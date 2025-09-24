@@ -14,3 +14,18 @@ target_compile_options(counter_module PRIVATE -Wall -Wextra)
 
 add_executable(dual_clock_module dual_clock_module.cpp)
 target_link_libraries(dual_clock_module PRIVATE minicash)
+
+add_executable(dual_port_ram dual_port_ram.cpp)
+target_link_libraries(dual_port_ram PRIVATE minicash)
+
+add_executable(vec_and_struct vec_and_struct.cpp)
+target_link_libraries(vec_and_struct ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(sync_fifo sync_fifo.cpp)
+target_link_libraries(sync_fifo ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(async_fifo async_fifo.cpp)
+target_link_libraries(async_fifo ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(stream_example stream_example.cpp)
+target_link_libraries(stream_example ${CMAKE_THREAD_LIBS_INIT})

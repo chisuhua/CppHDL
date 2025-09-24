@@ -1,11 +1,12 @@
 // examples/adder_module.cpp
 #include "../core/min_cash.h"
+#include "../core/component.h"
 #include <iostream>
 
 using namespace ch::core;
     
 // 用户定义的带端口模块
-struct MyAdderModule {
+struct MyAdderModule : public Component {
     __io(
         __in(ch_uint<4>) a;
         __in(ch_uint<4>) b;

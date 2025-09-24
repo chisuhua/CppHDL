@@ -1,10 +1,11 @@
 // examples/dual_clock_module.cpp
 #include "../core/min_cash.h"
+#include "../core/component.h"
 #include <iostream>
 
 using namespace ch::core;
 
-struct DualClockModule {
+struct DualClockModule : public Component {
     __io(
         __in(ch_bool) clk_a;
         __in(ch_bool) clk_b;
@@ -16,15 +17,17 @@ struct DualClockModule {
     void describe() {
         // 时钟域 A: 上升沿触发
         ch_pushcd(io.clk_a, io.rst, true);
-        static ch_reg<ch_uint<4>> reg_a(0);
-        reg_a.next() = *reg_a + 1;
+        static ch_reg<ch_uint<4>> reg_a(this, "clock_a", 0);
+        reg_a.next() = ch_nextEn(*reg_a + 1, !io.rst, 0); // ✅ 使用 ch_nextEn
+        //reg_a.next() = *reg_a + 1;
         io.count_a = *reg_a;
         ch_popcd();
 
         // 时钟域 B: 下降沿触发
         ch_pushcd(io.clk_b, io.rst, false);
-        static ch_reg<ch_uint<4>> reg_b(0);
-        reg_b.next() = *reg_b + 1;
+        static ch_reg<ch_uint<4>> reg_b(this,  "clock_b", 0);
+        reg_b.next() = ch_nextEn(*reg_b + 1, !io.rst, 0); // ✅ 使用 ch_nextEn
+        //reg_b.next() = *reg_b + 1;
         io.count_b = *reg_b;
         ch_popcd();
     }

@@ -1,42 +1,26 @@
 // examples/counter_module.cpp
 #include "../core/min_cash.h"
+#include "../core/ch_tracer.h"
+#include "../core/ch_verilog_gen.h"
+#include "../core/component.h"
 #include <iostream>
 
 using namespace ch::core;
 
-struct CounterModule {
+struct CounterModule : public Component {
     __io(
         __in(ch_bool) clk;
         __in(ch_bool) rst;
         __out(ch_uint<4>) count;
     );
 
-    ch_reg<ch_uint<4>>* reg = nullptr;
-
-    CounterModule() : reg(0) {
-        std::cout << "  [CounterModule] Constructor called" << std::endl;
-    }
-
     void describe() {
         ch_pushcd(io.clk, io.rst, true);
-        if (reg == nullptr) {
-            reg = new ch_reg<ch_uint<4>>(0);
-        }
+        static ch_reg<ch_uint<4>> reg(this, "CounterModule", 0);
 
-        if (io.rst) {
-            reg->next() = 0; // 设置下一周期的值
-        } else {
-            reg->next() = reg->value() + 1; // 获取当前值，加1，设置为下一周期的值
-        }
-
-        // 输出当前值（组合逻辑）
-        io.count = reg->value();
-
+        reg.next() = ch_nextEn(*reg + 1, !io.rst, 0);
+        io.count = *reg + 1;
         ch_popcd();
-    }
-
-    ~CounterModule() {
-        delete reg;
     }
 };
 
@@ -44,9 +28,14 @@ int main() {
     std::cout << "=== Starting Simulation: Counter Module ===" << std::endl;
 
     ch_device<CounterModule> device;
+    ch_tracer tracer(device, "counter_wave.vcd"); // ✅ 创建 tracer
+    //
+    tracer.add_signal(device.instance().io.clk, "clk", 1);
+    tracer.add_signal(device.instance().io.rst, "rst", 1);
+    tracer.add_signal(device.instance().io.count, "count", 4);
 
-    device.instance().io.clk = 0;
-    device.instance().io.rst = 1; // 初始复位
+    //device.instance().io.clk = 0;
+    //device.instance().io.rst = 1; // 初始复位
     // 运行 5 个时钟周期
     for (int cycle = 0; cycle < 15; cycle++) {
         std::cout << "\n--- Cycle " << cycle << " ---" << std::endl;
@@ -59,10 +48,14 @@ int main() {
         device.describe();
 
         device.tick();
+        tracer.tick();
 
         // 3. 读取输出
         std::cout << "Count: " << (unsigned)device.instance().io.count << std::endl;
     }
+
+
+    ch_toVerilog("counter_generated.v", device);
 
     std::cout << "\n=== Simulation Complete ===" << std::endl;
     return 0;
