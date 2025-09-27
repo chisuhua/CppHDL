@@ -2,6 +2,7 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
+#include "io.h" // for ch_in, ch_out
 #include "core/context.h"
 #include <string>
 #include <memory>
@@ -13,6 +14,7 @@ public:
     explicit Component(Component* parent = nullptr, const std::string& name = "");
     virtual ~Component() = default;
 
+    virtual void create_ports() {} // 新增
     virtual void describe() = 0;
     void build(); // 新增：显式构建 IR
 

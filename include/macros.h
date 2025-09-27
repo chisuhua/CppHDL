@@ -12,6 +12,19 @@ namespace ch {
 #define __in(...)   ch::core::ch_in<__VA_ARGS__>
 #define __out(...)  ch::core::ch_out<__VA_ARGS__>
 
-#endif // MACROS_H
+// include/macros.h
+#define CH_IO(...) \
+    struct { __VA_ARGS__ } io; \
+    void __register_ports() { \
+        /* 自动生成端口创建代码 */ \
+        /* 例如： */ \
+        if constexpr (requires { io.valid; }) { \
+            if constexpr (std::is_same_v<decltype(io.valid), ch::core::ch_out<ch_uint<1>>>) { \
+                auto* node = context()->create_output(1, "io_valid"); \
+                io.valid.bind(node); \
+            } \
+        } \
+        /* ... 递归处理其他字段 ... */ \
+    }
 
 #endif // MACROS_H

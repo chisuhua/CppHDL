@@ -15,6 +15,12 @@ add_library(cpphdl
     src/core/lnodeimpl.cpp
     src/component.cpp
 )
+
+target_sources(cpphdl PRIVATE
+    src/simulator.cpp
+    src/codegen.cpp
+)
+
 include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include)
 include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/core)
 target_include_directories(cpphdl INTERFACE ${CMAKE_SOURCE_DIR}/include)

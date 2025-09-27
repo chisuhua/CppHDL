@@ -3,17 +3,18 @@
 #define PORT_H
 
 #include "direction.h"
-#include "logic.h"      // for get_lnode, lnode
+#include "logic.h"      // for lnode, get_lnode
 #include "core/context.h"
 #include <string>
+#include <source_location>
 
+namespace ch { namespace core {
 #define CH_PORT(name, ...) \
     decltype(::ch::out(__VA_ARGS__)) name; \
     static_assert(true, "")
 
-namespace ch::core {
 
-// Forward declare
+// Forward declaration
 template<typename T, typename Dir>
 class port;
 
@@ -37,14 +38,16 @@ public:
         }
     }
 
-    // Implicit conversion to lnode<T> for use in expressions (only for input/internal)
+    // Implicit conversion to lnode<T> for use in expressions (input/internal only)
     operator lnode<T>() const {
         static_assert(!is_output_v<Dir>, "Output ports cannot be used as values!");
         return lnode<T>(impl_node_);
     }
 
     // Bind implementation node (called by Component::build)
-    void bind(lnodeimpl* node) { impl_node_ = node; }
+    void bind(lnodeimpl* node) {
+        impl_node_ = node;
+    }
 
     // Flip direction
     auto flip() const {
@@ -62,24 +65,15 @@ private:
     lnodeimpl* impl_node_ = nullptr;
 };
 
-template<typename T, typename Dir>
-void port<T, Dir>::bind(lnodeimpl* node) {
-    impl_node_ = node;
-    // 如果是 inputimpl/outputimpl，可额外保存仿真值指针（用于仿真器）
-}
-
 // Type aliases
 template<typename T> using ch_in  = port<T, input_direction>;
 template<typename T> using ch_out = port<T, output_direction>;
 
-// Specialize ch_width_v for port
 template<typename T, typename Dir>
 struct ch_width_impl<port<T, Dir>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };
 
-
-// 或更简单：用户手动 bind
-} // namespace ch::core
+}} // namespace ch::core
 
 #endif // PORT_H

@@ -16,7 +16,6 @@
 #include "core/context.h" // Now includes types.h and has node_id()
 
 namespace ch { namespace core {
-
 // --- Enum for Node Types using macros (借鉴 cash) ---
 #define CH_LNODE_TYPE(t) type_##t,
 // --- 定义用于计数的辅助宏 ---

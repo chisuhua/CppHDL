@@ -1,4 +1,9 @@
-#include "../include/ch.hpp" // Include the main CppHDL header
+// samples/counter.cpp
+#include "../include/ch.hpp"
+#include "../include/component.h"
+#include "../include/module.h"
+#include "../include/simulator.h"
+#include "../include/codegen.h"
 #include <iostream>
 
 using namespace ch::core;
@@ -6,43 +11,51 @@ using namespace ch::core;
 template <unsigned N>
 class Counter : public ch::Component {
 public:
-    //__io((__out(ch_uint<4>) out));
-    __io(ch_logic_out<ch_uint<N>> out); // Use the expanded type directly
+    ch_out<ch_uint<N>> out; // ← 延迟初始化
 
     Counter(ch::Component* parent = nullptr, const std::string& name = "counter")
         : ch::Component(parent, name)
     {}
 
+    void create_ports() override {
+        new (&out) ch_logic_out<ch_uint<N>>("out"); // placement new
+    }
+
     void describe() override {
-        ch_reg<ch_uint<4>> reg(0);
+        ch_reg<ch_uint<N>> reg(0);
         reg->next = reg + 1;
-        io.out = reg;
+        out = reg;
     }
 };
 
-// 顶层模块
 class Top : public ch::Component {
 public:
-    //__io((__out(ch_uint<4>) out));
-    __io(ch_logic_out<ch_uint<4>> out); // Use the expanded type directly
+    ch_out<ch_uint<4>> out;
 
     Top(ch::Component* parent = nullptr, const std::string& name = "top")
         : ch::Component(parent, name)
     {}
 
+    void create_ports() override {
+        new (&out) ch_logic_out<ch_uint<4>>("out");
+        //out.emplace("out");
+    }
+
     void describe() override {
-        ch::ch_module<Counter<4>> counter; // 自动归属到 Top
-        io.out = counter.io.out;
+        ch::ch_module<Counter<4>> counter;
+        out = counter.out;
     }
 };
 
 int main() {
-    // 直接构造顶层模块（无父）
-    ch::ch_device<Top> top; // 语义清晰：这是顶层设备
-    /*
-    ch::Simulator sim(top.context());
-    sim.run(10);
-    */
-    // 后续：Simulator sim(top.context()); ...
+    ch::ch_device<Top> top_device;
+
+    ch::Simulator sim(top_device.context());
+    for (int i = 0; i < 10; ++i) {
+        sim.tick();
+        std::cout << "Cycle " << i << ": out = " << sim.get_value(top_device.instance().out) << std::endl;
+    }
+
+    ch::toVerilog("counter.v", top_device.context());
     return 0;
 }
