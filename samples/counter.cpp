@@ -8,42 +8,42 @@
 
 using namespace ch::core;
 
+
 template <unsigned N>
 class Counter : public ch::Component {
 public:
-    ch_out<ch_uint<N>> out; // ← 延迟初始化
+    __io(ch_out<ch_uint<N>> out);
 
     Counter(ch::Component* parent = nullptr, const std::string& name = "counter")
         : ch::Component(parent, name)
     {}
 
     void create_ports() override {
-        new (&out) ch_logic_out<ch_uint<N>>("out"); // placement new
+        new (&io.out) ch_logic_out<ch_uint<N>>("out");
     }
 
     void describe() override {
         ch_reg<ch_uint<N>> reg(0);
         reg->next = reg + 1;
-        out = reg;
+        io.out = reg;
     }
 };
 
 class Top : public ch::Component {
 public:
-    ch_out<ch_uint<4>> out;
+    __io(ch_out<ch_uint<4>> out);
 
     Top(ch::Component* parent = nullptr, const std::string& name = "top")
         : ch::Component(parent, name)
     {}
 
     void create_ports() override {
-        new (&out) ch_logic_out<ch_uint<4>>("out");
-        //out.emplace("out");
+        new (&io.out) ch_logic_out<ch_uint<4>>("out");
     }
 
     void describe() override {
         ch::ch_module<Counter<4>> counter;
-        out = counter.out;
+        io.out = counter.io.out;
     }
 };
 
@@ -53,7 +53,7 @@ int main() {
     ch::Simulator sim(top_device.context());
     for (int i = 0; i < 10; ++i) {
         sim.tick();
-        std::cout << "Cycle " << i << ": out = " << sim.get_value(top_device.instance().out) << std::endl;
+        std::cout << "Cycle " << i << ": out = " << sim.get_value(top_device.instance().io.out) << std::endl;
     }
 
     ch::toVerilog("counter.v", top_device.context());

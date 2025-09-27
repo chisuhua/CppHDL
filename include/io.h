@@ -40,18 +40,6 @@ public:
         }
     }
 
-    // 移动构造（默认即可，但显式声明更安全）
-    /*
-    ch_logic_out(ch_logic_out&& other) noexcept
-        : name_(std::move(other.name_)), output_node_(other.output_node_) {
-        other.output_node_ = nullptr;
-    }
-    */
-
-    // 禁止拷贝（端口不可复制）
-    //ch_logic_out(const ch_logic_out&) = delete;
-    //ch_logic_out& operator=(const ch_logic_out&) = delete;
-
     lnodeimpl* impl() const { return output_node_; }
 
 private:
