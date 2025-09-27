@@ -15,7 +15,6 @@ namespace ch {
 namespace core {
 
 // ============ 前向声明 ============
-class ClockDomainManager;
 class ch_reg_base;
 class Component; // ✅ 前向声明 Component
 
@@ -90,7 +89,10 @@ public:
         return prev_data_;
     }
 };
-
+// ============ 全局时钟和复位信号 ============
+// 整个设计使用唯一的一对 clk/rst 信号
+static ch_bool global_clk;
+static ch_bool global_rst; 
 // ============ 端口方向修饰宏 ============
 #define __in(x) x
 #define __out(x) x
@@ -101,112 +103,6 @@ public:
         __VA_ARGS__ \
     } io;
 
-// ============ 时钟域定义 ============
-struct ClockDomain {
-    ch_bool& clk_signal;
-    ch_bool& rst_signal;
-    bool     posedge;
-    int      id;
-
-    ClockDomain(ch_bool& clk, ch_bool& rst, bool pe, int domain_id)
-        : clk_signal(clk), rst_signal(rst), posedge(pe), id(domain_id) {}
-};
-
-namespace {
-    ch_bool global_default_clk(false);
-    ch_bool global_default_rst(true);
-    ClockDomain global_default_domain(global_default_clk, global_default_rst, true, 0);
-}
-
-// ============ 时钟域管理器 ============
-class ClockDomainManager {
-private:
-    std::stack<ClockDomain> domain_stack_;
-    static int global_domain_id_;
-    int current_domain_id_ = 0;
-
-    struct DomainKey {
-        ch_bool* clk;
-        ch_bool* rst;
-        bool posedge;
-
-        bool operator==(const DomainKey& other) const {
-            return clk == other.clk && rst == other.rst && posedge == other.posedge;
-        }
-    };
-
-    struct DomainKeyHash {
-        std::size_t operator()(const DomainKey& key) const {
-            return std::hash<ch_bool*>{}(key.clk) ^
-                   std::hash<ch_bool*>{}(key.rst) ^
-                   std::hash<bool>{}(key.posedge);
-        }
-    };
-
-    std::unordered_map<DomainKey, int, DomainKeyHash> domain_map_;
-
-public:
-    void push(ch_bool& clk, const ch_bool& rst, bool posedge) {
-        DomainKey key{&clk, const_cast<ch_bool*>(&rst), posedge};
-        auto it = domain_map_.find(key);
-        if (it != domain_map_.end()) {
-            // 复用已存在的 ID
-            int existing_id = it->second;
-            domain_stack_.push(ClockDomain(clk, const_cast<ch_bool&>(rst), posedge, existing_id));
-            current_domain_id_ = existing_id;
-            std::cout << "  [DEBUG ClockDomain] existing clock_domain id " << existing_id << std::endl;
-        } else {
-            int new_id = ++global_domain_id_;
-            domain_map_[key] = new_id;
-            domain_stack_.push(ClockDomain(clk, const_cast<ch_bool&>(rst), posedge, new_id));
-            current_domain_id_ = new_id;
-            std::cout << "  [DEBUG ClockDomain] new_clock_domain id " << new_id << std::endl;
-        }
-    }
-
-    void pop() {
-        if (!domain_stack_.empty()) {
-            domain_stack_.pop();
-            current_domain_id_ = domain_stack_.empty() ? 0 : domain_stack_.top().id;
-        }
-    }
-
-    int current_domain_id() const {
-        return current_domain_id_;
-    }
-
-    const ClockDomain current_domain() const {
-        if (domain_stack_.empty()) {
-            return global_default_domain;
-        }
-        return domain_stack_.top();
-    }
-
-    const ClockDomain& get_domain_by_id(int id) const {
-        if (!domain_stack_.empty() && domain_stack_.top().id == id) {
-            return domain_stack_.top();
-        }
-
-        std::stack<ClockDomain> temp_stack = domain_stack_;
-        while (!temp_stack.empty()) {
-            if (temp_stack.top().id == id) {
-                return temp_stack.top();
-            }
-            temp_stack.pop();
-        }
-        return global_default_domain;
-    }
-
-    static ClockDomainManager& instance() {
-        static thread_local ClockDomainManager mgr;
-        return mgr;
-    }
-
-private:
-    ClockDomainManager() = default;
-};
-
-int ClockDomainManager::global_domain_id_ = 0;
 
 // ============ ch_reg_base 基类 ============
 class ch_reg_base {
@@ -214,7 +110,6 @@ public:
     virtual ~ch_reg_base() = default;
     virtual void tick() = 0;
     virtual void end_of_cycle() = 0;
-    virtual int domain_id() const = 0;
 };
 
 // ============ 寄存器模板 ============
@@ -223,10 +118,6 @@ class ch_reg : public ch_reg_base {
 private:
     T current_value_;
     T next_value_;
-    ch_bool* clk_ptr_;
-    ch_bool* rst_ptr_;
-    bool     posedge_;
-    int      domain_id_;
     std::string path_name_;
 
 public:
@@ -263,17 +154,14 @@ public:
     }
 
     bool should_tick() const {
-        bool current_clk = static_cast<bool>(*clk_ptr_);
-        bool prev_clk = static_cast<bool>(clk_ptr_->prev_value());
-        bool is_reset = static_cast<bool>(*rst_ptr_);
+        bool current_clk = static_cast<bool>(global_clk);
+        bool prev_clk = static_cast<bool>(global_clk.prev_value());
+        bool is_reset = static_cast<bool>(global_rst);
 
-        bool clk_edge = posedge_ ?
-            (current_clk && !prev_clk) :
-            (!current_clk && prev_clk);
+        bool clk_edge = true ? (current_clk && !prev_clk) : (!current_clk && prev_clk);
 
         std::cout << "  [TICK] " << path_name_
-                << "  [ch_reg] posedge=" << posedge_
-                << " clk_edge=" << clk_edge
+                << "  [ch_reg] clk_edge=" << clk_edge
                 << " is_reset=" << is_reset
                 << " clk=" << current_clk
                 << " prev_clk=" << prev_clk
@@ -287,16 +175,13 @@ public:
             std::cout << "  [TICK] " << path_name_ 
                       << ": " << current_value_ 
                       << " -> " << next_value_
-                      << "  [ch_reg] Ticked in domain " << domain_id() << std::endl;
+                      << std::endl;
             current_value_ = next_value_;
         }
     }
 
     void end_of_cycle() override {}
 
-    int domain_id() const override {
-        return domain_id_;
-    }
 };
 
 // ============ 内存模板 ============
@@ -305,10 +190,6 @@ class ch_mem : public ch_reg_base {
 private:
     std::array<T, N> current_storage_;
     std::array<T, N> next_storage_;
-    ch_bool* clk_ptr_;
-    ch_bool* rst_ptr_;
-    bool     posedge_;
-    int      domain_id_;
 
 public:
     explicit ch_mem(Component* parent);
@@ -321,7 +202,7 @@ public:
             if (addr >= 0 && addr < N) {
                 self->next_storage_[addr] = val;
             } else {
-                std::cerr << "  [ch_mem] Address out of range: " << addr << std::endl;
+                std::cerr << "  [ch_mem] Address " << addr << " out of range: " << N << std::endl;
             }
             return *this;
         }
@@ -330,22 +211,20 @@ public:
             if (addr >= 0 && addr < N) {
                 return self->current_storage_[addr];
             } else {
-                std::cerr << "  [ch_mem] Address out of range: " << addr << std::endl;
+                std::cerr << "  [ch_mem] Address " << addr << " out of range: " << N << std::endl;
                 return T();
             }
         }
     };
 
     bool should_tick() const {
-        bool current_clk = static_cast<bool>(*clk_ptr_);
-        bool prev_clk = static_cast<bool>(clk_ptr_->prev_value());
-        bool is_reset = static_cast<bool>(*rst_ptr_);
+        bool current_clk = static_cast<bool>(global_clk);
+        bool prev_clk = static_cast<bool>(global_clk.prev_value());
+        bool is_reset = static_cast<bool>(global_rst);
 
-        bool clk_edge = posedge_ ?
-            (current_clk && !prev_clk) :
-            (!current_clk && prev_clk);
+        bool clk_edge = true ? (current_clk && !prev_clk) : (!current_clk && prev_clk);
 
-        std::cout << "  [ch_mem] posedge=" << posedge_
+        std::cout << "  [ch_mem] "
                 << " clk_edge=" << clk_edge
                 << " is_reset=" << is_reset
                 << " clk=" << current_clk
@@ -362,25 +241,14 @@ public:
     void tick() override {
         if (should_tick()) {
             current_storage_ = next_storage_;
-            std::cout << "  [ch_mem] Ticked in domain " << domain_id() << std::endl;
+            std::cout << "  [ch_mem] Ticked in  " << std::endl;
         }
     }
 
     void end_of_cycle() override {}
 
-    int domain_id() const override {
-        return domain_id_;
-    }
 };
 
-// ============ 全局函数 ch_pushcd 和 ch_popcd ============
-inline void ch_pushcd(ch_bool& clk, const ch_bool& rst, bool posedge) {
-    ClockDomainManager::instance().push(clk, const_cast<ch_bool&>(rst), posedge);
-}
-
-inline void ch_popcd() {
-    ClockDomainManager::instance().pop();
-}
 
 // ============ ch_device_base 基类 ============
 class ch_device_base {
@@ -417,20 +285,9 @@ public:
 
         const auto& all_regs = instance_.get_all_regs();
 
-        // 按时钟域分组
-        std::map<int, std::vector<ch_reg_base*>> domain_map;
         for (auto* reg : all_regs) {
-            domain_map[reg->domain_id()].push_back(reg);
+            reg->tick();
         }
-
-        // 按域更新
-        for (auto& [domain_id, regs] : domain_map) {
-            std::cout << "    Updating domain " << domain_id << " with " << regs.size() << " registers" << std::endl;
-            for (auto* reg : regs) {
-                reg->tick();
-            }
-        }
-
         // 结束周期
         for (auto* reg : all_regs) {
             reg->end_of_cycle();

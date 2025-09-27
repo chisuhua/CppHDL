@@ -66,17 +66,10 @@ public:
 template<typename T>
 ch_reg<T>::ch_reg(Component* parent, const std::string& name, const T& init) // ✅ 修正: 参数列表
     : current_value_(init), next_value_(init), path_name_("unnamed_reg") {
-    const ClockDomain& current_domain = ClockDomainManager::instance().current_domain();
-    clk_ptr_ = &current_domain.clk_signal;
-    rst_ptr_ = &current_domain.rst_signal;
-    posedge_ = current_domain.posedge;
-    domain_id_ = current_domain.id;
     if (parent) {
         parent->add_local_reg(this);
         path_name_ = parent->get_path_name() + "." + name; // ✅ 构建完整路径
-        std::cout << "  [ch_reg] Created " << path_name_ << "." << name
-              << " rst_ptr_  " << (void*)rst_ptr_
-              << "in ClockDomain " << domain_id_ << std::endl; // ✅ 打印 parent 指针
+        std::cout << "  [ch_reg] Created " << path_name_ << "." << name << std::endl;
     } else {
         std::cerr << "  [ch_reg] WARNING: Created without a parent Component!" << std::endl;
     }
@@ -85,14 +78,9 @@ ch_reg<T>::ch_reg(Component* parent, const std::string& name, const T& init) // 
 template<typename T, int N>
 ch_mem<T, N>::ch_mem(Component* parent)
     : current_storage_(), next_storage_() {
-    const ClockDomain& current_domain = ClockDomainManager::instance().current_domain();
-    clk_ptr_ = &current_domain.clk_signal;
-    rst_ptr_ = &current_domain.rst_signal;
-    posedge_ = current_domain.posedge;
-    domain_id_ = current_domain.id;
-    std::cout << "  [ch_mem] Created with depth " << N << " in domain " << domain_id_ << std::endl;
     if (parent) {
         parent->add_local_reg(this);
+        std::cout << "  [ch_mem] Created with depth " << N  << std::endl;
     } else {
         std::cerr << "  [ch_mem] WARNING: Created without a parent Component!" << std::endl;
     }
