@@ -5,15 +5,14 @@
 #include "logic.h"
 #include "core/context.h"
 #include "lnodeimpl.h"
-#include "traits.h" // for ch_width_v
-#include "ast_nodes.h"  // 👈 关键：包含 inputimpl/outputimpl 的完整定义
+#include "traits.h"
+#include "ast_nodes.h" 
 #include <source_location>
 #include <string>
 #include <iostream>
 
 namespace ch { namespace core {
 
-// --- 保留现有的 ch_logic_out ---
 template <typename T>
 class ch_logic_out {
 public:
@@ -47,7 +46,6 @@ private:
     outputimpl* output_node_ = nullptr;
 };
 
-// --- 保留现有的 ch_logic_in（需补全）---
 template <typename T>
 class ch_logic_in {
 public:
@@ -62,7 +60,7 @@ public:
         }
     }
 
-    // Support get_lnode()
+    operator lnode<T>() const { return lnode<T>(input_node_); }
     lnodeimpl* impl() const { return input_node_; }
 
 private:
@@ -82,7 +80,7 @@ struct ch_width_impl<ch_logic_in<T>, void> {
 };
 
 // --- 新增：__io 宏（保持兼容）---
-#define __io(ports) struct { ports; } io;
+// #define __io(ports) struct { ports; } io;
 // include/io.h （在 namespace ch::core 的最后）
 template<typename T> using ch_in  = ch_logic_in<T>;
 template<typename T> using ch_out = ch_logic_out<T>;

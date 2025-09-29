@@ -6,10 +6,13 @@
 #include "lnodeimpl.h" // For regimpl, proxyimpl, lnodetype - Now in ch::core
 #include "bitbase.h" // For ch_uint, ch_width_v, logic_buffer
 #include <string>
+#include <typeinfo>
 #include <memory> // For std::unique_ptr
 #include <source_location> // C++20
+#include <iostream>
 
 namespace ch { namespace core {
+
 
 // Forward declaration of the internal implementation
 template<typename T>
@@ -31,6 +34,9 @@ struct next_assignment_proxy {
     template<typename U>
     void operator=(const U& value) const { // Marked as const
         lnode<U> src_lnode = get_lnode(value);
+        // --- DEBUG PRINT ---
+        std::cout << "[next_assignment_proxy::operator=] Assigning value (node ID: " << (src_lnode.impl() ? src_lnode.impl()->id() : -1) << ") to regimpl node ID " << (regimpl_node_ ? regimpl_node_->id() : -1) << std::endl;
+        // --- END DEBUG PRINT ---
         if (regimpl_node_ && src_lnode.impl() && regimpl_node_->type() == lnodetype::type_reg) {
             regimpl* reg_node_impl = static_cast<regimpl*>(regimpl_node_);
             reg_node_impl->set_next(src_lnode.impl()); // Connect RHS to reg's next input
@@ -77,7 +83,8 @@ public:
 
         // 2. Create the register node (and its next proxy) using the initial value lnode
         // This calls the version of createRegNode that accepts an initial value lnode
-        lnodeimpl* reg_proxy_node = createRegNodeImpl(init_lnode, "reg", std::source_location::current()); // Now calls the T-specific version from logic.h
+
+        lnodeimpl* reg_proxy_node = createRegNodeImpl<T>(init_lnode, "reg", std::source_location::current()); // Now calls the T-specific version from logic.h
 
         // 3. Initialize the base logic_buffer part of ch_reg_impl with the regimpl's *proxyimpl* node
         // The regimpl constructor returns the proxyimpl node representing the register's *current* value.
@@ -114,7 +121,11 @@ public:
              return;
          }
 
-         lnodeimpl* reg_proxy_node = createRegNodeImpl(ch_width_v<T>, "reg", std::source_location::current());
+         constexpr unsigned size = ch_width_v<T>; // Calculate size based on template param T
+         std::cout << "[ch_reg_impl::ctor (no init)] Type T is: " << typeid(T).name() << std::endl; // Requires #include <typeinfo>
+         std::cout << "[ch_reg_impl::ctor (no init)] Calculated register size (ch_width_v<T>): " << size << std::endl;
+
+         lnodeimpl* reg_proxy_node = createRegNodeImpl<T>(size, "reg", std::source_location::current());
          static_cast<logic_buffer<T>*>(this)->node_impl_ = reg_proxy_node; // Set base class node using T
          if (reg_proxy_node && reg_proxy_node->num_srcs() > 0 && reg_proxy_node->src(0) && reg_proxy_node->src(0)->type() == lnodetype::type_reg) {
               regimpl_node_ = reg_proxy_node->src(0);
@@ -147,7 +158,7 @@ struct ch_width_impl<ch_reg_impl<T>, void> { // Specialize for ch_reg_impl<T>
     // Example: ch_width_v<ch_reg_impl<ch_uint<4>>> -> ch_width_v<ch_uint<4>> -> 4
 };
 
-template<typename U> // U is the type of the initial value (e.g., int for literal 2)
+template<typename T, typename U> // U is the type of the initial value (e.g., int for literal 2)
 lnodeimpl* createRegNodeImpl(const lnode<U>& init, const std::string& name, const std::source_location& sloc) {
     auto ctx = ctx_curr_; // Assuming ctx_curr_ is accessible here, likely via context.h
     if (!ctx) {
@@ -163,7 +174,10 @@ lnodeimpl* createRegNodeImpl(const lnode<U>& init, const std::string& name, cons
     }
 
     // --- STEP 1: Create the regimpl node ---
-    uint32_t size = init_node_impl->size();
+    constexpr unsigned size = ch_width_v<T>; // Use ch_width_v of the register type T
+    std::cout << "[createRegNodeImpl (with init, T)] Calculated register size (ch_width_v<T>): " << size << " for type T" << std::endl; // Debug print
+    //
+    // --- END KEY CHANGE ---
     uint32_t cd = 0; // Placeholder clock domain
     lnodeimpl* rst = nullptr; // Placeholder reset signal
     lnodeimpl* clk_en = nullptr; // Placeholder clock enable
@@ -195,6 +209,9 @@ lnodeimpl* createRegNodeImpl(unsigned size, const std::string& name, const std::
         std::cerr << "[createRegNodeImpl (no init)] Error: No active context!" << std::endl;
         return nullptr;
     }
+
+
+    std::cout << "[createRegNodeImpl (no init)] Received size argument: " << size << std::endl;
 
     // Placeholders for clock domain, reset, etc.
     uint32_t cd = 0; // Placeholder clock domain

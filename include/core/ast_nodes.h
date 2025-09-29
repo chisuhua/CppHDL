@@ -4,7 +4,7 @@
 // Include lnodeimpl first, which now includes context.h and types.h
 #include "lnodeimpl.h"
 // #include "core/context.h" // Already included via lnodeimpl.h
-// #include "types.h"        // Already included via context.h
+#include "types.h"        // Already included via context.h
 
 #include <string>
 #include <source_location> // C++20
@@ -12,25 +12,19 @@
 namespace ch { namespace core {
 
 // --- Specific IR Node Implementations ---
-
-// --- regimpl: Register Node (参考 DESIGN_phase2.md 和 cash) ---
 class regimpl : public lnodeimpl {
 public:
-    // Constructor: Requires id, size, clock domain, reset, etc.
-    // The 'next' source is typically the 0th source (src(0))
-    // Initial value might be handled by a preceding literal node or stored separately.
     regimpl(uint32_t id, uint32_t size, uint32_t cd, lnodeimpl* rst, lnodeimpl* clk_en,
             lnodeimpl* rst_val, lnodeimpl* next, lnodeimpl* init_val, // init_val as a source node
             const std::string& name, const std::source_location& sloc, context* ctx) // Add context* parameter
         : lnodeimpl(id, lnodetype::type_reg, size, ctx, name, sloc), // Pass context* to base
           cd_(cd), rst_(rst), clk_en_(clk_en), rst_val_(rst_val) {
-        // Add sources: initial value first (if provided), then next value source.
-        // DESIGN_phase2.md showed init_val passed to create_node, implying it's part of the node state.
-        // Let's add init_val as src(0) and next as src(1) for clarity in this example.
         if (init_val) add_src(init_val); // src(0): initial value
         if (next) add_src(next);         // src(1): next value (if provided during construction)
-        // The simulation engine needs to know how to handle src(0) vs src(1) for a regimpl.
-        // During describe, reg->next = ... connects the RHS to src(1) (or replaces src(1)).
+        //
+        std::cout << "[regimpl::ctor] Initializing regimpl '" << name << "' (ID: " << id << ") with constructor parameter size: " << size << std::endl;
+        std::cout << "[regimpl::ctor] Inherited lnodeimpl size_ is now: " << this->size() << " for '" << name << "'" << std::endl; // Use this->size() to get inherited member
+        // --- END DEBUG PRINTS ---
     }
 
     // Accessor for clock domain index (or pointer if stored differently)
@@ -40,8 +34,34 @@ public:
     lnodeimpl* rst_val() const { return rst_val_; }
 
     // Setter for the 'next' source (as used in reg->next = ... logic)
-    // DESIGN_phase2.md showed: reg->add_src(next_node);
     void set_next(lnodeimpl* next) {
+        // --- DEBUG PRINT ---
+        std::cout << "[regimpl::set_next] Called on regimpl node ID " << this->id() << " with next node ID " << (next ? next->id() : -1) << std::endl;
+        // --- END DEBUG PRINT ---
+        if (next) {
+            if (num_srcs() > 1) {
+                // --- DEBUG PRINT ---
+                std::cout << "[regimpl::set_next] Replacing src(1) (old ID: " << (src(1) ? src(1)->id() : -1) << ") with new ID: " << next->id() << std::endl;
+                // --- END DEBUG PRINT ---
+                // Replace the 'next' source at index 1
+                set_src(1, next); // <-- Sets src(1)
+            } else if (num_srcs() == 1) {
+                // --- DEBUG PRINT ---
+                std::cout << "[regimpl::set_next] Adding next as src(1) (src(0) ID: " << (src(0) ? src(0)->id() : -1) << ")" << std::endl;
+                // --- END DEBUG PRINT ---
+                // If only init_val exists (src(0)), add next as src(1)
+                add_src(next); // <-- Adds as src(1)
+            } else {
+                // --- DEBUG PRINT ---
+                std::cout << "[regimpl::set_next] Warning: regimpl has 0 sources, adding next as src(0)" << std::endl;
+                // --- END DEBUG PRINT ---
+                // If no sources exist, add next as src(0) - this is less likely after construction with init_val
+                add_src(next); // <-- Adds as src(0)
+            }
+        } else {
+             std::cout << "[regimpl::set_next] Warning: Called with nullptr next node." << std::endl;
+        }
+        /*
         if (next) {
             if (num_srcs() > 1) {
                 // Replace the 'next' source at index 1
@@ -54,6 +74,7 @@ public:
                 add_src(next);
             }
         }
+        */
     }
 
     // Getter for the 'next' source (typically src(1) if init_val is src(0))

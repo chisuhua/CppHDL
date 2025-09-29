@@ -124,8 +124,16 @@ public:
 
     // --- Virtual Methods for Specific Node Behavior (借鉴 cash) ---
     // Example: Pretty printing the node
+    /*
     virtual void print(std::ostream& os) const {
         os << name_ << " (" << to_string(type_) << ", " << size_ << " bits)";
+    }
+    */
+    // --- Virtual Methods for Specific Node Behavior (借鉴 cash) ---
+    virtual std::string to_string() const {
+        std::ostringstream oss;
+        oss << name_ << " (" << ch::core::to_string(type_) << ", " << size_ << " bits)";
+        return oss.str();
     }
 
     // Example: Checking if the node is a constant/literal (can be overridden)
@@ -173,6 +181,7 @@ protected:
 };
 
 // --- Helper to print lnodeimpl* ---
+/*
 inline std::ostream& operator<<(std::ostream& os, const lnodeimpl* node) {
     if (node) {
         node->print(os);
@@ -181,10 +190,18 @@ inline std::ostream& operator<<(std::ostream& os, const lnodeimpl* node) {
     }
     return os;
 }
+*/
 
 // --- Helper for clone_map (借鉴 cash) ---
 using clone_map = std::unordered_map<uint32_t, lnodeimpl*>; // Defined elsewhere in cash, included here for completeness if needed in lnodeimpl methods
 
 }} // namespace ch::core
+
+/*
+inline std::ostream& operator<<(std::ostream& os, const ch::core::lnodeimpl& node) {
+    node.print(os);
+    return os;
+}
+*/
 
 #endif // LNODEIMPL_H

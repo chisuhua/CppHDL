@@ -6,58 +6,54 @@
 #include <memory>
 #include <string>
 #include <cstdint>
-#include <functional> // for std::hash
+#include <functional>
+#include <iostream>
 #include <source_location> // C++20, or use a custom fallback
-
-// Forward declarations
-// struct source_location; // Use std::source_location instead
-// class lnodeimpl;       // The base class for all IR nodes - Forward declared implicitly by being in ch::core namespace now
-// class outputimpl; // Forward declare if get_outputs returns this type specifically - Now defined in ch::core namespace
-// class regimpl;
-// class opimpl;
-// class inputimpl;
-// class proxyimpl;
-// class litimpl;
-// class memimpl;
-// class clockimpl;
-// class resetimpl;
-// struct sdata_type; // Forward declare sdata_type - Defined in types.h
 
 #include "types.h" // Include types.h first
 
 namespace ch { namespace core {
-
-    // Forward declare specific node types needed by context methods
     class lnodeimpl;
+    class litimpl;
+    class inputimpl;
     class outputimpl;
     class regimpl;
     class opimpl;
-    class inputimpl;
     class proxyimpl;
-    class litimpl;
+    class selectimpl;
     class memimpl;
+    class moduleimpl;
+    class moduleportimpl;
+    class ioimpl;
+    class cdimpl;
+    class udfimpl;
+    class udfportimpl;
     class clockimpl;
     class resetimpl;
-
+    enum class ch_op;
     class context;
 
-    // --- Forward Declaration for Context Switching ---
-    // This is the global function used by deviceimpl to switch contexts.
-    // Defined in src/core/context.cpp
-    context* ctx_swap(context* new_ctx);
+    extern context* ctx_curr_;
 
-    // --- Context Class Definition ---
+    // RAII helper for context switching
+    class ctx_swap {
+    public:
+        explicit ctx_swap(context* new_ctx);
+        ~ctx_swap();
+        ctx_swap(const ctx_swap&) = delete;
+        ctx_swap& operator=(const ctx_swap&) = delete;
+
+    private:
+        context* old_ctx_;
+    };
+
+    extern bool debug_context_lifetime;
+
     class context {
     public:
-        // Constructor: Initializes the context, sets up initial state.
-        //context(/* optional: const std::string& name, const std::source_location& sloc */);
         explicit context(const std::string& name = "unnamed", context* parent = nullptr);
-        // Destructor: Cleans up all nodes owned by this context.
         ~context();
 
-        // --- Node Creation Methods ---
-        // Generic template to create nodes of specific types.
-        // This is the primary way to add nodes to the context's graph.
         template <typename T, typename... Args>
         T* create_node(Args&&... args) {
             static_assert(std::is_base_of_v<lnodeimpl, T>, "T must derive from lnodeimpl");
@@ -67,39 +63,38 @@ namespace ch { namespace core {
             T* raw_ptr = node.get();
             nodes_.push_back(std::move(node)); // Store in owned list
             node_map_[raw_ptr->id()] = raw_ptr; // Map ID to raw pointer for quick lookup
+            if (debug_context_lifetime) { // --- NEW: Debug print ---
+                std::cout << "[context::create_node] Created node ID " << new_id << " (" << raw_ptr->name() << ") of type " << static_cast<int>(raw_ptr->type()) << " in context " << this << std::endl;
+            }
             return raw_ptr;
         }
 
-        // --- Helper to generate unique node IDs ---
         uint32_t node_id() { return next_node_id_++; }
 
         // --- Factory methods for specific node types (example) ---
         litimpl* create_literal(const sdata_type& value, const std::string& name = "literal", const std::source_location& sloc = std::source_location::current());
         inputimpl* create_input(uint32_t size, const std::string& name, const std::source_location& sloc = std::source_location::current());
         outputimpl* create_output(uint32_t size, const std::string& name, const std::source_location& sloc = std::source_location::current());
-        // Add other factory methods like create_input, create_reg, etc. here.
 
         // --- Accessor Methods for Simulator/Compiler ---
-        // Get the list of all nodes in this context
         const std::vector<std::unique_ptr<lnodeimpl>>& get_nodes() const { return nodes_; }
 
         // Get the list of output nodes (likely needed by simulator to build eval_list)
         // const std::vector<outputimpl*>& get_outputs() const { return outputs_; } // Example
 
-        // Get a specific node by its ID (for simulator's instr_map)
         lnodeimpl* get_node_by_id(uint32_t id) const {
             auto it = node_map_.find(id);
             return (it != node_map_.end()) ? it->second : nullptr;
         }
 
         // --- Topological Sort for Simulation Order ---
-        // Generates a list of nodes sorted in topological order for simulation.
-        // This ensures dependencies are evaluated before the nodes that use them.
         std::vector<lnodeimpl*> get_eval_list() const;
 
+        void print_debug_info() const {
+            std::cout << "[context::print_debug_info] Context " << this << ", name: " << name_ << ", nodes: " << nodes_.size() << std::endl;
+        }
+
         // --- Clock/Reset Management ---
-        // Methods to manage current clock/reset during describe()
-        // These are likely used by ch_reg, ch_mem, etc., during their construction.
         clockimpl* current_clock(const std::source_location& sloc);
         resetimpl* current_reset(const std::source_location& sloc);
         void set_current_clock(clockimpl* clk);
@@ -128,10 +123,6 @@ namespace ch { namespace core {
         context* parent_ = nullptr;
     };
 
-    // --- Global Context Pointer ---
-    // This is the global variable that ctx_swap manipulates.
-    // It holds the currently active context.
-    extern context* ctx_curr_;
 
 }} // namespace ch::core
 

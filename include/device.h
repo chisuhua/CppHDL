@@ -1,4 +1,4 @@
-// include/device.h （重构后）
+// include/device.h
 #pragma once
 #include "component.h"
 
@@ -15,8 +15,6 @@ public:
 
     T& instance() { return *top_; }
     const T& instance() const { return *top_; }
-
-    // 供仿真器/后端使用
     ch::core::context* context() const { return top_->context(); }
 
 private:

@@ -2,10 +2,11 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
-#include "io.h" // for ch_in, ch_out
+#include "io.h"
 #include "core/context.h"
 #include <string>
 #include <memory>
+#include <vector>
 
 namespace ch {
 
@@ -14,26 +15,27 @@ public:
     explicit Component(Component* parent = nullptr, const std::string& name = "");
     virtual ~Component() = default;
 
-    virtual void create_ports() {} // 新增
+    virtual void create_ports() {}
     virtual void describe() = 0;
-    void build(); // 新增：显式构建 IR
+    void build(ch::core::context* external_ctx = nullptr); // 式构建 IR
 
     // 访问器
     ch::core::context* context() const { return ctx_.get(); }
     Component* parent() const { return parent_; }
     const std::string& name() const { return name_; }
 
-    // 静态接口：获取当前活跃 Component
     static Component* current() { return current_; }
 
+    Component* add_child(std::unique_ptr<Component> child);
 protected:
     std::unique_ptr<ch::core::context> ctx_;
     Component* parent_;
     std::string name_;
+    std::vector<std::unique_ptr<Component>> children_;
 
 private:
-    static thread_local Component* current_;  // 当前建模中的 Component
-    bool built_ = false;  // 防止重复 build
+    static thread_local Component* current_;
+    bool built_ = false;
   
     // 禁止拷贝/移动
     Component(const Component&) = delete;
@@ -42,12 +44,6 @@ private:
     Component& operator=(Component&&) = delete;
 
 };
-
-namespace internal {
-// 供 ch_device / ch_module 使用
-Component* current_component();
-void set_current_component(Component* comp);
-} // namespace internal
 
 } // namespace ch
 #endif // COMPONENT_H
