@@ -2,17 +2,37 @@
 #ifndef LOGIC_H
 #define LOGIC_H
 
-#include "lnodeimpl.h" // For lnodeimpl
-//#include "core/context.h" // For ctx_curr, context::create_literal
-#include "traits.h" // For ch_width_v - Include the new traits header
-#include <type_traits> // For type traits, std::integral
+#include <bit>           // For std::bit_width (C++20)
+#include <type_traits>   // For type traits
 #include <source_location> // C++20
-#include <cstdint> // For uint64_t
+#include <cstdint>       // For uint64_t
+#include <iostream>      // For std::cerr
+
+#include "lnodeimpl.h"   // For lnodeimpl
+#include "traits.h"      // For ch_width_v
+#include "uint.h"        // For ctx_curr_, ch_uint
+#include "literal.h"     // For ch_literal
 
 namespace ch { namespace core {
 
-// --- lnode wrapper (as seen in cash) ---
-// A generic wrapper around lnodeimpl*, holds type info and the pointer.
+// --- Runtime helper function for literal width calculation ---
+template <typename T>
+requires std::is_integral_v<T> && std::is_unsigned_v<T>
+constexpr uint32_t get_literal_width(T value) {
+    if (value == 0) return 1;
+    return static_cast<uint32_t>(std::bit_width(value));
+}
+
+template <typename T>
+requires std::is_integral_v<T> && std::is_signed_v<T>
+constexpr uint32_t get_literal_width(T value) {
+    using U = std::make_unsigned_t<T>;
+    if (value == 0) return 1;
+    // For negative numbers, bit_width of two's complement representation
+    return get_literal_width(static_cast<U>(value));
+}
+
+// --- lnode wrapper ---
 template<typename T>
 struct lnode {
     lnodeimpl* impl() const { return impl_; }
@@ -21,48 +41,47 @@ private:
     lnodeimpl* impl_ = nullptr;
 };
 
-// --- get_lnode function template (core mechanism from cash) ---
-// Specialization for the lnode wrapper itself
+// --- get_lnode overloads ---
+
+// Identity: lnode<T> -> lnode<T>
 template<typename T>
 lnode<T> get_lnode(const lnode<T>& n) {
-    return n; // Return the lnode wrapper directly
+    return n;
 }
 
-// Default implementation: assumes T has an 'impl()' method returning lnodeimpl*.
+// From HDL type (e.g., ch_uint<N>, ch_reg_impl<...>) that has .impl()
 template<typename T>
 lnode<T> get_lnode(const T& t) requires requires { t.impl(); } {
-    return lnode<T>(t.impl()); // Use the impl() method of T to get lnodeimpl*
+    return lnode<T>(t.impl());
 }
 
-// --- Helper to create literal nodes from arithmetic types (cash style) ---
+// --- SPECIAL: For arithmetic literals, return ch_literal (NOT ch_uint<N>) ---
 template<typename LiteralType>
 requires std::is_arithmetic_v<LiteralType>
-lnode<LiteralType> get_lnode(LiteralType literal_val) {
-    auto ctx = ch::core::ctx_curr_;
-    if (!ctx) {
-        std::cerr << "[get_lnode(literal)] Error: No active context!" << std::endl;
-        return lnode<LiteralType>(nullptr);
-    }
-    // --- 使用 traits.h 中定义的 ch_width_v ---
-    constexpr uint32_t size = ch_width_v<LiteralType>; // <<--- Uses ch_width_v from traits.h
-    // --- End of ch_width_v usage ---
-    sdata_type sval(static_cast<uint64_t>(literal_val), size);
-    auto* lit_node = ctx->create_literal(sval); // Assuming create_literal exists
-    return lnode<LiteralType>(lit_node);
+ch_literal get_lnode(LiteralType literal_val) {
+    // Compute actual bit width needed for this literal
+    using Decayed = std::decay_t<LiteralType>;
+    using UnsignedType = std::make_unsigned_t<Decayed>;
+    
+    uint32_t actual_width = get_literal_width(static_cast<UnsignedType>(literal_val));
+    if (actual_width == 0) actual_width = 1;
+    if (actual_width > 64) actual_width = 64;
+
+    return ch_literal{
+        static_cast<uint64_t>(literal_val),
+        actual_width
+    };
 }
 
-// --- Forward declarations for node creation functions ---
-// These functions are implemented in their respective .cpp files (src/ast/...).
-// Updated to accept lnode<T> and lnode<U> arguments for consistency and type safety.
+// --- Forward declarations for node creation ---
 template<typename T, typename U>
 lnodeimpl* createOpNodeImpl(ch_op op, uint32_t size, bool is_signed,
                             const lnode<T>& lhs, const lnode<U>& rhs,
                             const std::string& name, const std::source_location& sloc);
 
-// Forward declarations for createRegNodeImpl
-// Make sure these signatures match the definitions in src/ast/regimpl.cpp
 template<typename T>
 lnodeimpl* createRegNodeImpl(unsigned size, const std::string& name, const std::source_location& sloc);
+
 template<typename T>
 lnodeimpl* createRegNodeImpl(const lnode<T>& init, const std::string& name, const std::source_location& sloc);
 
@@ -74,7 +93,5 @@ class ch_reg_impl;
 template<typename T>
 using ch_reg = const ch_reg_impl<T>;
 
-
 }} // namespace ch::core
-
 #endif // LOGIC_H
