@@ -28,7 +28,6 @@ namespace ch { namespace core {
 }}
 
 namespace ch {
-    class sdata_type;
 
 // Main function to generate Verilog code from the CppHDL IR context.
 // Uses the verilogwriter class internally.
@@ -46,7 +45,7 @@ private:
     // --- Helper functions for name generation and validation ---
     std::string sanitize_name(const std::string& name) const;
     std::string get_width_str(uint32_t size) const;
-    std::string get_literal_str(const sdata_type& val) const;
+    std::string get_literal_str(const ch::core::sdata_type& val) const;
 
     // --- Helper function to print operators ---
     std::string get_op_str(ch::core::ch_op op) const;

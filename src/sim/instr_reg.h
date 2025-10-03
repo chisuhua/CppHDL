@@ -11,6 +11,7 @@ namespace ch {
 // Forward declaration
 namespace core {
     class lnodeimpl; // Need the node ID
+    class sdata_type;
 }
 // Instruction for register update
 // Copies the value from the 'next' buffer to the 'current' buffer on eval.
@@ -19,7 +20,7 @@ public:
     instr_reg(uint32_t current_node_id, uint32_t size, uint32_t next_node_id);
     // Constructor takes pointers to the 'current' value buffer and the 'next' value buffer
 
-    void eval(const std::unordered_map<uint32_t, sdata_type>& data_map) override; // Pass data_map for lookups
+    void eval(const std::unordered_map<uint32_t, ch::core::sdata_type>& data_map) override; // Pass data_map for lookups
     uint32_t current_node_id() const { return current_node_id_; }
     uint32_t next_node_id() const { return next_node_id_; }
 

@@ -6,11 +6,11 @@
 
 #include <unordered_map> // If defining data_map_t here
 namespace ch { namespace core { class lnodeimpl; } }
-#include "types.h" // Include if sdata_type is defined there
+#include "types.h"
 
 namespace ch {
 
-using data_map_t = std::unordered_map<uint32_t /* node_id */, sdata_type>;
+using data_map_t = std::unordered_map<uint32_t, ch::core::sdata_type>;
 
 // Base class for all simulation instructions
 class instr_base {

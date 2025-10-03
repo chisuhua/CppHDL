@@ -4,6 +4,8 @@
 #include <cassert>
 #include <unordered_map> // For data_map_t if needed for debugging
 #include <iomanip>      // For std::hex, std::setw, std::setfill
+//
+using namespace ch::core;
 
 // --- Include the header where bv_assign_truncate is declared ---
 // Make sure the path is correct relative to this file.

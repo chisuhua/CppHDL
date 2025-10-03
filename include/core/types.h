@@ -10,7 +10,7 @@
 // Include the provided bitvector library
 #include "bv/bitvector.h" // Replace with the actual path to your bitvector.h
 //
-namespace ch {
+namespace ch { namespace core {
     struct sdata_type;
     // Declare the overloaded operators as friends so they can access private/protected members if needed
     // (Though sdata_type is a struct, so members are public by default.
@@ -23,9 +23,6 @@ namespace ch {
     sdata_type operator^(const sdata_type& lhs, const sdata_type& rhs);
     sdata_type operator~(const sdata_type& operand);
     // Add others as needed (/, %, ==, !=, <, >, etc.)
-}
-
-namespace ch {
 
 // Structure to hold simulation data values and IR literal values
 // Now uses ch::internal::bitvector<uint64_t> directly.
@@ -166,6 +163,6 @@ inline sdata_type operator>>(const sdata_type& lhs, uint32_t rhs) {
 }
 
 
-} // namespace ch
+}} // namespace ch
 
 #endif // TYPES_H

@@ -6,6 +6,10 @@
 #include "types.h" // For sdata_type
 #include <cstdint> // For uint32_t
 
+
+
+using namespace ch::core;
+
 namespace ch {
 
 // Instruction for input nodes (placeholder, actual value set externally)

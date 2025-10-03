@@ -61,7 +61,7 @@ private:
     ch::core::context* ctx_;
     std::vector <ch::core::lnodeimpl* > eval_list_; // Topologically sorted IR nodes (for initialization mapping)
     std::unordered_map <uint32_t, std::unique_ptr<ch::instr_base> > instr_map_; // node_id -> instruction object
-    std::unordered_map <uint32_t, sdata_type > data_map_; // node_id -> simulation data buffer (bitvector)
+    std::unordered_map <uint32_t, ch::core::sdata_type > data_map_; // node_id -> simulation data buffer (bitvector)
 };
 
 } // namespace ch

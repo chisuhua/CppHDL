@@ -327,7 +327,7 @@ std::string verilogwriter::get_width_str(uint32_t size) const {
     return "[" + std::to_string(size - 1) + ":0]";
 }
 
-std::string verilogwriter::get_literal_str(const ch::sdata_type& val) const {
+std::string verilogwriter::get_literal_str(const ch::core::sdata_type& val) const {
     // Corrected: Format the literal string correctly for Verilog
     // e.g., 8'hFF, 4'd5, 1'b1
     // Use a stringstream to apply std::hex formatting to the raw value

@@ -9,6 +9,8 @@
 
 // Include the provided bitvector library
 #include "bv/bitvector.h" // Replace with the actual path to your bitvector.h
+//
+using namespace ch::core;
 
 namespace ch {
 
