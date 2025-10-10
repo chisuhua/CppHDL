@@ -2,121 +2,129 @@
 #include "simulator.h"
 #include "core/lnodeimpl.h"
 #include "ast/ast_nodes.h"
+#include "logger.h"
 #include <cassert>
-#include <iostream>
 
 namespace ch {
 
 Simulator::Simulator(ch::core::context* ctx)
     : ctx_(ctx) {
+    CHDBG_FUNC();
+    CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
     
-    std::cout << "[Simulator::ctor] Received context " << ctx_ << std::endl;
-    if (!ctx_) {
-        throw std::invalid_argument("Context cannot be null");
-    }
     initialize();
 }
 
 Simulator::~Simulator() {
-    std::cout << "[Simulator::dtor] Destroying simulator for context " << ctx_ << std::endl;
+    CHDBG_FUNC();
     // unique_ptr 会自动清理 instr_cache_ 中的指令
 }
 
 void Simulator::initialize() {
+    CHDBG_FUNC();
+    
     if (initialized_) {
-        // 如果已经初始化，只需更新缓冲区指针
         update_instruction_pointers();
         return;
     }
     
-    std::cout << "[Simulator::initialize] Starting initialization for context " << ctx_ << std::endl;
+    CHREQUIRE(ctx_ != nullptr, "Context is null during initialization");
     
-    // 获取评估列表
     eval_list_ = ctx_->get_eval_list();
-    std::cout << "[Simulator::initialize] Retrieved eval_list with " << eval_list_.size() << " nodes." << std::endl;
+    CHDBG("Retrieved eval_list with %zu nodes", eval_list_.size());
     
-    // 清理之前的状态
     instr_map_.clear();
     instr_cache_.clear();
     data_map_.clear();
 
-    // 1. 分配数据缓冲区
-    std::cout << "[Simulator::initialize] Phase 1: Allocating data buffers." << std::endl;
+    // 分配数据缓冲区
     for (auto* node : eval_list_) {
+        CHCHECK_NULL(node, "Null node found in evaluation list, skipping");
+        
         if (!node) continue;
         
-        std::cout << "[Simulator::initialize] Processing node ID " << node->id() << " (ptr " << node << ")" << std::endl;
         uint32_t node_id = node->id();
         uint32_t size = node->size();
+        CHDBG("Processing node ID %u with size %u", node_id, size);
         
         if (node->type() == ch::core::lnodetype::type_lit) {
             auto* lit_node = static_cast<ch::core::litimpl*>(node);
-            std::cout << "[Simulator::initialize] Node " << node_id << " is literal, copying value." << std::endl;
             data_map_[node_id] = lit_node->value();
+            CHDBG("Set literal value for node %u", node_id);
         } else {
             data_map_[node_id] = ch::core::sdata_type(0, size);
+            CHDBG("Allocated buffer for node %u", node_id);
         }
-        std::cout << "[Simulator::initialize] Allocated buffer for node " << node_id << std::endl;
     }
-    std::cout << "[Simulator::initialize] Finished data_map_ initialization loop." << std::endl;
 
-    // 2. 创建指令缓存（一次性创建，后续重用）
-    std::cout << "[Simulator::initialize] Phase 2: Creating instruction cache." << std::endl;
+    // 创建指令缓存
     for (auto* node : eval_list_) {
         if (!node) continue;
         
-        std::cout << "[Simulator::initialize] Creating instruction for node ID " << node->id() << " (ptr " << node << ")" << std::endl;
         uint32_t node_id = node->id();
-        
-        // 让节点自己创建对应的指令
         auto instr = node->create_instruction(data_map_);
         if (instr) {
             instr_cache_[node_id] = std::move(instr);
-            instr_map_[node_id] = instr_cache_[node_id].get(); // 存储原始指针用于快速访问
-            std::cout << "[Simulator::initialize] Stored instruction for node_id:" << node_id << std::endl;
+            instr_map_[node_id] = instr_cache_[node_id].get();
+            CHDBG("Created instruction for node %u", node_id);
         } else {
-            std::cout << "[Simulator::initialize] No instruction created for node_id:" << node_id << std::endl;
+            CHDBG("No instruction created for node %u", node_id);
         }
     }
     
     initialized_ = true;
+    CHINFO("Simulator initialization completed successfully");
 }
 
 void Simulator::update_instruction_pointers() {
-    // 更新指令映射中的指针（当数据缓冲区可能发生变化时）
+    CHDBG_FUNC();
+    
     instr_map_.clear();
     for (const auto& pair : instr_cache_) {
         instr_map_[pair.first] = pair.second.get();
     }
+    CHDBG("Updated %zu instruction pointers", instr_map_.size());
 }
 
 void Simulator::eval() {
+    CHDBG_FUNC();
+    
     if (!initialized_) {
-        std::cerr << "[Simulator::eval] Error: Simulator not initialized!" << std::endl;
+        CHERROR("Simulator not initialized");
         return;
     }
     
-    std::cout << "[Simulator::eval] Starting evaluation loop." << std::endl;
+    if (eval_list_.empty()) {
+        CHDBG("No nodes to evaluate");
+        return;
+    }
+    
+    CHDBG("Starting evaluation loop with %zu nodes", eval_list_.size());
     for (auto* node : eval_list_) {
         if (!node) continue;
         
-        std::cout << "[Simulator::eval] Processing node ID " << node->id() << " (ptr " << node << ")" << std::endl;
         uint32_t node_id = node->id();
         auto it = instr_map_.find(node_id);
         if (it != instr_map_.end() && it->second) {
-            std::cout << "[Simulator::eval] Found instruction for node " << node_id << ", calling eval()." << std::endl;
+            CHDBG("Executing instruction for node %u", node_id);
             it->second->eval(data_map_);
         } else {
-            // 文字节点等不需要指令的节点会进入这里，这是正常的
-            std::cout << "[Simulator::eval] No instruction for node ID: " << node_id << std::endl;
+            CHDBG("No instruction for node ID: %u", node_id);
         }
     }
-    std::cout << "[Simulator::eval] Finished evaluation loop." << std::endl;
+    CHDBG("Evaluation loop completed");
 }
 
 void Simulator::eval_range(size_t start, size_t end) {
-    // 用于并行执行的辅助方法
+    CHDBG_FUNC();
+    
+    if (!initialized_) {
+        CHERROR("Simulator not initialized");
+        return;
+    }
+    
     if (start >= eval_list_.size() || end > eval_list_.size() || start >= end) {
+        CHERROR("Invalid evaluation range: start=%zu, end=%zu, list_size=%zu", start, end, eval_list_.size());
         return;
     }
     
@@ -133,43 +141,62 @@ void Simulator::eval_range(size_t start, size_t end) {
 }
 
 void Simulator::tick() {
-    std::cout << "[Simulator::tick] Calling eval()." << std::endl;
+    CHDBG_FUNC();
     eval();
 }
 
 void Simulator::tick(size_t count) {
+    CHDBG_FUNC();
+    CHDBG_VAR(count);
+    
+    if (count == 0) {
+        return;
+    }
+    
     for (size_t i = 0; i < count; ++i) {
-        std::cout << "[Simulator::tick] Tick " << (i + 1) << "/" << count << std::endl;
+        CHDBG("Tick %zu/%zu", i + 1, count);
         tick();
     }
 }
 
 void Simulator::reset() {
-    std::cout << "[Simulator::reset] Resetting simulator state." << std::endl;
+    CHDBG_FUNC();
     
-    // 重置数据缓冲区（保留结构，只重置值）
+    if (!initialized_) {
+        CHERROR("Simulator not initialized");
+        return;
+    }
+    
     for (auto& pair : data_map_) {
         uint32_t node_id = pair.first;
         auto* node = ctx_->get_node_by_id(node_id);
         if (node && node->type() != ch::core::lnodetype::type_lit) {
-            // 只重置非文字节点
             pair.second = ch::core::sdata_type(0, pair.second.bitwidth());
         }
     }
-    
-    // 重置指令状态（如果指令有重置方法）
-    for (auto& pair : instr_cache_) {
-        // 可以在这里调用指令的重置方法
-        // pair.second->reset();
-    }
-    
-    std::cout << "[Simulator::reset] Simulator state reset completed." << std::endl;
+    CHDBG("Simulator state reset completed");
 }
 
 uint64_t Simulator::get_value_by_name(const std::string& name) const {
-    if (!ctx_) return 0;
+    CHDBG_FUNC();
+    //CHDBG_VAR(name);
+    CHDBG("Looking for node with name: %s", name.c_str());  // 使用 CHDBG 替代 CHDBG_VAR
+
+    if (!initialized_) {
+        CHERROR("Simulator not initialized");
+        return 0;
+    }
     
-    // 遍历上下文中的所有节点
+    if (!ctx_) {
+        CHERROR("Context is null");
+        return 0;
+    }
+    
+    if (name.empty()) {
+        CHERROR("Node name cannot be empty");
+        return 0;
+    }
+    
     for (const auto& node_ptr : ctx_->get_nodes()) {
         if (node_ptr && node_ptr->name() == name) {
             uint32_t node_id = node_ptr->id();
@@ -182,6 +209,7 @@ uint64_t Simulator::get_value_by_name(const std::string& name) const {
             }
         }
     }
+    CHWARN("Node with name '%s' not found", name.c_str());
     return 0;
 }
 

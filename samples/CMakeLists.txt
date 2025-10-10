@@ -1,13 +1,17 @@
-add_executable(counter counter.cpp)
-include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include)
-include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/core)
-target_link_libraries(counter cpphdl)
+# samples/CMakeLists.txt
 
-include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include)
-include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/core)
+# 由于主库已经设置了包含目录，示例只需要链接主库即可
+file(GLOB EXAMPLE_SOURCES "*.cpp")
 
-
-#add_executable(stream stream.cpp)
-#include_directories(stream INTERFACE ${CMAKE_SOURCE_DIR}/include)
-#include_directories(stream INTERFACE ${CMAKE_SOURCE_DIR}/include/core)
-#target_link_libraries(stream cpphdl)
+foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})
+    get_filename_component(EXAMPLE_NAME ${EXAMPLE_SOURCE} NAME_WE)
+    add_executable(${EXAMPLE_NAME} ${EXAMPLE_SOURCE})
+    target_link_libraries(${EXAMPLE_NAME} cpphdl)
+    
+    # 设置C++标准
+    set_target_properties(${EXAMPLE_NAME} PROPERTIES
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+endforeach()
