@@ -6,6 +6,7 @@
 #include "core/context.h" // For ctx_curr_
 #include "lnodeimpl.h"    // For regimpl, proxyimpl, lnodetype
 #include "bitbase.h"      // For ch_uint, ch_width_v, logic_buffer
+#include "traits.h"      // For ch_uint, ch_width_v, logic_buffer
 #include <string>
 #include <typeinfo>
 #include <memory>         // For std::unique_ptr
@@ -163,6 +164,24 @@ private:
 // --- Width trait specialization ---
 template <typename T>
 struct ch_width_impl<ch_reg_impl<T>, void> {
+    static constexpr unsigned value = ch_width_v<T>;
+};
+
+// 处理 const ch_reg_impl
+template <typename T>
+struct ch_width_impl<const ch_reg_impl<T>, void> {
+    static constexpr unsigned value = ch_width_v<T>;
+};
+
+// 处理 volatile ch_reg_impl
+template <typename T>
+struct ch_width_impl<volatile ch_reg_impl<T>, void> {
+    static constexpr unsigned value = ch_width_v<T>;
+};
+
+// 处理 const volatile ch_reg_impl
+template <typename T>
+struct ch_width_impl<const volatile ch_reg_impl<T>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };
 

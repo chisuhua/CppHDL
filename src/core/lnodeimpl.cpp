@@ -1,16 +1,3 @@
-// src/core/lnodeimpl.cpp
-/*
-#define CH_LNODE_ENUM(m) \
-  m(none) \
-  m(lit) \
-  m(proxy) \
-  m(input) \
-  m(output) \
-  m(op) \
-  m(reg) \
-  m(mem)
-*/
-
 #include "lnodeimpl.h"
 
 #include <array>

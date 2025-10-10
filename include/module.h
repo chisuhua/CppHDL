@@ -40,30 +40,23 @@ public:
              std::cerr << "[ch_module::ctor] Error: Parent Component has no valid context!" << std::endl;
              return; // Or throw an exception
         }
-        std::cout << "[ch_module::ctor] Using parent context " << parent_context << std::endl; // Debug print
 
-        // 3. Construct the hierarchical path name for the child component
+        // 3. Construct the hierarchical path name
         std::string child_path_name = build_hierarchical_name(parent_component, instance_name);
-        std::cout << "[ch_module::ctor] Using hierarchical name/path: '" << child_path_name << "'" << std::endl;
 
-        // 4. Create the child component instance, passing the parent and the constructed path name
+        // 4. Create the child component instance
         std::unique_ptr<T> local_child_ptr = std::make_unique<T>(parent_component, child_path_name);
 
-        // 5. Build the child component within its own temporary context (managed by T::build and ctx_swap)
-        local_child_ptr->build(parent_context);
-
-        // 6. Transfer ownership of the child component to the parent.
+        // 5. Transfer ownership of the child component to the parent.
         // We will cast it to T* when accessing via io() or instance().
         child_component_ptr_ = dynamic_cast<T*>(parent_component->add_child(std::move(local_child_ptr)));
-
-        // 7. Clear our local unique_ptr as ownership has been transferred
-        // local_child_ptr is now nullptr.
-
         if (!child_component_ptr_) {
              std::cerr << "[ch_module::ctor] Error: add_child returned null or failed dynamic_cast!" << std::endl;
-             // Handle error appropriately - child_component_ptr_ will be null
-             // Subsequent calls to io() / instance() will need to handle this.
         }
+
+        // 6. Build the child component within its own temporary context (managed by T::build and ctx_swap)
+        child_component_ptr_->build(parent_context);
+
         std::cout << "[ch_module::ctor] Finished creating module, child ptr is " << child_component_ptr_ << std::endl;
     }
 

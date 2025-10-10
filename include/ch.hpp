@@ -2,10 +2,10 @@
 #define CH_HPP
 
 // --- Core (dependencies first) ---
-#include "types.h"        // Define sdata_type first
+//#include "types.h"        // Define sdata_type first
 #include "core/context.h" // Define context (depends on types.h)
 #include "core/lnodeimpl.h"    // Define base lnodeimpl (depends on context.h/types.h)
-#include "core/ast_nodes.h"    // Define specific nodes (depends on lnodeimpl.h/context.h/types.h)
+#include "ast/ast_nodes.h"    // Define specific nodes (depends on lnodeimpl.h/context.h/types.h)
 #include "device.h"       // Define ch_device (depends on component.h, core/deviceimpl.h)
 #include "component.h"    // Define Component base class
 #include "module.h"    // Define Component base class

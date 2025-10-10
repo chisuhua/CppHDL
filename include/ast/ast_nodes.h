@@ -1,12 +1,19 @@
-// include/ast_nodes.h
+// include/core/ast_nodes.h
 #ifndef AST_NODES_H
 #define AST_NODES_H
 
 #include "lnodeimpl.h"
 #include "types.h"
-
 #include <string>
 #include <source_location>
+#include <memory>
+
+// 只前向声明，不在头文件中包含具体指令头文件
+/*
+namespace ch {
+    class instr_base;
+}
+*/
 
 namespace ch { namespace core {
 
@@ -53,6 +60,10 @@ public:
     lnodeimpl* get_next() const { return num_srcs() > 1 ? src(1) : nullptr; }
     lnodeimpl* get_init_val() const { return num_srcs() > 0 ? src(0) : nullptr; }
 
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override;
+
 private:
     uint32_t cd_;
     lnodeimpl* rst_ = nullptr;
@@ -75,6 +86,10 @@ public:
     bool is_signed() const { return is_signed_; }
     lnodeimpl* lhs() const { return src(0); }
     lnodeimpl* rhs() const { return src(1); }
+
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override;
 
 private:
     ch_op op_;
@@ -101,7 +116,12 @@ public:
             }
         }
     }
+
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override;
 };
+
 // --- inputimpl ---
 class inputimpl : public lnodeimpl {
 public:
@@ -114,6 +134,10 @@ public:
     void set_value(const sdata_type& val) { value_ = val; }
     void set_driver(lnodeimpl* drv) { driver_ = drv; }
     lnodeimpl* driver() const { return driver_; }
+
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override;
 
 private:
     sdata_type value_;
@@ -133,6 +157,10 @@ public:
     const sdata_type& value() const { return value_; }
     void set_value(const sdata_type& val) { value_ = val; }
     lnodeimpl* src_driver() const { return src(0); }
+
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override;
 
 private:
     sdata_type value_;
@@ -154,6 +182,12 @@ public:
         if (!lnodeimpl::equals(other)) return false;
         auto* other_lit = static_cast<const litimpl*>(&other);
         return this->value_ == other_lit->value_;
+    }
+
+    // 文字节点不需要仿真指令（值已经在数据缓冲区中）
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override {
+        return nullptr; // 文字节点不需要执行指令
     }
 
 private:

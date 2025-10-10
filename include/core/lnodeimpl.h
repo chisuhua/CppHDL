@@ -8,12 +8,17 @@
 #include <source_location>
 #include <unordered_map>
 #include <sstream>
+#include <memory>
+
+#include "instr_base.h"
 
 // Forward declarations to avoid circular dependencies
-namespace ch { namespace core {
-    class context;
-    struct sdata_type;
-}}
+namespace ch { 
+    namespace core {
+        class context;
+        struct sdata_type;
+    }
+}
 
 namespace ch { namespace core {
 #define CH_LNODE_TYPE(t) type_##t,
@@ -121,6 +126,13 @@ public:
             }
         }
         return true;
+    }
+
+    // 新增：创建对应的仿真指令
+    virtual std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const {
+        // 默认实现返回空指针，具体节点类可以重写
+        return nullptr;
     }
 
 protected:

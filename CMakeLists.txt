@@ -20,17 +20,20 @@ target_include_directories(bitvector
 add_library(cpphdl 
     src/core/context.cpp 
     src/core/lnodeimpl.cpp
+    src/ast/ast_nodes.cpp
     src/component.cpp
     src/simulator.cpp
     src/codegen.cpp
-    src/sim/instr_op.cpp
-    src/sim/instr_io.cpp
-    src/sim/instr_proxy.cpp
-    src/sim/instr_reg.cpp
+    src/ast/instr_io.cpp
+    src/ast/instr_proxy.cpp
+    src/ast/instr_reg.cpp
 )
 
 include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include)
 include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/core)
+include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/ast)
+include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/abstract)
+include_directories(counter INTERFACE ${CMAKE_SOURCE_DIR}/include/utils)
 
 target_include_directories(cpphdl INTERFACE ${CMAKE_SOURCE_DIR}/include)
 target_include_directories(cpphdl INTERFACE ${CMAKE_SOURCE_DIR}/include/core)

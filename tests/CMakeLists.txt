@@ -15,5 +15,19 @@ target_include_directories(test_bitvector PRIVATE
     ${PROJECT_SOURCE_DIR}/include
 )
 
+add_executable(test_reg 
+    catch_amalgamated.cpp
+    test_reg.cpp
+)
+
+# 包含头文件目录
+target_include_directories(test_reg PRIVATE 
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+
+target_link_libraries(test_reg cpphdl)
+
 # 启用 CTest 支持
 add_test(NAME test_bitvector COMMAND test_bitvector)

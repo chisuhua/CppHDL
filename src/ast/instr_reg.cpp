@@ -1,5 +1,6 @@
 // src/sim/instr_reg.cpp
 #include "instr_reg.h"
+#include "types.h"
 #include <iostream>
 #include <cassert>
 #include <unordered_map> // For data_map_t if needed for debugging
@@ -25,7 +26,7 @@ instr_reg::instr_reg(uint32_t current_node_id, uint32_t size, uint32_t next_node
 }
 
 // --- MODIFIED instr_reg::eval with data_map lookup and truncation using bv_assign_truncate ---
-void instr_reg::eval(const std::unordered_map<uint32_t, sdata_type>& data_map) {
+void instr_reg::eval(const ch::data_map_t& data_map) {
     // --- DEBUG PRINTS (Optional, can be disabled for performance) ---
     std::cout << std::hex << std::setfill('0'); // Set output format for hex values
     std::cout << "[instr_reg::eval] === EVAL START (IDs: curr=" << current_node_id_ << ", next=" << next_node_id_ << ", size=" << this->size() << ") ===" << std::endl;
