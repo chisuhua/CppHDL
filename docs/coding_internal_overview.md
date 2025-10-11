@@ -1,5 +1,14 @@
 # CppHDL项目维护者内部文档 (Coding Internal Documentation)
 
+这是一个硬件描述语言的 C++ 实现，包含了 IR（中间表示）、代码生成、仿真等功能。
+
+主要组件包括：
+IR 层：lnodeimpl 及其派生类表示硬件节点
+上下文管理：context 管理节点创建和生命周期
+代码生成：verilogwriter 将 IR 转换为 Verilog
+仿真器：Simulator 执行硬件行为仿真
+组件系统：Component 提供模块化设计
+
 ## 1. 项目架构概览
 
 ```

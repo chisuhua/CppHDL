@@ -177,40 +177,40 @@ void Simulator::reset() {
     CHDBG("Simulator state reset completed");
 }
 
-uint64_t Simulator::get_value_by_name(const std::string& name) const {
+const ch::core::sdata_type& Simulator::get_value_by_name(const std::string& name) const {
     CHDBG_FUNC();
-    //CHDBG_VAR(name);
-    CHDBG("Looking for node with name: %s", name.c_str());  // 使用 CHDBG 替代 CHDBG_VAR
+    CHDBG("Looking for node with name: %s", name.c_str());
 
     if (!initialized_) {
         CHERROR("Simulator not initialized");
-        return 0;
+        return ch::core::constants::empty;
     }
     
     if (!ctx_) {
         CHERROR("Context is null");
-        return 0;
+        return ch::core::constants::empty;
     }
     
     if (name.empty()) {
         CHERROR("Node name cannot be empty");
-        return 0;
+        return ch::core::constants::empty;
     }
     
+    // 查找节点
     for (const auto& node_ptr : ctx_->get_nodes()) {
         if (node_ptr && node_ptr->name() == name) {
             uint32_t node_id = node_ptr->id();
             auto it = data_map_.find(node_id);
             if (it != data_map_.end()) {
-                const auto& bv = it->second.bv_;
-                if (bv.num_words() > 0) {
-                    return bv.words()[0];
-                }
+                return it->second;
             }
+            CHWARN("Data not found for node '%s' with ID %u", name.c_str(), node_id);
+            return ch::core::constants::empty;
         }
     }
+    
     CHWARN("Node with name '%s' not found", name.c_str());
-    return 0;
+    return ch::core::constants::empty;
 }
 
 } // namespace ch

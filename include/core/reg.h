@@ -6,12 +6,12 @@
 #include "core/context.h" // For ctx_curr_
 #include "lnodeimpl.h"    // For regimpl, proxyimpl, lnodetype
 #include "bitbase.h"      // For ch_uint, ch_width_v, logic_buffer
-#include "traits.h"      // For ch_uint, ch_width_v, logic_buffer
+#include "traits.h"       // For ch_uint, ch_width_v, logic_buffer
+#include "logger.h"    // For logging macros
 #include <string>
 #include <typeinfo>
 #include <memory>         // For std::unique_ptr
 #include <source_location> // C++20
-#include <iostream>
 #include <type_traits>    // For std::is_same_v
 
 namespace ch { namespace core {
@@ -33,15 +33,15 @@ struct next_assignment_proxy {
     template<typename U>
     void operator=(const U& value) const {
         lnode<U> src_lnode = get_lnode(value);
-        std::cout << "[next_assignment_proxy::operator=] Assigning value (node ID: " 
-                  << (src_lnode.impl() ? src_lnode.impl()->id() : -1) 
-                  << ") to regimpl node ID " 
-                  << (regimpl_node_ ? regimpl_node_->id() : -1) << std::endl;
+        CHDBG("[next_assignment_proxy::operator=] Assigning value (node ID: %d) to regimpl node ID %d", 
+              (src_lnode.impl() ? static_cast<int>(src_lnode.impl()->id()) : -1), 
+              (regimpl_node_ ? static_cast<int>(regimpl_node_->id()) : -1));
+        
         if (regimpl_node_ && src_lnode.impl() && regimpl_node_->type() == lnodetype::type_reg) {
             regimpl* reg_node_impl = static_cast<regimpl*>(regimpl_node_);
             reg_node_impl->set_next(src_lnode.impl());
         } else {
-             std::cerr << "[next_assignment_proxy::operator=] Error: regimpl_node_ is null, not a regimpl, or src_lnode is null!" << std::endl;
+            CHERROR("[next_assignment_proxy::operator=] Error: regimpl_node_ is null, not a regimpl, or src_lnode is null!");
         }
     }
 };
@@ -63,11 +63,11 @@ public:
     // Constructor with initial value (supports literals and HDL types)
     template<typename U>
     ch_reg_impl(const U& initial_value) {
-        std::cout << "  [ch_reg] Creating register with initial value" << std::endl;
+        CHDBG("  [ch_reg] Creating register with initial value");
 
         auto ctx = ch::core::ctx_curr_;
         if (!ctx) {
-            std::cerr << "[ch_reg] Error: No active context!" << std::endl;
+            CHERROR("[ch_reg] Error: No active context!");
             return;
         }
 
@@ -81,8 +81,8 @@ public:
             constexpr unsigned width = ch_width_v<T>;
             // Optional: warn if value doesn't fit
             if (init_result.value >= (1ULL << width)) {
-                std::cerr << "[ch_reg] Warning: Initial literal " << init_result.value 
-                          << " exceeds " << width << "-bit width!" << std::endl;
+                CHWARN("[ch_reg] Warning: Initial literal %llu exceeds %u-bit width!", 
+                       static_cast<unsigned long long>(init_result.value), width);
             }
             sdata_type sval(init_result.value, width);
             init_node_impl = ctx->create_literal(sval);
@@ -90,7 +90,7 @@ public:
             // Handle HDL type (e.g., ch_uint<N>, another reg)
             init_node_impl = init_result.impl();
             if (!init_node_impl) {
-                std::cerr << "[ch_reg] Error: Initial value is not a valid HDL node!" << std::endl;
+                CHERROR("[ch_reg] Error: Initial value is not a valid HDL node!");
                 return;
             }
         }
@@ -111,27 +111,27 @@ public:
             proxy_node->src(0) && proxy_node->src(0)->type() == lnodetype::type_reg) {
             regimpl_node_ = proxy_node->src(0);
         } else {
-            std::cerr << "[ch_reg_impl] Error: Could not get regimpl node from proxyimpl source!" << std::endl;
+            CHERROR("[ch_reg_impl] Error: Could not get regimpl node from proxyimpl source!");
             regimpl_node_ = nullptr;
         }
         __next__ = std::make_unique<next_type>(regimpl_node_);
 
-        std::cout << "  [ch_reg] Created regimpl and next_proxy." << std::endl;
+        CHDBG("  [ch_reg] Created regimpl and next_proxy.");
     }
 
     // Constructor without initial value
     ch_reg_impl() {
-        std::cout << "  [ch_reg] Creating register without initial value." << std::endl;
+        CHDBG("  [ch_reg] Creating register without initial value.");
 
         auto ctx = ch::core::ctx_curr_;
         if (!ctx) {
-            std::cerr << "[ch_reg] Error: No active context!" << std::endl;
+            CHERROR("[ch_reg] Error: No active context!");
             return;
         }
 
         constexpr unsigned size = ch_width_v<T>;
-        std::cout << "[ch_reg_impl::ctor (no init)] Type T is: " << typeid(T).name() << std::endl;
-        std::cout << "[ch_reg_impl::ctor (no init)] Calculated register size (ch_width_v<T>): " << size << std::endl;
+        CHDBG("[ch_reg_impl::ctor (no init)] Type T is: %s", typeid(T).name());
+        CHDBG("[ch_reg_impl::ctor (no init)] Calculated register size (ch_width_v<T>): %u", size);
 
         // Create regimpl without initial value
         regimpl* reg_node = ctx->create_node<regimpl>(
@@ -146,12 +146,12 @@ public:
             proxy_node->src(0) && proxy_node->src(0)->type() == lnodetype::type_reg) {
             regimpl_node_ = proxy_node->src(0);
         } else {
-            std::cerr << "[ch_reg_impl] Error: Could not get regimpl node from proxyimpl source (no init)!" << std::endl;
+            CHERROR("[ch_reg_impl] Error: Could not get regimpl node from proxyimpl source (no init)!");
             regimpl_node_ = nullptr;
         }
         __next__ = std::make_unique<next_type>(regimpl_node_);
 
-        std::cout << "  [ch_reg] Created regimpl (no init) and next_proxy." << std::endl;
+        CHDBG("  [ch_reg] Created regimpl (no init) and next_proxy.");
     }
 
     const next_type* operator->() const { return __next__.get(); }

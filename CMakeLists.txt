@@ -80,6 +80,7 @@ set(CH_SOURCES
     src/component.cpp
     src/simulator.cpp
     src/codegen.cpp
+    src/utils/types.cpp
 )
 
 # 创建主库

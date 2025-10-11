@@ -17,6 +17,13 @@
 
 namespace ch { namespace core {
 
+/* 使用thread_local的理由:
+1. **线程隔离性**：每个线程都有独立的变量副本，互不干扰
+2. **上下文切换**：在线程内串行执行不同的 context，`thread_local` 能正确维护当前状态
+3. **性能优势**：无需锁机制，访问速度快
+4. **简化设计**：避免了复杂的线程同步代码
+*/
+
 extern thread_local context* ctx_curr_;
 
 class ctx_swap {
@@ -58,7 +65,6 @@ public:
             T* raw_ptr = node.get();
             
             node_storage_.push_back(std::move(node));
-            node_map_[raw_ptr->id()] = raw_ptr;
             
             if (debug_context_lifetime) {
                 CHINFO("Created node ID %u (%s) of type %d in context 0x%llx", 
@@ -109,7 +115,6 @@ private:
     void init();
 
     std::vector<std::unique_ptr<lnodeimpl>> node_storage_;
-    std::unordered_map<uint32_t, lnodeimpl*> node_map_;
     uint32_t next_node_id_ = 0;
     clockimpl* current_clock_ = nullptr;
     resetimpl* current_reset_ = nullptr;

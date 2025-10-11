@@ -52,8 +52,7 @@ context::~context() {
     }
     
     try {
-        node_map_.clear();
-        
+        CHDBG("Cleaning up %zu nodes", node_storage_.size());
         if (ctx_curr_ == this) {
             if (debug_context_lifetime) {
                 CHWARN("Context 0x%llx being destroyed was still the active ctx_curr_!", 
@@ -73,7 +72,6 @@ void context::init() {
     CHDBG_FUNC();
     try {
         node_storage_.reserve(100);
-        node_map_.reserve(100);
         CHDBG("Reserved capacity for context containers");
     } catch (const std::bad_alloc&) {
         CHERROR("Failed to reserve memory for context containers");
@@ -124,8 +122,17 @@ void context::set_as_current_context() {
 lnodeimpl* context::get_node_by_id(uint32_t id) const {
     CHDBG_FUNC();
     CHDBG("Looking up node ID %u", id);
-    auto it = node_map_.find(id);
-    return (it != node_map_.end()) ? it->second : nullptr;
+    
+    //get_node_by_id() 主要在仿真初始化时调用 运行时很少使用
+    // 使用线性查找替代 map 查找, O(n)影响比较小
+    for (const auto& node_ptr : node_storage_) {
+        if (node_ptr && node_ptr->id() == id) {
+            return node_ptr.get();
+        }
+    }
+    
+    CHDBG("Node ID %u not found", id);
+    return nullptr;
 }
 
 litimpl* context::create_literal(const sdata_type& value, 

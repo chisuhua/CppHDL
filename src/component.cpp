@@ -61,14 +61,15 @@ void Component::build_internal(ch::core::context* target_ctx) {
     describe();
 }
 
-Component* Component::add_child(std::unique_ptr<Component> child) {
+// 修改返回类型和实现
+std::shared_ptr<Component> Component::add_child(std::unique_ptr<Component> child) {
     CHDBG_FUNC();
     CHREQUIRE(child != nullptr, "Cannot add null child component");
     
-    auto* raw_ptr = child.get();
-    children_.push_back(std::move(child));
-    CHDBG("Added child component: %s", raw_ptr ? raw_ptr->name().c_str() : "unknown");
-    return raw_ptr;
+    auto shared_child = std::shared_ptr<Component>(std::move(child));
+    children_shared_.push_back(shared_child);
+    CHDBG("Added child component: %s", shared_child->name().c_str());
+    return shared_child;
 }
 
 } // namespace ch

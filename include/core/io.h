@@ -7,9 +7,9 @@
 #include "lnodeimpl.h"
 #include "traits.h"
 #include "ast_nodes.h" 
+#include "logger.h"
 #include <source_location>
 #include <string>
-#include <iostream>
 
 namespace ch { namespace core {
 
@@ -19,23 +19,25 @@ public:
     using value_type = T;
     ch_logic_out(const std::string& name = "io", const std::source_location& sloc = std::source_location::current())
         : name_(name) {
+        CHDBG_FUNC();
         auto ctx = ch::core::ctx_curr_;
         if (!ctx) {
-            std::cerr << "[ch_logic_out] Error: No active context for output '" << name << "'!" << std::endl;
+            CHERROR("[ch_logic_out] Error: No active context for output '%s'!", name.c_str());
             return;
         }
         outputimpl* node_ptr = ctx->create_output(ch_width_v<T>, name, sloc);
         output_node_ = node_ptr;
-        std::cout << "  [ch_logic_out] Created outputimpl node for '" << name << "'" << std::endl;
+        CHDBG("  [ch_logic_out] Created outputimpl node for '%s'", name.c_str());
     }
 
     template <typename U>
     void operator=(const U& value) {
+        CHDBG_FUNC();
         lnode<U> src_lnode = get_lnode(value);
         if (output_node_ && src_lnode.impl()) {
             output_node_->set_src(0, src_lnode.impl());
         } else {
-            std::cerr << "[ch_logic_out::operator=] Error: output_node_ or src_lnode is null for '" << name_ << "'!" << std::endl;
+            CHERROR("[ch_logic_out::operator=] Error: output_node_ or src_lnode is null for '%s'!", name_.c_str());
         }
     }
 
@@ -52,11 +54,12 @@ public:
     using value_type = T;
     ch_logic_in(const std::string& name = "io", const std::source_location& sloc = std::source_location::current())
         : name_(name) {
+        CHDBG_FUNC();
         auto ctx = ch::core::ctx_curr_;
         if (ctx) {
             inputimpl* node_ptr = ctx->create_input(ch_width_v<T>, name, sloc);
             input_node_ = node_ptr;
-            std::cout << "  [ch_logic_in] Created inputimpl node for '" << name << "'" << std::endl;
+            CHDBG("  [ch_logic_in] Created inputimpl node for '%s'", name.c_str());
         }
     }
 

@@ -1680,11 +1680,11 @@ bool bv_ge_truncate(const bitvector<word_t>& lhs, const bitvector<word_t>& rhs) 
     return !bv_lt_truncate(lhs, rhs); // Delegate to bv_lt
 }
 
-// ... (potentially other code or closing includes) ...
-}} // namespace ch::internal
+//template <typename word_t>
+//std::ostream& operator<<(std::ostream& out, const bitvector<word_t>& in);
 
 template <typename word_t>
-std::ostream& operator<<(std::ostream& out, const ch::internal::bitvector<word_t>& in) {
+std::ostream& operator<<(std::ostream& out, const bitvector<word_t>& in) {
   out << "0x";
   auto oldflags = out.flags();
   out.setf(std::ios_base::hex, std::ios_base::basefield);
@@ -1709,6 +1709,7 @@ std::ostream& operator<<(std::ostream& out, const ch::internal::bitvector<word_t
   out.flags(oldflags);
   return out;
 }
+}} // namespace ch::internal
 
 template<typename T>
 inline std::string to_bitstring(const ch::internal::bitvector<T>& bv) {

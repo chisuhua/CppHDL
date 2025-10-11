@@ -31,39 +31,32 @@ public:
     void reset();
     
     template <typename T>
-    uint64_t get_value(const ch::core::ch_logic_out<T>& port) const {
+    const ch::core::sdata_type get_value(const ch::core::ch_logic_out<T>& port) const {
         CHDBG_FUNC();
         
         if (!initialized_) {
-            CHERROR("Simulator not initialized when getting value");
-            return 0;
+            CHABORT("Simulator not initialized when getting value");
+            //return 0;
         }
         
         auto* output_node = port.impl();
         if (!output_node) {
-            CHERROR("Port implementation is null");
-            return 0;
+            CHABORT("Port implementation is null");
+            //return 0;
         }
-        
-        auto* proxy = output_node->src(0);
-        if (!proxy) {
-            CHERROR("Output proxy node is null");
-            return 0;
-        }
-        
-        auto it = data_map_.find(proxy->id());
+
+        // 直接从 output 节点获取值
+        uint32_t node_id = output_node->id();
+        auto it = data_map_.find(node_id);
         if (it != data_map_.end()) {
-            const auto& bv = it->second.bv_;
-            if (bv.num_words() > 0) {
-                return bv.words()[0];
-            }
+            return it->second;
         }
         
-        CHWARN("Value not found for proxy node ID: %u", proxy->id());
-        return 0;
+        CHWARN("Value not found for output node ID: %u", node_id);
+        return ch::core::constants::zero(ch::core::ch_width_v<T>);
     }
 
-    uint64_t get_value_by_name(const std::string& name) const;
+    const ch::core::sdata_type& get_value_by_name(const std::string& name) const ;
     
     template <typename T>
     void set_input_value(const ch::core::ch_logic_in<T>& port, uint64_t value) {

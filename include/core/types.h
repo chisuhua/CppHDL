@@ -1,20 +1,19 @@
-// types.h
-#ifndef TYPES_H
-#define TYPES_H
+// include/core/types.h
+#ifndef CORE_TYPES_H
+#define CORE_TYPES_H
 
 #include <cstdint>
-#include <vector>
 #include <string>
-#include <source_location> // C++20
+#include <iostream>
+#include <unordered_map>
 
 // Include the provided bitvector library
-#include "bv/bitvector.h" // Replace with the actual path to your bitvector.h
-//
+#include "bv/bitvector.h"
+
 namespace ch { namespace core {
     struct sdata_type;
-    // Declare the overloaded operators as friends so they can access private/protected members if needed
-    // (Though sdata_type is a struct, so members are public by default.
-    //  Declaring them as friends is good practice if they need direct access to bv_).
+    
+    // Forward declarations for operators
     sdata_type operator+(const sdata_type& lhs, const sdata_type& rhs);
     sdata_type operator-(const sdata_type& lhs, const sdata_type& rhs);
     sdata_type operator*(const sdata_type& lhs, const sdata_type& rhs);
@@ -22,66 +21,80 @@ namespace ch { namespace core {
     sdata_type operator|(const sdata_type& lhs, const sdata_type& rhs);
     sdata_type operator^(const sdata_type& lhs, const sdata_type& rhs);
     sdata_type operator~(const sdata_type& operand);
-    // Add others as needed (/, %, ==, !=, <, >, etc.)
+    sdata_type operator<<(const sdata_type& lhs, uint32_t rhs);
+    sdata_type operator>>(const sdata_type& lhs, uint32_t rhs);
+    bool operator==(const sdata_type& lhs, const sdata_type& rhs);
+    bool operator!=(const sdata_type& lhs, const sdata_type& rhs);
+    bool operator<(const sdata_type& lhs, const sdata_type& rhs);
+    bool operator<=(const sdata_type& lhs, const sdata_type& rhs);
+    bool operator>(const sdata_type& lhs, const sdata_type& rhs);
+    bool operator>=(const sdata_type& lhs, const sdata_type& rhs);
 
-// Structure to hold simulation data values and IR literal values
-// Now uses ch::internal::bitvector<uint64_t> directly.
+// Minimal core structure to hold simulation data values
 struct sdata_type {
     using block_t = uint64_t;
-    // Use bitvector as the underlying data type
     ch::internal::bitvector<block_t> bv_;
 
-    // Constructor from a raw value and bitwidth (delegates to bitvector constructor)
+    // Minimal constructors
     sdata_type(block_t value, uint32_t width) : bv_(width) {
-        bv_ = value; // Use bitvector's assignment operator to set the initial value
+        bv_ = value;
     }
 
-    // Default constructor (creates a 0-bit vector, often resized later)
     sdata_type() : bv_() {}
-
-    // Constructor from bit width only (initializes to zero)
     explicit sdata_type(uint32_t width) : bv_(width) {}
 
-    // Get the bit width (delegates to bitvector's size method)
+    // Essential accessors
     uint32_t bitwidth() const { return bv_.size(); }
-
-    // Check if the value is zero (delegates to bitvector's is_zero method)
     bool is_zero() const { return bv_.is_zero(); }
 
-    // Equality operator (delegates to bitvector's operator==)
-    /*
-    bool operator==(const sdata_type& other) const {
-        return bv_ == other.bv_;
-    }
-    */
-
-    // Assignment operator (delegates to bitvector's operator=)
+    // Essential assignment operators
     sdata_type& operator=(const sdata_type& other) {
-        if (this != &other) { // Self-assignment check
+        if (this != &other) {
             bv_ = other.bv_;
         }
         return *this;
     }
 
-    // Assignment operator from literal (delegates to bitvector's operator=)
     template<typename U>
     sdata_type& operator=(U value) {
-        bv_ = value; // Uses bitvector's assignment from integral type
+        bv_ = value;
         return *this;
     }
 
-    // Accessor for the underlying bitvector (if needed for direct manipulation)
+    // Essential accessors for the underlying bitvector
     ch::internal::bitvector<uint64_t>& bitvector() { return bv_; }
     const ch::internal::bitvector<uint64_t>& bitvector() const { return bv_; }
 
-    // Optional: Add common checks from bitvector
-    bool is_one() const { return bv_.is_one(); }
-    bool is_ones() const { return bv_.is_ones(); }
-    bool is_neg() const { return bv_.is_neg(); }
+    // Essential type conversion
+    explicit operator uint64_t() const {
+        if (bv_.num_words() > 0) {
+            return bv_.words()[0];
+        }
+        return 0;
+    }
 
-    // --- NEW: Friend declarations for overloaded operators ---
-    // These allow the operators defined outside the struct to access private/protected members.
-    // Since sdata_type is a struct, members are public, but it's good practice.
+    // ========== Extended method declarations (to be implemented in utils/types.h) ==========
+    // String conversion methods
+    std::string to_string() const;
+    std::string to_string_dec() const;
+    std::string to_string_hex() const;
+    std::string to_string_bin() const;
+    std::string to_bitstring() const;
+    std::string to_string_verbose() const;
+    
+    // Extended convenience methods
+    bool is_one() const;
+    bool is_ones() const;
+    bool is_neg() const;
+    bool get_bit(uint32_t index) const;
+    void set_bit(uint32_t index, bool value);
+    bool is_value(uint64_t value) const;
+    bool msb() const;
+    bool lsb() const;
+    void reset();
+
+private:
+    // Friend declarations
     friend sdata_type operator+(const sdata_type& lhs, const sdata_type& rhs);
     friend sdata_type operator-(const sdata_type& lhs, const sdata_type& rhs);
     friend sdata_type operator*(const sdata_type& lhs, const sdata_type& rhs);
@@ -89,80 +102,58 @@ struct sdata_type {
     friend sdata_type operator|(const sdata_type& lhs, const sdata_type& rhs);
     friend sdata_type operator^(const sdata_type& lhs, const sdata_type& rhs);
     friend sdata_type operator~(const sdata_type& operand);
+    friend sdata_type operator<<(const sdata_type& lhs, uint32_t rhs);
+    friend sdata_type operator>>(const sdata_type& lhs, uint32_t rhs);
     friend bool operator==(const sdata_type& lhs, const sdata_type& rhs);
+    friend bool operator!=(const sdata_type& lhs, const sdata_type& rhs);
+    friend bool operator<(const sdata_type& lhs, const sdata_type& rhs);
+    friend bool operator<=(const sdata_type& lhs, const sdata_type& rhs);
+    friend bool operator>(const sdata_type& lhs, const sdata_type& rhs);
+    friend bool operator>=(const sdata_type& lhs, const sdata_type& rhs);
+    
+    // Friend for stream output
+    friend std::ostream& operator<<(std::ostream& os, const sdata_type& sdata);
 };
 
-// --- Helper macro to reduce boilerplate for binary operators ---
-#define CH_SDATA_BINARY_OP_TRUNCATE(op_name, op_func, bv_op_func) \
-inline sdata_type operator op_name(const sdata_type& lhs, const sdata_type& rhs) { \
-    sdata_type result(0, lhs.bitwidth()); \
-    bv_op_func(&result.bv_, &lhs.bv_, &rhs.bv_); \
-    return result; \
-}
+// ========== Minimal Constants ==========
+namespace constants {
+    inline const sdata_type empty{};
+    inline const sdata_type zero_8bit{0, 8};
+    inline const sdata_type one_8bit{1, 8};
+    
+    inline const sdata_type& empty_singleton() {
+        static const sdata_type instance;
+        return instance;
+    }
+    
+    inline const sdata_type& zero(uint32_t width = 1) {
+        static thread_local std::unordered_map<uint32_t, sdata_type> zero_cache;
+        auto it = zero_cache.find(width);
+        if (it == zero_cache.end()) {
+            it = zero_cache.emplace(width, sdata_type(0, width)).first;
+        }
+        return it->second;
+    }
+    
+    // Extended constants (declarations)
+    extern const sdata_type zero_1bit;
+    extern const sdata_type zero_16bit;
+    extern const sdata_type zero_32bit;
+    extern const sdata_type zero_64bit;
+    extern const sdata_type one_1bit;
+    extern const sdata_type one_16bit;
+    extern const sdata_type one_32bit;
+    extern const sdata_type one_64bit;
+    extern const sdata_type all_ones_8bit;
+    extern const sdata_type all_ones_16bit;
+    extern const sdata_type all_ones_32bit;
+    
+    const sdata_type& ones(uint32_t width);
+};
 
-// --- Arithmetic Operations ---
-CH_SDATA_BINARY_OP_TRUNCATE(+, add, ch::internal::bv_add_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(-, sub, ch::internal::bv_sub_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(*, mul, ch::internal::bv_mul_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(/, div, ch::internal::bv_div_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(%, mod, ch::internal::bv_mod_truncate<uint64_t>)
+}} // namespace ch::core
 
-// --- Bitwise Operations ---
-CH_SDATA_BINARY_OP_TRUNCATE(&, and, ch::internal::bv_and_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(|, or, ch::internal::bv_or_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(^, xor, ch::internal::bv_xor_truncate<uint64_t>)
+// Include extended functionality
+#include "../utils/types.h"
 
-// --- Unary Bitwise NOT ---
-inline sdata_type operator~(const sdata_type& operand) {
-    sdata_type result(0, operand.bitwidth()); // Create result with operand width
-    ch::internal::bv_inv_truncate<uint64_t>(&result.bv_, &operand.bv_);
-    return result;
-}
-/*
-inline bool operator==(const sdata_type& lhs, const sdata_type& rhs) {
-    bool cmp_result = ch::internal::bv_eq_truncate<uint64_t>(lhs.bv_, rhs.bv_);
-    return cmp_result;
-}
-*/
-
-// --- Comparison Operations (Result is always 1-bit boolean) ---
-#define CH_SDATA_COMPARISON_OP(op_name, op_func, bv_op_func) \
-inline bool operator op_name(const sdata_type& lhs, const sdata_type& rhs) { \
-    bool cmp_result = bv_op_func<uint64_t>(lhs.bv_, rhs.bv_); \
-    return cmp_result; \
-}
-
-CH_SDATA_COMPARISON_OP(==, eq, ch::internal::bv_eq_truncate)
-CH_SDATA_COMPARISON_OP(!=, ne, ch::internal::bv_ne_truncate)
-CH_SDATA_COMPARISON_OP(<, lt, ch::internal::bv_lt_truncate)
-CH_SDATA_COMPARISON_OP(<=, le, ch::internal::bv_le_truncate)
-CH_SDATA_COMPARISON_OP(>, gt, ch::internal::bv_gt_truncate)
-CH_SDATA_COMPARISON_OP(>=, ge, ch::internal::bv_ge_truncate)
-
-
-// --- Shift Operations ---
-// Left shift (<<)
-inline sdata_type operator<<(const sdata_type& lhs, uint32_t rhs) {
-    sdata_type result(0, lhs.bitwidth()); // Create result with LHS width
-    // Perform the left shift operation using the underlying bitvector library's function
-    // This function handles the shift distance and operand width.
-    // The result.width() should match lhs.bitwidth().
-    // The bv_shl_truncate function is assumed to be the width-aware truncate version.
-    ch::internal::bv_shl_truncate<uint64_t>(&result.bv_, &lhs.bv_, rhs);
-    // bv_shl_truncate should handle truncation/extension (though for shl, width usually stays same)
-    // and ensure the result in result.bv_.words() conforms to result.bitwidth().
-    // bv_clear_extra_bits is typically called inside bv_shl_truncate.
-    return result;
-}
-
-// Right shift (>>)
-inline sdata_type operator>>(const sdata_type& lhs, uint32_t rhs) {
-    sdata_type result(0, lhs.bitwidth()); // Create result with LHS width
-    ch::internal::bv_shr_truncate<uint64_t>(&result.bv_, &lhs.bv_, rhs);
-    return result;
-}
-
-
-}} // namespace ch
-
-#endif // TYPES_H
+#endif // CORE_TYPES_H

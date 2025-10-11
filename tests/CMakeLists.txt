@@ -31,3 +31,14 @@ target_link_libraries(test_reg cpphdl)
 
 # 启用 CTest 支持
 add_test(NAME test_bitvector COMMAND test_bitvector)
+add_test(NAME test_reg COMMAND test_reg)
+
+add_executable(test_multithread catch_amalgamated.cpp
+    test_reg.cpp
+)
+target_include_directories(test_multithread PRIVATE 
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test_multithread cpphdl)
+add_test(NAME test_multithread COMMAND test_multithread)
