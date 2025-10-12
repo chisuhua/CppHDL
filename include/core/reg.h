@@ -154,7 +154,18 @@ public:
         CHDBG("  [ch_reg] Created regimpl (no init) and next_proxy.");
     }
 
+    // 添加 as_ln() 方法 - 转换为逻辑节点
+    operator lnode<T>() const {
+        return lnode<T>(this->impl());
+    }
+    
+    // 显式的 as_ln 方法
+    lnode<T> as_ln() const {
+        return static_cast<lnode<T>>(*this);
+    }
+
     const next_type* operator->() const { return __next__.get(); }
+
 
 private:
     std::unique_ptr<next_type> __next__;

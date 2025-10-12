@@ -406,6 +406,40 @@ auto operator>=(Lit lhs_val, const ch_uint<N>& rhs) {
     return ch_uint<1>(op_node);
 }
 
+// 左移操作
+template<unsigned N, typename Lit>
+requires std::is_arithmetic_v<Lit>
+auto operator<<(const ch_uint<N>& lhs, Lit rhs_val) {
+    auto rhs_lnode = make_literal_lnode<N>(rhs_val);
+    constexpr unsigned result_width = N;
+    auto* op_node = createOpNodeImpl(ch_op::shl, result_width, false,
+                                     get_lnode(lhs), rhs_lnode,
+                                     "shl_lit", std::source_location::current());
+    return ch_uint<result_width>(op_node);
+}
+
+// 右移操作
+template<unsigned N, typename Lit>
+requires std::is_arithmetic_v<Lit>
+auto operator>>(const ch_uint<N>& lhs, Lit rhs_val) {
+    auto rhs_lnode = make_literal_lnode<N>(rhs_val);
+    constexpr unsigned result_width = N;
+    auto* op_node = createOpNodeImpl(ch_op::shr, result_width, false,
+                                     get_lnode(lhs), rhs_lnode,
+                                     "shr_lit", std::source_location::current());
+    return ch_uint<result_width>(op_node);
+}
+
+// 负号操作
+template<unsigned N>
+auto operator-(const ch_uint<N>& operand) {
+    lnode<ch_uint<N>> op_lnode = get_lnode(operand);
+    lnode<ch_uint<N>> null_lnode(nullptr);
+    auto* op_node = createOpNodeImpl(ch_op::neg, N, false,
+                                     op_lnode, null_lnode,
+                                     "neg_op", std::source_location::current());
+    return ch_uint<N>(op_node);
+}
 // ===================================================================
 // === UNARY OPERATORS ===
 // ===================================================================

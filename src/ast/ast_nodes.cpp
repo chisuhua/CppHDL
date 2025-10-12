@@ -18,28 +18,61 @@ std::unique_ptr<ch::instr_base> regimpl::create_instruction(
     // 创建对应的寄存器指令
     return std::make_unique<ch::instr_reg>(id_, size_, next_node_id);
 }
-
-// opimpl的指令创建实现
+// 在 src/core/ast_nodes.cpp 中更新
 std::unique_ptr<ch::instr_base> opimpl::create_instruction(
         ch::data_map_t& data_map) const {
     // 获取操作数缓冲区
     auto* dst_buf = &data_map[id_];
     auto* src0_buf = &data_map[lhs()->id()];
-    auto* src1_buf = &data_map[rhs()->id()];
+    auto* src1_buf = rhs() ? &data_map[rhs()->id()] : nullptr;
     
     // 根据操作类型创建对应的指令
     switch (op_) {
+        // 算术操作
         case ch_op::add:
             return std::make_unique<ch::instr_op_add>(dst_buf, size_, src0_buf, src1_buf);
         case ch_op::sub:
             return std::make_unique<ch::instr_op_sub>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::mul:
+            return std::make_unique<ch::instr_op_mul>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::div:
+            return std::make_unique<ch::instr_op_div>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::mod:
+            return std::make_unique<ch::instr_op_mod>(dst_buf, size_, src0_buf, src1_buf);
+        // 位操作
         case ch_op::and_:
             return std::make_unique<ch::instr_op_and>(dst_buf, size_, src0_buf, src1_buf);
         case ch_op::or_:
             return std::make_unique<ch::instr_op_or>(dst_buf, size_, src0_buf, src1_buf);
         case ch_op::xor_:
             return std::make_unique<ch::instr_op_xor>(dst_buf, size_, src0_buf, src1_buf);
-        // ... 其他操作类型
+        case ch_op::not_:
+            return std::make_unique<ch::instr_op_not>(dst_buf, size_, src0_buf);
+        // 比较操作
+        case ch_op::eq:
+            return std::make_unique<ch::instr_op_eq>(dst_buf, 1, src0_buf, src1_buf);
+        case ch_op::ne:
+            return std::make_unique<ch::instr_op_ne>(dst_buf, 1, src0_buf, src1_buf);
+        case ch_op::lt:
+            return std::make_unique<ch::instr_op_lt>(dst_buf, 1, src0_buf, src1_buf);
+        case ch_op::le:
+            return std::make_unique<ch::instr_op_le>(dst_buf, 1, src0_buf, src1_buf);
+        case ch_op::gt:
+            return std::make_unique<ch::instr_op_gt>(dst_buf, 1, src0_buf, src1_buf);
+        case ch_op::ge:
+            return std::make_unique<ch::instr_op_ge>(dst_buf, 1, src0_buf, src1_buf);
+        // 移位操作
+        case ch_op::shl:
+            return std::make_unique<ch::instr_op_shl>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::shr:
+            return std::make_unique<ch::instr_op_shr>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::sshr:
+            return std::make_unique<ch::instr_op_sshr>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::bit_sel:
+            return std::make_unique<ch::instr_op_bit_sel>(dst_buf, 1, src0_buf, src1_buf);
+        // 一元操作
+        case ch_op::neg:
+            return std::make_unique<ch::instr_op_neg>(dst_buf, size_, src0_buf);
         default:
             return nullptr;
     }

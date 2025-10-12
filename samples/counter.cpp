@@ -18,13 +18,22 @@ public:
     {}
 
     void create_ports() override {
-        new (io_storage_) io_type; // ✅ 安全构造
+        CHDBG_FUNC();
+        new (io_storage_) io_type;
+        CHDBG("IO structure created for Counter");
+
+        // 添加调试验证
+        if (!io().out.impl()) {
+            CHERROR("Counter output port not properly initialized!");
+        }
     }
 
     void describe() override {
+        CHDBG_FUNC();
         ch_reg<ch_uint<N>> reg(0);
         reg->next = reg + 1;
-        io().out = reg; // ✅ 通过 io() 访问
+        io().out = ~reg; // ✅ 通过 io() 访问
+        CHDBG("Counter logic described");
     }
 };
 

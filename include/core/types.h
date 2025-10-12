@@ -23,6 +23,8 @@ namespace ch { namespace core {
     sdata_type operator~(const sdata_type& operand);
     sdata_type operator<<(const sdata_type& lhs, uint32_t rhs);
     sdata_type operator>>(const sdata_type& lhs, uint32_t rhs);
+    sdata_type operator-(const sdata_type& operand);  // 一元负号
+
     bool operator==(const sdata_type& lhs, const sdata_type& rhs);
     bool operator!=(const sdata_type& lhs, const sdata_type& rhs);
     bool operator<(const sdata_type& lhs, const sdata_type& rhs);
@@ -104,6 +106,7 @@ private:
     friend sdata_type operator~(const sdata_type& operand);
     friend sdata_type operator<<(const sdata_type& lhs, uint32_t rhs);
     friend sdata_type operator>>(const sdata_type& lhs, uint32_t rhs);
+    friend sdata_type operator-(const sdata_type& operand);
     friend bool operator==(const sdata_type& lhs, const sdata_type& rhs);
     friend bool operator!=(const sdata_type& lhs, const sdata_type& rhs);
     friend bool operator<(const sdata_type& lhs, const sdata_type& rhs);

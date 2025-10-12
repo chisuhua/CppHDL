@@ -162,6 +162,8 @@ inputimpl* context::create_input(uint32_t size,
     if (input_node) {
         auto* proxy = this->create_node<proxyimpl>(input_node, "_" + name, sloc);
         CHDBG("Created input node and proxy for: %s", name.c_str());
+    } else {
+        CHERROR("Failed to create input node for: %s", name.c_str());
     }
     return input_node;
 }

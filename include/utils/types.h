@@ -190,6 +190,13 @@ inline sdata_type operator~(const sdata_type& operand) {
     return result;
 }
 
+inline sdata_type operator-(const sdata_type& operand) {
+    // 对于有符号数的负值：按位取反 + 1
+    sdata_type inverted = ~operand;  // 按位取反
+    sdata_type one(1, operand.bitwidth());
+    return inverted + one;  // 加1得到二进制补码
+}
+
 // --- Comparison Operations ---
 #define CH_SDATA_COMPARISON_OP(op_name, op_func, bv_op_func) \
 inline bool operator op_name(const sdata_type& lhs, const sdata_type& rhs) { \

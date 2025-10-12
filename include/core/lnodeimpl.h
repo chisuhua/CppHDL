@@ -46,11 +46,18 @@ constexpr std::size_t ch_lnode_type_count() {
 // --- Declare to_string (defined in .cpp) ---
 const char* to_string(lnodetype type);
 
-// --- ch_op enum ---
 enum class ch_op {
     add, sub, mul, div, mod,
     and_, or_, xor_, not_,
     eq, ne, lt, le, gt, ge,
+    shl,        // 左移
+    shr,        // 右移（逻辑右移）
+    sshr,       // 算术右移
+    neg,        // 负号（一元负）
+    bit_sel,    // 位选择
+    concat,     // 连接
+    sext,       // 符号扩展
+    zext,       // 零扩展
 };
 
 class lnodeimpl;

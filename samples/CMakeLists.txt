@@ -1,7 +1,10 @@
 # samples/CMakeLists.txt
 
 # 由于主库已经设置了包含目录，示例只需要链接主库即可
-file(GLOB EXAMPLE_SOURCES "*.cpp")
+file(GLOB EXAMPLE_SOURCES 
+    counter.cpp
+)
+#stream.cpp
 
 foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})
     get_filename_component(EXAMPLE_NAME ${EXAMPLE_SOURCE} NAME_WE)
