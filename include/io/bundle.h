@@ -4,7 +4,7 @@
 
 #include "core/bundle.h"
 #include "core/io.h"
-#include "core/logic.h"
+#include "core/lnode.h"
 
 namespace ch { namespace core {
 

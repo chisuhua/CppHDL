@@ -1,82 +1,58 @@
 // include/core/uint.h
-#ifndef UINT_H
-#define UINT_H
+#ifndef CH_CORE_UINT_H
+#define CH_CORE_UINT_H
 
 #include <cstdint>
 #include <source_location>
 
-// 前向声明必要的类型
-namespace ch { 
-    namespace core {
-        class lnodeimpl;
-        template<typename T> struct lnode;
-        struct sdata_type;
-    }
-}
+#include "core/lnodeimpl.h"
+#include "core/traits.h"
+#include "core/logic_buffer.h"
+#include "core/bool.h"
 
 namespace ch { namespace core {
 
-// ==================== logic_buffer 基类 ====================
-template<typename T>
-struct logic_buffer {
-    // 获取底层 IR 节点
-    lnodeimpl* impl() const { return node_impl_; }
-    
-    // 从现有节点构造
-    logic_buffer(lnodeimpl* node) : node_impl_(node) {}
-    
-    // 默认构造（创建空节点）
-    logic_buffer() : node_impl_(nullptr) {}
-    
-    // 拷贝构造
-    logic_buffer(const logic_buffer& other) : node_impl_(other.node_impl_) {}
-    
-    // 赋值操作符
-    logic_buffer& operator=(const logic_buffer& other) {
-        if (this != &other) {
-            node_impl_ = other.node_impl_;
-        }
-        return *this;
-    }
-    
-    // 比较操作
-    bool operator==(const logic_buffer& other) const {
-        return node_impl_ == other.node_impl_;
-    }
-    
-    bool operator!=(const logic_buffer& other) const {
-        return node_impl_ != other.node_impl_;
-    }
+template<typename T> struct lnode;
+struct ch_literal;
 
-    lnodeimpl* node_impl_ = nullptr;
-};
 
-// ==================== ch_uint 定义 ====================
 template<unsigned N>
 struct ch_uint : public logic_buffer<ch_uint<N>> {
     static constexpr unsigned width = N;
     static constexpr unsigned ch_width = N;
     
-    // 继承基类构造函数
     using logic_buffer<ch_uint<N>>::logic_buffer;
 
-    // 从 uint64_t 值构造 - 创建常量节点（构建 IR）
-    ch_uint(uint64_t val, const std::source_location& sloc = std::source_location::current());
-    
-    // 从 sdata_type 构造 - 创建常量节点
-    ch_uint(const sdata_type& val, const std::source_location& sloc = std::source_location::current());
-    
-    // 默认构造函数
     ch_uint() : logic_buffer<ch_uint<N>>() {}
+    ch_uint(const ch_literal& val,
+           const std::string& name = "uint_lit",
+           const std::source_location& sloc = std::source_location::current());
     
-    // 显式转换为 uint64_t（用于获取常量值）
     explicit operator uint64_t() const;
+
+    template<bool Enable = (N == 1), typename = std::enable_if_t<Enable>>
+    operator ch_bool() const {
+        return ch_bool(this->impl());
+    }
+
+    explicit ch_uint(lnodeimpl* node) : logic_buffer<ch_uint<N>>(node) {}
+
+    // friend auto to_operand(const ch_uint<N>&);
+    template<unsigned U>
+    friend inline lnode<ch_uint<U>> get_lnode(const ch_uint<U>&);
+    friend ch_bool;
+
+    template<unsigned Width>
+    friend constexpr auto make_uint_result(lnodeimpl* node);
 };
 
-// ==================== ch_width 特化 ====================
+// ==================== get_lnode 特化 ====================
 template<unsigned N>
-constexpr unsigned ch_width_v<ch_uint<N>> = N;
+inline lnode<ch_uint<N>> get_lnode(const ch_uint<N>& uint_val) {
+    return lnode<ch_uint<N>>(uint_val.impl());
+}
 
+// ==================== ch_width 特化 ====================
 template<unsigned N>
 struct ch_width_impl<ch_uint<N>, void> {
     static constexpr unsigned value = N;
@@ -89,6 +65,6 @@ using ch_uint16 = ch_uint<16>;
 using ch_uint32 = ch_uint<32>;
 using ch_uint64 = ch_uint<64>;
 
-}} // namespace ch::core
+}}
 
-#endif // UINT_H
+#endif // CH_CORE_UINT_H

@@ -26,11 +26,7 @@ target_include_directories(test_reg PRIVATE
     ${CATCH_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include
 )
-
-
 target_link_libraries(test_reg cpphdl)
-
-# 启用 CTest 支持
 add_test(NAME test_reg COMMAND test_reg)
 
 #add_executable(test_multithread catch_amalgamated.cpp
@@ -43,13 +39,23 @@ add_test(NAME test_reg COMMAND test_reg)
 #target_link_libraries(test_multithread cpphdl)
 #add_test(NAME test_multithread COMMAND test_multithread)
 
-add_executable(test_operation catch_amalgamated.cpp
+add_executable(test_operator catch_amalgamated.cpp
     test_reg.cpp
 )
-target_include_directories(test_operation PRIVATE 
+target_include_directories(test_operator PRIVATE 
     ${CATCH_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include
 )
-target_link_libraries(test_operation cpphdl)
-add_test(NAME test_operation COMMAND test_operation)
+target_link_libraries(test_operator cpphdl)
+add_test(NAME test_operator COMMAND test_operator)
+
+add_executable(test_literal catch_amalgamated.cpp
+    test_reg.cpp
+)
+target_include_directories(test_literal PRIVATE 
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test_literal cpphdl)
+add_test(NAME test_literal COMMAND test_literal)
 

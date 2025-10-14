@@ -2,7 +2,8 @@
 #ifndef IO_H
 #define IO_H
 
-#include "logic.h"
+#include "lnode.h"
+#include "uint.h"
 #include "core/context.h"
 #include "lnodeimpl.h"
 #include "traits.h"
