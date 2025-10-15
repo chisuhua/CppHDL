@@ -37,6 +37,23 @@ struct ch_uint : public logic_buffer<ch_uint<N>> {
 
     explicit ch_uint(lnodeimpl* node) : logic_buffer<ch_uint<N>>(node) {}
 
+    // use as io
+    using direction_type = std::variant<std::monostate, input_direction, output_direction>;
+    mutable direction_type dir_ = std::monostate{};
+
+    void set_direction(input_direction) const { dir_ = input_direction{}; }
+    void set_direction(output_direction) const { dir_ = output_direction{}; }
+
+    void flip_direction() const {
+        if (std::holds_alternative<input_direction>(dir_)) {
+            dir_ = output_direction{};
+        } else if (std::holds_alternative<output_direction>(dir_)) {
+            dir_ = input_direction{};
+        }
+    }
+    // 获取当前方向（用于 connect）
+    direction_type direction() const { return dir_; }
+
     // friend auto to_operand(const ch_uint<N>&);
     template<unsigned U>
     friend inline lnode<ch_uint<U>> get_lnode(const ch_uint<U>&);

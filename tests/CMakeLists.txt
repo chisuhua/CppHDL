@@ -1,61 +1,67 @@
+# 启用测试支持
+enable_testing()
+
 # Catch2 单头文件路径
 set(CATCH_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-# 创建测试可执行文件
-add_executable(test_bitvector 
-    catch_amalgamated.cpp
+# 定义创建单个 Catch2 测试的函数
+function(add_catch_test TEST_NAME)
+    # 参数：测试名称，其余为该测试的源文件（不含 catch_amalgamated.cpp）
+    set(SOURCES ${ARGN})
+
+    # 自动包含 catch_amalgamated.cpp
+    list(APPEND SOURCES ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp)
+
+    # 创建可执行文件
+    add_executable(${TEST_NAME} ${SOURCES})
+
+    # 包含目录
+    target_include_directories(${TEST_NAME} PRIVATE
+        ${CATCH_INCLUDE_DIR}
+        ${PROJECT_SOURCE_DIR}/include
+    )
+
+    # 链接库（如果存在）
+    if(TARGET cpphdl)
+        target_link_libraries(${TEST_NAME} cpphdl)
+    endif()
+
+    # 注册为 CTest 测试
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endfunction()
+
+# ================================
+# 方案一：为每个 test_xxx.cpp 创建独立测试（推荐）
+# ================================
+
+# 列出所有独立的测试源文件（每个文件一个测试）
+set(SINGLE_TEST_SOURCES
+    test_reg.cpp
+    test_operator.cpp
+    test_literal.cpp
+    test_simple_io.cpp
+    test_bundle.cpp
+    test_bundle_advanced.cpp
+    test_bundle_advanced_features.cpp
+    test_bundle_serialization.cpp
+    # test_multithread.cpp
+    test_nested_bundle.cpp
+)
+
+# 为每个源文件创建一个独立的测试
+foreach(TEST_SRC ${SINGLE_TEST_SOURCES})
+    # 提取测试名，如 test_reg.cpp -> test_reg
+    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
+    add_catch_test(${TEST_NAME} ${TEST_SRC})
+endforeach()
+
+# ================================
+# 方案二：特殊测试（多文件组合）
+# ================================
+
+# test_bitvector 需要多个源文件
+add_catch_test(test_bitvector
     test_bv_cmp.cpp
     test_bitvector.cpp
     test_bv_truncate.cpp
 )
-
-# 包含头文件目录
-target_include_directories(test_bitvector PRIVATE 
-    ${CATCH_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-)
-add_test(NAME test_bitvector COMMAND test_bitvector)
-
-add_executable(test_reg 
-    catch_amalgamated.cpp
-    test_reg.cpp
-)
-
-# 包含头文件目录
-target_include_directories(test_reg PRIVATE 
-    ${CATCH_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-)
-target_link_libraries(test_reg cpphdl)
-add_test(NAME test_reg COMMAND test_reg)
-
-#add_executable(test_multithread catch_amalgamated.cpp
-#    test_multithread.cpp
-#)
-#target_include_directories(test_multithread PRIVATE 
-#    ${CATCH_INCLUDE_DIR}
-#    ${PROJECT_SOURCE_DIR}/include
-#)
-#target_link_libraries(test_multithread cpphdl)
-#add_test(NAME test_multithread COMMAND test_multithread)
-
-add_executable(test_operator catch_amalgamated.cpp
-    test_reg.cpp
-)
-target_include_directories(test_operator PRIVATE 
-    ${CATCH_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-)
-target_link_libraries(test_operator cpphdl)
-add_test(NAME test_operator COMMAND test_operator)
-
-add_executable(test_literal catch_amalgamated.cpp
-    test_reg.cpp
-)
-target_include_directories(test_literal PRIVATE 
-    ${CATCH_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-)
-target_link_libraries(test_literal cpphdl)
-add_test(NAME test_literal COMMAND test_literal)
-

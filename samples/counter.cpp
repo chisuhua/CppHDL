@@ -32,7 +32,7 @@ public:
         CHDBG_FUNC();
         ch_reg<ch_uint<N>> reg(0);
         reg->next = reg + 1;
-        io().out = ~reg; // ✅ 通过 io() 访问
+        io().out = reg; // ✅ 通过 io() 访问
         CHDBG("Counter logic described");
     }
 };

@@ -156,13 +156,36 @@ struct neg_op {
 */
 
 // 一元操作定义
+/*
 struct not_op {
     static constexpr ch_op op_type = ch_op::not_;
     static constexpr const char* name() { return "not"; }
 };
+*/
+
+struct not_op {
+    static constexpr ch_op op_type = ch_op::not_;
+    static constexpr bool is_comparison = false;
+    static constexpr bool is_bitwise = true;
+    
+    //static constexpr unsigned result_width = 1; // 或者使用模板参数
+    
+    // 对于一元操作，可以这样定义：
+    template<unsigned N>
+    static constexpr unsigned result_width_v = N; // 位取反保持相同宽度
+    
+    static std::string name() { return "not"; }
+};
 
 struct neg_op {
     static constexpr ch_op op_type = ch_op::neg;
+    static constexpr bool is_comparison = false;
+    static constexpr bool is_bitwise = true;
+    //static constexpr unsigned result_width = 1; // 或者使用模板参数
+
+    template<unsigned N>
+    static constexpr unsigned result_width_v = N; // 位取反保持相同宽度
+
     static constexpr const char* name() { return "neg"; }
 };
 
