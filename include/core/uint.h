@@ -5,12 +5,13 @@
 #include <cstdint>
 #include <source_location>
 
-#include "core/lnodeimpl.h"
 #include "core/traits.h"
 #include "core/logic_buffer.h"
 #include "core/bool.h"
 
 namespace ch { namespace core {
+
+class lnodeimpl;
 
 template<typename T> struct lnode;
 struct ch_literal;
@@ -27,7 +28,20 @@ struct ch_uint : public logic_buffer<ch_uint<N>> {
     ch_uint(const ch_literal& val,
            const std::string& name = "uint_lit",
            const std::source_location& sloc = std::source_location::current());
-    
+
+    template<unsigned M>
+    ch_uint(const ch_uint<M>& other,
+           const std::string& name = "uint_conv",
+           const std::source_location& sloc = std::source_location::current()) {
+        if constexpr (M <= N) {
+            // 零扩展
+            this->node_impl_ = zero_extend(other, N).impl();
+        } else {
+            // 截断
+            this->node_impl_ = bits(other, N-1, 0).impl();
+        }
+    }
+
     explicit operator uint64_t() const;
 
     template<bool Enable = (N == 1), typename = std::enable_if_t<Enable>>

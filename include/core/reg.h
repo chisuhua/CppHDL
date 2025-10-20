@@ -64,6 +64,14 @@ public:
 
     const next_type* operator->() const { return __next__.get(); }
 
+    // 非阻塞赋值操作符
+    template<typename U>
+    void operator<=(const U& value) const {
+        if (__next__) {
+            *__next__ = value;
+        }
+    }
+
 private:
     std::unique_ptr<next_type> __next__;
     lnodeimpl* regimpl_node_ = nullptr;

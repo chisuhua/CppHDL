@@ -7,8 +7,11 @@
 #include "core/direction.h"
 #include <source_location>
 #include <variant>
+#include <string>
 
-namespace ch { namespace core {
+namespace ch::core {
+
+class lnodeimpl;
 
 template<unsigned N>
 struct ch_uint; 
@@ -59,11 +62,9 @@ struct ch_bool : public logic_buffer<ch_bool> {
 
 
     friend ch_bool make_bool_result(lnodeimpl* node);
-    friend lnode<ch_bool> get_lnode(const ch_bool&);
+    //friend lnode<ch_bool> get_lnode(const ch_bool&);
  
 };
-
-lnode<ch_bool> get_lnode(const ch_bool& bool_val) ;
 
 template<>
 struct ch_width_impl<ch_bool, void> {
@@ -75,6 +76,7 @@ struct ch_width_impl<const ch_bool, void> {
     static constexpr unsigned value = 1;
 };
 
-}} // namespace ch::core
+
+} // namespace ch::core
 
 #endif // CH_CORE_BOOL_H

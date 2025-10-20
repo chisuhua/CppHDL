@@ -95,6 +95,7 @@ public:
         static_assert(W > 0, "Bundle has zero width");
         return deserialize<Derived>(bits);
     }
+
 protected:
     virtual void as_master() = 0;
     virtual void as_slave() = 0;
@@ -135,7 +136,8 @@ protected:
             field.set_name(name);
         }
     }
-    // 字段方向设置 - 支持1-3个字段
+
+    // 字段方向设置 - 支持1-4个字段
     template<typename Field1>
     void make_output(Field1& field1) {
         set_field_direction(field1, output_direction{});
@@ -192,7 +194,6 @@ protected:
     constexpr Derived* derived() { return static_cast<Derived*>(this); }
     constexpr const Derived* derived() const { return static_cast<const Derived*>(this); }
 };
-
 
 } // namespace ch::core
 

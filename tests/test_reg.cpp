@@ -2,6 +2,7 @@
 #include "core/reg.h"
 #include "core/uint.h"
 #include "core/bool.h"
+#include "core/literal.h"
 #include "core/traits.h"
 #include "core/context.h"
 #include "ast/ast_nodes.h"
@@ -213,7 +214,7 @@ TEST_CASE("ch_reg: various template instantiations including bool", "[reg][templ
     ch_reg<ch_uint<4>> reg4(15_d);
     ch_reg<ch_uint<8>> reg8(255_d);
     ch_reg<ch_uint<16>> reg16(65535_d);
-    ch_reg<ch_uint<32>> reg32(0xFFFFFFFF_d);
+    ch_reg<ch_uint<32>> reg32(0xFFFFFFFF_h);
     ch_reg<ch_bool> bool_reg(1_b);
     
     REQUIRE(reg1.impl() != nullptr);
@@ -369,7 +370,7 @@ TEST_CASE("ch_reg: next assignment with hardware literals including bool", "[reg
         ch_reg<ch_uint<8>> reg2(10_d);
         ch_reg<ch_bool> bool_reg(0_b);
         
-        reg1->next = reg2 + 0x05_h;  // 10 + 5 = 15
+        reg1->next = reg2 + 05_h;  // 10 + 5 = 15
         bool_reg->next = (reg1 > 0x0A_h); // 15 > 10 = true
         REQUIRE(reg1.impl() != nullptr);
         REQUIRE(bool_reg.impl() != nullptr);

@@ -1,9 +1,10 @@
-// include/core/operators.h
+// include/lnode/operators.h
 #ifndef CH_LNODE_OPERATORS_H
 #define CH_LNODE_OPERATORS_H
 
-namespace ch { namespace core {
+#include <algorithm>
 
+namespace ch::core {
 
 // ===================================================================
 // === 操作策略定义 ===
@@ -72,13 +73,22 @@ struct shl_op {
     static constexpr const char* name() { return "shl"; }
 };
 
-// 右移操作策略
+// 右移操作策略（逻辑右移）
 struct shr_op {
     static constexpr ch_op op_type = ch_op::shr;
     template<unsigned M, unsigned N>
     static constexpr unsigned result_width = M;
     static constexpr bool is_comparison = false;
     static constexpr const char* name() { return "shr"; }
+};
+
+// 算术右移操作策略
+struct sshr_op {
+    static constexpr ch_op op_type = ch_op::sshr;
+    template<unsigned M, unsigned N>
+    static constexpr unsigned result_width = M;
+    static constexpr bool is_comparison = false;
+    static constexpr const char* name() { return "sshr"; }
 };
 
 // 相等比较策略
@@ -136,55 +146,25 @@ struct ge_op {
 };
 
 // 取反操作策略
-/*
 struct not_op {
     static constexpr ch_op op_type = ch_op::not_;
-    template<unsigned M, unsigned N>
-    static constexpr unsigned result_width = M;
     static constexpr bool is_comparison = false;
+    static constexpr bool is_bitwise = true;
+    
+    template<unsigned N>
+    static constexpr unsigned result_width_v = N; // 位取反保持相同宽度
+    
     static constexpr const char* name() { return "not"; }
 };
 
 // 负号操作策略
 struct neg_op {
     static constexpr ch_op op_type = ch_op::neg;
-    template<unsigned M, unsigned N>
-    static constexpr unsigned result_width = M;
     static constexpr bool is_comparison = false;
-    static constexpr const char* name() { return "neg"; }
-};
-*/
-
-// 一元操作定义
-/*
-struct not_op {
-    static constexpr ch_op op_type = ch_op::not_;
-    static constexpr const char* name() { return "not"; }
-};
-*/
-
-struct not_op {
-    static constexpr ch_op op_type = ch_op::not_;
-    static constexpr bool is_comparison = false;
-    static constexpr bool is_bitwise = true;
+    static constexpr bool is_bitwise = false;
     
-    //static constexpr unsigned result_width = 1; // 或者使用模板参数
-    
-    // 对于一元操作，可以这样定义：
     template<unsigned N>
-    static constexpr unsigned result_width_v = N; // 位取反保持相同宽度
-    
-    static std::string name() { return "not"; }
-};
-
-struct neg_op {
-    static constexpr ch_op op_type = ch_op::neg;
-    static constexpr bool is_comparison = false;
-    static constexpr bool is_bitwise = true;
-    //static constexpr unsigned result_width = 1; // 或者使用模板参数
-
-    template<unsigned N>
-    static constexpr unsigned result_width_v = N; // 位取反保持相同宽度
+    static constexpr unsigned result_width_v = N; // 负号保持相同宽度
 
     static constexpr const char* name() { return "neg"; }
 };
@@ -213,5 +193,15 @@ struct logical_not_op {
     static constexpr const char* name() { return "logical_not"; }
 };
 
-}} // namespace ch::core
+// 多路选择器操作
+struct mux_op {
+    static constexpr ch_op op_type = ch_op::mux;
+    static constexpr bool is_comparison = false;
+    static constexpr const char* name() { return "mux"; }
+    
+    template<unsigned M, unsigned N>
+    static constexpr unsigned result_width = std::max(M, N);
+};
+
+} // namespace ch::core
 #endif // CH_LNODE_OPERATORS_H

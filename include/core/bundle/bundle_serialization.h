@@ -4,12 +4,22 @@
 
 #include "bundle_base.h"
 #include "bundle_meta.h"
-#include "bundle_traits.h"  // 包含统一的宽度计算
+#include "bundle_traits.h"
+#include "bundle_layout.h"
 #include "uint.h"
+#include "bool.h"
 #include <tuple>
 #include <type_traits>
+#include <cstring>
 
 namespace ch::core {
+
+// 前向声明
+template<typename BitVectorT, typename BundleT>
+void serialize_fields_to_bits(const BundleT& bundle, BitVectorT& result);
+
+template<typename BundleT, typename BitVectorT>
+void deserialize_bits_to_fields(const BitVectorT& bits, BundleT& bundle);
 
 // 序列化Bundle到位向量
 template<typename BundleT>
@@ -19,11 +29,8 @@ auto serialize(const BundleT& bundle) {
     constexpr unsigned total_width = bundle_width_v<BundleT>;
     static_assert(total_width > 0, "Bundle has zero width");
     
-    // 创建结果位向量
     ch_uint<total_width> result;
-    
-    // TODO: 实际的序列化逻辑需要访问字段的底层节点
-    // 这里需要更复杂的实现来连接IR节点
+    serialize_fields_to_bits(result, bundle);
     
     return result;
 }
@@ -35,14 +42,69 @@ BundleT deserialize(const ch_uint<Width>& bits) {
     static_assert(Width == bundle_width_v<BundleT>, "Bit width mismatch");
     
     BundleT bundle;
-    
-    // TODO: 实际的反序列化逻辑需要设置字段的底层节点
-    // 这里需要更复杂的实现来连接IR节点
+    deserialize_bits_to_fields(bundle, bits);
     
     return bundle;
 }
 
-// Bundle到位向量的视图（不复制数据）
+// 字段序列化实现
+template<typename BitVectorT, typename BundleT>
+void serialize_fields_to_bits(const BundleT& bundle, BitVectorT& result) {
+    constexpr auto layout = get_bundle_layout<BundleT>();
+    constexpr auto indices = std::make_index_sequence<std::tuple_size_v<decltype(layout)>>{};
+    
+    std::apply([&](auto&&... field_info) {
+        ((serialize_single_field(result, bundle, field_info)), ...);
+    }, layout);
+}
+
+template<typename BitVectorT, typename BundleT, typename FieldInfo>
+void serialize_single_field(BitVectorT& result, const BundleT& bundle, const FieldInfo& field_info) {
+    const auto& field_value = bundle.*(field_info.ptr);
+    // TODO: 实际的位操作需要访问底层节点
+    // 这里简化处理
+    (void)result; (void)field_value; (void)field_info;
+}
+
+// 字段反序列化实现
+template<typename BundleT, typename BitVectorT>
+void deserialize_bits_to_fields(const BitVectorT& bits, BundleT& bundle) {
+    constexpr auto layout = get_bundle_layout<BundleT>();
+    constexpr auto indices = std::make_index_sequence<std::tuple_size_v<decltype(layout)>>{};
+    
+    std::apply([&](auto&&... field_info) {
+        ((deserialize_single_field(bits, bundle, field_info)), ...);
+    }, layout);
+}
+
+template<typename BitVectorT, typename BundleT, typename FieldInfo>
+void deserialize_single_field(const BitVectorT& bits, BundleT& bundle, const FieldInfo& field_info) {
+    auto& field_value = bundle.*(field_info.ptr);
+    // TODO: 实际的位操作需要设置底层节点
+    // 这里简化处理
+    (void)bits; (void)field_value; (void)field_info;
+}
+
+// 位向量与字节数组转换工具
+template<unsigned Width>
+void bits_to_bytes(const ch_uint<Width>& bits, unsigned char* bytes, size_t byte_count) {
+    static_assert(Width > 0, "Invalid bit width");
+    
+    // 简化实现 - 实际需要根据底层表示进行转换
+    uint64_t value = static_cast<uint64_t>(bits);
+    std::memset(bytes, 0, byte_count);
+    std::memcpy(bytes, &value, std::min(byte_count, sizeof(value)));
+}
+
+template<unsigned Width>
+ch_uint<Width> bytes_to_bits(const unsigned char* bytes, size_t byte_count) {
+    // 简化实现
+    uint64_t value = 0;
+    std::memcpy(&value, bytes, std::min(byte_count, sizeof(value)));
+    return ch_uint<Width>(value);
+}
+
+// Bundle到位向量的视图
 template<typename BundleT>
 struct bundle_bits_view {
     BundleT& bundle;
@@ -50,7 +112,6 @@ struct bundle_bits_view {
     
     explicit bundle_bits_view(BundleT& b) : bundle(b) {}
     
-    // 转换为位向量
     template<unsigned W = bundle_width_v<BundleT>>
     operator ch_uint<W>() const {
         return serialize(bundle);
@@ -66,7 +127,7 @@ auto to_bits(BundleT& bundle) {
 template<typename BundleT, unsigned Width>
 void from_bits(const ch_uint<Width>& bits, BundleT& bundle) {
     static_assert(Width == bundle_width_v<BundleT>, "Width mismatch");
-    // TODO: 实现反序列化逻辑
+    deserialize_bits_to_fields(bundle, bits);
 }
 
 } // namespace ch::core

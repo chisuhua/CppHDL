@@ -2,10 +2,10 @@
 #ifndef CH_CORE_NODE_BUILDER_H
 #define CH_CORE_NODE_BUILDER_H
 
-#include "context.h"
-#include "lnode.h"
-#include "lnodeimpl.h"
-#include "literal.h"
+#include "core/context.h"
+#include "core/lnode.h"
+#include "core/lnodeimpl.h"
+#include "core/literal.h"
 #include "types.h"
 #include <source_location>
 #include <memory>
@@ -53,7 +53,15 @@ public:
         lnodeimpl* next_val = nullptr,
         const std::string& name = "reg",
         const std::source_location& sloc = std::source_location::current());
-    
+
+    template<typename Cond, typename TrueVal, typename FalseVal>
+    lnodeimpl* build_mux(
+        const lnode<Cond>& cond,
+        const lnode<TrueVal>& true_val,
+        const lnode<FalseVal>& false_val,
+        const std::string& name = "mux",
+        const std::source_location& sloc = std::source_location::current());
+
     template<typename T, typename U>
     lnodeimpl* build_operation(
         ch_op op,

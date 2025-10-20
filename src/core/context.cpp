@@ -187,6 +187,54 @@ outputimpl* context::create_output(uint32_t size,
     return output_node;
 }
 
+memimpl* context::create_memory(
+    uint32_t addr_width,
+    uint32_t data_width,
+    uint32_t depth,
+    uint32_t num_banks,
+    bool has_byte_enable,
+    bool is_rom,
+    const std::vector<sdata_type>& init_data,  // 使用vector格式
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    return this->create_node<memimpl>(
+        addr_width, data_width, depth, num_banks,
+        has_byte_enable, is_rom, init_data, name, sloc);
+}
+
+mem_read_port_impl* context::create_mem_read_port(
+    memimpl* parent,
+    uint32_t port_id,
+    uint32_t size,
+    lnodeimpl* cd,
+    lnodeimpl* addr,
+    lnodeimpl* enable,
+    lnodeimpl* data_output,
+    const std::string& name,
+    const std::source_location& sloc) {
+
+    mem_port_type type = cd ? mem_port_type::sync_read : mem_port_type::async_read;
+    
+    return this->create_node<mem_read_port_impl>(
+        parent, port_id, type, size, cd, addr, enable, data_output, name, sloc);
+}
+
+mem_write_port_impl* context::create_mem_write_port(
+    memimpl* parent,
+    uint32_t port_id,
+    uint32_t size,
+    lnodeimpl* cd,
+    lnodeimpl* addr,
+    lnodeimpl* wdata,
+    lnodeimpl* enable,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    return this->create_node<mem_write_port_impl>(
+        parent, port_id, size, cd, addr, wdata, enable, name, sloc);
+}
+
 void context::topological_sort_visit(lnodeimpl* node, std::vector<lnodeimpl*>& sorted,
                                      std::unordered_map<lnodeimpl*, bool>& visited,
                                      std::unordered_map<lnodeimpl*, bool>& temp_mark) const {
@@ -239,6 +287,20 @@ void context::set_current_clock(clockimpl* clk) {
 void context::set_current_reset(resetimpl* rst) {
     CHDBG_FUNC();
     current_reset_ = rst;
+}
+
+    // 时钟节点创建
+clockimpl* context::create_clock(const sdata_type& init_value, bool posedge, bool negedge,
+                        const std::string& name,
+                        const std::source_location& sloc) {
+    return this->create_node<clockimpl>(init_value, posedge, negedge, name, sloc);
+}
+
+// 复位节点创建
+resetimpl* context::create_reset(const sdata_type& init_value, resetimpl::reset_type rtype,
+                        const std::string& name,
+                        const std::source_location& sloc) {
+    return this->create_node<resetimpl>(init_value, rtype, name, sloc);
 }
 
 void context::print_debug_info() const {

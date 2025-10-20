@@ -49,10 +49,11 @@ ch_bool::operator uint64_t() const {
 ch_bool::operator bool() const {
     return static_cast<bool>(static_cast<uint64_t>(*this));
 }
-
+/*
 lnode<ch_bool> get_lnode(const ch_bool& bool_val) {
     return lnode<ch_bool>(bool_val.impl());
 }
+*/
 
 // make_bool_result 的定义（如果未在别处定义）
 ch_bool make_bool_result(lnodeimpl* node) {

@@ -12,7 +12,7 @@
 #include "literal.h"
 #include "node_builder.h"
 
-namespace ch { namespace core {
+namespace ch::core {
 
 // --- lnode wrapper ---
 template<typename T>
@@ -33,7 +33,7 @@ template<typename T>
 lnode<T> get_lnode(const T& t) requires requires { t.impl(); } {
     return lnode<T>(t.impl());
 }
-
+/*
 template<typename LiteralType>
 requires std::is_arithmetic_v<LiteralType>
 ch_literal get_lnode(LiteralType literal_val) {
@@ -49,17 +49,13 @@ ch_literal get_lnode(LiteralType literal_val) {
         actual_width
     };
 }
+*/
 
 // Forward declaration of the internal implementation
 template<typename T>
 class ch_reg;
 
-// Public alias for the user-facing register type
-/*
-template<typename T>
-using ch_reg = const ch_reg_impl<T>;
-*/
 
-}} // namespace ch::core
+} // namespace ch::core
 
 #endif // CH_CORE_LNODE_H

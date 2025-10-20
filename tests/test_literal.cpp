@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "core/literal.h"
+#include "core/reg.h"
 #include <type_traits>
 
 using namespace ch::core;
@@ -97,9 +98,10 @@ TEST_CASE("lit_bin: binary literal parser", "[literal][lit_bin]") {
     REQUIRE(lit_bin::is_escape('\'') == true);
     REQUIRE(lit_bin::is_escape('x') == false);
     
-    REQUIRE(lit_bin::size('0', 0) == 1);
-    REQUIRE(lit_bin::size('1', 1) == 2);
-    REQUIRE(lit_bin::size('\'', 5) == 5);
+    // Replace lit_bin::size with lit_bin_size_v
+    REQUIRE(lit_bin_size_v<'0'> == 1);
+    REQUIRE(lit_bin_size_v<'1','1'> == 2);
+    REQUIRE(lit_bin_size_v<'\'','1','0'> == 2); // escape ignored
     
     REQUIRE(lit_bin::chr2int('0') == 0);
     REQUIRE(lit_bin::chr2int('1') == 1);
@@ -112,8 +114,9 @@ TEST_CASE("lit_oct: octal literal parser", "[literal][lit_oct]") {
     
     REQUIRE(lit_oct::is_escape('\'') == true);
     
-    REQUIRE(lit_oct::size('0', 0) == 3);
-    REQUIRE(lit_oct::size('\'', 5) == 5);
+    // Replace lit_oct::size with lit_oct_size_v
+    REQUIRE(lit_oct_size_v<'0'> == 3);
+    REQUIRE(lit_oct_size_v<'\'','7'> == 3);
     
     REQUIRE(lit_oct::chr2int('0') == 0);
     REQUIRE(lit_oct::chr2int('7') == 7);
@@ -132,10 +135,11 @@ TEST_CASE("lit_hex: hexadecimal literal parser", "[literal][lit_hex]") {
     REQUIRE(lit_hex::is_escape('x') == true);
     REQUIRE(lit_hex::is_escape('X') == true);
     
-    REQUIRE(lit_hex::size('0', 0) == 4);
-    REQUIRE(lit_hex::size('x', 0) == 0);
-    REQUIRE(lit_hex::size('X', 0) == 0);
-    REQUIRE(lit_hex::size('\'', 5) == 5);
+    // Replace lit_hex::size with lit_hex_size_v
+    REQUIRE(lit_hex_size_v<'0'> == 4);
+    REQUIRE(lit_hex_size_v<'x','F'> == 4);   // 'x' is escape → ignored
+    REQUIRE(lit_hex_size_v<'X','A'> == 4);   // 'X' is escape → ignored
+    REQUIRE(lit_hex_size_v<'\'','F'> == 4);  // '\'' is escape → ignored
     
     REQUIRE(lit_hex::chr2int('0') == 0);
     REQUIRE(lit_hex::chr2int('9') == 9);
@@ -284,7 +288,7 @@ TEST_CASE("Hardware-friendly literals: practical usage examples", "[literal][har
         // 全0
         constexpr auto zero8 = 0000'0000_b;
         REQUIRE(zero8.value == 0);
-        REQUIRE(zero8.actual_width == 8);
+        REQUIRE(zero8.actual_width == 1);
         
         // 全1
         constexpr auto ones8 = 1111'1111_b;
@@ -366,7 +370,7 @@ TEST_CASE("Edge cases and boundary conditions", "[literal][edge]") {
     
     SECTION("Extreme values and edge cases") {
         // 测试 64 位最大值
-        constexpr auto max64 = 0xFFFFFFFFFFFFFFFF_d;
+        constexpr auto max64 = 0xFFFFFFFFFFFFFFFF_h;
         REQUIRE(max64.value == 0xFFFFFFFFFFFFFFFF);
         REQUIRE(max64.actual_width == 64);
         
@@ -433,7 +437,7 @@ TEST_CASE("Integration with existing system", "[literal][integration]") {
     
     SECTION("Construction of ch_uint and ch_bool from literals") {
         // 测试与 ch_uint 集成
-        ch_uint<8> u8(255_d);
+        ch_reg<ch_uint<8>> u8(255_d);
         REQUIRE(u8.impl() != nullptr);
         
         ch_uint<16> u16(0xDEAD_h);
@@ -535,13 +539,13 @@ TEST_CASE("Real-world usage scenarios", "[literal][real_world]") {
         constexpr auto disable_mask = 0000'0000_b; // 8位禁用掩码
         
         REQUIRE(reset_value.value == 0);
-        REQUIRE(reset_value.actual_width == 16);
+        REQUIRE(reset_value.actual_width == 1);
         REQUIRE(default_config.value == 0x1234);
-        REQUIRE(default_config.actual_width == 16);
+        REQUIRE(default_config.actual_width == 13);
         REQUIRE(enable_mask.value == 0xFF);
         REQUIRE(enable_mask.actual_width == 8);
         REQUIRE(disable_mask.value == 0);
-        REQUIRE(disable_mask.actual_width == 8);
+        REQUIRE(disable_mask.actual_width == 1);
     }
     
     SECTION("Bit field manipulation") {

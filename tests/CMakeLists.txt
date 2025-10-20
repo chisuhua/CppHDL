@@ -46,6 +46,10 @@ set(SINGLE_TEST_SOURCES
     test_bundle_serialization.cpp
     # test_multithread.cpp
     test_nested_bundle.cpp
+    test_tlm_bundle_phase1.cpp
+    test_axi_lite_bundle.cpp
+    test_mem.cpp
+    test_operator_advanced.cpp
 )
 
 # 为每个源文件创建一个独立的测试

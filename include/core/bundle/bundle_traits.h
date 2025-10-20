@@ -1,4 +1,4 @@
-// include/core/bundle_traits.h
+// include/core/bundle_traits.h (更新版本)
 #ifndef CH_CORE_BUNDLE_TRAITS_H
 #define CH_CORE_BUNDLE_TRAITS_H
 

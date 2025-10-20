@@ -9,6 +9,8 @@ file(GLOB EXAMPLE_SOURCES
     nested_bundle_demo.cpp
     bundle_advanced_features.cpp
     bundle_serialization_demo.cpp
+    tlm_bundle_demo.cpp
+    axi_lite_demo.cpp
 )
 
 foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})

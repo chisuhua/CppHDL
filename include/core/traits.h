@@ -4,8 +4,9 @@
 
 #include <type_traits>
 #include <cstdint>
+#include <bit>
 
-namespace ch { namespace core {
+namespace ch::core {
 
 // --- Primary template (fallback) ---
 template<typename T, typename Enable = void>
@@ -34,6 +35,16 @@ struct ch_width_impl<long> {
 template<typename T>
 inline constexpr unsigned ch_width_v = ch_width_impl<std::remove_cv_t<T>>::value;
 
-}} // namespace ch::core
+// 计算值的位宽
+inline constexpr unsigned bit_width(uint64_t value) {
+    return value == 0 ? 1 : static_cast<unsigned>(64 - std::countl_zero(value));
+}
+
+// 检查是否为2的幂
+constexpr bool is_power_of_two(uint64_t value) {
+    return (value != 0) && ((value & (value - 1)) == 0);
+}
+
+} // namespace ch::core
 
 #endif // TRAITS_H

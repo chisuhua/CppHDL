@@ -2,14 +2,14 @@
 #ifndef CH_LNODE_NODE_BUILDER_TPP
 #define CH_LNODE_NODE_BUILDER_TPP
 
-#include "core/node_builder.h"
+#include "core/literal.h"
 #include "logger.h"
 #include "traits.h"
 #include <algorithm>
 #include <type_traits>
 #include <bit>
 
-namespace ch { namespace core {
+namespace ch::core {
 
 // 辅助函数实现
 namespace {
@@ -214,6 +214,28 @@ std::pair<regimpl*, proxyimpl*> node_builder::build_register(
     return {reg_node, proxy_node};
 }
 
+template<typename Cond, typename TrueVal, typename FalseVal>
+lnodeimpl* node_builder::build_mux(
+    const lnode<Cond>& cond,
+    const lnode<TrueVal>& true_val,
+    const lnode<FalseVal>& false_val,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    constexpr unsigned result_width = std::max(ch_width_v<TrueVal>, ch_width_v<FalseVal>);
+    
+    auto* mux_node = ctx_curr_->create_node<muximpl>(
+        result_width,
+        cond.impl(),
+        true_val.impl(),
+        false_val.impl(),
+        name,
+        sloc
+    );
+    
+    return mux_node;
+}
+
 // 二元操作节点构建实现
 template<typename T, typename U>
 lnodeimpl* node_builder::build_operation(
@@ -273,6 +295,6 @@ lnodeimpl* node_builder::build_unary_operation(
     return build_operation(op, operand, operand, false, name, sloc);
 }
 
-}} // namespace ch::core
+} // namespace ch::core
 
 #endif // CH_LNODE_NODE_BUILDER_TPP

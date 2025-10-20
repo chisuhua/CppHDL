@@ -9,19 +9,16 @@
 #include <memory>
 
 // 只前向声明，不在头文件中包含具体指令头文件
-/*
-namespace ch {
-    class instr_base;
-}
-*/
 
-namespace ch { namespace core {
+namespace ch::core {
 
 // Forward declare missing types (to avoid including their headers)
 class clockimpl;
 class resetimpl;
 class selectimpl;
 class memimpl;
+class mem_read_port_impl;
+class mem_write_port_impl;
 class moduleimpl;
 class moduleportimpl;
 class ioimpl;
@@ -194,6 +191,36 @@ private:
     sdata_type value_;
 };
 
-}} // namespace ch::core
+inline bool is_litimpl_one(lnodeimpl* node) {
+    if (!node) return false;
+    if (!node->is_const()) return false;
+    auto* lit_node = static_cast<litimpl*>(node);
+    return lit_node->value().is_one();
+}
+
+
+class muximpl : public lnodeimpl {
+public:
+    muximpl(uint32_t id, uint32_t size, lnodeimpl* cond, lnodeimpl* true_val, lnodeimpl* false_val,
+            const std::string& name, const std::source_location& sloc, context* ctx)
+        : lnodeimpl(id, lnodetype::type_mux, size, ctx, name, sloc) {
+        if (cond) add_src(cond);
+        if (true_val) add_src(true_val);
+        if (false_val) add_src(false_val);
+    }
+
+    lnodeimpl* condition() const { return src(0); }
+    lnodeimpl* true_value() const { return src(1); }
+    lnodeimpl* false_value() const { return src(2); }
+
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base> create_instruction(
+        ch::data_map_t& data_map) const override;
+};
+
+} // namespace ch::core
+
+#include "clockimpl.h"
+#include "resetimpl.h"
 
 #endif // AST_NODES_H

@@ -20,7 +20,7 @@ namespace ch {
     }
 }
 
-namespace ch { namespace core {
+namespace ch::core {
 #define CH_LNODE_TYPE(t) type_##t,
 #define CH_LNODE_COUNT(n) +1
 #define CH_LNODE_ENUM(m) \
@@ -31,7 +31,10 @@ namespace ch { namespace core {
   m(output) \
   m(op) \
   m(reg) \
-  m(mem)
+  m(mem) \
+  m(mux) \
+  m(mem_read_port) \
+  m(mem_write_port)
 
 
 enum class lnodetype {
@@ -55,9 +58,20 @@ enum class ch_op {
     sshr,       // 算术右移
     neg,        // 负号（一元负）
     bit_sel,    // 位选择
+    bits_extract,    // 位选择
     concat,     // 连接
     sext,       // 符号扩展
     zext,       // 零扩展
+    mux,        // 多路选择器
+    rotate_l,   // 循环左移（预留）
+    rotate_r   // 循环右移（预留）
+};
+
+// 内存端口类型
+enum class mem_port_type {
+    async_read,   // 异步读端口
+    sync_read,    // 同步读端口
+    write         // 写端口
 };
 
 class lnodeimpl;
@@ -152,6 +166,7 @@ protected:
     std::vector<lnodeimpl*> srcs_;
 };
 
-}} // namespace ch::core
+
+} // namespace ch::core
 
 #endif // LNODEIMPL_H

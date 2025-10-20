@@ -15,7 +15,7 @@
 #include "ast_nodes.h"
 #include "logger.h"
 
-namespace ch { namespace core {
+namespace ch::core {
 
 /* 使用thread_local的理由:
 1. **线程隔离性**：每个线程都有独立的变量副本，互不干扰
@@ -55,7 +55,9 @@ public:
 
     // 统一的节点创建方法，添加错误检查
     template <typename T, typename... Args>
-    T* create_node(Args&&... args) {
+    T* create_node(Args&&... args) ;
+    /*
+    {
         CHDBG_FUNC();
         CHREQUIRE(this != nullptr, "Context cannot be null");
         
@@ -80,6 +82,7 @@ public:
             return nullptr;
         }
     }
+    */
 
     // 专门的节点创建方法
     litimpl* create_literal(const sdata_type& value, 
@@ -94,16 +97,57 @@ public:
                              const std::string& name, 
                              const std::source_location& sloc = std::source_location::current());
 
+    memimpl* create_memory(
+        uint32_t addr_width,
+        uint32_t data_width,
+        uint32_t depth,
+        uint32_t num_banks,
+        bool has_byte_enable,
+        bool is_rom,
+        const std::vector<sdata_type>& init_data,  // 使用vector格式
+        const std::string& name,
+        const std::source_location& sloc = std::source_location::current());
+        
+
+    mem_read_port_impl* create_mem_read_port(
+        memimpl* parent,
+        uint32_t port_id,
+        uint32_t size,
+        lnodeimpl* cd,
+        lnodeimpl* addr,
+        lnodeimpl* enable,
+        lnodeimpl* data_output,
+        const std::string& name,
+        const std::source_location& sloc = std::source_location::current()) ;
+
+    mem_write_port_impl* create_mem_write_port(
+        memimpl* parent,
+        uint32_t port_id,
+        uint32_t size,
+        lnodeimpl* cd,
+        lnodeimpl* addr,
+        lnodeimpl* wdata,
+        lnodeimpl* enable,
+        const std::string& name,
+        const std::source_location& sloc = std::source_location::current()) ;
+
     const std::vector<std::unique_ptr<lnodeimpl>>& get_nodes() const { return node_storage_; }
 
     void print_debug_info() const;
     
     // 时钟和复位管理
-    clockimpl* current_clock(const std::source_location& sloc);
-    resetimpl* current_reset(const std::source_location& sloc);
+    clockimpl* current_clock(const std::source_location& sloc = std::source_location::current());
+    resetimpl* current_reset(const std::source_location& sloc = std::source_location::current());
     void set_current_clock(clockimpl* clk);
     void set_current_reset(resetimpl* rst);
     
+    clockimpl* create_clock(const sdata_type& init_value, bool posedge, bool negedge,
+                           const std::string& name,
+                           const std::source_location& sloc = std::source_location::current()) ;
+
+    resetimpl* create_reset(const sdata_type& init_value, resetimpl::reset_type rtype,
+                           const std::string& name,
+                           const std::source_location& sloc = std::source_location::current()) ;
     // 获取上下文信息
     const std::string& name() const { return name_; }
     context* parent() const { return parent_; }
@@ -126,6 +170,8 @@ private:
     
 };
 
-}} // namespace ch::core
+} // namespace ch::core
+
+#include "../lnode/context.th"
 
 #endif // CH_CORE_CONTEXT_H
