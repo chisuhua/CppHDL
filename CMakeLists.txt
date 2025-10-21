@@ -81,8 +81,8 @@ set(CH_SOURCES
     src/simulator.cpp
     src/codegen.cpp
     src/utils/types.cpp
-    src/lnode/uint.cpp
     src/lnode/bool.cpp
+    src/lnode/uint.cpp
 )
 
 # 创建主库

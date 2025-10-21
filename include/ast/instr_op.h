@@ -253,7 +253,7 @@ struct Sshr {
         *dst = (*src0) >> static_cast<uint32_t>(shift);  // 先逻辑右移
         
         // 符号扩展
-        if (sign_bit && shift > 0) {
+        if (sign_bit && shift > 0 && shift < src0->bitwidth()) {
             for (uint32_t i = src0->bitwidth() - static_cast<uint32_t>(shift); i < src0->bitwidth(); ++i) {
                 dst->set_bit(i, true);
             }
@@ -281,6 +281,160 @@ struct BitSel {
             std::cerr << "[instr_op_bit_sel] Error: Bit index out of range!" << std::endl;
             *dst = 0;
         }
+    }
+};
+
+// BITS_EXTRACT (位提取) - 提取 [msb:lsb] 范围的位
+// src1 编码: 低32位 = lsb, 高32位 = msb
+struct BitsExtract {
+    static const char* name() { return "instr_op_bits_extract::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src0, ch::core::sdata_type* src1) {
+        uint64_t range_val = static_cast<uint64_t>(*src1);
+        uint32_t lsb = static_cast<uint32_t>(range_val & 0xFFFFFFFF);
+        uint32_t msb = static_cast<uint32_t>((range_val >> 32) & 0xFFFFFFFF);
+        
+        if (msb >= src0->bitwidth() || lsb > msb) {
+            std::cerr << "[instr_op_bits_extract] Error: Invalid bit range [" << msb << ":" << lsb << "]!" << std::endl;
+            *dst = ch::core::sdata_type(0, dst->bitwidth());
+            return;
+        }
+        
+        uint32_t result_width = msb - lsb + 1;
+        if (result_width != dst->bitwidth()) {
+            std::cerr << "[instr_op_bits_extract] Error: Destination width mismatch!" << std::endl;
+            *dst = ch::core::sdata_type(0, dst->bitwidth());
+            return;
+        }
+        
+        // 提取位
+        for (uint32_t i = 0; i < result_width; ++i) {
+            bool bit_val = src0->get_bit(lsb + i);
+            dst->set_bit(i, bit_val);
+        }
+    }
+};
+
+// CONCAT (连接) - src0 (高位) + src1 (低位)
+struct Concat {
+    static const char* name() { return "instr_op_concat::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src0, ch::core::sdata_type* src1) {
+        uint32_t src0_width = src0->bitwidth();
+        uint32_t src1_width = src1->bitwidth();
+        
+        if (src0_width + src1_width != dst->bitwidth()) {
+            std::cerr << "[instr_op_concat] Error: Destination width mismatch!" << std::endl;
+            *dst = ch::core::sdata_type(0, dst->bitwidth());
+            return;
+        }
+        
+        // 将src1放在低位，src0放在高位
+        for (uint32_t i = 0; i < src1_width; ++i) {
+            bool bit_val = src1->get_bit(i);
+            dst->set_bit(i, bit_val);
+        }
+        for (uint32_t i = 0; i < src0_width; ++i) {
+            bool bit_val = src0->get_bit(i);
+            dst->set_bit(src1_width + i, bit_val);
+        }
+    }
+};
+
+// SEXT (符号扩展) - 一元操作
+struct Sext {
+    static const char* name() { return "instr_op_sext::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src) {
+        uint32_t src_width = src->bitwidth();
+        uint32_t dst_width = dst->bitwidth();
+        
+        if (src_width > dst_width) {
+            std::cerr << "[instr_op_sext] Error: Source width larger than destination!" << std::endl;
+            *dst = ch::core::sdata_type(0, dst_width);
+            return;
+        }
+        
+        // 复制原始位
+        for (uint32_t i = 0; i < src_width; ++i) {
+            bool bit_val = src->get_bit(i);
+            dst->set_bit(i, bit_val);
+        }
+        
+        // 符号扩展
+        bool sign_bit = (src_width > 0) ? src->get_bit(src_width - 1) : false;
+        for (uint32_t i = src_width; i < dst_width; ++i) {
+            dst->set_bit(i, sign_bit);
+        }
+    }
+};
+
+// ZEXT (零扩展) - 一元操作
+struct Zext {
+    static const char* name() { return "instr_op_zext::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src) {
+        uint32_t src_width = src->bitwidth();
+        uint32_t dst_width = dst->bitwidth();
+        
+        if (src_width > dst_width) {
+            std::cerr << "[instr_op_zext] Error: Source width larger than destination!" << std::endl;
+            *dst = ch::core::sdata_type(0, dst_width);
+            return;
+        }
+        
+        // 复制原始位
+        for (uint32_t i = 0; i < src_width; ++i) {
+            bool bit_val = src->get_bit(i);
+            dst->set_bit(i, bit_val);
+        }
+        
+        // 零扩展
+        for (uint32_t i = src_width; i < dst_width; ++i) {
+            dst->set_bit(i, false);
+        }
+    }
+};
+
+// === 规约操作 (Reduce Operations) ===
+
+// AND_REDUCE
+struct AndReduce {
+    static const char* name() { return "instr_op_and_reduce::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src) {
+        if (!check_comparison_result_width(dst)) return;
+        
+        bool result = true;
+        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
+            result &= src->get_bit(i);
+            if (!result) break; // 早期退出优化
+        }
+        *dst = result ? 1 : 0;
+    }
+};
+
+// OR_REDUCE  
+struct OrReduce {
+    static const char* name() { return "instr_op_or_reduce::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src) {
+        if (!check_comparison_result_width(dst)) return;
+        
+        bool result = false;
+        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
+            result |= src->get_bit(i);
+            if (result) break; // 早期退出优化
+        }
+        *dst = result ? 1 : 0;
+    }
+};
+
+// XOR_REDUCE
+struct XorReduce {
+    static const char* name() { return "instr_op_xor_reduce::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src) {
+        if (!check_comparison_result_width(dst)) return;
+        
+        bool result = false;
+        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
+            result ^= src->get_bit(i);
+        }
+        *dst = result ? 1 : 0;
     }
 };
 
@@ -313,6 +467,15 @@ using instr_op_shr   = instr_op_binary<op::Shr>;
 using instr_op_sshr  = instr_op_binary<op::Sshr>;
 using instr_op_neg   = instr_op_unary<op::Neg>;
 using instr_op_bit_sel = instr_op_binary<op::BitSel>;
+using instr_op_bits_extract = instr_op_binary<op::BitsExtract>;
+using instr_op_concat = instr_op_binary<op::Concat>;
+using instr_op_sext = instr_op_unary<op::Sext>;
+using instr_op_zext = instr_op_unary<op::Zext>;
+
+// 在类型别名部分添加
+using instr_op_and_reduce = instr_op_unary<op::AndReduce>;
+using instr_op_or_reduce = instr_op_unary<op::OrReduce>;
+using instr_op_xor_reduce = instr_op_unary<op::XorReduce>;
 
 } // namespace ch
 

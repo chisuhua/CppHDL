@@ -9,7 +9,7 @@
 #include "core/logic_buffer.h"
 #include "core/bool.h"
 
-namespace ch { namespace core {
+namespace ch::core {
 
 class lnodeimpl;
 
@@ -96,6 +96,7 @@ using ch_uint16 = ch_uint<16>;
 using ch_uint32 = ch_uint<32>;
 using ch_uint64 = ch_uint<64>;
 
-}}
+}
+
 
 #endif // CH_CORE_UINT_H

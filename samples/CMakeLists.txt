@@ -11,6 +11,7 @@ file(GLOB EXAMPLE_SOURCES
     bundle_serialization_demo.cpp
     tlm_bundle_demo.cpp
     axi_lite_demo.cpp
+    fifo.cpp
 )
 
 foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})

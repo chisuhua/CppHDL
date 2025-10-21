@@ -79,6 +79,13 @@ public:
         if (rhs) add_src(rhs);
     }
 
+    opimpl(uint32_t id, uint32_t size, ch_op op, bool is_signed, lnodeimpl* operand,
+        const std::string& name, const std::source_location& sloc, context* ctx)
+        : lnodeimpl(id, lnodetype::type_op, size, ctx, name, sloc),
+        op_(op), is_signed_(is_signed) {
+        if (operand) add_src(operand);
+    }
+
     ch_op op() const { return op_; }
     bool is_signed() const { return is_signed_; }
     lnodeimpl* lhs() const { return src(0); }

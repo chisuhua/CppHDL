@@ -39,13 +39,22 @@ ch_uint<N>::operator uint64_t() const {
 
 // 显式实例化 - 放在命名空间外部
 template class ch::core::ch_uint<1>;
+template class ch::core::ch_uint<2>;
+template class ch::core::ch_uint<3>;
+template class ch::core::ch_uint<4>;
+template class ch::core::ch_uint<5>;
+template class ch::core::ch_uint<6>;
+template class ch::core::ch_uint<7>;
 template class ch::core::ch_uint<8>;
+template class ch::core::ch_uint<9>;
+template class ch::core::ch_uint<10>;
+template class ch::core::ch_uint<11>;
+template class ch::core::ch_uint<12>;
+template class ch::core::ch_uint<13>;
+template class ch::core::ch_uint<14>;
+template class ch::core::ch_uint<15>;
 template class ch::core::ch_uint<16>;
 template class ch::core::ch_uint<32>;
 template class ch::core::ch_uint<64>;
-
-template class ch::core::ch_uint<2>;
-template class ch::core::ch_uint<4>;
-template class ch::core::ch_uint<12>;
 template class ch::core::ch_uint<24>;
 template class ch::core::ch_uint<48>;

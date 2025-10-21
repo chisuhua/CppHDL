@@ -78,6 +78,14 @@ public:
         const std::string& name = "unary_op",
         const std::source_location& sloc = std::source_location::current());
 
+    template<typename T>
+    lnodeimpl* build_operation(
+        ch_op op,
+        const lnode<T>& operand,
+        bool is_signed,
+        const std::string& name = "op",
+        const std::source_location& sloc = std::source_location::current());
+
 private:
     node_builder();
     

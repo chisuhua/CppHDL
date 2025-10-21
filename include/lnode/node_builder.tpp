@@ -283,6 +283,47 @@ lnodeimpl* node_builder::build_operation(
     return proxy_node;
 }
 
+// 重载 build_operation 支持一元操作
+template<typename T>
+lnodeimpl* node_builder::build_operation(
+    ch_op op,
+    const lnode<T>& operand,
+    bool is_signed,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    CHDBG_FUNC();
+    if (instance().debug_mode_) {
+        CHINFO("[node_builder] Building unary operation %d", static_cast<int>(op));
+    }
+    
+    auto* ctx = ctx_curr_;
+    if (!ctx) {
+        CHERROR("[node_builder] No active context for operation creation");
+        return nullptr;
+    }
+    
+    if (!operand.impl()) {
+        CHERROR("[node_builder] Invalid operand for unary operation");
+        return nullptr;
+    }
+    
+    uint32_t result_size = calculate_result_size(op, ch_width_v<T>, 0); // 0表示一元操作
+    if (instance().statistics_enabled_) {
+        ++instance().statistics_->operations_built;
+        ++instance().statistics_->total_nodes_built;
+    }
+    
+    // 构建一元操作节点
+    opimpl* op_node = ctx->create_node<opimpl>(
+        result_size, op, is_signed, operand.impl(), nullptr, // rhs = nullptr
+        prefixed_name_helper(name, instance().name_prefix_), sloc
+    );
+    
+    proxyimpl* proxy_node = ctx->create_node<proxyimpl>(op_node, prefixed_name_helper("_" + name, instance().name_prefix_), sloc);
+    return proxy_node;
+}
+/*
 // 一元操作节点构建实现
 template<typename T>
 lnodeimpl* node_builder::build_unary_operation(
@@ -294,7 +335,48 @@ lnodeimpl* node_builder::build_unary_operation(
     CHDBG_FUNC();
     return build_operation(op, operand, operand, false, name, sloc);
 }
+*/
 
+// 在 node_builder.h 或相关实现文件中
+template<typename T>
+lnodeimpl* node_builder::build_unary_operation(
+    ch_op op,
+    const lnode<T>& operand,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    CHDBG_FUNC();
+    if (instance().debug_mode_) {
+        CHINFO("[node_builder] Building unary operation %d", static_cast<int>(op));
+    }
+    
+    auto* ctx = ctx_curr_;
+    if (!ctx) {
+        CHERROR("[node_builder] No active context for operation creation");
+        return nullptr;
+    }
+    
+    if (!operand.impl()) {
+        CHERROR("[node_builder] Invalid operand for unary operation");
+        return nullptr;
+    }
+    
+    // 对于规约操作，结果宽度总是1
+    uint32_t result_size = 1;
+    if (instance().statistics_enabled_) {
+        ++instance().statistics_->operations_built;
+        ++instance().statistics_->total_nodes_built;
+    }
+    
+    // 构建真正的一元操作节点（rhs = nullptr）
+    opimpl* op_node = ctx->create_node<opimpl>(
+        result_size, op, false, operand.impl(), nullptr,
+        prefixed_name_helper(name, instance().name_prefix_), sloc
+    );
+    
+    proxyimpl* proxy_node = ctx->create_node<proxyimpl>(op_node, prefixed_name_helper("_" + name, instance().name_prefix_), sloc);
+    return proxy_node;
+}
 } // namespace ch::core
 
 #endif // CH_LNODE_NODE_BUILDER_TPP

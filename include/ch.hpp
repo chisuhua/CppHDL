@@ -16,12 +16,13 @@
 #include "logger.h"  // Define __io, __in, __out macros (defines the macros used by io.h and user code)
 #include "io.h"      // Define ch_logic_in/out (depends on logic.h, lnodeimpl.h, macros.h for type aliases)
 #include "reg.h"     // Define ch_reg (depends on logic.h, bitbase.h, lnodeimpl.h, ast_nodes.h if regimpl is used directly)
+#include "mem.h"     // Define ch_reg (depends on logic.h, bitbase.h, lnodeimpl.h, ast_nodes.h if regimpl is used directly)
 #include "operators.h" // Define ch_uint, operators (depends on logic.h, lnodeimpl.h)
 //#include "core/bundle/bundle_base.h" // Define ch_uint, operators (depends on logic.h, lnodeimpl.h)
 //#include "numbase.h" // If ch_uint is defined here, include it
 //#include "next.h"    // If ch_nextEn is defined here
 
-#include "lnode/when.h" // Define ch_uint, operators (depends on logic.h, lnodeimpl.h)
+//#include "lnode/when.h" // Define ch_uint, operators (depends on logic.h, lnodeimpl.h)
 // --- Simulation (when ready) ---
 // #include "simulator.h"
 // #include "tracer.h"

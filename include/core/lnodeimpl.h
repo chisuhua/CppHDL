@@ -63,6 +63,7 @@ enum class ch_op {
     sext,       // 符号扩展
     zext,       // 零扩展
     mux,        // 多路选择器
+    and_reduce, or_reduce, xor_reduce,
     rotate_l,   // 循环左移（预留）
     rotate_r   // 循环右移（预留）
 };

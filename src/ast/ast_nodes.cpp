@@ -73,6 +73,20 @@ std::unique_ptr<ch::instr_base> opimpl::create_instruction(
         // 一元操作
         case ch_op::neg:
             return std::make_unique<ch::instr_op_neg>(dst_buf, size_, src0_buf);
+        case ch_op::bits_extract:
+            return std::make_unique<ch::instr_op_bits_extract>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::concat:
+            return std::make_unique<ch::instr_op_concat>(dst_buf, size_, src0_buf, src1_buf);
+        case ch_op::sext:
+            return std::make_unique<ch::instr_op_sext>(dst_buf, size_, src0_buf);
+        case ch_op::zext:
+            return std::make_unique<ch::instr_op_zext>(dst_buf, size_, src0_buf);
+        case ch_op::and_reduce:
+            return std::make_unique<ch::instr_op_and_reduce>(dst_buf, 1, src0_buf);
+        case ch_op::or_reduce:
+            return std::make_unique<ch::instr_op_or_reduce>(dst_buf, 1, src0_buf);
+        case ch_op::xor_reduce:
+            return std::make_unique<ch::instr_op_xor_reduce>(dst_buf, 1, src0_buf);
         default:
             return nullptr;
     }

@@ -60,6 +60,9 @@ struct ch_literal {
 
 namespace literals {
 
+
+// FIXME: use literals width instead of compute bit width
+
 template <char... Chars>
 constexpr ch_literal operator "" _b() {
     constexpr auto value = lit_bin_value_v<Chars...>;

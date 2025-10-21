@@ -263,41 +263,33 @@ auto bit_select(const T& operand) {
     return make_uint_result<1>(op_node);
 }
 
-// === 位切片操作 ===
-template<typename T, unsigned Msb, unsigned Lsb>
+// === 位提取操作（模板参数版本）===
+template<typename T, unsigned MSB, unsigned LSB>
 auto bits(const T& operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
-    static_assert(Msb >= Lsb, "MSB must be greater than or equal to LSB");
-    static_assert(Msb < ch_width_v<T>, "MSB out of bounds");
+    static_assert(MSB >= LSB, "MSB must be >= LSB");
+    static_assert(MSB < ch_width_v<T>, "MSB must be within operand width");
     
-    constexpr unsigned width = Msb - Lsb + 1;
-    constexpr unsigned msb_w = bit_width(Msb);
-    constexpr unsigned lsb_w = bit_width(Lsb);
-
-    using MsbType = ch_uint<msb_w>;
-    using LsbType = ch_uint<lsb_w>;
-
-    MsbType msb_val(Msb);
-    LsbType lsb_val(Lsb);
-    auto msb_node = get_lnode(msb_val);
-    auto lsb_node = get_lnode(lsb_val);
-
     auto operand_node = to_operand(operand);
     
-    // 构建位切片操作（这里简化处理，实际可能需要特殊处理）
+    constexpr unsigned result_width = MSB - LSB + 1;
+    
+    // 将 MSB 和 LSB 编码到编译时常量中
+    constexpr uint64_t range_encoded = (static_cast<uint64_t>(MSB) << 32) | static_cast<uint64_t>(LSB);
+    auto range_const = ch_uint<64>(range_encoded);
+    auto range_node = get_lnode(range_const);
+    
     auto* op_node = node_builder::instance().build_operation(
         ch_op::bits_extract,
         operand_node,
-        msb_node,
-        lsb_node,
+        range_node,
         false,
-        "bits",
+        "bits_extract",
         std::source_location::current()
     );
     
-    return make_uint_result<width>(op_node);
+    return make_uint_result<result_width>(op_node);
 }
-
 // === 位拼接操作 ===
 template<typename T1, typename T2>
 auto concat(const T1& lhs, const T2& rhs) {
@@ -321,38 +313,43 @@ auto concat(const T1& lhs, const T2& rhs) {
     return make_uint_result<result_width>(op_node);
 }
 
+
 // === 符号扩展操作 ===
-template<typename T>
-auto sign_extend(const T& operand, unsigned new_width) {
+template<typename T, unsigned NewWidth>
+auto sext(const T& operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
+    static_assert(NewWidth >= ch_width_v<T>, "New width must be >= original width");
     
     auto operand_node = to_operand(operand);
     
-    auto* op_node = node_builder::instance().build_unary_operation(
+    auto* op_node = node_builder::instance().build_operation(
         ch_op::sext,
         operand_node,
+        true, // 符号操作
         "sext",
         std::source_location::current()
     );
     
-    return make_uint_result<new_width>(op_node);
+    return make_uint_result<NewWidth>(op_node);
 }
 
 // === 零扩展操作 ===
-template<typename T>
-auto zero_extend(const T& operand, unsigned new_width) {
+template<typename T, unsigned NewWidth>
+auto zext(const T& operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
+    static_assert(NewWidth >= ch_width_v<T>, "New width must be >= original width");
     
     auto operand_node = to_operand(operand);
     
-    auto* op_node = node_builder::instance().build_unary_operation(
+    auto* op_node = node_builder::instance().build_operation(
         ch_op::zext,
         operand_node,
+        false, // 无符号操作
         "zext",
         std::source_location::current()
     );
     
-    return make_uint_result<new_width>(op_node);
+    return make_uint_result<NewWidth>(op_node);
 }
 
 // === 约简操作 ===
@@ -363,7 +360,7 @@ ch_bool and_reduce(const T& operand) {
     auto operand_node = to_operand(operand);
     
     auto* op_node = node_builder::instance().build_unary_operation(
-        ch_op::and_,
+        ch_op::and_reduce,  // 使用专门的规约操作类型
         operand_node,
         "and_reduce",
         std::source_location::current()
@@ -379,7 +376,7 @@ ch_bool or_reduce(const T& operand) {
     auto operand_node = to_operand(operand);
     
     auto* op_node = node_builder::instance().build_unary_operation(
-        ch_op::or_,
+        ch_op::or_reduce,   // 使用专门的规约操作类型
         operand_node,
         "or_reduce",
         std::source_location::current()
@@ -395,7 +392,7 @@ ch_bool xor_reduce(const T& operand) {
     auto operand_node = to_operand(operand);
     
     auto* op_node = node_builder::instance().build_unary_operation(
-        ch_op::xor_,
+        ch_op::xor_reduce,  // 使用专门的规约操作类型
         operand_node,
         "xor_reduce",
         std::source_location::current()
@@ -403,7 +400,6 @@ ch_bool xor_reduce(const T& operand) {
     
     return make_bool_result(op_node);
 }
-
 // === 条件选择操作 ===
 template<typename Cond, typename T, typename U>
 auto select(const Cond& condition, const T& true_val, const U& false_val) {
