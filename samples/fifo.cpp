@@ -56,8 +56,8 @@ public:
         auto wr_a = bits<decltype(wr_ptr), addr_width - 1, 0>(wr_ptr);
 
         // 控制信号
-        auto reading = io().pop && !io().empty;
-        auto writing = io().push && !io().full;
+        auto reading = ch::core::ch_bool(ch::core::get_lnode(io().pop).impl()) && !ch::core::ch_bool(ch::core::get_lnode(io().empty).impl());
+        auto writing = ch::core::ch_bool(ch::core::get_lnode(io().push).impl()) && !ch::core::ch_bool(ch::core::get_lnode(io().full).impl());
 
         // 指针更新逻辑
         rd_ptr->next = select(reading, rd_ptr + 1, rd_ptr);
@@ -74,7 +74,7 @@ public:
 
         // 状态信号
         io().empty = (wr_ptr == rd_ptr);
-        io().full = (wr_a == rd_a) && (wr_ptr[addr_width] != rd_ptr[addr_width]);
+        io().full = (wr_a == rd_a) && static_cast<ch_bool>(ch::core::bit_select<ch::core::ch_uint<addr_width+1>, addr_width>(wr_ptr) != ch::core::bit_select<ch::core::ch_uint<addr_width+1>, addr_width>(rd_ptr));
     }
 };
 
@@ -126,24 +126,24 @@ int main() {
         sim.tick();
         
         // 获取输出值
-        auto dout_val = sim.get_value(top_device.instance().io().dout);
-        auto empty_val = sim.get_value(top_device.instance().io().empty);
-        auto full_val = sim.get_value(top_device.instance().io().full);
+        auto dout_val = sim.get_port_value(top_device.instance().io().dout);
+        auto empty_val = sim.get_port_value(top_device.instance().io().empty);
+        auto full_val = sim.get_port_value(top_device.instance().io().full);
         
         std::cout << "Cycle " << cycle 
                   << ": dout=" << dout_val 
                   << ", empty=" << empty_val 
                   << ", full=" << full_val 
-                  << ", din=" << sim.get_value(top_device.instance().io().din)
-                  << ", push=" << sim.get_value(top_device.instance().io().push)
-                  << ", pop=" << sim.get_value(top_device.instance().io().pop)
+                  << ", din=" << sim.get_port_value(top_device.instance().io().din)
+                  << ", push=" << sim.get_port_value(top_device.instance().io().push)
+                  << ", pop=" << sim.get_port_value(top_device.instance().io().pop)
                   << std::endl;
         
         // 测试激励
         switch (cycle) {
         case 0:
             // 初始状态检查
-            if (empty_val != true || full_val != false) {
+            if (empty_val != ch::core::sdata_type(true, 1) || full_val != ch::core::sdata_type(false, 1)) {
                 std::cerr << "ERROR: Initial state incorrect!" << std::endl;
                 return 1;
             }
@@ -152,7 +152,7 @@ int main() {
             sim.set_input_value(top_device.instance().io().pop, false);
             break;      
         case 2:
-            if (empty_val != false || full_val != false || dout_val != 1) {
+            if (empty_val != ch::core::sdata_type(false, 1) || full_val != ch::core::sdata_type(false, 1) || dout_val != ch::core::sdata_type(1, 2)) {
                 std::cerr << "ERROR: Cycle 2 state incorrect!" << std::endl;
                 return 1;
             }
@@ -160,7 +160,7 @@ int main() {
             sim.set_input_value(top_device.instance().io().push, true);
             break;
         case 4:
-            if (empty_val != false || full_val != true || dout_val != 1) {
+            if (empty_val != ch::core::sdata_type(false, 1) || full_val != ch::core::sdata_type(true, 1) || dout_val != ch::core::sdata_type(1, 2)) {
                 std::cerr << "ERROR: Cycle 4 state incorrect!" << std::endl;
                 return 1;
             }
@@ -168,21 +168,21 @@ int main() {
             sim.set_input_value(top_device.instance().io().push, false);
             break;
         case 6:
-            if (empty_val != false || full_val != true || dout_val != 1) {
+            if (empty_val != ch::core::sdata_type(false, 1) || full_val != ch::core::sdata_type(true, 1) || dout_val != ch::core::sdata_type(1, 2)) {
                 std::cerr << "ERROR: Cycle 6 state incorrect!" << std::endl;
                 return 1;
             }
             sim.set_input_value(top_device.instance().io().pop, true);
             break;
         case 8:
-            if (empty_val != false || full_val != false || dout_val != 2) {
+            if (empty_val != ch::core::sdata_type(false, 1) || full_val != ch::core::sdata_type(false, 1) || dout_val != ch::core::sdata_type(2, 2)) {
                 std::cerr << "ERROR: Cycle 8 state incorrect!" << std::endl;
                 return 1;
             }
             sim.set_input_value(top_device.instance().io().pop, true);
             break;
         case 10:
-            if (empty_val != true || full_val != false || dout_val != 1) {
+            if (empty_val != ch::core::sdata_type(true, 1) || full_val != ch::core::sdata_type(false, 1) || dout_val != ch::core::sdata_type(1, 2)) {
                 std::cerr << "ERROR: Cycle 10 state incorrect!" << std::endl;
                 return 1;
             }

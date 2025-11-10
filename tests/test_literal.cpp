@@ -436,6 +436,9 @@ TEST_CASE("Integration with existing system", "[literal][integration]") {
     }
     
     SECTION("Construction of ch_uint and ch_bool from literals") {
+
+        context ctx("test_context");
+        ctx_swap swap(&ctx);
         // 测试与 ch_uint 集成
         ch_reg<ch_uint<8>> u8(255_d);
         REQUIRE(u8.impl() != nullptr);
