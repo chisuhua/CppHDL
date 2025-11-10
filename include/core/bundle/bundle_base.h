@@ -79,20 +79,28 @@ public:
 
     // 获取Bundle宽度（使用统一的函数）
     constexpr unsigned width() const {
-        return bundle_width_v<Derived>;
+        return get_bundle_width<Derived>();
     }
 
     // 序列化支持
-    template<unsigned W = bundle_width_v<Derived>>
+    template<unsigned W = 0> // 默认模板参数改为0
     ch_uint<W> to_bits() const {
-        static_assert(W > 0, "Bundle has zero width");
-        return serialize(static_cast<const Derived&>(*this));
+        constexpr unsigned actual_width = get_bundle_width<Derived>();
+        static_assert(actual_width > 0, "Bundle has zero width");
+        static_assert(W == 0 || W == actual_width, "Template width parameter must match actual bundle width");
+        if constexpr (W == 0) {
+            return serialize(static_cast<const Derived&>(*this));
+        } else {
+            return serialize(static_cast<const Derived&>(*this));
+        }
     }
 
     // 反序列化支持
-    template<unsigned W = bundle_width_v<Derived>>
+    template<unsigned W = 0> // 默认模板参数改为0
     static Derived from_bits(const ch_uint<W>& bits) {
-        static_assert(W > 0, "Bundle has zero width");
+        constexpr unsigned actual_width = get_bundle_width<Derived>();
+        static_assert(actual_width > 0, "Bundle has zero width");
+        static_assert(W == 0 || W == actual_width, "Template width parameter must match actual bundle width");
         return deserialize<Derived>(bits);
     }
 

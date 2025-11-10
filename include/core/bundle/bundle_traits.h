@@ -4,7 +4,10 @@
 
 #include <type_traits>
 #include "bundle_meta.h"
-#include "bool.h"
+
+namespace ch::core {
+    struct ch_bool;
+}
 
 namespace ch::core {
 
@@ -20,7 +23,8 @@ struct is_bundle {
     
     template<typename>
     static std::false_type test(...);
-    
+
+public:
     static constexpr bool value = decltype(test<T>(0))::value;
 };
 
@@ -30,7 +34,7 @@ constexpr bool is_bundle_v = is_bundle<T>::value;
 // 获取Bundle字段数量
 template<typename BundleT>
 struct bundle_field_count {
-    static constexpr size_t value = []() constexpr {
+    static constexpr size_t value = []() {
         if constexpr (is_bundle_v<BundleT>) {
             return std::tuple_size_v<decltype(std::declval<BundleT>().__bundle_fields())>;
         } else {
@@ -46,26 +50,31 @@ constexpr size_t bundle_field_count_v = bundle_field_count<BundleT>::value;
 template<typename BundleT>
 constexpr unsigned get_bundle_width() {
     if constexpr (is_bundle_v<BundleT>) {
-        constexpr auto fields = BundleT::__bundle_fields();
-        constexpr auto indices = std::make_index_sequence<std::tuple_size_v<decltype(fields)>>{};
-        unsigned total_width = 0;
-        [&]<std::size_t... I>(std::index_sequence<I...>) {
-            ((total_width += []() constexpr {
-                using FieldType = std::remove_cvref_t<decltype(BundleT{}.*(std::get<I>(fields).ptr))>;
-                if constexpr (requires { FieldType::ch_width; }) {
-                    return FieldType::ch_width;
-                } else if constexpr (requires { FieldType::width; }) {
-                    return FieldType::width;
-                } else if constexpr (std::is_same_v<FieldType, ch_bool>) {
-                    return 1u;
-                } else if constexpr (is_bundle_v<FieldType>) {
-                    return get_bundle_width<FieldType>();
-                } else {
-                    return 0u;
-                }
-            }()), ...);
-        }(indices);
-        return total_width;
+        return []() constexpr {
+            constexpr auto fields = BundleT::__bundle_fields();
+            constexpr auto indices = std::make_index_sequence<std::tuple_size_v<decltype(fields)>>{};
+            unsigned total_width = 0;
+            
+            [&]<std::size_t... I>(std::index_sequence<I...>) {
+                constexpr auto field_tuple = BundleT::__bundle_fields();
+                (([&]() {
+                    if constexpr (I < std::tuple_size_v<decltype(field_tuple)>) {
+                        using FieldType = std::remove_cvref_t<decltype(std::declval<BundleT>().*(std::get<I>(field_tuple).ptr))>;
+                        if constexpr (requires { FieldType::ch_width; }) {
+                            total_width += FieldType::ch_width;
+                        } else if constexpr (requires { FieldType::width; }) {
+                            total_width += FieldType::width;
+                        } else if constexpr (std::is_same_v<FieldType, ch_bool>) {
+                            total_width += 1u;
+                        } else if constexpr (is_bundle_v<FieldType>) {
+                            total_width += get_bundle_width<FieldType>();
+                        }
+                    }
+                }()), ...);
+            }(indices);
+            
+            return total_width;
+        }();
     } else {
         return 0;
     }
@@ -91,7 +100,6 @@ constexpr unsigned get_field_width() {
         return 0;
     }
 }
-
 
 } // namespace ch::core
 

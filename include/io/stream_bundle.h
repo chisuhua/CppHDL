@@ -10,6 +10,10 @@
 namespace ch::core {
 
 template<typename T>
+struct stream_bundle;
+
+// 前向声明完成后再定义
+template<typename T>
 struct stream_bundle : public bundle_base<stream_bundle<T>> {
     using Self = stream_bundle<T>;
     T payload;
@@ -17,11 +21,17 @@ struct stream_bundle : public bundle_base<stream_bundle<T>> {
     ch_bool ready;
 
     stream_bundle() = default;
-    stream_bundle(const std::string& prefix) {
+    explicit stream_bundle(const std::string& prefix) {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, payload, valid, ready)
+    static constexpr auto __bundle_fields() { 
+        return std::make_tuple( 
+            CH_BUNDLE_FIELD_ENTRY(Self, payload),
+            CH_BUNDLE_FIELD_ENTRY(Self, valid),
+            CH_BUNDLE_FIELD_ENTRY(Self, ready)
+        ); 
+    }
 
     void as_master() override {
         // Master: 输出数据，接收就绪信号
