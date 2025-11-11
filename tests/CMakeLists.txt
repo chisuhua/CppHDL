@@ -1,3 +1,5 @@
+# tests/CMakeLists.txt
+
 # 启用测试支持
 enable_testing()
 
@@ -44,6 +46,7 @@ set(SINGLE_TEST_SOURCES
     test_bundle_advanced.cpp
     test_bundle_advanced_features.cpp
     test_bundle_serialization.cpp
+    test_bundle_bitstream.cpp
     # test_multithread.cpp
     test_nested_bundle.cpp
     test_tlm_bundle_phase1.cpp
