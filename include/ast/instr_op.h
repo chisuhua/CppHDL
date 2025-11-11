@@ -301,7 +301,8 @@ struct BitsExtract {
         
         uint32_t result_width = msb - lsb + 1;
         if (result_width != dst->bitwidth()) {
-            std::cerr << "[instr_op_bits_extract] Error: Destination width mismatch!" << std::endl;
+            std::cerr << "[instr_op_bits_extract] Error: Destination width mismatch! Expected: " 
+                      << result_width << ", Actual: " << dst->bitwidth() << std::endl;
             *dst = ch::core::sdata_type(0, dst->bitwidth());
             return;
         }

@@ -279,6 +279,7 @@ auto bits(const T& operand) {
     auto range_const = ch_uint<64>(range_encoded);
     auto range_node = get_lnode(range_const);
     
+    // 创建一个指定宽度的节点作为目标
     auto* op_node = node_builder::instance().build_operation(
         ch_op::bits_extract,
         operand_node,
@@ -288,7 +289,18 @@ auto bits(const T& operand) {
         std::source_location::current()
     );
     
-    return make_uint_result<result_width>(op_node);
+    auto* dst_node = new proxyimpl(
+        ctx_curr_->next_node_id(),  // id - 使用下一个可用id
+        result_width,               // size
+        std::string("bits_dst"),    // name
+        std::source_location::current(),  // sloc
+        ctx_curr_                   // ctx
+    );
+    
+    // 将目标节点连接到操作节点
+    dst_node->write(0, op_node, 0, result_width, std::source_location::current());
+    
+    return make_uint_result<result_width>(dst_node);
 }
 // === 位拼接操作 ===
 template<typename T1, typename T2>
