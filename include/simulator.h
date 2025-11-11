@@ -9,7 +9,6 @@
 #include "ast/instr_base.h"
 #include "logger.h"
 #include "core/bundle/bundle_base.h"
-#include "core/bundle/bundle_utils.h"
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -95,6 +94,53 @@ public:
         }
     }
 
+    // 为Bundle类型添加特殊支持
+    template <typename BundleT>
+    requires std::is_base_of_v<ch::core::bundle_base<BundleT>, BundleT>
+    void set_bundle_value(BundleT& bundle, uint64_t value) {
+        CHDBG_FUNC();
+        
+        if (!initialized_) {
+            CHERROR("Simulator not initialized when setting bundle value");
+            return;
+        }
+        
+        // 获取Bundle的总宽度
+        constexpr unsigned width = ch::core::get_bundle_width<BundleT>();
+        
+        // 遍历Bundle的所有字段并设置值
+        const auto& fields = bundle.__bundle_fields();
+        unsigned offset = 0;
+        
+        std::apply([&](auto&&... f) {
+            (((set_bundle_field_value(bundle.*(f.ptr), value, offset, 
+                                     ch::core::ch_width_v<std::decay_t<decltype(bundle.*(f.ptr))>>)), 
+              offset += ch::core::ch_width_v<std::decay_t<decltype(bundle.*(f.ptr))>>), ...);
+        }, fields);
+    }
+    
+    template <typename BundleT>
+    requires std::is_base_of_v<ch::core::bundle_base<BundleT>, BundleT>
+    uint64_t get_bundle_value(const BundleT& bundle) const {
+        CHDBG_FUNC();
+        
+        if (!initialized_) {
+            CHABORT("Simulator not initialized when getting bundle value");
+        }
+        
+        // 序列化Bundle字段为一个整数值
+        uint64_t result = 0;
+        const auto& fields = bundle.__bundle_fields();
+        unsigned offset = 0;
+        
+        std::apply([&](auto&&... f) {
+            (((result |= (get_bundle_field_value(bundle.*(f.ptr)) << offset)), 
+              offset += ch::core::ch_width_v<std::decay_t<decltype(bundle.*(f.ptr))>>), ...);
+        }, fields);
+        
+        return result;
+    }
+
     // 保持兼容性的旧接口
     template <typename T>
     const ch::core::sdata_type get_value(const ch::core::ch_out<T>& port) const {
@@ -115,6 +161,55 @@ private:
     void initialize();
     void update_instruction_pointers();
     void eval_range(size_t start, size_t end);
+
+    // 为Bundle字段设置值的辅助函数
+    template <typename FieldType>
+    void set_bundle_field_value(FieldType& field, uint64_t value, unsigned offset, unsigned width) {
+        // 提取对应位段的值
+        uint64_t field_value = (value >> offset) & ((1ULL << width) - 1);
+        
+        // 对于端口类型字段
+        if constexpr (requires { field.impl(); }) {
+            // 检查是否有方向类型，这表明是端口类型
+            if constexpr (requires { typename FieldType::direction; }) {
+                set_port_value(field, field_value);
+            } else {
+                // 对于其他类型字段
+                if constexpr (std::is_same_v<FieldType, ch::core::ch_bool>) {
+                    field = ch::core::ch_bool(field_value != 0);
+                } else {
+                    field = FieldType(field_value);
+                }
+            }
+        } 
+        // 对于其他类型字段
+        else {
+            if constexpr (std::is_same_v<FieldType, ch::core::ch_bool>) {
+                field = ch::core::ch_bool(field_value != 0);
+            } else {
+                field = FieldType(field_value);
+            }
+        }
+    }
+    
+    // 获取Bundle字段值的辅助函数
+    template <typename FieldType>
+    uint64_t get_bundle_field_value(const FieldType& field) const {
+        // 对于端口类型字段
+        if constexpr (requires { field.impl(); }) {
+            // 检查是否有方向类型，这表明是端口类型
+            if constexpr (requires { typename FieldType::direction; }) {
+                auto value = get_port_value(field);
+                return static_cast<uint64_t>(value);
+            } else {
+                return static_cast<uint64_t>(field);
+            }
+        } 
+        // 对于其他类型字段
+        else {
+            return static_cast<uint64_t>(field);
+        }
+    }
 
     ch::core::context* ctx_;
     std::vector<ch::core::lnodeimpl*> eval_list_;
