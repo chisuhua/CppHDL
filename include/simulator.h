@@ -8,6 +8,8 @@
 #include "core/reg.h"
 #include "ast/instr_base.h"
 #include "logger.h"
+#include "core/bundle/bundle_base.h"
+#include "core/bundle/bundle_utils.h"
 #include <unordered_map>
 #include <vector>
 #include <memory>

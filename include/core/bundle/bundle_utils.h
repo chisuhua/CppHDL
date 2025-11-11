@@ -47,8 +47,8 @@ auto serialize_to_bits(const BundleT& bundle) {
 }
 
 // 从bits反序列化到Bundle
-template<typename BundleT>
-BundleT deserialize_from_bits(const auto& bits_value) {
+template<typename BundleT, typename BitsType>
+BundleT deserialize_from_bits(const BitsType& bits_value) {
     static_assert(std::is_base_of_v<bundle_base<BundleT>, BundleT>, 
                   "deserialize_from_bits() only works with bundle_base-derived types");
                   
@@ -59,7 +59,7 @@ BundleT deserialize_from_bits(const auto& bits_value) {
     unsigned offset = 0;
     
     std::apply([&](auto&&... f) {
-        (((bundle.*(f.ptr) = bits_value.template slice<ch_width_v<std::decay_t<decltype(bundle.*(f.ptr))>>>(offset)), 
+        (((bundle.*(f.ptr) = bits(bits_value, offset + ch_width_v<std::decay_t<decltype(bundle.*(f.ptr))>> - 1, offset)), 
           offset += ch_width_v<std::decay_t<decltype(bundle.*(f.ptr))>>), ...);
     }, fields);
     
