@@ -203,6 +203,18 @@ protected:
     constexpr const Derived* derived() const { return static_cast<const Derived*>(this); }
 };
 
+// 连接两个相同类型的bundle
+template<typename BundleT>
+void connect(BundleT& src, BundleT& dst) {
+    static_assert(std::is_base_of_v<bundle_base<BundleT>, BundleT>, 
+                  "connect() only works with bundle_base-derived types");
+    
+    const auto& fields = src.__bundle_fields();
+    std::apply([&](auto&&... f) {
+        ((dst.*(f.ptr) = src.*(f.ptr)), ...);
+    }, fields);
+}
+
 } // namespace ch::core
 
 #endif // CH_CORE_BUNDLE_BASE_H
