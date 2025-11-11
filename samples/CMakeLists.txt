@@ -1,31 +1,41 @@
 # samples/CMakeLists.txt
-
-# 由于主库已经设置了包含目录，示例只需要链接主库即可
-file(GLOB EXAMPLE_SOURCES 
-    counter.cpp
-    simple_io.cpp
-    handshake.cpp
-    bundle_demo.cpp
-    nested_bundle_demo.cpp
-    bundle_advanced_features.cpp
-    bundle_serialization_demo.cpp
-    bundle_simulator_demo.cpp
-    tlm_bundle_demo.cpp
-    axi_lite_demo.cpp
-    fifo.cpp
-    fifo_bundle.cpp
-    bundle_top_example.cpp
+set(CH_SAMPLE_TARGETS
+    counter
+    simple_io
+    handshake
+    fifo
+    fifo_bundle
+    bundle_demo
+    bundle_advanced_features
+    bundle_serialization_demo
+    bundle_top_example
+    axi_lite_demo
+    nested_bundle_demo
+    tlm_bundle_demo
+    bundle_simulator_demo
+    pod_bundle_conversion
 )
 
-foreach(EXAMPLE_SOURCE ${EXAMPLE_SOURCES})
-    get_filename_component(EXAMPLE_NAME ${EXAMPLE_SOURCE} NAME_WE)
-    add_executable(${EXAMPLE_NAME} ${EXAMPLE_SOURCE})
-    target_link_libraries(${EXAMPLE_NAME} cpphdl)
+# 为每个示例创建可执行文件
+foreach(target ${CH_SAMPLE_TARGETS})
+    add_executable(${target} ${target}.cpp)
+    target_link_libraries(${target} cpphdl)
     
-    # 设置C++标准
-    set_target_properties(${EXAMPLE_NAME} PROPERTIES
+    # 设置C++20标准
+    set_target_properties(${target} PROPERTIES
         CXX_STANDARD 20
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
     )
+    
+    # 添加自定义目标以便于构建单个示例
+    add_custom_target(${target}-run
+        COMMAND ${target}
+        DEPENDS ${target}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
 endforeach()
+
+# 创建一个目标来构建所有示例
+add_custom_target(all-samples)
+add_dependencies(all-samples ${CH_SAMPLE_TARGETS})

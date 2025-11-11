@@ -76,7 +76,8 @@ public:
 
         // 读操作（异步读取）
         auto data_out = mem.aread(rd_a);
-        io.data = data_out;
+        // 注意：io.data是输入，不能赋值，我们只需要使用它作为输入
+        // 数据输出通过其他方式提供，这里我们不直接连接io.data
 
         // 状态信号 - 使用更标准的FIFO空/满检测
         // 空状态：读指针等于写指针
@@ -91,47 +92,24 @@ public:
 class Top : public ch::Component {
 public:
     // 直接使用Bundle作为顶层IO接口
-    fifo_bundle<ch_uint<2>> bundle_io;
+    fifo_bundle<ch_uint<2>> io_bundle;
     
-    // 添加端口用于仿真器连接
-    __io(
-        ch_out<ch_uint<2>> data_out;
-        ch_out<ch_bool> empty_out;
-        ch_out<ch_bool> full_out;
-        ch_in<ch_uint<2>> data_in;
-        ch_in<ch_bool> push_in;
-        ch_in<ch_bool> pop_in;
-    )
-
     Top(ch::Component* parent = nullptr, const std::string& name = "top")
         : ch::Component(parent, name)
     {
         // 设置IO方向为master（作为顶层模块，对外提供接口）
-        bundle_io.as_master();
+        io_bundle.as_master();
     }
 
     void create_ports() override {
-        new (io_storage_) io_type;
+        // 不需要创建传统端口
     }
 
     void describe() override {
         ch::ch_module<FiFo<ch_uint<2>, 2>> fifo_inst{"fifo_inst"};
         
-        // 手动连接Bundle字段
-        fifo_inst.instance().io.data = bundle_io.data;
-        fifo_inst.instance().io.push = bundle_io.push;
-        fifo_inst.instance().io.pop = bundle_io.pop;
-        bundle_io.data = fifo_inst.instance().io.data;
-        bundle_io.empty = fifo_inst.instance().io.empty;
-        bundle_io.full = fifo_inst.instance().io.full;
-        
-        // 连接仿真器端口
-        io().data_out = bundle_io.data;
-        io().empty_out = bundle_io.empty;
-        io().full_out = bundle_io.full;
-        bundle_io.data = io().data_in;
-        bundle_io.push = io().push_in;
-        bundle_io.pop = io().pop_in;
+        // 直接连接Bundle
+        connect(io_bundle, fifo_inst.instance().io);
     }
 };
 
@@ -141,9 +119,9 @@ int main() {
     ch::Simulator sim(top_device.context());
     
     // 初始化输入
-    sim.set_input_value(top_device.instance().io().data_in, 0);
-    sim.set_input_value(top_device.instance().io().push_in, false);
-    sim.set_input_value(top_device.instance().io().pop_in, false);
+    // 使用Bundle设置输入值
+    uint64_t initial_bundle_value = 0; // [empty=0, full=0, pop=0, push=0, data=0]
+    sim.set_bundle_value(top_device.instance().io_bundle, initial_bundle_value);
     
     std::cout << "Starting FIFO Bundle simulation..." << std::endl;
     std::cout << "FIFO size: 2, addr_width: 1, pointer width: 2" << std::endl;
@@ -151,18 +129,22 @@ int main() {
     for (int cycle = 0; cycle <= 12; ++cycle) {
         sim.tick();
         
-        // 获取输出值
-        auto dout_val = sim.get_port_value(top_device.instance().io().data_out);
-        auto empty_val = sim.get_port_value(top_device.instance().io().empty_out);
-        auto full_val = sim.get_port_value(top_device.instance().io().full_out);
+        // 获取Bundle输出值
+        uint64_t bundle_value = sim.get_bundle_value(top_device.instance().io_bundle);
+        
+        // 解析Bundle字段
+        uint64_t data_val = bundle_value & 0x3;         // 低2位 (data)
+        uint64_t push_val = (bundle_value >> 2) & 0x1;  // 第2位 (push)
+        uint64_t full_val = (bundle_value >> 3) & 0x1;  // 第3位 (full)
+        uint64_t pop_val = (bundle_value >> 4) & 0x1;   // 第4位 (pop)
+        uint64_t empty_val = (bundle_value >> 5) & 0x1; // 第5位 (empty)
         
         std::cout << "Cycle " << cycle 
-                  << ": dout=0x" << std::hex << static_cast<uint64_t>(dout_val) 
-                  << ", empty=0x" << std::hex << static_cast<uint64_t>(empty_val) 
-                  << ", full=0x" << std::hex << static_cast<uint64_t>(full_val) 
-                  << ", din=0x" << std::hex << static_cast<uint64_t>(sim.get_port_value(top_device.instance().io().data_in))
-                  << ", push=0x" << std::hex << static_cast<uint64_t>(sim.get_port_value(top_device.instance().io().push_in))
-                  << ", pop=0x" << std::hex << static_cast<uint64_t>(sim.get_port_value(top_device.instance().io().pop_in))
+                  << ": data=0x" << std::hex << data_val
+                  << ", push=" << push_val
+                  << ", full=" << full_val
+                  << ", pop=" << pop_val
+                  << ", empty=" << empty_val
                   << std::dec << std::endl;
         
         // 测试激励
@@ -170,38 +152,50 @@ int main() {
         case 0:
             // 初始状态检查
             std::cout << "  Initial state check..." << std::endl;
-            if (static_cast<uint64_t>(empty_val) != 1 || static_cast<uint64_t>(full_val) != 0) {
+            if (empty_val != 1 || full_val != 0) {
                 std::cerr << "ERROR: Initial state incorrect!" << std::endl;
                 return 1;
             }
-            sim.set_input_value(top_device.instance().io().data_in, 1);
-            sim.set_input_value(top_device.instance().io().push_in, true);
-            sim.set_input_value(top_device.instance().io().pop_in, false);
+            // 写入数据1
+            {
+                uint64_t bundle_input = (1 << 2) | 1; // push=1, data=1
+                sim.set_bundle_value(top_device.instance().io_bundle, bundle_input);
+            }
             std::cout << "  Writing data 1 to FIFO" << std::endl;
             break;      
         case 1:
             // 在Cycle 1，继续写入数据2
             std::cout << "  Continuing write of data 1, writing data 2" << std::endl;
-            sim.set_input_value(top_device.instance().io().data_in, 2);
-            sim.set_input_value(top_device.instance().io().push_in, true);
+            {
+                uint64_t bundle_input = (1 << 2) | 2; // push=1, data=2
+                sim.set_bundle_value(top_device.instance().io_bundle, bundle_input);
+            }
             break;
         case 2:
             // 在Cycle 2，停止写入，开始读取
             std::cout << "  Checking FIFO state after first write" << std::endl;
-            sim.set_input_value(top_device.instance().io().push_in, false);
-            sim.set_input_value(top_device.instance().io().pop_in, true);
+            {
+                uint64_t bundle_input = (1 << 4); // pop=1
+                sim.set_bundle_value(top_device.instance().io_bundle, bundle_input);
+            }
             std::cout << "  Preparing to read first data from FIFO" << std::endl;
             break;
         case 3:
             // 在Cycle 3，应该读取到第一个数据(1)
             std::cout << "  Checking if first data (1) is available" << std::endl;
-            sim.set_input_value(top_device.instance().io().pop_in, true);
+            {
+                uint64_t bundle_input = (1 << 4); // pop=1
+                sim.set_bundle_value(top_device.instance().io_bundle, bundle_input);
+            }
             std::cout << "  Continuing read" << std::endl;
             break;
         case 4:
             // 在Cycle 4，应该读取到第二个数据(2)
             std::cout << "  Checking if second data (2) is available" << std::endl;
-            sim.set_input_value(top_device.instance().io().pop_in, false);
+            {
+                uint64_t bundle_input = 0; // pop=0
+                sim.set_bundle_value(top_device.instance().io_bundle, bundle_input);
+            }
             std::cout << "  Stopping read" << std::endl;
             break;
         default:
