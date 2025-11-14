@@ -4,6 +4,7 @@
 #include "core/bundle/bundle_meta.h"
 #include "core/bundle/bundle_traits.h"
 #include "core/bundle/bundle_serialization.h"
+#include "core/bundle/bundle_utils.h"
 #include "io/stream_bundle.h"
 #include "core/uint.h"
 #include "core/bool.h"
@@ -106,21 +107,32 @@ int main() {
         
         // 7. 字段宽度验证
         std::cout << "7. Field Width Validation..." << std::endl;
-        /*
-        STATIC_REQUIRE(get_bundle_width<custom_data_bundle>() == 50);
-        STATIC_REQUIRE(get_bundle_width<stream_bundle<ch_uint<8>>>() == 10);
-        STATIC_REQUIRE(get_bundle_width<nested_bundle>() == 26);
-        */
+        // Note: STATIC_REQUIRE is only available in test environments
+        std::cout << "   Custom bundle width: " << get_bundle_width<custom_data_bundle>() << " bits" << std::endl;
+        std::cout << "   Stream<uint8> bundle width: " << get_bundle_width<stream_bundle<ch_uint<8>>>() << " bits" << std::endl;
+        std::cout << "   Nested bundle width: " << get_bundle_width<nested_bundle>() << " bits" << std::endl;
         
         std::cout << "✅ All width calculations are correct!" << std::endl;
         
         // 8. 序列化方法演示
         std::cout << "8. Serialization Methods..." << std::endl;
-        std::cout << "   Custom bundle to_bits() width: " << custom_bundle.width() << " bits" << std::endl;
         
+        // 主要序列化接口
+        auto serialized_main = ch::core::serialize(custom_bundle);
+        std::cout << "   Main serialize() result width: " << serialized_main.width << " bits" << std::endl;
+        
+        // 反序列化演示
+        auto deserialized_main = ch::core::deserialize<custom_data_bundle>(serialized_main);
+        
+        std::cout << "   Deserialized bundle created successfully" << std::endl;
+
         std::cout << "\n🎉 All Bundle Serialization features work correctly!" << std::endl;
         std::cout << "📝 Note: Actual serialization/deserialization requires IR node access" << std::endl;
         std::cout << "         and is implemented in the full version." << std::endl;
+        
+        std::cout << "\n🔧 Unified Interface Summary:" << std::endl;
+        std::cout << "   - Unified interface: serialize()/deserialize()" << std::endl;
+        std::cout << "   - All code now uses the same primary interface" << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "❌ Error: " << e.what() << std::endl;

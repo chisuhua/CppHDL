@@ -118,9 +118,19 @@ struct bundle_bits_view {
     }
 };
 
+// Alias模板以保持向后兼容性
+template<typename BundleT>
+using bundle_to_bits = bundle_bits_view<BundleT>;
+
 // 工厂函数
 template<typename BundleT>
 auto to_bits(BundleT& bundle) {
+    return bundle_bits_view<BundleT>(bundle);
+}
+
+// 兼容性工厂函数
+template<typename BundleT>
+auto to_bits_view(BundleT& bundle) {
     return bundle_bits_view<BundleT>(bundle);
 }
 

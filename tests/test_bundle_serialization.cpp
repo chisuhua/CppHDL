@@ -7,6 +7,7 @@
 #include "core/bundle/bundle_protocol.h"
 #include "core/bundle/bundle_traits.h"
 #include "core/bundle/bundle_serialization.h"
+#include "core/bundle/bundle_utils.h"
 #include "io/stream_bundle.h"
 #include "core/uint.h"
 #include "core/bool.h"
@@ -33,8 +34,21 @@ struct test_simple_bundle : public bundle_base<test_simple_bundle> {
     }
 };
 
-
-// 在测试文件中更新相关部分
+// 新增序列化API测试
+TEST_CASE("BundleSerialization - SerializationAPI", "[bundle][serialization][api]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+    
+    test_simple_bundle bundle;
+    
+    // 测试序列化API
+    auto bits = ch::core::serialize(bundle);
+    REQUIRE(bits.width == 9);
+    
+    // 测试反序列化API
+    auto deserialized = ch::core::deserialize<test_simple_bundle>(bits);
+    REQUIRE(deserialized.width() == 9);
+}
 
 TEST_CASE("BundleSerialization - WidthCalculation", "[bundle][serialization][width]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
@@ -77,7 +91,6 @@ TEST_CASE("BundleSerialization - NestedBundleWidth", "[bundle][serialization][ne
     STATIC_REQUIRE(bundle_width_v<nested_test> == 13);
 }
 
-
 TEST_CASE("BundleSerialization - BitsView", "[bundle][serialization][view]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -98,7 +111,6 @@ TEST_CASE("BundleSerialization - TypeTraits", "[bundle][serialization][traits]")
     REQUIRE(get_bundle_width<test_simple_bundle>() > 0);
 }
 
-    
 TEST_CASE("BundleSerialization - StreamBundleWidth", "[bundle][serialization][stream]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -120,6 +132,13 @@ TEST_CASE("BundleSerialization - ToBitsConversion", "[bundle][serialization][con
     
     // 测试位转换方法存在性（编译期检查）
     REQUIRE(bundle.width() == 9);
+    
+    // 测试新的序列化接口
+    auto serialized = serialize(bundle);
+    REQUIRE(serialized.width == 9);
+    
+    // 测试反序列化
+    auto deserialized = deserialize<test_simple_bundle>(serialized);
     
     // 注意：实际的to_bits()实现需要访问底层节点，
     // 这里只是验证API存在性

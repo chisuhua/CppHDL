@@ -14,6 +14,7 @@ set(CH_SAMPLE_TARGETS
     tlm_bundle_demo
     bundle_simulator_demo
     pod_bundle_conversion
+    minimal_fifo_bundle
 )
 
 # 为每个示例创建可执行文件
