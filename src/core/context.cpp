@@ -242,9 +242,14 @@ void context::topological_sort_visit(lnodeimpl* node, std::vector<lnodeimpl*>& s
     CHREQUIRE(node != nullptr, "Null node pointer in topological sort");
     
     if (temp_mark[node]) {
-        // 循环检测 - 记录错误但不终止程序
-        CHFATAL_RECOVERABLE("Cycle detected in IR graph during topological sort");
-        return; // 继续执行而不是终止程序
+        // Check if this is a register node, which is allowed to have cycles
+        if (node->type() == lnodetype::type_reg) {
+            // For registers, we allow cycles because they represent sequential logic
+            CHDBG("Allowing cycle for register node %u", node->id());
+        } else {
+            // 循环检测 - 抛出异常并终止程序
+            CHFATAL_EXCEPTION("Cycle detected in IR graph during topological sort");
+        }
     }
 
     if (visited[node]) {
@@ -253,10 +258,22 @@ void context::topological_sort_visit(lnodeimpl* node, std::vector<lnodeimpl*>& s
 
     temp_mark[node] = true;
 
-    for (uint32_t i = 0; i < node->num_srcs(); ++i) {
-        lnodeimpl* src_node = node->src(i);
-        if (src_node) {
-            topological_sort_visit(src_node, sorted, visited, temp_mark);
+    // For register nodes, we don't traverse the next value dependency
+    if (node->type() == lnodetype::type_reg) {
+        // Only process the initial value, not the next value
+        if (node->num_srcs() > 0) {
+            lnodeimpl* init_val = node->src(0);
+            if (init_val) {
+                topological_sort_visit(init_val, sorted, visited, temp_mark);
+            }
+        }
+    } else {
+        // For all other nodes, process all sources
+        for (uint32_t i = 0; i < node->num_srcs(); ++i) {
+            lnodeimpl* src_node = node->src(i);
+            if (src_node) {
+                topological_sort_visit(src_node, sorted, visited, temp_mark);
+            }
         }
     }
 
@@ -313,4 +330,13 @@ void context::print_debug_info() const {
     }
 }
 
-}} // namespace ch::core
+void context::set_default_clock(core::clockimpl* clk) {
+    default_clock_ = clk;
+}
+
+core::clockimpl* context::get_default_clock() const {
+    return default_clock_;
+}
+
+}
+} // namespace ch::core

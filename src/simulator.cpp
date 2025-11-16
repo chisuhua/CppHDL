@@ -12,12 +12,34 @@ Simulator::Simulator(ch::core::context* ctx)
     CHDBG_FUNC();
     CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
     
+    // 创建默认时钟
+    set_default_clock();
+    
     initialize();
 }
 
 Simulator::~Simulator() {
     CHDBG_FUNC();
-    // unique_ptr 会自动清理 instr_cache_ 中的指令
+    // Clear all data before the context gets destroyed
+    instr_map_.clear();
+    instr_cache_.clear();
+    data_map_.clear();
+    eval_list_.clear();
+    default_clock_.reset();
+    ctx_ = nullptr;
+    initialized_ = false;
+}
+
+void Simulator::set_default_clock() {
+    if (!ctx_) return;
+    
+    // 创建默认时钟
+    default_clock_ = std::unique_ptr<ch::core::clockimpl>(
+        ctx_->create_clock(ch::core::sdata_type(0, 1), true, false, "default_clock")
+    );
+    
+    // 设置为上下文的默认时钟
+    ctx_->set_default_clock(default_clock_.get());
 }
 
 void Simulator::initialize() {
@@ -142,6 +164,21 @@ void Simulator::eval_range(size_t start, size_t end) {
 
 void Simulator::tick() {
     CHDBG_FUNC();
+    
+    // Toggle the default clock if it exists
+    if (default_clock_) {
+        auto it = data_map_.find(default_clock_->id());
+        if (it != data_map_.end()) {
+            // Toggle the clock value (0 -> 1, 1 -> 0)
+            it->second = ch::core::sdata_type(
+                it->second.is_zero() ? 1 : 0, 
+                it->second.bitwidth()
+            );
+            CHDBG("Toggled default clock to %llu", 
+                  static_cast<unsigned long long>(static_cast<uint64_t>(it->second)));
+        }
+    }
+    
     eval();
 }
 

@@ -152,6 +152,11 @@ public:
     const std::string& name() const { return name_; }
     context* parent() const { return parent_; }
 
+    // 默认时钟相关方法
+    void set_default_clock(core::clockimpl* clk);
+    core::clockimpl* get_default_clock() const;
+    bool has_default_clock() const { return default_clock_ != nullptr; }
+
 private:
     void topological_sort_visit(lnodeimpl* node, std::vector<lnodeimpl*>& sorted,
                                 std::unordered_map<lnodeimpl*, bool>& visited,
@@ -167,7 +172,7 @@ private:
     
     // ID溢出保护
     static constexpr uint32_t MAX_NODE_ID = UINT32_MAX - 1000;
-    
+    core::clockimpl* default_clock_ = nullptr;  // 默认时钟
 };
 
 } // namespace ch::core

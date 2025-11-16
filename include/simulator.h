@@ -157,6 +157,8 @@ public:
     ch::core::context* context() const { return ctx_; }
     const ch::data_map_t& data_map() const { return data_map_; }
 
+    void set_default_clock();  // 创建并设置默认时钟
+    
     // 为Bundle字段设置值的辅助函数（处理uint64_t数组）
     template <typename FieldType>
     void set_bundle_field_value(FieldType& field, const std::vector<uint64_t>& values, 
@@ -270,6 +272,7 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<ch::instr_base>> instr_cache_;
     ch::data_map_t data_map_;
     bool initialized_ = false;
+    std::unique_ptr<ch::core::clockimpl> default_clock_;
 };
 
 } // namespace ch

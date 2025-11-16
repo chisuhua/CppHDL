@@ -178,10 +178,6 @@ std::pair<regimpl*, proxyimpl*> node_builder::build_register(
     const std::source_location& sloc) {
     
     CHDBG_FUNC();
-    if (instance().debug_mode_) {
-        CHINFO("[node_builder] Building register '%s'", name.c_str());
-    }
-    
     auto* ctx = ctx_curr_;
     if (!ctx) {
         CHERROR("[node_builder] No active context for register creation");
@@ -196,9 +192,12 @@ std::pair<regimpl*, proxyimpl*> node_builder::build_register(
     
     CHDBG("[node_builder] Building register with size %u, name '%s'", size, name.c_str());
     
+    // Check if we have a default clock
+    core::clockimpl* default_clk = ctx->get_default_clock();
+    
     // 构建寄存器节点
     regimpl* reg_node = ctx->create_node<regimpl>(
-        size, 0, nullptr, nullptr, nullptr, nullptr, init_val,
+        size, 0, default_clk, nullptr, nullptr, nullptr, init_val,
         prefixed_name_helper(name, instance().name_prefix_), sloc
     );
     
