@@ -324,9 +324,16 @@ void verilogwriter::print_reg(std::ostream& out, ch::core::regimpl* node) {
     try {
         // Find the 'next' source node for this register
         auto* next_node = node->get_next();
+        
+        // Default clock name
+        std::string clock_name = "default_clock"; 
+        
         if (next_node && node_names_.count(next_node)) {
-            out << "    always @(posedge clk) begin // Register update for " << node_names_[node] << "\n";
-            out << "        " << node_names_[node] << " <= " << node_names_[next_node] << ";\n";
+            // For register updates, assign to the register itself
+            std::string reg_name = node_names_[node];
+            
+            out << "    always @(posedge " << clock_name << ") begin // Register update for " << reg_name << "\n";
+            out << "        " << reg_name << " <= " << node_names_[next_node] << ";\n";
             out << "    end\n";
         } else {
             // If next is not found or not named, print a warning

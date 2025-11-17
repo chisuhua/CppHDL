@@ -59,9 +59,6 @@ public:
 };
 
 int main() {
-    // Set flag to indicate we're in static destruction phase to avoid logging
-    ch::detail::set_static_destruction();
-    
     // Create device and simulator in proper order to ensure correct destruction
     ch::ch_device<Top> device;
     
@@ -74,6 +71,12 @@ int main() {
     }
     
     std::cout << "Program completed successfully" << std::endl;
+    
+    // Generate Verilog before setting static destruction flag
+    ch::toVerilog("counter.v", device.context());
+    
+    // Set flag to indicate we're in static destruction phase to avoid logging
+    ch::detail::set_static_destruction();
     
     return 0;
 }
