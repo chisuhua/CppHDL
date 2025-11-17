@@ -53,6 +53,7 @@ set(SINGLE_TEST_SOURCES
     test_axi_lite_bundle.cpp
     test_mem.cpp
     test_operator_advanced.cpp
+    test_verilog_gen_new.cpp
 )
 
 # 为每个源文件创建一个独立的测试
