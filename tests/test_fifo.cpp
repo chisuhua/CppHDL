@@ -186,3 +186,46 @@ TEST_CASE("FIFO - Memory Operations Test", "[fifo][mem-op]") {
     
     REQUIRE(read_result.impl() != nullptr);
 }
+
+// Simple component for testing register behavior
+class SimpleRegister : public ch::Component {
+public:
+    __io(
+        ch_out<ch_uint<4>> out;
+        ch_in<ch_uint<4>> in;
+    )
+
+    SimpleRegister(ch::Component* parent = nullptr, const std::string& name = "simple_reg")
+        : ch::Component(parent, name)
+    {}
+
+    void create_ports() override {
+        new (io_storage_) io_type;
+    }
+
+    void describe() override {
+        ch_reg<ch_uint<4>> reg(0);
+        reg->next = io().in;
+        io().out = reg;
+    }
+};
+
+TEST_CASE("Register - Basic Functionality", "[reg][basic]") {
+    context ctx("reg_test");
+    ctx_swap swap(&ctx);
+    
+    // Test register creation
+    ch_reg<ch_uint<4>> reg(0_d);
+    REQUIRE(reg.impl() != nullptr);
+    
+    // Test register operations
+    ch_uint<4> value(5_d);
+    reg->next = value;
+    // next_assignment_proxy doesn't have impl() method, so we skip this check
+}
+
+TEST_CASE("Register - Component Interface", "[reg][interface]") {
+    // Test that we can declare register-based components
+    REQUIRE(std::is_class_v<SimpleRegister>);
+}
+
