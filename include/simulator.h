@@ -159,59 +159,9 @@ public:
 
     void set_default_clock();  // 创建并设置默认时钟
     
-    // 为Bundle字段设置值的辅助函数（处理uint64_t数组）
-    template <typename FieldType>
-    void set_bundle_field_value(FieldType& field, const std::vector<uint64_t>& values, 
-                               unsigned offset, unsigned width) {
-        // 计算在values数组中的位置
-        size_t index = offset / 64;
-        unsigned bit_offset = offset % 64;
-        
-        // 提取对应位段的值
-        uint64_t field_value = 0;
-        if (index < values.size()) {
-            if (bit_offset + width <= 64) {
-                // 值完全在一个uint64_t内
-                field_value = (values[index] >> bit_offset) & ((1ULL << width) - 1);
-            } else {
-                // 值跨越两个uint64_t
-                unsigned low_width = 64 - bit_offset;
-                unsigned high_width = width - low_width;
-                
-                uint64_t low_part = (values[index] >> bit_offset) & ((1ULL << low_width) - 1);
-                uint64_t high_part = 0;
-                if (index + 1 < values.size()) {
-                    high_part = values[index + 1] & ((1ULL << high_width) - 1);
-                }
-                
-                field_value = low_part | (high_part << low_width);
-            }
-        }
-        
-        // 对于端口类型字段
-        if constexpr (requires { field.impl(); }) {
-            // 检查是否有方向类型，这表明是端口类型
-            if constexpr (requires { typename FieldType::direction; }) {
-                set_port_value(field, field_value);
-            } else {
-                // 对于其他类型字段
-                if constexpr (std::is_same_v<FieldType, ch::core::ch_bool>) {
-                    field = ch::core::ch_bool(field_value != 0);
-                } else {
-                    field = FieldType(field_value);
-                }
-            }
-        } 
-        // 对于其他类型字段
-        else {
-            if constexpr (std::is_same_v<FieldType, ch::core::ch_bool>) {
-                field = ch::core::ch_bool(field_value != 0);
-            } else {
-                field = FieldType(field_value);
-            }
-        }
-    }
-    
+    // Disconnect the simulator from the context to prevent access during destruction
+    void disconnect();
+
     // 获取Bundle字段值的辅助函数
     template <typename FieldType>
     uint64_t get_bundle_field_value(const FieldType& field) const {
@@ -273,6 +223,9 @@ private:
     ch::data_map_t data_map_;
     bool initialized_ = false;
     std::unique_ptr<ch::core::clockimpl> default_clock_;
+    
+    // Add flag to track if we're in the destructor to prevent accessing destroyed context
+    bool disconnected_ = false;
 };
 
 } // namespace ch

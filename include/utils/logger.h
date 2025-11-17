@@ -84,6 +84,17 @@ namespace detail {
         }
         return name.substr(pos);
     }
+    
+    // Flag to indicate if we're in static destruction phase
+    inline bool& in_static_destruction() {
+        static bool flag = false;
+        return flag;
+    }
+    
+    // Function to set the static destruction flag
+    inline void set_static_destruction() {
+        in_static_destruction() = true;
+    }
 }
 
 // ===========================================================================
@@ -102,6 +113,7 @@ namespace detail {
 // 基础日志宏
 #define CHLOG(level, fmt, ...) \
     do { \
+        if (ch::detail::in_static_destruction()) break; \
         auto loc = std::source_location::current(); \
         std::string msg = ch::detail::printf_format(fmt, ##__VA_ARGS__); \
         ch::detail::log_message(level, msg, loc); \
@@ -110,6 +122,7 @@ namespace detail {
 // 简洁日志宏（不显示位置信息）
 #define CHLOG_SIMPLE(level, fmt, ...) \
     do { \
+        if (ch::detail::in_static_destruction()) break; \
         std::string msg = ch::detail::printf_format(fmt, ##__VA_ARGS__); \
         ch::detail::log_message_simple(level, msg); \
     } while(0)
@@ -132,25 +145,31 @@ namespace detail {
 // 带变量的日志宏（自动类型检测）
 #define CHDBG_VAR(var) \
     do { \
-        std::string var_value = ch::detail::to_string(var); \
-        std::string msg = ch::detail::printf_format("%s = %s", #var, var_value.c_str()); \
-        ch::detail::log_message_simple(ch::log_level::debug, msg); \
+        if (!ch::detail::in_static_destruction()) { \
+            std::string var_value = ch::detail::to_string(var); \
+            std::string msg = ch::detail::printf_format("%s = %s", #var, var_value.c_str()); \
+            ch::detail::log_message_simple(ch::log_level::debug, msg); \
+        } \
     } while(0)
 
 // 专门的指针变量输出宏
 #define CHDBG_PTR(ptr) \
     do { \
-        std::string msg = ch::detail::printf_format("%s = 0x%llx", #ptr, \
-            (unsigned long long)(ptr)); \
-        ch::detail::log_message_simple(ch::log_level::debug, msg); \
+        if (!ch::detail::in_static_destruction()) { \
+            std::string msg = ch::detail::printf_format("%s = 0x%llx", #ptr, \
+                (unsigned long long)(ptr)); \
+            ch::detail::log_message_simple(ch::log_level::debug, msg); \
+        } \
     } while(0)
 
 #define CHDBG_FUNC() \
     do { \
-        auto loc = std::source_location::current(); \
-        std::string short_name = ch::detail::short_function_name(loc.function_name()); \
-        ch::detail::log_message_simple(ch::log_level::debug, \
-            ch::detail::printf_format("[ENTER] %s", short_name.c_str())); \
+        if (!ch::detail::in_static_destruction()) { \
+            auto loc = std::source_location::current(); \
+            std::string short_name = ch::detail::short_function_name(loc.function_name()); \
+            ch::detail::log_message_simple(ch::log_level::debug, \
+                ch::detail::printf_format("[ENTER] %s", short_name.c_str())); \
+        } \
     } while(0)
 
 // ===========================================================================
@@ -160,7 +179,7 @@ namespace detail {
 // 基础检查宏 - 不返回值，只记录错误（不终止程序）
 #define CHCHECK(condition, fmt, ...) \
     do { \
-        if (!(condition)) { \
+        if (!(condition) && !ch::detail::in_static_destruction()) { \
             auto loc = std::source_location::current(); \
             std::string msg = ch::detail::printf_format("Check failed [%s]: " fmt, #condition, ##__VA_ARGS__); \
             ch::detail::log_message(ch::log_level::error, msg, loc); \
@@ -170,7 +189,7 @@ namespace detail {
 // 语义化检查宏
 #define CHREQUIRE(condition, fmt, ...) \
     do { \
-        if (!(condition)) { \
+        if (!(condition) && !ch::detail::in_static_destruction()) { \
             auto loc = std::source_location::current(); \
             std::string msg = ch::detail::printf_format("Requirement failed [%s]: " fmt, #condition, ##__VA_ARGS__); \
             ch::detail::log_message(ch::log_level::error, msg, loc); \
@@ -179,7 +198,7 @@ namespace detail {
 
 #define CHENSURE(condition, fmt, ...) \
     do { \
-        if (!(condition)) { \
+        if (!(condition) && !ch::detail::in_static_destruction()) { \
             auto loc = std::source_location::current(); \
             std::string msg = ch::detail::printf_format("Ensure failed [%s]: " fmt, #condition, ##__VA_ARGS__); \
             ch::detail::log_message(ch::log_level::error, msg, loc); \
@@ -189,7 +208,7 @@ namespace detail {
 // 空指针检查专用宏
 #define CHCHECK_NULL(ptr, fmt, ...) \
     do { \
-        if ((ptr) == nullptr) { \
+        if ((ptr) == nullptr && !ch::detail::in_static_destruction()) { \
             auto loc = std::source_location::current(); \
             std::string msg = ch::detail::printf_format("Null pointer check failed: " fmt, ##__VA_ARGS__); \
             ch::detail::log_message(ch::log_level::error, msg, loc); \
@@ -199,27 +218,33 @@ namespace detail {
 // 可恢复的致命错误宏（记录错误但不终止程序）
 #define CHFATAL_RECOVERABLE(fmt, ...) \
     do { \
-        auto loc = std::source_location::current(); \
-        std::string msg = ch::detail::printf_format("FATAL: " fmt, ##__VA_ARGS__); \
-        ch::detail::log_message(ch::log_level::fatal, msg, loc); \
+        if (!ch::detail::in_static_destruction()) { \
+            auto loc = std::source_location::current(); \
+            std::string msg = ch::detail::printf_format("FATAL: " fmt, ##__VA_ARGS__); \
+            ch::detail::log_message(ch::log_level::fatal, msg, loc); \
+        } \
     } while(0)
 
 // 致命错误宏（记录错误并抛出异常）
 #define CHFATAL_EXCEPTION(fmt, ...) \
     do { \
-        auto loc = std::source_location::current(); \
-        std::string msg = ch::detail::printf_format("FATAL: " fmt, ##__VA_ARGS__); \
-        ch::detail::log_message(ch::log_level::fatal, msg, loc); \
-        throw std::runtime_error(msg); \
+        if (!ch::detail::in_static_destruction()) { \
+            auto loc = std::source_location::current(); \
+            std::string msg = ch::detail::printf_format("FATAL: " fmt, ##__VA_ARGS__); \
+            ch::detail::log_message(ch::log_level::fatal, msg, loc); \
+            throw std::runtime_error(msg); \
+        } \
     } while(0)
 
 // 真正的终止程序宏
 #define CHABORT(fmt, ...) \
     do { \
-        auto loc = std::source_location::current(); \
-        std::string msg = ch::detail::printf_format("ABORT: " fmt, ##__VA_ARGS__); \
-        ch::detail::log_message(ch::log_level::fatal, msg, loc); \
-        std::abort(); \
+        if (!ch::detail::in_static_destruction()) { \
+            auto loc = std::source_location::current(); \
+            std::string msg = ch::detail::printf_format("ABORT: " fmt, ##__VA_ARGS__); \
+            ch::detail::log_message(ch::log_level::fatal, msg, loc); \
+            std::abort(); \
+        } \
     } while(false)
 
 // ===========================================================================
@@ -257,6 +282,11 @@ inline const char* log_level_str(log_level level) {
 
 // 带位置信息的日志输出
 inline void log_message(log_level level, const std::string& message, const std::source_location& loc) {
+    // Check if we're in static destruction phase
+    if (in_static_destruction()) {
+        return;
+    }
+    
     // 根据日志级别决定输出流和是否输出
     switch (level) {
         case log_level::debug:
@@ -287,6 +317,11 @@ inline void log_message(log_level level, const std::string& message, const std::
 
 // 简洁日志输出（不显示位置信息）
 inline void log_message_simple(log_level level, const std::string& message) {
+    // Check if we're in static destruction phase
+    if (in_static_destruction()) {
+        return;
+    }
+    
     // 根据日志级别决定输出流和是否输出
     switch (level) {
         case log_level::debug:
@@ -294,19 +329,19 @@ inline void log_message_simple(log_level level, const std::string& message) {
             return; // 调试模式下才输出debug信息
 #endif
         case log_level::info:
-            std::cout << "[INFO] " << message << std::endl;
+            std::cout << log_level_str(level) << " " << message << std::endl;
             break;
             
         case log_level::warning:
-            std::cerr << "[WARN] " << message << std::endl;
+            std::cerr << log_level_str(level) << " " << message << std::endl;
             break;
             
         case log_level::error:
-            std::cerr << "[ERROR] " << message << std::endl;
+            std::cerr << log_level_str(level) << " " << message << std::endl;
             break;
             
         case log_level::fatal:
-            std::cerr << "[FATAL] " << message << std::endl;
+            std::cerr << log_level_str(level) << " " << message << std::endl;
             break;
     }
 }
@@ -336,7 +371,10 @@ public:
     scope_exit& operator=(scope_exit&&) = default;
     
     ~scope_exit() { 
-        if (func_) func_(); 
+        // Additional safety check
+        if (func_ && !detail::in_static_destruction()) {
+            func_();
+        }
     }
     
     static void* operator new(std::size_t) = delete;

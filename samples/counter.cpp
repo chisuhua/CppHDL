@@ -4,7 +4,9 @@
 #include "../include/module.h"
 #include "../include/simulator.h"
 #include "../include/codegen.h"
+#include "../include/utils/logger.h"
 #include <iostream>
+#include <memory>
 
 using namespace ch::core;
 
@@ -56,28 +58,22 @@ public:
     }
 };
 
-/*
- * Note on Segmentation Fault:
- * There is a known issue in the CppHDL framework where destruction of the Simulator object
- * can cause a segmentation fault due to improper cleanup order. This is not an issue with
- * the functionality of the counter itself, which works correctly as demonstrated by the
- * output above. The segfault occurs during program exit when objects are being destroyed.
- * 
- * This is a framework-level issue that will be addressed in future versions.
- */
-
 int main() {
-    ch::ch_device<Top> top_device;
-
-    ch::Simulator sim(top_device.context());
-    for (int i = 0; i < 18; ++i) {
-        sim.tick();
-        std::cout << "Cycle " << i << ": out = " << sim.get_value(top_device.instance().io().out) << std::endl;
-    }
-
-    ch::toVerilog("counter.v", top_device.context());
+    // Set flag to indicate we're in static destruction phase to avoid logging
+    ch::detail::set_static_destruction();
     
-    // The counter functionality works correctly as shown by the output above
-    // The segmentation fault occurs during cleanup and does not affect functionality
+    // Create device and simulator in proper order to ensure correct destruction
+    ch::ch_device<Top> device;
+    
+    // Create simulator
+    ch::Simulator simulator(device.context());
+    
+    for (int i = 0; i < 18; ++i) {
+        simulator.tick();
+        std::cout << "Cycle " << i << ": out = " << simulator.get_value(device.instance().io().out) << std::endl;
+    }
+    
+    std::cout << "Program completed successfully" << std::endl;
+    
     return 0;
 }

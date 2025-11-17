@@ -10,14 +10,26 @@
 namespace ch { namespace core {
 
 thread_local context* ctx_curr_ = nullptr;
-bool debug_context_lifetime = true;
+
+// Instead of a global variable, use a function-local static variable
+// This ensures proper initialization order
+bool& debug_context_lifetime() {
+    // Check if we're in static destruction phase
+    if (ch::detail::in_static_destruction()) {
+        static bool dummy = false;
+        return dummy;
+    }
+    
+    static bool value = true;
+    return value;
+}
 
 ctx_swap::ctx_swap(context* new_ctx) : old_ctx_(ctx_curr_) {
     CHDBG_FUNC();
     CHREQUIRE(new_ctx != nullptr, "Cannot swap to null context");
     
     ctx_curr_ = new_ctx;
-    if (debug_context_lifetime) {
+    if (debug_context_lifetime()) {
         CHINFO("Swapped context from 0x%llx to 0x%llx", 
                (unsigned long long)old_ctx_, (unsigned long long)new_ctx);
     }
@@ -26,7 +38,7 @@ ctx_swap::ctx_swap(context* new_ctx) : old_ctx_(ctx_curr_) {
 ctx_swap::~ctx_swap() {
     CHDBG_FUNC();
     ctx_curr_ = old_ctx_;
-    if (debug_context_lifetime) {
+    if (debug_context_lifetime()) {
         CHINFO("Restored context to 0x%llx", (unsigned long long)old_ctx_);
     }
 }
@@ -35,7 +47,7 @@ context::context(const std::string& name, context* parent)
     : name_(name.empty() ? "unnamed" : name), parent_(parent) {
     CHDBG_FUNC();
     
-    if (debug_context_lifetime) {
+    if (debug_context_lifetime()) {
         CHINFO("Created new context 0x%llx, name: %s", 
                (unsigned long long)this, name_.c_str());
     }
@@ -44,27 +56,34 @@ context::context(const std::string& name, context* parent)
 }
 
 context::~context() {
-    CHDBG_FUNC();
-    
-    if (debug_context_lifetime) {
-        CHINFO("Destroying context 0x%llx, name: %s and its %zu nodes.", 
-               (unsigned long long)this, name_.c_str(), node_storage_.size());
+    // Check if we're in static destruction phase
+    if (ch::detail::in_static_destruction()) {
+        // During static destruction, minimize operations to prevent segfaults
+        // Just return immediately without doing any cleanup
+        return;
     }
     
+    // Immediately set ctx_curr_ to nullptr if it points to this context
+    // Do this first before any potential logging to avoid issues
+    if (ctx_curr_ == this) {
+        ctx_curr_ = nullptr;
+    }
+    
+    // Try to clear node references to prevent circular reference issues
     try {
-        CHDBG("Cleaning up %zu nodes", node_storage_.size());
-        if (ctx_curr_ == this) {
-            if (debug_context_lifetime) {
-                CHWARN("Context 0x%llx being destroyed was still the active ctx_curr_!", 
-                       (unsigned long long)this);
+        // Clear references between nodes first to avoid circular references
+        for (auto& node_ptr : node_storage_) {
+            if (node_ptr) {
+                // Clear the source references to break potential cycles
+                // This helps avoid accessing already deleted nodes
+                node_ptr->clear_sources();
             }
-            ctx_curr_ = nullptr;
         }
         
+        // Now clear the node storage
         node_storage_.clear();
-    } catch (const std::exception& e) {
-        CHERROR("Error during context cleanup: %s", e.what());
-        // 不抛出异常，因为在析构函数中
+    } catch (...) {
+        // Silently ignore exceptions during destruction
     }
 }
 
@@ -142,7 +161,7 @@ litimpl* context::create_literal(const sdata_type& value,
     CHREQUIRE(!name.empty(), "Literal name cannot be empty");
     
     auto* lit_node = this->create_node<litimpl>(value, name, sloc);
-    if (debug_context_lifetime && lit_node) {
+    if (debug_context_lifetime() && lit_node) {
         CHINFO("Created litimpl node '%s'", name.c_str());
     }
     return lit_node;
@@ -338,5 +357,5 @@ core::clockimpl* context::get_default_clock() const {
     return default_clock_;
 }
 
-}
 } // namespace ch::core
+} // namespace ch

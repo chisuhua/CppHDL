@@ -40,7 +40,9 @@ private:
     context* old_ctx_;
 };
 
-extern bool debug_context_lifetime;
+// Function to access the debug flag to avoid static initialization issues
+// Returns false during static destruction to prevent segfaults
+bool& debug_context_lifetime();
 
 class context : public abstract::context_interface {
 public:
@@ -68,7 +70,7 @@ public:
             
             node_storage_.push_back(std::move(node));
             
-            if (debug_context_lifetime) {
+            if (debug_context_lifetime()) {
                 CHINFO("Created node ID %u (%s) of type %d in context 0x%llx", 
                        new_id, raw_ptr->name().c_str(), static_cast<int>(raw_ptr->type()), 
                        (unsigned long long)this);

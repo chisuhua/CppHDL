@@ -156,6 +156,11 @@ public:
         // 默认实现返回空指针，具体节点类可以重写
         return nullptr;
     }
+    
+    // 新增：清理源节点引用，用于销毁时避免循环引用
+    void clear_sources() {
+        srcs_.clear();
+    }
 
 protected:
     uint32_t id_;

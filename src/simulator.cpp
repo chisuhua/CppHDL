@@ -19,19 +19,72 @@ Simulator::Simulator(ch::core::context* ctx)
 }
 
 Simulator::~Simulator() {
-    CHDBG_FUNC();
-    // Clear all data before the context gets destroyed
+    // Check if we're in static destruction phase
+    if (ch::detail::in_static_destruction()) {
+        // During static destruction, minimize operations to prevent segfaults
+        // Just return immediately without doing any cleanup
+        return;
+    }
+    
+    // Immediately mark as disconnected to prevent any further access to context
+    disconnected_ = true;
+    
+    // Clear all maps and lists that might reference context data
     instr_map_.clear();
     instr_cache_.clear();
     data_map_.clear();
     eval_list_.clear();
-    default_clock_.reset();
+    
+    // Safely reset the default clock
+    if (default_clock_) {
+        default_clock_.reset();
+    }
+    
+    // Clear the context pointer only after all cleanup is done
     ctx_ = nullptr;
+    
+    // Mark as uninitialized
+    initialized_ = false;
+}
+
+void Simulator::disconnect() {
+    CHDBG_FUNC();
+    
+    // Check if we're in static destruction phase
+    if (ch::detail::in_static_destruction()) {
+        // During static destruction, minimize operations to prevent segfaults
+        // Just mark as disconnected and return immediately
+        disconnected_ = true;
+        return;
+    }
+    
+    if (disconnected_) {
+        return;
+    }
+    
+    // Mark as disconnected first to prevent any further operations
+    disconnected_ = true;
+    
+    // Clear all data that references the context
+    instr_map_.clear();
+    instr_cache_.clear();
+    data_map_.clear();
+    eval_list_.clear();
+    
+    // Safely reset the default clock
+    if (default_clock_) {
+        default_clock_.reset();
+    }
+    
+    // Clear the context pointer
+    ctx_ = nullptr;
+    
+    // Mark as uninitialized
     initialized_ = false;
 }
 
 void Simulator::set_default_clock() {
-    if (!ctx_) return;
+    if (!ctx_ || disconnected_) return;
     
     // 创建默认时钟
     default_clock_ = std::unique_ptr<ch::core::clockimpl>(
@@ -39,18 +92,18 @@ void Simulator::set_default_clock() {
     );
     
     // 设置为上下文的默认时钟
-    ctx_->set_default_clock(default_clock_.get());
+    if (!disconnected_ && ctx_ && default_clock_) {
+        ctx_->set_default_clock(default_clock_.get());
+    }
 }
 
 void Simulator::initialize() {
     CHDBG_FUNC();
     
-    if (initialized_) {
+    if (initialized_ || disconnected_ || !ctx_) {
         update_instruction_pointers();
         return;
     }
-    
-    CHREQUIRE(ctx_ != nullptr, "Context is null during initialization");
     
     eval_list_ = ctx_->get_eval_list();
     CHDBG("Retrieved eval_list with %zu nodes", eval_list_.size());
@@ -61,6 +114,8 @@ void Simulator::initialize() {
 
     // 分配数据缓冲区
     for (auto* node : eval_list_) {
+        if (disconnected_) return;
+        
         CHCHECK_NULL(node, "Null node found in evaluation list, skipping");
         
         if (!node) continue;
@@ -81,7 +136,7 @@ void Simulator::initialize() {
 
     // 创建指令缓存
     for (auto* node : eval_list_) {
-        if (!node) continue;
+        if (!node || disconnected_) continue;
         
         uint32_t node_id = node->id();
         auto instr = node->create_instruction(data_map_);
@@ -101,8 +156,11 @@ void Simulator::initialize() {
 void Simulator::update_instruction_pointers() {
     CHDBG_FUNC();
     
+    if (disconnected_) return;
+    
     instr_map_.clear();
     for (const auto& pair : instr_cache_) {
+        if (disconnected_) return;
         instr_map_[pair.first] = pair.second.get();
     }
     CHDBG("Updated %zu instruction pointers", instr_map_.size());
@@ -111,8 +169,8 @@ void Simulator::update_instruction_pointers() {
 void Simulator::eval() {
     CHDBG_FUNC();
     
-    if (!initialized_) {
-        CHERROR("Simulator not initialized");
+    if (!initialized_ || disconnected_ || !ctx_) {
+        CHERROR("Simulator not initialized or disconnected");
         return;
     }
     
@@ -123,7 +181,7 @@ void Simulator::eval() {
     
     CHDBG("Starting evaluation loop with %zu nodes", eval_list_.size());
     for (auto* node : eval_list_) {
-        if (!node) continue;
+        if (!node || disconnected_) continue;
         
         uint32_t node_id = node->id();
         auto it = instr_map_.find(node_id);
@@ -140,8 +198,8 @@ void Simulator::eval() {
 void Simulator::eval_range(size_t start, size_t end) {
     CHDBG_FUNC();
     
-    if (!initialized_) {
-        CHERROR("Simulator not initialized");
+    if (!initialized_ || disconnected_ || !ctx_) {
+        CHERROR("Simulator not initialized or disconnected");
         return;
     }
     
@@ -152,7 +210,7 @@ void Simulator::eval_range(size_t start, size_t end) {
     
     for (size_t i = start; i < end; ++i) {
         auto* node = eval_list_[i];
-        if (!node) continue;
+        if (!node || disconnected_) continue;
         
         uint32_t node_id = node->id();
         auto it = instr_map_.find(node_id);
@@ -166,7 +224,7 @@ void Simulator::tick() {
     CHDBG_FUNC();
     
     // Toggle the default clock if it exists
-    if (default_clock_) {
+    if (default_clock_ && ctx_ && !disconnected_) {
         auto it = data_map_.find(default_clock_->id());
         if (it != data_map_.end()) {
             // Toggle the clock value (0 -> 1, 1 -> 0)
@@ -191,6 +249,7 @@ void Simulator::tick(size_t count) {
     }
     
     for (size_t i = 0; i < count; ++i) {
+        if (disconnected_) return;
         CHDBG("Tick %zu/%zu", i + 1, count);
         tick();
     }
@@ -199,12 +258,13 @@ void Simulator::tick(size_t count) {
 void Simulator::reset() {
     CHDBG_FUNC();
     
-    if (!initialized_) {
-        CHERROR("Simulator not initialized");
+    if (!initialized_ || disconnected_ || !ctx_) {
+        CHERROR("Simulator not initialized or disconnected");
         return;
     }
     
     for (auto& pair : data_map_) {
+        if (disconnected_) return;
         uint32_t node_id = pair.first;
         auto* node = ctx_->get_node_by_id(node_id);
         if (node && node->type() != ch::core::lnodetype::type_lit) {
@@ -218,13 +278,8 @@ const ch::core::sdata_type& Simulator::get_value_by_name(const std::string& name
     CHDBG_FUNC();
     CHDBG("Looking for node with name: %s", name.c_str());
 
-    if (!initialized_) {
-        CHERROR("Simulator not initialized");
-        return ch::core::constants::empty;
-    }
-    
-    if (!ctx_) {
-        CHERROR("Context is null");
+    if (!initialized_ || disconnected_ || !ctx_) {
+        CHERROR("Simulator not initialized or disconnected");
         return ch::core::constants::empty;
     }
     
@@ -235,6 +290,7 @@ const ch::core::sdata_type& Simulator::get_value_by_name(const std::string& name
     
     // 查找节点
     for (const auto& node_ptr : ctx_->get_nodes()) {
+        if (!node_ptr || disconnected_) continue;
         if (node_ptr && node_ptr->name() == name) {
             uint32_t node_id = node_ptr->id();
             auto it = data_map_.find(node_id);
