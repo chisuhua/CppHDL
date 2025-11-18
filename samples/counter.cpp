@@ -59,21 +59,23 @@ public:
 };
 
 int main() {
-    // Create device and simulator in proper order to ensure correct destruction
-    ch::ch_device<Top> device;
-    
-    // Create simulator
-    ch::Simulator simulator(device.context());
-    
-    for (int i = 0; i < 18; ++i) {
-        simulator.tick();
-        std::cout << "Cycle " << i << ": out = " << simulator.get_value(device.instance().io().out) << std::endl;
+    {
+        // Create device and simulator in proper order to ensure correct destruction
+        ch::ch_device<Top> device;
+        
+        // Create simulator
+        ch::Simulator simulator(device.context());
+        
+        for (int i = 0; i < 18; ++i) {
+            simulator.tick();
+            std::cout << "Cycle " << i << ": out = " << simulator.get_value(device.instance().io().out) << std::endl;
+        }
+        
+        std::cout << "Program completed successfully" << std::endl;
+        
+        // Generate Verilog before the device is destroyed
+        ch::toVerilog("counter.v", device.context());
     }
-    
-    std::cout << "Program completed successfully" << std::endl;
-    
-    // Generate Verilog before setting static destruction flag
-    ch::toVerilog("counter.v", device.context());
     
     // Set flag to indicate we're in static destruction phase to avoid logging
     ch::detail::set_static_destruction();

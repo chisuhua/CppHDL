@@ -18,6 +18,7 @@ std::unique_ptr<ch::instr_base> regimpl::create_instruction(
     // 创建对应的寄存器指令
     return std::make_unique<ch::instr_reg>(id_, size_, next_node_id);
 }
+
 // 在 src/core/ast_nodes.cpp 中更新
 std::unique_ptr<ch::instr_base> opimpl::create_instruction(
         ch::data_map_t& data_map) const {

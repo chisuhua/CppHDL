@@ -3,7 +3,9 @@
 #include "core/lnodeimpl.h"
 #include "ast/ast_nodes.h"
 #include "logger.h"
+#include "utils/destruction_manager.h"
 #include <cassert>
+#include <iostream>
 
 namespace ch {
 
@@ -12,6 +14,11 @@ Simulator::Simulator(ch::core::context* ctx)
     CHDBG_FUNC();
     CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
     
+    // Register with destruction manager
+    std::cout << "Registering simulator " << this << std::endl;
+    std::cout.flush();
+    ch::detail::destruction_manager::instance().register_simulator(this);
+    
     // 创建默认时钟
     set_default_clock();
     
@@ -19,32 +26,25 @@ Simulator::Simulator(ch::core::context* ctx)
 }
 
 Simulator::~Simulator() {
+    std::cout << "Unregistering simulator " << this << std::endl;
+    std::cout.flush();
+    // Unregister from destruction manager
+    ch::detail::destruction_manager::instance().unregister_simulator(this);
+    
     // Check if we're in static destruction phase
     if (ch::detail::in_static_destruction()) {
+        std::cout << "Simulator destructor called during static destruction" << std::endl;
+        std::cout.flush();
         // During static destruction, minimize operations to prevent segfaults
         // Just return immediately without doing any cleanup
         return;
     }
     
-    // Immediately mark as disconnected to prevent any further access to context
-    disconnected_ = true;
+    std::cout << "Simulator destructor normal cleanup" << std::endl;
+    std::cout.flush();
     
-    // Clear all maps and lists that might reference context data
-    instr_map_.clear();
-    instr_cache_.clear();
-    data_map_.clear();
-    eval_list_.clear();
-    
-    // Safely reset the default clock
-    if (default_clock_) {
-        default_clock_.reset();
-    }
-    
-    // Clear the context pointer only after all cleanup is done
-    ctx_ = nullptr;
-    
-    // Mark as uninitialized
-    initialized_ = false;
+    // Explicitly disconnect to prevent accessing destroyed context
+    disconnect();
 }
 
 void Simulator::disconnect() {
@@ -179,6 +179,10 @@ void Simulator::eval() {
         return;
     }
     
+    // Create a complete snapshot of the data map at the beginning of evaluation
+    // This ensures all instructions read from values at the start of the cycle
+    auto eval_start_data_map = data_map_;
+    
     CHDBG("Starting evaluation loop with %zu nodes", eval_list_.size());
     for (auto* node : eval_list_) {
         if (!node || disconnected_) continue;
@@ -187,11 +191,38 @@ void Simulator::eval() {
         auto it = instr_map_.find(node_id);
         if (it != instr_map_.end() && it->second) {
             CHDBG("Executing instruction for node %u", node_id);
-            it->second->eval(data_map_);
+            // Pass the snapshot for reading
+            it->second->eval(eval_start_data_map, data_map_);
         } else {
             CHDBG("No instruction for node ID: %u", node_id);
         }
     }
+    
+    // Update register proxy nodes to match their corresponding register nodes
+    // Based on the observed pattern, each register node is immediately followed by its proxy node
+    for (size_t i = 0; i < eval_list_.size(); ++i) {
+        auto* node = eval_list_[i];
+        if (!node || disconnected_) continue;
+        
+        // If this is a register node and there's a next node that is a proxy
+        if (node->type() == ch::core::lnodetype::type_reg && i + 1 < eval_list_.size()) {
+            auto* next_node = eval_list_[i + 1];
+            if (next_node && next_node->type() == ch::core::lnodetype::type_proxy) {
+                uint32_t reg_node_id = node->id();
+                uint32_t proxy_node_id = next_node->id();
+                
+                // Copy the register value to the proxy
+                auto reg_it = data_map_.find(reg_node_id);
+                auto proxy_it = data_map_.find(proxy_node_id);
+                
+                if (reg_it != data_map_.end() && proxy_it != data_map_.end()) {
+                    proxy_it->second = reg_it->second;
+                    CHDBG("Updated proxy node %u to match register node %u", proxy_node_id, reg_node_id);
+                }
+            }
+        }
+    }
+    
     CHDBG("Evaluation loop completed");
 }
 
@@ -208,6 +239,9 @@ void Simulator::eval_range(size_t start, size_t end) {
         return;
     }
     
+    // Create a complete snapshot of the data map at the beginning of evaluation
+    auto eval_start_data_map = data_map_;
+    
     for (size_t i = start; i < end; ++i) {
         auto* node = eval_list_[i];
         if (!node || disconnected_) continue;
@@ -215,7 +249,7 @@ void Simulator::eval_range(size_t start, size_t end) {
         uint32_t node_id = node->id();
         auto it = instr_map_.find(node_id);
         if (it != instr_map_.end() && it->second) {
-            it->second->eval(data_map_);
+            it->second->eval(eval_start_data_map, data_map_);
         }
     }
 }
@@ -280,12 +314,15 @@ const ch::core::sdata_type& Simulator::get_value_by_name(const std::string& name
 
     if (!initialized_ || disconnected_ || !ctx_) {
         CHERROR("Simulator not initialized or disconnected");
-        return ch::core::constants::empty;
+        // Return a safe empty value instead of crashing
+        static ch::core::sdata_type empty_value(0, 1);
+        return empty_value;
     }
     
     if (name.empty()) {
         CHERROR("Node name cannot be empty");
-        return ch::core::constants::empty;
+        static ch::core::sdata_type empty_value(0, 1);
+        return empty_value;
     }
     
     // 查找节点
@@ -298,12 +335,14 @@ const ch::core::sdata_type& Simulator::get_value_by_name(const std::string& name
                 return it->second;
             }
             CHWARN("Data not found for node '%s' with ID %u", name.c_str(), node_id);
-            return ch::core::constants::empty;
+            static ch::core::sdata_type empty_value(0, 1);
+            return empty_value;
         }
     }
     
     CHWARN("Node with name '%s' not found", name.c_str());
-    return ch::core::constants::empty;
+    static ch::core::sdata_type empty_value(0, 1);
+    return empty_value;
 }
 
 } // namespace ch

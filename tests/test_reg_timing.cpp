@@ -54,17 +54,25 @@ TEST_CASE("Register - Feedback Counter Structure", "[reg][feedback][structure]")
 }
 
 TEST_CASE("Register - Feedback Counter Timing", "[reg][feedback][timing]") {
+    std::cout << "Starting Feedback Counter Timing test" << std::endl;
     // Create device and simulator in proper order to ensure correct destruction
+    std::cout << "Creating device" << std::endl;
     ch_device<FeedbackCounter> device;
     
+    std::cout << "Created device" << std::endl;
     // Create simulator
+    std::cout << "Creating simulator" << std::endl;
     Simulator simulator(device.context());
+    
+    std::cout << "Created simulator" << std::endl;
     
     for (int i = 0; i <= 10; ++i) {
         simulator.tick();
         auto val = simulator.get_port_value(device.instance().io().out);
         REQUIRE(static_cast<uint64_t>(val) == i);
     }
+    
+    std::cout << "Finished test loop" << std::endl;
 }
 
 // Component for testing multi-register pipeline

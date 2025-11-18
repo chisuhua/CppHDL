@@ -15,6 +15,13 @@
 #include "ast_nodes.h"
 #include "logger.h"
 
+// Forward declaration
+namespace ch {
+namespace detail {
+    class destruction_manager;
+}
+}
+
 namespace ch::core {
 
 /* 使用thread_local的理由:

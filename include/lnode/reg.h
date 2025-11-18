@@ -20,6 +20,7 @@ void next_assignment_proxy<T>::operator=(const U& value) const {
     if (regimpl_node_ && src_impl && regimpl_node_->type() == lnodetype::type_reg) {
         regimpl* reg_node_impl = static_cast<regimpl*>(regimpl_node_);
         reg_node_impl->set_next(src_impl);
+        CHDBG("[next_assignment_proxy::operator=] Successfully set next value");
     } else {
         CHERROR("[next_assignment_proxy::operator=] Error: regimpl_node_ is null, not a regimpl, or src_impl is null!");
     }

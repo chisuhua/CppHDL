@@ -9,6 +9,7 @@
 #include "ast/instr_base.h"
 #include "logger.h"
 #include "core/bundle/bundle_base.h"
+#include "utils/destruction_manager.h"
 #include <unordered_map>
 #include <vector>
 #include <memory>

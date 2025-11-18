@@ -3,9 +3,11 @@
 #include "ast_nodes.h"
 #include "lnodeimpl.h"
 #include "logger.h"
+#include "utils/destruction_manager.h"
 #include <iostream>
 #include <stack>
 #include <unordered_set>
+#include <cstdlib>
 
 namespace ch { namespace core {
 
@@ -22,6 +24,18 @@ bool& debug_context_lifetime() {
     
     static bool value = true;
     return value;
+}
+
+// Register cleanup function to be called at exit
+namespace {
+    struct cleanup_register {
+        cleanup_register() {
+            std::atexit([]() {
+                std::cout << "atexit: Calling pre_static_destruction_cleanup" << std::endl;
+                ch::pre_static_destruction_cleanup();
+            });
+        }
+    } cleanup_instance;
 }
 
 ctx_swap::ctx_swap(context* new_ctx) : old_ctx_(ctx_curr_) {
@@ -47,6 +61,14 @@ context::context(const std::string& name, context* parent)
     : name_(name.empty() ? "unnamed" : name), parent_(parent) {
     CHDBG_FUNC();
     
+    std::cout << "Context constructor called for " << this << " with name: " << name_ << std::endl;
+    std::cout.flush();
+    
+    // Register with destruction manager
+    std::cout << "Registering context " << this << " with name: " << name_ << std::endl;
+    std::cout.flush();
+    ch::detail::destruction_manager::instance().register_context(this);
+    
     if (debug_context_lifetime()) {
         CHINFO("Created new context 0x%llx, name: %s", 
                (unsigned long long)this, name_.c_str());
@@ -56,12 +78,22 @@ context::context(const std::string& name, context* parent)
 }
 
 context::~context() {
+    std::cout << "Unregistering context " << this << " with name: " << name_ << std::endl;
+    std::cout.flush();
+    // Unregister from destruction manager
+    ch::detail::destruction_manager::instance().unregister_context(this);
+    
     // Check if we're in static destruction phase
     if (ch::detail::in_static_destruction()) {
+        std::cout << "Context destructor called during static destruction" << std::endl;
+        std::cout.flush();
         // During static destruction, minimize operations to prevent segfaults
         // Just return immediately without doing any cleanup
         return;
     }
+    
+    std::cout << "Context destructor normal cleanup" << std::endl;
+    std::cout.flush();
     
     // Immediately set ctx_curr_ to nullptr if it points to this context
     // Do this first before any potential logging to avoid issues
