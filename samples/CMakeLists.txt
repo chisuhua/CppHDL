@@ -15,6 +15,10 @@ set(CH_SAMPLE_TARGETS
     bundle_simulator_demo
     pod_bundle_conversion
     minimal_fifo_bundle
+    feedback_counter
+    pipeline
+    shift_register
+    destruction
 )
 
 # 为每个示例创建可执行文件

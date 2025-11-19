@@ -32,15 +32,6 @@ function(add_catch_test TEST_NAME)
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endfunction()
 
-# Create a simple test executable for destruction manager testing
-add_executable(test_destruction test_destruction.cpp)
-target_include_directories(test_destruction PRIVATE
-    ${PROJECT_SOURCE_DIR}/include
-)
-if(TARGET cpphdl)
-    target_link_libraries(test_destruction cpphdl)
-endif()
-
 # ================================
 # 方案一：为每个 test_xxx.cpp 创建独立测试（推荐）
 # ================================
@@ -65,7 +56,6 @@ set(SINGLE_TEST_SOURCES
     test_verilog_gen_new.cpp
     test_fifo.cpp
     test_reg_timing.cpp
-    test_destruction.cpp
 )
 
 # 为每个源文件创建一个独立的测试
