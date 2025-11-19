@@ -49,13 +49,11 @@ TEST_CASE("bits: bit slice operation", "[operators][bit_operations]") {
     auto slice_7_4 = bits<decltype(data), 7, 4>(data);  // 应该是0b1011
     auto slice_6_0 = bits<decltype(data), 6, 0>(data);  // 应该是0b0110101
     
-    // 验证宽度 - 根据实际实现调整期望值
-    // 说明：虽然实际提取的位数分别是3位、4位和7位，但由于硬件描述语言的设计，
-    // 类型系统将1-8位的结果都映射到ch_uint<8>类型以简化类型系统并提高仿真效率。
-    // 在实际的电路综合过程中，综合工具会根据实际使用的位数来优化电路。
-    STATIC_REQUIRE(ch_width_v<decltype(slice_3_1)> == 8);
-    STATIC_REQUIRE(ch_width_v<decltype(slice_7_4)> == 8);
-    STATIC_REQUIRE(ch_width_v<decltype(slice_6_0)> == 8);
+    // 验证宽度 - 支持精确宽度
+    // 现在支持精确宽度，3位应该映射到ch_uint<3>，4位应该映射到ch_uint<4>，7位应该映射到ch_uint<7>
+    STATIC_REQUIRE(ch_width_v<decltype(slice_3_1)> == 3);
+    STATIC_REQUIRE(ch_width_v<decltype(slice_7_4)> == 4);
+    STATIC_REQUIRE(ch_width_v<decltype(slice_6_0)> == 7);
     
     // 验证值的正确性 - 检查提取的位是否正确
     // 这里我们验证的是实际位操作的正确性，而不是类型宽度
@@ -78,8 +76,8 @@ TEST_CASE("bits: bit slice width verification", "[operators][bit_operations][wid
     auto slice16_7_4 = bits<decltype(data16), 7, 4>(data16);   // 4位宽
     auto slice16_15_8 = bits<decltype(data16), 15, 8>(data16); // 8位宽
     
-    // 说明：1-8位的结果映射到ch_uint<8>类型
-    STATIC_REQUIRE(ch_width_v<decltype(slice16_7_4)> == 8);
+    // 现在支持精确宽度，4位应该映射到ch_uint<4>，8位应该映射到ch_uint<8>
+    STATIC_REQUIRE(ch_width_v<decltype(slice16_7_4)> == 4);
     STATIC_REQUIRE(ch_width_v<decltype(slice16_15_8)> == 8);
     
     // 测试32位数据的不同切片
@@ -87,7 +85,7 @@ TEST_CASE("bits: bit slice width verification", "[operators][bit_operations][wid
     auto slice32_15_8 = bits<decltype(data32), 15, 8>(data32);  // 8位宽
     auto slice32_31_16 = bits<decltype(data32), 31, 16>(data32); // 16位宽
     
-    // 说明：1-8位的结果映射到ch_uint<8>类型，9-16位的结果映射到ch_uint<16>类型
+    // 现在支持精确宽度
     STATIC_REQUIRE(ch_width_v<decltype(slice32_7_0)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(slice32_15_8)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(slice32_31_16)> == 16);
@@ -98,12 +96,7 @@ TEST_CASE("bits: bit slice width verification", "[operators][bit_operations][wid
     auto slice64_31_0 = bits<decltype(data64), 31, 0>(data64);   // 32位宽
     auto slice64_63_32 = bits<decltype(data64), 63, 32>(data64); // 32位宽
     
-    // 说明：位宽映射遵循以下规则
-    // 1位: ch_uint<1>
-    // 2-8位: ch_uint<8>
-    // 9-16位: ch_uint<16>
-    // 17-32位: ch_uint<32>
-    // 33-64位: ch_uint<64>
+    // 现在支持精确宽度
     STATIC_REQUIRE(ch_width_v<decltype(slice64_7_0)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(slice64_15_0)> == 16);
     STATIC_REQUIRE(ch_width_v<decltype(slice64_31_0)> == 32);
@@ -134,6 +127,146 @@ TEST_CASE("concat: bit concatenation operation", "[operators][bit_operations]") 
     auto result = concat(high, low);  // 应该是0b10110101
     
     STATIC_REQUIRE(ch_width_v<decltype(result)> == 8);
+    
+    // 添加值的验证测试
+    // 由于硬件描述语言的特性，我们无法在编译时直接获取运行时值
+    // 但我们可以验证类型和宽度
+}
+
+// 添加新的concat测试
+TEST_CASE("concat: bit concatenation with value verification", "[operators][bit_operations][value]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+    
+    // 测试不同宽度的拼接
+    ch_uint<1> bit1(1, "bit1");
+    ch_uint<1> bit0(0, "bit0");
+    ch_uint<2> bits2(0b10, "bits2");
+    ch_uint<3> bits3(0b101, "bits3");
+    ch_uint<4> bits4(0b1100, "bits4");
+    
+    // 测试两个1位拼接成2位
+    auto concat_1_1 = concat(bit1, bit0);  // 应该是0b10 (2位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_1_1)> == 2);
+    
+    // 测试1位和2位拼接成3位
+    auto concat_1_2 = concat(bit1, bits2);  // 应该是0b110 (3位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_1_2)> == 3);
+    
+    // 测试2位和3位拼接成5位
+    auto concat_2_3 = concat(bits2, bits3);  // 应该是0b10101 (5位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_2_3)> == 5);
+    
+    // 测试3位和4位拼接成7位
+    auto concat_3_4 = concat(bits3, bits4);  // 应该是0b1011100 (7位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_3_4)> == 7);
+    
+    // 测试多个拼接操作
+    auto concat_multi = concat(bit1, concat(bits2, concat(bits3, bit0)));  // 应该是0b1101010 (7位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_multi)> == 7);
+}
+
+TEST_CASE("concat: wide bit concatenation operations", "[operators][bit_operations][wide]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+    
+    // 测试宽位拼接
+    ch_uint<8> byte1(0xAB, "byte1");
+    ch_uint<8> byte2(0xCD, "byte2");
+    ch_uint<16> word1(0x1234, "word1");
+    ch_uint<16> word2(0x5678, "word2");
+    
+    // 测试两个字节拼接成字
+    auto concat_bytes = concat(byte1, byte2);  // 应该是0xABCD (16位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_bytes)> == 16);
+    
+    // 测试两个字拼接成双字
+    auto concat_words = concat(word1, word2);  // 应该是0x12345678 (32位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_words)> == 32);
+    
+    // 测试混合宽度拼接
+    auto concat_mixed = concat(byte1, word1);  // 应该是0xAB1234 (24位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_mixed)> == 24);  // 现在支持精确宽度
+    
+    auto concat_mixed2 = concat(word1, byte1);  // 应该是0x1234AB (24位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_mixed2)> == 24);  // 现在支持精确宽度
+}
+
+TEST_CASE("concat: boolean and uint concatenation", "[operators][bit_operations][mixed]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+    
+    // 测试布尔值和整数的拼接
+    ch_bool bool_val(true);  // 应该是1 (1位)
+    ch_uint<3> bits(0b101, "bits");  // 3位
+    ch_uint<1> bit(0, "bit");  // 1位
+    
+    // 测试布尔值和多位数拼接
+    auto concat_bool_uint = concat(bool_val, bits);  // 应该是0b1101 (4位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_bool_uint)> == 4);
+    
+    // 测试多位数和布尔值拼接
+    auto concat_uint_bool = concat(bits, bool_val);  // 应该是0b1011 (4位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_uint_bool)> == 4);
+    
+    // 测试布尔值之间的拼接
+    auto concat_bool_bool = concat(bool_val, bit);  // 应该是0b10 (2位)
+    STATIC_REQUIRE(ch_width_v<decltype(concat_bool_bool)> == 2);
+}
+
+TEST_CASE("concat: nested concatenation operations", "[operators][bit_operations][nested]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+    
+    // 测试嵌套拼接操作
+    ch_uint<2> a(0b01, "a");
+    ch_uint<2> b(0b10, "b");
+    ch_uint<2> c(0b11, "c");
+    ch_uint<2> d(0b00, "d");
+    
+    // 测试多层嵌套拼接 (总共8位)
+    auto nested1 = concat(a, concat(b, concat(c, d)));  // 应该是0b01101100
+    STATIC_REQUIRE(ch_width_v<decltype(nested1)> == 8);
+    
+    // 测试分组拼接 (总共8位)
+    auto nested2 = concat(concat(a, b), concat(c, d));  // 应该是0b01101100
+    STATIC_REQUIRE(ch_width_v<decltype(nested2)> == 8);
+    
+    // 测试另一种分组拼接 (总共8位)
+    auto nested3 = concat(concat(concat(a, b), c), d);  // 应该是0b01101100
+    STATIC_REQUIRE(ch_width_v<decltype(nested3)> == 8);
+}
+
+TEST_CASE("concat: edge cases and special values", "[operators][bit_operations][edge]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+    
+    // 测试特殊值的拼接
+    ch_uint<4> zero_val(0, "zero_val");  // 4位
+    ch_uint<4> ones_val(0xF, "ones_val");  // 4位
+    ch_uint<4> pattern1(0xA, "pattern1");  // 1010 (4位)
+    ch_uint<4> pattern2(0x5, "pattern2");  // 0101 (4位)
+    
+    // 测试零值拼接
+    auto concat_zeros = concat(zero_val, zero_val);  // 4+4=8位
+    STATIC_REQUIRE(ch_width_v<decltype(concat_zeros)> == 8);
+    
+    // 测试全1拼接
+    auto concat_ones = concat(ones_val, ones_val);  // 4+4=8位
+    STATIC_REQUIRE(ch_width_v<decltype(concat_ones)> == 8);
+    
+    // 测试交替模式拼接
+    auto concat_pattern = concat(pattern1, pattern2);  // 4+4=8位
+    STATIC_REQUIRE(ch_width_v<decltype(concat_pattern)> == 8);
+    
+    // 测试不同模式拼接
+    auto concat_mixed_pattern = concat(pattern2, pattern1);  // 4+4=8位
+    STATIC_REQUIRE(ch_width_v<decltype(concat_mixed_pattern)> == 8);
 }
 
 // ---------- 扩展操作测试 ----------
@@ -248,7 +381,7 @@ TEST_CASE("operator_overloads: arithmetic and bitwise operators", "[operators][o
     auto bool_not_result = !bool_a;
     
     // 验证返回类型 (根据实际测试结果)
-    STATIC_REQUIRE(ch_width_v<decltype(add_result)> == 16);  // 加法结果实际为16位
+    STATIC_REQUIRE(ch_width_v<decltype(add_result)> == 9);  // 加法结果现在是精确的max(8,8)+1=9位
     STATIC_REQUIRE(ch_width_v<decltype(sub_result)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(mul_result)> == 16); // 乘法结果宽度相加
     STATIC_REQUIRE(ch_width_v<decltype(and_result)> == 8);
@@ -361,9 +494,8 @@ TEST_CASE("type_deduction: result type deduction", "[operators][deduction]") {
     auto result2 = small + literal;
     auto result3 = literal + small;
     
-    // 根据操作策略，结果宽度应该是max(4,16)+1=17，但会被调整到最近的预定义宽度
-    // 根据实际测试结果修改期望类型
-    STATIC_REQUIRE(ch_width_v<decltype(result1)> == 32); // 加法结果实际为32位
-    STATIC_REQUIRE(ch_width_v<decltype(result2)> == 64);  // 整数字面量默认为32位，结果为64位
-    STATIC_REQUIRE(ch_width_v<decltype(result3)> == 64);  // 整数字面量默认为32位，结果为64位
+    // 根据操作策略，结果宽度应该是max(4,16)+1=17，现在支持精确宽度
+    STATIC_REQUIRE(ch_width_v<decltype(result1)> == 17); // 加法结果现在是精确的max(4,16)+1=17位
+    STATIC_REQUIRE(ch_width_v<decltype(result2)> == 33);  // 整数字面量默认为32位，结果为max(4,32)+1=33位
+    STATIC_REQUIRE(ch_width_v<decltype(result3)> == 33);  // 整数字面量左侧操作数会被提升为32位，结果为max(32,4)+1=33位
 }

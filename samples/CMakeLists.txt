@@ -19,6 +19,7 @@ set(CH_SAMPLE_TARGETS
     pipeline
     shift_register
     destruction
+    precise_width_demo
 )
 
 # 为每个示例创建可执行文件

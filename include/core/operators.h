@@ -108,17 +108,7 @@ consteval unsigned get_binary_result_width() {
 // === 根据宽度选择合适的ch_uint类型 ===
 template<unsigned Width>
 constexpr auto make_uint_result(lnodeimpl* node) {
-    if constexpr (Width <= 1) {
-        return ch_uint<1>(node);
-    } else if constexpr (Width <= 8) {
-        return ch_uint<8>(node);
-    } else if constexpr (Width <= 16) {
-        return ch_uint<16>(node);
-    } else if constexpr (Width <= 32) {
-        return ch_uint<32>(node);
-    } else {
-        return ch_uint<64>(node);
-    }
+    return ch_uint<Width>(node);
 }
 
 // === 为ch_bool创建结果的特殊函数（改为 inline）===
@@ -302,6 +292,7 @@ auto bits(const T& operand) {
     
     return make_uint_result<result_width>(dst_node);
 }
+
 // === 位拼接操作 ===
 template<typename T1, typename T2>
 auto concat(const T1& lhs, const T2& rhs) {
@@ -324,7 +315,6 @@ auto concat(const T1& lhs, const T2& rhs) {
     
     return make_uint_result<result_width>(op_node);
 }
-
 
 // === 符号扩展操作 ===
 template<typename T, unsigned NewWidth>
@@ -412,6 +402,7 @@ ch_bool xor_reduce(const T& operand) {
     
     return make_bool_result(op_node);
 }
+
 // === 条件选择操作 ===
 template<typename Cond, typename T, typename U>
 auto select(const Cond& condition, const T& true_val, const U& false_val) {
