@@ -13,8 +13,15 @@ TEST_CASE("Register-Proxy Explicit Linking", "[reg][linking]") {
     // Create a register
     ch_reg<ch_uint<8>> reg(0_d, "test_reg");
     
-    // Get the register node implementation
-    auto* reg_impl = static_cast<regimpl*>(reg.impl());
+    // Get the proxy node implementation (this is what reg.impl() returns)
+    auto* proxy_impl = reg.impl();
+    
+    // Verify the proxy node exists
+    REQUIRE(proxy_impl != nullptr);
+    REQUIRE(proxy_impl->type() == lnodetype::type_proxy);
+    
+    // Get the register node by looking at the proxy's source
+    auto* reg_impl = static_cast<regimpl*>(proxy_impl->src(0));
     
     // Verify the register node exists
     REQUIRE(reg_impl != nullptr);
@@ -42,8 +49,11 @@ TEST_CASE("Register Next Assignment with Explicit Linking", "[reg][next][linking
     ch_reg<ch_uint<8>> reg_b(0_d, "reg_b");
     
     // Get register implementations
-    auto* reg_a_impl = static_cast<regimpl*>(reg_a.impl());
-    auto* reg_b_impl = static_cast<regimpl*>(reg_b.impl());
+    auto* reg_a_proxy = reg_a.impl();
+    auto* reg_b_proxy = reg_b.impl();
+    
+    auto* reg_a_impl = static_cast<regimpl*>(reg_a_proxy->src(0));
+    auto* reg_b_impl = static_cast<regimpl*>(reg_b_proxy->src(0));
     
     // Verify both registers have proxy links
     REQUIRE(reg_a_impl->get_proxy() != nullptr);

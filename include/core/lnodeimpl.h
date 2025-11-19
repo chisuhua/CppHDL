@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <sstream>
 #include <memory>
+#include <algorithm>  // Add this for std::remove
 
 #include "instr_base.h"
 
@@ -102,6 +103,8 @@ public:
     uint32_t add_src(lnodeimpl* src) {
         if (src) {
             srcs_.emplace_back(src);
+            // Automatically add this node as a user of the source
+            src->add_user(this);
             return static_cast<uint32_t>(srcs_.size() - 1);
         }
         return static_cast<uint32_t>(-1);
@@ -109,7 +112,13 @@ public:
 
     void set_src(uint32_t index, lnodeimpl* src) {
         if (index < srcs_.size() && src) {
+            // Remove user relationship from old source if it exists
+            if (srcs_[index]) {
+                srcs_[index]->remove_user(this);
+            }
             srcs_[index] = src;
+            // Add user relationship to new source
+            src->add_user(this);
         } else if (index == srcs_.size() && src) {
             add_src(src);
         }
@@ -121,6 +130,23 @@ public:
 
     uint32_t num_srcs() const { return static_cast<uint32_t>(srcs_.size()); }
     const std::vector<lnodeimpl*>& srcs() const { return srcs_; }
+
+    // User management
+    void add_user(lnodeimpl* user) {
+        if (user) {
+            users_.push_back(user);
+        }
+    }
+    
+    void remove_user(lnodeimpl* user) {
+        if (user) {
+            users_.erase(std::remove(users_.begin(), users_.end(), user), users_.end());
+        }
+    }
+    
+    const std::vector<lnodeimpl*>& get_users() const { 
+        return users_; 
+    }
 
     // Virtual methods
     virtual std::string to_string() const {
@@ -170,6 +196,7 @@ protected:
     std::string name_;
     std::source_location sloc_;
     std::vector<lnodeimpl*> srcs_;
+    std::vector<lnodeimpl*> users_;  // Track which nodes use this node
 };
 
 
