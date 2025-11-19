@@ -57,6 +57,7 @@ set(SINGLE_TEST_SOURCES
     test_fifo.cpp
     test_reg_timing.cpp
     test_precise_width.cpp
+    test_reg_linking.cpp
 )
 
 # 为每个源文件创建一个独立的测试

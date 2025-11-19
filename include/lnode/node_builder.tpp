@@ -204,6 +204,11 @@ std::pair<regimpl*, proxyimpl*> node_builder::build_register(
     // 构建代理节点
     proxyimpl* proxy_node = ctx->create_node<proxyimpl>(reg_node, prefixed_name_helper("_" + name, instance().name_prefix_), sloc);
     
+    // Explicitly link register and proxy nodes
+    if (reg_node && proxy_node) {
+        reg_node->set_proxy(proxy_node);
+    }
+    
     // 设置 next 值
     if (next_val && reg_node) {
         reg_node->set_next(next_val);

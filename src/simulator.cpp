@@ -199,17 +199,18 @@ void Simulator::eval() {
     }
     
     // Update register proxy nodes to match their corresponding register nodes
-    // Based on the observed pattern, each register node is immediately followed by its proxy node
-    for (size_t i = 0; i < eval_list_.size(); ++i) {
-        auto* node = eval_list_[i];
+    // Now using explicit links instead of positional relationships
+    for (auto* node : eval_list_) {
         if (!node || disconnected_) continue;
         
-        // If this is a register node and there's a next node that is a proxy
-        if (node->type() == ch::core::lnodetype::type_reg && i + 1 < eval_list_.size()) {
-            auto* next_node = eval_list_[i + 1];
-            if (next_node && next_node->type() == ch::core::lnodetype::type_proxy) {
-                uint32_t reg_node_id = node->id();
-                uint32_t proxy_node_id = next_node->id();
+        // If this is a register node with an explicit proxy link
+        if (node->type() == ch::core::lnodetype::type_reg) {
+            auto* reg_node = static_cast<ch::core::regimpl*>(node);
+            auto* proxy_node = reg_node->get_proxy();
+            
+            if (proxy_node) {
+                uint32_t reg_node_id = reg_node->id();
+                uint32_t proxy_node_id = proxy_node->id();
                 
                 // Copy the register value to the proxy
                 auto reg_it = data_map_.find(reg_node_id);

@@ -25,6 +25,7 @@ class ioimpl;
 class cdimpl;
 class udfimpl;
 class udfportimpl;
+class proxyimpl;  // Add forward declaration for proxyimpl
 
 // --- regimpl ---
 class regimpl : public lnodeimpl {
@@ -57,6 +58,10 @@ public:
     lnodeimpl* get_next() const { return num_srcs() > 1 ? src(1) : nullptr; }
     lnodeimpl* get_init_val() const { return num_srcs() > 0 ? src(0) : nullptr; }
 
+    // Explicit link to proxy node
+    void set_proxy(proxyimpl* proxy) { proxy_ = proxy; }
+    proxyimpl* get_proxy() const { return proxy_; }
+
     // 声明创建指令的方法，实现在cpp文件中
     std::unique_ptr<ch::instr_base> create_instruction(
         ch::data_map_t& data_map) const override;
@@ -66,6 +71,7 @@ private:
     lnodeimpl* rst_ = nullptr;
     lnodeimpl* clk_en_ = nullptr;
     lnodeimpl* rst_val_ = nullptr;
+    proxyimpl* proxy_ = nullptr;  // Explicit link to proxy node
 };
 
 // --- opimpl ---
