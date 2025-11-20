@@ -48,8 +48,8 @@ public:
 
     void describe() override {
         // 创建读写指针寄存器（addr_width + 1 位用于满/空检测）
-        ch_reg<ch_uint<addr_width + 1>> rd_ptr(0, "rd_ptr");
-        ch_reg<ch_uint<addr_width + 1>> wr_ptr(0, "wr_ptr");
+        ch_reg<ch_uint<addr_width + 1>> rd_ptr(0_d, "rd_ptr");
+        ch_reg<ch_uint<addr_width + 1>> wr_ptr(0_d, "wr_ptr");
 
         // 提取地址位（低 addr_width 位）
         // 对于2元素FIFO，addr_width=1，指针是2位宽，我们需要提取低1位作为地址

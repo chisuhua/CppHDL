@@ -27,6 +27,12 @@ std::unique_ptr<ch::instr_base> opimpl::create_instruction(
     auto* src0_buf = &data_map[lhs()->id()];
     auto* src1_buf = rhs() ? &data_map[rhs()->id()] : nullptr;
     
+    // 添加用户跟踪：将操作节点添加到源节点的用户列表中
+    lhs()->add_user(const_cast<opimpl*>(this));
+    if (rhs()) {
+        rhs()->add_user(const_cast<opimpl*>(this));
+    }
+    
     // 根据操作类型创建对应的指令
     switch (op_) {
         // 算术操作
@@ -99,6 +105,8 @@ std::unique_ptr<ch::instr_base> proxyimpl::create_instruction(
     auto* dst_buf = &data_map[id_];
     if (num_srcs() > 0 && src(0)) {
         auto* src_buf = &data_map[src(0)->id()];
+        // 添加用户跟踪：当创建proxy指令时，将proxy节点添加到源节点的用户列表中
+        src(0)->add_user(const_cast<proxyimpl*>(this));
         return std::make_unique<ch::instr_proxy>(dst_buf, size_, src_buf);
     }
     return nullptr;
@@ -117,6 +125,8 @@ std::unique_ptr<ch::instr_base> outputimpl::create_instruction(
     auto* dst_buf = &data_map[id_];
     if (num_srcs() > 0 && src(0)) {
         auto* src_buf = &data_map[src(0)->id()];
+        // 添加用户跟踪：当创建output指令时，将output节点添加到源节点的用户列表中
+        src(0)->add_user(const_cast<outputimpl*>(this));
         return std::make_unique<ch::instr_output>(dst_buf, size_, src_buf);
     }
     return nullptr;

@@ -41,8 +41,10 @@ TEST_CASE("User Tracking for Register Nodes", "[user_tracking][reg]") {
     REQUIRE(reg_a_proxy->get_users()[0] == result_impl);
     REQUIRE(reg_b_proxy->get_users()[0] == result_impl);
     
-    // The operation should not have users yet
-    REQUIRE(result_impl->get_users().empty());
+    // The operation should not have users yet (except for its proxy)
+    // The proxy node should be the only user of the operation node
+    REQUIRE(result_impl->get_users().size() == 1);
+    REQUIRE(result_impl->get_users()[0] == result_proxy);
     REQUIRE(result_proxy->get_users().empty());
 }
 
@@ -69,6 +71,12 @@ TEST_CASE("User Tracking for Operation Nodes", "[user_tracking][op]") {
     REQUIRE(val_a.impl()->get_users()[0] == result_impl);
     REQUIRE(val_b.impl()->get_users()[0] == result_impl);
     
+    // The operation should not have users yet (except for its proxy)
+    // The proxy node should be the only user of the operation node
+    REQUIRE(result_impl->get_users().size() == 1);
+    REQUIRE(result_impl->get_users()[0] == result_proxy);
+    REQUIRE(result_proxy->get_users().empty());
+    
     // Create another operation using the result
     ch_uint<8> val_c(2_d);
     auto final_result = result + val_c;
@@ -80,4 +88,9 @@ TEST_CASE("User Tracking for Operation Nodes", "[user_tracking][op]") {
     REQUIRE(val_c.impl()->get_users().size() == 1);
     REQUIRE(result_proxy->get_users()[0] == final_impl);
     REQUIRE(val_c.impl()->get_users()[0] == final_impl);
+    
+    // The final operation should not have users yet (except for its proxy)
+    REQUIRE(final_impl->get_users().size() == 1);
+    REQUIRE(final_impl->get_users()[0] == final_proxy);
+    REQUIRE(final_proxy->get_users().empty());
 }

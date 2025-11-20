@@ -32,9 +32,9 @@ public:
 
     void describe() override {
         CHDBG_FUNC();
-        ch_reg<ch_uint<N>> reg(0);
+        ch_reg<ch_uint<N>> reg(0_d); // 使用字面量初始化
         // Use the default clock for register updates
-        reg->next = reg + 1;
+        reg->next = reg + 1_d; // 明确指定1为字面量
         io().out = reg;
         CHDBG("Counter logic described");
     }

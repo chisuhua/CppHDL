@@ -197,7 +197,7 @@ std::pair<regimpl*, proxyimpl*> node_builder::build_register(
     
     // 构建寄存器节点
     regimpl* reg_node = ctx->create_node<regimpl>(
-        size, 0, default_clk, nullptr, nullptr, nullptr, init_val,
+        size, 0, nullptr, nullptr, nullptr, next_val, init_val,
         prefixed_name_helper(name, instance().name_prefix_), sloc
     );
     
