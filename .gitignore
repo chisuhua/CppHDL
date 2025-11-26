@@ -1,0 +1,34 @@
+# 忽略构建目录
+build/
+cmake-build-*/
+*.build/
+Debug/
+Release/
+
+# 忽略VSCode配置
+.vscode/
+.idea/
+.continue/
+
+# 忽略编译生成的文件
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.out
+*.bin
+*.dll
+
+# 忽略CMake生成的文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# 忽略临时文件
+*.swp
+*.swo
+*~
+.DS_Store

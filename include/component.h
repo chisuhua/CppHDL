@@ -69,7 +69,7 @@ public:
     const std::vector<std::shared_ptr<Component>>& children() const { return children_shared_; }
 
 protected:
-    std::unique_ptr<ch::core::context> ctx_;
+    std::shared_ptr<ch::core::context> ctx_;
     Component* parent_;
     std::string name_;
     std::vector<std::shared_ptr<Component>> children_shared_; // 改为 shared_ptr

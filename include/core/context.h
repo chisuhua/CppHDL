@@ -10,7 +10,7 @@
 #include <source_location>
 
 #include "types.h"
-#include "context_interface.h"
+#include "abstract/context_interface.h"
 #include "lnodeimpl.h"
 #include "ast_nodes.h"
 #include "logger.h"
