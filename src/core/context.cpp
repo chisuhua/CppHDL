@@ -11,7 +11,7 @@
 
 namespace ch { namespace core {
 
-thread_local context* ctx_curr_ = nullptr;
+/*thread_local*/ context* ctx_curr_ = nullptr;
 
 // Instead of a global variable, use a function-local static variable
 // This ensures proper initialization order
@@ -80,6 +80,10 @@ context::context(const std::string& name, context* parent)
 context::~context() {
     std::cout << "Unregistering context " << this << " with name: " << name_ << std::endl;
     std::cout.flush();
+    
+    // 标记正在析构，防止重复析构
+    destructing_ = true;
+    
     // Unregister from destruction manager
     ch::detail::destruction_manager::instance().unregister_context(this);
     
@@ -113,6 +117,7 @@ context::~context() {
         }
         
         // Now clear the node storage
+        // FIXME it cause segfault
         node_storage_.clear();
     } catch (...) {
         // Silently ignore exceptions during destruction

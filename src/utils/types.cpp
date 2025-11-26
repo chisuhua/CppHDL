@@ -18,7 +18,7 @@ const sdata_type all_ones_32bit{0xFFFFFFFF, 32};
 
 // ones 函数的实现
 const sdata_type& ones(uint32_t width) {
-    static thread_local std::unordered_map<uint32_t, sdata_type> ones_cache;
+    static /*thread_local*/ std::unordered_map<uint32_t, sdata_type> ones_cache;
     auto it = ones_cache.find(width);
     if (it == ones_cache.end()) {
         sdata_type s(width);

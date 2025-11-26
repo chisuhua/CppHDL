@@ -16,14 +16,14 @@ namespace ch {
 class Component {
 public:
     explicit Component(Component* parent = nullptr, const std::string& name = "");
-    virtual ~Component() = default;
+    virtual ~Component();
 
     virtual void create_ports() {}
     virtual void describe() = 0;
     void build(ch::core::context* external_ctx = nullptr);
 
     // 访问器
-    ch::core::context* context() const { return ctx_.get(); }
+    ch::core::context* context() const { return ctx_; }
     Component* parent() const { return parent_; }
     const std::string& name() const { return name_; }
 
@@ -69,14 +69,16 @@ public:
     const std::vector<std::shared_ptr<Component>>& children() const { return children_shared_; }
 
 protected:
-    std::shared_ptr<ch::core::context> ctx_;
+    ch::core::context* ctx_;
     Component* parent_;
     std::string name_;
     std::vector<std::shared_ptr<Component>> children_shared_; // 改为 shared_ptr
+    bool ctx_owner_ = false;
 
 private:
-    static thread_local Component* current_;
+    static /*thread_local*/ Component* current_;
     bool built_ = false;
+    bool destructing_ = false;  // 标记是否正在析构
     
     void build_internal(ch::core::context* target_ctx);
 

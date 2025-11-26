@@ -17,7 +17,6 @@ public:
     
     SimpleComponent(ch::Component* parent = nullptr, const std::string& name = "simple") 
         : Component(parent, name) {
-        create_ports();
     }
     
     void create_ports() override {
@@ -49,10 +48,10 @@ int main() {
     std::cout << "Program completed successfully" << std::endl;
     
     // Clean up properly before static destruction
-    ch::pre_static_destruction_cleanup();
+    //ch::pre_static_destruction_cleanup();
     
     // Also set the static destruction flag to prevent any further logging
-    ch::detail::set_static_destruction();
+    //ch::detail::set_static_destruction();
     
     return 0;
 }

@@ -3,6 +3,7 @@
 #define DESTRUCTION_MANAGER_H
 
 #include <unordered_set>
+#include <unordered_map>
 #include <mutex>
 #include <iostream>
 #include <atomic>
@@ -12,6 +13,7 @@ namespace ch {
         class context;
     }
     class Simulator;
+    class Component;
     
 namespace detail {
 
@@ -38,6 +40,20 @@ public:
         }
     }
     
+    void register_component(Component* comp) {
+        if (!in_static_destruction()) {
+            components_.insert(comp);
+            std::cout << "Registered component: " << comp << std::endl;
+        }
+    }
+    
+    void unregister_component(Component* comp) {
+        if (!in_static_destruction()) {
+            components_.erase(comp);
+            std::cout << "Unregistered component: " << comp << std::endl;
+        }
+    }
+    
     void register_simulator(Simulator* sim) {
         if (!in_static_destruction()) {
             simulators_.insert(sim);
@@ -49,6 +65,20 @@ public:
         if (!in_static_destruction()) {
             simulators_.erase(sim);
             std::cout << "Unregistered simulator: " << sim << std::endl;
+        }
+    }
+    
+    // 通知所有依赖特定context的simulator断开连接
+    void notify_context_destruction(core::context* ctx) {
+        if (!in_static_destruction()) {
+            // 查找所有依赖该context的simulator并通知它们断开连接
+            for (auto* sim : simulators_) {
+                if (sim) {
+                    // 注意：这里我们不能直接调用simulator的方法，因为可能存在不完整的类型问题
+                    // 我们只能依靠simulator自己检查context有效性
+                    std::cout << "Notifying simulator " << sim << " about context destruction" << std::endl;
+                }
+            }
         }
     }
     
@@ -64,6 +94,14 @@ public:
         }
         simulators_.clear();
         
+        // Then clean up components
+        for (auto* comp : components_) {
+            if (comp) {
+                std::cout << "Cleaning up component: " << comp << std::endl;
+            }
+        }
+        components_.clear();
+        
         // Then clean up contexts
         for (auto* ctx : contexts_) {
             if (ctx) {
@@ -74,12 +112,12 @@ public:
         contexts_.clear();
         
         // Set the static destruction flag
-        in_static_destruction() = true;
+        in_static_destruction_flag() = true;
         std::cout << "Static destruction flag set to true" << std::endl;
     }
     
     bool is_in_static_destruction() const {
-        return in_static_destruction();
+        return const_cast<destruction_manager*>(this)->in_static_destruction_flag();
     }
     
 private:
@@ -92,9 +130,10 @@ private:
     
     std::unordered_set<core::context*> contexts_;
     std::unordered_set<Simulator*> simulators_;
+    std::unordered_set<Component*> components_;
     
     // Flag to indicate if we're in static destruction phase
-    std::atomic<bool>& in_static_destruction() const {
+    std::atomic<bool>& in_static_destruction_flag() {
         static std::atomic<bool> flag{false};
         return flag;
     }

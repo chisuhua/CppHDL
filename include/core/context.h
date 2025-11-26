@@ -31,7 +31,7 @@ namespace ch::core {
 4. **简化设计**：避免了复杂的线程同步代码
 */
 
-extern thread_local context* ctx_curr_;
+extern /*thread_local*/ context* ctx_curr_;
 
 class ctx_swap {
 public:
@@ -178,6 +178,7 @@ private:
     resetimpl* current_reset_ = nullptr;
     std::string name_;
     context* parent_ = nullptr;
+    bool destructing_ = false;  // 标记是否正在析构
     
     // ID溢出保护
     static constexpr uint32_t MAX_NODE_ID = UINT32_MAX - 1000;

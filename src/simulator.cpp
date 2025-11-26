@@ -77,6 +77,7 @@ void Simulator::disconnect() {
     }
     
     // Clear the context pointer
+    if (!ctx_) delete ctx_;
     ctx_ = nullptr;
     
     // Mark as uninitialized
@@ -100,6 +101,7 @@ void Simulator::set_default_clock() {
 void Simulator::initialize() {
     CHDBG_FUNC();
     
+    // 检查context是否有效
     if (initialized_ || disconnected_ || !ctx_) {
         update_instruction_pointers();
         return;
@@ -169,6 +171,7 @@ void Simulator::update_instruction_pointers() {
 void Simulator::eval() {
     CHDBG_FUNC();
     
+    // 检查context是否有效
     if (!initialized_ || disconnected_ || !ctx_) {
         CHERROR("Simulator not initialized or disconnected");
         return;
@@ -230,6 +233,7 @@ void Simulator::eval() {
 void Simulator::eval_range(size_t start, size_t end) {
     CHDBG_FUNC();
     
+    // 检查context是否有效
     if (!initialized_ || disconnected_ || !ctx_) {
         CHERROR("Simulator not initialized or disconnected");
         return;
@@ -258,8 +262,14 @@ void Simulator::eval_range(size_t start, size_t end) {
 void Simulator::tick() {
     CHDBG_FUNC();
     
+    // 检查context是否有效
+    if (!ctx_ || disconnected_) {
+        CHERROR("Simulator context is null or disconnected");
+        return;
+    }
+    
     // Toggle the default clock if it exists
-    if (default_clock_ && ctx_ && !disconnected_) {
+    if (default_clock_ && !disconnected_) {
         auto it = data_map_.find(default_clock_->id());
         if (it != data_map_.end()) {
             // Toggle the clock value (0 -> 1, 1 -> 0)
@@ -293,6 +303,7 @@ void Simulator::tick(size_t count) {
 void Simulator::reset() {
     CHDBG_FUNC();
     
+    // 检查context是否有效
     if (!initialized_ || disconnected_ || !ctx_) {
         CHERROR("Simulator not initialized or disconnected");
         return;
@@ -313,6 +324,7 @@ const ch::core::sdata_type& Simulator::get_value_by_name(const std::string& name
     CHDBG_FUNC();
     CHDBG("Looking for node with name: %s", name.c_str());
 
+    // 检查context是否有效
     if (!initialized_ || disconnected_ || !ctx_) {
         CHERROR("Simulator not initialized or disconnected");
         // Return a safe empty value instead of crashing

@@ -130,7 +130,7 @@ namespace constants {
     }
     
     inline const sdata_type& zero(uint32_t width = 1) {
-        static thread_local std::unordered_map<uint32_t, sdata_type> zero_cache;
+        static /*thread_local*/ std::unordered_map<uint32_t, sdata_type> zero_cache;
         auto it = zero_cache.find(width);
         if (it == zero_cache.end()) {
             it = zero_cache.emplace(width, sdata_type(0, width)).first;

@@ -2,17 +2,23 @@
 #include "component.h"
 #include "core/context.h"
 #include "logger.h"
+#include "utils/destruction_manager.h"
+#include <set>
 
 namespace ch {
 
-thread_local Component* Component::current_ = nullptr;
+/*thread_local*/ Component* Component::current_ = nullptr;
 
 Component::Component(Component* parent, const std::string& name)
-    : parent_(parent)
+    : ctx_(nullptr)
+    , parent_(parent)
     , name_(name.empty() ? "unnamed" : name) {
     CHDBG_FUNC();
     CHDBG("Creating component: %s with parent: %s", 
           name_.c_str(), parent_ ? parent_->name().c_str() : "null");
+    
+    // Register with destruction manager
+    ch::detail::destruction_manager::instance().register_component(this);
 }
 
 void Component::build(ch::core::context* external_ctx) {
@@ -24,7 +30,6 @@ void Component::build(ch::core::context* external_ctx) {
     }
     
     built_ = true;
-    std::unique_ptr<ch::core::context> local_ctx;
     ch::core::context* target_ctx = nullptr;
     
     if (external_ctx) {
@@ -33,9 +38,9 @@ void Component::build(ch::core::context* external_ctx) {
     } else {
         auto parent_ctx = parent_ ? parent_->context() : nullptr;
         CHDBG("Creating internal context for component: %s", name_.c_str());
-        local_ctx = std::make_unique<ch::core::context>(name_, parent_ctx);
-        target_ctx = local_ctx.get();
-        ctx_ = std::move(local_ctx);
+        ctx_ = new ch::core::context(name_, parent_ctx);
+        target_ctx = ctx_;
+        ctx_owner_ = true;
     }
 
     build_internal(target_ctx);
@@ -59,6 +64,37 @@ void Component::build_internal(ch::core::context* target_ctx) {
     
     CHDBG("Describing behavior for component: %s", name_.c_str());
     describe();
+}
+
+Component::~Component() {
+    CHDBG_FUNC();
+    
+    // 标记正在析构，防止重复析构
+    destructing_ = true;
+    
+    // Unregister from destruction manager
+    ch::detail::destruction_manager::instance().unregister_component(this);
+    
+    // Check if we're in static destruction phase
+    if (ch::detail::in_static_destruction()) {
+        // During static destruction, minimize operations to prevent segfaults
+        CHDBG("Component destructor called during static destruction: %s", name_.c_str());
+        return;
+    }
+    
+    CHDBG("Component destructor normal cleanup: %s", name_.c_str());
+    
+    // 清理子组件
+    // FIXME it cause segfault
+    //children_shared_.clear();
+    
+    // 如果拥有context，则删除它
+    if (ctx_owner_ && ctx_) {
+        // 在删除context之前，确保所有依赖它的simulator都已断开连接
+        ch::detail::destruction_manager::instance().notify_context_destruction(ctx_);
+        delete ctx_;
+        ctx_ = nullptr;
+    }
 }
 
 // 修改返回类型和实现
