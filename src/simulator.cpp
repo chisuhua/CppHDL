@@ -17,7 +17,6 @@ Simulator::Simulator(ch::core::context* ctx)
     // Register with destruction manager
     std::cout << "Registering simulator " << this << std::endl;
     std::cout.flush();
-    ch::detail::destruction_manager::instance().register_simulator(this);
     
     // 创建默认时钟
     set_default_clock();
@@ -26,23 +25,9 @@ Simulator::Simulator(ch::core::context* ctx)
 }
 
 Simulator::~Simulator() {
-    std::cout << "Unregistering simulator " << this << std::endl;
-    std::cout.flush();
-    // Unregister from destruction manager
-    ch::detail::destruction_manager::instance().unregister_simulator(this);
-    
-    // Check if we're in static destruction phase
-    if (ch::detail::in_static_destruction()) {
-        std::cout << "Simulator destructor called during static destruction" << std::endl;
-        std::cout.flush();
-        // During static destruction, minimize operations to prevent segfaults
-        // Just return immediately without doing any cleanup
-        return;
-    }
-    
-    std::cout << "Simulator destructor normal cleanup" << std::endl;
-    std::cout.flush();
-    
+    ch::pre_static_destruction_cleanup();
+    ch::detail::set_static_destruction();
+
     // Explicitly disconnect to prevent accessing destroyed context
     disconnect();
 }

@@ -70,7 +70,7 @@ TEST_CASE("bits: bit slice width verification", "[operators][bit_operations][wid
     // 测试不同宽度的切片操作
     ch_uint<16> data16(0b1011010111110000, "test_data16");
     ch_uint<32> data32(0x12345678, "test_data32");
-    ch_uint<64> data64(0x123456789ABCDEF0ULL, "test_data64");
+    ch_uint<64> data64(ch_literal(0x123456789ABCDEF0ULL), "test_data64");
     
     // 测试16位数据的不同切片
     auto slice16_7_4 = bits<decltype(data16), 7, 4>(data16);   // 4位宽

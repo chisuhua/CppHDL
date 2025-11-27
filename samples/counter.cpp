@@ -78,7 +78,7 @@ int main() {
     }
     
     // Set flag to indicate we're in static destruction phase to avoid logging
-    ch::detail::set_static_destruction();
+    //ch::detail::set_static_destruction();
     
     return 0;
 }

@@ -105,11 +105,5 @@ int main() {
     
     std::cout << "Finished Shift Register test" << std::endl;
     
-    // Clean up properly before static destruction
-    ch::pre_static_destruction_cleanup();
-    
-    // Also set the static destruction flag to prevent any further logging
-    ch::detail::set_static_destruction();
-    
     return 0;
 }
