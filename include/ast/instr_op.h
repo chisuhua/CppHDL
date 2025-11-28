@@ -321,11 +321,13 @@ struct Concat {
     static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src0, ch::core::sdata_type* src1) {
         uint32_t src0_width = src0->bitwidth();
         uint32_t src1_width = src1->bitwidth();
+        uint32_t expected_width = src0_width + src1_width;
         
-        if (src0_width + src1_width != dst->bitwidth()) {
-            std::cerr << "[instr_op_concat] Error: Destination width mismatch!" << std::endl;
-            *dst = ch::core::sdata_type(0, dst->bitwidth());
-            return;
+        // 检查目标位宽是否符合预期
+        if (expected_width != dst->bitwidth()) {
+            std::cerr << "[instr_op_concat] Warning: Destination width mismatch!" << " dest width=" << dst->bitwidth() << ", expected: " << expected_width << ", src0 width=" << src0_width << " src1_width=" << src1_width << std::endl;
+            // 重新调整目标位宽以匹配期望值
+            *dst = ch::core::sdata_type(dst->bitwidth()); // 重置为目标位宽的0值
         }
         
         // 将src1放在低位，src0放在高位

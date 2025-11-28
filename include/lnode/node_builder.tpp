@@ -54,6 +54,8 @@ namespace {
                 return std::max(lhs_width, rhs_width);
             case ch_op::bit_sel:
                 return 1;
+            case ch_op::concat:
+                return lhs_width + rhs_width;  // 正确计算concat操作的结果宽度
             default:
                 return std::max(lhs_width, rhs_width);
         }

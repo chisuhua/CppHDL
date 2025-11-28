@@ -197,10 +197,10 @@ public:
 
     void describe() override {
         // Create a 4-bit shift register
-        ch_reg<ch_bool> bit1(0_b);
-        ch_reg<ch_bool> bit2(0_b);
-        ch_reg<ch_bool> bit3(0_b);
-        ch_reg<ch_bool> bit4(0_b);
+        ch_reg<ch_uint<1>> bit1(0_b);
+        ch_reg<ch_uint<1>> bit2(0_b);
+        ch_reg<ch_uint<1>> bit3(0_b);
+        ch_reg<ch_uint<1>> bit4(0_b);
         
         bit1->next = io().in;
         bit2->next = bit1;
@@ -221,10 +221,10 @@ TEST_CASE("Register - Shift Register Structure", "[reg][shift][structure]") {
     ctx_swap swap(&ctx);
     
     // Create a 4-bit shift register
-    ch_reg<ch_bool> bit1(0_b);
-    ch_reg<ch_bool> bit2(0_b);
-    ch_reg<ch_bool> bit3(0_b);
-    ch_reg<ch_bool> bit4(0_b);
+    ch_reg<ch_uint<1>> bit1(0_b);
+    ch_reg<ch_uint<1>> bit2(0_b);
+    ch_reg<ch_uint<1>> bit3(0_b);
+    ch_reg<ch_uint<1>> bit4(0_b);
     
     REQUIRE(bit1.impl() != nullptr);
     REQUIRE(bit2.impl() != nullptr);
@@ -232,7 +232,7 @@ TEST_CASE("Register - Shift Register Structure", "[reg][shift][structure]") {
     REQUIRE(bit4.impl() != nullptr);
     
     // Test connections
-    ch_bool input(1_b);
+    ch_uint<1> input(1_b);
     bit1->next = input;
     bit2->next = bit1;
     bit3->next = bit2;

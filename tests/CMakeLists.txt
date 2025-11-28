@@ -59,6 +59,8 @@ set(SINGLE_TEST_SOURCES
     test_precise_width.cpp
     test_reg_linking.cpp
     test_user_tracking.cpp
+    test_operation_widths.cpp
+    test_operation_results.cpp
 )
 
 # 为每个源文件创建一个独立的测试

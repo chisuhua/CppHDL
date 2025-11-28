@@ -14,7 +14,7 @@ using namespace ch::core;
 class ShiftRegister : public ch::Component {
 public:
     __io(
-        ch_in<ch_bool> in;
+        ch_in<ch_uint<1>> in;
         ch_out<ch_uint<4>> out;
     )
 
@@ -28,18 +28,22 @@ public:
 
     void describe() override {
         // Create a 4-bit shift register
-        ch_reg<ch_bool> bit1(0_b);
-        ch_reg<ch_bool> bit2(0_b);
-        ch_reg<ch_bool> bit3(0_b);
-        ch_reg<ch_bool> bit4(0_b);
+        ch_reg<ch_uint<1>> bit1(0_b);
+        ch_reg<ch_uint<1>> bit2(0_b);
+        ch_reg<ch_uint<1>> bit3(0_b);
+        ch_reg<ch_uint<1>> bit4(0_b);
         
         bit1->next = io().in;
         bit2->next = bit1;
         bit3->next = bit2;
         bit4->next = bit3;
+
+        auto result1 = concat(bit4, bit3);
+        auto result2 = concat(result1, bit2);
+        io().out = concat(result2, bit1);
         
         // Concatenate bits to form output
-        io().out = concat(concat(concat(bit4, bit3), bit2), bit1);
+        //io().out = concat(concat(concat(bit4, bit3), bit2), bit1);
     }
 };
 
