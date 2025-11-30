@@ -6,7 +6,7 @@ Debug/
 Release/
 
 # 忽略VSCode配置
-.vscode/
+#.vscode/
 .idea/
 .continue/
 
