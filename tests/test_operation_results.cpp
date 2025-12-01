@@ -34,49 +34,78 @@ public:
 // 测试各种操作的运行结果正确性
 TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
     SECTION("Arithmetic Operations") {
-        // 创建设备和模拟器
+        // 创建设备
         ch_device<TestOpsComponent> device;
+        
+        // 在上下文中创建所有操作和连接
+        {
+            ctx_swap swap(device.context());
+            
+            // 创建操作数
+            ch_uint<8> a = ch_uint<8>(12);  // 0b00001100
+            ch_uint<8> b = ch_uint<8>(5);   // 0b00000101
+            
+            // 执行所有操作并将结果连接到输出端口
+            // 加法: 12 + 5 = 17
+            auto add_result = a + b;
+            device.instance().io().result_out = add_result;
+        } // 此时上下文交换结束
+        
+        // 创建模拟器并运行测试
         Simulator simulator(device.context());
-        
-        ch_uint<8> a(12);  // 0b00001100
-        ch_uint<8> b(5);   // 0b00000101
-        
-        // 加法: 12 + 5 = 17
-        auto add_result = a + b;
-        device.instance().io().result_out = add_result;
         simulator.eval();
         auto add_value = simulator.get_port_value(device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(add_value) == 17);
         
-        // 减法: 12 - 5 = 7
-        auto sub_result = a - b;
-        device.instance().io().result_out = sub_result;
+        // 对于其他操作，我们需要重新设置上下文
+        {
+            ctx_swap swap(device.context());
+            ch_uint<8> a = ch_uint<8>(12);
+            ch_uint<8> b = ch_uint<8>(5);
+            
+            // 减法: 12 - 5 = 7
+            auto sub_result = a - b;
+            device.instance().io().result_out = sub_result;
+        }
         simulator.eval();
         auto sub_value = simulator.get_port_value(device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(sub_value) == 7);
         
-        // 乘法: 12 * 5 = 60
-        auto mul_result = a * b;
-        device.instance().io().result_out = mul_result;
+        {
+            ctx_swap swap(device.context());
+            ch_uint<8> a = ch_uint<8>(12);
+            ch_uint<8> b = ch_uint<8>(5);
+            
+            // 乘法: 12 * 5 = 60
+            auto mul_result = a * b;
+            device.instance().io().result_out = mul_result;
+        }
         simulator.eval();
         auto mul_value = simulator.get_port_value(device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(mul_value) == 60);
         
-        // 负号: -12 = -12 (补码形式)
-        auto neg_result = -a;
-        device.instance().io().result_out = neg_result;
+        {
+            ctx_swap swap(device.context());
+            ch_uint<8> a = ch_uint<8>(12);
+            
+            // 负号: -12 = -12 (补码形式)
+            auto neg_result = -a;
+            device.instance().io().result_out = neg_result;
+        }
         simulator.eval();
         auto neg_value = simulator.get_port_value(device.instance().io().result_out);
         REQUIRE(static_cast<int64_t>(static_cast<uint64_t>(neg_value)) == -12);
     }
-
     SECTION("Bitwise Operations") {
         // 创建设备和模拟器
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<8> a(12);  // 0b00001100
-        ch_uint<8> b(5);   // 0b00000101
+        // 在上下文中创建操作数
+        ch_uint<8> a, b;
+        ctx_swap swap(device.context());
+        a = ch_uint<8>(12);  // 0b00001100
+        b = ch_uint<8>(5);   // 0b00000101
         
         // 按位与: 12 & 5 = 0b00000100 = 4
         auto and_result = a & b;
@@ -112,9 +141,12 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<8> a(12);
-        ch_uint<8> b(5);
-        ch_uint<8> c(12);
+        // 在上下文中创建操作数
+        ch_uint<8> a, b, c;
+        ctx_swap swap(device.context());
+        a = ch_uint<8>(12);
+        b = ch_uint<8>(5);
+        c = ch_uint<8>(12);
         
         // 等于: 12 == 12 = true
         auto eq_result = (a == c);
@@ -164,7 +196,10 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<8> a(12);  // 0b00001100
+        // 在上下文中创建操作数
+        ch_uint<8> a;
+        ctx_swap swap(device.context());
+        a = ch_uint<8>(12);  // 0b00001100
         
         // 左移: 12 << 2 = 0b00110000 = 48
         auto shl_result = a << 2;
@@ -186,10 +221,13 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<8> a(0b10110101);
+        // 在上下文中创建操作数
+        ch_uint<8> a;
+        ctx_swap swap(device.context());
+        a = ch_uint<8>(0b10110101);
         
         // 位提取: bits[6:2] = 0b11010 = 26
-        auto bits_result = bits<ch_uint<8>, 6, 2>(a);
+        auto bits_result = bits<decltype(a), 6, 2>(a);
         device.instance().io().result_out = bits_result;
         simulator.eval();
         auto bits_value = simulator.get_port_value(device.instance().io().result_out);
@@ -201,8 +239,12 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<3> a(0b101);   // 5
-        ch_uint<5> b(0b11010); // 26
+        // 在上下文中创建操作数
+        ch_uint<3> a;
+        ch_uint<5> b;
+        ctx_swap swap(device.context());
+        a = ch_uint<3>(0b101);   // 5
+        b = ch_uint<5>(0b11010); // 26
         
         // 连接: 0b10111010 = 186
         auto concat_result = concat(a, b);
@@ -217,7 +259,10 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<3> a(0b101); // -3 in signed 3-bit
+        // 在上下文中创建操作数
+        ch_uint<3> a;
+        ctx_swap swap(device.context());
+        a = ch_uint<3>(0b101); // -3 in signed 3-bit
         
         // 零扩展: 0b00000101 = 5
         auto zext_result = zext<ch_uint<3>, 8>(a);
@@ -239,7 +284,10 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_uint<8> a(0b10110101);
+        // 在上下文中创建操作数
+        ch_uint<8> a;
+        ctx_swap swap(device.context());
+        a = ch_uint<8>(0b10110101);
         
         // 与归约: 1 & 0 & 1 & 1 & 0 & 1 & 0 & 1 = 0
         auto and_reduce_result = and_reduce(a);
@@ -268,9 +316,13 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_bool cond(true);
-        ch_uint<8> a(12);
-        ch_uint<8> b(5);
+        // 在上下文中创建操作数
+        ch_bool cond;
+        ch_uint<8> a, b;
+        ctx_swap swap(device.context());
+        cond = ch_bool(true);
+        a = ch_uint<8>(12);
+        b = ch_uint<8>(5);
         
         // 多路选择器: true ? 12 : 5 = 12
         auto mux_result = select(cond, a, b);
@@ -288,8 +340,11 @@ TEST_CASE("Register Operation Results", "[operation][register][runtime]") {
         ch_device<TestOpsComponent> device;
         Simulator simulator(device.context());
         
-        ch_reg<ch_uint<8>> reg_a(10);
-        ch_reg<ch_uint<8>> reg_b(5);
+        // 在上下文中创建寄存器
+        ch_reg<ch_uint<8>> reg_a, reg_b;
+        ctx_swap swap(device.context());
+        reg_a = ch_reg<ch_uint<8>>(10);
+        reg_b = ch_reg<ch_uint<8>>(5);
         
         // 寄存器加法: 10 + 5 = 15
         auto reg_add_result = reg_a + reg_b;

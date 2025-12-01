@@ -54,6 +54,11 @@ namespace {
                 return std::max(lhs_width, rhs_width);
             case ch_op::bit_sel:
                 return 1;
+            case ch_op::bits_extract:
+                // For bits extraction, the result width should be determined at compile time
+                // Since we can't determine it here, we'll need to fix this in the bits() function
+                // For now, return a placeholder value that will be corrected by the caller
+                return lhs_width;
             case ch_op::concat:
                 return lhs_width + rhs_width;  // 正确计算concat操作的结果宽度
             default:
@@ -240,6 +245,146 @@ lnodeimpl* node_builder::build_mux(
     );
     
     return mux_node;
+}
+
+template<typename T>
+lnodeimpl* node_builder::build_bit_select(
+    const lnode<T>& operand,
+    uint32_t index,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    auto* ctx = ctx_curr_;
+    if (!ctx) {
+        CHERROR("[node_builder] No active context for bit select operation creation");
+        return nullptr;
+    }
+    
+    if (!operand.impl()) {
+        CHERROR("[node_builder] Invalid operand for bit select operation");
+        return nullptr;
+    }
+    
+    if (instance().statistics_enabled_) {
+        ++instance().statistics_->operations_built;
+        ++instance().statistics_->total_nodes_built;
+    }
+    
+    // Create operation node specifically for bit selection
+    opimpl* op_node = ctx->create_node<opimpl>(
+        1,  // bit_select always returns 1 bit
+        ch_op::bit_sel, 
+        false, 
+        operand.impl(), 
+        ctx->create_literal(sdata_type(index, 32), name + "_idx", sloc),
+        prefixed_name_helper(name, instance().name_prefix_), 
+        sloc
+    );
+    
+    // Create proxy node with correct size
+    proxyimpl* proxy_node = ctx->create_node<proxyimpl>(
+        op_node, 
+        prefixed_name_helper("_" + name, instance().name_prefix_), 
+        sloc
+    );
+    
+    return proxy_node;
+}
+
+template<typename T>
+lnodeimpl* node_builder::build_bits(
+    const lnode<T>& operand,
+    uint32_t msb,
+    uint32_t lsb,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    auto* ctx = ctx_curr_;
+    if (!ctx) {
+        CHERROR("[node_builder] No active context for bits operation creation");
+        return nullptr;
+    }
+    
+    if (!operand.impl()) {
+        CHERROR("[node_builder] Invalid operand for bits operation");
+        return nullptr;
+    }
+    
+    if (instance().statistics_enabled_) {
+        ++instance().statistics_->operations_built;
+        ++instance().statistics_->total_nodes_built;
+    }
+    
+    // Calculate result width at compile time
+    const uint32_t result_width = msb - lsb + 1;
+    
+    // Encode range as single 64-bit value (msb in upper 32 bits, lsb in lower 32 bits)
+    const uint64_t range_encoded = (static_cast<uint64_t>(msb) << 32) | static_cast<uint64_t>(lsb);
+    
+    // Create operation node specifically for bits extraction
+    opimpl* op_node = ctx->create_node<opimpl>(
+        result_width,
+        ch_op::bits_extract, 
+        false, 
+        operand.impl(), 
+        ctx->create_literal(sdata_type(range_encoded, 64), name + "_range", sloc),
+        prefixed_name_helper(name, instance().name_prefix_), 
+        sloc
+    );
+    
+    // Create proxy node with correct size
+    proxyimpl* proxy_node = ctx->create_node<proxyimpl>(
+        op_node, 
+        prefixed_name_helper("_" + name, instance().name_prefix_), 
+        sloc
+    );
+    
+    return proxy_node;
+}
+
+template<typename T, typename Index>
+lnodeimpl* node_builder::build_bit_extract(
+    const lnode<T>& operand,
+    const lnode<Index>& index,
+    unsigned result_width,
+    const std::string& name,
+    const std::source_location& sloc) {
+    
+    auto* ctx = ctx_curr_;
+    if (!ctx) {
+        CHERROR("[node_builder] No active context for bit extract operation creation");
+        return nullptr;
+    }
+    
+    if (!operand.impl() || !index.impl()) {
+        CHERROR("[node_builder] Invalid operand or index for bit extract operation");
+        return nullptr;
+    }
+    
+    if (instance().statistics_enabled_) {
+        ++instance().statistics_->operations_built;
+        ++instance().statistics_->total_nodes_built;
+    }
+    
+    // Create operation node specifically for bit extraction
+    opimpl* op_node = ctx->create_node<opimpl>(
+        result_width, 
+        ch_op::bits_extract, 
+        false, 
+        operand.impl(), 
+        index.impl(),
+        prefixed_name_helper(name, instance().name_prefix_), 
+        sloc
+    );
+    
+    // Create proxy node with correct size
+    proxyimpl* proxy_node = ctx->create_node<proxyimpl>(
+        op_node, 
+        prefixed_name_helper("_" + name, instance().name_prefix_), 
+        sloc
+    );
+    
+    return proxy_node;
 }
 
 // 二元操作节点构建实现

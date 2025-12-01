@@ -62,6 +62,29 @@ public:
         const std::string& name = "mux",
         const std::source_location& sloc = std::source_location::current());
 
+    template<typename T>
+    lnodeimpl* build_bit_select(
+        const lnode<T>& operand,
+        uint32_t index,
+        const std::string& name = "bit_select",
+        const std::source_location& sloc = std::source_location::current());
+
+    template<typename T>
+    lnodeimpl* build_bits(
+        const lnode<T>& operand,
+        uint32_t msb,
+        uint32_t lsb,
+        const std::string& name = "bits",
+        const std::source_location& sloc = std::source_location::current());
+
+    template<typename T, typename Index>
+    lnodeimpl* build_bit_extract(
+        const lnode<T>& operand,
+        const lnode<Index>& index,
+        unsigned result_width,
+        const std::string& name = "bit_extract",
+        const std::source_location& sloc = std::source_location::current());
+    
     template<typename T, typename U>
     lnodeimpl* build_operation(
         ch_op op,
