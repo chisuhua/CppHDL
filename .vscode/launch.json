@@ -7,18 +7,19 @@
       "request": "launch",
       "program": "${workspaceFolder}/build/samples/${fileBasenameNoExtension}",
       "args": [],
+      "stopAtEntry": true,
+      "externalConsole": false,
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build",
-      "stopAtEntry": false,
-      "externalConsole": false,
-      "MIMode": "lldb",
+      "MIMode": "gdb",
       "setupCommands": [
         {
           "description": "Enable pretty-printing for gdb",
           "text": "-enable-pretty-printing",
           "ignoreFailures": true
         }
-      ]
+      ],
+        "miDebuggerPath": "/usr/bin/gdb"
     },
     {
       "name": "C++ Debug 活动测试文件",
@@ -28,9 +29,9 @@
       "args": [],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "build",
-      "stopAtEntry": false,
+      "stopAtEntry": true,
       "externalConsole": false,
-      "MIMode": "lldb",
+      "MIMode": "gdb",
       "setupCommands": [
         {
           "description": "Enable pretty-printing for gdb",
@@ -40,29 +41,23 @@
       ]
     },
     {
-      "name": "C/C++: clang 构建和调试活动文件",
+      "name": "C++ Debug 活动测试文件 without build",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/${fileBasenameNoExtension}",
+      "program": "${workspaceFolder}/build/tests/${fileBasenameNoExtension}",
       "args": [],
-      "stopAtEntry": false,
-      "cwd": "${fileDirname}",
-      "environment": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": true,
       "externalConsole": false,
-      "MIMode": "lldb",
-      "preLaunchTask": "C/C++: clang 生成活动文件"
-    },
-    {
-      "name": "(lldb) 启动",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "输入程序名称，例如 ${workspaceFolder}/a.out",
-      "args": [],
-      "stopAtEntry": false,
-      "cwd": "${fileDirname}",
-      "environment": [],
-      "externalConsole": false,
-      "MIMode": "lldb"
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
     }
   ]
 }
