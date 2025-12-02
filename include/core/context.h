@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <string>
 #include <cstdint>
@@ -169,7 +170,9 @@ public:
 private:
     void topological_sort_visit(lnodeimpl* node, std::vector<lnodeimpl*>& sorted,
                                 std::unordered_map<lnodeimpl*, bool>& visited,
-                                std::unordered_map<lnodeimpl*, bool>& temp_mark) const;
+                                std::unordered_map<lnodeimpl*, bool>& temp_mark,
+                                std::unordered_set<lnodeimpl*>& cyclic_nodes,
+                                std::unordered_set<lnodeimpl*>& update_list) const;
     void init();
 
     std::vector<std::unique_ptr<lnodeimpl>> node_storage_;

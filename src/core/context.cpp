@@ -154,6 +154,8 @@ std::vector<lnodeimpl*> context::get_eval_list() const {
 
     std::unordered_map<lnodeimpl*, bool> visited;
     std::unordered_map<lnodeimpl*, bool> temp_mark;
+    std::unordered_set<lnodeimpl*> cyclic_nodes;
+    std::unordered_set<lnodeimpl*> update_list;
 
     for (const auto& node_ptr : node_storage_) {
         CHCHECK_NULL(node_ptr.get(), "Null node pointer found in context");
@@ -162,7 +164,7 @@ std::vector<lnodeimpl*> context::get_eval_list() const {
         
         lnodeimpl* node = node_ptr.get();
         if (visited.find(node) == visited.end()) {
-            topological_sort_visit(node, sorted, visited, temp_mark);
+            topological_sort_visit(node, sorted, visited, temp_mark, cyclic_nodes, update_list);
         }
     }
 
@@ -293,43 +295,86 @@ mem_write_port_impl* context::create_mem_write_port(
 
 void context::topological_sort_visit(lnodeimpl* node, std::vector<lnodeimpl*>& sorted,
                                      std::unordered_map<lnodeimpl*, bool>& visited,
-                                     std::unordered_map<lnodeimpl*, bool>& temp_mark) const {
+                                     std::unordered_map<lnodeimpl*, bool>& temp_mark,
+                                     std::unordered_set<lnodeimpl*>& cyclic_nodes,
+                                     std::unordered_set<lnodeimpl*>& update_list) const {
     CHDBG_FUNC();
     CHREQUIRE(node != nullptr, "Null node pointer in topological sort");
     
+    // 检查节点是否已经访问过
+    if (visited.count(node)) {
+        // 如果节点依赖于更新节点，则也需要更新
+        if (update_list.count(node)) {
+            // 传递更新标记给调用者
+        }
+        return;
+    }
+
+    // 检查是否存在循环依赖
     if (temp_mark[node]) {
-        // Check if this is a register node, which is allowed to have cycles
+        // 处理寄存器循环依赖
         if (node->type() == lnodetype::type_reg) {
-            // For registers, we allow cycles because they represent sequential logic
+            // 对于寄存器，允许循环，因为它们代表时序逻辑
             CHDBG("Allowing cycle for register node %u", node->id());
+            
+            // 检测未初始化的寄存器
+            auto* reg_node = reinterpret_cast<regimpl*>(node);
+            if (reg_node->get_init_val() == nullptr) {
+                // 这里可以记录未初始化的寄存器，但不终止程序
+                CHWARN("Uninitialized register node %u", node->id());
+            }
         } else {
             // 循环检测 - 抛出异常并终止程序
             CHFATAL_EXCEPTION("Cycle detected in IR graph during topological sort");
         }
-    }
-
-    if (visited[node]) {
         return;
     }
+    
+    // 检查循环节点
+    if (cyclic_nodes.count(node)) {
+        // 处理寄存器循环依赖
+        if (node->type() == lnodetype::type_reg) {
+            // 检测未初始化的寄存器
+            auto* reg_node = reinterpret_cast<regimpl*>(node);
+            if (reg_node->get_init_val() == nullptr) {
+                // 记录未初始化的寄存器
+                CHWARN("Uninitialized register node %u", node->id());
+            }
+            return;
+        }
+        CHFATAL_EXCEPTION("Cycle detected in IR graph during topological sort");
+    }
+    cyclic_nodes.insert(node);
 
     temp_mark[node] = true;
 
-    // For register nodes, we don't traverse the next value dependency
+    // 对寄存器节点特殊处理，只遍历初始化值依赖，不遍历next值依赖
     if (node->type() == lnodetype::type_reg) {
-        // Only process the initial value, not the next value
+        // 只处理初始值依赖（第一个源节点）
         if (node->num_srcs() > 0) {
             lnodeimpl* init_val = node->src(0);
             if (init_val) {
-                topological_sort_visit(init_val, sorted, visited, temp_mark);
+                this->topological_sort_visit(init_val, sorted, visited, temp_mark, cyclic_nodes, update_list);
             }
         }
     } else {
-        // For all other nodes, process all sources
+        // 对于所有其他节点，处理所有源节点
+        bool update = false;
         for (uint32_t i = 0; i < node->num_srcs(); ++i) {
             lnodeimpl* src_node = node->src(i);
             if (src_node) {
-                topological_sort_visit(src_node, sorted, visited, temp_mark);
+                // 递归访问源节点
+                this->topological_sort_visit(src_node, sorted, visited, temp_mark, cyclic_nodes, update_list);
+                // 检查源节点是否需要更新
+                if (update_list.count(src_node)) {
+                    update = true;
+                }
             }
+        }
+        
+        if (update) {
+            // 依赖路径中存在循环，此节点需要更新
+            update_list.insert(node);
         }
     }
 
