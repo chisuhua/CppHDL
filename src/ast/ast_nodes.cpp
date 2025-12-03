@@ -12,11 +12,25 @@ std::unique_ptr<ch::instr_base> regimpl::create_instruction(
         ch::data_map_t& data_map) const {
     // 获取next节点ID
     uint32_t next_node_id = static_cast<uint32_t>(-1); // 无效ID
-    if (auto* next_node = get_next()) {
+    auto* next_node = get_next();
+    if (next_node) {
         next_node_id = next_node->id();
     }
+    
+    // 获取当前节点和下一节点的数据缓冲区指针
+    auto* current_buf = &data_map[id_];
+    auto* next_buf = (next_node_id != static_cast<uint32_t>(-1)) ? &data_map[next_node_id] : nullptr;
+    
+    // 添加用户跟踪：将寄存器节点添加到next节点的用户列表中
+    if (next_node) {
+        next_node->add_user(const_cast<regimpl*>(this));
+    }
+    
     // 创建对应的寄存器指令
-    return std::make_unique<ch::instr_reg>(id_, size_, next_node_id);
+    return std::make_unique<ch::instr_reg>(current_buf, size_, next_buf, 
+                                          cd_, clk_en_ ? &data_map[clk_en_->id()] : nullptr,
+                                          rst_ ? &data_map[rst_->id()] : nullptr,
+                                          rst_val_ ? &data_map[rst_val_->id()] : nullptr);
 }
 
 // 在 src/core/ast_nodes.cpp 中更新

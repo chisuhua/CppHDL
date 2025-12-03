@@ -12,7 +12,7 @@ public:
     instr_input(ch::core::sdata_type* dst, uint32_t size)
         : instr_base(size), dst_(dst) {}
 
-    void eval(const ch::data_map_t& data_map) override;
+    void eval() override;
 
 private:
     ch::core::sdata_type* dst_;
@@ -23,7 +23,7 @@ public:
     instr_output(ch::core::sdata_type* dst, uint32_t size, ch::core::sdata_type* src)
         : instr_base(size), dst_(dst), src_(src) {}
 
-    void eval(const ch::data_map_t& data_map) override;
+    void eval() override;
 
 private:
     ch::core::sdata_type* dst_;

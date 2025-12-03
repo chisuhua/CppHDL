@@ -1,10 +1,10 @@
-
 // include/instr/mux.h
 #ifndef INSTR_MUX_H
 #define INSTR_MUX_H
 
 #include "instr_base.h"
 #include "core/types.h"
+#include <iostream>
 
 namespace ch {
 
@@ -16,9 +16,7 @@ public:
               ch::core::sdata_type* false_val)
         : instr_base(size), dst_(dst), cond_(cond), true_val_(true_val), false_val_(false_val) {}
 
-    void eval(const ch::data_map_t& data_map) override {
-        (void)data_map; // Silence unused warning if not used
-
+    void eval() override {
         if (!dst_ || !cond_ || !true_val_ || !false_val_) {
             std::cerr << "[MUX] Error: Null pointer encountered!" << std::endl;
             return;
@@ -26,9 +24,9 @@ public:
 
         // Perform the mux operation: if cond != 0 then true_val else false_val
         if (!cond_->is_zero()) {
-            dst_ = true_val_;
+            *dst_ = *true_val_;
         } else {
-            dst_ = false_val_;
+            *dst_ = *false_val_;
         }
     }
 

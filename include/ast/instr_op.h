@@ -22,9 +22,7 @@ public:
                     ch::core::sdata_type* src0, ch::core::sdata_type* src1)
         : instr_base(size), dst_(dst), src0_(src0), src1_(src1) {}
 
-    void eval(const ch::data_map_t& data_map) override {
-        (void)data_map; // Silence unused warning if not used
-
+    void eval() override {
         if (!dst_ || !src0_ || !src1_) {
             std::cerr << "[" << Op::name() << "] Error: Null pointer encountered!" << std::endl;
             return;
@@ -50,9 +48,7 @@ public:
                    ch::core::sdata_type* src)
         : instr_base(size), dst_(dst), src_(src) {}
 
-    void eval(const ch::data_map_t& data_map) override {
-        (void)data_map;
-
+    void eval() override {
         if (!dst_ || !src_) {
             std::cerr << "[" << Op::name() << "] Error: Null pointer encountered!" << std::endl;
             return;

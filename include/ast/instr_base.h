@@ -22,13 +22,7 @@ class instr_base {
 public:
     explicit instr_base(uint32_t size) : size_(size) {}
     virtual ~instr_base() = default;
-    virtual void eval(const data_map_t& data_map) = 0;
-    
-    // New overload for dual-map evaluation
-    virtual void eval(const data_map_t& read_map, data_map_t& write_map) {
-        // Default implementation - just call the single-map version with read_map
-        eval(read_map);
-    }
+    virtual void eval() = 0;
     
     uint32_t size() const { return size_; }
 private:
