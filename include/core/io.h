@@ -9,6 +9,7 @@
 #include "logger.h"
 #include "traits.h"
 #include "uint.h"
+#include "node_builder.h"
 #include <source_location>
 #include <string>
 
@@ -291,10 +292,13 @@ auto operator&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
 
     // 使用现有的 createOpNodeImpl 创建操作节点
     if (lhs_impl && rhs_impl) {
-        lnodeimpl *op_node = createOpNodeImpl(
-            ch_op::and_, std::max(ch_width_v<T1>, ch_width_v<T2>), false,
-            lnode<T1>(lhs_impl), lnode<T2>(rhs_impl), "and_port_op",
+        auto lnode_lhs = lnode<T1>(lhs_impl);
+        auto lnode_rhs = lnode<T2>(rhs_impl);
+        
+        auto *op_node = node_builder::instance().build_operation(
+            ch_op::and_, lnode_lhs, lnode_rhs, false, "and_port_op",
             std::source_location::current());
+            
         // 返回适当类型的结果
         using result_type =
             std::conditional_t<(ch_width_v<T1> >= ch_width_v<T2>),

@@ -4,6 +4,7 @@
 
 #include "core/bool.h"
 #include "core/context.h"
+#include "core/io.h"
 #include "core/literal.h"
 #include "core/lnode.h"
 #include "core/lnodeimpl.h"
@@ -246,23 +247,6 @@ template <typename T, unsigned Index> auto bit_select(const T &operand) {
     return make_uint_result<1>(op_node);
 }
 
-// === 位提取操作（模板参数版本）===
-template <typename T, unsigned MSB, unsigned LSB> auto bits(const T &operand) {
-    static_assert(HardwareType<T>, "Operand must be a hardware type");
-    static_assert(MSB >= LSB, "MSB must be >= LSB");
-    static_assert(MSB < ch_width_v<T>, "MSB must be within operand width");
-
-    auto operand_node = to_operand(operand);
-
-    constexpr unsigned result_width = MSB - LSB + 1;
-
-    auto *op_node = node_builder::instance().build_bits(
-        operand_node, MSB, LSB, "bits_extract",
-        std::source_location::current());
-
-    return make_uint_result<result_width>(op_node);
-}
-
 // === 位拼接操作 ===
 template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
     static_assert(HardwareType<T1> || ArithmeticLiteral<T1>,
@@ -292,10 +276,19 @@ template <typename T, unsigned NewWidth> auto sext(const T &operand) {
 
     auto *op_node = node_builder::instance().build_operation(
         ch_op::sext, operand_node,
-        true, // 符号操作
+        true, // 有符号操作
         "sext", std::source_location::current());
 
     return make_uint_result<NewWidth>(op_node);
+}
+
+// 添加端口类型的重载版本
+template <typename T, unsigned NewWidth, typename Dir>
+auto sext(const port<T, Dir> &operand) {
+    auto lnode_operand = to_operand(operand);
+    auto *impl = lnode_operand.impl();
+    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
+        ch_op::sext, impl, true, "sext", std::source_location::current()));
 }
 
 // === 零扩展操作 ===
@@ -312,6 +305,41 @@ template <typename T, unsigned NewWidth> auto zext(const T &operand) {
         "zext", std::source_location::current());
 
     return make_uint_result<NewWidth>(op_node);
+}
+
+// 修改端口类型的重载版本
+template <typename T, unsigned NewWidth, typename Dir>
+auto zext(const port<T, Dir> &operand) {
+    auto lnode_operand = to_operand(operand);
+    auto *impl = lnode_operand.impl();
+    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
+        ch_op::zext, impl, false, "zext", std::source_location::current()));
+}
+
+// === 位域提取操作 ===
+template <typename T, unsigned MSB, unsigned LSB> auto bits(const T &operand) {
+    static_assert(HardwareType<T>, "Operand must be a hardware type");
+    static_assert(MSB < ch_width_v<T>, "MSB must be < operand width");
+    static_assert(LSB <= MSB, "LSB must be <= MSB");
+
+    auto operand_node = to_operand(operand);
+
+    auto *op_node = node_builder::instance().build_bits(
+        operand_node, MSB, LSB, "bits", std::source_location::current());
+
+    return make_uint_result<MSB - LSB + 1>(op_node);
+}
+
+// 修改端口类型的重载版本，使用build_bits函数
+template <typename T, unsigned MSB, unsigned LSB, typename Dir>
+auto bits(const port<T, Dir> &operand) {
+    auto lnode_operand = to_operand(operand);
+
+    auto *op_node = node_builder::instance().build_bits(
+        lnode_operand.impl(), MSB, LSB, "bits",
+        std::source_location::current());
+
+    return make_uint_result<MSB - LSB + 1>(op_node);
 }
 
 // === 约简操作 ===
