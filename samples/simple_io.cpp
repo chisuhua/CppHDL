@@ -3,6 +3,7 @@
 #include "core/uint.h"
 #include "core/bool.h"
 #include "core/io.h"
+#include "core/literal.h"
 #include <memory>
 #include <iostream>
 

@@ -2,6 +2,7 @@
 #include "core/uint.h"
 #include "core/node_builder.h"
 #include "core/literal.h"
+#include "ast/ast_nodes.h"
 #include <string>
 
 namespace ch { namespace core {
@@ -55,9 +56,9 @@ lnode<ch_bool> get_lnode(const ch_bool& bool_val) {
 }
 */
 
-// make_bool_result 的定义（如果未在别处定义）
-ch_bool make_bool_result(lnodeimpl* node) {
-    return ch_bool(node);
-}
+// 删除重复定义的make_bool_result函数，因为它已经在operators.h中内联定义了
+// ch_bool make_bool_result(lnodeimpl* node) {
+//     return ch_bool(node);
+// }
 
 }} // namespace ch::core
