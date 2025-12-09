@@ -4,7 +4,11 @@
 #include "../include/module.h"
 #include "../include/simulator.h"
 #include "../include/codegen.h"
+#include "../include/core/literal.h"  // 添加这一行以支持字面量操作符如1_d
 #include <iostream>
+
+// 添加STATIC_REQUIRE宏定义
+#define STATIC_REQUIRE(expr) static_assert(expr, #expr)
 
 using namespace ch::core;
 
@@ -78,7 +82,7 @@ int main() {
         ch_uint<12> g(0b101101011100, "g");  // 12位
         
         // 提取位[7:4]应该产生4位结果
-        auto slice = bits<decltype(g), 7, 4>(g);
+        auto slice = bits<ch_uint<12>, 7, 4>(g);
         STATIC_REQUIRE(ch_width_v<decltype(slice)> == 4);
         std::cout << "   Bits extract result width: " << ch_width_v<decltype(slice)> << " bits" << std::endl;
         std::cout << "   Expected width: 4 bits" << std::endl;
@@ -97,9 +101,9 @@ int main() {
         // 获取输出值
         auto output_value = simulator.get_port_value(device.instance().io().out_data);
         std::cout << "   Input value: " << 0b1010 << " (decimal)" << std::endl;
-        std::cout << "   Output value: " << output_value << " (decimal)" << std::endl;
+        std::cout << "   Output value: " << static_cast<uint64_t>(output_value) << " (decimal)" << std::endl;
         std::cout << "   Expected output: " << (0b1010 + 1) << " (decimal)" << std::endl;
-        std::cout << "   Test " << (output_value == (0b1010 + 1) ? "PASSED" : "FAILED") << std::endl;
+        std::cout << "   Test " << (static_cast<uint64_t>(output_value) == (0b1010 + 1) ? "PASSED" : "FAILED") << std::endl;
         
         std::cout << "\n✅ All precise width tests completed!" << std::endl;
         
