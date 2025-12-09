@@ -223,12 +223,10 @@ TEST_CASE("Shift Operation Results", "[operation][shift][runtime]") {
 template <typename TestType>
 class OperationTestComponent : public ch::Component {
 public:
-    __io(typename TestType::input_ports inputs; 
-         ch_out<ch_uint<16>> result_out;
-         ch_in<ch_clock> clk;)
+    __io(typename TestType::input_ports inputs; ch_out<ch_uint<16>> result_out;)
 
-    OperationTestComponent(ch::Component *parent = nullptr,
-                           const std::string &name = "test_ops")
+        OperationTestComponent(ch::Component *parent = nullptr,
+                               const std::string &name = "test_ops")
         : ch::Component(parent, name) {}
 
     void create_ports() override { new (io_storage_) io_type(); }
@@ -237,8 +235,6 @@ public:
         ctx_swap swap(context());
         TestType::perform_test(*this);
     }
-    
-    auto& clk() { return io().clk; }
 };
 
 // 各种测试类型的实现
@@ -529,7 +525,11 @@ struct RegisterAddTest {
         // 创建并初始化寄存器，初始值分别为10和5
         ch_reg<ch_uint<8>> reg_a(10);
         ch_reg<ch_uint<8>> reg_b(5);
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 3e60d50 (fix test_operation_results)
         // 将寄存器的输出相加并连接到输出端口
         component.io().result_out = reg_a + reg_b;
     }
@@ -698,8 +698,17 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
     SECTION("Concatenation Operation") {
         ch_device<OperationTestComponent<ConcatTest>> concat_device;
         Simulator concat_simulator(concat_device.context());
-        concat_simulator.set_port_value(concat_device.instance().io().inputs.a, 5);
-        concat_simulator.set_port_value(concat_device.instance().io().inputs.b, 26);
+<<<<<<< HEAD
+        concat_simulator.set_port_value(concat_device.instance().io().inputs.a,
+                                        5);
+        concat_simulator.set_port_value(concat_device.instance().io().inputs.b,
+                                        26);
+=======
+        concat_simulator.set_port_value(concat_device.instance().io().inputs.a,
+                                        5);
+        concat_simulator.set_port_value(concat_device.instance().io().inputs.b,
+                                        26);
+>>>>>>> 3e60d50 (fix test_operation_results)
         concat_simulator.eval();
         auto concat_value = concat_simulator.get_port_value(
             concat_device.instance().io().result_out);
@@ -725,7 +734,13 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
     SECTION("Reduction Operations") {
         ch_device<OperationTestComponent<AndReduceTest>> and_reduce_device;
         Simulator and_reduce_simulator(and_reduce_device.context());
-        and_reduce_simulator.set_port_value(and_reduce_device.instance().io().inputs.a, 255);
+<<<<<<< HEAD
+        and_reduce_simulator.set_port_value(
+            and_reduce_device.instance().io().inputs.a, 255);
+=======
+        and_reduce_simulator.set_port_value(
+            and_reduce_device.instance().io().inputs.a, 255);
+>>>>>>> 3e60d50 (fix test_operation_results)
         and_reduce_simulator.eval();
         auto and_reduce_value = and_reduce_simulator.get_port_value(
             and_reduce_device.instance().io().result_out);
@@ -733,7 +748,13 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
 
         ch_device<OperationTestComponent<OrReduceTest>> or_reduce_device;
         Simulator or_reduce_simulator(or_reduce_device.context());
-        or_reduce_simulator.set_port_value(or_reduce_device.instance().io().inputs.a, 12);
+<<<<<<< HEAD
+        or_reduce_simulator.set_port_value(
+            or_reduce_device.instance().io().inputs.a, 12);
+=======
+        or_reduce_simulator.set_port_value(
+            or_reduce_device.instance().io().inputs.a, 12);
+>>>>>>> 3e60d50 (fix test_operation_results)
         or_reduce_simulator.eval();
         auto or_reduce_value = or_reduce_simulator.get_port_value(
             or_reduce_device.instance().io().result_out);
@@ -742,7 +763,13 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<OperationTestComponent<XorReduceTest>> xor_reduce_device;
         Simulator xor_reduce_simulator(xor_reduce_device.context());
         // 使用值13 (二进制 00001101)，各位异或: 0^0^0^0^1^1^0^1 = 1
-        xor_reduce_simulator.set_port_value(xor_reduce_device.instance().io().inputs.a, 13);
+<<<<<<< HEAD
+        xor_reduce_simulator.set_port_value(
+            xor_reduce_device.instance().io().inputs.a, 13);
+=======
+        xor_reduce_simulator.set_port_value(
+            xor_reduce_device.instance().io().inputs.a, 13);
+>>>>>>> 3e60d50 (fix test_operation_results)
         xor_reduce_simulator.eval();
         auto xor_reduce_value = xor_reduce_simulator.get_port_value(
             xor_reduce_device.instance().io().result_out);
@@ -752,7 +779,11 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
     SECTION("Mux Operation") {
         ch_device<OperationTestComponent<MuxTest>> mux_device;
         Simulator mux_simulator(mux_device.context());
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 3e60d50 (fix test_operation_results)
         // 测试条件为 true 的情况，应该选择 a 输入
         mux_simulator.set_port_value(mux_device.instance().io().inputs.cond, 1);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.a, 12);
@@ -761,13 +792,23 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         auto mux_value =
             mux_simulator.get_port_value(mux_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(mux_value) == 12);
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 3e60d50 (fix test_operation_results)
         // 测试条件为 false 的情况，应该选择 b 输入
         mux_simulator.set_port_value(mux_device.instance().io().inputs.cond, 0);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.a, 12);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.b, 5);
         mux_simulator.eval();
-        mux_value = mux_simulator.get_port_value(mux_device.instance().io().result_out);
+<<<<<<< HEAD
+        mux_value =
+            mux_simulator.get_port_value(mux_device.instance().io().result_out);
+=======
+        mux_value =
+            mux_simulator.get_port_value(mux_device.instance().io().result_out);
+>>>>>>> 3e60d50 (fix test_operation_results)
         REQUIRE(static_cast<uint64_t>(mux_value) == 5);
     }
 }
