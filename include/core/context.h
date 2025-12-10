@@ -156,6 +156,10 @@ public:
     void set_default_clock(core::clockimpl *clk);
     core::clockimpl *get_default_clock() const;
     bool has_default_clock() const { return default_clock_ != nullptr; }
+    
+    // 默认复位相关方法
+    core::resetimpl *get_default_reset() const;
+    bool has_default_reset() const { return default_reset_ != nullptr; }
 
 private:
     void
@@ -177,6 +181,7 @@ private:
     // ID溢出保护
     static constexpr uint32_t MAX_NODE_ID = UINT32_MAX - 1000;
     core::clockimpl *default_clock_ = nullptr; // 默认时钟
+    core::resetimpl *default_reset_ = nullptr; // 默认复位
 };
 
 } // namespace ch::core

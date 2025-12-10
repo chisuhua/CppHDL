@@ -4,6 +4,8 @@
 #include "instr_op.h"
 #include "instr_proxy.h"
 #include "instr_reg.h"
+#include "instr_clock.h"
+#include "core/context.h"
 
 namespace ch {
 namespace core {
@@ -29,9 +31,19 @@ regimpl::create_instruction(ch::data_map_t &data_map) const {
         next_node->add_user(const_cast<regimpl *>(this));
     }
 
+    // 获取时钟边沿信息
+    sdata_type* clk_edge = nullptr;
+    if (cd_ != static_cast<uint32_t>(-1)) {
+        // 直接使用cd_作为data_map的键值获取时钟边沿信息
+        auto it = data_map.find(cd_);
+        if (it != data_map.end()) {
+            clk_edge = &it->second;
+        }
+    }
+
     // 创建对应的寄存器指令
     return std::make_unique<ch::instr_reg>(
-        current_buf, size_, next_buf, cd_,
+        current_buf, size_, next_buf, clk_edge,
         clk_en_ ? &data_map[clk_en_->id()] : nullptr,
         rst_ ? &data_map[rst_->id()] : nullptr,
         rst_val_ ? &data_map[rst_val_->id()] : nullptr);

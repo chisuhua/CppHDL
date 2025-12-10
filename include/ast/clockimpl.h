@@ -63,10 +63,7 @@ public:
     }
 
     std::unique_ptr<ch::instr_base>
-    create_instruction(ch::data_map_t &data_map) const override {
-        // 时钟节点通常不需要特殊的仿真指令
-        return lnodeimpl::create_instruction(data_map);
-    }
+    create_instruction(ch::data_map_t &data_map) const override;
 };
 
 } // namespace ch::core

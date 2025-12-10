@@ -137,6 +137,16 @@ void context::init() {
     try {
         node_storage_.reserve(100);
         CHDBG("Reserved capacity for context containers");
+        
+        // 创建默认时钟
+        default_clock_ = this->create_clock(
+            sdata_type(0, 1), true, false, "default_clock");
+        current_clock_ = default_clock_;
+        
+        // 创建默认复位
+        default_reset_ = this->create_reset(
+            sdata_type(0, 1), resetimpl::reset_type::async_low, "default_reset");
+        current_reset_ = default_reset_;
     } catch (const std::bad_alloc &) {
         CHERROR("Failed to reserve memory for context containers");
     }
@@ -439,6 +449,8 @@ void context::print_debug_info() const {
 void context::set_default_clock(core::clockimpl *clk) { default_clock_ = clk; }
 
 core::clockimpl *context::get_default_clock() const { return default_clock_; }
+
+core::resetimpl *context::get_default_reset() const { return default_reset_; }
 
 } // namespace core
 } // namespace ch
