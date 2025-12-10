@@ -63,7 +63,6 @@ void Simulator::disconnect() {
     initialized_ = false;
 }
 
-
 void Simulator::initialize() {
     CHDBG_FUNC();
 
@@ -111,7 +110,8 @@ void Simulator::initialize() {
             CHDBG("Allocated buffer for node %u", node_id);
 
             // 如果这是默认时钟节点，则保存其数据指针
-            if (ctx_->has_default_clock() && node_id == ctx_->get_default_clock()->id()) {
+            if (ctx_->has_default_clock() &&
+                node_id == ctx_->get_default_clock()->id()) {
                 default_clock_data_ = &data_map_[node_id];
                 CHDBG("Saved default clock data pointer for node %u", node_id);
             }
@@ -132,6 +132,34 @@ void Simulator::initialize() {
             instr_cache_[node_id] = std::move(instr);
             instr_map_[node_id] = instr.get();
             CHDBG("Created instruction for node %u", node_id);
+
+            // 根据节点类型分类
+            switch (node->type()) {
+            case ch::core::lnodetype::type_input:
+                // 区分默认时钟和其他输入节点
+                if (ctx_->has_default_clock() &&
+                    node_id == ctx_->get_default_clock()->id()) {
+                    default_clock_instr_list_.emplace_back(node_id,
+                                                           instr.get());
+                } else {
+                    other_clock_instr_list_.emplace_back(node_id, instr.get());
+                }
+                break;
+
+            case ch::core::lnodetype::type_lit:
+                literal_instr_list_.emplace_back(node_id, instr.get());
+                break;
+
+            case ch::core::lnodetype::type_reg:
+            case ch::core::lnodetype::type_mem_write_port:
+                sequential_instr_list_.emplace_back(node_id, instr.get());
+                break;
+
+            default:
+                // 其他所有节点归类为组合逻辑节点
+                combinational_instr_list_.emplace_back(node_id, instr.get());
+                break;
+            }
         } else {
             CHDBG("No instruction created for node %u", node_id);
         }
@@ -200,44 +228,6 @@ void Simulator::initialize() {
                     }
                 }
             }
-        }
-    }
-
-    // 第四步：根据节点类型将指令分类到不同的列表中
-    for (auto *node : eval_list_) {
-        if (!node || disconnected_)
-            continue;
-
-        uint32_t node_id = node->id();
-        auto it = instr_map_.find(node_id);
-        if (it == instr_map_.end() || !it->second) {
-            continue; // 没有对应指令的节点
-        }
-
-        // 根据节点类型分类
-        switch (node->type()) {
-        case ch::core::lnodetype::type_input:
-            // 区分默认时钟和其他输入节点
-            if (ctx_->has_default_clock() && node_id == ctx_->get_default_clock()->id()) {
-                default_clock_instr_list_.emplace_back(node_id, it->second);
-            } else {
-                other_clock_instr_list_.emplace_back(node_id, it->second);
-            }
-            break;
-
-        case ch::core::lnodetype::type_lit:
-            literal_instr_list_.emplace_back(node_id, it->second);
-            break;
-
-        case ch::core::lnodetype::type_reg:
-        case ch::core::lnodetype::type_mem_write_port:
-            sequential_instr_list_.emplace_back(node_id, it->second);
-            break;
-
-        default:
-            // 其他所有节点归类为组合逻辑节点
-            combinational_instr_list_.emplace_back(node_id, it->second);
-            break;
         }
     }
 
@@ -395,12 +385,6 @@ void Simulator::eval() {
     // 3. 执行输入节点指令
     for (const auto &[node_id, instr] : input_instr_list_) {
         CHDBG("Evaluating input instruction for node %u", node_id);
-        instr->eval();
-    }
-
-    // 4. 执行字面量节点指令（通常不需要执行，但保留以防万一）
-    for (const auto &[node_id, instr] : literal_instr_list_) {
-        CHDBG("Evaluating literal instruction for node %u", node_id);
         instr->eval();
     }
 

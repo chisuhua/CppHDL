@@ -208,13 +208,14 @@ node_builder::build_register(lnodeimpl *init_val, lnodeimpl *next_val,
     CHDBG("[node_builder] Building register with size %u, name '%s'", size,
           name.c_str());
 
-    // Check if we have a default clock
+    // Check if we have a default clock and reset
     ch::core::clockimpl *default_clk = ctx->get_default_clock();
+    ch::core::resetimpl *default_rst = ctx->get_default_reset();
 
     // 构建寄存器节点
     regimpl *reg_node = ctx->create_node<regimpl>(
-        size, 0, nullptr, nullptr, nullptr, next_val, init_val,
-        prefixed_name_helper(name, instance().name_prefix_), sloc);
+        size, default_clk->id(), default_rst, nullptr, nullptr, next_val,
+        init_val, prefixed_name_helper(name, instance().name_prefix_), sloc);
 
     // 构建代理节点
     proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
