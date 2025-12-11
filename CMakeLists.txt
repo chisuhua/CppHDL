@@ -79,7 +79,8 @@ set(CH_SOURCES
     ${AST_SOURCES}
     src/component.cpp
     src/simulator.cpp
-    src/codegen.cpp
+    src/codegen_verilog.cpp
+    src/codegen_dag.cpp
     src/utils/types.cpp
     src/lnode/bool.cpp
     src/lnode/uint.cpp

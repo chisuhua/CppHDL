@@ -83,7 +83,6 @@ void Simulator::initialize() {
     default_clock_instr_list_.clear();
     other_clock_instr_list_.clear();
     input_instr_list_.clear();
-    literal_instr_list_.clear();
     sequential_instr_list_.clear();
     combinational_instr_list_.clear();
 
@@ -126,42 +125,48 @@ void Simulator::initialize() {
         uint32_t node_id = node->id();
 
         auto instr = node->create_instruction(data_map_);
-        if (instr) {
+        if (instr.get()) {
             // 设置指令ID
-            // instr->set_id(node_id);
-            instr_cache_[node_id] = std::move(instr);
             instr_map_[node_id] = instr.get();
+            instr_cache_[node_id] = std::move(instr);
             CHDBG("Created instruction for node %u", node_id);
 
             // 根据节点类型分类
             switch (node->type()) {
             case ch::core::lnodetype::type_input:
+                input_instr_list_.emplace_back(node_id, instr_map_[node_id]);
+                break;
+            case ch::core::lnodetype::type_reset:
+                reset_instr_list_.emplace_back(node_id, instr_map_[node_id]);
+                break;
+            case ch::core::lnodetype::type_clock:
                 // 区分默认时钟和其他输入节点
                 if (ctx_->has_default_clock() &&
                     node_id == ctx_->get_default_clock()->id()) {
                     default_clock_instr_list_.emplace_back(node_id,
-                                                           instr.get());
+                                                           instr_map_[node_id]);
                 } else {
-                    other_clock_instr_list_.emplace_back(node_id, instr.get());
+                    other_clock_instr_list_.emplace_back(node_id,
+                                                         instr_map_[node_id]);
                 }
                 break;
 
-            case ch::core::lnodetype::type_lit:
-                literal_instr_list_.emplace_back(node_id, instr.get());
-                break;
-
             case ch::core::lnodetype::type_reg:
+            case ch::core::lnodetype::type_mem_read_port:
             case ch::core::lnodetype::type_mem_write_port:
-                sequential_instr_list_.emplace_back(node_id, instr.get());
+                sequential_instr_list_.emplace_back(node_id,
+                                                    instr_map_[node_id]);
                 break;
 
             default:
                 // 其他所有节点归类为组合逻辑节点
-                combinational_instr_list_.emplace_back(node_id, instr.get());
+                combinational_instr_list_.emplace_back(node_id,
+                                                       instr_map_[node_id]);
                 break;
             }
         } else {
-            CHDBG("No instruction created for node %u", node_id);
+            CHDBG("No instruction created for node %u (type: %s)", node_id,
+                  ch::core::to_string(node->type()));
         }
     }
 

@@ -1,10 +1,10 @@
 // samples/bundle_pod_generation.cpp
-#include "../include/ch.hpp"
-#include "../include/component.h"
-#include "../include/module.h"
-#include "../include/simulator.h"
-#include "../include/core/bundle/bundle_base.h"
-#include "../include/core/bundle/bundle_pod_traits.h"
+#include "ch.hpp"
+#include "component.h"
+#include "core/bundle/bundle_base.h"
+#include "core/bundle/bundle_pod_traits.h"
+#include "module.h"
+#include "simulator.h"
 #include <iostream>
 #include <type_traits>
 
@@ -14,17 +14,20 @@ using namespace ch::core;
 struct example_bundle : public bundle_base<example_bundle> {
     ch_uint<32> data;
     ch_uint<16> addr;
-    ch_bool     valid;
-    ch_bool     ready;
+    ch_bool valid;
+    ch_bool ready;
 
     // 注意：实际实现中需要更复杂的宏来处理字段映射
     static constexpr auto __bundle_fields() {
         return std::make_tuple(
-            bundle_field<example_bundle, ch_uint<32>>{"data", &example_bundle::data},
-            bundle_field<example_bundle, ch_uint<16>>{"addr", &example_bundle::addr},
-            bundle_field<example_bundle, ch_bool>{"valid", &example_bundle::valid},
-            bundle_field<example_bundle, ch_bool>{"ready", &example_bundle::ready}
-        );
+            bundle_field<example_bundle, ch_uint<32>>{"data",
+                                                      &example_bundle::data},
+            bundle_field<example_bundle, ch_uint<16>>{"addr",
+                                                      &example_bundle::addr},
+            bundle_field<example_bundle, ch_bool>{"valid",
+                                                  &example_bundle::valid},
+            bundle_field<example_bundle, ch_bool>{"ready",
+                                                  &example_bundle::ready});
     }
 
     void as_master() override {
@@ -42,8 +45,8 @@ struct example_bundle : public bundle_base<example_bundle> {
 struct example_pod {
     uint32_t data;
     uint16_t addr;
-    bool     valid;
-    bool     ready;
+    bool valid;
+    bool ready;
 };
 
 // 验证POD类型
@@ -62,21 +65,27 @@ int main() {
 
     // 显示Bundle信息
     std::cout << "\nBundle Analysis:" << std::endl;
-    std::cout << "Bundle width: " << get_bundle_width<example_bundle>() << " bits" << std::endl;
-    std::cout << "Bundle field count: " << bundle_field_count_v<example_bundle> << std::endl;
+    std::cout << "Bundle width: " << get_bundle_width<example_bundle>()
+              << " bits" << std::endl;
+    std::cout << "Bundle field count: "
+              << bundle_field_count_v<example_bundle> << std::endl;
 
     // 显示手动定义的POD信息
     std::cout << "\nManual POD Analysis:" << std::endl;
     std::cout << "POD size: " << sizeof(example_pod) << " bytes" << std::endl;
-    std::cout << "POD is standard layout: " << std::is_standard_layout_v<example_pod> << std::endl;
-    std::cout << "POD is trivial: " << std::is_trivial_v<example_pod> << std::endl;
+    std::cout << "POD is standard layout: "
+              << std::is_standard_layout_v<example_pod> << std::endl;
+    std::cout << "POD is trivial: "
+              << std::is_trivial_v<example_pod> << std::endl;
 
     // 演示从Bundle生成POD类型的思路（概念验证）
     std::cout << "\nConcept Demonstration:" << std::endl;
-    std::cout << "In a full implementation, we would be able to generate:" << std::endl;
+    std::cout << "In a full implementation, we would be able to generate:"
+              << std::endl;
     std::cout << "- POD type from Bundle definition" << std::endl;
     std::cout << "- Bundle type from POD definition" << std::endl;
-    std::cout << "- Automatic serialization/deserialization between them" << std::endl;
+    std::cout << "- Automatic serialization/deserialization between them"
+              << std::endl;
 
     // 显示字段映射关系
     std::cout << "\nField Mapping:" << std::endl;
@@ -87,9 +96,15 @@ int main() {
     std::cout << "ready\t\t\tch_bool\t\t\tbool" << std::endl;
 
     std::cout << "\nDemo completed successfully!" << std::endl;
-    std::cout << "This demonstrates the concept of generating POD types from Bundle definitions." << std::endl;
-    std::cout << "A complete implementation would use advanced template metaprogramming" << std::endl;
-    std::cout << "and possibly reflection (C++23) to automatically generate the mappings." << std::endl;
+    std::cout << "This demonstrates the concept of generating POD types from "
+                 "Bundle definitions."
+              << std::endl;
+    std::cout << "A complete implementation would use advanced template "
+                 "metaprogramming"
+              << std::endl;
+    std::cout << "and possibly reflection (C++23) to automatically generate "
+                 "the mappings."
+              << std::endl;
 
     return 0;
 }

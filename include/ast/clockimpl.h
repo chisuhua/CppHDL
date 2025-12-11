@@ -23,7 +23,7 @@ public:
     clockimpl(uint32_t id, const sdata_type &init_value, bool posedge,
               bool negedge, const std::string &name,
               const std::source_location &sloc, context *ctx)
-        : lnodeimpl(id, lnodetype::type_input, 1, ctx, name,
+        : lnodeimpl(id, lnodetype::type_clock, 1, ctx, name,
                     sloc) // 时钟通常是1位输入
           ,
           init_value_(), is_posedge_(posedge), is_negedge_(negedge) {

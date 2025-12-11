@@ -53,7 +53,7 @@ set(SINGLE_TEST_SOURCES
     test_axi_lite_bundle.cpp
     test_mem.cpp
     test_operator_advanced.cpp
-    test_verilog_gen_new.cpp
+    test_verilog_gen.cpp
     test_fifo.cpp
     test_reg_timing.cpp
     test_precise_width.cpp

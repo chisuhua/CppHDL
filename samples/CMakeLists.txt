@@ -1,6 +1,7 @@
 # samples/CMakeLists.txt
 set(CH_SAMPLE_TARGETS
     counter
+    test_dag
     simple_io
     handshake
     fifo

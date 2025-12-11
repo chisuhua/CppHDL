@@ -1,23 +1,23 @@
 // samples/counter.cpp
-#include "../include/ch.hpp"
-#include "../include/component.h"
-#include "../include/module.h"
-#include "../include/simulator.h"
-#include "../include/codegen.h"
-#include "../include/utils/logger.h"
+#include "ch.hpp"
+#include "codegen_dag.h"
+#include "codegen_verilog.h"
+#include "component.h"
+#include "module.h"
+#include "simulator.h"
+#include "utils/logger.h"
 #include <iostream>
 #include <memory>
 
 using namespace ch::core;
 
-template<unsigned N>
-class Counter : public ch::Component {
+template <unsigned N> class Counter : public ch::Component {
 public:
     __io(ch_out<ch_uint<N>> out;)
 
-    Counter(ch::Component* parent = nullptr, const std::string& name = "counter")
-        : ch::Component(parent, name)
-    {}
+        Counter(ch::Component *parent = nullptr,
+                const std::string &name = "counter")
+        : ch::Component(parent, name) {}
 
     void create_ports() override {
         CHDBG_FUNC();
@@ -44,13 +44,10 @@ class Top : public ch::Component {
 public:
     __io(ch_out<ch_uint<4>> out;)
 
-    Top(ch::Component* parent = nullptr, const std::string& name = "top")
-        : ch::Component(parent, name)
-    {}
+        Top(ch::Component *parent = nullptr, const std::string &name = "top")
+        : ch::Component(parent, name) {}
 
-    void create_ports() override {
-        new (io_storage_) io_type;
-    }
+    void create_ports() override { new (io_storage_) io_type; }
 
     void describe() override {
         CH_MODULE(Counter<4>, counter1);
@@ -60,25 +57,31 @@ public:
 
 int main() {
     {
-        // Create device and simulator in proper order to ensure correct destruction
+        // Create device and simulator in proper order to ensure correct
+        // destruction
         ch::ch_device<Top> device;
-        
+
         // Create simulator
         ch::Simulator simulator(device.context());
-        
+
         for (int i = 0; i < 18; ++i) {
             simulator.tick();
-            std::cout << "Cycle " << i << ": out = " << simulator.get_value(device.instance().io().out) << std::endl;
+            std::cout << "Cycle " << i << ": out = "
+                      << simulator.get_value(device.instance().io().out)
+                      << std::endl;
         }
-        
+
         std::cout << "Program completed successfully" << std::endl;
-        
+
         // Generate Verilog before the device is destroyed
         ch::toVerilog("counter.v", device.context());
+
+        // Generate DAG diagram
+        ch::toDAG("counter.dot", device.context());
     }
-    
+
     // Set flag to indicate we're in static destruction phase to avoid logging
-    //ch::detail::set_static_destruction();
-    
+    // ch::detail::set_static_destruction();
+
     return 0;
 }

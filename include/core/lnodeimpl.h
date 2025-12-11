@@ -26,7 +26,7 @@ namespace ch::core {
 #define CH_LNODE_COUNT(n) +1
 #define CH_LNODE_ENUM(m)                                                       \
     m(none) m(lit) m(proxy) m(input) m(output) m(op) m(reg) m(mem) m(mux)      \
-        m(mem_read_port) m(mem_write_port)
+        m(mem_read_port) m(mem_write_port) m(clock) m(reset)
 
 enum class lnodetype { CH_LNODE_ENUM(CH_LNODE_TYPE) };
 
