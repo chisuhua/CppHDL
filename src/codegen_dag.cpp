@@ -17,11 +17,6 @@ namespace ch {
 // --- DAG Generation Function ---
 void toDAG(const std::string &filename, ch::core::context *ctx) {
     try {
-        // Additional check for static destruction
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
-
         if (!ctx) {
             std::cerr << "[toDAG] Error: Context is null!" << std::endl;
             return;
@@ -50,20 +45,12 @@ void toDAG(const std::string &filename, ch::core::context *ctx) {
 // --- dagwriter Class Implementation ---
 dagwriter::dagwriter(ch::core::context *ctx) : ctx_(ctx) {
     try {
-        // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
 
         // Build the 'uses' map: for each node, find which other nodes use it as
         // a source.
         for (auto &node_ptr : ctx_->get_nodes()) {
-            if (ch::detail::in_static_destruction())
-                return;
             auto *node = node_ptr.get();
             for (uint32_t i = 0; i < node->num_srcs(); ++i) {
-                if (ch::detail::in_static_destruction())
-                    return;
                 auto *src = node->src(i);
                 if (src) { // Ensure source is not null
                     node_uses_[src].insert(node);
@@ -77,8 +64,6 @@ dagwriter::dagwriter(ch::core::context *ctx) : ctx_(ctx) {
         auto eval_list = ctx_->get_eval_list(); // Use the topologically sorted
                                                 // list from context
         for (auto *node : eval_list) {
-            if (ch::detail::in_static_destruction())
-                return;
             std::string base_name = sanitize_name(node->name());
             std::string unique_name = base_name;
             int counter = name_counts[base_name]++;
@@ -98,9 +83,6 @@ dagwriter::dagwriter(ch::core::context *ctx) : ctx_(ctx) {
 void dagwriter::print(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
 
         print_header(out);
         print_nodes(out);
@@ -163,8 +145,6 @@ void dagwriter::print_nodes(std::ostream &out) {
     // Print all nodes with their properties
     for (size_t i = 0; i < sorted_nodes_.size(); ++i) {
         auto *node = sorted_nodes_[i];
-        if (ch::detail::in_static_destruction())
-            return;
 
         out << "  \"" << node_names_[node] << "\" [";
         out << "label=\"" << node_names_[node] << "\\n";
@@ -217,8 +197,6 @@ void dagwriter::print_nodes(std::ostream &out) {
 void dagwriter::print_edges(std::ostream &out) {
     // Print edges between nodes
     for (auto *node : sorted_nodes_) {
-        if (ch::detail::in_static_destruction())
-            return;
 
         for (uint32_t i = 0; i < node->num_srcs(); ++i) {
             auto *src = node->src(i);

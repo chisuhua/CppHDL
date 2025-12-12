@@ -26,6 +26,12 @@ regimpl::create_instruction(ch::data_map_t &data_map) const {
                          ? &data_map[next_node_id]
                          : nullptr;
 
+    // 如果有初始值，则设置current_buf为初始值
+    if (init_val_) {
+        auto *lit_init_val = static_cast<litimpl*>(init_val_);
+        *current_buf = lit_init_val->value();
+    }
+
     // 添加用户跟踪：将寄存器节点添加到next节点的用户列表中
     if (next_node) {
         next_node->add_user(const_cast<regimpl *>(this));

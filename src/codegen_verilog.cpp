@@ -19,11 +19,6 @@ void toVerilog(const std::string &filename, ch::core::context *ctx) {
     // Check if we're in static destruction phase
     // If so, skip code generation to avoid segfaults
     try {
-        // Additional check for static destruction
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
-
         if (!ctx) {
             std::cerr << "[toVerilog] Error: Context is null!" << std::endl;
             return;
@@ -51,20 +46,11 @@ void toVerilog(const std::string &filename, ch::core::context *ctx) {
 }
 verilogwriter::verilogwriter(ch::core::context *ctx) : ctx_(ctx) {
     try {
-        // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
-
         // Build the 'uses' map: for each node, find which other nodes use it as
         // a source.
         for (auto &node_ptr : ctx_->get_nodes()) {
-            if (ch::detail::in_static_destruction())
-                return;
             auto *node = node_ptr.get();
             for (uint32_t i = 0; i < node->num_srcs(); ++i) {
-                if (ch::detail::in_static_destruction())
-                    return;
                 auto *src = node->src(i);
                 if (src) { // Ensure source is not null
                     node_uses_[src].insert(node);
@@ -78,8 +64,6 @@ verilogwriter::verilogwriter(ch::core::context *ctx) : ctx_(ctx) {
         auto eval_list = ctx_->get_eval_list(); // Use the topologically sorted
                                                 // list from context
         for (auto *node : eval_list) {
-            if (ch::detail::in_static_destruction())
-                return;
             std::string base_name = sanitize_name(node->name());
             std::string unique_name = base_name;
             int counter = name_counts[base_name]++;
@@ -99,9 +83,6 @@ verilogwriter::verilogwriter(ch::core::context *ctx) : ctx_(ctx) {
 void verilogwriter::print(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
 
         print_header(out);
         print_body(out);
@@ -207,17 +188,11 @@ std::string verilogwriter::get_op_str(ch::core::ch_op op) const {
 void verilogwriter::print_header(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
-
         out << "module top (\n";
 
         std::vector<ch::core::lnodeimpl *> ports;
         // Collect inputs and outputs from the context's node list
         for (auto &node_ptr : ctx_->get_nodes()) {
-            if (ch::detail::in_static_destruction())
-                return;
             auto *node = node_ptr.get();
             if (node->type() == ch::core::lnodetype::type_input) {
                 ports.push_back(node);
@@ -248,8 +223,6 @@ void verilogwriter::print_header(std::ostream &out) {
         }
 
         for (size_t i = 0; i < filtered_ports.size(); ++i) {
-            if (ch::detail::in_static_destruction())
-                return;
             auto *port_node = filtered_ports[i];
             if (port_node->type() == ch::core::lnodetype::type_input) {
                 print_input(out, static_cast<ch::core::inputimpl *>(port_node));
@@ -271,9 +244,6 @@ void verilogwriter::print_header(std::ostream &out) {
 void verilogwriter::print_body(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
 
         print_decl(out);
         out << "\n";
@@ -295,9 +265,6 @@ void verilogwriter::print_footer(std::ostream &out) {
 void verilogwriter::print_decl(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
 
         // Declare inputs, outputs, wires, regs
         // Iterate through the sorted list, but handle types differently for
@@ -305,8 +272,6 @@ void verilogwriter::print_decl(std::ostream &out) {
         std::vector<ch::core::lnodeimpl *> inputs, outputs, wires, regs;
 
         for (auto *node : sorted_nodes_) {
-            if (ch::detail::in_static_destruction())
-                return;
             if (declared_nodes_.count(node))
                 continue; // Skip if already processed
 
@@ -376,16 +341,11 @@ void verilogwriter::print_decl(std::ostream &out) {
 void verilogwriter::print_logic(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
-        if (ch::detail::in_static_destruction()) {
-            return;
-        }
 
         // Iterate through the sorted list and print logic for each node type
         // This assumes the sorted list correctly orders combinational logic
         // before sequential.
         for (auto *node : sorted_nodes_) {
-            if (ch::detail::in_static_destruction())
-                return;
             if (printed_logic_nodes_.count(node))
                 continue; // Skip if already processed
 
@@ -407,8 +367,6 @@ void verilogwriter::print_logic(std::ostream &out) {
                 // their source. Find the source of the outputimpl and generate
                 // the assign.
                 {
-                    if (ch::detail::in_static_destruction())
-                        return;
                     auto *output_node =
                         static_cast<ch::core::outputimpl *>(node);
                     if (output_node->num_srcs() > 0) {

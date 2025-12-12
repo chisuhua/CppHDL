@@ -34,9 +34,7 @@ public:
             lnodeimpl *init_val, const std::string &name,
             const std::source_location &sloc, context *ctx)
         : lnodeimpl(id, lnodetype::type_reg, size, ctx, name, sloc), cd_(cd),
-          rst_(rst), clk_en_(clk_en), rst_val_(rst_val) {
-        if (init_val)
-            add_src(init_val);
+          rst_(rst), clk_en_(clk_en), rst_val_(rst_val), init_val_(init_val) {
         if (next)
             add_src(next);
     }
@@ -45,23 +43,19 @@ public:
     lnodeimpl *rst() const { return rst_; }
     lnodeimpl *clk_en() const { return clk_en_; }
     lnodeimpl *rst_val() const { return rst_val_; }
+    lnodeimpl *get_init_val() const { return init_val_; }
 
     void set_next(lnodeimpl *next) {
         if (!next)
             return;
-        if (num_srcs() > 1) {
-            set_src(1, next);
-        } else if (num_srcs() == 1) {
-            add_src(next);
+        if (num_srcs() > 0) {
+            set_src(0, next);
         } else {
             add_src(next);
         }
     }
 
-    lnodeimpl *get_next() const { return num_srcs() > 1 ? src(1) : nullptr; }
-    lnodeimpl *get_init_val() const {
-        return num_srcs() > 0 ? src(0) : nullptr;
-    }
+    lnodeimpl *get_next() const { return num_srcs() > 0 ? src(0) : nullptr; }
 
     // Explicit link to proxy node
     void set_proxy(proxyimpl *proxy) { proxy_ = proxy; }
@@ -76,6 +70,7 @@ private:
     lnodeimpl *rst_ = nullptr;
     lnodeimpl *clk_en_ = nullptr;
     lnodeimpl *rst_val_ = nullptr;
+    lnodeimpl *init_val_ = nullptr; // Store init_val as dedicated member
     proxyimpl *proxy_ = nullptr; // Explicit link to proxy node
 };
 

@@ -1,5 +1,7 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "codegen_dag.h"
+#include "component.h"
 #include "core/bool.h"
 #include "core/context.h"
 #include "core/literal.h"
@@ -7,7 +9,6 @@
 #include "core/reg.h"
 #include "core/uint.h"
 #include "simulator.h"
-#include <iostream>
 
 using namespace ch;
 using namespace ch::core;
@@ -44,7 +45,7 @@ TEST_CASE("Basic Arithmetic Operation Results",
         simulator.set_port_value(device.instance().io().in_b, 5);
 
         // 运行仿真
-        simulator.eval();
+        simulator.tick();
 
         // 获取输出值
         auto output_value =
@@ -90,7 +91,7 @@ TEST_CASE("Bitwise Operation Results", "[operation][bitwise][runtime]") {
         simulator.set_port_value(device.instance().io().in_data, 0b11001100);
 
         // 运行仿真
-        simulator.eval();
+        simulator.tick();
 
         // 检查按位与结果
         auto and_value =
@@ -147,7 +148,7 @@ TEST_CASE("Comparison Operation Results", "[operation][comparison][runtime]") {
         simulator.set_port_value(device.instance().io().in_b, 10);
 
         // 运行仿真
-        simulator.eval();
+        simulator.tick();
 
         // 检查相等比较结果
         auto eq_value =
@@ -162,7 +163,7 @@ TEST_CASE("Comparison Operation Results", "[operation][comparison][runtime]") {
         // 更改输入值测试大于和小于
         simulator.set_port_value(device.instance().io().in_a, 15);
         simulator.set_port_value(device.instance().io().in_b, 5);
-        simulator.eval();
+        simulator.tick();
 
         // 检查大于比较结果
         auto gt_value =
@@ -205,7 +206,7 @@ TEST_CASE("Shift Operation Results", "[operation][shift][runtime]") {
         simulator.set_port_value(device.instance().io().in_data, 0b00110000);
 
         // 运行仿真
-        simulator.eval();
+        simulator.tick();
 
         // 检查左移结果
         auto shl_value =
@@ -538,7 +539,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         // 添加输入值设置
         add_simulator.set_port_value(add_device.instance().io().inputs.a, 12);
         add_simulator.set_port_value(add_device.instance().io().inputs.b, 5);
-        add_simulator.eval();
+        add_simulator.tick();
         auto add_value =
             add_simulator.get_port_value(add_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(add_value) == 17);
@@ -547,7 +548,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator sub_simulator(sub_device.context());
         sub_simulator.set_port_value(sub_device.instance().io().inputs.a, 12);
         sub_simulator.set_port_value(sub_device.instance().io().inputs.b, 5);
-        sub_simulator.eval();
+        sub_simulator.tick();
         auto sub_value =
             sub_simulator.get_port_value(sub_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(sub_value) == 7);
@@ -556,7 +557,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator mul_simulator(mul_device.context());
         mul_simulator.set_port_value(mul_device.instance().io().inputs.a, 12);
         mul_simulator.set_port_value(mul_device.instance().io().inputs.b, 5);
-        mul_simulator.eval();
+        mul_simulator.tick();
         auto mul_value =
             mul_simulator.get_port_value(mul_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(mul_value) == 60);
@@ -564,7 +565,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<OperationTestComponent<NegationTest>> neg_device;
         Simulator neg_simulator(neg_device.context());
         neg_simulator.set_port_value(neg_device.instance().io().inputs.a, 12);
-        neg_simulator.eval();
+        neg_simulator.tick();
         auto neg_value =
             neg_simulator.get_port_value(neg_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(neg_value) == 244);
@@ -575,7 +576,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator and_simulator(and_device.context());
         and_simulator.set_port_value(and_device.instance().io().inputs.a, 12);
         and_simulator.set_port_value(and_device.instance().io().inputs.b, 5);
-        and_simulator.eval();
+        and_simulator.tick();
         auto and_value =
             and_simulator.get_port_value(and_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(and_value) == 4);
@@ -584,7 +585,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator or_simulator(or_device.context());
         or_simulator.set_port_value(or_device.instance().io().inputs.a, 12);
         or_simulator.set_port_value(or_device.instance().io().inputs.b, 5);
-        or_simulator.eval();
+        or_simulator.tick();
         auto or_value =
             or_simulator.get_port_value(or_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(or_value) == 13);
@@ -593,7 +594,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator xor_simulator(xor_device.context());
         xor_simulator.set_port_value(xor_device.instance().io().inputs.a, 12);
         xor_simulator.set_port_value(xor_device.instance().io().inputs.b, 5);
-        xor_simulator.eval();
+        xor_simulator.tick();
         auto xor_value =
             xor_simulator.get_port_value(xor_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(xor_value) == 9);
@@ -601,7 +602,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<OperationTestComponent<BitwiseNotTest>> not_device;
         Simulator not_simulator(not_device.context());
         not_simulator.set_port_value(not_device.instance().io().inputs.a, 12);
-        not_simulator.eval();
+        not_simulator.tick();
         auto not_value =
             not_simulator.get_port_value(not_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(not_value) == 243);
@@ -612,7 +613,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator eq_simulator(eq_device.context());
         eq_simulator.set_port_value(eq_device.instance().io().inputs.a, 12);
         eq_simulator.set_port_value(eq_device.instance().io().inputs.b, 12);
-        eq_simulator.eval();
+        eq_simulator.tick();
         auto eq_value =
             eq_simulator.get_port_value(eq_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(eq_value) == 1);
@@ -621,7 +622,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator ne_simulator(ne_device.context());
         ne_simulator.set_port_value(ne_device.instance().io().inputs.a, 12);
         ne_simulator.set_port_value(ne_device.instance().io().inputs.b, 5);
-        ne_simulator.eval();
+        ne_simulator.tick();
         auto ne_value =
             ne_simulator.get_port_value(ne_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(ne_value) == 1);
@@ -630,7 +631,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator gt_simulator(gt_device.context());
         gt_simulator.set_port_value(gt_device.instance().io().inputs.a, 12);
         gt_simulator.set_port_value(gt_device.instance().io().inputs.b, 5);
-        gt_simulator.eval();
+        gt_simulator.tick();
         auto gt_value =
             gt_simulator.get_port_value(gt_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(gt_value) == 1);
@@ -639,7 +640,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator ge_simulator(ge_device.context());
         ge_simulator.set_port_value(ge_device.instance().io().inputs.a, 12);
         ge_simulator.set_port_value(ge_device.instance().io().inputs.b, 12);
-        ge_simulator.eval();
+        ge_simulator.tick();
         auto ge_value =
             ge_simulator.get_port_value(ge_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(ge_value) == 1);
@@ -648,7 +649,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator lt_simulator(lt_device.context());
         lt_simulator.set_port_value(lt_device.instance().io().inputs.a, 5);
         lt_simulator.set_port_value(lt_device.instance().io().inputs.b, 12);
-        lt_simulator.eval();
+        lt_simulator.tick();
         auto lt_value =
             lt_simulator.get_port_value(lt_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(lt_value) == 1);
@@ -657,7 +658,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator le_simulator(le_device.context());
         le_simulator.set_port_value(le_device.instance().io().inputs.a, 12);
         le_simulator.set_port_value(le_device.instance().io().inputs.b, 12);
-        le_simulator.eval();
+        le_simulator.tick();
         auto le_value =
             le_simulator.get_port_value(le_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(le_value) == 1);
@@ -667,7 +668,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<OperationTestComponent<LeftShiftTest>> shl_device;
         Simulator shl_simulator(shl_device.context());
         shl_simulator.set_port_value(shl_device.instance().io().inputs.a, 12);
-        shl_simulator.eval();
+        shl_simulator.tick();
         auto shl_value =
             shl_simulator.get_port_value(shl_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(shl_value) == 48);
@@ -675,7 +676,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         ch_device<OperationTestComponent<RightShiftTest>> shr_device;
         Simulator shr_simulator(shr_device.context());
         shr_simulator.set_port_value(shr_device.instance().io().inputs.a, 12);
-        shr_simulator.eval();
+        shr_simulator.tick();
         auto shr_value =
             shr_simulator.get_port_value(shr_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(shr_value) == 6);
@@ -684,7 +685,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
     SECTION("Bit Operations") {
         // ch_device<OperationTestComponent<BitsExtractTest>> bits_device;
         // Simulator bits_simulator(bits_device.context());
-        // bits_simulator.eval();
+        // bits_simulator.tick();
         // auto bits_value = bits_simulator.get_port_value(
         //     bits_device.instance().io().result_out);
         // REQUIRE(static_cast<uint64_t>(bits_value) == 26);
@@ -697,7 +698,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
                                         5);
         concat_simulator.set_port_value(concat_device.instance().io().inputs.b,
                                         26);
-        concat_simulator.eval();
+        concat_simulator.tick();
         auto concat_value = concat_simulator.get_port_value(
             concat_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(concat_value) == 186);
@@ -706,14 +707,14 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
     SECTION("Extension Operations") {
         // ch_device<OperationTestComponent<ZeroExtendTest>> zext_device;
         // Simulator zext_simulator(zext_device.context());
-        // zext_simulator.eval();
+        // zext_simulator.tick();
         // auto zext_value =
         // zext_simulator.get_port_value(zext_device.instance().io().result_out);
         // REQUIRE(static_cast<uint64_t>(zext_value) == 5);
 
         // ch_device<OperationTestComponent<SignExtendTest>> sext_device;
         // Simulator sext_simulator(sext_device.context());
-        // sext_simulator.eval();
+        // sext_simulator.tick();
         // auto sext_value =
         // sext_simulator.get_port_value(sext_device.instance().io().result_out);
         // REQUIRE(static_cast<uint64_t>(sext_value) == 253);
@@ -724,7 +725,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator and_reduce_simulator(and_reduce_device.context());
         and_reduce_simulator.set_port_value(
             and_reduce_device.instance().io().inputs.a, 255);
-        and_reduce_simulator.eval();
+        and_reduce_simulator.tick();
         auto and_reduce_value = and_reduce_simulator.get_port_value(
             and_reduce_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(and_reduce_value) == 1);
@@ -733,7 +734,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         Simulator or_reduce_simulator(or_reduce_device.context());
         or_reduce_simulator.set_port_value(
             or_reduce_device.instance().io().inputs.a, 12);
-        or_reduce_simulator.eval();
+        or_reduce_simulator.tick();
         auto or_reduce_value = or_reduce_simulator.get_port_value(
             or_reduce_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(or_reduce_value) == 1);
@@ -743,7 +744,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         // 使用值13 (二进制 00001101)，各位异或: 0^0^0^0^1^1^0^1 = 1
         xor_reduce_simulator.set_port_value(
             xor_reduce_device.instance().io().inputs.a, 13);
-        xor_reduce_simulator.eval();
+        xor_reduce_simulator.tick();
         auto xor_reduce_value = xor_reduce_simulator.get_port_value(
             xor_reduce_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(xor_reduce_value) == 1);
@@ -756,7 +757,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         mux_simulator.set_port_value(mux_device.instance().io().inputs.cond, 1);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.a, 12);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.b, 5);
-        mux_simulator.eval();
+        mux_simulator.tick();
         auto mux_value =
             mux_simulator.get_port_value(mux_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(mux_value) == 12);
@@ -764,7 +765,7 @@ TEST_CASE("Operation Result Correctness", "[operation][result][runtime]") {
         mux_simulator.set_port_value(mux_device.instance().io().inputs.cond, 0);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.a, 12);
         mux_simulator.set_port_value(mux_device.instance().io().inputs.b, 5);
-        mux_simulator.eval();
+        mux_simulator.tick();
         mux_value =
             mux_simulator.get_port_value(mux_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(mux_value) == 5);
@@ -776,7 +777,7 @@ TEST_CASE("Register Operation Results", "[operation][register][runtime]") {
     SECTION("Register Assignment and Operations") {
         ch_device<OperationTestComponent<RegisterAddTest>> reg_add_device;
         Simulator reg_add_simulator(reg_add_device.context());
-        reg_add_simulator.tick(); // 第一个tick设置寄存器的next值
+        ch::toDAG("test_operation_results_reg.dot", reg_add_device.context());
         reg_add_simulator.tick(); // 第二个tick更新寄存器值
         auto reg_add_value = reg_add_simulator.get_port_value(
             reg_add_device.instance().io().result_out);

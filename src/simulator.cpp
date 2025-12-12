@@ -80,7 +80,7 @@ void Simulator::initialize() {
     data_map_.clear();
 
     // 清空所有分类指令列表
-    default_clock_instr_list_.clear();
+    default_clock_instr_ = nullptr;
     other_clock_instr_list_.clear();
     input_instr_list_.clear();
     sequential_instr_list_.clear();
@@ -112,6 +112,7 @@ void Simulator::initialize() {
             if (ctx_->has_default_clock() &&
                 node_id == ctx_->get_default_clock()->id()) {
                 default_clock_data_ = &data_map_[node_id];
+                *default_clock_data_ = ch::core::sdata_type(0, 1);
                 CHDBG("Saved default clock data pointer for node %u", node_id);
             }
         }
@@ -143,8 +144,7 @@ void Simulator::initialize() {
                 // 区分默认时钟和其他输入节点
                 if (ctx_->has_default_clock() &&
                     node_id == ctx_->get_default_clock()->id()) {
-                    default_clock_instr_list_.emplace_back(node_id,
-                                                           instr_map_[node_id]);
+                    default_clock_instr_ = instr_map_[node_id];
                 } else {
                     other_clock_instr_list_.emplace_back(node_id,
                                                          instr_map_[node_id]);
@@ -157,7 +157,6 @@ void Simulator::initialize() {
                 sequential_instr_list_.emplace_back(node_id,
                                                     instr_map_[node_id]);
                 break;
-
             default:
                 // 其他所有节点归类为组合逻辑节点
                 combinational_instr_list_.emplace_back(node_id,
@@ -168,6 +167,10 @@ void Simulator::initialize() {
             CHDBG("No instruction created for node %u (type: %s)", node_id,
                   ch::core::to_string(node->type()));
         }
+    }
+
+    if (sequential_instr_list_.empty()) {
+        default_clock_instr_ = nullptr;
     }
 
     // 第二步：初始化内存端口指令对象，传递内存指令对象指针
@@ -258,84 +261,26 @@ void Simulator::update_instruction_pointers() {
 void Simulator::eval_sequential() {
     CHDBG_FUNC();
 
-    CHDBG("Starting evaluation sequential with %zu nodes", eval_list_.size());
-    for (auto *node : eval_list_) {
-        if (!node || disconnected_)
-            continue;
-
-        if (node->type() == ch::core::lnodetype::type_reg) {
-            uint32_t node_id = node->id();
-            auto it = instr_map_.find(node_id);
-            if (it != instr_map_.end() && it->second) {
-                CHDBG("Executing instruction for node %u", node_id);
-                // Call the simplified eval method without parameters
-                it->second->eval();
-            } else {
-                CHDBG("No instruction for node ID: %u", node_id);
-            }
-        }
+    for (const auto &[node_id, instr] : sequential_instr_list_) {
+        CHDBG("Evaluating sequential instruction for node %u", node_id);
+        instr->eval();
     }
 
-    // Update register proxy nodes to match their corresponding register nodes
-    // Now using explicit links instead of positional relationships
-    for (auto *node : eval_list_) {
-        if (!node || disconnected_)
-            continue;
-
-        // If this is a register node with an explicit proxy link
-        if (node->type() == ch::core::lnodetype::type_reg) {
-            auto *reg_node = static_cast<ch::core::regimpl *>(node);
-            auto *proxy_node = reg_node->get_proxy();
-
-            if (proxy_node) {
-                uint32_t reg_node_id = reg_node->id();
-                uint32_t proxy_node_id = proxy_node->id();
-
-                // Copy the register value to the proxy
-                auto reg_it = data_map_.find(reg_node_id);
-                auto proxy_it = data_map_.find(proxy_node_id);
-
-                if (reg_it != data_map_.end() && proxy_it != data_map_.end()) {
-                    proxy_it->second = reg_it->second;
-                    CHDBG("Updated proxy node %u to match register node %u",
-                          proxy_node_id, reg_node_id);
-                }
-            }
-        }
-    }
-
-    CHDBG("Evaluation loop sequential");
+    CHDBG("Evaluation sequential completed");
 }
 
 void Simulator::eval_combinational() {
     CHDBG_FUNC();
+    // 执行输入节点指令
+    for (const auto &[node_id, instr] : input_instr_list_) {
+        CHDBG("Evaluating input instruction for node %u", node_id);
+        instr->eval();
+    }
 
-    CHDBG("Starting evaluation combinational with %zu nodes",
-          eval_list_.size());
-    for (auto *node : eval_list_) {
-        if (!node || disconnected_)
-            continue;
-
-        if (node->type() == ch::core::lnodetype::type_input) {
-            continue;
-        }
-
-        if (node->type() == ch::core::lnodetype::type_lit) {
-            continue;
-        }
-
-        if (node->type() == ch::core::lnodetype::type_reg) {
-            continue;
-        }
-        uint32_t node_id = node->id();
-        auto it = instr_map_.find(node_id);
-        if (it != instr_map_.end() && it->second) {
-            CHDBG("Executing instruction for node %u", node_id);
-            // Call the simplified eval method without parameters
-            it->second->eval();
-        } else {
-            CHDBG("No instruction for node ID: %u", node_id);
-        }
+    // 执行组合逻辑节点
+    for (const auto &[node_id, instr] : combinational_instr_list_) {
+        CHDBG("Evaluating combinational instruction for node %u", node_id);
+        instr->eval();
     }
 
     CHDBG("Evaluation combinational completed");
@@ -350,36 +295,20 @@ void Simulator::tick() {
         return;
     }
 
-    // 使用 eval() 函数执行仿真步骤
-    eval();
+    eval_combinational();
+
+    if (default_clock_instr_) {
+        eval();
+        eval();
+    }
 }
 
 void Simulator::eval() {
     CHDBG_FUNC();
 
-    if (disconnected_ || !ctx_) {
-        CHERROR("Simulator not initialized or disconnected");
-        return;
-    }
-
-    // 对于纯组合逻辑电路（无时钟）
-    if (!ctx_->has_default_clock()) {
-        // 执行所有组合逻辑节点
-        for (const auto &[node_id, instr] : combinational_instr_list_) {
-            CHDBG("Executing combinational instruction for node %u", node_id);
-            instr->eval();
-        }
-        eval_combinational();
-        return;
-    }
-
-    // 对于包含时序逻辑的电路，按照特定顺序执行各类节点
-
     // 1. 首先执行默认时钟指令以更新时钟边沿状态
-    for (const auto &[node_id, instr] : default_clock_instr_list_) {
-        CHDBG("Evaluating default clock instruction for node %u", node_id);
-        instr->eval();
-    }
+    CHDBG("Evaluating default clock instruction");
+    default_clock_instr_->eval();
 
     // 2. 然后执行其他时钟指令
     for (const auto &[node_id, instr] : other_clock_instr_list_) {
@@ -387,30 +316,17 @@ void Simulator::eval() {
         instr->eval();
     }
 
-    // 3. 执行输入节点指令
-    for (const auto &[node_id, instr] : input_instr_list_) {
-        CHDBG("Evaluating input instruction for node %u", node_id);
-        instr->eval();
+    // 对于包含时序逻辑的电路，按照特定顺序执行各类节点
+    // 如果时钟为0，执行组合逻辑；如果时钟为1，执行时序逻辑
+    if (default_clock_data_->is_zero()) {
+        eval_combinational();
+    } else {
+        eval_sequential();
     }
 
-    // 5. 执行组合逻辑节点
-    for (const auto &[node_id, instr] : combinational_instr_list_) {
-        CHDBG("Evaluating combinational instruction for node %u", node_id);
-        instr->eval();
-    }
-
-    // 6. 根据时钟状态执行相应的时序逻辑或组合逻辑
-    if (default_clock_data_) {
-        // 如果时钟为0，执行组合逻辑；如果时钟为1，执行时序逻辑
-        if (default_clock_data_->is_zero()) {
-            eval_combinational();
-        } else {
-            eval_sequential();
-        }
-        CHDBG("Executed post-clock eval based on clock state %llu",
-              static_cast<unsigned long long>(
-                  static_cast<uint64_t>(*default_clock_data_)));
-    }
+    CHDBG("Executed post-clock eval based on clock state %llu",
+          static_cast<unsigned long long>(
+              static_cast<uint64_t>(*default_clock_data_)));
 }
 
 void Simulator::tick(size_t count) {

@@ -359,14 +359,13 @@ void context::topological_sort_visit(
 
     // 对寄存器节点特殊处理，只遍历初始化值依赖，不遍历next值依赖
     if (node->type() == lnodetype::type_reg) {
-        // 只处理初始值依赖（第一个源节点）
-        if (node->num_srcs() > 0) {
-            lnodeimpl *init_val = node->src(0);
-            if (init_val) {
-                this->topological_sort_visit(init_val, sorted, visited,
-                                             temp_mark, cyclic_nodes,
-                                             update_list);
-            }
+        // 处理寄存器的初始值依赖
+        auto reg_node = static_cast<const regimpl*>(node);
+        lnodeimpl *init_val = reg_node->get_init_val();
+        if (init_val) {
+            this->topological_sort_visit(init_val, sorted, visited,
+                                         temp_mark, cyclic_nodes,
+                                         update_list);
         }
     } else {
         // 对于所有其他节点，处理所有源节点

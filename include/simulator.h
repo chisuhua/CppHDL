@@ -244,8 +244,7 @@ private:
     ch::core::sdata_type *default_clock_data_ = nullptr;
 
     // 按类别分类的指令列表，提高执行效率
-    std::vector<std::pair<uint32_t, ch::instr_base *>>
-        default_clock_instr_list_;
+    ch::instr_base *default_clock_instr_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> other_clock_instr_list_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> reset_instr_list_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> input_instr_list_;
