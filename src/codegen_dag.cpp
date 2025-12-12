@@ -168,15 +168,11 @@ void dagwriter::print_nodes(std::ostream &out) {
 
         out << "  \"" << node_names_[node] << "\" [";
         out << "label=\"" << node_names_[node] << "\\n";
-        out << "(ID: " << i << ", " << get_node_type_str(node->type()) << ")";
+        out << "(ID: " << i << ", " << get_node_type_str(node->type()) << ")\\n";
+        out << "width=" << node->size() << " bits";
 
         // Add additional info based on node type
         switch (node->type()) {
-        case ch::core::lnodetype::type_input:
-        case ch::core::lnodetype::type_output:
-        case ch::core::lnodetype::type_reg:
-            out << "\\n" << node->size() << " bits";
-            break;
         case ch::core::lnodetype::type_lit: {
             auto *lit_node = static_cast<ch::core::litimpl *>(node);
             out << "\\nvalue=" << lit_node->value().to_string();
