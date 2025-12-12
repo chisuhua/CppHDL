@@ -161,13 +161,14 @@ void dagwriter::print_header(std::ostream &out) {
 
 void dagwriter::print_nodes(std::ostream &out) {
     // Print all nodes with their properties
-    for (auto *node : sorted_nodes_) {
+    for (size_t i = 0; i < sorted_nodes_.size(); ++i) {
+        auto *node = sorted_nodes_[i];
         if (ch::detail::in_static_destruction())
             return;
 
         out << "  \"" << node_names_[node] << "\" [";
         out << "label=\"" << node_names_[node] << "\\n";
-        out << "(" << get_node_type_str(node->type()) << ")";
+        out << "(ID: " << i << ", " << get_node_type_str(node->type()) << ")";
 
         // Add additional info based on node type
         switch (node->type()) {
