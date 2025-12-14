@@ -83,7 +83,7 @@ set(CH_SOURCES
     src/codegen_dag.cpp
     src/utils/types.cpp
     src/lnode/bool.cpp
-    src/lnode/uint.cpp
+    #src/lnode/uint.cpp
 )
 
 # 创建主库

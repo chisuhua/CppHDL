@@ -8,15 +8,21 @@
 #include <string>
 #include <variant>
 
+// 前向声明，避免循环包含
+namespace ch::core {
+template <uint64_t V, uint32_t W> struct ch_literal_impl;
+struct ch_literal_runtime;
+template <unsigned N> struct ch_uint;
+} // namespace ch::core
+
+#include "core/literal.h"
+
 namespace ch::core {
 
 class lnodeimpl;
 
-template <unsigned N> struct ch_uint;
-
-using ch_uint1 = ch_uint<1>;
-
-struct ch_literal;
+// 使用完整形式替代typedef，避免声明顺序问题
+// using ch_uint1 = ch_uint<1>;
 
 struct ch_bool : public logic_buffer<ch_bool> {
     static constexpr unsigned width = 1;
@@ -27,7 +33,12 @@ struct ch_bool : public logic_buffer<ch_bool> {
     ch_bool(bool val, const std::string &name = "bool_lit",
             const std::source_location &sloc = std::source_location::current());
 
-    ch_bool(const ch_literal &val, const std::string &name = "bool_lit",
+    ch_bool(const ch_literal_runtime &val, const std::string &name = "bool_lit",
+            const std::source_location &sloc = std::source_location::current());
+
+    template <uint64_t V, uint32_t W>
+    ch_bool(const ch_literal_impl<V, W> &val,
+            const std::string &name = "bool_lit",
             const std::source_location &sloc = std::source_location::current());
 
     ch_bool() : logic_buffer<ch_bool>() {}
@@ -37,7 +48,7 @@ struct ch_bool : public logic_buffer<ch_bool> {
     explicit operator bool() const;
 
     // 隐式转换为 ch_uint<1>（用于兼容性）
-    operator ch_uint1() const;
+    operator ch_uint<1>() const;
 
     using direction_type =
         std::variant<std::monostate, input_direction, output_direction>;
@@ -70,5 +81,7 @@ template <> struct ch_width_impl<const ch_bool, void> {
 };
 
 } // namespace ch::core
+
+#include "../lnode/bool.tpp"
 
 #endif // CH_CORE_BOOL_H

@@ -1,57 +1,59 @@
 // src/core/uint.cpp
-#include "core/uint.h"
-#include "core/node_builder.h"
-#include "core/context.h"
-#include "core/lnodeimpl.h"
-#include "core/literal.h"
 #include "core/bool.h"
+#include "core/context.h"
+#include "core/literal.h"
+#include "core/lnodeimpl.h"
+#include "core/node_builder.h"
+#include "core/uint.h"
 #include "utils/logger.h"
 #include <string>
 
-namespace ch { namespace core {
+namespace ch {
+namespace core {
 
-template<unsigned N>
-ch_uint<N>::ch_uint(const ch_literal_runtime& val,
-                   const std::string& name,
-                   const std::source_location& sloc) {
+template <unsigned N>
+ch_uint<N>::ch_uint(const ch_literal_runtime &val, const std::string &name,
+                    const std::source_location &sloc) {
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from sdata_type", N);
-    
+
     this->node_impl_ = node_builder::instance().build_literal(val, name, sloc);
-    
+
     if (!this->node_impl_) {
-        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from sdata_type");
+        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from "
+                "sdata_type");
     }
 }
 
-template<unsigned N>
-template<uint64_t V, uint32_t W>
-ch_uint<N>::ch_uint(const ch_literal_impl<V, W>& val,
-                   const std::string& name,
-                   const std::source_location& sloc) {
+template <unsigned N>
+template <uint64_t V, uint32_t W>
+ch_uint<N>::ch_uint(const ch_literal_impl<V, W> &val, const std::string &name,
+                    const std::source_location &sloc) {
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from compile-time literal", N);
-    
+
     static_assert(W <= N, "Literal width must not exceed target uint width");
     ch_literal_runtime runtime_lit(V, W);
-    this->node_impl_ = node_builder::instance().build_literal(runtime_lit, name, sloc);
-    
+    this->node_impl_ =
+        node_builder::instance().build_literal(runtime_lit, name, sloc);
+
     if (!this->node_impl_) {
-        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from compile-time literal");
+        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from "
+                "compile-time literal");
     }
 }
 
-template<unsigned N>
-ch_uint<N>::operator uint64_t() const {
+template <unsigned N> ch_uint<N>::operator uint64_t() const {
     if (this->node_impl_ && this->node_impl_->is_const()) {
-        auto* lit_node = static_cast<litimpl*>(this->node_impl_);
+        auto *lit_node = static_cast<litimpl *>(this->node_impl_);
         return static_cast<uint64_t>(lit_node->value());
     }
     // 如果不是常量节点，返回 0
-    CHWARN("[ch_uint<N>::operator uint64_t] Attempting to convert non-constant node to uint64_t");
+    CHWARN("[ch_uint<N>::operator uint64_t] Attempting to convert non-constant "
+           "node to uint64_t");
     return 0;
 }
 
-
-}} // namespace ch::core
+} // namespace core
+} // namespace ch
 
 // 显式实例化 - 放在命名空间外部
 template class ch::core::ch_uint<1>;

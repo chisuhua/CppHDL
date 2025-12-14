@@ -3,17 +3,28 @@
 
 #include <cstdint>
 #include <source_location>
+#include <string>
+#include <variant>
+
+// 前向声明，避免包含循环
+namespace ch::core {
+template <uint64_t V, uint32_t W> struct ch_literal_impl;
+struct ch_literal_runtime;
+struct ch_bool;
+} // namespace ch::core
 
 #include "core/bool.h"
 #include "core/logic_buffer.h"
 #include "core/traits.h"
+// literal.h 放在最后
+#include "core/literal.h"
 
 namespace ch::core {
 
 class lnodeimpl;
 
 template <typename T> struct lnode;
-struct ch_literal;
+struct ch_literal_runtime;
 
 template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     static constexpr unsigned width = N;
@@ -22,7 +33,12 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     using logic_buffer<ch_uint<N>>::logic_buffer;
 
     ch_uint() : logic_buffer<ch_uint<N>>() {}
-    ch_uint(const ch_literal &val, const std::string &name = "uint_lit",
+    ch_uint(const ch_literal_runtime &val, const std::string &name = "uint_lit",
+            const std::source_location &sloc = std::source_location::current());
+
+    template <uint64_t V, uint32_t W>
+    ch_uint(const ch_literal_impl<V, W> &val,
+            const std::string &name = "uint_lit",
             const std::source_location &sloc = std::source_location::current());
 
     template <unsigned M>
@@ -93,5 +109,7 @@ using ch_uint32 = ch_uint<32>;
 using ch_uint64 = ch_uint<64>;
 
 } // namespace ch::core
+
+#include "../lnode/uint.tpp"
 
 #endif // CH_CORE_UINT_H

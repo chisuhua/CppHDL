@@ -41,6 +41,7 @@ set(SINGLE_TEST_SOURCES
     test_reg.cpp
     test_operator.cpp
     test_literal.cpp
+    test_literal_width.cpp
     test_simple_io.cpp
     test_bundle.cpp
     test_bundle_advanced.cpp

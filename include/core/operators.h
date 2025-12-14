@@ -45,26 +45,26 @@ template <typename T> auto to_operand(const T &value) {
     } else if constexpr (ArithmeticLiteral<T>) {
         using Decayed = std::decay_t<T>;
         uint64_t val = static_cast<uint64_t>(value);
-        uint32_t width = 0;
+        constexpr uint32_t width = ch_width_v<T>;
+        /*
+                if (val == 0) {
+                    width = 1;
+                } else if constexpr (std::is_same_v<Decayed, bool>) {
+                    width = 1;
+                } else if constexpr (std::is_integral_v<Decayed>) {
+                    using UnsignedType = std::make_unsigned_t<Decayed>;
+                    width = 64 -
+           std::countl_zero(static_cast<UnsignedType>(val)); } else {
+                    static_assert(std::is_integral_v<Decayed>,
+                                  "Only integral types and bool are supported");
+                }
 
-        if (val == 0) {
-            width = 1;
-        } else if constexpr (std::is_same_v<Decayed, bool>) {
-            width = 1;
-        } else if constexpr (std::is_integral_v<Decayed>) {
-            using UnsignedType = std::make_unsigned_t<Decayed>;
-            width = 64 - std::countl_zero(static_cast<UnsignedType>(val));
-        } else {
-            static_assert(std::is_integral_v<Decayed>,
-                          "Only integral types and bool are supported");
-        }
-
-        if (width == 0)
-            width = 1;
-        if (width > 64)
-            width = 64;
-
-        ch_literal lit(val, width);
+                if (width == 0)
+                    width = 1;
+                if (width > 64)
+                    width = 64;
+        */
+        ch_literal_dynamic lit(val, width);
         auto *lit_impl = node_builder::instance().build_literal(lit, "lit");
         return lnode<ch_uint<64>>(lit_impl);
     } else if constexpr (CHLiteral<T>) {

@@ -117,14 +117,20 @@ inline constexpr uint64_t lit_hex_value_v = lit_value_v<lit_hex, 0, Chars...>;
 template <char... Chars>
 inline constexpr uint64_t lit_dec_value_v = lit_value_v<lit_dec, 0, Chars...>;
 
-template <char... Chars>
-inline constexpr unsigned lit_bin_size_v = lit_size_v<lit_bin, 0, Chars...>;
+// template <char... Chars>
+// inline constexpr unsigned lit_bin_size_v = lit_size_v<lit_bin, 0, Chars...>;
 
 template <char... Chars>
-inline constexpr unsigned lit_oct_size_v = lit_size_v<lit_oct, 0, Chars...>;
+inline constexpr unsigned lit_bin_size_v =
+    compute_bit_width(lit_bin_value_v<Chars...>);
 
 template <char... Chars>
-inline constexpr unsigned lit_hex_size_v = lit_size_v<lit_hex, 0, Chars...>;
+inline constexpr unsigned lit_oct_size_v =
+    compute_bit_width(lit_oct_value_v<Chars...>);
+
+template <char... Chars>
+inline constexpr unsigned lit_hex_size_v =
+    compute_bit_width(lit_hex_value_v<Chars...>);
 
 template <char... Chars>
 inline constexpr unsigned lit_dec_size_v =
