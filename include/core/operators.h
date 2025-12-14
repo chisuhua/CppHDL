@@ -38,6 +38,9 @@ concept CHLiteral = is_ch_literal_v<std::remove_cvref_t<T>>;
 template <typename T>
 concept ValidOperand = HardwareType<T> || ArithmeticLiteral<T> || CHLiteral<T>;
 
+template <typename T>
+concept ValidWidthOperand = HardwareType<T> || CHLiteral<T>;
+
 // === 统一的操作数转换 ===
 template <typename T> auto to_operand(const T &value) {
     if constexpr (HardwareType<T>) {
@@ -46,31 +49,15 @@ template <typename T> auto to_operand(const T &value) {
         using Decayed = std::decay_t<T>;
         uint64_t val = static_cast<uint64_t>(value);
         constexpr uint32_t width = ch_width_v<T>;
-        /*
-                if (val == 0) {
-                    width = 1;
-                } else if constexpr (std::is_same_v<Decayed, bool>) {
-                    width = 1;
-                } else if constexpr (std::is_integral_v<Decayed>) {
-                    using UnsignedType = std::make_unsigned_t<Decayed>;
-                    width = 64 -
-           std::countl_zero(static_cast<UnsignedType>(val)); } else {
-                    static_assert(std::is_integral_v<Decayed>,
-                                  "Only integral types and bool are supported");
-                }
-
-                if (width == 0)
-                    width = 1;
-                if (width > 64)
-                    width = 64;
-        */
         ch_literal_dynamic lit(val, width);
         auto *lit_impl = node_builder::instance().build_literal(lit, "lit");
-        return lnode<ch_uint<64>>(lit_impl);
+        return lnode<ch_literal_dynamic>(lit_impl);
     } else if constexpr (CHLiteral<T>) {
         auto *lit_impl =
             node_builder::instance().build_literal(value, "ch_lit");
-        return lnode<ch_uint<64>>(lit_impl);
+        constexpr auto val = T::actual_width;
+        constexpr uint32_t width = ch_width_v<T>;
+        return lnode<ch_literal_impl<val, width>>(lit_impl);
     } else {
         static_assert(sizeof(T) == 0,
                       "Unsupported operand type - this should never happen due "
@@ -84,27 +71,32 @@ consteval unsigned get_binary_result_width() {
     if constexpr (Op::is_comparison) {
         return 1;
     } else if constexpr (requires { Op::template result_width<1, 1>; }) {
-        if constexpr (HardwareType<LHS> && HardwareType<RHS>) {
-            if constexpr (
-                requires { ch_width_v<LHS>; } &&
-                requires { ch_width_v<RHS>; }) {
-                return Op::template result_width<ch_width_v<LHS>,
-                                                 ch_width_v<RHS>>;
-            }
+        if constexpr (
+            requires { ch_width_v<LHS>; } && requires { ch_width_v<RHS>; }) {
+            return Op::template result_width<ch_width_v<LHS>, ch_width_v<RHS>>;
         }
-        if constexpr (HardwareType<LHS>) {
-            if constexpr (requires { ch_width_v<LHS>; }) {
-                return Op::template result_width<ch_width_v<LHS>, 32>;
-            }
-        }
-        if constexpr (HardwareType<RHS>) {
-            if constexpr (requires { ch_width_v<RHS>; }) {
-                return Op::template result_width<32, ch_width_v<RHS>>;
-            }
-        }
+        static_assert(1, "Invalid");
+        // if constexpr (ValidWidthOperand<LHS> && ValidWidthOperand<RHS>) {
+        //     if constexpr (
+        //         requires { ch_width_v<LHS>; } &&
+        //         requires { ch_width_v<RHS>; }) {
+        //         return Op::template result_width<ch_width_v<LHS>,
+        //                                          ch_width_v<RHS>>;
+        //     }
+        // }
+        // if constexpr (ValidWidthOperand<LHS>) {
+        //     if constexpr (requires { ch_width_v<LHS>; }) {
+        //         return Op::template result_width<ch_width_v<LHS>, 32>;
+        //     }
+        // }
+        // if constexpr (ValidWidthOperand<RHS>) {
+        //     if constexpr (requires { ch_width_v<RHS>; }) {
+        //         return Op::template result_width<32, ch_width_v<RHS>>;
+        //     }
+        // }
     } else if constexpr (requires { Op::template result_width_v<1>; }) {
         // 一元操作的情况
-        if constexpr (HardwareType<LHS>) {
+        if constexpr (ValidWidthOperand<LHS>) {
             if constexpr (requires { ch_width_v<LHS>; }) {
                 return Op::template result_width_v<ch_width_v<LHS>>;
             }
