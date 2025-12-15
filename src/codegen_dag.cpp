@@ -148,7 +148,8 @@ void dagwriter::print_nodes(std::ostream &out) {
 
         out << "  \"" << node_names_[node] << "\" [";
         out << "label=\"" << node_names_[node] << "\\n";
-        out << "(ID: " << i << ", " << get_node_type_str(node->type()) << ")\\n";
+        out << "(ID: " << node->id() << ", " << get_node_type_str(node->type())
+            << ")\\n";
         out << "width=" << node->size() << " bits";
 
         // Add additional info based on node type

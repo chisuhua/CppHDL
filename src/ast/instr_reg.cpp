@@ -33,7 +33,7 @@ void instr_reg::eval() {
     if (rst_buf_ && !rst_buf_->is_zero()) {
         // 应用复位值
         if (rst_val_buf_) {
-            *current_buf_ = *rst_val_buf_;
+            current_buf_->assign_truncate(*rst_val_buf_);
         }
         return;
     }
@@ -53,7 +53,7 @@ void instr_reg::eval() {
     // 更新寄存器值
     if (next_buf_) {
         // 如果有next值，则使用next值更新当前值
-        *current_buf_ = *next_buf_;
+        current_buf_->assign_truncate(*next_buf_);
     }
     // 否则保持当前值不变（寄存器特性）
 }

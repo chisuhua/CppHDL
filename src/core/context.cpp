@@ -137,15 +137,16 @@ void context::init() {
     try {
         node_storage_.reserve(100);
         CHDBG("Reserved capacity for context containers");
-        
+
         // 创建默认时钟
-        default_clock_ = this->create_clock(
-            sdata_type(0, 1), true, false, "default_clock");
+        default_clock_ =
+            this->create_clock(sdata_type(0, 1), true, false, "default_clock");
         current_clock_ = default_clock_;
-        
+
         // 创建默认复位
-        default_reset_ = this->create_reset(
-            sdata_type(0, 1), resetimpl::reset_type::async_low, "default_reset");
+        default_reset_ = this->create_reset(sdata_type(0, 1),
+                                            resetimpl::reset_type::async_low,
+                                            "default_reset");
         current_reset_ = default_reset_;
     } catch (const std::bad_alloc &) {
         CHERROR("Failed to reserve memory for context containers");
@@ -360,12 +361,11 @@ void context::topological_sort_visit(
     // 对寄存器节点特殊处理，只遍历初始化值依赖，不遍历next值依赖
     if (node->type() == lnodetype::type_reg) {
         // 处理寄存器的初始值依赖
-        auto reg_node = static_cast<const regimpl*>(node);
+        auto reg_node = static_cast<const regimpl *>(node);
         lnodeimpl *init_val = reg_node->get_init_val();
         if (init_val) {
-            this->topological_sort_visit(init_val, sorted, visited,
-                                         temp_mark, cyclic_nodes,
-                                         update_list);
+            this->topological_sort_visit(init_val, sorted, visited, temp_mark,
+                                         cyclic_nodes, update_list);
         }
     } else {
         // 对于所有其他节点，处理所有源节点

@@ -5,6 +5,7 @@
 #include "ast/mem_port_impl.h"
 #include "core/lnodeimpl.h"
 #include "logger.h"
+#include "types.h"
 #include "utils/destruction_manager.h"
 #include <cassert>
 #include <iostream>
@@ -103,10 +104,12 @@ void Simulator::initialize() {
         if (node->type() == ch::core::lnodetype::type_lit) {
             auto *lit_node = static_cast<ch::core::litimpl *>(node);
             data_map_[node_id] = lit_node->value();
-            CHDBG("Set literal value for node %u", node_id);
+            CHDBG("Set literal value for node %u", node_id,
+                  data_map_[node_id].to_string_verbose().c_str());
         } else {
             data_map_[node_id] = ch::core::sdata_type(0, size);
-            CHDBG("Allocated buffer for node %u", node_id);
+            CHDBG("Allocated buffer for node %u, width %u, value %s", node_id,
+                  size, data_map_[node_id].to_string_verbose().c_str());
 
             // 如果这是默认时钟节点，则保存其数据指针
             if (ctx_->has_default_clock() &&
@@ -126,6 +129,7 @@ void Simulator::initialize() {
         uint32_t node_id = node->id();
 
         auto instr = node->create_instruction(data_map_);
+
         if (instr.get()) {
             // 设置指令ID
             instr_map_[node_id] = instr.get();
@@ -163,6 +167,7 @@ void Simulator::initialize() {
                                                        instr_map_[node_id]);
                 break;
             }
+
         } else {
             CHDBG("No instruction created for node %u (type: %s)", node_id,
                   ch::core::to_string(node->type()));
@@ -262,7 +267,8 @@ void Simulator::eval_sequential() {
     CHDBG_FUNC();
 
     for (const auto &[node_id, instr] : sequential_instr_list_) {
-        CHDBG("Evaluating sequential instruction for node %u", node_id);
+        CHDBG("Evaluating sequential instruction for node %u, %s", node_id,
+              data_map_[node_id].to_string_verbose().c_str());
         instr->eval();
     }
 
@@ -273,14 +279,15 @@ void Simulator::eval_combinational() {
     CHDBG_FUNC();
     // 执行输入节点指令
     for (const auto &[node_id, instr] : input_instr_list_) {
-        CHDBG("Evaluating input instruction for node %u", node_id);
         instr->eval();
+        CHDBG("Evaluating input instruction for node %u", node_id);
     }
 
     // 执行组合逻辑节点
     for (const auto &[node_id, instr] : combinational_instr_list_) {
-        CHDBG("Evaluating combinational instruction for node %u", node_id);
         instr->eval();
+        CHDBG("Evaluating combinational instruction for node %u: %s", node_id,
+              data_map_[node_id].to_string_verbose().c_str());
     }
 
     CHDBG("Evaluation combinational completed");

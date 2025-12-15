@@ -76,24 +76,6 @@ consteval unsigned get_binary_result_width() {
             return Op::template result_width<ch_width_v<LHS>, ch_width_v<RHS>>;
         }
         static_assert(1, "Invalid");
-        // if constexpr (ValidWidthOperand<LHS> && ValidWidthOperand<RHS>) {
-        //     if constexpr (
-        //         requires { ch_width_v<LHS>; } &&
-        //         requires { ch_width_v<RHS>; }) {
-        //         return Op::template result_width<ch_width_v<LHS>,
-        //                                          ch_width_v<RHS>>;
-        //     }
-        // }
-        // if constexpr (ValidWidthOperand<LHS>) {
-        //     if constexpr (requires { ch_width_v<LHS>; }) {
-        //         return Op::template result_width<ch_width_v<LHS>, 32>;
-        //     }
-        // }
-        // if constexpr (ValidWidthOperand<RHS>) {
-        //     if constexpr (requires { ch_width_v<RHS>; }) {
-        //         return Op::template result_width<32, ch_width_v<RHS>>;
-        //     }
-        // }
     } else if constexpr (requires { Op::template result_width_v<1>; }) {
         // 一元操作的情况
         if constexpr (ValidWidthOperand<LHS>) {

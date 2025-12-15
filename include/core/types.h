@@ -52,6 +52,7 @@ struct sdata_type {
 
     // Essential assignment operators
     sdata_type &operator=(const sdata_type &other);
+    sdata_type &assign_truncate(const sdata_type &other);
 
     template <typename U> sdata_type &operator=(U value) {
         bv_ = value;
@@ -150,6 +151,19 @@ extern const sdata_type all_ones_32bit;
 
 const sdata_type &ones(uint32_t width);
 }; // namespace constants
+
+namespace utils {
+void print_sdata(const sdata_type &sdata, const std::string &name);
+void debug_print(const sdata_type &sdata, const std::string &context);
+void print_all_formats(const sdata_type &sdata, const std::string &name);
+void compare_sdata(const sdata_type &lhs, const sdata_type &rhs,
+                   const std::string &name1, const std::string &name2);
+std::string to_binary_readable(const sdata_type &sdata, int group_size);
+bool validate(const sdata_type &sdata);
+std::string dump(const sdata_type &sdata, const std::string &name);
+void print_aligned(const sdata_type &sdata, const std::string &name, int width,
+                   int value_width);
+} // namespace utils
 
 } // namespace core
 } // namespace ch

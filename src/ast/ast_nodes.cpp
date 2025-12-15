@@ -1,11 +1,12 @@
 // src/core/ast_nodes.cpp
 #include "ast_nodes.h"
+#include "core/context.h"
+#include "instr_clock.h"
 #include "instr_io.h"
 #include "instr_op.h"
 #include "instr_proxy.h"
 #include "instr_reg.h"
-#include "instr_clock.h"
-#include "core/context.h"
+#include "types.h"
 
 namespace ch {
 namespace core {
@@ -28,8 +29,8 @@ regimpl::create_instruction(ch::data_map_t &data_map) const {
 
     // 如果有初始值，则设置current_buf为初始值
     if (init_val_) {
-        auto *lit_init_val = static_cast<litimpl*>(init_val_);
-        *current_buf = lit_init_val->value();
+        auto *lit_init_val = static_cast<litimpl *>(init_val_);
+        current_buf->assign_truncate(lit_init_val->value());
     }
 
     // 添加用户跟踪：将寄存器节点添加到next节点的用户列表中
@@ -38,7 +39,7 @@ regimpl::create_instruction(ch::data_map_t &data_map) const {
     }
 
     // 获取时钟边沿信息
-    sdata_type* clk_edge = nullptr;
+    sdata_type *clk_edge = nullptr;
     if (cd_ != static_cast<uint32_t>(-1)) {
         // 直接使用cd_作为data_map的键值获取时钟边沿信息
         auto it = data_map.find(cd_);

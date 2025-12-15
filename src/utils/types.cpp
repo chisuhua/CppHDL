@@ -1,5 +1,6 @@
 // src/core/types.cpp
 #include "types.h"
+#include "bv/bitvector.h"
 #include <iomanip>
 
 namespace ch {
@@ -11,6 +12,12 @@ sdata_type &sdata_type::operator=(const sdata_type &other) {
     return *this;
 }
 
+sdata_type &sdata_type::assign_truncate(const sdata_type &other) {
+    if (this != &other) {
+        internal::bv_assign_truncate(&bv_, &other.bv_);
+    }
+    return *this;
+}
 std::string sdata_type::to_string() const {
     if (bv_.size() == 0) {
         return "0";
