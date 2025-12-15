@@ -1,6 +1,7 @@
 #ifndef TRAITS_H
 #define TRAITS_H
 
+#include "logger.h"
 #include <bit>
 #include <cstdint>
 #include <type_traits>
@@ -9,7 +10,18 @@ namespace ch::core {
 
 // --- Primary template (fallback) ---
 template <typename T, typename Enable = void> struct ch_width_impl {
-    static constexpr unsigned value = 0; // Unknown type
+private:
+    // NOTE: when compile failed at this , mostly it use width is not known at
+    // compile time please fix it by ch_width_impl specialize or change hdl code
+    template <typename U> struct _print_type; // 未定义
+    static constexpr unsigned debug_hook() {
+        _print_type<T>{};
+        return 0;
+    }
+
+public:
+    static constexpr unsigned value = debug_hook();
+    // static constexpr unsigned value = 0; // Unknown type
 };
 
 // --- Specialization: Standard integral types ---

@@ -191,8 +191,8 @@ public:
 
     void describe() override {
         // 移位操作
-        io().shl_result = io().in_data << 2;
-        io().shr_result = io().in_data >> 1;
+        io().shl_result = io().in_data << 2_d;
+        io().shr_result = io().in_data >> 1_d;
     }
 };
 
@@ -411,7 +411,7 @@ struct LeftShiftTest {
     };
 
     static void perform_test(auto &component) {
-        auto result = component.io().inputs.a << 2;
+        auto result = component.io().inputs.a << 2_d;
         component.io().result_out = result;
     }
 };
@@ -422,7 +422,7 @@ struct RightShiftTest {
     };
 
     static void perform_test(auto &component) {
-        auto result = component.io().inputs.a >> 1;
+        auto result = component.io().inputs.a >> 1_d;
         component.io().result_out = result;
     }
 };

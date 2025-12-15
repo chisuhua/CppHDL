@@ -1,5 +1,6 @@
 #ifndef CH_CORE_LITERAL_H
 #define CH_CORE_LITERAL_H
+#include "core/traits.h"
 #include <cstdint>
 #include <type_traits>
 
@@ -160,6 +161,10 @@ inline constexpr bool is_ch_literal_v<volatile ch_literal_impl<V, W>> = true;
 template <uint64_t V, uint32_t W>
 inline constexpr bool is_ch_literal_v<const volatile ch_literal_impl<V, W>> =
     true;
+
+template <uint64_t V, uint32_t W> struct ch_width_impl<ch_literal_impl<V, W>> {
+    static constexpr unsigned value = ch_literal_impl<V, W>::actual_width;
+};
 
 } // namespace ch::core
 

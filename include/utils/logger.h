@@ -400,6 +400,14 @@ private:
 
 template <typename X> struct type_print;
 
+// 1. 声明一个未定义的模板结构体（关键）
+template <auto V> struct print_constexpr_value;
+
+// 2. 提供一个 consteval 辅助函数（可选，但更清晰）
+template <auto V> consteval void constexpr_print() {
+    print_constexpr_value<V>{}; // 故意实例化未定义模板 → 触发编译错误
+}
+
 } // namespace ch
 
 #endif // LOGGER_H

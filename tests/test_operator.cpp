@@ -93,8 +93,8 @@ TEST_CASE("ch_uint: basic operations", "[uint][operations][basic]") {
     SECTION("Shift operations") {
         ch_uint<8> a(12_d);
 
-        auto shl_result = a << 2;
-        auto shr_result = a >> 1;
+        auto shl_result = a << 2_d;
+        auto shr_result = a >> 1_d;
 
         REQUIRE(shl_result.impl() != nullptr);
         REQUIRE(shr_result.impl() != nullptr);

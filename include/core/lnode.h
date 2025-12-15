@@ -2,6 +2,7 @@
 #ifndef CH_CORE_LNODE_H
 #define CH_CORE_LNODE_H
 
+#include "core/traits.h"
 #include "lnodeimpl.h"
 
 namespace ch::core {
@@ -10,6 +11,8 @@ namespace ch::core {
 template <typename T> struct lnode {
     lnodeimpl *impl() const { return impl_; }
     lnode(lnodeimpl *p) : impl_(p) {}
+
+    virtual std::string to_string() const { return impl_->to_string(); }
 
 private:
     lnodeimpl *impl_ = nullptr;
@@ -24,6 +27,11 @@ lnode<T> get_lnode(const T &t)
 {
     return lnode<T>(t.impl());
 }
+
+template <typename T> struct ch_width_impl<ch::core::lnode<T>, void> {
+    static constexpr unsigned value = ch_width_v<T>;
+};
+
 /*
 template<typename LiteralType>
 requires std::is_arithmetic_v<LiteralType>

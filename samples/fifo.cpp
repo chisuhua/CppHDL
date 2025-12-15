@@ -62,8 +62,8 @@ public:
         auto writing = io().push;
 
         // 指针更新逻辑
-        rd_ptr->next = select(reading, rd_ptr + 1, rd_ptr);
-        wr_ptr->next = select(writing, wr_ptr + 1, wr_ptr);
+        rd_ptr->next = select(reading, rd_ptr + 1_b, rd_ptr);
+        wr_ptr->next = select(writing, wr_ptr + 1_b, wr_ptr);
 
         // 创建内存
         ch_mem<T, N> mem("fifo_mem");
@@ -79,7 +79,7 @@ public:
         // 空状态：读指针等于写指针
         io().empty = (rd_ptr == wr_ptr);
         // 满状态：写指针+1等于读指针
-        auto wr_plus_one = wr_ptr + 1;
+        auto wr_plus_one = wr_ptr + 1_b;
         io().full = (wr_plus_one == rd_ptr);
     }
 };

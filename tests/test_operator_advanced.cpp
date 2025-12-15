@@ -505,7 +505,7 @@ TEST_CASE("type_deduction: result type deduction", "[operators][deduction]") {
     // 测试不同类型的操作数组合
     ch_uint<4> small(5, "small");
     ch_uint<16> large(100, "large");
-    int literal = 3;
+    auto literal = 3_d;
 
     // 测试混合操作数类型
     auto result1 = small + large;
@@ -515,11 +515,8 @@ TEST_CASE("type_deduction: result type deduction", "[operators][deduction]") {
     // 根据操作策略，结果宽度应该是max(4,16)+1=17，现在支持精确宽度
     STATIC_REQUIRE(ch_width_v<decltype(result1)> ==
                    17); // 加法结果现在是精确的max(4,16)+1=17位
-    STATIC_REQUIRE(ch_width_v<decltype(result2)> ==
-                   33); // 整数字面量默认为32位，结果为max(4,32)+1=33位
-    STATIC_REQUIRE(
-        ch_width_v<decltype(result3)> ==
-        33); // 整数字面量左侧操作数会被提升为32位，结果为max(32,4)+1=33位
+    STATIC_REQUIRE(ch_width_v<decltype(result2)> == 5); // 结果为max(4,2)+1=5位
+    STATIC_REQUIRE(ch_width_v<decltype(result3)> == 5); // 结果为max(2,4)+1=33位
 }
 
 TEST_CASE("Bit slicing operations", "[operators][bitslice]") {
@@ -625,8 +622,8 @@ TEST_CASE("Shift operations", "[operators][shift]") {
     ch_uint<8> data(0b10101010, "data");
 
     // 测试移位操作
-    auto shl_result = data << 2;
-    auto shr_result = data >> 2;
+    auto shl_result = data << 2_d;
+    auto shr_result = data >> 2_d;
 
     // 验证返回类型
     STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 8);

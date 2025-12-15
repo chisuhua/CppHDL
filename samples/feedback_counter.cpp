@@ -22,7 +22,7 @@ public:
 
     void describe() override {
         ch_reg<ch_uint<4>> counter(0);
-        counter->next = counter + 1;
+        counter->next = counter + 1_b;
         io().out = counter;
     }
 };

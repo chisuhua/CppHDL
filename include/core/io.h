@@ -9,10 +9,10 @@
 #include "logger.h"
 #include "traits.h"
 #include "uint.h"
-#include "node_builder.h"
 #include <source_location>
 #include <string>
 
+#include "node_builder.h"
 namespace ch {
 namespace core {
 
@@ -294,11 +294,11 @@ auto operator&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
     if (lhs_impl && rhs_impl) {
         auto lnode_lhs = lnode<T1>(lhs_impl);
         auto lnode_rhs = lnode<T2>(rhs_impl);
-        
+
         auto *op_node = node_builder::instance().build_operation(
             ch_op::and_, lnode_lhs, lnode_rhs, false, "and_port_op",
             std::source_location::current());
-            
+
         // 返回适当类型的结果
         using result_type =
             std::conditional_t<(ch_width_v<T1> >= ch_width_v<T2>),
@@ -332,7 +332,11 @@ template <typename T, typename Dir>
 auto operator~(const port<T, Dir> &operand) {
     // static_assert(ch_width_v<T> == 1,
     //               "Bitwise NOT only supported for 1-bit types");
-    return ~get_lnode(operand);
+    // return ~get_lnode(operand);
+    auto lhs_impl = operand.impl();
+    assert(lhs_impl != nullptr);
+    auto lnode_lhs = lnode<T>(lhs_impl);
+    return ~lnode_lhs;
 }
 
 // 为端口添加相等比较操作符 (==)
