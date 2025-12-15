@@ -160,7 +160,8 @@ auto unary_operation(const T &operand, const std::string &name_suffix) {
            operand_node.to_string().c_str());
 
     auto *op_node = node_builder::instance().build_unary_operation(
-        op_type, operand_node, std::string(Op::name()) + "_" + name_suffix,
+        op_type, operand_node, result_width,
+        std::string(Op::name()) + "_" + name_suffix,
         std::source_location::current());
 
     // 特殊处理：如果结果宽度为1且操作数是ch_bool，则返回ch_bool
@@ -169,11 +170,8 @@ auto unary_operation(const T &operand, const std::string &name_suffix) {
         return make_bool_result(op_node);
     } else if constexpr (result_width <= 1) {
         ch::type_print<Op>{};
-        ch::type_print<T>{};
         ch::constexpr_print<ch_width_v<T>>();
         ch::constexpr_print<result_width>();
-        ch::type_print<decltype(operand)>{};
-        ch::type_print<decltype(operand_node)>{};
         return make_uint_result<1>(op_node);
     } else {
         return make_uint_result<result_width>(op_node);
@@ -235,7 +233,7 @@ ch_bool unary_bool_operation(const ch_bool &operand,
     auto operand_node = to_operand(operand);
 
     auto *op_node = node_builder::instance().build_unary_operation(
-        op_type, operand_node, std::string(Op::name()) + "_" + name_suffix,
+        op_type, operand_node, 1, std::string(Op::name()) + "_" + name_suffix,
         std::source_location::current());
 
     return ch_bool(op_node);
@@ -356,7 +354,7 @@ template <typename T> ch_bool and_reduce(const T &operand) {
 
     auto *op_node = node_builder::instance().build_unary_operation(
         ch_op::and_reduce, // 使用专门的规约操作类型
-        operand_node, "and_reduce", std::source_location::current());
+        operand_node, 1, "and_reduce", std::source_location::current());
 
     return make_bool_result(op_node);
 }
@@ -368,7 +366,7 @@ template <typename T> ch_bool or_reduce(const T &operand) {
 
     auto *op_node = node_builder::instance().build_unary_operation(
         ch_op::or_reduce, // 使用专门的规约操作类型
-        operand_node, "or_reduce", std::source_location::current());
+        operand_node, 1, "or_reduce", std::source_location::current());
 
     return make_bool_result(op_node);
 }
@@ -380,7 +378,7 @@ template <typename T> ch_bool xor_reduce(const T &operand) {
 
     auto *op_node = node_builder::instance().build_unary_operation(
         ch_op::xor_reduce, // 使用专门的规约操作类型
-        operand_node, "xor_reduce", std::source_location::current());
+        operand_node, 1, "xor_reduce", std::source_location::current());
 
     return make_bool_result(op_node);
 }

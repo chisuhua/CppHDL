@@ -158,28 +158,23 @@ TEST_CASE("Register - Multi-Stage Pipeline Timing", "[reg][pipeline][timing]") {
     // Tick 3 - Data in stage3/output
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 0); // Still initial value
-
-    // Tick 4 - First value (9) reaches output
-    simulator.tick();
-    val = simulator.get_port_value(device.instance().io().out);
     REQUIRE(static_cast<uint64_t>(val) == 9); // Now we see the input value
 
     // Change input
     simulator.set_input_value(device.instance().io().in,
                               static_cast<uint64_t>(5));
 
-    // Tick 5 - New input in stage1, old value still propagating
+    // Tick 4 - New input in stage1, old value still propagating
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     REQUIRE(static_cast<uint64_t>(val) == 9); // Still seeing old value
 
-    // Tick 6 - New input in stage2
+    // Tick 5 - New input in stage2
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     REQUIRE(static_cast<uint64_t>(val) == 9); // Still seeing old value
 
-    // Tick 7 - New input reaches output
+    // Tick 6 - New input reaches output
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     REQUIRE(static_cast<uint64_t>(val) == 5); // Now seeing new value
@@ -270,17 +265,17 @@ TEST_CASE("Register - Shift Register Timing", "[reg][shift][timing]") {
     // Tick 2 - 1 in bit2
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 2); // 0010 (bit2=1)
+    REQUIRE(static_cast<uint64_t>(val) == 3); // 0011 (bit2=1)
 
     // Tick 3 - 1 in bit3
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 4); // 0100 (bit3=1)
+    REQUIRE(static_cast<uint64_t>(val) == 7); // 0111 (bit3=1)
 
     // Tick 4 - 1 in bit4 (output)
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 8); // 1000 (bit4=1)
+    REQUIRE(static_cast<uint64_t>(val) == 15); // 1111 (bit4=1)
 
     // Shift in a 0
     simulator.set_input_value(device.instance().io().in,
@@ -289,17 +284,17 @@ TEST_CASE("Register - Shift Register Timing", "[reg][shift][timing]") {
     // Tick 5 - 0 in bit1, 1 in bit2
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 4); // 0100 (bit3=1)
+    REQUIRE(static_cast<uint64_t>(val) == 14); // 1110 (bit3=1)
 
     // Tick 6 - 0 in bit2, 1 in bit3
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 2); // 0010 (bit2=1)
+    REQUIRE(static_cast<uint64_t>(val) == 12); // 1100 (bit2=1)
 
     // Tick 7 - 0 in bit3, 1 in bit4
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
-    REQUIRE(static_cast<uint64_t>(val) == 1); // 0001 (bit1=1)
+    REQUIRE(static_cast<uint64_t>(val) == 8); // 1000 (bit1=1)
 
     // Tick 8 - All zeros
     simulator.tick();

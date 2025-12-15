@@ -7,6 +7,7 @@
 #include "core/lnode.h"
 #include "core/lnodeimpl.h"
 #include "types.h"
+#include <cstdint>
 #include <memory>
 #include <source_location>
 
@@ -90,7 +91,8 @@ public:
 
     template <typename T>
     lnodeimpl *build_unary_operation(
-        ch_op op, const lnode<T> &operand, const std::string &name = "unary_op",
+        ch_op op, const lnode<T> &operand, uint32_t,
+        const std::string &name = "unary_op",
         const std::source_location &sloc = std::source_location::current());
 
     template <typename T>

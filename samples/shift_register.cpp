@@ -1,4 +1,6 @@
 #include "ch.hpp"
+#include "codegen_dag.h"
+#include "codegen_verilog.h"
 #include "component.h"
 #include "core/bool.h"
 #include "core/reg.h"
@@ -70,19 +72,19 @@ int main() {
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     std::cout << "Cycle 2: out = " << static_cast<uint64_t>(val)
-              << " (expected: 2 - 0010)" << std::endl;
+              << " (expected: 3 - 0011)" << std::endl;
 
     // Tick 3 - 1 in bit3
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     std::cout << "Cycle 3: out = " << static_cast<uint64_t>(val)
-              << " (expected: 4 - 0100)" << std::endl;
+              << " (expected: 7 - 0111)" << std::endl;
 
     // Tick 4 - 1 in bit4 (output)
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     std::cout << "Cycle 4: out = " << static_cast<uint64_t>(val)
-              << " (expected: 8 - 1000)" << std::endl;
+              << " (expected: 15 - 1111)" << std::endl;
 
     // Shift in a 0
     simulator.set_input_value(device.instance().io().in, 0);
@@ -91,19 +93,19 @@ int main() {
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     std::cout << "Cycle 5: out = " << static_cast<uint64_t>(val)
-              << " (expected: 4 - 0100)" << std::endl;
+              << " (expected: 14 - 1110)" << std::endl;
 
     // Tick 6 - 0 in bit2, 1 in bit3
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     std::cout << "Cycle 6: out = " << static_cast<uint64_t>(val)
-              << " (expected: 2 - 0010)" << std::endl;
+              << " (expected: 12 - 1100)" << std::endl;
 
     // Tick 7 - 0 in bit3, 1 in bit4
     simulator.tick();
     val = simulator.get_port_value(device.instance().io().out);
     std::cout << "Cycle 7: out = " << static_cast<uint64_t>(val)
-              << " (expected: 1 - 0001)" << std::endl;
+              << " (expected: 8 - 1000)" << std::endl;
 
     // Tick 8 - All zeros
     simulator.tick();
@@ -112,6 +114,11 @@ int main() {
               << " (expected: 0 - 0000)" << std::endl;
 
     std::cout << "Finished Shift Register test" << std::endl;
+
+    ch::toVerilog("shift_register.v", device.context());
+
+    // Generate DAG diagram
+    ch::toDAG("shift_regster.dot", device.context());
 
     return 0;
 }

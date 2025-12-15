@@ -267,9 +267,9 @@ void Simulator::eval_sequential() {
     CHDBG_FUNC();
 
     for (const auto &[node_id, instr] : sequential_instr_list_) {
+        instr->eval();
         CHDBG("Evaluating sequential instruction for node %u, %s", node_id,
               data_map_[node_id].to_string_verbose().c_str());
-        instr->eval();
     }
 
     CHDBG("Evaluation sequential completed");
@@ -280,7 +280,8 @@ void Simulator::eval_combinational() {
     // 执行输入节点指令
     for (const auto &[node_id, instr] : input_instr_list_) {
         instr->eval();
-        CHDBG("Evaluating input instruction for node %u", node_id);
+        CHDBG("Evaluating input instruction for node %u: %s", node_id,
+              data_map_[node_id].to_string_verbose().c_str());
     }
 
     // 执行组合逻辑节点
@@ -301,6 +302,8 @@ void Simulator::tick() {
         CHERROR("Simulator not initialized or disconnected");
         return;
     }
+
+    CHINFO("ticks count: %u", ticks_++);
 
     eval_combinational();
 

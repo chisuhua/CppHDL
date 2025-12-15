@@ -255,6 +255,7 @@ private:
     // Add flag to track if we're in the destructor to prevent accessing
     // destroyed context
     bool disconnected_ = false;
+    uint64_t ticks_{0};
 };
 
 } // namespace ch

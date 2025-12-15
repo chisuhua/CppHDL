@@ -476,10 +476,9 @@ lnodeimpl* node_builder::build_unary_operation(
 
 // 在 node_builder.h 或相关实现文件中
 template <typename T>
-lnodeimpl *
-node_builder::build_unary_operation(ch_op op, const lnode<T> &operand,
-                                    const std::string &name,
-                                    const std::source_location &sloc) {
+lnodeimpl *node_builder::build_unary_operation(
+    ch_op op, const lnode<T> &operand, uint32_t result_size,
+    const std::string &name, const std::source_location &sloc) {
 
     CHDBG_FUNC();
     if (instance().debug_mode_) {
@@ -499,7 +498,6 @@ node_builder::build_unary_operation(ch_op op, const lnode<T> &operand,
     }
 
     // 对于规约操作，结果宽度总是1
-    uint32_t result_size = 1;
     if (instance().statistics_enabled_) {
         ++instance().statistics_->operations_built;
         ++instance().statistics_->total_nodes_built;
