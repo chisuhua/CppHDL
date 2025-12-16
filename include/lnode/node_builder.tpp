@@ -29,44 +29,46 @@ constexpr uint32_t get_literal_width(T value) {
     return get_literal_width(static_cast<U>(value));
 }
 
-uint32_t calculate_result_size(ch_op op, uint32_t lhs_width,
-                               uint32_t rhs_width) {
-    switch (op) {
-    case ch_op::add:
-        return std::max(lhs_width, rhs_width) + 1;
-    case ch_op::sub:
-    case ch_op::neg:
-        return std::max(lhs_width, rhs_width);
-    case ch_op::mul:
-        return lhs_width + rhs_width;
-    case ch_op::eq:
-    case ch_op::ne:
-    case ch_op::lt:
-    case ch_op::le:
-    case ch_op::gt:
-    case ch_op::ge:
-        return 1;
-    case ch_op::and_:
-    case ch_op::or_:
-    case ch_op::xor_:
-    case ch_op::shl:
-    case ch_op::shr:
-    case ch_op::sshr:
-        return std::max(lhs_width, rhs_width);
-    case ch_op::bit_sel:
-        return 1;
-    case ch_op::bits_extract:
-        // For bits extraction, the result width should be determined at compile
-        // time Since we can't determine it here, we'll need to fix this in the
-        // bits() function For now, return a placeholder value that will be
-        // corrected by the caller
-        return lhs_width;
-    case ch_op::concat:
-        return lhs_width + rhs_width; // 正确计算concat操作的结果宽度
-    default:
-        return std::max(lhs_width, rhs_width);
-    }
-}
+// uint32_t calculate_result_size(ch_op op, uint32_t lhs_width,
+//                                uint32_t rhs_width) {
+//     switch (op) {
+//     case ch_op::add:
+//         return std::max(lhs_width, rhs_width) + 1;
+//     case ch_op::sub:
+//     case ch_op::neg:
+//         return std::max(lhs_width, rhs_width);
+//     case ch_op::mul:
+//         return lhs_width + rhs_width;
+//     case ch_op::eq:
+//     case ch_op::ne:
+//     case ch_op::lt:
+//     case ch_op::le:
+//     case ch_op::gt:
+//     case ch_op::ge:
+//         return 1;
+//     case ch_op::and_:
+//     case ch_op::or_:
+//     case ch_op::xor_:
+//     case ch_op::shl:
+//     case ch_op::shr:
+//     case ch_op::sshr:
+//         return std::max(lhs_width, rhs_width);
+//     case ch_op::bit_sel:
+//         return 1;
+//     case ch_op::bits_extract:
+//         // For bits extraction, the result width should be determined at
+//         compile
+//         // time Since we can't determine it here, we'll need to fix this in
+//         the
+//         // bits() function For now, return a placeholder value that will be
+//         // corrected by the caller
+//         return lhs_width;
+//     case ch_op::concat:
+//         return lhs_width + rhs_width; // 正确计算concat操作的结果宽度
+//     default:
+//         return std::max(lhs_width, rhs_width);
+//     }
+// }
 
 std::string prefixed_name_helper(const std::string &name,
                                  const std::string &prefix) {
@@ -376,7 +378,8 @@ lnodeimpl *node_builder::build_bit_extract(const lnode<T> &operand,
 // 二元操作节点构建实现
 template <typename T, typename U>
 lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &lhs,
-                                         const lnode<U> &rhs, bool is_signed,
+                                         const lnode<U> &rhs,
+                                         uint32_t result_size, bool is_signed,
                                          const std::string &name,
                                          const std::source_location &sloc) {
 
@@ -396,8 +399,8 @@ lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &lhs,
         return nullptr;
     }
 
-    uint32_t result_size =
-        calculate_result_size(op, ch_width_v<T>, ch_width_v<U>);
+    // uint32_t result_size =
+    //     calculate_result_size(op, ch_width_v<T>, ch_width_v<U>);
     if (instance().statistics_enabled_) {
         ++instance().statistics_->operations_built;
         ++instance().statistics_->total_nodes_built;
@@ -422,7 +425,7 @@ lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &lhs,
 // 重载 build_operation 支持一元操作
 template <typename T>
 lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &operand,
-                                         bool is_signed,
+                                         uint32_t result_size, bool is_signed,
                                          const std::string &name,
                                          const std::source_location &sloc) {
 
@@ -443,8 +446,8 @@ lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &operand,
         return nullptr;
     }
 
-    uint32_t result_size =
-        calculate_result_size(op, ch_width_v<T>, 0); // 0表示一元操作
+    // uint32_t result_size =
+    //     calculate_result_size(op, ch_width_v<T>, 0); // 0表示一元操作
     if (instance().statistics_enabled_) {
         ++instance().statistics_->operations_built;
         ++instance().statistics_->total_nodes_built;

@@ -5,10 +5,12 @@
 #include "core/context.h"
 #include "direction.h"
 #include "lnode.h"
+#include "lnode/operators_ext.h"
 #include "lnodeimpl.h"
 #include "logger.h"
 #include "traits.h"
 #include "uint.h"
+#include <cstdint>
 #include <source_location>
 #include <string>
 
@@ -279,64 +281,25 @@ template <typename T> [[nodiscard]] auto out(const T & = T{}) {
 // 为端口添加按位与操作符 (&)
 template <typename T1, typename Dir1, typename T2, typename Dir2>
 auto operator&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    // static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
-    //               "Bitwise AND only supported for 1-bit types");
-    // return static_cast<lnode<T1>>(lhs) & static_cast<lnode<T2>>(rhs);
-    // auto lhs_lnode = get_lnode(static_cast<lnode<T1>>(lhs));
-    // auto rhs_lnode = get_lnode(static_cast<lnode<T2>>(rhs));
-    // return lhs_lnode & rhs_lnode;
-    // return (*lhs.impl()) & (*rhs.impl());  // 这可能还需要进一步实现
-    //  直接使用 port 的 impl() 方法获取底层节点
-    auto lhs_impl = lhs.impl();
-    auto rhs_impl = rhs.impl();
-
-    // 使用现有的 createOpNodeImpl 创建操作节点
-    if (lhs_impl && rhs_impl) {
-        auto lnode_lhs = lnode<T1>(lhs_impl);
-        auto lnode_rhs = lnode<T2>(rhs_impl);
-
-        auto *op_node = node_builder::instance().build_operation(
-            ch_op::and_, lnode_lhs, lnode_rhs, false, "and_port_op",
-            std::source_location::current());
-
-        // 返回适当类型的结果
-        using result_type =
-            std::conditional_t<(ch_width_v<T1> >= ch_width_v<T2>),
-                               ch_uint<ch_width_v<T1>>,
-                               ch_uint<ch_width_v<T2>>>;
-        return result_type(op_node);
-    }
-
-    // 错误情况返回默认值
-    // return ch_uint<1>(0);
+    return get_lnode(lhs) & get_lnode(rhs);
 }
 
 // 为端口添加按位或操作符 (|)
 template <typename T1, typename Dir1, typename T2, typename Dir2>
 auto operator|(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    // static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
-    //               "Bitwise OR only supported for 1-bit types");
     return get_lnode(lhs) | get_lnode(rhs);
 }
 
 // 为端口添加按位异或操作符 (^)
 template <typename T1, typename Dir1, typename T2, typename Dir2>
 auto operator^(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    // static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
-    //               "Bitwise XOR only supported for 1-bit types");
     return get_lnode(lhs) ^ get_lnode(rhs);
 }
 
 // 为端口添加按位取反操作符 (~)
 template <typename T, typename Dir>
 auto operator~(const port<T, Dir> &operand) {
-    // static_assert(ch_width_v<T> == 1,
-    //               "Bitwise NOT only supported for 1-bit types");
-    // return ~get_lnode(operand);
-    auto lhs_impl = operand.impl();
-    assert(lhs_impl != nullptr);
-    auto lnode_lhs = lnode<T>(lhs_impl);
-    return ~lnode_lhs;
+    return ~get_lnode(operand);
 }
 
 // 为端口添加相等比较操作符 (==)
@@ -368,21 +331,184 @@ auto operator||(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
     return get_lnode(lhs) | get_lnode(rhs);
 }
 
+template <typename T, typename Dir>
+auto operator!(const port<T, Dir> &operand) {
+    static_assert(ch_width_v<T> == 1,
+                  "Logical NOT only supported for 1-bit types");
+    return ~get_lnode(operand);
+}
+
 // 端口与常量的操作符支持
 template <typename T, typename Dir, typename Lit>
     requires std::is_arithmetic_v<Lit>
 auto operator&(const port<T, Dir> &lhs, Lit rhs) {
-    static_assert(ch_width_v<T> == 1,
-                  "Bitwise AND only supported for 1-bit types");
     return get_lnode(lhs) & rhs;
 }
 
 template <typename T, typename Dir, typename Lit>
     requires std::is_arithmetic_v<Lit>
 auto operator&(Lit lhs, const port<T, Dir> &rhs) {
-    static_assert(ch_width_v<T> == 1,
-                  "Bitwise AND only supported for 1-bit types");
     return lhs & get_lnode(rhs);
+}
+
+// 补全其他算术操作符
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator+(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) + get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator-(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) - get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator*(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) * get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator/(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) / get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator%(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) % get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator<<(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) << get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator>>(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) >> get_lnode(rhs);
+}
+
+// 比较操作符
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator<(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) < get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator<=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) <= get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator>(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) > get_lnode(rhs);
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto operator>=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return get_lnode(lhs) >= get_lnode(rhs);
+}
+
+// 一元操作符
+template <typename T, typename Dir>
+auto operator-(const port<T, Dir> &operand) {
+    return -get_lnode(operand);
+}
+
+// 添加混合操作符支持（端口与常量）
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator+(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) + rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator+(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs + get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator-(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) - rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator-(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs - get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator*(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) * rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator*(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs * get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator/(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) / rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator/(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs / get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator%(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) % rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator%(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs % get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator|(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) | rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator|(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs | get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator^(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) ^ rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator^(Lit lhs, const port<T, Dir> &rhs) {
+    return lhs ^ get_lnode(rhs);
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator<<(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) << rhs;
+}
+
+template <typename T, typename Dir, typename Lit>
+    requires std::is_arithmetic_v<Lit>
+auto operator>>(const port<T, Dir> &lhs, Lit rhs) {
+    return get_lnode(lhs) >> rhs;
 }
 
 // 添加更多混合操作符支持...

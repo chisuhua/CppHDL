@@ -86,7 +86,8 @@ public:
     template <typename T, typename U>
     lnodeimpl *build_operation(
         ch_op op, const lnode<T> &lhs, const lnode<U> &rhs,
-        bool is_signed = false, const std::string &name = "op",
+        uint32_t result_width, bool is_signed = false,
+        const std::string &name = "op",
         const std::source_location &sloc = std::source_location::current());
 
     template <typename T>
@@ -97,8 +98,8 @@ public:
 
     template <typename T>
     lnodeimpl *build_operation(
-        ch_op op, const lnode<T> &operand, bool is_signed,
-        const std::string &name = "op",
+        ch_op op, const lnode<T> &operand, uint32_t result_width,
+        bool is_signed, const std::string &name = "op",
         const std::source_location &sloc = std::source_location::current());
 
 private:

@@ -112,8 +112,7 @@ consteval unsigned get_unary_result_width() {
 }
 
 // === 根据宽度选择合适的ch_uint类型 ===
-template <unsigned Width>
-constexpr auto make_uint_result(lnodeimpl *node) {
+template <unsigned Width> constexpr auto make_uint_result(lnodeimpl *node) {
     return ch_uint<Width>(node);
 }
 
@@ -132,7 +131,7 @@ auto binary_operation(const LHS &lhs, const RHS &rhs,
     constexpr unsigned result_width = get_binary_result_width<Op, LHS, RHS>();
 
     auto *op_node = node_builder::instance().build_operation(
-        op_type, lhs_operand, rhs_operand, false,
+        op_type, lhs_operand, rhs_operand, result_width, false,
         std::string(Op::name()) + "_" + name_suffix,
         std::source_location::current());
 
@@ -216,7 +215,7 @@ ch_bool binary_bool_operation(const ch_bool &lhs, const ch_bool &rhs,
     auto rhs_operand = to_operand(rhs);
 
     auto *op_node = node_builder::instance().build_operation(
-        op_type, lhs_operand, rhs_operand, false,
+        op_type, lhs_operand, rhs_operand, 1, false,
         std::string(Op::name()) + "_" + name_suffix,
         std::source_location::current());
 
@@ -262,7 +261,7 @@ template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
     constexpr unsigned result_width = ch_width_v<T1> + ch_width_v<T2>;
 
     auto *op_node = node_builder::instance().build_operation(
-        ch_op::concat, lhs_operand, rhs_operand, false, "concat",
+        ch_op::concat, lhs_operand, rhs_operand, result_width, false, "concat",
         std::source_location::current());
 
     return make_uint_result<result_width>(op_node);
@@ -277,7 +276,7 @@ template <typename T, unsigned NewWidth> auto sext(const T &operand) {
     auto operand_node = to_operand(operand);
 
     auto *op_node = node_builder::instance().build_operation(
-        ch_op::sext, operand_node,
+        ch_op::sext, operand_node, NewWidth,
         true, // 有符号操作
         "sext", std::source_location::current());
 
@@ -290,7 +289,8 @@ auto sext(const port<T, Dir> &operand) {
     auto lnode_operand = to_operand(operand);
     auto *impl = lnode_operand.impl();
     return make_uint_result<NewWidth>(node_builder::instance().build_operation(
-        ch_op::sext, impl, true, "sext", std::source_location::current()));
+        ch_op::sext, impl, NewWidth, true, "sext",
+        std::source_location::current()));
 }
 
 // === 零扩展操作 ===
@@ -302,7 +302,7 @@ template <typename T, unsigned NewWidth> auto zext(const T &operand) {
     auto operand_node = to_operand(operand);
 
     auto *op_node = node_builder::instance().build_operation(
-        ch_op::zext, operand_node,
+        ch_op::zext, operand_node, NewWidth,
         false, // 无符号操作
         "zext", std::source_location::current());
 
@@ -315,7 +315,8 @@ auto zext(const port<T, Dir> &operand) {
     auto lnode_operand = to_operand(operand);
     auto *impl = lnode_operand.impl();
     return make_uint_result<NewWidth>(node_builder::instance().build_operation(
-        ch_op::zext, impl, false, "zext", std::source_location::current()));
+        ch_op::zext, impl, NewWidth, false, "zext",
+        std::source_location::current()));
 }
 
 // === 位域提取操作 ===
