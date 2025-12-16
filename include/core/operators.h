@@ -112,7 +112,8 @@ consteval unsigned get_unary_result_width() {
 }
 
 // === 根据宽度选择合适的ch_uint类型 ===
-template <unsigned Width> constexpr auto make_uint_result(lnodeimpl *node) {
+template <unsigned Width>
+constexpr auto make_uint_result(lnodeimpl *node) {
     return ch_uint<Width>(node);
 }
 
@@ -155,9 +156,6 @@ auto unary_operation(const T &operand, const std::string &name_suffix) {
     auto operand_node = to_operand(operand);
 
     constexpr unsigned result_width = get_unary_result_width<Op, T>();
-
-    printf("XXX result width=%d, %s\n", result_width,
-           operand_node.to_string().c_str());
 
     auto *op_node = node_builder::instance().build_unary_operation(
         op_type, operand_node, result_width,
@@ -470,6 +468,28 @@ auto operator<<(const LHS &lhs, const RHS &rhs) {
 template <ValidOperand LHS, ValidOperand RHS>
 auto operator>>(const LHS &lhs, const RHS &rhs) {
     return binary_operation<shr_op>(lhs, rhs, "shr");
+}
+
+// === 添加除法和取模操作符重载 ===
+template <ValidOperand LHS, ValidOperand RHS>
+auto operator/(const LHS &lhs, const RHS &rhs) {
+    return binary_operation<div_op>(lhs, rhs, "div");
+}
+
+template <ValidOperand LHS, ValidOperand RHS>
+auto operator%(const LHS &lhs, const RHS &rhs) {
+    return binary_operation<mod_op>(lhs, rhs, "mod");
+}
+
+// === 添加循环移位函数 ===
+template <ValidOperand LHS, ValidOperand RHS>
+auto rotate_left(const LHS &lhs, const RHS &rhs) {
+    return binary_operation<rotate_l_op>(lhs, rhs, "rotate_l");
+}
+
+template <ValidOperand LHS, ValidOperand RHS>
+auto rotate_right(const LHS &lhs, const RHS &rhs) {
+    return binary_operation<rotate_r_op>(lhs, rhs, "rotate_r");
 }
 
 // === 一元操作符重载 ===

@@ -202,5 +202,115 @@ struct mux_op {
     static constexpr unsigned result_width = std::max(M, N);
 };
 
+// 除法操作策略
+struct div_op {
+    static constexpr ch_op op_type = ch_op::div;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = M;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "div"; }
+};
+
+// 取模操作策略
+struct mod_op {
+    static constexpr ch_op op_type = ch_op::mod;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = N;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "mod"; }
+};
+
+// 位选择操作策略
+struct bit_sel_op {
+    static constexpr ch_op op_type = ch_op::bit_sel;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = 1;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "bit_sel"; }
+};
+
+// 位提取操作策略
+struct bits_extract_op {
+    static constexpr ch_op op_type = ch_op::bits_extract;
+    // 注意：这里的宽度计算需要根据具体的提取范围来定
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = N; // 这里假设N代表提取的位数
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "bits_extract"; }
+};
+
+// 连接操作策略
+struct concat_op {
+    static constexpr ch_op op_type = ch_op::concat;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = M + N;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "concat"; }
+};
+
+// 符号扩展操作策略
+struct sext_op {
+    static constexpr ch_op op_type = ch_op::sext;
+    // 扩展后的宽度取决于目标宽度
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = N; // 这里假设N是目标宽度
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "sext"; }
+};
+
+// 零扩展操作策略
+struct zext_op {
+    static constexpr ch_op op_type = ch_op::zext;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = N; // 这里假设N是目标宽度
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "zext"; }
+};
+
+// 与归约操作策略
+struct and_reduce_op {
+    static constexpr ch_op op_type = ch_op::and_reduce;
+    template <unsigned N>
+    static constexpr unsigned result_width_v = 1;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "and_reduce"; }
+};
+
+// 或归约操作策略
+struct or_reduce_op {
+    static constexpr ch_op op_type = ch_op::or_reduce;
+    template <unsigned N>
+    static constexpr unsigned result_width_v = 1;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "or_reduce"; }
+};
+
+// 异或归约操作策略
+struct xor_reduce_op {
+    static constexpr ch_op op_type = ch_op::xor_reduce;
+    template <unsigned N>
+    static constexpr unsigned result_width_v = 1;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "xor_reduce"; }
+};
+
+// 循环左移操作策略
+struct rotate_l_op {
+    static constexpr ch_op op_type = ch_op::rotate_l;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = M;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "rotate_l"; }
+};
+
+// 循环右移操作策略
+struct rotate_r_op {
+    static constexpr ch_op op_type = ch_op::rotate_r;
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = M;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "rotate_r"; }
+};
+
 } // namespace ch::core
 #endif // CH_LNODE_OPERATORS_H
