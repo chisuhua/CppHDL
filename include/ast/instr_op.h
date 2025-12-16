@@ -437,6 +437,35 @@ struct XorReduce {
     }
 };
 
+// POPCOUNT (新增)
+struct PopCount {
+    static const char* name() { return "instr_op_popcount::eval"; }
+    static void eval(ch::core::sdata_type* dst, ch::core::sdata_type* src) {
+        if (!check_dst_width(dst, src->bitwidth())) return;
+        
+        uint64_t count = 0;
+        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
+            if (src->get_bit(i)) {
+                count++;
+            }
+        }
+        *dst = count;
+    }
+    
+private:
+    static bool check_dst_width(ch::core::sdata_type* dst, uint32_t src_width) {
+        // popcount的结果最大值是src_width，所以需要足够的位宽来表示这个值
+        // 例如，对于8位输入，结果最大是8，需要4位来表示（0-8）
+        uint32_t required_width = src_width > 1 ? static_cast<uint32_t>(std::bit_width(src_width)) : 1u;
+        if (dst->bitwidth() < required_width) {
+            CHERROR("Destination width {} is less than required width {} for popcount of {} bits",
+                   dst->bitwidth(), required_width, src_width);
+            return false;
+        }
+        return true;
+    }
+};
+
 } // namespace op
 
 // -----------------------------
@@ -475,6 +504,9 @@ using instr_op_zext = instr_op_unary<op::Zext>;
 using instr_op_and_reduce = instr_op_unary<op::AndReduce>;
 using instr_op_or_reduce = instr_op_unary<op::OrReduce>;
 using instr_op_xor_reduce = instr_op_unary<op::XorReduce>;
+
+// 添加popcount别名
+using instr_op_popcount = instr_op_unary<op::PopCount>;
 
 } // namespace ch
 

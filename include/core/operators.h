@@ -92,22 +92,26 @@ template <typename Op, typename LHS>
 consteval unsigned get_unary_result_width() {
     if constexpr (Op::is_comparison) {
         return 1;
-    } else if constexpr (requires { Op::template result_width_v<1>; }) {
-        if constexpr (ValidWidthOperand<LHS>) {
-            if constexpr (requires { ch_width_v<LHS>; }) {
-                // return Op::template result_width_v<ch_width_v<LHS>>;
-                return ch_width_v<LHS>;
-            } else {
-                ch::type_print<LHS>{};
-                ch::type_print<Op>{};
-            }
+    } else if constexpr (std::is_same_v<Op, popcount_op>) {
+        // popcount的结果宽度是输入位宽的对数加上1
+        // 例如：1位输入最多有1个1，需要1位表示（0或1）
+        //      8位输入最多有8个1，需要4位表示（0-8）
+        //      16位输入最多有16个1，需要5位表示（0-16）
+        constexpr unsigned input_width = ch_width_v<LHS>;
+        if constexpr (input_width <= 1) {
+            return 1;
         } else {
-            ch::type_print<LHS>{};
-            ch::type_print<Op>{};
+            // 计算表示input_width所需的位数
+            unsigned bits_needed = 1;
+            unsigned max_count = input_width;
+            while (max_count > 1) {
+                max_count >>= 1;
+                bits_needed++;
+            }
+            return bits_needed;
         }
     } else {
-        ch::type_print<LHS>{};
-        ch::type_print<Op>{};
+        return ch_width_v<LHS>;
     }
 }
 
@@ -166,9 +170,6 @@ auto unary_operation(const T &operand, const std::string &name_suffix) {
                   std::is_same_v<std::remove_cvref_t<T>, ch_bool>) {
         return make_bool_result(op_node);
     } else if constexpr (result_width <= 1) {
-        ch::type_print<Op>{};
-        ch::constexpr_print<ch_width_v<T>>();
-        ch::constexpr_print<result_width>();
         return make_uint_result<1>(op_node);
     } else {
         return make_uint_result<result_width>(op_node);
@@ -491,6 +492,12 @@ auto rotate_left(const LHS &lhs, const RHS &rhs) {
 template <ValidOperand LHS, ValidOperand RHS>
 auto rotate_right(const LHS &lhs, const RHS &rhs) {
     return binary_operation<rotate_r_op>(lhs, rhs, "rotate_r");
+}
+
+// === 添加popcount函数 ===
+template <ValidOperand T>
+auto popcount(const T &operand) {
+    return unary_operation<popcount_op>(operand, "popcount");
 }
 
 // === 一元操作符重载 ===

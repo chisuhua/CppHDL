@@ -270,8 +270,7 @@ struct zext_op {
 // 与归约操作策略
 struct and_reduce_op {
     static constexpr ch_op op_type = ch_op::and_reduce;
-    template <unsigned N>
-    static constexpr unsigned result_width_v = 1;
+    template <unsigned N> static constexpr unsigned result_width_v = 1;
     static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "and_reduce"; }
 };
@@ -279,8 +278,7 @@ struct and_reduce_op {
 // 或归约操作策略
 struct or_reduce_op {
     static constexpr ch_op op_type = ch_op::or_reduce;
-    template <unsigned N>
-    static constexpr unsigned result_width_v = 1;
+    template <unsigned N> static constexpr unsigned result_width_v = 1;
     static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "or_reduce"; }
 };
@@ -288,8 +286,7 @@ struct or_reduce_op {
 // 异或归约操作策略
 struct xor_reduce_op {
     static constexpr ch_op op_type = ch_op::xor_reduce;
-    template <unsigned N>
-    static constexpr unsigned result_width_v = 1;
+    template <unsigned N> static constexpr unsigned result_width_v = 1;
     static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "xor_reduce"; }
 };
@@ -305,11 +302,25 @@ struct rotate_l_op {
 
 // 循环右移操作策略
 struct rotate_r_op {
-    static constexpr ch_op op_type = ch_op::rotate_r;
+    static constexpr auto op = ch_op::rotate_r;
     template <unsigned M, unsigned N>
     static constexpr unsigned result_width = M;
-    static constexpr bool is_comparison = false;
+    static constexpr bool is_commutative = false;
+    static constexpr bool is_bitwise = false;
     static constexpr const char *name() { return "rotate_r"; }
+};
+
+// 添加popcount操作结构体
+struct popcount_op {
+    static constexpr ch_op op_type = ch_op::popcount;
+    static constexpr bool is_commutative = false;
+    static constexpr bool is_bitwise = false;
+    static constexpr bool is_comparison = false;
+    
+    template <unsigned N>
+    static constexpr unsigned result_width_v = N; // 结果宽度与输入相同
+    
+    static constexpr const char* name() { return "popcount"; }
 };
 
 } // namespace ch::core

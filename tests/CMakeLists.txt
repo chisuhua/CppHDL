@@ -1,6 +1,6 @@
 # tests/CMakeLists.txt
 
-# 启用测试支持
+# Enable CTest
 enable_testing()
 
 # Catch2 单头文件路径
@@ -63,6 +63,8 @@ set(SINGLE_TEST_SOURCES
     test_operation_widths.cpp
     test_operation_results.cpp
     test_io_operations.cpp
+    test_io_extended_ops.cpp
+    test_popcount.cpp
 )
 
 # 为每个源文件创建一个独立的测试
@@ -82,4 +84,3 @@ add_catch_test(test_bitvector
     test_bitvector.cpp
     test_bv_truncate.cpp
 )
-

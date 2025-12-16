@@ -513,6 +513,86 @@ auto operator>>(const port<T, Dir> &lhs, Lit rhs) {
 
 // 添加更多混合操作符支持...
 
+// === 添加对bit_select操作的支持 ===
+template <typename T, typename Dir, unsigned Index>
+auto bit_select(const port<T, Dir> &operand) {
+    return bit_select<T, Index>(get_lnode(operand));
+}
+
+// === 添加对bits操作的支持 ===
+template <typename T, typename Dir, unsigned MSB, unsigned LSB>
+auto bits(const port<T, Dir> &operand) {
+    return bits<T, MSB, LSB>(get_lnode(operand));
+}
+
+// === 添加对concat操作的支持 ===
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto concat(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return concat(get_lnode(lhs), get_lnode(rhs));
+}
+
+template <typename T, typename Dir, typename U>
+    requires std::is_arithmetic_v<U>
+auto concat(const port<T, Dir> &lhs, U rhs) {
+    return concat(get_lnode(lhs), rhs);
+}
+
+template <typename T, typename Dir, typename U>
+    requires std::is_arithmetic_v<U>
+auto concat(U lhs, const port<T, Dir> &rhs) {
+    return concat(lhs, get_lnode(rhs));
+}
+
+// === 添加对select操作的支持 ===
+template <typename CondType, typename T1, typename Dir1, typename T2, typename Dir2>
+auto select(const CondType &condition, const port<T1, Dir1> &true_val, const port<T2, Dir2> &false_val) {
+    return select(condition, get_lnode(true_val), get_lnode(false_val));
+}
+
+// === 添加对归约操作的支持 ===
+template <typename T, typename Dir>
+auto and_reduce(const port<T, Dir> &operand) {
+    return and_reduce(get_lnode(operand));
+}
+
+template <typename T, typename Dir>
+auto or_reduce(const port<T, Dir> &operand) {
+    return or_reduce(get_lnode(operand));
+}
+
+template <typename T, typename Dir>
+auto xor_reduce(const port<T, Dir> &operand) {
+    return xor_reduce(get_lnode(operand));
+}
+
+// === 添加对扩展操作的支持 ===
+template <typename T, typename Dir, unsigned NewWidth>
+auto sext(const port<T, Dir> &operand) {
+    return sext<T, NewWidth>(get_lnode(operand));
+}
+
+template <typename T, typename Dir, unsigned NewWidth>
+auto zext(const port<T, Dir> &operand) {
+    return zext<T, NewWidth>(get_lnode(operand));
+}
+
+// === 添加对循环移位操作的支持 ===
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto rotate_left(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return rotate_left(get_lnode(lhs), get_lnode(rhs));
+}
+
+template <typename T1, typename Dir1, typename T2, typename Dir2>
+auto rotate_right(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    return rotate_right(get_lnode(lhs), get_lnode(rhs));
+}
+
+// === 添加对popcount操作的支持 ===
+template <typename T, typename Dir>
+auto popcount(const port<T, Dir> &operand) {
+    return popcount(get_lnode(operand));
+}
+
 } // namespace core
 } // namespace ch
 
