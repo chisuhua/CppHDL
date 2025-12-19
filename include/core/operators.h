@@ -284,16 +284,6 @@ template <typename T, unsigned NewWidth> auto sext(const T &operand) {
     return make_uint_result<NewWidth>(op_node);
 }
 
-// 添加端口类型的重载版本
-template <typename T, unsigned NewWidth, typename Dir>
-auto sext(const port<T, Dir> &operand) {
-    auto lnode_operand = to_operand(operand);
-    auto *impl = lnode_operand.impl();
-    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
-        ch_op::sext, impl, NewWidth, true, "sext",
-        std::source_location::current()));
-}
-
 // === 零扩展操作 ===
 template <typename T, unsigned NewWidth> auto zext(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
@@ -310,16 +300,6 @@ template <typename T, unsigned NewWidth> auto zext(const T &operand) {
     return make_uint_result<NewWidth>(op_node);
 }
 
-// 修改端口类型的重载版本
-template <typename T, unsigned NewWidth, typename Dir>
-auto zext(const port<T, Dir> &operand) {
-    auto lnode_operand = to_operand(operand);
-    auto *impl = lnode_operand.impl();
-    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
-        ch_op::zext, impl, NewWidth, false, "zext",
-        std::source_location::current()));
-}
-
 // === 位域提取操作 ===
 template <typename T, unsigned MSB, unsigned LSB> auto bits(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
@@ -330,18 +310,6 @@ template <typename T, unsigned MSB, unsigned LSB> auto bits(const T &operand) {
 
     auto *op_node = node_builder::instance().build_bits(
         operand_node, MSB, LSB, "bits", std::source_location::current());
-
-    return make_uint_result<MSB - LSB + 1>(op_node);
-}
-
-// 修改端口类型的重载版本，使用build_bits函数
-template <typename T, unsigned MSB, unsigned LSB, typename Dir>
-auto bits(const port<T, Dir> &operand) {
-    auto lnode_operand = to_operand(operand);
-
-    auto *op_node = node_builder::instance().build_bits(
-        lnode_operand.impl(), MSB, LSB, "bits",
-        std::source_location::current());
 
     return make_uint_result<MSB - LSB + 1>(op_node);
 }
@@ -495,8 +463,7 @@ auto rotate_right(const LHS &lhs, const RHS &rhs) {
 }
 
 // === 添加popcount函数 ===
-template <ValidOperand T>
-auto popcount(const T &operand) {
+template <ValidOperand T> auto popcount(const T &operand) {
     return unary_operation<popcount_op>(operand, "popcount");
 }
 

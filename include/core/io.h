@@ -5,9 +5,9 @@
 #include "core/context.h"
 #include "direction.h"
 #include "lnode.h"
-#include "lnode/operators_ext.h"
 #include "lnodeimpl.h"
 #include "logger.h"
+#include "operators.h"
 #include "traits.h"
 #include "uint.h"
 #include <cstdint>
@@ -514,15 +514,16 @@ auto operator>>(const port<T, Dir> &lhs, Lit rhs) {
 // 添加更多混合操作符支持...
 
 // === 添加对bit_select操作的支持 ===
-template <typename T, typename Dir, unsigned Index>
+template <unsigned Index, typename T, typename Dir>
 auto bit_select(const port<T, Dir> &operand) {
-    return bit_select<T, Index>(get_lnode(operand));
-}
+    // return bit_select<T, Index>(get_lnode(operand()));
+    // lnode<T> node = static_cast<lnode<T>>(operand);
+    auto node = to_operand(operand);
+    // 直接构建位选择节点（不经过 operators.h 的重载）
+    auto *op_node = node_builder::instance().build_bit_select(
+        node, Index, "bit_select", std::source_location::current());
 
-// === 添加对bits操作的支持 ===
-template <typename T, typename Dir, unsigned MSB, unsigned LSB>
-auto bits(const port<T, Dir> &operand) {
-    return bits<T, MSB, LSB>(get_lnode(operand));
+    return make_uint_result<1>(op_node);
 }
 
 // === 添加对concat操作的支持 ===
@@ -544,8 +545,10 @@ auto concat(U lhs, const port<T, Dir> &rhs) {
 }
 
 // === 添加对select操作的支持 ===
-template <typename CondType, typename T1, typename Dir1, typename T2, typename Dir2>
-auto select(const CondType &condition, const port<T1, Dir1> &true_val, const port<T2, Dir2> &false_val) {
+template <typename CondType, typename T1, typename Dir1, typename T2,
+          typename Dir2>
+auto select(const CondType &condition, const port<T1, Dir1> &true_val,
+            const port<T2, Dir2> &false_val) {
     return select(condition, get_lnode(true_val), get_lnode(false_val));
 }
 
@@ -565,15 +568,35 @@ auto xor_reduce(const port<T, Dir> &operand) {
     return xor_reduce(get_lnode(operand));
 }
 
-// === 添加对扩展操作的支持 ===
-template <typename T, typename Dir, unsigned NewWidth>
+// 添加端口类型的重载版本
+template <typename T, unsigned NewWidth, typename Dir>
 auto sext(const port<T, Dir> &operand) {
-    return sext<T, NewWidth>(get_lnode(operand));
+    auto lnode_operand = to_operand(operand);
+    auto *impl = lnode_operand.impl();
+    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
+        ch_op::sext, lnode_operand, NewWidth, true, "sext",
+        std::source_location::current()));
 }
 
-template <typename T, typename Dir, unsigned NewWidth>
+// 修改端口类型的重载版本
+template <typename T, unsigned NewWidth, typename Dir>
 auto zext(const port<T, Dir> &operand) {
-    return zext<T, NewWidth>(get_lnode(operand));
+    auto lnode_operand = to_operand(operand);
+    auto *impl = lnode_operand.impl();
+    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
+        ch_op::zext, lnode_operand, NewWidth, false, "zext",
+        std::source_location::current()));
+}
+
+// 修改端口类型的重载版本，使用build_bits函数
+template <typename T, unsigned MSB, unsigned LSB, typename Dir>
+auto bits(const port<T, Dir> &operand) {
+    auto lnode_operand = to_operand(operand);
+
+    auto *op_node = node_builder::instance().build_bits(
+        lnode_operand, MSB, LSB, "bits", std::source_location::current());
+
+    return make_uint_result<MSB - LSB + 1>(op_node);
 }
 
 // === 添加对循环移位操作的支持 ===
@@ -588,8 +611,7 @@ auto rotate_right(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
 }
 
 // === 添加对popcount操作的支持 ===
-template <typename T, typename Dir>
-auto popcount(const port<T, Dir> &operand) {
+template <typename T, typename Dir> auto popcount(const port<T, Dir> &operand) {
     return popcount(get_lnode(operand));
 }
 

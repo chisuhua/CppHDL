@@ -22,10 +22,8 @@ namespace chlib {
  */
 template <unsigned N> class onehot_decoder : public ch::Component {
 public:
-    // 确保至少有一个位
     static_assert(N > 0, "OneHotDecoder must have at least 1 bit");
 
-    // 输出宽度应该足够容纳N个可能的值 (0 到 N-1)
     static constexpr unsigned OUTPUT_WIDTH =
         (N > 1) ? compute_bit_width(N - 1) : 1;
 
@@ -42,33 +40,23 @@ public:
                        const std::string &name = "onehot_decoder")
         : ch::Component(parent, name) {}
 
-    /**
-     * 创建IO端口
-     */
     void create_ports() override { new (io_storage_) io_type; }
 
-    /**
-     * 描述组合逻辑
-     */
     void describe() override {
-
-        // 使用条件运算符链来解码one-hot编码
-        ch_uint<OUTPUT_WIDTH> result = 0_d;
-
-        // 对每一位检查是否设置，如果是则返回对应的位置值
         if constexpr (N == 1) {
-            // 特殊情况：只有1位
-            result = 0_d;
+            io().out = 0_d;
         } else {
-            // 多位情况：逐位检查
-            for (unsigned i = 0; i < N; i++) {
-                // 使用条件选择操作符，如果第i位被设置，则选择i，否则保持原值
-                result = select(bit_select<ch_uint<N>, i>(io().in),
-                                ch_uint<OUTPUT_WIDTH>(i), result);
-            }
-        }
+            ch_uint<OUTPUT_WIDTH> result = 0_d;
 
-        io().out = result;
+            // C++20: 使用模板 Lambda + 折叠表达式实现编译期展开循环
+            [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+                ((result = select(bit_select<Is>(io().in),
+                                  ch_uint<OUTPUT_WIDTH>(Is), result)),
+                 ...);
+            }(std::make_index_sequence<N>{});
+
+            io().out = result;
+        }
     }
 };
 

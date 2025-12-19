@@ -1,6 +1,7 @@
 #ifndef CH_LNODE_OPERATORS_H
 #define CH_LNODE_OPERATORS_H
 
+#include "lnodeimpl.h"
 #include <algorithm>
 
 namespace ch::core {
@@ -302,11 +303,12 @@ struct rotate_l_op {
 
 // 循环右移操作策略
 struct rotate_r_op {
-    static constexpr auto op = ch_op::rotate_r;
+    static constexpr ch_op op_type = ch_op::rotate_r;
     template <unsigned M, unsigned N>
     static constexpr unsigned result_width = M;
     static constexpr bool is_commutative = false;
     static constexpr bool is_bitwise = false;
+    static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "rotate_r"; }
 };
 
@@ -316,11 +318,11 @@ struct popcount_op {
     static constexpr bool is_commutative = false;
     static constexpr bool is_bitwise = false;
     static constexpr bool is_comparison = false;
-    
+
     template <unsigned N>
     static constexpr unsigned result_width_v = N; // 结果宽度与输入相同
-    
-    static constexpr const char* name() { return "popcount"; }
+
+    static constexpr const char *name() { return "popcount"; }
 };
 
 } // namespace ch::core
