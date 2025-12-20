@@ -62,7 +62,8 @@ int main() {
 
         // 测试所有有效的one-hot值
         for (int i = 0; i < 4; i++) {
-            ch_uint<4> input = ch_uint<4>(1) << i;
+            // ch_uint<4> input = ch_uint<4>(1) << i;
+            uint64_t input = 1 << i;
             simulator.set_input_value(device.instance().io().in,
                                       static_cast<uint64_t>(input));
             simulator.tick();

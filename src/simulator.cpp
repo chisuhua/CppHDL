@@ -20,6 +20,9 @@ Simulator::Simulator(ch::core::context *ctx) : ctx_(ctx) {
     std::cout << "Registering simulator " << this << std::endl;
     std::cout.flush();
 
+    ctx_curr_backup_ = ctx_curr_;
+    ctx_curr_ = ctx_;
+
     initialize();
 }
 
@@ -29,6 +32,8 @@ Simulator::~Simulator() {
 
     // Explicitly disconnect to prevent accessing destroyed context
     disconnect();
+
+    ctx_curr_ = ctx_curr_backup_;
 }
 
 void Simulator::disconnect() {

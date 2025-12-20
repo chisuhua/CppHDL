@@ -236,6 +236,7 @@ private:
     }
 
     ch::core::context *ctx_;
+    ch::core::context *ctx_curr_backup_;
     std::vector<ch::core::lnodeimpl *> eval_list_;
     std::unordered_map<uint32_t, ch::instr_base *> instr_map_;
     std::unordered_map<uint32_t, std::unique_ptr<ch::instr_base>> instr_cache_;

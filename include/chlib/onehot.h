@@ -51,7 +51,7 @@ public:
             // C++20: 使用模板 Lambda + 折叠表达式实现编译期展开循环
             [&]<std::size_t... Is>(std::index_sequence<Is...>) {
                 ((result = select(bit_select<Is>(io().in),
-                                  ch_uint<OUTPUT_WIDTH>(Is), result)),
+                                  ch_literal<Is, OUTPUT_WIDTH>{}, result)),
                  ...);
             }(std::make_index_sequence<N>{});
 
