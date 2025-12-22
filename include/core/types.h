@@ -35,6 +35,21 @@ bool operator<=(const sdata_type &lhs, const sdata_type &rhs);
 bool operator>(const sdata_type &lhs, const sdata_type &rhs);
 bool operator>=(const sdata_type &lhs, const sdata_type &rhs);
 
+// 与uint64_t的比较运算符声明
+bool operator==(const sdata_type &lhs, uint64_t rhs);
+bool operator!=(const sdata_type &lhs, uint64_t rhs);
+bool operator<(const sdata_type &lhs, uint64_t rhs);
+bool operator<=(const sdata_type &lhs, uint64_t rhs);
+bool operator>(const sdata_type &lhs, uint64_t rhs);
+bool operator>=(const sdata_type &lhs, uint64_t rhs);
+
+bool operator==(uint64_t lhs, const sdata_type &rhs);
+bool operator!=(uint64_t lhs, const sdata_type &rhs);
+bool operator<(uint64_t lhs, const sdata_type &rhs);
+bool operator<=(uint64_t lhs, const sdata_type &rhs);
+bool operator>(uint64_t lhs, const sdata_type &rhs);
+bool operator>=(uint64_t lhs, const sdata_type &rhs);
+
 // Minimal core structure to hold simulation data values
 struct sdata_type {
     using block_t = uint64_t;
@@ -111,6 +126,21 @@ private:
     friend bool operator<=(const sdata_type &lhs, const sdata_type &rhs);
     friend bool operator>(const sdata_type &lhs, const sdata_type &rhs);
     friend bool operator>=(const sdata_type &lhs, const sdata_type &rhs);
+    
+    // 与uint64_t比较的友元声明
+    friend bool operator==(const sdata_type &lhs, uint64_t rhs);
+    friend bool operator!=(const sdata_type &lhs, uint64_t rhs);
+    friend bool operator<(const sdata_type &lhs, uint64_t rhs);
+    friend bool operator<=(const sdata_type &lhs, uint64_t rhs);
+    friend bool operator>(const sdata_type &lhs, uint64_t rhs);
+    friend bool operator>=(const sdata_type &lhs, uint64_t rhs);
+
+    friend bool operator==(uint64_t lhs, const sdata_type &rhs);
+    friend bool operator!=(uint64_t lhs, const sdata_type &rhs);
+    friend bool operator<(uint64_t lhs, const sdata_type &rhs);
+    friend bool operator<=(uint64_t lhs, const sdata_type &rhs);
+    friend bool operator>(uint64_t lhs, const sdata_type &rhs);
+    friend bool operator>=(uint64_t lhs, const sdata_type &rhs);
 
     // Friend for stream output
     friend std::ostream &operator<<(std::ostream &os, const sdata_type &sdata);

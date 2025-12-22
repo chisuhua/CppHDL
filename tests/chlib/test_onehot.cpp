@@ -2,6 +2,7 @@
 #include "chlib/onehot.h"
 #include "codegen_verilog.h"
 #include "simulator.h"
+#include <cstdint>
 #include <iostream>
 
 using namespace ch;
@@ -21,10 +22,10 @@ TEST_CASE("OneHotDecoder: Basic functionality test", "[onehot][decoder]") {
             void create_ports() override { new (io_storage_) io_type; }
 
             void describe() override {
-                CH_MODULE(OneHotDecoder<4>, decoder);
+                CH_MODULE(onehot_decoder<4>, decoder);
 
                 // 测试各种输入值
-                ch_reg<ch_uint<4>> input_reg(0b0001_d);
+                ch_reg<ch_uint<4>> input_reg(0001_b);
                 decoder.io().in = input_reg;
                 io().out = decoder.io().out;
 
@@ -52,9 +53,9 @@ TEST_CASE("OneHotDecoder: Basic functionality test", "[onehot][decoder]") {
             void create_ports() override { new (io_storage_) io_type; }
 
             void describe() override {
-                CH_MODULE(OneHotDecoder<8>, decoder);
+                CH_MODULE(onehot_decoder<8>, decoder);
 
-                ch_reg<ch_uint<8>> input_reg(0b00000001_d);
+                ch_reg<ch_uint<8>> input_reg(00000001_b);
                 decoder.io().in = input_reg;
                 io().out = decoder.io().out;
             }
@@ -82,12 +83,12 @@ TEST_CASE("OneHotDecoder: Verify decode values",
             void create_ports() override { new (io_storage_) io_type; }
 
             void describe() override {
-                CH_MODULE(OneHotDecoder<4>, decoder);
+                CH_MODULE(onehot_decoder<4>, decoder);
                 decoder.io().in = io().in;
                 io().out = decoder.io().out;
 
                 // 验证恰好只有一个位被设置（即有效的one-hot编码）
-                io().valid = (ch_countones(io().in) == 1_d);
+                io().valid = (popcount(io().in) == 1_d);
             }
         };
 
@@ -96,15 +97,16 @@ TEST_CASE("OneHotDecoder: Verify decode values",
 
         // 测试所有有效的one-hot值
         for (int i = 0; i < 4; i++) {
-            ch_uint<4> input_val = ch_uint<4>(1) << i;
-            simulator.set_value(device.instance().io().in, input_val.value());
+            // ch_uint<4> input_val = ch_uint<4>(1) << i;
+            uint64_t input_val = 1 << i;
+            simulator.set_input_value(device.instance().io().in, input_val);
             simulator.tick();
 
             auto output = simulator.get_value(device.instance().io().out);
             auto valid = simulator.get_value(device.instance().io().valid);
 
-            REQUIRE(valid == 1);
-            REQUIRE(output == i);
+            REQUIRE(static_cast<uint64_t>(valid) == 1);
+            REQUIRE(static_cast<uint64_t>(output) == i);
         }
     }
 }
@@ -122,7 +124,7 @@ TEST_CASE("OneHotDecoder: Edge cases", "[onehot][decoder][edge]") {
             void create_ports() override { new (io_storage_) io_type; }
 
             void describe() override {
-                CH_MODULE(OneHotDecoder<1>, decoder);
+                CH_MODULE(onehot_decoder<1>, decoder);
 
                 ch_reg<ch_uint<1>> input_reg(0b1_d);
                 decoder.io().in = input_reg;
@@ -137,7 +139,7 @@ TEST_CASE("OneHotDecoder: Edge cases", "[onehot][decoder][edge]") {
         auto output = simulator.get_value(device.instance().io().out);
 
         // 对于1位输入，输出应该是0
-        REQUIRE(output == 0);
+        REQUIRE(static_cast<uint64_t>(output) == 0);
     }
 
     SECTION("Testing 2-bit OneHotDecoder") {
@@ -152,7 +154,7 @@ TEST_CASE("OneHotDecoder: Edge cases", "[onehot][decoder][edge]") {
             void create_ports() override { new (io_storage_) io_type; }
 
             void describe() override {
-                CH_MODULE(OneHotDecoder<2>, decoder);
+                CH_MODULE(onehot_decoder<2>, decoder);
 
                 ch_reg<ch_uint<2>> input_reg(0b01_d);
                 decoder.io().in = input_reg;
@@ -167,14 +169,14 @@ TEST_CASE("OneHotDecoder: Edge cases", "[onehot][decoder][edge]") {
         auto output = simulator.get_value(device.instance().io().out);
 
         // 对于输入0b01，输出应该是0
-        REQUIRE(output == 0);
+        REQUIRE(static_cast<uint64_t>(output) == 0);
 
         // 更改输入为0b10
-        simulator.set_value(device.instance().io().in, 0b10);
+        simulator.set_input_value(device.instance().io().in, 10_b);
         simulator.tick();
         output = simulator.get_value(device.instance().io().out);
 
         // 对于输入0b10，输出应该是1
-        REQUIRE(output == 1);
+        REQUIRE(static_cast<uint64_t>(output) == 1);
     }
 }

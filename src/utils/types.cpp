@@ -5,6 +5,56 @@
 
 namespace ch {
 namespace core {
+
+// 实现sdata_type与uint64_t的比较运算符
+bool operator==(const sdata_type &lhs, uint64_t rhs) {
+    return static_cast<uint64_t>(lhs) == rhs;
+}
+
+bool operator!=(const sdata_type &lhs, uint64_t rhs) {
+    return static_cast<uint64_t>(lhs) != rhs;
+}
+
+bool operator<(const sdata_type &lhs, uint64_t rhs) {
+    return static_cast<uint64_t>(lhs) < rhs;
+}
+
+bool operator<=(const sdata_type &lhs, uint64_t rhs) {
+    return static_cast<uint64_t>(lhs) <= rhs;
+}
+
+bool operator>(const sdata_type &lhs, uint64_t rhs) {
+    return static_cast<uint64_t>(lhs) > rhs;
+}
+
+bool operator>=(const sdata_type &lhs, uint64_t rhs) {
+    return static_cast<uint64_t>(lhs) >= rhs;
+}
+
+bool operator==(uint64_t lhs, const sdata_type &rhs) {
+    return lhs == static_cast<uint64_t>(rhs);
+}
+
+bool operator!=(uint64_t lhs, const sdata_type &rhs) {
+    return lhs != static_cast<uint64_t>(rhs);
+}
+
+bool operator<(uint64_t lhs, const sdata_type &rhs) {
+    return lhs < static_cast<uint64_t>(rhs);
+}
+
+bool operator<=(uint64_t lhs, const sdata_type &rhs) {
+    return lhs <= static_cast<uint64_t>(rhs);
+}
+
+bool operator>(uint64_t lhs, const sdata_type &rhs) {
+    return lhs > static_cast<uint64_t>(rhs);
+}
+
+bool operator>=(uint64_t lhs, const sdata_type &rhs) {
+    return lhs >= static_cast<uint64_t>(rhs);
+}
+
 sdata_type &sdata_type::operator=(const sdata_type &other) {
     if (this != &other) {
         bv_ = other.bv_;

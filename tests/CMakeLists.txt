@@ -65,6 +65,9 @@ set(SINGLE_TEST_SOURCES
     test_io_operations.cpp
     test_io_extended_ops.cpp
     test_popcount.cpp
+    test_module.cpp
+    test_sdata_compare.cpp
+    test_basic.cpp
 )
 
 # 为每个源文件创建一个独立的测试
