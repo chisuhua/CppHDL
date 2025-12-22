@@ -66,6 +66,39 @@ public:
         return ch::core::constants::zero(ch::core::ch_width_v<T>);
     }
 
+    // 信号值获取接口 - 支持ch_uint<N>类型
+    template <unsigned N>
+    const ch::core::sdata_type
+    get_signal_value(const ch::core::ch_uint<N> &signal) const {
+        CHDBG_FUNC();
+
+        if (!initialized_) {
+            CHABORT("Simulator not initialized when getting signal value");
+        }
+
+        auto *node = signal.impl();
+        CHDBG("Signal impl pointer: %p", static_cast<void *>(node));
+
+        if (!node) {
+            CHABORT(
+                "Signal implementation is null - signal may not be properly "
+                "initialized");
+            return ch::core::constants::zero(N);
+        }
+
+        uint32_t node_id = node->id();
+        CHDBG("Getting value for node ID: %u", node_id);
+
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            CHDBG("Found value for node ID: %u", node_id);
+            return it->second;
+        }
+
+        CHWARN("Value not found for signal node ID: %u", node_id);
+        return ch::core::constants::zero(N);
+    }
+
     // 统一的端口值设置接口
     template <typename T, typename Dir>
     void set_port_value(const ch::core::port<T, Dir> &port, uint64_t value) {
@@ -166,6 +199,13 @@ public:
         return get_port_value(port);
     }
 
+    // 添加对ch_uint<N>类型的支持
+    template <unsigned N>
+    const ch::core::sdata_type
+    get_value(const ch::core::ch_uint<N> &signal) const {
+        return get_signal_value(signal);
+    }
+
     template <typename T>
     void set_input_value(const ch::core::ch_in<T> &port, uint64_t value) {
         set_port_value(port, value);
@@ -199,6 +239,8 @@ public:
             return static_cast<uint64_t>(field);
         }
     }
+
+    void reinitialize();
 
 private:
     void initialize();

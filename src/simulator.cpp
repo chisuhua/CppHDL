@@ -69,6 +69,11 @@ void Simulator::disconnect() {
     initialized_ = false;
 }
 
+void Simulator::reinitialize() {
+    initialized_ = false;
+    initialize();
+}
+
 void Simulator::initialize() {
     CHDBG_FUNC();
 

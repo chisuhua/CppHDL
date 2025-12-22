@@ -320,7 +320,7 @@ struct popcount_op {
     static constexpr bool is_comparison = false;
 
     template <unsigned N>
-    static constexpr unsigned result_width_v = N; // 结果宽度与输入相同
+    static constexpr unsigned result_width_v = (N <= 1) ? 1 : std::bit_width(N);
 
     static constexpr const char *name() { return "popcount"; }
 };

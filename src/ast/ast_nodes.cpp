@@ -151,6 +151,8 @@ opimpl::create_instruction(ch::data_map_t &data_map) const {
         return std::make_unique<ch::instr_op_or_reduce>(dst_buf, 1, src0_buf);
     case ch_op::xor_reduce:
         return std::make_unique<ch::instr_op_xor_reduce>(dst_buf, 1, src0_buf);
+    case ch_op::popcount:
+        return std::make_unique<ch::instr_op_popcount>(dst_buf, 1, src0_buf);
     default:
         return nullptr;
     }
