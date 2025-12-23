@@ -38,6 +38,7 @@ endfunction()
 
 # 列出所有独立的测试源文件（每个文件一个测试）
 set(SINGLE_TEST_SOURCES
+    test_basic.cpp
     test_reg.cpp
     test_operator.cpp
     test_literal.cpp
@@ -67,7 +68,7 @@ set(SINGLE_TEST_SOURCES
     test_popcount.cpp
     test_module.cpp
     test_sdata_compare.cpp
-    test_basic.cpp
+    test_mem_timing.cpp
 )
 
 # 为每个源文件创建一个独立的测试

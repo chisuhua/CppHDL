@@ -46,7 +46,6 @@ template <typename T> auto to_operand(const T &value) {
     if constexpr (HardwareType<T>) {
         return ch::core::get_lnode(value);
     } else if constexpr (ArithmeticLiteral<T>) {
-        using Decayed = std::decay_t<T>;
         uint64_t val = static_cast<uint64_t>(value);
         constexpr uint32_t width = ch_width_v<T>;
         ch_literal_dynamic lit(val, width);

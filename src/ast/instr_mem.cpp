@@ -16,9 +16,8 @@ instr_mem::instr_mem(uint32_t node_id, uint32_t addr_width, uint32_t data_width,
       is_rom_(is_rom) {
 
     CHDBG_FUNC();
-    CHINFO(
-        "Created memory instruction for node_id=%u, %ux%u bits, depth=%u, %s",
-        node_id_, data_width_, depth_, is_rom_ ? "ROM" : "RAM");
+    CHINFO("Created memory instruction for node_id=%u, %u bits, depth=%u, %s",
+           node_id_, data_width_, depth_, is_rom_ ? "ROM" : "RAM");
 
     initialize_memory(init_data);
 }

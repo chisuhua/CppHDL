@@ -14,8 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace ch {
-namespace core {
+namespace ch::core {
 
 template <typename T, unsigned N> class ch_mem {
 public:
@@ -31,6 +30,10 @@ public:
         mem_read_port_impl *port_impl_;
 
     public:
+        using mem_value_type = T; // 添加这个类型别名，以便特化时可以引用
+        static constexpr unsigned mem_num_entries =
+            N; // 添加这个常量，以便特化时可以引用
+
         read_port(mem_read_port_impl *impl) : port_impl_(impl) {}
 
         // 转换为lnode，用于连接和运算
@@ -49,6 +52,9 @@ public:
         mem_write_port_impl *port_impl_;
 
     public:
+        using mem_value_type = T;  // 添加这个类型别名，以便特化时可以引用
+        static constexpr unsigned mem_num_entries = N;  // 添加这个常量，以便特化时可以引用
+        
         write_port(mem_write_port_impl *impl) : port_impl_(impl) {}
 
         // 获取底层实现
@@ -214,12 +220,7 @@ private:
 // ROM特化
 template <typename T, unsigned N> using ch_rom = ch_mem<T, N>;
 
-} // namespace core
-} // namespace ch
-
 // 宽度特质特化
-namespace ch {
-namespace core {
 template <typename T, unsigned N> struct ch_width_impl<ch_mem<T, N>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };
@@ -228,7 +229,39 @@ template <typename T, unsigned N>
 struct ch_width_impl<const ch_mem<T, N>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };
-} // namespace core
-} // namespace ch
 
-#endif // CH_CORE_CH_MEM_H
+} // namespace ch::core
+
+// 为read_port提供通用特化，利用read_port中定义的mem_value_type
+// 这种方法可以支持任意大小的内存
+namespace ch::core {
+    // 定义一个类型特征来检测是否为read_port类型
+    // 使用SFINAE检查是否存在mem_value_type成员
+    template<typename T, typename = void>
+    struct is_read_port : std::false_type {};
+    
+    template<typename T>
+    struct is_read_port<T, std::void_t<typename T::mem_value_type>> : std::true_type {};
+    
+    // 为read_port类型提供通用特化
+    template<typename ReadPortType>
+    struct ch_width_impl<ReadPortType, std::enable_if_t<is_read_port<ReadPortType>::value>> {
+        static constexpr unsigned value = ch_width_v<typename ReadPortType::mem_value_type>;
+    };
+    
+    // 定义一个类型特征来检测是否为write_port类型
+    // 使用SFINAE检查是否存在mem_value_type成员
+    template<typename T, typename = void>
+    struct is_write_port : std::false_type {};
+    
+    template<typename T>
+    struct is_write_port<T, std::void_t<typename T::mem_value_type>> : std::true_type {};
+    
+    // 为write_port类型提供通用特化
+    template<typename WritePortType>
+    struct ch_width_impl<WritePortType, std::enable_if_t<is_write_port<WritePortType>::value>> {
+        static constexpr unsigned value = ch_width_v<typename WritePortType::mem_value_type>;
+    };
+}
+
+#endif // CPPHDL_CORE_MEM_H_
