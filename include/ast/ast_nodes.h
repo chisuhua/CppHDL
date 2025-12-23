@@ -71,7 +71,7 @@ private:
     lnodeimpl *clk_en_ = nullptr;
     lnodeimpl *rst_val_ = nullptr;
     lnodeimpl *init_val_ = nullptr; // Store init_val as dedicated member
-    proxyimpl *proxy_ = nullptr; // Explicit link to proxy node
+    proxyimpl *proxy_ = nullptr;    // Explicit link to proxy node
 };
 
 // --- opimpl ---
@@ -154,7 +154,10 @@ public:
 
     const sdata_type &value() const { return value_; }
     void set_value(const sdata_type &val) { value_ = val; }
-    void set_driver(lnodeimpl *drv) { driver_ = drv; }
+    void set_driver(lnodeimpl *drv) {
+        driver_ = drv;
+        add_src(drv);
+    }
     lnodeimpl *driver() const { return driver_; }
 
     // 声明创建指令的方法，实现在cpp文件中

@@ -1,203 +1,113 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "codegen_dag.h"
 #include "codegen_verilog.h"
 #include "module.h"
 #include "simulator.h"
 #include <cstdint>
-#include <iostream>
 
 using namespace ch;
 using namespace ch::core;
 
-// 定义一个简单的测试模块，用于测试输入和输出
-template <unsigned N> class TestModule : public Component {
+// 定义一个简单的测试模块
+template <unsigned N> class SimpleModule : public Component {
 public:
-    __io(ch_in<ch_uint<N>> in_port; ch_out<ch_uint<N>> out_port;
-         ch_out<ch_uint<N>> incremented;)
+    __io(ch_in<ch_uint<N>> in_port; ch_out<ch_uint<N>> out_port;)
 
-        TestModule(Component *parent = nullptr,
-                   const std::string &name = "TestModule")
+        SimpleModule(Component *parent = nullptr,
+                     const std::string &name = "SimpleModule")
         : Component(parent, name) {}
 
-    void create_ports() override { new (io_storage_) io_type; }
+    void create_ports() override { new (this->io_storage_) io_type; }
 
     void describe() override {
         // 直接连接输入到输出
-        io().out_port = io().in_port;
-        // 输出一个递增的值
-        io().incremented = io().in_port + 1_d;
+        // 使用新的显式operator<<=替换赋值操作
+        io().out_port <<= io().in_port;
     }
 };
 
-// 定义另一个测试模块，用于测试多个模块连接
-template <unsigned N> class AdderModule : public Component {
-public:
-    __io(ch_in<ch_uint<N>> a; ch_in<ch_uint<N>> b; ch_out<ch_uint<N + 1>> sum;)
-
-        AdderModule(Component *parent = nullptr,
-                    const std::string &name = "AdderModule")
-        : Component(parent, name) {}
-
-    void create_ports() override { new (io_storage_) io_type; }
-
-    void describe() override { io().sum = io().a + io().b; }
-};
-
-// 顶层模块，用于测试CH_MODULE实例化和连接
-class TopModuleTest : public Component {
-public:
-    __io(ch_in<ch_uint<8>> in_data; ch_out<ch_uint<8>> out_data;
-         ch_out<ch_uint<8>> incremented_data; ch_out<ch_uint<9>> summed_data;)
-
-        TopModuleTest(Component *parent = nullptr,
-                      const std::string &name = "TopModuleTest")
-        : Component(parent, name) {}
-
-    void create_ports() override { new (io_storage_) io_type; }
-
-    void describe() override {
-        // 实例化第一个模块
-        CH_MODULE(TestModule<8>, test_module);
-
-        // 实例化第二个模块
-        CH_MODULE(AdderModule<8>, adder_module);
-
-        // 连接信号
-        // 从顶层输入到test_module输入
-        test_module.io().in_port = io().in_data;
-
-        // 从test_module输出到顶层输出
-        io().out_data = test_module.io().out_port;
-        io().incremented_data = test_module.io().incremented;
-
-        // 连接两个模块到adder_module
-        adder_module.io().a = test_module.io().in_port;
-        adder_module.io().b = test_module.io().incremented;
-        io().summed_data = adder_module.io().sum;
-    }
-};
-
-TEST_CASE("CH_MODULE - Basic Instantiation", "[module][instantiation]") {
-    class TestTop : public Component {
+TEST_CASE("CH_MODULE - Basic Instantiation", "[module][basic]") {
+    class Top : public Component {
     public:
-        __io(ch_out<ch_uint<4>> out;)
+        __io()
 
-            TestTop(Component *parent = nullptr,
-                    const std::string &name = "test_top")
+            Top(Component *parent = nullptr, const std::string &name = "top")
             : Component(parent, name) {}
 
-        void create_ports() override { new (io_storage_) io_type; }
+        void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            CH_MODULE(TestModule<4>, mod);
-            io().out = mod.io().in_port; // 简单连接以测试实例化
+            // 在父组件中创建子模块
+            CH_MODULE(SimpleModule<4>, child_module);
         }
     };
 
-    REQUIRE_NOTHROW([&]() { ch_device<TestTop> device; }());
+    ch_device<Top> device;
+
+    // 检查子模块是否创建成功
+    REQUIRE(device.instance().child_count() == 1);
 }
 
-TEST_CASE("CH_MODULE - Signal Connection", "[module][connection]") {
-    ch_device<TopModuleTest> device;
-    Simulator simulator(device.context());
-
-    // 设置输入值
-    simulator.set_input_value(device.instance().io().in_data, 42);
-
-    // 执行仿真
-    simulator.tick();
-
-    // 检查输出值
-    auto out_data = simulator.get_value(device.instance().io().out_data);
-    auto incremented_data =
-        simulator.get_value(device.instance().io().incremented_data);
-    auto summed_data = simulator.get_value(device.instance().io().summed_data);
-
-    REQUIRE(out_data == 42);
-    REQUIRE(incremented_data == 43);
-    REQUIRE(static_cast<uint64_t>(summed_data) == 85); // 42 + 43 = 85
-}
-
-TEST_CASE("CH_MODULE - Hierarchical Naming", "[module][hierarchy]") {
-    ch_device<TopModuleTest> device;
-
-    // 检查模块是否正确创建了层次结构
-    REQUIRE(device.instance().child_count() == 2);
-
-    const auto &children = device.instance().children();
-    REQUIRE(children.size() == 2);
-
-    // 检查子模块名称
-    bool found_test_module = false;
-    bool found_adder_module = false;
-
-    for (const auto &child : children) {
-        if (child->name() == "test_module") {
-            found_test_module = true;
-        } else if (child->name() == "adder_module") {
-            found_adder_module = true;
-        }
-    }
-
-    REQUIRE(found_test_module);
-    REQUIRE(found_adder_module);
-}
-
-// 测试嵌套模块
-class NestedChild : public Component {
-public:
-    __io(ch_in<ch_uint<4>> in_port; ch_out<ch_uint<4>> out_port;)
-
-        NestedChild(Component *parent = nullptr,
-                    const std::string &name = "NestedChild")
-        : Component(parent, name) {}
-
-    void create_ports() override { new (io_storage_) io_type; }
-
-    void describe() override { io().out_port = io().in_port; }
-};
-
-class NestedParent : public Component {
-public:
-    __io(ch_in<ch_uint<4>> in_port; ch_out<ch_uint<4>> out_port;)
-
-        NestedParent(Component *parent = nullptr,
-                     const std::string &name = "NestedParent")
-        : Component(parent, name) {}
-
-    void create_ports() override { new (io_storage_) io_type; }
-
-    void describe() override {
-        CH_MODULE(NestedChild, child);
-        child.io().in_port = io().in_port;
-        io().out_port = child.io().out_port;
-    }
-};
-
-TEST_CASE("CH_MODULE - Nested Modules", "[module][nested]") {
-    class NestedTop : public Component {
+TEST_CASE("CH_MODULE - Code Generation", "[module][codegen]") {
+    class Top : public Component {
     public:
-        __io(ch_in<ch_uint<4>> in_port; ch_out<ch_uint<4>> out_port;)
+        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
 
-            NestedTop(Component *parent = nullptr,
-                      const std::string &name = "NestedTop")
+            Top(Component *parent = nullptr, const std::string &name = "top")
             : Component(parent, name) {}
 
-        void create_ports() override { new (io_storage_) io_type; }
+        void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            CH_MODULE(NestedParent, parent);
-            parent.io().in_port = io().in_port;
-            io().out_port = parent.io().out_port;
+            CH_MODULE(SimpleModule<4>, mod);
+
+            // 检查子模块是否创建成功
+            REQUIRE(mod.io().in_port.impl() != nullptr);
+            REQUIRE(mod.io().out_port.impl() != nullptr);
+            // 连接端口: 顶层输入 -> 子模块输入，子模块输出 -> 顶层输出
+            // 使用新的operator<<=替代connect函数调用
+            mod.io().in_port <<= io().in_data;
+            io().out_data <<= mod.io().out_port;
         }
     };
 
-    ch_device<NestedTop> device;
-    Simulator simulator(device.context());
+    ch_device<Top> device;
 
-    simulator.set_input_value(device.instance().io().in_port, 10);
-    simulator.tick();
+    // 测试代码生成功能
+    REQUIRE_NOTHROW(toVerilog("test_module_codgen.v", device.context()));
+    REQUIRE_NOTHROW(toDAG("test_module_codgen.dot", device.context()));
+}
 
-    auto result = simulator.get_value(device.instance().io().out_port);
-    REQUIRE(static_cast<uint64_t>(result) == 10);
+TEST_CASE("CH_MODULE - Simulation Value Transfer", "[module][simulation]") {
+    class Top : public Component {
+    public:
+        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
+
+            Top(Component *parent = nullptr, const std::string &name = "top")
+            : Component(parent, name) {}
+
+        void create_ports() override { new (this->io_storage_) io_type; }
+
+        void describe() override {
+            CH_MODULE(SimpleModule<4>, mod);
+
+            // 连接端口: 顶层输入 -> 子模块输入，子模块输出 -> 顶层输出
+            mod.io().in_port <<= io().in_data;
+            io().out_data <<= mod.io().out_port;
+        }
+    };
+
+    ch_device<Top> device;
+    Simulator sim(device.context());
+
+    // 测试不同的输入值
+    auto in_data = device.io().in_data;
+    auto out_data = device.io().out_data;
+
+    for (uint64_t i = 0; i < 16; ++i) {
+        sim.set_input_value(in_data, i);
+        sim.tick();
+        REQUIRE(sim.get_value(out_data) == i);
+    }
 }

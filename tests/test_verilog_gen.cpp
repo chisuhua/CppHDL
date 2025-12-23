@@ -57,6 +57,8 @@ TEST_CASE("VerilogGen - CounterModule", "[verilog][counter]") {
     reg_counter->next = reg_counter + ch_uint<4>(1);
     out_port = reg_counter;
 
+    ch::toVerilog("verilog_gen.v", ctx.get());
+
     // Generate Verilog code
     std::string verilog_code = generateVerilogToString(ctx.get());
 

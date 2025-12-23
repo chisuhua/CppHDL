@@ -149,7 +149,12 @@ void Simulator::initialize() {
             // 根据节点类型分类
             switch (node->type()) {
             case ch::core::lnodetype::type_input:
-                input_instr_list_.emplace_back(node_id, instr_map_[node_id]);
+                if (!node->get_parent())
+                    input_instr_list_.emplace_back(node_id,
+                                                   instr_map_[node_id]);
+                else
+                    combinational_instr_list_.emplace_back(node_id,
+                                                           instr_map_[node_id]);
                 break;
             case ch::core::lnodetype::type_reset:
                 reset_instr_list_.emplace_back(node_id, instr_map_[node_id]);

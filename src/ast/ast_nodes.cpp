@@ -175,7 +175,11 @@ proxyimpl::create_instruction(ch::data_map_t &data_map) const {
 std::unique_ptr<ch::instr_base>
 inputimpl::create_instruction(ch::data_map_t &data_map) const {
     auto *dst_buf = &data_map[id_];
-    return std::make_unique<ch::instr_input>(dst_buf, size_);
+    if (num_srcs() > 0 && src(0)) {
+        auto *src_buf = &data_map[src(0)->id()];
+        return std::make_unique<ch::instr_input>(dst_buf, size_, src_buf);
+    }
+    return nullptr;
 }
 
 // outputimpl的指令创建实现

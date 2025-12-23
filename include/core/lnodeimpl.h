@@ -12,9 +12,11 @@
 #include <vector>
 
 #include "instr_base.h"
+#include "logger.h"
 
 // Forward declarations to avoid circular dependencies
 namespace ch {
+class Component;
 namespace core {
 class context;
 struct sdata_type;
@@ -88,9 +90,7 @@ using clone_map = std::unordered_map<uint32_t, lnodeimpl *>;
 class lnodeimpl {
 public:
     lnodeimpl(uint32_t id, lnodetype type, uint32_t size, context *ctx,
-              const std::string &name, const std::source_location &sloc)
-        : id_(id), type_(type), size_(size), ctx_(ctx), name_(name),
-          sloc_(sloc) {}
+              const std::string &name, const std::source_location &sloc);
 
     virtual ~lnodeimpl() = default;
 
@@ -138,6 +138,9 @@ public:
     void add_user(lnodeimpl *user) {
         if (user) {
             users_.push_back(user);
+            CHDBG(" DAG chain: node ID %u(%s)  -> %u(%s)", this->id_,
+                  this->to_string().c_str(), user->id(),
+                  user->to_string().c_str());
         }
     }
 
@@ -189,6 +192,7 @@ public:
 
     // 新增：清理源节点引用，用于销毁时避免循环引用
     void clear_sources() { srcs_.clear(); }
+    ch::Component *get_parent() { return parent_; }
 
 protected:
     uint32_t id_;
@@ -199,6 +203,7 @@ protected:
     std::source_location sloc_;
     std::vector<lnodeimpl *> srcs_;
     std::vector<lnodeimpl *> users_; // Track which nodes use this node
+    ch::Component *parent_;
 };
 
 } // namespace ch::core

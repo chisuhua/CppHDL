@@ -65,33 +65,6 @@ public:
 
     // 统一的节点创建方法，添加错误检查
     template <typename T, typename... Args> T *create_node(Args &&...args);
-    /*
-    {
-        CHDBG_FUNC();
-        CHREQUIRE(this != nullptr, "Context cannot be null");
-
-        try {
-            uint32_t new_id = next_node_id();
-            auto node = std::make_unique<T>(new_id, std::forward<Args>(args)...,
-    this); T* raw_ptr = node.get();
-
-            node_storage_.push_back(std::move(node));
-
-            if (debug_context_lifetime()) {
-                CHINFO("Created node ID %u (%s) of type %d in context 0x%llx",
-                       new_id, raw_ptr->name().c_str(),
-    static_cast<int>(raw_ptr->type()), (unsigned long long)this);
-            }
-            return raw_ptr;
-        } catch (const std::bad_alloc&) {
-            CHERROR("Failed to allocate memory for node creation");
-            return nullptr;
-        } catch (const std::exception& e) {
-            CHERROR("Node creation failed: %s", e.what());
-            return nullptr;
-        }
-    }
-    */
 
     // 专门的节点创建方法
     litimpl *create_literal(
@@ -156,7 +129,7 @@ public:
     void set_default_clock(core::clockimpl *clk);
     core::clockimpl *get_default_clock() const;
     bool has_default_clock() const { return default_clock_ != nullptr; }
-    
+
     // 默认复位相关方法
     core::resetimpl *get_default_reset() const;
     bool has_default_reset() const { return default_reset_ != nullptr; }

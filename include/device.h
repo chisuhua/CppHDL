@@ -16,6 +16,10 @@ public:
     T& instance() { return *top_; }
     const T& instance() const { return *top_; }
     ch::core::context* context() const { return top_->context(); }
+    
+    // 添加io()方法，暴露顶层模块的IO接口
+    auto& io() { return top_->io(); }
+    const auto& io() const { return top_->io(); }
 
 private:
     std::unique_ptr<T> top_;

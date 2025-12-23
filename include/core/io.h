@@ -15,8 +15,7 @@
 #include <string>
 
 #include "node_builder.h"
-namespace ch {
-namespace core {
+namespace ch::core {
 
 // === 改进的 ch_logic_out 类 ===
 template <typename T> class ch_logic_out {
@@ -615,7 +614,120 @@ template <typename T, typename Dir> auto popcount(const port<T, Dir> &operand) {
     return popcount(get_lnode(operand));
 }
 
-} // namespace core
-} // namespace ch
+// === 添加显式连接函数 ===
+// 连接函数：输出端口驱动输入端口
+template <typename T1, typename T2>
+void operator<<=(const port<T1, output_direction> &receiver,
+                 const port<T2, input_direction> &driver) {
+    CHDBG_FUNC();
+    // 获取驱动方和接收方的实现节点
+    auto *driver_impl = driver.impl();
+    auto *receiver_impl = receiver.impl();
+
+    // 检查节点有效性
+    if (!driver_impl || !receiver_impl) {
+        CHERROR("Invalid port connection: null node encountered");
+        return;
+    }
+
+    // TODO: check the port is module port
+
+    // 建立连接：设置接收方的驱动源为驱动方
+    // receiver_impl 是 inputimpl 类型，有 set_driver 方法
+    outputimpl *input_receiver = dynamic_cast<outputimpl *>(receiver_impl);
+    if (input_receiver) {
+        input_receiver->set_src(0, driver_impl);
+
+        // 同时在驱动方添加用户关系
+        // driver_impl->add_user(input_receiver);
+    }
+
+    CHDBG("Connected output port '%s' to input port '%s'",
+          driver.name().c_str(), receiver.name().c_str());
+}
+
+// 连接函数：输入端口驱动输入端口
+template <typename T1, typename T2>
+void operator<<=(const port<T1, input_direction> &receiver,
+                 const port<T2, input_direction> &driver) {
+    CHDBG_FUNC();
+    // 获取驱动方和接收方的实现节点
+    auto *driver_impl = driver.impl();
+    auto *receiver_impl = receiver.impl();
+
+    // 检查节点有效性
+    if (!driver_impl || !receiver_impl) {
+        CHERROR("Invalid port connection: null node encountered");
+        return;
+    }
+
+    // TODO: check receiver is submodule port, driver is module port
+
+    // 建立连接：设置接收方的驱动源为驱动方
+    // receiver_impl 是 inputimpl 类型，有 set_driver 方法
+    inputimpl *input_receiver = dynamic_cast<inputimpl *>(receiver_impl);
+    if (input_receiver) {
+        input_receiver->set_driver(driver_impl);
+    }
+
+    CHDBG("Connected input port '%s' to input port '%s'", driver.name().c_str(),
+          receiver.name().c_str());
+}
+
+// 连接函数：输出端口驱动输出端口（用于连接子模块输出到顶层输出）
+template <typename T1, typename T2>
+void operator<<=(const port<T1, output_direction> &receiver,
+                 const port<T2, output_direction> &driver) {
+    CHDBG_FUNC();
+    // 获取驱动方和接收方的实现节点
+    auto *driver_impl = driver.impl();
+    auto *receiver_impl = receiver.impl();
+
+    // 检查节点有效性
+    if (!driver_impl || !receiver_impl) {
+        CHERROR("Invalid port connection: null node encountered");
+        return;
+    }
+
+    // TODO: check receiver is module port, driver is submodule port
+
+    // 对于输出到输出的连接，设置接收方的源为驱动方
+    receiver_impl->set_src(0, driver_impl);
+
+    CHDBG("Connected output port '%s' to output port '%s'",
+          driver.name().c_str(), receiver.name().c_str());
+}
+
+// 连接函数：输入端口驱动输出端口
+template <typename T1, typename T2>
+void operator<<=(const port<T1, input_direction> &receiver,
+                 const port<T2, output_direction> &driver) {
+    CHDBG_FUNC();
+    // 获取驱动方和接收方的实现节点
+    auto *driver_impl = driver.impl();
+    auto *receiver_impl = receiver.impl();
+
+    // 检查节点有效性
+    if (!driver_impl || !receiver_impl) {
+        CHERROR("Invalid port connection: null node encountered");
+        return;
+    }
+
+    // TODO: check receiver is submodule port, driver is submodule port
+
+    // 建立连接：设置接收方的驱动源为驱动方
+    // receiver_impl 是 outputimpl 类型，需要添加源
+    outputimpl *output_receiver = dynamic_cast<outputimpl *>(receiver_impl);
+    if (output_receiver) {
+        // 清除旧的源并添加新的源
+        // 注意：这里简化处理，实际应用中可能需要更复杂的源管理
+        output_receiver->add_src(driver_impl);
+    }
+
+    CHDBG("Connected input port '%s' to output port '%s'",
+          driver.name().c_str(), receiver.name().c_str());
+}
+
+} // namespace ch::core
 
 #endif // IO_H
