@@ -165,13 +165,16 @@ public:
     // 拷贝构造函数
     port(const port &other) : impl_(other.impl_) {}
 
+    // ... existing code ...
+    port &operator=(const port &other) = delete;
+    // ... existing code ...
     // 赋值操作符
-    port &operator=(const port &other) {
-        if (this != &other) {
-            impl_ = other.impl_;
-        }
-        return *this;
-    }
+    // port &operator=(const port &other) {
+    //     if (this != &other) {
+    //         impl_ = other.impl_;
+    //     }
+    //     return *this;
+    // }
 
     operator lnode<T>() const { return static_cast<lnode<T>>(impl_); }
 
@@ -214,12 +217,13 @@ public:
     port(const port &other) : impl_(other.impl_) {}
 
     // 赋值操作符
-    port &operator=(const port &other) {
-        if (this != &other) {
-            impl_ = other.impl_;
-        }
-        return *this;
-    }
+    port &operator=(const port &other) = delete;
+    // port &operator=(const port &other) {
+    //     if (this != &other) {
+    //         impl_ = other.impl_;
+    //     }
+    //     return *this;
+    // }
 
     template <typename U> void operator=(const U &value) { impl_ = value; }
 

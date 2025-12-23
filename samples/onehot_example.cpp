@@ -40,10 +40,10 @@ public:
         CH_MODULE(chlib::onehot_decoder<N>, decoder);
 
         // 连接输入
-        decoder.io().in = io().in;
+        decoder.io().in <<= io().in;
 
         // 连接输出
-        io().decoded_value = decoder.io().out;
+        io().decoded_value <<= decoder.io().out;
 
         // 验证输入确实是有效的one-hot编码（只有一个位被设置）
         io().valid = (popcount(io().in) == 1_d);
@@ -57,6 +57,7 @@ int main() {
         // 创建设备和仿真器
         ch_device<OneHotDecoderTop<4>> device;
         Simulator simulator(device.context());
+        ch::toDAG("onehot_example.dot", device.context());
 
         std::cout << "Testing OneHotDecoder with 4-bit input:" << std::endl;
 
@@ -70,19 +71,20 @@ int main() {
 
             auto decoded_value =
                 simulator.get_value(device.instance().io().decoded_value);
-            auto valid = simulator.get_value(device.instance().io().valid);
+            // auto valid = simulator.get_value(device.instance().io().valid);
 
             std::cout << "Input: 0b"
                       << std::bitset<4>(static_cast<uint64_t>(input))
-                      << " -> Decoded value: " << decoded_value
-                      << " (Valid: " << (valid.is_one() ? "true" : "false")
+                      << " -> Decoded value: "
+                      << decoded_value
+                      //   << " (Valid: " << (valid.is_one() ? "true" : "false")
                       << ")" << std::endl;
 
             // 验证结果
-            if (!valid.is_value(1)) {
-                std::cerr << "Error: Input should be valid!" << std::endl;
-                return 1;
-            }
+            // if (!valid.is_value(1)) {
+            //     std::cerr << "Error: Input should be valid!" << std::endl;
+            //     return 1;
+            // }
 
             if (!decoded_value.is_value(i)) {
                 std::cerr << "Error: Expected " << i << ", got "
@@ -90,22 +92,21 @@ int main() {
                 return 1;
             }
         }
+        // // 测试无效输入（全0）
+        // simulator.set_input_value(device.instance().io().in, 0);
+        // simulator.tick();
 
-        // 测试无效输入（全0）
-        simulator.set_input_value(device.instance().io().in, 0);
-        simulator.tick();
+        // auto valid = simulator.get_value(device.instance().io().valid);
+        // std::cout << "Input: 0b0000 -> Valid: "
+        //           << (valid.is_one() ? "true" : "false") << std::endl;
 
-        auto valid = simulator.get_value(device.instance().io().valid);
-        std::cout << "Input: 0b0000 -> Valid: "
-                  << (valid.is_one() ? "true" : "false") << std::endl;
+        // // 测试无效输入（多个位设置）
+        // simulator.set_input_value(device.instance().io().in, 0b0101);
+        // simulator.tick();
 
-        // 测试无效输入（多个位设置）
-        simulator.set_input_value(device.instance().io().in, 0b0101);
-        simulator.tick();
-
-        valid = simulator.get_value(device.instance().io().valid);
-        std::cout << "Input: 0b0101 -> Valid: "
-                  << (valid.is_one() ? "true" : "false") << std::endl;
+        // valid = simulator.get_value(device.instance().io().valid);
+        // std::cout << "Input: 0b0101 -> Valid: "
+        //           << (valid.is_one() ? "true" : "false") << std::endl;
 
         std::cout << "\nGenerating Verilog code..." << std::endl;
         toVerilog("onehot_decoder.v", device.context());

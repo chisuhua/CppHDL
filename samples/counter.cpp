@@ -51,7 +51,7 @@ public:
 
     void describe() override {
         CH_MODULE(Counter<4>, counter1);
-        io().out = counter1.io().out;
+        io().out <<= counter1.io().out;
     }
 };
 

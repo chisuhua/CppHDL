@@ -99,12 +99,12 @@ public:
         ch::ch_module<FiFo<ch_uint<2>, 2>> fifo_inst{"fifo_inst"};
 
         // 连接IO
-        fifo_inst.io().din = io().din;
-        fifo_inst.io().push = io().push;
-        fifo_inst.io().pop = io().pop;
-        io().dout = fifo_inst.io().dout;
-        io().empty = fifo_inst.io().empty;
-        io().full = fifo_inst.io().full;
+        fifo_inst.io().din <<= io().din;
+        fifo_inst.io().push <<= io().push;
+        fifo_inst.io().pop <<= io().pop;
+        io().dout <<= fifo_inst.io().dout;
+        io().empty <<= fifo_inst.io().empty;
+        io().full <<= fifo_inst.io().full;
     }
 };
 
