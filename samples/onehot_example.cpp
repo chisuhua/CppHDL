@@ -57,7 +57,6 @@ int main() {
         // 创建设备和仿真器
         ch_device<OneHotDecoderTop<4>> device;
         Simulator simulator(device.context());
-        ch::toDAG("onehot_example.dot", device.context());
 
         std::cout << "Testing OneHotDecoder with 4-bit input:" << std::endl;
 
@@ -71,7 +70,7 @@ int main() {
 
             auto decoded_value =
                 simulator.get_value(device.instance().io().decoded_value);
-            // auto valid = simulator.get_value(device.instance().io().valid);
+            auto valid = simulator.get_value(device.instance().io().valid);
 
             std::cout << "Input: 0b"
                       << std::bitset<4>(static_cast<uint64_t>(input))
@@ -81,10 +80,10 @@ int main() {
                       << ")" << std::endl;
 
             // 验证结果
-            // if (!valid.is_value(1)) {
-            //     std::cerr << "Error: Input should be valid!" << std::endl;
-            //     return 1;
-            // }
+            if (!valid.is_value(1)) {
+                std::cerr << "Error: Input should be valid!" << std::endl;
+                return 1;
+            }
 
             if (!decoded_value.is_value(i)) {
                 std::cerr << "Error: Expected " << i << ", got "
