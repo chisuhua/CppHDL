@@ -76,7 +76,7 @@ public:
 // 内存读端口
 class mem_read_port_impl : public mem_port_impl {
 private:
-    int data_output_idx_; // 数据输出索引
+    lnodeimpl *data_output_; // 数据输出索引
 
 public:
     mem_read_port_impl(uint32_t id, memimpl *parent, uint32_t port_id,
@@ -86,13 +86,12 @@ public:
                        const std::source_location &sloc, context *ctx)
         : mem_port_impl(id, parent, port_id, type, size, cd, addr, enable, name,
                         sloc, ctx),
-          data_output_idx_(-1) {
+          data_output_(data_output) {
 
         // 添加数据输出节点作为源
-        if (data_output) {
-            data_output->add_src(this);
-            // data_output_idx_ = add_src(data_output);
-        }
+        // if (data_output) {
+        //     data_output->add_src(this);
+        // }
 
         // 添加父内存节点
         add_src(parent);
@@ -101,9 +100,7 @@ public:
         parent->add_read_port(this);
     }
 
-    lnodeimpl *data_output() const {
-        return data_output_idx_ != -1 ? src(data_output_idx_) : nullptr;
-    }
+    lnodeimpl *data_output() const { return data_output_; }
 
     lnodeimpl *clone(context *new_ctx,
                      const clone_map &cloned_nodes) const override;

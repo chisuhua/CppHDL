@@ -111,9 +111,9 @@ TEST_CASE("ch_mem: port creation", "[mem][ports][basic]") {
         auto read_port = mem.aread(addr, "async_read");
 
         REQUIRE(read_port.impl() != nullptr);
-        REQUIRE(read_port.impl()->port_type() == mem_port_type::async_read);
-        REQUIRE(read_port.impl()->has_addr() == true);
-        REQUIRE(read_port.impl()->has_cd() == false); // 异步读端口没有时钟
+        REQUIRE(read_port.port_type() == mem_port_type::async_read);
+        REQUIRE(read_port.has_addr() == true);
+        REQUIRE(read_port.has_cd() == false); // 异步读端口没有时钟
     }
 
     SECTION("Sync read port creation") {
@@ -122,10 +122,10 @@ TEST_CASE("ch_mem: port creation", "[mem][ports][basic]") {
         auto read_port = mem.sread(addr, enable, "sync_read");
 
         REQUIRE(read_port.impl() != nullptr);
-        REQUIRE(read_port.impl()->port_type() == mem_port_type::sync_read);
-        REQUIRE(read_port.impl()->has_addr() == true);
-        REQUIRE(read_port.impl()->has_cd() == true); // 同步读端口有时钟
-        REQUIRE(read_port.impl()->has_enable() == true);
+        REQUIRE(read_port.port_type() == mem_port_type::sync_read);
+        REQUIRE(read_port.has_addr() == true);
+        REQUIRE(read_port.has_cd() == true); // 同步读端口有时钟
+        REQUIRE(read_port.has_enable() == true);
     }
 
     SECTION("Write port creation") {
@@ -135,10 +135,10 @@ TEST_CASE("ch_mem: port creation", "[mem][ports][basic]") {
         auto write_port = mem.write(addr, data, enable, "write_port");
 
         REQUIRE(write_port.impl() != nullptr);
-        REQUIRE(write_port.impl()->port_type() == mem_port_type::write);
-        REQUIRE(write_port.impl()->has_addr() == true);
-        REQUIRE(write_port.impl()->has_cd() == true);
-        REQUIRE(write_port.impl()->wdata() != nullptr);
+        REQUIRE(write_port.port_type() == mem_port_type::write);
+        REQUIRE(write_port.has_addr() == true);
+        REQUIRE(write_port.has_cd() == true);
+        REQUIRE(write_port.wdata() != nullptr);
     }
 }
 
@@ -200,9 +200,9 @@ TEST_CASE("mem_port_impl: node creation", "[mem][port][impl]") {
         auto read_port = mem_obj.aread(addr, "async_read_test");
 
         REQUIRE(read_port.impl() != nullptr);
-        REQUIRE(read_port.impl()->parent() == mem_obj.impl());
-        REQUIRE(read_port.impl()->port_type() == mem_port_type::async_read);
-        REQUIRE(read_port.impl()->has_addr() == true);
+        REQUIRE(read_port.parent() == mem_obj.impl());
+        REQUIRE(read_port.port_type() == mem_port_type::async_read);
+        REQUIRE(read_port.has_addr() == true);
     }
 
     SECTION("Write port node creation") {
@@ -398,7 +398,7 @@ TEST_CASE("ch_mem: advanced port scenarios", "[mem][ports][advanced]") {
         auto read_port = mem.sread(addr, ch_bool(true), "sync_read_literal");
 
         REQUIRE(read_port.impl() != nullptr);
-        REQUIRE(read_port.impl()->port_type() == mem_port_type::sync_read);
+        REQUIRE(read_port.port_type() == mem_port_type::sync_read);
         // 当使能为常量1时，可能被优化掉
         // REQUIRE(read_port.impl()->has_enable() == false); // 可选检查
     }

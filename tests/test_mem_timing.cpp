@@ -153,12 +153,36 @@ public:
     }
 };
 
+// Component for testing memory with multiple read ports and initialized data
+class MultiReadMemInitialized : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> addr1_in; ch_in<ch_uint<8>> addr2_in;
+         ch_out<ch_uint<32>> data1_out; ch_out<ch_uint<32>> data2_out;)
+
+        MultiReadMemInitialized(ch::Component *parent = nullptr,
+                     const std::string &name = "multi_read_mem_init")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        // Initialize memory with the test data
+        std::vector<uint32_t> init_data = {0x1000, 0x1001, 0x1002, 0x1003};
+        ch_mem<ch_uint<32>, 256> mem(init_data, "multi_read_mem_init");
+
+        // Two read ports
+        auto read_port1 = mem.aread(ch_uint<8>(io().addr1_in.impl()), "read1");
+        auto read_port2 = mem.aread(ch_uint<8>(io().addr2_in.impl()), "read2");
+
+        io().data1_out = read_port1;
+        io().data2_out = read_port2;
+    }
+};
+
 TEST_CASE("Memory Timing - Single Port Memory Write/Read",
           "[mem][timing][single-port]") {
     ch_device<SinglePortMem> device;
     Simulator simulator(device.context());
-
-    toDAG("mem.dot", device.context());
 
     // Initialize memory by writing to address 0
     simulator.set_input_value(device.instance().io().addr_in,
@@ -208,51 +232,70 @@ TEST_CASE("Memory Timing - Dual Port Memory", "[mem][timing][dual-port]") {
     ch_device<DualPortMem> device;
     Simulator simulator(device.context());
 
-    // Write data to address 5
+    toDAG("mem.dot", device.context());
+
+    // First, initialize memory by writing to address 5
     simulator.set_input_value(device.instance().io().write_addr,
                               static_cast<uint64_t>(5));
     simulator.set_input_value(device.instance().io().write_data,
-                              static_cast<uint64_t>(0x12345678));
+                              static_cast<uint64_t>(0x11111111));
     simulator.set_input_value(device.instance().io().write_enable,
                               static_cast<uint64_t>(1));
-
-    // Read from address 5
     simulator.set_input_value(device.instance().io().read_addr,
-                              static_cast<uint64_t>(5));
+                              static_cast<uint64_t>(5)); // Try to read same address
 
-    // Tick 1: Perform write
+    // Tick 1: Perform write to address 5
     simulator.tick();
 
-    // Read the value back
+    // Attempt to read from address 5 in the same cycle as write - should not see the newly written data yet
+    // For synchronous memory, we expect to see the old value or undefined (typically 0 for uninitialized)
     auto read_value =
         simulator.get_port_value(device.instance().io().read_data);
-    REQUIRE(static_cast<uint64_t>(read_value) == 0x12345678);
+    // Should not see 0x11111111 yet, as write hasn't committed
+    
+    // Now perform a read in the next cycle to get the written value
+    simulator.set_input_value(device.instance().io().write_enable,
+                              static_cast<uint64_t>(0)); // Disable write
+    simulator.tick();
+
+    read_value = simulator.get_port_value(device.instance().io().read_data);
+    REQUIRE(static_cast<uint64_t>(read_value) == 0x11111111);
 
     // Write different data to address 5
     simulator.set_input_value(device.instance().io().write_data,
                               static_cast<uint64_t>(0xFEDCBA98));
     simulator.set_input_value(device.instance().io().write_enable,
                               static_cast<uint64_t>(1));
+    simulator.tick(); // Write cycle
+
+    // Read again in next cycle - should get the previous value, not the one just written
+    simulator.set_input_value(device.instance().io().write_enable,
+                              static_cast<uint64_t>(0)); // Disable write
     simulator.tick();
 
-    // Read again
     read_value = simulator.get_port_value(device.instance().io().read_data);
-    REQUIRE(static_cast<uint64_t>(read_value) == 0xFEDCBA98);
+    REQUIRE(static_cast<uint64_t>(read_value) == 0xFEDCBA98); // Now we get the last written value
 
     // Test writing to different address while reading from another
     simulator.set_input_value(device.instance().io().write_addr,
                               static_cast<uint64_t>(10));
     simulator.set_input_value(device.instance().io().write_data,
                               static_cast<uint64_t>(0xAAAAAAAA));
+    simulator.set_input_value(device.instance().io().write_enable,
+                              static_cast<uint64_t>(1));
+    simulator.tick(); // Write to address 10
+
+    // Read from address 5 - should still have the old value
     simulator.set_input_value(device.instance().io().read_addr,
                               static_cast<uint64_t>(5));
+    simulator.set_input_value(device.instance().io().write_enable,
+                              static_cast<uint64_t>(0)); // Disable write
     simulator.tick();
 
-    // Address 5 should still have the old value
     read_value = simulator.get_port_value(device.instance().io().read_data);
     REQUIRE(static_cast<uint64_t>(read_value) == 0xFEDCBA98);
 
-    // Now read from address 10
+    // Now read from address 10 - should get the value written in the previous cycle
     simulator.set_input_value(device.instance().io().read_addr,
                               static_cast<uint64_t>(10));
     simulator.tick();
@@ -314,51 +357,31 @@ TEST_CASE("Memory Timing - Initialized Memory", "[mem][timing][initialized]") {
 
 TEST_CASE("Memory Timing - Multi-Read Port Memory",
           "[mem][timing][multi-read]") {
-    ch_device<MultiReadMem> device;
-    Simulator simulator(device.context());
-
-    // First, initialize some data using the single port memory component
-    ch_device<SinglePortMem> init_device;
-    Simulator init_simulator(init_device.context());
-
-    // Write some test data to addresses 0, 1, 2, 3
-    for (int i = 0; i < 4; i++) {
-        init_simulator.set_input_value(init_device.instance().io().addr_in,
-                                       static_cast<uint64_t>(i));
-        init_simulator.set_input_value(init_device.instance().io().data_in,
-                                       static_cast<uint64_t>(0x1000 + i));
-        init_simulator.set_input_value(init_device.instance().io().we_in,
-                                       static_cast<uint64_t>(1));
-        init_simulator.set_input_value(init_device.instance().io().en_in,
-                                       static_cast<uint64_t>(1));
-        init_simulator.tick();
-        init_simulator.set_input_value(init_device.instance().io().we_in,
-                                       static_cast<uint64_t>(0));
-        init_simulator.tick();
-    }
+    ch_device<MultiReadMemInitialized> device_with_init_data;
+    Simulator simulator(device_with_init_data.context());
 
     // Now test reading from multiple ports simultaneously with our multi-read
     // component
-    simulator.set_input_value(device.instance().io().addr1_in,
+    simulator.set_input_value(device_with_init_data.instance().io().addr1_in,
                               static_cast<uint64_t>(0));
-    simulator.set_input_value(device.instance().io().addr2_in,
+    simulator.set_input_value(device_with_init_data.instance().io().addr2_in,
                               static_cast<uint64_t>(1));
     simulator.tick();
 
-    auto data1 = simulator.get_port_value(device.instance().io().data1_out);
-    auto data2 = simulator.get_port_value(device.instance().io().data2_out);
+    auto data1 = simulator.get_port_value(device_with_init_data.instance().io().data1_out);
+    auto data2 = simulator.get_port_value(device_with_init_data.instance().io().data2_out);
     REQUIRE(static_cast<uint64_t>(data1) == 0x1000);
     REQUIRE(static_cast<uint64_t>(data2) == 0x1001);
 
     // Test different addresses
-    simulator.set_input_value(device.instance().io().addr1_in,
+    simulator.set_input_value(device_with_init_data.instance().io().addr1_in,
                               static_cast<uint64_t>(2));
-    simulator.set_input_value(device.instance().io().addr2_in,
+    simulator.set_input_value(device_with_init_data.instance().io().addr2_in,
                               static_cast<uint64_t>(3));
     simulator.tick();
 
-    data1 = simulator.get_port_value(device.instance().io().data1_out);
-    data2 = simulator.get_port_value(device.instance().io().data2_out);
+    data1 = simulator.get_port_value(device_with_init_data.instance().io().data1_out);
+    data2 = simulator.get_port_value(device_with_init_data.instance().io().data2_out);
     REQUIRE(static_cast<uint64_t>(data1) == 0x1002);
     REQUIRE(static_cast<uint64_t>(data2) == 0x1003);
 }

@@ -9,6 +9,7 @@
 #include "core/lnode.h"
 #include "core/traits.h"
 #include "core/uint.h"
+#include "lnodeimpl.h"
 #include <array>
 #include <source_location>
 #include <string>
@@ -41,11 +42,17 @@ public:
             return lnode<T>(port_impl_->data_output());
         }
 
-        // 获取底层实现
-        mem_read_port_impl *impl() const { return port_impl_; }
+        // 获取底层实现, 用proximpl代表
+        lnodeimpl *impl() const { return port_impl_->data_output(); }
 
         // 端口信息
         uint32_t port_id() const { return port_impl_->port_id(); }
+
+        mem_port_type port_type() const { return port_impl_->port_type(); }
+        bool has_addr() const { return port_impl_->has_addr(); }
+        bool has_cd() const { return port_impl_->has_cd(); }
+        bool has_enable() const { return port_impl_->has_enable(); }
+        memimpl *parent() const { return port_impl_->parent(); }
     };
 
     // 写端口类型
@@ -65,6 +72,12 @@ public:
 
         // 端口信息
         uint32_t port_id() const { return port_impl_->port_id(); }
+        mem_port_type port_type() const { return port_impl_->port_type(); }
+        bool has_addr() const { return port_impl_->has_addr(); }
+        bool has_cd() const { return port_impl_->has_cd(); }
+        bool has_enable() const { return port_impl_->has_enable(); }
+        lnodeimpl *wdata() const { return port_impl_->wdata(); }
+        memimpl *parent() const { return port_impl_->parent(); }
     };
 
 private:
@@ -118,7 +131,8 @@ public:
 
         // 验证输入参数是否为有效的lnode
         if (!addr_lnode.impl()) {
-            throw std::invalid_argument("Invalid addr parameter: addr must be a valid lnode with non-null impl()");
+            throw std::invalid_argument("Invalid addr parameter: addr must be "
+                                        "a valid lnode with non-null impl()");
         }
 
         // 获取当前上下文
@@ -147,10 +161,13 @@ public:
 
         // 验证输入参数是否为有效的lnode
         if (!addr_lnode.impl()) {
-            throw std::invalid_argument("Invalid addr parameter: addr must be a valid lnode with non-null impl()");
+            throw std::invalid_argument("Invalid addr parameter: addr must be "
+                                        "a valid lnode with non-null impl()");
         }
         if (!enable_lnode.impl()) {
-            throw std::invalid_argument("Invalid enable parameter: enable must be a valid lnode with non-null impl()");
+            throw std::invalid_argument(
+                "Invalid enable parameter: enable must be a valid lnode with "
+                "non-null impl()");
         }
 
         // 获取当前时钟域
@@ -186,13 +203,17 @@ public:
 
         // 验证输入参数是否为有效的lnode
         if (!addr_lnode.impl()) {
-            throw std::invalid_argument("Invalid addr parameter: addr must be a valid lnode with non-null impl()");
+            throw std::invalid_argument("Invalid addr parameter: addr must be "
+                                        "a valid lnode with non-null impl()");
         }
         if (!data_lnode.impl()) {
-            throw std::invalid_argument("Invalid data parameter: data must be a valid lnode with non-null impl()");
+            throw std::invalid_argument("Invalid data parameter: data must be "
+                                        "a valid lnode with non-null impl()");
         }
         if (!enable_lnode.impl()) {
-            throw std::invalid_argument("Invalid enable parameter: enable must be a valid lnode with non-null impl()");
+            throw std::invalid_argument(
+                "Invalid enable parameter: enable must be a valid lnode with "
+                "non-null impl()");
         }
 
         // 获取当前时钟域
