@@ -81,6 +81,8 @@ void instr_mem::write_memory(uint32_t addr, const sdata_type &data,
     } else {
         // 全字写入
         memory_[addr] = data;
+        CHDBG("memory[%u] is written to %s", addr,
+              data.to_string_verbose().c_str());
     }
 }
 
@@ -88,6 +90,9 @@ sdata_type instr_mem::read_memory(uint32_t addr) const {
     if (addr >= depth_) {
         return sdata_type(0, data_width_);
     }
+
+    CHDBG("memory[%u] is read, the value is %s", addr,
+          memory_[addr].to_string_verbose().c_str());
     return memory_[addr];
 }
 
@@ -232,12 +237,14 @@ void instr_mem_sync_read_port::eval() {
         return;
 
     // 检查时钟上升沿
-    bool current_clk = !clk_data_ptr_->is_zero();
-    if (!(current_clk && !last_clk_)) {
-        last_clk_ = current_clk;
+    if (clk_data_ptr_->is_zero())
         return;
-    }
-    last_clk_ = current_clk;
+    // bool current_clk = !clk_data_ptr_->is_zero();
+    // if (!(current_clk && !last_clk_)) {
+    //     last_clk_ = current_clk;
+    //     return;
+    // }
+    // last_clk_ = current_clk;
 
     // 获取地址
     uint32_t addr = mem_ptr_->get_address(*addr_data_ptr_);
@@ -320,12 +327,14 @@ void instr_mem_write_port::eval() {
         return;
 
     // 检查时钟上升沿
-    bool current_clk = !clk_data_ptr_->is_zero();
-    if (!(current_clk && !last_clk_)) {
-        last_clk_ = current_clk;
+    if (clk_data_ptr_->is_zero())
         return;
-    }
-    last_clk_ = current_clk;
+    // bool current_clk = !clk_data_ptr_->is_zero();
+    // if (!(current_clk && !last_clk_)) {
+    //     last_clk_ = current_clk;
+    //     return;
+    // }
+    // last_clk_ = current_clk;
 
     // 获取地址
     uint32_t addr = mem_ptr_->get_address(*addr_data_ptr_);

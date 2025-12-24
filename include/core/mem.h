@@ -37,7 +37,9 @@ public:
         read_port(mem_read_port_impl *impl) : port_impl_(impl) {}
 
         // 转换为lnode，用于连接和运算
-        operator lnode<T>() const { return lnode<T>(port_impl_); }
+        operator lnode<T>() const {
+            return lnode<T>(port_impl_->data_output());
+        }
 
         // 获取底层实现
         mem_read_port_impl *impl() const { return port_impl_; }
@@ -114,15 +116,22 @@ public:
                         std::source_location::current()) const {
         auto addr_lnode = get_lnode(addr);
 
-        // 创建数据输出节点
+        // 验证输入参数是否为有效的lnode
+        if (!addr_lnode.impl()) {
+            throw std::invalid_argument("Invalid addr parameter: addr must be a valid lnode with non-null impl()");
+        }
+
+        // 获取当前上下文
         auto *ctx = mem_node_->ctx();
-        auto *data_output =
-            ctx->create_output(data_width, name + "_data", sloc);
+
+        // 创建proxy节点而不是output节点
+        auto *data_proxy =
+            ctx->create_node<proxyimpl>(data_width, name + "_data_proxy", sloc);
 
         // 创建异步读端口节点
         auto *port_impl = ctx->create_mem_read_port(
             mem_node_, mem_node_->next_port_id(), data_width, nullptr,
-            addr_lnode.impl(), nullptr, data_output, name, sloc);
+            addr_lnode.impl(), nullptr, data_proxy, name, sloc);
 
         return read_port(port_impl);
     }
@@ -136,20 +145,28 @@ public:
         auto addr_lnode = get_lnode(addr);
         auto enable_lnode = get_lnode(enable);
 
+        // 验证输入参数是否为有效的lnode
+        if (!addr_lnode.impl()) {
+            throw std::invalid_argument("Invalid addr parameter: addr must be a valid lnode with non-null impl()");
+        }
+        if (!enable_lnode.impl()) {
+            throw std::invalid_argument("Invalid enable parameter: enable must be a valid lnode with non-null impl()");
+        }
+
         // 获取当前时钟域
         auto *ctx = mem_node_->ctx();
         auto *cd = ctx->current_clock(sloc);
 
-        // 创建数据输出节点
-        auto *data_output =
-            ctx->create_output(data_width, name + "_data", sloc);
+        // 创建proxy节点而不是output节点
+        auto *data_proxy =
+            ctx->create_node<proxyimpl>(data_width, name + "_data_proxy", sloc);
 
         // 创建同步读端口节点
         auto enable_impl =
             is_litimpl_one(enable_lnode.impl()) ? nullptr : enable_lnode.impl();
         auto *port_impl = ctx->create_mem_read_port(
             mem_node_, mem_node_->next_port_id(), data_width, cd,
-            addr_lnode.impl(), enable_impl, data_output, name, sloc);
+            addr_lnode.impl(), enable_impl, data_proxy, name, sloc);
 
         return read_port(port_impl);
     }
@@ -166,6 +183,17 @@ public:
         auto addr_lnode = get_lnode(addr);
         auto data_lnode = get_lnode(data);
         auto enable_lnode = get_lnode(enable);
+
+        // 验证输入参数是否为有效的lnode
+        if (!addr_lnode.impl()) {
+            throw std::invalid_argument("Invalid addr parameter: addr must be a valid lnode with non-null impl()");
+        }
+        if (!data_lnode.impl()) {
+            throw std::invalid_argument("Invalid data parameter: data must be a valid lnode with non-null impl()");
+        }
+        if (!enable_lnode.impl()) {
+            throw std::invalid_argument("Invalid enable parameter: enable must be a valid lnode with non-null impl()");
+        }
 
         // 获取当前时钟域
         auto *ctx = mem_node_->ctx();
