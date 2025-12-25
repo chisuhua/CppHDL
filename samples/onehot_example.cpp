@@ -1,5 +1,5 @@
 #include "ch.hpp"
-#include "chlib/onehot.h"
+#include "chlib/onehot_module.h"
 #include "codegen_dag.h"
 #include "codegen_verilog.h"
 #include "component.h"

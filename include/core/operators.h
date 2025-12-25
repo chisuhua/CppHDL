@@ -47,16 +47,17 @@ template <typename T> auto to_operand(const T &value) {
         return ch::core::get_lnode(value);
     } else if constexpr (ArithmeticLiteral<T>) {
         uint64_t val = static_cast<uint64_t>(value);
+        // FIXME , how to compute value 's real width in compile time?
         constexpr uint32_t width = ch_width_v<T>;
         ch_literal_dynamic lit(val, width);
         auto *lit_impl = node_builder::instance().build_literal(lit, "lit");
-        return lnode<ch_literal_dynamic>(lit_impl);
+        return lnode<ch_uint<width>>(lit_impl);
     } else if constexpr (CHLiteral<T>) {
         auto *lit_impl =
             node_builder::instance().build_literal(value, "ch_lit");
-        constexpr auto val = T::actual_width;
+        // constexpr auto vaidth = value.width();
         constexpr uint32_t width = ch_width_v<T>;
-        return lnode<ch_literal_impl<val, width>>(lit_impl);
+        return lnode<ch_uint<width>>(lit_impl);
     } else {
         static_assert(sizeof(T) == 0,
                       "Unsupported operand type - this should never happen due "

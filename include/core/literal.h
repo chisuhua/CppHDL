@@ -16,20 +16,20 @@ template <unsigned N> struct ch_uint;
 
 // 定义模板化的字面量类，以便在编译时获取value和width
 template <uint64_t V, uint32_t W> struct ch_literal_impl {
-    static constexpr uint64_t value = V;
+    static constexpr uint64_t actual_value = V;
     static constexpr uint32_t actual_width = (W == 0 ? 1u : (W > 64 ? 64u : W));
 
     constexpr unsigned width() const noexcept { return actual_width; }
-    constexpr bool is_zero() const noexcept { return value == 0; }
+    constexpr uint64_t value() const noexcept { return actual_value; }
+    constexpr bool is_zero() const noexcept { return actual_value == 0; }
 
     // 安全计算全 1 值：避免 (1 << 64) 未定义行为
     constexpr bool is_ones() const noexcept {
         if (actual_width == 64) {
-            return value == UINT64_MAX;
+            return actual_value == UINT64_MAX;
         }
-        return value == ((uint64_t{1} << actual_width) - 1);
+        return actual_value == ((uint64_t{1} << actual_width) - 1);
     }
-
     // 隐式转换到 ch_uint<N>（带编译期检查）
     /*
     template <unsigned N> constexpr operator ch_uint<N>() const {
@@ -42,7 +42,7 @@ template <uint64_t V, uint32_t W> struct ch_literal_impl {
 
 // 保持原有的运行时版本，用于动态创建字面量
 struct ch_literal_runtime {
-    uint64_t value;
+    uint64_t actual_value;
     uint32_t actual_width; // 由字面量字符决定（非十进制）或 bit_width（十进制）
 
     // 统一宽度计算：用于非字面量构造
@@ -52,7 +52,7 @@ struct ch_literal_runtime {
 
     // 主构造函数：确保宽度合法
     constexpr ch_literal_runtime(uint64_t v, uint32_t w) noexcept
-        : value(v), actual_width(w == 0 ? 1u : (w > 64 ? 64u : w)) {}
+        : actual_value(v), actual_width(w == 0 ? 1u : (w > 64 ? 64u : w)) {}
 
     // 从值自动推断宽度（用于非字面量场景）
     constexpr ch_literal_runtime(uint64_t v) noexcept
@@ -71,26 +71,28 @@ struct ch_literal_runtime {
         : ch_literal_runtime(v, compute_width(v)) {}
 
     constexpr ch_literal_runtime(bool b) noexcept
-        : value(b ? 1u : 0u), actual_width(1u) {}
+        : actual_value(b ? 1u : 0u), actual_width(1u) {}
 
-    constexpr ch_literal_runtime() noexcept : value(0), actual_width(1u) {}
+    constexpr ch_literal_runtime() noexcept
+        : actual_value(0), actual_width(1u) {}
 
+    constexpr uint64_t value() const noexcept { return actual_value; }
     constexpr unsigned width() const noexcept { return actual_width; }
-    constexpr bool is_zero() const noexcept { return value == 0; }
+    constexpr bool is_zero() const noexcept { return actual_value == 0; }
 
     // 安全计算全 1 值：避免 (1 << 64) 未定义行为
     constexpr bool is_ones() const noexcept {
         if (actual_width == 64) {
-            return value == UINT64_MAX;
+            return actual_value == UINT64_MAX;
         }
-        return value == ((uint64_t{1} << actual_width) - 1);
+        return actual_value == ((uint64_t{1} << actual_width) - 1);
     }
 
     // 隐式转换到 ch_uint<N>（带编译期检查）
     template <unsigned N> constexpr operator ch_uint<N>() const {
         static_assert(N >= actual_width,
                       "Literal width exceeds target ch_uint width");
-        return ch_uint<N>(value);
+        return ch_uint<N>(actual_value);
     }
 };
 
@@ -139,7 +141,7 @@ inline constexpr ch_literal_runtime make_literal(uint64_t value,
     return ch_literal_runtime(value, width);
 }
 
-inline constexpr ch_literal_runtime make_literal_auto(uint64_t value) {
+inline constexpr ch_literal_runtime make_literal(uint64_t value) {
     return ch_literal_runtime(value); // uses compute_width
 }
 

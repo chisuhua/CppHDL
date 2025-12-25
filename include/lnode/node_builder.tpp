@@ -111,7 +111,7 @@ lnodeimpl *node_builder::build_literal(T value, const std::string &name,
         return ctx->create_literal(
             sval, prefixed_name_helper(name, instance().name_prefix_), sloc);
     } else if constexpr (is_ch_literal_v<T>) {
-        sdata_type sdata(value.value, value.actual_width); // 直接构造
+        sdata_type sdata(value.value(), value.actual_width); // 直接构造
 
         if (instance().statistics_enabled_) {
             ++instance().statistics_->literals_built;

@@ -67,6 +67,7 @@ set(SINGLE_TEST_SOURCES
     test_io_extended_ops.cpp
     test_popcount.cpp
     test_module.cpp
+    test_module_advanced.cpp
     test_sdata_compare.cpp
     test_mem_timing.cpp
 )
