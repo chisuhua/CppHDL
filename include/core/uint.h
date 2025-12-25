@@ -1,6 +1,7 @@
 #ifndef CH_CORE_UINT_H
 #define CH_CORE_UINT_H
 
+#include "literal.h"
 #include <cstdint>
 #include <source_location>
 #include <string>
@@ -89,6 +90,10 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     template <unsigned Width>
     friend constexpr auto make_uint_result(lnodeimpl *node);
 };
+
+template <uint32_t W> inline constexpr auto make_uint(uint64_t value) {
+    return ch_uint<W>(make_literal(value, W));
+}
 
 // ==================== get_lnode 特化 ====================
 template <unsigned N>

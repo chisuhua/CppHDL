@@ -165,10 +165,8 @@ public:
     // 拷贝构造函数
     port(const port &other) : impl_(other.impl_) {}
 
-    // ... existing code ...
-    port &operator=(const port &other) = delete;
-    // ... existing code ...
     // 赋值操作符
+    port &operator=(const port &other) = delete;
     // port &operator=(const port &other) {
     //     if (this != &other) {
     //         impl_ = other.impl_;
@@ -177,6 +175,13 @@ public:
     // }
 
     operator lnode<T>() const { return static_cast<lnode<T>>(impl_); }
+    
+    // 添加到ch_uint的隐式转换，使用port.impl()作为底层实现
+    template<unsigned W>
+    operator ch_uint<W>() const requires(std::is_same_v<T, ch_uint<W>>)
+    {
+        return ch_uint<W>(impl());
+    }
 
     template <typename U> void operator=(const U &value) {
         static_assert(is_input_v<input_direction>,
@@ -226,6 +231,13 @@ public:
     // }
 
     template <typename U> void operator=(const U &value) { impl_ = value; }
+    
+    // 添加到ch_uint的隐式转换，使用port.impl()作为底层实现
+    template<unsigned W>
+    operator ch_uint<W>() const requires(std::is_same_v<T, ch_uint<W>>)
+    {
+        return ch_uint<W>(impl());
+    }
 
     lnodeimpl *impl() const { return impl_.impl(); }
 
