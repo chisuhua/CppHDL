@@ -1,5 +1,5 @@
-#ifndef CHLIB_ONEHOT_DECODER_H
-#define CHLIB_ONEHOT_DECODER_H
+#ifndef CHLIB_ONEHOT_MODULE_H
+#define CHLIB_ONEHOT_MODULE_H
 
 #include "ch.hpp"
 #include "component.h"

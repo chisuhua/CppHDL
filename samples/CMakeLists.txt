@@ -22,7 +22,7 @@ set(CH_SAMPLE_TARGETS
     destruction
     precise_width_demo
     precise_width_example
-    onehot_example
+    onehot_module_example
 )
 
 # 为每个示例创建可执行文件
