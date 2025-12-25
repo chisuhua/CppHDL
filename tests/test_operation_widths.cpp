@@ -108,8 +108,7 @@ TEST_CASE("Operation Width Calculation", "[operation][width][compile_time]") {
         ch_uint<8> a(0b10101010);
 
         // 位提取
-        auto bits_result =
-            bits<ch_uint<8>, 6, 2>(a); // 使用正确的函数名 bits<>()
+        auto bits_result = bits<6, 2>(a); // 使用正确的函数名 bits<>()
         STATIC_REQUIRE(ch_width_v<decltype(bits_result)> == 5); // 6-2+1 = 5
     }
 
@@ -205,7 +204,7 @@ TEST_CASE("Runtime Width Consistency", "[operation][width][runtime]") {
     SECTION("Bit Extraction Runtime Width") {
         ch_uint<8> a(0b10101010);
 
-        auto bits_result = bits<ch_uint<8>, 6, 2>(a);
+        auto bits_result = bits<6, 2>(a);
         constexpr unsigned bits_compile_width =
             ch_width_v<decltype(bits_result)>;
         STATIC_REQUIRE(bits_compile_width == 5);

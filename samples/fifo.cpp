@@ -47,8 +47,8 @@ public:
 
         if constexpr (addr_width == 1) {
             // 特殊处理1位地址的情况
-            auto rd_bit = bit_select<decltype(rd_ptr), 0>(rd_ptr);
-            auto wr_bit = bit_select<decltype(wr_ptr), 0>(wr_ptr);
+            auto rd_bit = bit_select<0>(rd_ptr);
+            auto wr_bit = bit_select<0>(wr_ptr);
             rd_a = zext<decltype(rd_bit), addr_width>(rd_bit);
             wr_a = zext<decltype(wr_bit), addr_width>(wr_bit);
         } else {

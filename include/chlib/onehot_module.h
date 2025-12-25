@@ -6,6 +6,7 @@
 #include "core/bool.h"
 #include "core/literal.h"
 #include "core/operators.h"
+#include "core/operators_runtime.h"
 #include "core/uint.h"
 #include <cassert>
 
@@ -52,95 +53,16 @@ public:
             // 循环遍历每一位
             for (unsigned i = 0; i < N; ++i) {
                 // 创建一个运行时位选择操作
-                ch_bool bit_at_i = runtime_bit_select(io().in, i);
+                ch_bool bit_at_i = bit_select(io().in, i);
 
                 // 创建当前索引的字面量值
                 ch_uint<OUTPUT_WIDTH> current_value = make_literal(i);
 
                 // 使用select操作创建新的result节点
-                // result = select(bit_at_i, make_literal(i), result);
-                // result = select(bit_at_i, current_value, result);
-                result = select(bit_at_i, i, result);
+                result = select(bit_at_i, current_value, result);
             }
 
             io().out = result;
-        }
-    }
-
-private:
-    // 运行时位选择函数
-    ch_bool runtime_bit_select(const ch_in<ch_uint<N>> &input,
-                               unsigned index) const {
-        // 使用一个switch来处理不同的索引值，生成相应的位选择操作
-        switch (index) {
-        case 0:
-            return bit_select<0>(input);
-        case 1:
-            return bit_select<1>(input);
-        case 2:
-            return bit_select<2>(input);
-        case 3:
-            return bit_select<3>(input);
-        case 4:
-            return bit_select<4>(input);
-        case 5:
-            return bit_select<5>(input);
-        case 6:
-            return bit_select<6>(input);
-        case 7:
-            return bit_select<7>(input);
-        case 8:
-            return bit_select<8>(input);
-        case 9:
-            return bit_select<9>(input);
-        case 10:
-            return bit_select<10>(input);
-        case 11:
-            return bit_select<11>(input);
-        case 12:
-            return bit_select<12>(input);
-        case 13:
-            return bit_select<13>(input);
-        case 14:
-            return bit_select<14>(input);
-        case 15:
-            return bit_select<15>(input);
-        case 16:
-            return bit_select<16>(input);
-        case 17:
-            return bit_select<17>(input);
-        case 18:
-            return bit_select<18>(input);
-        case 19:
-            return bit_select<19>(input);
-        case 20:
-            return bit_select<20>(input);
-        case 21:
-            return bit_select<21>(input);
-        case 22:
-            return bit_select<22>(input);
-        case 23:
-            return bit_select<23>(input);
-        case 24:
-            return bit_select<24>(input);
-        case 25:
-            return bit_select<25>(input);
-        case 26:
-            return bit_select<26>(input);
-        case 27:
-            return bit_select<27>(input);
-        case 28:
-            return bit_select<28>(input);
-        case 29:
-            return bit_select<29>(input);
-        case 30:
-            return bit_select<30>(input);
-        case 31:
-            return bit_select<31>(input);
-        // 可以根据需要继续添加更多case
-        default:
-            // 对于超出范围的索引，返回第0位的值（作为fallback）
-            return bit_select<0>(input);
         }
     }
 };

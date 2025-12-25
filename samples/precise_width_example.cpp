@@ -88,7 +88,7 @@ int main() {
         ch_uint<12> g(0b101101011100, "g"); // 12位
 
         // 提取位[7:4]应该产生4位结果
-        auto slice = bits<ch_uint<12>, 7, 4>(g);
+        auto slice = bits<7, 4>(g);
         STATIC_REQUIRE(ch_width_v<decltype(slice)> == 4);
         std::cout << "   Bits extract result width: "
                   << ch_width_v<decltype(slice)> << " bits" << std::endl;

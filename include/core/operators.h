@@ -466,7 +466,7 @@ ch_bool unary_bool_operation(const ch_bool &operand,
 }
 
 // === 位选择操作 ===
-template <typename T, unsigned Index> auto bit_select(const T &operand) {
+template <unsigned Index, typename T> auto bit_select(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
 
     auto operand_node = to_operand(operand);
@@ -527,7 +527,7 @@ template <typename T, unsigned NewWidth> auto zext(const T &operand) {
 }
 
 // === 位域提取操作 ===
-template <typename T, unsigned MSB, unsigned LSB> auto bits(const T &operand) {
+template <unsigned MSB, unsigned LSB, typename T> auto bits(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
     static_assert(MSB < ch_width_v<T>, "MSB must be < operand width");
     static_assert(LSB <= MSB, "LSB must be <= MSB");

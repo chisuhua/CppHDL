@@ -19,10 +19,10 @@ TEST_CASE("bit_select: bit selection operation",
     ch_uint<8> data(0b10110101, "test_data");
 
     // 测试位选择操作（使用模板参数）
-    auto bit0 = bit_select<decltype(data), 0>(data); // 应该是1
-    auto bit1 = bit_select<decltype(data), 1>(data); // 应该是0
-    auto bit2 = bit_select<decltype(data), 2>(data); // 应该是1
-    auto bit7 = bit_select<decltype(data), 7>(data); // 应该是1
+    auto bit0 = bit_select<0>(data); // 应该是1
+    auto bit1 = bit_select<1>(data); // 应该是0
+    auto bit2 = bit_select<2>(data); // 应该是1
+    auto bit7 = bit_select<7>(data); // 应该是1
 
     REQUIRE(std::is_same_v<decltype(bit0), ch_uint<1>>);
     REQUIRE(std::is_same_v<decltype(bit1), ch_uint<1>>);
@@ -45,9 +45,9 @@ TEST_CASE("bits: bit slice operation", "[operators][bit_operations]") {
     ch_uint<8> data(0b10110101, "test_data");
 
     // 测试位切片操作（使用模板参数）
-    auto slice_3_1 = bits<decltype(data), 3, 1>(data); // 应该是0b101
-    auto slice_7_4 = bits<decltype(data), 7, 4>(data); // 应该是0b1011
-    auto slice_6_0 = bits<decltype(data), 6, 0>(data); // 应该是0b0110101
+    auto slice_3_1 = bits<3, 1>(data); // 应该是0b101
+    auto slice_7_4 = bits<7, 4>(data); // 应该是0b1011
+    auto slice_6_0 = bits<6, 0>(data); // 应该是0b0110101
 
     // 验证宽度 - 支持精确宽度
     // 现在支持精确宽度，3位应该映射到ch_uint<3>，4位应该映射到ch_uint<4>，7位应该映射到ch_uint<7>
@@ -74,17 +74,17 @@ TEST_CASE("bits: bit slice width verification",
     ch_uint<64> data64(make_literal(0x123456789ABCDEF0ULL), "test_data64");
 
     // 测试16位数据的不同切片
-    auto slice16_7_4 = bits<decltype(data16), 7, 4>(data16);   // 4位宽
-    auto slice16_15_8 = bits<decltype(data16), 15, 8>(data16); // 8位宽
+    auto slice16_7_4 = bits<7, 4>(data16);   // 4位宽
+    auto slice16_15_8 = bits<15, 8>(data16); // 8位宽
 
     // 现在支持精确宽度，4位应该映射到ch_uint<4>，8位应该映射到ch_uint<8>
     STATIC_REQUIRE(ch_width_v<decltype(slice16_7_4)> == 4);
     STATIC_REQUIRE(ch_width_v<decltype(slice16_15_8)> == 8);
 
     // 测试32位数据的不同切片
-    auto slice32_7_0 = bits<decltype(data32), 7, 0>(data32);     // 8位宽
-    auto slice32_15_8 = bits<decltype(data32), 15, 8>(data32);   // 8位宽
-    auto slice32_31_16 = bits<decltype(data32), 31, 16>(data32); // 16位宽
+    auto slice32_7_0 = bits<7, 0>(data32);     // 8位宽
+    auto slice32_15_8 = bits<15, 8>(data32);   // 8位宽
+    auto slice32_31_16 = bits<31, 16>(data32); // 16位宽
 
     // 现在支持精确宽度
     STATIC_REQUIRE(ch_width_v<decltype(slice32_7_0)> == 8);
@@ -92,10 +92,10 @@ TEST_CASE("bits: bit slice width verification",
     STATIC_REQUIRE(ch_width_v<decltype(slice32_31_16)> == 16);
 
     // 测试64位数据的不同切片
-    auto slice64_7_0 = bits<decltype(data64), 7, 0>(data64);     // 8位宽
-    auto slice64_15_0 = bits<decltype(data64), 15, 0>(data64);   // 16位宽
-    auto slice64_31_0 = bits<decltype(data64), 31, 0>(data64);   // 32位宽
-    auto slice64_63_32 = bits<decltype(data64), 63, 32>(data64); // 32位宽
+    auto slice64_7_0 = bits<7, 0>(data64);     // 8位宽
+    auto slice64_15_0 = bits<15, 0>(data64);   // 16位宽
+    auto slice64_31_0 = bits<31, 0>(data64);   // 32位宽
+    auto slice64_63_32 = bits<63, 32>(data64); // 32位宽
 
     // 现在支持精确宽度
     STATIC_REQUIRE(ch_width_v<decltype(slice64_7_0)> == 8);
@@ -488,8 +488,8 @@ TEST_CASE("boundary_conditions: edge cases", "[operators][boundary]") {
     STATIC_REQUIRE(ch_width_v<decltype(all_ones_not)> == 8);
 
     // 测试位选择边界
-    auto bit_0 = bit_select<decltype(all_ones), 0>(all_ones);
-    auto bit_7 = bit_select<decltype(all_ones), 7>(all_ones);
+    auto bit_0 = bit_select<0>(all_ones);
+    auto bit_7 = bit_select<7>(all_ones);
 
     STATIC_REQUIRE(ch_width_v<decltype(bit_0)> == 1);
     STATIC_REQUIRE(ch_width_v<decltype(bit_7)> == 1);
@@ -530,7 +530,7 @@ TEST_CASE("Bit slicing operations", "[operators][bitslice]") {
     ch_uint<64> data64(make_literal(0x123456789ABCDEF0ULL), "test_data64");
 
     // 测试16位数据的不同切片
-    auto slice16_7_4 = bits<decltype(data16), 7, 4>(data16); // 4位宽
+    auto slice16_7_4 = bits<7, 4>(data16); // 4位宽
 
     // 验证宽度 - 支持精确宽度
     STATIC_REQUIRE(ch_width_v<decltype(slice16_7_4)> == 4);
