@@ -70,6 +70,7 @@ set(SINGLE_TEST_SOURCES
     test_module_advanced.cpp
     test_sdata_compare.cpp
     test_mem_timing.cpp
+    test_literal_left_shift.cpp
 )
 
 # 为每个源文件创建一个独立的测试

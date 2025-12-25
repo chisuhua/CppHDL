@@ -68,7 +68,7 @@ struct xor_op {
 struct shl_op {
     static constexpr ch_op op_type = ch_op::shl;
     template <unsigned M, unsigned N>
-    static constexpr unsigned result_width = M;
+    static constexpr unsigned result_width = M + N;
     static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "shl"; }
 };

@@ -11,6 +11,7 @@
 #include "core/node_builder.h"
 #include "core/traits.h"
 #include "core/uint.h"
+#include "traits.h"
 #include "utils/logger.h"
 #include <algorithm>
 #include <cstdint>
@@ -656,9 +657,37 @@ auto operator>=(const LHS &lhs, const RHS &rhs) {
     return binary_operation<ge_op>(lhs, rhs, "ge");
 }
 
+// 带结果位宽模板参数的左移操作
+template <unsigned ResultWidth, ValidOperand LHS, ValidOperand RHS>
+auto shl(const LHS &lhs, const RHS &rhs) {
+    auto lhs_node = to_operand(lhs);
+    auto rhs_node = to_operand(rhs);
+
+    auto *op_node = node_builder::instance().build_operation(
+        ch_op::shl, lhs_node, rhs_node, ResultWidth, false, "shl",
+        std::source_location::current());
+
+    return make_uint_result<ResultWidth>(op_node);
+}
+
 template <ValidOperand LHS, ValidOperand RHS>
 auto operator<<(const LHS &lhs, const RHS &rhs) {
-    return binary_operation<shl_op>(lhs, rhs, "shl");
+    // 获取左操作数的位宽
+    constexpr unsigned lhs_width = ch_width_v<LHS>;
+
+    // 根据规范，左移操作的结果位宽应为左操作数的位宽
+    // 但在某些情况下，用户可能希望扩展位宽以容纳更大的结果
+    // 当前实现保持左操作数的位宽，这是最常见的情况
+    constexpr unsigned result_width = lhs_width;
+
+    auto lhs_node = to_operand(lhs);
+    auto rhs_node = to_operand(rhs);
+
+    auto *op_node = node_builder::instance().build_operation(
+        ch_op::shl, lhs_node, rhs_node, result_width, false, "shl",
+        std::source_location::current());
+
+    return make_uint_result<result_width>(op_node);
 }
 
 template <ValidOperand LHS, ValidOperand RHS>

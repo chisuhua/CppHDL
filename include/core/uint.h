@@ -51,7 +51,7 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
             this->node_impl_ = zero_extend(other, N).impl();
         } else {
             // 截断
-            this->node_impl_ = bits<ch_uint<M>, N - 1, 0>(other).impl();
+            this->node_impl_ = bits<N - 1, 0, ch_uint<M>>(other).impl();
         }
     }
 
