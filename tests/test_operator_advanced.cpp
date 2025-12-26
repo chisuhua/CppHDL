@@ -403,7 +403,7 @@ TEST_CASE("operator_overloads: arithmetic and bitwise operators",
     STATIC_REQUIRE(ch_width_v<decltype(and_result)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(or_result)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(xor_result)> == 8);
-    STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 8);
+    STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 255 + 8);
     STATIC_REQUIRE(ch_width_v<decltype(shr_result)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(not_result)> == 8);
     STATIC_REQUIRE(ch_width_v<decltype(neg_result)> == 8);
@@ -626,7 +626,7 @@ TEST_CASE("Shift operations", "[operators][shift]") {
     auto shr_result = data >> 2_d;
 
     // 验证返回类型
-    STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 8);
+    STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 10);
     STATIC_REQUIRE(ch_width_v<decltype(shr_result)> == 8);
 }
 

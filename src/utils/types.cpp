@@ -269,7 +269,8 @@ CH_SDATA_COMPARISON_OP(>=, ge, ch::internal::bv_ge_truncate)
 
 // --- Shift Operations ---
 sdata_type operator<<(const sdata_type &lhs, uint32_t rhs) {
-    sdata_type result(0, lhs.bitwidth());
+    uint32_t width = lhs.compute_bitwidth() + rhs;
+    sdata_type result(0, width > lhs.bitwidth() ? width : lhs.bitwidth());
     ch::internal::bv_shl_truncate<uint64_t>(&result.bv_, &lhs.bv_, rhs);
     return result;
 }

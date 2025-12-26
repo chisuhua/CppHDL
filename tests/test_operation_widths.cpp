@@ -93,7 +93,7 @@ TEST_CASE("Operation Width Calculation", "[operation][width][compile_time]") {
 
         // 左移: M
         auto shl_result = a << shamt;
-        STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 8); // 8
+        STATIC_REQUIRE(ch_width_v<decltype(shl_result)> == 7 + 8); // 8
 
         // 右移: M
         auto shr_result = a >> shamt;

@@ -63,6 +63,19 @@ struct sdata_type {
 
     // Essential accessors
     uint32_t bitwidth() const { return bv_.size(); }
+    uint32_t compute_bitwidth() const {
+        if (bv_.num_words() > 1) {
+            throw;
+        }
+        if (bv_.num_words() > 0) {
+            uint32_t result =
+                bv_.words()[0] == 0
+                    ? 1u
+                    : static_cast<uint32_t>(std::bit_width(bv_.words()[0]));
+            return result;
+        }
+        return 1;
+    }
     bool is_zero() const { return bv_.is_zero(); }
 
     // Essential assignment operators
@@ -126,7 +139,7 @@ private:
     friend bool operator<=(const sdata_type &lhs, const sdata_type &rhs);
     friend bool operator>(const sdata_type &lhs, const sdata_type &rhs);
     friend bool operator>=(const sdata_type &lhs, const sdata_type &rhs);
-    
+
     // 与uint64_t比较的友元声明
     friend bool operator==(const sdata_type &lhs, uint64_t rhs);
     friend bool operator!=(const sdata_type &lhs, uint64_t rhs);

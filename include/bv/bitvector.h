@@ -1600,6 +1600,22 @@ void bv_shl_truncate(bitvector<T> *dst, const bitvector<T> *src,
                         dst_size); // Ensure extra bits are cleared
 }
 
+// Performs left shift: dst = src << dist
+// Creates a destination bitvector with size src->size() + dist, then performs
+// the shift.
+template <typename T>
+void bv_shl(bitvector<T> *dst, const bitvector<T> *src, uint32_t dist) {
+    if (!dst || !src)
+        return; // Safety check
+
+    const uint32_t src_size = src->size();
+    const uint32_t result_size = src_size + dist; // Calculate result width
+
+    bv_shl<false>(dst->words(), result_size, src->words(), src_size, dist);
+    // bv_clear_extra_bits(result->words(),
+    //                     result_size); // Ensure extra bits are cleared
+}
+
 // Performs right shift: dst = src >> dist
 // Truncates or zero-extends the result to fit exactly dst->size() bits.
 template <typename T>

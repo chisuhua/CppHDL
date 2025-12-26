@@ -675,10 +675,19 @@ auto operator<<(const LHS &lhs, const RHS &rhs) {
     // 获取左操作数的位宽
     constexpr unsigned lhs_width = ch_width_v<LHS>;
 
-    // 根据规范，左移操作的结果位宽应为左操作数的位宽
-    // 但在某些情况下，用户可能希望扩展位宽以容纳更大的结果
-    // 当前实现保持左操作数的位宽，这是最常见的情况
-    constexpr unsigned result_width = lhs_width;
+    // 检查RHS是否是CHLiteral，如果是则使用actual_value，否则使用1 <<
+    // ch_width_v<RHS>
+    constexpr unsigned rhs_extra_width = [] {
+        if constexpr (CHLiteral<RHS>) {
+            // 对于字面量，使用其实际值作为额外宽度
+            return RHS::actual_value;
+        } else {
+            // 对于非字面量，使用1 << ch_width_v<RHS>
+            return (1 << ch_width_v<RHS>)-1;
+        }
+    }();
+
+    constexpr unsigned result_width = lhs_width + rhs_extra_width;
 
     auto lhs_node = to_operand(lhs);
     auto rhs_node = to_operand(rhs);
