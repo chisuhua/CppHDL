@@ -30,14 +30,16 @@ template <uint64_t V, uint32_t W> struct ch_literal_impl {
         }
         return actual_value == ((uint64_t{1} << actual_width) - 1);
     }
+
+    // 添加到uint64_t的转换操作符
+    constexpr operator uint64_t() const noexcept { return actual_value; }
+
     // 隐式转换到 ch_uint<N>（带编译期检查）
-    /*
-    template <unsigned N> constexpr operator ch_uint<N>() const {
-        static_assert(N >= actual_width,
-                      "Literal width exceeds target ch_uint width");
-        return ch_uint<N>(value);
-    }
-    */
+    // constexpr operator _uint<N>() const {
+    //     static_assert(N >= actual_width,
+    //                   "Literal width exceeds target ch_uint width");
+    //     return ch_uint<N>(value);
+    // }
 };
 
 // 保持原有的运行时版本，用于动态创建字面量
@@ -88,12 +90,15 @@ struct ch_literal_runtime {
         return actual_value == ((uint64_t{1} << actual_width) - 1);
     }
 
+    // 添加到uint64_t的转换操作符，以支持static_cast<uint64_t>
+    constexpr operator uint64_t() const noexcept { return actual_value; }
+
     // 隐式转换到 ch_uint<N>（带编译期检查）
-    template <unsigned N> constexpr operator ch_uint<N>() const {
-        static_assert(N >= actual_width,
-                      "Literal width exceeds target ch_uint width");
-        return ch_uint<N>(actual_value);
-    }
+    // template <unsigned N> constexpr operator ch_uint<N>() const {
+    //     static_assert(N >= actual_width,
+    //                   "Literal width exceeds target ch_uint width");
+    //     return ch_uint<N>(actual_value);
+    // }
 };
 
 // 定义通用的ch_literal类型别名，指向编译时版本

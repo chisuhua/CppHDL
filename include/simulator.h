@@ -211,6 +211,13 @@ public:
         set_port_value(port, value);
     }
 
+    // 为CHLiteral类型添加重载支持
+    template <typename T>
+    requires ch::core::is_ch_literal_v<std::remove_cvref_t<T>>
+    void set_input_value(const ch::core::ch_in<T> &port, const T &literal_value) {
+        set_port_value(port, literal_value.value());
+    }
+
     const ch::core::sdata_type &
     get_value_by_name(const std::string &name) const;
 
