@@ -103,3 +103,38 @@ add_catch_test(test_bitvector
     test_bitvector.cpp
     test_bv_truncate.cpp
 )
+
+# Define test source files
+set(TEST_SOURCES
+    main.cpp
+    chlib/test_arithmetic.cpp
+    chlib/test_logic.cpp
+    chlib/test_combinational.cpp
+    chlib/test_sequential.cpp
+    chlib/test_memory.cpp
+    chlib/test_bitwise.cpp
+    chlib/test_selector_arbiter.cpp
+    chlib/test_converter.cpp
+    chlib/test_arithmetic_advance.cpp
+    chlib/test_fifo.cpp
+    chlib/test_cam.cpp
+    chlib/test_axi4lite.cpp
+    chlib/test_stream.cpp  # 添加Stream测试文件
+)
+
+# Create test executable
+add_executable(test ${TEST_SOURCES})
+
+# Include directories
+target_include_directories(test PRIVATE
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+# Link libraries (if any)
+if(TARGET cpphdl)
+    target_link_libraries(test cpphdl)
+endif()
+
+# Register as CTest test
+add_test(NAME test COMMAND test)
