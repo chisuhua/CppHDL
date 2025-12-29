@@ -72,6 +72,18 @@ set(SINGLE_TEST_SOURCES
     test_mem_timing.cpp
     test_literal_left_shift.cpp
     chlib/test_onehot.cpp
+    chlib/test_arithmetic.cpp
+    chlib/test_logic.cpp
+    chlib/test_combinational.cpp
+    chlib/test_sequential.cpp
+    chlib/test_memory.cpp
+    chlib/test_bitwise.cpp
+    chlib/test_selector_arbiter.cpp
+    chlib/test_converter.cpp
+    chlib/test_arithmetic_advance.cpp
+    chlib/test_chfifo.cpp
+    chlib/test_cam.cpp
+    chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件
 )
 
 # 为每个源文件创建一个独立的测试
