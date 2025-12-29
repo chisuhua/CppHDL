@@ -8,8 +8,10 @@
 #include "core/io.h"
 #include "core/reg.h"
 #include "core/types.h"
+#include "core/bool.h"  // 添加对 ch_bool 的支持
 #include "logger.h"
 #include "utils/destruction_manager.h"
+
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -204,6 +206,38 @@ public:
     const ch::core::sdata_type
     get_value(const ch::core::ch_uint<N> &signal) const {
         return get_signal_value(signal);
+    }
+
+    // 添加对ch_bool类型的支持
+    const ch::core::sdata_type
+    get_value(const ch::core::ch_bool &signal) const {
+        CHDBG_FUNC();
+
+        if (!initialized_) {
+            CHABORT("Simulator not initialized when getting ch_bool value");
+        }
+
+        auto *node = signal.impl();
+        CHDBG("ch_bool impl pointer: %p", static_cast<void *>(node));
+
+        if (!node) {
+            CHABORT(
+                "ch_bool implementation is null - ch_bool may not be properly "
+                "initialized");
+            return ch::core::constants::zero(1);  // ch_bool width is always 1
+        }
+
+        uint32_t node_id = node->id();
+        CHDBG("Getting value for node ID: %u", node_id);
+
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            CHDBG("Found value for node ID: %u", node_id);
+            return it->second;
+        }
+
+        CHWARN("Value not found for ch_bool node ID: %u", node_id);
+        return ch::core::constants::zero(1);  // ch_bool width is always 1
     }
 
     template <typename T>

@@ -38,12 +38,14 @@ AddWithCarryResult<N> add_with_carry(ch_uint<N> a, ch_uint<N> b,
                                      ch_bool carry_in) {
     ch_uint<N + 1> extended_a = ch_uint<N + 1>(a);
     ch_uint<N + 1> extended_b = ch_uint<N + 1>(b);
-    ch_uint<N + 1> extended_cin = ch_uint<N + 1>(carry_in);
+    
+    // 使用make_literal创建单bit值
+    ch_uint<N + 1> extended_cin = ch_uint<N + 1>(make_literal(carry_in ? 1ULL : 0ULL, 1));
 
     ch_uint<N + 1> result = extended_a + extended_b + extended_cin;
 
     AddWithCarryResult<N> output;
-    output.sum = result.template slice<0, N - 1>();
+    output.sum = bits<N-1, 0>(result);
     output.carry_out = bit_select(result, N);
 
     return output;
@@ -63,22 +65,22 @@ template <unsigned N> ch_uint<N> subtract(ch_uint<N> a, ch_uint<N> b) {
  *
  * 接收两个相同位宽的输入和一个借位输入，返回差与借位输出
  */
-template <unsigned N> struct SubWithBorrowResult {
+template <unsigned N> struct SubtractWithBorrowResult {
     ch_uint<N> diff;
     ch_bool borrow_out;
 };
 
 template <unsigned N>
-SubWithBorrowResult<N> sub_with_borrow(ch_uint<N> a, ch_uint<N> b,
+SubtractWithBorrowResult<N> sub_with_borrow(ch_uint<N> a, ch_uint<N> b,
                                        ch_bool borrow_in) {
     ch_uint<N + 1> extended_a = ch_uint<N + 1>(a);
     ch_uint<N + 1> extended_b = ch_uint<N + 1>(b);
-    ch_uint<N + 1> extended_bin = ch_uint<N + 1>(borrow_in);
+    ch_uint<N + 1> extended_bin = ch_uint<N + 1>(make_literal(borrow_in ? 1ULL : 0ULL, 1));
 
     ch_uint<N + 1> result = extended_a - extended_b - extended_bin;
 
-    SubWithBorrowResult<N> output;
-    output.diff = result.template slice<0, N - 1>();
+    SubtractWithBorrowResult<N> output;
+    output.diff = bits<N-1, 0>(result);
     output.borrow_out = bit_select(result, N);
 
     return output;

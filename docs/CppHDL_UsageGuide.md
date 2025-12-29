@@ -62,10 +62,10 @@ CppHDL中主要有以下几种信号类型：
 
 ### 字面量
 CppHDL提供多种字面量后缀用于创建不同类型的值：
-- `_d`: 十进制字面量
-- `_b`: 二进制字面量
-- `_h`: 十六进制字面量
-- `_o`: 八进制字面量
+- `_d`: 十进制字面量，例如 `42_d`
+- `_b`: 二进制字面量，例如 `1011_b`
+- `_h`: 十六进制字面量，例如 `FF_h`
+- `_o`: 八进制字面量，例如 `77_o`
 
 ### 端口
 - `ch_in<T>`: 输入端口
@@ -79,7 +79,7 @@ CppHDL提供多种字面量后缀用于创建不同类型的值：
 
 以下是一个简单的例子，展示如何使用CppHDL创建一个4位加法器：
 
-```cpp
+```
 #include "ch.hpp"
 #include "component.h"
 #include "core/uint.h"
@@ -120,7 +120,7 @@ int main() {
 CppHDL支持丰富的组合逻辑运算：
 
 ### 算术运算
-```cpp
+```
 ch_uint<8> a(12_d);
 ch_uint<8> b(5_d);
 
@@ -130,7 +130,7 @@ auto mul_result = a * b;
 ```
 
 ### 位运算
-```cpp
+```
 ch_uint<8> a(12_d); // 0b00001100
 ch_uint<8> b(5_d);  // 0b00000101
 
@@ -141,7 +141,7 @@ auto not_result = ~a;
 ```
 
 ### 比较运算
-```cpp
+```
 ch_uint<8> a(12_d);
 ch_uint<8> b(5_d);
 ch_uint<8> c(12_d);
@@ -155,7 +155,7 @@ auto le_result = b <= a;  // true
 ```
 
 ### 移位运算
-```cpp
+```
 ch_uint<8> a(12_d);
 
 auto shl_result = a << 2_d;  // 左移2位
@@ -167,7 +167,7 @@ auto shr_result = a >> 1_d;  // 右移1位
 CppHDL通过寄存器（`ch_reg`）来实现时序逻辑：
 
 ### D触发器示例
-```cpp
+```
 class DFlipFlop : public ch::Component {
 public:
     __io(
@@ -189,7 +189,7 @@ public:
 ```
 
 ### 计数器示例
-```cpp
+```
 template <unsigned N>
 class Counter : public ch::Component {
 public:
@@ -213,7 +213,7 @@ public:
 ```
 
 ### 带复位的计数器
-```cpp
+```
 class CounterWithReset : public ch::Component {
 public:
     __io(
@@ -244,16 +244,45 @@ CppHDL提供了丰富的运算符操作，用于构建复杂的硬件逻辑。
 
 `bit_select`用于从位向量中选择特定位置的位：
 
-```cpp
-ch_uint<8> data(0b10110101_d);
+```
+ch_uint<8> data(10110101_b);
 ch_bool bit2 = bit_select(data, 2);  // 选择第2位，结果为true(1)
+```
+
+### 位段提取操作 (bits)
+
+`bits<MSB, LSB>`用于从位向量中提取连续的位段，其中MSB是最高有效位索引，LSB是最小有效位索引：
+
+```
+ch_uint<8> data(11010110_b);
+ch_uint<4> low4bits = bits<3, 0>(data);    // 提取低4位: 0b0110
+ch_uint<3> mid3bits = bits<5, 3>(data);    // 提取位5到3: 0b101
+ch_uint<2> high2bits = bits<7, 6>(data);   // 提取高2位: 0b11
+```
+
+### 零扩展操作 (zext)
+
+`zext<NewWidth, T>`用于将位向量零扩展到更大的宽度，其中NewWidth是目标宽度，T是源类型：
+
+```
+ch_uint<4> small_val(1011_b);
+ch_uint<8> big_val = zext<8>(small_val);    // 扩展为8位: 0b00001011
+```
+
+### 符号扩展操作 (sext)
+
+`sext<NewWidth, T>`用于将位向量符号扩展到更大的宽度：
+
+```
+ch_uint<4> signed_val(1011_b);  // 如果作为有符号数，表示-5
+ch_uint<8> extended = sext<8>(signed_val);  // 扩展为8位，保持符号: 0b11111011
 ```
 
 ### 条件选择操作 (select)
 
 `select`用于根据条件选择两个值中的一个：
 
-```cpp
+```
 ch_bool condition(true);
 ch_uint<8> true_val(10_d);
 ch_uint<8> false_val(20_d);
@@ -265,7 +294,7 @@ ch_uint<8> result = select(condition, true_val, false_val);  // 结果为10
 
 CppHDL支持标准的逻辑运算符：
 
-```cpp
+```
 ch_bool a(true);
 ch_bool b(false);
 
@@ -278,7 +307,7 @@ ch_bool not_result = !a;      // 逻辑NOT
 
 CppHDL支持标准的比较运算符：
 
-```cpp
+```
 ch_uint<8> a(10_d);
 ch_uint<8> b(20_d);
 
@@ -294,9 +323,9 @@ ch_bool le = (a <= b);  // 小于等于
 
 CppHDL支持标准的位运算符：
 
-```cpp
-ch_uint<8> a(0b1100_d);
-ch_uint<8> b(0b1010_d);
+```
+ch_uint<8> a(1100_b);
+ch_uint<8> b(1010_b);
 
 ch_uint<8> and_result = a & b;  // 位AND
 ch_uint<8> or_result = a | b;   // 位OR
@@ -308,8 +337,8 @@ ch_uint<8> not_result = ~a;     // 位NOT
 
 CppHDL支持左移和右移运算符：
 
-```cpp
-ch_uint<8> value(0b00001100_d);  // 12
+```
+ch_uint<8> value(00001100_b);  // 12
 
 ch_uint<8> left_shifted = value << 2_d;  // 左移2位: 0b00110000 (48)
 ch_uint<8> right_shifted = value >> 1_d; // 右移1位: 0b00000110 (6)
@@ -319,7 +348,7 @@ ch_uint<8> right_shifted = value >> 1_d; // 右移1位: 0b00000110 (6)
 
 CppHDL支持函数式编程风格，允许将硬件操作封装为函数：
 
-```cpp
+```
 // 定义一个函数来实现某种硬件功能
 template <unsigned N>
 ch_uint<N> reverse_bits(ch_uint<N> input) {
@@ -357,7 +386,7 @@ public:
 
 CppHDL允许将复杂功能封装为子模块并复用：
 
-```cpp
+```
 class MyTopModule : public ch::Component {
 public:
     __io(
@@ -387,7 +416,7 @@ public:
 
 ### 使用运行时for循环实现OneHot解码器
 
-```cpp
+```
 void describe() override {
     if constexpr (N == 1) {
         io().out = ch_uint<OUTPUT_WIDTH>(0_d);
@@ -413,7 +442,7 @@ void describe() override {
 
 ### 使用运行时for循环实现OneHot编码器
 
-```cpp
+```
 void describe() override {
     ch_uint<N> result = 0_d;
 
@@ -431,7 +460,7 @@ void describe() override {
 
 ### 使用static_assert进行编译时检查
 
-```cpp
+```
 template <unsigned N> class onehot_dec {
 public:
     static_assert(N > 0, "OneHotDecoder must have at least 1 bit");
@@ -443,7 +472,7 @@ public:
 
 ### 使用if constexpr进行编译时条件分支
 
-```cpp
+```
 void describe() override {
     if constexpr (N == 1) {
         io().out = ch_uint<OUTPUT_WIDTH>(0_d);
@@ -460,7 +489,7 @@ void describe() override {
 CppHDL提供了完整的测试框架，可以使用Catch2测试框架进行验证：
 
 ### 基本测试
-```cpp
+```
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "component.h"
@@ -508,7 +537,7 @@ TEST_CASE("Adder4: basic functionality", "[adder][basic]") {
 ```
 
 ### 时序逻辑测试
-```cpp
+```
 TEST_CASE("Counter: basic functionality", "[counter][timing]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_swapper(ctx.get());
@@ -531,7 +560,7 @@ TEST_CASE("Counter: basic functionality", "[counter][timing]") {
 
 CppHDL支持将设计转换为Verilog代码：
 
-```cpp
+```
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "component.h"
@@ -579,6 +608,9 @@ int main() {
 
 6. **运算符使用**：
    - 使用bit_select访问特定位
+   - 使用bits<MSB, LSB>提取位段
+   - 使用zext<NewWidth>进行零扩展
+   - 使用sext<NewWidth>进行符号扩展
    - 使用select实现条件选择
    - 使用标准算术、位运算和比较运算符
    - 遵循移位操作规范（字面量作为右操作数）

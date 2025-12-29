@@ -48,10 +48,10 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
         const std::source_location &sloc = std::source_location::current()) {
         if constexpr (M <= N) {
             // 零扩展
-            this->node_impl_ = zero_extend(other, N).impl();
+            this->node_impl_ = zext<ch_uint<M>, N>(other).impl();
         } else {
             // 截断
-            this->node_impl_ = bits<N - 1, 0, ch_uint<M>>(other).impl();
+            this->node_impl_ = bits<N - 1, 0>(other).impl();
         }
     }
 
