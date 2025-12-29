@@ -23,6 +23,14 @@ set(CH_SAMPLE_TARGETS
     precise_width_demo
     precise_width_example
     onehot_example
+    stream_fifo_example
+    stream_fork_example
+    stream_join_example
+    stream_arbiter_example
+    stream_demux_example
+    stream_flow_basic_example
+    spinalhdl_stream_example
+    spinalhdl_component_function_area_example
 )
 
 # 为每个示例创建可执行文件
@@ -44,6 +52,17 @@ foreach(target ${CH_SAMPLE_TARGETS})
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 endforeach()
+
+# 添加新的示例
+add_executable(fragment_example
+    fragment_example.cpp
+)
+
+target_link_libraries(fragment_example
+    cpphdl
+)
+
+set_property(TARGET fragment_example PROPERTY CXX_STANDARD 20)
 
 # 创建一个目标来构建所有示例
 add_custom_target(all-samples)
