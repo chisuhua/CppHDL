@@ -106,9 +106,10 @@ ch_uint<N> gray_counter(ch_bool clk, ch_bool rst, ch_bool en,
     ch_uint<N> gray_code;
 
     // 先实现二进制计数器
-    ch_uint<N> next_binary =
-        select(binary_counter == (1_d << N_d) - 1_d, // 检查是否达到最大值
-               0_d, binary_counter + 1_d);
+    ch_uint<N> next_binary = select(
+        binary_counter == (1_d << make_literal<N, compute_bit_width(N - 1)>()) -
+                              1_d, // 检查是否达到最大值
+        0_d, binary_counter + 1_d);
 
     binary_counter->next =
         select(rst, ch_uint<N>(0_d), select(en, next_binary, binary_counter));
@@ -168,7 +169,7 @@ ch_uint<N> ring_counter(ch_bool clk, ch_bool rst, ch_bool en,
 
     // 环形移位：将最高位移到最低位
     ch_bool msb = bit_select(counter, N - 1);
-    ch_uint<N> shifted = (counter << 1_d) | ch_uint<N>(msb);
+    ch_uint<N> shifted = (counter << 1_d) | ch_uint<N>(msb ? 1_d : 0_d);
 
     counter->next = select(rst, ch_uint<N>(1_d), select(en, shifted, counter));
 
@@ -227,9 +228,9 @@ struct EdgeDetectorResult {
 inline EdgeDetectorResult
 edge_detector(ch_bool clk, ch_bool rst, ch_bool signal,
               const std::string &name = "edge_detector") {
-    ch_reg<ch_bool> prev_signal(false, name + "_prev");
+    ch_reg<ch_bool> prev_signal(0_b, name + "_prev");
 
-    prev_signal->next = select(rst, false, signal);
+    prev_signal->next = select(rst, 0_b, signal);
 
     EdgeDetectorResult result;
     result.pos_edge = signal && !prev_signal;
@@ -258,7 +259,7 @@ configurable_counter(ch_bool clk, ch_bool rst, ch_bool en, ch_uint<2> mode,
     ch_reg<ch_uint<N>> counter(0_d, name);
 
     ch_uint<N> next_value = counter;
-    ch_bool is_overflow = false;
+    ch_bool is_overflow = 0_b;
 
     // 根据模式决定下一个值
     ch_bool is_max = (counter == max_val);
@@ -266,19 +267,19 @@ configurable_counter(ch_bool clk, ch_bool rst, ch_bool en, ch_uint<2> mode,
 
     // 递增模式
     ch_uint<N> inc_value = select(is_max, 0_d, counter + 1_d);
-    ch_bool inc_overflow = select(is_max, true, false);
+    ch_bool inc_overflow = select(is_max, 1_b, 0_b);
 
     // 递减模式
     ch_uint<N> dec_value = select(is_zero, max_val, counter - 1_d);
-    ch_bool dec_overflow = select(is_zero, true, false);
+    ch_bool dec_overflow = select(is_zero, 1_b, 0_b);
 
     // 递增到最大值重置模式
     ch_uint<N> up_mod_value = select(is_max, 0_d, counter + 1_d);
-    ch_bool up_mod_overflow = select(is_max, true, false);
+    ch_bool up_mod_overflow = select(is_max, 1_b, 0_b);
 
     // 递减到0重置模式
     ch_uint<N> down_mod_value = select(is_zero, max_val, counter - 1_d);
-    ch_bool down_mod_overflow = select(is_zero, true, false);
+    ch_bool down_mod_overflow = select(is_zero, 1_b, 0_b);
 
     // 根据模式选择
     next_value =

@@ -56,7 +56,7 @@ set(SINGLE_TEST_SOURCES
     test_mem.cpp
     test_operator_advanced.cpp
     test_verilog_gen.cpp
-    test_fifo.cpp
+    test_fifo_example.cpp
     test_reg_timing.cpp
     test_precise_width.cpp
     test_reg_linking.cpp
@@ -76,12 +76,12 @@ set(SINGLE_TEST_SOURCES
     chlib/test_bitwise.cpp
     chlib/test_logic.cpp
     chlib/test_combinational.cpp
-    # chlib/test_sequential.cpp
-    # chlib/test_memory.cpp
-    # chlib/test_selector_arbiter.cpp
-    # chlib/test_converter.cpp
-    # chlib/test_arithmetic_advance.cpp
-    # chlib/test_chfifo.cpp
+    chlib/test_sequential.cpp
+    chlib/test_converter.cpp
+    chlib/test_selector_arbiter.cpp
+    chlib/test_arithmetic_advance.cpp
+    chlib/test_memory.cpp
+    # chlib/test_fifo.cpp
     # chlib/test_cam.cpp
     # chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件
 )
