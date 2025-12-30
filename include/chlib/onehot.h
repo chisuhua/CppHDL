@@ -35,7 +35,7 @@ public:
 
             for (unsigned i = 0; i < N; ++i) {
                 ch_bool bit_at_i = bit_select(in, i);
-                ch_uint<OUTPUT_WIDTH> current_value = make_literal(i);
+                ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
                 result = select(bit_at_i, current_value, result);
             }
 
@@ -85,7 +85,7 @@ public:
                 ch_bool bit_at_i = bit_select(io().in, i);
 
                 // 创建当前索引的字面量值
-                ch_uint<OUTPUT_WIDTH> current_value = make_literal(i);
+                ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
 
                 // 使用select操作创建新的result节点
                 result = select(bit_at_i, current_value, result);

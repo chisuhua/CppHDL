@@ -2,52 +2,201 @@
 
 ## 概述
 
-本文档为AI助手提供编码规范和提示词编写指南，确保AI在辅助开发CppHDL项目时遵循正确的实践和规范。
+本文档为AI助手提供了在CppHDL项目中编写代码的具体规范和最佳实践。遵循这些指南可以确保生成的代码与项目架构、编码风格和设计模式保持一致。
 
-## CppHDL核心编码规范
+## 通用编码规范
 
-### 1. 模板函数使用规范
-- 对于位操作函数如[zext](file:///mnt/ubuntu/chisuhua/github/CppHDL/include/core/lnodeimpl.h#L65-L65)、[bits](file:///mnt/ubuntu/chisuhua/github/CppHDL/include/core/operators.h#L538-L546)等，必须使用正确的模板参数语法
-- 正确用法：`zext<NewWidth>(operand)` 或 `bits<MSB, LSB>(operand)`
-- 避免虚构不存在的方法，如`ch_uint`的`slice`方法
+### 1. C++ 语言标准
+- 使用 C++20 标准
+- 利用现代 C++ 特性，如概念(Concepts)、范围(Ranges)、模块化等
+- 遵循 RAII 原则进行资源管理
 
-### 2. 字面量构造规范
+### 2. 命名约定
+- 使用驼峰命名法：变量和函数使用小驼峰 `camelCase`
+- 类名使用大驼峰 `PascalCase`
+- 常量使用全大写加下划线 `CONSTANT_CASE`
+
+### 3. 代码格式
+- 使用 4 个空格缩进，禁用制表符
+- 遵循 Google C++ Style Guide
+- 行长度不超过 100 个字符
+- 使用 clang-format 统一代码风格
+
+## CppHDL 特定规范
+
+### 1. 硬件类型定义
+- 使用 `ch_uint<N>` 表示 N 位无符号整数
+- 使用 `ch_bool` 表示布尔类型
+- 使用 `ch_reg<T>` 表示寄存器类型
+- 使用 `ch_in<T>`, `ch_out<T>`, `ch_inout<T>` 表示端口类型
+
+### 2. 字面量规范
+- 使用 `_d` 后缀表示十进制字面量，如 `12_d`
+- 使用 `_b` 后缀表示二进制字面量，如 `1100_b`（**注意：不要在二进制字面量前添加 `0b` 前缀**）
+- 使用 `_h` 后缀表示十六进制字面量，如 `0xC_h`
+- 使用 `_o` 后缀表示八进制字面量，如 `14_o`
+- 确保字面量的位宽不超过目标 `ch_uint<N>` 的宽度
 - 优先使用`make_literal(value, width)`工厂函数创建指定宽度的运行时字面量信号
 - 禁止直接使用`ch_literal_runtime`构造函数
-- 使用字面量后缀：`_d`(十进制)、`_b`(二进制)、`_h`(十六进制)、`_o`(八进制)
 
-### 3. 位操作规范
-- 使用`bits<MSB, LSB>()`提取指定位段
-- 使用`zext<NewWidth>()`进行零扩展
-- 使用`sext<NewWidth>()`进行符号扩展
-- 使用`bit_select(data, index)`访问特定位
+### 3. 循环变量规范
+- 在循环中创建表示索引或其他运行期值的硬件节点时，应优先使用`make_uint<WIDTH>(i)`而非`make_literal(i)`
+- `make_uint`用于创建指定位宽的无符号整数信号，更适合循环变量场景
+- `make_literal`主要用于常量值的字面量构造，一般不适用于运行期变化的循环变量
+- **例外情况**：当[make_literal(i)](file:///mnt/ubuntu/chisuhua/github/CppHDL/include/core/literal.h#L163-L165)仅在赋值语句中作为右操作数使用时，是允许的例外，如 `ch_uint<N> value = make_literal(i);`
+- **禁止用法**：将[make_literal(i)](file:///mnt/ubuntu/chisuhua/github/CppHDL/include/core/literal.h#L163-L165)用于比较操作或作为函数参数传递，如 `if (some_signal == make_literal(i))` 或 `auto value = make_uint<WIDTH>(make_literal(i));`
+- 正确用法示例：
+  ```cpp
+  for (unsigned i = 0; i < N; ++i) {
+      ch_uint<WIDTH> current_value = make_uint<WIDTH>(i);
+      // ... 其他操作
+  }
+  ```
+- 错误用法示例：
+  ```cpp
+  for (unsigned i = 0; i < N; ++i) {
+      ch_uint<WIDTH> current_value = make_literal(i);  // 不推荐
+      // ... 其他操作
+  }
+  ```
 
-### 4. 组件生命周期规范
-- `create_ports()`和`describe()`方法由框架自动调用，禁止在用户代码中手动调用
-- 使用`ctx->get_default_clk()`和`ctx->get_default_rst()`获取默认时钟和复位信号
-- 使用`simulator.tick()`驱动仿真时钟
+### 4. 组件定义
+- 使用 `__io` 宏定义组件接口
+- 继承自 `ch::Component` 创建新组件
+- 实现 `create_ports()` 和 `describe()` 方法
+- 在构造函数中初始化组件名称和父组件
 
-### 5. 运行时循环设计规范
-- 当需要对多个位进行相似操作时，使用运行时for循环
-- 在循环中使用`bit_select`访问特定位
-- 使用`select`操作实现条件选择逻辑
-- 结合`if constexpr`进行编译时优化
+### 5. 操作符使用
+- 优先使用框架提供的自由函数而非自定义函数
+- 使用 `zext` 进行零扩展，而非 `zero_extend`
+- 使用 `bits<MSB, LSB>(value)` 提取位段，而非成员函数调用
+- 位宽计算规则：提取WIDTH位从LSB开始，则MSB = LSB + WIDTH - 1
 
-## AI助手行为规范
+### 6. 仿真与测试
+- 使用 `ch::Simulator` 进行仿真
+- 使用 `sim.tick()` 驱动时钟，而非手动翻转时钟信号
+- 使用 Catch2 框架编写测试用例
+- 为 `ch_reg` 提供初始值
 
-### 1. 代码生成规范
-- 生成的代码必须遵循CppHDL的API规范
-- 优先使用自由函数而非虚构的成员方法
-- 确保模板参数的正确使用
+### 7. 模板参数使用规范
+- **核心原则**：模板参数必须是编译期可确定的常量表达式
+- **禁止将运行时变量（如循环变量、函数参数等）作为模板参数使用**
+- **所有模板实参必须在编译时具有确定值**
 
-### 2. 错误诊断规范
-- 识别CppHDL特有的编译错误，如模板参数推导失败
-- 提供符合CppHDL架构的修复建议
-- 避免建议使用不存在的API或方法
+**常见错误示例**：
+- 在`make_uint<compute_bit_width(width)>(width)`中，如果[width](file:///mnt/ubuntu/chisuhua/github/CppHDL/include/core/literal.h#L75-L75)是函数参数（运行时值），则`compute_bit_width(width)`无法作为模板参数，因为[width](file:///mnt/ubuntu/chisuhua/github/CppHDL/include/core/literal.h#L75-L75)不是编译期常量
+- 在`bits<MSB, LSB>()`、`make_literal<Value, Width>()`等模板中使用运行时变量
 
-### 3. 文档引用规范
-- 在提供CppHDL相关建议时，引用[CppHDL_UsageGuide.md](file:///mnt/ubuntu/chisuhua/github/CppHDL/docs/CppHDL_UsageGuide.md)中的相关内容
-- 确保所提建议与文档中的最佳实践一致
+**正确实践**：
+1. **编译期计算**：对于依赖于变量的位宽或其他类型参数，应先通过constexpr函数或模板在编译期计算出结果
+2. **运行时场景**：当参数是运行时值时，应使用运行时函数而非模板函数，如使用循环和字面量操作来处理运行时值
+3. **常量提取**：将复杂的表达式简化为编译期常量，避免在模板参数中直接使用算术运算
+4. **替代方案**：当需要运行时行为时，考虑使用函数参数而非模板参数，或采用标签分发（tag dispatching）等技术
+
+**设计优势**：
+- 确保代码可通过编译，避免"non-type template parameter is not a constant expression"等错误
+- 提高类型安全性，保证生成的硬件结构在编译期就已确定
+- 符合CppHDL框架对静态类型和编译期优化的要求
+
+### 8. 运行时值处理规范
+- **运行时值处理**：当需要处理运行时值（如函数参数）时，不能直接将其用作模板参数
+- **替代方法**：使用循环和字面量操作来处理运行时值，而不是依赖模板计算
+- **字面量操作**：使用如`1_d`等字面量操作来构建运行时计算逻辑
+
+**示例**：
+```cpp
+// 错误：试图使用运行时值作为模板参数
+ch_uint<N> mask = (ch_uint<N>(1_d) << make_uint<compute_bit_width(width)>(width)) - 1_d;
+
+// 正确：使用循环和字面量操作处理运行时值
+ch_uint<N> mask_val = 1_d;
+for(unsigned i = 1; i < width; ++i) {
+    mask_val = (mask_val << 1_d) + 1_d;
+}
+```
+
+## 代码结构规范
+
+### 1. 头文件包含顺序
+```
+1. 对应的头文件（如果适用）
+2. C 系统头文件
+3. C++ 系统头文件
+4. 其他库头文件
+5. 项目头文件
+```
+
+### 2. 类和函数组织
+- 在头文件中声明，在源文件中定义实现
+- 将公共接口放在类的开头
+- 使用 RAII 模式管理资源
+- 避免在头文件中包含不必要的实现细节
+
+## 错误处理和调试
+
+### 1. 断言和检查
+- 使用 `CHREQUIRE` 进行前置条件检查
+- 使用 `CHASSERT` 进行运行时断言
+- 提供有意义的错误消息
+
+### 2. 调试输出
+- 使用 `CHDBG` 进行调试输出
+- 包含有意义的上下文信息
+- 包含类型信息或状态信息以提升诊断效率
+
+## 测试规范
+
+### 1. 测试用例编写
+- 使用 Catch2 的 SECTION 机制组织测试
+- 测试应覆盖边界情况
+- 使用适当的测试名称和标签
+- 优先使用公共 API 进行测试，而非内部实现
+
+### 2. 验证方法
+- 使用 `REQUIRE` 和 `CHECK` 进行断言
+- 使用 `sim.get_value()` 获取仿真值
+- 验证硬件行为符合预期
+
+## 性能优化
+
+### 1. 编译时优化
+- 利用模板和 constexpr 进行编译时计算
+- 避免不必要的运行时开销
+- 使用适当的算法和数据结构
+
+### 2. 硬件优化
+- 避免创建不必要的中间节点
+- 重用已创建的节点以减少重复
+- 遵循硬件语义，一个物理连接点对应一个唯一的节点表示
+
+## 文档规范
+
+### 1. 注释风格
+- 使用 Doxygen 风格的注释
+- 为公共接口提供详细文档
+- 解释复杂算法和设计决策
+
+### 2. 代码文档
+- 在函数和类定义前添加文档注释
+- 说明参数、返回值和异常情况
+- 提供使用示例
+
+## AI 特定指导
+
+### 1. 模板使用
+- 当不确定时，参考现有实现而非自行发明
+- 优先使用框架提供的公共 API
+- 避免使用未在项目中验证的 C++ 特性
+
+### 2. 代码生成
+- 确保生成的代码符合上述所有规范
+- 生成的代码应易于理解和维护
+- 提供适当的错误处理和边界检查
+
+### 3. 问题修复
+- 修复问题时保持与现有架构一致
+- 优先使用框架提供的标准操作符进行测试
+- 验证修改后的代码符合预期语义
 
 ## 提示词编写模板
 

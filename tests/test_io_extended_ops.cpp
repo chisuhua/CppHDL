@@ -114,7 +114,7 @@ TEST_CASE("IOExtendedOps - ExtensionOperations",
 
     SECTION("Zero extension") {
         ch_out<ch_uint<8>> port("test_port");
-        auto result = zext<ch_uint<8>, 16>(port);
+        auto result = zext<16>(port);
 
         REQUIRE(ch_width_v<decltype(result)> == 16);
     }

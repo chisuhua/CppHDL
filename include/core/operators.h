@@ -496,7 +496,7 @@ template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
 }
 
 // === 符号扩展操作 ===
-template <typename T, unsigned NewWidth> auto sext(const T &operand) {
+template <unsigned NewWidth, typename T> auto sext(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
     static_assert(NewWidth >= ch_width_v<T>,
                   "New width must be >= original width");
@@ -512,7 +512,7 @@ template <typename T, unsigned NewWidth> auto sext(const T &operand) {
 }
 
 // === 零扩展操作 ===
-template <typename T, unsigned NewWidth> auto zext(const T &operand) {
+template <unsigned NewWidth, typename T> auto zext(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
     static_assert(NewWidth >= ch_width_v<T>,
                   "New width must be >= original width");

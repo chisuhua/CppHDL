@@ -30,7 +30,7 @@ ch_uint<compute_bit_width(N - 1)> priority_encoder(ch_uint<N> input) {
     // 从低位到高位检查，优先处理低位
     for (unsigned i = 0; i < N; ++i) {
         ch_bool bit_at_i = bit_select(input, i);
-        ch_uint<OUTPUT_WIDTH> current_value = make_literal(i);
+        ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
         result = select(bit_at_i, current_value, result);
     }
 
@@ -51,7 +51,7 @@ ch_uint<compute_bit_width(N - 1)> binary_encoder(ch_uint<N> input) {
 
     for (unsigned i = 0; i < N; ++i) {
         ch_bool bit_at_i = bit_select(input, i);
-        ch_uint<OUTPUT_WIDTH> current_value = make_literal(i);
+        ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
         result = select(bit_at_i, current_value, result);
     }
 
@@ -71,31 +71,15 @@ ch_uint<N> binary_decoder(ch_uint<compute_bit_width(N - 1)> input) {
     ch_uint<N> result = 0_d;
 
     for (unsigned i = 0; i < N; ++i) {
-        ch_bool idx_matches = (input == make_literal(i));
-        ch_uint<N> one_hot_val = ch_uint<N>(1_d) << make_literal(i);
+        ch_bool idx_matches = (input == make_uint<INPUT_WIDTH>(i));
+        ch_uint<N> one_hot_val = ch_uint<N>(1_d) << make_uint<INPUT_WIDTH>(i);
         result = select(idx_matches, one_hot_val, result);
     }
 
     return result;
 }
 
-/**
- * 多路分配器 - 函数式接口
- *
- * 将输入分配到多个输出中的一个
- */
-template <unsigned N, unsigned M>
-std::array<ch_uint<N>, M> demux(ch_uint<N> input,
-                                ch_uint<compute_bit_width(M - 1)> sel) {
-    std::array<ch_uint<N>, M> outputs;
-
-    for (unsigned i = 0; i < M; ++i) {
-        ch_bool sel_matches = (sel == make_literal(i));
-        outputs[i] = select(sel_matches, input, ch_uint<N>(0_d));
-    }
-
-    return outputs;
-}
+// demux函数已经在chlib/logic.h中定义，不需要重复定义
 
 /**
  * 奇偶校验生成器 - 函数式接口
@@ -192,7 +176,7 @@ RippleCarryAdderResult<N> ripple_carry_adder(ch_uint<N> a, ch_uint<N> b,
         FullAdderResult fa_result = full_adder(a_bit, b_bit, carry);
 
         // 设置当前位的和
-        sum = sum | (ch_uint<N>(fa_result.sum) << make_literal(i));
+        sum = sum | (ch_uint<N>(ch_uint<1>(fa_result.sum)) << make_uint<compute_bit_width(N-1)>(i));
 
         // 更新进位
         carry = fa_result.carry_out;
@@ -220,9 +204,9 @@ ComparatorResult<N> comparator(ch_uint<N> a, ch_uint<N> b) {
     ComparatorResult<N> result;
 
     // 初始化结果
-    result.greater = false;
-    result.equal = true;
-    result.less = false;
+    result.greater = ch_bool(false);
+    result.equal = ch_bool(true);
+    result.less = ch_bool(false);
 
     // 从高位到低位比较
     for (int i = N - 1; i >= 0; --i) {
@@ -236,13 +220,15 @@ ComparatorResult<N> comparator(ch_uint<N> a, ch_uint<N> b) {
         // 更新比较结果
         ch_bool update = result.equal; // 只有在前面的位相等时才更新
 
-        result.greater = select(update, select(a_gt_b, true, result.greater),
-                                result.greater);
-        result.less =
-            select(update, select(a_lt_b, true, result.less), result.less);
-        result.equal =
-            select(update, select(a_gt_b || a_lt_b, false, result.equal),
-                   result.equal);
+        ch_bool new_greater = select(a_gt_b, ch_bool(true), result.greater);
+        result.greater = select(update, new_greater, result.greater);
+
+        ch_bool new_less = select(a_lt_b, ch_bool(true), result.less);
+        result.less = select(update, new_less, result.less);
+
+        ch_bool new_equal =
+            select(a_gt_b || a_lt_b, ch_bool(false), result.equal);
+        result.equal = select(update, new_equal, result.equal);
     }
 
     return result;
@@ -259,7 +245,7 @@ ch_uint<N> multiplexer(const std::array<ch_uint<N>, M> &inputs,
     ch_uint<N> result = inputs[0];
 
     for (unsigned i = 0; i < M; ++i) {
-        ch_bool sel_matches = (sel == make_literal(i));
+        ch_bool sel_matches = (sel == make_uint<compute_bit_width(M-1)>(i));
         ch_uint<N> current_input = inputs[i];
         result = select(sel_matches, current_input, result);
     }
@@ -304,7 +290,7 @@ ch_uint<N> mux16to1(ch_uint<N> in0, ch_uint<N> in1, ch_uint<N> in2,
  * 检查输入是否等于特定值
  */
 template <unsigned N> ch_bool equals(ch_uint<N> input, unsigned value) {
-    ch_uint<N> literal_value = make_literal(value);
+    ch_uint<N> literal_value = make_literal(value, N);
     return input == literal_value;
 }
 
@@ -315,8 +301,10 @@ template <unsigned N> ch_bool equals(ch_uint<N> input, unsigned value) {
  */
 template <unsigned N>
 ch_bool in_range(ch_uint<N> input, unsigned min_val, unsigned max_val) {
-    ch_bool greater_equal_min = input >= make_literal(min_val);
-    ch_bool less_equal_max = input <= make_literal(max_val);
+    ch_uint<N> min_literal = make_literal(min_val, N);
+    ch_uint<N> max_literal = make_literal(max_val, N);
+    ch_bool greater_equal_min = input >= min_literal;
+    ch_bool less_equal_max = input <= max_literal;
     return greater_equal_min && less_equal_max;
 }
 

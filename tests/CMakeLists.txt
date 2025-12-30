@@ -73,11 +73,11 @@ set(SINGLE_TEST_SOURCES
     test_literal_left_shift.cpp
     chlib/test_onehot.cpp
     chlib/test_arithmetic.cpp
-    # chlib/test_logic.cpp
-    # chlib/test_combinational.cpp
+    chlib/test_bitwise.cpp
+    chlib/test_logic.cpp
+    chlib/test_combinational.cpp
     # chlib/test_sequential.cpp
     # chlib/test_memory.cpp
-    # chlib/test_bitwise.cpp
     # chlib/test_selector_arbiter.cpp
     # chlib/test_converter.cpp
     # chlib/test_arithmetic_advance.cpp

@@ -29,8 +29,6 @@ ch_bool::ch_bool(const ch_literal_runtime &val, const std::string &name,
     this->node_impl_ = node;
 }
 
-ch_bool::operator ch_uint<1>() const { return ch_uint<1>(this->impl()); }
-
 ch_bool::operator uint64_t() const {
     if (this->node_impl_ && this->node_impl_->is_const()) {
         auto *lit_node = static_cast<litimpl *>(this->node_impl_);

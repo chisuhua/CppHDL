@@ -148,7 +148,7 @@ ch_uint<N> mux(std::array<ch_uint<N>, M> inputs, ch_uint<compute_bit_width(M-1)>
     ch_uint<N> result = inputs[0];
     
     for (unsigned i = 0; i < M; ++i) {
-        ch_bool sel_matches = (sel == make_literal(i));
+        ch_bool sel_matches = (sel == make_uint<compute_bit_width(M-1)>(i));
         ch_uint<N> current_input = inputs[i];
         result = select(sel_matches, current_input, result);
     }
@@ -192,7 +192,7 @@ std::array<ch_uint<N>, M> demux(ch_uint<N> input, ch_uint<compute_bit_width(M-1)
     std::array<ch_uint<N>, M> outputs;
     
     for (unsigned i = 0; i < M; ++i) {
-        ch_bool sel_matches = (sel == make_literal(i));
+        ch_bool sel_matches = (sel == make_uint<compute_bit_width(M-1)>(i));
         outputs[i] = select(sel_matches, input, ch_uint<N>(0_d));
     }
     

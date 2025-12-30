@@ -4,7 +4,7 @@ set(CH_SAMPLE_TARGETS
     test_dag
     simple_io
     handshake
-    fifo
+    fifo_example
     fifo_bundle
     bundle_demo
     bundle_advanced_features

@@ -17,7 +17,7 @@ TEST_CASE("Popcount operation on various ch_uint types", "[popcount]") {
     SECTION("popcount of ch_uint<1>") {
         auto ctx = context("test_ctx");
         auto sim1 = Simulator(&ctx);
-        auto value = ch_uint<1>(0b1);
+        auto value = ch_uint<1>(1_b);
         auto result = popcount(value);
 
         // 对于1位输入，最多有1个1，需要1位表示（0或1）

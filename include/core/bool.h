@@ -48,7 +48,6 @@ struct ch_bool : public logic_buffer<ch_bool> {
     explicit operator bool() const;
 
     // 隐式转换为 ch_uint<1>（用于兼容性）
-    operator ch_uint<1>() const;
 
     using direction_type =
         std::variant<std::monostate, input_direction, output_direction>;

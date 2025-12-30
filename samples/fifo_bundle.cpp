@@ -55,12 +55,12 @@ public:
             // 特殊处理1位地址的情况
             auto rd_bit = bit_select<0>(rd_ptr);
             auto wr_bit = bit_select<0>(wr_ptr);
-            rd_a = zext<decltype(rd_bit), addr_width>(rd_bit);
-            wr_a = zext<decltype(wr_bit), addr_width>(wr_bit);
+            rd_a = zext<addr_width>(rd_bit);
+            wr_a = zext<addr_width>(wr_bit);
         } else {
             // 一般情况使用bits提取
-            rd_a = bits<decltype(rd_ptr), addr_width - 1, 0>(rd_ptr);
-            wr_a = bits<decltype(wr_ptr), addr_width - 1, 0>(wr_ptr);
+            rd_a = bits<addr_width - 1, 0>(rd_ptr);
+            wr_a = bits<addr_width - 1, 0>(wr_ptr);
         }
 
         // 控制信号

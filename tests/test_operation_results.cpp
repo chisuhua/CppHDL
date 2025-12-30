@@ -456,7 +456,7 @@ struct ZeroExtendTest {
     };
 
     static void perform_test(auto &component) {
-        auto result = zext<ch_uint<3>, 8>(component.io().inputs.a);
+        auto result = zext<8>(component.io().inputs.a);
         component.io().result_out = result;
     }
 };

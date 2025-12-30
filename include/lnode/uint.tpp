@@ -6,6 +6,8 @@
 #include "core/node_builder.h"
 #include "core/uint.h"
 #include "utils/logger.h"
+#include <cstdint>
+#include <source_location>
 #include <string>
 
 namespace ch {
@@ -13,7 +15,7 @@ namespace core {
 
 template <unsigned N>
 ch_uint<N>::ch_uint(const ch_literal_runtime &val, const std::string &name,
-                    const std::source_location &sloc) {
+                    const std::source_location &sloc) requires (N > 1) {
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from sdata_type", N);
 
     this->node_impl_ = node_builder::instance().build_literal(val, name, sloc);

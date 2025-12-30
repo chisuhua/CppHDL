@@ -3,6 +3,7 @@
 #include "core/traits.h"
 #include <cstdint>
 #include <type_traits>
+#include <variant>
 
 #include "../lnode/literal_ext.h"
 
@@ -33,13 +34,6 @@ template <uint64_t V, uint32_t W> struct ch_literal_impl {
 
     // 添加到uint64_t的转换操作符
     constexpr operator uint64_t() const noexcept { return actual_value; }
-
-    // 隐式转换到 ch_uint<N>（带编译期检查）
-    // constexpr operator _uint<N>() const {
-    //     static_assert(N >= actual_width,
-    //                   "Literal width exceeds target ch_uint width");
-    //     return ch_uint<N>(value);
-    // }
 };
 
 // 保持原有的运行时版本，用于动态创建字面量
@@ -92,13 +86,6 @@ struct ch_literal_runtime {
 
     // 添加到uint64_t的转换操作符，以支持static_cast<uint64_t>
     constexpr operator uint64_t() const noexcept { return actual_value; }
-
-    // 隐式转换到 ch_uint<N>（带编译期检查）
-    // template <unsigned N> constexpr operator ch_uint<N>() const {
-    //     static_assert(N >= actual_width,
-    //                   "Literal width exceeds target ch_uint width");
-    //     return ch_uint<N>(actual_value);
-    // }
 };
 
 // 定义通用的ch_literal类型别名，指向编译时版本
@@ -136,11 +123,39 @@ template <char... Chars> constexpr auto operator"" _d() {
 
 } // namespace literals
 
+template <uint32_t W>
+using literal_variant =
+    std::variant<ch_literal_impl<0, W>, ch_literal_impl<1, W>,
+                 ch_literal_impl<2, W>, ch_literal_impl<3, W>,
+                 ch_literal_impl<4, W>, ch_literal_impl<5, W>,
+                 ch_literal_impl<6, W>, ch_literal_impl<7, W>,
+                 ch_literal_impl<8, W>, ch_literal_impl<UINT64_MAX, W>>;
+
 // 工厂函数
 template <uint64_t V, uint32_t W> inline constexpr auto make_literal() {
     return ch_literal_impl<V, W>();
 }
 
+// 提供仅指定值的编译期重载，自动计算宽度
+template <uint64_t V> inline constexpr auto make_literal() {
+    constexpr uint32_t width = ch_literal_runtime::compute_width(V);
+    return ch_literal_impl<V, width>();
+}
+
+// 提供宽度作为模板参数，值作为函数参数的版本
+// template <uint32_t W>
+// inline constexpr literal_variant<W> make_literal(uint64_t value) {
+//     switch (value) {
+//     case 0:
+//         return ch_literal_impl<0, W>();
+//     case 1:
+//         return ch_literal_impl<1, W>();
+//     default:
+//         return ch_literal_impl<0, W>();
+//     }
+// }
+
+// 运行时版本：直接构造，依赖编译器优化小常量
 inline constexpr ch_literal_runtime make_literal(uint64_t value,
                                                  uint32_t width) {
     return ch_literal_runtime(value, width);

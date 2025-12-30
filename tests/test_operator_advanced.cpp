@@ -292,7 +292,7 @@ TEST_CASE("sign_extend: sign extension operation", "[operators][extension]") {
     ch_uint<4> data(0b1011, "signed_data"); // -5 in 4-bit signed
 
     // 符号扩展到8位
-    auto extended = sext<decltype(data), 8>(data);
+    auto extended = sext<8>(data);
 
     STATIC_REQUIRE(ch_width_v<decltype(extended)> == 8);
 }
@@ -306,7 +306,7 @@ TEST_CASE("zero_extend: zero extension operation", "[operators][extension]") {
     ch_uint<4> data(0b1011, "data");
 
     // 零扩展到8位
-    auto extended = zext<decltype(data), 8>(data);
+    auto extended = zext<8>(data);
 
     STATIC_REQUIRE(ch_width_v<decltype(extended)> == 8);
 }

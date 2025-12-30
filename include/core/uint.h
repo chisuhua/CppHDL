@@ -1,7 +1,8 @@
 #ifndef CH_CORE_UINT_H
 #define CH_CORE_UINT_H
 
-#include "literal.h"
+#include "core/literal.h"
+#include "core/operators.h" // 添加 operators.h 包含以使用 zext 等函数
 #include <cstdint>
 #include <source_location>
 #include <string>
@@ -17,8 +18,6 @@ struct ch_bool;
 #include "core/bool.h"
 #include "core/logic_buffer.h"
 #include "core/traits.h"
-// literal.h 放在最后
-#include "core/literal.h"
 
 namespace ch::core {
 
@@ -35,7 +34,25 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
 
     ch_uint() : logic_buffer<ch_uint<N>>() {}
     ch_uint(const ch_literal_runtime &val, const std::string &name = "uint_lit",
-            const std::source_location &sloc = std::source_location::current());
+            const std::source_location &sloc = std::source_location::current())
+        requires(N > 1);
+
+    // 添加接受 ch_bool 类型的构造函数，只对 N==1 的情况启用
+    ch_uint(const ch_bool &val, const std::string &name = "bool_to_uint",
+            const std::source_location &sloc = std::source_location::current())
+        requires(N == 1)
+    {
+        this->node_impl_ = val.impl();
+    }
+
+    // 提供一个工厂函数用于创建 ch_uint<1>，用户可以进一步扩展
+    static ch_uint<1> make_bool(
+        const ch_bool &val, const std::string &name = "bool_to_uint_1",
+        const std::source_location &sloc = std::source_location::current()) {
+        ch_uint<1> result;
+        result.node_impl_ = val.impl();
+        return result;
+    }
 
     template <uint64_t V, uint32_t W>
     ch_uint(const ch_literal_impl<V, W> &val,
@@ -48,7 +65,7 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
         const std::source_location &sloc = std::source_location::current()) {
         if constexpr (M <= N) {
             // 零扩展
-            this->node_impl_ = zext<ch_uint<M>, N>(other).impl();
+            this->node_impl_ = zext<N>(other).impl();
         } else {
             // 截断
             this->node_impl_ = bits<N - 1, 0>(other).impl();
@@ -89,6 +106,8 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
 
     template <unsigned Width>
     friend constexpr auto make_uint_result(lnodeimpl *node);
+
+    // Bool -> UInt
 };
 
 template <uint32_t W> inline constexpr auto make_uint(uint64_t value) {

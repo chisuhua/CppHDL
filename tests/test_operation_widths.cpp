@@ -125,11 +125,11 @@ TEST_CASE("Operation Width Calculation", "[operation][width][compile_time]") {
         ch_uint<3> a(0b101);
 
         // 零扩展
-        auto zext_result = zext<ch_uint<3>, 8>(a);
+        auto zext_result = zext<8>(a);
         STATIC_REQUIRE(ch_width_v<decltype(zext_result)> == 8);
 
         // 符号扩展
-        auto sext_result = sext<ch_uint<3>, 8>(a);
+        auto sext_result = sext<8>(a);
         STATIC_REQUIRE(ch_width_v<decltype(sext_result)> == 8);
     }
 
