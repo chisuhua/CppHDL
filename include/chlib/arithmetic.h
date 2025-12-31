@@ -38,14 +38,15 @@ AddWithCarryResult<N> add_with_carry(ch_uint<N> a, ch_uint<N> b,
                                      ch_bool carry_in) {
     ch_uint<N + 1> extended_a = ch_uint<N + 1>(a);
     ch_uint<N + 1> extended_b = ch_uint<N + 1>(b);
-    
+
     // 使用make_literal创建单bit值
-    ch_uint<N + 1> extended_cin = ch_uint<N + 1>(make_literal(carry_in ? 1ULL : 0ULL, 1));
+    ch_uint<N + 1> extended_cin =
+        ch_uint<N + 1>(make_literal(carry_in ? 1ULL : 0ULL, 1));
 
     ch_uint<N + 1> result = extended_a + extended_b + extended_cin;
 
     AddWithCarryResult<N> output;
-    output.sum = bits<N-1, 0>(result);
+    output.sum = bits<N - 1, 0>(result);
     output.carry_out = bit_select(result, N);
 
     return output;
@@ -72,15 +73,16 @@ template <unsigned N> struct SubtractWithBorrowResult {
 
 template <unsigned N>
 SubtractWithBorrowResult<N> sub_with_borrow(ch_uint<N> a, ch_uint<N> b,
-                                       ch_bool borrow_in) {
+                                            ch_bool borrow_in) {
     ch_uint<N + 1> extended_a = ch_uint<N + 1>(a);
     ch_uint<N + 1> extended_b = ch_uint<N + 1>(b);
-    ch_uint<N + 1> extended_bin = ch_uint<N + 1>(make_literal(borrow_in ? 1ULL : 0ULL, 1));
+    ch_uint<N + 1> extended_bin =
+        ch_uint<N + 1>(make_literal(borrow_in ? 1ULL : 0ULL, 1));
 
     ch_uint<N + 1> result = extended_a - extended_b - extended_bin;
 
     SubtractWithBorrowResult<N> output;
-    output.diff = bits<N-1, 0>(result);
+    output.diff = bits<N - 1, 0>(result);
     output.borrow_out = bit_select(result, N);
 
     return output;
@@ -209,6 +211,36 @@ ch_uint<N> arithmetic_right_shift(ch_uint<N> a, unsigned shift_amount) {
     ch_uint<N> sign_fill = select(sign_bit, mask, ch_uint<N>(0_d));
 
     return shifted | sign_fill;
+}
+
+/**
+ * 返回两个 ch_uint 中的较小值
+ */
+template <unsigned N> ch_uint<N> min(ch_uint<N> a, ch_uint<N> b) {
+    static_assert(N > 0, "ch_uint must have at least 1 bit");
+
+    ch_bool is_less_or_equal = a <= b;
+    return select(is_less_or_equal, a, b);
+}
+
+template <unsigned N, typename... Args>
+ch_uint<N> min(ch_uint<N> first, ch_uint<N> second, Args... args) {
+    return min(min(first, second), args...);
+}
+
+/**
+ * 返回两个 ch_uint 中的最大值
+ */
+template <unsigned N> ch_uint<N> max(ch_uint<N> a, ch_uint<N> b) {
+    static_assert(N > 0, "ch_uint must have at least 1 bit");
+
+    ch_bool is_greater_or_equal = a >= b;
+    return select(is_greater_or_equal, a, b);
+}
+
+template <unsigned N, typename... Args>
+ch_uint<N> max(ch_uint<N> first, ch_uint<N> second, Args... args) {
+    return max(max(first, second), args...);
 }
 
 } // namespace chlib

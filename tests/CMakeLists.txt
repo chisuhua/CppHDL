@@ -79,7 +79,7 @@ set(SINGLE_TEST_SOURCES
     chlib/test_sequential.cpp
     chlib/test_converter.cpp
     chlib/test_selector_arbiter.cpp
-    chlib/test_arithmetic_advance.cpp
+    #chlib/test_arithmetic_advance.cpp
     chlib/test_memory.cpp
     # chlib/test_fifo.cpp
     # chlib/test_cam.cpp

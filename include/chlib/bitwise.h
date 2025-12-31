@@ -29,7 +29,7 @@ ch_uint<compute_bit_width(N)> leading_zero_detector(ch_uint<N> input) {
 
     // 从最高位开始向下检查
     for (int i = N - 1; i >= 0; --i) {
-        ch_bool is_zero = !bit_select(input, i);
+        ch_bool is_zero = !bit_select(input, static_cast<unsigned>(i));
         ch_uint<OUTPUT_WIDTH> current_count =
             make_uint<OUTPUT_WIDTH>(N - i - 1);
 
@@ -220,7 +220,7 @@ ch_uint<compute_bit_width(N - 1)> first_set_bit_detector(ch_uint<N> input) {
         make_uint<OUTPUT_WIDTH>(N); // 如果没有设置位，返回N
 
     for (int i = N - 1; i >= 0; --i) {
-        ch_bool bit_at_i = bit_select(input, i);
+        ch_uint<1> bit_at_i = bit_select(input, i);
         ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
         result = select(bit_at_i, current_value, result);
     }

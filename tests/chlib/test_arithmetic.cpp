@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "chlib/arithmetic.h"
+#include "chlib/switch.h"
 #include "core/context.h"
 #include "core/literal.h"
 #include "simulator.h"
@@ -53,21 +54,20 @@ TEST_CASE("Arithmetic: add with carry function", "[arithmetic][add_carry]") {
         REQUIRE(sim.get_value(result.carry_out) == false);
     }
 
-    //     SECTION("Add with carry in") {
-    //         ch_uint<4> a(7_d);
-    //         ch_uint<4> b(8_d);
-    //         ch_bool carry_in(true);
+    SECTION("Add with carry in") {
+        ch_uint<4> a(7_d);
+        ch_uint<4> b(8_d);
+        ch_bool carry_in(true);
 
-    //         AddWithCarryResult<4> result = add_with_carry<4>(a, b, carry_in);
+        AddWithCarryResult<4> result = add_with_carry<4>(a, b, carry_in);
 
-    //         ch::Simulator sim(ctx.get());
-    //         sim.tick();
+        ch::Simulator sim(ctx.get());
+        sim.tick();
 
-    //         REQUIRE(sim.get_value(result.sum) ==
-    //                 0); // 7+8+1=16, wraps to 0 in 4-bit
-    //         REQUIRE(sim.get_value(result.carry_out) == true);
-    //     }
-    // }
+        REQUIRE(sim.get_value(result.sum) ==
+                0); // 7+8+1=16, wraps to 0 in 4-bit
+        REQUIRE(sim.get_value(result.carry_out) == true);
+    }
 
     // TEST_CASE("Arithmetic: basic subtract function",
     // "[arithmetic][subtract]") {
@@ -309,4 +309,415 @@ TEST_CASE("Arithmetic: add with carry function", "[arithmetic][add_carry]") {
     //         REQUIRE(sim.get_value(add_result) == 5);
     //         REQUIRE(sim.get_value(sub_result) == 5);
     //     }
+}
+
+TEST_CASE("Arithmetic: min function", "[arithmetic][min]") {
+    auto ctx = std::make_unique<ch::core::context>("test_min");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Basic min operation") {
+        ch_uint<4> a(5_d);
+        ch_uint<4> b(3_d);
+        ch_uint<4> result = min<4>(a, b);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 3);
+    }
+
+    SECTION("Min when first value is smaller") {
+        ch_uint<4> a(2_d);
+        ch_uint<4> b(7_d);
+        ch_uint<4> result = min<4>(a, b);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 2);
+    }
+
+    SECTION("Min with equal values") {
+        ch_uint<4> a(6_d);
+        ch_uint<4> b(6_d);
+        ch_uint<4> result = min<4>(a, b);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 6);
+    }
+
+    SECTION("Min with multiple values (3 args)") {
+        ch_uint<4> a(8_d);
+        ch_uint<4> b(3_d);
+        ch_uint<4> c(5_d);
+        ch_uint<4> result = min<4>(a, b, c);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 3);
+    }
+
+    SECTION("Min with multiple values (4 args)") {
+        ch_uint<4> a(10_d);
+        ch_uint<4> b(15_d);
+        ch_uint<4> c(2_d);
+        ch_uint<4> d(7_d);
+        ch_uint<4> result = min<4>(a, b, c, d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 2);
+    }
+}
+
+TEST_CASE("Arithmetic: max function", "[arithmetic][max]") {
+    auto ctx = std::make_unique<ch::core::context>("test_max");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Basic max operation") {
+        ch_uint<4> a(5_d);
+        ch_uint<4> b(3_d);
+        ch_uint<4> result = max<4>(a, b);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 5);
+    }
+
+    SECTION("Max when second value is smaller") {
+        ch_uint<4> a(7_d);
+        ch_uint<4> b(2_d);
+        ch_uint<4> result = max<4>(a, b);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 7);
+    }
+
+    SECTION("Max with equal values") {
+        ch_uint<4> a(6_d);
+        ch_uint<4> b(6_d);
+        ch_uint<4> result = max<4>(a, b);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 6);
+    }
+
+    SECTION("Max with multiple values (3 args)") {
+        ch_uint<4> a(8_d);
+        ch_uint<4> b(3_d);
+        ch_uint<4> c(12_d);
+        ch_uint<4> result = max<4>(a, b, c);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 12);
+    }
+
+    SECTION("Max with multiple values (4 args)") {
+        ch_uint<4> a(10_d);
+        ch_uint<4> b(15_d);
+        ch_uint<4> c(2_d);
+        ch_uint<4> d(7_d);
+        ch_uint<4> result = max<4>(a, b, c, d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 15);
+    }
+}
+
+TEST_CASE("Arithmetic: switch function", "[arithmetic][switch]") {
+    auto ctx = std::make_unique<ch::core::context>("test_switch");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Switch with one case") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result = switch_case<4>(
+            input, 2_d, 10_d, 0_d); // case 2: return 10, default: return 0
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 10);
+    }
+
+    SECTION("Switch with one case - default path") {
+        ch_uint<4> input(3_d);
+        ch_uint<4> result = switch_case<4>(
+            input, 2_d, 10_d, 0_d); // case 2: return 10, default: return 0
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+
+    SECTION("Switch with multiple cases - first case matches") {
+        ch_uint<4> input(0_d);
+        ch_uint<4> result = switch_case<4>(input, 0_d, 10_d, 1_d, 12_d, 2_d,
+                                           13_d, 0_d); // 3 cases + default
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 10);
+    }
+
+    SECTION("Switch with multiple cases - middle case matches") {
+        ch_uint<4> input(1_d);
+        ch_uint<4> result =
+            switch_case<4>(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 12);
+    }
+
+    SECTION("Switch with multiple cases - last case matches") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result =
+            switch_case<4>(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 13);
+    }
+
+    SECTION("Switch with multiple cases - default path") {
+        ch_uint<4> input(5_d);
+        ch_uint<4> result =
+            switch_case<4>(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+}
+
+TEST_CASE("Arithmetic: switch_pairs function", "[arithmetic][switch]") {
+    auto ctx = std::make_unique<ch::core::context>("test_switch_pairs");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Switch with pairs - one case") {
+        ch_uint<4> input(1_d);
+        ch_uint<4> result =
+            switch_pairs<4>(input, case_value<4>(1_d, 14_d), 0_d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 14);
+    }
+
+    SECTION("Switch with pairs - multiple cases") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result = switch_pairs<4>(input, case_value<4>(0_d, 10_d),
+                                            case_value<4>(1_d, 12_d),
+                                            case_value<4>(2_d, 13_d), 0_d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 13);
+    }
+
+    SECTION("Switch with pairs - default path") {
+        ch_uint<4> input(3_d);
+        ch_uint<4> result = switch_pairs<4>(input, case_value<4>(0_d, 10_d),
+                                            case_value<4>(1_d, 12_d), 0_d);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+}
+
+TEST_CASE("Arithmetic: switch_ function", "[arithmetic][switch_recursive]") {
+    auto ctx = std::make_unique<ch::core::context>("test_switch_recursive");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Switch recursive with one case") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result = switch_(input, 0_d, case_(2_d, 10_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 10);
+    }
+
+    SECTION("Switch recursive with one case - default path") {
+        ch_uint<4> input(3_d);
+        ch_uint<4> result = switch_(input, 0_d, case_(2_d, 10_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+
+    SECTION("Switch recursive with multiple cases - first case matches") {
+        ch_uint<4> input(0_d);
+        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+                                    case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 10);
+    }
+
+    SECTION("Switch recursive with multiple cases - middle case matches") {
+        ch_uint<4> input(1_d);
+        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+                                    case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 12);
+    }
+
+    SECTION("Switch recursive with multiple cases - last case matches") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+                                    case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 13);
+    }
+
+    SECTION("Switch recursive with multiple cases - default path") {
+        ch_uint<4> input(5_d);
+        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+                                    case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+}
+
+TEST_CASE("Arithmetic: switch_parallel function",
+          "[arithmetic][switch_parallel]") {
+    auto ctx = std::make_unique<ch::core::context>("test_switch_parallel");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Switch parallel with one case") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result = switch_parallel(input, 0_d, case_(2_d, 10_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 10);
+    }
+
+    SECTION("Switch parallel with one case - default path") {
+        ch_uint<4> input(3_d);
+        ch_uint<4> result = switch_parallel(input, 0_d, case_(2_d, 10_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+
+    SECTION("Switch parallel with multiple cases - first case matches") {
+        ch_uint<4> input(0_d);
+        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+                                            case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 10);
+    }
+
+    SECTION("Switch parallel with multiple cases - middle case matches") {
+        ch_uint<4> input(1_d);
+        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+                                            case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 12);
+    }
+
+    SECTION("Switch parallel with multiple cases - last case matches") {
+        ch_uint<4> input(2_d);
+        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+                                            case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 13);
+    }
+
+    SECTION("Switch parallel with multiple cases - default path") {
+        ch_uint<4> input(5_d);
+        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+                                            case_(1_d, 12_d), case_(2_d, 13_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 0);
+    }
+}
+
+TEST_CASE("Arithmetic: switch performance comparison",
+          "[arithmetic][switch_performance]") {
+    auto ctx = std::make_unique<ch::core::context>("test_switch_performance");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Compare all switch implementations return same result") {
+        ch_uint<4> input(1_d);
+
+        // Using switch_case (direct values)
+        ch_uint<4> result1 =
+            switch_case<4>(input, 0_d, 0_d, 1_d, 10_d, 2_d, 20_d, 99_d);
+
+        // Using switch_pairs (with case_value)
+        ch_uint<4> result2 = switch_pairs<4>(input, case_value<4>(0_d, 0_d),
+                                             case_value<4>(1_d, 10_d),
+                                             case_value<4>(2_d, 20_d), 99_d);
+
+        // Using switch_ (with case_ entries)
+        ch_uint<4> result3 = switch_(input, 99_d, case_(0_d, 0_d),
+                                     case_(1_d, 10_d), case_(2_d, 20_d));
+
+        // Using switch_parallel (with case_ entries)
+        ch_uint<4> result4 = switch_parallel(
+            input, 99_d, case_(0_d, 0_d), case_(1_d, 10_d), case_(2_d, 20_d));
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // All implementations should return the same result
+        REQUIRE(sim.get_value(result1) == 10);
+        REQUIRE(sim.get_value(result2) == 10);
+        REQUIRE(sim.get_value(result3) == 10);
+        REQUIRE(sim.get_value(result4) == 10);
+    }
 }

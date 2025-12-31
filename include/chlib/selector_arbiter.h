@@ -116,6 +116,7 @@ template <unsigned N>
 PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
                                                ch_uint<N> last_grant) {
     static_assert(N > 0, "Round robin selector must have at least 1 bit");
+    static constexpr unsigned BIT_WIDTH = compute_bit_width(N - 1);
 
     PrioritySelectorResult<N> result;
     result.grant = 0_d;
@@ -128,12 +129,12 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
     for (unsigned i = 0; i < N; ++i) {
         ch_uint<N> pos = (start_pos + i) % N;
         ch_bool req_at_pos = bit_select(request, pos);
-        ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << make_literal(pos);
+        ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << pos;
 
         // 如果当前位有请求且尚未确定授予，则授予当前位
         result.grant =
             select(req_at_pos && !result.valid, grant_one_hot, result.grant);
-        result.valid = select(req_at_pos, true, result.valid);
+        result.valid = select(req_at_pos, 1_b, result.valid);
     }
 
     return result;

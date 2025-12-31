@@ -489,6 +489,32 @@ template <typename T> auto bit_select(const T &operand, unsigned index) {
     return make_uint_result<1>(op_node);
 }
 
+template <typename T> auto bit_select(const T &operand, int index) {
+    return bit_select(operand, static_cast<unsigned>(index));
+}
+
+template <typename T> auto bit_select(const T &operand, uint64_t index) {
+    return bit_select(operand, static_cast<unsigned>(index));
+}
+
+template <typename T> auto bit_select(const T &operand, int64_t index) {
+    return bit_select(operand, static_cast<unsigned>(index));
+}
+
+template <typename T, typename Index>
+auto bit_select(const T &operand, const Index &index) {
+    static_assert(HardwareType<T>, "Operand must be a hardware type");
+    static_assert(HardwareType<Index>, "Index must be a hardware type");
+
+    auto operand_node = to_operand(operand);
+    auto index_node = to_operand(index);
+
+    auto *op_node = node_builder::instance().build_bit_extract<T, Index>(
+        operand_node, index_node, 1);
+
+    return make_uint_result<1>(op_node);
+}
+
 // === 位拼接操作 ===
 template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
     static_assert(HardwareType<T1> || CHLiteral<T1>, "Invalid operand type");
@@ -552,6 +578,18 @@ template <unsigned MSB, unsigned LSB, typename T> auto bits(const T &operand) {
     return make_uint_result<MSB - LSB + 1>(op_node);
 }
 
+template <unsigned Width, typename T, typename Index>
+auto bits(const T &operand, const Index &index) {
+    static_assert(HardwareType<T>, "Operand must be a hardware type");
+
+    auto operand_node = to_operand(operand);
+
+    auto *op_node = node_builder::instance().build_bit_extract(
+        operand_node, index, Width, "bit_extract",
+        std::source_location::current());
+
+    return make_uint_result<Width>(op_node);
+}
 // === 约简操作 ===
 template <typename T> ch_bool and_reduce(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
