@@ -28,29 +28,7 @@ constexpr case_entry<TCond, TResult> case_(TCond &&condition,
                                       std::forward<TResult>(result));
 }
 
-// 为字面量类型提供特化版本，自动转换为ch_uint
-template <typename TCond, typename TResult>
-    requires is_ch_literal_v<std::decay_t<TCond>>
-constexpr auto case_(TCond &&condition, TResult &&result) {
-    // 将字面量转换为对应宽度的ch_uint
-    using uint_type = ch_uint<ch_width_v<std::decay_t<TCond>>>;
-    uint_type cond_uint(condition);
-    return case_entry<uint_type, TResult>(std::move(cond_uint),
-                                          std::forward<TResult>(result));
-}
-
-// 为字面量作为result的情况也提供支持
-template <typename TCond, typename TResult>
-    requires is_ch_literal_v<std::decay_t<TResult>>
-constexpr auto case_(TCond &&condition, TResult &&result) {
-    // 将字面量转换为对应宽度的ch_uint
-    using uint_type = ch_uint<ch_width_v<std::decay_t<TResult>>>;
-    uint_type result_uint(result);
-    return case_entry<TCond, uint_type>(std::forward<TCond>(condition),
-                                        std::move(result_uint));
-}
-
-// 为两个参数都是字面量的情况提供支持
+// 为两个参数都是字面量的情况提供支持（优先级最高）
 template <typename TCond, typename TResult>
     requires(is_ch_literal_v<std::decay_t<TCond>> &&
              is_ch_literal_v<std::decay_t<TResult>>)
@@ -62,6 +40,30 @@ constexpr auto case_(TCond &&condition, TResult &&result) {
     result_uint_type result_uint(result);
     return case_entry<cond_uint_type, result_uint_type>(std::move(cond_uint),
                                                         std::move(result_uint));
+}
+
+// 仅为条件参数是字面量的情况提供支持
+template <typename TCond, typename TResult>
+    requires(is_ch_literal_v<std::decay_t<TCond>> && 
+             !is_ch_literal_v<std::decay_t<TResult>>)
+constexpr auto case_(TCond &&condition, TResult &&result) {
+    // 将条件字面量转换为对应宽度的ch_uint
+    using uint_type = ch_uint<ch_width_v<std::decay_t<TCond>>>;
+    uint_type cond_uint(condition);
+    return case_entry<uint_type, TResult>(std::move(cond_uint),
+                                          std::forward<TResult>(result));
+}
+
+// 仅为结果参数是字面量的情况提供支持
+template <typename TCond, typename TResult>
+    requires(!is_ch_literal_v<std::decay_t<TCond>> && 
+             is_ch_literal_v<std::decay_t<TResult>>)
+constexpr auto case_(TCond &&condition, TResult &&result) {
+    // 将结果字面量转换为对应宽度的ch_uint
+    using uint_type = ch_uint<ch_width_v<std::decay_t<TResult>>>;
+    uint_type result_uint(result);
+    return case_entry<TCond, uint_type>(std::forward<TCond>(condition),
+                                        std::move(result_uint));
 }
 
 // 递归基础情况：没有更多case分支时，返回默认值
