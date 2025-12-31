@@ -96,6 +96,24 @@ template <unsigned N> ch_uint<2 * N> multiply(ch_uint<N> a, ch_uint<N> b) {
 }
 
 /**
+ * 除法器 - 函数式接口
+ *
+ * 接收两个相同位宽的输入并返回它们的商
+ */
+template <unsigned N> ch_uint<N> divide(ch_uint<N> a, ch_uint<N> b) {
+    return a / b;
+}
+
+/**
+ * 取模器 - 函数式接口
+ *
+ * 接收两个相同位宽的输入并返回它们的余数
+ */
+template <unsigned N> ch_uint<N> modulo(ch_uint<N> a, ch_uint<N> b) {
+    return a % b;
+}
+
+/**
  * 比较器 - 函数式接口
  *
  * 接收两个相同位宽的输入并返回比较结果

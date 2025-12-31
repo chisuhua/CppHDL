@@ -478,6 +478,17 @@ template <unsigned Index, typename T> auto bit_select(const T &operand) {
     return make_uint_result<1>(op_node);
 }
 
+template <typename T> auto bit_select(const T &operand, unsigned index) {
+    static_assert(HardwareType<T>, "Operand must be a hardware type");
+
+    auto operand_node = to_operand(operand);
+
+    auto *op_node = node_builder::instance().build_bit_select(
+        operand_node, index, "bit_select", std::source_location::current());
+
+    return make_uint_result<1>(op_node);
+}
+
 // === 位拼接操作 ===
 template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
     static_assert(HardwareType<T1> || CHLiteral<T1>, "Invalid operand type");

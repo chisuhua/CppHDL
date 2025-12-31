@@ -176,7 +176,8 @@ RippleCarryAdderResult<N> ripple_carry_adder(ch_uint<N> a, ch_uint<N> b,
         FullAdderResult fa_result = full_adder(a_bit, b_bit, carry);
 
         // 设置当前位的和
-        sum = sum | (ch_uint<N>(ch_uint<1>(fa_result.sum)) << make_uint<compute_bit_width(N-1)>(i));
+        ch_uint<N> sum_bit = fa_result.sum ? make_uint<N>(1) : make_uint<N>(0);
+        sum = sum | (sum_bit << make_uint<compute_bit_width(N-1)>(i));
 
         // 更新进位
         carry = fa_result.carry_out;

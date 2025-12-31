@@ -150,7 +150,7 @@ ch_uint<N> johnson_counter(ch_bool clk, ch_bool rst, ch_bool en,
 
     // 约翰逊计数器：移位寄存器，将反相的最高位反馈到最低位
     ch_bool feedback = !bit_select(counter, N - 1);
-    ch_uint<N> shifted = (counter << 1_d) | ch_uint<N>(feedback);
+    ch_uint<N> shifted = (counter << 1_d) | (feedback ? make_uint<N>(1) : make_uint<N>(0));
 
     counter->next = select(rst, ch_uint<N>(0_d), select(en, shifted, counter));
 
