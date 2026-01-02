@@ -3,6 +3,7 @@
 
 #include "ch.hpp"
 #include "chlib/logic.h"
+#include "chlib/switch.h"
 #include "component.h"
 #include "core/bool.h"
 #include "core/literal.h"
@@ -144,23 +145,29 @@ ch_uint<2 * N> booth_multiplier(ch_uint<N> a, ch_uint<N> b) {
             select(bit_i, 1_d, 0_d) | (select(bit_i_plus_1, 2_d, 0_d));
 
         // 根据Booth编码执行操作
-        ch_uint<2 * N> partial_val = 0_d;
-        switch (booth_code) {
-        case 0: // 00 -> 0
-            partial_val = 0_d;
-            break;
-        case 1: // 01 -> +1
-            partial_val = ch_uint<2 * N>(multiplicand)
-                          << make_uint<BIT_WIDTH>(i);
-            break;
-        case 2: // 10 -> -1
-            partial_val = (0_d - ch_uint<2 * N>(multiplicand))
-                          << make_uint<BIT_WIDTH>(i);
-            break;
-        case 3: // 11 -> 0
-            partial_val = 0_d;
-            break;
-        }
+        ch_uint<2 * N> partial_val = switch_(
+            booth_code, 0_d,
+            case_(1_d, ch_uint<2 * N>(multiplicand) << make_uint<BIT_WIDTH>(i)),
+            case_(2_d, (0_d - ch_uint<2 * N>(multiplicand))
+                           << make_uint<BIT_WIDTH>(i)));
+
+        // ch_uint<2 * N> partial_val = 0_d;
+        // switch (booth_code) {
+        // case 0: // 00 -> 0
+        //     partial_val = 0_d;
+        //     break;
+        // case 1: // 01 -> +1
+        //     partial_val = ch_uint<2 * N>(multiplicand)
+        //                   << make_uint<BIT_WIDTH>(i);
+        //     break;
+        // case 2: // 10 -> -1
+        //     partial_val = (0_d - ch_uint<2 * N>(multiplicand))
+        //                   << make_uint<BIT_WIDTH>(i);
+        //     break;
+        // case 3: // 11 -> 0
+        //     partial_val = 0_d;
+        //     break;
+        // }
 
         result = result + partial_val;
     }
