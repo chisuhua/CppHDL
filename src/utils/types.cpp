@@ -232,7 +232,7 @@ inline uint32_t add_width(const sdata_type &lhs, const sdata_type &rhs) {
 }
 
 inline uint32_t sub_width(const sdata_type &lhs, const sdata_type &rhs) {
-    return std::max(lhs.bitwidth(), rhs.bitwidth()) + 1;
+    return std::max(lhs.bitwidth(), rhs.bitwidth());  // 无符号减法不需要额外位
 }
 
 inline uint32_t mul_width(const sdata_type &lhs, const sdata_type &rhs) {

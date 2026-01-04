@@ -801,29 +801,159 @@ TEST_CASE("Arithmetic: basic add function", "[operation][arithmetic][add]") {
 
         ch::Simulator sim(ctx.get());
         sim.tick();
-        ch::toDAG("test_arithmetic0.dot", ctx.get());
 
         REQUIRE(sim.get_value(result) == 8);
     }
 
-    // SECTION("Simple addition with literal") {
-    //     ch_uint<4> a(5_d);
-    //     ch_uint<4> result = a + 3_d;
+    SECTION("Simple addition with literal") {
+        ch_uint<4> a(5_d);
+        ch_uint<4> result = a + 3_d;
 
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 8);
+    }
+
+    SECTION("Simple addition with all literal") {
+        ch_uint<4> result = 5_d + 3_d;
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 8);
+    }
+}
+
+// 测试运算结果的位宽是否符合预期
+TEST_CASE("Operation Result Widths",
+          "[operation][width][arithmetic][bitwise]") {
+    auto ctx = std::make_unique<ch::core::context>("test_widths");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Addition width calculation") {
+        ch_uint<4> a(5_d);
+        ch_uint<6> b(3_d);
+        auto result = a + b;
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 加法结果宽度应为 max(4, 6) + 1 = 7
+        REQUIRE(result.width == 7);
+        REQUIRE(sim.get_value(result) == 8);
+    }
+
+    SECTION("Subtraction width calculation") {
+        ch_uint<5> a(10_d);
+        ch_uint<3> b(4_d);
+        auto result = a - b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 减法结果宽度应为 max(5, 3)  = 5
+        REQUIRE(result.width == 5);
+        REQUIRE(sim.get_value(result) == 6);
+    }
+
+    SECTION("Multiplication width calculation") {
+        ch_uint<4> a(5_d);
+        ch_uint<3> b(6_d);
+        auto result = a * b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 乘法结果宽度应为 4 + 3 = 7
+        REQUIRE(result.width == 7);
+        REQUIRE(sim.get_value(result) == 30);
+    }
+
+    SECTION("Division width calculation") {
+        ch_uint<8> a(20_d);
+        ch_uint<4> b(4_d);
+        auto result = a / b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 除法结果宽度应为被除数的宽度 = 8
+        REQUIRE(result.width == 8);
+        REQUIRE(sim.get_value(result) == 5);
+    }
+
+    SECTION("Modulo width calculation") {
+        ch_uint<8> a(23_d);
+        ch_uint<4> b(7_d);
+        auto result = a % b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 模运算结果宽度应为 min(8, 4) = 4
+        REQUIRE(result.width == 4);
+        REQUIRE(sim.get_value(result) == 2); // 23 % 7 = 2
+    }
+
+    SECTION("Bitwise AND width calculation") {
+        ch_uint<10> a(11110000_b);
+        ch_uint<6> b(111111_b);
+        auto result = a & b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 按位与结果宽度应为 max(10, 6) = 10
+        REQUIRE(result.width == 10);
+        REQUIRE(sim.get_value(result) == (0b11110000 & 0b111111));
+    }
+
+    SECTION("Bitwise OR width calculation") {
+        ch_uint<5> a(1010_b);
+        ch_uint<7> b(110011_b);
+        auto result = a | b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 按位或结果宽度应为 max(5, 7) = 7
+        REQUIRE(result.width == 7);
+        REQUIRE(sim.get_value(result) == (0b001010 | 0b110011)); // 0b111111
+    }
+
+    SECTION("Bitwise XOR width calculation") {
+        ch_uint<4> a(1010_b);
+        ch_uint<4> b(1100_b);
+        auto result = a ^ b;
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 按位异或结果宽度应为 max(4, 4) = 4
+        REQUIRE(result.width == 4);
+        REQUIRE(sim.get_value(result) == (0b1010 ^ 0b1100)); // 0b0110 = 6
+    }
+
+    // SECTION("Unary NOT width calculation") {
+    //     ch_uint<12> a(111100001111_b);
+    //     auto result = ~a;
     //     ch::Simulator sim(ctx.get());
-    //     sim.tick();
-    //     ch::toDAG("test_arithmetic1.dot", ctx.get());
 
-    //     REQUIRE(sim.get_value(result) == 8);
+    //     // 按位取反结果宽度应与操作数相同 = 12
+    //     REQUIRE(result.width == 12);
+    //     REQUIRE(sim.get_value(result) == ~uint64_t(0b111100001111) &
+    //             ((1UL << 12) - 1));
     // }
 
-    // SECTION("Simple addition with all literal") {
-    //     ch_uint<4> result = 5_d + 3_d;
+    SECTION("Mixed width operations") {
+        ch_uint<3> a(5_d); // 3位
+        ch_uint<5> b(7_d); // 5位
+        ch_uint<4> c(2_d); // 4位
 
-    //     ch::Simulator sim(ctx.get());
-    //     sim.tick();
-    //     ch::toDAG("test_arithmetic2.dot", ctx.get());
+        // 测试复杂的表达式宽度计算
+        auto result1 = (a + b) * c; // (max(3,5)+1=6) * 4 = 6+4=10
+        auto result2 = a * b + c;   // max((3+5),4) +1 = 8+1 = 9
+        ch::Simulator sim(ctx.get());
+        sim.tick();
 
-    //     REQUIRE(sim.get_value(result) == 8);
-    // }
+        REQUIRE(result1.width == 10);
+        REQUIRE(sim.get_value(result1) == (5 + 7) * 2); // 24
+
+        REQUIRE(result2.width == 9);
+        REQUIRE(sim.get_value(result2) == 5 * 7 + 2); // 37
+    }
 }

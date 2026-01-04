@@ -1,6 +1,7 @@
 #include "catch_amalgamated.hpp"
 #include "chlib/arithmetic.h"
 #include "chlib/switch.h"
+#include "codegen_dag.h"
 #include "core/context.h"
 #include "core/literal.h"
 #include "simulator.h"
@@ -17,6 +18,7 @@ TEST_CASE("Arithmetic: basic add function", "[arithmetic][add]") {
         ch_uint<4> a(5_d);
         ch_uint<4> b(3_d);
         ch_uint<4> result = add<4>(a, b);
+        // ch_uint<4> result = add<4>(5_d, 4_d);
 
         ch::Simulator sim(ctx.get());
         sim.tick();
