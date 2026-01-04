@@ -330,9 +330,9 @@ inline void log_message(log_level level, const std::string &message,
 // 简洁日志输出（不显示位置信息）
 inline void log_message_simple(log_level level, const std::string &message) {
     // Check if we're in static destruction phase
-    if (in_static_destruction()) {
-        return;
-    }
+    // if (in_static_destruction()) {
+    //     return;
+    // }
 
     // 根据日志级别决定输出流和是否输出
     switch (level) {

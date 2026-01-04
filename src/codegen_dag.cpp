@@ -35,10 +35,10 @@ void toDAG(const std::string &filename, ch::core::context *ctx) {
         std::cout << "[toDAG] Generated " << filename << std::endl;
     } catch (...) {
         // Silently ignore exceptions during static destruction
-        if (!ch::detail::in_static_destruction()) {
-            std::cerr << "[toDAG] Exception caught during DAG generation"
-                      << std::endl;
-        }
+        // if (!ch::detail::in_static_destruction()) {
+        //     std::cerr << "[toDAG] Exception caught during DAG generation"
+        //               << std::endl;
+        // }
     }
 }
 

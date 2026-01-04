@@ -38,10 +38,11 @@ void toVerilog(const std::string &filename, ch::core::context *ctx) {
     } catch (...) {
         // Silently ignore exceptions during static destruction
         // Don't even print error messages during static destruction
-        if (!ch::detail::in_static_destruction()) {
-            std::cerr << "[toVerilog] Exception caught during code generation"
-                      << std::endl;
-        }
+        // if (!ch::detail::in_static_destruction()) {
+        //     std::cerr << "[toVerilog] Exception caught during code
+        //     generation"
+        //               << std::endl;
+        // }
     }
 }
 verilogwriter::verilogwriter(ch::core::context *ctx) : ctx_(ctx) {

@@ -777,10 +777,53 @@ TEST_CASE("Register Operation Results", "[operation][register][runtime]") {
     SECTION("Register Assignment and Operations") {
         ch_device<OperationTestComponent<RegisterAddTest>> reg_add_device;
         Simulator reg_add_simulator(reg_add_device.context());
-        ch::toDAG("test_operation_results_reg.dot", reg_add_device.context());
         reg_add_simulator.tick(); // 第二个tick更新寄存器值
         auto reg_add_value = reg_add_simulator.get_port_value(
             reg_add_device.instance().io().result_out);
         REQUIRE(static_cast<uint64_t>(reg_add_value) == 15);
     }
+}
+
+TEST_CASE("Arithmetic: basic add function", "[operation][arithmetic][add]") {
+    std::cout << "DDD1\n";
+    auto ctx = std::make_unique<ch::core::context>("test_arithmetic");
+    std::cout << "DDD2\n";
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+    std::cout << "DDD3\n";
+
+    SECTION("Simple addition") {
+        std::cout << "DDD5\n";
+        ch_uint<4> a(5_d);
+        ch_uint<4> b(3_d);
+        std::cout << "DDD6\n";
+        auto result = a + b;
+        std::cout << "DDD7\n";
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        ch::toDAG("test_arithmetic0.dot", ctx.get());
+
+        REQUIRE(sim.get_value(result) == 8);
+    }
+
+    // SECTION("Simple addition with literal") {
+    //     ch_uint<4> a(5_d);
+    //     ch_uint<4> result = a + 3_d;
+
+    //     ch::Simulator sim(ctx.get());
+    //     sim.tick();
+    //     ch::toDAG("test_arithmetic1.dot", ctx.get());
+
+    //     REQUIRE(sim.get_value(result) == 8);
+    // }
+
+    // SECTION("Simple addition with all literal") {
+    //     ch_uint<4> result = 5_d + 3_d;
+
+    //     ch::Simulator sim(ctx.get());
+    //     sim.tick();
+    //     ch::toDAG("test_arithmetic2.dot", ctx.get());
+
+    //     REQUIRE(sim.get_value(result) == 8);
+    // }
 }

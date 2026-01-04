@@ -1,7 +1,9 @@
 // src/core/types.cpp
-#include "types.h"
+#include "core/types.h"
 #include "bv/bitvector.h"
 #include <iomanip>
+#include <bit>
+#include <algorithm>
 
 namespace ch {
 namespace core {
@@ -215,25 +217,59 @@ std::ostream &operator<<(std::ostream &os, const sdata_type &sdata) {
 
 // ========== Extended Operator Implementations ==========
 // --- Helper macro to reduce boilerplate for binary operators ---
-#define CH_SDATA_BINARY_OP_TRUNCATE(op_name, op_func, bv_op_func)              \
+#define CH_SDATA_BINARY_OP_TRUNCATE(op_name, op_func, bv_op_func, width_func)  \
     sdata_type operator op_name(const sdata_type &lhs,                         \
                                 const sdata_type &rhs) {                       \
-        sdata_type result(0, lhs.bitwidth());                                  \
+        uint32_t result_width = width_func(lhs, rhs);                          \
+        sdata_type result(0, result_width);                                    \
         bv_op_func(&result.bv_, &lhs.bv_, &rhs.bv_);                           \
         return result;                                                         \
     }
 
+// Helper functions to calculate result width for different operations
+inline uint32_t add_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return std::max(lhs.bitwidth(), rhs.bitwidth()) + 1;
+}
+
+inline uint32_t sub_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return std::max(lhs.bitwidth(), rhs.bitwidth()) + 1;
+}
+
+inline uint32_t mul_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return lhs.bitwidth() + rhs.bitwidth();
+}
+
+inline uint32_t div_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return lhs.bitwidth();  // Division result has width of dividend
+}
+
+inline uint32_t mod_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return std::min(lhs.bitwidth(), rhs.bitwidth());  // Mod result has width of divisor
+}
+
+inline uint32_t and_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return std::max(lhs.bitwidth(), rhs.bitwidth());  // Bitwise AND uses max width
+}
+
+inline uint32_t or_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return std::max(lhs.bitwidth(), rhs.bitwidth());  // Bitwise OR uses max width
+}
+
+inline uint32_t xor_width(const sdata_type &lhs, const sdata_type &rhs) {
+    return std::max(lhs.bitwidth(), rhs.bitwidth());  // Bitwise XOR uses max width
+}
+
 // --- Arithmetic Operations ---
-CH_SDATA_BINARY_OP_TRUNCATE(+, add, ch::internal::bv_add_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(-, sub, ch::internal::bv_sub_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(*, mul, ch::internal::bv_mul_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(/, div, ch::internal::bv_div_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(%, mod, ch::internal::bv_mod_truncate<uint64_t>)
+CH_SDATA_BINARY_OP_TRUNCATE(+, add, ch::internal::bv_add_truncate<uint64_t>, add_width)
+CH_SDATA_BINARY_OP_TRUNCATE(-, sub, ch::internal::bv_sub_truncate<uint64_t>, sub_width)
+CH_SDATA_BINARY_OP_TRUNCATE(*, mul, ch::internal::bv_mul_truncate<uint64_t>, mul_width)
+CH_SDATA_BINARY_OP_TRUNCATE(/, div, ch::internal::bv_div_truncate<uint64_t>, div_width)
+CH_SDATA_BINARY_OP_TRUNCATE(%, mod, ch::internal::bv_mod_truncate<uint64_t>, mod_width)
 
 // --- Bitwise Operations ---
-CH_SDATA_BINARY_OP_TRUNCATE(&, and, ch::internal::bv_and_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(|, or, ch::internal::bv_or_truncate<uint64_t>)
-CH_SDATA_BINARY_OP_TRUNCATE(^, xor, ch::internal::bv_xor_truncate<uint64_t>)
+CH_SDATA_BINARY_OP_TRUNCATE(&, and, ch::internal::bv_and_truncate<uint64_t>, and_width)
+CH_SDATA_BINARY_OP_TRUNCATE(|, or, ch::internal::bv_or_truncate<uint64_t>, or_width)
+CH_SDATA_BINARY_OP_TRUNCATE(^, xor, ch::internal::bv_xor_truncate<uint64_t>, xor_width)
 
 // --- Unary Bitwise NOT ---
 sdata_type operator~(const sdata_type &operand) {

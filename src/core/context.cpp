@@ -20,10 +20,10 @@ namespace core {
 // This ensures proper initialization order
 bool &debug_context_lifetime() {
     // Check if we're in static destruction phase
-    if (ch::detail::in_static_destruction()) {
-        static bool dummy = false;
-        return dummy;
-    }
+    // if (ch::detail::in_static_destruction()) {
+    //     static bool dummy = false;
+    //     return dummy;
+    // }
 
     static bool value = true;
     return value;
@@ -36,7 +36,7 @@ struct cleanup_register {
         std::atexit([]() {
             std::cout << "atexit: Calling pre_static_destruction_cleanup"
                       << std::endl;
-            ch::pre_static_destruction_cleanup();
+            // ch::pre_static_destruction_cleanup();
         });
     }
 } cleanup_instance;
@@ -73,7 +73,7 @@ context::context(const std::string &name, context *parent)
     std::cout << "Registering context " << this << " with name: " << name_
               << std::endl;
     std::cout.flush();
-    ch::detail::destruction_manager::instance().register_context(this);
+    // ch::detail::destruction_manager::instance().register_context(this);
 
     if (debug_context_lifetime()) {
         CHINFO("Created new context 0x%llx, name: %s", (unsigned long long)this,
@@ -92,17 +92,18 @@ context::~context() {
     destructing_ = true;
 
     // Unregister from destruction manager
-    ch::detail::destruction_manager::instance().unregister_context(this);
+    // ch::detail::destruction_manager::instance().unregister_context(this);
 
     // Check if we're in static destruction phase
-    if (ch::detail::in_static_destruction()) {
-        std::cout << "Context destructor called during static destruction"
-                  << std::endl;
-        std::cout.flush();
-        // During static destruction, minimize operations to prevent segfaults
-        // Just return immediately without doing any cleanup
-        return;
-    }
+    // if (ch::detail::in_static_destruction()) {
+    //     std::cout << "Context destructor called during static destruction"
+    //               << std::endl;
+    //     std::cout.flush();
+    //     // During static destruction, minimize operations to prevent
+    //     segfaults
+    //     // Just return immediately without doing any cleanup
+    //     return;
+    // }
 
     std::cout << "Context destructor normal cleanup" << std::endl;
     std::cout.flush();

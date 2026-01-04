@@ -15,7 +15,9 @@ namespace core {
 
 template <unsigned N>
 ch_uint<N>::ch_uint(const ch_literal_runtime &val, const std::string &name,
-                    const std::source_location &sloc) requires (N > 1) {
+                    const std::source_location &sloc)
+    requires(N > 1)
+{
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from sdata_type", N);
 
     this->node_impl_ = node_builder::instance().build_literal(val, name, sloc);
@@ -49,8 +51,9 @@ template <unsigned N> ch_uint<N>::operator uint64_t() const {
         return static_cast<uint64_t>(lit_node->value());
     }
     // 如果不是常量节点，返回 0
-    CHWARN("[ch_uint<N>::operator uint64_t] Attempting to convert non-constant "
-           "node to uint64_t");
+    CHERROR(
+        "[ch_uint<N>::operator uint64_t] Attempting to convert non-constant "
+        "node to uint64_t");
     return 0;
 }
 

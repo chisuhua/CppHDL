@@ -27,8 +27,8 @@ Simulator::Simulator(ch::core::context *ctx) : ctx_(ctx) {
 }
 
 Simulator::~Simulator() {
-    ch::pre_static_destruction_cleanup();
-    ch::detail::set_static_destruction();
+    // ch::pre_static_destruction_cleanup();
+    // ch::detail::set_static_destruction();
 
     // Explicitly disconnect to prevent accessing destroyed context
     disconnect();
@@ -40,12 +40,13 @@ void Simulator::disconnect() {
     CHDBG_FUNC();
 
     // Check if we're in static destruction phase
-    if (ch::detail::in_static_destruction()) {
-        // During static destruction, minimize operations to prevent segfaults
-        // Just mark as disconnected and return immediately
-        disconnected_ = true;
-        return;
-    }
+    // if (ch::detail::in_static_destruction()) {
+    //     // During static destruction, minimize operations to prevent
+    //     segfaults
+    //     // Just mark as disconnected and return immediately
+    //     disconnected_ = true;
+    //     return;
+    // }
 
     if (disconnected_) {
         return;
@@ -114,8 +115,8 @@ void Simulator::initialize() {
         if (node->type() == ch::core::lnodetype::type_lit) {
             auto *lit_node = static_cast<ch::core::litimpl *>(node);
             data_map_[node_id] = lit_node->value();
-            CHDBG("Set literal value for node %u", node_id,
-                  data_map_[node_id].to_string_verbose().c_str());
+            CHDBG("Set literal value(%d) for node %u", lit_node->value(),
+                  node_id, data_map_[node_id].to_string_verbose().c_str());
         } else {
             data_map_[node_id] = ch::core::sdata_type(0, size);
             CHDBG("Allocated buffer for node %u, width %u, value %s", node_id,
