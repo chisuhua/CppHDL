@@ -732,16 +732,79 @@ void operator<<=(const port<T1, input_direction> &receiver,
     // TODO: check receiver is submodule port, driver is submodule port
 
     // 建立连接：设置接收方的驱动源为驱动方
-    // receiver_impl 是 outputimpl 类型，需要添加源
-    outputimpl *output_receiver = dynamic_cast<outputimpl *>(receiver_impl);
-    if (output_receiver) {
-        // 清除旧的源并添加新的源
-        // 注意：这里简化处理，实际应用中可能需要更复杂的源管理
-        output_receiver->add_src(driver_impl);
+    // receiver_impl 是 inputimpl 类型，有 set_driver 方法
+    inputimpl *input_receiver = dynamic_cast<inputimpl *>(receiver_impl);
+    if (input_receiver) {
+        input_receiver->set_driver(driver_impl);
     }
 
-    CHDBG("Connected input port '%s' to output port '%s'",
-          driver.name().c_str(), receiver.name().c_str());
+    CHDBG("Connected input port '%s' to input port '%s'", driver.name().c_str(),
+          receiver.name().c_str());
+}
+
+// 连接函数：输出端口连接到非端口类型（如表达式结果、字面量等）
+template <typename T, typename U>
+void operator<<=(const port<T, output_direction> &receiver, const U &driver) {
+    CHDBG_FUNC();
+    // 获取接收方的实现节点
+    auto *receiver_impl = receiver.impl();
+
+    // 检查节点有效性
+    if (!receiver_impl) {
+        CHERROR("Invalid port connection: receiver node is null");
+        return;
+    }
+
+    // 获取driver的节点表示
+    auto driver_lnode = get_lnode(driver);
+    auto *driver_impl = driver_lnode.impl();
+
+    if (!driver_impl) {
+        CHERROR("Invalid port connection: driver node is null");
+        return;
+    }
+
+    // 将driver_impl设置为receiver的源
+    outputimpl *output_receiver = dynamic_cast<outputimpl *>(receiver_impl);
+    if (output_receiver) {
+        output_receiver->set_src(0, driver_impl);
+    }
+
+    CHDBG("Connected non-port value to output port '%s'", receiver.name().c_str());
+}
+
+// 连接函数：输入端口连接到非端口类型（如表达式结果、字面量等）
+template <typename T, typename U>
+void operator<<=(const port<T, input_direction> &receiver, const U &driver) {
+    CHDBG_FUNC();
+    // 获取接收方的实现节点
+    auto *receiver_impl = receiver.impl();
+
+    // 检查节点有效性
+    if (!receiver_impl) {
+        CHERROR("Invalid port connection: receiver node is null");
+        return;
+    }
+
+    // 获取driver的节点表示
+    auto driver_lnode = get_lnode(driver);
+    auto *driver_impl = driver_lnode.impl();
+
+    if (!driver_impl) {
+        CHERROR("Invalid port connection: driver node is null");
+        return;
+    }
+
+    // 将driver_impl设置为receiver的驱动源
+    inputimpl *input_receiver = dynamic_cast<inputimpl *>(receiver_impl);
+    if (input_receiver) {
+        input_receiver->set_driver(driver_impl);
+        
+        // 同时在驱动方添加用户关系
+        driver_impl->add_user(input_receiver);
+    }
+
+    CHDBG("Connected non-port value to input port '%s'", receiver.name().c_str());
 }
 
 } // namespace ch::core

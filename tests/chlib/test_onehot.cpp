@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "chlib/onehot.h"
+#include "codegen_dag.h"
 #include "codegen_verilog.h"
 #include "simulator.h"
 #include <cstdint>
@@ -398,6 +399,7 @@ TEST_CASE("OneHot: Encoder-Decoder combination test",
 
         ch_device<EncoderDecoderTester> device;
         Simulator simulator(device.context());
+        toDAG("onehot1.dot", device.context());
 
         // 测试所有可能的索引值
         for (int i = 0; i < 4; i++) {
@@ -465,13 +467,15 @@ TEST_CASE("OneHot: Encoder-Decoder combination test",
                 CH_MODULE(onehot_dec_module<4>, decoder);
 
                 ch_uint<4> encoded = encoder(io().in);
-                decoder.io().in = encoded;
-                io().out <<= decoder.io().out;
+                decoder.io().in <<=
+                    encoded; // 使用连接操作符连接函数式输出到模块式输入
+                io().out <<= decoder.io().out; // 使用连接操作符连接输出
             }
         };
 
         ch_device<EncoderDecoderTester> device;
         Simulator simulator(device.context());
+        toDAG("onehot.dot", device.context());
 
         // 测试所有可能的索引值
         for (int i = 0; i < 4; i++) {
@@ -584,7 +588,7 @@ TEST_CASE("OneHotEncoder: Edge cases", "[onehot][encoder][edge]") {
 
         // 测试输入为0
         simulator.set_input_value(device.instance().io().in,
-                                  static_cast<uint64_t>(01_b));
+                                  static_cast<uint64_t>(0_b));
         simulator.tick();
         auto output = simulator.get_value(device.instance().io().out);
 
@@ -593,7 +597,7 @@ TEST_CASE("OneHotEncoder: Edge cases", "[onehot][encoder][edge]") {
 
         // 测试输入为1
         simulator.set_input_value(device.instance().io().in,
-                                  static_cast<uint64_t>(10_b));
+                                  static_cast<uint64_t>(1_b));
         simulator.tick();
         output = simulator.get_value(device.instance().io().out);
 
