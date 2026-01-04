@@ -37,7 +37,7 @@ endfunction()
 # ================================
 
 # 列出所有独立的测试源文件（每个文件一个测试）
-set(SINGLE_TEST_SOURCES
+set(BASE_TEST_SOURCES
     test_basic.cpp
     test_reg.cpp
     test_operator.cpp
@@ -71,6 +71,11 @@ set(SINGLE_TEST_SOURCES
     test_sdata_compare.cpp
     test_mem_timing.cpp
     test_literal_left_shift.cpp
+    test_comparison_ops.cpp
+)
+
+# chlib 测试源文件列表
+set(CHLIB_TEST_SOURCES
     chlib/test_onehot.cpp
     chlib/test_arithmetic.cpp
     chlib/test_bitwise.cpp
@@ -79,18 +84,27 @@ set(SINGLE_TEST_SOURCES
     chlib/test_sequential.cpp
     chlib/test_converter.cpp
     chlib/test_selector_arbiter.cpp
-    #chlib/test_arithmetic_advance.cpp
+    # chlib/test_arithmetic_advance.cpp
     #chlib/test_memory.cpp
     # chlib/test_fifo.cpp
     # chlib/test_cam.cpp
     # chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件
 )
 
-# 为每个源文件创建一个独立的测试
-foreach(TEST_SRC ${SINGLE_TEST_SOURCES})
+# 为所有基础测试创建可执行文件
+foreach(TEST_SRC ${BASE_TEST_SOURCES})
     # 提取测试名，如 test_reg.cpp -> test_reg
     get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
     add_catch_test(${TEST_NAME} ${TEST_SRC})
+    set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
+endforeach()
+
+# 为所有chlib测试创建可执行文件
+foreach(TEST_SRC ${CHLIB_TEST_SOURCES})
+    # 提取测试名，如 test_reg.cpp -> test_reg
+    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
+    add_catch_test(${TEST_NAME} ${TEST_SRC})
+    set_tests_properties(${TEST_NAME} PROPERTIES LABELS "chlib")
 endforeach()
 
 # ================================
@@ -103,3 +117,4 @@ add_catch_test(test_bitvector
     test_bitvector.cpp
     test_bv_truncate.cpp
 )
+set_tests_properties(test_bitvector PROPERTIES LABELS "base")

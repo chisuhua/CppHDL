@@ -564,12 +564,12 @@ TEST_CASE("Comparison operations", "[operators][comparison]") {
     auto ge_result = a >= b;
 
     // 验证返回类型
-    REQUIRE(std::is_same_v<decltype(eq_result), ch_uint<1>>);
-    REQUIRE(std::is_same_v<decltype(ne_result), ch_uint<1>>);
-    REQUIRE(std::is_same_v<decltype(lt_result), ch_uint<1>>);
-    REQUIRE(std::is_same_v<decltype(le_result), ch_uint<1>>);
-    REQUIRE(std::is_same_v<decltype(gt_result), ch_uint<1>>);
-    REQUIRE(std::is_same_v<decltype(ge_result), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(eq_result), ch_bool>);
+    REQUIRE(std::is_same_v<decltype(ne_result), ch_bool>);
+    REQUIRE(std::is_same_v<decltype(lt_result), ch_bool>);
+    REQUIRE(std::is_same_v<decltype(le_result), ch_bool>);
+    REQUIRE(std::is_same_v<decltype(gt_result), ch_bool>);
+    REQUIRE(std::is_same_v<decltype(ge_result), ch_bool>);
 }
 
 TEST_CASE("Arithmetic operations", "[operators][arithmetic]") {

@@ -30,6 +30,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     add_compile_options(-Wall -Wextra -Wpedantic)
     # 针对格式化安全警告
     add_compile_options(-Wno-format-security)
+    # 禁用一些不必要的警告
+    add_compile_options(-Wno-deprecated-copy)
+    add_compile_options(-Wno-unused-parameter)
+    add_compile_options(-Wno-unused-variable)
 endif()
 
 # 优化构建类型
