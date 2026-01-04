@@ -112,7 +112,8 @@ TEST_CASE("CH_MODULE - Simulation Value Transfer", "[module][simulation]") {
     }
 }
 
-TEST_CASE("CH_MODULE - Connection Between Child Modules", "[module][child-connection]") {
+TEST_CASE("CH_MODULE - Connection Between Child Modules",
+          "[module][child-connection]") {
     class Top : public Component {
     public:
         __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
@@ -126,11 +127,11 @@ TEST_CASE("CH_MODULE - Connection Between Child Modules", "[module][child-connec
             CH_MODULE(SimpleModule<4>, mod1);
             CH_MODULE(SimpleModule<4>, mod2);
 
-            // 连接: 顶层输入 -> mod1输入 -> mod2输入，mod2输出 -> mod1输出 -> 顶层输出
+            // 修复循环连接：正确的级联应该是 顶层输入 -> mod1 -> mod2 ->
+            // 顶层输出
             mod1.io().in_port <<= io().in_data;
             mod2.io().in_port <<= mod1.io().out_port;
-            mod1.io().out_port <<= mod2.io().out_port;
-            io().out_data <<= mod1.io().out_port;
+            io().out_data <<= mod2.io().out_port;
         }
     };
 
@@ -149,14 +150,16 @@ TEST_CASE("CH_MODULE - Connection Between Child Modules", "[module][child-connec
     }
 }
 
-TEST_CASE("CH_MODULE - Connection Between Different IO Directions", "[module][io-direction]") {
+TEST_CASE("CH_MODULE - Connection Between Different IO Directions",
+          "[module][io-direction]") {
     class DataProcessor : public Component {
     public:
-        __io(ch_in<ch_uint<4>> input; ch_out<ch_uint<4>> output; ch_in<bool> enable;)
+        __io(ch_in<ch_uint<4>> input; ch_out<ch_uint<4>> output;
+             ch_in<bool> enable;)
 
-        DataProcessor(Component *parent = nullptr,
-                     const std::string &name = "DataProcessor")
-        : Component(parent, name) {}
+            DataProcessor(Component *parent = nullptr,
+                          const std::string &name = "DataProcessor")
+            : Component(parent, name) {}
 
         void create_ports() override { new (this->io_storage_) io_type; }
 
@@ -168,7 +171,8 @@ TEST_CASE("CH_MODULE - Connection Between Different IO Directions", "[module][io
 
     class Top : public Component {
     public:
-        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data; ch_in<bool> enable1; ch_in<bool> enable2;)
+        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;
+             ch_in<bool> enable1; ch_in<bool> enable2;)
 
             Top(Component *parent = nullptr, const std::string &name = "top")
             : Component(parent, name) {}
@@ -208,13 +212,13 @@ TEST_CASE("CH_MODULE - Connection Between Different IO Directions", "[module][io
 
     // 测试使能信号不同组合
     sim.set_input_value(in_data, 5);
-    sim.set_input_value(enable1, 1);  // proc1使能
-    sim.set_input_value(enable2, 0);  // proc2不使能
+    sim.set_input_value(enable1, 1); // proc1使能
+    sim.set_input_value(enable2, 0); // proc2不使能
     sim.tick();
-    REQUIRE(sim.get_value(out_data) == 0);  // 应该是0，因为proc2输出0
+    REQUIRE(sim.get_value(out_data) == 0); // 应该是0，因为proc2输出0
 
-    sim.set_input_value(enable1, 0);  // proc1不使能
-    sim.set_input_value(enable2, 1);  // proc2使能
+    sim.set_input_value(enable1, 0); // proc1不使能
+    sim.set_input_value(enable2, 1); // proc2使能
     sim.tick();
-    REQUIRE(sim.get_value(out_data) == 0);  // 应该是0，因为proc1输出0
+    REQUIRE(sim.get_value(out_data) == 0); // 应该是0，因为proc1输出0
 }

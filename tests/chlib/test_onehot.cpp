@@ -399,7 +399,6 @@ TEST_CASE("OneHot: Encoder-Decoder combination test",
 
         ch_device<EncoderDecoderTester> device;
         Simulator simulator(device.context());
-        toDAG("onehot1.dot", device.context());
 
         // 测试所有可能的索引值
         for (int i = 0; i < 4; i++) {
