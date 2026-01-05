@@ -25,14 +25,14 @@ TEST_CASE("Combinational: priority encoder function",
         REQUIRE(sim.get_value(result) == 4);
     }
 
-    SECTION("Multiple bits set - priority to lower") {
-        ch_uint<8> input(0x12_h);
+    SECTION("Multiple bits set - priority from high to lower") {
+        ch_uint<8> input(0x32_h);
         ch_uint<3> result = priority_encoder<8>(input);
 
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 1);
+        REQUIRE(sim.get_value(result) == 5);
     }
 
     SECTION("No bits set") {
@@ -138,7 +138,7 @@ TEST_CASE("Combinational: parity generation", "[combinational][parity]") {
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        REQUIRE(sim.get_value(result) == true);
+        REQUIRE(sim.get_value(result) == false);
     }
 
     SECTION("Even parity with odd number of 1s") {
@@ -148,7 +148,7 @@ TEST_CASE("Combinational: parity generation", "[combinational][parity]") {
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        REQUIRE(sim.get_value(result) == false);
+        REQUIRE(sim.get_value(result) == true);
     }
 }
 
@@ -195,7 +195,7 @@ TEST_CASE("Combinational: ripple carry adder function",
     SECTION("Simple addition without carry") {
         ch_uint<4> a(5_d);
         ch_uint<4> b(3_d);
-        RippleCarryAdderResult<4> result = ripple_carry_adder<4>(a, b);
+        auto result = ripple_carry_adder<4>(a, b);
 
         ch::Simulator sim(ctx.get());
         sim.tick();

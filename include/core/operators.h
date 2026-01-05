@@ -305,62 +305,37 @@ auto binary_operation(const LHS &lhs, const RHS &rhs,
             }
         }
     } else if constexpr (ArithmeticLiteral<LHS> && ArithmeticLiteral<RHS>) {
-            // 两个都是 ArithmeticLiteral，可以完全在编译期计算
-            if constexpr (std::is_same_v<Op, add_op>) {
-                return lhs + rhs;
-            } else if constexpr (std::is_same_v<Op, sub_op>) {
-                return lhs - rhs;
-            } else if constexpr (std::is_same_v<Op, mul_op>) {
-                return lhs * rhs;
-            } else if constexpr (std::is_same_v<Op, div_op>) {
-                return lhs / rhs;
-            } else if constexpr (std::is_same_v<Op, mod_op>) {
-                return lhs % rhs;
-            } else if constexpr (std::is_same_v<Op, and_op>) {
-                return lhs & rhs;
-            } else if constexpr (std::is_same_v<Op, or_op>) {
-                return lhs | rhs;
-            } else if constexpr (std::is_same_v<Op, xor_op>) {
-                return lhs ^ rhs;
-            } else if constexpr (std::is_same_v<Op, eq_op>) {
-                return ch_bool(lhs == rhs);
-            } else if constexpr (std::is_same_v<Op, ne_op>) {
-                return ch_bool(lhs != rhs);
-            } else if constexpr (std::is_same_v<Op, lt_op>) {
-                return ch_bool(lhs < rhs);
-            } else if constexpr (std::is_same_v<Op, le_op>) {
-                return ch_bool(lhs <= rhs);
-            } else if constexpr (std::is_same_v<Op, gt_op>) {
-                return ch_bool(lhs > rhs);
-            } else if constexpr (std::is_same_v<Op, ge_op>) {
-                return ch_bool(lhs >= rhs);
-            } else {
-                // 对于不支持直接计算的操作，回退到原来的实现
-                constexpr ch_op op_type = Op::op_type;
-
-                auto lhs_operand = to_operand(lhs);
-                auto rhs_operand = to_operand(rhs);
-
-                constexpr unsigned result_width =
-                    get_binary_result_width<Op, LHS, RHS>();
-
-                auto *op_node = node_builder::instance().build_operation(
-                    op_type, lhs_operand, rhs_operand, result_width, false,
-                    std::string(Op::name()) + "_" + name_suffix,
-                    std::source_location::current());
-
-                if constexpr (result_width <= 1) {
-                    if constexpr (Op::is_comparison) {
-                        return make_bool_result(op_node);
-                    } else {
-                        return make_uint_result<1>(op_node);
-                    }
-                } else {
-                    return make_uint_result<result_width>(op_node);
-                }
-            }
+        // 两个都是 ArithmeticLiteral，可以完全在编译期计算
+        if constexpr (std::is_same_v<Op, add_op>) {
+            return lhs + rhs;
+        } else if constexpr (std::is_same_v<Op, sub_op>) {
+            return lhs - rhs;
+        } else if constexpr (std::is_same_v<Op, mul_op>) {
+            return lhs * rhs;
+        } else if constexpr (std::is_same_v<Op, div_op>) {
+            return lhs / rhs;
+        } else if constexpr (std::is_same_v<Op, mod_op>) {
+            return lhs % rhs;
+        } else if constexpr (std::is_same_v<Op, and_op>) {
+            return lhs & rhs;
+        } else if constexpr (std::is_same_v<Op, or_op>) {
+            return lhs | rhs;
+        } else if constexpr (std::is_same_v<Op, xor_op>) {
+            return lhs ^ rhs;
+        } else if constexpr (std::is_same_v<Op, eq_op>) {
+            return ch_bool(lhs == rhs);
+        } else if constexpr (std::is_same_v<Op, ne_op>) {
+            return ch_bool(lhs != rhs);
+        } else if constexpr (std::is_same_v<Op, lt_op>) {
+            return ch_bool(lhs < rhs);
+        } else if constexpr (std::is_same_v<Op, le_op>) {
+            return ch_bool(lhs <= rhs);
+        } else if constexpr (std::is_same_v<Op, gt_op>) {
+            return ch_bool(lhs > rhs);
+        } else if constexpr (std::is_same_v<Op, ge_op>) {
+            return ch_bool(lhs >= rhs);
         } else {
-            // 其他情况，回退到原来的实现
+            // 对于不支持直接计算的操作，回退到原来的实现
             constexpr ch_op op_type = Op::op_type;
 
             auto lhs_operand = to_operand(lhs);
@@ -375,10 +350,7 @@ auto binary_operation(const LHS &lhs, const RHS &rhs,
                 std::source_location::current());
 
             if constexpr (result_width <= 1) {
-                if constexpr (std::is_same_v<std::remove_cvref_t<LHS>, ch_bool> ||
-                              std::is_same_v<std::remove_cvref_t<RHS>, ch_bool>) {
-                    return make_bool_result(op_node);
-                } else if constexpr (Op::is_comparison) {
+                if constexpr (Op::is_comparison) {
                     return make_bool_result(op_node);
                 } else {
                     return make_uint_result<1>(op_node);
@@ -386,6 +358,34 @@ auto binary_operation(const LHS &lhs, const RHS &rhs,
             } else {
                 return make_uint_result<result_width>(op_node);
             }
+        }
+    } else {
+        // 其他情况，回退到原来的实现
+        constexpr ch_op op_type = Op::op_type;
+
+        auto lhs_operand = to_operand(lhs);
+        auto rhs_operand = to_operand(rhs);
+
+        constexpr unsigned result_width =
+            get_binary_result_width<Op, LHS, RHS>();
+
+        auto *op_node = node_builder::instance().build_operation(
+            op_type, lhs_operand, rhs_operand, result_width, false,
+            std::string(Op::name()) + "_" + name_suffix,
+            std::source_location::current());
+
+        if constexpr (result_width <= 1) {
+            if constexpr (std::is_same_v<std::remove_cvref_t<LHS>, ch_bool> ||
+                          std::is_same_v<std::remove_cvref_t<RHS>, ch_bool>) {
+                return make_bool_result(op_node);
+            } else if constexpr (Op::is_comparison) {
+                return make_bool_result(op_node);
+            } else {
+                return make_uint_result<1>(op_node);
+            }
+        } else {
+            return make_uint_result<result_width>(op_node);
+        }
     }
 }
 

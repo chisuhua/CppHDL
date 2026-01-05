@@ -21,13 +21,12 @@ namespace chlib {
  * 将输入的one-hot编码转换为二进制索引，优先处理低位
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N - 1)> priority_encoder(ch_uint<N> input) {
+ch_uint<compute_bit_width(N)> priority_encoder(ch_uint<N> input) {
     static_assert(N > 0, "Priority encoder must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
 
     ch_uint<OUTPUT_WIDTH> result = 0_d;
 
-    // 从低位到高位检查，优先处理低位
     for (unsigned i = 0; i < N; ++i) {
         ch_bool bit_at_i = bit_select(input, i);
         ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
@@ -43,9 +42,9 @@ ch_uint<compute_bit_width(N - 1)> priority_encoder(ch_uint<N> input) {
  * 将输入的one-hot编码转换为二进制索引
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N - 1)> binary_encoder(ch_uint<N> input) {
+ch_uint<compute_bit_width(N)> binary_encoder(ch_uint<N> input) {
     static_assert(N > 0, "Binary encoder must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
 
     ch_uint<OUTPUT_WIDTH> result = 0_d;
 
@@ -64,9 +63,9 @@ ch_uint<compute_bit_width(N - 1)> binary_encoder(ch_uint<N> input) {
  * 将输入的二进制索引转换为one-hot编码
  */
 template <unsigned N>
-ch_uint<N> binary_decoder(ch_uint<compute_bit_width(N - 1)> input) {
+ch_uint<N> binary_decoder(ch_uint<compute_bit_width(N)> input) {
     static_assert(N > 0, "Binary decoder must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N);
 
     ch_uint<N> result = 0_d;
 
@@ -164,29 +163,44 @@ template <unsigned N> struct RippleCarryAdderResult {
 template <unsigned N>
 RippleCarryAdderResult<N> ripple_carry_adder(ch_uint<N> a, ch_uint<N> b,
                                              ch_bool carry_in = false) {
-    RippleCarryAdderResult<N> result;
+    if constexpr (N == 1) {
+        // N=1的特殊情况：直接使用全加器
+        FullAdderResult fa_result =
+            full_adder(bit_select(a, 0), bit_select(b, 0), carry_in);
 
-    ch_bool carry = carry_in;
-    ch_uint<N> sum = 0_d;
+        RippleCarryAdderResult<N> result;
+        result.sum = ch_uint<N>(fa_result.sum);
+        result.carry_out = fa_result.carry_out;
 
-    for (unsigned i = 0; i < N; ++i) {
-        ch_bool a_bit = bit_select(a, i);
-        ch_bool b_bit = bit_select(b, i);
+        return result;
+    } else {
+        // N>1的一般情况：使用编译期展开的模板递归实现循环
+        ch_bool carry = carry_in;
+        ch_uint<N> sum = 0_d;
 
-        FullAdderResult fa_result = full_adder(a_bit, b_bit, carry);
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            (([&]() {
+                 auto a_bit = bit_select<I>(a);
+                 auto b_bit = bit_select<I>(b);
+                 FullAdderResult fa_result = full_adder(a_bit, b_bit, carry);
 
-        // 设置当前位的和
-        ch_uint<N> sum_bit = fa_result.sum ? make_uint<N>(1) : make_uint<N>(0);
-        sum = sum | (sum_bit << make_uint<compute_bit_width(N-1)>(i));
+                 // 设置当前位的和
+                 //  ch_uint<N> sum_bit =
+                 //      fa_result.sum ? make_literal(1_d) : make_literal(0_d);
+                 sum = sum | (fa_result.sum << make_literal<I>());
 
-        // 更新进位
-        carry = fa_result.carry_out;
+                 // 更新进位
+                 carry = fa_result.carry_out;
+             }()),
+             ...);
+        }(std::make_index_sequence<N>{});
+
+        RippleCarryAdderResult<N> result;
+        result.sum = sum;
+        result.carry_out = carry;
+
+        return result;
     }
-
-    result.sum = sum;
-    result.carry_out = carry;
-
-    return result;
 }
 
 /**
@@ -246,7 +260,7 @@ ch_uint<N> multiplexer(const std::array<ch_uint<N>, M> &inputs,
     ch_uint<N> result = inputs[0];
 
     for (unsigned i = 0; i < M; ++i) {
-        ch_bool sel_matches = (sel == make_uint<compute_bit_width(M-1)>(i));
+        ch_bool sel_matches = (sel == make_uint<compute_bit_width(M - 1)>(i));
         ch_uint<N> current_input = inputs[i];
         result = select(sel_matches, current_input, result);
     }
