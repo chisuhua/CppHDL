@@ -75,7 +75,8 @@ TEST_CASE("SelectorArbiter: round robin selector",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // After position 0, next available is position 2
+        // After position 0 (encoded as 0001_b), next available is position 1, then position 2
+        // Position 1 is checked first but not requested, position 2 is checked second and is requested
         REQUIRE(sim.get_value(result.grant) == 0b0100); // Bit 2 set
         REQUIRE(sim.get_value(result.valid) == true);
     }
@@ -90,7 +91,7 @@ TEST_CASE("SelectorArbiter: round robin selector",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // After position 2, next available is position 3
+        // After position 2 (encoded as 0100_b), next available is position 3
         REQUIRE(sim.get_value(result.grant) == 0b1000); // Bit 3 set
         REQUIRE(sim.get_value(result.valid) == true);
     }
@@ -105,7 +106,7 @@ TEST_CASE("SelectorArbiter: round robin selector",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // After position 3, wrap to position 0
+        // After position 3 (encoded as 1000_b), wrap to position 0
         REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
         REQUIRE(sim.get_value(result.valid) == true);
     }
@@ -121,5 +122,70 @@ TEST_CASE("SelectorArbiter: round robin selector",
 
         REQUIRE(sim.get_value(result.grant) == 0b0000); // No grants
         REQUIRE(sim.get_value(result.valid) == false);
+    }
+}
+
+TEST_CASE("SelectorArbiter: round robin arbiter",
+          "[selector_arbiter][round_robin_arbiter]") {
+    auto ctx = std::make_unique<ch::core::context>("test_round_robin_arbiter");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Round robin arbiter with multiple requests") {
+        ch_uint<4> request(0101_b);    // Requests at positions 0 and 2
+        RoundRobinArbiterResult<4> result = round_robin_arbiter<4>(request);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // First time: should grant position 0 (as internal ptr_reg starts with 0)
+        REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
+        REQUIRE(sim.get_value(result.valid) == true);
+    }
+
+    SECTION("Round robin arbiter with different request pattern") {
+        ch_uint<4> request(1100_b);    // Requests at positions 2 and 3
+        RoundRobinArbiterResult<4> result = round_robin_arbiter<4>(request);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // Should grant position 2 (as internal ptr_reg starts with 0)
+        REQUIRE(sim.get_value(result.grant) == 0b0100); // Bit 2 set
+        REQUIRE(sim.get_value(result.valid) == true);
+    }
+
+    SECTION("Round robin arbiter with no requests") {
+        ch_uint<4> request(0000_b);    // No requests
+        RoundRobinArbiterResult<4> result = round_robin_arbiter<4>(request);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result.grant) == 0b0000); // No grants
+        REQUIRE(sim.get_value(result.valid) == false);
+    }
+
+    SECTION("Round robin arbiter with all requests") {
+        ch_uint<4> request(1111_b);    // All requests active
+        RoundRobinArbiterResult<4> result = round_robin_arbiter<4>(request);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // Should grant position 0 (as internal ptr_reg starts with 0)
+        REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
+        REQUIRE(sim.get_value(result.valid) == true);
+    }
+    
+    SECTION("Round robin arbiter sequential behavior") {
+        ch_uint<4> request(1101_b);    // Requests at positions 0, 2, 3
+        RoundRobinArbiterResult<4> result = round_robin_arbiter<4>(request);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // First time: should grant position 0 (as internal ptr_reg starts with 0)
+        REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
+        REQUIRE(sim.get_value(result.valid) == true);
     }
 }

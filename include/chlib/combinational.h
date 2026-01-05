@@ -21,9 +21,9 @@ namespace chlib {
  * 将输入的one-hot编码转换为二进制索引，优先处理低位
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N)> priority_encoder(ch_uint<N> input) {
+ch_uint<compute_idx_width(N)> priority_encoder(ch_uint<N> input) {
     static_assert(N > 0, "Priority encoder must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<OUTPUT_WIDTH> result = 0_d;
 
@@ -42,9 +42,9 @@ ch_uint<compute_bit_width(N)> priority_encoder(ch_uint<N> input) {
  * 将输入的one-hot编码转换为二进制索引
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N)> binary_encoder(ch_uint<N> input) {
+ch_uint<compute_idx_width(N)> binary_encoder(ch_uint<N> input) {
     static_assert(N > 0, "Binary encoder must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<OUTPUT_WIDTH> result = 0_d;
 
@@ -63,9 +63,9 @@ ch_uint<compute_bit_width(N)> binary_encoder(ch_uint<N> input) {
  * 将输入的二进制索引转换为one-hot编码
  */
 template <unsigned N>
-ch_uint<N> binary_decoder(ch_uint<compute_bit_width(N)> input) {
+ch_uint<N> binary_decoder(ch_uint<compute_idx_width(N)> input) {
     static_assert(N > 0, "Binary decoder must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned INPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<N> result = 0_d;
 

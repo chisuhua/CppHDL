@@ -8,6 +8,24 @@ inline constexpr unsigned compute_bit_width(uint64_t value) {
     return value == 0 ? 1u : static_cast<unsigned>(std::bit_width(value));
 }
 
+// 计算指向数据位指针的指针位宽
+// 例如：对于N位宽的数据，索引范围是0到N-1，需要多少位来表示这些索引
+// 1位宽数据：索引范围0，需要1位（特殊处理）
+// 2位宽数据：索引范围0-1，需要1位
+// 3位宽数据：索引范围0-2，需要2位
+// 4位宽数据：索引范围0-3，需要2位
+// 5-8位宽数据：索引范围0-4/0-7，需要3位
+// 与compute_bit_width的区别：compute_bit_width计算表示数值所需的位宽
+// compute_idx_width计算表示0到N-1索引所需的位宽
+inline constexpr unsigned compute_idx_width(size_t data_width) {
+    if (data_width <= 1) {
+        return 1u;  // 对于0或1位宽的数据，索引只需要1位
+    }
+    // 计算ceil(log2(data_width))，即表示data_width个索引所需的位数
+    // std::bit_width(data_width - 1)会给出表示0到data_width-1所需的最大位数
+    return static_cast<unsigned>(std::bit_width(data_width - 1));
+}
+
 // ==================== 字面量解析辅助结构 ====================
 
 struct lit_bin {

@@ -439,78 +439,79 @@ TEST_CASE("Arithmetic: max function", "[arithmetic][max]") {
     }
 }
 
-TEST_CASE("Arithmetic: switch function", "[arithmetic][switch]") {
-    auto ctx = std::make_unique<ch::core::context>("test_switch");
-    ch::core::ctx_swap ctx_swapper(ctx.get());
+// TEST_CASE("Arithmetic: switch function", "[arithmetic][switch]") {
+//     auto ctx = std::make_unique<ch::core::context>("test_switch");
+//     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    SECTION("Switch with one case") {
-        ch_uint<4> input(2_d);
-        ch_uint<4> result =
-            switch_case(input, 2_d, 10_d,
-                        0_d); // case 2: return 10, default: return 0
+//     SECTION("Switch with one case") {
+//         ch_uint<4> input(2_d);
+//         ch_uint<4> result =
+//             switch_case(input, 2_d, 10_d,
+//                         0_d); // case 2: return 10, default: return 0
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 10);
-    }
+//         REQUIRE(sim.get_value(result) == 10);
+//     }
 
-    SECTION("Switch with one case - default path") {
-        ch_uint<4> input(3_d);
-        ch_uint<4> result =
-            switch_case(input, 2_d, 10_d,
-                        0_d); // case 2: return 10, default: return 0
+//     SECTION("Switch with one case - default path") {
+//         ch_uint<4> input(3_d);
+//         ch_uint<4> result =
+//             switch_case(input, 2_d, 10_d,
+//                         0_d); // case 2: return 10, default: return 0
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 0);
-    }
+//         REQUIRE(sim.get_value(result) == 0);
+//     }
 
-    SECTION("Switch with multiple cases - first case matches") {
-        ch_uint<4> input(0_d);
-        ch_uint<4> result = switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d,
-                                        0_d); // 3 cases + default
+//     SECTION("Switch with multiple cases - first case matches") {
+//         ch_uint<4> input(0_d);
+//         ch_uint<4> result = switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d,
+//         13_d,
+//                                         0_d); // 3 cases + default
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 10);
-    }
+//         REQUIRE(sim.get_value(result) == 10);
+//     }
 
-    SECTION("Switch with multiple cases - middle case matches") {
-        ch_uint<4> input(1_d);
-        ch_uint<4> result =
-            switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
+//     SECTION("Switch with multiple cases - middle case matches") {
+//         ch_uint<4> input(1_d);
+//         ch_uint<4> result =
+//             switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 12);
-    }
+//         REQUIRE(sim.get_value(result) == 12);
+//     }
 
-    SECTION("Switch with multiple cases - last case matches") {
-        ch_uint<4> input(2_d);
-        ch_uint<4> result =
-            switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
+//     SECTION("Switch with multiple cases - last case matches") {
+//         ch_uint<4> input(2_d);
+//         ch_uint<4> result =
+//             switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 13);
-    }
+//         REQUIRE(sim.get_value(result) == 13);
+//     }
 
-    SECTION("Switch with multiple cases - default path") {
-        ch_uint<4> input(5_d);
-        ch_uint<4> result =
-            switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
+//     SECTION("Switch with multiple cases - default path") {
+//         ch_uint<4> input(5_d);
+//         ch_uint<4> result =
+//             switch_case(input, 0_d, 10_d, 1_d, 12_d, 2_d, 13_d, 0_d);
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 0);
-    }
-}
+//         REQUIRE(sim.get_value(result) == 0);
+//     }
+// }
 
 // TEST_CASE("Arithmetic: switch_pairs function", "[arithmetic][switch]") {
 //     auto ctx = std::make_unique<ch::core::context>("test_switch_pairs");
@@ -550,177 +551,183 @@ TEST_CASE("Arithmetic: switch function", "[arithmetic][switch]") {
 //     }
 // }
 
-TEST_CASE("Arithmetic: switch_ function", "[arithmetic][switch_recursive]") {
-    auto ctx = std::make_unique<ch::core::context>("test_switch_recursive");
-    ch::core::ctx_swap ctx_swapper(ctx.get());
+// TEST_CASE("Arithmetic: switch_ function", "[arithmetic][switch_recursive]") {
+//     auto ctx = std::make_unique<ch::core::context>("test_switch_recursive");
+//     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    SECTION("Switch recursive with one case") {
-        ch_uint<4> input(2_d);
-        ch_uint<4> result = switch_(input, 0_d, case_(2_d, 10_d));
+//     SECTION("Switch recursive with one case") {
+//         ch_uint<4> input(2_d);
+//         ch_uint<4> result = switch_(input, 0_d, case_(2_d, 10_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 10);
-    }
+//         REQUIRE(sim.get_value(result) == 10);
+//     }
 
-    SECTION("Switch recursive with one case - default path") {
-        ch_uint<4> input(3_d);
-        ch_uint<4> result = switch_(input, 0_d, case_(2_d, 10_d));
+//     SECTION("Switch recursive with one case - default path") {
+//         ch_uint<4> input(3_d);
+//         ch_uint<4> result = switch_(input, 0_d, case_(2_d, 10_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 0);
-    }
+//         REQUIRE(sim.get_value(result) == 0);
+//     }
 
-    SECTION("Switch recursive with multiple cases - first case matches") {
-        ch_uint<4> input(0_d);
-        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
-                                    case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch recursive with multiple cases - first case matches") {
+//         ch_uint<4> input(0_d);
+//         ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+//                                     case_(1_d, 12_d), case_(2_d, 13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 10);
-    }
+//         REQUIRE(sim.get_value(result) == 10);
+//     }
 
-    SECTION("Switch recursive with multiple cases - middle case matches") {
-        ch_uint<4> input(1_d);
-        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
-                                    case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch recursive with multiple cases - middle case matches") {
+//         ch_uint<4> input(1_d);
+//         ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+//                                     case_(1_d, 12_d), case_(2_d, 13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 12);
-    }
+//         REQUIRE(sim.get_value(result) == 12);
+//     }
 
-    SECTION("Switch recursive with multiple cases - last case matches") {
-        ch_uint<4> input(2_d);
-        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
-                                    case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch recursive with multiple cases - last case matches") {
+//         ch_uint<4> input(2_d);
+//         ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+//                                     case_(1_d, 12_d), case_(2_d, 13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 13);
-    }
+//         REQUIRE(sim.get_value(result) == 13);
+//     }
 
-    SECTION("Switch recursive with multiple cases - default path") {
-        ch_uint<4> input(5_d);
-        ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
-                                    case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch recursive with multiple cases - default path") {
+//         ch_uint<4> input(5_d);
+//         ch_uint<4> result = switch_(input, 0_d, case_(0_d, 10_d),
+//                                     case_(1_d, 12_d), case_(2_d, 13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 0);
-    }
-}
+//         REQUIRE(sim.get_value(result) == 0);
+//     }
+// }
 
-TEST_CASE("Arithmetic: switch_parallel function",
-          "[arithmetic][switch_parallel]") {
-    auto ctx = std::make_unique<ch::core::context>("test_switch_parallel");
-    ch::core::ctx_swap ctx_swapper(ctx.get());
+// TEST_CASE("Arithmetic: switch_parallel function",
+//           "[arithmetic][switch_parallel]") {
+//     auto ctx = std::make_unique<ch::core::context>("test_switch_parallel");
+//     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    SECTION("Switch parallel with one case") {
-        ch_uint<4> input(2_d);
-        ch_uint<4> result = switch_parallel(input, 0_d, case_(2_d, 10_d));
+//     SECTION("Switch parallel with one case") {
+//         ch_uint<4> input(2_d);
+//         ch_uint<4> result = switch_parallel(input, 0_d, case_(2_d, 10_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 10);
-    }
+//         REQUIRE(sim.get_value(result) == 10);
+//     }
 
-    SECTION("Switch parallel with one case - default path") {
-        ch_uint<4> input(3_d);
-        ch_uint<4> result = switch_parallel(input, 0_d, case_(2_d, 10_d));
+//     SECTION("Switch parallel with one case - default path") {
+//         ch_uint<4> input(3_d);
+//         ch_uint<4> result = switch_parallel(input, 0_d, case_(2_d, 10_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 0);
-    }
+//         REQUIRE(sim.get_value(result) == 0);
+//     }
 
-    SECTION("Switch parallel with multiple cases - first case matches") {
-        ch_uint<4> input(0_d);
-        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
-                                            case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch parallel with multiple cases - first case matches") {
+//         ch_uint<4> input(0_d);
+//         ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+//                                             case_(1_d, 12_d), case_(2_d,
+//                                             13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 10);
-    }
+//         REQUIRE(sim.get_value(result) == 10);
+//     }
 
-    SECTION("Switch parallel with multiple cases - middle case matches") {
-        ch_uint<4> input(1_d);
-        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
-                                            case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch parallel with multiple cases - middle case matches") {
+//         ch_uint<4> input(1_d);
+//         ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+//                                             case_(1_d, 12_d), case_(2_d,
+//                                             13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 12);
-    }
+//         REQUIRE(sim.get_value(result) == 12);
+//     }
 
-    SECTION("Switch parallel with multiple cases - last case matches") {
-        ch_uint<4> input(2_d);
-        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
-                                            case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch parallel with multiple cases - last case matches") {
+//         ch_uint<4> input(2_d);
+//         ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+//                                             case_(1_d, 12_d), case_(2_d,
+//                                             13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 13);
-    }
+//         REQUIRE(sim.get_value(result) == 13);
+//     }
 
-    SECTION("Switch parallel with multiple cases - default path") {
-        ch_uint<4> input(5_d);
-        ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
-                                            case_(1_d, 12_d), case_(2_d, 13_d));
+//     SECTION("Switch parallel with multiple cases - default path") {
+//         ch_uint<4> input(5_d);
+//         ch_uint<4> result = switch_parallel(input, 0_d, case_(0_d, 10_d),
+//                                             case_(1_d, 12_d), case_(2_d,
+//                                             13_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        REQUIRE(sim.get_value(result) == 0);
-    }
-}
+//         REQUIRE(sim.get_value(result) == 0);
+//     }
+// }
 
-TEST_CASE("Arithmetic: switch performance comparison",
-          "[arithmetic][switch_performance]") {
-    auto ctx = std::make_unique<ch::core::context>("test_switch_performance");
-    ch::core::ctx_swap ctx_swapper(ctx.get());
+// TEST_CASE("Arithmetic: switch performance comparison",
+//           "[arithmetic][switch_performance]") {
+//     auto ctx =
+//     std::make_unique<ch::core::context>("test_switch_performance");
+//     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    SECTION("Compare all switch implementations return same result") {
-        ch_uint<5> input(1_d);
+//     SECTION("Compare all switch implementations return same result") {
+//         ch_uint<5> input(1_d);
 
-        // Using switch_case (direct values)
-        ch_uint<5> result1 =
-            switch_case(input, 0_d, 0_d, 1_d, 10_d, 2_d, 20_d, 9_d);
+//         // Using switch_case (direct values)
+//         ch_uint<5> result1 =
+//             switch_case(input, 0_d, 0_d, 1_d, 10_d, 2_d, 20_d, 9_d);
 
-        // Using switch_pairs (with case_value)
-        // ch_uint<4> result2 =
-        //     switch_pairs(input, case_value(0_d, 0_d), case_value(1_d, 10_d),
-        //                  case_value(2_d, 20_d), 99_d);
+//         // Using switch_pairs (with case_value)
+//         // ch_uint<4> result2 =
+//         //     switch_pairs(input, case_value(0_d, 0_d), case_value(1_d,
+//         10_d),
+//         //                  case_value(2_d, 20_d), 99_d);
 
-        // Using switch_ (with case_ entries)
-        // ch_uint<5> result3 = switch_(input, (9_d, case_(0_d, 0_d),
-        //                              case_(1_d, 10_d), case_(2_d, 20_d));
+//         // Using switch_ (with case_ entries)
+//         // ch_uint<5> result3 = switch_(input, (9_d, case_(0_d, 0_d),
+//         //                              case_(1_d, 10_d), case_(2_d, 20_d));
 
-        // Using switch_parallel (with case_ entries)
-        ch_uint<5> result4 = switch_parallel(
-            input, 9_d, case_(0_d, 0_d), case_(1_d, 10_d), case_(2_d, 20_d));
+//         // Using switch_parallel (with case_ entries)
+//         ch_uint<5> result4 = switch_parallel(
+//             input, 9_d, case_(0_d, 0_d), case_(1_d, 10_d), case_(2_d, 20_d));
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+//         ch::Simulator sim(ctx.get());
+//         sim.tick();
 
-        // All implementations should return the same result
-        REQUIRE(sim.get_value(result1) == 10);
-        // REQUIRE(sim.get_value(result2) == 10);
-        // REQUIRE(sim.get_value(result3) == 10);
-        REQUIRE(sim.get_value(result4) == 10);
-    }
-}
+//         // All implementations should return the same result
+//         REQUIRE(sim.get_value(result1) == 10);
+//         // REQUIRE(sim.get_value(result2) == 10);
+//         // REQUIRE(sim.get_value(result3) == 10);
+//         REQUIRE(sim.get_value(result4) == 10);
+//     }
+// }

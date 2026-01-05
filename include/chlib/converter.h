@@ -37,9 +37,9 @@ ch_uint<N> bit_field_extract(ch_uint<N> input, unsigned start, unsigned width) {
  * 将二进制索引转换为OneHot编码
  */
 template <unsigned N>
-ch_uint<N> binary_to_onehot(ch_uint<compute_bit_width(N)> input) {
+ch_uint<N> binary_to_onehot(ch_uint<compute_idx_width(N)> input) {
     static_assert(N > 0, "Binary to onehot converter must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned INPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<N> result = 0_d;
 
@@ -58,9 +58,9 @@ ch_uint<N> binary_to_onehot(ch_uint<compute_bit_width(N)> input) {
  * 将OneHot编码转换为二进制索引
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N)> onehot_to_binary(ch_uint<N> input) {
+ch_uint<compute_idx_width(N)> onehot_to_binary(ch_uint<N> input) {
     static_assert(N > 0, "Onehot to binary converter must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<OUTPUT_WIDTH> result = 0_d;
 

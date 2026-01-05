@@ -169,7 +169,7 @@ template <unsigned N> ch_uint<N> bit_reversal(ch_uint<N> input) {
     for (unsigned i = 0; i < N; ++i) {
         ch_bool bit_i = bit_select(input, i);
         // 使用constexpr计算位宽，避免在模板参数中使用运行时变量
-        constexpr unsigned shift_amount = compute_bit_width(N - 1);
+        constexpr unsigned shift_amount = compute_bit_width(N);
         ch_uint<N> reversed_bit = bit_i << make_uint<shift_amount>(N - 1 - i);
         result = result | reversed_bit;
     }

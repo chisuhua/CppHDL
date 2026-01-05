@@ -24,8 +24,7 @@ namespace chlib {
 template <unsigned N> class onehot_dec {
 public:
     static_assert(N > 0, "OneHotDecoder must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<OUTPUT_WIDTH> operator()(ch_uint<N> in) {
         if constexpr (N == 1) {
@@ -35,7 +34,8 @@ public:
 
             for (unsigned i = 0; i < N; ++i) {
                 ch_bool bit_at_i = bit_select(in, i);
-                ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
+                ch_uint<OUTPUT_WIDTH> current_value =
+                    make_uint<OUTPUT_WIDTH>(i);
                 result = select(bit_at_i, current_value, result);
             }
 
@@ -55,8 +55,7 @@ template <unsigned N> class onehot_dec_module : public ch::Component {
 public:
     static_assert(N > 0, "OneHotDecoder must have at least 1 bit");
 
-    static constexpr unsigned OUTPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     __io(ch_in<ch_uint<N>> in;              // N位 one-hot 输入
          ch_out<ch_uint<OUTPUT_WIDTH>> out; // 解码后的输出值
@@ -85,7 +84,8 @@ public:
                 ch_bool bit_at_i = bit_select(io().in, i);
 
                 // 创建当前索引的字面量值
-                ch_uint<OUTPUT_WIDTH> current_value = make_uint<OUTPUT_WIDTH>(i);
+                ch_uint<OUTPUT_WIDTH> current_value =
+                    make_uint<OUTPUT_WIDTH>(i);
 
                 // 使用select操作创建新的result节点
                 result = select(bit_at_i, current_value, result);
@@ -104,8 +104,7 @@ public:
 template <unsigned N> class onehot_enc {
 public:
     static_assert(N > 0, "OneHotEncoder must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned INPUT_WIDTH = compute_idx_width(N);
 
     ch_uint<N> operator()(ch_uint<INPUT_WIDTH> idx) {
         ch_uint<N> result = 0_d;
@@ -129,8 +128,7 @@ public:
 template <unsigned N> class onehot_enc_module : public ch::Component {
 public:
     static_assert(N > 0, "OneHotEncoder must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned INPUT_WIDTH = compute_idx_width(N);
 
     __io(ch_in<ch_uint<INPUT_WIDTH>> in; // 输入索引
          ch_out<ch_uint<N>> out;         // one-hot 输出

@@ -2,6 +2,7 @@
 #define CHLIB_SELECTOR_ARBITER_H
 
 #include "ch.hpp"
+#include "chlib/converter.h"
 #include "chlib/logic.h"
 #include "component.h"
 #include "core/bool.h"
@@ -10,6 +11,7 @@
 #include "core/operators_runtime.h"
 #include "core/uint.h"
 #include <cassert>
+#include <cstddef>
 
 using namespace ch::core;
 
@@ -28,7 +30,7 @@ template <unsigned N> struct PrioritySelectorResult {
 template <unsigned N>
 PrioritySelectorResult<N> priority_selector(ch_uint<N> request) {
     static_assert(N > 0, "Priority selector must have at least 1 bit");
-    static constexpr unsigned BIT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned BIT_WIDTH = compute_bit_width(N);
 
     PrioritySelectorResult<N> result;
     result.grant = 0_d;
@@ -59,10 +61,68 @@ template <unsigned N> struct RoundRobinArbiterResult {
     ch_uint<N> next_ptr; // 下一个优先级指针
 };
 
+// 辅助结构体用于实现串行依赖计算
+template <unsigned N, unsigned Iter = 0> struct ProcessRequests {
+    static void process(ch_uint<N> request, ch_uint<N> priority_ptr,
+                        RoundRobinArbiterResult<N> &result) {
+        ch_uint<compute_bit_width(N)> pos = (priority_ptr + Iter) % N;
+        ch_bool req_at_pos = bit_select(request, pos);
+        ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << pos;
+
+        // 如果当前位有请求且尚未确定授予，则授予当前位
+        result.grant =
+            select(req_at_pos && !result.valid, grant_one_hot, result.grant);
+        result.valid = select(req_at_pos, 1_b, result.valid);
+
+        // 递归处理下一个迭代
+        if constexpr (Iter + 1 < N) {
+            ProcessRequests<N, Iter + 1>::process(request, priority_ptr,
+                                                  result);
+        }
+    }
+};
+
+// 特化终止条件
+template <unsigned N> struct ProcessRequests<N, N> {
+    static void process(ch_uint<N> request, ch_uint<N> priority_ptr,
+                        RoundRobinArbiterResult<N> &result) {
+        // 什么都不做，递归终止
+    }
+};
+
+// 辅助结构体用于更新优先级指针
+template <unsigned N, unsigned Iter = 0> struct UpdatePriority {
+    static void process(const RoundRobinArbiterResult<N> &result,
+                        ch_uint<N> &next_priority, ch_uint<N> request,
+                        ch_uint<N> priority_ptr) {
+        if (result.valid) {
+            ch_uint<compute_bit_width(N)> pos = (priority_ptr + Iter) % N;
+            ch_bool req_at_pos = bit_select(request, pos);
+            ch_uint<compute_bit_width(N)> next_pos = ((pos + 1) % N);
+            next_priority =
+                select(req_at_pos && (result.grant == (ch_uint<N>(1_d) << pos)),
+                       next_pos, next_priority);
+
+            // 递归处理下一个迭代
+            if constexpr (Iter + 1 < N) {
+                UpdatePriority<N, Iter + 1>::process(result, next_priority,
+                                                     request, priority_ptr);
+            }
+        }
+    }
+};
+
+// 特化终止条件
+template <unsigned N> struct UpdatePriority<N, N> {
+    static void process(const RoundRobinArbiterResult<N> &result,
+                        ch_uint<N> &next_priority, ch_uint<N> request,
+                        ch_uint<N> priority_ptr) {
+        // 什么都不做，递归终止
+    }
+};
+
 template <unsigned N>
-RoundRobinArbiterResult<N> round_robin_arbiter(ch_uint<N> request,
-                                               ch_uint<N> priority_ptr,
-                                               ch_bool clk, ch_bool rst) {
+RoundRobinArbiterResult<N> round_robin_arbiter(ch_uint<N> request) {
 
     static_assert(N > 0, "Round robin arbiter must have at least 1 bit");
 
@@ -70,37 +130,21 @@ RoundRobinArbiterResult<N> round_robin_arbiter(ch_uint<N> request,
     result.grant = 0_d;
     result.valid = false;
 
-    // 首先从优先级指针开始向高位查找
-    for (unsigned i = 0; i < N; ++i) {
-        unsigned pos = (priority_ptr.value() + i) % N; // 从优先级指针开始循环
-        ch_bool req_at_pos = bit_select(request, pos);
-        ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << make_literal(pos);
+    // 使用内部寄存器来管理优先级指针
+    ch_reg<ch_uint<N>> ptr_reg(0_d, "rr_arbiter_ptr"); // 初始化为0
+    ch_uint<N> priority_ptr = ptr_reg; // 获取当前优先级指针值
 
-        // 如果当前位有请求且尚未确定授予，则授予当前位
-        result.grant =
-            select(req_at_pos && !result.valid, grant_one_hot, result.grant);
-        result.valid = select(req_at_pos, true, result.valid);
-    }
+    // 使用递归模板处理第一个循环，确保串行依赖
+    ProcessRequests<N>::process(request, priority_ptr, result);
 
     // 计算下一个优先级指针
     ch_uint<N> next_priority = priority_ptr;
 
-    if (result.valid) {
-        // 如果有请求被授予，下一次从该位置的下一个位置开始
-        for (unsigned i = 0; i < N; ++i) {
-            unsigned pos = (priority_ptr.value() + i) % N;
-            ch_bool req_at_pos = bit_select(request, pos);
-            ch_uint<N> next_pos = make_literal((pos + 1) % N);
-            next_priority =
-                select(req_at_pos && (result.grant ==
-                                      (ch_uint<N>(1_d) << make_literal(pos))),
-                       next_pos, next_priority);
-        }
-    }
+    // 使用递归模板处理第二个循环，确保串行依赖
+    UpdatePriority<N>::process(result, next_priority, request, priority_ptr);
 
-    // 更新优先级指针（在时钟边沿）
-    ch_reg<ch_uint<N>> ptr_reg(priority_ptr, "rr_arbiter_ptr");
-    ptr_reg->next = select(rst, ch_uint<N>(0_d), next_priority);
+    // 更新优先级指针寄存器（在时钟边沿）
+    ptr_reg->next = next_priority;
 
     result.next_ptr = ptr_reg;
 
@@ -116,26 +160,34 @@ template <unsigned N>
 PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
                                                ch_uint<N> last_grant) {
     static_assert(N > 0, "Round robin selector must have at least 1 bit");
-    static constexpr unsigned BIT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned BIT_WIDTH = compute_bit_width(N);
 
     PrioritySelectorResult<N> result;
     result.grant = 0_d;
     result.valid = false;
 
-    // 从last_grant的下一位开始查找
-    ch_uint<N> start_pos = (last_grant + 1) % N;
+    // 将one-hot编码的last_grant转换为二进制索引，然后加1
+    // 需要确保当last_grant为0时，使用默认值0
+    ch_bool has_last_grant = last_grant != 0_d;
+    ch_uint<compute_idx_width(N)> last_grant_idx =
+        select(has_last_grant, onehot_to_binary<N>(last_grant), 0_d);
+    ch_uint<BIT_WIDTH> start_pos = (last_grant_idx + 1) % N;
 
     // 先从start_pos到高位查找
-    for (unsigned i = 0; i < N; ++i) {
-        ch_uint<N> pos = (start_pos + i) % N;
-        ch_bool req_at_pos = bit_select(request, pos);
-        ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << pos;
+    [&]<std::size_t... I>(std::index_sequence<I...>) {
+        auto process_request = [&](unsigned i) {
+            ch_uint<BIT_WIDTH> pos = (start_pos + i) % N;
+            ch_bool req_at_pos = bit_select(request, pos);
+            ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << pos;
 
-        // 如果当前位有请求且尚未确定授予，则授予当前位
-        result.grant =
-            select(req_at_pos && !result.valid, grant_one_hot, result.grant);
-        result.valid = select(req_at_pos, 1_b, result.valid);
-    }
+            // 如果当前位有请求且尚未确定授予，则授予当前位
+            result.grant = select(req_at_pos && !result.valid, grant_one_hot,
+                                  result.grant);
+            result.valid = select(req_at_pos, 1_b, result.valid);
+        };
+
+        (process_request(I), ...);
+    }(std::make_index_sequence<N>{});
 
     return result;
 }

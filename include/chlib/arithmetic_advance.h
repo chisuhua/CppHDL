@@ -30,7 +30,7 @@ template <unsigned N>
 CLAResult<N> carry_lookahead_adder(ch_uint<N> a, ch_uint<N> b,
                                    ch_bool carry_in = false) {
     static_assert(N > 0, "Carry lookahead adder must have at least 1 bit");
-    constexpr unsigned shift_amount = compute_bit_width(N - 1);
+    constexpr unsigned shift_amount = compute_bit_width(N);
 
     CLAResult<N> result;
 
@@ -105,7 +105,7 @@ ch_uint<2 * N> wallace_tree_multiplier(ch_uint<N> a, ch_uint<N> b) {
         for (unsigned i = 0; i < N; ++i) {
             ch_bool b_bit = bit_select(b, i);
             // 修复：使用compute_bit_width计算正确的位宽，而不是手动的三元运算表达式
-            constexpr unsigned shift_amount = compute_bit_width(N - 1);
+            constexpr unsigned shift_amount = compute_bit_width(N);
             ch_uint<N> partial_product =
                 select(b_bit, a << make_uint<shift_amount>(i), 0_d);
             result = result + ch_uint<2 * N>(partial_product);
@@ -123,7 +123,7 @@ ch_uint<2 * N> wallace_tree_multiplier(ch_uint<N> a, ch_uint<N> b) {
 template <unsigned N>
 ch_uint<2 * N> booth_multiplier(ch_uint<N> a, ch_uint<N> b) {
     static_assert(N > 0, "Booth multiplier must have at least 1 bit");
-    constexpr unsigned BIT_WIDTH = compute_bit_width(N - 1);
+    constexpr unsigned BIT_WIDTH = compute_bit_width(N);
 
     // 简化版Booth乘法器实现
     ch_uint<2 * N> result = 0_d;

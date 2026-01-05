@@ -13,8 +13,7 @@ using namespace chlib;
 // 测试函数式 onehot 解码器
 template <unsigned N> class OneHotDecoderFunctionExample : public Component {
 public:
-    static constexpr unsigned OUTPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     __io(ch_in<ch_uint<N>> in;              // one-hot输入
          ch_out<ch_uint<OUTPUT_WIDTH>> out; // 解码后的输出
@@ -37,8 +36,7 @@ public:
 // 测试模块式 onehot 解码器
 template <unsigned N> class OneHotDecoderModuleExample : public Component {
 public:
-    static constexpr unsigned OUTPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned OUTPUT_WIDTH = compute_idx_width(N);
 
     __io(ch_in<ch_uint<N>> in;              // one-hot输入
          ch_out<ch_uint<OUTPUT_WIDTH>> out; // 解码后的输出
@@ -64,8 +62,7 @@ public:
 // 测试函数式 onehot 编码器
 template <unsigned N> class OneHotEncoderFunctionExample : public Component {
 public:
-    static constexpr unsigned INPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned INPUT_WIDTH = compute_idx_width(N);
 
     __io(ch_in<ch_uint<INPUT_WIDTH>> in; // 输入索引
          ch_out<ch_uint<N>> out;         // one-hot输出
@@ -88,8 +85,7 @@ public:
 // 测试模块式 onehot 编码器
 template <unsigned N> class OneHotEncoderModuleExample : public Component {
 public:
-    static constexpr unsigned INPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned INPUT_WIDTH = compute_idx_width(N);
 
     __io(ch_in<ch_uint<INPUT_WIDTH>> in; // 输入索引
          ch_out<ch_uint<N>> out;         // one-hot输出

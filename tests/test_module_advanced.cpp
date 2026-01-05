@@ -23,8 +23,7 @@ template <unsigned N> class onehot_decoder : public ch::Component {
 public:
     static_assert(N > 0, "OneHotDecoder must have at least 1 bit");
 
-    static constexpr unsigned OUTPUT_WIDTH =
-        (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
 
     __io(ch_in<ch_uint<N>> in;              // N位 one-hot 输入
          ch_out<ch_uint<OUTPUT_WIDTH>> out; // 解码后的输出值
@@ -63,15 +62,16 @@ public:
 template <unsigned N> class OneHotDecoderTestTop : public Component {
 public:
     // 计算输出宽度
-    static constexpr unsigned OUTPUT_WIDTH = (N > 1) ? compute_bit_width(N - 1) : 1;
+    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
 
     __io(ch_in<ch_uint<N>> in;                        // one-hot输入
          ch_out<ch_uint<OUTPUT_WIDTH>> decoded_value; // 解码后的值
-         ch_out<ch_bool> valid;                       // 输入是否有效（恰好一个位被设置）
+         ch_out<ch_bool> valid; // 输入是否有效（恰好一个位被设置）
          )
 
-    OneHotDecoderTestTop(Component *parent = nullptr,
-                         const std::string &name = "onehot_decoder_test_top")
+        OneHotDecoderTestTop(
+            Component *parent = nullptr,
+            const std::string &name = "onehot_decoder_test_top")
         : Component(parent, name) {}
 
     void create_ports() override { new (io_storage_) io_type; }
@@ -102,7 +102,8 @@ TEST_CASE("OneHotDecoder - Basic Functionality", "[onehot][decoder][basic]") {
             simulator.set_input_value(device.instance().io().in, input);
             simulator.tick();
 
-            auto decoded_value = simulator.get_value(device.instance().io().decoded_value);
+            auto decoded_value =
+                simulator.get_value(device.instance().io().decoded_value);
             auto valid = simulator.get_value(device.instance().io().valid);
 
             // 验证结果
@@ -119,7 +120,8 @@ TEST_CASE("OneHotDecoder - Basic Functionality", "[onehot][decoder][basic]") {
         simulator.set_input_value(device.instance().io().in, 1);
         simulator.tick();
 
-        auto decoded_value = simulator.get_value(device.instance().io().decoded_value);
+        auto decoded_value =
+            simulator.get_value(device.instance().io().decoded_value);
         REQUIRE(decoded_value.is_value(0));
     }
 
@@ -133,7 +135,8 @@ TEST_CASE("OneHotDecoder - Basic Functionality", "[onehot][decoder][basic]") {
             simulator.set_input_value(device.instance().io().in, input);
             simulator.tick();
 
-            auto decoded_value = simulator.get_value(device.instance().io().decoded_value);
+            auto decoded_value =
+                simulator.get_value(device.instance().io().decoded_value);
             auto valid = simulator.get_value(device.instance().io().valid);
 
             REQUIRE(valid.is_value(1));
@@ -152,14 +155,14 @@ TEST_CASE("OneHotDecoder - Invalid Inputs", "[onehot][decoder][invalid]") {
         simulator.tick();
 
         auto valid = simulator.get_value(device.instance().io().valid);
-        REQUIRE(!valid.is_value(1));  // 无效输入时valid应为false
+        REQUIRE(!valid.is_value(1)); // 无效输入时valid应为false
 
         // 测试无效输入（多个位设置）
         simulator.set_input_value(device.instance().io().in, 0b0101);
         simulator.tick();
 
         valid = simulator.get_value(device.instance().io().valid);
-        REQUIRE(!valid.is_value(1));  // 无效输入时valid应为false
+        REQUIRE(!valid.is_value(1)); // 无效输入时valid应为false
     }
 }
 
@@ -178,19 +181,21 @@ TEST_CASE("OneHotDecoder - Code Generation", "[onehot][decoder][codegen]") {
         ch_device<OneHotDecoderTestTop<8>> device;
 
         // 测试Verilog代码生成
-        REQUIRE_NOTHROW(toVerilog("test_onehot_decoder_8bit.v", device.context()));
+        REQUIRE_NOTHROW(
+            toVerilog("test_onehot_decoder_8bit.v", device.context()));
     }
 }
 
-TEST_CASE("OneHotDecoder - Component Hierarchy", "[onehot][decoder][hierarchy]") {
+TEST_CASE("OneHotDecoder - Component Hierarchy",
+          "[onehot][decoder][hierarchy]") {
     ch_device<OneHotDecoderTestTop<4>> device;
-    auto& top = device.instance();
-    
+    auto &top = device.instance();
+
     // 验证组件层次结构
-    REQUIRE(top.child_count() == 1);  // 应该有一个子组件，即onehot_decoder
-    
+    REQUIRE(top.child_count() == 1); // 应该有一个子组件，即onehot_decoder
+
     // 获取子组件并验证其类型
-    const auto& children = top.children();
+    const auto &children = top.children();
     REQUIRE(!children.empty());
     auto child = children[0];
     REQUIRE(child != nullptr);

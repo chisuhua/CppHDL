@@ -107,7 +107,7 @@ ch_uint<N> gray_counter(ch_bool clk, ch_bool rst, ch_bool en,
 
     // 先实现二进制计数器
     ch_uint<N> next_binary = select(
-        binary_counter == (1_d << make_literal<N, compute_bit_width(N - 1)>()) -
+        binary_counter == (1_d << make_literal<N, compute_bit_width(N)>()) -
                               1_d, // 检查是否达到最大值
         0_d, binary_counter + 1_d);
 
@@ -150,7 +150,8 @@ ch_uint<N> johnson_counter(ch_bool clk, ch_bool rst, ch_bool en,
 
     // 约翰逊计数器：移位寄存器，将反相的最高位反馈到最低位
     ch_bool feedback = !bit_select(counter, N - 1);
-    ch_uint<N> shifted = (counter << 1_d) | (feedback ? make_uint<N>(1) : make_uint<N>(0));
+    ch_uint<N> shifted =
+        (counter << 1_d) | (feedback ? make_uint<N>(1) : make_uint<N>(0));
 
     counter->next = select(rst, ch_uint<N>(0_d), select(en, shifted, counter));
 
