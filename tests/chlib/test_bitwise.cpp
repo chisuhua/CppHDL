@@ -334,13 +334,13 @@ TEST_CASE("Bitwise: bit swap", "[bitwise][bit_swap]") {
 
     SECTION("Swap bits in 8-bit value") {
         ch_uint<8> input(10110100_b);
-        ch_uint<8> result = bit_swap<8>(input, 2, 5);
+        ch_uint<8> result = bit_swap<8>(input, 1, 4);
 
         ch::Simulator sim(ctx.get());
         sim.tick();
 
         // Original: 10110100
-        // bit 2 (0-indexed) is 0, bit 5 is 1
+        // bit 2 (1-indexed) is 0, bit 5 is 1
         // After swap: bit 2 should be 1, bit 5 should be 0
         // Result: 10100110 = 0x86 = 134
         REQUIRE(sim.get_value(result) == 0b10100110);
@@ -442,14 +442,14 @@ TEST_CASE("Bitwise: bit field insert", "[bitwise][bit_field_insert]") {
         ch_uint<8> input(11010110_b);
         ch_uint<8> value_to_insert(011_b); // 3 bits: 011
         ch_uint<8> result = bit_field_insert<8>(
-            input, value_to_insert, 2, 3); // Insert at position 2, width 3
+            input, value_to_insert, 3, 3); // Insert at position 2, width 3
 
         ch::Simulator sim(ctx.get());
         sim.tick();
 
         // Input: 11010110
-        // Clearing bits [4:2]: 11000110
-        // Inserting 011 at positions [4:2]: 11011110
+        // Clearing bits [4:2]: 11000010
+        // Inserting 011 at positions [4:2]: 11001110
         REQUIRE(sim.get_value(result) == 0b11011110);
     }
 

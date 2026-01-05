@@ -185,23 +185,23 @@ template <unsigned N> ch_uint<N> bit_reversal(ch_uint<N> input) {
 template <unsigned N>
 ch_uint<N> bit_swap(ch_uint<N> input, unsigned pos1, unsigned pos2) {
     static_assert(N > 0, "Bit swap must have at least 1 bit");
-    static constexpr unsigned BIT_WIDTH = compute_bit_width(N - 1);
 
     ch_bool bit1 = bit_select(input, pos1);
     ch_bool bit2 = bit_select(input, pos2);
 
-    // 清除两个位置的值
-    ch_uint<N> mask1 = ~(ch_uint<N>(1_d) << make_uint<BIT_WIDTH>(pos1));
-    ch_uint<N> mask2 = ~(ch_uint<N>(1_d) << make_uint<BIT_WIDTH>(pos2));
+    // 创建掩码以清除两个位置的值
+    ch_uint<N> pos1_mask = shl<N>(ch_uint<N>(1_d), pos1);
+    ch_uint<N> pos2_mask = shl<N>(ch_uint<N>(1_d), pos2);
 
-    // 先清除两个位置的位，然后设置交换后的值
+    ch_uint<N> mask1 = ~pos1_mask;
+    ch_uint<N> mask2 = ~pos2_mask;
+
+    // 清除两个位置的值
     ch_uint<N> cleared = input & mask1 & mask2;
 
-    // 设置交换后的值，将ch_bool转换为ch_uint<1>后再进行零扩展和位移
-    ch_uint<N> new_bit1 = zext<N>(ch_uint<1>(bit1))
-                          << make_uint<BIT_WIDTH>(pos1);
-    ch_uint<N> new_bit2 = zext<N>(ch_uint<1>(bit2))
-                          << make_uint<BIT_WIDTH>(pos2);
+    // 设置交换后的值 - 将bit2放到pos1位置，bit1放到pos2位置
+    ch_uint<N> new_bit1 = shl<N>(zext<N>(ch_uint<1>(bit2)), pos1);
+    ch_uint<N> new_bit2 = shl<N>(zext<N>(ch_uint<1>(bit1)), pos2);
 
     return cleared | new_bit1 | new_bit2;
 }
@@ -212,9 +212,9 @@ ch_uint<N> bit_swap(ch_uint<N> input, unsigned pos1, unsigned pos2) {
  * 检测输入中第一个设置位（从最低位开始）的位置
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N - 1)> first_set_bit_detector(ch_uint<N> input) {
+ch_uint<compute_bit_width(N)> first_set_bit_detector(ch_uint<N> input) {
     static_assert(N > 0, "First set bit detector must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
 
     ch_uint<OUTPUT_WIDTH> result =
         make_uint<OUTPUT_WIDTH>(N); // 如果没有设置位，返回N
