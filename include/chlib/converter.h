@@ -37,9 +37,9 @@ ch_uint<N> bit_field_extract(ch_uint<N> input, unsigned start, unsigned width) {
  * 将二进制索引转换为OneHot编码
  */
 template <unsigned N>
-ch_uint<N> binary_to_onehot(ch_uint<compute_bit_width(N - 1)> input) {
+ch_uint<N> binary_to_onehot(ch_uint<compute_bit_width(N)> input) {
     static_assert(N > 0, "Binary to onehot converter must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N);
 
     ch_uint<N> result = 0_d;
 
@@ -58,9 +58,9 @@ ch_uint<N> binary_to_onehot(ch_uint<compute_bit_width(N - 1)> input) {
  * 将OneHot编码转换为二进制索引
  */
 template <unsigned N>
-ch_uint<compute_bit_width(N - 1)> onehot_to_binary(ch_uint<N> input) {
+ch_uint<compute_bit_width(N)> onehot_to_binary(ch_uint<N> input) {
     static_assert(N > 0, "Onehot to binary converter must have at least 1 bit");
-    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N - 1);
+    static constexpr unsigned OUTPUT_WIDTH = compute_bit_width(N);
 
     ch_uint<OUTPUT_WIDTH> result = 0_d;
 
@@ -82,6 +82,7 @@ ch_uint<compute_bit_width(N - 1)> onehot_to_binary(ch_uint<N> input) {
 template <unsigned N> ch_uint<N> bcd_to_binary(ch_uint<N> input) {
     static_assert(N > 0, "BCD to binary converter must have at least 1 bit");
 
+    // FIXME
     // BCD码是以4位为一组表示十进制数的编码方式
     // 每4位BCD码表示0-9的十进制数
     // ch_uint<N> result = 0_d;
@@ -121,6 +122,7 @@ template <unsigned N> ch_uint<N> bcd_to_binary(ch_uint<N> input) {
 template <unsigned N> ch_uint<N> binary_to_bcd(ch_uint<N> input) {
     static_assert(N > 0, "Binary to BCD converter must have at least 1 bit");
 
+    // FIXME
     // 使用Double Dabble算法进行二进制到BCD的转换
     // 这里使用一个简化的实现，适用于较小的数值
     // ch_uint<N> result = 0_d;
@@ -152,33 +154,39 @@ template <unsigned N> ch_uint<N> binary_to_bcd(ch_uint<N> input) {
  * 格雷码到二进制转换器 - 函数式接口
  *
  * 将格雷码转换为二进制码
+ * 使用模板特化和if constexpr实现真正的编译期循环
  */
 template <unsigned N> ch_uint<N> gray_to_binary(ch_uint<N> input) {
     static_assert(N > 0, "Gray to binary converter must have at least 1 bit");
-    static constexpr unsigned INPUT_WIDTH = compute_bit_width(N - 1);
 
-    ch_uint<N> result = 0_d;
+    if constexpr (N == 1) {
+        // N=1的特殊情况：直接返回输入
+        return input;
+    } else {
+        // 先设置最高位
+        ch_bool msb = bit_select(input, N - 1);
+        ch_uint<N> result =
+            select(msb, (1_d << make_uint<compute_bit_width(N)>(N - 1)), 0_d);
 
-    // 格雷码到二进制的转换：result[i] = input[i] XOR result[i+1]
-    // 最高位保持不变，然后逐位异或
-    for (int i = N - 1; i >= 0; --i) {
-        ch_bool bit = bit_select(input, i);
+        // 使用编译期循环处理其余位
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            auto compute_next_bit = [&](unsigned idx) {
+                ch_bool input_bit = bit_select(input, idx);
+                ch_bool higher_result_bit = bit_select(result, idx + 1);
+                ch_bool binary_bit = input_bit ^ higher_result_bit;
 
-        if (i == N - 1) {
-            // 最高位保持不变
-            ch_uint<N> bit_uint = bit ? make_uint<N>(1) : make_uint<N>(0);
-            result = result | (bit_uint << make_uint<INPUT_WIDTH>(i));
-        } else {
-            // 其他位是输入位与结果高位的异或
-            ch_bool result_higher_bit = bit_select(result, i + 1);
-            ch_bool binary_bit = bit ^ result_higher_bit;
-            ch_uint<N> binary_bit_uint =
-                binary_bit ? make_uint<N>(1) : make_uint<N>(0);
-            result = result | (binary_bit_uint << make_uint<INPUT_WIDTH>(i));
-        }
+                result = select(
+                    binary_bit,
+                    result | (1_d << make_uint<compute_bit_width(N)>(idx)),
+                    result);
+            };
+
+            // 从 N-2 到 0 的顺序处理（按I的顺序是0到N-2，但我们要映射到N-2到0）
+            ((compute_next_bit(N - 2 - I)), ...);
+        }(std::make_index_sequence<N - 1>{});
+
+        return result;
     }
-
-    return result;
 }
 
 /**
