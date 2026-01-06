@@ -524,6 +524,69 @@ auto bit_select(const T &operand, const Index &index) {
     return make_uint_result<1>(op_node);
 }
 
+/**
+ * @brief 动态位选择函数，支持运行时计算的索引
+ * @tparam T 输入值的类型
+ * @param value 输入值
+ * @param index 运行时索引
+ * @return 选中的位
+ */
+template <unsigned N>
+ch_bool bit_select(const ch_uint<N> &value, const ch_uint<compute_idx_width(N)> &index) {
+    static_assert(N > 0, "Bit select must have at least 1 bit");
+    
+    ch_bool result = false;
+    for (unsigned i = 0; i < N; ++i) {
+        ch_bool index_matches = (index == make_uint<compute_idx_width(N)>(i));
+        ch_bool bit_at_i = bit_select(value, i);
+        result = select(index_matches, bit_at_i, result);
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 动态左移函数，支持运行时计算的位移量
+ * @tparam N 输入值的位宽
+ * @param value 输入值
+ * @param shift_amount 运行时位移量
+ * @return 左移后的值
+ */
+template <unsigned N>
+ch_uint<N> shl(const ch_uint<N> &value, const ch_uint<compute_idx_width(N)> &shift_amount) {
+    static_assert(N > 0, "Shift operation must have at least 1 bit");
+    
+    ch_uint<N> result = 0_d;
+    for (unsigned i = 0; i < N; ++i) {
+        ch_bool shift_matches = (shift_amount == make_uint<compute_idx_width(N)>(i));
+        ch_uint<N> shifted_value = value << make_literal(i);
+        result = select(shift_matches, shifted_value, result);
+    }
+    
+    return result;
+}
+
+/**
+ * @brief 动态右移函数，支持运行时计算的位移量
+ * @tparam N 输入值的位宽
+ * @param value 输入值
+ * @param shift_amount 运行时位移量
+ * @return 右移后的值
+ */
+template <unsigned N>
+ch_uint<N> shr(const ch_uint<N> &value, const ch_uint<compute_idx_width(N)> &shift_amount) {
+    static_assert(N > 0, "Shift operation must have at least 1 bit");
+    
+    ch_uint<N> result = 0_d;
+    for (unsigned i = 0; i < N; ++i) {
+        ch_bool shift_matches = (shift_amount == make_uint<compute_idx_width(N)>(i));
+        ch_uint<N> shifted_value = value >> make_literal(i);
+        result = select(shift_matches, shifted_value, result);
+    }
+    
+    return result;
+}
+
 // === 位拼接操作 ===
 template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
     static_assert(HardwareType<T1> || CHLiteral<T1>, "Invalid operand type");

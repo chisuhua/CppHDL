@@ -2,6 +2,7 @@
 #include "codegen_dag.h"
 #include "ast_nodes.h"
 #include "lnodeimpl.h"
+#include "simulator.h"
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -33,6 +34,34 @@ void toDAG(const std::string &filename, ch::core::context *ctx) {
 
         file.close();
         std::cout << "[toDAG] Generated " << filename << std::endl;
+    } catch (...) {
+        // Silently ignore exceptions during static destruction
+        // if (!ch::detail::in_static_destruction()) {
+        //     std::cerr << "[toDAG] Exception caught during DAG generation"
+        //               << std::endl;
+        // }
+    }
+}
+
+// New DAG Generation Function that accepts a simulator
+void toDAG(const std::string &filename, ch::core::context *ctx, const ch::Simulator &simulator) {
+    try {
+        if (!ctx) {
+            std::cerr << "[toDAG] Error: Context is null!" << std::endl;
+            return;
+        }
+
+        std::ofstream file(filename);
+        if (!file.is_open()) {
+            std::cerr << "[toDAG] Failed to open " << filename << std::endl;
+            return;
+        }
+
+        dagwriter writer(ctx, simulator);
+        writer.print(file);
+
+        file.close();
+        std::cout << "[toDAG] Generated " << filename << " with simulation values" << std::endl;
     } catch (...) {
         // Silently ignore exceptions during static destruction
         // if (!ch::detail::in_static_destruction()) {
@@ -75,6 +104,46 @@ dagwriter::dagwriter(ch::core::context *ctx) : ctx_(ctx) {
 
         // Store the sorted list for later use
         sorted_nodes_ = eval_list;
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+// New constructor that accepts a simulator to access data_map
+dagwriter::dagwriter(ch::core::context *ctx, const ch::Simulator &simulator) : ctx_(ctx) {
+    try {
+        // Build the 'uses' map: for each node, find which other nodes use it as
+        // a source.
+        for (auto &node_ptr : ctx_->get_nodes()) {
+            auto *node = node_ptr.get();
+            for (uint32_t i = 0; i < node->num_srcs(); ++i) {
+                auto *src = node->src(i);
+                if (src) { // Ensure source is not null
+                    node_uses_[src].insert(node);
+                }
+            }
+        }
+
+        // Build the initial name map based on node names and ensure uniqueness.
+        // Also build the sorted_nodes_ list.
+        std::unordered_map<std::string, int> name_counts;
+        auto eval_list = ctx_->get_eval_list(); // Use the topologically sorted
+                                                // list from context
+        for (auto *node : eval_list) {
+            std::string base_name = sanitize_name(node->name());
+            std::string unique_name = base_name;
+            int counter = name_counts[base_name]++;
+            if (counter > 0) {
+                unique_name = base_name + "_" + std::to_string(counter);
+            }
+            node_names_[node] = unique_name;
+        }
+
+        // Store the sorted list for later use
+        sorted_nodes_ = eval_list;
+        
+        // Get the data_map from simulator
+        data_map_ = simulator.data_map();
     } catch (...) {
         // Silently ignore exceptions
     }
@@ -205,9 +274,19 @@ void dagwriter::print_edges(std::ostream &out) {
                 out << "  \"" << node_names_[src] << "\" -> \""
                     << node_names_[node] << "\"";
 
+                // Create edge label that includes source value if available
+                std::string edge_label = "src" + std::to_string(i);
+                
+                // Check if we have data_map available and if the source node has a value
+                auto data_it = data_map_.find(src->id());
+                if (data_it != data_map_.end()) {
+                    // Add the value to the edge label
+                    edge_label += "\\nval=" + data_it->second.to_string();
+                }
+
                 // Add edge label for multi-source nodes (like operations)
-                if (node->num_srcs() > 1) {
-                    out << " [label=\"src" << i << "\"]";
+                if (node->num_srcs() > 1 || data_it != data_map_.end()) {
+                    out << " [label=\"" << edge_label << "\"]";
                 }
 
                 out << ";\n";

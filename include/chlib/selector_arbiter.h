@@ -30,7 +30,7 @@ template <unsigned N> struct PrioritySelectorResult {
 template <unsigned N>
 PrioritySelectorResult<N> priority_selector(ch_uint<N> request) {
     static_assert(N > 0, "Priority selector must have at least 1 bit");
-    static constexpr unsigned BIT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned BIT_WIDTH = compute_idx_width(N);
 
     PrioritySelectorResult<N> result;
     result.grant = 0_d;
@@ -65,7 +65,7 @@ template <unsigned N> struct RoundRobinArbiterResult {
 template <unsigned N, unsigned Iter = 0> struct ProcessRequests {
     static void process(ch_uint<N> request, ch_uint<N> priority_ptr,
                         RoundRobinArbiterResult<N> &result) {
-        ch_uint<compute_bit_width(N)> pos = (priority_ptr + Iter) % N;
+        ch_uint<compute_idx_width(N)> pos = (priority_ptr + Iter) % N;
         ch_bool req_at_pos = bit_select(request, pos);
         ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << pos;
 
@@ -96,9 +96,9 @@ template <unsigned N, unsigned Iter = 0> struct UpdatePriority {
                         ch_uint<N> &next_priority, ch_uint<N> request,
                         ch_uint<N> priority_ptr) {
         if (result.valid) {
-            ch_uint<compute_bit_width(N)> pos = (priority_ptr + Iter) % N;
+            ch_uint<compute_idx_width(N)> pos = (priority_ptr + Iter) % N;
             ch_bool req_at_pos = bit_select(request, pos);
-            ch_uint<compute_bit_width(N)> next_pos = ((pos + 1) % N);
+            ch_uint<compute_idx_width(N)> next_pos = ((pos + 1) % N);
             next_priority =
                 select(req_at_pos && (result.grant == (ch_uint<N>(1_d) << pos)),
                        next_pos, next_priority);
@@ -160,7 +160,7 @@ template <unsigned N>
 PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
                                                ch_uint<N> last_grant) {
     static_assert(N > 0, "Round robin selector must have at least 1 bit");
-    static constexpr unsigned BIT_WIDTH = compute_bit_width(N);
+    static constexpr unsigned IDX_WIDTH = compute_idx_width(N);
 
     PrioritySelectorResult<N> result;
     result.grant = 0_d;
@@ -169,25 +169,21 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
     // 将one-hot编码的last_grant转换为二进制索引，然后加1
     // 需要确保当last_grant为0时，使用默认值0
     ch_bool has_last_grant = last_grant != 0_d;
-    ch_uint<compute_idx_width(N)> last_grant_idx =
+    ch_uint<IDX_WIDTH> last_grant_idx =
         select(has_last_grant, onehot_to_binary<N>(last_grant), 0_d);
-    ch_uint<BIT_WIDTH> start_pos = (last_grant_idx + 1) % N;
+    ch_uint<IDX_WIDTH> start_pos = (last_grant_idx + 1_d) % make_literal<N>();
 
-    // 先从start_pos到高位查找
-    [&]<std::size_t... I>(std::index_sequence<I...>) {
-        auto process_request = [&](unsigned i) {
-            ch_uint<BIT_WIDTH> pos = (start_pos + i) % N;
-            ch_bool req_at_pos = bit_select(request, pos);
-            ch_uint<N> grant_one_hot = ch_uint<N>(1_d) << pos;
+    // 从start_pos开始循环检查，直到找到请求或完成一圈
+    for (unsigned i = 0; i < N; ++i) {
+        ch_uint<IDX_WIDTH> pos = (start_pos + i) % make_literal<N>();
+        ch_bool req_at_pos = bit_select(request, pos);
+        ch_uint<N> grant_one_hot = shl<N>(ch_uint<N>(1_d), pos);
 
-            // 如果当前位有请求且尚未确定授予，则授予当前位
-            result.grant = select(req_at_pos && !result.valid, grant_one_hot,
-                                  result.grant);
-            result.valid = select(req_at_pos, 1_b, result.valid);
-        };
-
-        (process_request(I), ...);
-    }(std::make_index_sequence<N>{});
+        // 如果当前位有请求且尚未确定授予，则授予当前位
+        result.grant =
+            select(req_at_pos && !result.valid, grant_one_hot, result.grant);
+        result.valid = select(req_at_pos, 1_b, result.valid);
+    }
 
     return result;
 }

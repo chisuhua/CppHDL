@@ -3,6 +3,7 @@
 #define CODEGEN_DAG_H
 
 #include "core/context.h"
+#include "core/types.h"
 #include <algorithm>
 #include <cctype>
 #include <fstream>
@@ -28,14 +29,23 @@ class proxyimpl;
 } // namespace core
 } // namespace ch
 
+// Forward declaration for Simulator class
+namespace ch {
+class Simulator;
+}
+
 namespace ch {
 
 void toDAG(const std::string &filename, ch::core::context *ctx);
+// New overload that accepts a simulator to display simulation values on edges
+void toDAG(const std::string &filename, ch::core::context *ctx, const ch::Simulator &simulator);
 
 // Class responsible for generating DAG representation from the IR graph.
 class dagwriter {
 public:
     explicit dagwriter(ch::core::context *ctx);
+    // New constructor that accepts a simulator to access data_map
+    explicit dagwriter(ch::core::context *ctx, const ch::Simulator &simulator);
 
     // Generates the complete DAG representation and writes it to the given
     // stream.
@@ -62,6 +72,8 @@ private:
     std::unordered_map<ch::core::lnodeimpl *,
                        std::unordered_set<ch::core::lnodeimpl *>>
         node_uses_;
+    // Map to store node values from simulator
+    ch::data_map_t data_map_;
 };
 
 } // namespace ch
