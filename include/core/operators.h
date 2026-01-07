@@ -74,7 +74,32 @@ consteval unsigned get_binary_result_width() {
     } else if constexpr (requires { Op::template result_width<1, 1>; }) {
         if constexpr (
             requires { ch_width_v<LHS>; } && requires { ch_width_v<RHS>; }) {
-            return Op::template result_width<ch_width_v<LHS>, ch_width_v<RHS>>;
+
+            // 特殊处理mod_op，当右操作数是编译期字面量时
+            if constexpr (std::is_same_v<Op, ch::core::mod_op>) {
+                // 检查右操作数是否是ch_literal_impl类型
+                if constexpr (is_ch_literal_v<std::remove_cvref_t<RHS>>) {
+                    // RHS是ch_literal_impl类型，获取其值并计算所需位宽
+                    constexpr uint64_t value =
+                        std::remove_cvref_t<RHS>::actual_value;
+                    if constexpr (value > 0) {
+                        // 模运算的结果最大为 value-1，所以需要的位宽是
+                        // compute_bit_width(value-1)
+                        return compute_bit_width(value - 1);
+                    } else {
+                        // 如果字面量值为0，这是无效的模运算，返回左操作数的宽度
+                        return ch_width_v<LHS>;
+                    }
+                } else {
+                    // RHS不是编译期字面量，使用默认的右操作数宽度
+                    return Op::template result_width<ch_width_v<LHS>,
+                                                     ch_width_v<RHS>>;
+                }
+            } else {
+                // 非mod_op，使用原来逻辑
+                return Op::template result_width<ch_width_v<LHS>,
+                                                 ch_width_v<RHS>>;
+            }
         }
         static_assert(1, "Invalid");
     } else if constexpr (requires { Op::template result_width_v<1>; }) {
@@ -305,60 +330,7 @@ auto binary_operation(const LHS &lhs, const RHS &rhs,
             }
         }
     } else if constexpr (ArithmeticLiteral<LHS> && ArithmeticLiteral<RHS>) {
-        // 两个都是 ArithmeticLiteral，可以完全在编译期计算
-        if constexpr (std::is_same_v<Op, add_op>) {
-            return lhs + rhs;
-        } else if constexpr (std::is_same_v<Op, sub_op>) {
-            return lhs - rhs;
-        } else if constexpr (std::is_same_v<Op, mul_op>) {
-            return lhs * rhs;
-        } else if constexpr (std::is_same_v<Op, div_op>) {
-            return lhs / rhs;
-        } else if constexpr (std::is_same_v<Op, mod_op>) {
-            return lhs % rhs;
-        } else if constexpr (std::is_same_v<Op, and_op>) {
-            return lhs & rhs;
-        } else if constexpr (std::is_same_v<Op, or_op>) {
-            return lhs | rhs;
-        } else if constexpr (std::is_same_v<Op, xor_op>) {
-            return lhs ^ rhs;
-        } else if constexpr (std::is_same_v<Op, eq_op>) {
-            return ch_bool(lhs == rhs);
-        } else if constexpr (std::is_same_v<Op, ne_op>) {
-            return ch_bool(lhs != rhs);
-        } else if constexpr (std::is_same_v<Op, lt_op>) {
-            return ch_bool(lhs < rhs);
-        } else if constexpr (std::is_same_v<Op, le_op>) {
-            return ch_bool(lhs <= rhs);
-        } else if constexpr (std::is_same_v<Op, gt_op>) {
-            return ch_bool(lhs > rhs);
-        } else if constexpr (std::is_same_v<Op, ge_op>) {
-            return ch_bool(lhs >= rhs);
-        } else {
-            // 对于不支持直接计算的操作，回退到原来的实现
-            constexpr ch_op op_type = Op::op_type;
-
-            auto lhs_operand = to_operand(lhs);
-            auto rhs_operand = to_operand(rhs);
-
-            constexpr unsigned result_width =
-                get_binary_result_width<Op, LHS, RHS>();
-
-            auto *op_node = node_builder::instance().build_operation(
-                op_type, lhs_operand, rhs_operand, result_width, false,
-                std::string(Op::name()) + "_" + name_suffix,
-                std::source_location::current());
-
-            if constexpr (result_width <= 1) {
-                if constexpr (Op::is_comparison) {
-                    return make_bool_result(op_node);
-                } else {
-                    return make_uint_result<1>(op_node);
-                }
-            } else {
-                return make_uint_result<result_width>(op_node);
-            }
-        }
+        static_assert(false, "should not goto here");
     } else {
         // 其他情况，回退到原来的实现
         constexpr ch_op op_type = Op::op_type;
@@ -522,69 +494,6 @@ auto bit_select(const T &operand, const Index &index) {
         operand_node, index_node, 1);
 
     return make_uint_result<1>(op_node);
-}
-
-/**
- * @brief 动态位选择函数，支持运行时计算的索引
- * @tparam T 输入值的类型
- * @param value 输入值
- * @param index 运行时索引
- * @return 选中的位
- */
-template <unsigned N>
-ch_bool bit_select(const ch_uint<N> &value, const ch_uint<compute_idx_width(N)> &index) {
-    static_assert(N > 0, "Bit select must have at least 1 bit");
-    
-    ch_bool result = false;
-    for (unsigned i = 0; i < N; ++i) {
-        ch_bool index_matches = (index == make_uint<compute_idx_width(N)>(i));
-        ch_bool bit_at_i = bit_select(value, i);
-        result = select(index_matches, bit_at_i, result);
-    }
-    
-    return result;
-}
-
-/**
- * @brief 动态左移函数，支持运行时计算的位移量
- * @tparam N 输入值的位宽
- * @param value 输入值
- * @param shift_amount 运行时位移量
- * @return 左移后的值
- */
-template <unsigned N>
-ch_uint<N> shl(const ch_uint<N> &value, const ch_uint<compute_idx_width(N)> &shift_amount) {
-    static_assert(N > 0, "Shift operation must have at least 1 bit");
-    
-    ch_uint<N> result = 0_d;
-    for (unsigned i = 0; i < N; ++i) {
-        ch_bool shift_matches = (shift_amount == make_uint<compute_idx_width(N)>(i));
-        ch_uint<N> shifted_value = value << make_literal(i);
-        result = select(shift_matches, shifted_value, result);
-    }
-    
-    return result;
-}
-
-/**
- * @brief 动态右移函数，支持运行时计算的位移量
- * @tparam N 输入值的位宽
- * @param value 输入值
- * @param shift_amount 运行时位移量
- * @return 右移后的值
- */
-template <unsigned N>
-ch_uint<N> shr(const ch_uint<N> &value, const ch_uint<compute_idx_width(N)> &shift_amount) {
-    static_assert(N > 0, "Shift operation must have at least 1 bit");
-    
-    ch_uint<N> result = 0_d;
-    for (unsigned i = 0; i < N; ++i) {
-        ch_bool shift_matches = (shift_amount == make_uint<compute_idx_width(N)>(i));
-        ch_uint<N> shifted_value = value >> make_literal(i);
-        result = select(shift_matches, shifted_value, result);
-    }
-    
-    return result;
 }
 
 // === 位拼接操作 ===

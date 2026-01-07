@@ -882,14 +882,18 @@ TEST_CASE("Operation Result Widths",
 
     SECTION("Modulo width calculation") {
         ch_uint<8> a(23_d);
-        ch_uint<4> b(7_d);
-        auto result = a % b;
+        auto b = 7_d;
+        ch_uint<4> c = 7_d;
+        auto result1 = a % b;
+        auto result2 = a % c;
         ch::Simulator sim(ctx.get());
         sim.tick();
 
         // 模运算结果宽度应为 min(8, 4) = 4
-        REQUIRE(result.width == 4);
-        REQUIRE(sim.get_value(result) == 2); // 23 % 7 = 2
+        REQUIRE(result1.width == 3);
+        REQUIRE(result2.width == 4);
+        REQUIRE(sim.get_value(result1) == 2); // 23 % 7 = 2
+        REQUIRE(sim.get_value(result2) == 2); // 23 % 7 = 2
     }
 
     SECTION("Bitwise AND width calculation") {

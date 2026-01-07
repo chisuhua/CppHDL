@@ -35,7 +35,8 @@ ch_uint<N>::ch_uint(const ch_literal_impl<V, W> &val, const std::string &name,
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from compile-time literal", N);
 
     static_assert(W <= N, "Literal width must not exceed target uint width");
-    ch_literal_runtime runtime_lit(V, N);
+    // ch_literal_runtime runtime_lit(V, N);
+    auto runtime_lit = make_literal<V, N>();
     this->node_impl_ =
         node_builder::instance().build_literal(runtime_lit, name, sloc);
 

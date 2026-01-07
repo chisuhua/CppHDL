@@ -240,6 +240,78 @@ public:
         return ch::core::constants::zero(1);  // ch_bool width is always 1
     }
 
+    // 为输入端口添加 set_value 函数
+    template <typename T, typename Dir>
+    void set_value(const ch::core::port<T, Dir> &port, uint64_t value) {
+        // 静态断言确保只能对输入端口设置值
+        static_assert(ch::core::is_input_v<Dir>,
+                      "set_value can only be used with input ports!");
+        set_port_value(port, value);
+    }
+
+    // 为 ch_uint<N> 类型添加 set_value 函数
+    template <unsigned N>
+    void set_value(const ch::core::ch_uint<N> &signal, uint64_t value) {
+        CHDBG_FUNC();
+
+        if (!initialized_) {
+            CHERROR("Simulator not initialized when setting signal value");
+            return;
+        }
+
+        auto *node = signal.impl();
+        if (!node) {
+            CHERROR("Signal implementation is null");
+            return;
+        }
+
+        uint32_t node_id = node->id();
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            try {
+                it->second = ch::core::sdata_type(value, it->second.bitwidth());
+                CHDBG("Set signal value for node %u to %llu", node_id,
+                      (unsigned long long)value);
+            } catch (const std::exception &e) {
+                CHERROR("Failed to set signal value: %s", e.what());
+            }
+        } else {
+            CHERROR("Signal node ID not found: %u", node_id);
+        }
+    }
+
+    // 为 ch_bool 类型添加 set_value 函数
+    void set_value(const ch::core::ch_bool &signal, uint64_t value) {
+        CHDBG_FUNC();
+
+        if (!initialized_) {
+            CHERROR("Simulator not initialized when setting ch_bool value");
+            return;
+        }
+
+        auto *node = signal.impl();
+        if (!node) {
+            CHERROR("ch_bool implementation is null");
+            return;
+        }
+
+        uint32_t node_id = node->id();
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            try {
+                // ch_bool 只需要1位，所以取value的最低位
+                bool bool_value = (value & 1) != 0;
+                it->second = ch::core::sdata_type(bool_value ? 1 : 0, 1);
+                CHDBG("Set ch_bool value for node %u to %s", node_id,
+                      bool_value ? "true" : "false");
+            } catch (const std::exception &e) {
+                CHERROR("Failed to set ch_bool value: %s", e.what());
+            }
+        } else {
+            CHERROR("ch_bool node ID not found: %u", node_id);
+        }
+    }
+
     template <typename T>
     void set_input_value(const ch::core::ch_in<T> &port, uint64_t value) {
         set_port_value(port, value);
