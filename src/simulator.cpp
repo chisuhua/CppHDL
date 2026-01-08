@@ -3,16 +3,20 @@
 #include "ast/ast_nodes.h"
 #include "ast/instr_mem.h"
 #include "ast/mem_port_impl.h"
+#include "bv/utils.h"
 #include "core/lnodeimpl.h"
 #include "logger.h"
 #include "types.h"
 #include "utils/destruction_manager.h"
 #include <cassert>
+#include <cstring> // 添加memcpy的头文件
 #include <iostream>
+#include <fstream> // 添加fstream头文件以支持文件输出
 
 namespace ch {
 
-Simulator::Simulator(ch::core::context *ctx) : ctx_(ctx) {
+Simulator::Simulator(ch::core::context *ctx, bool trace_on)
+    : ctx_(ctx), trace_on_(trace_on) {
     CHDBG_FUNC();
     CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
 
@@ -24,9 +28,20 @@ Simulator::Simulator(ch::core::context *ctx) : ctx_(ctx) {
     ctx_curr_ = ctx_;
 
     initialize();
+
+    // 如果启用了跟踪，则收集信号
+    if (trace_on_) {
+        collect_signals();
+    }
 }
 
 Simulator::~Simulator() {
+    // 释放跟踪数据块
+    for (auto *block : trace_blocks_) {
+        delete block;
+    }
+    trace_blocks_.clear();
+
     // ch::pre_static_destruction_cleanup();
     // ch::detail::set_static_destruction();
 
@@ -73,6 +88,167 @@ void Simulator::disconnect() {
 void Simulator::reinitialize() {
     initialized_ = false;
     initialize();
+
+    // 重新初始化跟踪
+    if (trace_on_) {
+        collect_signals();
+    }
+}
+
+void Simulator::collect_signals() {
+    CHDBG_FUNC();
+    signals_.clear();
+
+    // 1. 添加系统时钟和复位信号
+    if (ctx_->has_default_clock()) {
+        signals_.push_back(ctx_->get_default_clock());
+    }
+
+    if (ctx_->has_default_reset()) {
+        signals_.push_back(ctx_->get_default_reset());
+    }
+
+    // 2. 添加所有输入信号
+    for (auto *node : eval_list_) {
+        if (node->type() == ch::core::lnodetype::type_input) {
+            signals_.push_back(node);
+        }
+    }
+
+    // 3. 添加所有输出信号
+    for (auto *node : eval_list_) {
+        if (node->type() == ch::core::lnodetype::type_output) {
+            signals_.push_back(node);
+        }
+    }
+
+    // 4. 添加DAG中最后被驱动的叶子节点（输出节点）
+    // 这些通常是DAG的终端节点，即没有后续驱动的节点
+    std::unordered_set<uint32_t> driver_ids;
+    for (auto *node : eval_list_) {
+        // 检查这个节点是否驱动了其他节点
+        const auto &users = node->get_users();
+        for (size_t i = 0; i < users.size(); ++i) {
+            auto *user = users[i];
+            if (user) {
+                driver_ids.insert(user->id());
+            }
+        }
+    }
+
+    // 叶子节点是没有被任何其他节点驱动的节点
+    for (auto *node : eval_list_) {
+        if (driver_ids.find(node->id()) == driver_ids.end() &&
+            node->type() != ch::core::lnodetype::type_input &&
+            node->type() != ch::core::lnodetype::type_clock &&
+            node->type() != ch::core::lnodetype::type_reset) {
+            signals_.push_back(node);
+        }
+    }
+
+    // 计算总跟踪宽度
+    trace_width_ = 0;
+    for (auto *signal : signals_) {
+        trace_width_ += signal->size();
+    }
+
+    // 初始化跟踪相关数据结构
+    prev_values_.resize(signals_.size());
+    for (auto &prev : prev_values_) {
+        prev.first = nullptr;
+        prev.second = 0;
+    }
+
+    valid_mask_ = ch::core::sdata_type(0, signals_.size());
+}
+
+void Simulator::trace() {
+    if (!trace_on_)
+        return;
+
+    CHDBG_FUNC();
+
+    // 分配新的跟踪块（如果当前块已满）
+    const size_t NUM_TRACES = 1024; // 每块存储的跟踪数量
+    auto block_width = NUM_TRACES * trace_width_;
+    if (nullptr == trace_tail_ ||
+        (trace_tail_->size + trace_width_) > block_width) {
+        allocate_trace(block_width);
+    }
+
+    // 记录跟踪数据
+    valid_mask_.reset(); // 重置有效位掩码
+    auto dst_block = trace_tail_->data;
+    auto dst_offset = trace_tail_->size;
+    dst_offset += (valid_mask_.bitwidth() + 31) / 32 *
+                  4; // 跳过有效位掩码的空间（按4字节对齐）
+
+    // 遍历所有信号
+    for (uint32_t i = 0, n = signals_.size(); i < n; ++i) {
+        auto *node = signals_[i];
+        auto node_id = node->id();
+
+        auto it = data_map_.find(node_id);
+        if (it == data_map_.end()) {
+            continue; // 节点值不存在，跳过
+        }
+
+        auto &curr_value = it->second;
+        auto &prev = prev_values_.at(i);
+
+        // 如果之前有值，比较是否发生变化
+        if (prev.first) {
+            // 比较当前值与之前保存的值
+            // 创建一个临时的sdata_type对象来进行比较
+            auto temp_data = ch::core::sdata_type(
+                curr_value.bitwidth()); // 创建指定宽度的临时对象
+
+            // 将之前保存的数据复制到临时对象的bitvector中
+            std::memcpy(
+                temp_data.bitvector().data(),
+                reinterpret_cast<
+                    const ch::internal::bitvector<uint64_t>::block_type *>(
+                    prev.first),
+                (curr_value.bitwidth() + 7) / 8); // 根据位宽计算字节数
+
+            if (curr_value == temp_data) {
+                continue; // 值没有变化，跳过记录
+            }
+        }
+
+        // 保存当前值的位置信息
+        prev.first = dst_block;
+        prev.second = dst_offset;
+
+        // 复制信号值到跟踪缓冲区
+        // 使用正确的bitvector方法
+        std::memcpy(dst_block + dst_offset, curr_value.bitvector().data(),
+                    (curr_value.bitwidth() + 7) / 8); // 根据位宽计算字节数
+        dst_offset += (curr_value.bitwidth() + 7) / 8; // 按字节对齐
+
+        // 使用[]操作符设置valid_mask_的位
+        valid_mask_.bitvector()[i] = true; // 标记该信号在此次仿真中有变化
+    }
+
+    // 将有效位掩码写入跟踪数据块
+    std::memcpy(dst_block + trace_tail_->size, valid_mask_.bitvector().data(),
+                (valid_mask_.bitwidth() + 31) / 32 * 4); // 按4字节对齐
+
+    // 更新跟踪块大小
+    trace_tail_->size = dst_offset;
+}
+
+void Simulator::allocate_trace(size_t block_width) {
+    // 释放旧的尾部块（如果不是在blocks列表中）
+    if (trace_tail_) {
+        // 如果当前块不是最后一个块，说明需要新开辟
+        if (trace_blocks_.empty() || trace_blocks_.back() != trace_tail_) {
+            delete trace_tail_;
+        }
+    }
+
+    trace_tail_ = new TraceBlock(block_width);
+    trace_blocks_.push_back(trace_tail_);
 }
 
 void Simulator::initialize() {
@@ -327,6 +503,11 @@ void Simulator::tick() {
         eval();
         eval();
     }
+
+    // 如果启用了跟踪，则记录信号值
+    if (trace_on_) {
+        trace();
+    }
 }
 
 void Simulator::eval() {
@@ -433,4 +614,114 @@ Simulator::get_value_by_name(const std::string &name) const {
     return empty_value;
 }
 
+void Simulator::toVCD(const std::string &filename) const {
+    // 预留VCD输出功能的实现
+    CHINFO("VCD output to file: %s", filename.c_str());
+    
+    if (!trace_on_) {
+        CHWARN("Tracing is not enabled, nothing to export to VCD");
+        return;
+    }
+    
+    if (trace_blocks_.empty()) {
+        CHWARN("No trace data available to export to VCD");
+        return;
+    }
+    
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        CHERROR("Failed to open file for VCD output: %s", filename.c_str());
+        return;
+    }
+    
+    // 输出VCD头部信息
+    out << "$timescale 1 ns $end" << std::endl;
+    
+    // 输出信号定义
+    for (size_t i = 0; i < signals_.size(); ++i) {
+        auto *node = signals_[i];
+        out << "$var wire " << node->size() << " " << static_cast<char>('!' + i) 
+            << " " << node->name() << " $end" << std::endl;
+    }
+    
+    // 结束定义部分
+    out << "$enddefinitions $end" << std::endl;
+    
+    // 输出跟踪数据
+    uint32_t t = 0;
+    auto mask_width = signals_.size(); // 信号数量等于掩码位数
+    
+    // 遍历所有跟踪块
+    for (const auto *trace_block : trace_blocks_) {
+        auto src_block = trace_block->data;
+        auto src_width = trace_block->size;
+        uint32_t src_offset = 0;
+        
+        // 每个块包含多个时间点的数据
+        while (src_offset < src_width) {
+            // 读取有效位掩码（按4字节对齐）
+            uint32_t mask_size_bytes = (mask_width + 31) / 32 * 4;
+            const char *mask_ptr = src_block + src_offset;
+            src_offset += mask_size_bytes;
+            
+            bool new_trace = false;
+            // 遍历所有信号
+            for (uint32_t i = 0, n = signals_.size(); i < n; ++i) {
+                // 检查该信号在此时间点是否有变化
+                // 首先计算掩码中第i位的值
+                uint32_t byte_idx = i / 32;
+                uint32_t bit_idx = i % 32;
+                
+                if (byte_idx < mask_size_bytes) {
+                    // 读取掩码字节
+                    uint32_t mask_word = *reinterpret_cast<const uint32_t*>(mask_ptr + byte_idx * 4);
+                    bool valid = (mask_word >> bit_idx) & 1;
+                    
+                    if (valid) {
+                        if (!new_trace) {
+                            out << '#' << t << std::endl;  // 输出时间戳
+                            new_trace = true;
+                        }
+                        
+                        auto signal = signals_[i];
+                        auto signal_size = signal->size();
+                        
+                        // 读取信号值（按字节对齐）
+                        uint32_t signal_bytes = (signal_size + 7) / 8;
+                        const char *signal_ptr = src_block + src_offset;
+                        src_offset += signal_bytes;
+                        
+                        // 构建信号值
+                        ch::core::sdata_type value(0, signal_size);
+                        std::memcpy(
+                            const_cast<ch::internal::bitvector<uint64_t> &>(value.bitvector()).data(),
+                            reinterpret_cast<const ch::internal::bitvector<uint64_t>::block_type*>(signal_ptr),
+                            signal_bytes
+                        );
+                        
+                        // 输出信号值
+                        if (signal_size > 1) {
+                            out << 'b';
+                            // 输出二进制表示
+                            for (int j = signal_size - 1; j >= 0; --j) {
+                                out << (value.bitvector()[static_cast<uint32_t>(j)] ? '1' : '0');
+                            }
+                            out << ' ';
+                        } else {
+                            // 单位信号直接输出0或1
+                            out << (value.bitvector()[static_cast<uint32_t>(0)] ? '1' : '0');
+                        }
+                        out << static_cast<char>('!' + i) << std::endl;  // 输出信号ID
+                    }
+                }
+            }
+            if (new_trace)
+                out << std::endl;
+            ++t;  // 时间递增
+        }
+    }
+    
+    out.close();
+    CHINFO("VCD file written successfully: %s", filename.c_str());
+}
 } // namespace ch

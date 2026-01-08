@@ -73,7 +73,8 @@ set(BASE_TEST_SOURCES
     test_mem_timing.cpp
     test_literal_left_shift.cpp
     test_comparison_ops.cpp
-    test_mod_width.cpp  # 新增mod_op位宽计算测试
+    test_mod_width.cpp
+    test_trace.cpp
 )
 
 # chlib 测试源文件列表

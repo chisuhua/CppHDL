@@ -16,12 +16,29 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include <bitset>
+#include <deque>
 
 namespace ch {
 
+// 跟踪数据块结构
+struct TraceBlock {
+    char *data;
+    size_t size;
+    size_t capacity;
+    
+    TraceBlock(size_t cap) : size(0), capacity(cap) {
+        data = new char[capacity];
+    }
+    
+    ~TraceBlock() {
+        delete[] data;
+    }
+};
+
 class Simulator {
 public:
-    explicit Simulator(ch::core::context *ctx);
+    explicit Simulator(ch::core::context *ctx, bool trace_on = false);
     ~Simulator();
 
     Simulator(const Simulator &) = delete;
@@ -354,10 +371,29 @@ public:
     }
 
     void reinitialize();
+    
+    // 信号跟踪相关方法
+    void enable_tracing(bool enable) { trace_on_ = enable; }
+    bool is_tracing_enabled() const { return trace_on_; }
+    void toVCD(const std::string &filename) const;  // 预留VCD输出方法
+    
+    // 添加用于测试的getter方法
+    const std::deque<TraceBlock*>& get_trace_blocks_for_testing() const { 
+        return trace_blocks_; 
+    }
+    size_t get_valid_mask_width() const {
+        return signals_.size();
+    }
+    const std::vector<ch::core::lnodeimpl*>& get_traced_signals() const {
+        return signals_;
+    }
 
 private:
     void initialize();
     void update_instruction_pointers();
+    void collect_signals();  // 收集需要跟踪的信号
+    void trace();            // 执行信号跟踪
+    void allocate_trace(size_t block_width); // 添加allocate_trace方法声明
 
     // 为Bundle字段设置值的辅助函数
     template <typename FieldType>
@@ -405,13 +441,21 @@ private:
     std::vector<std::pair<uint32_t, ch::instr_base *>> reset_instr_list_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> input_instr_list_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> sequential_instr_list_;
-    std::vector<std::pair<uint32_t, ch::instr_base *>>
-        combinational_instr_list_;
+    std::vector<std::pair<uint32_t, ch::instr_base *>> combinational_instr_list_;
 
     // Add flag to track if we're in the destructor to prevent accessing
     // destroyed context
     bool disconnected_ = false;
     uint64_t ticks_{0};
+    
+    // 信号跟踪相关成员
+    bool trace_on_ = false;
+    std::vector<ch::core::lnodeimpl*> signals_;  // 需要跟踪的信号列表
+    std::vector<std::pair<const char*, size_t>> prev_values_;  // 上次记录的值的位置信息
+    ch::core::sdata_type valid_mask_;  // 有效位掩码
+    size_t trace_width_ = 0;  // 跟踪数据的总宽度
+    std::deque<TraceBlock*> trace_blocks_;  // 跟踪数据块
+    TraceBlock* trace_tail_ = nullptr;  // 当前跟踪数据块
 };
 
 } // namespace ch
