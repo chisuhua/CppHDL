@@ -49,6 +49,7 @@ set(BASE_TEST_SOURCES
     test_bundle_advanced_features.cpp
     test_bundle_serialization.cpp
     test_bundle_bitstream.cpp
+    #test_source_info.cpp
     # test_multithread.cpp
     test_nested_bundle.cpp
     test_tlm_bundle_phase1.cpp
@@ -72,6 +73,7 @@ set(BASE_TEST_SOURCES
     test_mem_timing.cpp
     test_literal_left_shift.cpp
     test_comparison_ops.cpp
+    test_mod_width.cpp  # 新增mod_op位宽计算测试
 )
 
 # chlib 测试源文件列表
@@ -85,7 +87,7 @@ set(CHLIB_TEST_SOURCES
     chlib/test_converter.cpp
     chlib/test_selector_arbiter.cpp
     # chlib/test_arithmetic_advance.cpp
-    #chlib/test_memory.cpp
+    # chlib/test_memory.cpp
     # chlib/test_fifo.cpp
     # chlib/test_cam.cpp
     # chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件

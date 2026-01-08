@@ -1,0 +1,3 @@
+[submodule "external/nameof"]
+	path = external/nameof
+	url = git@github.com:chisuhua/nameof.git

@@ -24,7 +24,7 @@ set(CH_SAMPLE_TARGETS
     precise_width_example
     onehot_example
     switch_demo
-    if_demo
+    #if_demo
     # stream_fifo_example
     # stream_fork_example
     # stream_join_example
