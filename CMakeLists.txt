@@ -52,6 +52,7 @@ set(CH_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ast
     ${CMAKE_CURRENT_SOURCE_DIR}/include/abstract
     ${CMAKE_CURRENT_SOURCE_DIR}/include/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/inipp
 )
 
 # 创建接口库用于包含目录

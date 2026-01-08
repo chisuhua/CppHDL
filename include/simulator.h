@@ -3,42 +3,62 @@
 #define SIMULATOR_H
 
 #include "ast/instr_base.h"
+#include "core/bool.h" // 添加对 ch_bool 的支持
 #include "core/bundle/bundle_base.h"
 #include "core/context.h"
 #include "core/io.h"
 #include "core/reg.h"
 #include "core/types.h"
-#include "core/bool.h"  // 添加对 ch_bool 的支持
 #include "logger.h"
 #include "utils/destruction_manager.h"
 
+// 添加inipp头文件
+#include "inipp/inipp.h"
+
+#include <bitset>
 #include <cstdint>
+#include <deque>
+#include <map>
 #include <memory>
+#include <set>
+#include <string>
 #include <unordered_map>
 #include <vector>
-#include <bitset>
-#include <deque>
 
 namespace ch {
+
+// 跟踪配置结构
+struct TraceConfig {
+    bool trace_on = false;
+    bool trace_reg = false;
+    bool trace_wire = false;
+    bool trace_input = false;
+    bool trace_output = false;
+
+    TraceConfig() = default;
+    TraceConfig(bool on, bool reg, bool wire, bool input, bool output)
+        : trace_on(on), trace_reg(reg), trace_wire(wire), trace_input(input),
+          trace_output(output) {}
+};
 
 // 跟踪数据块结构
 struct TraceBlock {
     char *data;
     size_t size;
     size_t capacity;
-    
+
     TraceBlock(size_t cap) : size(0), capacity(cap) {
         data = new char[capacity];
     }
-    
-    ~TraceBlock() {
-        delete[] data;
-    }
+
+    ~TraceBlock() { delete[] data; }
 };
 
 class Simulator {
 public:
     explicit Simulator(ch::core::context *ctx, bool trace_on = false);
+    // 新增构造函数，支持从配置文件加载
+    explicit Simulator(ch::core::context *ctx, const std::string &config_file);
     ~Simulator();
 
     Simulator(const Simulator &) = delete;
@@ -241,7 +261,7 @@ public:
             CHABORT(
                 "ch_bool implementation is null - ch_bool may not be properly "
                 "initialized");
-            return ch::core::constants::zero(1);  // ch_bool width is always 1
+            return ch::core::constants::zero(1); // ch_bool width is always 1
         }
 
         uint32_t node_id = node->id();
@@ -254,7 +274,7 @@ public:
         }
 
         CHWARN("Value not found for ch_bool node ID: %u", node_id);
-        return ch::core::constants::zero(1);  // ch_bool width is always 1
+        return ch::core::constants::zero(1); // ch_bool width is always 1
     }
 
     // 为输入端口添加 set_value 函数
@@ -336,8 +356,9 @@ public:
 
     // 为CHLiteral类型添加重载支持
     template <typename T>
-    requires ch::core::is_ch_literal_v<std::remove_cvref_t<T>>
-    void set_input_value(const ch::core::ch_in<T> &port, const T &literal_value) {
+        requires ch::core::is_ch_literal_v<std::remove_cvref_t<T>>
+    void set_input_value(const ch::core::ch_in<T> &port,
+                         const T &literal_value) {
         set_port_value(port, literal_value.value());
     }
 
@@ -371,30 +392,53 @@ public:
     }
 
     void reinitialize();
+
+    // 获取跟踪状态
+    bool is_tracing_enabled() const { return trace_on_; }
+
+    // 获取跟踪块（用于测试）
+    const std::deque<TraceBlock *> &get_trace_blocks_for_testing() const {
+        return trace_blocks_;
+    }
+
+    // 获取跟踪信号数量（用于测试）
+    size_t get_traced_signals_count() const { return signals_.size(); }
     
+    // 获取跟踪的信号列表（用于测试）
+    const std::vector<std::pair<uint32_t, std::string>>& get_traced_signals() const { 
+        return signals_; 
+    }
+    
+    // 根据名称查找信号ID（用于跟踪）
+    uint32_t get_signal_id_by_name(const std::string& name) const {
+        for (const auto& signal : signals_) {
+            if (signal.second == name) {
+                return signal.first;
+            }
+        }
+        return static_cast<uint32_t>(-1); // 返回无效ID
+    }
+    
+    // 检查是否跟踪特定信号
+    bool is_signal_traced(const std::string& name) const {
+        return get_signal_id_by_name(name) != static_cast<uint32_t>(-1);
+    }
+
     // 信号跟踪相关方法
     void enable_tracing(bool enable) { trace_on_ = enable; }
-    bool is_tracing_enabled() const { return trace_on_; }
-    void toVCD(const std::string &filename) const;  // 预留VCD输出方法
-    
+    void toVCD(const std::string &filename) const; // 预留VCD输出方法
+
     // 添加用于测试的getter方法
-    const std::deque<TraceBlock*>& get_trace_blocks_for_testing() const { 
-        return trace_blocks_; 
-    }
-    size_t get_valid_mask_width() const {
-        return signals_.size();
-    }
-    const std::vector<ch::core::lnodeimpl*>& get_traced_signals() const {
-        return signals_;
-    }
+    size_t get_valid_mask_width() const { return signals_.size(); }
+
+    // 添加write_to_trace_block函数的声明
+    void write_to_trace_block(const std::string &data);
 
 private:
     void initialize();
     void update_instruction_pointers();
-    void collect_signals();  // 收集需要跟踪的信号
-    void trace();            // 执行信号跟踪
-    void allocate_trace(size_t block_width); // 添加allocate_trace方法声明
-
+    void collect_signals();                  // 收集需要跟踪的信号
+    void trace();                            // 执行信号跟踪
     // 为Bundle字段设置值的辅助函数
     template <typename FieldType>
     void set_bundle_field_value(FieldType &field, uint64_t value,
@@ -447,15 +491,30 @@ private:
     // destroyed context
     bool disconnected_ = false;
     uint64_t ticks_{0};
-    
+
     // 信号跟踪相关成员
     bool trace_on_ = false;
-    std::vector<ch::core::lnodeimpl*> signals_;  // 需要跟踪的信号列表
-    std::vector<std::pair<const char*, size_t>> prev_values_;  // 上次记录的值的位置信息
-    ch::core::sdata_type valid_mask_;  // 有效位掩码
-    size_t trace_width_ = 0;  // 跟踪数据的总宽度
-    std::deque<TraceBlock*> trace_blocks_;  // 跟踪数据块
-    TraceBlock* trace_tail_ = nullptr;  // 当前跟踪数据块
+    std::vector<std::pair<uint32_t, std::string>> signals_; // 需要跟踪的信号列表
+    std::vector<std::pair<const char *, size_t>>
+        prev_values_;                       // 上次记录的值的位置信息
+    ch::core::sdata_type valid_mask_;       // 有效位掩码
+    size_t trace_width_ = 0;                // 跟踪数据的总宽度
+    std::deque<TraceBlock *> trace_blocks_; // 跟踪数据块
+    TraceBlock *current_trace_block_ = nullptr;      // 当前跟踪数据块
+    size_t current_trace_block_size_ = 1024 * 1024;  // 默认1MB
+    size_t current_trace_block_used_ = 0;
+
+    // 跟踪配置
+    std::map<std::string, TraceConfig> trace_configs_;
+
+    // 追踪的节点ID集合
+    std::set<uint32_t> traced_nodes_;
+
+    // 内部方法
+    void load_trace_config_from_file(const std::string &config_file);
+    bool should_trace_node(uint32_t node_id, const std::string &node_name,
+                           ch::core::lnodetype node_type);
+    void allocate_new_trace_block(); // 替换allocate_trace方法
 };
 
 } // namespace ch

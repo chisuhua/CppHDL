@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "codegen_dag.h"
 #include "component.h"
 #include "core/literal.h"
 #include "core/uint.h"
@@ -221,18 +222,19 @@ TEST_CASE("Trace: Verify trace content matches expected", "[trace][content]") {
 
     // 找到counter.io().out对应的信号并检查它的大小
     bool found_counter_signal = false;
-    for (auto *signal : traced_signals) {
-        // 输出每个信号的大小用于调试
-        std::cout << "Signal size: " << signal->size() << std::endl;
-        // 如果信号大小为4，则认为是我们要找的counter输出信号
-        if (signal->size() == 4) {
+    for (const auto &signal_pair : traced_signals) {
+        // 输出每个信号ID和名称用于调试
+        std::cout << "Signal ID: " << signal_pair.first
+                  << ", Name: " << signal_pair.second << std::endl;
+        // 如果信号名称中包含特定标识符，则认为是我们要找的counter输出信号
+        if (signal_pair.second.find("counter_reg") != std::string::npos) {
             found_counter_signal = true;
             break;
         }
     }
 
     REQUIRE(
-        found_counter_signal); // 确保至少有一个大小为4的信号（即counter输出）
+        found_counter_signal); // 确保至少有一个包含"out"的信号（即counter输出）
 }
 
 TEST_CASE("Trace: VCD output functionality", "[trace][vcd]") {
@@ -254,7 +256,8 @@ TEST_CASE("Trace: VCD output functionality", "[trace][vcd]") {
     }
 
     // 输出VCD文件
-    sim.toVCD("test_output.vcd");
+    sim.toVCD("test_trace.vcd");
+    toDAG("test_trace.dot", ctx.get(), sim);
 
     // 验证VCD文件是否创建
     std::ifstream vcd_file("test_output.vcd");

@@ -10,8 +10,9 @@
 #include "utils/destruction_manager.h"
 #include <cassert>
 #include <cstring> // 添加memcpy的头文件
-#include <iostream>
 #include <fstream> // 添加fstream头文件以支持文件输出
+#include <iostream>
+#include <set> // 添加set头文件
 
 namespace ch {
 
@@ -33,6 +34,157 @@ Simulator::Simulator(ch::core::context *ctx, bool trace_on)
     if (trace_on_) {
         collect_signals();
     }
+}
+
+// 新增构造函数实现
+Simulator::Simulator(ch::core::context *ctx, const std::string &config_file)
+    : ctx_(ctx), trace_on_(false) {
+    CHDBG_FUNC();
+    CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
+
+    ctx_curr_backup_ = ctx_curr_;
+    ctx_curr_ = ctx_;
+
+    // 从配置文件加载跟踪配置
+    load_trace_config_from_file(config_file);
+
+    initialize();
+
+    // 检查是否需要启用跟踪
+    trace_on_ = !trace_configs_.empty(); // 如果有任何配置，则启用跟踪
+    if (trace_on_) {
+        collect_signals();
+    }
+}
+
+void Simulator::load_trace_config_from_file(const std::string &config_file) {
+    CHDBG_FUNC();
+    CHINFO("Loading trace configuration from file: %s", config_file.c_str());
+
+    inipp::Ini<char> ini;
+    std::ifstream is(config_file);
+    if (!is.is_open()) {
+        CHWARN("Could not open configuration file: %s", config_file.c_str());
+        return;
+    }
+
+    ini.parse(is);
+
+    // 遍历所有section，每个section代表一个模块实例
+    for (const auto &section_pair : ini.sections) {
+        const std::string &section_name = section_pair.first;
+        const auto &section = section_pair.second;
+
+        // 解析配置项
+        bool trace_on = false;
+        bool trace_reg = false;
+        bool trace_wire = false;
+        bool trace_input = false;
+        bool trace_output = false;
+
+        inipp::get_value(section, "trace_on", trace_on);
+        inipp::get_value(section, "trace_reg", trace_reg);
+        inipp::get_value(section, "trace_wire", trace_wire);
+        inipp::get_value(section, "trace_input", trace_input);
+        inipp::get_value(section, "trace_output", trace_output);
+
+        trace_configs_[section_name] = TraceConfig(
+            trace_on, trace_reg, trace_wire, trace_input, trace_output);
+
+        CHINFO("Loaded trace config for section '%s': trace_on=%d, "
+               "trace_reg=%d, trace_wire=%d, trace_input=%d, trace_output=%d",
+               section_name.c_str(), trace_on, trace_reg, trace_wire,
+               trace_input, trace_output);
+    }
+}
+
+bool Simulator::should_trace_node(uint32_t node_id,
+                                  const std::string &node_name,
+                                  ch::core::lnodetype node_type) {
+    // 首先检查是否有全局配置（"all" section）
+    auto global_it = trace_configs_.find("all");
+    if (global_it != trace_configs_.end()) {
+        const TraceConfig &config = global_it->second;
+        if (!config.trace_on)
+            return false; // 全局关闭
+
+        switch (node_type) {
+        case ch::core::lnodetype::type_reg:
+            return config.trace_reg;
+        case ch::core::lnodetype::type_input:
+            return config.trace_input;
+        case ch::core::lnodetype::type_output:
+            return config.trace_output;
+        default:
+            return config.trace_on; // 根据配置决定是否跟踪其他类型
+        }
+    }
+
+    // 检查模块级别配置
+    // 假设节点名称包含模块路径信息，例如 "top.counter.signal_name"
+    size_t dot_pos = node_name.find('.');
+    std::string module_name =
+        (dot_pos != std::string::npos) ? node_name.substr(0, dot_pos) : "top";
+
+    // 优先检查完整路径（如果适用）
+    auto path_it = trace_configs_.find(node_name);
+    if (path_it != trace_configs_.end()) {
+        const TraceConfig &config = path_it->second;
+        if (!config.trace_on)
+            return false;
+
+        switch (node_type) {
+        case ch::core::lnodetype::type_reg:
+            return config.trace_reg;
+        case ch::core::lnodetype::type_input:
+            return config.trace_input;
+        case ch::core::lnodetype::type_output:
+            return config.trace_output;
+        default:
+            return config.trace_on;
+        }
+    }
+
+    // 然后检查模块名配置
+    auto it = trace_configs_.find(module_name);
+    if (it != trace_configs_.end()) {
+        const TraceConfig &config = it->second;
+        if (!config.trace_on)
+            return false; // 模块级关闭
+
+        switch (node_type) {
+        case ch::core::lnodetype::type_reg:
+            return config.trace_reg;
+        case ch::core::lnodetype::type_input:
+            return config.trace_input;
+        case ch::core::lnodetype::type_output:
+            return config.trace_output;
+        default:
+            return config.trace_on; // 根据配置决定是否跟踪其他类型
+        }
+    }
+
+    // 检查顶层模块配置
+    auto top_it = trace_configs_.find("top");
+    if (top_it != trace_configs_.end()) {
+        const TraceConfig &config = top_it->second;
+        if (!config.trace_on)
+            return false; // 顶层关闭
+
+        switch (node_type) {
+        case ch::core::lnodetype::type_reg:
+            return config.trace_reg;
+        case ch::core::lnodetype::type_input:
+            return config.trace_input;
+        case ch::core::lnodetype::type_output:
+            return config.trace_output;
+        default:
+            return config.trace_on; // 根据配置决定是否跟踪其他类型
+        }
+    }
+
+    // 如果没有任何配置，返回默认值（跟踪）
+    return true;
 }
 
 Simulator::~Simulator() {
@@ -98,58 +250,53 @@ void Simulator::reinitialize() {
 void Simulator::collect_signals() {
     CHDBG_FUNC();
     signals_.clear();
+    traced_nodes_.clear();
 
-    // 1. 添加系统时钟和复位信号
+    // 1. 添加系统时钟和复位信号（总是跟踪）
     if (ctx_->has_default_clock()) {
-        signals_.push_back(ctx_->get_default_clock());
+        auto *clock_node = ctx_->get_default_clock();
+        if (should_trace_node(clock_node->id(), clock_node->name(),
+                              clock_node->type())) {
+            signals_.push_back(
+                std::make_pair(clock_node->id(), clock_node->name()));
+            traced_nodes_.insert(clock_node->id());
+            CHDBG("Added clock signal for tracing: %s (ID: %u)", 
+                  clock_node->name(), clock_node->id());
+        }
     }
 
     if (ctx_->has_default_reset()) {
-        signals_.push_back(ctx_->get_default_reset());
-    }
-
-    // 2. 添加所有输入信号
-    for (auto *node : eval_list_) {
-        if (node->type() == ch::core::lnodetype::type_input) {
-            signals_.push_back(node);
+        auto *reset_node = ctx_->get_default_reset();
+        if (should_trace_node(reset_node->id(), reset_node->name(),
+                              ch::core::lnodetype::type_reset)) {
+            signals_.push_back(
+                std::make_pair(reset_node->id(), reset_node->name()));
+            traced_nodes_.insert(reset_node->id());
+            CHDBG("Added reset signal for tracing: %s (ID: %u)", 
+                  reset_node->name(), reset_node->id());
         }
     }
 
-    // 3. 添加所有输出信号
+    // 2. 添加所有符合条件的信号
     for (auto *node : eval_list_) {
-        if (node->type() == ch::core::lnodetype::type_output) {
-            signals_.push_back(node);
+        if (should_trace_node(node->id(), node->name(), node->type())) {
+            signals_.push_back(std::make_pair(node->id(), node->name()));
+            traced_nodes_.insert(node->id());
+            CHDBG("Added signal for tracing: %s (ID: %u, Type: %s)", 
+                  node->name(), node->id(), ch::core::to_string(node->type()));
         }
     }
 
-    // 4. 添加DAG中最后被驱动的叶子节点（输出节点）
-    // 这些通常是DAG的终端节点，即没有后续驱动的节点
-    std::unordered_set<uint32_t> driver_ids;
-    for (auto *node : eval_list_) {
-        // 检查这个节点是否驱动了其他节点
-        const auto &users = node->get_users();
-        for (size_t i = 0; i < users.size(); ++i) {
-            auto *user = users[i];
-            if (user) {
-                driver_ids.insert(user->id());
-            }
-        }
-    }
-
-    // 叶子节点是没有被任何其他节点驱动的节点
-    for (auto *node : eval_list_) {
-        if (driver_ids.find(node->id()) == driver_ids.end() &&
-            node->type() != ch::core::lnodetype::type_input &&
-            node->type() != ch::core::lnodetype::type_clock &&
-            node->type() != ch::core::lnodetype::type_reset) {
-            signals_.push_back(node);
-        }
-    }
+    CHINFO("Collected %zu signals for tracing", signals_.size());
 
     // 计算总跟踪宽度
     trace_width_ = 0;
-    for (auto *signal : signals_) {
-        trace_width_ += signal->size();
+    for (const auto &signal_pair : signals_) {
+        uint32_t node_id = signal_pair.first;
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            trace_width_ += it->second.bitwidth();
+        }
     }
 
     // 初始化跟踪相关数据结构
@@ -171,22 +318,21 @@ void Simulator::trace() {
     // 分配新的跟踪块（如果当前块已满）
     const size_t NUM_TRACES = 1024; // 每块存储的跟踪数量
     auto block_width = NUM_TRACES * trace_width_;
-    if (nullptr == trace_tail_ ||
-        (trace_tail_->size + trace_width_) > block_width) {
-        allocate_trace(block_width);
+    if (nullptr == current_trace_block_ ||
+        (current_trace_block_->size + trace_width_) > block_width) {
+        allocate_new_trace_block();
     }
 
     // 记录跟踪数据
     valid_mask_.reset(); // 重置有效位掩码
-    auto dst_block = trace_tail_->data;
-    auto dst_offset = trace_tail_->size;
+    auto dst_block = current_trace_block_->data;
+    auto dst_offset = current_trace_block_->size;
     dst_offset += (valid_mask_.bitwidth() + 31) / 32 *
                   4; // 跳过有效位掩码的空间（按4字节对齐）
 
     // 遍历所有信号
     for (uint32_t i = 0, n = signals_.size(); i < n; ++i) {
-        auto *node = signals_[i];
-        auto node_id = node->id();
+        auto node_id = signals_[i].first;
 
         auto it = data_map_.find(node_id);
         if (it == data_map_.end()) {
@@ -231,24 +377,46 @@ void Simulator::trace() {
     }
 
     // 将有效位掩码写入跟踪数据块
-    std::memcpy(dst_block + trace_tail_->size, valid_mask_.bitvector().data(),
+    std::memcpy(dst_block + current_trace_block_->size,
+                valid_mask_.bitvector().data(),
                 (valid_mask_.bitwidth() + 31) / 32 * 4); // 按4字节对齐
 
     // 更新跟踪块大小
-    trace_tail_->size = dst_offset;
+    current_trace_block_->size = dst_offset;
 }
 
-void Simulator::allocate_trace(size_t block_width) {
-    // 释放旧的尾部块（如果不是在blocks列表中）
-    if (trace_tail_) {
+void Simulator::allocate_new_trace_block() {
+    // 释放旧的当前块（如果不是在blocks列表中）
+    if (current_trace_block_) {
         // 如果当前块不是最后一个块，说明需要新开辟
-        if (trace_blocks_.empty() || trace_blocks_.back() != trace_tail_) {
-            delete trace_tail_;
+        if (trace_blocks_.empty() ||
+            trace_blocks_.back() != current_trace_block_) {
+            delete current_trace_block_;
         }
     }
 
-    trace_tail_ = new TraceBlock(block_width);
-    trace_blocks_.push_back(trace_tail_);
+    current_trace_block_ = new TraceBlock(current_trace_block_size_);
+    trace_blocks_.push_back(current_trace_block_);
+    current_trace_block_used_ = 0;
+}
+
+void Simulator::write_to_trace_block(const std::string &data) {
+    if (!current_trace_block_) {
+        allocate_new_trace_block();
+    }
+
+    size_t data_size = data.size();
+    if (current_trace_block_->size + data_size >
+        current_trace_block_->capacity) {
+        allocate_new_trace_block();
+    }
+
+    if (current_trace_block_ && current_trace_block_->size + data_size <=
+        current_trace_block_->capacity) {
+        memcpy(current_trace_block_->data + current_trace_block_->size,
+               data.data(), data_size);
+        current_trace_block_->size += data_size;
+    }
 }
 
 void Simulator::initialize() {
@@ -503,11 +671,6 @@ void Simulator::tick() {
         eval();
         eval();
     }
-
-    // 如果启用了跟踪，则记录信号值
-    if (trace_on_) {
-        trace();
-    }
 }
 
 void Simulator::eval() {
@@ -529,6 +692,11 @@ void Simulator::eval() {
         eval_combinational();
     } else {
         eval_sequential();
+    }
+
+    // 如果启用了跟踪，则记录信号值
+    if (trace_on_) {
+        trace();
     }
 
     CHDBG("Executed post-clock eval based on clock state %llu",
@@ -617,110 +785,120 @@ Simulator::get_value_by_name(const std::string &name) const {
 void Simulator::toVCD(const std::string &filename) const {
     // 预留VCD输出功能的实现
     CHINFO("VCD output to file: %s", filename.c_str());
-    
+
     if (!trace_on_) {
         CHWARN("Tracing is not enabled, nothing to export to VCD");
         return;
     }
-    
+
     if (trace_blocks_.empty()) {
         CHWARN("No trace data available to export to VCD");
         return;
     }
-    
+
     std::ofstream out(filename);
     if (!out.is_open()) {
         CHERROR("Failed to open file for VCD output: %s", filename.c_str());
         return;
     }
-    
+
     // 输出VCD头部信息
-    out << "$timescale 1 ns $end" << std::endl;
-    
-    // 输出信号定义
+    out << "$timescale 1 ns $end\n";
+    out << "$scope module top $end\n";
+
+    // 输出信号定义，使用更合适的信号标识符
     for (size_t i = 0; i < signals_.size(); ++i) {
-        auto *node = signals_[i];
-        out << "$var wire " << node->size() << " " << static_cast<char>('!' + i) 
-            << " " << node->name() << " $end" << std::endl;
+        const auto& signal_info = signals_[i];
+        auto signal_id = signal_info.first;
+        auto signal_name = signal_info.second;
+        
+        // 确保信号名符合VCD规范，移除可能引起冲突的字符
+        std::string sanitized_name = signal_name;
+        for (char& c : sanitized_name) {
+            if (c == ' ' || c == '.') c = '_';
+        }
+        
+        auto signal_width = data_map_.at(signal_id).bitwidth();
+        if (signal_width == 1) {
+            out << "$var wire 1 " << static_cast<char>('!'+i) << " " 
+                << sanitized_name << " $end\n";
+        } else {
+            out << "$var wire " << signal_width << " " 
+                << static_cast<char>('!' + i) << " " << sanitized_name 
+                << " $end\n";
+        }
     }
-    
-    // 结束定义部分
-    out << "$enddefinitions $end" << std::endl;
-    
+
+    out << "$upscope $end\n";
+    out << "$enddefinitions $end\n";
+
     // 输出跟踪数据
-    uint32_t t = 0;
-    auto mask_width = signals_.size(); // 信号数量等于掩码位数
-    
+    uint64_t t = 0;  // 使用更大的类型避免溢出
+    auto mask_width = signals_.size();
+
     // 遍历所有跟踪块
     for (const auto *trace_block : trace_blocks_) {
         auto src_block = trace_block->data;
         auto src_width = trace_block->size;
         uint32_t src_offset = 0;
-        
+
         // 每个块包含多个时间点的数据
         while (src_offset < src_width) {
             // 读取有效位掩码（按4字节对齐）
             uint32_t mask_size_bytes = (mask_width + 31) / 32 * 4;
             const char *mask_ptr = src_block + src_offset;
             src_offset += mask_size_bytes;
-            
-            bool new_trace = false;
+
+            bool has_changes = false;
             // 遍历所有信号
             for (uint32_t i = 0, n = signals_.size(); i < n; ++i) {
                 // 检查该信号在此时间点是否有变化
-                // 首先计算掩码中第i位的值
-                uint32_t byte_idx = i / 32;
+                uint32_t word_idx = i / 32;
                 uint32_t bit_idx = i % 32;
-                
-                if (byte_idx < mask_size_bytes) {
-                    // 读取掩码字节
-                    uint32_t mask_word = *reinterpret_cast<const uint32_t*>(mask_ptr + byte_idx * 4);
-                    bool valid = (mask_word >> bit_idx) & 1;
-                    
+
+                if (word_idx < (mask_size_bytes / sizeof(uint32_t))) {
+                    // 读取掩码字
+                    const uint32_t *mask_words = reinterpret_cast<const uint32_t*>(mask_ptr);
+                    bool valid = (mask_words[word_idx] >> bit_idx) & 1;
+
                     if (valid) {
-                        if (!new_trace) {
-                            out << '#' << t << std::endl;  // 输出时间戳
-                            new_trace = true;
+                        if (!has_changes) {
+                            out << '#' << t << '\n'; // 输出时间戳
+                            has_changes = true;
                         }
-                        
-                        auto signal = signals_[i];
-                        auto signal_size = signal->size();
-                        
+
+                        auto signal_id = signals_[i].first;
+                        auto signal_width = data_map_.at(signal_id).bitwidth();
+
                         // 读取信号值（按字节对齐）
-                        uint32_t signal_bytes = (signal_size + 7) / 8;
+                        uint32_t signal_bytes = (signal_width + 7) / 8;
                         const char *signal_ptr = src_block + src_offset;
                         src_offset += signal_bytes;
-                        
+
                         // 构建信号值
-                        ch::core::sdata_type value(0, signal_size);
+                        ch::core::sdata_type value(0, signal_width);
                         std::memcpy(
-                            const_cast<ch::internal::bitvector<uint64_t> &>(value.bitvector()).data(),
-                            reinterpret_cast<const ch::internal::bitvector<uint64_t>::block_type*>(signal_ptr),
-                            signal_bytes
-                        );
-                        
+                            const_cast<ch::internal::bitvector<uint64_t>&>(
+                                value.bitvector()).data(),
+                            signal_ptr,
+                            std::min(signal_bytes, 
+                                     static_cast<uint32_t>(value.bitvector().size() * sizeof(uint64_t))));
+
                         // 输出信号值
-                        if (signal_size > 1) {
-                            out << 'b';
-                            // 输出二进制表示
-                            for (int j = signal_size - 1; j >= 0; --j) {
-                                out << (value.bitvector()[static_cast<uint32_t>(j)] ? '1' : '0');
-                            }
-                            out << ' ';
-                        } else {
-                            // 单位信号直接输出0或1
-                            out << (value.bitvector()[static_cast<uint32_t>(0)] ? '1' : '0');
+                        out << 'b';
+                        // 输出二进制表示，从高位到低位
+                        for (int j = signal_width - 1; j >= 0; --j) {
+                            out << (value.bitvector()[static_cast<uint32_t>(j)] ? '1' : '0');
                         }
-                        out << static_cast<char>('!' + i) << std::endl;  // 输出信号ID
+                        out << ' ' << static_cast<char>('!' + i) << '\n'; // 输出信号ID
                     }
                 }
             }
-            if (new_trace)
-                out << std::endl;
-            ++t;  // 时间递增
+            
+            t++; // 时间递增
         }
     }
-    
+
     out.close();
     CHINFO("VCD file written successfully: %s", filename.c_str());
 }
