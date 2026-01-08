@@ -281,6 +281,70 @@ for(unsigned i = 1; i < width; ++i) {
 - 错误：在select语句中使用C++内置的true/false
 - 正确：使用CppHDL字面量如1_b/0_b或ch_bool类型
 
+### 5. 条件选择操作符使用规范
+- **核心实现**：使用`select`函数作为CppHDL项目中条件选择操作的标准方式，而非`mux`
+- **语义表达**：`select(condition, true_val, false_val)`具有明确的三元选择语义
+- **推荐使用**：对于基础条件选择功能，应优先使用`select`函数，因其为直接、清晰的基础构建块
+- **避免使用**：避免使用`ch::mux`函数，保持代码简洁性和一致性
+
+**正确示例**：
+```
+// 使用select作为条件选择的标准方式
+auto result = select(condition, value_a, value_b);
+```
+
+**错误示例**：
+```
+// 不要使用ch::mux
+auto result = ch::mux(condition, value_a, value_b);
+```
+
+### 6. 寄存器状态访问规范
+- **当前值获取**：访问寄存器当前周期的输出值时，应直接使用寄存器对象本身，因其继承自对应类型并可隐式转换为数据值
+- **下一值设置**：设置寄存器下一周期的值时，必须通过`->next`语法进行赋值
+- **禁止访问**：禁止使用不存在的成员（如`.out`）来访问寄存器当前值
+
+**正确示例**：
+```
+// 直接使用寄存器对象获取当前值
+ch_uint<4> current_value = counter;
+
+// 使用->next语法设置下一周期的值
+counter->next = new_value;
+```
+
+**错误示例**：
+```
+// 不要使用不存在的.out成员
+ch_uint<4> current_value = counter.out;
+
+// 不要直接赋值给寄存器对象
+counter = new_value;  // 错误
+```
+
+### 7. ch_bool类型使用规范
+- **类型声明**：声明布尔类型时使用`ch_bool`而非C++内置的`bool`类型
+- **寄存器初始化**：创建布尔类型寄存器时使用`ch_reg<ch_bool>`类型
+- **字面量使用**：在布尔上下文中使用`1_b`表示真值，`0_b`表示假值，而非C++内置的true/false
+
+**正确示例**：
+```
+// 声明ch_bool类型的寄存器
+ch_reg<ch_bool> flag(0_b, "flag_reg");
+
+// 在tick中设置下一个值
+flag->next = select(condition, 1_b, 0_b);
+```
+
+**错误示例**：
+```
+// 不要使用C++内置bool类型
+ch_reg<bool> flag(false, "flag_reg");  // 错误
+
+// 不要使用C++内置true/false
+flag->next = select(condition, true, false);  // 错误
+```
+
 ## 检查清单
 
 在AI辅助编码时，请确保：
