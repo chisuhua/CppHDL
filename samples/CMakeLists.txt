@@ -23,6 +23,7 @@ set(CH_SAMPLE_TARGETS
     precise_width_demo
     precise_width_example
     onehot_example
+    configured_trace_example
     switch_demo
     #if_demo
     # stream_fifo_example

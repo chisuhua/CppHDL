@@ -10,9 +10,10 @@
 #include "utils/destruction_manager.h"
 #include <cassert>
 #include <cstring> // 添加memcpy的头文件
-#include <fstream> // 添加fstream头文件以支持文件输出
+#include <fstream> // 添加fstream头文件以支持文件输出和文件存在性检查
 #include <iostream>
 #include <set> // 添加set头文件
+#include <unordered_set>
 
 namespace ch {
 
@@ -21,10 +22,18 @@ Simulator::Simulator(ch::core::context *ctx, bool trace_on)
     CHDBG_FUNC();
     CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
 
-    // Register with destruction manager
-    std::cout << "Registering simulator " << this << std::endl;
-    std::cout.flush();
+    // 检查当前目录是否存在trace.ini文件
+    std::ifstream trace_ini_file("./trace.ini");
+    if (trace_ini_file.is_open()) {
+        trace_ini_file.close();
+        // 从配置文件加载跟踪配置
+        load_trace_config_from_file("./trace.ini");
 
+        // 检查是否需要启用跟踪
+        trace_on_ = !trace_configs_.empty(); // 如果有任何配置，则启用跟踪
+    }
+
+    // 如果不存在trace.ini文件，则按原来的流程执行
     ctx_curr_backup_ = ctx_curr_;
     ctx_curr_ = ctx_;
 
@@ -76,25 +85,28 @@ void Simulator::load_trace_config_from_file(const std::string &config_file) {
         const auto &section = section_pair.second;
 
         // 解析配置项
-        bool trace_on = false;
-        bool trace_reg = false;
-        bool trace_wire = false;
-        bool trace_input = false;
-        bool trace_output = false;
+        int trace_on = 0;
+        int trace_reg = 0;
+        int trace_tap = 0; // 将trace_wire改为trace_tap
+        int trace_input = 0;
+        int trace_output = 0;
 
         inipp::get_value(section, "trace_on", trace_on);
         inipp::get_value(section, "trace_reg", trace_reg);
-        inipp::get_value(section, "trace_wire", trace_wire);
+        inipp::get_value(section, "trace_tap",
+                         trace_tap); // 将trace_wire改为trace_tap
         inipp::get_value(section, "trace_input", trace_input);
         inipp::get_value(section, "trace_output", trace_output);
 
-        trace_configs_[section_name] = TraceConfig(
-            trace_on, trace_reg, trace_wire, trace_input, trace_output);
+        trace_configs_[section_name] =
+            TraceConfig(trace_on, trace_reg, trace_tap, trace_input,
+                        trace_output); // 更新构造函数参数
 
-        CHINFO("Loaded trace config for section '%s': trace_on=%d, "
-               "trace_reg=%d, trace_wire=%d, trace_input=%d, trace_output=%d",
-               section_name.c_str(), trace_on, trace_reg, trace_wire,
-               trace_input, trace_output);
+        CHINFO(
+            "Loaded trace config for section '%s': trace_on=%d, "
+            "trace_reg=%d, trace_tap=%d, trace_input=%d, trace_output=%d", // 更新日志消息
+            section_name.c_str(), trace_on, trace_reg, trace_tap, trace_input,
+            trace_output);
     }
 }
 
@@ -116,17 +128,11 @@ bool Simulator::should_trace_node(uint32_t node_id,
         case ch::core::lnodetype::type_output:
             return config.trace_output;
         default:
-            return config.trace_on; // 根据配置决定是否跟踪其他类型
+            return config.trace_tap; // 使用trace_tap代替trace_wire
         }
     }
 
-    // 检查模块级别配置
-    // 假设节点名称包含模块路径信息，例如 "top.counter.signal_name"
-    size_t dot_pos = node_name.find('.');
-    std::string module_name =
-        (dot_pos != std::string::npos) ? node_name.substr(0, dot_pos) : "top";
-
-    // 优先检查完整路径（如果适用）
+    // 检查完整路径（如果适用）
     auto path_it = trace_configs_.find(node_name);
     if (path_it != trace_configs_.end()) {
         const TraceConfig &config = path_it->second;
@@ -141,11 +147,16 @@ bool Simulator::should_trace_node(uint32_t node_id,
         case ch::core::lnodetype::type_output:
             return config.trace_output;
         default:
-            return config.trace_on;
+            return config.trace_tap; // 使用trace_tap代替trace_wire
         }
     }
 
-    // 然后检查模块名配置
+    // 检查模块级别配置
+    // 假设节点名称包含模块路径信息，例如 "top.counter.signal_name"
+    size_t dot_pos = node_name.find('.');
+    std::string module_name =
+        (dot_pos != std::string::npos) ? node_name.substr(0, dot_pos) : "top";
+
     auto it = trace_configs_.find(module_name);
     if (it != trace_configs_.end()) {
         const TraceConfig &config = it->second;
@@ -160,7 +171,7 @@ bool Simulator::should_trace_node(uint32_t node_id,
         case ch::core::lnodetype::type_output:
             return config.trace_output;
         default:
-            return config.trace_on; // 根据配置决定是否跟踪其他类型
+            return config.trace_tap; // 使用trace_tap代替trace_wire
         }
     }
 
@@ -179,7 +190,7 @@ bool Simulator::should_trace_node(uint32_t node_id,
         case ch::core::lnodetype::type_output:
             return config.trace_output;
         default:
-            return config.trace_on; // 根据配置决定是否跟踪其他类型
+            return config.trace_tap; // 使用trace_tap代替trace_wire
         }
     }
 
@@ -260,7 +271,7 @@ void Simulator::collect_signals() {
             signals_.push_back(
                 std::make_pair(clock_node->id(), clock_node->name()));
             traced_nodes_.insert(clock_node->id());
-            CHDBG("Added clock signal for tracing: %s (ID: %u)", 
+            CHDBG("Added clock signal for tracing: %s (ID: %u)",
                   clock_node->name(), clock_node->id());
         }
     }
@@ -272,22 +283,107 @@ void Simulator::collect_signals() {
             signals_.push_back(
                 std::make_pair(reset_node->id(), reset_node->name()));
             traced_nodes_.insert(reset_node->id());
-            CHDBG("Added reset signal for tracing: %s (ID: %u)", 
+            CHDBG("Added reset signal for tracing: %s (ID: %u)",
                   reset_node->name(), reset_node->id());
         }
     }
 
-    // 2. 添加所有符合条件的信号
+    // 2. 构建使用关系图：找出哪些节点被其他节点使用
+    std::unordered_set<uint32_t> used_node_ids;
     for (auto *node : eval_list_) {
-        if (should_trace_node(node->id(), node->name(), node->type())) {
+        // 检查这个节点是否驱动了其他节点
+        const auto &users = node->get_users();
+        for (size_t i = 0; i < users.size(); ++i) {
+            auto *user = users[i];
+            if (user) {
+                used_node_ids.insert(user->id());
+            }
+        }
+    }
+
+    // 3. 添加所有符合条件的信号，包括叶子节点
+    for (auto *node : eval_list_) {
+        bool should_trace =
+            should_trace_node(node->id(), node->name(), node->type());
+
+        if (!should_trace) {
+            continue;
+        }
+
+        // 检查是否是叶子节点（没有被其他节点使用）
+        bool is_leaf_node =
+            used_node_ids.find(node->id()) == used_node_ids.end();
+
+        // 如果是叶子节点并且配置为跟踪tap节点，则添加到信号列表
+        if (is_leaf_node) {
+            // 检查配置是否允许跟踪tap节点
+            bool should_trace_as_tap = false;
+
+            // 检查全局配置
+            auto global_it = trace_configs_.find("all");
+            if (global_it != trace_configs_.end()) {
+                should_trace_as_tap = global_it->second.trace_tap;
+            }
+            // 检查完整路径配置
+            else {
+                auto path_it = trace_configs_.find(node->name());
+                if (path_it != trace_configs_.end()) {
+                    should_trace_as_tap = path_it->second.trace_tap;
+                }
+                // 检查模块名配置
+                else {
+                    size_t dot_pos = node->name().find('.');
+                    std::string module_name =
+                        (dot_pos != std::string::npos)
+                            ? node->name().substr(0, dot_pos)
+                            : "top";
+
+                    auto mod_it = trace_configs_.find(module_name);
+                    if (mod_it != trace_configs_.end()) {
+                        should_trace_as_tap = mod_it->second.trace_tap;
+                    }
+                    // 检查顶层配置
+                    else {
+                        auto top_it = trace_configs_.find("top");
+                        if (top_it != trace_configs_.end()) {
+                            should_trace_as_tap = top_it->second.trace_tap;
+                        } else {
+                            // 默认情况下，如果节点类型不是输入/时钟/复位，则视为tap
+                            should_trace_as_tap =
+                                (node->type() !=
+                                     ch::core::lnodetype::type_input &&
+                                 node->type() !=
+                                     ch::core::lnodetype::type_clock &&
+                                 node->type() !=
+                                     ch::core::lnodetype::type_reset);
+                        }
+                    }
+                }
+            }
+
+            if (should_trace_as_tap) {
+                signals_.push_back(std::make_pair(node->id(), node->name()));
+                traced_nodes_.insert(node->id());
+                CHDBG("Added leaf signal for tracing: %s (ID: %u, Type: %s)",
+                      node->name(), node->id(),
+                      ch::core::to_string(node->type()));
+            }
+        }
+        // 如果不是叶子节点，但仍符合跟踪条件，也添加
+        else {
             signals_.push_back(std::make_pair(node->id(), node->name()));
             traced_nodes_.insert(node->id());
-            CHDBG("Added signal for tracing: %s (ID: %u, Type: %s)", 
+            CHDBG("Added signal for tracing: %s (ID: %u, Type: %s)",
                   node->name(), node->id(), ch::core::to_string(node->type()));
         }
     }
 
     CHINFO("Collected %zu signals for tracing", signals_.size());
+
+    if (signals_.size() == 0) {
+        trace_on_ = false;
+        return;
+    }
 
     // 计算总跟踪宽度
     trace_width_ = 0;
@@ -412,7 +508,7 @@ void Simulator::write_to_trace_block(const std::string &data) {
     }
 
     if (current_trace_block_ && current_trace_block_->size + data_size <=
-        current_trace_block_->capacity) {
+                                    current_trace_block_->capacity) {
         memcpy(current_trace_block_->data + current_trace_block_->size,
                data.data(), data_size);
         current_trace_block_->size += data_size;
@@ -808,23 +904,24 @@ void Simulator::toVCD(const std::string &filename) const {
 
     // 输出信号定义，使用更合适的信号标识符
     for (size_t i = 0; i < signals_.size(); ++i) {
-        const auto& signal_info = signals_[i];
+        const auto &signal_info = signals_[i];
         auto signal_id = signal_info.first;
         auto signal_name = signal_info.second;
-        
+
         // 确保信号名符合VCD规范，移除可能引起冲突的字符
         std::string sanitized_name = signal_name;
-        for (char& c : sanitized_name) {
-            if (c == ' ' || c == '.') c = '_';
+        for (char &c : sanitized_name) {
+            if (c == ' ' || c == '.')
+                c = '_';
         }
-        
+
         auto signal_width = data_map_.at(signal_id).bitwidth();
         if (signal_width == 1) {
-            out << "$var wire 1 " << static_cast<char>('!'+i) << " " 
+            out << "$var wire 1 " << static_cast<char>('!' + i) << " "
                 << sanitized_name << " $end\n";
         } else {
-            out << "$var wire " << signal_width << " " 
-                << static_cast<char>('!' + i) << " " << sanitized_name 
+            out << "$var wire " << signal_width << " "
+                << static_cast<char>('!' + i) << " " << sanitized_name
                 << " $end\n";
         }
     }
@@ -833,7 +930,7 @@ void Simulator::toVCD(const std::string &filename) const {
     out << "$enddefinitions $end\n";
 
     // 输出跟踪数据
-    uint64_t t = 0;  // 使用更大的类型避免溢出
+    uint64_t t = 0; // 使用更大的类型避免溢出
     auto mask_width = signals_.size();
 
     // 遍历所有跟踪块
@@ -858,7 +955,8 @@ void Simulator::toVCD(const std::string &filename) const {
 
                 if (word_idx < (mask_size_bytes / sizeof(uint32_t))) {
                     // 读取掩码字
-                    const uint32_t *mask_words = reinterpret_cast<const uint32_t*>(mask_ptr);
+                    const uint32_t *mask_words =
+                        reinterpret_cast<const uint32_t *>(mask_ptr);
                     bool valid = (mask_words[word_idx] >> bit_idx) & 1;
 
                     if (valid) {
@@ -878,23 +976,29 @@ void Simulator::toVCD(const std::string &filename) const {
                         // 构建信号值
                         ch::core::sdata_type value(0, signal_width);
                         std::memcpy(
-                            const_cast<ch::internal::bitvector<uint64_t>&>(
-                                value.bitvector()).data(),
+                            const_cast<ch::internal::bitvector<uint64_t> &>(
+                                value.bitvector())
+                                .data(),
                             signal_ptr,
-                            std::min(signal_bytes, 
-                                     static_cast<uint32_t>(value.bitvector().size() * sizeof(uint64_t))));
+                            std::min(
+                                signal_bytes,
+                                static_cast<uint32_t>(value.bitvector().size() *
+                                                      sizeof(uint64_t))));
 
                         // 输出信号值
                         out << 'b';
                         // 输出二进制表示，从高位到低位
                         for (int j = signal_width - 1; j >= 0; --j) {
-                            out << (value.bitvector()[static_cast<uint32_t>(j)] ? '1' : '0');
+                            out << (value.bitvector()[static_cast<uint32_t>(j)]
+                                        ? '1'
+                                        : '0');
                         }
-                        out << ' ' << static_cast<char>('!' + i) << '\n'; // 输出信号ID
+                        out << ' ' << static_cast<char>('!' + i)
+                            << '\n'; // 输出信号ID
                     }
                 }
             }
-            
+
             t++; // 时间递增
         }
     }

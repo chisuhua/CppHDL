@@ -31,13 +31,13 @@ namespace ch {
 struct TraceConfig {
     bool trace_on = false;
     bool trace_reg = false;
-    bool trace_wire = false;
+    bool trace_tap = false;  // 替换trace_wire为trace_tap
     bool trace_input = false;
     bool trace_output = false;
 
     TraceConfig() = default;
-    TraceConfig(bool on, bool reg, bool wire, bool input, bool output)
-        : trace_on(on), trace_reg(reg), trace_wire(wire), trace_input(input),
+    TraceConfig(bool on, bool reg, bool tap, bool input, bool output)  // 更新构造函数参数
+        : trace_on(on), trace_reg(reg), trace_tap(tap), trace_input(input),
           trace_output(output) {}
 };
 
