@@ -71,8 +71,6 @@ TEST_CASE("SelectorArbiter: round robin selector extended tests",
         std::cout << "Output: grant=0b" << to_binary_string(grant_val, 4)
                   << ", valid=" << valid_val << std::endl;
 
-        sim.toVCD("1.vcd");
-
         // After position 2, should go to position 3 but it's not requested,
         // so wrap around to position 0
         REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
@@ -509,54 +507,48 @@ TEST_CASE("SelectorArbiter: round robin selector",
     SECTION("Round robin selection with starting position 0") {
         ch_uint<4> request(0101_b, "request"); // Requests at positions 0 and 2
         ch_uint<4> last_grant(0001_b,
-                              "last_grand"); // Last granted was position 0, so
+                              "last_grant"); // Last granted was position 0, so
                                              // next should start from 1
         PrioritySelectorResult<4> result =
             round_robin_selector<4>(request, last_grant);
 
         ch::Simulator sim(ctx.get(), "trace.ini");
+        
+        // Initial case: request=0101, last_grant=0001 (position 0 granted previously)
+        // Next starting position would be 1, position 1 not requesting, so grant to position 2
         sim.tick();
-        std::cout << "Grand(0101 0001): " << sim.get_value(result.grant)
-                  << std::endl;
+        REQUIRE(sim.get_value(result.grant) == 0100_b); // Expecting position 2 granted
 
-        sim.set_value(request, 0100_b);
-        sim.set_value(last_grant, 0100_b);
+        sim.set_value(request, 0100_b);  // Now only position 2 requesting
+        sim.set_value(last_grant, 0100_b); // Previously granted position 2
         sim.tick();
-        std::cout << "Grand(0101 0100): " << sim.get_value(result.grant)
-                  << std::endl;
+        // Starting from position 3 (after 2), no request there, wrap around to position 0 if requested
+        // But only pos 2 is requested, so should still grant to position 2
+        REQUIRE(sim.get_value(result.grant) == 0100_b); 
 
-        sim.set_value(request, 1111_b);
-        sim.set_value(last_grant, 0001_b);
+        sim.set_value(request, 1111_b);  // All positions requesting
+        sim.set_value(last_grant, 0001_b); // Previously granted position 0
         sim.tick();
-        std::cout << "Grand(1111 0001): " << sim.get_value(result.grant)
-                  << std::endl;
+        // Starting from position 1 (after 0), position 1 is requesting, so should grant to position 1
+        REQUIRE(sim.get_value(result.grant) == 0010_b);
 
-        sim.set_value(request, 1111_b);
-        sim.set_value(last_grant, 0010_b);
+        sim.set_value(request, 1111_b);  // All positions requesting
+        sim.set_value(last_grant, 0010_b); // Previously granted position 1
         sim.tick();
-        std::cout << "Grand(1111 0001): " << sim.get_value(result.grant)
-                  << std::endl;
+        // Starting from position 2 (after 1), position 2 is requesting, so should grant to position 2
+        REQUIRE(sim.get_value(result.grant) == 0100_b);
 
-        sim.set_value(request, 1111_b);
-        sim.set_value(last_grant, 0100_b);
+        sim.set_value(request, 1111_b);  // All positions requesting
+        sim.set_value(last_grant, 0100_b); // Previously granted position 2
         sim.tick();
-        std::cout << "Grand(1111 0001): " << sim.get_value(result.grant)
-                  << std::endl;
+        // Starting from position 3 (after 2), position 3 is requesting, so should grant to position 3
+        REQUIRE(sim.get_value(result.grant) == 1000_b);
 
-        sim.set_value(request, 1111_b);
-        sim.set_value(last_grant, 1000_b);
+        sim.set_value(request, 1111_b);  // All positions requesting
+        sim.set_value(last_grant, 1000_b); // Previously granted position 3
         sim.tick();
-        std::cout << "Grand(1111 1000): " << sim.get_value(result.grant)
-                  << std::endl;
-
-        sim.toVCD("rrs_trace.vcd");
-        ch::toDAG("rrs_trace.dot", ctx.get(), sim);
-
-        // After position 0 (encoded as 0001_b), next available is position 1,
-        // then position 2 Position 1 is checked first but not requested,
-        // position 2 is checked second and is requested
-        REQUIRE(sim.get_value(result.grant) == 0b0100); // Bit 2 set
-        REQUIRE(sim.get_value(result.valid) == true);
+        // Starting from position 0 (after 3, wrapping around), position 0 is requesting, so should grant to position 0
+        REQUIRE(sim.get_value(result.grant) == 0001_b);
     }
 
     SECTION("Round robin selection with starting position 2") {
