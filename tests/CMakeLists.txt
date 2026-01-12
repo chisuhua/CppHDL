@@ -56,6 +56,7 @@ set(BASE_TEST_SOURCES
     test_axi_lite_bundle.cpp
     test_mem.cpp
     test_operator_advanced.cpp
+    test_operator_results.cpp
     test_verilog_gen.cpp
     test_fifo_example.cpp
     test_reg_timing.cpp
@@ -87,6 +88,8 @@ set(CHLIB_TEST_SOURCES
     chlib/test_sequential.cpp
     chlib/test_converter.cpp
     chlib/test_selector_arbiter.cpp
+    chlib/test_selector_priority.cpp
+    chlib/test_selector_round_robin.cpp  # 新增的轮询选择器测试文件
     # chlib/test_arithmetic_advance.cpp
     # chlib/test_memory.cpp
     # chlib/test_fifo.cpp

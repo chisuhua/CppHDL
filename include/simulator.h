@@ -27,18 +27,24 @@
 
 namespace ch {
 
+// 追踪类型枚举
+enum class TraceType { REG, INPUT, OUTPUT, CLOCK, RESET, TAP };
+
 // 跟踪配置结构
 struct TraceConfig {
-    bool trace_on = false;
-    bool trace_reg = false;
-    bool trace_tap = false;  // 替换trace_wire为trace_tap
-    bool trace_input = false;
-    bool trace_output = false;
+    int trace_on = 0;
+    int trace_reg = 0;
+    int trace_tap = 0; // 替换trace_wire为trace_tap
+    int trace_input = 0;
+    int trace_output = 0;
+    int trace_clock = 0;
+    int trace_reset = 0;
 
     TraceConfig() = default;
-    TraceConfig(bool on, bool reg, bool tap, bool input, bool output)  // 更新构造函数参数
+    TraceConfig(int on, int reg, int tap, int input, int output, int clock = 0,
+                int reset = 0) // 更新构造函数参数
         : trace_on(on), trace_reg(reg), trace_tap(tap), trace_input(input),
-          trace_output(output) {}
+          trace_output(output), trace_clock(clock), trace_reset(reset) {}
 };
 
 // 跟踪数据块结构
@@ -403,24 +409,25 @@ public:
 
     // 获取跟踪信号数量（用于测试）
     size_t get_traced_signals_count() const { return signals_.size(); }
-    
+
     // 获取跟踪的信号列表（用于测试）
-    const std::vector<std::pair<uint32_t, std::string>>& get_traced_signals() const { 
-        return signals_; 
+    const std::vector<std::pair<uint32_t, std::string>> &
+    get_traced_signals() const {
+        return signals_;
     }
-    
+
     // 根据名称查找信号ID（用于跟踪）
-    uint32_t get_signal_id_by_name(const std::string& name) const {
-        for (const auto& signal : signals_) {
+    uint32_t get_signal_id_by_name(const std::string &name) const {
+        for (const auto &signal : signals_) {
             if (signal.second == name) {
                 return signal.first;
             }
         }
         return static_cast<uint32_t>(-1); // 返回无效ID
     }
-    
+
     // 检查是否跟踪特定信号
-    bool is_signal_traced(const std::string& name) const {
+    bool is_signal_traced(const std::string &name) const {
         return get_signal_id_by_name(name) != static_cast<uint32_t>(-1);
     }
 
@@ -437,8 +444,8 @@ public:
 private:
     void initialize();
     void update_instruction_pointers();
-    void collect_signals();                  // 收集需要跟踪的信号
-    void trace();                            // 执行信号跟踪
+    void collect_signals(); // 收集需要跟踪的信号
+    void trace();           // 执行信号跟踪
     // 为Bundle字段设置值的辅助函数
     template <typename FieldType>
     void set_bundle_field_value(FieldType &field, uint64_t value,
@@ -485,7 +492,8 @@ private:
     std::vector<std::pair<uint32_t, ch::instr_base *>> reset_instr_list_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> input_instr_list_;
     std::vector<std::pair<uint32_t, ch::instr_base *>> sequential_instr_list_;
-    std::vector<std::pair<uint32_t, ch::instr_base *>> combinational_instr_list_;
+    std::vector<std::pair<uint32_t, ch::instr_base *>>
+        combinational_instr_list_;
 
     // Add flag to track if we're in the destructor to prevent accessing
     // destroyed context
@@ -494,14 +502,15 @@ private:
 
     // 信号跟踪相关成员
     bool trace_on_ = false;
-    std::vector<std::pair<uint32_t, std::string>> signals_; // 需要跟踪的信号列表
+    std::vector<std::pair<uint32_t, std::string>>
+        signals_; // 需要跟踪的信号列表
     std::vector<std::pair<const char *, size_t>>
         prev_values_;                       // 上次记录的值的位置信息
     ch::core::sdata_type valid_mask_;       // 有效位掩码
     size_t trace_width_ = 0;                // 跟踪数据的总宽度
     std::deque<TraceBlock *> trace_blocks_; // 跟踪数据块
-    TraceBlock *current_trace_block_ = nullptr;      // 当前跟踪数据块
-    size_t current_trace_block_size_ = 1024 * 1024;  // 默认1MB
+    TraceBlock *current_trace_block_ = nullptr;     // 当前跟踪数据块
+    size_t current_trace_block_size_ = 1024 * 1024; // 默认1MB
     size_t current_trace_block_used_ = 0;
 
     // 跟踪配置
@@ -513,7 +522,7 @@ private:
     // 内部方法
     void load_trace_config_from_file(const std::string &config_file);
     bool should_trace_node(uint32_t node_id, const std::string &node_name,
-                           ch::core::lnodetype node_type);
+                           TraceType trace_type = TraceType::TAP); // 修改参数
     void allocate_new_trace_block(); // 替换allocate_trace方法
 };
 

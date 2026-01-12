@@ -260,7 +260,7 @@ TEST_CASE("Trace: VCD output functionality", "[trace][vcd]") {
     toDAG("test_trace.dot", ctx.get(), sim);
 
     // 验证VCD文件是否创建
-    std::ifstream vcd_file("test_output.vcd");
+    std::ifstream vcd_file("test_trace.vcd");  // 修复：使用与创建的文件相同的名称
     REQUIRE(vcd_file.is_open());
 
     std::string line;

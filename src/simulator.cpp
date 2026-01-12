@@ -17,6 +17,25 @@
 
 namespace ch {
 
+std::string toString(TraceType type) {
+    switch (type) {
+    case TraceType::REG:
+        return "REG";
+    case TraceType::INPUT:
+        return "INPUT";
+    case TraceType::OUTPUT:
+        return "OUTPUT";
+    case TraceType::CLOCK:
+        return "CLOCK";
+    case TraceType::RESET:
+        return "RESET";
+    case TraceType::TAP:
+        return "TAP";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 Simulator::Simulator(ch::core::context *ctx, bool trace_on)
     : ctx_(ctx), trace_on_(trace_on) {
     CHDBG_FUNC();
@@ -87,115 +106,131 @@ void Simulator::load_trace_config_from_file(const std::string &config_file) {
         // 解析配置项
         int trace_on = 0;
         int trace_reg = 0;
-        int trace_tap = 0; // 将trace_wire改为trace_tap
+        int trace_tap = 0; // 替换trace_wire为trace_tap
         int trace_input = 0;
         int trace_output = 0;
+        int trace_clock = 0; // 新增clock配置
+        int trace_reset = 0; // 新增reset配置
 
         inipp::get_value(section, "trace_on", trace_on);
         inipp::get_value(section, "trace_reg", trace_reg);
-        inipp::get_value(section, "trace_tap",
-                         trace_tap); // 将trace_wire改为trace_tap
+        inipp::get_value(section, "trace_tap", trace_tap);
         inipp::get_value(section, "trace_input", trace_input);
         inipp::get_value(section, "trace_output", trace_output);
+        inipp::get_value(section, "trace_clock", trace_clock); // 新增clock配置
+        inipp::get_value(section, "trace_reset", trace_reset); // 新增reset配置
 
-        trace_configs_[section_name] =
-            TraceConfig(trace_on, trace_reg, trace_tap, trace_input,
-                        trace_output); // 更新构造函数参数
+        trace_configs_[section_name] = TraceConfig(
+            trace_on, trace_reg, trace_tap, trace_input, trace_output,
+            trace_clock, trace_reset); // 更新构造函数参数
 
-        CHINFO(
-            "Loaded trace config for section '%s': trace_on=%d, "
-            "trace_reg=%d, trace_tap=%d, trace_input=%d, trace_output=%d", // 更新日志消息
-            section_name.c_str(), trace_on, trace_reg, trace_tap, trace_input,
-            trace_output);
+        CHINFO("Loaded trace config for section '%s': trace_on=%d, "
+               "trace_reg=%d, trace_tap=%d, trace_input=%d, trace_output=%d, "
+               "trace_clock=%d, trace_reset=%d",
+               section_name.c_str(), trace_on, trace_reg, trace_tap,
+               trace_input, trace_output, trace_clock, trace_reset);
     }
 }
 
 bool Simulator::should_trace_node(uint32_t node_id,
                                   const std::string &node_name,
-                                  ch::core::lnodetype node_type) {
-    // 首先检查是否有全局配置（"all" section）
-    auto global_it = trace_configs_.find("all");
-    if (global_it != trace_configs_.end()) {
-        const TraceConfig &config = global_it->second;
-        if (!config.trace_on)
-            return false; // 全局关闭
-
-        switch (node_type) {
-        case ch::core::lnodetype::type_reg:
-            return config.trace_reg;
-        case ch::core::lnodetype::type_input:
-            return config.trace_input;
-        case ch::core::lnodetype::type_output:
-            return config.trace_output;
-        default:
-            return config.trace_tap; // 使用trace_tap代替trace_wire
-        }
+                                  TraceType trace_type) { // 修改参数
+    // 如果全局跟踪未启用，直接返回false
+    if (!trace_on_) {
+        return false;
     }
 
-    // 检查完整路径（如果适用）
+    // 如果已经处理过这个节点，直接返回
+    if (traced_nodes_.find(node_id) != traced_nodes_.end()) {
+        return false;
+    }
+
+    // 首先检查指定路径的配置
     auto path_it = trace_configs_.find(node_name);
     if (path_it != trace_configs_.end()) {
         const TraceConfig &config = path_it->second;
         if (!config.trace_on)
-            return false;
+            return false; // 路径级关闭
 
-        switch (node_type) {
-        case ch::core::lnodetype::type_reg:
+        // 根据传入的trace_type判断是否跟踪
+        switch (trace_type) {
+        case TraceType::REG:
             return config.trace_reg;
-        case ch::core::lnodetype::type_input:
+        case TraceType::INPUT:
             return config.trace_input;
-        case ch::core::lnodetype::type_output:
+        case TraceType::OUTPUT:
             return config.trace_output;
+        case TraceType::CLOCK:
+            return config.trace_clock;
+        case TraceType::RESET:
+            return config.trace_reset;
+        case TraceType::TAP:
+            return config.trace_tap;
         default:
-            return config.trace_tap; // 使用trace_tap代替trace_wire
+            return config.trace_on;
         }
     }
 
-    // 检查模块级别配置
-    // 假设节点名称包含模块路径信息，例如 "top.counter.signal_name"
-    size_t dot_pos = node_name.find('.');
-    std::string module_name =
-        (dot_pos != std::string::npos) ? node_name.substr(0, dot_pos) : "top";
+    // 如果指定路径没有找到配置，则查找模块名配置
+    // 解析模块路径，尝试从最具体到最通用的路径查找
+    std::string current_path = node_name;
+    size_t pos;
+    while ((pos = current_path.rfind('.')) != std::string::npos) {
+        current_path = current_path.substr(0, pos);
+        auto it = trace_configs_.find(current_path);
+        if (it != trace_configs_.end()) {
+            const TraceConfig &config = it->second;
+            if (!config.trace_on)
+                return false; // 模块级关闭
 
-    auto it = trace_configs_.find(module_name);
-    if (it != trace_configs_.end()) {
-        const TraceConfig &config = it->second;
-        if (!config.trace_on)
-            return false; // 模块级关闭
-
-        switch (node_type) {
-        case ch::core::lnodetype::type_reg:
-            return config.trace_reg;
-        case ch::core::lnodetype::type_input:
-            return config.trace_input;
-        case ch::core::lnodetype::type_output:
-            return config.trace_output;
-        default:
-            return config.trace_tap; // 使用trace_tap代替trace_wire
+            // 根据传入的trace_type判断是否跟踪
+            switch (trace_type) {
+            case TraceType::REG:
+                return config.trace_reg;
+            case TraceType::INPUT:
+                return config.trace_input;
+            case TraceType::OUTPUT:
+                return config.trace_output;
+            case TraceType::CLOCK:
+                return config.trace_clock;
+            case TraceType::RESET:
+                return config.trace_reset;
+            case TraceType::TAP:
+                return config.trace_tap;
+            default:
+                return config.trace_on;
+            }
         }
     }
 
-    // 检查顶层模块配置
+    // 如果没有模块前缀，则查找"top"配置
     auto top_it = trace_configs_.find("top");
     if (top_it != trace_configs_.end()) {
         const TraceConfig &config = top_it->second;
         if (!config.trace_on)
             return false; // 顶层关闭
 
-        switch (node_type) {
-        case ch::core::lnodetype::type_reg:
+        // 根据传入的trace_type判断是否跟踪
+        switch (trace_type) {
+        case TraceType::REG:
             return config.trace_reg;
-        case ch::core::lnodetype::type_input:
+        case TraceType::INPUT:
             return config.trace_input;
-        case ch::core::lnodetype::type_output:
+        case TraceType::OUTPUT:
             return config.trace_output;
+        case TraceType::CLOCK:
+            return config.trace_clock;
+        case TraceType::RESET:
+            return config.trace_reset;
+        case TraceType::TAP:
+            return config.trace_tap;
         default:
-            return config.trace_tap; // 使用trace_tap代替trace_wire
+            return config.trace_on;
         }
     }
 
-    // 如果没有任何配置，返回默认值（跟踪）
-    return true;
+    // 如果没有任何配置，返回默认值（不跟踪）
+    return false;
 }
 
 Simulator::~Simulator() {
@@ -263,118 +298,66 @@ void Simulator::collect_signals() {
     signals_.clear();
     traced_nodes_.clear();
 
-    // 1. 添加系统时钟和复位信号（总是跟踪）
-    if (ctx_->has_default_clock()) {
-        auto *clock_node = ctx_->get_default_clock();
-        if (should_trace_node(clock_node->id(), clock_node->name(),
-                              clock_node->type())) {
-            signals_.push_back(
-                std::make_pair(clock_node->id(), clock_node->name()));
-            traced_nodes_.insert(clock_node->id());
-            CHDBG("Added clock signal for tracing: %s (ID: %u)",
-                  clock_node->name(), clock_node->id());
-        }
-    }
-
-    if (ctx_->has_default_reset()) {
-        auto *reset_node = ctx_->get_default_reset();
-        if (should_trace_node(reset_node->id(), reset_node->name(),
-                              ch::core::lnodetype::type_reset)) {
-            signals_.push_back(
-                std::make_pair(reset_node->id(), reset_node->name()));
-            traced_nodes_.insert(reset_node->id());
-            CHDBG("Added reset signal for tracing: %s (ID: %u)",
-                  reset_node->name(), reset_node->id());
-        }
-    }
-
-    // 2. 构建使用关系图：找出哪些节点被其他节点使用
-    std::unordered_set<uint32_t> used_node_ids;
+    // 添加所有符合条件的信号，包括叶子节点
     for (auto *node : eval_list_) {
-        // 检查这个节点是否驱动了其他节点
-        const auto &users = node->get_users();
-        for (size_t i = 0; i < users.size(); ++i) {
-            auto *user = users[i];
-            if (user) {
-                used_node_ids.insert(user->id());
-            }
-        }
-    }
 
-    // 3. 添加所有符合条件的信号，包括叶子节点
-    for (auto *node : eval_list_) {
-        bool should_trace =
-            should_trace_node(node->id(), node->name(), node->type());
-
-        if (!should_trace) {
-            continue;
-        }
-
-        // 检查是否是叶子节点（没有被其他节点使用）
-        bool is_leaf_node =
-            used_node_ids.find(node->id()) == used_node_ids.end();
-
-        // 如果是叶子节点并且配置为跟踪tap节点，则添加到信号列表
-        if (is_leaf_node) {
-            // 检查配置是否允许跟踪tap节点
-            bool should_trace_as_tap = false;
-
-            // 检查全局配置
-            auto global_it = trace_configs_.find("all");
-            if (global_it != trace_configs_.end()) {
-                should_trace_as_tap = global_it->second.trace_tap;
-            }
-            // 检查完整路径配置
-            else {
-                auto path_it = trace_configs_.find(node->name());
-                if (path_it != trace_configs_.end()) {
-                    should_trace_as_tap = path_it->second.trace_tap;
-                }
-                // 检查模块名配置
-                else {
-                    size_t dot_pos = node->name().find('.');
-                    std::string module_name =
-                        (dot_pos != std::string::npos)
-                            ? node->name().substr(0, dot_pos)
-                            : "top";
-
-                    auto mod_it = trace_configs_.find(module_name);
-                    if (mod_it != trace_configs_.end()) {
-                        should_trace_as_tap = mod_it->second.trace_tap;
-                    }
-                    // 检查顶层配置
-                    else {
-                        auto top_it = trace_configs_.find("top");
-                        if (top_it != trace_configs_.end()) {
-                            should_trace_as_tap = top_it->second.trace_tap;
-                        } else {
-                            // 默认情况下，如果节点类型不是输入/时钟/复位，则视为tap
-                            should_trace_as_tap =
-                                (node->type() !=
-                                     ch::core::lnodetype::type_input &&
-                                 node->type() !=
-                                     ch::core::lnodetype::type_clock &&
-                                 node->type() !=
-                                     ch::core::lnodetype::type_reset);
-                        }
-                    }
-                }
-            }
-
-            if (should_trace_as_tap) {
+        // 根据节点类型和是否为叶子节点确定trace类型
+        TraceType trace_type;
+        switch (node->type()) {
+        case ch::core::lnodetype::type_reg:
+            trace_type = TraceType::REG;
+            break;
+        case ch::core::lnodetype::type_input:
+            trace_type = TraceType::INPUT;
+            break;
+        case ch::core::lnodetype::type_output:
+            trace_type = TraceType::OUTPUT;
+            break;
+        case ch::core::lnodetype::type_clock:
+            trace_type = TraceType::CLOCK;
+            if (node == ctx_->get_default_clock()) {
                 signals_.push_back(std::make_pair(node->id(), node->name()));
                 traced_nodes_.insert(node->id());
-                CHDBG("Added leaf signal for tracing: %s (ID: %u, Type: %s)",
-                      node->name(), node->id(),
-                      ch::core::to_string(node->type()));
+                continue;
+            }
+            break;
+        case ch::core::lnodetype::type_reset:
+            trace_type = TraceType::RESET;
+            if (node == ctx_->get_default_reset()) {
+                signals_.push_back(std::make_pair(node->id(), node->name()));
+                traced_nodes_.insert(node->id());
+                continue;
+            }
+            break;
+        default:
+            const auto &users = node->get_users();
+            const auto &srcs = node->num_srcs();
+            if (users.size() == 0 & srcs > 0) {
+                trace_type = TraceType::TAP;
+                break;
+            } else {
+                continue;
             }
         }
-        // 如果不是叶子节点，但仍符合跟踪条件，也添加
-        else {
+
+        bool should_trace =
+            should_trace_node(node->id(), node->name(), trace_type);
+
+        if (!should_trace) {
+            CHINFO(
+                "Skip signal for tracing: %s (ID: %u, Type: %s, trace_type %s)",
+                node->name().c_str(), node->id(),
+                ch::core::to_string(node->type()),
+                toString(trace_type).c_str());
+            continue;
+        } else {
             signals_.push_back(std::make_pair(node->id(), node->name()));
             traced_nodes_.insert(node->id());
-            CHDBG("Added signal for tracing: %s (ID: %u, Type: %s)",
-                  node->name(), node->id(), ch::core::to_string(node->type()));
+            CHINFO("Added signal for tracing: %s (ID: %u, Type: %s, trace_type "
+                   "%s)",
+                   node->name().c_str(), node->id(),
+                   ch::core::to_string(node->type()),
+                   toString(trace_type).c_str());
         }
     }
 
@@ -766,6 +749,10 @@ void Simulator::tick() {
     if (default_clock_instr_) {
         eval();
         eval();
+    }
+
+    if (trace_on_) {
+        trace();
     }
 }
 

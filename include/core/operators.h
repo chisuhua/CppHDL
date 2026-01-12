@@ -490,8 +490,9 @@ auto bit_select(const T &operand, const Index &index) {
     auto operand_node = to_operand(operand);
     auto index_node = to_operand(index);
 
-    auto *op_node = node_builder::instance().build_bit_extract<T, Index>(
-        operand_node, index_node, 1);
+    auto *op_node = node_builder::instance().build_bit_select<T, Index>(
+        operand_node, index_node, "bit_select", 
+        std::source_location::current());
 
     return make_uint_result<1>(op_node);
 }
@@ -530,7 +531,8 @@ template <unsigned NewWidth, typename T> auto sext(const T &operand) {
 }
 
 // === 零扩展操作 ===
-template <unsigned NewWidth, typename T> auto zext(const T &operand) {
+template <unsigned NewWidth, typename T>
+auto zext(const T &operand, const std::string &name = "zext") {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
     static_assert(NewWidth >= ch_width_v<T>,
                   "New width must be >= original width");
@@ -540,7 +542,7 @@ template <unsigned NewWidth, typename T> auto zext(const T &operand) {
     auto *op_node = node_builder::instance().build_operation(
         ch_op::zext, operand_node, NewWidth,
         false, // 无符号操作
-        "zext", std::source_location::current());
+        name, std::source_location::current());
 
     return make_uint_result<NewWidth>(op_node);
 }

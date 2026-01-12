@@ -42,7 +42,12 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
             const std::source_location &sloc = std::source_location::current())
         requires(N == 1)
     {
-        this->node_impl_ = val.impl();
+        if (name == "bool_to_uint") {
+            this->node_impl_ = val.impl();
+        } else {
+            // create new node with provided name
+            this->node_impl_ = zext<N, ch_bool>(val, name).impl();
+        }
     }
 
     // 提供一个工厂函数用于创建 ch_uint<1>，用户可以进一步扩展
@@ -63,9 +68,15 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     ch_uint(
         const ch_uint<M> &other, const std::string &name = "uint_conv",
         const std::source_location &sloc = std::source_location::current()) {
-        if constexpr (M <= N) {
+        if constexpr (M == N) {
+            if (name == "uint_conv") {
+                this->node_impl_ = other.impl();
+            } else {
+                this->node_impl_ = zext<N>(other, name).impl();
+            }
+        } else if constexpr (M < N) {
             // 零扩展
-            this->node_impl_ = zext<N>(other).impl();
+            this->node_impl_ = zext<N>(other, name).impl();
         } else {
             // 截断
             this->node_impl_ = bits<N - 1, 0>(other).impl();

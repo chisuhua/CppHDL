@@ -23,8 +23,13 @@ namespace chlib {
  * 从多个请求中选择优先级最高的一个，通常低位优先级更高
  */
 template <unsigned N> struct PrioritySelectorResult {
+
     ch_uint<N> grant; // 授予信号，one-hot编码
     ch_bool valid;    // 是否有有效请求
+    PrioritySelectorResult()
+        : grant(0, "grant"),
+          valid(false, "valid") // 或 valid(0, "valid")，取决于ch_bool的实现
+    {}
 };
 
 template <unsigned N>
@@ -163,8 +168,6 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
     static constexpr unsigned IDX_WIDTH = compute_idx_width(N);
 
     PrioritySelectorResult<N> result;
-    result.grant = 0_d;
-    result.valid = false;
 
     // 将one-hot编码的last_grant转换为二进制索引，然后加1
     // 需要确保当last_grant为0时，使用默认值0
@@ -173,8 +176,30 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
         select(has_last_grant, onehot_to_binary<N>(last_grant), 0_d);
     ch_uint<IDX_WIDTH> start_pos = (last_grant_idx + 1_d) % make_literal<N>();
 
+    // 初始化第一个元素
+    ch_uint<IDX_WIDTH> pos_0 = (start_pos + 0) % make_literal<N>();
+    ch_bool req_at_pos_0 = bit_select(request, pos_0);
+    ch_uint<N> grant_one_hot_0 = shl<N>(ch_uint<N>(1_d), pos_0);
+
+    result.grant = select(req_at_pos_0, grant_one_hot_0, 0_d);
+    result.valid = select(req_at_pos_0, 1_b, 0_b);
+
+    // ch_uint<N> request_tap(request, "request");
+    // ch_uint<N> last_grant_tap(last_grant, "last_grant");
+    // ch_uint<1> has_last_grant_tap(has_last_grant, "has_last_grant");
+    // ch_uint<IDX_WIDTH> last_grant_idx_tap(last_grant_idx, "last_grant_idx");
+    // ch_uint<IDX_WIDTH> start_pos_tap(start_pos, "start_pos");
+
+    // ch_uint<IDX_WIDTH> pos0_tap(pos_0, "pos0"); // 授予信号，one-hot编码
+    // ch_uint<1> req_at_pos0_tap(req_at_pos_0, "req_at_pos0"); //
+    // 是否有有效请求 ch_uint<N> grant_onehot0_tap(grant_one_hot_0,
+    //                              "grant_onehot0"); // 授予信号，one-hot编码
+    // ch_uint<N> grant0_tap(result.grant,
+    //                       "grant0"); // 授予信号，one-hot编码
+    // ch_uint<1> valid0_tap(result.valid, "valid0"); // 是否有有效请求
+
     // 从start_pos开始循环检查，直到找到请求或完成一圈
-    for (unsigned i = 0; i < N; ++i) {
+    for (unsigned i = 1; i < N; ++i) {
         ch_uint<IDX_WIDTH> pos = (start_pos + i) % make_literal<N>();
         ch_bool req_at_pos = bit_select(request, pos);
         ch_uint<N> grant_one_hot = shl<N>(ch_uint<N>(1_d), pos);
@@ -183,9 +208,19 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
         result.grant =
             select(req_at_pos && !result.valid, grant_one_hot, result.grant);
         result.valid = select(req_at_pos, 1_b, result.valid);
+
+        // ch_uint<IDX_WIDTH> pos_tap(
+        //     pos, "pos" + std::to_string(i)); // 授予信号，one-hot编码
+        // ch_uint<1> req_at_pos_tap(req_at_pos, "req_at_pos" +
+        // std::to_string(i)); ch_uint<N> grant_onehot_tap(grant_one_hot,
+        //                             "grant_onehot" + std::to_string(i));
+        // ch_uint<N> grant1_tap(result.grant, "grant" + std::to_string(i));
+        // ch_uint<1> valid1_tap(result.valid, "valid" + std::to_string(i));
     }
 
-    return result;
+    ch_uint<N> grant1_tap(result.grant, "grant");
+    ch_uint<1> valid1_tap(result.valid, "valid");
+    return result; // 返回最后一个结果，即最终结果
 }
 
 } // namespace chlib

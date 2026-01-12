@@ -36,6 +36,100 @@ TEST_CASE("bit_select: bit selection operation",
     STATIC_REQUIRE(ch_width_v<decltype(bit7)> == 1);
 }
 
+// 添加新的 bit_select 测试用例
+TEST_CASE("bit_select: runtime index version", "[operators][bit_operations]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+
+    // 创建一个8位的ch_uint
+    ch_uint<8> data(0b10110101, "test_data");
+
+    // 测试位选择操作（使用运行时索引）
+    auto bit0 = bit_select(data, 0u); // 应该是1
+    auto bit1 = bit_select(data, 1u); // 应该是0
+    auto bit2 = bit_select(data, 2u); // 应该是1
+    auto bit7 = bit_select(data, 7u); // 应该是1
+
+    REQUIRE(std::is_same_v<decltype(bit0), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(bit1), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(bit2), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(bit7), ch_uint<1>>);
+
+    // 验证宽度
+    STATIC_REQUIRE(ch_width_v<decltype(bit0)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit1)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit2)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7)> == 1);
+}
+
+TEST_CASE("bit_select: comparison between compile-time and runtime versions", "[operators][bit_operations]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+
+    // 创建一个8位的ch_uint
+    ch_uint<8> data(0b10110101, "test_data");
+
+    // 比较编译时版本和运行时版本的结果
+    auto bit0_compile_time = bit_select<0>(data);
+    auto bit0_runtime = bit_select(data, 0u);
+    
+    auto bit1_compile_time = bit_select<1>(data);
+    auto bit1_runtime = bit_select(data, 1u);
+    
+    auto bit2_compile_time = bit_select<2>(data);
+    auto bit2_runtime = bit_select(data, 2u);
+    
+    auto bit7_compile_time = bit_select<7>(data);
+    auto bit7_runtime = bit_select(data, 7u);
+
+    // 验证两种版本的返回类型相同
+    REQUIRE(std::is_same_v<decltype(bit0_compile_time), decltype(bit0_runtime)>);
+    REQUIRE(std::is_same_v<decltype(bit1_compile_time), decltype(bit1_runtime)>);
+    REQUIRE(std::is_same_v<decltype(bit2_compile_time), decltype(bit2_runtime)>);
+    REQUIRE(std::is_same_v<decltype(bit7_compile_time), decltype(bit7_runtime)>);
+
+    // 验证宽度相同
+    STATIC_REQUIRE(ch_width_v<decltype(bit0_compile_time)> == ch_width_v<decltype(bit0_runtime)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit1_compile_time)> == ch_width_v<decltype(bit1_runtime)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit2_compile_time)> == ch_width_v<decltype(bit2_runtime)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7_compile_time)> == ch_width_v<decltype(bit7_runtime)>);
+}
+
+TEST_CASE("bit_select: various widths", "[operators][bit_operations]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+
+    // 测试不同宽度的数值
+    ch_uint<4> data4(0b1011, "test_data4");
+    ch_uint<16> data16(0b1011010111110000, "test_data16");
+    ch_uint<32> data32(0x12345678, "test_data32");
+
+    // 测试不同宽度数据的位选择
+    auto bit2_4 = bit_select<2>(data4);
+    auto bit7_16 = bit_select<7>(data16);
+    auto bit15_16 = bit_select<15>(data16);
+    auto bit23_32 = bit_select<23>(data32);
+    
+    // 测试运行时版本
+    auto bit2_4_rt = bit_select(data4, 2u);
+    auto bit7_16_rt = bit_select(data16, 7u);
+    auto bit15_16_rt = bit_select(data16, 15u);
+    auto bit23_32_rt = bit_select(data32, 23u);
+
+    // 验证所有结果都是1位宽
+    STATIC_REQUIRE(ch_width_v<decltype(bit2_4)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7_16)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit15_16)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit23_32)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit2_4_rt)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7_16_rt)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit15_16_rt)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit23_32_rt)> == 1);
+}
+
 TEST_CASE("bits: bit slice operation", "[operators][bit_operations]") {
     // 创建测试上下文
     context ctx("test_ctx");
@@ -648,3 +742,93 @@ TEST_CASE("Concatenation operations", "[operators][concat]") {
     STATIC_REQUIRE(ch_width_v<decltype(concat_4_8)> == 12);
     STATIC_REQUIRE(ch_width_v<decltype(concat_8_4)> == 12);
 }
+
+// 添加参数形式的 bit_select 函数的测试
+TEST_CASE("bit_select: hardware index version", "[operators][bit_operations][hardware_index]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+
+    // 创建一个8位的ch_uint
+    ch_uint<8> data(0b10110101, "test_data");
+    
+    // 创建硬件类型的索引
+    ch_uint<4> idx0(0, "idx0");
+    ch_uint<4> idx1(1, "idx1");
+    ch_uint<4> idx2(2, "idx2");
+    ch_uint<4> idx7(7, "idx7");
+
+    // 测试位选择操作（使用硬件类型的索引）
+    auto bit0 = bit_select(data, idx0); // 应该是1
+    auto bit1 = bit_select(data, idx1); // 应该是0
+    auto bit2 = bit_select(data, idx2); // 应该是1
+    auto bit7 = bit_select(data, idx7); // 应该是1
+
+    REQUIRE(std::is_same_v<decltype(bit0), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(bit1), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(bit2), ch_uint<1>>);
+    REQUIRE(std::is_same_v<decltype(bit7), ch_uint<1>>);
+
+    // 验证宽度
+    STATIC_REQUIRE(ch_width_v<decltype(bit0)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit1)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit2)> == 1);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7)> == 1);
+}
+
+TEST_CASE("bit_select: comparison between all three versions", "[operators][bit_operations][comparison]") {
+    // 创建测试上下文
+    context ctx("test_ctx");
+    ctx_swap swap(&ctx);
+
+    // 创建一个8位的ch_uint
+    ch_uint<8> data(0b10110101, "test_data");
+    
+    // 创建硬件类型的索引
+    ch_uint<4> idx0(0, "idx0");
+    ch_uint<4> idx1(1, "idx1");
+    ch_uint<4> idx2(2, "idx2");
+    ch_uint<4> idx7(7, "idx7");
+
+    // 比较三种版本的结果
+    // 编译时版本
+    auto bit0_compile_time = bit_select<0>(data);
+    auto bit1_compile_time = bit_select<1>(data);
+    auto bit2_compile_time = bit_select<2>(data);
+    auto bit7_compile_time = bit_select<7>(data);
+    
+    // 运行时版本
+    auto bit0_runtime = bit_select(data, 0u);
+    auto bit1_runtime = bit_select(data, 1u);
+    auto bit2_runtime = bit_select(data, 2u);
+    auto bit7_runtime = bit_select(data, 7u);
+    
+    // 硬件索引版本
+    auto bit0_hardware_idx = bit_select(data, idx0);
+    auto bit1_hardware_idx = bit_select(data, idx1);
+    auto bit2_hardware_idx = bit_select(data, idx2);
+    auto bit7_hardware_idx = bit_select(data, idx7);
+
+    // 验证三种版本的返回类型相同
+    REQUIRE(std::is_same_v<decltype(bit0_compile_time), decltype(bit0_runtime)>);
+    REQUIRE(std::is_same_v<decltype(bit1_compile_time), decltype(bit1_runtime)>);
+    REQUIRE(std::is_same_v<decltype(bit2_compile_time), decltype(bit2_runtime)>);
+    REQUIRE(std::is_same_v<decltype(bit7_compile_time), decltype(bit7_runtime)>);
+    
+    REQUIRE(std::is_same_v<decltype(bit0_compile_time), decltype(bit0_hardware_idx)>);
+    REQUIRE(std::is_same_v<decltype(bit1_compile_time), decltype(bit1_hardware_idx)>);
+    REQUIRE(std::is_same_v<decltype(bit2_compile_time), decltype(bit2_hardware_idx)>);
+    REQUIRE(std::is_same_v<decltype(bit7_compile_time), decltype(bit7_hardware_idx)>);
+
+    // 验证宽度相同
+    STATIC_REQUIRE(ch_width_v<decltype(bit0_compile_time)> == ch_width_v<decltype(bit0_runtime)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit1_compile_time)> == ch_width_v<decltype(bit1_runtime)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit2_compile_time)> == ch_width_v<decltype(bit2_runtime)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7_compile_time)> == ch_width_v<decltype(bit7_runtime)>);
+    
+    STATIC_REQUIRE(ch_width_v<decltype(bit0_compile_time)> == ch_width_v<decltype(bit0_hardware_idx)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit1_compile_time)> == ch_width_v<decltype(bit1_hardware_idx)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit2_compile_time)> == ch_width_v<decltype(bit2_hardware_idx)>);
+    STATIC_REQUIRE(ch_width_v<decltype(bit7_compile_time)> == ch_width_v<decltype(bit7_hardware_idx)>);
+}
+
