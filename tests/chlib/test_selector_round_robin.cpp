@@ -513,41 +513,48 @@ TEST_CASE("SelectorArbiter: round robin selector",
             round_robin_selector<4>(request, last_grant);
 
         ch::Simulator sim(ctx.get(), "trace.ini");
-        
-        // Initial case: request=0101, last_grant=0001 (position 0 granted previously)
-        // Next starting position would be 1, position 1 not requesting, so grant to position 2
-        sim.tick();
-        REQUIRE(sim.get_value(result.grant) == 0100_b); // Expecting position 2 granted
 
-        sim.set_value(request, 0100_b);  // Now only position 2 requesting
+        // Initial case: request=0101, last_grant=0001 (position 0 granted
+        // previously) Next starting position would be 1, position 1 not
+        // requesting, so grant to position 2
+        sim.tick();
+        REQUIRE(sim.get_value(result.grant) ==
+                0100_b); // Expecting position 2 granted
+
+        sim.set_value(request, 0100_b);    // Now only position 2 requesting
         sim.set_value(last_grant, 0100_b); // Previously granted position 2
         sim.tick();
-        // Starting from position 3 (after 2), no request there, wrap around to position 0 if requested
-        // But only pos 2 is requested, so should still grant to position 2
-        REQUIRE(sim.get_value(result.grant) == 0100_b); 
-
-        sim.set_value(request, 1111_b);  // All positions requesting
-        sim.set_value(last_grant, 0001_b); // Previously granted position 0
-        sim.tick();
-        // Starting from position 1 (after 0), position 1 is requesting, so should grant to position 1
-        REQUIRE(sim.get_value(result.grant) == 0010_b);
-
-        sim.set_value(request, 1111_b);  // All positions requesting
-        sim.set_value(last_grant, 0010_b); // Previously granted position 1
-        sim.tick();
-        // Starting from position 2 (after 1), position 2 is requesting, so should grant to position 2
+        // Starting from position 3 (after 2), no request there, wrap around to
+        // position 0 if requested But only pos 2 is requested, so should still
+        // grant to position 2
         REQUIRE(sim.get_value(result.grant) == 0100_b);
 
-        sim.set_value(request, 1111_b);  // All positions requesting
+        sim.set_value(request, 1111_b);    // All positions requesting
+        sim.set_value(last_grant, 0001_b); // Previously granted position 0
+        sim.tick();
+        // Starting from position 1 (after 0), position 1 is requesting, so
+        // should grant to position 1
+        REQUIRE(sim.get_value(result.grant) == 0010_b);
+
+        sim.set_value(request, 1111_b);    // All positions requesting
+        sim.set_value(last_grant, 0010_b); // Previously granted position 1
+        sim.tick();
+        // Starting from position 2 (after 1), position 2 is requesting, so
+        // should grant to position 2
+        REQUIRE(sim.get_value(result.grant) == 0100_b);
+
+        sim.set_value(request, 1111_b);    // All positions requesting
         sim.set_value(last_grant, 0100_b); // Previously granted position 2
         sim.tick();
-        // Starting from position 3 (after 2), position 3 is requesting, so should grant to position 3
+        // Starting from position 3 (after 2), position 3 is requesting, so
+        // should grant to position 3
         REQUIRE(sim.get_value(result.grant) == 1000_b);
 
-        sim.set_value(request, 1111_b);  // All positions requesting
+        sim.set_value(request, 1111_b);    // All positions requesting
         sim.set_value(last_grant, 1000_b); // Previously granted position 3
         sim.tick();
-        // Starting from position 0 (after 3, wrapping around), position 0 is requesting, so should grant to position 0
+        // Starting from position 0 (after 3, wrapping around), position 0 is
+        // requesting, so should grant to position 0
         REQUIRE(sim.get_value(result.grant) == 0001_b);
     }
 
