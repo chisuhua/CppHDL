@@ -100,6 +100,19 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     void set_direction(input_direction) const { dir_ = input_direction{}; }
     void set_direction(output_direction) const { dir_ = output_direction{}; }
 
+    // 添加赋值操作符，代表硬件连接
+    template <typename U> ch_uint &operator<<=(const U &value) {
+        lnode<U> src_lnode = get_lnode(value);
+        if (this->node_impl_ && src_lnode.impl()) {
+            this->node_impl_ = src_lnode.impl();
+        } else {
+            CHERROR("[ch_uint::operator=] Error: node_impl_ or "
+                    "src_lnode is null for ch_uint<%d>!",
+                    N);
+        }
+        return *this;
+    }
+
     void flip_direction() const {
         if (std::holds_alternative<input_direction>(dir_)) {
             dir_ = output_direction{};

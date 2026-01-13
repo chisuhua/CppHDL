@@ -1,3 +1,4 @@
+AI_CODING_GUIDELINES.md
 # CppHDL AI辅助编码规则和提示词指南
 
 ## 概述
@@ -143,6 +144,35 @@ for(unsigned i = 1; i < width; ++i) {
     mask_val = (mask_val << 1_d) + 1_d;
 }
 ```
+
+### 10. 硬件连接赋值操作规范
+- **核心操作**：使用 `operator<<=` 作为硬件连接的标准赋值操作符
+- **适用类型**：
+  - `ch_reg<T>` 类型：用于连接寄存器的下一个值
+  - `ch_out<T>` 类型：用于连接输出端口的值
+  - `ch_uint<N>` 类型：用于连接信号的值
+- **语义表达**：`<<=` 操作符表示将右侧信号连接到左侧端口或寄存器
+- **连接语义**：该操作符实现硬件连接，而非传统赋值，右侧值将在下一个时钟周期影响左侧对象
+
+**正确示例**：
+```cpp
+// 连接寄存器的下一个值
+ch_reg<ch_uint<8>> reg("counter");
+reg <<= select(rst, 0_d, reg + 1_d);
+
+// 连接输出端口
+ch_out<ch_uint<8>> output_port;
+output_port <<= some_signal;
+
+// 连接信号
+ch_uint<8> signal1, signal2;
+signal1 <<= signal2;  // 将signal2连接到signal1
+```
+
+**设计优势**：
+- 明确区分硬件连接与传统赋值操作
+- 提供一致的硬件连接语法
+- 避免对硬件信号的错误理解
 
 ## 代码结构规范
 
@@ -356,3 +386,5 @@ flag->next = select(condition, true, false);  // 错误
 - [ ] 使用CppHDL类型（1_b/0_b）替代C++内置true/false
 - [ ] 代码风格与项目保持一致
 - [ ] 包含了适当的错误处理和验证
+</file>
+</attached_files>

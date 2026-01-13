@@ -76,6 +76,9 @@ set(BASE_TEST_SOURCES
     test_comparison_ops.cpp
     test_mod_width.cpp
     test_trace.cpp
+    test_operator_connection.cpp
+    test_bool_connection.cpp
+    test_mem_connection.cpp
 )
 
 # chlib 测试源文件列表
@@ -93,7 +96,7 @@ set(CHLIB_TEST_SOURCES
     chlib/test_switch.cpp
     chlib/test_arithmetic_advance.cpp
     chlib/test_memory.cpp
-    # chlib/test_fifo.cpp
+    chlib/test_fifo.cpp
     # chlib/test_cam.cpp
     # chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件
 )

@@ -4,6 +4,7 @@
 #include "core/direction.h"
 #include "core/logic_buffer.h"
 #include "core/traits.h"
+#include "core/lnode.h"  // 添加 lnode 定义
 #include <source_location>
 #include <string>
 #include <variant>
@@ -55,6 +56,18 @@ struct ch_bool : public logic_buffer<ch_bool> {
 
     void set_direction(input_direction) const { dir_ = input_direction{}; }
     void set_direction(output_direction) const { dir_ = output_direction{}; }
+
+    // 添加赋值操作符，代表硬件连接
+    template <typename U> ch_bool &operator<<=(const U &value) {
+        lnode<U> src_lnode = get_lnode(value);
+        if (this->node_impl_ && src_lnode.impl()) {
+            this->node_impl_ = src_lnode.impl();
+        } else {
+            CHERROR("[ch_bool::operator=] Error: node_impl_ or "
+                    "src_lnode is null for ch_bool!");
+        }
+        return *this;
+    }
 
     void flip_direction() const {
         if (std::holds_alternative<input_direction>(dir_)) {
