@@ -92,7 +92,7 @@ set(CHLIB_TEST_SOURCES
     chlib/test_selector_round_robin.cpp  # 新增的轮询选择器测试文件
     chlib/test_switch.cpp
     chlib/test_arithmetic_advance.cpp
-    # chlib/test_memory.cpp
+    chlib/test_memory.cpp
     # chlib/test_fifo.cpp
     # chlib/test_cam.cpp
     # chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件
