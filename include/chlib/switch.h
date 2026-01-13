@@ -5,10 +5,43 @@
 #include <core/operators.h>
 #include <core/operators_runtime.h>
 #include <core/types.h>
+#include <cstdint>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 using namespace ch::core;
+
+// 为ch_uint类型特化std::common_type
+namespace std {
+template <unsigned N, unsigned M>
+struct common_type<ch::core::ch_uint<N>, ch::core::ch_uint<M>> {
+    using type = ch::core::ch_uint<(N > M ? N : M)>; // 取较大宽度作为公共类型
+};
+
+// 处理ch_uint与字面量类型的通用情况
+template <unsigned N, uint64_t V, uint32_t W>
+struct common_type<ch::core::ch_uint<N>, ch::core::ch_literal_impl<V, W>> {
+    using type = ch::core::ch_uint<N>;
+};
+
+template <uint64_t V, uint32_t W, unsigned N>
+struct common_type<ch::core::ch_literal_impl<V, W>, ch::core::ch_uint<N>> {
+    using type = ch::core::ch_uint<N>;
+};
+
+// 处理ch_uint与ch_bool类型的通用情况
+template <unsigned N>
+struct common_type<ch::core::ch_uint<N>, ch::core::ch_bool> {
+    using type = ch::core::ch_uint<(N > 1 ? N : 1)>; // ch_bool可视为ch_uint<1>
+};
+
+template <unsigned N>
+struct common_type<ch::core::ch_bool, ch::core::ch_uint<N>> {
+    using type = ch::core::ch_uint<(N > 1 ? N : 1)>; // ch_bool可视为ch_uint<1>
+};
+
+} // namespace std
 
 namespace chlib {
 
@@ -72,6 +105,35 @@ constexpr auto switch_impl(TDefault &&default_result) {
     return std::forward<TDefault>(default_result);
 }
 
+// 辅助函数：处理不同类型间的转换，特别是ch_bool到ch_uint的转换
+template<typename FromType, typename ToType>
+constexpr auto convert_for_select(FromType&& value) -> ToType {
+    if constexpr (std::is_same_v<std::decay_t<FromType>, ch::core::ch_bool> && 
+                  std::is_same_v<ToType, ch::core::ch_uint<1>>) {
+        // 当源类型是ch_bool，目标类型是ch_uint<1>时，直接转换
+        return ToType{value};
+    } else if constexpr (std::is_same_v<std::decay_t<FromType>, ch::core::ch_bool> && 
+                        (std::is_same_v<ToType, ch::core::ch_uint<2>> || 
+                         std::is_same_v<ToType, ch::core::ch_uint<3>> || 
+                         std::is_same_v<ToType, ch::core::ch_uint<4>> || 
+                         std::is_same_v<ToType, ch::core::ch_uint<8>> || 
+                         std::is_same_v<ToType, ch::core::ch_uint<15>>)) {
+        // 当源类型是ch_bool而目标类型是ch_uint（且N>1）时，需要特殊处理
+        // 将ch_bool转换为ch_uint<1>，然后再扩展
+        constexpr unsigned to_width = ch::core::ch_width_v<std::decay_t<ToType>>;
+        if constexpr (to_width > 1) {
+            // 使用zext进行零扩展
+            ch::core::ch_uint<1> temp{value};
+            return ch::core::zext<to_width>(temp);
+        } else {
+            return ToType{value}; // N==1的情况
+        }
+    } else {
+        // 对于其他情况，执行标准转换
+        return static_cast<ToType>(std::forward<FromType>(value));
+    }
+}
+
 // 递归实现：处理当前case并继续处理剩余参数
 // 电路行为：实现优先级编码器，从第一个case开始依次检查，找到第一个匹配的case
 // 硬件结构：多个比较器串联，形如 if (value == case1) result1
@@ -88,13 +150,22 @@ constexpr auto switch_impl(TValue &&value, TDefault &&default_result,
     // 如果匹配则返回当前结果，否则继续处理剩余case
     if constexpr (sizeof...(rest_cases) == 0) {
         // 这是最后一个case
-        return is_match ? current_case.result : default_result;
+        using result_type = std::common_type_t<TResult, TDefault>;
+        return select(is_match, convert_for_select<TResult, result_type>(std::forward<TResult>(current_case.result)),
+                      convert_for_select<TDefault, result_type>(std::forward<TDefault>(default_result)));
     } else {
         // 还有更多case，递归处理
-        return is_match ? current_case.result
-                        : switch_impl(std::forward<TValue>(value),
-                                      std::forward<TDefault>(default_result),
-                                      std::forward<TRest>(rest_cases)...);
+        using recursive_result_type = decltype(switch_impl(
+            std::forward<TValue>(value), std::forward<TDefault>(default_result),
+            std::forward<TRest>(rest_cases)...));
+        using result_type = std::common_type_t<TResult, recursive_result_type>;
+        
+        return select(is_match, 
+                      convert_for_select<TResult, result_type>(std::forward<TResult>(current_case.result)),
+                      convert_for_select<recursive_result_type, result_type>(
+                          switch_impl(std::forward<TValue>(value),
+                                    std::forward<TDefault>(default_result),
+                                    std::forward<TRest>(rest_cases)...)));
     }
 }
 
@@ -134,9 +205,8 @@ constexpr auto switch_parallel(TValue &&value, TDefault &&default_result,
             auto result = default_result;
 
             // 从最高优先级到最低优先级依次检查
-            auto _ = ((static_cast<ch_bool>(std::get<I>(conditions))
-                           ? (result = std::get<I>(results), true)
-                           : false) ||
+            auto _ = ((select((std::get<I>(conditions)),
+                              (result = std::get<I>(results), true), false)) ||
                       ... || true);
             (void)_; // 避免未使用变量警告
 
@@ -171,9 +241,8 @@ constexpr auto switch_parallel(TValue &&value, TDefault &&default_result,
             auto result = default_uint;
 
             // 从最高优先级到最低优先级依次检查
-            auto _ = ((static_cast<ch_bool>(std::get<I>(conditions))
-                           ? (result = std::get<I>(results), true)
-                           : false) ||
+            auto _ = (select(std::get<I>(conditions),
+                             (result = std::get<I>(results), true), false) ||
                       ... || true);
             (void)_; // 避免未使用变量警告
 
