@@ -1,90 +1,149 @@
-## 基础模块
-1. **算术运算模块**
-   - 加法器 (Adder) - 基础加法运算
-   - 减法器 (Subtractor) - 基础减法运算
-   - 乘法器 (Multiplier) - 基础乘法运算
-   - 比较器 (Comparator) - 大小比较
-   - 移位器 (Shifter) - 左移、右移、算术移位、逻辑移位
+## CHLib 模块指南
 
-2. **基本逻辑模块**
-   - 与门 (AND)、或门 (OR)、非门 (NOT)、异或门 (XOR)
-   - 多输入与门/或门 (NAND/NOR)
-   - 解码器 (Decoder) - 二进制到one-hot转换（除了onehot外的其他解码）
+CppHDL 的 CHLib 是一个硬件构建库，提供了一系列模块化组件，用于快速构建复杂的数字电路。以下是按文件组织的模块说明：
 
-## 中级模块
-3. **组合逻辑模块**
-   - 多路选择器 (Multiplexer) - 2选1, 4选1, 8选1等
-   - 分配器 (Demultiplexer) - 信号分配
-   - 编码器 (Encoder) - 优先级编码器
-   - 奇偶校验生成器/校验器 (Parity Generator/Checker)
-   - 海明码生成器/校验器 (Hamming Code Generator/Checker)
+### arithmetic.h - 算术运算模块
+提供基本的算术运算功能：
+- `add(a, b)` - 加法运算，返回两数之和
+- `subtract(a, b)` - 减法运算，返回两数之差
+- `multiply(a, b)` - 乘法运算，返回两数之积（2*N位宽）
+- `add_with_carry(a, b, carry_in)` - 带进位加法器，返回和与进位输出
+- `sub_with_borrow(a, b, borrow_in)` - 带借位减法器，返回差与借位输出
+- `divide(a, b)` - 除法运算（整数除法）
+- `modulo(a, b)` - 取模运算
+- `negate(a)` - 取负运算
+- `abs(a)` - 绝对值运算
 
-4. **时序逻辑模块**
-   - D触发器 (D Flip-Flop) - 带使能和复位
-   - JK触发器 (JK Flip-Flop)
-   - T触发器 (T Flip-Flop)
-   - 寄存器 (Register) - 带并行加载功能
-   - 移位寄存器 (Shift Register) - 串行/并行输入输出
+### arithmetic_advance.h - 高级算术运算模块
+提供高级算术运算功能：
+- `square_root<N>(a)` - 计算N位数值的平方根
+- `power<N>(base, exp)` - 计算幂运算
+- `logarithm<N>(a)` - 计算对数值
+- `fixed_point_multiply<N, F>(a, b)` - 定点数乘法
 
-5. **计数器模块**
-   - 二进制计数器 (Binary Counter)
-   - 约翰逊计数器 (Johnson Counter)
-   - 环形计数器 (Ring Counter)
-   - BCD计数器 (BCD Counter)
-   - 可逆计数器 (Up/Down Counter)
+### bitwise.h - 位运算模块
+提供基本的位运算功能：
+- `bitwise_and<N>(a, b)` - 按位与运算
+- `bitwise_or<N>(a, b)` - 按位或运算
+- `bitwise_xor<N>(a, b)` - 按位异或运算
+- `bitwise_not<N>(a)` - 按位取反运算
+- `bitwise_nand<N>(a, b)` - 按位与非运算
+- `bitwise_nor<N>(a, b)` - 按位或非运算
+- `bitwise_xnor<N>(a, b)` - 按位同或运算
+- `population_count<N>(a)` - 计算比特中1的个数
+- `leading_zeros<N>(a)` - 计算前导零的个数
+- `trailing_zeros<N>(a)` - 计算尾随零的个数
 
-## 高级模块
-6. **存储器模块**
-   - 单端口RAM (Single Port RAM)
-   - 双端口RAM (Dual Port RAM)
-   - FIFO (First In First Out) - 同步/异步FIFO
-   - LIFO (Last In First Out) - 栈存储器
-   - CAM (Content Addressable Memory) - 相联存储器
+### combinational.h - 组合逻辑模块
+提供常用的组合逻辑功能：
+- `priority_encoder<N>(input)` - 优先级编码器，将one-hot编码转换为二进制索引
+- `binary_encoder<N>(input)` - 二进制编码器
+- `binary_decoder<N>(input)` - 二进制解码器，将二进制索引转换为one-hot编码
+- `odd_parity_gen<N>(input)` - 奇校验生成器
+- `even_parity_gen<N>(input)` - 偶校验生成器
 
-7. **接口协议模块**
-   - AXI总线接口 (AXI Bus Interface)
-   - AXI-Lite接口 (AXI-Lite Interface)
-   - UART控制器 (UART Controller)
-   - SPI控制器 (SPI Controller)
-   - I2C控制器 (I2C Controller)
-   - PCIe接口 (PCIe Interface)
+### converter.h - 数据转换模块
+提供数据格式转换功能：
+- `binary_to_gray<N>(input)` - 二进制转格雷码
+- `gray_to_binary<N>(input)` - 格雷码转二进制
+- `binary_to_bcd<N>(input)` - 二进制转BCD码
+- `bcd_to_binary<N>(input)` - BCD码转二进制
+- `unsigned_to_signed<N>(input)` - 无符号转有符号
+- `signed_to_unsigned<N>(input)` - 有符号转无符号
 
-8. **算术和逻辑单元 (ALU)**
-   - 基础ALU - 加减与或运算
-   - 高级ALU - 包含乘除、移位、比较等
-   - 浮点运算单元 (Floating Point Unit)
+### fifo.h - FIFO存储器模块
+提供FIFO队列功能：
+- `sync_fifo<DATA_WIDTH, ADDR_WIDTH>()` - 同步FIFO，支持同步读写操作
+- `async_fifo<DATA_WIDTH, ADDR_WIDTH>()` - 异步FIFO，支持跨时钟域操作
+- `fwft_fifo<DATA_WIDTH, ADDR_WIDTH>()` - First-Word Fall-Through FIFO，读取延迟为0
+- `is_empty(count)` - 检查FIFO是否为空
+- `is_full(count)` - 检查FIFO是否为满
 
-9. **处理器模块**
-   - 简单CPU核心 (Simple CPU Core)
-   - RISC-V兼容处理器 (RISC-V Compatible Processor)
-   - 流水线处理器 (Pipelined Processor)
-   - 多核处理器 (Multi-core Processor)
+### fragment.h - 数据分片模块
+提供数据分片和重组功能：
+- `fragment(data, size)` - 将大数据分片
+- `defragment(fragments)` - 将分片数据重组
 
-10. **数字信号处理模块**
-    - 数字滤波器 (Digital Filter) - FIR/IIR
-    - FFT处理器 (FFT Processor)
-    - DDS信号发生器 (DDS Signal Generator)
-    - 数模/模数转换接口 (ADC/DAC Interface)
+### if.h - 条件选择模块
+提供条件选择功能：
+- `if_(condition).then(value1).else_(value2)` - 条件选择函数式接口
+- `select(condition, true_value, false_value)` - 三元选择操作（基于mux）
 
-11. **错误检测与纠正模块**
-    - CRC生成器/校验器 (CRC Generator/Checker)
-    - ECC编码器/解码器 (ECC Encoder/Decoder)
-    - 检错重传控制器 (ARQ Controller)
+### if_stmt.h - 条件语句模块
+提供高级条件语句功能：
+- `if_then_else(condition, then_func, else_func)` - 函数式条件语句
+- `switch_case(value, cases...)` - 多路分支语句
+- `switch_pairs(cases...)` - 基于键值对的分支语句
 
-12. **时钟和复位管理模块**
-    - 时钟分频器 (Clock Divider)
-    - 时钟倍频器 (Clock Multiplier/PLL)
-    - 复位同步器 (Reset Synchronizer)
-    - 时钟门控 (Clock Gating)
+### logic.h - 基本逻辑门模块
+提供基本逻辑门功能：
+- `and_gate<N>(a, b)` - N位与门
+- `or_gate<N>(a, b)` - N位或门
+- `not_gate<N>(a)` - N位非门
+- `xor_gate<N>(a, b)` - N位异或门
+- `nand_gate<N>(a, b)` - N位与非门
+- `nor_gate<N>(a, b)` - N位或非门
+- `xnor_gate<N>(a, b)` - N位同或门
+- `multi_and_gate(inputs)` - 多输入与门
+- `mux<N, M>(inputs, sel)` - M选1多路选择器
+- `mux2<N>(in0, in1, sel)` - 2选1多路选择器
+- `mux4<N>(in0, in1, in2, in3, sel)` - 4选1多路选择器
+- `demux<N, M>(input, sel)` - 分配器，将输入分配到M个输出之一
 
-13. **调试和测试模块**
-    - 内建自测试 (BIST - Built-In Self Test)
-    - 边界扫描 (Boundary Scan - JTAG)
-    - 调试接口 (Debug Interface)
-    - 仿真模型 (Simulation Models)
+### memory.h - 存储器模块
+提供存储器功能：
+- `ch_mem<T, SIZE>` - 通用存储器类型
+- `sread(addr, enable)` - 同步读取操作
+- `aread(addr)` - 异步读取操作
+- `write(addr, data, enable)` - 写入操作
 
-14. **高级控制模块**
-    - 状态机生成器 (FSM Generator)
-    - 调度器 (Scheduler)
-    - 仲裁器 (Arbiter) - 轮询、优先级、公平仲裁
-    - 缓冲管理器 (Buffer Manager)
+### onehot.h - One-Hot编码模块
+提供One-Hot编码相关功能：
+- `onehot_to_binary<N>(onehot)` - 将N位One-Hot编码转换为二进制
+- `binary_to_onehot<N>(binary)` - 将二进制转换为N位One-Hot编码
+- `is_onehot<N>(value)` - 检查值是否为One-Hot编码
+- `priority_onehot<N>(input)` - 优先级One-Hot编码
+
+### selector_arbiter.h - 选择器与仲裁器模块
+提供选择和仲裁功能：
+- `priority_selector<N>(request)` - 优先级选择器，低位优先级更高
+- `round_robin_arbiter<N>(request)` - 循环仲裁器，确保公平访问
+- `round_robin_selector<N>(request, last_grant)` - 简化版循环仲裁器
+
+### sequential.h - 时序逻辑模块
+提供时序逻辑功能：
+- `d_flip_flop(data, clk, rst)` - D触发器
+- `jk_flip_flop(j, k, clk, rst)` - JK触发器
+- `t_flip_flop(t, clk, rst)` - T触发器
+- `counter<WIDTH>(clk, rst, enable, load, data, up_down)` - 可控计数器
+- `up_counter<WIDTH>(clk, rst, enable)` - 向上计数器
+- `down_counter<WIDTH>(clk, rst, enable)` - 向下计数器
+- `up_down_counter<WIDTH>(clk, rst, up, down)` - 可逆计数器
+- `shift_register<WIDTH>(clk, rst, enable, serial_in, parallel_in, shift_right)` - 移位寄存器
+
+### stream.h - 流处理模块
+提供流式数据处理功能：
+- `Stream<T>` - 带反压的数据流接口（包含payload, valid, ready信号）
+- `Flow<T>` - 无反压的数据流接口（包含payload, valid信号）
+- `stream_fifo<T, DEPTH>()` - 带反压的FIFO
+- `stream_fork<T, N_OUTPUTS>()` - 将输入流复制到多个输出流
+- `stream_join<T, N_INPUTS>()` - 等待所有输入流都有效后传输
+- `stream_arbiter_round_robin<T, N_INPUTS>()` - 流仲裁器（轮询方式）
+- `stream_mux<T, N_INPUTS>()` - 流多路选择器
+- `stream_demux<T, N_OUTPUTS>()` - 流解复用器
+
+### switch.h - Switch语句模块
+提供高级Switch语句功能：
+- `switch_<T>(value)` - 基础Switch语句
+- `switch_case<T>(value, cases...)` - 带默认值的Switch语句
+- `switch_pairs<T>(pairs...)` - 基于std::pair的Switch语句
+- `switch_parallel<T>(value, cases...)` - 并行比较Switch语句
+- `switch_sequential<T>(value, cases...)` - 串行比较Switch语句
+
+### axi_lite.h - AXI4-Lite总线接口模块
+提供AXI4-Lite总线接口功能：
+- `axi_lite_bundle` - AXI4-Lite总线bundle定义
+- `axi_lite_read_master` - AXI4-Lite读主设备
+- `axi_lite_write_master` - AXI4-Lite写主设备
+- `axi_lite_read_slave` - AXI4-Lite读从设备
+- `axi_lite_write_slave` - AXI4-Lite写从设备

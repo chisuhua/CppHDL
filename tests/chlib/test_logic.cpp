@@ -246,6 +246,112 @@ TEST_CASE("Logic: 4-input multiplexer", "[logic][mux4]") {
     }
 }
 
+TEST_CASE("Logic: general multiplexer", "[logic][mux]") {
+    auto ctx = std::make_unique<ch::core::context>("test_logic_general_mux");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("3-input multiplexer") {
+        std::array<ch_uint<4>, 3> inputs = {ch_uint<4>(1_d), ch_uint<4>(2_d),
+                                            ch_uint<4>(3_d)};
+        ch_uint<compute_idx_width(3)> sel(2_d); // Select index 2
+        ch_uint<4> result = mux<3, ch_uint<4>>(inputs, sel);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 3_d);
+    }
+
+    SECTION("General mux with different selection") {
+        std::array<ch_uint<4>, 4> inputs = {ch_uint<4>(5_d), ch_uint<4>(10_d),
+                                            ch_uint<4>(15_d), ch_uint<4>(0_d)};
+
+        // Test each selection
+        for (int i = 0; i < 4; i++) {
+            ch_uint<compute_idx_width(4)> sel =
+                make_uint<compute_idx_width(4)>(i);
+            ch_uint<4> result = mux<4, ch_uint<4>>(inputs, sel);
+
+            ch::Simulator sim(ctx.get());
+            sim.tick();
+
+            REQUIRE(sim.get_value(result) == sim.get_value(inputs[i]));
+        }
+    }
+}
+
+TEST_CASE("Logic: demultiplexer", "[logic][demux]") {
+    auto ctx = std::make_unique<ch::core::context>("test_logic_demux");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Demux to 3 outputs") {
+        ch_uint<4> input(12_d);
+        ch_uint<compute_idx_width(3)> sel(1_d); // Select output index 1
+        std::array<ch_uint<4>, 3> outputs = demux<3, ch_uint<4>>(input, sel);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // Output at selected index should equal input, others should be 0
+        REQUIRE(sim.get_value(outputs[0]) == 0_d);
+        REQUIRE(sim.get_value(outputs[1]) == 12_d);
+        REQUIRE(sim.get_value(outputs[2]) == 0_d);
+    }
+
+    SECTION("Demux to different indices") {
+        ch_uint<4> input(7_d);
+
+        for (int i = 0; i < 4; i++) {
+            ch_uint<compute_idx_width(4)> sel =
+                make_uint<compute_idx_width(4)>(i);
+            std::array<ch_uint<4>, 4> outputs =
+                demux<4, ch_uint<4>>(input, sel);
+
+            ch::Simulator sim(ctx.get());
+            sim.tick();
+
+            // Check that only the selected output has the input value
+            for (int j = 0; j < 4; j++) {
+                if (j == i) {
+                    REQUIRE(sim.get_value(outputs[j]) == 7_d);
+                } else {
+                    REQUIRE(sim.get_value(outputs[j]) == 0_d);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Logic: buffer", "[logic][buffer]") {
+    auto ctx = std::make_unique<ch::core::context>("test_logic_buffer");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Simple buffer operation") {
+        ch_uint<4> input(12_d);
+        ch_uint<4> result = buffer<4>(input);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result) == 12_d);
+        REQUIRE(sim.get_value(result) == sim.get_value(input));
+    }
+
+    SECTION("Buffer with different values") {
+        ch_uint<8> input1(0xAB_h);
+        ch_uint<8> result1 = buffer<8>(input1);
+
+        ch_uint<1> input2(1_d);
+        ch_uint<1> result2 = buffer<1>(input2);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(result1) == 0xAB_h);
+        REQUIRE(sim.get_value(result2) == 1_d);
+    }
+}
+
 TEST_CASE("Logic: parity generation", "[logic][parity]") {
     auto ctx = std::make_unique<ch::core::context>("test_logic_parity");
     ch::core::ctx_swap ctx_swapper(ctx.get());

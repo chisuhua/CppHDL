@@ -95,7 +95,7 @@ TEST_CASE("Combinational: demux function", "[combinational][demux]") {
     SECTION("Demux to position 2") {
         ch_uint<4> input(1010_b);
         ch_uint<2> sel(2_d);
-        auto outputs = demux<4, 4>(input, sel);
+        auto outputs = demux<4>(input, sel);
 
         ch::Simulator sim(ctx.get());
         sim.tick();

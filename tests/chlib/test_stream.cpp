@@ -1,4 +1,6 @@
 #include "catch_amalgamated.hpp"
+#include "ch.hpp"
+#include "chlib/combinational.h"
 #include "chlib/stream.h"
 #include "core/context.h"
 #include "core/literal.h"
@@ -14,21 +16,67 @@ TEST_CASE("Stream: Basic Stream Operations", "[stream][bundle]") {
 
     SECTION("Stream creation and basic usage") {
         Stream<ch_uint<8>> stream("test_stream");
-        
-        REQUIRE(stream.payload.width() == 8);
-        REQUIRE(stream.valid.width() == 1);
-        REQUIRE(stream.ready.width() == 1);
+
+        REQUIRE(stream.payload.width == 8);
+        REQUIRE(stream.valid.width == 1);
+        REQUIRE(stream.ready.width == 1);
     }
-    
+}
+
+TEST_CASE("Stream: Stream Mux", "[stream][mux]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_mux");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Stream Mux operation") {
+        Stream<ch_uint<8>> stream_a, stream_b, stream_c;
+        std::array<Stream<ch_uint<8>>, 3> inputs = {stream_a, stream_b,
+                                                    stream_c};
+
+        stream_a.payload = 10_d;
+        stream_a.valid = true;
+        stream_b.payload = 20_d;
+        stream_b.valid = true;
+        stream_c.payload = 30_d;
+        stream_c.valid = true;
+
+        auto select_signal = ch_uint<2>(0_d);
+        auto mux_out = stream_mux<ch_uint<8>, 3>(select_signal, inputs);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick(); // Tick to allow combinatorial propagation
+
+        REQUIRE(sim.get_value(mux_out.valid) == true);
+        REQUIRE(sim.get_value(mux_out.payload) == 10); // Selecting first input
+        REQUIRE(sim.get_value(inputs[0].ready) ==
+                true); // First input should be ready
+        REQUIRE(sim.get_value(inputs[1].ready) ==
+                false); // Others should not be ready
+        REQUIRE(sim.get_value(inputs[2].ready) == false);
+
+        // Change selection to second input
+        sim.set_value(select_signal, 1);
+        sim.tick();
+
+        REQUIRE(sim.get_value(mux_out.payload) ==
+                20); // Now selecting second input
+        REQUIRE(sim.get_value(inputs[0].ready) ==
+                false); // Now first input should not be ready
+        REQUIRE(sim.get_value(inputs[1].ready) ==
+                true); // Second input should be ready
+        REQUIRE(sim.get_value(inputs[2].ready) == false);
+    }
+
     SECTION("Stream direction control") {
         Stream<ch_uint<8>> master_stream("master");
         Stream<ch_uint<8>> slave_stream("slave");
-        
+
         master_stream.as_master();
         slave_stream.as_slave();
-        
-        // Verify that the directions are set correctly (would be validated by the framework)
-        REQUIRE(true); // Placeholder - actual validation would happen in the framework
+
+        // Verify that the directions are set correctly (would be validated by
+        // the framework)
+        REQUIRE(true); // Placeholder - actual validation would happen in the
+                       // framework
     }
 }
 
@@ -38,9 +86,9 @@ TEST_CASE("Stream: Flow Operations", "[stream][flow]") {
 
     SECTION("Flow creation and basic usage") {
         Flow<ch_uint<8>> flow("test_flow");
-        
-        REQUIRE(flow.payload.width() == 8);
-        REQUIRE(flow.valid.width() == 1);
+
+        REQUIRE(flow.payload.width == 8);
+        REQUIRE(flow.valid.width == 1);
     }
 }
 
@@ -49,41 +97,34 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream FIFO basic operation") {
-        ch_bool clk = false;
-        ch_bool rst = true;
-        
         Stream<ch_uint<8>> input_stream;
         input_stream.payload = 0_d;
         input_stream.valid = false;
         input_stream.ready = false;
-        
+
         ch::Simulator sim(ctx.get());
-        
+
         // Reset
-        auto fifo_result = stream_fifo<ch_uint<8>, 4>(clk, rst, input_stream);
+        auto fifo_result = stream_fifo<ch_uint<8>, 4>(input_stream);
         sim.tick();
-        
-        rst = false;
-        clk = true;
-        input_stream.payload = 0x55_d;
+
+        input_stream.payload = 0x55_h;
         input_stream.valid = true;
-        fifo_result = stream_fifo<ch_uint<8>, 4>(clk, rst, input_stream);
+        fifo_result = stream_fifo<ch_uint<8>, 4>(input_stream);
         sim.tick();
-        
+
         // Check that data was accepted
-        REQUIRE(simulator.get_value(fifo_result.push_stream.ready) == true);
-        
-        clk = false;
+        REQUIRE(sim.get_value(fifo_result.push_stream.ready) == true);
+
         sim.tick();
-        
-        clk = true;
-        input_stream.payload = 0xAA_d;
+
+        input_stream.payload = 0xAA_h;
         input_stream.valid = true;
-        fifo_result = stream_fifo<ch_uint<8>, 4>(clk, rst, input_stream);
+        fifo_result = stream_fifo<ch_uint<8>, 4>(input_stream);
         sim.tick();
-        
+
         // Check that second data was also accepted
-        REQUIRE(simulator.get_value(fifo_result.push_stream.ready) == true);
+        REQUIRE(sim.get_value(fifo_result.push_stream.ready) == true);
     }
 }
 
@@ -93,28 +134,34 @@ TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
 
     SECTION("Stream Fork synchronous operation") {
         Stream<ch_uint<8>> input_stream;
-        input_stream.payload = 0x12_d;
+        input_stream.payload = 0x12_h;
         input_stream.valid = true;
-        
+
         auto fork_result = stream_fork<ch_uint<8>, 2>(input_stream, true);
-        
-        REQUIRE(simulator.get_value(fork_result.output_streams[0].payload) == 0x12);
-        REQUIRE(simulator.get_value(fork_result.output_streams[1].payload) == 0x12);
-        REQUIRE(simulator.get_value(fork_result.output_streams[0].valid) == true);
-        REQUIRE(simulator.get_value(fork_result.output_streams[1].valid) == true);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick(); // Tick to allow combinatorial propagation
+
+        REQUIRE(sim.get_value(fork_result.output_streams[0].payload) == 0x12);
+        REQUIRE(sim.get_value(fork_result.output_streams[1].payload) == 0x12);
+        REQUIRE(sim.get_value(fork_result.output_streams[0].valid) == true);
+        REQUIRE(sim.get_value(fork_result.output_streams[1].valid) == true);
     }
-    
+
     SECTION("Stream Fork asynchronous operation") {
         Stream<ch_uint<8>> input_stream;
-        input_stream.payload = 0x34_d;
+        input_stream.payload = 0x34_h;
         input_stream.valid = true;
-        
+
         auto fork_result = stream_fork<ch_uint<8>, 2>(input_stream, false);
-        
-        REQUIRE(simulator.get_value(fork_result.output_streams[0].payload) == 0x34);
-        REQUIRE(simulator.get_value(fork_result.output_streams[1].payload) == 0x34);
-        REQUIRE(simulator.get_value(fork_result.output_streams[0].valid) == true);
-        REQUIRE(simulator.get_value(fork_result.output_streams[1].valid) == true);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick(); // Tick to allow combinatorial propagation
+
+        REQUIRE(sim.get_value(fork_result.output_streams[0].payload) == 0x34);
+        REQUIRE(sim.get_value(fork_result.output_streams[1].payload) == 0x34);
+        REQUIRE(sim.get_value(fork_result.output_streams[0].valid) == true);
+        REQUIRE(sim.get_value(fork_result.output_streams[1].valid) == true);
     }
 }
 
@@ -124,16 +171,19 @@ TEST_CASE("Stream: Stream Join", "[stream][join]") {
 
     SECTION("Stream Join operation") {
         std::array<Stream<ch_uint<8>>, 2> input_streams;
-        input_streams[0].payload = 0xAB_d;
+        input_streams[0].payload = 0xAB_h;
         input_streams[0].valid = true;
-        input_streams[1].payload = 0xCD_d;
+        input_streams[1].payload = 0xCD_h;
         input_streams[1].valid = true;
-        
+
         auto join_result = stream_join<ch_uint<8>, 2>(input_streams);
-        
+
+        ch::Simulator sim(ctx.get());
+        sim.tick(); // Tick to allow combinatorial propagation
+
         // When all inputs are valid, output should be valid
-        REQUIRE(simulator.get_value(join_result.output_stream.valid) == true);
-        REQUIRE(simulator.get_value(join_result.output_stream.payload) == 0xAB);
+        REQUIRE(sim.get_value(join_result.output_stream.valid) == true);
+        REQUIRE(sim.get_value(join_result.output_stream.payload) == 0xAB);
     }
 }
 
@@ -142,30 +192,27 @@ TEST_CASE("Stream: Stream Arbiter", "[stream][arbiter]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream Arbiter basic operation") {
-        ch_bool clk = false;
-        ch_bool rst = true;
-        
+
         std::array<Stream<ch_uint<8>>, 2> input_streams;
-        input_streams[0].payload = 0x11_d;
+        input_streams[0].payload = 0x11_h;
         input_streams[0].valid = true;
-        input_streams[1].payload = 0x22_d;
+        input_streams[1].payload = 0x22_h;
         input_streams[1].valid = false;
-        
+
         ch::Simulator sim(ctx.get());
-        
+
         // Reset
-        auto arb_result = stream_arbiter_round_robin<ch_uint<8>, 2>(clk, rst, input_streams);
+        auto arb_result =
+            stream_arbiter_round_robin<ch_uint<8>, 2>(input_streams);
         sim.tick();
-        
-        rst = false;
-        clk = true;
-        arb_result = stream_arbiter_round_robin<ch_uint<8>, 2>(clk, rst, input_streams);
+
+        arb_result = stream_arbiter_round_robin<ch_uint<8>, 2>(input_streams);
         sim.tick();
-        
+
         // Should select input 0 since input 1 is not valid
-        REQUIRE(simulator.get_value(arb_result.selected) == 0);
-        REQUIRE(simulator.get_value(arb_result.output_stream.payload) == 0x11);
-        REQUIRE(simulator.get_value(arb_result.output_stream.valid) == true);
+        REQUIRE(sim.get_value(arb_result.selected) == 0);
+        REQUIRE(sim.get_value(arb_result.output_stream.payload) == 0x11);
+        REQUIRE(sim.get_value(arb_result.output_stream.valid) == true);
     }
 }
 
@@ -175,15 +222,18 @@ TEST_CASE("Stream: Stream Demux", "[stream][demux]") {
 
     SECTION("Stream Demux operation") {
         Stream<ch_uint<8>> input_stream;
-        input_stream.payload = 0x99_d;
+        input_stream.payload = 0x99_h;
         input_stream.valid = true;
         input_stream.ready = true;
-        
+
         auto demux_result = stream_demux<ch_uint<8>, 2>(input_stream, 1_d);
-        
+
+        ch::Simulator sim(ctx.get());
+        sim.tick(); // Tick to allow combinatorial propagation
+
         // Data should go to output 1 (selected)
-        REQUIRE(simulator.get_value(demux_result.output_streams[0].valid) == false);
-        REQUIRE(simulator.get_value(demux_result.output_streams[1].valid) == true);
-        REQUIRE(simulator.get_value(demux_result.output_streams[1].payload) == 0x99);
+        REQUIRE(sim.get_value(demux_result.output_streams[0].valid) == false);
+        REQUIRE(sim.get_value(demux_result.output_streams[1].valid) == true);
+        REQUIRE(sim.get_value(demux_result.output_streams[1].payload) == 0x99);
     }
 }
