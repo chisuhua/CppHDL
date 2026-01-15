@@ -277,9 +277,9 @@ stream_arbiter_round_robin(std::array<Stream<T>, N_INPUTS> input_streams) {
 /**
  * Stream Mux - 流多路选择器
  */
-template <typename T, unsigned N_INPUTS>
-Stream<T> stream_mux(ch_uint<compute_idx_width(N_INPUTS)> select,
-                     std::array<Stream<T>, N_INPUTS> input_streams) {
+template <unsigned N_INPUTS, typename T>
+Stream<T> stream_mux(std::array<Stream<T>, N_INPUTS> input_streams,
+                     ch_uint<compute_idx_width(N_INPUTS)> select) {
     Stream<T> result;
 
     // 使用chlib中的mux函数来选择payload

@@ -32,15 +32,15 @@ TEST_CASE("Stream: Stream Mux", "[stream][mux]") {
         std::array<Stream<ch_uint<8>>, 3> inputs = {stream_a, stream_b,
                                                     stream_c};
 
-        stream_a.payload = 10_d;
-        stream_a.valid = true;
-        stream_b.payload = 20_d;
-        stream_b.valid = true;
-        stream_c.payload = 30_d;
-        stream_c.valid = true;
+        stream_a.payload = make_uint<8>(10);
+        stream_a.valid = make_uint<1>(1);
+        stream_b.payload = make_uint<8>(20);
+        stream_b.valid = make_uint<1>(1);
+        stream_c.payload = make_uint<8>(30);
+        stream_c.valid = make_uint<1>(1);
 
-        auto select_signal = ch_uint<2>(0_d);
-        auto mux_out = stream_mux<ch_uint<8>, 3>(select_signal, inputs);
+        ch_uint<2> select_signal(0_d);
+        auto mux_out = stream_mux<3, ch_uint<8>>(inputs, select_signal);
 
         ch::Simulator sim(ctx.get());
         sim.tick(); // Tick to allow combinatorial propagation
