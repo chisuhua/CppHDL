@@ -15,8 +15,8 @@ Bundle 通过继承 `bundle_base<Derived>` 模板类来定义，需要指定其�
 #include "core/bool.h"
 
 template<typename T>
-struct stream_bundle : public bundle_base<stream_bundle<T>> {
-    using Self = stream_bundle<T>;
+struct stream_bundle : public bundle_base<Stream<T>> {
+    using Self = Stream<T>;
     T payload;           // 数据载荷
     ch_bool valid;       // 有效信号
     ch_bool ready;       // 就绪信号

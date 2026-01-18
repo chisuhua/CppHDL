@@ -25,7 +25,7 @@ SC_MODULE(SimpleInitiator) {
 
     void run() {
         // 创建测试Bundle
-        stream_bundle<ch_uint<32>> test_bundle;
+        Stream<ch_uint<32>> test_bundle;
         test_bundle.payload = ch_uint<32>(12345678);
         test_bundle.valid = ch_bool(true);
 
@@ -41,22 +41,20 @@ SC_MODULE(SimpleInitiator) {
 
         // TLM转换测试
         auto *payload =
-            bundle_tlm_converter<stream_bundle<ch_uint<32>>>::bundle_to_tlm(
+            bundle_tlm_converter<Stream<ch_uint<32>>>::bundle_to_tlm(
                 test_bundle);
         std::cout << "TLM payload created with " << payload->get_data_length()
                   << " bytes" << std::endl;
 
         // 反向转换测试
         auto recovered_bundle =
-            bundle_tlm_converter<stream_bundle<ch_uint<32>>>::tlm_to_bundle(
-                payload);
+            bundle_tlm_converter<Stream<ch_uint<32>>>::tlm_to_bundle(payload);
         std::cout << "Recovered payload: "
                   << static_cast<uint64_t>(recovered_bundle.payload)
                   << std::endl;
 
         // 清理
-        bundle_tlm_converter<stream_bundle<ch_uint<32>>>::cleanup_tlm_payload(
-            payload);
+        bundle_tlm_converter<Stream<ch_uint<32>>>::cleanup_tlm_payload(payload);
 
         std::cout << "✅ TLM-Bundle conversion demo completed!" << std::endl;
     }
@@ -106,7 +104,7 @@ int main() {
 
     try {
         // 测试Bundle序列化
-        stream_bundle<ch_uint<32>> test_bundle;
+        Stream<ch_uint<32>> test_bundle;
         test_bundle.payload = ch_uint<32>(12345678_h);
         test_bundle.valid = ch_bool(true);
 
@@ -120,7 +118,7 @@ int main() {
         std::cout << "Serialized to ch_uint<" << bits.width << ">" << std::endl;
 
         // 反序列化测试
-        auto recovered_bundle = deserialize<stream_bundle<ch_uint<32>>>(bits);
+        auto recovered_bundle = deserialize<Stream<ch_uint<32>>>(bits);
         std::cout << "Recovered payload: "
                   << static_cast<uint64_t>(recovered_bundle.payload)
                   << std::endl;

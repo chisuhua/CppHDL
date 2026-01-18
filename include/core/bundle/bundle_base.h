@@ -1,9 +1,12 @@
 #ifndef CH_CORE_BUNDLE_BASE_H
 #define CH_CORE_BUNDLE_BASE_H
 
-#include "bundle.h"
+#include "bundle_serialization.h"
 #include "bundle_traits.h"
 #include "direction.h"
+#include "logic_buffer.h"
+#include "traits.h"
+#include "types.h"
 #include "uint.h"
 #include <memory>
 #include <string>
@@ -42,12 +45,49 @@ struct bundle_field_traits<BundleType> {
     }
 };
 
-template <typename Derived> class bundle_base : public bundle {
+template <typename Derived> class bundle_base : public logic_buffer<Derived> {
 public:
+    // 默认构造：创建未驱动的字面量节点
+    bundle_base() {
+        constexpr unsigned W = get_bundle_width<Derived>();
+        // 创建一个零值字面量作为默认值
+        sdata_type default_value = constants::zero(W);
+        this->node_impl_ = node_builder::instance().build_literal(
+            default_value, "unnamed_bundle");
+    }
+
+    // 拷贝构造：共享节点（硬件连接语义）
+    bundle_base(const bundle_base &other)
+        : logic_buffer<Derived>(other.impl()) {}
+
+    // 从底层节点直接构造（用于 <<= 或内部）
+    explicit bundle_base(lnodeimpl *node) : logic_buffer<Derived>(node) {}
+
+    // 从 ch_uint<W> 反序列化（复用其节点）
+    template <unsigned W> explicit bundle_base(const ch_uint<W> &bits) {
+        static_assert(W == get_bundle_width<Derived>(),
+                      "Bundle width mismatch");
+        this->node_impl_ = bits.impl(); // 直接复用节点！
+    }
+
     virtual ~bundle_base() = default;
 
+    // 连接操作符
+    Derived &operator<<=(const Derived &src) {
+        this->node_impl_ = src.impl();
+        return static_cast<Derived &>(*this);
+    }
+
+    // 赋值操作符（可选，通常不需要，因 <<= 更符合硬件语义）
+    Derived &operator=(const Derived &other) {
+        if (this != &other) {
+            this->node_impl_ = other.impl();
+        }
+        return static_cast<Derived &>(*this);
+    }
+
     // 自动生成 flip()
-    std::unique_ptr<bundle> flip() const override {
+    std::unique_ptr<Derived> flip() const {
         auto flipped = std::make_unique<Derived>();
         // 在flip时自动设置为slave方向
         if constexpr (requires { flipped->as_slave(); }) {
@@ -57,7 +97,7 @@ public:
     }
 
     // 简化版本
-    bool is_valid() const override {
+    bool is_valid() const {
         const auto &fields = derived()->__bundle_fields();
         bool valid = true;
         std::apply(
@@ -217,6 +257,17 @@ template <typename BundleT> void connect(BundleT &src, BundleT &dst) {
     const auto &fields = src.__bundle_fields();
     std::apply([&](auto &&...f) { ((dst.*(f.ptr) = src.*(f.ptr)), ...); },
                fields);
+}
+
+// 为Bundle类型特化ch_width_impl
+template <typename Derived>
+struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>> {
+    static constexpr unsigned value = get_bundle_width<Derived>();
+};
+
+// 为Bundle类型特化get_lnode
+template <typename Derived> inline lnode<Derived> get_lnode(const Derived &b) {
+    return lnode<Derived>(b.impl());
 }
 
 } // namespace ch::core

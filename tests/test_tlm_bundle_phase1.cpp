@@ -36,12 +36,11 @@ TEST_CASE("Phase1 - BundleWidthCalculation", "[phase1][width]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 测试宽度计算
-    STATIC_REQUIRE(bundle_width_v<test_simple_bundle> == 13); // 8 + 1 + 4
-    STATIC_REQUIRE(bundle_width_v<stream_bundle<ch_uint<32>>> ==
-                   34); // 32 + 1 + 1
+    STATIC_REQUIRE(bundle_width_v<test_simple_bundle> == 13);  // 8 + 1 + 4
+    STATIC_REQUIRE(bundle_width_v<Stream<ch_uint<32>>> == 34); // 32 + 1 + 1
 
     test_simple_bundle simple;
-    stream_bundle<ch_uint<16>> stream;
+    Stream<ch_uint<16>> stream;
 
     REQUIRE(simple.width() == 13);
     REQUIRE(stream.width() == 18);
@@ -55,8 +54,7 @@ TEST_CASE("Phase1 - BundleLayoutInfo", "[phase1][layout]") {
     constexpr auto layout = get_bundle_layout<test_simple_bundle>();
     REQUIRE(std::tuple_size_v<decltype(layout)> == 3);
 
-    constexpr auto stream_layout =
-        get_bundle_layout<stream_bundle<ch_uint<32>>>();
+    constexpr auto stream_layout = get_bundle_layout<Stream<ch_uint<32>>>();
     REQUIRE(std::tuple_size_v<decltype(stream_layout)> == 3);
 }
 
@@ -82,7 +80,7 @@ TEST_CASE("Phase1 - StreamBundleSerialization", "[phase1][stream]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    stream_bundle<ch_uint<16>> stream;
+    Stream<ch_uint<16>> stream;
     stream.payload = ch_uint<16>(0x1234_h);
     stream.valid = ch_bool(true);
     stream.ready = ch_bool(false);
@@ -90,7 +88,7 @@ TEST_CASE("Phase1 - StreamBundleSerialization", "[phase1][stream]") {
     auto bits = serialize(stream);
     REQUIRE(bits.width == 18);
 
-    auto recovered = deserialize<stream_bundle<ch_uint<16>>>(bits);
+    auto recovered = deserialize<Stream<ch_uint<16>>>(bits);
     REQUIRE(recovered.width() == 18);
 }
 
@@ -122,7 +120,7 @@ TEST_CASE("Phase1 - Integration", "[phase1][integration]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 完整的序列化-反序列化流程
-    stream_bundle<ch_uint<32>> original;
+    Stream<ch_uint<32>> original;
     original.payload = ch_uint<32>(0xDEADBEEF_h);
     original.valid = ch_bool(true);
     original.ready = ch_bool(false);
@@ -132,7 +130,7 @@ TEST_CASE("Phase1 - Integration", "[phase1][integration]") {
     REQUIRE(bits.width == 34);
 
     // 反序列化
-    auto recovered = deserialize<stream_bundle<ch_uint<32>>>(bits);
+    auto recovered = deserialize<Stream<ch_uint<32>>>(bits);
     REQUIRE(recovered.width() == 34);
 
     // 验证字段

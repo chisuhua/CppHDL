@@ -2,7 +2,6 @@
 #include "ch.hpp"
 #include "component.h"
 #include "core/bool.h"
-#include "core/bundle/bundle.h"
 #include "core/context.h"
 #include "core/literal.h"
 #include "core/reg.h"
