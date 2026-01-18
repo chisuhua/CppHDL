@@ -2,9 +2,9 @@
 #define CH_CORE_BOOL_H
 
 #include "core/direction.h"
+#include "core/lnode.h" // 添加 lnode 定义
 #include "core/logic_buffer.h"
 #include "core/traits.h"
-#include "core/lnode.h"  // 添加 lnode 定义
 #include <source_location>
 #include <string>
 #include <variant>
@@ -61,7 +61,7 @@ struct ch_bool : public logic_buffer<ch_bool> {
     template <typename U> ch_bool &operator<<=(const U &value) {
         lnode<U> src_lnode = get_lnode(value);
         if (this->node_impl_ && src_lnode.impl()) {
-            this->node_impl_ = src_lnode.impl();
+            this->node_impl_->set_src(0, src_lnode.impl());
         } else {
             CHERROR("[ch_bool::operator=] Error: node_impl_ or "
                     "src_lnode is null for ch_bool!");

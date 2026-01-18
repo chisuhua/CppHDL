@@ -70,7 +70,8 @@ enum class ch_op {
     xor_reduce,
     rotate_l, // 循环左移（预留）
     rotate_r, // 循环右移（预留）
-    popcount  // 添加popcount操作
+    popcount, // 添加popcount操作
+    assign    // 添加assign操作
 };
 
 // 内存端口类型

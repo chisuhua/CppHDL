@@ -15,15 +15,16 @@ namespace ch::core {
 // Only keep the build_operation functions and the build_bit_select we added
 
 template <typename T, typename U>
-lnodeimpl *node_builder::build_operation(
-    ch_op op, const lnode<T> &lhs, const lnode<U> &rhs,
-    uint32_t result_width, bool is_signed,
-    const std::string &name,
-    const std::source_location &sloc) {
+lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &lhs,
+                                         const lnode<U> &rhs,
+                                         uint32_t result_width, bool is_signed,
+                                         const std::string &name,
+                                         const std::source_location &sloc) {
     CHDBG_FUNC();
     auto *ctx = ctx_curr_;
     if (!ctx) {
-        CHERROR("[node_builder] No active context for binary operation creation");
+        CHERROR(
+            "[node_builder] No active context for binary operation creation");
         return nullptr;
     }
 
@@ -39,14 +40,14 @@ lnodeimpl *node_builder::build_operation(
 
     // Create the operation node
     opimpl *op_node = ctx->create_node<opimpl>(
-        result_width,
-        op, is_signed,
-        lhs.impl(), rhs.impl(),
+        result_width, op, is_signed, lhs.impl(), rhs.impl(),
         instance().prefixed_name_helper(name, instance().name_prefix_), sloc);
 
     // Create proxy node
     proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-        op_node, instance().prefixed_name_helper("_" + name, instance().name_prefix_), sloc);
+        op_node,
+        instance().prefixed_name_helper("_" + name, instance().name_prefix_),
+        sloc);
 
     return proxy_node;
 }
@@ -54,12 +55,12 @@ lnodeimpl *node_builder::build_operation(
 template <typename T>
 lnodeimpl *node_builder::build_unary_operation(
     ch_op op, const lnode<T> &operand, uint32_t result_width,
-    const std::string &name,
-    const std::source_location &sloc) {
+    const std::string &name, const std::source_location &sloc) {
     CHDBG_FUNC();
     auto *ctx = ctx_curr_;
     if (!ctx) {
-        CHERROR("[node_builder] No active context for unary operation creation");
+        CHERROR(
+            "[node_builder] No active context for unary operation creation");
         return nullptr;
     }
 
@@ -75,28 +76,30 @@ lnodeimpl *node_builder::build_unary_operation(
 
     // Create the unary operation node
     opimpl *op_node = ctx->create_node<opimpl>(
-        result_width,
-        op, false, // is_signed usually irrelevant for unary ops
+        result_width, op, false, // is_signed usually irrelevant for unary ops
         operand.impl(),
         nullptr, // no second operand
         instance().prefixed_name_helper(name, instance().name_prefix_), sloc);
 
     // Create proxy node
-    proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-        op_node, instance().prefixed_name_helper("_" + name, instance().name_prefix_), sloc);
+    // proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
+    //     op_node, instance().prefixed_name_helper("_" + name,
+    //     instance().name_prefix_), sloc);
 
-    return proxy_node;
+    // return proxy_node;
+    return op_node;
 }
 
 template <typename T>
-lnodeimpl *node_builder::build_operation(
-    ch_op op, const lnode<T> &operand, uint32_t result_width,
-    bool is_signed, const std::string &name,
-    const std::source_location &sloc) {
+lnodeimpl *node_builder::build_operation(ch_op op, const lnode<T> &operand,
+                                         uint32_t result_width, bool is_signed,
+                                         const std::string &name,
+                                         const std::source_location &sloc) {
     CHDBG_FUNC();
     auto *ctx = ctx_curr_;
     if (!ctx) {
-        CHERROR("[node_builder] No active context for unary operation creation");
+        CHERROR(
+            "[node_builder] No active context for unary operation creation");
         return nullptr;
     }
 
@@ -112,15 +115,14 @@ lnodeimpl *node_builder::build_operation(
 
     // Create the unary operation node
     opimpl *op_node = ctx->create_node<opimpl>(
-        result_width,
-        op, is_signed,
-        operand.impl(),
-        nullptr,
+        result_width, op, is_signed, operand.impl(), nullptr,
         instance().prefixed_name_helper(name, instance().name_prefix_), sloc);
 
     // Create proxy node
     proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-        op_node, instance().prefixed_name_helper("_" + name, instance().name_prefix_), sloc);
+        op_node,
+        instance().prefixed_name_helper("_" + name, instance().name_prefix_),
+        sloc);
 
     return proxy_node;
 }

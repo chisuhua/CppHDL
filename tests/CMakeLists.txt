@@ -79,6 +79,7 @@ set(BASE_TEST_SOURCES
     test_operator_connection.cpp
     test_bool_connection.cpp
     test_mem_connection.cpp
+    test_wires_connection.cpp
 )
 
 # chlib 测试源文件列表

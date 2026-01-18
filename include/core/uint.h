@@ -103,8 +103,24 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     // 添加赋值操作符，代表硬件连接
     template <typename U> ch_uint &operator<<=(const U &value) {
         lnode<U> src_lnode = get_lnode(value);
-        if (this->node_impl_ && src_lnode.impl()) {
-            this->node_impl_ = src_lnode.impl();
+        if (src_lnode.impl()) {
+            if (this->node_impl_) {
+                this->node_impl_->set_src(0, src_lnode.impl());
+            } else {
+                // 使用编译期判断位宽差异
+                if constexpr (ch_width_v<U> < N) {
+                    // 源节点位宽小于目标节点，使用零扩展
+                    auto extended = zext<N>(value);
+                    this->node_impl_ = extended.impl();
+                } else if constexpr (ch_width_v<U> > N) {
+                    // 源节点位宽大于目标节点，使用bits操作提取低位
+                    auto truncated = bits<N - 1, 0>(value);
+                    this->node_impl_ = truncated.impl();
+                } else {
+                    // 位宽相同，直接使用源节点
+                    this->node_impl_ = src_lnode.impl();
+                }
+            }
         } else {
             CHERROR("[ch_uint::operator=] Error: node_impl_ or "
                     "src_lnode is null for ch_uint<%d>!",

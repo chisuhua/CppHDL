@@ -518,6 +518,15 @@ private:
     }
 };
 
+// 添加 ASSIGN 操作定义
+struct Assign {
+    static const char *name() { return "instr_op_assign::eval"; }
+    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
+        // 使用 sdata_type 的 assign_truncate 方法处理不同宽度的赋值
+        dst->assign_truncate(*src);
+    }
+};
+
 } // namespace op
 
 // -----------------------------
@@ -556,6 +565,7 @@ using instr_op_zext = instr_op_unary<op::Zext>;
 using instr_op_and_reduce = instr_op_unary<op::AndReduce>;
 using instr_op_or_reduce = instr_op_unary<op::OrReduce>;
 using instr_op_xor_reduce = instr_op_unary<op::XorReduce>;
+using instr_op_assign = instr_op_unary<op::Assign>;  // 添加 assign 操作的别名
 
 // 添加popcount别名
 using instr_op_popcount = instr_op_unary<op::PopCount>;

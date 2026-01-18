@@ -20,10 +20,26 @@ ch_uint<N>::ch_uint(const ch_literal_runtime &val, const std::string &name,
 {
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from sdata_type", N);
 
-    this->node_impl_ = node_builder::instance().build_literal(val, name, sloc);
+    // 先创建字面值节点
+    auto *literal_node = node_builder::instance().build_literal(val, name + "_literal", sloc);
+    
+    // 然后使用 assign 操作创建一个新的节点
+    if (literal_node) {
+        this->node_impl_ = node_builder::instance().build_unary_operation(
+            ch_op::assign, 
+            lnode<ch_uint<N>>(literal_node), 
+            N, 
+            name, 
+            sloc
+        );
+    } else {
+        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from "
+                "sdata_type");
+        this->node_impl_ = nullptr;
+    }
 
     if (!this->node_impl_) {
-        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from "
+        CHERROR("[ch_uint<N>::ch_uint] Failed to create assign node from "
                 "sdata_type");
     }
 }
@@ -37,11 +53,27 @@ ch_uint<N>::ch_uint(const ch_literal_impl<V, W> &val, const std::string &name,
     static_assert(W <= N, "Literal width must not exceed target uint width");
     // ch_literal_runtime runtime_lit(V, N);
     auto runtime_lit = make_literal<V, N>();
-    this->node_impl_ =
-        node_builder::instance().build_literal(runtime_lit, name, sloc);
+    
+    // 先创建字面值节点
+    auto *literal_node = node_builder::instance().build_literal(runtime_lit, name + "_literal", sloc);
+    
+    // 然后使用 assign 操作创建一个新的节点
+    if (literal_node) {
+        this->node_impl_ = node_builder::instance().build_unary_operation(
+            ch_op::assign, 
+            lnode<ch_uint<N>>(literal_node), 
+            N, 
+            name, 
+            sloc
+        );
+    } else {
+        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from "
+                "compile-time literal");
+        this->node_impl_ = nullptr;
+    }
 
     if (!this->node_impl_) {
-        CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node from "
+        CHERROR("[ch_uint<N>::ch_uint] Failed to create assign node from "
                 "compile-time literal");
     }
 }

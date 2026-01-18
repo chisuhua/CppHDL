@@ -1,4 +1,5 @@
 #include "catch_amalgamated.hpp"
+#include "codegen_dag.h"
 #include "component.h"
 #include "core/bool.h"
 #include "core/context.h"
@@ -30,6 +31,8 @@ TEST_CASE("bit_select: simulation value verification",
 
     // 运行模拟
     simulator.tick();
+
+    toDAG("test_operator.dot", &ctx, simulator);
 
     // 验证仿真结果
     REQUIRE(static_cast<uint64_t>(simulator.get_value(bit0)) == true); // 位0是1
