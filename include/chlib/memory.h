@@ -104,76 +104,81 @@ dual_port_ram_single_clk(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH> din_a,
     return result;
 }
 
-// /**
-//  * FIFO - 函数式接口
-//  *
-//  * 先进先出队列，支持同步读写
-//  */
-// template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FIFOResult {
-//     ch_uint<DATA_WIDTH> dout;  // 输出数据
-//     ch_bool empty;             // 空标志
-//     ch_bool full;              // 满标志
-//     ch_uint<ADDR_WIDTH> count; // 当前元素数量
-// };
+/**
+ * FIFO - 函数式接口
+ *
+ * 先进先出队列，支持同步读写
+ */
+template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FIFOResult {
+    ch_uint<DATA_WIDTH> dout;  // 输出数据
+    ch_bool empty;             // 空标志
+    ch_bool full;              // 满标志
+    ch_uint<ADDR_WIDTH> count; // 当前元素数量
+};
 
-// template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
-// FIFOResult<DATA_WIDTH, ADDR_WIDTH>
-// sync_fifo(ch_uint<DATA_WIDTH> din, ch_bool wr_en, ch_bool rd_en,
-//           const std::string &name = "sync_fifo") {
+template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH,
+          bool USE_OUTPUT_REGISTER = true>
+FIFOResult<DATA_WIDTH, ADDR_WIDTH>
+sync_fifo(ch_uint<DATA_WIDTH> din, ch_bool wr_en, ch_bool rd_en,
+          const std::string &name = "sync_fifo") {
 
-//     static constexpr unsigned DEPTH = (1U << ADDR_WIDTH);
-//     ch_mem<ch_uint<DATA_WIDTH>, DEPTH> mem(name + "_mem");
+    static constexpr unsigned DEPTH = (1U << ADDR_WIDTH);
+    ch_mem<ch_uint<DATA_WIDTH>, DEPTH> mem(name + "_mem");
 
-//     // 使用寄存器实现FIFO的指针和计数器
-//     ch_reg<ch_uint<ADDR_WIDTH>> wr_ptr(0_d, name + "_wr_ptr");
-//     ch_reg<ch_uint<ADDR_WIDTH>> rd_ptr(0_d, name + "_rd_ptr");
-//     ch_reg<ch_uint<ADDR_WIDTH + 1>> count_reg(0_d, name + "_count");
+    // 使用寄存器实现FIFO的指针和计数器
+    ch_reg<ch_uint<ADDR_WIDTH>> wr_ptr(0, name + "_wr_ptr");
+    ch_reg<ch_uint<ADDR_WIDTH>> rd_ptr(0, name + "_rd_ptr");
+    ch_reg<ch_uint<ADDR_WIDTH + 1>> count_reg(0, name + "_count");
 
-//     ch_reg<ch_uint<DATA_WIDTH>> dout(0_d, name + "_dout");
-//     ch_reg<ch_bool> empty_reg(true, name + "_empty");
-//     ch_reg<ch_bool> full_reg(false, name + "_full");
+    ch_reg<ch_bool> empty_reg(true, name + "_empty");
+    ch_reg<ch_bool> full_reg(false, name + "_full");
 
-//     // 计算写入和读取使能信号
-//     ch_bool wr_active = wr_en && !full_reg;
-//     ch_bool rd_active = rd_en && !empty_reg;
+    // 计算写入和读取使能信号
+    ch_bool wr_active = wr_en && !full_reg;
+    ch_bool rd_active = rd_en && !empty_reg;
 
-//     // 写入操作
-//     auto write_port = mem.write(wr_ptr, din, wr_active);
+    // 写入操作
+    auto write_port = mem.write(wr_ptr, din, wr_active);
 
-//     // 读取操作
-//     auto read_port = mem.sread(rd_ptr, rd_active);
+    // 读取操作
+    auto read_port = mem.sread(rd_ptr, rd_active);
 
-//     when(true) {
-//         // 写入操作
-//         if_(wr_active) {
-//             wr_ptr = wr_ptr + 1_d;
-//         }
+    // 使用select语句计算下一个时钟周期的值
+    ch_uint<ADDR_WIDTH> next_wr_ptr = select(wr_active, wr_ptr + 1_d, wr_ptr);
+    ch_uint<ADDR_WIDTH> next_rd_ptr = select(rd_active, rd_ptr + 1_d, rd_ptr);
 
-//         // 读取操作
-//         if_(rd_active) {
-//             dout = read_port;
-//             rd_ptr = rd_ptr + 1_d;
-//         }
+    ch_uint<ADDR_WIDTH + 1> next_count = count_reg;
+    next_count = select(wr_active && !rd_active, count_reg + 1_d, next_count);
+    next_count = select(!wr_active && rd_active, count_reg - 1_d, next_count);
 
-//         // 更新计数
-//         if_(wr_active && !rd_active) { count_reg = count_reg + 1_d; }
-//         else if_(!wr_active && rd_active) {
-//             count_reg = count_reg - 1_d;
-//         }
+    ch_bool next_empty = (next_count == 0_d);
+    ch_bool next_full = (next_count == DEPTH);
 
-//         // 更新状态标志
-//         empty_reg = (count_reg == 0_d);
-//         full_reg = (count_reg == DEPTH);
-//     }
+    // 连接寄存器的下一个值
+    wr_ptr->next = next_wr_ptr;
+    rd_ptr->next = next_rd_ptr;
+    count_reg->next = next_count;
+    empty_reg->next = next_empty;
+    full_reg->next = next_full;
 
-//     FIFOResult<DATA_WIDTH, ADDR_WIDTH> result;
-//     result.dout = dout;
-//     result.empty = empty_reg;
-//     result.full = full_reg;
-//     result.count = count_reg;
+    FIFOResult<DATA_WIDTH, ADDR_WIDTH> result;
 
-//     return result;
-// }
+    if constexpr (USE_OUTPUT_REGISTER) {
+        // 使用寄存器输出（默认行为）
+        ch_reg<ch_uint<DATA_WIDTH>> dout_reg(0_d, name + "_dout");
+        ch_uint<DATA_WIDTH> next_dout = select(rd_active, read_port, dout_reg);
+        dout_reg->next = next_dout;
+        result.dout = dout_reg;
+    } else {
+        // 使用组合逻辑输出 - 直接输出read_port
+        result.dout <<= read_port;
+    }
+    result.empty = empty_reg;
+    result.full = full_reg;
+    result.count = count_reg;
+
+    return result;
+}
 
 /**
  * Content Addressable Memory (CAM) - 相联存储器

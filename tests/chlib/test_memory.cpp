@@ -139,7 +139,7 @@ TEST_CASE("Memory: dual port RAM", "[memory][dual_port_ram]") {
         sim.set_value(we_a, 0);
         sim.set_value(addr_a, 1);
         sim.tick();
-        toDAG("mem3.dot", ctx.get(), sim);
+        // toDAG("mem3.dot", ctx.get(), sim);
 
         REQUIRE(sim.get_value(result.dout_a) == 0x34); // Value written earlier
     }
@@ -184,101 +184,136 @@ TEST_CASE("Memory: dual port RAM single clock",
     }
 }
 
-// TEST_CASE("Memory: sync FIFO", "[memory][sync_fifo]") {
-//     auto ctx = std::make_unique<ch::core::context>("test_sync_fifo");
-//     ch::core::ctx_swap ctx_swapper(ctx.get());
+TEST_CASE("Memory: sync FIFO", "[memory][sync_fifo]") {
 
-//     SECTION("Basic FIFO operations") {
-//         ch_uint<8> din = 0_d;
-//         ch_bool wr_en = false;
-//         ch_bool rd_en = false;
-//         ch_bool rst = true;
+    SECTION("Basic FIFO operations") {
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din = 0_d;
+        ch_bool wr_en = false;
+        ch_bool rd_en = false;
 
-//         FIFOResult<8, 3> fifo =
-//             sync_fifo<8, 3>(din, wr_en, rd_en, rst, "test_fifo");
+        FIFOResult<8, 3> fifo = sync_fifo<8, 3>(din, wr_en, rd_en, "test_fifo");
 
-//         ch::Simulator sim(ctx.get());
-//         sim.tick();
+        ch::Simulator sim(ctx.get());
+        sim.tick();
 
-//         // Reset FIFO
-//         sim.set_value(rst.impl(), 1);
-//         sim.tick();
+        REQUIRE(sim.get_value(fifo.empty) == true);
+        REQUIRE(sim.get_value(fifo.full) == false);
+        REQUIRE(sim.get_value(fifo.count) == 0);
 
-//         REQUIRE(sim.get_value(fifo.empty) == true);
-//         REQUIRE(sim.get_value(fifo.full) == false);
-//         REQUIRE(sim.get_value(fifo.count) == 0);
+        sim.tick();
 
-//         // Deassert reset
-//         sim.set_value(rst.impl(), 0);
-//         sim.tick();
+        // Write first value
+        sim.set_value(din, 0xAB);
+        sim.set_value(wr_en, 1);
+        sim.tick();
 
-//         // Write first value
-//         sim.set_value(din.impl(), 0xAB);
-//         sim.set_value(wr_en.impl(), 1);
-//         sim.tick();
+        REQUIRE(sim.get_value(fifo.count) == 1);
+        REQUIRE(sim.get_value(fifo.empty) == false);
 
-//         REQUIRE(sim.get_value(fifo.count) == 1);
-//         REQUIRE(sim.get_value(fifo.empty) == false);
+        // Write second value
+        sim.set_value(din, 0xCD);
+        sim.tick();
 
-//         // Write second value
-//         sim.set_value(din.impl(), 0xCD);
-//         sim.tick();
+        REQUIRE(sim.get_value(fifo.count) == 2);
 
-//         REQUIRE(sim.get_value(fifo.count) == 2);
+        // Read first value
+        sim.set_value(wr_en, 0);
+        sim.set_value(rd_en, 1);
+        sim.tick(); // 4
+        REQUIRE(sim.get_value(fifo.count) == 1);
+        REQUIRE(sim.get_value(fifo.dout) == 0);
+        sim.tick(); // 5
 
-//         // Read first value
-//         sim.set_value(wr_en.impl(), 0);
-//         sim.set_value(rd_en.impl(), 1);
-//         sim.tick();
+        REQUIRE(sim.get_value(fifo.dout) == 0xAB);
 
-//         REQUIRE(sim.get_value(fifo.dout) == 0xAB);
-//         REQUIRE(sim.get_value(fifo.count) == 1);
+        // Read second value
+        sim.tick();
 
-//         // Read second value
-//         sim.tick();
+        REQUIRE(sim.get_value(fifo.dout) == 0xCD);
+        REQUIRE(sim.get_value(fifo.count) == 0);
+        REQUIRE(sim.get_value(fifo.empty) == true);
+    }
 
-//         REQUIRE(sim.get_value(fifo.dout) == 0xCD);
-//         REQUIRE(sim.get_value(fifo.count) == 0);
-//         REQUIRE(sim.get_value(fifo.empty) == true);
-//     }
+    SECTION("FIFO full and empty conditions") {
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din = 0_d;
+        ch_bool wr_en = false;
+        ch_bool rd_en = false;
 
-//     SECTION("FIFO full and empty conditions") {
-//         ch_uint<8> din = 0_d;
-//         ch_bool wr_en = false;
-//         ch_bool rd_en = false;
-//         ch_bool rst = false;
+        FIFOResult<8, 2> fifo =
+            sync_fifo<8, 2>(din, wr_en, rd_en, "test_fifo_full");
 
-//         FIFOResult<8, 2> fifo =
-//             sync_fifo<8, 2>(din, wr_en, rd_en, rst, "test_fifo_full");
+        ch::Simulator sim(ctx.get());
+        sim.tick();
 
-//         ch::Simulator sim(ctx.get());
-//         sim.tick();
+        // Fill FIFO completely (depth = 2^2 = 4)
+        for (int i = 0; i < 4; ++i) {
+            sim.set_value(din, i + 1);
+            sim.set_value(wr_en, 1);
+            sim.tick();
+        }
 
-//         // Fill FIFO completely (depth = 2^2 = 4)
-//         for (int i = 0; i < 4; ++i) {
-//             sim.set_value(din.impl(), i + 1);
-//             sim.set_value(wr_en.impl(), 1);
-//             sim.tick();
-//         }
+        REQUIRE(sim.get_value(fifo.full) == true);
+        REQUIRE(sim.get_value(fifo.count) == 4);
 
-//         REQUIRE(sim.get_value(fifo.full) == true);
-//         REQUIRE(sim.get_value(fifo.count) == 4);
+        // Try to write more (should not increase count)
+        sim.set_value(din, 0xFF);
+        sim.tick();
 
-//         // Try to write more (should not increase count)
-//         sim.set_value(din.impl(), 0xFF);
-//         sim.tick();
+        REQUIRE(sim.get_value(fifo.full) == true);
+        REQUIRE(sim.get_value(fifo.count) == 4);
 
-//         REQUIRE(sim.get_value(fifo.full) == true);
-//         REQUIRE(sim.get_value(fifo.count) == 4);
+        // Read all values
+        for (int i = 0; i < 4; ++i) {
+            sim.set_value(wr_en, 0);
+            sim.set_value(rd_en, 1);
+            sim.tick();
+        }
 
-//         // Read all values
-//         for (int i = 0; i < 4; ++i) {
-//             sim.set_value(wr_en.impl(), 0);
-//             sim.set_value(rd_en.impl(), 1);
-//             sim.tick();
-//         }
+        REQUIRE(sim.get_value(fifo.empty) == true);
+        REQUIRE(sim.get_value(fifo.count) == 0);
+    }
 
-//         REQUIRE(simulator.get_value(fifo.empty) == true);
-//         REQUIRE(simulator.get_value(fifo.count) == 0);
-//     }
-// }
+    SECTION("FIFO with combinatorial output") {
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_comb");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din = 0_d;
+        ch_bool wr_en = false;
+        ch_bool rd_en = false;
+        ch_bool rst = true;
+
+        FIFOResult<8, 3> fifo =
+            sync_fifo<8, 3, false>(din, wr_en, rd_en, "test_fifo_comb");
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        REQUIRE(sim.get_value(fifo.empty) == true);
+        REQUIRE(sim.get_value(fifo.full) == false);
+        REQUIRE(sim.get_value(fifo.count) == 0);
+
+        // Deassert reset
+        sim.tick();
+
+        // Write value to FIFO
+        sim.set_value(din, 0x99);
+        sim.set_value(wr_en, 1);
+        sim.tick();
+
+        REQUIRE(sim.get_value(fifo.count) == 1);
+        REQUIRE(sim.get_value(fifo.empty) == false);
+
+        // Enable read - should see the value immediately with combinatorial
+        // output
+        sim.set_value(wr_en, 0);
+        sim.set_value(rd_en, 1);
+        sim.tick();
+
+        REQUIRE(sim.get_value(fifo.dout) == 0x99);
+        REQUIRE(sim.get_value(fifo.count) == 0);
+        REQUIRE(sim.get_value(fifo.empty) == true);
+    }
+}
