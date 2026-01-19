@@ -61,20 +61,7 @@ struct ch_bool : public logic_buffer<ch_bool> {
     void set_direction(output_direction) const { dir_ = output_direction{}; }
 
     // 添加赋值操作符，代表硬件连接
-    template <typename U> ch_bool &operator<<=(const U &value) {
-        lnode<U> src_lnode = get_lnode(value);
-        if (src_lnode.impl()) {
-            if (this->node_impl_) {
-                this->node_impl_->set_src(0, src_lnode.impl());
-            } else {
-                this->node_impl_ = src_lnode.impl();
-            }
-        } else {
-            CHERROR("[ch_bool::operator=] Error: node_impl_ or "
-                    "src_lnode is null for ch_bool!");
-        }
-        return *this;
-    }
+    template <typename U> ch_bool &operator<<=(const U &value);
 
     void flip_direction() const {
         if (std::holds_alternative<input_direction>(dir_)) {

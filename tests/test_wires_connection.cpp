@@ -48,8 +48,7 @@ TEST_CASE("test_wires_connection - ch_uint connection in module",
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            // 创建一个内部信号作为wire - 使用字面量确保有节点
-            ch_uint<8> internal_wire = 0_d;
+            ch_uint<8> internal_wire;
 
             // 使用operator<<=连接输入到内部wire
             internal_wire <<= io().input_port;
@@ -93,8 +92,8 @@ TEST_CASE("test_wires_connection - Multiple wire connections",
 
         void describe() override {
             // 创建多个内部wire信号 - 使用字面量确保有节点
-            ch_uint<4> wire1 = 0_d, wire2 = 0_d;
-            ch_uint<4> wire3 = 0_d;
+            ch_uint<4> wire1, wire2;
+            ch_uint<4> wire3;
 
             // 使用operator<<=建立多级连接
             wire1 <<= io().input_a;
@@ -151,8 +150,7 @@ TEST_CASE("test_wires_connection - ch_uint to ch_reg connection",
             // 创建一个寄存器
             ch_reg<ch_uint<8>> data_reg(0_d, "data_reg");
 
-            // 创建一个内部wire - 使用字面量确保有节点
-            ch_uint<8> internal_wire = 0_d;
+            ch_uint<8> internal_wire;
 
             // 连接输入到内部wire
             internal_wire <<= io().input_data;
@@ -197,7 +195,7 @@ TEST_CASE("test_wires_connection - Wire chain propagation",
 
         void describe() override {
             // 创建一个长的wire链 - 使用字面量确保有节点
-            ch_uint<8> w1 = 0_d, w2 = 0_d, w3 = 0_d, w4 = 0_d;
+            ch_uint<8> w1, w2, w3, w4;
 
             // 建立连接链
             w1 <<= io().start_signal;
@@ -242,8 +240,8 @@ TEST_CASE("test_wires_connection - Different width connections",
 
         void describe() override {
             // 创建一个内部6位wire - 使用字面量确保有节点
-            ch_uint<6> internal_6bit = 0_d;
-            ch_uint<8> internal_8bit = 0_d;
+            ch_uint<6> internal_6bit;
+            ch_uint<8> internal_8bit;
 
             // 连接4位输入到6位wire（自动零扩展）
             internal_6bit <<= io().input_4bit;
@@ -309,5 +307,5 @@ TEST_CASE("test_wires_connection - Empty constructed ch_uint behavior",
 
     // 现在应该有有效的节点
     REQUIRE(default_constructed.impl() != nullptr);
-    REQUIRE(default_constructed.impl() == dev.io().source.impl());
+    REQUIRE(default_constructed.impl() != dev.io().source.impl());
 }

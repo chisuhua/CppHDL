@@ -36,7 +36,7 @@ TEST_CASE("ch_mem sread port connection to ch_uint",
             // 创建一个16个条目，每个条目8位的存储器
             ch_mem<ch_uint<8>, 16> mem(init_data, "test_mem");
 
-            ch_bool enable_in(1_b);
+            ch_bool enable_in;
             enable_in <<= io().enable_in;
 
             // 创建同步读端口
@@ -165,7 +165,7 @@ TEST_CASE("ch_mem read port connection with ch_uint variable",
                 mem.sread(io().addr_in, ch_bool(1_b), "sread_port");
 
             // 创建一个ch_uint变量来接收读端口的值
-            ch_uint<16> read_data(0_d);
+            ch_uint<16> read_data;
             read_data <<= read_port;
 
             // 使用operator <<= 连接到输出

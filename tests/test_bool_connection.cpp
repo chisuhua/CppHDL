@@ -23,7 +23,7 @@ TEST_CASE("ch_bool operator<<= with ch_bool", "[bool][connection][operator]") {
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            ch_bool temp_signal(0_b);
+            ch_bool temp_signal;
 
             // 使用operator<<=连接ch_bool信号
             temp_signal <<= io().input_bool;
@@ -62,7 +62,7 @@ TEST_CASE("ch_bool operator<<= with ch_uint<1>",
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            ch_bool bool_signal(0_b);
+            ch_bool bool_signal;
 
             // 使用operator<<=连接ch_uint<1>到ch_bool
             bool_signal <<= io().input_uint1;

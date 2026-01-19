@@ -17,19 +17,40 @@ inline ch_bool::ch_bool(const ch_literal_impl<V, W> &val,
         runtime_lit, name + "_literal", sloc);
 
     // 然后使用 assign 操作创建一个新的节点
-    if (literal_node) {
-        this->node_impl_ = node_builder::instance().build_unary_operation(
-            ch_op::assign, lnode<ch_bool>(literal_node), 1, name, sloc);
-    } else {
-        CHERROR("[ch_bool::ch_bool] Failed to create literal node from "
-                "compile-time literal");
-        this->node_impl_ = nullptr;
-    }
+    // if (literal_node) {
+    //     this->node_impl_ = node_builder::instance().build_unary_operation(
+    //         ch_op::assign, lnode<ch_bool>(literal_node), 1, name, sloc);
+    // } else {
+    //     CHERROR("[ch_bool::ch_bool] Failed to create literal node from "
+    //             "compile-time literal");
+    //     this->node_impl_ = nullptr;
+    // }
 
+    this->node_impl_ = literal_node;
     if (!this->node_impl_) {
         CHERROR("[ch_bool::ch_bool] Failed to create assign node from "
                 "compile-time literal");
     }
+}
+
+template <typename U> inline ch_bool &ch_bool::operator<<=(const U &value) {
+    lnode<U> src_lnode = get_lnode(value);
+    if (src_lnode.impl()) {
+        if (this->node_impl_) {
+            CHERROR("[ch_bool::operator<<=] Error: node_impl_ or "
+                    "src_lnode is not null for ch_bool!");
+            // this->node_impl_->set_src(0, src_lnode.impl());
+        } else {
+            // this->node_impl_ = src_lnode.impl();
+            this->node_impl_ = node_builder::instance().build_unary_operation(
+                ch_op::assign, src_lnode, 1,
+                src_lnode.impl()->name() + "_wire");
+        }
+    } else {
+        CHERROR("[ch_bool::operator=] Error: node_impl_ or "
+                "src_lnode is null for ch_bool!");
+    }
+    return *this;
 }
 
 } // namespace ch::core

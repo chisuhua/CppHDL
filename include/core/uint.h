@@ -69,11 +69,12 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
         const ch_uint<M> &other, const std::string &name = "uint_conv",
         const std::source_location &sloc = std::source_location::current()) {
         if constexpr (M == N) {
-            if (name == "uint_conv") {
-                this->node_impl_ = other.impl();
-            } else {
-                this->node_impl_ = zext<N>(other, name).impl();
-            }
+            this->node_impl_ = other.impl();
+            // if (name == "uint_conv") {
+            //     this->node_impl_ = other.impl();
+            // } else {
+            //     this->node_impl_ = zext<N>(other, name).impl();
+            // }
         } else if constexpr (M < N) {
             // 零扩展
             this->node_impl_ = zext<N>(other, name).impl();
@@ -105,21 +106,29 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
         lnode<U> src_lnode = get_lnode(value);
         if (src_lnode.impl()) {
             if (this->node_impl_) {
-                this->node_impl_->set_src(0, src_lnode.impl());
+                //       this->node_impl_->set_src(0, src_lnode.impl());
+                CHERROR("[ch_uint::operator<<=] Error: node_impl_ or "
+                        "src_lnode is not null for ch_uint<%d>!",
+                        N);
             } else {
+                this->node_impl_ =
+                    node_builder::instance().build_unary_operation(
+                        ch_op::assign, src_lnode, N,
+                        src_lnode.impl()->name() + "_wire");
+
                 // 使用编译期判断位宽差异
-                if constexpr (ch_width_v<U> < N) {
-                    // 源节点位宽小于目标节点，使用零扩展
-                    auto extended = zext<N>(value);
-                    this->node_impl_ = extended.impl();
-                } else if constexpr (ch_width_v<U> > N) {
-                    // 源节点位宽大于目标节点，使用bits操作提取低位
-                    auto truncated = bits<N - 1, 0>(value);
-                    this->node_impl_ = truncated.impl();
-                } else {
-                    // 位宽相同，直接使用源节点
-                    this->node_impl_ = src_lnode.impl();
-                }
+                // if constexpr (ch_width_v<U> < N) {
+                //     // 源节点位宽小于目标节点，使用零扩展
+                //     auto extended = zext<N>(value);
+                //     this->node_impl_ = extended.impl();
+                // } else if constexpr (ch_width_v<U> > N) {
+                //     // 源节点位宽大于目标节点，使用bits操作提取低位
+                //     auto truncated = bits<N - 1, 0>(value);
+                //     this->node_impl_ = truncated.impl();
+                // } else {
+                //     // 位宽相同，直接使用源节点
+                //     this->node_impl_ = src_lnode.impl();
+                // }
             }
         } else {
             CHERROR("[ch_uint::operator=] Error: node_impl_ or "

@@ -44,7 +44,8 @@ public:
         const std::source_location &sloc = std::source_location::current()) {
         CHDBG_FUNC();
         if (debug_mode_) {
-            CHINFO("[node_builder] Building literal with value %s", name.c_str());
+            CHINFO("[node_builder] Building literal with value %s",
+                   name.c_str());
         }
 
         auto *ctx = ctx_curr_;
@@ -113,8 +114,8 @@ public:
 
         CHDBG("[node_builder] Building input with size %u, name '%s'", size,
               name.c_str());
-        return ctx->create_input(
-            size, prefixed_name_helper(name, name_prefix_), sloc);
+        return ctx->create_input(size, prefixed_name_helper(name, name_prefix_),
+                                 sloc);
     }
 
     template <typename T>
@@ -177,8 +178,7 @@ public:
 
         // 构建代理节点
         proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-            reg_node, prefixed_name_helper("_" + name, name_prefix_),
-            sloc);
+            reg_node, prefixed_name_helper("_" + name, name_prefix_), sloc);
 
         // Explicitly link register and proxy nodes
         if (reg_node && proxy_node) {
@@ -195,11 +195,10 @@ public:
     }
 
     template <typename Cond, typename TrueVal, typename FalseVal>
-    lnodeimpl *build_mux(const lnode<Cond> &cond,
-                         const lnode<TrueVal> &true_val,
-                         const lnode<FalseVal> &false_val,
-                         const std::string &name = "mux",
-                         const std::source_location &sloc = std::source_location::current()) {
+    lnodeimpl *build_mux(
+        const lnode<Cond> &cond, const lnode<TrueVal> &true_val,
+        const lnode<FalseVal> &false_val, const std::string &name = "mux",
+        const std::source_location &sloc = std::source_location::current()) {
 
         constexpr unsigned result_width =
             std::max(ch_width_v<TrueVal>, ch_width_v<FalseVal>);
@@ -242,11 +241,12 @@ public:
             prefixed_name_helper(name, name_prefix_), sloc);
 
         // Create proxy node with correct size
-        proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-            op_node, prefixed_name_helper("_" + name, name_prefix_),
-            sloc);
+        // proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
+        //     op_node, prefixed_name_helper("_" + name, name_prefix_),
+        //     sloc);
 
-        return proxy_node;
+        // return proxy_node;
+        return op_node;
     }
 
     template <typename T, typename Index>
@@ -280,11 +280,11 @@ public:
             prefixed_name_helper(name, name_prefix_), sloc);
 
         // Create proxy node with correct size
-        proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-            op_node, prefixed_name_helper("_" + name, name_prefix_),
-            sloc);
+        // proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
+        //     op_node, prefixed_name_helper("_" + name, name_prefix_), sloc);
 
-        return proxy_node;
+        // return proxy_node;
+        return op_node;
     }
 
     template <typename T>
@@ -295,7 +295,8 @@ public:
         CHDBG_FUNC();
         auto *ctx = ctx_curr_;
         if (!ctx) {
-            CHERROR("[node_builder] No active context for bits operation creation");
+            CHERROR(
+                "[node_builder] No active context for bits operation creation");
             return nullptr;
         }
 
@@ -305,7 +306,8 @@ public:
         }
 
         if (msb < lsb) {
-            CHWARN("[node_builder] MSB (%u) < LSB (%u) in build_bits, swapping", msb, lsb);
+            CHWARN("[node_builder] MSB (%u) < LSB (%u) in build_bits, swapping",
+                   msb, lsb);
             std::swap(msb, lsb);
         }
 
@@ -315,22 +317,22 @@ public:
             ++statistics_->total_nodes_built;
         }
 
-        // Create the bits extract operation node - use a literal to encode the range
-        // The range info will be encoded in the second operand (src1)
+        // Create the bits extract operation node - use a literal to encode the
+        // range The range info will be encoded in the second operand (src1)
         uint64_t range_encoding = (static_cast<uint64_t>(msb) << 32) | lsb;
-        
+
         opimpl *op_node = ctx->create_node<opimpl>(
-            width,
-            ch_op::bits_extract, false,
-            operand.impl(),
-            ctx->create_literal(sdata_type(range_encoding, 64), name + "_range", sloc),
+            width, ch_op::bits_extract, false, operand.impl(),
+            ctx->create_literal(sdata_type(range_encoding, 64), name + "_range",
+                                sloc),
             prefixed_name_helper(name, name_prefix_), sloc);
 
         // Create proxy node
-        proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
-            op_node, prefixed_name_helper("_" + name, name_prefix_), sloc);
+        // proxyimpl *proxy_node = ctx->create_node<proxyimpl>(
+        //     op_node, prefixed_name_helper("_" + name, name_prefix_), sloc);
 
-        return proxy_node;
+        // return proxy_node;
+        return op_node;
     }
 
     template <typename T, typename Index>
@@ -369,7 +371,7 @@ private:
     std::string name_prefix_;
     std::unique_ptr<build_statistics> statistics_;
     // 移除 node_cache 和 optimization_manager 相关成员
-    
+
     // 辅助函数
     std::string prefixed_name_helper(const std::string &name,
                                      const std::string &prefix) {
@@ -378,9 +380,8 @@ private:
         }
         return prefix + "_" + name;
     }
-    
-    template <typename T>
-    constexpr uint32_t get_literal_width(T value) {
+
+    template <typename T> constexpr uint32_t get_literal_width(T value) {
         if (value == 0)
             return 1;
         if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {

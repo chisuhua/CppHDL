@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "chlib/memory.h"
+#include "codegen_dag.h"
 #include "core/context.h"
 #include "core/literal.h"
 #include "simulator.h"
@@ -31,6 +32,8 @@ TEST_CASE("Memory: single port RAM", "[memory][single_port_ram]") {
         // Read from address 0
         sim.set_value(we.impl(), 0);
         sim.tick();
+
+        toDAG("mem.dot", ctx.get(), sim);
 
         REQUIRE(sim.get_value(dout) == 0x55);
     }
