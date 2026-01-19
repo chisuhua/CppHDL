@@ -179,8 +179,10 @@ public:
             ctx->create_node<proxyimpl>(data_width, name + "_data_proxy", sloc);
 
         // 创建同步读端口节点
-        auto enable_impl =
-            is_litimpl_one(enable_lnode.impl()) ? nullptr : enable_lnode.impl();
+        // auto enable_impl =
+        //     is_litimpl_one(enable_lnode.impl()) ? nullptr :
+        //     enable_lnode.impl();
+        auto enable_impl = enable_lnode.impl();
         auto *port_impl = ctx->create_mem_read_port(
             mem_node_, mem_node_->next_port_id(), data_width, cd,
             addr_lnode.impl(), enable_impl, data_proxy, name, sloc);
@@ -221,8 +223,10 @@ public:
         auto *cd = ctx->current_clock(sloc);
 
         // 创建写端口节点
-        auto enable_impl =
-            is_litimpl_one(enable_lnode.impl()) ? nullptr : enable_lnode.impl();
+        // auto enable_impl =
+        //     is_litimpl_one(enable_lnode.impl()) ? nullptr :
+        //     enable_lnode.impl();
+        auto enable_impl = enable_lnode.impl();
         auto *port_impl = ctx->create_mem_write_port(
             mem_node_, mem_node_->next_port_id(), data_width, cd,
             addr_lnode.impl(), data_lnode.impl(), enable_impl, name, sloc);

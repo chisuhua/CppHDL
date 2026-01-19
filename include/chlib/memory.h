@@ -32,10 +32,12 @@ single_port_ram(ch_uint<ADDR_WIDTH> addr, ch_uint<DATA_WIDTH> din, ch_bool we,
     auto write_port = mem.write(addr, din, we);
 
     // 执行读操作
-    auto read_port = mem.sread(addr, ch_bool(true));
+    auto read_port = mem.sread(addr, !we);
 
-    // 输出数据 - 如果写使能有效则返回输入数据，否则返回读取的数据
-    return select(we, din, read_port);
+    ch_uint<DATA_WIDTH> read_data;
+    read_data <<= read_port;
+
+    return select(we, make_uint<DATA_WIDTH>(0), read_data);
 }
 
 /**
@@ -59,17 +61,16 @@ dual_port_ram(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH> din_a,
 
     // 端口A操作
     auto write_port_a = mem.write(addr_a, din_a, we_a);
-    auto read_port_a = mem.sread(addr_a, ch_bool(true));
+    auto read_port_a = mem.sread(addr_a, !we_a);
 
     // 端口B操作
     auto write_port_b = mem.write(addr_b, din_b, we_b);
-    auto read_port_b = mem.sread(addr_b, ch_bool(true));
+    auto read_port_b = mem.sread(addr_b, !we_b);
 
     DualPortRAMResult<DATA_WIDTH, ADDR_WIDTH> result;
-    result.dout_a =
-        select(we_a, din_a,
-               read_port_a); // 如果写使能有效，返回写入数据，否则返回读出数据
-    result.dout_b = select(we_b, din_b, read_port_b);
+    // 如果写使能有效，返回写入数据，否则返回读出数据
+    result.dout_a = select(we_a, make_uint<DATA_WIDTH>(0), read_port_a);
+    result.dout_b = select(we_b, make_uint<DATA_WIDTH>(0), read_port_b);
 
     return result;
 }
