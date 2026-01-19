@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "codegen_dag.h"
 #include "component.h"
 #include "core/bool.h"
 #include "core/context.h"
@@ -44,6 +45,7 @@ TEST_CASE("ch_bool operator<<= with ch_bool", "[bool][connection][operator]") {
     // 测试true/1
     sim.set_input_value(input_bool, 1);
     sim.tick();
+    toDAG("bool1.dot", dev.context(), sim);
     REQUIRE(sim.get_value(output_bool) == 1);
 }
 

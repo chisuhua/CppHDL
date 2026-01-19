@@ -7,7 +7,7 @@
 namespace ch::core {
 // 统一的节点创建方法，添加错误检查
 template <typename T, typename... Args>
-T *context::create_node(Args &&...args) {
+inline T *context::create_node(Args &&...args) {
     CHDBG_FUNC();
     CHREQUIRE(this != nullptr, "Context cannot be null");
 

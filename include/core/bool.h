@@ -48,6 +48,9 @@ struct ch_bool : public logic_buffer<ch_bool> {
     explicit operator uint64_t() const;
     explicit operator bool() const;
 
+    // 添加to_bool方法的声明
+    bool to_bool() const;
+
     // 隐式转换为 ch_uint<1>（用于兼容性）
 
     using direction_type =
@@ -60,8 +63,12 @@ struct ch_bool : public logic_buffer<ch_bool> {
     // 添加赋值操作符，代表硬件连接
     template <typename U> ch_bool &operator<<=(const U &value) {
         lnode<U> src_lnode = get_lnode(value);
-        if (this->node_impl_ && src_lnode.impl()) {
-            this->node_impl_->set_src(0, src_lnode.impl());
+        if (src_lnode.impl()) {
+            if (this->node_impl_) {
+                this->node_impl_->set_src(0, src_lnode.impl());
+            } else {
+                this->node_impl_ = src_lnode.impl();
+            }
         } else {
             CHERROR("[ch_bool::operator=] Error: node_impl_ or "
                     "src_lnode is null for ch_bool!");

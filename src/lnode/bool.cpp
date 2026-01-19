@@ -17,27 +17,35 @@ ch_bool::ch_bool(bool val, const std::string &name,
     this->node_impl_ = node;
 }
 
-// 从 ch_literal_runtime 构造
+// 从运行时字面量构造
 ch_bool::ch_bool(const ch_literal_runtime &val, const std::string &name,
                  const std::source_location &sloc)
     : logic_buffer<ch_bool>() {
-    // 验证宽度（可选）
-    if (val.actual_width > 1) {
-        // 可以警告或截断
-    }
-    auto *node = node_builder::instance().build_literal(val, name, sloc);
-    this->node_impl_ = node;
-}
+    // 先创建字面值节点
+    auto *literal_node =
+        node_builder::instance().build_literal(val, name + "_literal", sloc);
 
+    // 然后使用 assign 操作创建一个新的节点
+    if (literal_node) {
+        this->node_impl_ = node_builder::instance().build_unary_operation(
+            ch_op::assign, lnode<ch_bool>(literal_node), 1, name, sloc);
+    } else {
+        CHERROR("[ch_bool::ch_bool] Failed to create literal node from "
+                "sdata_type");
+        this->node_impl_ = nullptr;
+    }
+
+    if (!this->node_impl_) {
+        CHERROR("[ch_bool::ch_bool] Failed to create assign node from "
+                "sdata_type");
+    }
+}
 ch_bool::operator uint64_t() const {
     if (this->node_impl_ && this->node_impl_->is_const()) {
         auto *lit_node = static_cast<litimpl *>(this->node_impl_);
         return static_cast<uint64_t>(lit_node->value());
     }
     return 0;
-    // 注意：运行时转换可能需要求值器，这里假设仅用于常量
-    // 实际项目中可能需要更复杂的实现
-    // return static_cast<bool>(static_cast<uint64_t>(*this));
 }
 
 ch_bool::operator bool() const {
@@ -53,6 +61,17 @@ lnode<ch_bool> get_lnode(const ch_bool& bool_val) {
 // ch_bool make_bool_result(lnodeimpl* node) {
 //     return ch_bool(node);
 // }
+
+// 显式转换为 bool
+bool ch_bool::to_bool() const {
+    return static_cast<bool>(static_cast<uint64_t>(*this));
+}
+
+// 支持流输出
+std::ostream &operator<<(std::ostream &os, const ch_bool &b) {
+    os << (b ? "true" : "false");
+    return os;
+}
 
 } // namespace core
 } // namespace ch
