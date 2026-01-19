@@ -37,7 +37,7 @@ single_port_ram(ch_uint<ADDR_WIDTH> addr, ch_uint<DATA_WIDTH> din, ch_bool we,
     ch_uint<DATA_WIDTH> read_data;
     read_data <<= read_port;
 
-    return select(we, make_uint<DATA_WIDTH>(0), read_data);
+    return read_data;
 }
 
 /**
@@ -69,8 +69,8 @@ dual_port_ram(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH> din_a,
 
     DualPortRAMResult<DATA_WIDTH, ADDR_WIDTH> result;
     // 如果写使能有效，返回写入数据，否则返回读出数据
-    result.dout_a = select(we_a, make_uint<DATA_WIDTH>(0), read_port_a);
-    result.dout_b = select(we_b, make_uint<DATA_WIDTH>(0), read_port_b);
+    result.dout_a <<= read_port_a;
+    result.dout_b <<= read_port_b;
 
     return result;
 }
@@ -80,29 +80,31 @@ dual_port_ram(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH> din_a,
  *
  * 双端口RAM的简化版本，使用单一时钟
  */
-template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
-DualPortRAMResult<DATA_WIDTH, ADDR_WIDTH>
-dual_port_ram_single_clk(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH> din_a,
-                         ch_bool we_a, ch_uint<ADDR_WIDTH> addr_b,
-                         ch_uint<DATA_WIDTH> din_b, ch_bool we_b,
-                         const std::string &name = "dual_port_ram_single_clk") {
+// template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
+// DualPortRAMResult<DATA_WIDTH, ADDR_WIDTH>
+// dual_port_ram_single_clk(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH>
+// din_a,
+//                          ch_bool we_a, ch_uint<ADDR_WIDTH> addr_b,
+//                          ch_uint<DATA_WIDTH> din_b, ch_bool we_b,
+//                          const std::string &name =
+//                          "dual_port_ram_single_clk") {
 
-    ch_mem<ch_uint<DATA_WIDTH>, (1U << ADDR_WIDTH)> mem(name);
+//     ch_mem<ch_uint<DATA_WIDTH>, (1U << ADDR_WIDTH)> mem(name);
 
-    // 端口A操作
-    auto write_port_a = mem.write(addr_a, din_a, we_a);
-    auto read_port_a = mem.sread(addr_a, ch_bool(true));
+//     // 端口A操作
+//     auto write_port_a = mem.write(addr_a, din_a, we_a);
+//     auto read_port_a = mem.sread(addr_a, ch_bool(true));
 
-    // 端口B操作
-    auto write_port_b = mem.write(addr_b, din_b, we_b);
-    auto read_port_b = mem.sread(addr_b, ch_bool(true));
+//     // 端口B操作
+//     auto write_port_b = mem.write(addr_b, din_b, we_b);
+//     auto read_port_b = mem.sread(addr_b, ch_bool(true));
 
-    DualPortRAMResult<DATA_WIDTH, ADDR_WIDTH> result;
-    result.dout_a = select(we_a, din_a, read_port_a);
-    result.dout_b = select(we_b, din_b, read_port_b);
+//     DualPortRAMResult<DATA_WIDTH, ADDR_WIDTH> result;
+//     result.dout_a = select(we_a, din_a, read_port_a);
+//     result.dout_b = select(we_b, din_b, read_port_b);
 
-    return result;
-}
+//     return result;
+// }
 
 /**
  * FIFO - 函数式接口
@@ -110,14 +112,13 @@ dual_port_ram_single_clk(ch_uint<ADDR_WIDTH> addr_a, ch_uint<DATA_WIDTH> din_a,
  * 先进先出队列，支持同步读写
  */
 template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FIFOResult {
-    ch_uint<DATA_WIDTH> dout;  // 输出数据
-    ch_bool empty;             // 空标志
-    ch_bool full;              // 满标志
-    ch_uint<ADDR_WIDTH> count; // 当前元素数量
+    ch_uint<DATA_WIDTH> dout;      // 输出数据
+    ch_bool empty;                 // 空标志
+    ch_bool full;                  // 满标志
+    ch_uint<ADDR_WIDTH + 1> count; // 当前元素数量
 };
 
-template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH,
-          bool USE_OUTPUT_REGISTER = true>
+template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
 FIFOResult<DATA_WIDTH, ADDR_WIDTH>
 sync_fifo(ch_uint<DATA_WIDTH> din, ch_bool wr_en, ch_bool rd_en,
           const std::string &name = "sync_fifo") {
@@ -163,16 +164,8 @@ sync_fifo(ch_uint<DATA_WIDTH> din, ch_bool wr_en, ch_bool rd_en,
 
     FIFOResult<DATA_WIDTH, ADDR_WIDTH> result;
 
-    if constexpr (USE_OUTPUT_REGISTER) {
-        // 使用寄存器输出（默认行为）
-        ch_reg<ch_uint<DATA_WIDTH>> dout_reg(0_d, name + "_dout");
-        ch_uint<DATA_WIDTH> next_dout = select(rd_active, read_port, dout_reg);
-        dout_reg->next = next_dout;
-        result.dout = dout_reg;
-    } else {
-        // 使用组合逻辑输出 - 直接输出read_port
-        result.dout <<= read_port;
-    }
+    // 使用组合逻辑输出 - 直接输出read_port
+    result.dout <<= read_port;
     result.empty = empty_reg;
     result.full = full_reg;
     result.count = count_reg;

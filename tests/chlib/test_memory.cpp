@@ -159,7 +159,7 @@ TEST_CASE("Memory: dual port RAM single clock",
         ch_uint<8> din_b = 0_d;
         ch_bool we_b = false;
 
-        DualPortRAMResult<8, 4> result = dual_port_ram_single_clk<8, 4>(
+        DualPortRAMResult<8, 4> result = dual_port_ram<8, 4>(
             addr_a, din_a, we_a, addr_b, din_b, we_b, "test_dpram_sc");
 
         ch::Simulator sim(ctx.get());
@@ -221,12 +221,10 @@ TEST_CASE("Memory: sync FIFO", "[memory][sync_fifo]") {
         // Read first value
         sim.set_value(wr_en, 0);
         sim.set_value(rd_en, 1);
-        sim.tick(); // 4
-        REQUIRE(sim.get_value(fifo.count) == 1);
-        REQUIRE(sim.get_value(fifo.dout) == 0);
-        sim.tick(); // 5
+        sim.tick();
 
         REQUIRE(sim.get_value(fifo.dout) == 0xAB);
+        REQUIRE(sim.get_value(fifo.count) == 1);
 
         // Read second value
         sim.tick();
@@ -275,45 +273,5 @@ TEST_CASE("Memory: sync FIFO", "[memory][sync_fifo]") {
 
         REQUIRE(sim.get_value(fifo.empty) == true);
         REQUIRE(sim.get_value(fifo.count) == 0);
-    }
-
-    SECTION("FIFO with combinatorial output") {
-        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_comb");
-        ch::core::ctx_swap ctx_swapper(ctx.get());
-        ch_uint<8> din = 0_d;
-        ch_bool wr_en = false;
-        ch_bool rd_en = false;
-        ch_bool rst = true;
-
-        FIFOResult<8, 3> fifo =
-            sync_fifo<8, 3, false>(din, wr_en, rd_en, "test_fifo_comb");
-
-        ch::Simulator sim(ctx.get());
-        sim.tick();
-
-        REQUIRE(sim.get_value(fifo.empty) == true);
-        REQUIRE(sim.get_value(fifo.full) == false);
-        REQUIRE(sim.get_value(fifo.count) == 0);
-
-        // Deassert reset
-        sim.tick();
-
-        // Write value to FIFO
-        sim.set_value(din, 0x99);
-        sim.set_value(wr_en, 1);
-        sim.tick();
-
-        REQUIRE(sim.get_value(fifo.count) == 1);
-        REQUIRE(sim.get_value(fifo.empty) == false);
-
-        // Enable read - should see the value immediately with combinatorial
-        // output
-        sim.set_value(wr_en, 0);
-        sim.set_value(rd_en, 1);
-        sim.tick();
-
-        REQUIRE(sim.get_value(fifo.dout) == 0x99);
-        REQUIRE(sim.get_value(fifo.count) == 0);
-        REQUIRE(sim.get_value(fifo.empty) == true);
     }
 }
