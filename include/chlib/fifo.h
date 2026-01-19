@@ -27,8 +27,7 @@ template <unsigned N> ch_bool is_empty(ch_uint<N> count) {
  * 辅助函数：判断计数器是否为满
  */
 template <unsigned N> ch_bool is_full(ch_uint<N> count) {
-    static constexpr unsigned MAX_COUNT =
-        (1 << N) - 1; // 修复：使用N而不是ADDR_WIDTH
+    static constexpr unsigned MAX_COUNT = (1 << (N - 1));
     return count == make_literal<MAX_COUNT>();
 }
 
@@ -71,9 +70,8 @@ sync_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden,
     write_ptr->next = next_write_ptr;
 
     // 读取操作 - 创建读端口
-    ch_uint<DATA_WIDTH> read_data(0_d);
-    auto read_port = memory.sread(read_ptr, ch_bool(true));
-    read_data <<= read_port;
+    ch_uint<DATA_WIDTH> read_data;
+    read_data <<= memory.sread(read_ptr, ch_bool(true));
     ch_bool read_enable = rden && !is_empty(count);
 
     // 更新读指针
@@ -140,7 +138,7 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
     write_ptr->next = next_write_ptr;
 
     // 读取操作 - 创建读端口
-    ch_uint<DATA_WIDTH> read_port(0_d);
+    ch_uint<DATA_WIDTH> read_port;
     read_port <<= memory.sread(read_ptr, ch_bool(1_b));
     ch_bool read_enable = rden && !is_empty(count);
 
@@ -332,7 +330,7 @@ lifo_stack(ch_bool push, ch_uint<DATA_WIDTH> din, ch_bool pop) {
     ch_bool pop_enable = pop && !is_empty(stack_ptr);
     ch_uint<ADDR_WIDTH> pop_addr =
         select(pop_enable, stack_ptr - 1_d, stack_ptr);
-    ch_uint<DATA_WIDTH> read_port(0_d);
+    ch_uint<DATA_WIDTH> read_port;
     read_port <<= memory.sread(pop_addr, ch_bool(true));
 
     LifoResult<DATA_WIDTH, ADDR_WIDTH> result;
