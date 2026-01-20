@@ -66,7 +66,7 @@ constexpr unsigned get_bundle_width() {
                             total_width += FieldType::width;
                         } else if constexpr (std::is_same_v<FieldType, ch_bool>) {
                             total_width += 1u;
-                        } else if constexpr (is_bundle_v<FieldType>) {
+                        } else if constexpr (is_bundle_v<FieldType> && !std::is_same_v<BundleT, FieldType>) {
                             total_width += get_bundle_width<FieldType>();
                         }
                     }

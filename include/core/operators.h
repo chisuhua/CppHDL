@@ -810,6 +810,27 @@ inline ch_bool operator||(const ch_uint<N> &lhs, const ch_bool &rhs) {
                                                 "logical_or");
 }
 
+// === to_bits 包装函数，用于将值转换为位表示 ===
+template <typename T>
+auto to_bits_wrapper(const T &value) {
+    if constexpr (requires { value.to_bits(); }) {
+        // 如果类型有 to_bits 方法，直接使用它
+        return value.to_bits();
+    } else if constexpr (HardwareType<T> || CHLiteral<T>) {
+        // 如果是硬件类型或字面量类型，获取其节点并构建 ch_uint
+        constexpr unsigned W = ch_width_v<T>;
+        return ch_uint<W>(value.impl());
+    } else if constexpr (ArithmeticLiteral<T>) {
+        // 如果是算术字面量，将其转换为适当宽度的 ch_uint
+        constexpr unsigned W = sizeof(T) * 8;  // 按类型大小确定位宽
+        sdata_type data(static_cast<uint64_t>(value), W);
+        auto *literal_node = node_builder::instance().build_literal(data, "literal");
+        return ch_uint<W>(literal_node);
+    } else {
+        static_assert(sizeof(T) == 0, "Unsupported type for to_bits_wrapper");
+    }
+}
+
 static_assert(HardwareType<ch_bool>, "ch_bool must be HardwareType");
 
 } // namespace ch::core
