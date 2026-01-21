@@ -49,4 +49,10 @@ template <typename BundleT, typename FieldType> struct bundle_field {
             CH_BUNDLE_FIELDS_CHOOSE_N(__VA_ARGS__)(T, __VA_ARGS__));           \
     }
 
+// 用于模板bundle的宏
+#define CH_BUNDLE_FIELDS_T(TYPE, ...)                                          \
+    static constexpr auto __bundle_fields() {                                  \
+        return std::make_tuple(__VA_ARGS__);                                   \
+    }
+
 #endif // CH_CORE_BUNDLE_META_H
