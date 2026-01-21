@@ -15,6 +15,8 @@ namespace ch::core {
 // 从Bundle序列化为位向量
 template <typename BundleT>
 auto serialize(const BundleT &bundle) {
+    static_assert(is_bundle_v<BundleT>, "serialize() only works with Bundle types");
+    
     if constexpr (is_bundle_v<BundleT>) {
         constexpr auto fields = BundleT::__bundle_fields();
         constexpr unsigned W = get_bundle_width<BundleT>();
@@ -45,8 +47,6 @@ auto serialize(const BundleT &bundle) {
         
         return result;
     } else {
-        // 对非bundle类型返回空结果，但不会导致编译错误
-        static_assert(is_bundle_v<BundleT>, "serialize() only works with Bundle types");
         return ch_uint<1>{0};  // 返回默认值，避免不完整类型错误
     }
 }
@@ -118,12 +118,13 @@ void deserialize_bits_to_fields(const ch_uint<W> &bits, BundleT &bundle) {
 // 从位向量反序列化到Bundle
 template <typename BundleT, unsigned W>
 BundleT deserialize(const ch_uint<W> &bits) {
+    static_assert(is_bundle_v<BundleT>, "deserialize() only works with Bundle types");
+    
     if constexpr (is_bundle_v<BundleT>) {
         BundleT bundle;
         deserialize_bits_to_fields(bits, bundle);
         return bundle;
     } else {
-        static_assert(is_bundle_v<BundleT>, "deserialize() only works with Bundle types");
         return BundleT{};  // 返回默认值
     }
 }

@@ -1,10 +1,12 @@
 #ifndef CH_CORE_BUNDLE_BASE_H
 #define CH_CORE_BUNDLE_BASE_H
 
-#include "core/logic_buffer.h"
-#include "core/bundle/bundle_traits.h" // for get_bundle_width, __bundle_fields
-#include "core/bundle/bundle_serialization.h" // 添加对bundle_serialization.h的包含
+#include "core/bundle/bundle_serialization.h"
+#include "core/bundle/bundle_traits.h"
 #include "core/direction.h"
+#include "core/literal.h" // 添加对literal.h的包含
+#include "core/logic_buffer.h"
+#include <source_location>
 #include <string>
 
 namespace ch::core {
@@ -42,22 +44,8 @@ struct bundle_field_traits<BundleType> {
 
 template <typename Derived> class bundle_base : public logic_buffer<Derived> {
 public:
-    using Self = Derived;
-
     // (1) 默认构造：创建未驱动的字面量节点并通过assign操作连接
-    bundle_base() {
-        constexpr unsigned W = get_bundle_width<Derived>();
-        // 创建一个零值字面量作为默认值
-        sdata_type default_value = constants::zero(W);
-        auto *literal_node = node_builder::instance().build_literal(
-            default_value, "unnamed_bundle_literal");
-        
-        // 创建assign操作节点，将字面量值连接到bundle节点
-        this->node_impl_ = node_builder::instance().build_unary_operation(
-            ch_op::assign, lnode<ch_uint<W>>(literal_node), W, "unnamed_bundle");
-            
-        // 不再自动同步成员，以避免段错误
-    }
+    bundle_base() : logic_buffer<Derived>() {}
 
     // (2) 拷贝构造：共享节点（硬件连接语义）
     bundle_base(const bundle_base &other)
@@ -66,29 +54,40 @@ public:
     }
 
     // (3) 从底层节点直接构造（用于 <<= 或内部）
-    explicit bundle_base(lnodeimpl *node) : logic_buffer<Derived>(node) {
+    bundle_base(lnodeimpl *node) : logic_buffer<Derived>(node) {
         // 不再自动同步成员
     }
 
-    // (4) 从 ch_uint<W> 反序列化（复用其节点）
-    template <unsigned W> explicit bundle_base(const ch_uint<W> &bits) {
-        static_assert(W == get_bundle_width<Derived>(),
-                      "Bundle width mismatch");
-        this->node_impl_ = bits.impl(); // 直接复用节点！
-        // 不再自动同步成员
-    }
+    // // (4) 从 ch_uint<W> 反序列化（复用其节点）
+    // template <unsigned W> bundle_base(const ch_uint<W> &bits) {
+    //     this->node_impl_ = bits.impl(); // 直接复用节点！
+    // }
 
     // (5) 从字面量类型参数构造：创建字面量节点
-    explicit bundle_base(const sdata_type &literal_value) {
-        constexpr unsigned W = get_bundle_width<Derived>();
-        auto *literal_node = node_builder::instance().build_literal(
-            literal_value, "literal_bundle_literal");
-        
-        // 创建assign操作节点，将字面量值连接到bundle节点
-        this->node_impl_ = node_builder::instance().build_unary_operation(
-            ch_op::assign, lnode<ch_uint<W>>(literal_node), W, "literal_bundle");
-            
-        // 不再自动同步成员
+    // 接受编译时字面量类型，如 0_d, 0x11_h 等
+    template <uint64_t V, uint32_t W>
+    bundle_base(
+        ch_literal_impl<V, W> literal_value,
+        const std::string &name = "bundle_lit",
+        const std::source_location &sloc = std::source_location::current()) {
+        auto runtime_lit = make_literal<V, W>();
+        auto *literal_node =
+            node_builder::instance().build_literal(runtime_lit, name, sloc);
+
+        this->node_impl_ = literal_node;
+    }
+
+    // (6) 从运行时字面量类型构造：创建字面量节点
+    bundle_base(
+        const ch_literal_runtime &literal_value,
+        const std::string &name = "bundle_lit",
+        const std::source_location &sloc = std::source_location::current()) {
+        auto runtime_lit =
+            make_literal(literal_value.value(), literal_value.width());
+        auto *literal_node =
+            node_builder::instance().build_literal(runtime_lit, name, sloc);
+
+        this->node_impl_ = literal_node;
     }
 
     virtual ~bundle_base() = default;
@@ -99,7 +98,22 @@ public:
 
     // 连接操作符 - 保持bundle整体连接语义
     Derived &operator<<=(const Derived &src) {
-        this->node_impl_ = src.impl();
+        lnode<Derived> src_lnode = get_lnode(src);
+        unsigned W = get_bundle_width<Derived>();
+        if (src_lnode.impl()) {
+            if (!this->node_impl_) {
+                this->node_impl_ =
+                    node_builder::instance().build_unary_operation(
+                        ch_op::assign, src_lnode, W,
+                        src_lnode.impl()->name() + "_bundle");
+            } else {
+                CHERROR("[bundle::operator<<=] Error: node_impl_ or "
+                        "src_lnode is not null for !");
+            }
+        } else {
+            CHERROR("[bundle::operator<<=] Error: node_impl_ or "
+                    "src_lnode is null for !");
+        }
         // 移除sync_members_from_node()调用以避免段错误
         return static_cast<Derived &>(*this);
     }
@@ -114,16 +128,7 @@ public:
     }
 
     // 序列化支持
-    auto to_bits() const {
-        // 使用 bundle_traits 中的通用 serialize 逻辑
-        constexpr unsigned W = get_bundle_width<Derived>();
-        return ch_uint<W>(this->impl());
-    }
-
-    static Derived from_bits(const ch_uint<get_bundle_width<Derived>()> &bits) {
-        // 使用 bundle_serialization.h 中的 deserialize 函数
-        return deserialize<Derived>(bits);
-    }
+    // 使用 bundle_serialization.h 中的 deserialize 函数
 
     // 自动生成 flip()
     std::unique_ptr<Derived> flip() const {
@@ -160,32 +165,37 @@ public:
     }
 
     // 获取Bundle宽度（使用统一的函数）
-    constexpr unsigned width() const { return get_bundle_width<Derived>(); }
+    unsigned width() const { return get_bundle_width<Derived>(); }
 
 protected:
     // 子类可调用：从节点同步成员字段
     void sync_members_from_node() {
-        if (!this->node_impl_) return;
+        if (!this->node_impl_)
+            return;
 
         // 检查当前bundle是否已经初始化，避免递归调用
         // 我们可以通过检查impl()是否为有效的节点来判断
-        if (this->impl() == nullptr) return;
+        if (this->impl() == nullptr)
+            return;
 
         constexpr unsigned W = get_bundle_width<Derived>();
         ch_uint<W> all_bits(this->impl());
-        
+
         // 检查节点是否有效，避免段错误
-        if (all_bits.impl() == nullptr) return;
-        
+        if (all_bits.impl() == nullptr)
+            return;
+
         // 使用 bundle_serialization.h 中的 deserialize 函数
         Derived temp = deserialize<Derived>(all_bits);
 
         // 将 temp 的字段赋值给 this 的成员
         const auto fields = Derived::__bundle_fields();
-        std::apply([&](auto &&...f) {
-            // 确保在赋值前 temp 对象已正确构造
-            ((derived()->*(f.ptr) = temp.*(f.ptr)), ...);
-        }, fields);
+        std::apply(
+            [&](auto &&...f) {
+                // 确保在赋值前 temp 对象已正确构造
+                ((derived()->*(f.ptr) = temp.*(f.ptr)), ...);
+            },
+            fields);
     }
 
     // 获取派生类指针的辅助函数
@@ -195,9 +205,9 @@ protected:
     }
 
     // 辅助：打包当前字段为 ch_uint<W>
-    ch_uint<get_bundle_width<Derived>()> pack_current_fields() const {
-        return this->to_bits();
-    }
+    // ch_uint<get_bundle_width<Derived>()> pack_current_fields() const {
+    //     return this->to_bits();
+    // }
 
     // 方向控制辅助函数
     template <typename T> void set_field_direction(T &field, input_direction) {
@@ -290,13 +300,12 @@ protected:
 };
 
 // 特化 ch_width_impl 和 get_lnode（必须在定义后）
-template <typename Derived>
-struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>> {
-    static constexpr unsigned value = get_bundle_width<Derived>();
-};
+// template <typename Derived>
+// struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>> {
+//     static constexpr unsigned value = get_bundle_width<Derived>();
+// };
 
-template <typename Derived>
-inline lnode<Derived> get_lnode(const Derived& b) {
+template <typename Derived> inline lnode<Derived> get_lnode(const Derived &b) {
     return lnode<Derived>(b.impl());
 }
 

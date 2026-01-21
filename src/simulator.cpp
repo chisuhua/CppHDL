@@ -332,7 +332,7 @@ void Simulator::collect_signals() {
         default:
             const auto &users = node->get_users();
             const auto &srcs = node->num_srcs();
-            if (users.size() == 0 & srcs > 0) {
+            if (users.size() == 0 && srcs > 0) {
                 trace_type = TraceType::TAP;
                 break;
             } else {

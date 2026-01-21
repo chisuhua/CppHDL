@@ -21,7 +21,7 @@ TEST_CASE("test_wires_connection - Basic ch_uint connection",
     // 创建两个ch_uint信号 - 使用字面量构造确保有节点
     ch_uint<8> signal_src(42_d);
     ch_uint<8> signal_dst1(0_d); // 修改：使用字面量构造确保有节点
-    ch_uint<8> signal_dst2(0_d); // 修改：使用字面量构造确保有节点
+    ch_uint<8> signal_dst2; // 修改：使用字面量构造确保有节点
 
     // 使用operator<<=连接两个信号，这相当于硬件中的wire连接
     signal_dst1 = signal_src;
