@@ -59,10 +59,10 @@ public:
             uint32_t width = get_literal_width(value);
             sdata_type sval(static_cast<uint64_t>(value), width);
 
-            if (statistics_enabled_) {
-                ++statistics_->literals_built;
-                ++statistics_->total_nodes_built;
-            }
+            // if (statistics_enabled_) {
+            //     ++statistics_->literals_built;
+            //     ++statistics_->total_nodes_built;
+            // }
 
             CHDBG("[node_builder] Building literal with value %llu, width %u",
                   static_cast<unsigned long long>(value), width);
@@ -71,19 +71,19 @@ public:
         } else if constexpr (is_ch_literal_v<T>) {
             sdata_type sdata(value.value(), value.actual_width); // 直接构造
 
-            if (statistics_enabled_) {
-                ++statistics_->literals_built;
-                ++statistics_->total_nodes_built;
-            }
+            // if (statistics_enabled_) {
+            //     ++statistics_->literals_built;
+            //     ++statistics_->total_nodes_built;
+            // }
 
             return ctx->create_literal(
                 sdata, prefixed_name_helper(name, name_prefix_), sloc);
         } else {
             // 处理 sdata_type
-            if (statistics_enabled_) {
-                ++statistics_->literals_built;
-                ++statistics_->total_nodes_built;
-            }
+            // if (statistics_enabled_) {
+            //     ++statistics_->literals_built;
+            //     ++statistics_->total_nodes_built;
+            // }
 
             CHDBG("[node_builder] Building literal from sdata_type");
             return ctx->create_literal(
@@ -107,10 +107,10 @@ public:
         }
 
         uint32_t size = ch_width_v<T>;
-        if (statistics_enabled_) {
-            ++statistics_->inputs_built;
-            ++statistics_->total_nodes_built;
-        }
+        // if (statistics_enabled_) {
+        //     ++statistics_->inputs_built;
+        //     ++statistics_->total_nodes_built;
+        // }
 
         CHDBG("[node_builder] Building input with size %u, name '%s'", size,
               name.c_str());
@@ -134,10 +134,10 @@ public:
         }
 
         uint32_t size = ch_width_v<T>;
-        if (statistics_enabled_) {
-            ++statistics_->outputs_built;
-            ++statistics_->total_nodes_built;
-        }
+        // if (statistics_enabled_) {
+        //     ++statistics_->outputs_built;
+        //     ++statistics_->total_nodes_built;
+        // }
 
         CHDBG("[node_builder] Building output with size %u, name '%s'", size,
               name.c_str());
@@ -159,10 +159,10 @@ public:
         }
 
         uint32_t size = ch_width_v<T>;
-        if (statistics_enabled_) {
-            ++statistics_->registers_built;
-            ++statistics_->total_nodes_built;
-        }
+        // if (statistics_enabled_) {
+        //     ++statistics_->registers_built;
+        //     ++statistics_->total_nodes_built;
+        // }
 
         CHDBG("[node_builder] Building register with size %u, name '%s'", size,
               name.c_str());
@@ -228,10 +228,10 @@ public:
             return nullptr;
         }
 
-        if (statistics_enabled_) {
-            ++statistics_->operations_built;
-            ++statistics_->total_nodes_built;
-        }
+        // if (statistics_enabled_) {
+        //     ++statistics_->operations_built;
+        //     ++statistics_->total_nodes_built;
+        // }
 
         // Create operation node specifically for bit selection
         opimpl *op_node = ctx->create_node<opimpl>(
@@ -268,10 +268,10 @@ public:
             return nullptr;
         }
 
-        if (statistics_enabled_) {
-            ++statistics_->operations_built;
-            ++statistics_->total_nodes_built;
-        }
+        // if (statistics_enabled_) {
+        //     ++statistics_->operations_built;
+        //     ++statistics_->total_nodes_built;
+        // }
 
         // Create operation node specifically for bit selection
         opimpl *op_node = ctx->create_node<opimpl>(
@@ -312,10 +312,10 @@ public:
         }
 
         uint32_t width = msb - lsb + 1;
-        if (statistics_enabled_) {
-            ++statistics_->operations_built;
-            ++statistics_->total_nodes_built;
-        }
+        // if (statistics_enabled_) {
+        //     ++statistics_->operations_built;
+        //     ++statistics_->total_nodes_built;
+        // }
 
         // Create the bits extract operation node - use a literal to encode the
         // range The range info will be encoded in the second operand (src1)

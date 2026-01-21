@@ -46,7 +46,7 @@ AI_CODING_GUIDELINES.md
 - **对于ch_bool类型的变量，应使用`ch_bool(1_b)`或`ch_bool(0_b)`创建**
 
 **正确示例**：
-```cpp
+```
 // 在select语句中使用CppHDL字面量
 ch_bool result = select(condition, 1_b, 0_b);
 
@@ -58,7 +58,7 @@ reg->next = select(rst, 0_b, signal);
 ```
 
 **错误示例**：
-```cpp
+```
 // 不要使用C++内置的true/false
 ch_bool result = select(condition, true, false);
 
@@ -134,7 +134,7 @@ reg->next = select(rst, false, signal);
 - **字面量操作**：使用如`1_d`等字面量操作来构建运行时计算逻辑
 
 **示例**：
-```cpp
+```
 // 错误：试图使用运行时值作为模板参数
 ch_uint<N> mask = (ch_uint<N>(1_d) << make_uint<compute_bit_width(width)>(width)) - 1_d;
 
@@ -155,7 +155,7 @@ for(unsigned i = 1; i < width; ++i) {
 - **连接语义**：该操作符实现硬件连接，而非传统赋值，右侧值将在下一个时钟周期影响左侧对象
 
 **正确示例**：
-```cpp
+```
 // 连接寄存器的下一个值
 ch_reg<ch_uint<8>> reg("counter");
 reg <<= select(rst, 0_d, reg + 1_d);
@@ -375,6 +375,31 @@ ch_reg<bool> flag(false, "flag_reg");  // 错误
 flag->next = select(condition, true, false);  // 错误
 ```
 
+## Bundle 字段方向控制规范
+
+- **字段类型选择**：在Bundle定义中，使用普通 `ch_uint` 和 `ch_bool` 类型作为字段，而非IO类型（如 `ch_in<T>`、`ch_out<T>`）
+- **方向控制方法**：通过在Bundle类中实现 `as_master()` 和 `as_slave()` 方法来控制Bundle内字段的方向
+  - `as_master()` 方法中调用 `make_output(field1, field2, ...)` 将字段设置为输出方向
+  - `as_slave()` 方法中调用 `make_input(field1, field2, ...)` 将字段设置为输入方向
+- **普通字段类型特点**：普通 `ch_uint` 和 `ch_bool` 类型同样具有 `set_direction()` 方法，但Bundle方向设置主要用于连接验证
+- **语义说明**：Bundle的方向设置更多是提供语义上的主从关系指示，而非直接修改字段状态
+- **正确示例**：
+  ```cpp
+  struct TestBundle : public bundle_base<TestBundle> {
+      using Self = TestBundle;
+      using bundle_base<TestBundle>::bundle_base;
+      ch_uint<8> data;
+      ch_bool valid;
+
+      TestBundle() = default;
+
+      CH_BUNDLE_FIELDS(Self, data, valid)
+
+      void as_master() override { this->make_output(data, valid); }
+      void as_slave() override { this->make_input(data, valid); }
+  };
+  ```
+
 ## 检查清单
 
 在AI辅助编码时，请确保：
@@ -386,5 +411,3 @@ flag->next = select(condition, true, false);  // 错误
 - [ ] 使用CppHDL类型（1_b/0_b）替代C++内置true/false
 - [ ] 代码风格与项目保持一致
 - [ ] 包含了适当的错误处理和验证
-</file>
-</attached_files>

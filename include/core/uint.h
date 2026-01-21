@@ -98,8 +98,14 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
         std::variant<std::monostate, input_direction, output_direction>;
     mutable direction_type dir_ = std::monostate{};
 
-    void set_direction(input_direction) const { dir_ = input_direction{}; }
-    void set_direction(output_direction) const { dir_ = output_direction{}; }
+    // 方向控制方法
+    void as_input() { 
+        dir_ = input_direction{}; 
+    }
+    
+    void as_output() { 
+        dir_ = output_direction{}; 
+    }
 
     // 添加赋值操作符，代表硬件连接
     template <typename U> ch_uint &operator<<=(const U &value) {

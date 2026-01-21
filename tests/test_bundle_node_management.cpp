@@ -14,13 +14,11 @@ using namespace ch::core;
 // 定义一个简单的Bundle用于测试
 struct TestBundle : public bundle_base<TestBundle> {
     using Self = TestBundle;
+    using bundle_base<TestBundle>::bundle_base;
     ch_uint<8> data;
     ch_bool valid;
 
     TestBundle() = default;
-
-    // 使用using声明引入基类的所有构造函数
-    using bundle_base<TestBundle>::bundle_base;
 
     CH_BUNDLE_FIELDS(Self, data, valid)
 
