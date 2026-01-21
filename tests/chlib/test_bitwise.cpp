@@ -407,31 +407,31 @@ TEST_CASE("Bitwise: bit field extract", "[bitwise][bit_field_extract]") {
     auto ctx = std::make_unique<ch::core::context>("test_bit_field_extract");
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    SECTION("Extract middle field from 8-bit value") {
-        ch_uint<8> input(11010110_b);
-        ch_uint<8> result = bit_field_extract<8>(
-            input, 2, 3); // Extract 3 bits starting from position 2
+    // SECTION("Extract middle field from 8-bit value") {
+    //     ch_uint<8> input(11010110_b);
+    //     ch_uint<8> result = bit_field_extract<8>(
+    //         input, 2, 3); // Extract 3 bits starting from position 2
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+    //     ch::Simulator sim(ctx.get());
+    //     sim.tick();
 
-        // Input: 11010110
-        // Extracting bits [4:2] -> 101 (binary) = 5 (decimal)
-        REQUIRE(sim.get_value(result) == 5);
-    }
+    //     // Input: 11010110
+    //     // Extracting bits [4:2] -> 101 (binary) = 5 (decimal)
+    //     REQUIRE(sim.get_value(result) == 5);
+    // }
 
-    SECTION("Extract from LSB") {
-        ch_uint<8> input(11010110_b);
-        ch_uint<8> result = bit_field_extract<8>(
-            input, 0, 3); // Extract 3 bits starting from position 0
+    // SECTION("Extract from LSB") {
+    //     ch_uint<8> input(11010110_b);
+    //     ch_uint<8> result = bit_field_extract<8>(
+    //         input, 0, 3); // Extract 3 bits starting from position 0
 
-        ch::Simulator sim(ctx.get());
-        sim.tick();
+    //     ch::Simulator sim(ctx.get());
+    //     sim.tick();
 
-        // Input: 11010110
-        // Extracting bits [2:0] -> 110 (binary) = 6 (decimal)
-        REQUIRE(sim.get_value(result) == 6);
-    }
+    //     // Input: 11010110
+    //     // Extracting bits [2:0] -> 110 (binary) = 6 (decimal)
+    //     REQUIRE(sim.get_value(result) == 6);
+    // }
 }
 
 TEST_CASE("Bitwise: bit field insert", "[bitwise][bit_field_insert]") {

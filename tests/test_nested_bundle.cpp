@@ -1,5 +1,7 @@
 // tests/test_nested_bundle.cpp
 #define CATCH_CONFIG_MAIN
+#include "bundle/axi_bundle.h"
+#include "bundle/stream_bundle.h"
 #include "catch_amalgamated.hpp"
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
@@ -8,8 +10,6 @@
 #include "core/bundle/bundle_utils.h"
 #include "core/context.h"
 #include "core/uint.h"
-#include "io/axi_bundle.h"
-#include "io/stream_bundle.h"
 #include <memory>
 
 using namespace ch;

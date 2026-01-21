@@ -233,24 +233,25 @@ ch_uint<compute_bit_width(N)> first_set_bit_detector(ch_uint<N> input) {
  *
  * 从输入中提取指定位范围的值
  */
-template <unsigned N>
-ch_uint<N> bit_field_extract(ch_uint<N> input, unsigned start, unsigned width) {
-    static_assert(N > 0, "Bit field extract must have at least 1 bit");
+// template <unsigned N>
+// ch_uint<N> bit_field_extract(ch_uint<N> input, unsigned start, unsigned
+// width) {
+//     static_assert(N > 0, "Bit field extract must have at least 1 bit");
 
-    // 使用固定宽度的运行时字面量来处理运行时值
-    ch_uint<N> mask_val = 1_d;
-    for (unsigned i = 1; i < width; ++i) {
-        mask_val = (mask_val << 1_d) + 1_d;
-    }
+//     // 使用固定宽度的运行时字面量来处理运行时值
+//     ch_uint<N> mask_val = 1_d;
+//     for (unsigned i = 1; i < width; ++i) {
+//         mask_val = (mask_val << 1_d) + 1_d;
+//     }
 
-    // 右移并掩码
-    ch_uint<N> result = input;
-    for (unsigned i = 0; i < start; ++i) {
-        result = result >> 1_d;
-    }
+//     // 右移并掩码
+//     ch_uint<N> result = input;
+//     for (unsigned i = 0; i < start; ++i) {
+//         result = result >> 1_d;
+//     }
 
-    return result & mask_val;
-}
+//     return result & mask_val;
+// }
 
 /**
  * 位域插入器 - 函数式接口

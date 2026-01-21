@@ -1,12 +1,12 @@
 // samples/tlm_bundle_demo.cpp
 #ifdef USE_SYSTEMC_TLM
 
+#include "bundle/stream_bundle.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
 #include "core/bundle/bundle_serialization.h"
 #include "core/context.h"
 #include "core/literal.h"
-#include "io/stream_bundle.h"
 #include "tlm/tlm_bundle_converter.h"
 #include <iostream>
 #include <memory>
@@ -84,12 +84,12 @@ int sc_main(int argc, char *argv[]) {
 #else
 
 // 如果没有SystemC TLM，提供简单的测试
+#include "bundle/stream_bundle.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
 #include "core/bundle/bundle_serialization.h"
 #include "core/context.h"
 #include "core/literal.h"
-#include "io/stream_bundle.h"
 #include <iostream>
 #include <memory>
 

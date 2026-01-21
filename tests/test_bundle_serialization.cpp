@@ -1,5 +1,6 @@
 // tests/test_bundle_serialization.cpp
 #define CATCH_CONFIG_MAIN
+#include "bundle/stream_bundle.h"
 #include "catch_amalgamated.hpp"
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
@@ -10,7 +11,6 @@
 #include "core/bundle/bundle_utils.h"
 #include "core/context.h"
 #include "core/uint.h"
-#include "io/stream_bundle.h"
 #include <memory>
 
 using namespace ch;

@@ -1,8 +1,8 @@
 // samples/minimal_fifo_bundle.cpp
+#include "bundle/common_bundles.h"
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "component.h"
-#include "io/common_bundles.h"
 #include "module.h"
 #include "simulator.h"
 #include <iostream>

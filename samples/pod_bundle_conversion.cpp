@@ -1,9 +1,9 @@
 // samples/pod_bundle_conversion.cpp
+#include "bundle/common_bundles.h"
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "component.h"
 #include "core/bundle/bundle_utils.h"
-#include "io/common_bundles.h"
 #include "module.h"
 #include "simulator.h"
 #include <bitset>
@@ -224,9 +224,9 @@ int main() {
     auto ctx = std::make_unique<ch::core::context>("demo_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    large_data_bundle large_bundle;
-    std::cout << "LargeDataBundle width: " << large_bundle.width() << " bits"
-              << std::endl;
+    // large_data_bundle large_bundle;
+    // std::cout << "LargeDataBundle width: " << large_bundle.width() << " bits"
+    //           << std::endl;
 
     // 测试4: 通过仿真器设置大尺寸Bundle值
     std::cout << "\n=== Test 4: Large Bundle Value Setting via Simulator ==="

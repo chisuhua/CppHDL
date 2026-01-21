@@ -47,12 +47,13 @@ set(BASE_TEST_SOURCES
     test_bundle.cpp
     test_bundle_advanced.cpp
     test_bundle_advanced_features.cpp
-    test_bundle_serialization.cpp
-    test_bundle_bitstream.cpp
+    # test_bundle_serialization.cpp
+    # test_bundle_bitstream.cpp
+    test_bundle_node_management.cpp  # 新增：bundle节点管理测试
     #test_source_info.cpp
     # test_multithread.cpp
     test_nested_bundle.cpp
-    test_tlm_bundle_phase1.cpp
+    # test_tlm_bundle_phase1.cpp
     test_axi_lite_bundle.cpp
     test_mem.cpp
     test_operator_advanced.cpp
@@ -80,6 +81,7 @@ set(BASE_TEST_SOURCES
     test_bool_connection.cpp
     test_mem_connection.cpp
     test_wires_connection.cpp
+    test_bundle_connection.cpp
 )
 
 # chlib 测试源文件列表

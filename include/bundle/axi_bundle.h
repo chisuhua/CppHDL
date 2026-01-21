@@ -2,16 +2,16 @@
 #ifndef CH_IO_AXI_BUNDLE_H
 #define CH_IO_AXI_BUNDLE_H
 
+#include "bundle/stream_bundle.h"
+#include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
 #include "core/uint.h"
-#include "core/bool.h"
-#include "io/stream_bundle.h"
 
 namespace ch::core {
 
 // AXI地址通道Bundle
-template<size_t ADDR_WIDTH>
+template <size_t ADDR_WIDTH>
 struct axi_addr_channel : public bundle_base<axi_addr_channel<ADDR_WIDTH>> {
     using Self = axi_addr_channel<ADDR_WIDTH>;
     ch_uint<ADDR_WIDTH> addr;
@@ -20,7 +20,7 @@ struct axi_addr_channel : public bundle_base<axi_addr_channel<ADDR_WIDTH>> {
     ch_bool ready;
 
     axi_addr_channel() = default;
-    axi_addr_channel(const std::string& prefix) {
+    axi_addr_channel(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 
@@ -38,8 +38,9 @@ struct axi_addr_channel : public bundle_base<axi_addr_channel<ADDR_WIDTH>> {
 };
 
 // AXI数据写通道Bundle
-template<size_t DATA_WIDTH>
-struct axi_write_data_channel : public bundle_base<axi_write_data_channel<DATA_WIDTH>> {
+template <size_t DATA_WIDTH>
+struct axi_write_data_channel
+    : public bundle_base<axi_write_data_channel<DATA_WIDTH>> {
     using Self = axi_write_data_channel<DATA_WIDTH>;
     ch_uint<DATA_WIDTH> data;
     ch_uint<(DATA_WIDTH + 7) / 8> strb;
@@ -47,7 +48,7 @@ struct axi_write_data_channel : public bundle_base<axi_write_data_channel<DATA_W
     ch_bool ready;
 
     axi_write_data_channel() = default;
-    axi_write_data_channel(const std::string& prefix) {
+    axi_write_data_channel(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 
@@ -72,7 +73,7 @@ struct axi_write_resp_channel : public bundle_base<axi_write_resp_channel> {
     ch_bool ready;
 
     axi_write_resp_channel() = default;
-    axi_write_resp_channel(const std::string& prefix) {
+    axi_write_resp_channel(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 
@@ -90,15 +91,16 @@ struct axi_write_resp_channel : public bundle_base<axi_write_resp_channel> {
 };
 
 // 完整的AXI写通道Bundle (嵌套Bundle示例)
-template<size_t ADDR_WIDTH, size_t DATA_WIDTH>
-struct axi_write_channel : public bundle_base<axi_write_channel<ADDR_WIDTH, DATA_WIDTH>> {
+template <size_t ADDR_WIDTH, size_t DATA_WIDTH>
+struct axi_write_channel
+    : public bundle_base<axi_write_channel<ADDR_WIDTH, DATA_WIDTH>> {
     using Self = axi_write_channel;
     axi_addr_channel<ADDR_WIDTH> aw;      // 地址通道
     axi_write_data_channel<DATA_WIDTH> w; // 数据写通道
     axi_write_resp_channel b;             // 响应通道
 
     axi_write_channel() = default;
-    axi_write_channel(const std::string& prefix) {
+    axi_write_channel(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 

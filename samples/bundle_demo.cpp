@@ -1,12 +1,12 @@
 
 // samples/bundle_demo.cpp
+#include "bundle/stream_bundle.h"
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
 #include "core/bundle/bundle_utils.h"
 #include "core/context.h"
 #include "core/uint.h"
-#include "io/stream_bundle.h"
 #include <iostream>
 #include <memory>
 

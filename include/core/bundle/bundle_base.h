@@ -1,7 +1,6 @@
 #ifndef CH_CORE_BUNDLE_BASE_H
 #define CH_CORE_BUNDLE_BASE_H
 
-#include "core/bundle/bundle_layout.h" // 新增
 #include "core/bundle/bundle_serialization.h"
 #include "core/bundle/bundle_traits.h"
 #include "core/direction.h"
@@ -11,9 +10,6 @@
 #include <string>
 
 namespace ch::core {
-
-// 添加bundle_role枚举
-enum class bundle_role { internal, master, slave };
 
 // 为Bundle字段添加特殊处理
 template <typename Derived> struct bundle_field_traits {
@@ -49,32 +45,25 @@ struct bundle_field_traits<BundleType> {
 template <typename Derived> class bundle_base : public logic_buffer<Derived> {
 public:
     // (1) 默认构造：创建未驱动的字面量节点并通过assign操作连接
-    bundle_base() : logic_buffer<Derived>(), role_(bundle_role::internal) {}
+    bundle_base() : logic_buffer<Derived>() {}
 
     // (2) 拷贝构造：共享节点（硬件连接语义）
     bundle_base(const bundle_base &other)
-        : logic_buffer<Derived>(other.impl()), role_(other.role_) {
+        : logic_buffer<Derived>(other.impl()) {
         // 不再自动同步成员
     }
 
     // (3) 从底层节点直接构造（用于 <<= 或内部）
-    bundle_base(lnodeimpl *node)
-        : logic_buffer<Derived>(node), role_(bundle_role::internal) {
+    bundle_base(lnodeimpl *node) : logic_buffer<Derived>(node) {
         // 不再自动同步成员
     }
 
-    // (4) 从底层节点和角色构造（用于嵌套bundle）
-    bundle_base(lnodeimpl *node, bundle_role role)
-        : logic_buffer<Derived>(node), role_(role) {
-        // 不再自动同步成员
-    }
-
-    // // (5) 从 ch_uint<W> 反序列化（复用其节点）
+    // // (4) 从 ch_uint<W> 反序列化（复用其节点）
     // template <unsigned W> bundle_base(const ch_uint<W> &bits) {
     //     this->node_impl_ = bits.impl(); // 直接复用节点！
     // }
 
-    // (6) 从字面量类型参数构造：创建字面量节点
+    // (5) 从字面量类型参数构造：创建字面量节点
     // 接受编译时字面量类型，如 0_d, 0x11_h 等
     template <uint64_t V, uint32_t W>
     bundle_base(
@@ -86,10 +75,9 @@ public:
             node_builder::instance().build_literal(runtime_lit, name, sloc);
 
         this->node_impl_ = literal_node;
-        role_ = bundle_role::internal;
     }
 
-    // (7) 从运行时字面量类型构造：创建字面量节点
+    // (6) 从运行时字面量类型构造：创建字面量节点
     bundle_base(
         const ch_literal_runtime &literal_value,
         const std::string &name = "bundle_lit",
@@ -100,7 +88,6 @@ public:
             node_builder::instance().build_literal(runtime_lit, name, sloc);
 
         this->node_impl_ = literal_node;
-        role_ = bundle_role::internal;
     }
 
     virtual ~bundle_base() = default;
@@ -111,35 +98,30 @@ public:
 
     // 连接操作符 - 保持bundle整体连接语义
     Derived &operator<<=(const Derived &src) {
-        CHCHECK(role_ == bundle_role::slave, "LHS must be slave");
-        CHCHECK(src.role_ == bundle_role::master, "RHS must be master");
-
-        do_recursive_connect(static_cast<Derived &>(*this),
-                             src); // 使用递归连接所有字段
-        return static_cast<Derived &>(*this);
-    }
-
-    // 递归连接辅助函数
-    template <typename T> void do_recursive_connect(T &dst, const T &src) {
-        if constexpr (is_bundle_v<T>) {
-            // 递归进入 Bundle 字段
-            const auto layout = get_bundle_layout<T>();
-            std::apply(
-                [&](auto &&...f) {
-                    ((do_recursive_connect(dst.*(f.ptr), src.*(f.ptr))), ...);
-                },
-                layout);
+        lnode<Derived> src_lnode = get_lnode(src);
+        unsigned W = get_bundle_width<Derived>();
+        if (src_lnode.impl()) {
+            if (!this->node_impl_) {
+                this->node_impl_ =
+                    node_builder::instance().build_unary_operation(
+                        ch_op::assign, src_lnode, W,
+                        src_lnode.impl()->name() + "_bundle");
+            } else {
+                CHERROR("[bundle::operator<<=] Error: node_impl_ or "
+                        "src_lnode is not null for !");
+            }
         } else {
-            // 原子类型：正向连接
-            dst.impl()->add_src(src.impl());
+            CHERROR("[bundle::operator<<=] Error: node_impl_ or "
+                    "src_lnode is null for !");
         }
+        // 移除sync_members_from_node()调用以避免段错误
+        return static_cast<Derived &>(*this);
     }
 
     // 赋值操作符 - 保持一致性
     Derived &operator=(const Derived &other) {
         if (this != &other) {
             this->node_impl_ = other.impl();
-            this->role_ = other.role_;
             // 移除sync_members_from_node()调用以避免段错误
         }
         return static_cast<Derived &>(*this);
@@ -185,12 +167,7 @@ public:
     // 获取Bundle宽度（使用统一的函数）
     unsigned width() const { return get_bundle_width<Derived>(); }
 
-    // 检查bundle的角色
-    bundle_role get_role() const { return role_; }
-
 protected:
-    bundle_role role_;
-
     // 子类可调用：从节点同步成员字段
     void sync_members_from_node() {
         if (!this->node_impl_)

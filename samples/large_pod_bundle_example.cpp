@@ -1,9 +1,9 @@
 // samples/large_pod_bundle_example.cpp
+#include "bundle/common_bundles.h"
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "component.h"
 #include "core/bundle/bundle_utils.h"
-#include "io/common_bundles.h"
 #include "module.h"
 #include "simulator.h"
 #include <bitset>

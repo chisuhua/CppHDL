@@ -20,16 +20,17 @@ namespace chlib {
  *
  * 从输入中提取指定位范围的值
  */
-template <unsigned N>
-ch_uint<N> bit_field_extract(ch_uint<N> input, unsigned start, unsigned width) {
-    static_assert(N > 0, "Bit field extract must have at least 1 bit");
+// template <unsigned N>
+// ch_uint<N> bit_field_extract(ch_uint<N> input, unsigned start, unsigned
+// width) {
+//     static_assert(N > 0, "Bit field extract must have at least 1 bit");
 
-    // 创建掩码: (1 << width) - 1 生成width个连续的1
-    ch_uint<N> mask = (ch_uint<N>(1_d) << make_uint<N>(width)) - 1_d;
+//     // 创建掩码: (1 << width) - 1 生成width个连续的1
+//     ch_uint<N> mask = (ch_uint<N>(1_d) << make_uint<N>(width)) - 1_d;
 
-    // 右移start位，然后与掩码相与
-    return (input >> make_uint<N>(start)) & mask;
-}
+//     // 右移start位，然后与掩码相与
+//     return (input >> make_uint<N>(start)) & mask;
+// }
 
 /**
  * OneHot编码转换器 - 函数式接口

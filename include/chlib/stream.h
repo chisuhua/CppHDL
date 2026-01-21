@@ -1,6 +1,7 @@
 #ifndef CHLIB_STREAM_H
 #define CHLIB_STREAM_H
 
+#include "bundle/flow_bundle.h"
 #include "ch.hpp"
 #include "chlib/combinational.h"
 #include "chlib/fifo.h"
@@ -13,12 +14,13 @@
 #include "core/operators.h"
 #include "core/operators_runtime.h"
 #include "core/uint.h"
-#include "io/flow_bundle.h"
-#include "io/stream_bundle.h"
 #include "lnode/literal_ext.h"
 #include <array>
 #include <cassert>
 #include <vector>
+
+// 添加对bundle/stream_bundle.h的引用，该文件定义了Stream类型
+#include "bundle/stream_bundle.h"
 
 using namespace ch::core;
 
