@@ -52,7 +52,7 @@ struct very_large_data_bundle : public bundle_base<very_large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, part1, part2, part3, part4, flag, ready)
+    CH_BUNDLE_FIELDS_T(part1, part2, part3, part4, flag, ready)
 
     void as_master() override {
         // 分多次调用make_output，因为最多支持4个参数

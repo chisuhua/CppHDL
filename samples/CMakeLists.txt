@@ -11,7 +11,8 @@ set(CH_SAMPLE_TARGETS
     bundle_serialization_demo
     bundle_top_example
     # axi_lite_demo
-    # nested_bundle_demo
+    nested_bundle_demo
+    nested_fragment_demo
     # tlm_bundle_demo
     # bundle_simulator_demo
     pod_bundle_conversion

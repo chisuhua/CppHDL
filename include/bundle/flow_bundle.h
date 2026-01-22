@@ -22,7 +22,7 @@ template <typename T> struct Flow : public bundle_base<Flow<T>> {
     Flow() = default;
     explicit Flow(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-    CH_BUNDLE_FIELDS(Self, payload, valid)
+    CH_BUNDLE_FIELDS_T(payload, valid)
 
     void as_master() override {
         // Master: 输出数据和有效信号

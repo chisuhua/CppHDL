@@ -2,16 +2,15 @@
 #ifndef CH_IO_COMMON_BUNDLES_H
 #define CH_IO_COMMON_BUNDLES_H
 
+#include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
 #include "core/uint.h"
-#include "core/bool.h"
 
 namespace ch::core {
 
 // FIFO接口Bundle
-template<typename T>
-struct fifo_bundle : public bundle_base<fifo_bundle<T>> {
+template <typename T> struct fifo_bundle : public bundle_base<fifo_bundle<T>> {
     using Self = fifo_bundle<T>;
     T data;
     ch_bool push;
@@ -20,11 +19,9 @@ struct fifo_bundle : public bundle_base<fifo_bundle<T>> {
     ch_bool empty;
 
     fifo_bundle() = default;
-    fifo_bundle(const std::string& prefix) {
-        this->set_name_prefix(prefix);
-    }
+    fifo_bundle(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-    CH_BUNDLE_FIELDS(Self, data, push, full, pop, empty)
+    CH_BUNDLE_FIELDS_T(data, push, full, pop, empty)
 
     void as_master() override {
         this->make_output(data, push, pop);
@@ -44,11 +41,11 @@ struct interrupt_bundle : public bundle_base<interrupt_bundle> {
     ch_bool ack;
 
     interrupt_bundle() = default;
-    interrupt_bundle(const std::string& prefix) {
+    interrupt_bundle(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, irq, ack)
+    CH_BUNDLE_FIELDS_T(irq, ack)
 
     void as_master() override {
         this->make_output(irq);
@@ -62,8 +59,9 @@ struct interrupt_bundle : public bundle_base<interrupt_bundle> {
 };
 
 // 配置Bundle
-template<size_t ADDR_WIDTH, size_t DATA_WIDTH>
-struct config_bundle : public bundle_base<config_bundle<ADDR_WIDTH, DATA_WIDTH>> {
+template <size_t ADDR_WIDTH, size_t DATA_WIDTH>
+struct config_bundle
+    : public bundle_base<config_bundle<ADDR_WIDTH, DATA_WIDTH>> {
     using Self = config_bundle<ADDR_WIDTH, DATA_WIDTH>;
     ch_uint<ADDR_WIDTH> addr;
     ch_uint<DATA_WIDTH> wdata;
@@ -73,11 +71,9 @@ struct config_bundle : public bundle_base<config_bundle<ADDR_WIDTH, DATA_WIDTH>>
     ch_bool ready;
 
     config_bundle() = default;
-    config_bundle(const std::string& prefix) {
-        this->set_name_prefix(prefix);
-    }
+    config_bundle(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-    CH_BUNDLE_FIELDS(Self, addr, wdata, rdata, write, read, ready)
+    CH_BUNDLE_FIELDS_T(addr, wdata, rdata, write, read, ready)
 
     void as_master() override {
         this->make_output(addr, wdata, write, read);

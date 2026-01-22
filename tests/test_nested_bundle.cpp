@@ -41,7 +41,7 @@ TEST_CASE("NestedBundle - SimpleNested", "[bundle][nested]") {
         NestedTest() = default;
         NestedTest(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-        CH_BUNDLE_FIELDS(Self, inner_stream, status)
+        CH_BUNDLE_FIELDS_T(inner_stream, status)
 
         void as_master() override { this->make_output(inner_stream, status); }
 

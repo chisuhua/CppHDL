@@ -24,7 +24,7 @@ struct axi_addr_channel : public bundle_base<axi_addr_channel<ADDR_WIDTH>> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, addr, prot, valid, ready)
+    CH_BUNDLE_FIELDS_T(addr, prot, valid, ready)
 
     void as_master() override {
         this->make_output(addr, prot, valid);
@@ -52,7 +52,7 @@ struct axi_write_data_channel
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, data, strb, valid, ready)
+    CH_BUNDLE_FIELDS_T(data, strb, valid, ready)
 
     void as_master() override {
         this->make_output(data, strb, valid);
@@ -77,7 +77,7 @@ struct axi_write_resp_channel : public bundle_base<axi_write_resp_channel> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, resp, valid, ready)
+    CH_BUNDLE_FIELDS_T(resp, valid, ready)
 
     void as_master() override {
         this->make_input(resp, valid);
@@ -104,7 +104,7 @@ struct axi_write_channel
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, aw, w, b)
+    CH_BUNDLE_FIELDS_T(aw, w, b)
 
     void as_master() override {
         this->make_output(aw, w);

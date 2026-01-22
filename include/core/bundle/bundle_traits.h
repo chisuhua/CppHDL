@@ -107,6 +107,89 @@ template <typename T> constexpr unsigned get_field_width() {
     }
 }
 
+// 为Bundle字段添加特殊处理
+template <typename Derived> struct bundle_field_traits {
+    static constexpr bool is_bundle = false;
+};
+
+// 特化：识别Bundle类型
+template <typename T>
+concept is_bundle_type = requires(T t) {
+    t.__bundle_fields();
+    t.is_valid();
+    t.as_master();
+    t.as_slave();
+};
+
+// 为Bundle类型提供特化
+template <typename BundleType>
+    requires is_bundle_type<BundleType>
+struct bundle_field_traits<BundleType> {
+    static constexpr bool is_bundle = true;
+
+    // 递归验证嵌套Bundle
+    static bool check_valid(const BundleType &bundle) {
+        return bundle.is_valid();
+    }
+
+    // 递归命名嵌套Bundle
+    static void set_name(BundleType &bundle, const std::string &name) {
+        bundle.set_name_prefix(name);
+    }
+
+    // 递归连接嵌套Bundle
+    template <typename SrcBundleType>
+    static void connect(SrcBundleType &&src, BundleType &dst) {
+        const auto &src_fields = src.__bundle_fields();
+        const auto &dst_fields = dst.__bundle_fields();
+
+        // 连接对应的字段
+        connect_fields(src, dst, src_fields, dst_fields);
+    }
+
+private:
+    template <typename SrcBundle, typename DstBundle, typename... SrcFieldInfo,
+              typename... DstFieldInfo>
+    static void connect_fields(SrcBundle &&src, DstBundle &dst,
+                               std::tuple<SrcFieldInfo...> src_fields,
+                               std::tuple<DstFieldInfo...> dst_fields) {
+        // 确保字段数量相同
+        static_assert(std::tuple_size_v<decltype(src_fields)> ==
+                      std::tuple_size_v<decltype(dst_fields)>);
+
+        // 使用索引序列展开元组
+        connect_fields_impl(std::forward<SrcBundle>(src), dst, src_fields,
+                            dst_fields,
+                            std::make_index_sequence<
+                                std::tuple_size_v<decltype(src_fields)>>{});
+    }
+
+    template <typename SrcBundle, typename DstBundle, typename... SrcFieldInfo,
+              typename... DstFieldInfo, size_t... Is>
+    static void connect_fields_impl(SrcBundle &&src, DstBundle &dst,
+                                    std::tuple<SrcFieldInfo...> src_fields,
+                                    std::tuple<DstFieldInfo...> dst_fields,
+                                    std::index_sequence<Is...>) {
+        // 连接每个字段
+        ((connect_single_field(src.*(std::get<Is>(src_fields).ptr),
+                               dst.*(std::get<Is>(dst_fields).ptr))),
+         ...);
+    }
+
+    template <typename SrcField, typename DstField>
+    static void connect_single_field(SrcField &&src_field,
+                                     DstField &dst_field) {
+        if constexpr (is_bundle_v<std::decay_t<SrcField>>) {
+            // 如果源字段是Bundle，递归连接
+            bundle_field_traits<std::decay_t<SrcField>>::connect(
+                std::forward<SrcField>(src_field), dst_field);
+        } else {
+            // 否则直接连接
+            dst_field = std::forward<SrcField>(src_field);
+        }
+    }
+};
+
 } // namespace ch::core
 
 #endif // CH_CORE_BUNDLE_TRAITS_H

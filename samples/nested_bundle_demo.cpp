@@ -14,6 +14,31 @@
 using namespace ch;
 using namespace ch::core;
 
+template <typename T = ch_uint<32>>
+struct CustomNested : public bundle_base<CustomNested<T>> {
+    using Self = CustomNested<T>;
+    Stream<T> data_stream;
+    ch_bool interrupt;
+
+    CustomNested() = default;
+
+    CustomNested(const std::string &prefix) { this->set_name_prefix(prefix); }
+
+    CH_BUNDLE_FIELDS_T(data_stream, interrupt)
+
+    void as_master() override {
+        this->role_ = bundle_role::master;
+        this->make_output(interrupt);
+        this->data_stream.as_master();
+    }
+
+    void as_slave() override {
+        this->role_ = bundle_role::slave;
+        this->make_input(interrupt);
+        this->data_stream.as_slave();
+    }
+};
+
 int main() {
     std::cout << "=== Nested Bundle Demo ===" << std::endl;
 
@@ -24,29 +49,7 @@ int main() {
     try {
         // 1. 基本嵌套Bundle
         std::cout << "1. Creating Nested Bundle..." << std::endl;
-        struct CustomNested : public bundle_base<CustomNested> {
-            using Self = CustomNested;
-            Stream<ch_uint<32>> data_stream;
-            ch_bool interrupt;
-
-            CustomNested() = default;
-
-            CustomNested(const std::string &prefix) {
-                this->set_name_prefix(prefix);
-            }
-
-            CH_BUNDLE_FIELDS(Self, data_stream, interrupt)
-
-            void as_master() override {
-                this->make_output(data_stream, interrupt);
-            }
-
-            void as_slave() override {
-                this->make_input(data_stream, interrupt);
-            }
-        };
-
-        CustomNested nested("top.module");
+        CustomNested<> nested("top.module");
         std::cout << "✅ Custom nested bundle created" << std::endl;
 
         // 2. AXI Bundle演示
@@ -71,7 +74,7 @@ int main() {
         // 5. Bundle类型特征
         std::cout << "5. Testing Bundle Type Traits..." << std::endl;
         std::cout << "   CustomNested is bundle: "
-                  << (is_bundle_v<CustomNested> ? "✅" : "❌") << std::endl;
+                  << (is_bundle_v<CustomNested<>> ? "✅" : "❌") << std::endl;
         std::cout << "   StreamBundle is bundle: "
                   << (is_bundle_v<Stream<ch_uint<8>>> ? "✅" : "❌")
                   << std::endl;

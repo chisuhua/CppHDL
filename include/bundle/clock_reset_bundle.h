@@ -19,7 +19,7 @@ struct clock_reset_bundle : public bundle_base<clock_reset_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, clock, reset)
+    CH_BUNDLE_FIELDS_(clock, reset)
 
     void as_master() {
         // Master: 输出时钟和复位

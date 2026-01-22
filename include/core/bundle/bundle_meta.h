@@ -49,4 +49,37 @@ template <typename BundleT, typename FieldType> struct bundle_field {
             CH_BUNDLE_FIELDS_CHOOSE_N(__VA_ARGS__)(T, __VA_ARGS__));           \
     }
 
+// 用于模板Bundle的字段定义宏
+#define CH_BUNDLE_FIELD_ENTRY_T(name)                                          \
+    ::ch::core::bundle_field<Self, decltype(Self::name)> { #name, &Self::name }
+
+// 支持 1~6 个字段的模板宏
+#define CH_BUNDLE_FIELDS_T_1(a) CH_BUNDLE_FIELD_ENTRY_T(a)
+#define CH_BUNDLE_FIELDS_T_2(a, b)                                             \
+    CH_BUNDLE_FIELD_ENTRY_T(a), CH_BUNDLE_FIELD_ENTRY_T(b)
+#define CH_BUNDLE_FIELDS_T_3(a, b, c)                                          \
+    CH_BUNDLE_FIELD_ENTRY_T(a), CH_BUNDLE_FIELD_ENTRY_T(b),                    \
+        CH_BUNDLE_FIELD_ENTRY_T(c)
+#define CH_BUNDLE_FIELDS_T_4(a, b, c, d)                                       \
+    CH_BUNDLE_FIELD_ENTRY_T(a), CH_BUNDLE_FIELD_ENTRY_T(b),                    \
+        CH_BUNDLE_FIELD_ENTRY_T(c), CH_BUNDLE_FIELD_ENTRY_T(d)
+#define CH_BUNDLE_FIELDS_T_5(a, b, c, d, e)                                    \
+    CH_BUNDLE_FIELD_ENTRY_T(a), CH_BUNDLE_FIELD_ENTRY_T(b),                    \
+        CH_BUNDLE_FIELD_ENTRY_T(c), CH_BUNDLE_FIELD_ENTRY_T(d),                \
+        CH_BUNDLE_FIELD_ENTRY_T(e)
+#define CH_BUNDLE_FIELDS_T_6(a, b, c, d, e, f)                                 \
+    CH_BUNDLE_FIELD_ENTRY_T(a), CH_BUNDLE_FIELD_ENTRY_T(b),                    \
+        CH_BUNDLE_FIELD_ENTRY_T(c), CH_BUNDLE_FIELD_ENTRY_T(d),                \
+        CH_BUNDLE_FIELD_ENTRY_T(e), CH_BUNDLE_FIELD_ENTRY_T(f)
+
+// 模板Bundle的主宏：生成 static constexpr __bundle_fields()
+#define CH_BUNDLE_FIELDS_T(...)                                                \
+    using bundle_base<Self>::bundle_base;                                      \
+    static constexpr auto __bundle_fields() {                                  \
+        return std::make_tuple(CH_GET_NTH_ARG(                                 \
+            __VA_ARGS__, CH_BUNDLE_FIELDS_T_6, CH_BUNDLE_FIELDS_T_5,           \
+            CH_BUNDLE_FIELDS_T_4, CH_BUNDLE_FIELDS_T_3, CH_BUNDLE_FIELDS_T_2,  \
+            CH_BUNDLE_FIELDS_T_1, )(__VA_ARGS__));                             \
+    }
+
 #endif // CH_CORE_BUNDLE_META_H

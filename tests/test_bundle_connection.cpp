@@ -18,13 +18,13 @@ using namespace ch::core;
 // 定义一个简单的Bundle，只包含一个ch_uint字段
 struct SimpleBundle : public bundle_base<SimpleBundle> {
     using Self = SimpleBundle;
-    using bundle_base<Self>::bundle_base;
     ch_uint<8> data;
 
     SimpleBundle() = default;
-    SimpleBundle(const std::string &prefix) { this->set_name_prefix(prefix); }
+    // SimpleBundle(const std::string &prefix) { this->set_name_prefix(prefix);
+    // }
 
-    CH_BUNDLE_FIELDS(Self, data)
+    CH_BUNDLE_FIELDS_T(data)
 
     void as_master() override { this->make_output(data); }
 
@@ -34,7 +34,6 @@ struct SimpleBundle : public bundle_base<SimpleBundle> {
 // 定义一个包含多个字段的Bundle
 struct ComplexBundle : public bundle_base<ComplexBundle> {
     using Self = ComplexBundle;
-    using bundle_base<Self>::bundle_base;
     ch_uint<8> input_field;
     ch_uint<4> output_field;
     ch_bool enable;
@@ -42,7 +41,7 @@ struct ComplexBundle : public bundle_base<ComplexBundle> {
     ComplexBundle() = default;
     ComplexBundle(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-    CH_BUNDLE_FIELDS(Self, input_field, output_field, enable)
+    CH_BUNDLE_FIELDS_T(input_field, output_field, enable)
 
     void as_master() override {
         this->make_output(input_field, output_field);
@@ -58,14 +57,13 @@ struct ComplexBundle : public bundle_base<ComplexBundle> {
 // 定义一个flip类型的Bundle（输入输出方向相反）
 struct FlipBundle : public bundle_base<FlipBundle> {
     using Self = FlipBundle;
-    using bundle_base<Self>::bundle_base;
     ch_uint<8> data;
     ch_bool enable;
 
     FlipBundle() = default;
     FlipBundle(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-    CH_BUNDLE_FIELDS(Self, data, enable)
+    CH_BUNDLE_FIELDS_T(data, enable)
 
     void as_master() override {
         this->make_output(data);
@@ -78,7 +76,6 @@ struct FlipBundle : public bundle_base<FlipBundle> {
 // 定义一个握手协议Bundle
 struct HandShakeBundle : public bundle_base<HandShakeBundle> {
     using Self = HandShakeBundle;
-    using bundle_base<Self>::bundle_base;
     ch_uint<8> payload;
     ch_bool valid;
     ch_bool ready;
@@ -88,7 +85,7 @@ struct HandShakeBundle : public bundle_base<HandShakeBundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, payload, valid, ready)
+    CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
     void as_master() override {
         this->make_output(payload, valid);

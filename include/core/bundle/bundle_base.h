@@ -11,43 +11,26 @@
 
 namespace ch::core {
 
-// 为Bundle字段添加特殊处理
-template <typename Derived> struct bundle_field_traits {
-    static constexpr bool is_bundle = false;
-};
-
-// 特化：识别Bundle类型
-template <typename T>
-concept is_bundle_type = requires(T t) {
-    t.__bundle_fields();
-    t.is_valid();
-    t.as_master();
-    t.as_slave();
-};
-
-// 为Bundle类型提供特化
-template <typename BundleType>
-    requires is_bundle_type<BundleType>
-struct bundle_field_traits<BundleType> {
-    static constexpr bool is_bundle = true;
-
-    // 递归验证嵌套Bundle
-    static bool check_valid(const BundleType &bundle) {
-        return bundle.is_valid();
-    }
-
-    // 递归命名嵌套Bundle
-    static void set_name(BundleType &bundle, const std::string &name) {
-        bundle.set_name_prefix(name);
-    }
+// Bundle的角色枚举，用于区分内部连接、主设备和从设备
+enum class bundle_role {
+    unknown, // 内部连接，可读可写
+    master,  // 主设备，输出信号
+    slave    // 从设备，输入信号
 };
 
 template <typename Derived> class bundle_base : public logic_buffer<Derived> {
+protected:
+    bundle_role role_ = bundle_role::unknown; // 默认为内部角色
+
 public:
     // (1) 默认构造：创建未驱动的字面量节点并通过assign操作连接
-    bundle_base() : logic_buffer<Derived>() {}
+    bundle_base() : logic_buffer<Derived>(){};
+    bundle_base(const std::string &prefix) : logic_buffer<Derived>() {
+        this->set_name_prefix(prefix);
+    }
 
     // (2) 拷贝构造：共享节点（硬件连接语义）
+
     bundle_base(const bundle_base &other)
         : logic_buffer<Derived>(other.impl()) {
         // 不再自动同步成员
@@ -59,8 +42,14 @@ public:
     }
 
     // // (4) 从 ch_uint<W> 反序列化（复用其节点）
-    // template <unsigned W> bundle_base(const ch_uint<W> &bits) {
-    //     this->node_impl_ = bits.impl(); // 直接复用节点！
+    // // 接受编译时字面量类型，如 0_d, 0x11_h 等
+    // template <uint64_t V, uint32_t W>
+    // bundle_base(
+    //     ch_uint<W> bits,
+    //     const std::string &name = "bundle_lit",
+    //     const std::source_location &sloc =
+    //     std::source_location::current()) { this->node_impl_ =
+    //     bits.impl(); // 直接复用节点！
     // }
 
     // (5) 从字面量类型参数构造：创建字面量节点
@@ -166,6 +155,9 @@ public:
 
     // 获取Bundle宽度（使用统一的函数）
     unsigned width() const { return get_bundle_width<Derived>(); }
+
+    // 获取bundle角色
+    bundle_role get_role() const { return role_; }
 
 protected:
     // 子类可调用：从节点同步成员字段
@@ -301,7 +293,8 @@ protected:
 
 // 特化 ch_width_impl 和 get_lnode（必须在定义后）
 // template <typename Derived>
-// struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>> {
+// struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>>
+// {
 //     static constexpr unsigned value = get_bundle_width<Derived>();
 // };
 

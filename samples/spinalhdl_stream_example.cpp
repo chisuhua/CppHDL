@@ -142,7 +142,7 @@ struct CustomStreamBundle : public bundle_base<CustomStreamBundle<T>> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, data, enable, valid, ready)
+    CH_BUNDLE_FIELDS_T(data, enable, valid, ready)
 
     void as_master() override {
         this->make_output(data, enable, valid);
@@ -179,73 +179,17 @@ public:
 class FragmentExample {
 public:
     struct Result {
-        Flow<FragmentBundle<ch_uint<8>>> input_flow;
-        ch_uint<8> payload_fragment;
-        ch_bool is_last;
+        Fragment<ch_uint<8>> input_frag;
+        Fragment<ch_uint<8>> output_frag;
     };
     
     Result process(
-        Flow<FragmentBundle<ch_uint<8>>> input_flow
+        Fragment<ch_uint<8>> input_frag
     ) {
         Result result;
         
-        result.input_flow = input_flow;
-        result.payload_fragment = get_fragment_data(input_flow);  // 使用fragment.h中提供的函数
-        result.is_last = get_last_signal(input_flow);             // 使用fragment.h中提供的函数
-        
-        return result;
-    }
-};
-
-// Fragment序列处理示例
-class FragmentSequenceExample {
-public:
-    struct Result {
-        std::array<Flow<FragmentBundle<ch_uint<8>>>, 4> fragment_sequence;
-    };
-    
-    Result process() {
-        Result result;
-        
-        // 创建包含4个数据片段的序列
-        std::array<ch_uint<8>, 4> data = {0x12_u8, 0x34_u8, 0x56_u8, 0x78_u8};
-        
-        // 使用fragment_sequence函数创建片段序列
-        result.fragment_sequence = fragment_sequence(data);
-        
-        return result;
-    }
-};
-
-// 简单的内存示例 - 对应SpinalHDL的Mem
-class SimpleMemoryExample {
-public:
-    struct Result {
-        ch_uint<5> address;
-        ch_uint<8> data_out;
-        ch_uint<8> data_in;
-        ch_bool write_enable;
-    };
-    
-    Result process(
-        ch_uint<5> addr,
-        ch_bool write_enable,
-        ch_uint<8> data_in
-    ) {
-        Result result;
-        
-        // 创建一个32深度、8位宽的内存
-        static std::array<ch_uint<8>, 32> memory = {};
-        
-        result.address = addr;
-        result.data_out = memory[addr.value()];  // 异步读取
-        result.data_in = data_in;
-        result.write_enable = write_enable;
-        
-        // 如果写使能有效，写入数据
-        if(write_enable.value()) {
-            memory[addr.value()] = data_in;
-        }
+        result.input_frag = input_frag;
+        result.output_frag = input_frag;  // 简单传递
         
         return result;
     }
@@ -256,178 +200,40 @@ int main() {
     auto ctx = std::make_unique<ch::core::context>("spinalhdl_stream_example");
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    std::cout << "CppHDL Stream Examples (based on SpinalHDL)" << std::endl;
-    std::cout << "=============================================" << std::endl;
+    std::cout << "CppHDL vs SpinalHDL Stream/Flow Example" << std::endl;
+    std::cout << "======================================" << std::endl;
 
-    // 示例1: Stream FIFO
-    std::cout << "\n1. Stream FIFO Example:" << std::endl;
+    // 创建Stream FIFO示例
+    StreamFifoExample fifo_example;
     
-    ch_bool clk = false;
-    ch_bool rst = true;
+    // 创建Stream Fork示例
+    StreamForkExample fork_example;
     
-    Stream<ch_uint<8>> input_stream;
-    input_stream.payload = 0_d;
-    input_stream.valid = false;
-    input_stream.ready = false;
+    // 创建Stream Join示例
+    StreamJoinExample join_example;
     
+    // 创建Stream Arbiter示例
+    StreamArbiterExample arbiter_example;
+
+    // 创建自定义Stream Bundle
+    CustomStreamBundle<ch_uint<16>> custom_stream;
+    custom_stream.as_master();
+    custom_stream.set_name_prefix("custom_stream");
+
+    // 创建Flow示例
+    FlowExample flow_example;
+
+    // 创建Fragment示例
+    FragmentExample frag_example;
+
+    std::cout << "Bundle created with width: " << custom_stream.width() << std::endl;
+    std::cout << "Bundle name prefix set successfully!" << std::endl;
+
+    // 创建仿真器
     ch::Simulator sim(ctx.get());
     
-    StreamFifoExample fifo_example;
-    auto fifo_result = fifo_example.process(clk, rst, input_stream);
-    sim.tick();
-    
-    rst = false;
-    clk = true;
-    input_stream.payload = 0x55_d;
-    input_stream.valid = true;
-    fifo_result = fifo_example.process(clk, rst, input_stream);
-    sim.tick();
-    
-    std::cout << "After writing 0x55 - FIFO empty: " << simulator.get_value(fifo_result.empty) 
-              << ", FIFO full: " << simulator.get_value(fifo_result.full) 
-              << ", Occupancy: " << simulator.get_value(fifo_result.occupancy) << std::endl;
-
-    // 示例2: Stream Fork
-    std::cout << "\n2. Stream Fork Example:" << std::endl;
-    
-    Stream<ch_uint<8>> fork_input_stream;
-    fork_input_stream.payload = 0xAB_d;
-    fork_input_stream.valid = true;
-    
-    StreamForkExample fork_example;
-    auto fork_result = fork_example.process(fork_input_stream);
-    
-    std::cout << "Fork input payload: 0x" << std::hex << simulator.get_value(fork_input_stream.payload) << std::endl;
-    std::cout << "Fork output 0 payload: 0x" << std::hex << simulator.get_value(fork_result.output_streams[0].payload) << std::endl;
-    std::cout << "Fork output 1 payload: 0x" << std::hex << simulator.get_value(fork_result.output_streams[1].payload) << std::endl;
-    std::cout << "Fork input valid: " << std::dec << simulator.get_value(fork_input_stream.valid) << std::endl;
-    std::cout << "Fork output 0 valid: " << std::dec << simulator.get_value(fork_result.output_streams[0].valid) << std::endl;
-    std::cout << "Fork output 1 valid: " << std::dec << simulator.get_value(fork_result.output_streams[1].valid) << std::endl;
-
-    // 示例3: Stream Join
-    std::cout << "\n3. Stream Join Example:" << std::endl;
-    
-    std::array<Stream<ch_uint<8>>, 2> join_input_streams;
-    join_input_streams[0].payload = 0x12_d;
-    join_input_streams[0].valid = true;
-    join_input_streams[1].payload = 0x34_d;
-    join_input_streams[1].valid = true;
-    
-    StreamJoinExample join_example;
-    auto join_result = join_example.process(join_input_streams);
-    
-    std::cout << "Join input 0 payload: 0x" << std::hex << simulator.get_value(join_input_streams[0].payload) << std::endl;
-    std::cout << "Join input 1 payload: 0x" << std::hex << simulator.get_value(join_input_streams[1].payload) << std::endl;
-    std::cout << "Join output payload: 0x" << std::hex << simulator.get_value(join_result.output.payload) << std::endl;
-    std::cout << "Join output valid: " << std::dec << simulator.get_value(join_result.output.valid) << std::endl;
-
-    // 示例4: Stream Arbiter
-    std::cout << "\n4. Stream Arbiter Example:" << std::endl;
-    
-    std::array<Stream<ch_uint<8>>, 4> arb_input_streams;
-    arb_input_streams[0].payload = 0x11_d;
-    arb_input_streams[0].valid = true;
-    arb_input_streams[1].payload = 0x22_d;
-    arb_input_streams[1].valid = false;  // 这个无效
-    arb_input_streams[2].payload = 0x33_d;
-    arb_input_streams[2].valid = true;
-    arb_input_streams[3].payload = 0x44_d;
-    arb_input_streams[3].valid = false;  // 这个也无效
-
-    StreamArbiterExample arb_example;
-    auto arb_result = arb_example.process(clk, rst, arb_input_streams);
-    
-    std::cout << "Arbiter input 0 payload: 0x" << std::hex << simulator.get_value(arb_input_streams[0].payload) << std::endl;
-    std::cout << "Arbiter input 0 valid: " << std::dec << simulator.get_value(arb_input_streams[0].valid) << std::endl;
-    std::cout << "Arbiter input 2 payload: 0x" << std::hex << simulator.get_value(arb_input_streams[2].payload) << std::endl;
-    std::cout << "Arbiter input 2 valid: " << std::dec << simulator.get_value(arb_input_streams[2].valid) << std::endl;
-    
-    std::cout << "\nArbiter Output:" << std::endl;
-    std::cout << "Output payload: 0x" << std::hex << simulator.get_value(arb_result.output.payload) << std::endl;
-    std::cout << "Output valid: " << std::dec << simulator.get_value(arb_result.output.valid) << std::endl;
-    std::cout << "Selected input index: " << simulator.get_value(arb_result.selected) << std::endl;
-
-    // 示例5: 自定义Stream Bundle
-    std::cout << "\n5. Custom Stream Bundle Example:" << std::endl;
-    
-    CustomStreamBundle<ch_uint<8>> custom_stream("custom");
-    custom_stream.data = 0xDE_d;
-    custom_stream.enable = true;
-    custom_stream.valid = true;
-    custom_stream.ready = false;
-    
-    custom_stream.as_master();
-    std::cout << "Custom stream data: 0x" << std::hex << simulator.get_value(custom_stream.data) << std::endl;
-    std::cout << "Custom stream enable: " << std::dec << simulator.get_value(custom_stream.enable) << std::endl;
-    std::cout << "Custom stream valid: " << simulator.get_value(custom_stream.valid) << std::endl;
-    std::cout << "Custom stream ready: " << simulator.get_value(custom_stream.ready) << std::endl;
-
-    // 示例6: Flow示例
-    std::cout << "\n6. Flow Example:" << std::endl;
-    
-    Flow<ch_uint<8>> input_flow;
-    input_flow.payload = 0xBC_d;
-    input_flow.valid = true;
-    
-    FlowExample flow_example;
-    auto flow_result = flow_example.process(input_flow);
-    
-    std::cout << "Flow payload: 0x" << std::hex << simulator.get_value(flow_result.input_flow.payload) << std::endl;
-    std::cout << "Flow valid: " << std::dec << simulator.get_value(flow_result.input_flow.valid) << std::endl;
-
-    // 示例7: Fragment示例
-    std::cout << "\n7. Fragment Example:" << std::endl;
-    
-    Flow<FragmentBundle<ch_uint<8>>> fragment_flow;
-    fragment_flow.payload.fragment = 0xEF_d;
-    fragment_flow.payload.last = true;
-    fragment_flow.valid = true;
-    
-    FragmentExample fragment_example;
-    auto fragment_result = fragment_example.process(fragment_flow);
-    
-    std::cout << "Fragment payload: 0x" << std::hex << simulator.get_value(fragment_result.payload_fragment) << std::endl;
-    std::cout << "Fragment last: " << std::dec << simulator.get_value(fragment_result.is_last) << std::endl;
-
-    // 示例8: 简单内存示例
-    std::cout << "\n8. Memory Example:" << std::endl;
-    
-    ch_uint<5> addr = 5_u5;
-    ch_uint<8> data_in = 0xAA_d;
-    ch_bool write_enable = false;
-    
-    SimpleMemoryExample mem_example;
-    auto mem_result = mem_example.process(addr, write_enable, data_in);
-    
-    std::cout << "Memory address: " << std::dec << simulator.get_value(mem_result.address) << std::endl;
-    std::cout << "Memory data out: 0x" << std::hex << simulator.get_value(mem_result.data_out) << std::endl;
-    std::cout << "Memory write enable: " << std::dec << simulator.get_value(mem_result.write_enable) << std::endl;
-
-    // 示例9: Fragment序列处理示例
-    std::cout << "\n9. Fragment Sequence Example:" << std::endl;
-    
-    FragmentSequenceExample seq_example;
-    auto seq_result = seq_example.process();
-    
-    for(size_t i = 0; i < seq_result.fragment_sequence.size(); ++i) {
-        std::cout << "Fragment " << i << " - data: 0x" << std::hex 
-                  << simulator.get_value(seq_result.fragment_sequence[i].payload.fragment)
-                  << ", last: " << std::dec 
-                  << simulator.get_value(seq_result.fragment_sequence[i].payload.last) << std::endl;
-    }
-    
-    ch_uint<5> addr = 5_u5;
-    ch_uint<8> data_in = 0xAA_d;
-    ch_bool write_enable = false;
-    
-    SimpleMemoryExample mem_example;
-    auto mem_result = mem_example.process(addr, write_enable, data_in);
-    
-    std::cout << "Memory address: " << std::dec << simulator.get_value(mem_result.address) << std::endl;
-    std::cout << "Memory data out: 0x" << std::hex << simulator.get_value(mem_result.data_out) << std::endl;
-    std::cout << "Memory write enable: " << std::dec << simulator.get_value(mem_result.write_enable) << std::endl;
-
-    std::cout << "\nAll examples completed successfully!" << std::endl;
+    std::cout << "\nStream/Flow examples initialized successfully!" << std::endl;
+    std::cout << "Ready to simulate hardware designs..." << std::endl;
 
     return 0;
 }

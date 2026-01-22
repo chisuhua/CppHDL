@@ -23,7 +23,7 @@ template <typename T> struct HandShake : public bundle_base<HandShake<T>> {
     HandShake() = default;
     HandShake(const std::string &prefix) { this->set_name_prefix(prefix); }
 
-    CH_BUNDLE_FIELDS(Self, payload, valid, ready)
+    CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
     void as_master() override {
         // Master: 输出payload和valid，输入ready

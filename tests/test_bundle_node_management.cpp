@@ -14,13 +14,12 @@ using namespace ch::core;
 // 定义一个简单的Bundle用于测试
 struct TestBundle : public bundle_base<TestBundle> {
     using Self = TestBundle;
-    using bundle_base<TestBundle>::bundle_base;
     ch_uint<8> data;
     ch_bool valid;
 
     TestBundle() = default;
 
-    CH_BUNDLE_FIELDS(Self, data, valid)
+    CH_BUNDLE_FIELDS_T(data, valid)
 
     void as_master() override { this->make_output(data, valid); }
 

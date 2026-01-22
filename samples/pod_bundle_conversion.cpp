@@ -70,7 +70,7 @@ struct large_data_bundle : public bundle_base<large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, address, data, extra, flag1, flag2, ready)
+    CH_BUNDLE_FIELDS_T(address, data, extra, flag1, flag2, ready)
 
     void as_master() override {
         // 分多次调用make_output，因为最多支持4个参数

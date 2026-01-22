@@ -66,7 +66,7 @@ struct ch_literal_runtime {
     constexpr ch_literal_runtime(uint32_t v) noexcept
         : ch_literal_runtime(v, compute_width(v)) {}
 
-    constexpr ch_literal_runtime(bool b) noexcept
+    explicit constexpr ch_literal_runtime(bool b) noexcept
         : actual_value(b ? 1u : 0u), actual_width(1u) {}
 
     constexpr ch_literal_runtime() noexcept

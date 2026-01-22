@@ -25,7 +25,8 @@ struct SmallData {
     }
 
     bool operator==(const SmallData &other) const {
-        return data == other.data && flag1 == other.flag1 && flag2 == other.flag2;
+        return data == other.data && flag1 == other.flag1 &&
+               flag2 == other.flag2;
     }
 };
 
@@ -43,7 +44,8 @@ struct MediumData {
     }
 
     bool operator==(const MediumData &other) const {
-        return address == other.address && data == other.data && flag1 == other.flag1;
+        return address == other.address && data == other.data &&
+               flag1 == other.flag1;
     }
 };
 
@@ -65,8 +67,9 @@ struct LargeData {
     }
 
     bool operator==(const LargeData &other) const {
-        return address == other.address && data == other.data && extra == other.extra &&
-               flags == other.flags && flag1 == other.flag1 && flag2 == other.flag2;
+        return address == other.address && data == other.data &&
+               extra == other.extra && flags == other.flags &&
+               flag1 == other.flag1 && flag2 == other.flag2;
     }
 };
 
@@ -82,15 +85,11 @@ struct small_data_bundle : public bundle_base<small_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, data, flag1, flag2)
+    CH_BUNDLE_FIELDS_T(data, flag1, flag2)
 
-    void as_master() override {
-        this->make_output(data, flag1, flag2);
-    }
+    void as_master() override { this->make_output(data, flag1, flag2); }
 
-    void as_slave() override {
-        this->make_input(data, flag1, flag2);
-    }
+    void as_slave() override { this->make_input(data, flag1, flag2); }
 };
 
 struct medium_data_bundle : public bundle_base<medium_data_bundle> {
@@ -104,15 +103,11 @@ struct medium_data_bundle : public bundle_base<medium_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, address, data, flag1)
+    CH_BUNDLE_FIELDS_T(address, data, flag1)
 
-    void as_master() override {
-        this->make_output(address, data, flag1);
-    }
+    void as_master() override { this->make_output(address, data, flag1); }
 
-    void as_slave() override {
-        this->make_input(address, data, flag1);
-    }
+    void as_slave() override { this->make_input(address, data, flag1); }
 };
 
 struct large_data_bundle : public bundle_base<large_data_bundle> {
@@ -129,7 +124,7 @@ struct large_data_bundle : public bundle_base<large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, address, data, extra, flags, flag1, flag2)
+    CH_BUNDLE_FIELDS_T(address, data, extra, flags, flag1, flag2)
 
     void as_master() override {
         this->make_output(address, data, extra, flags);
@@ -172,7 +167,7 @@ T deserialize_pod_from_uint64_array(const std::vector<uint64_t> &data) {
 }
 
 // 测试小型POD结构体的序列化/反序列化
-TEST_CASE("PODConversions - Small POD Serialization/Deserialization", 
+TEST_CASE("PODConversions - Small POD Serialization/Deserialization",
           "[pod][conversion][small]") {
     SmallData small{0x12345678, true, false};
     std::cout << "Original: ";
@@ -195,7 +190,7 @@ TEST_CASE("PODConversions - Small POD Serialization/Deserialization",
 }
 
 // 测试中型POD结构体的序列化/反序列化
-TEST_CASE("PODConversions - Medium POD Serialization/Deserialization", 
+TEST_CASE("PODConversions - Medium POD Serialization/Deserialization",
           "[pod][conversion][medium]") {
     MediumData medium{0x123456789ABCDEF0ULL, 0xABCD1234, true};
     std::cout << "Original: ";
@@ -218,9 +213,10 @@ TEST_CASE("PODConversions - Medium POD Serialization/Deserialization",
 }
 
 // 测试大型POD结构体的序列化/反序列化
-TEST_CASE("PODConversions - Large POD Serialization/Deserialization", 
+TEST_CASE("PODConversions - Large POD Serialization/Deserialization",
           "[pod][conversion][large]") {
-    LargeData large{0x123456789ABCDEF0ULL, 0xABCD1234, 0xEF56, 0x78, true, false};
+    LargeData large{
+        0x123456789ABCDEF0ULL, 0xABCD1234, 0xEF56, 0x78, true, false};
     std::cout << "Original: ";
     large.print();
 
@@ -241,7 +237,7 @@ TEST_CASE("PODConversions - Large POD Serialization/Deserialization",
 }
 
 // 测试小型Bundle的序列化/反序列化
-TEST_CASE("PODConversions - Small Bundle Serialization/Deserialization", 
+TEST_CASE("PODConversions - Small Bundle Serialization/Deserialization",
           "[pod][conversion][bundle][small]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -266,7 +262,7 @@ TEST_CASE("PODConversions - Small Bundle Serialization/Deserialization",
 }
 
 // 测试中型Bundle的序列化/反序列化
-TEST_CASE("PODConversions - Medium Bundle Serialization/Deserialization", 
+TEST_CASE("PODConversions - Medium Bundle Serialization/Deserialization",
           "[pod][conversion][bundle][medium]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -285,13 +281,14 @@ TEST_CASE("PODConversions - Medium Bundle Serialization/Deserialization",
     // 反序列化
     auto deserialized_bundle = deserialize<medium_data_bundle>(bits);
 
-    REQUIRE(static_cast<uint64_t>(deserialized_bundle.address) == 0x123456789ABCDEF0ULL);
+    REQUIRE(static_cast<uint64_t>(deserialized_bundle.address) ==
+            0x123456789ABCDEF0ULL);
     REQUIRE(static_cast<uint64_t>(deserialized_bundle.data) == 0xABCD1234);
     REQUIRE(static_cast<bool>(deserialized_bundle.flag1) == true);
 }
 
 // 测试大型Bundle的序列化/反序列化
-TEST_CASE("PODConversions - Large Bundle Serialization/Deserialization", 
+TEST_CASE("PODConversions - Large Bundle Serialization/Deserialization",
           "[pod][conversion][bundle][large]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -313,7 +310,8 @@ TEST_CASE("PODConversions - Large Bundle Serialization/Deserialization",
     // 反序列化
     auto deserialized_bundle = deserialize<large_data_bundle>(bits);
 
-    REQUIRE(static_cast<uint64_t>(deserialized_bundle.address) == 0x123456789ABCDEF0ULL);
+    REQUIRE(static_cast<uint64_t>(deserialized_bundle.address) ==
+            0x123456789ABCDEF0ULL);
     REQUIRE(static_cast<uint64_t>(deserialized_bundle.data) == 0xABCD1234);
     REQUIRE(static_cast<uint64_t>(deserialized_bundle.extra) == 0xEF56);
     REQUIRE(static_cast<uint64_t>(deserialized_bundle.flags) == 0x78);
@@ -322,14 +320,14 @@ TEST_CASE("PODConversions - Large Bundle Serialization/Deserialization",
 }
 
 // 测试POD到Bundle的转换
-TEST_CASE("PODConversions - POD to Bundle Conversion", 
+TEST_CASE("PODConversions - POD to Bundle Conversion",
           "[pod][conversion][pod-to-bundle]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 测试中型数据
     MediumData medium{0x123456789ABCDEF0ULL, 0xABCD1234, true};
-    
+
     // 创建对应的bundle并手动设置值
     medium_data_bundle bundle;
     bundle.address = ch_uint<64>(make_literal(medium.address, 64));
@@ -338,16 +336,16 @@ TEST_CASE("PODConversions - POD to Bundle Conversion",
 
     // 序列化bundle
     auto bundle_bits = serialize(bundle);
-    
+
     // 反序列化为POD
     auto deserialized_medium = deserialize_pod_from_uint64_array<MediumData>(
-        serialize_pod_to_uint64_array(medium));  // 用原数据验证
-    
+        serialize_pod_to_uint64_array(medium)); // 用原数据验证
+
     REQUIRE(medium == deserialized_medium);
 }
 
 // 测试ch_uint到C++基本类型的转换
-TEST_CASE("PODConversions - ch_uint to C++ Basic Types", 
+TEST_CASE("PODConversions - ch_uint to C++ Basic Types",
           "[ch_uint][conversion][basic-types]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -370,7 +368,7 @@ TEST_CASE("PODConversions - ch_uint to C++ Basic Types",
 }
 
 // 测试大型数据在仿真环境中的行为
-TEST_CASE("PODConversions - Large Data Simulation Integration", 
+TEST_CASE("PODConversions - Large Data Simulation Integration",
           "[pod][conversion][simulation][integration]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
@@ -380,16 +378,15 @@ TEST_CASE("PODConversions - Large Data Simulation Integration",
     public:
         large_data_bundle io;
 
-        TestLargeDataModule(
-            ch::Component *parent = nullptr,
-            const std::string &name = "test_large_module")
+        TestLargeDataModule(ch::Component *parent = nullptr,
+                            const std::string &name = "test_large_module")
             : ch::Component(parent, name) {
             io.as_slave();
         }
 
         void create_ports() override {}
 
-        void describe() override { 
+        void describe() override {
             // 简单地将输入复制到输出
         }
     };
@@ -398,30 +395,35 @@ TEST_CASE("PODConversions - Large Data Simulation Integration",
     ch::Simulator sim(test_device.context());
 
     // 设置大型Bundle数据
-    LargeData test_data{0x123456789ABCDEF0ULL, 0xABCD1234, 0xEF56, 0x78, true, false};
+    LargeData test_data{
+        0x123456789ABCDEF0ULL, 0xABCD1234, 0xEF56, 0x78, true, false};
     auto uint64_array = serialize_pod_to_uint64_array(test_data);
 
     // 使用仿真器设置Bundle值
-    sim.set_bundle_field_value(
-        test_device.instance().io.address, uint64_array, 0, 64);
-    sim.set_bundle_field_value(
-        test_device.instance().io.data, uint64_array, 64, 32);
-    sim.set_bundle_field_value(
-        test_device.instance().io.extra, uint64_array, 96, 16);
-    sim.set_bundle_field_value(
-        test_device.instance().io.flags, uint64_array, 112, 8);
-    sim.set_bundle_field_value(
-        test_device.instance().io.flag1, uint64_array, 120, 1);
-    sim.set_bundle_field_value(
-        test_device.instance().io.flag2, uint64_array, 121, 1);
+    sim.set_bundle_field_value(test_device.instance().io.address, uint64_array,
+                               0, 64);
+    sim.set_bundle_field_value(test_device.instance().io.data, uint64_array, 64,
+                               32);
+    sim.set_bundle_field_value(test_device.instance().io.extra, uint64_array,
+                               96, 16);
+    sim.set_bundle_field_value(test_device.instance().io.flags, uint64_array,
+                               112, 8);
+    sim.set_bundle_field_value(test_device.instance().io.flag1, uint64_array,
+                               120, 1);
+    sim.set_bundle_field_value(test_device.instance().io.flag2, uint64_array,
+                               121, 1);
 
     sim.tick();
 
     // 获取Bundle值
-    uint64_t result_address = static_cast<uint64_t>(test_device.instance().io.address);
-    uint64_t result_data = static_cast<uint64_t>(test_device.instance().io.data);
-    uint64_t result_extra = static_cast<uint64_t>(test_device.instance().io.extra);
-    uint64_t result_flags = static_cast<uint64_t>(test_device.instance().io.flags);
+    uint64_t result_address =
+        static_cast<uint64_t>(test_device.instance().io.address);
+    uint64_t result_data =
+        static_cast<uint64_t>(test_device.instance().io.data);
+    uint64_t result_extra =
+        static_cast<uint64_t>(test_device.instance().io.extra);
+    uint64_t result_flags =
+        static_cast<uint64_t>(test_device.instance().io.flags);
     bool result_flag1 = static_cast<bool>(test_device.instance().io.flag1);
     bool result_flag2 = static_cast<bool>(test_device.instance().io.flag2);
 

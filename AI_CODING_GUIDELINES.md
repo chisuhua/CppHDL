@@ -1,9 +1,278 @@
 AI_CODING_GUIDELINES.md
-# CppHDL AI辅助编码规则和提示词指南
+# CppHDL AI Coding Guidelines
 
-## 概述
+## 1. Bundle系统设计与硬件连接规范
 
-本文档为AI助手提供了在CppHDL项目中编写代码的具体规范和最佳实践。遵循这些指南可以确保生成的代码与项目架构、编码风格和设计模式保持一致。
+### 1.1 核心设计原则
+- **类型统一性**：Bundle内部字段应使用普通`ch_uint<N>`和`ch_bool`类型（非IO类型），不需实现`as_input()`/`as_output()`方法
+- **嵌套支持**：支持嵌套Bundle结构（如`Stream<Fragment<T>>`）
+- **语义一致性**：保持"内部可写、端口只读"的基本语义
+- **角色管理**：
+  - 保留`bundle_role { internal, master, slave }`枚举
+  - 默认角色为`internal`
+  - 外层Bundle（如Stream）控制整体角色，内层Bundle（如Fragment）作为结构视图不独立拥有角色
+- **分层抽象**：必须支持Fragment/Stream分层抽象，允许任意嵌套Bundle结构
+- **初始化支持**：嵌套Bundle的初始化必须支持带偏移构造，确保位段正确切分
+
+### 1.2 方向控制机制
+- **批量设置**：通过`as_master()`和`as_slave()`方法调用`make_output()`/`make_input()`实现批量方向设置
+- **模板重载**：支持1-4个字段的模板重载，仅提供语义指示用于连接时的方向检查，实际不修改字段状态
+- **错误做法**：禁止在Bundle中直接使用`ch_in<T>`或`ch_out<T>`类型作为字段，这会限制灵活性
+- **类型安全**：使用`set_field_direction`配合`if constexpr (requires { field.as_input(); })`检查方法存在性，确保对普通类型静默忽略
+
+### 1.3 字段类型扩展
+- `ch_uint` 和 `ch_bool` 类型应提供 `as_input()` 和 `as_output()` 方法用于方向控制
+- 方向状态通过 `direction_type` 成员管理，类型为 `std::variant<std::monostate, input_direction, output_direction>`
+- `as_input()` 方法调用 `set_direction(input_direction{})` 设置输入方向
+- `as_output()` 方法调用 `set_direction(output_direction{})` 设置输出方向
+- 这些方法的实现需保持const正确性，允许在const对象上调用
+- 移除独立的 `set_direction()` 函数，直接在 `as_input()` 和 `as_output()` 方法中设置 `dir_` 成员变量
+- 该设计使普通数据类型也能参与Bundle的方向控制体系
+
+### 1.4 连接机制
+- **核心连接操作**: 使用 `operator<<=` 作为硬件连接的标准赋值操作符，表示数据流方向（右侧信号驱动左侧端口/寄存器）
+- **适用类型**:
+  - `ch_reg<T>`：连接寄存器下一值
+  - `ch_out<T>`：连接输出端口值
+  - `ch_uint<N>`：连接信号值
+- **连接语义**: 实现硬件连接而非传统赋值，右侧值在下一个时钟周期影响左侧对象
+- **设计目的**: 统一语法，提高可读性，明确信号驱动关系
+- **Bundle连接方式**:
+  - 必须使用 `operator<<=` 或 `ch::core::connect(src, dst)` 进行连接，禁止直接赋值
+  - `connect`用于相同类型Bundle整体连接；`<<=`用于字段级选择性连接
+  - 方向语义需匹配master/slave属性
+  - 自定义Bundle必须继承`bundle_base`，使用CH_BUNDLE_FIELDS宏定义字段，并实现`as_master/as_slave`
+  - 禁止同一字段被重复连接
+  - 在硬件描述语言上下文中，bundle之间的连接必须使用`<<=`操作符表示硬件连接语义，禁止使用`=`赋值操作符
+- **递归连接**：实现基于字段布局的递归连接`do_recursive_connect`
+- **重载支持**：重载`operator<<=`支持任意Bundle连接
+- **自定义行为**：允许特定Bundle（如Stream）通过`do_connect_from`覆盖默认连接行为处理反向信号
+- **连接语义要求**:
+  - 实现`operator<<=`时必须同时处理：
+    1. bundle整体的主节点连接
+    2. 内部字段逐个连接，遵循源（master）→目标（slave）方向
+  - master和slave方向的assign操作必须使用不同的节点类型
+  - 根据字段方向创建相应assign节点，确保连接语义正确
+  - 验证方向兼容性，防止非法连接
+
+### 1.5 反射系统
+- 支持模板Bundle的字段反射`CH_BUNDLE_FIELDS_T(TYPE, ...)`
+- `get_bundle_layout`需能处理模板类型
+- 宽度计算、命名设置等需递归处理嵌套结构
+
+### 1.6 标准组件
+- 提供开箱即用的`Fragment<T>`和`Stream<T>`模板
+- `Fragment<T>`：纯数据结构，包含payload和last信号
+- `Stream<T>`：传输协议载体，包含valid/ready握手机制
+
+### 1.7 硬件抽象层规范
+- `sread`/`aread`返回的`read_port`是`ch_uint`代理类型，支持隐式转换为`lnode<T>()()`
+- 禁止显式类型转换或中间变量赋值，应直接作为`ch_uint`使用
+- 所有输出端口遵循此代理模式
+
+### 1.8 类型一致性要求
+- 所有硬件信号类型统一持有`lnodeimpl*`作为底层实现
+- 统一连接语义（`operator<<=`）、序列化接口（`to_bits/from_bits`）
+- 继承公共基类（如`logic_buffer`）共享节点管理功能
+- 保持方向控制接口一致性（`as_master/as_slave`）
+
+### 1.9 Bundle类继承规范
+- `bundle_base<Derived>`继承`logic_buffer<Derived>`，使其成为硬件信号并持有`lnodeimpl*`
+- 子类自动获得：
+  - 节点管理（`impl()`, `node_impl_`）
+  - 连接语义（`operator<<=`）
+  - 序列化/反序列化（`to_bits()` / `from_bits()`）
+  - 字段同步
+  - 方向控制（`as_master()` / `as_slave()`）
+
+### 1.10 架构原则（统一主节点模式）
+- Bundle作为一个整体使用单一主节点（`node_impl_`）表示，与其他硬件类型保持一致抽象模型
+- 通过`sync_members_from_node()`方法将主节点状态同步到各字段成员，确保字段可独立访问且值一致
+- 支持完整的位打包/解包机制（`to_bits`/`from_bits`），实现字段与整体间的序列化转换
+
+### 1.11 构造与生命周期管理
+- **默认构造函数**: 不创建节点（`node_impl_ = nullptr`），用于声明未初始化对象
+- **带参数构造函数**: 仅当提供字面量值时才创建对应字面量节点
+- **赋值操作符**: 当目标`node_impl_`为`nullptr`时复制源`impl()`指针，建立共享关系
+- 禁止对已绑定节点的对象重新绑定，确保连接稳定性
+
+### 1.12 最佳实践
+- 使用C++17折叠表达式配合`std::index_sequence`安全展开元组字段
+- 在连接前确保源和目标对象有效性及方向匹配
+- 对复杂嵌套结构，优先分解为独立连接函数
+- 保持与`ch_uint`等基础类型`operator<<=`语义的一致性
+
+## 2. 核心设计约束
+
+### 2.1 编译期与运行时分离
+- **禁止将运行时值用于需要编译期常量的上下文**（如`bit_select`索引）
+- 动态位移使用`shl<N>/shr<N>`函数而非`<<`/`>>`
+- 使用`if constexpr`结合模板递归或`std::index_sequence`实现编译期循环展开
+
+### 2.2 条件选择
+- **禁止使用命令式if-else/switch-case**，必须使用`select(condition, true_value, false_value)`
+- 复杂控制流通过`switch_case`等函数式接口实现
+
+### 2.3 对象不可变性
+- `ch_uint`等基本类型为不可变对象，状态保持使用显式`ch_reg`
+
+## 3. 参数传递与生命周期
+
+### 3.1 参数传递规则
+- 禁止对按值传递的bundle执行`operator<<=`
+- 物理连接必须通过引用或指针传递对象
+- 函数应接受非const引用（`T&`）或指针以修改连接关系
+- 推荐使用`std::array<T, N>&`传递bundle数组
+
+### 3.2 寄存器状态访问规范
+1. 当前值必须通过模拟器内部状态获取，不能通过`.value()`或`.out`访问
+2. 设置下一周期值使用`reg->next = value`
+3. 值更新发生在模拟器tick过程中
+4. 禁止使用不存在成员或直接类型转换访问当前值
+
+## 4. 类型规范
+
+### 4.1 ch_bool 类型规范
+- 声明布尔类型必须使用`ch_bool`而非`bool`
+- 创建布尔寄存器使用`ch_reg<ch_bool>`
+- 使用`1_b`表示真，`0_b`表示假
+- 禁止混用`bool`与`ch_bool`，防止重载歧义
+
+### 4.2 三元运算符类型统一
+- 禁止分支返回不同位宽的`ch_uint<N>`类型
+- 使用`std::common_type_t<T1, T2>`确定统一返回类型并显式转换
+- 封装类型统一逻辑于模板内部，对用户透明
+
+## 5. 单元测试与验证要求
+
+### 5.1 测试覆盖
+- 所有公共函数必须有对应单元测试，模板函数需完整覆盖
+- `operator<<=` 测试场景包括：
+  1. 基础连接：验证`ch_uint`、`ch_reg`、IO类型间直接连接
+  2. 复杂结构：嵌套、链式连接
+  3. 操作符协同：与位选择、范围选择兼容性
+  4. 仿真验证：通过Simulator确认信号传播行为
+- 测试约束：
+  - 禁止引用未定义模块
+  - 在独立组件上下文中执行
+  - 不破坏原有驱动关系
+  - 保持与现有构建语义一致
+  - 注意bundle生命周期，避免临时对象导致连接失效
+
+### 5.2 测试环境初始化
+1. **Context管理**：
+   - 每个测试用例必须创建独立的`context`实例
+   - 使用`ctx_swap`工具类进行上下文切换和管理
+   - `Simulator`构造函数必须传入有效的`context`指针
+2. **头文件包含**：
+   - 必须包含`core/context.h`以获取上下文管理功能
+   - 必须包含`simulator.h`以使用仿真器功能
+3. **仿真执行API**
+   - 驱动仿真：使用`sim.tick()`方法推进一个时钟周期
+   - 值获取：使用`sim.get_value(signal)`方法获取信号当前值
+   - 禁止使用已废弃或不存在的`watch()`和`run()`方法
+4. **测试设计最佳实践**
+   - 参照`test_selector_arbiter.cpp`等成熟测试文件的设计模式
+   - 保持测试结构一致性，便于维护和理解
+   - 在断言前输出调试信息，使用二进制格式显示硬件信号值
+5. **测试断言前输入输出打印规范**
+   - 在单元测试中执行 `REQUIRE` 或类似断言之前，应先通过 `sim.get_value()` 等方法将被验证函数/模块的所有输入和输出值读取到本地变量中
+   - 随后统一使用 `std::cout` 等输出机制打印这些本地变量的值
+   - 打印时应使用二进制格式（带`0b`前缀）显示硬件信号，使用辅助函数（如`to_binary_string`）转换为指定宽度的二进制字符串
+   - 打印内容应包含：request、last_grant、grant等关键信号及其当前周期标识
+   - 目的：提高调试效率，确保断言与打印值一致，增强位级信号可观测性
+   - 适用场景：所有涉及硬件行为验证的单元测试，特别是状态机、选择器、仲裁器等复杂逻辑以及时序逻辑和内部寄存器的验证
+
+## 6. 代码风格与规范
+
+### 6.1 整型类型安全规范
+- API要求`uint32_t`时禁止传递`int`，索引必须使用无符号类型
+- 显式转换使用`static_cast<uint32_t>`，常量使用`0u`
+- 循环变量声明为`uint32_t`，模板参数约束使用`std::unsigned_integral`
+
+### 6.2 模块连接与测试覆盖
+- 禁止循环连接，必须形成有向无环图(DAG)
+- 必须覆盖顶层-子模块、子模块间、多级级联、混合IO方向连接的测试
+- 反馈逻辑必须通过`ch_reg`显式插入打破组合环路
+
+### 6.3 双端口SRAM时序
+- 写操作在时钟上升沿生效
+- 读操作获取写入前的数据值
+- 同周期写入数据不可见，需经一个完整周期后才可读取
+
+## 7. 节点管理要求
+
+### 7.1 节点初始化
+- 所有参与连接的信号对象必须具有有效节点(`node_impl_ != nullptr`)
+- 禁止使用默认构造函数创建用于连接的对象
+- 应通过带值构造函数初始化，确保节点正确建立
+
+### 7.2 API命名一致性
+- 重置检查方法命名为`has_default_reset()`和`get_default_reset()`
+- 节点使用者查询使用`get_users()`返回容器
+- 位宽查询使用`bitwidth()`，禁用`size()`
+- 零值重置使用`reset()`，禁用`fill_with(value)`
+
+## 8. 位操作规范
+
+### 8.1 bit_select使用规范
+- 统一使用函数参数形式`bit_select(value, index)`，禁止模板语法`bit_select<Index>(value)`
+- 索引应为编译期常量，范围0 ≤ index < N
+
+## 9. 字面量与类型转换
+
+### 9.1 字面量创建
+- 使用`make_literal(value, width)`创建运行时字面量
+- 进制后缀统一为`_b`,`_d`,`_h`,`_o`小写形式
+- `ch_bool`转`ch_uint<N>`使用`ch_bool ? 1_d : 0_d`
+
+## 10. 框架缺陷环境下的Bundle实现替代方案
+
+当CppHDL框架存在`bundle_base`初始化缺陷导致段错误时，可采用以下替代实现方案：
+1. **避免直接继承**：暂时移除`bundle_base<Derived>`继承以规避初始化问题
+2. **保留元数据**：继续使用`CH_BUNDLE_FIELDS_T`宏定义字段元数据
+3. **手动补全接口**：显式实现必要的成员方法：
+   - `as_master()` / `as_slave()` 方向控制
+   - `width()` 位宽查询
+   - 字段同步相关接口
+4. **连接语义保持**：确保仍能使用`operator<<=`进行硬件连接
+5. **测试验证**：通过基础连接和序列化测试验证功能完整性
+此方案可在框架修复前临时使用，既能避开已知缺陷，又能保持Bundle核心功能的可用性。
+
+## 11. 模板Bundle的特殊处理
+
+### 11.1 模板Bundle定义
+- 对于模板Bundle，必须使用`CH_BUNDLE_FIELDS_T(...)`宏而不是`CH_BUNDLE_FIELDS(Self, ...)`宏
+- 模板Bundle示例：
+  ```cpp
+  template<typename T>
+  struct MyBundle : public bundle_base<MyBundle<T>> {
+      using Self = MyBundle<T>;
+      
+      T data;
+      ch_bool valid;
+      ch_bool ready;
+  
+      MyBundle() = default;
+      explicit MyBundle(const std::string& prefix) {
+          this->set_name_prefix(prefix);
+      }
+  
+      CH_BUNDLE_FIELDS_T(data, valid, ready)
+  
+      void as_master() override {
+          this->make_output(data, valid);
+          this->make_input(ready);
+      }
+  
+      void as_slave() override {
+          this->make_input(data, valid);
+          this->make_output(ready);
+      }
+  };
+  ```
+
+注意：只有模板类才使用`CH_BUNDLE_FIELDS_T`，非模板类仍应使用`CH_BUNDLE_FIELDS(Self, ...)`。
 
 ## 通用编码规范
 
@@ -60,13 +329,13 @@ reg->next = select(rst, 0_b, signal);
 **错误示例**：
 ```
 // 不要使用C++内置的true/false
-ch_bool result = select(condition, true, false);
+ch_bool result = select(condition, true, false); // 错误：应使用1_b和0_b
 
 // 不要直接使用true/false初始化
-ch_reg<ch_bool> reg(false, "name");
+ch_reg<ch_bool> reg(false, "name"); // 错误：应使用0_b
 
 // 避免混用类型
-reg->next = select(rst, false, signal);
+reg->next = select(rst, false, signal); // 错误：应使用0_b
 ```
 
 ### 4. 循环变量规范
@@ -195,7 +464,7 @@ signal1 <<= signal2;  // 将signal2连接到signal1
 
 ### 1. 断言和检查
 - 使用 `CHREQUIRE` 进行前置条件检查
-- 使用 `CHASSERT` 进行运行时断言
+- 使用 `CHCHECK` 进行条件检查
 - 提供有意义的错误消息
 
 ### 2. 调试输出
@@ -326,7 +595,7 @@ auto result = select(condition, value_a, value_b);
 **错误示例**：
 ```
 // 不要使用ch::mux
-auto result = ch::mux(condition, value_a, value_b);
+auto result = ch::mux(condition, value_a, value_b); // 错误：应使用select函数
 ```
 
 ### 6. 寄存器状态访问规范
@@ -346,10 +615,10 @@ counter->next = new_value;
 **错误示例**：
 ```
 // 不要使用不存在的.out成员
-ch_uint<4> current_value = counter.out;
+ch_uint<4> current_value = counter.out; // 错误：应直接使用counter
 
 // 不要直接赋值给寄存器对象
-counter = new_value;  // 错误
+counter = new_value;  // 错误：应使用counter->next
 ```
 
 ### 7. ch_bool类型使用规范
@@ -369,10 +638,10 @@ flag->next = select(condition, 1_b, 0_b);
 **错误示例**：
 ```
 // 不要使用C++内置bool类型
-ch_reg<bool> flag(false, "flag_reg");  // 错误
+ch_reg<bool> flag(false, "flag_reg");  // 错误：应使用ch_bool和0_b
 
 // 不要使用C++内置true/false
-flag->next = select(condition, true, false);  // 错误
+flag->next = select(condition, true, false);  // 错误：应使用1_b和0_b
 ```
 
 ## Bundle 字段方向控制规范
