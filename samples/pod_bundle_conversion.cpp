@@ -70,20 +70,16 @@ struct large_data_bundle : public bundle_base<large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS_T(address, data, extra, flag1, flag2, ready)
+    CH_BUNDLE_FIELDS_T(address, data, extra, flag1, flag2)
 
-    void as_master() override {
-        // 分多次调用make_output，因为最多支持4个参数
+    void as_master_direction() {
         this->make_output(address, data, extra, flag1);
         this->make_output(flag2);
-        this->make_input(ready);
     }
 
-    void as_slave() override {
-        // 分多次调用make_input
+    void as_slave_direction() {
         this->make_input(address, data, extra, flag1);
         this->make_input(flag2);
-        this->make_output(ready);
     }
 };
 

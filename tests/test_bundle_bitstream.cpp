@@ -28,9 +28,9 @@ struct TestSimpleBundle : public bundle_base<TestSimpleBundle<T>> {
 
     CH_BUNDLE_FIELDS_T(data, flag1, flag2)
 
-    void as_master() override { this->make_output(data, flag1, flag2); }
+    void as_master_direction() { this->make_output(data, flag1, flag2); }
 
-    void as_slave() override { this->make_input(data, flag1, flag2); }
+    void as_slave_direction() { this->make_input(data, flag1, flag2); }
 };
 
 TEST_CASE("BundleBitstream - BitSegmentConcatenation",

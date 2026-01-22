@@ -20,20 +20,14 @@ struct CustomNested : public bundle_base<CustomNested<T>> {
     Stream<T> data_stream;
     ch_bool interrupt;
 
-    CustomNested() = default;
-
-    CustomNested(const std::string &prefix) { this->set_name_prefix(prefix); }
-
     CH_BUNDLE_FIELDS_T(data_stream, interrupt)
 
-    void as_master() override {
-        this->role_ = bundle_role::master;
+    void as_master_direction() {
         this->make_output(interrupt);
         this->data_stream.as_master();
     }
 
-    void as_slave() override {
-        this->role_ = bundle_role::slave;
+    void as_slave_direction() {
         this->make_input(interrupt);
         this->data_stream.as_slave();
     }

@@ -18,17 +18,25 @@ using namespace ch::core;
 
 // 测试用的简单Bundle
 struct test_simple_bundle : public bundle_base<test_simple_bundle> {
+    using Self = test_simple_bundle;
     ch_uint<8> data;
     ch_bool flag;
     ch_uint<4> status;
 
     test_simple_bundle() = default;
+    explicit test_simple_bundle(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
-    CH_BUNDLE_FIELDS(test_simple_bundle, data, flag, status)
+    CH_BUNDLE_FIELDS(Self, data, flag, status)
 
-    void as_master() override { this->make_output(data, flag, status); }
+    void as_master_direction() {
+        this->make_output(data, flag, status);
+    }
 
-    void as_slave() override { this->make_input(data, flag, status); }
+    void as_slave_direction() {
+        this->make_input(data, flag, status);
+    }
 };
 
 TEST_CASE("Phase1 - BundleWidthCalculation", "[phase1][width]") {

@@ -25,9 +25,9 @@ struct test_simple_bundle : public bundle_base<test_simple_bundle> {
 
     CH_BUNDLE_FIELDS(test_simple_bundle, data, flag)
 
-    void as_master() override { this->make_output(data, flag); }
+    void as_master_direction() { this->make_output(data, flag); }
 
-    void as_slave() override { this->make_input(data, flag); }
+    void as_slave_direction() { this->make_input(data, flag); }
 };
 
 // 新增序列化API测试
@@ -76,9 +76,9 @@ TEST_CASE("BundleSerialization - NestedBundleWidth",
 
         CH_BUNDLE_FIELDS(nested_test, inner, extra)
 
-        void as_master() override { this->make_output(inner, extra); }
+        void as_master_direction() { this->make_output(inner, extra); }
 
-        void as_slave() override { this->make_input(inner, extra); }
+        void as_slave_direction() { this->make_input(inner, extra); }
     };
 
     nested_test nested;

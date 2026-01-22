@@ -26,26 +26,63 @@ template <typename T> struct TestBundle : public bundle_base<TestBundle<T>> {
 
     CH_BUNDLE_FIELDS_T(data, enable, ack)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(data, enable);
         this->make_input(ack);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(data, enable);
         this->make_output(ack);
     }
 };
 
-TEST_CASE("BundleAdvanced - StreamBundleCreation", "[bundle][stream]") {
+TEST_CASE("BundleAdvanced - BundleFieldsAndWidth", "[bundle][fields][width]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    Stream<ch_uint<32>> stream("test_stream");
+    TestBundle<ch_uint<8>> bundle;
 
-    REQUIRE(stream.is_valid());
-    // 验证字段创建
-    REQUIRE(true); // 如果能编译就说明成功
+    // 验证Bundle字段数量
+    auto fields = bundle.__bundle_fields();
+    REQUIRE(std::tuple_size_v<decltype(fields)> == 3);
+
+    // 验证Bundle总宽度
+    REQUIRE(get_bundle_width<TestBundle<ch_uint<8>>>() == 10); // 8 + 1 + 1
+
+    // 验证Bundle是否有效
+    REQUIRE(bundle.is_valid());
+}
+
+TEST_CASE("BundleAdvanced - BundleNaming", "[bundle][naming]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    TestBundle<ch_uint<8>> bundle("my_test");
+
+    // 验证字段名称前缀设置
+    auto fields = bundle.__bundle_fields();
+    REQUIRE(std::tuple_size_v<decltype(fields)> == 3);
+
+    // 验证Bundle是否有效
+    REQUIRE(bundle.is_valid());
+}
+
+TEST_CASE("BundleAdvanced - BundleDirection", "[bundle][direction]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    TestBundle<ch_uint<8>> bundle;
+
+    // 测试方向设置
+    bundle.as_master_direction();
+    REQUIRE(bundle.get_role() == bundle_role::master);
+
+    bundle.as_slave_direction();
+    REQUIRE(bundle.get_role() == bundle_role::slave);
+
+    // 验证Bundle是否有效
+    REQUIRE(bundle.is_valid());
 }
 
 TEST_CASE("BundleAdvanced - ConnectFunction", "[bundle][connect]") {
@@ -81,13 +118,4 @@ TEST_CASE("BundleAdvanced - FlipWithAutoDirection", "[bundle][flip]") {
 
     REQUIRE(slave_bundle != nullptr);
     REQUIRE(slave_bundle->is_valid());
-}
-
-TEST_CASE("BundleAdvanced - NamingIntegration", "[bundle][naming]") {
-    auto ctx = std::make_unique<ch::core::context>("test_ctx");
-    ch::core::ctx_swap ctx_guard(ctx.get());
-
-    Stream<ch_uint<16>> stream("io.data");
-    // 测试命名功能集成
-    REQUIRE(true); // 如果能编译就说明集成成功
 }

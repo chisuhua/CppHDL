@@ -1,6 +1,7 @@
 // samples/advanced_bundle_demo.cpp
 #include "bundle/common_bundles.h"
 #include "bundle/stream_bundle.h"
+#include "ch.hpp"
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
@@ -10,98 +11,88 @@
 #include "core/bundle/bundle_utils.h"
 #include "core/context.h"
 #include "core/uint.h"
+#include "simulator.h"
 #include <iostream>
 #include <memory>
 
 using namespace ch;
 using namespace ch::core;
 
-int main() {
-    std::cout << "=== Advanced Bundle Features Demo ===" << std::endl;
+// 自定义Bundle示例
+template <typename T>
+struct AdvancedBundle : public bundle_base<AdvancedBundle<T>> {
+    using Self = AdvancedBundle<T>;
+    T data;
+    ch_bool enable;
+    ch_bool ack;
+    ch_bool extra_flag;
 
-    // 创建测试上下文
-    auto ctx = std::make_unique<ch::core::context>("demo_ctx");
-    ch::core::ctx_swap ctx_guard(ctx.get());
+    CH_BUNDLE_FIELDS_T(data, enable, ack, extra_flag)
 
-    try {
-        // 1. 常用Bundle演示
-        std::cout << "1. Creating Common Bundles..." << std::endl;
-        fifo_bundle<ch_uint<32>> fifo("module.fifo");
-        interrupt_bundle irq("module.irq");
-        config_bundle<8, 32> config("module.config");
-
-        std::cout << "✅ FIFO bundle created with "
-                  << bundle_field_count_v<fifo_bundle<ch_uint<32>>> << " fields"
-                  << std::endl;
-        std::cout << "✅ Interrupt bundle created with "
-                  << bundle_field_count_v<interrupt_bundle> << " fields"
-                  << std::endl;
-        std::cout << "✅ Config bundle created with "
-                  << bundle_field_count_v<config_bundle<8, 32>> << " fields"
-                  << std::endl;
-
-        // 2. 协议验证演示
-        std::cout << "2. Protocol Validation..." << std::endl;
-        Stream<ch_uint<16>> data_stream("data.stream");
-
-        std::cout << "   Stream bundle is HandShake protocol: "
-                  << (is_handshake_protocol_v<Stream<ch_uint<16>>> ? "✅"
-                                                                   : "❌")
-                  << std::endl;
-        std::cout << "   FIFO bundle is HandShake protocol: "
-                  << (is_handshake_protocol_v<fifo_bundle<ch_uint<32>>> ? "❌"
-                                                                        : "✅")
-                  << std::endl;
-
-        // 3. 字段检查演示
-        std::cout << "3. Field Name Checking..." << std::endl;
-        std::cout << "   Stream has 'payload' field: "
-                  << (has_field_named_v<Stream<ch_uint<16>>,
-                                        structural_string{"payload"}>
-                          ? "✅"
-                          : "❌")
-                  << std::endl;
-        std::cout << "   Stream has 'nonexistent' field: "
-                  << (has_field_named_v<Stream<ch_uint<16>>,
-                                        structural_string{"nonexistent"}>
-                          ? "❌"
-                          : "✅")
-                  << std::endl;
-
-        // 4. Bundle操作演示
-        std::cout << "4. Bundle Operations..." << std::endl;
-        Stream<ch_uint<8>> input_stream;
-        Stream<ch_uint<8>> output_stream;
-
-        // auto combined = ch::core::bundle_cat(input_stream, output_stream);
-        std::cout << "✅ Bundle concatenation works" << std::endl;
-
-        // 5. 编译期协议验证
-        std::cout << "5. Compile-time Protocol Validation..." << std::endl;
-        validate_handshake_protocol<decltype(data_stream)>();
-        std::cout << "✅ Compile-time protocol validation works" << std::endl;
-
-        // 6. 类型特征演示
-        std::cout << "6. Type Traits..." << std::endl;
-        std::cout << "   Stream bundle is bundle type: "
-                  << (is_bundle_v<Stream<ch_uint<16>>> ? "✅" : "❌")
-                  << std::endl;
-        std::cout << "   ch_uint is bundle type: "
-                  << (is_bundle_v<ch_uint<16>> ? "❌" : "✅") << std::endl;
-
-        // 7. 集成测试
-        std::cout << "7. Integration Testing..." << std::endl;
-        fifo_bundle<ch_uint<64>> big_fifo("system.data_fifo");
-        CHREQUIRE(big_fifo.is_valid(), "big_fifo is not valid");
-        std::cout << "✅ Large bundle integration works" << std::endl;
-
-        std::cout << "\n🎉 All Advanced Bundle Features work correctly!"
-                  << std::endl;
-
-    } catch (const std::exception &e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
-        return 1;
+    void as_master_direction() {
+        this->make_output(data, enable, extra_flag);
+        this->make_input(ack);
     }
+
+    void as_slave_direction() {
+        this->make_input(data, enable, extra_flag);
+        this->make_output(ack);
+    }
+};
+
+int main() {
+    std::cout << "CppHDL Bundle Advanced Features Demo" << std::endl;
+    std::cout << "===================================" << std::endl;
+
+    // 创建上下文
+    auto ctx = std::make_unique<context>("bundle_advanced_features");
+    ctx_swap ctx_swapper(ctx.get());
+
+    std::cout << "Creating bundles and testing master/slave roles..."
+              << std::endl;
+
+    // 创建Bundle实例
+    AdvancedBundle<ch_uint<16>> bundle_master;
+    AdvancedBundle<ch_uint<16>> bundle_slave;
+
+    // 设置角色
+    bundle_master.as_master();
+    bundle_slave.as_slave();
+
+    // 设置名称前缀
+    bundle_master.set_name_prefix("master");
+    bundle_slave.set_name_prefix("slave");
+
+    std::cout << "Bundle master role: "
+              << static_cast<int>(bundle_master.get_role()) << std::endl;
+    std::cout << "Bundle slave role: "
+              << static_cast<int>(bundle_slave.get_role()) << std::endl;
+
+    std::cout << "Bundle master width: " << bundle_master.width() << std::endl;
+    std::cout << "Bundle slave width: " << bundle_slave.width() << std::endl;
+
+    // 测试FIFO Bundle
+    ch::fifo_bundle<ch_uint<8>> fifo_bundle;
+    fifo_bundle.as_master();
+
+    std::cout << "FIFO bundle role: "
+              << static_cast<int>(fifo_bundle.get_role()) << std::endl;
+    std::cout << "FIFO bundle width: " << fifo_bundle.width() << std::endl;
+
+    // 测试中断Bundle
+    ch::interrupt_bundle interrupt_bundle;
+    interrupt_bundle.as_master();
+
+    std::cout << "Interrupt bundle role: "
+              << static_cast<int>(interrupt_bundle.get_role()) << std::endl;
+    std::cout << "Interrupt bundle width: " << interrupt_bundle.width()
+              << std::endl;
+
+    // 创建仿真器
+    ch::Simulator sim(ctx.get());
+
+    std::cout << "Bundle Advanced Features Demo completed successfully!"
+              << std::endl;
 
     return 0;
 }

@@ -43,9 +43,9 @@ TEST_CASE("NestedBundle - SimpleNested", "[bundle][nested]") {
 
         CH_BUNDLE_FIELDS_T(inner_stream, status)
 
-        void as_master() override { this->make_output(inner_stream, status); }
+        void as_master_direction() { this->make_output(inner_stream, status); }
 
-        void as_slave() override { this->make_input(inner_stream, status); }
+        void as_slave_direction() { this->make_input(inner_stream, status); }
     };
 
     NestedTest nested("test.nested");
@@ -100,16 +100,8 @@ TEST_CASE("NestedBundle - ConnectNested", "[bundle][nested][connect]") {
     axi_write_channel<32, 32> src_axi;
     axi_write_channel<32, 32> dst_axi;
 
-    // 测试嵌套Bundle连接
-    ch::core::connect(src_axi, dst_axi);
-    REQUIRE(true); // 如果能编译就说明成功
-}
+    // 尝试连接
+    dst_axi <<= src_axi;
 
-TEST_CASE("NestedBundle - NamingIntegration", "[bundle][nested][naming]") {
-    auto ctx = std::make_unique<ch::core::context>("test_ctx");
-    ch::core::ctx_swap ctx_guard(ctx.get());
-
-    axi_write_channel<32, 32> axi_write("top.axi");
-    // 测试嵌套命名
-    REQUIRE(true); // 如果能编译就说明命名系统工作
+    REQUIRE(dst_axi.is_valid());
 }

@@ -30,7 +30,6 @@ public:
     }
 
     // (2) 拷贝构造：共享节点（硬件连接语义）
-
     bundle_base(const bundle_base &other)
         : logic_buffer<Derived>(other.impl()) {
         // 不再自动同步成员
@@ -40,17 +39,6 @@ public:
     bundle_base(lnodeimpl *node) : logic_buffer<Derived>(node) {
         // 不再自动同步成员
     }
-
-    // // (4) 从 ch_uint<W> 反序列化（复用其节点）
-    // // 接受编译时字面量类型，如 0_d, 0x11_h 等
-    // template <uint64_t V, uint32_t W>
-    // bundle_base(
-    //     ch_uint<W> bits,
-    //     const std::string &name = "bundle_lit",
-    //     const std::source_location &sloc =
-    //     std::source_location::current()) { this->node_impl_ =
-    //     bits.impl(); // 直接复用节点！
-    // }
 
     // (5) 从字面量类型参数构造：创建字面量节点
     // 接受编译时字面量类型，如 0_d, 0x11_h 等
@@ -81,9 +69,14 @@ public:
 
     virtual ~bundle_base() = default;
 
-    // 虚函数，子类需要实现
-    virtual void as_master() = 0;
-    virtual void as_slave() = 0;
+    void as_master() {
+        set_role(bundle_role::master);
+        static_cast<Derived *>(this)->as_master_direction();
+    };
+    void as_slave() {
+        set_role(bundle_role::slave);
+        static_cast<Derived *>(this)->as_slave_direction();
+    };
 
     // 连接操作符 - 保持bundle整体连接语义
     Derived &operator<<=(const Derived &src) {
@@ -103,7 +96,6 @@ public:
             CHERROR("[bundle::operator<<=] Error: node_impl_ or "
                     "src_lnode is null for !");
         }
-        // 移除sync_members_from_node()调用以避免段错误
         return static_cast<Derived &>(*this);
     }
 
@@ -111,7 +103,6 @@ public:
     Derived &operator=(const Derived &other) {
         if (this != &other) {
             this->node_impl_ = other.impl();
-            // 移除sync_members_from_node()调用以避免段错误
         }
         return static_cast<Derived &>(*this);
     }
@@ -161,34 +152,34 @@ public:
 
 protected:
     // 子类可调用：从节点同步成员字段
-    void sync_members_from_node() {
-        if (!this->node_impl_)
-            return;
+    // void sync_members_from_node() {
+    //     if (!this->node_impl_)
+    //         return;
 
-        // 检查当前bundle是否已经初始化，避免递归调用
-        // 我们可以通过检查impl()是否为有效的节点来判断
-        if (this->impl() == nullptr)
-            return;
+    //     // 检查当前bundle是否已经初始化，避免递归调用
+    //     // 我们可以通过检查impl()是否为有效的节点来判断
+    //     if (this->impl() == nullptr)
+    //         return;
 
-        constexpr unsigned W = get_bundle_width<Derived>();
-        ch_uint<W> all_bits(this->impl());
+    //     constexpr unsigned W = get_bundle_width<Derived>();
+    //     ch_uint<W> all_bits(this->impl());
 
-        // 检查节点是否有效，避免段错误
-        if (all_bits.impl() == nullptr)
-            return;
+    //     // 检查节点是否有效，避免段错误
+    //     if (all_bits.impl() == nullptr)
+    //         return;
 
-        // 使用 bundle_serialization.h 中的 deserialize 函数
-        Derived temp = deserialize<Derived>(all_bits);
+    //     // 使用 bundle_serialization.h 中的 deserialize 函数
+    //     Derived temp = deserialize<Derived>(all_bits);
 
-        // 将 temp 的字段赋值给 this 的成员
-        const auto fields = Derived::__bundle_fields();
-        std::apply(
-            [&](auto &&...f) {
-                // 确保在赋值前 temp 对象已正确构造
-                ((derived()->*(f.ptr) = temp.*(f.ptr)), ...);
-            },
-            fields);
-    }
+    //     // 将 temp 的字段赋值给 this 的成员
+    //     const auto fields = Derived::__bundle_fields();
+    //     std::apply(
+    //         [&](auto &&...f) {
+    //             // 确保在赋值前 temp 对象已正确构造
+    //             ((derived()->*(f.ptr) = temp.*(f.ptr)), ...);
+    //         },
+    //         fields);
+    // }
 
     // 获取派生类指针的辅助函数
     constexpr Derived *derived() { return static_cast<Derived *>(this); }
@@ -235,59 +226,44 @@ protected:
         }
     }
 
-    // 字段方向设置 - 支持1-4个字段
-    template <typename Field1> void make_output(Field1 &field1) {
-        set_field_direction(field1, output_direction{});
+    // 字段方向设置 - 支持任意数量字段 (C++20)
+    template <typename... Fields>
+    void make_output(Fields&... fields) {
+        (set_field_direction(fields, output_direction{}), ...);
     }
 
-    template <typename Field1, typename Field2>
-    void make_output(Field1 &field1, Field2 &field2) {
-        set_field_direction(field1, output_direction{});
-        set_field_direction(field2, output_direction{});
+    template <typename... Fields>
+    void make_input(Fields&... fields) {
+        (set_field_direction(fields, input_direction{}), ...);
     }
 
-    template <typename Field1, typename Field2, typename Field3>
-    void make_output(Field1 &field1, Field2 &field2, Field3 &field3) {
-        set_field_direction(field1, output_direction{});
-        set_field_direction(field2, output_direction{});
-        set_field_direction(field3, output_direction{});
+protected:
+    void as_master_direction() {
+        static_assert(sizeof(Derived) == 0,
+                      "Subclass must implement as_master_direction()");
     }
 
-    template <typename Field1, typename Field2, typename Field3,
-              typename Field4>
-    void make_output(Field1 &field1, Field2 &field2, Field3 &field3,
-                     Field4 &field4) {
-        set_field_direction(field1, output_direction{});
-        set_field_direction(field2, output_direction{});
-        set_field_direction(field3, output_direction{});
-        set_field_direction(field4, output_direction{});
+    void as_slave_direction() {
+        static_assert(sizeof(Derived) == 0,
+                      "Subclass must implement do_slave_direction()");
     }
 
-    template <typename Field1> void make_input(Field1 &field1) {
-        set_field_direction(field1, input_direction{});
-    }
+private:
+    void set_role(bundle_role new_role) {
+        CHCHECK(role_ == bundle_role::unknown, "Bundle role already set");
+        role_ = new_role;
 
-    template <typename Field1, typename Field2>
-    void make_input(Field1 &field1, Field2 &field2) {
-        set_field_direction(field1, input_direction{});
-        set_field_direction(field2, input_direction{});
-    }
+        // 创建总线节点（若尚未存在）
+        if (!this->node_impl_) {
+            unsigned W = get_bundle_width<Derived>();
+            const std::string &name = "bundle_lit";
+            auto lit = make_literal(0, W);
+            this->node_impl_ =
+                node_builder::instance().build_literal(lit, name);
+        }
 
-    template <typename Field1, typename Field2, typename Field3>
-    void make_input(Field1 &field1, Field2 &field2, Field3 &field3) {
-        set_field_direction(field1, input_direction{});
-        set_field_direction(field2, input_direction{});
-        set_field_direction(field3, input_direction{});
-    }
-
-    template <typename Field1, typename Field2, typename Field3,
-              typename Field4>
-    void make_input(Field1 &field1, Field2 &field2, Field3 &field3,
-                    Field4 &field4) {
-        set_field_direction(field1, input_direction{});
-        set_field_direction(field2, input_direction{});
-        set_field_direction(field3, input_direction{});
-        set_field_direction(field4, input_direction{});
+        // 将字段初始化为总线的位切片
+        // create_field_slices_from_node();
     }
 };
 

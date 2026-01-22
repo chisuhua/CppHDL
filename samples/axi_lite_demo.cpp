@@ -119,11 +119,34 @@ int main() {
 
         // 5. 方向控制演示
         std::cout << "5. Direction Control..." << std::endl;
-        axi_lite_bundle<32, 32> master_axi;
-        axi_lite_bundle<32, 32> slave_axi;
+        axi_lite_aw_channel<32> aw_channel;
+        axi_lite_w_channel<32> w_channel;
+        axi_lite_b_channel b_channel;
+        axi_lite_ar_channel<32> ar_channel;
+        axi_lite_r_channel<32> r_channel;
 
-        master_axi.as_master();
-        slave_axi.as_slave();
+        aw_channel.as_master();
+        w_channel.as_master();
+        b_channel.as_slave();
+        ar_channel.as_master();
+        r_channel.as_slave();
+
+        std::cout << "AW channel role: " << static_cast<int>(aw_channel.get_role()) << std::endl;
+        std::cout << "W channel role: " << static_cast<int>(w_channel.get_role()) << std::endl;
+        std::cout << "B channel role: " << static_cast<int>(b_channel.get_role()) << std::endl;
+        std::cout << "AR channel role: " << static_cast<int>(ar_channel.get_role()) << std::endl;
+        std::cout << "R channel role: " << static_cast<int>(r_channel.get_role()) << std::endl;
+
+        std::cout << "AW channel width: " << aw_channel.width() << std::endl;
+        std::cout << "W channel width: " << w_channel.width() << std::endl;
+        std::cout << "B channel width: " << b_channel.width() << std::endl;
+        std::cout << "AR channel width: " << ar_channel.width() << std::endl;
+        std::cout << "R channel width: " << r_channel.width() << std::endl;
+
+        std::cout << "Master AXI-Lite interface role: " << static_cast<int>(master_axi.get_role()) << std::endl;
+        std::cout << "Slave AXI-Lite interface role: " << static_cast<int>(slave_axi.get_role()) << std::endl;
+        std::cout << "Master AXI-Lite interface width: " << master_axi.width() << std::endl;
+        std::cout << "Slave AXI-Lite interface width: " << slave_axi.width() << std::endl;
         std::cout << "✅ Direction control works" << std::endl;
 
         // 6. Flip功能演示

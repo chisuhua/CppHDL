@@ -16,6 +16,7 @@ using namespace ch::core;
 
 // 自定义测试Bundle - 从bundle_base继承
 struct custom_data_bundle : public bundle_base<custom_data_bundle> {
+    using Self = custom_data_bundle;
     ch_uint<16> address;
     ch_uint<32> data;
     ch_bool write_enable;
@@ -23,15 +24,14 @@ struct custom_data_bundle : public bundle_base<custom_data_bundle> {
 
     custom_data_bundle() = default;
 
-    CH_BUNDLE_FIELDS(custom_data_bundle, address, data, write_enable,
-                     read_enable)
+    CH_BUNDLE_FIELDS_T(address, data, write_enable, read_enable)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(address, data, write_enable);
         this->make_input(read_enable);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(address, data, write_enable);
         this->make_output(read_enable);
     }

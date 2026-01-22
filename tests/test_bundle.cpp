@@ -28,12 +28,12 @@ template <typename T> struct TestBundle : public bundle_base<TestBundle<T>> {
 
     CH_BUNDLE_FIELDS_T(data, enable, ack)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(data, enable);
         this->make_input(ack);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(data, enable);
         this->make_output(ack);
     }
@@ -51,12 +51,12 @@ template <typename T> struct HandShake : public bundle_base<HandShake<T>> {
 
     CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(payload, valid);
         this->make_input(ready);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(payload, valid);
         this->make_output(ready);
     }

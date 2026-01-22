@@ -52,16 +52,16 @@ struct very_large_data_bundle : public bundle_base<very_large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS_T(part1, part2, part3, part4, flag, ready)
+    CH_BUNDLE_FIELDS(Self, part1, part2, part3, part4, flag, ready)
 
-    void as_master() override {
+    void as_master_direction() {
         // 分多次调用make_output，因为最多支持4个参数
         this->make_output(part1, part2, part3, part4);
         this->make_output(flag);
         this->make_input(ready);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         // 分多次调用make_input
         this->make_input(part1, part2, part3, part4);
         this->make_input(flag);
@@ -101,83 +101,43 @@ int main() {
     std::cout << "Deserialized: ";
     deserialized_large.print();
 
-    bool large_match = (large == deserialized_large);
-    std::cout << "Serialization/Deserialization match: "
-              << (large_match ? "✓" : "✗") << std::endl;
-
-    // 测试3: Bundle创建和分析
-    std::cout << "\n=== Test 3: Very Large Bundle Creation and Analysis ==="
+    std::cout << "Equal? " << (large == deserialized_large ? "Yes" : "No")
               << std::endl;
-    auto ctx = std::make_unique<ch::core::context>("demo_ctx");
-    ch::core::ctx_swap ctx_guard(ctx.get());
 
-    very_large_data_bundle large_bundle;
-    std::cout << "VeryLargeDataBundle width: " << large_bundle.width()
-              << " bits" << std::endl;
+    // 测试3: Bundle序列化
+    std::cout << "\n=== Test 3: Bundle Serialization ===" << std::endl;
+    very_large_data_bundle bundle;
+    bundle.part1 = 0x1111111111111111_d;
+    bundle.part2 = 0x22222222_d;
+    bundle.part3 = 0x3333_d;
+    bundle.part4 = 0x44_d;
+    bundle.flag = true;
+    bundle.ready = false;
 
-    // 测试4: 通过序列化和反序列化方式设置大尺寸Bundle值
-    std::cout
-        << "\n=== Test 4: Very Large Bundle Value Setting via Serialization ==="
-        << std::endl;
+    auto bundle_bits = bundle.to_bits();
+    std::cout << "Bundle serialized to bits: 0x" << std::hex
+              << bundle_bits.value() << std::dec << std::endl;
 
-    // 创建一个模块来测试大尺寸Bundle
-    class TestVeryLargeDataModule : public ch::Component {
-    public:
-        very_large_data_bundle io;
-
-        TestVeryLargeDataModule(
-            ch::Component *parent = nullptr,
-            const std::string &name = "test_very_large_module")
-            : ch::Component(parent, name) {
-            io.as_slave();
-        }
-
-        void create_ports() override {}
-
-        void describe() override { io.ready = io.flag; }
-    };
-
-    ch::ch_device<TestVeryLargeDataModule> test_very_large_device;
-    ch::Simulator very_large_sim(test_very_large_device.context());
-
-    // 使用大尺寸POD数据设置Bundle
-    VeryLargeData test_very_large_data{0x123456789ABCDEF0ULL, 0xABCD1234,
-                                       0xEF56, 0x78, true};
-    std::cout << "Setting Very Large Bundle with POD data: ";
-    test_very_large_data.print();
-
-    // 使用高级序列化方法将POD转换为Bundle
-    ch::core::assign_pod_to_bundle_advanced(
-        test_very_large_data, test_very_large_device.instance().io,
-        very_large_sim);
-
-    very_large_sim.tick();
-
-    // 从Bundle提取POD数据
-    VeryLargeData result_very_large_data =
-        ch::core::assign_bundle_to_pod_advanced<very_large_data_bundle,
-                                                VeryLargeData>(
-            test_very_large_device.instance().io, very_large_sim);
-    std::cout << "Result POD data: ";
-    result_very_large_data.print();
-
-    bool full_match = (test_very_large_data == result_very_large_data);
-    std::cout << "Full conversion match: " << (full_match ? "✓" : "✗")
+    // 测试4: Bundle字段数量和宽度
+    std::cout << "\n=== Test 4: Bundle Field Count and Width ===" << std::endl;
+    std::cout << "Field count: " << bundle_field_count_v<very_large_data_bundle>
               << std::endl;
+    std::cout << "Bundle width: " << bundle.width() << " bits" << std::endl;
+
+    // 测试5: Bundle字段访问
+    std::cout << "\n=== Test 5: Bundle Field Access ===" << std::endl;
+    auto fields = bundle.__bundle_fields();
+    std::cout << "Number of fields in tuple: " << std::tuple_size_v<decltype(fields)> << std::endl;
+
+    // 测试6: Bundle方向设置
+    std::cout << "\n=== Test 6: Bundle Direction Setting ===" << std::endl;
+    bundle.as_master();
+    std::cout << "Bundle set as master, role is now: " << static_cast<int>(bundle.get_role()) << std::endl;
+
+    bundle.as_slave();
+    std::cout << "Bundle set as slave, role is now: " << static_cast<int>(bundle.get_role()) << std::endl;
 
     std::cout << "\nDemo completed successfully!" << std::endl;
-    std::cout << "This demonstrates how to handle POD structs of any size with "
-                 "Bundle types using serialization."
-              << std::endl;
-    std::cout << "Key techniques:" << std::endl;
-    std::cout << "1. Use uint64_t arrays to represent large POD data"
-              << std::endl;
-    std::cout
-        << "2. Handle bit field extraction that spans multiple uint64_t values"
-        << std::endl;
-    std::cout << "3. Use serialization/deserialization approach to convert "
-                 "between POD and Bundle"
-              << std::endl;
 
     return 0;
 }

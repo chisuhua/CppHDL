@@ -6,6 +6,7 @@
 #include "core/bundle/bundle_utils.h"
 #include "core/io.h"
 #include "core/uint.h"
+#include "utils/logger.h"
 #include <iostream>
 #include <memory>
 
@@ -25,13 +26,13 @@ template <typename T> struct HandShake : public bundle_base<HandShake<T>> {
 
     CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
-    void as_master() override {
+    void as_master_direction() {
         // Master: 输出payload和valid，输入ready
         this->make_output(payload, valid);
         this->make_input(ready);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         // Slave: 输入payload和valid，输出ready
         this->make_input(payload, valid);
         this->make_output(ready);
@@ -49,35 +50,36 @@ int main() {
     try {
         // 测试1: 基本创建
         HandShake<ch_uint<8>> master_bundle;
-        std::cout << "✅ Master bundle created" << std::endl;
+        HandShake<ch_uint<8>> slave_bundle;
 
-        // 测试2: 元数据
-        auto fields = master_bundle.__bundle_fields();
-        std::cout << "✅ Bundle has "
-                  << std::tuple_size_v<decltype(fields)> << " fields"
+        master_bundle.payload = 0x55_h;
+        master_bundle.valid = true;
+        slave_bundle.ready = true;
+
+        // 设置方向
+        master_bundle.as_master();
+        slave_bundle.as_slave();
+
+        std::cout << "Bundle created successfully!" << std::endl;
+        std::cout << "Master role: " << (int)master_bundle.get_role()
+                  << std::endl;
+        std::cout << "Slave role: " << (int)slave_bundle.get_role()
                   << std::endl;
 
-        // 测试3: flip功能
-        auto slave_bundle = master_bundle.flip();
-        std::cout << "✅ Bundle flipped successfully" << std::endl;
+        // 测试2: 连接
+        slave_bundle <<= master_bundle;
+        std::cout << "Connection established successfully!" << std::endl;
 
-        // 测试4: 连接功能
-        HandShake<ch_uint<8>> src_bundle;
-        HandShake<ch_uint<8>> dst_bundle;
-        ch::core::connect(src_bundle, dst_bundle);
-        std::cout << "✅ Bundle connect successfully" << std::endl;
-
-        // 测试5: Master/Slave工厂函数
-        auto master_view = ch::core::master(HandShake<ch_uint<8>>{});
-        auto slave_view = ch::core::slave(HandShake<ch_uint<8>>{});
-        std::cout << "✅ Master/Slave factory functions work" << std::endl;
-
-        std::cout << "✅ All Bundle tests passed!" << std::endl;
+        // 测试3: 验证连接
+        CHCHECK(master_bundle.get_role() == bundle_role::master, "Error");
+        CHCHECK(slave_bundle.get_role() == bundle_role::slave, "Error");
+        std::cout << "Direction setting verified!" << std::endl;
 
     } catch (const std::exception &e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 
+    std::cout << "All tests passed!" << std::endl;
     return 0;
 }

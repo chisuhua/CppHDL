@@ -24,12 +24,12 @@ template <typename T> struct Flow : public bundle_base<Flow<T>> {
 
     CH_BUNDLE_FIELDS_T(payload, valid)
 
-    void as_master() override {
+    void as_master_direction() {
         // Master: 输出数据和有效信号
         this->make_output(payload, valid);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         // Slave: 接收数据和有效信号
         this->make_input(payload, valid);
     }

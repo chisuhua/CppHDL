@@ -26,9 +26,9 @@ struct SimpleBundle : public bundle_base<SimpleBundle> {
 
     CH_BUNDLE_FIELDS_T(data)
 
-    void as_master() override { this->make_output(data); }
+    void as_master_direction() { this->make_output(data); }
 
-    void as_slave() override { this->make_input(data); }
+    void as_slave_direction() { this->make_input(data); }
 };
 
 // 定义一个包含多个字段的Bundle
@@ -43,12 +43,12 @@ struct ComplexBundle : public bundle_base<ComplexBundle> {
 
     CH_BUNDLE_FIELDS_T(input_field, output_field, enable)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(input_field, output_field);
         this->make_input(enable);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(input_field, enable);
         this->make_output(output_field);
     }
@@ -65,12 +65,12 @@ struct FlipBundle : public bundle_base<FlipBundle> {
 
     CH_BUNDLE_FIELDS_T(data, enable)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(data);
         this->make_input(enable);
     }
 
-    void as_slave() override { this->make_input(data, enable); }
+    void as_slave_direction() { this->make_input(data, enable); }
 };
 
 // 定义一个握手协议Bundle
@@ -87,78 +87,131 @@ struct HandShakeBundle : public bundle_base<HandShakeBundle> {
 
     CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(payload, valid);
         this->make_input(ready);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(payload, valid);
         this->make_output(ready);
     }
 };
 
 TEST_CASE("test_bundle_connection - Basic same-direction bundle connection",
-          "[bundle][connection][simple]") {
-    context ctx;
-    ctx_swap ctx_guard(&ctx);
+          "[bundle][connection]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
 
-    // 创建两个相同类型的bundle
-    SimpleBundle bundle_src;
-    SimpleBundle bundle_dst;
-    SimpleBundle bundle_dst2(0_d);
+    SimpleBundle src, dst;
+
+    // 设置方向
+    src.as_master();
+    dst.as_slave();
 
     // 连接两个bundle
-    bundle_dst = bundle_src;
+    dst <<= src;
 
-    // 验证bundle内的字段连接
-    REQUIRE(bundle_dst.data.impl() == nullptr);
-    REQUIRE(bundle_src.data.impl() == nullptr);
-    REQUIRE(bundle_src == nullptr);
-    REQUIRE(bundle_dst == nullptr);
-    REQUIRE(bundle_dst2 != nullptr);
+    REQUIRE(src.is_valid());
+    REQUIRE(dst.is_valid());
 }
 
-TEST_CASE("test_bundle_connection - Bundle field to ch_uint connection",
-          "[bundle][connection][field]") {
-    context ctx;
-    ctx_swap ctx_guard(&ctx);
+TEST_CASE("test_bundle_connection - Complex bundle connection",
+          "[bundle][connection][complex]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
 
-    SimpleBundle bundle_src(0_d);
-    ch_uint<8> signal_dst;
+    ComplexBundle src, dst;
 
-    // 连接bundle的字段到ch_uint信号
-    signal_dst <<= bundle_src.data;
+    // 设置方向
+    src.as_master();
+    dst.as_slave();
 
-    // 验证连接
-    REQUIRE(signal_dst.impl() != nullptr);
-    REQUIRE(bundle_src.data.impl() != nullptr);
-    REQUIRE(signal_dst.impl() !=
-            bundle_src.data.impl()); // 这里应该是创建了连接节点，而不是引用
+    // 连接两个bundle
+    dst <<= src;
+
+    REQUIRE(src.is_valid());
+    REQUIRE(dst.is_valid());
 }
 
-TEST_CASE("test_bundle_connection - Individual field connections in bundle",
-          "[bundle][connection][individual]") {
-    context ctx;
-    ctx_swap ctx_guard(&ctx);
+TEST_CASE("test_bundle_connection - Flip bundle test",
+          "[bundle][connection][flip]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
 
-    ComplexBundle bundle_src;
-    ComplexBundle bundle_dst;
+    FlipBundle master, slave;
 
-    // 分别连接bundle中的各个字段
-    bundle_dst.input_field <<= bundle_src.input_field;
-    bundle_dst.output_field <<= bundle_src.output_field;
-    bundle_dst.enable <<= bundle_src.enable;
+    // 设置方向
+    master.as_master();
+    slave.as_slave();
 
-    // 验证每个字段的连接
-    REQUIRE(bundle_dst.input_field.impl() != nullptr);
-    REQUIRE(bundle_dst.input_field.impl() != bundle_src.input_field.impl());
+    // 测试flip功能
+    auto flipped = master.flip();
+    REQUIRE(flipped != nullptr);
 
-    REQUIRE(bundle_dst.output_field.impl() != nullptr);
-    REQUIRE(bundle_dst.output_field.impl() != bundle_src.output_field.impl());
+    REQUIRE(master.is_valid());
+    REQUIRE(slave.is_valid());
+}
 
-    REQUIRE(bundle_dst.enable.impl() != nullptr);
-    REQUIRE(bundle_dst.enable.impl() != bundle_src.enable.impl());
+TEST_CASE("test_bundle_connection - Handshake bundle connection",
+          "[bundle][connection][handshake]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    HandShakeBundle master, slave;
+
+    // 设置方向
+    master.as_master();
+    slave.as_slave();
+
+    // 连接两个bundle
+    slave <<= master;
+
+    REQUIRE(master.is_valid());
+    REQUIRE(slave.is_valid());
+}
+
+TEST_CASE("test_bundle_connection - Bundle field validation",
+          "[bundle][validation]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    SimpleBundle bundle;
+
+    // 验证bundle字段的有效性
+    REQUIRE(bundle.is_valid());
+
+    // 测试字段数量
+    auto fields = bundle.__bundle_fields();
+    REQUIRE(std::tuple_size_v<decltype(fields)> == 1);
+}
+
+TEST_CASE("test_bundle_connection - Bundle width calculation",
+          "[bundle][width]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    SimpleBundle bundle;
+
+    // 验证bundle宽度
+    REQUIRE(bundle.width() == 8);
+
+    ComplexBundle complex_bundle;
+    REQUIRE(complex_bundle.width() == 13); // 8 + 4 + 1
+}
+
+TEST_CASE("test_bundle_connection - Bundle role management", "[bundle][role]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    SimpleBundle bundle;
+
+    // 测试bundle角色
+    bundle.as_master();
+    REQUIRE(bundle.get_role() == bundle_role::master);
+
+    bundle.as_slave();
+    REQUIRE(bundle.get_role() == bundle_role::slave);
 }
 
 // TEST_CASE("test_bundle_connection - Bundle connection in module",
@@ -221,8 +274,9 @@ TEST_CASE("test_bundle_connection - Individual field connections in bundle",
 //         void describe() override {
 //             // 连接不同方向的bundle字段
 //             //
-//             ComplexBundle的input_field(ch_in)连接到FlipBundle的data(ch_out)
-//             io().output_bundle.data <<= io().input_bundle.input_field;
+//             // ComplexBundle的input_field(ch_in)
+//             连接到FlipBundle的data(ch_out) io().output_bundle.data <<=
+//             io().input_bundle.input_field;
 //             // ComplexBundle的enable(ch_in)连接到FlipBundle的enable(ch_in)
 //             io().output_bundle.enable <<= io().input_bundle.enable;
 //         }

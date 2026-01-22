@@ -1,60 +1,81 @@
 
 // samples/bundle_demo.cpp
 #include "bundle/stream_bundle.h"
-#include "core/bool.h"
-#include "core/bundle/bundle_base.h"
-#include "core/bundle/bundle_meta.h"
-#include "core/bundle/bundle_utils.h"
+#include "ch.hpp"
 #include "core/context.h"
-#include "core/uint.h"
+#include "simulator.h"
 #include <iostream>
-#include <memory>
 
-using namespace ch;
 using namespace ch::core;
 
-int main() {
-    std::cout << "=== Bundle Advanced Demo ===" << std::endl;
+// 自定义Bundle示例
+template <typename T>
+struct CustomBundle : public bundle_base<CustomBundle<T>> {
+    using Self = CustomBundle<T>;
+    T data;
+    ch_bool enable;
+    ch_bool ack;
 
-    // 创建测试上下文
-    auto ctx = std::make_unique<ch::core::context>("demo_ctx");
-    ch::core::ctx_swap ctx_guard(ctx.get());
+    CH_BUNDLE_FIELDS_T(data, enable, ack)
 
-    try {
-        // 1. Stream Bundle演示
-        std::cout << "1. Creating Stream Bundle..." << std::endl;
-        Stream<ch_uint<32>> input_stream("io.input");
-        Stream<ch_uint<32>> output_stream("io.output");
-        std::cout << "✅ Stream bundles created" << std::endl;
-
-        // 2. Bundle连接演示
-        std::cout << "2. Testing Bundle Connection..." << std::endl;
-        ch::core::connect(input_stream, output_stream);
-        std::cout << "✅ Bundle connection works" << std::endl;
-
-        // 3. Factory函数演示
-        std::cout << "3. Testing Factory Functions..." << std::endl;
-        auto master_stream = ch::core::master(Stream<ch_uint<16>>{"master"});
-        auto slave_stream = ch::core::slave(Stream<ch_uint<16>>{"slave"});
-        std::cout << "✅ Factory functions work" << std::endl;
-
-        // 4. Flip功能演示
-        std::cout << "4. Testing Flip with Auto Direction..." << std::endl;
-        auto flipped = input_stream.flip();
-        std::cout << "✅ Flip with auto direction works" << std::endl;
-
-        // 5. 命名功能演示
-        std::cout << "5. Testing Naming Integration..." << std::endl;
-        Stream<ch_uint<8>> named_stream("top.level.signal");
-        std::cout << "✅ Naming integration works" << std::endl;
-
-        std::cout << "\n🎉 All advanced Bundle features work correctly!"
-                  << std::endl;
-
-    } catch (const std::exception &e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
-        return 1;
+    void as_master_direction() {
+        this->make_output(data, enable);
+        this->make_input(ack);
     }
+
+    void as_slave_direction() {
+        this->make_input(data, enable);
+        this->make_output(ack);
+    }
+};
+
+int main() {
+    // 创建上下文
+    auto ctx = std::make_unique<context>("bundle_demo");
+    ctx_swap ctx_swapper(ctx.get());
+
+    std::cout << "CppHDL Bundle Demo" << std::endl;
+    std::cout << "==================" << std::endl;
+
+    // 创建Bundle实例
+    CustomBundle<ch_uint<8>> bundle_master;
+    CustomBundle<ch_uint<8>> bundle_slave;
+
+    // 设置角色
+    bundle_master.as_master();
+    bundle_slave.as_slave();
+
+    // 设置名称前缀
+    bundle_master.set_name_prefix("master");
+    bundle_slave.set_name_prefix("slave");
+
+    std::cout << "Bundle master role: "
+              << static_cast<int>(bundle_master.get_role()) << std::endl;
+    std::cout << "Bundle slave role: "
+              << static_cast<int>(bundle_slave.get_role()) << std::endl;
+
+    std::cout << "Bundle master width: " << bundle_master.width() << std::endl;
+    std::cout << "Bundle slave width: " << bundle_slave.width() << std::endl;
+
+    // 创建Stream Bundle
+    Stream<ch_uint<16>> stream_master;
+    Stream<ch_uint<16>> stream_slave;
+
+    stream_master.as_master();
+    stream_slave.as_slave();
+
+    std::cout << "Stream master role: "
+              << static_cast<int>(stream_master.get_role()) << std::endl;
+    std::cout << "Stream slave role: "
+              << static_cast<int>(stream_slave.get_role()) << std::endl;
+
+    std::cout << "Stream master width: " << stream_master.width() << std::endl;
+    std::cout << "Stream slave width: " << stream_slave.width() << std::endl;
+
+    // 创建仿真器
+    ch::Simulator sim(ctx.get());
+
+    std::cout << "Bundle Demo completed successfully!" << std::endl;
 
     return 0;
 }

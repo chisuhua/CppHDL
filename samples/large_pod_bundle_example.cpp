@@ -52,17 +52,15 @@ struct very_large_data_bundle : public bundle_base<very_large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS_T(part1, part2, part3, part4, flag, ready)
+    CH_BUNDLE_FIELDS(Self, part1, part2, part3, part4, flag, ready)
 
-    void as_master() override {
-        // 分多次调用make_output，因为最多支持4个参数
+    void as_master_direction() {
         this->make_output(part1, part2, part3, part4);
         this->make_output(flag);
         this->make_input(ready);
     }
 
-    void as_slave() override {
-        // 分多次调用make_input
+    void as_slave_direction() {
         this->make_input(part1, part2, part3, part4);
         this->make_input(flag);
         this->make_output(ready);
@@ -141,6 +139,7 @@ int main() {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     very_large_data_bundle large_bundle;
+    large_bundle.as_slave(); // 设置方向用于测试
     std::cout << "VeryLargeDataBundle width: " << large_bundle.width()
               << " bits" << std::endl;
 
@@ -158,7 +157,7 @@ int main() {
             ch::Component *parent = nullptr,
             const std::string &name = "test_very_large_module")
             : ch::Component(parent, name) {
-            io.as_slave();
+            io.as_slave_direction();
         }
 
         void create_ports() override {}

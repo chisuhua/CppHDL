@@ -10,159 +10,87 @@
 namespace ch {
 
 // Fragment Bundle定义 - 用于表示数据流中的片段
-template <typename T>
-struct Fragment : public ch::core::bundle_base<Fragment<T>> {
+template <typename T> struct Fragment : public core::bundle_base<Fragment<T>> {
     using Self = Fragment<T>;
-
-    T fragment;             // 片段数据
-    ch::core::ch_bool last; // 标记是否为最后一个片段
+    T fragment;         // 片段数据
+    core::ch_bool last; // 标记是否为最后一个片段
 
     Fragment() = default;
-
-    // 从节点和偏移构造（用于嵌套bundle）
-    // explicit Fragment(ch::core::lnodeimpl *node, unsigned base_offset = 0)
-    //     : ch::core::bundle_base<Fragment<T>>(node) {
-    //     // 初始化字段，如果是bundle类型则递归处理
-    //     initialize_fields_with_offset(base_offset);
-    // }
-
     explicit Fragment(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 
     CH_BUNDLE_FIELDS_T(fragment, last)
 
-    void as_master() override {
-        this->role_ = ch::core::bundle_role::master;
+    void as_master_direction() {
+        this->role_ = core::bundle_role::master;
         this->make_output(fragment, last);
     }
 
-    void as_slave() override {
-        this->role_ = ch::core::bundle_role::slave;
+    void as_slave_direction() {
+        this->role_ = core::bundle_role::slave;
         this->make_input(fragment, last);
-    }
-
-private:
-    void initialize_fields_with_offset(unsigned base_offset) {
-        unsigned offset = base_offset;
-
-        // 根据fragment类型决定如何初始化
-        if constexpr (ch::core::is_bundle_v<T>) {
-            // 如果fragment是一个bundle，递归初始化它
-            fragment = T(this->impl(), offset);
-            offset += fragment.width();
-        } else {
-            // 否则是基本类型，创建位切片
-            unsigned w = ch::core::get_field_width<T>();
-            if (w == 1) {
-                fragment = ch::core::ch_bool(this->bit_select(offset++));
-            } else {
-                fragment =
-                    T(ch::core::bits(this->impl(), offset + w - 1, offset));
-                offset += w;
-            }
-        }
-
-        // 初始化last信号
-        last = ch::core::ch_bool(this->bit_select(offset));
     }
 };
 
-// // Stream Bundle定义 - 用于表示带反压的数据流
-// template <typename DataT>
-// struct Stream : public ch::core::bundle_base<Stream<DataT>> {
-//     using Self = Stream<DataT>;
-//     DataT payload;
-//     ch::core::ch_bool valid;
-//     ch::core::ch_bool ready;
+// Stream Bundle定义 - 用于表示带反压的数据流
+template <typename DataT>
+struct StreamBundle : public core::bundle_base<StreamBundle<DataT>> {
+    using Self = StreamBundle<DataT>;
+    DataT payload;
+    core::ch_bool valid;
+    core::ch_bool ready;
 
-//     Stream() = default;
+    StreamBundle() = default;
+    explicit StreamBundle(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
-//     // 从节点和偏移构造（用于嵌套bundle）
-//     explicit Stream(ch::core::lnodeimpl *node, unsigned base_offset = 0)
-//         : ch::core::bundle_base<Stream<DataT>>(node) {
-//         // 初始化字段，如果是bundle类型则递归处理
-//         initialize_fields_with_offset(base_offset);
-//     }
+    CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
-//     explicit Stream(const std::string &prefix = "stream") {
-//         this->set_name_prefix(prefix);
-//     }
+    void as_master_direction() {
+        this->role_ = core::bundle_role::master;
+        this->make_output(payload, valid);
+        this->make_input(ready);
+    }
 
-//     CH_BUNDLE_FIELDS_T(payload, valid, ready)
+    void as_slave_direction() {
+        this->role_ = core::bundle_role::slave;
+        this->make_input(payload, valid);
+        this->make_output(ready);
+    }
 
-//     void as_master() override {
-//         this->role_ = ch::core::bundle_role::master;
-//         this->make_output(payload, valid);
-//         this->make_input(ready);
-//     }
+    // 递归连接功能，用于处理嵌套bundle
+    template <typename OtherStream>
+    void do_recursive_connect(const OtherStream &src) {
+        // 根据当前角色确定连接方向
+        if (this->get_role() == core::bundle_role::master) {
+            // 如果是主设备，输出payload和valid，输入ready
+            if constexpr (core::is_bundle_v<DataT>) {
+                core::bundle_field_traits<DataT>::connect(src.payload,
+                                                          this->payload);
+            } else {
+                this->payload = src.payload;
+            }
+            this->valid = src.valid;
+            src.ready = this->ready; // 反向连接
+        } else {
+            // 如果是从设备，输入payload和valid，输出ready
+            if constexpr (core::is_bundle_v<DataT>) {
+                core::bundle_field_traits<DataT>::connect(src.payload,
+                                                          this->payload);
+            } else {
+                this->payload = src.payload;
+            }
+            this->valid = src.valid;
+            this->ready = src.ready;
+        }
+    }
 
-//     void as_slave() override {
-//         this->role_ = ch::core::bundle_role::slave;
-//         this->make_input(payload, valid);
-//         this->make_output(ready);
-//     }
-
-//     // 递归连接功能，用于处理嵌套bundle
-//     template <typename OtherStream>
-//     void do_recursive_connect(const OtherStream &src) {
-//         // 根据当前角色确定连接方向
-//         if (this->get_role() == ch::core::bundle_role::master) {
-//             // 如果是主设备，输出payload和valid，输入ready
-//             if constexpr (ch::core::is_bundle_v<DataT>) {
-//                 ch::core::bundle_field_traits<DataT>::connect(src.payload,
-//                                                               this->payload);
-//             } else {
-//                 this->payload = src.payload;
-//             }
-//             this->valid = src.valid;
-//             src.ready = this->ready; // 反向连接
-//         } else {
-//             // 如果是从设备，输入payload和valid，输出ready
-//             if constexpr (ch::core::is_bundle_v<DataT>) {
-//                 ch::core::bundle_field_traits<DataT>::connect(src.payload,
-//                                                               this->payload);
-//             } else {
-//                 this->payload = src.payload;
-//             }
-//             this->valid = src.valid;
-//             this->ready = src.ready;
-//         }
-//     }
-
-//     [[nodiscard]] ch::core::ch_bool fire() const {
-//         return this->valid && this->ready;
-//     }
-
-// private:
-//     void initialize_fields_with_offset(unsigned base_offset) {
-//         unsigned offset = base_offset;
-
-//         // 初始化payload
-//         if constexpr (ch::core::is_bundle_v<DataT>) {
-//             // 如果payload是一个bundle，递归初始化它
-//             payload = DataT(this->impl(), offset);
-//             offset += payload.width();
-//         } else {
-//             // 否则是基本类型，创建位切片
-//             unsigned w = ch::core::get_field_width<DataT>();
-//             if (w == 1) {
-//                 payload = ch::core::ch_bool(this->bit_select(offset++));
-//             } else {
-//                 payload =
-//                     DataT(ch::core::bits(this->impl(), offset + w - 1,
-//                     offset));
-//                 offset += w;
-//             }
-//         }
-
-//         // 初始化valid信号
-//         valid = ch::core::ch_bool(this->bit_select(offset++));
-
-//         // 初始化ready信号
-//         ready = ch::core::ch_bool(this->bit_select(offset));
-//     }
-// };
+    [[nodiscard]] core::ch_bool fire() const {
+        return this->valid && this->ready;
+    }
+};
 
 // 将Flow<Fragment<T>>转换为Flow<T>的函数
 template <typename T>

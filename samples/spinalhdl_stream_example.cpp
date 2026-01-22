@@ -132,8 +132,7 @@ public:
 template<typename T>
 struct CustomStreamBundle : public bundle_base<CustomStreamBundle<T>> {
     using Self = CustomStreamBundle<T>;
-    T data;
-    ch_bool enable;
+    T payload;
     ch_bool valid;
     ch_bool ready;
 
@@ -142,15 +141,17 @@ struct CustomStreamBundle : public bundle_base<CustomStreamBundle<T>> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS_T(data, enable, valid, ready)
+    CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
     void as_master() override {
-        this->make_output(data, enable, valid);
+        // Master: 输出payload和valid，输入ready
+        this->make_output(payload, valid);
         this->make_input(ready);
     }
 
     void as_slave() override {
-        this->make_input(data, enable, valid);
+        // Slave: 输入payload和valid，输出ready
+        this->make_input(payload, valid);
         this->make_output(ready);
     }
 };

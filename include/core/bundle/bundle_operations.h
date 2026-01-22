@@ -2,24 +2,40 @@
 #define CH_CORE_BUNDLE_OPERATIONS_H
 
 #include "bundle_base.h"
-#include <string>
-#include <tuple>
+#include "bundle_meta.h"
+#include "core/bool.h"
+#include "core/uint.h"
+#include <array>
+#include <type_traits>
 
 namespace ch::core {
 
-// Bundle字段提取 (bundle_slice)
+// 从bundle中选择一部分字段组成新的bundle
 template <size_t Start, size_t Count, typename BundleT>
 struct bundle_slice_view
     : public bundle_base<bundle_slice_view<Start, Count, BundleT>> {
-    BundleT &source_bundle;
+    using Self = bundle_slice_view<Start, Count, BundleT>;
+    BundleT original_bundle;
 
-    explicit bundle_slice_view(BundleT &bundle) : source_bundle(bundle) {}
+    bundle_slice_view(BundleT &bundle) : original_bundle(bundle) {}
+
+    CH_BUNDLE_FIELDS_T(original_bundle)
+
+    void as_master_direction() {
+        // Master: 将原始bundle设置为主模式
+        original_bundle.as_master();
+    }
+
+    void as_slave_direction() {
+        // Slave: 将原始bundle设置为从模式
+        original_bundle.as_slave();
+    }
 
     // 获取源Bundle的字段子集
-    constexpr auto __bundle_fields() const {
-        const auto &all_fields = source_bundle.__bundle_fields();
-        return slice_fields<Start, Count>(all_fields);
-    }
+    // constexpr auto __bundle_fields() const {
+    //     const auto &all_fields = original_bundle.__bundle_fields();
+    //     return slice_fields<Start, Count>(all_fields);
+    // }
 
     template <size_t S, size_t C, typename Tuple>
     constexpr auto slice_fields(const Tuple &tuple) const {
@@ -36,56 +52,33 @@ struct bundle_slice_view
             return std::make_tuple(); // fallback
         }
     }
-
-    void as_master() override {
-        // 简化实现 - 实际应该设置子集字段方向
-    }
-
-    void as_slave() override {
-        // 简化实现
-    }
-
-    bool is_valid() const override {
-        return false; // first.is_valid() && second.is_valid();
-    }
-
-    void set_name_prefix(const std::string &prefix) override {}
 };
 
-// Bundle连接 (bundle_cat) - 简化版本
+// 连接两个bundle
 template <typename Bundle1, typename Bundle2>
 struct bundle_concat : public bundle_base<bundle_concat<Bundle1, Bundle2>> {
-    Bundle1 first;
-    Bundle2 second;
+    using Self = bundle_concat<Bundle1, Bundle2>;
+    Bundle1 bundle1;
+    Bundle2 bundle2;
 
-    bundle_concat() = default;
-    bundle_concat(Bundle1 b1, Bundle2 b2)
-        : first(std::move(b1)), second(std::move(b2)) {}
+    bundle_concat(Bundle1 &b1, Bundle2 &b2) : bundle1(b1), bundle2(b2) {}
 
-    bundle_concat(const std::string &prefix) { this->set_name_prefix(prefix); }
+    CH_BUNDLE_FIELDS_T(bundle1, bundle2)
 
-    constexpr auto __bundle_fields() const {
-        return std::tuple_cat(first.__bundle_fields(),
-                              second.__bundle_fields());
+    void as_master_direction() {
+        // Master: 将两个bundle都设置为主模式
+        bundle1.as_master();
+        bundle2.as_master();
     }
 
-    void as_master() override {
-        first.as_master();
-        second.as_master();
+    void as_slave_direction() {
+        // Slave: 将两个bundle都设置为从模式
+        bundle1.as_slave();
+        bundle2.as_slave();
     }
-
-    void as_slave() override {
-        first.as_slave();
-        second.as_slave();
-    }
-
-    bool is_valid() const override {
-        return first.is_valid() && second.is_valid();
-    }
-
     void set_name_prefix(const std::string &prefix) override {
-        first.set_name_prefix(prefix + ".first");
-        second.set_name_prefix(prefix + ".second");
+        bundle1.set_name_prefix(prefix + ".first");
+        bundle2.set_name_prefix(prefix + ".second");
     }
 };
 

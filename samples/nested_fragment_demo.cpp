@@ -1,6 +1,5 @@
-// samples/improved_bundle_demo.cpp
+// samples/nested_fragment_demo.cpp
 #include "bundle/fragment.h"
-#include "bundle/stream_bundle.h"
 #include "ch.hpp"
 #include "core/context.h"
 #include "simulator.h"
@@ -8,33 +7,31 @@
 
 using namespace ch::core;
 
-// 自定义嵌套Bundle示例
+// 自定义嵌套Fragment示例
 template <typename T>
-struct NestedBundle : public bundle_base<NestedBundle<T>> {
-    using Self = NestedBundle<T>;
+struct NestedFragment : public bundle_base<NestedFragment<T>> {
+    using Self = NestedFragment<T>;
 
-    ch::Stream<T> stream;
+    Fragment<T> fragment;
     ch_bool flag;
 
-    NestedBundle() = default;
-    explicit NestedBundle(const std::string &prefix) {
-        this->set_name_prefix(prefix);
-    }
+    NestedFragment() = default;
+    // explicit NestedFragment(const std::string &prefix = "nested_frag") {
+    //     this->set_name_prefix(prefix);
+    // }
 
-    CH_BUNDLE_FIELDS_T(stream, flag)
+    CH_BUNDLE_FIELDS_T(fragment, flag)
 
-    void as_master() override {
-        this->role_ = bundle_role::master;
+    void as_master_direction() {
         this->make_output(flag);
-        // 对stream也应用master角色
-        this->stream.as_master();
+        // 对fragment也应用master角色
+        this->fragment.as_master();
     }
 
-    void as_slave() override {
-        this->role_ = bundle_role::slave;
+    void as_slave_direction() {
         this->make_input(flag);
-        // 对stream也应用slave角色
-        this->stream.as_slave();
+        // 对fragment也应用slave角色
+        this->fragment.as_slave();
     }
 };
 
@@ -47,8 +44,8 @@ int main() {
     std::cout << "=========================" << std::endl;
 
     // 创建嵌套Bundle实例
-    NestedBundle<ch_uint<8>> nested_bundle_master;
-    NestedBundle<ch_uint<8>> nested_bundle_slave;
+    NestedFragment<ch_uint<8>> nested_bundle_master;
+    NestedFragment<ch_uint<8>> nested_bundle_slave;
 
     // 设置角色
     nested_bundle_master.as_master();

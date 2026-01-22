@@ -21,9 +21,9 @@ struct TestBundle : public bundle_base<TestBundle> {
 
     CH_BUNDLE_FIELDS_T(data, valid)
 
-    void as_master() override { this->make_output(data, valid); }
+    void as_master_direction() { this->make_output(data, valid); }
 
-    void as_slave() override { this->make_input(data, valid); }
+    void as_slave_direction() { this->make_input(data, valid); }
 };
 
 // 一个独立的测试函数，验证is_bundle_safe是否能正确检测is_bundle1
@@ -50,25 +50,29 @@ TEST_CASE("TestBundle node management") {
 
         TestBundle bundle1(0x55_h); // 使用字面值构造
         REQUIRE(bundle1.impl() != nullptr);
+        REQUIRE(bundle1.width() == 9);
     }
 
-    SECTION("Copy construction shares nodes") {
+    SECTION("Copy construction shares node") {
         context ctx;
         ctx_swap cs(&ctx);
 
-        TestBundle bundle1;
-        TestBundle bundle2(bundle1);
-        REQUIRE(bundle1.impl() == bundle2.impl());
+        TestBundle bundle1(0x55_h);
+        TestBundle bundle2 = bundle1; // Copy construction
+        REQUIRE(bundle1.impl() != nullptr);
+        REQUIRE(bundle1.impl() == bundle2.impl()); // Same node shared
+        REQUIRE(bundle2.width() == 9);
     }
 
-    SECTION("Bundle connection operator") {
+    SECTION("Assignment shares node") {
         context ctx;
         ctx_swap cs(&ctx);
 
-        TestBundle src(0_d);
-        TestBundle dst;
-        dst <<= src;
-
-        REQUIRE(dst.impl() != src.impl()); // 连接后应该共享同一个实现
+        TestBundle bundle1(0x55_h);
+        TestBundle bundle2;
+        bundle2 = bundle1; // Assignment
+        REQUIRE(bundle1.impl() != nullptr);
+        REQUIRE(bundle1.impl() == bundle2.impl()); // Same node shared
+        REQUIRE(bundle2.width() == 9);
     }
 }

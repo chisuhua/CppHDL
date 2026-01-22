@@ -1,4 +1,3 @@
-
 // include/io/clock_reset_bundle.h
 #ifndef CH_IO_CLOCK_RESET_BUNDLE_H
 #define CH_IO_CLOCK_RESET_BUNDLE_H
@@ -19,14 +18,14 @@ struct clock_reset_bundle : public bundle_base<clock_reset_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS_(clock, reset)
+    CH_BUNDLE_FIELDS(Self, clock, reset)
 
-    void as_master() {
+    void as_master_direction() {
         // Master: 输出时钟和复位
         this->make_output(clock, reset);
     }
 
-    void as_slave() {
+    void as_slave_direction() {
         // Slave: 输入时钟和复位
         this->make_input(clock, reset);
     }
