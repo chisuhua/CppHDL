@@ -78,6 +78,12 @@ struct ch_bool : public logic_buffer<ch_bool> {
     }
     direction_type direction() const { return dir_; }
 
+    // 检查是否有效：如果dir_被设置为输入或输出方向，则认为是有效的
+    bool is_valid() const {
+        return std::holds_alternative<input_direction>(dir_) || 
+               std::holds_alternative<output_direction>(dir_);
+    }
+
     explicit ch_bool(lnodeimpl *node) : logic_buffer<ch_bool>(node) {}
 
     friend ch_bool make_bool_result(lnodeimpl *node);

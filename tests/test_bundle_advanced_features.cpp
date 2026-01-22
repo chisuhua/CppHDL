@@ -23,14 +23,17 @@ TEST_CASE("BundleAdvanced - CommonBundles", "[bundle][common]") {
 
     // 测试FIFO Bundle
     fifo_bundle<ch_uint<32>> fifo("fifo");
+    fifo.as_master();
     REQUIRE(fifo.is_valid());
 
     // 测试中断Bundle
     interrupt_bundle irq("irq");
+    irq.as_slave();
     REQUIRE(irq.is_valid());
 
     // 测试配置Bundle
     config_bundle<8, 32> config("config");
+    config.as_slave();
     REQUIRE(config.is_valid());
 }
 
@@ -97,6 +100,9 @@ TEST_CASE("BundleAdvanced - NamingIntegration", "[bundle][naming]") {
     interrupt_bundle irq("top.irq");
     config_bundle<8, 32> config("top.config");
 
+    fifo.as_master();
+    irq.as_master();
+    config.as_master();
     REQUIRE(fifo.is_valid());
     REQUIRE(irq.is_valid());
     REQUIRE(config.is_valid());

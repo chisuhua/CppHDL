@@ -126,12 +126,16 @@ TEST_CASE("BundleFinal - ContextIsolation", "[bundle][context]") {
     {
         ch::core::ctx_swap ctx_guard(ctx1.get());
         HandShake<ch_uint<8>> bundle1;
+        REQUIRE(!bundle1.is_valid());
+        bundle1.as_master();
         REQUIRE(bundle1.is_valid());
     }
 
     {
         ch::core::ctx_swap ctx_guard(ctx2.get());
         HandShake<ch_uint<8>> bundle2;
+        REQUIRE(!bundle2.is_valid());
+        bundle2.as_slave();
         REQUIRE(bundle2.is_valid());
     }
 }
@@ -174,6 +178,7 @@ TEST_CASE("BundleEnhanced - EnhancedValidation", "[bundle][validation]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     HandShake<ch_uint<8>> bundle;
+    bundle.as_slave();
     bool valid = bundle.is_valid();
 
     REQUIRE(valid == true); // 基本Bundle应该有效

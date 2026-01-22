@@ -51,6 +51,7 @@ TEST_CASE("BundleAdvanced - BundleFieldsAndWidth", "[bundle][fields][width]") {
     REQUIRE(get_bundle_width<TestBundle<ch_uint<8>>>() == 10); // 8 + 1 + 1
 
     // 验证Bundle是否有效
+    bundle.as_master();
     REQUIRE(bundle.is_valid());
 }
 
@@ -65,6 +66,7 @@ TEST_CASE("BundleAdvanced - BundleNaming", "[bundle][naming]") {
     REQUIRE(std::tuple_size_v<decltype(fields)> == 3);
 
     // 验证Bundle是否有效
+    bundle.as_slave();
     REQUIRE(bundle.is_valid());
 }
 
@@ -75,10 +77,10 @@ TEST_CASE("BundleAdvanced - BundleDirection", "[bundle][direction]") {
     TestBundle<ch_uint<8>> bundle;
 
     // 测试方向设置
-    bundle.as_master_direction();
+    bundle.as_master();
     REQUIRE(bundle.get_role() == bundle_role::master);
 
-    bundle.as_slave_direction();
+    bundle.as_slave();
     REQUIRE(bundle.get_role() == bundle_role::slave);
 
     // 验证Bundle是否有效

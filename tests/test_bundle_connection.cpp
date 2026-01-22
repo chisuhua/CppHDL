@@ -177,6 +177,7 @@ TEST_CASE("test_bundle_connection - Bundle field validation",
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     SimpleBundle bundle;
+    bundle.as_master();
 
     // 验证bundle字段的有效性
     REQUIRE(bundle.is_valid());

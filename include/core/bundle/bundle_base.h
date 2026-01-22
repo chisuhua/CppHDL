@@ -187,11 +187,6 @@ protected:
         return static_cast<const Derived *>(this);
     }
 
-    // 辅助：打包当前字段为 ch_uint<W>
-    // ch_uint<get_bundle_width<Derived>()> pack_current_fields() const {
-    //     return this->to_bits();
-    // }
-
     // 方向控制辅助函数
     template <typename T> void set_field_direction(T &field, input_direction) {
         if constexpr (requires { field.as_input(); }) {
@@ -227,13 +222,11 @@ protected:
     }
 
     // 字段方向设置 - 支持任意数量字段 (C++20)
-    template <typename... Fields>
-    void make_output(Fields&... fields) {
+    template <typename... Fields> void make_output(Fields &...fields) {
         (set_field_direction(fields, output_direction{}), ...);
     }
 
-    template <typename... Fields>
-    void make_input(Fields&... fields) {
+    template <typename... Fields> void make_input(Fields &...fields) {
         (set_field_direction(fields, input_direction{}), ...);
     }
 

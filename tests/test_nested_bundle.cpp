@@ -43,12 +43,19 @@ TEST_CASE("NestedBundle - SimpleNested", "[bundle][nested]") {
 
         CH_BUNDLE_FIELDS_T(inner_stream, status)
 
-        void as_master_direction() { this->make_output(inner_stream, status); }
+        void as_master_direction() {
+            inner_stream.as_master();
+            this->make_output(status);
+        }
 
-        void as_slave_direction() { this->make_input(inner_stream, status); }
+        void as_slave_direction() {
+            inner_stream.as_slave();
+            this->make_input(status);
+        }
     };
 
     NestedTest nested("test.nested");
+    nested.as_master();
 
     REQUIRE(nested.is_valid());
     REQUIRE(is_bundle_v<NestedTest> == true);
@@ -63,6 +70,10 @@ TEST_CASE("NestedBundle - AXIBundleCreation", "[bundle][axi]") {
     axi_write_data_channel<32> data_chan("axi.w");
     axi_write_resp_channel resp_chan("axi.b");
 
+    addr_chan.as_master();
+    data_chan.as_master();
+    resp_chan.as_master();
+
     REQUIRE(addr_chan.is_valid());
     REQUIRE(data_chan.is_valid());
     REQUIRE(resp_chan.is_valid());
@@ -74,6 +85,7 @@ TEST_CASE("NestedBundle - FullAXIWrite", "[bundle][axi][nested]") {
 
     // 测试完整的AXI写通道 (嵌套Bundle)
     axi_write_channel<32, 32> axi_write("axi.write");
+    axi_write.as_master();
 
     REQUIRE(axi_write.is_valid());
     REQUIRE(is_bundle_v<axi_write_channel<32, 32>> == true);
@@ -99,6 +111,9 @@ TEST_CASE("NestedBundle - ConnectNested", "[bundle][nested][connect]") {
 
     axi_write_channel<32, 32> src_axi;
     axi_write_channel<32, 32> dst_axi;
+
+    src_axi.as_master();
+    dst_axi.as_slave();
 
     // 尝试连接
     dst_axi <<= src_axi;

@@ -140,6 +140,12 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     // 获取当前方向（用于 connect）
     direction_type direction() const { return dir_; }
 
+    // 检查是否有效：如果dir_被设置为输入或输出方向，则认为是有效的
+    bool is_valid() const {
+        return std::holds_alternative<input_direction>(dir_) || 
+               std::holds_alternative<output_direction>(dir_);
+    }
+
     // friend auto to_operand(const ch_uint<N>&);
     template <unsigned U>
     friend inline lnode<ch_uint<U>> get_lnode(const ch_uint<U> &);
