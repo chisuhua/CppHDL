@@ -1,37 +1,20 @@
 {
-  "name": "C++ Dev (Local & Web)",
+  "name": "C++ Dev (Ubuntu 22.04)",
   "image": "mcr.microsoft.com/devcontainers/cpp:0-ubuntu-22.04",
-  "features": {
-    "ghcr.io/devcontainers/features/cmake:1": {},
-    "ghcr.io/devcontainers/features/gcc:1": {},
-    "ghcr.io/devcontainers/features/ninja:1": {},
-    "ghcr.io/devcontainers/features/clang:1": {
-      "installClangd": true
-    }
-  },
   "customizations": {
     "vscode": {
       "extensions": [
         "llvm-vs-code-extensions.vscode-clangd",
         "ms-vscode.cmake-tools",
         "twxs.cmake",
-        "ms-vscode.cpptools" // 保留但禁用，作为 fallback
+        "ms-vscode.cpptools"
       ],
       "settings": {
-        // 优先使用 clangd
         "C_Cpp.intelliSenseEngine": "disabled",
         "clangd.path": "/usr/bin/clangd",
-        "clangd.arguments": [
-          "--background-index",
-          "--compile-commands-dir=build/"
-        ],
-        // CMake 默认用 Ninja
-        "cmake.generator": "Ninja",
-        "cmake.configureOnOpen": true,
-        // 终端默认用 bash
-        "terminal.integrated.defaultProfile.linux": "bash"
+        "cmake.generator": "Ninja"
       }
     }
   },
-  "postCreateCommand": "echo '🛠️ C++ dev environment ready!' && cmake --version"
+  "postCreateCommand": "sudo apt update && sudo apt install -y cmake ninja-build clangd gdb"
 }
