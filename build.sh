@@ -8,7 +8,7 @@
 
 # 启用调试日志
 cmake -B build -DENABLE_DEBUG_LOGGING=ON -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j4
+cmake --build build -j2
 
 # Debug 模式构建
 #cmake -B build -DCMAKE_BUILD_TYPE=Debug
