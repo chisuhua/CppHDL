@@ -1,6 +1,6 @@
 {
-  "name": "C++ Dev (Ubuntu 22.04)",
-  "image": "mcr.microsoft.com/devcontainers/cpp:0-ubuntu-22.04",
+  "name": "C++ Dev (Ubuntu 24.04)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -16,5 +16,5 @@
       }
     }
   },
-  "postCreateCommand": "sudo apt update && sudo apt install -y cmake ninja-build clangd gdb"
+  "postCreateCommand": "sudo apt update && sudo apt install -y build-essential cmake ninja-build clang clangd gdb git libstdc++-14-dev"
 }
