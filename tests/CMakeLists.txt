@@ -54,7 +54,8 @@ set(BASE_TEST_SOURCES
     # test_multithread.cpp
     test_nested_bundle.cpp
     # test_tlm_bundle_phase1.cpp
-    # test_axi_lite_bundle.cpp
+    test_axi_lite_bundle.cpp
+    test_fragment.cpp
     test_mem.cpp
     test_operator_advanced.cpp
     test_operator_results.cpp
@@ -82,6 +83,7 @@ set(BASE_TEST_SOURCES
     test_mem_connection.cpp
     test_wires_connection.cpp
     test_bundle_connection.cpp
+    test_bits_update.cpp  # 新增：bits_update操作测试
 )
 
 # chlib 测试源文件列表

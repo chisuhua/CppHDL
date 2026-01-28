@@ -17,7 +17,7 @@ using namespace ch::core;
 template <typename T = ch_uint<32>>
 struct CustomNested : public bundle_base<CustomNested<T>> {
     using Self = CustomNested<T>;
-    Stream<T> data_stream;
+    ch_stream<T> data_stream;
     ch_bool interrupt;
 
     CH_BUNDLE_FIELDS_T(data_stream, interrupt)
@@ -70,7 +70,7 @@ int main() {
         std::cout << "   CustomNested is bundle: "
                   << (is_bundle_v<CustomNested<>> ? "✅" : "❌") << std::endl;
         std::cout << "   StreamBundle is bundle: "
-                  << (is_bundle_v<Stream<ch_uint<8>>> ? "✅" : "❌")
+                  << (is_bundle_v<ch_stream<ch_uint<8>>> ? "✅" : "❌")
                   << std::endl;
         std::cout
             << "   AXI fields count: "

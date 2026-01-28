@@ -11,16 +11,17 @@ using namespace ch::core;
 namespace ch {
 
 /**
- * Flow - 无反压的数据流接口
+ * ch_flow - 无反压的数据流接口
  * 包含 payload, valid 信号（无ready信号）
  */
-template <typename T> struct Flow : public bundle_base<Flow<T>> {
-    using Self = Flow<T>;
+template <typename T> struct ch_flow : public bundle_base<ch_flow<T>> {
+    using Self = ch_flow<T>;
     T payload;     // 数据载荷
     ch_bool valid; // 有效信号
 
-    Flow() = default;
-    explicit Flow(const std::string &prefix) { this->set_name_prefix(prefix); }
+    ch_flow() = default;
+    // explicit ch_flow(const std::string &prefix) {
+    // this->set_name_prefix(prefix); }
 
     CH_BUNDLE_FIELDS_T(payload, valid)
 

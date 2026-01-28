@@ -17,7 +17,6 @@ namespace ch::core {
 template <typename T> struct is_bundle {
     template <typename U>
     static auto test(int) -> decltype(std::declval<U>().__bundle_fields(),
-                                      std::declval<U>().is_valid(),
                                       std::true_type{});
 
     template <typename> static std::false_type test(...);

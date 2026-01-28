@@ -63,6 +63,34 @@ private:
 };
 
 // -----------------------------
+// Generic Ternary Operation Template
+// -----------------------------
+template <typename Op> class instr_op_ternary : public instr_base {
+public:
+    instr_op_ternary(ch::core::sdata_type *dst, uint32_t size,
+                     ch::core::sdata_type *src0, ch::core::sdata_type *src1,
+                     ch::core::sdata_type *src2)
+        : instr_base(size), dst_(dst), src0_(src0), src1_(src1), src2_(src2) {}
+
+    void eval() override {
+        if (!dst_ || !src0_ || !src1_ || !src2_) {
+            std::cerr << "[" << Op::name()
+                      << "] Error: Null pointer encountered!" << std::endl;
+            return;
+        }
+
+        // Perform the operation with 4 arguments for other operations
+        Op::eval(dst_, src0_, src1_, src2_);
+    }
+
+private:
+    ch::core::sdata_type *dst_;
+    ch::core::sdata_type *src0_;
+    ch::core::sdata_type *src1_;
+    ch::core::sdata_type *src2_;
+};
+
+// -----------------------------
 // Operation Policies (Function Objects)
 // -----------------------------
 namespace op {
@@ -527,6 +555,31 @@ struct Assign {
     }
 };
 
+// 添加 BITS_UPDATE 操作定义 - 将源数据分配到位范围
+struct BitsUpdate {
+    static const char *name() { return "instr_op_bits_update::eval"; }
+    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
+                     ch::core::sdata_type *range_info) {
+        // src1 (range_info) 编码: 低32位 = lsb, 高32位 = msb
+        uint64_t range_val = static_cast<uint64_t>(*range_info);
+        uint32_t lsb = static_cast<uint32_t>(range_val & 0xFFFFFFFF);
+        uint32_t msb = static_cast<uint32_t>((range_val >> 32) & 0xFFFFFFFF);
+
+        // 确保目标位宽足够大
+        if (dst->bitwidth() <= msb) {
+            std::cerr << "Destination width " << dst->bitwidth()
+                      << " is less than required MSB " << msb << std::endl;
+            return;
+        }
+
+        // 保留目标数据的其他位不变，仅替换指定范围内的位
+        for (uint32_t i = 0; i < (msb - lsb + 1) && i < src0->bitwidth(); ++i) {
+            bool bit_val = src0->get_bit(i);
+            dst->set_bit(lsb + i, bit_val);
+        }
+    }
+};
+
 } // namespace op
 
 // -----------------------------
@@ -557,6 +610,7 @@ using instr_op_sshr = instr_op_binary<op::Sshr>;
 using instr_op_neg = instr_op_unary<op::Neg>;
 using instr_op_bit_sel = instr_op_binary<op::BitSel>;
 using instr_op_bits_extract = instr_op_binary<op::BitsExtract>;
+using instr_op_bits_update = instr_op_binary<op::BitsUpdate>;
 using instr_op_concat = instr_op_binary<op::Concat>;
 using instr_op_sext = instr_op_unary<op::Sext>;
 using instr_op_zext = instr_op_unary<op::Zext>;
@@ -565,7 +619,7 @@ using instr_op_zext = instr_op_unary<op::Zext>;
 using instr_op_and_reduce = instr_op_unary<op::AndReduce>;
 using instr_op_or_reduce = instr_op_unary<op::OrReduce>;
 using instr_op_xor_reduce = instr_op_unary<op::XorReduce>;
-using instr_op_assign = instr_op_unary<op::Assign>;  // 添加 assign 操作的别名
+using instr_op_assign = instr_op_unary<op::Assign>; // 添加 assign 操作的别名
 
 // 添加popcount别名
 using instr_op_popcount = instr_op_unary<op::PopCount>;

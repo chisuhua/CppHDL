@@ -312,10 +312,6 @@ public:
         }
 
         uint32_t width = msb - lsb + 1;
-        // if (statistics_enabled_) {
-        //     ++statistics_->operations_built;
-        //     ++statistics_->total_nodes_built;
-        // }
 
         // Create the bits extract operation node - use a literal to encode the
         // range The range info will be encoded in the second operand (src1)
@@ -335,11 +331,57 @@ public:
         return op_node;
     }
 
-    template <typename T, typename Index>
-    lnodeimpl *build_bit_extract(
-        const lnode<T> &operand, const lnode<Index> &index,
-        unsigned result_width, const std::string &name = "bit_extract",
-        const std::source_location &sloc = std::source_location::current());
+    template <typename Target, typename Source>
+    lnodeimpl *build_bits_update(
+        const lnode<Target> &target, const lnode<Source> &source, uint32_t msb,
+        uint32_t lsb, const std::string &name = "bits_update",
+        const std::source_location &sloc = std::source_location::current()) {
+        CHDBG_FUNC();
+        auto *ctx = ctx_curr_;
+        if (!ctx) {
+            CHERROR("[node_builder] No active context for bits update "
+                    "operation creation");
+            return nullptr;
+        }
+
+        if (!target.impl()) {
+            CHERROR("[node_builder] Invalid target for bits update operation");
+            return nullptr;
+        }
+
+        if (!source.impl()) {
+            CHERROR("[node_builder] Invalid source for bits update operation");
+            return nullptr;
+        }
+
+        if (msb < lsb) {
+            CHWARN("[node_builder] MSB (%u) < LSB (%u) in build_bits_update, "
+                   "swapping",
+                   msb, lsb);
+            std::swap(msb, lsb);
+        }
+
+        // 目标宽度应该与输出宽度相同
+        uint32_t width = target.impl()->size();
+
+        // 创建范围信息字面量
+        uint64_t range_encoding = (static_cast<uint64_t>(msb) << 32) | lsb;
+
+        // 创建操作节点，将target作为主要操作数，source和range_info作为额外操作数
+        bitsupdateimpl *op_node = ctx->create_node<bitsupdateimpl>(
+            width, target.impl(), source.impl(),
+            ctx->create_literal(sdata_type(range_encoding, 64), name + "_range",
+                                sloc),
+            prefixed_name_helper(name, name_prefix_), sloc);
+
+        return op_node;
+    }
+
+    // template <typename T, typename Index>
+    // lnodeimpl *build_bit_extract(
+    //     const lnode<T> &operand, const lnode<Index> &index,
+    //     unsigned result_width, const std::string &name = "bit_extract",
+    //     const std::source_location &sloc = std::source_location::current());
 
     template <typename T, typename U>
     lnodeimpl *build_operation(

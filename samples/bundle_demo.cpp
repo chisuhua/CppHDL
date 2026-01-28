@@ -58,8 +58,8 @@ int main() {
     std::cout << "Bundle slave width: " << bundle_slave.width() << std::endl;
 
     // 创建Stream Bundle
-    Stream<ch_uint<16>> stream_master;
-    Stream<ch_uint<16>> stream_slave;
+    ch_stream<ch_uint<16>> stream_master;
+    ch_stream<ch_uint<16>> stream_slave;
 
     stream_master.as_master();
     stream_slave.as_slave();

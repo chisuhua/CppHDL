@@ -18,12 +18,13 @@ using namespace ch::core;
 
 // 简单的测试Bundle
 struct test_simple_bundle : public bundle_base<test_simple_bundle> {
+    using Self = test_simple_bundle;
     ch_uint<8> data;
     ch_bool flag;
 
     test_simple_bundle() = default;
 
-    CH_BUNDLE_FIELDS(test_simple_bundle, data, flag)
+    CH_BUNDLE_FIELDS_T(data, flag)
 
     void as_master_direction() { this->make_output(data, flag); }
 
@@ -69,16 +70,23 @@ TEST_CASE("BundleSerialization - NestedBundleWidth",
 
     // 创建嵌套结构进行测试
     struct nested_test : public bundle_base<nested_test> {
+        using Self = nested_test;
         test_simple_bundle inner;
         ch_uint<4> extra;
 
         nested_test() = default;
 
-        CH_BUNDLE_FIELDS(nested_test, inner, extra)
+        CH_BUNDLE_FIELDS_T(inner, extra)
 
-        void as_master_direction() { this->make_output(inner, extra); }
+        void as_master_direction() {
+            inner.as_master();
+            this->make_output(extra);
+        }
 
-        void as_slave_direction() { this->make_input(inner, extra); }
+        void as_slave_direction() {
+            inner.as_slave();
+            this->make_input(extra);
+        }
     };
 
     nested_test nested;
@@ -93,7 +101,7 @@ TEST_CASE("BundleSerialization - BitsView", "[bundle][serialization][view]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     test_simple_bundle bundle;
-    auto bits_view = ch::core::to_bits(bundle);
+    auto bits_view = ch::core::serialize(bundle);
 
     REQUIRE(bits_view.width == 9);
 }

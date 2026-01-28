@@ -219,7 +219,7 @@ struct mod_op {
     static constexpr unsigned result_width = N;
     static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "mod"; }
-    
+
     // 为编译期字面量特化版本，当右操作数是编译期字面量时，根据其值计算结果位宽
     template <uint64_t V, uint32_t W>
     static constexpr unsigned result_width_literal = compute_bit_width(V - 1);
@@ -327,6 +327,17 @@ struct popcount_op {
     static constexpr unsigned result_width_v = (N <= 1) ? 1 : std::bit_width(N);
 
     static constexpr const char *name() { return "popcount"; }
+};
+
+// 位段更新操作策略
+struct bits_update_op {
+    static constexpr ch_op op_type = ch_op::bits_update;
+    static constexpr bool is_comparison = false;
+    static constexpr const char *name() { return "bits_update"; }
+
+    // 位段更新操作的结果宽度与目标操作数的宽度相同
+    template <unsigned M, unsigned N>
+    static constexpr unsigned result_width = M; // M代表目标操作数的宽度
 };
 
 } // namespace ch::core

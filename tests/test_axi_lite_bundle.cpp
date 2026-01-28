@@ -22,28 +22,33 @@ TEST_CASE("AXILiteBundle - ChannelCreation", "[axi][lite][channel]") {
 
     // 测试写地址通道
     axi_lite_aw_channel<32> aw_chan("axi.aw");
+    aw_chan.as_master();
     REQUIRE(aw_chan.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_aw_channel<32>> == 4);
+    REQUIRE(bundle_field_count_v<axi_lite_aw_channel<32>> == 2);
 
     // 测试写数据通道
     axi_lite_w_channel<32> w_chan("axi.w");
+    w_chan.as_master();
     REQUIRE(w_chan.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_w_channel<32>> == 4);
+    REQUIRE(bundle_field_count_v<axi_lite_w_channel<32>> == 3);
 
     // 测试写响应通道
     axi_lite_b_channel b_chan("axi.b");
+    b_chan.as_master();
     REQUIRE(b_chan.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_b_channel> == 3);
+    REQUIRE(bundle_field_count_v<axi_lite_b_channel> == 1);
 
     // 测试读地址通道
     axi_lite_ar_channel<32> ar_chan("axi.ar");
+    ar_chan.as_master();
     REQUIRE(ar_chan.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_ar_channel<32>> == 4);
+    REQUIRE(bundle_field_count_v<axi_lite_ar_channel<32>> == 2);
 
     // 测试读数据通道
     axi_lite_r_channel<32> r_chan("axi.r");
+    r_chan.as_master();
     REQUIRE(r_chan.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_r_channel<32>> == 4);
+    REQUIRE(bundle_field_count_v<axi_lite_r_channel<32>> == 2);
 }
 
 TEST_CASE("AXILiteBundle - InterfaceCreation", "[axi][lite][interface]") {
@@ -52,18 +57,21 @@ TEST_CASE("AXILiteBundle - InterfaceCreation", "[axi][lite][interface]") {
 
     // 测试写接口
     axi_lite_write_interface<32, 32> write_if("axi.write");
+    write_if.as_master();
     REQUIRE(write_if.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_write_interface<32, 32>> == 3);
+    REQUIRE(bundle_field_count_v<axi_lite_write_interface<32, 32>> == 6);
 
     // 测试读接口
     axi_lite_read_interface<32, 32> read_if("axi.read");
+    read_if.as_slave();
     REQUIRE(read_if.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_read_interface<32, 32>> == 2);
+    REQUIRE(bundle_field_count_v<axi_lite_read_interface<32, 32>> == 4);
 
     // 测试完整接口
     axi_lite_bundle<32, 32> axi_if("axi.full");
+    axi_if.as_master();
     REQUIRE(axi_if.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_bundle<32, 32>> == 5);
+    REQUIRE(bundle_field_count_v<axi_lite_bundle<32, 32>> == 10);
 }
 
 TEST_CASE("AXILiteBundle - ProtocolValidation", "[axi][lite][protocol]") {
@@ -74,7 +82,6 @@ TEST_CASE("AXILiteBundle - ProtocolValidation", "[axi][lite][protocol]") {
     axi_lite_bundle<32, 32> full_axi;
     axi_lite_write_interface<32, 32> write_axi;
     axi_lite_read_interface<32, 32> read_axi;
-    Stream<ch_uint<32>> stream;
 
     // 协议类型检查
     STATIC_REQUIRE(is_axi_lite_v<axi_lite_bundle<32, 32>> == true);
@@ -83,9 +90,9 @@ TEST_CASE("AXILiteBundle - ProtocolValidation", "[axi][lite][protocol]") {
     STATIC_REQUIRE(is_axi_lite_read_v<axi_lite_read_interface<32, 32>> == true);
 
     // 非AXI类型检查
-    STATIC_REQUIRE(is_axi_lite_v<Stream<ch_uint<32>>> == false);
-    STATIC_REQUIRE(is_axi_lite_write_v<Stream<ch_uint<32>>> == false);
-    STATIC_REQUIRE(is_axi_lite_read_v<Stream<ch_uint<32>>> == false);
+    STATIC_REQUIRE(is_axi_lite_v<ch_stream<ch_uint<32>>> == false);
+    STATIC_REQUIRE(is_axi_lite_write_v<ch_stream<ch_uint<32>>> == false);
+    STATIC_REQUIRE(is_axi_lite_read_v<ch_stream<ch_uint<32>>> == false);
 }
 
 TEST_CASE("AXILiteBundle - FieldNameChecking", "[axi][lite][fields]") {
@@ -94,22 +101,29 @@ TEST_CASE("AXILiteBundle - FieldNameChecking", "[axi][lite][fields]") {
 
     axi_lite_bundle<32, 32> axi_if;
 
-    // 测试字段存在性检查
+    // 测试字段存在性检查 -
+    // 对于axi_lite_bundle，aw/w/b/ar/r字段是嵌套在write和read子接口中的
+    // 因此，我们不能直接检查axi_lite_bundle<32, 32>是否包含aw字段
+    // 而是应该检查write和read子接口
+    STATIC_REQUIRE(has_field_named_v<axi_lite_write_interface<32, 32>,
+                                     structural_string{"aw"}> == true);
+    STATIC_REQUIRE(has_field_named_v<axi_lite_write_interface<32, 32>,
+                                     structural_string{"w"}> == true);
+    STATIC_REQUIRE(has_field_named_v<axi_lite_write_interface<32, 32>,
+                                     structural_string{"b"}> == true);
+    STATIC_REQUIRE(has_field_named_v<axi_lite_read_interface<32, 32>,
+                                     structural_string{"ar"}> == true);
+    STATIC_REQUIRE(has_field_named_v<axi_lite_read_interface<32, 32>,
+                                     structural_string{"r"}> == true);
+
+    // 验证axi_lite_bundle本身具有write和read字段
+    STATIC_REQUIRE(has_field_named_v<axi_lite_bundle<32, 32>,
+                                     structural_string{"write"}> == true);
     STATIC_REQUIRE(
-        has_field_named_v<axi_lite_bundle<32, 32>, structural_string{"aw"}> ==
+        has_field_named_v<axi_lite_bundle<32, 32>, structural_string{"read"}> ==
         true);
-    STATIC_REQUIRE(
-        has_field_named_v<axi_lite_bundle<32, 32>, structural_string{"w"}> ==
-        true);
-    STATIC_REQUIRE(
-        has_field_named_v<axi_lite_bundle<32, 32>, structural_string{"b"}> ==
-        true);
-    STATIC_REQUIRE(
-        has_field_named_v<axi_lite_bundle<32, 32>, structural_string{"ar"}> ==
-        true);
-    STATIC_REQUIRE(
-        has_field_named_v<axi_lite_bundle<32, 32>, structural_string{"r"}> ==
-        true);
+
+    // 验证无效字段不存在
     STATIC_REQUIRE(has_field_named_v<axi_lite_bundle<32, 32>,
                                      structural_string{"invalid"}> == false);
 }

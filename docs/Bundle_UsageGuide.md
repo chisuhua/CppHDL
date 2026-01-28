@@ -6,7 +6,7 @@ Bundle 是 CppHDL 中用于表示复杂信号集合的机制，允许将多个�
 
 ## 2. Bundle 的基本定义
 
-Bundle 通过继承 `bundle_base<Derived>` 模板类来定义，需要指定其包含的字段，并实现 `as_master()` 和 `as_slave()` 方法来定义方向。
+Bundle 通过继承 `bundle_base<Derived>` 模板类来定义，需要指定其包含的字段，并实现 `as_master_direction()` 和 `as_slave_direction()` 方法来定义方向。
 
 ```cpp
 #include "core/bundle/bundle_base.h"
@@ -15,8 +15,8 @@ Bundle 通过继承 `bundle_base<Derived>` 模板类来定义，需要指定其�
 #include "core/bool.h"
 
 template<typename T>
-struct stream_bundle : public bundle_base<Stream<T>> {
-    using Self = Stream<T>;
+struct stream_bundle : public bundle_base<stream_bundle<T>> {
+    using Self = stream_bundle<T>;
     T payload;           // 数据载荷
     ch_bool valid;       // 有效信号
     ch_bool ready;       // 就绪信号
@@ -27,15 +27,15 @@ struct stream_bundle : public bundle_base<Stream<T>> {
     }
 
     // 使用宏定义bundle字段
-    CH_BUNDLE_FIELDS(Self, payload, valid, ready)
+    CH_BUNDLE_FIELDS_T(payload, valid, ready)
 
-    void as_master() override {
+    void as_master_direction() {
         // Master: 输出数据，接收就绪信号
         this->make_output(payload, valid);
         this->make_input(ready);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         // Slave: 接收数据，发送就绪信号
         this->make_input(payload, valid);
         this->make_output(ready);
@@ -45,10 +45,10 @@ struct stream_bundle : public bundle_base<Stream<T>> {
 
 ## 3. Bundle 宏定义
 
-CppHDL 提供了 `CH_BUNDLE_FIELDS` 宏来简化 Bundle 字段定义：
+CppHDL 提供了 `CH_BUNDLE_FIELDS_T` 宏来简化 Bundle 字段定义：
 
 ```cpp
-CH_BUNDLE_FIELDS(Self, field1, field2, field3)
+CH_BUNDLE_FIELDS_T(field1, field2, field3)
 ```
 
 该宏会自动创建 `__bundle_fields()` 方法，返回包含所有字段信息的元组。
@@ -57,11 +57,11 @@ CH_BUNDLE_FIELDS(Self, field1, field2, field3)
 
 ### 4.1 方向控制
 
-Bundle 提供了 `as_master()` 和 `as_slave()` 方法来控制其内部信号的方向：
+Bundle 提供了 `as_master()` 和 `as_slave()` 方法来控制其内部信号的方向，这两个方法内部会调用相应的 `_direction` 方法：
 
-- `as_master()`: 指定哪些信号是输出，哪些是输入
-- `as_slave()`: 与 `as_master()` 相反的方向设置
-- `flip()`: 自动翻转 Bundle 的方向
+- `as_master()`: 调用 `as_master_direction()`，指定哪些信号是输出，哪些是输入
+- `as_slave()`: 调用 `as_slave_direction()`，与 `as_master_direction()` 相反的方向设置
+- `as_master_direction()` 和 `as_slave_direction()`: 在派生类中需要实现的具体方向设置方法
 
 ### 4.2 命名
 
@@ -126,19 +126,19 @@ Bundle 支持嵌套定义，可以将多个 Bundle 组合成更复杂的 Bundle�
 ```cpp
 template<size_t ADDR_WIDTH, size_t DATA_WIDTH>
 struct axi_write_channel : public bundle_base<axi_write_channel<ADDR_WIDTH, DATA_WIDTH>> {
-    using Self = axi_write_channel;
+    using Self = axi_write_channel<ADDR_WIDTH, DATA_WIDTH>;
     axi_addr_channel<ADDR_WIDTH> aw;      // 地址通道
     axi_write_data_channel<DATA_WIDTH> w; // 数据写通道
     axi_write_resp_channel b;             // 响应通道
 
-    CH_BUNDLE_FIELDS(Self, aw, w, b)
+    CH_BUNDLE_FIELDS_T(aw, w, b)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(aw, w);
         this->make_input(b);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(aw, w);
         this->make_output(b);
     }
@@ -161,14 +161,14 @@ struct axi_lite_bundle : public bundle_base<axi_lite_bundle<ADDR_WIDTH, DATA_WID
     axi_lite_ar_channel<ADDR_WIDTH> ar;      // 读地址通道
     axi_lite_r_channel<DATA_WIDTH> r;        // 读数据通道
 
-    CH_BUNDLE_FIELDS(Self, aw, w, b, ar, r)
+    CH_BUNDLE_FIELDS_T(aw, w, b, ar, r)
 
-    void as_master() override {
+    void as_master_direction() {
         this->make_output(aw, w, ar);
         this->make_input(b, r);
     }
 
-    void as_slave() override {
+    void as_slave_direction() {
         this->make_input(aw, w, ar);
         this->make_output(b, r);
     }
@@ -181,18 +181,18 @@ Bundle 支持转换为位向量和从位向量恢复：
 
 ```cpp
 // 序列化
-template <unsigned W = 0>
-ch_uint<W> to_bits() const;
+template <typename BundleT>
+auto serialize(const BundleT &bundle);
 
 // 反序列化
-template <unsigned W = 0>
-static Derived from_bits(const ch_uint<W> &bits);
+template <typename BundleT, unsigned W>
+BundleT deserialize(const ch_uint<W> &bits);
 ```
 
 ## 9. 注意事项
 
 1. Bundle 必须继承自 `bundle_base<Derived>`，其中 `Derived` 是 Bundle 自己的类型
-2. 必须使用 `CH_BUNDLE_FIELDS` 宏定义 Bundle 字段
-3. 必须实现 `as_master()` 和 `as_slave()` 方法
+2. 必须使用 `CH_BUNDLE_FIELDS_T` 宏定义 Bundle 字段
+3. 必须实现 `as_master_direction()` 和 `as_slave_direction()` 方法
 4. Bundle 支持嵌套，但需要确保所有嵌套类型也符合 Bundle 规范
 5. Bundle 可以像普通类型一样使用，支持复制、移动等操作

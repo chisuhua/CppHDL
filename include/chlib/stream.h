@@ -2,6 +2,7 @@
 #define CHLIB_STREAM_H
 
 #include "bundle/flow_bundle.h"
+#include "bundle/stream_bundle.h"
 #include "ch.hpp"
 #include "chlib/combinational.h"
 #include "chlib/fifo.h"
@@ -30,15 +31,15 @@ namespace chlib {
  * Stream FIFO - 带反压的FIFO
  */
 template <typename T, unsigned DEPTH> struct StreamFifoResult {
-    Stream<T> push_stream;                           // 推入端口
-    Stream<T> pop_stream;                            // 弹出端口
+    ch_stream<T> push_stream;                        // 推入端口
+    ch_stream<T> pop_stream;                         // 弹出端口
     ch_uint<compute_idx_width(DEPTH) + 1> occupancy; // 占用计数
     ch_bool full;                                    // 满标志
     ch_bool empty;                                   // 空标志
 };
 
 template <typename T, unsigned DEPTH>
-StreamFifoResult<T, DEPTH> stream_fifo(Stream<T> input_stream) {
+StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     StreamFifoResult<T, DEPTH> result;
 
     // 计算地址宽度：log2(DEPTH)
@@ -75,12 +76,12 @@ StreamFifoResult<T, DEPTH> stream_fifo(Stream<T> input_stream) {
  * synchronous=false: 任意输出就绪即可传输
  */
 template <typename T, unsigned N_OUTPUTS> struct StreamForkResult {
-    Stream<T> input_stream;
-    std::array<Stream<T>, N_OUTPUTS> output_streams;
+    ch_stream<T> input_stream;
+    std::array<ch_stream<T>, N_OUTPUTS> output_streams;
 };
 
 template <typename T, unsigned N_OUTPUTS>
-StreamForkResult<T, N_OUTPUTS> stream_fork(Stream<T> input_stream,
+StreamForkResult<T, N_OUTPUTS> stream_fork(ch_stream<T> input_stream,
                                            bool synchronous = true) {
     StreamForkResult<T, N_OUTPUTS> result;
 
@@ -129,13 +130,13 @@ StreamForkResult<T, N_OUTPUTS> stream_fork(Stream<T> input_stream,
  * Stream Join - 等待所有输入流都有效后传输
  */
 template <typename T, unsigned N_INPUTS> struct StreamJoinResult {
-    std::array<Stream<T>, N_INPUTS> input_streams;
-    Stream<T> output_stream;
+    std::array<ch_stream<T>, N_INPUTS> input_streams;
+    ch_stream<T> output_stream;
 };
 
 template <typename T, unsigned N_INPUTS>
 StreamJoinResult<T, N_INPUTS>
-stream_join(std::array<Stream<T>, N_INPUTS> input_streams) {
+stream_join(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     StreamJoinResult<T, N_INPUTS> result;
 
     // 检查所有输入是否都有效
@@ -164,14 +165,14 @@ stream_join(std::array<Stream<T>, N_INPUTS> input_streams) {
  * Stream Arbiter - 流仲裁器（轮询方式）
  */
 template <typename T, unsigned N_INPUTS> struct StreamArbiterResult {
-    std::array<Stream<T>, N_INPUTS> input_streams;
-    Stream<T> output_stream;
+    std::array<ch_stream<T>, N_INPUTS> input_streams;
+    ch_stream<T> output_stream;
     ch_uint<compute_idx_width(N_INPUTS)> selected; // 选择的输入索引
 };
 
 template <typename T, unsigned N_INPUTS>
 StreamArbiterResult<T, N_INPUTS>
-stream_arbiter_round_robin(std::array<Stream<T>, N_INPUTS> input_streams) {
+stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     StreamArbiterResult<T, N_INPUTS> result;
 
     // 跟踪当前轮询位置的寄存器，使用默认时钟和复位
@@ -227,9 +228,9 @@ stream_arbiter_round_robin(std::array<Stream<T>, N_INPUTS> input_streams) {
  * Stream Mux - 流多路选择器
  */
 template <unsigned N_INPUTS, typename T>
-Stream<T> stream_mux(std::array<Stream<T>, N_INPUTS> input_streams,
-                     ch_uint<compute_idx_width(N_INPUTS)> select) {
-    Stream<T> result;
+ch_stream<T> stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
+                        ch_uint<compute_idx_width(N_INPUTS)> select) {
+    ch_stream<T> result;
 
     // 使用chlib中的mux函数来选择payload
     std::array<T, N_INPUTS> payloads;
@@ -276,14 +277,14 @@ Stream<T> stream_mux(std::array<Stream<T>, N_INPUTS> input_streams,
  * Stream Demux - 流解复用器
  */
 template <typename T, unsigned N_OUTPUTS> struct StreamDemuxResult {
-    Stream<T> input_stream;
-    std::array<Stream<T>, N_OUTPUTS> output_streams;
+    ch_stream<T> input_stream;
+    std::array<ch_stream<T>, N_OUTPUTS> output_streams;
     ch_uint<compute_idx_width(N_OUTPUTS)> select;
 };
 
 template <typename T, unsigned N_OUTPUTS>
 StreamDemuxResult<T, N_OUTPUTS>
-stream_demux(Stream<T> input_stream,
+stream_demux(ch_stream<T> input_stream,
              ch_uint<compute_idx_width(N_OUTPUTS)> select) {
     StreamDemuxResult<T, N_OUTPUTS> result;
     result.input_stream = input_stream;

@@ -1,4 +1,3 @@
-AI_CODING_GUIDELINES.md
 # CppHDL AI Coding Guidelines
 
 This document outlines the coding guidelines for the CppHDL project, designed to ensure consistency and maintainability when working with AI-assisted development.

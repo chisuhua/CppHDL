@@ -6,13 +6,14 @@
 #include <iostream>
 
 using namespace ch::core;
+using namespace ch;
 
 // 自定义嵌套Fragment示例
 template <typename T>
 struct NestedFragment : public bundle_base<NestedFragment<T>> {
     using Self = NestedFragment<T>;
 
-    Fragment<T> fragment;
+    ch_fragment<T> fragment;
     ch_bool flag;
 
     NestedFragment() = default;
@@ -52,8 +53,8 @@ int main() {
     nested_bundle_slave.as_slave();
 
     // 创建Fragment实例
-    Fragment<ch_uint<16>> frag_master;
-    Fragment<ch_uint<16>> frag_slave;
+    ch_fragment<ch_uint<16>> frag_master;
+    ch_fragment<ch_uint<16>> frag_slave;
 
     frag_master.as_master();
     frag_slave.as_slave();

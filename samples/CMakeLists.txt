@@ -10,11 +10,10 @@ set(CH_SAMPLE_TARGETS
     bundle_advanced_features
     bundle_serialization_demo
     bundle_top_example
-    # axi_lite_demo
+    axi_lite_demo
     nested_bundle_demo
     nested_fragment_demo
     # tlm_bundle_demo
-    # bundle_simulator_demo
     pod_bundle_conversion
     minimal_fifo_bundle
     feedback_counter
@@ -33,7 +32,6 @@ set(CH_SAMPLE_TARGETS
     # stream_arbiter_example
     # stream_demux_example
     # stream_flow_basic_example
-    # fragment_example
     # spinalhdl_stream_example
     # spinalhdl_component_function_area_example
     # stream_handshake_example

@@ -20,12 +20,12 @@ TEST_CASE("NestedBundle - BundleTraits", "[bundle][traits]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 测试类型特征
-    STATIC_REQUIRE(is_bundle_v<Stream<ch_uint<8>>> == true);
+    STATIC_REQUIRE(is_bundle_v<ch_stream<ch_uint<8>>> == true);
     STATIC_REQUIRE(is_bundle_v<ch_uint<8>> == false);
     STATIC_REQUIRE(is_bundle_v<ch_bool> == false);
 
     // 测试字段计数
-    STATIC_REQUIRE(bundle_field_count_v<Stream<ch_uint<8>>> == 3);
+    STATIC_REQUIRE(bundle_field_count_v<ch_stream<ch_uint<8>>> == 3);
 }
 
 TEST_CASE("NestedBundle - SimpleNested", "[bundle][nested]") {
@@ -35,7 +35,7 @@ TEST_CASE("NestedBundle - SimpleNested", "[bundle][nested]") {
     // 创建嵌套的Stream Bundle
     struct NestedTest : public bundle_base<NestedTest> {
         using Self = NestedTest;
-        Stream<ch_uint<16>> inner_stream;
+        ch_stream<ch_uint<16>> inner_stream;
         ch_bool status;
 
         NestedTest() = default;

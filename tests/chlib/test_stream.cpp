@@ -15,7 +15,7 @@ TEST_CASE("Stream: Basic Stream Operations", "[stream][bundle]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream creation and basic usage") {
-        Stream<ch_uint<8>> stream("test_stream");
+        ch_stream<ch_uint<8>> stream("test_stream");
 
         REQUIRE(stream.payload.width == 8);
         REQUIRE(stream.valid.width == 1);
@@ -28,9 +28,9 @@ TEST_CASE("Stream: Stream Mux", "[stream][mux]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream Mux operation") {
-        Stream<ch_uint<8>> stream_a, stream_b, stream_c;
-        std::array<Stream<ch_uint<8>>, 3> inputs = {stream_a, stream_b,
-                                                    stream_c};
+        ch_stream<ch_uint<8>> stream_a, stream_b, stream_c;
+        std::array<ch_stream<ch_uint<8>>, 3> inputs = {stream_a, stream_b,
+                                                       stream_c};
 
         stream_a.payload = make_uint<8>(10);
         stream_a.valid = make_uint<1>(1);
@@ -67,8 +67,8 @@ TEST_CASE("Stream: Stream Mux", "[stream][mux]") {
     }
 
     SECTION("Stream direction control") {
-        Stream<ch_uint<8>> master_stream("master");
-        Stream<ch_uint<8>> slave_stream("slave");
+        ch_stream<ch_uint<8>> master_stream("master");
+        ch_stream<ch_uint<8>> slave_stream("slave");
 
         master_stream.as_master();
         slave_stream.as_slave();
@@ -85,7 +85,7 @@ TEST_CASE("Stream: Flow Operations", "[stream][flow]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Flow creation and basic usage") {
-        Flow<ch_uint<8>> flow("test_flow");
+        ch_flow<ch_uint<8>> flow("test_flow");
 
         REQUIRE(flow.payload.width == 8);
         REQUIRE(flow.valid.width == 1);
@@ -97,7 +97,7 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream FIFO basic operation") {
-        Stream<ch_uint<8>> input_stream;
+        ch_stream<ch_uint<8>> input_stream;
         input_stream.payload = 0_d;
         input_stream.valid = false;
         input_stream.ready = false;
@@ -133,7 +133,7 @@ TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream Fork synchronous operation") {
-        Stream<ch_uint<8>> input_stream;
+        ch_stream<ch_uint<8>> input_stream;
         input_stream.payload = 0x12_h;
         input_stream.valid = true;
 
@@ -149,7 +149,7 @@ TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
     }
 
     SECTION("Stream Fork asynchronous operation") {
-        Stream<ch_uint<8>> input_stream;
+        ch_stream<ch_uint<8>> input_stream;
         input_stream.payload = 0x34_h;
         input_stream.valid = true;
 
@@ -170,7 +170,7 @@ TEST_CASE("Stream: Stream Join", "[stream][join]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream Join operation") {
-        std::array<Stream<ch_uint<8>>, 2> input_streams;
+        std::array<ch_stream<ch_uint<8>>, 2> input_streams;
         input_streams[0].payload = 0xAB_h;
         input_streams[0].valid = true;
         input_streams[1].payload = 0xCD_h;
@@ -193,7 +193,7 @@ TEST_CASE("Stream: Stream Arbiter", "[stream][arbiter]") {
 
     SECTION("Stream Arbiter basic operation") {
 
-        std::array<Stream<ch_uint<8>>, 2> input_streams;
+        std::array<ch_stream<ch_uint<8>>, 2> input_streams;
         input_streams[0].payload = 0x11_h;
         input_streams[0].valid = true;
         input_streams[1].payload = 0x22_h;
@@ -221,7 +221,7 @@ TEST_CASE("Stream: Stream Demux", "[stream][demux]") {
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Stream Demux operation") {
-        Stream<ch_uint<8>> input_stream;
+        ch_stream<ch_uint<8>> input_stream;
         input_stream.payload = 0x99_h;
         input_stream.valid = true;
         input_stream.ready = true;

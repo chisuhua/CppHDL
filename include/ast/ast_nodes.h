@@ -256,6 +256,29 @@ public:
     create_instruction(ch::data_map_t &data_map) const override;
 };
 
+class bitsupdateimpl : public lnodeimpl {
+public:
+    bitsupdateimpl(uint32_t id, uint32_t size, lnodeimpl *target,
+                   lnodeimpl *source, lnodeimpl *range, const std::string &name,
+                   const std::source_location &sloc, context *ctx)
+        : lnodeimpl(id, lnodetype::type_mux, size, ctx, name, sloc) {
+        if (target)
+            add_src(target);
+        if (source)
+            add_src(source);
+        if (range)
+            add_src(range);
+    }
+
+    lnodeimpl *target() const { return src(0); }
+    lnodeimpl *source() const { return src(1); }
+    lnodeimpl *range() const { return src(2); }
+
+    // 声明创建指令的方法，实现在cpp文件中
+    std::unique_ptr<ch::instr_base>
+    create_instruction(ch::data_map_t &data_map) const override;
+};
+
 } // namespace ch::core
 
 #include "clockimpl.h"

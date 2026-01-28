@@ -60,7 +60,8 @@ enum class ch_op {
     sshr,         // 算术右移
     neg,          // 负号（一元负）
     bit_sel,      // 位选择
-    bits_extract, // 位选择
+    bits_extract, // 位提取
+    bits_update,  // 位赋值
     concat,       // 连接
     sext,         // 符号扩展
     zext,         // 零扩展

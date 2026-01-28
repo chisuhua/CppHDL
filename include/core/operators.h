@@ -491,7 +491,7 @@ auto bit_select(const T &operand, const Index &index) {
     auto index_node = to_operand(index);
 
     auto *op_node = node_builder::instance().build_bit_select<T, Index>(
-        operand_node, index_node, "bit_select", 
+        operand_node, index_node, "bit_select",
         std::source_location::current());
 
     return make_uint_result<1>(op_node);
@@ -512,6 +512,32 @@ template <typename T1, typename T2> auto concat(const T1 &lhs, const T2 &rhs) {
         std::source_location::current());
 
     return make_uint_result<result_width>(op_node);
+}
+
+// === 位段更新操作 ===
+// 该函数接收一个目标值、一个源值和最低位索引，返回一个新值，
+// 该新值是目标值的部分位被源值替换后的结果
+template <unsigned Width, typename Target, typename Source>
+auto bits_update(const Target &target, const Source &source, unsigned lsb) {
+    static_assert(HardwareType<Target>, "Target must be a hardware type");
+    static_assert(HardwareType<Source> || CHLiteral<Source> ||
+                      ArithmeticLiteral<Source>,
+                  "Source must be a hardware type, literal or arithmetic type");
+    static_assert(Width <= ch_width_v<Target>, "Width must be <= target width");
+
+    // 获取目标和源的操作节点
+    auto target_operand = to_operand(target);
+    auto source_operand = to_operand(source);
+
+    // 计算最高位索引
+    unsigned msb = lsb + Width - 1;
+
+    // 创建位段更新操作节点
+    auto *op_node = node_builder::instance().build_bits_update(
+        target_operand, source_operand, msb, lsb);
+
+    // 返回结果，位宽与目标相同
+    return make_uint_result<ch_width_v<Target>>(op_node);
 }
 
 // === 符号扩展操作 ===
@@ -561,18 +587,32 @@ template <unsigned MSB, unsigned LSB, typename T> auto bits(const T &operand) {
     return make_uint_result<MSB - LSB + 1>(op_node);
 }
 
-template <unsigned Width, typename T, typename Index>
-auto bits(const T &operand, const Index &index) {
+template <unsigned Width, typename T>
+auto bits(const T &operand, unsigned lsb) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
+    static_assert(Width <= ch_width_v<T>, "MSB must be < operand width");
 
     auto operand_node = to_operand(operand);
 
-    auto *op_node = node_builder::instance().build_bit_extract(
-        operand_node, index, Width, "bit_extract",
+    auto *op_node = node_builder::instance().build_bits(
+        operand_node, lsb + Width - 1, lsb, "bits",
         std::source_location::current());
 
     return make_uint_result<Width>(op_node);
 }
+
+// template <unsigned Width, typename T, typename Index>
+// auto bits(const T &operand, const Index &index) {
+//     static_assert(HardwareType<T>, "Operand must be a hardware type");
+
+//     auto operand_node = to_operand(operand);
+
+//     auto *op_node = node_builder::instance().build_bit_extract(
+//         operand_node, index, Width, "bit_extract",
+//         std::source_location::current());
+
+//     return make_uint_result<Width>(op_node);
+// }
 // === 约简操作 ===
 template <typename T> ch_bool and_reduce(const T &operand) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
@@ -811,8 +851,7 @@ inline ch_bool operator||(const ch_uint<N> &lhs, const ch_bool &rhs) {
 }
 
 // === to_bits 包装函数，用于将值转换为位表示 ===
-template <typename T>
-auto to_bits_wrapper(const T &value) {
+template <typename T> auto to_bits_wrapper(const T &value) {
     if constexpr (requires { value.to_bits(); }) {
         // 如果类型有 to_bits 方法，直接使用它
         return value.to_bits();
@@ -822,9 +861,10 @@ auto to_bits_wrapper(const T &value) {
         return ch_uint<W>(value.impl());
     } else if constexpr (ArithmeticLiteral<T>) {
         // 如果是算术字面量，将其转换为适当宽度的 ch_uint
-        constexpr unsigned W = sizeof(T) * 8;  // 按类型大小确定位宽
+        constexpr unsigned W = sizeof(T) * 8; // 按类型大小确定位宽
         sdata_type data(static_cast<uint64_t>(value), W);
-        auto *literal_node = node_builder::instance().build_literal(data, "literal");
+        auto *literal_node =
+            node_builder::instance().build_literal(data, "literal");
         return ch_uint<W>(literal_node);
     } else {
         static_assert(sizeof(T) == 0, "Unsupported type for to_bits_wrapper");

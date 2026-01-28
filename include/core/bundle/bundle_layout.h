@@ -27,16 +27,10 @@ template <typename BundleT> struct bundle_layout {
     }
 
     template <typename T> static constexpr unsigned get_field_width() {
-        if constexpr (requires { T::ch_width; }) {
-            return T::ch_width;
-        } else if constexpr (requires { T::width; }) {
-            return T::width;
-        } else if constexpr (std::is_same_v<T, ch_bool>) {
-            return 1;
-        } else if constexpr (is_bundle_v<T>) {
-            return bundle_width_v<T>;
+        if constexpr (is_bundle_v<T>) {
+            return get_bundle_width<T>();
         } else {
-            return 0;
+            return ch_width_v<T>;
         }
     }
 

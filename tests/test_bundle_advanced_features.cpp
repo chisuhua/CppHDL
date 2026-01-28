@@ -41,23 +41,22 @@ TEST_CASE("BundleAdvanced - ProtocolValidation", "[bundle][protocol]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    Stream<ch_uint<32>> stream;
+    ch_stream<ch_uint<32>> stream;
 
     // 验证HandShake协议
-    STATIC_REQUIRE(is_handshake_protocol_v<Stream<ch_uint<32>>> == true);
+    STATIC_REQUIRE(is_handshake_protocol_v<ch_stream<ch_uint<32>>> == true);
     STATIC_REQUIRE(is_handshake_protocol_v<ch_uint<32>> == false);
 
     // 验证字段检查
+    STATIC_REQUIRE(has_field_named_v<ch_stream<ch_uint<32>>,
+                                     structural_string{"payload"}> == true);
     STATIC_REQUIRE(
-        has_field_named_v<Stream<ch_uint<32>>, structural_string{"payload"}> ==
+        has_field_named_v<ch_stream<ch_uint<32>>, structural_string{"valid"}> ==
         true);
     STATIC_REQUIRE(
-        has_field_named_v<Stream<ch_uint<32>>, structural_string{"valid"}> ==
+        has_field_named_v<ch_stream<ch_uint<32>>, structural_string{"ready"}> ==
         true);
-    STATIC_REQUIRE(
-        has_field_named_v<Stream<ch_uint<32>>, structural_string{"ready"}> ==
-        true);
-    STATIC_REQUIRE(has_field_named_v<Stream<ch_uint<32>>,
+    STATIC_REQUIRE(has_field_named_v<ch_stream<ch_uint<32>>,
                                      structural_string{"nonexistent"}> ==
                    false);
 }
@@ -67,8 +66,8 @@ TEST_CASE("BundleAdvanced - BundleOperations", "[bundle][operations]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 测试Bundle连接 (简化版)
-    Stream<ch_uint<16>> stream1;
-    Stream<ch_uint<16>> stream2;
+    ch_stream<ch_uint<16>> stream1;
+    ch_stream<ch_uint<16>> stream2;
 
     auto concat_bundle = ch::core::bundle_cat(stream1, stream2);
     REQUIRE(concat_bundle.is_valid());
@@ -79,15 +78,15 @@ TEST_CASE("BundleAdvanced - TypeTraits", "[bundle][traits]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    Stream<ch_uint<8>> stream;
+    ch_stream<ch_uint<8>> stream;
     ch_uint<8> regular_type;
 
     // 测试类型特征
-    STATIC_REQUIRE(is_bundle_v<Stream<ch_uint<8>>> == true);
+    STATIC_REQUIRE(is_bundle_v<ch_stream<ch_uint<8>>> == true);
     STATIC_REQUIRE(is_bundle_v<ch_uint<8>> == false);
 
     // 测试字段计数
-    STATIC_REQUIRE(bundle_field_count_v<Stream<ch_uint<8>>> == 3);
+    STATIC_REQUIRE(bundle_field_count_v<ch_stream<ch_uint<8>>> == 3);
     STATIC_REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<32>>> == 5);
 }
 
@@ -113,7 +112,7 @@ TEST_CASE("BundleAdvanced - ProtocolCheckFunction",
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    Stream<ch_uint<32>> stream;
+    ch_stream<ch_uint<32>> stream;
 
     // 测试协议验证函数 (编译期检查)
     validate_handshake_protocol<decltype(stream)>();

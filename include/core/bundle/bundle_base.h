@@ -1,11 +1,15 @@
 #ifndef CH_CORE_BUNDLE_BASE_H
 #define CH_CORE_BUNDLE_BASE_H
 
+#include "bundle_traits.h"
+#include "core/bundle/bundle_layout.h"
 #include "core/bundle/bundle_serialization.h"
 #include "core/bundle/bundle_traits.h"
 #include "core/direction.h"
 #include "core/literal.h" // 添加对literal.h的包含
 #include "core/logic_buffer.h"
+#include "core/operators.h" // 添加operators.h的包含
+#include <concepts>
 #include <source_location>
 #include <string>
 
@@ -78,28 +82,59 @@ public:
         static_cast<Derived *>(this)->as_slave_direction();
     };
 
-    // 连接操作符 - 保持bundle整体连接语义
-    Derived &operator<<=(const Derived &src) {
-        lnode<Derived> src_lnode = get_lnode(src);
-        unsigned W = get_bundle_width<Derived>();
-        if (src_lnode.impl()) {
-            if (!this->node_impl_) {
-                this->node_impl_ =
-                    node_builder::instance().build_unary_operation(
-                        ch_op::assign, src_lnode, W,
-                        src_lnode.impl()->name() + "_bundle");
-            } else {
-                CHERROR("[bundle::operator<<=] Error: node_impl_ or "
-                        "src_lnode is not null for !");
-            }
-        } else {
-            CHERROR("[bundle::operator<<=] Error: node_impl_ or "
-                    "src_lnode is null for !");
-        }
+    // 连接操作符 - 重构以支持字段级别连接，根据字段方向进行连接
+    Derived &operator<<=(Derived &src) {
+        // 对bundle的每个字段进行单独连接，根据字段方向决定连接方式
+        const auto &fields = derived()->__bundle_fields();
+
+        // 使用C++20的pack expansion特性来展开字段连接
+        std::apply(
+            [this, &src](auto &&...field_ptrs) {
+                (connect_field_based_on_direction_and_source(
+                     derived()->*(field_ptrs.ptr),
+                     src.derived()->*(field_ptrs.ptr)),
+                 ...);
+            },
+            fields);
+
         return static_cast<Derived &>(*this);
     }
+    
+    // 一个新的连接函数，处理双向连接场景
+    template <typename LeftField, typename RightField>
+    void connect_field_based_on_direction_and_source(LeftField &left_field, 
+                                                     RightField &right_field) {
+        using LeftFieldType = std::remove_const_t<std::remove_reference_t<decltype(left_field)>>;
+        using RightFieldType = std::remove_const_t<std::remove_reference_t<decltype(right_field)>>;
 
-    // 赋值操作符 - 保持一致性
+        if constexpr (is_bundle_v<RightFieldType>) {
+            // 如果字段是bundle类型，递归调用operator<<=
+            left_field <<= right_field;
+        } else {
+            // 对于基本类型字段，根据字段方向决定连接方式
+            // 获取左右字段的方向信息
+            auto left_dir = left_field.direction();
+            auto right_dir = right_field.direction();
+
+            // 根据方向连接：右操作数的输出连接到左操作数的输入
+            // 如果右字段是输出方向，左字段是输入方向，则右字段驱动左字段
+            if (std::holds_alternative<output_direction>(right_dir) &&
+                std::holds_alternative<input_direction>(left_dir)) {
+                left_field = right_field;
+            }
+            // 如果右字段是输入方向，左字段是输出方向，则左字段驱动右字段
+            else if (std::holds_alternative<input_direction>(right_dir) &&
+                     std::holds_alternative<output_direction>(left_dir)) {
+                right_field = left_field;
+            }
+            // 默认情况下，按原始方式连接（如果方向相同或未指定方向）
+            else {
+                left_field = right_field;
+            }
+        }
+    }
+
+    // 赋值操作符 - 保持不变
     Derived &operator=(const Derived &other) {
         if (this != &other) {
             this->node_impl_ = other.impl();
@@ -151,36 +186,6 @@ public:
     bundle_role get_role() const { return role_; }
 
 protected:
-    // 子类可调用：从节点同步成员字段
-    // void sync_members_from_node() {
-    //     if (!this->node_impl_)
-    //         return;
-
-    //     // 检查当前bundle是否已经初始化，避免递归调用
-    //     // 我们可以通过检查impl()是否为有效的节点来判断
-    //     if (this->impl() == nullptr)
-    //         return;
-
-    //     constexpr unsigned W = get_bundle_width<Derived>();
-    //     ch_uint<W> all_bits(this->impl());
-
-    //     // 检查节点是否有效，避免段错误
-    //     if (all_bits.impl() == nullptr)
-    //         return;
-
-    //     // 使用 bundle_serialization.h 中的 deserialize 函数
-    //     Derived temp = deserialize<Derived>(all_bits);
-
-    //     // 将 temp 的字段赋值给 this 的成员
-    //     const auto fields = Derived::__bundle_fields();
-    //     std::apply(
-    //         [&](auto &&...f) {
-    //             // 确保在赋值前 temp 对象已正确构造
-    //             ((derived()->*(f.ptr) = temp.*(f.ptr)), ...);
-    //         },
-    //         fields);
-    // }
-
     // 获取派生类指针的辅助函数
     constexpr Derived *derived() { return static_cast<Derived *>(this); }
     constexpr const Derived *derived() const {
@@ -256,16 +261,61 @@ private:
         }
 
         // 将字段初始化为总线的位切片
-        // create_field_slices_from_node();
+        create_field_slices_from_node();
     }
+
+protected:
+    // 创建字段的位切片节点
+    void create_field_slices_from_node() {
+        unsigned offset = 0;
+        const auto layout = get_bundle_layout<Derived>();
+        std::apply(
+            [&](auto &&...field_info) {
+                (([&]() {
+                     auto &field_ref = derived()->*(field_info.ptr);
+                     using FieldType = std::decay_t<decltype(field_ref)>;
+                     auto bundle_lnode = get_lnode(*derived());
+                     if constexpr (is_bundle_v<FieldType>) {
+                         static_assert(!std::is_same_v<FieldType, Derived>,
+                                       "Bundle cannot contain itself");
+                         constexpr unsigned W = get_bundle_width<FieldType>();
+                         if constexpr (W == 0) {
+                             static_assert(W != 0,
+                                           "Field width cannot be zero!");
+                         }
+
+                         // 使用get_lnode获取当前bundle的节点
+                         auto field_slice = bits<W>(bundle_lnode, offset);
+                         field_ref = FieldType(field_slice.impl());
+                         offset += W;
+                     } else {
+                         constexpr unsigned W = ch_width_v<FieldType>;
+                         if constexpr (W == 0) {
+                             static_assert(W != 0,
+                                           "Field width cannot be zero!");
+                         }
+
+                         if constexpr (W == 1) {
+                             field_ref = bit_select(bundle_lnode, offset);
+                             offset++;
+                         } else {
+                             field_ref = bits<W>(bundle_lnode, offset);
+                             offset += W;
+                         }
+                     }
+                 }()),
+                 ...);
+            },
+            layout);
+    }
+
 };
 
 // 特化 ch_width_impl 和 get_lnode（必须在定义后）
-// template <typename Derived>
-// struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>>
-// {
-//     static constexpr unsigned value = get_bundle_width<Derived>();
-// };
+template <typename Derived>
+struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>> {
+    static constexpr unsigned value = get_bundle_width<Derived>();
+};
 
 template <typename Derived> inline lnode<Derived> get_lnode(const Derived &b) {
     return lnode<Derived>(b.impl());

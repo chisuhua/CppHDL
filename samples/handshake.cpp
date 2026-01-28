@@ -52,13 +52,13 @@ int main() {
         HandShake<ch_uint<8>> master_bundle;
         HandShake<ch_uint<8>> slave_bundle;
 
-        master_bundle.payload = 0x55_h;
-        master_bundle.valid = true;
-        slave_bundle.ready = true;
-
         // 设置方向
         master_bundle.as_master();
         slave_bundle.as_slave();
+
+        master_bundle.payload = 0x55_h;
+        master_bundle.valid = true;
+        slave_bundle.ready = true;
 
         std::cout << "Bundle created successfully!" << std::endl;
         std::cout << "Master role: " << (int)master_bundle.get_role()

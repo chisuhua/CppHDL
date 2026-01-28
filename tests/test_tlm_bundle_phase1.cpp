@@ -24,19 +24,15 @@ struct test_simple_bundle : public bundle_base<test_simple_bundle> {
     ch_uint<4> status;
 
     test_simple_bundle() = default;
-    explicit test_simple_bundle(const std::string &prefix) {
-        this->set_name_prefix(prefix);
-    }
+    // explicit test_simple_bundle(const std::string &prefix) {
+    //     this->set_name_prefix(prefix);
+    // }
 
-    CH_BUNDLE_FIELDS(Self, data, flag, status)
+    CH_BUNDLE_FIELDS_T(data, flag, status)
 
-    void as_master_direction() {
-        this->make_output(data, flag, status);
-    }
+    void as_master_direction() { this->make_output(data, flag, status); }
 
-    void as_slave_direction() {
-        this->make_input(data, flag, status);
-    }
+    void as_slave_direction() { this->make_input(data, flag, status); }
 };
 
 TEST_CASE("Phase1 - BundleWidthCalculation", "[phase1][width]") {
@@ -44,11 +40,11 @@ TEST_CASE("Phase1 - BundleWidthCalculation", "[phase1][width]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 测试宽度计算
-    STATIC_REQUIRE(bundle_width_v<test_simple_bundle> == 13);  // 8 + 1 + 4
-    STATIC_REQUIRE(bundle_width_v<Stream<ch_uint<32>>> == 34); // 32 + 1 + 1
+    STATIC_REQUIRE(bundle_width_v<test_simple_bundle> == 13);     // 8 + 1 + 4
+    STATIC_REQUIRE(bundle_width_v<ch_stream<ch_uint<32>>> == 34); // 32 + 1 + 1
 
     test_simple_bundle simple;
-    Stream<ch_uint<16>> stream;
+    ch_stream<ch_uint<16>> stream;
 
     REQUIRE(simple.width() == 13);
     REQUIRE(stream.width() == 18);
@@ -62,7 +58,7 @@ TEST_CASE("Phase1 - BundleLayoutInfo", "[phase1][layout]") {
     constexpr auto layout = get_bundle_layout<test_simple_bundle>();
     REQUIRE(std::tuple_size_v<decltype(layout)> == 3);
 
-    constexpr auto stream_layout = get_bundle_layout<Stream<ch_uint<32>>>();
+    constexpr auto stream_layout = get_bundle_layout<ch_stream<ch_uint<32>>>();
     REQUIRE(std::tuple_size_v<decltype(stream_layout)> == 3);
 }
 
@@ -88,7 +84,7 @@ TEST_CASE("Phase1 - StreamBundleSerialization", "[phase1][stream]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());
 
-    Stream<ch_uint<16>> stream;
+    ch_stream<ch_uint<16>> stream;
     stream.payload = ch_uint<16>(0x1234_h);
     stream.valid = ch_bool(true);
     stream.ready = ch_bool(false);
@@ -96,7 +92,7 @@ TEST_CASE("Phase1 - StreamBundleSerialization", "[phase1][stream]") {
     auto bits = serialize(stream);
     REQUIRE(bits.width == 18);
 
-    auto recovered = deserialize<Stream<ch_uint<16>>>(bits);
+    auto recovered = deserialize<ch_stream<ch_uint<16>>>(bits);
     REQUIRE(recovered.width() == 18);
 }
 
@@ -105,7 +101,7 @@ TEST_CASE("Phase1 - BitsConversion", "[phase1][conversion]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     test_simple_bundle bundle;
-    auto bits_view = to_bits(bundle);
+    auto bits_view = serialize(bundle);
 
     REQUIRE(bits_view.width == 13);
 }
@@ -128,7 +124,7 @@ TEST_CASE("Phase1 - Integration", "[phase1][integration]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     // 完整的序列化-反序列化流程
-    Stream<ch_uint<32>> original;
+    ch_stream<ch_uint<32>> original;
     original.payload = ch_uint<32>(0xDEADBEEF_h);
     original.valid = ch_bool(true);
     original.ready = ch_bool(false);
@@ -138,7 +134,7 @@ TEST_CASE("Phase1 - Integration", "[phase1][integration]") {
     REQUIRE(bits.width == 34);
 
     // 反序列化
-    auto recovered = deserialize<Stream<ch_uint<32>>>(bits);
+    auto recovered = deserialize<ch_stream<ch_uint<32>>>(bits);
     REQUIRE(recovered.width() == 34);
 
     // 验证字段

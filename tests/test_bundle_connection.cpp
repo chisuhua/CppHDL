@@ -44,8 +44,8 @@ struct ComplexBundle : public bundle_base<ComplexBundle> {
     CH_BUNDLE_FIELDS_T(input_field, output_field, enable)
 
     void as_master_direction() {
-        this->make_output(input_field, output_field);
-        this->make_input(enable);
+        this->make_output(output_field);
+        this->make_input(enable, input_field);
     }
 
     void as_slave_direction() {
@@ -215,47 +215,51 @@ TEST_CASE("test_bundle_connection - Bundle role management", "[bundle][role]") {
     REQUIRE(bundle.get_role() == bundle_role::slave);
 }
 
-// TEST_CASE("test_bundle_connection - Bundle connection in module",
-//           "[bundle][connection][module]") {
-//     class BundleConnectionModule : public Component {
-//     public:
-//         __io(SimpleBundle input_bundle; SimpleBundle output_bundle;);
+TEST_CASE("test_bundle_connection - Bundle connection in module",
+          "[bundle][connection][module]") {
+    class BundleConnectionModule : public Component {
+    public:
+        __io(SimpleBundle input_bundle; SimpleBundle output_bundle;);
 
-//         BundleConnectionModule(Component *parent = nullptr,
-//                                const std::string &name = "bundle_conn")
-//             : Component(parent, name) {}
+        BundleConnectionModule(Component *parent = nullptr,
+                               const std::string &name = "bundle_conn")
+            : Component(parent, name) {}
 
-//         void create_ports() override { new (this->io_storage_) io_type; }
+        void create_ports() override { new (this->io_storage_) io_type; }
 
-//         void describe() override {
-//             SimpleBundle internal_bundle;
+        void describe() override {
+            // SimpleBundle internal_bundle;
+            io().input_bundle.as_master();
+            io().output_bundle.as_slave();
 
-//             // 连接输入bundle到内部bundle
-//             internal_bundle <<= io().input_bundle;
+            io().output_bundle <<= io().output_bundle;
 
-//             // 连接内部bundle到输出bundle
-//             io().output_bundle <<= internal_bundle;
-//         }
-//     };
+            // 连接输入bundle到内部bundle
+            // internal_bundle <<= io().input_bundle;
 
-//     ch_device<BundleConnectionModule> dev;
-//     toDAG("bundle1.dot", dev.context());
-//     Simulator sim(dev.context());
+            // // 连接内部bundle到输出bundle
+            // io().output_bundle <<= internal_bundle;
+        }
+    };
 
-//     auto input_bundle = dev.io().input_bundle;
-//     auto output_bundle = dev.io().output_bundle;
+    ch_device<BundleConnectionModule> dev;
+    toDAG("bundle1.dot", dev.context());
+    Simulator sim(dev.context());
 
-//     // 测试bundle中数据字段的连接
-//     std::vector<uint64_t> test_values = {10, 42, 100, 200};
+    auto input_bundle = dev.io().input_bundle;
+    auto output_bundle = dev.io().output_bundle;
 
-//     for (uint64_t test_val : test_values) {
-//         sim.set_input_value(input_bundle.data, test_val);
-//         sim.tick();
+    // 测试bundle中数据字段的连接
+    std::vector<uint64_t> test_values = {10, 42, 100, 200};
 
-//         auto output_val = sim.get_value(output_bundle.data);
-//         REQUIRE(static_cast<uint64_t>(output_val) == test_val);
-//     }
-// }
+    for (uint64_t test_val : test_values) {
+        sim.set_value(input_bundle.data, test_val);
+        sim.tick();
+
+        auto output_val = sim.get_value(output_bundle.data);
+        REQUIRE(static_cast<uint64_t>(output_val) == test_val);
+    }
+}
 
 // TEST_CASE("test_bundle_connection - Connection between bundles with different
 // "
@@ -364,13 +368,14 @@ TEST_CASE("test_bundle_connection - Bundle using connect function",
     SimpleBundle bundle_src;
     SimpleBundle bundle_dst;
 
+    bundle_src.as_master();
+    bundle_dst.as_master();
+
     // 使用connect函数连接两个bundle
     ch::core::connect(bundle_src, bundle_dst);
 
     // 验证bundle内的字段连接
-    REQUIRE(bundle_dst.data.impl() != nullptr);
-    REQUIRE(bundle_src.data.impl() != nullptr);
-    REQUIRE(bundle_dst.data.impl() !=
+    REQUIRE(bundle_dst.data.impl() ==
             bundle_src.data.impl()); // connect函数逐字段连接，不会共享节点
 }
 
@@ -429,18 +434,27 @@ TEST_CASE("test_bundle_connection - Bundle operator<<= connects both bundle "
     SimpleBundle bundle_src;
     SimpleBundle bundle_dst;
 
+    bundle_src.as_master();
+    bundle_dst.as_slave();
+
     // 使用operator<<=连接两个bundle
     bundle_dst <<= bundle_src;
 
     // 验证bundle本身被连接
     REQUIRE(bundle_dst.impl() != nullptr);
     REQUIRE(bundle_src.impl() != nullptr);
+    REQUIRE(bundle_src.impl() != bundle_dst.impl());
 
     // 验证bundle的字段也被连接
     REQUIRE(bundle_dst.data.impl() != nullptr);
     REQUIRE(bundle_src.data.impl() != nullptr);
-    REQUIRE(bundle_dst.data.impl() !=
+    REQUIRE(bundle_dst.data.impl() ==
             bundle_src.data.impl()); // 通过operator<<=连接，不共享节点
+
+    auto source = make_uint<ch_width_v<decltype(bundle_src.data)>>(0);
+    bundle_src.data = source;
+    REQUIRE(bundle_dst.data.impl() != bundle_src.data.impl());
+    REQUIRE(bundle_src.data.impl() == source.impl());
 }
 
 // 新增测试：验证复杂bundle的operator<<=实现
@@ -454,12 +468,16 @@ TEST_CASE(
     ComplexBundle bundle_src;
     ComplexBundle bundle_dst;
 
+    bundle_src.as_master();
+    bundle_dst.as_slave();
+
     // 使用operator<<=连接两个bundle
     bundle_dst <<= bundle_src;
 
     // 验证bundle本身被连接
     REQUIRE(bundle_dst.impl() != nullptr);
     REQUIRE(bundle_src.impl() != nullptr);
+    REQUIRE(bundle_src.impl() != bundle_dst.impl());
 
     // 验证bundle的所有字段都被连接
     REQUIRE(bundle_dst.input_field.impl() != nullptr);
@@ -467,12 +485,141 @@ TEST_CASE(
     REQUIRE(bundle_dst.enable.impl() != nullptr);
 
     // 验证字段连接成功（虽然节点不共享，但已建立了连接）
-    REQUIRE(bundle_dst.input_field.impl() != bundle_src.input_field.impl());
-    REQUIRE(bundle_dst.output_field.impl() != bundle_src.output_field.impl());
-    REQUIRE(bundle_dst.enable.impl() != bundle_src.enable.impl());
+    REQUIRE(bundle_dst.input_field.impl() == bundle_src.input_field.impl());
+    REQUIRE(bundle_dst.output_field.impl() == bundle_src.output_field.impl());
+    REQUIRE(bundle_dst.enable.impl() == bundle_src.enable.impl());
+
+    auto source = make_uint<ch_width_v<decltype(bundle_src.output_field)>>(0);
+    bundle_src.output_field <<= source;
+    REQUIRE(bundle_dst.output_field.impl() == bundle_src.output_field.impl());
 }
 
-// 新增测试：在模块中验证bundle operator<<=的功能
+// 新增测试：bundle之间的连接测试
+TEST_CASE(
+    "test_bundle_connection - Bundle to bundle connection with <<= operator",
+    "[bundle][connection][bundle_to_bundle]") {
+    context ctx;
+    ctx_swap ctx_guard(&ctx);
+
+    // 创建一个master bundle和一个slave bundle
+    auto master_bundle = ch::core::master(ComplexBundle{});
+    auto slave_bundle = ch::core::slave(ComplexBundle{});
+
+    // 连接两个bundle
+    slave_bundle <<= master_bundle;
+
+    // 验证bundle节点连接
+    REQUIRE(master_bundle.impl() != nullptr);
+    REQUIRE(slave_bundle.impl() != nullptr);
+
+    // 验证所有字段都已正确连接
+    REQUIRE(master_bundle.input_field.impl() != nullptr);
+    REQUIRE(master_bundle.output_field.impl() != nullptr);
+    REQUIRE(master_bundle.enable.impl() != nullptr);
+
+    REQUIRE(slave_bundle.input_field.impl() != nullptr);
+    REQUIRE(slave_bundle.output_field.impl() != nullptr);
+    REQUIRE(slave_bundle.enable.impl() != nullptr);
+}
+
+// 新增测试：字段之间的连接测试
+TEST_CASE("test_bundle_connection - Field to field connection with = operator",
+          "[bundle][connection][field_to_field]") {
+    context ctx;
+    ctx_swap ctx_guard(&ctx);
+
+    // 创建两个bundle实例
+    ComplexBundle src_bundle, dst_bundle;
+    src_bundle.as_master();
+    dst_bundle.as_slave();
+
+    // 分别连接字段，使用 = 操作符（因为字段是目的端）
+    dst_bundle.input_field = src_bundle.input_field;
+    dst_bundle.output_field = src_bundle.output_field;
+    dst_bundle.enable = src_bundle.enable;
+
+    // 验证字段连接成功
+    REQUIRE(dst_bundle.input_field.impl() != nullptr);
+    REQUIRE(dst_bundle.output_field.impl() != nullptr);
+    REQUIRE(dst_bundle.enable.impl() != nullptr);
+
+    // 验证字段是从源节点连接过来的，不再是原来的位提取节点
+    REQUIRE(dst_bundle.input_field.impl() == src_bundle.input_field.impl());
+    REQUIRE(dst_bundle.output_field.impl() == src_bundle.output_field.impl());
+    REQUIRE(dst_bundle.enable.impl() == src_bundle.enable.impl());
+}
+
+// 新增测试：中间模块的字段连接测试
+TEST_CASE("test_bundle_connection - Field connection in intermediate module",
+          "[bundle][connection][intermediate_module]") {
+    context ctx;
+    ctx_swap ctx_guard(&ctx);
+
+    // 创建上游slave bundle和下游master bundle
+    auto upstream_slave = ch::core::slave(ComplexBundle{});
+    auto downstream_master = ch::core::master(ComplexBundle{});
+
+    // 创建中间模块的bundle
+    ComplexBundle intermediate_bundle;
+    intermediate_bundle.as_master(); // 中间模块作为master向下游输出
+
+    // 连接上游到中间模块
+    intermediate_bundle.input_field = upstream_slave.input_field;
+    intermediate_bundle.enable = upstream_slave.enable;
+
+    // 连接中间模块到下游
+    downstream_master.input_field = intermediate_bundle.input_field;
+    downstream_master.enable = intermediate_bundle.enable;
+    downstream_master.output_field = intermediate_bundle.output_field;
+
+    // 验证所有连接都已建立
+    REQUIRE(upstream_slave.input_field.impl() != nullptr);
+    REQUIRE(upstream_slave.enable.impl() != nullptr);
+
+    REQUIRE(intermediate_bundle.input_field.impl() != nullptr);
+    REQUIRE(intermediate_bundle.enable.impl() != nullptr);
+    REQUIRE(intermediate_bundle.output_field.impl() != nullptr);
+
+    REQUIRE(downstream_master.input_field.impl() != nullptr);
+    REQUIRE(downstream_master.enable.impl() != nullptr);
+    REQUIRE(downstream_master.output_field.impl() != nullptr);
+}
+
+// 新增测试：混合连接测试（bundle连接和字段连接结合）
+TEST_CASE("test_bundle_connection - Mixed bundle and field connections",
+          "[bundle][connection][mixed]") {
+    context ctx;
+    ctx_swap ctx_guard(&ctx);
+
+    // 创建三个bundle实例
+    ComplexBundle src_bundle, intermediate_bundle, dst_bundle;
+
+    src_bundle.as_master();
+    intermediate_bundle.as_slave();
+    dst_bundle.as_slave();
+
+    // 首先连接源到中间层bundle
+    intermediate_bundle <<= src_bundle;
+
+    // 然后对某些字段进行重定向连接
+    dst_bundle.input_field = intermediate_bundle.input_field;
+    dst_bundle.output_field <<= src_bundle.output_field; // 使用bundle连接
+    dst_bundle.enable = src_bundle.enable;               // 使用字段连接
+
+    // 验证所有连接都已建立
+    REQUIRE(src_bundle.input_field.impl() != nullptr);
+    REQUIRE(src_bundle.output_field.impl() != nullptr);
+    REQUIRE(src_bundle.enable.impl() != nullptr);
+
+    REQUIRE(intermediate_bundle.input_field.impl() != nullptr);
+    REQUIRE(intermediate_bundle.output_field.impl() != nullptr);
+    REQUIRE(intermediate_bundle.enable.impl() != nullptr);
+
+    REQUIRE(dst_bundle.input_field.impl() != nullptr);
+    REQUIRE(dst_bundle.output_field.impl() != nullptr);
+    REQUIRE(dst_bundle.enable.impl() != nullptr);
+}
+
 // TEST_CASE("test_bundle_connection - Bundle operator<<= in module context",
 //           "[bundle][connection][module_operator]") {
 //     class BundleOperatorModule : public Component {
