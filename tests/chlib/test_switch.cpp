@@ -224,17 +224,16 @@ TEST_CASE("switch_parallel functionality", "[switch]") {
 }
 
 TEST_CASE("switch_ with literal values", "[switch]") {
-    auto ctx = std::make_unique<context>("test_switch_literal");
-    ctx_swap ctx_swapper(ctx.get());
-
-    ch_uint<4> input = make_uint<4>(0);
-
-    // 测试使用字面量值的情况
-    ch_uint<8> output = switch_(input, 00_d, case_(1_d, 10_d), case_(2_d, 20_d),
-                                case_(3_d, 30_d));
-
     SECTION("Test default case with literals") {
-        input = make_uint<4>(0);
+        auto ctx = std::make_unique<context>("test_switch_literal_default");
+        ctx_swap ctx_swapper(ctx.get());
+
+        ch_uint<4> input = make_uint<4>(0);
+
+        // 测试使用字面量值的情况
+        ch_uint<8> output = switch_(input, 00_d, case_(1_d, 10_d), case_(2_d, 20_d),
+                                    case_(3_d, 30_d));
+
         Simulator sim(ctx.get());
         sim.tick();
 
@@ -248,7 +247,15 @@ TEST_CASE("switch_ with literal values", "[switch]") {
     }
 
     SECTION("Test first case with literals") {
-        input = make_uint<4>(1);
+        auto ctx = std::make_unique<context>("test_switch_literal_first");
+        ctx_swap ctx_swapper(ctx.get());
+
+        ch_uint<4> input = make_uint<4>(1);
+
+        // 测试使用字面量值的情况
+        ch_uint<8> output = switch_(input, 00_d, case_(1_d, 10_d), case_(2_d, 20_d),
+                                    case_(3_d, 30_d));
+
         Simulator sim(ctx.get());
         sim.tick();
 
@@ -262,7 +269,15 @@ TEST_CASE("switch_ with literal values", "[switch]") {
     }
 
     SECTION("Test second case with literals") {
-        input = make_uint<4>(2);
+        auto ctx = std::make_unique<context>("test_switch_literal_second");
+        ctx_swap ctx_swapper(ctx.get());
+
+        ch_uint<4> input = make_uint<4>(2);
+
+        // 测试使用字面量值的情况
+        ch_uint<8> output = switch_(input, 00_d, case_(1_d, 10_d), case_(2_d, 20_d),
+                                    case_(3_d, 30_d));
+
         Simulator sim(ctx.get());
         sim.tick();
 
@@ -277,17 +292,18 @@ TEST_CASE("switch_ with literal values", "[switch]") {
 }
 
 TEST_CASE("switch_case with mixed literal and non-literal values", "[switch]") {
-    auto ctx = std::make_unique<context>("test_switch_mixed");
-    ctx_swap ctx_swapper(ctx.get());
-
-    ch_uint<4> input = make_uint<4>(0);
-
-    // 测试混合字面量和非字面量值的情况
-    ch_uint<8> output = switch_case(input, 0_d, 1_d, make_uint<8>(10), 2_d,
-                                    make_uint<8>(20), 3_d, make_uint<8>(30));
-
     SECTION("Test default case") {
-        input = make_uint<4>(0);
+        auto ctx = std::make_unique<context>("test_switch_mixed_default");
+        ctx_swap ctx_swapper(ctx.get());
+
+        ch_uint<4> input = make_uint<4>(0);
+
+        // 使用显式的case_来构造
+        ch_uint<8> output = switch_parallel(input, make_uint<8>(0),
+                                            case_(make_uint<4>(1), make_uint<8>(10)),
+                                            case_(make_uint<4>(2), make_uint<8>(20)),
+                                            case_(make_uint<4>(3), make_uint<8>(30)));
+
         Simulator sim(ctx.get());
         sim.tick();
 
@@ -301,7 +317,17 @@ TEST_CASE("switch_case with mixed literal and non-literal values", "[switch]") {
     }
 
     SECTION("Test first case") {
-        input = make_uint<4>(1);
+        auto ctx = std::make_unique<context>("test_switch_mixed_first");
+        ctx_swap ctx_swapper(ctx.get());
+
+        ch_uint<4> input = make_uint<4>(1);
+
+        // 使用显式的case_来构造
+        ch_uint<8> output = switch_parallel(input, make_uint<8>(0),
+                                            case_(make_uint<4>(1), make_uint<8>(10)),
+                                            case_(make_uint<4>(2), make_uint<8>(20)),
+                                            case_(make_uint<4>(3), make_uint<8>(30)));
+
         Simulator sim(ctx.get());
         sim.tick();
 
@@ -315,7 +341,17 @@ TEST_CASE("switch_case with mixed literal and non-literal values", "[switch]") {
     }
 
     SECTION("Test second case") {
-        input = make_uint<4>(2);
+        auto ctx = std::make_unique<context>("test_switch_mixed_second");
+        ctx_swap ctx_swapper(ctx.get());
+
+        ch_uint<4> input = make_uint<4>(2);
+
+        // 使用显式的case_来构造
+        ch_uint<8> output = switch_parallel(input, make_uint<8>(0),
+                                            case_(make_uint<4>(1), make_uint<8>(10)),
+                                            case_(make_uint<4>(2), make_uint<8>(20)),
+                                            case_(make_uint<4>(3), make_uint<8>(30)));
+
         Simulator sim(ctx.get());
         sim.tick();
 

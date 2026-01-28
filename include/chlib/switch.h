@@ -202,13 +202,18 @@ constexpr auto switch_parallel(TValue &&value, TDefault &&default_result,
             auto results = std::make_tuple(std::get<I>(case_array).result...);
 
             // 使用优先级编码器逻辑：第一个匹配的case获胜
+            // 从最后一个case开始往前处理，逐层构建mux树
+            // 这样确保第一个case具有最高优先级
             auto result = default_result;
-
-            // 从最高优先级到最低优先级依次检查
-            auto _ = ((select((std::get<I>(conditions)),
-                              (result = std::get<I>(results), true), false)) ||
-                      ... || true);
-            (void)_; // 避免未使用变量警告
+            
+            // 使用folding expression，从右到左处理（最后的case优先级低）
+            // 但由于我们从后往前构建，实际上最前面的case优先级最高
+            [&]<size_t... J>(std::index_sequence<J...>) {
+                // 从后往前反向遍历
+                ((result = select(std::get<sizeof...(I) - 1 - J>(conditions),
+                                  std::get<sizeof...(I) - 1 - J>(results),
+                                  result)), ...);
+            }(std::make_index_sequence<sizeof...(I)>{});
 
             return result;
         }(std::index_sequence_for<TCaseEntries...>{});
@@ -240,11 +245,13 @@ constexpr auto switch_parallel(TValue &&value, TDefault &&default_result,
             // 使用优先级编码器逻辑：第一个匹配的case获胜
             auto result = default_uint;
 
-            // 从最高优先级到最低优先级依次检查
-            auto _ = (select(std::get<I>(conditions),
-                             (result = std::get<I>(results), true), false) ||
-                      ... || true);
-            (void)_; // 避免未使用变量警告
+            // 从最后一个case开始往前处理，逐层构建mux树
+            [&]<size_t... J>(std::index_sequence<J...>) {
+                // 从后往前反向遍历
+                ((result = select(std::get<sizeof...(I) - 1 - J>(conditions),
+                                  std::get<sizeof...(I) - 1 - J>(results),
+                                  result)), ...);
+            }(std::make_index_sequence<sizeof...(I)>{});
 
             return result;
         }(std::index_sequence_for<TCaseEntries...>{});
@@ -253,31 +260,42 @@ constexpr auto switch_parallel(TValue &&value, TDefault &&default_result,
 
 // 便捷函数，允许直接传入值对而不需要显式创建case_entry
 // 电路行为：与switch_相同，使用优先级编码器结构
-template <typename TValue, typename TDefault, typename... TArgs>
+template <typename TValue, typename TDefault, typename TCond1, typename TResult1>
 constexpr auto switch_case(TValue &&value, TDefault &&default_result,
-                           TArgs &&...args) {
-    static_assert(sizeof...(args) % 2 == 0,
-                  "Arguments must come in pairs: condition, result, condition, "
-                  "result, ...");
+                           TCond1 &&cond1, TResult1 &&result1) {
+    return switch_parallel(std::forward<TValue>(value),
+                          std::forward<TDefault>(default_result),
+                          case_(std::forward<TCond1>(cond1),
+                                std::forward<TResult1>(result1)));
+}
 
-    // 将参数转换为case_entry
-    constexpr size_t case_count = sizeof...(args) / 2;
+template <typename TValue, typename TDefault, typename TCond1, typename TResult1,
+          typename TCond2, typename TResult2>
+constexpr auto switch_case(TValue &&value, TDefault &&default_result,
+                           TCond1 &&cond1, TResult1 &&result1,
+                           TCond2 &&cond2, TResult2 &&result2) {
+    return switch_parallel(std::forward<TValue>(value),
+                          std::forward<TDefault>(default_result),
+                          case_(std::forward<TCond1>(cond1),
+                                std::forward<TResult1>(result1)),
+                          case_(std::forward<TCond2>(cond2),
+                                std::forward<TResult2>(result2)));
+}
 
-    if constexpr (case_count == 0) {
-        return std::forward<TDefault>(default_result);
-    } else {
-        return [&]<size_t... I>(std::index_sequence<I...>) {
-            // 构造case_entry
-            auto cases = std::make_tuple(
-                case_(std::get<I * 2>(std::forward_as_tuple(args...)),
-                      std::get<I * 2 + 1>(std::forward_as_tuple(args...)))...);
-
-            // 使用parallel_switch处理
-            return switch_parallel(std::forward<TValue>(value),
-                                   std::forward<TDefault>(default_result),
-                                   std::get<I>(cases)...);
-        }(std::make_index_sequence<case_count>{});
-    }
+template <typename TValue, typename TDefault, typename TCond1, typename TResult1,
+          typename TCond2, typename TResult2, typename TCond3, typename TResult3>
+constexpr auto switch_case(TValue &&value, TDefault &&default_result,
+                           TCond1 &&cond1, TResult1 &&result1,
+                           TCond2 &&cond2, TResult2 &&result2,
+                           TCond3 &&cond3, TResult3 &&result3) {
+    return switch_parallel(std::forward<TValue>(value),
+                          std::forward<TDefault>(default_result),
+                          case_(std::forward<TCond1>(cond1),
+                                std::forward<TResult1>(result1)),
+                          case_(std::forward<TCond2>(cond2),
+                                std::forward<TResult2>(result2)),
+                          case_(std::forward<TCond3>(cond3),
+                                std::forward<TResult3>(result3)));
 }
 
 // template <typename TCond, typename TResult>
