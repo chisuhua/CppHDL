@@ -34,6 +34,18 @@ template <typename T> struct ch_flow : public bundle_base<ch_flow<T>> {
         // Slave: 接收数据和有效信号
         this->make_input(payload, valid);
     }
+    
+    // Check if flow is firing (valid is true)
+    [[nodiscard]] ch_bool fire() const { return this->valid; }
+    
+    // Convert to stream (add ready signal)
+    ch_stream<T> toStream() const {
+        ch_stream<T> result;
+        result.payload = this->payload;
+        result.valid = this->valid;
+        result.ready = true; // Default to ready
+        return result;
+    }
 };
 
 } // namespace ch

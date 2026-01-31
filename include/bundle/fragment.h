@@ -15,17 +15,24 @@ struct ch_fragment : public core::bundle_base<ch_fragment<T>> {
     using Self = ch_fragment<T>;
     T data_beat;        // 片段数据
     core::ch_bool last; // 标记是否为最后一个片段
+    core::ch_bool first; // 标记是否为第一个片段（新增）
 
     ch_fragment() = default;
     explicit ch_fragment(const std::string &prefix) {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS_T(data_beat, last)
+    CH_BUNDLE_FIELDS_T(data_beat, last, first)
 
-    void as_master_direction() { this->make_output(data_beat, last); }
+    void as_master_direction() { this->make_output(data_beat, last, first); }
 
-    void as_slave_direction() { this->make_input(data_beat, last); }
+    void as_slave_direction() { this->make_input(data_beat, last, first); }
+    
+    // Check if this is the last fragment
+    [[nodiscard]] core::ch_bool isLast() const { return last; }
+    
+    // Check if this is the first fragment  
+    [[nodiscard]] core::ch_bool isFirst() const { return first; }
 };
 
 // 将ch_flow<ch_fragment<T>>转换为ch_flow<T>的函数
@@ -39,10 +46,11 @@ ch_flow<T> fragment_to_payload(ch_flow<ch_fragment<T>> flow) {
 
 // 将ch_flow<T>转换为ch_fragment的函数
 template <typename T>
-ch_flow<ch_fragment<T>> payload_to_fragment(T payload, core::ch_bool last) {
+ch_flow<ch_fragment<T>> payload_to_fragment(T payload, core::ch_bool last, core::ch_bool first = false) {
     ch_flow<ch_fragment<T>> result;
     result.payload.data_beat = payload;
     result.payload.last = last;
+    result.payload.first = first;
     result.valid = true; // 假设总是有效
     return result;
 }
@@ -56,6 +64,7 @@ fragment_sequence(const std::array<T, N> &data) {
     for (size_t i = 0; i < N; ++i) {
         result[i].payload.data_beat = data[i];
         result[i].payload.last = (i == N - 1); // 最后一个元素标记为last
+        result[i].payload.first = (i == 0);    // 第一个元素标记为first
         result[i].valid = true;
     }
     return result;
@@ -65,6 +74,12 @@ fragment_sequence(const std::array<T, N> &data) {
 template <typename T>
 core::ch_bool is_last_fragment(ch_flow<ch_fragment<T>> flow) {
     return flow.payload.last;
+}
+
+// 检查fragment是否为第一个
+template <typename T>
+core::ch_bool is_first_fragment(ch_flow<ch_fragment<T>> flow) {
+    return flow.payload.first;
 }
 
 // 从ch_flow<ch_fragment<T>>中提取last信号
