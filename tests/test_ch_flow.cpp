@@ -193,11 +193,13 @@ public:
         ch_reg<ch_uint<3>> counter(0_d);
         counter->next = counter + 1_d;
 
-        io().flow_out.payload <<= chlib::switch_(counter, 5_d, chlib::case_(0_d, 5_d),
+        ch_flow<ch_uint<8>> flow_out;
+        flow_out <<= io().flow_out;
+        flow_out.payload <<= chlib::switch_(counter, 5_d, chlib::case_(0_d, 5_d),
                                 chlib::case_(1_d, 15_d), chlib::case_(2_d, 25_d));
 
         // valid信号：前3个周期有效
-        io().flow_out.valid <<= (counter < 3_d);
+        flow_out.valid <<= (counter < 3_d);
     }
 };
 
@@ -242,7 +244,8 @@ public:
 
     void describe() override {
         // 消费flow数据，将输入映射到输出
-        io().output <<= io().flow_in.payload;
+        auto flow_in = io().flow_in;
+        io().output <<= flow_in.payload;
     }
 };
 

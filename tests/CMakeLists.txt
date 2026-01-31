@@ -86,7 +86,6 @@ set(BASE_TEST_SOURCES
     test_bits_update.cpp  # 新增：bits_update操作测试
     test_ch_stream.cpp
     # test_ch_flow.cpp
-    test_plan3_bundle_port_proxy.cpp
 )
 
 # chlib 测试源文件列表

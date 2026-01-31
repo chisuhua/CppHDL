@@ -1,6 +1,7 @@
 // include/device.h
 #pragma once
 #include "component.h"
+#include "context.h"
 
 namespace ch {
 
@@ -8,8 +9,10 @@ template <typename T, typename... Args>
 class ch_device {
 public:
     explicit ch_device(Args&&... args)
-        : top_(std::make_unique<T>(nullptr, "top", std::forward<Args>(args)...))
     {
+        auto ctx = std::make_unique<ch::core::context>("top_ctx");
+        ch::core::ctx_swap ctx_guard(ctx.get());
+        top_ = std::make_unique<T>(nullptr, "top", std::forward<Args>(args)...);
         top_->build();
     }
 

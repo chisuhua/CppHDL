@@ -21,11 +21,8 @@
 #include "core/bundle/bundle_base.h"          // Bundle 基类
 #include "core/bundle/bundle_utils.h"         // 工具函数
 
-// 方案 3：编译期反射支持
-#include "core/bundle/bundle_port_proxy.h"           // 字段代理实现
-#include "core/bundle/bundle_plan3_integration.h"    // 集成和便捷工具
-
 // 标准 Bundle 类型
+#include "bundle/fragment.h"                    // Stream Bundle
 #include "bundle/stream_bundle.h"                    // Stream Bundle
 #include "bundle/flow_bundle.h"                      // Flow Bundle
 #include "bundle/common_bundles.h"                   // 常见 Bundle 类型

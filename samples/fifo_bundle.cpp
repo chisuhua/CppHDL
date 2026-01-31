@@ -38,12 +38,6 @@ public:
     }
 
     void describe() override {
-        // 设置当前时钟域
-        auto *ctx = ch::core::ctx_curr_;
-        if (ctx && ctx->get_default_clock()) {
-            ctx->set_current_clock(ctx->get_default_clock());
-        }
-
         // 创建读写指针寄存器（addr_width + 1 位用于满/空检测）
         ch_reg<ch_uint<addr_width + 1>> rd_ptr(0_d, "rd_ptr");
         ch_reg<ch_uint<addr_width + 1>> wr_ptr(0_d, "wr_ptr");

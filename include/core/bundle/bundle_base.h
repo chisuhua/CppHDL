@@ -104,7 +104,6 @@ public:
     template <typename LeftField, typename RightField>
     void connect_field_based_on_direction_and_source(LeftField &left_field, 
                                                      RightField &right_field) {
-        using LeftFieldType = std::remove_const_t<std::remove_reference_t<decltype(left_field)>>;
         using RightFieldType = std::remove_const_t<std::remove_reference_t<decltype(right_field)>>;
 
         if constexpr (is_bundle_v<RightFieldType>) {
