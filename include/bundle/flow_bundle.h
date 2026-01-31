@@ -10,6 +10,9 @@ using namespace ch::core;
 
 namespace ch {
 
+// Forward declaration
+template <typename T> struct ch_stream;
+
 /**
  * ch_flow - 无反压的数据流接口
  * 包含 payload, valid 信号（无ready信号）

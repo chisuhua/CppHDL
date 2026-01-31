@@ -28,70 +28,27 @@ using namespace ch::core;
 namespace chlib {
 
 /**
+ * Stream FIFO - 带反压的FIFO
+ */
+template <typename T, unsigned DEPTH> struct StreamFifoResult {
+    ch_stream<T> push_stream;                        // 推入端口
+    ch_stream<T> pop_stream;                         // 弹出端口
+    ch_uint<compute_idx_width(DEPTH) + 1> occupancy; // 占用计数
+    ch_bool full;                                    // 满标志
+    ch_bool empty;                                   // 空标志
+};
+
+// Forward declaration
+template <typename T, unsigned DEPTH>
+StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream);
+
+/**
  * Stream Queue/Buffer - 创建具有指定深度的流缓冲区（别名为stream_fifo）
  * 类似SpinalHDL的queue()方法
  */
 template <typename T, unsigned DEPTH>
 StreamFifoResult<T, DEPTH> stream_queue(ch_stream<T> input_stream) {
     return stream_fifo<T, DEPTH>(input_stream);
-}
-
-/**
- * Stream Stage/Pipeline - 在流路径上插入寄存器级
- * 类似SpinalHDL的stage()方法
- */
-template <typename T>
-ch_stream<T> stream_stage(ch_stream<T> input_stream) {
-    ch_stream<T> result;
-    
-    // 使用寄存器延迟payload和valid
-    result.payload = ch_reg(input_stream.payload);
-    result.valid = ch_reg(input_stream.valid && input_stream.ready);
-    
-    // ready信号直接传递（可能需要寄存器用于timing）
-    input_stream.ready = result.ready;
-    
-    return result;
-}
-
-/**
- * Stream m2sPipe - Master to Slave pipeline register
- * 在valid和payload路径上插入寄存器
- */
-template <typename T>
-ch_stream<T> stream_m2s_pipe(ch_stream<T> input_stream) {
-    ch_stream<T> result;
-    
-    // 寄存payload和valid（从master到slave方向）
-    auto payload_reg = ch_reg(input_stream.payload);
-    auto valid_reg = ch_reg(input_stream.valid && input_stream.ready);
-    
-    result.payload = payload_reg;
-    result.valid = valid_reg;
-    
-    // ready信号不经过寄存器
-    input_stream.ready = result.ready;
-    
-    return result;
-}
-
-/**
- * Stream s2mPipe - Slave to Master pipeline register  
- * 在ready路径上插入寄存器
- */
-template <typename T>
-ch_stream<T> stream_s2m_pipe(ch_stream<T> input_stream) {
-    ch_stream<T> result;
-    
-    // payload和valid直接连接
-    result.payload = input_stream.payload;
-    result.valid = input_stream.valid;
-    
-    // ready信号经过寄存器（从slave到master方向）
-    auto ready_reg = ch_reg(result.ready);
-    input_stream.ready = ready_reg;
-    
-    return result;
 }
 
 /**
@@ -289,16 +246,8 @@ stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
 }
 
 /**
- * Stream FIFO - 带反压的FIFO
+ * Stream FIFO implementation - 带反压的FIFO
  */
-template <typename T, unsigned DEPTH> struct StreamFifoResult {
-    ch_stream<T> push_stream;                        // 推入端口
-    ch_stream<T> pop_stream;                         // 弹出端口
-    ch_uint<compute_idx_width(DEPTH) + 1> occupancy; // 占用计数
-    ch_bool full;                                    // 满标志
-    ch_bool empty;                                   // 空标志
-};
-
 template <typename T, unsigned DEPTH>
 StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     StreamFifoResult<T, DEPTH> result;

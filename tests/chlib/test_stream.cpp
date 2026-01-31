@@ -2,6 +2,7 @@
 #include "ch.hpp"
 #include "chlib/combinational.h"
 #include "chlib/stream.h"
+#include "bundle/fragment.h"
 #include "core/context.h"
 #include "core/literal.h"
 #include "simulator.h"
@@ -20,6 +21,186 @@ TEST_CASE("Stream: Basic Stream Operations", "[stream][bundle]") {
         REQUIRE(stream.payload.width == 8);
         REQUIRE(stream.valid.width == 1);
         REQUIRE(stream.ready.width == 1);
+    }
+    
+    SECTION("Stream fire() method") {
+        ch_stream<ch_uint<8>> stream;
+        stream.valid = true;
+        stream.ready = true;
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(stream.fire()) == true);
+        
+        stream.ready = false;
+        sim.tick();
+        REQUIRE(sim.get_value(stream.fire()) == false);
+    }
+    
+    SECTION("Stream isStall() method") {
+        ch_stream<ch_uint<8>> stream;
+        stream.valid = true;
+        stream.ready = false;
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Stream is stalled when valid but not ready
+        REQUIRE(sim.get_value(stream.isStall()) == true);
+        
+        stream.ready = true;
+        sim.tick();
+        REQUIRE(sim.get_value(stream.isStall()) == false);
+    }
+}
+
+TEST_CASE("Stream: Flow Operations", "[stream][flow]") {
+    auto ctx = std::make_unique<ch::core::context>("test_flow_basic");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    SECTION("Flow creation and basic usage") {
+        ch_flow<ch_uint<8>> flow("test_flow");
+
+        REQUIRE(flow.payload.width == 8);
+        REQUIRE(flow.valid.width == 1);
+    }
+    
+    SECTION("Flow fire() method") {
+        ch_flow<ch_uint<8>> flow;
+        flow.valid = true;
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(flow.fire()) == true);
+        
+        flow.valid = false;
+        sim.tick();
+        REQUIRE(sim.get_value(flow.fire()) == false);
+    }
+    
+    SECTION("Flow toStream() conversion") {
+        ch_flow<ch_uint<8>> flow;
+        flow.payload = 0x42_h;
+        flow.valid = true;
+        
+        auto stream = flow.toStream();
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(stream.payload) == 0x42);
+        REQUIRE(sim.get_value(stream.valid) == true);
+        REQUIRE(sim.get_value(stream.ready) == true);
+    }
+}
+
+TEST_CASE("Stream: Fragment Operations", "[stream][fragment]") {
+    auto ctx = std::make_unique<ch::core::context>("test_fragment");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+    
+    SECTION("Fragment with first/last tracking") {
+        ch::ch_fragment<ch_uint<8>> frag;
+        frag.data_beat = 0x55_h;
+        frag.first = true;
+        frag.last = false;
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(frag.isFirst()) == true);
+        REQUIRE(sim.get_value(frag.isLast()) == false);
+    }
+    
+    SECTION("Fragment sequence generation") {
+        std::array<ch_uint<8>, 4> data = {0x11_h, 0x22_h, 0x33_h, 0x44_h};
+        auto seq = ch::fragment_sequence(data);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // First fragment
+        REQUIRE(sim.get_value(seq[0].payload.data_beat) == 0x11);
+        REQUIRE(sim.get_value(seq[0].payload.first) == true);
+        REQUIRE(sim.get_value(seq[0].payload.last) == false);
+        
+        // Last fragment
+        REQUIRE(sim.get_value(seq[3].payload.data_beat) == 0x44);
+        REQUIRE(sim.get_value(seq[3].payload.first) == false);
+        REQUIRE(sim.get_value(seq[3].payload.last) == true);
+    }
+}
+
+TEST_CASE("Stream: Conditional Operations", "[stream][conditional]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_conditional");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+    
+    SECTION("Stream throwWhen - discard on condition") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0xAA_h;
+        input.valid = true;
+        input.ready = true;
+        
+        ch_bool discard = true;
+        auto output = stream_throw_when(input, discard);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Data should be discarded
+        REQUIRE(sim.get_value(output.valid) == false);
+        REQUIRE(sim.get_value(input.ready) == true); // Input consumed
+        
+        discard = false;
+        output = stream_throw_when(input, discard);
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.valid) == true);
+    }
+    
+    SECTION("Stream takeWhen - pass on condition") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0xBB_h;
+        input.valid = true;
+        input.ready = true;
+        
+        ch_bool pass = true;
+        auto output = stream_take_when(input, pass);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.valid) == true);
+        REQUIRE(sim.get_value(output.payload) == 0xBB);
+        
+        pass = false;
+        output = stream_take_when(input, pass);
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.valid) == false);
+    }
+    
+    SECTION("Stream haltWhen - stall on condition") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0xCC_h;
+        input.valid = true;
+        input.ready = true;
+        
+        ch_bool halt = true;
+        auto output = stream_halt_when(input, halt);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Stream should be halted
+        REQUIRE(sim.get_value(output.valid) == false);
+        
+        halt = false;
+        output = stream_halt_when(input, halt);
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.valid) == true);
     }
 }
 
@@ -80,18 +261,6 @@ TEST_CASE("Stream: Stream Mux", "[stream][mux]") {
     }
 }
 
-TEST_CASE("Stream: Flow Operations", "[stream][flow]") {
-    auto ctx = std::make_unique<ch::core::context>("test_flow_basic");
-    ch::core::ctx_swap ctx_swapper(ctx.get());
-
-    SECTION("Flow creation and basic usage") {
-        ch_flow<ch_uint<8>> flow("test_flow");
-
-        REQUIRE(flow.payload.width == 8);
-        REQUIRE(flow.valid.width == 1);
-    }
-}
-
 TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
     auto ctx = std::make_unique<ch::core::context>("test_stream_fifo");
     ch::core::ctx_swap ctx_swapper(ctx.get());
@@ -125,6 +294,20 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
 
         // Check that second data was also accepted
         REQUIRE(sim.get_value(fifo_result.push_stream.ready) == true);
+    }
+    
+    SECTION("Stream queue - alias to FIFO") {
+        ch_stream<ch_uint<8>> input_stream;
+        input_stream.payload = 0x33_h;
+        input_stream.valid = true;
+        
+        auto queue_result = stream_queue<ch_uint<8>, 8>(input_stream);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Queue should accept data
+        REQUIRE(sim.get_value(queue_result.push_stream.ready) == true);
     }
 }
 
@@ -191,7 +374,7 @@ TEST_CASE("Stream: Stream Arbiter", "[stream][arbiter]") {
     auto ctx = std::make_unique<ch::core::context>("test_stream_arbiter");
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
-    SECTION("Stream Arbiter basic operation") {
+    SECTION("Stream Arbiter round-robin basic operation") {
 
         std::array<ch_stream<ch_uint<8>>, 2> input_streams;
         input_streams[0].payload = 0x11_h;
@@ -212,6 +395,26 @@ TEST_CASE("Stream: Stream Arbiter", "[stream][arbiter]") {
         // Should select input 0 since input 1 is not valid
         REQUIRE(sim.get_value(arb_result.selected) == 0);
         REQUIRE(sim.get_value(arb_result.output_stream.payload) == 0x11);
+        REQUIRE(sim.get_value(arb_result.output_stream.valid) == true);
+    }
+    
+    SECTION("Stream Arbiter priority operation") {
+        std::array<ch_stream<ch_uint<8>>, 3> input_streams;
+        input_streams[0].payload = 0x11_h;
+        input_streams[0].valid = false;
+        input_streams[1].payload = 0x22_h;
+        input_streams[1].valid = true;
+        input_streams[2].payload = 0x33_h;
+        input_streams[2].valid = true;
+        
+        auto arb_result = stream_arbiter_priority<ch_uint<8>, 3>(input_streams);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Should select input 1 (highest priority valid input)
+        REQUIRE(sim.get_value(arb_result.selected) == 1);
+        REQUIRE(sim.get_value(arb_result.output_stream.payload) == 0x22);
         REQUIRE(sim.get_value(arb_result.output_stream.valid) == true);
     }
 }
