@@ -43,21 +43,5 @@ template <typename T> struct ch_stream : public bundle_base<ch_stream<T>> {
     
     // Check if stream is stalled (valid but not ready)
     [[nodiscard]] ch_bool isStall() const { return this->valid && !this->ready; }
-    
-    // Stream connection operator - connects this stream to another (like SpinalHDL <<)
-    Self& operator<<(const Self& source) {
-        this->payload = source.payload;
-        this->valid = source.valid;
-        const_cast<Self&>(source).ready = this->ready;
-        return *this;
-    }
-    
-    // Stream connection operator - connects another stream to this (like SpinalHDL >>)
-    Self& operator>>(Self& sink) {
-        sink.payload = this->payload;
-        sink.valid = this->valid;
-        this->ready = sink.ready;
-        return sink;
-    }
 };
 } // namespace ch

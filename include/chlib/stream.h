@@ -129,9 +129,10 @@ ch_stream<TOut> stream_translate_with(ch_stream<TIn> input_stream, Func transfor
 /**
  * Stream map - 映射payload到新值
  * 类似SpinalHDL的map()
+ * Accepts any callable (lambda, functor, function pointer)
  */
-template <typename TOut, typename TIn>
-ch_stream<TOut> stream_map(ch_stream<TIn> input_stream, TOut (*transform)(TIn)) {
+template <typename TOut, typename TIn, typename Func>
+ch_stream<TOut> stream_map(ch_stream<TIn> input_stream, Func transform) {
     ch_stream<TOut> result;
     
     result.payload = transform(input_stream.payload);
@@ -161,16 +162,18 @@ ch_stream<TOut> stream_transpose(ch_stream<TIn> input_stream) {
  * Stream combineWith - 组合两个流
  * 当两个流都有效时才输出
  */
+// Helper struct for combined payload
+template <typename T1, typename T2>
+struct StreamCombinePayload {
+    T1 _1;
+    T2 _2;
+};
+
 template <typename T1, typename T2>
 struct StreamCombineResult {
     ch_stream<T1> input1;
     ch_stream<T2> input2;
-    struct {
-        T1 _1;
-        T2 _2;
-    } payload;
-    ch_bool valid;
-    ch_bool ready;
+    ch_stream<StreamCombinePayload<T1, T2>> output_stream;
 };
 
 template <typename T1, typename T2>
@@ -180,20 +183,24 @@ StreamCombineResult<T1, T2> stream_combine_with(ch_stream<T1> input1, ch_stream<
     result.input1 = input1;
     result.input2 = input2;
     
-    result.payload._1 = input1.payload;
-    result.payload._2 = input2.payload;
-    result.valid = input1.valid && input2.valid;
+    // 组合payload
+    result.output_stream.payload._1 = input1.payload;
+    result.output_stream.payload._2 = input2.payload;
     
-    // 两个输入都就绪当输出就绪
-    result.input1.ready = result.ready && input2.valid;
-    result.input2.ready = result.ready && input1.valid;
+    // 当两个输入都有效时输出有效
+    result.output_stream.valid = input1.valid && input2.valid;
+    
+    // 反压：当输出就绪且另一路有效时，该输入就绪
+    result.input1.ready = result.output_stream.ready && input2.valid;
+    result.input2.ready = result.output_stream.ready && input1.valid;
     
     return result;
 }
 
 /**
  * Stream Priority Arbiter - 优先级仲裁器
- * 较低索引的输入具有更高优先级
+ * 注意：priority_encoder迭代0到N-1并覆盖结果，选择最高有效索引（最高优先级）
+ * 因此，较高索引的输入具有更高优先级
  */
 template <typename T, unsigned N_INPUTS> 
 struct StreamPriorityArbiterResult {
@@ -205,6 +212,7 @@ struct StreamPriorityArbiterResult {
 template <typename T, unsigned N_INPUTS>
 StreamPriorityArbiterResult<T, N_INPUTS>
 stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
+    static_assert(N_INPUTS >= 2, "Priority arbiter requires at least 2 inputs");
     StreamPriorityArbiterResult<T, N_INPUTS> result;
     
     // 初始化输入流

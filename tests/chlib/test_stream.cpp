@@ -204,6 +204,107 @@ TEST_CASE("Stream: Conditional Operations", "[stream][conditional]") {
     }
 }
 
+TEST_CASE("Stream: Transformation Operations", "[stream][transform]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_transform");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+    
+    SECTION("Stream continueWhen - continue on condition") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0xDD_h;
+        input.valid = true;
+        input.ready = true;
+        
+        ch_bool continue_cond = true;
+        auto output = stream_continue_when(input, continue_cond);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Stream should continue when condition is true
+        REQUIRE(sim.get_value(output.valid) == true);
+        
+        continue_cond = false;
+        output = stream_continue_when(input, continue_cond);
+        sim.tick();
+        
+        // Stream should halt when condition is false
+        REQUIRE(sim.get_value(output.valid) == false);
+    }
+    
+    SECTION("Stream map - transform payload") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0x10_h;
+        input.valid = true;
+        
+        // Use lambda for transformation
+        auto transform = [](ch_uint<8> x) -> ch_uint<8> {
+            return x + 0x05_h;
+        };
+        
+        auto output = stream_map<ch_uint<8>, ch_uint<8>>(input, transform);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.payload) == 0x15);
+        REQUIRE(sim.get_value(output.valid) == true);
+    }
+    
+    SECTION("Stream translateWith - custom transformation") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0x20_h;
+        input.valid = true;
+        
+        // Use lambda for transformation
+        auto transform = [](ch_uint<8> x) -> ch_uint<16> {
+            return ch_uint<16>(x) << 8_d;
+        };
+        
+        auto output = stream_translate_with<ch_uint<16>, ch_uint<8>>(input, transform);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.payload) == 0x2000);
+        REQUIRE(sim.get_value(output.valid) == true);
+    }
+    
+    SECTION("Stream transpose - width conversion") {
+        ch_stream<ch_uint<8>> input;
+        input.payload = 0xFF_h;
+        input.valid = true;
+        
+        auto output = stream_transpose<ch_uint<16>, ch_uint<8>>(input);
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        REQUIRE(sim.get_value(output.payload) == 0xFF);
+        REQUIRE(sim.get_value(output.valid) == true);
+    }
+    
+    SECTION("Stream combineWith - combine two streams") {
+        ch_stream<ch_uint<8>> input1;
+        input1.payload = 0xAA_h;
+        input1.valid = true;
+        
+        ch_stream<ch_uint<8>> input2;
+        input2.payload = 0xBB_h;
+        input2.valid = true;
+        
+        auto result = stream_combine_with(input1, input2);
+        result.output_stream.ready = true;
+        
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        
+        // Both inputs valid means output is valid
+        REQUIRE(sim.get_value(result.output_stream.valid) == true);
+        REQUIRE(sim.get_value(result.output_stream.payload._1) == 0xAA);
+        REQUIRE(sim.get_value(result.output_stream.payload._2) == 0xBB);
+    }
+}
+
 TEST_CASE("Stream: Stream Mux", "[stream][mux]") {
     auto ctx = std::make_unique<ch::core::context>("test_stream_mux");
     ch::core::ctx_swap ctx_swapper(ctx.get());
