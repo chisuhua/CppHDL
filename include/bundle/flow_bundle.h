@@ -10,6 +10,9 @@ using namespace ch::core;
 
 namespace ch {
 
+// Forward declaration
+template <typename T> struct ch_stream;
+
 /**
  * ch_flow - 无反压的数据流接口
  * 包含 payload, valid 信号（无ready信号）
@@ -33,6 +36,18 @@ template <typename T> struct ch_flow : public bundle_base<ch_flow<T>> {
     void as_slave_direction() {
         // Slave: 接收数据和有效信号
         this->make_input(payload, valid);
+    }
+    
+    // Check if flow is firing (valid is true)
+    [[nodiscard]] ch_bool fire() const { return this->valid; }
+    
+    // Convert to stream (add ready signal)
+    ch_stream<T> toStream() const {
+        ch_stream<T> result;
+        result.payload = this->payload;
+        result.valid = this->valid;
+        result.ready = true; // Default to ready
+        return result;
     }
 };
 

@@ -38,6 +38,224 @@ template <typename T, unsigned DEPTH> struct StreamFifoResult {
     ch_bool empty;                                   // 空标志
 };
 
+// Forward declaration
+template <typename T, unsigned DEPTH>
+StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream);
+
+/**
+ * Stream Queue/Buffer - 创建具有指定深度的流缓冲区（别名为stream_fifo）
+ * 类似SpinalHDL的queue()方法
+ */
+template <typename T, unsigned DEPTH>
+StreamFifoResult<T, DEPTH> stream_queue(ch_stream<T> input_stream) {
+    return stream_fifo<T, DEPTH>(input_stream);
+}
+
+/**
+ * Stream throwWhen - 当条件为真时丢弃数据
+ * 类似SpinalHDL的throwWhen()
+ */
+template <typename T>
+ch_stream<T> stream_throw_when(ch_stream<T> input_stream, ch_bool condition) {
+    ch_stream<T> result;
+    
+    result.payload = input_stream.payload;
+    result.valid = input_stream.valid && !condition;
+    
+    // 当条件为真时，即使没有有效输出，输入也被消费
+    input_stream.ready = result.ready || condition;
+    
+    return result;
+}
+
+/**
+ * Stream takeWhen - 只在条件为真时传递数据
+ * 类似SpinalHDL的takeWhen()
+ */
+template <typename T>
+ch_stream<T> stream_take_when(ch_stream<T> input_stream, ch_bool condition) {
+    ch_stream<T> result;
+    
+    result.payload = input_stream.payload;
+    result.valid = input_stream.valid && condition;
+    
+    // 只有条件为真且输出就绪时，输入才就绪
+    input_stream.ready = result.ready && condition;
+    
+    return result;
+}
+
+/**
+ * Stream haltWhen - 当条件为真时暂停流
+ * 类似SpinalHDL的haltWhen()
+ */
+template <typename T>
+ch_stream<T> stream_halt_when(ch_stream<T> input_stream, ch_bool halt) {
+    ch_stream<T> result;
+    
+    result.payload = input_stream.payload;
+    result.valid = input_stream.valid && !halt;
+    
+    // 当暂停时，输入不就绪
+    input_stream.ready = result.ready && !halt;
+    
+    return result;
+}
+
+/**
+ * Stream continueWhen - 只在条件为真时继续流
+ * 类似SpinalHDL的continueWhen()
+ */
+template <typename T>
+ch_stream<T> stream_continue_when(ch_stream<T> input_stream, ch_bool continue_cond) {
+    return stream_halt_when(input_stream, !continue_cond);
+}
+
+/**
+ * Stream translateWith - 转换payload类型
+ * 类似SpinalHDL的translateWith()
+ */
+template <typename TOut, typename TIn, typename Func>
+ch_stream<TOut> stream_translate_with(ch_stream<TIn> input_stream, Func transform) {
+    ch_stream<TOut> result;
+    
+    result.payload = transform(input_stream.payload);
+    result.valid = input_stream.valid;
+    input_stream.ready = result.ready;
+    
+    return result;
+}
+
+/**
+ * Stream map - 映射payload到新值
+ * 类似SpinalHDL的map()
+ * Accepts any callable (lambda, functor, function pointer)
+ */
+template <typename TOut, typename TIn, typename Func>
+ch_stream<TOut> stream_map(ch_stream<TIn> input_stream, Func transform) {
+    ch_stream<TOut> result;
+    
+    result.payload = transform(input_stream.payload);
+    result.valid = input_stream.valid;
+    input_stream.ready = result.ready;
+    
+    return result;
+}
+
+/**
+ * Stream transpose - 位宽转换/重组
+ * 用于改变数据位宽
+ */
+template <typename TOut, typename TIn>
+ch_stream<TOut> stream_transpose(ch_stream<TIn> input_stream) {
+    ch_stream<TOut> result;
+    
+    // 简单的位宽转换 - 实际应用可能需要更复杂的逻辑
+    result.payload = TOut(input_stream.payload);
+    result.valid = input_stream.valid;
+    input_stream.ready = result.ready;
+    
+    return result;
+}
+
+/**
+ * Stream combineWith - 组合两个流
+ * 当两个流都有效时才输出
+ */
+// Helper struct for combined payload
+template <typename T1, typename T2>
+struct StreamCombinePayload {
+    T1 _1;
+    T2 _2;
+};
+
+template <typename T1, typename T2>
+struct StreamCombineResult {
+    ch_stream<T1> input1;
+    ch_stream<T2> input2;
+    ch_stream<StreamCombinePayload<T1, T2>> output_stream;
+};
+
+template <typename T1, typename T2>
+StreamCombineResult<T1, T2> stream_combine_with(ch_stream<T1> input1, ch_stream<T2> input2) {
+    StreamCombineResult<T1, T2> result;
+    
+    result.input1 = input1;
+    result.input2 = input2;
+    
+    // 组合payload
+    result.output_stream.payload._1 = input1.payload;
+    result.output_stream.payload._2 = input2.payload;
+    
+    // 当两个输入都有效时输出有效
+    result.output_stream.valid = input1.valid && input2.valid;
+    
+    // 反压：当输出就绪且另一路有效时，该输入就绪
+    result.input1.ready = result.output_stream.ready && input2.valid;
+    result.input2.ready = result.output_stream.ready && input1.valid;
+    
+    return result;
+}
+
+/**
+ * Stream Priority Arbiter - 优先级仲裁器
+ * 注意：priority_encoder迭代0到N-1并覆盖结果，选择最高有效索引（最高优先级）
+ * 因此，较高索引的输入具有更高优先级
+ */
+template <typename T, unsigned N_INPUTS> 
+struct StreamPriorityArbiterResult {
+    std::array<ch_stream<T>, N_INPUTS> input_streams;
+    ch_stream<T> output_stream;
+    ch_uint<compute_idx_width(N_INPUTS)> selected;
+};
+
+template <typename T, unsigned N_INPUTS>
+StreamPriorityArbiterResult<T, N_INPUTS>
+stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
+    static_assert(N_INPUTS >= 2, "Priority arbiter requires at least 2 inputs");
+    StreamPriorityArbiterResult<T, N_INPUTS> result;
+    
+    // 初始化输入流
+    for (unsigned i = 0; i < N_INPUTS; i++) {
+        result.input_streams[i] = input_streams[i];
+    }
+    
+    // 创建有效向量
+    ch_uint<N_INPUTS> valid_vector = 0_d;
+    for (unsigned i = 0; i < N_INPUTS; i++) {
+        ch_bool is_valid = input_streams[i].valid;
+        ch_uint<N_INPUTS> mask = ch_uint<N_INPUTS>(1_d) << make_uint<compute_idx_width(N_INPUTS)>(i);
+        valid_vector = select(is_valid, valid_vector | mask, valid_vector);
+    }
+    
+    // 使用优先级编码器选择最高优先级的有效输入
+    auto selected_idx = priority_encoder<N_INPUTS>(valid_vector);
+    
+    // 选择payload
+    std::array<T, N_INPUTS> payloads;
+    for (unsigned i = 0; i < N_INPUTS; i++) {
+        payloads[i] = input_streams[i].payload;
+    }
+    T selected_payload = mux<N_INPUTS>(payloads, selected_idx);
+    
+    // 输出
+    result.output_stream.payload = selected_payload;
+    result.output_stream.valid = valid_vector != 0_d;
+    
+    // 只有选中的输入就绪
+    for (unsigned i = 0; i < N_INPUTS; i++) {
+        ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
+        result.input_streams[i].ready = is_selected && result.output_stream.ready;
+    }
+    
+    result.selected = selected_idx;
+    
+    return result;
+}
+
+/**
+ * Stream FIFO implementation - 带反压的FIFO
+ */
 template <typename T, unsigned DEPTH>
 StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     StreamFifoResult<T, DEPTH> result;

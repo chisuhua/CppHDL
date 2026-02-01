@@ -40,5 +40,8 @@ template <typename T> struct ch_stream : public bundle_base<ch_stream<T>> {
     }
 
     [[nodiscard]] ch_bool fire() const { return this->valid && this->ready; }
+    
+    // Check if stream is stalled (valid but not ready)
+    [[nodiscard]] ch_bool isStall() const { return this->valid && !this->ready; }
 };
 } // namespace ch
