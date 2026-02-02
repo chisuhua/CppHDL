@@ -228,11 +228,11 @@ TEST_CASE("test_bundle_connection - Bundle connection in module",
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            // SimpleBundle internal_bundle;
-            io().input_bundle.as_master();
-            io().output_bundle.as_slave();
+            io().input_bundle.as_slave();
+            io().output_bundle.as_master();
 
-            io().output_bundle <<= io().input_bundle;
+            // Connect data field from input to output
+            io().output_bundle.data = io().input_bundle.data;
 
             // 连接输入bundle到内部bundle
             // internal_bundle <<= io().input_bundle;
