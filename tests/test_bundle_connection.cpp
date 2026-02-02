@@ -232,7 +232,7 @@ TEST_CASE("test_bundle_connection - Bundle connection in module",
             io().input_bundle.as_master();
             io().output_bundle.as_slave();
 
-            io().output_bundle <<= io().output_bundle;
+            io().output_bundle <<= io().input_bundle;
 
             // 连接输入bundle到内部bundle
             // internal_bundle <<= io().input_bundle;

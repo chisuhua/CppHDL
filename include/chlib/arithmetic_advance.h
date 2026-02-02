@@ -242,7 +242,7 @@ DividerResult<N> non_restoring_divider(ch_uint<N> dividend,
     if (divisor == 0_d) {
         // 除零处理
         result.quotient = ~ch_uint<N>(0_d); // 返回全1
-        result.remainder = dividend;
+        result.remainder = 0_d;              // 余数设为0
         return result;
     }
 

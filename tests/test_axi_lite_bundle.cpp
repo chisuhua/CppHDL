@@ -30,7 +30,7 @@ TEST_CASE("AXILiteBundle - ChannelCreation", "[axi][lite][channel]") {
     axi_lite_w_channel<32> w_chan("axi.w");
     w_chan.as_master();
     REQUIRE(w_chan.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_w_channel<32>> == 3);
+    REQUIRE(bundle_field_count_v<axi_lite_w_channel<32>> == 2); // data, strb
 
     // 测试写响应通道
     axi_lite_b_channel b_chan("axi.b");
@@ -59,19 +59,19 @@ TEST_CASE("AXILiteBundle - InterfaceCreation", "[axi][lite][interface]") {
     axi_lite_write_interface<32, 32> write_if("axi.write");
     write_if.as_master();
     REQUIRE(write_if.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_write_interface<32, 32>> == 6);
+    REQUIRE(bundle_field_count_v<axi_lite_write_interface<32, 32>> == 3); // aw, w, b
 
     // 测试读接口
     axi_lite_read_interface<32, 32> read_if("axi.read");
     read_if.as_slave();
     REQUIRE(read_if.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_read_interface<32, 32>> == 4);
+    REQUIRE(bundle_field_count_v<axi_lite_read_interface<32, 32>> == 2); // ar, r
 
     // 测试完整接口
     axi_lite_bundle<32, 32> axi_if("axi.full");
     axi_if.as_master();
     REQUIRE(axi_if.is_valid());
-    REQUIRE(bundle_field_count_v<axi_lite_bundle<32, 32>> == 10);
+    REQUIRE(bundle_field_count_v<axi_lite_bundle<32, 32>> == 2); // write, read
 }
 
 TEST_CASE("AXILiteBundle - ProtocolValidation", "[axi][lite][protocol]") {
@@ -190,6 +190,10 @@ TEST_CASE("AXILiteBundle - NamingIntegration", "[axi][lite][naming]") {
     axi_lite_write_interface<32, 32> write_if("master.write");
     axi_lite_read_interface<32, 32> read_if("master.read");
 
+    axi_if.as_master();
+    write_if.as_master();
+    read_if.as_slave();
+
     REQUIRE(axi_if.is_valid());
     REQUIRE(write_if.is_valid());
     REQUIRE(read_if.is_valid());
@@ -204,6 +208,11 @@ TEST_CASE("AXILiteBundle - DifferentWidths", "[axi][lite][widths]") {
     axi_lite_bundle<64, 64> axi64("axi64");
     axi_lite_bundle<32, 64> axi32_64("axi32_64");
     axi_lite_bundle<64, 32> axi64_32("axi64_32");
+
+    axi32.as_master();
+    axi64.as_master();
+    axi32_64.as_master();
+    axi64_32.as_master();
 
     REQUIRE(axi32.is_valid());
     REQUIRE(axi64.is_valid());

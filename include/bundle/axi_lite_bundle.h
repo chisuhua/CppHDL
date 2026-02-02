@@ -20,9 +20,9 @@ struct axi_lite_aw_channel
     ch_uint<3> prot;          // 保护类型
 
     axi_lite_aw_channel() = default;
-    // explicit axi_lite_aw_channel(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_aw_channel(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(addr, prot)
 
@@ -43,23 +43,22 @@ struct axi_lite_w_channel : public bundle_base<axi_lite_w_channel<DATA_WIDTH>> {
     using Self = axi_lite_w_channel<DATA_WIDTH>;
     ch_uint<DATA_WIDTH> data;     // 写数据
     ch_uint<DATA_WIDTH / 8> strb; // 字节选通
-    ch_uint<DATA_WIDTH / 8> keep; // 数据有效
 
     axi_lite_w_channel() = default;
-    // explicit axi_lite_w_channel(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_w_channel(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
-    CH_BUNDLE_FIELDS_T(data, strb, keep)
+    CH_BUNDLE_FIELDS_T(data, strb)
 
     void as_master_direction() {
         // Master: 输出数据和控制信号
-        this->make_output(data, strb, keep);
+        this->make_output(data, strb);
     }
 
     void as_slave_direction() {
         // Slave: 输入数据和控制信号
-        this->make_input(data, strb, keep);
+        this->make_input(data, strb);
     }
 };
 
@@ -69,9 +68,9 @@ struct axi_lite_b_channel : public bundle_base<axi_lite_b_channel> {
     ch_uint<2> resp; // 响应信号
 
     axi_lite_b_channel() = default;
-    // explicit axi_lite_b_channel(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_b_channel(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(resp)
 
@@ -95,9 +94,9 @@ struct axi_lite_ar_channel
     ch_uint<3> prot;          // 保护类型
 
     axi_lite_ar_channel() = default;
-    // explicit axi_lite_ar_channel(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_ar_channel(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(addr, prot)
 
@@ -120,9 +119,9 @@ struct axi_lite_r_channel : public bundle_base<axi_lite_r_channel<DATA_WIDTH>> {
     ch_uint<2> resp;          // 响应信号
 
     axi_lite_r_channel() = default;
-    // explicit axi_lite_r_channel(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_r_channel(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(data, resp)
 
@@ -147,9 +146,9 @@ struct axi_lite_write_interface
     axi_lite_b_channel b;               // 写响应通道
 
     axi_lite_write_interface() = default;
-    // explicit axi_lite_write_interface(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_write_interface(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(aw, w, b)
 
@@ -177,9 +176,9 @@ struct axi_lite_read_interface
     axi_lite_r_channel<DATA_WIDTH> r;   // 读数据通道
 
     axi_lite_read_interface() = default;
-    // explicit axi_lite_read_interface(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_read_interface(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(ar, r)
 
@@ -205,9 +204,9 @@ struct axi_lite_bundle
     axi_lite_read_interface<ADDR_WIDTH, DATA_WIDTH> read;
 
     axi_lite_bundle() = default;
-    // explicit axi_lite_bundle(const std::string &prefix) {
-    //     this->set_name_prefix(prefix);
-    // }
+    explicit axi_lite_bundle(const std::string &prefix) {
+        this->set_name_prefix(prefix);
+    }
 
     CH_BUNDLE_FIELDS_T(write, read)
 

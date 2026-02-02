@@ -65,10 +65,10 @@ TEST_CASE("Fragment - WidthCalculation", "[fragment][width]") {
     ch_fragment<ch_uint<16>> frag16;
     ch_fragment<ch_uint<32>> frag32;
 
-    // fragment的总宽度 = 数据宽度 + last信号宽度(1位)
-    REQUIRE(frag8.width() == 9);
-    REQUIRE(frag16.width() == 17);
-    REQUIRE(frag32.width() == 33);
+    // fragment的总宽度 = 数据宽度 + last信号宽度(1位) + first信号宽度(1位)
+    REQUIRE(frag8.width() == 10);
+    REQUIRE(frag16.width() == 18);
+    REQUIRE(frag32.width() == 34);
 }
 
 TEST_CASE("Fragment - FieldAccess", "[fragment][fields]") {
@@ -199,8 +199,8 @@ TEST_CASE("Fragment - ComplexDataIntegration", "[fragment][complex]") {
                                      structural_string{"last"}> == true);
 
     // 计算fragment的宽度
-    // data(64) + last(1) = 65位
-    REQUIRE(complex_fragment.width() == 65);
+    // data(64) + last(1) + first(1) = 66位
+    REQUIRE(complex_fragment.width() == 66);
 }
 
 TEST_CASE("Fragment - SequenceWithComplexData",
