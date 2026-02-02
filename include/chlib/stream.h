@@ -263,11 +263,14 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     // 计算地址宽度：log2(DEPTH)
     constexpr unsigned ADDR_WIDTH = compute_idx_width(DEPTH);
 
+    // 默认输出端就绪信号（避免空节点）
+    ch_bool pop_ready = true;
+
     // 创建内部FIFO，使用正确的模板参数（数据宽度和地址宽度）
     auto fifo_result = sync_fifo<ch_width_v<T>, ADDR_WIDTH>(
         input_stream.valid && input_stream.ready,          // 写使能
         input_stream.payload,                              // 写数据
-        result.pop_stream.ready && result.pop_stream.valid // 读使能
+        pop_ready && result.pop_stream.valid // 读使能
     );
 
     // 连接输入到FIFO
@@ -278,7 +281,7 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     // 连接FIFO到输出
     result.pop_stream.payload = fifo_result.q;
     result.pop_stream.valid = !fifo_result.empty;
-    result.pop_stream.ready = true; // 假设输出端总是就绪
+    result.pop_stream.ready = pop_ready; // 假设输出端总是就绪
 
     // 占用计数和状态
     result.occupancy = fifo_result.count;
@@ -443,12 +446,24 @@ stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
 }
 
 /**
+ * Stream Mux Result - 流多路选择器返回结构体
+ */
+template <unsigned N_INPUTS, typename T> struct StreamMuxResult {
+    ch_stream<T> output_stream;
+    std::array<ch_stream<T>, N_INPUTS> input_streams;
+    ch_uint<compute_idx_width(N_INPUTS)> select;
+};
+
+/**
  * Stream Mux - 流多路选择器
  */
 template <unsigned N_INPUTS, typename T>
-ch_stream<T> stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
-                        ch_uint<compute_idx_width(N_INPUTS)> select) {
-    ch_stream<T> result;
+StreamMuxResult<N_INPUTS, T>
+stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
+           ch_uint<compute_idx_width(N_INPUTS)> select) {
+    StreamMuxResult<N_INPUTS, T> result;
+    result.input_streams = input_streams;
+    result.select = select;
 
     // 使用chlib中的mux函数来选择payload
     std::array<T, N_INPUTS> payloads;
@@ -459,14 +474,16 @@ ch_stream<T> stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
     // 直接使用T::ch_width作为mux的第一个模板参数（如果T是ch_uint的话）
     // 如果T不是ch_uint类型，则手动实现mux逻辑
     if constexpr (requires { T::ch_width; }) { // 检查T是否有ch_width成员
-        result.payload = mux<N_INPUTS>(payloads, select);
+        result.output_stream.payload = mux<N_INPUTS>(payloads, select);
     } else {
         // 如果T没有ch_width成员，则手动实现mux功能
-        result.payload = payloads[0];
+        result.output_stream.payload = payloads[0];
         for (unsigned i = 1; i < N_INPUTS; ++i) {
             ch_bool is_selected =
                 (select == make_uint<compute_idx_width(N_INPUTS)>(i));
-            result.payload = select(is_selected, payloads[i], result.payload);
+            result.output_stream.payload =
+                ch::core::select(is_selected, payloads[i],
+                                 result.output_stream.payload);
         }
     }
 
@@ -479,16 +496,25 @@ ch_stream<T> stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
             selected_valid || (input_streams[i].valid && is_selected);
     }
 
-    result.valid = selected_valid;
+    result.output_stream.valid = selected_valid;
 
-    // 当输出就绪时，只有被选中的输入才就绪
-    for (unsigned i = 0; i < N_INPUTS; i++) {
-        ch_bool is_selected =
-            (select == make_uint<compute_idx_width(N_INPUTS)>(i));
-        input_streams[i].ready = is_selected && result.ready;
-    }
+    // Note: input_streams[].ready signals should be connected externally
+    // after setting output_stream.ready, using the stream_mux_connect_ready() function
 
     return result;
+}
+
+/**
+ * Stream Mux Connect Ready - 连接 MUX 的 ready 信号
+ * 在设置好 output_stream.ready 后调用此函数来连接 input ready 信号
+ */
+template <unsigned N_INPUTS, typename T>
+void stream_mux_connect_ready(StreamMuxResult<N_INPUTS, T>& mux_result) {
+    for (unsigned i = 0; i < N_INPUTS; i++) {
+        ch_bool is_selected =
+            (mux_result.select == make_uint<compute_idx_width(N_INPUTS)>(i));
+        mux_result.input_streams[i].ready = is_selected && mux_result.output_stream.ready;
+    }
 }
 
 /**
