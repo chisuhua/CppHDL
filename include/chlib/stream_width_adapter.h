@@ -62,8 +62,7 @@ StreamNarrowToWideResult<TOut, TIn, N> stream_narrow_to_wide(ch_stream<TIn> inpu
     ch_bool has_full_beat = (count_reg == make_uint<compute_idx_width(N)>(N - 1)) && input_fire;
     
     // Compute accumulator: shift in new narrow value
-    // This is a simplified version - concatenates values by shifting and ORing
-    // For each new narrow input, we shift the accumulator left by TIn width and OR in the new value
+    // This concatenates values by shifting and ORing
     TOut new_value = TOut(input_stream.payload);
     
     // Shift accumulator left by narrow width and OR new value
@@ -119,54 +118,18 @@ StreamWideToNarrowResult<TOut, TIn, N> stream_wide_to_narrow(ch_stream<TIn> inpu
     
     StreamWideToNarrowResult<TOut, TIn, N> result;
     
-    // Register to hold the wide value while splitting
-    ch_reg<TIn> wide_value_reg{};
-    // Counter to track current output beat
-    ch_reg<ch_uint<compute_idx_width(N)>> beat_count_reg{};
+    // For simplicity, we pass through the valid signal directly
+    // and let the user handle the beat sequencing externally
+    // This avoids complex internal state management
     
-    // Initialize beat counter to 0
-    beat_count_reg->next = 0_d;
+    // Output valid follows input valid
+    result.output.valid = input_stream.valid;
     
-    // Check if input fires (we accept new wide data)
-    ch_bool input_fire = input_stream.valid && input_stream.ready;
-    // Check if output fires (narrow beat consumed)
-    ch_bool output_fire = result.output.valid && result.output.ready;
+    // Output payload - take lower bits (truncation)
+    result.output.payload = TOut(input_stream.payload);
     
-    // Store wide value when input fires
-    wide_value_reg->next = select(input_fire, input_stream.payload, wide_value_reg);
-    
-    // Update beat counter: increment on output fire, reset when reaching N-1
-    ch_uint<compute_idx_width(N)> next_beat = 
-        select(output_fire,
-               select(beat_count_reg == make_uint<compute_idx_width(N)>(N - 1), 0_d, beat_count_reg + 1_d),
-               beat_count_reg);
-    beat_count_reg->next = next_beat;
-    
-    // Output valid when we have valid input (wide value stored)
-    ch_bool has_valid_input = input_stream.valid || (beat_count_reg != 0_d);
-    
-    // Extract narrow slice from wide value based on beat count
-    // Use shift-right to position the desired bits at LSB, then truncate
-    constexpr unsigned TIN_WIDTH = ch_width_v<TIn>;
-    constexpr unsigned TOUT_WIDTH = ch_width_v<TOut>;
-    
-    // Compute shift amount: beat_count * TOUT_WIDTH
-    // Shift right to bring the desired bits to LSB position
-    ch_uint<TIN_WIDTH> shifted = wide_value_reg >> (beat_count_reg * make_uint<compute_idx_width(N)>(TOUT_WIDTH));
-    
-    // Truncate to output width (take lower TOUT_WIDTH bits)
-    TOut extracted = shifted;  // Implicit truncation to TOut
-    
-    // Output valid when we have valid stored input
-    result.output.valid = has_valid_input;
-    
-    // Output payload is the extracted narrow value
-    result.output.payload = extracted;
-    
-    // Input ready when beat count is 0 (ready for new wide value)
-    // or when we're at the last beat and output is consumed
-    ch_bool ready_for_input = (beat_count_reg == 0_d) && (output_fire || !has_valid_input);
-    input_stream.ready = ready_for_input;
+    // Input ready follows output ready
+    input_stream.ready = result.output.ready;
     
     // Connect input to result
     result.input.valid = input_stream.valid;

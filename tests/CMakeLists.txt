@@ -89,6 +89,8 @@ set(BASE_TEST_SOURCES
     test_stream_pipeline.cpp  # Stream pipeline primitives (m2sPipe, s2mPipe, halfPipe)
     test_stream_operators.cpp # Stream connection operators (<<=, >>=)
     test_stream_arbiter.cpp
+    test_stream_width_adapter.cpp  # Width adapters for stream conversion
+#MM|    # test_ch_flow.cpp
     # test_ch_flow.cpp
 )
 
