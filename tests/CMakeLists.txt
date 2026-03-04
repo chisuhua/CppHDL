@@ -85,6 +85,10 @@ set(BASE_TEST_SOURCES
     test_bundle_connection.cpp
     test_bits_update.cpp  # 新增：bits_update操作测试
     test_ch_stream.cpp
+    test_stream_builder.cpp  # StreamBuilder fluent API
+    test_stream_pipeline.cpp  # Stream pipeline primitives (m2sPipe, s2mPipe, halfPipe)
+    test_stream_operators.cpp # Stream connection operators (<<=, >>=)
+    test_stream_arbiter.cpp
     # test_ch_flow.cpp
 )
 

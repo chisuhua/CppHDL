@@ -35,10 +35,8 @@ For detailed documentation, please refer to the following guides in the `docs/` 
 
 - **[Stream/Flow Usage Comparison](docs/CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)**: Comparison between CppHDL and SpinalHDL Stream/Flow usage patterns
 - **[Stream Connection Features Comparison](docs/SpinalHDL_Stream_Connection_Features_Comparison.md)**: Comprehensive comparison of SpinalHDL Stream connection operators and CppHDL ch_stream connection operations (连接功能对比)
+- **[Stream Operators Implementation](docs/SpinalHDL_Stream_Operators_Implementation.md)**: Implementation of SpinalHDL-like stream operators in CppHDL (操作符实现)
 - **[Bundle Usage Guide](docs/Bundle_UsageGuide.md)**: Guide for using Bundle types
-- **[CHLib Usage Guide](docs/CHLib_UsageGuide.md)**: Guide for using CHLib utilities
-- **[CppHDL Usage Guide](docs/CppHDL_UsageGuide.md)**: General CppHDL usage guide
-- **[Testing Guide](docs/CppHDL_Testing_Guide.md)**: Guide for writing and running tests
 
 ## Usage
 To build and run the project:

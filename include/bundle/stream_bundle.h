@@ -10,6 +10,7 @@
 using namespace ch::core;
 
 namespace ch {
+
 /**
  * @brief ch_stream bundle - 带反压的数据流接口
  * 包含 payload, valid, ready 信号
@@ -43,5 +44,22 @@ template <typename T> struct ch_stream : public bundle_base<ch_stream<T>> {
     
     // Check if stream is stalled (valid but not ready)
     [[nodiscard]] ch_bool isStall() const { return this->valid && !this->ready; }
+
+    // Pipeline member functions - declarations
+    // The implementations are defined in stream_bundle_member_inlines.h
+    // which must be included AFTER chlib::stream_pipeline.h
+    
+    // m2sPipe - Master-to-Slave pipeline (1-cycle delay for valid and payload)
+    auto m2sPipe();
+    
+    // stage - Alias for m2sPipe
+    auto stage();
+    
+    // s2mPipe - Slave-to-Master pipeline (0-cycle payload delay, 1-cycle ready delay)
+    auto s2mPipe();
+    
+    // halfPipe - Half-bandwidth pipeline (all signals registered)
+    auto halfPipe();
 };
+
 } // namespace ch
