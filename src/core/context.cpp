@@ -114,22 +114,29 @@ context::~context() {
         ctx_curr_ = nullptr;
     }
 
-    // Try to clear node references to prevent circular reference issues
+    // 尝试清理节点引用以防止循环引用问题
     try {
-        // Clear references between nodes first to avoid circular references
+        // 设置析构标志，防止重入
+        destructing_ = true;
+        
+        // 先断开节点之间的引用关系
         for (auto &node_ptr : node_storage_) {
             if (node_ptr) {
-                // Clear the source references to break potential cycles
-                // This helps avoid accessing already deleted nodes
+                // 清理源引用以断开潜在的循环
                 node_ptr->clear_sources();
             }
         }
 
-        // Now clear the node storage
-        // FIXME it cause segfault
+        // 逐个释放节点，更好地控制销毁顺序
+        // 从后往前释放，避免前置节点先销毁导致后置节点访问无效内存
+        for (auto it = node_storage_.rbegin(); it != node_storage_.rend(); ++it) {
+            it->reset();  // 显式释放unique_ptr
+        }
+        
+        // 清空容器
         node_storage_.clear();
     } catch (...) {
-        // Silently ignore exceptions during destruction
+        // 静默忽略析构期间的异常
     }
 }
 

@@ -80,10 +80,18 @@ Component::~Component() {
 
     CHDBG("Component destructor normal cleanup: %s", name_.c_str());
 
-    // 清理子组件
-    // FIXME it cause segfault
-    // children_shared_.clear();
-
+    // 清理子组件 - 先断开父引用再清理，避免循环引用导致segfault
+    if (!children_shared_.empty()) {
+        CHDBG("Clearing %zu child components", children_shared_.size());
+        // 先断开所有子组件的父引用，防止析构时访问已删除的父组件
+        for (auto& child : children_shared_) {
+            if (child) {
+                child->parent_ = nullptr;
+            }
+        }
+        // 清空子组件列表
+        children_shared_.clear();
+    }
     // 如果拥有context，则删除它
     if (ctx_owner_ && ctx_) {
         // 在删除context之前，确保所有依赖它的simulator都已断开连接
