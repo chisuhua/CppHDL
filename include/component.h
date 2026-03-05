@@ -13,7 +13,7 @@ namespace ch { namespace core { class context; } }
 
 namespace ch {
 
-class Component {
+class Component : public std::enable_shared_from_this<Component> {
 public:
     explicit Component(Component* parent = nullptr, const std::string& name = "");
     virtual ~Component();
@@ -24,7 +24,13 @@ public:
 
     // 访问器
     ch::core::context* context() const { return ctx_; }
-    Component* parent() const { return parent_; }
+    // Returns a raw pointer for transient use only. Do not store; the parent
+    // may be destroyed while a raw pointer is held. For long-lived references
+    // use parent_.lock() directly.
+    Component* parent() const {
+        auto p = parent_.lock();
+        return p ? p.get() : nullptr;
+    }
     const std::string& name() const { return name_; }
 
     static Component* current() { return current_; }
@@ -51,11 +57,12 @@ public:
     }
 
     std::string hierarchical_name() const {
-        if (!parent_) {
+        auto p = parent_.lock();
+        if (!p) {
             return name_;
         }
         
-        std::string parent_path = parent_->hierarchical_name();
+        std::string parent_path = p->hierarchical_name();
         if (parent_path.empty() || parent_path == "unnamed") {
             return name_;
         }
@@ -70,7 +77,7 @@ public:
 
 protected:
     ch::core::context* ctx_;
-    Component* parent_;
+    std::weak_ptr<Component> parent_;
     std::string name_;
     std::vector<std::shared_ptr<Component>> children_shared_; // 改为 shared_ptr
     bool ctx_owner_ = false;
@@ -84,8 +91,6 @@ private:
 
     Component(const Component&) = delete;
     Component& operator=(const Component&) = delete;
-    Component(Component&&) = delete;
-    Component& operator=(Component&&) = delete;
 };
 
 } // namespace ch

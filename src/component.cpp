@@ -10,10 +10,17 @@ namespace ch {
 /*thread_local*/ Component *Component::current_ = nullptr;
 
 Component::Component(Component *parent, const std::string &name)
-    : ctx_(nullptr), parent_(parent), name_(name.empty() ? "unnamed" : name) {
+    : ctx_(nullptr), name_(name.empty() ? "unnamed" : name) {
     CHDBG_FUNC();
+    if (parent) {
+        // weak_from_this() returns an empty weak_ptr if parent is not
+        // managed by a shared_ptr (C++17+). All Components must be owned
+        // by a shared_ptr (e.g. via ch_device or children_shared_) for
+        // hierarchical parent links to be valid.
+        parent_ = parent->weak_from_this();
+    }
     CHDBG("Creating component: %s with parent: %s", name_.c_str(),
-          parent_ ? parent_->name().c_str() : "null");
+          parent ? parent->name().c_str() : "null");
 
     // Register with destruction manager
     // ch::detail::destruction_manager::instance().register_component(this);
@@ -34,7 +41,8 @@ void Component::build(ch::core::context *external_ctx) {
         CHDBG("Using external context for component: %s", name_.c_str());
         target_ctx = external_ctx;
     } else {
-        auto parent_ctx = parent_ ? parent_->context() : nullptr;
+        auto parent_ptr = parent_.lock();
+        auto parent_ctx = parent_ptr ? parent_ptr->context() : nullptr;
         CHDBG("Creating internal context for component: %s", name_.c_str());
         ctx_ = new ch::core::context(name_, parent_ctx);
         target_ctx = ctx_;
@@ -80,16 +88,9 @@ Component::~Component() {
 
     CHDBG("Component destructor normal cleanup: %s", name_.c_str());
 
-    // 清理子组件 - 先断开父引用再清理，避免循环引用导致segfault
+    // 清理子组件 - weak_ptr 在父组件析构后自动失效，无需手动清除
     if (!children_shared_.empty()) {
         CHDBG("Clearing %zu child components", children_shared_.size());
-        // 先断开所有子组件的父引用，防止析构时访问已删除的父组件
-        for (auto& child : children_shared_) {
-            if (child) {
-                child->parent_ = nullptr;
-            }
-        }
-        // 清空子组件列表
         children_shared_.clear();
     }
     // 如果拥有context，则删除它
