@@ -34,9 +34,9 @@ Core logic layer: node builders, operators, context management, buffers. Provide
 
 ## ANTI-PATTERNS
 - **Direct lnode manipulation**: Use node_builder instead of raw lnode
-- **Context leaks**: Always pair createContext() with destroyContext()
+- **Context leaks**: Always pair context creation and destruction via the CppHDL context lifecycle APIs defined in context.h
 - **Operator misuse**: Runtime operators in operators_runtime.h differ from compile-time in operators.h
-- **Missing context**: Operations require valid context; check ctx validity
+- **Missing context**: Operations require a valid Context instance; acquire and release it via the same lifecycle APIs
 
 ## RELATED DIRECTORIES
 - src/core/ - Implementation files (context.cpp, lnodeimpl.cpp)
