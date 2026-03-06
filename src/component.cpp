@@ -10,13 +10,87 @@ namespace ch {
 /*thread_local*/ Component *Component::current_ = nullptr;
 
 Component::Component(Component *parent, const std::string &name)
-    : ctx_(nullptr), parent_(parent), name_(name.empty() ? "unnamed" : name) {
+    : ctx_(nullptr), name_(name.empty() ? "unnamed" : name) {
     CHDBG_FUNC();
-    CHDBG("Creating component: %s with parent: %s", name_.c_str(),
-          parent_ ? parent_->name().c_str() : "null");
 
-    // Register with destruction manager
-    // ch::detail::destruction_manager::instance().register_component(this);
+    if (parent != nullptr) {
+        // Attempt to obtain a weak_ptr to parent via enable_shared_from_this.
+        // This succeeds when the parent is already owned by a shared_ptr
+        // (e.g. created through create_child, add_child, or ch_device with
+        // shared_ptr). For stack-allocated or unique_ptr-managed parents the
+        // weak_from_this() call returns an empty weak_ptr and parent_ stays
+        // empty; in that scenario the parent reference is unavailable through
+        // the weak_ptr mechanism.
+        parent_ = parent->weak_from_this();
+        if (parent_.lock() == nullptr) {
+            CHDBG("Parent '%s' is not shared_ptr-managed; parent reference "
+                  "not stored in weak_ptr", parent->name().c_str());
+        }
+    }
+
+    CHDBG("Creating component: %s with parent: %s", name_.c_str(),
+          parent ? parent->name().c_str() : "null");
+}
+
+Component::Component(Component&& other) noexcept
+    : ctx_(other.ctx_)
+    , parent_(std::move(other.parent_))
+    , name_(std::move(other.name_))
+    , children_shared_(std::move(other.children_shared_))
+    , ctx_owner_(other.ctx_owner_)
+    , built_(other.built_)
+    , destructing_(other.destructing_) {
+    CHDBG_FUNC();
+    // Limitation: children's parent_ weak_ptrs still reference 'other' (the
+    // move source) after this constructor runs.  Because 'this' is not yet
+    // managed by a shared_ptr at move time, shared_from_this() is unavailable
+    // and the weak_ptrs cannot be updated.  If 'other' was itself shared_ptr-
+    // managed, those weak_ptrs will expire when 'other' is destroyed, causing
+    // children's parent() calls to return nullptr.  Move operations should
+    // therefore only be used on components that have not yet been inserted into
+    // a shared_ptr (i.e. before add_child / create_child).
+    other.ctx_ = nullptr;
+    other.ctx_owner_ = false;
+    other.built_ = false;
+    other.destructing_ = false;
+}
+
+Component& Component::operator=(Component&& other) noexcept {
+    CHDBG_FUNC();
+    if (this != &other) {
+        // Release current context if we own it.
+        if (ctx_owner_ && ctx_) {
+            delete ctx_;
+        }
+        // Reset current children's parent references before releasing them.
+        // This prevents them from accessing 'this' via an (about-to-be-
+        // invalid) weak_ptr during their own destruction.
+        for (auto& child : children_shared_) {
+            if (child) {
+                child->parent_.reset();
+            }
+        }
+
+        ctx_ = other.ctx_;
+        parent_ = std::move(other.parent_);
+        name_ = std::move(other.name_);
+        children_shared_ = std::move(other.children_shared_);
+        ctx_owner_ = other.ctx_owner_;
+        built_ = other.built_;
+        destructing_ = other.destructing_;
+
+        // The transferred children's parent_ weak_ptrs still reference 'other'
+        // (the move source) and cannot be updated here for the same reason as
+        // in the move constructor: 'this' is not yet (or still) managed by a
+        // shared_ptr so shared_from_this() / weak_from_this() are unavailable.
+        // See the move constructor comment for the associated constraint.
+
+        other.ctx_ = nullptr;
+        other.ctx_owner_ = false;
+        other.built_ = false;
+        other.destructing_ = false;
+    }
+    return *this;
 }
 
 void Component::build(ch::core::context *external_ctx) {
@@ -34,7 +108,8 @@ void Component::build(ch::core::context *external_ctx) {
         CHDBG("Using external context for component: %s", name_.c_str());
         target_ctx = external_ctx;
     } else {
-        auto parent_ctx = parent_ ? parent_->context() : nullptr;
+        auto parent_ptr = parent_.lock();
+        auto parent_ctx = parent_ptr ? parent_ptr->context() : nullptr;
         CHDBG("Creating internal context for component: %s", name_.c_str());
         ctx_ = new ch::core::context(name_, parent_ctx);
         target_ctx = ctx_;
@@ -65,43 +140,22 @@ void Component::build_internal(ch::core::context *target_ctx) {
 Component::~Component() {
     CHDBG_FUNC();
 
-    // 标记正在析构，防止重复析构
     destructing_ = true;
-
-    // Unregister from destruction manager
-    // ch::detail::destruction_manager::instance().unregister_component(this);
-
-    // Check if we're in static destruction phase
-    // if (ch::detail::in_static_destruction()) {
-    //     // During static destruction, minimize operations to prevent
-    //     segfaults CHDBG("Component destructor called during static
-    //     destruction: %s", name_.c_str()); return;
-    // }
 
     CHDBG("Component destructor normal cleanup: %s", name_.c_str());
 
-    // 清理子组件 - 先断开父引用再清理，避免循环引用导致segfault
-    if (!children_shared_.empty()) {
-        CHDBG("Clearing %zu child components", children_shared_.size());
-        // 先断开所有子组件的父引用，防止析构时访问已删除的父组件
-        for (auto& child : children_shared_) {
-            if (child) {
-                child->parent_ = nullptr;
-            }
-        }
-        // 清空子组件列表
-        children_shared_.clear();
-    }
-    // 如果拥有context，则删除它
+    // Clear children. Because children hold only a weak_ptr to this component,
+    // there is no reference cycle; when the shared_ptrs in children_shared_ are
+    // released, the children's weak_ptr (parent_) to this object will
+    // automatically expire, so no manual nulling of parent_ is required.
+    children_shared_.clear();
+
     if (ctx_owner_ && ctx_) {
-        // 在删除context之前，确保所有依赖它的simulator都已断开连接
-        // ch::detail::destruction_manager::instance().notify_context_destruction(ctx_);
         delete ctx_;
         ctx_ = nullptr;
     }
 }
 
-// 修改返回类型和实现
 std::shared_ptr<Component>
 Component::add_child(std::unique_ptr<Component> child) {
     CHDBG_FUNC();

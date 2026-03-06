@@ -13,10 +13,19 @@ namespace ch { namespace core { class context; } }
 
 namespace ch {
 
-class Component {
+class Component : public std::enable_shared_from_this<Component> {
 public:
     explicit Component(Component* parent = nullptr, const std::string& name = "");
     virtual ~Component();
+
+    // Move operations: valid only before the object is managed by a shared_ptr.
+    // Once owned by shared_ptr (e.g. via create_child / add_child), the
+    // underlying shared_ptr control block is bound to the original object
+    // address.  Moving the object after that point causes children's parent_
+    // weak_ptrs to become stale (they still reference the move source).
+    // Prefer moving the shared_ptr itself (std::move(shared_ptr<T>)) instead.
+    Component(Component&& other) noexcept;
+    Component& operator=(Component&& other) noexcept;
 
     virtual void create_ports() {}
     virtual void describe() = 0;
@@ -24,7 +33,7 @@ public:
 
     // 访问器
     ch::core::context* context() const { return ctx_; }
-    Component* parent() const { return parent_; }
+    std::shared_ptr<Component> parent() const { return parent_.lock(); }
     const std::string& name() const { return name_; }
 
     static Component* current() { return current_; }
@@ -51,11 +60,12 @@ public:
     }
 
     std::string hierarchical_name() const {
-        if (!parent_) {
+        auto p = parent_.lock();
+        if (!p) {
             return name_;
         }
         
-        std::string parent_path = parent_->hierarchical_name();
+        std::string parent_path = p->hierarchical_name();
         if (parent_path.empty() || parent_path == "unnamed") {
             return name_;
         }
@@ -70,9 +80,13 @@ public:
 
 protected:
     ch::core::context* ctx_;
-    Component* parent_;
+    // Stored as weak_ptr to avoid a reference cycle: each child holds a
+    // weak reference to its parent so the parent's lifetime is governed
+    // solely by its owner (e.g. ch_device or children_shared_ of the
+    // grandparent), not by its children.
+    std::weak_ptr<Component> parent_;
     std::string name_;
-    std::vector<std::shared_ptr<Component>> children_shared_; // 改为 shared_ptr
+    std::vector<std::shared_ptr<Component>> children_shared_;
     bool ctx_owner_ = false;
 
 private:
@@ -84,8 +98,6 @@ private:
 
     Component(const Component&) = delete;
     Component& operator=(const Component&) = delete;
-    Component(Component&&) = delete;
-    Component& operator=(Component&&) = delete;
 };
 
 } // namespace ch
