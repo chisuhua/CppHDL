@@ -82,6 +82,7 @@ set(BASE_TEST_SOURCES
     test_bool_connection.cpp
     test_mem_connection.cpp
     test_wires_connection.cpp
+    test_memory_leak.cpp  # 新增：内存泄漏检测测试
     test_bundle_connection.cpp
     test_bits_update.cpp  # 新增：bits_update操作测试
     test_ch_stream.cpp
