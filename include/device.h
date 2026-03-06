@@ -12,7 +12,10 @@ public:
     {
         auto ctx = std::make_unique<ch::core::context>("top_ctx");
         ch::core::ctx_swap ctx_guard(ctx.get());
-        top_ = std::make_unique<T>(nullptr, "top", std::forward<Args>(args)...);
+        // Use shared_ptr so that enable_shared_from_this (used by Component
+        // for weak_ptr parent tracking) is properly initialised for the
+        // top-level instance and any children it creates.
+        top_ = std::make_shared<T>(nullptr, "top", std::forward<Args>(args)...);
         top_->build();
     }
 
@@ -25,7 +28,7 @@ public:
     const auto& io() const { return top_->io(); }
 
 private:
-    std::unique_ptr<T> top_;
+    std::shared_ptr<T> top_;
 };
 
 } // namespace ch
