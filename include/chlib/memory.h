@@ -326,6 +326,28 @@ template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FIFOResult {
 //     }
 // };
 
+// ============================================================================
+// 便捷函数
+// ============================================================================
+
+/**
+ * ch_nextEn - 使能控制的下一周期值便捷函数
+ */
+template <typename T>
+T ch_nextEn(const T& current, const T& next, ch_bool enable) {
+    return select(enable, next, current);
+}
+
+/**
+ * ch_rom - ROM 便捷函数
+ */
+template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
+ch_uint<DATA_WIDTH> ch_rom(ch_uint<ADDR_WIDTH> addr,
+                           const std::string& name = "rom") {
+    ch_mem<ch_uint<DATA_WIDTH>, (1U << ADDR_WIDTH)> mem(name);
+    return mem.aread(addr);
+}
+
 } // namespace chlib
 
 #endif // CHLIB_MEMORY_H
