@@ -88,7 +88,7 @@ public:
         // 内存控制
         io().mem_read = select(opcode == ch_uint<32>(3_d), ch_bool(true), ch_bool(false));
         io().mem_write = select(opcode == ch_uint<32>(35_d), ch_bool(true), ch_bool(false));
-        io().mem_to_reg = io().mem_read;
+        io().mem_to_reg = select(io().mem_read, ch_bool(true), ch_bool(false));
         
         // 分支/跳转
         io().branch = select(opcode == ch_uint<32>(99_d), ch_bool(true), ch_bool(false));

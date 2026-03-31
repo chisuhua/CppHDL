@@ -50,13 +50,13 @@ public:
 };
 
 /**
- * 分支目标计算单元
+ * 分支目标计算单元 (简化)
  */
 class BranchTargetCalc : public ch::Component {
 public:
     __io(
         ch_in<ch_uint<32>> pc;
-        ch_in<ch_int<32>> imm;
+        ch_in<ch_uint<32>> imm;
         ch_out<ch_uint<32>> target;
     )
     
@@ -68,9 +68,8 @@ public:
     }
     
     void describe() override {
-        // 分支目标 = PC + imm (imm 已经是符号扩展的)
-        // PC 总是 4 字节对齐，imm 也是 4 字节对齐 (B 格式和 J 格式)
-        io().target = pc + ch_uint<32>(imm);
+        // 分支目标 = PC + imm
+        io().target = pc + imm;
     }
 };
 
