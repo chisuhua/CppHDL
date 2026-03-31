@@ -141,6 +141,8 @@ add_subdirectory(examples/spinalhdl-ported/phase1c)
 add_subdirectory(examples/spinalhdl-ported/uart_rx)
 add_subdirectory(examples/spinalhdl-ported/vga)
 add_subdirectory(examples/spinalhdl-ported/ws2812)
+add_subdirectory(examples/spinalhdl-ported/quadrature_encoder)
+add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 
 # 添加测试
 enable_testing()
