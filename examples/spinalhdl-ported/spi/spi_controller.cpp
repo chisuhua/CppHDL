@@ -279,14 +279,21 @@ int main() {
         
         if (static_cast<uint64_t>(done)) {
             auto rx_data = sim.get_port_value(top_device.instance().io().rx_data);
-            std::cout << "Transfer complete! RX data: 0x" << std::hex
+            std::cout << "Transfer complete at cycle " << cycle << "! RX data: 0x" << std::hex
                       << static_cast<uint64_t>(rx_data) << std::dec << std::endl;
             
-            // 验证结果
-            if (static_cast<uint64_t>(rx_data) == 0xAA) {
-                std::cout << "✅ PASS: RX data matches TX data (0xAA)" << std::dec << std::endl;
+            // 时序断言：SPI 8 位传输应在 ~100 周期内完成
+            if (cycle < 150) {
+                std::cout << "  [TIMING] PASS: SPI 8-bit transfer in " << cycle << " cycles (expected ~100)" << std::endl;
             } else {
-                std::cout << "❌ FAIL: Expected 0xAA, got 0x" << std::hex
+                std::cout << "  [TIMING] FAIL: SPI transfer took " << cycle << " cycles (expected ~100)" << std::endl;
+            }
+            
+            // 数据验证
+            if (static_cast<uint64_t>(rx_data) == 0xAA) {
+                std::cout << "  [DATA] PASS: RX data matches TX data (0xAA)" << std::dec << std::endl;
+            } else {
+                std::cout << "  [DATA] FAIL: Expected 0xAA, got 0x" << std::hex
                           << static_cast<uint64_t>(rx_data) << std::dec << std::endl;
                 std::cout << "  Note: 0x55 = ~0xAA (bit inversion or phase issue)" << std::endl;
             }
