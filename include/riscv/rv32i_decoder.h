@@ -1,14 +1,13 @@
 /**
  * RV32I Instruction Decoder
  * 
- * 将 32 位指令译码为控制信号
+ * 将 32 位指令译码为控制信号 (简化版)
  */
 
 #pragma once
 
 #include "ch.hpp"
 #include "component.h"
-#include "rv32i_isa.h"
 
 using namespace ch::core;
 
@@ -57,53 +56,15 @@ public:
         auto funct3 = (io().instr >> ch_uint<32>(12_d)) & ch_uint<32>(7_d);
         auto rs1 = (io().instr >> ch_uint<32>(15_d)) & ch_uint<32>(31_d);
         auto rs2 = (io().instr >> ch_uint<32>(20_d)) & ch_uint<32>(31_d);
-        auto funct7 = (io().instr >> ch_uint<32>(25_d)) & ch_uint<32>(127_d);
         
         // 输出寄存器地址
         io().rs1_addr = rs1;
         io().rs2_addr = rs2;
         io().rd_addr = rd;
         
-        // 立即数扩展 (根据不同指令类型)
-        // I 格式：imm[11:0]
-        auto imm_i = bits<11, 0>(io().instr);
-        
-        // S 格式：imm[11:5] + imm[4:0]
-        auto imm_s_lo = bits<11, 7>(io().instr);
-        auto imm_s_hi = bits<31, 25](io().instr);
-        auto imm_s = (imm_s_hi << ch_uint<32>(5_d)) | imm_s_lo;
-        
-        // B 格式：imm[12|10:5|4:1|11]
-        auto imm_b_11 = bits<7, 7](io().instr);
-        auto imm_b_4_1 = bits<11, 8](io().instr);
-        auto imm_b_10_5 = bits<30, 25](io().instr);
-        auto imm_b_12 = bits<31, 31](io().instr);
-        auto imm_b = (imm_b_12 << ch_uint<32>(12_d)) | (imm_b_11 << ch_uint<32>(11_d)) |
-                     (imm_b_10_5 << ch_uint<32>(5_d)) | (imm_b_4_1 << ch_uint<32>(1_d));
-        
-        // U 格式：imm[31:12]
-        auto imm_u = bits<31, 12](io().instr) << ch_uint<32>(12_d);
-        
-        // J 格式：imm[20|10:1|11|19:12]
-        auto imm_j_19_12 = bits<19, 12](io().instr);
-        auto imm_j_11 = bits<20, 20](io().instr);
-        auto imm_j_10_1 = bits<30, 21](io().instr);
-        auto imm_j_20 = bits<31, 31](io().instr);
-        auto imm_j = (imm_j_20 << ch_uint<32>(20_d)) | (imm_j_19_12 << ch_uint<32>(12_d)) |
-                     (imm_j_11 << ch_uint<32>(11_d)) | (imm_j_10_1 << ch_uint<32>(1_d));
-        
-        // 选择正确的立即数
-        ch_uint<32> imm_val(0_d);
-        imm_val = select(opcode == ch_uint<32>(opcode::LOAD), imm_i, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::STORE), imm_s, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::OP_IMM), imm_i, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::BRANCH), imm_b, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::LUI), imm_u, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::AUIPC), imm_u, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::JAL), imm_j, imm_val);
-        imm_val = select(opcode == ch_uint<32>(opcode::JALR), imm_i, imm_val);
-        
-        io().imm = imm_val;
+        // 立即数 (简化：I 格式)
+        auto imm_i = (io().instr >> ch_uint<32>(20_d)) & ch_uint<32>(4095_d);
+        io().imm = imm_i;
         
         // 控制信号生成 (使用十进制操作码)
         // LOAD=3, STORE=35, OP_IMM=19, OP=51, LUI=55, AUIPC=23, BRANCH=99, JALR=103, JAL=111
@@ -137,10 +98,8 @@ public:
         // ALU 操作
         io().alu_op = funct3;
         
-        // 减法 (SUB vs ADD) - 简化处理
+        // 简化：暂不支持 SUB 和 SRA
         io().alu_sub = ch_bool(false);
-        
-        // 算术右移 (SRA vs SRL) - 简化处理
         io().alu_sra = ch_bool(false);
     }
 };
