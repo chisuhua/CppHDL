@@ -71,7 +71,7 @@ int main() {
         // 测试 ADD
         sim.set_input_value(alu.instance().io().operand_a, 10_d);
         sim.set_input_value(alu.instance().io().operand_b, 5_d);
-        sim.set_input_value(alu.instance().io().funct3, funct3::ADD);
+        sim.set_input_value(alu.instance().io().funct3, 0_d);  // ADD = 0
         sim.set_input_value(alu.instance().io().is_sub, false);
         sim.tick();
         
@@ -100,7 +100,7 @@ int main() {
         // 测试 AND
         sim.set_input_value(alu.instance().io().operand_a, 255_d);  // 0xFF
         sim.set_input_value(alu.instance().io().operand_b, 15_d);   // 0x0F
-        sim.set_input_value(alu.instance().io().funct3, funct3::AND);
+        sim.set_input_value(alu.instance().io().funct3, 7_d);  // AND = 7
         sim.set_input_value(alu.instance().io().is_sub, false);
         sim.tick();
         
