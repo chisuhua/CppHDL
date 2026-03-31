@@ -43,9 +43,9 @@ template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct SyncFifoResult {
     ch_uint<ADDR_WIDTH + 1> count;
 };
 
-template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
+template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH, typename WrenT, typename RdenT>
 SyncFifoResult<DATA_WIDTH, ADDR_WIDTH>
-sync_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden,
+sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
           ch_uint<ADDR_WIDTH> threshold = 0_d) {
     static_assert(DATA_WIDTH > 0, "Data width must be greater than 0");
     static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
@@ -60,30 +60,33 @@ sync_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden,
     // 计数器
     ch_reg<ch_uint<ADDR_WIDTH + 1>> count(0_d, "sync_fifo_count");
 
-    // 写入操作
-    ch_bool write_enable = wren && !is_full(count);
-    memory.write(write_ptr, din, write_enable);
-
-    // 更新写指针
-    ch_uint<ADDR_WIDTH> next_write_ptr =
-        select(write_enable, write_ptr + 1_d, write_ptr);
-    write_ptr->next = next_write_ptr;
-
     // 读取操作 - 创建读端口
     ch_uint<DATA_WIDTH> read_data;
     read_data <<= memory.sread(read_ptr, ch_bool(true));
-    ch_bool read_enable = rden && !is_empty(count);
+    
+    // 计算下一周期计数器值（用于满/空判断）
+    // 使用 select 代替 && 以支持 IO 端口类型
+    ch_bool will_write = select(wren, ch_bool(!is_full(count)), ch_bool(false));
+    ch_bool will_read = select(rden, ch_bool(!is_empty(count)), ch_bool(false));
+    
+    ch_uint<ADDR_WIDTH + 1> next_count;
+    next_count = select(select(will_write, ch_bool(!will_read), ch_bool(false)), count + 1_d,
+                        select(select(ch_bool(!will_write), will_read, ch_bool(false)), count - 1_d, count));
+    
+    // 写入操作 - 使用简化的写使能（外部负责背压）
+    memory.write(write_ptr, din, wren);
+
+    // 更新写指针
+    ch_uint<ADDR_WIDTH> next_write_ptr =
+        select(wren, write_ptr + 1_d, write_ptr);
+    write_ptr->next = next_write_ptr;
 
     // 更新读指针
     ch_uint<ADDR_WIDTH> next_read_ptr =
-        select(read_enable, read_ptr + 1_d, read_ptr);
+        select(rden, read_ptr + 1_d, read_ptr);
     read_ptr->next = next_read_ptr;
 
     // 更新计数器
-    ch_uint<ADDR_WIDTH + 1> next_count;
-    next_count =
-        select(write_enable && !read_enable, count + 1_d,
-               select(!write_enable && read_enable, count - 1_d, count));
     count->next = next_count;
 
     SyncFifoResult<DATA_WIDTH, ADDR_WIDTH> result;

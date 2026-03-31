@@ -1,142 +1,227 @@
-#pragma once
+#ifndef CHLIB_STREAM_WIDTH_ADAPTER_H
+#define CHLIB_STREAM_WIDTH_ADAPTER_H
 
-#include "bundle/stream_bundle.h"
+/**
+ * @file stream_width_adapter.h
+ * @brief Stream Width Adapters for CppHDL
+ * 
+ * Provides SpinalHDL-like stream width conversion:
+ * - Narrow to Wide: Accumulate multiple narrow transfers into one wide transfer
+ * - Wide to Narrow: Split one wide transfer into multiple narrow transfers
+ * 
+ * Usage Example:
+ * @code{.cpp}
+ * // Narrow (8-bit) to Wide (32-bit)
+ * auto wide_stream = stream_narrow_to_wide<ch_uint<32>, ch_uint<8>>(narrow_stream);
+ * 
+ * // Wide (32-bit) to Narrow (8-bit)
+ * auto narrow_stream = stream_wide_to_narrow<ch_uint<8>, ch_uint<32>>(wide_stream);
+ * @endcode
+ */
+
+#include "chlib/stream.h"
 #include "ch.hpp"
-#include "core/bool.h"
 #include "core/reg.h"
 #include "core/uint.h"
+#include "core/bool.h"
+#include "core/operators.h"
+#include <cstdint>
 
 using namespace ch::core;
 
 namespace chlib {
 
 /**
- * Stream Narrow to Wide Result - Narrow-to-wide width adapter result structure
- * Combines multiple narrow input beats into one wide output beat
+ * @brief Compute number of narrow transfers needed for one wide transfer
  */
-template <typename TOut, typename TIn, unsigned N> struct StreamNarrowToWideResult {
-    ch_stream<TIn> input;   // Input stream (narrow)
-    ch_stream<TOut> output; // Output stream (wide)
-};
+template <typename TWide, typename TNarrow>
+constexpr unsigned compute_transfer_ratio() {
+    constexpr size_t wide_bits = TWide::ch_width;
+    constexpr size_t narrow_bits = TNarrow::ch_width;
+    return (wide_bits + narrow_bits - 1) / narrow_bits;  // Ceiling division
+}
 
 /**
- * stream_narrow_to_wide - Combine N narrow input beats into one wide output beat
+ * @brief Narrow to Wide Stream Adapter
  * 
- * Similar to SpinalHDL's width adapter that combines multiple smaller beats
- * into a larger beat (e.g., 4 x 8-bit = 32-bit)
+ * Accumulates multiple narrow transfers into one wide transfer.
  * 
- * @tparam TOut  Output wide type (e.g., ch_uint<32>)
- * @tparam TIn   Input narrow type (e.g., ch_uint<8>)
- * @tparam N     Number of narrow beats to combine (e.g., 4)
- * @param input_stream  Narrow input stream
- * @return StreamNarrowToWideResult with input and output streams
+ * @tparam TWide Wide output type (e.g., ch_uint<32>)
+ * @tparam TNarrow Narrow input type (e.g., ch_uint<8>)
+ * @param input Narrow input stream
+ * @return Wide output stream
  */
-template <typename TOut, typename TIn, unsigned N>
-StreamNarrowToWideResult<TOut, TIn, N> stream_narrow_to_wide(ch_stream<TIn> input_stream) {
-    static_assert(N >= 2, "Narrow to wide adapter requires at least 2 beats");
+template <typename TWide, typename TNarrow>
+ch_stream<TWide> stream_narrow_to_wide(ch_stream<TNarrow> input) {
+    constexpr unsigned RATIO = compute_transfer_ratio<TWide, TNarrow>();
+    constexpr unsigned ACCUM_BITS = TWide::ch_width;
     
-    StreamNarrowToWideResult<TOut, TIn, N> result;
+    ch_stream<TWide> result;
     
-    // Register to accumulate narrow values
-    ch_reg<TOut> accumulator_reg{};
-    // Counter to track number of accumulated beats
-    ch_reg<ch_uint<compute_idx_width(N)>> count_reg{};
+    // Accumulator register
+    ch_reg<TWide> accumulator(TWide(0_d));
     
-    // Initialize counter to 0
-    count_reg->next = 0_d;
+    // Transfer counter
+    ch_reg<ch_uint<8>> counter(ch_uint<8>(0_d));
     
-    // Check if input fires
-    ch_bool input_fire = input_stream.valid && input_stream.ready;
+    // Check if accumulator is full
+    ch_bool is_full = (counter == ch_uint<8>(RATIO - 1));
     
-    // Check if output is ready (can accept new wide data)
-    ch_bool output_ready = result.output.ready;
+    // Shift amount for current narrow transfer
+    ch_uint<8> shift_amount = counter * ch_uint<8>(TNarrow::ch_width);
     
-    // Compute next count: increment on input fire, reset when output fires
-    ch_uint<compute_idx_width(N)> next_count = 
-        select(input_fire, 
-               select(count_reg == make_uint<compute_idx_width(N)>(N - 1), 0_d, count_reg + 1_d),
-               count_reg);
-    count_reg->next = next_count;
+    // Accumulate narrow data
+    TWide shifted_data = (TWide(input.payload) << shift_amount);
+    TWide new_accumulator = accumulator | shifted_data;
     
-    // Check if we have accumulated N beats (output is valid)
-    ch_bool has_full_beat = (count_reg == make_uint<compute_idx_width(N)>(N - 1)) && input_fire;
+    // Update accumulator
+    accumulator->next = select(input.valid && input.ready, new_accumulator, accumulator);
     
-    // Compute accumulator: shift in new narrow value
-    // This concatenates values by shifting and ORing
-    TOut new_value = TOut(input_stream.payload);
+    // Update counter
+    counter->next = select(input.valid && input.ready,
+                           select(is_full, ch_uint<8>(0_d), counter + ch_uint<8>(1_d)),
+                           counter);
     
-    // Shift accumulator left by narrow width and OR new value
-    TOut shifted_value = (accumulator_reg << make_uint<ch_width_v<TIn>>(TIn::ch_width)) | TOut(new_value);
+    // Output valid when accumulator is full and input is valid
+    result.valid = select(is_full, input.valid, ch_bool(false));
     
-    // Update accumulator on input fire
-    accumulator_reg->next = select(input_fire, shifted_value, accumulator_reg);
+    // Output data from accumulator
+    result.payload = accumulator;
     
-    // Output valid when we've accumulated enough beats
-    result.output.valid = has_full_beat;
-    
-    // Output payload is the accumulator
-    result.output.payload = accumulator_reg;
-    
-    // Input ready when: output is ready AND we've accumulated N-1 beats (ready for last beat)
-    // OR when output has already fired (ready for next sequence)
-    ch_bool ready_for_input = (count_reg < make_uint<compute_idx_width(N)>(N - 1)) || 
-                               (output_ready && has_full_beat);
-    input_stream.ready = ready_for_input;
-    
-    // Connect input to result
-    result.input.valid = input_stream.valid;
-    result.input.payload = input_stream.payload;
-    result.input.ready = input_stream.ready;
+    // Input ready when not full or output is ready
+    input.ready = select(is_full, result.ready, ch_bool(true));
     
     return result;
 }
 
 /**
- * Stream Wide to Narrow Result - Wide-to-narrow width adapter result structure
- * Splits one wide input beat into multiple narrow output beats
+ * @brief Wide to Narrow Stream Adapter
+ * 
+ * Splits one wide transfer into multiple narrow transfers.
+ * 
+ * @tparam TNarrow Narrow output type (e.g., ch_uint<8>)
+ * @tparam TWide Wide input type (e.g., ch_uint<32>)
+ * @param input Wide input stream
+ * @return Narrow output stream
  */
-template <typename TOut, typename TIn, unsigned N> struct StreamWideToNarrowResult {
-    ch_stream<TIn> input;   // Input stream (wide)
-    ch_stream<TOut> output; // Output stream (narrow)
-};
+template <typename TNarrow, typename TWide>
+ch_stream<TNarrow> stream_wide_to_narrow(ch_stream<TWide> input) {
+    constexpr unsigned RATIO = compute_transfer_ratio<TWide, TNarrow>();
+    
+    ch_stream<TNarrow> result;
+    
+    // Data register (holds wide data during splitting)
+    ch_reg<TWide> data_reg(TWide(0_d));
+    
+    // Transfer counter
+    ch_reg<ch_uint<8>> counter(ch_uint<8>(0_d));
+    
+    // Valid flag (indicates we have data to split)
+    ch_reg<ch_bool> valid_flag(ch_bool(false));
+    
+    // Check if we've sent all narrow transfers
+    ch_bool is_done = (counter == ch_uint<8>(RATIO - 1));
+    
+    // Shift amount for current narrow transfer
+    ch_uint<8> shift_amount = counter * ch_uint<8>(TNarrow::ch_width);
+    
+    // Extract narrow data from wide data (take lower bits)
+    TNarrow narrow_data = TNarrow(data_reg >> shift_amount);
+    
+    // Load new wide data when input is valid and we're done with previous data
+    ch_bool load_new = input.valid && !valid_flag;
+    data_reg->next = select(load_new, input.payload, data_reg);
+    valid_flag->next = select(load_new, ch_bool(true), select(is_done && result.ready, ch_bool(false), valid_flag));
+    
+    // Update counter
+    counter->next = select(load_new, ch_uint<8>(0_d),
+                           select(is_done && result.ready, ch_uint<8>(0_d),
+                                  select(result.ready, counter + ch_uint<8>(1_d), counter)));
+    
+    // Output valid when we have data
+    result.valid = valid_flag;
+    
+    // Output narrow data
+    result.payload = narrow_data;
+    
+    // Input ready when we don't have pending data
+    input.ready = !valid_flag;
+    
+    return result;
+}
 
 /**
- * stream_wide_to_narrow - Split one wide input beat into N narrow output beats
+ * @brief Generic Stream Width Adapter
  * 
- * Similar to SpinalHDL's width adapter that splits a larger beat
- * into multiple smaller beats (e.g., 32-bit = 4 x 8-bit)
+ * Automatically chooses direction based on input/output types.
  * 
- * @tparam TOut  Output narrow type (e.g., ch_uint<8>)
- * @tparam TIn   Input wide type (e.g., ch_uint<32>)
- * @tparam N     Number of narrow beats to produce (e.g., 4)
- * @param input_stream  Wide input stream
- * @return StreamWideToNarrowResult with input and output streams
+ * @tparam TOut Output type
+ * @tparam TIn Input type
+ * @param input Input stream
+ * @return Output stream with different width
  */
-template <typename TOut, typename TIn, unsigned N>
-StreamWideToNarrowResult<TOut, TIn, N> stream_wide_to_narrow(ch_stream<TIn> input_stream) {
-    static_assert(N >= 2, "Wide to narrow adapter requires at least 2 beats");
+template <typename TOut, typename TIn>
+ch_stream<TOut> stream_width_adapter(ch_stream<TIn> input) {
+    if constexpr (TOut::ch_width > TIn::ch_width) {
+        // Narrow to Wide
+        return stream_narrow_to_wide<TOut, TIn>(input);
+    } else if constexpr (TOut::ch_width < TIn::ch_width) {
+        // Wide to Narrow
+        return stream_wide_to_narrow<TOut, TIn>(input);
+    } else {
+        // Same width - direct connection
+        ch_stream<TOut> result;
+        result.payload = TOut(input.payload);
+        result.valid = input.valid;
+        input.ready = result.ready;
+        return result;
+    }
+}
+
+/**
+ * @brief Stream Bit Extender (zero-extend)
+ * 
+ * Extends a narrow stream to wider by zero-extending each transfer.
+ * 
+ * @tparam TWide Wide output type
+ * @tparam TNarrow Narrow input type
+ * @param input Narrow input stream
+ * @return Wide output stream (zero-extended)
+ */
+template <typename TWide, typename TNarrow>
+ch_stream<TWide> stream_extend(ch_stream<TNarrow> input) {
+    ch_stream<TWide> result;
     
-    StreamWideToNarrowResult<TOut, TIn, N> result;
+    // Zero-extend narrow data to wide
+    result.payload = TWide(input.payload);
+    result.valid = input.valid;
+    input.ready = result.ready;
     
-    // For simplicity, we pass through the valid signal directly
-    // and let the user handle the beat sequencing externally
-    // This avoids complex internal state management
+    return result;
+}
+
+/**
+ * @brief Stream Bit Truncator
+ * 
+ * Truncates a wide stream to narrower by taking LSBs.
+ * 
+ * @tparam TNarrow Narrow output type
+ * @tparam TWide Wide input type
+ * @param input Wide input stream
+ * @return Narrow output stream (truncated to LSBs)
+ */
+template <typename TNarrow, typename TWide>
+ch_stream<TNarrow> stream_truncate(ch_stream<TWide> input) {
+    ch_stream<TNarrow> result;
     
-    // Output valid follows input valid
-    result.output.valid = input_stream.valid;
-    
-    // Output payload - take lower bits (truncation)
-    result.output.payload = TOut(input_stream.payload);
-    
-    // Input ready follows output ready
-    input_stream.ready = result.output.ready;
-    
-    // Connect input to result
-    result.input.valid = input_stream.valid;
-    result.input.payload = input_stream.payload;
-    result.input.ready = input_stream.ready;
+    // Truncate wide data to narrow (take LSBs)
+    result.payload = TNarrow(input.payload);
+    result.valid = input.valid;
+    input.ready = result.ready;
     
     return result;
 }
 
 } // namespace chlib
+
+#endif // CHLIB_STREAM_WIDTH_ADAPTER_H

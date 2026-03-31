@@ -147,6 +147,9 @@ add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 # Phase 3: AXI4 总线系统
 add_subdirectory(examples/axi4)
 
+# Phase 3A: RISC-V SoC
+add_subdirectory(examples/riscv)
+
 # 添加测试
 enable_testing()
 add_subdirectory(tests)
