@@ -20,11 +20,11 @@ public:
         ch_in<ch_uint<32>> operand_a;
         ch_in<ch_uint<32>> operand_b;
         ch_in<ch_uint<3>> funct3;
-        ch_in<ch_bool> is_sub;   // 减法标志
-        ch_in<ch_bool> is_sra;   // 算术右移标志
+        ch_in<ch_bool> is_sub;
+        ch_in<ch_bool> is_sra;
         ch_out<ch_uint<32>> result;
-        ch_out<ch_bool> zero;    // 结果为零
-        ch_out<ch_bool> less;    // 小于标志
+        ch_out<ch_bool> zero;
+        ch_out<ch_bool> less;
     )
     
     ALU(ch::Component* parent = nullptr, const std::string& name = "alu")
@@ -35,29 +35,31 @@ public:
     }
     
     void describe() override {
+        auto op_a = io().operand_a;
+        auto op_b = io().operand_b;
+        
         // 加法/减法
-        auto add_result = operand_a + operand_b;
-        auto sub_result = operand_a - operand_b;
+        auto add_result = op_a + op_b;
+        auto sub_result = op_a - op_b;
         auto arith_result = select(is_sub, sub_result, add_result);
         
         // 逻辑运算
-        auto and_result = operand_a & operand_b;
-        auto or_result = operand_a | operand_b;
-        auto xor_result = operand_a ^ operand_b;
+        auto and_result = op_a & op_b;
+        auto or_result = op_a | op_b;
+        auto xor_result = op_a ^ op_b;
         
         // 移位运算
-        auto srl_result = operand_a >> (operand_b & ch_uint<32>(31_d));
-        auto sra_result = (operand_a >> ch_uint<32>(31_d)) | 
-                          (operand_a >> (operand_b & ch_uint<32>(31_d)));
-        auto sll_result = operand_a << (operand_b & ch_uint<32>(31_d));
+        auto shift_amt = op_b & ch_uint<32>(31_d);
+        auto srl_result = op_a >> shift_amt;
+        auto sra_result = (op_a >> ch_uint<32>(31_d)) | (op_a >> shift_amt);
+        auto sll_result = op_a << shift_amt;
         
         // 比较运算
-        auto slt_result = select(operand_a < operand_b, ch_uint<32>(1_d), ch_uint<32>(0_d));
-        auto sltu_result = select((operand_a & ch_uint<32>(0x7FFFFFFF_d)) < (operand_b & ch_uint<32>(0x7FFFFFFF_d)),
+        auto slt_result = select(op_a < op_b, ch_uint<32>(1_d), ch_uint<32>(0_d));
+        auto sltu_result = select((op_a & ch_uint<32>(0x7FFFFFFF_d)) < (op_b & ch_uint<32>(0x7FFFFFFF_d)),
                                    ch_uint<32>(1_d), ch_uint<32>(0_d));
         
         // 根据 funct3 选择结果
-        // funct3: 000=ADD/SUB, 001=SLL, 010=SLT, 011=SLTU, 100=XOR, 101=SRL/SRA, 110=OR, 111=AND
         auto shift_result = select(is_sra, sra_result, srl_result);
         
         ch_uint<32> alu_out(0_d);
