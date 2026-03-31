@@ -36,8 +36,10 @@ public:
         // PC 寄存器
         ch_reg<ch_uint<32>> pc_reg(0_d);
         
-        // 下一 PC 选择
-        auto next_pc_val = select(branch_taken || jump, branch_target, io().next_pc);
+        // 下一 PC 选择 (使用 select 替代 ||)
+        auto do_branch = select(io().branch_taken, ch_bool(true),
+                                select(io().jump, ch_bool(true), ch_bool(false)));
+        auto next_pc_val = select(do_branch, io().branch_target, io().next_pc);
         
         // PC 更新 (暂停时保持不变)
         pc_reg->next = select(io().stall, pc_reg,
