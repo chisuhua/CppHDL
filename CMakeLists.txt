@@ -144,6 +144,9 @@ add_subdirectory(examples/spinalhdl-ported/ws2812)
 add_subdirectory(examples/spinalhdl-ported/quadrature_encoder)
 add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 
+# Phase 3: AXI4 总线系统
+add_subdirectory(examples/axi4)
+
 # 添加测试
 enable_testing()
 add_subdirectory(tests)
