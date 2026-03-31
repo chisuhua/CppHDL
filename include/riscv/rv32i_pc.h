@@ -69,7 +69,7 @@ public:
     
     void describe() override {
         // 分支目标 = PC + imm
-        io().target = pc + imm;
+        io().target = io().pc + io().imm;
     }
 };
 
