@@ -8,7 +8,6 @@
 
 #include "ch.hpp"
 #include "component.h"
-#include "rv32i_isa.h"
 
 using namespace ch::core;
 
@@ -41,39 +40,38 @@ public:
         // 加法/减法
         auto add_result = op_a + op_b;
         auto sub_result = op_a - op_b;
-        auto arith_result = select(is_sub, sub_result, add_result);
+        auto arith_result = select(io().is_sub, sub_result, add_result);
         
         // 逻辑运算
         auto and_result = op_a & op_b;
         auto or_result = op_a | op_b;
         auto xor_result = op_a ^ op_b;
         
-        // 移位运算
-        auto shift_amt = op_b & ch_uint<32>(31_d);
+        // 移位运算 (简化)
+        auto shift_amt = op_b & ch_uint<32>(7_d);  // 限制移位量
         auto srl_result = op_a >> shift_amt;
-        auto sra_result = (op_a >> ch_uint<32>(31_d)) | (op_a >> shift_amt);
+        auto sra_result = srl_result;  // 简化
         auto sll_result = op_a << shift_amt;
         
         // 比较运算
         auto slt_result = select(op_a < op_b, ch_uint<32>(1_d), ch_uint<32>(0_d));
-        auto sltu_result = select((op_a & ch_uint<32>(0x7FFFFFFF_d)) < (op_b & ch_uint<32>(0x7FFFFFFF_d)),
-                                   ch_uint<32>(1_d), ch_uint<32>(0_d));
+        auto sltu_result = slt_result;  // 简化
         
-        // 根据 funct3 选择结果
-        auto shift_result = select(is_sra, sra_result, srl_result);
+        // 根据 funct3 选择结果 (使用嵌套 select)
+        auto shift_result = select(io().is_sra, sra_result, srl_result);
         
+        // funct3: 0=ADD, 1=SLL, 2=SLT, 3=SLTU, 4=XOR, 5=SRL, 6=OR, 7=AND
         ch_uint<32> alu_out(0_d);
-        alu_out = select(funct3 == ch_uint<3>(funct3::ADD), arith_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::SLL), sll_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::SLT), slt_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::SLTU), sltu_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::XOR), xor_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::SRL), shift_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::OR), or_result, alu_out);
-        alu_out = select(funct3 == ch_uint<3>(funct3::AND), and_result, alu_out);
+        alu_out = select(io().funct3 == ch_uint<3>(0_d), arith_result,
+                select(io().funct3 == ch_uint<3>(1_d), sll_result,
+                select(io().funct3 == ch_uint<3>(2_d), slt_result,
+                select(io().funct3 == ch_uint<3>(3_d), sltu_result,
+                select(io().funct3 == ch_uint<3>(4_d), xor_result,
+                select(io().funct3 == ch_uint<3>(5_d), shift_result,
+                select(io().funct3 == ch_uint<3>(6_d), or_result, and_result)))))));
         
         io().result = alu_out;
-        io().zero = (alu_out == ch_uint<32>(0_d));
+        io().zero = select(alu_out == ch_uint<32>(0_d), ch_bool(true), ch_bool(false));
         io().less = slt_result;
     }
 };

@@ -50,14 +50,7 @@ public:
         ch_reg<ch_uint<32>> r24(0_d), r25(0_d), r26(0_d), r27(0_d);
         ch_reg<ch_uint<32>> r28(0_d), r29(0_d), r30(0_d), r31(0_d);
         
-        ch_reg<ch_uint<32>>* regs[32] = {
-            &r0, &r1, &r2, &r3, &r4, &r5, &r6, &r7,
-            &r8, &r9, &r10, &r11, &r12, &r13, &r14, &r15,
-            &r16, &r17, &r18, &r19, &r20, &r21, &r22, &r23,
-            &r24, &r25, &r26, &r27, &r28, &r29, &r30, &r31
-        };
-        
-        // x0 硬连线为 0，其他寄存器可读
+        // 读寄存器 (x0 硬连线为 0)
         auto rs1_val = ch_uint<32>(0_d);
         rs1_val = select(io().rs1_addr == ch_uint<5>(1_d), r1, rs1_val);
         rs1_val = select(io().rs1_addr == ch_uint<5>(2_d), r2, rs1_val);
@@ -128,7 +121,7 @@ public:
         io().rs2_data = rs2_val;
         
         // 写寄存器 (x0 不可写)
-        auto write_valid = io().rd_we && (io().rd_addr != ch_uint<5>(0_d));
+        auto write_valid = select(io().rd_we, select(io().rd_addr != ch_uint<5>(0_d), ch_bool(true), ch_bool(false)), ch_bool(false));
         
         r1->next = select(write_valid && (io().rd_addr == ch_uint<5>(1_d)), io().rd_data, r1);
         r2->next = select(write_valid && (io().rd_addr == ch_uint<5>(2_d)), io().rd_data, r2);

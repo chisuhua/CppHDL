@@ -29,9 +29,9 @@ int main() {
         ch::ch_device<RegFile> regfile;
         ch::Simulator sim(regfile.context());
         
-        // 写寄存器 x1 = 0x12345678
+        // 写寄存器 x1 = 0x12345678 (305419896)
         sim.set_input_value(regfile.instance().io().rd_addr, 1_d);
-        sim.set_input_value(regfile.instance().io().rd_data, 0x12345678_d);
+        sim.set_input_value(regfile.instance().io().rd_data, 305419896_d);
         sim.set_input_value(regfile.instance().io().rd_we, true);
         sim.tick();
         
@@ -43,7 +43,7 @@ int main() {
         auto rs1_data = sim.get_port_value(regfile.instance().io().rs1_data);
         std::cout << "Read x1: 0x" << std::hex << static_cast<uint64_t>(rs1_data) << std::dec << std::endl;
         
-        if (static_cast<uint64_t>(rs1_data) == 0x12345678) {
+        if (static_cast<uint64_t>(rs1_data) == 305419896) {
             std::cout << "  [PASS] Register file write/read OK" << std::endl;
         } else {
             std::cout << "  [FAIL] Register file data mismatch" << std::endl;
@@ -98,16 +98,16 @@ int main() {
         }
         
         // 测试 AND
-        sim.set_input_value(alu.instance().io().operand_a, 0xFF_d);
-        sim.set_input_value(alu.instance().io().operand_b, 0x0F_d);
+        sim.set_input_value(alu.instance().io().operand_a, 255_d);  // 0xFF
+        sim.set_input_value(alu.instance().io().operand_b, 15_d);   // 0x0F
         sim.set_input_value(alu.instance().io().funct3, funct3::AND);
         sim.set_input_value(alu.instance().io().is_sub, false);
         sim.tick();
         
         result = sim.get_port_value(alu.instance().io().result);
-        std::cout << "AND: 0xFF & 0x0F = 0x" << std::hex << static_cast<uint64_t>(result) << std::dec << std::endl;
+        std::cout << "AND: 255 & 15 = " << static_cast<uint64_t>(result) << std::endl;
         
-        if (static_cast<uint64_t>(result) == 0x0F) {
+        if (static_cast<uint64_t>(result) == 15) {
             std::cout << "  [PASS] AND OK" << std::endl;
         } else {
             std::cout << "  [FAIL] AND failed" << std::endl;
