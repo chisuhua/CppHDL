@@ -126,6 +126,22 @@ target_include_directories(cpphdl
 # 添加示例子目录
 add_subdirectory(samples)
 
+# 添加 SpinalHDL 移植示例
+add_subdirectory(examples/spinalhdl-ported/counter)
+add_subdirectory(examples/spinalhdl-ported/uart)
+add_subdirectory(examples/spinalhdl-ported/fifo)
+add_subdirectory(examples/spinalhdl-ported/width_adapter)
+add_subdirectory(examples/spinalhdl-ported/pwm)
+add_subdirectory(examples/spinalhdl-ported/gpio)
+add_subdirectory(examples/spinalhdl-ported/spi)
+add_subdirectory(examples/spinalhdl-ported/i2c)
+add_subdirectory(examples/spinalhdl-ported/timer)
+add_subdirectory(examples/spinalhdl-ported/assert)
+add_subdirectory(examples/spinalhdl-ported/phase1c)
+add_subdirectory(examples/spinalhdl-ported/uart_rx)
+add_subdirectory(examples/spinalhdl-ported/vga)
+add_subdirectory(examples/spinalhdl-ported/ws2812)
+
 # 添加测试
 enable_testing()
 add_subdirectory(tests)

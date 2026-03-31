@@ -47,13 +47,13 @@ set(BASE_TEST_SOURCES
     test_bundle.cpp
     test_bundle_advanced.cpp
     test_bundle_advanced_features.cpp
-    # test_bundle_serialization.cpp
-    # test_bundle_bitstream.cpp
-    test_bundle_node_management.cpp  # 新增：bundle节点管理测试
-    #test_source_info.cpp
-    # test_multithread.cpp
+    test_bundle_serialization.cpp
+    test_bundle_bitstream.cpp
+    test_bundle_node_management.cpp
+    test_source_info.cpp
+    test_multithread.cpp
     test_nested_bundle.cpp
-    # test_tlm_bundle_phase1.cpp
+    test_tlm_bundle_phase1.cpp
     test_axi_lite_bundle.cpp
     test_fragment.cpp
     test_mem.cpp
@@ -82,17 +82,18 @@ set(BASE_TEST_SOURCES
     test_bool_connection.cpp
     test_mem_connection.cpp
     test_wires_connection.cpp
-    test_memory_leak.cpp  # 新增：内存泄漏检测测试
+    test_memory_leak.cpp
     test_bundle_connection.cpp
-    test_bits_update.cpp  # 新增：bits_update操作测试
+    test_bits_update.cpp
     test_ch_stream.cpp
-    test_stream_builder.cpp  # StreamBuilder fluent API
-    test_stream_pipeline.cpp  # Stream pipeline primitives (m2sPipe, s2mPipe, halfPipe)
-    test_stream_operators.cpp # Stream connection operators (<<=, >>=)
+    test_ch_flow.cpp
+    test_stream_builder.cpp
+    test_stream_pipeline.cpp
+    test_stream_operators.cpp
     test_stream_arbiter.cpp
-    test_stream_width_adapter.cpp  # Width adapters for stream conversion
-#MM|    # test_ch_flow.cpp
-    # test_ch_flow.cpp
+    test_stream_width_adapter.cpp
+    test_stream_width_adapter_complete.cpp
+    test_state_machine.cpp
 )
 
 # chlib 测试源文件列表
@@ -106,14 +107,14 @@ set(CHLIB_TEST_SOURCES
     chlib/test_converter.cpp
     chlib/test_selector_arbiter.cpp
     chlib/test_selector_priority.cpp
-    chlib/test_selector_round_robin.cpp  # 新增的轮询选择器测试文件
+    chlib/test_selector_round_robin.cpp
     chlib/test_switch.cpp
     chlib/test_arithmetic_advance.cpp
     chlib/test_memory.cpp
     chlib/test_fifo.cpp
     chlib/test_stream.cpp
-    # chlib/test_cam.cpp
-    # chlib/test_axi4lite.cpp  # 添加AXI4-Lite测试文件
+    chlib/test_cam.cpp
+    chlib/test_axi4lite.cpp
 )
 
 # 为所有基础测试创建可执行文件
@@ -124,7 +125,7 @@ foreach(TEST_SRC ${BASE_TEST_SOURCES})
     set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
 endforeach()
 
-# 为所有chlib测试创建可执行文件
+# 为所有 chlib 测试创建可执行文件
 foreach(TEST_SRC ${CHLIB_TEST_SOURCES})
     # 提取测试名，如 test_reg.cpp -> test_reg
     get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
