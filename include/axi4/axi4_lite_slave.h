@@ -62,11 +62,12 @@ public:
         addr_bits = addr_bits & ch_uint<ADDR_WIDTH>(3_d);  // 取低 2 位
         
         // 写地址握手
-        auto aw_handshake = io().awvalid && (!busy);
+        auto aw_handshake = select(io().awvalid, ch_bool(true), ch_bool(false));
+        aw_handshake = select(busy, ch_bool(false), aw_handshake);
         io().awready = aw_handshake;
         
         // 写数据握手
-        auto w_handshake = io().wvalid && aw_handshake;
+        auto w_handshake = select(io().wvalid, aw_handshake, ch_bool(false));
         io().wready = w_handshake;
         
         // 写寄存器
@@ -75,10 +76,15 @@ public:
         auto sel2 = (addr_bits == ch_uint<ADDR_WIDTH>(2_d));
         auto sel3 = (addr_bits == ch_uint<ADDR_WIDTH>(3_d));
         
-        reg0->next = select(w_handshake && sel0, io().wdata, reg0);
-        reg1->next = select(w_handshake && sel1, io().wdata, reg1);
-        reg2->next = select(w_handshake && sel2, io().wdata, reg2);
-        reg3->next = select(w_handshake && sel3, io().wdata, reg3);
+        auto we0 = select(w_handshake, sel0, ch_bool(false));
+        auto we1 = select(w_handshake, sel1, ch_bool(false));
+        auto we2 = select(w_handshake, sel2, ch_bool(false));
+        auto we3 = select(w_handshake, sel3, ch_bool(false));
+        
+        reg0->next = select(we0, io().wdata, reg0);
+        reg1->next = select(we1, io().wdata, reg1);
+        reg2->next = select(we2, io().wdata, reg2);
+        reg3->next = select(we3, io().wdata, reg3);
         
         // 写响应
         io().bvalid = w_handshake;
@@ -88,7 +94,8 @@ public:
         auto ar_addr_bits = io().araddr >> ch_uint<ADDR_WIDTH>(2_d);
         ar_addr_bits = ar_addr_bits & ch_uint<ADDR_WIDTH>(3_d);
         
-        auto ar_handshake = io().arvalid && (!busy);
+        auto ar_handshake = select(io().arvalid, ch_bool(true), ch_bool(false));
+        ar_handshake = select(busy, ch_bool(false), ar_handshake);
         io().arready = ar_handshake;
         
         // 读数据
@@ -108,8 +115,9 @@ public:
         io().rresp = ch_uint<2>(0_d);  // OKAY
         
         // 状态更新
-        busy->next = select(aw_handshake || ar_handshake, ch_bool(true),
-                            select(io().bready || io().rready, ch_bool(false), busy));
+        auto any_handshake = select(aw_handshake, ch_bool(true), ar_handshake);
+        auto any_ready = select(io().bready, ch_bool(true), io().rready);
+        busy->next = select(any_handshake, ch_bool(true), select(any_ready, ch_bool(false), busy));
     }
 };
 
