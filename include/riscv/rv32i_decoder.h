@@ -52,12 +52,12 @@ public:
     
     void describe() override {
         // 提取指令字段
-        auto opcode = io().instr & ch_uint<32>(0x7F_d);
-        auto rd = (io().instr >> ch_uint<32>(7_d)) & ch_uint<32>(0x1F_d);
+        auto opcode = io().instr & ch_uint<32>(127_d);
+        auto rd = (io().instr >> ch_uint<32>(7_d)) & ch_uint<32>(31_d);
         auto funct3 = (io().instr >> ch_uint<32>(12_d)) & ch_uint<32>(7_d);
-        auto rs1 = (io().instr >> ch_uint<32>(15_d)) & ch_uint<32>(0x1F_d);
-        auto rs2 = (io().instr >> ch_uint<32>(20_d)) & ch_uint<32>(0x1F_d);
-        auto funct7 = (io().instr >> ch_uint<32>(25_d)) & ch_uint<32>(0x7F_d);
+        auto rs1 = (io().instr >> ch_uint<32>(15_d)) & ch_uint<32>(31_d);
+        auto rs2 = (io().instr >> ch_uint<32>(20_d)) & ch_uint<32>(31_d);
+        auto funct7 = (io().instr >> ch_uint<32>(25_d)) & ch_uint<32>(127_d);
         
         // 输出寄存器地址
         io().rs1_addr = rs1;
@@ -105,15 +105,15 @@ public:
         
         io().imm = imm_val;
         
-        // 控制信号生成
-        auto op_eq = opcode & ch_uint<32>(0xFFFFFFFF_d);
-        auto is_r_type = select(op_eq == ch_uint<32>(opcode::OP), ch_bool(true), ch_bool(false));
-        auto is_i_type = select(op_eq == ch_uint<32>(opcode::OP_IMM), ch_bool(true),
-                                select(op_eq == ch_uint<32>(opcode::LOAD), ch_bool(true),
-                                       select(op_eq == ch_uint<32>(opcode::JALR), ch_bool(true), ch_bool(false))));
-        auto is_u_type = select(op_eq == ch_uint<32>(opcode::LUI), ch_bool(true),
-                                select(op_eq == ch_uint<32>(opcode::AUIPC), ch_bool(true), ch_bool(false)));
-        auto is_j_type = select(op_eq == ch_uint<32>(opcode::JAL), ch_bool(true), ch_bool(false));
+        // 控制信号生成 (使用十进制操作码)
+        // LOAD=3, STORE=35, OP_IMM=19, OP=51, LUI=55, AUIPC=23, BRANCH=99, JALR=103, JAL=111
+        auto is_r_type = select(opcode == ch_uint<32>(51_d), ch_bool(true), ch_bool(false));
+        auto is_i_type = select(opcode == ch_uint<32>(19_d), ch_bool(true),
+                                select(opcode == ch_uint<32>(3_d), ch_bool(true),
+                                       select(opcode == ch_uint<32>(103_d), ch_bool(true), ch_bool(false))));
+        auto is_u_type = select(opcode == ch_uint<32>(55_d), ch_bool(true),
+                                select(opcode == ch_uint<32>(23_d), ch_bool(true), ch_bool(false)));
+        auto is_j_type = select(opcode == ch_uint<32>(111_d), ch_bool(true), ch_bool(false));
         
         io().reg_write = select(is_r_type, ch_bool(true),
                                 select(is_i_type, ch_bool(true),
@@ -125,14 +125,14 @@ public:
                               select(is_u_type, ch_bool(true), ch_bool(false)));
         
         // 内存控制
-        io().mem_read = select(op_eq == ch_uint<32>(opcode::LOAD), ch_bool(true), ch_bool(false));
-        io().mem_write = select(op_eq == ch_uint<32>(opcode::STORE), ch_bool(true), ch_bool(false));
+        io().mem_read = select(opcode == ch_uint<32>(3_d), ch_bool(true), ch_bool(false));
+        io().mem_write = select(opcode == ch_uint<32>(35_d), ch_bool(true), ch_bool(false));
         io().mem_to_reg = io().mem_read;
         
         // 分支/跳转
-        io().branch = select(op_eq == ch_uint<32>(opcode::BRANCH), ch_bool(true), ch_bool(false));
+        io().branch = select(opcode == ch_uint<32>(99_d), ch_bool(true), ch_bool(false));
         io().jump = is_j_type;
-        io().jalr = select(op_eq == ch_uint<32>(opcode::JALR), ch_bool(true), ch_bool(false));
+        io().jalr = select(opcode == ch_uint<32>(103_d), ch_bool(true), ch_bool(false));
         
         // ALU 操作
         io().alu_op = funct3;
