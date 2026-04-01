@@ -94,6 +94,7 @@ set(BASE_TEST_SOURCES
     test_stream_width_adapter.cpp
     test_stream_width_adapter_complete.cpp
     test_state_machine.cpp
+    test_shift_boundary.cpp
 )
 
 # chlib 测试源文件列表

@@ -34,6 +34,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     add_compile_options(-Wno-deprecated-copy)
     add_compile_options(-Wno-unused-parameter)
     add_compile_options(-Wno-unused-variable)
+    
+    # 位移溢出警告（预防 UB）
+    # -Wshift-overflow=2: 警告有符号和无符号位移溢出
+    add_compile_options(-Wshift-overflow=2)
 endif()
 
 # AddressSanitizer 选项
