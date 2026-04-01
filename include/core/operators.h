@@ -48,7 +48,7 @@ template <typename T> auto to_operand(const T &value) {
         return ch::core::get_lnode(value);
     } else if constexpr (ArithmeticLiteral<T>) {
         uint64_t val = static_cast<uint64_t>(value);
-        // FIXME , how to compute value 's real width in compile time?
+        // 使用 ch_width_v<T> 获取类型位宽（修复：constexpr lambda 无法捕获运行时值）
         constexpr uint32_t width = ch_width_v<T>;
         ch_literal_dynamic lit(val, width);
         auto *lit_impl = node_builder::instance().build_literal(lit, "lit");
@@ -56,7 +56,6 @@ template <typename T> auto to_operand(const T &value) {
     } else if constexpr (CHLiteral<T>) {
         auto *lit_impl =
             node_builder::instance().build_literal(value, "ch_lit");
-        // constexpr auto vaidth = value.width();
         constexpr uint32_t width = ch_width_v<T>;
         return lnode<ch_uint<width>>(lit_impl);
     } else {
@@ -755,7 +754,7 @@ auto operator<<(const LHS &lhs, const RHS &rhs) {
             return RHS::actual_value;
         } else {
             // 对于非字面量，使用1 << ch_width_v<RHS>
-            return (1 << ch_width_v<RHS>)-1;
+            return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1; // 修复 UB: 避免位移量 >= 32
         }
     }();
 

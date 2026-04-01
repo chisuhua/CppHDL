@@ -113,7 +113,7 @@ struct Axi4LiteSlave {
 template <unsigned ADDR_WIDTH, unsigned DATA_WIDTH>
 class Axi4LiteMemorySlave {
 private:
-    ch_ram<(1 << ADDR_WIDTH), DATA_WIDTH> memory;
+    ch_ram<(1ULL << ADDR_WIDTH), DATA_WIDTH> memory;
     
     // Write address state
     ch_reg<ch_uint<ADDR_WIDTH>> write_addr_reg;

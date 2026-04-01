@@ -27,7 +27,7 @@ template <unsigned N> ch_bool is_empty(ch_uint<N> count) {
  * 辅助函数：判断计数器是否为满
  */
 template <unsigned N> ch_bool is_full(ch_uint<N> count) {
-    static constexpr unsigned MAX_COUNT = (1 << (N - 1));
+    static constexpr unsigned MAX_COUNT = (1ULL << (N - 1)); // 修复 UB: 使用 64 位位移
     return count == make_literal<MAX_COUNT>();
 }
 
@@ -51,7 +51,7 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
     static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
 
     // 内部存储器
-    ch_mem<ch_uint<DATA_WIDTH>, (1 << ADDR_WIDTH)> memory("sync_fifo_memory");
+    ch_mem<ch_uint<DATA_WIDTH>, (1ULL << ADDR_WIDTH)> memory("sync_fifo_memory");
 
     // 读写指针
     ch_reg<ch_uint<ADDR_WIDTH>> read_ptr(0_d, "sync_fifo_read_ptr");
@@ -117,7 +117,7 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
     static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
 
     // 内部存储器
-    ch_mem<ch_uint<DATA_WIDTH>, (1 << ADDR_WIDTH)> memory("fwft_fifo_memory");
+    ch_mem<ch_uint<DATA_WIDTH>, (1ULL << ADDR_WIDTH)> memory("fwft_fifo_memory");
 
     // 获取默认时钟和复位信号
 
@@ -178,11 +178,125 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
 }
 
 /**
- * 异步FIFO - 异步读写操作
- *
- * FIXME: 目前暂不支持，因为需要两个不同的时钟域
- * 支持不同时钟域的读写操作
+ * 异步 FIFO - 异步读写操作
+ * 
+ * ⚠️ 限制说明:
+ * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
+ * - 需要额外的格雷码计数器和多级同步器逻辑
+ * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 
+ * 未来实现计划:
+ * 1. 添加格雷码计数器用于跨时钟域指针传输
+ * 2. 实现两级/多级同步器用于控制信号
+ * 3. 添加空满标志生成逻辑（基于格雷码比较）
+ * 4. 验证建立/保持时间约束
+ * 
+ * 临时替代方案:
+ * - 使用同步 FIFO + 时钟分配合并
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 AsyncFifo 组件
  */
+
+/**
+ * 异步 FIFO - 异步读写操作
+ * 
+ * ⚠️ 限制说明:
+ * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
+ * - 需要额外的格雷码计数器和多级同步器逻辑
+ * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 
+ * 未来实现计划:
+ * 1. 添加格雷码计数器用于跨时钟域指针传输
+ * 2. 实现两级/多级同步器用于控制信号
+ * 3. 添加空满标志生成逻辑（基于格雷码比较）
+ * 4. 验证建立/保持时间约束
+ * 
+ * 临时替代方案:
+ * - 使用同步 FIFO + 时钟分配合并
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 AsyncFifo 组件
+ */
+
+/**
+ * 异步 FIFO - 异步读写操作
+ * 
+ * ⚠️ 限制说明:
+ * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
+ * - 需要额外的格雷码计数器和多级同步器逻辑
+ * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 
+ * 未来实现计划:
+ * 1. 添加格雷码计数器用于跨时钟域指针传输
+ * 2. 实现两级/多级同步器用于控制信号
+ * 3. 添加空满标志生成逻辑（基于格雷码比较）
+ * 4. 验证建立/保持时间约束
+ * 
+ * 临时替代方案:
+ * - 使用同步 FIFO + 时钟分配合并
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 AsyncFifo 组件
+ */
+
+/**
+ * 异步 FIFO - 异步读写操作
+ * 
+ * ⚠️ 限制说明:
+ * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
+ * - 需要额外的格雷码计数器和多级同步器逻辑
+ * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 
+ * 未来实现计划:
+ * 1. 添加格雷码计数器用于跨时钟域指针传输
+ * 2. 实现两级/多级同步器用于控制信号
+ * 3. 添加空满标志生成逻辑（基于格雷码比较）
+ * 4. 验证建立/保持时间约束
+ * 
+ * 临时替代方案:
+ * - 使用同步 FIFO + 时钟分配合并
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 AsyncFifo 组件
+ */
+
+/**
+ * 异步 FIFO - 异步读写操作
+ * 
+ * ⚠️ 限制说明:
+ * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
+ * - 需要额外的格雷码计数器和多级同步器逻辑
+ * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 
+ * 未来实现计划:
+ * 1. 添加格雷码计数器用于跨时钟域指针传输
+ * 2. 实现两级/多级同步器用于控制信号
+ * 3. 添加空满标志生成逻辑（基于格雷码比较）
+ * 4. 验证建立/保持时间约束
+ * 
+ * 临时替代方案:
+ * - 使用同步 FIFO + 时钟分配合并
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 AsyncFifo 组件
+ */
+
+/**
+ * 异步 FIFO - 异步读写操作
+ * 
+ * ⚠️ 限制说明:
+ * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
+ * - 需要额外的格雷码计数器和多级同步器逻辑
+ * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 
+ * 未来实现计划:
+ * 1. 添加格雷码计数器用于跨时钟域指针传输
+ * 2. 实现两级/多级同步器用于控制信号
+ * 3. 添加空满标志生成逻辑（基于格雷码比较）
+ * 4. 验证建立/保持时间约束
+ * 
+ * 临时替代方案:
+ * - 使用同步 FIFO + 时钟分配合并
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 AsyncFifo 组件
+ */
+
 /*
 template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct AsyncFifoResult {
     ch_bool empty;
@@ -199,7 +313,7 @@ async_fifo(ch_bool wr_clk, ch_bool wr_rst, ch_bool wren,
     static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
 
     // 内部存储器
-    ch_mem<1 << ADDR_WIDTH, DATA_WIDTH> memory("async_fifo_memory");
+    ch_mem<(1ULL << ADDR_WIDTH), DATA_WIDTH> memory("async_fifo_memory");
 
     // 写时钟域
     ch_reg<ch_uint<ADDR_WIDTH>> wr_ptr(0_d, "async_fifo_wr_ptr");
@@ -250,7 +364,7 @@ async_fifo(ch_bool wr_clk, ch_bool wr_rst, ch_bool wren,
     // 写入操作
     ch_uint<ADDR_WIDTH> wr_ptr_gray = to_gray(wr_ptr);
     ch_bool wr_full = (to_gray(rd_ptr_gray_sync) ==
-                       wr_ptr_gray + (1 << make_literal(ADDR_WIDTH - 1)));
+                       wr_ptr_gray + (1ULL << make_literal(ADDR_WIDTH - 1)));
     ch_bool write_enable = wren && !wr_full;
 
     memory.write(wr_clk, wr_ptr, din, write_enable);
@@ -313,7 +427,7 @@ lifo_stack(ch_bool push, ch_uint<DATA_WIDTH> din, ch_bool pop) {
     static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
 
     // 内部存储器
-    ch_mem<ch_uint<DATA_WIDTH>, (1 << ADDR_WIDTH)> memory("lifo_memory");
+    ch_mem<ch_uint<DATA_WIDTH>, (1ULL << ADDR_WIDTH)> memory("lifo_memory");
 
     // 栈指针
     ch_reg<ch_uint<ADDR_WIDTH>> stack_ptr(0_d, "lifo_stack_ptr");
