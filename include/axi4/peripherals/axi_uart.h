@@ -80,19 +80,21 @@ public:
         addr_bits = addr_bits & ch_uint<32>(3_d);
         
         // 写地址握手
-        auto aw_handshake = io().awvalid && (!busy);
+        auto aw_handshake = select(io().awvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().awready = aw_handshake;
         
         // 写数据握手
-        auto w_handshake = io().wvalid && aw_handshake;
+        auto w_handshake = select(io().wvalid, aw_handshake, ch_bool(false));
         io().wready = w_handshake;
         
         // 写寄存器
         auto sel_tx_data = (addr_bits == ch_uint<32>(0_d));
         auto sel_ctrl = (addr_bits == ch_uint<32>(3_d));
         
-        tx_data_reg->next = select(w_handshake && sel_tx_data, io().wdata, tx_data_reg);
-        ctrl_reg->next = select(w_handshake && sel_ctrl, io().wdata, ctrl_reg);
+        auto we_tx_data = select(w_handshake, sel_tx_data, ch_bool(false));
+        auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
+        tx_data_reg->next = select(we_tx_data, io().wdata, tx_data_reg);
+        ctrl_reg->next = select(we_ctrl, io().wdata, ctrl_reg);
         
         // 写响应
         io().bvalid = w_handshake;
@@ -102,7 +104,7 @@ public:
         auto ar_addr_bits = io().araddr >> ch_uint<32>(2_d);
         ar_addr_bits = ar_addr_bits & ch_uint<32>(3_d);
         
-        auto ar_handshake = io().arvalid && (!busy);
+        auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().arready = ar_handshake;
         
         // 读数据
@@ -112,8 +114,13 @@ public:
         auto read_sel_ctrl = (ar_addr_bits == ch_uint<32>(3_d));
         
         // 更新状态寄存器
-        status_reg->next = select(tx_empty, status_reg | ch_uint<32>(1_d), status_reg & ch_uint<32>(~1_d));
-        status_reg->next = select(rx_valid, status_reg | ch_uint<32>(2_d), status_reg & ch_uint<32>(~2_d));
+        auto tx_empty_set = select(tx_empty, ch_uint<32>(1_d), ch_uint<32>(0_d));
+        auto tx_empty_clear = select(tx_empty, ch_uint<32>(0_d), ch_uint<32>(~static_cast<uint32_t>(1)));
+        status_reg->next = select(tx_empty, status_reg | tx_empty_set, status_reg & tx_empty_clear);
+        
+        auto rx_valid_set = select(rx_valid, ch_uint<32>(2_d), ch_uint<32>(0_d));
+        auto rx_valid_clear = select(rx_valid, ch_uint<32>(0_d), ch_uint<32>(~static_cast<uint32_t>(2)));
+        status_reg->next = select(rx_valid, status_reg | rx_valid_set, status_reg & rx_valid_clear);
         
         ch_uint<32> read_val(0_d);
         read_val = select(read_sel_tx_data, tx_data_reg, read_val);
@@ -130,8 +137,9 @@ public:
         io().irq = rx_valid;
         
         // 状态更新
-        busy->next = select(aw_handshake || ar_handshake, ch_bool(true),
-                            select(io().bready || io().rready, ch_bool(false), busy));
+        auto any_handshake = select(aw_handshake, ch_bool(true), ar_handshake);
+        auto any_ready = select(io().bready, ch_bool(true), select(io().rready, ch_bool(true), ch_bool(false)));
+        busy->next = select(any_handshake, ch_bool(true), select(any_ready, ch_bool(false), busy));
     }
 };
 

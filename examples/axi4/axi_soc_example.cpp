@@ -54,6 +54,7 @@ public:
         ch_out<ch_bool> wvalid;
         ch_in<ch_bool> wready;
         
+        ch_in<ch_uint<2>> bresp;
         ch_in<ch_bool> bvalid;
         ch_out<ch_bool> bready;
         
@@ -62,6 +63,7 @@ public:
         ch_in<ch_bool> arready;
         
         ch_in<ch_uint<32>> rdata_axi;
+        ch_in<ch_uint<2>> rresp;
         ch_in<ch_bool> rvalid;
         ch_out<ch_bool> rready;
     )
@@ -77,30 +79,40 @@ public:
         ch_reg<ch_bool> state(ch_bool(false));
         
         // 写事务
-        auto write_start = io().start && io().write && (!state);
+        auto start_and_write = select(io().start, io().write, ch_bool(false));
+        auto not_state = select(state, ch_bool(false), ch_bool(true));
+        auto write_start = select(start_and_write, not_state, ch_bool(false));
+        
         io().awvalid = write_start;
         io().awaddr = io().addr;
-        io().wvalid = write_start && io().awready;
+        auto wvalid_cond = select(write_start, io().awready, ch_bool(false));
+        io().wvalid = wvalid_cond;
         io().wdata_axi = io().wdata;
         
-        auto write_done = io().bvalid && io().bready;
-        state->next = select(write_start, ch_bool(true), select(write_done, ch_bool(false), state));
+        auto write_done = select(io().bvalid, io().bready, ch_bool(false));
+        auto next_state_write = select(write_start, ch_bool(true), select(write_done, ch_bool(false), state));
         
-        io().bready = io().bvalid && state;
+        io().bready = select(io().bvalid, state, ch_bool(false));
         io().done = write_done;
         
         // 读事务
-        auto read_start = io().start && (!io().write) && (!state);
+        auto not_write = select(io().write, ch_bool(false), ch_bool(true));
+        auto start_and_not_write = select(io().start, not_write, ch_bool(false));
+        auto read_start = select(start_and_not_write, not_state, ch_bool(false));
+        
         io().arvalid = read_start;
         io().araddr = io().addr;
         
-        auto read_done = io().rvalid && io().rready;
-        io().rready = io().rvalid && state;
+        auto read_done = select(io().rvalid, io().rready, ch_bool(false));
+        io().rready = select(io().rvalid, state, ch_bool(false));
         io().rdata = io().rdata_axi;
         
-        state->next = select(read_start, ch_bool(true), select(read_done, ch_bool(false), state));
+        auto next_state_read = select(read_start, ch_bool(true), select(read_done, ch_bool(false), state));
         
-        io().done = read_done;
+        // 合并写和读的状态更新
+        state->next = select(write_start, next_state_write, select(read_start, next_state_read, state));
+        
+        io().done = select(write_start, write_done, read_done);
     }
 };
 
@@ -157,7 +169,7 @@ public:
         master.io().awready <<= matrix.io().m0_awready;
         
         matrix.io().m0_wdata <<= master.io().wdata_axi;
-        matrix.io().m0_wstrb <<= ch_uint<4>(0xF_d);
+        matrix.io().m0_wstrb <<= ch_uint<4>(0xF_h);
         matrix.io().m0_wvalid <<= master.io().wvalid;
         master.io().wready <<= matrix.io().m0_wready;
         
@@ -239,7 +251,7 @@ int main() {
     
     // 写 GPIO DATA_OUT 寄存器 (地址 0x00)
     sim.set_input_value(top_device.instance().io().addr, 0_d);
-    sim.set_input_value(top_device.instance().io().wdata, 0xAB_d);
+    sim.set_input_value(top_device.instance().io().wdata, 0xAB_h);
     sim.set_input_value(top_device.instance().io().write, true);
     sim.set_input_value(top_device.instance().io().start, true);
     sim.tick();

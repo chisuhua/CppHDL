@@ -76,11 +76,11 @@ public:
         addr_bits = addr_bits & ch_uint<32>(3_d);
         
         // 写地址握手
-        auto aw_handshake = io().awvalid && (!busy);
+        auto aw_handshake = select(io().awvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().awready = aw_handshake;
         
         // 写数据握手
-        auto w_handshake = io().wvalid && aw_handshake;
+        auto w_handshake = select(io().wvalid, aw_handshake, ch_bool(false));
         io().wready = w_handshake;
         
         // 写寄存器
@@ -88,9 +88,12 @@ public:
         auto sel_direction = (addr_bits == ch_uint<32>(1_d));
         auto sel_interrupt = (addr_bits == ch_uint<32>(2_d));
         
-        data_out_reg->next = select(w_handshake && sel_data_out, io().wdata, data_out_reg);
-        direction_reg->next = select(w_handshake && sel_direction, io().wdata, direction_reg);
-        interrupt_reg->next = select(w_handshake && sel_interrupt, io().wdata, interrupt_reg);
+        auto we_data_out = select(w_handshake, sel_data_out, ch_bool(false));
+        auto we_direction = select(w_handshake, sel_direction, ch_bool(false));
+        auto we_interrupt = select(w_handshake, sel_interrupt, ch_bool(false));
+        data_out_reg->next = select(we_data_out, io().wdata, data_out_reg);
+        direction_reg->next = select(we_direction, io().wdata, direction_reg);
+        interrupt_reg->next = select(we_interrupt, io().wdata, interrupt_reg);
         
         // 写响应
         io().bvalid = w_handshake;
@@ -100,7 +103,7 @@ public:
         auto ar_addr_bits = io().araddr >> ch_uint<32>(2_d);
         ar_addr_bits = ar_addr_bits & ch_uint<32>(3_d);
         
-        auto ar_handshake = io().arvalid && (!busy);
+        auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().arready = ar_handshake;
         
         // 读数据
@@ -111,7 +114,7 @@ public:
         
         ch_uint<32> read_val(0_d);
         read_val = select(read_sel_data_out, data_out_reg, read_val);
-        read_val = select(read_sel_data_in, ch_uint<32>(io().gpio_in), read_val);
+        read_val = select(read_sel_data_in, ch_uint<32>(ch_uint<NUM_GPIOS>(io().gpio_in)), read_val);
         read_val = select(read_sel_direction, direction_reg, read_val);
         read_val = select(read_sel_interrupt, interrupt_reg, read_val);
         
@@ -125,8 +128,9 @@ public:
         io().irq = (interrupt_reg != ch_uint<32>(0_d));
         
         // 状态更新
-        busy->next = select(aw_handshake || ar_handshake, ch_bool(true),
-                            select(io().bready || io().rready, ch_bool(false), busy));
+        auto any_handshake = select(aw_handshake, ch_bool(true), ar_handshake);
+        auto any_ready = select(io().bready, ch_bool(true), select(io().rready, ch_bool(true), ch_bool(false)));
+        busy->next = select(any_handshake, ch_bool(true), select(any_ready, ch_bool(false), busy));
     }
 };
 

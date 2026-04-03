@@ -51,6 +51,7 @@ public:
         ch_in<ch_bool> m1_awready;
         
         ch_out<ch_uint<DATA_WIDTH>> m1_wdata;
+        ch_out<ch_uint<DATA_WIDTH/8>> m1_wstrb;
         ch_out<ch_bool> m1_wvalid;
         ch_in<ch_bool> m1_wready;
         
@@ -73,6 +74,7 @@ public:
         ch_out<ch_bool> s0_awready;
         
         ch_in<ch_uint<DATA_WIDTH>> s0_wdata;
+        ch_in<ch_uint<DATA_WIDTH/8>> s0_wstrb;
         ch_in<ch_bool> s0_wvalid;
         ch_out<ch_bool> s0_wready;
         
@@ -97,6 +99,7 @@ public:
         ch_out<ch_bool> s1_awready;
         
         ch_in<ch_uint<DATA_WIDTH>> s1_wdata;
+        ch_in<ch_uint<DATA_WIDTH/8>> s1_wstrb;
         ch_in<ch_bool> s1_wvalid;
         ch_out<ch_bool> s1_wready;
         
@@ -138,8 +141,8 @@ public:
         auto m1_req = io().m1_awvalid;
         
         // 选择哪个主设备
-        auto grant_m0 = (!arb_state) && m0_req;
-        auto grant_m1 = arb_state && m1_req;
+        auto grant_m0 = select(!arb_state, m0_req, ch_bool(false));
+        auto grant_m1 = select(arb_state, m1_req, ch_bool(false));
         
         // 更新仲裁器
         auto transaction_done = io().s0_awready || io().s1_awready;
@@ -148,18 +151,22 @@ public:
         // ==================== 写地址通道 ====================
         
         // 主设备 0 → 从设备
-        io().s0_awaddr = select(grant_m0 && (!select_s1_m0), io().m0_awaddr, ch_uint<ADDR_WIDTH>(0_d));
-        io().s1_awaddr = select(grant_m0 && select_s1_m0, io().m0_awaddr, ch_uint<ADDR_WIDTH>(0_d));
+        auto grant_m0_s0 = select(grant_m0, select(!select_s1_m0, ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto grant_m0_s1 = select(grant_m0, select_s1_m0, ch_bool(false));
+        io().s0_awaddr = select(grant_m0_s0, io().m0_awaddr, ch_uint<ADDR_WIDTH>(0_d));
+        io().s1_awaddr = select(grant_m0_s1, io().m0_awaddr, ch_uint<ADDR_WIDTH>(0_d));
         
         // 主设备 1 → 从设备
-        io().s0_awaddr = select(grant_m1 && (!select_s1_m1), io().m1_awaddr, io().s0_awaddr);
-        io().s1_awaddr = select(grant_m1 && select_s1_m1, io().m1_awaddr, io().s1_awaddr);
+        auto grant_m1_s0 = select(grant_m1, select(!select_s1_m1, ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto grant_m1_s1 = select(grant_m1, select_s1_m1, ch_bool(false));
+        io().s0_awaddr = select(grant_m1_s0, io().m1_awaddr, io().s0_awaddr);
+        io().s1_awaddr = select(grant_m1_s1, io().m1_awaddr, io().s1_awaddr);
         
         // 从设备就绪
-        io().s0_awready = select(grant_m0 && (!select_s1_m0), io().m0_awready,
-                            select(grant_m1 && (!select_s1_m1), io().m1_awready, ch_bool(false)));
-        io().s1_awready = select(grant_m0 && select_s1_m0, io().m0_awready,
-                            select(grant_m1 && select_s1_m1, io().m1_awready, ch_bool(false)));
+        io().s0_awready = select(grant_m0_s0, io().m0_awready,
+                            select(grant_m1_s0, io().m1_awready, ch_bool(false)));
+        io().s1_awready = select(grant_m0_s1, io().m0_awready,
+                            select(grant_m1_s1, io().m1_awready, ch_bool(false)));
         
         // 主设备就绪
         io().m0_awready = select(!select_s1_m0, io().s0_awready, io().s1_awready);
@@ -167,15 +174,20 @@ public:
         
         // ==================== 写数据通道 (简化) ====================
         
-        io().s0_wdata = select(grant_m0 && (!select_s1_m0), io().m0_wdata,
-                          select(grant_m1 && (!select_s1_m1), io().m1_wdata, ch_uint<DATA_WIDTH>(0_d)));
-        io().s1_wdata = select(grant_m0 && select_s1_m0, io().m0_wdata,
-                          select(grant_m1 && select_s1_m1, io().m1_wdata, ch_uint<DATA_WIDTH>(0_d)));
+        io().s0_wdata = select(grant_m0_s0, io().m0_wdata,
+                          select(grant_m1_s0, io().m1_wdata, ch_uint<DATA_WIDTH>(0_d)));
+        io().s1_wdata = select(grant_m0_s1, io().m0_wdata,
+                          select(grant_m1_s1, io().m1_wdata, ch_uint<DATA_WIDTH>(0_d)));
         
-        io().s0_wready = select(grant_m0 && (!select_s1_m0), io().m0_wready,
-                           select(grant_m1 && (!select_s1_m1), io().m1_wready, ch_bool(false)));
-        io().s1_wready = select(grant_m0 && select_s1_m0, io().m0_wready,
-                           select(grant_m1 && select_s1_m1, io().m1_wready, ch_bool(false)));
+        io().s0_wstrb = select(grant_m0_s0, io().m0_wstrb,
+                          select(grant_m1_s0, io().m1_wstrb, ch_uint<DATA_WIDTH/8>(0_d)));
+        io().s1_wstrb = select(grant_m0_s1, io().m0_wstrb,
+                          select(grant_m1_s1, io().m1_wstrb, ch_uint<DATA_WIDTH/8>(0_d)));
+        
+        io().s0_wready = select(grant_m0_s0, io().m0_wready,
+                           select(grant_m1_s0, io().m1_wready, ch_bool(false)));
+        io().s1_wready = select(grant_m0_s1, io().m0_wready,
+                           select(grant_m1_s1, io().m1_wready, ch_bool(false)));
         
         io().m0_wready = select(!select_s1_m0, io().s0_wready, io().s1_wready);
         io().m1_wready = select(!select_s1_m1, io().s0_wready, io().s1_wready);
@@ -188,22 +200,22 @@ public:
         io().m0_bvalid = select(!select_s1_m0, io().s0_bvalid, io().s1_bvalid);
         io().m1_bvalid = select(!select_s1_m1, io().s0_bvalid, io().s1_bvalid);
         
-        io().s0_bready = select(grant_m0 && (!select_s1_m0), io().m0_bready,
-                           select(grant_m1 && (!select_s1_m1), io().m1_bready, ch_bool(false)));
-        io().s1_bready = select(grant_m0 && select_s1_m0, io().m0_bready,
-                           select(grant_m1 && select_s1_m1, io().m1_bready, ch_bool(false)));
+        io().s0_bready = select(grant_m0_s0, io().m0_bready,
+                           select(grant_m1_s0, io().m1_bready, ch_bool(false)));
+        io().s1_bready = select(grant_m0_s1, io().m0_bready,
+                           select(grant_m1_s1, io().m1_bready, ch_bool(false)));
         
         // ==================== 读地址通道 (简化) ====================
         
-        io().s0_araddr = select(grant_m0 && (!select_s1_m0), io().m0_araddr,
-                           select(grant_m1 && (!select_s1_m1), io().m1_araddr, ch_uint<ADDR_WIDTH>(0_d)));
-        io().s1_araddr = select(grant_m0 && select_s1_m0, io().m0_araddr,
-                           select(grant_m1 && select_s1_m1, io().m1_araddr, ch_uint<ADDR_WIDTH>(0_d)));
+        io().s0_araddr = select(grant_m0_s0, io().m0_araddr,
+                           select(grant_m1_s0, io().m1_araddr, ch_uint<ADDR_WIDTH>(0_d)));
+        io().s1_araddr = select(grant_m0_s1, io().m0_araddr,
+                           select(grant_m1_s1, io().m1_araddr, ch_uint<ADDR_WIDTH>(0_d)));
         
-        io().s0_arready = select(grant_m0 && (!select_s1_m0), io().m0_arready,
-                            select(grant_m1 && (!select_s1_m1), io().m1_arready, ch_bool(false)));
-        io().s1_arready = select(grant_m0 && select_s1_m0, io().m0_arready,
-                            select(grant_m1 && select_s1_m1, io().m1_arready, ch_bool(false)));
+        io().s0_arready = select(grant_m0_s0, io().m0_arready,
+                            select(grant_m1_s0, io().m1_arready, ch_bool(false)));
+        io().s1_arready = select(grant_m0_s1, io().m0_arready,
+                            select(grant_m1_s1, io().m1_arready, ch_bool(false)));
         
         io().m0_arready = select(!select_s1_m0, io().s0_arready, io().s1_arready);
         io().m1_arready = select(!select_s1_m1, io().s0_arready, io().s1_arready);
@@ -216,10 +228,10 @@ public:
         io().m0_rvalid = select(!select_s1_m0, io().s0_rvalid, io().s1_rvalid);
         io().m1_rvalid = select(!select_s1_m1, io().s0_rvalid, io().s1_rvalid);
         
-        io().s0_rready = select(grant_m0 && (!select_s1_m0), io().m0_rready,
-                           select(grant_m1 && (!select_s1_m1), io().m1_rready, ch_bool(false)));
-        io().s1_rready = select(grant_m0 && select_s1_m0, io().m0_rready,
-                           select(grant_m1 && select_s1_m1, io().m1_rready, ch_bool(false)));
+        io().s0_rready = select(grant_m0_s0, io().m0_rready,
+                           select(grant_m1_s0, io().m1_rready, ch_bool(false)));
+        io().s1_rready = select(grant_m0_s1, io().m0_rready,
+                           select(grant_m1_s1, io().m1_rready, ch_bool(false)));
     }
 };
 
