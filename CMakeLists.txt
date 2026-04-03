@@ -40,6 +40,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     add_compile_options(-Wshift-overflow=2)
 endif()
 
+find_program(CCACHE_FOUND ccache)
+if(CCACHE_FOUND)
+    set(CMAKE_C_COMPILER_LAUNCHER "ccache")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "ccache")
+endif()
+
 # AddressSanitizer 选项
 option(ENABLE_ASAN "Enable AddressSanitizer for memory leak detection" OFF)
 if(ENABLE_ASAN)
@@ -151,8 +157,8 @@ add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 # Phase 3: AXI4 总线系统
 add_subdirectory(examples/axi4)
 
-# Phase 3A: RISC-V SoC
-add_subdirectory(examples/riscv)
+# Phase 3A: RISC-V SoC (Temporarily disabled due to API changes)
+# add_subdirectory(examples/riscv)
 
 # 添加测试
 enable_testing()

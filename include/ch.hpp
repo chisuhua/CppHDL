@@ -9,6 +9,7 @@
 #include "device.h"       // Define ch_device (depends on component.h, core/deviceimpl.h)
 #include "component.h"    // Define Component base class
 #include "module.h"    // Define Component base class
+#include "core/literal.h" // Define ch_literal and literal operators (_d, _b, _h, _o)
 
 // --- Hardware Primitives ---
 #include "traits.h"   // Include first as others depend on lnode/get_lnode (depends on lnodeimpl.h)

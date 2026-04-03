@@ -36,8 +36,8 @@ ch_uint<N>::ch_uint(const ch_literal_impl<V, W> &val, const std::string &name,
     CHDBG("[ch_uint<N>::ch_uint] Creating uint%d from compile-time literal", N);
 
     static_assert(W <= N, "Literal width must not exceed target uint width");
-    // ch_literal_runtime runtime_lit(V, N);
-    auto runtime_lit = make_literal<V, N>();
+    // 直接使用 ch_literal_runtime 而不是 ch_literal_impl，避免 bitvector 拷贝问题
+    ch_literal_runtime runtime_lit(V, N);
 
     // 先创建字面值节点
     auto *literal_node =

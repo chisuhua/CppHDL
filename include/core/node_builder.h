@@ -69,7 +69,13 @@ public:
             return ctx->create_literal(
                 sval, prefixed_name_helper(name, name_prefix_), sloc);
         } else if constexpr (is_ch_literal_v<T>) {
-            sdata_type sdata(value.value(), value.actual_width); // 直接构造
+            // 使用 value() 方法获取值，它对于 ch_literal_impl 和 ch_literal_runtime 都工作
+            uint64_t lit_value = value.value();
+            uint32_t lit_width = value.width();  // 两者都有 width() 方法
+            
+            CHDBG("[build_literal] literal: value=%llu, width=%u",
+                  (unsigned long long)lit_value, (unsigned)lit_width);
+            sdata_type sdata(lit_value, lit_width);
 
             // if (statistics_enabled_) {
             //     ++statistics_->literals_built;

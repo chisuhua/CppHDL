@@ -65,14 +65,13 @@ int main() {
     std::cout << "\n=== Test 2: ALU ===" << std::endl;
     
     {
-        ch::ch_device<ALU> alu;
+        ch::ch_device<Rv32iAlu> alu;
         ch::Simulator sim(alu.context());
         
         // 测试 ADD
         sim.set_input_value(alu.instance().io().operand_a, 10_d);
         sim.set_input_value(alu.instance().io().operand_b, 5_d);
-        sim.set_input_value(alu.instance().io().funct3, 0_d);  // ADD = 0
-        sim.set_input_value(alu.instance().io().is_sub, false);
+        sim.set_input_value(alu.instance().io().alu_op, 0_d);  // ADD = 0
         sim.tick();
         
         auto result = sim.get_port_value(alu.instance().io().result);
@@ -85,7 +84,7 @@ int main() {
         }
         
         // 测试 SUB
-        sim.set_input_value(alu.instance().io().is_sub, true);
+        sim.set_input_value(alu.instance().io().alu_op, 10_d);  // SUB = 10
         sim.tick();
         
         result = sim.get_port_value(alu.instance().io().result);
@@ -100,8 +99,7 @@ int main() {
         // 测试 AND
         sim.set_input_value(alu.instance().io().operand_a, 255_d);  // 0xFF
         sim.set_input_value(alu.instance().io().operand_b, 15_d);   // 0x0F
-        sim.set_input_value(alu.instance().io().funct3, 7_d);  // AND = 7
-        sim.set_input_value(alu.instance().io().is_sub, false);
+        sim.set_input_value(alu.instance().io().alu_op, 7_d);  // AND = 7
         sim.tick();
         
         result = sim.get_port_value(alu.instance().io().result);
@@ -118,22 +116,19 @@ int main() {
     std::cout << "\n=== Test 3: Program Counter ===" << std::endl;
     
     {
-        ch::ch_device<ProgramCounter> pc_unit;
+        ch::ch_device<Rv32iPc> pc_unit;
         ch::Simulator sim(pc_unit.context());
         
         // 复位
-        sim.set_input_value(pc_unit.instance().io().reset, true);
-        sim.set_input_value(pc_unit.instance().io().stall, false);
+        sim.set_input_value(pc_unit.instance().io().rst, true);
         sim.tick();
         
         auto pc = sim.get_port_value(pc_unit.instance().io().pc);
         std::cout << "After reset: PC = 0x" << std::hex << static_cast<uint64_t>(pc) << std::dec << std::endl;
         
         // 顺序执行 (PC+4)
-        sim.set_input_value(pc_unit.instance().io().reset, false);
-        sim.set_input_value(pc_unit.instance().io().next_pc, 4_d);
-        sim.set_input_value(pc_unit.instance().io().branch_taken, false);
-        sim.set_input_value(pc_unit.instance().io().jump, false);
+        sim.set_input_value(pc_unit.instance().io().rst, false);
+        sim.set_input_value(pc_unit.instance().io().jump_enable, false);
         sim.tick();
         
         pc = sim.get_port_value(pc_unit.instance().io().pc);
@@ -156,13 +151,13 @@ int main() {
     }
     
     {
-        ch::ch_device<ALU> alu;
+        ch::ch_device<Rv32iAlu> alu;
         toVerilog("rv32i_alu.v", alu.context());
         std::cout << "Generated: rv32i_alu.v" << std::endl;
     }
     
     {
-        ch::ch_device<ProgramCounter> pc_unit;
+        ch::ch_device<Rv32iPc> pc_unit;
         toVerilog("rv32i_pc.v", pc_unit.context());
         std::cout << "Generated: rv32i_pc.v" << std::endl;
     }

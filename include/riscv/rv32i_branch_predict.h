@@ -142,20 +142,25 @@ public:
     
     void describe() override {
         // ========================================================================
-        // 提取操作数符号位
+        // 提取操作数符号位 (最高位 bit 31)
         // ========================================================================
-        auto rs1_sign = bits<31, 31>(io().rs1_data);
-        auto rs2_sign = bits<31, 31>(io().rs2_data);
+        // 直接使用 bits<31> 提取第 31 位作为 ch_bool
+        auto rs1_sign = bits<31>(io().rs1_data, 31) != ch_uint<1>(0_d);
+        auto rs2_sign = bits<31>(io().rs2_data, 31) != ch_uint<1>(0_d);
         auto signs_equal = (rs1_sign == rs2_sign);
         
         // ========================================================================
-        // 有符号比较 (直接比较，避免减法溢出)
+        // 有符号比较 (使用减法，检查符号位)
         // ========================================================================
-        // 符号相同：直接比较大小
-        // 符号不同：符号位大的反而小 (负数 < 正数)
+        // 有符号比较 (使用减法，检查符号位)
+        // 参考 RV32I ALU 的 SLT 实现
+        // 符号不同：a < b 当且仅当 a 是负数
+        // 符号相同：a < b 当且仅当 a - b 是负数
+        auto sub_result = io().rs1_data - io().rs2_data;
+        auto sub_sign = bits<31, 31>(sub_result);
         auto signed_less = signs_equal 
-                           ? (io().rs1_data < io().rs2_data)  // 符号相同，直接比较
-                           : (rs1_sign > rs2_sign);           // 符号不同，负数 < 正数
+                           ? (sub_sign != ch_uint<1>(0))  // 符号相同：检查 a-b 的符号
+                           : rs1_sign;                     // 符号不同：a 为负则 a < b
         
         auto signed_ge = !signed_less;
         
@@ -182,12 +187,12 @@ public:
         // 110: BLTU -> unsigned_less
         // 111: BGEU -> unsigned_ge
         
-        auto is_beq  = io().branch_type == ch_uint<3>(0_d);
-        auto is_bne  = io().branch_type == ch_uint<3>(1_d);
-        auto is_blt  = io().branch_type == ch_uint<3>(4_d);
-        auto is_bge  = io().branch_type == ch_uint<3>(5_d);
-        auto is_bltu = io().branch_type == ch_uint<3>(6_d);
-        auto is_bgeu = io().branch_type == ch_uint<3>(7_d);
+        auto is_beq  = io().branch_type == ch_uint<3>(0);
+        auto is_bne  = io().branch_type == ch_uint<3>(1);
+        auto is_blt  = io().branch_type == ch_uint<3>(4);
+        auto is_bge  = io().branch_type == ch_uint<3>(5);
+        auto is_bltu = io().branch_type == ch_uint<3>(6);
+        auto is_bgeu = io().branch_type == ch_uint<3>(7);
         
         // 分支条件 = 各类型条件的 OR
         io().branch_condition = 

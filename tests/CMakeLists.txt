@@ -67,6 +67,9 @@ set(BASE_TEST_SOURCES
     test_user_tracking.cpp
     test_operation_widths.cpp
     test_operation_results.cpp
+    test_blt_debug.cpp
+    test_uint_compare.cpp
+    test_literal_debug.cpp
     test_io_operations.cpp
     test_io_extended_ops.cpp
     test_popcount.cpp
