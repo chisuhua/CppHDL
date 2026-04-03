@@ -3,6 +3,7 @@
 #define INSTR_OP_H
 
 #include "instr_base.h"
+#include "logger.h"
 #include <cstdint>
 #include <iostream> // for std::cerr
 #include <type_traits>

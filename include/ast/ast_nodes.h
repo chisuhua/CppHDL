@@ -199,7 +199,8 @@ public:
     litimpl(uint32_t id, const sdata_type &value, const std::string &name,
             const std::source_location &sloc, context *ctx)
         : lnodeimpl(id, lnodetype::type_lit, value.bitwidth(), ctx, name, sloc),
-          value_(value) {}
+          value_(value) {
+    }
 
     const sdata_type &value() const { return value_; }
     bool is_zero() const { return value_.is_zero(); }
@@ -261,7 +262,7 @@ public:
     bitsupdateimpl(uint32_t id, uint32_t size, lnodeimpl *target,
                    lnodeimpl *source, lnodeimpl *range, const std::string &name,
                    const std::source_location &sloc, context *ctx)
-        : lnodeimpl(id, lnodetype::type_mux, size, ctx, name, sloc) {
+        : lnodeimpl(id, lnodetype::type_bitsupdate, size, ctx, name, sloc) {
         if (target)
             add_src(target);
         if (source)

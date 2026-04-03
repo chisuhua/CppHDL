@@ -56,7 +56,9 @@ struct sdata_type {
     ch::internal::bitvector<block_t> bv_;
 
     // Minimal constructors
-    sdata_type(block_t value, uint32_t width) : bv_(width) { bv_ = value; }
+    sdata_type(block_t value, uint32_t width) : bv_(width) {
+        bv_ = value;
+    }
 
     sdata_type() : bv_() {}
     explicit sdata_type(uint32_t width) : bv_(width) {}
