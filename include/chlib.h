@@ -51,4 +51,7 @@
 #include "chlib/if.h"
 #include "chlib/if_stmt.h" // 新增语句块风格的条件执行
 
+// Pipeline components
+#include "chlib/pipeline.h"
+
 #endif // CH_CHLIB_H
