@@ -282,14 +282,15 @@ public:
         auto m3_req = io().m3_awvalid;
         
         // 仲裁授予
-        auto grant_m0 = (arb_state == ch_uint<2>(0_d)) && m0_req;
-        auto grant_m1 = (arb_state == ch_uint<2>(1_d)) && m1_req;
-        auto grant_m2 = (arb_state == ch_uint<2>(2_d)) && m2_req;
-        auto grant_m3 = (arb_state == ch_uint<2>(3_d)) && m3_req;
+        auto grant_m0 = select((arb_state == ch_uint<2>(0_d)), m0_req, ch_bool(false));
+        auto grant_m1 = select((arb_state == ch_uint<2>(1_d)), m1_req, ch_bool(false));
+        auto grant_m2 = select((arb_state == ch_uint<2>(2_d)), m2_req, ch_bool(false));
+        auto grant_m3 = select((arb_state == ch_uint<2>(3_d)), m3_req, ch_bool(false));
         
         // 事务完成时更新仲裁器
-        auto transaction_done = io().s0_awready || io().s1_awready || 
-                                io().s2_awready || io().s3_awready;
+        auto s0_or_s1 = select(io().s0_awready, ch_bool(true), io().s1_awready);
+        auto s2_or_s3 = select(io().s2_awready, ch_bool(true), io().s3_awready);
+        auto transaction_done = select(s0_or_s1, ch_bool(true), s2_or_s3);
         arb_state->next = select(transaction_done, 
                                   (arb_state + ch_uint<2>(1_d)) & ch_uint<2>(3_d),
                                   arb_state);
@@ -299,10 +300,10 @@ public:
         // ========================================================================
         
         // 从设备 0 选择
-        auto s0_sel_m0 = grant_m0 && (m0_slave == ch_uint<2>(0_d));
-        auto s0_sel_m1 = grant_m1 && (m1_slave == ch_uint<2>(0_d));
-        auto s0_sel_m2 = grant_m2 && (m2_slave == ch_uint<2>(0_d));
-        auto s0_sel_m3 = grant_m3 && (m3_slave == ch_uint<2>(0_d));
+        auto s0_sel_m0 = select(grant_m0, select((m0_slave == ch_uint<2>(0_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto s0_sel_m1 = select(grant_m1, select((m1_slave == ch_uint<2>(0_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto s0_sel_m2 = select(grant_m2, select((m2_slave == ch_uint<2>(0_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto s0_sel_m3 = select(grant_m3, select((m3_slave == ch_uint<2>(0_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
         
         io().s0_awaddr = select(s0_sel_m0, io().m0_awaddr,
                                 select(s0_sel_m1, io().m1_awaddr,
@@ -317,9 +318,9 @@ public:
                                         ch_bool(false)))));
         
         // 从设备 1-3 (类似)
-        auto s1_sel_m0 = grant_m0 && (m0_slave == ch_uint<2>(1_d));
-        auto s2_sel_m0 = grant_m0 && (m0_slave == ch_uint<2>(2_d));
-        auto s3_sel_m0 = grant_m0 && (m0_slave == ch_uint<2>(3_d));
+        auto s1_sel_m0 = select(grant_m0, select((m0_slave == ch_uint<2>(1_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto s2_sel_m0 = select(grant_m0, select((m0_slave == ch_uint<2>(2_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto s3_sel_m0 = select(grant_m0, select((m0_slave == ch_uint<2>(3_d)), ch_bool(true), ch_bool(false)), ch_bool(false));
         
         io().s1_awaddr = select(s1_sel_m0, io().m0_awaddr, ch_uint<ADDR_WIDTH>(0_d));
         io().s1_awvalid = select(s1_sel_m0, io().m0_awvalid, ch_bool(false));
