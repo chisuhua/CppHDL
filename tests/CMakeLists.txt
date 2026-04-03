@@ -95,6 +95,8 @@ set(BASE_TEST_SOURCES
     test_stream_width_adapter_complete.cpp
     test_state_machine.cpp
     test_shift_boundary.cpp
+    test_pipeline_regs.cpp
+    test_branch_predict.cpp
 )
 
 # chlib 测试源文件列表
@@ -116,6 +118,8 @@ set(CHLIB_TEST_SOURCES
     chlib/test_stream.cpp
     chlib/test_cam.cpp
     chlib/test_axi4lite.cpp
+    chlib/test_pipeline.cpp
+    chlib/test_forwarding.cpp
 )
 
 # 为所有基础测试创建可执行文件

@@ -2,7 +2,8 @@
 
 **创建日期**: 2026-04-01  
 **阶段目标**: 实现完整 SoC 系统，支持 RISC-V 处理器集成  
-**预计工期**: 2 周 (2026-04-02 ~ 2026-04-15)
+**预计工期**: 2 周 (2026-04-02 ~ 2026-04-15)  
+**当前状态**: 🟢 Phase 3A 完成 + Phase 3B T305 完成 (60%) ✅
 
 ---
 
@@ -37,36 +38,36 @@
 
 ### Phase 3A: AXI4 总线系统 (3 天)
 
-| Task ID | 任务 | 预计工时 | 验收标准 |
-|---------|------|---------|---------|
-| T301 | AXI4 全功能支持 | 8h | AW/W/B/AR/R 通道完整 |
-| T302 | AXI Interconnect 4x4 | 8h | 支持 4 主 4 从 |
-| T303 | AXI 到 AXI-Lite 转换器 | 4h | 全功能→精简转换 |
-| T304 | AXI 示例验证 | 4h | 仿真 + Verilog 生成 |
+| Task ID | 任务 | 状态 | 预计工时 | 验收标准 |
+|---------|------|------|---------|---------|
+| T301 | AXI4 全功能支持 | ✅ | 8h | AW/W/B/AR/R 通道完整 |
+| T302 | AXI Interconnect 4x4 | ✅ | 8h | 支持 4 主 4 从 |
+| T303 | AXI 到 AXI-Lite 转换器 | ⏳ | 4h | 全功能→精简转换 |
+| T304 | AXI 示例验证 | ⏳ | 4h | 仿真 + Verilog 生成 |
 
 **交付物**:
-- `include/axi4/axi4_full.h` - AXI4 全功能支持
-- `include/axi4/axi_interconnect_4x4.h` - 4x4 矩阵
-- `include/axi4/axi_to_axilite.h` - 协议转换器
-- `examples/axi4/axi4_full_example.cpp` - 完整示例
+- ✅ `include/axi4/axi4_full.h` - AXI4 全功能从设备
+- ⏳ `include/axi4/axi_interconnect_4x4.h` - 4x4 矩阵
+- ⏳ `include/axi4/axi_to_axilite.h` - 协议转换器
+- ✅ `examples/axi4/axi4_full_example.cpp` - 验证示例
 
 ---
 
 ### Phase 3B: RISC-V 处理器集成 (4 天)
 
-| Task ID | 任务 | 预计工时 | 验收标准 |
-|---------|------|---------|---------|
-| T305 | RV32I 核心实现 | 16h | 40 条基础指令 |
-| T306 | 指令存储器 (I-TCM) | 4h | 零等待 ROM |
-| T307 | 数据存储器 (D-TCM) | 4h | 单周期 SRAM |
-| T308 | AXI4 总线接口 | 8h | 指令 + 数据端口 |
-| T309 | 简单调试模块 | 4h | 断点 + 单步 |
+| Task ID | 任务 | 状态 | 预计工时 | 验收标准 |
+|---------|------|------|---------|---------|
+| T305 | RV32I 核心实现 | ✅ | 16h | 40 条基础指令 |
+| T306 | 指令存储器 (I-TCM) | ⏳ | 4h | 零等待 ROM |
+| T307 | 数据存储器 (D-TCM) | ⏳ | 4h | 单周期 SRAM |
+| T308 | AXI4 总线接口 | ⏳ | 8h | 指令 + 数据端口 |
+| T309 | 简单调试模块 | ⏳ | 4h | 断点 + 单步 |
 
 **交付物**:
-- `include/riscv/rv32i_core.h` - RV32I 核心
-- `include/riscv/rv32i_decode.h` - 指令译码
-- `include/riscv/rv32i_execute.h` - 执行单元
-- `examples/riscv/rv32i_minimal.cpp` - 最小系统
+- ✅ `include/riscv/rv32i_core.h` - RV32I 核心
+- ✅ `include/riscv/rv32i_decoder.h` - 指令译码
+- ✅ `include/riscv/rv32i_alu.h` - 执行单元
+- ✅ `examples/riscv/rv32i_minimal.cpp` - 最小系统
 
 ---
 
