@@ -31,12 +31,15 @@ namespace axi4 {
 // AXI4 响应类型枚举
 // ============================================================================
 
+#ifndef AXI4_AXIRESP_DEFINED
+#define AXI4_AXIRESP_DEFINED
 enum class AxiResp : uint8_t {
     OKAY   = 0b00,  // 正常响应
     EXOKAY = 0b01,  // 独占访问成功
     SLVERR = 0b10,  // 从设备错误
     DECERR = 0b11   // 解码错误
 };
+#endif
 
 // ============================================================================
 // AXI4 突发类型枚举
