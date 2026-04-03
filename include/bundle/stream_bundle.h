@@ -62,4 +62,7 @@ template <typename T> struct ch_stream : public bundle_base<ch_stream<T>> {
     auto halfPipe();
 };
 
+// Alias for ch_stream
+template <typename T> using Stream = ch_stream<T>;
+
 } // namespace ch

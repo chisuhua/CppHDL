@@ -1,12 +1,12 @@
 #ifndef CH_CORE_BUNDLE_SERIALIZATION_H
 #define CH_CORE_BUNDLE_SERIALIZATION_H
 
-#include "bundle_layout.h" // 添加bundle_layout支持
+#include "bundle_layout.h" // 添加 bundle_layout 支持
 #include "bundle_meta.h"
 #include "bundle_traits.h"
 #include "core/bool.h"
 #include "core/operators.h"
-#include "core/traits.h" // 为了ch_width_v
+#include "core/traits.h" // 为了 ch_width_v
 #include "core/uint.h"
 
 #include <tuple>
@@ -14,7 +14,7 @@
 
 namespace ch::core {
 
-// 从Bundle序列化为位向量
+// 从 Bundle 序列化为位向量
 template <typename BundleT> auto serialize(const BundleT &bundle) {
     static_assert(is_bundle_v<BundleT>,
                   "serialize() only works with Bundle types");
@@ -35,7 +35,7 @@ template <typename BundleT> auto serialize(const BundleT &bundle) {
                         std::remove_cvref_t<decltype(bundle.*(field_info.ptr))>;
 
                     if constexpr (is_bundle_v<FieldType>) {
-                        // 对于嵌套的Bundle类型
+                        // 对于嵌套的 Bundle 类型
                         constexpr unsigned field_width =
                             get_bundle_width<FieldType>();
 
@@ -62,15 +62,12 @@ template <typename BundleT> auto serialize(const BundleT &bundle) {
     }
 }
 
-// 从位向量反序列化到Bundle的字段
+// 从位向量反序列化到 Bundle 的字段
 template <typename BundleT, unsigned W>
-void deserialize_bits_to_fields(const ch_uint<W> &bits, BundleT &bundle) {
+void deserialize_bits_to_fields(const ch_uint<W> &src_bits, BundleT &bundle) {
     if constexpr (is_bundle_v<BundleT>) {
         unsigned offset = 0;
         constexpr auto layout = get_bundle_layout<BundleT>();
-        
-        // 获取bits的节点，以便我们可以从中提取子位
-        auto bits_lnode = get_lnode(bits);
 
         std::apply(
             [&](auto &&...field_info_args) {
@@ -80,29 +77,25 @@ void deserialize_bits_to_fields(const ch_uint<W> &bits, BundleT &bundle) {
                          std::remove_reference_t<decltype(field_ref)>;
 
                      if constexpr (is_bundle_v<FieldType>) {
-                         // 对于嵌套的Bundle类型
+                         // 对于嵌套的 Bundle 类型
                          constexpr unsigned field_width =
                              get_bundle_width<FieldType>();
 
-                         // 提取对应宽度的位并反序列化嵌套Bundle
-                         auto field_bits = bits<field_width>(bits_lnode, offset);
+                         // 提取对应宽度的位并反序列化嵌套 Bundle
+                         auto field_bits = bits<field_width>(src_bits, offset);
                          field_ref = deserialize<FieldType>(field_bits);
                          offset += field_width;
+                     } else if constexpr (std::is_same_v<FieldType, ch_bool>) {
+                         // ch_bool 类型：使用 bit_select
+                         auto field_bit = bit_select(src_bits, offset);
+                         field_ref = ch_bool(field_bit.impl());
+                         offset++;
                      } else {
-                         // 对于基本类型(ch_uint, ch_bool等)
+                         // ch_uint 等其他类型：使用 bits 提取
                          constexpr unsigned field_width = ch_width_v<FieldType>;
-
-                         if constexpr (field_width == 1) {
-                             // 单位宽类型
-                             auto field_bit = bit_select(bits_lnode, offset);
-                             field_ref = static_cast<FieldType>(field_bit);
-                             offset++;
-                         } else {
-                             // 多位宽类型
-                             auto field_bits = bits<field_width>(bits_lnode, offset);
-                             field_ref = static_cast<FieldType>(field_bits);
-                             offset += field_width;
-                         }
+                         auto field_bits = bits<field_width>(src_bits, offset);
+                         field_ref = FieldType(field_bits);
+                         offset += field_width;
                      }
                  }()),
                  ...);
@@ -111,15 +104,15 @@ void deserialize_bits_to_fields(const ch_uint<W> &bits, BundleT &bundle) {
     }
 }
 
-// 从位向量反序列化到Bundle
+// 从位向量反序列化到 Bundle
 template <typename BundleT, unsigned W>
-BundleT deserialize(const ch_uint<W> &bits) {
+BundleT deserialize(const ch_uint<W> &src_bits) {
     static_assert(is_bundle_v<BundleT>,
                   "deserialize() only works with Bundle types");
 
     if constexpr (is_bundle_v<BundleT>) {
         BundleT bundle;
-        deserialize_bits_to_fields(bits, bundle);
+        deserialize_bits_to_fields(src_bits, bundle);
         return bundle;
     } else {
         return BundleT{}; // 返回默认值
