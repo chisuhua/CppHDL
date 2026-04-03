@@ -97,6 +97,7 @@ set(BASE_TEST_SOURCES
     test_shift_boundary.cpp
     test_pipeline_regs.cpp
     test_branch_predict.cpp
+    test_rv32i_pipeline.cpp
 )
 
 # chlib 测试源文件列表

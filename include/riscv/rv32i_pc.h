@@ -35,23 +35,12 @@ public:
     }
     
     void describe() override {
-        // PC 寄存器
         ch_reg<ch_uint<32>> pc_reg(0_d);
-        
-        // 下一 PC 值
         ch_uint<32> next_pc(0_d);
-        
-        // 顺序执行：PC + 4
         auto pc_plus_4 = pc_reg + ch_uint<32>(4_d);
-        
-        // 选择下一 PC：跳转则使用 jump_target，否则 PC+4
-        next_pc = select(jump_enable, jump_target, pc_plus_4);
-        
-        // PC 更新 (复位时清零)
-        pc_reg->next = select(rst, ch_uint<32>(0_d), next_pc);
-        
-        // 输出当前 PC
-        pc = pc_reg;
+        next_pc = select(io().jump_enable, io().jump_target, pc_plus_4);
+        pc_reg->next = select(io().rst, ch_uint<32>(0_d), next_pc);
+        io().pc = pc_reg;
     }
 };
 

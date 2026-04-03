@@ -142,19 +142,21 @@ public:
     
     void describe() override {
         // ========================================================================
-        // 有符号比较 (通过符号位判断)
+        // 提取操作数符号位
         // ========================================================================
-        // 计算 rs1 - rs2 的符号
-        auto diff = io().rs1_data - io().rs2_data;
-        auto sign_bit = bits<31, 31>(diff);  // 符号位
+        auto rs1_sign = bits<31, 31>(io().rs1_data);
+        auto rs2_sign = bits<31, 31>(io().rs2_data);
+        auto signs_equal = (rs1_sign == rs2_sign);
         
-        // 检查是否为零
-        auto is_zero = (io().rs1_data == io().rs2_data);
+        // ========================================================================
+        // 有符号比较 (直接比较，避免减法溢出)
+        // ========================================================================
+        // 符号相同：直接比较大小
+        // 符号不同：符号位大的反而小 (负数 < 正数)
+        auto signed_less = signs_equal 
+                           ? (io().rs1_data < io().rs2_data)  // 符号相同，直接比较
+                           : (rs1_sign > rs2_sign);           // 符号不同，负数 < 正数
         
-        // 有符号小于：符号位为 1 且不是零
-        auto signed_less = sign_bit & !is_zero;
-        
-        // 有符号大于等于：符号位为 0 或为零
         auto signed_ge = !signed_less;
         
         // ========================================================================
@@ -166,8 +168,8 @@ public:
         // ========================================================================
         // 相等性比较 (BEQ/BNE 有符号无符号相同)
         // ========================================================================
-        auto equal = is_zero;
-        auto not_equal = !is_zero;
+        auto equal = (io().rs1_data == io().rs2_data);
+        auto not_equal = !equal;
         
         // ========================================================================
         // 根据 branch_type 选择条件
@@ -261,13 +263,18 @@ public:
         // ========================================================================
         // 分支条件计算
         // ========================================================================
-        // 有符号比较 (通过符号位判断)
-        auto diff = io().rs1_data - io().rs2_data;
-        auto sign_bit = bits<31, 31>(diff);  // 符号位
-        auto is_zero = (io().rs1_data == io().rs2_data);
+        // 提取操作数符号位
+        auto rs1_sign = bits<31, 31>(io().rs1_data);
+        auto rs2_sign = bits<31, 31>(io().rs2_data);
+        auto signs_equal = (rs1_sign == rs2_sign);
         
-        // 有符号小于：符号位为 1 且不是零
-        auto signed_less = sign_bit & !is_zero;
+        // 有符号比较 (直接比较，避免减法溢出)
+        // 符号相同：直接比较大小
+        // 符号不同：符号位大的反而小 (负数 < 正数)
+        auto signed_less = signs_equal 
+                           ? (io().rs1_data < io().rs2_data)  // 符号相同，直接比较
+                           : (rs1_sign > rs2_sign);           // 符号不同，负数 < 正数
+        
         auto signed_ge = !signed_less;
         
         // 无符号比较
@@ -275,8 +282,8 @@ public:
         auto unsigned_ge = !unsigned_less;
         
         // 相等性比较
-        auto equal = is_zero;
-        auto not_equal = !is_zero;
+        auto equal = (io().rs1_data == io().rs2_data);
+        auto not_equal = !equal;
         
         // 根据 funct3 选择条件
         auto is_beq  = funct3 == ch_uint<3>(0_d);
