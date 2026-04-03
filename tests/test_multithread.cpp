@@ -22,7 +22,7 @@ public:
 
     void describe() override {
         // 创建一些基本的硬件元素进行测试
-        auto reg1 = ch::core::ch_reg_impl<ch_uint<8>>(0);
+        auto reg1 = ch::core::regimpl<ch_uint<8>>(0);
         auto input1 = ch::core::ch_logic_in<ch_uint<8>>("in1");
         auto output1 = ch::core::ch_logic_out<ch_uint<8>>("out1");
         
@@ -48,7 +48,7 @@ TEST_CASE("Multithreaded context isolation", "[multithread][context][isolation]"
         auto* ctx = device.context();
         auto* lit_node = ctx->create_literal(ch::core::sdata_type(42, 8), "test_lit");
         REQUIRE(lit_node != nullptr);
-        REQUIRE(lit_node->value().bitvector().to_uint64() == 42);
+        REQUIRE(lit_node->value().bitvector().words()[0] == 42);
         
         test_counter.fetch_add(1);
         return true;
@@ -175,7 +175,7 @@ TEST_CASE("Thread safety with node creation", "[multithread][node][creation]") {
             );
             
             REQUIRE(lit != nullptr);
-            REQUIRE(lit->value().bitvector().to_uint64() == static_cast<uint64_t>(thread_id * 1000 + i));
+            REQUIRE(lit->value().bitvector().words()[0] == static_cast<uint64_t>(thread_id * 1000 + i));
         }
         
         total_nodes_created += nodes_per_thread;
@@ -407,7 +407,7 @@ TEST_CASE("Concurrent Component creation and current() tracking", "[multithread]
 TEST_CASE("Component::current() during build process in multithread", "[multithread][component][build]") {
     class BuildTrackingModule : public Component {
     public:
-        static thread_local std::vector<Component*> build_stack;
+        static std::vector<Component*> build_stack;
         
         BuildTrackingModule(Component* parent, const std::string& name)
             : Component(parent, name) {
@@ -432,7 +432,7 @@ TEST_CASE("Component::current() during build process in multithread", "[multithr
         }
     };
     
-    thread_local std::vector<Component*> BuildTrackingModule::build_stack;
+    std::vector<Component*> BuildTrackingModule::build_stack;
     
     auto worker = [](int thread_id) {
         REQUIRE(Component::current() == nullptr);
