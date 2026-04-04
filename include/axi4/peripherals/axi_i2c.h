@@ -102,10 +102,18 @@ public:
     
     void describe() override {
         // ========================================================================
-        // AXI4-Lite Bus State Machine
+        // AXI Transaction State Machine
         // ========================================================================
         
-        ch_reg<ch_bool> axi_busy(ch_bool(false));
+        // AXI write/read state: 0=IDLE, 1=ADDR_WAIT
+        ch_reg<ch_uint<2>> axi_wr_state(ch_uint<2>(0_d));
+        ch_reg<ch_uint<2>> axi_rd_state(ch_uint<2>(0_d));
+        
+        // State decode
+        auto axi_wr_idle = (axi_wr_state == ch_uint<2>(0_d));
+        auto axi_wr_addr = (axi_wr_state == ch_uint<2>(1_d));
+        auto axi_rd_idle = (axi_rd_state == ch_uint<2>(0_d));
+        auto axi_rd_addr = (axi_rd_state == ch_uint<2>(1_d));
         
         // ========================================================================
         // Register Storage
@@ -131,10 +139,10 @@ public:
         // AXI4-Lite Write Transaction
         // ========================================================================
         
-        auto aw_handshake = select(io().awvalid, select(axi_busy, ch_bool(false), ch_bool(true)), ch_bool(false));
-        io().awready = aw_handshake;
+        io().awready = select(axi_wr_idle, io().awvalid, ch_bool(false));
+        auto aw_handshake = select(axi_wr_idle, io().awvalid, ch_bool(false));
         
-        auto w_handshake = select(io().wvalid, select(aw_handshake, ch_bool(true), ch_bool(false)), ch_bool(false));
+        auto w_handshake = select(axi_wr_addr, io().wvalid, ch_bool(false));
         io().wready = w_handshake;
         
         // Register write select
@@ -165,8 +173,8 @@ public:
         // AXI4-Lite Read Transaction
         // ========================================================================
         
-        auto ar_handshake = select(io().arvalid, select(axi_busy, ch_bool(false), ch_bool(true)), ch_bool(false));
-        io().arready = ar_handshake;
+        io().arready = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        auto ar_handshake = select(axi_rd_idle, io().arvalid, ch_bool(false));
         
         // Register read select
         auto sel_read_ctrl = (rd_addr == ch_uint<32>(0_d));
@@ -184,16 +192,34 @@ public:
         read_val = select(sel_read_prescale, ch_uint<32>(prescale_reg), read_val);
         
         io().rdata = read_val;
-        io().rvalid = ar_handshake;
         io().rresp = ch_uint<2>(0_d);  // OKAY
         
+        // rvalid: combinational output, valid when in axi_rd_addr state
+        io().rvalid = axi_rd_addr;
+        
         // ========================================================================
-        // AXI Bus State Update
+        // AXI Transaction State Machine Transitions (Write)
         // ========================================================================
         
-        auto axi_start = select(aw_handshake, ch_bool(true), ar_handshake);
-        auto axi_end = select(io().bready, ch_bool(true), io().rready);
-        axi_busy->next = select(axi_start, ch_bool(true), select(axi_end, ch_bool(false), axi_busy));
+        auto w_resp_handshake = select(axi_wr_addr, io().bready, ch_bool(false));
+        
+        ch_uint<2> axi_wr_next;
+        axi_wr_next = select(axi_wr_idle,
+                             select(aw_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
+                             select(w_resp_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
+        axi_wr_state->next = axi_wr_next;
+        
+        // ========================================================================
+        // AXI Transaction State Machine Transitions (Read)
+        // ========================================================================
+        
+        auto r_handshake = select(axi_rd_addr, io().rready, ch_bool(false));
+        
+        ch_uint<2> axi_rd_next;
+        axi_rd_next = select(axi_rd_idle,
+                             select(ar_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
+                             select(r_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
+        axi_rd_state->next = axi_rd_next;
         
         // ========================================================================
         // I2C State Machine (4 bits for 16 states)

@@ -101,10 +101,20 @@ public:
     
     void describe() override {
         // ========================================================================
-        // AXI4-Lite State Machine
+        // AXI Transaction State Machine (simplified, no backpressure)
         // ========================================================================
         
-        ch_reg<ch_bool> axi_busy(ch_bool(false));
+        // AXI write state: 0=IDLE, 1=ADDR_WAIT (waiting for data)
+        ch_reg<ch_uint<2>> axi_wr_state(ch_uint<2>(0_d));
+        ch_reg<ch_uint<2>> axi_rd_state(ch_uint<2>(0_d));
+        
+        // State decode (write)
+        auto axi_wr_idle = (axi_wr_state == ch_uint<2>(0_d));
+        auto axi_wr_addr = (axi_wr_state == ch_uint<2>(1_d));
+        
+        // State decode (read)
+        auto axi_rd_idle = (axi_rd_state == ch_uint<2>(0_d));
+        auto axi_rd_addr = (axi_rd_state == ch_uint<2>(1_d));
         
         // ========================================================================
         // Register Storage
@@ -152,22 +162,21 @@ public:
         ch_reg<ch_bool> rx_overrun(ch_bool(false));
         
         // ========================================================================
-        // Register Write Enable Signals
+        // AXI4-Lite Write Address Channel
         // ========================================================================
         
         // Address decoding (2-bit, 4-byte aligned)
         auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
         wr_addr = wr_addr & ch_uint<32>(static_cast<uint32_t>(0x0F));  // Support up to 16 registers
         
+        // Address decoding for read (needed for RX read detection)
         auto rd_addr = io().araddr >> ch_uint<32>(2_d);
         rd_addr = rd_addr & ch_uint<32>(static_cast<uint32_t>(0x0F));
         
-        // Write handshake using select instead of &&
-        auto aw_handshake = select(io().awvalid, select(axi_busy, ch_bool(false), ch_bool(true)), ch_bool(false));
-        io().awready = aw_handshake;
-        
-        auto w_handshake = select(io().wvalid, aw_handshake, ch_bool(false));
-        io().wready = w_handshake;
+        // AXI write handshake
+        io().awready = select(axi_wr_idle, io().awvalid, ch_bool(false));
+        io().wready = select(axi_wr_addr, io().wvalid, ch_bool(false));
+        auto w_handshake = select(axi_wr_addr, io().wvalid, ch_bool(false));
         
         // Register write enables
         auto we_tx_data = select(w_handshake, (wr_addr == ch_uint<32>(0_d)), ch_bool(false));
@@ -178,11 +187,17 @@ public:
         // Control Register Logic
         // ========================================================================
         
-        // Extract control bits
-        auto ctrl_enable = select((ctrl_reg & ch_uint<32>(1_d)) != ch_uint<32>(0_d), ch_bool(true), ch_bool(false));
-        auto ctrl_start = select((ctrl_reg & ch_uint<32>(2_d)) != ch_uint<32>(0_d), ch_bool(true), ch_bool(false));
-        auto ctrl_int_en = select((ctrl_reg & ch_uint<32>(4_d)) != ch_uint<32>(0_d), ch_bool(true), ch_bool(false));
-        auto ctrl_clr_rx = select((ctrl_reg & ch_uint<32>(8_d)) != ch_uint<32>(0_d), ch_bool(true), ch_bool(false));
+        // Extract control bits using bits<> instead of & operator to avoid
+        // ch_reg type conversion issues
+        auto ctrl_bit0 = bits<0, 0>(ctrl_reg);
+        auto ctrl_bit1 = bits<1, 1>(ctrl_reg);
+        auto ctrl_bit2 = bits<2, 2>(ctrl_reg);
+        auto ctrl_bit3 = bits<3, 3>(ctrl_reg);
+        
+        auto ctrl_enable = select(ctrl_bit0 != ch_uint<1>(0_d), ch_bool(true), ch_bool(false));
+        auto ctrl_start = select(ctrl_bit1 != ch_uint<1>(0_d), ch_bool(true), ch_bool(false));
+        auto ctrl_int_en = select(ctrl_bit2 != ch_uint<1>(0_d), ch_bool(true), ch_bool(false));
+        auto ctrl_clr_rx = select(ctrl_bit3 != ch_uint<1>(0_d), ch_bool(true), ch_bool(false));
         
         // START bit is self-clearing
         auto start_pulse = select(ctrl_start, select(!transfer_active, ch_bool(true), ch_bool(false)), ch_bool(false));
@@ -294,9 +309,9 @@ public:
         // Shift Register
         // ========================================================================
         
-        // MOSI: output MSB of shift register
-        auto shift_msb = (shift_reg >> ch_uint<DATA_WIDTH>(DATA_WIDTH - 1)) & ch_uint<DATA_WIDTH>(1_d);
-        io().spi_mosi = select((shift_msb != ch_uint<DATA_WIDTH>(0_d)), ch_bool(true), ch_bool(false));
+        // MOSI: output MSB of shift register using bits<> to avoid & operator
+        auto shift_msb = bits<DATA_WIDTH - 1, DATA_WIDTH - 1>(shift_reg);
+        io().spi_mosi = select(shift_msb != ch_uint<1>(0_d), ch_bool(true), ch_bool(false));
         
         // MISO input - convert ch_bool to ch_uint
         auto miso_bit = select(io().spi_miso, ch_uint<DATA_WIDTH>(1_d), ch_uint<DATA_WIDTH>(0_d));
@@ -305,9 +320,14 @@ public:
         auto shifted_data = (shift_reg << ch_uint<DATA_WIDTH>(1_d)) | miso_bit;
         
         // Get lower DATA_WIDTH bits from wdata for loading
-        // Use bit masking to extract lower bits
-        ch_uint<32> wdata_mask = ch_uint<32>((1ULL << DATA_WIDTH) - 1);
-        ch_uint<32> wdata_masked = io().wdata & wdata_mask;
+        // Use compile-time literal mask instead of runtime calculation
+        // to avoid node_impl_ initialization issues with ch_literal_runtime
+        ch_uint<32> wdata_masked;
+        if constexpr (DATA_WIDTH == 8) {
+            wdata_masked = io().wdata & ch_uint<32>(255_d);
+        } else {
+            wdata_masked = io().wdata;  // DATA_WIDTH == 32, no mask needed
+        }
         ch_uint<DATA_WIDTH> wdata_lower = ch_uint<DATA_WIDTH>(wdata_masked);
         
         // Load TX data on START, shift on SCLK falling edge during TRANSFER
@@ -370,28 +390,33 @@ public:
         
         // Control: written via AXI, START bit self-clears
         ch_uint<32> ctrl_next = select(we_ctrl, io().wdata, ctrl_reg);
-        // Self-clear START bit when transfer starts
+        // Self-clear START bit (bit 1) when transfer starts - use literal mask instead of ~
         ctrl_next = select(select(start_pulse, select(!we_ctrl, ch_bool(true), ch_bool(false)), ch_bool(false)), 
-                           ctrl_next & ~ch_uint<32>(2_d), ctrl_next);
-        // Self-clear CLR_RX bit
+                           ctrl_next & ch_uint<32>(0xFFFFFFFD_h), ctrl_next);
+        // Self-clear CLR_RX bit (bit 3)
         ctrl_next = select(select(clr_rx_pulse, select(!we_ctrl, ch_bool(true), ch_bool(false)), ch_bool(false)),
-                           ctrl_next & ~ch_uint<32>(8_d), ctrl_next);
+                           ctrl_next & ch_uint<32>(0xFFFFFFF7_h), ctrl_next);
         ctrl_reg->next = ctrl_next;
         
-        // Baud rate - extract lower BAUD_WIDTH bits
-        // Use bit masking to extract lower bits
-        ch_uint<32> baud_mask = ch_uint<32>((1ULL << BAUD_WIDTH) - 1);
-        ch_uint<32> wdata_baud_masked = io().wdata & baud_mask;
+        // Baud rate - extract lower BAUD_WIDTH bits using compile-time literal
+        ch_uint<32> wdata_baud_masked;
+        if constexpr (BAUD_WIDTH == 8) {
+            wdata_baud_masked = io().wdata & ch_uint<32>(255_d);
+        } else if constexpr (BAUD_WIDTH == 16) {
+            wdata_baud_masked = io().wdata & ch_uint<32>(65535_d);
+        } else {
+            wdata_baud_masked = io().wdata;  // BAUD_WIDTH == 32
+        }
         ch_uint<BAUD_WIDTH> wdata_baud = ch_uint<BAUD_WIDTH>(wdata_baud_masked);
         baud_reg->next = select(we_baud, wdata_baud, baud_reg);
         
         // ========================================================================
-        // AXI4-Lite Read
+        // AXI4-Lite Read Address Channel
         // ========================================================================
         
-        // Read handshake using select instead of &&
-        auto ar_handshake = select(io().arvalid, select(axi_busy, ch_bool(false), ch_bool(true)), ch_bool(false));
-        io().arready = ar_handshake;
+        // AXI read handshake
+        io().arready = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        auto ar_handshake = select(axi_rd_idle, io().arvalid, ch_bool(false));
         
         // Read data multiplexer
         ch_uint<32> read_val(0_d);
@@ -405,24 +430,44 @@ public:
         read_val = select((rd_addr == ch_uint<32>(4_d)), baud_32, read_val);
         
         io().rdata = read_val;
-        io().rvalid = ar_handshake;
         io().rresp = ch_uint<2>(0_d);  // OKAY
+        
+        // rvalid: combinational output, valid when in axi_rd_addr state
+        // This matches AXI protocol: rvalid asserted after address handshake
+        io().rvalid = axi_rd_addr;
         
         // ========================================================================
         // AXI4-Lite Write Response
         // ========================================================================
         
-        io().bvalid = w_handshake;
+        io().bvalid = select(axi_wr_addr, select(w_handshake, ch_bool(true), ch_bool(false)), ch_bool(false));
         io().bresp = ch_uint<2>(0_d);  // OKAY
         
         // ========================================================================
-        // AXI State Machine
+        // AXI Transaction State Machine Transitions (Write)
         // ========================================================================
         
-        auto any_handshake = select(aw_handshake, ch_bool(true), ar_handshake);
-        auto any_ready = select(io().bready, ch_bool(true), select(io().rready, ch_bool(true), ch_bool(false)));
-        axi_busy->next = select(any_handshake, ch_bool(true),
-                                select(any_ready, ch_bool(false), axi_busy));
+        auto aw_handshake = select(axi_wr_idle, io().awvalid, ch_bool(false));
+        
+        ch_uint<2> axi_wr_next;
+        axi_wr_next = select(axi_wr_idle,
+                             select(aw_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
+                             select(axi_wr_addr,
+                                    select(w_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)),
+                                    ch_uint<2>(0_d)));
+        axi_wr_state->next = axi_wr_next;
+        
+        // ========================================================================
+        // AXI Transaction State Machine Transitions (Read)
+        // ========================================================================
+        
+        auto r_handshake = select(axi_rd_addr, io().rready, ch_bool(false));
+        
+        ch_uint<2> axi_rd_next;
+        axi_rd_next = select(axi_rd_idle,
+                             select(ar_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
+                             select(r_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
+        axi_rd_state->next = axi_rd_next;
     }
 };
 

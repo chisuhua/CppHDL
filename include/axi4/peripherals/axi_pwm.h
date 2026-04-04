@@ -75,8 +75,19 @@ public:
     }
     
     void describe() override {
-        // 状态机寄存器
-        ch_reg<ch_bool> busy(ch_bool(false));
+        // ========================================================================
+        // AXI Transaction State Machine
+        // ========================================================================
+        
+        // AXI write/read state: 0=IDLE, 1=ADDR_WAIT
+        ch_reg<ch_uint<2>> axi_wr_state(ch_uint<2>(0_d));
+        ch_reg<ch_uint<2>> axi_rd_state(ch_uint<2>(0_d));
+        
+        // State decode
+        auto axi_wr_idle = (axi_wr_state == ch_uint<2>(0_d));
+        auto axi_wr_addr = (axi_wr_state == ch_uint<2>(1_d));
+        auto axi_rd_idle = (axi_rd_state == ch_uint<2>(0_d));
+        auto axi_rd_addr = (axi_rd_state == ch_uint<2>(1_d));
         
         // 配置寄存器
         ch_reg<ch_uint<32>> period_reg(ch_uint<32>(255_d));      // 默认周期 255
@@ -91,19 +102,20 @@ public:
         ch_reg<ch_uint<COUNTER_WIDTH>> counter(0_d);
         
         // ====================================================================
-        // AXI4-Lite 写地址通道
+        // AXI4-Lite Write Channel
         // ====================================================================
         
-        // 写地址握手
-        auto aw_handshake = select(io().awvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
-        io().awready = aw_handshake;
+        // Write address handshake
+        io().awready = select(axi_wr_idle, io().awvalid, ch_bool(false));
+        auto aw_handshake = select(axi_wr_idle, io().awvalid, ch_bool(false));
         
-        // 写数据握手
-        auto w_handshake = select(io().wvalid, aw_handshake, ch_bool(false));
+        // Write data handshake
+        auto w_handshake = select(axi_wr_addr, io().wvalid, ch_bool(false));
         io().wready = w_handshake;
         
-        // 地址解码 (右移 2 位，4 字节对齐)
+        // Address decode (2-bit, 4-byte aligned)
         auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
+        wr_addr = wr_addr & ch_uint<32>(15_d);
         
         // 寄存器选择信号 (使用右移后的地址)
         auto sel_period = (wr_addr == ch_uint<32>(0_d));
@@ -132,21 +144,23 @@ public:
         enable_reg->next = select(we_enable, io().wdata, enable_reg);
         interrupt_reg->next = select(we_interrupt, io().wdata, interrupt_reg);
         
-        // 写响应
+        // Write response (combinational)
         io().bvalid = w_handshake;
         io().bresp = ch_uint<2>(0_d);  // OKAY
         
         // ====================================================================
-        // AXI4-Lite 读地址通道
+        // AXI4-Lite Read Channel
         // ====================================================================
         
-        auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
-        io().arready = ar_handshake;
-        
-        // 读地址解码 (右移 2 位，4 字节对齐)
+        // Read address decode
         auto rd_addr = io().araddr >> ch_uint<32>(2_d);
+        rd_addr = rd_addr & ch_uint<32>(15_d);
         
-        // 读寄存器选择 (使用右移后的地址)
+        // Read handshake
+        io().arready = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        auto ar_handshake = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        
+        // Read register select
         auto read_sel_period = (rd_addr == ch_uint<32>(0_d));
         auto read_sel_duty0 = (rd_addr == ch_uint<32>(4_d));
         auto read_sel_duty1 = (rd_addr == ch_uint<32>(5_d));
@@ -155,7 +169,7 @@ public:
         auto read_sel_enable = (rd_addr == ch_uint<32>(8_d));
         auto read_sel_interrupt = (rd_addr == ch_uint<32>(9_d));
         
-        // 读数据多路选择
+        // Read data mux
         ch_uint<32> read_val(0_d);
         read_val = select(read_sel_period, period_reg, read_val);
         read_val = select(read_sel_duty0, duty0_reg, read_val);
@@ -166,8 +180,10 @@ public:
         read_val = select(read_sel_interrupt, interrupt_reg, read_val);
         
         io().rdata = read_val;
-        io().rvalid = ar_handshake;
         io().rresp = ch_uint<2>(0_d);  // OKAY
+        
+        // rvalid: combinational output, valid when in axi_rd_addr state
+        io().rvalid = axi_rd_addr;
         
         // ====================================================================
         // PWM 计数器逻辑
@@ -192,41 +208,59 @@ public:
         // PWM 比较逻辑 (每通道独立)
         // ====================================================================
         
+        // Extract enable bits using bits<> instead of & operator
+        auto en_bit0 = bits<0, 0>(enable_reg);
+        auto en_bit1 = bits<1, 1>(enable_reg);
+        auto en_bit2 = bits<2, 2>(enable_reg);
+        auto en_bit3 = bits<3, 3>(enable_reg);
+        auto irq_bit = bits<0, 0>(interrupt_reg);
+        
         // 通道 0
         auto counter_width_duty0 = ch_uint<COUNTER_WIDTH>(duty0_reg);
         auto cmp0 = (counter < counter_width_duty0);
-        auto en0 = (enable_reg & ch_uint<32>(1_d)) != ch_uint<32>(0_d);
-        io().pwm_out_0 = select(en0, cmp0, ch_bool(false));
+        io().pwm_out_0 = select(en_bit0 != ch_uint<1>(0_d), cmp0, ch_bool(false));
         
         // 通道 1
         auto counter_width_duty1 = ch_uint<COUNTER_WIDTH>(duty1_reg);
         auto cmp1 = (counter < counter_width_duty1);
-        auto en1 = (enable_reg & ch_uint<32>(2_d)) != ch_uint<32>(0_d);
-        io().pwm_out_1 = select(en1, cmp1, ch_bool(false));
+        io().pwm_out_1 = select(en_bit1 != ch_uint<1>(0_d), cmp1, ch_bool(false));
         
         // 通道 2
         auto counter_width_duty2 = ch_uint<COUNTER_WIDTH>(duty2_reg);
         auto cmp2 = (counter < counter_width_duty2);
-        auto en2 = (enable_reg & ch_uint<32>(4_d)) != ch_uint<32>(0_d);
-        io().pwm_out_2 = select(en2, cmp2, ch_bool(false));
+        io().pwm_out_2 = select(en_bit2 != ch_uint<1>(0_d), cmp2, ch_bool(false));
         
         // 通道 3
         auto counter_width_duty3 = ch_uint<COUNTER_WIDTH>(duty3_reg);
         auto cmp3 = (counter < counter_width_duty3);
-        auto en3 = (enable_reg & ch_uint<32>(8_d)) != ch_uint<32>(0_d);
-        io().pwm_out_3 = select(en3, cmp3, ch_bool(false));
+        io().pwm_out_3 = select(en_bit3 != ch_uint<1>(0_d), cmp3, ch_bool(false));
         
         // 中断输出
-        io().irq = (interrupt_reg & ch_uint<32>(1_d)) != ch_uint<32>(0_d);
+        io().irq = irq_bit != ch_uint<1>(0_d);
         
-        // ====================================================================
-        // 状态机更新
-        // ====================================================================
+        // ========================================================================
+        // AXI Transaction State Machine Transitions (Write)
+        // ========================================================================
         
-        auto any_handshake = select(aw_handshake, ch_bool(true), ar_handshake);
-        auto any_ready = select(io().bready, ch_bool(true), select(io().rready, ch_bool(true), ch_bool(false)));
-        busy->next = select(any_handshake, ch_bool(true),
-                            select(any_ready, ch_bool(false), busy));
+        auto w_resp_handshake = select(axi_wr_addr, io().bready, ch_bool(false));
+        
+        ch_uint<2> axi_wr_next;
+        axi_wr_next = select(axi_wr_idle,
+                             select(aw_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
+                             select(w_resp_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
+        axi_wr_state->next = axi_wr_next;
+        
+        // ========================================================================
+        // AXI Transaction State Machine Transitions (Read)
+        // ========================================================================
+        
+        auto r_handshake = select(axi_rd_addr, io().rready, ch_bool(false));
+        
+        ch_uint<2> axi_rd_next;
+        axi_rd_next = select(axi_rd_idle,
+                             select(ar_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
+                             select(r_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
+        axi_rd_state->next = axi_rd_next;
     }
 };
 
