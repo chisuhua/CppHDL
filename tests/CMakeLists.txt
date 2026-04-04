@@ -101,6 +101,10 @@ set(BASE_TEST_SOURCES
     test_pipeline_regs.cpp
     test_branch_predict.cpp
     test_rv32i_pipeline.cpp
+    test_axi_dma.cpp
+    test_axi_pwm.cpp
+    test_axi_spi.cpp
+    test_axi_i2c.cpp
 )
 
 # chlib 测试源文件列表
