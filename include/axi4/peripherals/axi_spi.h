@@ -325,7 +325,7 @@ public:
         rx_data_reg->next = select(capture_rx, shift_reg, rx_data_reg);
         
         // RX valid flag - set on capture, cleared on read or CLR_RX
-        auto rx_read = select((io().araddr == ch_uint<32>(4_d)), io().arvalid, ch_bool(false));
+        auto rx_read = select((rd_addr == ch_uint<32>(1_d)), io().arvalid, ch_bool(false));
         rx_valid->next = select(capture_rx, ch_bool(true),
                                 select(select(clr_rx_pulse, ch_bool(true), rx_read), ch_bool(false),
                                        rx_valid));

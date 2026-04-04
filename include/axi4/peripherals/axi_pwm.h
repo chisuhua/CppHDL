@@ -102,14 +102,17 @@ public:
         auto w_handshake = select(io().wvalid, aw_handshake, ch_bool(false));
         io().wready = w_handshake;
         
-        // 寄存器选择信号 (地址直接比较)
-        auto sel_period = (io().awaddr == ch_uint<32>(0_d));
-        auto sel_duty0 = (io().awaddr == ch_uint<32>(16_d));
-        auto sel_duty1 = (io().awaddr == ch_uint<32>(20_d));
-        auto sel_duty2 = (io().awaddr == ch_uint<32>(24_d));
-        auto sel_duty3 = (io().awaddr == ch_uint<32>(28_d));
-        auto sel_enable = (io().awaddr == ch_uint<32>(32_d));
-        auto sel_interrupt = (io().awaddr == ch_uint<32>(36_d));
+        // 地址解码 (右移 2 位，4 字节对齐)
+        auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
+        
+        // 寄存器选择信号 (使用右移后的地址)
+        auto sel_period = (wr_addr == ch_uint<32>(0_d));
+        auto sel_duty0 = (wr_addr == ch_uint<32>(4_d));
+        auto sel_duty1 = (wr_addr == ch_uint<32>(5_d));
+        auto sel_duty2 = (wr_addr == ch_uint<32>(6_d));
+        auto sel_duty3 = (wr_addr == ch_uint<32>(7_d));
+        auto sel_enable = (wr_addr == ch_uint<32>(8_d));
+        auto sel_interrupt = (wr_addr == ch_uint<32>(9_d));
         
         // 写使能信号
         auto we_period = select(w_handshake, sel_period, ch_bool(false));
@@ -140,14 +143,17 @@ public:
         auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().arready = ar_handshake;
         
-        // 读寄存器选择
-        auto read_sel_period = (io().araddr == ch_uint<32>(0_d));
-        auto read_sel_duty0 = (io().araddr == ch_uint<32>(16_d));
-        auto read_sel_duty1 = (io().araddr == ch_uint<32>(20_d));
-        auto read_sel_duty2 = (io().araddr == ch_uint<32>(24_d));
-        auto read_sel_duty3 = (io().araddr == ch_uint<32>(28_d));
-        auto read_sel_enable = (io().araddr == ch_uint<32>(32_d));
-        auto read_sel_interrupt = (io().araddr == ch_uint<32>(36_d));
+        // 读地址解码 (右移 2 位，4 字节对齐)
+        auto rd_addr = io().araddr >> ch_uint<32>(2_d);
+        
+        // 读寄存器选择 (使用右移后的地址)
+        auto read_sel_period = (rd_addr == ch_uint<32>(0_d));
+        auto read_sel_duty0 = (rd_addr == ch_uint<32>(4_d));
+        auto read_sel_duty1 = (rd_addr == ch_uint<32>(5_d));
+        auto read_sel_duty2 = (rd_addr == ch_uint<32>(6_d));
+        auto read_sel_duty3 = (rd_addr == ch_uint<32>(7_d));
+        auto read_sel_enable = (rd_addr == ch_uint<32>(8_d));
+        auto read_sel_interrupt = (rd_addr == ch_uint<32>(9_d));
         
         // 读数据多路选择
         ch_uint<32> read_val(0_d);
