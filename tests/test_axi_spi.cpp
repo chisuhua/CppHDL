@@ -30,7 +30,8 @@ void axi_lite_write(ch::Simulator& sim, T& device, uint32_t addr, uint32_t data)
     while (sim.get_port_value(device.instance().io().awready) == 0) {
         sim.tick();
     }
-    sim.tick();
+    sim.tick();  // Extra tick for signal propagation
+    sim.tick();  // Second tick for stability
     sim.set_port_value(device.instance().io().awvalid, 0);
     
     // Write data
@@ -38,17 +39,19 @@ void axi_lite_write(ch::Simulator& sim, T& device, uint32_t addr, uint32_t data)
     sim.set_port_value(device.instance().io().wstrb, 0xF);
     sim.set_port_value(device.instance().io().wvalid, 1);
     
-    // Wait for W ready and B valid
+    // Wait for W ready
     while (sim.get_port_value(device.instance().io().wready) == 0) {
         sim.tick();
     }
-    sim.tick();
+    sim.tick();  // Extra tick for signal propagation
+    sim.tick();  // Second tick for stability
     sim.set_port_value(device.instance().io().wvalid, 0);
     
     // Wait for B valid
     while (sim.get_port_value(device.instance().io().bvalid) == 0) {
         sim.tick();
     }
+    sim.tick();  // Extra tick for signal propagation
     sim.set_port_value(device.instance().io().bready, 1);
     sim.tick();
     sim.set_port_value(device.instance().io().bready, 0);
@@ -65,13 +68,15 @@ uint32_t axi_lite_read(ch::Simulator& sim, T& device, uint32_t addr) {
     while (sim.get_port_value(device.instance().io().arready) == 0) {
         sim.tick();
     }
-    sim.tick();
+    sim.tick();  // Extra tick for signal propagation
+    sim.tick();  // Second tick for stability
     sim.set_port_value(device.instance().io().arvalid, 0);
     
     // Wait for R valid
     while (sim.get_port_value(device.instance().io().rvalid) == 0) {
         sim.tick();
     }
+    sim.tick();  // Extra tick for stable data
     uint32_t data = static_cast<uint64_t>(sim.get_port_value(device.instance().io().rdata));
     sim.set_port_value(device.instance().io().rready, 1);
     sim.tick();
@@ -117,6 +122,8 @@ TEST_CASE("AxiLiteSpi - RegisterAccess", "[axi][spi][register]") {
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 0);
     sim.set_input_value(spi_device.instance().io().rready, 0);
+    sim.tick();  // Initial tick to stabilize state machine
+    sim.tick();  // Second tick for stability
     
     // Test register write and read
     const uint32_t BAUD_VAL = 99;

@@ -41,7 +41,8 @@ void axi_lite_write(ch::Simulator& sim, T& device, uint32_t addr, uint32_t data)
     while (!static_cast<uint64_t>(sim.get_port_value(device.instance().io().awready))) {
         sim.tick();
     }
-    sim.tick();
+    sim.tick();  // Extra tick for signal propagation
+    sim.tick();  // Second tick for stability
     sim.set_port_value(device.instance().io().awvalid, 0);
     
     // 设置数据
@@ -53,13 +54,15 @@ void axi_lite_write(ch::Simulator& sim, T& device, uint32_t addr, uint32_t data)
     while (!static_cast<uint64_t>(sim.get_port_value(device.instance().io().wready))) {
         sim.tick();
     }
-    sim.tick();
+    sim.tick();  // Extra tick for signal propagation
+    sim.tick();  // Second tick for stability
     sim.set_port_value(device.instance().io().wvalid, 0);
     
     // 等待 B 响应
     while (!static_cast<uint64_t>(sim.get_port_value(device.instance().io().bvalid))) {
         sim.tick();
     }
+    sim.tick();  // Extra tick for signal propagation
     sim.set_port_value(device.instance().io().bready, 1);
     sim.tick();
     sim.set_port_value(device.instance().io().bready, 0);
@@ -79,13 +82,15 @@ uint32_t axi_lite_read(ch::Simulator& sim, T& device, uint32_t addr) {
     while (!static_cast<uint64_t>(sim.get_port_value(device.instance().io().arready))) {
         sim.tick();
     }
-    sim.tick();
+    sim.tick();  // Extra tick for signal propagation
+    sim.tick();  // Second tick for stability
     sim.set_port_value(device.instance().io().arvalid, 0);
     
     // 等待读数据
     while (!static_cast<uint64_t>(sim.get_port_value(device.instance().io().rvalid))) {
         sim.tick();
     }
+    sim.tick();  // Extra tick for stable data
     
     uint32_t rdata = static_cast<uint64_t>(sim.get_port_value(device.instance().io().rdata));
     sim.set_port_value(device.instance().io().rready, 1);
@@ -115,7 +120,8 @@ TEST_CASE("AXI PWM - Register Read/Write", "[axi_pwm][register]") {
     // 初始化
     sim.set_input_value(pwm_device.instance().io().bready, 0);
     sim.set_input_value(pwm_device.instance().io().rready, 0);
-    sim.tick();
+    sim.tick();  // Initial tick to stabilize state machine
+    sim.tick();  // Second tick for stability
     
     // 测试周期寄存器
     axi_lite_write(sim, pwm_device, 0x00, 1023);
