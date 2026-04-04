@@ -538,15 +538,10 @@ void Simulator::initialize() {
         if (node->type() == ch::core::lnodetype::type_lit) {
             auto *lit_node = static_cast<ch::core::litimpl *>(node);
             const auto& lit_value = lit_node->value();
-            auto& target = data_map_[node_id];
-            if (target.bitwidth() != lit_value.bitwidth()) {
-                CHWARN("Literal width mismatch: node %u expects %u bits, got %u bits",
-                       node_id, target.bitwidth(), lit_value.bitwidth());
-                target.assign_truncate(lit_value);
-            } else {
-                target = lit_value;
-            }
-            CHDBG("Set literal value(%d) for node %u", lit_node->value(),
+            // Directly assign the literal value to avoid issues with assign_truncate
+            // when the target has 0 bitwidth (default-constructed sdata_type)
+            data_map_[node_id] = lit_value;
+            CHDBG("Set literal value(%d) for node %u",
                   node_id, data_map_[node_id].to_string_verbose().c_str());
         } else {
             data_map_[node_id] = ch::core::sdata_type(0, size);
