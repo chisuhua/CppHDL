@@ -34,3 +34,6 @@ compile_commands.json
 .DS_Store
 .worktrees/
 .aider*
+
+# 忽略测试生成的输出
+tests/output/

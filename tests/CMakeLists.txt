@@ -105,6 +105,7 @@ set(BASE_TEST_SOURCES
     test_axi_pwm.cpp
     test_axi_spi.cpp
     test_axi_i2c.cpp
+    test_ch_reg_bitwise.cpp
 )
 
 # chlib 测试源文件列表

@@ -96,7 +96,8 @@ public:
         
         rdata_buf->next = select(r_hs, io().rdata, rdata_buf);
         data_vld->next = select(r_hs, ch_bool(true), select(w_hs, ch_bool(false), data_vld));
-        id_reg->next = select(ar_hs, id_reg + ch_uint<ID_WIDTH>(1_d), id_reg);
+        // ID increments only at transaction start (reg_start), stays same for all beats/bursts in same transaction
+        id_reg->next = select(start, id_reg + ch_uint<ID_WIDTH>(1_d), id_reg);
         
         auto rd_err = select(is_rd_data, select(r_vld, rresp != ch_uint<2>(0_d), ch_bool(false)), ch_bool(false));
         auto wr_err = select(is_wr_resp, select(b_vld, bresp != ch_uint<2>(0_d), ch_bool(false)), ch_bool(false));

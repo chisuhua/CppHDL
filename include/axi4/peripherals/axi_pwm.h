@@ -65,6 +65,9 @@ public:
         
         // 中断输出 (计数器溢出)
         ch_out<ch_bool> irq;
+        
+        // 异步复位 (低电平有效)
+        ch_in<ch_bool> rst_n;
     )
     
     AxiLitePwm(ch::Component* parent = nullptr, const std::string& name = "axi_pwm")
@@ -76,18 +79,13 @@ public:
     
     void describe() override {
         // ========================================================================
-        // AXI Transaction State Machine
+        // Simple AXI handshake with busy register
+        // Supports separated AW/W and AR/R phases
         // ========================================================================
         
-        // AXI write/read state: 0=IDLE, 1=ADDR_WAIT
-        ch_reg<ch_uint<2>> axi_wr_state(ch_uint<2>(0_d));
-        ch_reg<ch_uint<2>> axi_rd_state(ch_uint<2>(0_d));
-        
-        // State decode
-        auto axi_wr_idle = (axi_wr_state == ch_uint<2>(0_d));
-        auto axi_wr_addr = (axi_wr_state == ch_uint<2>(1_d));
-        auto axi_rd_idle = (axi_rd_state == ch_uint<2>(0_d));
-        auto axi_rd_addr = (axi_rd_state == ch_uint<2>(1_d));
+        ch_reg<ch_bool> busy(ch_bool(false));
+        ch_reg<ch_bool> aw_done(ch_bool(false));
+        ch_reg<ch_bool> r_valid(ch_bool(false));
         
         // 配置寄存器
         ch_reg<ch_uint<32>> period_reg(ch_uint<32>(255_d));      // 默认周期 255
@@ -100,18 +98,22 @@ public:
         
         // PWM 计数器
         ch_reg<ch_uint<COUNTER_WIDTH>> counter(0_d);
+        auto overflow = ch_bool(false);  // 初始化溢出标志
         
         // ====================================================================
         // AXI4-Lite Write Channel
         // ====================================================================
         
-        // Write address handshake
-        io().awready = select(axi_wr_idle, io().awvalid, ch_bool(false));
-        auto aw_handshake = select(axi_wr_idle, io().awvalid, ch_bool(false));
+        // Write address handshake: accept when !busy
+        auto aw_handshake = select(io().awvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
+        io().awready = aw_handshake;
         
-        // Write data handshake
-        auto w_handshake = select(axi_wr_addr, io().wvalid, ch_bool(false));
+        // Write data handshake: accept when AW was done
+        auto w_handshake = select(io().wvalid, aw_done, ch_bool(false));
         io().wready = w_handshake;
+        
+        // Write response
+        io().bvalid = select(aw_done, ch_bool(true), ch_bool(false));
         
         // Address decode (2-bit, 4-byte aligned)
         auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
@@ -135,14 +137,17 @@ public:
         auto we_enable = select(w_handshake, sel_enable, ch_bool(false));
         auto we_interrupt = select(w_handshake, sel_interrupt, ch_bool(false));
         
-        // 写寄存器
-        period_reg->next = select(we_period, io().wdata, period_reg);
-        duty0_reg->next = select(we_duty0, io().wdata, duty0_reg);
-        duty1_reg->next = select(we_duty1, io().wdata, duty1_reg);
-        duty2_reg->next = select(we_duty2, io().wdata, duty2_reg);
-        duty3_reg->next = select(we_duty3, io().wdata, duty3_reg);
-        enable_reg->next = select(we_enable, io().wdata, enable_reg);
-        interrupt_reg->next = select(we_interrupt, io().wdata, interrupt_reg);
+        // 写寄存器 (带异步复位)
+        period_reg->next = select(!io().rst_n, ch_uint<32>(255_d), select(we_period, io().wdata, period_reg));
+        duty0_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty0, io().wdata, duty0_reg));
+        duty1_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty1, io().wdata, duty1_reg));
+        duty2_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty2, io().wdata, duty2_reg));
+        duty3_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty3, io().wdata, duty3_reg));
+        enable_reg->next = select(!io().rst_n, ch_uint<32>(0_d), select(we_enable, io().wdata, enable_reg));
+        // interrupt_reg: clear on reset or write, set on overflow
+        interrupt_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                     select(we_interrupt, io().wdata,
+                                            select(overflow, interrupt_reg | ch_uint<32>(1_d), interrupt_reg)));
         
         // Write response (combinational)
         io().bvalid = w_handshake;
@@ -156,9 +161,12 @@ public:
         auto rd_addr = io().araddr >> ch_uint<32>(2_d);
         rd_addr = rd_addr & ch_uint<32>(15_d);
         
-        // Read handshake
-        io().arready = select(axi_rd_idle, io().arvalid, ch_bool(false));
-        auto ar_handshake = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        // Read address handshake: accept when !busy
+        auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
+        io().arready = ar_handshake;
+        
+        // Read response
+        io().rvalid = select(r_valid, ch_bool(true), ch_bool(false));
         
         // Read register select
         auto read_sel_period = (rd_addr == ch_uint<32>(0_d));
@@ -182,9 +190,6 @@ public:
         io().rdata = read_val;
         io().rresp = ch_uint<2>(0_d);  // OKAY
         
-        // rvalid: combinational output, valid when in axi_rd_addr state
-        io().rvalid = axi_rd_addr;
-        
         // ====================================================================
         // PWM 计数器逻辑
         // ====================================================================
@@ -192,17 +197,15 @@ public:
         // 计数器比较：是否达到周期值
         auto counter_width_period = ch_uint<COUNTER_WIDTH>(period_reg);
         auto counter_max = (counter >= counter_width_period);
+        overflow = counter_max;  // 更新溢出标志
         
-        // 计数器更新：递增或回绕
-        counter->next = select(counter_max, 
-                               ch_uint<COUNTER_WIDTH>(0_d),  // 回绕到 0
-                               counter + ch_uint<COUNTER_WIDTH>(1_d));
+        // 计数器更新：递增或回绕 (带异步复位)
+        counter->next = select(!io().rst_n, ch_uint<COUNTER_WIDTH>(0_d),
+                               select(counter_max, 
+                                      ch_uint<COUNTER_WIDTH>(0_d),  // 回绕到 0
+                                      counter + ch_uint<COUNTER_WIDTH>(1_d)));
         
-        // 中断生成：计数器回绕时产生脉冲
-        auto overflow = counter_max;
-        interrupt_reg->next = select(overflow, 
-                                     interrupt_reg | ch_uint<32>(1_d),  // 设置中断标志
-                                     interrupt_reg);
+        // 中断生成：计数器回绕时产生脉冲 (已在前面与写逻辑合并)
         
         // ====================================================================
         // PWM 比较逻辑 (每通道独立)
@@ -238,29 +241,20 @@ public:
         // 中断输出
         io().irq = irq_bit != ch_uint<1>(0_d);
         
-        // ========================================================================
-        // AXI Transaction State Machine Transitions (Write)
-        // ========================================================================
+        // State update: aw_done (with async reset)
+        aw_done->next = select(!io().rst_n, ch_bool(false),
+                               select(aw_handshake, ch_bool(true), select(io().bready, ch_bool(false), aw_done)));
         
-        auto w_resp_handshake = select(axi_wr_addr, io().bready, ch_bool(false));
+        // State update: r_valid (with async reset)
+        r_valid->next = select(!io().rst_n, ch_bool(false),
+                               select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), r_valid)));
         
-        ch_uint<2> axi_wr_next;
-        axi_wr_next = select(axi_wr_idle,
-                             select(aw_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
-                             select(w_resp_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
-        axi_wr_state->next = axi_wr_next;
-        
-        // ========================================================================
-        // AXI Transaction State Machine Transitions (Read)
-        // ========================================================================
-        
-        auto r_handshake = select(axi_rd_addr, io().rready, ch_bool(false));
-        
-        ch_uint<2> axi_rd_next;
-        axi_rd_next = select(axi_rd_idle,
-                             select(ar_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
-                             select(r_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
-        axi_rd_state->next = axi_rd_next;
+        // Busy update (with async reset)
+        busy->next = select(!io().rst_n, ch_bool(false),
+                            select(aw_handshake, ch_bool(true),
+                                   select(ar_handshake, ch_bool(true),
+                                          select(io().bready, ch_bool(false),
+                                                 select(io().rready, ch_bool(false), busy)))));
     }
 };
 

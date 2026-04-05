@@ -90,6 +90,12 @@ public:
         ch_out<ch_bool> spi_sclk;   // SPI Clock
         ch_out<ch_bool> spi_cs;     // Chip Select (active low)
         ch_out<ch_bool> irq;        // Interrupt Request
+        
+        // ========================================================================
+        // Reset (active low, asynchronous)
+        // ========================================================================
+        
+        ch_in<ch_bool> rst_n;       // Active-low asynchronous reset
     )
     
     AxiLiteSpi(ch::Component* parent = nullptr, const std::string& name = "axi_spi")
@@ -101,20 +107,13 @@ public:
     
     void describe() override {
         // ========================================================================
-        // AXI Transaction State Machine (simplified, no backpressure)
+        // Simple AXI handshake with busy register
+        // Supports separated AW/W and AR/R phases
         // ========================================================================
         
-        // AXI write state: 0=IDLE, 1=ADDR_WAIT (waiting for data)
-        ch_reg<ch_uint<2>> axi_wr_state(ch_uint<2>(0_d));
-        ch_reg<ch_uint<2>> axi_rd_state(ch_uint<2>(0_d));
-        
-        // State decode (write)
-        auto axi_wr_idle = (axi_wr_state == ch_uint<2>(0_d));
-        auto axi_wr_addr = (axi_wr_state == ch_uint<2>(1_d));
-        
-        // State decode (read)
-        auto axi_rd_idle = (axi_rd_state == ch_uint<2>(0_d));
-        auto axi_rd_addr = (axi_rd_state == ch_uint<2>(1_d));
+        ch_reg<ch_bool> busy(ch_bool(false));
+        ch_reg<ch_bool> aw_done(ch_bool(false));  // AW phase complete
+        ch_reg<ch_bool> r_valid(ch_bool(false));  // Read data valid
         
         // ========================================================================
         // Register Storage
@@ -162,7 +161,7 @@ public:
         ch_reg<ch_bool> rx_overrun(ch_bool(false));
         
         // ========================================================================
-        // AXI4-Lite Write Address Channel
+        // AXI4-Lite Address Decode
         // ========================================================================
         
         // Address decoding (2-bit, 4-byte aligned)
@@ -173,10 +172,23 @@ public:
         auto rd_addr = io().araddr >> ch_uint<32>(2_d);
         rd_addr = rd_addr & ch_uint<32>(static_cast<uint32_t>(0x0F));
         
-        // AXI write handshake
-        io().awready = select(axi_wr_idle, io().awvalid, ch_bool(false));
-        io().wready = select(axi_wr_addr, io().wvalid, ch_bool(false));
-        auto w_handshake = select(axi_wr_addr, io().wvalid, ch_bool(false));
+        // Write address handshake: accept when !busy
+        auto aw_handshake = select(io().awvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
+        io().awready = aw_handshake;
+        
+        // Write data handshake: accept when AW was done
+        auto w_handshake = select(io().wvalid, aw_done, ch_bool(false));
+        io().wready = w_handshake;
+        
+        // Write response: valid after AW handshake, until B ready
+        io().bvalid = select(aw_done, ch_bool(true), ch_bool(false));
+        
+        // Read address handshake: accept when !busy
+        auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
+        io().arready = ar_handshake;
+        
+        // Read response: valid after AR handshake, until R ready
+        io().rvalid = select(r_valid, ch_bool(true), ch_bool(false));
         
         // Register write enables
         auto we_tx_data = select(w_handshake, (wr_addr == ch_uint<32>(0_d)), ch_bool(false));
@@ -247,15 +259,16 @@ public:
                                    select(is_transfer,
                                           select(transfer_complete, ch_uint<2>(3_d), ch_uint<2>(2_d)),
                                           ch_uint<2>(0_d))));
-        spi_state->next = next_state;
+        spi_state->next = select(!io().rst_n, ch_uint<2>(0_d), next_state);
         
         // ========================================================================
         // Transfer Control
         // ========================================================================
         
         // Transfer active: set on START, clear on STOP
-        transfer_active->next = select(idle_to_start, ch_bool(true),
-                                       select(is_stop, ch_bool(false), transfer_active));
+        transfer_active->next = select(!io().rst_n, ch_bool(false),
+                                       select(idle_to_start, ch_bool(true),
+                                              select(is_stop, ch_bool(false), transfer_active)));
         
         // Load data on START
         ch_bool load_data = is_start;
@@ -272,7 +285,7 @@ public:
                                         select(select(bit_inc, select(!transfer_complete, ch_bool(true), ch_bool(false)), ch_bool(false)),
                                                bit_counter + ch_uint<COUNTER_WIDTH>(1_d),
                                                bit_counter));
-        bit_counter->next = next_bit_counter;
+        bit_counter->next = select(!io().rst_n, ch_uint<COUNTER_WIDTH>(0_d), next_bit_counter);
         
         // ========================================================================
         // Baud Rate Divider
@@ -290,7 +303,7 @@ public:
                                   select(baud_full_tick, ch_uint<BAUD_WIDTH>(0_d),
                                          baud_divider + ch_uint<BAUD_WIDTH>(1_d)),
                                   ch_uint<BAUD_WIDTH>(0_d)));
-        baud_divider->next = next_baud;
+        baud_divider->next = select(!io().rst_n, ch_uint<BAUD_WIDTH>(0_d), next_baud);
         
         // ========================================================================
         // SPI Clock Generation (Mode 0: CPOL=0, CPHA=0)
@@ -334,7 +347,7 @@ public:
         ch_uint<DATA_WIDTH> next_shift;
         next_shift = select(load_data, wdata_lower,
                             select(sclk_falling, shifted_data, shift_reg));
-        shift_reg->next = next_shift;
+        shift_reg->next = select(!io().rst_n, ch_uint<DATA_WIDTH>(0_d), next_shift);
         
         // ========================================================================
         // RX Data Capture
@@ -342,17 +355,19 @@ public:
         
         // Capture shift register on last bit
         auto capture_rx = select(is_transfer, select(transfer_complete, sclk_falling, ch_bool(false)), ch_bool(false));
-        rx_data_reg->next = select(capture_rx, shift_reg, rx_data_reg);
+        rx_data_reg->next = select(!io().rst_n, ch_uint<DATA_WIDTH>(0_d), select(capture_rx, shift_reg, rx_data_reg));
         
         // RX valid flag - set on capture, cleared on read or CLR_RX
         auto rx_read = select((rd_addr == ch_uint<32>(1_d)), io().arvalid, ch_bool(false));
-        rx_valid->next = select(capture_rx, ch_bool(true),
-                                select(select(clr_rx_pulse, ch_bool(true), rx_read), ch_bool(false),
-                                       rx_valid));
+        rx_valid->next = select(!io().rst_n, ch_bool(false),
+                                select(capture_rx, ch_bool(true),
+                                       select(select(clr_rx_pulse, ch_bool(true), rx_read), ch_bool(false),
+                                              rx_valid)));
         
         // RX overrun: new data received while RX_FULL is set
-        rx_overrun->next = select(select(capture_rx, rx_valid, ch_bool(false)), ch_bool(true),
-                                  select(clr_rx_pulse, ch_bool(false), rx_overrun));
+        rx_overrun->next = select(!io().rst_n, ch_bool(false),
+                                  select(select(capture_rx, rx_valid, ch_bool(false)), ch_bool(true),
+                                         select(clr_rx_pulse, ch_bool(false), rx_overrun)));
         
         // ========================================================================
         // Chip Select (active low)
@@ -379,14 +394,14 @@ public:
         status_val = select(status_tx_empty, status_val | ch_uint<32>(2_d), status_val);
         status_val = select(status_rx_full, status_val | ch_uint<32>(4_d), status_val);
         status_val = select(status_rx_overrun, status_val | ch_uint<32>(8_d), status_val);
-        status_reg->next = status_val;
+        status_reg->next = select(!io().rst_n, ch_uint<32>(0_d), status_val);
         
         // ========================================================================
         // Register Updates
         // ========================================================================
         
         // TX data: written via AXI, loaded into shift register on START
-        tx_data_reg->next = select(we_tx_data, io().wdata, tx_data_reg);
+        tx_data_reg->next = select(!io().rst_n, ch_uint<32>(0_d), select(we_tx_data, io().wdata, tx_data_reg));
         
         // Control: written via AXI, START bit self-clears
         ch_uint<32> ctrl_next = select(we_ctrl, io().wdata, ctrl_reg);
@@ -396,7 +411,7 @@ public:
         // Self-clear CLR_RX bit (bit 3)
         ctrl_next = select(select(clr_rx_pulse, select(!we_ctrl, ch_bool(true), ch_bool(false)), ch_bool(false)),
                            ctrl_next & ch_uint<32>(0xFFFFFFF7_h), ctrl_next);
-        ctrl_reg->next = ctrl_next;
+        ctrl_reg->next = select(!io().rst_n, ch_uint<32>(0_d), ctrl_next);
         
         // Baud rate - extract lower BAUD_WIDTH bits using compile-time literal
         ch_uint<32> wdata_baud_masked;
@@ -408,15 +423,7 @@ public:
             wdata_baud_masked = io().wdata;  // BAUD_WIDTH == 32
         }
         ch_uint<BAUD_WIDTH> wdata_baud = ch_uint<BAUD_WIDTH>(wdata_baud_masked);
-        baud_reg->next = select(we_baud, wdata_baud, baud_reg);
-        
-        // ========================================================================
-        // AXI4-Lite Read Address Channel
-        // ========================================================================
-        
-        // AXI read handshake
-        io().arready = select(axi_rd_idle, io().arvalid, ch_bool(false));
-        auto ar_handshake = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        baud_reg->next = select(!io().rst_n, ch_uint<BAUD_WIDTH>(100_d), select(we_baud, wdata_baud, baud_reg));
         
         // Read data multiplexer
         ch_uint<32> read_val(0_d);
@@ -432,42 +439,20 @@ public:
         io().rdata = read_val;
         io().rresp = ch_uint<2>(0_d);  // OKAY
         
-        // rvalid: combinational output, valid when in axi_rd_addr state
-        // This matches AXI protocol: rvalid asserted after address handshake
-        io().rvalid = axi_rd_addr;
+        // State update: aw_done (set after AW, clear after B ready)
+        aw_done->next = select(!io().rst_n, ch_bool(false),
+                               select(aw_handshake, ch_bool(true), select(io().bready, ch_bool(false), aw_done)));
         
-        // ========================================================================
-        // AXI4-Lite Write Response
-        // ========================================================================
+        // State update: r_valid (set after AR, clear after R ready)
+        r_valid->next = select(!io().rst_n, ch_bool(false),
+                               select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), r_valid)));
         
-        io().bvalid = select(axi_wr_addr, select(w_handshake, ch_bool(true), ch_bool(false)), ch_bool(false));
-        io().bresp = ch_uint<2>(0_d);  // OKAY
-        
-        // ========================================================================
-        // AXI Transaction State Machine Transitions (Write)
-        // ========================================================================
-        
-        auto aw_handshake = select(axi_wr_idle, io().awvalid, ch_bool(false));
-        
-        ch_uint<2> axi_wr_next;
-        axi_wr_next = select(axi_wr_idle,
-                             select(aw_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
-                             select(axi_wr_addr,
-                                    select(w_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)),
-                                    ch_uint<2>(0_d)));
-        axi_wr_state->next = axi_wr_next;
-        
-        // ========================================================================
-        // AXI Transaction State Machine Transitions (Read)
-        // ========================================================================
-        
-        auto r_handshake = select(axi_rd_addr, io().rready, ch_bool(false));
-        
-        ch_uint<2> axi_rd_next;
-        axi_rd_next = select(axi_rd_idle,
-                             select(ar_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
-                             select(r_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
-        axi_rd_state->next = axi_rd_next;
+        // Busy update
+        busy->next = select(!io().rst_n, ch_bool(false),
+                            select(aw_handshake, ch_bool(true),
+                                   select(ar_handshake, ch_bool(true),
+                                          select(io().bready, ch_bool(false),
+                                                 select(io().rready, ch_bool(false), busy)))));
     }
 };
 

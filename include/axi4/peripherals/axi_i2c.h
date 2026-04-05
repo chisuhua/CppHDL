@@ -91,6 +91,9 @@ public:
         
         // Interrupt
         ch_out<ch_bool> irq;
+        
+        // Async reset (active low)
+        ch_in<ch_bool> rst_n;
     )
     
     AxiLiteI2c(ch::Component* parent = nullptr, const std::string& name = "axi_i2c")
@@ -102,18 +105,13 @@ public:
     
     void describe() override {
         // ========================================================================
-        // AXI Transaction State Machine
+        // Simple AXI handshake with busy register
+        // Supports separated AW/W and AR/R phases
         // ========================================================================
         
-        // AXI write/read state: 0=IDLE, 1=ADDR_WAIT
-        ch_reg<ch_uint<2>> axi_wr_state(ch_uint<2>(0_d));
-        ch_reg<ch_uint<2>> axi_rd_state(ch_uint<2>(0_d));
-        
-        // State decode
-        auto axi_wr_idle = (axi_wr_state == ch_uint<2>(0_d));
-        auto axi_wr_addr = (axi_wr_state == ch_uint<2>(1_d));
-        auto axi_rd_idle = (axi_rd_state == ch_uint<2>(0_d));
-        auto axi_rd_addr = (axi_rd_state == ch_uint<2>(1_d));
+        ch_reg<ch_bool> busy(ch_bool(false));
+        ch_reg<ch_bool> aw_done(ch_bool(false));
+        ch_reg<ch_bool> r_valid(ch_bool(false));
         
         // ========================================================================
         // Register Storage
@@ -139,21 +137,26 @@ public:
         // AXI4-Lite Write Transaction
         // ========================================================================
         
-        io().awready = select(axi_wr_idle, io().awvalid, ch_bool(false));
-        auto aw_handshake = select(axi_wr_idle, io().awvalid, ch_bool(false));
+        // Write address handshake: accept when !busy
+        auto aw_handshake = select(io().awvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
+        io().awready = aw_handshake;
         
-        auto w_handshake = select(axi_wr_addr, io().wvalid, ch_bool(false));
+        // Write data handshake: accept when AW was done
+        auto w_handshake = select(io().wvalid, aw_done, ch_bool(false));
         io().wready = w_handshake;
+        
+        // Write response
+        io().bvalid = select(aw_done, ch_bool(true), ch_bool(false));
         
         // Register write select
         auto sel_ctrl = (wr_addr == ch_uint<32>(0_d));
         auto sel_tx_data = (wr_addr == ch_uint<32>(2_d));
         auto sel_prescale = (wr_addr == ch_uint<32>(4_d));
         
-        // Write enable signals
-        auto we_ctrl = w_handshake && sel_ctrl;
-        auto we_tx_data = w_handshake && sel_tx_data;
-        auto we_prescale = w_handshake && sel_prescale;
+        // Write enable signals (fixed type: use select instead of &&)
+        auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
+        auto we_tx_data = select(w_handshake, sel_tx_data, ch_bool(false));
+        auto we_prescale = select(w_handshake, sel_prescale, ch_bool(false));
         
         // Update control register (clear START/STOP bits after write)
         auto ctrl_write_val = io().wdata & ch_uint<32>(~static_cast<uint32_t>(6_d));  // Clear bits 1,2
@@ -173,8 +176,12 @@ public:
         // AXI4-Lite Read Transaction
         // ========================================================================
         
-        io().arready = select(axi_rd_idle, io().arvalid, ch_bool(false));
-        auto ar_handshake = select(axi_rd_idle, io().arvalid, ch_bool(false));
+        // Read address handshake: accept when !busy
+        auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
+        io().arready = ar_handshake;
+        
+        // Read response
+        io().rvalid = select(r_valid, ch_bool(true), ch_bool(false));
         
         // Register read select
         auto sel_read_ctrl = (rd_addr == ch_uint<32>(0_d));
@@ -194,32 +201,17 @@ public:
         io().rdata = read_val;
         io().rresp = ch_uint<2>(0_d);  // OKAY
         
-        // rvalid: combinational output, valid when in axi_rd_addr state
-        io().rvalid = axi_rd_addr;
+        // State update: aw_done
+        aw_done->next = select(aw_handshake, ch_bool(true), select(io().bready, ch_bool(false), aw_done));
         
-        // ========================================================================
-        // AXI Transaction State Machine Transitions (Write)
-        // ========================================================================
+        // State update: r_valid
+        r_valid->next = select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), r_valid));
         
-        auto w_resp_handshake = select(axi_wr_addr, io().bready, ch_bool(false));
-        
-        ch_uint<2> axi_wr_next;
-        axi_wr_next = select(axi_wr_idle,
-                             select(aw_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
-                             select(w_resp_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
-        axi_wr_state->next = axi_wr_next;
-        
-        // ========================================================================
-        // AXI Transaction State Machine Transitions (Read)
-        // ========================================================================
-        
-        auto r_handshake = select(axi_rd_addr, io().rready, ch_bool(false));
-        
-        ch_uint<2> axi_rd_next;
-        axi_rd_next = select(axi_rd_idle,
-                             select(ar_handshake, ch_uint<2>(1_d), ch_uint<2>(0_d)),
-                             select(r_handshake, ch_uint<2>(0_d), ch_uint<2>(1_d)));
-        axi_rd_state->next = axi_rd_next;
+        // Busy update
+        busy->next = select(aw_handshake, ch_bool(true),
+                           select(ar_handshake, ch_bool(true),
+                                  select(io().bready, ch_bool(false),
+                                         select(io().rready, ch_bool(false), busy))));
         
         // ========================================================================
         // I2C State Machine (4 bits for 16 states)
