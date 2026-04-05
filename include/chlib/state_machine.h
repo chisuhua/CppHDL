@@ -218,6 +218,11 @@ public:
         // Set initial state
         set_entry(entry_state);
         
+        auto& entry_state_def = states_[static_cast<size_t>(entry_state)];
+        if (entry_state_def.entry_action) {
+            entry_state_def.entry_action();
+        }
+        
         // Generate state transition logic
         // This is a simplified implementation - full implementation would
         // need to generate proper combinational logic for state transitions
