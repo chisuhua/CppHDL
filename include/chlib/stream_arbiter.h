@@ -63,18 +63,17 @@ stream_arbiter_lock(std::array<ch_stream<T>, N_INPUTS> input_streams) {
         current_locked_valid = current_locked_valid || (is_locked && input_streams[i].valid);
     }
 
-    // Determine if we should keep the lock or grab a new one
-    ch_bool transaction_complete = result.output_stream.ready;
-    ch_bool should_keep_lock = current_locked_valid && !transaction_complete;
-
-    // Select the channel: keep current if locked, otherwise use priority encoder
+    // Select the channel: use locked channel if valid, otherwise use priority encoder
     ch_uint<compute_idx_width(N_INPUTS)> selected_idx;
-    if (should_keep_lock) {
+    ch_bool has_valid = valid_vector != 0_d;
+    
+    if (current_locked_valid) {
         selected_idx = locked_channel;
-    } else {
+    } else if (has_valid) {
         selected_idx = priority_encoder<N_INPUTS>(valid_vector);
-        ch_bool has_valid = valid_vector != 0_d;
-        locked_channel = select(has_valid, selected_idx, locked_channel);
+        locked_channel = selected_idx;
+    } else {
+        selected_idx = locked_channel;
     }
 
     // Select payload using mux
