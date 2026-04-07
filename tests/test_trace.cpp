@@ -52,9 +52,10 @@ public:
     }
 };
 
-// 创建trace配置文件
+
+// 创建 trace 配置文件
 void create_trace_ini() {
-    std::ofstream ini_file("./test_trace.ini");
+    std::ofstream ini_file("/tmp/test_trace.ini");
     ini_file << "[top]\n";
     ini_file << "; 全局设置，对所有模块生效\n";
     ini_file << "trace_on = 1\n";
@@ -64,11 +65,13 @@ void create_trace_ini() {
     ini_file << "trace_output = 1\n";
     ini_file << "trace_clock = 1\n";
     ini_file << "trace_reset = 1\n";
+    ini_file << "\n[counter_reg]\n";
+    ini_file << "trace_on = 1\n";
+    ini_file << "trace_reg = 1\n";
     ini_file.close();
 }
 
-// 删除trace配置文件
-void remove_trace_ini() { std::filesystem::remove("./test_trace.ini"); }
+void remove_trace_ini() { std::filesystem::remove("/tmp/test_trace.ini"); }
 
 TEST_CASE("Trace: Basic counter tracing", "[trace][basic]") {
     // 创建配置文件
@@ -82,7 +85,7 @@ TEST_CASE("Trace: Basic counter tracing", "[trace][basic]") {
     counter.describe();
 
     // 创建启用trace功能的模拟器
-    ch::Simulator sim(ctx.get(), "./test_trace.ini"); // 使用新的配置文件路径
+    ch::Simulator sim(ctx.get(), "/tmp/test_trace.ini"); // 使用新的配置文件路径
 
     REQUIRE(sim.is_tracing_enabled() == true);
 
@@ -124,7 +127,7 @@ TEST_CASE("Trace: Counter with enable tracing", "[trace][enable]") {
     counter.describe();
 
     // 创建启用trace功能的模拟器
-    ch::Simulator sim(ctx.get(), "./test_trace.ini"); // 使用新的配置文件路径
+    ch::Simulator sim(ctx.get(), "/tmp/test_trace.ini"); // 使用新的配置文件路径
 
     REQUIRE(sim.is_tracing_enabled() == true);
 
@@ -190,7 +193,7 @@ TEST_CASE("Trace: Toggle signal tracing", "[trace][toggle]") {
     toggle_signal->next = !toggle_signal;
 
     // 创建启用trace功能的模拟器
-    ch::Simulator sim(ctx.get(), "./test_trace.ini"); // 使用新的配置文件路径
+    ch::Simulator sim(ctx.get(), "/tmp/test_trace.ini"); // 使用新的配置文件路径
 
     REQUIRE(sim.is_tracing_enabled() == true);
 
@@ -234,7 +237,7 @@ TEST_CASE("Trace: Verify trace content matches expected", "[trace][content]") {
     counter.describe();
 
     // 创建启用trace功能的模拟器
-    ch::Simulator sim(ctx.get(), "./test_trace.ini"); // 使用新的配置文件路径
+    ch::Simulator sim(ctx.get(), "/tmp/test_trace.ini"); // 使用新的配置文件路径
 
     // 检查初始值
     auto initial_val = sim.get_port_value(counter.io().out);
@@ -292,7 +295,7 @@ TEST_CASE("Trace: VCD output functionality", "[trace][vcd]") {
     counter.describe();
 
     // 创建启用trace功能的模拟器
-    ch::Simulator sim(ctx.get(), "./test_trace.ini"); // 使用新的配置文件路径
+    ch::Simulator sim(ctx.get(), "/tmp/test_trace.ini"); // 使用新的配置文件路径
 
     REQUIRE(sim.is_tracing_enabled() == true);
 

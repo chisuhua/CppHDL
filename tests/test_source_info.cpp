@@ -88,7 +88,7 @@ TEST_CASE("sloc_arg and srcinfo_arg templates", "[source_info]") {
 // 测试输出流操作符
 TEST_CASE("Stream output operators", "[source_info]") {
     SECTION("source_location stream output") {
-        source_location loc; // 使用默认方式构造
+        auto loc = CH_CUR_SLOC; // 使用宏获取有效位置
         std::ostringstream oss;
         oss << loc;
         std::string output = oss.str();
@@ -96,7 +96,7 @@ TEST_CASE("Stream output operators", "[source_info]") {
     }
 
     SECTION("source_info stream output") {
-        source_location loc; // 使用默认方式构造
+        auto loc = CH_CUR_SLOC; // 使用宏获取有效位置
         source_info info(loc, "test_name");
         std::ostringstream oss;
         oss << info;
@@ -105,7 +105,7 @@ TEST_CASE("Stream output operators", "[source_info]") {
     }
 
     SECTION("source_info stream output without name") {
-        source_location loc; // 使用默认方式构造
+        auto loc = CH_CUR_SLOC; // 使用宏获取有效位置
         source_info info(loc);
         std::ostringstream oss;
         oss << info;
