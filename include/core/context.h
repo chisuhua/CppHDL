@@ -31,7 +31,7 @@ namespace ch::core {
 4. **简化设计**：避免了复杂的线程同步代码
 */
 
-extern /*thread_local*/ context *ctx_curr_;
+extern thread_local context *ctx_curr_;
 
 class ctx_swap {
 public:

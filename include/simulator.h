@@ -65,6 +65,7 @@ public:
     explicit Simulator(ch::core::context *ctx, bool trace_on = false);
     // 新增构造函数，支持从配置文件加载
     explicit Simulator(ch::core::context *ctx, const std::string &config_file);
+    explicit Simulator(ch::core::context* ctx, const char* config_file);
     ~Simulator();
 
     Simulator(const Simulator &) = delete;

@@ -85,6 +85,26 @@ Simulator::Simulator(ch::core::context *ctx, const std::string &config_file)
     }
 }
 
+Simulator::Simulator(ch::core::context *ctx, const char* config_file)
+    : ctx_(ctx), trace_on_(false) {
+    CHDBG_FUNC();
+    CHREQUIRE(ctx_ != nullptr, "Context cannot be null");
+
+    ctx_curr_backup_ = ctx_curr_;
+    ctx_curr_ = ctx_;
+
+    // 从配置文件加载跟踪配置
+    load_trace_config_from_file(std::string(config_file));
+
+    initialize();
+
+    // 检查是否需要启用跟踪
+    trace_on_ = !trace_configs_.empty(); // 如果有任何配置，则启用跟踪
+    if (trace_on_) {
+        collect_signals();
+    }
+}
+
 void Simulator::load_trace_config_from_file(const std::string &config_file) {
     CHDBG_FUNC();
     CHINFO("Loading trace configuration from file: %s", config_file.c_str());

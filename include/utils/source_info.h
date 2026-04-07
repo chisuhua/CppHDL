@@ -41,6 +41,7 @@ public:
         } else {
             out << "<unknown source location>";
         }
+        return out;
     }
 };
 

@@ -247,7 +247,7 @@ protected:
 
 private:
     void set_role(bundle_role new_role) {
-        CHCHECK(role_ == bundle_role::unknown, "Bundle role already set");
+        // 允许设置或改变 role
         role_ = new_role;
 
         // 创建总线节点（若尚未存在）

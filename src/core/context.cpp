@@ -14,7 +14,7 @@
 namespace ch {
 namespace core {
 
-/*thread_local*/ context *ctx_curr_ = nullptr;
+thread_local context *ctx_curr_ = nullptr;
 
 // Instead of a global variable, use a function-local static variable
 // This ensures proper initialization order

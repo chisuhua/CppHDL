@@ -90,7 +90,7 @@ protected:
     bool ctx_owner_ = false;
 
 private:
-    static /*thread_local*/ Component* current_;
+    static thread_local Component* current_;
     bool built_ = false;
     bool destructing_ = false;  // 标记是否正在析构
     

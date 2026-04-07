@@ -7,7 +7,7 @@
 
 namespace ch {
 
-/*thread_local*/ Component *Component::current_ = nullptr;
+thread_local Component *Component::current_ = nullptr;
 
 Component::Component(Component *parent, const std::string &name)
     : ctx_(nullptr), name_(name.empty() ? "unnamed" : name) {
