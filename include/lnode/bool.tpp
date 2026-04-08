@@ -37,11 +37,10 @@ template <typename U> inline ch_bool &ch_bool::operator<<=(const U &value) {
     lnode<U> src_lnode = get_lnode(value);
     if (src_lnode.impl()) {
         if (this->node_impl_) {
-            CHERROR("[ch_bool::operator<<=] Error: node_impl_ or "
-                    "src_lnode is not null for ch_bool!");
-            // this->node_impl_->set_src(0, src_lnode.impl());
+            // 修复 ADR-002: 字段已有节点时，使用 set_src() 建立连接
+            // 这是 ch_logic_out::operator= 的正确模式
+            this->node_impl_->set_src(0, src_lnode.impl());
         } else {
-            // this->node_impl_ = src_lnode.impl();
             this->node_impl_ = node_builder::instance().build_unary_operation(
                 ch_op::assign, src_lnode, 1,
                 src_lnode.impl()->name() + "_wire");

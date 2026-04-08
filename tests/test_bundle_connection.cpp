@@ -231,8 +231,8 @@ TEST_CASE("test_bundle_connection - Bundle connection in module",
             io().input_bundle.as_slave();
             io().output_bundle.as_master();
 
-            // Connect data field from input to output
-            io().output_bundle.data = io().input_bundle.data;
+            // 使用 <<=进行硬件连接（operator= 是拷贝赋值，不代表硬件连接）
+            io().output_bundle.data <<= io().input_bundle.data;
 
             // 连接输入bundle到内部bundle
             // internal_bundle <<= io().input_bundle;

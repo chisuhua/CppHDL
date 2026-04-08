@@ -108,14 +108,14 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     }
 
     // 添加赋值操作符，代表硬件连接
+    // 修复 ADR-002: 支持字段已有节点的场景，使用 set_src() 建立连接
     template <typename U> ch_uint &operator<<=(const U &value) {
         lnode<U> src_lnode = get_lnode(value);
         if (src_lnode.impl()) {
             if (this->node_impl_) {
-                //       this->node_impl_->set_src(0, src_lnode.impl());
-                CHERROR("[ch_uint::operator<<=] Error: node_impl_ or "
-                        "src_lnode is not null for ch_uint<%d>!",
-                        N);
+                // 修复 ADR-002: 字段已有节点时，使用 set_src() 建立连接
+                // 这是 ch_logic_out::operator= 的正确模式
+                this->node_impl_->set_src(0, src_lnode.impl());
             } else {
                 this->node_impl_ =
                     node_builder::instance().build_unary_operation(
