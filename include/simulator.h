@@ -360,6 +360,44 @@ public:
     void set_input_value(const ch::core::ch_in<T> &port, uint64_t value) {
         set_port_value(port, value);
     }
+    
+    // T401.2: 扩展 set_input_value() 支持 Bundle 字段 (ch_uint<N> 类型)
+    // 用于直接访问 Bundle IO 字段，无需整个 Bundle 设置
+    template <unsigned N>
+    void set_input_value(const ch::core::ch_uint<N> &signal, uint64_t value) {
+        CHDBG_FUNC();
+
+        if (!initialized_) {
+            CHERROR("Simulator not initialized when setting signal input value");
+            return;
+        }
+
+        auto *node = signal.impl();
+        if (!node) {
+            CHERROR("Signal implementation is null");
+            return;
+        }
+
+        uint32_t node_id = node->id();
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            try {
+                it->second = ch::core::sdata_type(value, it->second.bitwidth());
+                CHDBG("Set signal input value for node %u to %llu", node_id,
+                      (unsigned long long)value);
+            } catch (const std::exception &e) {
+                CHERROR("Failed to set signal input value: %s", e.what());
+            }
+        } else {
+            CHERROR("Signal node ID not found: %u", node_id);
+        }
+    }
+    
+    // T401.3: 扩展 get_value() 支持 Bundle 字段的便捷访问
+    template <unsigned N>
+    const ch::core::sdata_type get_input_value(const ch::core::ch_uint<N> &signal) const {
+        return get_value(signal);
+    }
 
     // 为CHLiteral类型添加重载支持
     template <typename T>
