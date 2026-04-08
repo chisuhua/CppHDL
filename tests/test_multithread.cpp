@@ -41,11 +41,14 @@ TEST_CASE("Multithreaded context isolation", "[multithread][context][isolation]"
         auto device = ch::ch_device<SimpleModule>();
         REQUIRE(device.context() != nullptr);
         
-        // 验证线程局部存储正确工作
-        REQUIRE(ch::core::ctx_curr_ == device.context());
+        // 验证：ch_device 构造完成后，ctx_curr_ 应该恢复到 nullptr（RAII 行为）
+        REQUIRE(ch::core::ctx_curr_ == nullptr);
+        
+        // 验证：可以通过 device.context() 访问保存的上下文
+        auto* ctx = device.context();
+        REQUIRE(ctx != nullptr);
         
         // 验证可以正常创建节点
-        auto* ctx = device.context();
         auto* lit_node = ctx->create_literal(ch::core::sdata_type(42, 8), "test_lit");
         REQUIRE(lit_node != nullptr);
         REQUIRE(lit_node->value().bitvector().words()[0] == 42);
@@ -141,14 +144,10 @@ TEST_CASE("Concurrent device creation", "[multithread][device][creation]") {
             // 验证设备名称和上下文
             REQUIRE(device.instance().name() == "top");
             REQUIRE(device.context() == device.instance().context());
-            
-            // 验证线程局部变量设置正确
-            REQUIRE(ch::core::ctx_curr_ == device.context());
         }
         
-        // 设备销毁后上下文应该为nullptr
-        // 注意：这取决于具体的实现，有些实现可能不重置为nullptr
-        // REQUIRE(ch::core::ctx_curr_ == nullptr);
+        // 设备销毁后，ctx_curr_ 应该为 nullptr（RAII 行为）
+        REQUIRE(ch::core::ctx_curr_ == nullptr);
         
         return true;
     };
@@ -287,22 +286,29 @@ TEST_CASE("Thread local Component::current() isolation", "[multithread][componen
     std::atomic<int> thread_counter{0};
     
     auto worker = [&thread_counter](int thread_id) {
-        // 初始状态：current应该为nullptr
+        // 初始状态：current 应该为 nullptr
         REQUIRE(Component::current() == nullptr);
         
         {
             auto device = ch_device<TestModuleA>();
             auto& module = device.instance();
             
-            // 构建过程中current应该指向当前模块
-            REQUIRE(Component::current() == &module);
+            // ch_device 构造完成后，Component::current() 应该恢复到 nullptr（RAII 行为）
+            REQUIRE(Component::current() == nullptr);
             
             // 验证模块属性
             REQUIRE(module.name() == "top");
             REQUIRE(module.context() != nullptr);
+            
+            // 可以通过 set_current 手动设置 current
+            Component::set_current(&module);
+            REQUIRE(Component::current() == &module);
+            
+            // 清理回 nullptr
+            Component::set_current(nullptr);
         }
         
-        // 设备销毁后current应回到nullptr
+        // 设备销毁后 current 应回到 nullptr
         REQUIRE(Component::current() == nullptr);
         
         thread_counter.fetch_add(1);
@@ -337,8 +343,8 @@ TEST_CASE("Nested Component::current() in multithreaded environment", "[multithr
             auto device = ch_device<TestModuleB>();
             auto& top_module = device.instance();
             
-            // 验证顶层模块的current指针
-            REQUIRE(Component::current() == &top_module);
+            // ch_device 构造完成后，Component::current() 应该恢复到 nullptr（RAII 行为）
+            REQUIRE(Component::current() == nullptr);
             
             // 验证子模块创建
             REQUIRE(top_module.child_count() == 1);
@@ -346,7 +352,7 @@ TEST_CASE("Nested Component::current() in multithreaded environment", "[multithr
             REQUIRE(child_module != nullptr);
         }
         
-        // 清理后恢复nullptr
+        // 清理后恢复 nullptr
         REQUIRE(Component::current() == nullptr);
         
         return true;
@@ -377,16 +383,21 @@ TEST_CASE("Concurrent Component creation and current() tracking", "[multithread]
             REQUIRE(Component::current() == nullptr);
             
             {
-                // 创建组件时验证current指针的正确设置
+                // 创建组件时验证 current 指针的正确设置
                 auto device = ch_device<TestModuleA>();
                 auto& module = device.instance();
                 
-                // current应该指向当前创建的模块
-                REQUIRE(Component::current() == &module);
+                // ch_device 构造完成后，Component::current() 应该恢复到 nullptr（RAII 行为）
+                REQUIRE(Component::current() == nullptr);
                 REQUIRE(module.name() == "top");
+                
+                // 验证可以通过 set_current 手动设置
+                Component::set_current(&module);
+                REQUIRE(Component::current() == &module);
+                Component::set_current(nullptr);
             }
             
-            // 销毁后应该回到nullptr
+            // 销毁后应该回到 nullptr
             REQUIRE(Component::current() == nullptr);
         }
         
@@ -476,18 +487,23 @@ TEST_CASE("Component::current() cross-thread validation", "[multithread][compone
     std::atomic<int> thread_ids[4] = {0};
     
     auto thread_worker = [&test_completed, &thread_ids](int thread_index) {
-        // 每个线程都有独立的Component::current状态
+        // 每个线程都有独立的 Component::current 状态
         REQUIRE(Component::current() == nullptr);
         
         {
             auto device = ch_device<TestModuleA>();
             auto& module = device.instance();
             
-            // 验证current指针在线程内正确设置
-            REQUIRE(Component::current() == &module);
+            // ch_device 构造完成后，Component::current() 应该恢复到 nullptr（RAII 行为）
+            REQUIRE(Component::current() == nullptr);
             REQUIRE(module.name() == "top");
             
-            // 存储线程ID用于验证
+            // 可以通过 set_current 手动设置，验证每个线程的 thread_local 是独立的
+            Component::set_current(&module);
+            REQUIRE(Component::current() == &module);
+            Component::set_current(nullptr);
+            
+            // 存储线程 ID 用于验证
             thread_ids[thread_index].store(thread_index + 1);
         }
         
