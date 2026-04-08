@@ -154,12 +154,18 @@ public:
         auto unsigned_ge = !unsigned_less;
         
         // ========================================================================
-        // 有符号比较 (BLT/BGE) - 使用简单比较
+        // 有符号比较 (BLT/BGE) - 使用符号位比较
         // ========================================================================
-        // 对于 RV32I，直接比较 ch_uint<32> 会进行无符号比较
-        // 有符号比较需要使用专用的比较函数或逻辑
-        // 简化：将符号位作为最高位，使用 ch_uint 的 native 比较
-        auto signed_less = (io().rs1_data < io().rs2_data);  // 临时简化
+        // 提取符号位
+        auto rs1_sign = bits<31, 31>(io().rs1_data);
+        auto rs2_sign = bits<31, 31>(io().rs2_data);
+        auto signs_equal = (rs1_sign == rs2_sign);
+        
+        // 符号相同：直接比较（此时无符号比较 = 有符号比较）
+        // 符号不同：负数 < 正数 (rs1_sign=1, rs2_sign=0 时 rs1 < rs2)
+        auto same_sign_less = (io().rs1_data < io().rs2_data);
+        auto diff_sign_less = (rs1_sign == ch_uint<1>(1_d));  // rs1 为负，rs2 为正
+        auto signed_less = select(signs_equal, same_sign_less, diff_sign_less);
         auto signed_ge = !signed_less;
         
         // ========================================================================
