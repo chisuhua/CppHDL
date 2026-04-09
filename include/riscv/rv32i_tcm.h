@@ -25,7 +25,7 @@ namespace riscv {
 template <unsigned ADDR_WIDTH = 20, unsigned DATA_WIDTH = 32>
 class InstrTCM : public ch::Component {
 public:
-    static constexpr unsigned SIZE = 1 << ADDR_WIDTH;  // 存储器大小
+    static constexpr unsigned SIZE = 1ULL << ADDR_WIDTH;  // 存储器大小
     
     __io(
         // 指令接口 (简化)
@@ -68,7 +68,7 @@ public:
 template <unsigned ADDR_WIDTH = 20, unsigned DATA_WIDTH = 32>
 class DataTCM : public ch::Component {
 public:
-    static constexpr unsigned SIZE = 1 << ADDR_WIDTH;  // 存储器大小
+    static constexpr unsigned SIZE = 1ULL << ADDR_WIDTH;  // 存储器大小
     
     __io(
         // 数据接口 (简化)
