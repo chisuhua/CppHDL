@@ -31,3 +31,6 @@ add_catch_test(test_hazard_complete riscv/test_hazard_complete.cpp)
 
 # Phase 4 完整集成验证
 add_catch_test(test_phase4_integration riscv/test_phase4_integration.cpp)
+
+# Cache 完整功能测试
+add_catch_test(test_cache_complete chlib/test_cache_complete.cpp)
