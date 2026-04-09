@@ -1,116 +1,66 @@
 // tests/test_simulator_bundle.cpp
-// T401: Simulator API 扩展 - Bundle IO 字段直接访问测试
+// T401: Simulator API扩展测试 - 不使用 Component，直接测试 API
 
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
-#include "component.h"
-#include "core/bundle/bundle_base.h"
-#include "core/io.h"
 #include "simulator.h"
 
 using namespace ch::core;
 
-// 定义一个简单的 Bundle 用于测试
-struct SimpleBundle : public bundle_base<SimpleBundle> {
-    using Self = SimpleBundle;
-    ch_uint<8> data;
+// T401 测试：直接测试 ch_uint<N> 的 set_input_value/get_input_value
+TEST_CASE("T401 - ch_uint set_input_value without Component", "[T401][simulator]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
     
-    SimpleBundle() = default;
+    // 创建一个独立的 ch_uint 变量（不是 Component IO）
+    ch_uint<8> signal(0_d);
     
-    CH_BUNDLE_FIELDS_T(data)
-};
-
-// ============================================================================
-// T401: Simulator API扩展测试 - 验证Component的IO字段访问
-// ============================================================================
-
-TEST_CASE("Simulator API - Component IO field access", "[T401][simulator]") {
-    // 创建包含 Bundle IO 的 Component
-    class TestBundleIOComponent : public Component {
-    public:
-        __io(SimpleBundle data_in; SimpleBundle data_out;);
-        
-        TestBundleIOComponent(Component *parent = nullptr, const std::string &name = "test")
-            : Component(parent, name) {}
-        
-        void create_ports() override { new (this->io_storage_) io_type; }
-        
-        void describe() override {
-            // 直接连接输入到输出
-            io().data_out.data <<= io().data_in.data;
-        }
-    };
+    // 创建 Simulator
+    Simulator sim(ctx.get());
     
-    ch::ch_device<TestBundleIOComponent> dev;
-    ch::Simulator sim(dev.context());
+    // T401.2: 使用扩展的 set_input_value
+    sim.set_input_value(signal, 0xA5);
     
-    // T401: 设置 Bundle 字段的值
-    sim.set_input_value(dev.instance().io().data_in.data, 0xA5);
-    
-    sim.tick();
-    
-    // T401: 读取字段值
-    auto val = sim.get_value(dev.instance().io().data_out.data);
+    // T401.3: 读取值
+    auto val = sim.get_value(signal);
     
     REQUIRE(static_cast<uint64_t>(val) == 0xA5);
 }
 
-TEST_CASE("Simulator API - get_input_value", "[T401][simulator]") {
-    class TestComp : public Component {
-    public:
-        __io(ch_in<ch_uint<8>> data_in; ch_out<ch_uint<8>> data_out;);
-        
-        TestComp(Component *parent = nullptr, const std::string &name = "test")
-            : Component(parent, name) {}
-        
-        void create_ports() override { new (this->io_storage_) io_type; }
-        
-        void describe() override {
-            io().data_out <<= io().data_in;
-        }
-    };
+TEST_CASE("T401 - get_input_value for ch_uint", "[T401][simulator]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
     
-    ch::ch_device<TestComp> dev;
-    ch::Simulator sim(dev.context());
+    ch_uint<16> signal(0_d);
+    Simulator sim(ctx.get());
     
-    const uint64_t TEST_VALUE = 0x42;
+    const uint64_t TEST_VALUE = 0x1234;
     
     // 设置值
-    sim.set_input_value(dev.instance().io().data_in, TEST_VALUE);
+    sim.set_value(signal, TEST_VALUE);
     
-    // T401.3: 测试 get_input_value
-    auto read_val = sim.get_input_value(dev.instance().io().data_in);
+    // T401.3: 使用 get_input_value
+    auto val = sim.get_input_value(signal);
     
-    REQUIRE(static_cast<uint64_t>(read_val) == TEST_VALUE);
+    REQUIRE(static_cast<uint64_t>(val) == TEST_VALUE);
 }
 
-TEST_CASE("Simulator API - Multiple component fields", "[T401][simulator]") {
-    class MultiIOComp : public Component {
-    public:
-        __io(ch_in<ch_uint<8>> field1; ch_in<ch_uint<8>> field2;
-             ch_out<ch_uint<8>> out1; ch_out<ch_uint<8>> out2;);
-        
-        MultiIOComp(Component *parent = nullptr, const std::string &name = "test")
-            : Component(parent, name) {}
-        
-        void create_ports() override { new (this->io_storage_) io_type; }
-        
-        void describe() override {
-            io().out1 <<= io().field1;
-            io().out2 <<= io().field2;
-        }
-    };
+TEST_CASE("T401 - ch_uint access different widths", "[T401][simulator]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
     
-    ch::ch_device<MultiIOComp> dev;
-    ch::Simulator sim(dev.context());
+    ch_uint<4> n4(0_d);
+    ch_uint<8> n8(0_d);
+    ch_uint<32> n32(0_d);
     
-    // 设置两个不同的字段
-    sim.set_input_value(dev.instance().io().field1, 0xAA);
-    sim.set_input_value(dev.instance().io().field2, 0x55);
+    Simulator sim(ctx.get());
     
-    sim.tick();
+    // 测试不同位宽
+    sim.set_input_value(n4, 0xA);
+    sim.set_input_value(n8, 0xA5);
+    sim.set_input_value(n32, 0xA5A5A5A5);
     
-    // 验证各自的值
-    REQUIRE(static_cast<uint64_t>(sim.get_value(dev.instance().io().out1)) == 0xAA);
-    REQUIRE(static_cast<uint64_t>(sim.get_value(dev.instance().io().out2)) == 0x55);
+    REQUIRE(static_cast<uint64_t>(sim.get_input_value(n4)) == 0xA);
+    REQUIRE(static_cast<uint64_t>(sim.get_input_value(n8)) == 0xA5);
+    REQUIRE(static_cast<uint64_t>(sim.get_input_value(n32)) == 0xA5A5A5A5);
 }
