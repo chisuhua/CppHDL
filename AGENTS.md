@@ -249,6 +249,71 @@ public:
 
 ---
 
+### 3.5 Testbench Simulator API 错误（新增）
+
+**错误**:
+```
+error: no matching function for call to 'ch::Simulator::set_port_value(ch::core::ch_in<...>&, ch::core::ch_bool)'
+```
+
+**原因**: `set_port_value()` 需要 `uint64_t` 值参数，不能使用 `ch_bool()` 或 `ch_uint<>()` 包装
+
+**修复**:
+```cpp
+// ❌ 错误：使用 ch_bool/ch_uint 包装
+sim.set_port_value(hazard.io().ex_reg_write, ch_bool(true));
+sim.set_port_value(hazard.io().id_rs1_addr, ch_uint<5>(5_d));
+
+// ✅ 正确：直接使用整数
+sim.set_port_value(hazard.io().ex_reg_write, 1);
+sim.set_port_value(hazard.io().id_rs1_addr, 5);
+sim.set_port_value(hazard.io().ex_alu_result, 42);  // ch_uint<32>
+```
+
+**错误 2**:
+```
+error: 'class ch::Simulator' has no member named 'run_for'
+```
+
+**原因**: Simulator 没有 `run_for()` 方法，应该使用 `tick()`
+
+**修复**:
+```cpp
+// ❌ 错误
+sim.run_for(10'000'000'000ULL);
+
+// ✅ 正确
+sim.tick();  // 运行一个时钟周期
+```
+
+**错误 3**:
+```
+error: cannot convert 'const ch::core::sdata_type' to 'uint64_t'
+```
+
+**原因**: `get_port_value()` 返回 `sdata_type`，需要转换
+
+**修复**:
+```cpp
+// ❌ 错误
+uint64_t stall = sim.get_port_value(hazard.io().stall);
+
+// ✅ 正确：隐式转换
+auto stall = sim.get_port_value(hazard.io().stall);
+REQUIRE(stall == 1);  // C++ 自动转换
+
+// ✅ 正确：显式转换
+auto stall = sim.get_port_value(hazard.io().stall);
+uint64_t stall_u64 = stall;
+REQUIRE(stall_u64 == 1);
+```
+
+**参考**:
+- `skills/cpphdl-simulator-port-value/SKILL.md` - Simulator API 快速参考
+- `tests/riscv/test_hazard_compile.cpp` - 实战示例
+
+---
+
 ## 4. 参考资源
 
 ### 4.1 示例代码位置
