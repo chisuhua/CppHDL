@@ -102,6 +102,7 @@ public:
     uint32_t size() const { return size_; }
     context *ctx() const { return ctx_; }
     const std::string &name() const { return name_; }
+    void set_name(const std::string &name) { name_ = name; }  // T002: 允许设置节点名称
     const std::source_location &sloc() const { return sloc_; }
 
     // Source management

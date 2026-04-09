@@ -285,6 +285,7 @@ protected:
 
                          // 使用get_lnode获取当前bundle的节点
                          auto field_slice = bits<W>(bundle_lnode, offset);
+                         field_slice.impl()->set_name(field_info.name); // T002: 保留字段名称
                          field_ref = FieldType(field_slice.impl());
                          offset += W;
                      } else {
@@ -296,9 +297,11 @@ protected:
 
                          if constexpr (W == 1) {
                              field_ref = bit_select(bundle_lnode, offset);
+                             auto* temp_node1 = field_ref.impl(); temp_node1->set_name(field_info.name); // T002: 保留字段名称
                              offset++;
                          } else {
                              field_ref = bits<W>(bundle_lnode, offset);
+                             auto* temp_node2 = field_ref.impl(); temp_node2->set_name(field_info.name); // T002: 保留字段名称
                              offset += W;
                          }
                      }
