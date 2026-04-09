@@ -394,6 +394,12 @@ public:
     }
     
     // T401.3: 扩展 get_value() 支持 Bundle 字段的便捷访问
+    // 添加 ch_in<T>类型的重载
+    template <typename T>
+    const ch::core::sdata_type get_input_value(const ch::core::ch_in<T> &port) const {
+        return get_port_value(port);
+    }
+
     template <unsigned N>
     const ch::core::sdata_type get_input_value(const ch::core::ch_uint<N> &signal) const {
         return get_value(signal);
