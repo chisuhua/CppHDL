@@ -195,6 +195,58 @@ CH_MODULE(StreamFifoModule<8, 16>, fifo_inst);
 ch::ch_module<StreamFifoModule<8, 16>> fifo_inst{"fifo_inst"};
 ```
 
+### 3.4 Bundle IO 端口错误（新增）
+
+**错误**:
+```
+error: 'ch::core::ch_out<HazardControl>' has no member named 'if_stall'
+```
+
+**原因**: Bundle 结构体不能作为 `__io()` 端口类型
+
+**修复**:
+```cpp
+// ❌ 错误：Bundle 结构体作为 IO 端口
+struct HazardControl {
+    ch_bool if_stall;
+    ch_bool id_stall;
+};
+
+__io(
+    ch_out<HazardControl> hazard_ctrl;  // ❌ 编译错误！
+)
+io().hazard_ctrl.if_stall = ...;
+
+// ✅ 正确：使用单独的 ch_bool/ch_uint 端口
+__io(
+    ch_out<ch_bool> if_stall;      // ✅ 单独端口
+    ch_out<ch_bool> id_stall;
+    ch_out<ch_uint<2>> forward_a;  // ✅ 单独 ch_uint 端口
+)
+io().if_stall = load_use_hazard;
+io().forward_a = select(condition, ch_uint<2>(1_d), ch_uint<2>(0_d));
+
+// ✅ 或使用 Class 成员模式（推荐用于流接口）
+class HazardUnit : public ch::Component {
+public:
+    ch::ch_stream<ch_uint<32>> stream_out;  // ✅ Bundle 作为成员
+
+    HazardUnit(...) : ch::Component(parent, name), stream_out() {
+        stream_out.as_master();  // ✅ 设置方向
+    }
+
+    void describe() override {
+        stream_out.payload = counter;  // ✅ 直接访问成员
+        stream_out.valid = 1_b;
+    }
+};
+```
+
+**参考文件**:
+- `samples/bundle_top_example.cpp` - Bundle 成员模式（推荐）
+- `include/chlib/forwarding.h` - 单独端口模式（参考）
+- `skills/cpphdl-bundle-patterns/SKILL.md` - 完整 Bundle 模式指南
+
 ---
 
 ## 4. 参考资源
