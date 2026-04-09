@@ -1,222 +1,24 @@
 # tests/CMakeLists.txt
-
-# Enable CTest
-enable_testing()
-
-# Catch2 单头文件路径
 set(CATCH_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-# 定义创建单个 Catch2 测试的函数
 function(add_catch_test TEST_NAME)
-    # 参数：测试名称，其余为该测试的源文件（不含 catch_amalgamated.cpp）
-    set(SOURCES ${ARGN})
-
-    # 自动包含 catch_amalgamated.cpp
-    list(APPEND SOURCES ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp)
-
-    # 创建可执行文件
-    add_executable(${TEST_NAME} ${SOURCES})
-
-    # 包含目录
+    set(_srcs ${ARGN})
+    list(APPEND _srcs ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp)
+    add_executable(${TEST_NAME} ${_srcs})
     target_include_directories(${TEST_NAME} PRIVATE
         ${CATCH_INCLUDE_DIR}
         ${PROJECT_SOURCE_DIR}/include
     )
-
-    # 链接库（如果存在）
     if(TARGET cpphdl)
         target_link_libraries(${TEST_NAME} cpphdl)
     endif()
-
-    # 注册为 CTest 测试
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
 endfunction()
 
-# ================================
-# 方案一：为每个 test_xxx.cpp 创建独立测试（推荐）
-# ================================
+include(chlib/CMakeLists.txt)
+include(riscv/CMakeLists.txt)
+enable_testing()
 
-# 列出所有独立的测试源文件（每个文件一个测试）
-set(BASE_TEST_SOURCES
-    test_basic.cpp
-    test_reg.cpp
-    test_operator.cpp
-    test_literal.cpp
-    test_literal_width.cpp
-    test_simple_io.cpp
-    test_bundle.cpp
-    test_bundle_advanced.cpp
-    test_bundle_advanced_features.cpp
-    test_bundle_serialization.cpp
-    test_bundle_bitstream.cpp
-    test_bundle_node_management.cpp
-    test_source_info.cpp
-    test_multithread.cpp
-    test_nested_bundle.cpp
-    test_tlm_bundle_phase1.cpp
-    test_axi_lite_bundle.cpp
-    test_fragment.cpp
-    test_mem.cpp
-    test_operator_advanced.cpp
-    test_operator_results.cpp
-    test_verilog_gen.cpp
-    test_fifo_example.cpp
-    test_reg_timing.cpp
-    test_precise_width.cpp
-    test_reg_linking.cpp
-    test_user_tracking.cpp
-    test_operation_widths.cpp
-    test_operation_results.cpp
-    test_blt_debug.cpp
-    # test_uint_compare.cpp - DISABLED: Code incomplete (commented out framework)
-    test_literal_debug.cpp
-    test_io_operations.cpp
-    test_io_extended_ops.cpp
-    test_popcount.cpp
-    test_module.cpp
-    test_module_advanced.cpp
-    test_sdata_compare.cpp
-    test_mem_timing.cpp
-    test_literal_left_shift.cpp
-    test_comparison_ops.cpp
-    test_mod_width.cpp
-    test_trace.cpp
-    test_operator_connection.cpp
-    test_bool_connection.cpp
-    test_mem_connection.cpp
-    test_wires_connection.cpp
-    # test_memory_leak.cpp - DISABLED: Code incomplete (commented out framework)
-    test_bundle_connection.cpp
-    test_bits_update.cpp
-    test_ch_stream.cpp
-    # test_ch_flow.cpp - DISABLED: Code incomplete (commented out framework)
-    test_stream_builder.cpp
-    test_stream_pipeline.cpp
-    test_stream_operators.cpp
-    test_stream_arbiter.cpp
-    # test_stream_width_adapter.cpp - DISABLED: Code incomplete (commented out framework)
-    test_stream_width_adapter_complete.cpp
-    test_state_machine.cpp
-    test_shift_boundary.cpp
-    test_pipeline_regs.cpp
-    test_branch_predict.cpp
-    test_rv32i_pipeline.cpp
-    test_axi_dma.cpp
-    test_axi_pwm.cpp
-    test_axi_spi.cpp
-    test_axi_i2c.cpp
-    test_simulator_bundle.cpp
-    test_ch_reg_bitwise.cpp
-    # riscv 测试 - 全部暂时禁用
-    # riscv/test_ex_stage.cpp - compilation error
-    # riscv/test_mem_stage.cpp - compilation error
-    # riscv/test_wb_stage.cpp - compilation error
-)
-
-# chlib 测试源文件列表
-set(CHLIB_TEST_SOURCES
-    chlib/test_onehot.cpp
-    chlib/test_arithmetic.cpp
-    chlib/test_bitwise.cpp
-    chlib/test_logic.cpp
-    chlib/test_combinational.cpp
-    chlib/test_sequential.cpp
-    chlib/test_converter.cpp
-    chlib/test_selector_arbiter.cpp
-    chlib/test_selector_priority.cpp
-    chlib/test_selector_round_robin.cpp
-    chlib/test_switch.cpp
-    chlib/test_arithmetic_advance.cpp
-    chlib/test_memory.cpp
-    chlib/test_fifo.cpp
-    chlib/test_stream.cpp
-    chlib/test_cache_simple.cpp
-    # chlib/test_cam.cpp - DISABLED: Code incomplete (commented out framework)
-    chlib/test_axi4lite.cpp
-    chlib/test_pipeline.cpp
-    chlib/test_forwarding.cpp
-)
-
-# 为所有基础测试创建可执行文件
-foreach(TEST_SRC ${BASE_TEST_SOURCES})
-    # 提取测试名，如 test_reg.cpp -> test_reg
-    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
-    add_catch_test(${TEST_NAME} ${TEST_SRC})
-    set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
-endforeach()
-
-# 为所有 chlib 测试创建可执行文件
-foreach(TEST_SRC ${CHLIB_TEST_SOURCES})
-    # 提取测试名，如 test_reg.cpp -> test_reg
-    get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
-    add_catch_test(${TEST_NAME} ${TEST_SRC})
-    set_tests_properties(${TEST_NAME} PROPERTIES LABELS "chlib")
-endforeach()
-
-# ================================
-# 方案二：特殊测试（多文件组合）
-# ================================
-
-# test_bitvector 需要多个源文件
-add_catch_test(test_bitvector
-    test_bv_cmp.cpp
-    test_bitvector.cpp
-    test_bv_truncate.cpp
-)
-set_tests_properties(test_bitvector PROPERTIES LABELS "base")
-
-# ================================
-# 方案四：RISC-V 测试
-# ================================
-
-# RISC-V IF 级/ID 级测试 - 暂时禁用（语法错误）
-# add_executable(test_if_stage riscv/test_if_stage.cpp)
-# add_executable(test_id_stage riscv/test_id_stage.cpp)
-
-# ================================
-# RISC-V Hazard Unit 编译测试
-# ================================
-add_executable(test_hazard_compile riscv/test_hazard_compile.cpp)
-target_include_directories(test_hazard_compile PRIVATE
-    ${CATCH_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-)
-if(TARGET cpphdl)
-    target_link_libraries(test_hazard_compile cpphdl)
-endif()
-add_test(NAME test_hazard_compile COMMAND test_hazard_compile)
-set_tests_properties(test_hazard_compile PROPERTIES LABELS "riscv;base")
-
-# ================================
-# RISC-V 5 级流水线集成测试
-# ================================
-add_executable(test_pipeline_integration 
-    riscv/test_pipeline_integration.cpp
-    ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp
-)
-target_include_directories(test_pipeline_integration PRIVATE
-    ${CATCH_INCLUDE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-)
-if(TARGET cpphdl)
-    target_link_libraries(test_pipeline_integration cpphdl)
-endif()
-add_test(NAME test_pipeline_integration COMMAND test_pipeline_integration)
-set_tests_properties(test_pipeline_integration PROPERTIES LABELS "riscv;base")
-
-# ================================
-# 方案五：排除 Verilog 生成测试
-# ================================
-
-# 以下测试因 Verilog 生成器信号名称问题暂时排除
-# 问题：codegen_verilog.h 未正确映射 C++ 信号名称到 Verilog
-# 跟踪 issue：https://github.com/xxx/CppHDL/issues/xxx
-
-# test_verilog_gen.cpp        - 通用 Verilog 生成（信号名称问题）
-# test_axi_pwm.cpp           - PWM Verilog 断言（信号名称问题）
-# test_axi_spi.cpp           - SPI Verilog 断言（信号名称问题）
-# test_axi_i2c.cpp            - I2C Verilog 断言（信号名称问题）
-# test_module.cpp             - Module Verilog（信号名称问题）
-# test_module_advanced.cpp     - Advanced Module Verilog（信号名称问题）
-# test_axi_pwm_simple.cpp     - Simple PWM Verilog（信号名称问题）
-
+# Cache 完整功能测试
+add_catch_test(test_cache_full chlib/test_cache_full.cpp)
