@@ -34,3 +34,6 @@ add_catch_test(test_phase4_integration riscv/test_phase4_integration.cpp)
 
 # Cache 完整功能测试
 add_catch_test(test_cache_complete chlib/test_cache_complete.cpp)
+
+# 分支预测器 v2 测试
+add_catch_test(test_branch_predictor_v2 riscv/test_branch_predictor_v2.cpp)
