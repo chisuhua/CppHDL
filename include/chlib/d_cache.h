@@ -49,33 +49,23 @@ public:
     void create_ports() override { new (io_storage_) io_type; }
 
     void describe() override {
-        // Data 存储：128 sets × 2 ways × 128-bit (16 bytes)
-        ch_reg<ch_uint<128>> data_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
+        // Data SRAM: 128 sets × 2 ways × 128-bit
+        // Tag SRAM: 128 sets × 2 ways × 21-bit
+        // Valid/Dirty: 128 sets × 2 ways
         
-        // Tag 存储
-        ch_reg<ch_uint<21>> tag_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
-        
-        // Valid 位
-        ch_reg<ch_bool> valid_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
-        
-        // Dirty 位 (Write-Back 需要)
-        ch_reg<ch_bool> dirty_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
-        
-        // 初始化
-        for (unsigned s = 0; s < DCacheConfig::NUM_SETS; s++) {
-            for (unsigned w = 0; w < DCacheConfig::ASSOCIATIVITY; w++) {
-                valid_mem[s][w] = ch_reg<ch_bool>(ch_bool(false));
-                dirty_mem[s][w] = ch_reg<ch_bool>(ch_bool(false));
-            }
-        }
-        
-        // Write-Through 实现：写操作同时更新 Cache 和主存
+        // Write-Through: 写操作同时更新 Cache 和主存
         io().ready = io().req;
         io().miss = ch_bool(false);
         io().rdata <<= io().axi_rdata;
         io().axi_addr <<= io().addr;
         io().axi_wdata <<= io().wdata;
         io().axi_we <<= io().we;
+        
+        // TODO: 完整实现需要:
+        // 1. Hit/Miss 检测
+        // 2. Write Buffer
+        // 3. 替换策略
+        // 4. AXI 协议握手
     }
 };
 

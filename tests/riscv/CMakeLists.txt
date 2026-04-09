@@ -16,6 +16,36 @@ endif()
 add_test(NAME test_hazard_compile COMMAND test_hazard_compile)
 set_tests_properties(test_hazard_compile PROPERTIES LABELS "riscv;base")
 
+# Forwarding 单元功能测试
+add_executable(test_forwarding 
+    test_forwarding.cpp
+    ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp
+)
+target_include_directories(test_forwarding PRIVATE
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+if(TARGET cpphdl)
+    target_link_libraries(test_forwarding cpphdl)
+endif()
+add_test(NAME test_forwarding COMMAND test_forwarding)
+set_tests_properties(test_forwarding PROPERTIES LABELS "riscv;base")
+
+# 5 级流水线性能基准测试
+add_executable(benchmark_pipeline 
+    benchmark_pipeline.cpp
+    ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp
+)
+target_include_directories(benchmark_pipeline PRIVATE
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+if(TARGET cpphdl)
+    target_link_libraries(benchmark_pipeline cpphdl)
+endif()
+add_test(NAME benchmark_pipeline COMMAND benchmark_pipeline)
+set_tests_properties(benchmark_pipeline PROPERTIES LABELS "riscv;base;benchmark")
+
 # Pipeline 集成测试（功能测试）
 add_executable(test_pipeline_integration 
     test_pipeline_integration.cpp

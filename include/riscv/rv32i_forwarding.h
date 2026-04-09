@@ -1,213 +1,161 @@
 /**
  * @file rv32i_forwarding.h
- * @brief RV32I 数据前推单元定义
+ * @brief RISC-V 5 级流水线前推单元
  * 
- * 功能：检测数据冒险 (RAW) 并实现前推逻辑，避免流水线停顿
+ * 支持 3 路数据前推:
+ * - EX→EX: ALU 结果直接前推
+ * - MEM→EX: MEM 级 ALU 结果前推
+ * - WB→EX: WB 级数据前推
  * 
- * 冒险类型:
- * - RAW (Read After Write): 需要前推 ✅
- * - WAW (Write After Write): RV32I 顺序执行，不会发生
- * - WAR (Write After Read): RV32I 顺序执行，不会发生
+ * 前推优先级：EX(1) > MEM(2) > WB(3) > REG(0)
  * 
- * 前推路径:
- * - EX → EX: EX/MEM 阶段的 ALU 结果前推到 ID/EX 的 ALU 输入
- * - MEM → EX: MEM/WB 阶段的访存结果前推到 ID/EX 的 ALU 输入
- * - WB → EX: MEM/WB 阶段的写回结果前推到 ID/EX 的 ALU 输入
- * 
- * 前推优先级:
- * 1. EX/MEM (最近的结果，优先级最高)
- * 2. MEM/WB (较旧的结果)
- * 3. 寄存器文件 (无前推)
+ * 作者：DevMate
+ * 日期：2026-04-10
  */
-
 #pragma once
 
 #include "ch.hpp"
-#include "riscv/rv32i_pipeline_regs.h"
+#include "component.h"
 
 using namespace ch::core;
 
 namespace riscv {
 
-// ============================================================================
-// 前推检测逻辑 (组合逻辑)
-// ============================================================================
 /**
- * @brief 前推检测单元
+ * @brief 前推源选择
+ */
+enum class ForwardSrc : unsigned {
+    REG = 0,  // 来自寄存器堆
+    EX = 1,   // 来自 EX/MEM 流水线寄存器
+    MEM = 2,  // 来自 MEM/WB 流水线寄存器
+    WB = 3    // 来自 WB 阶段
+};
+
+/**
+ * @brief 前推单元配置
+ */
+struct ForwardingConfig {
+    static constexpr unsigned RS1_SRC_BITS = 2;
+    static constexpr unsigned RS2_SRC_BITS = 2;
+};
+
+/**
+ * @brief 前推控制信号
+ */
+struct ForwardingControl {
+    ch_bool rs1_forward_ex;     // RS1 从 EX 前推
+    ch_bool rs1_forward_mem;    // RS1 从 MEM 前推
+    ch_bool rs2_forward_ex;     // RS2 从 EX 前推
+    ch_bool rs2_forward_mem;    // RS2 从 MEM 前推
+};
+
+/**
+ * @brief 前推单元
  * 
- * 比较寄存器地址，检测是否需要前推
- * 
- * 输入:
- * - id_ex_rs1_addr: ID/EX 阶段 RS1 寄存器地址 (5 位)
- * - id_ex_rs2_addr: ID/EX 阶段 RS2 寄存器地址 (5 位)
- * - ex_mem_rd:      EX/MEM 阶段目的寄存器地址 (5 位)
- * - ex_mem_reg_write: EX/MEM 阶段寄存器写使能
- * - mem_wb_rd:      MEM/WB 阶段目的寄存器地址 (5 位)
- * - mem_wb_reg_write: MEM/WB 阶段寄存器写使能
- * 
- * 输出:
- * - forward_a: RS1 的前推源选择 (2 位)
- * - forward_b: RS2 的前推源选择 (2 位)
- * 
- * 前推条件 (RS1 为例，RS2 同理):
- * 1. EX/MEM 前推：ex_mem_reg_write & (ex_mem_rd != 0) & (ex_mem_rd == id_ex_rs1_addr)
- * 2. MEM/WB 前推：mem_wb_reg_write & (mem_wb_rd != 0) & (mem_wb_rd == id_ex_rs1_addr)
+ * 根据冒险检测结果，选择正确的数据源
  */
 class ForwardingUnit : public ch::Component {
 public:
     __io(
-        // 来自 ID/EX 阶段：需要前推的寄存器地址
-        ch_in<ch_uint<5>>  id_ex_rs1_addr;     // RS1 寄存器地址
-        ch_in<ch_uint<5>>  id_ex_rs2_addr;     // RS2 寄存器地址
+        // ID 级寄存器读地址
+        ch_in<ch_uint<5>> id_rs1_addr;
+        ch_in<ch_uint<5>> id_rs2_addr;
+        ch_in<ch_bool> id_reg_read;
         
-        // 来自 EX/MEM 阶段：可能产生前推的信息
-        ch_in<ch_uint<5>>  ex_mem_rd;          // 目的寄存器地址
-        ch_in<ch_bool>     ex_mem_reg_write;   // 寄存器写使能
+        // EX 级写寄存器信息
+        ch_in<ch_uint<5>> ex_rd_addr;
+        ch_in<ch_bool> ex_reg_write;
         
-        // 来自 MEM/WB 阶段：可能产生前推的信息
-        ch_in<ch_uint<5>>  mem_wb_rd;          // 目的寄存器地址
-        ch_in<ch_bool>     mem_wb_reg_write;   // 寄存器写使能
+        // MEM 级写寄存器信息
+        ch_in<ch_uint<5>> mem_rd_addr;
+        ch_in<ch_bool> mem_reg_write;
         
-        // 前推控制输出
-        ch_out<ch_uint<2>> forward_a;          // RS1 前推源选择 (0=REG, 1=EX, 2=MEM)
-        ch_out<ch_uint<2>> forward_b           // RS2 前推源选择 (0=REG, 1=EX, 2=MEM)
-    )
-    
-    ForwardingUnit(ch::Component* parent = nullptr, const std::string& name = "forwarding_unit")
-        : ch::Component(parent, name) {}
-    
-    void create_ports() override {
-        new (io_storage_) io_type;
-    }
-    
-    void describe() override {
-        // =========================================================================
-        // RS1 前推检测逻辑
-        // =========================================================================
-        // 检查 EX/MEM 前推条件：reg_write & (rd != 0) & (rd == rs)
-        auto ex_mem_rd_nonzero = io().ex_mem_rd != ch_uint<5>(0_d);
-        auto ex_mem_rd_match_rs1 = io().ex_mem_rd == io().id_ex_rs1_addr;
-        auto ex_mem_forward_a = io().ex_mem_reg_write & ex_mem_rd_nonzero & ex_mem_rd_match_rs1;
+        // WB 级写寄存器信息
+        ch_in<ch_uint<5>> wb_rd_addr;
+        ch_in<ch_bool> wb_reg_write;
         
-        // 检查 MEM/WB 前推条件
-        auto mem_wb_rd_nonzero = io().mem_wb_rd != ch_uint<5>(0_d);
-        auto mem_wb_rd_match_rs1 = io().mem_wb_rd == io().id_ex_rs1_addr;
-        auto mem_wb_forward_a = io().mem_wb_reg_write & mem_wb_rd_nonzero & mem_wb_rd_match_rs1;
-        
-        // RS1 前推源选择 (优先级：EX/MEM > MEM/WB > REG)
-        io().forward_a = select(ex_mem_forward_a, 
-                                ch_uint<2>(1_d),  // EX/MEM 前推
-                                select(mem_wb_forward_a,
-                                       ch_uint<2>(2_d),  // MEM/WB 前推
-                                       ch_uint<2>(0_d))); // 寄存器文件
-        
-        // =========================================================================
-        // RS2 前推检测逻辑 (与 RS1 相同)
-        // =========================================================================
-        auto ex_mem_rd_match_rs2 = io().ex_mem_rd == io().id_ex_rs2_addr;
-        auto ex_mem_forward_b = io().ex_mem_reg_write & ex_mem_rd_nonzero & ex_mem_rd_match_rs2;
-        
-        auto mem_wb_rd_match_rs2 = io().mem_wb_rd == io().id_ex_rs2_addr;
-        auto mem_wb_forward_b = io().mem_wb_reg_write & mem_wb_rd_nonzero & mem_wb_rd_match_rs2;
-        
-        // RS2 前推源选择 (优先级：EX/MEM > MEM/WB > REG)
-        io().forward_b = select(ex_mem_forward_b, 
-                                ch_uint<2>(1_d),  // EX/MEM 前推
-                                select(mem_wb_forward_b,
-                                       ch_uint<2>(2_d),  // MEM/WB 前推
-                                       ch_uint<2>(0_d))); // 寄存器文件
-    }
-};
-
-// ============================================================================
-// 前推数据选择器 (多路复用器)
-// ============================================================================
-/**
- * @brief 前推数据选择单元
- * 
- * 根据前推控制信号，选择正确的数据源
- * 
- * 输入:
- * - forward_a/b: 前推源选择信号 (来自 ForwardingUnit)
- * - rs1_data: 从寄存器文件读取的 RS1 数据
- * - rs2_data: 从寄存器文件读取的 RS2 数据
- * - ex_mem_alu_result: EX/MEM 阶段的 ALU 结果
- * - mem_wb_alu_result: MEM/WB 阶段的 ALU 结果
- * - mem_wb_mem_read_data: MEM/WB 阶段的内存读数据
- * - mem_wb_is_load: MEM/WB 阶段是否为 LOAD 指令
- * 
- * 输出:
- * - alu_input_a: 前推后的 ALU 输入 A
- * - alu_input_b: 前推后的 ALU 输入 B
- */
-class ForwardingMux : public ch::Component {
-public:
-    __io(
-        // 前推控制信号 (来自 ForwardingUnit)
-        ch_in<ch_uint<2>>  forward_a;
-        ch_in<ch_uint<2>>  forward_b;
-        
-        // 寄存器文件输出 (原始数据)
+        // 原始寄存器数据
         ch_in<ch_uint<32>> rs1_data_reg;
         ch_in<ch_uint<32>> rs2_data_reg;
         
-        // EX/MEM 阶段数据 (前推源 1)
-        ch_in<ch_uint<32>> ex_mem_alu_result;
+        // 前推数据
+        ch_in<ch_uint<32>> ex_alu_result;
+        ch_in<ch_uint<32>> mem_alu_result;
+        ch_in<ch_uint<32>> wb_write_data;
         
-        // MEM/WB 阶段数据 (前推源 2)
-        ch_in<ch_uint<32>> mem_wb_alu_result;
-        ch_in<ch_uint<32>> mem_wb_mem_read_data;
-        ch_in<ch_bool>     mem_wb_is_load;
+        // 前推选通输出
+        ch_out<ch_uint<32>> rs1_data;
+        ch_out<ch_uint<32>> rs2_data;
         
-        // ALU 输入输出 (前推后的数据)
-        ch_out<ch_uint<32>> alu_input_a;
-        ch_out<ch_uint<32>> alu_input_b
+        // 前推控制信号输出
+        ch_out<ch_uint<2>> rs1_src;
+        ch_out<ch_uint<2>> rs2_src;
     )
-    
-    ForwardingMux(ch::Component* parent = nullptr, const std::string& name = "forwarding_mux")
+
+    ForwardingUnit(ch::Component* parent = nullptr, 
+                   const std::string& name = "forwarding_unit")
         : ch::Component(parent, name) {}
-    
-    void create_ports() override {
-        new (io_storage_) io_type;
-    }
-    
+
+    void create_ports() override { new (io_storage_) io_type; }
+
     void describe() override {
-        // =========================================================================
-        // MEM/WB 结果选择：LOAD 指令用内存读数据，其他用 ALU 结果
-        // =========================================================================
-        auto mem_wb_result = select(io().mem_wb_is_load, 
-                                    io().mem_wb_mem_read_data, 
-                                    io().mem_wb_alu_result);
+        // =====================================================================
+        // RS1 前推逻辑
+        // =====================================================================
+        ch_bool rs1_match_ex = (io().id_rs1_addr == io().ex_rd_addr) && 
+                               io().ex_reg_write && 
+                               (io().id_rs1_addr != ch_uint<5>(0_d));
         
-        // =========================================================================
-        // ALU 输入 A 选择 (RS1 路径)
-        // forward_a = 0: 寄存器文件
-        // forward_a = 1: EX/MEM ALU 结果
-        // forward_a = 2: MEM/WB 结果
-        // =========================================================================
-        auto sel_a_is_reg = io().forward_a == ch_uint<2>(0_d);
-        auto sel_a_is_ex = io().forward_a == ch_uint<2>(1_d);
+        ch_bool rs1_match_mem = (io().id_rs1_addr == io().mem_rd_addr) && 
+                                io().mem_reg_write && 
+                                (io().id_rs1_addr != ch_uint<5>(0_d));
         
-        io().alu_input_a = select(sel_a_is_reg,
-                                  io().rs1_data_reg,
-                                  select(sel_a_is_ex,
-                                         io().ex_mem_alu_result,
-                                         mem_wb_result));
+        ch_bool rs1_match_wb = (io().id_rs1_addr == io().wb_rd_addr) && 
+                               io().wb_reg_write && 
+                               (io().id_rs1_addr != ch_uint<5>(0_d));
         
-        // =========================================================================
-        // ALU 输入 B 选择 (RS2 路径)
-        // forward_b = 0: 寄存器文件
-        // forward_b = 1: EX/MEM ALU 结果
-        // forward_b = 2: MEM/WB 结果
-        // =========================================================================
-        auto sel_b_is_reg = io().forward_b == ch_uint<2>(0_d);
-        auto sel_b_is_ex = io().forward_b == ch_uint<2>(1_d);
+        // RS1 数据选择：优先级 EX > MEM > WB > REG
+        auto rs1_result = select(rs1_match_ex, io().ex_alu_result,
+            select(rs1_match_mem, io().mem_alu_result,
+                select(rs1_match_wb, io().wb_write_data,
+                    io().rs1_data_reg)));
         
-        io().alu_input_b = select(sel_b_is_reg,
-                                  io().rs2_data_reg,
-                                  select(sel_b_is_ex,
-                                         io().ex_mem_alu_result,
-                                         mem_wb_result));
+        io().rs1_data <<= rs1_result;
+        
+        // RS1 源选择
+        io().rs1_src = select(rs1_match_ex, ch_uint<2>(1_d),
+            select(rs1_match_mem, ch_uint<2>(2_d),
+                select(rs1_match_wb, ch_uint<2>(3_d),
+                    ch_uint<2>(0_d))));
+        
+        // =====================================================================
+        // RS2 前推逻辑
+        // =====================================================================
+        ch_bool rs2_match_ex = (io().id_rs2_addr == io().ex_rd_addr) && 
+                               io().ex_reg_write && 
+                               (io().id_rs2_addr != ch_uint<5>(0_d));
+        
+        ch_bool rs2_match_mem = (io().id_rs2_addr == io().mem_rd_addr) && 
+                                io().mem_reg_write && 
+                                (io().id_rs2_addr != ch_uint<5>(0_d));
+        
+        ch_bool rs2_match_wb = (io().id_rs2_addr == io().wb_rd_addr) && 
+                               io().wb_reg_write && 
+                               (io().id_rs2_addr != ch_uint<5>(0_d));
+        
+        // RS2 数据选择：优先级 EX > MEM > WB > REG
+        auto rs2_result = select(rs2_match_ex, io().ex_alu_result,
+            select(rs2_match_mem, io().mem_alu_result,
+                select(rs2_match_wb, io().wb_write_data,
+                    io().rs2_data_reg)));
+        
+        io().rs2_data <<= rs2_result;
+        
+        // RS2 源选择
+        io().rs2_src = select(rs2_match_ex, ch_uint<2>(1_d),
+            select(rs2_match_mem, ch_uint<2>(2_d),
+                select(rs2_match_wb, ch_uint<2>(3_d),
+                    ch_uint<2>(0_d))));
     }
 };
 
