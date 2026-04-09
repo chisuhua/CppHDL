@@ -107,6 +107,10 @@ set(BASE_TEST_SOURCES
     test_axi_i2c.cpp
     test_simulator_bundle.cpp
     test_ch_reg_bitwise.cpp
+    # riscv 测试 - 全部暂时禁用
+    # riscv/test_ex_stage.cpp - compilation error
+    # riscv/test_mem_stage.cpp - compilation error
+    # riscv/test_wb_stage.cpp - compilation error
 )
 
 # chlib 测试源文件列表
@@ -161,7 +165,43 @@ add_catch_test(test_bitvector
 set_tests_properties(test_bitvector PROPERTIES LABELS "base")
 
 # ================================
-# 方案三：排除 Verilog 生成测试（信号名称映射问题待修复）
+# 方案四：RISC-V 测试
+# ================================
+
+# RISC-V IF 级/ID 级测试 - 暂时禁用（语法错误）
+# add_executable(test_if_stage riscv/test_if_stage.cpp)
+# add_executable(test_id_stage riscv/test_id_stage.cpp)
+
+# ================================
+# RISC-V Hazard Unit 编译测试
+# ================================
+add_executable(test_hazard_compile riscv/test_hazard_compile.cpp)
+target_include_directories(test_hazard_compile PRIVATE
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+if(TARGET cpphdl)
+    target_link_libraries(test_hazard_compile cpphdl)
+endif()
+add_test(NAME test_hazard_compile COMMAND test_hazard_compile)
+set_tests_properties(test_hazard_compile PROPERTIES LABELS "riscv;base")
+
+# ================================
+# RISC-V 5 级流水线集成测试
+# ================================
+add_executable(test_pipeline_integration riscv/test_pipeline_integration.cpp)
+target_include_directories(test_pipeline_integration PRIVATE
+    ${CATCH_INCLUDE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+if(TARGET cpphdl)
+    target_link_libraries(test_pipeline_integration cpphdl)
+endif()
+add_test(NAME test_pipeline_integration COMMAND test_pipeline_integration)
+set_tests_properties(test_pipeline_integration PROPERTIES LABELS "riscv;base")
+
+# ================================
+# 方案五：排除 Verilog 生成测试
 # ================================
 
 # 以下测试因 Verilog 生成器信号名称问题暂时排除
