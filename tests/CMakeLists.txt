@@ -130,6 +130,7 @@ set(CHLIB_TEST_SOURCES
     chlib/test_memory.cpp
     chlib/test_fifo.cpp
     chlib/test_stream.cpp
+    chlib/test_cache_simple.cpp
     # chlib/test_cam.cpp - DISABLED: Code incomplete (commented out framework)
     chlib/test_axi4lite.cpp
     chlib/test_pipeline.cpp

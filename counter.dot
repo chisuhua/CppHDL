@@ -1,0 +1,26 @@
+digraph G {
+  rankdir=TB;
+  node [shape=box, style=filled, fillcolor=lightgray];
+
+  "default_clock" [label="default_clock\n(ID: 0, unknown)\nwidth=1 bits", fillcolor=lightgray];
+  "default_reset" [label="default_reset\n(ID: 1, unknown)\nwidth=1 bits", fillcolor=lightgray];
+  "top__io" [label="top__io\n(ID: 2, proxy)\nwidth=4 bits", fillcolor=lightgray];
+  "top_counter1_ch_lit" [label="top_counter1_ch_lit\n(ID: 6, literal)\nwidth=1 bits\nvalue=0x0", fillcolor=lightgreen];
+  "top_counter1_reg" [label="top_counter1_reg\n(ID: 7, register)\nwidth=4 bits", fillcolor=lightcoral];
+  "top_counter1__reg" [label="top_counter1__reg\n(ID: 8, proxy)\nwidth=4 bits", fillcolor=lightgray];
+  "top_counter1_io" [label="top_counter1_io\n(ID: 5, output)\nwidth=4 bits", fillcolor=lightyellow];
+  "top_io" [label="top_io\n(ID: 3, output)\nwidth=4 bits", fillcolor=lightyellow];
+  "top_counter1__io" [label="top_counter1__io\n(ID: 4, proxy)\nwidth=4 bits", fillcolor=lightgray];
+  "top_counter1_ch_lit_1" [label="top_counter1_ch_lit_1\n(ID: 9, literal)\nwidth=1 bits\nvalue=0x1", fillcolor=lightgreen];
+  "top_counter1_add_add" [label="top_counter1_add_add\n(ID: 10, operation)\nwidth=5 bits\nop=0", fillcolor=lightpink];
+  "top_counter1__add_add" [label="top_counter1__add_add\n(ID: 11, proxy)\nwidth=5 bits", fillcolor=lightgray];
+
+  "top_counter1__add_add" -> "top_counter1_reg";
+  "top_counter1_reg" -> "top_counter1__reg";
+  "top_counter1__reg" -> "top_counter1_io";
+  "top_counter1_io" -> "top_io";
+  "top_counter1__reg" -> "top_counter1_add_add" [label="src0"];
+  "top_counter1_ch_lit_1" -> "top_counter1_add_add" [label="src1"];
+  "top_counter1_add_add" -> "top_counter1__add_add";
+
+}
