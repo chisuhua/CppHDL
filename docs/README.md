@@ -1,91 +1,129 @@
-# CppHDL 文档中心
+# CppHDL 文档中心 v2.0
 
-**最后更新**: 2026-04-08  
-**文档状态**: 🟢 最新 | 🟡 部分更新 | 🔴 待更新
+> **CppHDL 文档中心** - 基于 C++20 的高层次综合 (HLS) 库  
+> **文档版本**: v2.0 | **最后更新**: 2026-04-09  
 
 ---
 
-## 1. 快速导航
+## 📚 快速导航
 
 ### 新入门？从这里开始
 
 1. [项目概览](PROJECT-OVERVIEW.md) - 了解 CppHDL 是什么
-2. [快速参考](../QUICK_REFERENCE.md) - 常用 API 速查
-3. [CppHDL_UsageGuide.md](CppHDL_UsageGuide.md) - 详细使用指南
+2. [文档架构规范](DOCUMENT-ARCHITECTURE.md) - 了解文档体系
+3. [使用指南](usage_guide/README.md) - 学习如何使用 CppHDL
 
-### 修复问题？
+### 开发者？
 
-- [Bundle 连接问题](problem-reports/bundle-connection-issue.md) - 问题分析与修复方案
-- [实施计划](plans/bundle-connection-fix-plan.md) - 详细修复步骤
+- [开发者指南](developer_guide/README.md) - 框架内部机制
+- [API 参考](developer_guide/api-reference/) - 技术规格文档
+- [贡献指南](developer_guide/contributing.md) - 如何贡献代码
+
+### 查找特定内容？
+
+- [Simulator API](usage_guide/04-simulator-api.md) - T001 任务成果
+- [Bundle 模式](usage_guide/06-bundle-patterns.md) - Bundle 设计模式
+- [测试指南](CppHDL_Testing_Guide.md) - 测试编写指南
 
 ---
 
-## 2. 文档结构
+## 📁 文档分类
+
+### 📘 用户使用指南 (Usage Guide)
+
+**目标读者**: 使用 CppHDL 设计硬件的工程师
+
+| 文档 | 说明 | 状态 |
+|------|------|------|
+| [进入使用指南 →](usage_guide/README.md) | 完整使用指南索引 | 📖 导航 |
+
+### 🔧 开发者指南 (Developer Guide)
+
+**目标读者**: 维护和扩展 CppHDL 框架的开发者
+
+| 文档 | 说明 | 状态 |
+|------|------|------|
+| [进入开发者指南 →](developer_guide/README.md) | 完整开发指南索引 | 🔧 导航 |
+
+### ⚡ 快速参考技能 (Skills)
+
+**目标读者**: 需要快速查找用法的所有用户
+
+| 文档 | 说明 | 状态 |
+|------|------|------|
+| [进入技能库 →](skills/README.md) | 快速参考技能索引 | ⚡ 导航 |
+
+### 📅 计划与报告 (Plans)
+
+**目标读者**: 项目参与者、管理者
+
+| 文档 | 说明 | 状态 |
+|------|------|------|
+| [Phase 4 计划](plans/PHASE4-PLAN-2026-04-09.md) | Phase 4 工作计划 | ✅ 完成 |
+| [T001 完成报告](plans/T001-completion-report.md) | T001 任务完成报告 | ✅ 完成 |
+
+---
+
+## 🗺️ 文档目录结构
 
 ```
 docs/
-├── README.md                        # 本文件
-├── PROJECT-OVERVIEW.md              # 项目概览
-├── Bundle_UsageGuide.md             # Bundle 使用指南
-├── Bundle_DeveloperGuide.md         # Bundle 开发者指南
-├── CHLib_UsageGuide.md              # Chlib 库指南
-├── CppHDL_UsageGuide.md             # 综合使用指南
-├── CppHDL_Testing_Guide.md          # 测试指南
-├── problem-reports/                 # 问题报告
-│   └── bundle-connection-issue.md   # Bundle 连接问题
-├── plans/                           # 实施计划
-│   └── bundle-connection-fix-plan.md # Bundle 连接修复计划
-├── architecture/                    # 架构文档
-│   ├── decisions/                   # 架构决策
-│   └── plans/                       # 架构计划
-└── archive/                         # 归档文档 (历史报告)
+├── README.md                        # 文档中心 (当前位置)
+├── DOCUMENT-ARCHITECTURE.md        # 文档架构规范 v2.0
+│
+├── usage_guide/                    # 📘 用户使用指南
+│   ├── README.md                   # 使用指南导航
+│   └── ...                         # 使用文档
+│
+├── developer_guide/                # 🔧 开发者指南
+│   ├── README.md                   # 开发指南导航
+│   ├── architecture/               # 架构文档
+│   ├── api-reference/              # API 参考
+│   ├── tech-reports/               # 技术报告
+│   └── patterns/                   # 开发模式
+│
+├── skills/                         # ⚡ 快速参考技能
+│   └── README.md                   # 技能索引
+│
+├── plans/                          # 📅 计划与报告
+│   └── README.md                   # 计划索引
+│
+├── archive/                        # 🗄️ 归档文档
+│
+└── learning/                       # 学习资料
+└── problem-reports/                # 问题报告
 ```
 
 ---
 
-## 3. 文档分类
+## 🔍 快速查找
 
-### 使用指南 (面向用户)
+### 按任务查找
 
-| 文档 | 内容 | 目标读者 |
-|------|------|----------|
-| [CppHDL_UsageGuide.md](CppHDL_UsageGuide.md) | CppHDL 综合指南 | 所有用户 |
-| [Bundle_UsageGuide.md](Bundle_UsageGuide.md) | Bundle 定义与连接 | 用户 |
-| [CHLib_UsageGuide.md](CHLib_UsageGuide.md) | Chlib 组件库使用 | 用户 |
+| 任务 | 相关文档 |
+|------|---------|
+| **T001: Simulator API** | [使用指南](usage_guide/04-simulator-api.md), [API 规格](developer_guide/api-reference/T001-simulator-api.md), [技术报告](developer_guide/tech-reports/T001-analysis.md) |
 
-### 开发者指南 (面向维护者)
+### 按主题查找
 
-| 文档 | 内容 | 目标读者 |
-|------|------|----------|
-| [Bundle_DeveloperGuide.md](Bundle_DeveloperGuide.md) | Bundle 元编程与扩展 | 框架维护者 |
-| [architecture/](architecture/) | 架构设计与决策 | 架构师 |
-
-### 测试与质量
-
-| 文档 | 内容 | 目标读者 |
-|------|------|----------|
-| [CppHDL_Testing_Guide.md](CppHDL_Testing_Guide.md) | 测试框架与最佳实践 | QA |
+- **Bundle**: [使用模式](usage_guide/06-bundle-patterns.md), [设计指南](Bundle_DeveloperGuide.md)
+- **Stream**: [使用指南](CppHDL_UsageGuide.md), [对比分析](CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)
+- **测试**: [测试指南](CppHDL_Testing_Guide.md)
 
 ---
 
-## 4. 问题报告与计划
+## 📊 文档状态统计
 
-### 当前问题
-
-| 问题 | 状态 | 优先级 | 负责人 |
-|------|------|--------|--------|
-| [Bundle 连接失败](problem-reports/bundle-connection-issue.md) | 🔴 待修复 | P0 | - |
-| RV32I Pipeline 测试失败 | 🔴 待分析 | P1 | - |
-
-### 实施计划
-
-| 计划 | 状态 | 预计完成 |
-|------|------|----------|
-| [Bundle 连接修复](plans/bundle-connection-fix-plan.md) | 🔴 未开始 | 2026-04-09 |
+| 类别 | 总数 | 已完成 | 进行中 | 规划中 | 完成率 |
+|------|------|--------|--------|--------|--------|
+| usage_guide | 11 | 4 | 1 | 6 | 36% |
+| developer_guide | 15 | 6 | 1 | 8 | 40% |
+| skills | 5 | 1 | 1 | 3 | 20% |
+| plans | 按需 | 2 | 0 | 0 | 100% |
 
 ---
 
-## 5. 文档维护
+## 📝 文档维护
 
 ### 更新指南
 
@@ -103,39 +141,25 @@ docs/
 
 ---
 
-## 6. 相关资源
-
-### 代码库
-
-| 目录 | 内容 |
-|------|------|
-| `include/` | 核心头文件 |
-| `src/` | 实现文件 |
-| `tests/` | 单元测试 |
-| `samples/` | 快速示例 |
-| `examples/` | 完整项目 |
-
-### 外部资源
-
-- [SpinalHDL 官网](https://spinalhdl.github.io/SpinalDoc-RTD/master/index.html)
-- [AGENTS.md](../AGENTS.md) - 开发代理指南
-
----
-
-## 7. 文档索引
+## 🔗 相关资源
 
 ### 根目录文档
 
 | 文档 | 说明 |
 |------|------|
 | [../README.md](../README.md) | 项目简介 |
-| [../PROJECT-OVERVIEW.md](../PROJECT-OVERVIEW.md) | 项目概览 |
 | [../QUICK_REFERENCE.md](../QUICK_REFERENCE.md) | 快速参考 |
-| [../Compare.md](../Compare.md) | CppHDL vs SpinalHDL |
-| [../AGENTS.md](../AGENTS.md) | 开发代理指南 |
+| [../AGENTS.md](../AGENTS.md) | AI 代理指南 |
+
+### 外部资源
+
+- [SpinalHDL 官网](https://spinalhdl.github.io/SpinalDoc-RTD/master/index.html)
+- [CppHDL GitHub](https://github.com/your-repo/CppHDL)
 
 ---
 
 **维护**: AI Agent  
+**文档版本**: v2.0  
+**下次审查**: 2026-07-09  
 **联系**: 提交 Issue 获取帮助
 

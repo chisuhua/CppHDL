@@ -1,0 +1,19 @@
+digraph G {
+  rankdir=TB;
+  node [shape=box, style=filled, fillcolor=lightgray];
+
+  "default_clock" [label="default_clock\n(ID: 0, unknown)\nwidth=1 bits", fillcolor=lightgray];
+  "default_reset" [label="default_reset\n(ID: 1, unknown)\nwidth=1 bits", fillcolor=lightgray];
+  "top_bundle_lit" [label="top_bundle_lit\n(ID: 2, literal)\nwidth=8 bits\nvalue=0x0", fillcolor=lightgreen];
+  "top_bits_range" [label="top_bits_range\n(ID: 3, literal)\nwidth=64 bits\nvalue=0x700000000", fillcolor=lightgreen];
+  "top_bits" [label="top_bits\n(ID: 4, operation)\nwidth=8 bits\nop=20", fillcolor=lightpink];
+  "top_bundle_lit_1" [label="top_bundle_lit_1\n(ID: 5, literal)\nwidth=8 bits\nvalue=0x0", fillcolor=lightgreen];
+  "top_bits_range_1" [label="top_bits_range_1\n(ID: 6, literal)\nwidth=64 bits\nvalue=0x700000000", fillcolor=lightgreen];
+  "top_bits_1" [label="top_bits_1\n(ID: 7, operation)\nwidth=8 bits\nop=20", fillcolor=lightpink];
+
+  "top_bundle_lit" -> "top_bits" [label="src0"];
+  "top_bits_range" -> "top_bits" [label="src1"];
+  "top_bits" -> "top_bits_1" [label="src0"];
+  "top_bits_range_1" -> "top_bits_1" [label="src1"];
+
+}
