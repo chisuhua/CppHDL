@@ -25,3 +25,6 @@ add_catch_test(test_cache_full chlib/test_cache_full.cpp)
 
 # Cache-流水线集成测试
 add_catch_test(test_cache_pipeline_integration riscv/test_cache_pipeline_integration.cpp)
+
+# Hazard 完整功能测试
+add_catch_test(test_hazard_complete riscv/test_hazard_complete.cpp)
