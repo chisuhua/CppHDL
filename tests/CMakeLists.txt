@@ -189,7 +189,10 @@ set_tests_properties(test_hazard_compile PROPERTIES LABELS "riscv;base")
 # ================================
 # RISC-V 5 级流水线集成测试
 # ================================
-add_executable(test_pipeline_integration riscv/test_pipeline_integration.cpp)
+add_executable(test_pipeline_integration 
+    riscv/test_pipeline_integration.cpp
+    ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp
+)
 target_include_directories(test_pipeline_integration PRIVATE
     ${CATCH_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/include
