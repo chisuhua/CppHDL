@@ -100,9 +100,9 @@ public:
         // ========================================================================
         // IF 级连接
         // ========================================================================
-        // stall/flush 信号来自冒险检测单元
-        if_stage.io().stall <<= hazard.io().hazard_ctrl.if_stall;
-        if_stage.io().flush <<= hazard.io().hazard_ctrl.if_flush;
+        // stall/flush 信号来自冒险检测单元（单独端口模式）
+        if_stage.io().stall <<= hazard.io().stall;
+        if_stage.io().flush <<= hazard.io().flush;
         if_stage.io().rst <<= io().rst;
         
         // 分支控制 (来自 EX 级)
