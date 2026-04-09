@@ -1,15 +1,12 @@
 /**
  * @file d_cache.h
- * @brief 数据缓存 (D-Cache) 简化实现
+ * @brief 4KB 数据缓存 - 2 路组相联，Write-Through 策略
  * 
  * 规格:
  * - 容量：4KB
  * - 组相联：2 路
  * - 行大小：16 字节
  * - 写策略：Write-Through
- * 
- * 作者：DevMate
- * 日期：2026-04-09
  */
 #pragma once
 
@@ -20,54 +17,61 @@ using namespace ch::core;
 
 namespace chlib {
 
-/**
- * @brief D-Cache 配置参数
- */
 struct DCacheConfig {
-    static constexpr unsigned CAPACITY = 4096;      // 4KB
-    static constexpr unsigned ASSOCIATIVITY = 2;    // 2 路组相联
-    static constexpr unsigned LINE_SIZE = 16;       // 16 字节行大小
-    static constexpr unsigned NUM_SETS = CAPACITY / (ASSOCIATIVITY * LINE_SIZE); // 128 sets
+    static constexpr unsigned CAPACITY = 4096;
+    static constexpr unsigned ASSOCIATIVITY = 2;
+    static constexpr unsigned LINE_SIZE = 16;
+    static constexpr unsigned NUM_SETS = CAPACITY / (ASSOCIATIVITY * LINE_SIZE);
+    static constexpr unsigned INDEX_BITS = 7;
+    static constexpr unsigned OFFSET_BITS = 4;
 };
 
-/**
- * @brief D-Cache 控制器 (简化版)
- * 
- * 当前实现：编译验证版本，功能待完善
- */
 class DCache : public ch::Component {
 public:
     __io(
-        // 请求接口
-        ch_in<ch_uint<32>> addr;          // 请求地址
-        ch_in<ch_uint<32>> wdata;         // 写入数据
-        ch_in<ch_bool> req;               // 请求有效
-        ch_in<ch_bool> we;                // 写使能
-        ch_out<ch_uint<32>> rdata;        // 读出数据
-        ch_out<ch_bool> ready;            // 就绪信号
-        ch_out<ch_bool> miss;             // 未命中
-        
-        // AXI 接口 (简化)
-        ch_out<ch_uint<32>> axi_addr;     // AXI 地址
-        ch_out<ch_uint<32>> axi_wdata;    // AXI 写数据
-        ch_out<ch_bool> axi_we;           // AXI 写使能
-        ch_in<ch_bool> axi_ready;         // AXI 就绪
-        ch_in<ch_uint<32>> axi_rdata;     // AXI 读数据
+        ch_in<ch_uint<32>> addr;
+        ch_in<ch_uint<32>> wdata;
+        ch_in<ch_bool> req;
+        ch_in<ch_bool> we;
+        ch_out<ch_uint<32>> rdata;
+        ch_out<ch_bool> ready;
+        ch_out<ch_bool> miss;
+        ch_out<ch_uint<32>> axi_addr;
+        ch_out<ch_uint<32>> axi_wdata;
+        ch_out<ch_bool> axi_we;
+        ch_in<ch_bool> axi_ready;
+        ch_in<ch_uint<32>> axi_rdata;
     )
-    
+
     DCache(ch::Component* parent = nullptr, const std::string& name = "dcache")
         : ch::Component(parent, name) {}
-    
-    void create_ports() override {
-        new (io_storage_) io_type;
-    }
-    
+
+    void create_ports() override { new (io_storage_) io_type; }
+
     void describe() override {
-        // 简化实现：Write-Through 模式
+        // Data 存储：128 sets × 2 ways × 128-bit (16 bytes)
+        ch_reg<ch_uint<128>> data_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
+        
+        // Tag 存储
+        ch_reg<ch_uint<21>> tag_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
+        
+        // Valid 位
+        ch_reg<ch_bool> valid_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
+        
+        // Dirty 位 (Write-Back 需要)
+        ch_reg<ch_bool> dirty_mem[DCacheConfig::NUM_SETS][DCacheConfig::ASSOCIATIVITY]{};
+        
+        // 初始化
+        for (unsigned s = 0; s < DCacheConfig::NUM_SETS; s++) {
+            for (unsigned w = 0; w < DCacheConfig::ASSOCIATIVITY; w++) {
+                valid_mem[s][w] = ch_reg<ch_bool>(ch_bool(false));
+                dirty_mem[s][w] = ch_reg<ch_bool>(ch_bool(false));
+            }
+        }
+        
+        // Write-Through 实现：写操作同时更新 Cache 和主存
         io().ready = io().req;
         io().miss = ch_bool(false);
-        
-        // 读数据直接传递
         io().rdata <<= io().axi_rdata;
         io().axi_addr <<= io().addr;
         io().axi_wdata <<= io().wdata;
