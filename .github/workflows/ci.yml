@@ -1,0 +1,120 @@
+# CppHDL CI/CD Pipeline
+# Tests on Linux, macOS, and Windows
+
+name: CppHDL CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }} - ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-2022]
+        build_type: [Release, Debug]
+        include:
+          - os: ubuntu-22.04
+            compiler: gcc-13
+            cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
+          - os: macos-14
+            compiler: clang
+            cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
+          - os: windows-2022
+            compiler: msvc
+            cxx_flags: "/W4"
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++-13 ccache
+        g++-13 --version
+    
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install ccache
+        clang --version
+    
+    - name: Setup MSVC (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+    
+    - name: Configure CMake
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+        -DCMAKE_CXX_FLAGS="${{ matrix.cxx_flags }}"
+        -DENABLE_ASAN=OFF
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    
+    - name: Build
+      run: cmake --build build --config ${{ matrix.build_type }} -j$(nproc 2>/dev/null || echo 4)
+      shell: bash
+    
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4)
+      shell: bash
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
+        path: build/Testing/Temporary/*.xml
+        if-no-files-found: ignore
+    
+    - name: Upload compile commands
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compile-commands-${{ matrix.os }}-${{ matrix.build_type }}
+        path: build/compile_commands.json
+        if-no-files-found: ignore
+
+  # Code quality checks (Linux only)
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++-13 clang-tidy
+    
+    - name: Configure CMake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    
+    - name: Run clang-tidy
+      run: |
+        python3 -m pip install run-clang-tidy
+        run-clang-tidy -p build -j$(nproc) \
+          -checks='readability-*,modernize-*,performance-*,bugprone-*' \
+          -header-filter='.*' \
+          'src/.*\.cpp$'
+      continue-on-error: true

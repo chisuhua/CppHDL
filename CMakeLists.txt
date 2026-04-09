@@ -88,13 +88,24 @@ target_include_directories(bitvector INTERFACE
 )
 target_link_libraries(bitvector INTERFACE ch_includes)
 
-# 收集源文件
-file(GLOB_RECURSE CORE_SOURCES 
-    "src/core/*.cpp"
+# 收集源文件（显式列表，避免 GLOB_RECURSE 反模式）
+set(CORE_SOURCES
+    src/core/context.cpp
+    src/core/lnodeimpl.cpp
 )
 
-file(GLOB_RECURSE AST_SOURCES 
-    "src/ast/*.cpp"
+set(AST_SOURCES
+    src/ast/ast_nodes.cpp
+    src/ast/clockimpl.cpp
+    src/ast/instr_clock.cpp
+    src/ast/instr_io.cpp
+    src/ast/instr_mem.cpp
+    src/ast/instr_proxy.cpp
+    src/ast/instr_reg.cpp
+    src/ast/mem_port_impl.cpp
+    src/ast/memimpl.cpp
+    src/ast/muximpl.cpp
+    src/ast/resetimpl.cpp
 )
 
 set(CH_SOURCES
