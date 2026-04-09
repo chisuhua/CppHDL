@@ -124,9 +124,9 @@ public:
     }
     
     void describe() override {
-        // 简化：返回固定值
+        // 简化：返回固定 NOP 指令 (0x00000013 = 十进制 19)
         // 实际应该包含启动代码
-        io().data <<= ch_uint<DATA_WIDTH>(0x13_d);  // NOP 指令
+        io().data <<= ch_uint<DATA_WIDTH>(19_d);  // NOP 指令
         io().ready = ch_bool(true);
     }
 };
