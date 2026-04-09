@@ -6,7 +6,7 @@
 #include "catch_amalgamated.hpp"
 #include "chlib/i_cache.h"
 #include "chlib/d_cache.h"
-#include "riscv/dynamic_branch_predict.h"
+#include "../examples/riscv-mini/src/dynamic_branch_predict.h"
 
 using namespace chlib;
 using namespace riscv;

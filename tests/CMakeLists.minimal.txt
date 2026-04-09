@@ -1,0 +1,21 @@
+# Minimal tests for Phase A verification
+set(CATCH_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+function(add_catch_test TEST_NAME)
+    set(_srcs ${ARGN})
+    list(APPEND _srcs ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp)
+    add_executable(${TEST_NAME} ${_srcs})
+    target_include_directories(${TEST_NAME} PRIVATE
+        ${CATCH_INCLUDE_DIR}
+        ${PROJECT_SOURCE_DIR}/include
+    )
+    if(TARGET cpphdl)
+        target_link_libraries(${TEST_NAME} cpphdl)
+    endif()
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
+endfunction()
+
+# Basic tests that should work
+add_catch_test(test_fifo chlib/test_fifo.cpp)
+add_catch_test(test_pipeline chlib/test_pipeline.cpp)

@@ -9,8 +9,8 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "riscv/rv32i_forwarding.h"
-#include "riscv/hazard_unit.h"
+#include "../examples/riscv-mini/src/rv32i_forwarding.h"
+#include "../examples/riscv-mini/src/hazard_unit.h"
 
 using namespace riscv;
 

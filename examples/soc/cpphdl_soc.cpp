@@ -41,9 +41,9 @@
  */
 
 #include "ch.hpp"
-#include "riscv/rv32i_core.h"
-#include "riscv/rv32i_tcm.h"
-#include "riscv/rv32i_axi_interface.h"
+#include "../riscv-mini/src/rv32i_core.h"
+#include "../riscv-mini/src/rv32i_tcm.h"
+#include "../riscv-mini/src/rv32i_axi_interface.h"
 #include "axi4/axi_interconnect_4x4.h"
 #include "axi4/axi4_lite_slave.h"
 #include "axi4/peripherals/axi_gpio.h"

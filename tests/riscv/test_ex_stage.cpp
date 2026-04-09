@@ -10,7 +10,7 @@
 
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
-#include "riscv/stages/ex_stage.h"
+#include "../examples/riscv-mini/src/stages/ex_stage.h"
 
 using namespace ch::core;
 using namespace riscv;

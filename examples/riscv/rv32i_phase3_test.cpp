@@ -13,7 +13,7 @@
  */
 
 #include "ch.hpp"
-#include "riscv/rv32i_decoder.h"
+#include "../riscv-mini/src/rv32i_decoder.h"
 #include "component.h"
 #include "simulator.h"
 #include <iostream>

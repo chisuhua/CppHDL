@@ -3,7 +3,7 @@
  * @brief 验证 hazard_unit.h 可以编译
  */
 
-#include "riscv/hazard_unit.h"
+#include "../examples/riscv-mini/src/hazard_unit.h"
 
 using namespace riscv;
 

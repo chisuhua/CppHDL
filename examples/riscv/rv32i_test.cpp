@@ -5,10 +5,10 @@
  */
 
 #include "ch.hpp"
-#include "riscv/rv32i_regs.h"
-#include "riscv/rv32i_alu.h"
-#include "riscv/rv32i_decoder.h"
-#include "riscv/rv32i_pc.h"
+#include "../riscv-mini/src/rv32i_regs.h"
+#include "../riscv-mini/src/rv32i_alu.h"
+#include "../riscv-mini/src/rv32i_decoder.h"
+#include "../riscv-mini/src/rv32i_pc.h"
 #include "component.h"
 #include "simulator.h"
 #include "codegen_verilog.h"

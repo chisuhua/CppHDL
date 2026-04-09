@@ -10,7 +10,7 @@
  */
 
 #include "ch.hpp"
-#include "riscv/rv32i_core.h"
+#include "../riscv-mini/src/rv32i_core.h"
 #include "component.h"
 #include "simulator.h"
 #include "codegen_verilog.h"

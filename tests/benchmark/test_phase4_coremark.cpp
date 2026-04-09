@@ -4,7 +4,7 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "riscv/rv302i_pipeline.h"
+#include "../examples/riscv-mini/src/rv302i_pipeline.h"
 #include "chlib/i_cache_complete.h"
 #include "chlib/d_cache_complete.h"
 #include <iostream>

@@ -15,8 +15,8 @@
 
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
-#include "riscv/rv32i_branch_predict.h"
-#include "riscv/rv32i_pipeline_regs.h"
+#include "../examples/riscv-mini/src/rv32i_branch_predict.h"
+#include "../examples/riscv-mini/src/rv32i_pipeline_regs.h"
 
 using namespace riscv;
 

@@ -13,10 +13,10 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "riscv/rv32i_pipeline_regs.h"
-#include "riscv/rv32i_forwarding.h"
-#include "riscv/rv32i_branch_predict.h"
-#include "riscv/rv32i_core.h"
+#include "../examples/riscv-mini/src/rv32i_pipeline_regs.h"
+#include "../examples/riscv-mini/src/rv32i_forwarding.h"
+#include "../examples/riscv-mini/src/rv32i_branch_predict.h"
+#include "../examples/riscv-mini/src/rv32i_core.h"
 
 #include <iostream>
 

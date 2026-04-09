@@ -2,15 +2,17 @@
 # RISC-V 测试配置
 
 # 使用 ${CATCH_INCLUDE_DIR} 变量（由上层定义）
+set(RISCV_TEST_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 macro(add_test_riscv _test_name _sources)
     add_executable(${_test_name}
-        ${_sources}
+        ${RISCV_TEST_DIR}/${_sources}
         ${CATCH_INCLUDE_DIR}/catch_amalgamated.cpp
     )
     target_include_directories(${_test_name} PRIVATE
         ${CATCH_INCLUDE_DIR}
         ${PROJECT_SOURCE_DIR}/include
+        ${RISCV_TEST_DIR}
     )
     if(TARGET cpphdl)
         target_link_libraries(${_test_name} cpphdl)

@@ -1,7 +1,7 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "riscv/rv32i_branch_predict.h"
+#include "../examples/riscv-mini/src/rv32i_branch_predict.h"
 
 using namespace ch;
 using namespace ch::core;

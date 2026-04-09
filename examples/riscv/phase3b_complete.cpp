@@ -44,9 +44,9 @@
  */
 
 #include "ch.hpp"
-#include "riscv/rv32i_core.h"
-#include "riscv/i_tcm.h"
-#include "riscv/d_tcm.h"
+#include "../riscv-mini/src/rv32i_core.h"
+#include "../riscv-mini/src/i_tcm.h"
+#include "../riscv-mini/src/d_tcm.h"
 #include "component.h"
 #include "simulator.h"
 #include "codegen_verilog.h"
