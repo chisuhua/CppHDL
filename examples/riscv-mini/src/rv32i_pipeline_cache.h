@@ -13,8 +13,8 @@
 
 #include "ch.hpp"
 #include "component.h"
-#include "chlib/i_cache.h"
-#include "chlib/d_cache.h"
+#include "cpu/cache/i_cache.h"
+#include "cpu/cache/d_cache.h"
 #include "stages/if_stage.h"
 #include "stages/id_stage.h"
 #include "stages/ex_stage.h"

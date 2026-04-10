@@ -4,8 +4,8 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "chlib/i_cache_complete.h"
-#include "chlib/d_cache_complete.h"
+#include "cpu/cache/i_cache_complete.h"
+#include "cpu/cache/d_cache_complete.h"
 
 using namespace chlib;
 

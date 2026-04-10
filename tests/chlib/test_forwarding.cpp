@@ -1,5 +1,5 @@
 #include "catch_amalgamated.hpp"
-#include "chlib/forwarding.h"
+#include "cpu/forwarding.h"
 #include "codegen_dag.h"
 #include "core/context.h"
 #include "core/literal.h"

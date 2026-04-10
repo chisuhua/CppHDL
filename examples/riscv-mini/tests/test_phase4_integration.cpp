@@ -13,8 +13,8 @@
 #include "../src/rv32i_pipeline.h"
 #include "../src/rv32i_pipeline_cache.h"
 #include "../src/rv32i_hazard_complete.h"
-#include "chlib/i_cache.h"
-#include "chlib/d_cache.h"
+#include "cpu/cache/i_cache.h"
+#include "cpu/cache/d_cache.h"
 
 using namespace riscv;
 
