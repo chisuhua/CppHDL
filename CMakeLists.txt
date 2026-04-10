@@ -170,7 +170,7 @@ add_subdirectory(examples/axi4)
 
 # Phase 3A: RISC-V SoC (Temporarily disabled due to API changes)
 # add_subdirectory(examples/riscv)  # Deprecated, use riscv-mini
-# add_subdirectory(examples/riscv-mini)  # Temporarily disabled - API updates needed
+add_subdirectory(examples/riscv-mini)  # Temporarily disabled - API updates needed
 
 # 添加测试
 enable_testing()

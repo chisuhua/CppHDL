@@ -102,17 +102,23 @@ public:
         // =====================================================================
         // RS1 前推逻辑
         // =====================================================================
-        ch_bool rs1_match_ex = (io().id_rs1_addr == io().ex_rd_addr) && 
-                               io().ex_reg_write && 
-                               (io().id_rs1_addr != ch_uint<5>(0_d));
+        // 修复：使用 select() 代替 && (IO 端口兼容性)
+        auto rs1_addr_ex_match = io().id_rs1_addr == io().ex_rd_addr;
+        auto rs1_addr_mem_match = io().id_rs1_addr == io().mem_rd_addr;
+        auto rs1_addr_wb_match = io().id_rs1_addr == io().wb_rd_addr;
+        auto rs1_addr_nz = io().id_rs1_addr != ch_uint<5>(0_d);
         
-        ch_bool rs1_match_mem = (io().id_rs1_addr == io().mem_rd_addr) && 
-                                io().mem_reg_write && 
-                                (io().id_rs1_addr != ch_uint<5>(0_d));
+        ch_bool rs1_match_ex = select(rs1_addr_ex_match,
+                                select(io().ex_reg_write, rs1_addr_nz, ch_bool(false)),
+                                ch_bool(false));
         
-        ch_bool rs1_match_wb = (io().id_rs1_addr == io().wb_rd_addr) && 
-                               io().wb_reg_write && 
-                               (io().id_rs1_addr != ch_uint<5>(0_d));
+        ch_bool rs1_match_mem = select(rs1_addr_mem_match,
+                                 select(io().mem_reg_write, rs1_addr_nz, ch_bool(false)),
+                                 ch_bool(false));
+        
+        ch_bool rs1_match_wb = select(rs1_addr_wb_match,
+                                select(io().wb_reg_write, rs1_addr_nz, ch_bool(false)),
+                                ch_bool(false));
         
         // RS1 数据选择：优先级 EX > MEM > WB > REG
         auto rs1_result = select(rs1_match_ex, io().ex_alu_result,
@@ -131,17 +137,23 @@ public:
         // =====================================================================
         // RS2 前推逻辑
         // =====================================================================
-        ch_bool rs2_match_ex = (io().id_rs2_addr == io().ex_rd_addr) && 
-                               io().ex_reg_write && 
-                               (io().id_rs2_addr != ch_uint<5>(0_d));
+        // 修复：使用 select() 代替 && (IO 端口兼容性)
+        auto rs2_addr_ex_match = io().id_rs2_addr == io().ex_rd_addr;
+        auto rs2_addr_mem_match = io().id_rs2_addr == io().mem_rd_addr;
+        auto rs2_addr_wb_match = io().id_rs2_addr == io().wb_rd_addr;
+        auto rs2_addr_nz = io().id_rs2_addr != ch_uint<5>(0_d);
         
-        ch_bool rs2_match_mem = (io().id_rs2_addr == io().mem_rd_addr) && 
-                                io().mem_reg_write && 
-                                (io().id_rs2_addr != ch_uint<5>(0_d));
+        ch_bool rs2_match_ex = select(rs2_addr_ex_match,
+                                select(io().ex_reg_write, rs2_addr_nz, ch_bool(false)),
+                                ch_bool(false));
         
-        ch_bool rs2_match_wb = (io().id_rs2_addr == io().wb_rd_addr) && 
-                               io().wb_reg_write && 
-                               (io().id_rs2_addr != ch_uint<5>(0_d));
+        ch_bool rs2_match_mem = select(rs2_addr_mem_match,
+                                 select(io().mem_reg_write, rs2_addr_nz, ch_bool(false)),
+                                 ch_bool(false));
+        
+        ch_bool rs2_match_wb = select(rs2_addr_wb_match,
+                                select(io().wb_reg_write, rs2_addr_nz, ch_bool(false)),
+                                ch_bool(false));
         
         // RS2 数据选择：优先级 EX > MEM > WB > REG
         auto rs2_result = select(rs2_match_ex, io().ex_alu_result,
