@@ -21,7 +21,7 @@
 
 #include "ch.hpp"
 #include "component.h"
-#include "stream.h"
+#include "chlib/stream.h"
 
 using namespace ch::core;
 
