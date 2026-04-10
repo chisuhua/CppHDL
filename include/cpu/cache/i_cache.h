@@ -113,8 +113,8 @@ public:
         // =====================================================================
         // 地址解析
         // =====================================================================
-        auto offset = io().addr(ICcacheConfig::OFFSET_BITS - 1, 0);
-        auto index = io().addr(ICcacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS - 1, 
+        auto offset = io().addr(ICacheConfig::OFFSET_BITS - 1, 0);
+        auto index = io().addr(ICacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS - 1, 
                                ICacheConfig::OFFSET_BITS);
         auto tag = io().addr(31_d, ICacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS);
         
