@@ -16,24 +16,27 @@ function(add_catch_test TEST_NAME)
     set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
 endfunction()
 
-# include(chlib/CMakeLists.txt)  # Not needed - tests defined inline
-# include(riscv/CMakeLists.txt)  # Temporarily disabled - old API needs update  # Temporarily disabled - requires API updates
 enable_testing()
 
-# Cache 完整功能测试
-add_catch_test(test_cache_basic chlib/test_cache_full.cpp)
+# ============================================================================
+# CPU 模块测试
+# ============================================================================
 
-# Cache-流水线集成测试
-add_catch_test(test_cache_pipeline_integration riscv/test_cache_pipeline_integration.cpp)
+add_catch_test(test_branch_predictor cpu/test_branch_predictor_v2.cpp)
+add_catch_test(test_forwarding cpu/test_forwarding.cpp)
+add_catch_test(test_hazard cpu/test_hazard_complete.cpp)
 
-# Hazard 完整功能测试
-add_catch_test(test_hazard_complete riscv/test_hazard_complete.cpp)
+# ============================================================================
+# Cache 测试
+# ============================================================================
 
-# Phase 4 完整集成验证
-add_catch_test(test_phase4_integration riscv/test_phase4_integration.cpp)
-
-# Cache 完整功能测试
+add_catch_test(test_cache_full chlib/test_cache_full.cpp)
 add_catch_test(test_cache_complete chlib/test_cache_complete.cpp)
 
-# 分支预测器 v2 测试
-add_catch_test(test_branch_predictor_v2 riscv/test_branch_predictor_v2.cpp)
+# ============================================================================
+# RISC-V 集成测试
+# ============================================================================
+
+add_catch_test(test_cache_integration riscv-integration/test_cache_pipeline_integration.cpp)
+add_catch_test(test_phase4 riscv-integration/test_phase4_integration.cpp)
+add_catch_test(test_pipeline riscv-integration/test_pipeline_integration.cpp)

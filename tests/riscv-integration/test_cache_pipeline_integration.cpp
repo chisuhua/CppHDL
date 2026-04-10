@@ -4,7 +4,7 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "../src/rv32i_pipeline_cache.h"
+#include "../../examples/riscv-mini/src/rv32i_pipeline_cache.h"
 
 using namespace riscv;
 
