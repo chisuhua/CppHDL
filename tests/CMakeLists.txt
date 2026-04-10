@@ -40,3 +40,7 @@ add_catch_test(test_cache_complete chlib/test_cache_complete.cpp)
 add_catch_test(test_cache_integration riscv-integration/test_cache_pipeline_integration.cpp)
 add_catch_test(test_phase4 riscv-integration/test_phase4_integration.cpp)
 add_catch_test(test_pipeline riscv-integration/test_pipeline_integration.cpp)
+
+# Add riscv-mini src directory for headers
+target_include_directories(test_phase4 PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
+target_include_directories(test_cache_integration PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
