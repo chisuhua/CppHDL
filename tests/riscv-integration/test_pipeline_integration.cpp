@@ -9,8 +9,8 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "../examples/riscv-mini/src/hazard_unit.h"
-#include "../examples/riscv-mini/src/rv32i_pipeline_regs.h"
+#include "../src/hazard_unit.h"
+#include "../src/rv32i_pipeline_regs.h"
 
 using namespace riscv;
 

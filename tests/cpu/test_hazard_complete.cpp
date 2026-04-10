@@ -4,7 +4,7 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "../examples/riscv-mini/src/rv32i_hazard_complete.h"
+#include "../src/rv32i_hazard_complete.h"
 
 using namespace riscv;
 

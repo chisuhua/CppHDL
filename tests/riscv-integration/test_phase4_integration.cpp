@@ -10,9 +10,9 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "../examples/riscv-mini/src/rv32i_pipeline.h"
-#include "../examples/riscv-mini/src/rv32i_pipeline_cache.h"
-#include "../examples/riscv-mini/src/rv32i_hazard_complete.h"
+#include "../src/rv32i_pipeline.h"
+#include "../src/rv32i_pipeline_cache.h"
+#include "../src/rv32i_hazard_complete.h"
 #include "cpu/cache/i_cache.h"
 #include "cpu/cache/d_cache.h"
 
