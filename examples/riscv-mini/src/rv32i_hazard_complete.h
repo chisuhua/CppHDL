@@ -83,29 +83,29 @@ public:
         // =====================================================================
         
         // RS1 匹配检测
-        ch_bool rs1_match_ex = (io().id_rs1_addr == io().ex_rd_addr) && 
-                               io().ex_reg_write && 
+        ch_bool rs1_match_ex = (io().id_rs1_addr == io().ex_rd_addr) & 
+                               io().ex_reg_write & 
                                (io().id_rs1_addr != ch_uint<5>(0_d));
         
-        ch_bool rs1_match_mem = (io().id_rs1_addr == io().mem_rd_addr) && 
-                                io().mem_reg_write && 
+        ch_bool rs1_match_mem = (io().id_rs1_addr == io().mem_rd_addr) & 
+                                io().mem_reg_write & 
                                 (io().id_rs1_addr != ch_uint<5>(0_d));
         
-        ch_bool rs1_match_wb = (io().id_rs1_addr == io().wb_rd_addr) && 
-                               io().wb_reg_write && 
+        ch_bool rs1_match_wb = (io().id_rs1_addr == io().wb_rd_addr) & 
+                               io().wb_reg_write & 
                                (io().id_rs1_addr != ch_uint<5>(0_d));
         
         // RS2 匹配检测
-        ch_bool rs2_match_ex = (io().id_rs2_addr == io().ex_rd_addr) && 
-                               io().ex_reg_write && 
+        ch_bool rs2_match_ex = (io().id_rs2_addr == io().ex_rd_addr) & 
+                               io().ex_reg_write & 
                                (io().id_rs2_addr != ch_uint<5>(0_d));
         
-        ch_bool rs2_match_mem = (io().id_rs2_addr == io().mem_rd_addr) && 
-                                io().mem_reg_write && 
+        ch_bool rs2_match_mem = (io().id_rs2_addr == io().mem_rd_addr) & 
+                                io().mem_reg_write & 
                                 (io().id_rs2_addr != ch_uint<5>(0_d));
         
-        ch_bool rs2_match_wb = (io().id_rs2_addr == io().wb_rd_addr) && 
-                               io().wb_reg_write && 
+        ch_bool rs2_match_wb = (io().id_rs2_addr == io().wb_rd_addr) & 
+                               io().wb_reg_write & 
                                (io().id_rs2_addr != ch_uint<5>(0_d));
         
         // =====================================================================
@@ -156,10 +156,13 @@ public:
         
         // Load-Use: ID 级 Load 指令需要使用 MEM 级 Load 的结果
         // MEM 级是 Load 且目的寄存器与 RS1 或 RS2 相同
+        auto rs1_match_load = (io().mem_rd_addr == io().id_rs1_addr) & 
+                              (io().id_rs1_addr != ch_uint<5>(0_d));
+        auto rs2_match_load = (io().mem_rd_addr == io().id_rs2_addr) & 
+                              (io().id_rs2_addr != ch_uint<5>(0_d));
         ch_bool load_use_hazard = 
-            io().mem_is_load && 
-            ((io().mem_rd_addr == io().id_rs1_addr && (io().id_rs1_addr != ch_uint<5>(0_d))) ||
-             (io().mem_rd_addr == io().id_rs2_addr && (io().id_rs2_addr != ch_uint<5>(0_d))));
+            io().mem_is_load & 
+            (rs1_match_load | rs2_match_load);
         
         io().stall <<= load_use_hazard;
         
