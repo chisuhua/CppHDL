@@ -98,7 +98,7 @@ add_catch_test(test_bundle_node_management test_bundle_node_management.cpp)
 add_catch_test(test_bundle_serialization test_bundle_serialization.cpp)
 add_catch_test(test_nested_bundle test_nested_bundle.cpp)
 # TODO: 修复 CH_BUNDLE_FIELDS / set_bundle_field_value API 不兼容
-# add_catch_test(test_pod_bundle_conversions test_pod_bundle_conversions.cpp)
+add_catch_test(test_pod_bundle_conversions test_pod_bundle_conversions.cpp)
 add_catch_test(test_simulator_bundle test_simulator_bundle.cpp)
 add_catch_test(test_tlm_bundle_phase1 test_tlm_bundle_phase1.cpp)
 
@@ -149,7 +149,7 @@ add_catch_test(test_fifo_example test_fifo_example.cpp)
 
 # Flow / Stream Bundle 测试
 # TODO: ch_flow <<= ch_out 运算符不兼容，需要添加 operator<<= 支持
-# add_catch_test(test_ch_flow test_ch_flow.cpp)
+add_catch_test(test_ch_flow test_ch_flow.cpp)
 add_catch_test(test_stream_width_adapter test_stream_width_adapter.cpp)
 
 # 其它测试
@@ -164,8 +164,7 @@ add_catch_test(test_operation_results test_operation_results.cpp)
 add_catch_test(test_operation_widths test_operation_widths.cpp)
 # TODO: 编译错误
 # add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
-# TODO: test_simplified_creation — core/easy_nodes.h 已不存在
-# add_catch_test(test_simplified_creation test_simplified_creation.cpp)
+# test_simplified_creation 已删除 — easy_nodes.h 不再存在
 add_catch_test(test_trace test_trace.cpp)
 add_catch_test(test_user_tracking test_user_tracking.cpp)
 add_catch_test(test_verilog_gen test_verilog_gen.cpp)
