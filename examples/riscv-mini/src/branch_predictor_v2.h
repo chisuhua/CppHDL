@@ -92,7 +92,7 @@ public:
         // =====================================================================
         // BHT 索引：PC[7:4] (使用地址低位)
         // =====================================================================
-        auto bht_index = io().pc(BranchPredictorConfig::BHT_INDEX_BITS + 1, 2);
+        auto bht_index = bits<BranchPredictorConfig::BHT_INDEX_BITS + 1, 2>(ch_uint<32>(io().pc));
         
         // 读取预测计数器
         auto counter = bht[bht_index];
@@ -107,8 +107,8 @@ public:
         // =====================================================================
         // BTB 查找 (简化：使用 PC 低位索引)
         // =====================================================================
-        auto btb_index = io().pc(BranchPredictorConfig::BTB_INDEX_BITS + 2, 3);
-        auto btb_tag = io().pc(23_d, 4);
+        auto btb_index = bits<BranchPredictorConfig::BTB_INDEX_BITS + 2, 3>(ch_uint<32>(io().pc));
+        auto btb_tag = bits<23, 4>(ch_uint<32>(io().pc));
         
         // BTB Hit 检测
         ch_bool btb_hit = btb_valid[btb_index] && (bht_tag[btb_index] == btb_tag);
