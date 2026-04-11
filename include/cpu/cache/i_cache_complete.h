@@ -112,10 +112,10 @@ public:
         // =====================================================================
         // 地址解析
         // =====================================================================
-        auto offset = io().addr(ICacheConfig::OFFSET_BITS - 1, 0);
-        auto index = io().addr(ICacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS - 1, 
-                               ICacheConfig::OFFSET_BITS);
-        auto tag = io().addr(31_d, ICacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS);
+        auto offset = bits<ICacheConfig::OFFSET_BITS - 1, 0>(ch_uint<32>(io().addr));
+        auto index = bits<ICacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS - 1, 
+                           ICacheConfig::OFFSET_BITS>(ch_uint<32>(io().addr));
+        auto tag = bits<31, ICacheConfig::OFFSET_BITS + ICacheConfig::INDEX_BITS>(ch_uint<32>(io().addr));
         
         // =====================================================================
         // Hit 检测

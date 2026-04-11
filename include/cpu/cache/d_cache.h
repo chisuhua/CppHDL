@@ -121,10 +121,10 @@ public:
         // =====================================================================
         // 地址解析
         // =====================================================================
-        auto offset = io().addr(DCacheConfig::OFFSET_BITS - 1, 0);
-        auto index = io().addr(DCacheConfig::OFFSET_BITS + DCacheConfig::INDEX_BITS - 1, 
-                               DCacheConfig::OFFSET_BITS);
-        auto tag = io().addr(31_d, DCacheConfig::OFFSET_BITS + DCacheConfig::INDEX_BITS);
+        auto offset = bits<DCacheConfig::OFFSET_BITS - 1, 0>(ch_uint<32>(io().addr));
+        auto index = bits<DCacheConfig::OFFSET_BITS + DCacheConfig::INDEX_BITS - 1, 
+                           DCacheConfig::OFFSET_BITS>(ch_uint<32>(io().addr));
+        auto tag = bits<31, DCacheConfig::OFFSET_BITS + DCacheConfig::INDEX_BITS>(ch_uint<32>(io().addr));
         
         // =====================================================================
         // 读写控制逻辑（简化版本）
