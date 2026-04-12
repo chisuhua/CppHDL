@@ -63,6 +63,9 @@ add_catch_test(test_switch chlib/test_switch.cpp)
 # RISC-V Mini 组件测试
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 
+# Stream 组件独立测试
+add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)
+
 # Phase 4 集成测试 (chlib 版本)
 # TODO: test_phase4_chlib 需要修复 riscv-mini API 兼容性问题
 # add_catch_test(test_phase4_chlib chlib/test_phase4_integration.cpp)
