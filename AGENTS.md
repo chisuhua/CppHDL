@@ -127,6 +127,7 @@ sm.build();
 - [ ] 已阅读 `samples/fifo_example.cpp` 理解 IO 模式
 - [ ] 已阅读相关现有示例（如移位寄存器、计数器等）
 - [ ] Testbench 使用 `sim.set_input_value()` 而非直接赋值
+- [ ] **禁止** 对 input 端口使用 `io().port = value`（见 3.6 错误）
 - [ ] `describe()` 中使用 `select()` 而非 `&&` 处理 IO 端口
 - [ ] 模块实例化使用 `ch::ch_module<...>`
 - [ ] 编译无错误
@@ -308,9 +309,33 @@ uint64_t stall_u64 = stall;
 REQUIRE(stall_u64 == 1);
 ```
 
+### 3.6 Testbench 输入端口赋值错误（新增）
+
+**错误**: 仿真中计数器不工作、状态机不响应、使能信号无效，所有信号值始终为 0。使用 `io()` 赋值不产生效果，但也不编译错误。
+
+**原因**: `port<T, input_direction>::operator=` 只打印错误消息，**不会更新模拟器的 `data_map_`**。所有 Top 层输入端口必须通过 `simulator.set_input_value()` 设置。
+
+**修复**:
+```cpp
+int main() {
+    ch::ch_device<Top> device;
+    ch::Simulator sim(device.context());
+    
+    // ❌ 错误：直接赋值对 input 端口无效
+    device.instance().io().enable = true;
+    device.instance().io().clear = false;
+    
+    // ✅ 正确：使用 simulator.set_input_value
+    sim.set_input_value(device.instance().io().enable, 1);  // true → 1
+    sim.set_input_value(device.instance().io().clear, 0);   // false → 0
+    
+    sim.tick();
+    auto val = sim.get_value(device.instance().io().value);
+}
+```
+
 **参考**:
-- `skills/cpphdl-simulator-port-value/SKILL.md` - Simulator API 快速参考
-- `tests/riscv/test_hazard_compile.cpp` - 实战示例
+- `skills/cpphdl-input-port-assignment/SKILL.md` — 完整错误分析 + 修复指南
 
 ---
 
