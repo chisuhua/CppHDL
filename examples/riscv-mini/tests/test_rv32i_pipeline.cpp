@@ -16,7 +16,8 @@
 #include "../src/rv32i_pipeline_regs.h"
 #include "../src/rv32i_forwarding.h"
 #include "../src/rv32i_branch_predict.h"
-#include "../src/rv32i_core.h"
+#include "../src/hazard_unit.h"
+#include "cpu/forwarding.h"
 
 #include <iostream>
 
@@ -184,12 +185,12 @@ TEST_CASE("Forwarding Unit - Basic Functionality", "[forwarding][unit]") {
 TEST_CASE("Forwarding Mux - Data Selection", "[forwarding][mux]") {
     SECTION("ForwardingMux compiles and instantiates") {
         ch::Component* parent = nullptr;
-        ForwardingMux mux(parent, "test_mux");
+        chlib::ForwardingMux<32> mux(parent, "test_mux");
         (void)mux;
     }
     
     SECTION("ForwardingMux selects EX/MEM result") {
-        ch::ch_device<ForwardingMux> mux;
+        ch::ch_device<chlib::ForwardingMux<32>> mux;
         ch::Simulator sim(mux.context());
         
         sim.set_input_value(mux.instance().io().forward_a, 1);
@@ -412,74 +413,6 @@ TEST_CASE("Hazard Detection Unit - LOAD-USE", "[hazard][load-use]") {
         
         auto stall_if = to_bool(sim.get_port_value(unit.instance().io().stall_if));
         REQUIRE(stall_if == false);
-    }
-}
-
-// ============================================================================
-// 测试用例 10: 流水线核心集成
-// ============================================================================
-TEST_CASE("RV32I Core - Pipeline Integration", "[core][pipeline]") {
-    SECTION("Rv32iCore compiles and instantiates") {
-        ch::Component* parent = nullptr;
-        Rv32iCore core(parent, "test_core");
-        (void)core;
-    }
-    
-    SECTION("Rv32iCore IO ports are accessible") {
-        ch::ch_device<Rv32iCore> core;
-        ch::Simulator sim(core.context());
-        
-        sim.set_input_value(core.instance().io().clk, false);
-        sim.set_input_value(core.instance().io().rst, true);
-        sim.set_input_value(core.instance().io().instr_data, 0x00100093);
-        sim.set_input_value(core.instance().io().instr_ready, true);
-        sim.set_input_value(core.instance().io().data_rdata, 0);
-        sim.set_input_value(core.instance().io().data_ready, true);
-        
-        (void)sim.get_port_value(core.instance().io().running);
-        (void)sim.get_port_value(core.instance().io().instr_addr);
-        (void)sim.get_port_value(core.instance().io().data_addr);
-    }
-}
-
-// ============================================================================
-// 测试用例 11: 流水线 IPC 验证
-// ============================================================================
-TEST_CASE("Pipeline - IPC Verification", "[pipeline][ipc]") {
-    SECTION("Pipeline achieves IPC > 1.0 for independent instructions") {
-        // 5 级流水线理论 IPC 计算:
-        // N 条独立指令：总周期 = N + 4 (填充 5 周期，稳定执行 N-1 周期)
-        // IPC = N / (N + 4)
-        // N=10: IPC = 10/14 = 0.71
-        // N=100: IPC = 100/104 = 0.96
-        // 相比非流水线 (IPC=0.2) 有显著提升
-        
-        double ideal_ipc_10 = 10.0 / 14.0;
-        double ideal_ipc_100 = 100.0 / 104.0;
-        
-        REQUIRE(ideal_ipc_10 > 0.5);
-        REQUIRE(ideal_ipc_100 > 0.9);
-    }
-}
-
-// ============================================================================
-// 测试用例 12: 完整流水线数据通路
-// ============================================================================
-TEST_CASE("Pipeline - Full Data Path", "[pipeline][datapath]") {
-    SECTION("Pipeline components connect correctly") {
-        // 验证所有流水线组件可以一起实例化
-        ch::Component* parent = nullptr;
-        
-        IfIdPipelineReg if_id(parent, "if_id");
-        IdExPipelineReg id_ex(parent, "id_ex");
-        ExMemPipelineReg ex_mem(parent, "ex_mem");
-        MemWbPipelineReg mem_wb(parent, "mem_wb");
-        ForwardingUnit fwd(parent, "fwd");
-        BranchPredictor bp(parent, "bp");
-        HazardDetectionUnit hazard(parent, "hazard");
-        
-        (void)if_id; (void)id_ex; (void)ex_mem; (void)mem_wb;
-        (void)fwd; (void)bp; (void)hazard;
     }
 }
 

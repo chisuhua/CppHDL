@@ -1,9 +1,11 @@
 /**
  * @file rv32i_core.h
- * @brief RV32I 处理器核心 (Phase 3C: 5 级流水线集成)
+ * @brief RISC-V 5 级流水线冒险检测单元
  * 
- * 架构：IF → ID → EX → MEM → WB
- * 组件：流水线寄存器、数据前推、分支预测、冒险检测
+ * 注意：Rv32iCore 类已删除（骨架代码，无实际连线）
+ * 此文件仅保留 HazardDetectionUnit 组件
+ * 
+ * 日期：2026-04-09
  */
 #pragma once
 
@@ -57,53 +59,6 @@ public:
         io().stall_if = load_use_hazard;
         io().stall_id = load_use_hazard;
         io().flush_id_ex = load_use_hazard;  // 注意：实际实现中可能需要 & !branch_taken
-    }
-};
-
-/** RV32I 5 级流水线核心 - 组件集成声明 */
-class Rv32iCore : public ch::Component {
-public:
-    __io(
-        ch_in<ch_uint<32>> instr_data; ch_in<ch_bool> instr_ready;
-        ch_out<ch_uint<32>> instr_addr; ch_out<ch_bool> instr_valid;
-        ch_in<ch_uint<32>> data_rdata; ch_in<ch_bool> data_ready;
-        ch_out<ch_uint<32>> data_addr; ch_out<ch_uint<32>> data_wdata;
-        ch_out<ch_bool> data_read; ch_out<ch_bool> data_write; ch_out<ch_uint<4>> data_strbe;
-        ch_in<ch_bool> clk; ch_in<ch_bool> rst;
-        ch_out<ch_bool> running; ch_out<ch_uint<32>> ipc_count; ch_out<ch_uint<32>> stall_count
-    )
-    Rv32iCore(ch::Component* p = nullptr, const std::string& n = "rv32i_core") : ch::Component(p, n) {}
-    void create_ports() override { new (io_storage_) io_type; }
-    void describe() override {
-        // 组件实例化声明 (完整连接需框架支持 port 连接)
-        // 流水线寄存器
-        IfIdPipelineReg if_id_reg(this, "if_id");
-        IdExPipelineReg id_ex_reg(this, "id_ex");
-        ExMemPipelineReg ex_mem_reg(this, "ex_mem");
-        MemWbPipelineReg mem_wb_reg(this, "mem_wb");
-        
-        // 数据前推
-        ForwardingUnit fwd_unit(this, "fwd");
-        
-        // 分支预测
-        BranchPredictor bp(this, "bp");
-        ControlHazardUnit ch(this, "ch");
-        
-        // 冒险检测
-        HazardDetectionUnit hz(this, "hz");
-        
-        // 基础组件
-        Rv32iPc pc(this, "pc");
-        Rv32iDecoder dec(this, "dec");
-        Rv32iRegFile rf(this, "rf");
-        Rv32iAlu alu(this, "alu");
-        
-        // 状态输出
-        io().running = !io().rst;
-        io().ipc_count = ch_uint<32>(0_d);
-        io().stall_count = ch_uint<32>(0_d);
-        io().instr_valid = ch_bool(true);
-        io().data_strbe = ch_uint<4>(15_d);
     }
 };
 
