@@ -68,34 +68,24 @@ public:
 
     void describe() override {
         // =====================================================================
-        // BHT: 16 条目 × 2-bit 饱和计数器
+        // BHT: 16 条目 × 2-bit 饱和计数器 (使用 ch_mem 代替 ch_reg[] 数组)
         // =====================================================================
-        ch_reg<ch_uint<2>> bht[BranchPredictorConfig::BHT_ENTRIES];
-        
-        // 初始化：全部设为 Weakly Taken (10 = 2)
-        for (unsigned i = 0; i < BranchPredictorConfig::BHT_ENTRIES; i++) {
-            bht[i] = ch_reg<ch_uint<2>>(ch_uint<2>(2_d));
-        }
+        ch_mem<ch_uint<2>, BranchPredictorConfig::BHT_ENTRIES> bht("bht");
         
         // =====================================================================
-        // BTB: 8 条目 (Tag + Target)
+        // BTB: 8 条目 (Tag + Target + Valid)
+        // 使用 3 个并行 ch_mem 存储
         // =====================================================================
-        ch_reg<ch_uint<20>> bht_tag[BranchPredictorConfig::BTB_ENTRIES];  // PC[23:4] 作为 tag
-        ch_reg<ch_uint<32>> btb_target[BranchPredictorConfig::BTB_ENTRIES];
-        ch_reg<ch_bool> btb_valid[BranchPredictorConfig::BTB_ENTRIES];
-        
-        // 初始化 BTB
-        for (unsigned i = 0; i < BranchPredictorConfig::BTB_ENTRIES; i++) {
-            btb_valid[i] = ch_reg<ch_bool>(ch_bool(false));
-        }
+        ch_mem<ch_uint<20>, BranchPredictorConfig::BTB_ENTRIES> btb_tag("btb_tag");
+        ch_mem<ch_uint<32>, BranchPredictorConfig::BTB_ENTRIES> btb_target("btb_target");
+        ch_mem<ch_bool, BranchPredictorConfig::BTB_ENTRIES> btb_valid("btb_valid");
         
         // =====================================================================
         // BHT 索引：PC[7:4] (使用地址低位)
         // =====================================================================
         auto bht_index = bits<BranchPredictorConfig::BHT_INDEX_BITS + 1, 2>(ch_uint<32>(io().pc));
         
-        // 读取预测计数器
-        auto counter = bht[bht_index];
+        auto counter = bht.aread(bht_index);
         
         // =====================================================================
         // 预测逻辑：counter >= 2 则预测 Taken
@@ -108,40 +98,38 @@ public:
         // BTB 查找 (简化：使用 PC 低位索引)
         // =====================================================================
         auto btb_index = bits<BranchPredictorConfig::BTB_INDEX_BITS + 2, 3>(ch_uint<32>(io().pc));
-        auto btb_tag = bits<23, 4>(ch_uint<32>(io().pc));
+        auto btb_tag_val = bits<23, 4>(ch_uint<32>(io().pc));
         
-        // BTB Hit 检测
-        ch_bool btb_hit = btb_valid[btb_index] && (bht_tag[btb_index] == btb_tag);
+        auto tag_r = btb_tag.aread(btb_index);
+        auto valid_r = btb_valid.aread(btb_index);
+        auto tag_match = select(valid_r, tag_r == btb_tag_val, ch_bool(false));
+        ch_bool btb_hit = tag_match;
         
-        // 输出预测目标地址
-        io().predicted_target <<= select(btb_hit, btb_target[btb_index], 
-                                         io().pc + ch_uint<32>(4_d));  // 默认 PC+4
+        auto target_r = btb_target.aread(btb_index);
+        io().predicted_target <<= select(btb_hit, target_r, 
+                                         io().pc + ch_uint<32>(4_d));
         
         // =====================================================================
         // 更新逻辑 (EX 级确认后)
         // =====================================================================
-        if (io().update == ch_bool(true)) {
-            // 更新 BHT 计数器
-            auto old_counter = bht[bht_index];
-            
-            // 实际 Taken: counter++; Not Taken: counter--
-            auto new_counter = select(io().branch_taken_actual == ch_bool(true),
-                                      select(old_counter < ch_uint<2>(3_d), 
-                                             old_counter + ch_uint<2>(1_d),
-                                             old_counter),
-                                      select(old_counter > ch_uint<2>(0_d),
-                                             old_counter - ch_uint<2>(1_d),
-                                             old_counter));
-            
-            bht[bht_index] = ch_reg<ch_uint<2>>(new_counter);
-            
-            // 更新 BTB (分支实际采取时)
-            if (io().branch_taken_actual == ch_bool(true)) {
-                bht_tag[btb_index] = ch_reg<ch_uint<20>>(btb_tag);
-                btb_target[btb_index] = ch_reg<ch_uint<32>>(io().branch_target);
-                btb_valid[btb_index] = ch_reg<ch_bool>(ch_bool(true));
-            }
-        }
+        auto old_counter = bht.aread(bht_index);
+        
+        auto new_counter = select(io().branch_taken_actual == ch_bool(true),
+                                  select(old_counter < ch_uint<2>(3_d), 
+                                         old_counter + ch_uint<2>(1_d),
+                                         old_counter),
+                                  select(old_counter > ch_uint<2>(0_d),
+                                         old_counter - ch_uint<2>(1_d),
+                                         old_counter));
+        
+        auto btb_wen = select(io().update, io().branch_taken_actual, ch_bool(false));
+        
+        bht.write(bht_index, new_counter, io().update);
+        
+        auto btb_tag_val_w = bits<23, 4>(ch_uint<32>(io().pc));
+        btb_tag.write(btb_index, btb_tag_val_w, btb_wen);
+        btb_target.write(btb_index, io().branch_target, btb_wen);
+        btb_valid.write(btb_index, ch_bool(true), btb_wen);
     }
 };
 

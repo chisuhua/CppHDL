@@ -60,6 +60,9 @@ add_catch_test(test_switch chlib/test_switch.cpp)
 # 需要系统性修复 stages/*.h 和 cache 头文件，工作量较大，延后处理
 # add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
 
+# RISC-V Mini 组件测试
+add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
+
 # Phase 4 集成测试 (chlib 版本)
 # TODO: test_phase4_chlib 需要修复 riscv-mini API 兼容性问题
 # add_catch_test(test_phase4_chlib chlib/test_phase4_integration.cpp)
@@ -224,4 +227,5 @@ add_spinalhdl_ported_test(axi4_phase3a phase3a_complete)
 add_spinalhdl_ported_test(rv32i_phase1 rv32i_phase1_test)
 add_spinalhdl_ported_test(rv32i_phase2 rv32i_phase2_test)
 add_spinalhdl_ported_test(rv32i_phase3 rv32i_phase3_test)
+add_spinalhdl_ported_test(branch_predictor_v2 test_branch_predictor_v2)
 

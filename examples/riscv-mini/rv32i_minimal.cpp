@@ -97,7 +97,7 @@ public:
     
     void describe() override {
         // RV32I 核心
-        ch::ch_module<RV32ICore> core{"core"};
+        ch::ch_module<Rv32iCore> core{"core"};
         
         // 指令存储器
         ch::ch_module<InstrMemory> instr_mem{"instr_mem"};

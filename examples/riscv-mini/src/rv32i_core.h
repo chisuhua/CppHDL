@@ -84,7 +84,6 @@ public:
         
         // 数据前推
         ForwardingUnit fwd_unit(this, "fwd");
-        ForwardingMux fwd_mux(this, "fwd_mux");
         
         // 分支预测
         BranchPredictor bp(this, "bp");
