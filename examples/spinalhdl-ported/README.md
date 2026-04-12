@@ -64,6 +64,16 @@ examples/spinalhdl-ported/
 | 20 | AXI SoC | ⭐⭐⭐⭐ | ✅ 稳定 | ✅ CTest | AXI 矩阵 + GPIO + UART + Timer |
 | 21 | Phase 3A | ⭐⭐⭐⭐ | ✅ 稳定 | ✅ CTest | Interconnect + AXI-to-Lite 转换器 |
 
+### RISC-V Mini 示例 (`examples/riscv-mini/`)
+
+| # | 模块 | 复杂度 | 质量 | CTest | 说明 |
+|---|------|--------|------|-------|------|
+| 22 | RV32I Phase 1 | ⭐⭐ | ✅ 稳定 | ✅ CTest | RegFile + ALU + 解码器 |
+| 23 | RV32I Phase 2 | ⭐⭐ | ✅ 稳定 | ✅ CTest | 分支 + 跳转指令 (13/13) |
+| 24 | RV32I Phase 3 | ⭐⭐ | ✅ 稳定 | ✅ CTest | Load/Store 指令 (13/13) |
+
+> ⚠️ RISC-V Mini 代码债务见下方「已知问题」
+
 ---
 
 ## 🚀 快速开始
@@ -129,6 +139,22 @@ class Top : public ch::Component {
 ```
 
 > ⚠️ 使用 `ch::ch_module<T>` 而非 `CH_MODULE` 宏（后者不支持模板类）
+
+---
+
+## ⚠️ 已知问题
+
+### RISC-V Mini 代码债务 (`examples/riscv-mini/`)
+
+| 问题 | 文件 | 严重程度 | 说明 |
+|------|------|---------|------|
+| 已禁用文件 | `rv32i_minimal.cpp`, `phase3b_minimal.cpp` | 🔴 | `ForwardingMux` / `RV32ICore` 类名不存在，API 变更 |
+| 未编译代码 | `phase3b_complete.cpp` | 🟡 | 存在但未在 CMakeLists.txt 中注册 |
+| 未编译代码 | `rv32i_test.cpp`, `rv32i_phase3_test.cpp` 外的测试 | 🟡 | `rv32i_test.cpp` 引用已废弃头文件 |
+| 孤立 tests/ | `tests/` 目录 CMakeLists.txt 未被主 CMakeLists 引用 | 🟡 | 9 个测试文件无法构建 |
+| stages/ 头文件 | `src/stages/*.h` | 🟡 | IF/ID/EX/MEM/WB 阶段完整但未被活跃测试使用 |
+| 流水线 Cache | `src/rv32i_pipeline_cache.h` | 🟡 | 集成 I/D-Cache 但依赖链不完整 |
+| 分支预测器 | `src/branch_predictor_v2.h`, `dynamic_branch_predict.h` | 🟡 | 两个版本共存，v2 有测试，dynamic 无 |
 
 ---
 

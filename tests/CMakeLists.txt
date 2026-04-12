@@ -216,3 +216,12 @@ add_spinalhdl_ported_test(axi4_full axi4_full_example)
 add_spinalhdl_ported_test(axi4_soc axi_soc_example)
 add_spinalhdl_ported_test(axi4_phase3a phase3a_complete)
 
+# ============================================================================
+# RISC-V Mini 示例 CTest 注册
+# 3 个活跃测试（Phase 1/2/3）通过 100%，2 个文件因 API 变更被禁用
+# ============================================================================
+
+add_spinalhdl_ported_test(rv32i_phase1 rv32i_phase1_test)
+add_spinalhdl_ported_test(rv32i_phase2 rv32i_phase2_test)
+add_spinalhdl_ported_test(rv32i_phase3 rv32i_phase3_test)
+
