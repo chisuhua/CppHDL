@@ -52,10 +52,17 @@ examples/spinalhdl-ported/
 | 13 | quadrature_encoder | ⭐⭐⭐ | ✅ 稳定 | ❌ | AB 相 4 倍频解码 |
 | 14 | sigma_delta_dac | ⭐⭐ | ✅ 稳定 | ❌ | 一阶 Σ-Delta 调制 |
 | 15 | width_adapter | ⭐⭐ | ✅ 稳定 | ✅ 已注册 | Stream 位宽转换 |
-| 16 | assert | ⭐ | ✅ 稳定 | ❌ | 断言系统演示 |
-| 17 | phase1c | ⭐⭐ | ✅ 稳定 | ❌ | 集成测试 |
+| 16 | assert | ⭐ | ✅ 稳定 | ✅ CTest | 断言系统演示 |
+| 17 | phase1c | ⭐⭐ | ✅ 稳定 | ✅ CTest | 集成测试 |
 
-> ⚠️ 当前所有示例仅通过 `main()` 自测试，仅有 width_adapter 有独立 Catch2 测试。
+### AXI4 总线示例 (`examples/axi4/`)
+
+| # | 模块 | 复杂度 | 质量 | CTest | 说明 |
+|---|------|--------|------|-------|------|
+| 18 | AXI4-Lite | ⭐⭐⭐ | ✅ 稳定 | ✅ CTest | 最简 AXI-Lite 时序验证 |
+| 19 | AXI4 Full | ⭐⭐⭐⭐ | ✅ 稳定 | ✅ CTest | 全功能 AXI4，突发传输 |
+| 20 | AXI SoC | ⭐⭐⭐⭐ | ✅ 稳定 | ✅ CTest | AXI 矩阵 + GPIO + UART + Timer |
+| 21 | Phase 3A | ⭐⭐⭐⭐ | ✅ 稳定 | ✅ CTest | Interconnect + AXI-to-Lite 转换器 |
 
 ---
 
