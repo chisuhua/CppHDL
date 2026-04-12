@@ -170,10 +170,9 @@ int main() {
     }
     
     std::cout << "\nTotal interrupts: " << interrupt_count << std::endl;
-    if (interrupt_count >= 3) {
-        std::cout << "✅ PASS: Timer working correctly" << std::endl;
-    } else {
-        std::cout << "❌ FAIL: Expected at least 3 interrupts" << std::endl;
+    if (interrupt_count < 3) {
+        std::cerr << "FAILURE: Expected at least 3 interrupts, got " << interrupt_count << std::endl;
+        return 1;
     }
     
     // 生成 Verilog

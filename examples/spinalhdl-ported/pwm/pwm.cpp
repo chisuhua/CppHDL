@@ -173,6 +173,10 @@ int main() {
         sim.tick();
         auto pwm_val = sim.get_port_value(top_device.instance().io().pwm_out);
         std::cout << "  pwm=" << static_cast<uint64_t>(pwm_val) << std::endl;
+        if (static_cast<uint64_t>(pwm_val) != 0) {
+            std::cerr << "FAILURE: pwm_out should be 0 when enable=0" << std::endl;
+            return 1;
+        }
     }
     
     // 生成 Verilog

@@ -246,10 +246,9 @@ int main() {
             auto rx_data = sim.get_port_value(top_device.instance().io().rx_data);
             std::cout << "Transfer complete! RX data: 0x" << std::hex
                       << static_cast<uint64_t>(rx_data) << std::dec << std::endl;
-            if (static_cast<uint64_t>(rx_data) == 0x5A) {
-                std::cout << "✅ PASS" << std::endl;
-            } else {
-                std::cout << "❌ FAIL: Expected 0x5A" << std::dec << std::endl;
+            if (static_cast<uint64_t>(rx_data) != 0x5A) {
+                std::cerr << "FAILURE: Expected 0x5A, got 0x" << std::hex << static_cast<uint64_t>(rx_data) << std::dec << std::endl;
+                return 1;
             }
             break;
         }

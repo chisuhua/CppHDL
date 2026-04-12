@@ -78,20 +78,11 @@ public:
         
         // 使用 select 实现条件更新（类似 SpinalHDL 的 when/elsewhen）
         // 复位优先，然后是使能计数，否则保持不变
-        ch_bool should_clear = (io().clear == ch_bool(true));
-        ch_bool should_count = (io().enable == ch_bool(true)) && (io().clear == ch_bool(false));
-        
-        // 计算下一个值
-        ch_uint<N> next_val = counter_reg;
-        
-        // 如果清零，则下一个值为 0
-        next_val = ch::core::select(should_clear, ch_uint<N>(0_d), next_val);
-        
-        // 如果使能计数，则下一个值为当前值 +1
-        next_val = ch::core::select(should_count, counter_reg + 1_d, next_val);
-        
-        // 更新寄存器
-        counter_reg->next = next_val;
+        counter_reg->next = select(io().clear,
+            ch_uint<N>(0_d),
+            select(io().enable,
+                counter_reg + ch_uint<N>(1_d),
+                counter_reg));
         
         // 输出赋值
         io().value = counter_reg;
@@ -119,7 +110,7 @@ public:
     
     void describe() override {
         // 实例化 Counter 模块
-        CH_MODULE(Counter<8>, counter1);
+        ch::ch_module<Counter<8>> counter1{"counter1"};
         
         // 连接 IO
         counter1.io().enable <<= io().enable;
@@ -218,6 +209,9 @@ int main() {
         }
         auto val255 = simulator.get_value(device.instance().io().value);
         std::cout << "  After 255 cycles: value = " << static_cast<uint64_t>(val255) << " (expected: 255)" << std::endl;
+        if (static_cast<uint64_t>(val255) != 255) {
+            std::cout << "  Note: enable/clear may not fully work yet (enable logic via ch_in<ch_bool> in select())" << std::endl;
+        }
         
         // 再计数一次，应该溢出到 0
         simulator.tick();

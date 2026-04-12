@@ -115,6 +115,8 @@ int main() {
             
             if (static_cast<uint64_t>(val) != expected) {
                 std::cout << " [ERROR: expected " << expected << "]";
+                std::cerr << "FAILURE: value mismatch at cycle " << i << std::endl;
+                return 1;
             } else {
                 std::cout << " [OK]";
             }
@@ -129,10 +131,18 @@ int main() {
         }
         auto val255 = simulator.get_value(device.instance().io().value);
         std::cout << "  After 255 ticks: value = " << static_cast<uint64_t>(val255) << " (expected: 255)" << std::endl;
+        if (static_cast<uint64_t>(val255) != 255) {
+            std::cerr << "FAILURE: expected 255 after 255 ticks" << std::endl;
+            return 1;
+        }
         
         simulator.tick();
         auto val_overflow = simulator.get_value(device.instance().io().value);
         std::cout << "  After 256 ticks (overflow): value = " << static_cast<uint64_t>(val_overflow) << " (expected: 0)" << std::endl;
+        if (static_cast<uint64_t>(val_overflow) != 0) {
+            std::cerr << "FAILURE: expected 0 after overflow" << std::endl;
+            return 1;
+        }
         
         std::cout << "\n=== Test Complete ===" << std::endl;
         

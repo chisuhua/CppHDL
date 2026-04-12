@@ -149,11 +149,16 @@ int main() {
                       << " d=0x" << std::hex << static_cast<uint64_t>(d) << std::dec << "\n";
         }
         if (static_cast<uint64_t>(v)) {
-            std::cout << (static_cast<uint64_t>(d) == 0x5A ? "✅ PASS" : "❌ FAIL") << "\n";
+            if (static_cast<uint64_t>(d) != 0x5A) {
+                std::cerr << "FAILURE: Expected 0x5A, got 0x" << std::hex << static_cast<uint64_t>(d) << std::dec << "\n";
+                return 1;
+            }
+            std::cout << "PASS: Received correct data 0x5A\n";
             goto done;
         }
     }
-    std::cout << "❌ Timeout\n";
+    std::cout << "FAILURE: Timeout, no valid data received\n";
+    return 1;
 done:
     
     toVerilog("uart_rx.v", top.context());

@@ -206,6 +206,10 @@ int main() {
     sim.tick();
     auto int_val = sim.get_port_value(top_device.instance().io().interrupt);
     std::cout << "  interrupt=" << static_cast<uint64_t>(int_val) << " (should be 1)" << std::endl;
+    if (static_cast<uint64_t>(int_val) != 1) {
+        std::cerr << "FAILURE: expected interrupt=1 on rising edge" << std::endl;
+        return 1;
+    }
     
     // 产生下降沿
     std::cout << "Generating falling edge..." << std::endl;
@@ -213,6 +217,10 @@ int main() {
     sim.tick();
     int_val = sim.get_port_value(top_device.instance().io().interrupt);
     std::cout << "  interrupt=" << static_cast<uint64_t>(int_val) << " (should be 1)" << std::endl;
+    if (static_cast<uint64_t>(int_val) != 1) {
+        std::cerr << "FAILURE: expected interrupt=1 on falling edge" << std::endl;
+        return 1;
+    }
     
     // 测试中断禁用
     std::cout << "Testing interrupt disable..." << std::endl;
@@ -221,6 +229,10 @@ int main() {
     sim.tick();
     int_val = sim.get_port_value(top_device.instance().io().interrupt);
     std::cout << "  interrupt=" << static_cast<uint64_t>(int_val) << " (should be 0)" << std::endl;
+    if (static_cast<uint64_t>(int_val) != 0) {
+        std::cerr << "FAILURE: expected interrupt=0 when disabled" << std::endl;
+        return 1;
+    }
     
     // 生成 Verilog
     std::cout << "\n=== Generating Verilog ===" << std::endl;
