@@ -172,6 +172,7 @@ TEST_CASE("HazardUnitComplete - Branch Flush", "[hazard][branch]") {
     ch::Simulator sim(hazard_device.context());
     
     sim.set_input_value(hazard_device.instance().io().ex_branch, 1);
+    sim.set_input_value(hazard_device.instance().io().ex_branch_taken, 1);
     sim.set_input_value(hazard_device.instance().io().id_rs1_addr, 0);
     sim.set_input_value(hazard_device.instance().io().id_rs2_addr, 0);
     sim.set_input_value(hazard_device.instance().io().ex_rd_addr, 0);
@@ -182,7 +183,6 @@ TEST_CASE("HazardUnitComplete - Branch Flush", "[hazard][branch]") {
     sim.set_input_value(hazard_device.instance().io().wb_reg_write, 0);
     sim.set_input_value(hazard_device.instance().io().id_is_load, 0);
     sim.set_input_value(hazard_device.instance().io().id_is_branch, 0);
-    sim.set_input_value(hazard_device.instance().io().ex_branch_taken, 0);
     sim.set_input_value(hazard_device.instance().io().mem_is_load, 0);
     sim.set_input_value(hazard_device.instance().io().ex_alu_result, 0);
     sim.set_input_value(hazard_device.instance().io().mem_alu_result, 0);
@@ -197,6 +197,41 @@ TEST_CASE("HazardUnitComplete - Branch Flush", "[hazard][branch]") {
     auto pc_src = sim.get_port_value(hazard_device.instance().io().pc_src);
     REQUIRE(static_cast<uint64_t>(flush) == 1);
     REQUIRE(static_cast<uint64_t>(pc_src) == 1);
+}
+
+TEST_CASE("HazardUnitComplete - Branch Not Taken No Flush", "[hazard][branch][notaken]") {
+    auto ctx = std::make_unique<ch::core::context>("hazard_branch_noflush");
+    ch::core::ctx_swap swap(ctx.get());
+    
+    ch::ch_device<HazardUnitComplete> hazard_device;
+    ch::Simulator sim(hazard_device.context());
+    
+    sim.set_input_value(hazard_device.instance().io().ex_branch, 1);
+    sim.set_input_value(hazard_device.instance().io().ex_branch_taken, 0);
+    sim.set_input_value(hazard_device.instance().io().id_rs1_addr, 0);
+    sim.set_input_value(hazard_device.instance().io().id_rs2_addr, 0);
+    sim.set_input_value(hazard_device.instance().io().ex_rd_addr, 0);
+    sim.set_input_value(hazard_device.instance().io().ex_reg_write, 0);
+    sim.set_input_value(hazard_device.instance().io().mem_rd_addr, 0);
+    sim.set_input_value(hazard_device.instance().io().mem_reg_write, 0);
+    sim.set_input_value(hazard_device.instance().io().wb_rd_addr, 0);
+    sim.set_input_value(hazard_device.instance().io().wb_reg_write, 0);
+    sim.set_input_value(hazard_device.instance().io().id_is_load, 0);
+    sim.set_input_value(hazard_device.instance().io().id_is_branch, 0);
+    sim.set_input_value(hazard_device.instance().io().mem_is_load, 0);
+    sim.set_input_value(hazard_device.instance().io().ex_alu_result, 0);
+    sim.set_input_value(hazard_device.instance().io().mem_alu_result, 0);
+    sim.set_input_value(hazard_device.instance().io().wb_write_data, 0);
+    sim.set_input_value(hazard_device.instance().io().rs1_data_reg, 1);
+    sim.set_input_value(hazard_device.instance().io().rs2_data_reg, 2);
+    
+    sim.tick();
+    sim.tick();
+    
+    auto flush = sim.get_port_value(hazard_device.instance().io().flush);
+    auto pc_src = sim.get_port_value(hazard_device.instance().io().pc_src);
+    REQUIRE(static_cast<uint64_t>(flush) == 0);
+    REQUIRE(static_cast<uint64_t>(pc_src) == 0);
 }
 
 TEST_CASE("HazardUnitComplete - x0 Protection", "[hazard][x0]") {

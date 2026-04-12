@@ -83,30 +83,42 @@ public:
         // =====================================================================
         
         // RS1 匹配检测
-        ch_bool rs1_match_ex = (io().id_rs1_addr == io().ex_rd_addr) & 
-                               io().ex_reg_write & 
-                               (io().id_rs1_addr != ch_uint<5>(0_d));
+        ch_bool rs1_match_ex = select(io().id_rs1_addr == io().ex_rd_addr,
+                                      select(io().ex_reg_write,
+                                             io().id_rs1_addr != ch_uint<5>(0_d),
+                                             ch_bool(false)),
+                                      ch_bool(false));
         
-        ch_bool rs1_match_mem = (io().id_rs1_addr == io().mem_rd_addr) & 
-                                io().mem_reg_write & 
-                                (io().id_rs1_addr != ch_uint<5>(0_d));
+        ch_bool rs1_match_mem = select(io().id_rs1_addr == io().mem_rd_addr,
+                                       select(io().mem_reg_write,
+                                              io().id_rs1_addr != ch_uint<5>(0_d),
+                                              ch_bool(false)),
+                                       ch_bool(false));
         
-        ch_bool rs1_match_wb = (io().id_rs1_addr == io().wb_rd_addr) & 
-                               io().wb_reg_write & 
-                               (io().id_rs1_addr != ch_uint<5>(0_d));
+        ch_bool rs1_match_wb = select(io().id_rs1_addr == io().wb_rd_addr,
+                                      select(io().wb_reg_write,
+                                             io().id_rs1_addr != ch_uint<5>(0_d),
+                                             ch_bool(false)),
+                                      ch_bool(false));
         
         // RS2 匹配检测
-        ch_bool rs2_match_ex = (io().id_rs2_addr == io().ex_rd_addr) & 
-                               io().ex_reg_write & 
-                               (io().id_rs2_addr != ch_uint<5>(0_d));
+        ch_bool rs2_match_ex = select(io().id_rs2_addr == io().ex_rd_addr,
+                                      select(io().ex_reg_write,
+                                             io().id_rs2_addr != ch_uint<5>(0_d),
+                                             ch_bool(false)),
+                                      ch_bool(false));
         
-        ch_bool rs2_match_mem = (io().id_rs2_addr == io().mem_rd_addr) & 
-                                io().mem_reg_write & 
-                                (io().id_rs2_addr != ch_uint<5>(0_d));
+        ch_bool rs2_match_mem = select(io().id_rs2_addr == io().mem_rd_addr,
+                                       select(io().mem_reg_write,
+                                              io().id_rs2_addr != ch_uint<5>(0_d),
+                                              ch_bool(false)),
+                                       ch_bool(false));
         
-        ch_bool rs2_match_wb = (io().id_rs2_addr == io().wb_rd_addr) & 
-                               io().wb_reg_write & 
-                               (io().id_rs2_addr != ch_uint<5>(0_d));
+        ch_bool rs2_match_wb = select(io().id_rs2_addr == io().wb_rd_addr,
+                                      select(io().wb_reg_write,
+                                             io().id_rs2_addr != ch_uint<5>(0_d),
+                                             ch_bool(false)),
+                                      ch_bool(false));
         
         // =====================================================================
         // Forwarding 优先级控制
@@ -156,13 +168,15 @@ public:
         
         // Load-Use: ID 级 Load 指令需要使用 MEM 级 Load 的结果
         // MEM 级是 Load 且目的寄存器与 RS1 或 RS2 相同
-        auto rs1_match_load = (io().mem_rd_addr == io().id_rs1_addr) & 
-                              (io().id_rs1_addr != ch_uint<5>(0_d));
-        auto rs2_match_load = (io().mem_rd_addr == io().id_rs2_addr) & 
-                              (io().id_rs2_addr != ch_uint<5>(0_d));
-        ch_bool load_use_hazard = 
-            io().mem_is_load & 
-            (rs1_match_load | rs2_match_load);
+        auto rs1_match_load = select(io().mem_rd_addr == io().id_rs1_addr,
+                                     io().id_rs1_addr != ch_uint<5>(0_d),
+                                     ch_bool(false));
+        auto rs2_match_load = select(io().mem_rd_addr == io().id_rs2_addr,
+                                     io().id_rs2_addr != ch_uint<5>(0_d),
+                                     ch_bool(false));
+        ch_bool load_use_hazard = select(io().mem_is_load,
+                                         select(rs1_match_load, ch_bool(true), rs2_match_load),
+                                         ch_bool(false));
         
         io().stall <<= load_use_hazard;
         
@@ -171,9 +185,10 @@ public:
         // =====================================================================
         
         // Branch 预测错误时需要 Flush IF/ID 级
-        // 简化实现：EX 级 branch && branch_taken -> flush
-        io().flush <<= io().ex_branch;
-        io().pc_src <<= io().ex_branch;
+        // EX 级 branch 且实际采取 (taken) 才需要 flush
+        auto need_flush = select(io().ex_branch, io().ex_branch_taken, ch_bool(false));
+        io().flush <<= need_flush;
+        io().pc_src <<= need_flush;
     }
 };
 
