@@ -97,6 +97,10 @@ run_test "assert" "examples/spinalhdl-ported/assert/assert_example"
 run_test "phase1c_integration" "examples/spinalhdl-ported/phase1c/phase1c_test"
 
 echo ""
+echo "--- Phase 3: Stream 组件 ---"
+run_test "stream_mux" "examples/spinalhdl-ported/stream/stream_mux_demo"
+
+echo ""
 echo "--- Phase 3A: AXI4 总线 ---"
 run_test "axi4_lite" "examples/axi4/axi4_lite_example"
 run_test "axi4_full" "examples/axi4/axi4_full_example"

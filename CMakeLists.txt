@@ -165,6 +165,9 @@ add_subdirectory(examples/spinalhdl-ported/ws2812)
 add_subdirectory(examples/spinalhdl-ported/quadrature_encoder)
 add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 
+# Phase 3: Stream 组件
+add_subdirectory(examples/spinalhdl-ported/stream)
+
 # Phase 3: AXI4 总线系统
 add_subdirectory(examples/axi4)
 

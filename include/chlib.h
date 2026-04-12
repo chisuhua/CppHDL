@@ -23,8 +23,8 @@
 // FIFO components
 // #include "chlib/fifo.h"
 
-// Fragment components
-#include "chlib/fragment.h"
+// Fragment components (not implemented yet)
+// #include "chlib/fragment.h"
 
 // Logic components
 #include "chlib/logic.h"
