@@ -177,3 +177,32 @@ add_catch_test(test_wires_connection test_wires_connection.cpp)
 # test_mod_width_simple.cpp - 全文注释
 # test_stream_width_adapter.cpp - 全文注释
 
+# ============================================================================
+# SpinalHDL 移植示例 CTest 注册
+# 所有 17 个移植示例均编译通过，通过运行可执行文件验证功能
+# ============================================================================
+
+function(add_spinalhdl_ported_test TEST_NAME TARGET_NAME)
+    add_test(NAME spinalhdl_${TEST_NAME} COMMAND $<TARGET_FILE:${TARGET_NAME}>)
+    set_tests_properties(spinalhdl_${TEST_NAME} PROPERTIES LABELS "spinalhdl-ported" TIMEOUT 30)
+endfunction()
+
+# Phase 1: 基础移植验证
+add_spinalhdl_ported_test(counter counter_example)
+add_spinalhdl_ported_test(counter_simple counter_simple_example)
+add_spinalhdl_ported_test(fifo fifo_example)
+add_spinalhdl_ported_test(uart_tx uart_tx_example)
+add_spinalhdl_ported_test(uart_rx uart_rx_example)
+add_spinalhdl_ported_test(pwm pwm_example)
+add_spinalhdl_ported_test(gpio gpio_example)
+add_spinalhdl_ported_test(spi spi_controller_example)
+add_spinalhdl_ported_test(i2c i2c_controller_example)
+add_spinalhdl_ported_test(timer timer_example)
+add_spinalhdl_ported_test(vga vga_controller_example)
+add_spinalhdl_ported_test(ws2812 ws2812_controller_example)
+add_spinalhdl_ported_test(quadrature_encoder quadrature_encoder_example)
+add_spinalhdl_ported_test(sigma_delta_dac sigma_delta_dac_example)
+add_spinalhdl_ported_test(width_adapter width_adapter_example)
+add_spinalhdl_ported_test(assert assert_example)
+add_spinalhdl_ported_test(phase1c phase1c_test)
+

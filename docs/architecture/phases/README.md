@@ -10,9 +10,9 @@
 
 | Phase | 主题 | 状态 | 完成度 | 核心交付 |
 |-------|------|------|--------|---------|
-| [Phase 1](phase-1-foundation/) | 基础移植验证 | ✅ 完成 | 100% | Counter, FIFO, 测试框架 |
-| [Phase 2](phase-2-core-components/) | 核心组件移植 | 🟡 进行中 | ~40% | UART TX, PWM, GPIO, SPI |
-| [Phase 3](phase-3-stream-advanced/) | 高级流处理 | 🟡 部分 | ~30% | Stream Mux, Arbiter, AXI 适配 |
+| [Phase 1](phase-1-foundation/) | 基础移植验证 | ✅ 完成 | 100% | Counter, FIFO, UART TX, 17 个移植 |
+| [Phase 2](phase-2-core-components/) | 核心组件完善 | 🟡 测试中 | ~40% | Catch2 测试 + CTest 注册（代码已存在） |
+| [Phase 3](phase-3-stream-advanced/) | 高级流处理 | 🟡 部分 | ~30% | Width Adapter ✅, Stream Mux/Arbiter (待实现) |
 | [Phase 4](phase-4-axi-bus/) | AXI 总线完整实现 | 🟡 简化 | ~20% | AXI4-Lite (简化), AXI4-Full (规划) |
 | [Phase 5](phase-5-riscv-pipeline/) | RISC-V 5 级流水线 | 🟡 原型 | ~25% | RV32I 流水线, Branch Predictor v2 |
 | [Phase 6](phase-6-advanced-features/) | 高级特性与性能优化 | 🔴 规划 | 0% | Tournament BPU, L2 Cache, 超标量 |

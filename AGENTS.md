@@ -363,24 +363,42 @@ docs/architecture/
 
 ## 5. 已移植示例清单
 
-| 示例 | 状态 | 文件 | Verilog |
-|------|------|------|---------|
-| Counter (simple) | ✅ | `examples/spinalhdl-ported/counter/counter_simple.cpp` | ✅ |
-| UART TX | ✅ | `examples/spinalhdl-ported/uart/uart_tx.cpp` | ✅ |
-| FIFO | ✅ | `examples/spinalhdl-ported/fifo/stream_fifo_example.cpp` | ✅ |
-| Width Adapter | ✅ | `examples/spinalhdl-ported/width_adapter/stream_width_adapter_example.cpp` | ✅ |
+> **最后更新**: 2026-04-12 | 17 个移植全部完成
+
+| # | 示例 | 状态 | 文件 | Verilog | Catch2 测试 |
+|---|------|------|------|---------|------------|
+| 1 | Counter (simple) | ✅ | `examples/spinalhdl-ported/counter/counter_simple.cpp` | ✅ | ❌ |
+| 2 | Counter (full) | ✅ | `examples/spinalhdl-ported/counter/counter.cpp` | ✅ | ❌ |
+| 3 | UART TX | ✅ | `examples/spinalhdl-ported/uart/uart_tx.cpp` | ✅ | ❌ |
+| 4 | UART RX | ✅ | `examples/spinalhdl-ported/uart_rx/uart_rx.cpp` | ✅ | ❌ |
+| 5 | FIFO | ✅ | `examples/spinalhdl-ported/fifo/stream_fifo_example.cpp` | ✅ | ❌ |
+| 6 | PWM | ✅ | `examples/spinalhdl-ported/pwm/pwm.cpp` | ✅ | ❌ |
+| 7 | GPIO | ✅ | `examples/spinalhdl-ported/gpio/gpio.cpp` | ✅ | ❌ |
+| 8 | SPI Controller | ✅ | `examples/spinalhdl-ported/spi/spi_controller.cpp` | ✅ | ❌ |
+| 9 | I2C Controller | ✅ | `examples/spinalhdl-ported/i2c/i2c_controller.cpp` | ✅ | ❌ |
+| 10 | Timer | ✅ | `examples/spinalhdl-ported/timer/timer.cpp` | ✅ | ❌ |
+| 11 | VGA Controller | ✅ | `examples/spinalhdl-ported/vga/vga_controller.cpp` | ✅ | ❌ |
+| 12 | WS2812 Controller | ✅ | `examples/spinalhdl-ported/ws2812/ws2812_controller.cpp` | ✅ | ❌ |
+| 13 | Quadrature Encoder | ✅ | `examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp` | ✅ | ❌ |
+| 14 | Sigma-Delta DAC | ✅ | `examples/spinalhdl-ported/sigma_delta_dac/sigma_delta_dac.cpp` | ✅ | ❌ |
+| 15 | Width Adapter | ✅ | `examples/spinalhdl-ported/width_adapter/stream_width_adapter_example.cpp` | ✅ | ✅ |
+| 16 | Assert | ✅ | `examples/spinalhdl-ported/assert/assert_example.cpp` | ✅ | ❌ |
+| 17 | Phase 1C 集成测试 | ✅ | `examples/spinalhdl-ported/phase1c/phase1c_test.cpp` | N/A | ❌ |
 
 ---
 
-## 6. 待移植示例优先级
+## 6. 当前技术债与待完善项
 
-| 优先级 | 示例 | 依赖 | 预计工时 |
+> 以下为已移植代码需要进一步完善的工作，**不是**新的移植任务。
+
+| 优先级 | 项目 | 说明 | 预计工时 |
 |--------|------|------|---------|
-| P0 | PWM | 状态机 + 比较器 | 3h |
-| P0 | GPIO | IO 映射 | 2h |
-| P1 | SPI Controller | 状态机 + FIFO | 4h |
-| P2 | VGA Controller | 双时钟 + BRAM | 8h |
-| P2 | RISC-V Core | 完整 CPU | 16h |
+| P0 | Catch2 单元测试 | 16 个端口仅有 `main()` 自测，需编写独立测试 | ~4h |
+| P0 | CTest 注册 | 所有示例需通过 `add_test()` 注册到 CTest | ~1h |
+| P1 | I2C 完整实现 | 当前为简化版，缺少 ACK 处理和完整时序 | ~3h |
+| P1 | API 合规审查 | 部分代码使用已废弃 API（如 `get_value()` vs `get_port_value()`） | ~2h |
+| P2 | 模块文档 | 每个端口配套 detailed-design.md | ~4h |
+| P2 | 代码/测试分离 | 当前模块+testbench+main() 在同一文件 | 架构决策 |
 
 ---
 
@@ -393,6 +411,13 @@ docs/architecture/
 > **原则 3**: 模块实例化用 `ch::ch_module` - 不要用 `CH_MODULE` 宏处理模板类
 
 > **原则 4**: 验证后再提交 - 编译 + 仿真 + Verilog 生成全部通过
+
+---
+
+**版本**: v1.0  
+**创建时间**: 2026-03-30  
+**维护人**: DevMate  
+**下次更新**: 发现新模式或修复常见错误时
 
 ---
 

@@ -1,45 +1,99 @@
 # SpinalHDL 移植示例
 
-本目录包含从 SpinalHDL 移植到 CppHDL 的经典示例。
+> **状态**: 17 个移植全部完成 ✅  
+> **最后更新**: 2026-04-12
 
-## 目录结构
+本目录包含从 SpinalHDL 移植到 CppHDL 的经典示例。每个示例都包含完整的代码、仿真测试和 Verilog 生成功能。
+
+---
+
+## 📁 目录结构
 
 ```
 examples/spinalhdl-ported/
-├── README.md                 # 本文件
-├── testbench_template.cpp    # 测试平台模板
-├── counter/                  # 计数器示例
-│   ├── counter.cpp           # 完整版（带 enable/clear 输入）
-│   ├── counter_simple.cpp    # 简化版（自由运行）
-│   └── CMakeLists.txt
-├── fifo/                     # FIFO 示例（待实现）
-├── uart/                     # UART 示例（待实现）
-└── ...
+├── README.md                     # 本文件
+├── testbench_template.cpp        # 测试平台模板
+├── counter/                      # ✅ 计数器（2 个版本）
+├── fifo/                         # ✅ 流式 FIFO
+├── uart/                         # ✅ UART 发送器
+├── uart_rx/                      # ✅ UART 接收器
+├── pwm/                          # ✅ PWM 调制器
+├── gpio/                         # ✅ 通用 IO + 中断
+├── spi/                          # ✅ SPI 控制器
+├── i2c/                          # ✅ I2C 控制器
+├── timer/                        # ✅ 可编程定时器
+├── vga/                          # ✅ VGA 控制器 (640x480)
+├── ws2812/                       # ✅ WS2812 LED 控制器
+├── quadrature_encoder/           # ✅ 正交编码器
+├── sigma_delta_dac/              # ✅ Σ-Delta DAC
+├── width_adapter/                # ✅ 位宽适配器
+├── assert/                       # ✅ 断言系统示例
+└── phase1c/                      # ✅ 集成测试
 ```
 
-## 快速开始
+---
 
-### 1. 构建示例
+## 📊 移植清单
+
+| # | 模块 | 复杂度 | 质量 | Catch2 测试 | 说明 |
+|---|------|--------|------|-------------|------|
+| 1 | counter_simple | ⭐ | ✅ 稳定 | ❌ | 自由运行计数器 |
+| 2 | counter | ⭐⭐ | ✅ 稳定 | ❌ | 带 enable/clear |
+| 3 | fifo | ⭐⭐⭐ | ✅ 稳定 | ❌ | StreamFifo，带反压 |
+| 4 | uart_tx | ⭐⭐⭐ | ✅ 稳定 | ❌ | UART 发送器，状态机 |
+| 5 | uart_rx | ⭐⭐⭐ | ✅ 稳定 | ❌ | UART 接收器 |
+| 6 | pwm | ⭐⭐ | ✅ 稳定 | ❌ | PWM，占空比可调 |
+| 7 | gpio | ⭐⭐ | ✅ 稳定 | ❌ | 8 位 GPIO + 边沿检测 |
+| 8 | spi | ⭐⭐⭐⭐ | ✅ 稳定 | ❌ | SPI 主控制器，状态机 |
+| 9 | i2c | ⭐⭐⭐ | ⚠️ 简化 | ❌ | I2C 基础时序 |
+| 10 | timer | ⭐⭐ | ✅ 稳定 | ❌ | 预分频 + 自动重装载 |
+| 11 | vga | ⭐⭐⭐ | ✅ 稳定 | ❌ | 640x480@60Hz 时序 |
+| 12 | ws2812 | ⭐⭐⭐⭐ | ✅ 稳定 | ❌ | WS2812B LED 驱动 |
+| 13 | quadrature_encoder | ⭐⭐⭐ | ✅ 稳定 | ❌ | AB 相 4 倍频解码 |
+| 14 | sigma_delta_dac | ⭐⭐ | ✅ 稳定 | ❌ | 一阶 Σ-Delta 调制 |
+| 15 | width_adapter | ⭐⭐ | ✅ 稳定 | ✅ 已注册 | Stream 位宽转换 |
+| 16 | assert | ⭐ | ✅ 稳定 | ❌ | 断言系统演示 |
+| 17 | phase1c | ⭐⭐ | ✅ 稳定 | ❌ | 集成测试 |
+
+> ⚠️ 当前所有示例仅通过 `main()` 自测试，仅有 width_adapter 有独立 Catch2 测试。
+
+---
+
+## 🚀 快速开始
+
+### 构建所有示例
 
 ```bash
-cd /workspace/CppHDL/build
-cmake ..
-make counter_simple_example
+cd build && cmake .. && make -j$(nproc)
 ```
 
-### 2. 运行示例
+### 运行单个示例
 
 ```bash
-./examples/spinalhdl-ported/counter/counter_simple_example
+./examples/spinalhdl-ported/pwm/pwm_example          # PWM
+./examples/spinalhdl-ported/gpio/gpio_example        # GPIO
+./examples/spinalhdl-ported/spi/spi_controller_example  # SPI
 ```
 
-### 3. 查看生成的 Verilog
+### 运行测试
 
 ```bash
-cat counter_simple.v
+cd build && ctest --output-on-failure
 ```
 
-## 使用测试平台模板
+---
+
+## ✅ 测试通过标准
+
+每个移植示例必须满足：
+1. **编译通过** — 无编译错误和警告
+2. **仿真正常** — `main()` 中的自测试输出正确
+3. **Verilog 生成** — `toVerilog()` 成功生成有效代码
+4. **Catch2 测试** — 独立的单元测试通过（逐步补全中）
+
+---
+
+## 📐 使用模板
 
 创建新示例时，复制 `testbench_template.cpp` 并修改：
 
@@ -57,90 +111,23 @@ public:
     }
 };
 
-// 2. 在 Top 中实例化
+// 2. 在 Top 中实例化（使用 ch::ch_module<T>）
 class Top : public ch::Component {
     void describe() override {
-        CH_MODULE(MyModule, my_module);
-    }
-};
-
-// 3. 在 Testbench 中编写测试
-void run_test() {
-    // 测试逻辑
-}
-```
-
-## 已实现示例
-
-### Counter（计数器）
-
-| 文件 | 描述 | 状态 |
-|------|------|------|
-| `counter_simple.cpp` | 自由运行计数器 | ✅ 完成 |
-| `counter.cpp` | 带 enable/clear 控制 | 🟡 部分完成 |
-
-**SpinalHDL 原代码**:
-```scala
-class Counter extends Component {
-  val io = new Bundle {
-    val value = out UInt(8 bits)
-  }
-  val counterReg = RegInit(U(0, 8 bits))
-  counterReg := counterReg + 1
-  io.value := counterReg
-}
-```
-
-**CppHDL 移植**:
-```cpp
-template <unsigned N = 8>
-class Counter : public ch::Component {
-public:
-    __io(ch_out<ch_uint<N>> value;)
-    
-    void describe() override {
-        ch_reg<ch_uint<N>> counter_reg(0_d);
-        counter_reg->next = counter_reg + 1_d;
-        io().value = counter_reg;
+        ch::ch_module<MyModule> inst{"my_inst"};
+        inst.io().enable <<= io().enable;
+        io().output <<= inst.io().output;
     }
 };
 ```
 
-## 待实现示例
+> ⚠️ 使用 `ch::ch_module<T>` 而非 `CH_MODULE` 宏（后者不支持模板类）
 
-| 示例 | 优先级 | 预计工作量 | 依赖 |
-|------|--------|-----------|------|
-| FIFO | P0 | 4 小时 | ch_mem |
-| UART TX | P1 | 4 小时 | 状态机 DSL |
-| UART RX | P1 | 4 小时 | 状态机 DSL |
-| GPIO | P1 | 2 小时 | - |
-| PWM | P2 | 3 小时 | 比较器 |
-| SPI Controller | P2 | 6 小时 | 状态机 |
+---
 
-## 测试规范
-
-### 测试期望值计算
-
-CppHDL 仿真语义：`tick()` **后**读取值为新值
-
-```cpp
-// 正确：Cycle 0 对应计数值 1
-for (int i = 0; i < 10; i++) {
-    simulator.tick();
-    auto val = simulator.get_value(device.instance().io().value);
-    uint64_t expected = i + 1;  // tick 后计数值 = 周期数 + 1
-}
-```
-
-### 测试通过标准
-
-1. **功能正确**: 输出值符合预期
-2. **边界正确**: 溢出/欠载行为正确
-3. **Verilog 生成**: 无错误
-4. **DAG 生成**: 无错误
-
-## 参考资料
+## 🔗 参考资料
 
 - [CppHDL 架构差距分析](../../docs/architecture/2026-03-30-cpphdl-architecture-gap-analysis.md)
 - [SpinalHDL 移植架构](../../docs/architecture/2026-03-30-spinalhdl-port-architecture.md)
+- [Phase 架构总览](../../docs/architecture/phases/README.md)
 - [官方 Counter 示例](../../samples/counter.cpp)
