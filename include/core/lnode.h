@@ -28,6 +28,14 @@ lnode<T> get_lnode(const T &t)
     return lnode<T>(t.impl());
 }
 
+// 通用版本 - 仅当 T 不是 port 类型时匹配
+template <typename T>
+lnode<T> get_lnode_noport(const T &t)
+    requires requires { t.impl(); }
+{
+    return lnode<T>(t.impl());
+}
+
 template <typename T> struct ch_width_impl<ch::core::lnode<T>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };

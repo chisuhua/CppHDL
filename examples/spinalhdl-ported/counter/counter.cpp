@@ -138,8 +138,8 @@ int main() {
         
         // 测试 1: 复位测试
         std::cout << "\n[Test 1] Reset test..." << std::endl;
-        device.instance().io().clear = true;
-        device.instance().io().enable = false;
+        simulator.set_input_value(device.instance().io().clear, 1);
+        simulator.set_input_value(device.instance().io().enable, 0);
         
         for (int i = 0; i < 3; i++) {
             simulator.tick();
@@ -148,23 +148,23 @@ int main() {
         }
         
         // 释放复位
-        device.instance().io().clear = false;
+        simulator.set_input_value(device.instance().io().clear, 0);
         simulator.tick();
         auto val = simulator.get_value(device.instance().io().value);
         std::cout << "  After reset release: value = " << static_cast<uint64_t>(val) << std::endl;
         
         // 测试 2: 计数测试
         std::cout << "\n[Test 2] Counting test..." << std::endl;
-        device.instance().io().enable = true;
+        simulator.set_input_value(device.instance().io().enable, 1);
         
         for (int i = 0; i < 15; i++) {
             simulator.tick();
             auto val = simulator.get_value(device.instance().io().value);
+            uint64_t expected = i + 1; // After first tick, value goes from 0 to 1
             std::cout << "  Cycle " << i << ": value = " << static_cast<uint64_t>(val);
             
-            // 验证计数值
-            if (static_cast<uint64_t>(val) != (uint64_t)i) {
-                std::cout << " [ERROR: expected " << i << "]";
+            if (static_cast<uint64_t>(val) != expected) {
+                std::cout << " [ERROR: expected " << expected << "]";
             }
             std::cout << std::endl;
         }
@@ -173,7 +173,7 @@ int main() {
         std::cout << "\n[Test 3] Enable control test..." << std::endl;
         
         // 禁用计数
-        device.instance().io().enable = false;
+        simulator.set_input_value(device.instance().io().enable, 0);
         auto held_val = simulator.get_value(device.instance().io().value);
         std::cout << "  Disable enable, held value = " << static_cast<uint64_t>(held_val) << std::endl;
         
@@ -188,7 +188,7 @@ int main() {
         }
         
         // 重新使能
-        device.instance().io().enable = true;
+        simulator.set_input_value(device.instance().io().enable, 1);
         std::cout << "  Re-enable counting..." << std::endl;
         for (int i = 0; i < 5; i++) {
             simulator.tick();
@@ -198,10 +198,10 @@ int main() {
         
         // 测试 4: 溢出测试
         std::cout << "\n[Test 4] Overflow test..." << std::endl;
-        device.instance().io().clear = true;  // 先清零
+        simulator.set_input_value(device.instance().io().clear, 1);  // 先清零
         simulator.tick();
-        device.instance().io().clear = false;
-        device.instance().io().enable = true;
+        simulator.set_input_value(device.instance().io().clear, 0);
+        simulator.set_input_value(device.instance().io().enable, 1);
         
         // 计数到 255（最大值）
         for (int i = 0; i < 255; i++) {

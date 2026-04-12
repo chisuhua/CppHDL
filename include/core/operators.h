@@ -44,11 +44,13 @@ concept ValidWidthOperand = HardwareType<T> || CHLiteral<T>;
 
 // === 统一的操作数转换 ===
 template <typename T> auto to_operand(const T &value) {
-    if constexpr (HardwareType<T>) {
+    // 特殊处理 port 类型（ch_in/ch_out）：提取 value_type 作为 lnode 的模板参数
+    if constexpr (requires { typename T::value_type; typename T::direction; }) {
+        return lnode<typename T::value_type>(value.impl());
+    } else if constexpr (HardwareType<T>) {
         return ch::core::get_lnode(value);
     } else if constexpr (ArithmeticLiteral<T>) {
         uint64_t val = static_cast<uint64_t>(value);
-        // 使用 ch_width_v<T> 获取类型位宽（修复：constexpr lambda 无法捕获运行时值）
         constexpr uint32_t width = ch_width_v<T>;
         ch_literal_dynamic lit(val, width);
         auto *lit_impl = node_builder::instance().build_literal(lit, "lit");
