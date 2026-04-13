@@ -30,6 +30,11 @@ target_include_directories(test_hazard PRIVATE ${PROJECT_SOURCE_DIR}/examples/ri
 
 target_include_directories(test_forwarding PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
+# RV32I Pipeline integration test (from examples/riscv-mini/tests/)
+# Includes IF/ID/EX/MEM/WB stage registers, forwarding, hazard, branch predictor
+add_catch_test(test_rv32i_pipeline ../../examples/riscv-mini/tests/test_rv32i_pipeline.cpp)
+target_include_directories(test_rv32i_pipeline PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
+
 # ============================================================================
 # chlib 库测试 (26 个测试文件)
 # ============================================================================
