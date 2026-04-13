@@ -45,3 +45,9 @@ samples/
 - build/samples/: Compiled sample executables
 - docs/: Additional usage guides
 - tests/: Unit tests for core functionality
+
+## PHASE GATES
+Follow root Zero-Debt Policy. Samples serve as living documentation:
+- Each sample must compile and run (`./build/samples/<name>` — no segfaults)
+- One concept per file, naming: `<feature>_demo.cpp` or `<feature>_example.cpp`
+- Samples are NOT tests — Catch2 tests go in `tests/`

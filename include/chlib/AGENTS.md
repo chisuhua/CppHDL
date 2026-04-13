@@ -49,5 +49,11 @@ include/chlib/
 - **Blocking in pipelines**: Use combinational/sequential components correctly
 
 ## RELATED DIRECTORIES
-- tests/chlib/           # 17 test files for chlib components
-- include/bundle/        # Stream and Flow bundle definitions
+- tests/chlib/       # 17 test files for chlib components
+- include/bundle/    # Stream and Flow bundle definitions
+
+## PHASE GATES
+Follow root Zero-Debt Policy. chlib components are the user-facing API:
+- New component → `chlib.h` aggregator update + `tests/chlib/test_*.cpp` test file
+- Component uses stream → register in `chlib.h` aggregator, NOT individual include
+- Width mismatches → stream_width_adapter required, document in component header

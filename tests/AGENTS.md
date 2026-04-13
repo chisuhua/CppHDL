@@ -65,3 +65,10 @@ ctest -L reg
 
 - tests/chlib/ : Component library tests
 - Catch2 tags: `[basic]`, `[reg]`, `[bundle]`, `[stream]`, `[memory]`, `[io]`, `[chlib]`
+
+## PHASE GATES
+Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**. For tests:
+- **No empty TEST_CASE**: use `SKIP()` or delete entirely
+- **New feature → new TEST_CASE**: every public API must have test coverage
+- **Catch2 tags**: `[category][subcategory]` for `ctest -L` filtering
+- **No test dependencies**: each TEST_CASE is independent with its own context

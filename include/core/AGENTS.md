@@ -1,9 +1,6 @@
 # AGENTS.md - Core Subsystem
 
-Child of: [AGENTS.md](../../AGENTS.md)
-
-## OVERVIEW
-Core logic layer: node builders, operators, context management, buffers. Provides low-level hardware simulation primitives.
+Child of: `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATES). Core is the foundation of all HDL types; new primitives must not break existing patterns.
 
 ## STRUCTURE
 | Category | Files |
@@ -42,3 +39,9 @@ Core logic layer: node builders, operators, context management, buffers. Provide
 - src/core/ - Implementation files (context.cpp, lnodeimpl.cpp)
 - include/lnode/ - Additional logic node types
 - include/bundle/ - Bundle type definitions
+
+## PHASE GATES
+Follow root Zero-Debt Policy. Core changes affect everything downstream; extra caution:
+- New primitives → update `ch.hpp` aggregator + add test in `tests/test_*.cpp`
+- API changes → update existing usage examples, verify no compile regressions
+- Operators → both compile-time (`operators.h`) and runtime (`operators_runtime.h`) must stay in sync

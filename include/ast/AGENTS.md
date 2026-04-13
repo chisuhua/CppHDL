@@ -1,6 +1,6 @@
 # AGENTS.md - AST Subsystem
 
-Child of root AGENTS.md. See parent for general conventions.
+Child of: `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATES).
 
 ## OVERVIEW
 AST (Abstract Syntax Tree) defines internal structure of HDL designs. Converts C++ hardware descriptions into executable simulation instructions.
@@ -47,3 +47,9 @@ src/ast/
 ## RELATED DIRECTORIES
 - src/ast/: Contains implementations for all AST node logic
 - src/simulator/: Uses AST instructions for simulation execution
+
+## PHASE GATES
+Follow root Zero-Debt Policy. AST changes affect codegen and simulation:
+- New AST node → add to `ast_nodes.h` + implement `create_instruction()` in `src/ast/ast_nodes.cpp`
+- New instruction → `instr_*.h` + `instr_*.cpp` must implement `eval()` method
+- Empty `create_instruction()` → throw immediately, never return nullptr
