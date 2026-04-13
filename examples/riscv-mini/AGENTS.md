@@ -12,7 +12,6 @@ examples/riscv-mini/
 ├── rv32i_phase1_test.cpp    # RegFile + ALU + Decoder
 ├── rv32i_phase2_test.cpp    # Branch + Jump (13/13)
 ├── rv32i_phase3_test.cpp    # Load/Store (13/13)
-├── phase3b_complete.cpp      # ⚠️ Source exists, NOT in CMake (API changes)
 ├── src/                     # Pipeline stages + components
 │   ├── forwarding.h         # Data forwarding mux
 │   ├── hazard_detection.h   # Hazard detection unit
@@ -31,9 +30,9 @@ examples/riscv-mini/
 ## KNOWN ISSUES
 - `rv32i_pipeline_cache.h` — I/D-Cache integration chain incomplete
 - `dynamic_branch_predict.h` — DELETED during code debt cleanup
-- `phase3b_complete.cpp` — Compiles but not registered
-- `tests/` subdirectory — CMake not wired to main build
-- 5-stage pipeline `test_rv32i_pipeline.cpp` — 46 compile errors (needs fix)
+- `phase3b_complete.cpp` — DELETED (used `ch::log2_ceil` and `ch_array` which don't exist)
+- `tests/` subdirectory — CMakeLists.txt placeholder only (test moved to root)
+- 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 10 assertions)
 
 ## WHERE TO LOOK
 | Task | Location |
