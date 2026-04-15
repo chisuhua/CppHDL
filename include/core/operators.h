@@ -745,17 +745,21 @@ auto shl(const LHS &lhs, const RHS &rhs) {
 
 template <ValidOperand LHS, ValidOperand RHS>
 auto operator<<(const LHS &lhs, const RHS &rhs) {
-    // 获取左操作数的位宽
     constexpr unsigned lhs_width = ch_width_v<LHS>;
 
-    // 检查RHS是否是CHLiteral，如果是则使用actual_value，否则使用1 <<
-    // ch_width_v<RHS>
+    // Check if RHS is compile-time ch_literal_impl (has static actual_value)
+    // vs ch_literal_runtime (has instance actual_value member)
     constexpr unsigned rhs_extra_width = [] {
-        if constexpr (CHLiteral<RHS>) {
-            // 对于字面量，使用其实际值作为额外宽度
-            return std::remove_cvref_t<RHS>::actual_value;
+        if constexpr (is_ch_literal_v<std::remove_cvref_t<RHS>>) {
+            using DecayedRHS = std::remove_cvref_t<RHS>;
+            if constexpr (requires { typename DecayedRHS::actual_value; }) {
+                // Compile-time literal: use static constexpr actual_value
+                return DecayedRHS::actual_value;
+            } else {
+                // Runtime literal: fall back to width-based calculation
+                return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1;
+            }
         } else {
-            // 对于非字面量，使用1 << ch_width_v<RHS>
             return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1;
         }
     }();
