@@ -66,8 +66,8 @@ public:
         child_component_sptr_ = std::static_pointer_cast<T>(shared_child);
 
         // 6. Build the child component within its own temporary context
-        if (auto locked_ptr = child_component_sptr_.lock()) {
-            locked_ptr->build(parent_context);
+        if (child_component_sptr_) {
+            child_component_sptr_->build(parent_context);
         } else {
             CHERROR("[ch_module::ctor] Error: Child component was destroyed immediately after creation!");
         }
@@ -78,26 +78,22 @@ public:
     // Provide access to the child component's I/O and instance
     auto& io() {
         CHDBG_FUNC();
-        
-        auto shared = child_component_sptr_.lock();
-        if (!shared) {
+        if (!child_component_sptr_) {
             CHFATAL("Child component has been destroyed unexpectedly in io()!");
         }
-        return shared->io();
+        return child_component_sptr_->io();
     }
 
     T& instance() {
         CHDBG_FUNC();
-        
-        auto shared = child_component_sptr_.lock();
-        if (!shared) {
+        if (!child_component_sptr_) {
             CHFATAL("Child component has been destroyed unexpectedly in instance()!");
         }
-        return *shared;
+        return *child_component_sptr_;
     }
 
 private:
-    std::weak_ptr<T> child_component_sptr_; // 使用 weak_ptr 存储
+    std::shared_ptr<T> child_component_sptr_; // 使用 shared_ptr 保持组件生命周期
 };
 
 #define CH_MODULE(type, name, ...) ch::ch_module<type> name(#name, ##__VA_ARGS__)

@@ -109,3 +109,64 @@ target_include_directories(test_pipeline_minimal PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(test_pipeline_minimal PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+# Debug test: Incremental pipeline crash isolation
+add_executable(test_pipeline_debug tests/test_pipeline_debug.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_debug PRIVATE cpphdl)
+target_include_directories(test_pipeline_debug PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_debug PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_pipeline_debug3 tests/test_pipeline_debug3.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_debug3 PRIVATE cpphdl)
+target_include_directories(test_pipeline_debug3 PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_debug3 PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_pipeline_debug4 tests/test_pipeline_debug4.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_debug4 PRIVATE cpphdl)
+target_include_directories(test_pipeline_debug4 PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_debug4 PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_pipeline_debug5 tests/test_pipeline_debug5.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_debug5 PRIVATE cpphdl)
+target_include_directories(test_pipeline_debug5 PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_debug5 PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_pipeline_debug6 tests/test_pipeline_debug6.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_debug6 PRIVATE cpphdl)
+target_include_directories(test_pipeline_debug6 PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_debug6 PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
