@@ -87,7 +87,7 @@ TEST_CASE("Bad pattern", "[bad]") {
 }
 ```
 
-See `docs/COMPONENT-LIFECYCLE-GUIDE.md` for full details.
+See `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` for full details.
 
 ## ANTI-PATTERNS
 - Direct IO port assignment: `io().port = value` (compiles but silently does nothing)

@@ -176,5 +176,5 @@ sim.get_port_value(port);            // Read output port (returns sdata_type)
 
 ## See Also
 
-- Full guide: `docs/COMPONENT-LIFECYCLE-GUIDE.md`
+- Full guide: `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md`
 - Source: `include/module.h`, `include/component.h`, `include/device.h`
