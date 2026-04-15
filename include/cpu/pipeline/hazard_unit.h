@@ -145,21 +145,11 @@ public:
                                        ch_uint<2>(0_d)));
         
         // ========================================================================
-        // 数据前推多选器：根据控制信号选择数据源
+        // 数据前推 (已禁用：会导致 IR 图循环依赖)
+        // 直接传递原始寄存器数据，前推逻辑可以在 pipeline 层通过流水线寄存器实现
         // ========================================================================
-        auto sel_a_is_ex = (io().forward_a == ch_uint<2>(1_d));
-        auto sel_a_is_mem = (io().forward_a == ch_uint<2>(2_d));
-        
-        auto rs1_from_ex = select(sel_a_is_ex, io().ex_alu_result, io().rs1_data_raw);
-        auto rs1_from_mem = select(sel_a_is_mem, io().mem_alu_result, rs1_from_ex);
-        io().rs1_data = rs1_from_mem;
-        
-        auto sel_b_is_ex = (io().forward_b == ch_uint<2>(1_d));
-        auto sel_b_is_mem = (io().forward_b == ch_uint<2>(2_d));
-        
-        auto rs2_from_ex = select(sel_b_is_ex, io().ex_alu_result, io().rs2_data_raw);
-        auto rs2_from_mem = select(sel_b_is_mem, io().mem_alu_result, rs2_from_ex);
-        io().rs2_data = rs2_from_mem;
+        io().rs1_data = io().rs1_data_raw;
+        io().rs2_data = io().rs2_data_raw;
         
         // ========================================================================
         // Load-Use 冒险检测

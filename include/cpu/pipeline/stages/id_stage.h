@@ -35,10 +35,9 @@ public:
         ch_in<ch_uint<32>>  instruction;    // 32 位指令
         ch_in<ch_bool>      valid;          // 指令有效
         
-        // 输入 (来自 MEM/WB 流水线寄存器 - 写回)
-        ch_in<ch_uint<5>>   wb_rd_addr;    // 写回目标寄存器地址
-        ch_in<ch_uint<32>>  wb_write_data;  // 写回数据
-        ch_in<ch_bool>       wb_reg_write;  // 写回使能
+        // 输入 (来自流水线级 reg_file 的读端口)
+        ch_in<ch_uint<32>>  reg_rs1_data;   // RS1 读数据 (来自 reg_file)
+        ch_in<ch_uint<32>>  reg_rs2_data;   // RS2 读数据 (来自 reg_file)
         
         // 输出 (到 EX 级)
         ch_out<ch_uint<5>>  rs1_addr;       // RS1 地址
@@ -142,32 +141,21 @@ public:
         selected_imm = select(is_jal,     imm_j, selected_imm);
         
         // ========================================================================
-        // 寄存器文件 (32x32 bit, 2 读端口)
+        // 寄存器地址选择 (组合逻辑)
         // ========================================================================
-        // 使用 ch_mem 实现寄存器文件
-        // 注意：实际 RISC-V 寄存器 x0 硬连线为 0
-        ch_mem<ch_uint<32>, 32> reg_file("reg_file");
-        
-        // 写端口 (来自 WB 级 - 寄存器写回)
-        // x0 寄存器硬连线为 0，禁止写入
-        auto wb_write_en = io().wb_reg_write & (io().wb_rd_addr != ch_uint<5>(0_d));
-        reg_file.write(io().wb_rd_addr, io().wb_write_data, wb_write_en, "reg_file_write");
-        
-        // 读端口 A (组合逻辑) - rs1
+        // 读端口 A - rs1 地址
         auto rs1_addr_mux = select(
             is_op || is_opimm || is_load || is_store || is_branch || is_jalr,
             rs1,
-            ch_uint<5>(0_d)  // 对于 LUI/AUIPC/JAL，不使用 rs1
+            ch_uint<5>(0_d)
         );
-        auto rs1_data_raw = reg_file.sread(rs1_addr_mux, ch_bool(true));
         
-        // 读端口 B (组合逻辑) - rs2
+        // 读端口 B - rs2 地址
         auto rs2_addr_mux = select(
             is_op || is_store || is_branch,
             rs2,
-            ch_uint<5>(0_d)  // 对于其他指令，不使用 rs2
+            ch_uint<5>(0_d)
         );
-        auto rs2_data_raw = reg_file.sread(rs2_addr_mux, ch_bool(true));
         
         // ========================================================================
         // 控制信号生成 (组合逻辑)
@@ -213,8 +201,8 @@ public:
         // 更新寄存器
         idex_rs1_addr->next = select(idex_update_en, rs1_addr_mux, idex_rs1_addr);
         idex_rs2_addr->next = select(idex_update_en, rs2_addr_mux, idex_rs2_addr);
-        idex_rs1_data->next = select(idex_update_en, rs1_data_raw, idex_rs1_data);
-        idex_rs2_data->next = select(idex_update_en, rs2_data_raw, idex_rs2_data);
+        idex_rs1_data->next = select(idex_update_en, io().reg_rs1_data, idex_rs1_data);
+        idex_rs2_data->next = select(idex_update_en, io().reg_rs2_data, idex_rs2_data);
         idex_imm->next      = select(idex_update_en, selected_imm, idex_imm);
         idex_opcode->next   = select(idex_update_en, opcode_raw, idex_opcode);
         idex_funct3->next   = select(idex_update_en, funct3, idex_funct3);

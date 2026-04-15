@@ -71,6 +71,22 @@ public:
         
         // 冒险检测单元
         ch::ch_module<HazardUnit> hazard{"hazard_unit"};
+        
+        // 流水线级寄存器文件 (32x32 bit)
+        // 移到这里以打破 ID→reg_file→WB 的环
+        ch_mem<ch_uint<32>, 32> reg_file("reg_file");
+        
+        // 从 reg_file 读端口读取数据 (组合逻辑)
+        auto rs1_data_result = reg_file.sread(id_stage.io().rs1_addr, ch_bool(true));
+        auto rs2_data_result = reg_file.sread(id_stage.io().rs2_addr, ch_bool(true));
+        
+        // 将读结果连接到 ID 阶段
+        id_stage.io().reg_rs1_data <<= rs1_data_result;
+        id_stage.io().reg_rs2_data <<= rs2_data_result;
+        
+        // WB 阶段写回寄存器文件
+        auto wb_write_en = wb_stage.io().write_en & (wb_stage.io().rd_addr_out != ch_uint<5>(0_d));
+        reg_file.write(wb_stage.io().rd_addr_out, wb_stage.io().write_data, wb_write_en, "reg_file_write");
 
         // ===================== IF 级连接 =====================
         if_stage.io().stall <<= hazard.io().stall;
@@ -87,18 +103,9 @@ public:
         if_stage.io().instr_ready <<= io().instr_ready;
         
         // ===================== IF → ID 连接 (FIX B5) =====================
-        // BUG: 原代码 if_stage.io().pc → instruction (错误: PC 当作指令)
-        // FIX: 正确连接 instruction 和 pc
         id_stage.io().pc <<= if_stage.io().pc;
         id_stage.io().instruction <<= if_stage.io().instruction;
         id_stage.io().valid <<= if_stage.io().valid;
-        
-        // ===================== WB → ID 写回连接 (FIX B2) =====================
-        // BUG: 原代码完全缺少写回路径, ID 的 reg_file 无写端口
-        // FIX: 将 WB 写回信号连接到 ID 阶段
-        id_stage.io().wb_rd_addr <<= wb_stage.io().rd_addr_out;
-        id_stage.io().wb_write_data <<= wb_stage.io().write_data;
-        id_stage.io().wb_reg_write <<= wb_stage.io().write_en;
         
         // ===================== ID → EX 连接 =====================
         // 控制信号 (部分字段缺失, 简化处理传递到 EX)

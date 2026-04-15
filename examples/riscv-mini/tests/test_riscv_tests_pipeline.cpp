@@ -1,6 +1,6 @@
 /**
  * @file test_riscv_tests_pipeline.cpp
- * @brief RISC-V RV32UI tests through Rv32iPipeline hardware (Phase F Wave 4)
+ * @brief RISC-V RV32UI tests through Rv32iPipeline hardware
  */
 
 #include "../../../tests/catch_amalgamated.hpp"
@@ -48,11 +48,28 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
     context ctx("rv32ui_" + test_name + "_pipeline");
     ctx_swap swap(&ctx);
     
-    ch::ch_device<Rv32iPipeline> pipeline;
-    ch::ch_device<InstrTCM<20, 32>> itcm;
-    ch::ch_device<DataTCM<20, 32>> dtcm;
+    // Single context: create all modules as ch::ch_module
+    ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};
+    ch::ch_module<InstrTCM<20, 32>> itcm{"itcm"};
+    ch::ch_module<DataTCM<20, 32>> dtcm{"dtcm"};
     
-    Simulator sim(pipeline.context());
+    // Wire pipeline to ITCM
+    itcm.io().addr <<= pipeline.io().instr_addr;
+    pipeline.io().instr_data <<= itcm.io().data;
+    pipeline.io().instr_ready <<= itcm.io().ready;
+    
+    // Wire pipeline to DTCM  
+    dtcm.io().addr <<= pipeline.io().data_addr;
+    dtcm.io().wdata <<= pipeline.io().data_write_data;
+    dtcm.io().write <<= pipeline.io().data_write_en;
+    dtcm.io().valid <<= ch_bool(true);
+    pipeline.io().data_read_data <<= dtcm.io().rdata;
+    pipeline.io().data_ready <<= dtcm.io().ready;
+    
+    // Set reset high initially
+    pipeline.io().rst <<= ch_bool(true);
+    
+    Simulator sim(&ctx);
     
     std::string bin_path = "/workspace/project/riscv-tests/build/rv32ui/" + bin_filename;
     std::vector<uint32_t> program = load_binary_file(bin_path);
@@ -62,39 +79,40 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
         return false;
     }
     
+    // Load program into ITCM via write interface
     for (size_t i = 0; i < program.size(); i++) {
-        sim.set_input_value(itcm.instance().io().write_addr, static_cast<uint32_t>(i));
-        sim.set_input_value(itcm.instance().io().write_data, program[i]);
-        sim.set_input_value(itcm.instance().io().write_en, 1);
+        sim.set_input_value(itcm.io().write_addr, static_cast<uint32_t>(i));
+        sim.set_input_value(itcm.io().write_data, program[i]);
+        sim.set_input_value(itcm.io().write_en, 1);
         sim.tick();
-        sim.set_input_value(itcm.instance().io().write_en, 0);
+        sim.set_input_value(itcm.io().write_en, 0);
     }
     
-    sim.set_input_value(dtcm.instance().io().addr, RV32I_TOHOST_ADDR / 4);
-    sim.set_input_value(dtcm.instance().io().wdata, 0);
-    sim.set_input_value(dtcm.instance().io().write, 1);
-    sim.set_input_value(dtcm.instance().io().valid, 1);
+    // Initialize tohost to 0 in DTCM
+    sim.set_input_value(dtcm.io().addr, RV32I_TOHOST_ADDR / 4);
+    sim.set_input_value(dtcm.io().wdata, 0);
+    sim.set_input_value(dtcm.io().write, 1);
     sim.tick();
-    sim.set_input_value(dtcm.instance().io().write, 0);
-    sim.set_input_value(dtcm.instance().io().valid, 0);
+    sim.set_input_value(dtcm.io().write, 0);
     
-    sim.set_input_value(pipeline.instance().io().rst, 1);
+    // Release reset
+    pipeline.io().rst <<= ch_bool(false);
     sim.tick();
-    sim.set_input_value(pipeline.instance().io().rst, 0);
     
+    // Run until tohost changes or max ticks
     uint32_t tohost_value = 0;
     bool test_complete = false;
     
     for (uint32_t tick = 0; tick < MAX_TICKS && !test_complete; tick++) {
         sim.tick();
         
-        sim.set_input_value(dtcm.instance().io().addr, RV32I_TOHOST_ADDR / 4);
-        sim.set_input_value(dtcm.instance().io().write, 0);
-        sim.set_input_value(dtcm.instance().io().valid, 1);
+        sim.set_input_value(dtcm.io().addr, RV32I_TOHOST_ADDR / 4);
+        sim.set_input_value(dtcm.io().write, 0);
+        sim.set_input_value(dtcm.io().valid, 1);
         sim.tick();
-        auto val = sim.get_port_value(dtcm.instance().io().rdata);
+        auto val = sim.get_port_value(dtcm.io().rdata);
         tohost_value = static_cast<uint64_t>(val);
-        sim.set_input_value(dtcm.instance().io().valid, 0);
+        sim.set_input_value(dtcm.io().valid, 0);
         
         if (tohost_value != 0) {
             test_complete = true;

@@ -83,4 +83,29 @@ target_include_directories(test_riscv_tests_pipeline PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(test_riscv_tests_pipeline PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
-install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test test_pipeline_exec test_soc_hello_world test_riscv_tests test_address_decoder test_riscv_tests_pipeline RUNTIME DESTINATION bin/riscv-mini)
+# Smoke test: Pipeline + TCM instantiation in single context
+add_executable(test_pipeline_smoke tests/test_pipeline_smoke.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_smoke PRIVATE cpphdl)
+target_include_directories(test_pipeline_smoke PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_smoke PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test test_pipeline_exec test_soc_hello_world test_riscv_tests test_address_decoder test_riscv_tests_pipeline test_pipeline_smoke RUNTIME DESTINATION bin/riscv-mini)
+
+add_executable(test_pipeline_minimal tests/test_pipeline_minimal.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_minimal PRIVATE cpphdl)
+target_include_directories(test_pipeline_minimal PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_minimal PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)

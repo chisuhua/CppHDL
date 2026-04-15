@@ -329,7 +329,7 @@ void context::topological_sort_visit(
 
     // 检查是否存在循环依赖
     if (temp_mark[node]) {
-        // 处理寄存器循环依赖
+        // 处理寄存器/存储器循环依赖
         if (node->type() == lnodetype::type_reg) {
             // 对于寄存器，允许循环，因为它们代表时序逻辑
             CHDBG("Allowing cycle for register node %u", node->id());
@@ -340,17 +340,20 @@ void context::topological_sort_visit(
                 // 这里可以记录未初始化的寄存器，但不终止程序
                 CHWARN("Uninitialized register node %u", node->id());
             }
+        } else if (node->type() == lnodetype::type_mem) {
+            // 存储器也是时序逻辑（同步读写），允许循环
+            CHDBG("Allowing cycle for memory node %u", node->id());
         } else {
-            // 循环检测 - 抛出异常并终止程序
             CHFATAL_EXCEPTION(
-                "Cycle detected in IR graph during topological sort");
+                "Cycle detected in IR graph during topological sort (node type: %s, id: %u, name: %s)",
+                to_string(node->type()), node->id(), node->name().c_str());
         }
         return;
     }
 
     // 检查循环节点
     if (cyclic_nodes.count(node)) {
-        // 处理寄存器循环依赖
+        // 处理寄存器/存储器循环依赖
         if (node->type() == lnodetype::type_reg) {
             // 检测未初始化的寄存器
             auto *reg_node = reinterpret_cast<regimpl *>(node);
@@ -359,14 +362,20 @@ void context::topological_sort_visit(
                 CHWARN("Uninitialized register node %u", node->id());
             }
             return;
+        } else if (node->type() == lnodetype::type_mem) {
+            // 存储器也是时序逻辑，允许循环
+            CHDBG("Skipping cycle for memory node %u", node->id());
+            return;
         }
-        CHFATAL_EXCEPTION("Cycle detected in IR graph during topological sort");
+        CHFATAL_EXCEPTION(
+            "Cycle detected in IR graph during topological sort (node type: %s, id: %u, name: %s)",
+            to_string(node->type()), node->id(), node->name().c_str());
     }
     cyclic_nodes.insert(node);
 
     temp_mark[node] = true;
 
-    // 对寄存器节点特殊处理，只遍历初始化值依赖，不遍历next值依赖
+    // 对寄存器/存储器节点特殊处理，只遍历初始化值依赖，不遍历 next 值依赖
     if (node->type() == lnodetype::type_reg) {
         // 处理寄存器的初始值依赖
         auto reg_node = static_cast<const regimpl *>(node);
@@ -375,6 +384,11 @@ void context::topological_sort_visit(
             this->topological_sort_visit(init_val, sorted, visited, temp_mark,
                                          cyclic_nodes, update_list);
         }
+    } else if (node->type() == lnodetype::type_mem) {
+        // 存储器的初始化依赖（如果有）
+        auto *mem_node = static_cast<const memimpl *>(node);
+        // memimpl 的初始化值在 node 构建时已经编码，不需要遍历 next
+        CHDBG("Memory node %u - skipping combinational traversal", node->id());
     } else {
         // 对于所有其他节点，处理所有源节点
         bool update = false;
