@@ -170,3 +170,75 @@ target_include_directories(test_pipeline_debug6 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(test_pipeline_debug6 PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_pipeline_wrapper tests/test_pipeline_wrapper.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_pipeline_wrapper PRIVATE cpphdl)
+target_include_directories(test_pipeline_wrapper PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_pipeline_wrapper PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_wrapper_simple tests/test_wrapper_simple.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_wrapper_simple PRIVATE cpphdl)
+target_include_directories(test_wrapper_simple PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_wrapper_simple PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_wrapper_ifstage tests/test_wrapper_ifstage.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_wrapper_ifstage PRIVATE cpphdl)
+target_include_directories(test_wrapper_ifstage PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_wrapper_ifstage PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_wrapper_pipeline tests/test_wrapper_pipeline.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_wrapper_pipeline PRIVATE cpphdl)
+target_include_directories(test_wrapper_pipeline PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_wrapper_pipeline PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_rv32i_pipeline_device tests/test_rv32i_pipeline_device.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_rv32i_pipeline_device PRIVATE cpphdl)
+target_include_directories(test_rv32i_pipeline_device PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_rv32i_pipeline_device PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+add_executable(test_ifstage_device tests/test_ifstage_device.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_ifstage_device PRIVATE cpphdl)
+target_include_directories(test_ifstage_device PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_ifstage_device PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
