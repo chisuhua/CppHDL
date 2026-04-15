@@ -13,16 +13,16 @@
  * 内存映射:
  * | 区域   | 基地址          | 大小   | 说明         |
  * |--------|-----------------|--------|--------------|
- * | I-TCM  | 0x20000000      | 64KB   | 指令存储     |
- * | D-TCM  | 0x20010000      | 64KB   | 数据存储     |
- * | CLINT  | 0x40000000      | 4KB    | 定时器       |
- * | UART   | 0x40001000      | 4KB    | 串口         |
- * | GPIO   | 0x40002000      | 4KB    | 通用IO       |
+ * | I-TCM  | 0x80000000      | 64KB   | 指令存储     |
+ * | D-TCM  | 0x80010000      | 64KB   | 数据存储     |
+ * | CLINT  | 0x80100000      | 4KB    | 定时器       |
+ * | UART   | 0x80101000      | 4KB    | 串口         |
+ * | GPIO   | 0x80102000      | 4KB    | 通用IO       |
  * 
  * 启动配置:
- * - PC 起始地址: 0x20000000 (I-TCM 基地址)
+ * - PC 起始地址: 0x80000000 (I-TCM 基地址, riscv-tests 入口)
  * - mstatus 复位值: 0x00000080 (MPIE=1)
- * - mtvec 复位值: 0x20000100 (陷阱处理入口)
+ * - mtvec 复位值: 0x80000100 (陷阱处理入口)
  * 
  * Tick 序列:
  * 1. Clint mtime++ (计数器递增)
@@ -40,13 +40,14 @@
 #include "component.h"
 #include "chlib.h"
 
-#include "rv32i_pipeline.h"
+#include "cpu/pipeline/rv32i_pipeline.h"
 #include "rv32i_csr.h"
 #include "rv32i_exception.h"
-#include "hazard_unit.h"
+#include "cpu/pipeline/hazard_unit.h"
 #include "address_decoder.h"
-#include "rv32i_tcm.h"
+#include "cpu/pipeline/rv32i_tcm.h"
 #include "axi4/peripherals/axi_uart.h"
+#include "clint.h"
 
 using namespace ch::core;
 
@@ -111,65 +112,66 @@ public:
         
         // ====================================================================
         // 信号定义 (用于模块间连接)
+        // 注意: CppHDL 中不存在 ch_var<T> 类型，直接使用 ch_uint<N>/ch_bool 作为信号线
         // ====================================================================
-        
+
         // 流水线到指令存储器的信号
-        ch_var<ch_uint<32>> instr_addr{"instr_addr", 0_d};
-        ch_var<ch_uint<32>> instr_data{"instr_data", 0_d};
-        ch_var<ch_bool>     instr_ready{"instr_ready", true};
-        
+        auto instr_addr = ch_uint<32>(0_d, "instr_addr");
+        auto instr_data = ch_uint<32>(0_d, "instr_data");
+        auto instr_ready = ch_bool(true, "instr_ready");
+
         // 流水线到数据存储器的信号
-        ch_var<ch_uint<32>> data_addr{"data_addr", 0_d};
-        ch_var<ch_uint<32>> data_write_data{"data_write_data", 0_d};
-        ch_var<ch_uint<4>>  data_strbe{"data_strbe", 0_d};
-        ch_var<ch_bool>     data_write_en{"data_write_en", false};
-        ch_var<ch_uint<32>> data_read_data{"data_read_data", 0_d};
-        ch_var<ch_bool>     data_ready{"data_ready", true};
-        
+        auto data_addr = ch_uint<32>(0_d, "data_addr");
+        auto data_write_data = ch_uint<32>(0_d, "data_write_data");
+        auto data_strbe = ch_uint<4>(0_d, "data_strbe");
+        auto data_write_en = ch_bool(false, "data_write_en");
+        auto data_read_data = ch_uint<32>(0_d, "data_read_data");
+        auto data_ready = ch_bool(true, "data_ready");
+
         // 地址解码器片选信号
-        ch_var<ch_bool> i_tcm_cs{"i_tcm_cs", false};
-        ch_var<ch_bool> d_tcm_cs{"d_tcm_cs", false};
-        ch_var<ch_bool> clint_cs{"clint_cs", false};
-        ch_var<ch_bool> uart_cs{"uart_cs", false};
-        ch_var<ch_bool> gpio_cs{"gpio_cs", false};
-        ch_var<ch_bool> error_cs{"error_cs", false};
-        ch_var<ch_uint<32>> local_addr{"local_addr", 0_d};
-        
+        auto i_tcm_cs = ch_bool(false, "i_tcm_cs");
+        auto d_tcm_cs = ch_bool(false, "d_tcm_cs");
+        auto clint_cs = ch_bool(false, "clint_cs");
+        auto uart_cs = ch_bool(false, "uart_cs");
+        auto gpio_cs = ch_bool(false, "gpio_cs");
+        auto error_cs = ch_bool(false, "error_cs");
+        auto local_addr = ch_uint<32>(0_d, "local_addr");
+
         // CLINT 相关信号
-        ch_var<ch_uint<32>> clint_addr{"clint_addr", 0_d};
-        ch_var<ch_uint<32>> clint_wdata{"clint_wdata", 0_d};
-        ch_var<ch_bool>     clint_write_en{"clint_write_en", false};
-        ch_var<ch_uint<32>> clint_rdata{"clint_rdata", 0_d};
-        ch_var<ch_bool>     clint_read_en{"clint_read_en", false};
-        ch_var<ch_bool>     clint_mtip{"clint_mtip", false};
-        
+        auto clint_addr = ch_uint<32>(0_d, "clint_addr");
+        auto clint_wdata = ch_uint<32>(0_d, "clint_wdata");
+        auto clint_write_en = ch_bool(false, "clint_write_en");
+        auto clint_rdata = ch_uint<32>(0_d, "clint_rdata");
+        auto clint_read_en = ch_bool(false, "clint_read_en");
+        auto clint_mtip = ch_bool(false, "clint_mtip");
+
         // UART 相关信号 (AXI4-Lite)
-        ch_var<ch_uint<32>> uart_awaddr{"uart_awaddr", 0_d};
-        ch_var<ch_uint<2>>  uart_awprot{"uart_awprot", 0_d};
-        ch_var<ch_bool>     uart_awvalid{"uart_awvalid", false};
-        ch_var<ch_bool>     uart_awready{"uart_awready", false};
-        
-        ch_var<ch_uint<32>> uart_wdata{"uart_wdata", 0_d};
-        ch_var<ch_uint<4>>  uart_wstrb{"uart_wstrb", 0_d};
-        ch_var<ch_bool>     uart_wvalid{"uart_wvalid", false};
-        ch_var<ch_bool>     uart_wready{"uart_wready", false};
-        
-        ch_var<ch_uint<2>>  uart_bresp{"uart_bresp", 0_d};
-        ch_var<ch_bool>     uart_bvalid{"uart_bvalid", false};
-        ch_var<ch_bool>     uart_bready{"uart_bready", false};
-        
-        ch_var<ch_uint<32>> uart_araddr{"uart_araddr", 0_d};
-        ch_var<ch_uint<2>>  uart_arprot{"uart_arprot", 0_d};
-        ch_var<ch_bool>     uart_arvalid{"uart_arvalid", false};
-        ch_var<ch_bool>     uart_arready{"uart_arready", false};
-        
-        ch_var<ch_uint<32>> uart_rdata{"uart_rdata", 0_d};
-        ch_var<ch_uint<2>>  uart_rresp{"uart_rresp", 0_d};
-        ch_var<ch_bool>     uart_rvalid{"uart_rvalid", false};
-        ch_var<ch_bool>     uart_rready{"uart_rready", false};
-        
-        ch_var<ch_bool>     uart_tx{"uart_tx", false};
-        ch_var<ch_bool>     uart_irq{"uart_irq", false};
+        auto uart_awaddr = ch_uint<32>(0_d, "uart_awaddr");
+        auto uart_awprot = ch_uint<2>(0_d, "uart_awprot");
+        auto uart_awvalid = ch_bool(false, "uart_awvalid");
+        auto uart_awready = ch_bool(false, "uart_awready");
+
+        auto uart_wdata = ch_uint<32>(0_d, "uart_wdata");
+        auto uart_wstrb = ch_uint<4>(0_d, "uart_wstrb");
+        auto uart_wvalid = ch_bool(false, "uart_wvalid");
+        auto uart_wready = ch_bool(false, "uart_wready");
+
+        auto uart_bresp = ch_uint<2>(0_d, "uart_bresp");
+        auto uart_bvalid = ch_bool(false, "uart_bvalid");
+        auto uart_bready = ch_bool(false, "uart_bready");
+
+        auto uart_araddr = ch_uint<32>(0_d, "uart_araddr");
+        auto uart_arprot = ch_uint<2>(0_d, "uart_arprot");
+        auto uart_arvalid = ch_bool(false, "uart_arvalid");
+        auto uart_arready = ch_bool(false, "uart_arready");
+
+        auto uart_rdata = ch_uint<32>(0_d, "uart_rdata");
+        auto uart_rresp = ch_uint<2>(0_d, "uart_rresp");
+        auto uart_rvalid = ch_bool(false, "uart_rvalid");
+        auto uart_rready = ch_bool(false, "uart_rready");
+
+        auto uart_tx = ch_bool(false, "uart_tx");
+        auto uart_irq = ch_bool(false, "uart_irq");
         
         // ====================================================================
         // 流水线连接
@@ -217,7 +219,7 @@ public:
         // ====================================================================
         
         // 计算 TCM 内部地址 (32位地址 -> TCM 地址宽度)
-        // I-TCM 基地址: 0x20000000, 我们取低 20 位
+        // I-TCM 基地址: 0x80000000, 我们取低 20 位
         auto itcm_offset = instr_addr - ADDR_ITCM_BASE;
         auto itcm_internal_addr = bits<19, 0>(itcm_offset);
         
@@ -232,7 +234,7 @@ public:
         // ====================================================================
         
         // 计算 TCM 内部地址
-        // D-TCM 基地址: 0x20010000
+        // D-TCM 基地址: 0x80010000
         auto dtcm_offset = data_addr - ADDR_DTCM_BASE;
         auto dtcm_internal_addr = bits<19, 0>(dtcm_offset);
         

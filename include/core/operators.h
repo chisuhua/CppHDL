@@ -491,7 +491,7 @@ auto bit_select(const T &operand, const Index &index) {
     auto operand_node = to_operand(operand);
     auto index_node = to_operand(index);
 
-    auto *op_node = node_builder::instance().build_bit_select<T, Index>(
+    auto *op_node = node_builder::instance().build_bit_select(
         operand_node, index_node, "bit_select",
         std::source_location::current());
 
@@ -753,10 +753,10 @@ auto operator<<(const LHS &lhs, const RHS &rhs) {
     constexpr unsigned rhs_extra_width = [] {
         if constexpr (CHLiteral<RHS>) {
             // 对于字面量，使用其实际值作为额外宽度
-            return RHS::actual_value;
+            return std::remove_cvref_t<RHS>::actual_value;
         } else {
             // 对于非字面量，使用1 << ch_width_v<RHS>
-            return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1; // 修复 UB: 避免位移量 >= 32
+            return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1;
         }
     }();
 
