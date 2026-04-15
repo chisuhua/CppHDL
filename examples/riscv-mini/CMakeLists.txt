@@ -70,4 +70,17 @@ target_include_directories(test_address_decoder PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(test_address_decoder PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
-install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test test_pipeline_exec test_soc_hello_world test_riscv_tests test_address_decoder RUNTIME DESTINATION bin/riscv-mini)
+# RISC-V RV32UI Tests through actual Rv32iPipeline hardware (Phase F Wave 3)
+add_executable(test_riscv_tests_pipeline tests/test_riscv_tests_pipeline.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.hpp)
+target_link_libraries(test_riscv_tests_pipeline PRIVATE cpphdl)
+target_include_directories(test_riscv_tests_pipeline PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(test_riscv_tests_pipeline PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+
+install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test test_pipeline_exec test_soc_hello_world test_riscv_tests test_address_decoder test_riscv_tests_pipeline RUNTIME DESTINATION bin/riscv-mini)

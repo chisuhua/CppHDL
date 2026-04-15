@@ -150,7 +150,7 @@ public:
         
         // 写端口 (来自 WB 级 - 寄存器写回)
         // x0 寄存器硬连线为 0，禁止写入
-        auto wb_write_en = wb_reg_write & (io().wb_rd_addr != ch_uint<5>(0_d));
+        auto wb_write_en = io().wb_reg_write & (io().wb_rd_addr != ch_uint<5>(0_d));
         reg_file.write(io().wb_rd_addr, io().wb_write_data, wb_write_en, "reg_file_write");
         
         // 读端口 A (组合逻辑) - rs1
