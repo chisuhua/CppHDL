@@ -53,10 +53,47 @@ CppHDL/
 - **Bundle as IO**: Use individual `ch_bool`/`ch_uint` ports, NOT bundle struct
 - **Include aggregator**: Use `#include "ch.hpp"` (library) or `#include "chlib.h"` (chlib components)
 
+## COMPONENT LIFECYCLE PATTERNS
+| Scenario | Pattern | Example |
+|----------|---------|---------|
+| **Standalone test** | `ch::ch_device<T>` | `ch::ch_device<HazardUnit> hazard;` |
+| **Inside Component::describe()** | `ch::ch_module<T>` | `ch::ch_module<IfStage> if_stage{"if_stage"};` |
+| **Top-level wrapper** | `ch::ch_device<T>` in main() | `ch::ch_device<Rv32iSoc> soc;` |
+
+**CRITICAL**: `ch::ch_module<T>` **MUST** be created inside a `Component::describe()` method. It requires `Component::current()` to return a valid parent. Using it in standalone test functions causes silent failure and SIGSEGV.
+
+```cpp
+// ✅ CORRECT: Standalone test uses ch_device
+TEST_CASE("HazardUnit test", "[hazard]") {
+    ch::ch_device<HazardUnit> hazard;
+    ch::Simulator sim(hazard.context());
+    sim.set_input_value(hazard.instance().io().rs1_data_raw, 0);
+    sim.tick();
+}
+
+// ✅ CORRECT: ch_module inside Component::describe()
+class MyTop : public ch::Component {
+    void describe() override {
+        ch::ch_module<HazardUnit> hazard{"hazard"};  // Works - has parent
+        ch::ch_module<IfStage> if_stage{"if_stage"};
+        // ...
+    }
+};
+
+// ❌ WRONG: ch_module in standalone test - SIGSEGV
+TEST_CASE("Bad pattern", "[bad]") {
+    ch::ch_module<HazardUnit> hazard{"hazard"};  // Fails - no parent Component
+    // "Child component has been destroyed unexpectedly in io()!"
+}
+```
+
+See `docs/COMPONENT-LIFECYCLE-GUIDE.md` for full details.
+
 ## ANTI-PATTERNS
 - Direct IO port assignment: `io().port = value` (compiles but silently does nothing)
 - `&&` on IO ports: use `select()` instead
 - `CH_MODULE` with templates: use `ch::ch_module<T>`
+- `ch_module` in standalone tests: use `ch_device` instead
 - Empty TEST_CASE: use SKIP() or delete
 - Missing ctx_swap: register ops segfault without it
 
@@ -103,5 +140,5 @@ ctest --output-on-failure
 ## NOTES
 - 119 CTest entries (base + chlib labels)
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
-- riscv-mini incomplete: 5-stage pipeline has compile errors, phases 1-3 pass
+- riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)
