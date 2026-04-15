@@ -486,7 +486,7 @@ template <typename T> auto bit_select(const T &operand, int64_t index) {
 template <typename T, typename Index>
 auto bit_select(const T &operand, const Index &index) {
     static_assert(HardwareType<T>, "Operand must be a hardware type");
-    static_assert(HardwareType<Index>, "Index must be a hardware type");
+    static_assert(HardwareType<Index> || CHLiteral<Index>, "Index must be a hardware type or literal");
 
     auto operand_node = to_operand(operand);
     auto index_node = to_operand(index);

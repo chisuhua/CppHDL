@@ -190,6 +190,14 @@ template <uint64_t V, uint32_t W> struct ch_width_impl<ch_literal_impl<V, W>> {
 
 } // namespace ch::core
 
+// ch_width_impl specialization for ch_literal_runtime
+namespace ch::core {
+template <>
+struct ch_width_impl<ch_literal_runtime> {
+    static constexpr unsigned value = 32;
+};
+} // namespace ch::core
+
 // 引入字面量操作符到全局命名空间
 using namespace ch::core::literals;
 

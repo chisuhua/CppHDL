@@ -52,9 +52,9 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
     ch::ch_device<InstrTCM<20, 32>> itcm;
     ch::ch_device<DataTCM<20, 32>> dtcm;
     
-    Simulator sim;
+    Simulator sim(pipeline.context());
     
-    std::string bin_path = "/workspace/project/riscv-tests/build/rv32ui-" + bin_filename;
+    std::string bin_path = "/workspace/project/riscv-tests/build/rv32ui/" + bin_filename;
     std::vector<uint32_t> program = load_binary_file(bin_path);
     
     if (program.empty()) {
@@ -70,11 +70,13 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
         sim.set_input_value(itcm.instance().io().write_en, 0);
     }
     
-    sim.set_input_value(dtcm.instance().io().write_addr, RV32I_TOHOST_ADDR / 4);
-    sim.set_input_value(dtcm.instance().io().write_data, 0);
-    sim.set_input_value(dtcm.instance().io().write_en, 1);
+    sim.set_input_value(dtcm.instance().io().addr, RV32I_TOHOST_ADDR / 4);
+    sim.set_input_value(dtcm.instance().io().wdata, 0);
+    sim.set_input_value(dtcm.instance().io().write, 1);
+    sim.set_input_value(dtcm.instance().io().valid, 1);
     sim.tick();
-    sim.set_input_value(dtcm.instance().io().write_en, 0);
+    sim.set_input_value(dtcm.instance().io().write, 0);
+    sim.set_input_value(dtcm.instance().io().valid, 0);
     
     sim.set_input_value(pipeline.instance().io().rst, 1);
     sim.tick();
@@ -87,9 +89,12 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
         sim.tick();
         
         sim.set_input_value(dtcm.instance().io().addr, RV32I_TOHOST_ADDR / 4);
+        sim.set_input_value(dtcm.instance().io().write, 0);
+        sim.set_input_value(dtcm.instance().io().valid, 1);
         sim.tick();
-        auto val = sim.get_port_value(dtcm.instance().io().data);
-        tohost_value = static_cast<uint32_t>(val);
+        auto val = sim.get_port_value(dtcm.instance().io().rdata);
+        tohost_value = static_cast<uint64_t>(val);
+        sim.set_input_value(dtcm.instance().io().valid, 0);
         
         if (tohost_value != 0) {
             test_complete = true;
@@ -111,9 +116,9 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
 }
 
 TEST_CASE("rv32ui-p-simple through pipeline", "[pipeline][rv32ui][simple]") {
-    bool passed = run_riscv_test_pipeline("simple", "rv32ui-p-simple.bin");
+    bool passed = run_riscv_test_pipeline("simple", "simple.bin");
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui-p-simple.bin");
+        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/simple.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -121,9 +126,9 @@ TEST_CASE("rv32ui-p-simple through pipeline", "[pipeline][rv32ui][simple]") {
 }
 
 TEST_CASE("rv32ui-p-add through pipeline", "[pipeline][rv32ui][add]") {
-    bool passed = run_riscv_test_pipeline("add", "rv32ui-p-add.bin");
+    bool passed = run_riscv_test_pipeline("add", "add.bin");
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui-p-add.bin");
+        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/add.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -131,9 +136,9 @@ TEST_CASE("rv32ui-p-add through pipeline", "[pipeline][rv32ui][add]") {
 }
 
 TEST_CASE("rv32ui-p-addi through pipeline", "[pipeline][rv32ui][addi]") {
-    bool passed = run_riscv_test_pipeline("addi", "rv32ui-p-addi.bin");
+    bool passed = run_riscv_test_pipeline("addi", "addi.bin");
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui-p-addi.bin");
+        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/addi.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
