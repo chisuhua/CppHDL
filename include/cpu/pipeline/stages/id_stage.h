@@ -31,8 +31,14 @@ class IdStage : public ch::Component {
 public:
     __io(
         // 输入 (来自 IF 级)
+        ch_in<ch_uint<32>>  pc;             // IF/ID PC (用于分支目标计算)
         ch_in<ch_uint<32>>  instruction;    // 32 位指令
         ch_in<ch_bool>      valid;          // 指令有效
+        
+        // 输入 (来自 MEM/WB 流水线寄存器 - 写回)
+        ch_in<ch_uint<5>>   wb_rd_addr;    // 写回目标寄存器地址
+        ch_in<ch_uint<32>>  wb_write_data;  // 写回数据
+        ch_in<ch_bool>       wb_reg_write;  // 写回使能
         
         // 输出 (到 EX 级)
         ch_out<ch_uint<5>>  rs1_addr;       // RS1 地址
@@ -141,6 +147,11 @@ public:
         // 使用 ch_mem 实现寄存器文件
         // 注意：实际 RISC-V 寄存器 x0 硬连线为 0
         ch_mem<ch_uint<32>, 32> reg_file("reg_file");
+        
+        // 写端口 (来自 WB 级 - 寄存器写回)
+        // x0 寄存器硬连线为 0，禁止写入
+        auto wb_write_en = wb_reg_write & (io().wb_rd_addr != ch_uint<5>(0_d));
+        reg_file.write(io().wb_rd_addr, io().wb_write_data, wb_write_en, "reg_file_write");
         
         // 读端口 A (组合逻辑) - rs1
         auto rs1_addr_mux = select(

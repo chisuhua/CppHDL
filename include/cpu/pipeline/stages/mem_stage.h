@@ -41,6 +41,7 @@ public:
         // ====================================================================
         ch_in<ch_uint<32>> alu_result;   // ALU 结果 (内存地址 for load/store)
         ch_in<ch_uint<32>> rs2_data;     // RS2 数据 (存储数据)
+        ch_in<ch_uint<5>>  rd_addr;     // 目的寄存器地址 (传递到 WB)
         ch_in<ch_bool>     is_load;      // 是否为加载指令
         ch_in<ch_bool>     is_store;     // 是否为存储指令
         ch_in<ch_uint<3>>  funct3;       // 功能码 (决定数据宽度)
@@ -49,6 +50,8 @@ public:
         // ====================================================================
         // 输出端口：写入 MEM/WB 流水线寄存器
         // ====================================================================
+        ch_out<ch_uint<32>> alu_result_out; // ALU 结果传递到 WB (流水线寄存器)
+        ch_out<ch_uint<5>>  rd_addr_out;  // rd_addr 流水线寄存器
         ch_out<ch_uint<32>> mem_data;    // 从内存读出的数据 (WB 级使用)
         ch_out<ch_bool>     mem_valid_out; // 内存数据有效 (用于 WB 级多选)
     )
