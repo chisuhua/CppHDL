@@ -80,7 +80,8 @@ target_include_directories(test_riscv_tests_pipeline PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 set_target_properties(test_riscv_tests_pipeline PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
 # Smoke test: Pipeline + TCM instantiation in single context
