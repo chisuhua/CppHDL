@@ -765,7 +765,7 @@ void Simulator::tick() {
         return;
     }
 
-    CHINFO("ticks count: %u", ticks_++);
+    CHDBG("ticks count: %u", ticks_++);
 
     eval_combinational();
 

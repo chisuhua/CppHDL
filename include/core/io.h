@@ -26,6 +26,29 @@ private:
 public:
     using value_type = T;
 
+    // 默认构造函数：创建具名输出节点
+    ch_logic_out(
+        const std::source_location &sloc = std::source_location::current())
+        : name_("unnamed_output") {
+        CHDBG_FUNC();
+        auto ctx = ch::core::ctx_curr_;
+        if (!ctx) {
+            CHDBG("[ch_logic_out] No active context for output '%s', will be null",
+                  name_.c_str());
+            return;
+        }
+        outputimpl *node_ptr = ctx->create_output(ch_width_v<T>, name_, sloc);
+        output_node_ = node_ptr;
+        if (output_node_) {
+            CHDBG("  [ch_logic_out] Created outputimpl node ID %u for '%s'",
+                  output_node_->id(), name_.c_str());
+        } else {
+            CHERROR(
+                "  [ch_logic_out] Failed to create outputimpl node for '%s'",
+                name_.c_str());
+        }
+    }
+
     // 拷贝构造函数 - 浅拷贝
     ch_logic_out(const ch_logic_out &other)
         : name_(other.name_), output_node_(other.output_node_) {}
@@ -45,16 +68,16 @@ public:
         CHDBG("[ch_logic_out] Wrapping existing node for '%s'", name.c_str());
     }
 
-    // 标准构造函数
+    // 标准构造函数（带名称）
     ch_logic_out(
-        const std::string &name = "io",
+        const std::string &name,
         const std::source_location &sloc = std::source_location::current())
         : name_(name) {
         CHDBG_FUNC();
         auto ctx = ch::core::ctx_curr_;
         if (!ctx) {
-            CHERROR("[ch_logic_out] Error: No active context for output '%s'!",
-                    name.c_str());
+            CHDBG("[ch_logic_out] No active context for output '%s', will be null",
+                  name.c_str());
             return;
         }
         outputimpl *node_ptr = ctx->create_output(ch_width_v<T>, name, sloc);
@@ -96,6 +119,26 @@ private:
 public:
     using value_type = T;
 
+    // 默认构造函数：创建具名输入节点
+    ch_logic_in(
+        const std::source_location &sloc = std::source_location::current())
+        : name_("unnamed_input") {
+        CHDBG_FUNC();
+        auto ctx = ch::core::ctx_curr_;
+        if (ctx) {
+            inputimpl *node_ptr = ctx->create_input(ch_width_v<T>, name_, sloc);
+            input_node_ = node_ptr;
+            if (input_node_) {
+                CHDBG("  [ch_logic_in] Created inputimpl node ID %u for '%s'",
+                      input_node_->id(), name_.c_str());
+            } else {
+                CHERROR(
+                    "  [ch_logic_in] Failed to create inputimpl node for '%s'",
+                    name_.c_str());
+            }
+        }
+    }
+
     // 拷贝构造函数 - 浅拷贝
     ch_logic_in(const ch_logic_in &other)
         : name_(other.name_), input_node_(other.input_node_) {}
@@ -115,9 +158,9 @@ public:
         CHDBG("[ch_logic_in] Wrapping existing node for '%s'", name.c_str());
     }
 
-    // 标准构造函数
+    // 标准构造函数（带名称）
     ch_logic_in(
-        const std::string &name = "io",
+        const std::string &name,
         const std::source_location &sloc = std::source_location::current())
         : name_(name) {
         CHDBG_FUNC();
@@ -155,7 +198,8 @@ public:
     using value_type = T;
     using direction = input_direction;
 
-    port() = default;
+    // 默认构造函数：创建具名输入端口
+    port() : impl_() {}
 
     // 从名称构造
     explicit port(const std::string &name, const std::source_location &sloc =
@@ -211,11 +255,12 @@ public:
     using value_type = T;
     using direction = output_direction;
 
-    port() = default;
+    // 默认构造函数：创建具名输出端口
+    port() : impl_() {}
 
     // 从名称构造
     explicit port(const std::string &name, const std::source_location &sloc =
-                                               std::source_location::current())
+                                                std::source_location::current())
         : impl_(ch_logic_out<T>(name, sloc)) {}
 
     // 拷贝构造函数
