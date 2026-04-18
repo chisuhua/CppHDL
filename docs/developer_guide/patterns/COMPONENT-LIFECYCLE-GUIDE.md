@@ -259,12 +259,81 @@ public:
 TEST_CASE("Pipeline test with wrapper", "[pipeline]") {
     context ctx("test");
     ctx_swap swap(&ctx);
-    
+
     ch::ch_device<PipelineTestTop> top;
     ch::Simulator sim(top.context());
     sim.tick();  // Works!
 }
 ```
+
+## PipelineTop Pattern: Testing Nested Multi-Component Hierarchies
+
+When testing a design that contains multiple nested `ch_module` components (e.g., Pipeline + ITCM + DTCM), create a dedicated "Top" wrapper component for testing:
+
+### When to Use PipelineTop Pattern
+
+- Testing integration of pipeline with memory modules (ITCM/DTCM)
+- Testing multi-component subsystems before full SoC integration
+- Isolating test failures to a specific subsystem
+
+### Example: Rv32iPipelineTop
+
+```cpp
+// rv32i_pipeline_top.h
+class Rv32iPipelineTop : public ch::Component {
+public:
+    __io(
+        (ch_in<ch_bool>)      ext_rst;
+        (ch_in<ch_bool>)      ext_clk;
+        (ch_in<ch_uint<32>>) ext_instr_data;
+        (ch_in<ch_bool>)      ext_instr_ready;
+        (ch_in<ch_uint<32>>) ext_data_read_data;
+        (ch_in<ch_bool>)      ext_data_ready;
+    )
+
+    Rv32iPipelineTop(ch::Component* parent = nullptr,
+                     const std::string& name = "rv32i_pipeline_top")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        // ✅ All nested modules created inside describe()
+        ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};
+        ch::ch_module<InstrTCM<20, 32>> itcm{"itcm"};
+        ch::ch_module<DataTCM<20, 32>> dtcm{"dtcm"};
+
+        // Connect ITCM/DTCM to pipeline
+        itcm.io().addr <<= pipeline.io().instr_addr;
+        pipeline.io().instr_data <<= itcm.io().data;
+        ...
+
+        // Connect external control
+        pipeline.io().rst <<= io().ext_rst;
+        pipeline.io().clk <<= io().ext_clk;
+    }
+};
+
+// Test usage
+TEST_CASE("PipelineTop with ITCM/DTCM", "[pipeline]") {
+    ch::ch_device<Rv32iPipelineTop> top;
+
+    auto& io = top.io();
+    io.ext_rst <<= ch_bool(true);
+    io.ext_clk <<= ch_bool(false);
+    ...
+
+    Simulator sim(top.context());
+    sim.tick();  // ✅ Works correctly
+}
+```
+
+### Benefits
+
+1. **Proper parent context**: All `ch_module` calls have valid parent
+2. **Shared context**: All modules share same context for cross-module connections
+3. **Clean test interface**: External IO ports allow testbench control
+4. **Reusable**: Same component can be used in larger SoC integration
 
 ## Troubleshooting
 

@@ -1,8 +1,9 @@
 # Pipeline Tick Crash Debugging Analysis
 
-**文档版本**: 1.0  
-**创建日期**: 2026-04-18  
-**状态**: 分析完成，待修复
+**文档版本**: 1.1
+**创建日期**: 2026-04-18
+**最后更新**: 2026-04-19
+**状态**: ✅ 已修复
 
 ---
 
@@ -15,6 +16,17 @@
 ```
 test_pipeline_smoke: FAILED due to a fatal error condition: SIGTERM
 ```
+
+### 1.2 修复状态
+
+| 日期 | 修改 | 状态 |
+|------|------|------|
+| 2026-04-18 | 问题分析完成 | ✅ |
+| 2026-04-19 | 创建 `Rv32iPipelineTop` + 修复测试 | ✅ 已修复 |
+
+**修复文件**：
+- `examples/riscv-mini/src/rv32i_pipeline_top.h` (NEW)
+- `examples/riscv-mini/tests/test_pipeline_smoke.cpp` (FIXED)
 
 ### 1.2 Git 历史确认
 
@@ -287,12 +299,94 @@ pipeline.io().clk <<= ch_bool(true);
 
 ---
 
-## 7. 相关文件
+## 7. 修复方案 (2026-04-19)
+
+### 7.1 根本原因
+
+测试代码 `test_pipeline_smoke.cpp` 直接在 TEST_CASE 函数中调用 `ch_module`：
+
+```cpp
+// WRONG - ch_module called outside describe()
+TEST_CASE("Pipeline + TCM", "[pipeline]") {
+    ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};  // ❌ No parent Component
+    ch::ch_module<InstrTCM<20, 32>> itcm{"itcm"};
+    ...
+}
+```
+
+`ch_module` 需要 `Component::current()` 返回有效父组件，但在 TEST_CASE 中调用时 `current()` 为 `nullptr`，导致未定义行为/卡死。
+
+### 7.2 解决方案
+
+创建 `Rv32iPipelineTop` 包装组件，将所有嵌套 `ch_module` 放在 `describe()` 内部：
+
+**`examples/riscv-mini/src/rv32i_pipeline_top.h`** (NEW):
+```cpp
+class Rv32iPipelineTop : public ch::Component {
+public:
+    __io(
+        ch_in<ch_bool>      ext_rst;
+        ch_in<ch_bool>      ext_clk;
+        ch_in<ch_uint<32>>  ext_instr_data;
+        ch_in<ch_bool>      ext_instr_ready;
+        ch_in<ch_uint<32>>  ext_data_read_data;
+        ch_in<ch_bool>      ext_data_ready;
+    )
+
+    Rv32iPipelineTop(ch::Component* parent = nullptr,
+                     const std::string& name = "rv32i_pipeline_top")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        // ✅ 所有 ch_module 都在 describe() 内部 - parent 有效
+        ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};
+        ch::ch_module<InstrTCM<20, 32>> itcm{"itcm"};
+        ch::ch_module<DataTCM<20, 32>> dtcm{"dtcm"};
+
+        // 连接 ITCM/DTCM 到流水线
+        itcm.io().addr <<= pipeline.io().instr_addr;
+        pipeline.io().instr_data <<= itcm.io().data;
+        ...
+    }
+};
+```
+
+**`examples/riscv-mini/tests/test_pipeline_smoke.cpp`** (FIXED):
+```cpp
+TEST_CASE("PipelineTop with ITCM/DTCM: construct + tick", "[pipeline][smoke]") {
+    // ✅ 使用 ch_device 创建顶层组件
+    ch::ch_device<Rv32iPipelineTop> top;
+
+    auto& io = top.io();
+    io.ext_rst <<= ch_bool(true);
+    io.ext_clk <<= ch_bool(false);
+    ...
+
+    Simulator sim(top.context());
+    sim.tick();  // ✅ 正常工作
+
+    SUCCEED("PipelineTop with ITCM/DTCM ticked without crash");
+}
+```
+
+### 7.3 测试结果
+
+```
+===============================================================================
+All tests passed (1 assertion in 1 test case)
+```
+
+---
+
+## 8. 相关文件
 
 | 文件 | 说明 |
 |------|------|
+| `examples/riscv-mini/src/rv32i_pipeline_top.h` | 流水线顶层包装组件 (NEW) |
+| `examples/riscv-mini/tests/test_pipeline_smoke.cpp` | 修复后的测试 |
 | `include/cpu/pipeline/rv32i_pipeline.h` | 流水线顶层模块 |
-| `include/cpu/pipeline/stages/*.h` | 各流水线阶段定义 |
 | `include/cpu/pipeline/rv32i_tcm.h` | ITCM/DTCM 内存模块 |
 | `include/module.h` | `ch_module` 实现 |
 | `src/component.cpp` | `Component::describe()` 实现 |
@@ -300,14 +394,13 @@ pipeline.io().clk <<= ch_bool(true);
 
 ---
 
-## 8. 参考文献
+## 9. 参考文献
 
 - **ch_module 生命周期**: `include/module.h`
 - **Component 上下文管理**: `src/component.cpp`
-- **已知问题**: Git commit `b1d0753`
-- **相关讨论**: `docs/riscv-mini/test-architecture.md`
+- **Component 生命周期指南**: `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md`
 
 ---
 
-**维护**: AI Agent  
-**最后更新**: 2026-04-18
+**维护**: AI Agent
+**最后更新**: 2026-04-19
