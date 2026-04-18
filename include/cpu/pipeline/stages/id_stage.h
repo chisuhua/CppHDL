@@ -45,7 +45,7 @@ public:
         ch_out<ch_uint<32>> rs1_data;       // RS1 数据
         ch_out<ch_uint<32>> rs2_data;       // RS2 数据
         ch_out<ch_uint<32>> imm;            // 立即数 (符号扩展)
-        ch_out<ch_uint<4>>  opcode;         // 操作码
+        ch_out<ch_uint<7>>  opcode;         // 操作码 (FIX: was 4bit, RISC-V opcodes are 7 bits)
         ch_out<ch_uint<3>>  funct3;         // funct3 字段
         ch_out<ch_bool>     is_branch;      // 分支指令
         ch_out<ch_bool>     is_load;        // 加载指令
@@ -53,6 +53,7 @@ public:
         ch_out<ch_bool>     is_jump;        // 跳转指令
         ch_out<ch_bool>     is_alu;         // ALU 指令
         ch_out<ch_uint<5>>  rd_addr;        // 目的寄存器地址
+        ch_out<ch_bool>     valid_out;      // 寄存后的 valid 信号 (到 EX)
     )
     
     IdStage(ch::Component* parent = nullptr, const std::string& name = "id_stage")
@@ -103,30 +104,29 @@ public:
         ch_uint<32> imm_i = sext<32>(bits<31, 20>(io().instruction));
         
         // S-type 立即数：instr[31:25] << 5 | instr[11:7], 符号扩展
-        ch_uint<12> imm_s_base = 
-            (bits<31, 25>(io().instruction) << ch_uint<7>(5_d)) | 
+        ch_uint<12> imm_s_base =
+            (bits<31, 25>(io().instruction) << ch_uint<3>(5_d)) |
             bits<11, 7>(io().instruction);
         ch_uint<32> imm_s = sext<32>(imm_s_base);
-        
+
         // B-type 立即数：instr[31|30:25|11:8|7], 符号扩展
-        ch_uint<13> imm_b_base = 
-            (bits<31, 31>(io().instruction) << ch_uint<12>(12_d)) |  // imm[12]
-            (bits<30, 25>(io().instruction) << ch_uint<6>(5_d)) |    // imm[10:5]
-            (bits<11, 8>(io().instruction) << ch_uint<4>(1_d)) |     // imm[4:1]
-            bits<7, 7>(io().instruction);                            // imm[11]
+        ch_uint<13> imm_b_base =
+            (bits<31, 31>(io().instruction) << ch_uint<5>(12_d)) |  // 5 bits can hold 0-31
+            (bits<30, 25>(io().instruction) << ch_uint<3>(5_d)) |   // 3 bits can hold 0-7
+            (bits<11, 8>(io().instruction) << ch_uint<1>(1_d)) |    // 1 bit can hold 0-1
+            bits<7, 7>(io().instruction);
         ch_uint<32> imm_b = sext<32>(imm_b_base);
-        
+
         // U-type 立即数：instr[31:12] 直接作为高 20 位
-        // 使用位掩码 0xFFFFF (十进制 1048575) 提取指令低 20 位
-        ch_uint<32> instr_masked = io().instruction & ch_uint<32>(1048575_d);  // 0xFFFFF = 1048575
-        ch_uint<32> imm_u = instr_masked << ch_uint<32>(12_d);  // 左移 12 位得到立即数
-        
+        ch_uint<32> instr_masked = io().instruction & ch_uint<32>(1048575_d);
+        ch_uint<32> imm_u = instr_masked << ch_uint<5>(12_d);
+
         // J-type 立即数：instr[31|30:21|20|19:12], 符号扩展
-        ch_uint<21> imm_j_base = 
-            (bits<31, 31>(io().instruction) << ch_uint<20>(20_d)) |  // imm[20]
-            (bits<30, 21>(io().instruction) << ch_uint<10>(1_d)) |   // imm[10:1]
-            (bits<20, 20>(io().instruction) << ch_uint<11>(11_d)) |  // imm[11]
-            (bits<19, 12>(io().instruction) << ch_uint<12>(12_d));   // imm[19:12]
+        ch_uint<21> imm_j_base =
+            (bits<31, 31>(io().instruction) << ch_uint<5>(20_d)) |  // 5 bits can hold 0-31
+            (bits<30, 21>(io().instruction) << ch_uint<1>(1_d)) |   // 1 bit can hold 0-1
+            (bits<20, 20>(io().instruction) << ch_uint<4>(11_d)) |  // 4 bits can hold 0-15
+            (bits<19, 12>(io().instruction) << ch_uint<5>(12_d));   // 5 bits can hold 0-31
         ch_uint<32> imm_j = sext<32>(imm_j_base);
         
         // 根据指令类型选择立即数
@@ -230,7 +230,7 @@ public:
         io().is_jump   = idex_is_jump;
         io().is_alu    = idex_is_alu;
         io().rd_addr   = idex_rd_addr;
-        io().valid     = idex_valid;
+        io().valid_out = idex_valid;
     }
 };
 

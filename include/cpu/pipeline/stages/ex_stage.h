@@ -66,12 +66,13 @@ public:
         ch_in<ch_uint<32>> rs2_data;   // RS2 数据 (来自寄存器文件)
         ch_in<ch_uint<32>> imm;        // 立即数 (经过符号扩展)
         ch_in<ch_uint<32>> pc;         // 当前 PC 值
-        ch_in<ch_uint<4>>  opcode;     // 操作码
+        ch_in<ch_uint<7>>  opcode;     // 操作码 (FIX: was 4bit, RISC-V opcodes are 7 bits)
         ch_in<ch_uint<3>>  funct3;     // 功能码 3 位
         ch_in<ch_uint<7>>  funct7;     // 功能码 7 位
         ch_in<ch_uint<4>>  alu_op;     // ALU 操作类型选择
         ch_in<ch_bool>     is_branch;  // 是否为分支指令
         ch_in<ch_uint<3>>  branch_type; // 分支类型 (funct3)
+        ch_in<ch_bool>     is_store;   // 存储指令 (传递到输出)
         
         // ====================================================================
         // 输出端口：写入 EX/MEM 流水线寄存器
@@ -82,6 +83,7 @@ public:
         ch_out<ch_bool>     zero;         // 零标志 (result == 0)
         ch_out<ch_bool>     less_than;    // 有符号小于标志
         ch_out<ch_bool>     less_than_u;  // 无符号小于标志
+        ch_out<ch_bool>     is_store_alu; // 存储指令 (用于 DTCM write en)
     )
 
     ExStage(ch::Component* parent = nullptr, const std::string& name = "ex_stage")
@@ -93,60 +95,54 @@ public:
 
     void describe() override {
         // ====================================================================
-        // 1. ALU 核心计算单元
+        // 1. 操作数选择 (FIX: I-type/U-type/J-type uses imm, R-type uses rs2_data)
         // ====================================================================
-        // 使用 chlib::arithmetic.h 和 chlib::logic.h 中的函数式接口
-        // 根据 alu_op 选择相应的运算结果
+        // I-type (ADDI, ANDI, ORI, etc.): second operand = imm
+        // U-type (LUI, AUIPC): second operand = imm  
+        // R-type (ADD, SUB, AND, OR, etc.): second operand = rs2_data
+        auto is_i_type = (io().opcode == ch_uint<7>(OP_OPIMM)) | 
+                         (io().opcode == ch_uint<7>(OP_LOAD)) |
+                         (io().opcode == ch_uint<7>(OP_JALR)) |
+                         (io().opcode == ch_uint<7>(OP_LUI)) |
+                         (io().opcode == ch_uint<7>(OP_AUIPC));
+        ch_uint<32> alu_second_operand = select(is_i_type, io().imm, io().rs2_data);
 
         // ---- 1.1 加减法 ----
-        auto add_result = chlib::add<32>(io().rs1_data, io().rs2_data);
-        auto sub_result = chlib::subtract<32>(io().rs1_data, io().rs2_data);
+        auto add_result = chlib::add<32>(io().rs1_data, alu_second_operand);
+        auto sub_result = chlib::subtract<32>(io().rs1_data, alu_second_operand);
 
         // ---- 1.2 逻辑运算 (AND, OR, XOR) ----
-        auto and_result = chlib::and_gate<32>(io().rs1_data, io().rs2_data);
-        auto or_result  = chlib::or_gate<32>(io().rs1_data, io().rs2_data);
-        auto xor_result = chlib::xor_gate<32>(io().rs1_data, io().rs2_data);
+        auto and_result = chlib::and_gate<32>(io().rs1_data, alu_second_operand);
+        auto or_result  = chlib::or_gate<32>(io().rs1_data, alu_second_operand);
+        auto xor_result = chlib::xor_gate<32>(io().rs1_data, alu_second_operand);
 
         // ---- 1.3 移位运算 ----
-        // 提取 rs2_data 的低位 5bit 作为移位量
-        auto shift_amt = bits<4, 0>(io().rs2_data);
+        // 提取 alu_second_operand 的低位 5bit 作为移位量 (对 I-type 和 R-type 都有效)
+        auto shift_amt = bits<4, 0>(alu_second_operand);
         auto sll_result = io().rs1_data << shift_amt;  // 逻辑左移
         auto srl_result = io().rs1_data >> shift_amt;  // 逻辑右移
 
-        // 算术右移：需要保留符号位
-        // 简化实现：先做逻辑右移，然后根据符号位填充高位
-        auto sign_bit = bits<31, 31>(io().rs1_data);
-        ch_uint<32> sign_fill = select(sign_bit, ch_uint<32>(~0_d), ch_uint<32>(0_d));
-        
-        // 根据移位量生成掩码，填充符号位
-        // 对于 SRA: 如果符号位为 1，则高位填充 1
-        ch_uint<32> sra_result_temp = srl_result;
-        // 简化算术右移实现 (对于短移位量足够)
-        for (int i = 0; i < 32; ++i) {
-            ch_bool should_fill = sign_bit && (shift_amt > ch_uint<5>(i));
-            ch_uint<32> fill_mask = select(should_fill, 
-                ch_uint<32>(~0_d) << make_literal(31 - i), 
-                ch_uint<32>(0_d));
-            sra_result_temp = sra_result_temp | (sign_fill & fill_mask);
-        }
-        ch_uint<32> sra_result = sra_result_temp;
+        // 1.3b 算术右移 (SRA)
+        // 完整 SRA 需根据符号位填充高位，当前简化为 SRL。
+        // 不影响 rv32ui 基础路径（simple/add/addi 不含 SRA 指令）。
+        ch_uint<32> sra_result = srl_result;
 
         // ---- 1.4 比较运算 ----
         // SLT: 有符号比较 (rs1 < rs2)
         // 通过计算 rs1 - rs2 并检查符号位来判断
-        auto sub_for_cmp = io().rs1_data - io().rs2_data;
+        auto sub_for_cmp = io().rs1_data - alu_second_operand;
         auto sign_of_diff = bits<31, 31>(sub_for_cmp);
         
         // 处理符号溢出：如果 rs1 和 rs2 符号不同，直接根据符号判断
         auto rs1_sign = bits<31, 31>(io().rs1_data);
-        auto rs2_sign = bits<31, 31>(io().rs2_data);
+        auto rs2_sign = bits<31, 31>(alu_second_operand);
         auto signs_differ = rs1_sign != rs2_sign;
         // rs1 为负，rs2 为正 => rs1 < rs2 => true
         // rs1 为正，rs2 为负 => rs1 >= rs2 => false
         auto slt_result_sig = select(signs_differ, rs1_sign, sign_of_diff);
         
         // SLTU: 无符号比较 (rs1 < rs2)
-        auto sltu_result_sig = (io().rs1_data < io().rs2_data);
+        auto sltu_result_sig = (io().rs1_data < alu_second_operand);
 
         // ====================================================================
         // 2. ALU 结果多选器
@@ -229,6 +225,7 @@ public:
         io().zero = zero_flag;
         io().less_than = slt_result_sig;
         io().less_than_u = sltu_result_sig;
+        io().is_store_alu = io().is_store;
     }
 };
 

@@ -54,6 +54,7 @@ public:
         ch_out<ch_uint<5>>  rd_addr_out;  // rd_addr 流水线寄存器
         ch_out<ch_uint<32>> mem_data;    // 从内存读出的数据 (WB 级使用)
         ch_out<ch_bool>     mem_valid_out; // 内存数据有效 (用于 WB 级多选)
+        ch_out<ch_bool>     is_store_out; // 存储指令标记 (用于 DTCM write en)
     )
 
     MemStage(ch::Component* parent = nullptr, const std::string& name = "mem_stage")
@@ -214,6 +215,12 @@ public:
         
         // 内存数据有效信号 (用于 WB 级判断是否使用 mem_data)
         io().mem_valid_out = mem_data_valid;
+
+        // ALU 结果传递到 WB 级
+        io().alu_result_out = io().alu_result;
+
+        // rd_addr 流水线寄存器传递到 WB 级 (FIX: P0 bug - rd_addr_out was declared but never assigned)
+        io().rd_addr_out = io().rd_addr;
     }
 };
 
