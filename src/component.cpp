@@ -106,6 +106,7 @@ void Component::build(ch::core::context *external_ctx) {
 
     if (external_ctx) {
         CHDBG("Using external context for component: %s", name_.c_str());
+        ctx_ = external_ctx;
         target_ctx = external_ctx;
     } else {
         auto parent_ptr = parent_.lock();
