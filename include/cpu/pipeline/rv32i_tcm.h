@@ -91,7 +91,6 @@ public:
         // SRAM 模型
         ch_mem<ch_uint<DATA_WIDTH>, SIZE> memory("dtcm_memory");
         
-        // 写操作
         memory.write(io().addr, io().wdata, io().write && io().valid);
         
         // 读操作

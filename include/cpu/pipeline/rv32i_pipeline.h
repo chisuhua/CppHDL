@@ -73,8 +73,12 @@ public:
         ch::ch_module<HazardUnit> hazard{"hazard_unit"};
         
         // 流水线级寄存器文件 (32x32 bit)
-        // 移到这里以打破 ID→reg_file→WB 的环
         ch_mem<ch_uint<32>, 32> reg_file("reg_file");
+        
+        // EX/MEM 流水线寄存器 - 修复 store 的 data_write_en 和 alu_result 同步问题
+        ch_reg<ch_bool>     exmem_is_store(false, "exmem_is_store");
+        ch_reg<ch_uint<32>> exmem_alu_result(0_d, "exmem_alu_result");
+        ch_reg<ch_uint<32>> exmem_rs2_data(0_d, "exmem_rs2_data");
         
         // 从 reg_file 读端口读取数据 (组合逻辑)
         auto rs1_data_result = reg_file.sread(id_stage.io().rs1_addr, ch_bool(true));
@@ -108,45 +112,80 @@ public:
         id_stage.io().valid <<= if_stage.io().valid;
         
         // ===================== ID → EX 连接 =====================
-        // 控制信号 (部分字段缺失, 简化处理传递到 EX)
         ex_stage.io().rs1_data <<= id_stage.io().rs1_data;
         ex_stage.io().rs2_data <<= id_stage.io().rs2_data;
         ex_stage.io().imm <<= id_stage.io().imm;
         ex_stage.io().funct3 <<= id_stage.io().funct3;
         ex_stage.io().is_branch <<= id_stage.io().is_branch;
+        ex_stage.io().is_store <<= id_stage.io().is_store;
         
         // BUG FIX: 原代码 pc <<= id_stage.io().rs1_data (错误)
         // FIX: PC 应来自 IF/ID 流水线寄存器 (id_stage.io().pc)
         ex_stage.io().pc <<= id_stage.io().pc;
         
-        // opcode/funct7/alu_op/branch_type - 简化: 由 EX 级内部从 opcode 推导
+        // opcode 连接 - EX 级需要 opcode 来选择 imm vs rs2_data (I-type vs R-type)
+        ex_stage.io().opcode <<= id_stage.io().opcode;
+        
+        // EX stage self-decodes from opcode/funct3 inputs
         // EX 级内部使用 funct3 和 opcode_raw 生成 alu_op
         // 注意: funct7 直接从 instruction[31:25] 获取 (id_stage 已输出 opcode, EX 用 raw instruction)
         // EX 阶段需要: opcode_raw -> ALU decoder, funct3 -> ALU decoder
         // 这里通过 id_stage.io().funct3 和固定的 opcode_raw/funct7 输入
         // EX stage self-decodes from opcode/funct3 inputs
         
-        // ===================== EX → MEM 连接 =====================
-        mem_stage.io().alu_result <<= ex_stage.io().alu_result;
-        mem_stage.io().rs2_data <<= id_stage.io().rs2_data;  // From ID (after forwarding)
-        mem_stage.io().is_load <<= id_stage.io().is_load;
-        mem_stage.io().is_store <<= id_stage.io().is_store;
-        mem_stage.io().funct3 <<= id_stage.io().funct3;
-        mem_stage.io().mem_valid <<= ch_bool(true);
-        
+        // ===================== EX → MEM 寄存器 =====================
+        exmem_is_store <<= ex_stage.io().is_store_alu;
+        exmem_alu_result <<= ex_stage.io().alu_result;
+        exmem_rs2_data <<= ex_stage.io().rs2_data;
+
+        // ADD: IDEX pipeline registers for MEM stage inputs
+        // Pipeline registers ID → EX → MEM → WB
+        ch_reg<ch_uint<5>>  exmem_rd_addr(0_d, "exmem_rd_addr");
+        ch_reg<ch_uint<3>>  exmem_funct3(0_d, "exmem_funct3");
+        ch_reg<ch_bool>     exmem_is_load(false, "exmem_is_load");
+        ch_reg<ch_uint<32>> exmem_imm(0_d, "exmem_imm");
+        ch_reg<ch_bool>     exmem_valid(false, "exmem_valid");
+
+        // Connect IDEX pipeline registers
+        exmem_rd_addr <<= id_stage.io().rd_addr;
+        exmem_funct3 <<= id_stage.io().funct3;
+        exmem_is_load <<= id_stage.io().is_load;
+        exmem_imm <<= id_stage.io().imm;
+        exmem_valid <<= id_stage.io().valid;
+
+        // Connect MEM stage inputs from EX/MEM pipeline registers
+        mem_stage.io().alu_result <<= exmem_alu_result;
+        mem_stage.io().rs2_data <<= exmem_rs2_data;
+        mem_stage.io().rd_addr <<= exmem_rd_addr;
+        mem_stage.io().is_store <<= exmem_is_store;
+        mem_stage.io().is_load <<= exmem_is_load;
+        mem_stage.io().funct3 <<= exmem_funct3;
+        mem_stage.io().mem_valid <<= exmem_valid;
+
         // ===================== MEM → WB 连接 (FIX B3/B4) =====================
-        // BUG B3: 原代码 wb_stage.io().alu_result <<= ex_stage.io().alu_result
-        //         (直接从 EX 取, 绕过了 MEM/WB 流水线寄存器)
-        // BUG B4: 原代码 wb_stage.io().rd_addr <<= id_stage.io().rd_addr
-        //         (从 ID 取, 绕过了 MEM/WB 流水线寄存器)
-        // FIX: 使用 mem_stage 输出的流水线寄存器值
-        wb_stage.io().alu_result <<= mem_stage.io().alu_result;  // From MEM/WB reg
-        wb_stage.io().rd_addr <<= mem_stage.io().rd_addr;       // From MEM/WB reg
+        wb_stage.io().alu_result <<= mem_stage.io().alu_result_out;
+        wb_stage.io().rd_addr <<= mem_stage.io().rd_addr_out;
         wb_stage.io().mem_data <<= mem_stage.io().mem_data;
         wb_stage.io().is_load <<= mem_stage.io().is_load;
-        wb_stage.io().is_alu <<= id_stage.io().is_alu;
-        wb_stage.io().is_jump <<= id_stage.io().is_jump;
         wb_stage.io().mem_valid <<= mem_stage.io().mem_valid_out;
+        
+        // MEM/WB 流水线寄存器 - FIX: is_alu/is_jump 应该来自流水线, 不是 id_stage
+        ch_reg<ch_bool> memwb_is_alu(false, "memwb_is_alu");
+        ch_reg<ch_bool> memwb_is_jump(false, "memwb_is_jump");
+        ch_reg<ch_uint<5>> memwb_rd_addr(0_d, "memwb_rd_addr");
+        ch_reg<ch_bool> memwb_valid(false, "memwb_valid");
+        
+        // MEM/WB 寄存器更新: 使用 mem_valid 作为 enable
+        memwb_is_alu->next = select(mem_stage.io().mem_valid, id_stage.io().is_alu, memwb_is_alu);
+        memwb_is_jump->next = select(mem_stage.io().mem_valid, id_stage.io().is_jump, memwb_is_jump);
+        memwb_rd_addr->next = select(mem_stage.io().mem_valid, mem_stage.io().rd_addr_out, memwb_rd_addr);
+        memwb_valid->next = mem_stage.io().mem_valid_out;
+        
+        // WB 级使用 MEM/WB 流水线寄存器的值
+        wb_stage.io().is_alu <<= memwb_is_alu;
+        wb_stage.io().is_jump <<= memwb_is_jump;
+        wb_stage.io().rd_addr <<= memwb_rd_addr;
+        wb_stage.io().mem_valid <<= memwb_valid;
         
         // ===================== Hazard Unit 连接 =====================
         hazard.io().id_rs1_addr <<= id_stage.io().rs1_addr;
@@ -177,13 +216,10 @@ public:
         ex_stage.io().rs2_data <<= hazard.io().rs2_data;
         
         // ===================== MEM 级: 数据存储器接口 =====================
-        // MEM 阶段的访存结果输出到 D-TCM
-        // data_addr/data_write_data/data_strbe/data_write_en 
-        // 由 mem_stage 内部生成 (或简化处理)
-        io().data_addr <<= mem_stage.io().alu_result;  // 地址来自 ALU 结果
-        io().data_write_data <<= id_stage.io().rs2_data;
-        io().data_strbe <<= ch_uint<4>(15_d);  // 全字节使能 (简化)
-        io().data_write_en <<= id_stage.io().is_store;
+        io().data_addr <<= exmem_alu_result;
+        io().data_write_data <<= exmem_rs2_data;
+        io().data_strbe <<= ch_uint<4>(15_d);
+        io().data_write_en <<= exmem_is_store;
     }
 };
 
