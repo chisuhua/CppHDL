@@ -747,19 +747,19 @@ template <ValidOperand LHS, ValidOperand RHS>
 auto operator<<(const LHS &lhs, const RHS &rhs) {
     constexpr unsigned lhs_width = ch_width_v<LHS>;
 
-    // Check if RHS is compile-time ch_literal_impl (has static actual_value)
-    // vs ch_literal_runtime (has instance actual_value member)
+    // Check if RHS is ch_literal_runtime vs ch_literal_impl
+    // - ch_literal_runtime: use width-based calculation (value unknown at compile time)
+    // - ch_literal_impl: use actual_value directly (compile-time known)
     constexpr unsigned rhs_extra_width = [] {
-        if constexpr (is_ch_literal_v<std::remove_cvref_t<RHS>>) {
-            using DecayedRHS = std::remove_cvref_t<RHS>;
-            if constexpr (requires { typename DecayedRHS::actual_value; }) {
-                // Compile-time literal: use static constexpr actual_value
-                return DecayedRHS::actual_value;
-            } else {
-                // Runtime literal: fall back to width-based calculation
-                return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1;
-            }
+        using DecayedRHS = std::remove_cvref_t<RHS>;
+        if constexpr (std::is_same_v<DecayedRHS, ch_literal_runtime>) {
+            // Runtime literal: fall back to width-based calculation
+            return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1;
+        } else if constexpr (is_ch_literal_v<DecayedRHS>) {
+            // Compile-time literal: use static constexpr actual_value
+            return DecayedRHS::actual_value;
         } else {
+            // Non-literal operand: use width-based calculation
             return (static_cast<uint64_t>(1) << ch_width_v<RHS>) - 1;
         }
     }();
