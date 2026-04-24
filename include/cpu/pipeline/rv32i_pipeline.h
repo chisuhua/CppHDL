@@ -39,12 +39,12 @@ public:
         // 系统控制
         ch_in<ch_bool>      rst;
         ch_in<ch_bool>      clk;
-        
+
         // 指令存储器接口 (连接到 I-TCM)
         ch_out<ch_uint<32>> instr_addr;
         ch_in<ch_uint<32>>  instr_data;
         ch_in<ch_bool>      instr_ready;
-        
+
         // 数据存储器接口 (连接到 D-TCM)
         ch_out<ch_uint<32>> data_addr;
         ch_out<ch_uint<32>> data_write_data;
@@ -52,6 +52,14 @@ public:
         ch_out<ch_bool>     data_write_en;
         ch_in<ch_uint<32>>  data_read_data;
         ch_in<ch_bool>      data_ready;
+
+        // 性能计数器输出 (用于 benchmark 测试)
+        ch_out<ch_uint<48>> perf_cycles;              // 总时钟周期
+        ch_out<ch_uint<48>> perf_instructions;        // 提交指令数 (commit count)
+        ch_out<ch_uint<32>> perf_branch_count;        // 分支指令数
+        ch_out<ch_uint<32>> perf_branch_mispredict;   // 分支预测错误数
+        ch_out<ch_uint<32>> perf_load_use_stalls;     // Load-Use stall 次数
+        ch_out<ch_uint<32>> perf_control_stalls       // 控制冒险 stall 次数
     )
     
     Rv32iPipeline(ch::Component* parent = nullptr, const std::string& name = "rv32i_pipeline")
@@ -220,6 +228,46 @@ public:
         io().data_write_data <<= exmem_rs2_data;
         io().data_strbe <<= ch_uint<4>(15_d);
         io().data_write_en <<= exmem_is_store;
+
+        // ===================== 性能计数器 (B001/B002) =====================
+        // 内部计数器寄存器
+        ch_reg<ch_uint<48>> cycle_count(0_d, "cycle_count");
+        ch_reg<ch_uint<48>> commit_count(0_d, "commit_count");
+        ch_reg<ch_uint<32>> branch_count(0_d, "branch_count");
+        ch_reg<ch_uint<32>> branch_mispredict(0_d, "branch_mispredict");
+        ch_reg<ch_uint<32>> load_use_stalls(0_d, "load_use_stalls");
+        ch_reg<ch_uint<32>> control_stalls(0_d, "control_stalls");
+
+        // Cycle counter - always increments (reset 时清零)
+        auto reset_active = io().rst;
+        cycle_count->next = select(reset_active, ch_uint<48>(0_d), cycle_count + 1_d);
+
+        // Instruction commit counter (WB stage valid out indicates commit)
+        auto commit_valid = mem_stage.io().mem_valid_out;
+        commit_count->next = select(reset_active, ch_uint<48>(0_d), commit_count + commit_valid);
+
+        // Branch counter (ID stage sees branch instruction decode)
+        auto branch_decoded = id_stage.io().is_branch;
+        branch_count->next = select(reset_active, ch_uint<32>(0_d), branch_count + branch_decoded);
+
+        // Branch misprediction: EX stage detects branch taken AND IF stage had valid instruction
+        // flush signal from HazardUnit indicates misprediction requiring flush
+        auto branch_mispred_detected = ex_stage.io().branch_taken & if_stage.io().valid & hazard.io().flush;
+        branch_mispredict->next = select(reset_active, ch_uint<32>(0_d), branch_mispredict + branch_mispred_detected);
+
+        // Load-Use stall counter (HazardUnit stall signal)
+        load_use_stalls->next = select(reset_active, ch_uint<32>(0_d), load_use_stalls + hazard.io().stall);
+
+        // Control stall counter (same as branch misprediction for now)
+        control_stalls->next = select(reset_active, ch_uint<32>(0_d), control_stalls + branch_mispred_detected);
+
+        // 连接性能计数器输出到 IO
+        io().perf_cycles <<= cycle_count;
+        io().perf_instructions <<= commit_count;
+        io().perf_branch_count <<= branch_count;
+        io().perf_branch_mispredict <<= branch_mispredict;
+        io().perf_load_use_stalls <<= load_use_stalls;
+        io().perf_control_stalls <<= control_stalls;
     }
 };
 
