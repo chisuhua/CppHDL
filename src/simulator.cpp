@@ -9,11 +9,13 @@
 #include "types.h"
 #include "utils/destruction_manager.h"
 #include <cassert>
-#include <cstring> // 添加memcpy的头文件
-#include <fstream> // 添加fstream头文件以支持文件输出和文件存在性检查
+#include <cstring>
+#include <fstream>
 #include <iostream>
-#include <set> // 添加set头文件
+#include <set>
 #include <unordered_set>
+#include <chrono>
+#include <iomanip>
 
 namespace ch {
 
@@ -766,6 +768,22 @@ void Simulator::tick() {
     }
 
     CHDBG("ticks count: %u", ticks_++);
+
+    // 进度报告 (每1秒报告一次)
+    {
+        static auto last_report = std::chrono::steady_clock::now();
+        static size_t last_ticks = 0;
+        auto now = std::chrono::steady_clock::now();
+        double elapsed = std::chrono::duration<double>(now - last_report).count();
+        if (elapsed >= 1.0) {
+            double rate = (ticks_ - last_ticks) / elapsed;
+            std::cout << "[PROGRESS] tick=" << ticks_
+                      << " rate=" << std::fixed << std::setprecision(0) << rate << " ticks/s"
+                      << std::endl << std::flush;
+            last_report = now;
+            last_ticks = ticks_;
+        }
+    }
 
     eval_combinational();
 
