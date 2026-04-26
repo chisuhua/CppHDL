@@ -30,13 +30,14 @@ CppHDL 采用两阶段架构：elaboration 构建 IR 图，模拟器编译为指
 
 #### Cash：JIT 编译模拟器
 
-cash 在 CppHDL 类似架构之上增加了 JIT 编译层：
+cash 在 CppHDL 类似架构之上增加了 JIT 编译层（使用 **LIBJIT/GNU Lightning**，非 LLVM）：
 
 - **编译期优化**：七遍 IR 优化（DCE、CSE、常量折叠、代理合并、分支合并、寄存器提升）
-- **JIT 后端**：将优化后的 eval list 编译为原生机器码（LLVM 或 LIBJIT），生成单一 `entry(sim_state_t*)` 函数
-- **标量优化**：≤64 位节点映射到原生寄存器，避免 bitvector 开销
-- **bypass 优化**：单时钟域设计在时钟未翻转时可跳过部分评估
-- **信号存储**：预分配扁平 `sim_state_t.vars` 字节数组，JIT 代码直接偏移访问
+- **merged context**：通过 `create_merged_context()` 将多模块 flatten 为单一 eval context，这是 Cash 能高效编译的关键
+- **JIT 后端**：将优化后的 eval list 编译为原生机器码（**LIBJIT**），生成单一 `entry(sim_state_t*)` 函数
+- **标量优化**：≤64 位节点直接映射到 x86 原生寄存器，生成 `add/and/or/xor` 等指令；>64 位才调用库函数
+- **bypass 优化**：单时钟域设计在时钟未翻转时可跳过 sequential 节点评估
+- **信号存储**：预分配扁平 `sim_state_t.vars` 字节数组，JIT 代码使用**编译期偏移量**直接访问
 
 #### SpinalHDL：Verilator 编译仿真
 
@@ -88,16 +89,27 @@ SpinalHDL 采用完全不同的策略——将 RTL 编译为优化的 C++ 模型
        ├── node->create_instruction()  // 创建指令
        └── 分类: input/comb/seq/clock/reset 列表
 
-2. tick() 循环 (per cycle)
+2. tick() 循环 (per cycle) - **注意：实际调用 eval() 两次**
    ├── eval_combinational()
    │   ├── input_instr_list_ → eval()  // 驱动输入
    │   └── combinational_instr_list_ → eval() // 组合逻辑传播
    │
-   └── eval()  [if default_clock]
-       ├── default_clock_instr_->eval() // 翻转时钟
-       ├── other_clock_instr_ → eval()
-       ├── if clk==0 → eval_combinational()  // 低电平组合
-       └── if clk==1 → eval_sequential()   // 高电平时序
+   └── eval()  [if default_clock] — **调用两次**
+       ├── 第一次 eval()：时钟翻转到 1 → eval_sequential()  时序锁存
+       ├── 第二次 eval()：时钟翻转到 0 → eval_combinational() 组合逻辑收敛
+       └── **实际流程**：tick() → eval() → eval() → trace()（per tick）
+
+   **伪代码**（src/simulator.cpp）：
+   ```cpp
+   void tick() {
+       eval_combinational();      // 1. 先执行组合逻辑
+       if (default_clock_instr_) {
+           eval();                 // 2. 第一次：时钟→1，时序评估
+           eval();                 // 3. 第二次：时钟→0，组合评估
+       }
+       if (trace_on_) trace();    // 4. 每 tick 都 trace（可选）
+   }
+   ```
 
 3. trace() (可选 per tick)
    ├── 遍历 signals_
@@ -175,7 +187,9 @@ void Simulator::trace() {
         auto &prev = prev_values_.at(i);
 
         if (prev.first) {
-            // memcmp 比较
+            // ⚠️ 关键问题：每次变化信号都构造临时对象
+            auto temp_data = ch::core::sdata_type(curr_value.bitwidth()); // 堆分配！
+            std::memcpy(temp_data.bitvector().data(), prev.first, ...);
             if (curr_value == temp_data) continue;  // 无变化跳过
         }
         // memcpy 复制数据
@@ -186,8 +200,15 @@ void Simulator::trace() {
 
 **问题**：
 - 每次 tick 都遍历所有信号
-- 哈希查找（data_map_.find）
+- 哈希查找（data_map_.find）→ O(1) 但 Cache miss 高
+- **临时对象构造**：每个变化信号都 `new sdata_type(bitwidth)` → **堆分配**
 - memcmp + memcpy 对变化信号
+
+**优化方向**：直接比较原始字节，避免临时对象构造：
+```cpp
+// 直接比较内存，避免 sdata_type 构造/析构
+if (std::memcmp(curr_value.bitvector().data(), prev.first, byte_len) == 0) continue;
+```
 
 ---
 
@@ -211,14 +232,26 @@ void Simulator::trace() {
 
 ### 3.2 关键发现
 
-#### 发现 1：TC-06 batch tick 比单步更慢 — 架构问题
+#### 发现 1：TC-06 batch tick 比单步更慢 — 疑似测量问题
 
-实测显示批量 `tick(N)` 比循环单步 `tick()` **慢 27%**，这完全违背了批量优化的初衷。
+实测显示批量 `tick(N)` 比循环单步 `tick()` **慢 27%**。
+
+**⚠️ 根因分析（待验证）**：从 `src/simulator.cpp:831-845` 代码看，`tick(N)` 实际就是简单循环调用 `tick()`：
+```cpp
+void Simulator::tick(size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        tick();  // 就是简单循环！
+    }
+}
+```
+
+与手动单步循环的代码完全相同，理论上批量应略快（减少循环控制开销）。
 
 **可能根因**：
-1. **循环开销反转**：当前 `tick(N)` 实现可能每次都重新初始化/清理状态，而非真正复用
-2. **指令重建**：`sim.tick(N)` 内部每次都调用 `eval_combinational()` 和 `eval_sequential()`，与单步完全相同
-3. **状态保存开销**：为支持 `set_input()` 中断恢复，每次 tick 可能保存完整状态
+1. **进度报告干扰**：`tick()` 内部每秒一次的 `[PROGRESS]` 日志可能在测量时产生不公平比较
+2. **测试方法问题**：批量模式下时间测量可能包含了 `sim.tick(N)` 之外的初始化开销
+
+**待验证**：需重新测试，排除进度报告干扰，确认批量是否有加速。
 
 #### 发现 2：TC-01 组合链性能随深度非线性崩溃
 
@@ -321,6 +354,6 @@ void Simulator::trace() {
 
 ---
 
-*文档版本: v1.0*
+*文档版本: v1.1*
 *创建日期: 2026-04-26*
-*最后更新: 2026-04-26（从 ARCHITECTURE.md 拆分：保留架构分析，移除实施路线图）*
+*最后更新: 2026-04-26（Oracle 审查反馈：修正 tick() 描述、补充 trace 临时对象、修正 TC-06 根因、更新 Cash 描述）*
