@@ -242,3 +242,8 @@ add_spinalhdl_ported_test(rv32i_phase2 rv32i_phase2_test)
 add_spinalhdl_ported_test(rv32i_phase3 rv32i_phase3_test)
 add_spinalhdl_ported_test(branch_predictor_v2 test_branch_predictor_v2)
 
+# ============================================================================
+# Performance Benchmarks
+# ============================================================================
+add_subdirectory(benchmark)
+
