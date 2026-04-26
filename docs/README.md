@@ -1,7 +1,7 @@
 # CppHDL 文档中心 v2.0
 
-> **CppHDL 文档中心** - 基于 C++20 的高层次综合 (HLS) 库  
-> **文档版本**: v2.0 | **最后更新**: 2026-04-09  
+> **CppHDL 文档中心** - 基于 C++20 的层次化综合 (HLS) 库  
+> **文档版本**: v2.1 | **最后更新**: 2026-04-25
 
 ---
 
@@ -88,6 +88,10 @@ docs/
 ├── plans/                          # 📅 计划与报告
 │   └── README.md                   # 计划索引
 │
+├── simulation/                     # 🔬 仿真架构与性能
+│   ├── ARCHITECTURE.md            # 仿真架构 + 优化方案
+│   └── PERFORMANCE_TESTS.md       # 性能测试计划 (TC-01~TC-06)
+│
 ├── archive/                        # 🗄️ 归档文档
 │
 └── learning/                       # 学习资料
@@ -109,6 +113,7 @@ docs/
 - **Bundle**: [使用模式](usage_guide/06-bundle-patterns.md), [设计指南](Bundle_DeveloperGuide.md)
 - **Stream**: [使用指南](CppHDL_UsageGuide.md), [对比分析](CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)
 - **测试**: [测试指南](CppHDL_Testing_Guide.md)
+- **仿真性能**: [仿真架构](simulation/ARCHITECTURE.md), [性能测试](simulation/PERFORMANCE_TESTS.md)
 
 ---
 
@@ -120,6 +125,7 @@ docs/
 | developer_guide | 15 | 6 | 1 | 8 | 40% |
 | skills | 5 | 1 | 1 | 3 | 20% |
 | plans | 按需 | 2 | 0 | 0 | 100% |
+| simulation | 2 | 2 | 0 | 0 | 100% |
 
 ---
 
