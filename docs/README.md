@@ -89,7 +89,8 @@ docs/
 │   └── README.md                   # 计划索引
 │
 ├── simulation/                     # 🔬 仿真架构与性能
-│   ├── ARCHITECTURE.md            # 仿真架构 + 优化方案
+│   ├── ARCHITECTURE.md            # 仿真架构深入分析
+│   ├── ROADMAP.md                 # 实施路线图与优化方案
 │   └── PERFORMANCE_TESTS.md       # 性能测试计划 (TC-01~TC-06)
 │
 ├── archive/                        # 🗄️ 归档文档
@@ -113,7 +114,7 @@ docs/
 - **Bundle**: [使用模式](usage_guide/06-bundle-patterns.md), [设计指南](Bundle_DeveloperGuide.md)
 - **Stream**: [使用指南](CppHDL_UsageGuide.md), [对比分析](CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)
 - **测试**: [测试指南](CppHDL_Testing_Guide.md)
-- **仿真性能**: [仿真架构](simulation/ARCHITECTURE.md), [性能测试](simulation/PERFORMANCE_TESTS.md)
+- **仿真性能**: [架构分析](simulation/ARCHITECTURE.md), [实施路线图](simulation/ROADMAP.md), [性能测试](simulation/PERFORMANCE_TESTS.md)
 
 ---
 
