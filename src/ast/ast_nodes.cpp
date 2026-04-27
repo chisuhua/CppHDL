@@ -165,9 +165,15 @@ std::unique_ptr<ch::instr_base>
 proxyimpl::create_instruction(ch::data_map_t &data_map) const {
     auto *dst_buf = &data_map[id_];
     if (num_srcs() > 0 && src(0)) {
-        auto *src_buf = &data_map[src(0)->id()];
+        lnodeimpl *ultimate_src = src(0);
+        while (ultimate_src->type() == lnodetype::type_proxy &&
+               ultimate_src->num_srcs() > 0 &&
+               ultimate_src->src(0) != nullptr) {
+            ultimate_src = ultimate_src->src(0);
+        }
+        auto *src_buf = &data_map[ultimate_src->id()];
         // 添加用户跟踪：当创建proxy指令时，将proxy节点添加到源节点的用户列表中
-        src(0)->add_user(const_cast<proxyimpl *>(this));
+        ultimate_src->add_user(const_cast<proxyimpl *>(this));
         return std::make_unique<ch::instr_proxy>(dst_buf, size_, src_buf);
     }
     return nullptr;
