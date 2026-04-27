@@ -283,14 +283,18 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func) {
         }
     }
 
-    return JitResult::SUCCESS;
+    return finalize_compilation();
 #else
     return JitResult::UNSUPPORTED_OP;
 #endif
 }
 
 JitResult JitCompiler::finalize_compilation() {
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
     return JitResult::SUCCESS;
+#else
+    return JitResult::UNSUPPORTED_OP;
+#endif
 }
 
 }
