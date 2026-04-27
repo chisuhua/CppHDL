@@ -64,6 +64,16 @@ Simulator::Simulator(ch::core::context *ctx, bool trace_on)
     if (trace_on_) {
         collect_signals();
     }
+
+#if __has_include("jit/jit_compiler.h")
+    jit_compiler_ = std::make_unique<ch::jit::JitCompiler>();
+    if (jit_compiler_->is_available()) {
+        CHINFO("JIT compiler available, attempting compilation...");
+        try_jit_compile();
+    } else {
+        CHINFO("JIT compiler not available, using interpreter");
+    }
+#endif
 }
 
 // 新增构造函数实现
@@ -1032,4 +1042,23 @@ void Simulator::toVCD(const std::string &filename) const {
     out.close();
     CHINFO("VCD file written successfully: %s", filename.c_str());
 }
+
+#if __has_include("jit/jit_compiler.h")
+void Simulator::try_jit_compile() {
+    if (!jit_compiler_ || !initialized_) {
+        return;
+    }
+
+    auto result = jit_compiler_->compile(ctx_);
+    if (result.result == ch::jit::JitResult::SUCCESS) {
+        jit_compiled_ = true;
+        CHINFO("JIT compilation successful: %u IR instructions, %u vregs, %llu ns",
+               result.ir_instr_count, result.vreg_count,
+               (unsigned long long)result.compile_time_ns);
+    } else {
+        CHWARN("JIT compilation failed: %s", result.error_msg.c_str());
+    }
+}
+#endif
+
 } // namespace ch

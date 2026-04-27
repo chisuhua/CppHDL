@@ -11,6 +11,9 @@
 #include "core/types.h"
 #include "logger.h"
 #include "utils/destruction_manager.h"
+#if __has_include("jit/jit_compiler.h")
+#include "jit/jit_compiler.h"
+#endif
 
 // 添加inipp头文件
 #include "inipp/inipp.h"
@@ -79,6 +82,11 @@ public:
     void eval_combinational();
     void tick(size_t count);
     void reset();
+
+#if __has_include("jit/jit_compiler.h")
+    bool is_jit_compiled() const { return jit_compiled_; }
+    void try_jit_compile();
+#endif
 
     // 统一的端口值获取接口 - 支持所有端口类型
     template <typename T, typename Dir>
@@ -530,6 +538,13 @@ private:
     ch::data_map_t data_map_;
     bool initialized_ = false;
     ch::core::sdata_type *default_clock_data_ = nullptr;
+
+#if __has_include("jit/jit_compiler.h")
+    // JIT 编译相关
+    std::unique_ptr<ch::jit::JitCompiler> jit_compiler_;
+    bool jit_enabled_ = false;
+    bool jit_compiled_ = false;
+#endif
 
     // 按类别分类的指令列表，提高执行效率
     ch::instr_base *default_clock_instr_;
