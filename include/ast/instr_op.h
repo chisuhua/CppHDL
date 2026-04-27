@@ -114,7 +114,9 @@ struct Add {
     static const char *name() { return "instr_op_add::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        *dst = *src0 + *src1;
+        auto width = std::max(src0->bitwidth(), src1->bitwidth()) + 1;
+        dst->bv_.resize(width);
+        ch::internal::bv_add_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
 
@@ -123,7 +125,9 @@ struct Sub {
     static const char *name() { return "instr_op_sub::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        *dst = *src0 - *src1;
+        auto width = std::max(src0->bitwidth(), src1->bitwidth());
+        dst->bv_.resize(width);
+        ch::internal::bv_sub_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
 
@@ -132,7 +136,9 @@ struct Mul {
     static const char *name() { return "instr_op_mul::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        *dst = *src0 * *src1;
+        auto width = src0->bitwidth() + src1->bitwidth();
+        dst->bv_.resize(width);
+        ch::internal::bv_mul_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
 
@@ -141,7 +147,9 @@ struct And {
     static const char *name() { return "instr_op_and::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        *dst = *src0 & *src1;
+        auto width = std::max(src0->bitwidth(), src1->bitwidth());
+        dst->bv_.resize(width);
+        ch::internal::bv_and_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
 
@@ -150,7 +158,9 @@ struct Or {
     static const char *name() { return "instr_op_or::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        *dst = *src0 | *src1;
+        auto width = std::max(src0->bitwidth(), src1->bitwidth());
+        dst->bv_.resize(width);
+        ch::internal::bv_or_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
 
@@ -159,7 +169,9 @@ struct Xor {
     static const char *name() { return "instr_op_xor::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        *dst = *src0 ^ *src1;
+        auto width = std::max(src0->bitwidth(), src1->bitwidth());
+        dst->bv_.resize(width);
+        ch::internal::bv_xor_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
 
@@ -167,7 +179,8 @@ struct Xor {
 struct Not {
     static const char *name() { return "instr_op_not::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        *dst = ~(*src);
+        dst->bv_.resize(src->bitwidth());
+        ch::internal::bv_inv_truncate<uint64_t>(&dst->bv_, &src->bv_);
     }
 };
 

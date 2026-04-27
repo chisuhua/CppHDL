@@ -158,6 +158,9 @@ inline void set_static_destruction() { in_static_destruction() = true; }
         }                                                                      \
     } while (0)
 
+#ifndef CH_DEBUG
+#define CHDBG_FUNC() ((void)0)
+#else
 #define CHDBG_FUNC()                                                           \
     do {                                                                       \
         if (!ch::detail::in_static_destruction()) {                            \
@@ -169,6 +172,7 @@ inline void set_static_destruction() { in_static_destruction() = true; }
                 ch::detail::printf_format("[ENTER] %s", short_name.c_str()));  \
         }                                                                      \
     } while (0)
+#endif
 
 // ===========================================================================
 // 统一的检查宏（不返回错误码，支持 printf 风格格式化）
