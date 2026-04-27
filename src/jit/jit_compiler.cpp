@@ -1,5 +1,7 @@
 #include "jit/jit_compiler.h"
 #include "core/context.h"
+#include "core/lnodeimpl.h"
+#include "ast/ast_nodes.h"
 #include <iostream>
 
 namespace ch::jit {
@@ -53,6 +55,146 @@ void JitCompiler::clear() {
 }
 
 JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func) {
+    if (!ctx) {
+        return JitResult::IR_GENERATION_FAILED;
+    }
+
+    auto eval_list = ctx->get_eval_list();
+    if (eval_list.empty()) {
+        return JitResult::SUCCESS;
+    }
+
+    JitBlock block("main");
+    VRegId next_vreg = 0;
+
+    for (auto* node : eval_list) {
+        auto node_type = node->type();
+        auto node_id = node->id();
+        auto bitwidth = static_cast<BitWidth>(node->size());
+
+        switch (node_type) {
+        case ch::core::lnodetype::type_lit: {
+            auto* lit = static_cast<ch::core::litimpl*>(node);
+            auto value = static_cast<uint64_t>(lit->value());
+            auto vreg = next_vreg++;
+            block.instrs.push_back(make_const(vreg, value, bitwidth));
+            block.instrs.push_back(make_store(node_id, vreg, bitwidth));
+            break;
+        }
+
+        case ch::core::lnodetype::type_input: {
+            auto vreg = next_vreg++;
+            block.instrs.push_back(make_load(vreg, node_id, bitwidth));
+            auto store_instr = make_store(node_id, vreg, bitwidth);
+            block.instrs.push_back(store_instr);
+            break;
+        }
+
+        case ch::core::lnodetype::type_op: {
+            auto* op_node = static_cast<ch::core::opimpl*>(node);
+            auto ch_op = op_node->op();
+
+            auto src0_vreg = next_vreg++;
+            auto src1_vreg = next_vreg++;
+            auto dst_vreg = next_vreg++;
+
+            if (node->num_srcs() > 0 && node->src(0)) {
+                block.instrs.push_back(make_load(src0_vreg, node->src(0)->id(), bitwidth));
+            }
+            if (node->num_srcs() > 1 && node->src(1)) {
+                block.instrs.push_back(make_load(src1_vreg, node->src(1)->id(), bitwidth));
+            }
+
+            JitOp jit_op;
+            switch (ch_op) {
+            case ch::core::ch_op::add: jit_op = JitOp::ADD; break;
+            case ch::core::ch_op::sub: jit_op = JitOp::SUB; break;
+            case ch::core::ch_op::mul: jit_op = JitOp::MUL; break;
+            case ch::core::ch_op::and_: jit_op = JitOp::AND; break;
+            case ch::core::ch_op::or_: jit_op = JitOp::OR; break;
+            case ch::core::ch_op::xor_: jit_op = JitOp::XOR; break;
+            case ch::core::ch_op::not_: jit_op = JitOp::NOT; break;
+            case ch::core::ch_op::eq: jit_op = JitOp::EQ; break;
+            case ch::core::ch_op::ne: jit_op = JitOp::NE; break;
+            case ch::core::ch_op::lt: jit_op = JitOp::LT; break;
+            case ch::core::ch_op::le: jit_op = JitOp::LE; break;
+            case ch::core::ch_op::gt: jit_op = JitOp::GT; break;
+            case ch::core::ch_op::ge: jit_op = JitOp::GE; break;
+            case ch::core::ch_op::shl: jit_op = JitOp::SHIFT_LEFT; break;
+            case ch::core::ch_op::shr: jit_op = JitOp::SHIFT_RIGHT; break;
+            case ch::core::ch_op::concat: jit_op = JitOp::CONCAT; break;
+            default: jit_op = JitOp::CALL_EXTERNAL; break;
+            }
+
+            if (jit_op != JitOp::CALL_EXTERNAL) {
+                block.instrs.push_back(make_binary(jit_op, dst_vreg, src0_vreg, src1_vreg, bitwidth));
+            } else {
+                auto load_instr = make_load(dst_vreg, node_id, bitwidth);
+                load_instr.op = JitOp::CALL_EXTERNAL;
+                block.instrs.push_back(load_instr);
+            }
+            block.instrs.push_back(make_store(node_id, dst_vreg, bitwidth));
+            break;
+        }
+
+        case ch::core::lnodetype::type_mux: {
+            auto cond_vreg = next_vreg++;
+            auto src0_vreg = next_vreg++;
+            auto src1_vreg = next_vreg++;
+            auto dst_vreg = next_vreg++;
+
+            if (node->num_srcs() >= 1 && node->src(0)) {
+                block.instrs.push_back(make_load(cond_vreg, node->src(0)->id(), 1));
+            }
+            if (node->num_srcs() >= 2 && node->src(1)) {
+                block.instrs.push_back(make_load(src0_vreg, node->src(1)->id(), bitwidth));
+            }
+            if (node->num_srcs() >= 3 && node->src(2)) {
+                block.instrs.push_back(make_load(src1_vreg, node->src(2)->id(), bitwidth));
+            }
+
+            block.instrs.push_back(make_select(dst_vreg, cond_vreg, src0_vreg, src1_vreg, bitwidth));
+            block.instrs.push_back(make_store(node_id, dst_vreg, bitwidth));
+            break;
+        }
+
+        case ch::core::lnodetype::type_reg: {
+            auto vreg = next_vreg++;
+            auto load_instr = make_load(vreg, node_id, bitwidth);
+            load_instr.op = JitOp::REG_NEXT;
+            block.instrs.push_back(load_instr);
+            block.instrs.push_back(make_store(node_id, vreg, bitwidth));
+            break;
+        }
+
+        case ch::core::lnodetype::type_proxy: {
+            if (node->num_srcs() > 0 && node->src(0)) {
+                auto src_vreg = next_vreg++;
+                auto dst_vreg = next_vreg++;
+                block.instrs.push_back(make_load(src_vreg, node->src(0)->id(), bitwidth));
+                block.instrs.push_back(make_store(node_id, src_vreg, bitwidth));
+            }
+            break;
+        }
+
+        case ch::core::lnodetype::type_clock:
+        case ch::core::lnodetype::type_reset:
+        case ch::core::lnodetype::type_output:
+        case ch::core::lnodetype::type_mem:
+        case ch::core::lnodetype::type_mem_read_port:
+        case ch::core::lnodetype::type_mem_write_port:
+        case ch::core::lnodetype::type_bitsupdate:
+        default:
+            break;
+        }
+
+        block.node_count++;
+    }
+
+    func.vreg_count = next_vreg;
+    func.blocks.push_back(std::move(block));
+    func.node_count = static_cast<uint32_t>(eval_list.size());
+
     return JitResult::SUCCESS;
 }
 
