@@ -551,6 +551,8 @@ private:
         signals_; // 需要跟踪的信号列表
     std::vector<std::pair<const char *, size_t>>
         prev_values_;                       // 上次记录的值的位置信息
+    std::vector<ch::core::sdata_type *>
+        signal_data_ptrs_;                  // 预计算的信号数据指针 (P0-1优化)
     ch::core::sdata_type valid_mask_;       // 有效位掩码
     size_t trace_width_ = 0;                // 跟踪数据的总宽度
     std::deque<TraceBlock *> trace_blocks_; // 跟踪数据块

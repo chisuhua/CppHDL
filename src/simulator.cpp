@@ -407,6 +407,18 @@ void Simulator::collect_signals() {
         prev.second = 0;
     }
 
+    // P0-1: 预计算信号数据指针，避免 trace() 中每次都做 hash lookup
+    signal_data_ptrs_.resize(signals_.size());
+    for (size_t i = 0; i < signals_.size(); ++i) {
+        uint32_t node_id = signals_[i].first;
+        auto it = data_map_.find(node_id);
+        if (it != data_map_.end()) {
+            signal_data_ptrs_[i] = &it->second;
+        } else {
+            signal_data_ptrs_[i] = nullptr;
+        }
+    }
+
     valid_mask_ = ch::core::sdata_type(0, signals_.size());
 }
 
@@ -431,35 +443,21 @@ void Simulator::trace() {
     dst_offset += (valid_mask_.bitwidth() + 31) / 32 *
                   4; // 跳过有效位掩码的空间（按4字节对齐）
 
-    // 遍历所有信号
+    // 遍历所有信号 (P0-1优化版：使用预计算指针，避免hash lookup和临时对象)
     for (uint32_t i = 0, n = signals_.size(); i < n; ++i) {
-        auto node_id = signals_[i].first;
-
-        auto it = data_map_.find(node_id);
-        if (it == data_map_.end()) {
-            continue; // 节点值不存在，跳过
+        auto *curr_value_ptr = signal_data_ptrs_[i];
+        if (!curr_value_ptr) {
+            continue;
         }
-
-        auto &curr_value = it->second;
-        auto &prev = prev_values_.at(i);
+        auto &curr_value = *curr_value_ptr;
+        auto &prev = prev_values_[i];
 
         // 如果之前有值，比较是否发生变化
         if (prev.first) {
-            // 比较当前值与之前保存的值
-            // 创建一个临时的sdata_type对象来进行比较
-            auto temp_data = ch::core::sdata_type(
-                curr_value.bitwidth()); // 创建指定宽度的临时对象
-
-            // 将之前保存的数据复制到临时对象的bitvector中
-            std::memcpy(
-                temp_data.bitvector().data(),
-                reinterpret_cast<
-                    const ch::internal::bitvector<uint64_t>::block_type *>(
-                    prev.first),
-                (curr_value.bitwidth() + 7) / 8); // 根据位宽计算字节数
-
-            if (curr_value == temp_data) {
-                continue; // 值没有变化，跳过记录
+            // 直接比较原始字节，避免临时sdata_type对象构造/析构
+            size_t byte_len = (curr_value.bitwidth() + 7) / 8;
+            if (std::memcmp(curr_value.bitvector().data(), prev.first, byte_len) == 0) {
+                continue;
             }
         }
 
