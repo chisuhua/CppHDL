@@ -2,6 +2,7 @@
 #define JIT_COMPILER_H
 
 #include "jit_ir.h"
+#include "ast/instr_base.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -47,6 +48,13 @@ public:
     void clear();
     uint32_t get_ir_instr_count() const { return last_ir_instr_count_; }
 
+    uint64_t* data_buffer() { return data_buffer_.data(); }
+    const uint64_t* data_buffer() const { return data_buffer_.data(); }
+    size_t data_buffer_size() const { return data_buffer_.size(); }
+
+    void sync_to_buffer(const ch::data_map_t& data_map);
+    void sync_from_buffer(ch::data_map_t& data_map);
+
 private:
     bool available_;
     void* jit_session_;
@@ -54,6 +62,9 @@ private:
     uint32_t last_ir_instr_count_;
     uint32_t last_vreg_count_;
 
+    std::vector<uint64_t> data_buffer_;
+
+    JitResult allocate_buffer(ch::core::context* ctx);
     JitResult generate_ir(ch::core::context* ctx, JitFunction& func);
     JitResult compile_to_llvm(const JitFunction& func);
     JitResult finalize_compilation();

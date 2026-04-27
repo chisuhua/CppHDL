@@ -63,6 +63,10 @@ if(CH_JIT_ENABLE)
     if(LLVM_FOUND)
         message(STATUS "LLVM version: ${LLVM_VERSION}")
         add_compile_definitions(CH_JIT_ENABLED=1)
+        # 添加 LLVM include 目录
+        include_directories(${LLVM_INCLUDE_DIRS})
+        # 直接使用 LLVM-18 库 (避免 llvm_map_components_to_libnames 的系统库问题)
+        set(LLVM_LIBS LLVM-18)
     else()
         message(WARNING "LLVM not found. JIT will be disabled.")
         set(CH_JIT_ENABLE OFF CACHE BOOL "" FORCE)
@@ -148,6 +152,7 @@ set_target_properties(cpphdl PROPERTIES
 # 链接依赖
 target_link_libraries(cpphdl 
     PUBLIC bitvector
+    PRIVATE ${LLVM_LIBS}
 )
 
 # 设置包含目录

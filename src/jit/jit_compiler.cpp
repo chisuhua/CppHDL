@@ -27,6 +27,24 @@ JitCompileResult JitCompiler::compile(ch::core::context* ctx) {
         return result;
     }
 
+    if (!ctx) {
+        result.result = JitResult::IR_GENERATION_FAILED;
+        result.error_msg = "null context";
+        return result;
+    }
+
+    auto eval_list = ctx->get_eval_list();
+    if (eval_list.empty()) {
+        result.result = JitResult::SUCCESS;
+        return result;
+    }
+
+    auto buf_result = allocate_buffer(ctx);
+    if (buf_result != JitResult::SUCCESS) {
+        result.result = buf_result;
+        return result;
+    }
+
     JitFunction func("tick");
     auto ir_result = generate_ir(ctx, func);
     if (ir_result != JitResult::SUCCESS) {
@@ -51,6 +69,54 @@ void JitCompiler::clear() {
     }
     if (jit_session_) {
         jit_session_ = nullptr;
+    }
+    data_buffer_.clear();
+}
+
+JitResult JitCompiler::allocate_buffer(ch::core::context* ctx) {
+    if (!ctx) {
+        return JitResult::IR_GENERATION_FAILED;
+    }
+
+    auto eval_list = ctx->get_eval_list();
+    if (eval_list.empty()) {
+        return JitResult::SUCCESS;
+    }
+
+    uint32_t max_node_id = 0;
+    for (auto* node : eval_list) {
+        if (node->id() > max_node_id) {
+            max_node_id = node->id();
+        }
+        if (node->size() > 64) {
+            return JitResult::UNSUPPORTED_OP;
+        }
+    }
+
+    data_buffer_.resize(max_node_id + 1, 0);
+    return JitResult::SUCCESS;
+}
+
+void JitCompiler::sync_to_buffer(const ch::data_map_t& data_map) {
+    if (data_buffer_.empty()) {
+        return;
+    }
+    for (const auto& [node_id, value] : data_map) {
+        if (node_id < data_buffer_.size()) {
+            data_buffer_[node_id] = static_cast<uint64_t>(value);
+        }
+    }
+}
+
+void JitCompiler::sync_from_buffer(ch::data_map_t& data_map) {
+    if (data_buffer_.empty()) {
+        return;
+    }
+    for (size_t i = 0; i < data_buffer_.size(); ++i) {
+        auto it = data_map.find(static_cast<uint32_t>(i));
+        if (it != data_map.end()) {
+            it->second = ch::core::sdata_type(data_buffer_[i], it->second.bitwidth());
+        }
     }
 }
 
@@ -199,7 +265,28 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func) {
 }
 
 JitResult JitCompiler::compile_to_llvm(const JitFunction& func) {
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
+    if (func.blocks.empty() || func.blocks[0].instrs.empty()) {
+        return JitResult::SUCCESS;
+    }
+
+    for (const auto& instr : func.blocks[0].instrs) {
+        if (instr.op == JitOp::CALL_EXTERNAL ||
+            instr.op == JitOp::CONCAT ||
+            instr.op == JitOp::SLICE ||
+            instr.op == JitOp::MEM_READ ||
+            instr.op == JitOp::MEM_WRITE ||
+            instr.op == JitOp::JUMP ||
+            instr.op == JitOp::BRANCH ||
+            instr.op == JitOp::LABEL) {
+            return JitResult::UNSUPPORTED_OP;
+        }
+    }
+
     return JitResult::SUCCESS;
+#else
+    return JitResult::UNSUPPORTED_OP;
+#endif
 }
 
 JitResult JitCompiler::finalize_compilation() {
