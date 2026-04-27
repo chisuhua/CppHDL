@@ -10,6 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # 日志配置选项
 option(ENABLE_DEBUG_LOGGING "Enable debug level logging" OFF)
 option(ENABLE_VERBOSE_LOGGING "Enable verbose logging with source locations" OFF)
+option(CH_JIT_ENABLE "Enable LLVM ORC JIT compilation (default OFF)" OFF)
 
 # 设置编译定义
 if(ENABLE_DEBUG_LOGGING)
@@ -52,6 +53,20 @@ if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer enabled")
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address)
+endif()
+
+# JIT 编译选项 (default OFF)
+if(CH_JIT_ENABLE)
+    message(STATUS "JIT compilation enabled (LLVM ORC)")
+    # 尝试查找 LLVM
+    find_package(LLVM QUIET)
+    if(LLVM_FOUND)
+        message(STATUS "LLVM version: ${LLVM_VERSION}")
+        add_compile_definitions(CH_JIT_ENABLED=1)
+    else()
+        message(WARNING "LLVM not found. JIT will be disabled.")
+        set(CH_JIT_ENABLE OFF CACHE BOOL "" FORCE)
+    endif()
 endif()
 
 # 优化构建类型
@@ -117,7 +132,7 @@ set(CH_SOURCES
     src/codegen_dag.cpp
     src/utils/types.cpp
     src/lnode/bool.cpp
-    #src/lnode/uint.cpp
+    src/jit/jit_compiler.cpp
 )
 
 # 创建主库
