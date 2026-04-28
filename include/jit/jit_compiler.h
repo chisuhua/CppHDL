@@ -64,6 +64,10 @@ private:
 
     std::vector<uint64_t> data_buffer_;
 
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
+    void* llvm_module_;  // Stores llvm::Module* as void*
+#endif
+
     JitResult allocate_buffer(ch::core::context* ctx);
     JitResult generate_ir(ch::core::context* ctx, JitFunction& func);
     JitResult compile_to_llvm(const JitFunction& func);

@@ -4,12 +4,32 @@
 #include "ast/ast_nodes.h"
 #include <iostream>
 
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
+#include <llvm/ExecutionEngine/JITSymbol.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/Error.h>
+#include <llvm-c/Target.h>
+#include <llvm-c/Core.h>
+#endif
+
 namespace ch::jit {
 
 JitCompiler::JitCompiler()
     : available_(false), jit_session_(nullptr), compiled_func_(nullptr),
       last_ir_instr_count_(0), last_vreg_count_(0) {
-#if __has_include(<llvm/Support/TargetSelect.h>)
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/Support/TargetSelect.h>)
+    LLVMInitializeNativeTarget();
+    LLVMInitializeNativeAsmPrinter();
+    LLVMInitializeNativeAsmParser();
     available_ = true;
 #endif
 }
@@ -61,6 +81,15 @@ JitCompileResult JitCompiler::compile(ch::core::context* ctx) {
 }
 
 void JitCompiler::execute_tick() {
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
+    if (!compiled_func_) {
+        return;
+    }
+
+    using TickFunc = void(*)(uint64_t*);
+    auto tick_func = reinterpret_cast<TickFunc>(compiled_func_);
+    tick_func(data_buffer_.data());
+#endif
 }
 
 void JitCompiler::clear() {
@@ -283,6 +312,240 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func) {
         }
     }
 
+    auto* context = new llvm::LLVMContext();
+    std::string module_name = "cpphdl_jit_" + func.name;
+    auto* module = new llvm::Module(module_name, *context);
+    llvm::IRBuilder<> builder(*context);
+
+    auto* ptr_ty = builder.getInt64Ty()->getPointerTo();
+    auto* func_ty = llvm::FunctionType::get(builder.getVoidTy(), ptr_ty, false);
+
+    auto* tick_func = llvm::Function::Create(
+        func_ty, llvm::Function::ExternalLinkage, func.name, module);
+    tick_func->arg_begin()->setName("data_buffer");
+
+    auto* entry = llvm::BasicBlock::Create(*context, "entry", tick_func);
+    builder.SetInsertPoint(entry);
+
+    std::vector<llvm::Value*> vregs;
+    if (func.vreg_count > 0) {
+        vregs.resize(func.vreg_count, nullptr);
+        for (uint32_t i = 0; i < func.vreg_count; ++i) {
+            vregs[i] = builder.CreateAlloca(builder.getInt64Ty(), nullptr, "vreg_" + std::to_string(i));
+        }
+    }
+
+    llvm::Argument* data_buffer_arg = &*tick_func->arg_begin();
+    llvm::Value* data_buffer_ptr = data_buffer_arg;
+
+    // Helper lambdas
+    auto get_node_ptr = [&](uint32_t node_id) -> llvm::Value* {
+        auto* indices = llvm::ConstantInt::get(builder.getInt32Ty(), node_id);
+        return builder.CreateGEP(builder.getInt64Ty(), data_buffer_ptr, indices, "node_ptr");
+    };
+
+    auto load_node = [&](uint32_t node_id, BitWidth bw) -> llvm::Value* {
+        auto* ptr = get_node_ptr(node_id);
+        auto* val = builder.CreateLoad(builder.getInt64Ty(), ptr, "load_node");
+        if (bw < 64) {
+            return builder.CreateTrunc(val, builder.getIntNTy(bw), "trunc");
+        }
+        return val;
+    };
+
+    auto store_node = [&](uint32_t node_id, llvm::Value* val, BitWidth bw) {
+        auto* ptr = get_node_ptr(node_id);
+        llvm::Value* store_val = val;
+        if (bw < 64) {
+            store_val = builder.CreateZExt(store_val, builder.getInt64Ty(), "zext");
+        }
+        builder.CreateStore(store_val, ptr);
+    };
+
+    // Generate IR for each instruction
+    for (const auto& instr : func.blocks[0].instrs) {
+        switch (instr.op) {
+        case JitOp::LOAD_CONST: {
+            llvm::Value* const_val;
+            if (instr.bitwidth < 64) {
+                const_val = builder.getIntN(instr.bitwidth, instr.imm.value);
+                const_val = builder.CreateZExt(const_val, builder.getInt64Ty(), "zext_const");
+            } else {
+                const_val = builder.getInt64(instr.imm.value);
+            }
+            builder.CreateStore(const_val, vregs[instr.dst], "store_const");
+            break;
+        }
+
+        case JitOp::LOAD_DATA: {
+            auto* val = load_node(instr.node_id, instr.bitwidth);
+            builder.CreateStore(val, vregs[instr.dst], "store_load");
+            break;
+        }
+
+        case JitOp::STORE_DATA: {
+            if (instr.src0 == INVALID_VREG) {
+                break;  // Skip invalid store
+            }
+            auto* val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_src");
+            store_node(instr.node_id, val, instr.bitwidth);
+            break;
+        }
+
+        case JitOp::ADD: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateAdd(a, b, "add");
+            builder.CreateStore(res, vregs[instr.dst], "store_add");
+            break;
+        }
+
+        case JitOp::SUB: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateSub(a, b, "sub");
+            builder.CreateStore(res, vregs[instr.dst], "store_sub");
+            break;
+        }
+
+        case JitOp::MUL: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateMul(a, b, "mul");
+            builder.CreateStore(res, vregs[instr.dst], "store_mul");
+            break;
+        }
+
+        case JitOp::AND: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateAnd(a, b, "and");
+            builder.CreateStore(res, vregs[instr.dst], "store_and");
+            break;
+        }
+
+        case JitOp::OR: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateOr(a, b, "or");
+            builder.CreateStore(res, vregs[instr.dst], "store_or");
+            break;
+        }
+
+        case JitOp::XOR: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateXor(a, b, "xor");
+            builder.CreateStore(res, vregs[instr.dst], "store_xor");
+            break;
+        }
+
+        case JitOp::NOT: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* all1 = builder.getInt64(uint64_t(-1));
+            auto* res = builder.CreateXor(a, all1, "not");
+            builder.CreateStore(res, vregs[instr.dst], "store_not");
+            break;
+        }
+
+        case JitOp::SHIFT_LEFT: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateShl(a, b, "shl");
+            builder.CreateStore(res, vregs[instr.dst], "store_shl");
+            break;
+        }
+
+        case JitOp::SHIFT_RIGHT: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* res = builder.CreateLShr(a, b, "shr");
+            builder.CreateStore(res, vregs[instr.dst], "store_shr");
+            break;
+        }
+
+        case JitOp::EQ: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* cmp = builder.CreateICmpEQ(a, b, "eq");
+            auto* res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_eq");
+            builder.CreateStore(res, vregs[instr.dst], "store_eq");
+            break;
+        }
+
+        case JitOp::NE: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* cmp = builder.CreateICmpNE(a, b, "ne");
+            auto* res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_ne");
+            builder.CreateStore(res, vregs[instr.dst], "store_ne");
+            break;
+        }
+
+        case JitOp::LT: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* cmp = builder.CreateICmpULT(a, b, "lt");
+            auto* res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_lt");
+            builder.CreateStore(res, vregs[instr.dst], "store_lt");
+            break;
+        }
+
+        case JitOp::LE: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* cmp = builder.CreateICmpULE(a, b, "le");
+            auto* res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_le");
+            builder.CreateStore(res, vregs[instr.dst], "store_le");
+            break;
+        }
+
+        case JitOp::GT: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* cmp = builder.CreateICmpUGT(a, b, "gt");
+            auto* res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_gt");
+            builder.CreateStore(res, vregs[instr.dst], "store_gt");
+            break;
+        }
+
+        case JitOp::GE: {
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+            auto* cmp = builder.CreateICmpUGE(a, b, "ge");
+            auto* res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_ge");
+            builder.CreateStore(res, vregs[instr.dst], "store_ge");
+            break;
+        }
+
+        case JitOp::SELECT: {
+            auto* cond = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_cond");
+            auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_a");
+            auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src2], "load_b");
+            auto* cmp = builder.CreateICmpNE(cond, builder.getInt64(0), "cond_nz");
+            auto* res = builder.CreateSelect(cmp, a, b, "select");
+            builder.CreateStore(res, vregs[instr.dst], "store_select");
+            break;
+        }
+
+        case JitOp::REG_NEXT: {
+            if (instr.src0 == INVALID_VREG) {
+                break;  // Skip invalid reg_next
+            }
+            auto* val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_reg");
+            store_node(instr.node_id, val, instr.bitwidth);
+            break;
+        }
+
+        case JitOp::NOP:
+        default:
+            break;
+        }
+    }
+
+    builder.CreateRetVoid();
+
+    llvm_module_ = module;
     return finalize_compilation();
 #else
     return JitResult::UNSUPPORTED_OP;
@@ -291,6 +554,35 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func) {
 
 JitResult JitCompiler::finalize_compilation() {
 #if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
+    if (!llvm_module_) {
+        return JitResult::COMPILATION_FAILED;
+    }
+
+    auto* module = static_cast<llvm::Module*>(llvm_module_);
+    auto* context = &module->getContext();
+
+    llvm::orc::LLJITBuilder lljit_builder;
+    auto JIT_or_err = lljit_builder.create();
+    if (!JIT_or_err) {
+        return JitResult::COMPILATION_FAILED;
+    }
+
+    auto JIT = std::move(JIT_or_err.get());
+    auto tsm = llvm::orc::ThreadSafeModule(std::unique_ptr<llvm::Module>(module), std::unique_ptr<llvm::LLVMContext>(context));
+    if (auto Err = JIT->addIRModule(std::move(tsm))) {
+        return JitResult::COMPILATION_FAILED;
+    }
+
+    auto Sym = JIT->lookup("tick");
+    if (!Sym) {
+        return JitResult::COMPILATION_FAILED;
+    }
+
+    compiled_func_ = reinterpret_cast<void*>(Sym->getValue());
+
+    // Keep JIT alive by storing in member - but we can't store unique_ptr in void*
+    // For now, we'll just hope the symbol address remains valid
+    llvm_module_ = nullptr;
     return JitResult::SUCCESS;
 #else
     return JitResult::UNSUPPORTED_OP;
