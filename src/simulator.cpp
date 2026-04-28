@@ -751,7 +751,7 @@ void Simulator::eval_combinational() {
     CHDBG_FUNC();
 
 #if __has_include("jit/jit_compiler.h")
-    if (jit_compiled_ && jit_compiler_ && jit_compiler_->get_ir_instr_count() > 0) {
+    if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->get_ir_instr_count() > 0) {
         jit_compiler_->sync_to_buffer(data_map_);
         jit_compiler_->execute_tick();
         jit_compiler_->sync_from_buffer(data_map_);
@@ -1066,6 +1066,18 @@ void Simulator::try_jit_compile() {
     } else {
         CHWARN("JIT compilation failed: %s (ir_instr_count=%u)",
                result.error_msg.c_str(), result.ir_instr_count);
+    }
+}
+
+void Simulator::set_jit_enabled(bool enabled) {
+    if (!jit_compiler_) {
+        CHWARN("JIT compiler not available");
+        return;
+    }
+    jit_enabled_ = enabled;
+    CHINFO("JIT %s", enabled ? "enabled" : "disabled");
+    if (enabled && !jit_compiled_) {
+        try_jit_compile();
     }
 }
 #endif

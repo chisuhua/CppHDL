@@ -85,6 +85,8 @@ public:
 
 #if __has_include("jit/jit_compiler.h")
     bool is_jit_compiled() const { return jit_compiled_; }
+    bool is_jit_enabled() const { return jit_enabled_; }
+    void set_jit_enabled(bool enabled);
     void try_jit_compile();
 #endif
 
