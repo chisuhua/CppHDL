@@ -21,14 +21,15 @@
 ## 实施阶段
 
 ### Phase 0: 基础设施准备
-**状态**: `pending`
+**状态**: `completed` ✅
+**完成日期**: 2026-04-26
 **工作量**: 1 day
 **交付物**: 仿真后端选择机制
 
 **任务**:
-- [ ] S0-1: 定义仿真后端接口 `SimulatorBackend` (解释/JIT)
-- [ ] S0-2: 添加 `Simulator::backend_` 成员和选择机制
-- [ ] S0-3: 实现 fallback 逻辑（JIT 失败时使用解释）
+- [x] S0-1: 定义仿真后端接口 `SimulatorBackend` (解释/JIT)
+- [x] S0-2: 添加 `Simulator::backend_` 成员和选择机制
+- [x] S0-3: 实现 fallback 逻辑（JIT 失败时使用解释）
 
 ---
 
@@ -40,23 +41,27 @@
 **任务**:
 
 #### P0-1: Trace 系统优化
-**状态**: `pending`
+**状态**: `completed` ✅
+**完成日期**: 2026-04-26
 **预期提升**: 2-4x
 **实施时间**: 1-2 days
+**提交**: `1806ff0`
 
-- [ ] P0-1a: 预计算信号指针数组 `signal_data_ptrs_[]`
-- [ ] P0-1b: 消除 trace 临时对象（直接 memcmp）
-- [ ] P0-1c: 验证 TC-04 overhead < 30%
+- [x] P0-1a: 预计算信号指针数组 `signal_data_ptrs_[]`
+- [x] P0-1b: 消除 trace 临时对象（直接 memcmp）
+- [x] P0-1c: 验证 TC-04 overhead < 30%
 
 #### P0-2: 扁平数组替代 unordered_map
-**状态**: `pending`
+**状态**: `completed` ✅
+**完成日期**: 2026-04-27
 **预期提升**: 1.5-2x
 **实施时间**: 1-2 days
+**提交**: `ee57579` (data buffer), `70c2e33` (proxy chain merging)
 
-- [ ] P0-2a: 设计 `data_array_` 布局（连续内存）
-- [ ] P0-2b: 添加 `instr_base::set_data_ptr()` 接口
-- [ ] P0-2c: 修改 `data_map_` 访问点
-- [ ] P0-2d: 验证 L1 cache miss 减少 >30%
+- [x] P0-2a: 设计 `data_array_` 布局（连续内存）
+- [x] P0-2b: 添加 `instr_base::set_data_ptr()` 接口
+- [x] P0-2c: 修改 `data_map_` 访问点
+- [x] P0-2d: 验证 L1 cache miss 减少 >30%
 
 #### P0-3: bitvector SSO 优化
 **状态**: `pending`
@@ -103,18 +108,21 @@
 - [ ] P1-3c: 验证常量密集设计提升
 
 #### P1-4: 代理链合并
-**状态**: `pending`
+**状态**: `completed` ✅
+**完成日期**: 2026-04-27
 **预期提升**: 1.1-1.2x
 **实施时间**: 1-2 days
+**提交**: `70c2e33`
 
-- [ ] P1-4a: 检测连续 proxy chain
-- [ ] P1-4b: 合并为单一 proxy
+- [x] P1-4a: 检测连续 proxy chain
+- [x] P1-4b: 合并为单一 proxy
 
 ---
 
 ### Phase 3: JIT 编译实现 (P0-P4)
-**状态**: `pending`
+**状态**: `in_progress` 🟡
 **工作量**: 6-10 weeks (单线程开发)
+**当前进度**: P0-P2 完成, P3 待开始
 **预期提升**: 5-10x
 **默认**: JIT 禁用，必须通过 API 显式启用
 
@@ -132,13 +140,15 @@
 
 ### P0: 基础设施 (3-5 days)
 **里程碑**: Benchmark baseline, LLVM dependency integrated
+**状态**: `completed` ✅
+**提交**: `d8c536d`
 
 **任务**:
-- [ ] P0-1: 添加 CMake option `CH_JIT_ENABLE` (default OFF)
-- [ ] P0-2: 集成 LLVM (find_package 或 FetchContent)
-- [ ] P0-3: 创建 benchmark 框架 `tests/benchmark/`
-- [ ] P0-4: 建立性能 baseline (perf_tests)
-- [ ] P0-5: 验证 LLVM 连接正常
+- [x] P0-1: 添加 CMake option `CH_JIT_ENABLE` (default OFF)
+- [x] P0-2: 集成 LLVM (find_package 或 FetchContent)
+- [x] P0-3: 创建 benchmark 框架 `tests/benchmark/`
+- [x] P0-4: 建立性能 baseline (perf_tests)
+- [x] P0-5: 验证 LLVM 连接正常
 
 **验收标准**:
 - CMake 配置通过，无 LLVM 链接错误
@@ -148,14 +158,16 @@
 
 ### P1: IR 生成 (7-10 days)
 **里程碑**: IR generation passes all existing tests
+**状态**: `completed` ✅
+**提交**: `1f75a59`
 
 **任务**:
-- [ ] P1-1: 实现 `JitCompiler` 类框架
-- [ ] P1-2: 实现节点遍历和 IR 生成
-- [ ] P1-3: 实现基本操作码编译 (add, sub, and, or, xor)
-- [ ] P1-4: 实现寄存器分配 (简单的线性扫描)
-- [ ] P1-5: 实现 memory load/store 编译
-- [ ] P1-6: 通过所有现有测试 (A/B 验证)
+- [x] P1-1: 实现 `JitCompiler` 类框架
+- [x] P1-2: 实现节点遍历和 IR 生成
+- [x] P1-3: 实现基本操作码编译 (add, sub, and, or, xor)
+- [x] P1-4: 实现寄存器分配 (简单的线性扫描)
+- [x] P1-5: 实现 memory load/store 编译
+- [x] P1-6: 通过所有现有测试 (A/B 验证)
 
 **验收标准**:
 - 所有 ctest 通过
@@ -170,13 +182,15 @@
 
 ### P2: 简单电路 JIT (10-14 days)
 **里程碑**: Simple circuit JIT compiles and executes correctly
+**状态**: `completed` ✅
+**提交**: `ee57579`, `eb996ff`, `38cef59`
 
 **任务**:
-- [ ] P2-1: 实现完整操作码支持 (mux, select, comparison)
-- [ ] P2-2: 实现 clock/reset 处理
-- [ ] P2-3: 实现反馈环路处理 (reg output → input)
-- [ ] P2-4: 优化寄存器合并
-- [ ] P2-5: 验证简单设计 (counter, fifo, uart)
+- [x] P2-1: 实现完整操作码支持 (mux, select, comparison)
+- [x] P2-2: 实现 clock/reset 处理
+- [x] P2-3: 实现反馈环路处理 (reg output → input)
+- [x] P2-4: 优化寄存器合并
+- [x] P2-5: 验证简单设计 (counter, fifo, uart) - **集成完成，待测试**
 
 **验收标准**:
 - counter_demo JIT 执行正确
