@@ -801,12 +801,45 @@ void Simulator::tick() {
         }
     }
 
+    // A/B verification: save interpreted state before execution
+    ch::data_map_t ab_result_a;
+    bool run_ab_verify = false;
+#if __has_include("jit/jit_compiler.h")
+    run_ab_verify = ab_verification_ && jit_enabled_ && jit_compiled_;
+    if (run_ab_verify) {
+        ab_result_a = data_map_;
+    }
+#endif
+
     eval_combinational();
 
     if (default_clock_instr_) {
         eval();
         eval();
     }
+
+#if __has_include("jit/jit_compiler.h")
+    // A/B verification: run JIT and compare
+    if (run_ab_verify) {
+        jit_compiler_->sync_to_buffer(data_map_);
+        jit_compiler_->execute_tick();
+        jit_compiler_->sync_from_buffer(data_map_);
+
+        // Compare results
+        for (const auto& [node_id, val_b] : data_map_) {
+            auto it_a = ab_result_a.find(node_id);
+            if (it_a == ab_result_a.end()) {
+                CHABORT("A/B mismatch: node %u missing in interpreted result", node_id);
+            }
+            if (it_a->second != val_b) {
+                CHABORT("A/B mismatch at tick %llu, node %u: interpreted=%s, jit=%s",
+                       (unsigned long long)ticks_, node_id,
+                       it_a->second.to_string_verbose().c_str(),
+                       val_b.to_string_verbose().c_str());
+            }
+        }
+    }
+#endif
 
     if (trace_on_) {
         trace();
@@ -1079,6 +1112,11 @@ void Simulator::set_jit_enabled(bool enabled) {
     if (enabled && !jit_compiled_) {
         try_jit_compile();
     }
+}
+
+void Simulator::set_ab_verification(bool enabled) {
+    ab_verification_ = enabled;
+    CHINFO("A/B verification %s", enabled ? "enabled" : "disabled");
 }
 #endif
 

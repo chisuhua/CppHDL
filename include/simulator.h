@@ -88,6 +88,8 @@ public:
     bool is_jit_enabled() const { return jit_enabled_; }
     void set_jit_enabled(bool enabled);
     void try_jit_compile();
+    void set_ab_verification(bool enabled);
+    bool is_ab_verification() const { return ab_verification_; }
 #endif
 
     // 统一的端口值获取接口 - 支持所有端口类型
@@ -546,6 +548,7 @@ private:
     std::unique_ptr<ch::jit::JitCompiler> jit_compiler_;
     bool jit_enabled_ = false;
     bool jit_compiled_ = false;
+    bool ab_verification_ = false;  // A/B 验证模式
 #endif
 
     // 按类别分类的指令列表，提高执行效率
