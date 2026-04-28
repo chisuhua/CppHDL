@@ -749,14 +749,22 @@ void Simulator::eval_sequential() {
 
 void Simulator::eval_combinational() {
     CHDBG_FUNC();
-    // 执行输入节点指令
+
+#if __has_include("jit/jit_compiler.h")
+    if (jit_compiled_ && jit_compiler_ && jit_compiler_->get_ir_instr_count() > 0) {
+        jit_compiler_->sync_to_buffer(data_map_);
+        jit_compiler_->execute_tick();
+        jit_compiler_->sync_from_buffer(data_map_);
+        return;
+    }
+#endif
+
     for (const auto &[node_id, instr] : input_instr_list_) {
         instr->eval();
         CHDBG("Evaluating input instruction for node %u: %s", node_id,
               data_map_[node_id].to_string_verbose().c_str());
     }
 
-    // 执行组合逻辑节点
     for (const auto &[node_id, instr] : combinational_instr_list_) {
         instr->eval();
         CHDBG("Evaluating combinational instruction for node %u: %s", node_id,
@@ -1050,13 +1058,14 @@ void Simulator::try_jit_compile() {
     }
 
     auto result = jit_compiler_->compile(ctx_);
-    if (result.result == ch::jit::JitResult::SUCCESS) {
+    if (result.result == ch::jit::JitResult::SUCCESS && result.ir_instr_count > 0) {
         jit_compiled_ = true;
         CHINFO("JIT compilation successful: %u IR instructions, %u vregs, %llu ns",
                result.ir_instr_count, result.vreg_count,
                (unsigned long long)result.compile_time_ns);
     } else {
-        CHWARN("JIT compilation failed: %s", result.error_msg.c_str());
+        CHWARN("JIT compilation failed: %s (ir_instr_count=%u)",
+               result.error_msg.c_str(), result.ir_instr_count);
     }
 }
 #endif
