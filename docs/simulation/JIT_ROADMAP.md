@@ -317,6 +317,7 @@ CppHDL/
 - `task_plan.md` - 项目任务计划
 - `docs/simulation/SIM_OPT_PLAN.md` - 详细实施计划
 - `docs/simulation/ARCHITECTURE.md` - 仿真架构分析
+- `docs/simulation/JIT_ARCHITECTURE_DEBT.md` - **架构债务分析与修复指南**
 - `/workspace/project/cash/src/compiler/simjit.cpp` - Cash JIT 参考实现
 
 ---
@@ -325,4 +326,5 @@ CppHDL/
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-04-29 | v1.1 | 新增 JIT_ARCHITECTURE_DEBT.md 交叉引用 |
 | 2026-04-27 | v1.0 | 初始版本，基于 Metis JIT 计划 |
