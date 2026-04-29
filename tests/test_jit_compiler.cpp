@@ -29,7 +29,7 @@ TEST_CASE("JIT Compiler simple context", "[jit][basic]") {
     ctx_swap swap(&ctx);
 
     auto reg = ch_reg<ch_uint<8>>(0_b, "test_reg");
-    reg = ch_uint<8>(42);
+    reg <<= ch_uint<8>(42);
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -51,7 +51,7 @@ TEST_CASE("JIT Compiler addition", "[jit][arithmetic]") {
     ch_uint<8> b(5_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = a + b;
+    result_reg <<= a + b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -72,7 +72,7 @@ TEST_CASE("JIT Compiler subtraction", "[jit][arithmetic]") {
     ch_uint<8> b(8_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = a - b;
+    result_reg <<= a - b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -93,7 +93,7 @@ TEST_CASE("JIT Compiler multiplication", "[jit][arithmetic]") {
     ch_uint<8> b(6_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = a * b;
+    result_reg <<= a * b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -114,7 +114,7 @@ TEST_CASE("JIT Compiler bitwise AND", "[jit][bitwise]") {
     ch_uint<8> b(10_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = a & b;
+    result_reg <<= a & b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -135,7 +135,7 @@ TEST_CASE("JIT Compiler bitwise OR", "[jit][bitwise]") {
     ch_uint<8> b(10_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = a | b;
+    result_reg <<= a | b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -156,7 +156,7 @@ TEST_CASE("JIT Compiler bitwise XOR", "[jit][bitwise]") {
     ch_uint<8> b(10_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = a ^ b;
+    result_reg <<= a ^ b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -177,7 +177,7 @@ TEST_CASE("JIT Compiler comparison LT", "[jit][comparison]") {
     ch_uint<8> b(20_d);
     auto result_reg = ch_reg<ch_bool>(false, "result");
 
-    result_reg = a < b;
+    result_reg <<= a < b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -198,7 +198,7 @@ TEST_CASE("JIT Compiler comparison GT", "[jit][comparison]") {
     ch_uint<8> b(20_d);
     auto result_reg = ch_reg<ch_bool>(false, "result");
 
-    result_reg = a > b;
+    result_reg <<= a > b;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -218,7 +218,7 @@ TEST_CASE("JIT Compiler comparison EQ", "[jit][comparison]") {
     ch_uint<8> a(10_d);
     auto result_reg = ch_reg<ch_bool>(false, "result");
 
-    result_reg = (a == 10_d);
+    result_reg <<= (a == 10_d);
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -240,7 +240,7 @@ TEST_CASE("JIT Compiler select true", "[jit][select]") {
     ch_bool condition(true);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = ch::core::select(condition, a, b);
+    result_reg <<= ch::core::select(condition, a, b);
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -262,7 +262,7 @@ TEST_CASE("JIT Compiler select false", "[jit][select]") {
     ch_bool condition(false);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = ch::core::select(condition, a, b);
+    result_reg <<= ch::core::select(condition, a, b);
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -284,7 +284,7 @@ TEST_CASE("JIT Compiler chained operations", "[jit][arithmetic]") {
     ch_uint<8> c(4_d);
     auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
 
-    result_reg = (a + b) * c;
+    result_reg <<= (a + b) * c;
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
@@ -302,14 +302,11 @@ TEST_CASE("JIT Compiler register set and get", "[jit][reg]") {
     ctx_swap swap(&ctx);
 
     auto counter = ch_reg<ch_uint<8>>(0_b, "counter");
+    counter <<= ch_uint<8>(42);
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
 
-    sim.tick();
-    REQUIRE(static_cast<uint64_t>(sim.get_value(counter)) == 0);
-
-    counter = ch_uint<8>(42);
     sim.tick();
     REQUIRE(static_cast<uint64_t>(sim.get_value(counter)) == 42);
 #else

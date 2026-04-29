@@ -111,6 +111,13 @@ inline JitInstr make_select(VRegId dst, VRegId cond, VRegId src0, VRegId src1, B
     return i;
 }
 
+inline JitInstr make_reg_next(VRegId dst, NodeId node_id, BitWidth bw) {
+    JitInstr i(JitOp::REG_NEXT, bw);
+    i.dst = dst;
+    i.node_id = node_id;
+    return i;
+}
+
 } // namespace jit
 } // namespace ch
 

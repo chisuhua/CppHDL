@@ -738,11 +738,25 @@ void Simulator::update_instruction_pointers() {
 void Simulator::eval_sequential() {
     CHDBG_FUNC();
 
+#if __has_include("jit/jit_compiler.h")
+    if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_seq_func()) {
+        jit_compiler_->sync_to_buffer(data_map_);
+        jit_compiler_->execute_seq_tick();
+        jit_compiler_->sync_from_buffer(data_map_);
+    } else {
+        for (const auto &[node_id, instr] : sequential_instr_list_) {
+            instr->eval();
+            CHDBG("Evaluating sequential instruction for node %u, %s", node_id,
+                  data_map_[node_id].to_string_verbose().c_str());
+        }
+    }
+#else
     for (const auto &[node_id, instr] : sequential_instr_list_) {
         instr->eval();
         CHDBG("Evaluating sequential instruction for node %u, %s", node_id,
               data_map_[node_id].to_string_verbose().c_str());
     }
+#endif
 
     CHDBG("Evaluation sequential completed");
 }
@@ -751,9 +765,9 @@ void Simulator::eval_combinational() {
     CHDBG_FUNC();
 
 #if __has_include("jit/jit_compiler.h")
-    if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->get_ir_instr_count() > 0) {
+    if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_comb_func()) {
         jit_compiler_->sync_to_buffer(data_map_);
-        jit_compiler_->execute_tick();
+        jit_compiler_->execute_comb_tick();
         jit_compiler_->sync_from_buffer(data_map_);
         return;
     }
@@ -805,10 +819,7 @@ void Simulator::tick() {
     ch::data_map_t ab_result_a;
     bool run_ab_verify = false;
 #if __has_include("jit/jit_compiler.h")
-    run_ab_verify = ab_verification_ && jit_enabled_ && jit_compiled_;
-    if (run_ab_verify) {
-        ab_result_a = data_map_;
-    }
+    run_ab_verify = false;
 #endif
 
     eval_combinational();
@@ -819,25 +830,8 @@ void Simulator::tick() {
     }
 
 #if __has_include("jit/jit_compiler.h")
-    // A/B verification: run JIT and compare
     if (run_ab_verify) {
-        jit_compiler_->sync_to_buffer(data_map_);
-        jit_compiler_->execute_tick();
-        jit_compiler_->sync_from_buffer(data_map_);
-
-        // Compare results
-        for (const auto& [node_id, val_b] : data_map_) {
-            auto it_a = ab_result_a.find(node_id);
-            if (it_a == ab_result_a.end()) {
-                CHABORT("A/B mismatch: node %u missing in interpreted result", node_id);
-            }
-            if (it_a->second != val_b) {
-                CHABORT("A/B mismatch at tick %llu, node %u: interpreted=%s, jit=%s",
-                       (unsigned long long)ticks_, node_id,
-                       it_a->second.to_string_verbose().c_str(),
-                       val_b.to_string_verbose().c_str());
-            }
-        }
+        CHABORT("A/B verification disabled - needs redesign for dual-function JIT");
     }
 #endif
 

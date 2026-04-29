@@ -198,3 +198,4 @@ add_subdirectory(examples/riscv-mini)  # Temporarily disabled - API updates need
 # 添加测试
 enable_testing()
 add_subdirectory(tests)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
