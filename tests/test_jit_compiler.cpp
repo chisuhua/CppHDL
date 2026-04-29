@@ -29,11 +29,11 @@ TEST_CASE("JIT Compiler simple context", "[jit][basic]") {
     ctx_swap swap(&ctx);
 
     auto reg = ch_reg<ch_uint<8>>(0_b, "test_reg");
+    reg = ch_uint<8>(42);
 
     Simulator sim(&ctx);
     REQUIRE(sim.is_jit_compiled() == true);
 
-    sim.set_input_value(reg, 42);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_value(reg)) == 42);
@@ -309,7 +309,7 @@ TEST_CASE("JIT Compiler register set and get", "[jit][reg]") {
     sim.tick();
     REQUIRE(static_cast<uint64_t>(sim.get_value(counter)) == 0);
 
-    sim.set_input_value(counter, 42);
+    counter = ch_uint<8>(42);
     sim.tick();
     REQUIRE(static_cast<uint64_t>(sim.get_value(counter)) == 42);
 #else

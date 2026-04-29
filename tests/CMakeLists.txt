@@ -185,6 +185,8 @@ add_catch_test(test_trace test_trace.cpp)
 add_catch_test(test_user_tracking test_user_tracking.cpp)
 add_catch_test(test_verilog_gen test_verilog_gen.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
+# JIT compiler tests
+add_catch_test(test_jit_compiler test_jit_compiler.cpp)
 
 # ============================================================================
 # 完全被注释掉的文件 (无法启用)
