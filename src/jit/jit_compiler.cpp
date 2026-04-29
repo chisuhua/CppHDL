@@ -74,8 +74,13 @@ JitCompileResult JitCompiler::compile(ch::core::context* ctx) {
 
     last_ir_instr_count_ = func.blocks.empty() ? 0 :
         static_cast<uint32_t>(func.blocks[0].instrs.size());
+    for (size_t i = 1; i < func.blocks.size(); ++i) {
+        last_ir_instr_count_ += static_cast<uint32_t>(func.blocks[i].instrs.size());
+    }
     last_vreg_count_ = func.vreg_count;
 
+    result.ir_instr_count = last_ir_instr_count_;
+    result.vreg_count = last_vreg_count_;
     result.result = compile_to_llvm(func);
     return result;
 }
@@ -96,9 +101,16 @@ void JitCompiler::clear() {
     if (compiled_func_) {
         compiled_func_ = nullptr;
     }
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/ExecutionEngine/Orc/LLJIT.h>)
+    if (jit_session_) {
+        delete static_cast<llvm::orc::LLJIT*>(jit_session_);
+        jit_session_ = nullptr;
+    }
+#else
     if (jit_session_) {
         jit_session_ = nullptr;
     }
+#endif
     data_buffer_.clear();
 }
 
@@ -159,13 +171,21 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func) {
         return JitResult::SUCCESS;
     }
 
-    JitBlock block("main");
+    JitBlock block("combinational");
     VRegId next_vreg = 0;
 
     for (auto* node : eval_list) {
         auto node_type = node->type();
         auto node_id = node->id();
         auto bitwidth = static_cast<BitWidth>(node->size());
+
+        // 时序节点由解释器处理，JIT 只编译组合逻辑
+        if (node_type == ch::core::lnodetype::type_reg ||
+            node_type == ch::core::lnodetype::type_mem ||
+            node_type == ch::core::lnodetype::type_mem_read_port ||
+            node_type == ch::core::lnodetype::type_mem_write_port) {
+            continue;
+        }
 
         switch (node_type) {
         case ch::core::lnodetype::type_lit: {
@@ -253,15 +273,6 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func) {
             break;
         }
 
-        case ch::core::lnodetype::type_reg: {
-            auto vreg = next_vreg++;
-            auto load_instr = make_load(vreg, node_id, bitwidth);
-            load_instr.op = JitOp::REG_NEXT;
-            block.instrs.push_back(load_instr);
-            block.instrs.push_back(make_store(node_id, vreg, bitwidth));
-            break;
-        }
-
         case ch::core::lnodetype::type_proxy: {
             if (node->num_srcs() > 0 && node->src(0)) {
                 auto src_vreg = next_vreg++;
@@ -276,8 +287,6 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func) {
         case ch::core::lnodetype::type_reset:
         case ch::core::lnodetype::type_output:
         case ch::core::lnodetype::type_mem:
-        case ch::core::lnodetype::type_mem_read_port:
-        case ch::core::lnodetype::type_mem_write_port:
         case ch::core::lnodetype::type_bitsupdate:
         default:
             break;
@@ -580,8 +589,9 @@ JitResult JitCompiler::finalize_compilation() {
 
     compiled_func_ = reinterpret_cast<void*>(Sym->getValue());
 
-    // Keep JIT alive by storing in member - but we can't store unique_ptr in void*
-    // For now, we'll just hope the symbol address remains valid
+    // 将 LLJIT 对象的所有权转移到 jit_session_ 中
+    // 防止 LLJIT 析构后 compiled_func_ 指向已释放的内存
+    jit_session_ = static_cast<void*>(JIT.release());
     llvm_module_ = nullptr;
     return JitResult::SUCCESS;
 #else
