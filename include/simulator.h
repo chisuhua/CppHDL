@@ -546,7 +546,12 @@ private:
 #if __has_include("jit/jit_compiler.h")
     // JIT 编译相关
     std::unique_ptr<ch::jit::JitCompiler> jit_compiler_;
-    bool jit_enabled_ = false;
+    bool jit_enabled_ =
+#if defined(CH_JIT_ENABLED)
+        true;
+#else
+        false;
+#endif
     bool jit_compiled_ = false;
     bool ab_verification_ = false;  // A/B 验证模式
 #endif
