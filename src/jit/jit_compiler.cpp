@@ -214,8 +214,22 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
 
         // Sequential nodes go to seq_block
         if (node_type == ch::core::lnodetype::type_reg) {
+            auto* reg_node = static_cast<ch::core::regimpl*>(node);
+            auto* next_node = reg_node->get_next();
+
+            // Load the "next" value from the source node into a vreg
+            VRegId next_vreg = INVALID_VREG;
+            if (next_node && next_node->size() <= 64) {
+                next_vreg = next_seq_vreg++;
+                auto next_bitwidth = static_cast<BitWidth>(next_node->size());
+                block_seq.instrs.push_back(make_load(next_vreg, next_node->id(), next_bitwidth));
+            }
+
+            // REG_NEXT: store the "next" value to the register's output node
             auto dst_vreg = next_seq_vreg++;
-            block_seq.instrs.push_back(make_reg_next(dst_vreg, node_id, bitwidth));
+            auto reg_next = make_reg_next(dst_vreg, node_id, bitwidth);
+            reg_next.src0 = next_vreg;  // Set source (INVALID_VREG means no update)
+            block_seq.instrs.push_back(reg_next);
             block_seq.node_count++;
             continue;
         }
@@ -226,17 +240,19 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             continue;
         }
 
-        // Combinational nodes
-        switch (node_type) {
-        case ch::core::lnodetype::type_lit: {
-            auto* lit = static_cast<ch::core::litimpl*>(node);
-            auto value = static_cast<uint64_t>(lit->value());
+        // type_lit nodes: literal values are set at runtime via set_value().
+        // The interpreter does NOT evaluate them (litimpl has no create_instruction),
+        // so JIT must also skip them to avoid overwriting runtime values with compile-time constants.
+        if (node_type == ch::core::lnodetype::type_lit) {
+            // Literals should be loaded via sync_from_buffer so set_value() updates persist.
+            // Use LOAD_DATA (read from data_buffer_) instead of LOAD_CONST (compile-time constant).
             auto vreg = next_comb_vreg++;
-            block_comb.instrs.push_back(make_const(vreg, value, bitwidth));
-            block_comb.instrs.push_back(make_store(node_id, vreg, bitwidth));
+            block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
             break;
         }
 
+        // Combinational nodes
+        switch (node_type) {
         case ch::core::lnodetype::type_input: {
             auto vreg = next_comb_vreg++;
             block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
