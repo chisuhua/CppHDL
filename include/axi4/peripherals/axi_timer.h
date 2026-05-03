@@ -73,33 +73,26 @@ public:
         auto addr_bits = io().awaddr >> ch_uint<32>(2_d);
         addr_bits = addr_bits & ch_uint<32>(3_d);
         
-        // 写地址握手
-        auto aw_handshake = io().awvalid && (!busy);
-        io().awready = aw_handshake;
+        io().awready = select(busy, ch_bool(false), io().awvalid);
+        io().wready = io().awvalid && io().awready;
         
-        // 写数据握手
-        auto w_handshake = io().wvalid && aw_handshake;
-        io().wready = w_handshake;
+        auto w_handshake = io().wvalid && io().wready;
         
-        // 写寄存器
         auto sel_load = (addr_bits == ch_uint<32>(0_d));
         auto sel_ctrl = (addr_bits == ch_uint<32>(2_d));
         
         load_reg->next = select(w_handshake && sel_load, io().wdata, load_reg);
         ctrl_reg->next = select(w_handshake && sel_ctrl, io().wdata, ctrl_reg);
         
-        // 写响应
         io().bvalid = w_handshake;
         io().bresp = ch_uint<2>(0_d);
         
-        // 读地址握手
         auto ar_addr_bits = io().araddr >> ch_uint<32>(2_d);
         ar_addr_bits = ar_addr_bits & ch_uint<32>(3_d);
         
-        auto ar_handshake = io().arvalid && (!busy);
-        io().arready = ar_handshake;
+        io().arready = select(busy, ch_bool(false), io().arvalid);
+        auto ar_handshake = io().arvalid && io().arready;
         
-        // 读数据
         auto read_sel_load = (ar_addr_bits == ch_uint<32>(0_d));
         auto read_sel_count = (ar_addr_bits == ch_uint<32>(1_d));
         auto read_sel_ctrl = (ar_addr_bits == ch_uint<32>(2_d));
@@ -115,7 +108,6 @@ public:
         io().rvalid = ar_handshake;
         io().rresp = ch_uint<2>(0_d);
         
-        // 定时器逻辑 (简化)
         auto enable = (ctrl_reg & ch_uint<32>(1_d)) != ch_uint<32>(0_d);
         auto timeout = (count_reg == ch_uint<32>(0_d));
         
@@ -127,7 +119,7 @@ public:
         
         io().irq = (status_reg & ch_uint<32>(1_d)) != ch_uint<32>(0_d);
         
-        // 状态更新
+        auto aw_handshake = io().awvalid && io().awready;
         busy->next = select(aw_handshake || ar_handshake, ch_bool(true),
                             select(io().bready || io().rready, ch_bool(false), busy));
     }

@@ -10,7 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # 日志配置选项
 option(ENABLE_DEBUG_LOGGING "Enable debug level logging" OFF)
 option(ENABLE_VERBOSE_LOGGING "Enable verbose logging with source locations" OFF)
-option(CH_JIT_ENABLE "Enable LLVM ORC JIT compilation (default OFF)" OFF)
+option(CH_JIT_ENABLE "Enable LLVM ORC JIT compilation (default OFF)" ON)
 
 # 设置编译定义
 if(ENABLE_DEBUG_LOGGING)

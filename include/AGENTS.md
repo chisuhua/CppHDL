@@ -21,8 +21,8 @@ include/
 ├── ast/                # AST nodes (AGENTS.md)
 ├── chlib/              # HDL components (AGENTS.md)
 ├── bundle/             # Bundle type defs (stream, axi, flow)
-├── axi4/               # AXI4 interconnect + peripherals
-├── cpu/                # RV32I core, cache
+├── axi4/               # AXI4 interconnect + peripherals (AGENTS.md)
+├── cpu/                # RV32I core, cache (AGENTS.md)
 ├── lnode/              # Logic node impl types
 ├── bv/                 # Bit-vector math (gmp/mpfr)
 └── abstract/           # Abstract base classes

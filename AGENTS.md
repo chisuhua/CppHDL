@@ -43,7 +43,9 @@ CppHDL/
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
 | State machine DSL | `include/chlib/state_machine.h` |
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` |
-| AXI4 interconnect | `include/axi4/` |
+| AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
+| AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/axi4_lite_example.cpp` |
+| Stream examples | `examples/stream/` (functional API — no Component subclass), `examples/spinalhdl-ported/stream/` (moved to sibling) |
 
 ## CONVENTIONS
 - **IO assignment**: Use `select(condition, val1, val0)` NOT `&&` on IO ports

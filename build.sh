@@ -7,8 +7,9 @@
 #cmake --build build
 
 # 启用调试日志
-cmake -B build -DENABLE_DEBUG_LOGGING=ON -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j2
+#cmake -B build -DENABLE_DEBUG_LOGGING=ON -DCMAKE_BUILD_TYPE=Release
+cmake -B build -DCMAKE_BUILD_TYPE=Release -S .
+cmake --build build -j1
 
 # Debug 模式构建
 #cmake -B build -DCMAKE_BUILD_TYPE=Debug
