@@ -307,8 +307,6 @@ void Simulator::disconnect() {
     eval_list_.clear();
 
     // Clear the context pointer
-    if (!ctx_)
-        delete ctx_;
     ctx_ = nullptr;
 
     // Mark as uninitialized
