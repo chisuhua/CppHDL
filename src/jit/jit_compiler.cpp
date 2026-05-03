@@ -234,18 +234,9 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             continue;
         }
 
-        if (node_type == ch::core::lnodetype::type_mem) {
-            // Memory nodes are processed separately - skip here
-            continue;
-        }
-
-        // Memory read ports have combinational outputs that depend on memory array state.
-        // Without the memory array accessible in JIT, we must fall back to interpreter.
-        if (node_type == ch::core::lnodetype::type_mem_read_port) {
-            return JitResult::UNSUPPORTED_OP;
-        }
-
-        if (node_type == ch::core::lnodetype::type_mem_write_port) {
+        if (node_type == ch::core::lnodetype::type_mem ||
+            node_type == ch::core::lnodetype::type_mem_read_port ||
+            node_type == ch::core::lnodetype::type_mem_write_port) {
             continue;
         }
 
@@ -257,7 +248,7 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             // Use LOAD_DATA (read from data_buffer_) instead of LOAD_CONST (compile-time constant).
             auto vreg = next_comb_vreg++;
             block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
-            continue;
+            break;
         }
 
         // Combinational nodes
@@ -340,8 +331,7 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             break;
         }
 
-        case ch::core::lnodetype::type_proxy:
-        case ch::core::lnodetype::type_output: {
+        case ch::core::lnodetype::type_proxy: {
             if (node->num_srcs() > 0 && node->src(0)) {
                 auto src_vreg = next_comb_vreg++;
                 auto dst_vreg = next_comb_vreg++;
@@ -353,6 +343,7 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
 
         case ch::core::lnodetype::type_clock:
         case ch::core::lnodetype::type_reset:
+        case ch::core::lnodetype::type_output:
         case ch::core::lnodetype::type_bitsupdate:
         default:
             break;
@@ -426,8 +417,7 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
             auto* ptr = get_node_ptr(node_id);
             auto* val = builder.CreateLoad(builder.getInt64Ty(), ptr, "load_node");
             if (bw < 64) {
-                uint64_t mask = (1ULL << bw) - 1;
-                return builder.CreateAnd(val, builder.getInt64(mask), "mask_load");
+                return builder.CreateTrunc(val, builder.getIntNTy(bw), "trunc");
             }
             return val;
         };
@@ -474,10 +464,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
                 auto* res = builder.CreateAdd(a, b, "add");
-                if (instr.bitwidth < 64) {
-                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
-                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_add");
-                }
                 builder.CreateStore(res, vregs[instr.dst], "store_add");
                 break;
             }
@@ -486,10 +472,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
                 auto* res = builder.CreateSub(a, b, "sub");
-                if (instr.bitwidth < 64) {
-                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
-                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_sub");
-                }
                 builder.CreateStore(res, vregs[instr.dst], "store_sub");
                 break;
             }
@@ -498,10 +480,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
                 auto* res = builder.CreateMul(a, b, "mul");
-                if (instr.bitwidth < 64) {
-                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
-                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_mul");
-                }
                 builder.CreateStore(res, vregs[instr.dst], "store_mul");
                 break;
             }
@@ -534,10 +512,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* all1 = builder.getInt64(uint64_t(-1));
                 auto* res = builder.CreateXor(a, all1, "not");
-                if (instr.bitwidth < 64) {
-                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
-                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_not");
-                }
                 builder.CreateStore(res, vregs[instr.dst], "store_not");
                 break;
             }
@@ -546,10 +520,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
                 auto* res = builder.CreateShl(a, b, "shl");
-                if (instr.bitwidth < 64) {
-                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
-                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_shl");
-                }
                 builder.CreateStore(res, vregs[instr.dst], "store_shl");
                 break;
             }
@@ -558,10 +528,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
                 auto* res = builder.CreateLShr(a, b, "shr");
-                if (instr.bitwidth < 64) {
-                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
-                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_shr");
-                }
                 builder.CreateStore(res, vregs[instr.dst], "store_shr");
                 break;
             }
