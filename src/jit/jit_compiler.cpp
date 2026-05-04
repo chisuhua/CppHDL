@@ -240,19 +240,13 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             continue;
         }
 
-        // type_lit nodes: literal values are set at runtime via set_value().
-        // The interpreter does NOT evaluate them (litimpl has no create_instruction),
-        // so JIT must also skip them to avoid overwriting runtime values with compile-time constants.
-        if (node_type == ch::core::lnodetype::type_lit) {
-            // Literals should be loaded via sync_from_buffer so set_value() updates persist.
-            // Use LOAD_DATA (read from data_buffer_) instead of LOAD_CONST (compile-time constant).
+        switch (node_type) {
+        case ch::core::lnodetype::type_lit: {
             auto vreg = next_comb_vreg++;
             block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
             break;
         }
 
-        // Combinational nodes
-        switch (node_type) {
         case ch::core::lnodetype::type_input: {
             auto vreg = next_comb_vreg++;
             block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
