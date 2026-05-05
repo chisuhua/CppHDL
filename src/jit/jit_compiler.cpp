@@ -270,8 +270,15 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
         switch (node_type) {
         case ch::core::lnodetype::type_input: {
             auto vreg = next_comb_vreg++;
-            block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
-            block_comb.instrs.push_back(make_store(node_id, vreg, bitwidth));
+            // 连接后的输入端口需要从 driver 加载值，而非从自身
+            if (node->num_srcs() > 0 && node->src(0)) {
+                auto src_bitwidth = static_cast<BitWidth>(node->src(0)->size());
+                block_comb.instrs.push_back(make_load(vreg, node->src(0)->id(), src_bitwidth));
+                block_comb.instrs.push_back(make_store(node_id, vreg, bitwidth));
+            } else {
+                block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
+                block_comb.instrs.push_back(make_store(node_id, vreg, bitwidth));
+            }
             break;
         }
 
