@@ -741,6 +741,12 @@ void Simulator::eval_sequential() {
         jit_compiler_->sync_to_buffer(data_map_);
         jit_compiler_->execute_seq_tick();
         jit_compiler_->sync_from_buffer(data_map_);
+
+        for (const auto &[node_id, instr] : sequential_instr_list_) {
+            if (jit_compiler_->is_external_node(node_id)) {
+                instr->eval();
+            }
+        }
     } else {
         for (const auto &[node_id, instr] : sequential_instr_list_) {
             instr->eval();
@@ -767,6 +773,13 @@ void Simulator::eval_combinational() {
         jit_compiler_->sync_to_buffer(data_map_);
         jit_compiler_->execute_comb_tick();
         jit_compiler_->sync_from_buffer(data_map_);
+
+        // JIT 执行完成后，对 CALL_EXTERNAL 节点运行解释器回退
+        for (const auto &[node_id, instr] : combinational_instr_list_) {
+            if (jit_compiler_->is_external_node(node_id)) {
+                instr->eval();
+            }
+        }
         return;
     }
 #endif

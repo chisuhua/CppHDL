@@ -5,6 +5,7 @@
 #include "ast/instr_base.h"
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ch {
@@ -63,6 +64,9 @@ public:
     void sync_to_buffer(const ch::data_map_t& data_map);
     void sync_from_buffer(ch::data_map_t& data_map);
 
+    // 查询需要解释器回退的外部节点
+    bool is_external_node(uint32_t node_id) const;
+
 private:
     bool available_;
     void* jit_session_;
@@ -74,6 +78,9 @@ private:
     uint32_t last_vreg_count_;
 
     std::vector<uint64_t> data_buffer_;
+
+    // CALL_EXTERNAL 操作的外部节点 ID 集合（需要解释器回退）
+    std::unordered_set<uint32_t> external_node_ids_;
 
 #if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
     void* llvm_module_;  // Stores llvm::Module* as void*
