@@ -16,6 +16,7 @@ enum class JitOp : uint8_t {
     EQ, NE, LT, LE, GT, GE,
     SELECT,
     BIT_SELECT,
+    BITS_EXTRACT,
     CONCAT, SLICE,
     LOAD_CONST,
     JUMP, BRANCH, LABEL,

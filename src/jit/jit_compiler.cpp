@@ -1,3 +1,4 @@
+#include <fstream>
 #include "jit/jit_compiler.h"
 #include "core/context.h"
 #include "core/lnodeimpl.h"
@@ -298,6 +299,7 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::shl: jit_op = JitOp::SHIFT_LEFT; break;
             case ch::core::ch_op::shr: jit_op = JitOp::SHIFT_RIGHT; break;
             case ch::core::ch_op::bit_sel: jit_op = JitOp::BIT_SELECT; break;
+            case ch::core::ch_op::bits_extract: jit_op = JitOp::BITS_EXTRACT; break;
             case ch::core::ch_op::concat: jit_op = JitOp::CONCAT; break;
             default: jit_op = JitOp::CALL_EXTERNAL; break;
             }
@@ -661,6 +663,26 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 break;
             }
 
+            case JitOp::BITS_EXTRACT: {
+                auto* val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_val");
+                auto* range = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_range");
+                auto* lsb = builder.CreateAnd(range, builder.getInt64(0xFFFFFFFF), "lsb");
+                auto* msb = builder.CreateLShr(range, builder.getInt64(32), "msb_shift");
+                msb = builder.CreateAnd(msb, builder.getInt64(0xFFFFFFFF), "msb");
+                auto* shifted = builder.CreateLShr(val, lsb, "shift_val");
+                auto* width = builder.CreateSub(msb, lsb, "width_sub");
+                width = builder.CreateAdd(width, builder.getInt64(1), "width_add1");
+                auto* mask = builder.CreateShl(builder.getInt64(1), width, "mask_shl");
+                mask = builder.CreateSub(mask, builder.getInt64(1), "mask_sub1");
+                auto* res = builder.CreateAnd(shifted, mask, "extract");
+                if (instr.bitwidth < 64) {
+                    uint64_t bw_mask = (1ULL << instr.bitwidth) - 1;
+                    res = builder.CreateAnd(res, builder.getInt64(bw_mask), "mask_bw");
+                }
+                builder.CreateStore(res, vregs[instr.dst], "store_bits_extract");
+                break;
+            }
+
             case JitOp::REG_NEXT: {
                 if (instr.src0 == INVALID_VREG) {
                     break;
@@ -683,6 +705,7 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
             }
         }
 
+        std::string ir_str; llvm::raw_string_ostream ir_stream(ir_str); module->print(ir_stream, nullptr); std::ofstream ir_file("/tmp/jit_ir.ll"); ir_file << ir_str; ir_file.close();
         builder.CreateRetVoid();
         return JitResult::SUCCESS;
     };
