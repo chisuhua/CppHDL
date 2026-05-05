@@ -284,6 +284,7 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::add: jit_op = JitOp::ADD; break;
             case ch::core::ch_op::sub: jit_op = JitOp::SUB; break;
             case ch::core::ch_op::mul: jit_op = JitOp::MUL; break;
+            case ch::core::ch_op::mod: jit_op = JitOp::MOD; break;
             case ch::core::ch_op::and_: jit_op = JitOp::AND; break;
             case ch::core::ch_op::or_: jit_op = JitOp::OR; break;
             case ch::core::ch_op::xor_: jit_op = JitOp::XOR; break;
@@ -296,6 +297,7 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::ge: jit_op = JitOp::GE; break;
             case ch::core::ch_op::shl: jit_op = JitOp::SHIFT_LEFT; break;
             case ch::core::ch_op::shr: jit_op = JitOp::SHIFT_RIGHT; break;
+            case ch::core::ch_op::bit_sel: jit_op = JitOp::BIT_SELECT; break;
             case ch::core::ch_op::concat: jit_op = JitOp::CONCAT; break;
             default: jit_op = JitOp::CALL_EXTERNAL; break;
             }
@@ -512,6 +514,20 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 break;
             }
 
+            case JitOp::MOD: {
+                auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+                auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+                auto* is_zero = builder.CreateICmpEQ(b, builder.getInt64(0), "is_zero");
+                auto* rem = builder.CreateURem(a, b, "mod");
+                auto* res = builder.CreateSelect(is_zero, a, rem, "mod_safe");
+                if (instr.bitwidth < 64) {
+                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
+                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_mod");
+                }
+                builder.CreateStore(res, vregs[instr.dst], "store_mod");
+                break;
+            }
+
             case JitOp::AND: {
                 auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
                 auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
@@ -633,6 +649,15 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                 auto* cmp = builder.CreateICmpNE(cond, builder.getInt64(0), "cond_nz");
                 auto* res = builder.CreateSelect(cmp, a, b, "select");
                 builder.CreateStore(res, vregs[instr.dst], "store_select");
+                break;
+            }
+
+            case JitOp::BIT_SELECT: {
+                auto* data = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_data");
+                auto* idx = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_idx");
+                auto* shifted = builder.CreateLShr(data, idx, "shift_idx");
+                auto* masked = builder.CreateAnd(shifted, builder.getInt64(1), "mask_bit");
+                builder.CreateStore(masked, vregs[instr.dst], "store_bit_sel");
                 break;
             }
 

@@ -738,15 +738,16 @@ void Simulator::eval_sequential() {
 
 #if __has_include("jit/jit_compiler.h")
     if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_seq_func()) {
-        jit_compiler_->sync_to_buffer(data_map_);
-        jit_compiler_->execute_seq_tick();
-        jit_compiler_->sync_from_buffer(data_map_);
-
+        // 先执行 CALL_EXTERNAL 解释器节点（修复: JIT 之前执行避免陈旧值）
         for (const auto &[node_id, instr] : sequential_instr_list_) {
             if (jit_compiler_->is_external_node(node_id)) {
                 instr->eval();
             }
         }
+
+        jit_compiler_->sync_to_buffer(data_map_);
+        jit_compiler_->execute_seq_tick();
+        jit_compiler_->sync_from_buffer(data_map_);
     } else {
         for (const auto &[node_id, instr] : sequential_instr_list_) {
             instr->eval();
@@ -770,16 +771,17 @@ void Simulator::eval_combinational() {
 
 #if __has_include("jit/jit_compiler.h")
     if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_comb_func()) {
-        jit_compiler_->sync_to_buffer(data_map_);
-        jit_compiler_->execute_comb_tick();
-        jit_compiler_->sync_from_buffer(data_map_);
-
-        // JIT 执行完成后，对 CALL_EXTERNAL 节点运行解释器回退
+        // 先执行 CALL_EXTERNAL 解释器节点，确保 JIT 加载到正确的值
+        // （修复: 原代码在 JIT 之后执行导致 JIT 使用陈旧值）
         for (const auto &[node_id, instr] : combinational_instr_list_) {
             if (jit_compiler_->is_external_node(node_id)) {
                 instr->eval();
             }
         }
+
+        jit_compiler_->sync_to_buffer(data_map_);
+        jit_compiler_->execute_comb_tick();
+        jit_compiler_->sync_from_buffer(data_map_);
         return;
     }
 #endif

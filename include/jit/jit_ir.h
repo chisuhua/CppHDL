@@ -10,11 +10,12 @@ namespace jit {
 
 enum class JitOp : uint8_t {
     LOAD_DATA, STORE_DATA,
-    ADD, SUB, MUL,
+    ADD, SUB, MUL, MOD,
     AND, OR, XOR, NOT,
     SHIFT_LEFT, SHIFT_RIGHT,
     EQ, NE, LT, LE, GT, GE,
     SELECT,
+    BIT_SELECT,
     CONCAT, SLICE,
     LOAD_CONST,
     JUMP, BRANCH, LABEL,
