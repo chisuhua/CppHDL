@@ -453,7 +453,8 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
             auto* ptr = get_node_ptr(node_id);
             llvm::Value* store_val = val;
             if (bw < 64) {
-                store_val = builder.CreateZExt(store_val, builder.getInt64Ty(), "zext");
+                uint64_t mask = (1ULL << bw) - 1;
+                store_val = builder.CreateAnd(store_val, builder.getInt64(mask), "mask_store");
             }
             builder.CreateStore(store_val, ptr);
         };
