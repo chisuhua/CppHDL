@@ -11,6 +11,7 @@ CppHDL/
 ├── include/          # Header-only HDL library
 │   ├── core/         # Core primitives: context, operators, IO, lnode
 │   ├── ast/          # AST nodes + instruction classes
+│   ├── jit/          # JIT compiler interface (AGENTS.md)
 │   ├── chlib/        # HDL components: stream, fifo, pipeline, arbiter
 │   ├── bundle/       # Bundle type definitions (AXI, Stream, Flow)
 │   ├── lnode/        # Logic node implementations
@@ -20,6 +21,7 @@ CppHDL/
 ├── src/              # Library implementations
 │   ├── ast/          # Instruction eval() implementations
 │   ├── core/         # Context + lnodeimpl
+│   ├── jit/          # JIT compiler implementation
 │   └── *.cpp         # CodeGen (Verilog/DAG), Simulator, Component
 ├── samples/          # 41 HDL pattern demos (bundles, streams, protocols)
 ├── examples/         # Full design examples
@@ -43,6 +45,7 @@ CppHDL/
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
 | State machine DSL | `include/chlib/state_machine.h` |
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` |
+| JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
 | AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/axi4_lite_example.cpp` |
 | Stream examples | `examples/stream/` (functional API — no Component subclass), `examples/spinalhdl-ported/stream/` (moved to sibling) |
@@ -98,6 +101,15 @@ See `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` for full detail
 - `ch_module` in standalone tests: use `ch_device` instead
 - Empty TEST_CASE: use SKIP() or delete
 - Missing ctx_swap: register ops segfault without it
+
+## JIT COMPILER RULES (CRITICAL)
+The JIT compiler (`src/jit/jit_compiler.cpp`) compiles HDL operations to native code. These rules prevent silent data corruption:
+
+- **New `ch_op` → must add `JitOp`**: Adding an operation to `include/core/lnodeimpl.h` enum `ch_op` requires: (1) `JitOp` entry in `include/jit/jit_ir.h`, (2) mapping in `generate_ir()` switch, (3) LLVM lowering in `compile_to_llvm()` switch. Skipping any causes `CALL_EXTERNAL` fallback and **silently stale values** in downstream JIT-native nodes.
+- **`type_input` must check driver**: Connected input ports (via `<<=`) have `num_srcs()>0`. JIT must load from `src(0)->id()` (the driver), not `node_id`. Otherwise Component IO hierarchy silently reads zero.
+- **`type_lit` uses `continue`, never `break`**: In the `for (auto* node : eval_list)` loop; `break` exits the entire loop.
+- **All <64-bit arithmetic must mask**: After ADD/SUB/MUL/SHL etc., apply `AND` with `(1<<bw)-1` bitmask.
+- **See**: `include/jit/AGENTS.md`, `docs/developer_guide/patterns/JIT-DEBUGGING-GUIDE.md`
 
 ## ZERO-DEBT POLICY
 Every Phase must exit with **zero technical debt** before marking complete:
