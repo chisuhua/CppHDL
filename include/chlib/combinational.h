@@ -1,5 +1,4 @@
-#ifndef CHLIB_COMBINATIONAL_H
-#define CHLIB_COMBINATIONAL_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/logic.h"
@@ -324,5 +323,3 @@ ch_bool in_range(ch_uint<N> input, unsigned min_val, unsigned max_val) {
 }
 
 } // namespace chlib
-
-#endif // CHLIB_COMBINATIONAL_H

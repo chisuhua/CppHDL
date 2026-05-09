@@ -1,5 +1,4 @@
-#ifndef CHLIB_ARITHMETIC_ADVANCE_H
-#define CHLIB_ARITHMETIC_ADVANCE_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/logic.h"
@@ -135,4 +134,3 @@ FixedPointResult<N, Q> fixed_point_divider(ch_uint<N> a, ch_uint<N> b) {
 
 } // namespace chlib
 
-#endif // CHLIB_ARITHMETIC_ADVANCE_H

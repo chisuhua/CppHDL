@@ -1,5 +1,4 @@
-#ifndef CHLIB_PIPELINE_H
-#define CHLIB_PIPELINE_H
+#pragma once
 
 #include "ch.hpp"
 #include "component.h"
@@ -392,4 +391,3 @@ inline ch_bool pipeline_flush_ctrl(ch_bool flush_req, ch_bool exception) {
 
 } // namespace chlib
 
-#endif // CHLIB_PIPELINE_H

@@ -1,5 +1,4 @@
-#ifndef CHLIB_STREAM_WIDTH_ADAPTER_H
-#define CHLIB_STREAM_WIDTH_ADAPTER_H
+#pragma once
 
 /**
  * @file stream_width_adapter.h
@@ -224,4 +223,3 @@ ch_stream<TNarrow> stream_truncate(ch_stream<TWide> input) {
 
 } // namespace chlib
 
-#endif // CHLIB_STREAM_WIDTH_ADAPTER_H

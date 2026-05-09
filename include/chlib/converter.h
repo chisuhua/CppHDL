@@ -1,5 +1,4 @@
-#ifndef CHLIB_CONVERTER_H
-#define CHLIB_CONVERTER_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/logic.h"
@@ -122,4 +121,3 @@ template <unsigned N> ch_uint<N> binary_to_gray(ch_uint<N> input) {
 
 } // namespace chlib
 
-#endif // CHLIB_CONVERTER_H

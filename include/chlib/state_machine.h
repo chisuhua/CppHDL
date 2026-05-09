@@ -1,5 +1,4 @@
-#ifndef CHLIB_STATE_MACHINE_H
-#define CHLIB_STATE_MACHINE_H
+#pragma once
 
 /**
  * @file state_machine.h
@@ -283,4 +282,3 @@ public:
 
 } // namespace chlib
 
-#endif // CHLIB_STATE_MACHINE_H

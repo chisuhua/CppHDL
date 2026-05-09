@@ -1,5 +1,4 @@
-#ifndef CH_CHLIB_SWITCH_H
-#define CH_CHLIB_SWITCH_H
+#pragma once
 
 #include <ch.hpp>
 #include <core/operators.h>
@@ -371,5 +370,3 @@ constexpr auto switch_case(TValue &&value, TDefault &&default_result,
 // }
 
 } // namespace chlib
-
-#endif

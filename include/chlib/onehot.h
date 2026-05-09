@@ -1,5 +1,4 @@
-#ifndef CHLIB_ONEHOT_H
-#define CHLIB_ONEHOT_H
+#pragma once
 
 #include "ch.hpp"
 #include "component.h"
@@ -156,5 +155,3 @@ public:
 };
 
 } // namespace chlib
-
-#endif // CHLIB_ONEHOT_H

@@ -1,5 +1,4 @@
-#ifndef CHLIB_STREAM_H
-#define CHLIB_STREAM_H
+#pragma once
 
 #include "bundle/flow_bundle.h"
 #include "bundle/stream_bundle.h"
@@ -561,5 +560,3 @@ stream_demux(ch_stream<T> input_stream,
 }
 
 } // namespace chlib
-
-#endif // CHLIB_STREAM_H

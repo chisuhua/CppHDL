@@ -1,5 +1,4 @@
-#ifndef CHLIB_AXI4LITE_H
-#define CHLIB_AXI4LITE_H
+#pragma once
 
 #include "ch.hpp"
 #include "component.h"
@@ -119,5 +118,3 @@ struct Axi4LiteSlave {
 
 
 } // namespace chlib
-
-#endif // CHLIB_AXI4LITE_H

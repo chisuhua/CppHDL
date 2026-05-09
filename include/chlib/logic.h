@@ -1,5 +1,4 @@
-#ifndef CHLIB_LOGIC_H
-#define CHLIB_LOGIC_H
+#pragma once
 
 #include "ch.hpp"
 #include "component.h"
@@ -233,5 +232,3 @@ ch_uint<N> tri_state_buffer(ch_uint<N> input, ch_bool enable) {
 }
 
 } // namespace chlib
-
-#endif // CHLIB_LOGIC_H

@@ -1,5 +1,4 @@
-#ifndef CH_CHLIB_IF_STMT_H
-#define CH_CHLIB_IF_STMT_H
+#pragma once
 
 #include "core/bool.h"
 #include "core/context.h"
@@ -176,5 +175,3 @@ template <typename T> auto conditional_reg_assign(ch_reg<T> &reg) {
 }
 
 } // namespace chlib
-
-#endif // CH_CHLIB_IF_STMT_H

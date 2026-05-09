@@ -1,5 +1,4 @@
-#ifndef CHLIB_SEQUENTIAL_H
-#define CHLIB_SEQUENTIAL_H
+#pragma once
 
 #include "ch.hpp"
 #include "component.h"
@@ -383,5 +382,3 @@ configurable_counter(ch_bool en, ch_uint<2> mode, ch_uint<N> max_val,
 }
 
 } // namespace chlib
-
-#endif // CHLIB_SEQUENTIAL_H

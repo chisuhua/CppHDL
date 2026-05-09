@@ -1,5 +1,4 @@
-#ifndef CHLIB_BITWISE_H
-#define CHLIB_BITWISE_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/logic.h"
@@ -286,5 +285,3 @@ ch_uint<N> bit_field_insert(ch_uint<N> input, ch_uint<N> value, unsigned start,
 }
 
 } // namespace chlib
-
-#endif // CHLIB_BITWISE_H

@@ -1,5 +1,4 @@
-#ifndef CH_CHLIB_IF_H
-#define CH_CHLIB_IF_H
+#pragma once
 
 #include "core/bool.h"
 #include "core/context.h"
@@ -154,5 +153,3 @@ auto priority_if_then(const ch_bool &condition, const T &value) {
 }
 
 } // namespace chlib
-
-#endif // CH_CHLIB_IF_H

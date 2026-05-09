@@ -1,5 +1,4 @@
-#ifndef CHLIB_ARITHMETIC_H
-#define CHLIB_ARITHMETIC_H
+#pragma once
 
 #include "ch.hpp"
 #include "component.h"
@@ -244,5 +243,3 @@ ch_uint<N> max(ch_uint<N> first, ch_uint<N> second, Args... args) {
 }
 
 } // namespace chlib
-
-#endif // CHLIB_ARITHMETIC_H

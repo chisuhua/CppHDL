@@ -1,5 +1,4 @@
-#ifndef CHLIB_SELECTOR_ARBITER_H
-#define CHLIB_SELECTOR_ARBITER_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/converter.h"
@@ -224,5 +223,3 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
 }
 
 } // namespace chlib
-
-#endif // CHLIB_SELECTOR_ARBITER_H

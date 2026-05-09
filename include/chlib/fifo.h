@@ -1,5 +1,4 @@
-#ifndef CHLIB_FIFO_H
-#define CHLIB_FIFO_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/logic.h"
@@ -465,5 +464,3 @@ lifo_stack(ch_bool push, ch_uint<DATA_WIDTH> din, ch_bool pop) {
 }
 
 } // namespace chlib
-
-#endif // CHLIB_FIFO_H

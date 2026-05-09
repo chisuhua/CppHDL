@@ -1,8 +1,7 @@
 // include/chlib/stream_arbiter.h
 // Additional stream arbiter strategies: locking and sequential
 
-#ifndef CHLIB_STREAM_ARBITER_H
-#define CHLIB_STREAM_ARBITER_H
+#pragma once
 
 #include "bundle/stream_bundle.h"
 #include "ch.hpp"
@@ -166,4 +165,3 @@ stream_arbiter_sequence(std::array<ch_stream<T>, N_INPUTS> input_streams) {
 
 }  // namespace chlib
 
-#endif  // CHLIB_STREAM_ARBITER_H

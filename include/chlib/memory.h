@@ -1,5 +1,4 @@
-#ifndef CHLIB_MEMORY_H
-#define CHLIB_MEMORY_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/logic.h"
@@ -349,5 +348,3 @@ ch_uint<DATA_WIDTH> ch_rom(ch_uint<ADDR_WIDTH> addr,
 }
 
 } // namespace chlib
-
-#endif // CHLIB_MEMORY_H

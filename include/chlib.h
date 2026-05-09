@@ -1,5 +1,4 @@
-#ifndef CH_CHLIB_H
-#define CH_CHLIB_H
+#pragma once
 
 // Main include file for the CH Hardware Library (chlib)
 // This file provides a single entry point to include all chlib components
@@ -53,5 +52,3 @@
 
 // Pipeline components
 #include "chlib/pipeline.h"
-
-#endif // CH_CHLIB_H
