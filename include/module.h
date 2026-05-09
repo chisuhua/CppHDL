@@ -1,6 +1,5 @@
 // include/module.h
-#ifndef CH_MODULE_H
-#define CH_MODULE_H
+#pragma once
 
 #include "component.h"
 #include "logger.h"
@@ -96,4 +95,3 @@ private:
     std::shared_ptr<T> child_component_sptr_; // 使用 shared_ptr 保持组件生命周期
 };
 } // namespace ch
-#endif // CH_MODULE_H

@@ -1,6 +1,5 @@
 // include/lnode/node_builder.h
-#ifndef CH_LNODE_NODE_BUILDER_H
-#define CH_LNODE_NODE_BUILDER_H
+#pragma once
 
 namespace ch { namespace core {
 
@@ -32,4 +31,3 @@ struct build_statistics {
 
 }} // namespace ch::core
 
-#endif // CH_LNODE_NODE_BUILDER_H

@@ -1,5 +1,4 @@
-#ifndef CH_LNODE_LITERAL_H
-#define CH_LNODE_LITERAL_H
+#pragma once
 
 #include <bit>
 #include <cstdint>
@@ -154,4 +153,3 @@ template <char... Chars>
 inline constexpr unsigned lit_dec_size_v =
     compute_bit_width(lit_dec_value_v<Chars...>);
 
-#endif // CH_LNODE_LITERAL_H

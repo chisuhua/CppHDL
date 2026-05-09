@@ -1,6 +1,5 @@
 // include/simulator.h
-#ifndef SIMULATOR_H
-#define SIMULATOR_H
+#pragma once
 
 #include "ast/instr_base.h"
 #include "core/bool.h" // 添加对 ch_bool 的支持
@@ -599,5 +598,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // SIMULATOR_H

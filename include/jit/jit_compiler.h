@@ -1,5 +1,4 @@
-#ifndef JIT_COMPILER_H
-#define JIT_COMPILER_H
+#pragma once
 
 #include "jit_ir.h"
 #include "ast/instr_base.h"
@@ -94,5 +93,3 @@ private:
 
 } // namespace jit
 } // namespace ch
-
-#endif

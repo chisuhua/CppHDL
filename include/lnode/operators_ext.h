@@ -1,5 +1,4 @@
-#ifndef CH_LNODE_OPERATORS_H
-#define CH_LNODE_OPERATORS_H
+#pragma once
 
 #include "lnodeimpl.h"
 #include <algorithm>
@@ -341,4 +340,3 @@ struct bits_update_op {
 };
 
 } // namespace ch::core
-#endif // CH_LNODE_OPERATORS_H

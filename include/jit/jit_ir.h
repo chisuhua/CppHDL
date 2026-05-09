@@ -1,5 +1,4 @@
-#ifndef JIT_IR_H
-#define JIT_IR_H
+#pragma once
 
 #include <cstdint>
 #include <vector>
@@ -122,5 +121,3 @@ inline JitInstr make_reg_next(VRegId dst, NodeId node_id, BitWidth bw) {
 
 } // namespace jit
 } // namespace ch
-
-#endif
