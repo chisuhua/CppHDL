@@ -153,8 +153,13 @@ private:
 
     // ID溢出保护
     static constexpr uint32_t MAX_NODE_ID = UINT32_MAX - 1000;
-    core::clockimpl *default_clock_ = nullptr; // 默认时钟
-    core::resetimpl *default_reset_ = nullptr; // 默认复位
+
+    // ⚠️ 单时钟域约束：CppHDL 当前仅支持单时钟域
+    // 所有寄存器共享 default_clock_ 和 default_reset_，不支持多时钟设计
+    // 不支持 CDC（Clock Domain Crossing），不支持多时钟 FIFO
+    // 参见: docs/adr/ADR-008-single-clock-domain-constraint.md
+    core::clockimpl *default_clock_ = nullptr; // 默认时钟（唯一）
+    core::resetimpl *default_reset_ = nullptr; // 默认复位（唯一）
 };
 
 } // namespace ch::core

@@ -5,7 +5,6 @@
 #include "ast/resetimpl.h"
 #include "lnodeimpl.h"
 #include "logger.h"
-#include "utils/destruction_manager.h"
 #include <cstdlib>
 #include <iostream>
 #include <stack>
@@ -16,31 +15,11 @@ namespace core {
 
 thread_local context *ctx_curr_ = nullptr;
 
-// Instead of a global variable, use a function-local static variable
-// This ensures proper initialization order
+// debug_context_lifetime 控制 Debug 日志输出
 bool &debug_context_lifetime() {
-    // Check if we're in static destruction phase
-    // if (ch::detail::in_static_destruction()) {
-    //     static bool dummy = false;
-    //     return dummy;
-    // }
-
     static bool value = true;
     return value;
 }
-
-// Register cleanup function to be called at exit
-namespace {
-struct cleanup_register {
-    cleanup_register() {
-        std::atexit([]() {
-            std::cout << "atexit: Calling pre_static_destruction_cleanup"
-                      << std::endl;
-            // ch::pre_static_destruction_cleanup();
-        });
-    }
-} cleanup_instance;
-} // namespace
 
 ctx_swap::ctx_swap(context *new_ctx) : old_ctx_(ctx_curr_) {
     CHDBG_FUNC();
@@ -65,16 +44,6 @@ context::context(const std::string &name, context *parent)
     : name_(name.empty() ? "unnamed" : name), parent_(parent) {
     CHDBG_FUNC();
 
-    std::cout << "Context constructor called for " << this
-              << " with name: " << name_ << std::endl;
-    std::cout.flush();
-
-    // Register with destruction manager
-    std::cout << "Registering context " << this << " with name: " << name_
-              << std::endl;
-    std::cout.flush();
-    // ch::detail::destruction_manager::instance().register_context(this);
-
     if (debug_context_lifetime()) {
         CHINFO("Created new context 0x%llx, name: %s", (unsigned long long)this,
                name_.c_str());
@@ -84,59 +53,33 @@ context::context(const std::string &name, context *parent)
 }
 
 context::~context() {
-    std::cout << "Unregistering context " << this << " with name: " << name_
-              << std::endl;
-    std::cout.flush();
-
-    // 标记正在析构，防止重复析构
+    // 标记正在析构，防止重复操作。必须在首次清理前设置
     destructing_ = true;
 
-    // Unregister from destruction manager
-    // ch::detail::destruction_manager::instance().unregister_context(this);
-
-    // Check if we're in static destruction phase
-    // if (ch::detail::in_static_destruction()) {
-    //     std::cout << "Context destructor called during static destruction"
-    //               << std::endl;
-    //     std::cout.flush();
-    //     // During static destruction, minimize operations to prevent
-    //     segfaults
-    //     // Just return immediately without doing any cleanup
-    //     return;
-    // }
-
-    std::cout << "Context destructor normal cleanup" << std::endl;
-    std::cout.flush();
-
-    // Immediately set ctx_curr_ to nullptr if it points to this context
-    // Do this first before any potential logging to avoid issues
+    // 立即断开 ctx_curr_ 链接（如果当前 context 是活跃的）
+    // 必须在任何日志或节点操作之前完成，防止后续误操作使用已析构的 context
     if (ctx_curr_ == this) {
         ctx_curr_ = nullptr;
     }
 
-    // 尝试清理节点引用以防止循环引用问题
+    // 清理节点引用并释放所有节点
     try {
-        // 设置析构标志，防止重入
-        destructing_ = true;
-        
-        // 先断开节点之间的引用关系
+        // 先断开节点之间的双向引用（srcs_ 和 users_），防止 unique_ptr reset 时
+        // 析构函数中访问相邻节点的野指针
         for (auto &node_ptr : node_storage_) {
             if (node_ptr) {
-                // 清理源引用以断开潜在的循环
                 node_ptr->clear_sources();
             }
         }
 
-        // 逐个释放节点，更好地控制销毁顺序
-        // 从后往前释放，避免前置节点先销毁导致后置节点访问无效内存
+        // 从后往前逐个释放节点，避免前置节点先销毁后，后置节点在析构时访问前置节点
         for (auto it = node_storage_.rbegin(); it != node_storage_.rend(); ++it) {
-            it->reset();  // 显式释放unique_ptr
+            it->reset();
         }
-        
-        // 清空容器
+
         node_storage_.clear();
     } catch (...) {
-        // 静默忽略析构期间的异常
+        // 析构函数不应抛异常，静默处理
     }
 }
 
