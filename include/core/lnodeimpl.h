@@ -193,8 +193,12 @@ public:
         return nullptr;
     }
 
-    // 新增：清理源节点引用，用于销毁时避免循环引用
-    void clear_sources() { srcs_.clear(); }
+    // 新增：清理所有引用关系，用于销毁时断开 DAG 链接
+    // 同时清理 srcs_（指向输入）和 users_（指向输出），确保双向引用完整断开
+    void clear_sources() {
+        srcs_.clear();
+        users_.clear();
+    }
     ch::Component *get_parent() { return parent_; }
 
 protected:
