@@ -95,8 +95,5 @@ public:
 private:
     std::shared_ptr<T> child_component_sptr_; // 使用 shared_ptr 保持组件生命周期
 };
-
-#define CH_MODULE(type, name, ...) ch::ch_module<type> name(#name, ##__VA_ARGS__)
-
 } // namespace ch
 #endif // CH_MODULE_H
