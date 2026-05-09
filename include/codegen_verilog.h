@@ -1,6 +1,5 @@
 // include/codegen_verilog.h
-#ifndef CODEGEN_VERILOG_H
-#define CODEGEN_VERILOG_H
+#pragma once
 
 #include "core/context.h"
 #include <algorithm>
@@ -86,5 +85,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // CODEGEN_VERILOG_H

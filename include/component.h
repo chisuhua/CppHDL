@@ -1,6 +1,5 @@
 // include/component.h
-#ifndef COMPONENT_H
-#define COMPONENT_H
+#pragma once
 
 #include "io.h"
 #include "logger.h"
@@ -101,4 +100,3 @@ private:
 };
 
 } // namespace ch
-#endif // COMPONENT_H

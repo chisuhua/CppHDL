@@ -1,6 +1,5 @@
 // include/codegen_dag.h
-#ifndef CODEGEN_DAG_H
-#define CODEGEN_DAG_H
+#pragma once
 
 #include "core/context.h"
 #include "core/types.h"
@@ -77,5 +76,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // CODEGEN_DAG_H

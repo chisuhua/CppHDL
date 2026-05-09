@@ -1,6 +1,5 @@
 // include/abstract/context_interface.h
-#ifndef CONTEXT_INTERFACE_H
-#define CONTEXT_INTERFACE_H
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -25,4 +24,3 @@ public:
 
 }} // namespace ch::abstract
 
-#endif // CONTEXT_INTERFACE_H
