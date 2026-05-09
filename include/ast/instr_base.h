@@ -1,6 +1,5 @@
 // include/sim/instr_base.h
-#ifndef INSTR_BASE_H
-#define INSTR_BASE_H
+#pragma once
 
 #include <cstdint>
 #include <unordered_map>
@@ -30,5 +29,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // INSTR_BASE_H

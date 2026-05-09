@@ -1,5 +1,4 @@
-#ifndef AST_NODES_H
-#define AST_NODES_H
+#pragma once
 
 #include "lnodeimpl.h"
 #include "types.h"
@@ -285,4 +284,3 @@ public:
 #include "clockimpl.h"
 #include "resetimpl.h"
 
-#endif // AST_NODES_H

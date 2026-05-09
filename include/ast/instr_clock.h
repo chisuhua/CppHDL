@@ -1,6 +1,5 @@
 // include/sim/instr_clock.h
-#ifndef INSTR_CLOCK_H
-#define INSTR_CLOCK_H
+#pragma once
 
 #include "core/types.h"
 #include "instr_base.h"
@@ -31,5 +30,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // INSTR_CLOCK_H

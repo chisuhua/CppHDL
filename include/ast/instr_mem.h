@@ -1,6 +1,5 @@
 // include/sim/instr_mem.h
-#ifndef INSTR_MEM_H
-#define INSTR_MEM_H
+#pragma once
 
 #include "instr_base.h"
 #include "types.h"
@@ -171,5 +170,3 @@ namespace ch
     };
 
 } // namespace ch
-
-#endif // INSTR_MEM_H

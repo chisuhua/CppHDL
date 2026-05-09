@@ -1,6 +1,5 @@
 // include/sim/instr_reg.h
-#ifndef INSTR_REG_H
-#define INSTR_REG_H
+#pragma once
 
 #include "instr_base.h"
 #include "core/types.h"
@@ -35,5 +34,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // INSTR_REG_H

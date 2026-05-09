@@ -1,6 +1,5 @@
 // include/sim/instr_proxy.h
-#ifndef INSTR_PROXY_H
-#define INSTR_PROXY_H
+#pragma once
 
 #include "instr_base.h"
 #include <cstdint>
@@ -22,5 +21,3 @@ namespace ch
     };
 
 } // namespace ch
-
-#endif // INSTR_PROXY_H

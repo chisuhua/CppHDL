@@ -1,6 +1,5 @@
 // include/sim/instr_op.h - 扩展版本
-#ifndef INSTR_OP_H
-#define INSTR_OP_H
+#pragma once
 
 #include "instr_base.h"
 #include "logger.h"
@@ -639,5 +638,3 @@ using instr_op_assign = instr_op_unary<op::Assign>; // 添加 assign 操作的�
 using instr_op_popcount = instr_op_unary<op::PopCount>;
 
 } // namespace ch
-
-#endif // INSTR_OP_H

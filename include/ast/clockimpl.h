@@ -1,5 +1,4 @@
-#ifndef CH_CORE_CLOCKIMPL_H
-#define CH_CORE_CLOCKIMPL_H
+#pragma once
 
 #include "ast/instr_base.h"
 #include "core/lnodeimpl.h"
@@ -67,5 +66,3 @@ public:
 };
 
 } // namespace ch::core
-
-#endif // CH_CORE_CLOCKIMPL_H

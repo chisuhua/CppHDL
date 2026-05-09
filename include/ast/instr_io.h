@@ -1,6 +1,5 @@
 // include/sim/instr_io.h
-#ifndef INSTR_IO_H
-#define INSTR_IO_H
+#pragma once
 
 #include "instr_base.h"
 #include <cstdint>
@@ -34,5 +33,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // INSTR_IO_H

@@ -1,6 +1,5 @@
 // include/core/mem_port_impl.h
-#ifndef CH_CORE_MEM_PORT_IMPL_H
-#define CH_CORE_MEM_PORT_IMPL_H
+#pragma once
 
 #include "ast/memimpl.h"
 #include "core/context.h" // 添加context包含
@@ -150,5 +149,3 @@ public:
 };
 
 } // namespace ch::core
-
-#endif // CH_CORE_MEM_PORT_IMPL_H

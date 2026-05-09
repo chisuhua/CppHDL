@@ -1,6 +1,5 @@
 // include/core/memimpl.h
-#ifndef CH_CORE_MEMIMPL_H
-#define CH_CORE_MEMIMPL_H
+#pragma once
 
 #include "core/lnodeimpl.h"
 #include "core/types.h"
@@ -102,5 +101,3 @@ public:
 };
 
 } // namespace ch::core
-
-#endif // CH_CORE_MEMIMPL_H

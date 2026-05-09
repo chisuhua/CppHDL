@@ -1,6 +1,5 @@
 // include/instr/mux.h
-#ifndef INSTR_MUX_H
-#define INSTR_MUX_H
+#pragma once
 
 #include "instr_base.h"
 #include "core/types.h"
@@ -38,5 +37,3 @@ private:
 };
 
 } // namespace ch
-
-#endif // INSTR_MUX_H
