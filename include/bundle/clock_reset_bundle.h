@@ -1,6 +1,5 @@
 // include/io/clock_reset_bundle.h
-#ifndef CH_IO_CLOCK_RESET_BUNDLE_H
-#define CH_IO_CLOCK_RESET_BUNDLE_H
+#pragma once
 
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
@@ -32,5 +31,3 @@ struct clock_reset_bundle : public bundle_base<clock_reset_bundle> {
 };
 
 } // namespace ch::core
-
-#endif // CH_IO_CLOCK_RESET_BUNDLE_H

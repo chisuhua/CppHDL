@@ -8,8 +8,7 @@
 // - 方案 3 的编译期反射支持
 //
 
-#ifndef CH_BUNDLE_H
-#define CH_BUNDLE_H
+#pragma once
 
 // 基础设施
 #include "core/bundle/bundle_meta.h"          // 字段元数据和宏
@@ -27,4 +26,3 @@
 #include "bundle/flow_bundle.h"                      // Flow Bundle
 #include "bundle/common_bundles.h"                   // 常见 Bundle 类型
 
-#endif // CH_BUNDLE_H

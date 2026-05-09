@@ -1,6 +1,5 @@
 // include/bundle/axi_protocol.h
-#ifndef CH_BUNDLE_AXI_PROTOCOL_H
-#define CH_BUNDLE_AXI_PROTOCOL_H
+#pragma once
 
 #include "core/bundle/bundle_traits.h"
 #include "core/bundle/bundle_protocol.h"
@@ -111,5 +110,3 @@ void validate_axi_lite_read_protocol(const BundleT &bundle) {
 }
 
 } // namespace ch::core
-
-#endif // CH_CORE_AXI_PROTOCOL_H

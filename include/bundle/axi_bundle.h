@@ -1,6 +1,5 @@
 // include/io/axi_bundle.h
-#ifndef CH_IO_AXI_BUNDLE_H
-#define CH_IO_AXI_BUNDLE_H
+#pragma once
 
 #include "ch.hpp"
 #include "core/bundle/bundle_base.h"
@@ -142,5 +141,3 @@ struct axi_write_channel
 };
 
 } // namespace ch
-
-#endif // CH_IO_AXI_BUNDLE_H

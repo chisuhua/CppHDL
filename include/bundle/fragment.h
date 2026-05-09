@@ -1,5 +1,4 @@
-#ifndef CHLIB_FRAGMENT_H
-#define CHLIB_FRAGMENT_H
+#pragma once
 
 #include "ch.hpp"
 #include "flow_bundle.h"
@@ -94,5 +93,3 @@ template <typename T> T get_fragment_data(ch_flow<ch_fragment<T>> flow) {
 }
 
 } // namespace ch
-
-#endif // CHLIB_FRAGMENT_H

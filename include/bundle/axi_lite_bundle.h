@@ -1,6 +1,5 @@
 // include/io/axi_lite_bundle.h
-#ifndef CH_IO_AXI_LITE_BUNDLE_H
-#define CH_IO_AXI_LITE_BUNDLE_H
+#pragma once
 
 #include "ch.hpp"
 #include "core/bundle/bundle_base.h"
@@ -224,5 +223,3 @@ struct axi_lite_bundle
 };
 
 } // namespace ch
-
-#endif // CH_IO_AXI_LITE_BUNDLE_H
