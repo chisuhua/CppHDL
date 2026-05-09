@@ -81,7 +81,7 @@ public:
     
     void describe() override {
         // 实例化 Counter 模块
-        CH_MODULE(Counter<8>, counter1);
+        ch::ch_module<Counter<8>> counter1{"counter1"};
         
         // 连接 IO
         io().value <<= counter1.io().value;

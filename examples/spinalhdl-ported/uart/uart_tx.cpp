@@ -166,7 +166,7 @@ public:
     }
     
     void describe() override {
-        CH_MODULE(UartTx, uart_tx_inst);
+        ch::ch_module<UartTx> uart_tx_inst{"uart_tx_inst"};
         
         uart_tx_inst.io().frame_start <<= io().frame_start;
         uart_tx_inst.io().data <<= io().data;

@@ -60,7 +60,7 @@ public:
 
     void describe() override {
         // 实例化模块式 onehot 解码器
-        CH_MODULE(onehot_dec_module<N>, decoder);
+        ch::ch_module<onehot_dec_module<N>> decoder{"decoder"};
 
         // 连接输入输出 - 使用隐式转换
         decoder.io().in <<= io().in;   // 隐式转换
@@ -109,7 +109,7 @@ public:
 
     void describe() override {
         // 实例化模块式 onehot 编码器
-        CH_MODULE(onehot_enc_module<N>, encoder);
+        ch::ch_module<onehot_enc_module<N>> encoder{"encoder"};
 
         // 连接输入输出 - 使用隐式转换
         encoder.io().in <<= io().in;   // 隐式转换

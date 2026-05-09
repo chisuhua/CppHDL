@@ -50,7 +50,7 @@ public:
     void create_ports() override { new (io_storage_) io_type; }
 
     void describe() override {
-        CH_MODULE(Counter<4>, counter1);
+        ch::ch_module<Counter<4>> counter1{"counter1"};
         io().out <<= counter1.io().out;
     }
 };
