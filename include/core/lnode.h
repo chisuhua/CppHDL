@@ -1,6 +1,5 @@
 // include/core/lnode.h
-#ifndef CH_CORE_LNODE_H
-#define CH_CORE_LNODE_H
+#pragma once
 
 #include "core/traits.h"
 #include "lnodeimpl.h"
@@ -63,4 +62,3 @@ template <typename T> class ch_reg;
 
 } // namespace ch::core
 
-#endif // CH_CORE_LNODE_H

@@ -1,5 +1,4 @@
-#ifndef CH_CORE_BUNDLE_OPERATIONS_H
-#define CH_CORE_BUNDLE_OPERATIONS_H
+#pragma once
 
 #include "bundle_base.h"
 #include "bundle_meta.h"
@@ -95,4 +94,3 @@ auto bundle_cat(Bundle1 b1, Bundle2 b2) {
 
 } // namespace ch::core
 
-#endif // CH_CORE_BUNDLE_OPERATIONS_H

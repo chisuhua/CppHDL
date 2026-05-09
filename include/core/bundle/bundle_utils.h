@@ -1,6 +1,5 @@
 // include/core/bundle_utils.h
-#ifndef CH_CORE_BUNDLE_UTILS_H
-#define CH_CORE_BUNDLE_UTILS_H
+#pragma once
 
 #include "bundle_serialization.h"  // Include the main serialization header
 
@@ -59,5 +58,3 @@ namespace detail {
 }
 
 } // namespace ch::core
-
-#endif // CH_CORE_BUNDLE_UTILS_H

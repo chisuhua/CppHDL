@@ -1,6 +1,5 @@
 // include/core/bundle_protocol.h
-#ifndef CH_CORE_BUNDLE_PROTOCOL_H
-#define CH_CORE_BUNDLE_PROTOCOL_H
+#pragma once
 
 #include "bundle_meta.h"
 #include <string_view>
@@ -163,5 +162,3 @@ template <typename BundleType, auto FieldName>
 using get_field_type_t = typename get_field_type<BundleType, FieldName>::type;
 
 } // namespace ch::core
-
-#endif // CH_CORE_BUNDLE_PROTOCOL_H

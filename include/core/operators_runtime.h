@@ -1,5 +1,4 @@
-#ifndef CH_CORE_OPERATORS_RUNTIME_H
-#define CH_CORE_OPERATORS_RUNTIME_H
+#pragma once
 
 #include "operators.h"
 #include "uint.h"
@@ -403,5 +402,3 @@ ch_bool bits(const ch_in<ch_uint<N>> &input, unsigned msb, unsigned lsb) {
 }
 
 } // namespace ch::core
-
-#endif // CH_CORE_OPERATORS_RUNTIME_H

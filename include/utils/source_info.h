@@ -1,5 +1,4 @@
-#ifndef UTILS_SOURCE_INFO_H
-#define UTILS_SOURCE_INFO_H
+#pragma once
 
 #include <ostream>
 #include <source_location> // 引入C++20 source_location
@@ -140,5 +139,3 @@ template <typename T> struct srcinfo_arg {
 };
 
 } // namespace ch::utils
-
-#endif

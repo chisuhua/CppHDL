@@ -1,5 +1,4 @@
-#ifndef FORMAT_UTILS_H
-#define FORMAT_UTILS_H
+#pragma once
 #include <bitset>
 #include <cstdint>
 #include <string>
@@ -11,4 +10,3 @@ template <typename T> std::string to_binary_string(T value, size_t width) {
     return result.substr(64 - width, width);
 }
 
-#endif

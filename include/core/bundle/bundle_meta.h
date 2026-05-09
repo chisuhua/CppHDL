@@ -1,5 +1,4 @@
-#ifndef CH_CORE_BUNDLE_META_H
-#define CH_CORE_BUNDLE_META_H
+#pragma once
 
 #include <string_view>
 
@@ -70,5 +69,3 @@ template <typename BundleT, typename FieldType> struct bundle_field {
             CH_BUNDLE_FIELDS_T_5, CH_BUNDLE_FIELDS_T_4, CH_BUNDLE_FIELDS_T_3,  \
             CH_BUNDLE_FIELDS_T_2, CH_BUNDLE_FIELDS_T_1, )(__VA_ARGS__));       \
     }
-
-#endif // CH_CORE_BUNDLE_META_H

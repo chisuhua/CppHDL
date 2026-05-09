@@ -1,5 +1,4 @@
-#ifndef CH_CORE_BUNDLE_BASE_H
-#define CH_CORE_BUNDLE_BASE_H
+#pragma once
 
 #include "bundle_traits.h"
 #include "core/bundle/bundle_layout.h"
@@ -334,5 +333,3 @@ template <typename BundleT> void connect(BundleT &src, BundleT &dst) {
 }
 
 } // namespace ch::core
-
-#endif // CH_CORE_BUNDLE_BASE_H

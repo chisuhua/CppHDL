@@ -1,5 +1,4 @@
-#ifndef IO_H
-#define IO_H
+#pragma once
 
 #include "ast_nodes.h"
 #include "core/context.h"
@@ -856,4 +855,3 @@ void operator<<=(const port<T, input_direction> &receiver, const U &driver) {
 
 } // namespace ch::core
 
-#endif // IO_H

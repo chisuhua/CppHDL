@@ -1,6 +1,5 @@
 // include/utils/destruction_manager.h
-#ifndef DESTRUCTION_MANAGER_H
-#define DESTRUCTION_MANAGER_H
+#pragma once
 
 #include "logger.h"
 #include <atomic>
@@ -161,5 +160,3 @@ inline bool in_static_destruction() {
 }
 
 } // namespace ch
-
-#endif // DESTRUCTION_MANAGER_H

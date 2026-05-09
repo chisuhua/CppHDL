@@ -1,5 +1,4 @@
-#ifndef CH_CORE_CONTEXT_H
-#define CH_CORE_CONTEXT_H
+#pragma once
 
 #include <cstdint>
 #include <memory>
@@ -165,5 +164,3 @@ private:
 } // namespace ch::core
 
 #include "../lnode/context.tpp"
-
-#endif // CH_CORE_CONTEXT_H

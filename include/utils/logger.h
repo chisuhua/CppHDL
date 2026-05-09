@@ -1,6 +1,5 @@
 // include/logger.h
-#ifndef LOGGER_H
-#define LOGGER_H
+#pragma once
 
 #include <cassert>
 #include <cstdint>
@@ -413,5 +412,3 @@ template <auto V> consteval void constexpr_print() {
 }
 
 } // namespace ch
-
-#endif // LOGGER_H

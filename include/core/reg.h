@@ -1,5 +1,4 @@
-#ifndef CH_CORE_REG_H
-#define CH_CORE_REG_H
+#pragma once
 
 #include "core/lnode.h"
 #include "core/lnodeimpl.h"
@@ -83,4 +82,3 @@ template <typename T> struct ch_width_impl<const volatile ch_reg<T>, void> {
 
 #include "../lnode/reg.tpp"
 
-#endif // CH_CORE_REG_H

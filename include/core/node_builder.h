@@ -1,6 +1,5 @@
 // include/core/node_builder.h
-#ifndef CH_CORE_NODE_BUILDER_H
-#define CH_CORE_NODE_BUILDER_H
+#pragma once
 
 #include "core/context.h"
 #include "core/literal.h"
@@ -454,5 +453,3 @@ inline node_builder::node_builder()
 
 // 在文件末尾包含模板实现
 #include "../lnode/node_builder.tpp"
-
-#endif // CH_CORE_NODE_BUILDER_H

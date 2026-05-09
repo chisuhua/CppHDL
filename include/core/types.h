@@ -1,6 +1,5 @@
 // include/core/types.h
-#ifndef CORE_TYPES_H
-#define CORE_TYPES_H
+#pragma once
 
 #include <cstdint>
 #include <iostream>
@@ -216,4 +215,3 @@ void print_aligned(const sdata_type &sdata, const std::string &name, int width,
 // Include extended functionality
 // #include "../utils/types_ext.h"
 
-#endif // CORE_TYPES_H

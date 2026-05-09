@@ -1,6 +1,5 @@
 // include/core/operators.h
-#ifndef CH_CORE_OPERATORS_H
-#define CH_CORE_OPERATORS_H
+#pragma once
 
 #include "core/bool.h"
 #include "core/context.h"
@@ -879,5 +878,3 @@ template <typename T> auto to_bits_wrapper(const T &value) {
 static_assert(HardwareType<ch_bool>, "ch_bool must be HardwareType");
 
 } // namespace ch::core
-
-#endif // CH_CORE_OPERATORS_H

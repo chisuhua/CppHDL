@@ -1,5 +1,4 @@
-#ifndef EXCEPTIONS_H
-#define EXCEPTIONS_H
+#pragma once
 
 #include <exception>
 #include <source_location>
@@ -44,4 +43,3 @@ public:
 } // namespace core
 } // namespace ch
 
-#endif // EXCEPTIONS_H

@@ -1,5 +1,4 @@
-#ifndef CH_CORE_BUNDLE_SERIALIZATION_H
-#define CH_CORE_BUNDLE_SERIALIZATION_H
+#pragma once
 
 #include "bundle_layout.h" // 添加 bundle_layout 支持
 #include "bundle_meta.h"
@@ -121,4 +120,3 @@ BundleT deserialize(const ch_uint<W> &src_bits) {
 
 } // namespace ch::core
 
-#endif // CH_CORE_BUNDLE_SERIALIZATION_H

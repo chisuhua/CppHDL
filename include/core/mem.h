@@ -1,5 +1,4 @@
-#ifndef CH_CORE_CH_MEM_H
-#define CH_CORE_CH_MEM_H
+#pragma once
 
 #include "ast/ast_nodes.h"
 #include "ast/mem_port_impl.h"
@@ -305,5 +304,3 @@ struct ch_width_impl<ReadPortType,
         ch_width_v<typename ReadPortType::mem_value_type>;
 };
 } // namespace ch::core
-
-#endif // CPPHDL_CORE_MEM_H_

@@ -1,5 +1,4 @@
-#ifndef CH_CORE_BOOL_H
-#define CH_CORE_BOOL_H
+#pragma once
 
 #include "core/direction.h"
 #include "core/lnode.h" // 添加 lnode 定义
@@ -101,5 +100,3 @@ template <> struct ch_width_impl<const ch_bool, void> {
 } // namespace ch::core
 
 #include "../lnode/bool.tpp"
-
-#endif // CH_CORE_BOOL_H

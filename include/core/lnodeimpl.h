@@ -1,6 +1,5 @@
 // include/lnodeimpl.h
-#ifndef LNODEIMPL_H
-#define LNODEIMPL_H
+#pragma once
 
 #include <algorithm> // Add this for std::remove
 #include <cstdint>
@@ -215,4 +214,3 @@ protected:
 
 } // namespace ch::core
 
-#endif // LNODEIMPL_H

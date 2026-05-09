@@ -51,7 +51,7 @@ public:
 
     void describe() override {
         // 实例化模块式 onehot 解码器
-        CH_MODULE(onehot_dec_module<N>, decoder);
+        ch::ch_module<onehot_dec_module<N>> decoder{"decoder"};
 
         // 连接输入输出 - 使用隐式转换
         decoder.io().in <<= io().in;   // 隐式转换
@@ -100,7 +100,7 @@ public:
 
     void describe() override {
         // 实例化模块式 onehot 编码器
-        CH_MODULE(onehot_enc_module<N>, encoder);
+        ch::ch_module<onehot_enc_module<N>> encoder{"encoder"};
 
         // 连接输入输出 - 使用隐式转换
         encoder.io().in <<= io().in;   // 隐式转换
@@ -266,7 +266,7 @@ TEST_CASE("OneHotDecoder: Verify decode values",
 
             void describe() override {
                 // 使用模块式 onehot 解码器
-                CH_MODULE(onehot_dec_module<4>, decoder);
+                ch::ch_module<onehot_dec_module<4>> decoder{"decoder"};
                 decoder.io().in <<= io().in;
                 io().out <<= decoder.io().out;
 
@@ -345,7 +345,7 @@ TEST_CASE("OneHotEncoder: Verify encode values",
 
             void describe() override {
                 // 使用模块式 onehot 编码器
-                CH_MODULE(onehot_enc_module<4>, encoder);
+                ch::ch_module<onehot_enc_module<4>> encoder{"encoder"};
                 encoder.io().in <<= io().in;
                 io().out <<= encoder.io().out;
             }
@@ -421,8 +421,8 @@ TEST_CASE("OneHot: Encoder-Decoder combination test",
 
             void describe() override {
                 // 使用模块式 onehot 编码器和解码器
-                CH_MODULE(onehot_enc_module<4>, encoder);
-                CH_MODULE(onehot_dec_module<4>, decoder);
+                ch::ch_module<onehot_enc_module<4>> encoder{"encoder"};
+                ch::ch_module<onehot_dec_module<4>> decoder{"decoder"};
 
                 encoder.io().in <<= io().in;
                 io().out <<= decoder.io().out;
@@ -459,7 +459,7 @@ TEST_CASE("OneHot: Encoder-Decoder combination test",
             void describe() override {
                 // 使用函数式编码器和模块式解码器
                 onehot_enc<4> encoder;
-                CH_MODULE(onehot_dec_module<4>, decoder);
+                ch::ch_module<onehot_dec_module<4>> decoder{"decoder"};
 
                 ch_uint<4> encoded = encoder(io().in);
                 decoder.io().in <<=

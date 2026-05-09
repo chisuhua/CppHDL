@@ -1,5 +1,4 @@
-#ifndef CHLIB_FORWARDING_H
-#define CHLIB_FORWARDING_H
+#pragma once
 
 #include "ch.hpp"
 #include "chlib/switch.h"
@@ -346,4 +345,3 @@ forward_select(ch_uint<2> forward_a, ch_uint<2> forward_b,
 
 } // namespace chlib
 
-#endif // CHLIB_FORWARDING_H

@@ -1,5 +1,4 @@
-#ifndef CH_CORE_UINT_H
-#define CH_CORE_UINT_H
+#pragma once
 
 #include "core/literal.h"
 #include "core/operators.h" // 添加 operators.h 包含以使用 zext 等函数
@@ -182,5 +181,3 @@ using ch_uint64 = ch_uint<64>;
 } // namespace ch::core
 
 #include "../lnode/uint.tpp"
-
-#endif // CH_CORE_UINT_H

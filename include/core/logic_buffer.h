@@ -1,5 +1,4 @@
-#ifndef CH_CORE_LOGIC_BUFFER_H
-#define CH_CORE_LOGIC_BUFFER_H
+#pragma once
 
 namespace ch::core {
 
@@ -73,5 +72,3 @@ template <typename T> struct logic_buffer {
 } // namespace ch::core
 
 #include "../lnode/logic_buffer.tpp" // 包含模板实现
-
-#endif // CH_CORE_LOGIC_BUFFER_H

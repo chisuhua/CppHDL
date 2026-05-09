@@ -1,6 +1,5 @@
 // include/tlm/tlm_bundle_converter.h
-#ifndef CH_TLM_BUNDLE_CONVERTER_H
-#define CH_TLM_BUNDLE_CONVERTER_H
+#pragma once
 
 // 注意：这个文件需要SystemC和TLM头文件
 // 在实际项目中应该有条件编译
@@ -125,4 +124,3 @@ public:
 
 #endif // USE_SYSTEMC_TLM
 
-#endif // CH_TLM_BUNDLE_CONVERTER_H

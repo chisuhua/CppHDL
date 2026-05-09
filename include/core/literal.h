@@ -1,5 +1,4 @@
-#ifndef CH_CORE_LITERAL_H
-#define CH_CORE_LITERAL_H
+#pragma once
 #include "core/traits.h"
 #include <cstdint>
 #include <type_traits>
@@ -200,5 +199,3 @@ struct ch_width_impl<ch_literal_runtime> {
 
 // 引入字面量操作符到全局命名空间
 using namespace ch::core::literals;
-
-#endif // CH_CORE_LITERAL_H

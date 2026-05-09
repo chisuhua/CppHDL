@@ -78,7 +78,7 @@ public:
 
     void describe() override {
         // 实例化OneHotDecoder模块
-        CH_MODULE(onehot_decoder<N>, decoder);
+            ch::ch_module<onehot_decoder<N>> decoder{"decoder"};
 
         // 连接输入
         decoder.io().in <<= io().in;

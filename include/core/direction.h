@@ -1,6 +1,5 @@
 // include/core/direction.h
-#ifndef DIRECTION_H
-#define DIRECTION_H
+#pragma once
 
 #include <type_traits>
 
@@ -22,4 +21,3 @@ constexpr bool is_internal_v = std::is_same_v<Dir, internal_direction>;
 
 }} // namespace ch::core
 
-#endif // DIRECTION_H

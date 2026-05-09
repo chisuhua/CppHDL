@@ -1,5 +1,4 @@
-#ifndef CH_CORE_BUNDLE_LAYOUT_H
-#define CH_CORE_BUNDLE_LAYOUT_H
+#pragma once
 
 #include "bundle_traits.h"
 #include <tuple>
@@ -92,4 +91,3 @@ constexpr unsigned find_field_offset(const LayoutTuple &layout,
 
 } // namespace ch::core
 
-#endif // CH_CORE_BUNDLE_LAYOUT_H

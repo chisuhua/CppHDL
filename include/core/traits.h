@@ -1,5 +1,4 @@
-#ifndef TRAITS_H
-#define TRAITS_H
+#pragma once
 
 #include "logger.h"
 #include <bit>
@@ -55,4 +54,3 @@ constexpr bool is_power_of_two(uint64_t value) {
 
 } // namespace ch::core
 
-#endif // TRAITS_H

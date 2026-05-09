@@ -39,7 +39,7 @@ TEST_CASE("CH_MODULE - Basic Instantiation", "[module][basic]") {
 
         void describe() override {
             // 在父组件中创建子模块
-            CH_MODULE(SimpleModule<4>, child_module);
+            ch::ch_module<SimpleModule<4>> child_module{"child_module"};
         }
     };
 
@@ -60,7 +60,7 @@ TEST_CASE("CH_MODULE - Code Generation", "[module][codegen]") {
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            CH_MODULE(SimpleModule<4>, mod);
+            ch::ch_module<SimpleModule<4>> mod{"mod"};
 
             // 检查子模块是否创建成功
             REQUIRE(mod.io().in_port.impl() != nullptr);
@@ -90,7 +90,7 @@ TEST_CASE("CH_MODULE - Simulation Value Transfer", "[module][simulation]") {
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            CH_MODULE(SimpleModule<4>, mod);
+            ch::ch_module<SimpleModule<4>> mod{"mod"};
 
             // 连接端口: 顶层输入 -> 子模块输入，子模块输出 -> 顶层输出
             mod.io().in_port <<= io().in_data;
@@ -124,8 +124,8 @@ TEST_CASE("CH_MODULE - Connection Between Child Modules",
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            CH_MODULE(SimpleModule<4>, mod1);
-            CH_MODULE(SimpleModule<4>, mod2);
+            ch::ch_module<SimpleModule<4>> mod1{"mod1"};
+            ch::ch_module<SimpleModule<4>> mod2{"mod2"};
 
             // 修复循环连接：正确的级联应该是 顶层输入 -> mod1 -> mod2 ->
             // 顶层输出
@@ -180,8 +180,8 @@ TEST_CASE("CH_MODULE - Connection Between Different IO Directions",
         void create_ports() override { new (this->io_storage_) io_type; }
 
         void describe() override {
-            CH_MODULE(DataProcessor, proc1);
-            CH_MODULE(DataProcessor, proc2);
+            ch::ch_module<DataProcessor> proc1{"proc1"};
+            ch::ch_module<DataProcessor> proc2{"proc2"};
 
             // 连接端口: 顶层输入 -> proc1输入 -> proc2输入 -> 顶层输出
             proc1.io().input <<= io().in_data;
