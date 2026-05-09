@@ -178,32 +178,38 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
 }
 
 /**
- * 异步 FIFO - 异步读写操作
- * 
- * ⚠️ 限制说明:
- * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
- * - 需要额外的格雷码计数器和多级同步器逻辑
- * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
- * 
- * 未来实现计划:
- * 1. 添加格雷码计数器用于跨时钟域指针传输
- * 2. 实现两级/多级同步器用于控制信号
- * 3. 添加空满标志生成逻辑（基于格雷码比较）
- * 4. 验证建立/保持时间约束
- * 
+ * 异步 FIFO — 未实现（因 CppHDL 不支持 CDC）
+ *
+ * ❌ CppHDL 当前不支持多时钟域，因此不提供真正的异步 FIFO。
+ *
+ * 原因: 没有 ClockDomain 对象、同步器原语、格雷码计数器基础设施。
+ * 如果提供"假异步 FIFO"，会在跨时钟域时产生不可调试的静默数据损坏。
+ *
+ * 参见: docs/adr/ADR-008-single-clock-domain-constraint.md
+ *
  * 临时替代方案:
- * - 使用同步 FIFO + 时钟分配合并
+ * - 使用同步 FIFO（sync_fifo / fwft_fifo）+ 单时钟域设计
  * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
- * - 使用 SpinalHDL 的 AsyncFifo 组件
+ * - 使用 SpinalHDL 的 StreamFifoCC 组件
+ *
+ * 恢复条件（CDC 基础设施就绪后）:
+ * 1. ClockDomain 对象实现
+ * 2. 同步器原语（BufferCC）实现
+ * 3. 格雷码计数器实现
+ * 4. 基于 SpinalHDL StreamFifoCC 模式重新实现 async_fifo
  */
 
 /**
- * 异步 FIFO - 异步读写操作
- * 
- * ⚠️ 限制说明:
- * - 当前版本不支持真正的双时钟域 CDC（Clock Domain Crossing）
- * - 需要额外的格雷码计数器和多级同步器逻辑
- * - 建议使用外部异步 FIFO IP 或 SpinalHDL 实现
+ * 异步 FIFO — 未实现（因 CppHDL 不支持 CDC）
+ *
+ * ❌ CppHDL 当前不支持多时钟域，因此不提供真正的异步 FIFO。
+ *
+ * 参见: docs/adr/ADR-008-single-clock-domain-constraint.md
+ *
+ * 临时替代方案:
+ * - 使用同步 FIFO（sync_fifo / fwft_fifo）+ 单时钟域设计
+ * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
+ * - 使用 SpinalHDL 的 StreamFifoCC 组件
  * 
  * 未来实现计划:
  * 1. 添加格雷码计数器用于跨时钟域指针传输
