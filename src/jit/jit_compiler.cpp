@@ -287,7 +287,10 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             auto ch_op = op_node->op();
 
             // 检查操作是否 JIT 原生支持
+            // 使用 -Wswitch-enum 确保所有 ch_op 值被显式处理
             JitOp jit_op;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic error "-Wswitch-enum"
             switch (ch_op) {
             case ch::core::ch_op::add: jit_op = JitOp::ADD; break;
             case ch::core::ch_op::sub: jit_op = JitOp::SUB; break;
@@ -308,11 +311,27 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::bit_sel: jit_op = JitOp::BIT_SELECT; break;
             case ch::core::ch_op::bits_extract: jit_op = JitOp::BITS_EXTRACT; break;
             case ch::core::ch_op::concat: jit_op = JitOp::CONCAT; break;
-            default: jit_op = JitOp::CALL_EXTERNAL; break;
+            // 显式列出的 JIT 未支持操作（call_external 回退）
+            case ch::core::ch_op::div:
+            case ch::core::ch_op::sshr:
+            case ch::core::ch_op::neg:
+            case ch::core::ch_op::bits_update:
+            case ch::core::ch_op::sext:
+            case ch::core::ch_op::zext:
+            case ch::core::ch_op::mux:
+            case ch::core::ch_op::and_reduce:
+            case ch::core::ch_op::or_reduce:
+            case ch::core::ch_op::xor_reduce:
+            case ch::core::ch_op::rotate_l:
+            case ch::core::ch_op::rotate_r:
+            case ch::core::ch_op::popcount:
+            case ch::core::ch_op::assign:
+                jit_op = JitOp::CALL_EXTERNAL;
+                break;
             }
+#pragma GCC diagnostic pop
 
             if (jit_op == JitOp::CALL_EXTERNAL) {
-                // 未支持的操作：标记为外部节点，由解释器回退处理
                 external_node_ids_.insert(node_id);
                 continue;
             }

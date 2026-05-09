@@ -31,6 +31,8 @@
 | #21 | LLVM 版本硬编码修复 | **ADR-027** | 2026-05-08 | LLVM-18 → LLVM-${LLVM_VERSION_MAJOR}，QUIET → REQUIRED，WARNING → FATAL_ERROR |
 | #22 | 已禁用测试处理 | **ADR-028** | 2026-05-08 | 保留 TODO 注释，记录禁用测试清单 |
 | #23 | 命名约定一致化 | **ADR-029** | 2026-05-08 | 接受 3 种系统性质模式，公开 API 必须 CamelCase，AST 内部/工具类允许 snake_case |
+| #24 | Include 防护风格统一 | **ADR-030** | 2026-05-08 | 84 个 #ifndef → #pragma once 批量转换完成 |
+| #25 | JIT ch_op ↔ JitOp 同步 | **ADR-031** | 2026-05-08 | generate_ir() switch 加 -Wswitch-enum pragma + 显式 14 external op 列表 |
 
 ---
 
@@ -80,8 +82,8 @@
 | **21** | **LLVM-18 硬编码** — CMake 中版本固定，`find_package(LLVM QUIET)` 静默降级 | `CMakeLists.txt:58-74` | **ADR-027** → 已修复 | 0.5 session ✅ |
 | **22** | **已禁用测试处理** — 5+ 测试被注释掉/排除，无修复时间线 | `tests/CMakeLists.txt` | **ADR-028** → 保留 TODO | 0.5 session ✅ |
 | **23** | **命名约定不一致** — ~20 个类以小写开头，与 AGENTS.md 的 CamelCase 冲突 | 多个文件 | **ADR-029** → 接受现状并文档化例外 | 0.5 session ✅ |
-| **24** | **Include 防护风格不统一** — `#pragma once` vs `#ifndef` 混用 | 遍及 `include/` | — | 0.5 session |
-| **25** | **JIT ch_op ↔ JitOp 三文件同步** — 需编译时验证防止静默数据损坏 | `lnodeimpl.h`, `jit_ir.h`, `jit_compiler.cpp` | ADR-003 | 0.5 session |
+| **24** | **Include 防护风格不统一** — `#pragma once` vs `#ifndef` 混用 | 遍及 `include/` | **ADR-030** → 已统一为 #pragma once | 0.5 session ✅ |
+| **25** | **JIT ch_op ↔ JitOp 三文件同步** — 需编译时验证防止静默数据损坏 | `lnodeimpl.h`, `jit_ir.h`, `jit_compiler.cpp` | **ADR-031** → -Wswitch-enum pragma + 显式 external 列表 | 0.5 session ✅ |
 | **26** | **`context_interface` 抽象类** — 4 方法纯虚接口无其他实现，属死代码或未来抽象 | `abstract/context_interface.h` | — | 0.5 session |
 | **27** | **`using namespace ch::core` 污染** — 在 `ch` 命名空间内部使用，破坏隔离 | `if_stmt.h:13` 等 | — | 0.5 session |
 | **28** | **组件构建非幂等性** — `built_` 标志存在但 rebuild 语义未指定 | `component.h:94`, `component.cpp:135-138` | ADR-004 | 0.5 session |
@@ -95,8 +97,8 @@
 | P0 | 6 | — | — | 6 |
 | P1 | 6 | — | — | 6 |
 | P2 | 7 | — | — | 7 |
-| P3 | 4 | — | 5 | 9 |
-| **合计** | **23** | **—** | **6** | **29** |
+| P3 | 6 | — | 3 | 9 |
+| **合计** | **25** | **—** | **4** | **29** |
 
 ---
 
@@ -143,3 +145,5 @@
 | **ADR-027** | **✅ 已采纳（已执行）** | **#21 LLVM 版本硬编码修复（LLVM-18 → 动态检测）** |
 | **ADR-028** | **✅ 已采纳** | **#22 已禁用测试处理（保留 TODO 注释清单）** |
 | **ADR-029** | **✅ 已采纳** | **#23 命名约定一致化（接受现状，AST 内部/工具类例外规则）** |
+| **ADR-030** | **✅ 已采纳（已执行）** | **#24 Include 防护风格统一（84 个 #ifndef → #pragma once）** |
+| **ADR-031** | **✅ 已采纳（已执行）** | **#25 JIT ch_op ↔ JitOp 同步（-Wswitch-enum pragma 编译时强制）** |
