@@ -1,6 +1,6 @@
 # CMakeLists.txt (根目录)
 cmake_minimum_required(VERSION 3.14)
-project(CppHDL LANGUAGES CXX VERSION 1.0.0)
+project(CppHDL LANGUAGES C CXX VERSION 1.0.0)
 
 # 设置C++标准
 set(CMAKE_CXX_STANDARD 20)
@@ -59,17 +59,16 @@ endif()
 if(CH_JIT_ENABLE)
     message(STATUS "JIT compilation enabled (LLVM ORC)")
     # 尝试查找 LLVM
-    find_package(LLVM QUIET)
+    find_package(LLVM REQUIRED)
     if(LLVM_FOUND)
         message(STATUS "LLVM version: ${LLVM_VERSION}")
         add_compile_definitions(CH_JIT_ENABLED=1)
         # 添加 LLVM include 目录
         include_directories(${LLVM_INCLUDE_DIRS})
-        # 直接使用 LLVM-18 库 (避免 llvm_map_components_to_libnames 的系统库问题)
-        set(LLVM_LIBS LLVM-18)
+        # 使用检测到的 LLVM 主版本链接 (避免硬编码版本号)
+        set(LLVM_LIBS "LLVM-${LLVM_VERSION_MAJOR}")
     else()
-        message(WARNING "LLVM not found. JIT will be disabled.")
-        set(CH_JIT_ENABLE OFF CACHE BOOL "" FORCE)
+        message(FATAL_ERROR "CH_JIT_ENABLE=ON but LLVM not found. Install LLVM or set CH_JIT_ENABLE=OFF.")
     endif()
 endif()
 
