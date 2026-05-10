@@ -8,7 +8,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "abstract/context_interface.h"
 #include "ast_nodes.h"
 #include "lnodeimpl.h"
 #include "types.h"
@@ -50,17 +49,17 @@ private:
 // Returns false during static destruction to prevent segfaults
 bool &debug_context_lifetime();
 
-class context : public abstract::context_interface {
+class context {
 public:
     explicit context(const std::string &name = "unnamed",
                      context *parent = nullptr);
     ~context();
 
-    // 实现抽象接口
-    uint32_t next_node_id() override;
-    std::vector<lnodeimpl *> get_eval_list() const override;
-    void set_as_current_context() override;
-    lnodeimpl *get_node_by_id(uint32_t id) const override;
+    // 上下文方法
+    uint32_t next_node_id();
+    std::vector<lnodeimpl *> get_eval_list() const;
+    void set_as_current_context();
+    lnodeimpl *get_node_by_id(uint32_t id) const;
 
     // 统一的节点创建方法，添加错误检查
     template <typename T, typename... Args> T *create_node(Args &&...args);
