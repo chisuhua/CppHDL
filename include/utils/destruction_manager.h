@@ -130,7 +130,7 @@ private:
         pre_static_destruction();
     }
 
-    std::unordered_set<core::context *> contexts_;
+    std::unordered_set<::ch::core::context *> contexts_;
     std::unordered_set<Simulator *> simulators_;
     std::unordered_set<Component *> components_;
 
