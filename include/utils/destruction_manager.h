@@ -23,7 +23,7 @@ public:
         return instance;
     }
 
-    void register_context(core::context *ctx) {
+    void register_context(::ch::core::context *ctx) {
         if (!in_static_destruction()) {
             // Use a simpler approach without mutex during normal operation
             contexts_.insert(ctx);
@@ -31,7 +31,7 @@ public:
         }
     }
 
-    void unregister_context(core::context *ctx) {
+    void unregister_context(::ch::core::context *ctx) {
         if (!in_static_destruction()) {
             contexts_.erase(ctx);
             std::cout << "Unregistered context: " << ctx << std::endl;
@@ -67,7 +67,7 @@ public:
     }
 
     // 通知所有依赖特定context的simulator断开连接
-    void notify_context_destruction(core::context *ctx) {
+    void notify_context_destruction(::ch::core::context *ctx) {
         (void)ctx; // 显式标记参数为有意未使用
         if (!in_static_destruction()) {
             // 查找所有依赖该context的simulator并通知它们断开连接
@@ -146,13 +146,13 @@ private:
 // Function to call before program exits to ensure proper cleanup
 inline void pre_static_destruction_cleanup() {
     std::cout << "Calling pre_static_destruction_cleanup" << std::endl;
-    detail::destruction_manager::instance().pre_static_destruction();
+    ::ch::detail::destruction_manager::instance().pre_static_destruction();
 }
 
 // Check if we're in static destruction phase
 inline bool in_static_destruction() {
     bool result =
-        detail::destruction_manager::instance().is_in_static_destruction();
+        ::ch::detail::destruction_manager::instance().is_in_static_destruction();
     if (result) {
         std::cout << "in_static_destruction returned true" << std::endl;
     }
