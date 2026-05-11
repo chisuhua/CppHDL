@@ -16,9 +16,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 // 指令字段结构
 struct RvInstrFields {

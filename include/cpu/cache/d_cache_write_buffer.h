@@ -28,9 +28,9 @@
 #include "component.h"
 #include "d_cache_complete.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * @brief Write Buffer 配置

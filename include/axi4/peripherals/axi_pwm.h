@@ -24,9 +24,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 template <unsigned COUNTER_WIDTH = 16, unsigned NUM_CHANNELS = 4>
 class AxiLitePwm : public ch::Component {

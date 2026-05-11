@@ -13,9 +13,9 @@
 #include <memory>
 #include <vector>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 // 多条件选择器类 - 表达式风格
 template <typename T> class multi_if {

@@ -19,9 +19,9 @@
 #include "component.h"
 #include "rv32i_tcm.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * @brief IF 级 (取指级)

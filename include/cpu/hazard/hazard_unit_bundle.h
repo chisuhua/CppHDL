@@ -16,9 +16,9 @@
 #include "component.h"
 #include "core/bundle/bundle_base.h"
 
-using namespace ch::core;
-
 namespace cpu {
+
+using namespace ch::core;
 
 /**
  * @brief Hazard Unit 通用接口配置

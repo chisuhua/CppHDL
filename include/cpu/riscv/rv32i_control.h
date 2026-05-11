@@ -13,9 +13,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 // Opcode 定义 (与 rv32i_decoder.h 保持一致)
 constexpr unsigned OP_LOAD   = 0b0000011;

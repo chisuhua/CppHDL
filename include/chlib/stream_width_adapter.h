@@ -26,9 +26,9 @@
 #include "core/operators.h"
 #include <cstdint>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * @brief Compute number of narrow transfers needed for one wide transfer

@@ -19,9 +19,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 // CSR 地址定义 (RISC-V Privileged Spec v1.11)
 constexpr uint32_t CSR_MSTATUS  = 0x300;   // 机器状态

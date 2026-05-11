@@ -7,9 +7,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 template <unsigned ADDR_WIDTH = 32, unsigned DATA_WIDTH = 32, unsigned NUM_REGS = 4>
 class AxiLiteSlave : public ch::Component {

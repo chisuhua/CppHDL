@@ -15,9 +15,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 template <unsigned PRESCALE_WIDTH = 16>
 class AxiLiteUart : public ch::Component {

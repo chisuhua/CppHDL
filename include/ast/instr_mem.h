@@ -7,9 +7,10 @@
 #include <vector>
 #include <unordered_map>
 
-using namespace ch::core;
 namespace ch
 {
+
+using namespace ch::core;
 
     class data_map_t;
     ///////////////////////////////////////////////////////////////////////////////

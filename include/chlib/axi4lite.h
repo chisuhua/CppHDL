@@ -10,9 +10,9 @@
 #include "chlib/logic.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * AXI4-Lite Write Address Channel Signals

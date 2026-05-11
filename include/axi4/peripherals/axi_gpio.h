@@ -15,9 +15,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 template <unsigned NUM_GPIOS = 8>
 class AxiLiteGpio : public ch::Component {

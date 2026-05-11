@@ -22,9 +22,9 @@
 // 添加对bundle/stream_bundle.h的引用，该文件定义了Stream类型
 #include "bundle/stream_bundle.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * Stream FIFO - 带反压的FIFO

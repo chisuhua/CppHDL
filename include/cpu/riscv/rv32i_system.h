@@ -25,9 +25,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 class SystemUnit : public ch::Component {
 public:

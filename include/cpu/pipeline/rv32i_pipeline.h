@@ -29,9 +29,9 @@
 #include "hazard_unit.h"
 #include "rv32i_pipeline_regs.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 class Rv32iPipeline : public ch::Component {
 public:

@@ -10,9 +10,9 @@
 #include "core/uint.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * 前导零检测器 - 函数式接口

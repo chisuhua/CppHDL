@@ -19,9 +19,9 @@
 #include "chlib/arithmetic.h"
 #include "chlib/logic.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * WB 级 (写回级) 组件

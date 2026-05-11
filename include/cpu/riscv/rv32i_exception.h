@@ -27,9 +27,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * @brief 异常/陷阱处理单元

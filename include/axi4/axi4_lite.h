@@ -12,9 +12,9 @@
 
 #include "ch.hpp"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 // ============================================================================
 // AXI4-Lite 信号定义

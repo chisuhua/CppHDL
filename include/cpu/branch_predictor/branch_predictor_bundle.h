@@ -34,9 +34,9 @@
 #include "component.h"
 #include "core/bundle/bundle_base.h"
 
-using namespace ch::core;
-
 namespace cpu {
+
+using namespace ch::core;
 
 /**
  * @brief 分支预测器通用接口配置

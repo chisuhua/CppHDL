@@ -13,9 +13,9 @@
 #include "core/operators.h"
 #include "core/uint.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * Stream Arbiter Lock Result - 锁定仲裁器结果

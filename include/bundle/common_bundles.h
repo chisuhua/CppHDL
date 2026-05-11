@@ -6,9 +6,9 @@
 #include "core/bundle/bundle_meta.h"
 #include "core/uint.h"
 
-using namespace ch::core;
-
 namespace ch {
+
+using namespace ch::core;
 
 // FIFO Bundle - 用于表示FIFO接口
 template <typename T> struct fifo_bundle : public bundle_base<fifo_bundle<T>> {

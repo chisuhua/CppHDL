@@ -23,9 +23,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 // 地址空间基地址常量 (使用原生 uint32_t 避免 ch_uint constexpr 问题)
 // riscv-tests ELF 期望: ITCM=0x80000000, DTCM=0x80010000, peripherals above

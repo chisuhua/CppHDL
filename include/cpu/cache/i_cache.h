@@ -23,9 +23,9 @@
 #include "component.h"
 #include "chlib/stream.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * @brief I-Cache 配置参数

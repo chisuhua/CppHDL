@@ -7,9 +7,9 @@
 #include "core/operators.h"
 #include "core/uint.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 // ============================================================================
 // 前推源选择枚举

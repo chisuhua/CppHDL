@@ -10,9 +10,9 @@
 #include "core/uint.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * OneHot 编码转换器

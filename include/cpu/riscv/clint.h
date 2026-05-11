@@ -18,9 +18,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace ch::chlib {
+
+using namespace ch::core;
 
 /**
  * CLINT 模块 - 64位定时器比较器

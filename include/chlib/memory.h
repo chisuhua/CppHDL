@@ -11,9 +11,9 @@
 #include "core/uint.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * 单端口RAM - 函数式接口

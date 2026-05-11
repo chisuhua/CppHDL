@@ -17,9 +17,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * @brief 冒险检测与前推单元

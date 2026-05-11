@@ -9,9 +9,9 @@
 #include "simulator.h"
 #include <iostream>
 
-using namespace ch::core;
-
 namespace ch {
+
+using namespace ch::core;
 namespace chlib {
 
 /**

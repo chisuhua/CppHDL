@@ -5,9 +5,9 @@
 #include "core/bool.h"
 #include "core/reg.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * Stream M2S Pipe Result - Master-to-Slave pipeline result structure

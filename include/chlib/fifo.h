@@ -12,9 +12,9 @@
 #include "core/uint.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 /**
  * 辅助函数：判断计数器是否为空
  */

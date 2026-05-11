@@ -11,9 +11,9 @@
 #include "core/uint.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 template <unsigned N> struct CLAResult {
     ch_uint<N> sum;

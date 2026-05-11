@@ -19,9 +19,9 @@
 #include "chlib/arithmetic.h"
 #include "chlib/logic.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * EX 级 ALU 操作码编码

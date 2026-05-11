@@ -7,9 +7,9 @@
 #include "core/bundle/bundle_serialization.h"
 #include "core/uint.h"
 
-using namespace ch::core;
-
 namespace ch {
+
+using namespace ch::core;
 
 /**
  * @brief ch_stream bundle - 带反压的数据流接口

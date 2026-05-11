@@ -17,9 +17,9 @@
 #include <unordered_set>
 #include <vector>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 // 语句块风格的条件执行 - 通过上下文管理实现
 class conditional_block {

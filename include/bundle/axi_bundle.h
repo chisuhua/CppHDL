@@ -6,9 +6,9 @@
 #include "core/bundle/bundle_meta.h"
 #include "core/uint.h"
 
-using namespace ch::core;
-
 namespace ch {
+
+using namespace ch::core;
 
 // AXI地址通道Bundle (AW and AR channels)
 template <uint32_t ADDR_WIDTH>

@@ -10,9 +10,9 @@
 #include "core/uint.h"
 #include <string>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 // ============================================================================
 // 单数据类型流水线寄存器 (基础版本)

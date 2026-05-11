@@ -49,9 +49,9 @@
 #include "axi4/peripherals/axi_uart.h"
 #include "clint.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * @brief RV32I SoC 顶层集成类

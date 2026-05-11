@@ -9,9 +9,9 @@
 #include "component.h"
 #include "../axi4_full.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 template <unsigned ADDR_WIDTH = 32, unsigned DATA_WIDTH = 32, unsigned ID_WIDTH = 4, unsigned MAX_BURST_LEN = 16>
 class AxiDma : public ch::Component {

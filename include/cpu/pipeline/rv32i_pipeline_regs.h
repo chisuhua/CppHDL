@@ -21,9 +21,9 @@
 #include "ch.hpp"
 #include "rv32i_decoder.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 // ============================================================================
 // IF/ID 流水线寄存器 (数据结构)

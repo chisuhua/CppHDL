@@ -6,9 +6,9 @@
 #include "core/bundle/bundle_meta.h"
 #include "core/uint.h"
 
-using namespace ch::core;
-
 namespace ch {
+
+using namespace ch::core;
 
 // Forward declaration
 template <typename T> struct ch_stream;

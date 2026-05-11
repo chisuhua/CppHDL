@@ -15,9 +15,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 template <unsigned COUNTER_WIDTH = 32>
 class AxiLiteTimer : public ch::Component {

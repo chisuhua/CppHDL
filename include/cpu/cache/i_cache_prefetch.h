@@ -22,9 +22,9 @@
 #include "component.h"
 #include "i_cache_complete.h"
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * @brief I-Cache 预取配置

@@ -9,9 +9,9 @@
 #include "core/uint.h"
 #include <cassert>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * onehot_dec - 函数式 one-hot 解码器

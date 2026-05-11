@@ -12,9 +12,9 @@
 #include <cassert>
 #include <cstddef>
 
-using namespace ch::core;
-
 namespace chlib {
+
+using namespace ch::core;
 
 /**
  * 优先级选择器 - 函数式接口

@@ -18,9 +18,9 @@
 #include "component.h"
 #include "rv32i_decoder.h"
 
-using namespace ch::core;
-
 namespace riscv {
+
+using namespace ch::core;
 
 /**
  * @brief ID 级 (译码级)

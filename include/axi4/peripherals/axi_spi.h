@@ -33,9 +33,9 @@
 #include "ch.hpp"
 #include "component.h"
 
-using namespace ch::core;
-
 namespace axi4 {
+
+using namespace ch::core;
 
 // ============================================================================
 // AXI4-Lite SPI Controller
