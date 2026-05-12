@@ -82,6 +82,10 @@ public:
     void tick(size_t count);
     void reset();
 
+#ifdef ENABLE_PERF_PROFILING
+    void print_perf_report() const;
+#endif
+
 #if __has_include("jit/jit_compiler.h")
     bool is_jit_compiled() const { return jit_compiled_; }
     bool is_jit_enabled() const { return jit_enabled_; }
@@ -497,6 +501,11 @@ public:
     // 添加write_to_trace_block函数的声明
     void write_to_trace_block(const std::string &data);
 
+#ifdef ENABLE_MEMORY_API
+    std::vector<uint8_t> get_memory(uint32_t addr, size_t size) const;
+    void set_memory(uint32_t addr, const std::vector<uint8_t>& data);
+#endif
+
 private:
     void initialize();
     void update_instruction_pointers();
@@ -568,6 +577,12 @@ private:
     // destroyed context
     bool disconnected_ = false;
     uint64_t ticks_{0};
+
+#ifdef ENABLE_PERF_PROFILING
+    uint64_t total_tick_ns_ = 0;
+    uint64_t eval_ns_ = 0;
+    uint64_t profile_tick_count_ = 0;
+#endif
 
     // 信号跟踪相关成员
     bool trace_on_ = false;
