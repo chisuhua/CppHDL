@@ -11,7 +11,9 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_bool;
+using ch::core::ch_in;
+using ch::core::ch_out;
 namespace chlib {
 
 /**

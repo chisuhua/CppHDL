@@ -9,7 +9,8 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_bool;
+using ch::core::bundle_base;
 
 /**
  * @brief ch_stream bundle - 带反压的数据流接口

@@ -19,6 +19,8 @@
 
 namespace ch {
 
+using ch::core::ctx_curr_;
+
 std::string toString(TraceType type) {
     switch (type) {
     case TraceType::REG:
@@ -520,11 +522,20 @@ void Simulator::write_to_trace_block(const std::string &data) {
 
     if (current_trace_block_ && current_trace_block_->size + data_size <=
                                     current_trace_block_->capacity) {
-        memcpy(current_trace_block_->data + current_trace_block_->size,
-               data.data(), data_size);
+    memcpy(current_trace_block_->data + current_trace_block_->size,
+           data.data(), data_size);
         current_trace_block_->size += data_size;
     }
 }
+
+#ifdef ENABLE_MEMORY_API
+std::vector<uint8_t> Simulator::get_memory(uint32_t addr, size_t size) const {
+    return {};
+}
+
+void Simulator::set_memory(uint32_t addr, const std::vector<uint8_t>& data) {
+}
+#endif
 
 void Simulator::initialize() {
     CHDBG_FUNC();
@@ -731,6 +742,7 @@ void Simulator::update_instruction_pointers() {
         instr_map_[pair.first] = pair.second.get();
     }
     CHDBG("Updated %zu instruction pointers", instr_map_.size());
+
 }
 
 void Simulator::eval_sequential() {
@@ -835,9 +847,18 @@ void Simulator::tick() {
     run_ab_verify = false;
 #endif
 
+#ifdef ENABLE_PERF_PROFILING
+    auto tick_start = std::chrono::high_resolution_clock::now();
+    uint64_t eval_start_ns = 0;
+#endif
+
     eval_combinational();
 
     if (default_clock_instr_) {
+#ifdef ENABLE_PERF_PROFILING
+        eval_start_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::high_resolution_clock::now() - tick_start).count();
+#endif
         eval();
         eval();
     }
@@ -851,6 +872,17 @@ void Simulator::tick() {
     if (trace_on_) {
         trace();
     }
+
+#ifdef ENABLE_PERF_PROFILING
+    auto tick_end = std::chrono::high_resolution_clock::now();
+    uint64_t tick_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        tick_end - tick_start).count();
+    total_tick_ns_ += tick_ns;
+    if (default_clock_instr_) {
+        eval_ns_ += (tick_ns - eval_start_ns);
+    }
+    profile_tick_count_++;
+#endif
 }
 
 void Simulator::eval() {
@@ -899,6 +931,25 @@ void Simulator::tick(size_t count) {
         tick();
     }
 }
+
+#ifdef ENABLE_PERF_PROFILING
+void Simulator::print_perf_report() const {
+    if (profile_tick_count_ == 0) {
+        std::cout << "[PERF] No profiling data collected" << std::endl;
+        return;
+    }
+    double avg_tick_us = static_cast<double>(total_tick_ns_) / profile_tick_count_ / 1000.0;
+    double avg_eval_us = static_cast<double>(eval_ns_) / profile_tick_count_ / 1000.0;
+    double eval_pct = total_tick_ns_ > 0
+        ? 100.0 * static_cast<double>(eval_ns_) / total_tick_ns_
+        : 0.0;
+    std::cout << "[PERF] Profiled ticks: " << profile_tick_count_
+              << ", avg tick: " << std::fixed << std::setprecision(1) << avg_tick_us << " us"
+              << ", avg eval: " << avg_eval_us << " us"
+              << " (" << std::setprecision(0) << eval_pct << "%)"
+              << std::endl;
+}
+#endif
 
 void Simulator::reset() {
     CHDBG_FUNC();

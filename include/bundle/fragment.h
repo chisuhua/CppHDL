@@ -8,7 +8,8 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_bool;
+using ch::core::bundle_base;
 
 // ch_fragment Bundle定义 - 用于表示数据流中的片段
 template <typename T>

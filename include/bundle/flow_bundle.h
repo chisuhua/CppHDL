@@ -8,7 +8,8 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_bool;
+using ch::core::bundle_base;
 
 // Forward declaration
 template <typename T> struct ch_stream;

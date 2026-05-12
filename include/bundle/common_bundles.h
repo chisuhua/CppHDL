@@ -8,7 +8,9 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_uint;
+using ch::core::ch_bool;
+using ch::core::bundle_base;
 
 // FIFO Bundle - 用于表示FIFO接口
 template <typename T> struct fifo_bundle : public bundle_base<fifo_bundle<T>> {

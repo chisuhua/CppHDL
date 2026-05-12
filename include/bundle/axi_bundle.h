@@ -8,7 +8,9 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_uint;
+using ch::core::ch_bool;
+using ch::core::bundle_base;
 
 // AXI地址通道Bundle (AW and AR channels)
 template <uint32_t ADDR_WIDTH>

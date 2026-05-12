@@ -8,7 +8,8 @@
 
 namespace ch {
 
-using namespace ch::core;
+using ch::core::ch_uint;
+using ch::core::bundle_base;
 
 // AXI-Lite写地址通道Bundle
 template <uint32_t ADDR_WIDTH>
