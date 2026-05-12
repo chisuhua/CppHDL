@@ -176,6 +176,14 @@ std::string verilogwriter::get_op_str(ch::core::ch_op op) const {
             return ">";
         case ch::core::ch_op::ge:
             return ">=";
+        case ch::core::ch_op::shl:
+            return "<<";
+        case ch::core::ch_op::shr:
+            return ">>";
+        case ch::core::ch_op::sshr:
+            return ">>>";
+        case ch::core::ch_op::neg:
+            return "-";
         // Add other operations as needed
         default:
             return "<OP_NOT_IMPLEMENTED>";
@@ -363,6 +371,10 @@ void verilogwriter::print_logic(std::ostream &out) {
                 print_reg(out, static_cast<ch::core::regimpl *>(node));
                 printed_logic_nodes_.insert(node);
                 break;
+            case ch::core::lnodetype::type_mux:
+                print_mux(out, static_cast<ch::core::muximpl *>(node));
+                printed_logic_nodes_.insert(node);
+                break;
             case ch::core::lnodetype::type_output: // Handle output assignments
                 // Outputs are typically assigned via an 'assign' statement from
                 // their source. Find the source of the outputimpl and generate
@@ -399,9 +411,6 @@ void verilogwriter::print_logic(std::ostream &out) {
                     }
                 }
                 printed_logic_nodes_.insert(node);
-                break;
-            default:
-                // Other node types might not need explicit logic printing
                 break;
             }
         }
@@ -467,26 +476,42 @@ void verilogwriter::print_op(std::ostream &out, ch::core::opimpl *node) {
             auto *rhs_node = node->rhs();
             if (lhs_node && rhs_node && node_names_.count(lhs_node) &&
                 node_names_.count(rhs_node)) {
-                std::string op_str = get_op_str(node->op());
                 std::string lhs_name = node_names_[lhs_node];
                 std::string rhs_name = node_names_[rhs_node];
 
-                // Special handling for literals
-                if (rhs_node->type() == ch::core::lnodetype::type_lit) {
-                    auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
-                    // Check if this is the literal 1 used for incrementing
-                    // (1-bit value of 1)
-                    uint64_t value = static_cast<uint64_t>(lit_node->value());
-                    uint32_t width = lit_node->value().bv_.size();
-                    if (value == 1 && width == 1) {
-                        rhs_name = "1'b1";
-                    } else {
+                // Special handling for concat - uses Verilog concatenation
+                if (node->op() == ch::core::ch_op::concat) {
+                    // Handle literals specially
+                    if (rhs_node->type() == ch::core::lnodetype::type_lit) {
+                        auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
                         rhs_name = get_literal_str(lit_node->value());
                     }
-                }
+                    if (lhs_node->type() == ch::core::lnodetype::type_lit) {
+                        auto *lit_node = static_cast<ch::core::litimpl *>(lhs_node);
+                        lhs_name = get_literal_str(lit_node->value());
+                    }
+                    out << "    assign " << node_names_[node] << " = {" << lhs_name
+                        << ", " << rhs_name << "};\n";
+                } else {
+                    std::string op_str = get_op_str(node->op());
 
-                out << "    assign " << node_names_[node] << " = " << lhs_name
-                    << " " << op_str << " " << rhs_name << ";\n";
+                    // Special handling for literals
+                    if (rhs_node->type() == ch::core::lnodetype::type_lit) {
+                        auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
+                        // Check if this is the literal 1 used for incrementing
+                        // (1-bit value of 1)
+                        uint64_t value = static_cast<uint64_t>(lit_node->value());
+                        uint32_t width = lit_node->value().bv_.size();
+                        if (value == 1 && width == 1) {
+                            rhs_name = "1'b1";
+                        } else {
+                            rhs_name = get_literal_str(lit_node->value());
+                        }
+                    }
+
+                    out << "    assign " << node_names_[node] << " = " << lhs_name
+                        << " " << op_str << " " << rhs_name << ";\n";
+                }
             } else {
                 out << "    // Warning: Operation '" << node_names_[node]
                     << "' has missing or unnamed sources.\n";
@@ -519,6 +544,28 @@ void verilogwriter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
                 std::string proxy_name = node_names_[node];
                 out << "    assign " << proxy_name << " = " << src_name
                     << ";\n";
+            }
+        }
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_mux(std::ostream &out, ch::core::muximpl *node) {
+    try {
+        if (node->num_srcs() >= 3 && node_names_.count(node)) {
+            auto *cond_node = node->condition();
+            auto *true_node = node->true_value();
+            auto *false_node = node->false_value();
+            if (cond_node && true_node && false_node &&
+                node_names_.count(cond_node) &&
+                node_names_.count(true_node) &&
+                node_names_.count(false_node)) {
+                std::string cond_name = node_names_[cond_node];
+                std::string true_name = node_names_[true_node];
+                std::string false_name = node_names_[false_node];
+                out << "    assign " << node_names_[node] << " = " << cond_name
+                    << " ? " << true_name << " : " << false_name << ";\n";
             }
         }
     } catch (...) {

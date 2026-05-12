@@ -66,6 +66,7 @@ private:
     void print_reg(std::ostream &out, ch::core::regimpl *node);
     void print_op(std::ostream &out, ch::core::opimpl *node);
     void print_proxy(std::ostream &out, ch::core::proxyimpl *node);
+    void print_mux(std::ostream &out, ch::core::muximpl *node);
 
     // --- Data members ---
     ch::core::context *ctx_;
