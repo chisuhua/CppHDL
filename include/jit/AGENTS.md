@@ -69,15 +69,15 @@ jit_op = JitOp::CALL_EXTERNAL;
 ```
 
 **新增 CALL_EXTERNAL 操作的标准流程**:
-1. 先在 `JitInstr` 中添加 `src_bitwidth` 字段（结构体在 `include/jit/jit_ir.h`）
-2. 在 `generate_ir()` 中填充 `instr.src_bitwidth`
+1. `src_bitwidth` 字段已在 `JitInstr` 中（`include/jit/jit_ir.h`），无需添加
+2. 在 `generate_ir()` 的 `type_op` case 中填充 `instr.src_bitwidth`：在 `make_binary()` 调用后设置 `instr.src_bitwidth = src0_bitwidth`
 3. 然后在 `compile_to_llvm()` 中添加 LLVM lowering:
    ```
-   对值 a (源位宽 src_bw, 目标位宽 dst_bw):
-     sext: trunc to src_bw → SExt to dst_bw
-     zext: trunc to src_bw → ZExt to dst_bw  
-     sshr: trunc to src_bw → SExt to 64 → AShr → mask
-     neg:  zero - a → mask to dst_bw  (NEG 可安全降低，已验证)
+   对值 a (源位宽 src_bw = instr.src_bitwidth, 目标位宽 dst_bw = instr.bitwidth):
+     sext: trunc i64 a to src_bw → SExt to dst_bw → ZExt to i64 → store
+     zext: trunc i64 a to src_bw → ZExt to dst_bw → ZExt to i64 → store
+     sshr: trunc i64 a to src_bw → SExt to i64 → AShr → mask → store
+     neg:  sub(0, a) → mask to dst_bw → store
    ```
 4. 验证：运行 `ctest` 确认所有测试通过，`JIT compilation failed` 警告数量不增加
 

@@ -42,7 +42,8 @@ struct JitInstr {
     VRegId src1 = INVALID_VREG;
     VRegId src2 = INVALID_VREG;
     NodeId node_id = 0;
-    BitWidth bitwidth = 0;
+    BitWidth bitwidth = 0;       // 结果位宽
+    BitWidth src_bitwidth = 0;   // 源操作数位宽（用于 sext/zext/sshr 等）
     ImmValue imm = ImmValue(0, 0);
 
     JitInstr() = default;
