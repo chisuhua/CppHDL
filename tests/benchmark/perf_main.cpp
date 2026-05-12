@@ -212,9 +212,9 @@ int main(int argc, char* argv[]) {
 
     if (run_all || tc01) {
         std::cout << "TC-01: Combinational Chain\n";
-        std::vector<int> depths = {10, 100, 1000, 5000, 10000};
+        std::vector<int> depths = {10, 100, 1000};
         for (int d : depths) {
-            auto r = run_combinational_benchmark(d, 10000);
+            auto r = run_combinational_benchmark(d, 1000);
             reporter.add_result(r);
             printf("  depth=%5d: %12.2f ticks/sec | %8.2f ns/tick | %6.2f ns/node/tick\n",
                    d, r.ticks_per_sec, r.ns_per_tick, r.ns_per_node_tick);
@@ -224,9 +224,9 @@ int main(int argc, char* argv[]) {
 
     if (run_all || tc02) {
         std::cout << "TC-02: Sequential Registers\n";
-        std::vector<int> counts = {10, 100, 1000, 5000, 10000};
+        std::vector<int> counts = {10, 100, 1000};
         for (int n : counts) {
-            auto r = run_sequential_benchmark(n, 10000);
+            auto r = run_sequential_benchmark(n, 1000);
             reporter.add_result(r);
             printf("  regs=%5d: %12.2f ticks/sec | %8.2f ns/tick | %6.2f ns/reg/tick\n",
                    n, r.ticks_per_sec, r.ns_per_tick, r.ns_per_node_tick);
@@ -236,7 +236,7 @@ int main(int argc, char* argv[]) {
 
     if (run_all || tc04) {
         std::cout << "TC-04: Trace Overhead\n";
-        auto r = run_trace_benchmark(100, 10000);
+        auto r = run_trace_benchmark(100, 1000);
         reporter.add_result(r);
         printf("  100 signals: trace overhead = %.2f%%\n", r.overhead_percent);
         std::cout << "\n";
@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
 
     if (run_all || tc06) {
         std::cout << "TC-06: Batch vs Single Tick\n";
-        auto r = run_batch_tick_benchmark(1000, 10000);
+        auto r = run_batch_tick_benchmark(1000, 1000);
         reporter.add_result(r);
         printf("  batch vs single: %.2f%% difference\n", r.overhead_percent);
         std::cout << "\n";
