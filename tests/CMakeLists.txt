@@ -188,12 +188,8 @@ add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
 
-# ============================================================================
-# 完全被注释掉的文件 (无法启用)
-# ============================================================================
-# test_ch_flow.cpp - 全文注释
-# test_mod_width_simple.cpp - 全文注释
-# test_stream_width_adapter.cpp - 全文注释
+# test_mod_width_simple: 测试已被 test_mod_width 覆盖, 不再需要
+# 旧文件使用已废弃的 ch_lit<N> API, 保留作为参考
 
 # ============================================================================
 # SpinalHDL 移植示例 CTest 注册

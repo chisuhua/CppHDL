@@ -152,7 +152,12 @@ ctest --output-on-failure
 ```
 
 ## NOTES
-- 119 CTest entries (base + chlib labels)
+- 122/123 CTest 测试通过（1 个 pre-existing 超时：`perf_tests` 约 120s）
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)
+
+## 已消除的过时信息
+- "7 个禁用测试" → 实际仅 2 个仍禁用（`test_cache_pipeline`, `test_phase4_chlib`），均为 API 兼容性问题
+- `test_mod_width_simple` → 已被 `test_mod_width` 覆盖，冗余
+- `test_ch_flow`, `test_stream_width_adapter`, `test_branch_predictor_v2` → 已注册且通过

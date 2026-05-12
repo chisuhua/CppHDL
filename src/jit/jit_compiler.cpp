@@ -313,11 +313,11 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::concat: jit_op = JitOp::CONCAT; break;
             // 显式列出的 JIT 未支持操作（call_external 回退）
             case ch::core::ch_op::div:
+            case ch::core::ch_op::sext:
+            case ch::core::ch_op::zext:
             case ch::core::ch_op::sshr:
             case ch::core::ch_op::neg:
             case ch::core::ch_op::bits_update:
-            case ch::core::ch_op::sext:
-            case ch::core::ch_op::zext:
             case ch::core::ch_op::mux:
             case ch::core::ch_op::and_reduce:
             case ch::core::ch_op::or_reduce:

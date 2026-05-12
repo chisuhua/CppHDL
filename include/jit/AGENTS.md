@@ -50,6 +50,39 @@ if (node->num_srcs() > 0 && node->src(0)) {
 
 `type_lit` 的 case 在 `for (auto* node : eval_list)` 循环内。使用 `break` 会跳出整个循环，导致所有后续节点被跳过。
 
+### 规则 5: CALL_EXTERNAL 降低需要源位宽信息（CRITICAL — 学习教训）
+
+**背景**: 
+- `JitInstr` 只存储 `bitwidth`（目标位宽），不存储源操作数的原始位宽
+- 需要源位宽的操作：`sext`, `zext`, `sshr`, `neg`, `mux`, `bits_update`, `and_reduce`, `or_reduce`, `xor_reduce`, `rotate_l`, `rotate_r`, `popcount`
+
+**原因**:
+```
+// ❌ 错误：CreateSExt(i64, iN) — 非法 LLVM IR!
+//     instr.bitwidth 是目标位宽，不是源位宽
+auto* a = load i64 from vregs;
+auto* dst_ty = builder.getIntNTy(instr.bitwidth);
+auto* res = builder.CreateSExt(a, dst_ty);  // LLVM 后端崩溃！
+
+// ✅ 正确：回退到 CALL_EXTERNAL，由解释器处理
+jit_op = JitOp::CALL_EXTERNAL;
+```
+
+**新增 CALL_EXTERNAL 操作的标准流程**:
+1. 先在 `JitInstr` 中添加 `src_bitwidth` 字段（结构体在 `include/jit/jit_ir.h`）
+2. 在 `generate_ir()` 中填充 `instr.src_bitwidth`
+3. 然后在 `compile_to_llvm()` 中添加 LLVM lowering:
+   ```
+   对值 a (源位宽 src_bw, 目标位宽 dst_bw):
+     sext: trunc to src_bw → SExt to dst_bw
+     zext: trunc to src_bw → ZExt to dst_bw  
+     sshr: trunc to src_bw → SExt to 64 → AShr → mask
+     neg:  zero - a → mask to dst_bw  (NEG 可安全降低，已验证)
+   ```
+4. 验证：运行 `ctest` 确认所有测试通过，`JIT compilation failed` 警告数量不增加
+
+**警告**: 在 `JitInstr` 扩展前，任何将 `sext/zext/sshr/neg` 从 CALL_EXTERNAL 移出的尝试都会导致 LLVM IR 非法、LLVM 后端崩溃（`SelectionDAGISel` SIGSEGV）。
+
 ### 规则 4: <64-bit 操作必须 mask
 
 所有算术/位操作的结果必须以目标位宽 mask：
@@ -69,6 +102,7 @@ if (instr.bitwidth < 64) {
 | `type_lit` case 用 `break` | 跳过所有后续节点 | 用 `continue` |
 | 算术结果不 mask | 窄位宽值溢出/带垃圾位 | 加 `if (bw<64) AND mask` |
 | `load_node` 用 Trunc 不用 AND | 存 iN 读 i64 时上 56 位是垃圾 | 用 AND 代替 Trunc |
+| 缺少源位宽就降低 `sext/zext/sshr/neg` | 非法 LLVM IR + `SelectionDAGISel` SIGSEGV | 先加 `src_bitwidth` 到 `JitInstr` 再降低 |
 
 ## WHERE TO LOOK
 
