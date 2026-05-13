@@ -12,6 +12,7 @@ enum class JitOp : uint8_t {
     ADD, SUB, MUL, MOD,
     AND, OR, XOR, NOT,
     SHIFT_LEFT, SHIFT_RIGHT,
+    SEXT, ZEXT, SSHRSHN, NEG,
     EQ, NE, LT, LE, GT, GE,
     SELECT,
     BIT_SELECT,

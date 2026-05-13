@@ -313,3 +313,63 @@ TEST_CASE("JIT Compiler register set and get", "[jit][reg]") {
     SUCCEED("JIT not enabled - skipping");
 #endif
 }
+
+TEST_CASE("JIT Compiler sext", "[jit][arithmetic]") {
+#if __has_include("jit/jit_compiler.h")
+    context ctx("jit_sext_ctx");
+    ctx_swap swap(&ctx);
+
+    ch_uint<4> a(5_d);
+    auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+
+    result_reg <<= sext<8>(a);
+
+    Simulator sim(&ctx);
+    REQUIRE(sim.is_jit_compiled() == true);
+
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 5);
+#else
+    SUCCEED("JIT not enabled - skipping");
+#endif
+}
+
+TEST_CASE("JIT Compiler zext", "[jit][arithmetic]") {
+#if __has_include("jit/jit_compiler.h")
+    context ctx("jit_zext_ctx");
+    ctx_swap swap(&ctx);
+
+    ch_uint<4> a(5_d);
+    auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+
+    result_reg <<= zext<8>(a);
+
+    Simulator sim(&ctx);
+    REQUIRE(sim.is_jit_compiled() == true);
+
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 5);
+#else
+    SUCCEED("JIT not enabled - skipping");
+#endif
+}
+
+TEST_CASE("JIT Compiler neg", "[jit][arithmetic]") {
+#if __has_include("jit/jit_compiler.h")
+    context ctx("jit_neg_ctx");
+    ctx_swap swap(&ctx);
+
+    ch_uint<8> a(5_d);
+    auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+
+    result_reg <<= -a;
+
+    Simulator sim(&ctx);
+    REQUIRE(sim.is_jit_compiled() == true);
+
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 251);
+#else
+    SUCCEED("JIT not enabled - skipping");
+#endif
+}

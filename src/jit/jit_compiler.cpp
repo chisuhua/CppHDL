@@ -313,10 +313,6 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::concat: jit_op = JitOp::CONCAT; break;
             // 显式列出的 JIT 未支持操作（call_external 回退）
             case ch::core::ch_op::div:
-            case ch::core::ch_op::sext:
-            case ch::core::ch_op::zext:
-            case ch::core::ch_op::sshr:
-            case ch::core::ch_op::neg:
             case ch::core::ch_op::bits_update:
             case ch::core::ch_op::mux:
             case ch::core::ch_op::and_reduce:
@@ -328,6 +324,11 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
             case ch::core::ch_op::assign:
                 jit_op = JitOp::CALL_EXTERNAL;
                 break;
+            // 原生支持的操作（使用 src_bitwidth）
+            case ch::core::ch_op::sext: jit_op = JitOp::SEXT; break;
+            case ch::core::ch_op::zext: jit_op = JitOp::ZEXT; break;
+            case ch::core::ch_op::sshr: jit_op = JitOp::SSHRSHN; break;
+            case ch::core::ch_op::neg: jit_op = JitOp::NEG; break;
             }
 #pragma GCC diagnostic pop
 
@@ -350,8 +351,32 @@ JitResult JitCompiler::generate_ir(ch::core::context* ctx, JitFunction& func_com
                 block_comb.instrs.push_back(make_load(src1_vreg, node->src(1)->id(), src1_bitwidth));
             }
 
-            block_comb.instrs.push_back(make_binary(jit_op, dst_vreg, src0_vreg, src1_vreg, result_bitwidth));
-            block_comb.instrs.push_back(make_store(node_id, dst_vreg, result_bitwidth));
+            JitInstr jit_instr;
+            if (jit_op == JitOp::SEXT || jit_op == JitOp::ZEXT || jit_op == JitOp::NEG) {
+                jit_instr = JitInstr(jit_op, result_bitwidth);
+                jit_instr.dst = dst_vreg;
+                jit_instr.src0 = src0_vreg;
+                auto src0_bitwidth = node->num_srcs() > 0 && node->src(0)
+                    ? static_cast<BitWidth>(node->src(0)->size()) : result_bitwidth;
+                jit_instr.src_bitwidth = src0_bitwidth;
+                jit_instr.node_id = node_id;
+            } else if (jit_op == JitOp::SSHRSHN) {
+                jit_instr = JitInstr(jit_op, result_bitwidth);
+                jit_instr.dst = dst_vreg;
+                jit_instr.src0 = src0_vreg;
+                jit_instr.src1 = src1_vreg;
+                auto src0_bitwidth = node->num_srcs() > 0 && node->src(0)
+                    ? static_cast<BitWidth>(node->src(0)->size()) : result_bitwidth;
+                jit_instr.src_bitwidth = src0_bitwidth;
+                jit_instr.node_id = node_id;
+            } else {
+                block_comb.instrs.push_back(make_binary(jit_op, dst_vreg, src0_vreg, src1_vreg, result_bitwidth));
+                block_comb.instrs.push_back(make_store(node_id, dst_vreg, result_bitwidth));
+            }
+            if (jit_op == JitOp::SEXT || jit_op == JitOp::ZEXT || jit_op == JitOp::SSHRSHN || jit_op == JitOp::NEG) {
+                block_comb.instrs.push_back(jit_instr);
+                block_comb.instrs.push_back(make_store(node_id, dst_vreg, result_bitwidth));
+            }
             break;
         }
 
@@ -614,6 +639,54 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction& func_comb, const JitFu
                     res = builder.CreateAnd(res, builder.getInt64(mask), "mask_shr");
                 }
                 builder.CreateStore(res, vregs[instr.dst], "store_shr");
+                break;
+            }
+
+            case JitOp::SEXT: {
+                auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+                auto* res = builder.CreateTrunc(a, builder.getIntNTy(instr.src_bitwidth), "trunc_sext");
+                res = builder.CreateSExt(res, builder.getInt64Ty(), "sext");
+                if (instr.bitwidth < 64) {
+                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
+                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_sext");
+                }
+                builder.CreateStore(res, vregs[instr.dst], "store_sext");
+                break;
+            }
+
+            case JitOp::ZEXT: {
+                auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+                auto* res = builder.CreateTrunc(a, builder.getIntNTy(instr.src_bitwidth), "trunc_zext");
+                res = builder.CreateZExt(res, builder.getInt64Ty(), "zext");
+                if (instr.bitwidth < 64) {
+                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
+                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_zext");
+                }
+                builder.CreateStore(res, vregs[instr.dst], "store_zext");
+                break;
+            }
+
+            case JitOp::SSHRSHN: {
+                auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+                auto* b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1], "load_b");
+                auto* narrowed = builder.CreateTrunc(a, builder.getIntNTy(instr.src_bitwidth), "trunc_sshr");
+                auto* res = builder.CreateAShr(narrowed, b, "sshr");
+                if (instr.bitwidth < 64) {
+                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
+                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_sshr");
+                }
+                builder.CreateStore(res, vregs[instr.dst], "store_sshr");
+                break;
+            }
+
+            case JitOp::NEG: {
+                auto* a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0], "load_a");
+                auto* res = builder.CreateNeg(a, "neg");
+                if (instr.bitwidth < 64) {
+                    uint64_t mask = (1ULL << instr.bitwidth) - 1;
+                    res = builder.CreateAnd(res, builder.getInt64(mask), "mask_neg");
+                }
+                builder.CreateStore(res, vregs[instr.dst], "store_neg");
                 break;
             }
 
