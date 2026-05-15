@@ -371,10 +371,14 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
       case ch::core::ch_op::xor_reduce:
         jit_op = JitOp::XOR_REDUCE;
         break;
+      case ch::core::ch_op::rotate_l:
+        jit_op = JitOp::ROTATE_LEFT;
+        break;
+      case ch::core::ch_op::rotate_r:
+        jit_op = JitOp::ROTATE_RIGHT;
+        break;
       case ch::core::ch_op::bits_update:
       case ch::core::ch_op::mux:
-      case ch::core::ch_op::rotate_l:
-      case ch::core::ch_op::rotate_r:
       case ch::core::ch_op::assign:
         jit_op = JitOp::CALL_EXTERNAL;
         break;
@@ -834,6 +838,44 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
           res = builder.CreateAnd(res, builder.getInt64(mask), "mask_shr");
         }
         builder.CreateStore(res, vregs[instr.dst], "store_shr");
+        break;
+      }
+
+      case JitOp::ROTATE_LEFT: {
+        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
+                                     "load_a");
+        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
+                                     "load_b");
+        auto *bw_val = builder.getInt64(instr.bitwidth);
+        auto *shift_count = builder.CreateURem(b, bw_val, "rotl_count");
+        auto *inv_count = builder.CreateSub(bw_val, shift_count, "rotl_inv_count");
+        auto *left = builder.CreateShl(a, shift_count, "rotl_left");
+        auto *right = builder.CreateLShr(a, inv_count, "rotl_right");
+        auto *res = builder.CreateOr(left, right, "rotl");
+        if (instr.bitwidth < 64) {
+          uint64_t mask = (1ULL << instr.bitwidth) - 1;
+          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_rotl");
+        }
+        builder.CreateStore(res, vregs[instr.dst], "store_rotl");
+        break;
+      }
+
+      case JitOp::ROTATE_RIGHT: {
+        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
+                                     "load_a");
+        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
+                                     "load_b");
+        auto *bw_val = builder.getInt64(instr.bitwidth);
+        auto *shift_count = builder.CreateURem(b, bw_val, "rotr_count");
+        auto *inv_count = builder.CreateSub(bw_val, shift_count, "rotr_inv_count");
+        auto *right = builder.CreateLShr(a, shift_count, "rotr_right");
+        auto *left = builder.CreateShl(a, inv_count, "rotr_left");
+        auto *res = builder.CreateOr(right, left, "rotr");
+        if (instr.bitwidth < 64) {
+          uint64_t mask = (1ULL << instr.bitwidth) - 1;
+          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_rotr");
+        }
+        builder.CreateStore(res, vregs[instr.dst], "store_rotr");
         break;
       }
 
