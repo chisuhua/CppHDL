@@ -462,6 +462,70 @@ TEST_CASE("JIT Compiler xor_reduce", "[jit][reduce]") {
 #endif
 }
 
+TEST_CASE("JIT Compiler rotate_left", "[jit][bitwise]") {
+#if __has_include("jit/jit_compiler.h")
+  context ctx("jit_rotate_left_ctx");
+  ctx_swap swap(&ctx);
+  ch_uint<8> a(0b00000001);
+  auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+  result_reg <<= rotate_left(a, ch_uint<8>(1));
+  Simulator sim(&ctx);
+  REQUIRE(sim.is_jit_compiled() == true);
+  sim.tick();
+  REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 2);
+#else
+  SUCCEED("JIT not enabled - skipping");
+#endif
+}
+
+TEST_CASE("JIT Compiler rotate_left wrap", "[jit][bitwise]") {
+#if __has_include("jit/jit_compiler.h")
+  context ctx("jit_rotate_left_wrap_ctx");
+  ctx_swap swap(&ctx);
+  ch_uint<8> a(0b10000000);
+  auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+  result_reg <<= rotate_left(a, ch_uint<8>(1));
+  Simulator sim(&ctx);
+  REQUIRE(sim.is_jit_compiled() == true);
+  sim.tick();
+  REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 1);
+#else
+  SUCCEED("JIT not enabled - skipping");
+#endif
+}
+
+TEST_CASE("JIT Compiler rotate_right", "[jit][bitwise]") {
+#if __has_include("jit/jit_compiler.h")
+  context ctx("jit_rotate_right_ctx");
+  ctx_swap swap(&ctx);
+  ch_uint<8> a(0b00000010);
+  auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+  result_reg <<= rotate_right(a, ch_uint<8>(1));
+  Simulator sim(&ctx);
+  REQUIRE(sim.is_jit_compiled() == true);
+  sim.tick();
+  REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 1);
+#else
+  SUCCEED("JIT not enabled - skipping");
+#endif
+}
+
+TEST_CASE("JIT Compiler rotate_right wrap", "[jit][bitwise]") {
+#if __has_include("jit/jit_compiler.h")
+  context ctx("jit_rotate_right_wrap_ctx");
+  ctx_swap swap(&ctx);
+  ch_uint<8> a(0b00000001);
+  auto result_reg = ch_reg<ch_uint<8>>(0_b, "result");
+  result_reg <<= rotate_right(a, ch_uint<8>(1));
+  Simulator sim(&ctx);
+  REQUIRE(sim.is_jit_compiled() == true);
+  sim.tick();
+  REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 128);
+#else
+  SUCCEED("JIT not enabled - skipping");
+#endif
+}
+
 TEST_CASE("JIT Compiler popcount", "[jit][bitwise]") {
 #if __has_include("jit/jit_compiler.h")
   context ctx("jit_popcount_ctx");
@@ -474,6 +538,7 @@ TEST_CASE("JIT Compiler popcount", "[jit][bitwise]") {
 
   Simulator sim(&ctx);
   REQUIRE(sim.is_jit_compiled() == true);
+
   sim.tick();
   REQUIRE(static_cast<uint64_t>(sim.get_value(result_reg)) == 4);
 #else
