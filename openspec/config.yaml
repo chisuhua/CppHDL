@@ -1,20 +1,81 @@
+# =============================================================================
+# OpenSpec Configuration for CppHDL
+# =============================================================================
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# ---------------------------------------------------------------------------
+# Project Context - AI 生成制品时的背景信息
+# ---------------------------------------------------------------------------
+context: |
+  # 技术栈
+  Tech stack: C++20, CMake, Catch2 v3.7.0, clangd LSP
+  架构: SpinalHDL-style API，header-only 库
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  # 核心概念
+  - 硬件描述用 ch_bool, ch_uint<N>, ch_sint<N> 类型
+  - 组件层次: Component → ch_module<T> (hierarchical) / ch_device<T> (standalone)
+  - 硬件连接用 <<= 操作符，非软件赋值
+  - 仿真用 context + ctx_swap + Simulator
+
+  # 编码规范 (来自 AGENTS.md)
+  - 缩进: 2 空格
+  - 类名: CamelCase (HttpRequest)
+  - 函数名: camelCase (sendRequest)
+  - 变量名: snake_case (request_body)
+  - 宏常量: SCREAMING_SNAKE_CASE
+  - 注释: 中文，避免中英混杂
+
+  # 关键反模式
+  - 禁止: as any, @ts-ignore, 空 catch 块
+  - ch_module 不可用于 standalone test，需用 ch_device
+  - IO 赋值用 select()，不用 &&
+
+  # JIT 编译注意 (来自 AGENTS.md)
+  - ch_op 新增需同步添加 JitOp
+  - type_input 需检查 driver (num_srcs()>0)
+  - type_lit 用 continue，不用 break
+  - 64 位以下算术需掩码
+
+  # 关键文件位置
+  - Core types: include/core/operators.h, include/core/types.h
+  - IO ports: include/core/io.h
+  - Stream/Flow: include/chlib/stream.h
+  - FIFO: include/chlib/fifo.h
+  - Verilog codegen: include/codegen_verilog.h
+  - JIT compiler: src/jit/jit_compiler.cpp
+
+  # 测试验证命令
+  - Build: cmake --build build -j$(nproc)
+  - Tests: ctest --output-on-failure
+  - Examples: ./run_all_ported_tests.sh
+
+# ---------------------------------------------------------------------------
+# Per-artifact Rules - 定制各制品的规则
+# ---------------------------------------------------------------------------
+rules:
+  # proposal 规则
+  proposal:
+    - 使用中文撰写 (符合项目注释规范)
+    - 包含"动机"和"目标"两个必填节
+    - 非目标项明确列出，避免范围蔓延
+    - 硬件相关提案需包含信号接口描述
+
+  # specs 规则
+  specs:
+    - API 设计需符合 SpinalHDL 命名约定
+    - 状态机规格需包含完整状态转换图
+    - 接口规格需标注方向 (ch_in/ch_out)
+
+  # design 规则
+  design:
+    - 实现前评估对现有文件的修改影响
+    - 跨模块依赖需在设计中明确
+    - 涉及 JIT 需标注所有 ch_op 映射
+    - 涉及 context 生命周期需标注线程安全考量
+
+  # tasks 规则
+  tasks:
+    - 每个任务需对应一个可验证的测试
+    - TDD 流程: RED → GREEN → REFACTOR
+    - 涉及多文件修改的任务需拆分
+    - 完成后必须: clang-tidy clean, clang-format applied
