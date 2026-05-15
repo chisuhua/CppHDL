@@ -20,6 +20,8 @@ enum class JitOp : uint8_t {
   NOT,
   SHIFT_LEFT,
   SHIFT_RIGHT,
+  ROTATE_LEFT,
+  ROTATE_RIGHT,
   SEXT,
   ZEXT,
   SSHRSHN,
