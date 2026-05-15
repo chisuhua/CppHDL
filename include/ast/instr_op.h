@@ -305,6 +305,34 @@ struct Shr {
     }
 };
 
+// ROTATE_LEFT (循环左移)
+struct RotateLeft {
+    static const char *name() { return "instr_op_rotate_left::eval"; }
+    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
+                     ch::core::sdata_type *src1) {
+        uint32_t bw = src0->bitwidth();
+        uint64_t count = static_cast<uint64_t>(*src1) % bw;
+        uint64_t val = static_cast<uint64_t>(*src0);
+        uint64_t mask = (bw < 64) ? ((1ULL << bw) - 1) : ~0ULL;
+        uint64_t result = ((val << count) | (val >> (bw - count))) & mask;
+        *dst = result;
+    }
+};
+
+// ROTATE_RIGHT (循环右移)
+struct RotateRight {
+    static const char *name() { return "instr_op_rotate_right::eval"; }
+    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
+                     ch::core::sdata_type *src1) {
+        uint32_t bw = src0->bitwidth();
+        uint64_t count = static_cast<uint64_t>(*src1) % bw;
+        uint64_t val = static_cast<uint64_t>(*src0);
+        uint64_t mask = (bw < 64) ? ((1ULL << bw) - 1) : ~0ULL;
+        uint64_t result = ((val >> count) | (val << (bw - count))) & mask;
+        *dst = result;
+    }
+};
+
 // SSHR (算术右移)
 struct Sshr {
     static const char *name() { return "instr_op_sshr::eval"; }
@@ -636,5 +664,7 @@ using instr_op_assign = instr_op_unary<op::Assign>; // 添加 assign 操作的�
 
 // 添加popcount别名
 using instr_op_popcount = instr_op_unary<op::PopCount>;
+using instr_op_rotate_left = instr_op_binary<op::RotateLeft>;
+using instr_op_rotate_right = instr_op_binary<op::RotateRight>;
 
 } // namespace ch

@@ -129,6 +129,12 @@ opimpl::create_instruction(ch::data_map_t &data_map) const {
     case ch_op::sshr:
         return std::make_unique<ch::instr_op_sshr>(dst_buf, size_, src0_buf,
                                                    src1_buf);
+    case ch_op::rotate_l:
+        return std::make_unique<ch::instr_op_rotate_left>(dst_buf, size_, src0_buf,
+                                                          src1_buf);
+    case ch_op::rotate_r:
+        return std::make_unique<ch::instr_op_rotate_right>(dst_buf, size_, src0_buf,
+                                                           src1_buf);
     case ch_op::bit_sel:
         return std::make_unique<ch::instr_op_bit_sel>(dst_buf, 1, src0_buf,
                                                       src1_buf);
