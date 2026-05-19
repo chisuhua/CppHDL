@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires openspec CLI v1.3.1+.
 metadata:
   author: sisyphus
-  version: "3.2"  # P1: 提供 change name 时始终验证，添加 Step 0e 验证逻辑
+  version: "3.3"  # P1: Step 7 后添加检查其他未计划 change 的循环
   generatedBy: "1.3.1"
 ---
 
@@ -393,7 +393,7 @@ git add .sisyphus/plans/<name>.md
 git commit -m "plan: <name> 实施计划"
 ```
 
-### Step 7：输出结果
+### Step 7：输出结果 + 循环检查
 
 ```
 ✅ Plan 完成
@@ -411,6 +411,34 @@ Plan: .sisyphus/plans/<name>.md
 
   如果还有未计划的 change，可以再次执行本技能：
     skill_use("openspec-workflow-plan")
+```
+
+**Plan 后循环检查**：
+
+```bash
+# 检查是否还有其他已创建但未计划的 change
+UNPLANNED=$(ls -d openspec/changes/*/ 2>/dev/null | grep -v archive/ | while read dir; do
+    name=$(basename "$dir")
+    if ! git worktree list | awk '{print $2}' | grep -q "^openspec/$name$"; then
+        echo "$name"
+    fi
+done | wc -l)
+
+if [ "$UNPLANNED" -gt 0 ]; then
+    echo ""
+    echo "📋 还有 $UNPLANNED 个已创建但未计划的 change:"
+    ls -d openspec/changes/*/ 2>/dev/null | grep -v archive/ | while read dir; do
+        name=$(basename "$dir")
+        if ! git worktree list | awk '{print $2}' | grep -q "^openspec/$name$"; then
+            echo "   - $name"
+        fi
+    done
+    echo ""
+    echo "请选择:"
+    echo "1. 继续为其他 change 创建 worktree（返回 Phase 1）"
+    echo "2. 完成 Plan 阶段，进入 Execute 阶段"
+    echo "i. 其他输入"
+fi
 ```
 
 ---

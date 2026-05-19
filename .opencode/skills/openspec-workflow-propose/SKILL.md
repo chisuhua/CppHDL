@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires openspec CLI v1.3.1+. Reads docs/adr/, docs/architecture/, docs/developer_guide/.
 metadata:
   author: sisyphus
-  version: "1.2"  # P1: 明确本技能作为创建 change 的唯一入口，guide 仅做交互引导
+  version: "1.3"  # P0: Phase 5 后添加继续创建循环，自动检查剩余建议
   generatedBy: "1.3.1"
   replaces-step: "step1-manual"  # 替代原工作流 Step 1 的手动 openspec new/propose 操作
 ---
@@ -423,6 +423,24 @@ for each selected propose <name>:
   - ...
 
 下次执行本技能时会从现有建议列表继续。
+```
+
+**5d. Phase 5 后自动检查剩余建议（循环机制）**
+
+```bash
+# 检查是否还有剩余建议
+if [ -f "proposal-suggestions.md" ]; then
+    REMAINING=$(grep -c "status: 待创建" "proposal-suggestions.md" 2>/dev/null || echo "0")
+    if [ "$REMAINING" -gt 0 ]; then
+        echo ""
+        echo "📋 proposal-suggestions.md 中还有 $REMAINING 个未创建的 change"
+        echo ""
+        echo "请选择:"
+        echo "1. 继续创建其他 change（返回 Phase 3 选择）"
+        echo "2. 完成 Propose 阶段（提交当前 artifacts）"
+        echo "i. 其他输入"
+    fi
+fi
 ```
 
 ---

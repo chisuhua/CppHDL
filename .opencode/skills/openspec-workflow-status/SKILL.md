@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires openspec CLI
 metadata:
   author: sisyphus
-  version: "2.1"  # P2: 重划分 Mode A/B 职责，Mode A 仅做概览不检测问题
+  version: "2.2"  # P2: 明确 Mode C 与 guide 的 status_archive 职责边界
   generatedBy: "1.3.1"
 ---
 
@@ -351,7 +351,7 @@ if [ "$IN_WORKTREE" = true ] && [ -n "$WORKTREE_PATH" ]; then
 fi
 ```
 
-### Step 6：输出归档报告
+### Step 6：输出归档报告 + 循环检查
 
 ```
 🎉 Change <name> 归档完成
@@ -365,6 +365,30 @@ fi
   - ccache 加速构建
   - 所有 Work Unit 完成
   - merge 方式: fast-forward / merge commit
+```
+
+**归档后循环检查**（与 guide 的 status_archive 阶段保持一致）：
+
+```bash
+# 检查是否还有其他 worktree（使用 awk 检查分支名而非路径）
+REMAINING_WT=$(git worktree list | awk '$2 ~ /^openspec\// {print $1}' | wc -l)
+if [ "$REMAINING_WT" -gt 0 ]; then
+    echo ""
+    echo "📋 还有 $REMAINING_WT 个 worktree 正在进行"
+    echo "请选择:"
+    echo "1. 继续处理其他 worktree"
+    echo "2. 返回 guide: skill_use(\"openspec-workflow-guide\")"
+else
+    # 检查 proposal-suggestions.md
+    if [ -f "proposal-suggestions.md" ]; then
+        REMAINING=$(grep -c "status: 待创建" "proposal-suggestions.md" 2>/dev/null || echo "0")
+        if [ "$REMAINING" -gt 0 ]; then
+            echo ""
+            echo "📋 proposal-suggestions.md 中还有 $REMAINING 个未创建的 change"
+            echo "建议运行: skill_use(\"openspec-workflow-guide\") 回到 propose 阶段"
+        fi
+    fi
+fi
 ```
 
 ---

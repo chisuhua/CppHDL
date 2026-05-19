@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires openspec CLI and git worktree.
 metadata:
   author: sisyphus
-  version: "2.3"  # P0: 修复 worktree 选择逻辑，支持多 worktree 动态选择
+  version: "2.4"  # P0: 添加执行完毕后自动检查其他 worktree 的循环机制
   generatedBy: "1.3.1"
 ---
 
@@ -260,6 +260,25 @@ echo "3. 继续处理其他 worktree："
 echo "   skill_use(\"openspec-workflow-plan\")"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ============================================================
+# P0 FIX: 执行完毕后自动检查是否还有其他 worktree 需要处理
+# ============================================================
+# 使用 awk 检查分支名（第二列）而非路径，避免路径含 openspec/ 的误匹配
+OTHER_WTS=$(git worktree list | awk '$2 ~ /^openspec\// && $2 != "openspec/'"$CHANGE_NAME"'" {print $1}' | wc -l)
+if [ "$OTHER_WTS" -gt 0 ]; then
+    echo ""
+    echo "📋 发现其他 $OTHER_WTS 个 worktree:"
+    git worktree list | awk '$2 ~ /^openspec\// && $2 != "openspec/'"$CHANGE_NAME"'" {print $1, $2}' | while read path branch; do
+        name=$(echo "$branch" | sed 's|openspec/||')
+        echo "   - $name → $path"
+    done
+    echo ""
+    echo "请选择:"
+    echo "1. 切换到另一个 worktree 继续执行"
+    echo "2. 返回主 session（skill_use(\"openspec-workflow-guide\"))"
+    echo "i. 其他输入"
+fi
 ```
 
 **注意**：此输出在每个独立的 execute session 结束时显示，引导用户回到 guide 或继续其他操作。
