@@ -359,9 +359,6 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
       case ch::core::ch_op::bits_extract:
         jit_op = JitOp::BITS_EXTRACT;
         break;
-      case ch::core::ch_op::concat:
-        jit_op = JitOp::CONCAT;
-        break;
       case ch::core::ch_op::and_reduce:
         jit_op = JitOp::AND_REDUCE;
         break;
@@ -433,6 +430,9 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
                                  : result_bitwidth;
         jit_instr.src_bitwidth = src0_bitwidth;
         jit_instr.node_id = node_id;
+        block_comb.instrs.push_back(jit_instr);
+        block_comb.instrs.push_back(
+            make_store(node_id, dst_vreg, result_bitwidth));
       } else if (jit_op == JitOp::SSHRSHN) {
         jit_instr = JitInstr(jit_op, result_bitwidth);
         jit_instr.dst = dst_vreg;
@@ -443,15 +443,12 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
                                  : result_bitwidth;
         jit_instr.src_bitwidth = src0_bitwidth;
         jit_instr.node_id = node_id;
+        block_comb.instrs.push_back(jit_instr);
+        block_comb.instrs.push_back(
+            make_store(node_id, dst_vreg, result_bitwidth));
       } else {
         block_comb.instrs.push_back(make_binary(jit_op, dst_vreg, src0_vreg,
                                                 src1_vreg, result_bitwidth));
-        block_comb.instrs.push_back(
-            make_store(node_id, dst_vreg, result_bitwidth));
-      }
-      if (jit_op == JitOp::SEXT || jit_op == JitOp::ZEXT ||
-          jit_op == JitOp::SSHRSHN || jit_op == JitOp::NEG) {
-        block_comb.instrs.push_back(jit_instr);
         block_comb.instrs.push_back(
             make_store(node_id, dst_vreg, result_bitwidth));
       }
@@ -573,7 +570,7 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
     }
 
     for (const auto &instr : func.blocks[0].instrs) {
-      if (instr.op == JitOp::CONCAT || instr.op == JitOp::SLICE ||
+      if (instr.op == JitOp::SLICE ||
           instr.op == JitOp::MEM_READ || instr.op == JitOp::MEM_WRITE ||
           instr.op == JitOp::JUMP || instr.op == JitOp::BRANCH ||
           instr.op == JitOp::LABEL) {
@@ -739,6 +736,10 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
         auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
                                      "load_b");
         auto *res = builder.CreateAnd(a, b, "and");
+        if (instr.bitwidth < 64) {
+          uint64_t mask = (1ULL << instr.bitwidth) - 1;
+          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_and");
+        }
         builder.CreateStore(res, vregs[instr.dst], "store_and");
         break;
       }
@@ -749,6 +750,10 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
         auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
                                      "load_b");
         auto *res = builder.CreateOr(a, b, "or");
+        if (instr.bitwidth < 64) {
+          uint64_t mask = (1ULL << instr.bitwidth) - 1;
+          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_or");
+        }
         builder.CreateStore(res, vregs[instr.dst], "store_or");
         break;
       }
@@ -759,6 +764,10 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
         auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
                                      "load_b");
         auto *res = builder.CreateXor(a, b, "xor");
+        if (instr.bitwidth < 64) {
+          uint64_t mask = (1ULL << instr.bitwidth) - 1;
+          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_xor");
+        }
         builder.CreateStore(res, vregs[instr.dst], "store_xor");
         break;
       }
@@ -1023,6 +1032,22 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
         auto *masked =
             builder.CreateAnd(shifted, builder.getInt64(1), "mask_bit");
         builder.CreateStore(masked, vregs[instr.dst], "store_bit_sel");
+        break;
+      }
+
+      case JitOp::CONCAT: {
+        auto *src0_val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
+                                            "load_concat_src0");
+        auto *src1_val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
+                                            "load_concat_src1");
+        auto *shift_amt = builder.getInt64(instr.src_bitwidth);
+        auto *shifted = builder.CreateShl(src1_val, shift_amt, "concat_shift");
+        auto *res = builder.CreateOr(shifted, src0_val, "concat_or");
+        if (instr.bitwidth < 64) {
+          uint64_t bw_mask = (1ULL << instr.bitwidth) - 1;
+          res = builder.CreateAnd(res, builder.getInt64(bw_mask), "mask_concat");
+        }
+        builder.CreateStore(res, vregs[instr.dst], "store_concat");
         break;
       }
 

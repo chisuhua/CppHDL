@@ -33,6 +33,9 @@ src/jit/
 
 **如果跳过 JIT 支持**: 操作默认成为 `CALL_EXTERNAL`，依赖链中的下游 JIT-native 操作将读到陈旧值，导致**静默错误**（非崩溃）。
 
+**已知不可 JIT 的操作（ADR-021）**:
+- `concat`: JIT IR 无对应指令，`compile_to_llvm()` 会拒绝 → CALL_EXTERNAL
+
 ### 规则 2: `type_input` 节点必须检查 driver
 
 `inputimpl` 可通过 `set_driver()` 设置驱动源（Component IO 连线 `<<=` 时使用）。JIT 的 `generate_ir()` 必须处理此情况：

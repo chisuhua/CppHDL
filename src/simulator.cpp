@@ -783,8 +783,6 @@ void Simulator::eval_combinational() {
 
 #if __has_include("jit/jit_compiler.h")
     if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_comb_func()) {
-        // 先执行 CALL_EXTERNAL 解释器节点，确保 JIT 加载到正确的值
-        // （修复: 原代码在 JIT 之后执行导致 JIT 使用陈旧值）
         for (const auto &[node_id, instr] : combinational_instr_list_) {
             if (jit_compiler_->is_external_node(node_id)) {
                 instr->eval();
@@ -861,6 +859,18 @@ void Simulator::tick() {
 #endif
         eval();
         eval();
+
+#if __has_include("jit/jit_compiler.h")
+        if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_comb_func()) {
+            for (const auto &[node_id, instr] : combinational_instr_list_) {
+                if (jit_compiler_->is_external_node(node_id)) {
+                    instr->eval();
+                }
+            }
+        }
+#endif
+
+        eval_combinational();
     }
 
 #if __has_include("jit/jit_compiler.h")
