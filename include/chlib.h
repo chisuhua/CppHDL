@@ -42,6 +42,7 @@
 
 // Stream components
 #include "chlib/stream.h"
+#include "chlib/stream_pipeline.h"
 
 // Switch components
 #include "chlib/switch.h"
@@ -52,3 +53,6 @@
 
 // Pipeline components
 #include "chlib/pipeline.h"
+
+// Stream member inline implementations (must be after stream_bundle.h and stream_pipeline.h)
+#include "bundle/stream_bundle_member_inlines.h"
