@@ -5,6 +5,7 @@
 #include "ast/resetimpl.h"
 #include "lnodeimpl.h"
 #include "logger.h"
+#include <atomic>
 #include <cstdlib>
 #include <iostream>
 #include <stack>
@@ -14,6 +15,19 @@ namespace ch {
 namespace core {
 
 thread_local context *ctx_curr_ = nullptr;
+
+namespace {
+// Process-wide atomic counter used to allocate globally unique node IDs.
+// Each ch::core::context owns a thread-local next_node_id_ for backward
+// compatibility (some debug paths still read it), but the authoritative
+// allocator is this atomic so that nested contexts -- e.g. the device-level
+// "top_ctx" holding IO ports and the per-component child context created by
+// Component::build() -- never reuse the same id.  Without this, the JIT's
+// data_buffer_ (indexed by node id) and the interpreter's data_map_ (keyed by
+// node id) both suffer silent aliasing when a parent context's IO port and a
+// child context's first opimpl are both assigned id == 2.
+std::atomic<uint32_t> g_next_node_id{0};
+} // namespace
 
 // debug_context_lifetime 控制 Debug 日志输出
 bool &debug_context_lifetime() {
@@ -106,8 +120,12 @@ void context::init() {
 
 uint32_t context::next_node_id() {
     CHDBG_FUNC();
-    CHENSURE(next_node_id_ < MAX_NODE_ID, "Node ID overflow approaching");
-    return next_node_id_++;
+    uint32_t new_id = g_next_node_id.fetch_add(1, std::memory_order_relaxed);
+    CHENSURE(new_id < MAX_NODE_ID, "Node ID overflow approaching");
+    // Keep the per-context counter in sync so any code that still inspects it
+    // (debug logs, tests) sees a monotonically increasing value.
+    next_node_id_ = new_id + 1;
+    return new_id;
 }
 
 std::vector<lnodeimpl *> context::get_eval_list() const {

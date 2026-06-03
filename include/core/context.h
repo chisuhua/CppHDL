@@ -142,6 +142,11 @@ private:
     void init();
 
     std::vector<std::unique_ptr<lnodeimpl>> node_storage_;
+    // Per-context counter retained for backward compatibility; IDs are now
+    // allocated from a process-wide atomic counter to guarantee uniqueness
+    // across nested contexts (ch::ch_device creates a device-level context for
+    // IO ports and a child context for opimpls, so per-context counters
+    // collide on node_id == 2 for the first input and the first opimpl).
     uint32_t next_node_id_ = 0;
     clockimpl *current_clock_ = nullptr;
     resetimpl *current_reset_ = nullptr;
