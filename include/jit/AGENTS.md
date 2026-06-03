@@ -33,8 +33,7 @@ src/jit/
 
 **如果跳过 JIT 支持**: 操作默认成为 `CALL_EXTERNAL`，依赖链中的下游 JIT-native 操作将读到陈旧值，导致**静默错误**（非崩溃）。
 
-**已知不可 JIT 的操作（ADR-021）**:
-- `concat`: JIT IR 无对应指令，`compile_to_llvm()` 会拒绝 → CALL_EXTERNAL
+**已知不可 JIT 的操作（ADR-021）**:（当前为空 — 所有 ch_op 均有 JIT 原生支持）
 
 ### 规则 2: `type_input` 节点必须检查 driver
 
@@ -95,6 +94,12 @@ if (instr.bitwidth < 64) {
     res = builder.CreateAnd(res, builder.getInt64(mask), "mask");
 }
 ```
+
+## 支持的 JIT 操作
+
+以下操作已具备 JIT 原生支持（不依赖解释器 `CALL_EXTERNAL` 回退）：
+
+- **`concat`** (JitOp::CONCAT) — 语义 `result = (src0 << src1_width) | src1`，其中 `src0` 写入高位、`src1` 写入低位。降低路径：`SHL` + `OR` + `AND mask`（全部使用现有 JitOp）。语义对齐解释器 `Concat::eval`（`include/ast/instr_op.h:416-447`）。**跨任务不变式**：`generate_ir()` 中必须设置 `instr.src_bitwidth = src1_width`（LOW 操作数位宽，即移位量），否则 `compile_to_llvm()` 拿到错误的移位值。
 
 ## ANTI-PATTERNS
 

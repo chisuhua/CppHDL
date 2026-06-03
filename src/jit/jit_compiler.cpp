@@ -379,6 +379,9 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
       case ch::core::ch_op::assign:
         jit_op = JitOp::CALL_EXTERNAL;
         break;
+      case ch::core::ch_op::concat:
+        jit_op = JitOp::CONCAT;
+        break;
       case ch::core::ch_op::popcount:
         jit_op = JitOp::POPCOUNT;
         break;
@@ -442,6 +445,21 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
                                  ? static_cast<BitWidth>(node->src(0)->size())
                                  : result_bitwidth;
         jit_instr.src_bitwidth = src0_bitwidth;
+        jit_instr.node_id = node_id;
+        block_comb.instrs.push_back(jit_instr);
+        block_comb.instrs.push_back(
+            make_store(node_id, dst_vreg, result_bitwidth));
+      } else if (jit_op == JitOp::CONCAT) {
+        // Concat: src0 → HIGH, src1 → LOW
+        // src_bitwidth = src1_width (shift amount for src0)
+        jit_instr = JitInstr(jit_op, result_bitwidth);
+        jit_instr.dst  = dst_vreg;
+        jit_instr.src0 = src0_vreg;
+        jit_instr.src1 = src1_vreg;
+        auto src1_bitwidth = (node->num_srcs() > 1 && node->src(1))
+                                ? static_cast<BitWidth>(node->src(1)->size())
+                                : BitWidth{0};
+        jit_instr.src_bitwidth = src1_bitwidth;
         jit_instr.node_id = node_id;
         block_comb.instrs.push_back(jit_instr);
         block_comb.instrs.push_back(
@@ -813,7 +831,7 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
       case JitOp::XOR_REDUCE: {
         auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
                                      "load_a");
-        auto *ctpop_fn = llvm::Intrinsic::getDeclaration(
+        auto *ctpop_fn = llvm::Intrinsic::getOrInsertDeclaration(
             module, llvm::Intrinsic::ctpop, {builder.getInt64Ty()});
         auto *count = builder.CreateCall(ctpop_fn, {a}, "xor_reduce_pop");
         auto *parity =
@@ -1036,13 +1054,17 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
       }
 
       case JitOp::CONCAT: {
+        // result = (src0 << src1_width) | src1
+        // src0 -> HIGH bits, src1 -> LOW bits (matches Concat::eval in
+        // include/ast/instr_op.h). instr.src_bitwidth must be set to src1_width
+        // by generate_ir() (the amount we need to shift src0 up by).
         auto *src0_val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
                                             "load_concat_src0");
         auto *src1_val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
                                             "load_concat_src1");
         auto *shift_amt = builder.getInt64(instr.src_bitwidth);
-        auto *shifted = builder.CreateShl(src1_val, shift_amt, "concat_shift");
-        auto *res = builder.CreateOr(shifted, src0_val, "concat_or");
+        auto *shifted = builder.CreateShl(src0_val, shift_amt, "concat_shift");
+        auto *res = builder.CreateOr(shifted, src1_val, "concat_or");
         if (instr.bitwidth < 64) {
           uint64_t bw_mask = (1ULL << instr.bitwidth) - 1;
           res = builder.CreateAnd(res, builder.getInt64(bw_mask), "mask_concat");
@@ -1096,7 +1118,7 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
       case JitOp::POPCOUNT: {
         auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
                                      "load_a");
-        auto *ctpop_fn = llvm::Intrinsic::getDeclaration(
+        auto *ctpop_fn = llvm::Intrinsic::getOrInsertDeclaration(
             module, llvm::Intrinsic::ctpop, {builder.getInt64Ty()});
         llvm::Value *res = builder.CreateCall(ctpop_fn, {a}, "popcount");
         if (instr.bitwidth < 64) {

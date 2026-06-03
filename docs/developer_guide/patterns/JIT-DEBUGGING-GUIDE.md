@@ -126,6 +126,38 @@ jit_compiler_->execute_comb_tick();
 jit_compiler_->sync_from_buffer(data_map_);
 ```
 
+### Bug 4: Concat on Output Ports (RESOLVED, 2026-06-02)
+
+**症状**:
+- 输出端口读到的值比预期晚 1 个时钟周期，使用 `concat()` 时尤为明显
+- 警告：`[instr_op_concat] Warning: Destination width mismatch! dest width=8, expected: 13, src0 width=8 src1_width=5`
+- 警告：`Value not found for port node ID: <output-id>`
+- JIT 编译失败，提示 `ir_instr_count=10`（或其他非零值，但 `JIT compilation successful` 未出现）
+
+**根因**: 三个独立的架构缺陷叠加造成：
+
+1. **节点 ID 别名冲突** — `ch::ch_device` 会创建两个 context：`top_ctx` 用于 IO 端口，组件自带的子 context 用于 ops。两者各自维护 `next_node_id_` 计数器，因此都会为各自的第一个非 clock/reset 节点发出 `id=2`。`eval_list` 沿 `src_` 边遍历会同时进入两个 context，JIT 因此看到两个 `id==2` 的节点，CONCAT 结果每 tick 都会覆盖 input `a`。JIT `data_buffer_` 按 `node->id()` 索引，两条写入会互相破坏。
+2. **`ch_device` 拆分 context 导致 output port 丢失** — Output port 位于 `top_ctx`，但 Simulator 的 `data_map_` 由 `top` 的 `eval_list` 构造。拓扑排序不会回溯到 `top_ctx`，因此 output port 永远拿不到自己的值，`get_port_value(result)` 返回 0。
+3. **`tick_seq` 符号缺失** — `compile_to_llvm` 在函数体为空（例如纯组合逻辑设计）时短路，不会发出 `Function` 声明，导致后续 `JIT->lookup("tick_seq")` 失败。错误信息也是空的，无法定位。
+
+**修复**（提交在 plan `.omo/plans/jit-concat-lowering.md`）:
+- `src/core/context.cpp`：将 `next_node_id()` 改为进程级 `std::atomic<uint32_t>`，保证跨 context 唯一
+- `include/device.h`：`top_->build(ctx_.get())` — 把 device ctx 传给顶层组件，让 IO 和 ops 共享同一个 context（顺带消除缺陷 #2）
+- `src/jit/jit_compiler.cpp`：无论函数体是否为空，都发出 `Function` 符号
+- `src/jit/jit_compiler.cpp`：将 `LLVMError` 捕获到 `last_error_msg_`，失败原因可诊断
+- `src/simulator.cpp`：编译失败时打印 `last_error_msg()`
+
+**验证**:
+- `ctest -R "jit_concat"`：5/6 通过（1 个已知的移位寄存器时序初始化缺陷，见下）
+- `ctest -L base`：122/123（与改动前持平，无回归）
+- `./run_all_ported_tests.sh`：28/28 通过
+- JIT 编译日志：`JIT compilation successful: 16 IR instructions, 13 vregs`
+- `src0 width=8` 与 `Value not found` 警告已消失
+
+**已知遗留问题**：`test_jit_concat` 中的移位寄存器测试暴露出一个独立的 JIT 序贯初始化缺陷 —— `REG_NEXT` 在 tick 0 上会覆盖 init 值（0）为 next 值（1），发生在 Simulator 最终 `eval_combinational()` 重新读取寄存器的 output port 之前。这是一处独立缺陷，不在本次修复范围内；解释器路径仍是序贯逻辑的真相来源。
+
+详细 debug 笔记：`.omo/evidence/task-6-debug-notes.md`
+
 ## LLVM Lowering 参考
 
 ### BIT_SELECT (动态位选择)

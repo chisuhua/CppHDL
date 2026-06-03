@@ -187,6 +187,7 @@ add_catch_test(test_verilog_gen test_verilog_gen.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
+add_catch_test(test_jit_concat test_jit_concat.cpp)
 
 # test_mod_width_simple: 测试已被 test_mod_width 覆盖, 不再需要
 # 旧文件使用已废弃的 ch_lit<N> API, 保留作为参考
