@@ -582,7 +582,19 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
   auto *func_ty = llvm::FunctionType::get(builder.getVoidTy(), ptr_ty, false);
 
   auto compile_single_func = [&](const JitFunction &func, void *&out_func_ptr) {
+    // Always emit the tick function (even as an empty no-op) so that the
+    // subsequent JIT->lookup() call has a resolvable symbol.  Without this, a
+    // purely combinational design would leave tick_seq undefined and the JIT
+    // would fail to compile even though there is nothing wrong with the IR.
+    auto *tick_func = llvm::Function::Create(
+        func_ty, llvm::Function::ExternalLinkage, func.name, module);
+    tick_func->arg_begin()->setName("data_buffer");
+
+    auto *entry = llvm::BasicBlock::Create(*context, "entry", tick_func);
+    builder.SetInsertPoint(entry);
+
     if (func.blocks.empty() || func.blocks[0].instrs.empty()) {
+      builder.CreateRetVoid();
       out_func_ptr = nullptr;
       return JitResult::SUCCESS;
     }
@@ -592,16 +604,12 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
           instr.op == JitOp::MEM_READ || instr.op == JitOp::MEM_WRITE ||
           instr.op == JitOp::JUMP || instr.op == JitOp::BRANCH ||
           instr.op == JitOp::LABEL) {
+        // Detach the empty stub we already inserted so we don't leave a
+        // declared but unused function in the module.
+        tick_func->eraseFromParent();
         return JitResult::UNSUPPORTED_OP;
       }
     }
-
-    auto *tick_func = llvm::Function::Create(
-        func_ty, llvm::Function::ExternalLinkage, func.name, module);
-    tick_func->arg_begin()->setName("data_buffer");
-
-    auto *entry = llvm::BasicBlock::Create(*context, "entry", tick_func);
-    builder.SetInsertPoint(entry);
 
     std::vector<llvm::Value *> vregs;
     if (func.vreg_count > 0) {
@@ -1207,6 +1215,10 @@ JitResult JitCompiler::finalize_compilation_dual() {
   llvm::orc::LLJITBuilder lljit_builder;
   auto JIT_or_err = lljit_builder.create();
   if (!JIT_or_err) {
+    std::string err_msg;
+    llvm::raw_string_ostream os(err_msg);
+    os << JIT_or_err.takeError();
+    last_error_msg_ = std::string("LLJIT create failed: ") + err_msg;
     return JitResult::COMPILATION_FAILED;
   }
 
@@ -1215,17 +1227,29 @@ JitResult JitCompiler::finalize_compilation_dual() {
       llvm::orc::ThreadSafeModule(std::unique_ptr<llvm::Module>(module),
                                   std::unique_ptr<llvm::LLVMContext>(context));
   if (auto Err = JIT->addIRModule(std::move(tsm))) {
+    std::string err_msg;
+    llvm::raw_string_ostream os(err_msg);
+    os << Err;
+    last_error_msg_ = std::string("addIRModule failed: ") + err_msg;
     return JitResult::COMPILATION_FAILED;
   }
 
   auto Sym_comb = JIT->lookup("tick_comb");
   if (!Sym_comb) {
+    std::string err_msg;
+    llvm::raw_string_ostream os(err_msg);
+    os << Sym_comb.takeError();
+    last_error_msg_ = std::string("lookup tick_comb failed: ") + err_msg;
     return JitResult::COMPILATION_FAILED;
   }
   compiled_comb_func_ = reinterpret_cast<void *>(Sym_comb->getValue());
 
   auto Sym_seq = JIT->lookup("tick_seq");
   if (!Sym_seq) {
+    std::string err_msg;
+    llvm::raw_string_ostream os(err_msg);
+    os << Sym_seq.takeError();
+    last_error_msg_ = std::string("lookup tick_seq failed: ") + err_msg;
     return JitResult::COMPILATION_FAILED;
   }
   compiled_seq_func_ = reinterpret_cast<void *>(Sym_seq->getValue());

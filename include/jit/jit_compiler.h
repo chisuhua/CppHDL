@@ -55,6 +55,7 @@ public:
     void clear();
     uint32_t get_ir_instr_count() const { return last_ir_instr_count_; }
     uint32_t get_seq_ir_instr_count() const { return last_seq_ir_instr_count_; }
+    const std::string& last_error_msg() const { return last_error_msg_; }
 
     uint64_t* data_buffer() { return data_buffer_.data(); }
     const uint64_t* data_buffer() const { return data_buffer_.data(); }
@@ -75,6 +76,7 @@ private:
     uint32_t last_ir_instr_count_;
     uint32_t last_seq_ir_instr_count_;
     uint32_t last_vreg_count_;
+    std::string last_error_msg_;
 
     std::vector<uint64_t> data_buffer_;
 

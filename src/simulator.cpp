@@ -1165,8 +1165,12 @@ void Simulator::try_jit_compile() {
                result.ir_instr_count, result.vreg_count,
                (unsigned long long)result.compile_time_ns);
     } else {
+        std::string combined = result.error_msg;
+        if (combined.empty() && jit_compiler_) {
+            combined = jit_compiler_->last_error_msg();
+        }
         CHWARN("JIT compilation failed: %s (ir_instr_count=%u)",
-               result.error_msg.c_str(), result.ir_instr_count);
+               combined.c_str(), result.ir_instr_count);
     }
 }
 
