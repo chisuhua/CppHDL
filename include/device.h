@@ -10,13 +10,17 @@ class ch_device {
 public:
     explicit ch_device(Args&&... args)
     {
-        auto ctx = std::make_unique<ch::core::context>("top_ctx");
-        ch::core::ctx_swap ctx_guard(ctx.get());
-        // Use shared_ptr so that enable_shared_from_this (used by Component
-        // for weak_ptr parent tracking) is properly initialised for the
-        // top-level instance and any children it creates.
+        // Allocate the device-level context first so that the ch_in/ch_out
+        // members constructed by T (and any opimpls created by describe()) all
+        // land in the same context.  Mixing them across two contexts (the
+        // older "top_ctx for IO, child context for ops" design) caused node-id
+        // aliasing that corrupted the JIT data_buffer_ and dropped the
+        // component's output ports from the simulator's data_map.  See
+        // .omo/evidence/task-6-debug-notes.md for the full analysis.
+        ctx_ = std::make_unique<ch::core::context>("top_ctx");
+        ch::core::ctx_swap ctx_guard(ctx_.get());
         top_ = std::make_shared<T>(nullptr, "top", std::forward<Args>(args)...);
-        top_->build();
+        top_->build(ctx_.get());
     }
 
     T& instance() { return *top_; }
@@ -29,6 +33,7 @@ public:
 
 private:
     std::shared_ptr<T> top_;
+    std::unique_ptr<ch::core::context> ctx_;
 };
 
 } // namespace ch
