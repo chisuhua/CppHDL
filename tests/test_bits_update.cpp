@@ -85,7 +85,7 @@ TEST_CASE("bits_update: simulation result verification",
 
         // Expected: 0b11111010 (original upper 4 bits + new lower 4 bits)
         uint64_t expected = 250; // 0b11111010 = 250
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -101,7 +101,7 @@ TEST_CASE("bits_update: simulation result verification",
 
         // Expected: 0b10100000 (new upper 4 bits + original lower 4 bits)
         uint64_t expected = 160; // 0b10100000 = 160
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -117,7 +117,7 @@ TEST_CASE("bits_update: simulation result verification",
 
         // Expected: 0b11111000 (changing bits 3 and 2 from 00 to 10)
         uint64_t expected = 248; // 0b11111000 = 248
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -133,7 +133,7 @@ TEST_CASE("bits_update: simulation result verification",
 
         // Expected: 0b11110100 (changing bit 2 from 0 to 1)
         uint64_t expected = 244; // 0b11110100 = 244
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -152,7 +152,7 @@ TEST_CASE("bits_update: simulation result verification",
         // Position:        ^
         // Result:   1111 0101 1011 1100 = 62908
         uint64_t expected = 62908;
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -162,8 +162,8 @@ TEST_CASE("bits_update: simulation result verification",
         ch_uint<2> source1(1_d);  // 0b01 = 1
         ch_uint<2> source2(2_d);  // 0b10 = 2
 
-        auto result1 = bits_update<2>(target, source1, 0); // Update bits [1:0]
-        auto result2 = bits_update<2>(target, source2, 6); // Update bits [7:6]
+        auto result1 = bits_update<2>(target, source1, 0);  // Update bits [1:0]
+        auto result2 = bits_update<2>(result1, source2, 6); // Chain on result1
 
         Simulator sim(&ctx);
         sim.tick();
@@ -172,7 +172,7 @@ TEST_CASE("bits_update: simulation result verification",
         // Step 1:   11000001 (updated bits [1:0] to 01 = 1)
         // Step 2:   10000001 (updated bits [7:6] to 10 = 2)
         uint64_t expected = 129; // 0b10000001 = 129
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result2));
 
         REQUIRE(actual == expected);
     }
@@ -188,7 +188,7 @@ TEST_CASE("bits_update: simulation result verification",
 
         // Expected: 0b01111111 (highest bit cleared)
         uint64_t expected = 127;
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -206,7 +206,7 @@ TEST_CASE("bits_update: simulation result verification",
         // Replace [4:2] (010 = 2) with 111 (7)
         // Result:   10111110 = 242
         uint64_t expected = 190;
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -228,7 +228,7 @@ TEST_CASE("bits_update: boundary conditions",
         sim.tick();
 
         uint64_t expected = 170; // Source value
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -245,7 +245,7 @@ TEST_CASE("bits_update: boundary conditions",
         // Original: 11110000 (240)
         // Update MSB to 1 (it's already 1, so no change)
         uint64_t expected = 240;
-        uint64_t actual = static_cast<uint64_t>(sim.get_value(target));
+        uint64_t actual = static_cast<uint64_t>(sim.get_value(result));
 
         REQUIRE(actual == expected);
     }
@@ -280,20 +280,20 @@ TEST_CASE("bits_update: dynamic simulation test",
         sim.tick();
         // Original: 11000011 (195), replace [5:2] (0000) with 1010 (10)
         // Result: 11101011 = 235
-        REQUIRE(static_cast<uint64_t>(sim.get_value(target)) == 235);
+        REQUIRE(static_cast<uint64_t>(sim.get_value(result)) == 235);
 
         // Change source value
         sim.set_value(source, 1);
         sim.tick();
         // Original: 11000011 (195), replace [5:2] (0000) with 0001 (1)
         // Result: 11000111 = 199
-        REQUIRE(static_cast<uint64_t>(sim.get_value(target)) == 199);
+        REQUIRE(static_cast<uint64_t>(sim.get_value(result)) == 199);
 
         // Change target value
         sim.set_value(target, 51); // 0b00110011 = 51
         sim.tick();
         // Original: 00110011 (51), replace [5:2] (1100) with 0001 (1)
         // Result: 00000111 = 7
-        REQUIRE(static_cast<uint64_t>(sim.get_value(target)) == 7);
+        REQUIRE(static_cast<uint64_t>(sim.get_value(result)) == 7);
     }
 }

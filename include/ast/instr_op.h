@@ -599,7 +599,8 @@ struct Assign {
 // 添加 BITS_UPDATE 操作定义 - 将源数据分配到位范围
 struct BitsUpdate {
     static const char *name() { return "instr_op_bits_update::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
+    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *target,
+                     ch::core::sdata_type *source,
                      ch::core::sdata_type *range_info) {
         // src1 (range_info) 编码: 低32位 = lsb, 高32位 = msb
         uint64_t range_val = static_cast<uint64_t>(*range_info);
@@ -614,14 +615,40 @@ struct BitsUpdate {
         }
 
         // 保留目标数据的其他位不变，仅替换指定范围内的位
-        for (uint32_t i = 0; i < (msb - lsb + 1) && i < src0->bitwidth(); ++i) {
-            bool bit_val = src0->get_bit(i);
+        *dst = *target;
+        for (uint32_t i = 0; i < (msb - lsb + 1) && i < source->bitwidth(); ++i) {
+            bool bit_val = source->get_bit(i);
             dst->set_bit(lsb + i, bit_val);
         }
     }
 };
 
 } // namespace op
+
+// bits_update 指令：dst = (target & clear_mask) | (source << lsb & keep_mask)
+class instr_op_bits_update : public instr_base {
+public:
+    instr_op_bits_update(ch::core::sdata_type *dst, uint32_t size,
+                         ch::core::sdata_type *target, ch::core::sdata_type *source,
+                         ch::core::sdata_type *range_info)
+        : instr_base(size), dst_(dst), target_(target), source_(source),
+          range_(range_info) {}
+
+    void eval() override {
+        if (!dst_ || !target_ || !source_ || !range_) {
+            std::cerr << "[instr_op_bits_update] Error: Null pointer encountered!"
+                      << std::endl;
+            return;
+        }
+        ch::op::BitsUpdate::eval(dst_, target_, source_, range_);
+    }
+
+private:
+    ch::core::sdata_type *dst_;
+    ch::core::sdata_type *target_;
+    ch::core::sdata_type *source_;
+    ch::core::sdata_type *range_;
+};
 
 // -----------------------------
 // Type Aliases (扩展的别名)
@@ -651,7 +678,6 @@ using instr_op_sshr = instr_op_binary<op::Sshr>;
 using instr_op_neg = instr_op_unary<op::Neg>;
 using instr_op_bit_sel = instr_op_binary<op::BitSel>;
 using instr_op_bits_extract = instr_op_binary<op::BitsExtract>;
-using instr_op_bits_update = instr_op_binary<op::BitsUpdate>;
 using instr_op_concat = instr_op_binary<op::Concat>;
 using instr_op_sext = instr_op_unary<op::Sext>;
 using instr_op_zext = instr_op_unary<op::Zext>;

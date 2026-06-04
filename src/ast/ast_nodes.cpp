@@ -211,13 +211,14 @@ outputimpl::create_instruction(ch::data_map_t &data_map) const {
 
 std::unique_ptr<ch::instr_base>
 bitsupdateimpl::create_instruction(ch::data_map_t &data_map) const {
-    auto *target_buf = &data_map.at(target()->id()); // 目标数据
-    auto *source_buf = &data_map.at(source()->id()); // 目标数据
-    auto *range_buf = &data_map.at(range()->id());   // 目标数据
+    auto *dst_buf = &data_map.at(id());
+    auto *target_buf = &data_map.at(target()->id());
+    auto *source_buf = &data_map.at(source()->id());
+    auto *range_buf = &data_map.at(range()->id());
 
-    // 创建多路选择器指令
-    return std::make_unique<ch::instr_op_bits_update>(target_buf, size_,
-                                                      source_buf, range_buf);
+    return std::make_unique<ch::instr_op_bits_update>(dst_buf, size_,
+                                                      target_buf, source_buf,
+                                                      range_buf);
 }
 
 } // namespace core
