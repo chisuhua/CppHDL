@@ -376,8 +376,13 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
         break;
       case ch::core::ch_op::bits_update:
       case ch::core::ch_op::mux:
-      case ch::core::ch_op::assign:
         jit_op = JitOp::CALL_EXTERNAL;
+        break;
+      case ch::core::ch_op::assign:
+        // assign op 只是一个 wire 传递：dst = src0
+        // 必须做成 JIT 原生，否则下游 JIT-native op 会读到 stale 值
+        // （因为解释器在 JIT 之前跑，assign 的 src 还没被 JIT 更新）
+        jit_op = JitOp::ASSIGN;
         break;
       case ch::core::ch_op::concat:
         jit_op = JitOp::CONCAT;
@@ -1167,6 +1172,18 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
         } else {
           builder.CreateStore(source, vregs[instr.dst], "store_bits_update");
         }
+        break;
+      }
+
+      case JitOp::ASSIGN: {
+        // wire 传递：dst = src0 (按目标位宽 mask)
+        llvm::Value *src = builder.CreateLoad(builder.getInt64Ty(),
+                                              vregs[instr.src0], "load_assign_src");
+        if (instr.bitwidth < 64) {
+          uint64_t mask = (1ULL << instr.bitwidth) - 1;
+          src = builder.CreateAnd(src, builder.getInt64(mask), "mask_assign");
+        }
+        builder.CreateStore(src, vregs[instr.dst], "store_assign");
         break;
       }
 

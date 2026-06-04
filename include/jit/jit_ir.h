@@ -50,6 +50,7 @@ enum class JitOp : uint8_t {
   OR_REDUCE,
   XOR_REDUCE,
   BITS_UPDATE,
+  ASSIGN,
   CALL_EXTERNAL,
   NOP
 };
