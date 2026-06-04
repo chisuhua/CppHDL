@@ -32,8 +32,8 @@ TEST_CASE("AXI PWM - VerilogGeneration", "[axi_pwm][verilog]") {
     ch::ch_device<AxiLitePwm<16, 4>> pwm_device;
     
     // Generate Verilog
-    std::string vlog_file = "/workspace/CppHDL/tests/output/axi_pwm.v";
-    (void)system("mkdir -p /workspace/CppHDL/tests/output");
+    std::string vlog_file = "tests/output/axi_pwm.v";
+    (void)system("mkdir -p tests/output");
     
     toVerilog(vlog_file, pwm_device.context());
     

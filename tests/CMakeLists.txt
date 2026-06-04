@@ -215,6 +215,9 @@ add_spinalhdl_ported_test(i2c i2c_controller_example)
 add_spinalhdl_ported_test(timer timer_example)
 add_spinalhdl_ported_test(vga vga_controller_example)
 add_spinalhdl_ported_test(ws2812 ws2812_controller_example)
+# ws2812 takes ~20s in default parallel but exceeds 30s under heavy -j$(nproc) load.
+# Increase to 120s to prevent spurious "Subprocess aborted" in CI heavy-parallel runs.
+set_tests_properties(spinalhdl_ws2812 PROPERTIES TIMEOUT 120)
 add_spinalhdl_ported_test(quadrature_encoder quadrature_encoder_example)
 add_spinalhdl_ported_test(sigma_delta_dac sigma_delta_dac_example)
 add_spinalhdl_ported_test(width_adapter width_adapter_example)
