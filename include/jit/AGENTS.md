@@ -33,7 +33,34 @@ src/jit/
 
 **如果跳过 JIT 支持**: 操作默认成为 `CALL_EXTERNAL`，依赖链中的下游 JIT-native 操作将读到陈旧值，导致**静默错误**（非崩溃）。
 
-**已知不可 JIT 的操作（ADR-021）**:（当前为空 — 所有 ch_op 均有 JIT 原生支持）
+**已知走 `CALL_EXTERNAL` 的 `ch_op`（2026-06-04 审计）**:
+
+`generate_ir()` 的 `switch(ch_op)` 中**所有 33 个 ch_op 都有 case**（`-Wswitch-enum` 强制完整性），但其中 2 个映射到 `CALL_EXTERNAL`：
+
+| ch_op | 走 CALL_EXTERNAL 的原因 | 替代 JIT 路径 |
+|-------|------------------------|---------------|
+| `ch_op::mux` | `src/jit/jit_compiler.cpp:378-380` 显式映射为 `CALL_EXTERNAL` | `lnodetype::type_mux` 节点 → `make_select` → `JitOp::SELECT` (line 481) |
+| `ch_op::bits_update` | 同上，line 377-380 共享 case 块 | `lnodetype::type_bitsupdate` 节点 → `JitOp::BITS_UPDATE` (line 523) |
+
+**双路径架构说明**:
+
+CppHDL 的 `mux` 和 `bits_update` 有两种节点表示，通过不同创建入口使用：
+
+1. **ch_op 路径**（type_op 节点 + ch_op 枚举）— 由 `include/lnode/operators_ext.h:197, 333` 的 `op_type = ch_op::mux/bits_update` 触发。`generate_ir()` 映射为 `CALL_EXTERNAL`，由 `include/ast/instr_op.h` 的解释器处理。
+2. **lnodetype 路径**（专用节点类型）— 由 `include/core/node_builder.h:211, 376` 的 `create_node<muximpl>`/`create_node<bitsupdateimpl>` 触发。`generate_ir()` 直接 emit `JitOp::SELECT`/`JitOp::BITS_UPDATE`，由 `compile_to_llvm()` 原生 lowering。
+
+**生产代码推荐路径**:
+
+- ✅ `node_builder.h::ch_mux2()` / `bits_update()` → 创建 lnodetype 节点 → JIT 原生
+- ❌ 直接使用 `ch_select(...)` 运算符重载（`operators_ext.h`）→ 创建 ch_op 节点 → 解释器（CALL_EXTERNAL），**下游 JIT-native 节点可能读到陈旧值**
+
+**JitOp 中已定义但未降低的占位项**:
+
+`compile_to_llvm()` switch 中**无对应 case**的 6 个 JitOp（`src/jit/jit_compiler.cpp:608-611` 显式 NOP）：
+
+- `SLICE`, `MEM_READ`, `MEM_WRITE`, `JUMP`, `BRANCH`, `LABEL`
+
+`generate_ir()` 从不 emit 这些 op（无任何 `jit_op = JitOp::SLICE` 等赋值），所以是**死代码 / 未来内存 JIT 与控制流 JIT 的预留**。**不构成当前功能缺口**。
 
 ### 规则 2: `type_input` 节点必须检查 driver
 
@@ -97,9 +124,10 @@ if (instr.bitwidth < 64) {
 
 ## 支持的 JIT 操作
 
-以下操作已具备 JIT 原生支持（不依赖解释器 `CALL_EXTERNAL` 回退）：
+`generate_ir()` 中**所有 33 个 ch_op 都有 case**（`-Wswitch-enum` 强制完整性）。其中 31 个映射为 JIT 原生 JitOp，2 个映射为 `CALL_EXTERNAL`（见上文"已知走 CALL_EXTERNAL 的 ch_op"表格）。下表仅列出需要特别说明语义细节的操作：
 
 - **`concat`** (JitOp::CONCAT) — 语义 `result = (src0 << src1_width) | src1`，其中 `src0` 写入高位、`src1` 写入低位。降低路径：`SHL` + `OR` + `AND mask`（全部使用现有 JitOp）。语义对齐解释器 `Concat::eval`（`include/ast/instr_op.h:416-447`）。**跨任务不变式**：`generate_ir()` 中必须设置 `instr.src_bitwidth = src1_width`（LOW 操作数位宽，即移位量），否则 `compile_to_llvm()` 拿到错误的移位值。
+- **`mux` / `bits_update`** — 通过 lnodetype 路径（`type_mux` / `type_bitsupdate` 节点）走 JIT 原生。**ch_op 路径走 CALL_EXTERNAL**。生产代码应使用 `node_builder.h` 的 API 避免 ch_op 路径。
 
 ## ANTI-PATTERNS
 
@@ -141,5 +169,5 @@ sim.set_jit_enabled(false); // 禁用 JIT 确认是否为 JIT 问题
 ---
 
 **维护**: AI Agent
-**版本**: v1.0
-**最后更新**: 2026-05-06
+**版本**: v1.1
+**最后更新**: 2026-06-04
