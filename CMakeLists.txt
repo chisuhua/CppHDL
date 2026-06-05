@@ -29,6 +29,9 @@ endif()
 # 编译器特定选项
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-Wall -Wextra -Wpedantic)
+    # 强制 ch_op enum switch 完整性（让 jit_compiler.cpp 中的
+    # "#pragma GCC diagnostic error \"-Wswitch-enum\"" 真正生效）
+    add_compile_options(-Wswitch-enum)
     # 针对格式化安全警告
     add_compile_options(-Wno-format-security)
     # 禁用一些不必要的警告

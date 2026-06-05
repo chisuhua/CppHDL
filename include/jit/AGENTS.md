@@ -33,14 +33,14 @@ src/jit/
 
 **如果跳过 JIT 支持**: 操作默认成为 `CALL_EXTERNAL`，依赖链中的下游 JIT-native 操作将读到陈旧值，导致**静默错误**（非崩溃）。
 
-**已知走 `CALL_EXTERNAL` 的 `ch_op`（2026-06-04 审计）**:
+**已知走 `CALL_EXTERNAL` 的 `ch_op`（2026-06-04 审计，2026-06-05 修订）**:
 
-`generate_ir()` 的 `switch(ch_op)` 中**所有 33 个 ch_op 都有 case**（`-Wswitch-enum` 强制完整性），但其中 2 个映射到 `CALL_EXTERNAL`：
+`generate_ir()` 的 `switch(ch_op)` 中**所有 33 个 ch_op 都有 case**（`-Wswitch-enum` 由 `CMakeLists.txt:33` 全局强制），其中 2 个映射为 `CALL_EXTERNAL`：
 
-| ch_op | 走 CALL_EXTERNAL 的原因 | 替代 JIT 路径 |
-|-------|------------------------|---------------|
-| `ch_op::mux` | `src/jit/jit_compiler.cpp:378-380` 显式映射为 `CALL_EXTERNAL` | `lnodetype::type_mux` 节点 → `make_select` → `JitOp::SELECT` (line 481) |
-| `ch_op::bits_update` | 同上，line 377-380 共享 case 块 | `lnodetype::type_bitsupdate` 节点 → `JitOp::BITS_UPDATE` (line 523) |
+| ch_op | JIT switch 位置 | 替代 JIT 路径 |
+|-------|----------------|---------------|
+| `ch_op::mux` | `src/jit/jit_compiler.cpp:402-405`（在 `ch_op::neg` case 之后） | `lnodetype::type_mux` 节点 → `make_select` → `JitOp::SELECT` (`jit_compiler.cpp:496`) |
+| `ch_op::bits_update` | 同上，紧接 `ch_op::mux` 之后 | `lnodetype::type_bitsupdate` 节点 → `JitOp::BITS_UPDATE` (`jit_compiler.cpp:528`) |
 
 **双路径架构说明**:
 

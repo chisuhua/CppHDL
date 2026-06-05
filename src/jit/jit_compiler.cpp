@@ -374,10 +374,6 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
       case ch::core::ch_op::rotate_r:
         jit_op = JitOp::ROTATE_RIGHT;
         break;
-      case ch::core::ch_op::bits_update:
-      case ch::core::ch_op::mux:
-        jit_op = JitOp::CALL_EXTERNAL;
-        break;
       case ch::core::ch_op::assign:
         // assign op 只是一个 wire 传递：dst = src0
         // 必须做成 JIT 原生，否则下游 JIT-native op 会读到 stale 值
@@ -402,6 +398,17 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
         break;
       case ch::core::ch_op::neg:
         jit_op = JitOp::NEG;
+        break;
+      // === 走 CALL_EXTERNAL 的 ch_op ===
+      // 这两个 ch_op 仍出现在 enum 中（用于占位/未来兼容），但
+      // 生产代码已经走 lnodetype 路径（type_mux / type_bitsupdate），
+      // 不会创建 opimpl 节点。若未来有代码直接走 ch_op 路径，
+      // 这里会回退到解释器。
+      case ch::core::ch_op::mux:
+        jit_op = JitOp::CALL_EXTERNAL;
+        break;
+      case ch::core::ch_op::bits_update:
+        jit_op = JitOp::CALL_EXTERNAL;
         break;
       }
 #pragma GCC diagnostic pop
