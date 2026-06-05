@@ -839,10 +839,12 @@ void Simulator::tick() {
     }
 
     // A/B verification: save interpreted state before execution
+    // 注意：A/B 验证基础设施目前不完整（dual-function JIT 重构后尚未重新设计）
+    // 启用后只会打印警告，不会触发比对逻辑。
     ch::data_map_t ab_result_a;
     bool run_ab_verify = false;
 #if __has_include("jit/jit_compiler.h")
-    run_ab_verify = false;
+    run_ab_verify = ab_verification_;
 #endif
 
 #ifdef ENABLE_PERF_PROFILING
@@ -875,7 +877,10 @@ void Simulator::tick() {
 
 #if __has_include("jit/jit_compiler.h")
     if (run_ab_verify) {
-        CHABORT("A/B verification disabled - needs redesign for dual-function JIT");
+        // A/B 验证当前仅作为"启用标记"——dual-function JIT（tick_comb + tick_seq）
+        // 重构后尚未重新设计比对逻辑。此处仅打印警告，不中断仿真。
+        // TODO: 重新实现 A/B 验证（需要保存 JIT 前后的 data_map_ 并比对）。
+        CHWARN("A/B verification enabled but not implemented for dual-function JIT (tick_comb + tick_seq). Skipping comparison.");
     }
 #endif
 
