@@ -81,15 +81,6 @@ struct shr_op {
     static constexpr const char *name() { return "shr"; }
 };
 
-// 算术右移操作策略
-struct sshr_op {
-    static constexpr ch_op op_type = ch_op::sshr;
-    template <unsigned M, unsigned N>
-    static constexpr unsigned result_width = M;
-    static constexpr bool is_comparison = false;
-    static constexpr const char *name() { return "sshr"; }
-};
-
 // 相等比较策略
 struct eq_op {
     static constexpr ch_op op_type = ch_op::eq;
@@ -194,8 +185,6 @@ struct logical_not_op {
 
 // 多路选择器操作
 struct mux_op {
-    static constexpr ch_op op_type = ch_op::mux;
-    static constexpr bool is_comparison = false;
     static constexpr const char *name() { return "mux"; }
 
     template <unsigned M, unsigned N>
@@ -326,17 +315,6 @@ struct popcount_op {
     static constexpr unsigned result_width_v = (N <= 1) ? 1 : std::bit_width(N);
 
     static constexpr const char *name() { return "popcount"; }
-};
-
-// 位段更新操作策略
-struct bits_update_op {
-    static constexpr ch_op op_type = ch_op::bits_update;
-    static constexpr bool is_comparison = false;
-    static constexpr const char *name() { return "bits_update"; }
-
-    // 位段更新操作的结果宽度与目标操作数的宽度相同
-    template <unsigned M, unsigned N>
-    static constexpr unsigned result_width = M; // M代表目标操作数的宽度
 };
 
 } // namespace ch::core

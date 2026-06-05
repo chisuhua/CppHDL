@@ -54,14 +54,6 @@ CppHDL 的 `mux` 和 `bits_update` 有两种节点表示，通过不同创建入
 - ✅ `node_builder.h::ch_mux2()` / `bits_update()` → 创建 lnodetype 节点 → JIT 原生
 - ❌ 直接使用 `ch_select(...)` 运算符重载（`operators_ext.h`）→ 创建 ch_op 节点 → 解释器（CALL_EXTERNAL），**下游 JIT-native 节点可能读到陈旧值**
 
-**JitOp 中已定义但未降低的占位项**:
-
-`compile_to_llvm()` switch 中**无对应 case**的 6 个 JitOp（`src/jit/jit_compiler.cpp:608-611` 显式 NOP）：
-
-- `SLICE`, `MEM_READ`, `MEM_WRITE`, `JUMP`, `BRANCH`, `LABEL`
-
-`generate_ir()` 从不 emit 这些 op（无任何 `jit_op = JitOp::SLICE` 等赋值），所以是**死代码 / 未来内存 JIT 与控制流 JIT 的预留**。**不构成当前功能缺口**。
-
 ### 规则 2: `type_input` 节点必须检查 driver
 
 `inputimpl` 可通过 `set_driver()` 设置驱动源（Component IO 连线 `<<=` 时使用）。JIT 的 `generate_ir()` 必须处理此情况：

@@ -611,18 +611,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
       return JitResult::SUCCESS;
     }
 
-    for (const auto &instr : func.blocks[0].instrs) {
-      if (instr.op == JitOp::SLICE ||
-          instr.op == JitOp::MEM_READ || instr.op == JitOp::MEM_WRITE ||
-          instr.op == JitOp::JUMP || instr.op == JitOp::BRANCH ||
-          instr.op == JitOp::LABEL) {
-        // Detach the empty stub we already inserted so we don't leave a
-        // declared but unused function in the module.
-        tick_func->eraseFromParent();
-        return JitResult::UNSUPPORTED_OP;
-      }
-    }
-
     std::vector<llvm::Value *> vregs;
     if (func.vreg_count > 0) {
       vregs.resize(func.vreg_count, nullptr);
