@@ -509,3 +509,111 @@ TEST_CASE("VerilogGen - RotateRightVariableAmt", "[verilog][rotate][boundary]") 
     REQUIRE(verilog.find("variable amount not supported") != std::string::npos);
     REQUIRE(verilog.find("{") == std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Wave 2 follow-up: 4 boundary-condition tests for print_unary_op
+// (print_concat, print_bitsupdate) covering untested branches:
+//   - SextSameWidth: ext==0 branch (no replication, direct passthrough)
+//   - ZextSameWidth: ext==0 branch (no replication, direct passthrough)
+//   - BitsUpdateMsbTop: msb==N-1 boundary (zero-width top slice OMITTED)
+//   - ConcatLhsLiteral: lhs is a type_lit (get_literal_str path on LHS)
+// ---------------------------------------------------------------------------
+
+// 7. SextSameWidth: 8->8 sext hits the `if (ext == 0)` branch in
+//    print_unary_op (line 583-584), which emits a direct passthrough
+//    `assign sext = <src>;` with NO `{{ext{...}}, src}` replication.
+//    The static_assert `NewWidth >= ch_width_v<T>` allows same-width
+//    (8 >= 8 is true), so the node is actually created with ext==0.
+TEST_CASE("VerilogGen - SextSameWidth", "[verilog][extend][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("sext_samewidth_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    // ch_in<> is used so the source is a wire, making the passthrough
+    // line `assign sext = a;` clearly visible (no `uint_lit[7]` indexing).
+    ch_in<ch_uint<8>> a("a");
+    auto ext = sext<8>(a);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = ext;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // ext==0 branch: direct passthrough, no replication, no concat braces.
+    REQUIRE(verilog.find("assign sext = a;") != std::string::npos);
+    // Fingerprint of the ext>0 branch must NOT appear.
+    REQUIRE(verilog.find("{a[7]}") == std::string::npos);
+}
+
+// 8. ZextSameWidth: 8->8 zext hits the `if (ext == 0)` branch in
+//    print_unary_op (line 591-592), which emits a direct passthrough
+//    `assign zext = <src>;` with NO `{{ext{1'b0}}, src}` replication.
+TEST_CASE("VerilogGen - ZextSameWidth", "[verilog][extend][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("zext_samewidth_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<8>> a("a");
+    auto ext = zext<8>(a);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = ext;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // ext==0 branch: direct passthrough.
+    REQUIRE(verilog.find("assign zext = a;") != std::string::npos);
+    // Fingerprint of the ext>0 branch must NOT appear.
+    REQUIRE(verilog.find("{1'b0}") == std::string::npos);
+}
+
+// 9. BitsUpdateMsbTop: bits_update<4>(target_8bit, source_4bit, 4) produces
+//    msb=7, lsb=4, N=8. The top slice `target[N-1:msb+1]` = `target[7:8]`
+//    is a ZERO-WIDTH slice and must be OMITTED from the emit
+//    (print_bitsupdate line 853-855). Only `source` and `target[3:0]`
+//    remain in the concat.
+TEST_CASE("VerilogGen - BitsUpdateMsbTop", "[verilog][bitsupdate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("bitsupdate_top_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> target(0_d);
+    ch_uint<4> source(15_d);
+    auto updated = bits_update<4>(target, source, 4); // lsb=4, W=4 -> [7:4]
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = updated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The lower half of the target is preserved.
+    REQUIRE(verilog.find("[3:0]") != std::string::npos);
+    // The zero-width top slice [7:8] must NOT appear.
+    REQUIRE(verilog.find("[7:8]") == std::string::npos);
+    // Concat braces are present (bits_update always emits a concat).
+    REQUIRE(verilog.find("{") != std::string::npos);
+    REQUIRE(verilog.find("}") != std::string::npos);
+    // The source wire is embedded in the concat.
+    REQUIRE(verilog.find("uint_lit") != std::string::npos);
+}
+
+// 10. ConcatLhsLiteral: concat(high_literal, a_wire). The LHS is a
+//     `ch_uint<4>(15_d)` -> litimpl -> type_lit. print_concat's
+//     `if (lhs_node->type() == type_lit)` branch (line 782-785) calls
+//     get_literal_str() on the LHS, producing the hex form `4'hf`.
+//     The RHS is a ch_in<> wire, so its name is used verbatim.
+TEST_CASE("VerilogGen - ConcatLhsLiteral", "[verilog][concat][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("concat_lhs_lit_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<4>> a("a");
+    ch_uint<4> high(15_d); // 0b1111 -> get_literal_str -> "4'hf"
+    auto result = concat(high, a);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = result;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The literal form of the LHS must appear (proves the
+    // lhs_node->type()==type_lit branch ran get_literal_str).
+    REQUIRE(verilog.find("4'hf") != std::string::npos);
+    // The RHS wire name must appear verbatim (no literal transformation).
+    REQUIRE(verilog.find("a") != std::string::npos);
+    // Concat braces are present.
+    REQUIRE(verilog.find("{") != std::string::npos);
+    REQUIRE(verilog.find("}") != std::string::npos);
+}
