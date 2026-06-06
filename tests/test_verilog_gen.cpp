@@ -395,3 +395,117 @@ TEST_CASE("VerilogGen - Assign", "[verilog][assign]") {
     // passthrough: `assign <src_name>_wire = <src_name>;`.
     REQUIRE(verilog.find("_wire = uint_lit;") != std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Wave 1 follow-up: 6 boundary-condition tests for print_rotate_l /
+// print_rotate_r covering the 3 untested branches (amt==0, amt==N, variable
+// amount). The two existing tests (RotateLeft/RotateRight at amt=3) cover
+// the concat path; the 6 new tests cover the identity-passthrough paths.
+// ---------------------------------------------------------------------------
+
+// 1. RotateLeftZeroAmt: literal amount 0 -> identity rotation. Codegen emits
+//    `assign rotate_l = uint_lit;` (no slice, no concat).
+TEST_CASE("VerilogGen - RotateLeftZeroAmt", "[verilog][rotate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("rotatel_zero_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_left(a, 0_d);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // Identity passthrough: NO concat braces (vs amt>0 which uses {}).
+    REQUIRE(verilog.find("{") == std::string::npos);
+    // The lhs is wired through verbatim.
+    REQUIRE(verilog.find("uint_lit") != std::string::npos);
+}
+
+// 2. RotateLeftFullAmt: literal amount N -> also identity (full rotation
+//    is a no-op). Codegen emits the same passthrough line.
+TEST_CASE("VerilogGen - RotateLeftFullAmt", "[verilog][rotate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("rotatel_full_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_left(a, 8_d);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("{") == std::string::npos);
+    REQUIRE(verilog.find("uint_lit") != std::string::npos);
+}
+
+// 3. RotateLeftVariableAmt: non-literal amount (ch_in<ch_uint<3>>) hits the
+//    unsupported branch. Codegen emits the lhs name plus a diagnostic
+//    comment. We use ch_in<> because ch_uint<W>(3_d) builds a litimpl node
+//    and would take the LITERAL-amount path, not the variable one.
+TEST_CASE("VerilogGen - RotateLeftVariableAmt", "[verilog][rotate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("rotatel_var_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<3>> amt("amt");
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_left(a, amt);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // Variable amt: passthrough + "variable amount not supported" comment.
+    REQUIRE(verilog.find("variable amount not supported") != std::string::npos);
+    // Passthrough path uses no concat braces.
+    REQUIRE(verilog.find("{") == std::string::npos);
+}
+
+// 4. RotateRightZeroAmt: mirror of RotateLeftZeroAmt for rotate_r.
+TEST_CASE("VerilogGen - RotateRightZeroAmt", "[verilog][rotate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("rotater_zero_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_right(a, 0_d);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("{") == std::string::npos);
+    REQUIRE(verilog.find("uint_lit") != std::string::npos);
+}
+
+// 5. RotateRightFullAmt: mirror of RotateLeftFullAmt for rotate_r.
+TEST_CASE("VerilogGen - RotateRightFullAmt", "[verilog][rotate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("rotater_full_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_right(a, 8_d);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("{") == std::string::npos);
+    REQUIRE(verilog.find("uint_lit") != std::string::npos);
+}
+
+// 6. RotateRightVariableAmt: mirror of RotateLeftVariableAmt for rotate_r.
+TEST_CASE("VerilogGen - RotateRightVariableAmt", "[verilog][rotate][boundary]") {
+    auto ctx = std::make_unique<ch::core::context>("rotater_var_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<3>> amt("amt");
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_right(a, amt);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("variable amount not supported") != std::string::npos);
+    REQUIRE(verilog.find("{") == std::string::npos);
+}
