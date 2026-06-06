@@ -69,6 +69,15 @@ private:
     void print_mux(std::ostream &out, ch::core::muximpl *node);
     void print_bitsupdate(std::ostream &out, ch::core::bitsupdateimpl *node);
 
+    // --- Specialized op printers (Wave 2) ---
+    void print_unary_op(std::ostream &out, ch::core::opimpl *node);
+    void print_binary_op(std::ostream &out, ch::core::opimpl *node);
+    void print_bit_select(std::ostream &out, ch::core::opimpl *node);
+    void print_bits_extract(std::ostream &out, ch::core::opimpl *node);
+    void print_rotate_l(std::ostream &out, ch::core::opimpl *node);
+    void print_rotate_r(std::ostream &out, ch::core::opimpl *node);
+    void print_concat(std::ostream &out, ch::core::opimpl *node);
+
     // --- Data members ---
     ch::core::context *ctx_;
     // Map to store the generated Verilog name for each node

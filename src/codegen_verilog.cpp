@@ -184,10 +184,39 @@ std::string verilogwriter::get_op_str(ch::core::ch_op op) const {
             return ">>>";
         case ch::core::ch_op::neg:
             return "-";
-        // Add other operations as needed
-        default:
-            return "<OP_NOT_IMPLEMENTED>";
+        case ch::core::ch_op::and_reduce:
+            return "&";
+        case ch::core::ch_op::or_reduce:
+            return "|";
+        case ch::core::ch_op::xor_reduce:
+            return "^";
+        case ch::core::ch_op::popcount:
+            return "$countones";
+        case ch::core::ch_op::assign:
+            return "=";
+        case ch::core::ch_op::bit_sel:
+            return "<bit_sel>";
+        case ch::core::ch_op::bits_extract:
+            return "<bits_ex>";
+        case ch::core::ch_op::sext:
+            return "<sext>";
+        case ch::core::ch_op::zext:
+            return "<zext>";
+        case ch::core::ch_op::rotate_l:
+            return "<rotl>";
+        case ch::core::ch_op::rotate_r:
+            return "<rotr>";
+        // Unreachable placeholders (handled outside get_op_str). Required for
+        // -Wswitch-enum coverage of the 33-value ch_op enum.
+        case ch::core::ch_op::concat:
+            return "<concat>";
+        case ch::core::ch_op::mux:
+            return "<mux>";
+        case ch::core::ch_op::bits_update:
+            return "<bits_update>";
         }
+        // No default: -Wswitch-enum enforces full enum coverage at compile time.
+        return "<OP_NOT_IMPLEMENTED>";
     } catch (...) {
         // Silently ignore exceptions
         return "<OP_NOT_IMPLEMENTED>";
@@ -480,62 +509,282 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
 
 void verilogwriter::print_op(std::ostream &out, ch::core::opimpl *node) {
     try {
-        if (node->num_srcs() >= 2) { // Binary operations
-            auto *lhs_node = node->lhs();
-            auto *rhs_node = node->rhs();
-            if (lhs_node && rhs_node && node_names_.count(lhs_node) &&
-                node_names_.count(rhs_node)) {
-                std::string lhs_name = node_names_[lhs_node];
-                std::string rhs_name = node_names_[rhs_node];
+        if (!node) {
+            return;
+        }
+        switch (node->op()) {
+        case ch::core::ch_op::not_:
+        case ch::core::ch_op::neg:
+        case ch::core::ch_op::and_reduce:
+        case ch::core::ch_op::or_reduce:
+        case ch::core::ch_op::xor_reduce:
+        case ch::core::ch_op::popcount:
+        case ch::core::ch_op::sext:
+        case ch::core::ch_op::zext:
+        case ch::core::ch_op::assign:
+            return print_unary_op(out, node);
 
-                // Special handling for concat - uses Verilog concatenation
-                if (node->op() == ch::core::ch_op::concat) {
-                    // Handle literals specially
-                    if (rhs_node->type() == ch::core::lnodetype::type_lit) {
-                        auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
-                        rhs_name = get_literal_str(lit_node->value());
-                    }
-                    if (lhs_node->type() == ch::core::lnodetype::type_lit) {
-                        auto *lit_node = static_cast<ch::core::litimpl *>(lhs_node);
-                        lhs_name = get_literal_str(lit_node->value());
-                    }
-                    out << "    assign " << node_names_[node] << " = {" << lhs_name
-                        << ", " << rhs_name << "};\n";
-                } else {
-                    std::string op_str = get_op_str(node->op());
+        case ch::core::ch_op::add:
+        case ch::core::ch_op::sub:
+        case ch::core::ch_op::mul:
+        case ch::core::ch_op::div:
+        case ch::core::ch_op::mod:
+        case ch::core::ch_op::and_:
+        case ch::core::ch_op::or_:
+        case ch::core::ch_op::xor_:
+        case ch::core::ch_op::eq:
+        case ch::core::ch_op::ne:
+        case ch::core::ch_op::lt:
+        case ch::core::ch_op::le:
+        case ch::core::ch_op::gt:
+        case ch::core::ch_op::ge:
+        case ch::core::ch_op::shl:
+        case ch::core::ch_op::shr:
+        case ch::core::ch_op::sshr:
+            return print_binary_op(out, node);
 
-                    // Special handling for literals
-                    if (rhs_node->type() == ch::core::lnodetype::type_lit) {
-                        auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
-                        // Check if this is the literal 1 used for incrementing
-                        // (1-bit value of 1)
-                        uint64_t value = static_cast<uint64_t>(lit_node->value());
-                        uint32_t width = lit_node->value().bv_.size();
-                        if (value == 1 && width == 1) {
-                            rhs_name = "1'b1";
-                        } else {
-                            rhs_name = get_literal_str(lit_node->value());
-                        }
-                    }
+        case ch::core::ch_op::bit_sel:
+            return print_bit_select(out, node);
+        case ch::core::ch_op::bits_extract:
+            return print_bits_extract(out, node);
+        case ch::core::ch_op::rotate_l:
+            return print_rotate_l(out, node);
+        case ch::core::ch_op::rotate_r:
+            return print_rotate_r(out, node);
 
-                    out << "    assign " << node_names_[node] << " = " << lhs_name
-                        << " " << op_str << " " << rhs_name << ";\n";
-                }
+        case ch::core::ch_op::concat:
+            return print_concat(out, node);
+
+        // mux -> print_mux (lnodetype), bits_update -> print_bitsupdate
+        // (lnodetype; opimpl path is dead).
+        case ch::core::ch_op::mux:
+        case ch::core::ch_op::bits_update:
+            return;
+        }
+        // No default: -Wswitch-enum catches missing cases at compile time.
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_unary_op(std::ostream &out, ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 1 || !node_names_.count(node)) {
+            return;
+        }
+        auto *src = node->src(0);
+        if (!src || !node_names_.count(src)) {
+            return;
+        }
+        out << "    assign " << node_names_[node] << " = ";
+
+        if (node->op() == ch::core::ch_op::sext) {
+            uint32_t ext = node->size() - src->size();
+            if (ext == 0) {
+                out << node_names_[src];
             } else {
-                out << "    // Warning: Operation '" << node_names_[node]
-                    << "' has missing or unnamed sources.\n";
+                out << "{{" << ext << "{" << node_names_[src] << "["
+                    << (src->size() - 1) << "]}}, " << node_names_[src] << "}";
             }
-        } else if (node->num_srcs() == 1) { // Unary operations (e.g., not)
-            auto *src_node = node->lhs();   // For unary, lhs is the operand
-            if (src_node && node_names_.count(src_node)) {
-                std::string op_str = get_op_str(node->op());
-                out << "    assign " << node_names_[node] << " = " << op_str
-                    << node_names_[src_node] << ";\n";
+        } else if (node->op() == ch::core::ch_op::zext) {
+            uint32_t ext = node->size() - src->size();
+            if (ext == 0) {
+                out << node_names_[src];
             } else {
-                out << "    // Warning: Unary operation '" << node_names_[node]
-                    << "' has missing or unnamed source.\n";
+                out << "{{" << ext << "{1'b0}}, " << node_names_[src] << "}";
+            }
+        } else if (node->op() == ch::core::ch_op::popcount) {
+            out << "$countones(" << node_names_[src] << ")";
+        } else if (node->op() == ch::core::ch_op::assign) {
+            out << node_names_[src];
+        } else {
+            // if/else (not switch) avoids -Wswitch-enum on a partial subset.
+            auto op = node->op();
+            if (op == ch::core::ch_op::not_) {
+                out << "~";
+            } else if (op == ch::core::ch_op::neg) {
+                out << "-";
+            } else if (op == ch::core::ch_op::and_reduce) {
+                out << "&";
+            } else if (op == ch::core::ch_op::or_reduce) {
+                out << "|";
+            } else if (op == ch::core::ch_op::xor_reduce) {
+                out << "^";
+            }
+            out << node_names_[src];
+        }
+        out << ";\n";
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 2 || !node_names_.count(node)) {
+            return;
+        }
+        auto *lhs_node = node->lhs();
+        auto *rhs_node = node->rhs();
+        if (!lhs_node || !rhs_node || !node_names_.count(lhs_node) ||
+            !node_names_.count(rhs_node)) {
+            return;
+        }
+        std::string lhs_name = node_names_[lhs_node];
+        std::string rhs_name = node_names_[rhs_node];
+        std::string op_str = get_op_str(node->op());
+
+        if (rhs_node->type() == ch::core::lnodetype::type_lit) {
+            auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
+            uint64_t value = static_cast<uint64_t>(lit_node->value());
+            uint32_t width = lit_node->value().bv_.size();
+            if (value == 1 && width == 1) {
+                rhs_name = "1'b1";
+            } else {
+                rhs_name = get_literal_str(lit_node->value());
             }
         }
+
+        out << "    assign " << node_names_[node] << " = " << lhs_name << " "
+            << op_str << " " << rhs_name << ";\n";
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_bit_select(std::ostream &out, ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 2 || !node_names_.count(node)) {
+            return;
+        }
+        auto *lhs = node->src(0);
+        auto *rhs = node->src(1);
+        if (!lhs || !rhs || !node_names_.count(lhs) || !node_names_.count(rhs)) {
+            return;
+        }
+        out << "    assign " << node_names_[node] << " = " << node_names_[lhs]
+            << "[";
+        if (rhs->type() == ch::core::lnodetype::type_lit) {
+            out << static_cast<uint64_t>(static_cast<ch::core::litimpl *>(rhs)->value());
+        } else {
+            out << node_names_[rhs];
+        }
+        out << "];\n";
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_bits_extract(std::ostream &out,
+                                       ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 2 || !node_names_.count(node)) {
+            return;
+        }
+        auto *lhs = node->src(0);
+        auto *rhs = node->src(1);
+        if (!lhs || !rhs || !node_names_.count(lhs)) {
+            return;
+        }
+        if (rhs->type() != ch::core::lnodetype::type_lit) {
+            return; // Requires literal range.
+        }
+        auto range_val = static_cast<uint64_t>(
+            static_cast<ch::core::litimpl *>(rhs)->value());
+        uint32_t msb = static_cast<uint32_t>(range_val >> 32);
+        uint32_t lsb = static_cast<uint32_t>(range_val & 0xFFFFFFFFULL);
+        out << "    assign " << node_names_[node] << " = " << node_names_[lhs]
+            << "[" << msb << ":" << lsb << "];\n";
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_rotate_l(std::ostream &out, ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 2 || !node_names_.count(node)) {
+            return;
+        }
+        auto *lhs = node->src(0);
+        auto *rhs = node->src(1);
+        if (!lhs || !node_names_.count(lhs)) {
+            return;
+        }
+        uint32_t N = lhs->size();
+        out << "    assign " << node_names_[node] << " = ";
+        if (rhs && rhs->type() == ch::core::lnodetype::type_lit) {
+            uint32_t amt = static_cast<uint32_t>(
+                static_cast<uint64_t>(static_cast<ch::core::litimpl *>(rhs)->value()));
+            if (amt == 0 || amt >= N) {
+                out << node_names_[lhs] << ";\n"; // Identity rotation.
+            } else {
+                out << "{" << node_names_[lhs] << "[" << (N - 1) << ":"
+                    << (N - amt) << "], " << node_names_[lhs] << "["
+                    << (N - amt - 1) << ":0]};\n";
+            }
+        } else {
+            out << node_names_[lhs]
+                << "; // rotate_l with variable amount not supported\n";
+        }
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_rotate_r(std::ostream &out, ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 2 || !node_names_.count(node)) {
+            return;
+        }
+        auto *lhs = node->src(0);
+        auto *rhs = node->src(1);
+        if (!lhs || !node_names_.count(lhs)) {
+            return;
+        }
+        uint32_t N = lhs->size();
+        out << "    assign " << node_names_[node] << " = ";
+        if (rhs && rhs->type() == ch::core::lnodetype::type_lit) {
+            uint32_t amt = static_cast<uint32_t>(
+                static_cast<uint64_t>(static_cast<ch::core::litimpl *>(rhs)->value()));
+            if (amt == 0 || amt >= N) {
+                out << node_names_[lhs] << ";\n"; // Identity rotation.
+            } else {
+                out << "{" << node_names_[lhs] << "[" << (amt - 1) << ":0], "
+                    << node_names_[lhs] << "[" << (N - 1) << ":" << amt
+                    << "]};\n";
+            }
+        } else {
+            out << node_names_[lhs]
+                << "; // rotate_r with variable amount not supported\n";
+        }
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_concat(std::ostream &out, ch::core::opimpl *node) {
+    try {
+        if (node->num_srcs() < 2 || !node_names_.count(node)) {
+            return;
+        }
+        auto *lhs_node = node->lhs();
+        auto *rhs_node = node->rhs();
+        if (!lhs_node || !rhs_node || !node_names_.count(lhs_node) ||
+            !node_names_.count(rhs_node)) {
+            return;
+        }
+        std::string lhs_name = node_names_[lhs_node];
+        std::string rhs_name = node_names_[rhs_node];
+        if (rhs_node->type() == ch::core::lnodetype::type_lit) {
+            auto *lit_node = static_cast<ch::core::litimpl *>(rhs_node);
+            rhs_name = get_literal_str(lit_node->value());
+        }
+        if (lhs_node->type() == ch::core::lnodetype::type_lit) {
+            auto *lit_node = static_cast<ch::core::litimpl *>(lhs_node);
+            lhs_name = get_literal_str(lit_node->value());
+        }
+        out << "    assign " << node_names_[node] << " = {" << lhs_name << ", "
+            << rhs_name << "};\n";
     } catch (...) {
         // Silently ignore exceptions
     }
