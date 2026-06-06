@@ -41,3 +41,24 @@ Testing/
 tests/output/
 # Added by code-review-graph
 .code-review-graph/
+
+# 忽略代码生成 / 仿真调试产物（防止 verilog_gen 测试运行后产物被误提交）
+*.dot
+verilog_gen.v
+test_reg_timing_feedback.dot
+
+# 忽略 AI 工具环境配置（Claude / Gemini / Kiro / Qoder / Cursor / Windsurf / opencode / MCP）
+.claude/
+.gemini/
+.kiro/
+.qoder/
+.cursorrules
+.windsurfrules
+CLAUDE.md
+GEMINI.md
+QODER.md
+.opencode.json
+.mcp.json
+.omo/
+.understand-anything/
+.github/code-review-graph.instruction.md
