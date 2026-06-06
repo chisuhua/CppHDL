@@ -166,3 +166,232 @@ TEST_CASE("VerilogGen - BitsUpdateLnodetype", "[verilog][bitsupdate]") {
     REQUIRE(verilog.find("[7:4]") != std::string::npos);
     REQUIRE(verilog.find("assign") != std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Wave 3: 12 new tests for the 12 new ch_op mappings added in Wave 2
+// (and_reduce, or_reduce, xor_reduce, popcount, rotate_l, rotate_r,
+//  bit_sel, bits_extract, zext, sext, assign)
+// ---------------------------------------------------------------------------
+
+// 1. AndReduce: ch_op::and_reduce -> `assign name = &src;` (1-bit output)
+TEST_CASE("VerilogGen - AndReduce", "[verilog][reduce]") {
+    auto ctx = std::make_unique<ch::core::context>("andreduce_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(255_d);
+    auto reduced = and_reduce(a);
+    ch_out<ch_bool> out_port("io");
+    out_port = reduced;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The unary op node is named "and_reduce"; its emitted line is
+    // `assign and_reduce = &uint_lit;` (or with _0 / _1 counter suffix).
+    REQUIRE(verilog.find("and_reduce") != std::string::npos);
+    REQUIRE(verilog.find(" = &") != std::string::npos);
+    REQUIRE(verilog.find(";") != std::string::npos);
+}
+
+// 2. OrReduce: ch_op::or_reduce -> `assign name = |src;`
+TEST_CASE("VerilogGen - OrReduce", "[verilog][reduce]") {
+    auto ctx = std::make_unique<ch::core::context>("orreduce_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(0_d);
+    auto reduced = or_reduce(a);
+    ch_out<ch_bool> out_port("io");
+    out_port = reduced;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("or_reduce") != std::string::npos);
+    REQUIRE(verilog.find(" = |") != std::string::npos);
+}
+
+// 3. XorReduce: ch_op::xor_reduce -> `assign name = ^src;`
+TEST_CASE("VerilogGen - XorReduce", "[verilog][reduce]") {
+    auto ctx = std::make_unique<ch::core::context>("xorreduce_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d); // 0b10101010 -> parity == 0
+    auto reduced = xor_reduce(a);
+    ch_out<ch_bool> out_port("io");
+    out_port = reduced;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("xor_reduce") != std::string::npos);
+    REQUIRE(verilog.find(" = ^") != std::string::npos);
+}
+
+// 4. Popcount: ch_op::popcount -> `assign name = $countones(src);`
+//    For 8-bit input, result width is std::bit_width(8) = 4.
+TEST_CASE("VerilogGen - Popcount", "[verilog][popcount]") {
+    auto ctx = std::make_unique<ch::core::context>("popcount_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(15_d); // 0b00001111 -> popcount = 4
+    auto count = popcount(a);
+    ch_out<ch_uint<4>> out_port("io");
+    out_port = count;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("popcount") != std::string::npos);
+    REQUIRE(verilog.find("$countones(") != std::string::npos);
+    REQUIRE(verilog.find("$countones(uint_lit)") != std::string::npos);
+}
+
+// 5. RotateLeft: ch_op::rotate_l with literal amount -> `assign name =
+//    {src[N-1:N-amt], src[N-amt-1:0]};`. For 8-bit rotate by 3: {src[7:5],
+//    src[4:0]}.
+TEST_CASE("VerilogGen - RotateLeft", "[verilog][rotate]") {
+    auto ctx = std::make_unique<ch::core::context>("rotatel_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_left(a, 3_d);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // Slice [7:5] (high part) and [4:0] (low part) prove literal-amount
+    // emit. Concat braces confirm the rotate_l path (not bits_extract).
+    REQUIRE(verilog.find("[7:5]") != std::string::npos);
+    REQUIRE(verilog.find("[4:0]") != std::string::npos);
+    REQUIRE(verilog.find("{") != std::string::npos);
+}
+
+// 6. RotateRight: ch_op::rotate_r with literal amount -> `assign name =
+//    {src[amt-1:0], src[N-1:amt]};`. For 8-bit rotate by 3: {src[2:0],
+//    src[7:3]}.
+TEST_CASE("VerilogGen - RotateRight", "[verilog][rotate]") {
+    auto ctx = std::make_unique<ch::core::context>("rotater_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto rotated = rotate_right(a, 3_d);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = rotated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("[2:0]") != std::string::npos);
+    REQUIRE(verilog.find("[7:3]") != std::string::npos);
+    REQUIRE(verilog.find("{") != std::string::npos);
+}
+
+// 7. BitSelectLiteral: ch_op::bit_sel with compile-time index -> `assign
+//    name = src[IDX];`.
+TEST_CASE("VerilogGen - BitSelectLiteral", "[verilog][bitsel]") {
+    auto ctx = std::make_unique<ch::core::context>("bitsel_lit_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto sel = bit_select<3>(a); // extract bit 3
+    ch_out<ch_uint<1>> out_port("io");
+    out_port = sel;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // Compile-time index inlines the literal "3" inside the brackets.
+    REQUIRE(verilog.find("bit_select") != std::string::npos);
+    REQUIRE(verilog.find("[3]") != std::string::npos);
+}
+
+// 8. BitSelectVariable: ch_op::bit_sel with variable index -> `assign name
+//    = src[idx];`. Use a ch_in<ch_uint<2>> as a non-constant index.
+TEST_CASE("VerilogGen - BitSelectVariable", "[verilog][bitsel]") {
+    auto ctx = std::make_unique<ch::core::context>("bitsel_var_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<2>> idx("idx");
+    ch_uint<8> a(255_d);
+    auto sel = bit_select(a, idx);
+    ch_out<ch_uint<1>> out_port("io");
+    out_port = sel;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // Variable index means rhs is non-literal, so print_bit_select emits
+    // the index node's name (here, the input port name "idx") verbatim.
+    REQUIRE(verilog.find("bit_select") != std::string::npos);
+    REQUIRE(verilog.find("[idx]") != std::string::npos);
+}
+
+// 9. BitsExtract: ch_op::bits_extract with template range -> `assign name
+//    = src[MSB:LSB];`. Use bits<5, 2>(a) for slice [5:2].
+TEST_CASE("VerilogGen - BitsExtract", "[verilog][bitsextract]") {
+    auto ctx = std::make_unique<ch::core::context>("bitsextract_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    auto slice = bits<5, 2>(a); // 4-bit slice [5:2]
+    ch_out<ch_uint<4>> out_port("io");
+    out_port = slice;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The bits_extract op is named "bits" (not "bits_extract") — see
+    // operators.h:585,598 where build_bits is called with literal name "bits".
+    REQUIRE(verilog.find("bits") != std::string::npos);
+    REQUIRE(verilog.find("[5:2]") != std::string::npos);
+}
+
+// 10. Zext: ch_op::zext with width growth -> `assign name = {{ext{1'b0}},
+//     src};`. For 4->8 the replication is 4{1'b0}.
+TEST_CASE("VerilogGen - Zext", "[verilog][extend]") {
+    auto ctx = std::make_unique<ch::core::context>("zext_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<4> a(15_d);
+    auto ext = zext<8>(a);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = ext;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The zero-fill replication proves the zext (not sext) path.
+    REQUIRE(verilog.find("zext") != std::string::npos);
+    REQUIRE(verilog.find("{1'b0}") != std::string::npos);
+    REQUIRE(verilog.find("4{1'b0}") != std::string::npos);
+}
+
+// 11. Sext: ch_op::sext with width growth -> `assign name = {{ext{src[N-1]}},
+//     src};`. For 4->8 the replication is 4{src[3]}.
+TEST_CASE("VerilogGen - Sext", "[verilog][extend]") {
+    auto ctx = std::make_unique<ch::core::context>("sext_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<4> a(15_d); // MSB (bit 3) = 1, so sign bit is 1
+    auto ext = sext<8>(a);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = ext;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The sign-bit replication `{<ext>{src[<N-1>]}}` is the sext fingerprint.
+    REQUIRE(verilog.find("sext") != std::string::npos);
+    REQUIRE(verilog.find("4{uint_lit[3]}") != std::string::npos);
+}
+
+// 12. Assign: ch_op::assign is the ch_uint<>::operator<<= passthrough ->
+//     `assign name = src;`. Triggers when the LHS is a default-constructed
+//     ch_uint (no existing node_impl_), so a fresh wire is built.
+TEST_CASE("VerilogGen - Assign", "[verilog][assign]") {
+    auto ctx = std::make_unique<ch::core::context>("assign_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> a(170_d);
+    ch_uint<8> b;
+    b <<= a; // ch_op::assign
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = b;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    // The assign op node is named `<src_name>_wire`. Its emit is a pure
+    // passthrough: `assign <src_name>_wire = <src_name>;`.
+    REQUIRE(verilog.find("_wire = uint_lit;") != std::string::npos);
+}
