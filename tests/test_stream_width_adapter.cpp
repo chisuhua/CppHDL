@@ -1,8 +1,10 @@
 /**
  * @file test_stream_width_adapter.cpp
- * @brief 位宽适配器结构测试
- * 
- * 验证 stream_narrow_to_wide 和 stream_wide_to_narrow 函数返回正确的流类型
+ * @brief 位宽适配器结构 + 工具 + 编译期测试
+ *
+ * 验证 stream_narrow_to_wide / stream_wide_to_narrow 返回正确的流类型
+ * 验证 compute_transfer_ratio 在不同位宽组合下的正确性
+ * 验证模板元编程的类型推导能够通过编译
  */
 
 #include "bundle/stream_bundle.h"
@@ -77,4 +79,33 @@ TEST_CASE("Stream Width Adapter: 64→8 ratio", "[stream][width_adapter][ratio]"
     auto result = stream_wide_to_narrow<ch_uint<8>, ch_uint<64>>(wide_input);
 
     REQUIRE(result.payload.width == 8);
+}
+
+// Test: compute_transfer_ratio
+TEST_CASE("Stream Width Adapter: Transfer Ratio", "[stream][width_adapter][utility]") {
+    // 32-bit wide, 8-bit narrow = 4 transfers
+    REQUIRE(compute_transfer_ratio<ch_uint<32>, ch_uint<8>>() == 4);
+
+    // 16-bit wide, 8-bit narrow = 2 transfers
+    REQUIRE(compute_transfer_ratio<ch_uint<16>, ch_uint<8>>() == 2);
+
+    // 24-bit wide, 8-bit narrow = 3 transfers
+    REQUIRE(compute_transfer_ratio<ch_uint<24>, ch_uint<8>>() == 3);
+
+    // 32-bit wide, 16-bit narrow = 2 transfers
+    REQUIRE(compute_transfer_ratio<ch_uint<32>, ch_uint<16>>() == 2);
+
+    // Same width = 1 transfer
+    REQUIRE(compute_transfer_ratio<ch_uint<16>, ch_uint<16>>() == 1);
+}
+
+// Test: Function signature compilation (type checking only)
+TEST_CASE("Stream Width Adapter: Type Compilation", "[stream][width_adapter][compile]") {
+    // This test verifies that the templates compile correctly
+    // Actual runtime testing requires active context
+
+    // Verify type traits exist
+    REQUIRE(ch_uint<8>::ch_width == 8);
+    REQUIRE(ch_uint<16>::ch_width == 16);
+    REQUIRE(ch_uint<32>::ch_width == 32);
 }

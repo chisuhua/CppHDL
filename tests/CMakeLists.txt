@@ -47,6 +47,7 @@ target_include_directories(test_csr_unit PRIVATE ${PROJECT_SOURCE_DIR}/examples/
 # 基础功能测试
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
+add_catch_test(test_assert chlib/test_assert.cpp)
 add_catch_test(test_axi4lite chlib/test_axi4lite.cpp)
 add_catch_test(test_bitwise chlib/test_bitwise.cpp)
 add_catch_test(test_cache_simple chlib/test_cache_simple.cpp)
@@ -62,6 +63,7 @@ add_catch_test(test_selector_arbiter chlib/test_selector_arbiter.cpp)
 add_catch_test(test_selector_priority chlib/test_selector_priority.cpp)
 add_catch_test(test_selector_round_robin chlib/test_selector_round_robin.cpp)
 add_catch_test(test_sequential chlib/test_sequential.cpp)
+add_catch_test(test_simulator_trace chlib/test_simulator_trace.cpp)
 add_catch_test(test_stream chlib/test_stream.cpp)
 add_catch_test(test_switch chlib/test_switch.cpp)
 
@@ -124,7 +126,6 @@ add_catch_test(test_stream_arbiter test_stream_arbiter.cpp)
 add_catch_test(test_stream_builder test_stream_builder.cpp)
 add_catch_test(test_stream_operators test_stream_operators.cpp)
 add_catch_test(test_stream_pipeline test_stream_pipeline.cpp)
-add_catch_test(test_stream_width_adapter_complete test_stream_width_adapter_complete.cpp)
 
 # Memory 测试（核心功能已由 test_mem/test_mem_connection/test_mem_timing 覆盖）
 add_catch_test(test_mem test_mem.cpp)
@@ -155,6 +156,7 @@ add_catch_test(test_bool_connection test_bool_connection.cpp)
 add_catch_test(test_comparison_ops test_comparison_ops.cpp)
 add_catch_test(test_uint_compare test_uint_compare.cpp)
 add_catch_test(test_mod_width test_mod_width.cpp)
+add_catch_test(test_mod_width_simple test_mod_width_simple.cpp)
 add_catch_test(test_popcount test_popcount.cpp)
 add_catch_test(test_precise_width test_precise_width.cpp)
 add_catch_test(test_shift_boundary test_shift_boundary.cpp)
@@ -189,8 +191,8 @@ add_catch_test(test_wires_connection test_wires_connection.cpp)
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
 add_catch_test(test_jit_concat test_jit_concat.cpp)
 
-# test_mod_width_simple: 测试已被 test_mod_width 覆盖, 不再需要
-# 旧文件使用已废弃的 ch_lit<N> API, 保留作为参考
+# test_mod_width_simple: 重写为 Catch2 v3 + make_literal 后的最小烟雾测试
+# 详细测试见 test_mod_width
 
 # ============================================================================
 # SpinalHDL 移植示例 CTest 注册
