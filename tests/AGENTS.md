@@ -4,14 +4,17 @@ Parent: [AGENTS.md](../AGENTS.md)
 
 ## OVERVIEW
 
-Catch2 v3.7.0 unit tests validating AST, Core, Simulator, CodeGen. 79 test files: 64 base + 15 chlib.
+Catch2 v3.7.0 unit tests validating AST, Core, Simulator, CodeGen. 109 test files: 79 base + 30 chlib.
 
 ## STRUCTURE
 
 ```
 tests/
-├── test_*.cpp          # 64 base tests (core functionality)
-├── chlib/              # 15 chlib component tests
+├── test_*.cpp          # 79 base tests (core functionality)
+├── chlib/              # 30 chlib component tests
+│   ├── test_assert.cpp
+│   ├── test_if_stmt.cpp
+│   └── test_simulator_trace.cpp
 ├── catch_amalgamated.cpp   # Catch2 single-header
 └── CMakeLists.txt      # Custom add_catch_test() function
 ```
@@ -26,7 +29,7 @@ tests/
 | Memory | test_mem.cpp, test_memory_optimization.cpp | Memory operations |
 | Streams | test_ch_stream.cpp, test_stream_*.cpp | Stream operators |
 | IO | test_simple_io.cpp, test_io_operations.cpp | IO protocols |
-| chlib | test_arithmetic.cpp, test_logic.cpp | Component library |
+| chlib | test_arithmetic.cpp, test_logic.cpp, test_assert.cpp, test_if_stmt.cpp, test_simulator_trace.cpp | Component library (test_assert/test_if_stmt/test_simulator_trace are newly added) |
 
 ## CONVENTIONS
 

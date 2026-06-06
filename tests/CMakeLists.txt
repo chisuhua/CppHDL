@@ -23,8 +23,6 @@ enable_testing()
 # ============================================================================
 
 add_catch_test(test_forwarding chlib/test_forwarding.cpp)
-# TODO: branch_predictor_v2.h ch_reg[] 数组下标不兼容 - 需要 switch_() 多路复用器重构
-# add_catch_test(test_branch_predictor chlib/test_branch_predictor_v2.cpp)
 add_catch_test(test_hazard chlib/test_hazard_complete.cpp)
 target_include_directories(test_hazard PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
@@ -32,8 +30,8 @@ target_include_directories(test_forwarding PRIVATE ${PROJECT_SOURCE_DIR}/example
 
 # RV32I Pipeline integration test (from examples/riscv-mini/tests/)
 # Includes IF/ID/EX/MEM/WB stage registers, forwarding, hazard, branch predictor
-add_catch_test(test_rv32i_pipeline ../../examples/riscv-mini/tests/test_rv32i_pipeline.cpp)
-target_include_directories(test_rv32i_pipeline PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
+# 已迁移到根目录测试: tests/test_rv32i_pipeline.cpp (12 个 TEST_CASEs)
+# 原 examples/ 版本 5 个测试已通过根目录版本覆盖
 
 # CSR unit test (from examples/riscv-mini/tests/)
 # Tests CSR register reset values, read/write, set/clear, MRET, exceptions, WFI, interrupt logic
@@ -55,6 +53,7 @@ add_catch_test(test_cam chlib/test_cam.cpp)
 add_catch_test(test_combinational chlib/test_combinational.cpp)
 add_catch_test(test_converter chlib/test_converter.cpp)
 add_catch_test(test_fifo chlib/test_fifo.cpp)
+add_catch_test(test_if_stmt chlib/test_if_stmt.cpp)
 add_catch_test(test_logic chlib/test_logic.cpp)
 add_catch_test(test_memory chlib/test_memory.cpp)
 add_catch_test(test_onehot chlib/test_onehot.cpp)
@@ -68,9 +67,7 @@ add_catch_test(test_stream chlib/test_stream.cpp)
 add_catch_test(test_switch chlib/test_switch.cpp)
 
 # Cache 相关测试
-# TODO: rv32i_pipeline_cache.h 有多处 API 不兼容（构造函数、IO 端口、bits 操作）
-# 需要系统性修复 stages/*.h 和 cache 头文件，工作量较大，延后处理
-# add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
+add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
 
 # RISC-V Mini 组件测试
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
@@ -79,8 +76,8 @@ add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)
 
 # Phase 4 集成测试 (chlib 版本)
-# TODO: test_phase4_chlib 需要修复 riscv-mini API 兼容性问题
-# add_catch_test(test_phase4_chlib chlib/test_phase4_integration.cpp)
+add_catch_test(test_phase4_chlib chlib/test_phase4_integration.cpp)
+target_include_directories(test_phase4_chlib PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
 # ============================================================================
 # 根目录测试 (之前未注册)
@@ -180,12 +177,15 @@ add_catch_test(test_module_advanced test_module_advanced.cpp)
 add_catch_test(test_multithread test_multithread.cpp)
 add_catch_test(test_operation_results test_operation_results.cpp)
 add_catch_test(test_operation_widths test_operation_widths.cpp)
-# TODO: 编译错误
-# add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
+add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
+target_include_directories(test_rv32i_pipeline PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 # test_simplified_creation 已删除 — easy_nodes.h 不再存在
 add_catch_test(test_trace test_trace.cpp)
 add_catch_test(test_user_tracking test_user_tracking.cpp)
+add_catch_test(test_verilog_arith test_verilog_arith.cpp)
+add_catch_test(test_verilog_compare test_verilog_compare.cpp)
 add_catch_test(test_verilog_gen test_verilog_gen.cpp)
+add_catch_test(test_verilog_shift test_verilog_shift.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
