@@ -167,43 +167,62 @@ TEST_CASE("Concurrent device creation", "[multithread][device][creation]") {
 }
 
 TEST_CASE("Thread safety with node creation", "[multithread][node][creation]") {
-    std::atomic<int> total_nodes_created{0};
-    
-    auto node_creator = [&total_nodes_created](int thread_id) {
-        auto ctx = std::make_unique<ch::core::context>("thread_ctx_" + std::to_string(thread_id));
-        
-        ch::core::ctx_swap swap(ctx.get());
-        
-        // 每个线程创建多个节点
-        constexpr int nodes_per_thread = 50;
-        for (int i = 0; i < nodes_per_thread; ++i) {
-            auto* lit = ctx->create_literal(
-                ch::core::sdata_type(static_cast<uint64_t>(thread_id * 1000 + i), 32),
-                "lit_" + std::to_string(i)
-            );
-            
-            REQUIRE(lit != nullptr);
-            REQUIRE(lit->value().bitvector().words()[0] == static_cast<uint64_t>(thread_id * 1000 + i));
-        }
-        
-        total_nodes_created += nodes_per_thread;
-        return nodes_per_thread;
+    constexpr int num_threads = 4;
+    constexpr int nodes_per_thread = 50;
+
+    // Catch2 v3 的 OutputRedirect 状态在 RunContext::notifyAssertionStarted
+    // 和析构时被并发 worker 线程竞争（m_redirectActive 是非原子 bool），
+    // 因此 REQUIRE 必须在主线程执行。Worker 线程只负责创建节点并
+    // 返回数据，主线程在 Catch2 安全控制下验证。
+    struct ThreadResult {
+        std::unique_ptr<ch::core::context> ctx;
+        std::vector<std::pair<litimpl*, uint64_t>> literals;  // (literal, expected_value)
     };
-    
-    const int num_threads = 4;
-    std::vector<std::future<int>> futures;
-    
+
+    auto node_creator = [](int thread_id) -> ThreadResult {
+        ThreadResult result;
+        result.ctx = std::make_unique<ch::core::context>(
+            "thread_ctx_" + std::to_string(thread_id));
+
+        ch::core::ctx_swap swap(result.ctx.get());
+
+        for (int i = 0; i < nodes_per_thread; ++i) {
+            uint64_t expected = static_cast<uint64_t>(thread_id * 1000 + i);
+            auto* lit = result.ctx->create_literal(
+                ch::core::sdata_type(expected, 32),
+                "lit_" + std::to_string(i));
+            result.literals.emplace_back(lit, expected);
+        }
+
+        return result;
+    };
+
+    std::vector<std::future<ThreadResult>> futures;
     for (int i = 0; i < num_threads; ++i) {
         futures.push_back(std::async(std::launch::async, node_creator, i));
     }
-    
-    int expected_total = 0;
+
+    // 主线程验证所有 worker 结果（这里 Catch2 安全）
+    std::vector<ThreadResult> results;
     for (auto& future : futures) {
-        expected_total += future.get();
+        results.push_back(future.get());
     }
-    
-    REQUIRE(total_nodes_created.load() == expected_total);
-    REQUIRE(expected_total == num_threads * 50);
+
+    int total_nodes = 0;
+    for (size_t t = 0; t < results.size(); ++t) {
+        REQUIRE(results[t].ctx != nullptr);
+        REQUIRE(results[t].literals.size() == static_cast<size_t>(nodes_per_thread));
+
+        for (size_t i = 0; i < results[t].literals.size(); ++i) {
+            auto* lit = results[t].literals[i].first;
+            uint64_t expected = results[t].literals[i].second;
+            REQUIRE(lit != nullptr);
+            REQUIRE(lit->value().bitvector().words()[0] == expected);
+            ++total_nodes;
+        }
+    }
+
+    REQUIRE(total_nodes == num_threads * nodes_per_thread);
 }
 
 TEST_CASE("Component hierarchy in multithreaded environment", "[multithread][component][hierarchy]") {
