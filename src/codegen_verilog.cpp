@@ -313,6 +313,10 @@ void verilogwriter::print_decl(std::ostream &out) {
                 wires.push_back(node);
                 declared_nodes_.insert(node);
                 break;
+            case ch::core::lnodetype::type_bitsupdate:
+                wires.push_back(node);
+                declared_nodes_.insert(node);
+                break;
             default:
                 // Other types like cd, etc., might not need declarations here
                 break;
@@ -373,6 +377,11 @@ void verilogwriter::print_logic(std::ostream &out) {
                 break;
             case ch::core::lnodetype::type_mux:
                 print_mux(out, static_cast<ch::core::muximpl *>(node));
+                printed_logic_nodes_.insert(node);
+                break;
+            case ch::core::lnodetype::type_bitsupdate:
+                print_bitsupdate(out,
+                                 static_cast<ch::core::bitsupdateimpl *>(node));
                 printed_logic_nodes_.insert(node);
                 break;
             case ch::core::lnodetype::type_output: // Handle output assignments
@@ -568,6 +577,37 @@ void verilogwriter::print_mux(std::ostream &out, ch::core::muximpl *node) {
                     << " ? " << true_name << " : " << false_name << ";\n";
             }
         }
+    } catch (...) {
+        // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_bitsupdate(std::ostream &out,
+                                     ch::core::bitsupdateimpl *node) {
+    try {
+        // Emit {target[N-1:msb+1], source, target[lsb-1:0]}; omit slices that
+        // would be zero-width (msb==N-1) or negative (lsb==0).
+        auto *tgt = node->target();
+        auto *src = node->source();
+        auto *rng = node->range();
+        if (!tgt || !src || !rng || !node_names_.count(node) ||
+            !node_names_.count(tgt) || !node_names_.count(src)) {
+            return;
+        }
+        auto range_val = static_cast<uint64_t>(
+            static_cast<ch::core::litimpl *>(rng)->value());
+        uint32_t msb =
+            static_cast<uint32_t>(range_val >> 32);
+        uint32_t lsb = static_cast<uint32_t>(range_val & 0xFFFFFFFFULL);
+        uint32_t N = tgt->size();
+        out << "    assign " << node_names_[node] << " = {";
+        if (msb < N - 1)
+            out << node_names_[tgt] << "[" << (N - 1) << ":" << (msb + 1)
+                << "], ";
+        out << node_names_[src];
+        if (lsb > 0)
+            out << ", " << node_names_[tgt] << "[" << (lsb - 1) << ":0]";
+        out << "};\n";
     } catch (...) {
         // Silently ignore exceptions
     }

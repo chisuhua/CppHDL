@@ -150,3 +150,19 @@ TEST_CASE("VerilogGen - LiteralFormatting", "[verilog][literals]") {
     // Should not have unnecessary ports
     REQUIRE(verilog_code.find("io_1") == std::string::npos);
 }
+
+TEST_CASE("VerilogGen - BitsUpdateLnodetype", "[verilog][bitsupdate]") {
+    auto ctx = std::make_unique<ch::core::context>("bitsupdate_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_uint<8> target(0_d);
+    ch_uint<4> source(15_d);
+    auto updated = bits_update<4>(target, source, 0);
+    ch_out<ch_uint<8>> out_port("io");
+    out_port = updated;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("[7:4]") != std::string::npos);
+    REQUIRE(verilog.find("assign") != std::string::npos);
+}
