@@ -1,28 +1,35 @@
+// test_mod_width_simple.cpp
+// Simple, focused test for mod_op result-width calculation with the
+// supported make_literal<N, W>() factory. This is the minimal "smoke test"
+// companion to the more comprehensive test_mod_width.cpp.
+
+#include "catch_amalgamated.hpp"
 #include "../include/core/operators.h"
 #include "../include/core/literal.h"
 #include "../include/core/uint.h"
-#include <iostream>
 
 using namespace ch::core;
 
-int main() {
-    // 测试当右操作数是字面量8时（值为8，结果范围是0-7，需要3位）
-    constexpr unsigned width_result_8 = get_binary_result_width<mod_op, ch_uint<16>, decltype(ch_lit<8>)>();
-    std::cout << "Width result for mod 8: " << width_result_8 << " (expected: 3)" << std::endl;
-    
-    // 测试当右操作数是字面量16时（值为16，结果范围是0-15，需要4位）
-    constexpr unsigned width_result_16 = get_binary_result_width<mod_op, ch_uint<32>, decltype(ch_lit<16>)>();
-    std::cout << "Width result for mod 16: " << width_result_16 << " (expected: 4)" << std::endl;
-    
-    // 测试当右操作数是字面量7时（值为7，结果范围是0-6，需要3位）
-    constexpr unsigned width_result_7 = get_binary_result_width<mod_op, ch_uint<16>, decltype(ch_lit<7>)>();
-    std::cout << "Width result for mod 7: " << width_result_7 << " (expected: 3)" << std::endl;
-    
-    if (width_result_8 == 3 && width_result_16 == 4 && width_result_7 == 3) {
-        std::cout << "All tests passed!" << std::endl;
-        return 0;
-    } else {
-        std::cout << "Some tests failed!" << std::endl;
-        return 1;
-    }
+TEST_CASE("mod_op width: literal 8 yields 3-bit result", "[mod_width][simple]") {
+    // mod 8 -> range 0..7 -> 3 bits
+    constexpr auto literal_8 = make_literal<8, 4>();
+    constexpr unsigned width_result_8 =
+        get_binary_result_width<mod_op, ch_uint<16>, decltype(literal_8)>();
+    REQUIRE(width_result_8 == 3);
+}
+
+TEST_CASE("mod_op width: literal 16 yields 4-bit result", "[mod_width][simple]") {
+    // mod 16 -> range 0..15 -> 4 bits
+    constexpr auto literal_16 = make_literal<16, 5>();
+    constexpr unsigned width_result_16 =
+        get_binary_result_width<mod_op, ch_uint<32>, decltype(literal_16)>();
+    REQUIRE(width_result_16 == 4);
+}
+
+TEST_CASE("mod_op width: literal 7 yields 3-bit result", "[mod_width][simple]") {
+    // mod 7 -> range 0..6 -> 3 bits
+    constexpr auto literal_7 = make_literal<7, 3>();
+    constexpr unsigned width_result_7 =
+        get_binary_result_width<mod_op, ch_uint<16>, decltype(literal_7)>();
+    REQUIRE(width_result_7 == 3);
 }
