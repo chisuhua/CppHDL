@@ -163,6 +163,8 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
                compiled_so_path_.c_str());
     }
 
+    build_port_access_table();
+
     return true;
 }
 
@@ -296,6 +298,57 @@ bool VerilatorBackend::dlopen_top(const std::string &so_path) {
     return true;
 }
 
+void VerilatorBackend::build_port_access_table() {
+    port_access_.clear();
+    if (!ctx_) {
+        return;
+    }
+    auto nodes = ctx_->get_eval_list();
+    for (auto *node : nodes) {
+        if (!node) {
+            continue;
+        }
+        using ch::core::lnodetype;
+        bool is_input = (node->type() == lnodetype::type_input);
+        bool is_output = (node->type() == lnodetype::type_output);
+        if (!is_input && !is_output) {
+            continue;
+        }
+        VerilatorPortAccess pa;
+        pa.field_ptr = nullptr;  // Phase 3.3 follow-up: VPI or codegen
+        pa.bitwidth = node->size();
+        pa.is_input = is_input;
+        port_access_[node->id()] = pa;
+    }
+    CHINFO("VerilatorBackend: port_access_ built with %zu entries",
+           port_access_.size());
+}
+
+void VerilatorBackend::sync_inputs_to_vtop() {
+    if (!data_map_ || !top_instance_ || !eval_fn_) {
+        return;
+    }
+    // Phase 3.3 follow-up: walk port_access_ for is_input, read
+    // data_map_->at(id), write to vtop field via field_ptr. The
+    // field_ptr resolution requires either (a) VPI lookups at
+    // runtime, or (b) generated per-design accessors. For now we
+    // record the intent; the architecture is validated because
+    // eval_fn_() is still called.
+    CHINFO("VerilatorBackend: sync %zu inputs to Vtop (stub)",
+           port_access_.size());
+}
+
+void VerilatorBackend::sync_outputs_from_vtop() {
+    if (!data_map_ || !top_instance_ || !eval_fn_) {
+        return;
+    }
+    // Phase 3.3 follow-up: walk port_access_ for !is_input, read
+    // vtop field via field_ptr, write to data_map_->at(id). See
+    // sync_inputs_to_vtop() for the resolution plan.
+    CHINFO("VerilatorBackend: sync %zu outputs from Vtop (stub)",
+           port_access_.size());
+}
+
 void VerilatorBackend::close_top() {
     if (top_instance_ && final_fn_) {
         final_fn_(top_instance_);
@@ -316,9 +369,11 @@ void VerilatorBackend::eval_combinational(
         & /*combinational_instr_list*/) {
     // Phase 3.3-3.4: sync data_map -> Vtop inputs, call eval_fn_,
     // sync Vtop outputs -> data_map. See ADR-035 for the design.
+    sync_inputs_to_vtop();
     if (eval_fn_) {
         eval_fn_(top_instance_);
     }
+    sync_outputs_from_vtop();
 }
 
 void VerilatorBackend::eval_sequential(
@@ -330,9 +385,11 @@ void VerilatorBackend::eval_sequential(
     //   comb-1  -> top->clk=0; eval_fn_()
     //   clock   -> top->clk=1; eval_fn_()
     //   comb-2  -> top->clk=0; eval_fn_()
+    sync_inputs_to_vtop();
     if (eval_fn_) {
         eval_fn_(top_instance_);
     }
+    sync_outputs_from_vtop();
 }
 
 void VerilatorBackend::reset(ch::data_map_t & /*data_map*/) {

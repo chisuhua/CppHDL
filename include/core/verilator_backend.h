@@ -68,11 +68,30 @@ public:
     // Path to the compiled .so (or empty if not yet compiled).
     const std::string &compiled_so_path() const { return compiled_so_path_; }
 
+    // Snapshot the port access table (Phase 3.3). Returns a copy so
+    // callers can inspect bitwidth/is_input without exposing the
+    // internal unordered_map. Tests use this to assert the table
+    // was populated by build_port_access_table().
+    std::unordered_map<uint32_t, VerilatorPortAccess>
+    port_access_snapshot() const {
+        return port_access_;
+    }
+
 private:
     bool generate_verilog(ch::core::context *ctx);
     bool invoke_verilator(const std::string &verilog_path);
     bool dlopen_top(const std::string &so_path);
     void close_top();
+
+    // ADR-035 / Phase 3.3: build the port name → node_id map and
+    // populate port_access_ for the loaded Vtop. The actual
+    // field-pointer resolution (binding ch_in<>/ch_out<> names to
+    // &vtop-><field>) requires either VPI lookups or generated
+    // per-design accessors; we record metadata now and document
+    // the binding as Phase 3.3 follow-up.
+    void build_port_access_table();
+    void sync_inputs_to_vtop();
+    void sync_outputs_from_vtop();
 
     // dlopen state
     void *dl_handle_ = nullptr;

@@ -174,6 +174,41 @@ TEST_CASE("VerilatorBackend - EvalCombinationalDoesNotCrash",
     REQUIRE_NOTHROW(backend.eval_sequential(data_map, empty_list));
 }
 
+TEST_CASE("VerilatorBackend - BuildPortAccessTable",
+          "[verilator][backend][port-access]") {
+    auto ctx = std::make_unique<context>("vl_port_access_test");
+    ctx_swap guard(ctx.get());
+
+    ch_in<ch_uint<8>> din("din");
+    ch_out<ch_uint<8>> dout("dout");
+    ch_in<ch_bool> valid("valid");
+    ch_out<ch_bool> ready("ready");
+
+    std::vector<std::pair<uint32_t, ch::instr_base *>> empty_list;
+    ch::data_map_t data_map;
+
+    VerilatorBackend backend(make_temp_dir("_port_access"));
+    REQUIRE(backend.initialize(ctx.get(), data_map));
+
+    auto snapshot = backend.port_access_snapshot();
+    REQUIRE(snapshot.size() == 4);
+
+    size_t found_inputs = 0, found_outputs = 0;
+    for (const auto &kv : snapshot) {
+        if (kv.second.is_input) {
+            ++found_inputs;
+        } else {
+            ++found_outputs;
+        }
+        bool bw_ok = (kv.second.bitwidth == 1) || (kv.second.bitwidth == 8);
+        REQUIRE(bw_ok);
+        // Phase 3.3 follow-up: field_ptr resolution (VPI or codegen).
+        REQUIRE(kv.second.field_ptr == nullptr);
+    }
+    REQUIRE(found_inputs == 2);
+    REQUIRE(found_outputs == 2);
+}
+
 TEST_CASE("VerilatorBackend - ClearReleasesResources",
           "[verilog][backend]") {
     auto ctx = std::make_unique<context>("vl_clear_test");
