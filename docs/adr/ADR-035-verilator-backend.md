@@ -22,17 +22,23 @@
 | **Phase 2.2** | `InterpreterBackend`（`src/core/interpreter_backend.cpp`） | ✅ | `673d1a2` |
 | **Phase 2.3** | `Simulator::set_backend()` 入口重构 | ⏸ 延后 | 风险高，需要 50+ 测试适配 |
 | **Phase 3.1** | `VerilatorBackend` 脚手架（generate + invoke + SHA-1） | ✅ | `8c9800a` |
-| **Phase 3.2** | dlopen `.so` + ISignalAccess*[] 端口表 | ⏸ 延后 | 需要 C++ wrapper 生成 |
-| **Phase 3.3** | `data_map_` ↔ Vtop 同步 | ⏸ 延后 | 依赖 3.2 |
+| **Phase 3.2** | sim_main.cpp wrapper + dlopen（端到端可运行） | ✅ | `c5b7b1b` |
+| **Phase 3.3** | `data_map_` ↔ Vtop 同步 | ⏸ 延后 | 需要端口级 Vtop 字段映射（VPI 或生成 accessor） |
 | **Phase 3.4** | 时钟模型适配（3-eval/tick vs Verilator 单步） | ⏸ 延后 | 依赖 3.3 |
 | **Phase 3.5** | SHA-1 缓存命中 | ⏸ 延后 | 脚手架已计算缓存键 |
 | **Phase 3.6** | VCD 跟踪与 Verilator 桥接 | ⏸ 延后 | 依赖 3.3 |
-| **Phase 4.1** | VerilatorBackend 脚手架测试（8 个，7 通过） | ✅ | `1482b14` |
-| **Phase 4.4** | 用户文档（`docs/usage_guide/10-verilator-backend.md`） | ✅ | （待提交） |
+| **Phase 4.1** | VerilatorBackend 脚手架测试（13 个，11 通过） | ✅ | `1482b14` + `c5b7b1b` |
+| **Phase 4.4** | 用户文档（`docs/usage_guide/10-verilator-backend.md`） | ✅ | `b6e1b6e` |
 
-**已提交 commits**: 9 个（`ac6445b`, `5733597`, `41e6521`, `d196650`, `1257e4d`, `673d1a2`, `8c9800a`, `1482b14`, 等）
+**已提交 commits**: 11 个（`ac6445b`, `5733597`, `41e6521`, `d196650`, `1257e4d`, `673d1a2`, `c5c90d7`, `8c9800a`, `1482b14`, `b6e1b6e`, `c5b7b1b`）
 
 **测试状态**: 132/132 ctest 通过（排除 2 个预存在 flaky test: `perf_tests`, `test_multithread`）
+
+**Phase 3.2 端到端流程（已验证）**:
+1. `generate_verilog()` 写 `top.v` + `sim_main.cpp`（main() + extern "C" factory/eval/final/delete）
+2. `invoke_verilator()` 跑 `verilator --cc --exe --build` 编译
+3. `dlopen_top()` dlopen `obj_dir/Vtop` 并 dlsym 4 个符号
+4. 端到端测试 `DlopenAndResolveSymbols` 验证 `obj_dir/Vtop` 存在
 
 ---
 
