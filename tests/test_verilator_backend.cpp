@@ -207,6 +207,25 @@ TEST_CASE("VerilatorBackend - BuildPortAccessTable",
     }
     REQUIRE(found_inputs == 2);
     REQUIRE(found_outputs == 2);
+    // The context always has a default_clock lnode, so the clock
+    // id must be set (never UINT32_MAX).
+    REQUIRE(backend.clock_node_id() != UINT32_MAX);
+}
+
+TEST_CASE("VerilatorBackend - ClockNodeDetected",
+          "[verilator][backend][clock]") {
+    auto ctx = std::make_unique<context>("vl_clock_test");
+    ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+    reg_c->next = reg_c + 1_d;
+
+    std::vector<std::pair<uint32_t, ch::instr_base *>> empty_list;
+    ch::data_map_t data_map;
+
+    VerilatorBackend backend(make_temp_dir("_clock"));
+    REQUIRE(backend.initialize(ctx.get(), data_map));
+    REQUIRE(backend.clock_node_id() != UINT32_MAX);
 }
 
 TEST_CASE("VerilatorBackend - ClearReleasesResources",

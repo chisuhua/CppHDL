@@ -77,6 +77,13 @@ public:
         return port_access_;
     }
 
+    // ADR-035 Phase 3.4: id of the type_clock lnode discovered by
+    // build_port_access_table(), or UINT32_MAX. The 3-eval/tick
+    // model (comb-1, clock, comb-2) maps to Verilator's single-step
+    // eval(); clk manipulation is gated on the field_ptr work in
+    // Phase 3.3.
+    uint32_t clock_node_id() const { return clock_node_id_; }
+
 private:
     bool generate_verilog(ch::core::context *ctx);
     bool invoke_verilator(const std::string &verilog_path);
@@ -101,6 +108,9 @@ private:
 
     // Port access table (node_id -> Vtop field pointer + metadata)
     std::unordered_map<uint32_t, VerilatorPortAccess> port_access_;
+
+    // Phase 3.4: id of the type_clock lnode (or UINT32_MAX if none).
+    uint32_t clock_node_id_ = UINT32_MAX;
 
     // Config
     std::string verilator_work_dir_;

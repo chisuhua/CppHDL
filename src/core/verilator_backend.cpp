@@ -300,6 +300,7 @@ bool VerilatorBackend::dlopen_top(const std::string &so_path) {
 
 void VerilatorBackend::build_port_access_table() {
     port_access_.clear();
+    clock_node_id_ = UINT32_MAX;
     if (!ctx_) {
         return;
     }
@@ -309,6 +310,10 @@ void VerilatorBackend::build_port_access_table() {
             continue;
         }
         using ch::core::lnodetype;
+        if (node->type() == lnodetype::type_clock) {
+            clock_node_id_ = node->id();
+            continue;
+        }
         bool is_input = (node->type() == lnodetype::type_input);
         bool is_output = (node->type() == lnodetype::type_output);
         if (!is_input && !is_output) {
@@ -320,8 +325,8 @@ void VerilatorBackend::build_port_access_table() {
         pa.is_input = is_input;
         port_access_[node->id()] = pa;
     }
-    CHINFO("VerilatorBackend: port_access_ built with %zu entries",
-           port_access_.size());
+    CHINFO("VerilatorBackend: port_access_ built with %zu entries, "
+           "clock_node_id_=%u", port_access_.size(), clock_node_id_);
 }
 
 void VerilatorBackend::sync_inputs_to_vtop() {
