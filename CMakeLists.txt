@@ -139,6 +139,7 @@ set(CH_SOURCES
     src/utils/types.cpp
     src/lnode/bool.cpp
     src/jit/jit_compiler.cpp
+    src/core/interpreter_backend.cpp
 )
 
 # 创建主库
