@@ -374,14 +374,10 @@ void verilogwriter::print_decl(std::ostream &out) {
             }
         }
 
-        // Print declarations in order: inputs, wires, regs
-        // (outputs are already declared in the port list by print_header;
-        // re-declaring them in the body is invalid Verilog. ADR-035)
-        for (auto *node : inputs) {
-            print_input(out, static_cast<ch::core::inputimpl *>(node));
-            out << ";\n";
-        }
-
+        // Print declarations in order: wires, regs only.
+        // Inputs and outputs are already declared in the port list by
+        // print_header; re-declaring them in the body is invalid Verilog
+        // (ADR-035).
         for (auto *node : wires) {
             // Only declare wires that have names
             if (node_names_.count(node)) {

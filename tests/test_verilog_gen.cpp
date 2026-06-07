@@ -743,3 +743,27 @@ TEST_CASE("VerilogGen - OutputConnectsToActualSource",
     REQUIRE(verilog.find("assign io = reg_a") != std::string::npos);
     REQUIRE(verilog.find("assign aux_out = reg_b") != std::string::npos);
 }
+
+// ADR-035 / Phase 1.4: Bundle field names should be preserved in
+// the Verilog output, not collapsed to "top_io_N" placeholders.
+TEST_CASE("VerilogGen - BundleFieldNamesPreserved",
+          "[verilog][verilator][bundle]") {
+    auto ctx = std::make_unique<ch::core::context>("bundle_names_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<8>> a("awaddr");
+    ch_in<ch_uint<1>> b("awvalid");
+    ch_out<ch_uint<8>> c("rdata");
+
+    ch_uint<8> zero8(0_d);
+    ch_uint<1> zero1(0_d);
+    a = zero8;
+    b = zero1;
+    c = zero8;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("awaddr") != std::string::npos);
+    REQUIRE(verilog.find("awvalid") != std::string::npos);
+    REQUIRE(verilog.find("rdata") != std::string::npos);
+}
