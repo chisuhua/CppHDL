@@ -35,7 +35,7 @@
 
 | 编号 | 文档 | 说明 | 状态 |
 |------|------|------|------|
-| 10 | 10-verilog-synthesis.md | Verilog 生成与综合 | 🟡 规划中 |
+| 10 | [10-verilator-backend.md](10-verilator-backend.md) | Verilator 仿真后端 | ✅ 已完成（脚手架） |
 | 11 | [11-stream-flow-comparison.md](11-stream-flow-comparison.md) | Stream/Flow 对比 | ✅ 已完成 |
 
 ---

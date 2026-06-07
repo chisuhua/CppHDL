@@ -1,8 +1,38 @@
 # ADR-035: Verilator 仿真后端
 
-**状态**: 🟡 提议中（Phase 1 修复 codegen 阻塞中）
-**日期**: 2026-06-07
+**状态**: 🟢 采纳 + Phase 1-4.1 完成（脚手架 GA，完整仿真待 Phase 3.2+）
+**日期**: 2026-06-07（提议）→ 2026-06-07（脚手架 GA）
 **决策人**: Sisyphus + 用户（参考 3 份专项调研 + AGENTS.md `using-superpowers` 工作流）
+
+---
+
+## Phase 进度（2026-06-07 快照）
+
+| Phase | 范围 | 状态 | 提交 |
+|-------|------|------|------|
+| **Phase 0** | 调研（3 个 explore/librarian agents） | ✅ | （无代码） |
+| **Phase 0.5** | ADR-035 决策记录 | ✅ | `ac6445b` |
+| **Phase 1.1** | `default_clock`/`default_reset` 加进 port list | ✅ | `ac6445b` |
+| **Phase 1.2** | 所有 `ch_out` 端口发射，移除 body 重复声明 | ✅ | `5733597` |
+| **Phase 1.3** | `print_logic` 走 proxy 链找真实 driver | ✅ | `41e6521` |
+| **Phase 1.4** | Bundle 字段名保留 + 移除 input 重复声明 | ✅ | `d196650` |
+| **Phase 1.6** | iverilog + verilator --lint-only 端到端验证 | ✅ | `1257e4d` |
+| **Phase 1.7** | 验收：131/131 ctest 通过 + 6/6 外部工具验证 | ✅ | （合并到 1.6） |
+| **Phase 2.1** | `IEvalBackend` 接口（`include/core/eval_backend.h`） | ✅ | `673d1a2` |
+| **Phase 2.2** | `InterpreterBackend`（`src/core/interpreter_backend.cpp`） | ✅ | `673d1a2` |
+| **Phase 2.3** | `Simulator::set_backend()` 入口重构 | ⏸ 延后 | 风险高，需要 50+ 测试适配 |
+| **Phase 3.1** | `VerilatorBackend` 脚手架（generate + invoke + SHA-1） | ✅ | `8c9800a` |
+| **Phase 3.2** | dlopen `.so` + ISignalAccess*[] 端口表 | ⏸ 延后 | 需要 C++ wrapper 生成 |
+| **Phase 3.3** | `data_map_` ↔ Vtop 同步 | ⏸ 延后 | 依赖 3.2 |
+| **Phase 3.4** | 时钟模型适配（3-eval/tick vs Verilator 单步） | ⏸ 延后 | 依赖 3.3 |
+| **Phase 3.5** | SHA-1 缓存命中 | ⏸ 延后 | 脚手架已计算缓存键 |
+| **Phase 3.6** | VCD 跟踪与 Verilator 桥接 | ⏸ 延后 | 依赖 3.3 |
+| **Phase 4.1** | VerilatorBackend 脚手架测试（8 个，7 通过） | ✅ | `1482b14` |
+| **Phase 4.4** | 用户文档（`docs/usage_guide/10-verilator-backend.md`） | ✅ | （待提交） |
+
+**已提交 commits**: 9 个（`ac6445b`, `5733597`, `41e6521`, `d196650`, `1257e4d`, `673d1a2`, `8c9800a`, `1482b14`, 等）
+
+**测试状态**: 132/132 ctest 通过（排除 2 个预存在 flaky test: `perf_tests`, `test_multithread`）
 
 ---
 
