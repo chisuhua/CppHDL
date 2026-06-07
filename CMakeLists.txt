@@ -140,6 +140,7 @@ set(CH_SOURCES
     src/lnode/bool.cpp
     src/jit/jit_compiler.cpp
     src/core/interpreter_backend.cpp
+    src/core/verilator_backend.cpp
 )
 
 # 创建主库
