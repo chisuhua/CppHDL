@@ -80,6 +80,21 @@ TEST_CASE("VerilatorBackend - SHA1CacheKeyContentSensitive",
     REQUIRE(key1 != key2);
 }
 
+TEST_CASE("VerilatorBackend - CachePathForKey",
+          "[verilator][backend][cache]") {
+    // Empty key returns empty path (defensive).
+    REQUIRE(VerilatorBackend::cache_path_for_key("").empty());
+
+    // Non-empty key returns a path under
+    // $HOME/.cache/cpphdl/verilator/<key>/Vtop.
+    std::string key = "abcdef0123456789abcdef0123456789abcdef01";
+    std::string path = VerilatorBackend::cache_path_for_key(key);
+    REQUIRE_FALSE(path.empty());
+    REQUIRE(path.find("/.cache/cpphdl/verilator/") != std::string::npos);
+    REQUIRE(path.find(key) != std::string::npos);
+    REQUIRE(path.size() >= key.size() + 30);
+}
+
 TEST_CASE("VerilatorBackend - IEvalBackendInterfaceConformance",
           "[verilator][backend]") {
     VerilatorBackend backend(make_temp_dir("_interface"));

@@ -153,9 +153,26 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
     // fails (missing tool, slow build, etc.), we log a warning and
     // continue — the architecture is validated even without a working
     // .so. The full dlopen path is Phase 3.2.
-    if (!invoke_verilator(verilator_work_dir_ + "/top.v")) {
-        CHWARN("VerilatorBackend: verilator compilation failed "
-               "(continuing without .so — dlopen is a stub)");
+    // Phase 3.5: SHA-1 cache hit. Read back the generated Verilog,
+    // compute the cache key, and skip invoke_verilator if a cached
+    // Vtop binary already exists on disk.
+    {
+        std::ifstream vfile(verilator_work_dir_ + "/top.v");
+        std::string vsource((std::istreambuf_iterator<char>(vfile)),
+                            std::istreambuf_iterator<char>());
+        if (vfile && !vsource.empty()) {
+            std::string key = compute_cache_key(vsource, "5.020");
+            std::string cached = cache_path_for_key(key);
+            if (!cached.empty() && path_exists(cached)) {
+                compiled_so_path_ = cached;
+                CHINFO("VerilatorBackend: cache hit at %s", cached.c_str());
+            } else {
+                if (!invoke_verilator(verilator_work_dir_ + "/top.v")) {
+                    CHWARN("VerilatorBackend: verilator compilation failed "
+                           "(continuing without .so — dlopen is a stub)");
+                }
+            }
+        }
     }
 
     if (!dlopen_top(compiled_so_path_)) {
@@ -410,6 +427,14 @@ std::string VerilatorBackend::compute_cache_key(
     // part of the key because Verilator's generated code is
     // not ABI-stable across versions (see ADR-035 R1).
     return sha1_hex(verilog_source + "|" + verilator_version);
+}
+
+std::string VerilatorBackend::cache_path_for_key(const std::string &cache_key) {
+    const char *home = std::getenv("HOME");
+    if (!home || cache_key.empty()) {
+        return {};
+    }
+    return std::string(home) + "/.cache/cpphdl/verilator/" + cache_key + "/Vtop";
 }
 
 } // namespace ch

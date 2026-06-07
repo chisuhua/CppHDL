@@ -65,6 +65,14 @@ public:
     static std::string compute_cache_key(const std::string &verilog_source,
                                         const std::string &verilator_version);
 
+    // ADR-035 Phase 3.5: returns the absolute path to the cached
+    // Vtop binary for the given SHA-1 cache key. Format:
+    //   $HOME/.cache/cpphdl/verilator/<key>/Vtop
+    // The directory is created lazily on cache miss; this function
+    // does not touch the filesystem. Returns empty string if HOME
+    // is unset.
+    static std::string cache_path_for_key(const std::string &cache_key);
+
     // Path to the compiled .so (or empty if not yet compiled).
     const std::string &compiled_so_path() const { return compiled_so_path_; }
 
