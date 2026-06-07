@@ -374,21 +374,14 @@ void verilogwriter::print_decl(std::ostream &out) {
             }
         }
 
-        // Print declarations in order: wires, regs only.
-        // Inputs and outputs are already declared in the port list by
-        // print_header; re-declaring them in the body is invalid Verilog
-        // (ADR-035).
+        // Print wires only. Regs are emitted by print_logic (in
+        // topological order, paired with their always blocks). Inputs
+        // and outputs are already in the port list (ADR-035).
         for (auto *node : wires) {
-            // Only declare wires that have names
             if (node_names_.count(node)) {
                 out << "    wire " << get_width_str(node->size()) << " "
                     << node_names_[node] << ";\n";
             }
-        }
-
-        for (auto *node : regs) {
-            print_reg(out, static_cast<ch::core::regimpl *>(
-                               node)); // Will include semicolon
         }
     } catch (...) {
         // Silently ignore exceptions

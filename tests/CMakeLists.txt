@@ -186,6 +186,10 @@ add_catch_test(test_verilog_arith test_verilog_arith.cpp)
 add_catch_test(test_verilog_compare test_verilog_compare.cpp)
 add_catch_test(test_verilog_gen test_verilog_gen.cpp)
 add_catch_test(test_verilog_shift test_verilog_shift.cpp)
+# ADR-035 / Phase 1.6: end-to-end validation of generated Verilog
+# via external tools (iverilog + verilator --lint-only). Tests skip
+# cleanly if either tool is missing on the host.
+add_catch_test(test_verilog_external test_verilog_external.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
