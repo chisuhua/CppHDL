@@ -5,6 +5,7 @@
 #include "core/bool.h" // 添加对 ch_bool 的支持
 #include "core/bundle/bundle_base.h"
 #include "core/context.h"
+#include "core/eval_backend.h" // ADR-035: IEvalBackend for pluggable backends
 #include "core/io.h"
 #include "core/reg.h"
 #include "core/types.h"
@@ -94,6 +95,17 @@ public:
     void set_ab_verification(bool enabled);
     bool is_ab_verification() const { return ab_verification_; }
 #endif
+
+    // ADR-035 / Phase 2.3: Pluggable evaluation backend. The default
+    // is the inlined interpreter + JIT pipeline (preserved for
+    // backward compatibility with 50+ existing tests). Passing a
+    // non-null backend makes the Simulator delegate future
+    // evaluation to it. The full migration of eval_sequential /
+    // eval_combinational / reset to delegate is deferred (would
+    // require reworking the 3-eval-per-tick model).
+    void set_backend(std::unique_ptr<ch::IEvalBackend> backend);
+    IEvalBackend *backend() const { return backend_.get(); }
+    const std::string &active_backend_name() const;
 
     // 统一的端口值获取接口 - 支持所有端口类型
     template <typename T, typename Dir>
@@ -563,6 +575,12 @@ private:
     bool jit_compiled_ = false;
     bool ab_verification_ = false;  // A/B 验证模式
 #endif
+
+    // ADR-035 / Phase 2.3: pluggable evaluation backend. nullptr
+    // means the inlined interpreter + JIT pipeline is used (the
+    // default, preserves backward compatibility with 50+ tests).
+    std::unique_ptr<ch::IEvalBackend> backend_;
+    std::string backend_name_ = "inlined";
 
     // 按类别分类的指令列表，提高执行效率
     ch::instr_base *default_clock_instr_;

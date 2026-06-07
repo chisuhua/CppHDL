@@ -1197,4 +1197,25 @@ void Simulator::set_ab_verification(bool enabled) {
 }
 #endif
 
+void Simulator::set_backend(std::unique_ptr<ch::IEvalBackend> backend) {
+    if (backend_) {
+        backend_->clear();
+    }
+    backend_ = std::move(backend);
+    if (backend_) {
+        backend_->initialize(ctx_, data_map_);
+        backend_name_ = backend_->name();
+        CHINFO("Simulator backend set to '%s' (ADR-035 Phase 2.3)",
+               backend_name_.c_str());
+    } else {
+        backend_name_ = "inlined";
+        CHINFO("Simulator backend cleared (falling back to inlined "
+               "interpreter + JIT pipeline)");
+    }
+}
+
+const std::string &Simulator::active_backend_name() const {
+    return backend_name_;
+}
+
 } // namespace ch

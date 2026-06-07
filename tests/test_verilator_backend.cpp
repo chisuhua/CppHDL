@@ -11,7 +11,9 @@
 #include "codegen_verilog.h"
 #include "core/context.h"
 #include "core/eval_backend.h"
+#include "core/interpreter_backend.h"
 #include "core/verilator_backend.h"
+#include "simulator.h"
 #include <cstdlib>
 #include <cerrno>
 #include <fstream>
@@ -173,7 +175,7 @@ TEST_CASE("VerilatorBackend - EvalCombinationalDoesNotCrash",
 }
 
 TEST_CASE("VerilatorBackend - ClearReleasesResources",
-          "[verilator][backend]") {
+          "[verilog][backend]") {
     auto ctx = std::make_unique<context>("vl_clear_test");
     ctx_swap guard(ctx.get());
 
@@ -185,4 +187,58 @@ TEST_CASE("VerilatorBackend - ClearReleasesResources",
     REQUIRE_NOTHROW(backend.clear());
     // Double-clear must also be safe.
     REQUIRE_NOTHROW(backend.clear());
+}
+
+// ADR-035 / Phase 2.3: Simulator::set_backend() API conformance.
+// Verifies the new pluggable-backend entry point is exposed and
+// behaves correctly (default = inlined, non-null = delegated).
+TEST_CASE("Simulator - setBackendDefaultsToInlined",
+          "[simulator][backend][adr-035]") {
+    auto ctx = std::make_unique<context>("sim_setbackend_default");
+    ctx_swap guard(ctx.get());
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+
+    Simulator sim(ctx.get());
+    REQUIRE_FALSE(sim.active_backend_name().empty());
+    REQUIRE(sim.active_backend_name() == "inlined");
+    REQUIRE(sim.backend() == nullptr);
+}
+
+TEST_CASE("Simulator - setBackendWithNullptrIsNoop",
+          "[simulator][backend][adr-035]") {
+    auto ctx = std::make_unique<context>("sim_setbackend_null");
+    ctx_swap guard(ctx.get());
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+
+    Simulator sim(ctx.get());
+    sim.set_backend(nullptr);
+    REQUIRE(sim.backend() == nullptr);
+    REQUIRE(sim.active_backend_name() == "inlined");
+}
+
+TEST_CASE("Simulator - setBackendWithInterpreterBackend",
+          "[simulator][backend][adr-035]") {
+    auto ctx = std::make_unique<context>("sim_setbackend_interp");
+    ctx_swap guard(ctx.get());
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+
+    Simulator sim(ctx.get());
+    sim.set_backend(std::make_unique<InterpreterBackend>());
+    REQUIRE(sim.backend() != nullptr);
+    REQUIRE(sim.active_backend_name() == "interpreter");
+}
+
+TEST_CASE("Simulator - setBackendReplacesPrevious",
+          "[simulator][backend][adr-035]") {
+    auto ctx = std::make_unique<context>("sim_setbackend_replace");
+    ctx_swap guard(ctx.get());
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+
+    Simulator sim(ctx.get());
+    sim.set_backend(std::make_unique<InterpreterBackend>());
+    REQUIRE(sim.active_backend_name() == "interpreter");
+    sim.set_backend(std::make_unique<InterpreterBackend>());
+    REQUIRE(sim.active_backend_name() == "interpreter");
+    sim.set_backend(nullptr);
+    REQUIRE(sim.active_backend_name() == "inlined");
 }
