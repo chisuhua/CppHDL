@@ -190,6 +190,10 @@ add_catch_test(test_verilog_shift test_verilog_shift.cpp)
 # via external tools (iverilog + verilator --lint-only). Tests skip
 # cleanly if either tool is missing on the host.
 add_catch_test(test_verilog_external test_verilog_external.cpp)
+# ADR-035 / Phase 4.1: VerilatorBackend scaffolding tests
+# (SHA-1 cache key, IEvalBackend interface, Verilog generation,
+# verilator invocation, resource cleanup).
+add_catch_test(test_verilator_backend test_verilator_backend.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
