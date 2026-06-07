@@ -360,3 +360,65 @@ TEST_CASE("Simulator - setBackendReplacesPrevious",
     sim.set_backend(nullptr);
     REQUIRE(sim.active_backend_name() == "inlined");
 }
+
+TEST_CASE("VerilatorBackend - ResetIsSafe",
+          "[verilator][backend]") {
+    auto ctx = std::make_unique<context>("vl_reset_test");
+    ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+    ch::data_map_t data_map;
+
+    VerilatorBackend backend(make_temp_dir("_reset"));
+    REQUIRE(backend.initialize(ctx.get(), data_map));
+    REQUIRE_NOTHROW(backend.reset(data_map));
+    REQUIRE_NOTHROW(backend.reset(data_map));  // idempotent
+}
+
+TEST_CASE("VerilatorBackend - ReinitializeSafe",
+          "[verilator][backend]") {
+    auto ctx = std::make_unique<context>("vl_reinit_test");
+    ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+    ch::data_map_t data_map;
+
+    std::string workdir = make_temp_dir("_reinit");
+    VerilatorBackend backend(workdir);
+    REQUIRE(backend.initialize(ctx.get(), data_map));
+
+    size_t first_size = backend.port_access_snapshot().size();
+
+    REQUIRE_NOTHROW(backend.initialize(ctx.get(), data_map));
+    size_t second_size = backend.port_access_snapshot().size();
+
+    // 重新 initialize 不应累积 port_access_ entries
+    REQUIRE(first_size == second_size);
+
+    REQUIRE_NOTHROW(backend.clear());
+}
+
+TEST_CASE("VerilatorBackend - CompiledSoPathFormat",
+          "[verilator][backend]") {
+    auto ctx = std::make_unique<context>("vl_sopath_test");
+    ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_c(0_d, "counter");
+    ch::data_map_t data_map;
+
+    std::string workdir = make_temp_dir("_sopath");
+    VerilatorBackend backend(workdir);
+    REQUIRE(backend.initialize(ctx.get(), data_map));
+
+    // 验证 compiled_so_path() API 可用且返回字符串
+    // 当前实现仅在缓存命中时填充该字段；无 cache 时为空字符串
+    // CHECK（而非 REQUIRE）允许空路径通过，同时验证非空时的格式
+    const std::string &path = backend.compiled_so_path();
+    INFO("compiled_so_path = '" + path + "'");
+    if (!path.empty()) {
+        bool is_valid = (path.find("Vtop") != std::string::npos) ||
+                        (path.find("cpphdl") != std::string::npos);
+        CHECK(is_valid);
+    }
+    // 当实现演进并填充 compiled_so_path_ 时，CHECK 会触发并验证格式
+}
