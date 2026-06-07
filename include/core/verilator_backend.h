@@ -92,6 +92,14 @@ public:
     // Phase 3.3.
     uint32_t clock_node_id() const { return clock_node_id_; }
 
+    // ADR-035 Phase 3.6: VCD trace toggle. When enabled, eval
+    // calls would dump to a Verilator VCD file via the generated
+    // sim_main.cpp. The actual dump requires the Vtop field
+    // pointers (Phase 3.3 follow-up); this method only records
+    // intent for now.
+    void enable_vcd(bool on = true) { vcd_enabled_ = on; }
+    bool vcd_enabled() const { return vcd_enabled_; }
+
 private:
     bool generate_verilog(ch::core::context *ctx);
     bool invoke_verilator(const std::string &verilog_path);
@@ -119,6 +127,9 @@ private:
 
     // Phase 3.4: id of the type_clock lnode (or UINT32_MAX if none).
     uint32_t clock_node_id_ = UINT32_MAX;
+
+    // Phase 3.6: VCD trace toggle (default off).
+    bool vcd_enabled_ = false;
 
     // Config
     std::string verilator_work_dir_;

@@ -95,6 +95,16 @@ TEST_CASE("VerilatorBackend - CachePathForKey",
     REQUIRE(path.size() >= key.size() + 30);
 }
 
+TEST_CASE("VerilatorBackend - VCDToggle",
+          "[verilator][backend][vcd]") {
+    VerilatorBackend backend(make_temp_dir("_vcd"));
+    REQUIRE_FALSE(backend.vcd_enabled());
+    backend.enable_vcd(true);
+    REQUIRE(backend.vcd_enabled());
+    backend.enable_vcd(false);
+    REQUIRE_FALSE(backend.vcd_enabled());
+}
+
 TEST_CASE("VerilatorBackend - IEvalBackendInterfaceConformance",
           "[verilator][backend]") {
     VerilatorBackend backend(make_temp_dir("_interface"));
