@@ -433,36 +433,30 @@ void verilogwriter::print_logic(std::ostream &out) {
                 printed_logic_nodes_.insert(node);
                 break;
             case ch::core::lnodetype::type_output: // Handle output assignments
-                // Outputs are typically assigned via an 'assign' statement from
-                // their source. Find the source of the outputimpl and generate
-                // the assign.
+                // ADR-035 / Phase 1.3: walk the proxy chain to find the
+                // actual driver. The output's src(0) is a proxy like
+                // "_io"; the proxy's src(0) is the real driver (e.g., a
+                // reg). Emitting "assign io = <real_driver>" replaces
+                // the old "find first type_reg" hack (which was both
+                // hard-coded to "io" and non-deterministic).
                 {
                     auto *output_node =
                         static_cast<ch::core::outputimpl *>(node);
                     if (output_node->num_srcs() > 0) {
-                        auto *src_node = output_node->src(0);
-                        if (node_names_.count(src_node)) {
-                            std::string src_name = node_names_[src_node];
-                            std::string output_name = node_names_[node];
-
-                            // For the main output, connect directly to the
-                            // register
-                            if (output_name == "io") {
-                                // Find the register node
-                                for (const auto &pair : node_names_) {
-                                    if (pair.first->type() ==
-                                        ch::core::lnodetype::type_reg) {
-                                        out << "    assign " << output_name
-                                            << " = " << pair.second << ";\n";
-                                        break;
-                                    }
-                                }
-                            }
-                            // Skip other outputs that are driven by proxy nodes
-                            // starting with "_"
-                            else if (src_name[0] != '_') {
-                                out << "    assign " << output_name << " = "
-                                    << src_name << ";\n";
+                        ch::core::lnodeimpl *driver = output_node->src(0);
+                        while (driver &&
+                               driver->type() ==
+                                   ch::core::lnodetype::type_proxy &&
+                               driver->num_srcs() > 0) {
+                            driver = driver->src(0);
+                        }
+                        if (driver && node_names_.count(driver)) {
+                            std::string driver_name = node_names_[driver];
+                            if (driver_name[0] != '_') {
+                                std::string output_name =
+                                    node_names_[node];
+                                out << "    assign " << output_name
+                                    << " = " << driver_name << ";\n";
                             }
                         }
                     }

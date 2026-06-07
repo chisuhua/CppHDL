@@ -719,3 +719,27 @@ TEST_CASE("VerilogGen - NoOutputRedeclarationInBody",
 
     REQUIRE(second_output == std::string::npos);
 }
+
+// ADR-035 / Phase 1.3: outputs must connect to their actual src(0),
+// not to the first type_reg found via unordered_map iteration
+// (which is non-deterministic and breaks multi-reg designs).
+TEST_CASE("VerilogGen - OutputConnectsToActualSource",
+          "[verilog][verilator][logic]") {
+    auto ctx = std::make_unique<ch::core::context>("multi_reg_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_a(0_d, "reg_a");
+    ch_reg<ch_uint<4>> reg_b(0_d, "reg_b");
+    reg_a->next = reg_a + 1_d;
+    reg_b->next = reg_b + 2_d;
+
+    ch_out<ch_uint<4>> io("io");
+    ch_out<ch_uint<4>> aux_out("aux_out");
+    io <<= reg_a;
+    aux_out <<= reg_b;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("assign io = reg_a") != std::string::npos);
+    REQUIRE(verilog.find("assign aux_out = reg_b") != std::string::npos);
+}
