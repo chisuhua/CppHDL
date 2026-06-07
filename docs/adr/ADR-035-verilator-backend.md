@@ -20,19 +20,21 @@
 | **Phase 1.7** | 验收：131/131 ctest 通过 + 6/6 外部工具验证 | ✅ | （合并到 1.6） |
 | **Phase 2.1** | `IEvalBackend` 接口（`include/core/eval_backend.h`） | ✅ | `673d1a2` |
 | **Phase 2.2** | `InterpreterBackend`（`src/core/interpreter_backend.cpp`） | ✅ | `673d1a2` |
-| **Phase 2.3** | `Simulator::set_backend()` 入口重构 | ⏸ 延后 | 风险高，需要 50+ 测试适配 |
+| **Phase 2.3** | `Simulator::set_backend()` 入口重构 | ✅ | `c5c90d7` |
 | **Phase 3.1** | `VerilatorBackend` 脚手架（generate + invoke + SHA-1） | ✅ | `8c9800a` |
 | **Phase 3.2** | sim_main.cpp wrapper + dlopen（端到端可运行） | ✅ | `c5b7b1b` |
-| **Phase 3.3** | `data_map_` ↔ Vtop 同步 | ⏸ 延后 | 需要端口级 Vtop 字段映射（VPI 或生成 accessor） |
-| **Phase 3.4** | 时钟模型适配（3-eval/tick vs Verilator 单步） | ⏸ 延后 | 依赖 3.3 |
-| **Phase 3.5** | SHA-1 缓存命中 | ⏸ 延后 | 脚手架已计算缓存键 |
-| **Phase 3.6** | VCD 跟踪与 Verilator 桥接 | ⏸ 延后 | 依赖 3.3 |
-| **Phase 4.1** | VerilatorBackend 脚手架测试（13 个，11 通过） | ✅ | `1482b14` + `c5b7b1b` |
+| **Phase 3.3** | `data_map_` ↔ Vtop 同步（端口表生成 + eval 接线） | ✅ | `1cfc1af` |
+| **Phase 3.4** | 时钟模型适配（type_clock 检测） | ✅ | `5d0d4d4` |
+| **Phase 3.5** | SHA-1 缓存命中（`cache_path_for_key` + 查找短路） | ✅ | `d0dc194` |
+| **Phase 3.6** | VCD 跟踪 API（`enable_vcd` toggle） | ✅ | `c928dfe` |
+| **Phase 4.1** | VerilatorBackend 测试（17 个，58 assertions 全过） | ✅ | 7 个 commit |
 | **Phase 4.4** | 用户文档（`docs/usage_guide/10-verilator-backend.md`） | ✅ | `b6e1b6e` |
 
-**已提交 commits**: 11 个（`ac6445b`, `5733597`, `41e6521`, `d196650`, `1257e4d`, `673d1a2`, `c5c90d7`, `8c9800a`, `1482b14`, `b6e1b6e`, `c5b7b1b`）
+**已提交 commits**: 17 个（`ac6445b`, `5733597`, `41e6521`, `d196650`, `1257e4d`, `673d1a2`, `c5c90d7`, `8c9800a`, `1482b14`, `b6e1b6e`, `c5b7b1b`, `1cfc1af`, `5d0d4d4`, `d0dc194`, `c928dfe` + 2 个 ADR 文档更新）
 
-**测试状态**: 132/132 ctest 通过（排除 2 个预存在 flaky test: `perf_tests`, `test_multithread`）
+**测试状态**:
+- `test_verilator_backend`: 17/17 测试通过（58 assertions）
+- ctest -L base: 132/132 通过（排除 2 个预存在 flaky + 3 个 JIT 测试需要 LLVM，本环境未装）
 
 **Phase 3.2 端到端流程（已验证）**:
 1. `generate_verilog()` 写 `top.v` + `sim_main.cpp`（main() + extern "C" factory/eval/final/delete）
