@@ -228,32 +228,47 @@ void verilogwriter::print_header(std::ostream &out) {
         // Check if we're in static destruction phase
         out << "module top (\n";
 
+        // ADR-035: include type_clock and type_reset lnodes so Verilator
+        // and iverilog accept the generated module (the always blocks
+        // reference default_clock / default_reset which must be declared
+        // as input ports).
         std::vector<ch::core::lnodeimpl *> ports;
-        // Collect inputs and outputs from the context's node list
         for (auto &node_ptr : ctx_->get_nodes()) {
             auto *node = node_ptr.get();
-            if (node->type() == ch::core::lnodetype::type_input) {
-                ports.push_back(node);
-            } else if (node->type() == ch::core::lnodetype::type_output) {
+            if (node->type() == ch::core::lnodetype::type_input ||
+                node->type() == ch::core::lnodetype::type_output ||
+                node->type() == ch::core::lnodetype::type_clock ||
+                node->type() == ch::core::lnodetype::type_reset) {
                 ports.push_back(node);
             }
         }
 
-        // Sort ports by their ID to maintain order
         std::sort(ports.begin(), ports.end(),
                   [](ch::core::lnodeimpl *a, ch::core::lnodeimpl *b) {
                       return a->id() < b->id();
                   });
 
-        // Filter out unnecessary outputs - only include the main "io" port
+        // Emit default clock/reset FIRST so they occupy stable positions
+        // across designs (Verilator dlopen / SHA-1 cache key stability).
         std::vector<ch::core::lnodeimpl *> filtered_ports;
         for (auto *port_node : ports) {
-            if (port_node->type() == ch::core::lnodetype::type_input) {
-                // Always include inputs
+            if (port_node->type() == ch::core::lnodetype::type_clock) {
                 filtered_ports.push_back(port_node);
-            } else if (port_node->type() == ch::core::lnodetype::type_output) {
+            }
+        }
+        for (auto *port_node : ports) {
+            if (port_node->type() == ch::core::lnodetype::type_reset) {
+                filtered_ports.push_back(port_node);
+            }
+        }
+        for (auto *port_node : ports) {
+            if (port_node->type() == ch::core::lnodetype::type_input) {
+                filtered_ports.push_back(port_node);
+            }
+        }
+        for (auto *port_node : ports) {
+            if (port_node->type() == ch::core::lnodetype::type_output) {
                 std::string port_name = node_names_[port_node];
-                // Only include the main "io" port
                 if (port_name == "io") {
                     filtered_ports.push_back(port_node);
                 }
@@ -262,11 +277,21 @@ void verilogwriter::print_header(std::ostream &out) {
 
         for (size_t i = 0; i < filtered_ports.size(); ++i) {
             auto *port_node = filtered_ports[i];
-            if (port_node->type() == ch::core::lnodetype::type_input) {
-                print_input(out, static_cast<ch::core::inputimpl *>(port_node));
-            } else if (port_node->type() == ch::core::lnodetype::type_output) {
+            switch (port_node->type()) {
+            case ch::core::lnodetype::type_input:
+                print_input(out,
+                            static_cast<ch::core::inputimpl *>(port_node));
+                break;
+            case ch::core::lnodetype::type_output:
                 print_output(out,
                              static_cast<ch::core::outputimpl *>(port_node));
+                break;
+            case ch::core::lnodetype::type_clock:
+            case ch::core::lnodetype::type_reset:
+                out << "    input " << node_names_[port_node];
+                break;
+            default:
+                break;
             }
             if (i < filtered_ports.size() - 1) {
                 out << ",\n";

@@ -617,3 +617,57 @@ TEST_CASE("VerilogGen - ConcatLhsLiteral", "[verilog][concat][boundary]") {
     REQUIRE(verilog.find("{") != std::string::npos);
     REQUIRE(verilog.find("}") != std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// ADR-035 / Phase 1.1: Verilator-friendliness fixes
+// ---------------------------------------------------------------------------
+
+TEST_CASE("VerilogGen - DefaultClockDeclaredInPortList",
+          "[verilog][verilator][port]") {
+    auto ctx = std::make_unique<ch::core::context>("defclk_decl_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_c(0_d);
+    ch_out<ch_uint<4>> out_port("io");
+    out_port = reg_c;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("input default_clock") != std::string::npos);
+}
+
+TEST_CASE("VerilogGen - DefaultResetDeclaredInPortList",
+          "[verilog][verilator][port]") {
+    auto ctx = std::make_unique<ch::core::context>("defrst_decl_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg_c(0_d);
+    ch_out<ch_uint<4>> out_port("io");
+    out_port = reg_c;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    REQUIRE(verilog.find("input default_reset") != std::string::npos);
+}
+
+TEST_CASE("VerilogGen - DefaultClockResetOrderedFirst",
+          "[verilog][verilator][port][order]") {
+    auto ctx = std::make_unique<ch::core::context>("defclk_order_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_in<ch_uint<8>> user_input("user_in");
+    ch_out<ch_uint<8>> user_output("io");
+    user_output = user_input;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    auto pos_default_clock = verilog.find("default_clock");
+    auto pos_default_reset = verilog.find("default_reset");
+    auto pos_user_in = verilog.find("user_in");
+
+    REQUIRE(pos_default_clock != std::string::npos);
+    REQUIRE(pos_default_reset != std::string::npos);
+    REQUIRE(pos_user_in != std::string::npos);
+    REQUIRE(pos_default_clock < pos_user_in);
+    REQUIRE(pos_default_reset < pos_user_in);
+}
