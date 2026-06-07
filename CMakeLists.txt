@@ -192,6 +192,9 @@ add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 # Phase 3: Stream 组件
 add_subdirectory(examples/stream)
 
+# Phase 4: Verilator 仿真后端示例 (ADR-035)
+add_subdirectory(examples/verilator)
+
 # Phase 3: AXI4 总线系统
 add_subdirectory(examples/axi4)
 
