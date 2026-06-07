@@ -671,3 +671,51 @@ TEST_CASE("VerilogGen - DefaultClockResetOrderedFirst",
     REQUIRE(pos_default_clock < pos_user_in);
     REQUIRE(pos_default_reset < pos_user_in);
 }
+
+// ADR-035 / Phase 1.2: All ch_out ports must appear in the port list.
+// Outputs other than "io" were silently dropped and re-declared in the
+// body (invalid Verilog; Verilator rejects).
+TEST_CASE("VerilogGen - AllOutputsInPortList", "[verilog][verilator][port]") {
+    auto ctx = std::make_unique<ch::core::context>("all_outputs_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_out<ch_uint<8>> a("port_a");
+    ch_out<ch_uint<8>> b("port_b");
+    ch_out<ch_uint<8>> io("io");
+    ch_uint<8> v(0_d);
+    a = v;
+    b = v;
+    io = v;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    auto port_list_start = verilog.find("module top (");
+    REQUIRE(port_list_start != std::string::npos);
+    auto port_list_end = verilog.find(");", port_list_start);
+    REQUIRE(port_list_end != std::string::npos);
+    std::string port_list =
+        verilog.substr(port_list_start, port_list_end - port_list_start);
+
+    REQUIRE(port_list.find("port_a") != std::string::npos);
+    REQUIRE(port_list.find("port_b") != std::string::npos);
+    REQUIRE(port_list.find("io") != std::string::npos);
+}
+
+// ADR-035 / Phase 1.2: outputs must NOT be re-declared in the body.
+TEST_CASE("VerilogGen - NoOutputRedeclarationInBody",
+          "[verilog][verilator][port]") {
+    auto ctx = std::make_unique<ch::core::context>("no_redecl_test");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_out<ch_uint<8>> a("port_a");
+    ch_uint<8> v(0_d);
+    a = v;
+
+    std::string verilog = generateVerilogToString(ctx.get());
+
+    size_t first_output = verilog.find("output");
+    REQUIRE(first_output != std::string::npos);
+    size_t second_output = verilog.find("output", first_output + 1);
+
+    REQUIRE(second_output == std::string::npos);
+}

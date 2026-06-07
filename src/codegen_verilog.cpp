@@ -268,10 +268,7 @@ void verilogwriter::print_header(std::ostream &out) {
         }
         for (auto *port_node : ports) {
             if (port_node->type() == ch::core::lnodetype::type_output) {
-                std::string port_name = node_names_[port_node];
-                if (port_name == "io") {
-                    filtered_ports.push_back(port_node);
-                }
+                filtered_ports.push_back(port_node);
             }
         }
 
@@ -377,14 +374,11 @@ void verilogwriter::print_decl(std::ostream &out) {
             }
         }
 
-        // Print declarations in order: inputs, outputs, wires, regs
+        // Print declarations in order: inputs, wires, regs
+        // (outputs are already declared in the port list by print_header;
+        // re-declaring them in the body is invalid Verilog. ADR-035)
         for (auto *node : inputs) {
             print_input(out, static_cast<ch::core::inputimpl *>(node));
-            out << ";\n";
-        }
-
-        for (auto *node : outputs) {
-            print_output(out, static_cast<ch::core::outputimpl *>(node));
             out << ";\n";
         }
 
