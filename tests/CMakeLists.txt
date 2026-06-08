@@ -189,7 +189,15 @@ add_catch_test(test_verilog_shift test_verilog_shift.cpp)
 # ADR-035 / Phase 1.6: end-to-end validation of generated Verilog
 # via external tools (iverilog + verilator --lint-only). Tests skip
 # cleanly if either tool is missing on the host.
+# CATCH_AMALGAMATED_CUSTOM_MAIN + CATCH_CONFIG_RUNNER disable the
+# default main() in catch_amalgamated.cpp so the test can provide its
+# own main() that returns 0 (success) when neither iverilog nor
+# verilator is installed. Otherwise Catch2 exits with 4 (all tests
+# skipped), which ctest reports as failure.
 add_catch_test(test_verilog_external test_verilog_external.cpp)
+target_compile_definitions(test_verilog_external PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
 # ADR-035 / Phase 4.1: VerilatorBackend scaffolding tests
 # (SHA-1 cache key, IEvalBackend interface, Verilog generation,
 # verilator invocation, resource cleanup).
