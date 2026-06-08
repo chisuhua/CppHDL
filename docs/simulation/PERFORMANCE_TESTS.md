@@ -145,6 +145,49 @@
 - 批量执行应 <= 单步循环（允许误差 5%）
 - 如果批量执行更慢，说明存在优化空间
 
+### TC-07：组合逻辑三路对比（Interpreter / JIT / Verilator）
+
+**目的**：在 TC-01 DUT 上对比三个仿真后端的性能，建立跨后端基线
+
+| 参数 | 值 |
+|------|------|
+| 链深度 N | 10, 100, 1000 |
+| Tick 次数 | 10000 |
+| 后端 | Interpreter (`set_jit_enabled(false)`)、JIT (`set_jit_enabled(true)`)、Verilator (subprocess + SHA-1 缓存) |
+| DUT | 复用 TC-01（XOR 链 + `ch_out<>`） |
+
+**测量方法**：
+- 5 次 warmup + 10 次 measured，取 median
+- `build_us` 和 `sim_us` 分列报告
+- Verilator 不可用时降级为 2-way（Interpreter + JIT），输出 warning 后退出码仍为 0
+
+**验收标准**：
+- 三后端数据齐全，CSV / JSON / Markdown 报告可被解析
+- Verilator 加速比 >= 1.5x（相对 Interpreter）
+- JIT 在小规模（depth=10）下应快于 Interpreter
+
+---
+
+### TC-08：时序逻辑三路对比（Interpreter / JIT / Verilator）
+
+**目的**：在 TC-02 DUT 上对比三个仿真后端的时序逻辑性能
+
+| 参数 | 值 |
+|------|------|
+| 寄存器数量 | 10, 100, 1000（单 `ch_reg<>` 复用 DUT） |
+| Tick 次数 | 10000 |
+| 后端 | Interpreter, JIT, Verilator |
+
+**测量方法**：
+- 5 次 warmup + 10 次 measured，取 median
+- 包含 reset 序列：`reset=1` → `clock=1` → `reset=0`
+- Verilator 路径走 harness 的 `default_clock` 切换
+
+**验收标准**：
+- 三后端数据齐全
+- Verilator 应提供显著加速（预期 >= 5x）
+- 时序逻辑在 JIT 模式下加速比 >= 1.5x
+
 ---
 
 ## 5. 测试框架
@@ -285,6 +328,32 @@ tests/performance/
 | TC-04 | 100 signals | **-16.79%** | **73.61%** | — | overhead | ✅ 已测量 |
 | TC-06 | batch vs single | **44.11%** | **4.57%** | — | % | ✅ 已测量 |
 
+### TC-07 / TC-08：三路对比数据（待运行时填入）
+
+> 数据来源：`run_perf_comparison.sh` 运行时填入
+> 报告路径：`build/perf_report.{csv,json,md}`
+> 字段含义：`build_us` 构建时间 / `sim_us` 仿真时间 / `total_us` 合计 / `iterations` 测量次数 / `median_us` 中位数 / `status` 状态
+
+#### TC-07：XOR 链三路对比
+
+| 参数 | Interpreter (μs) | JIT (μs) | Verilator (μs) | Verilator / Interpreter 加速比 |
+|------|------------------|----------|----------------|-------------------------------|
+| depth=10   | _fill_ | _fill_ | _fill_ | _fill_ |
+| depth=100  | _fill_ | _fill_ | _fill_ | _fill_ |
+| depth=1000 | _fill_ | _fill_ | _fill_ | _fill_ |
+
+#### TC-08：寄存器三路对比
+
+| 参数 | Interpreter (μs) | JIT (μs) | Verilator (μs) | Verilator / Interpreter 加速比 |
+|------|------------------|----------|----------------|-------------------------------|
+| regs=10   | _fill_ | _fill_ | _fill_ | _fill_ |
+| regs=100  | _fill_ | _fill_ | _fill_ | _fill_ |
+| regs=1000 | _fill_ | _fill_ | _fill_ | _fill_ |
+
+#### 降级行为
+
+Verilator 不可用时脚本打印 warning，报告只含 Interpreter 和 JIT 两行，对应 `status` 列标记为 `DEGRADED`，退出码仍为 0。
+
 ---
 
 ## 8. JIT 架构说明
@@ -358,6 +427,98 @@ tests/performance/
 
 ---
 
-*文档版本: v2.2*
+## 11. Three-way comparison (TC-07/TC-08)
+
+> 本节定义 Interpreter / JIT / Verilator 三后端性能对比的执行方法、数据格式和回放步骤。
+> 一键脚本：`./run_perf_comparison.sh`
+
+### 11.1 测量环境
+
+运行前记录以下环境信息，写入报告头部或单独保留：
+
+| 项目 | 命令 |
+|------|------|
+| 操作系统 | `uname -a` |
+| 编译器 | `g++ --version` 或 `clang++ --version` |
+| 构建配置 | `cmake -L build 2>/dev/null \| grep -E "JIT\|LLVM"` |
+| Verilator | `verilator --version`（缺失则降级 2-way） |
+| CPU | `lscpu \| grep "Model name"` |
+| 内存 | `free -h` |
+| 时间戳 | `date -Iseconds` |
+
+### 11.2 运行命令
+
+```bash
+# 一键脚本：编译 + 测试 + 生成三格式报告
+./run_perf_comparison.sh
+
+# 仅运行 TC-07 / TC-08，输出 CSV / JSON / Markdown
+./build/tests/benchmark/perf_tests --tc=07 --tc=08 \
+    --report=csv --report=json --report=md
+
+# 自定义 Verilator 路径
+./build/tests/benchmark/perf_tests --tc=07 --tc=08 \
+    --verilator=/opt/verilator/bin/verilator
+
+# 自定义缓存根目录
+./build/tests/benchmark/perf_tests --tc=07 --tc=08 \
+    --cache-root=$HOME/.cache/cpphdl-verilator
+```
+
+### 11.3 输出报告
+
+| 格式 | 路径 | 用途 |
+|------|------|------|
+| CSV | `build/perf_report.csv` | 表格处理（Excel / pandas） |
+| JSON | `build/perf_report.json` | 程序化解析 |
+| Markdown | `build/perf_report.md` | GitHub 预览、文档嵌入 |
+
+CSV header 固定为：
+```
+design,backend,build_us,sim_us,total_us,iterations,median_us,status
+```
+
+### 11.4 降级行为
+
+Verilator 不可用时脚本：
+
+1. 打印 warning：`[WARN] verilator not found, falling back to 2-way comparison`
+2. 报告只含 Interpreter 和 JIT 两行，对应 `status` 列标记为 `DEGRADED`
+3. 退出码仍为 0，方便 CI 持续集成
+
+### 11.5 TC-07 sample run（XOR chain，待运行时填入）
+
+> 数据来源：`build/perf_report.csv`（运行 `run_perf_comparison.sh` 后填入实际值）
+> DUT：TC-01（XOR 链 + `ch_out<>`），链深度 10 / 100 / 1000
+> Tick 次数：10000，测量方法：5 warmup + 10 measured，取 median
+
+| 参数 | Interpreter (μs) | JIT (μs) | Verilator (μs) | 加速比（Verilator / Interpreter） |
+|------|------------------|----------|----------------|----------------------------------|
+| depth=10   | _fill_ | _fill_ | _fill_ | _fill_ |
+| depth=100  | _fill_ | _fill_ | _fill_ | _fill_ |
+| depth=1000 | _fill_ | _fill_ | _fill_ | _fill_ |
+
+### 11.6 TC-08 sample run（sequential，待运行时填入）
+
+> 数据来源：`build/perf_report.csv`（运行后填入实际值）
+> DUT：TC-02（单 `ch_reg<>` + `ch_out<>`），寄存器数 10 / 100 / 1000
+> Tick 次数：10000，测量方法：5 warmup + 10 measured，取 median
+
+| 参数 | Interpreter (μs) | JIT (μs) | Verilator (μs) | 加速比（Verilator / Interpreter） |
+|------|------------------|----------|----------------|----------------------------------|
+| regs=10   | _fill_ | _fill_ | _fill_ | _fill_ |
+| regs=100  | _fill_ | _fill_ | _fill_ | _fill_ |
+| regs=1000 | _fill_ | _fill_ | _fill_ | _fill_ |
+
+### 11.7 复用与扩展
+
+- TC-07 复用 TC-01 DUT，TC-08 复用 TC-02 DUT，避免设计漂移
+- 报告字段定义在 `tests/benchmark/report_generator.h`
+- SHA-1 缓存由 `verilator_runner.h` 提供，Verilator 重复构建自动跳过
+- 测量统一为 5 warmup + 10 measured，`build_us` 与 `sim_us` 分列
+
+---
+
+*文档版本: v2.3*
 *创建日期: 2026-04-25*
-*最后更新: 2026-05-02（填入 JIT vs Interpreter 对比数据）*
+*最后更新: 2026-06-08（追加 §11 Three-way comparison 与 TC-07/TC-08 章节）*
