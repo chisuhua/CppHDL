@@ -149,9 +149,8 @@ public:
     // Console summary — extends v1 format with backend column.
     // -------------------------------------------------------------------------
     void print_summary() const {
-        printf("%-20s | %-12s | %-12s | %12.2f ticks/sec | %10.2f ns/tick | %10.2f us/iter\n",
-               "test", "params", "backend", 0.0, 0.0, 0.0);  // header
-        (void)0;  // suppress unused-var warning on the above dummy header
+        printf("%-20s | %-12s | %-12s | %12s | %10s | %10s\n",
+               "test", "params", "backend", "ticks/sec", "ns/tick", "us/iter");
         for (const auto& r : results_) {
             printf("%-20s | %-12s | %-12s | %12.2f ticks/sec | %10.2f ns/tick | %10.2f us/iter\n",
                    r.test_name.c_str(),

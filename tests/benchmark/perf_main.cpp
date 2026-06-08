@@ -32,10 +32,7 @@
 using namespace ch;
 using namespace ch::core;
 
-// =============================================================================
-// Legacy TC-01/02/04/06 — single-backend combinational/sequential benchmarks
-// (preserved verbatim from the v1 perf_main.cpp).
-// =============================================================================
+// Legacy TC-01/02/04/06 — single-backend combinational/sequential benchmarks (v1, preserved verbatim).
 static BenchmarkResult run_combinational_benchmark(int depth, int ticks) {
     PerfTimer timer;
     {
@@ -136,10 +133,7 @@ static BenchmarkResult run_batch_tick_benchmark(int nodes, int ticks) {
     return r;
 }
 
-// =============================================================================
-// TC-07/08 three-way comparison — DUTs are Component subclasses so the
-// generated Verilog has a ch_out<ch_uint<8>> port (required by Verilator).
-// =============================================================================
+// TC-07/08 three-way comparison — DUTs are Component subclasses so the generated Verilog has a ch_out<ch_uint<8>> port (required by Verilator).
 class Tc07XorChain : public ch::Component {
 public:
     __io(ch_out<ch_uint<8>> result;)
@@ -155,8 +149,7 @@ private:
     int depth_;
 };
 
-// Single-register design mirroring the TC-02 stress pattern; `regs_` is
-// recorded for perf-metric normalization only (same convention as v1).
+// Single-register design mirroring the TC-02 stress pattern (v1 convention).
 class Tc08RegChain : public ch::Component {
 public:
     __io(ch_out<ch_uint<8>> result;)
@@ -193,9 +186,8 @@ static double time_backend_us(std::function<void()> runner,
 
 static BenchmarkResult make_row(const std::string& tn, const std::string& p,
                                 const std::string& backend,
-                                double build_us, double sim_us,
-                                int iters, double median,
-                                const std::string& status) {
+                                double build_us, double sim_us, int iters,
+                                double median, const std::string& status) {
     BenchmarkResult r;
     r.test_name = tn; r.params = p; r.backend = backend;
     r.build_us = build_us; r.sim_us = sim_us;
@@ -300,9 +292,7 @@ static ThreeWayResult run_three_way_tc08(int regs, int ticks, int warmup,
         vb, cr, wd, regs);
 }
 
-// =============================================================================
 // CLI
-// =============================================================================
 static void print_usage(const char* prog) {
     std::cout << "Usage: " << prog << " [options]\n"
         "  --tc=01|02|04|06    Legacy single-backend benchmarks\n"

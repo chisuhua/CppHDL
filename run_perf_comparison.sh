@@ -103,9 +103,9 @@ fi
 if ! "$PERF_BIN" --all --report=json --tc=07 --tc=08 >/dev/null; then
     log_warn "perf_tests --report=json returned non-zero"
 fi
-# Markdown (graceful: current binary may not implement --report=md)
+# Markdown (perf_tests implements --report=md; this call is a no-op fallback for forward compat)
 if ! "$PERF_BIN" --all --report=md --tc=07 --tc=08 >/dev/null; then
-    log_warn "perf_tests --report=md not yet supported (will synthesize from CSV)"
+    log_warn "perf_tests --report=md failed; will synthesize from CSV"
 fi
 
 # ---- Stage 5: copy outputs into build/perf_report.{csv,json,md} ----------
