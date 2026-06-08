@@ -35,7 +35,7 @@ target_include_directories(test_forwarding PRIVATE ${PROJECT_SOURCE_DIR}/example
 
 # CSR unit test (from examples/riscv-mini/tests/)
 # Tests CSR register reset values, read/write, set/clear, MRET, exceptions, WFI, interrupt logic
-add_catch_test(test_csr_unit ../../examples/riscv-mini/tests/test_csr_unit.cpp)
+add_catch_test(test_csr_unit ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)
 target_include_directories(test_csr_unit PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
 # ============================================================================
