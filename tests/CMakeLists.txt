@@ -75,6 +75,9 @@ add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 # W1: TC-08 JIT register path perf regression (perf-report-followup.md Task 1)
 add_catch_test(perf_jit_reg benchmark/test_jit_reg_perf.cpp)
 set_tests_properties(perf_jit_reg PROPERTIES LABELS "perf" TIMEOUT 120)
+# W2: TC-07 JIT small-graph threshold (perf-report-followup.md Task 2)
+add_catch_test(perf_jit_smallgraph benchmark/test_jit_smallgraph.cpp)
+set_tests_properties(perf_jit_smallgraph PROPERTIES LABELS "perf" TIMEOUT 60)
 
 # Stream 组件独立测试
 add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)

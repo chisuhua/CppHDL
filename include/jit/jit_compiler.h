@@ -36,6 +36,11 @@ struct JitCompileResult {
 
 class JitCompiler {
 public:
+    // Small graphs (depth=10, ~30 nodes) lose to interpreter because
+    // LLVM ORC JIT setup (~10-50 ms cold) exceeds savings. Threshold
+    // per perf-report-followup.md W2.
+    static constexpr uint32_t JIT_MIN_NODES = 50;
+
     JitCompiler();
     ~JitCompiler();
 

@@ -213,6 +213,17 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
     return JitResult::SUCCESS;
   }
 
+  // W2 (perf-report-followup.md): small graphs lose to interpreter because
+  // LLVM ORC JIT setup (~10-50 ms cold) exceeds savings. Return
+  // UNSUPPORTED_OP so the caller falls back to the interpreter path
+  // instead of paying the compilation cost.
+  if (eval_list.size() < JIT_MIN_NODES) {
+    last_error_msg_ = "graph too small for JIT ("
+                      + std::to_string(eval_list.size())
+                      + " nodes < JIT_MIN_NODES)";
+    return JitResult::UNSUPPORTED_OP;
+  }
+
   JitBlock block_comb("combinational");
   JitBlock block_seq("sequential");
   VRegId next_comb_vreg = 0;

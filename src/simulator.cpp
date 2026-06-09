@@ -1169,6 +1169,12 @@ void Simulator::try_jit_compile() {
         CHINFO("JIT compilation successful: %u IR instructions, %u vregs, %llu ns",
                result.ir_instr_count, result.vreg_count,
                (unsigned long long)result.compile_time_ns);
+    } else if (result.result == ch::jit::JitResult::UNSUPPORTED_OP) {
+        // W2 (perf-report-followup.md): small graphs intentionally skip JIT
+        // to avoid paying LLVM ORC setup cost. Silent fallback to interpreter.
+        jit_compiled_ = false;
+        CHINFO("JIT skipped (small graph or unsupported op): %s",
+               jit_compiler_->last_error_msg().c_str());
     } else {
         std::string combined = result.error_msg;
         if (combined.empty() && jit_compiler_) {
