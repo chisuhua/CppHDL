@@ -150,6 +150,13 @@ public:
     void export_markdown(const std::string& filename) const {
         std::ofstream f(filename);
         f << "# Performance Comparison Report\n\n";
+        // W6 (perf-report-followup.md): prepend disclaimer so consumers
+        // don't naively compare LEGACY and PASS rows.
+        f << "> **LEGACY rows** (TC-01/02/04/06) are historical benchmarks "
+             "from v1 and use `iterations=1`. **PASS rows** (TC-07/08 and "
+             "beyond) use `iterations=10` with median statistics. Do not "
+             "directly compare LEGACY and PASS rows. For new comparisons, "
+             "use **interpreter** as the reference baseline.\n\n";
         f << "| Design | Backend | Build (μs) | Sim (μs) | Total (μs) | "
              "Median (μs) | Iterations | Status | Skip Reason |\n";
         f << "|---|---|---:|---:|---:|---:|---:|---|---|\n";
