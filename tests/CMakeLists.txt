@@ -78,6 +78,10 @@ set_tests_properties(perf_jit_reg PROPERTIES LABELS "perf" TIMEOUT 120)
 # W2: TC-07 JIT small-graph threshold (perf-report-followup.md Task 2)
 add_catch_test(perf_jit_smallgraph benchmark/test_jit_smallgraph.cpp)
 set_tests_properties(perf_jit_smallgraph PROPERTIES LABELS "perf" TIMEOUT 60)
+# W3: build_us instrumentation (perf-report-followup.md Task 3)
+add_catch_test(perf_build_us benchmark/test_build_us_present.cpp)
+set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Stream 组件独立测试
 add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)

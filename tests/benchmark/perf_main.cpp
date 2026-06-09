@@ -212,12 +212,20 @@ static ThreeWayResult run_three_way(const std::string& test_name,
     // Workdir must exist before toVerilog() tries to open its output.
     std::error_code ec;
     std::filesystem::create_directories(workdir, ec);
+    // W3 (perf-report-followup.md): measure the build cost (ch_device +
+    // Simulator construction + initial tick) once and propagate the same
+    // value to all three backends. The build artifact is shared.
+    double build_us_measured = 0.0;
     {  // Build DUT once, export Verilog (shared artifact).
+        PerfTimer build_timer;
+        build_timer.start();
         ch_device<DutT, CtorArgs...> dev(std::forward<CtorArgs>(ctor_args)...);
         Simulator s(dev.context());
         s.tick(1);
         toVerilog(verilog_path, dev.context());
         (void)s.get_value(dev.io().result);
+        build_timer.stop();
+        build_us_measured = build_timer.elapsed_us();
     }
     {  // Interpreter backend.
         ch_device<DutT, CtorArgs...> dev(std::forward<CtorArgs>(ctor_args)...);
@@ -226,7 +234,7 @@ static ThreeWayResult run_three_way(const std::string& test_name,
         s.tick(1);
         double mu = time_backend_us([&](){ s.tick(ticks); }, warmup, measured);
         twr.interp = make_row(test_name, params, "interpreter",
-                              0.0, mu, measured, mu, "PASS");
+                              build_us_measured, mu, measured, mu, "PASS");
     }
     {  // JIT backend.
         ch_device<DutT, CtorArgs...> dev(std::forward<CtorArgs>(ctor_args)...);
@@ -234,7 +242,8 @@ static ThreeWayResult run_three_way(const std::string& test_name,
         s.set_jit_enabled(true);
         s.tick(1);  // triggers JIT compile
         double mu = time_backend_us([&](){ s.tick(ticks); }, warmup, measured);
-        twr.jit = make_row(test_name, params, "jit", 0.0, mu, measured, mu, "PASS");
+        twr.jit = make_row(test_name, params, "jit",
+                           build_us_measured, mu, measured, mu, "PASS");
     }
     // Verilator backend — skipped gracefully when unavailable.
     ch_perf::VerilatorRunner vr(cache_root, verilator_bin);
