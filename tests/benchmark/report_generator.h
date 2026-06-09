@@ -47,7 +47,13 @@ struct BenchmarkResult {
     double total_us = 0.0;
     int iterations = 0;
     double median_us = 0.0;
-    std::string status = "UNKNOWN";  // "PASS" / "FAILED" / "UNKNOWN"
+    std::string status = "UNKNOWN";  // "PASS" / "FAILED" / "UNKNOWN" /
+                                     // "SKIPPED" / "UNSUPPORTED" / "LEGACY"
+    // W5 (perf-report-followup.md): reason for SKIPPED/UNSUPPORTED status.
+    // Empty when status is PASS/LEGACY. Used to distinguish environment
+    // (UNSUPPORTED: binary missing) from runtime (SKIPPED: compile error)
+    // for the verilator backend.
+    std::string skip_reason;
 };
 
 class ReportGenerator {
@@ -63,7 +69,7 @@ public:
     void export_csv(const std::string& filename) const {
         std::ofstream f(filename);
         f << "test_name,params,backend,build_us,sim_us,total_us,iterations,"
-             "median_us,status,is_legacy\n";
+             "median_us,status,is_legacy,skip_reason\n";
         for (const auto& r : results_) {
             // W4: render sentinel -1.0 as empty cell (CSV convention).
             std::string oh_str = (r.overhead_percent < 0.0)
@@ -78,7 +84,8 @@ public:
               << r.iterations << ","
               << format_double(r.median_us) << ","
               << csv_escape(r.status) << ","
-              << is_legacy << "\n";
+              << is_legacy << ","
+              << csv_escape(r.skip_reason) << "\n";
         }
     }
 
@@ -123,7 +130,9 @@ public:
             f << "      \"status\": \"" << json_escape(r.status) << "\",\n";
             // W6: is_legacy flag — true for LEGACY rows (TC-01/02/04/06)
             // so downstream tools can filter them.
-            f << "      \"is_legacy\": " << (r.status == "LEGACY" ? "true" : "false") << "\n";
+            f << "      \"is_legacy\": " << (r.status == "LEGACY" ? "true" : "false") << ",\n";
+            // W5: skip_reason for SKIPPED/UNSUPPORTED rows.
+            f << "      \"skip_reason\": \"" << json_escape(r.skip_reason) << "\"\n";
             f << "    }" << (i + 1 < results_.size() ? "," : "") << "\n";
         }
         f << "  ]\n";
@@ -142,8 +151,8 @@ public:
         std::ofstream f(filename);
         f << "# Performance Comparison Report\n\n";
         f << "| Design | Backend | Build (μs) | Sim (μs) | Total (μs) | "
-             "Median (μs) | Iterations | Status |\n";
-        f << "|---|---|---:|---:|---:|---:|---:|---|\n";
+             "Median (μs) | Iterations | Status | Skip Reason |\n";
+        f << "|---|---|---:|---:|---:|---:|---:|---|---|\n";
         for (const auto& r : results_) {
             // W4: render sentinel -1.0 overhead as N/A in markdown.
             std::string oh_str = (r.overhead_percent < 0.0)
@@ -157,7 +166,8 @@ public:
               << "| " << format_double(r.total_us) << " "
               << "| " << format_double(r.median_us) << " "
               << "| " << r.iterations << " "
-              << "| " << md_cell(r.status) << " |\n";
+              << "| " << md_cell(r.status) << " "
+              << "| " << md_cell(r.skip_reason) << " |\n";
         }
     }
 

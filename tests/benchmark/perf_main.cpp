@@ -261,12 +261,21 @@ static ThreeWayResult run_three_way(const std::string& test_name,
     // Verilator backend — skipped gracefully when unavailable.
     ch_perf::VerilatorRunner vr(cache_root, verilator_bin);
     if (!vr.is_available()) {
+        // W5 (perf-report-followup.md): UNSUPPORTED = environment missing
+        // (verilator binary not on PATH), distinct from SKIPPED = runtime
+        // hiccup (compile error, missing harness).
         twr.verilator_skipped = true;
         twr.skip_reason = "verilator not found on PATH";
+        twr.verilator = make_row(test_name, params, "verilator",
+                                 0.0, 0.0, 0, 0.0, "UNSUPPORTED");
+        twr.verilator.skip_reason = twr.skip_reason;
     } else if (!std::filesystem::exists(verilog_path) ||
                !std::filesystem::exists(harness_path)) {
         twr.verilator_skipped = true;
         twr.skip_reason = "verilog or harness file missing";
+        twr.verilator = make_row(test_name, params, "verilator",
+                                 0.0, 0.0, 0, 0.0, "SKIPPED");
+        twr.verilator.skip_reason = twr.skip_reason;
     } else {
         auto br = vr.build(test_name, verilog_path, harness_path);
         if (!br.success) {
@@ -275,6 +284,7 @@ static ThreeWayResult run_three_way(const std::string& test_name,
             twr.verilator = make_row(test_name, params, "verilator",
                                      br.build_time_ns / 1000.0, 0.0,
                                      0, 0.0, "SKIPPED");
+            twr.verilator.skip_reason = twr.skip_reason;
         } else {
             double bu = br.build_time_ns / 1000.0;
             double mu = time_backend_us([&](){
@@ -285,7 +295,9 @@ static ThreeWayResult run_three_way(const std::string& test_name,
                                      bu, mu, measured, mu, "PASS");
         }
     }
-    if (twr.verilator_skipped) {
+    if (twr.verilator_skipped && twr.verilator.status != "UNSUPPORTED" &&
+        twr.verilator.status != "SKIPPED") {
+        // Backstop: if a path didn't set the status, default to SKIPPED.
         twr.verilator = make_row(test_name, params, "verilator",
                                  0.0, 0.0, 0, 0.0, "SKIPPED");
     }

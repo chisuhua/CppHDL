@@ -162,16 +162,30 @@ inline bool VerilatorRunner::is_available() const {
 
 inline std::string VerilatorRunner::verilator_version() const {
     // popen returns the first line of `verilator --version`.
+    // W5 (perf-report-followup.md): when verilator is not on PATH, the
+    // shell's "not found" message still appears on stdout (after the
+    // `2>&1` redirect), so fgets() returns a non-empty string. The
+    // `is_available()` check was therefore returning true for missing
+    // binaries, and the actual build would fail with exit 127 — looking
+    // identical to a SKIPPED runtime error. We now also require the
+    // output to start with a version-looking token (digit prefix).
     std::string cmd = shell_escape(verilator_bin_) + " --version 2>&1";
     FILE *p = ::popen(cmd.c_str(), "r");
     if (!p) return {};
     char buf[256];
     std::string out;
     if (fgets(buf, sizeof(buf), p)) out = buf;
-    ::pclose(p);
+    int rc = ::pclose(p);
     // Trim trailing newline
     while (!out.empty() && (out.back() == '\n' || out.back() == '\r'))
         out.pop_back();
+    // Reject shell error messages (e.g. "sh: 1: verilator: not found").
+    if (rc != 0) return {};
+    if (out.empty()) return {};
+    // Heuristic: real verilator output starts with a version like
+    // "Verilator 5.020 2024-...". Reject if it looks like a shell error.
+    if (out.find("not found") != std::string::npos) return {};
+    if (out.find("command not found") != std::string::npos) return {};
     return out;
 }
 
