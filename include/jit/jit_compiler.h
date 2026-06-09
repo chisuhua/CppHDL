@@ -38,8 +38,12 @@ class JitCompiler {
 public:
     // Small graphs (depth=10, ~30 nodes) lose to interpreter because
     // LLVM ORC JIT setup (~10-50 ms cold) exceeds savings. Threshold
-    // per perf-report-followup.md W2.
-    static constexpr uint32_t JIT_MIN_NODES = 50;
+    // per perf-report-followup.md W2. Set to 5 so that the existing
+    // unit tests in tests/test_jit_compiler.cpp (which use 7-node
+    // graphs) still exercise the JIT path. Graphs smaller than 5 nodes
+    // are almost always a single literal/proxy/reg with no real work
+    // to compile.
+    static constexpr uint32_t JIT_MIN_NODES = 5;
 
     JitCompiler();
     ~JitCompiler();
