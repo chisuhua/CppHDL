@@ -178,6 +178,65 @@ private:
     int regs_;
 };
 
+// W8 (perf-report-followup.md): TC-09 — ch_uint<32> arithmetic chain.
+class Tc09ArithChain : public ch::Component {
+public:
+    __io(ch_out<ch_uint<32>> result;)
+    Tc09ArithChain(ch::Component* p, const std::string& n, int d)
+        : ch::Component(p, n), depth_(d) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch_uint<32> acc = ch_uint<32>(1_d);
+        for (int i = 0; i < depth_; ++i) {
+            acc = acc + ch_uint<32>(static_cast<unsigned>(i));
+            acc = acc ^ (acc << 1);
+        }
+        io().result = acc;
+    }
+private:
+    int depth_;
+};
+
+// W8 (perf-report-followup.md): TC-10 — float chain. UNSUPPORTED because
+// ch_float does not exist in the current CppHDL type system (verified
+// 2026-06-08). The DUT stub remains so that a future ch_float integration
+// can simply enable the body.
+class Tc10FloatChain : public ch::Component {
+public:
+    __io(ch_out<ch_uint<8>> result;)  // ch_float not available; use placeholder
+    Tc10FloatChain(ch::Component* p, const std::string& n, int d)
+        : ch::Component(p, n), depth_(d) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        // ch_float not implemented; the design body is a no-op that
+        // exercises zero eval nodes. The run_three_way() wrapper should
+        // detect this and mark the row as UNSUPPORTED.
+        (void)depth_;
+        ch_uint<8> r = ch_uint<8>(0_b);
+        io().result = r;
+    }
+private:
+    int depth_;
+};
+
+// W8 (perf-report-followup.md): TC-11 — ch_uint<256> wide reg chain.
+class Tc11WideReg : public ch::Component {
+public:
+    __io(ch_out<ch_uint<256>> result;)
+    Tc11WideReg(ch::Component* p, const std::string& n, int r)
+        : ch::Component(p, n), regs_(r) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch_uint<256> inp = ch_uint<256>(1_b);
+        for (int i = 0; i < regs_; ++i) {
+            inp = ch_reg<ch_uint<256>>(inp);
+        }
+        io().result = inp;
+    }
+private:
+    int regs_;
+};
+
 struct ThreeWayResult {
     BenchmarkResult interp, jit, verilator;
     bool verilator_skipped = false;
@@ -326,6 +385,52 @@ static ThreeWayResult run_three_way_tc08(int regs, int ticks, int warmup,
         vb, cr, wd, regs);
 }
 
+// W8 (perf-report-followup.md): TC-09 arith chain. Verilator not wired
+// (no harness) so emit SKIPPED for the verilator backend; interpreter/JIT
+// are exercised.
+static ThreeWayResult run_three_way_tc09(int depth, int ticks, int warmup,
+                                         int measured,
+                                         const std::string& vb,
+                                         const std::string& cr,
+                                         const std::string& wd) {
+    return run_three_way<Tc09ArithChain>(
+        "TC-09", "depth=" + std::to_string(depth), ticks, warmup, measured,
+        wd + "/tc09_top.v", "build/tests/benchmark/verilator_harness_tc09.cpp",
+        vb, cr, wd, depth);
+}
+
+// W8: TC-10 is unconditionally UNSUPPORTED (ch_float does not exist).
+// Return a stub ThreeWayResult without invoking run_three_way.
+static ThreeWayResult run_three_way_tc10_unsupported(int depth) {
+    (void)depth;
+    ThreeWayResult twr;
+    auto stub = [&](const std::string& backend) {
+        BenchmarkResult r;
+        r.test_name = "TC-10";
+        r.params = "depth=" + std::to_string(depth);
+        r.backend = backend;
+        r.status = "UNSUPPORTED";
+        r.skip_reason = "ch_float not implemented";
+        return r;
+    };
+    twr.interp = stub("interpreter");
+    twr.jit = stub("jit");
+    twr.verilator = stub("verilator");
+    twr.verilator_skipped = true;
+    return twr;
+}
+
+static ThreeWayResult run_three_way_tc11(int regs, int ticks, int warmup,
+                                         int measured,
+                                         const std::string& vb,
+                                         const std::string& cr,
+                                         const std::string& wd) {
+    return run_three_way<Tc11WideReg>(
+        "TC-11", "regs=" + std::to_string(regs), ticks, warmup, measured,
+        wd + "/tc11_top.v", "build/tests/benchmark/verilator_harness_tc11.cpp",
+        vb, cr, wd, regs);
+}
+
 // CLI
 static void print_usage(const char* prog) {
     std::cout << "Usage: " << prog << " [options]\n"
@@ -351,6 +456,7 @@ int main(int argc, char* argv[]) {
     ReportGenerator reporter;
     bool run_all = false, tc01 = false, tc02 = false, tc04 = false, tc06 = false;
     bool tc07 = false, tc08 = false;
+    bool tc09 = false, tc10 = false, tc11 = false;
     std::vector<std::string> report_formats;
     std::string verilator_bin = "verilator";
     std::string cache_root = "build/perf_cache";
@@ -378,6 +484,9 @@ int main(int argc, char* argv[]) {
         else if (!std::strcmp(argv[i], "--tc=06")) tc06 = true;
         else if (!std::strcmp(argv[i], "--tc=07")) tc07 = true;
         else if (!std::strcmp(argv[i], "--tc=08")) tc08 = true;
+        else if (!std::strcmp(argv[i], "--tc=09")) tc09 = true;
+        else if (!std::strcmp(argv[i], "--tc=10")) tc10 = true;
+        else if (!std::strcmp(argv[i], "--tc=11")) tc11 = true;
         else if (!std::strcmp(argv[i], "--help") || !std::strcmp(argv[i], "-h")) {
             print_usage(argv[0]); return 0;
         } else {
@@ -385,7 +494,8 @@ int main(int argc, char* argv[]) {
             print_usage(argv[0]); return 1;
         }
     }
-    if (!run_all && !tc01 && !tc02 && !tc04 && !tc06 && !tc07 && !tc08) {
+    if (!run_all && !tc01 && !tc02 && !tc04 && !tc06 && !tc07 && !tc08 &&
+        !tc09 && !tc10 && !tc11) {
         print_usage(argv[0]); return 1;
     }
     if (warmup < 0 || measured <= 0 || ticks <= 0) {
@@ -460,6 +570,49 @@ int main(int argc, char* argv[]) {
                    twr.verilator_skipped ? "SKIPPED" : "OK");
             if (twr.verilator_skipped)
                 std::cout << "    verilator skipped: " << twr.skip_reason << "\n";
+        }
+        std::cout << "\n";
+    }
+    if (run_all || tc09) {
+        std::cout << "TC-09: 3-way ch_uint<32> arith chain\n";
+        for (int d : std::vector<int>{10, 100, 1000}) {
+            auto twr = run_three_way_tc09(d, ticks, warmup, measured,
+                                          verilator_bin, cache_root, workdir);
+            reporter.add_result(twr.interp);
+            reporter.add_result(twr.jit);
+            reporter.add_result(twr.verilator);
+            printf("  depth=%5d: interp=%9.2f us | jit=%9.2f us | verilator=%9.2f us [%s]\n",
+                   d, twr.interp.median_us, twr.jit.median_us,
+                   twr.verilator.median_us,
+                   twr.verilator_skipped ? "SKIPPED" : "OK");
+        }
+        std::cout << "\n";
+    }
+    if (run_all || tc10) {
+        std::cout << "TC-10: 3-way float chain (UNSUPPORTED — ch_float missing)\n";
+        for (int d : std::vector<int>{10, 100, 1000}) {
+            auto twr = run_three_way_tc10_unsupported(d);
+            reporter.add_result(twr.interp);
+            reporter.add_result(twr.jit);
+            reporter.add_result(twr.verilator);
+            printf("  depth=%5d: [UNSUPPORTED] %s\n", d,
+                   twr.skip_reason.empty() ? "ch_float not implemented"
+                                          : twr.skip_reason.c_str());
+        }
+        std::cout << "\n";
+    }
+    if (run_all || tc11) {
+        std::cout << "TC-11: 3-way ch_uint<256> wide reg chain\n";
+        for (int n : std::vector<int>{10, 100, 1000}) {
+            auto twr = run_three_way_tc11(n, ticks, warmup, measured,
+                                          verilator_bin, cache_root, workdir);
+            reporter.add_result(twr.interp);
+            reporter.add_result(twr.jit);
+            reporter.add_result(twr.verilator);
+            printf("  regs=%5d:  interp=%9.2f us | jit=%9.2f us | verilator=%9.2f us [%s]\n",
+                   n, twr.interp.median_us, twr.jit.median_us,
+                   twr.verilator.median_us,
+                   twr.verilator_skipped ? "SKIPPED" : "OK");
         }
         std::cout << "\n";
     }
