@@ -81,11 +81,26 @@ set_tests_properties(perf_jit_smallgraph PROPERTIES LABELS "perf" TIMEOUT 60)
 # W3: build_us instrumentation (perf-report-followup.md Task 3)
 add_catch_test(perf_build_us benchmark/test_build_us_present.cpp)
 set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 # W7: md/csv/json byte-equality (perf-report-followup.md Task 7)
 add_catch_test(perf_report_consistency benchmark/test_report_consistency.cpp)
 set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# W9: perf regression gate (perf-report-followup.md Task 9)
+# Runs perf_regression against the checked-in perf_baseline.json.
+# Exits non-zero on >1.2x regression. Tagged 'perf' so CI can opt-in via
+# ctest -L perf. The test uses the source-tree absolute paths so the
+# baseline is found regardless of CWD; the current perf_results.json is
+# expected to be in the worktree root (as produced by perf_main.cpp).
+add_test(NAME perf_regression
+    COMMAND perf_regression
+    ${CMAKE_SOURCE_DIR}/tests/benchmark/perf_baseline.json
+    ${CMAKE_SOURCE_DIR}/perf_results.json
+)
+set_tests_properties(perf_regression PROPERTIES
+    LABELS "perf" TIMEOUT 60
+)
 
 # Stream 组件独立测试
 add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)

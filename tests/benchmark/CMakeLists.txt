@@ -16,6 +16,16 @@ if(TARGET cpphdl)
     target_link_libraries(perf_tests cpphdl)
 endif()
 
+# W9 (perf-report-followup.md): standalone perf_regression executable that
+# compares perf_results.json against tests/benchmark/perf_baseline.json
+# and exits non-zero on >1.2x regression. Wired into ctest in the root
+# tests/CMakeLists.txt.
+add_executable(perf_regression perf_regression.cpp)
+target_include_directories(perf_regression PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+
 # Copy Verilator harness source files into the build directory so that
 # verilator_runner can read them via relative paths at runtime. Each harness
 # has its own main() and is compiled standalone by `verilator --build --exe`,
