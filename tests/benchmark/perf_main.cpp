@@ -60,6 +60,16 @@ static BenchmarkResult run_sequential_benchmark(int num_regs, int ticks) {
     PerfTimer timer;
     {
         context ctx("seq"); ctx_swap swap(&ctx);
+        // W4 (perf-report-followup.md): the v1 harness constructed a single
+        // ch_reg and ignored its `num_regs` parameter, so the LEGACY row
+        // for `regs=1000` was identical to `regs=10`. The intended fix
+        // (chain of N regs via `inp = ch_reg<ch_uint<8>>(inp);` in a loop)
+        // triggers a pre-existing segfault in regimpl::create_instruction
+        // (see .omo/evidence/task-4-w4-tc02-segfault.txt for backtrace).
+        // Until that is resolved upstream, keep the v1 single-reg DUT and
+        // rely on the LEGACY status + is_legacy flag (W6) to communicate
+        // the parameter-is-decorative nature to downstream consumers.
+        (void)num_regs;  // parameter is documented as v1-legacy decoration
         auto inp = ch_uint<8>(0_b);
         auto reg = ch_reg<ch_uint<8>>(inp);
         Simulator sim(&ctx);
@@ -77,6 +87,9 @@ static BenchmarkResult run_sequential_benchmark(int num_regs, int ticks) {
     r.ns_per_node_tick = ns / (static_cast<double>(ticks) * num_regs);
     r.backend = ""; r.sim_us = us; r.median_us = us;
     r.iterations = 1; r.status = "LEGACY";
+    // W4: LEGACY rows have no comparison target for overhead_percent;
+    // -1.0 is the sentinel for "not applicable" (rendered as null/N/A/empty).
+    r.overhead_percent = -1.0;
     return r;
 }
 

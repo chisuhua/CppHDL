@@ -58,13 +58,17 @@ public:
     // CSV output
     //
     // Header (per task spec): test_name,params,backend,build_us,sim_us,
-    //                          total_us,iterations,median_us,status
+    //                          total_us,iterations,median_us,status,is_legacy
     // -------------------------------------------------------------------------
     void export_csv(const std::string& filename) const {
         std::ofstream f(filename);
         f << "test_name,params,backend,build_us,sim_us,total_us,iterations,"
-             "median_us,status\n";
+             "median_us,status,is_legacy\n";
         for (const auto& r : results_) {
+            // W4: render sentinel -1.0 as empty cell (CSV convention).
+            std::string oh_str = (r.overhead_percent < 0.0)
+                ? "" : format_double(r.overhead_percent);
+            std::string is_legacy = (r.status == "LEGACY") ? "true" : "false";
             f << csv_escape(r.test_name) << ","
               << csv_escape(r.params) << ","
               << csv_escape(r.backend) << ","
@@ -73,7 +77,8 @@ public:
               << format_double(r.total_us) << ","
               << r.iterations << ","
               << format_double(r.median_us) << ","
-              << csv_escape(r.status) << "\n";
+              << csv_escape(r.status) << ","
+              << is_legacy << "\n";
         }
     }
 
@@ -98,6 +103,10 @@ public:
         f << "  \"runs\": [\n";
         for (size_t i = 0; i < results_.size(); ++i) {
             const auto& r = results_[i];
+            // W4 (perf-report-followup.md): emit null for sentinel -1.0 in
+            // overhead_percent and ns_per_node_tick (no comparison target).
+            const char* oh_str = (r.overhead_percent < 0.0)
+                ? "null" : format_double(r.overhead_percent).c_str();
             f << "    {\n";
             f << "      \"test_name\": \"" << json_escape(r.test_name) << "\",\n";
             f << "      \"params\": \"" << json_escape(r.params) << "\",\n";
@@ -105,13 +114,16 @@ public:
             f << "      \"ticks_per_sec\": " << format_double(r.ticks_per_sec) << ",\n";
             f << "      \"ns_per_tick\": " << format_double(r.ns_per_tick) << ",\n";
             f << "      \"ns_per_node_tick\": " << format_double(r.ns_per_node_tick) << ",\n";
-            f << "      \"overhead_percent\": " << format_double(r.overhead_percent) << ",\n";
+            f << "      \"overhead_percent\": " << oh_str << ",\n";
             f << "      \"build_us\": " << format_double(r.build_us) << ",\n";
             f << "      \"sim_us\": " << format_double(r.sim_us) << ",\n";
             f << "      \"total_us\": " << format_double(r.total_us) << ",\n";
             f << "      \"iterations\": " << r.iterations << ",\n";
             f << "      \"median_us\": " << format_double(r.median_us) << ",\n";
-            f << "      \"status\": \"" << json_escape(r.status) << "\"\n";
+            f << "      \"status\": \"" << json_escape(r.status) << "\",\n";
+            // W6: is_legacy flag — true for LEGACY rows (TC-01/02/04/06)
+            // so downstream tools can filter them.
+            f << "      \"is_legacy\": " << (r.status == "LEGACY" ? "true" : "false") << "\n";
             f << "    }" << (i + 1 < results_.size() ? "," : "") << "\n";
         }
         f << "  ]\n";
@@ -133,6 +145,10 @@ public:
              "Median (μs) | Iterations | Status |\n";
         f << "|---|---|---:|---:|---:|---:|---:|---|\n";
         for (const auto& r : results_) {
+            // W4: render sentinel -1.0 overhead as N/A in markdown.
+            std::string oh_str = (r.overhead_percent < 0.0)
+                ? "N/A"
+                : (format_double(r.overhead_percent) + "%");
             f << "| " << md_cell(r.test_name) << " "
               << "| " << md_cell(r.params) << " "
               << "| " << md_cell(r.backend.empty() ? "(legacy)" : r.backend) << " "
