@@ -82,6 +82,10 @@ set_tests_properties(perf_jit_smallgraph PROPERTIES LABELS "perf" TIMEOUT 60)
 add_catch_test(perf_build_us benchmark/test_build_us_present.cpp)
 set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+# W7: md/csv/json byte-equality (perf-report-followup.md Task 7)
+add_catch_test(perf_report_consistency benchmark/test_report_consistency.cpp)
+set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Stream 组件独立测试
 add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)

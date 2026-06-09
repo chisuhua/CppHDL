@@ -272,6 +272,19 @@ private:
         return oss.str();
     }
 
+    // W7 (perf-report-followup.md): shared numeric formatter for the
+    // md/csv/json writers. Returns a stable string representation with
+    // a fixed precision so that the same double value produces the
+    // same string in all three output formats. This is the "single
+    // source" the plan calls for.
+    static std::string fmt_double(double v, int prec = 3) {
+        if (std::isnan(v)) return "nan";
+        if (std::isinf(v)) return v < 0 ? "-inf" : "inf";
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(prec) << v;
+        return oss.str();
+    }
+
     // Current UTC time in ISO 8601 format: 2026-06-08T12:34:56Z
     static std::string iso8601_now() {
         using namespace std::chrono;
