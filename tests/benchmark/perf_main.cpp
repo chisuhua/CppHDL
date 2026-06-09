@@ -21,11 +21,14 @@
 #include "core/uint.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -144,6 +147,24 @@ static BenchmarkResult run_batch_tick_benchmark(int nodes, int ticks) {
     r.backend = ""; r.sim_us = nb / 1000.0; r.median_us = nb / 1000.0;
     r.iterations = 1; r.status = "LEGACY";
     return r;
+}
+
+// W11 (perf-report-followup.md): capture the current short git SHA so
+// that the JSON report can be tied back to a specific commit. Returns
+// "unknown" if git is unavailable, the working tree is not a git repo,
+// or the SHA file cannot be read.
+static std::string capture_git_sha() {
+    std::string sha = "unknown";
+    if (std::system("git rev-parse --short HEAD > /tmp/cpphdl_git_sha.txt 2>/dev/null") == 0) {
+        std::ifstream in("/tmp/cpphdl_git_sha.txt");
+        if (in.good()) {
+            std::getline(in, sha);
+            while (!sha.empty() && (sha.back() == '\n' || sha.back() == '\r' ||
+                   sha.back() == ' '))
+                sha.pop_back();
+        }
+    }
+    return sha;
 }
 
 // TC-07/08 three-way comparison — DUTs are Component subclasses so the generated Verilog has a ch_out<ch_uint<8>> port (required by Verilator).
@@ -454,6 +475,11 @@ static std::string flag_value(const char* arg, const char* prefix) {
 
 int main(int argc, char* argv[]) {
     ReportGenerator reporter;
+    // W11: stamp the report with metadata so reviewers can tie results
+    // back to a specific commit. git_sha is captured at startup;
+    // timestamp is filled in by ReportGenerator::export_json() at write
+    // time.
+    reporter.set_metadata_field("git_sha", capture_git_sha());
     bool run_all = false, tc01 = false, tc02 = false, tc04 = false, tc06 = false;
     bool tc07 = false, tc08 = false;
     bool tc09 = false, tc10 = false, tc11 = false;

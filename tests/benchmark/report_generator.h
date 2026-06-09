@@ -8,6 +8,7 @@
 #include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -60,6 +61,14 @@ class ReportGenerator {
 public:
     void add_result(const BenchmarkResult& r) { results_.push_back(r); }
 
+    // W11 (perf-report-followup.md): carry a small metadata map that is
+    // emitted in the JSON header so consumers can tie a perf report
+    // back to a specific commit / build context.
+    void set_metadata_field(const std::string& k, const std::string& v) {
+        metadata_[k] = v;
+    }
+    const std::map<std::string, std::string>& metadata() const { return metadata_; }
+
     // -------------------------------------------------------------------------
     // CSV output
     //
@@ -107,6 +116,12 @@ public:
         f << "{\n";
         f << "  \"version\": \"1.0\",\n";
         f << "  \"timestamp\": \"" << iso8601_now() << "\",\n";
+        // W11 (perf-report-followup.md): emit user-supplied metadata
+        // (git_sha, etc.) so reviewers can tie a report back to a commit.
+        for (const auto& kv : metadata_) {
+            f << "  \"" << json_escape(kv.first) << "\": \""
+              << json_escape(kv.second) << "\",\n";
+        }
         f << "  \"runs\": [\n";
         for (size_t i = 0; i < results_.size(); ++i) {
             const auto& r = results_[i];
@@ -200,6 +215,7 @@ public:
 
 private:
     std::vector<BenchmarkResult> results_;
+    std::map<std::string, std::string> metadata_;
 
     // ----- helpers -----------------------------------------------------------
 
