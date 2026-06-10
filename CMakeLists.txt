@@ -202,6 +202,65 @@ add_subdirectory(examples/axi4)
 # add_subdirectory(examples/riscv)  # Deprecated, use riscv-mini
 add_subdirectory(examples/riscv-mini)  # Phase B: API 兼容,已启用
 
+# ===========================================================================
+# Verilator integration (perf-report-followup spec v4, commit 4f9eb16)
+# ===========================================================================
+option(BUILD_VERILATOR "Build Verilator from git submodule" ON)
+
+if(BUILD_VERILATOR)
+    # REQUIRED so the developer gets a clear error at configure time,
+    # not a cryptic failure in the middle of Verilator's own build.
+    # Upstream's CMakeLists.txt uses find_package(BISON/FLEX) WITHOUT
+    # REQUIRED, so missing tools yield a silent empty BISON_EXECUTABLE
+    # and the build dies late with '/bin/sh: -d: not found'.
+    find_program(PERL perl REQUIRED)
+    find_program(FLEX flex REQUIRED)
+    find_program(BISON bison REQUIRED)
+
+    # Submodule must be present and non-empty.
+    set(_verilator_src "${CMAKE_SOURCE_DIR}/third_party/verilator")
+    if(NOT EXISTS "${_verilator_src}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "third_party/verilator is empty or missing. Run:\n"
+            "  ./scripts/init-submodules.sh\n"
+            "Or, to skip the Verilator build:\n"
+            "  cmake -B build -DBUILD_VERILATOR=OFF")
+    endif()
+
+    # Build Verilator into the build tree (hermetic, no system pollution).
+    # ExternalProject_Add is EXCLUDE_FROM_ALL by default — developers
+    # must explicitly run 'cmake --build build --target verilator'.
+    include(ExternalProject)
+    ExternalProject_Add(verilator
+        SOURCE_DIR    "${_verilator_src}"
+        BINARY_DIR    "${CMAKE_BINARY_DIR}/verilator-build"
+        INSTALL_DIR   "${CMAKE_BINARY_DIR}/verilator-install"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/verilator-install
+            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+        BUILD_ALWAYS   TRUE
+        USES_TERMINAL TRUE
+        COMMENT       "Building Verilator (10-30 min cold; seconds warm)"
+    )
+
+    # Cache install paths for downstream consumers (tests/benchmark/CMakeLists.txt).
+    # VERILATOR_ROOT is the install PREFIX (NOT share/verilator — verified
+    # against upstream CMakeLists.txt:175 install(DIRECTORY include ...)).
+    set(CPPHDL_VERILATOR_DIR      "${CMAKE_BINARY_DIR}/verilator-install" CACHE PATH "Verilator install directory")
+    set(CPPHDL_VERILATOR_WRAPPER  "${CPPHDL_VERILATOR_DIR}/bin/verilator"   CACHE PATH "Verilator Perl wrapper")
+    set(CPPHDL_VERILATOR_BIN      "${CPPHDL_VERILATOR_DIR}/bin/verilator_bin" CACHE PATH "Verilator binary")
+    message(STATUS "Verilator (BUILD_VERILATOR=ON):")
+    message(STATUS "  wrapper: ${CPPHDL_VERILATOR_WRAPPER}")
+    message(STATUS "  binary:  ${CPPHDL_VERILATOR_BIN}")
+    message(STATUS "  install: ${CPPHDL_VERILATOR_DIR}")
+else()
+    set(CPPHDL_VERILATOR_DIR     "" CACHE PATH "Verilator install directory (empty when BUILD_VERILATOR=OFF)")
+    set(CPPHDL_VERILATOR_WRAPPER "" CACHE PATH "Verilator Perl wrapper (empty when BUILD_VERILATOR=OFF)")
+    set(CPPHDL_VERILATOR_BIN     "" CACHE PATH "Verilator binary (empty when BUILD_VERILATOR=OFF)")
+    message(STATUS "Verilator (BUILD_VERILATOR=OFF): skipping submodule build")
+endif()
+
 # 添加测试
 enable_testing()
 add_subdirectory(tests)
