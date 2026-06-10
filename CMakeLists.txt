@@ -213,9 +213,12 @@ if(BUILD_VERILATOR)
     # Upstream's CMakeLists.txt uses find_package(BISON/FLEX) WITHOUT
     # REQUIRED, so missing tools yield a silent empty BISON_EXECUTABLE
     # and the build dies late with '/bin/sh: -d: not found'.
-    find_program(PERL perl REQUIRED)
-    find_program(FLEX flex REQUIRED)
-    find_program(BISON bison REQUIRED)
+    # Project-local names to avoid colliding with FindFLEX/FindBISON
+    # module output variables (which would silently break if those
+    # find_package calls are added later).
+    find_program(VERILATOR_PERL perl REQUIRED)
+    find_program(VERILATOR_FLEX flex REQUIRED)
+    find_program(VERILATOR_BISON bison REQUIRED)
 
     # Submodule must be present and non-empty.
     set(_verilator_src "${CMAKE_SOURCE_DIR}/third_party/verilator")
