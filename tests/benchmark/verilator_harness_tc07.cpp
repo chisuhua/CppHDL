@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     }
 
     // Sink to prevent the compiler from optimizing away the eval() loop.
-    volatile uint32_t sink = top->io;
+    volatile uint32_t sink = top->top_unnamed_output;
     (void)sink;
 
     delete top;
