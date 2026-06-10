@@ -108,6 +108,73 @@ TEST_CASE("verilator integration: wrapper can be invoked for --version",
     REQUIRE(out.find_first_of("0123456789") != std::string::npos);
 }
 
+// Per code review C8: the file's header comment promised a "tiny build
+// of a trivial Verilog module and assert success" but the two
+// TEST_CASEs above only check is_available() and --version. A malicious
+// or broken wrapper that prints "v666 fake" and exits 0 would pass
+// both. This third TEST_CASE actually exercises the build path
+// end-to-end so the "I broke the verilator path" regression class is
+// genuinely caught. SKIPs when wrapper is unavailable (same as the
+// other two). Build() is the slow path (~1-30s on cold cache).
+TEST_CASE("verilator integration: build a trivial and_gate from scratch",
+          "[perf][verilator][integration]") {
+    std::string wrapper = get_wrapper_path();
+    if (wrapper.empty() || !file_is_executable(wrapper)) {
+        SKIP("verilator not available; see preceding tests");
+    }
+
+    std::filesystem::path tmp =
+        std::filesystem::temp_directory_path() /
+        "cpphdl_verilator_integration_test";
+    std::error_code ec;
+    std::filesystem::remove_all(tmp, ec);
+    std::filesystem::create_directories(tmp, ec);
+    REQUIRE(!ec);
+
+    const std::string verilog_path = (tmp / "and_gate.v").string();
+    const std::string harness_path = (tmp / "harness.cpp").string();
+
+    {
+        std::ofstream f(verilog_path);
+        // Module name MUST be `top`: VerilatorRunner hardcodes the
+        // expected binary path to <cache>/obj_dir/Vtop (runner.h:217)
+        // and the input filenames to top.v + harness.cpp (runner.h:255).
+        f << "module top(\n"
+             "    input a,\n"
+             "    input b,\n"
+             "    output y\n"
+             ");\n"
+             "    assign y = a & b;\n"
+             "endmodule\n";
+        REQUIRE(f.good());
+    }
+    {
+        std::ofstream f(harness_path);
+        f << "#include \"Vtop.h\"\n"
+             "#include <cstdlib>\n"
+             "int main(int argc, char** argv) {\n"
+             "    Vtop* dut = new Vtop;\n"
+             "    int ticks = (argc > 1) ? std::atoi(argv[1]) : 1;\n"
+             "    for (int i = 0; i < ticks; ++i) dut->eval();\n"
+             "    delete dut;\n"
+             "    return 0;\n"
+             "}\n";
+        REQUIRE(f.good());
+    }
+
+    const std::string cache_root =
+        (std::filesystem::temp_directory_path() /
+         "cpphdl_verilator_integration_cache").string();
+    ch_perf::VerilatorRunner vr(cache_root, wrapper);
+
+    auto result = vr.build("and_gate_test", verilog_path, harness_path);
+    INFO("build error: " << result.error_msg);
+    INFO("binary path: " << result.binary_path);
+    REQUIRE(result.success);
+    REQUIRE(!result.binary_path.empty());
+    REQUIRE(std::filesystem::exists(result.binary_path));
+}
+
 int main(int argc, char* argv[]) {
     std::string wrapper = get_wrapper_path();
     if (wrapper.empty() || !file_is_executable(wrapper)) {
