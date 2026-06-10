@@ -1,3 +1,6 @@
 [submodule "external/nameof"]
 	path = external/nameof
 	url = git@github.com:chisuhua/nameof.git
+[submodule "third_party/verilator"]
+	path = third_party/verilator
+	url = https://github.com/verilator/verilator.git
