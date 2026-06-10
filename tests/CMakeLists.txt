@@ -83,7 +83,17 @@ add_catch_test(perf_build_us benchmark/test_build_us_present.cpp)
 set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 # W7: md/csv/json byte-equality (perf-report-followup.md Task 7)
+# CATCH_AMALGAMATED_CUSTOM_MAIN + CATCH_CONFIG_RUNNER disable the
+# default main() in catch_amalgamated.cpp so the test can provide its
+# own main() that returns 0 (success) when perf_results.{json,csv,md}
+# are not present (i.e. perf_tests has not been run yet). Otherwise
+# Catch2 exits with 4 (all tests skipped), which ctest reports as
+# failure. Pattern matches perf_verilator_integration (commit 1524fd0)
+# and test_verilog_external (ADR-035 / Phase 1.6).
 add_catch_test(perf_report_consistency benchmark/test_report_consistency.cpp)
+target_compile_definitions(perf_report_consistency PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
 set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
