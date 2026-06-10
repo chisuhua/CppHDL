@@ -239,6 +239,7 @@ if(BUILD_VERILATOR)
             -DCMAKE_BUILD_TYPE=Release
             -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/verilator-install
             -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         BUILD_ALWAYS   TRUE
         USES_TERMINAL TRUE
         COMMENT       "Building Verilator (10-30 min cold; seconds warm)"
