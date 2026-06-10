@@ -31,7 +31,7 @@ Verilator's build requires the following on the host system:
 |---------|----------|-----|
 | `flex`  | YES      | Verilator's CMake uses bison+flex for parser generation |
 | `bison` | YES      | Same as flex |
-| `perl` ≥ 5.6.1 | YES | The wrapper at `bin/verilator` is a Perl script |
+| `perl` ≥ 5.10.0 | YES | The wrapper at `bin/verilator` is a Perl script |
 | `g++` ≥ 7      | YES | Compile Verilator's own sources |
 | `make`         | YES | (or ninja) |
 | `python3` ≥ 3.6 | YES | Verilator's code generation scripts |
@@ -47,15 +47,18 @@ Verilator build entirely (e.g. on a constrained CI runner), pass
 ### Ubuntu
 
 ```bash
-sudo apt install flex bison build-essential python3 perl \
+sudo apt install flex bison build-essential python3 perl git \
                 autoconf help2man ccache \
-                libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev
+                libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev \
+                libgmp-dev
 ```
 
 ### macOS
 
+**Status: Untested on macOS as of this PR.**
+
 ```bash
-brew install flex bison python3 gperftools readline ccache help2man
+brew install flex bison python3 gmp readline ccache help2man
 ```
 
 ## Build recipe
@@ -114,7 +117,10 @@ git ls-remote --tags https://github.com/verilator/verilator.git | \
     grep -E 'refs/tags/v[5-9]\.[0-9]+(\.[0-9]+)?$' | \
     awk -F/ '{print $NF}' | sort -V | tail -1
 # Update the submodule pointer
-cd third_party/verilator && git fetch && git checkout <TAG> && cd ../..
+cd third_party/verilator
+git fetch origin tag <TAG>  # explicit tag refspec
+git checkout <TAG>
+cd ../..
 # Commit
 git add third_party/verilator && git commit -m "build: bump verilator to <TAG>"
 # Re-build
@@ -141,5 +147,6 @@ paths.
 
 **Generated `obj_dir/Makefile` fails with "verilated.mk: No such
 file or directory":** `VERILATOR_ROOT` is not set to the install
-prefix. The ctest test properties set this automatically; manual
-invocations need `VERILATOR_ROOT=<build>/verilator-install`.
+prefix (only relevant when `BUILD_VERILATOR=ON`). The ctest test
+properties set this automatically; manual invocations need
+`VERILATOR_ROOT=<build>/verilator-install`.
