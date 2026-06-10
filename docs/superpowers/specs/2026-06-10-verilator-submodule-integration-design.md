@@ -1,37 +1,50 @@
 # Design: Verilator Submodule + End-to-End Three-Way Perf Comparison
 
 **Date:** 2026-06-10
-**Status:** v3 — final, pending user approval
+**Status:** v4 — final, pending user approval
 **Author:** Sisyphus (brainstorming session)
 
 ## Revision history
 
-- **v1 (commit `5a18f98`, reverted):** Used `add_subdirectory(third_party/verilator)`.
-  Oracle review found 3 blocking issues: wrong CMake target name, broken
-  VERILATOR_ROOT setup, wrapper/binary co-location.
-- **v2 (commit `f870ca9`, reverted):** Switched to `ExternalProject_Add +
-  --prefix` and pointed `--verilator` at the source-tree wrapper while
-  injecting `VERILATOR_BIN` as a ctest env var. Oracle review found
-  2 new blocking issues: (a) the v2 spec falsely claimed Verilator does
-  NOT auto-install the wrapper — in fact, Verilator's top-level
-  `CMakeLists.txt` explicitly does `install(PROGRAMS bin/${program} TYPE BIN)`
-  for `verilator` (and 5 other helper programs); (b) the source-tree
-  wrapper sets `VERILATOR_ROOT = $RealBin/..` which points at the
-  source root, but `verilated_config.h` and `verilated.mk` (the
-  `configure_file()` outputs) only exist in the build tree and
-  install tree — the source root only has `.in` templates. The
-  generated Makefile in `obj_dir/` would fail to find
-  `$VERILATOR_ROOT/include/verilated.mk`.
-- **v3 (current):** Uses `ExternalProject_Add + --prefix` and points
-  `--verilator` at the **installed** wrapper
-  (`<install>/bin/verilator`). Because the wrapper sits in the same
-  directory as `verilator_bin` after install, `$RealBin/..` is the
-  install prefix (which DOES have configured data files), the
-  wrapper finds `verilator_bin` as a sibling via the default
-  `$RealBin/verilator_bin` lookup, and `VERILATOR_ROOT` is set to
-  the install prefix. **No `VERILATOR_BIN` env var is needed.**
+- **v1 (commit `5a18f98`, reverted):** `add_subdirectory`. Oracle
+  found 3 BLOCKING: wrong target name, broken VERILATOR_ROOT, wrapper/
+  binary co-location.
+- **v2 (commit `f870ca9`, reverted):** `ExternalProject_Add` +
+  source-tree wrapper + `VERILATOR_BIN` env var. Oracle found 2
+  BLOCKING: false claim about wrapper install, source-tree wrapper's
+  `$RealBin/..` points at source root which lacks configured data.
+- **v3 (commit `aaa9f89`, reverted):** `ExternalProject_Add` +
+  installed wrapper, single-path. Oracle review found 3 remaining
+  issues:
+  1. Spec said `${prefix}/share/verilator` for VERILATOR_ROOT, but
+     the actual install puts `include/verilated_config.h` and
+     `include/verilated.mk` at `${prefix}/include/` (verified
+     against upstream `CMakeLists.txt:175`). So `VERILATOR_ROOT`
+     must be exactly `${prefix}`.
+  2. flex/bison should be `REQUIRED`, not just a warning. Upstream
+     does `find_package(BISON)` (not REQUIRED); missing tools
+     yield silent garbage in `add_custom_command` with empty
+     `${BISON_EXECUTABLE}` and the build dies late with cryptic
+     `/bin/sh: -d: not found`.
+  3. The upstream wrapper does set `VERILATOR_ROOT` (via
+     `bin/verilator:101` `$ENV{VERILATOR_ROOT} = $verilator_root;`
+     before `system()` on line 199), so the `VERILATOR_ROOT` is
+     effectively inherited by the `verilator_bin` subprocess
+     started via `popen` from `verilator_runner.h:259`.
+     But the v3 spec overstated this as "wrapper auto-sets" without
+     being precise about the propagation chain.
 
-The full chain of evidence (lines, snippets) is preserved below in §11.
+- **v4 (current):** Same single-path approach as v3, with three
+  precise fixes:
+  1. `VERILATOR_ROOT` path: `${prefix}` (NOT `${prefix}/share/verilator`).
+  2. flex/bison: `find_program(... REQUIRED)` (with a graceful
+     `BUILD_VERILATOR=OFF` fallback).
+  3. Explicit `ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"`
+     in the ctest test properties as a belt-and-suspenders injection
+     — even though the wrapper sets it for its child `verilator_bin`,
+     explicit injection ensures the chain works on all paths
+     (e.g. if a future `verilator_runner` invocation is ever changed
+     to bypass the wrapper and call `verilator_bin` directly).
 
 ## 1. Background
 
@@ -52,18 +65,19 @@ distinction between `UNSUPPORTED` and `SKIPPED`) but it means we have
 
 This spec proposes to close that gap by vendoring Verilator as a git
 submodule and integrating its build into the CppHDL CMake graph via
-`ExternalProject_Add` + `--prefix`, so `cmake --build build` produces
-a working `verilator` binary and a working `bin/verilator` wrapper
-alongside the CppHDL artifacts, and `perf_tests` can exercise the
-real three-way comparison.
+`ExternalProject_Add` + `--prefix`, so `cmake --build build --target
+verilator` produces a working Verilator install
+(`<install>/bin/verilator` + `<install>/bin/verilator_bin` +
+`<install>/include/verilated_*.{h,mk}`) and `perf_tests` can exercise
+the real three-way comparison.
 
 ## 2. Goals
 
 1. **Reproducibility.** Pin a known-good Verilator version (5.x stable)
    as a submodule so every developer and CI worker gets the same version.
-2. **End-to-end build.** `cmake --build build` plus a single follow-up
-   `cmake --build build --target verilator` builds both CppHDL and
-   Verilator; no manual `apt install verilator` step required.
+2. **End-to-end build.** `cmake --build build --target verilator`
+   builds Verilator; `cmake --build build` builds CppHDL. Both
+   invocations are needed; no manual `apt install verilator` step.
 3. **Three-way PASS rows.** After integration, `perf_tests --tc=07/08`
    should produce PASS rows in all three backend columns
    (interpreter, jit, verilator) — not UNSUPPORTED.
@@ -128,21 +142,24 @@ CppHDL/
   need a Verilator patch, we upstream it first.
 
 - **Verilator install (`${CMAKE_BINARY_DIR}/verilator-install/`)** —
-  produced by Verilator's own `cmake --install --prefix` step. Contains:
-  - `bin/verilator` — Perl wrapper (auto-installed via
-    `install(PROGRAMS bin/${program} TYPE BIN)` in Verilator's top-level
-    `CMakeLists.txt`, line 164, for the loop containing
-    `verilator, verilator_gantt, verilator_ccache_report,
-    verilator_difftree, verilator_profcfunc, verilator_includer`).
-  - `bin/verilator_bin` — compiled binary (the actual C++ executable).
-  - `include/verilated_config.h` and `include/verilated.mk` —
-    `configure_file()` outputs, both present in the install tree.
-  - `share/verilator/` — helper data.
+  produced by Verilator's own `cmake --install --prefix` step. The
+  relevant contents (verified against upstream `CMakeLists.txt`):
+  - `bin/verilator` — Perl wrapper (installed by
+    `install(PROGRAMS bin/${program} TYPE BIN)` for `program` in
+    `verilator, verilator_gantt, verilator_ccache_report, ...`).
+  - `bin/verilator_bin` — compiled binary (installed by
+    `install(TARGETS ${verilator})`).
+  - `include/verilated_config.h` and `include/verilated.mk` — installed
+    by `install(FILES ... DESTINATION include)`.
+  - `include/verilated_*.h`, `include/vl/*` — installed by
+    `install(DIRECTORY include TYPE DATA ...)` (filtering via
+    `FILES_MATCHING`).
 
   After install, the wrapper and binary are **siblings** in
-  `${prefix}/bin/`. This matches the layout Verilator's own
-  developers use, and is exactly what `bin/verilator` line 221
-  expects when it does `if (-x "$RealBin/$basename")`.
+  `${prefix}/bin/`. `VERILATOR_ROOT` resolves to `${prefix}` (not
+  `${prefix}/share/verilator` — that path does not exist in a CMake
+  build; the `verilated.mk` file lives directly under
+  `${prefix}/include/`).
 
 - **CMake integration (top-level `CMakeLists.txt`)** — adds an
   `option(BUILD_VERILATOR "Build Verilator from submodule" ON)` gate
@@ -159,7 +176,11 @@ CppHDL/
 
 - **Test wiring (`tests/benchmark/CMakeLists.txt`)** — adds
   `--verilator=${CPPHDL_VERILATOR_WRAPPER}` to the
-  `add_test(NAME perf_tests ...)` command. No new env vars needed.
+  `add_test(NAME perf_tests ...)` command, and sets the
+  `ENVIRONMENT` property to inject
+  `VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}` for belt-and-suspenders
+  correctness (see §11 for why we inject even though the wrapper
+  does it for its child).
 
 ### Data flow at build time
 
@@ -171,9 +192,9 @@ git submodule update --init --recursive
 cmake -B build
   ↓
   option(BUILD_VERILATOR) = ON (default)
-  find_program(PERL perl REQUIRED) → fails fast if missing
-  find_program(FLEX flex) → warns if missing
-  find_program(BISON bison) → warns if missing
+  find_program(PERL perl REQUIRED)       → fails fast if missing
+  find_program(FLEX flex REQUIRED)       → fails fast if missing
+  find_program(BISON bison REQUIRED)     → fails fast if missing
   ↓
   ExternalProject_Add(verilator
     SOURCE_DIR  ${CMAKE_SOURCE_DIR}/third_party/verilator
@@ -188,19 +209,24 @@ cmake --build build --target verilator
   ExternalProject builds verilator
   (first build: 10-30 min cold; seconds warm)
   install step places:
-    <install>/bin/verilator        (Perl wrapper, auto-installed)
-    <install>/bin/verilator_bin    (binary)
+    <install>/bin/verilator           (Perl wrapper)
+    <install>/bin/verilator_bin       (binary)
     <install>/include/verilated_*.h, verilated.mk (configured files)
 cmake --build build              # builds CppHDL
   ↓
-./build/tests/benchmark/perf_tests --verilator=<install>/bin/verilator --tc=07
+ctest -L perf
+  ↓
+  perf_tests invoked with:
+    --verilator=<install>/bin/verilator
+    ENV{VERILATOR_ROOT} = <install>/
   ↓
   Perl wrapper at <install>/bin/verilator executes
-  wrapper sets VERILATOR_ROOT = <install>/ (from $RealBin/..)
-  wrapper finds verilator_bin at <install>/bin/verilator_bin (sibling, via default $RealBin/$basename)
-  wrapper sets VERILATOR_BIN internally to verilator_bin path (or just execs it directly)
-  wrapper runs verilator --build against Tc07XorChain's Verilog
-  verilated binary executes ticks, returns timing
+  wrapper sets ENV{VERILATOR_ROOT} = realpath($RealBin/..) = <install>/
+  wrapper finds verilator_bin at <install>/bin/verilator_bin (sibling)
+  wrapper system()s verilator_bin with ENV{VERILATOR_ROOT} inherited
+  verilator_bin generates obj_dir/Makefile with:
+    include $(VERILATOR_ROOT)/include/verilated.mk   # RESOLVES
+  verilator --build compiles, links, produces Vtop + binary
   → Three-way PASS row emitted
 ```
 
@@ -208,6 +234,7 @@ cmake --build build              # builds CppHDL
 
 ```
 perf_tests --verilator=<install>/bin/verilator
+  (with ENV{VERILATOR_ROOT}=<install>/ set by ctest)
   ↓
 VerilatorRunner(<install>/bin/verilator)
   ↓
@@ -217,8 +244,9 @@ VerilatorRunner(<install>/bin/verilator)
   ↓
   build(test_name, verilog, harness):
     shell_exec("<install>/bin/verilator --build --exe harness.cpp top.v")
-    → wrapper auto-sets VERILATOR_ROOT, finds sibling binary, runs
-      Verilator's own internal g++/make, produces ./obj_dir/Vtop + binary
+    → wrapper auto-sets VERILATOR_ROOT=$RealBin/.. for child
+    → child verilator_bin finds $VERILATOR_ROOT/include/verilated.mk
+    → Verilator's own internal g++/make produces ./obj_dir/Vtop + binary
   ↓
   run_and_time(binary, ticks):
     exec(./obj_dir/Vtop, ticks=1000)
@@ -243,7 +271,7 @@ Verilator into `${CMAKE_BINARY_DIR}/verilator-install/`.
   /binary co-location).
 - `ExternalProject_Add` with install solves all three: install
   places wrapper and binary side-by-side, and `VERILATOR_ROOT`
-  resolves to `${prefix}/share/verilator` naturally.
+  resolves to `${prefix}` (the install prefix).
 - `ExternalProject_Add` decouples Verilator's build graph from
   CppHDL's, so a plain `make all` does NOT walk Verilator's
   dependency graph. Verilator builds only when explicitly targeted.
@@ -281,8 +309,10 @@ picking the highest semver that is a 5.x release (not a pre-release).
   `${prefix}/bin/verilator_bin` are siblings, which is what
   upstream's install does and what the wrapper expects
   (`$RealBin/$basename`).
-- `VERILATOR_ROOT` is auto-derivable as `${prefix}/share/verilator`
-  (matches upstream's install layout).
+- `VERILATOR_ROOT` (set by the wrapper from `$RealBin/..`) resolves
+  to `${prefix}`, which contains the configured data files
+  (`include/verilated_config.h`, `include/verilated.mk`) that the
+  generated Makefile in `obj_dir/` needs.
 - Allows CI to cache the install dir across jobs (hermetic, stable
   content).
 
@@ -298,30 +328,37 @@ picking the highest semver that is a 5.x release (not a pre-release).
   back to its default (PATH lookup). Same UNSUPPORTED behavior as
   before, no regression.
 
-### Decision 5: `--verilator` points at the **installed** wrapper, no env var
+### Decision 5: `--verilator` points at the **installed** wrapper; inject `VERILATOR_ROOT` via ctest ENVIRONMENT
 
 **Choice:** The `perf_tests` executable is invoked with
 `--verilator=${CPPHDL_VERILATOR_DIR}/bin/verilator` (the wrapper
 installed by Verilator's own install step, sitting next to
-`verilator_bin`).
+`verilator_bin`). The ctest test entry ALSO sets
+`ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"` for
+defense in depth.
 
 **Rationale:**
-- The wrapper at `<install>/bin/verilator` sets `VERILATOR_ROOT` from
-  `$RealBin/..` = the install prefix. The install prefix contains the
-  configured data files (`include/verilated_config.h`,
-  `include/verilated.mk`) that the generated Makefile in `obj_dir/`
-  needs to find.
-- The wrapper's default `$RealBin/verilator_bin` lookup
-  (line 221 of upstream `bin/verilator`) finds the binary as a
-  sibling in `<install>/bin/`.
-- **No `VERILATOR_BIN` env var needed** (the v2 approach that needed
-  it was the workaround for using the source-tree wrapper, which
-  is no longer the approach).
+- The wrapper at `<install>/bin/verilator` (a) sets `VERILATOR_ROOT`
+  from `$RealBin/..` = the install prefix for its own child
+  `verilator_bin` process (verified by reading upstream
+  `bin/verilator:101`), and (b) finds `verilator_bin` as a sibling
+  via the default `$RealBin/$basename` lookup. So the wrapper
+  alone is sufficient.
+- **However**, the propagation chain is non-obvious: the wrapper
+  writes to Perl's `%ENV` and then `system()`s `verilator_bin`; if
+  `verilator_runner.h` were ever changed to call `verilator_bin`
+  directly (bypassing the wrapper), the `VERILATOR_ROOT` setup
+  would be lost. The ctest `ENVIRONMENT` injection is
+  belt-and-suspenders against future code changes. The cost is
+  zero (one env var per test invocation).
+- `VERILATOR_ROOT` is `${CPPHDL_VERILATOR_DIR}` (NOT
+  `${prefix}/share/verilator` — that path does not exist in a CMake
+  install; the `verilated.mk` file is at `${prefix}/include/`).
 - `perf_main.cpp`'s default of looking up `verilator` on `PATH` is
   preserved for manual invocations (developer can install Verilator
   system-wide and run `perf_tests` without rebuilding).
 
-### Decision 6: Host build dependency check at configure time
+### Decision 6: Host build dependencies are REQUIRED (not warnings)
 
 **Choice:** At CMake configure time, before declaring the
 ExternalProject:
@@ -329,34 +366,41 @@ ExternalProject:
 ```cmake
 if(BUILD_VERILATOR)
     find_program(PERL perl REQUIRED)
-    find_program(FLEX flex)
-    find_program(BISON bison)
-    if(NOT FLEX OR NOT BISON)
-        message(WARNING
-            "BUILD_VERILATOR=ON but flex or bison not found. Verilator "
-            "build will fail. Install with: apt install flex bison "
-            "(Ubuntu) or brew install flex bison (macOS). To skip the "
-            "Verilator build, re-run with -DBUILD_VERILATOR=OFF.")
-    endif()
+    find_program(FLEX flex REQUIRED)
+    find_program(BISON bison REQUIRED)
 endif()
 ```
 
-`PERL` is REQUIRED because the `bin/verilator` wrapper cannot run
-without it. `flex` and `bison` are warnings (not REQUIRED) because
-Verilator's own CMake uses `find_package(BISON)` and `find_package(FLEX)`
-internally, and a missing-bison error from Verilator's own build is
-already a clear message. We just give a heads-up at configure time.
+**Rationale (corrected from v3):**
+- v3 made `flex` and `bison` only warnings. That was wrong.
+- Upstream's `CMakeLists.txt` does `find_package(BISON)` and
+  `find_package(FLEX)` **without** `REQUIRED`. When these are
+  missing, `BISON_EXECUTABLE` / `FLEX_EXECUTABLE` are empty strings.
+  The subsequent `add_custom_command(... COMMAND ${BISON_EXECUTABLE} ...)`
+  produces a silent broken command that fails late with `/bin/sh: -d: not
+  found` or a missing-`V3ParseBison.c` error — NOT a clear "install
+  bison" message.
+- By making them REQUIRED in our outer CMake, we get a clear
+  `CMake Error: required flex not found` at configure time,
+  which saves a debug session.
+- We also REQUIRE `perl` because `bin/verilator` is a Perl script
+  and the wrapper cannot execute without it.
+- When `BUILD_VERILATOR=OFF`, none of the three checks run
+  (`if(BUILD_VERILATOR)` guards the entire block), so a developer
+  who doesn't want Verilator can still build CppHDL on a system
+  without flex/bison/perl.
 
 ### Decision 7: Document build dependencies (perl + flex + bison)
 
 **Choice:** `docs/developer_guide/verilator-integration.md` lists
 Verilator's host build dependencies:
 
-- `flex`, `bison` (Verilator's CMake uses these for code generation)
+- `flex`, `bison` (REQUIRED for Verilator's code generation; see
+  Decision 6)
 - `g++` ≥ 7 (or clang equivalent) — for Verilator's own compilation
 - `make` (or ninja)
-- `perl` ≥ 5.6.1 (REQUIRED — `bin/verilator` is a Perl script;
-  declared in upstream `bin/verilator` line 12: `require 5.006_001;`)
+- `perl` ≥ 5.6.1 (REQUIRED — `bin/verilator` is a Perl script; declared
+  in upstream `bin/verilator:12`: `require 5.006_001;`)
 - `python3` ≥ 3.6 (used by Verilator's code generation scripts)
 - `autoconf`, `m4`, `help2man`, `c++filt`, `libsystemd-dev`
   (optional but recommended)
@@ -365,31 +409,16 @@ Install commands:
 - Ubuntu: `sudo apt install flex bison build-essential python3 perl autoconf help2man ccache libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev`
 - macOS: `brew install flex bison python3 gperftools readline ccache help2man`
 
-**Rationale:**
-- The Verilator build is known to fail with cryptic errors when
-  `flex`/`bison`/`perl` are missing. Documenting upfront saves a
-  debug session per developer.
-- The Perl requirement is the most-often missed item; explicitly
-  calling it out here.
+### Decision 8: Two-step build recipe in §10
 
-### Decision 8: Top-level convenience targets
+**Choice:** Document the exact two-step build recipe (Decision 4 also
+notes that `cmake --build build` alone does NOT build Verilator —
+this is a subtle point).
 
-**Choice:** Add two convenience targets at the top of
-`CMakeLists.txt`:
-
-```cmake
-add_custom_target(cpphdl DEPENDS cpphdl)   # alias for clarity in logs
-add_custom_target(perf_test_bench DEPENDS
-    ${CPPHDL_PERF_TESTS_EXE}
-    ${CPPHDL_PERF_REGRESSION_EXE}
-)
-```
-
-These are no-ops; they exist purely so the developer can write
-`cmake --build build --target verilator` to build Verilator and
-`cmake --build build` to build CppHDL, and have a clear mental
-model. The main work happens at the ExternalProject level
-(`make verilator`).
+**Rationale:** ExternalProject_Add is `EXCLUDE_FROM_ALL` by default.
+The developer must explicitly invoke the `verilator` target. Without
+this document note, developers will run `cmake --build build` and
+wonder why Verilator isn't built.
 
 ### Decision 9: Fallback to system verilator when present
 
@@ -411,7 +440,7 @@ system binary is found by `verilator_runner.h`.
 | Variable | Set by | Read by | Meaning |
 |---|---|---|---|
 | `BUILD_VERILATOR` | user (option) | CppHDL top-level CMakeLists | ON (default) / OFF |
-| `CPPHDL_VERILATOR_DIR` | CppHDL top-level CMakeLists (after ExternalProject) | diagnostics | Install path or empty |
+| `CPPHDL_VERILATOR_DIR` | CppHDL top-level CMakeLists (after ExternalProject) | diagnostics, ctest ENVIRONMENT | Install path or empty |
 | `CPPHDL_VERILATOR_WRAPPER` | CppHDL top-level CMakeLists | `tests/benchmark/CMakeLists.txt` | `<dir>/bin/verilator` or empty |
 | `CPPHDL_VERILATOR_BIN` | CppHDL top-level CMakeLists | diagnostics (printed in CMake summary) | `<dir>/bin/verilator_bin` or empty |
 | `verilator` (ExternalProject target) | ExternalProject_Add | CppHDL top-level | The build target; depends on install step |
@@ -433,27 +462,27 @@ system binary is found by `verilator_runner.h`.
 | Failure mode | Behavior |
 |---|---|
 | Submodule not initialized (empty `third_party/verilator/`) | CMake configure prints error and aborts with `message(FATAL_ERROR "third_party/verilator is empty. Run 'git submodule update --init --recursive' first.")` |
-| `perl` missing | CMake configure aborts with `find_program(PERL perl REQUIRED)` |
-| `flex`/`bison` missing | CMake warning at configure time + Verilator's own build fails later |
+| `perl`/`flex`/`bison` missing | CMake configure aborts with `find_program(... REQUIRED)` |
 | Verilator build fails | `cmake --build build --target verilator` fails; `perf_tests` ctest entry shows UNSUPPORTED with `skip_reason: "verilator build failed"` |
 | Verilator built but binary doesn't run | `is_available()` (W5-fixed) returns false → `UNSUPPORTED` |
-| Developer sets `-DBUILD_VERILATOR=OFF` | `CPPHDL_VERILATOR_WRAPPER` is empty; `perf_tests` ctest entry falls back to `--verilator=verilator` (PATH lookup) → existing UNSUPPORTED behavior preserved |
+| Developer sets `-DBUILD_VERILATOR=OFF` | `CPPHDL_VERILATOR_WRAPPER` is empty; `perf_tests` ctest entry falls back to `--verilator=verilator` (PATH lookup). ctest entry uses an `if(CPPHDL_VERILATOR_WRAPPER)` guard so the `--verilator=` flag is only appended when non-empty. → existing UNSUPPORTED behavior preserved |
 | `verilator --build` reports error | VerilatorRunner reports `br.success=false` → `SKIPPED` (W5) |
+| `VERILATOR_ROOT` mismatch (defense in depth) | ctest ENVIRONMENT sets `VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}` so even if the wrapper's propagation chain is broken (e.g. future code change bypasses the wrapper), the env var is set explicitly for the test process and its children. |
 
 ## 8. Testing
 
 ### Smoke test
 
 ```bash
-# After applying this spec:
 git clone <CppHDL>
 git submodule update --init --recursive
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc) --target verilator
 cmake --build build -j$(nproc)
 ./build/tests/benchmark/perf_tests --tc=07 --warmup=3 --measured=5 --report=json
-# Expect: 3 rows per depth (interpreter/jit/verilator), all status=PASS for
-#         depth=10/100, verilator row at depth=1000 may be slow but PASS
+# Expect: 3 rows per depth (interpreter/jit/verilator), all status=PASS
+#         for depth=10/100, verilator row at depth=1000 may be slow but
+#         PASS
 ```
 
 ### Regression test
@@ -469,17 +498,16 @@ Add a new Catch2 test `tests/benchmark/test_verilator_integration.cpp`:
 - SKIPs (not FAILs) if `CPPHDL_VERILATOR_DIR` is empty or the
   verilator binary is missing.
 - This test catches the "I broke the verilator path" regression
-  class without depending on the heavy full perf run.
+  class without dependendo on the heavy full perf run.
 
 ### Manual verification checklist
 
 - [ ] `git submodule status` shows `third_party/verilator` at the pinned SHA with `+` prefix (clean)
 - [ ] `cmake --build build --target verilator` completes
 - [ ] `./build/verilator-install/bin/verilator_bin --version` prints a version string
-- [ ] `./build/verilator-install/bin/verilator --version` prints a version string (with VERILATOR_ROOT correctly set)
+- [ ] `./build/verilator-install/bin/verilator --version` prints a version string
 - [ ] `ctest -L perf` passes
-- [ ] `perf_tests --tc=07 --report=json | jq '.runs[] | select(.backend=="verilator") | .status'`
-      shows `"PASS"` for at least one row
+- [ ] `perf_tests --tc=07 --report=json | jq '.runs[] | select(.backend=="verilator") | .status'` shows `"PASS"` for at least one row
 
 ## 9. Out of scope (deferred)
 
@@ -499,9 +527,27 @@ Add a new Catch2 test `tests/benchmark/test_verilator_integration.cpp`:
 > machine.** Subsequent incremental builds: seconds. CI should
 > cache `build/verilator-install/` to amortize the cold cost.
 
+### Build recipe (two steps!)
+
+```bash
+# Step 1: build Verilator (slow, ~10-30 min cold)
+cmake --build build -j$(nproc) --target verilator
+
+# Step 2: build CppHDL artifacts (fast)
+cmake --build build -j$(nproc)
+
+# Combined: build both in one command
+cmake --build build -j$(nproc) --target verilator && \
+    cmake --build build -j$(nproc)
+```
+
+`cmake --build build` (no target) only builds CppHDL; Verilator is
+`EXCLUDE_FROM_ALL` by default for `ExternalProject_Add` and must be
+targeted explicitly.
+
 ### CI changes needed
 
-GitHub Actions (or equivalent) must enable submodule checkout:
+GitHub Actions (or équivalent) must enable submodule checkout:
 
 ```yaml
 - uses: actions/checkout@v4
@@ -514,12 +560,6 @@ GitHub Actions (or equivalent) must enable submodule checkout:
 
 Verilator's build tree consumes ~1–2 GB during build. Final install
 plus headers is ~50 MB. CI runners should have ≥ 5 GB free.
-
-### Build time
-
-First-time Verilator build on a 4-core x86_64: **10–30 minutes**.
-Subsequent incremental builds: seconds (only the changed
-`verilator` sources recompile, link step ~5 seconds).
 
 ### Cache strategy
 
@@ -542,61 +582,97 @@ cmake --build build    # builds CppHDL only
 
 This is a documented design feature, not a workaround.
 
-## 11. Evidence trail (oracle review v1 and v2)
+## 11. Evidence trail (oracle review v1, v2, v3)
 
 For future maintainers wondering "why is the spec so specific about
-the install wrapper path", here is the chain of evidence:
+the install wrapper path and the env var injection", here is the
+chain of evidence.
 
-### Oracle review v1 (commit `5a18f98`)
+### Upstream `bin/verilator` key lines (v5.020 master, June 2026)
 
-Found 3 BLOCKING issues in the `add_subdirectory` approach:
+```
+90: # WARNING: $verilator_pkgdatadir_relpath is substituted during Verilator 'make install'
+91: my $verilator_pkgdatadir_relpath = "..";
+92: my $verilator_root = realpath("$RealBin/$verilator_pkgdatadir_relpath");
+93: if (defined $ENV{VERILATOR_ROOT}) {
+94:     if ((!-d $ENV{VERILATOR_ROOT}) || $verilator_root ne realpath($ENV{VERILATOR_ROOT})) {
+95:         warn "%Error: verilator: VERILATOR_ROOT is set to inconsistent path. Suggest leaving it unset.\n";
+96:         warn "%Error: VERILATOR_ROOT=$ENV{VERILATOR_ROOT}\n";
+97:         exit 1;
+98:     }
+99: } else {
+100:     print "export VERILATOR_ROOT='$verilator_root'\n" if $Debug;
+101:     $ENV{VERILATOR_ROOT} = $verilator_root;
+102: }
+...
+199: run(ulimit_stack_unlimited() . aslr(1) . verilator_bin() . " " . join(' ', @quoted_sw));
+```
 
-1. **CMake target name.** Upstream `src/CMakeLists.txt` line 286:
-   `set(verilator verilator${CMAKE_BUILD_TYPE})`. The v1 spec used
-   `set_target_properties(verilator ...)` which would target a
-   non-existent target.
+**Reading:**
+- Line 92: `$verilator_root` = realpath of `..` from `$RealBin`. When
+  the wrapper is at `<install>/bin/verilator`, `$RealBin` is
+  `<install>/bin/`, so `$verilator_root` = `<install>/`.
+- Lines 93-98: Consistency check. If `VERILATOR_ROOT` is set in
+  the environment, it must equal `$verilator_root`. We must set it
+  to `<install>/` consistently with `$verilator_root`.
+- Lines 99-102: When `VERILATOR_ROOT` is NOT in env, set it
+  internally to `$verilator_root`. When the wrapper `system()`s
+  `verilator_bin` (line 199), the child inherits this via
+  Perl's `%ENV`.
+- **This means the wrapper does propagate `VERILATOR_ROOT` to
+  its child `verilator_bin`.** But the chain depends on
+  `popen()`/`system()` inheriting env, which is true for
+  `verilator_runner.h:259` and `popen()` itself. The ctest
+  ENVIRONMENT injection is defense in depth.
 
-2. **`VERILATOR_ROOT` setup.** Upstream `bin/verilator` line 92:
-   `my $verilator_root = realpath("$RealBin/$verilator_pkgdatadir_relpath")`.
-   Wrapper derives root from `$RealBin/..`. With `add_subdirectory`,
-   the binary lands in the build tree but the wrapper is in the
-   source tree → wrong root.
+### Upstream `CMakeLists.txt` install rules (v5.020 master)
 
-3. **Wrapper/binary co-location.** Upstream `bin/verilator` line 221:
-   `if (-x "$RealBin/$basename" || -x "$RealBin/$basename.exe")`. Wrapper
-   looks for binary next to itself. With `add_subdirectory`, the
-   binary is not next to the wrapper.
+```
+155: foreach(
+156:     program
+157:     verilator
+158:     verilator_gantt
+...
+164:     install(PROGRAMS bin/${program} TYPE BIN)
+165: endforeach()
+...
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/verilated_config.h DESTINATION include)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/verilated.mk DESTINATION include)
+install(DIRECTORY include TYPE DATA FILES_MATCHING PATTERN "include/verilated_config.h" ...)
+```
 
-### Oracle review v2 (commit `f870ca9`)
+**Reading:**
+- Lines 155-165 install 6 programs including `verilator` (the wrapper)
+  to `<prefix>/bin/`. So the wrapper IS auto-installed (v2 was wrong to
+  claim otherwise; v3 corrected this).
+- The configured data files (`verilated_config.h`, `verilated.mk`)
+  install to `<prefix>/include/` (NOT `<prefix>/share/verilator/`).
+- The third install copies the rest of the `include/` tree (excluding
+  the `.in` templates) to `<prefix>/include/`.
+- So after install, `VERILATOR_ROOT` (which is the wrapper's
+  `$RealBin/..` = `<prefix>/`) has `<prefix>/include/verilated.mk`
+  exactly where the generated Makefile expects it
+  (`include $(VERILATOR_ROOT)/include/verilated.mk` in
+  `V3EmitMk.cpp`).
 
-Found 2 new BLOCKING issues in the "source-tree wrapper + VERILATOR_BIN
-env var" approach:
+### Oracle review history
 
-1. **Factually wrong claim.** v2 spec said the upstream wrapper is
-   not auto-installed. In fact, upstream `CMakeLists.txt` line 156
-   loops over `(verilator, verilator_gantt, verilator_ccache_report,
-   verilator_difftree, verilator_profcfunc, verilator_includer)` and
-   line 164 does `install(PROGRAMS bin/${program} TYPE BIN)` for
-   each. The wrapper IS auto-installed.
+- **v1 (commit 5a18f98):** 3 BLOCKING (target name, VERILATOR_ROOT,
+  wrapper/binary co-location). All fixed by switching to
+  `ExternalProject_Add + --prefix`.
+- **v2 (commit f870ca9):** 2 BLOCKING (false "wrapper not installed"
+  claim, source-tree wrapper's `$RealBin/..` lacks configured data).
+  All fixed by switching to installed-wrapper single-path approach.
+- **v3 (commit aaa9f89):** 3 issues:
+  1. `VERILATOR_ROOT = ${prefix}/share/verilator` was wrong; actual
+     install puts files at `${prefix}/include/`. So
+     `VERILATOR_ROOT` must be exactly `${prefix}`.
+  2. `flex`/`bison` should be `REQUIRED`, not just warnings.
+  3. The v3 spec overclaimed about the wrapper's
+     `VERILATOR_ROOT` propagation. We now add explicit ctest
+     ENVIRONMENT injection as belt-and-suspenders.
 
-2. **VERILATOR_ROOT inconsistency check.** Upstream `bin/verilator`
-   lines 95–100 enforce that if `$ENV{VERILATOR_ROOT}` is set, it
-   must match `realpath("$RealBin/..")`. Pointing `--verilator` at
-   the source-tree wrapper while setting `VERILATOR_BIN` to the
-   install-tree binary is internally inconsistent: the wrapper's
-   `$RealBin/..` is the source root, but the binary is in the
-   install tree. The generated Makefile in `obj_dir/` looks for
-   `$VERILATOR_ROOT/include/verilated.mk` (the `configure_file()`
-   output), which only exists in the build tree and the install
-   tree — not in the source tree.
-
-### v3 resolution
-
-Use the **installed** wrapper. The install step places the wrapper
-and the binary in the same directory (`<prefix>/bin/`), matching
-what the wrapper's `$RealBin/$basename` check expects, and
-`$RealBin/..` is the install prefix which contains the configured
-data files. No env var needed.
+  All three addressed in v4.
 
 ## 12. Risks and mitigations
 
@@ -605,9 +681,9 @@ data files. No env var needed.
 | Verilator build takes > 30 min on slow CI | Slow CI feedback | Add CI cache for `build/verilator-install/`. Document `EXPECTED_BUILD_TIME` in DEVELOPING.md. |
 | Verilator submodule init fails (network/auth) | Submodule empty; CppHDL configure fails | Fast-fail at configure time with clear message; document `git submodule update --init --recursive` in README |
 | Verilator 5.x breaks compat with existing harness | All Verilator rows FAIL or crash | Integration test (§8) catches this in CI before merge. If a fix is needed, upstream patch first. |
-| flex/bison missing on dev machine | Verilator build fails | Document install commands in `verilator-integration.md`; CMake warning at configure time |
+| flex/bison/perl missing on dev machine | CppHDL configure aborts (REQUIRED) | Document install commands in `verilator-integration.md`; skip-Verilator via `BUILD_VERILATOR=OFF` |
 | Verilator install layout changes between versions | Wrapper no longer at expected location | The install layout (`bin/verilator` next to `bin/verilator_bin`) is core to how the wrapper itself works; if upstream changes it, they have to update the wrapper too. We're insulated by always using the install layout, not relying on a specific filesystem arrangement. |
-| `VERILATOR_ROOT` not set | Generated build fails | Wrapper auto-sets `VERILATOR_ROOT` from `$RealBin/..` (verified by reading `bin/verilator` line 92) |
+| `VERILATOR_ROOT` not set | Generated Makefile fails | (a) Wrapper auto-sets it for child process; (b) ctest ENVIRONMENT injects it explicitly as defense in depth |
 | `perl` missing | Wrapper cannot execute | `find_program(PERL perl REQUIRED)` at configure time |
 | Verilator upstream drops support for install layout (extremely unlikely) | Wrapper fails to find binary | Would require major upstream redesign; not a near-term risk. If it happens, we fall back to `VERILATOR_BIN` env var injection. |
 
@@ -619,7 +695,8 @@ None at this point. The user has confirmed:
 - CMake integration: build in-tree (initial plan was
   `add_subdirectory`; revised to `ExternalProject_Add` per oracle
   review, then to use the installed wrapper per second oracle
-  review)
+  review, then to add the `VERILATOR_ROOT` env var injection per
+  third oracle review)
 
 Submodule pin (exact tag) will be decided at implementation time by
 running `git ls-remote --tags` and picking the highest 5.x stable.
