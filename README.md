@@ -41,11 +41,23 @@ For detailed documentation, please refer to the following guides in the `docs/` 
 ## Usage
 To build and run the project:
 
+CppHDL vendors Verilator as a git submodule. After cloning:
+
 ```bash
-cmake .
-make
-./build.sh
+git submodule update --init --recursive
+./scripts/init-submodules.sh    # convenience wrapper
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc) --target verilator   # 10-30 min cold
+cmake --build build -j$(nproc)
 ```
+
+To skip the Verilator build:
+
+```bash
+cmake -B build -DBUILD_VERILATOR=OFF
+```
+
+See `docs/developer_guide/verilator-integration.md` for full details.
 
 To review the code for potential issues:
 
