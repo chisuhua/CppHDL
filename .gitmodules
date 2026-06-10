@@ -4,4 +4,3 @@
 [submodule "third_party/verilator"]
 	path = third_party/verilator
 	url = https://github.com/verilator/verilator.git
-	branch = v5.048
