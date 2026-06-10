@@ -10,7 +10,15 @@
  * Tag: [perf][report][consistency]
  */
 
+// CATCH_CONFIG_RUNNER (not CATCH_CONFIG_MAIN) so we can detect the
+// "perf_results.* not present" case and exit 0. Otherwise Catch2
+// returns exit code 4 ("all tests skipped") which ctest treats as
+// failure. Pattern matches tests/benchmark/test_verilator_integration.cpp
+// (commit 1524fd0) and tests/test_verilog_external.cpp (ADR-035).
+#define CATCH_CONFIG_RUNNER
+
 #include "catch_amalgamated.hpp"
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -80,4 +88,26 @@ TEST_CASE("md/csv/json reports agree on sim_us (W7)",
     REQUIRE(js > 0.0);
     REQUIRE(js == cs);
     REQUIRE(js == ms);
+}
+
+// Custom entry point: when perf_results.{json,csv,md} are missing
+// (the common case on a fresh worktree that hasn't run perf_tests
+// yet), the TEST_CASE above calls SKIP(). Catch2 then returns exit
+// code 4 ("all tests skipped"), which ctest treats as failure.
+// We treat the all-skipped case as a clean pass (exit 0) and surface
+// a one-line note on stderr so it's still visible in CI logs.
+// Pattern matches tests/benchmark/test_verilator_integration.cpp
+// (commit 1524fd0) and tests/test_verilog_external.cpp (ADR-035).
+int main(int argc, char* argv[]) {
+    if (!std::filesystem::exists("perf_results.json") ||
+        !std::filesystem::exists("perf_results.csv") ||
+        !std::filesystem::exists("perf_results.md")) {
+        std::fprintf(stderr,
+                     "test_report_consistency: perf_results.{json,csv,md} "
+                     "not present; skipping.\n");
+        return 0;
+    }
+    Catch::Session session;
+    session.applyCommandLine(argc, argv);
+    return session.run();
 }
