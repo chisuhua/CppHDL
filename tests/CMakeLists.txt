@@ -111,6 +111,21 @@ set_tests_properties(perf_regression PROPERTIES
     LABELS "perf" TIMEOUT 60
 )
 
+# W11: Verilator integration test (perf-report-followup.md followup).
+# Tags: [perf][verilator][integration]. Skips when BUILD_VERILATOR=OFF
+# or the Verilator build has not been run yet.
+add_catch_test(perf_verilator_integration benchmark/test_verilator_integration.cpp)
+target_compile_definitions(perf_verilator_integration PRIVATE
+    CPPHDL_VERILATOR_WRAPPER="${CPPHDL_VERILATOR_WRAPPER}"
+    CPPHDL_VERILATOR_BIN="${CPPHDL_VERILATOR_BIN}"
+    CPPHDL_VERILATOR_DIR="${CPPHDL_VERILATOR_DIR}"
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
+set_tests_properties(perf_verilator_integration PROPERTIES
+    LABELS "perf" TIMEOUT 60
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # Stream 组件独立测试
 add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)
 
