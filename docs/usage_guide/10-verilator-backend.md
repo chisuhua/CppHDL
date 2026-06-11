@@ -22,15 +22,50 @@
 
 ## 快速开始
 
-### 安装 Verilator
+### 启用 Verilator（git submodule）
+
+> **不要 `apt install verilator`** —— CppHDL 通过 `third_party/verilator` 子模块
+> 自己构建 Verilator（ExternalProject_Add），保证版本一致（v5.048）且无需
+> 系统权限。`apt install verilator` 拿到的版本可能与本项目不兼容。
+>
+> 完整流程参见 `docs/developer_guide/verilator-integration.md`。
+> 本节只给最常见的两个场景。
+
+#### 场景 A：启用子模块并构建 Verilator（开发/CI 完整路径）
 
 ```bash
-# Ubuntu 24.04 (apt 仓库自带 5.020-1)
-sudo apt install verilator iverilog
+# 一次性：初始化子模块（首次 clone 后）
+./scripts/init-submodules.sh
 
-# 验证
-verilator --version   # 5.020 或更高
-iverilog -V            # 12.0 或更高
+# 一次性：构建 Verilator（10-30 min cold，warm 秒级）
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc) --target verilator
+
+# 之后：构建 CppHDL（verilator-install/ 已在 build/ 下）
+cmake --build build -j$(nproc)
+```
+
+#### 场景 B：跳过 Verilator（快速迭代，CI 默认路径）
+
+```bash
+# 注意：如果 build/ 之前用 BUILD_VERILATOR=ON 配置过，先 rm -rf build
+# （CMake 会缓存旧 option）
+cmake -B build -DBUILD_VERILATOR=OFF
+cmake --build build -j$(nproc)
+```
+
+此时 `perf_tests` 的 Verilator 列会显示 `UNSUPPORTED`（与集成前行为一致）。
+
+### 工具链依赖（apt：iverilog + 编译器）
+
+Verilator 子模块的 CMake `find_program(... REQUIRED)` 会自动检查 `perl` /
+`flex` / `bison`，缺一即报错。`iverilog` 用于 `test_verilog_external.cpp`
+的端到端 codegen 验证（与 Verilator 集成独立，需要 apt 安装）：
+
+```bash
+# Ubuntu 24.04
+sudo apt install iverilog
+iverilog -V   # 12.0 或更高
 ```
 
 ### 最简示例
