@@ -1,5 +1,25 @@
 # CppHDL CI/CD Pipeline
-# Tests on Linux, macOS, and Windows
+# Tests on Linux, macOS, and Windows.
+#
+# Notes on design choices (2026-06 fix):
+# 1. Ubuntu 22.04 ships g++-11/12 in main repos; g++-13 needs the
+#    ubuntu-toolchain-r PPA. We try PPA first, then fall back to
+#    g++-12 (which also supports C++20 used by this project).
+# 2. The JIT path (`find_package(LLVM REQUIRED)` in CMakeLists.txt,
+#    CH_JIT_ENABLE=ON by default) needs LLVM dev headers on every
+#    platform. We pin LLVM 14 (LTS, available on all 3 OSes) and
+#    export LLVM_DIR so `find_package` locates LLVMConfig.cmake
+#    deterministically.
+# 3. BUILD_VERILATOR defaults to ON in CMakeLists.txt; the full
+#    Verilator build is 10-30 min cold and only runs in the
+#    separate `nightly-verilator` job below (cron + manual
+#    dispatch). PRs and main-branch pushes get a fast ~5-8 min
+#    build with BUILD_VERILATOR=OFF.
+# 4. Submodules (third_party/verilator) are still checked out for
+#    the nightly job so `cmake --build --target verilator` works.
+#    The fast path still checks out submodules because the
+#    `scripts/init-submodules.sh` sanity check is harmless and
+#    keeps the workflow shape uniform across jobs.
 
 name: CppHDL CI
 
@@ -8,17 +28,34 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  # Nightly cron: 02:00 UTC. GitHub Actions' minimal interval is
+  # 5 min; daily is the right cadence for a 10-30 min Verilator
+  # cold build.
+  schedule:
+    - cron: '0 2 * * *'
+  # Allow manual triggering of the full Verilator build for ad-hoc
+  # verification (e.g. after bumping the Verilator submodule pin).
+  workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Pinned LLVM version across all platforms; matches Ubuntu
+  # 22.04 apt (llvm-14-dev), Homebrew (llvm@14), and the
+  # llvm-actions/setup-llvm default behaviour.
+  LLVM_VERSION: '14'
+  # BUILD_VERILATOR=OFF for the fast default path; overridden to
+  # ON in the `nightly-verilator` job below.
+  BUILD_VERILATOR: 'OFF'
+
 jobs:
   build-and-test:
     name: ${{ matrix.os }} - ${{ matrix.build_type }}
     runs-on: ${{ matrix.os }}
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -26,55 +63,120 @@ jobs:
         build_type: [Release, Debug]
         include:
           - os: ubuntu-22.04
-            compiler: gcc-13
+            # `g++` (not gcc-13) so the matrix stays valid whether
+            # the install step lands g++-13 or falls back to g++-12
+            # via update-alternatives.
+            compiler: g++
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
           - os: macos-14
             compiler: clang
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
           - os: windows-2022
-            compiler: msvc
+            compiler: cl
             cxx_flags: "/W4"
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    
-    - name: Install dependencies (Linux)
+
+    # ---- Linux: g++ + LLVM --------------------------------------
+    - name: Install g++ (Linux)
       if: runner.os == 'Linux'
+      shell: bash
       run: |
+        set -e
         sudo apt-get update
-        sudo apt-get install -y g++-13 ccache
-        g++-13 --version
-    
+        # add-apt-repository lives in software-properties-common;
+        # not pre-installed on minimal GitHub runner images.
+        sudo apt-get install -y software-properties-common
+        if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+           && sudo apt-get update \
+           && sudo apt-get install -y g++-13 ccache; then
+          echo "Installed g++-13 via PPA"
+          sudo update-alternatives --set gcc /usr/bin/gcc-13
+          sudo update-alternatives --set g++ /usr/bin/g++-13
+        else
+          echo "::warning::g++-13 install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12 ccache
+          sudo update-alternatives --set gcc /usr/bin/gcc-12
+          sudo update-alternatives --set g++ /usr/bin/g++-12
+        fi
+        g++ --version
+
+    - name: Install LLVM (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
+                                clang-${{ env.LLVM_VERSION }}
+        # Discover LLVMConfig.cmake deterministically (the path is
+        # /usr/lib/llvm-14/lib/cmake/llvm/LLVMConfig.cmake on
+        # Ubuntu 22.04, but locating it via dpkg file list keeps
+        # this robust if the path ever changes).
+        LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
+          | grep 'LLVMConfig\.cmake$' | head -1)
+        if [ -z "$LLVM_CONFIG_CMAKE" ]; then
+          echo "::error::Could not find LLVMConfig.cmake for llvm-${{ env.LLVM_VERSION }}-dev"
+          exit 1
+        fi
+        LLVM_DIR="$(dirname "$LLVM_CONFIG_CMAKE")"
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+        echo "Discovered LLVM_DIR=$LLVM_DIR"
+
+    # ---- macOS: clang + brew llvm -------------------------------
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
+      shell: bash
       run: |
-        brew install ccache
+        set -e
+        brew install ccache llvm@${{ env.LLVM_VERSION }}
+        LLVM_PREFIX=$(brew --prefix llvm@${{ env.LLVM_VERSION }})
+        LLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm"
+        if [ ! -f "$LLVM_DIR/LLVMConfig.cmake" ]; then
+          echo "::error::LLVMConfig.cmake not found at $LLVM_DIR"
+          exit 1
+        fi
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+        echo "Discovered LLVM_DIR=$LLVM_DIR"
         clang --version
-    
+
+    # ---- Windows: llvm-actions + MSVC ---------------------------
+    - name: Setup LLVM (Windows)
+      if: runner.os == 'Windows'
+      uses: llvm-actions/setup-llvm@v1
+      with:
+        # setup-llvm@v1 exports `LLVM_DIR` automatically when
+        # given a version, which is exactly what CMake's
+        # find_package(LLVM) needs.
+        llvm-version: ${{ env.LLVM_VERSION }}
+
     - name: Setup MSVC (Windows)
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
-    
+
+    # ---- CMake configure (BUILD_VERILATOR=OFF for fast CI) ------
     - name: Configure CMake
+      shell: bash
       run: >
         cmake -S . -B build
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
         -DCMAKE_CXX_FLAGS="${{ matrix.cxx_flags }}"
         -DENABLE_ASAN=OFF
+        -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-    
+
     - name: Build
+      shell: bash
       run: cmake --build build --config ${{ matrix.build_type }} -j$(nproc 2>/dev/null || echo 4)
-      shell: bash
-    
+
     - name: Run tests
-      run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4)
       shell: bash
-    
+      run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4)
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -82,7 +184,7 @@ jobs:
         name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
         path: build/Testing/Temporary/*.xml
         if-no-files-found: ignore
-    
+
     - name: Upload compile commands
       if: success()
       uses: actions/upload-artifact@v4
@@ -95,22 +197,59 @@ jobs:
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-22.04
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    
-    - name: Install dependencies
+
+    - name: Install g++ (Linux)
+      shell: bash
       run: |
+        set -e
         sudo apt-get update
-        sudo apt-get install -y g++-13 clang-tidy
-    
+        sudo apt-get install -y software-properties-common
+        if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+           && sudo apt-get update \
+           && sudo apt-get install -y g++-13 clang-tidy; then
+          echo "Installed g++-13 via PPA"
+          sudo update-alternatives --set gcc /usr/bin/gcc-13
+          sudo update-alternatives --set g++ /usr/bin/g++-13
+        else
+          echo "::warning::g++-13 install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12 clang-tidy
+          sudo update-alternatives --set gcc /usr/bin/gcc-12
+          sudo update-alternatives --set g++ /usr/bin/g++-12
+        fi
+        g++ --version
+
+    - name: Install LLVM (Linux)
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
+                                clang-${{ env.LLVM_VERSION }}
+        LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
+          | grep 'LLVMConfig\.cmake$' | head -1)
+        if [ -z "$LLVM_CONFIG_CMAKE" ]; then
+          echo "::error::Could not find LLVMConfig.cmake for llvm-${{ env.LLVM_VERSION }}-dev"
+          exit 1
+        fi
+        LLVM_DIR="$(dirname "$LLVM_CONFIG_CMAKE")"
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+        echo "Discovered LLVM_DIR=$LLVM_DIR"
+
     - name: Configure CMake
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-    
+      shell: bash
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
     - name: Run clang-tidy
+      shell: bash
       run: |
         python3 -m pip install run-clang-tidy
         run-clang-tidy -p build -j$(nproc) \
@@ -118,3 +257,88 @@ jobs:
           -header-filter='.*' \
           'src/.*\.cpp$'
       continue-on-error: true
+
+  # Nightly full build including Verilator. Triggered by cron or
+  # manual workflow_dispatch; does NOT run on push or PR.
+  # Verilator's cold build is 10-30 min, so we keep it out of the
+  # PR feedback loop while still validating the full stack daily.
+  nightly-verilator:
+    name: Nightly Verilator Build
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    env:
+      BUILD_VERILATOR: 'ON'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install host build dependencies
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common
+        if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+           && sudo apt-get update \
+           && sudo apt-get install -y g++-13 ccache \
+                flex bison perl python3 make \
+                libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev \
+                libgmp-dev autoconf help2man; then
+          echo "Installed g++-13 via PPA"
+          sudo update-alternatives --set gcc /usr/bin/gcc-13
+          sudo update-alternatives --set g++ /usr/bin/g++-13
+        else
+          echo "::warning::g++-13 install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12 ccache \
+                flex bison perl python3 make \
+                libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev \
+                libgmp-dev autoconf help2man
+          sudo update-alternatives --set gcc /usr/bin/gcc-12
+          sudo update-alternatives --set g++ /usr/bin/g++-12
+        fi
+        g++ --version
+
+    - name: Install LLVM
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
+                                clang-${{ env.LLVM_VERSION }}
+        LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
+          | grep 'LLVMConfig\.cmake$' | head -1)
+        if [ -z "$LLVM_CONFIG_CMAKE" ]; then
+          echo "::error::Could not find LLVMConfig.cmake for llvm-${{ env.LLVM_VERSION }}-dev"
+          exit 1
+        fi
+        LLVM_DIR="$(dirname "$LLVM_CONFIG_CMAKE")"
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+        echo "Discovered LLVM_DIR=$LLVM_DIR"
+
+    - name: Configure CMake (with Verilator)
+      shell: bash
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_CXX_COMPILER=g++
+        -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
+        -DENABLE_ASAN=OFF
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    # Build the verilator target first (10-30 min cold, seconds
+    # warm) so the rest of the build can find the installed
+    # verilator binary at configure-time deps.
+    - name: Build verilator
+      shell: bash
+      run: cmake --build build --target verilator -j$(nproc)
+
+    - name: Build CppHDL
+      shell: bash
+      run: cmake --build build -j$(nproc)
+
+    - name: Run tests (including perf/verilator)
+      shell: bash
+      run: ctest --test-dir build --output-on-failure -j$(nproc)
