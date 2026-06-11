@@ -12,6 +12,14 @@ option(ENABLE_DEBUG_LOGGING "Enable debug level logging" OFF)
 option(ENABLE_VERBOSE_LOGGING "Enable verbose logging with source locations" OFF)
 option(CH_JIT_ENABLE "Enable LLVM ORC JIT compilation (default OFF)" ON)
 
+# ChipForge 集成门控:让父项目可以选择性关闭 CppHDL 子树 (tests + examples) 的
+# ctest 注册,以避免污染 ChipForge 自身的测试列表 (默认 ON,保持 CppHDL 独立
+# build 时的原有行为)。ChipForge 父项目 CMakeLists.txt 中通过
+# `set(CHIPFORGE_CPPHDL_BUILD_TESTS OFF FORCE)` 显式关闭。
+# 注意:这些开关只影响 add_subdirectory 范围,不影响 cpphdl 库本身的构建。
+option(CPPHDL_BUILD_TESTS    "Build CppHDL tests subtree (default ON for upstream compatibility)"    ON)
+option(CPPHDL_BUILD_EXAMPLES "Build CppHDL examples subtree (default ON for upstream compatibility)" ON)
+
 # 设置编译定义
 if(ENABLE_DEBUG_LOGGING)
     add_compile_definitions(CH_DEBUG=1)
@@ -168,39 +176,76 @@ target_include_directories(cpphdl
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# 添加示例子目录
-add_subdirectory(samples)
+# ─── ChipForge 集成支持:install 规则 (vendored 副本本地增强) ───
+# CppHDL 上游根 CMakeLists.txt 默认不提供 install,导致 ChipForge 父项目
+# 无法用 find_package()/find_path() 消费已构建的 cpphdl 库。本地 vendored
+# 副本补 install(DIRECTORY include/) + install(TARGETS cpphdl) 以支持
+# ExternalProject_Add 隔离构建(详见 ChipForge/CMakeLists.txt)。
+#
+# 注意:
+#   - 这是本地 vendored 副本的修改,不会同步到上游 chisuhua/CppHDL
+#   - 仅当 CPPHDL_BUILD_TESTS=ON 时,tests 子目录也会被 add — 但 tests
+#     不在 install 范围内,不影响 ChipForge 消费
+#   - bitvector 是 INTERFACE 库,作为 cpphdl 的 PUBLIC 依赖 install 会
+#     把它装走(无文件但有配置),无副作用
+install(DIRECTORY include/ DESTINATION include/cpp-hdl
+    FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+        PATTERN "*.tpp"   # 模板实现文件 (如 lnode/context.tpp)
+        PATTERN "*.inc"   # 可能存在的 include 片段
+)
+# inipp 是 CppHDL 头文件依赖(inipp/inipp.h),通过 simulator.h 等被间接引用
+# 源: external/inipp/inipp/inipp.h
+# install 目标: include/cpp-hdl/ (让 include path = cpp-hdl/ 时能解析 inipp/inipp.h)
+# Cmake install DIRECTORY 保留源子目录结构,所以:
+#   源 external/inipp/inipp/inipp.h → cpp-hdl/inipp/inipp/inipp.h
+install(DIRECTORY external/inipp/ DESTINATION include/cpp-hdl
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+install(TARGETS cpphdl bitvector ch_includes
+    EXPORT cpphdlTargets
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include/cpp-hdl
+)
 
-# 添加 SpinalHDL 移植示例
-add_subdirectory(examples/spinalhdl-ported/counter)
-add_subdirectory(examples/spinalhdl-ported/uart)
-add_subdirectory(examples/spinalhdl-ported/fifo)
-add_subdirectory(examples/spinalhdl-ported/width_adapter)
-add_subdirectory(examples/spinalhdl-ported/pwm)
-add_subdirectory(examples/spinalhdl-ported/gpio)
-add_subdirectory(examples/spinalhdl-ported/spi)
-add_subdirectory(examples/spinalhdl-ported/i2c)
-add_subdirectory(examples/spinalhdl-ported/timer)
-add_subdirectory(examples/spinalhdl-ported/assert)
-add_subdirectory(examples/spinalhdl-ported/phase1c)
-add_subdirectory(examples/spinalhdl-ported/uart_rx)
-add_subdirectory(examples/spinalhdl-ported/vga)
-add_subdirectory(examples/spinalhdl-ported/ws2812)
-add_subdirectory(examples/spinalhdl-ported/quadrature_encoder)
-add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
+# 添加示例子目录 (可由父项目通过 CPPHDL_BUILD_EXAMPLES=OFF 关闭)
+if(CPPHDL_BUILD_EXAMPLES)
+    add_subdirectory(samples)
 
-# Phase 3: Stream 组件
-add_subdirectory(examples/stream)
+    # 添加 SpinalHDL 移植示例
+    add_subdirectory(examples/spinalhdl-ported/counter)
+    add_subdirectory(examples/spinalhdl-ported/uart)
+    add_subdirectory(examples/spinalhdl-ported/fifo)
+    add_subdirectory(examples/spinalhdl-ported/width_adapter)
+    add_subdirectory(examples/spinalhdl-ported/pwm)
+    add_subdirectory(examples/spinalhdl-ported/gpio)
+    add_subdirectory(examples/spinalhdl-ported/spi)
+    add_subdirectory(examples/spinalhdl-ported/i2c)
+    add_subdirectory(examples/spinalhdl-ported/timer)
+    add_subdirectory(examples/spinalhdl-ported/assert)
+    add_subdirectory(examples/spinalhdl-ported/phase1c)
+    add_subdirectory(examples/spinalhdl-ported/uart_rx)
+    add_subdirectory(examples/spinalhdl-ported/vga)
+    add_subdirectory(examples/spinalhdl-ported/ws2812)
+    add_subdirectory(examples/spinalhdl-ported/quadrature_encoder)
+    add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
 
-# Phase 4: Verilator 仿真后端示例 (ADR-035)
-add_subdirectory(examples/verilator)
+    # Phase 3: Stream 组件
+    add_subdirectory(examples/stream)
 
-# Phase 3: AXI4 总线系统
-add_subdirectory(examples/axi4)
+    # Phase 4: Verilator 仿真后端示例 (ADR-035)
+    add_subdirectory(examples/verilator)
 
-# Phase 3A: RISC-V SoC (Temporarily disabled due to API changes)
-# add_subdirectory(examples/riscv)  # Deprecated, use riscv-mini
-add_subdirectory(examples/riscv-mini)  # Phase B: API 兼容,已启用
+    # Phase 3: AXI4 总线系统
+    add_subdirectory(examples/axi4)
+
+    # Phase 3A: RISC-V SoC (Temporarily disabled due to API changes)
+    # add_subdirectory(examples/riscv)  # Deprecated, use riscv-mini
+    add_subdirectory(examples/riscv-mini)  # Phase B: API 兼容,已启用
+endif()
 
 # ===========================================================================
 # Verilator integration (perf-report-followup spec v4, commit 4f9eb16)
@@ -267,5 +312,8 @@ endif()
 
 # 添加测试
 enable_testing()
-add_subdirectory(tests)
+# 添加测试子目录 (可由父项目通过 CPPHDL_BUILD_TESTS=OFF 关闭)
+if(CPPHDL_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
