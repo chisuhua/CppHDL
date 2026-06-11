@@ -86,6 +86,15 @@ set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
 add_catch_test(perf_report_consistency benchmark/test_report_consistency.cpp)
 set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# W12 (perf-report-followup.md): structural JIT-vs-interpreter ratio gate.
+# The absolute 50ms gate (perf_jit_smallgraph) and the 1.2x baseline gate
+# (perf_regression) cannot catch the case where JIT silently degrades to
+# interpreter-class speed. This test asserts same-DUT jit_us < interp_us
+# on a combinational XOR chain, which native code emission must win.
+# Two TEST_CASEs scale depth (500 strict / 1000 ratio>=2.0x) to confirm
+# JIT scalability grows with design size.
+add_catch_test(perf_jit_vs_interp_ratio benchmark/test_jit_vs_interp_ratio.cpp)
+set_tests_properties(perf_jit_vs_interp_ratio PROPERTIES LABELS "perf" TIMEOUT 120)
 
 # W9: perf regression gate (perf-report-followup.md Task 9)
 # Runs perf_regression against the checked-in perf_baseline.json.
