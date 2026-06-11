@@ -1,9 +1,12 @@
 # All submodule URLs use HTTPS for CI compatibility (actions/checkout@v4
 # does not configure SSH agent forwarding by default). After modifying
-# URLs, run `git submodule sync` locally so existing clones pick up the
-# new remote without a fresh clone.
+# URLs, run `git submodule sync` locally so existing clones pick up
+# the new remote without a fresh clone.
 #
 # Last update: switch SSH -> HTTPS to avoid flakiness in CI environments.
 [submodule "external/nameof"]
 	path = external/nameof
 	url = https://github.com/chisuhua/nameof.git
+[submodule "third_party/verilator"]
+	path = third_party/verilator
+	url = https://github.com/verilator/verilator.git

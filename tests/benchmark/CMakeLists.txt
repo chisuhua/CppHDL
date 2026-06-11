@@ -45,12 +45,31 @@ if(EXISTS ${_harness_tc08_src})
     configure_file(${_harness_tc08_src} ${_harness_tc08_dst} COPYONLY)
 endif()
 
-add_test(NAME perf_tests COMMAND perf_tests --all)
-# TIMEOUT raised from 120 to 300 to cover Verilator's first-build overhead
-# (~30s for C++ compile + Verilator codegen) on cold caches.
-set_tests_properties(perf_tests PROPERTIES
-    LABELS "perf"
-    TIMEOUT 300
-)
+# When BUILD_VERILATOR=ON, CPPHDL_VERILATOR_WRAPPER is the install-tree
+# path. Inject it as --verilator= so perf_main.cpp's VerilatorRunner finds
+# the real binary instead of looking it up on PATH (which would fail).
+# Also inject VERILATOR_ROOT explicitly as belt-and-suspenders: the
+# upstream Perl wrapper sets it in its own %ENV before system() on
+# verilator_bin, but an explicit injection survives any future
+# refactor that bypasses the wrapper.
+#
+# When BUILD_VERILATOR=OFF, CPPHDL_VERILATOR_WRAPPER is empty and we
+# fall back to the original behavior (perf_main.cpp's default of
+# 'verilator' on PATH, which will correctly produce UNSUPPORTED rows).
+if(CPPHDL_VERILATOR_WRAPPER)
+    add_test(NAME perf_tests COMMAND perf_tests --all
+        --verilator=${CPPHDL_VERILATOR_WRAPPER})
+    set_tests_properties(perf_tests PROPERTIES
+        LABELS "perf"
+        TIMEOUT 300
+        ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"
+    )
+else()
+    add_test(NAME perf_tests COMMAND perf_tests --all)
+    set_tests_properties(perf_tests PROPERTIES
+        LABELS "perf"
+        TIMEOUT 300
+    )
+endif()
 
 target_compile_features(perf_tests PRIVATE cxx_std_20)

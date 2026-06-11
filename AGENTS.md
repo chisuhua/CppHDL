@@ -49,6 +49,8 @@ CppHDL/
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
 | AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/axi4_lite_example.cpp` |
 | Stream examples | `examples/stream/` (functional API — no Component subclass), `examples/spinalhdl-ported/stream/` (moved to sibling) |
+| Verilator backend (ADR-035) | `include/core/verilator_backend.h`, `src/core/verilator_backend.cpp`, `tests/test_verilator_backend.cpp` |
+| Verilator submodule integration | `docs/developer_guide/verilator-integration.md` + `third_party/verilator/` (git submodule) + `scripts/init-submodules.sh` |
 
 ## CONVENTIONS
 - **IO assignment**: Use `select(condition, val1, val0)` NOT `&&` on IO ports
@@ -57,6 +59,7 @@ CppHDL/
 - **Test context**: Always `ch::core::context ctx("name")` + `ch::core::ctx_swap swap(&ctx)`
 - **Bundle as IO**: Use individual `ch_bool`/`ch_uint` ports, NOT bundle struct
 - **Include aggregator**: Use `#include "ch.hpp"` (library) or `#include "chlib.h"` (chlib components)
+- **Verilator install path**: `apt install verilator` is **WRONG** — Verilator comes from `third_party/verilator/` submodule, built by `cmake --build build --target verilator` (ExternalProject_Add, ~10-30 min cold). See `docs/developer_guide/verilator-integration.md`.
 
 ## COMPONENT LIFECYCLE PATTERNS
 | Scenario | Pattern | Example |
@@ -156,6 +159,7 @@ ctest --output-on-failure
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)
+- **Verilator 三路 perf 对比** (interpreter / JIT / Verilator) 默认要求 `BUILD_VERILATOR=ON`；CI/快速迭代用 `-DBUILD_VERILATOR=OFF`，Verilator 列在 perf 报告中显示 `UNSUPPORTED`（详见 `docs/developer_guide/verilator-integration.md`）
 
 ## 已消除的过时信息
 - "7 个禁用测试" → fix-test-completeness 计划将 4 个被注释的 `add_catch_test` 重新启用（`test_branch_predictor`、`test_cache_pipeline`、`test_phase4_chlib`、`test_rv32i_pipeline`），目标 0 禁用
