@@ -1,25 +1,41 @@
 # CppHDL CI/CD Pipeline
 # Tests on Linux, macOS, and Windows.
 #
-# Notes on design choices (2026-06 fix):
+# Design notes (2026-06 fix v2, post-review):
 # 1. Ubuntu 22.04 ships g++-11/12 in main repos; g++-13 needs the
 #    ubuntu-toolchain-r PPA. We try PPA first, then fall back to
 #    g++-12 (which also supports C++20 used by this project).
+#    We use /usr/local/bin symlinks (not `update-alternatives --set`)
+#    because the latter requires `--install` first to register the
+#    alternative entry; PPA-installed g++-13 doesn't always auto-
+#    register, and `--set` then fails with "no alternatives for gcc".
 # 2. The JIT path (`find_package(LLVM REQUIRED)` in CMakeLists.txt,
 #    CH_JIT_ENABLE=ON by default) needs LLVM dev headers on every
 #    platform. We pin LLVM 14 (LTS, available on all 3 OSes) and
 #    export LLVM_DIR so `find_package` locates LLVMConfig.cmake
-#    deterministically.
+#    deterministically. We use a real, existing action
+#    (`KyleMayes/install-llvm-action@v2`) on Windows; the previously
+#    referenced `llvm-actions/setup-llvm` does NOT exist (404).
 # 3. BUILD_VERILATOR defaults to ON in CMakeLists.txt; the full
 #    Verilator build is 10-30 min cold and only runs in the
-#    separate `nightly-verilator` job below (cron + manual
-#    dispatch). PRs and main-branch pushes get a fast ~5-8 min
-#    build with BUILD_VERILATOR=OFF.
-# 4. Submodules (third_party/verilator) are still checked out for
+#    separate `nightly-verilator` job (cron + manual dispatch).
+#    PRs and main-branch pushes get a fast ~5-8 min build with
+#    BUILD_VERILATOR=OFF.
+# 4. The schedule trigger is filtered to main branch only; develop
+#    branch nightly builds would waste 10-30 min on a non-default
+#    branch. workflow_dispatch is always allowed for ad-hoc
+#    verification (e.g. after bumping the Verilator submodule pin).
+# 5. Submodules (third_party/verilator) are still checked out for
 #    the nightly job so `cmake --build --target verilator` works.
-#    The fast path still checks out submodules because the
-#    `scripts/init-submodules.sh` sanity check is harmless and
-#    keeps the workflow shape uniform across jobs.
+#    The fast path also checks them out so the workflow shape is
+#    uniform across jobs (the init script's sanity check is
+#    harmless).
+# 6. ccache is persisted across runs via actions/cache keyed on
+#    (os, build_type, sha) with a fallback restore-key for the
+#    (os, build_type) prefix; PR feedback is materially faster.
+# 7. Verilator's cold build log is uploaded as a CI artifact on
+#    every run (success or failure) so a 10-30 min failure can be
+#    inspected without re-running the job.
 
 name: CppHDL CI
 
@@ -28,24 +44,27 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  # Nightly cron: 02:00 UTC. GitHub Actions' minimal interval is
-  # 5 min; daily is the right cadence for a 10-30 min Verilator
-  # cold build.
+  # Nightly cron: 02:00 UTC. The nightly-verilator job is gated
+  # below to main branch only.
   schedule:
     - cron: '0 2 * * *'
-  # Allow manual triggering of the full Verilator build for ad-hoc
-  # verification (e.g. after bumping the Verilator submodule pin).
+  # Manual trigger for ad-hoc Verilator verification.
   workflow_dispatch:
 
-# Cancel in-progress runs for the same branch
+# Cancel in-progress runs for the same branch / PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Minimal GITHUB_TOKEN scope (best practice; default is write).
+permissions:
+  contents: read
+
 env:
   # Pinned LLVM version across all platforms; matches Ubuntu
-  # 22.04 apt (llvm-14-dev), Homebrew (llvm@14), and the
-  # llvm-actions/setup-llvm default behaviour.
+  # 22.04 apt (llvm-14-dev), Homebrew (llvm@14), and
+  # KyleMayes/install-llvm-action v2 (which downloads official
+  # 14.x binaries on Windows).
   LLVM_VERSION: '14'
   # BUILD_VERILATOR=OFF for the fast default path; overridden to
   # ON in the `nightly-verilator` job below.
@@ -65,13 +84,15 @@ jobs:
           - os: ubuntu-22.04
             # `g++` (not gcc-13) so the matrix stays valid whether
             # the install step lands g++-13 or falls back to g++-12
-            # via update-alternatives.
+            # via the /usr/local/bin symlink.
             compiler: g++
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
           - os: macos-14
             compiler: clang
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
           - os: windows-2022
+            # cl.exe is the MSVC driver; CMake's MSVC generator
+            # finds it via the env exported by ilammy/msvc-dev-cmd.
             compiler: cl
             cxx_flags: "/W4"
 
@@ -81,6 +102,19 @@ jobs:
       with:
         submodules: recursive
 
+    # ---- ccache cache (Linux + macOS) ---------------------------
+    # Keyed on (os, build_type, sha). Restore-key falls back to
+    # (os, build_type) prefix for cross-PR warm cache hits.
+    - name: Cache ccache
+      if: runner.os != 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-${{ matrix.build_type }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ matrix.build_type }}-
+          ccache-${{ runner.os }}-
+
     # ---- Linux: g++ + LLVM --------------------------------------
     - name: Install g++ (Linux)
       if: runner.os == 'Linux'
@@ -89,20 +123,29 @@ jobs:
         set -e
         sudo apt-get update
         # add-apt-repository lives in software-properties-common;
-        # not pre-installed on minimal GitHub runner images.
-        sudo apt-get install -y software-properties-common
+        # not pre-installed on minimal runner images.
+        sudo apt-get install -y software-properties-common ccache
         if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
            && sudo apt-get update \
-           && sudo apt-get install -y g++-13 ccache; then
+           && sudo apt-get install -y g++-13; then
           echo "Installed g++-13 via PPA"
-          sudo update-alternatives --set gcc /usr/bin/gcc-13
-          sudo update-alternatives --set g++ /usr/bin/g++-13
+          GCC_BIN=gcc-13
+          GXX_BIN=g++-13
         else
-          echo "::warning::g++-13 install failed, falling back to g++-12"
-          sudo apt-get install -y g++-12 ccache
-          sudo update-alternatives --set gcc /usr/bin/gcc-12
-          sudo update-alternatives --set g++ /usr/bin/g++-12
+          echo "::warning::g++-13 PPA install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12
+          GCC_BIN=gcc-12
+          GXX_BIN=g++-12
         fi
+        # /usr/local/bin is earlier in PATH than /usr/bin, so a
+        # symlink there transparently re-points `g++`/`gcc` for
+        # subsequent steps. More robust than `update-alternatives
+        # --set` (which requires `--install` first to register the
+        # alternative entry; PPA-installed g++-13 does not always
+        # auto-register, and `--set` then fails with "no
+        # alternatives for gcc").
+        sudo ln -sf "/usr/bin/$GCC_BIN" /usr/local/bin/gcc
+        sudo ln -sf "/usr/bin/$GXX_BIN" /usr/local/bin/g++
         g++ --version
 
     - name: Install LLVM (Linux)
@@ -112,10 +155,10 @@ jobs:
         set -e
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }}
-        # Discover LLVMConfig.cmake deterministically (the path is
-        # /usr/lib/llvm-14/lib/cmake/llvm/LLVMConfig.cmake on
-        # Ubuntu 22.04, but locating it via dpkg file list keeps
-        # this robust if the path ever changes).
+        # Discover LLVMConfig.cmake deterministically via dpkg
+        # file list (the path is /usr/lib/llvm-14/lib/cmake/llvm/
+        # LLVMConfig.cmake on Ubuntu 22.04, but the dpkg lookup
+        # is robust to path changes across Ubuntu releases).
         LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
           | grep 'LLVMConfig\.cmake$' | head -1)
         if [ -z "$LLVM_CONFIG_CMAKE" ]; then
@@ -143,19 +186,42 @@ jobs:
         echo "Discovered LLVM_DIR=$LLVM_DIR"
         clang --version
 
-    # ---- Windows: llvm-actions + MSVC ---------------------------
-    - name: Setup LLVM (Windows)
-      if: runner.os == 'Windows'
-      uses: llvm-actions/setup-llvm@v1
-      with:
-        # setup-llvm@v1 exports `LLVM_DIR` automatically when
-        # given a version, which is exactly what CMake's
-        # find_package(LLVM) needs.
-        llvm-version: ${{ env.LLVM_VERSION }}
-
+    # ---- Windows: MSVC + downloaded LLVM ------------------------
     - name: Setup MSVC (Windows)
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
+
+    # KyleMayes/install-llvm-action@v2 downloads official LLVM
+    # binaries (which include dev headers, unlike the
+    # Chocolatey-bundled LLVM on the runner image — see
+    # actions/runner-images#12565). The action exports `LLVM_PATH`;
+    # the next step derives `LLVM_DIR` for find_package(LLVM).
+    - name: Install LLVM (Windows)
+      if: runner.os == 'Windows'
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: ${{ env.LLVM_VERSION }}
+
+    - name: Set LLVM_DIR for CMake (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        set -e
+        # install-llvm-action puts the install at $LLVM_PATH; the
+        # CMake config files live at $LLVM_PATH/lib/cmake/llvm/.
+        if [ -z "$LLVM_PATH" ]; then
+          echo "::error::LLVM_PATH is not set; install-llvm-action did not run?"
+          exit 1
+        fi
+        LLVM_DIR="$LLVM_PATH/lib/cmake/llvm"
+        if [ ! -f "$LLVM_DIR/LLVMConfig.cmake" ]; then
+          echo "::error::LLVMConfig.cmake not found at $LLVM_DIR"
+          echo "LLVM_PATH was: $LLVM_PATH"
+          ls -la "$LLVM_PATH" || true
+          exit 1
+        fi
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+        echo "Discovered LLVM_DIR=$LLVM_DIR"
 
     # ---- CMake configure (BUILD_VERILATOR=OFF for fast CI) ------
     - name: Configure CMake
@@ -193,7 +259,9 @@ jobs:
         path: build/compile_commands.json
         if-no-files-found: ignore
 
+  # ---------------------------------------------------------------
   # Code quality checks (Linux only)
+  # ---------------------------------------------------------------
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-22.04
@@ -212,24 +280,37 @@ jobs:
         sudo apt-get install -y software-properties-common
         if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
            && sudo apt-get update \
-           && sudo apt-get install -y g++-13 clang-tidy; then
+           && sudo apt-get install -y g++-13; then
           echo "Installed g++-13 via PPA"
-          sudo update-alternatives --set gcc /usr/bin/gcc-13
-          sudo update-alternatives --set g++ /usr/bin/g++-13
+          GCC_BIN=gcc-13
+          GXX_BIN=g++-13
         else
-          echo "::warning::g++-13 install failed, falling back to g++-12"
-          sudo apt-get install -y g++-12 clang-tidy
-          sudo update-alternatives --set gcc /usr/bin/gcc-12
-          sudo update-alternatives --set g++ /usr/bin/g++-12
+          echo "::warning::g++-13 PPA install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12
+          GCC_BIN=gcc-12
+          GXX_BIN=g++-12
         fi
+        sudo ln -sf "/usr/bin/$GCC_BIN" /usr/local/bin/gcc
+        sudo ln -sf "/usr/bin/$GXX_BIN" /usr/local/bin/g++
         g++ --version
 
-    - name: Install LLVM (Linux)
+    - name: Install LLVM and clang-tidy
       shell: bash
       run: |
         set -e
+        # Pin clang-tidy to the same LLVM major version as the
+        # build jobs, so diagnostics are consistent. Default apt
+        # clang-tidy is 10 on Ubuntu 22.04, which gives different
+        # results from LLVM 14.
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
-                                clang-${{ env.LLVM_VERSION }}
+                                clang-${{ env.LLVM_VERSION }} \
+                                clang-tidy-${{ env.LLVM_VERSION }}
+        # Register clang-tidy-14 as the default `clang-tidy` so
+        # `run-clang-tidy` (a pip wrapper) invokes the pinned
+        # version. `update-alternatives --install` is idempotent on
+        # the same path; re-running this step is safe.
+        sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy \
+          /usr/bin/clang-tidy-${{ env.LLVM_VERSION }} 100
         LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
           | grep 'LLVMConfig\.cmake$' | head -1)
         if [ -z "$LLVM_CONFIG_CMAKE" ]; then
@@ -251,21 +332,31 @@ jobs:
     - name: Run clang-tidy
       shell: bash
       run: |
-        python3 -m pip install run-clang-tidy
+        python3 -m pip install --quiet run-clang-tidy
+        # Check both src/ cpp files and include/ headers. The
+        # latter is the public API surface where inline-defined
+        # bugs hide; -header-filter='.*' is the right scope.
         run-clang-tidy -p build -j$(nproc) \
           -checks='readability-*,modernize-*,performance-*,bugprone-*' \
           -header-filter='.*' \
-          'src/.*\.cpp$'
+          'src/.*\.cpp$' 'include/.*\.h$'
       continue-on-error: true
 
-  # Nightly full build including Verilator. Triggered by cron or
-  # manual workflow_dispatch; does NOT run on push or PR.
-  # Verilator's cold build is 10-30 min, so we keep it out of the
+  # ---------------------------------------------------------------
+  # Nightly full build including Verilator. Triggered by cron
+  # (02:00 UTC, main branch only) or manual workflow_dispatch.
+  # Verilator's cold build is 10-30 min, so it stays out of the
   # PR feedback loop while still validating the full stack daily.
+  # ---------------------------------------------------------------
   nightly-verilator:
     name: Nightly Verilator Build
     runs-on: ubuntu-22.04
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Only run on main for cron (develop nightly would waste 30
+    # min on a non-default branch); workflow_dispatch is always
+    # allowed for ad-hoc verification.
+    if: |
+      (github.event_name == 'schedule' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
 
     env:
       BUILD_VERILATOR: 'ON'
@@ -289,17 +380,19 @@ jobs:
                 libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev \
                 libgmp-dev autoconf help2man; then
           echo "Installed g++-13 via PPA"
-          sudo update-alternatives --set gcc /usr/bin/gcc-13
-          sudo update-alternatives --set g++ /usr/bin/g++-13
+          GCC_BIN=gcc-13
+          GXX_BIN=g++-13
         else
-          echo "::warning::g++-13 install failed, falling back to g++-12"
+          echo "::warning::g++-13 PPA install failed, falling back to g++-12"
           sudo apt-get install -y g++-12 ccache \
                 flex bison perl python3 make \
                 libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev \
                 libgmp-dev autoconf help2man
-          sudo update-alternatives --set gcc /usr/bin/gcc-12
-          sudo update-alternatives --set g++ /usr/bin/g++-12
+          GCC_BIN=gcc-12
+          GXX_BIN=g++-12
         fi
+        sudo ln -sf "/usr/bin/$GCC_BIN" /usr/local/bin/gcc
+        sudo ln -sf "/usr/bin/$GXX_BIN" /usr/local/bin/g++
         g++ --version
 
     - name: Install LLVM
@@ -328,12 +421,27 @@ jobs:
         -DENABLE_ASAN=OFF
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-    # Build the verilator target first (10-30 min cold, seconds
-    # warm) so the rest of the build can find the installed
-    # verilator binary at configure-time deps.
+    # Build verilator first (10-30 min cold, seconds warm) so the
+    # rest of the build can use the installed binary. Stream the
+    # log to a file so it can be uploaded as an artifact below.
     - name: Build verilator
       shell: bash
-      run: cmake --build build --target verilator -j$(nproc)
+      run: |
+        set -o pipefail
+        cmake --build build --target verilator -j$(nproc) 2>&1 | tee verilator-build.log
+        rc=$?
+        if [ $rc -ne 0 ]; then
+          echo "::error::verilator build failed with exit $rc"
+          exit $rc
+        fi
+
+    - name: Upload verilator build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: verilator-build-log
+        path: verilator-build.log
+        if-no-files-found: ignore
 
     - name: Build CppHDL
       shell: bash
