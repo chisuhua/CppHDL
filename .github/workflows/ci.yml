@@ -209,19 +209,26 @@ jobs:
         set -e
         # install-llvm-action puts the install at $LLVM_PATH; the
         # CMake config files live at $LLVM_PATH/lib/cmake/llvm/.
+        # Use cygpath + find for robust path handling on Windows
+        # (the literal Windows path with backslashes / spaces
+        # breaks Git Bash's `[ -f ]` test on some runner images).
         if [ -z "$LLVM_PATH" ]; then
           echo "::error::LLVM_PATH is not set; install-llvm-action did not run?"
           exit 1
         fi
-        LLVM_DIR="$LLVM_PATH/lib/cmake/llvm"
-        if [ ! -f "$LLVM_DIR/LLVMConfig.cmake" ]; then
-          echo "::error::LLVMConfig.cmake not found at $LLVM_DIR"
-          echo "LLVM_PATH was: $LLVM_PATH"
-          ls -la "$LLVM_PATH" || true
+        LLVM_PATH_UNIX="$(cygpath -u "$LLVM_PATH" 2>/dev/null || echo "$LLVM_PATH")"
+        LLVM_CONFIG="$(find "$LLVM_PATH_UNIX" -name 'LLVMConfig.cmake' -type f 2>/dev/null | head -1)"
+        if [ -z "$LLVM_CONFIG" ]; then
+          echo "::error::LLVMConfig.cmake not found under $LLVM_PATH (searched: $LLVM_PATH_UNIX)"
+          echo "Directory listing (depth 3):"
+          find "$LLVM_PATH_UNIX" -maxdepth 3 -type d 2>/dev/null || ls -la "$LLVM_PATH"
           exit 1
         fi
-        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
-        echo "Discovered LLVM_DIR=$LLVM_DIR"
+        LLVM_DIR_UNIX="$(dirname "$LLVM_CONFIG")"
+        # Export as unix-style path; CMake's find_package accepts
+        # both forward and backward slashes on Windows.
+        echo "LLVM_DIR=$LLVM_DIR_UNIX" >> "$GITHUB_ENV"
+        echo "Discovered LLVMConfig.cmake at $LLVM_CONFIG"
 
     # ---- CMake configure (BUILD_VERILATOR=OFF for fast CI) ------
     - name: Configure CMake
