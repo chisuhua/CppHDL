@@ -55,31 +55,6 @@ template <typename T> auto logic_buffer<T>::lsb() const {
 }
 
 // 类型转换增强实现
-template <typename T>
-template <unsigned NewWidth>
-auto logic_buffer<T>::as() const {
-    if constexpr (NewWidth > T::width) {
-        return zero_extend(*static_cast<const T *>(this), NewWidth);
-    } else if constexpr (NewWidth < T::width) {
-        return bits(*static_cast<const T *>(this), NewWidth - 1, 0);
-    } else {
-        return *static_cast<const T *>(this);
-    }
-}
-
-template <typename T>
-template <unsigned NewWidth>
-auto logic_buffer<T>::sext() const {
-    static_assert(NewWidth >= T::width, "New width must be >= current width");
-    return sign_extend(*static_cast<const T *>(this), NewWidth);
-}
-
-template <typename T>
-template <unsigned NewWidth>
-auto logic_buffer<T>::zext() const {
-    static_assert(NewWidth >= T::width, "New width must be >= current width");
-    return zero_extend(*static_cast<const T *>(this), NewWidth);
-}
 
 // 查询操作实现
 template <typename T> bool logic_buffer<T>::is_zero() const {
