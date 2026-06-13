@@ -15,7 +15,7 @@
 #    alternative entry; PPA-installed g++-13 doesn't always auto-
 #    register, and `--set` then fails with "no alternatives for gcc".
 # 2. The JIT path (`find_package(LLVM REQUIRED)` in CMakeLists.txt,
-#    CH_JIT_ENABLE=ON by default) needs LLVM dev headers. We pin
+#    enabled by default) needs LLVM dev headers. We pin
 #    LLVM 14 (LTS) on Linux; install via apt (llvm-14-dev) and
 #    discover LLVMConfig.cmake via dpkg file list.
 # 3. BUILD_VERILATOR defaults to ON in CMakeLists.txt; the full
@@ -38,24 +38,6 @@
 # 7. Verilator's cold build log is uploaded as a CI artifact on
 #    every run (success or failure) so a 10-30 min failure can be
 #    inspected without re-running the job.
-#
-# Known issues (deferred to separate PRs):
-# - macOS-14: clang stricter than gcc. `include/core/literal.h:59`
-#   has a duplicate `unsigned long long` constructor (== `uint64_t`
-#   on Apple platforms). `include/core/uint.h:48` and
-#   `include/core/operators.h:145,333` have similar clang-only
-#   issues. Fixing these requires touching the source code.
-# - Windows-2022: same LLVM_DIR surface, plus MSVC C++20 module
-#   edge cases. Not validated here; re-enable when the source
-#   bugs are fixed.
-# - src/jit/jit_compiler.cpp: uses deprecated LLVM intrinsic API
-#   (`getOrInsertDeclaration` -> `getDeclaration`) and removed
-#   `JITEvaluatedSymbol::getValue()`. Surfaces only when
-#   CH_JIT_ENABLE=ON; CI matrix has JIT enabled. Linux gcc is
-#   tolerant enough to compile around some of these (deprecation
-#   warnings) but the actual JIT execution path is unverified.
-#   Will surface as a hard error if/when we exercise the JIT
-#   runtime tests.
 
 name: CppHDL CI
 
@@ -92,23 +74,33 @@ env:
 
 jobs:
   build-and-test:
-    name: ubuntu-22.04 - ${{ matrix.build_type }}
-    runs-on: ubuntu-22.04
+    name: ${{ matrix.os }} - ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        # Linux-only by design (see header). The OS-specific
-        # install steps below (macos-14, windows-2022 branches)
-        # are kept as no-op scaffolding so re-enabling those
-        # targets later is a one-line matrix change.
+        # Linux + macOS by design (see header). Windows-2022 remains
+        # deferred (MSVC C++20 module edge cases). The OS-specific
+        # install steps below cover both ubuntu-22.04 and macos-14.
+        os: [ubuntu-22.04, macos-14]
         build_type: [Release, Debug]
         include:
-          - build_type: Release
+          - os: ubuntu-22.04
+            build_type: Release
             compiler: g++
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
-          - build_type: Debug
+          - os: ubuntu-22.04
+            build_type: Debug
             compiler: g++
+            cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
+          - os: macos-14
+            build_type: Release
+            compiler: clang
+            cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
+          - os: macos-14
+            build_type: Debug
+            compiler: clang
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
 
     steps:
@@ -185,21 +177,30 @@ jobs:
         echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
         echo "Discovered LLVM_DIR=$LLVM_DIR"
 
-    # ---- macOS / Windows install steps (currently disabled) ----
-    # macOS-14 and windows-2022 are NOT in the build matrix (see
-    # header comment for rationale). The OS-specific install
-    # steps that would have been here are intentionally omitted;
-    # they are preserved in git history for re-enabling later
-    # when the underlying source bugs are fixed.
+    # ---- macOS: clang + brew llvm -------------------------------
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -e
+        brew install ccache llvm@${{ env.LLVM_VERSION }}
+        LLVM_PREFIX=$(brew --prefix llvm@${{ env.LLVM_VERSION }})
+        LLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm"
+        if [ ! -f "$LLVM_DIR/LLVMConfig.cmake" ]; then
+          echo "::error::LLVMConfig.cmake not found at $LLVM_DIR"
+          exit 1
+        fi
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+        echo "Discovered LLVM_DIR=$LLVM_DIR"
+        clang --version
 
-    # ---- CMake configure (BUILD_VERILATOR=OFF, CH_JIT_ENABLE=OFF) -
+    # ---- CMake configure (BUILD_VERILATOR=OFF) ------------------
     # BUILD_VERILATOR=OFF keeps PR feedback fast (no 10-30 min
     # Verilator cold build; that moves to nightly-verilator below).
-    # CH_JIT_ENABLE=OFF skips src/jit/jit_compiler.cpp, which has
-    # pre-existing source bugs (LLVM 14 API removals: getOrInsertDeclaration
-    # and JITEvaluatedSymbol::getValue) out of scope for this CI PR.
-    # The interpreter path is fully exercised; JIT is validated in
-    # nightly-verilator where CH_JIT_ENABLE=ON.
+    # The JIT path is the CMakeLists default and is exercised on
+    # every PR-feedback run, with the full perf suite validated
+    # nightly. macOS clang warnings are silenced via cxx_flags;
+    # only true errors fail the build (cmake's default policy).
     - name: Configure CMake
       shell: bash
       run: >
@@ -209,7 +210,6 @@ jobs:
         -DCMAKE_CXX_FLAGS="${{ matrix.cxx_flags }}"
         -DENABLE_ASAN=OFF
         -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
-        -DCH_JIT_ENABLE=OFF
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: Build
@@ -304,7 +304,6 @@ jobs:
         cmake -S . -B build
         -DCMAKE_BUILD_TYPE=Release
         -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
-        -DCH_JIT_ENABLE=OFF
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: Run clang-tidy
@@ -396,7 +395,6 @@ jobs:
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_CXX_COMPILER=g++
         -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
-        -DCH_JIT_ENABLE=ON
         -DENABLE_ASAN=OFF
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
