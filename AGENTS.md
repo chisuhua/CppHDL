@@ -161,6 +161,8 @@ ctest --output-on-failure
 - I2C controller is simplified (no ACK handling)
 - **Verilator 三路 perf 对比** (interpreter / JIT / Verilator) 默认要求 `BUILD_VERILATOR=ON`；CI/快速迭代用 `-DBUILD_VERILATOR=OFF`，Verilator 列在 perf 报告中显示 `UNSUPPORTED`（详见 `docs/developer_guide/verilator-integration.md`）
 
+- **macOS CI status (post PR-16 followup)**: macOS-14 enabled (clang/arm64 compile errors fixed). Windows-2022 still deferred (one-line matrix change when MSVC C++20 module edge cases are addressed). JIT path validated nightly (CH_JIT_ENABLE=ON default, -DCH_JIT_ENABLE=OFF only applies to PR-feedback matrix per design notes in .github/workflows/ci.yml).
+
 ## 已消除的过时信息
 - "7 个禁用测试" → fix-test-completeness 计划将 4 个被注释的 `add_catch_test` 重新启用（`test_branch_predictor`、`test_cache_pipeline`、`test_phase4_chlib`、`test_rv32i_pipeline`），目标 0 禁用
 - `test_mod_width_simple` → 已被 `test_mod_width` 覆盖，冗余

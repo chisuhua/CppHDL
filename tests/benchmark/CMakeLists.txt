@@ -58,14 +58,9 @@ endif()
 # 'verilator' on PATH, which will correctly produce UNSUPPORTED rows).
 #
 # The perf_tests binary runs multiple internal benchmarks, some of
-# which exercise the JIT path. When CH_JIT_ENABLE=OFF (the PR-feedback
-# matrix), those internal benchmarks either fail or hang past the
-# 300s timeout, causing the whole ctest invocation to report a
-# failure. Gate the test registration on CH_JIT_ENABLE so the
-# binary still builds (useful for local debugging) but isn't run
-# in the PR feedback loop. nightly-verilator (CH_JIT_ENABLE=ON)
-# validates the full perf suite.
-if(CH_JIT_ENABLE)
+# which exercise the JIT path. The JIT is enabled by default in
+# CMakeLists.txt, so the test always runs in CI. The 300s timeout
+# guards against hangs on malformed DUTs.
 if(CPPHDL_VERILATOR_WRAPPER)
     add_test(NAME perf_tests COMMAND perf_tests --all
         --verilator=${CPPHDL_VERILATOR_WRAPPER})
@@ -80,7 +75,6 @@ else()
         LABELS "perf"
         TIMEOUT 300
     )
-endif()
 endif()
 
 target_compile_features(perf_tests PRIVATE cxx_std_20)

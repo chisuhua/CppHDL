@@ -73,7 +73,6 @@ add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 
 # W1: TC-08 JIT register path perf regression (perf-report-followup.md Task 1)
-if(CH_JIT_ENABLE)
 add_catch_test(perf_jit_reg benchmark/test_jit_reg_perf.cpp)
 set_tests_properties(perf_jit_reg PROPERTIES LABELS "perf" TIMEOUT 120)
 # W2: TC-07 JIT small-graph threshold (perf-report-followup.md Task 2)
@@ -83,7 +82,6 @@ set_tests_properties(perf_jit_smallgraph PROPERTIES LABELS "perf" TIMEOUT 60)
 add_catch_test(perf_build_us benchmark/test_build_us_present.cpp)
 set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-endif()
 # W7: md/csv/json byte-equality (perf-report-followup.md Task 7)
 # CATCH_AMALGAMATED_CUSTOM_MAIN + CATCH_CONFIG_RUNNER disable the
 # default main() in catch_amalgamated.cpp so the test can provide its
@@ -105,10 +103,8 @@ set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
 # on a combinational XOR chain, which native code emission must win.
 # Two TEST_CASEs scale depth (500 strict / 1000 ratio>=2.0x) to confirm
 # JIT scalability grows with design size.
-if(CH_JIT_ENABLE)
 add_catch_test(perf_jit_vs_interp_ratio benchmark/test_jit_vs_interp_ratio.cpp)
 set_tests_properties(perf_jit_vs_interp_ratio PROPERTIES LABELS "perf" TIMEOUT 120)
-endif()
 
 # W9: perf regression gate (perf-report-followup.md Task 9)
 # Runs perf_regression against the checked-in perf_baseline.json.
@@ -116,7 +112,6 @@ endif()
 # ctest -L perf. The test uses the source-tree absolute paths so the
 # baseline is found regardless of CWD; the current perf_results.json is
 # expected to be in the worktree root (as produced by perf_main.cpp).
-if(CH_JIT_ENABLE)
 add_test(NAME perf_regression
     COMMAND perf_regression
     ${CMAKE_SOURCE_DIR}/tests/benchmark/perf_baseline.json
@@ -125,7 +120,6 @@ add_test(NAME perf_regression
 set_tests_properties(perf_regression PROPERTIES
     LABELS "perf" TIMEOUT 60
 )
-endif()
 
 # W11: Verilator integration test (perf-report-followup.md followup).
 # Tags: [perf][verilator][integration]. Skips when BUILD_VERILATOR=OFF
@@ -273,12 +267,9 @@ target_compile_definitions(test_verilog_external PRIVATE
 # verilator invocation, resource cleanup).
 add_catch_test(test_verilator_backend test_verilator_backend.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
-# JIT compiler tests (skipped when CH_JIT_ENABLE=OFF; the JIT module
-# is not built in that configuration, so these tests cannot link).
-if(CH_JIT_ENABLE)
+# JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
 add_catch_test(test_jit_concat test_jit_concat.cpp)
-endif()
 
 # test_mod_width_simple: 重写为 Catch2 v3 + make_literal 后的最小烟雾测试
 # 详细测试见 test_mod_width
