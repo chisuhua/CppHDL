@@ -961,3 +961,34 @@ TEST_CASE("Operation Result Widths",
         REQUIRE(sim.get_value(result2) == 5 * 7 + 2); // 37
     }
 }
+
+TEST_CASE("compile-time arithmetic folding (regression for e59c0f4)", "[operators][regression]") {
+    // CRITICAL: must use primitive int types, not ch_uint<N>
+    // The static_assert at operators.h:333 only fires when BOTH
+    // LHS and RHS satisfy ArithmeticLiteral<> (i.e., std::is_arithmetic_v
+    // is true). ch_uint<N> satisfies ValidWidthOperand<> but NOT
+    // ArithmeticLiteral<>. Using ch_uint<8> here would route through
+    // the ValidWidthOperand branch and never hit the broken
+    // ArithmeticLiteral branch — the test would be vacuous.
+
+    int a = 5;
+    int b = 3;
+
+    // 5 + 3 = 8 (int + int → ArithmeticLiteral branch)
+    REQUIRE((a + b) == 8);
+
+    // 5 - 3 = 2
+    REQUIRE((a - b) == 2);
+
+    // 5 & 3 = 1
+    REQUIRE((a & b) == 1);
+
+    // 5 ^ 3 = 6
+    REQUIRE((a ^ b) == 6);
+
+    // 5 == 3 → false
+    REQUIRE_FALSE(a == b);
+
+    // 5 < 10 → true
+    REQUIRE(a < 10);
+}
