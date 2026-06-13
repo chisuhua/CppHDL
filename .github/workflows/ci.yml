@@ -281,6 +281,11 @@ jobs:
       shell: bash
       run: |
         set -e
+        # Add LLVM official APT repo (Ubuntu 22.04 jammy only
+        # ships llvm-14 in main; llvm-18 needs apt.llvm.org).
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-get update
         # Pin clang-tidy to the same LLVM major version as the
         # build jobs, so diagnostics are consistent. Default apt
         # clang-tidy is 10 on Ubuntu 22.04, which gives different
@@ -382,6 +387,11 @@ jobs:
       shell: bash
       run: |
         set -e
+        # Add LLVM official APT repo (Ubuntu 22.04 jammy only
+        # ships llvm-14 in main; llvm-18 needs apt.llvm.org).
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-get update
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }}
         LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
