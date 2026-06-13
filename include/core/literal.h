@@ -56,8 +56,6 @@ struct ch_literal_runtime {
     constexpr ch_literal_runtime(int64_t v) noexcept
         : ch_literal_runtime(static_cast<uint64_t>(v), compute_width(v)) {}
 
-    constexpr ch_literal_runtime(unsigned long long v) noexcept
-        : ch_literal_runtime(static_cast<uint64_t>(v), compute_width(v)) {}
 
     constexpr ch_literal_runtime(int v) noexcept
         : ch_literal_runtime(v, compute_width(v)) {}
