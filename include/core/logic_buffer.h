@@ -43,13 +43,13 @@ template <typename T> struct logic_buffer {
     // === 类型转换增强 ===
 
     // 通用类型转换
-    template <unsigned NewWidth> auto as() const;
+
 
     // 符号扩展
-    template <unsigned NewWidth> auto sext() const;
+
 
     // 零扩展
-    template <unsigned NewWidth> auto zext() const;
+
 
     // === 查询操作 ===
 
