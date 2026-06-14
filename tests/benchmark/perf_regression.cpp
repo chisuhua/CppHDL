@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <array>
 
 struct Row {
     std::string test_name;
@@ -122,6 +123,36 @@ std::string make_key(const Row& r) {
     return r.test_name + "|" + r.params + "|" + r.backend;
 }
 
+// Per-backend regression threshold. Rationale (Oracle consultation, 2026-06-14):
+// the noise distribution is empirically bimodal — interpreter backend has
+// 1.37x–2.03x per-run max/min (virtual-call dispatch + OS scheduling jitter
+// dominate), JIT is 1.07x–1.61x (compile-once + tight inner loop), and
+// verilator is expected to be as stable as JIT. A single global threshold
+// either spams the CI with false positives (1.2x) or hides real JIT
+// regressions (2.0x). Per-backend thresholds match the structural noise
+// regime of each execution path. See docs/benchmark/perf_comparison_report.md
+// §6 for noise distribution data.
+struct BackendThreshold {
+    const char* name;
+    double threshold;
+};
+constexpr std::array<BackendThreshold, 3> kBackendThresholds = {{
+    {"interpreter", 2.5},
+    {"jit",         1.6},
+    {"verilator",   1.3},
+}};
+
+double threshold_for_backend(const std::string& backend) {
+    for (const auto& bt : kBackendThresholds) {
+        if (backend == bt.name) return bt.threshold;
+    }
+    // Unknown / LEGACY (backend == "") — be conservative and skip
+    // comparison rather than risk masking a real regression. Legacy
+    // rows use iterations=1 (no median over multiple runs), so any
+    // single-run comparison is noise-dominated.
+    return 0.0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -137,26 +168,36 @@ int main(int argc, char** argv) {
     }
     std::map<std::string, Row> bmap;
     for (const auto& r : baseline) bmap[make_key(r)] = r;
-    constexpr double THRESHOLD = 1.2;
     int regressions = 0;
     int compared = 0;
+    int skipped_legacy = 0;
     for (const auto& r : current) {
         auto it = bmap.find(make_key(r));
         if (it == bmap.end()) continue;  // new row, no baseline
         double base = it->second.median_us;
         if (base <= 0.0) continue;       // baseline had no measurement
+        double threshold = threshold_for_backend(r.backend);
+        if (threshold <= 0.0) {
+            ++skipped_legacy;
+            continue;  // LEGACY or unknown backend — see threshold_for_backend
+        }
         ++compared;
         double ratio = r.median_us / base;
-        if (ratio > THRESHOLD) {
+        if (ratio > threshold) {
             std::cerr << "REGRESSION: " << make_key(r)
                       << " baseline=" << base
                       << "us current=" << r.median_us
-                      << "us ratio=" << ratio << "\n";
+                      << "us ratio=" << ratio
+                      << " (threshold=" << threshold << "x)\n";
             ++regressions;
         }
     }
-    std::cout << "Compared " << compared << " rows against baseline ("
-              << baseline_path << "); threshold=" << THRESHOLD << "x\n";
+    std::cout << "Compared " << compared
+              << " rows against baseline (" << baseline_path
+              << "); thresholds per-backend (interpreter 2.5x, "
+              << "jit 1.6x, verilator 1.3x); "
+              << "skipped " << skipped_legacy
+              << " LEGACY/unknown-backend row(s)\n";
     if (regressions > 0) {
         std::cerr << "\n" << regressions
                   << " regression(s) detected.\n";
