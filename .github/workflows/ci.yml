@@ -16,9 +16,9 @@
 #    register, and `--set` then fails with "no alternatives for gcc".
 # 2. The JIT path (`find_package(LLVM REQUIRED)` in CMakeLists.txt,
 #    enabled by default) needs LLVM dev headers. We pin
-#    LLVM 18 on Linux (modern, matches local dev machines); install via
+#    LLVM 22 on Linux (modern, matches local dev machines); install via
 #    LLVM official APT repo (apt.llvm.org) since Ubuntu 22.04 jammy only
-#    ships llvm-14 in main. On macOS: brew install llvm@18.
+#    ships llvm-14 in main. On macOS: brew install llvm@22.
 # 3. BUILD_VERILATOR defaults to ON in CMakeLists.txt; the full
 #    Verilator build is 10-30 min cold and only runs in the
 #    separate `nightly-verilator` job (cron + manual dispatch).
@@ -65,10 +65,10 @@ permissions:
 
 env:
   # Pinned LLVM version across all platforms; matches Ubuntu
-  # 22.04 apt.llvm.org jammy repo (llvm-18-dev), Homebrew
-  # (llvm@18), and KyleMayes/install-llvm-action v2 (which
-  # downloads official 18.x binaries on Windows).
-  LLVM_VERSION: '18'
+  # 22.04 apt.llvm.org jammy repo (llvm-22-dev), Homebrew
+  # (llvm@22), and KyleMayes/install-llvm-action v2 (which
+  # downloads official 22.x binaries on Windows).
+  LLVM_VERSION: '22'
   # BUILD_VERILATOR=OFF for the fast default path; overridden to
   # ON in the `nightly-verilator` job below.
   BUILD_VERILATOR: 'OFF'
@@ -163,16 +163,17 @@ jobs:
       run: |
         set -e
         # Add LLVM official APT repo (Ubuntu 22.04 jammy only
-        # ships llvm-14 in main; llvm-18 needs apt.llvm.org).
+        # ships llvm-14 in main; llvm-22 needs apt.llvm.org).
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt-get update
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }}
         # Discover LLVMConfig.cmake deterministically via dpkg
-        # file list (the path is /usr/lib/llvm-14/lib/cmake/llvm/
-        # LLVMConfig.cmake on Ubuntu 22.04, but the dpkg lookup
-        # is robust to path changes across Ubuntu releases).
+        # file list (the path is /usr/lib/llvm-22/lib/cmake/llvm/
+        # LLVMConfig.cmake on Ubuntu 22.04 with the apt.llvm.org
+        # jammy repo, but the dpkg lookup is robust to path changes
+        # across Ubuntu releases).
         LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
           | grep 'LLVMConfig\.cmake$' | head -1)
         if [ -z "$LLVM_CONFIG_CMAKE" ]; then
@@ -282,9 +283,9 @@ jobs:
       run: |
         set -e
         # Add LLVM official APT repo (Ubuntu 22.04 jammy only
-        # ships llvm-14 in main; llvm-18 needs apt.llvm.org).
+        # ships llvm-14 in main; llvm-22 needs apt.llvm.org).
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt-get update
         # Pin clang-tidy to the same LLVM major version as the
         # build jobs, so diagnostics are consistent. Default apt
@@ -293,7 +294,7 @@ jobs:
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }} \
                                 clang-tidy-${{ env.LLVM_VERSION }}
-        # Register clang-tidy-14 as the default `clang-tidy` so
+        # Register clang-tidy-22 as the default `clang-tidy` so
         # `run-clang-tidy` (a pip wrapper) invokes the pinned
         # version. `update-alternatives --install` is idempotent on
         # the same path; re-running this step is safe.
@@ -388,9 +389,9 @@ jobs:
       run: |
         set -e
         # Add LLVM official APT repo (Ubuntu 22.04 jammy only
-        # ships llvm-14 in main; llvm-18 needs apt.llvm.org).
+        # ships llvm-14 in main; llvm-22 needs apt.llvm.org).
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt-get update
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }}
