@@ -24,22 +24,37 @@
 
 namespace {
 
-// Look for a "build_us" field in the JSON content and return its numeric
-// value. Returns -1.0 if not found or unparseable.
+// Look for a "build_us" field in a PASS row and return its numeric value.
+// Returns -1.0 if not found. LEGACY rows (TC-01/02/04/06) predate W3 and
+// carry build_us=0; they must be skipped so the test asserts what W3
+// actually instrumented.
 double find_build_us_value(const std::string& json) {
-    auto pos = json.find("\"build_us\"");
-    if (pos == std::string::npos) return -1.0;
-    pos = json.find(':', pos);
-    if (pos == std::string::npos) return -1.0;
-    ++pos;
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\n' ||
-           json[pos] == '\r' || json[pos] == '\t')) ++pos;
-    if (pos >= json.size()) return -1.0;
-    // Read the number (may end with comma, newline, or brace).
-    size_t end = pos;
-    while (end < json.size() && json[end] != ',' && json[end] != '\n' &&
-           json[end] != '}' && json[end] != ' ') ++end;
-    return std::atof(json.substr(pos, end - pos).c_str());
+    // Iterate over each top-level object in the "runs" array.
+    size_t pos = 0;
+    while ((pos = json.find("\"build_us\"", pos)) != std::string::npos) {
+        // Walk backwards to find the start of this row's object.
+        size_t obj_start = json.rfind('{', pos);
+        if (obj_start == std::string::npos) break;
+        size_t obj_end = json.find('}', pos);
+        if (obj_end == std::string::npos) break;
+        std::string obj = json.substr(obj_start, obj_end - obj_start + 1);
+        // Skip LEGACY rows (predate W3, build_us=0 by design).
+        if (obj.find("\"LEGACY\"") != std::string::npos) {
+            pos = obj_end;
+            continue;
+        }
+        // Parse the build_us value from this PASS row.
+        size_t colon = obj.find(':', obj.find("\"build_us\""));
+        if (colon == std::string::npos) { pos = obj_end; continue; }
+        ++colon;
+        while (colon < obj.size() && (obj[colon] == ' ' || obj[colon] == '\n' ||
+               obj[colon] == '\r' || obj[colon] == '\t')) ++colon;
+        size_t end = colon;
+        while (end < obj.size() && obj[end] != ',' && obj[end] != '\n' &&
+               obj[end] != '}') ++end;
+        return std::atof(obj.substr(colon, end - colon).c_str());
+    }
+    return -1.0;
 }
 
 } // namespace

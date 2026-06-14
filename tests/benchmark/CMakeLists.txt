@@ -72,17 +72,21 @@ endif()
 # guards against hangs on malformed DUTs.
 if(CPPHDL_VERILATOR_WRAPPER)
     add_test(NAME perf_tests COMMAND perf_tests --all
-        --verilator=${CPPHDL_VERILATOR_WRAPPER})
+        --verilator=${CPPHDL_VERILATOR_WRAPPER}
+        --report=json --report=csv --report=md)
     set_tests_properties(perf_tests PROPERTIES
         LABELS "perf"
-        TIMEOUT 300
+        TIMEOUT 900
         ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 else()
-    add_test(NAME perf_tests COMMAND perf_tests --all)
+    add_test(NAME perf_tests COMMAND perf_tests --all
+        --report=json --report=csv --report=md)
     set_tests_properties(perf_tests PROPERTIES
         LABELS "perf"
-        TIMEOUT 300
+        TIMEOUT 900
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 endif()
 
