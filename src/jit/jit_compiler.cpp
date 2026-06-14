@@ -14,6 +14,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
@@ -850,9 +851,12 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
       case JitOp::XOR_REDUCE: {
         auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
                                      "load_a");
-        auto *ctpop_fn = llvm::Intrinsic::getOrInsertDeclaration(
-            module, llvm::Intrinsic::ctpop, {builder.getInt64Ty()});
-        auto *count = builder.CreateCall(ctpop_fn, {a}, "xor_reduce_pop");
+        // IRBuilder::CreateIntrinsic handles both function-declaration lookup
+        // and call-emission in one call. Avoids getOrInsertDeclaration (LLVM
+        // 20+ rename of getDeclaration) which is not a member in LLVM 18.
+        auto *count = builder.CreateIntrinsic(
+            llvm::Intrinsic::ctpop, {builder.getInt64Ty()}, {a}, nullptr,
+            "xor_reduce_pop");
         auto *parity =
             builder.CreateAnd(count, builder.getInt64(1), "xor_reduce_parity");
         builder.CreateStore(parity, vregs[instr.dst], "store_xor_reduce");
@@ -1137,9 +1141,12 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
       case JitOp::POPCOUNT: {
         auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
                                      "load_a");
-        auto *ctpop_fn = llvm::Intrinsic::getOrInsertDeclaration(
-            module, llvm::Intrinsic::ctpop, {builder.getInt64Ty()});
-        llvm::Value *res = builder.CreateCall(ctpop_fn, {a}, "popcount");
+        // IRBuilder::CreateIntrinsic handles both function-declaration lookup
+        // and call-emission in one call. Avoids getOrInsertDeclaration (LLVM
+        // 20+ rename of getDeclaration) which is not a member in LLVM 18.
+        llvm::Value *res = builder.CreateIntrinsic(
+            llvm::Intrinsic::ctpop, {builder.getInt64Ty()}, {a}, nullptr,
+            "popcount");
         if (instr.bitwidth < 64) {
           uint64_t mask = (1ULL << instr.bitwidth) - 1;
           res = builder.CreateAnd(res, builder.getInt64(mask), "mask_popcount");

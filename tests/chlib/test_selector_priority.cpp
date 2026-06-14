@@ -208,7 +208,12 @@ TEST_CASE("SelectorArbiter: priority selector stress tests",
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     SECTION("Maximum width priority selector") {
-        ch_uint<64> request(0xFFFFFFFFFFFFFFFFUL); // All 64 bits set
+        // Explicit uint64_t cast: on macOS LP64, `unsigned long` is
+        // 64-bit, same as uint64_t, so `0xFFFFFFFFFFFFFFFFUL` is
+        // ambiguous between ch_literal_runtime(uint64_t) and
+        // ch_literal_runtime(int64_t) constructors. Disambiguating
+        // with an explicit type is portable across macOS/Linux.
+        ch_uint<64> request(uint64_t(0xFFFFFFFFFFFFFFFFUL)); // All 64 bits set
         PrioritySelectorResult<64> result = priority_selector<64>(request);
 
         ch::Simulator sim(ctx.get());

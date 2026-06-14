@@ -25,6 +25,15 @@ target_include_directories(perf_regression PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
 )
+# Link against cpphdl (matching perf_tests above) so the target inherits
+# the project's CMAKE_CXX_STANDARD + libc++/libstdc++ link flags. Without
+# this, macOS linker fails with:
+#   "std::length_error::length_error(char const*)", referenced from
+#   perf_regression.cpp.o
+# even when <stdexcept> is included (compile succeeds, link fails).
+if(TARGET cpphdl)
+    target_link_libraries(perf_regression cpphdl)
+endif()
 
 # Copy Verilator harness source files into the build directory so that
 # verilator_runner can read them via relative paths at runtime. Each harness

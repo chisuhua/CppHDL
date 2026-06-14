@@ -121,9 +121,10 @@ constexpr auto convert_for_select(FromType&& value) -> ToType {
         // 将ch_bool转换为ch_uint<1>，然后再扩展
         constexpr unsigned to_width = ch::core::ch_width_v<std::decay_t<ToType>>;
         if constexpr (to_width > 1) {
-            // 使用zext进行零扩展
-            ch::core::ch_uint<1> temp{value};
-            return ch::core::zext<to_width>(temp);
+            // 使用zext进行零扩展。直接传递临时对象而非命名变量，因为
+            // ch_uint<N> 在 C++20 中不是 literal type（无 constexpr 构造器），
+            // 在 constexpr 函数中定义 non-literal-type 变量是 C++23 才允许的。
+            return ch::core::zext<to_width>(ch::core::ch_uint<1>{value});
         } else {
             return ToType{value}; // N==1的情况
         }
@@ -139,11 +140,15 @@ constexpr auto convert_for_select(FromType&& value) -> ToType {
 //           else if (value == case2) result2
 //           else if (value == case3) result3
 //           else default_result
+// Note: not constexpr because ch_bool is not a literal type in C++20
+// (no constexpr constructor). Defining a ch_bool variable in a constexpr
+// function is forbidden before C++23. The function is still called at
+// simulation/elaboration time, never from a constant-expression context.
 template <typename TValue, typename TDefault, typename TCaseValue,
           typename TResult, typename... TRest>
-constexpr auto switch_impl(TValue &&value, TDefault &&default_result,
-                           case_entry<TCaseValue, TResult> current_case,
-                           TRest &&...rest_cases) {
+auto switch_impl(TValue &&value, TDefault &&default_result,
+                 case_entry<TCaseValue, TResult> current_case,
+                 TRest &&...rest_cases) {
     // 检查当前case是否匹配
     ch_bool is_match = (value == current_case.condition);
     // 如果匹配则返回当前结果，否则继续处理剩余case
