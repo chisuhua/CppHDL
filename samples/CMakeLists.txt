@@ -42,6 +42,18 @@ foreach(target ${CH_SAMPLE_TARGETS})
     add_executable(${target} ${target}.cpp)
     target_link_libraries(${target} cpphdl)
     
+    # On macOS, cpphdl transitively links against LLVM-18 (which uses the
+    # libc++ ABI tagged [abi:ue170006]) but does NOT propagate the libc++
+    # link itself. Samples that use std::length_error / std::runtime_error
+    # then fail at link with:
+    #   "std::length_error::length_error(char const*)", referenced from ...
+    # Append -lc++ only on Apple platforms to fix the missing libc++ link
+    # without disturbing Linux (where the system libstdc++ is found
+    # automatically by the linker).
+    if(APPLE)
+        target_link_libraries(${target} "-lc++")
+    endif()
+    
     # 设置C++20标准
     set_target_properties(${target} PROPERTIES
         CXX_STANDARD 20

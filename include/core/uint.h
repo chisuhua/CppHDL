@@ -44,8 +44,15 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
         if (name == "bool_to_uint") {
             this->node_impl_ = val.impl();
         } else {
-            // create new node with provided name
-            this->node_impl_ = zext<N, ch_bool>(val, name).impl();
+            // create new node with provided name. Call node_builder directly rather
+            // than zext<N>(val, name) because this constructor body is parsed during
+            // class template definition (clang is strict, GCC defers); zext lives in
+            // core/operators.h at line ~620 and is not yet visible when uint.h is
+            // included via io.h -> operators.h:12. node_builder, ch_op, and lnode<T>
+            // ARE visible at this point (included earlier in operators.h), so we
+            // inline the same build_operation call that zext would make internally.
+            this->node_impl_ = node_builder::instance().build_operation(
+                ch_op::zext, lnode<ch_bool>(val.impl()), N, false, name, sloc);
         }
     }
 
@@ -149,9 +156,6 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
     template <unsigned U>
     friend inline lnode<ch_uint<U>> get_lnode(const ch_uint<U> &);
     friend ch_bool;
-
-    template <unsigned Width>
-    friend constexpr auto make_uint_result(lnodeimpl *node);
 
     // Bool -> UInt
 };

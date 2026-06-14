@@ -76,6 +76,26 @@ if(CH_JIT_ENABLE)
         add_compile_definitions(CH_JIT_ENABLED=1)
         # 添加 LLVM include 目录
         include_directories(${LLVM_INCLUDE_DIRS})
+        # 添加 LLVM library 目录到 link search path.
+        # On Linux this is /usr/lib/llvm-<ver>/lib which the linker finds
+        # by default, but on macOS Homebrew installs LLVM at
+        # /opt/homebrew/opt/llvm@<ver>/lib which is NOT in the default
+        # linker search path. Without this, sample/test executables that
+        # transitively link LLVM-18 (via cpphdl) fail at link time with
+        # "ld: library 'LLVM-18' not found" on macos-14 CI.
+        if(LLVM_LIBRARY_DIRS)
+            link_directories(${LLVM_LIBRARY_DIRS})
+        endif()
+        # On macOS, LLVM-18 uses the libc++ ABI ([abi:ue170006] in
+        # link errors) but linking against LLVM-18 does NOT propagate the
+        # libc++ link itself. Every target that ends up calling
+        # std::length_error / std::runtime_error / std::bad_function_call
+        # (cpphdl + every sample/example/test executable) then fails at
+        # link with "Undefined symbols" for those types. On Linux the
+        # system libstdc++ is found automatically, so this is macOS-only.
+        if(APPLE)
+            link_libraries("-lc++")
+        endif()
         # 使用检测到的 LLVM 主版本链接 (避免硬编码版本号)
         set(LLVM_LIBS "LLVM-${LLVM_VERSION_MAJOR}")
     else()

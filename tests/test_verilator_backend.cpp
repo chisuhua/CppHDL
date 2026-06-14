@@ -6,6 +6,10 @@
 //   - verilator --cc --build invocation produces obj_dir/Vtop
 //   - dlopen stub is a safe no-op (real dlopen is Phase 3.2)
 //   - IEvalBackend interface is correctly implemented
+// mkdtemp() lives in <unistd.h> on macOS (POSIX) but only in <stdlib.h>
+// on glibc with _XOPEN_SOURCE >= 500 | _BSD_SOURCE. Include <unistd.h>
+// unconditionally to keep both platforms happy.
+#include <unistd.h>
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "codegen_verilog.h"

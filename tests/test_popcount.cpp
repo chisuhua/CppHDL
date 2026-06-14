@@ -44,7 +44,11 @@ TEST_CASE("Popcount operation on various ch_uint types", "[popcount]") {
 
     SECTION("popcount of ch_uint<32>") {
         auto ctx = context("test_ctx");
-        auto value = ch_uint<32>(0xFFFFFFFF);
+        // Explicit uint32_t cast: on macOS LP64, `unsigned int` (0xFFFFFFFF)
+        // is ambiguous between ch_literal_runtime(uint64_t), (int64_t),
+        // and (uint32_t) overloads. Same root cause as
+        // test_selector_priority.cpp / test_selector_arbiter.cpp.
+        auto value = ch_uint<32>(uint32_t(0xFFFFFFFF));
         auto result = popcount(value);
 
         // 对于32位输入，最多有32个1，需要6位表示（0-32）
@@ -53,7 +57,10 @@ TEST_CASE("Popcount operation on various ch_uint types", "[popcount]") {
 
     SECTION("popcount of ch_uint<64>") {
         auto ctx = context("test_ctx");
-        auto value = ch_uint<64>(0xFFFFFFFFFFFFFFFF);
+        // Explicit uint64_t cast: on macOS LP64, `long` (0xFFFFFFFFFFFFFFFF)
+        // is ambiguous between ch_literal_runtime(uint64_t) and (int64_t).
+        // Same root cause as test_selector_priority.cpp / test_selector_arbiter.cpp.
+        auto value = ch_uint<64>(uint64_t(0xFFFFFFFFFFFFFFFF));
         auto result = popcount(value);
 
         // 对于64位输入，最多有64个1，需要7位表示（0-64）

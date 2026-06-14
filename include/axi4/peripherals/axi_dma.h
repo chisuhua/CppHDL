@@ -60,10 +60,20 @@ public:
         ch_reg<ch_bool> data_vld(ch_bool(false)), err_flag(ch_bool(false)), irq_en(ch_bool(false));
         ch_reg<ch_uint<ID_WIDTH>> id_reg(0_d);
         
-        auto ar_rdy = io().arready, r_vld = io().rvalid, r_rdy_sig = io().rready;
-        auto aw_rdy = io().awready, w_vld = io().wvalid, w_rdy = io().wready;
-        auto b_vld = io().bvalid, b_rdy = io().bready;
-        auto rlast = io().rlast, rresp = io().rresp, bresp = io().bresp;
+        // Split into individual declarations because C++20 requires all
+        // variables in a single `auto` declarator to deduce to the same
+        // type, but these io() ports are a mix of ch_in<T> and ch_out<T>.
+        auto ar_rdy = io().arready;
+        auto r_vld = io().rvalid;
+        auto r_rdy_sig = io().rready;
+        auto aw_rdy = io().awready;
+        auto w_vld = io().wvalid;
+        auto w_rdy = io().wready;
+        auto b_vld = io().bvalid;
+        auto b_rdy = io().bready;
+        auto rlast = io().rlast;
+        auto rresp = io().rresp;
+        auto bresp = io().bresp;
         
         auto start = select(io().reg_start, select(is_idle, select(err_flag, ch_bool(false), ch_bool(true)), ch_bool(false)), ch_bool(false));
         auto stop = select(io().reg_stop, select(is_idle, ch_bool(false), select(is_done_st, ch_bool(false), ch_bool(true))), ch_bool(false));
