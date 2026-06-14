@@ -28,9 +28,16 @@ regimpl::create_instruction(ch::data_map_t &data_map) const {
                          : nullptr;
 
     // 如果有初始值，则设置current_buf为初始值
+    // Fix: read the init node's value from data_map, not via static_cast to
+    // litimpl. init_val_ may be a litimpl (literal initial value) OR a
+    // proxy/reg/other lnodeimpl (chained `inp = ch_reg<T>(inp)` pattern in
+    // TC-11). Casting a non-litimpl to litimpl* is UB and reads garbage,
+    // which previously caused a SIGSEGV in bv_assign_truncate for ch_uint<256>
+    // (src_size=145, src on stack). See .omo/evidence/task-4-w4-tc02-segfault.txt
+    // for the original W4 evidence.
     if (init_val_) {
-        auto *lit_init_val = static_cast<litimpl *>(init_val_);
-        current_buf->assign_truncate(lit_init_val->value());
+        auto *init_buf = &data_map[init_val_->id()];
+        current_buf->assign_truncate(*init_buf);
     }
 
     // 添加用户跟踪：将寄存器节点添加到next节点的用户列表中
