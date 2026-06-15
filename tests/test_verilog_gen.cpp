@@ -133,19 +133,19 @@ TEST_CASE("VerilogGen - LiteralFormatting", "[verilog][literals]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
 
     ch_out<ch_uint<8>> out_port("data");
-    ch_uint<8> val_1bit(1_d);   // Should be formatted as 1'b1
-    ch_uint<8> val_8bit(255_d); // Should be formatted appropriately
+    ch_uint<8> val_1bit(1_d);
+    ch_uint<8> val_8bit(255_d);
 
     // Simple assignments
     ch_reg<ch_uint<8>> reg1(0_d);
-    reg1->next = reg1 + val_1bit; // This should use 1'b1
+    reg1->next = reg1 + val_1bit;
     out_port = reg1;
 
     std::string verilog_code = generateVerilogToString(ctx.get());
 
-    // Check for correct literal formatting
-    // FIXME
-    // REQUIRE(verilog_code.find("1'b1") != std::string::npos);
+    // Multi-bit literals render as <width>'h<hex> per
+    // verilogwriter::get_literal_str in src/codegen_verilog.cpp.
+    REQUIRE(verilog_code.find("8'h1") != std::string::npos);
 
     // Should not have unnecessary ports
     REQUIRE(verilog_code.find("io_1") == std::string::npos);
