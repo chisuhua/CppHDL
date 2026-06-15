@@ -314,7 +314,6 @@ CppHDL/
 
 ## 相关文档
 
-- `task_plan.md` - 项目任务计划
 - `docs/simulation/SIM_OPT_PLAN.md` - 详细实施计划
 - `docs/simulation/ARCHITECTURE.md` - 仿真架构分析
 - `docs/simulation/JIT_ARCHITECTURE_DEBT.md` - **架构债务分析与修复指南**
