@@ -200,6 +200,12 @@ public:
     }
     ch::Component *get_parent() { return parent_; }
 
+    // Returns the currently active Component (the one whose describe() is
+    // running). Forwarded from ch::Component::current() so headers that only
+    // see the forward declaration of ch::Component (e.g. io.h) can still
+    // obtain a "current module" pointer for runtime assertions.
+    static ch::Component *current_component();
+
 protected:
     uint32_t id_;
     lnodetype type_;

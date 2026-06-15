@@ -31,4 +31,8 @@ lnodeimpl::lnodeimpl(uint32_t id, lnodetype type, uint32_t size, context *ctx,
     }
 }
 
+ch::Component *lnodeimpl::current_component() {
+    return ch::Component::current();
+}
+
 } // namespace ch::core

@@ -692,7 +692,9 @@ void operator<<=(const port<T1, output_direction> &receiver,
         return;
     }
 
-    // TODO: check the port is module port
+    // ADR-010 Q3: receiver (output port) should belong to the current module.
+    CHREQUIRE(receiver_impl->get_parent() == lnodeimpl::current_component(),
+              "out <<= in: receiver must be a port of the current module");
 
     // 建立连接：设置接收方的驱动源为驱动方
     // receiver_impl 是 inputimpl 类型，有 set_driver 方法
@@ -723,7 +725,10 @@ void operator<<=(const port<T1, input_direction> &receiver,
         return;
     }
 
-    // TODO: check receiver is submodule port, driver is module port
+    // ADR-010 Q3: driver (input port) should belong to the current module
+    // in a passthrough (current.in -> submodule.in) connection.
+    CHREQUIRE(driver_impl->get_parent() == lnodeimpl::current_component(),
+              "in <<= in (passthrough): driver must be a port of the current module");
 
     // 建立连接：设置接收方的驱动源为驱动方
     // receiver_impl 是 inputimpl 类型，有 set_driver 方法
@@ -751,7 +756,10 @@ void operator<<=(const port<T1, output_direction> &receiver,
         return;
     }
 
-    // TODO: check receiver is module port, driver is submodule port
+    // ADR-010 Q3: receiver (output port) should belong to the current module
+    // in a passthrough (submodule.out -> current.out) connection.
+    CHREQUIRE(receiver_impl->get_parent() == lnodeimpl::current_component(),
+              "out <<= out (passthrough): receiver must be a port of the current module");
 
     // 对于输出到输出的连接，设置接收方的源为驱动方
     receiver_impl->set_src(0, driver_impl);
@@ -775,7 +783,10 @@ void operator<<=(const port<T1, input_direction> &receiver,
         return;
     }
 
-    // TODO: check receiver is submodule port, driver is submodule port
+    // ADR-010 Q3: receiver (input port) should NOT belong to the current module
+    // (it is being driven by a submodule's output, so receiver is a submodule input).
+    CHREQUIRE(receiver_impl->get_parent() != lnodeimpl::current_component(),
+              "in <<= out: receiver must be a port of a submodule, not the current module");
 
     // 建立连接：设置接收方的驱动源为驱动方
     // receiver_impl 是 inputimpl 类型，有 set_driver 方法
