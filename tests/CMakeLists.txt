@@ -217,7 +217,6 @@ add_catch_test(test_bool_connection test_bool_connection.cpp)
 add_catch_test(test_comparison_ops test_comparison_ops.cpp)
 add_catch_test(test_uint_compare test_uint_compare.cpp)
 add_catch_test(test_mod_width test_mod_width.cpp)
-add_catch_test(test_mod_width_simple test_mod_width_simple.cpp)
 add_catch_test(test_popcount test_popcount.cpp)
 add_catch_test(test_precise_width test_precise_width.cpp)
 add_catch_test(test_shift_boundary test_shift_boundary.cpp)
@@ -270,9 +269,6 @@ add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
 add_catch_test(test_jit_concat test_jit_concat.cpp)
-
-# test_mod_width_simple: 重写为 Catch2 v3 + make_literal 后的最小烟雾测试
-# 详细测试见 test_mod_width
 
 # ============================================================================
 # SpinalHDL 移植示例 CTest 注册
