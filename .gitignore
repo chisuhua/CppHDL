@@ -62,3 +62,10 @@ QODER.md
 .omo/
 .understand-anything/
 .github/code-review-graph.instruction.md
+
+# 忽略 perf 性能测试自动生成产物（由 perf_main + run_perf_comparison.sh / benchmark_tracker.sh 写入根目录）
+# 规范的副本保留在 build/perf_report.{csv,json,md} 中（已通过 build/ 忽略）。
+perf_results.csv
+perf_results.json
+perf_results.md
+perf_history.csv
