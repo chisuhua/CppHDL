@@ -267,6 +267,11 @@ add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
 add_catch_test(test_jit_concat test_jit_concat.cpp)
+# Phase 0 of c-class-major-refactor: golden output regression safety net
+# (locks interpreter vs JIT byte-identical behavior before JIT split in
+# Phase 1). Tagged [jit][golden]. See .omo/plans/c-class-major-refactor.md
+# Task 1.
+add_catch_test(test_jit_golden jit/test_jit_golden.cpp)
 
 # ============================================================================
 # SpinalHDL 移植示例 CTest 注册
