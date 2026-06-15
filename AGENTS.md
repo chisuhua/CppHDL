@@ -1,6 +1,6 @@
 # CppHDL
 
-> C++17 hardware description library for high-level HDL development. SpinalHDL patterns compiled to C++.
+> C++20 hardware description library for high-level HDL development. SpinalHDL patterns compiled to C++.
 
 ## Stack
 C++20, CMake, Catch2 v3.7.0, clangd (LSP), SpinalHDL-style API
@@ -23,13 +23,13 @@ CppHDL/
 │   ├── core/         # Context + lnodeimpl
 │   ├── jit/          # JIT compiler implementation
 │   └── *.cpp         # CodeGen (Verilog/DAG), Simulator, Component
-├── samples/          # 41 HDL pattern demos (bundles, streams, protocols)
+├── samples/          # 40 HDL pattern demos (bundles, streams, protocols)
 ├── examples/         # Full design examples
 │   ├── spinalhdl-ported/  # 17 SpinalHDL port examples (each with main())
 │   ├── axi4/              # AXI4 bus demos
 │   ├── stream/            # Stream Mux/Demux/Arbiter/Fork
 │   └── riscv-mini/        # RV32I 5-stage pipeline (partial)
-├── tests/            # 109 Catch2 test files (79 base + 30 chlib)
+├── tests/            # 111 Catch2 test files (83 base + 28 chlib)
 │   └── chlib/              # Component library tests
 └── docs/             # Architecture plans, usage guides, phase reports
 ```
@@ -155,7 +155,7 @@ ctest --output-on-failure
 ```
 
 ## NOTES
-- 127 CTest tests registered (1 pre-existing timeout: `perf_tests` ~120s; pass count rerun before claiming)
+- 139 CTest tests registered (1 pre-existing timeout: `perf_tests` ~120s; pass count rerun before claiming)
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)

@@ -24,8 +24,7 @@ include/
 ├── axi4/               # AXI4 interconnect + peripherals (AGENTS.md)
 ├── cpu/                # RV32I core, cache (AGENTS.md)
 ├── lnode/              # Logic node impl types
-├── bv/                 # Bit-vector math (gmp/mpfr)
-└── abstract/           # Abstract base classes
+└── bv/                 # Bit-vector math (gmp/mpfr)
 ```
 
 ## CONVENTIONS
