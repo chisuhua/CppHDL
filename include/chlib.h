@@ -7,8 +7,8 @@
 #include "chlib/arithmetic.h"
 #include "chlib/arithmetic_advance.h"
 
-// AXI4-Lite components
-// #include "chlib/axi4lite.h"
+// Assert / Debug
+#include "chlib/assert.h"
 
 // Bitwise operations
 #include "chlib/bitwise.h"
@@ -16,20 +16,14 @@
 // Combinational logic components
 #include "chlib/combinational.h"
 
-// Converter components
-// #include "chlib/converter.h"
-
 // FIFO components
-// #include "chlib/fifo.h"
-
-// Fragment components (not implemented yet)
-// #include "chlib/fragment.h"
+#include "chlib/fifo.h"
 
 // Logic components
 #include "chlib/logic.h"
 
 // Memory components
-// #include "chlib/memory.h"
+#include "chlib/memory.h"
 
 // One-hot encoding components
 #include "chlib/onehot.h"
@@ -40,9 +34,19 @@
 // Sequential logic components
 #include "chlib/sequential.h"
 
+// Simulator trace helpers
+#include "chlib/simulator_trace.h"
+
+// State machine DSL
+#include "chlib/state_machine.h"
+
 // Stream components
 #include "chlib/stream.h"
+#include "chlib/stream_arbiter.h"
+#include "chlib/stream_builder.h"
+#include "chlib/stream_operators.h"
 #include "chlib/stream_pipeline.h"
+#include "chlib/stream_width_adapter.h"
 
 // Switch components
 #include "chlib/switch.h"
