@@ -176,7 +176,6 @@ add_catch_test(test_bundle_connection test_bundle_connection.cpp)
 add_catch_test(test_bundle_node_management test_bundle_node_management.cpp)
 add_catch_test(test_bundle_serialization test_bundle_serialization.cpp)
 add_catch_test(test_nested_bundle test_nested_bundle.cpp)
-# TODO: 修复 CH_BUNDLE_FIELDS / set_bundle_field_value API 不兼容
 add_catch_test(test_pod_bundle_conversions test_pod_bundle_conversions.cpp)
 add_catch_test(test_simulator_bundle test_simulator_bundle.cpp)
 add_catch_test(test_tlm_bundle_phase1 test_tlm_bundle_phase1.cpp)
@@ -226,7 +225,6 @@ add_catch_test(test_sdata_compare test_sdata_compare.cpp)
 add_catch_test(test_fifo_example test_fifo_example.cpp)
 
 # Flow / Stream Bundle 测试
-# TODO: ch_flow <<= ch_out 运算符不兼容，需要添加 operator<<= 支持
 add_catch_test(test_ch_flow test_ch_flow.cpp)
 add_catch_test(test_stream_width_adapter test_stream_width_adapter.cpp)
 
