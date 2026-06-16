@@ -1,22 +1,41 @@
+// include/core/io.h
+// Phase 4: Aggregator for HDL port (ch_in/ch_out) and connection API.
+//
+// After Phase 4 split, this file keeps the port class definitions
+// (ch_logic_in, ch_logic_out, port<,>, ch_in/ch_out aliases, width
+// trait specializations) and the operator<<= connection functions
+// (which preserve the 4 CHREQUIRE assertions from commit bc0cbdb /
+// ADR-010 Q3 port validation).
+//
+// The per-operator overloads (operator&, |, ^, ~, ==, !=, &&, ||, !,
+// +, -, *, /, %, <<, >>, <, <=, >, >=, bit_select, select,
+// and/or/xor_reduce, sext, zext, bits, rotate_*, popcount) and the
+// port<->literal mixed operators live in the 4 per-category headers:
+//   include/core/io_logical.h
+//   include/core/io_arithmetic.h
+//   include/core/io_shift.h
+//   include/core/io_lit.h
+//
+// All functions remain in namespace ch::core.
 #pragma once
 
 #include "ast_nodes.h"
 #include "core/context.h"
-#include "direction.h"
-#include "lnode.h"
-#include "lnodeimpl.h"
-#include "logger.h"
-#include "operators.h"
-#include "traits.h"
-#include "uint.h"
+#include "core/direction.h"
+#include "core/lnode.h"
+#include "core/lnodeimpl.h"
+#include "utils/logger.h"
+#include "core/operators.h"
+#include "core/traits.h"
+#include "core/uint.h"
+#include "node_builder.h"
 #include <cstdint>
 #include <source_location>
 #include <string>
 
-#include "node_builder.h"
 namespace ch::core {
 
-// === 改进的 ch_logic_out 类 ===
+// === ch_logic_out 类 ===
 template <typename T> class ch_logic_out {
 private:
     std::string name_;
@@ -76,18 +95,18 @@ public:
         auto ctx = ch::core::ctx_curr_;
         if (!ctx) {
             CHDBG("[ch_logic_out] No active context for output '%s', will be null",
-                  name.c_str());
+                  name_.c_str());
             return;
         }
         outputimpl *node_ptr = ctx->create_output(ch_width_v<T>, name, sloc);
         output_node_ = node_ptr;
         if (output_node_) {
             CHDBG("  [ch_logic_out] Created outputimpl node ID %u for '%s'",
-                  output_node_->id(), name.c_str());
+                  output_node_->id(), name_.c_str());
         } else {
             CHERROR(
                 "  [ch_logic_out] Failed to create outputimpl node for '%s'",
-                name.c_str());
+                name_.c_str());
         }
     }
 
@@ -109,7 +128,7 @@ public:
     ~ch_logic_out() = default;
 };
 
-// === 改进的 ch_logic_in 类 ===
+// === ch_logic_in 类 ===
 template <typename T> class ch_logic_in {
 private:
     std::string name_;
@@ -169,11 +188,11 @@ public:
             input_node_ = node_ptr;
             if (input_node_) {
                 CHDBG("  [ch_logic_in] Created inputimpl node ID %u for '%s'",
-                      input_node_->id(), name.c_str());
+                      input_node_->id(), name_.c_str());
             } else {
                 CHERROR(
                     "  [ch_logic_in] Failed to create inputimpl node for '%s'",
-                    name.c_str());
+                    name_.c_str());
             }
         }
     }
@@ -185,7 +204,7 @@ public:
     ~ch_logic_in() = default;
 };
 
-// === 改进的 port 系统 ===
+// === port 系统 ===
 template <typename T, typename Dir> class port;
 
 // 特化：输入端口
@@ -197,29 +216,18 @@ public:
     using value_type = T;
     using direction = input_direction;
 
-    // 默认构造函数：创建具名输入端口
     port() : impl_() {}
 
-    // 从名称构造
     explicit port(const std::string &name, const std::source_location &sloc =
                                                std::source_location::current())
         : impl_(ch_logic_in<T>(name, sloc)) {}
 
-    // 拷贝构造函数
     port(const port &other) : impl_(other.impl_) {}
 
-    // 赋值操作符
     port &operator=(const port &other) = delete;
-    // port &operator=(const port &other) {
-    //     if (this != &other) {
-    //         impl_ = other.impl_;
-    //     }
-    //     return *this;
-    // }
 
     operator lnode<T>() const { return static_cast<lnode<T>>(impl_); }
-    
-    // 添加到ch_uint的隐式转换，使用port.impl()作为底层实现
+
     template<unsigned W>
     operator ch_uint<W>() const requires(std::is_same_v<T, ch_uint<W>>)
     {
@@ -235,7 +243,6 @@ public:
     lnodeimpl *impl() const { return impl_.impl(); }
 
     auto flip() const {
-        // 简化实现：创建对应方向的新端口，不共享节点
         port<T, output_direction> flipped_port;
         return flipped_port;
     }
@@ -254,29 +261,18 @@ public:
     using value_type = T;
     using direction = output_direction;
 
-    // 默认构造函数：创建具名输出端口
     port() : impl_() {}
 
-    // 从名称构造
     explicit port(const std::string &name, const std::source_location &sloc =
-                                                std::source_location::current())
+                                               std::source_location::current())
         : impl_(ch_logic_out<T>(name, sloc)) {}
 
-    // 拷贝构造函数
     port(const port &other) : impl_(other.impl_) {}
 
-    // 赋值操作符
     port &operator=(const port &other) = delete;
-    // port &operator=(const port &other) {
-    //     if (this != &other) {
-    //         impl_ = other.impl_;
-    //     }
-    //     return *this;
-    // }
 
     template <typename U> void operator=(const U &value) { impl_ = value; }
-    
-    // 添加到ch_uint的隐式转换，使用port.impl()作为底层实现
+
     template<unsigned W>
     operator ch_uint<W>() const requires(std::is_same_v<T, ch_uint<W>>)
     {
@@ -286,7 +282,6 @@ public:
     lnodeimpl *impl() const { return impl_.impl(); }
 
     auto flip() const {
-        // 简化实现：创建对应方向的新端口，不共享节点
         port<T, input_direction> flipped_port;
         return flipped_port;
     }
@@ -309,12 +304,11 @@ template <typename T> struct ch_width_impl<ch_logic_in<T>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };
 
-// 为新 port 系统特化宽度
 template <typename T, typename Dir> struct ch_width_impl<port<T, Dir>, void> {
     static constexpr unsigned value = ch_width_v<T>;
 };
 
-// --- 保持原来的宏定义 ---
+// --- 宏定义 ---
 #define __io(...)                                                              \
     struct io_type {                                                           \
         __VA_ARGS__;                                                           \
@@ -337,373 +331,38 @@ template <typename T> [[nodiscard]] auto out(const T & = T{}) {
 #define __in(...) ch::core::ch_in<__VA_ARGS__>
 #define __out(...) ch::core::ch_out<__VA_ARGS__>
 
-// 为端口添加按位与操作符 (&)
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) & get_lnode(rhs);
-}
+} // namespace ch::core
 
-// 为端口添加按位或操作符 (|)
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator|(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) | get_lnode(rhs);
-}
+// === Per-operator-category port overloads ===
+#include "core/io_logical.h"
+#include "core/io_arithmetic.h"
+#include "core/io_shift.h"
+#include "core/io_lit.h"
 
-// 为端口添加按位异或操作符 (^)
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator^(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) ^ get_lnode(rhs);
-}
+namespace ch::core {
 
-// 为端口添加按位取反操作符 (~)
-template <typename T, typename Dir>
-auto operator~(const port<T, Dir> &operand) {
-    return ~get_lnode(operand);
-}
+// === 显式连接函数 (operator<<=) ===
+// 保留 4 个 CHREQUIRE 断言（来自 commit bc0cbdb / ADR-010 Q3）
 
-// 为端口添加相等比较操作符 (==)
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator==(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) == get_lnode(rhs);
-}
-
-// 为端口添加不等比较操作符 (!=)
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator!=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) != get_lnode(rhs);
-}
-
-// 为端口添加逻辑操作符支持
-// TODO: 这些操作符应标记为已废弃——在硬件中 &&/|| 和 &/| 对 1-bit 信号效果相同，
-// 但 C++ 的短路语义让用户误以为有特殊行为。推荐使用 select() 替代。
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator&&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
-                  "Logical AND only supported for 1-bit types");
-    // 在硬件中，逻辑与和按位与效果相同
-    return get_lnode(lhs) & get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator||(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
-                  "Logical OR only supported for 1-bit types");
-    // 在硬件中，逻辑或和按位或效果相同
-    return get_lnode(lhs) | get_lnode(rhs);
-}
-
-template <typename T, typename Dir>
-auto operator!(const port<T, Dir> &operand) {
-    static_assert(ch_width_v<T> == 1,
-                  "Logical NOT only supported for 1-bit types");
-    return ~get_lnode(operand);
-}
-
-// 端口与常量的操作符支持
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator&(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) & rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator&(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs & get_lnode(rhs);
-}
-
-// 补全其他算术操作符
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator+(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) + get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator-(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) - get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator*(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) * get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator/(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) / get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator%(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) % get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator<<(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) << get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator>>(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) >> get_lnode(rhs);
-}
-
-// 比较操作符
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator<(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) < get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator<=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) <= get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator>(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) > get_lnode(rhs);
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto operator>=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return get_lnode(lhs) >= get_lnode(rhs);
-}
-
-// 一元操作符
-template <typename T, typename Dir>
-auto operator-(const port<T, Dir> &operand) {
-    return -get_lnode(operand);
-}
-
-// 添加混合操作符支持（端口与常量）
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator+(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) + rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator+(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs + get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator-(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) - rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator-(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs - get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator*(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) * rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator*(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs * get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator/(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) / rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator/(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs / get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator%(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) % rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator%(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs % get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator|(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) | rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator|(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs | get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator^(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) ^ rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator^(Lit lhs, const port<T, Dir> &rhs) {
-    return lhs ^ get_lnode(rhs);
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator<<(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) << rhs;
-}
-
-template <typename T, typename Dir, typename Lit>
-    requires std::is_arithmetic_v<Lit>
-auto operator>>(const port<T, Dir> &lhs, Lit rhs) {
-    return get_lnode(lhs) >> rhs;
-}
-
-// 添加更多混合操作符支持...
-
-// === 添加对bit_select操作的支持 ===
-template <unsigned Index, typename T, typename Dir>
-auto bit_select(const port<T, Dir> &operand) {
-    // return bit_select<T, Index>(get_lnode(operand()));
-    // lnode<T> node = static_cast<lnode<T>>(operand);
-    auto node = to_operand(operand);
-    // 直接构建位选择节点（不经过 operators.h 的重载）
-    auto *op_node = node_builder::instance().build_bit_select(
-        node, Index, "bit_select", std::source_location::current());
-
-    return make_uint_result<1>(op_node);
-}
-
-// === 添加对concat操作的支持 ===
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto concat(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return concat(get_lnode(lhs), get_lnode(rhs));
-}
-
-template <typename T, typename Dir, typename U>
-    requires std::is_arithmetic_v<U>
-auto concat(const port<T, Dir> &lhs, U rhs) {
-    return concat(get_lnode(lhs), rhs);
-}
-
-template <typename T, typename Dir, typename U>
-    requires std::is_arithmetic_v<U>
-auto concat(U lhs, const port<T, Dir> &rhs) {
-    return concat(lhs, get_lnode(rhs));
-}
-
-// === 添加对select操作的支持 ===
-template <typename CondType, typename T1, typename Dir1, typename T2,
-          typename Dir2>
-auto select(const CondType &condition, const port<T1, Dir1> &true_val,
-            const port<T2, Dir2> &false_val) {
-    return select(condition, get_lnode(true_val), get_lnode(false_val));
-}
-
-// === 添加对归约操作的支持 ===
-template <typename T, typename Dir>
-auto and_reduce(const port<T, Dir> &operand) {
-    return and_reduce(get_lnode(operand));
-}
-
-template <typename T, typename Dir>
-auto or_reduce(const port<T, Dir> &operand) {
-    return or_reduce(get_lnode(operand));
-}
-
-template <typename T, typename Dir>
-auto xor_reduce(const port<T, Dir> &operand) {
-    return xor_reduce(get_lnode(operand));
-}
-
-// 添加端口类型的重载版本
-template <typename T, unsigned NewWidth, typename Dir>
-auto sext(const port<T, Dir> &operand) {
-    auto lnode_operand = to_operand(operand);
-    auto *impl = lnode_operand.impl();
-    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
-        ch_op::sext, lnode_operand, NewWidth, true, "sext",
-        std::source_location::current()));
-}
-
-// 修改端口类型的重载版本
-template <typename T, unsigned NewWidth, typename Dir>
-auto zext(const port<T, Dir> &operand) {
-    auto lnode_operand = to_operand(operand);
-    auto *impl = lnode_operand.impl();
-    return make_uint_result<NewWidth>(node_builder::instance().build_operation(
-        ch_op::zext, lnode_operand, NewWidth, false, "zext",
-        std::source_location::current()));
-}
-
-// 修改端口类型的重载版本，使用build_bits函数
-template <typename T, unsigned MSB, unsigned LSB, typename Dir>
-auto bits(const port<T, Dir> &operand) {
-    auto lnode_operand = to_operand(operand);
-
-    auto *op_node = node_builder::instance().build_bits(
-        lnode_operand, MSB, LSB, "bits", std::source_location::current());
-
-    return make_uint_result<MSB - LSB + 1>(op_node);
-}
-
-// === 添加对循环移位操作的支持 ===
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto rotate_left(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return rotate_left(get_lnode(lhs), get_lnode(rhs));
-}
-
-template <typename T1, typename Dir1, typename T2, typename Dir2>
-auto rotate_right(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
-    return rotate_right(get_lnode(lhs), get_lnode(rhs));
-}
-
-// === 添加对popcount操作的支持 ===
-template <typename T, typename Dir> auto popcount(const port<T, Dir> &operand) {
-    return popcount(get_lnode(operand));
-}
-
-// === 添加显式连接函数 ===
 // 连接函数：输出端口驱动输入端口
 template <typename T1, typename T2>
 void operator<<=(const port<T1, output_direction> &receiver,
                  const port<T2, input_direction> &driver) {
     CHDBG_FUNC();
-    // 获取驱动方和接收方的实现节点
     auto *driver_impl = driver.impl();
     auto *receiver_impl = receiver.impl();
 
-    // 检查节点有效性
     if (!driver_impl || !receiver_impl) {
         CHERROR("Invalid port connection: null node encountered");
         return;
     }
 
-    // ADR-010 Q3: receiver (output port) should belong to the current module.
     CHREQUIRE(receiver_impl->get_parent() == lnodeimpl::current_component(),
               "out <<= in: receiver must be a port of the current module");
 
-    // 建立连接：设置接收方的驱动源为驱动方
-    // receiver_impl 是 inputimpl 类型，有 set_driver 方法
     outputimpl *input_receiver = dynamic_cast<outputimpl *>(receiver_impl);
     if (input_receiver) {
         input_receiver->set_src(0, driver_impl);
-
-        // 同时在驱动方添加用户关系
-        // driver_impl->add_user(input_receiver);
     }
 
     CHDBG("Connected output port '%s' to input port '%s'",
@@ -715,23 +374,17 @@ template <typename T1, typename T2>
 void operator<<=(const port<T1, input_direction> &receiver,
                  const port<T2, input_direction> &driver) {
     CHDBG_FUNC();
-    // 获取驱动方和接收方的实现节点
     auto *driver_impl = driver.impl();
     auto *receiver_impl = receiver.impl();
 
-    // 检查节点有效性
     if (!driver_impl || !receiver_impl) {
         CHERROR("Invalid port connection: null node encountered");
         return;
     }
 
-    // ADR-010 Q3: driver (input port) should belong to the current module
-    // in a passthrough (current.in -> submodule.in) connection.
     CHREQUIRE(driver_impl->get_parent() == lnodeimpl::current_component(),
               "in <<= in (passthrough): driver must be a port of the current module");
 
-    // 建立连接：设置接收方的驱动源为驱动方
-    // receiver_impl 是 inputimpl 类型，有 set_driver 方法
     inputimpl *input_receiver = dynamic_cast<inputimpl *>(receiver_impl);
     if (input_receiver) {
         input_receiver->set_driver(driver_impl);
@@ -741,27 +394,22 @@ void operator<<=(const port<T1, input_direction> &receiver,
           receiver.name().c_str());
 }
 
-// 连接函数：输出端口驱动输出端口（用于连接子模块输出到顶层输出）
+// 连接函数：输出端口驱动输出端口
 template <typename T1, typename T2>
 void operator<<=(const port<T1, output_direction> &receiver,
                  const port<T2, output_direction> &driver) {
     CHDBG_FUNC();
-    // 获取驱动方和接收方的实现节点
     auto *driver_impl = driver.impl();
     auto *receiver_impl = receiver.impl();
 
-    // 检查节点有效性
     if (!driver_impl || !receiver_impl) {
         CHERROR("Invalid port connection: null node encountered");
         return;
     }
 
-    // ADR-010 Q3: receiver (output port) should belong to the current module
-    // in a passthrough (submodule.out -> current.out) connection.
     CHREQUIRE(receiver_impl->get_parent() == lnodeimpl::current_component(),
               "out <<= out (passthrough): receiver must be a port of the current module");
 
-    // 对于输出到输出的连接，设置接收方的源为驱动方
     receiver_impl->set_src(0, driver_impl);
 
     CHDBG("Connected output port '%s' to output port '%s'",
@@ -773,23 +421,17 @@ template <typename T1, typename T2>
 void operator<<=(const port<T1, input_direction> &receiver,
                  const port<T2, output_direction> &driver) {
     CHDBG_FUNC();
-    // 获取驱动方和接收方的实现节点
     auto *driver_impl = driver.impl();
     auto *receiver_impl = receiver.impl();
 
-    // 检查节点有效性
     if (!driver_impl || !receiver_impl) {
         CHERROR("Invalid port connection: null node encountered");
         return;
     }
 
-    // ADR-010 Q3: receiver (input port) should NOT belong to the current module
-    // (it is being driven by a submodule's output, so receiver is a submodule input).
     CHREQUIRE(receiver_impl->get_parent() != lnodeimpl::current_component(),
               "in <<= out: receiver must be a port of a submodule, not the current module");
 
-    // 建立连接：设置接收方的驱动源为驱动方
-    // receiver_impl 是 inputimpl 类型，有 set_driver 方法
     inputimpl *input_receiver = dynamic_cast<inputimpl *>(receiver_impl);
     if (input_receiver) {
         input_receiver->set_driver(driver_impl);
@@ -799,20 +441,17 @@ void operator<<=(const port<T1, input_direction> &receiver,
           receiver.name().c_str());
 }
 
-// 连接函数：输出端口连接到非端口类型（如表达式结果、字面量等）
+// 连接函数：输出端口连接到非端口类型
 template <typename T, typename U>
 void operator<<=(const port<T, output_direction> &receiver, const U &driver) {
     CHDBG_FUNC();
-    // 获取接收方的实现节点
     auto *receiver_impl = receiver.impl();
 
-    // 检查节点有效性
     if (!receiver_impl) {
         CHERROR("Invalid port connection: receiver node is null");
         return;
     }
 
-    // 获取driver的节点表示
     auto driver_lnode = get_lnode(driver);
     auto *driver_impl = driver_lnode.impl();
 
@@ -821,7 +460,6 @@ void operator<<=(const port<T, output_direction> &receiver, const U &driver) {
         return;
     }
 
-    // 将driver_impl设置为receiver的源
     outputimpl *output_receiver = dynamic_cast<outputimpl *>(receiver_impl);
     if (output_receiver) {
         output_receiver->set_src(0, driver_impl);
@@ -830,20 +468,17 @@ void operator<<=(const port<T, output_direction> &receiver, const U &driver) {
     CHDBG("Connected non-port value to output port '%s'", receiver.name().c_str());
 }
 
-// 连接函数：输入端口连接到非端口类型（如表达式结果、字面量等）
+// 连接函数：输入端口连接到非端口类型
 template <typename T, typename U>
 void operator<<=(const port<T, input_direction> &receiver, const U &driver) {
     CHDBG_FUNC();
-    // 获取接收方的实现节点
     auto *receiver_impl = receiver.impl();
 
-    // 检查节点有效性
     if (!receiver_impl) {
         CHERROR("Invalid port connection: receiver node is null");
         return;
     }
 
-    // 获取driver的节点表示
     auto driver_lnode = get_lnode(driver);
     auto *driver_impl = driver_lnode.impl();
 
@@ -852,12 +487,10 @@ void operator<<=(const port<T, input_direction> &receiver, const U &driver) {
         return;
     }
 
-    // 将driver_impl设置为receiver的驱动源
     inputimpl *input_receiver = dynamic_cast<inputimpl *>(receiver_impl);
     if (input_receiver) {
         input_receiver->set_driver(driver_impl);
-        
-        // 同时在驱动方添加用户关系
+
         driver_impl->add_user(input_receiver);
     }
 
@@ -865,4 +498,3 @@ void operator<<=(const port<T, input_direction> &receiver, const U &driver) {
 }
 
 } // namespace ch::core
-
