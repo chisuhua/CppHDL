@@ -162,6 +162,8 @@ set(CH_SOURCES
     ${AST_SOURCES}
     src/component.cpp
     src/simulator.cpp
+    src/simulator_trace.cpp
+    src/simulator_init.cpp
     src/codegen_verilog.cpp
     src/codegen_dag.cpp
     src/utils/types.cpp
