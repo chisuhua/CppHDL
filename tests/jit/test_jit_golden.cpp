@@ -121,8 +121,15 @@ class LoadConstDut : public ch::Component {
     r1 <<= io().in0 + lit2;   // ← LOAD_CONST: 0x11 folded by JIT
     io().out0 <<= r0;
     io().out1 <<= r1;
-    // Use XOR (no width change) instead of + to avoid pre-existing
-    // JIT-vs-interpreter divergence on 8-bit add masking of r0+r1.
+    // Use XOR (no width change) instead of +. r0 + r1 = ch_uint<8> +
+    // ch_uint<8> = ch_uint<9> (SpinalHDL: carry bit kept). The
+    // interpreter-arith-bug-fix commit fixed the interpreter's
+    // Add::eval width resize, but a separate divergence remains at
+    // the ch_out level: the JIT masks the stored value to the
+    // ch_out's declared bitwidth (8), while the interpreter returns
+    // the wider 9-bit sdata. A full resolution requires fixing
+    // ch_out truncation, which is out of scope for the arithmetic
+    // width fix. See .omo/plans/interpreter-arith-bug-fix.md.
     io().out2 <<= r0 ^ r1;
   }
 };
