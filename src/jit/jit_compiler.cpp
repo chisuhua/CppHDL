@@ -366,33 +366,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
     llvm::Argument *data_buffer_arg = &*tick_func->arg_begin();
     llvm::Value *data_buffer_ptr = data_buffer_arg;
 
-    auto get_node_ptr = [&](uint32_t node_id) -> llvm::Value * {
-      auto *indices = llvm::ConstantInt::get(builder.getInt32Ty(), node_id);
-      return builder.CreateGEP(builder.getInt64Ty(), data_buffer_ptr, indices,
-                               "node_ptr");
-    };
-
-    auto load_node = [&](uint32_t node_id, BitWidth bw) -> llvm::Value * {
-      auto *ptr = get_node_ptr(node_id);
-      auto *val = builder.CreateLoad(builder.getInt64Ty(), ptr, "load_node");
-      if (bw < 64) {
-        uint64_t mask = (1ULL << bw) - 1;
-        return builder.CreateAnd(val, builder.getInt64(mask), "mask_load");
-      }
-      return val;
-    };
-
-    auto store_node = [&](uint32_t node_id, llvm::Value *val, BitWidth bw) {
-      auto *ptr = get_node_ptr(node_id);
-      llvm::Value *store_val = val;
-      if (bw < 64) {
-        uint64_t mask = (1ULL << bw) - 1;
-        store_val =
-            builder.CreateAnd(store_val, builder.getInt64(mask), "mask_store");
-      }
-      builder.CreateStore(store_val, ptr);
-    };
-
     for (const auto &instr : func.blocks[0].instrs) {
       switch (instr.op) {
       case JitOp::LOAD_DATA:
@@ -479,65 +452,6 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
 
   llvm_module_ = module;
   return finalize_compilation_dual();
-#else
-  return JitResult::UNSUPPORTED_OP;
-#endif
-}
-
-JitResult JitCompiler::finalize_compilation_dual() {
-#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
-  if (!llvm_module_) {
-    return JitResult::COMPILATION_FAILED;
-  }
-
-  auto *module = static_cast<llvm::Module *>(llvm_module_);
-  auto *context = &module->getContext();
-
-  llvm::orc::LLJITBuilder lljit_builder;
-  auto JIT_or_err = lljit_builder.create();
-  if (!JIT_or_err) {
-    std::string err_msg;
-    llvm::raw_string_ostream os(err_msg);
-    os << JIT_or_err.takeError();
-    last_error_msg_ = std::string("LLJIT create failed: ") + err_msg;
-    return JitResult::COMPILATION_FAILED;
-  }
-
-  auto JIT = std::move(JIT_or_err.get());
-  auto tsm =
-      llvm::orc::ThreadSafeModule(std::unique_ptr<llvm::Module>(module),
-                                  std::unique_ptr<llvm::LLVMContext>(context));
-  if (auto Err = JIT->addIRModule(std::move(tsm))) {
-    std::string err_msg;
-    llvm::raw_string_ostream os(err_msg);
-    os << Err;
-    last_error_msg_ = std::string("addIRModule failed: ") + err_msg;
-    return JitResult::COMPILATION_FAILED;
-  }
-
-  auto Sym_comb = JIT->lookup("tick_comb");
-  if (!Sym_comb) {
-    std::string err_msg;
-    llvm::raw_string_ostream os(err_msg);
-    os << Sym_comb.takeError();
-    last_error_msg_ = std::string("lookup tick_comb failed: ") + err_msg;
-    return JitResult::COMPILATION_FAILED;
-  }
-  compiled_comb_func_ = reinterpret_cast<void *>(Sym_comb->getValue());
-
-  auto Sym_seq = JIT->lookup("tick_seq");
-  if (!Sym_seq) {
-    std::string err_msg;
-    llvm::raw_string_ostream os(err_msg);
-    os << Sym_seq.takeError();
-    last_error_msg_ = std::string("lookup tick_seq failed: ") + err_msg;
-    return JitResult::COMPILATION_FAILED;
-  }
-  compiled_seq_func_ = reinterpret_cast<void *>(Sym_seq->getValue());
-
-  jit_session_ = static_cast<void *>(JIT.release());
-  llvm_module_ = nullptr;
-  return JitResult::SUCCESS;
 #else
   return JitResult::UNSUPPORTED_OP;
 #endif

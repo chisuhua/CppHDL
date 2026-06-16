@@ -177,6 +177,7 @@ set(CH_SOURCES
     src/jit/jit_llvm_bit.cpp
     src/jit/jit_llvm_compare.cpp
     src/jit/jit_llvm_control.cpp
+    src/jit/jit_finalize.cpp
     src/core/interpreter_backend.cpp
     src/core/verilator_backend.cpp
 )
