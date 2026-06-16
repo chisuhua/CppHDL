@@ -37,9 +37,9 @@ CppHDL/
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Core types (ch_bool, ch_uint) | `include/core/operators.h`, `include/core/types.h` |
-| IO ports (ch_in, ch_out) | `include/core/io.h` |
-| Context + simulation | `include/core/context.h`, `src/simulator.cpp` |
+| Core types (ch_bool, ch_uint) | `include/core/operators.h` (aggregator) + `include/core/operators_{width,arith,logic,compare,shift}.h` |
+| IO ports (ch_in, ch_out) | `include/core/io.h` (port classes + `<<=` + 4 CHREQUIRE) + `include/core/io_{logical,arithmetic,shift,lit}.h` |
+| Context + simulation | `include/core/context.h`, `src/simulator.cpp` + `src/simulator_{init,trace}.cpp` |
 | Stream/Flow operators | `include/chlib/stream.h`, `include/chlib/stream_operators.h` |
 | FIFO | `include/chlib/fifo.h` |
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
@@ -155,11 +155,56 @@ ctest --output-on-failure
 ```
 
 ## NOTES
-- 139 CTest tests registered (1 pre-existing timeout: `perf_tests` ~120s; pass count rerun before claiming)
+- 141 CTest tests registered (1 pre-existing timeout: `perf_tests` ~120s; pass count rerun before claiming)
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)
 - **Verilator 三路 perf 对比** (interpreter / JIT / Verilator) 默认要求 `BUILD_VERILATOR=ON`；CI/快速迭代用 `-DBUILD_VERILATOR=OFF`，Verilator 列在 perf 报告中显示 `UNSUPPORTED`（详见 `docs/developer_guide/verilator-integration.md`）
+
+## C-CLASS REFACTOR (2026-06, completed)
+
+Major refactor splitting the 7 largest hot files into focused, single-responsibility units. **Pure structural decomposition** — no behavior changes, public API unchanged. See `.omo/plans/c-class-major-refactor.md` for the full plan.
+
+### Aggregator pattern
+The refactor introduces a standard **aggregator pattern** for hot headers: a slim aggregator file `#include`s per-category files and provides forward declarations for cross-category templates. The per-category files hold the actual implementation.
+
+| Hot file (was) | Aggregator (now) | Per-category files |
+|----------------|-----------------|---------------------|
+| `include/core/operators.h` (933) | 157 lines | `operators_width.h` (233), `operators_arith.h` (344), `operators_logic.h` (198), `operators_compare.h` (48), `operators_shift.h` (95) |
+| `include/core/io.h` (868) | 500 lines* | `io_logical.h` (177), `io_arithmetic.h` (42), `io_shift.h` (44), `io_lit.h` (145) |
+| `include/ast/instr_op.h` (714) | 350 lines** | `instr_op_arith.h` (97), `instr_op_logic.h` (100), `instr_op_compare.h` (100), `instr_op_shift.h` (120) |
+| `src/simulator.cpp` (1226) | 536 lines | `simulator_trace.cpp` (514), `simulator_init.cpp` (209) |
+
+\* `io.h` retained port class definitions + `operator<<=` + the 4 CHREQUIRE assertions from `bc0cbdb` (ADR-010 Q3 port validation), so it can't be reduced to <100 lines without invasive refactoring.
+\** `instr_op.h` retained the 3 template wrapper classes (`instr_op_binary`, `instr_op_unary`, `instr_op_ternary`) + width/concat ops + special ops + all 28+ type aliases, so it can't be reduced to <250 lines without breaking the public API.
+
+### describe() method splits
+5 monolithic `Component::describe()` methods broken into per-concern helper methods:
+
+| File | Helpers extracted |
+|------|-------------------|
+| `axi_spi.h` | `build_clock_generator()`, `build_transfer_fsm()`, `build_interrupt_logic()` |
+| `axi_i2c.h` | `build_register_bank()`, `build_i2c_fsm()` |
+| `axi4_full.h` | `build_id_handshake()`, `build_data_channels()`, `build_response_logic()` |
+| `axi_interconnect_4x4.h` | `build_address_map()`, `build_arbiter()`, `build_decoder()` (doc-only), `build_mux()` |
+| `rv32i_pipeline.h` | `build_datapath()`, `build_control_signals()`, `build_forwarding_paths()` |
+
+### Rollback tags
+| Tag | Phase |
+|-----|-------|
+| `pre-jit-split` | Before Phase 0 |
+| `interpreter-arith-fix` | Pre-Phase 1 fix (interpreter arithmetic width) |
+| `ch-out-truncation-fix` | Pre-Phase 1 fix (ch_out truncation) |
+| `post-jit-split` | After Phase 1 (JIT split) |
+| `post-bv-split` | After Phase 2 (bv.h + bitvector.h split) |
+| `post-operators-split` | After Phase 3 (operators.h split) |
+| `post-io-split` | After Phase 4 (io.h split) |
+| `post-describe-split` | After Phase 5 (5 describe() splits) |
+| `post-simulator-split` | After Phase 6 (simulator.cpp split) |
+| `post-ast-split` | After Phase 7 (instr_op.h split) |
+| `c-class-refactor-complete` | After Phase 8 (final integration + this doc update) |
+
+Use `git checkout <tag>` to roll back to any phase boundary.
 
 - **macOS CI status (post PR-16 followup)**: macOS-14 enabled (clang/arm64 compile errors fixed). Windows-2022 still deferred (one-line matrix change when MSVC C++20 module edge cases are addressed). JIT path validated nightly (CH_JIT_ENABLE=ON default, -DCH_JIT_ENABLE=OFF only applies to PR-feedback matrix per design notes in .github/workflows/ci.yml).
 
