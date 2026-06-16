@@ -171,6 +171,12 @@ set(CH_SOURCES
     src/jit/jit_ir_gen_lnode_state.cpp
     src/jit/jit_ir_gen_lnode_logic.cpp
     src/jit/jit_ir_gen_lnode_meta.cpp
+    src/jit/jit_llvm_mem.cpp
+    src/jit/jit_llvm_const.cpp
+    src/jit/jit_llvm_arith.cpp
+    src/jit/jit_llvm_bit.cpp
+    src/jit/jit_llvm_compare.cpp
+    src/jit/jit_llvm_control.cpp
     src/core/interpreter_backend.cpp
     src/core/verilator_backend.cpp
 )

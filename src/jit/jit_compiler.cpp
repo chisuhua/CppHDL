@@ -42,6 +42,26 @@ JitResult generate_ir_lnode_meta(ch::core::lnodeimpl *node,
                                  JitBlock &block_comb,
                                  VRegId &next_comb_vreg);
 
+void compile_to_llvm_mem(const JitInstr &instr, llvm::IRBuilder<> &builder,
+                         llvm::Value *data_buffer_ptr,
+                         std::vector<llvm::Value *> &vregs);
+
+void compile_to_llvm_const(const JitInstr &instr, llvm::IRBuilder<> &builder,
+                           std::vector<llvm::Value *> &vregs);
+
+void compile_to_llvm_arith(const JitInstr &instr, llvm::IRBuilder<> &builder,
+                           std::vector<llvm::Value *> &vregs);
+
+void compile_to_llvm_bit(const JitInstr &instr, llvm::IRBuilder<> &builder,
+                         std::vector<llvm::Value *> &vregs);
+
+void compile_to_llvm_compare(const JitInstr &instr, llvm::IRBuilder<> &builder,
+                             std::vector<llvm::Value *> &vregs);
+
+void compile_to_llvm_control(const JitInstr &instr, llvm::IRBuilder<> &builder,
+                             llvm::Value *data_buffer_ptr,
+                             std::vector<llvm::Value *> &vregs);
+
 JitCompiler::JitCompiler()
     : available_(false), jit_session_(nullptr), compiled_func_(nullptr),
       compiled_comb_func_(nullptr), compiled_seq_func_(nullptr),
@@ -375,541 +395,61 @@ JitResult JitCompiler::compile_to_llvm(const JitFunction &func_comb,
 
     for (const auto &instr : func.blocks[0].instrs) {
       switch (instr.op) {
-      case JitOp::LOAD_CONST: {
-        llvm::Value *const_val;
-        if (instr.bitwidth < 64) {
-          const_val = builder.getIntN(instr.bitwidth, instr.imm.value);
-          const_val =
-              builder.CreateZExt(const_val, builder.getInt64Ty(), "zext_const");
-        } else {
-          const_val = builder.getInt64(instr.imm.value);
-        }
-        builder.CreateStore(const_val, vregs[instr.dst], "store_const");
+      case JitOp::LOAD_DATA:
+      case JitOp::STORE_DATA:
+        compile_to_llvm_mem(instr, builder, data_buffer_ptr, vregs);
         break;
-      }
 
-      case JitOp::LOAD_DATA: {
-        auto *val = load_node(instr.node_id, instr.bitwidth);
-        builder.CreateStore(val, vregs[instr.dst], "store_load");
+      case JitOp::LOAD_CONST:
+        compile_to_llvm_const(instr, builder, vregs);
         break;
-      }
 
-      case JitOp::STORE_DATA: {
-        if (instr.src0 == INVALID_VREG) {
-          break;
-        }
-        auto *val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                       "load_src");
-        store_node(instr.node_id, val, instr.bitwidth);
+      case JitOp::ADD:
+      case JitOp::SUB:
+      case JitOp::MUL:
+      case JitOp::MOD:
+      case JitOp::DIV:
+        compile_to_llvm_arith(instr, builder, vregs);
         break;
-      }
 
-      case JitOp::ADD: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateAdd(a, b, "add");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_add");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_add");
+      case JitOp::AND:
+      case JitOp::OR:
+      case JitOp::XOR:
+      case JitOp::NOT:
+      case JitOp::SHIFT_LEFT:
+      case JitOp::SHIFT_RIGHT:
+      case JitOp::ROTATE_LEFT:
+      case JitOp::ROTATE_RIGHT:
+      case JitOp::SEXT:
+      case JitOp::ZEXT:
+      case JitOp::SSHRSHN:
+      case JitOp::NEG:
+      case JitOp::AND_REDUCE:
+      case JitOp::OR_REDUCE:
+      case JitOp::XOR_REDUCE:
+      case JitOp::POPCOUNT:
+        compile_to_llvm_bit(instr, builder, vregs);
         break;
-      }
 
-      case JitOp::SUB: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateSub(a, b, "sub");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_sub");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_sub");
+      case JitOp::EQ:
+      case JitOp::NE:
+      case JitOp::LT:
+      case JitOp::LE:
+      case JitOp::GT:
+      case JitOp::GE:
+        compile_to_llvm_compare(instr, builder, vregs);
         break;
-      }
 
-      case JitOp::MUL: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateMul(a, b, "mul");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_mul");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_mul");
+      case JitOp::SELECT:
+      case JitOp::REG_NEXT:
+      case JitOp::BITS_UPDATE:
+      case JitOp::BIT_SELECT:
+      case JitOp::CONCAT:
+      case JitOp::BITS_EXTRACT:
+      case JitOp::CALL_EXTERNAL:
+      case JitOp::ASSIGN:
+        compile_to_llvm_control(instr, builder, data_buffer_ptr, vregs);
         break;
-      }
-
-      case JitOp::MOD: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *is_zero = builder.CreateICmpEQ(b, builder.getInt64(0), "is_zero");
-        auto *rem = builder.CreateURem(a, b, "mod");
-        auto *res = builder.CreateSelect(is_zero, a, rem, "mod_safe");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_mod");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_mod");
-        break;
-      }
-
-      case JitOp::DIV: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *is_zero = builder.CreateICmpEQ(b, builder.getInt64(0), "is_zero");
-        auto *quotient = builder.CreateUDiv(a, b, "div");
-        auto *res = builder.CreateSelect(is_zero, builder.getInt64(0), quotient,
-                                         "div_safe");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_div");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_div");
-        break;
-      }
-
-      case JitOp::AND: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateAnd(a, b, "and");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_and");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_and");
-        break;
-      }
-
-      case JitOp::OR: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateOr(a, b, "or");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_or");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_or");
-        break;
-      }
-
-      case JitOp::XOR: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateXor(a, b, "xor");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_xor");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_xor");
-        break;
-      }
-
-      case JitOp::NOT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *all1 = builder.getInt64(uint64_t(-1));
-        auto *res = builder.CreateXor(a, all1, "not");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_not");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_not");
-        break;
-      }
-
-      case JitOp::AND_REDUCE: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        uint64_t all_ones =
-            (instr.bitwidth < 64) ? ((1ULL << instr.bitwidth) - 1) : ~0ULL;
-        auto *mask = builder.getInt64(all_ones);
-        auto *masked = builder.CreateAnd(a, mask, "and_reduce_masked");
-        auto *cmp = builder.CreateICmpEQ(masked, mask, "and_reduce_cmp");
-        auto *res =
-            builder.CreateZExt(cmp, builder.getInt64Ty(), "and_reduce_ext");
-        builder.CreateStore(res, vregs[instr.dst], "store_and_reduce");
-        break;
-      }
-
-      case JitOp::OR_REDUCE: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *cmp =
-            builder.CreateICmpNE(a, builder.getInt64(0), "or_reduce_cmp");
-        auto *res =
-            builder.CreateZExt(cmp, builder.getInt64Ty(), "or_reduce_ext");
-        builder.CreateStore(res, vregs[instr.dst], "store_or_reduce");
-        break;
-      }
-
-      case JitOp::XOR_REDUCE: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        // IRBuilder::CreateIntrinsic handles both function-declaration lookup
-        // and call-emission in one call. Avoids getOrInsertDeclaration (LLVM
-        // 20+ rename of getDeclaration) which is not a member in LLVM 18.
-        auto *count = builder.CreateIntrinsic(
-            llvm::Intrinsic::ctpop, {builder.getInt64Ty()}, {a}, nullptr,
-            "xor_reduce_pop");
-        auto *parity =
-            builder.CreateAnd(count, builder.getInt64(1), "xor_reduce_parity");
-        builder.CreateStore(parity, vregs[instr.dst], "store_xor_reduce");
-        break;
-      }
-
-      case JitOp::SHIFT_LEFT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateShl(a, b, "shl");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_shl");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_shl");
-        break;
-      }
-
-      case JitOp::SHIFT_RIGHT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *res = builder.CreateLShr(a, b, "shr");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_shr");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_shr");
-        break;
-      }
-
-      case JitOp::ROTATE_LEFT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *bw_val = builder.getInt64(instr.bitwidth);
-        auto *shift_count = builder.CreateURem(b, bw_val, "rotl_count");
-        auto *inv_count = builder.CreateSub(bw_val, shift_count, "rotl_inv_count");
-        auto *left = builder.CreateShl(a, shift_count, "rotl_left");
-        auto *right = builder.CreateLShr(a, inv_count, "rotl_right");
-        auto *res = builder.CreateOr(left, right, "rotl");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_rotl");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_rotl");
-        break;
-      }
-
-      case JitOp::ROTATE_RIGHT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *bw_val = builder.getInt64(instr.bitwidth);
-        auto *shift_count = builder.CreateURem(b, bw_val, "rotr_count");
-        auto *inv_count = builder.CreateSub(bw_val, shift_count, "rotr_inv_count");
-        auto *right = builder.CreateLShr(a, shift_count, "rotr_right");
-        auto *left = builder.CreateShl(a, inv_count, "rotr_left");
-        auto *res = builder.CreateOr(right, left, "rotr");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_rotr");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_rotr");
-        break;
-      }
-
-      case JitOp::SEXT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *res = builder.CreateTrunc(
-            a, builder.getIntNTy(instr.src_bitwidth), "trunc_sext");
-        res = builder.CreateSExt(res, builder.getInt64Ty(), "sext");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_sext");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_sext");
-        break;
-      }
-
-      case JitOp::ZEXT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *res = builder.CreateTrunc(
-            a, builder.getIntNTy(instr.src_bitwidth), "trunc_zext");
-        res = builder.CreateZExt(res, builder.getInt64Ty(), "zext");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_zext");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_zext");
-        break;
-      }
-
-      case JitOp::SSHRSHN: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *narrowed = builder.CreateTrunc(
-            a, builder.getIntNTy(instr.src_bitwidth), "trunc_sshr");
-        auto *res = builder.CreateAShr(narrowed, b, "sshr");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_sshr");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_sshr");
-        break;
-      }
-
-      case JitOp::NEG: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *res = builder.CreateNeg(a, "neg");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_neg");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_neg");
-        break;
-      }
-
-      case JitOp::EQ: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpEQ(a, b, "eq");
-        auto *res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_eq");
-        builder.CreateStore(res, vregs[instr.dst], "store_eq");
-        break;
-      }
-
-      case JitOp::NE: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpNE(a, b, "ne");
-        auto *res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_ne");
-        builder.CreateStore(res, vregs[instr.dst], "store_ne");
-        break;
-      }
-
-      case JitOp::LT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpULT(a, b, "lt");
-        auto *res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_lt");
-        builder.CreateStore(res, vregs[instr.dst], "store_lt");
-        break;
-      }
-
-      case JitOp::LE: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpULE(a, b, "le");
-        auto *res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_le");
-        builder.CreateStore(res, vregs[instr.dst], "store_le");
-        break;
-      }
-
-      case JitOp::GT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpUGT(a, b, "gt");
-        auto *res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_gt");
-        builder.CreateStore(res, vregs[instr.dst], "store_gt");
-        break;
-      }
-
-      case JitOp::GE: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpUGE(a, b, "ge");
-        auto *res = builder.CreateZExt(cmp, builder.getInt64Ty(), "zext_ge");
-        builder.CreateStore(res, vregs[instr.dst], "store_ge");
-        break;
-      }
-
-      case JitOp::SELECT: {
-        auto *cond = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                        "load_cond");
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                     "load_a");
-        auto *b = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src2],
-                                     "load_b");
-        auto *cmp = builder.CreateICmpNE(cond, builder.getInt64(0), "cond_nz");
-        auto *res = builder.CreateSelect(cmp, a, b, "select");
-        builder.CreateStore(res, vregs[instr.dst], "store_select");
-        break;
-      }
-
-      case JitOp::BIT_SELECT: {
-        auto *data = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                        "load_data");
-        auto *idx = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                       "load_idx");
-        auto *shifted = builder.CreateLShr(data, idx, "shift_idx");
-        auto *masked =
-            builder.CreateAnd(shifted, builder.getInt64(1), "mask_bit");
-        builder.CreateStore(masked, vregs[instr.dst], "store_bit_sel");
-        break;
-      }
-
-      case JitOp::CONCAT: {
-        // result = (src0 << src1_width) | src1
-        // src0 -> HIGH bits, src1 -> LOW bits (matches Concat::eval in
-        // include/ast/instr_op.h). instr.src_bitwidth must be set to src1_width
-        // by generate_ir() (the amount we need to shift src0 up by).
-        auto *src0_val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                            "load_concat_src0");
-        auto *src1_val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src1],
-                                            "load_concat_src1");
-        auto *shift_amt = builder.getInt64(instr.src_bitwidth);
-        auto *shifted = builder.CreateShl(src0_val, shift_amt, "concat_shift");
-        auto *res = builder.CreateOr(shifted, src1_val, "concat_or");
-        if (instr.bitwidth < 64) {
-          uint64_t bw_mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(bw_mask), "mask_concat");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_concat");
-        break;
-      }
-
-      case JitOp::BITS_EXTRACT: {
-        auto *val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                       "load_val");
-        auto *range = builder.CreateLoad(builder.getInt64Ty(),
-                                         vregs[instr.src1], "load_range");
-        auto *lsb =
-            builder.CreateAnd(range, builder.getInt64(0xFFFFFFFF), "lsb");
-        auto *msb =
-            builder.CreateLShr(range, builder.getInt64(32), "msb_shift");
-        msb = builder.CreateAnd(msb, builder.getInt64(0xFFFFFFFF), "msb");
-        auto *shifted = builder.CreateLShr(val, lsb, "shift_val");
-        auto *width = builder.CreateSub(msb, lsb, "width_sub");
-        width = builder.CreateAdd(width, builder.getInt64(1), "width_add1");
-        auto *mask = builder.CreateShl(builder.getInt64(1), width, "mask_shl");
-        mask = builder.CreateSub(mask, builder.getInt64(1), "mask_sub1");
-        auto *res = builder.CreateAnd(shifted, mask, "extract");
-        if (instr.bitwidth < 64) {
-          uint64_t bw_mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(bw_mask), "mask_bw");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_bits_extract");
-        break;
-      }
-
-      case JitOp::REG_NEXT: {
-        if (instr.src0 == INVALID_VREG) {
-          break;
-        }
-        auto *val = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                       "load_reg");
-        store_node(instr.node_id, val, instr.bitwidth);
-        break;
-      }
-
-      case JitOp::CALL_EXTERNAL: {
-        auto *ptr = get_node_ptr(instr.node_id);
-        auto *val =
-            builder.CreateLoad(builder.getInt64Ty(), ptr, "call_ext_load");
-        builder.CreateStore(val, vregs[instr.dst], "call_ext_store");
-        break;
-      }
-
-      case JitOp::POPCOUNT: {
-        auto *a = builder.CreateLoad(builder.getInt64Ty(), vregs[instr.src0],
-                                     "load_a");
-        // IRBuilder::CreateIntrinsic handles both function-declaration lookup
-        // and call-emission in one call. Avoids getOrInsertDeclaration (LLVM
-        // 20+ rename of getDeclaration) which is not a member in LLVM 18.
-        llvm::Value *res = builder.CreateIntrinsic(
-            llvm::Intrinsic::ctpop, {builder.getInt64Ty()}, {a}, nullptr,
-            "popcount");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          res = builder.CreateAnd(res, builder.getInt64(mask), "mask_popcount");
-        }
-        builder.CreateStore(res, vregs[instr.dst], "store_popcount");
-        break;
-      }
-
-      case JitOp::BITS_UPDATE: {
-        auto *target = builder.CreateLoad(builder.getInt64Ty(),
-                                          vregs[instr.src0], "load_target");
-        auto *source = builder.CreateLoad(builder.getInt64Ty(),
-                                          vregs[instr.src1], "load_source");
-        uint32_t lsb = static_cast<uint32_t>(instr.imm.value);
-        uint32_t width = static_cast<uint32_t>(instr.imm.bitwidth);
-
-        if (width > 0 && width < 64) {
-          uint64_t clear_mask_val = ~(((1ULL << width) - 1) << lsb);
-          auto *clear_mask = builder.getInt64(clear_mask_val);
-          auto *cleared = builder.CreateAnd(target, clear_mask, "bits_cleared");
-
-          auto *shifted =
-              builder.CreateShl(source, builder.getInt64(lsb), "bits_shifted");
-          uint64_t keep_mask_val = ((1ULL << width) - 1) << lsb;
-          auto *keep_mask = builder.getInt64(keep_mask_val);
-          auto *inserted =
-              builder.CreateAnd(shifted, keep_mask, "bits_inserted");
-
-          auto *res = builder.CreateOr(cleared, inserted, "bits_update");
-          if (instr.bitwidth < 64) {
-            uint64_t mask = (1ULL << instr.bitwidth) - 1;
-            res = builder.CreateAnd(res, builder.getInt64(mask),
-                                    "mask_bits_update");
-          }
-          builder.CreateStore(res, vregs[instr.dst], "store_bits_update");
-        } else {
-          builder.CreateStore(source, vregs[instr.dst], "store_bits_update");
-        }
-        break;
-      }
-
-      case JitOp::ASSIGN: {
-        // wire 传递：dst = src0 (按目标位宽 mask)
-        llvm::Value *src = builder.CreateLoad(builder.getInt64Ty(),
-                                              vregs[instr.src0], "load_assign_src");
-        if (instr.bitwidth < 64) {
-          uint64_t mask = (1ULL << instr.bitwidth) - 1;
-          src = builder.CreateAnd(src, builder.getInt64(mask), "mask_assign");
-        }
-        builder.CreateStore(src, vregs[instr.dst], "store_assign");
-        break;
-      }
 
       case JitOp::NOP:
       default:
