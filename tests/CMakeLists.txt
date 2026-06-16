@@ -272,6 +272,9 @@ add_catch_test(test_jit_concat test_jit_concat.cpp)
 # Phase 1). Tagged [jit][golden]. See .omo/plans/c-class-major-refactor.md
 # Task 1.
 add_catch_test(test_jit_golden jit/test_jit_golden.cpp)
+# Regression: interpreter and JIT must produce byte-identical results for
+# ADD/SUB/MUL/SHL/NEG width overflow cases (locks interpreter-arith-bug-fix).
+add_catch_test(test_interpreter_jit_compat test_interpreter_jit_compat.cpp)
 
 # ============================================================================
 # SpinalHDL 移植示例 CTest 注册
