@@ -11,12 +11,21 @@ void instr_input::eval() {
 }
 
 void instr_output::eval() {
-    // Output instruction: Copy the value from the source buffer ('src_->bv_')
-    // to the destination buffer ('dst_->bv_').
-    // This makes the output's value available in the data_map_ for external
-    // retrieval via sim.get_value() after the eval loop.
-    *dst_ = *src_; // Use bitvector's assignment operator for efficient copy
-    // The bitvector assignment handles size and data copying internally.
+    // Output instruction: copy the value from the source buffer ('src_') to
+    // the destination buffer ('dst_'). Use assign_truncate (not operator=) so
+    // the destination's bitwidth is preserved and the source is truncated or
+    // zero-extended to fit. This matches:
+    //   - instr_proxy::eval (src/ast/instr_proxy.cpp) for the proxy path
+    //   - instr_reg::eval (src/ast/instr_reg.cpp) for register propagation
+    //   - JIT STORE_DATA (src/jit/jit_compiler.cpp:686) which masks the stored
+    //     value to the ch_out's declared bitwidth via store_node
+    // Using plain `*dst_ = *src_` would call bitvector::operator= which RESIZES
+    // the destination to the source's size — a divergence from JIT when the
+    // source is wider than the declared ch_out (e.g. ch_uint<8> + ch_uint<8>
+    // = 9-bit sum → ch_out<ch_uint<8>> would silently widen to 9 bits).
+    // The bitvector assignment handles size and data copying internally;
+    // assign_truncate handles that plus the required bitwidth clamping.
+    dst_->assign_truncate(*src_);
 }
 
 } // namespace ch
