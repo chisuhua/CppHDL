@@ -109,12 +109,13 @@ inline bool check_comparison_result_width(ch::core::sdata_type *dst) {
 
 // === 现有的操作保持不变 ===
 // ADD
+// dst is sized to the compile-time result bitwidth; bv_add_truncate
+// truncates the natural max(lhs,rhs)+1 result to dst->size() (matches JIT
+// mask to bitwidth).
 struct Add {
     static const char *name() { return "instr_op_add::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        auto width = std::max(src0->bitwidth(), src1->bitwidth()) + 1;
-        dst->bv_.resize(width);
         ch::internal::bv_add_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
@@ -131,12 +132,13 @@ struct Sub {
 };
 
 // MUL
+// dst is sized to the compile-time result bitwidth; bv_mul_truncate
+// truncates the natural lhs+lhs result to dst->size() (matches JIT mask
+// to bitwidth).
 struct Mul {
     static const char *name() { return "instr_op_mul::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        auto width = src0->bitwidth() + src1->bitwidth();
-        dst->bv_.resize(width);
         ch::internal::bv_mul_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
     }
 };
@@ -286,12 +288,18 @@ struct Mod {
 };
 
 // SHL (左移)
+// dst is sized to the compile-time result bitwidth; bv_shl_truncate
+// shifts into dst->size() bits (matches JIT mask to bitwidth). The
+// previous `*dst = (*src0) << shift` path was buggy because
+// sdata::operator=(sdata) resizes dst to the operator<< result width
+// (max(compute_bw+shift, lhs.bw)), which can exceed dst.bw.
 struct Shl {
     static const char *name() { return "instr_op_shl::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
                      ch::core::sdata_type *src1) {
-        uint64_t shift = static_cast<uint64_t>(*src1); // 修复：使用转换操作符
-        *dst = (*src0) << static_cast<uint32_t>(shift);
+        uint64_t shift = static_cast<uint64_t>(*src1);
+        ch::internal::bv_shl_truncate<uint64_t>(&dst->bv_, &src0->bv_,
+                                                static_cast<uint32_t>(shift));
     }
 };
 
@@ -353,10 +361,20 @@ struct Sshr {
 };
 
 // NEG (负号)
+// Two's complement negation: result = (~src + 1) & mask(dst.bw). We
+// compute in uint64_t then assign with truncation to dst's compile-time
+// bitwidth, avoiding the implicit +1 width growth of sdata::operator-
+// (whose `~src + 1` uses add_width = max(bw,bw)+1).
 struct Neg {
     static const char *name() { return "instr_op_neg::eval"; }
     static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        *dst = -(*src);
+        uint64_t src_val = static_cast<uint64_t>(*src);
+        uint64_t neg_val = (~src_val) + 1ULL;
+        if (dst->bitwidth() < 64) {
+            uint64_t mask = (1ULL << dst->bitwidth()) - 1ULL;
+            neg_val &= mask;
+        }
+        *dst = neg_val;
     }
 };
 
