@@ -167,6 +167,10 @@ set(CH_SOURCES
     src/utils/types.cpp
     src/lnode/bool.cpp
     src/jit/jit_compiler.cpp
+    src/jit/jit_ir_gen_lnode_io.cpp
+    src/jit/jit_ir_gen_lnode_state.cpp
+    src/jit/jit_ir_gen_lnode_logic.cpp
+    src/jit/jit_ir_gen_lnode_meta.cpp
     src/core/interpreter_backend.cpp
     src/core/verilator_backend.cpp
 )

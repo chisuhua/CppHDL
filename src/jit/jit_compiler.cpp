@@ -25,6 +25,23 @@
 
 namespace ch::jit {
 
+JitResult generate_ir_lnode_io(ch::core::lnodeimpl *node,
+                               JitBlock &block_comb,
+                               VRegId &next_comb_vreg);
+
+JitResult generate_ir_lnode_state(ch::core::lnodeimpl *node,
+                                  JitBlock &block_seq,
+                                  VRegId &next_seq_vreg);
+
+JitResult generate_ir_lnode_logic(
+    ch::core::lnodeimpl *node, ch::core::context *ctx, JitBlock &block_comb,
+    VRegId &next_comb_vreg,
+    std::unordered_set<uint32_t> &external_node_ids);
+
+JitResult generate_ir_lnode_meta(ch::core::lnodeimpl *node,
+                                 JitBlock &block_comb,
+                                 VRegId &next_comb_vreg);
+
 JitCompiler::JitCompiler()
     : available_(false), jit_session_(nullptr), compiled_func_(nullptr),
       compiled_comb_func_(nullptr), compiled_seq_func_(nullptr),
@@ -232,356 +249,50 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
 
   for (auto *node : eval_list) {
     auto node_type = node->type();
-    auto node_id = node->id();
-    auto bitwidth = static_cast<BitWidth>(node->size());
+    JitResult r = JitResult::SUCCESS;
+    bool count_comb = false;
 
-    // Sequential nodes go to seq_block
-    if (node_type == ch::core::lnodetype::type_reg) {
-      auto *reg_node = static_cast<ch::core::regimpl *>(node);
-      auto *next_node = reg_node->get_next();
-
-      // Load the "next" value from the source node into a vreg
-      VRegId next_vreg = INVALID_VREG;
-      if (next_node && next_node->size() <= 64) {
-        next_vreg = next_seq_vreg++;
-        auto next_bitwidth = static_cast<BitWidth>(next_node->size());
-        block_seq.instrs.push_back(
-            make_load(next_vreg, next_node->id(), next_bitwidth));
-      }
-
-      // REG_NEXT: store the "next" value to the register's output node
-      auto dst_vreg = next_seq_vreg++;
-      auto reg_next = make_reg_next(dst_vreg, node_id, bitwidth);
-      reg_next.src0 = next_vreg; // Set source (INVALID_VREG means no update)
-      block_seq.instrs.push_back(reg_next);
-      block_seq.node_count++;
-      continue;
-    }
-
-    if (node_type == ch::core::lnodetype::type_mem) {
-      // Memory nodes are processed separately - skip here
-      continue;
-    }
-
-    // Memory read ports have combinational outputs that depend on memory array
-    // state. Without the memory array accessible in JIT, we must fall back to
-    // interpreter.
-    if (node_type == ch::core::lnodetype::type_mem_read_port) {
-      return JitResult::UNSUPPORTED_OP;
-    }
-
-    if (node_type == ch::core::lnodetype::type_mem_write_port) {
-      continue;
-    }
-
-    // type_lit nodes: literal values are set at runtime via set_value().
-    // The interpreter does NOT evaluate them (litimpl has no
-    // create_instruction), so JIT must also skip them to avoid overwriting
-    // runtime values with compile-time constants.
-    if (node_type == ch::core::lnodetype::type_lit) {
-      // Literals should be loaded via sync_from_buffer so set_value() updates
-      // persist. Use LOAD_DATA (read from data_buffer_) instead of LOAD_CONST
-      // (compile-time constant).
-      auto vreg = next_comb_vreg++;
-      block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
-      continue;
-    }
-
-    // Combinational nodes
     switch (node_type) {
-    case ch::core::lnodetype::type_input: {
-      auto vreg = next_comb_vreg++;
-      // 连接后的输入端口需要从 driver 加载值，而非从自身
-      if (node->num_srcs() > 0 && node->src(0)) {
-        auto src_bitwidth = static_cast<BitWidth>(node->src(0)->size());
-        block_comb.instrs.push_back(
-            make_load(vreg, node->src(0)->id(), src_bitwidth));
-        block_comb.instrs.push_back(make_store(node_id, vreg, bitwidth));
-      } else {
-        block_comb.instrs.push_back(make_load(vreg, node_id, bitwidth));
-        block_comb.instrs.push_back(make_store(node_id, vreg, bitwidth));
-      }
-      break;
-    }
-
-    case ch::core::lnodetype::type_op: {
-      auto *op_node = static_cast<ch::core::opimpl *>(node);
-      auto ch_op = op_node->op();
-
-      // 检查操作是否 JIT 原生支持
-      // 使用 -Wswitch-enum 确保所有 ch_op 值被显式处理
-      JitOp jit_op;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic error "-Wswitch-enum"
-      switch (ch_op) {
-      case ch::core::ch_op::add:
-        jit_op = JitOp::ADD;
-        break;
-      case ch::core::ch_op::sub:
-        jit_op = JitOp::SUB;
-        break;
-      case ch::core::ch_op::mul:
-        jit_op = JitOp::MUL;
-        break;
-      case ch::core::ch_op::div:
-        jit_op = JitOp::DIV;
-        break;
-      case ch::core::ch_op::mod:
-        jit_op = JitOp::MOD;
-        break;
-      case ch::core::ch_op::and_:
-        jit_op = JitOp::AND;
-        break;
-      case ch::core::ch_op::or_:
-        jit_op = JitOp::OR;
-        break;
-      case ch::core::ch_op::xor_:
-        jit_op = JitOp::XOR;
-        break;
-      case ch::core::ch_op::not_:
-        jit_op = JitOp::NOT;
-        break;
-      case ch::core::ch_op::eq:
-        jit_op = JitOp::EQ;
-        break;
-      case ch::core::ch_op::ne:
-        jit_op = JitOp::NE;
-        break;
-      case ch::core::ch_op::lt:
-        jit_op = JitOp::LT;
-        break;
-      case ch::core::ch_op::le:
-        jit_op = JitOp::LE;
-        break;
-      case ch::core::ch_op::gt:
-        jit_op = JitOp::GT;
-        break;
-      case ch::core::ch_op::ge:
-        jit_op = JitOp::GE;
-        break;
-      case ch::core::ch_op::shl:
-        jit_op = JitOp::SHIFT_LEFT;
-        break;
-      case ch::core::ch_op::shr:
-        jit_op = JitOp::SHIFT_RIGHT;
-        break;
-      case ch::core::ch_op::bit_sel:
-        jit_op = JitOp::BIT_SELECT;
-        break;
-      case ch::core::ch_op::bits_extract:
-        jit_op = JitOp::BITS_EXTRACT;
-        break;
-      case ch::core::ch_op::and_reduce:
-        jit_op = JitOp::AND_REDUCE;
-        break;
-      case ch::core::ch_op::or_reduce:
-        jit_op = JitOp::OR_REDUCE;
-        break;
-      case ch::core::ch_op::xor_reduce:
-        jit_op = JitOp::XOR_REDUCE;
-        break;
-      case ch::core::ch_op::rotate_l:
-        jit_op = JitOp::ROTATE_LEFT;
-        break;
-      case ch::core::ch_op::rotate_r:
-        jit_op = JitOp::ROTATE_RIGHT;
-        break;
-      case ch::core::ch_op::assign:
-        // assign op 只是一个 wire 传递：dst = src0
-        // 必须做成 JIT 原生，否则下游 JIT-native op 会读到 stale 值
-        // （因为解释器在 JIT 之前跑，assign 的 src 还没被 JIT 更新）
-        jit_op = JitOp::ASSIGN;
-        break;
-      case ch::core::ch_op::concat:
-        jit_op = JitOp::CONCAT;
-        break;
-      case ch::core::ch_op::popcount:
-        jit_op = JitOp::POPCOUNT;
-        break;
-      // 原生支持的操作（使用 src_bitwidth）
-      case ch::core::ch_op::sext:
-        jit_op = JitOp::SEXT;
-        break;
-      case ch::core::ch_op::zext:
-        jit_op = JitOp::ZEXT;
-        break;
-      case ch::core::ch_op::sshr:
-        jit_op = JitOp::SSHRSHN;
-        break;
-      case ch::core::ch_op::neg:
-        jit_op = JitOp::NEG;
-        break;
-      // === 走 CALL_EXTERNAL 的 ch_op ===
-      // 这两个 ch_op 仍出现在 enum 中（用于占位/未来兼容），但
-      // 生产代码已经走 lnodetype 路径（type_mux / type_bitsupdate），
-      // 不会创建 opimpl 节点。若未来有代码直接走 ch_op 路径，
-      // 这里会回退到解释器。
-      case ch::core::ch_op::mux:
-        jit_op = JitOp::CALL_EXTERNAL;
-        break;
-      case ch::core::ch_op::bits_update:
-        jit_op = JitOp::CALL_EXTERNAL;
-        break;
-      }
-#pragma GCC diagnostic pop
-
-      if (jit_op == JitOp::CALL_EXTERNAL) {
-        external_node_ids_.insert(node_id);
-        continue;
-      }
-
-      auto result_bitwidth = static_cast<BitWidth>(node->size());
-      auto src0_vreg = next_comb_vreg++;
-      auto src1_vreg = next_comb_vreg++;
-      auto dst_vreg = next_comb_vreg++;
-
-      if (node->num_srcs() > 0 && node->src(0)) {
-        auto src0_bitwidth = static_cast<BitWidth>(node->src(0)->size());
-        block_comb.instrs.push_back(
-            make_load(src0_vreg, node->src(0)->id(), src0_bitwidth));
-      }
-      if (node->num_srcs() > 1 && node->src(1)) {
-        auto src1_bitwidth = static_cast<BitWidth>(node->src(1)->size());
-        block_comb.instrs.push_back(
-            make_load(src1_vreg, node->src(1)->id(), src1_bitwidth));
-      }
-
-      JitInstr jit_instr;
-      if (jit_op == JitOp::SEXT || jit_op == JitOp::ZEXT ||
-          jit_op == JitOp::NEG) {
-        jit_instr = JitInstr(jit_op, result_bitwidth);
-        jit_instr.dst = dst_vreg;
-        jit_instr.src0 = src0_vreg;
-        auto src0_bitwidth = node->num_srcs() > 0 && node->src(0)
-                                 ? static_cast<BitWidth>(node->src(0)->size())
-                                 : result_bitwidth;
-        jit_instr.src_bitwidth = src0_bitwidth;
-        jit_instr.node_id = node_id;
-        block_comb.instrs.push_back(jit_instr);
-        block_comb.instrs.push_back(
-            make_store(node_id, dst_vreg, result_bitwidth));
-      } else if (jit_op == JitOp::SSHRSHN) {
-        jit_instr = JitInstr(jit_op, result_bitwidth);
-        jit_instr.dst = dst_vreg;
-        jit_instr.src0 = src0_vreg;
-        jit_instr.src1 = src1_vreg;
-        auto src0_bitwidth = node->num_srcs() > 0 && node->src(0)
-                                 ? static_cast<BitWidth>(node->src(0)->size())
-                                 : result_bitwidth;
-        jit_instr.src_bitwidth = src0_bitwidth;
-        jit_instr.node_id = node_id;
-        block_comb.instrs.push_back(jit_instr);
-        block_comb.instrs.push_back(
-            make_store(node_id, dst_vreg, result_bitwidth));
-      } else if (jit_op == JitOp::CONCAT) {
-        // Concat: src0 → HIGH, src1 → LOW
-        // src_bitwidth = src1_width (shift amount for src0)
-        jit_instr = JitInstr(jit_op, result_bitwidth);
-        jit_instr.dst  = dst_vreg;
-        jit_instr.src0 = src0_vreg;
-        jit_instr.src1 = src1_vreg;
-        auto src1_bitwidth = (node->num_srcs() > 1 && node->src(1))
-                                ? static_cast<BitWidth>(node->src(1)->size())
-                                : BitWidth{0};
-        jit_instr.src_bitwidth = src1_bitwidth;
-        jit_instr.node_id = node_id;
-        block_comb.instrs.push_back(jit_instr);
-        block_comb.instrs.push_back(
-            make_store(node_id, dst_vreg, result_bitwidth));
-      } else {
-        block_comb.instrs.push_back(make_binary(jit_op, dst_vreg, src0_vreg,
-                                                src1_vreg, result_bitwidth));
-        block_comb.instrs.push_back(
-            make_store(node_id, dst_vreg, result_bitwidth));
-      }
-      break;
-    }
-
-    case ch::core::lnodetype::type_mux: {
-      auto cond_vreg = next_comb_vreg++;
-      auto src0_vreg = next_comb_vreg++;
-      auto src1_vreg = next_comb_vreg++;
-      auto dst_vreg = next_comb_vreg++;
-
-      if (node->num_srcs() >= 1 && node->src(0)) {
-        block_comb.instrs.push_back(
-            make_load(cond_vreg, node->src(0)->id(), 1));
-      }
-      if (node->num_srcs() >= 2 && node->src(1)) {
-        block_comb.instrs.push_back(
-            make_load(src0_vreg, node->src(1)->id(), bitwidth));
-      }
-      if (node->num_srcs() >= 3 && node->src(2)) {
-        block_comb.instrs.push_back(
-            make_load(src1_vreg, node->src(2)->id(), bitwidth));
-      }
-
-      block_comb.instrs.push_back(
-          make_select(dst_vreg, cond_vreg, src0_vreg, src1_vreg, bitwidth));
-      block_comb.instrs.push_back(make_store(node_id, dst_vreg, bitwidth));
-      break;
-    }
-
+    case ch::core::lnodetype::type_input:
+    case ch::core::lnodetype::type_output:
     case ch::core::lnodetype::type_proxy:
-    case ch::core::lnodetype::type_output: {
-      if (node->num_srcs() > 0 && node->src(0)) {
-        auto src_vreg = next_comb_vreg++;
-        auto dst_vreg = next_comb_vreg++;
-        block_comb.instrs.push_back(
-            make_load(src_vreg, node->src(0)->id(), bitwidth));
-        block_comb.instrs.push_back(make_store(node_id, src_vreg, bitwidth));
-      }
+      r = generate_ir_lnode_io(node, block_comb, next_comb_vreg);
+      count_comb = true;
       break;
-    }
+
+    case ch::core::lnodetype::type_op:
+    case ch::core::lnodetype::type_mux:
+    case ch::core::lnodetype::type_bitsupdate:
+      r = generate_ir_lnode_logic(node, ctx, block_comb, next_comb_vreg,
+                                  external_node_ids_);
+      count_comb = true;
+      break;
+
+    case ch::core::lnodetype::type_reg:
+    case ch::core::lnodetype::type_mem:
+    case ch::core::lnodetype::type_mem_read_port:
+    case ch::core::lnodetype::type_mem_write_port:
+      r = generate_ir_lnode_state(node, block_seq, next_seq_vreg);
+      break;
 
     case ch::core::lnodetype::type_clock:
-    case ch::core::lnodetype::type_reset: {
+    case ch::core::lnodetype::type_reset:
+    case ch::core::lnodetype::type_none:
+      r = generate_ir_lnode_meta(node, block_comb, next_comb_vreg);
+      count_comb = true;
+      break;
+
+    case ch::core::lnodetype::type_lit:
+      r = generate_ir_lnode_meta(node, block_comb, next_comb_vreg);
       break;
     }
 
-    case ch::core::lnodetype::type_bitsupdate: {
-      auto *bitsupdate_node = static_cast<ch::core::bitsupdateimpl *>(node);
-      auto target_vreg = next_comb_vreg++;
-      auto source_vreg = next_comb_vreg++;
-      auto dst_vreg = next_comb_vreg++;
-
-      if (bitsupdate_node->target() && bitsupdate_node->target()->id() != 0) {
-        block_comb.instrs.push_back(
-            make_load(target_vreg, bitsupdate_node->target()->id(), bitwidth));
-      }
-      if (bitsupdate_node->source() && bitsupdate_node->source()->id() != 0) {
-        block_comb.instrs.push_back(
-            make_load(source_vreg, bitsupdate_node->source()->id(), bitwidth));
-      }
-
-      uint32_t lsb = 0;
-      uint32_t width = 0;
-      if (bitsupdate_node->range()) {
-        auto *range_node = bitsupdate_node->range();
-        if (range_node->type() == ch::core::lnodetype::type_lit) {
-          auto *lit_impl = static_cast<ch::core::litimpl *>(range_node);
-          uint64_t val = static_cast<uint64_t>(lit_impl->value());
-          uint32_t msb = static_cast<uint32_t>(val >> 32);
-          lsb = static_cast<uint32_t>(val & 0xFFFFFFFF);
-          width = msb - lsb + 1;
-        }
-      }
-
-      JitInstr bits_update_instr(JitOp::BITS_UPDATE, bitwidth);
-      bits_update_instr.dst = dst_vreg;
-      bits_update_instr.src0 = target_vreg;
-      bits_update_instr.src1 = source_vreg;
-      bits_update_instr.imm = ImmValue(lsb, static_cast<BitWidth>(width));
-      block_comb.instrs.push_back(bits_update_instr);
-      block_comb.instrs.push_back(make_store(node_id, dst_vreg, bitwidth));
-      break;
+    if (r != JitResult::SUCCESS) {
+      return r;
     }
-
-    default:
-      break;
+    if (count_comb) {
+      block_comb.node_count++;
     }
-
-    block_comb.node_count++;
   }
 
   func_comb.vreg_count = next_comb_vreg;
