@@ -121,16 +121,10 @@ class LoadConstDut : public ch::Component {
     r1 <<= io().in0 + lit2;   // ← LOAD_CONST: 0x11 folded by JIT
     io().out0 <<= r0;
     io().out1 <<= r1;
-    // Use XOR (no width change) instead of +. r0 + r1 = ch_uint<8> +
-    // ch_uint<8> = ch_uint<9> (SpinalHDL: carry bit kept). The
-    // interpreter-arith-bug-fix commit fixed the interpreter's
-    // Add::eval width resize, but a separate divergence remains at
-    // the ch_out level: the JIT masks the stored value to the
-    // ch_out's declared bitwidth (8), while the interpreter returns
-    // the wider 9-bit sdata. A full resolution requires fixing
-    // ch_out truncation, which is out of scope for the arithmetic
-    // width fix. See .omo/plans/interpreter-arith-bug-fix.md.
-    io().out2 <<= r0 ^ r1;
+    // Add of two 8-bit values widens to 9 bits; the 8-bit ch_out truncates
+    // to (r0 + r1) & 0xFF. The truncation is the ch_out STORE_DATA contract,
+    // matched by both interpreter and JIT (see fix(io) commit).
+    io().out2 <<= r0 + r1;
   }
 };
 
@@ -304,18 +298,20 @@ TEST_CASE("JitOp::LOAD_CONST — literal folded, interpreter == JIT",
 
   // r0 = (in0 + 0xAB) & 0xFF  with 1-cycle delay
   // r1 = (in0 + 0x11) & 0xFF  with 1-cycle delay
-  // out0 = r0 (delayed), out1 = r1 (delayed), out2 = r0 ^ r1 (combinational)
+  // out0 = r0 (delayed), out1 = r1 (delayed), out2 = (r0 + r1) & 0xFF
+  //        (Add widens to 9 bits; the 8-bit ch_out truncates)
   REQUIRE(interp[0][0] == ((0x00 + 0xAB) & 0xFF));
   REQUIRE(interp[0][1] == ((0x00 + 0x11) & 0xFF));
-  REQUIRE(interp[0][2] == (0xAB ^ 0x11));
+  REQUIRE(interp[0][2] == ((((0x00 + 0xAB) & 0xFF) + ((0x00 + 0x11) & 0xFF)) & 0xFF));
   REQUIRE(interp[1][0] == ((0x01 + 0xAB) & 0xFF));
   REQUIRE(interp[1][1] == ((0x01 + 0x11) & 0xFF));
-  REQUIRE(interp[1][2] == (0xAC ^ 0x12));
+  REQUIRE(interp[1][2] == ((((0x01 + 0xAB) & 0xFF) + ((0x01 + 0x11) & 0xFF)) & 0xFF));
+  REQUIRE(interp[3][2] == ((((0x42 + 0xAB) & 0xFF) + ((0x42 + 0x11) & 0xFF)) & 0xFF));  // 0xED+0x53=0x140 → 0x40
   REQUIRE(interp[4][0] == ((0x55 + 0xAB) & 0xFF));
   REQUIRE(interp[5][0] == ((0x99 + 0xAB) & 0xFF));
   REQUIRE(interp[6][0] == ((0xFE + 0xAB) & 0xFF));  // wraps to 0xA9
   REQUIRE(interp[7][0] == ((0xFF + 0xAB) & 0xFF));  // wraps to 0xAA
-  REQUIRE(interp[6][2] == ((((0xFE + 0xAB) & 0xFF)) ^ (((0xFE + 0x11) & 0xFF))));
+  REQUIRE(interp[6][2] == ((((0xFE + 0xAB) & 0xFF) + ((0xFE + 0x11) & 0xFF)) & 0xFF));  // 0xA9+0x0F=0xB8
 }
 
 TEST_CASE("JitOp::SELECT — ternary mux, interpreter == JIT",
