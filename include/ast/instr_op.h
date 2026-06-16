@@ -1,4 +1,16 @@
-// include/sim/instr_op.h - 扩展版本
+// include/ast/instr_op.h
+// Phase 7: Aggregator for AST op type structs (instr_op_*).
+// After Phase 7 split, this file keeps:
+//   - The 3 template wrapper classes (instr_op_binary, instr_op_unary, instr_op_ternary)
+//   - Width/concat ops (BitSel, BitsExtract, Concat)
+//   - Extension ops (Sext, Zext)
+//   - Special ops (Assign, BitsUpdate, instr_op_bits_update class)
+//   - All type aliases
+// The per-category op structs (arith, logic, compare, shift) are in:
+//   include/ast/instr_op_arith.h    (Add, Sub, Mul, Div, Mod, Neg)
+//   include/ast/instr_op_logic.h    (And, Or, Xor, Not, And/Or/XorReduce)
+//   include/ast/instr_op_compare.h  (Eq, Ne, Lt, Le, Gt, Ge)
+//   include/ast/instr_op_shift.h    (Shl, Shr, RotateLeft, RotateRight, Sshr, PopCount)
 #pragma once
 
 #include "instr_base.h"
@@ -6,6 +18,12 @@
 #include <cstdint>
 #include <iostream> // for std::cerr
 #include <type_traits>
+
+// Per-category op structs (each declares namespace ch { namespace op { ... } })
+#include "instr_op_arith.h"
+#include "instr_op_logic.h"
+#include "instr_op_compare.h"
+#include "instr_op_shift.h"
 
 namespace ch {
 
@@ -17,8 +35,8 @@ class data_map_t;
 // -----------------------------
 template <typename Op> class instr_op_binary : public instr_base {
 public:
-    instr_op_binary(ch::core::sdata_type *dst, uint32_t size,
-                    ch::core::sdata_type *src0, ch::core::sdata_type *src1)
+    instr_op_binary(core::sdata_type *dst, uint32_t size,
+                    core::sdata_type *src0, core::sdata_type *src1)
         : instr_base(size), dst_(dst), src0_(src0), src1_(src1) {}
 
     void eval() override {
@@ -33,9 +51,9 @@ public:
     }
 
 private:
-    ch::core::sdata_type *dst_;
-    ch::core::sdata_type *src0_;
-    ch::core::sdata_type *src1_;
+    core::sdata_type *dst_;
+    core::sdata_type *src0_;
+    core::sdata_type *src1_;
 };
 
 // -----------------------------
@@ -43,8 +61,8 @@ private:
 // -----------------------------
 template <typename Op> class instr_op_unary : public instr_base {
 public:
-    instr_op_unary(ch::core::sdata_type *dst, uint32_t size,
-                   ch::core::sdata_type *src)
+    instr_op_unary(core::sdata_type *dst, uint32_t size,
+                   core::sdata_type *src)
         : instr_base(size), dst_(dst), src_(src) {}
 
     void eval() override {
@@ -58,8 +76,8 @@ public:
     }
 
 private:
-    ch::core::sdata_type *dst_;
-    ch::core::sdata_type *src_;
+    core::sdata_type *dst_;
+    core::sdata_type *src_;
 };
 
 // -----------------------------
@@ -67,9 +85,9 @@ private:
 // -----------------------------
 template <typename Op> class instr_op_ternary : public instr_base {
 public:
-    instr_op_ternary(ch::core::sdata_type *dst, uint32_t size,
-                     ch::core::sdata_type *src0, ch::core::sdata_type *src1,
-                     ch::core::sdata_type *src2)
+    instr_op_ternary(core::sdata_type *dst, uint32_t size,
+                     core::sdata_type *src0, core::sdata_type *src1,
+                     core::sdata_type *src2)
         : instr_base(size), dst_(dst), src0_(src0), src1_(src1), src2_(src2) {}
 
     void eval() override {
@@ -84,307 +102,21 @@ public:
     }
 
 private:
-    ch::core::sdata_type *dst_;
-    ch::core::sdata_type *src0_;
-    ch::core::sdata_type *src1_;
-    ch::core::sdata_type *src2_;
+    core::sdata_type *dst_;
+    core::sdata_type *src0_;
+    core::sdata_type *src1_;
+    core::sdata_type *src2_;
 };
 
-// -----------------------------
-// Operation Policies (Function Objects)
-// -----------------------------
+// === Per-category op structs ===
 namespace op {
-
-// Helper: Check if destination is 1-bit for comparisons
-inline bool check_comparison_result_width(ch::core::sdata_type *dst) {
-    if (dst->bitwidth() != 1) {
-        std::cerr
-            << "Error: Destination bitvector size must be 1 for comparison!"
-            << std::endl;
-        *dst = false;
-        return false;
-    }
-    return true;
-}
-
-// === 现有的操作保持不变 ===
-// ADD
-// dst is sized to the compile-time result bitwidth; bv_add_truncate
-// truncates the natural max(lhs,rhs)+1 result to dst->size() (matches JIT
-// mask to bitwidth).
-struct Add {
-    static const char *name() { return "instr_op_add::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        ch::internal::bv_add_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
-    }
-};
-
-// SUB
-struct Sub {
-    static const char *name() { return "instr_op_sub::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        auto width = std::max(src0->bitwidth(), src1->bitwidth());
-        dst->bv_.resize(width);
-        ch::internal::bv_sub_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
-    }
-};
-
-// MUL
-// dst is sized to the compile-time result bitwidth; bv_mul_truncate
-// truncates the natural lhs+lhs result to dst->size() (matches JIT mask
-// to bitwidth).
-struct Mul {
-    static const char *name() { return "instr_op_mul::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        ch::internal::bv_mul_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
-    }
-};
-
-// AND
-struct And {
-    static const char *name() { return "instr_op_and::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        auto width = std::max(src0->bitwidth(), src1->bitwidth());
-        dst->bv_.resize(width);
-        ch::internal::bv_and_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
-    }
-};
-
-// OR
-struct Or {
-    static const char *name() { return "instr_op_or::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        auto width = std::max(src0->bitwidth(), src1->bitwidth());
-        dst->bv_.resize(width);
-        ch::internal::bv_or_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
-    }
-};
-
-// XOR
-struct Xor {
-    static const char *name() { return "instr_op_xor::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        auto width = std::max(src0->bitwidth(), src1->bitwidth());
-        dst->bv_.resize(width);
-        ch::internal::bv_xor_truncate<uint64_t>(&dst->bv_, &src0->bv_, &src1->bv_);
-    }
-};
-
-// NOT
-struct Not {
-    static const char *name() { return "instr_op_not::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        dst->bv_.resize(src->bitwidth());
-        ch::internal::bv_inv_truncate<uint64_t>(&dst->bv_, &src->bv_);
-    }
-};
-
-// EQ ==
-struct Eq {
-    static const char *name() { return "instr_op_eq::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (!check_comparison_result_width(dst))
-            return;
-        bool result_val = (*src0 == *src1);
-        *dst = result_val ? 1 : 0;
-    }
-};
-
-// NE !=
-struct Ne {
-    static const char *name() { return "instr_op_ne::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (!check_comparison_result_width(dst))
-            return;
-        bool result_val = (*src0 != *src1);
-        *dst = result_val ? 1 : 0;
-    }
-};
-
-// LT <
-struct Lt {
-    static const char *name() { return "instr_op_lt::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (!check_comparison_result_width(dst))
-            return;
-        bool result_val = (*src0 < *src1);
-        *dst = result_val ? 1 : 0;
-    }
-};
-
-// LE <=
-struct Le {
-    static const char *name() { return "instr_op_le::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (!check_comparison_result_width(dst))
-            return;
-        bool result_val = (*src0 <= *src1);
-        *dst = result_val ? 1 : 0;
-    }
-};
-
-// GT >
-struct Gt {
-    static const char *name() { return "instr_op_gt::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (!check_comparison_result_width(dst))
-            return;
-        bool result_val = (*src0 > *src1);
-        *dst = result_val ? 1 : 0;
-    }
-};
-
-// GE >=
-struct Ge {
-    static const char *name() { return "instr_op_ge::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (!check_comparison_result_width(dst))
-            return;
-        bool result_val = (*src0 >= *src1);
-        *dst = result_val ? 1 : 0;
-    }
-};
-
-// === 新添加的操作 ===
-
-// DIV (除法)
-struct Div {
-    static const char *name() { return "instr_op_div::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (src1->is_zero()) {
-            std::cerr << "[instr_op_div] Error: Division by zero!" << std::endl;
-            *dst = ch::core::sdata_type(0, dst->bitwidth());
-            return;
-        }
-        *dst = *src0 / *src1;
-    }
-};
-
-// MOD (取模)
-struct Mod {
-    static const char *name() { return "instr_op_mod::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        if (src1->is_zero()) {
-            std::cerr << "[instr_op_mod] Error: Modulo by zero!" << std::endl;
-            *dst = ch::core::sdata_type(0, dst->bitwidth());
-            return;
-        }
-        *dst = *src0 % *src1;
-    }
-};
-
-// SHL (左移)
-// dst is sized to the compile-time result bitwidth; bv_shl_truncate
-// shifts into dst->size() bits (matches JIT mask to bitwidth). The
-// previous `*dst = (*src0) << shift` path was buggy because
-// sdata::operator=(sdata) resizes dst to the operator<< result width
-// (max(compute_bw+shift, lhs.bw)), which can exceed dst.bw.
-struct Shl {
-    static const char *name() { return "instr_op_shl::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        uint64_t shift = static_cast<uint64_t>(*src1);
-        ch::internal::bv_shl_truncate<uint64_t>(&dst->bv_, &src0->bv_,
-                                                static_cast<uint32_t>(shift));
-    }
-};
-
-// SHR (逻辑右移)
-struct Shr {
-    static const char *name() { return "instr_op_shr::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        uint64_t shift = static_cast<uint64_t>(*src1); // 修复：使用转换操作符
-        *dst = (*src0) >> static_cast<uint32_t>(shift);
-    }
-};
-
-// ROTATE_LEFT (循环左移)
-struct RotateLeft {
-    static const char *name() { return "instr_op_rotate_left::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        uint32_t bw = src0->bitwidth();
-        uint64_t count = static_cast<uint64_t>(*src1) % bw;
-        uint64_t val = static_cast<uint64_t>(*src0);
-        uint64_t mask = (bw < 64) ? ((1ULL << bw) - 1) : ~0ULL;
-        uint64_t result = ((val << count) | (val >> (bw - count))) & mask;
-        *dst = result;
-    }
-};
-
-// ROTATE_RIGHT (循环右移)
-struct RotateRight {
-    static const char *name() { return "instr_op_rotate_right::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        uint32_t bw = src0->bitwidth();
-        uint64_t count = static_cast<uint64_t>(*src1) % bw;
-        uint64_t val = static_cast<uint64_t>(*src0);
-        uint64_t mask = (bw < 64) ? ((1ULL << bw) - 1) : ~0ULL;
-        uint64_t result = ((val >> count) | (val << (bw - count))) & mask;
-        *dst = result;
-    }
-};
-
-// SSHR (算术右移)
-struct Sshr {
-    static const char *name() { return "instr_op_sshr::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        uint64_t shift = static_cast<uint64_t>(*src1); // 修复：使用转换操作符
-        bool sign_bit = src0->get_bit(src0->bitwidth() - 1);
-        *dst = (*src0) >> static_cast<uint32_t>(shift); // 先逻辑右移
-
-        // 符号扩展
-        if (sign_bit && shift > 0 && shift < src0->bitwidth()) {
-            for (uint32_t i = src0->bitwidth() - static_cast<uint32_t>(shift);
-                 i < src0->bitwidth(); ++i) {
-                dst->set_bit(i, true);
-            }
-        }
-    }
-};
-
-// NEG (负号)
-// Two's complement negation: result = (~src + 1) & mask(dst.bw). We
-// compute in uint64_t then assign with truncation to dst's compile-time
-// bitwidth, avoiding the implicit +1 width growth of sdata::operator-
-// (whose `~src + 1` uses add_width = max(bw,bw)+1).
-struct Neg {
-    static const char *name() { return "instr_op_neg::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        uint64_t src_val = static_cast<uint64_t>(*src);
-        uint64_t neg_val = (~src_val) + 1ULL;
-        if (dst->bitwidth() < 64) {
-            uint64_t mask = (1ULL << dst->bitwidth()) - 1ULL;
-            neg_val &= mask;
-        }
-        *dst = neg_val;
-    }
-};
 
 // BIT_SEL (位选择)
 struct BitSel {
     static const char *name() { return "instr_op_bit_sel::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
-        uint64_t bit_index =
-            static_cast<uint64_t>(*src1); // 修复：使用转换操作符
+    static void eval(core::sdata_type *dst, core::sdata_type *src0,
+                     core::sdata_type *src1) {
+        uint64_t bit_index = static_cast<uint64_t>(*src1);
         if (bit_index < src0->bitwidth()) {
             bool bit_val = src0->get_bit(static_cast<uint32_t>(bit_index));
             *dst = bit_val ? 1 : 0;
@@ -400,8 +132,8 @@ struct BitSel {
 // src1 编码: 低32位 = lsb, 高32位 = msb
 struct BitsExtract {
     static const char *name() { return "instr_op_bits_extract::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
+    static void eval(core::sdata_type *dst, core::sdata_type *src0,
+                     core::sdata_type *src1) {
         uint64_t range_val = static_cast<uint64_t>(*src1);
         uint32_t lsb = static_cast<uint32_t>(range_val & 0xFFFFFFFF);
         uint32_t msb = static_cast<uint32_t>((range_val >> 32) & 0xFFFFFFFF);
@@ -409,7 +141,7 @@ struct BitsExtract {
         if (msb >= src0->bitwidth() || lsb > msb) {
             std::cerr << "[instr_op_bits_extract] Error: Invalid bit range ["
                       << msb << ":" << lsb << "]!" << std::endl;
-            *dst = ch::core::sdata_type(0, dst->bitwidth());
+            *dst = core::sdata_type(0, dst->bitwidth());
             return;
         }
 
@@ -419,11 +151,10 @@ struct BitsExtract {
                          "mismatch! Expected: "
                       << result_width << ", Actual: " << dst->bitwidth()
                       << std::endl;
-            *dst = ch::core::sdata_type(0, dst->bitwidth());
+            *dst = core::sdata_type(0, dst->bitwidth());
             return;
         }
 
-        // 提取位
         for (uint32_t i = 0; i < result_width; ++i) {
             bool bit_val = src0->get_bit(lsb + i);
             dst->set_bit(i, bit_val);
@@ -434,13 +165,12 @@ struct BitsExtract {
 // CONCAT (连接) - src0 (高位) + src1 (低位)
 struct Concat {
     static const char *name() { return "instr_op_concat::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src0,
-                     ch::core::sdata_type *src1) {
+    static void eval(core::sdata_type *dst, core::sdata_type *src0,
+                     core::sdata_type *src1) {
         uint32_t src0_width = src0->bitwidth();
         uint32_t src1_width = src1->bitwidth();
         uint32_t expected_width = src0_width + src1_width;
 
-        // 检查目标位宽是否符合预期
         if (expected_width != dst->bitwidth()) {
             std::cerr
                 << "[instr_op_concat] Warning: Destination width mismatch!"
@@ -448,11 +178,9 @@ struct Concat {
                 << ", expected: " << expected_width
                 << ", src0 width=" << src0_width << " src1_width=" << src1_width
                 << std::endl;
-            // 重新调整目标位宽以匹配期望值
-            *dst = ch::core::sdata_type(dst->bitwidth()); // 重置为目标位宽的0值
+            *dst = core::sdata_type(dst->bitwidth());
         }
 
-        // 将src1放在低位，src0放在高位
         for (uint32_t i = 0; i < src1_width; ++i) {
             bool bit_val = src1->get_bit(i);
             dst->set_bit(i, bit_val);
@@ -467,7 +195,7 @@ struct Concat {
 // SEXT (符号扩展) - 一元操作
 struct Sext {
     static const char *name() { return "instr_op_sext::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
+    static void eval(core::sdata_type *dst, core::sdata_type *src) {
         uint32_t src_width = src->bitwidth();
         uint32_t dst_width = dst->bitwidth();
 
@@ -475,17 +203,15 @@ struct Sext {
             std::cerr << "[instr_op_sext] Error: Source width larger than "
                          "destination!"
                       << std::endl;
-            *dst = ch::core::sdata_type(0, dst_width);
+            *dst = core::sdata_type(0, dst_width);
             return;
         }
 
-        // 复制原始位
         for (uint32_t i = 0; i < src_width; ++i) {
             bool bit_val = src->get_bit(i);
             dst->set_bit(i, bit_val);
         }
 
-        // 符号扩展
         bool sign_bit = (src_width > 0) ? src->get_bit(src_width - 1) : false;
         for (uint32_t i = src_width; i < dst_width; ++i) {
             dst->set_bit(i, sign_bit);
@@ -496,7 +222,7 @@ struct Sext {
 // ZEXT (零扩展) - 一元操作
 struct Zext {
     static const char *name() { return "instr_op_zext::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
+    static void eval(core::sdata_type *dst, core::sdata_type *src) {
         uint32_t src_width = src->bitwidth();
         uint32_t dst_width = dst->bitwidth();
 
@@ -504,135 +230,45 @@ struct Zext {
             std::cerr << "[instr_op_zext] Error: Source width larger than "
                          "destination!"
                       << std::endl;
-            *dst = ch::core::sdata_type(0, dst_width);
+            *dst = core::sdata_type(0, dst_width);
             return;
         }
 
-        // 复制原始位
         for (uint32_t i = 0; i < src_width; ++i) {
             bool bit_val = src->get_bit(i);
             dst->set_bit(i, bit_val);
         }
 
-        // 零扩展
         for (uint32_t i = src_width; i < dst_width; ++i) {
             dst->set_bit(i, false);
         }
     }
 };
 
-// === 规约操作 (Reduce Operations) ===
-
-// AND_REDUCE
-struct AndReduce {
-    static const char *name() { return "instr_op_and_reduce::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        if (!check_comparison_result_width(dst))
-            return;
-
-        bool result = true;
-        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
-            result &= src->get_bit(i);
-            if (!result)
-                break; // 早期退出优化
-        }
-        *dst = result ? 1 : 0;
-    }
-};
-
-// OR_REDUCE
-struct OrReduce {
-    static const char *name() { return "instr_op_or_reduce::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        if (!check_comparison_result_width(dst))
-            return;
-
-        bool result = false;
-        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
-            result |= src->get_bit(i);
-            if (result)
-                break; // 早期退出优化
-        }
-        *dst = result ? 1 : 0;
-    }
-};
-
-// XOR_REDUCE
-struct XorReduce {
-    static const char *name() { return "instr_op_xor_reduce::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        if (!check_comparison_result_width(dst))
-            return;
-
-        bool result = false;
-        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
-            result ^= src->get_bit(i);
-        }
-        *dst = result ? 1 : 0;
-    }
-};
-
-// POPCOUNT (新增)
-struct PopCount {
-    static const char *name() { return "instr_op_popcount::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        if (!check_dst_width(dst, src->bitwidth()))
-            return;
-
-        uint64_t count = 0;
-        for (uint32_t i = 0; i < src->bitwidth(); ++i) {
-            if (src->get_bit(i)) {
-                count++;
-            }
-        }
-        *dst = count;
-    }
-
-private:
-    static bool check_dst_width(ch::core::sdata_type *dst, uint32_t src_width) {
-        // popcount的结果最大值是src_width，所以需要足够的位宽来表示这个值
-        // 例如，对于8位输入，结果最大是8，需要4位来表示（0-8）
-        uint32_t required_width =
-            src_width > 1 ? static_cast<uint32_t>(std::bit_width(src_width))
-                          : 1u;
-        if (dst->bitwidth() < required_width) {
-            CHERROR("Destination width {} is less than required width {} for "
-                    "popcount of {} bits",
-                    dst->bitwidth(), required_width, src_width);
-            return false;
-        }
-        return true;
-    }
-};
-
-// 添加 ASSIGN 操作定义
+// ASSIGN 操作定义
 struct Assign {
     static const char *name() { return "instr_op_assign::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *src) {
-        // 使用 sdata_type 的 assign_truncate 方法处理不同宽度的赋值
+    static void eval(core::sdata_type *dst, core::sdata_type *src) {
         dst->assign_truncate(*src);
     }
 };
 
-// 添加 BITS_UPDATE 操作定义 - 将源数据分配到位范围
+// BITS_UPDATE 操作定义 - 将源数据分配到位范围
 struct BitsUpdate {
     static const char *name() { return "instr_op_bits_update::eval"; }
-    static void eval(ch::core::sdata_type *dst, ch::core::sdata_type *target,
-                     ch::core::sdata_type *source,
-                     ch::core::sdata_type *range_info) {
-        // src1 (range_info) 编码: 低32位 = lsb, 高32位 = msb
+    static void eval(core::sdata_type *dst, core::sdata_type *target,
+                     core::sdata_type *source,
+                     core::sdata_type *range_info) {
         uint64_t range_val = static_cast<uint64_t>(*range_info);
         uint32_t lsb = static_cast<uint32_t>(range_val & 0xFFFFFFFF);
         uint32_t msb = static_cast<uint32_t>((range_val >> 32) & 0xFFFFFFFF);
 
-        // 确保目标位宽足够大
         if (dst->bitwidth() <= msb) {
             std::cerr << "Destination width " << dst->bitwidth()
                       << " is less than required MSB " << msb << std::endl;
             return;
         }
 
-        // 保留目标数据的其他位不变，仅替换指定范围内的位
         *dst = *target;
         for (uint32_t i = 0; i < (msb - lsb + 1) && i < source->bitwidth(); ++i) {
             bool bit_val = source->get_bit(i);
@@ -646,9 +282,9 @@ struct BitsUpdate {
 // bits_update 指令：dst = (target & clear_mask) | (source << lsb & keep_mask)
 class instr_op_bits_update : public instr_base {
 public:
-    instr_op_bits_update(ch::core::sdata_type *dst, uint32_t size,
-                         ch::core::sdata_type *target, ch::core::sdata_type *source,
-                         ch::core::sdata_type *range_info)
+    instr_op_bits_update(core::sdata_type *dst, uint32_t size,
+                         core::sdata_type *target, core::sdata_type *source,
+                         core::sdata_type *range_info)
         : instr_base(size), dst_(dst), target_(target), source_(source),
           range_(range_info) {}
 
@@ -658,14 +294,14 @@ public:
                       << std::endl;
             return;
         }
-        ch::op::BitsUpdate::eval(dst_, target_, source_, range_);
+        ::ch::op::BitsUpdate::eval(dst_, target_, source_, range_);
     }
 
 private:
-    ch::core::sdata_type *dst_;
-    ch::core::sdata_type *target_;
-    ch::core::sdata_type *source_;
-    ch::core::sdata_type *range_;
+    core::sdata_type *dst_;
+    core::sdata_type *target_;
+    core::sdata_type *source_;
+    core::sdata_type *range_;
 };
 
 // -----------------------------
@@ -704,7 +340,7 @@ using instr_op_zext = instr_op_unary<op::Zext>;
 using instr_op_and_reduce = instr_op_unary<op::AndReduce>;
 using instr_op_or_reduce = instr_op_unary<op::OrReduce>;
 using instr_op_xor_reduce = instr_op_unary<op::XorReduce>;
-using instr_op_assign = instr_op_unary<op::Assign>; // 添加 assign 操作的别名
+using instr_op_assign = instr_op_unary<op::Assign>;
 
 // 添加popcount别名
 using instr_op_popcount = instr_op_unary<op::PopCount>;
