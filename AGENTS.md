@@ -106,6 +106,16 @@ See `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` for full detail
 - Empty TEST_CASE: use SKIP() or delete
 - Missing ctx_swap: register ops segfault without it
 
+## OPENSPEC WORKFLOW
+The project is `schema: spec-driven` (see `openspec/config.yaml`). `openspec/specs/` is the **current spec source of truth** — never bypass it.
+
+- **Directory layout (OpenSpec 1.4.0)**: 主规范使用 capability 文件夹结构 — `openspec/specs/<capability>/spec.md`。**禁止**使用扁平的 `openspec/specs/<capability>.md`（CLI 不识别）。详见 `docs/developer_guide/openspec-specs-guide.md`。
+- **Archive must merge specs**: `openspec archive <name>` 默认会合并 `openspec/changes/<name>/specs/<capability>/spec.md` 的 `## ADDED Requirements` 到 `openspec/specs/<capability>/spec.md`。**禁止**使用 `--skip-specs` 标志，除非该 change 显式声明 "no spec changes"（参见 `fix-ns-pollution` 模式）。
+- **Spec 变更必须走 change 流程**：直接修改 `openspec/specs/<capability>/spec.md` 是禁止的；先创建 change 提案，archive 时由 CLI 自动合并。
+- **Spec 内容规范**：每条 requirement 描述**必须**含 `SHALL` 或 `MUST` 关键字（RFC 2119）；`## Purpose` 与 `## Requirements` 必须是 heading 而非引用块。
+- **CI 校验**：`openspec validate --specs --strict` 必须在 archive 前通过。当前 `openspec/specs/` 包含 `chlib-aggregator/`（2 requirements，来自 `2026-06-17-fix-include-aggregation`）。
+- **See**: `docs/developer_guide/openspec-specs-guide.md`（完整格式规范与迁移历史）
+
 ## JIT COMPILER RULES (CRITICAL)
 The JIT compiler (`src/jit/jit_compiler.cpp`) compiles HDL operations to native code. These rules prevent silent data corruption:
 
