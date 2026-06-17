@@ -1,3 +1,7 @@
+# fix-jit-fail-fast
+
+> **STATUS (2026-06-17)**: 5/9 tasks complete. Core JIT changes (1.1, 1.2, 2.1, 2.2, 2.3) all done. Task 1.3 (AGENTS.md rule update for explicit CALL_EXTERNAL prohibition) still pending — should be addressed in a follow-up. Task 3.x verification pending.
+
 ## 1. JIT FAIL FAST 实施
 
 - [x] 1.1 从 `jit_compiler.cpp:generate_ir()` line 移除 concat 映射

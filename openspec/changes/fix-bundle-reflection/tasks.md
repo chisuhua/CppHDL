@@ -1,3 +1,7 @@
+# fix-bundle-reflection
+
+> **STATUS (2026-06-17)**: Analysis phase complete. 10-field limit fix (Task 2) and verification (Task 4) still pending. add_user task (Task 3) is cancelled per ADR-014 P2 deferral.
+
 ## 1. 分析阶段
 
 - [x] 1.1 找到 Bundle 反射系统实现代码
