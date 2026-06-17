@@ -189,7 +189,8 @@ public:
 
     // Arbiter: round-robin, 2-bit state, 4-way request grant.
     template <typename TS>
-    void build_arbiter(TS &s, ch_bool m0_req, ch_bool m1_req, ch_bool m2_req, ch_bool m3_req,
+    void build_arbiter(TS &s, const ch_in<ch_bool> &m0_req, const ch_in<ch_bool> &m1_req,
+                       const ch_in<ch_bool> &m2_req, const ch_in<ch_bool> &m3_req,
                        ch_bool &grant_m0, ch_bool &grant_m1, ch_bool &grant_m2, ch_bool &grant_m3) {
         grant_m0 = select((s.arb_state == ch_uint<2>(0_d)), m0_req, ch_bool(false));
         grant_m1 = select((s.arb_state == ch_uint<2>(1_d)), m1_req, ch_bool(false));
