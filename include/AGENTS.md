@@ -24,7 +24,8 @@ include/
 ├── axi4/               # AXI4 interconnect + peripherals (AGENTS.md)
 ├── cpu/                # RV32I core, cache (AGENTS.md)
 ├── lnode/              # Logic node impl types
-└── bv/                 # Bit-vector math (gmp/mpfr)
+├── bv/                 # Bit-vector math (gmp/mpfr)
+└── utils/              # Cross-cutting helpers (logger, format, source_info, destruction_manager)
 ```
 
 ## CONVENTIONS

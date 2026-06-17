@@ -44,6 +44,7 @@ CppHDL/
 | FIFO | `include/chlib/fifo.h` |
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
 | State machine DSL | `include/chlib/state_machine.h` |
+| If/else statement DSL | `include/chlib/if_stmt.h` |
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
