@@ -158,14 +158,52 @@ constexpr auto __bundle_fields() {
 | 日期 | 版本 | 变更 | 作者 |
 |------|------|------|------|
 | 2026-05-07 | v1.0 | 初始版本，记录 Q1-Q3 分析与决议；详细记录 Bug A/B 的代码证据 | Sisyphus + 用户 |
+| 2026-06-18 | v1.1 | **Q1 修复完成**：`CH_BUNDLE_FIELDS_T` 宏从 10 字段扩展到 **40 字段**（`CH_GET_NTH_ARG` + `CH_BUNDLE_FIELDS_T_21` ~ `_40`）。修复了 `HazardUnitBundle` 23 字段被静默丢弃 3 字段的潜在 bug。新增 `tests/test_bundle_large.cpp` 回归测试覆盖 1/20/23/25/40 字段边界。**未来工作**：变基到 C++20 variadic 模板可彻底解除限制（见 §4.2 方案）| Sisyphus |
+
+---
+
+## 6. 当前限制与未来工作
+
+### 6.1 Q1 限制（已缓解）
+
+**当前实现**: 宏支持 1~40 字段。已通过 `tests/test_bundle_large.cpp` 验证所有边界。
+
+**已知不足**: 仍是 X-macro 实现，每次扩展需手动添加 20 个宏。编译期 `CH_GET_NTH_ARG` 深度随字段数线性增长，对 >40 字段的 Bundle 仍会静默截断。
+
+**未来重构方案**（来自 §4.2，**非阻塞**）:
+```cpp
+template<typename Self, typename... Fields>
+constexpr auto __bundle_fields() {
+    return std::make_tuple(
+        bundle_field<Self, Fields>{Fields::name, &Self::name}...
+    );
+}
+
+#define CH_BUNDLE_FIELDS(...)                                                  \
+    using bundle_base<Self>::bundle_base;                                      \
+    static constexpr auto __bundle_fields() {                                  \
+        return __bundle_fields_impl<Self, __VA_ARGS__>();                     \
+    }
+```
+
+**触发条件**: 当任何 Bundle 超过 40 字段，或当 variadic 重构被列为低风险任务时再实施。当前 27 个 Bundle 中最大 23 字段，余量充足（17 字段）。
+
+### 6.2 Q2 比特序（未启动）
+
+比特序隐式 LSB-first 约定无文档注释，详见 §2.3。
+
+### 6.3 Q3 add_user（已延期）
+
+P2 延期任务，按 §2.4 当前决策不变。
 
 ---
 
 **相关链接**:
-- `include/core/bundle/bundle_meta.h:23-72` — `CH_BUNDLE_FIELDS_T` 宏定义和 10 字段限制机制
+- `include/core/bundle/bundle_meta.h:23-152` — `CH_BUNDLE_FIELDS_T` 宏定义（扩展到 1-40 字段）
 - `include/core/bundle/bundle_base.h:268-312` — `create_field_slices_from_node()` 比特序实现
 - `include/core/bundle/bundle_layout.h` — 字段布局计算（LSB-first 隐式约定）
-- `include/cpu/hazard/hazard_unit_bundle.h:161-169` — **Bug A**：23 字段 Bundle
+- `tests/test_bundle_large.cpp` — 1/20/23/25/40 字段边界回归测试
+- `examples/riscv-mini/src/hazard_unit_bundle.h:161-169` — **Bug A**（23 字段，现已支持）
 - `include/bundle/clock_reset_bundle.h:21` — **Bug B**：使用未定义的 `CH_BUNDLE_FIELDS` 宏
 - `include/core/lnodeimpl.h:141` — `add_user()` 定义
 - `docs/adr/ADR-DISCUSSION-PLAN.md` — 议题 #9

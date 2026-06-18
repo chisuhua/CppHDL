@@ -169,6 +169,7 @@ add_catch_test(test_source_info test_source_info.cpp)
 
 # Bundle 测试
 add_catch_test(test_bundle test_bundle.cpp)
+add_catch_test(test_bundle_large test_bundle_large.cpp)
 add_catch_test(test_bundle_advanced test_bundle_advanced.cpp)
 add_catch_test(test_bundle_advanced_features test_bundle_advanced_features.cpp)
 add_catch_test(test_bundle_bitstream test_bundle_bitstream.cpp)
