@@ -67,7 +67,16 @@ ctest -L reg
 ## RELATED
 
 - tests/chlib/ : Component library tests
-- Catch2 tags: `[basic]`, `[reg]`, `[bundle]`, `[stream]`, `[memory]`, `[io]`, `[chlib]`
+- Catch2 tags: `[basic]`, `[reg]`, `[bundle]`, `[stream]`, `[memory]`, `[io]`, `[chlib]`, `[perf]`
+
+## PERF MEASUREMENT ISOLATION (F2, 2026-06-19)
+
+`tests/benchmark/perf_main.cpp` runs TC-07/08/09 in **separate child processes** (via `tests/benchmark/subprocess_runner.h::run_perf_subprocess`) to avoid the K1 ORC JIT cross-DUT state pollution documented in `docs/simulation/PERF_COMPARISON_REPORT.md §6 K1`. Each TC gets a fresh address space; the parent reads the child's `perf_results.json` and merges into the parent's reporter.
+
+Conventions for perf benchmarks:
+- **`--direct` flag**: when passed, `perf_main` runs the requested TC **in-process** (no subprocess spawn). Use for: (a) standalone `--tc=NN` invocations, (b) the parent always passes `--direct` when invoking children. Without `--direct`, the child would itself spawn another child (infinite recursion).
+- **Subprocess inherits the parent's --workdir** as a per-TC temp dir, so the child's `perf_results.json` is captured in isolation, not written to the project root.
+- **No cross-DUT state**: each TC starts with a clean LLVM ORC state. Do not write tests that depend on shared `JitCompiler` state across multiple TC calls.
 
 ## PHASE GATES
 Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**. For tests:
@@ -75,3 +84,4 @@ Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**. Fo
 - **New feature → new TEST_CASE**: every public API must have test coverage
 - **Catch2 tags**: `[category][subcategory]` for `ctest -L` filtering
 - **No test dependencies**: each TEST_CASE is independent with its own context
+- **Perf subprocess tests** (`tests/benchmark/test_perf_subprocess_*.cpp`): expect ~15-20 minute total runtime because the test invokes `perf_tests --all` (which spawns 9 child processes for TC-07/08/09 × {10,100,1000} plus TC-01/02/04/06/10/11 in-process). Wall-clock is dominated by TC-09 (`ch_uint<32>` arith chain, depth=1000) and TC-11 (`ch_uint<256>` wide reg chain, regs=1000). Set `TIMEOUT 1800` (30 min) in CMake — original TIMEOUT 300 was insufficient and caused false failures.

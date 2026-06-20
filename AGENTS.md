@@ -166,7 +166,7 @@ ctest --output-on-failure
 ```
 
 ## NOTES
-- 141 CTest tests registered (1 pre-existing timeout: `perf_tests` ~120s; pass count rerun before claiming)
+- 142 CTest tests registered. `perf_tests` runs `perf_tests --all` (F2 subprocess-isolated), wall-clock ~15-20 min; TIMEOUT 1800 in CMake. Pass count rerun before claiming.
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)

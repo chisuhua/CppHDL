@@ -68,15 +68,25 @@ endif()
 #
 # The perf_tests binary runs multiple internal benchmarks, some of
 # which exercise the JIT path. The JIT is enabled by default in
-# CMakeLists.txt, so the test always runs in CI. The 300s timeout
-# guards against hangs on malformed DUTs.
+# CMakeLists.txt, so the test always runs in CI.
+#
+# Runtime note (measured 2026-06-19 on developer workstation): after
+# F2 (fix-perf-subprocess-isolation), `perf_tests --all` spawns 9 child
+# processes for TC-07/08/09 × {10,100,1000} (subprocess isolation to
+# avoid K1 ORC JIT cross-DUT state pollution) plus runs TC-01/02/04/06
+# in-process and TC-10/11 in-process. Total wall-clock is ~15 minutes,
+# dominated by TC-09 (ch_uint<32> arith chain, depth=1000) and TC-11
+# (ch_uint<256> wide reg chain, regs=1000). TIMEOUT 1800 (30 min)
+# provides ~2× safety margin over the measured 930 s; the previous
+# TIMEOUT 900 was insufficient and caused ctest to kill the test mid
+# TC-09 (F2 regression).
 if(CPPHDL_VERILATOR_WRAPPER)
     add_test(NAME perf_tests COMMAND perf_tests --all
         --verilator=${CPPHDL_VERILATOR_WRAPPER}
         --report=json --report=csv --report=md)
     set_tests_properties(perf_tests PROPERTIES
         LABELS "perf"
-        TIMEOUT 900
+        TIMEOUT 1800
         ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
@@ -85,7 +95,7 @@ else()
         --report=json --report=csv --report=md)
     set_tests_properties(perf_tests PROPERTIES
         LABELS "perf"
-        TIMEOUT 900
+        TIMEOUT 1800
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
 endif()

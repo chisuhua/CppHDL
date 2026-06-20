@@ -96,6 +96,26 @@ target_compile_definitions(perf_report_consistency PRIVATE
 )
 set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# F2 (fix-perf-subprocess-isolation): regression test for K1 ORC JIT
+# cross-DUT state pollution mitigation. Verifies that perf_tests --all
+# TC-08 JIT is within 1.5x of standalone TC-08 JIT. Pattern matches
+# perf_report_consistency: CATCH_AMALGAMATED_CUSTOM_MAIN + WORKING_DIRECTORY
+# at project root so subprocess can locate build/tests/benchmark/perf_tests.
+#
+# Runtime note (measured 2026-06-19 on developer workstation): the test
+# invokes `perf_tests --all` which spawns 9 child processes (TC-07/08/09 ×
+# {10,100,1000}) plus runs TC-01/02/04/06/10/11 in-process. Total wall-clock
+# is ~15 minutes, dominated by TC-09 (ch_uint<32> arith chain, depth=1000)
+# and TC-11 (ch_uint<256> wide reg chain, regs=1000). TIMEOUT 1800 (30 min)
+# provides ~2× safety margin over the measured 930 s; reduce to 1200 only on
+# machines confirmed to run TC-09/TC-11 in <8 min combined.
+add_catch_test(perf_subprocess_isolation
+    benchmark/test_perf_subprocess_isolation.cpp)
+target_compile_definitions(perf_subprocess_isolation PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
+set_tests_properties(perf_subprocess_isolation PROPERTIES LABELS "perf" TIMEOUT 1800
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 # W12 (perf-report-followup.md): structural JIT-vs-interpreter ratio gate.
 # The absolute 50ms gate (perf_jit_smallgraph) and the 1.2x baseline gate
 # (perf_regression) cannot catch the case where JIT silently degrades to
