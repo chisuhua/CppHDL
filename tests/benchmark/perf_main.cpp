@@ -11,6 +11,7 @@
 #include "stats_collector.h"
 #include "report_generator.h"
 #include "verilator_runner.h"
+#include "subprocess_runner.h"
 #include "ch.hpp"
 #include "simulator.h"
 #include "codegen_verilog.h"
@@ -35,7 +36,6 @@
 using namespace ch;
 using namespace ch::core;
 
-// Legacy TC-01/02/04/06 — single-backend combinational/sequential benchmarks (v1, preserved verbatim).
 static BenchmarkResult run_combinational_benchmark(int depth, int ticks) {
     PerfTimer timer;
     {
@@ -264,6 +264,137 @@ struct ThreeWayResult {
     std::string skip_reason;
 };
 
+// F2 (fix-perf-subprocess-isolation): helpers that drive TC-07/08/09 in a
+// fresh child process. Each helper builds a CLI command mirroring the
+// parent's --tc=NN flags, invokes run_perf_subprocess, parses the child's
+// perf_results.json, and returns a ThreeWayResult in the same shape as
+// the in-process run_three_way_tc07/08/09 functions below. The child
+// process runs in its own address space, so K1 ORC JIT cross-DUT state
+// pollution (see docs/simulation/PERF_COMPARISON_REPORT.md §6 K1) cannot
+// affect subsequent measurements.
+
+static std::filesystem::path self_exe_path() {
+    // Linux: /proc/self/exe is a symlink to the running executable.
+    // Returns the path; on readlink failure (other platforms) callers
+    // fall back to argv[0] at the call site.
+    std::error_code ec;
+    auto p = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec) return p;
+    return {};
+}
+
+static BenchmarkResult subprocess_row_to_benchmark_result(
+    const ch::perf_test::SubprocessRow& r) {
+    BenchmarkResult out;
+    out.test_name = r.test_name;
+    out.params = r.params;
+    out.backend = r.backend;
+    out.ticks_per_sec = r.ticks_per_sec;
+    out.ns_per_tick = r.ns_per_tick;
+    out.ns_per_node_tick = r.ns_per_node_tick;
+    out.overhead_percent = r.overhead_percent;
+    out.build_us = r.build_us;
+    out.sim_us = r.sim_us;
+    out.total_us = r.total_us;
+    out.iterations = r.iterations;
+    out.median_us = r.median_us;
+    out.status = r.status;
+    out.skip_reason = r.skip_reason;
+    return out;
+}
+
+// Find the row whose (backend, params) matches; if absent, return a SKIPPED
+// placeholder so the parent's reporter still emits a row for verilator-
+// missing environments.
+static BenchmarkResult find_or_skip(
+    const std::vector<ch::perf_test::SubprocessRow>& rows,
+    const std::string& want,
+    const std::string& test_name, const std::string& params) {
+    for (const auto& r : rows) {
+        if (r.backend == want && r.params == params) {
+            return subprocess_row_to_benchmark_result(r);
+        }
+    }
+    BenchmarkResult skip;
+    skip.test_name = test_name;
+    skip.params = params;
+    skip.backend = want;
+    skip.status = "SKIPPED";
+    skip.skip_reason = "no row for backend '" + want + "' params '" + params +
+        "' in subprocess output";
+    return skip;
+}
+
+static ThreeWayResult run_three_way_subprocess_dispatch(
+    const std::string& tc_str, const std::string& params,
+    const std::string& test_name,
+    int ticks, int warmup, int measured,
+    const std::string& verilator_bin, const std::string& cache_root,
+    const std::string& workdir) {
+    ThreeWayResult twr;
+    auto exe = self_exe_path();
+    if (exe.empty()) {
+        BenchmarkResult fail;
+        fail.test_name = test_name; fail.params = params;
+        fail.status = "SKIPPED";
+        fail.skip_reason = "subprocess self-exe path not available";
+        twr.interp = fail; twr.interp.backend = "interpreter";
+        twr.jit = fail; twr.jit.backend = "jit";
+        twr.verilator = fail; twr.verilator.backend = "verilator";
+        twr.verilator_skipped = true;
+        twr.skip_reason = fail.skip_reason;
+        return twr;
+    }
+    std::vector<std::string> args = {
+        "--direct",  // subprocess runs in-process to avoid infinite recursion
+        "--ticks=" + std::to_string(ticks),
+        "--warmup=" + std::to_string(warmup),
+        "--measured=" + std::to_string(measured),
+        "--verilator=" + verilator_bin,
+        "--cache-root=" + cache_root,
+        "--workdir=" + workdir,
+    };
+    auto sub = ch::perf_test::run_perf_subprocess(exe, tc_str, args, 180);
+    if (!sub.error_msg.empty() || sub.timed_out) {
+        std::cerr << "  [F2 subprocess] " << tc_str << " " << params
+                  << ": " << sub.error_msg << "\n";
+    }
+    twr.interp = find_or_skip(sub.rows, "interpreter", test_name, params);
+    twr.jit = find_or_skip(sub.rows, "jit", test_name, params);
+    twr.verilator = find_or_skip(sub.rows, "verilator", test_name, params);
+    twr.verilator_skipped = (twr.verilator.status == "SKIPPED" ||
+                             twr.verilator.status == "UNSUPPORTED");
+    twr.skip_reason = twr.verilator.skip_reason;
+    return twr;
+}
+
+static ThreeWayResult run_three_way_subprocess_tc07(
+    int depth, int ticks, int warmup, int measured,
+    const std::string& verilator_bin, const std::string& cache_root,
+    const std::string& workdir) {
+    std::string params = "depth=" + std::to_string(depth);
+    return run_three_way_subprocess_dispatch("07", params, "TC-07",
+        ticks, warmup, measured, verilator_bin, cache_root, workdir);
+}
+
+static ThreeWayResult run_three_way_subprocess_tc08(
+    int regs, int ticks, int warmup, int measured,
+    const std::string& verilator_bin, const std::string& cache_root,
+    const std::string& workdir) {
+    std::string params = "regs=" + std::to_string(regs);
+    return run_three_way_subprocess_dispatch("08", params, "TC-08",
+        ticks, warmup, measured, verilator_bin, cache_root, workdir);
+}
+
+static ThreeWayResult run_three_way_subprocess_tc09(
+    int depth, int ticks, int warmup, int measured,
+    const std::string& verilator_bin, const std::string& cache_root,
+    const std::string& workdir) {
+    std::string params = "depth=" + std::to_string(depth);
+    return run_three_way_subprocess_dispatch("09", params, "TC-09",
+        ticks, warmup, measured, verilator_bin, cache_root, workdir);
+}
+
 // Run `runner` `warmup + measured` times; return median (us) of measured.
 static double time_backend_us(std::function<void()> runner,
                               int warmup, int measured) {
@@ -481,6 +612,11 @@ int main(int argc, char* argv[]) {
     // time.
     reporter.set_metadata_field("git_sha", capture_git_sha());
     bool run_all = false, tc01 = false, tc02 = false, tc04 = false, tc06 = false;
+    // F2 (fix-perf-subprocess-isolation): when the parent perf_main spawns
+    // a child for a single TC, it passes --direct so the child runs the
+    // TC in-process. Without --direct, the child would itself spawn another
+    // child for the same TC (infinite recursion).
+    bool direct = false;
     bool tc07 = false, tc08 = false;
     bool tc09 = false, tc10 = false, tc11 = false;
     std::vector<std::string> report_formats;
@@ -504,6 +640,7 @@ int main(int argc, char* argv[]) {
         else if ((v = flag_value(argv[i], "--measured=")).size() > 0)   measured = std::atoi(v.c_str());
         else if ((v = flag_value(argv[i], "--ticks=")).size() > 0)      ticks = std::atoi(v.c_str());
         else if (!std::strcmp(argv[i], "--all") || !std::strcmp(argv[i], "--baseline")) run_all = true;
+        else if (!std::strcmp(argv[i], "--direct")) direct = true;
         else if (!std::strcmp(argv[i], "--tc=01")) tc01 = true;
         else if (!std::strcmp(argv[i], "--tc=02")) tc02 = true;
         else if (!std::strcmp(argv[i], "--tc=04")) tc04 = true;
@@ -568,8 +705,10 @@ int main(int argc, char* argv[]) {
     if (run_all || tc07) {
         std::cout << "TC-07: 3-way XOR chain\n";
         for (int d : std::vector<int>{10, 100, 1000}) {
-            auto twr = run_three_way_tc07(d, ticks, warmup, measured,
-                                          verilator_bin, cache_root, workdir);
+            auto twr = direct ? run_three_way_tc07(d, ticks, warmup, measured,
+                                                    verilator_bin, cache_root, workdir)
+                              : run_three_way_subprocess_tc07(d, ticks, warmup, measured,
+                                                    verilator_bin, cache_root, workdir);
             reporter.add_result(twr.interp);
             reporter.add_result(twr.jit);
             reporter.add_result(twr.verilator);
@@ -585,8 +724,10 @@ int main(int argc, char* argv[]) {
     if (run_all || tc08) {
         std::cout << "TC-08: 3-way ch_reg chain\n";
         for (int n : std::vector<int>{10, 100, 1000}) {
-            auto twr = run_three_way_tc08(n, ticks, warmup, measured,
-                                          verilator_bin, cache_root, workdir);
+            auto twr = direct ? run_three_way_tc08(n, ticks, warmup, measured,
+                                                    verilator_bin, cache_root, workdir)
+                              : run_three_way_subprocess_tc08(n, ticks, warmup, measured,
+                                                    verilator_bin, cache_root, workdir);
             reporter.add_result(twr.interp);
             reporter.add_result(twr.jit);
             reporter.add_result(twr.verilator);
@@ -602,8 +743,10 @@ int main(int argc, char* argv[]) {
     if (run_all || tc09) {
         std::cout << "TC-09: 3-way ch_uint<32> arith chain\n";
         for (int d : std::vector<int>{10, 100, 1000}) {
-            auto twr = run_three_way_tc09(d, ticks, warmup, measured,
-                                          verilator_bin, cache_root, workdir);
+            auto twr = direct ? run_three_way_tc09(d, ticks, warmup, measured,
+                                                    verilator_bin, cache_root, workdir)
+                              : run_three_way_subprocess_tc09(d, ticks, warmup, measured,
+                                                    verilator_bin, cache_root, workdir);
             reporter.add_result(twr.interp);
             reporter.add_result(twr.jit);
             reporter.add_result(twr.verilator);

@@ -130,8 +130,9 @@ std::string make_key(const Row& r) {
 // verilator is expected to be as stable as JIT. A single global threshold
 // either spams the CI with false positives (1.2x) or hides real JIT
 // regressions (2.0x). Per-backend thresholds match the structural noise
-// regime of each execution path. See docs/benchmark/perf_comparison_report.md
-// §6 for noise distribution data.
+// regime of each execution path. See
+// docs/simulation/PERF_COMPARISON_REPORT.md §6 (K1, K5) for noise
+// distribution data and the K1 mitigation (F2 subprocess isolation).
 struct BackendThreshold {
     const char* name;
     double threshold;
