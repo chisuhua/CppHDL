@@ -42,6 +42,7 @@ JitResult generate_ir_lnode_meta(ch::core::lnodeimpl *node,
                                  JitBlock &block_comb,
                                  VRegId &next_comb_vreg);
 
+#if defined(CH_JIT_ENABLED) && __has_include(<llvm/IR/LLVMContext.h>)
 void compile_to_llvm_mem(const JitInstr &instr, llvm::IRBuilder<> &builder,
                          llvm::Value *data_buffer_ptr,
                          std::vector<llvm::Value *> &vregs);
@@ -61,6 +62,7 @@ void compile_to_llvm_compare(const JitInstr &instr, llvm::IRBuilder<> &builder,
 void compile_to_llvm_control(const JitInstr &instr, llvm::IRBuilder<> &builder,
                              llvm::Value *data_buffer_ptr,
                              std::vector<llvm::Value *> &vregs);
+#endif
 
 JitCompiler::JitCompiler()
     : available_(false), jit_session_(nullptr), compiled_func_(nullptr),
