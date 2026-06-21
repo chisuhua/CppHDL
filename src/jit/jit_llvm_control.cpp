@@ -168,8 +168,7 @@ void compile_to_llvm_control(const JitInstr &instr, llvm::IRBuilder<> &builder,
 }
 
 #else
-void compile_to_llvm_control(const JitInstr &, llvm::IRBuilder<> &,
-                             llvm::Value *, std::vector<llvm::Value *> &) {}
+void compile_to_llvm_control(const JitInstr & /*instr*/, ... /*args*/) {}
 #endif
 
 } // namespace ch::jit

@@ -55,8 +55,7 @@ void compile_to_llvm_arith(const JitInstr &instr, llvm::IRBuilder<> &builder,
 }
 
 #else
-void compile_to_llvm_arith(const JitInstr &, llvm::IRBuilder<> &,
-                           std::vector<llvm::Value *> &) {}
+void compile_to_llvm_arith(const JitInstr & /*instr*/, ... /*args*/) {}
 #endif
 
 } // namespace ch::jit
