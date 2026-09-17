@@ -3,8 +3,12 @@
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/context.h"
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
 #include <memory>
 #include <sstream>
+#include <sys/wait.h>
 
 using namespace ch;
 using namespace ch::core;
@@ -16,6 +20,29 @@ std::string generateVerilogToString(context *ctx) {
     verilogwriter writer(ctx);
     writer.print(oss);
     return oss.str();
+}
+
+std::string detect_verilator() {
+    if (const char *env = std::getenv("VERILATOR_BIN")) {
+        std::string probe = std::string("test -x \"") + env + "\"";
+        if (std::system(probe.c_str()) == 0) {
+            return env;
+        }
+    }
+    if (std::system("which verilator >/dev/null 2>&1") == 0) {
+        return "verilator";
+    }
+    const char *candidates[] = {
+        "build/verilator-install/bin/verilator",
+        "../build/verilator-install/bin/verilator",
+    };
+    for (const char *c : candidates) {
+        std::string probe = std::string("test -x ./") + c;
+        if (std::system(probe.c_str()) == 0) {
+            return std::string("./") + c;
+        }
+    }
+    return "";
 }
 
 TEST_CASE("VerilogGen - EmptyModule", "[verilog][empty]") {
@@ -836,10 +863,58 @@ TEST_CASE("VerilogGen - CombinationalOnlyUsesLogic", "[verilog][sv]") {
         return code.find(prefix) != std::string::npos;
     };
 
-    REQUIRE_FALSE(has_decl("reg"));
+REQUIRE_FALSE(has_decl("reg"));
     REQUIRE_FALSE(has_decl("wire"));
     REQUIRE(has_decl("logic"));
-    // No register → no always_ff expected at all
     REQUIRE(code.find("always_ff") == std::string::npos);
     REQUIRE(code.find("always @(") == std::string::npos);
+}
+
+TEST_CASE("VerilogGen - VerilatorLintOnly", "[verilog][verilator][lint]") {
+    std::string verilator = detect_verilator();
+    if (verilator.empty()) {
+        SKIP("Verilator not found. Build via "
+             "`cmake --build build --target verilator` "
+             "or set VERILATOR_BIN env var.");
+    }
+
+    auto ctx = std::make_unique<ch::core::context>("verilator_lint_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_in<ch_bool> en("en");
+    ch_in<ch_uint<8>> din("din");
+    ch_out<ch_uint<8>> dout("dout");
+    ch_reg<ch_uint<8>> counter(0);
+    counter->next = select(en, counter + ch_uint<8>(1), counter);
+    dout = select(en, counter, din);
+
+    std::string verilog = generateVerilogToString(ctx.get());
+    REQUIRE(verilog.find("always_ff") != std::string::npos);
+    REQUIRE(verilog.find("logic") != std::string::npos);
+
+    std::string tmpfile = std::string("/tmp/cpphdl_vlint_") + ctx->name() + ".v";
+    std::string outfile = tmpfile + ".verilator_out";
+    {
+        std::ofstream out(tmpfile);
+        out << verilog;
+        REQUIRE(out.good());
+    }
+
+    std::string cmd = verilator + " --lint-only " + tmpfile +
+                      " > " + outfile + " 2>&1";
+    int rc = std::system(cmd.c_str());
+    int exit_code = WIFEXITED(rc) ? WEXITSTATUS(rc) : -1;
+
+    std::ifstream of(outfile);
+    std::stringstream ss;
+    ss << of.rdbuf();
+    std::string verilator_output = ss.str();
+
+    std::remove(tmpfile.c_str());
+    std::remove(outfile.c_str());
+
+    INFO("verilator output:\n" + verilator_output);
+    INFO("generated verilog:\n" + verilog);
+
+    REQUIRE(exit_code == 0);
 }
