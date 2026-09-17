@@ -223,6 +223,19 @@ std::string verilogwriter::get_op_str(ch::core::ch_op op) const {
     }
 }
 
+void verilogwriter::emit_signal_decl(std::ostream &out,
+                                     ch::core::lnodeimpl *node) {
+    try {
+        if (!node || !node_names_.count(node)) {
+            return;
+        }
+        out << "    logic " << get_width_str(node->size())
+            << " " << node_names_[node] << ";\n";
+    } catch (...) {
+        // Silently ignore exceptions (codebase convention for print_* methods)
+    }
+}
+
 void verilogwriter::print_header(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
