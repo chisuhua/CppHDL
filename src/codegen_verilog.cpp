@@ -236,6 +236,22 @@ void verilogwriter::emit_signal_decl(std::ostream &out,
     }
 }
 
+void verilogwriter::emit_always_ff(std::ostream &out,
+                                   const std::string &reg_name,
+                                   const std::string &next_name) {
+    try {
+        if (reg_name.empty() || next_name.empty()) {
+            return;
+        }
+        out << "    always_ff @(posedge default_clock) begin // "
+            << "Register update for " << reg_name << "\n";
+        out << "        " << reg_name << " <= " << next_name << ";\n";
+        out << "    end\n";
+    } catch (...) {
+        // Silently ignore exceptions (codebase convention for print_* methods)
+    }
+}
+
 void verilogwriter::print_header(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
@@ -493,24 +509,20 @@ void verilogwriter::print_output(std::ostream &out,
 void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
     try {
         // Declare the register
-        out << "    reg " << get_width_str(node->size()) << " "
-            << node_names_[node] << ";\n";
+        emit_signal_decl(out, node);
 
         // Find the 'next' source node for this register
         auto *next_node = node->get_next();
 
-        // Default clock name
+        // Default clock name (kept for future reset-support; unused at present)
         std::string clock_name = "default_clock";
+        (void)clock_name;
 
         if (next_node && node_names_.count(next_node)) {
             // For register updates, assign to the register itself
             std::string reg_name = node_names_[node];
 
-            out << "    always @(posedge " << clock_name
-                << ") begin // Register update for " << reg_name << "\n";
-            out << "        " << reg_name << " <= " << node_names_[next_node]
-                << ";\n";
-            out << "    end\n";
+            emit_always_ff(out, reg_name, node_names_[next_node]);
         } else {
             // If next is not found or not named, print a warning
             out << "    // Warning: Register '" << node_names_[node]
