@@ -49,6 +49,12 @@ private:
     // --- Helper function to print operators ---
     std::string get_op_str(ch::core::ch_op op) const;
 
+    // --- SV helper methods (emit_signal_decl / emit_always_ff) ---
+    void emit_signal_decl(std::ostream &out, ch::core::lnodeimpl *node);
+    void emit_always_ff(std::ostream &out,
+                        const std::string &reg_name,
+                        const std::string &next_name);
+
     // --- Core printing methods ---
     void print_header(std::ostream &out);
     void print_body(std::ostream &out);
