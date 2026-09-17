@@ -800,3 +800,46 @@ TEST_CASE("VerilogGen - AlwaysFFBlocks", "[verilog][sv]") {
             std::string::npos);
     REQUIRE(code.find("always @(") == std::string::npos);
 }
+
+TEST_CASE("VerilogGen - PortsStayBareInputOutput", "[verilog][sv]") {
+    auto ctx = std::make_unique<ch::core::context>("sv_ports_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_out<ch_uint<8>> out_port("io");
+    ch_in<ch_uint<4>> sel("sel");
+    out_port = sel;
+
+    std::string code = generateVerilogToString(ctx.get());
+
+    // R5: ports must remain bare 'input [N:0]' / 'output [N:0]',
+    // never 'input logic' / 'output logic' (which would change Verilator
+    // IO type inference semantics).
+    REQUIRE(code.find("input [3:0] sel") != std::string::npos);
+    REQUIRE(code.find("output [7:0] io") != std::string::npos);
+    REQUIRE(code.find("input logic") == std::string::npos);
+    REQUIRE(code.find("output logic") == std::string::npos);
+}
+
+TEST_CASE("VerilogGen - CombinationalOnlyUsesLogic", "[verilog][sv]") {
+    auto ctx = std::make_unique<ch::core::context>("sv_comb_only_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_in<ch_uint<4>> a("a");
+    ch_in<ch_uint<4>> b("b");
+    ch_out<ch_uint<4>> o("o");
+    o = a + b;
+
+    std::string code = generateVerilogToString(ctx.get());
+
+    auto has_decl = [&](const std::string &kw) {
+        std::string prefix = "\n    " + kw + " ";
+        return code.find(prefix) != std::string::npos;
+    };
+
+    REQUIRE_FALSE(has_decl("reg"));
+    REQUIRE_FALSE(has_decl("wire"));
+    REQUIRE(has_decl("logic"));
+    // No register → no always_ff expected at all
+    REQUIRE(code.find("always_ff") == std::string::npos);
+    REQUIRE(code.find("always @(") == std::string::npos);
+}
