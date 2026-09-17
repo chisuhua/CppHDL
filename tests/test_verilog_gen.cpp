@@ -65,8 +65,8 @@ TEST_CASE("VerilogGen - CounterModule", "[verilog][counter]") {
     // Check that the generated code contains expected elements
     REQUIRE(verilog_code.find("module top") != std::string::npos);
     REQUIRE(verilog_code.find("output [3:0] io") != std::string::npos);
-    REQUIRE(verilog_code.find("reg [3:0] reg") != std::string::npos);
-    REQUIRE(verilog_code.find("always @(posedge default_clock)") !=
+    REQUIRE(verilog_code.find("logic [3:0] reg") != std::string::npos);
+    REQUIRE(verilog_code.find("always_ff @(posedge default_clock)") !=
             std::string::npos);
     REQUIRE(verilog_code.find("assign io = reg") != std::string::npos);
 
@@ -117,10 +117,10 @@ TEST_CASE("VerilogGen - RegisterWithComplexLogic", "[verilog][complex]") {
     REQUIRE(verilog_code.find("input [7:0] input_a") != std::string::npos);
     REQUIRE(verilog_code.find("input [7:0] input_b") != std::string::npos);
     REQUIRE(verilog_code.find("output [7:0] result") != std::string::npos);
-    REQUIRE(verilog_code.find("reg [7:0] reg") != std::string::npos);
+    REQUIRE(verilog_code.find("logic [7:0] reg") != std::string::npos);
 
     // Check for conditional logic (mux)
-    REQUIRE(verilog_code.find("always @(posedge default_clock)") !=
+    REQUIRE(verilog_code.find("always_ff @(posedge default_clock)") !=
             std::string::npos);
 
     // Should not have unnecessary ports
@@ -766,4 +766,37 @@ TEST_CASE("VerilogGen - BundleFieldNamesPreserved",
     REQUIRE(verilog.find("awaddr") != std::string::npos);
     REQUIRE(verilog.find("awvalid") != std::string::npos);
     REQUIRE(verilog.find("rdata") != std::string::npos);
+}
+
+TEST_CASE("VerilogGen - UsesLogicKeyword", "[verilog][sv]") {
+    auto ctx = std::make_unique<ch::core::context>("sv_logic_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg(ch_uint<4>(0));
+    reg->next = reg + ch_uint<4>(1);
+
+    std::string code = generateVerilogToString(ctx.get());
+
+    auto has_decl = [&](const std::string &kw) {
+        std::string prefix = "\n    " + kw + " ";
+        return code.find(prefix) != std::string::npos;
+    };
+
+    REQUIRE_FALSE(has_decl("reg"));
+    REQUIRE_FALSE(has_decl("wire"));
+    REQUIRE(code.find("logic [3:0]") != std::string::npos);
+}
+
+TEST_CASE("VerilogGen - AlwaysFFBlocks", "[verilog][sv]") {
+    auto ctx = std::make_unique<ch::core::context>("sv_alwaysff_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<4>> reg(ch_uint<4>(0));
+    reg->next = reg + ch_uint<4>(1);
+
+    std::string code = generateVerilogToString(ctx.get());
+
+    REQUIRE(code.find("always_ff @(posedge default_clock)") !=
+            std::string::npos);
+    REQUIRE(code.find("always @(") == std::string::npos);
 }
