@@ -45,7 +45,7 @@ CppHDL/
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
 | State machine DSL | `include/chlib/state_machine.h` |
 | If/else statement DSL | `include/chlib/if_stmt.h` |
-| Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` |
+| Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
 | AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/axi4_lite_example.cpp` |
