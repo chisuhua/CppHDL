@@ -36,6 +36,35 @@ template <unsigned N> struct ch_uint : public logic_buffer<ch_uint<N>> {
             const std::source_location &sloc = std::source_location::current())
         requires(N > 1);
 
+    // BUGFIX (Phase 6c M6, chipforge SEGV repro): integer literal ctor.
+    //
+    // Without this, `ch_uint<5>(0)` matches the inherited
+    // `logic_buffer(lnodeimpl *node)` ctor — because `0` is a null pointer
+    // constant, `int → lnodeimpl*` is a standard conversion sequence that
+    // outranks the user-defined `int → ch_literal_runtime → ch_uint` chain.
+    // Result: `node_impl_ = nullptr` and any downstream op (`==`, `!=`,
+    // `&&`) on that value yields a null opimpl, ultimately causing
+    // muximpl SEGV.
+    //
+    // This template is SFINAE-restricted to integral types and uses identity
+    // match for `ch_uint<N>(0)`, which wins over both the pointer ctor
+    // (null-pointer conversion) and any `uint64_t`-based non-template ctor
+    // (integral conversion). Width is forced to N (not `compute_width(v)`)
+    // so the resulting litimpl matches the target uint width, matching the
+    // behaviour of the `ch_literal<V, N>{}` path.
+    template <typename IntT,
+              typename = std::enable_if_t<std::is_integral_v<std::decay_t<IntT>>>>
+    ch_uint(IntT v, const std::string &name = "uint_lit",
+            const std::source_location &sloc = std::source_location::current()) {
+        ch_literal_runtime lit(static_cast<std::uint64_t>(v), N);
+        this->node_impl_ =
+            node_builder::instance().build_literal(lit, name, sloc);
+        if (!this->node_impl_) {
+            CHERROR("[ch_uint<N>::ch_uint] Failed to create literal node "
+                    "from integer value");
+        }
+    }
+
     // 添加接受 ch_bool 类型的构造函数，只对 N==1 的情况启用
     ch_uint(const ch_bool &val, const std::string &name = "bool_to_uint",
             const std::source_location &sloc = std::source_location::current())

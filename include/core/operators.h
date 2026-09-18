@@ -62,7 +62,7 @@ template <typename T> auto to_operand(const T &value) {
     if constexpr (requires { typename T::value_type; typename T::direction; }) {
         return lnode<typename T::value_type>(value.impl());
     } else if constexpr (HardwareType<T>) {
-        return ch::core::get_lnode(value);
+        return get_lnode(value);
     } else if constexpr (ArithmeticLiteral<T>) {
         uint64_t val = static_cast<uint64_t>(value);
         constexpr uint32_t width = ch_width_v<T>;

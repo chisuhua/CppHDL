@@ -83,7 +83,19 @@ struct ch_bool : public logic_buffer<ch_bool> {
                std::holds_alternative<output_direction>(dir_);
     }
 
-    explicit ch_bool(lnodeimpl *node) : logic_buffer<ch_bool>(node) {}
+    // BUGFIX (Phase 6c M6, chipforge SEGV repro): SFINAE-restricted
+    // integer ctor. Without this, `ch_bool(0)` is ambiguous between
+    // `ch_bool(bool)` (int→bool) and the inherited `ch_bool(lnodeimpl*)`
+    // (int→nullptr) — both are standard conversions of the same rank.
+    // This template has identity match for integer args, which wins over
+    // both. `ch_bool(false)` still works because bool is excluded by
+    // SFINAE and matches the non-template `ch_bool(bool)` ctor.
+    template <typename T,
+              typename = std::enable_if_t<
+                  std::is_integral_v<std::decay_t<T>> &&
+                  !std::is_same_v<std::decay_t<T>, bool>>>
+    ch_bool(T v, const std::string &name = "bool_lit",
+            const std::source_location &sloc = std::source_location::current());
 
     friend ch_bool make_bool_result(lnodeimpl *node);
     // friend lnode<ch_bool> get_lnode(const ch_bool&);

@@ -2,6 +2,22 @@
 
 namespace ch::core {
 
+// BUGFIX (Phase 6c M6, chipforge SEGV repro): see bool.h declaration.
+// Identity-match template wins over both `ch_bool(bool)` (int→bool) and
+// inherited `ch_bool(lnodeimpl*)` (int→nullptr) for integer args.
+template <typename T, typename>
+inline ch_bool::ch_bool(T v, const std::string &name,
+                        const std::source_location &sloc)
+    : logic_buffer<ch_bool>() {
+    ch_literal_runtime lit(static_cast<std::uint64_t>(v ? 1u : 0u), 1);
+    this->node_impl_ =
+        node_builder::instance().build_literal(lit, name, sloc);
+    if (!this->node_impl_) {
+        CHERROR("[ch_bool::ch_bool] Failed to create literal node from "
+                "integer value");
+    }
+}
+
 // 从编译时 ch_literal_impl 构造
 template <uint64_t V, uint32_t W>
 inline ch_bool::ch_bool(const ch_literal_impl<V, W> &val,

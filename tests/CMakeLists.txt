@@ -42,6 +42,11 @@ target_include_directories(test_csr_unit PRIVATE ${PROJECT_SOURCE_DIR}/examples/
 # chlib 库测试 (26 个测试文件)
 # ============================================================================
 
+# chipforge 5-stage Simulator SEGV repro (Phase 6c M6 investigation)
+# Independent repro of ch_bool(false) && (rd_addr != addr_t(0)) -> null impl
+# Standalone CppHDL test (no chipforge dependency) to isolate the bug.
+add_catch_test(test_chipforge_mux_segv_repro test_chipforge_mux_segv_repro.cpp)
+
 # 基础功能测试
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
@@ -353,4 +358,5 @@ add_spinalhdl_ported_test(branch_predictor_v2 test_branch_predictor_v2)
 # Performance Benchmarks
 # ============================================================================
 add_subdirectory(benchmark)
+
 
