@@ -70,6 +70,40 @@ public:
         this->node_impl_ = literal_node;
     }
 
+    // (7) BUGFIX (fix-bundle-base-null-ptr-hijack): SFINAE-restricted
+    // integer literal ctor. Without this, `bundle_base<Derived>(0)`
+    // matches `bundle_base(lnodeimpl *node)` via null pointer
+    // conversion, creating a node with node_impl_ = nullptr.
+    //
+    // Through `using bundle_base<Self>::bundle_base;` in the
+    // CH_BUNDLE_FIELDS_T macro (bundle_meta.h:155), this ctor is
+    // inherited by all 22 bundle derived classes (ch_stream, ch_flow,
+    // all AXI/axi_lite channels, fifo_bundle, interrupt_bundle,
+    // config_bundle, ch_fragment, bundle_slice_view, bundle_concat).
+    //
+    // `bool` is excluded (mirror P0 ch_bool pattern) so that
+    // `bundle_base<Derived>(false)` doesn't become ambiguous.
+    //
+    // Identity match for integer args wins over the standard-conversion
+    // null pointer path. The existing `bundle_base(lnodeimpl *node)`
+    // ctor remains available for legitimate lnodeimpl* arguments.
+    template <typename IntT,
+              typename = std::enable_if_t<
+                  std::is_integral_v<std::decay_t<IntT>> &&
+                  !std::is_same_v<std::decay_t<IntT>, bool>>>
+    explicit bundle_base(
+        IntT v, const std::string &name = "bundle_lit",
+        const std::source_location &sloc = std::source_location::current())
+        : logic_buffer<Derived>() {
+        ch_literal_runtime lit(static_cast<std::uint64_t>(v));
+        this->node_impl_ =
+            node_builder::instance().build_literal(lit, name, sloc);
+        if (!this->node_impl_) {
+            CHERROR("[bundle_base] Failed to create literal node "
+                    "from integer value");
+        }
+    }
+
     virtual ~bundle_base() = default;
 
     void as_master() {

@@ -47,6 +47,11 @@ target_include_directories(test_csr_unit PRIVATE ${PROJECT_SOURCE_DIR}/examples/
 # Standalone CppHDL test (no chipforge dependency) to isolate the bug.
 add_catch_test(test_chipforge_mux_segv_repro test_chipforge_mux_segv_repro.cpp)
 
+# Bundle literal fix regression (fix-bundle-base-null-ptr-hijack)
+# Verifies SFINAE-restricted integer ctor on bundle_base prevents
+# null pointer constant hijack for ch_stream / ch_flow / AXI channels.
+add_catch_test(test_bundle_literal test_bundle_literal.cpp)
+
 # 基础功能测试
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
