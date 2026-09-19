@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <memory>
+#include <regex>
 #include <sstream>
 #include <sys/wait.h>
 
@@ -917,4 +918,111 @@ TEST_CASE("VerilogGen - VerilatorLintOnly", "[verilog][verilator][lint]") {
     INFO("generated verilog:\n" + verilog);
 
     REQUIRE(exit_code == 0);
+}
+
+TEST_CASE("VerilogGen - RegNextAssignmentIsWidthSliced",
+          "[verilog][width-slice]") {
+    // Bug 3: counter->next = select(en, counter + ch_uint<8>(1), counter)
+    // widens 8->9 bits; the always_ff RHS must be sliced to the reg width
+    // (reg_r <= mux_select_1[7:0];) or Verilator fails with WIDTHTRUNC.
+    auto ctx = std::make_unique<ch::core::context>("reg_width_slice_test");
+    ch::core::ctx_swap guard(ctx.get());
+    ch_in<ch_bool> en("en");
+    ch_reg<ch_uint<8>> counter(0);
+    counter->next = select(en, counter + ch_uint<8>(1), counter);
+
+    std::string verilog = generateVerilogToString(ctx.get());
+    INFO("generated verilog:\n" + verilog);
+
+    std::smatch decl;
+    std::regex rx_decl(R"(logic\s*\[\s*(\d+)\s*:\s*0\s*\]\s*reg_r\s*;)");
+    REQUIRE(std::regex_search(verilog, decl, rx_decl));
+    unsigned msb = std::stoul(decl[1].str());
+
+    std::regex rx_sliced(
+        "reg_r\\s*<=\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*\\[" +
+        std::to_string(msb) + "\\s*:\\s*0\\s*\\]\\s*;");
+    REQUIRE(std::regex_search(verilog, rx_sliced));
+
+    std::regex rx_bare(R"(reg_r\s*<=\s*[a-zA-Z_][a-zA-Z0-9_]*\s*;)");
+    REQUIRE_FALSE(std::regex_search(verilog, rx_bare));
+}
+
+TEST_CASE("VerilogGen - MuxNodesAreDeclaredAsWires", "[verilog][mux-decl]") {
+    auto ctx = std::make_unique<ch::core::context>("mux_decl_test");
+    ch::core::ctx_swap guard(ctx.get());
+    ch_in<ch_bool> sel("sel");
+    ch_in<ch_uint<4>> a("a");
+    ch_in<ch_uint<4>> b("b");
+    ch_out<ch_uint<4>> y("y");
+    y = select(sel, a, b); // creates a mux node
+
+    std::string verilog = generateVerilogToString(ctx.get());
+    INFO("generated verilog:\n" + verilog);
+
+    // The mux lnode default name is "mux_select" (see operators.h
+    // ternary_operation -> build_mux(..., "mux" + "_select")). It MUST appear
+    // in a logic declaration ("logic [W:0] mux_select;"), not only in an
+    // assign statement. Without the declaration Verilator emits
+    // %Warning-IMPLICIT and (under --lint-only) fails.
+    bool mux_declared_as_logic = false;
+    std::regex rx(R"(logic\s*\[\s*\d+\s*:\s*0\s*\]\s*mux_select\s*;)");
+    mux_declared_as_logic = std::regex_search(verilog, rx);
+    REQUIRE(mux_declared_as_logic);
+}
+
+TEST_CASE("VerilogGen - MuxOperandsAreWidthExtended",
+          "[verilog][mux-extend]") {
+    // Bug 4: select() with mismatched operand widths (4 vs 6) emits
+    // "assign mux_select = sel ? a : b;" where `a` (4-bit) is narrower
+    // than the mux result (6-bit). Verilator rejects this with
+    // %Warning-WIDTHEXPAND ("Operator COND expects 6 bits ... generates
+    // 4 bits"). The narrow arm must be zero-extended: {{2{1'b0}}, a}.
+    auto ctx = std::make_unique<ch::core::context>("mux_extend_test");
+    ch::core::ctx_swap guard(ctx.get());
+    ch_in<ch_bool> sel("sel");
+    ch_in<ch_uint<4>> a("a");
+    ch_in<ch_uint<6>> b("b");   // mismatched widths: 4 vs 6
+    ch_out<ch_uint<6>> y("y");  // mux result width = max(4, 6) = 6
+    y = select(sel, a, b);
+
+    std::string verilog = generateVerilogToString(ctx.get());
+    INFO("generated verilog:\n" + verilog);
+
+    // The 4-bit arm `a` must be zero-extended to 6 bits (2 extend bits).
+    std::regex rx_extend(R"(assign\s+mux_select\s*=\s*sel\s*\?\s*\{\{2\{1'b0\}\},\s*a\s*\}\s*:\s*b\s*;)");
+    REQUIRE(std::regex_search(verilog, rx_extend));
+}
+
+TEST_CASE("VerilogGen - DefaultRegNameIsEscapedFromKeyword",
+          "[verilog][keyword-escape]") {
+    // ch_reg's default name is "reg" (see include/core/reg.h). Without keyword
+    // escaping in sanitize_name(), this produces an illegal SV declaration
+    // "logic [7:0] reg;" that Verilator rejects.
+    auto ctx = std::make_unique<ch::core::context>("default_reg_escape_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<8>> x(0);
+
+    std::string verilog = generateVerilogToString(ctx.get());
+    INFO("generated verilog:\n" + verilog);
+
+    REQUIRE(verilog.find("logic [7:0] reg;") == std::string::npos);
+    REQUIRE(verilog.find(" reg;") == std::string::npos);
+    REQUIRE(verilog.find("reg_r") != std::string::npos);
+}
+
+TEST_CASE("VerilogGen - UserProvidedKeywordNameIsEscaped",
+          "[verilog][keyword-escape]") {
+    auto ctx = std::make_unique<ch::core::context>("user_keyword_escape_test");
+    ch::core::ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<8>> wire_reg(0, "wire");
+
+    std::string verilog = generateVerilogToString(ctx.get());
+    INFO("generated verilog:\n" + verilog);
+
+    REQUIRE(verilog.find("logic [7:0] wire;") == std::string::npos);
+    REQUIRE(verilog.find("] wire;") == std::string::npos);
+    REQUIRE(verilog.find("wire_r") != std::string::npos);
 }

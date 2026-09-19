@@ -105,6 +105,21 @@ std::string verilogwriter::sanitize_name(const std::string &name) const {
         sanitized = "_" + sanitized;
     }
 
+    // Escape Verilog/SystemVerilog reserved keywords by appending "_r" suffix.
+    // Pragmatic subset of IEEE 1800-2017 reserved words covering real
+    // collisions (e.g., ch_reg's default name "reg" would otherwise emit an
+    // illegal "logic [7:0] reg;" declaration).
+    static const std::unordered_set<std::string> keywords = {
+        "reg", "wire", "logic", "assign", "module", "endmodule",
+        "input", "output", "inout", "always", "always_ff", "always_comb",
+        "initial", "begin", "end", "if", "else", "case", "endcase",
+        "parameter", "localparam", "signed", "unsigned", "genvar",
+        "generate", "endgenerate", "tri", "wand", "wor", "supply0",
+        "supply1"};
+    if (keywords.find(sanitized) != keywords.end()) {
+        sanitized += "_r";
+    }
+
     return sanitized;
 }
 
@@ -393,6 +408,8 @@ void verilogwriter::print_decl(std::ostream &out) {
                 wires.push_back(node);
                 declared_nodes_.insert(node);
                 break;
+            case ch::core::lnodetype::type_mux: // Mux nodes are assigned in
+                                                // print_mux and need wires
             case ch::core::lnodetype::type_bitsupdate:
                 wires.push_back(node);
                 declared_nodes_.insert(node);
@@ -522,7 +539,18 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
             // For register updates, assign to the register itself
             std::string reg_name = node_names_[node];
 
-            emit_always_ff(out, reg_name, node_names_[next_node]);
+            // Bug 3: the next-value expression may be wider than the reg
+            // (e.g. counter + ch_uint<8>(1) widens 8->9 bits, and a mux
+            // over it inherits 9 bits). Verilator rejects a wide RHS into
+            // a narrow reg with %Warning-WIDTHTRUNC, so slice it down to
+            // the reg's width.
+            std::string next_name = node_names_[next_node];
+            if (next_node->size() > node->size()) {
+                next_name = next_name + "[" +
+                            std::to_string(node->size() - 1) + ":0]";
+            }
+
+            emit_always_ff(out, reg_name, next_name);
         } else {
             // If next is not found or not named, print a warning
             out << "    // Warning: Register '" << node_names_[node]
@@ -848,6 +876,23 @@ void verilogwriter::print_mux(std::ostream &out, ch::core::muximpl *node) {
                 std::string cond_name = node_names_[cond_node];
                 std::string true_name = node_names_[true_node];
                 std::string false_name = node_names_[false_node];
+                // Bug 4: a select() with mismatched operand widths (e.g.
+                // counter + ch_uint<8>(1) widens 8->9 bits muxed with the
+                // 8-bit counter) makes the mux result wider than the narrow
+                // arm. Verilator rejects the bare narrow arm in a wider
+                // conditional context with %Warning-WIDTHEXPAND, so
+                // zero-extend each arm below the mux result width.
+                uint32_t result_width = node->size();
+                if (true_node->size() < result_width) {
+                    uint32_t ext = result_width - true_node->size();
+                    true_name = "{{" + std::to_string(ext) + "{1'b0}}, " +
+                                true_name + "}";
+                }
+                if (false_node->size() < result_width) {
+                    uint32_t ext = result_width - false_node->size();
+                    false_name = "{{" + std::to_string(ext) + "{1'b0}}, " +
+                                 false_name + "}";
+                }
                 out << "    assign " << node_names_[node] << " = " << cond_name
                     << " ? " << true_name << " : " << false_name << ";\n";
             }
