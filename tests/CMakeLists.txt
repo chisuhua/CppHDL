@@ -306,6 +306,14 @@ add_catch_test(test_jit_golden jit/test_jit_golden.cpp)
 # Regression: interpreter and JIT must produce byte-identical results for
 # ADD/SUB/MUL/SHL/NEG width overflow cases (locks interpreter-arith-bug-fix).
 add_catch_test(test_interpreter_jit_compat test_interpreter_jit_compat.cpp)
+# Per openspec/changes/2026-09-20-upgrade-llvm-22-jit-compat:
+# LLVM version compatibility red-line tests. These assert that
+# JitCompiler::is_available() returns true on detected LLVM 17-22 and
+# gracefully SUCCEED-skip otherwise. The `#if defined(CH_JIT_ENABLED)`
+# guard inside the .cpp files handles the CH_JIT_ENABLE=OFF PR-feedback
+# matrix (no link error when JitCompiler is not built).
+add_catch_test(test_jit_llvm_version jit/test_jit_llvm_version.cpp)
+add_catch_test(test_jit_init_succeeds jit/test_jit_init_succeeds.cpp)
 
 # ============================================================================
 # SpinalHDL 移植示例 CTest 注册
