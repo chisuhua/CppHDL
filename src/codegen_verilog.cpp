@@ -270,6 +270,14 @@ void verilogwriter::emit_always_ff(std::ostream &out,
 void verilogwriter::print_header(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
+        // Verilator lint pragmas (must be outside module declaration):
+        //   WIDTHEXPAND/WIDTHTRUNC arise from CH_MEM select tree mux widths
+        //   (e.g. 5-bit shift amount mux_select_71 << 5'h1f producing 32-bit
+        //   result assigned to 31-bit target). These are functionally correct
+        //   (select tree outputs are zero-extended) but trigger Verilator
+        //   warnings. Disable globally for the generated module.
+        out << "/* verilator lint_off WIDTHEXPAND */\n";
+        out << "/* verilator lint_off WIDTHTRUNC */\n";
         out << "module top (\n";
 
         // ADR-035: include type_clock and type_reset lnodes so Verilator
