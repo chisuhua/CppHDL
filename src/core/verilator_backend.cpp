@@ -190,6 +190,22 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
     auto nodes = ctx->get_eval_list();
     using ch::core::lnodetype;
 
+    // M1: emit C++ identifier-safe field names. Verilator emits
+    // Vtop.h identifiers verbatim from the Verilog port name, but
+    // CppHDL lnode names use dots (e.g. "top.unnamed_output") which
+    // would parse as member access in C++. Mirror codegen sanitize:
+    // non [a-zA-Z0-9_] chars -> underscore; leading digit -> "_" prefix.
+    auto cpp_safe_name = [](const std::string& n) -> std::string {
+        std::string s = n;
+        for (char& c : s) {
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
+        }
+        if (!s.empty() && std::isdigit(static_cast<unsigned char>(s[0]))) {
+            s = "_" + s;
+        }
+        return s;
+    };
+
     // set_input_Vtop
     out << "void set_input_Vtop(void* top, uint32_t port_id,\n"
         << "                    const void* bits) {\n"
@@ -225,8 +241,10 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
         const char* dt = (bw <= 8)  ? "CData"
                        : (bw <= 16) ? "SData"
                        : (bw <= 32) ? "IData" : "QData";
+        // Use lnode->name() (matches Vtop.h field name;
+        // ch_uint<4> -> "io"; ch_uint<32> -> "top_unnamed_output").
         out << "    case " << id << ": {\n"
-            << "        " << dt << "* p = &v->io;\n"
+            << "        " << dt << "* p = &v->" << cpp_safe_name(node->name()).c_str() << ";\n"
             << "        *reinterpret_cast<" << dt << "*>(bits) = *p;\n"
             << "        break;\n"
             << "    }\n";
@@ -239,11 +257,15 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
         << "    switch (port_id) {\n";
     for (auto* node : nodes) {
         if (!node) continue;
+        auto t = node->type();
+        // Only emit cases for ports (skip internal lnodes).
+        // lnode->name() is the Verilog port identifier Vtop.h
+        // exposes (default_clock, io, top_unnamed_output, etc.)
+        if (t != lnodetype::type_input && t != lnodetype::type_clock &&
+            t != lnodetype::type_output) continue;
         uint32_t id = node->id();
-        bool is_output = (node->type() == lnodetype::type_output);
-        const char* fn = is_output ? "io" : node->name().c_str();
         out << "    case " << id << ": return reinterpret_cast<uint8_t*>(&v->"
-            << fn << ");\n";
+            << cpp_safe_name(node->name()).c_str() << ");\n";
     }
     out << "    default: return nullptr;\n    }\n}\n";
 
@@ -419,8 +441,8 @@ bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
          << "../sim_main.cpp "
          << "./*.cpp "  // verilator 5.x split: Vtop___024root*.cpp + Vtop.cpp
          << (verilator_root_.empty()
-             ? std::string("/workspace/main/opt/verilator/share/verilator/include/verilated.cpp")
-             : (verilator_root_ + "/include/verilated.cpp"))
+             ? std::string("/workspace/main/opt/verilator/share/verilator/include/verilated.cpp /workspace/main/opt/verilator/share/verilator/include/verilated_threads.cpp")
+             : (verilator_root_ + "/include/verilated.cpp " + verilator_root_ + "/include/verilated_threads.cpp"))
          << " -I. "  // Vtop.h is in obj_dir/ (verilator --cc output)
 
          << "-I" << (verilator_root_.empty()
@@ -429,10 +451,8 @@ bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
          << "-L" << (verilator_root_.empty()
              ? "/workspace/main/opt/verilator/share/verilator"
              : verilator_root_) << "/include "
-         << "-L" << (verilator_root_.empty()
-             ? "/workspace/main/opt/verilator/share/verilator/lib"
-             : verilator_root_ + "/lib")
-         << " -lverilated 2>&1";
+         << "-pthread -lz 2>&1";
+
     return run_shell(link.str());
 }
 
@@ -609,12 +629,15 @@ void VerilatorBackend::dump_vcd(uint64_t sim_time) {
 }
 
 void VerilatorBackend::eval_combinational(
-    ch::data_map_t & /*data_map*/,
-    const std::vector<std::pair<uint32_t, ch::instr_base *>> & /*input_instr_list*/,
+    ch::data_map_t &data_map,
+    const std::vector<std::pair<uint32_t, ch::instr_base *>> &input_instr_list,
     const std::vector<std::pair<uint32_t, ch::instr_base *>>
-        & /*combinational_instr_list*/) {
+        &combinational_instr_list) {
     // Phase 3.3-3.4: sync data_map -> Vtop inputs, call eval_fn_,
     // sync Vtop outputs -> data_map. See ADR-035 for the design.
+    // Sync data_map_ to the dispatcher-provided map; the pointer
+    // captured during initialize() points to a stale/test buffer.
+    data_map_ = &data_map;
     sync_inputs_to_vtop();
     if (eval_fn_) {
         eval_fn_(top_instance_);
@@ -623,14 +646,15 @@ void VerilatorBackend::eval_combinational(
 }
 
 void VerilatorBackend::eval_sequential(
-    ch::data_map_t & /*data_map*/,
+    ch::data_map_t &data_map,
     const std::vector<std::pair<uint32_t, ch::instr_base *>>
-        & /*sequential_instr_list*/) {
+        &sequential_instr_list) {
     // Phase 3.4: clock toggle (clk=0/1) + Verilator's step() instead
     // of eval(). The 3-eval-per-tick model maps to:
     //   comb-1  -> top->clk=0; eval_fn_()
     //   clock   -> top->clk=1; eval_fn_()
     //   comb-2  -> top->clk=0; eval_fn_()
+    data_map_ = &data_map;
     sync_inputs_to_vtop();
     if (eval_fn_) {
         eval_fn_(top_instance_);

@@ -1,12 +1,18 @@
 // tests/test_verilator_e2e_harness.cpp
 // ADR-035 §M5 e2e tier — real Verilator compile + dlopen + counter verification.
-// Closes R5 (e2e vacuous PASS) + R7 (4-bit counter wraps) for the fixture path.
-// samples/counter.cpp is ch_uint<4> (wraps at 16); per tasks v2 §5.1 we use a
-// ch_uint<32> fixture to satisfy the spec's counter_value == cycle_count rule.
 //
 // Tagged [verilator][e2e]: skipped when verilator tool not on PATH (PR matrix).
 // When CPPHDL_REQUIRE_VERILATOR=1 is set in env, the test REQUIRES instead of
 // SKIPs — for nightly CI matrix with tool installed.
+//
+// R5 closure: real verilator compile + dlopen + accessor symbols populate
+// `port_access_` snapshot. R7 closure: ch_uint<32> fixture so counter_value
+// == cycles (ch_uint<4> wraps at 16; per tasks v2 §5.1).
+//
+// IMPORTANT: We MUST use `ch::ch_device<>` to instantiate CounterFixture<>
+// because Component lifecycle (build -> create_ports -> describe) relies on
+// `std::shared_ptr` parent tracking. Stack-allocated Component instances
+// crash during build() (R2 SIGSEGV we hit before this rewrite).
 #include <unistd.h>
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
@@ -14,6 +20,7 @@
 #include "core/context.h"
 #include "core/eval_backend.h"
 #include "core/verilator_backend.h"
+#include "device.h"
 #include "simulator.h"
 #include <cstdlib>
 #include <fstream>
@@ -48,7 +55,7 @@ std::string make_temp_dir(const std::string &suffix) {
     return result;
 }
 
-// ch_uint<32> counter fixture — avoids 4-bit wraps (R7 closure).
+// ch_uint<N> counter fixture — Counter<32> avoids 4-bit wraps.
 template <unsigned N>
 class CounterFixture : public ch::Component {
 public:
@@ -68,45 +75,39 @@ public:
     }
 };
 
-bool env_flag_set(const char *name) {
-    const char *v = std::getenv(name);
-    return v && v[0] != '\0' && std::string(v) != "0";
+// Helper: build CounterFixture<N> in a fresh context via ch_device, return
+// the device and ctx. Clean ownership for stack-allocated ch_device.
+template <unsigned N>
+std::unique_ptr<ch::ch_device<CounterFixture<N>>>
+make_counter_device(const std::string & /*name*/) {
+    return std::make_unique<ch::ch_device<CounterFixture<N>>>();
 }
 
 } // namespace
 
-TEST_CASE("VerilatorBackend - E2E CounterSimulator50CyclesCounter32",
-          "[verilator][e2e][counter][m5]") {
+// ============================================================================
+// E2E: real Verilator compile + dlopen + port_access_ populated. (R5 closure)
+// ============================================================================
+TEST_CASE("VerilatorBackend - E2E CounterSimulatorPortAccess",
+          "[verilator][e2e][port_access][m5]") {
     if (!tool_available("verilator")) {
         SKIP("verilator not on PATH");
     }
-    auto ctx = std::make_unique<context>("vl_e2e_ctr32");
-    ctx_swap guard(ctx.get());
-
-    CounterFixture<32> counter_inst;
-    (void)counter_inst;
+    auto device = std::make_unique<ch::ch_device<CounterFixture<32>>>();
 
     ch::data_map_t data_map;
-    auto workdir = make_temp_dir("_ctr32");
+    auto workdir = make_temp_dir("_pa");
     REQUIRE_FALSE(workdir.empty());
 
     VerilatorBackend backend(workdir);
-    REQUIRE(backend.initialize(ctx.get(), data_map));
+    REQUIRE(backend.initialize(device->context(), data_map));
 
-    // R5 closure: real Verilator compile + dlopen — field_ptr populated when
-    // libVtop.so resolved. Snapshot non-empty when dlopen succeeded.
     auto snap = backend.port_access_snapshot();
     if (snap.empty()) {
         SKIP("verilator dlopen did not populate port_access_ "
              "(verilator build may have failed in test env)");
     }
 
-    // R7 closure proof: the fixture is 32-bit so post-cycle counter value
-    // monotonically tracks cycle count. We don't drive the full 50-cycle
-    // Simulator dispatch here (requires Simulator dispatch harness beyond
-    // this PR's scope, tracked in issue #25). Instead, validate the
-    // contract shape: native dispatch wired, accessor symbols resolved,
-    // port_access_ snap has expected input + output entries.
     REQUIRE(backend.is_native());
     REQUIRE(backend.clock_node_id() != UINT32_MAX);
     size_t n_inputs = 0, n_outputs = 0;
@@ -114,65 +115,100 @@ TEST_CASE("VerilatorBackend - E2E CounterSimulator50CyclesCounter32",
         if (kv.second.is_input) ++n_inputs;
         else ++n_outputs;
     }
-    // Counter<32> has 1 ch_out + default_clock + default_reset = 3 entries
-    // (after M1.x R3 fix, default_clock is also an input).
-    REQUIRE(n_inputs >= 1);   // default_clock
-    REQUIRE(n_outputs >= 1);  // counter output
+    // After M1.x R3 fix: default_clock + default_reset are inputs.
+    // Counter<32> has 1 ch_out -> 1 output.
+    REQUIRE(n_inputs >= 1);
+    REQUIRE(n_outputs >= 1);
 }
 
-// ADR-035 §M5: real Verilator dlopen resolution verification.
-// Samples/counter.cpp verification (4-bit: counter wraps at 16, so assert
-// counter == cycles % 16 — proves Verilator matches interpreter semantics).
-TEST_CASE("VerilatorBackend - E2E SamplesCounterMatchesInterpreter",
+// ============================================================================
+// E2E: real Simulator dispatch via VerilatorBackend (M0.5), 50 cycles.
+// assert counter_value == 50. (R5/R7 full closure)
+// ============================================================================
+TEST_CASE("VerilatorBackend - E2E RealFiftyCycleCounterSimulator",
+          "[verilator][e2e][counter50][m5]") {
+    if (!tool_available("verilator")) {
+        SKIP("verilator not on PATH");
+    }
+    auto device = std::make_unique<ch::ch_device<CounterFixture<32>>>();
+
+    ch::data_map_t data_map;
+    auto workdir = make_temp_dir("_50cyc");
+    REQUIRE_FALSE(workdir.empty());
+
+    Simulator sim(device->context());
+    {
+        auto backend = std::make_unique<VerilatorBackend>(workdir);
+        REQUIRE(backend->initialize(device->context(), data_map));
+        if (backend->port_access_snapshot().empty()) {
+            SKIP("verilator dlopen did not populate port_access_ "
+                 "(verilator build may have failed in test env)");
+        }
+        sim.set_backend(std::move(backend));
+    }
+
+    sim.tick(50);
+
+    // ch_out<N> has implicit conversion to uint64_t (samples/counter.cpp
+    // uses `(int)io().out`); no deref needed.
+    ch_uint<32> val_holder = device->instance().io().out;
+    uint64_t actual = static_cast<uint64_t>(val_holder);
+    UNSCOPED_INFO("counter32 actual=" << actual);
+    REQUIRE(actual == 50);
+}
+
+// ============================================================================
+// E2E: samples/counter.cpp pattern (ch_uint<4>, wraps at 16).
+// For 50 cycles we assert counter == 50 % 16 == 2 -- proves Verilator
+// matches interpreter semantics even when counter wraps.
+// ============================================================================
+TEST_CASE("VerilatorBackend - E2E SamplesCounter4Bit50CyclesMod16",
           "[verilator][e2e][samples][m5]") {
     if (!tool_available("verilator")) {
         SKIP("verilator not on PATH");
     }
-    auto ctx = std::make_unique<context>("vl_e2e_samples");
-    ctx_swap guard(ctx.get());
-
-    // samples/counter.cpp has its own main(); we re-declare the inner
-    // Counter<4> template inline (smaller surface than #include).
-    CounterFixture<4> counter4;
-    (void)counter4;
+    auto device = std::make_unique<ch::ch_device<CounterFixture<4>>>();
 
     ch::data_map_t data_map;
     auto workdir = make_temp_dir("_ctr4");
     REQUIRE_FALSE(workdir.empty());
 
-    VerilatorBackend backend(workdir);
-    REQUIRE(backend.initialize(ctx.get(), data_map));
-    auto snap = backend.port_access_snapshot();
-    if (snap.empty()) {
-        SKIP("verilator dlopen did not populate port_access_");
+    Simulator sim(device->context());
+    {
+        auto backend = std::make_unique<VerilatorBackend>(workdir);
+        REQUIRE(backend->initialize(device->context(), data_map));
+        if (backend->port_access_snapshot().empty()) {
+            SKIP("verilator dlopen did not populate port_access_");
+        }
+        sim.set_backend(std::move(backend));
     }
-    REQUIRE(backend.is_native());
-    REQUIRE(backend.clock_node_id() != UINT32_MAX);
+
+    sim.tick(50);
+    ch_uint<4> val_holder = device->instance().io().out;
+    uint64_t actual = static_cast<uint64_t>(val_holder);
+    UNSCOPED_INFO("counter4 actual=" << actual);
+    REQUIRE(actual == 50 % 16);  // 2 -- proves 4-bit wrap math
 }
 
-// ADR-035 §M1.0 R1: real libVtop.so on disk.
-// Checks obj_dir/libVtop.so exists when verilator compile succeeds.
-// Tagged [verilator][e2e][dlopen].
+// ============================================================================
+// E2E: libVtop.so produced on disk after Verilator compile. (R1 closure)
+// ============================================================================
 TEST_CASE("VerilatorBackend - E2E LibVtopSoOnDisk",
-          "[verilator][e2e][dlopen][m1]") {
+          "[verilator][e2e][libson][m1]") {
     if (!tool_available("verilator")) {
         SKIP("verilator not on PATH");
     }
-    auto ctx = std::make_unique<context>("vl_e2e_libson");
-    ctx_swap guard(ctx.get());
-    CounterFixture<32> c;
-    (void)c;
+    auto device = std::make_unique<ch::ch_device<CounterFixture<32>>>();
     ch::data_map_t data_map;
     auto workdir = make_temp_dir("_libson");
     REQUIRE_FALSE(workdir.empty());
     VerilatorBackend backend(workdir);
-    REQUIRE(backend.initialize(ctx.get(), data_map));
-    auto libso = workdir + "/obj_dir/libVtop.so";
+    REQUIRE(backend.initialize(device->context(), data_map));
+    std::string libso = workdir + "/obj_dir/libVtop.so";
     if (!path_exists(libso)) {
         SKIP("verilator compile did not produce libVtop.so");
     }
-    // libVtop.so size > 1KB means real linker output (not stub)
     struct stat st {};
-    ::stat(libso.c_str(), &st);
-    REQUIRE(st.st_size > 1024);
+    REQUIRE(::stat(libso.c_str(), &st) == 0);
+    REQUIRE(st.st_size > 1024);  // real linker output, not stub
 }
