@@ -14,6 +14,7 @@
 #include "core/eval_backend.h"
 #include "core/context.h"
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -60,10 +61,13 @@ public:
     std::string name() const override { return "verilator"; }
     bool is_native() const override { return true; }
 
-    // Returns the SHA-1 cache key for the current context (depends
-    // on verilator version + Verilog source). Public for tests.
+    // Returns the SHA-1 cache key for the current context. ADR-035
+    // §M1.7 (R4): hashes source + sim_main template + flags +
+    // verilator version. Public for tests.
     static std::string compute_cache_key(const std::string &verilog_source,
-                                        const std::string &verilator_version);
+                                        const std::string &verilator_version,
+                                        const std::string &sim_main_template,
+                                        const std::string &flags);
 
     // ADR-035 Phase 3.5: returns the absolute path to the cached
     // Vtop binary for the given SHA-1 cache key. Format:
@@ -92,13 +96,27 @@ public:
     // Phase 3.3.
     uint32_t clock_node_id() const { return clock_node_id_; }
 
-    // ADR-035 Phase 3.6: VCD trace toggle. When enabled, eval
-    // calls would dump to a Verilator VCD file via the generated
-    // sim_main.cpp. The actual dump requires the Vtop field
-    // pointers (Phase 3.3 follow-up); this method only records
-    // intent for now.
+    // ADR-035 §M4: VCD trace toggle. Records intent; the actual
+    // dump is performed by dump_vcd(time) per cycle.
     void enable_vcd(bool on = true) { vcd_enabled_ = on; }
     bool vcd_enabled() const { return vcd_enabled_; }
+
+    // ADR-035 §M4: write a signal-value row to the VCD stream.
+    // Hooked by Simulator::tick after eval_sequential(). Real
+    // implementation requires --trace + libVtop.so (Phase 3.6
+    // WAS-A-STUB-now-real). With stub emitted symbols, this is
+    // a no-op that records the call into vcd_call_count_; e2e
+    // tier (§M5) verifies the .vcd file is non-empty when
+    // verilator is on PATH.
+    void dump_vcd(uint64_t sim_time);
+
+    // ADR-035 §M4: VCD call count for e2e test assertion.
+    uint32_t vcd_call_count() const { return vcd_call_count_; }
+
+    // ADR-035 §M3: invoke_verilator() call counter for cache-hit tests.
+    uint32_t invoke_verilator_call_count() const {
+        return invoke_verilator_call_count_;
+    }
 
 private:
     bool generate_verilog(ch::core::context *ctx);
@@ -122,11 +140,35 @@ private:
     void (*eval_fn_)(void *) = nullptr;
     void (*final_fn_)(void *) = nullptr;
 
+    // ADR-035 §M1: accessor symbols (Phase 3.3).
+    using SetInputFn = void (*)(void *, uint32_t, const void *);
+    using GetOutputFn = void (*)(void *, uint32_t, void *);
+    using FieldPtrFn = uint8_t *(*)(void *, uint32_t);
+    SetInputFn set_input_fn_ = nullptr;
+    GetOutputFn get_output_fn_ = nullptr;
+    FieldPtrFn get_field_ptr_fn_ = nullptr;
+
     // Port access table (node_id -> Vtop field pointer + metadata)
     std::unordered_map<uint32_t, VerilatorPortAccess> port_access_;
 
     // Phase 3.4: id of the type_clock lnode (or UINT32_MAX if none).
     uint32_t clock_node_id_ = UINT32_MAX;
+
+    // ADR-035 §M3: invoke_verilator() call counter for cache-hit tests.
+    uint32_t invoke_verilator_call_count_ = 0;
+
+    // ADR-035 §M1.7: runtime-detected verilator version for cache key.
+    std::string verilator_version_;
+
+    // ADR-035 §M4: --trace toggle for current build.
+    bool trace_enabled_ = false;
+
+    // ADR-035 §M4: dump_vcd call counter for e2e verification.
+    uint32_t vcd_call_count_ = 0;
+
+    // ADR-035 §M4: VCD output stream (lazy-opened on first dump_vcd).
+    std::ofstream vcd_stream_;
+    std::string vcd_path_;
 
     // Phase 3.6: VCD trace toggle (default off).
     bool vcd_enabled_ = false;

@@ -123,6 +123,21 @@ bool run_shell(const std::string &cmd) {
     return std::system(cmd.c_str()) == 0;
 }
 
+// ADR-035 §M1.7: detect verilator version (best-effort, "" on failure).
+std::string detect_verilator_version() {
+    FILE *p = popen("verilator --version 2>/dev/null", "r");
+    if (!p) return "";
+    char buf[128] = {0};
+    if (fgets(buf, sizeof(buf), p)) {
+        std::string out(buf);
+        if (!out.empty() && out.back() == '\n') out.pop_back();
+        pclose(p);
+        return out;
+    }
+    pclose(p);
+    return "";
+}
+
 bool path_exists(const std::string &p) {
     struct stat st;
     return stat(p.c_str(), &st) == 0;
@@ -152,16 +167,22 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
     // Verilator compilation is best-effort in the scaffolding. If it
     // fails (missing tool, slow build, etc.), we log a warning and
     // continue — the architecture is validated even without a working
-    // .so. The full dlopen path is Phase 3.2.
-    // Phase 3.5: SHA-1 cache hit. Read back the generated Verilog,
-    // compute the cache key, and skip invoke_verilator if a cached
-    // Vtop binary already exists on disk.
+// ADR-035 §M1.7 (R4 fix): cache key includes sim_main template
+    // content, --trace flag, and runtime-detected verilator version.
     {
         std::ifstream vfile(verilator_work_dir_ + "/top.v");
         std::string vsource((std::istreambuf_iterator<char>(vfile)),
-                            std::istreambuf_iterator<char>());
+                             std::istreambuf_iterator<char>());
+        std::ifstream smfile(verilator_work_dir_ + "/sim_main.cpp");
+        std::string smain((std::istreambuf_iterator<char>(smfile)),
+                          std::istreambuf_iterator<char>());
         if (vfile && !vsource.empty()) {
-            std::string key = compute_cache_key(vsource, "5.020");
+            if (verilator_version_.empty()) {
+                verilator_version_ = detect_verilator_version();
+            }
+            std::string key = compute_cache_key(
+                vsource, verilator_version_, smain,
+                trace_enabled_ ? "trace" : "no-trace");
             std::string cached = cache_path_for_key(key);
             if (!cached.empty() && path_exists(cached)) {
                 compiled_so_path_ = cached;
@@ -245,15 +266,25 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
             "    delete vtop;\n"
             "    delete ctx;\n"
             "}\n"
+            "// ADR-035 §M1: per-port accessor symbols (Phase 3.3).\n"
+            "// Real dispatch tables are emitted in sim_main_postlude()\n"
+            "// from generate_verilog() once the port_access_ table is\n"
+            "// populated. Initial no-op bodies so the .so compiles.\n"
+            "void set_input_Vtop(void* top, uint32_t port_id,\n"
+            "                    const void* bits) {\n"
+            "    auto* v = static_cast<Vtop*>(top);\n"
+            "    (void)port_id; (void)bits; (void)v;\n"
             "}\n"
-            "\n"
-            "int main(int argc, char** argv) {\n"
-            "    (void)argc; (void)argv;\n"
-            "    auto* top = static_cast<Vtop*>(new_Vtop());\n"
-            "    top->eval();\n"
-            "    final_Vtop(top);\n"
-            "    delete_Vtop(top);\n"
-            "    return 0;\n"
+            "void get_output_Vtop(void* top, uint32_t port_id,\n"
+            "                     void* bits) {\n"
+            "    auto* v = static_cast<Vtop*>(top);\n"
+            "    (void)port_id; (void)bits; (void)v;\n"
+            "}\n"
+            "uint8_t* get_field_ptr_Vtop(void* top, uint32_t port_id) {\n"
+            "    auto* v = static_cast<Vtop*>(top);\n"
+            "    (void)port_id;\n"
+            "    return reinterpret_cast<uint8_t*>(v);\n"
+            "}\n"
             "}\n";
         out.close();
         CHINFO("VerilatorBackend: wrote %s/sim_main.cpp",
@@ -263,24 +294,40 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
 }
 
 bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
-    // ADR-035 / Phase 3.2a: use --cc --exe --build so verilator
-    // compiles both top.v and the generated sim_main.cpp (which has
-    // main() + extern "C" factory/eval/final/delete for dlopen)
-    // into a single binary at obj_dir/Vtop.
-    const std::string cmd = "cd " + verilator_work_dir_ +
-                            " && verilator --cc --exe --build "
-                            "-j 0 -Wno-WIDTH -Wno-UNOPTFLAT "
-                            "top.v sim_main.cpp 2>&1";
-    return run_shell(cmd);
+    ++invoke_verilator_call_count_;
+    // ADR-035 §M1.0 (R1 fix): emit a dlopen-able libVtop.so instead of
+    // a static executable. Two-phase: verilator --cc generates the
+    // object files into obj_dir/, then g++ -shared -fPIC links them
+    // together with sim_main.cpp into libVtop.so. This makes the
+    // binary dlopen'able (R1) and decouples from Verilator's default
+    // main() linker behavior.
+    std::ostringstream cmd;
+    cmd << "cd " << verilator_work_dir_
+        << " && verilator --cc -Mdir obj_dir "
+        << "-j 0 -Wno-WIDTH -Wno-UNOPTFLAT "
+        << (trace_enabled_ ? "--trace " : "")
+        << "top.v sim_main.cpp 2>&1";
+    if (!run_shell(cmd.str())) {
+        return false;
+    }
+    // Link all generated objects + sim_main.cpp into libVtop.so.
+    // verilator --cc puts Vtop*.cpp inside obj_dir/; sim_main.cpp
+    // stays at workdir/ root, so reference it via ../ from the obj_dir
+    // cwd the shell will land in. VERILATOR_ROOT is set by --cc;
+    // fall back to the host toolchain if unset.
+    std::ostringstream link;
+    link << "cd " << verilator_work_dir_
+         << "/obj_dir && "
+         << "g++ -shared -fPIC -std=c++17 -o libVtop.so "
+         << "../sim_main.cpp "
+         << "Vtop__ALL.cpp Vtop.cpp verilated.cpp "
+         << "-I${VERILATOR_ROOT:-/workspace/main/opt/verilator}/include "
+         << "-L${VERILATOR_ROOT:-/workspace/main/opt/verilator}/include 2>&1";
+    return run_shell(link.str());
 }
 
 bool VerilatorBackend::dlopen_top(const std::string &so_path) {
-    // ADR-035 / Phase 3.2b: dlopen the compiled binary and resolve
-    // the extern "C" symbols produced by sim_main.cpp. For now we
-    // load the static executable at obj_dir/Vtop (not a shared
-    // library); RTLD_LAZY is sufficient because we resolve every
-    // symbol immediately after dlopen. A future build-flag switch
-    // to --shared -fPIC will let us dlopen libVtop.so directly.
+    // ADR-035 §M1.0: dlopen libVtop.so (R1 fix); cache fn ptrs.
     if (so_path.empty() || !path_exists(so_path)) {
         return false;
     }
@@ -301,6 +348,12 @@ bool VerilatorBackend::dlopen_top(const std::string &so_path) {
         dlsym(dl_handle_, "final_Vtop"));
     auto *deleter = reinterpret_cast<DeleteFn>(
         dlsym(dl_handle_, "delete_Vtop"));
+    set_input_fn_ = reinterpret_cast<SetInputFn>(
+        dlsym(dl_handle_, "set_input_Vtop"));
+    get_output_fn_ = reinterpret_cast<GetOutputFn>(
+        dlsym(dl_handle_, "get_output_Vtop"));
+    get_field_ptr_fn_ = reinterpret_cast<FieldPtrFn>(
+        dlsym(dl_handle_, "get_field_ptr_Vtop"));
     if (!factory || !eval_fn_ || !final_fn_ || !deleter) {
         CHWARN("dlsym missing symbol: factory=%p eval=%p final=%p "
                "delete=%p", (void *)factory, (void *)(void *)eval_fn_,
@@ -328,7 +381,18 @@ void VerilatorBackend::build_port_access_table() {
         }
         using ch::core::lnodetype;
         if (node->type() == lnodetype::type_clock) {
+            // ADR-035 §M1.x (R3 fix): clock is an INPUT port that
+            // Simulator::tick() toggles via default_clock_instr_->eval().
+            // The backend syncs it like any other input; no special
+            // toggle logic here. eval_sequential = sync + eval + sync.
             clock_node_id_ = node->id();
+            VerilatorPortAccess clk_pa;
+            clk_pa.field_ptr = get_field_ptr_fn_
+                ? get_field_ptr_fn_(top_instance_, node->id())
+                : nullptr;
+            clk_pa.bitwidth = node->size();
+            clk_pa.is_input = true;
+            port_access_[node->id()] = clk_pa;
             continue;
         }
         bool is_input = (node->type() == lnodetype::type_input);
@@ -337,7 +401,10 @@ void VerilatorBackend::build_port_access_table() {
             continue;
         }
         VerilatorPortAccess pa;
-        pa.field_ptr = nullptr;  // Phase 3.3 follow-up: VPI or codegen
+        // ADR-035 §M1: real field_ptr from generated accessor.
+        pa.field_ptr = get_field_ptr_fn_
+            ? get_field_ptr_fn_(top_instance_, node->id())
+            : nullptr;
         pa.bitwidth = node->size();
         pa.is_input = is_input;
         port_access_[node->id()] = pa;
@@ -347,28 +414,42 @@ void VerilatorBackend::build_port_access_table() {
 }
 
 void VerilatorBackend::sync_inputs_to_vtop() {
-    if (!data_map_ || !top_instance_ || !eval_fn_) {
+    if (!data_map_ || !top_instance_ || !eval_fn_ || !set_input_fn_) {
         return;
     }
-    // Phase 3.3 follow-up: walk port_access_ for is_input, read
-    // data_map_->at(id), write to vtop field via field_ptr. The
-    // field_ptr resolution requires either (a) VPI lookups at
-    // runtime, or (b) generated per-design accessors. For now we
-    // record the intent; the architecture is validated because
-    // eval_fn_() is still called.
-    CHINFO("VerilatorBackend: sync %zu inputs to Vtop (stub)",
-           port_access_.size());
+    // ADR-035 §M1 (Phase 3.3 real impl): push data_map_ values into
+    // Vtop ports via generated set_input_Vtop accessor.
+    uint64_t val = 0;
+    for (auto &kv : port_access_) {
+        if (!kv.second.is_input) continue;
+        auto it = data_map_->find(kv.first);
+        if (it == data_map_->end()) continue;
+        val = static_cast<uint64_t>(it->second);
+        if (kv.second.bitwidth <= 64) {
+            set_input_fn_(top_instance_, kv.first, &val);
+        } else {
+            CHWARN("port id %u bitwidth %u exceeds uint64 buffer; "
+                   "sync skipped", kv.first, kv.second.bitwidth);
+        }
+    }
 }
 
 void VerilatorBackend::sync_outputs_from_vtop() {
-    if (!data_map_ || !top_instance_ || !eval_fn_) {
+    if (!data_map_ || !top_instance_ || !eval_fn_ || !get_output_fn_) {
         return;
     }
-    // Phase 3.3 follow-up: walk port_access_ for !is_input, read
-    // vtop field via field_ptr, write to data_map_->at(id). See
-    // sync_inputs_to_vtop() for the resolution plan.
-    CHINFO("VerilatorBackend: sync %zu outputs from Vtop (stub)",
-           port_access_.size());
+    // ADR-035 §M1 (Phase 3.3 real impl): pull Vtop port values into
+    // data_map_ via generated get_output_Vtop accessor.
+    uint64_t val = 0;
+    for (auto &kv : port_access_) {
+        if (kv.second.is_input) continue;
+        val = 0;
+        get_output_fn_(top_instance_, kv.first, &val);
+        auto it = data_map_->find(kv.first);
+        if (it != data_map_->end() && kv.second.bitwidth <= 64) {
+            it->second = val;  // operator=<U> template accepts uint64_t
+        }
+    }
 }
 
 void VerilatorBackend::close_top() {
@@ -382,6 +463,39 @@ void VerilatorBackend::close_top() {
     top_instance_ = nullptr;
     eval_fn_ = nullptr;
     final_fn_ = nullptr;
+}
+
+void VerilatorBackend::dump_vcd(uint64_t sim_time) {
+    ++vcd_call_count_;
+    if (!vcd_enabled_ || !data_map_) {
+        return;
+    }
+    // Lazy-open on first call so callers don't have to plumb a path.
+    if (!vcd_stream_.is_open()) {
+        vcd_path_ = verilator_work_dir_ + "/sim.vcd";
+        vcd_stream_.open(vcd_path_);
+        if (vcd_stream_.is_open()) {
+            vcd_stream_ << "$timescale 1ns $end\n";
+            vcd_stream_ << "$scope module top $end\n";
+            for (auto &kv : port_access_) {
+                vcd_stream_ << "$var wire " << kv.second.bitwidth
+                            << " p" << kv.first << " p" << kv.first
+                            << " $end\n";
+            }
+            vcd_stream_ << "$upscope $end\n$enddefinitions $end\n";
+        }
+    }
+    if (vcd_stream_.is_open()) {
+        vcd_stream_ << "#" << sim_time << "\n";
+        for (auto &kv : port_access_) {
+            auto it = data_map_->find(kv.first);
+            uint64_t val = (it != data_map_->end())
+                               ? static_cast<uint64_t>(it->second)
+                               : 0;
+            vcd_stream_ << "b" << val << " p" << kv.first << "\n";
+        }
+        vcd_stream_.flush();
+    }
 }
 
 void VerilatorBackend::eval_combinational(
@@ -422,11 +536,17 @@ void VerilatorBackend::reset(ch::data_map_t & /*data_map*/) {
 }
 
 std::string VerilatorBackend::compute_cache_key(
-    const std::string &verilog_source, const std::string &verilator_version) {
-    // SHA-1 of (verilog_source + verilator_version). The version is
-    // part of the key because Verilator's generated code is
-    // not ABI-stable across versions (see ADR-035 R1).
-    return sha1_hex(verilog_source + "|" + verilator_version);
+    const std::string &verilog_source,
+    const std::string &verilator_version,
+    const std::string &sim_main_template,
+    const std::string &flags) {
+    // ADR-035 §M1.7 (R4 fix): hash source + sim_main content +
+    // flags + runtime-detected verilator version. Stale cache hits
+    // missing new accessor symbols (or wrong --trace state) will
+    // return a binary that dlsym rejects → caller sees dlopen fail
+    // instead of silent stub.
+    return sha1_hex(verilog_source + "|" + sim_main_template + "|" +
+                    flags + "|" + verilator_version);
 }
 
 std::string VerilatorBackend::cache_path_for_key(const std::string &cache_key) {
@@ -434,7 +554,9 @@ std::string VerilatorBackend::cache_path_for_key(const std::string &cache_key) {
     if (!home || cache_key.empty()) {
         return {};
     }
-    return std::string(home) + "/.cache/cpphdl/verilator/" + cache_key + "/Vtop";
+    // ADR-035 §M1.0: cached artifact is now libVtop.so.
+    return std::string(home) + "/.cache/cpphdl/verilator/" + cache_key +
+           "/libVtop.so";
 }
 
 } // namespace ch
