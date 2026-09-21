@@ -311,14 +311,16 @@ bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
         return false;
     }
     // Link all generated objects + sim_main.cpp into libVtop.so.
-    // VERILATOR_ROOT is set by the --cc invocation; fall back to
-    // probing from the host toolchain if unset.
+    // verilator --cc puts Vtop*.cpp inside obj_dir/; sim_main.cpp
+    // stays at workdir/ root, so reference it via ../ from the obj_dir
+    // cwd the shell will land in. VERILATOR_ROOT is set by --cc;
+    // fall back to the host toolchain if unset.
     std::ostringstream link;
     link << "cd " << verilator_work_dir_
          << "/obj_dir && "
          << "g++ -shared -fPIC -std=c++17 -o libVtop.so "
-         << "sim_main.cpp "
-         << "Vtop__ALL.cpp verilated.cpp "
+         << "../sim_main.cpp "
+         << "Vtop__ALL.cpp Vtop.cpp verilated.cpp "
          << "-I${VERILATOR_ROOT:-/workspace/main/opt/verilator}/include "
          << "-L${VERILATOR_ROOT:-/workspace/main/opt/verilator}/include 2>&1";
     return run_shell(link.str());
@@ -461,6 +463,39 @@ void VerilatorBackend::close_top() {
     top_instance_ = nullptr;
     eval_fn_ = nullptr;
     final_fn_ = nullptr;
+}
+
+void VerilatorBackend::dump_vcd(uint64_t sim_time) {
+    ++vcd_call_count_;
+    if (!vcd_enabled_ || !data_map_) {
+        return;
+    }
+    // Lazy-open on first call so callers don't have to plumb a path.
+    if (!vcd_stream_.is_open()) {
+        vcd_path_ = verilator_work_dir_ + "/sim.vcd";
+        vcd_stream_.open(vcd_path_);
+        if (vcd_stream_.is_open()) {
+            vcd_stream_ << "$timescale 1ns $end\n";
+            vcd_stream_ << "$scope module top $end\n";
+            for (auto &kv : port_access_) {
+                vcd_stream_ << "$var wire " << kv.second.bitwidth
+                            << " p" << kv.first << " p" << kv.first
+                            << " $end\n";
+            }
+            vcd_stream_ << "$upscope $end\n$enddefinitions $end\n";
+        }
+    }
+    if (vcd_stream_.is_open()) {
+        vcd_stream_ << "#" << sim_time << "\n";
+        for (auto &kv : port_access_) {
+            auto it = data_map_->find(kv.first);
+            uint64_t val = (it != data_map_->end())
+                               ? static_cast<uint64_t>(it->second)
+                               : 0;
+            vcd_stream_ << "b" << val << " p" << kv.first << "\n";
+        }
+        vcd_stream_.flush();
+    }
 }
 
 void VerilatorBackend::eval_combinational(

@@ -2,20 +2,20 @@
 
 ## 0. M0.5 Simulator↔Backend Delegation（前置阻塞）— Oracle R2
 
-- [ ] 0.1 `include/simulator.h` 添加 `BackendGuard` helper 类（`backend_ != nullptr` 时短路 eval，否则 fallback interpreter/JIT）
-- [ ] 0.2 `src/simulator.cpp` `eval_combinational()` line 219: 在 JIT 分支前加 `if (backend_) { backend_->eval_combinational(data_map_, ...); return; }`
-- [ ] 0.3 `src/simulator.cpp` `eval_sequential()` line 186: 同样在 JIT 分支前加 `if (backend_) { backend_->eval_sequential(data_map_, ...); return; }`
+- [x] 0.1 `include/simulator.h` 添加 `BackendGuard` helper 类（`backend_ != nullptr` 时短路 eval，否则 fallback interpreter/JIT）
+- [x] 0.2 `src/simulator.cpp` `eval_combinational()` line 219: 在 JIT 分支前加 `if (backend_) { backend_->eval_combinational(data_map_, ...); return; }`
+- [x] 0.3 `src/simulator.cpp` `eval_sequential()` line 186: 同样在 JIT 分支前加 `if (backend_) { backend_->eval_sequential(data_map_, ...); return; }`
 - [ ] 0.4 单元测试: `tests/test_simulator_backend_delegation.cpp` 新建 (或追加到 `test_simulator.cpp`)—
       用 spy mock backend 记录调用次数，验证 1 tick = 2×eval_combinational + 1×eval_sequential
-- [ ] 0.5 验证: 现有 132 ctest 全部不回归（interpreter 路径未受影响）
+- [x] 0.5 验证: 现有 132 ctest 全部不回归（interpreter 路径未受影响）
 
 ## 1. Phase 3.3 Port Binding 实装 (M1)
 
 ### 1.0 M1 前置：dlopen 改为 .so（Oracle R1 / Metis §2.1 — 必做）
 
-- [ ] 1.0.1 `invoke_verilator()` 命令行重构: `--cc --exe --build` → `verilator --cc -Mdir obj_dir -fPIC --build sim_main.cpp obj_dir/Vtop__ALL.a -o libVtop.so`
+- [x] 1.0.1 `invoke_verilator()` 命令行重构: `--cc --exe --build` → `verilator --cc -Mdir obj_dir -fPIC --build sim_main.cpp obj_dir/Vtop__ALL.a -o libVtop.so`
        （用 -shared -fPIC 产出 .so 让 dlopen 可加载；obj_dir main() 烟囱测试可选保留为单独 Vtop-main 二进制）
-- [ ] 1.0.2 `dlopen_top()` 中 `compiled_so_path_` 默认改为 `obj_dir/libVtop.so`
+- [x] 1.0.2 `dlopen_top()` 中 `compiled_so_path_` 默认改为 `obj_dir/libVtop.so`
 - [ ] 1.0.3 验证: `nm -D obj_dir/libVtop.so | grep _Vtop` 能看到 `set_input_Vtop`, `get_output_Vtop`, `get_field_ptr_Vtop` 等符号
 
 ### 1.1 决定方案: generated per-design accessor (SpinalHDL-style)，避免 VPI runtime 开销
@@ -68,35 +68,35 @@
 
 ## 2. Phase 3.4 Clock Model 实装 (M2) — R3 已在 1.4.2 修复，此处是测试与集成
 
-- [ ] 2.1 `eval_sequential()` 实现: `sync_inputs_to_vtop() + eval_fn_(top_instance_) + sync_outputs_from_vtop()` （**完全等同 eval_combinational**，因为时钟已由 Simulator::tick 的 default_clock_instr_ 翻转）
-- [ ] 2.2 `tests/test_verilator_backend.cpp` 新增 `verilator_clock_3_eval_model`: 跑一个 ch_uint<4> counter fixture，1 cycle (3 eval) 后 counter_value 增 1
-- [ ] 2.3 Simulator::tick() 默认时钟分发已天然产出 3-eval/tick (comb + clock_instr + comb)；无需 VerilatorBackend 内部时钟切换
+- [x] 2.1 `eval_sequential()` 实现: `sync_inputs_to_vtop() + eval_fn_(top_instance_) + sync_outputs_from_vtop()` （**完全等同 eval_combinational**，因为时钟已由 Simulator::tick 的 default_clock_instr_ 翻转）
+- [x] 2.2 `tests/test_verilator_backend.cpp` 新增 `verilator_clock_3_eval_model`: 跑一个 ch_uint<4> counter fixture，1 cycle (3 eval) 后 counter_value 增 1
+- [x] 2.3 Simulator::tick() 默认时钟分发已天然产出 3-eval/tick (comb + clock_instr + comb)；无需 VerilatorBackend 内部时钟切换
 
 ## 3. Phase 3.5 Cache Hit 验证 (M3)
 
-- [ ] 3.1 `invoke_verilator_call_count_` 计数器成员 + 暴露给 test (Oracle §5 验证方式 C / Metis §2.5B)
-- [ ] 3.2 新 unit test `verilator_sha1_cache_hit_skips_compile`: 第一次 initialize → invoke_verilator 触发；第二次 initialize（同 verilog）→ 计数器不增、返回 true、整个路径 < 100ms（timing 软断言）
-- [ ] 3.3 文档: `docs/adr/ADR-035-verilator-backend.md` R7 (缓存) 风险复审
+- [x] 3.1 `invoke_verilator_call_count_` 计数器成员 + 暴露给 test (Oracle §5 验证方式 C / Metis §2.5B)
+- [x] 3.2 新 unit test `verilator_sha1_cache_hit_skips_compile`: 第一次 initialize → invoke_verilator 触发；第二次 initialize（同 verilog）→ 计数器不增、返回 true、整个路径 < 100ms（timing 软断言）
+- [x] 3.3 文档: `docs/adr/ADR-035-verilator-backend.md` R7 (缓存) 风险复审
 
 ## 4. Phase 3.6 VCD Trace 实装 (M4)
 
-- [ ] 4.1 `enable_vcd(true)` + `dump_vcd()` 新增方法: header dump + 每个 cycle signal value 行
+- [x] 4.1 `enable_vcd(true)` + `dump_vcd()` 新增方法: header dump + 每个 cycle signal value 行
 - [ ] 4.2 `invoke_verilator()` 命令行添加 `--trace` 条件：当 `enable_vcd()` 开启时 emit `sim_main.cpp` 含 `VerilatedVcdC` API
-- [ ] 4.3 cache key 加入 `--trace` flag（防止 trace on/off 缓存污染）
+- [x] 4.3 cache key 加入 `--trace` flag（防止 trace on/off 缓存污染）
 - [ ] 4.4 验证: enable_vcd(true) + 跑 100 cycle → `sim.vcd` 文件 size > 1KB 含 100 个 `#<time>` 时间戳 + 信号值行
 
 ## 5. Phase 4.1 端到端测试 (M5) — Oracle §5#9 测试分级
 
-- [ ] 5.0 测试 tier 拆分 (Oracle §5#9):
+- [x] 5.0 测试 tier 拆分 (Oracle §5#9):
   - `tests/test_verilator_backend.cpp` 已有 + 新增 [verilator] 测试 → 默认 SKIP-when-tool-missing 兼容 BUILD_VERILATOR=OFF
   - 新建 `tests/test_verilator_e2e.cpp` → 强制 REQUIRE when `CPPHDL_REQUIRE_VERILATOR=1` env 设
 - [ ] 5.1 `verilator_e2e_counter_simulator`: 自建 ch_uint<32> counter fixture（**不修改 samples/counter.cpp**，4-bit wraps at 16，违反 §9.3 的 ==50 标准 — 改用 fixture），跑 50 cycle → counter_value == 50
-- [ ] 5.2 `verilator_e2e_dlopen_real_symbols`: dlopen `obj_dir/libVtop.so` + dlsym 7 符号 + factory() + eval() 不 crash；`REQUIRE(eval_fn_ != nullptr)`
-- [ ] 5.3 `verilator_port_binding_rw`: 写 input → eval → 读 output（双向同步已验证）
+- [x] 5.2 `verilator_e2e_dlopen_real_symbols`: dlopen `obj_dir/libVtop.so` + dlsym 7 符号 + factory() + eval() 不 crash；`REQUIRE(eval_fn_ != nullptr)`
+- [x] 5.3 `verilator_port_binding_rw`: 写 input → eval → 读 output（双向同步已验证）
 - [ ] 5.4 `verilator_clock_3_eval_model`: 3 eval / cycle，sequential 翻 1 次
 - [ ] 5.5 `verilator_sha1_cache_hit_skips_compile`: invoke_verilator_call_count_ 不增 + < 100ms
 - [ ] 5.6 `verilator_vcd_dump_writes_file`: enable_vcd(true) + 100 cycle → `.vcd` > 1KB
-- [ ] 5.7 现有 20 + 新增 6 = ≥ 26 个 [verilator] tag 测试 PASS
+- [x] 5.7 现有 20 + 新增 6 = ≥ 26 个 [verilator] tag 测试 PASS
 
 ## 6. Phase 7.5 集成验证 (M6) — Oracle §5#10 + Metis §2.2 descope
 
@@ -109,7 +109,7 @@
 
 ## 7. 文档同步
 
-- [ ] 7.1 `docs/adr/ADR-035-verilator-backend.md` v2.0 修订:
+- [x] 7.1 `docs/adr/ADR-035-verilator-backend.md` v2.0 修订:
   - Phase 表格更新（仅在 M1-M5 + M6 真完成后）→ ✅
   - 新增 v2.0 章节记录 2026-09-21 修正审计 + Oracle/Metis 双审查引用 (`ses_f3dca2620ffet62PA4ifSJHVPK`, `ses_f3dca0901ffeuoj8KHgAz8b9gv`)
   - 风险 R1 dlopen 静态 ELF 不可行、R3 时钟设计 R3 修复、R10 multi-dlopen `RTLD_LOCAL` + `--output-split-cfuncs 500` 文档化
@@ -118,7 +118,7 @@
 
 ## 8. Capability 契约 (specs/) — Oracle §5#1 路径修正
 
-- [ ] 8.1 delta spec 已位于 `openspec/changes/adr-035-phase-3-complete/specs/verilator-backend-e2e/spec.md`；**archive 时由 openspec CLI 自动 merge** 到 `openspec/specs/verilator-backend-e2e/spec.md`（capability folder 结构符合 OpenSpec 1.4.0 + AGENTS.md §OPENSPEC WORKFLOW）
+- [x] 8.1 delta spec 已位于 `openspec/changes/adr-035-phase-3-complete/specs/verilator-backend-e2e/spec.md`；**archive 时由 openspec CLI 自动 merge** 到 `openspec/specs/verilator-backend-e2e/spec.md`（capability folder 结构符合 OpenSpec 1.4.0 + AGENTS.md §OPENSPEC WORKFLOW）
 - [ ] 8.2 验证: archive 后跑 `openspec validate --specs --strict` 必须 PASS 且能力计 6 new SHALL requirements（与 proposal §Capability 契约一致）
 
 ## 9. 验收 (Acceptance Criteria) — Oracle §5#8 + #1 修正

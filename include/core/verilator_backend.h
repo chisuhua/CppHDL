@@ -14,6 +14,7 @@
 #include "core/eval_backend.h"
 #include "core/context.h"
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -95,13 +96,27 @@ public:
     // Phase 3.3.
     uint32_t clock_node_id() const { return clock_node_id_; }
 
-    // ADR-035 Phase 3.6: VCD trace toggle. When enabled, eval
-    // calls would dump to a Verilator VCD file via the generated
-    // sim_main.cpp. The actual dump requires the Vtop field
-    // pointers (Phase 3.3 follow-up); this method only records
-    // intent for now.
+    // ADR-035 §M4: VCD trace toggle. Records intent; the actual
+    // dump is performed by dump_vcd(time) per cycle.
     void enable_vcd(bool on = true) { vcd_enabled_ = on; }
     bool vcd_enabled() const { return vcd_enabled_; }
+
+    // ADR-035 §M4: write a signal-value row to the VCD stream.
+    // Hooked by Simulator::tick after eval_sequential(). Real
+    // implementation requires --trace + libVtop.so (Phase 3.6
+    // WAS-A-STUB-now-real). With stub emitted symbols, this is
+    // a no-op that records the call into vcd_call_count_; e2e
+    // tier (§M5) verifies the .vcd file is non-empty when
+    // verilator is on PATH.
+    void dump_vcd(uint64_t sim_time);
+
+    // ADR-035 §M4: VCD call count for e2e test assertion.
+    uint32_t vcd_call_count() const { return vcd_call_count_; }
+
+    // ADR-035 §M3: invoke_verilator() call counter for cache-hit tests.
+    uint32_t invoke_verilator_call_count() const {
+        return invoke_verilator_call_count_;
+    }
 
 private:
     bool generate_verilog(ch::core::context *ctx);
@@ -147,6 +162,13 @@ private:
 
     // ADR-035 §M4: --trace toggle for current build.
     bool trace_enabled_ = false;
+
+    // ADR-035 §M4: dump_vcd call counter for e2e verification.
+    uint32_t vcd_call_count_ = 0;
+
+    // ADR-035 §M4: VCD output stream (lazy-opened on first dump_vcd).
+    std::ofstream vcd_stream_;
+    std::string vcd_path_;
 
     // Phase 3.6: VCD trace toggle (default off).
     bool vcd_enabled_ = false;

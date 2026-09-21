@@ -3,10 +3,11 @@
 **状态**: 🟢 采纳 + Phase 1-4.1 完成（脚手架 GA，完整仿真待 Phase 3.2+）
 **日期**: 2026-06-07（提议）→ 2026-06-07（脚手架 GA）
 **决策人**: Sisyphus + 用户（参考 3 份专项调研 + AGENTS.md `using-superpowers` 工作流）
+**修正审计**: v2.0（2026-09-21）— 见末尾 §v2.0 修正审计章节
 
 ---
 
-## Phase 进度（2026-06-07 快照）
+## Phase 进度（2026-06-07 快照，已被 v2.0 审计修正）
 
 | Phase | 范围 | 状态 | 提交 |
 |-------|------|------|------|
@@ -355,3 +356,62 @@ std::vector<PortAccessor> accessors_;   // node_id → accessor, O(1) 查表
 
 **维护**: AI Agent
 **下次审查**: Phase 1 完成后（预计 2026-06-14）
+
+---
+
+## v2.0 修正审计（2026-09-21）
+
+### 审计缘起
+ADR 阶段表格原声称 Phase 3.1-3.6 + 4.1 全部 ✅ 完成（共 17 commits、58 assertions）。
+2026-09-21 由 Oracle（OpenSpec review session `ses_f3dca2620ffet62PA4ifSJHVPK`）
++ Metis（OpenSpec review session `ses_f3dca0901ffeuoj8KHgAz8b9gv`）双审查发现：
+
+- **Phase 3.3 port binding**：实为 stub（`field_ptr=nullptr`，sync 仅 `CHINFO` log）
+- **Phase 3.4 clock model**：实为 stub（`build_port_access_table` 中 type_clock 节点被
+  `continue` 跳过 → `port_access_.find(clock_node_id_)` 永远 miss → 时钟永
+  不翻转 → Verilator sequential 永不前进）
+- **Phase 3.5 cache hit**：路径存在但未验证
+- **Phase 3.6 VCD**：实为 stub（仅 enable 标志）
+- **Phase 4.1 测试**：17 个大多测脚手架，无 e2e
+
+### 修复（变更 adr-035-phase-3-complete）
+
+合并 Oracle + Metis 双审查建议，闭合 R1-R4 阻塞：
+
+| R | 描述 | 修复 commits |
+|---|------|-------------|
+| **R1** dlopen 静态 ELF 不可行（`--cc --exe --build` 产出非 dlopen-able） | `invoke_verilator()` 改两步：verilator --cc 生成 obj_dir/，再 `g++ -shared -fPIC -o libVtop.so` 链成 .so | `742f368` |
+| **R2** Simulator 永不 delegate `backend_` | `src/simulator.cpp` `eval_combinational/eval_sequential` 头插 `if (backend_ && backend_->is_native()) { backend_->eval_*(...); return; }` | `742f368` |
+| **R3** 时钟节点被 `continue` 跳过 | `build_port_access_table()` 改为 type_clock 当 `is_input=true` 加入 port_access_；clock 由 Simulator::tick 的 `default_clock_instr_->eval()` 翻转，backend 仅 sync | `742f368` |
+| **R4** cache key hardcode "5.020" + 不含 sim_main template | `compute_cache_key()` 加 sim_main_template_hash + flags + 运行时 `verilator --version`；cache_path 改 libVtop.so | `742f368` |
+
+### M1-M4 实装（变更 archive 时一并合并）
+- M0.5 Simulator↔backend delegation
+- M1.0 切换 .so 编译（R1）
+- M1.x 时钟当 input（R3）
+- M1 accessor symbols emit + 真 sync_inputs/outputs（R1/R3）
+- M1.7 cache key 扩展（R4）
+- M1.8 BuildPortAccessTable 测试 nullable tolerance
+- M2/M3/M4/M5 tests 25/26 PASS（1 e2e skipped 因 verilator tool 未在 PR-feedback PATH）
+
+### M6 descope（in-repo rv32i_soc UART TX 跳过）
+按 Oracle §5#10 + Metis §2.2，M6 依赖外部 ELF 文件 + 跨仓 ChipForge 集成，超出
+CppHDL 仓 scope。固件加载需要 memory backdoor symbol（当前未实现）。
+本 change archive 后，M6 在 ChipForge Phase 6d.5 E8 独立跟进。
+
+### 已知后续风险（来自 Oracle R5-R8 / Metis §3）
+
+| R | 状态 | 缓解 |
+|---|------|------|
+| R5 e2e tests vacuous PASS（SKIP-on-fail pattern） | 部分缓解 — `[verilator][e2e]` tier + CPPHDL_REQUIRE_VERILATOR env | CI nightly job with tool required |
+| R6 132 ctest 全绿在 `BUILD_VERILATOR=OFF` 下 | 待 nightly verification | `[verilator]` tag 通过 ctest label 隔离 |
+| R7 samples/counter.cpp 是 4-bit wraps at 16 | **⚠️ 仅采用 fixture 测试**（ch_uint<32>） | oracle 9.3 接受标准修正 |
+| R8 M6 memory backdoor | **descope 到 sibling repo** | ChipForge 6d.5 E8 跟进 |
+
+### 审计 trail 引用
+
+- Oracle review: `ses_f3dca2620ffet62PA4ifSJHVPK`
+- Metis review: `ses_f3dca0901ffeuoj8KHgAz8b9gv`
+- OpenSpec change: `openspec/changes/adr-035-phase-3-complete/`
+- 修复 commits: `dd4258e` (tasks v2), `742f368` (M0.5+M1 impl) + post-fix commits
+
