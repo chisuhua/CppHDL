@@ -134,11 +134,12 @@ private:
     void sync_inputs_to_vtop();
     void sync_outputs_from_vtop();
 
-    // dlopen state
+    // dlopen state — stored fn pointers for Vtop lifecycle + dispatch.
     void *dl_handle_ = nullptr;
     void *top_instance_ = nullptr;  // Vtop*
     void (*eval_fn_)(void *) = nullptr;
     void (*final_fn_)(void *) = nullptr;
+    void (*delete_fn_)(void *) = nullptr;
 
     // ADR-035 §M1: accessor symbols (Phase 3.3).
     using SetInputFn = void (*)(void *, uint32_t, const void *);

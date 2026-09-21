@@ -484,10 +484,11 @@ bool VerilatorBackend::dlopen_top(const std::string &so_path) {
         dlsym(dl_handle_, "get_output_Vtop"));
     get_field_ptr_fn_ = reinterpret_cast<FieldPtrFn>(
         dlsym(dl_handle_, "get_field_ptr_Vtop"));
-    if (!factory || !eval_fn_ || !final_fn_ || !deleter) {
+    delete_fn_ = deleter;
+    if (!factory || !eval_fn_ || !final_fn_ || !delete_fn_) {
         CHWARN("dlsym missing symbol: factory=%p eval=%p final=%p "
                "delete=%p", (void *)factory, (void *)(void *)eval_fn_,
-               (void *)final_fn_, (void *)deleter);
+               (void *)final_fn_, (void *)delete_fn_);
         dlclose(dl_handle_);
         dl_handle_ = nullptr;
         return false;
@@ -586,6 +587,12 @@ void VerilatorBackend::close_top() {
     if (top_instance_ && final_fn_) {
         final_fn_(top_instance_);
     }
+    // Destroy Vtop before dlclose so the Verilator thread pool shuts
+    // down cleanly; otherwise Vtop background threads crash in
+    // libstdc++ cleanup after the .so is unmapped.
+    if (top_instance_ && delete_fn_) {
+        delete_fn_(top_instance_);
+    }
     if (dl_handle_) {
         dlclose(dl_handle_);
         dl_handle_ = nullptr;
@@ -593,6 +600,7 @@ void VerilatorBackend::close_top() {
     top_instance_ = nullptr;
     eval_fn_ = nullptr;
     final_fn_ = nullptr;
+    delete_fn_ = nullptr;
 }
 
 void VerilatorBackend::dump_vcd(uint64_t sim_time) {
