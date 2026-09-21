@@ -2,6 +2,8 @@
 #include "codegen_verilog.h"
 #include "ast_nodes.h"
 #include "lnodeimpl.h"
+#include "memimpl.h"
+#include "mem_port_impl.h"
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -253,7 +255,8 @@ void verilogwriter::emit_signal_decl(std::ostream &out,
 
 void verilogwriter::emit_always_ff(std::ostream &out,
                                    const std::string &reg_name,
-                                   const std::string &next_name) {
+                                   const std::string &next_name,
+                                   const std::string &reset_value) {
     try {
         if (reg_name.empty() || next_name.empty()) {
             return;
@@ -263,7 +266,7 @@ void verilogwriter::emit_always_ff(std::ostream &out,
         out << "        if (!default_reset)\n";
         out << "            " << reg_name << " <= " << next_name << ";\n";
         out << "        else\n";
-        out << "            " << reg_name << " <= 1'b0;\n";
+        out << "            " << reg_name << " <= " << reset_value << ";\n";
         out << "    end\n";
     } catch (...) {
         // Silently ignore exceptions (codebase convention for print_* methods)
@@ -385,6 +388,7 @@ void verilogwriter::print_decl(std::ostream &out) {
         // Iterate through the sorted list, but handle types differently for
         // declaration
         std::vector<ch::core::lnodeimpl *> inputs, outputs, wires, regs;
+        std::vector<ch::core::memimpl *> mems;
 
         for (auto *node : sorted_nodes_) {
             if (declared_nodes_.count(node))
@@ -401,6 +405,10 @@ void verilogwriter::print_decl(std::ostream &out) {
                 break;
             case ch::core::lnodetype::type_reg:
                 regs.push_back(node);
+                declared_nodes_.insert(node);
+                break;
+            case ch::core::lnodetype::type_mem:
+                mems.push_back(static_cast<ch::core::memimpl *>(node));
                 declared_nodes_.insert(node);
                 break;
             case ch::core::lnodetype::type_op:
@@ -437,6 +445,12 @@ void verilogwriter::print_decl(std::ostream &out) {
         for (auto *node : wires) {
             if (node_names_.count(node)) {
                 emit_signal_decl(out, node);
+            }
+        }
+        // Memory arrays (unpacked SystemVerilog arrays).
+        for (auto *mem : mems) {
+            if (node_names_.count(mem)) {
+                print_mem_decl(out, mem);
             }
         }
     } catch (...) {
@@ -477,6 +491,29 @@ void verilogwriter::print_logic(std::ostream &out) {
                                  static_cast<ch::core::bitsupdateimpl *>(node));
                 printed_logic_nodes_.insert(node);
                 break;
+            case ch::core::lnodetype::type_mem:
+                print_mem_init(out, static_cast<ch::core::memimpl *>(node));
+                printed_logic_nodes_.insert(node);
+                break;
+            case ch::core::lnodetype::type_mem_read_port:
+                print_mem_read_port(
+                    out, static_cast<ch::core::mem_read_port_impl *>(node));
+                printed_logic_nodes_.insert(node);
+                break;
+            case ch::core::lnodetype::type_mem_write_port:
+                print_mem_write_port(
+                    out, static_cast<ch::core::mem_write_port_impl *>(node));
+                printed_logic_nodes_.insert(node);
+                break;
+            case ch::core::lnodetype::type_lit: {
+                auto *lit_node = static_cast<ch::core::litimpl *>(node);
+                if (node_names_.count(node)) {
+                    out << "    assign " << node_names_[node] << " = "
+                        << get_literal_str(lit_node->value()) << ";\n";
+                }
+                printed_logic_nodes_.insert(node);
+                break;
+            }
             case ch::core::lnodetype::type_output: // Handle output assignments
                 // ADR-035 / Phase 1.3: walk the proxy chain to find the
                 // actual driver. The output's src(0) is a proxy like
@@ -546,6 +583,18 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
         std::string clock_name = "default_clock";
         (void)clock_name;
 
+        // The ch_reg init value becomes the synchronous reset value so the
+        // Verilator model starts from the same state as the CppHDL Simulator
+        // when no reset pulse is applied (e.g. the CPU PC starts at
+        // 0x80000000, matching the vendored ELF harness which skips reset).
+        std::string reset_value = "1'b0";
+        auto *init_node = node->get_init_val();
+        if (init_node && init_node->type() ==
+                             ch::core::lnodetype::type_lit) {
+            auto *lit = static_cast<ch::core::litimpl *>(init_node);
+            reset_value = get_literal_str(lit->value());
+        }
+
         if (next_node && node_names_.count(next_node)) {
             // For register updates, assign to the register itself
             std::string reg_name = node_names_[node];
@@ -561,7 +610,7 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
                             std::to_string(node->size() - 1) + ":0]";
             }
 
-            emit_always_ff(out, reg_name, next_name);
+            emit_always_ff(out, reg_name, next_name, reset_value);
         } else {
             // If next is not found or not named, print a warning
             out << "    // Warning: Register '" << node_names_[node]
@@ -941,6 +990,126 @@ void verilogwriter::print_bitsupdate(std::ostream &out,
         out << "};\n";
     } catch (...) {
         // Silently ignore exceptions
+    }
+}
+
+void verilogwriter::print_mem_decl(std::ostream &out,
+                                   ch::core::memimpl *node) {
+    try {
+        if (!node || !node_names_.count(node)) {
+            return;
+        }
+        out << "    logic " << get_width_str(node->data_width())
+            << " " << node_names_[node] << " [0:" << (node->depth() - 1)
+            << "];\n";
+    } catch (...) {
+        // Silently ignore exceptions (codebase convention for print_* methods)
+    }
+}
+
+void verilogwriter::print_mem_init(std::ostream &out,
+                                   ch::core::memimpl *node) {
+    try {
+        if (!node || !node_names_.count(node)) {
+            return;
+        }
+        const auto &init_data = node->init_data();
+        std::string mem_name = node_names_[node];
+        out << "    initial begin\n";
+        if (!init_data.empty()) {
+            out << "        for (int __i = 0; __i < "
+                << static_cast<int>(node->depth()) << "; __i = __i + 1)\n";
+            out << "            " << mem_name << "[__i] = 1'b0;\n";
+        }
+        for (std::size_t i = 0; i < init_data.size(); ++i) {
+            const auto &w = init_data[i];
+            if (w.is_zero()) {
+                continue;
+            }
+            out << "        " << mem_name << "[" << i << "] = "
+                << get_literal_str(w) << ";\n";
+        }
+        out << "    end\n";
+    } catch (...) {
+        // Silently ignore exceptions (codebase convention for print_* methods)
+    }
+}
+
+void verilogwriter::print_mem_read_port(
+    std::ostream &out, ch::core::mem_read_port_impl *node) {
+    try {
+        if (!node || !node_names_.count(node)) {
+            return;
+        }
+        auto *parent = node->parent();
+        auto *addr = node->addr();
+        auto *enable = node->enable();
+        auto *data_proxy = node->data_output();
+        if (!parent || !addr || !data_proxy ||
+            !node_names_.count(parent) || !node_names_.count(addr) ||
+            !node_names_.count(data_proxy)) {
+            return;
+        }
+        std::string mem_name = node_names_[parent];
+        std::string addr_name = node_names_[addr];
+        std::string proxy_name = node_names_[data_proxy];
+
+        // All mem read ports (async aread and sync sread) are evaluated in
+        // the simulator's sequential phase at posedge, giving 1-cycle read
+        // latency. The CPU's pc_lag / FLUSH mechanism depends on this; a
+        // combinational read would misalign fetch with pc_lag.
+        std::string en_str = "1'b1";
+        if (enable && node_names_.count(enable)) {
+            en_str = node_names_[enable];
+        }
+        // Reset branch clears the read proxy (matches the CppHDL Simulator
+        // data_map default-zero), preventing X from reaching the datapath.
+        out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
+            << "Read port " << proxy_name << "\n";
+        out << "        if (!default_reset)\n";
+        out << "            if (" << en_str << ")\n";
+        out << "                " << proxy_name << " <= " << mem_name << "["
+            << addr_name << "];\n";
+        out << "        else\n";
+        out << "            " << proxy_name << " <= 1'b0;\n";
+        out << "    end\n";
+    } catch (...) {
+        // Silently ignore exceptions (codebase convention for print_* methods)
+    }
+}
+
+void verilogwriter::print_mem_write_port(
+    std::ostream &out, ch::core::mem_write_port_impl *node) {
+    try {
+        if (!node || !node_names_.count(node)) {
+            return;
+        }
+        auto *parent = node->parent();
+        auto *addr = node->addr();
+        auto *wdata = node->wdata();
+        auto *enable = node->enable();
+        if (!parent || !addr || !wdata ||
+            !node_names_.count(parent) || !node_names_.count(addr) ||
+            !node_names_.count(wdata)) {
+            return;
+        }
+        std::string mem_name = node_names_[parent];
+        std::string addr_name = node_names_[addr];
+        std::string wdata_name = node_names_[wdata];
+        std::string en_str = "1'b1";
+        if (enable && node_names_.count(enable)) {
+            en_str = node_names_[enable];
+        }
+        // No reset branch: simulator reset() never clears memory contents
+        // (preloaded ELF must survive; only ch_reg cells are reset).
+        out << "    always_ff @(posedge default_clock) begin // "
+            << "Write port for " << mem_name << "\n";
+        out << "        if (" << en_str << ")\n";
+        out << "            " << mem_name << "[" << addr_name
+            << "] <= " << wdata_name << ";\n";
+        out << "    end\n";
+    } catch (...) {
+        // Silently ignore exceptions (codebase convention for print_* methods)
     }
 }
 

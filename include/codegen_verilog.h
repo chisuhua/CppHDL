@@ -24,6 +24,9 @@ class outputimpl;
 class regimpl;
 class opimpl;
 class proxyimpl;
+class memimpl;
+class mem_read_port_impl;
+class mem_write_port_impl;
 enum class ch_op;
 } // namespace core
 } // namespace ch
@@ -53,7 +56,8 @@ private:
     void emit_signal_decl(std::ostream &out, ch::core::lnodeimpl *node);
     void emit_always_ff(std::ostream &out,
                         const std::string &reg_name,
-                        const std::string &next_name);
+                        const std::string &next_name,
+                        const std::string &reset_value = "1'b0");
 
     // --- Core printing methods ---
     void print_header(std::ostream &out);
@@ -74,6 +78,12 @@ private:
     void print_proxy(std::ostream &out, ch::core::proxyimpl *node);
     void print_mux(std::ostream &out, ch::core::muximpl *node);
     void print_bitsupdate(std::ostream &out, ch::core::bitsupdateimpl *node);
+
+    // --- Memory emission (ADR-035 R8: memory backdoor, ChipForge 6d.5 E8) ---
+    void print_mem_decl(std::ostream &out, ch::core::memimpl *node);
+    void print_mem_init(std::ostream &out, ch::core::memimpl *node);
+    void print_mem_read_port(std::ostream &out, ch::core::mem_read_port_impl *node);
+    void print_mem_write_port(std::ostream &out, ch::core::mem_write_port_impl *node);
 
     // --- Specialized op printers (Wave 2) ---
     void print_unary_op(std::ostream &out, ch::core::opimpl *node);
