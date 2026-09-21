@@ -69,3 +69,7 @@ perf_results.csv
 perf_results.json
 perf_results.md
 perf_history.csv
+
+# 忽略 perf F2 修复机制 sentinel 文件（test_perf_subprocess_isolation 在 RAII 中备份 perf_results.json
+# 为 .__saved/.__saved2，以便从上一次 SIGKILL/ctest TIMEOUT 中恢复；这些是运行时临时残留）
+perf_results.json.__saved*
