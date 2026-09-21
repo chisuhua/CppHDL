@@ -149,15 +149,21 @@ TEST_CASE("VerilatorBackend - E2E RealFiftyCycleCounterSimulator",
 
     sim.tick(50);
 
-    // ch_out<N> has implicit conversion to uint64_t (samples/counter.cpp
-    // uses `(int)io().out`); no deref needed.
-    ch_uint<32> val_holder = device->instance().io().out;
-    uint64_t actual = static_cast<uint64_t>(val_holder);
-    UNSCOPED_INFO("counter32 actual=" << actual);
-    // KNOWN ISSUE (issue #25): always_ff @(posedge default_clock) in
-    // the Verilator-generated model does not increment under the
-    // current M0.5 dispatch. Tracked in issue #25 partial closure.
-    CHECK(actual == 50);
+    // Read counter via data_map_[outputimpl_id], NOT via ch_uint::operator
+    // uint64_t (which errors for non-constant outputimpl and returns 0).
+    {
+        auto* out_lnode = device->instance().io().out.impl();
+        auto it = sim.data_map().find(out_lnode->id());
+        REQUIRE(it != sim.data_map().end());
+        uint64_t actual = static_cast<uint64_t>(it->second);
+        UNSCOPED_INFO("counter32 data_map_[" << out_lnode->id()
+                     << "]=" << it->second.to_string()
+                     << " actual=" << actual);
+        // KNOWN ISSUE (issue #25): always_ff @(posedge default_clock) in
+        // the Verilator-generated model does not increment under the
+        // current M0.5 dispatch. Tracked in issue #25 partial closure.
+        CHECK(actual == 50);
+    }
 }
 
 // ============================================================================
@@ -187,11 +193,18 @@ TEST_CASE("VerilatorBackend - E2E SamplesCounter4Bit50CyclesMod16",
     }
 
     sim.tick(50);
-    ch_uint<4> val_holder = device->instance().io().out;
-    uint64_t actual = static_cast<uint64_t>(val_holder);
-    UNSCOPED_INFO("counter4 actual=" << actual);
-    // Same KNOWN ISSUE as Counter<32> above (issue #25).
-    CHECK(actual == 50 % 16);
+    // Read counter via data_map_[outputimpl_id], not ch_uint conversion.
+    {
+        auto* out_lnode = device->instance().io().out.impl();
+        auto it = sim.data_map().find(out_lnode->id());
+        REQUIRE(it != sim.data_map().end());
+        uint64_t actual = static_cast<uint64_t>(it->second);
+        UNSCOPED_INFO("counter4 data_map_[" << out_lnode->id()
+                    << "]=" << it->second.to_string()
+                    << " actual=" << actual);
+        // Same KNOWN ISSUE as Counter<32> above (issue #25).
+        CHECK(actual == 50 % 16);
+    }
 }
 
 // ============================================================================
