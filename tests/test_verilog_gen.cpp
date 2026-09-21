@@ -94,7 +94,8 @@ TEST_CASE("VerilogGen - CounterModule", "[verilog][counter]") {
     REQUIRE(verilog_code.find("module top") != std::string::npos);
     REQUIRE(verilog_code.find("output [3:0] io") != std::string::npos);
     REQUIRE(verilog_code.find("logic [3:0] reg") != std::string::npos);
-    REQUIRE(verilog_code.find("always_ff @(posedge default_clock)") !=
+    REQUIRE(verilog_code.find(
+                "always_ff @(posedge default_clock or posedge default_reset)") !=
             std::string::npos);
     REQUIRE(verilog_code.find("assign io = reg") != std::string::npos);
 
@@ -148,7 +149,8 @@ TEST_CASE("VerilogGen - RegisterWithComplexLogic", "[verilog][complex]") {
     REQUIRE(verilog_code.find("logic [7:0] reg") != std::string::npos);
 
     // Check for conditional logic (mux)
-    REQUIRE(verilog_code.find("always_ff @(posedge default_clock)") !=
+    REQUIRE(verilog_code.find(
+                "always_ff @(posedge default_clock or posedge default_reset)") !=
             std::string::npos);
 
     // Should not have unnecessary ports
@@ -824,7 +826,8 @@ TEST_CASE("VerilogGen - AlwaysFFBlocks", "[verilog][sv]") {
 
     std::string code = generateVerilogToString(ctx.get());
 
-    REQUIRE(code.find("always_ff @(posedge default_clock)") !=
+    REQUIRE(code.find(
+                "always_ff @(posedge default_clock or posedge default_reset)") !=
             std::string::npos);
     REQUIRE(code.find("always @(") == std::string::npos);
 }

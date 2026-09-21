@@ -258,9 +258,12 @@ void verilogwriter::emit_always_ff(std::ostream &out,
         if (reg_name.empty() || next_name.empty()) {
             return;
         }
-        out << "    always_ff @(posedge default_clock) begin // "
+        out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
             << "Register update for " << reg_name << "\n";
-        out << "        " << reg_name << " <= " << next_name << ";\n";
+        out << "        if (!default_reset)\n";
+        out << "            " << reg_name << " <= " << next_name << ";\n";
+        out << "        else\n";
+        out << "            " << reg_name << " <= 1'b0;\n";
         out << "    end\n";
     } catch (...) {
         // Silently ignore exceptions (codebase convention for print_* methods)
