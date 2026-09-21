@@ -60,10 +60,13 @@ public:
     std::string name() const override { return "verilator"; }
     bool is_native() const override { return true; }
 
-    // Returns the SHA-1 cache key for the current context (depends
-    // on verilator version + Verilog source). Public for tests.
+    // Returns the SHA-1 cache key for the current context. ADR-035
+    // §M1.7 (R4): hashes source + sim_main template + flags +
+    // verilator version. Public for tests.
     static std::string compute_cache_key(const std::string &verilog_source,
-                                        const std::string &verilator_version);
+                                        const std::string &verilator_version,
+                                        const std::string &sim_main_template,
+                                        const std::string &flags);
 
     // ADR-035 Phase 3.5: returns the absolute path to the cached
     // Vtop binary for the given SHA-1 cache key. Format:
@@ -122,11 +125,28 @@ private:
     void (*eval_fn_)(void *) = nullptr;
     void (*final_fn_)(void *) = nullptr;
 
+    // ADR-035 §M1: accessor symbols (Phase 3.3).
+    using SetInputFn = void (*)(void *, uint32_t, const void *);
+    using GetOutputFn = void (*)(void *, uint32_t, void *);
+    using FieldPtrFn = uint8_t *(*)(void *, uint32_t);
+    SetInputFn set_input_fn_ = nullptr;
+    GetOutputFn get_output_fn_ = nullptr;
+    FieldPtrFn get_field_ptr_fn_ = nullptr;
+
     // Port access table (node_id -> Vtop field pointer + metadata)
     std::unordered_map<uint32_t, VerilatorPortAccess> port_access_;
 
     // Phase 3.4: id of the type_clock lnode (or UINT32_MAX if none).
     uint32_t clock_node_id_ = UINT32_MAX;
+
+    // ADR-035 §M3: invoke_verilator() call counter for cache-hit tests.
+    uint32_t invoke_verilator_call_count_ = 0;
+
+    // ADR-035 §M1.7: runtime-detected verilator version for cache key.
+    std::string verilator_version_;
+
+    // ADR-035 §M4: --trace toggle for current build.
+    bool trace_enabled_ = false;
 
     // Phase 3.6: VCD trace toggle (default off).
     bool vcd_enabled_ = false;

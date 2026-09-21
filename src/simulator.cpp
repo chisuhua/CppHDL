@@ -186,6 +186,14 @@ void Simulator::update_instruction_pointers() {
 void Simulator::eval_sequential() {
     CHDBG_FUNC();
 
+    // ADR-035 §M0.5: delegate to native backend (e.g., VerilatorBackend) when installed.
+    // Backend owns sync_inputs → eval → sync_outputs semantics, so we short-circuit here
+    // before JIT/instr loops fire. R2 fix.
+    if (backend_ && backend_->is_native()) {
+        backend_->eval_sequential(data_map_, sequential_instr_list_);
+        return;
+    }
+
 #if __has_include("jit/jit_compiler.h")
     if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_seq_func()) {
         // 先执行 CALL_EXTERNAL 解释器节点（修复: JIT 之前执行避免陈旧值）
@@ -218,6 +226,13 @@ void Simulator::eval_sequential() {
 
 void Simulator::eval_combinational() {
     CHDBG_FUNC();
+
+    // ADR-035 §M0.5: delegate to native backend when installed (R2 fix).
+    if (backend_ && backend_->is_native()) {
+        backend_->eval_combinational(data_map_, input_instr_list_,
+                                     combinational_instr_list_);
+        return;
+    }
 
 #if __has_include("jit/jit_compiler.h")
     if (jit_enabled_ && jit_compiled_ && jit_compiler_ && jit_compiler_->has_comb_func()) {
