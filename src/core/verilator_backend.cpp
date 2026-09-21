@@ -214,7 +214,8 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
     for (auto* node : nodes) {
         if (!node) continue;
         auto t = node->type();
-        if (t != lnodetype::type_input && t != lnodetype::type_clock) continue;
+        if (t != lnodetype::type_input && t != lnodetype::type_clock &&
+            t != lnodetype::type_reset) continue;
         uint32_t id = node->id();
         uint32_t bw = node->size();
         const char* dt = (bw <= 8)  ? "CData"
@@ -262,7 +263,7 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
         // lnode->name() is the Verilog port identifier Vtop.h
         // exposes (default_clock, io, top_unnamed_output, etc.)
         if (t != lnodetype::type_input && t != lnodetype::type_clock &&
-            t != lnodetype::type_output) continue;
+            t != lnodetype::type_output && t != lnodetype::type_reset) continue;
         uint32_t id = node->id();
         out << "    case " << id << ": return reinterpret_cast<uint8_t*>(&v->"
             << cpp_safe_name(node->name()).c_str() << ");\n";
@@ -288,6 +289,7 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
     // continue — the architecture is validated even without a working
 // ADR-035 §M1.7 (R4 fix): cache key includes sim_main template
     // content, --trace flag, and runtime-detected verilator version.
+    std::string cache_key;
     {
         std::ifstream vfile(verilator_work_dir_ + "/top.v");
         std::string vsource((std::istreambuf_iterator<char>(vfile)),
@@ -302,10 +304,10 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
             if (verilator_root_.empty()) {
                 verilator_root_ = detect_verilator_root();
             }
-            std::string key = compute_cache_key(
+            cache_key = compute_cache_key(
                 vsource, verilator_version_, smain,
                 trace_enabled_ ? "trace" : "no-trace");
-            std::string cached = cache_path_for_key(key);
+            std::string cached = cache_path_for_key(cache_key);
             if (!cached.empty() && path_exists(cached)) {
                 compiled_so_path_ = cached;
                 CHINFO("VerilatorBackend: cache hit at %s", cached.c_str());
@@ -318,6 +320,14 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
                     // finds the freshly-built libVtop.so (cache-miss path).
                     compiled_so_path_ =
                         verilator_work_dir_ + "/obj_dir/libVtop.so";
+                    // ADR-035 §M3: write the freshly-built .so back
+                    // to ~/.cache/cpphdl/verilator/<key>/ so future
+                    // initialize() with the same context hits the
+                    // cache instead of recompiling (minutes -> ms).
+                    if (!writeback_to_cache(cache_key)) {
+                        CHWARN("VerilatorBackend: cache write-back failed "
+                               "(subsequent runs will recompile)");
+                    }
                 }
             }
         }
@@ -328,7 +338,12 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
                compiled_so_path_.c_str());
     }
 
-    build_port_access_table();
+    if (!build_port_access_table()) {
+        CHERROR("VerilatorBackend: port access table rejected the design "
+                "(see prior error for the offending port)");
+        close_top();
+        return false;
+    }
 
     return true;
 }
@@ -499,11 +514,11 @@ bool VerilatorBackend::dlopen_top(const std::string &so_path) {
     return true;
 }
 
-void VerilatorBackend::build_port_access_table() {
+bool VerilatorBackend::build_port_access_table() {
     port_access_.clear();
     clock_node_id_ = UINT32_MAX;
     if (!ctx_) {
-        return;
+        return false;
     }
     auto nodes = ctx_->get_eval_list();
     for (auto *node : nodes) {
@@ -511,25 +526,33 @@ void VerilatorBackend::build_port_access_table() {
             continue;
         }
         using ch::core::lnodetype;
-        if (node->type() == lnodetype::type_clock) {
-            // ADR-035 §M1.x (R3 fix): clock is an INPUT port that
-            // Simulator::tick() toggles via default_clock_instr_->eval().
-            // The backend syncs it like any other input; no special
-            // toggle logic here. eval_sequential = sync + eval + sync.
-            clock_node_id_ = node->id();
-            VerilatorPortAccess clk_pa;
-            clk_pa.field_ptr = get_field_ptr_fn_
-                ? get_field_ptr_fn_(top_instance_, node->id())
-                : nullptr;
-            clk_pa.bitwidth = node->size();
-            clk_pa.is_input = true;
-            port_access_[node->id()] = clk_pa;
+        auto t = node->type();
+        if (t != lnodetype::type_clock && t != lnodetype::type_reset &&
+            t != lnodetype::type_input && t != lnodetype::type_output) {
             continue;
         }
-        bool is_input = (node->type() == lnodetype::type_input);
-        bool is_output = (node->type() == lnodetype::type_output);
-        if (!is_input && !is_output) {
-            continue;
+        // ADR-035 §M1.7 (R3 fix): Verilator's QData/UData accessor
+        // model caps at 64 bits. VlWide vectors (bw>64) would be
+        // reinterpret-cast down to QData in emit_sim_main_postlude,
+        // silently truncating high bits. Reject early instead.
+        // Only check user-declared ports (type_input/type_output) —
+        // type_clock and type_reset are infrastructure signals and
+        // are 1-bit by convention regardless of what size() returns.
+        if ((t == lnodetype::type_input ||
+             t == lnodetype::type_output) && node->size() > 64) {
+            CHERROR("VerilatorBackend: port id %u has bitwidth %u > 64; "
+                    "wide signals are unsupported (Verilator QData "
+                    "accessor cannot transport VlWide vectors). Use "
+                    "the interpreter or JIT backend for designs with "
+                    "ports wider than 64 bits.", node->id(), node->size());
+            port_access_.clear();
+            return false;
+        }
+        if (t == lnodetype::type_clock) {
+            clock_node_id_ = node->id();
+        }
+        if (t == lnodetype::type_reset) {
+            reset_node_id_ = node->id();
         }
         VerilatorPortAccess pa;
         // ADR-035 §M1: real field_ptr from generated accessor.
@@ -537,11 +560,15 @@ void VerilatorBackend::build_port_access_table() {
             ? get_field_ptr_fn_(top_instance_, node->id())
             : nullptr;
         pa.bitwidth = node->size();
-        pa.is_input = is_input;
+        pa.is_input = (t == lnodetype::type_input ||
+                       t == lnodetype::type_clock ||
+                       t == lnodetype::type_reset);
         port_access_[node->id()] = pa;
     }
     CHINFO("VerilatorBackend: port_access_ built with %zu entries, "
-           "clock_node_id_=%u", port_access_.size(), clock_node_id_);
+           "clock_node_id_=%u reset_node_id_=%u",
+           port_access_.size(), clock_node_id_, reset_node_id_);
+    return true;
 }
 
 void VerilatorBackend::sync_inputs_to_vtop() {
@@ -549,7 +576,9 @@ void VerilatorBackend::sync_inputs_to_vtop() {
         return;
     }
     // ADR-035 §M1 (Phase 3.3 real impl): push data_map_ values into
-    // Vtop ports via generated set_input_Vtop accessor.
+    // Vtop ports via generated set_input_Vtop accessor. Wide ports
+    // (>64 bits) are rejected by build_port_access_table() during
+    // initialize(); this branch is defensive and should never run.
     uint64_t val = 0;
     for (auto &kv : port_access_) {
         if (!kv.second.is_input) continue;
@@ -560,7 +589,8 @@ void VerilatorBackend::sync_inputs_to_vtop() {
             set_input_fn_(top_instance_, kv.first, &val);
         } else {
             CHWARN("port id %u bitwidth %u exceeds uint64 buffer; "
-                   "sync skipped", kv.first, kv.second.bitwidth);
+                   "sync skipped (initialize should have rejected)",
+                   kv.first, kv.second.bitwidth);
         }
     }
 }
@@ -570,7 +600,9 @@ void VerilatorBackend::sync_outputs_from_vtop() {
         return;
     }
     // ADR-035 §M1 (Phase 3.3 real impl): pull Vtop port values into
-    // data_map_ via generated get_output_Vtop accessor.
+    // data_map_ via generated get_output_Vtop accessor. Wide ports
+    // (>64 bits) are rejected by build_port_access_table() during
+    // initialize(); the silent-skip below is defensive only.
     uint64_t val = 0;
     for (auto &kv : port_access_) {
         if (kv.second.is_input) continue;
@@ -627,10 +659,18 @@ void VerilatorBackend::dump_vcd(uint64_t sim_time) {
         vcd_stream_ << "#" << sim_time << "\n";
         for (auto &kv : port_access_) {
             auto it = data_map_->find(kv.first);
-            uint64_t val = (it != data_map_->end())
+            uint64_t raw = (it != data_map_->end())
                                ? static_cast<uint64_t>(it->second)
                                : 0;
-            vcd_stream_ << "b" << val << " p" << kv.first << "\n";
+            // VCD spec requires binary after 'b' (e.g. b0101), not decimal.
+            // Format val as zero-padded binary to bitwidth digits.
+            size_t bw = kv.second.bitwidth;
+            std::string bin;
+            bin.reserve(bw);
+            for (size_t i = bw; i > 0; --i) {
+                bin += ((raw >> (i - 1)) & 1u) ? '1' : '0';
+            }
+            vcd_stream_ << "b" << bin << " p" << kv.first << "\n";
         }
         vcd_stream_.flush();
     }
@@ -670,11 +710,26 @@ void VerilatorBackend::eval_sequential(
     sync_outputs_from_vtop();
 }
 
-void VerilatorBackend::reset(ch::data_map_t & /*data_map*/) {
-    // Phase 3.4: Vtop doesn't have an explicit reset port in our
-    // generated Verilog (Phase 1.2 deferred reset). The user is
-    // expected to set inputs to known values after a "reset" event.
-    // For now, this is a no-op.
+void VerilatorBackend::reset(ch::data_map_t &data_map) {
+    if (!top_instance_ || !eval_fn_ || reset_node_id_ == UINT32_MAX) {
+        return;
+    }
+    auto it = port_access_.find(reset_node_id_);
+    if (it == port_access_.end() || !it->second.field_ptr) {
+        return;
+    }
+    // Drive reset=1 to Vtop. The Simulator's eval_sequential()
+    // toggles the clock after this; the register captures the reset
+    // value on that clock edge.
+    data_map_ = &data_map;
+    uint64_t val = 1;
+    set_input_fn_(top_instance_, reset_node_id_, &val);
+    eval_fn_(top_instance_);
+    // De-assert reset so it does not hold the register in reset
+    // after the clock edge (the Simulator will set reset=0 via
+    // sync_inputs_to_vtop on the next tick).
+    val = 0;
+    set_input_fn_(top_instance_, reset_node_id_, &val);
 }
 
 std::string VerilatorBackend::compute_cache_key(
@@ -699,6 +754,53 @@ std::string VerilatorBackend::cache_path_for_key(const std::string &cache_key) {
     // ADR-035 §M1.0: cached artifact is now libVtop.so.
     return std::string(home) + "/.cache/cpphdl/verilator/" + cache_key +
            "/libVtop.so";
+}
+
+bool VerilatorBackend::writeback_to_cache(const std::string &cache_key) {
+    if (cache_key.empty() || compiled_so_path_.empty()) {
+        return false;
+    }
+    std::string dst = cache_path_for_key(cache_key);
+    if (dst.empty() || !path_exists(compiled_so_path_)) {
+        return false;
+    }
+    // mkdir -p ~/.cache/cpphdl/verilator/<key>/ (recursive: each
+    // intermediate segment must be created individually because
+    // mkdir(2) does not auto-create parents).
+    std::string dir_only = dst;
+    auto slash = dir_only.find_last_of('/');
+    if (slash != std::string::npos) {
+        dir_only.resize(slash);
+    }
+    for (size_t pos = 0; pos <= dir_only.size(); ++pos) {
+        if (pos == dir_only.size() || dir_only[pos] == '/') {
+            std::string seg = dir_only.substr(0, pos);
+            if (seg.empty()) continue;
+            if (mkdir(seg.c_str(), 0755) != 0 && errno != EEXIST) {
+                CHWARN("VerilatorBackend: cannot create cache dir %s: %s",
+                       seg.c_str(), std::strerror(errno));
+                return false;
+            }
+        }
+    }
+    std::ifstream src(compiled_so_path_, std::ios::binary);
+    if (!src.is_open()) {
+        CHWARN("VerilatorBackend: cannot reopen %s for cache write-back",
+               compiled_so_path_.c_str());
+        return false;
+    }
+    std::ofstream out(dst, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        CHWARN("VerilatorBackend: cannot open cache dst %s", dst.c_str());
+        return false;
+    }
+    out << src.rdbuf();
+    if (!out.good()) {
+        CHWARN("VerilatorBackend: cache copy stream failed");
+        return false;
+    }
+    CHINFO("VerilatorBackend: cached artifact at %s", dst.c_str());
+    return true;
 }
 
 } // namespace ch

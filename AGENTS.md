@@ -125,6 +125,14 @@ The JIT compiler (`src/jit/jit_compiler.cpp`) compiles HDL operations to native 
 - **All <64-bit arithmetic must mask**: After ADD/SUB/MUL/SHL etc., apply `AND` with `(1<<bw)-1` bitmask.
 - **See**: `include/jit/AGENTS.md`, `docs/developer_guide/patterns/JIT-DEBUGGING-GUIDE.md`
 
+## VERILATOR BACKEND RULES (CRITICAL)
+The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vtop shared library and drives its ports from the CppHDL data_map. The following contracts prevent silent data corruption and performance regression:
+
+- **Port bitwidth limit: 64 bits**. Any `ch_in<ch_uint<N>>` or `ch_out<ch_uint<N>>` with `N > 64` causes `initialize()` to return `false` with `CHERROR`. Verilator's QData/UData accessor model in `emit_sim_main_postlude` casts Vtop fields to `QData`, silently truncating high bits of `VlWide` vectors. `type_clock` and `type_reset` are infrastructure (1-bit by convention) and are NOT subject to this check — `node->size()` returns garbage for them and must not be validated.
+- **Cache write-back is mandatory on cache miss**. After `invoke_verilator()` succeeds, the freshly built `libVtop.so` must be copied to `$HOME/.cache/cpphdl/verilator/<key>/libVtop.so` via `writeback_to_cache()`. Skipping this makes the SHA-1 cache a no-op (every `initialize()` recompiles — minutes per call). The cache key is computed from verilog source + sim_main template + flags + verilator version (`compute_cache_key()`).
+- **mkdir for cache must be recursive**. `mkdir(2)` is single-level; `~/.cache/cpphdl/verilator/<key>/` requires creating `~/.cache/`, `~/.cache/cpphdl/`, `~/.cache/cpphdl/verilator/`, and the key dir in sequence. The implementation walks `dst` and `mkdir`s each `/`-separated segment.
+- **`build_port_access_table()` returns `bool`**. False means the design was rejected (currently only for wide ports). The function must end with `return true;` — falling off without returning is UB and crashes with SIGFPE in `if (!build_port_access_table())` checks.
+
 ## ZERO-DEBT POLICY
 Every Phase must exit with **zero technical debt** before marking complete:
 - **No dead code**: Delete stubs, skeleton files, and unused includes immediately. Never "leave for later".

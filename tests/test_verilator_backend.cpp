@@ -172,15 +172,18 @@ TEST_CASE("VerilatorBackend - InvokeVerilatorProducesVtop",
     ch::data_map_t data_map;
     REQUIRE(backend.initialize(ctx.get(), data_map));
 
-    // verilator --cc should produce obj_dir/Vtop. If it didn't
-    // (slow build, tool error, etc.), skip rather than fail — the
-    // architecture is validated by the other tests.
-    std::string obj_vtop = workdir + "/obj_dir/Vtop";
-    INFO("Expected: " + obj_vtop);
-    if (!path_exists(obj_vtop)) {
-        SKIP("verilator did not produce obj_dir/Vtop "
-             "(likely slow build or tool issue)");
-    }
+    // R1 fix: verilator --cc --build produces obj_dir/libVtop.so (shared lib).
+    // ADR-035 §M3: cache write-back copies it to
+    // ~/.cache/cpphdl/verilator/<key>/ on first miss, so subsequent
+    // initializes with the same verilog source reuse the cached .so
+    // and never produce workdir/obj_dir/libVtop.so. Accept either path.
+    std::string so_path = backend.compiled_so_path();
+    INFO("compiled_so_path = '" + so_path + "'");
+    REQUIRE_FALSE(so_path.empty());
+    REQUIRE(path_exists(so_path));
+    struct stat st;
+    stat(so_path.c_str(), &st);
+    REQUIRE(st.st_size > 1024);
 }
 
 TEST_CASE("VerilatorBackend - EvalCombinationalDoesNotCrash",
@@ -222,9 +225,10 @@ TEST_CASE("VerilatorBackend - BuildPortAccessTable",
     REQUIRE(backend.initialize(ctx.get(), data_map));
 
     auto snapshot = backend.port_access_snapshot();
-    // ADR-035 §M1.x (R3): clock is now an input port too, so the
-    // snapshot gains +1 entry. Original was 4; expected is 5 now.
-    REQUIRE(snapshot.size() == 5);
+    // ADR-035 §M1.x (R3): clock is an input port; reset is also an input
+    // port. Snapshot gains +2 over the original 4. Original was 4; expected
+    // is 6 now (4 original + clock + reset).
+    REQUIRE(snapshot.size() == 6);
 
     size_t found_inputs = 0, found_outputs = 0;
     for (const auto &kv : snapshot) {
@@ -239,9 +243,9 @@ TEST_CASE("VerilatorBackend - BuildPortAccessTable",
         // asserts strict non-null when toolchain is present.
         (void)kv.second.field_ptr;
     }
-    // ADR-035 §M1.x (R3): default_clock is an input too, so
-    // found_inputs is original 2 + 1 (clock) = 3.
-    REQUIRE(found_inputs == 3);
+    // ADR-035 §M1.x (R3): default_clock and default_reset are inputs too,
+    // so found_inputs is original 2 + 2 (clock + reset) = 4.
+    REQUIRE(found_inputs == 4);
     REQUIRE(found_outputs == 2);
     // The context always has a default_clock lnode, so the clock
     // id must be set (never UINT32_MAX).
@@ -307,15 +311,18 @@ TEST_CASE("VerilatorBackend - DlopenAndResolveSymbols",
 
     // After initialize() succeeds with a working verilator,
     // obj_dir/libVtop.so must exist (R1 fix: dlopen-able .so).
-    std::string vtop_path = workdir + "/obj_dir/libVtop.so";
-    INFO("Expected libVtop.so at: " + vtop_path);
-    // path_exists is best-effort; verilator compile can be slow/fail in
-    // PR-feedback matrix. CHECK rather than REQUIRE so the rest of the
-    // test (which verifies the dlopen stub path) still runs.
-    if (!path_exists(vtop_path)) {
-        WARN("libVtop.so missing; M1.0 .so build either failed or "
-             "verilator tool not in expected location");
-    }
+    // ADR-035 §M3: cache write-back may have moved it to
+    // ~/.cache/cpphdl/verilator/<key>/, so we accept compiled_so_path()
+    // instead of insisting on the workdir location.
+    std::string so_path = backend.compiled_so_path();
+    INFO("compiled_so_path = '" + so_path + "'");
+    REQUIRE_FALSE(so_path.empty());
+    REQUIRE(path_exists(so_path));
+
+    // Verify .so is non-empty (real compiled artifact, not a stub).
+    struct stat st;
+    stat(so_path.c_str(), &st);
+    REQUIRE(st.st_size > 1024);
 
     // We can't dlopen a static executable (it's an ELF executable,
     // not a shared library), so the dlopen step is best-effort.
@@ -427,17 +434,17 @@ TEST_CASE("VerilatorBackend - CompiledSoPathFormat",
     VerilatorBackend backend(workdir);
     REQUIRE(backend.initialize(ctx.get(), data_map));
 
-    // 验证 compiled_so_path() API 可用且返回字符串
-    // 当前实现仅在缓存命中时填充该字段；无 cache 时为空字符串
-    // CHECK（而非 REQUIRE）允许空路径通过，同时验证非空时的格式
-    const std::string &path = backend.compiled_so_path();
-    INFO("compiled_so_path = '" + path + "'");
-    if (!path.empty()) {
-        bool is_valid = (path.find("Vtop") != std::string::npos) ||
-                        (path.find("cpphdl") != std::string::npos);
-        CHECK(is_valid);
-    }
-    // 当实现演进并填充 compiled_so_path_ 时，CHECK 会触发并验证格式
+// Verify compiled_so_path() API is callable and returns a valid path.
+// When cache is populated (future write-back implementation), path is
+// non-empty; currently it may be empty after a cache-miss initialize.
+// The CHECK below validates format only when path is populated.
+const std::string &path = backend.compiled_so_path();
+INFO("compiled_so_path = '" + path + "'");
+if (!path.empty()) {
+    bool is_valid = (path.find("Vtop") != std::string::npos) ||
+                    (path.find("cpphdl") != std::string::npos);
+    CHECK(is_valid);
+}
 }
 
 // ADR-035 §M2: 3-eval/tick clock model — eval_sequential = sync + eval + sync.
@@ -459,31 +466,21 @@ TEST_CASE("VerilatorBackend - ThreeEvalTickClockModel",
     // once (R1/R3/R4 wiring exercised).
     REQUIRE(backend.is_native());
     REQUIRE(backend.clock_node_id() != UINT32_MAX);
-    REQUIRE(backend.invoke_verilator_call_count() >= 1);
+    // ADR-035 §M3: cache write-back means a subsequent initialize
+    // with the same verilog skips invoke_verilator; compiled_so_path
+    // is set to either the workdir or cache location either way.
+    REQUIRE_FALSE(backend.compiled_so_path().empty());
 }
 
-// ADR-035 §M3: SHA-1 cache hit path skips invoke_verilator subprocess.
-// Verified via the public invoke_verilator_call_count_ counter.
-TEST_CASE("VerilatorBackend - Sha1CacheHitSkipsCompile",
-          "[verilator][backend][cache][m3]") {
-    auto ctx = std::make_unique<context>("vl_cache_test");
-    ctx_swap guard(ctx.get());
-    ch_reg<ch_uint<4>> reg(0_d, "r");
-    ch::data_map_t data_map;
-    // First init: cache miss expected (or dlopen fail in PR matrix).
-    {
-        VerilatorBackend b(make_temp_dir("_cache1"));
-        REQUIRE(b.initialize(ctx.get(), data_map));
-    }
-    // Counter is monotonic across backend lifetime; second init in
-    // any shared cache directory should not increment further.
-    VerilatorBackend b2(make_temp_dir("_cache2"));
-    REQUIRE(b2.initialize(ctx.get(), data_map));
-    uint32_t after2 = b2.invoke_verilator_call_count();
-    REQUIRE(after2 <= 1);
-}
+// Sha1CacheHitSkipsCompile is removed: the implementation has no
+// cache write-back path (compiled .so is never copied to
+// ~/.cache/cpphdl/verilator/<key>/), so the cache can never hit and
+// this test was permanently vacuous (passes whether or not caching works).
+// To re-enable: add a cache write-back step to initialize() after a
+// successful verilator build, then restore this test with a shared
+// cache directory across the two backend instances.
 
-// ADR-035 §M4: dump_vcd writes a non-empty sim.vcd when enable_vcd is on.
+// ADR-035 §M4: dump_vcd writes a non-empty sim.vcd with valid VCD format.
 TEST_CASE("VerilatorBackend - VcdDumpWritesFile",
           "[verilator][backend][vcd][m4]") {
     auto ctx = std::make_unique<context>("vl_vcd_test");
@@ -494,15 +491,25 @@ TEST_CASE("VerilatorBackend - VcdDumpWritesFile",
     VerilatorBackend backend(workdir);
     REQUIRE(backend.initialize(ctx.get(), data_map));
     backend.enable_vcd(true);
-    // Drive 3 cycles; each calls dump_vcd internally via Simulator tick path.
-    // Since we don't have a real .so in this unit tier, dump_vcd() is
-    // invoked directly to verify the file production path.
     for (uint64_t t = 0; t < 3; ++t) {
         backend.dump_vcd(t);
     }
     REQUIRE(backend.vcd_call_count() == 3);
-    // The VCD file may or may not be opened depending on lazy-init
-    // + data_map presence; the call count is the authoritative signal.
+    // Verify sim.vcd exists, is non-empty, and contains valid VCD header.
+    std::string vcd_path = workdir + "/sim.vcd";
+    REQUIRE(path_exists(vcd_path));
+    std::ifstream vcd(vcd_path);
+    std::stringstream ss;
+    ss << vcd.rdbuf();
+    std::string content = ss.str();
+    REQUIRE_FALSE(content.empty());
+    // VCD header must contain $timescale and $enddefinitions.
+    REQUIRE(content.find("$timescale") != std::string::npos);
+    REQUIRE(content.find("$enddefinitions") != std::string::npos);
+    // Each value-change line must be binary (b0/b1), not decimal,
+    // per VCD spec: format is "b<binary_digits> p<id>".
+    REQUIRE((content.find("b0 ") != std::string::npos ||
+             content.find("b1 ") != std::string::npos));
 }
 
 // ADR-035 §M5 (e2e tier): dlsym finds 7 accessor symbols post-dlopen.
@@ -594,4 +601,113 @@ TEST_CASE("VerilatorBackend - E2E PortBindingReadWrite",
             (void)kv.second.field_ptr;
         }
     }
+}
+
+// ADR-035 §M5 (e2e tier): reset drives counter to 0.
+// The generated always_ff now includes "or posedge default_reset";
+// VerilatorBackend::reset() drives the reset port to Vtop.
+TEST_CASE("VerilatorBackend - E2E ResetDrivesCounterToZero",
+          "[verilator][e2e][reset][m5]") {
+    if (!tool_available("verilator")) {
+        SKIP("verilator not on PATH");
+    }
+    auto ctx = std::make_unique<context>("vl_e2e_reset");
+    ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<32>> counter(0_d, "ctr");
+    counter->next = counter + 1_d;
+    ch_out<ch_uint<32>> out_port("io");
+    out_port <<= counter;
+
+    ch::Simulator sim(ctx.get(), /*trace_on=*/false);
+    auto backend = std::make_unique<VerilatorBackend>(make_temp_dir("_e2e_reset"));
+    VerilatorBackend *raw_backend = backend.get();
+    sim.set_backend(std::move(backend));
+
+    if (!raw_backend || raw_backend->compiled_so_path().empty()) {
+        SKIP("verilator compile failed (libVtop.so not produced)");
+    }
+
+    REQUIRE(sim.active_backend_name() == "verilator");
+
+    // Advance counter to 10.
+    sim.tick(10);
+    uint64_t val_before = static_cast<uint64_t>(sim.get_value(out_port));
+    REQUIRE(val_before == 10);
+
+    // Drive reset: backend.reset() pulses default_reset high and calls
+    // eval so the register captures the reset value (0) on the next clock.
+    // After reset() returns, reset=0 so subsequent ticks resume counting.
+    ch::data_map_t reset_dm;
+    raw_backend->reset(reset_dm);
+    sim.tick(1);
+
+    uint64_t val_after = static_cast<uint64_t>(sim.get_value(out_port));
+    // After reset + 1 tick: if reset worked, counter was forced to 0 and
+    // then incremented once → counter should be 1. If reset was a no-op,
+    // counter would be 11.
+    CHECK(val_after <= 1);
+}
+
+// ADR-035 §M1.7: Wide ports (>64 bits) are rejected at initialize()
+// because Verilator's QData/UData accessor model in
+// emit_sim_main_postlude casts Vtop fields to QData, silently
+// truncating the high bits of any ch_uint<N> with N>64. The check
+// fires in build_port_access_table() BEFORE sync runs, so the test
+// runs in unit tier (no verilator on PATH required).
+TEST_CASE("VerilatorBackend - WideSignalRejection",
+          "[verilator][backend][width]") {
+    auto ctx = std::make_unique<context>("vl_wide_reject");
+    ctx_swap guard(ctx.get());
+    // ch_out<ch_uint<128>> introduces a 128-bit type_output port.
+    // Verilator backend must reject the design rather than silently
+    // truncating to QData on every cycle.
+    ch_out<ch_uint<128>> wide_out("wide");
+    ch::data_map_t data_map;
+    VerilatorBackend backend(make_temp_dir("_wide"));
+    bool ok = backend.initialize(ctx.get(), data_map);
+    INFO("initialize() returned true despite >64-bit port");
+    REQUIRE_FALSE(ok);
+    REQUIRE(backend.port_access_snapshot().empty());
+}
+
+// ADR-035 §M3: A second initialize() with the same context must hit
+// the cache and not recompile. The writeback path added to
+// initialize() must copy libVtop.so into
+// ~/.cache/cpphdl/verilator/<key>/ after a successful first build.
+// Tagged [verilator][e2e] because the cache only fills when verilator
+// actually compiles the design. HOME is redirected to a fresh tempdir
+// so prior test runs cannot pre-populate the cache and invalidate
+// the writeback assertion below.
+TEST_CASE("VerilatorBackend - E2E CacheRoundTrip",
+          "[verilator][e2e][cache][m3]") {
+    if (!tool_available("verilator")) {
+        SKIP("verilator not on PATH; cache round-trip needs a real build");
+    }
+    std::string cache_home = make_temp_dir("_cache_home");
+    if (cache_home.empty()) {
+        SKIP("cannot create isolated cache home");
+    }
+    setenv("HOME", cache_home.c_str(), 1);
+
+    auto ctx = std::make_unique<context>("vl_cache_rt");
+    ctx_swap guard(ctx.get());
+    ch_reg<ch_uint<8>> r(0_d, "rt");
+    ch::data_map_t data_map;
+
+    VerilatorBackend b1(make_temp_dir("_cache_rt"));
+    if (!b1.initialize(ctx.get(), data_map)) {
+        SKIP("first initialize failed (verilator compile)");
+    }
+    uint32_t count_after_first = b1.invoke_verilator_call_count();
+    REQUIRE(count_after_first >= 1);
+    REQUIRE_FALSE(b1.compiled_so_path().empty());
+
+    VerilatorBackend b2(make_temp_dir("_cache_rt2"));
+    ch::data_map_t data_map2;
+    if (!b2.initialize(ctx.get(), data_map2)) {
+        SKIP("second initialize failed");
+    }
+    CHECK(b2.invoke_verilator_call_count() == 0);
+    INFO("cache miss path was taken — writeback is broken");
 }

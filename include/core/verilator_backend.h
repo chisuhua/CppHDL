@@ -125,12 +125,19 @@ private:
     void close_top();
 
     // ADR-035 / Phase 3.3: build the port name → node_id map and
-    // populate port_access_ for the loaded Vtop. The actual
-    // field-pointer resolution (binding ch_in<>/ch_out<> names to
-    // &vtop-><field>) requires either VPI lookups or generated
-    // per-design accessors; we record metadata now and document
-    // the binding as Phase 3.3 follow-up.
-    void build_port_access_table();
+    // populate port_access_ for the loaded Vtop. Returns false if
+    // any port has bitwidth > 64 (Verilator's QData/UData accessor
+    // model cannot transport VlWide vectors; wide signals must be
+    // split or use the interpreter/JIT backend instead).
+    bool build_port_access_table();
+
+    // ADR-035 §M3: copy a freshly-built libVtop.so into the
+    // ~/.cache/cpphdl/verilator/<key>/ cache directory so a future
+    // initialize() with the same context can hit the cache instead
+    // of recompiling. Best-effort: returns false on I/O failure but
+    // does not fail initialize (the freshly-built .so is still
+    // usable from work_dir).
+    bool writeback_to_cache(const std::string &cache_key);
     void sync_inputs_to_vtop();
     void sync_outputs_from_vtop();
 
@@ -154,6 +161,9 @@ private:
 
     // Phase 3.4: id of the type_clock lnode (or UINT32_MAX if none).
     uint32_t clock_node_id_ = UINT32_MAX;
+
+    // Reset support: id of the type_reset lnode (or UINT32_MAX if none).
+    uint32_t reset_node_id_ = UINT32_MAX;
 
     // ADR-035 §M3: invoke_verilator() call counter for cache-hit tests.
     uint32_t invoke_verilator_call_count_ = 0;
