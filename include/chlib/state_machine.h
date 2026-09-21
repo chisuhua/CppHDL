@@ -30,6 +30,24 @@
  *     }
  * };
  * @endcode
+ * 
+ * NOTE (Phase 6d / ADR-046): `if (ch_bool)` conditions inside on_active
+ * closures are NOT hardware conditionals — ch_bool's contextual bool
+ * conversion silently evaluates false at describe time. For runtime
+ * (cycle-accurate) transitions use `transition_when(ch_bool, target)`:
+ * @code{.cpp}
+ *     ch_state_machine<MyState, 3> sm;
+ *     auto start_sig = io().start;              // ch_bool
+ *     sm.state(MyState::IDLE).on_active([&]{
+ *         sm.transition_when(start_sig, MyState::RUNNING);  // emits select tree
+ *     });
+ *     sm.set_entry(MyState::IDLE);
+ *     sm.build();   // state_reg->next = select-tree (works in Simulator)
+ * @endcode
+ * `build()` executes every state's on_active closure once at describe time;
+ * each `transition_when` call accumulates into a ch select-tree for
+ * `state_reg->next`. The Simulator evaluates that tree every tick, giving
+ * cycle-accurate multi-cycle FSMs.
  */
 
 #include "ch.hpp"
@@ -39,6 +57,7 @@
 #include "core/operators.h"
 #include <array>
 #include <functional>
+#include <vector>
 #include <cstdint>
 
 namespace chlib {
@@ -84,6 +103,16 @@ public:
         state_action_t exit_action;
         StateEnum next_state_on_exit;  // For automatic transitions
         bool has_exit_transition;
+        
+        // Phase 6d.6 (ADR-046): runtime transitions accumulated by
+        // transition_when() / transition_to() during build(). Each entry is
+        // a (condition, target) pair composed into state_reg->next via a
+        // ch select-tree at build() time.
+        struct runtime_transition {
+            ch_bool cond;
+            StateEnum target;
+        };
+        std::vector<runtime_transition> transitions;
         
         state_def() : has_exit_transition(false) {}
         
@@ -144,11 +173,16 @@ private:
     // Build flag
     bool built;
     
+    // Phase 6d.6: state whose on_active closure is currently executing
+    // (used by transition_when/transition_to to attribute the transition).
+    StateEnum cur_state_;
+    
 public:
     /**
      * @brief Constructor
      */
-    ch_state_machine() : state_reg(0_d), next_state(0_d), state_changed(false), built(false) {
+    ch_state_machine() : state_reg(0_d), next_state(0_d), state_changed(false),
+                         built(false), cur_state_(static_cast<StateEnum>(0)) {
         // Initialize state definitions
         for (size_t i = 0; i < N; i++) {
             states_[i].parent = this;
@@ -159,6 +193,7 @@ public:
      * @brief Get state definition for a given state
      */
     state_def& state(StateEnum s) {
+        cur_state_ = s;
         return states_[static_cast<size_t>(s)];
     }
     
@@ -171,16 +206,36 @@ public:
     
     /**
      * @brief Transition to a new state
+     * 
+     * Unconditional runtime transition from the currently-being-defined
+     * state. Equivalent to transition_when(ch_bool(true), s).
      */
     void transition_to(StateEnum s) {
-        next_state = ch_uint<STATE_BITS>(static_cast<uint8_t>(s));
+        transition_when(ch_bool(true), s);
+    }
+    
+    /**
+     * @brief Conditioned runtime transition (Phase 6d.6 / ADR-046)
+     * 
+     * Records a hardware transition from the currently-being-defined state:
+     *   when state_reg == cur_state_ && cond  ->  next = target
+     * Composed into the next-state select tree by build().
+     * 
+     * NOTE: unlike `if (ch_bool)` (which silently evaluates false at describe
+     * time), `cond` is a real ch_bool hardware signal evaluated by the
+     * Simulator every tick — this enables cycle-accurate multi-cycle FSMs.
+     */
+    void transition_when(const ch_bool& cond, StateEnum target) {
+        states_[static_cast<size_t>(cur_state_)].transitions.push_back(
+            {cond, target});
     }
     
     /**
      * @brief Get current state
      */
     StateEnum current_state() const {
-        // For now, return entry state - full implementation needs simulator integration
+        // Entry state (compile-time describe value). For the runtime state
+        // register value use current_state_uint() / is_in().
         return entry_state;
     }
     
@@ -192,7 +247,7 @@ public:
     }
     
     /**
-     * @brief Check if in a specific state
+     * @brief Check if in a specific state (hardware comparison, runtime)
      */
     ch_bool is_in(StateEnum s) const {
         return state_reg == ch_uint<STATE_BITS>(static_cast<uint8_t>(s));
@@ -203,32 +258,68 @@ public:
      */
     void set_entry(StateEnum s) {
         entry_state = s;
-        state_reg = ch_uint<STATE_BITS>(static_cast<uint8_t>(s));
+        // NOTE (Phase 6d.6): do NOT clobber state_reg's node with a literal.
+        // The register's init value is fixed at construction (0_d). Entry
+        // state enum value must be 0 for the register to reset to it.
+        // (ch_state_machine is constructed with state_reg(0_d) — keep enum
+        // value 0 == entry state, which holds for all ChipForge FSMs.)
     }
     
     /**
      * @brief Build the state machine (generate state register and logic)
      * 
-     * This should be called after all states are defined.
+     * Executes each state's on_active closure once at describe time to emit
+     * combinational logic and collect transitions, then composes a ch
+     * select-tree for state_reg->next:
+     *   next = state_reg                          (hold by default)
+     *   for each state S, transition (cond,target):
+     *     next = select(is_in(S) && cond, target, next)
+     * 
+     * The Simulator evaluates this tree every tick, giving cycle-accurate
+     * multi-cycle FSM behavior (Phase 6d.6 / ADR-046).
      */
     void build() {
         if (built) return;
         
         // Set initial state
-        set_entry(entry_state);
+        // state_reg init value fixed at construction; entry_state recorded
+        // for current_state() reporting.
         
         auto& entry_state_def = states_[static_cast<size_t>(entry_state)];
         if (entry_state_def.entry_action) {
             entry_state_def.entry_action();
         }
         
-        // Generate state transition logic
-        // This is a simplified implementation - full implementation would
-        // need to generate proper combinational logic for state transitions
+        // Phase 6d.6: run every state's active action at describe time so
+        // its transition_when()/transition_to() calls (and any combinational
+        // output assignments) are emitted into the DAG.
+        for (size_t i = 0; i < N; i++) {
+            cur_state_ = static_cast<StateEnum>(i);
+            if (states_[i].active_action) {
+                states_[i].active_action();
+            }
+        }
         
-        // For now, we use a simple approach:
-        // 1. Execute on_active for current state
-        // 2. Update state register with next_state
+        // Compose next-state select tree. Default: hold current state.
+        // Later-registered transitions have higher priority (last select
+        // wins) — register exclusive conditions to avoid ambiguity.
+        ch_uint<STATE_BITS> hold = state_reg;
+        next_state = hold;
+        for (size_t i = 0; i < N; i++) {
+            const auto& sd = states_[i];
+            auto in_s = is_in(static_cast<StateEnum>(i));
+            for (const auto& tr : sd.transitions) {
+                auto target_lit =
+                    ch_uint<STATE_BITS>(static_cast<uint8_t>(tr.target));
+                next_state = select(in_s && tr.cond, target_lit, next_state);
+            }
+            // Legacy automatic exit transition (then())
+            if (sd.has_exit_transition) {
+                auto target_lit = ch_uint<STATE_BITS>(
+                    static_cast<uint8_t>(sd.next_state_on_exit));
+                next_state = select(in_s, target_lit, next_state);
+            }
+        }
         
         // State update (sequential)
         state_reg->next = next_state;
@@ -239,7 +330,9 @@ public:
     /**
      * @brief Execute state machine logic (called in describe())
      * 
-     * This executes the on_active action for the current state.
+     * Legacy helper — executes the ENTRY state's active action once.
+     * For runtime behavior, the select-tree emitted by build() is
+     * evaluated by the Simulator each tick; no per-cycle call needed.
      */
     void tick_state() {
         if (!built) {
@@ -248,8 +341,8 @@ public:
         
         // Execute on_active for current state
         StateEnum current = current_state();
-        if (states_[static_cast<size_t>(current)].on_active) {
-            states_[static_cast<size_t>(current)].on_active();
+        if (states_[static_cast<size_t>(current)].active_action) {
+            states_[static_cast<size_t>(current)].active_action();
         }
     }
     
@@ -281,4 +374,3 @@ public:
     sm.build();
 
 } // namespace chlib
-
