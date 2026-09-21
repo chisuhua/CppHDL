@@ -103,7 +103,7 @@ int main() {
 
 ---
 
-## 当前实现状态（ADR-035 Phase 1-4.1）
+## 当前实现状态（ADR-035 Phase 1-4.1 + v2.1 e2e 验证）
 
 ### ✅ 已完成
 
@@ -113,21 +113,58 @@ int main() {
 | **iverilog/verilator 验证** | ✅ | 6 个端到端测试通过 iverilog 和 verilator --lint-only |
 | **IEvalBackend 抽象** | ✅ | `include/core/eval_backend.h` 定义统一后端接口 |
 | **InterpreterBackend** | ✅ | 包装现有解释器循环的默认后端 |
-| **VerilatorBackend 脚手架** | ✅ | 生成 Verilog, 调用 verilator --cc, SHA-1 缓存键计算 |
-| **8 个后端测试** | ✅ | 7 通过, 1 跳过（verilator 慢构建时） |
+| **Simulator::set_backend()** | ✅ | Phase 2.3 完整重构，Simulator 可通过 `ch::IEvalBackend` 接口切换后端 |
+| **Verilog + sim_main.cpp 生成** | ✅ | `generate_verilog()` 写 top.v + sim_main.cpp（含 extern "C" factory/eval/delete/set_input/get_output 符号） |
+| **verilator --cc + dlopen .so** | ✅ | 两步编译：verilator --cc 生成 obj_dir/，再 `g++ -shared -fPIC -o libVtop.so`；dlopen 符号 7 个 |
+| **data_map_ ↔ Vtop 同步** | ✅ | `sync_inputs_to_vtop()` 将 `data_map_` 输入推入 Vtop；`sync_outputs_from_vtop()` 将 Vtop 输出拉回 `data_map_` |
+| **时钟模型适配** | ✅ | `type_clock` 节点作为 input 纳入 port_access_；Simulator::tick() 通过 `default_clock_instr_->eval()` 翻转时钟，backend 仅 sync；`eval_fn_()` 触发 Verilator `always_ff @posedge` |
+| **SHA-1 缓存** | ✅ | 缓存键含 verilog_source + sim_main template + flags + verilator --version；产物 `~/.cache/cpphdl/verilator/<hash>/libVtop.so` |
+| **VCD 跟踪 API** | ✅ | `enable_vcd()` toggle + `dump_vcd()` 写端口值到 .vcd 文件 |
+| **Simulator 集成 + 多 backend 切换** | ✅ | `set_backend()` 热替换；`sim_setbackend_*` 测试覆盖 default/null/interpreter 场景 |
+| **VerilatorBackend 测试** | ✅ | **26 个测试, 25 passed, 1 skipped, 76/76 assertions**（含 `E2E CounterSimulator50Cycles`—50 ticks 后 counter==50 🔥） |
+| **线程安全销毁** | ✅ | `close_top()` 在 `dlclose` 前调用 `delete_fn_()` 销毁 Vtop 对象，VlThreadPool 线程池干净退出，消除多测试间 SIGSEGV |
 
-### ⏳ 待完成（Phase 3.2-3.6）
+### ⏳ 待完成
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| dlopen .so 加载 Vtop* | ⏳ | 需要生成 C++ wrapper 暴露 factory + eval 函数 |
-| ISignalAccess*[] 端口表 | ⏳ | O(1) 端口访问（SpinalHDL 模式） |
-| data_map_ ↔ Vtop 同步 | ⏳ | 输入写入 Vtop, 输出读回 data_map_ |
-| 时钟模型适配 | ⏳ | CppHDL 的 3-eval/tick vs Verilator 单步 |
-| SHA-1 缓存命中 | ⏳ | 增量构建，避免重复 verilator 编译 |
-| Simulator::set_backend() | ⏳ | 完整重构，让 ch::Simulator 使用 IEvalBackend |
+| `riscv-mini` 端到端 | ⏳ | 需要 ChipForge 仓集成 + ELF 加载 |
+| 性能基准对比（解释器 vs JIT vs Verilator） | ⏳ | `perf_tests` 框架已支持，需在 Verilator 安装环境跑 |
+| A/B 验证 | ⏳ | `set_ab_verification(true)` 可用但比对逻辑为警告占位 |
 
-**当前性能预期**: VerilatorBackend 脚手架可生成 Verilog 并触发 verilator 编译，但**不能**实际驱动仿真。等待 Phase 3.2-3.3 完成。
+### 🔬 e2e 验证（v2.1 新增）
+
+```cpp
+#include "ch.hpp"
+#include "core/verilator_backend.h"
+#include "simulator.h"
+
+using namespace ch;
+
+int main() {
+    auto ctx = std::make_unique<ch::core::context>("my_design");
+    ch::core::ctx_swap guard(ctx.get());
+
+    // 32-bit counter + output port
+    ch_reg<ch_uint<32>> counter(0_d, "ctr");
+    counter->next = counter + 1_d;
+    ch_out<ch_uint<32>> out_port("io");
+    out_port <<= counter;
+
+    // Simulator + VerilatorBackend
+    Simulator sim(ctx.get());
+    auto backend = std::make_unique<VerilatorBackend>("/tmp/verilator_workdir");
+    sim.set_backend(std::move(backend));
+
+    // 50 ticks -> counter == 50
+    sim.tick(50);
+    uint64_t val = static_cast<uint64_t>(sim.get_value(out_port));
+    printf("counter after 50 ticks: %lu (expected 50)\n", val);
+    return (val == 50) ? 0 : 1;
+}
+```
+
+**当前状态**: VerilatorBackend **已能实际驱动仿真**。通过 `Simulator::set_backend()` 将后端注入后，`sim.tick(N)` 的 4-eval 时序（comb-1 → clock toggle → seq → clock toggle → comb-2 → comb-3）全部委托给 VerilatorBackend，Vtop 的 `always_ff @(posedge default_clock)` 正确递增计数器，`sync_outputs_from_vtop()` 将结果写回 `data_map_` 供 `sim.get_value()` 读取。
 
 ---
 
@@ -242,36 +279,46 @@ TEST_CASE("MyDesign - VerilatorLints", "[verilator]") {
 | Verilator（理论） | 10-100x 解释器 | ~50ms（缓存命中） | Verilator 5.020+ |
 | Verilator（首次构建） | 同上 | ~30s（verilate） | 同上 |
 
-**注**: Verilator 后端的实际仿真（Phase 3.2+）尚未实现。当前 Phase 1-4.1 完成了 codegen 修复 + 脚手架。
+**注**: v2.1 e2e 验证已完成，VerilatorBackend **已能实际驱动仿真**（50 ticks 后 counter==50 已通过）。性能基准对比（解释器 vs JIT vs Verilator）待 `perf_tests` 在 Verilator 安装环境运行。
 
 ---
 
 ## 架构图
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   ch::Simulator                          │
-│                  (public API 保持不变)                    │
-│         set_input_value / get_value / tick               │
-└────────────────────────┬────────────────────────────────┘
-                         │ Phase 2.3 (pending)
-                         ▼
-        ┌────────────────────────────────────┐
-        │       IEvalBackend (Phase 2.1)     │
-        │   interface: initialize/eval_*/reset│
-        └────────────┬───────────┬────────────┘
-                     │           │
-        ┌────────────▼───┐  ┌────▼─────────────┐
-        │ Interpreter    │  │ VerilatorBackend │
-        │ (Phase 2.2)    │  │ (Phase 3.1)      │
-        │                │  │ scaffolding only │
-        └────────────────┘  └──────────────────┘
-                                     │
-                                     ▼
-                          ┌──────────────────────┐
-                          │ verilator --cc       │
-                          │ (Phase 3.5 缓存)     │
-                          └──────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│                 ch::Simulator                          │
+│                (public API 保持不变)                    │
+│       set_input_value / get_value / tick               │
+└──────────────────────┬────────────────────────────────┘
+                       │ set_backend()
+                       ▼
+       ┌────────────────────────────────────┐
+       │       IEvalBackend (Phase 2.1)     │
+       │   interface: initialize/eval_*/reset│
+       └────────────┬───────────┬────────────┘
+                    │           │
+       ┌────────────▼───┐  ┌────▼─────────────────┐
+       │ Interpreter    │  │ VerilatorBackend     │
+       │ (Phase 2.2)    │  │ (Phase 3.1-3.6, v2.1)│
+       │                │  │ real .so dispatch ✅  │
+       └────────────────┘  └────┬─────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │ verilator --cc        │
+                    │ g++ -shared -fPIC     │
+                    │ → libVtop.so          │
+                    │ SHA-1 cache           │
+                    └───────────┬───────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │ Vtop eval()           │
+                    │ sync_inputs →         │
+                    │ eval_fn_() →          │
+                    │ sync_outputs          │
+                    │ delete_fn_() →        │
+                    │ clean thread pool exit│
+                    └───────────────────────┘
 ```
 
 ---

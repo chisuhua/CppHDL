@@ -1,13 +1,13 @@
 # ADR-035: Verilator 仿真后端
 
-**状态**: 🟢 采纳 + Phase 1-4.1 完成（脚手架 GA，完整仿真待 Phase 3.2+）
-**日期**: 2026-06-07（提议）→ 2026-06-07（脚手架 GA）
+**状态**: 🟢 采纳 + Phase 1-4.1 GA + v2.1 e2e 验证通过
+**日期**: 2026-06-07（提议）→ 2026-09-21（v2.1 e2e 验证）
 **决策人**: Sisyphus + 用户（参考 3 份专项调研 + AGENTS.md `using-superpowers` 工作流）
-**修正审计**: v2.0（2026-09-21）— 见末尾 §v2.0 修正审计章节
+**修正审计**: v2.0（2026-09-21）→ v2.1（2026-09-21 补丁）— 见末尾 §v2.0 修正审计章节
 
 ---
 
-## Phase 进度（2026-06-07 快照，已被 v2.0 审计修正）
+## Phase 进度（2026-09-21 v2.1 刷新）
 
 | Phase | 范围 | 状态 | 提交 |
 |-------|------|------|------|
@@ -23,25 +23,29 @@
 | **Phase 2.2** | `InterpreterBackend`（`src/core/interpreter_backend.cpp`） | ✅ | `673d1a2` |
 | **Phase 2.3** | `Simulator::set_backend()` 入口重构 | ✅ | `c5c90d7` |
 | **Phase 3.1** | `VerilatorBackend` 脚手架（generate + invoke + SHA-1） | ✅ | `8c9800a` |
-| **Phase 3.2** | sim_main.cpp wrapper + dlopen（端到端可运行） | ✅ | `c5b7b1b` |
-| **Phase 3.3** | `data_map_` ↔ Vtop 同步（端口表生成 + eval 接线） | ✅ | `1cfc1af` |
-| **Phase 3.4** | 时钟模型适配（type_clock 检测） | ✅ | `5d0d4d4` |
+| **Phase 3.2** | sim_main.cpp wrapper + dlopen（端到端可运行） | ✅ | `c5b7b1b`, `0430830` |
+| **Phase 3.3** | `data_map_` ↔ Vtop 同步（sync_inputs/sync_outputs + eval 接线） | ✅ | `1cfc1af`, `2565a60` |
+| **Phase 3.4** | 时钟模型适配（type_clock 检测 + Simulator tick 代理） | ✅ | `5d0d4d4`, `2565a60` |
 | **Phase 3.5** | SHA-1 缓存命中（`cache_path_for_key` + 查找短路） | ✅ | `d0dc194` |
 | **Phase 3.6** | VCD 跟踪 API（`enable_vcd` toggle） | ✅ | `c928dfe` |
-| **Phase 4.1** | VerilatorBackend 测试（17 个，58 assertions 全过） | ✅ | 7 个 commit |
-| **Phase 4.4** | 用户文档（`docs/usage_guide/10-verilator-backend.md`） | ✅ | `b6e1b6e` |
+| **Phase 4.1** | VerilatorBackend 测试（26 个，76 assertions） | ✅ | 多个 commit + `ec81320` |
+| **Phase 4.4** | 用户文档（`docs/usage_guide/10-verilator-backend.md`） | ✅ | `b6e1b6e`, v2.1 刷新 |
 
-**已提交 commits**: 17 个（`ac6445b`, `5733597`, `41e6521`, `d196650`, `1257e4d`, `673d1a2`, `c5c90d7`, `8c9800a`, `1482b14`, `b6e1b6e`, `c5b7b1b`, `1cfc1af`, `5d0d4d4`, `d0dc194`, `c928dfe` + 2 个 ADR 文档更新）
+**已提交 commits**: 20+ 个（上述 + `0430830`, `2565a60`, `e786cc8`, `141c291`, `ec81320`）
 
-**测试状态**:
-- `test_verilator_backend`: 17/17 测试通过（58 assertions）
-- ctest -L base: 132/132 通过（排除 2 个预存在 flaky + 3 个 JIT 测试需要 LLVM，本环境未装）
+**测试状态（2026-09-21 v2.1）**:
+- `test_verilator_backend`: 26 tests, 25 passed, 1 skipped, **76/76 assertions** ✅
+- 含真正的端到端验证：`E2E CounterSimulator50Cycles` — 50 ticks 后 counter==50 🔥
+- SIGSEGV regression fixed: delete_fn_ 在 close_top 中先于 dlclose 销毁 Vtop，线程池（VlThreadPool）干净退出
+- ctest -L base: 基线一致
 
-**Phase 3.2 端到端流程（已验证）**:
-1. `generate_verilog()` 写 `top.v` + `sim_main.cpp`（main() + extern "C" factory/eval/final/delete）
-2. `invoke_verilator()` 跑 `verilator --cc --exe --build` 编译
-3. `dlopen_top()` dlopen `obj_dir/Vtop` 并 dlsym 4 个符号
-4. 端到端测试 `DlopenAndResolveSymbols` 验证 `obj_dir/Vtop` 存在
+**Phase 3.2-3.6 端到端流程（v2.1 已验证）**:
+1. `generate_verilog()` 写 `top.v` + `sim_main.cpp`（extern "C" factory/eval/final/delete + per-port_id dispatch tables）
+2. `invoke_verilator()` 跑 `verilator --cc` → `g++ -shared -fPIC -o libVtop.so`
+3. `dlopen_top()` dlopen `libVtop.so` → dlsym 7 个符号（+set_input/get_output/get_field_ptr）
+4. `build_port_access_table()` 扫描 type_clock/type_input/type_output 建立 node_id → Vtop 字段指针映射
+5. `Simulator::tick()` 通过 backend 代理：eval_combinational → sync + eval + sync → eval_sequential → sync + eval + sync
+6. e2e: `ch_reg<ch_uint<32>>` + `ch_out` → Simulator + VerilatorBackend → tick(50) → `get_value() == 50`
 
 ---
 
@@ -414,4 +418,34 @@ CppHDL 仓 scope。固件加载需要 memory backdoor symbol（当前未实现�
 - Metis review: `ses_f3dca0901ffeuoj8KHgAz8b9gv`
 - OpenSpec change: `openspec/changes/adr-035-phase-3-complete/`
 - 修复 commits: `dd4258e` (tasks v2), `742f368` (M0.5+M1 impl) + post-fix commits
+
+---
+
+## v2.1 补丁（2026-09-21）
+
+### 修正摘要
+
+| # | 问题 | 修复 | 提交 |
+|---|------|------|------|
+| **S1** | 多测试间 SIGSEGV：`verilated_threads.cpp` 产生 VlThreadPool 后台线程。`close_top()` 仅调用 `final_fn_` 而不销毁 Vtop 对象就直接 `dlclose`，线程在 .so 卸载后仍运行 → libstdc++ 崩溃 | `delete_fn_` 存入成员；`close_top()` 中在 `dlclose` **之前**调用 `delete_fn_()` 销毁 Vtop 对象，线程池（VlThreadPool）干净退出 | `ec81320` |
+| **S2** | `E2E CounterSimulator50Cycles` 仅为脚手架检查（`is_native() + clock_node_id()`），未实际跑仿真 | 替换为真正的端到端测试：`ch_reg<ch_uint<32>>` + `ch_out` → Simulator + VerilatorBackend → `tick(50)` → `get_value(out) == 50` ✅ | `ec81320` |
+
+### 测试状态（v2.1）
+
+```
+test cases: 26 | 25 passed | 1 skipped
+assertions: 76 | 76 passed
+```
+
+- **1 skipped**: `InvokeVerilatorProducesVtop` — 检查 `obj_dir/Vtop` 可执行文件，但当前输出是 `libVtop.so`（设计的 SKIP 行为）
+- **无 SIGSEGV** ✅ — S1 修复验证通过（全序列 26 测试交叉无崩溃）
+- **counter==50 e2e** ✅ — S2 真实 Simulator + VerilatorBackend 集成验证通过
+
+### M0.5 dispatch 验证
+
+`Simulator::tick()` 的 4-eval 时序（comb-1 → clock toggle → seq → clock toggle → comb-2 → comb-3）经 VerilatorBackend 代理后，每次 `eval_fn_()` 都会触发 Verilator 发现 `default_clock` 0→1 边沿并执行 `always_ff @(posedge default_clock)` 块，counter 正确递增。`sync_inputs_to_vtop()` 从 Simulator 的 `data_map_` 读取 `default_clock` 值（由 `default_clock_instr_->eval()` 翻转）并同步到 Vtop，`sync_outputs_from_vtop()` 将 `ch_out` 端口值写回 `data_map_` → `sim.get_value()` 可读。
+
+### M3 线程安全修正
+
+VlThreadPool 是 Verilator 5.x 的全局线程池单例。正确关机顺序：`final_fn_()` → `delete_fn_()`（Vtop 析构函数停了线程池）→ `dlclose()`（.so 卸载安全）。错误顺序（v2.0 行为）：`final_fn_()` → `dlclose()` 跳过 delete → 线程跑在已卸载的代码上 → SIGSEGV。
 

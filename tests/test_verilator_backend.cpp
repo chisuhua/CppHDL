@@ -536,19 +536,33 @@ TEST_CASE("VerilatorBackend - E2E CounterSimulator50Cycles",
     }
     auto ctx = std::make_unique<context>("vl_e2e_counter");
     ctx_swap guard(ctx.get());
+
+    // 32-bit counter with output port for readback
     ch_reg<ch_uint<32>> counter(0_d, "ctr");
     counter->next = counter + 1_d;
-    ch::data_map_t data_map;
-    VerilatorBackend backend(make_temp_dir("_e2e_counter"));
-    if (!backend.initialize(ctx.get(), data_map)) {
-        SKIP("verilator compile failed");
+    ch_out<ch_uint<32>> out_port("io");
+    out_port <<= counter;
+
+    ch::Simulator sim(ctx.get(), /*trace_on=*/false);
+    auto backend = std::make_unique<VerilatorBackend>(make_temp_dir("_e2e_counter"));
+    VerilatorBackend *raw_backend = backend.get();
+    sim.set_backend(std::move(backend));
+
+    // If verilator compilation or dlopen failed, skip gracefully
+    if (!raw_backend || raw_backend->compiled_so_path().empty()) {
+        SKIP("verilator compile failed (libVtop.so not produced)");
     }
-    // The actual tick loop requires Simulator wiring; this test asserts
-    // the contract (initialize succeeded, port_access populated, native
-    // dispatch enabled). End-to-end cycle counting needs a Simulator
-    // integration harness — exercised at the higher test tier.
-    REQUIRE(backend.is_native());
-    REQUIRE(backend.clock_node_id() != UINT32_MAX);
+
+    REQUIRE(sim.active_backend_name() == "verilator");
+
+    // Run 50 ticks — the Simulator's tick() loop delegates to
+    // VerilatorBackend for both eval_sequential (posedge clock →
+    // always_ff @posedge fires → counter increments) and
+    // eval_combinational (sync outputs back to data_map).
+    sim.tick(50);
+
+    uint64_t val = static_cast<uint64_t>(sim.get_value(out_port));
+    REQUIRE(val == 50);
 }
 
 // ADR-035 §M5 (e2e tier): port binding round-trip — write data_map
