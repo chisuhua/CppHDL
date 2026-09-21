@@ -160,6 +160,10 @@ private:
     // ADR-035 §M1.7: runtime-detected verilator version for cache key.
     std::string verilator_version_;
 
+    // ADR-035 §M1: runtime-detected VERILATOR_ROOT for include paths
+    // (shared + buit-from-source installs vary in include layout).
+    std::string verilator_root_;
+
     // ADR-035 §M4: --trace toggle for current build.
     bool trace_enabled_ = false;
 

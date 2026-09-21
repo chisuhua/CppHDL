@@ -294,6 +294,9 @@ target_compile_definitions(test_verilog_external PRIVATE
 # (SHA-1 cache key, IEvalBackend interface, Verilog generation,
 # verilator invocation, resource cleanup).
 add_catch_test(test_verilator_backend test_verilator_backend.cpp)
+# ADR-035 issue #25 / Phase 4.1+: e2e harness — real Verilator compile
+# + dlopen + counter verification (closes R5/R7 in tasks v2).
+add_catch_test(test_verilator_e2e_harness test_verilator_e2e_harness.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)

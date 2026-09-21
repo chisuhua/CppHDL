@@ -138,6 +138,26 @@ std::string detect_verilator_version() {
     return "";
 }
 
+// ADR-035 §M1: detect VERILATOR_ROOT via `verilator -getenv`.
+// Shared installs lay headers at ${ROOT}/include, but ROOT itself
+// varies (e.g. /usr/share/verilator vs /opt/.../share/verilator).
+std::string detect_verilator_root() {
+    FILE *p = popen("verilator -getenv VERILATOR_ROOT 2>/dev/null", "r");
+    if (!p) return "";
+    char buf[512] = {0};
+    if (fgets(buf, sizeof(buf), p)) {
+        std::string out(buf);
+        while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) {
+            out.pop_back();
+        }
+        pclose(p);
+        return out;
+    }
+    pclose(p);
+    return "";
+}
+
+
 bool path_exists(const std::string &p) {
     struct stat st;
     return stat(p.c_str(), &st) == 0;
@@ -153,6 +173,83 @@ VerilatorBackend::VerilatorBackend(std::string verilog_path)
 VerilatorBackend::~VerilatorBackend() {
     clear();
 }
+
+namespace {
+// ADR-035 §M1: Append per-port_id dispatch tables to sim_main.cpp.
+// Walks ctx port nodes (type_input/type_output/type_clock) and emits
+// switch cases keyed by node_id with bitwidth-bucketed dispatch
+// (CData/SData/IData/QData). Vtop field naming convention:
+//   - Inputs/clocks: lnode->name()
+//   - Outputs in __io() bundle: "io" (single-output flattening)
+void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
+    if (!ctx) return;
+    std::ofstream out(path, std::ios::app);
+    if (!out.is_open()) return;
+    out << "\nextern \"C\" {\n";
+
+    auto nodes = ctx->get_eval_list();
+    using ch::core::lnodetype;
+
+    // set_input_Vtop
+    out << "void set_input_Vtop(void* top, uint32_t port_id,\n"
+        << "                    const void* bits) {\n"
+        << "    auto* v = static_cast<Vtop*>(top);\n"
+        << "    switch (port_id) {\n";
+    for (auto* node : nodes) {
+        if (!node) continue;
+        auto t = node->type();
+        if (t != lnodetype::type_input && t != lnodetype::type_clock) continue;
+        uint32_t id = node->id();
+        uint32_t bw = node->size();
+        const char* dt = (bw <= 8)  ? "CData"
+                       : (bw <= 16) ? "SData"
+                       : (bw <= 32) ? "IData" : "QData";
+        out << "    case " << id << ": {\n"
+            << "        " << dt << "* p = &v->" << node->name() << ";\n"
+            << "        *p = *reinterpret_cast<const " << dt << "*>(bits);\n"
+            << "        break;\n"
+            << "    }\n";
+    }
+    out << "    default: break;\n    }\n}\n\n";
+
+    // get_output_Vtop
+    out << "void get_output_Vtop(void* top, uint32_t port_id,\n"
+        << "                     void* bits) {\n"
+        << "    auto* v = static_cast<Vtop*>(top);\n"
+        << "    switch (port_id) {\n";
+    for (auto* node : nodes) {
+        if (!node) continue;
+        if (node->type() != lnodetype::type_output) continue;
+        uint32_t id = node->id();
+        uint32_t bw = node->size();
+        const char* dt = (bw <= 8)  ? "CData"
+                       : (bw <= 16) ? "SData"
+                       : (bw <= 32) ? "IData" : "QData";
+        out << "    case " << id << ": {\n"
+            << "        " << dt << "* p = &v->io;\n"
+            << "        *reinterpret_cast<" << dt << "*>(bits) = *p;\n"
+            << "        break;\n"
+            << "    }\n";
+    }
+    out << "    default: break;\n    }\n}\n\n";
+
+    // get_field_ptr_Vtop
+    out << "uint8_t* get_field_ptr_Vtop(void* top, uint32_t port_id) {\n"
+        << "    auto* v = static_cast<Vtop*>(top);\n"
+        << "    switch (port_id) {\n";
+    for (auto* node : nodes) {
+        if (!node) continue;
+        uint32_t id = node->id();
+        bool is_output = (node->type() == lnodetype::type_output);
+        const char* fn = is_output ? "io" : node->name().c_str();
+        out << "    case " << id << ": return reinterpret_cast<uint8_t*>(&v->"
+            << fn << ");\n";
+    }
+    out << "    default: return nullptr;\n    }\n}\n";
+
+    out << "}\n";
+}
+} // namespace
 
 bool VerilatorBackend::initialize(ch::core::context *ctx,
                                   ch::data_map_t &data_map) {
@@ -180,6 +277,9 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
             if (verilator_version_.empty()) {
                 verilator_version_ = detect_verilator_version();
             }
+            if (verilator_root_.empty()) {
+                verilator_root_ = detect_verilator_root();
+            }
             std::string key = compute_cache_key(
                 vsource, verilator_version_, smain,
                 trace_enabled_ ? "trace" : "no-trace");
@@ -191,6 +291,11 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
                 if (!invoke_verilator(verilator_work_dir_ + "/top.v")) {
                     CHWARN("VerilatorBackend: verilator compilation failed "
                            "(continuing without .so — dlopen is a stub)");
+                } else {
+                    // §M1.0: refresh compiled_so_path_ so dlopen_top
+                    // finds the freshly-built libVtop.so (cache-miss path).
+                    compiled_so_path_ =
+                        verilator_work_dir_ + "/obj_dir/libVtop.so";
                 }
             }
         }
@@ -240,12 +345,13 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
             return false;
         }
         out <<
-            "// Generated by VerilatorBackend (ADR-035 Phase 3.2a).\n"
-            "// Provides main() for verilator --cc --exe --build AND\n"
-            "// extern \"C\" factory/eval/final/delete for dlopen.\n"
+            "// Generated by VerilatorBackend (ADR-035 §M1).\n"
+            "// Provides extern \"C\" symbols for dlopen + real per-port_id\n"
+            "// dispatch via emit_sim_main_postlude() below.\n"
             "#include \"Vtop.h\"\n"
             "#include \"verilated.h\"\n"
             "#include <cstdio>\n"
+            "#include <cstring>\n"
             "\n"
             "extern \"C\" {\n"
             "void* new_Vtop() {\n"
@@ -267,26 +373,17 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
             "    delete ctx;\n"
             "}\n"
             "// ADR-035 §M1: per-port accessor symbols (Phase 3.3).\n"
-            "// Real dispatch tables are emitted in sim_main_postlude()\n"
-            "// from generate_verilog() once the port_access_ table is\n"
-            "// populated. Initial no-op bodies so the .so compiles.\n"
+            "// ADR-035 §M1: accessor forward declarations (Phase 3.3).\n"
+            "// Real per-port_id dispatch written by emit_sim_main_postlude().\n"
             "void set_input_Vtop(void* top, uint32_t port_id,\n"
-            "                    const void* bits) {\n"
-            "    auto* v = static_cast<Vtop*>(top);\n"
-            "    (void)port_id; (void)bits; (void)v;\n"
-            "}\n"
+            "                    const void* bits);\n"
             "void get_output_Vtop(void* top, uint32_t port_id,\n"
-            "                     void* bits) {\n"
-            "    auto* v = static_cast<Vtop*>(top);\n"
-            "    (void)port_id; (void)bits; (void)v;\n"
-            "}\n"
-            "uint8_t* get_field_ptr_Vtop(void* top, uint32_t port_id) {\n"
-            "    auto* v = static_cast<Vtop*>(top);\n"
-            "    (void)port_id;\n"
-            "    return reinterpret_cast<uint8_t*>(v);\n"
-            "}\n"
+            "                     void* bits);\n"
+            "uint8_t* get_field_ptr_Vtop(void* top, uint32_t port_id);\n"
             "}\n";
         out.close();
+        // ADR-035 §M1: append per-port_id dispatch tables.
+        emit_sim_main_postlude(verilator_work_dir_ + "/sim_main.cpp", ctx);
         CHINFO("VerilatorBackend: wrote %s/sim_main.cpp",
                verilator_work_dir_.c_str());
     }
@@ -320,9 +417,22 @@ bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
          << "/obj_dir && "
          << "g++ -shared -fPIC -std=c++17 -o libVtop.so "
          << "../sim_main.cpp "
-         << "Vtop__ALL.cpp Vtop.cpp verilated.cpp "
-         << "-I${VERILATOR_ROOT:-/workspace/main/opt/verilator}/include "
-         << "-L${VERILATOR_ROOT:-/workspace/main/opt/verilator}/include 2>&1";
+         << "./*.cpp "  // verilator 5.x split: Vtop___024root*.cpp + Vtop.cpp
+         << (verilator_root_.empty()
+             ? std::string("/workspace/main/opt/verilator/share/verilator/include/verilated.cpp")
+             : (verilator_root_ + "/include/verilated.cpp"))
+         << " -I. "  // Vtop.h is in obj_dir/ (verilator --cc output)
+
+         << "-I" << (verilator_root_.empty()
+             ? "/workspace/main/opt/verilator/share/verilator"
+             : verilator_root_) << "/include "
+         << "-L" << (verilator_root_.empty()
+             ? "/workspace/main/opt/verilator/share/verilator"
+             : verilator_root_) << "/include "
+         << "-L" << (verilator_root_.empty()
+             ? "/workspace/main/opt/verilator/share/verilator/lib"
+             : verilator_root_ + "/lib")
+         << " -lverilated 2>&1";
     return run_shell(link.str());
 }
 
