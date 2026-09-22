@@ -145,14 +145,23 @@ verilogwriter::get_literal_str(const ch::core::sdata_type &val) const {
         uint64_t value = static_cast<uint64_t>(val);
         uint32_t width = val.bv_.size();
 
+        // verilator-perf-three-way: bitvector stores `value` in `words_[0]`
+        // (uint64) without masking, so `ch_uint<8>(999)` reports width=8 but
+        // carries 999. SystemVerilog rejects `8'h3e7` as a hard syntax error
+        // (`Too many digits for N bit number`); mask to width bits to emit
+        // `8'he7` instead. ADR-035 caps width at 64, so width>=64 is unchanged.
+        uint64_t masked = (width == 0)    ? uint64_t{0}
+                        : (width >= 64)   ? value
+                        : (value & ((uint64_t{1} << width) - 1));
+
         // Special handling for small values
         if (width == 1) {
-            return (value ? "1'b1" : "1'b0");
+            return (masked ? "1'b1" : "1'b0");
         }
 
         // For larger values or wider widths, use hex format
         std::stringstream ss;
-        ss << width << "'h" << std::hex << value;
+        ss << width << "'h" << std::hex << masked;
         return ss.str();
     } catch (...) {
         // Silently ignore exceptions
