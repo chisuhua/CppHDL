@@ -57,6 +57,11 @@ add_catch_test(test_bundle_literal test_bundle_literal.cpp)
 # Verilator "Too many digits for N bit number" 语法错误 (TC-07 depth=1000 关键)
 add_catch_test(test_verilator_three_way test_verilator_three_way.cpp)
 
+# Gap F2 closure: AXI4-Lite e2e test through VerilatorBackend (real verilator
+# compile + dlopen + multi-cycle write/read). Skipped when verilator not on
+# PATH (PR matrix). See test_axi_lite_verilator_e2e.cpp header for context.
+add_catch_test(test_axi_lite_verilator_e2e test_axi_lite_verilator_e2e.cpp)
+
 # 基础功能测试
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
