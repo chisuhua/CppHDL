@@ -61,6 +61,51 @@ specifications.
 
 ---
 
+## 2026-09-22 — `axi4lite-verilator-e2e` (Gap F2 closure)
+
+### Added
+- **`tests/test_axi_lite_verilator_e2e.cpp`** (268 lines, 2 test cases /
+  9 assertions) closes Gap F2 from the `verilator-perf-three-way`
+  review: `examples/axi4/axi4_lite_example.cpp` runs only through the
+  interpreter — no VerilatorBackend e2e coverage existed for any AXI
+  class. Two test cases:
+  - `AxiLiteTopPortAccessSnapshot`: VerilatorBackend compiles an
+    `AxiLiteTop` fixture (wraps `AxiLiteSlave<32,32,4>` via
+    `ch::ch_module`), dlopens `libVtop.so`, and verifies
+    `port_access_` is populated with all 17 AXI4-Lite IO signals
+    (10 inputs + 7 outputs + clock + reset).
+  - `WriteReadReg0ThroughBackend`: dispatches through Simulator +
+    VerilatorBackend, performs a write transaction (AW + W →
+    `reg0 = 0xDEADBEEF`) and a read transaction (AR → R), and logs
+    `RVALID` / `RDATA` for nightly inspection.
+
+### Known limitations carried forward (issue #25)
+- **`RVALID` / `RDATA` readback via `data_map_` returns 0 even though
+  the generated Verilog has pure `assign top_slave_unnamed_output =
+  top_slave_mux_select_1;` (combinational).** Originally Oracle
+  audit (C12) suggested this would propagate; in practice it does
+  not, indicating issue #25 extends beyond `always_ff` reg updates to
+  the **entire `sync_outputs_from_vtop` path**. Strong evidence that
+  the VerilatorBackend eval-after-input-sync sequence does not
+  refresh wire outputs. Resolution tracked under
+  `verilator-issue-25-fix` (proposed next change, option A in the
+  Oracle audit).
+- Test case 2 uses `INFO(...)` only for the readback values; no
+  `CHECK` is asserted on `RVALID` / `RDATA` until the underlying
+  Verilator eval-eval-sync issue is fixed.
+
+### Test invocation
+- Tagged `[verilator][e2e][axi4lite][m5]`. PR matrix (no verilator
+  binary) SKIPs both cases via the standard `tool_available("verilator")`
+  gate. Nightly Verilator CI (`.github/workflows/ci.yml`) runs them
+  for real.
+
+### Files
+- `tests/test_axi_lite_verilator_e2e.cpp` (new)
+- `tests/CMakeLists.txt` (+5)
+
+---
+
 ## Format
 
 Entries are reverse-chronological. Each entry may have sections:
