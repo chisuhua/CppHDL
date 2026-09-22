@@ -5,7 +5,7 @@ add_executable(quadrature_encoder_example quadrature_encoder.cpp)
 target_link_libraries(quadrature_encoder_example PRIVATE cpphdl)
 
 set_target_properties(quadrature_encoder_example PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 

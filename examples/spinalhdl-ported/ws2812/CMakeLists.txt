@@ -5,7 +5,7 @@ add_executable(ws2812_controller_example ws2812_controller.cpp)
 target_link_libraries(ws2812_controller_example PRIVATE cpphdl)
 
 set_target_properties(ws2812_controller_example PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 

@@ -1,9 +1,9 @@
 # CppHDL
 
-> C++20 hardware description library for high-level HDL development. SpinalHDL patterns compiled to C++.
+> C++23 hardware description library for high-level HDL development. SpinalHDL patterns compiled to C++.
 
 ## Stack
-C++20, CMake, Catch2 v3.7.0, clangd (LSP), SpinalHDL-style API
+C++23, CMake, Catch2 v3.7.0, clangd (LSP), SpinalHDL-style API
 
 ## Structure
 ```

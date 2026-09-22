@@ -1,9 +1,9 @@
 # CppHDL
 
-This repository is a collection of C++ libraries for high-level hardware description (HDL) development. The main purpose is to create a robust and efficient toolset for developing complex HDL designs using C++17, CMake, and Catch2.
+This repository is a collection of C++ libraries for high-level hardware description (HDL) development. The main purpose is to create a robust and efficient toolset for developing complex HDL designs using C++23, CMake, and Catch2.
 
 ## Key Technologies
-- C++17: The primary programming language used for developing the libraries.
+- C++23: The primary programming language used for developing the libraries.
 - CMake: A build system for managing dependencies and building the project.
 - Catch2: A testing framework used for validating all components.
 
@@ -69,7 +69,7 @@ To review the code for potential issues:
 ## Development Environment
 Set up a development environment by ensuring you have:
 
-- C++17 compiler
+- C++23 compiler
 - CMake installed
 - Catch2 library included
 

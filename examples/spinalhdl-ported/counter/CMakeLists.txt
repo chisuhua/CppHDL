@@ -11,7 +11,7 @@ target_link_libraries(counter_example
 
 # 设置 C++ 标准
 set_target_properties(counter_example PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 
@@ -26,7 +26,7 @@ target_link_libraries(counter_simple_example
 
 # 设置 C++ 标准
 set_target_properties(counter_simple_example PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 

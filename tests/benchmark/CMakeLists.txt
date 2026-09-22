@@ -124,4 +124,4 @@ set_tests_properties(perf_three_way PROPERTIES
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-target_compile_features(perf_tests PRIVATE cxx_std_20)
+target_compile_features(perf_tests PRIVATE cxx_std_23)

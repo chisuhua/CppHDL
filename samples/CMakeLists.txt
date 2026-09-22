@@ -56,7 +56,7 @@ foreach(target ${CH_SAMPLE_TARGETS})
     
     # 设置C++20标准
     set_target_properties(${target} PROPERTIES
-        CXX_STANDARD 20
+        CXX_STANDARD 23
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
     )

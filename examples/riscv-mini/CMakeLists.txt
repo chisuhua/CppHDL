@@ -11,7 +11,7 @@ function(riscv_mini_unit_test TEST_NAME TEST_SOURCE)
     target_include_directories(${TEST_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../../include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/riscv)
-    set_target_properties(${TEST_NAME} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+    set_target_properties(${TEST_NAME} PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 endfunction()
 
 # Catch2 集成测试(链接 catch_amalgamated)
@@ -30,7 +30,7 @@ function(riscv_mini_catch_test TEST_NAME TEST_SOURCE)
         ${CMAKE_CURRENT_SOURCE_DIR}/../../tests
         ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/pipeline
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    set_target_properties(${TEST_NAME} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+    set_target_properties(${TEST_NAME} PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 endfunction()
 
 # === ISA 组件验证 (Phase 1-3) ===

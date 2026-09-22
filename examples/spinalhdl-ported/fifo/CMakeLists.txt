@@ -5,7 +5,7 @@ add_executable(fifo_stream_example stream_fifo_example.cpp)
 target_link_libraries(fifo_stream_example PRIVATE cpphdl)
 
 set_target_properties(fifo_stream_example PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 

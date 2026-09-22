@@ -5,7 +5,7 @@ add_executable(i2c_controller_example i2c_controller.cpp)
 target_link_libraries(i2c_controller_example PRIVATE cpphdl)
 
 set_target_properties(i2c_controller_example PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )
 

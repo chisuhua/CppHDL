@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.14)
 project(CppHDL LANGUAGES C CXX VERSION 1.0.0)
 
 # 设置C++标准
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -189,7 +189,7 @@ add_library(cpphdl ${CH_SOURCES})
 
 # 设置库属性
 set_target_properties(cpphdl PROPERTIES
-    CXX_STANDARD 20
+    CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
 )
