@@ -121,6 +121,18 @@ TIMEOUT 360s (~6 min cold with verilator first build, ~3 min warm).
 This is the ctest level that the nightly Verilator job picks up; you do
 not need to invoke `perf_tests` directly for a smoke test.
 
+> **verilator-issue-25-fix (2026-09-23)**: `VerilatorBackend::eval_sequential`
+> now performs a 2-step clock toggle (`clk=1` → `eval_fn_` → `clk=0` →
+> `eval_fn_`) per cycle so Verilator's `VlClockSig`/`__Vclklast__` edge
+> detection fires `always_ff @(posedge clk)` blocks. The clock Vtop
+> field is written directly via `clock_field_ptr_` (NOT round-tripped
+> through `data_map_`); `sync_inputs_to_vtop(exclude_clock=true)` and
+> `sync_outputs_from_vtop()` both skip clock/reset (infrastructure).
+> Before the fix, `always_ff` blocks never fired and counter-style
+> regressions read 0 even though `eval()` was called. After the fix,
+> TC-07 depth=1000 verilator runs at ~580 ticks/sec (vs ~34 ticks/sec
+> in the broken baseline).
+
 > Note: `perf_three_way` does **not** inject `VERILATOR_ROOT` into the
 > spawned process — the verilator wrapper self-sets it from its own
 > resolved path, and an injected value that disagrees with the actual

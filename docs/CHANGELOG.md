@@ -6,6 +6,32 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-09-23 — `verilator-issue-25-fix`
+
+### Fixed
+- **`VerilatorBackend::eval_sequential` performs a 2-step clock toggle** so
+  Verilator's `VlClockSig`/`__Vclklast__` edge detection fires
+  `always_ff @(posedge clk)` blocks. The clock Vtop field is written
+  directly via the new `clock_field_ptr_` (NOT round-tripped through
+  `data_map_`); `sync_inputs_to_vtop(exclude_clock=true)` skips clock/reset
+  on the input pass, and `sync_outputs_from_vtop()` skips clock/reset on
+  the output pass (they are infrastructure, never user-visible). Before
+  the fix, `always_ff` blocks never fired — counter-style regressions
+  read 0 even though `eval()` was called, AXI4-Lite `awready`/`wready`/
+  `bvalid` combinational handshakes did not propagate to `data_map_`, and
+  sequential `rdata` reads returned 0. After the fix, the e2e tier
+  (`test_verilator_e2e_harness`, `test_axi_lite_verilator_e2e`) passes with
+  `REQUIRE` assertions, and TC-07 depth=1000 verilator runs at
+  ~580 ticks/sec (was ~34 ticks/sec in the broken baseline). Also fixed
+  `emit_sim_main_postlude` (`src/core/verilator_backend.cpp`) to use the
+  codegen's `get_verilog_name(node)` instead of `cpp_safe_name(node->name())`
+  — the codegen applies a `_N` uniqueness suffix that `lnode->name()`
+  does not carry, and without the fix the generated accessor code had
+  `&v->top.slave.unnamed_input` (with literal dots) which verilator
+  rejected as a hard compile error.
+
+---
+
 ## 2026-09-22 — `verilator-perf-three-way`
 
 ### Fixed
