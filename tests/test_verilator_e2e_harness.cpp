@@ -159,10 +159,7 @@ TEST_CASE("VerilatorBackend - E2E RealFiftyCycleCounterSimulator",
         UNSCOPED_INFO("counter32 data_map_[" << out_lnode->id()
                      << "]=" << it->second.to_string()
                      << " actual=" << actual);
-        // KNOWN ISSUE (issue #25): always_ff @(posedge default_clock) in
-        // the Verilator-generated model does not increment under the
-        // current M0.5 dispatch. Tracked in issue #25 partial closure.
-        CHECK(actual == 50);
+        REQUIRE(actual == 50);
     }
 }
 
@@ -202,8 +199,7 @@ TEST_CASE("VerilatorBackend - E2E SamplesCounter4Bit50CyclesMod16",
         UNSCOPED_INFO("counter4 data_map_[" << out_lnode->id()
                     << "]=" << it->second.to_string()
                     << " actual=" << actual);
-        // Same KNOWN ISSUE as Counter<32> above (issue #25).
-        CHECK(actual == 50 % 16);
+        REQUIRE(actual == 50 % 16);
     }
 }
 
