@@ -176,12 +176,11 @@ VerilatorBackend::~VerilatorBackend() {
 
 namespace {
 // ADR-035 §M1: Append per-port_id dispatch tables to sim_main.cpp.
-// Walks ctx port nodes (type_input/type_output/type_clock) and emits
-// switch cases keyed by node_id with bitwidth-bucketed dispatch
-// (CData/SData/IData/QData). Vtop field naming convention:
-//   - Inputs/clocks: lnode->name()
-//   - Outputs in __io() bundle: "io" (single-output flattening)
-void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
+// Vtop field names come from writer.get_verilog_name(node) — the
+// codegen applies a _N suffix for uniqueness that lnode->name()
+// does not carry.
+void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
+                            const verilogwriter& writer) {
     if (!ctx) return;
     std::ofstream out(path, std::ios::app);
     if (!out.is_open()) return;
@@ -189,22 +188,6 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
 
     auto nodes = ctx->get_eval_list();
     using ch::core::lnodetype;
-
-    // M1: emit C++ identifier-safe field names. Verilator emits
-    // Vtop.h identifiers verbatim from the Verilog port name, but
-    // CppHDL lnode names use dots (e.g. "top.unnamed_output") which
-    // would parse as member access in C++. Mirror codegen sanitize:
-    // non [a-zA-Z0-9_] chars -> underscore; leading digit -> "_" prefix.
-    auto cpp_safe_name = [](const std::string& n) -> std::string {
-        std::string s = n;
-        for (char& c : s) {
-            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') c = '_';
-        }
-        if (!s.empty() && std::isdigit(static_cast<unsigned char>(s[0]))) {
-            s = "_" + s;
-        }
-        return s;
-    };
 
     // set_input_Vtop
     out << "void set_input_Vtop(void* top, uint32_t port_id,\n"
@@ -221,8 +204,9 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
         const char* dt = (bw <= 8)  ? "CData"
                        : (bw <= 16) ? "SData"
                        : (bw <= 32) ? "IData" : "QData";
+        std::string vname = writer.get_verilog_name(node);
         out << "    case " << id << ": {\n"
-            << "        " << dt << "* p = &v->" << node->name() << ";\n"
+            << "        " << dt << "* p = &v->" << vname << ";\n"
             << "        *p = *reinterpret_cast<const " << dt << "*>(bits);\n"
             << "        break;\n"
             << "    }\n";
@@ -242,10 +226,9 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
         const char* dt = (bw <= 8)  ? "CData"
                        : (bw <= 16) ? "SData"
                        : (bw <= 32) ? "IData" : "QData";
-        // Use lnode->name() (matches Vtop.h field name;
-        // ch_uint<4> -> "io"; ch_uint<32> -> "top_unnamed_output").
+        std::string vname = writer.get_verilog_name(node);
         out << "    case " << id << ": {\n"
-            << "        " << dt << "* p = &v->" << cpp_safe_name(node->name()).c_str() << ";\n"
+            << "        " << dt << "* p = &v->" << vname << ";\n"
             << "        *reinterpret_cast<" << dt << "*>(bits) = *p;\n"
             << "        break;\n"
             << "    }\n";
@@ -259,14 +242,12 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx) {
     for (auto* node : nodes) {
         if (!node) continue;
         auto t = node->type();
-        // Only emit cases for ports (skip internal lnodes).
-        // lnode->name() is the Verilog port identifier Vtop.h
-        // exposes (default_clock, io, top_unnamed_output, etc.)
         if (t != lnodetype::type_input && t != lnodetype::type_clock &&
             t != lnodetype::type_output && t != lnodetype::type_reset) continue;
         uint32_t id = node->id();
+        std::string vname = writer.get_verilog_name(node);
         out << "    case " << id << ": return reinterpret_cast<uint8_t*>(&v->"
-            << cpp_safe_name(node->name()).c_str() << ");\n";
+            << vname << ");\n";
     }
     out << "    default: return nullptr;\n    }\n}\n";
 
@@ -345,17 +326,29 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
         return false;
     }
 
+    // verilator-issue-25-fix: Verilator initializes signals to X, which
+    // would propagate through async-reset always_ff blocks (kept at 0).
+    // Force reset low so the 3-step clock toggle in eval_sequential is
+    // the only thing driving reg updates.
+    if (reset_field_ptr_ && top_instance_) {
+        *static_cast<uint8_t *>(reset_field_ptr_) = 0;
+        if (eval_fn_) eval_fn_(top_instance_);
+    }
+
     return true;
 }
 
 void VerilatorBackend::clear() {
     close_top();
     port_access_.clear();
+    clock_field_ptr_ = nullptr;
+    reset_field_ptr_ = nullptr;
     ctx_ = nullptr;
     data_map_ = nullptr;
 }
 
 bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
+    verilogwriter writer(ctx);
     {
         std::ofstream out(verilator_work_dir_ + "/top.v");
         if (!out.is_open()) {
@@ -363,7 +356,6 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
                     verilator_work_dir_.c_str());
             return false;
         }
-        verilogwriter writer(ctx);
         writer.print(out);
         out.close();
         CHINFO("VerilatorBackend: wrote %s/top.v",
@@ -419,8 +411,11 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
             "uint8_t* get_field_ptr_Vtop(void* top, uint32_t port_id);\n"
             "}\n";
         out.close();
-        // ADR-035 §M1: append per-port_id dispatch tables.
-        emit_sim_main_postlude(verilator_work_dir_ + "/sim_main.cpp", ctx);
+        // ADR-035 §M1: append per-port_id dispatch tables. Pass the
+        // writer so postlude uses the same Verilog name mapping as
+        // the codegen (with _N uniqueness suffix).
+        emit_sim_main_postlude(verilator_work_dir_ + "/sim_main.cpp",
+                               ctx, writer);
         CHINFO("VerilatorBackend: wrote %s/sim_main.cpp",
                verilator_work_dir_.c_str());
     }
@@ -563,6 +558,16 @@ bool VerilatorBackend::build_port_access_table() {
         pa.is_input = (t == lnodetype::type_input ||
                        t == lnodetype::type_clock ||
                        t == lnodetype::type_reset);
+        // verilator-issue-25-fix: mark clock/reset entries so
+        // sync_inputs/sync_outputs can skip them; also save direct
+        // Vtop pointers for the 3-step clock toggle in eval_sequential.
+        pa.is_clock = (t == lnodetype::type_clock);
+        pa.is_reset = (t == lnodetype::type_reset);
+        if (pa.is_clock) {
+            clock_field_ptr_ = pa.field_ptr;
+        } else if (pa.is_reset) {
+            reset_field_ptr_ = pa.field_ptr;
+        }
         port_access_[node->id()] = pa;
     }
     CHINFO("VerilatorBackend: port_access_ built with %zu entries, "
@@ -571,7 +576,7 @@ bool VerilatorBackend::build_port_access_table() {
     return true;
 }
 
-void VerilatorBackend::sync_inputs_to_vtop() {
+void VerilatorBackend::sync_inputs_to_vtop(bool exclude_clock) {
     if (!data_map_ || !top_instance_ || !eval_fn_ || !set_input_fn_) {
         return;
     }
@@ -579,9 +584,17 @@ void VerilatorBackend::sync_inputs_to_vtop() {
     // Vtop ports via generated set_input_Vtop accessor. Wide ports
     // (>64 bits) are rejected by build_port_access_table() during
     // initialize(); this branch is defensive and should never run.
+    // verilator-issue-25-fix: skip clock/reset when exclude_clock is
+    // true (the default during eval_sequential). Their Vtop fields
+    // are toggled directly via clock_field_ptr_/reset_field_ptr_,
+    // and round-tripping through data_map_ would clobber Verilator's
+    // internal __Vclklast__ edge-detection state.
     uint64_t val = 0;
     for (auto &kv : port_access_) {
         if (!kv.second.is_input) continue;
+        if (exclude_clock && (kv.second.is_clock || kv.second.is_reset)) {
+            continue;
+        }
         auto it = data_map_->find(kv.first);
         if (it == data_map_->end()) continue;
         val = static_cast<uint64_t>(it->second);
@@ -603,14 +616,17 @@ void VerilatorBackend::sync_outputs_from_vtop() {
     // data_map_ via generated get_output_Vtop accessor. Wide ports
     // (>64 bits) are rejected by build_port_access_table() during
     // initialize(); the silent-skip below is defensive only.
+    // verilator-issue-25-fix: clock/reset are infrastructure and are
+    // never user-visible outputs, so they are excluded from this pass.
     uint64_t val = 0;
     for (auto &kv : port_access_) {
         if (kv.second.is_input) continue;
+        if (kv.second.is_clock || kv.second.is_reset) continue;
         val = 0;
         get_output_fn_(top_instance_, kv.first, &val);
         auto it = data_map_->find(kv.first);
         if (it != data_map_->end() && kv.second.bitwidth <= 64) {
-            it->second = val;  // operator=<U> template accepts uint64_t
+            it->second = val;
         }
     }
 }
@@ -697,15 +713,23 @@ void VerilatorBackend::eval_sequential(
     ch::data_map_t &data_map,
     const std::vector<std::pair<uint32_t, ch::instr_base *>>
         &sequential_instr_list) {
-    // Phase 3.4: clock toggle (clk=0/1) + Verilator's step() instead
-    // of eval(). The 3-eval-per-tick model maps to:
-    //   comb-1  -> top->clk=0; eval_fn_()
-    //   clock   -> top->clk=1; eval_fn_()
-    //   comb-2  -> top->clk=0; eval_fn_()
+    // verilator-issue-25-fix: Verilator edge detection needs a
+    // 0->1->0 toggle per cycle so VlClockSig fires always_ff and
+    // combinational re-evaluates with the new register values. The
+    // clock is written directly via clock_field_ptr_ (bypassing
+    // data_map_) so the Vtop field transitions deterministically.
+    // sync_inputs_to_vtop() is called with exclude_clock=true so
+    // user inputs (other than clock/reset) are still pushed.
     data_map_ = &data_map;
-    sync_inputs_to_vtop();
+    sync_inputs_to_vtop(/*exclude_clock=*/true);
     if (eval_fn_) {
-        eval_fn_(top_instance_);
+        if (clock_field_ptr_) {
+            auto *clk = static_cast<uint8_t *>(clock_field_ptr_);
+            *clk = 1; eval_fn_(top_instance_);  // posedge: always_ff fires
+            *clk = 0; eval_fn_(top_instance_);  // combinational re-evals
+        } else {
+            eval_fn_(top_instance_);
+        }
     }
     sync_outputs_from_vtop();
 }

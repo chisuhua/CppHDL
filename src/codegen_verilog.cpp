@@ -95,6 +95,11 @@ void verilogwriter::print(std::ostream &out) {
     }
 }
 
+std::string verilogwriter::get_verilog_name(ch::core::lnodeimpl *node) const {
+    auto it = node_names_.find(node);
+    return it == node_names_.end() ? std::string() : it->second;
+}
+
 std::string verilogwriter::sanitize_name(const std::string &name) const {
     std::string sanitized = name;
     // Replace illegal characters with underscores

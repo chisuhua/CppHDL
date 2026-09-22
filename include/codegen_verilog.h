@@ -43,6 +43,10 @@ public:
     // Generates the complete Verilog module and writes it to the given stream.
     void print(std::ostream &out);
 
+    // Verilog port name for `node` (with uniqueness _N suffix). Empty if
+    // the node was not assigned a name by the codegen.
+    std::string get_verilog_name(ch::core::lnodeimpl *node) const;
+
 private:
     // --- Helper functions for name generation and validation ---
     std::string sanitize_name(const std::string &name) const;

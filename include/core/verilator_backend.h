@@ -32,6 +32,8 @@ struct VerilatorPortAccess {
     void *field_ptr;        // &vtop->port (computed once, O(1) access)
     uint32_t bitwidth;      // 1, 2, ..., 64
     bool is_input;          // true for ch_in, false for ch_out
+    bool is_clock;          // true for type_clock lnode
+    bool is_reset;          // true for type_reset lnode
 };
 
 class VerilatorBackend : public IEvalBackend {
@@ -138,7 +140,9 @@ private:
     // does not fail initialize (the freshly-built .so is still
     // usable from work_dir).
     bool writeback_to_cache(const std::string &cache_key);
-    void sync_inputs_to_vtop();
+    // verilator-issue-25-fix: clock/reset excluded by default so they
+    // are not round-tripped through data_map_ during eval_sequential.
+    void sync_inputs_to_vtop(bool exclude_clock = true);
     void sync_outputs_from_vtop();
 
     // dlopen state — stored fn pointers for Vtop lifecycle + dispatch.
@@ -164,6 +168,12 @@ private:
 
     // Reset support: id of the type_reset lnode (or UINT32_MAX if none).
     uint32_t reset_node_id_ = UINT32_MAX;
+
+    // verilator-issue-25-fix: direct Vtop field pointers for clock/reset
+    // so eval_sequential can toggle them without round-tripping through
+    // data_map_ (which would defeat VlClockSig edge detection).
+    void *clock_field_ptr_ = nullptr;
+    void *reset_field_ptr_ = nullptr;
 
     // ADR-035 §M3: invoke_verilator() call counter for cache-hit tests.
     uint32_t invoke_verilator_call_count_ = 0;
