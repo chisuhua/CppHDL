@@ -52,6 +52,11 @@ add_catch_test(test_chipforge_mux_segv_repro test_chipforge_mux_segv_repro.cpp)
 # null pointer constant hijack for ch_stream / ch_flow / AXI channels.
 add_catch_test(test_bundle_literal test_bundle_literal.cpp)
 
+# verilator-perf-three-way: codegen 字面量 mask 修复测试 (不依赖 verilator 二进制)
+# 验证 ch_uint<N>(literal) 生成的 Verilog 字面量值落在 N 位内,避免触发
+# Verilator "Too many digits for N bit number" 语法错误 (TC-07 depth=1000 关键)
+add_catch_test(test_verilator_three_way test_verilator_three_way.cpp)
+
 # 基础功能测试
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
