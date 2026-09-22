@@ -100,4 +100,28 @@ else()
     )
 endif()
 
+# verilator-perf-three-way: 独立的三路 perf ctest 入口,仅跑 TC-07/08
+# 三路 subprocess 隔离对比,用于 CI 快速门禁 Verilator 集成健康
+# (vs 完整 perf_tests 15 分钟)。
+# TIMEOUT 240s 基于 TC-07/08 子集实测(3 sizes × 3 backends,首次含
+# verilator 冷构建 ~60s,后续 ~30s)。注意 perf_main 不支持 --tc=07,08
+# 逗号语法(perf_main.cpp:644-652);必须用 --tc=07 --tc=08 两个独立 flag。
+# perf_three_way 不注入 VERILATOR_ROOT(避免路径不一致时 wrapper %Error),
+# wrapper 在未设置时自设已足够 (third_party/verilator/bin/verilator:101)。
+if(CPPHDL_VERILATOR_WRAPPER)
+    add_test(NAME perf_three_way COMMAND perf_tests
+        --tc=07 --tc=08
+        --verilator=${CPPHDL_VERILATOR_WRAPPER}
+        --report=json)
+else()
+    add_test(NAME perf_three_way COMMAND perf_tests
+        --tc=07 --tc=08
+        --report=json)
+endif()
+set_tests_properties(perf_three_way PROPERTIES
+    LABELS "perf;verilator"
+    TIMEOUT 360
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 target_compile_features(perf_tests PRIVATE cxx_std_20)

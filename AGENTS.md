@@ -179,6 +179,7 @@ ctest --output-on-failure
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)
 - **Verilator 三路 perf 对比** (interpreter / JIT / Verilator) 默认要求 `BUILD_VERILATOR=ON`；CI/快速迭代用 `-DBUILD_VERILATOR=OFF`，Verilator 列在 perf 报告中显示 `UNSUPPORTED`（详见 `docs/developer_guide/verilator-integration.md`）
+- **`perf_three_way` ctest 入口**（`ctest -L verilator -R perf_three_way`）专跑 TC-07（XOR 链 depth=10/100/1000）+ TC-08（寄存器链）的三路子集 subprocess 隔离对比，TIMEOUT 360。完整三路 perf 仍走 `perf_tests --all`（TIMEOUT 1800）。修复 TC-07 depth=1000 verilator 编译失败：`src/codegen_verilog.cpp::get_literal_str` 单参数版本对字面量值按宽度 mask，避免 `ch_uint<N>(literal)` 触发 Verilator "Too many digits for N bit number" 语法错误（width=64 路径保留 `value` 原值，符合 ADR-035 64-bit port cap）
 
 ## C-CLASS REFACTOR (2026-06, completed)
 

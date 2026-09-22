@@ -106,6 +106,26 @@ cmake --build build
 ./build/tests/benchmark/perf_tests --tc=07
 ```
 
+## Quick perf regression check (CI-friendly subset)
+
+For a CI-friendly three-way subset that exercises the canonical
+Verilator regression surface (TC-07 XOR chain depth=10/100/1000 + TC-08
+register chain) without the full `--all` runtime (~15-20 min), use the
+dedicated `perf_three_way` ctest entry:
+
+```bash
+ctest --test-dir build -L verilator -R perf_three_way --output-on-failure
+```
+
+TIMEOUT 360s (~6 min cold with verilator first build, ~3 min warm).
+This is the ctest level that the nightly Verilator job picks up; you do
+not need to invoke `perf_tests` directly for a smoke test.
+
+> Note: `perf_three_way` does **not** inject `VERILATOR_ROOT` into the
+> spawned process — the verilator wrapper self-sets it from its own
+> resolved path, and an injected value that disagrees with the actual
+> install location triggers `%Error: Open of ...` in `make`.
+
 The Verilator column in the report will show `UNSUPPORTED` with
 `skip_reason: "verilator not found on PATH"`, exactly as it did
 before this integration.
