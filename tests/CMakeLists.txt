@@ -232,6 +232,7 @@ add_catch_test(test_stream_pipeline test_stream_pipeline.cpp)
 add_catch_test(test_mem test_mem.cpp)
 add_catch_test(test_mem_connection test_mem_connection.cpp)
 add_catch_test(test_mem_timing test_mem_timing.cpp)
+add_catch_test(test_mem_comb_read test_mem_comb_read.cpp)
 # 已删除：以下测试使用过时 API（ChComponent/TestComponent），且测试内部实现细节
 # - test_memory_leak.cpp
 # - test_memory_optimization.cpp

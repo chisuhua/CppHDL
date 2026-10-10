@@ -1068,14 +1068,48 @@ void verilogwriter::print_mem_read_port(
         std::string addr_name = node_names_[addr];
         std::string proxy_name = node_names_[data_proxy];
 
-        // All mem read ports (async aread and sync sread) are evaluated in
-        // the simulator's sequential phase at posedge, giving 1-cycle read
-        // latency. The CPU's pc_lag / FLUSH mechanism depends on this; a
-        // combinational read would misalign fetch with pc_lag.
+        // B' (ChipForge Phase 6d.7+): per-port opt-out of 1-cycle latency.
+        // aread (async_read) emits a continuous `assign` (combinational read),
+        // matching the CppHDL Simulator's combinational eval for that port.
+        // Use aread when the consumer has a combinational datapath and the
+        // downstream register already provides the 1-cycle dependency (e.g.
+        // ChipForge CPU dmem where reg_file <<= provides 1-cycle latency,
+        // mirroring ibus's pc_lag). DO NOT use aread for imem — that would
+        // misalign fetch with pc_lag (keep imem as sread for 1-cycle).
+        //
+        // For sync_read (sread) we keep the historical 1-cycle always_ff,
+        // which is what the CPU's pc_lag / FLUSH mechanism depends on.
         std::string en_str = "1'b1";
         if (enable && node_names_.count(enable)) {
             en_str = node_names_[enable];
         }
+
+        if (node->port_type() == ch::core::mem_port_type::async_read) {
+            // Combinational read: `assign proxy = en ? mem[addr] : proxy`.
+            // The enable-false branch re-selects the proxy itself so the
+            // combinational port holds its previous value when disabled,
+            // matching the simulator's instr_mem_async_read_port::eval()
+            // behavior (which early-returns on enable=0 without writing).
+            // No clock gating needed — the simulator classifies async_read
+            // ports as combinational and evaluates them before the write
+            // ports, so the read returns the pre-write value at the same
+            // cycle (consistent with Verilog non-blocking write semantics).
+            if (enable && node_names_.count(enable)) {
+                out << "    assign " << proxy_name << " = " << en_str
+                    << " ? " << mem_name << "[" << addr_name << "] : "
+                    << proxy_name << "; // Comb read " << proxy_name << "\n";
+            } else {
+                out << "    assign " << proxy_name << " = " << mem_name
+                    << "[" << addr_name << "]; // Comb read " << proxy_name
+                    << "\n";
+            }
+            return;
+        }
+
+        // Sync read (existing 1-cycle path, unchanged behavior).
+        // All sync mem read ports emit always_ff, giving 1-cycle read
+        // latency. The CPU's pc_lag / FLUSH mechanism depends on this for
+        // imem — keep as-is.
         // Reset branch clears the read proxy (matches the CppHDL Simulator
         // data_map default-zero), preventing X from reaching the datapath.
         out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
