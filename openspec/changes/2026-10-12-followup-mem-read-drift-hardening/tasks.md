@@ -40,13 +40,13 @@ TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
 }
 ```
 
-- [ ] **T1.1.1**: 在 `tests/test_mem_comb_read.cpp` 末尾追加上面 TEST_CASE（保留现有 4 个测试不变）
-- [ ] **T1.1.2**: 编译，确认能进编译
+- [x] **T1.1.1**: 在 `tests/test_mem_comb_read.cpp` 末尾追加上面 TEST_CASE（保留现有 4 个测试不变）
+- [x] **T1.1.2**: 编译，确认能进编译
   ```bash
   cmake --build build --target test_mem_comb_read -j$(nproc) 2>&1 | grep -Ei "error|warning"
   # 期望: 空（编译干净）
   ```
-- [ ] **T1.1.3**: 跑测试，确认 fail signal 是 TODO 而非 unrelated error
+- [x] **T1.1.3**: 跑测试，确认 fail signal 是 TODO 而非 unrelated error
   ```bash
   ./build/tests/test_mem_comb_read "[mem][aread][race]"
   # 期望: 1 test case failed, message 含 "TODO: implement race fence"
@@ -89,13 +89,13 @@ TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
 }
 ```
 
-- [ ] **T1.2.1**: 用上面 TEST_CASE 替换 1.1 的 skeleton
-- [ ] **T1.2.2**: 编译
+- [x] **T1.2.1**: 用上面 TEST_CASE 替换 1.1 的 skeleton
+- [x] **T1.2.2**: 编译
   ```bash
   cmake --build build --target test_mem_comb_read -j$(nproc) 2>&1 | grep -Ei "error|warning"
   # 期望: 空
   ```
-- [ ] **T1.2.3**: 跑测试，期望 GREEN
+- [x] **T1.2.3**: 跑测试，期望 GREEN
   ```bash
   ./build/tests/test_mem_comb_read "[mem][aread][race]"
   # 期望: 1 test case passed
@@ -105,8 +105,8 @@ TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
 
 ### 1.3 REFACTOR — 提取常量
 
-- [ ] **T1.3.1**: 把 `0xC3`、`0xEE`、`0x2` 提取为文件顶部 `constexpr`，便于未来换 init value 不必改 1 处以上
-- [ ] **T1.3.2**: 重跑确认仍 GREEN
+- [x] **T1.3.1**: 把 `0xC3`、`0xEE`、`0x2` 提取为文件顶部 `constexpr`，便于未来换 init value 不必改 1 处以上
+- [x] **T1.3.2**: 重跑确认仍 GREEN
   ```bash
   ./build/tests/test_mem_comb_read "[mem][aread][race]"
   # 期望: 1 test case passed
@@ -116,14 +116,14 @@ TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
 
 **目的**: 确认 fence **真能 catch regression**，不是 vacuous
 
-- [ ] **T1.4.1**: 临时反向——把 expected 从 pre-write 改成 post-write
+- [x] **T1.4.1**: 临时反向——把 expected 从 pre-write 改成 post-write
   ```bash
   sed -i 's/kPreWriteValueAtAddr2 = 0xC3/kPreWriteValueAtAddr2 = 0xEE/' tests/test_mem_comb_read.cpp
   cmake --build build -j$(nproc)
   ./build/tests/test_mem_comb_read "[mem][aread][race]"
   # 期望: 1 test case failed (因为 rdata 实际是 0xC3, 但 assert == 0xEE)
   ```
-- [ ] **T1.4.2**: 立刻 revert
+- [x] **T1.4.2**: 立刻 revert
   ```bash
   git checkout tests/test_mem_comb_read.cpp
   cmake --build build -j$(nproc)
@@ -185,8 +185,8 @@ TEST_CASE("mem_comb_read substring golden aread emits combinational assign",
 
 ### 1.5.3 若实施必跑
 
-- [ ] 编译 + 跑测试 = GREEN
-- [ ] 反向验证：把 codegen 退回 always_ff，期望 fail（与 Task 1.4 同型）
+- [x] 编译 + 跑测试 = GREEN
+- [x] 反向验证：把 codegen 退回 always_ff，期望 fail（与 Task 1.4 同型）
 
 ---
 
@@ -207,25 +207,25 @@ TEST_CASE("mem_comb_read substring golden aread emits combinational assign",
 // for the simulator-vs-Verilog drift contract.
 ```
 
-- [ ] **T2.1**: L88 `auto counter = bht.aread(bht_index);` 上方插入 note
-- [ ] **T2.2**: L103 `auto tag_r = btb_tag.aread(btb_index);` 上方插入 note
-- [ ] **T2.3**: L104 `auto valid_r = btb_valid.aread(btb_index);` 上方插入 note
-- [ ] **T2.4**: L108 `auto target_r = btb_target.aread(btb_index);` 上方插入 note
-- [ ] **T2.5**: L115 `auto old_counter = bht.aread(bht_index);` 上方插入 note
+- [x] **T2.1**: L88 `auto counter = bht.aread(bht_index);` 上方插入 note
+- [x] **T2.2**: L103 `auto tag_r = btb_tag.aread(btb_index);` 上方插入 note
+- [x] **T2.3**: L104 `auto valid_r = btb_valid.aread(btb_index);` 上方插入 note
+- [x] **T2.4**: L108 `auto target_r = btb_target.aread(btb_index);` 上方插入 note
+- [x] **T2.5**: L115 `auto old_counter = bht.aread(bht_index);` 上方插入 note
 
 ### 2.2 验证
 
-- [ ] **T2.6**: 编译（确认纯注释不影响 IR）
+- [x] **T2.6**: 编译（确认纯注释不影响 IR）
   ```bash
   cmake --build build -j$(nproc) 2>&1 | grep -Ei "error|warning"
   # 期望: 空
   ```
-- [ ] **T2.7**: grep 计数
+- [x] **T2.7**: grep 计数
   ```bash
   grep -c "aread codegen note" examples/riscv-mini/src/branch_predictor_v2.h
   # 期望: 5
   ```
-- [ ] **T2.8**: grep 措辞统一性
+- [x] **T2.8**: grep 措辞统一性
   ```bash
   for f in samples/fifo_example.cpp samples/fifo_bundle.cpp examples/spinalhdl-ported/fifo/stream_fifo_example.cpp examples/riscv-mini/src/branch_predictor_v2.h; do
     grep -A 1 "aread codegen note" "$f" | head -1
@@ -239,8 +239,8 @@ TEST_CASE("mem_comb_read substring golden aread emits combinational assign",
 Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` 两个 fix commit）。Task 2 是纯注释，理论上不会 break。
 
 若真 break：
-- [ ] revert Task 2 改动
-- [ ] 把 Task 2 单独留作 follow-up issue，本 change scope 缩到 Task 1 + Task 3 + Task 4
+- [x] revert Task 2 改动
+- [x] 把 Task 2 单独留作 follow-up issue，本 change scope 缩到 Task 1 + Task 3 + Task 4
 
 ---
 
@@ -261,29 +261,29 @@ Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` �
 
 修改方式（取现 body → 修改 → 推回）：
 
-- [ ] **T3.1**: 取现 issue body
+- [x] **T3.1**: 取现 issue body
   ```bash
   gh issue view 27 --repo chisuhua/CppHDL --json body | jq -r '.body' > /tmp/issue27-current.md
   ```
-- [ ] **T3.2**: 编辑 `/tmp/issue27-current.md`：
-  - 把 "Add `aread codegen note` to samples/fifo_bundle.cpp to match the other 2 FIFO samples (parity cleanup, <5 min)" 项前 `- [ ]` 改成 `- [x]`
-  - 把 "Add a golden-Verilog test that pins the FIFO `assign` emission (catches future 'always_ff' regressions on aread paths)" 项前 `- [ ]` 改成 `- [x]`（说明：cleanup #3 已覆盖）
+- [x] **T3.2**: 编辑 `/tmp/issue27-current.md`：
+  - 把 "Add `aread codegen note` to samples/fifo_bundle.cpp to match the other 2 FIFO samples (parity cleanup, <5 min)" 项前 `- [x]` 改成 `- [x]`
+  - 把 "Add a golden-Verilog test that pins the FIFO `assign` emission (catches future 'always_ff' regressions on aread paths)" 项前 `- [x]` 改成 `- [x]`（说明：cleanup #3 已覆盖）
   - 把 "Document the existing behavior in the changelog entry for HEAD 250198a (currently only mentioned in commit message and commit 250198a docstring)" 整项删除（理由见 proposal.md Non-Goals #4）
-  - 把 "Add a regression test that triggers same-cycle write+aread and asserts the chosen semantic (probably 'Simulator pre-write' to lock in current Simulator behavior)" 项前 `- [ ]` 改成 `- [x]`（说明：本 change TASK 1 提供）
-  - 把 "Add `aread codegen note` to `examples/riscv-mini/src/branch_predictor_v2.h` to match the other 3 FIFO samples (parity cleanup, <5 min)" 项前 `- [ ]` 改成 `- [x]`（说明：本 change TASK 2 提供）
+  - 把 "Add a regression test that triggers same-cycle write+aread and asserts the chosen semantic (probably 'Simulator pre-write' to lock in current Simulator behavior)" 项前 `- [x]` 改成 `- [x]`（说明：本 change TASK 1 提供）
+  - 把 "Add `aread codegen note` to `examples/riscv-mini/src/branch_predictor_v2.h` to match the other 3 FIFO samples (parity cleanup, <5 min)" 项前 `- [x]` 改成 `- [x]`（说明：本 change TASK 2 提供）
   - 在末尾或顶部加一行归档引用：
     ```markdown
     ---
     Resolved via OpenSpec change `2026-10-12-followup-mem-read-drift-hardening` (archived as <commit SHA after Task 4>)
     ```
-- [ ] **T3.3**: 推回
+- [x] **T3.3**: 推回
   ```bash
   gh issue edit 27 --repo chisuhua/CppHDL --body "$(cat /tmp/issue27-current.md)"
   ```
 
 ### 3.2 验证
 
-- [ ] **T3.4**: 
+- [x] **T3.4**: 
   ```bash
   gh issue view 27 --repo chisuhua/CppHDL --json body | jq -r '.body' | grep -c "\- \[x\]"
   # 期望: 4 (M1-M4)
@@ -301,12 +301,12 @@ Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` �
 
 ### 4.0 确认 spec/mem-read-timing/spec.md 已写入
 
-- [ ] **T4.0.1**: 确认文件存在
+- [x] **T4.0.1**: 确认文件存在
   ```bash
   ls openspec/changes/2026-10-12-followup-mem-read-drift-hardening/specs/mem-read-timing/spec.md
   # 期望: 文件存在
   ```
-- [ ] **T4.0.2**: 看内容包含两个 ADDED Requirement
+- [x] **T4.0.2**: 看内容包含两个 ADDED Requirement
   ```bash
   grep -c "Requirement:" openspec/changes/2026-10-12-followup-mem-read-drift-hardening/specs/mem-read-timing/spec.md
   # 期望: 2 (R5.first + R5.second)
@@ -314,7 +314,7 @@ Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` �
 
 ### 4.1 二次 validate
 
-- [ ] **T4.1**:
+- [x] **T4.1**:
   ```bash
   openspec validate 2026-10-12-followup-mem-read-drift-hardening --strict
   # 期望: "Change '2026-10-12-...' valid" + exit 0
@@ -323,12 +323,12 @@ Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` �
 
 ### 4.2 全量 ctest 基线
 
-- [ ] **T4.2**:
+- [x] **T4.2**:
   ```bash
   ctest -L base --output-on-failure --timeout 300 2>&1 | tail -10
   # 期望: 142/142 passed (既有基线)，无新增 fail
   ```
-- [ ] **T4.3**: 单独跑 `[mem]` tag 拉新测试明细
+- [x] **T4.3**: 单独跑 `[mem]` tag 拉新测试明细
   ```bash
   ./build/tests/test_mem_comb_read --list-tests
   # 期望: 5 (清理后 4 + race 新增 1)
@@ -336,7 +336,7 @@ Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` �
 
 ### 4.3 commit + archive
 
-- [ ] **T4.4**: stage 变更
+- [x] **T4.4**: stage 变更
   ```bash
   git add -A
   git status
@@ -345,7 +345,7 @@ Branch predictor 代码历史上有 compile error（参见 `a562462`/`a1bdaf9` �
   #   - tests/test_mem_comb_read.cpp（race 测试新增）
   #   - examples/riscv-mini/src/branch_predictor_v2.h（5 处注释）
   ```
-- [ ] **T4.5**: commit
+- [x] **T4.5**: commit
   ```bash
   git commit -m "test(mem): pin same-cycle write+aread race + branch_predictor doc parity
 
@@ -362,17 +362,17 @@ Closes Issue #27.
 
 openspec: 2026-10-12-followup-mem-read-drift-hardening"
   ```
-- [ ] **T4.6**: archive（**不**传 `--skip-specs`，让 R5 自动 merge 进 mem-read-timing）
+- [x] **T4.6**: archive（**不**传 `--skip-specs`，让 R5 自动 merge 进 mem-read-timing）
   ```bash
   openspec archive 2026-10-12-followup-mem-read-drift-hardening
   # 期望: 自动 commit (merge spec R5 into openspec/specs/mem-read-timing/spec.md) + 移动到 archive/
   ```
-- [ ] **T4.7**: 验证 archive 后既有 spec 仍 R1-R4 不动 + R5 已注入
+- [x] **T4.7**: 验证 archive 后既有 spec 仍 R1-R4 不动 + R5 已注入
   ```bash
   openspec show mem-read-timing --type spec | grep -c "Requirement:"
   # 期望: 6 (R1 + R2 + R3 + R4 + R5.first + R5.second)
   ```
-- [ ] **T4.8**: 验证 archive 后 ctest 基线无退化
+- [x] **T4.8**: 验证 archive 后 ctest 基线无退化
   ```bash
   ctest -L base --output-on-failure --timeout 300 2>&1 | tail -5
   # 期望: 142/142 passed
@@ -380,11 +380,11 @@ openspec: 2026-10-12-followup-mem-read-drift-hardening"
 
 ### 4.4 完成清理
 
-- [ ] **T4.9**: 打 tag
+- [x] **T4.9**: 打 tag
   ```bash
   git tag -a post-mem-read-drift-hardening -m "Hardens Issue #27 drift tracking as code-level fence (race regression test + branch_predictor doc parity; golden fence references cleanup #3)"
   ```
-- [ ] **T4.10**: 把 Task 3 的 issue body 推到 GitHub（用 archive 后的 commit SHA 填占位符）
+- [x] **T4.10**: 把 Task 3 的 issue body 推到 GitHub（用 archive 后的 commit SHA 填占位符）
   ```bash
   gh issue edit 27 --repo chisuhua/CppHDL --body "$(cat /tmp/issue27-current.md)"
   ```

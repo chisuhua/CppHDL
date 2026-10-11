@@ -7,19 +7,13 @@
 
 ## Why
 
-Issue #27（[drift] mem read port: simulator-vs-Verilog divergence）记录了 HEAD commit `250198a feat(mem): aread emits combinational \`assign\` instead of \`always_ff\`` 引入的 **simulator↔Verilog drift** 的**代码级缓解**待办。`cleanup-250198a-aread-combinational-debt` change 已完成：
+Issue #27 跟踪 `250198a` 引入的 simulator↔Verilog drift 的**代码级缓解**。`cleanup-250198a-aread-combinational-debt` change 已完成文档化（ARCHITECTURE.md / spec R1-R4）、3 个 FIFO 内联 note、`test_mem_comb_read.cpp` 4 个 TEST_CASE（含 codegen pin + 跨周期 write+read）。执行前审计发现：
 
-- 文档化（ARCHITECTURE.md "Memory read port timing"、既有 spec R1-R4）
-- FIFO 示例内联 note（3 个：`fifo_example.cpp` / `fifo_bundle.cpp` / `stream_fifo_example.cpp`）
-- `test_mem_comb_read.cpp` 重写（4 个 TEST_CASE，含 codegen pin + 跨周期 write+read）
+- **cleanup #3 已 pin `assign` 发射**（proxy-name 行内匹配）——spec R5.first 直接引用为契约
+- **Same-cycle write+read race 仍空**——spec R4 缺执行层 fence
+- **`branch_predictor_v2.h` 5 处零文档**——与 3 个 FIFO sample 不一致
 
-执行本 change 前再次审计，发现 **issue body 列出的 "no golden Verilog test" 项实际已被 cleanup 部分覆盖**（test 3 `"aread Verilog codegen emits assign (no always_ff)"` 通过 proxy name 行内匹配 pin 了 `assign` 发射）——但该 pin 走 **proxy-name 锚定**而非**通用 substring**锚定，覆盖面有死角。所以本 change 把 scope 调整为：
-
-1. **不重复造轮子写第二个 golden 测试**——保留 cleanup #3，让其在 spec R5 中正式生效；本 change 可选地添加一条更通用的 substring 版 alias 测试（`[mem][aread][golden]` tag，与 #3 互为正交 fence）
-2. **Same-cycle write+read race 测试**——这才是 issue body 跟踪清单中**真正缺失**的执行层契约。spec R4 锁定 "Simulator pre-write / Verilog post-write"，但无执行层 fence
-3. **`branch_predictor_v2.h` 5 处 `.aread()` 零文档**——与 3 个 FIFO sample 的内联 note 不一致；同属 cleanup 非-goal 范畴
-
-修复这些债务为「**代码级 fence**」，使未来的"refactor for cleanliness" 不会无意识撤回 `250198a` 的合约。
+修复后使"refactor for cleanliness"不会无意识撤回 `250198a` 的合约。
 
 ### 风险评估
 
