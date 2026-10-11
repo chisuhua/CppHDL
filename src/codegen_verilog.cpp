@@ -1069,40 +1069,45 @@ void verilogwriter::print_mem_read_port(
         std::string proxy_name = node_names_[data_proxy];
 
         // B' (ChipForge Phase 6d.7+): per-port opt-out of 1-cycle latency.
-        // aread (async_read) emits a continuous `assign` (combinational read),
-        // matching the CppHDL Simulator's combinational eval for that port.
-        // Use aread when the consumer has a combinational datapath and the
-        // downstream register already provides the 1-cycle dependency (e.g.
-        // ChipForge CPU dmem where reg_file <<= provides 1-cycle latency,
-        // mirroring ibus's pc_lag). DO NOT use aread for imem — that would
-        // misalign fetch with pc_lag (keep imem as sread for 1-cycle).
+        // aread (async_read) emits a continuous `assign` (combinational read,
+        // 0-cycle latency in Verilog). In the Simulator, aread is evaluated
+        // in `sequential_instr_list_` at posedge (`src/simulator_init.cpp`),
+        // and the trailing `eval_combinational()` in `Simulator::tick()` makes
+        // the proxy visible to output ports within the same tick — hence the
+        // observed "same-cycle" behavior in the Simulator matches the
+        // 0-cycle Verilog `assign` from a testbench perspective. This is
+        // NOT a 0-cycle property of the aread instr itself (it still ticks);
+        // it is a property of the Simulator's tick ordering.
+        //
+        // Known simulator-vs-Verilog drift (documented in
+        // docs/simulation/ARCHITECTURE.md "Memory read port timing"):
+        //   - Register-driven read address: Simulator aread lags by 1 cycle
+        //     relative to a register update at the same posedge; Verilog
+        //     `assign` reflects the new address immediately.
+        //   - Same-cycle write+read race: Simulator aread returns pre-write
+        //     value; Verilog `assign` returns post-write value (NBA update).
+        // ChipForge dmem tolerates both drifts because downstream `reg_file`
+        // provides the required 1-cycle latency.
         //
         // For sync_read (sread) we keep the historical 1-cycle always_ff,
-        // which is what the CPU's pc_lag / FLUSH mechanism depends on.
+        // which is what the CPU's pc_lag / FLUSH mechanism depends on for
+        // imem. DO NOT use aread for imem — that would misalign fetch with
+        // pc_lag.
         std::string en_str = "1'b1";
         if (enable && node_names_.count(enable)) {
             en_str = node_names_[enable];
         }
 
         if (node->port_type() == ch::core::mem_port_type::async_read) {
-            // Combinational read: `assign proxy = en ? mem[addr] : proxy`.
-            // The enable-false branch re-selects the proxy itself so the
-            // combinational port holds its previous value when disabled,
-            // matching the simulator's instr_mem_async_read_port::eval()
-            // behavior (which early-returns on enable=0 without writing).
-            // No clock gating needed — the simulator classifies async_read
-            // ports as combinational and evaluates them before the write
-            // ports, so the read returns the pre-write value at the same
-            // cycle (consistent with Verilog non-blocking write semantics).
-            if (enable && node_names_.count(enable)) {
-                out << "    assign " << proxy_name << " = " << en_str
-                    << " ? " << mem_name << "[" << addr_name << "] : "
-                    << proxy_name << "; // Comb read " << proxy_name << "\n";
-            } else {
-                out << "    assign " << proxy_name << " = " << mem_name
-                    << "[" << addr_name << "]; // Comb read " << proxy_name
-                    << "\n";
-            }
+            // aread: combinational read in generated Verilog (0-cycle
+            // latency). `ch_mem::aread()` (include/core/mem.h) always passes
+            // `nullptr` for the enable argument, so this branch has no
+            // enable-gated path (a previous dead enable-branch was removed).
+            // The Simulator classifies async_read ports in the same
+            // sequential_instr_list_ as sync reads; see the doc comment
+            // above for the simulator↔Verilog drift details.
+            out << "    assign " << proxy_name << " = " << mem_name
+                << "[" << addr_name << "]; // Comb read " << proxy_name << "\n";
             return;
         }
 
