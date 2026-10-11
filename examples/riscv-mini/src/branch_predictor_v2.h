@@ -85,8 +85,11 @@ public:
         // =====================================================================
         auto bht_index = bits<BranchPredictorConfig::BHT_INDEX_BITS + 1, 2>(ch_uint<32>(io().pc));
         
+        // aread codegen note: emits combinational `assign` (0-cycle). See
+        // docs/simulation/ARCHITECTURE.md "Memory read port timing"
+        // for the simulator-vs-Verilog drift contract.
         auto counter = bht.aread(bht_index);
-        
+
         // =====================================================================
         // 预测逻辑：counter >= 2 则预测 Taken
         // =====================================================================
@@ -100,11 +103,20 @@ public:
         auto btb_index = bits<BranchPredictorConfig::BTB_INDEX_BITS + 2, 3>(ch_uint<32>(io().pc));
         auto btb_tag_val = bits<23, 4>(ch_uint<32>(io().pc));
         
+        // aread codegen note: emits combinational `assign` (0-cycle). See
+        // docs/simulation/ARCHITECTURE.md "Memory read port timing"
+        // for the simulator-vs-Verilog drift contract.
         auto tag_r = btb_tag.aread(btb_index);
+        // aread codegen note: emits combinational `assign` (0-cycle). See
+        // docs/simulation/ARCHITECTURE.md "Memory read port timing"
+        // for the simulator-vs-Verilog drift contract.
         auto valid_r = btb_valid.aread(btb_index);
         auto tag_match = select(valid_r, tag_r == btb_tag_val, ch_bool(false));
         ch_bool btb_hit = tag_match;
         
+        // aread codegen note: emits combinational `assign` (0-cycle). See
+        // docs/simulation/ARCHITECTURE.md "Memory read port timing"
+        // for the simulator-vs-Verilog drift contract.
         auto target_r = btb_target.aread(btb_index);
         io().predicted_target <<= select(btb_hit, target_r, 
                                          io().pc + ch_uint<32>(4_d));
@@ -112,8 +124,11 @@ public:
         // =====================================================================
         // 更新逻辑 (EX 级确认后)
         // =====================================================================
+        // aread codegen note: emits combinational `assign` (0-cycle). See
+        // docs/simulation/ARCHITECTURE.md "Memory read port timing"
+        // for the simulator-vs-Verilog drift contract.
         auto old_counter = bht.aread(bht_index);
-        
+
         auto new_counter = select(io().branch_taken_actual == ch_bool(true),
                                   select(old_counter < ch_uint<2>(3_d), 
                                          old_counter + ch_uint<2>(1_d),

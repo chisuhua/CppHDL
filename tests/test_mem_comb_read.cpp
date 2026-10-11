@@ -329,3 +329,44 @@ TEST_CASE("aread cross-cycle write-then-read consistency",
         device.instance().io().rdata_async);
     REQUIRE(static_cast<uint64_t>(rdata_after_write) == 0xFF);
 }
+
+// =============================================================================
+// Same-cycle write+aread race: AREAD returns PRE-WRITE value (spec R4 third
+// bullet). This test pins the chosen Simulator semantic — if a future
+// refactor lets aread observe the same-tick we=1 write, this test fails and
+// requires a coordinated spec/ARCHITECTURE.md update.
+// =============================================================================
+
+TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
+          "[mem][aread][race]") {
+    ch::core::context ctx("race_test");
+    ch::core::ctx_swap swap(&ctx);
+
+    ch_device<CombReadFixture> device;
+    Simulator simulator(device.context());
+
+    simulator.set_input_value(device.instance().io().we,
+                              static_cast<uint64_t>(0));
+    simulator.set_input_value(device.instance().io().addr_sync,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().addr_async,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().wdata,
+                              static_cast<uint64_t>(0x00));
+    simulator.tick();
+
+    simulator.set_input_value(device.instance().io().we,
+                              static_cast<uint64_t>(1));
+    simulator.set_input_value(device.instance().io().wdata,
+                              static_cast<uint64_t>(0xEE));
+    simulator.set_input_value(device.instance().io().addr_sync,
+                              static_cast<uint64_t>(0x2));
+    simulator.set_input_value(device.instance().io().addr_async,
+                              static_cast<uint64_t>(0x2));
+    simulator.tick();
+
+    constexpr uint64_t kPreWriteValueAtAddr2 = 0xC3;
+    auto rdata = simulator.get_port_value(
+        device.instance().io().rdata_async);
+    REQUIRE(static_cast<uint64_t>(rdata) == kPreWriteValueAtAddr2);
+}
