@@ -357,3 +357,21 @@ void Simulator::tick(size_t count) {
 *文档版本: v1.1*
 *创建日期: 2026-04-26*
 *最后更新: 2026-04-26（Oracle 审查反馈：修正 tick() 描述、补充 trace 临时对象、修正 TC-06 根因、更新 Cash 描述）*
+## Memory read port timing (B' ChipForge Phase 6d.7+)
+
+### `aread` (async_read)
+- **Verilog codegen** (`src/codegen_verilog.cpp`): emits `assign proxy = mem[addr];` — continuous assignment, **0-cycle latency** in generated Verilog.
+- **Simulator**: `instr_mem_async_read_port::eval` is in `sequential_instr_list_` (`src/simulator_init.cpp:116-121`), evaluated at posedge. Observable same-tick visibility comes from the trailing `eval_combinational()` in `Simulator::tick()` (`src/simulator.cpp`), which propagates the proxy to output ports within the same tick.
+- **Use when**: read-only consumer, where a downstream register provides the 1-cycle latency (e.g., ChipForge dmem → `reg_file`).
+
+### `sread` (sync_read)
+- **Verilog codegen**: emits `always_ff @(posedge default_clock or posedge default_reset)` — registered read, **1-cycle latency**.
+- **Simulator**: `instr_mem_sync_read_port::eval` is also in `sequential_instr_list_`, with a clk-high check. Same observable timing as `aread` from the testbench's perspective in the Simulator.
+- **Use when**: 1-cycle registered read semantics required (e.g., imem fetch — must keep `pc_lag` alignment).
+
+### Known simulator↔Verilog drift
+
+1. **Register-driven read address**: Simulator `aread` effectively lags 1 cycle behind a register update at the same posedge (the proxy updates only at the *next* `eval_sequential()` pass); Verilog `assign` reflects the new address immediately within the same time step. ChipForge dmem tolerates this because the downstream `reg_file <<=` provides the required latency.
+2. **Same-cycle write+read race**: Simulator `aread` returns the pre-write value; Verilog `assign` returns the post-write value after the NBA update in the same time step.
+
+These drifts are documented in `openspec/changes/cleanup-250198a-aread-combinational-debt/specs/mem-read-timing/spec.md` and tracked separately.

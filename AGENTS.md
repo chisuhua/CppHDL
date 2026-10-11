@@ -61,6 +61,7 @@ CppHDL/
 - **Bundle as IO**: Use individual `ch_bool`/`ch_uint` ports, NOT bundle struct
 - **Include aggregator**: Use `#include "ch.hpp"` (library) or `#include "chlib.h"` (chlib components)
 - **Verilator install path**: `apt install verilator` is **WRONG** — Verilator comes from `third_party/verilator/` submodule, built by `cmake --build build --target verilator` (ExternalProject_Add, ~10-30 min cold). See `docs/developer_guide/verilator-integration.md`.
+- **Mem read port**: `aread` emits combinational `assign` in Verilog (0-cycle); `sread` emits `always_ff` (1-cycle). In Simulator, both are evaluated at posedge in `sequential_instr_list_`; downstream registers in the consumer provide the required latency. `imem` must use `sread` to maintain `pc_lag` alignment. See `docs/simulation/ARCHITECTURE.md` "Memory read port timing".
 
 ## COMPONENT LIFECYCLE PATTERNS
 | Scenario | Pattern | Example |

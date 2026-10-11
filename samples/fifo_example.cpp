@@ -194,6 +194,10 @@ int main() {
     }
 
     // 生成Verilog
+    // aread codegen note: this FIFO emits `assign dout = mem[rd_ptr]` (0-cycle
+    // combinational read, no downstream register). See
+    // docs/simulation/ARCHITECTURE.md "Memory read port timing" for the
+    // simulator-vs-Verilog drift contract.
     ch::toVerilog("fifo.v", top_device.context());
 
     std::cout << "FIFO simulation completed successfully!" << std::endl;
