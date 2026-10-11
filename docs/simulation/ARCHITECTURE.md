@@ -375,3 +375,38 @@ void Simulator::tick(size_t count) {
 2. **Same-cycle write+read race**: Simulator `aread` returns the pre-write value; Verilog `assign` returns the post-write value after the NBA update in the same time step.
 
 These drifts are documented in `openspec/changes/cleanup-250198a-aread-combinational-debt/specs/mem-read-timing/spec.md` and tracked separately.
+
+## VerilatorBackend clock toggle contract (verilator-issue-25-fix)
+
+### `eval_sequential` 2-step toggle
+
+Per Verilator's `VlClockSig/__Vclklast__` edge detection, every `always_ff @(posedge clk)` fires only on a 0→1 transition of the clock field. To force that transition deterministically, `VerilatorBackend::eval_sequential` (in `src/core/verilator_backend.cpp`) performs a 2-step toggle per Simulator tick:
+
+```
+1. sync_inputs_to_vtop(exclude_clock=true)   — push user inputs (skip clock/reset)
+2. *clock_field_ptr_ = 1; eval_fn_();          — posedge: always_ff fires
+3. *clock_field_ptr_ = 0; eval_fn_();          — combinational re-evaluates
+4. sync_outputs_from_vtop()                    — pull outputs back to data_map_
+```
+
+The clock and reset Vtop fields are written directly via `clock_field_ptr_` and `reset_field_ptr_` (set in `build_port_access_table()`) — *not* round-tripped through `data_map_`. Round-tripping would clobber Verilator's internal `__Vclklast__` bookkeeping and break edge detection.
+
+### Clock/reset exclusion from `sync_inputs_to_vtop` / `sync_outputs_from_vtop`
+
+Both functions skip clock and reset entries unconditionally:
+
+- `sync_inputs_to_vtop(bool exclude_clock)` — when `exclude_clock` (default true), skips `is_clock || is_reset`. User-supplied inputs still flow normally.
+- `sync_outputs_from_vtop()` — skips `is_clock || is_reset` always (clock/reset are infrastructure, never user-visible outputs).
+
+### `reset()` drives reset directly
+
+`VerilatorBackend::reset(data_map)` uses `reset_field_ptr_` directly for the same reason as the clock toggle: a 1→0 reset pulse through the accessor round-trip would interfere with Verilator's bookkeeping. If the design has no async-reset port (no `reset_field_ptr_`), the function falls back to the older accessor path for compatibility.
+
+### 64-bit port cap
+
+`build_port_access_table()` rejects ports wider than 64 bits (`QData` is Verilator's widest single-word type; `VlWide` vectors are not supported by the dlopen-based accessor pattern). `sync_inputs_to_vtop()` defensively warns and skips any 65+bit port that slipped through. Use the interpreter or JIT backend for designs with wide ports.
+
+### Direct unit test
+
+`tests/test_verilator_backend.cpp::TwoStepClockToggleIncrementOnePerTick` ticks the simulator one cycle at a time and asserts `counter == N+1` after tick `N`. A double-toggle in any cycle skips a value; a no-toggle stalls. Both regressions are caught.
+
