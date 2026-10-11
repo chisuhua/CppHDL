@@ -328,8 +328,9 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
 
     // verilator-issue-25-fix: Verilator initializes signals to X, which
     // would propagate through async-reset always_ff blocks (kept at 0).
-    // Force reset low so the 3-step clock toggle in eval_sequential is
-    // the only thing driving reg updates.
+    // Force reset low (one direct toggle, not the 2-step clock pattern) so
+    // the 2-step clock toggle in eval_sequential is the only thing that
+    // drives reg updates going forward.
     if (reset_field_ptr_ && top_instance_) {
         *static_cast<uint8_t *>(reset_field_ptr_) = 0;
         if (eval_fn_) eval_fn_(top_instance_);
@@ -720,40 +721,43 @@ void VerilatorBackend::eval_sequential(
     // data_map_) so the Vtop field transitions deterministically.
     // sync_inputs_to_vtop() is called with exclude_clock=true so
     // user inputs (other than clock/reset) are still pushed.
+    //
+    // clock_field_ptr_ is always non-null after a successful initialize()
+    // (build_port_access_table sets it from the type_clock lnode); the
+    // else branch is intentionally omitted — a missing clock is a setup
+    // error, not a recoverable runtime state.
     data_map_ = &data_map;
     sync_inputs_to_vtop(/*exclude_clock=*/true);
-    if (eval_fn_) {
-        if (clock_field_ptr_) {
-            auto *clk = static_cast<uint8_t *>(clock_field_ptr_);
-            *clk = 1; eval_fn_(top_instance_);  // posedge: always_ff fires
-            *clk = 0; eval_fn_(top_instance_);  // combinational re-evals
-        } else {
-            eval_fn_(top_instance_);
-        }
+    if (eval_fn_ && clock_field_ptr_) {
+        auto *clk = static_cast<uint8_t *>(clock_field_ptr_);
+        *clk = 1; eval_fn_(top_instance_);  // posedge: always_ff fires
+        *clk = 0; eval_fn_(top_instance_);  // combinational re-evals
     }
     sync_outputs_from_vtop();
 }
 
 void VerilatorBackend::reset(ch::data_map_t &data_map) {
-    if (!top_instance_ || !eval_fn_ || reset_node_id_ == UINT32_MAX) {
+    if (!top_instance_ || !eval_fn_) {
         return;
     }
-    auto it = port_access_.find(reset_node_id_);
-    if (it == port_access_.end() || !it->second.field_ptr) {
-        return;
-    }
-    // Drive reset=1 to Vtop. The Simulator's eval_sequential()
-    // toggles the clock after this; the register captures the reset
-    // value on that clock edge.
+    // verilator-issue-25-fix: drive reset directly via reset_field_ptr_
+    // (mirrors the clock toggle pattern in eval_sequential — bypasses
+    // the data_map_ round-trip and Verilator's __Vclklast__ bookkeeping).
+    // If the design has no reset port (reset_field_ptr_ is nullptr, the
+    // normal case for designs without async reset), fall back to the
+    // accessor path so we still satisfy the reset contract.
     data_map_ = &data_map;
-    uint64_t val = 1;
-    set_input_fn_(top_instance_, reset_node_id_, &val);
-    eval_fn_(top_instance_);
-    // De-assert reset so it does not hold the register in reset
-    // after the clock edge (the Simulator will set reset=0 via
-    // sync_inputs_to_vtop on the next tick).
-    val = 0;
-    set_input_fn_(top_instance_, reset_node_id_, &val);
+    if (reset_field_ptr_) {
+        *static_cast<uint8_t *>(reset_field_ptr_) = 1;
+        eval_fn_(top_instance_);
+        *static_cast<uint8_t *>(reset_field_ptr_) = 0;
+    } else if (reset_node_id_ != UINT32_MAX && set_input_fn_) {
+        uint64_t val = 1;
+        set_input_fn_(top_instance_, reset_node_id_, &val);
+        eval_fn_(top_instance_);
+        uint64_t val_lo = 0;
+        set_input_fn_(top_instance_, reset_node_id_, &val_lo);
+    }
 }
 
 std::string VerilatorBackend::compute_cache_key(
