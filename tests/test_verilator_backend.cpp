@@ -572,6 +572,48 @@ TEST_CASE("VerilatorBackend - E2E CounterSimulator50Cycles",
     REQUIRE(val == 50);
 }
 
+// verilator-issue-25-fix: 2-step clock toggle contract. The counter must
+// increment by exactly 1 per tick — not 0 (no posedge fired) and not 2
+// (double-toggle). We check the counter after every tick of a 16-tick
+// run; the assertion chain fails on either off-by-one. This is the
+// direct unit test for the 0->1->0 toggle that fires VlClockSig
+// edge detection in VerilatorBackend::eval_sequential.
+TEST_CASE("VerilatorBackend - TwoStepClockToggleIncrementOnePerTick",
+          "[verilator][e2e][clock-toggle][m5]") {
+    if (!tool_available("verilator")) {
+        SKIP("verilator not on PATH");
+    }
+    auto ctx = std::make_unique<context>("vl_2step_clock");
+    ctx_swap guard(ctx.get());
+
+    ch_reg<ch_uint<32>> counter(0_d, "ctr");
+    counter->next = counter + 1_d;
+    ch_out<ch_uint<32>> out_port("io");
+    out_port <<= counter;
+
+    ch::Simulator sim(ctx.get(), /*trace_on=*/false);
+    auto backend = std::make_unique<VerilatorBackend>(
+        make_temp_dir("_2step_clock"));
+    VerilatorBackend *raw_backend = backend.get();
+    sim.set_backend(std::move(backend));
+
+    if (!raw_backend || raw_backend->compiled_so_path().empty()) {
+        SKIP("verilator compile failed (libVtop.so not produced)");
+    }
+
+    REQUIRE(sim.active_backend_name() == "verilator");
+
+    // Tick one at a time and check counter increments by exactly 1 each
+    // tick. If the 2-step clock toggle fires twice in one tick, the
+    // counter will skip a value; if it fires zero times, the counter
+    // stalls. Both regressions are caught by this incremental check.
+    for (uint32_t expected = 0; expected < 16; ++expected) {
+        sim.tick(1);
+        uint64_t val = static_cast<uint64_t>(sim.get_value(out_port));
+        REQUIRE(val == expected + 1);
+    }
+}
+
 // ADR-035 §M5 (e2e tier): port binding round-trip — write data_map
 // input, eval, read data_map output, expect matching values.
 TEST_CASE("VerilatorBackend - E2E PortBindingReadWrite",
