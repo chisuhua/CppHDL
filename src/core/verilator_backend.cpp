@@ -179,6 +179,17 @@ namespace {
 // Vtop field names come from writer.get_verilog_name(node) — the
 // codegen applies a _N suffix for uniqueness that lnode->name()
 // does not carry.
+//
+// Data-type dispatch: CData (≤8), SData (≤16), IData (≤32), QData
+// (≤64). build_port_access_table() rejects >64-bit ports, so this
+// branch is exhaustive.
+static const char *data_type_for(uint32_t bw) {
+    if (bw <= 8) return "CData";
+    if (bw <= 16) return "SData";
+    if (bw <= 32) return "IData";
+    return "QData";
+}
+
 void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
                             const verilogwriter& writer) {
     if (!ctx) return;
@@ -189,66 +200,83 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
     auto nodes = ctx->get_eval_list();
     using ch::core::lnodetype;
 
-    // set_input_Vtop
+    auto emit_case =
+        [&](const std::function<bool(const ch::core::lnodeimpl *)>& accepts,
+            const std::function<void(std::ostream &,
+                                     const ch::core::lnodeimpl *,
+                                     const std::string &)> &body) {
+        for (auto* node : nodes) {
+            if (!node || !accepts(node)) continue;
+            uint32_t id = node->id();
+            std::string vname = writer.get_verilog_name(node);
+            out << "    case " << id << ": ";
+            body(out, node, vname);
+            out << "\n";
+        }
+    };
+
+    // set_input_Vtop — write user-supplied bits into the Vtop field.
     out << "void set_input_Vtop(void* top, uint32_t port_id,\n"
         << "                    const void* bits) {\n"
         << "    auto* v = static_cast<Vtop*>(top);\n"
         << "    switch (port_id) {\n";
-    for (auto* node : nodes) {
-        if (!node) continue;
-        auto t = node->type();
-        if (t != lnodetype::type_input && t != lnodetype::type_clock &&
-            t != lnodetype::type_reset) continue;
-        uint32_t id = node->id();
-        uint32_t bw = node->size();
-        const char* dt = (bw <= 8)  ? "CData"
-                       : (bw <= 16) ? "SData"
-                       : (bw <= 32) ? "IData" : "QData";
-        std::string vname = writer.get_verilog_name(node);
-        out << "    case " << id << ": {\n"
-            << "        " << dt << "* p = &v->" << vname << ";\n"
-            << "        *p = *reinterpret_cast<const " << dt << "*>(bits);\n"
-            << "        break;\n"
-            << "    }\n";
-    }
+    emit_case(
+        [](const ch::core::lnodeimpl *n) {
+            auto t = n->type();
+            return t == lnodetype::type_input ||
+                   t == lnodetype::type_clock ||
+                   t == lnodetype::type_reset;
+        },
+        [&](std::ostream &o, const ch::core::lnodeimpl *n,
+            const std::string &vname) {
+            const char *dt = data_type_for(n->size());
+            o << "{\n"
+              << "        " << dt << "* p = &v->" << vname << ";\n"
+              << "        *p = *reinterpret_cast<const " << dt
+              << "*>(bits);\n"
+              << "        break;\n"
+              << "    }";
+        });
     out << "    default: break;\n    }\n}\n\n";
 
-    // get_output_Vtop
+    // get_output_Vtop — read Vtop field into user-supplied bits.
     out << "void get_output_Vtop(void* top, uint32_t port_id,\n"
         << "                     void* bits) {\n"
         << "    auto* v = static_cast<Vtop*>(top);\n"
         << "    switch (port_id) {\n";
-    for (auto* node : nodes) {
-        if (!node) continue;
-        if (node->type() != lnodetype::type_output) continue;
-        uint32_t id = node->id();
-        uint32_t bw = node->size();
-        const char* dt = (bw <= 8)  ? "CData"
-                       : (bw <= 16) ? "SData"
-                       : (bw <= 32) ? "IData" : "QData";
-        std::string vname = writer.get_verilog_name(node);
-        out << "    case " << id << ": {\n"
-            << "        " << dt << "* p = &v->" << vname << ";\n"
-            << "        *reinterpret_cast<" << dt << "*>(bits) = *p;\n"
-            << "        break;\n"
-            << "    }\n";
-    }
+    emit_case(
+        [](const ch::core::lnodeimpl *n) {
+            return n->type() == lnodetype::type_output;
+        },
+        [&](std::ostream &o, const ch::core::lnodeimpl *n,
+            const std::string &vname) {
+            const char *dt = data_type_for(n->size());
+            o << "{\n"
+              << "        " << dt << "* p = &v->" << vname << ";\n"
+              << "        *reinterpret_cast<" << dt
+              << "*>(bits) = *p;\n"
+              << "        break;\n"
+              << "    }";
+        });
     out << "    default: break;\n    }\n}\n\n";
 
-    // get_field_ptr_Vtop
+    // get_field_ptr_Vtop — return raw Vtop field address (for adapters
+    // that need direct access; no width dispatch needed).
     out << "uint8_t* get_field_ptr_Vtop(void* top, uint32_t port_id) {\n"
         << "    auto* v = static_cast<Vtop*>(top);\n"
         << "    switch (port_id) {\n";
-    for (auto* node : nodes) {
-        if (!node) continue;
-        auto t = node->type();
-        if (t != lnodetype::type_input && t != lnodetype::type_clock &&
-            t != lnodetype::type_output && t != lnodetype::type_reset) continue;
-        uint32_t id = node->id();
-        std::string vname = writer.get_verilog_name(node);
-        out << "    case " << id << ": return reinterpret_cast<uint8_t*>(&v->"
-            << vname << ");\n";
-    }
+    emit_case(
+        [](const ch::core::lnodeimpl *n) {
+            auto t = n->type();
+            return t == lnodetype::type_input ||
+                   t == lnodetype::type_clock ||
+                   t == lnodetype::type_output ||
+                   t == lnodetype::type_reset;
+        },
+        [](std::ostream &o, const ch::core::lnodeimpl *,
+           const std::string &vname) {
+            o << "return reinterpret_cast<uint8_t*>(&v->" << vname << ")";
+        });
     out << "    default: return nullptr;\n    }\n}\n";
 
     out << "}\n";
