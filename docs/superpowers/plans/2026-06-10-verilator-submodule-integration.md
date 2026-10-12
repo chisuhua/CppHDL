@@ -6,7 +6,7 @@
 
 **Architecture:** Top-level CMakeLists.txt gains an `option(BUILD_VERILATOR "..." ON)` gate and an `ExternalProject_Add(verilator ...)` that builds Verilator from the pinned submodule and installs it under `${CMAKE_BINARY_DIR}/verilator-install/`. The `tests/benchmark/CMakeLists.txt` ctest entry for `perf_tests` then appends `--verilator=<install>/bin/verilator` to the command line and injects `ENVIRONMENT "VERILATOR_ROOT=<install>"` (belt-and-suspenders). When the user runs `cmake -B build -DBUILD_VERILATOR=OFF`, none of this activates and the existing UNSUPPORTED fallback is preserved.
 
-**Tech Stack:** C++17/20, CMake 3.16+ (ExternalProject), Catch2 v3.7.0, Git submodules, Verilator 5.x stable, Perl 5.6.1+, flex, bison, Python 3.6+, g++ ≥ 7.
+**Tech Stack:** C++23, CMake 3.16+ (ExternalProject), Catch2 v3.7.0, Git submodules, Verilator 5.x stable, Perl 5.6.1+, flex, bison, Python 3.6+, g++ ≥ 7.
 
 ---
 

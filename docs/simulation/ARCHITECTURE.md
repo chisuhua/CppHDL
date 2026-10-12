@@ -10,7 +10,7 @@
 
 | 特性 | CppHDL | Cash | SpinalHDL |
 |------|--------|------|-----------|
-| **语言** | C++20 | C++17 | Scala (JVM) |
+| **语言** | C++23 | C++17 | Scala (JVM) |
 | **仿真引擎** | 内置解释型模拟器 | JIT 编译模拟器 (LLVM/LIBJIT) | Verilator JNI + VPI 后端 |
 | **调度模型** | 指令列表分类执行 | 拓扑排序 + JIT 编译函数 | 事件链表 + delta-cycle |
 | **信号表示** | `bitvector<uint64_t>` + `unordered_map` | `bitvector<block_type>` + 扁平内存数组 | Verilator 原生 C++ 类型 / VPI 句柄 |

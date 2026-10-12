@@ -54,7 +54,7 @@ foreach(target ${CH_SAMPLE_TARGETS})
         target_link_libraries(${target} "-lc++")
     endif()
     
-    # 设置C++20标准
+    # 设置C++23标准
     set_target_properties(${target} PROPERTIES
         CXX_STANDARD 23
         CXX_STANDARD_REQUIRED ON

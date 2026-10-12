@@ -8,7 +8,7 @@ schema: spec-driven
 # ---------------------------------------------------------------------------
 context: |
   # 技术栈
-  Tech stack: C++20, CMake, Catch2 v3.7.0, clangd LSP
+  Tech stack: C++23, CMake, Catch2 v3.7.0, clangd LSP
   架构: SpinalHDL-style API，header-only 库
 
   # 核心概念

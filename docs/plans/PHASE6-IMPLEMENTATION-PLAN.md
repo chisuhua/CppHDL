@@ -533,7 +533,7 @@ ctest -R "phase6" --output-on-failure
 
 - clangd 版本：>= 14.0
 - compile_commands.json: 必须存在
-- C++ 标准：C++17
+- C++ 标准：C++23
 
 ### 8.3 代码风格
 
