@@ -168,6 +168,12 @@ opimpl::create_instruction(ch::data_map_t &data_map) const {
         return std::make_unique<ch::instr_op_xor_reduce>(dst_buf, 1, src0_buf);
     case ch_op::popcount:
         return std::make_unique<ch::instr_op_popcount>(dst_buf, 1, src0_buf);
+    // ch_op::mux / ch_op::bits_update 永不通过 opimpl 派发: muximpl / bitsupdateimpl
+    // 是独立 lnodeimpl 子类, 各自有专属 create_instruction() (见本文件 219-229
+    // bitsupdateimpl). 显式列 case 仅消除 -Wswitch-enum 警告.
+    case ch_op::mux:
+    case ch_op::bits_update:
+        return nullptr;
     default:
         return nullptr;
     }
