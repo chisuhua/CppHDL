@@ -275,7 +275,7 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
         },
         [](std::ostream &o, const ch::core::lnodeimpl *,
            const std::string &vname) {
-            o << "return reinterpret_cast<uint8_t*>(&v->" << vname << ")";
+            o << "return reinterpret_cast<uint8_t*>(&v->" << vname << ");";
         });
     out << "    default: return nullptr;\n    }\n}\n";
 
