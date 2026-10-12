@@ -115,7 +115,9 @@ target_compile_definitions(perf_report_consistency PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    DEPENDS "perf_tests;perf_subprocess_isolation"
+    RESOURCE_LOCK "perf_results_file")
 # F2 (fix-perf-subprocess-isolation): regression test for K1 ORC JIT
 # cross-DUT state pollution mitigation. Verifies that perf_tests --all
 # TC-08 JIT is within 1.5x of standalone TC-08 JIT. Pattern matches
@@ -135,7 +137,8 @@ target_compile_definitions(perf_subprocess_isolation PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(perf_subprocess_isolation PROPERTIES LABELS "perf" TIMEOUT 1800
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    RESOURCE_LOCK "perf_results_file")
 # W12 (perf-report-followup.md): structural JIT-vs-interpreter ratio gate.
 # The absolute 50ms gate (perf_jit_smallgraph) and the 1.2x baseline gate
 # (perf_regression) cannot catch the case where JIT silently degrades to
@@ -159,6 +162,8 @@ add_test(NAME perf_regression
 )
 set_tests_properties(perf_regression PROPERTIES
     LABELS "perf" TIMEOUT 60
+    DEPENDS "perf_tests;perf_subprocess_isolation"
+    RESOURCE_LOCK "perf_results_file"
 )
 
 # W11: Verilator integration test (perf-report-followup.md followup).
@@ -174,6 +179,7 @@ target_compile_definitions(perf_verilator_integration PRIVATE
 set_tests_properties(perf_verilator_integration PROPERTIES
     LABELS "perf" TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    RESOURCE_LOCK "perf_results_file"
 )
 
 # Stream 组件独立测试

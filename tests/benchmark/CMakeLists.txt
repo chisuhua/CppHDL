@@ -89,6 +89,7 @@ if(CPPHDL_VERILATOR_WRAPPER)
         TIMEOUT 1800
         ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESOURCE_LOCK "perf_results_file"
     )
 else()
     add_test(NAME perf_tests COMMAND perf_tests --all
@@ -97,6 +98,7 @@ else()
         LABELS "perf"
         TIMEOUT 1800
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESOURCE_LOCK "perf_results_file"
     )
 endif()
 
@@ -122,6 +124,7 @@ set_tests_properties(perf_three_way PROPERTIES
     LABELS "perf;verilator"
     TIMEOUT 360
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    RESOURCE_LOCK "perf_results_file"
 )
 
 target_compile_features(perf_tests PRIVATE cxx_std_23)
