@@ -2,6 +2,18 @@
 
 > 追溯记录：将 CppHDL 项目从 C++20 升级到 C++23，并补齐 5c1cd3d 升级时缺失的 openspec 跟踪与文档清理。
 
+## Why
+
+`5c1cd3d feat(build): upgrade C++ standard from C++20 to C++23` (merged 2026-09-22) bumped the project's 25 CMake files from C++20 to C++23 with zero source-code changes, but merged without an accompanying openspec change. This creates spec drift: the build configuration is C++23 but `openspec/specs/` has no `build-cpp-standard` capability, and 4 documentation files + `openspec/config.yaml` still reference C++17/C++20. Future contributors cannot find the C++23 rationale from the spec layer.
+
+## What Changes
+
+- **Add** `build-cpp-standard` capability under `openspec/specs/build-cpp-standard/spec.md` defining C++23 as the project's baseline C++ standard, with 3 requirements (baseline, compatibility audit, doc consistency) covering 11 SHALL/MUST scenarios
+- **Modify** 5 files to align documentation with the C++23 baseline: `samples/CMakeLists.txt:57`, `docs/simulation/ARCHITECTURE.md:13`, `docs/plans/PHASE6-IMPLEMENTATION-PLAN.md:536`, `docs/superpowers/plans/2026-06-10-verilator-submodule-integration.md:9`, `openspec/config.yaml:11`
+- **Preserve** `docs/adr/ADR-011-zero-ones-thread-safety.md:77` (a P0438R2 fact about C++17, not a project-standard claim)
+- **Document** the 8 known C++23 breakage points and their 0-hit audit results in `design.md`
+- **Out of scope**: C++23 feature adoption (std::expected / std::format / etc.), pre-existing test_verilator_three_way failure, pre-existing -Wswitch-enum warning
+
 ## 动机
 
 commit `5c1cd3d feat(build): upgrade C++ standard from C++20 to C++23`（2026-09-22）已经把项目的 25 个 CMake 文件从 C++20 升到 C++23，但本次升级**缺少对应的 openspec change**：
