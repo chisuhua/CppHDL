@@ -61,6 +61,10 @@ add_catch_test(test_verilator_three_way test_verilator_three_way.cpp)
 # compile + dlopen + multi-cycle write/read). Skipped when verilator not on
 # PATH (PR matrix). See test_axi_lite_verilator_e2e.cpp header for context.
 add_catch_test(test_axi_lite_verilator_e2e test_axi_lite_verilator_e2e.cpp)
+set_tests_properties(test_axi_lite_verilator_e2e PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+)
 
 # 基础功能测试
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
@@ -311,9 +315,17 @@ target_compile_definitions(test_verilog_external PRIVATE
 # (SHA-1 cache key, IEvalBackend interface, Verilog generation,
 # verilator invocation, resource cleanup).
 add_catch_test(test_verilator_backend test_verilator_backend.cpp)
+set_tests_properties(test_verilator_backend PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+)
 # ADR-035 issue #25 / Phase 4.1+: e2e harness — real Verilator compile
 # + dlopen + counter verification (closes R5/R7 in tasks v2).
 add_catch_test(test_verilator_e2e_harness test_verilator_e2e_harness.cpp)
+set_tests_properties(test_verilator_e2e_harness PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+)
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
 # required — exercises the type API and the try_initialize() rich-error
