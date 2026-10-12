@@ -283,20 +283,22 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
 }
 } // namespace
 
-bool VerilatorBackend::initialize(ch::core::context *ctx,
-                                  ch::data_map_t &data_map) {
+VerilatorResult VerilatorBackend::try_initialize(ch::core::context *ctx,
+                                             ch::data_map_t &data_map) {
     ctx_ = ctx;
     data_map_ = &data_map;
 
-    if (!generate_verilog(ctx)) {
-        CHERROR("VerilatorBackend: failed to generate Verilog");
-        return false;
+    // generate_verilog is fatal: any failure here propagates as
+    // VerilatorErrorCode::VerilogGeneration.
+    if (auto r = generate_verilog(ctx); !r) {
+        return r;
     }
 
     // Verilator compilation is best-effort in the scaffolding. If it
     // fails (missing tool, slow build, etc.), we log a warning and
     // continue — the architecture is validated even without a working
-// ADR-035 §M1.7 (R4 fix): cache key includes sim_main template
+    // libVtop.so. Map VerilatorCompile error to CHWARN.
+    // ADR-035 §M1.7 (R4 fix): cache key includes sim_main template
     // content, --trace flag, and runtime-detected verilator version.
     std::string cache_key;
     {
@@ -321,9 +323,10 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
                 compiled_so_path_ = cached;
                 CHINFO("VerilatorBackend: cache hit at %s", cached.c_str());
             } else {
-                if (!invoke_verilator(verilator_work_dir_ + "/top.v")) {
+                if (auto r = invoke_verilator(verilator_work_dir_ + "/top.v"); !r) {
                     CHWARN("VerilatorBackend: verilator compilation failed "
-                           "(continuing without .so — dlopen is a stub)");
+                           "(continuing without .so — dlopen is a stub): %s",
+                           r.error().message.c_str());
                 } else {
                     // §M1.0: refresh compiled_so_path_ so dlopen_top
                     // finds the freshly-built libVtop.so (cache-miss path).
@@ -333,25 +336,30 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
                     // to ~/.cache/cpphdl/verilator/<key>/ so future
                     // initialize() with the same context hits the
                     // cache instead of recompiling (minutes -> ms).
-                    if (!writeback_to_cache(cache_key)) {
+                    // CacheWriteback is best-effort: log CHWARN and continue.
+                    if (auto r = writeback_to_cache(cache_key); !r) {
                         CHWARN("VerilatorBackend: cache write-back failed "
-                               "(subsequent runs will recompile)");
+                               "(subsequent runs will recompile): %s",
+                               r.error().message.c_str());
                     }
                 }
             }
         }
     }
 
-    if (!dlopen_top(compiled_so_path_)) {
-        CHWARN("VerilatorBackend: dlopen of %s failed",
-               compiled_so_path_.c_str());
+    // dlopen is best-effort: if libVtop.so is missing or dlopen fails,
+    // log CHWARN and continue (the architecture is validated even
+    // without a working .so). Map Dlopen/DlsymMissing to CHWARN.
+    if (auto r = dlopen_top(compiled_so_path_); !r) {
+        CHWARN("VerilatorBackend: dlopen of %s failed: %s",
+               compiled_so_path_.c_str(), r.error().message.c_str());
     }
 
-    if (!build_port_access_table()) {
-        CHERROR("VerilatorBackend: port access table rejected the design "
-                "(see prior error for the offending port)");
+    // build_port_access_table is fatal: any failure (null ctx, port
+    // bitwidth > 64, etc.) propagates as VerilatorErrorCode.
+    if (auto r = build_port_access_table(); !r) {
         close_top();
-        return false;
+        return r;
     }
 
     // verilator-issue-25-fix: Verilator initializes signals to X, which
@@ -364,7 +372,7 @@ bool VerilatorBackend::initialize(ch::core::context *ctx,
         if (eval_fn_) eval_fn_(top_instance_);
     }
 
-    return true;
+    return {};
 }
 
 void VerilatorBackend::clear() {
@@ -376,14 +384,14 @@ void VerilatorBackend::clear() {
     data_map_ = nullptr;
 }
 
-bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
+VerilatorResult VerilatorBackend::generate_verilog(ch::core::context *ctx) {
     verilogwriter writer(ctx);
     {
         std::ofstream out(verilator_work_dir_ + "/top.v");
         if (!out.is_open()) {
-            CHERROR("Cannot open %s/top.v for writing",
-                    verilator_work_dir_.c_str());
-            return false;
+            return std::unexpected(VerilatorError{
+                VerilatorErrorCode::VerilogGeneration,
+                "Cannot open " + verilator_work_dir_ + "/top.v for writing"});
         }
         writer.print(out);
         out.close();
@@ -398,9 +406,9 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
     {
         std::ofstream out(verilator_work_dir_ + "/sim_main.cpp");
         if (!out.is_open()) {
-            CHERROR("Cannot open %s/sim_main.cpp for writing",
-                    verilator_work_dir_.c_str());
-            return false;
+            return std::unexpected(VerilatorError{
+                VerilatorErrorCode::VerilogGeneration,
+                "Cannot open " + verilator_work_dir_ + "/sim_main.cpp for writing"});
         }
         out <<
             "// Generated by VerilatorBackend (ADR-035 §M1).\n"
@@ -448,10 +456,10 @@ bool VerilatorBackend::generate_verilog(ch::core::context *ctx) {
         CHINFO("VerilatorBackend: wrote %s/sim_main.cpp",
                verilator_work_dir_.c_str());
     }
-    return true;
+    return {};
 }
 
-bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
+VerilatorResult VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
     ++invoke_verilator_call_count_;
     // ADR-035 §M1.0 (R1 fix): emit a dlopen-able libVtop.so instead of
     // a static executable. Two-phase: verilator --cc generates the
@@ -466,7 +474,9 @@ bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
         << (trace_enabled_ ? "--trace " : "")
         << "top.v sim_main.cpp 2>&1";
     if (!run_shell(cmd.str())) {
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::VerilatorCompile,
+            "verilator --cc failed in " + verilator_work_dir_});
     }
     // Link all generated objects + sim_main.cpp into libVtop.so.
     // verilator --cc puts Vtop*.cpp inside obj_dir/; sim_main.cpp
@@ -492,18 +502,28 @@ bool VerilatorBackend::invoke_verilator(const std::string & /*verilog_path*/) {
              : verilator_root_) << "/include "
          << "-pthread -lz 2>&1";
 
-    return run_shell(link.str());
+    if (!run_shell(link.str())) {
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::VerilatorCompile,
+            "g++ -shared link of libVtop.so failed in " +
+                verilator_work_dir_ + "/obj_dir"});
+    }
+    return {};
 }
 
-bool VerilatorBackend::dlopen_top(const std::string &so_path) {
+VerilatorResult VerilatorBackend::dlopen_top(const std::string &so_path) {
     // ADR-035 §M1.0: dlopen libVtop.so (R1 fix); cache fn ptrs.
     if (so_path.empty() || !path_exists(so_path)) {
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::Dlopen,
+            "libVtop.so path empty or missing: " + so_path});
     }
     dl_handle_ = dlopen(so_path.c_str(), RTLD_LAZY | RTLD_LOCAL);
     if (!dl_handle_) {
-        CHWARN("dlopen failed: %s", dlerror());
-        return false;
+        std::string err = dlerror() ? dlerror() : "unknown";
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::Dlopen,
+            "dlopen(" + so_path + ") failed: " + err});
     }
     using FactoryFn = void *(*)();
     using EvalFn = void (*)(void *);
@@ -525,24 +545,25 @@ bool VerilatorBackend::dlopen_top(const std::string &so_path) {
         dlsym(dl_handle_, "get_field_ptr_Vtop"));
     delete_fn_ = deleter;
     if (!factory || !eval_fn_ || !final_fn_ || !delete_fn_) {
-        CHWARN("dlsym missing symbol: factory=%p eval=%p final=%p "
-               "delete=%p", (void *)factory, (void *)(void *)eval_fn_,
-               (void *)final_fn_, (void *)delete_fn_);
         dlclose(dl_handle_);
         dl_handle_ = nullptr;
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::DlsymMissing,
+            "required Vtop symbol missing (factory/eval/final/delete)"});
     }
     top_instance_ = factory();
     CHINFO("VerilatorBackend: dlopen'd %s, created Vtop at %p",
            so_path.c_str(), top_instance_);
-    return true;
+    return {};
 }
 
-bool VerilatorBackend::build_port_access_table() {
+VerilatorResult VerilatorBackend::build_port_access_table() {
     port_access_.clear();
     clock_node_id_ = UINT32_MAX;
     if (!ctx_) {
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::PortAccessTable,
+            "build_port_access_table called with null ctx_"});
     }
     auto nodes = ctx_->get_eval_list();
     for (auto *node : nodes) {
@@ -564,13 +585,16 @@ bool VerilatorBackend::build_port_access_table() {
         // are 1-bit by convention regardless of what size() returns.
         if ((t == lnodetype::type_input ||
              t == lnodetype::type_output) && node->size() > 64) {
-            CHERROR("VerilatorBackend: port id %u has bitwidth %u > 64; "
-                    "wide signals are unsupported (Verilator QData "
-                    "accessor cannot transport VlWide vectors). Use "
-                    "the interpreter or JIT backend for designs with "
-                    "ports wider than 64 bits.", node->id(), node->size());
             port_access_.clear();
-            return false;
+            return std::unexpected(VerilatorError{
+                VerilatorErrorCode::PortBitwidthOverflow,
+                "port id " + std::to_string(node->id()) +
+                    " has bitwidth " + std::to_string(node->size()) +
+                    " > 64; wide signals are unsupported "
+                    "(Verilator QData accessor cannot transport "
+                    "VlWide vectors). Use the interpreter or JIT "
+                    "backend for designs with ports wider than 64 "
+                    "bits."});
         }
         if (t == lnodetype::type_clock) {
             clock_node_id_ = node->id();
@@ -602,7 +626,7 @@ bool VerilatorBackend::build_port_access_table() {
     CHINFO("VerilatorBackend: port_access_ built with %zu entries, "
            "clock_node_id_=%u reset_node_id_=%u",
            port_access_.size(), clock_node_id_, reset_node_id_);
-    return true;
+    return {};
 }
 
 void VerilatorBackend::sync_inputs_to_vtop(bool exclude_clock) {
@@ -812,13 +836,18 @@ std::string VerilatorBackend::cache_path_for_key(const std::string &cache_key) {
            "/libVtop.so";
 }
 
-bool VerilatorBackend::writeback_to_cache(const std::string &cache_key) {
+VerilatorResult VerilatorBackend::writeback_to_cache(const std::string &cache_key) {
     if (cache_key.empty() || compiled_so_path_.empty()) {
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::CacheWriteback,
+            "cache_key or compiled_so_path_ empty"});
     }
     std::string dst = cache_path_for_key(cache_key);
     if (dst.empty() || !path_exists(compiled_so_path_)) {
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::CacheWriteback,
+            "cache_path_for_key returned empty or source missing: " +
+                compiled_so_path_});
     }
     // mkdir -p ~/.cache/cpphdl/verilator/<key>/ (recursive: each
     // intermediate segment must be created individually because
@@ -833,30 +862,33 @@ bool VerilatorBackend::writeback_to_cache(const std::string &cache_key) {
             std::string seg = dir_only.substr(0, pos);
             if (seg.empty()) continue;
             if (mkdir(seg.c_str(), 0755) != 0 && errno != EEXIST) {
-                CHWARN("VerilatorBackend: cannot create cache dir %s: %s",
-                       seg.c_str(), std::strerror(errno));
-                return false;
+                return std::unexpected(VerilatorError{
+                    VerilatorErrorCode::CacheWriteback,
+                    "cannot create cache dir " + seg + ": " +
+                        std::strerror(errno)});
             }
         }
     }
     std::ifstream src(compiled_so_path_, std::ios::binary);
     if (!src.is_open()) {
-        CHWARN("VerilatorBackend: cannot reopen %s for cache write-back",
-               compiled_so_path_.c_str());
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::CacheWriteback,
+            "cannot reopen " + compiled_so_path_ + " for cache write-back"});
     }
     std::ofstream out(dst, std::ios::binary | std::ios::trunc);
     if (!out.is_open()) {
-        CHWARN("VerilatorBackend: cannot open cache dst %s", dst.c_str());
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::CacheWriteback,
+            "cannot open cache dst " + dst});
     }
     out << src.rdbuf();
     if (!out.good()) {
-        CHWARN("VerilatorBackend: cache copy stream failed");
-        return false;
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::CacheWriteback,
+            "cache copy stream failed writing " + dst});
     }
     CHINFO("VerilatorBackend: cached artifact at %s", dst.c_str());
-    return true;
+    return {};
 }
 
 } // namespace ch

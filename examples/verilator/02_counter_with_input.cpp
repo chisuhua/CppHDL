@@ -1,6 +1,7 @@
 // examples/verilator/02_counter_with_input.cpp
 // Verilator 仿真后端 - 带输入端口的计数器
-// 演示: ch_in<> 输入 + VCD toggle + 元数据访问
+// 演示: ch_in<> 输入 + VCD toggle + 元数据访问 +
+// verilator-std-expected rich error handling via try_initialize().
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/verilator_backend.h"
@@ -25,8 +26,18 @@ int main() {
     ch::data_map_t data_map;
     std::filesystem::create_directories("/tmp/vl_counter_in");
     ch::VerilatorBackend backend("/tmp/vl_counter_in");
-    if (!backend.initialize(ctx.get(), data_map)) {
-        std::cerr << "Failed to initialize Verilator backend\n";
+    // verilator-std-expected: try_initialize() returns std::expected<void,
+    // VerilatorError>. On failure, .error() yields the rich struct so
+    // the caller can log code/message/location to surface exactly which
+    // of the 8 VerilatorErrorCode variants triggered.
+    auto result = backend.try_initialize(ctx.get(), data_map);
+    if (!result) {
+        const auto &err = result.error();
+        std::cerr << "Failed to initialize Verilator backend: "
+                  << "code=" << static_cast<int>(err.code)
+                  << " at " << err.location.file_name() << ":"
+                  << err.location.line() << " — " << err.message
+                  << '\n';
         return 1;
     }
 

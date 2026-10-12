@@ -308,6 +308,11 @@ add_catch_test(test_verilator_backend test_verilator_backend.cpp)
 # ADR-035 issue #25 / Phase 4.1+: e2e harness — real Verilator compile
 # + dlopen + counter verification (closes R5/R7 in tasks v2).
 add_catch_test(test_verilator_e2e_harness test_verilator_e2e_harness.cpp)
+# verilator-std-expected: VerilatorError type contract + bool wrapper
+# backward compat + source_location capture. No verilator toolchain
+# required — exercises the type API and the try_initialize() rich-error
+# return path against VerilogGeneration (unwritable work_dir).
+add_catch_test(test_verilator_error_flow test_verilator_error_flow.cpp)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)
