@@ -60,10 +60,29 @@ add_catch_test(test_verilator_three_way test_verilator_three_way.cpp)
 # Gap F2 closure: AXI4-Lite e2e test through VerilatorBackend (real verilator
 # compile + dlopen + multi-cycle write/read). Skipped when verilator not on
 # PATH (PR matrix). See test_axi_lite_verilator_e2e.cpp header for context.
+#
+# ADR-035 verilator-PATH fix (2026-10-13): the three VerilatorBackend tests
+# (`test_axi_lite_verilator_e2e`, `test_verilator_backend`,
+# `test_verilator_e2e_harness`) all SKIP every TEST_CASE when `verilator`
+# is not on PATH. Catch2 then returns exit code 4 ("all tests skipped"),
+# which ctest treats as a failure — so a missing `$PATH` for verilator
+# silently looks like 3 flaky tests. We inject the install prefix's bin
+# directory (where `${CPPHDL_VERILATOR_WRAPPER}` lives) into the child
+# process PATH via the ctest `ENVIRONMENT` property, so `which verilator`
+# and `popen("verilator ...")>` succeed and the tests actually execute
+# their ASSERTIONS. Falls back to "verilator on PATH" behavior when
+# CPPHDL_VERILATOR_WRAPPER is empty (BUILD_VERILATOR=OFF local-dev mode).
+if(CPPHDL_VERILATOR_WRAPPER)
+    get_filename_component(_vl_bin_dir "${CPPHDL_VERILATOR_WRAPPER}" DIRECTORY)
+    set(_vl_path_env "PATH=$ENV{PATH}:${_vl_bin_dir}")
+else()
+    set(_vl_path_env "")
+endif()
 add_catch_test(test_axi_lite_verilator_e2e test_axi_lite_verilator_e2e.cpp)
 set_tests_properties(test_axi_lite_verilator_e2e PROPERTIES
     LABELS "base"
     RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
 )
 
 # 基础功能测试
@@ -318,6 +337,7 @@ add_catch_test(test_verilator_backend test_verilator_backend.cpp)
 set_tests_properties(test_verilator_backend PROPERTIES
     LABELS "base"
     RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
 )
 # ADR-035 issue #25 / Phase 4.1+: e2e harness — real Verilator compile
 # + dlopen + counter verification (closes R5/R7 in tasks v2).
@@ -325,6 +345,7 @@ add_catch_test(test_verilator_e2e_harness test_verilator_e2e_harness.cpp)
 set_tests_properties(test_verilator_e2e_harness PROPERTIES
     LABELS "base"
     RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
 )
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
