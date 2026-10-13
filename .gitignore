@@ -73,3 +73,25 @@ perf_history.csv
 # 忽略 perf F2 修复机制 sentinel 文件（test_perf_subprocess_isolation 在 RAII 中备份 perf_results.json
 # 为 .__saved/.__saved2，以便从上一次 SIGKILL/ctest TIMEOUT 中恢复；这些是运行时临时残留）
 perf_results.json.__saved*
+
+# 忽略 CMake in-source build 产物
+# 任何在源码树就地 cmake . + make 的运行都会生成这些。
+# 规范姿势: cmake -B build && cmake --build build
+/Makefile
+/*/Makefile
+/*/*/Makefile
+/*/*/*/Makefile
+/CTestTestfile.cmake
+/*/CTestTestfile.cmake
+/*/*/CTestTestfile.cmake
+
+# 忽略 CMake ExternalProject_Add 产物 (verilator-build/verilator-install/verilator-prefix)
+# 这些是 third_party/verilator 子模块的隔离构建输出，不应入库
+verilator-build/
+verilator-install/
+verilator-prefix/
+
+# 忽略 verilator_backend 运行时输出（test_verilator_* 单元测试 + e2e harness 写到工作区）
+# 这些 .v 文件是 Verilator 编译中间产物，每次跑测试都重新生成
+/tests/*.v
+/tests/**/*.v
