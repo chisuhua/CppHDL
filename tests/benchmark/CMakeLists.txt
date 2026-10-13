@@ -80,24 +80,46 @@ endif()
 # provides ~2× safety margin over the measured 930 s; the previous
 # TIMEOUT 900 was insufficient and caused ctest to kill the test mid
 # TC-09 (F2 regression).
+#
+# perf_report_consistency (W7) fix (2026-10-13): the test asserts
+# that perf_results.{json,csv,md} all carry the same numeric
+# value for the same row. The cleanest contract is "all three
+# files were produced by a single perf_tests invocation in this
+# ctest run". If a developer manually ran `perf_tests --report=csv`
+# earlier, the leftover csv+md would pair with the freshly-written
+# json from this ctest call, producing the cross-run mismatch we
+# observed on 2026-10-12 (js=16586.591 from 22:08:23 ctest vs
+# cs=15562.788 from 22:08:22 manual run — different ms noise).
+#
+# Fix: add a FIXTURES_SETUP test `perf_results_clean` that wipes
+# any stale perf_results.{json,csv,md} in ${CMAKE_SOURCE_DIR}, then
+# have perf_tests / perf_three_way FIXTURES_REQUIRED it. CTest
+# runs the cleanup before the perf-tests jobs, so the three files
+# are guaranteed to come from this ctest run only.
 if(CPPHDL_VERILATOR_WRAPPER)
-    add_test(NAME perf_tests COMMAND perf_tests --all
-        --verilator=${CPPHDL_VERILATOR_WRAPPER}
-        --report=json --report=csv --report=md)
+    add_test(NAME perf_tests
+        COMMAND perf_tests --all
+            --verilator=${CPPHDL_VERILATOR_WRAPPER}
+            --report=json --report=csv --report=md
+    )
     set_tests_properties(perf_tests PROPERTIES
         LABELS "perf"
         TIMEOUT 1800
         ENVIRONMENT "VERILATOR_ROOT=${CPPHDL_VERILATOR_DIR}"
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        FIXTURES_REQUIRED "perf_results_clean"
         RESOURCE_LOCK "perf_results_file"
     )
 else()
-    add_test(NAME perf_tests COMMAND perf_tests --all
-        --report=json --report=csv --report=md)
+    add_test(NAME perf_tests
+        COMMAND perf_tests --all
+            --report=json --report=csv --report=md
+    )
     set_tests_properties(perf_tests PROPERTIES
         LABELS "perf"
         TIMEOUT 1800
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        FIXTURES_REQUIRED "perf_results_clean"
         RESOURCE_LOCK "perf_results_file"
     )
 endif()
@@ -110,21 +132,48 @@ endif()
 # 逗号语法(perf_main.cpp:644-652);必须用 --tc=07 --tc=08 两个独立 flag。
 # perf_three_way 不注入 VERILATOR_ROOT(避免路径不一致时 wrapper %Error),
 # wrapper 在未设置时自设已足够 (third_party/verilator/bin/verilator:101)。
+# perf_three_way also writes perf_results.json. Because it shares the
+# file with perf_tests (RESOURCE_LOCK guarantees serialized execution),
+# we still FIXTURES_REQUIRED "perf_results_clean" so consumers
+# downstream of `perf_report_consistency` see only the most recent
+# ctest run's output.
 if(CPPHDL_VERILATOR_WRAPPER)
-    add_test(NAME perf_three_way COMMAND perf_tests
-        --tc=07 --tc=08
-        --verilator=${CPPHDL_VERILATOR_WRAPPER}
-        --report=json)
+    add_test(NAME perf_three_way
+        COMMAND perf_tests
+            --tc=07 --tc=08
+            --verilator=${CPPHDL_VERILATOR_WRAPPER}
+            --report=json --report=csv --report=md
+    )
 else()
-    add_test(NAME perf_three_way COMMAND perf_tests
-        --tc=07 --tc=08
-        --report=json)
+    add_test(NAME perf_three_way
+        COMMAND perf_tests
+            --tc=07 --tc=08
+            --report=json --report=csv --report=md
+    )
 endif()
 set_tests_properties(perf_three_way PROPERTIES
     LABELS "perf;verilator"
     TIMEOUT 360
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    FIXTURES_REQUIRED "perf_results_clean"
     RESOURCE_LOCK "perf_results_file"
+)
+
+# perf_results_clean: FIXTURES_SETUP test that wipes any stale
+# perf_results.{json,csv,md} from a prior ctest pass. Runs once
+# per CTest invocation before perf_tests / perf_three_way. Trivial
+# CTest wrapper around `${CMAKE_COMMAND} -E rm -f` so no build of
+# an extra executable is needed.
+add_test(NAME perf_results_clean
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+        "${CMAKE_SOURCE_DIR}/perf_results.json"
+        "${CMAKE_SOURCE_DIR}/perf_results.csv"
+        "${CMAKE_SOURCE_DIR}/perf_results.md"
+)
+set_tests_properties(perf_results_clean PROPERTIES
+    LABELS "perf"
+    FIXTURES_SETUP "perf_results_clean"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 target_compile_features(perf_tests PRIVATE cxx_std_23)

@@ -124,7 +124,10 @@ set_tests_properties(perf_jit_smallgraph PROPERTIES LABELS "perf" TIMEOUT 60)
 # W3: build_us instrumentation (perf-report-followup.md Task 3)
 add_catch_test(perf_build_us benchmark/test_build_us_present.cpp)
 set_tests_properties(perf_build_us PROPERTIES LABELS "perf" TIMEOUT 30
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    FIXTURES_REQUIRED "perf_results_clean"
+    DEPENDS "perf_tests;perf_three_way"
+    RESOURCE_LOCK "perf_results_file")
 # W7: md/csv/json byte-equality (perf-report-followup.md Task 7)
 # CATCH_AMALGAMATED_CUSTOM_MAIN + CATCH_CONFIG_RUNNER disable the
 # default main() in catch_amalgamated.cpp so the test can provide its
@@ -139,7 +142,8 @@ target_compile_definitions(perf_report_consistency PRIVATE
 )
 set_tests_properties(perf_report_consistency PROPERTIES LABELS "perf" TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    DEPENDS "perf_tests;perf_subprocess_isolation"
+    DEPENDS "perf_tests;perf_subprocess_isolation;perf_three_way"
+    FIXTURES_REQUIRED "perf_results_clean"
     RESOURCE_LOCK "perf_results_file")
 # F2 (fix-perf-subprocess-isolation): regression test for K1 ORC JIT
 # cross-DUT state pollution mitigation. Verifies that perf_tests --all
@@ -185,7 +189,8 @@ add_test(NAME perf_regression
 )
 set_tests_properties(perf_regression PROPERTIES
     LABELS "perf" TIMEOUT 60
-    DEPENDS "perf_tests;perf_subprocess_isolation"
+    DEPENDS "perf_tests;perf_subprocess_isolation;perf_three_way"
+    FIXTURES_REQUIRED "perf_results_clean"
     RESOURCE_LOCK "perf_results_file"
 )
 
