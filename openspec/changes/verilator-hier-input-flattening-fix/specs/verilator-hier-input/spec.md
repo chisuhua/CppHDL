@@ -6,10 +6,9 @@
 
 #### Scenario: 顶层 ch_in + ch_module 子输入 + ch_reg + 顶层 ch_out 层次化设计
 
-- **WHEN** fixture 为 `ch_in<ch_uint<32>> a` + `ch_in<ch_bool> b` + `ch::ch_module<SubComp>` + `sub.io().a_in = a`（带 driver） + `sub.io().b_in = b`（带 driver） + `sub.io().out = sub.reg`（reg-driven ch_out）
+- **WHEN** fixture 为 `ch_in<ch_uint<32>> a` + `ch_in<ch_bool> b` + `ch::ch_module<SubComp>` + `sub.io().a_in <<= a`（带 driver） + `sub.io().b_in <<= b`（带 driver） + `sub.io().out <<= sub.reg`（reg-driven ch_out）
 - **AND** 跑 verilator 仿真
-- **THEN** 生成的 Verilog `top.v` 中**不存在** `input [31:0] top_a` 或 `input top_b`（被 filter 掉），但**存在** `logic [31:0] top__a;` + `assign top__a = top_a;` 与 `logic top__b;` + `assign top__b = top_b;`（由 fixture 内部驱动）
-- **AND** SubComp 内部的 `sub.a_in`（verilator 内部 wire）通过内部 assign 接到 `top__a`，verilator 仿真看到正确的 driver 值
+- **THEN** 生成的 Verilog `top.v` 中 `input [31:0] a` 与 `input top_b` **仍存在**（顶层 ch_in 无 driver 保持为 input port），但**子模块输入被降级**：`sub.io().a_in` 不再是顶层 input port 而是 `logic [31:0] sub_io_a_in;`，并 emit `assign sub_io_a_in = a;`（driver 通过 fixture 内部传递）
 - **AND** `sub.reg` 的 always_ff @posedge clk 触发后，`sub.io().out`（ch_out 端口）的 Vtop 字段在 `sync_outputs_from_vtop()` 后可被 `data_map_[id]` 读出
 - **NOTE**: 这个 invariant 是 verilator-rv32i-pipeline-e2e (2026-10-14) 与 test_axi_lite_verilator_e2e WriteReadReg0 真正缺失的能力，issue #25 的残余症状（"M0.5 dispatch 不传播寄存器"）是被误诊的
 

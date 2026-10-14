@@ -32,22 +32,25 @@ Oracle 深入调查（2026-10-14 后续诊断）重新定位根因：`codegen_ve
 
 ### D1：filter 掉有 driver 的 input 节点从 print_header
 
-- 决策：`print_header` (L307-316) 跳过 `inputimpl::driver() != nullptr` 的节点；改在 `print_decl` (L320-326) 把它们 emit 为内部 `logic`
-- 实现（伪代码）：
+- 决策：`print_header` (L290-374) 跳过 `inputimpl::driver() != nullptr` 的节点；改在 `print_decl` (L397-473, type_input case L412-415) 把它们 emit 为内部 `logic`（复用 `emit_signal_decl` L257-268）
+- 实现（伪代码，oracle 建议的 patch sketch）：
   ```cpp
-  void VerilogWriter::print_header(...) {
-      for (auto& node : input_nodes) {
-          if (is_input_with_driver(node)) continue;  // not a top port
-          emit "input [w-1:0] name;";
+  // print_header input 追加处 (L336-340):
+  for (auto *port_node : ports) {
+      if (port_node->type() == ch::core::lnodetype::type_input) {
+          // Driven submodule inputs are internal logic, not top ports.
+          if (static_cast<ch::core::inputimpl *>(port_node)->driver() == nullptr)
+              filtered_ports.push_back(port_node);
       }
   }
-  void VerilogWriter::print_decl(...) {
-      for (auto& node : all_nodes) {
-          if (is_input_with_driver(node)) {
-              emit "logic [w-1:0] name;";
-          }
-      }
-  }
+
+  // print_decl type_input case (L412-415):
+  case ch::core::lnodetype::type_input:
+      if (static_cast<ch::core::inputimpl *>(node)->driver() != nullptr)
+          emit_signal_decl(out, node);  // internal `logic`, was top port
+      inputs.push_back(node);
+      declared_nodes_.insert(node);
+      break;
   ```
 - 理由：
   - input port 的真正功能是 testbench 驱动；当 fixture 内部 driver 提供了值时，input 不应再出现
@@ -55,19 +58,26 @@ Oracle 深入调查（2026-10-14 后续诊断）重新定位根因：`codegen_ve
 
 ### D2：print_logic 新增 type_input 分支
 
-- 决策：与 `type_output` 分支对称 —— 从 input node 的 `src(0)` 走 proxy 链 walk 找到真正 driver，emit `assign <in_name> = <driver_name>;`
-- 实现（伪代码）：
+- 决策：与 `type_output` 分支对称 —— 从 input node 的 `driver()` 走 proxy 链 walk 找到真正 driver，emit `assign <in_name> = <driver_name>;`
+- 实现（伪代码，oracle 建议的 patch sketch）：
   ```cpp
-  void VerilogWriter::print_logic(node, ...) {
-      if (is_input_with_driver(node)) {
-          // walk proxy chain like type_output does
-          lnodeimpl* driver = walk_proxy_chain(node->src(0));
-          std::string driver_name = node_names_[driver];
-          emit "assign " + node_names_[node] + " = " + driver_name + ";";
-      }
+  // print_logic 新 case (插到 L531 type_output 前):
+  case ch::core::lnodetype::type_input: {
+      auto *in = static_cast<ch::core::inputimpl *>(node);
+      ch::core::lnodeimpl *drv = in->driver();
+      // Walk only UNNAMED proxies; named wires are declared+assigned already.
+      while (drv && drv->type() == ch::core::lnodetype::type_proxy &&
+             !node_names_.count(drv) && drv->num_srcs() > 0)
+          drv = drv->src(0);
+      if (drv && node_names_.count(drv) && node_names_.count(node))
+          out << "    assign " << node_names_[node] << " = "
+              << node_names_[drv] << ";\n";
+      printed_logic_nodes_.insert(node);
+      break;
   }
   ```
-- 理由：driver 链 walk 是 `print_logic` 在 type_output 分支已经实现的，复用同一逻辑避免逻辑漂移
+- 关键：**无** `driver_name[0] != '_'` 检查（不复制 NG3 bug —— `type_output` 分支 L551 的静默丢弃不应在本 change 传染给 input 路径）
+- 理由：driver 链 walk 条件设为"proxy 且无名字"，有名字就直接引用 —— 对 RV32I 的 `instr_data <<= word_sel`（named proxy → mem read data proxy，两者都已声明）和 AXI 的 input-to-input（driver 是顶层 port）都成立
 
 ### D3：backend 同步跳过被驱动的 input
 
@@ -90,9 +100,10 @@ Oracle 深入调查（2026-10-14 后续诊断）重新定位根因：`codegen_ve
 
 ### D5：删除 RV32I documented SKIP
 
-- 决策：`test_verilator_complex_e2e.cpp:374-381` 删除 `if (perf_a_val != perf_b_val) { SKIP(...); }` 块，改回 `REQUIRE(perf_a_val == perf_b_val); REQUIRE(perf_a_val == 3);`
-- 理由：D1+D2 修复后 RV32I fixture 真跑通
-- 风险：`perf_instructions` 由 `commit_count` 驱动，commit_count 依赖 EX/MEM/WB 流水线寄存器 + hazard unit 组合 + EX 阶段 alu 累加。如果 D1+D2 不完全修复所有 issue #25 残余，RV32I 测试可能仍失败
+- 决策：`test_verilator_complex_e2e.cpp:374-381` 删除 `if (perf_a_val != perf_b_val) { SKIP(...); }` 块，改回 `REQUIRE(perf_a_val == perf_b_val); REQUIRE(perf_a_val == 12);`
+- 终值 12 而非 3 的原因：fixture imem 4-word 程序循环回绕（`bits<3,2>(cpu.io().instr_addr)` 模 4），3 条 addi/add 指令每条 commit_valid 持续累加；`rv32i_pipeline.h:221` `commit_count->next = commit_count + commit_valid` 每拍无条件累加；20 cycle 中流水线填充 (~5 cycle) 后 commit_count 每 cycle +1，cycle 20 时约累加到 12。`3` 是 `commit_count` 首次被静态读的误解，实际跑 20 cycle 后稳定在 12
+- 理由：D1+D4 修复后 RV32I fixture 真跑通；期望值 12（不是 3）已与 fixture 注释 (`test_verilator_complex_e2e.cpp:362-369` "Interpreter produces the correct value (12)") 一致
+- 风险：`perf_instructions` 由 `commit_count` 驱动，commit_count 依赖 EX/MEM/WB 流水线寄存器 + hazard unit 组合 + EX 阶段 alu 累加。如果 D1+D4 不完全修复所有 issue #25 残余，RV32I 测试可能仍失败
 
 ### D6：spec invariant 5 放宽
 
@@ -114,7 +125,7 @@ Oracle 深入调查（2026-10-14 后续诊断）重新定位根因：`codegen_ve
 | AXI4-Lite rdata 真断言可能仍失败（其他未发现 issue） | 中 | 阶段 2 GREEN 跑测试时实测；若仍失败 → D8 (b) descope 单个 assertion，**不阻塞 archive** |
 | RV32I perf 真断言可能仍失败（issue #25 真正残余） | 中 | 同上；fixture 已 SKIP，能容纳失败 |
 | codegen_verilog.cpp 改动面广（header + decl + logic + backend）| 中 | 4 个独立 commit（per D7 AGENTS.md "commit 频繁"） |
-| cache key 变化导致 perf_regression baseline 失效 | 低 | 同步更新 `tests/benchmark/perf_baseline.json`（已知机制） |
+| cache key 变化导致 perf_regression baseline 失效 | **不适用** | 扁平设计（Counter / SpiFsm / perf TC-07/08/09）生成的 verilog 和 sim_main 逐字节不变（accept lambda 只在存在 driven input 时才改变输出）→ cache key 不变 → 零重编译。**`tests/benchmark/perf_baseline.json` 不需要重基线**（perf TC 全是扁平设计，verilator 编译时间不在 perf 计量内）。只有层次化 verilator fixture（RV32I e2e、AXI4-Lite TC1/TC2）首次各吃一次冷编译（~30-90s），之后回暖 |
 
 ## 验证矩阵
 

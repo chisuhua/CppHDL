@@ -15,7 +15,7 @@
 
 - [ ] 2.1 `src/codegen_verilog.cpp::print_header` (L307-316) filter 掉 `inputimpl::driver() != nullptr` 的节点
       ⏳ Pending
-- [ ] 2.2 `src/codegen_verilog.cpp::print_decl` (L320-326) 把被驱动的 input 声明为 `logic` wire
+- [ ] 2.2 `src/codegen_verilog.cpp::print_decl` (L397-473, type_input case L412-415) 把被驱动的 input 声明为 `logic` wire（调用 `emit_signal_decl` L257-268）
       ⏳ Pending
 - [ ] 2.3 `src/codegen_verilog.cpp::print_logic` (L486-563) 新增 `type_input` 分支，emit `assign <in> = <driver>;`
       ⏳ Pending
@@ -35,11 +35,11 @@
 
 - [ ] 3.1 `tests/test_axi_lite_verilator_e2e.cpp:276` 改为 `REQUIRE(rvalid_val == 1)` + 加 `REQUIRE(rdata_val == 0xDEADBEEF)`
       ⏳ Pending
-- [ ] 3.2 `tests/test_verilator_complex_e2e.cpp:374-381` 删除 `if (perf_a_val != perf_b_val) { SKIP(...); }` 块，改回 `REQUIRE(perf_a_val == perf_b_val); REQUIRE(perf_a_val == 3);`
+- [ ] 3.2 `tests/test_verilator_complex_e2e.cpp:374-381` 删除 `if (perf_a_val != perf_b_val) { SKIP(...); }` 块，改回 `REQUIRE(perf_a_val == perf_b_val); REQUIRE(perf_a_val == 12);`（**12 非 3**：imem 4-word 循环回绕，3 条 ALU 指令 commit_valid 持续累加 20 cycle，cycle 20 时 perf_instructions ≈ 12，详见 design D5）
       ⏳ Pending
 - [ ] 3.3 跑 `ctest -R "test_verilator_(complex_e2e|axi_lite_verilator_e2e)"` —— RV32I 真跑通 + AXI4-Lite rdata 真断言通过
       ⏳ Pending
-- [ ] 3.4 如果 3.3 任一失败：分析失败原因（trace parity diff / codegen 漏 case / 其他 issue #25 残余），D8 (b) descope 对应 assertion 改为 SKIP + 记录到 follow-up change（**不阻塞本 change archive**）
+- [ ] 3.4 如果 3.3 任一失败：**不**用 D8 (b) descope（这是连续 4 个 change 的第 4 个，D8 (b) 已被过度使用）—— 回到阶段 2 修正 codegen/backed 代码，**必须**让 RV32I perf==12 与 AXI4-Lite rdata==0xDEADBEEF 真实通过后才 archive。本 change 是 issue #25 真正根因修复，不能再 descope
       ⏳ Pending
 - [ ] 3.5 `openspec/specs/verilator-e2e-coverage/spec.md` invariant 5 放宽（从"MUST NOT 依赖 always_ff 寄存器传播"改为"always_ff 寄存器由 Verilator 自动触发，寄存器驱动的 ch_out 是合法观测点"）
       ⏳ Pending
