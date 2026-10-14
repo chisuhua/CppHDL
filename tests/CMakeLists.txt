@@ -352,6 +352,19 @@ set_tests_properties(test_verilator_e2e_harness PROPERTIES
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
+# strengthen-verilator-e2e-coverage phase 1: trace parity single-test for
+# 3 fixtures (counter / AXI4-Lite / bundle multi-field). Skips cleanly
+# when verilator is not on PATH; CATCH_AMALGAMATED_CUSTOM_MAIN keeps exit
+# code 0 when ALL tests SKIP (otherwise Catch2 exits with 4 = failure).
+add_catch_test(test_verilator_trace_parity test_verilator_trace_parity.cpp)
+target_compile_definitions(test_verilator_trace_parity PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
+set_tests_properties(test_verilator_trace_parity PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+)
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
 # required — exercises the type API and the try_initialize() rich-error
