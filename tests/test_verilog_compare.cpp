@@ -18,6 +18,7 @@
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/context.h"
+#include "external_tool_helpers.h"
 #include <memory>
 #include <sstream>
 
@@ -64,6 +65,13 @@ TEST_CASE("VerilogGen - CompareEq", "[verilog][gen][compare][eq]") {
     REQUIRE(verilog.find("eq") != std::string::npos);
     REQUIRE(verilog.find(" == ") != std::string::npos);
     REQUIRE(verilog.find("!=") == std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // 2. ne: ch_op::ne -> "assign <name> = lhs != rhs;"

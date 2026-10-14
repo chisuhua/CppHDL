@@ -16,6 +16,7 @@
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/context.h"
+#include "external_tool_helpers.h"
 #include <memory>
 #include <sstream>
 #include <string>
@@ -74,6 +75,15 @@ TEST_CASE("VerilogGen - ArithAdd", "[verilog][gen][arith][add]") {
     // not appear here (catches a regression where add falls through to
     // unary neg emission).
     REQUIRE(verilog.find("=-a") == std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): upgrade the
+    // string-assertion test to also pass verilator --lint-only. SKIPs
+    // cleanly when verilator is not on PATH (PR matrix).
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +130,13 @@ TEST_CASE("VerilogGen - ArithMul", "[verilog][gen][arith][mul]") {
     REQUIRE(verilog.find(" * ") != std::string::npos);
     REQUIRE(verilog.find("input [7:0] a") != std::string::npos);
     REQUIRE(verilog.find("input [7:0] b") != std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // ---------------------------------------------------------------------------

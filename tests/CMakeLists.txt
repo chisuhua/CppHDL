@@ -55,7 +55,15 @@ add_catch_test(test_bundle_literal test_bundle_literal.cpp)
 # verilator-perf-three-way: codegen 字面量 mask 修复测试 (不依赖 verilator 二进制)
 # 验证 ch_uint<N>(literal) 生成的 Verilog 字面量值落在 N 位内,避免触发
 # Verilator "Too many digits for N bit number" 语法错误 (TC-07 depth=1000 关键)
-add_catch_test(test_verilator_three_way test_verilator_three_way.cpp)
+#
+# strengthen-verilator-e2e-coverage D5: file renamed
+# test_verilator_three_way.cpp → test_codegen_literal_mask.cpp (诚信修复
+# 误导命名,源文件 header 注释第 17 行自承 "不依赖 verilator 二进制")。
+# Old ctest name retained as alias below for backwards compatibility.
+add_catch_test(test_codegen_literal_mask test_codegen_literal_mask.cpp)
+add_test(NAME test_verilator_three_way
+         COMMAND test_codegen_literal_mask)
+set_tests_properties(test_verilator_three_way PROPERTIES LABELS "base")
 
 # Gap F2 closure: AXI4-Lite e2e test through VerilatorBackend (real verilator
 # compile + dlopen + multi-cycle write/read). Skipped when verilator not on

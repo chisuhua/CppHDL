@@ -18,6 +18,7 @@
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/context.h"
+#include "external_tool_helpers.h"
 #include <memory>
 #include <sstream>
 
@@ -60,6 +61,13 @@ TEST_CASE("VerilogGen - Shl", "[verilog][gen][shift][shl]") {
     // assign ... = ... ; boundary check (line emitted by print_binary_op).
     REQUIRE(verilog.find("assign") != std::string::npos);
     REQUIRE(verilog.find(";") != std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +97,13 @@ TEST_CASE("VerilogGen - Shr", "[verilog][gen][shift][shr]") {
     REQUIRE(verilog.find("<<") == std::string::npos);
     // The sshr ">>>" must NOT appear (proves we hit shr, not sshr).
     REQUIRE(verilog.find(">>>") == std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // ---------------------------------------------------------------------------

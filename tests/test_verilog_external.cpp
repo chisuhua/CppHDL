@@ -13,6 +13,7 @@
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/context.h"
+#include "external_tool_helpers.h"
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -30,59 +31,16 @@ using namespace ch::core;
 
 namespace {
 
-bool tool_available(const char *cmd) {
-    std::string which_cmd = std::string("which ") + cmd +
-                             " >/dev/null 2>&1";
-    return std::system(which_cmd.c_str()) == 0;
-}
+using ch_test::tool_available;
+using ch_test::run_tool;
+using ch_test::write_to_tempfile;
+using ch_test::ToolResult;
 
 std::string generate_verilog(context *ctx) {
     std::ostringstream oss;
     verilogwriter writer(ctx);
     writer.print(oss);
     return oss.str();
-}
-
-struct ToolResult {
-    int exit_code;
-    std::string stdout_out;
-    std::string stderr_out;
-};
-
-ToolResult run_tool(const std::string &cmd) {
-    ToolResult r{};
-    FILE *pipe = popen(cmd.c_str(), "r");
-    if (!pipe) {
-        r.exit_code = -1;
-        r.stderr_out = "popen failed";
-        return r;
-    }
-    char buf[4096];
-    while (char *line = fgets(buf, sizeof(buf), pipe)) {
-        r.stdout_out += line;
-    }
-    int status = pclose(pipe);
-    if (WIFEXITED(status)) {
-        r.exit_code = WEXITSTATUS(status);
-    } else {
-        r.exit_code = -1;
-    }
-    return r;
-}
-
-std::string write_to_tempfile(const std::string &body,
-                              const std::string &suffix) {
-    char tmpl[] = "/tmp/cpphdl_verilog_XXXXXX";
-    int fd = mkstemp(tmpl);
-    if (fd < 0) {
-        return {};
-    }
-    close(fd);
-    std::string path = std::string(tmpl) + suffix;
-    std::ofstream out(path);
-    out << body;
-    out.close();
-    return path;
 }
 
 } // namespace

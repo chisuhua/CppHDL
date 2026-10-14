@@ -1,4 +1,4 @@
-// tests/test_verilator_three_way.cpp
+// tests/test_codegen_literal_mask.cpp
 //
 // verilator-perf-three-way: codegen 字面量 mask 修复测试
 //
@@ -96,7 +96,7 @@ bool has_overflowing_hex_literal(const std::string &verilog,
 // ============================================================================
 
 TEST_CASE("get_literal_str preserves small values (ch_uint<8>(0) and (1))",
-          "[verilog][verilator]") {
+          "[verilog][codegen][literal-mask]") {
     std::string verilog = generate_verilog_within_ctx([] {
         ch_out<ch_uint<8>> out_port_a("a");
         ch_out<ch_uint<8>> out_port_b("b");
@@ -114,7 +114,7 @@ TEST_CASE("get_literal_str preserves small values (ch_uint<8>(0) and (1))",
 }
 
 TEST_CASE("get_literal_str handles boundary value ch_uint<8>(255)",
-          "[verilog][verilator]") {
+          "[verilog][codegen][literal-mask]") {
     std::string verilog = generate_verilog_within_ctx([] {
         ch_out<ch_uint<8>> out_port("data");
         ch_uint<8> max_8bit(static_cast<uint64_t>(255));  // 边界值, mask 后仍是 8'hff

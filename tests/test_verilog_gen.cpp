@@ -3,6 +3,7 @@
 #include "ch.hpp"
 #include "codegen_verilog.h"
 #include "core/context.h"
+#include "external_tool_helpers.h"
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -155,6 +156,16 @@ TEST_CASE("VerilogGen - RegisterWithComplexLogic", "[verilog][complex]") {
 
     // Should not have unnecessary ports
     REQUIRE(verilog_code.find("io_1") == std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    // Verifies the always_ff @(posedge clk or posedge rst) template
+    // is parseable by verilator (catches always_ff-vs-always-comb
+    // regressions, async-reset syntax errors, etc.).
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog_code);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 TEST_CASE("VerilogGen - LiteralFormatting", "[verilog][literals]") {
@@ -220,6 +231,13 @@ TEST_CASE("VerilogGen - AndReduce", "[verilog][reduce]") {
     REQUIRE(verilog.find("and_reduce") != std::string::npos);
     REQUIRE(verilog.find(" = &") != std::string::npos);
     REQUIRE(verilog.find(";") != std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // 2. OrReduce: ch_op::or_reduce -> `assign name = |src;`
@@ -386,6 +404,13 @@ TEST_CASE("VerilogGen - Zext", "[verilog][extend]") {
     REQUIRE(verilog.find("zext") != std::string::npos);
     REQUIRE(verilog.find("{1'b0}") != std::string::npos);
     REQUIRE(verilog.find("4{1'b0}") != std::string::npos);
+
+    // strengthen-verilator-e2e-coverage phase 4 (D4): lint upgrade.
+    if (ch_test::tool_available("verilator")) {
+        auto r = ch_test::lint_verilog(verilog);
+        INFO("verilator output:\n" + r.stdout_out);
+        REQUIRE(r.exit_code == 0);
+    }
 }
 
 // 11. Sext: ch_op::sext with width growth -> `assign name = {{ext{src[N-1]}},
