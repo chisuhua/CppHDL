@@ -422,6 +422,13 @@ set_tests_properties(test_verilator_complex_e2e PROPERTIES
     ENVIRONMENT "${_vl_path_env}"
     TIMEOUT 600
 )
+# RV32I pipeline headers (`stages/if_stage.h` etc.) use relative
+# includes for sibling files (`rv32i_tcm.h`); the test must have
+# include/cpu/pipeline/ on its path so `#include "stages/if_stage.h"`
+# resolves and the stage's `#include "rv32i_tcm.h"` lands.
+target_include_directories(test_verilator_complex_e2e PRIVATE
+    ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
+)
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
 # required — exercises the type API and the try_initialize() rich-error
