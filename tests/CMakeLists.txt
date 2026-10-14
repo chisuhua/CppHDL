@@ -409,6 +409,19 @@ set_tests_properties(test_verilator_memory_e2e PROPERTIES
     ENVIRONMENT "${_vl_path_env}"
     TIMEOUT 300
 )
+# strengthen-verilator-e2e-coverage phase 7: complex e2e fixtures
+# (rv32i_pipeline + spi_fsm × 2 scenarios). TIMEOUT 600s covers cold
+# verilator compile of complex designs (rough memory max cold ~3-5 min).
+add_catch_test(test_verilator_complex_e2e test_verilator_complex_e2e.cpp)
+target_compile_definitions(test_verilator_complex_e2e PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
+set_tests_properties(test_verilator_complex_e2e PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 600
+)
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
 # required — exercises the type API and the try_initialize() rich-error
