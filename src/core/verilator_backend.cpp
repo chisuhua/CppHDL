@@ -372,6 +372,20 @@ VerilatorResult VerilatorBackend::try_initialize(ch::core::context *ctx,
         if (eval_fn_) eval_fn_(top_instance_);
     }
 
+    // verilator-reset-initial-value-mismatch fix: pulse reset once
+    // (1 → eval → 0 → eval) so the @(posedge default_reset) edge in
+    // always_ff reset branches loads the ch_reg init values into Vtop.
+    // Mirrors the t=0 init semantics of the interpreter side
+    // (Regimpl::create_instruction assigns *init_buf at register
+    // construction). Required for trace parity on designs that have
+    // ch_reg<ch_uint<N>>(INIT_d) with INIT != 0; without it the
+    // verilator model returns 0 + add-addend after tick(1), whereas
+    // the interpreter returns INIT + add-addend. See
+    // openspec/changes/verilator-reset-initial-value-mismatch/design.md
+    // Bug A. Idempotent across repeated initialize() calls (same
+    // INIT value loaded N times → final state == INIT).
+    pulse_reset();
+
     return {};
 }
 
@@ -789,26 +803,38 @@ void VerilatorBackend::eval_sequential(
 }
 
 void VerilatorBackend::reset(ch::data_map_t &data_map) {
-    if (!top_instance_ || !eval_fn_) {
-        return;
-    }
     // verilator-issue-25-fix: drive reset directly via reset_field_ptr_
     // (mirrors the clock toggle pattern in eval_sequential — bypasses
     // the data_map_ round-trip and Verilator's __Vclklast__ bookkeeping).
-    // If the design has no reset port (reset_field_ptr_ is nullptr, the
-    // normal case for designs without async reset), fall back to the
-    // accessor path so we still satisfy the reset contract.
+    // The actual 4-step pulse sequence is shared with try_initialize()
+    // via pulse_reset() so the two paths can't drift.
     data_map_ = &data_map;
+    pulse_reset();
+}
+
+// verilator-reset-initial-value-mismatch: shared 4-step reset pulse.
+// Drives reset high → eval (loads ch_reg init via always_ff reset
+// branch) → reset low → eval (settles into the working state). At
+// t=0 (try_initialize) this loads ch_reg init values; at runtime
+// (reset()) this re-arms all regs to their init. No-op if Vtop is
+// not yet constructed or the design has no async reset port AND no
+// set_input_fn_ accessor.
+void VerilatorBackend::pulse_reset() {
+    if (!top_instance_ || !eval_fn_) {
+        return;
+    }
     if (reset_field_ptr_) {
         *static_cast<uint8_t *>(reset_field_ptr_) = 1;
         eval_fn_(top_instance_);
         *static_cast<uint8_t *>(reset_field_ptr_) = 0;
-    } else if (reset_node_id_ != UINT32_MAX && set_input_fn_) {
-        uint64_t val = 1;
-        set_input_fn_(top_instance_, reset_node_id_, &val);
         eval_fn_(top_instance_);
-        uint64_t val_lo = 0;
-        set_input_fn_(top_instance_, reset_node_id_, &val_lo);
+    } else if (reset_node_id_ != UINT32_MAX && set_input_fn_) {
+        uint64_t hi = 1;
+        set_input_fn_(top_instance_, reset_node_id_, &hi);
+        eval_fn_(top_instance_);
+        uint64_t lo = 0;
+        set_input_fn_(top_instance_, reset_node_id_, &lo);
+        eval_fn_(top_instance_);
     }
 }
 

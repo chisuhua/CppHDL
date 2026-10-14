@@ -601,12 +601,33 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
         // Verilator model starts from the same state as the CppHDL Simulator
         // when no reset pulse is applied (e.g. the CPU PC starts at
         // 0x80000000, matching the vendored ELF harness which skips reset).
+        //
+        // verilator-reset-initial-value-mismatch fix: normalize the
+        // init literal to the register's width before emitting the
+        // Verilog hex literal. Previously the literal kept its native
+        // width (`ch_reg<ch_uint<8>>(10_d)` → `reg <= 4'ha;` since
+        // 10_d's intrinsic width is 4 bits), which produced unstable
+        // Verilog output across `_d`/`_h`/`_b` literal suffix choices.
+        // The reset branch must read `<reg_width>'h<value>` so the
+        // width is always 1:1 with the reg declaration.
         std::string reset_value = "1'b0";
         auto *init_node = node->get_init_val();
         if (init_node && init_node->type() ==
                              ch::core::lnodetype::type_lit) {
             auto *lit = static_cast<ch::core::litimpl *>(init_node);
-            reset_value = get_literal_str(lit->value());
+            ch::core::sdata_type widened(
+                static_cast<uint64_t>(lit->value()),
+                node->size());
+            reset_value = get_literal_str(widened);
+        } else if (init_node) {
+            // Non-literal init (e.g. ch_bool(true)): simulator side
+            // may use a special init path; we conservatively fall back
+            // to 1'b0 in the reset branch. Emit a warning so the
+            // mismatch is visible during the codegen stage rather than
+            // surfacing as a silent trace-parity bug downstream.
+            CHWARN("[print_reg] ch_reg init_node is not type_lit "
+                   "(type=%d); reset branch falls back to 1'b0",
+                   static_cast<int>(init_node->type()));
         }
 
         if (next_node && node_names_.count(next_node)) {

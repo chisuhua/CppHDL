@@ -191,6 +191,14 @@ private:
     void sync_inputs_to_vtop(bool exclude_clock = true);
     void sync_outputs_from_vtop();
 
+    // verilator-reset-initial-value-mismatch: shared 4-step reset
+    // pulse sequence (reset=1 → eval → reset=0 → eval). Used by both
+    // try_initialize() at t=0 (so ch_reg init values are loaded into
+    // the Verilog always_ff reset branch) and reset() at runtime.
+    // Falls back to set_input_fn_ path when reset_field_ptr_ is null
+    // (design without async reset port).
+    void pulse_reset();
+
     // dlopen state — stored fn pointers for Vtop lifecycle + dispatch.
     void *dl_handle_ = nullptr;
     void *top_instance_ = nullptr;  // Vtop*

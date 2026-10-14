@@ -224,14 +224,13 @@ public:
         AbcBundle<ch_uint<N>> bundle;
         bundle.as_master();
 
-        // All three registers start at 0 to avoid the
-        // VerilatorBackend ch_reg initial-value mismatch bug (D8 (b);
-        // deferred to follow-up change). The fixture still exercises
-        // bundle field resolution in verilator — the bug is in reset
-        // reg handling, not in bundle field naming.
+        // RED (verilator-reset-initial-value-mismatch stage 1): temporarily
+        // change reg_b / reg_c to non-zero init values to verify the
+        // fixture surfaces the bug. Will be committed together with the
+        // backend fix in stage 2.
         ch_reg<ch_uint<N>> reg_a(0_d);
-        ch_reg<ch_uint<N>> reg_b(0_d);
-        ch_reg<ch_uint<N>> reg_c(0_d);
+        ch_reg<ch_uint<N>> reg_b(10_d);
+        ch_reg<ch_uint<N>> reg_c(20_d);
         reg_a->next = reg_a + 1_d;
         reg_b->next = reg_b + 2_d;
         reg_c->next = reg_c + 3_d;
