@@ -224,10 +224,11 @@ public:
         AbcBundle<ch_uint<N>> bundle;
         bundle.as_master();
 
-        // RED (verilator-reset-initial-value-mismatch stage 1): temporarily
-        // change reg_b / reg_c to non-zero init values to verify the
-        // fixture surfaces the bug. Will be committed together with the
-        // backend fix in stage 2.
+        // (verilator-reset-initial-value-mismatch): the follow-up change
+        // restored the original design intent — three non-zero init
+        // values that exercise reg init loading via VerilatorBackend's
+        // t=0 reset pulse. After cycle 1 we expect a=1, b=12, c=23
+        // (interpreter == verilator).
         ch_reg<ch_uint<N>> reg_a(0_d);
         ch_reg<ch_uint<N>> reg_b(10_d);
         ch_reg<ch_uint<N>> reg_c(20_d);
