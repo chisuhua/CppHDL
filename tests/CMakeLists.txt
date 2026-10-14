@@ -365,6 +365,17 @@ set_tests_properties(test_verilator_trace_parity PROPERTIES
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
+# strengthen-verilator-e2e-coverage phase 2: bundle e2e fixtures
+# (single-layer / nested / array / chain × 4 scenarios).
+add_catch_test(test_verilator_bundle_e2e test_verilator_bundle_e2e.cpp)
+target_compile_definitions(test_verilator_bundle_e2e PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
+set_tests_properties(test_verilator_bundle_e2e PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+)
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
 # required — exercises the type API and the try_initialize() rich-error
