@@ -395,6 +395,20 @@ set_tests_properties(test_verilator_stream_e2e PROPERTIES
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
+# strengthen-verilator-e2e-coverage phase 6: memory e2e fixtures
+# (sync_fifo + axi4_full burst × 2 scenarios). AxiFull is a heavier
+# design so we set an explicit TIMEOUT 300s (add_catch_test does not
+# support TIMEOUT; must use set_tests_properties).
+add_catch_test(test_verilator_memory_e2e test_verilator_memory_e2e.cpp)
+target_compile_definitions(test_verilator_memory_e2e PRIVATE
+    CATCH_AMALGAMATED_CUSTOM_MAIN
+)
+set_tests_properties(test_verilator_memory_e2e PROPERTIES
+    LABELS "base"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 300
+)
 # verilator-std-expected: VerilatorError type contract + bool wrapper
 # backward compat + source_location capture. No verilator toolchain
 # required — exercises the type API and the try_initialize() rich-error
