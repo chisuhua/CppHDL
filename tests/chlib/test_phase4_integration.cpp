@@ -28,8 +28,8 @@
 
 #include "catch_amalgamated.hpp"
 #include "rv32i_hazard_complete.h"   // 来自 examples/riscv-mini/src
-#include "cpu/cache/i_cache.h"
-#include "cpu/cache/d_cache.h"
+#include "cpu/cache/i_cache_stub.h"
+#include "cpu/cache/d_cache_stub.h"
 
 using namespace riscv;
 using namespace chlib;

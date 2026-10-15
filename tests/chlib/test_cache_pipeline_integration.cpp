@@ -21,8 +21,8 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "catch_amalgamated.hpp"
-#include "cpu/cache/i_cache.h"
-#include "cpu/cache/d_cache.h"
+#include "cpu/cache/i_cache_stub.h"
+#include "cpu/cache/d_cache_stub.h"
 #include "simulator.h"
 
 using namespace chlib;
