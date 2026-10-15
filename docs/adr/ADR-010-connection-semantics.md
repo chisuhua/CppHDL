@@ -1,8 +1,17 @@
 # ADR-010: `<<=` DAG 连接语义
 
-**状态**: ✅ 已采纳  
+**状态**: ✅ 已采纳（§5.2 已被 [ADR-036](./ADR-036-deprecate-hdl-logical-operators.md) 取代）  
 **日期**: 2026-05-06  
 **决策人**: Sisyphus + 用户  
+
+> **§5.2 supersession note (2026-10-16)**:
+> `&&` / `||` on HDL values is now `[[deprecated]]` on all 8 overloads
+> in `include/core/io_logical.h` and `include/core/operators_logic.h`.
+> The deprecation messages, the migration of 233 internal call sites
+> to `&` / `|`, and the implementation order lessons (migration first,
+> attributes second) are recorded in **ADR-036**. The remainder of
+> this ADR (the `<<=` semantics, the connection rules, the IO
+> direction analysis in §1-§4) is unaffected.
 
 ---
 
