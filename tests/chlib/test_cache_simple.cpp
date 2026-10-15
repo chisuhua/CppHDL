@@ -1,7 +1,16 @@
 /**
  * @file test_cache_simple.cpp
  * @brief Cache 模块编译验证测试
+ *
+ * Both ICache / DCache classes are marked [[deprecated]] (2026-10-17
+ * deprecate-cache-stubs); this file intentionally instantiates the
+ * stubs to keep regression coverage of the pass-through semantics
+ * they expose. Suppress the deprecation warning locally so the
+ * zero-warning policy is unaffected.
  */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "catch_amalgamated.hpp"
 #include "cpu/cache/i_cache.h"
@@ -22,3 +31,5 @@ TEST_CASE("DCache Type Check", "[cache][dcache]") {
     DCache dcache{nullptr, "dcache"};
     REQUIRE(true);
 }
+
+#pragma GCC diagnostic pop

@@ -59,6 +59,7 @@ struct ICacheConfig {
  * - `ready := req, miss := false, data := axi_data`
  * 其它"支持功能"(2 路组相联 / Tag 比较 / LRU 替换)在 stub 中并未实现。
  */
+__attribute__((deprecated("Use include/cpu/cache/i_cache_complete.h instead; see root AGENTS.md §KNOWN LIMITATIONS")))
 class ICache : public ch::Component {
 public:
     __io(

@@ -18,7 +18,13 @@
  * - 通过 CMake 的 `target_include_directories` 注入
  *   `${PROJECT_SOURCE_DIR}/examples/riscv-mini/src` 以解析
  *   `rv32i_hazard_complete.h` 头文件。
+ *
+ * ICache / DCache are [[deprecated]] (2026-10-17 deprecate-cache-stubs);
+ * suppress the local warning to preserve regression coverage.
  */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "catch_amalgamated.hpp"
 #include "rv32i_hazard_complete.h"   // 来自 examples/riscv-mini/src
@@ -160,3 +166,5 @@ TEST_CASE("Phase4 Integration - Performance Benchmark", "[phase4][benchmark][chl
 
     SKIP("Rv32iPipelineWithCache not implemented; perf benchmark awaiting reconstruction.");
 }
+
+#pragma GCC diagnostic pop

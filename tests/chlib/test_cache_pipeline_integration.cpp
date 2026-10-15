@@ -12,7 +12,13 @@
  * - 每个 TEST_CASE 使用单独的 ch::ch_device<T>，保证独立 context。
  * - 多 cache 协同（Dual / AXI 双向）测试用 SKIP 标注，等待
  *   Rv32iPipelineWithCache 重建后切换为 ch::ch_module 容器测试。
+ *
+ * ICache / DCache are [[deprecated]] (2026-10-17 deprecate-cache-stubs);
+ * suppress the local warning to preserve regression coverage.
  */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "catch_amalgamated.hpp"
 #include "cpu/cache/i_cache.h"
@@ -162,3 +168,5 @@ TEST_CASE("Cache-Pipeline - AXI Interface", "[integration][axi]") {
     SKIP("AXI cross-cache burst test needs Rv32iPipelineWithCache wrapper; "
          "individual cache AXI channels verified above.");
 }
+
+#pragma GCC diagnostic pop

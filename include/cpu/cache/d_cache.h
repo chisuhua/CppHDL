@@ -59,6 +59,7 @@ struct DCacheConfig {
  * - `ready := req, miss := false, data := axi_data`
  * 其它"支持功能"(2 路组相联 / Tag 比较 / Write-Through 缓冲)在 stub 中并未实现。
  */
+__attribute__((deprecated("Use include/cpu/cache/d_cache_complete.h instead; see root AGENTS.md §KNOWN LIMITATIONS")))
 class DCache : public ch::Component {
 public:
     __io(
