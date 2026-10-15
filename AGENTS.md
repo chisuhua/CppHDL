@@ -257,6 +257,8 @@ Use `git checkout <tag>` to roll back to any phase boundary.
 - "7 个禁用测试" → fix-test-completeness 计划将 4 个被注释的 `add_catch_test` 重新启用（`test_branch_predictor`、`test_cache_pipeline`、`test_phase4_chlib`、`test_rv32i_pipeline`），目标 0 禁用
 - `test_mod_width_simple` → 已被 `test_mod_width` 覆盖，冗余
 - `test_ch_flow`, `test_stream_width_adapter`, `test_branch_predictor_v2` → 已注册且通过
+- **2026-10-15 cleanup-orphan-code** → 8 个孤儿文件删除（`include/bundle.h`, `include/chlib/axi4lite.h`, `tests/test_branch_predict.cpp`, root `tests/test_forwarding.cpp`, `tests/test_pipeline_regs.cpp`, `tests/test_memory_leak.cpp` / `test_memory_optimization.cpp` / `test_memory_performance.cpp`, `tests/chlib/test_axi4lite.cpp`）；同步 6 个 AGENTS.md 文件到 single-source-of-truth 测试计数；新增 `scripts/verify_test_counts.sh` 作为 CI 防 drift 护栏。`CTEST_TOTAL: 159` (= 148 non-perf + 11 perf)。
+- **2026-10-15 deprecate-hdl-logical-operators 首次尝试 rollback** → 加 `[[deprecated]]` 时触发 315 个 `-Wdeprecated-declarations` 警告，因 migration 不完整（剩余 ~200 行未迁移，包括 `include/axi4/{axi4_full,axi_to_axilite,axi4_lite_matrix,peripherals/axi_i2c,peripherals/axi_dma}.h`、`examples/spinalhdl-ported/{quadrature_encoder,i2c,ws2812,spi,uart_rx,vga,timer}`、`examples/riscv-mini/src/{rv32i_regfile,rv32i_alu,rv32i_tcm}`、`examples/axi4/phase3a_complete.cpp`、`samples/pod_bundle_conversion.cpp`），attributes 已全部撤回。Follow-up change `deprecate-hdl-logical-operators-redo` 重新发起，**必须先完成全量 migration，再加 attributes**，避免 self-warning 状态。
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph

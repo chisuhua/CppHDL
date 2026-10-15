@@ -69,11 +69,22 @@ include/cpu/
 - **Orphan forwarding**: `forwarding.h` in `include/cpu/` but uses `chlib` namespace — should be in `include/chlib/`
 
 ## TESTS
-Located in `examples/riscv-mini/tests/` (CMakeLists stub — NOT wired to main CMake):
-- `test_forwarding.cpp` (537 lines — most comprehensive)
-- `test_hazard_complete.cpp` (235 lines)
-- `test_rv32i_pipeline.cpp` (5 tests, 10 assertions)
-Plus 9+ other files in isolated tests/ subdirectory.
+Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`:
+
+| Target | Source path | Focus |
+|--------|-------------|-------|
+| `test_forwarding` | `tests/chlib/test_forwarding.cpp` | `chlib::ForwardingMux` + IfIdRegs struct field access |
+| `test_hazard` | `tests/chlib/test_hazard_complete.cpp` | Hazard detection + forwarding |
+| `test_rv32i_pipeline` | `tests/test_rv32i_pipeline.cpp` | 5-stage pipeline integration (Catch2) |
+| `test_csr_unit` | `examples/riscv-mini/tests/test_csr_unit.cpp` | CSR register reset, R/W, MRET, exceptions, WFI, interrupts |
+| `test_phase4_chlib` | `tests/chlib/test_phase4_integration.cpp` | Phase-4 chlib / CPU integration smoke (cache stubs + pipeline) |
+
+`examples/riscv-mini/tests/` contains additional exploratory scripts
+(`test_pipeline_debug*.cpp`, `test_pipeline_minimal.cpp`, etc.) that
+are **not** registered in `tests/CMakeLists.txt` — they are kept as
+runnable prototypes only. Run them with `cmake --build build --target
+<name>` after wiring the source files in `examples/riscv-mini/CMakeLists.txt`,
+or directly via `g++ -std=c++23 -Iinclude -Iexamples/riscv-mini/src`.
 
 ## PHASE GATES
 Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**.
