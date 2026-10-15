@@ -305,11 +305,12 @@ TEST_CASE("MemoryE2E - SyncFifoTraceParity",
 
 // ============================================================================
 // AXI4-Full burst write/read. We do not enforce exact rdata parity per
-// cycle (rdata is register-driven under M0.5 dispatch, which currently
-// has issue #25 limitations on register propagation); instead we only
-// verify that both backends successfully drive the slave through a
-// burst transaction and that the burst-ready / burst-valid handshakes
-// reach a stable end-state matching expectations.
+// cycle here; instead we only check that both backends successfully drive
+// the slave through a burst transaction and that the burst-ready /
+// burst-valid handshakes reach a stable end-state matching expectations.
+// (Register-driven rdata is exercised in test_axi_lite_verilator_e2e.cpp
+// and test_verilator_complex_e2e.cpp after verilator-hier-input-
+// flattening-fix, 2026-10-15.)
 // ============================================================================
 TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
           "[verilator][e2e][memory][axi4-full][m5]") {
@@ -420,8 +421,9 @@ TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
     }
 
     // Combinational handshake parity: awready, wready, arready after
-    // the burst sequence. Register-driven rdata / rvalid are out of
-    // scope for issue #25 (see design.md D1 invariant 5).
+    // the burst sequence. (Register-driven rdata / rvalid parity is
+    // covered by test_axi_lite_verilator_e2e and test_verilator_
+    // complex_e2e — see verilator-hier-input-flattening-fix.)
     REQUIRE(read_port_output(*sim_a, awready_a) ==
             read_port_output(*sim_b, awready_b));
     REQUIRE(read_port_output(*sim_a, wready_a) ==

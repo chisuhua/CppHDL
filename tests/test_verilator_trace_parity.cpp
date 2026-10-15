@@ -20,10 +20,14 @@
 //   - fixtures MUST NOT contain `ch_mem` `aread` read ports (those are
 //     0-cycle comb in Verilog but posedge in Simulator → 1-cycle skew
 //     makes parity fail by design); `sread` is fine
-//   - we do NOT compare `rvalid`/`rdata` etc. that depend on always_ff
-//     register propagation under the current M0.5 dispatch (issue #25);
-//     only combinationally-driven outputs (awready/wready/arready/bvalid/
-//     counter-out etc.)
+//   - register-driven `ch_out` ports propagate correctly through
+//     VerilatorBackend after verilator-hier-input-flattening-fix
+//     (2026-10-15); however this fixture deliberately scopes down to
+//     combinationally-driven outputs (awready/wready/arready/bvalid/
+//     counter-out) to keep per-cycle assertions stable across all
+//     backends. Issue #25's "always_ff may not propagate" symptom is
+//     resolved — see test_verilator_complex_e2e.cpp for the AXI rdata
+//     reg-driven check.
 //
 // Tagged [verilator][e2e][trace-parity][m5]. Skipped cleanly when
 // verilator is not on PATH (PR matrix without toolchain).
@@ -109,9 +113,10 @@ public:
 // ----------------------------------------------------------------------------
 // Fixture 2: Minimal AXI4-Lite slave wrapper. Mirrors tests/test_axi_lite_
 // verilator_e2e.cpp::AxiLiteTop but exposes only the combinational handshake
-// signals (awready / wready / arready) that do NOT depend on always_ff
-// register propagation under M0.5 dispatch (issue #25). bvalid and rvalid
-// are skipped here because they depend on the busy latch (always_ff).
+// signals (awready / wready / arready) so this fixture stays cycle-stable
+// across backends. The bvalid / rvalid busy-latch paths are still exercised
+// in test_axi_lite_verilator_e2e.cpp — see verilator-hier-input-flattening-fix
+// (2026-10-15) which restored the REQUIRE-rdata assertion.
 // ----------------------------------------------------------------------------
 class TraceParityAxiLite : public ch::Component {
 public:

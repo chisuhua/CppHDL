@@ -20,13 +20,14 @@
 // Tagged [verilator][e2e][axi4lite]: skipped when verilator is not on PATH
 // (PR matrix). For nightly, set CPPHDL_REQUIRE_VERILATOR=1 to require.
 //
-// KNOWN LIMITATIONS (matches test_verilator_e2e_harness.cpp):
-//   - Always_ff register updates may not propagate under the current M0.5
-//     dispatch (issue #25); assertions use CHECK not REQUIRE, and we read
-//     RVALID (combinational with arvalid+ar_handshake) which doesn't depend
-//     on register timing.
-//   - Multi-cycle AXI handshakes are walked step-by-step; total wall-clock
-//     ~5-10s on cold verilator build, ~1s warm.
+// Status (post-verilator-hier-input-flattening-fix, 2026-10-15): the
+// previously documented "always_ff may not propagate" concern is resolved
+// — the codegen now produces an `assign` for driven submodule `ch_in`
+// ports and the backend skips them in port_access_ / emit_sim_main_
+// postlude. assertions use REQUIRE; RDATA / RVALID both propagate
+// correctly through the 2-step clock toggle. Multi-cycle AXI handshakes
+// are walked step-by-step; total wall-clock ~5-10s on cold verilator
+// build, ~1s warm.
 
 #include <unistd.h>
 #include <cstdlib>

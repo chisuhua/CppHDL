@@ -329,12 +329,12 @@ void verilogwriter::print_header(std::ostream &out) {
         // `logic` wires in print_decl() and assigned from their driver
         // in print_logic(). Without this filter, verilator sees
         // top-level input ports that nothing drives, so they stay X
-        // (=0 after issue #25's 2-step reset pulse), silently
-        // disabling every `ch_in` that lives below the top component
-        // (e.g. RV32I's `if_stage.io().instr_data`, AXI4-Lite slave
-        // inputs). JIT already handles this correctly
-        // (src/jit/jit_ir_gen_lnode_io.cpp:31-46); this brings the
-        // Verilog codegen path into parity with JIT semantics.
+        // (=0 after the initialize() reset pulse), silently disabling
+        // every `ch_in` that lives below the top component (e.g. RV32I's
+        // `if_stage.io().instr_data`, AXI4-Lite slave inputs). JIT
+        // already handles this correctly (src/jit/jit_ir_gen_lnode_io.cpp:
+        // 31-46); this brings the Verilog codegen path into parity with
+        // JIT semantics.
         std::vector<ch::core::lnodeimpl *> filtered_ports;
         for (auto *port_node : ports) {
             if (port_node->type() == ch::core::lnodetype::type_clock) {
