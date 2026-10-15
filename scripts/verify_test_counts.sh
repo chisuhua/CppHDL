@@ -57,9 +57,32 @@ fi
 
 echo "AGENTS.md CTEST_TOTAL ($documented_total) matches ctest -N ($actual_total) ✓"
 
-# 2. Catch2 source file count — informational only, not gated.
-#    The "94 root / 27 chlib / 3 jit" counts in AGENTS.md are tracked by
-#    `ls | wc -l` and would drift whenever a test is added. We do not
-#    gate this; the CTest total above is the authoritative check.
+# 2. Catch2 source file count — informational check for chlib directory.
+#    The chlib count in AGENTS.md is line-anchored as
+#    '**27 Catch2 test source files** at `tests/chlib/test_*.cpp`'
+#    and we verify it by an explicit `ls | wc -l`. Drift here means the
+#    documentation diverged from the filesystem (e.g. someone added a
+#    new test but forgot to update AGENTS.md).
+if grep -qE '\*\*([0-9]+) Catch2 test source files\*\* at `tests/chlib/test_\*\.cpp`' "$AGENTS"; then
+  documented_chlib=$(grep -oE '\*\*[0-9]+ Catch2 test source files\*\* at `tests/chlib/test_\*\.cpp`' "$AGENTS" | head -1 | grep -oE '[0-9]+' | head -1)
+  actual_chlib=$(ls tests/chlib/test_*.cpp 2>/dev/null | wc -l)
+  if [ "$documented_chlib" = "$actual_chlib" ]; then
+    echo "AGENTS.md chlib test source count ($actual_chlib) matches filesystem ✓"
+  else
+    echo "::warning::AGENTS.md says $documented_chlib chlib tests but filesystem has $actual_chlib"
+  fi
+fi
+
+# 3. Informational only — root / jit / samples / main-bearing examples counts.
+#    These are documented with 'ls | wc -l' / 'grep -rl' commands rather
+#    than literal numbers, so a drift is visible by running the command.
+#    We print them to give the operator a quick spot-check.
+echo ""
+echo "--- Informational spot-checks (drift visible by re-running each command) ---"
+echo "root tests/test_*.cpp         : $(ls tests/test_*.cpp 2>/dev/null | wc -l)"
+echo "tests/chlib/test_*.cpp        : $(ls tests/chlib/test_*.cpp 2>/dev/null | wc -l)"
+echo "tests/jit/test_*.cpp          : $(ls tests/jit/test_*.cpp 2>/dev/null | wc -l)"
+echo "samples/*.cpp                 : $(ls samples/*.cpp 2>/dev/null | wc -l)"
+echo "examples main()-bearing .cpp  : $(grep -rl '^int main' examples --include='*.cpp' 2>/dev/null | wc -l)"
 
 exit 0
