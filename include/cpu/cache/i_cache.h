@@ -1,19 +1,29 @@
 /**
  * @file i_cache.h
  * @brief 4KB 指令缓存 - 2 路组相联，LRU 替换
- * 
+ *
  * 规格:
  * - 容量：4KB (4096 bytes)
  * - 组相联：2-way set associative
  * - 行大小：16 bytes
  * - Sets: 128 (4KB / 2 / 16B)
  * - 替换策略：LRU
- * 
+ *
  * 地址格式 (32-bit):
  * [31:11] Tag (21 bits)
  * [10:4]  Index (7 bits) - 128 sets
  * [3:0]   Offset (4 bits) - 16 bytes per line
- * 
+ *
+ * @warning DESIGN: This header is a **pass-through stub** kept for smoke
+ * tests. Semantics: `ready := req, miss := false, data := axi_data`. It
+ * does NOT implement Hit/Miss logic, LRU, or tag comparison despite the
+ * spec text above. For a real cache use `i_cache_complete.h` (instantiated
+ * by `examples/riscv-mini/src/i_cache_prefetch.h`).
+ *
+ * @warning Do NOT co-include this header with `i_cache_complete.h` — both
+ * define `chlib::ICacheConfig` and the ODR clash breaks the build. See
+ * `include/cpu/AGENTS.md` for the canonical key-files table.
+ *
  * 作者：DevMate
  * 日期：2026-04-10
  */
@@ -42,13 +52,12 @@ struct ICacheConfig {
 };
 
 /**
- * @brief I-Cache 控制器
- * 
- * 支持功能:
- * - 2 路组相联
- * - Tag 比较
- * - LRU 替换
- * - AXI4 接口
+ * @brief I-Cache 控制器（pass-through stub — see DESIGN note at top）
+ *
+ * 仅暴露的接口:
+ * - AXI4 端口透传
+ * - `ready := req, miss := false, data := axi_data`
+ * 其它"支持功能"(2 路组相联 / Tag 比较 / LRU 替换)在 stub 中并未实现。
  */
 class ICache : public ch::Component {
 public:

@@ -1,19 +1,29 @@
 /**
  * @file d_cache.h
  * @brief 4KB 数据缓存 - 2 路组相联，Write-Through 策略
- * 
+ *
  * 规格:
  * - 容量：4KB (4096 bytes)
  * - 组相联：2-way set associative
  * - 行大小：16 bytes
  * - Sets: 128 (4KB / 2 / 16B)
  * - 写策略：Write-Through (写操作同时更新 Cache 和主存)
- * 
+ *
  * 地址格式 (32-bit):
  * [31:11] Tag (21 bits)
  * [10:4]  Index (7 bits) - 128 sets
  * [3:0]   Offset (4 bits) - 16 bytes per line
- * 
+ *
+ * @warning DESIGN: This header is a **pass-through stub** kept for smoke
+ * tests. Semantics: `ready := req, miss := false, data := axi_data`. It
+ * does NOT implement Hit/Miss logic or Write-Through buffering despite the
+ * spec text above. For a real cache use `d_cache_complete.h` (instantiated
+ * by `examples/riscv-mini/src/d_cache_write_buffer.h`).
+ *
+ * @warning Do NOT co-include this header with `d_cache_complete.h` — both
+ * define `chlib::DCacheConfig` and the ODR clash breaks the build. See
+ * `include/cpu/AGENTS.md` for the canonical key-files table.
+ *
  * 作者：DevMate
  * 日期：2026-04-10
  */
@@ -42,13 +52,12 @@ struct DCacheConfig {
 };
 
 /**
- * @brief D-Cache 控制器
- * 
- * 支持功能:
- * - 2 路组相联
- * - Tag 比较
- * - Write-Through 策略
- * - AXI4 接口
+ * @brief D-Cache 控制器（pass-through stub — see DESIGN note at top）
+ *
+ * 仅暴露的接口:
+ * - AXI4 端口透传
+ * - `ready := req, miss := false, data := axi_data`
+ * 其它"支持功能"(2 路组相联 / Tag 比较 / Write-Through 缓冲)在 stub 中并未实现。
  */
 class DCache : public ch::Component {
 public:
