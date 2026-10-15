@@ -6,6 +6,52 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-10-15 — `verilator-hier-input-flattening-fix`
+
+### Fixed
+- **`VerilatorBackend` now propagates driven submodule `ch_in` ports
+  end-to-end.** `codegen_verilog.cpp::print_header` previously flattened
+  driven submodule `ch_in`s (anything with `inputimpl::driver() != nullptr`,
+  e.g. `sub.io().x <<= some_wire`) to top-level Verilog `input` ports that
+  nothing drove. The matching `print_logic` switch had no `type_input`
+  branch, so there was no `assign` to feed the driver value into the
+  Vtop field. Verilator initialised those ports to X (=0 after the
+  `initialize()` reset pulse), silently disabling every `ch_in` below
+  the top component. After the fix:
+  - `print_header` filters out driven inputs from the top-port list.
+  - `print_decl` declares them as internal `logic` (via `emit_signal_decl`).
+  - `print_logic` adds a `type_input` branch that walks the unnamed-proxy
+    chain and emits `assign <in> = <driver>;` (mirroring the `type_output`
+    branch).
+  - `VerilatorBackend::emit_sim_main_postlude` skips them in
+    `set_input_Vtop` / `get_field_ptr_Vtop` (the Vtop field does not
+    exist), and `build_port_access_table` does not add them to
+    `port_access_` so `sync_inputs_to_vtop` will not try to write them.
+  JIT already handled this correctly (`src/jit/jit_ir_gen_lnode_io.cpp:31-46`).
+  This brings the Verilog codegen path into parity with JIT semantics.
+
+### Resolved (was a known limitation of `verilator-issue-25-fix`)
+- The `verilator-issue-25-fix` entry below mentioned that
+  "RVALID / RDATA readback via `data_map_` returns 0" and was tracked
+  under issue #25 / option A in the Oracle audit. That symptom was
+  actually the same hierarchical-input bug, not a separate issue #25
+  register-propagation problem: in `test_axi_lite_verilator_e2e.cpp`,
+  `slave.io().awaddr <<= io().awaddr` etc. flatten `slave.io().awaddr`
+  to a top-level `input` port the testbench never drives, which then
+  propagates through to `rvalid`/`rdata` via the `always_ff` busy
+  latch. With the codegen fix, the AXI4-Lite WriteReadReg0ThroughBackend
+  fixture now asserts `rvalid == 1 && rdata == 0xDEADBEEF` as a real
+  REQUIRE, and the RV32I 3-instruction parity fixture runs
+  `perf_instructions == 12` on both interpreter and verilator (was 0).
+
+### AGENTS.md
+- New VERILATOR BACKEND RULE: hierarchical input driver MUST be emitted
+  by codegen. The four-site contract is now enforced (filter, declare,
+  assign, backend skip). Reflects the actual root cause of the
+  previously-tracked symptom.
+
+---
+
 ## 2026-09-23 — `verilator-issue-25-fix`
 
 ### Fixed
@@ -106,7 +152,7 @@ specifications.
     `RVALID` / `RDATA` for nightly inspection.
 
 ### Known limitations carried forward (issue #25)
-- **`RVALID` / `RDATA` readback via `data_map_` returns 0 even though
+- ~~**`RVALID` / `RDATA` readback via `data_map_` returns 0 even though
   the generated Verilog has pure `assign top_slave_unnamed_output =
   top_slave_mux_select_1;` (combinational).** Originally Oracle
   audit (C12) suggested this would propagate; in practice it does
@@ -115,10 +161,18 @@ specifications.
   the VerilatorBackend eval-after-input-sync sequence does not
   refresh wire outputs. Resolution tracked under
   `verilator-issue-25-fix` (proposed next change, option A in the
-  Oracle audit).
-- Test case 2 uses `INFO(...)` only for the readback values; no
+  Oracle audit).~~ **Resolved 2026-10-15 by
+  `verilator-hier-input-flattening-fix`**: the symptom was actually the
+  hierarchical-input flattening bug (driven submodule `ch_in` ports
+  became top-level input ports that nothing drove). Once the codegen
+  emits `assign` for those ports, `RVALID` / `RDATA` propagate normally
+  through the existing `sync_outputs_from_vtop` path. No changes to
+  the sync machinery were needed.
+- ~~Test case 2 uses `INFO(...)` only for the readback values; no
   `CHECK` is asserted on `RVALID` / `RDATA` until the underlying
-  Verilator eval-eval-sync issue is fixed.
+  Verilator eval-eval-sync issue is fixed.~~ **Resolved 2026-10-15**:
+  `test_axi_lite_verilator_e2e.cpp::WriteReadReg0ThroughBackend` now
+  asserts `REQUIRE(rvalid == 1)` + `REQUIRE(rdata == 0xDEADBEEF)`.
 
 ### Test invocation
 - Tagged `[verilator][e2e][axi4lite][m5]`. PR matrix (no verilator
