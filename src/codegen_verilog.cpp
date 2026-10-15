@@ -1,6 +1,6 @@
 // src/codegen_verilog.cpp
 #include "codegen_verilog.h"
-#include "ast_nodes.h"
+#include "ast/ast_nodes.h"
 #include "lnodeimpl.h"
 #include "memimpl.h"
 #include "mem_port_impl.h"

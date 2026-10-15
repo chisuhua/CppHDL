@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "ast_nodes.h"
+#include "ast/ast_nodes.h"
 #include "lnodeimpl.h"
 #include "types.h"
 

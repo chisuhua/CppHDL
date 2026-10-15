@@ -1,6 +1,6 @@
 // src/codegen_dag.cpp
 #include "codegen_dag.h"
-#include "ast_nodes.h"
+#include "ast/ast_nodes.h"
 #include "lnodeimpl.h"
 #include "simulator.h"
 #include <algorithm>

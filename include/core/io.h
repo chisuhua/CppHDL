@@ -19,7 +19,7 @@
 // All functions remain in namespace ch::core.
 #pragma once
 
-#include "ast_nodes.h"
+#include "ast/ast_nodes.h"
 #include "core/context.h"
 #include "core/direction.h"
 #include "core/lnode.h"
