@@ -233,7 +233,9 @@ jobs:
       # This prevents the historical drift where the documented number
       # (142/161) silently fell behind the actual registered count (159).
       # See openspec/changes/cleanup-orphan-code for the audit trail.
-      if: matrix.os == 'ubuntu-22.04' && matrix.build_type == 'Release'
+      # Runs on every OS in the matrix because the check is portable
+      # bash (`ls | wc -l`, `grep -oE`) and the build dir / CTest
+      # environment is the same on all runners.
       shell: bash
       run: scripts/verify_test_counts.sh
 
