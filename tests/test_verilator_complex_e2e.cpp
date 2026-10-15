@@ -359,27 +359,17 @@ TEST_CASE("ComplexE2E - Rv32iShortInstructionTraceParity",
     UNSCOPED_INFO("perf_instructions interp=" << perf_a_val
                  << " verilator=" << perf_b_val);
 
-    // D8 (b) descope: VerilatorBackend M0.5 dispatch (issue #25) does
-    // not propagate commit_count register updates to perf_instructions
-    // top-level ch_out. Interpreter produces the correct value (12)
-    // because commit_count accumulates commit_valid pulse every cycle,
-    // but verilator reads 0 because the eval_sequential path doesn't
-    // propagate the always_ff result. This is the same backend bug
-    // class as test_axi_lite_verilator_e2e.cpp:24 — the fixture must
-    // NOT depend on register-driven outputs (per design D1 invariant 5).
-    //
-    // D8 (b) path: documented SKIP with follow-up change pointer.
-    // The follow-up change must fix VerilatorBackend's eval_sequential
-    // register path before this fixture can run real trace parity.
-    if (perf_a_val != perf_b_val) {
-        SKIP("VerilatorBackend M0.5 dispatch (issue #25) does not "
-             "propagate commit_count register updates to "
-             "perf_instructions top-level ch_out. Deferred to follow-up "
-             "change `verilator-m05-register-propagation-fix`. See "
-             "openspec/changes/verilator-rv32i-pipeline-e2e/design.md "
-             "D8 (b).");
-    }
-    REQUIRE(perf_a_val == 3);
+    // verilator-hier-input-flattening-fix (2026-10-14 archive):
+    // D8 (b) SKIP is no longer needed. Verilator now produces 12
+    // (matches interpreter) because the codegen fix prevents driven
+    // submodule `ch_in` ports from being flattened to top-level
+    // ports that nothing drives. The end value is 12 because the
+    // 4-word imem wraps (bits<3,2>(cpu.io().instr_addr) cycles
+    // through 0..3), and commit_count accumulates commit_valid
+    // every cycle (no hazard stalls for these 3 ALU instructions),
+    // landing at 12 after 20 cycles of pipeline draining.
+    REQUIRE(perf_a_val == perf_b_val);
+    REQUIRE(perf_a_val == 12);
 }
 
 // Custom main(): exit 0 when verilator is missing.

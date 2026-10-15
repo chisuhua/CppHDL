@@ -255,23 +255,37 @@ TEST_CASE("AXI4-Lite VerilatorBackend E2E WriteReadReg0ThroughBackend",
     sim.set_input_value(device->instance().io().arprot,  static_cast<uint64_t>(0x0));
     sim.set_input_value(device->instance().io().arvalid, true);
     sim.tick();
-    sim.set_input_value(device->instance().io().arvalid, false);
-    for (int i = 0; i < 4; ++i) sim.tick();
 
-    // Verify RVALID (combinational with ar_handshake); rdata is logged but
-    // the AXI-specific reg-propagation interaction with Verilator's
-    // select/mux optimization is out of scope for issue #25 (counter
-    // tests in test_verilator_e2e_harness.cpp prove the 3-step clock
-    // toggle fires always_ff correctly under this backend).
+    // Verify RVALID is asserted (combinational with ar_handshake) and
+    // rdata matches the value previously written (reg-driven ch_out,
+    // exercised here to prove the verilator backend propagates
+    // always_ff outputs through sync_outputs_from_vtop — the
+    // root-cause fix in verilator-hier-input-flattening-fix).
+    // RVALID is combinational on arvalid && !busy, so we read it
+    // while arvalid is still asserted (the cycle 1 handshake, just
+    // like axi4_lite_example.cpp:236). Walk several cycles while
+    // arvalid stays high so we capture the handshake even if the
+    // verilator 2-step clock toggle adds a cycle of latency vs.
+    // interpreter.
     auto *rvalid_lnode = device->instance().io().rvalid.impl();
     auto *rdata_lnode = device->instance().io().rdata.impl();
-    uint64_t rvalid_val = read_port_output(sim, rvalid_lnode);
-    uint64_t rdata_val  = read_port_output(sim, rdata_lnode);
+    uint64_t rvalid_val = 0;
+    uint64_t rdata_val  = 0;
+    for (int wait = 0; wait < 4; ++wait) {
+        rvalid_val = read_port_output(sim, rvalid_lnode);
+        rdata_val  = read_port_output(sim, rdata_lnode);
+        UNSCOPED_INFO("read wait=" << wait
+                     << " rvalid data_map_[" << rvalid_lnode->id()
+                     << "] = " << rvalid_val
+                     << " rdata data_map_[" << rdata_lnode->id()
+                     << "] = 0x" << std::hex << rdata_val);
+        if (rvalid_val == 1 && rdata_val == 0xDEADBEEFu) break;
+        sim.tick();
+    }
 
-    UNSCOPED_INFO("rvalid data_map_[" << rvalid_lnode->id()
-                 << "] = " << rvalid_val);
-    UNSCOPED_INFO("rdata  data_map_[" << rdata_lnode->id()
-                 << "] = 0x" << std::hex << rdata_val);
+    REQUIRE(rvalid_val == 1);
+    REQUIRE(rdata_val == 0xDEADBEEFu);
 
-    REQUIRE(rvalid_val == 0);
+    sim.set_input_value(device->instance().io().arvalid, false);
+    for (int i = 0; i < 4; ++i) sim.tick();
 }
