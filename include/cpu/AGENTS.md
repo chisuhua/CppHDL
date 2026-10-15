@@ -9,11 +9,6 @@ RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC i
 ## STRUCTURE
 ```
 include/cpu/
-├── forwarding.h                    # ForwardingUnit + Mux (namespace chlib ⚠️ orphan)
-├── branch_predictor/
-│   └── branch_predictor_bundle.h   # Bundle interface (namespace cpu)
-├── hazard/
-│   └── hazard_unit_bundle.h        # Bundle interface (namespace cpu)
 ├── cache/
 │   ├── i_cache_stub.h / i_cache_complete.h / i_cache_prefetch.h
 │   └── d_cache_stub.h / d_cache_complete.h / d_cache_write_buffer.h
@@ -39,11 +34,9 @@ include/cpu/
 | Namespace | Files | Purpose |
 |-----------|-------|---------|
 | `riscv` | `pipeline/stages/*.h`, `riscv/*.h` | Pipeline stages, decoder, CSR, exception |
-| `chlib` | `forwarding.h`, `cache/*.h` | Forwarding unit, cache controllers |
-| `cpu` | `branch_predictor/*.h`, `hazard/*.h` | Bundle interfaces (unused by pipeline) |
+| `chlib` | `cache/*.h` | Cache controllers (`i_cache_*`, `d_cache_*`) — forwarding.h moved to `include/chlib/` per ADR-038 |
+| `cpu` | (no in-tree headers under this namespace) | Historic placeholders `branch_predictor/*.h` and `hazard/*.h` were removed; the live bundle interfaces live under `examples/riscv-mini/src/` and are not part of the main `include/cpu/` graph |
 | `ch::chlib` | `clint.h` | CLINT timer |
-
-⚠️ **Note**: `forwarding.h` lives in `include/cpu/` but uses `chlib` namespace — likely should be in `include/chlib/`.
 
 ## KEY FILES
 | Task | File |
@@ -65,8 +58,7 @@ include/cpu/
 
 ## ANTI-PATTERNS
 - **Namespace inconsistency**: CPU components split across 4 namespaces (`riscv`, `chlib`, `cpu`, `ch::chlib`)
-- **Duplicate forwarding**: `forwarding.h` (chlib) vs `hazard_unit.h` (riscv) — overlapping functionality
-- **Orphan forwarding**: `forwarding.h` in `include/cpu/` but uses `chlib` namespace — should be in `include/chlib/`
+- **Duplicate forwarding**: `include/chlib/forwarding.h` vs `include/cpu/pipeline/hazard_unit.h` — overlapping functionality (forwarding mover per ADR-038; merge deferred to a future change)
 
 ## TESTS
 Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`:
