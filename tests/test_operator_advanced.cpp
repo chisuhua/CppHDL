@@ -485,8 +485,8 @@ TEST_CASE("operator_overloads: arithmetic and bitwise operators",
     auto ge_result = a >= b;
 
     // 测试布尔操作符
-    auto bool_and_result = bool_a && bool_b;
-    auto bool_or_result = bool_a || bool_b;
+    auto bool_and_result = bool_a & bool_b;
+    auto bool_or_result = bool_a | bool_b;
     auto bool_not_result = !bool_a;
 
     // 验证返回类型 (根据实际测试结果)
@@ -525,6 +525,18 @@ TEST_CASE("bool_uint_mix_operations: boolean and uint mixed operations",
     ch_uint<8> uint_val(10, "uint_val");
 
     // 测试布尔与无符号整数的混合操作
+    //
+    // ch_bool && ch_uint<N> and ch_uint<N> && ch_bool are [[deprecated]]
+    // because they lower to `rhs != 0` then AND/OR — a non-obvious nonzero
+    // test. A naive && -> & rewrite would silently drop the reduction
+    // (true & 0b10 == 0, while true && 0b10 == 1). We retain the
+    // deprecated API deliberately here as the only in-tree exercise
+    // of the mixed overloads' semantics. The pragma suppresses the
+    // diagnostic on exactly these four lines plus the type-check
+    // assertions below, so the broader zero-warning policy is not
+    // affected by this single regression-coverage test.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     auto and_result1 = bool_val && uint_val;
     auto and_result2 = uint_val && bool_val;
     auto or_result1 = bool_val || uint_val;
@@ -534,6 +546,7 @@ TEST_CASE("bool_uint_mix_operations: boolean and uint mixed operations",
     REQUIRE(std::is_same_v<decltype(and_result2), ch_bool>);
     REQUIRE(std::is_same_v<decltype(or_result1), ch_bool>);
     REQUIRE(std::is_same_v<decltype(or_result2), ch_bool>);
+#pragma GCC diagnostic pop
 }
 
 // ---------- 静态断言测试 ----------

@@ -134,10 +134,10 @@ TEST_CASE("ch_bool: basic operations", "[bool][operations][basic]") {
         ch_bool t(true);
         ch_bool f(false);
 
-        auto tt = t && t;
-        auto tf = t && f;
-        auto ft = f && t;
-        auto ff = f && f;
+        auto tt = t & t;
+        auto tf = t & f;
+        auto ft = f & t;
+        auto ff = f & f;
 
         REQUIRE(tt.impl() != nullptr);
         REQUIRE(tf.impl() != nullptr);
@@ -149,10 +149,10 @@ TEST_CASE("ch_bool: basic operations", "[bool][operations][basic]") {
         ch_bool t(true);
         ch_bool f(false);
 
-        auto tt = t || t;
-        auto tf = t || f;
-        auto ft = f || t;
-        auto ff = f || f;
+        auto tt = t | t;
+        auto tf = t | f;
+        auto ft = f | t;
+        auto ff = f | f;
 
         REQUIRE(tt.impl() != nullptr);
         REQUIRE(tf.impl() != nullptr);

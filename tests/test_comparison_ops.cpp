@@ -34,10 +34,10 @@ TEST_CASE("Comparison operations return type verification", "[operators][compari
     REQUIRE(std::is_same_v<decltype(ge_result), ch_bool>);
 
     // 验证比较操作结果可以用于逻辑操作
-    auto combined = (a == c) && (b > a);  // Should be true && true = true
+    auto combined = (a == c) & (b > a);  // Should be true & true = true
     REQUIRE(std::is_same_v<decltype(combined), ch_bool>);
 
-    auto combined2 = (a == b) || (b > a); // Should be false || true = true
+    auto combined2 = (a == b) | (b > a); // Should be false | true = true
     REQUIRE(std::is_same_v<decltype(combined2), ch_bool>);
 }
 
@@ -69,8 +69,8 @@ TEST_CASE("Logical operations with comparison results", "[operators][logical][co
 
     // 原来的错误：比较操作返回ch_uint<1>会导致逻辑操作符重载歧义
     // 现在应该可以正常工作，因为比较操作返回ch_bool
-    ch_bool result1 = (a == 10_d) && (b == 20_d);  // true && true
-    ch_bool result2 = (a == 10_d) || (b == 5_d);   // true || false
+    ch_bool result1 = (a == 10_d) & (b == 20_d);  // true & true
+    ch_bool result2 = (a == 10_d) | (b == 5_d);   // true | false
     ch_bool result3 = !(a == 20_d);                // !(false) = true
 
     // 验证类型
@@ -99,9 +99,9 @@ TEST_CASE("Comparison operations with IO types", "[operators][comparison][io]") 
     REQUIRE(std::is_same_v<decltype(gt_io), ch_bool>);
 
     // 测试IO类型比较结果的逻辑操作
-    auto combined_io = (input_a == 50_d) && (input_b < 100_d);
+    auto combined_io = (input_a == 50_d) & (input_b < 100_d);
     REQUIRE(std::is_same_v<decltype(combined_io), ch_bool>);
 
-    auto combined_or_io = (input_a != input_b) || (input_a >= 25_d);
+    auto combined_or_io = (input_a != input_b) | (input_a >= 25_d);
     REQUIRE(std::is_same_v<decltype(combined_or_io), ch_bool>);
 }

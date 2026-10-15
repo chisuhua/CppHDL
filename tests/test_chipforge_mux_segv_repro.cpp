@@ -116,6 +116,15 @@
 // ============================================================================
 
 #include "catch_amalgamated.hpp"
+// ch_bool::operator&& is [[deprecated]] (2026-10-16 deprecate-redo).
+// This file intentionally exercises the deprecated API to keep regression
+// coverage of the still-existing null-impl behavior under the SEGV repro
+// pattern: `ch_bool(false) && (a != 0)` provokes binary_bool_operation
+// returning a null impl, which the test catches before sim.tick(). Wrap
+// in a pragma so the broader zero-warning policy is unaffected.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 #include "ch.hpp"
 #include "context.h"
 #include "literal.h"
@@ -306,3 +315,5 @@ TEST_CASE("cpphdl_repro_select_with_null_cond_triggers_segv",
   sim.tick();
   SUCCEED("Simulator tick completed without SEGV");
 }
+#pragma GCC diagnostic pop
+

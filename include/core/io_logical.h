@@ -64,6 +64,7 @@ auto operator!=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
 // TODO: 这些操作符应标记为已废弃——在硬件中 &&/|| 和 &/| 对 1-bit 信号效果相同，
 // 但 C++ 的短路语义让用户误以为有特殊行为。推荐使用 select() 替代。
 template <typename T1, typename Dir1, typename T2, typename Dir2>
+[[deprecated("use operator& for 1-bit AND; select() is for value muxing")]]
 auto operator&&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
     static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
                   "Logical AND only supported for 1-bit types");
@@ -72,6 +73,7 @@ auto operator&&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
 }
 
 template <typename T1, typename Dir1, typename T2, typename Dir2>
+[[deprecated("use operator| for 1-bit OR; select() is for value muxing")]]
 auto operator||(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
     static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
                   "Logical OR only supported for 1-bit types");

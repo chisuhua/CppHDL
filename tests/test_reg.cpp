@@ -281,7 +281,7 @@ TEST_CASE("ch_reg: next assignment with boolean expressions", "[reg][next][bool_
     ch_reg<ch_bool> bool_reg2(1_b);
     ch_reg<ch_uint<8>> uint_reg(0_d);
     
-    bool_reg1->next = bool_reg2 && ch_bool(1_b);
+    bool_reg1->next = bool_reg2 & ch_bool(1_b);
     bool_reg2->next = !(uint_reg == ch_uint<8>(0_d));
     
     REQUIRE(bool_reg1.impl() != nullptr);
@@ -386,10 +386,10 @@ TEST_CASE("ch_reg: boolean register operations", "[reg][bool][operations]") {
         ch_reg<ch_bool> bool_reg2(0_b);
         ch_reg<ch_bool> result_reg(0_b);
         
-        result_reg->next = bool_reg1 && bool_reg2;  // true && false = false
+        result_reg->next = bool_reg1 & bool_reg2;  // true & false = false
         REQUIRE(result_reg.impl() != nullptr);
         
-        result_reg->next = bool_reg1 || bool_reg2;  // true || false = true
+        result_reg->next = bool_reg1 | bool_reg2;  // true | false = true
         REQUIRE(result_reg.impl() != nullptr);
         
         result_reg->next = !bool_reg1;              // !true = false
@@ -414,8 +414,8 @@ TEST_CASE("ch_reg: boolean register operations", "[reg][bool][operations]") {
         ch_reg<ch_bool> result_reg(0_b);
         
         // 使用字面量确保无歧义
-        result_reg->next = bool_reg && (uint_reg > ch_uint<8>(0_d));  // true && true = true
-        result_reg->next = (uint_reg == ch_uint<8>(5_d)) || !bool_reg; // true || false = true
+        result_reg->next = bool_reg & (uint_reg > ch_uint<8>(0_d));  // true & true = true
+        result_reg->next = (uint_reg == ch_uint<8>(5_d)) | !bool_reg; // true | false = true
         
         REQUIRE(result_reg.impl() != nullptr);
     }

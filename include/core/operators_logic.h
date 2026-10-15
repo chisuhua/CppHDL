@@ -158,10 +158,12 @@ template <typename T> ch_bool xor_reduce(const T &operand) {
 }
 
 // === 布尔专用操作符重载 ===
+[[deprecated("use operator& for 1-bit AND; select() is for value muxing")]]
 inline ch_bool operator&&(const ch_bool &lhs, const ch_bool &rhs) {
     return binary_bool_operation<logical_and_op>(lhs, rhs, "logical_and");
 }
 
+[[deprecated("use operator| for 1-bit OR; select() is for value muxing")]]
 inline ch_bool operator||(const ch_bool &lhs, const ch_bool &rhs) {
     return binary_bool_operation<logical_or_op>(lhs, rhs, "logical_or");
 }
@@ -172,24 +174,28 @@ inline ch_bool operator!(const ch_bool &operand) {
 
 // === 布尔与其他类型的操作 ===
 template <unsigned N>
+[[deprecated("mixed && with ch_uint<N> uses nonzero test; write (rhs != 0) explicitly")]]
 inline ch_bool operator&&(const ch_bool &lhs, const ch_uint<N> &rhs) {
     return binary_bool_operation<logical_and_op>(lhs, rhs != ch_uint<N>(0),
                                                  "logical_and");
 }
 
 template <unsigned N>
+[[deprecated("mixed && with ch_uint<N> uses nonzero test; write (lhs != 0) explicitly")]]
 inline ch_bool operator&&(const ch_uint<N> &lhs, const ch_bool &rhs) {
     return binary_bool_operation<logical_and_op>(lhs != ch_uint<N>(0), rhs,
                                                  "logical_and");
 }
 
 template <unsigned N>
+[[deprecated("mixed || with ch_uint<N> uses nonzero test; write (rhs != 0) explicitly")]]
 inline ch_bool operator||(const ch_bool &lhs, const ch_uint<N> &rhs) {
     return binary_bool_operation<logical_or_op>(lhs, rhs != ch_uint<N>(0),
                                                 "logical_or");
 }
 
 template <unsigned N>
+[[deprecated("mixed || with ch_uint<N> uses nonzero test; write (lhs != 0) explicitly")]]
 inline ch_bool operator||(const ch_uint<N> &lhs, const ch_bool &rhs) {
     return binary_bool_operation<logical_or_op>(lhs != ch_uint<N>(0), rhs,
                                                 "logical_or");
