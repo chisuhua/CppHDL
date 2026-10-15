@@ -145,7 +145,7 @@ public:
         auto grant_m1 = select(arb_state, m1_req, ch_bool(false));
         
         // 更新仲裁器
-        auto transaction_done = io().s0_awready || io().s1_awready;
+        auto transaction_done = io().s0_awready | io().s1_awready;
         arb_state->next = select(transaction_done, !arb_state, arb_state);
         
         // ==================== 写地址通道 ====================

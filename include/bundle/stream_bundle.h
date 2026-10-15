@@ -41,10 +41,10 @@ template <typename T> struct ch_stream : public bundle_base<ch_stream<T>> {
         this->make_output(ready);
     }
 
-    [[nodiscard]] ch_bool fire() const { return this->valid && this->ready; }
+    [[nodiscard]] ch_bool fire() const { return this->valid & this->ready; }
     
     // Check if stream is stalled (valid but not ready)
-    [[nodiscard]] ch_bool isStall() const { return this->valid && !this->ready; }
+    [[nodiscard]] ch_bool isStall() const { return this->valid & !(this->ready); }
 
     // Pipeline member functions - declarations
     // The implementations are defined in stream_bundle_member_inlines.h

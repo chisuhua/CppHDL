@@ -59,7 +59,7 @@ stream_arbiter_lock(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     ch_bool current_locked_valid = false;
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_locked = (locked_channel == make_uint<compute_idx_width(N_INPUTS)>(i));
-        current_locked_valid = current_locked_valid || (is_locked && input_streams[i].valid);
+        current_locked_valid = current_locked_valid | (is_locked & input_streams[i].valid);
     }
 
     // Select the channel: use locked channel if valid, otherwise use priority encoder
@@ -89,7 +89,7 @@ stream_arbiter_lock(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     // Only the selected input is ready
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected && result.output_stream.ready;
+        result.input_streams[i].ready = is_selected & result.output_stream.ready;
     }
 
     result.selected = selected_idx;
@@ -154,7 +154,7 @@ stream_arbiter_sequence(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     // Only the selected input is ready
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected && result.output_stream.ready && has_valid;
+        result.input_streams[i].ready = is_selected & result.output_stream.ready & has_valid;
     }
 
     result.selected = selected_idx;

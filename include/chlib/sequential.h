@@ -106,7 +106,7 @@ BCDCounterResult<N> bcd_counter(ch_bool en,
     ch_reg<ch_uint<N>> counter(0_d, name);
 
     ch_uint<N> next_value = select(counter == 9_d, 0_d, counter + 1_d);
-    ch_bool has_carry = (counter == 9_d) && en;
+    ch_bool has_carry = (counter == 9_d) & en;
 
     counter->next = select(en, next_value, counter);
 
@@ -185,7 +185,7 @@ ch_uint<N> counter(const ch_uint<N> &start = make_uint<N>(0U),
     // Detect overflow by checking if next_val is less than cnt_val (wrapping)
     // Or if next_val is greater than max_val (explicit overflow)
     ch_uint<N> final_val =
-        select((next_val < cnt_val && cnt_val != max_val) || next_val > max_val,
+        select((next_val < cnt_val & cnt_val != max_val) | next_val > max_val,
                start, next_val);
 
     cnt_val->next = select(enable, final_val, cnt_val);
@@ -309,9 +309,9 @@ edge_detector(ch_bool signal, const std::string &name = "edge_detector") {
     ch_bool current_signal = signal;
 
     EdgeDetectorResult result;
-    result.pos_edge = current_signal && !prev_signal;
-    result.neg_edge = !current_signal && prev_signal;
-    result.any_edge = result.pos_edge || result.neg_edge;
+    result.pos_edge = current_signal & !prev_signal;
+    result.neg_edge = !current_signal & prev_signal;
+    result.any_edge = result.pos_edge | result.neg_edge;
 
     ch_uint<1> current_signal_tap(current_signal, "current_signal");
     ch_uint<1> prev_signal_tap(prev_signal, "prev_signal");

@@ -59,10 +59,10 @@ ch_stream<T> stream_throw_when(ch_stream<T> input_stream, ch_bool condition) {
     ch_stream<T> result;
     
     result.payload = input_stream.payload;
-    result.valid = input_stream.valid && !condition;
+    result.valid = input_stream.valid & !condition;
     
     // 当条件为真时，即使没有有效输出，输入也被消费
-    input_stream.ready = result.ready || condition;
+    input_stream.ready = result.ready | condition;
     
     return result;
 }
@@ -76,10 +76,10 @@ ch_stream<T> stream_take_when(ch_stream<T> input_stream, ch_bool condition) {
     ch_stream<T> result;
     
     result.payload = input_stream.payload;
-    result.valid = input_stream.valid && condition;
+    result.valid = input_stream.valid & condition;
     
     // 只有条件为真且输出就绪时，输入才就绪
-    input_stream.ready = result.ready && condition;
+    input_stream.ready = result.ready & condition;
     
     return result;
 }
@@ -93,10 +93,10 @@ ch_stream<T> stream_halt_when(ch_stream<T> input_stream, ch_bool halt) {
     ch_stream<T> result;
     
     result.payload = input_stream.payload;
-    result.valid = input_stream.valid && !halt;
+    result.valid = input_stream.valid & !halt;
     
     // 当暂停时，输入不就绪
-    input_stream.ready = result.ready && !halt;
+    input_stream.ready = result.ready & !halt;
     
     return result;
 }
@@ -187,11 +187,11 @@ StreamCombineResult<T1, T2> stream_combine_with(ch_stream<T1> input1, ch_stream<
     result.output_stream.payload._2 = input2.payload;
     
     // 当两个输入都有效时输出有效
-    result.output_stream.valid = input1.valid && input2.valid;
+    result.output_stream.valid = input1.valid & input2.valid;
     
     // 反压：当输出就绪且另一路有效时，该输入就绪
-    result.input1.ready = result.output_stream.ready && input2.valid;
-    result.input2.ready = result.output_stream.ready && input1.valid;
+    result.input1.ready = result.output_stream.ready & input2.valid;
+    result.input2.ready = result.output_stream.ready & input1.valid;
     
     return result;
 }
@@ -244,7 +244,7 @@ stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     // 只有选中的输入就绪
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected && result.output_stream.ready;
+        result.input_streams[i].ready = is_selected & result.output_stream.ready;
     }
     
     result.selected = selected_idx;
@@ -267,9 +267,9 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
 
     // 创建内部FIFO，使用正确的模板参数（数据宽度和地址宽度）
     auto fifo_result = sync_fifo<ch_width_v<T>, ADDR_WIDTH>(
-        input_stream.valid && input_stream.ready,          // 写使能
+        input_stream.valid & input_stream.ready,          // 写使能
         input_stream.payload,                              // 写数据
-        pop_ready && result.pop_stream.valid // 读使能
+        pop_ready & result.pop_stream.valid // 读使能
     );
 
     // 连接输入到FIFO
@@ -315,7 +315,7 @@ StreamForkResult<T, N_OUTPUTS> stream_fork(ch_stream<T> input_stream,
         // 同步模式：所有输出都就绪时输入才就绪
         ch_bool all_ready = true;
         for (unsigned i = 0; i < N_OUTPUTS; i++) {
-            all_ready = all_ready && result.output_streams[i].ready;
+            all_ready = all_ready & result.output_streams[i].ready;
         }
         result.input_stream.ready = all_ready;
 
@@ -327,7 +327,7 @@ StreamForkResult<T, N_OUTPUTS> stream_fork(ch_stream<T> input_stream,
         // 非同步模式：任意输出就绪时输入就绪
         ch_bool any_ready = false;
         for (unsigned i = 0; i < N_OUTPUTS; i++) {
-            any_ready = any_ready || result.output_streams[i].ready;
+            any_ready = any_ready | result.output_streams[i].ready;
         }
         result.input_stream.ready = input_stream.valid ? any_ready : true;
 
@@ -335,7 +335,7 @@ StreamForkResult<T, N_OUTPUTS> stream_fork(ch_stream<T> input_stream,
         for (unsigned i = 0; i < N_OUTPUTS; i++) {
             // 仅当输入有效且就绪时，输出才有效
             result.output_streams[i].valid =
-                input_stream.valid && input_stream.ready;
+                input_stream.valid & input_stream.ready;
         }
     }
 
@@ -362,7 +362,7 @@ stream_join(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     // 检查所有输入是否都有效
     ch_bool all_valid = true;
     for (unsigned i = 0; i < N_INPUTS; i++) {
-        all_valid = all_valid && input_streams[i].valid;
+        all_valid = all_valid & input_streams[i].valid;
         result.input_streams[i] = input_streams[i];
     }
 
@@ -435,7 +435,7 @@ stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
         ch_bool is_selected =
             (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
         result.input_streams[i].ready =
-            is_selected && result.output_stream.ready && arb_result.valid;
+            is_selected & result.output_stream.ready & arb_result.valid;
     }
 
     result.selected = selected_idx;
@@ -492,7 +492,7 @@ stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
         ch_bool is_selected =
             (select == make_uint<compute_idx_width(N_INPUTS)>(i));
         selected_valid =
-            selected_valid || (input_streams[i].valid && is_selected);
+            selected_valid | (input_streams[i].valid & is_selected);
     }
 
     result.output_stream.valid = selected_valid;
@@ -512,7 +512,7 @@ void stream_mux_connect_ready(StreamMuxResult<N_INPUTS, T>& mux_result) {
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected =
             (mux_result.select == make_uint<compute_idx_width(N_INPUTS)>(i));
-        mux_result.input_streams[i].ready = is_selected && mux_result.output_stream.ready;
+        mux_result.input_streams[i].ready = is_selected & mux_result.output_stream.ready;
     }
 }
 
@@ -540,7 +540,7 @@ stream_demux(ch_stream<T> input_stream,
     for (unsigned i = 0; i < N_OUTPUTS; i++) {
         result.output_streams[i].payload = demux_outputs[i];
         result.output_streams[i].valid =
-            input_stream.valid &&
+            input_stream.valid &
             (select == make_uint<compute_idx_width(N_OUTPUTS)>(i));
     }
 
@@ -549,9 +549,9 @@ stream_demux(ch_stream<T> input_stream,
     for (unsigned i = 0; i < N_OUTPUTS; i++) {
         ch_bool is_selected =
             (select == make_uint<compute_idx_width(N_OUTPUTS)>(i));
-        result.output_streams[i].ready = is_selected && input_stream.ready;
+        result.output_streams[i].ready = is_selected & input_stream.ready;
         selected_ready =
-            selected_ready || (is_selected && result.output_streams[i].ready);
+            selected_ready | (is_selected & result.output_streams[i].ready);
     }
 
     result.input_stream.ready = selected_ready;

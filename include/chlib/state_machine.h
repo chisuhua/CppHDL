@@ -218,7 +218,7 @@ public:
      * @brief Conditioned runtime transition (Phase 6d.6 / ADR-046)
      * 
      * Records a hardware transition from the currently-being-defined state:
-     *   when state_reg == cur_state_ && cond  ->  next = target
+     *   when state_reg == cur_state_ & cond  ->  next = target
      * Composed into the next-state select tree by build().
      * 
      * NOTE: unlike `if (ch_bool)` (which silently evaluates false at describe
@@ -273,7 +273,7 @@ public:
      * select-tree for state_reg->next:
      *   next = state_reg                          (hold by default)
      *   for each state S, transition (cond,target):
-     *     next = select(is_in(S) && cond, target, next)
+     *     next = select(is_in(S) & cond, target, next)
      * 
      * The Simulator evaluates this tree every tick, giving cycle-accurate
      * multi-cycle FSM behavior (Phase 6d.6 / ADR-046).
@@ -311,7 +311,7 @@ public:
             for (const auto& tr : sd.transitions) {
                 auto target_lit =
                     ch_uint<STATE_BITS>(static_cast<uint8_t>(tr.target));
-                next_state = select(in_s && tr.cond, target_lit, next_state);
+                next_state = select(in_s & tr.cond, target_lit, next_state);
             }
             // Legacy automatic exit transition (then())
             if (sd.has_exit_transition) {

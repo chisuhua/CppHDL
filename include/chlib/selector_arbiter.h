@@ -47,7 +47,7 @@ PrioritySelectorResult<N> priority_selector(ch_uint<N> request) {
 
         // 如果当前位有请求且尚未确定优先级更高的请求，则授予当前位
         result.grant =
-            select(req_at_i && !result.valid, grant_one_hot, result.grant);
+            select(req_at_i & !result.valid, grant_one_hot, result.grant);
         result.valid = select(req_at_i, 1_b, result.valid);
     }
 
@@ -75,7 +75,7 @@ template <unsigned N, unsigned Iter = 0> struct ProcessRequests {
 
         // 如果当前位有请求且尚未确定授予，则授予当前位
         result.grant =
-            select(req_at_pos && !result.valid, grant_one_hot, result.grant);
+            select(req_at_pos & !result.valid, grant_one_hot, result.grant);
         result.valid = select(req_at_pos, 1_b, result.valid);
 
         // 递归处理下一个迭代
@@ -104,7 +104,7 @@ template <unsigned N, unsigned Iter = 0> struct UpdatePriority {
             ch_bool req_at_pos = bit_select(request, pos);
             ch_uint<compute_idx_width(N)> next_pos = ((pos + 1) % N);
             next_priority =
-                select(req_at_pos && (result.grant == (ch_uint<N>(1_d) << pos)),
+                select(req_at_pos & (result.grant == (ch_uint<N>(1_d) << pos)),
                        next_pos, next_priority);
 
             // 递归处理下一个迭代
@@ -205,7 +205,7 @@ PrioritySelectorResult<N> round_robin_selector(ch_uint<N> request,
 
         // 如果当前位有请求且尚未确定授予，则授予当前位
         result.grant =
-            select(req_at_pos && !result.valid, grant_one_hot, result.grant);
+            select(req_at_pos & !result.valid, grant_one_hot, result.grant);
         result.valid = select(req_at_pos, 1_b, result.valid);
 
         // ch_uint<IDX_WIDTH> pos_tap(

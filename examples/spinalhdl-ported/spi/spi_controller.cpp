@@ -163,14 +163,14 @@ public:
         
         // 移位 (TRANSFER 状态 + SCLK 下降沿 - 在采样之后)
         auto sclk_falling = (clk_divider == ch_uint<4>(8_d));
-        auto shift_enable = is_transfer && sclk_falling;
+        auto shift_enable = is_transfer & sclk_falling;
         
         // 位计数 (在 SCLK 上升沿采样时递增)
         auto sclk_rising = (clk_divider == ch_uint<4>(0_d));
-        auto sample_enable = is_transfer && sclk_rising;
+        auto sample_enable = is_transfer & sclk_rising;
         auto next_bit_counter = select(load_data,
                                         ch_uint<3>(0_d),
-                                        select(sample_enable && (bit_counter != ch_uint<3>(7_d)),
+                                        select(sample_enable & (bit_counter != ch_uint<3>(7_d)),
                                                bit_counter + ch_uint<3>(1_d),
                                                bit_counter));
         bit_counter->next = next_bit_counter;
@@ -265,14 +265,14 @@ int main() {
         
         // 详细打印前 20 个周期和 SCLK 边沿
         auto miso_val = sim.get_port_value(top_device.instance().io().miso);
-        if (cycle < 20 || static_cast<uint64_t>(done)) {
+        if (cycle < 20 | static_cast<uint64_t>(done)) {
             std::cout << "Cycle " << cycle << ": cs=" << static_cast<uint64_t>(cs)
                       << ", sclk=" << static_cast<uint64_t>(sclk)
                       << ", mosi=" << static_cast<uint64_t>(mosi_val)
                       << ", miso=" << static_cast<uint64_t>(miso_val)
                       << ", done=" << static_cast<uint64_t>(done)
                       << std::endl;
-        } else if (static_cast<uint64_t>(sclk) && !transfer_started) {
+        } else if (static_cast<uint64_t>(sclk) & !transfer_started) {
             std::cout << "Cycle " << cycle << ": SCLK rising edge (sampling)" << std::endl;
             transfer_started = true;
         }

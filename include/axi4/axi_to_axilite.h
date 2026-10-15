@@ -177,7 +177,7 @@ public:
                                        select(io().axi_arvalid, ch_uint<2>(1_d), ch_uint<2>(0_d)),
                                        select(is_read_ar,
                                            select(io().axil_arready, ch_uint<2>(2_d), ch_uint<2>(1_d)),
-                                           select(io().axi_rready && io().axi_rvalid,
+                                           select(io().axi_rready & io().axi_rvalid,
                                                ch_uint<2>(0_d), ch_uint<2>(2_d))));
         read_state->next = next_read_state;
         

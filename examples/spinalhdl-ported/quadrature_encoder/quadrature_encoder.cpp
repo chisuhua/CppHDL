@@ -69,21 +69,21 @@ public:
         io().b_sync = b_sync2;
         
         // 边沿检测
-        auto a_rising = !a_sync2 && a_sync1;
-        auto a_falling = a_sync2 && !a_sync1;
-        auto b_rising = !b_sync2 && b_sync1;
-        auto b_falling = b_sync2 && !b_sync1;
+        auto a_rising = !a_sync2 & a_sync1;
+        auto a_falling = a_sync2 & !a_sync1;
+        auto b_rising = !b_sync2 & b_sync1;
+        auto b_falling = b_sync2 & !b_sync1;
         
         // 方向检测 (基于 A 相和 B 相的相位关系)
         // A 领先 B = CW (顺时针), B 领先 A = CCW (逆时针)
-        auto is_cw = (a_sync2 && !b_sync2) || (!a_sync2 && b_sync2);
+        auto is_cw = (a_sync2 & !b_sync2) | (!a_sync2 & b_sync2);
         
         // 4 倍频计数逻辑
         // 在 A 相和 B 相的每个边沿都计数
-        auto count_up = (a_rising && !b_sync2) || (a_falling && b_sync2) ||
-                        (b_rising && a_sync2) || (b_falling && !a_sync2);
-        auto count_down = (a_rising && b_sync2) || (a_falling && !b_sync2) ||
-                          (b_rising && !a_sync2) || (b_falling && a_sync2);
+        auto count_up = (a_rising & !b_sync2) | (a_falling & b_sync2) |
+                        (b_rising & a_sync2) | (b_falling & !a_sync2);
+        auto count_down = (a_rising & b_sync2) | (a_falling & !b_sync2) |
+                          (b_rising & !a_sync2) | (b_falling & a_sync2);
         
         // 位置计数器 (使用无符号数，支持双向计数)
         ch_reg<ch_uint<COUNTER_WIDTH>> pos_reg(0_d);
@@ -93,7 +93,7 @@ public:
         ch_reg<ch_bool> z_sync2(ch_bool(false));
         z_sync1->next = io().enc_z;
         z_sync2->next = z_sync1;
-        auto z_rising = !z_sync2 && z_sync1;
+        auto z_rising = !z_sync2 & z_sync1;
         
         auto new_pos_up = pos_reg + ch_uint<COUNTER_WIDTH>(1_d);
         auto new_pos_down = pos_reg - ch_uint<COUNTER_WIDTH>(1_d);

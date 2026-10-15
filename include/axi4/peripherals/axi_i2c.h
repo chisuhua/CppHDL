@@ -198,7 +198,7 @@ public:
         auto ctrl_stop = (s.ctrl_reg & ch_uint<32>(4_d)) != ch_uint<32>(0_d);
 
         // Clock divider
-        auto clk_en = !is_idle && ctrl_enable;
+        auto clk_en = !is_idle & ctrl_enable;
         auto clk_div_max = s.prescale_reg - ch_uint<PRESCALE_WIDTH>(1_d);
         s.clk_div->next = select(clk_en,
                                   select(s.clk_div >= clk_div_max, ch_uint<PRESCALE_WIDTH>(0_d),
@@ -207,8 +207,8 @@ public:
         auto clk_end = (s.clk_div == clk_div_max);
 
         // State transitions
-        auto start_requested = ctrl_start && is_idle;
-        auto stop_requested = ctrl_stop && is_idle;
+        auto start_requested = ctrl_start & is_idle;
+        auto stop_requested = ctrl_stop & is_idle;
         auto shift_done = (s.bit_counter == ch_uint<3>(7_d));
 
         ch_uint<4> next_state_val(0_d);
@@ -226,7 +226,7 @@ public:
         s.i2c_state->next = next_state_val;
 
         // SCL output
-        auto scl_toggle = !is_idle && !is_done && ctrl_enable;
+        auto scl_toggle = !is_idle & !is_done & ctrl_enable;
         auto scl_target = select(scl_toggle,
                                   select(s.clk_div < (s.prescale_reg >> ch_uint<PRESCALE_WIDTH>(1_d)),
                                          ch_bool(false), ch_bool(true)),
@@ -238,8 +238,8 @@ public:
         auto data_msb = (s.shift_reg >> ch_uint<8>(7_d)) & ch_uint<8>(1_d);
         auto sda_data = data_msb != ch_uint<8>(0_d);
 
-        auto start_cond = is_start && clk_end;
-        auto stop_cond = is_stop && clk_end;
+        auto start_cond = is_start & clk_end;
+        auto stop_cond = is_stop & clk_end;
 
         auto sda_target = select(start_cond, ch_bool(false),
                                   select(stop_cond, ch_bool(true),
@@ -248,11 +248,11 @@ public:
         io().i2c_sda = s.sda_out_reg;
 
         // Shift register
-        auto load_tx = is_start && clk_end;
-        auto shift_en = (is_write_bit || is_addr_shift) && clk_end && !shift_done;
+        auto load_tx = is_start & clk_end;
+        auto shift_en = (is_write_bit | is_addr_shift) & clk_end & !shift_done;
 
         auto next_bit_counter = select(load_tx, ch_uint<3>(0_d),
-                                        select(shift_en && !shift_done,
+                                        select(shift_en & !shift_done,
                                                 s.bit_counter + ch_uint<3>(1_d), s.bit_counter));
         s.bit_counter->next = next_bit_counter;
 
@@ -261,7 +261,7 @@ public:
                                     select(shift_en, shifted_val, s.shift_reg));
 
         // Status register
-        auto busy_set = !is_idle && !is_done;
+        auto busy_set = !is_idle & !is_done;
         auto tx_empty = is_idle;
 
         ch_uint<32> status_next(0_d);

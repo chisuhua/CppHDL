@@ -147,7 +147,7 @@ public:
 
         // Write burst counter
         auto burst_not_last = !io().wlast;
-        s.write_burst_cnt->next = select(w_ready_sig && burst_not_last,
+        s.write_burst_cnt->next = select(w_ready_sig & burst_not_last,
                                           s.write_burst_cnt + ch_uint<4>(1_d),
                                           ch_uint<4>(0_d));
 
@@ -208,22 +208,22 @@ public:
         auto sel14 = (addr_index == ch_uint<ADDR_WIDTH>(14_d));
         auto sel15 = (addr_index == ch_uint<ADDR_WIDTH>(15_d));
 
-        auto we0 = w_ready_sig && sel0;
-        auto we1 = w_ready_sig && sel1;
-        auto we2 = w_ready_sig && sel2;
-        auto we3 = w_ready_sig && sel3;
-        auto we4 = w_ready_sig && sel4;
-        auto we5 = w_ready_sig && sel5;
-        auto we6 = w_ready_sig && sel6;
-        auto we7 = w_ready_sig && sel7;
-        auto we8 = w_ready_sig && sel8;
-        auto we9 = w_ready_sig && sel9;
-        auto we10 = w_ready_sig && sel10;
-        auto we11 = w_ready_sig && sel11;
-        auto we12 = w_ready_sig && sel12;
-        auto we13 = w_ready_sig && sel13;
-        auto we14 = w_ready_sig && sel14;
-        auto we15 = w_ready_sig && sel15;
+        auto we0 = w_ready_sig & sel0;
+        auto we1 = w_ready_sig & sel1;
+        auto we2 = w_ready_sig & sel2;
+        auto we3 = w_ready_sig & sel3;
+        auto we4 = w_ready_sig & sel4;
+        auto we5 = w_ready_sig & sel5;
+        auto we6 = w_ready_sig & sel6;
+        auto we7 = w_ready_sig & sel7;
+        auto we8 = w_ready_sig & sel8;
+        auto we9 = w_ready_sig & sel9;
+        auto we10 = w_ready_sig & sel10;
+        auto we11 = w_ready_sig & sel11;
+        auto we12 = w_ready_sig & sel12;
+        auto we13 = w_ready_sig & sel13;
+        auto we14 = w_ready_sig & sel14;
+        auto we15 = w_ready_sig & sel15;
 
         s.reg0->next = select(we0, io().wdata, s.reg0);
         s.reg1->next = select(we1, io().wdata, s.reg1);

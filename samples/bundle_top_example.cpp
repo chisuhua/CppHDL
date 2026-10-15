@@ -38,7 +38,7 @@ public:
 
     void describe() override {
         ch_reg<T> counter(0_d, "counter");
-        auto fire = stream_out.valid && stream_out.ready;
+        auto fire = stream_out.valid & stream_out.ready;
         counter->next = select(fire, counter + 1_b, counter);
         stream_out.payload = counter;
         stream_out.valid = 1_b;

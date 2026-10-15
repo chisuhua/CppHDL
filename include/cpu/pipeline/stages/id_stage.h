@@ -145,14 +145,14 @@ public:
         // ========================================================================
         // 读端口 A - rs1 地址
         auto rs1_addr_mux = select(
-            is_op || is_opimm || is_load || is_store || is_branch || is_jalr,
+            is_op | is_opimm | is_load | is_store | is_branch | is_jalr,
             rs1,
             ch_uint<5>(0_d)
         );
         
         // 读端口 B - rs2 地址
         auto rs2_addr_mux = select(
-            is_op || is_store || is_branch,
+            is_op | is_store | is_branch,
             rs2,
             ch_uint<5>(0_d)
         );
@@ -170,10 +170,10 @@ public:
         ch_bool store_flag = is_store;
         
         // 跳转指令标志
-        ch_bool jump_flag = is_jal || is_jalr;
+        ch_bool jump_flag = is_jal | is_jalr;
         
         // ALU 指令标志 (R-type, I-type, LUI, AUIPC)
-        ch_bool alu_flag = is_op || is_opimm || is_lui || is_auipc;
+        ch_bool alu_flag = is_op | is_opimm | is_lui | is_auipc;
         
         // ========================================================================
         // ID/EX 流水线寄存器

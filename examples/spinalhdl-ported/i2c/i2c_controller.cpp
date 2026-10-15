@@ -95,10 +95,10 @@ public:
         // ==================== SDA 输出 ====================
         
         // START 条件：SCL 高时 SDA 从高变低 (在 clk_div=16, SCL 刚变高时拉低 SDA)
-        auto start_condition = is_start_state && (clk_div == ch_uint<5>(16_d));
+        auto start_condition = is_start_state & (clk_div == ch_uint<5>(16_d));
         
         // STOP 条件：SCL 高时 SDA 从低变高 (在 clk_div=16, SCL 刚变高时拉高 SDA)
-        auto stop_condition = is_stop && (clk_div == ch_uint<5>(16_d));
+        auto stop_condition = is_stop & (clk_div == ch_uint<5>(16_d));
         
         // 数据传输：输出 shift_reg 的 MSB
         auto shift_msb = (shift_reg >> ch_uint<DATA_WIDTH>(DATA_WIDTH - 1)) & ch_uint<DATA_WIDTH>(1_d);
@@ -115,7 +115,7 @@ public:
         
         // START/STOP 立即变化，数据传输在 SCL 低时变化
         auto scl_low = (io().scl == ch_bool(false));
-        auto sda_target = select(start_condition || stop_condition, sda_immediate,
+        auto sda_target = select(start_condition | stop_condition, sda_immediate,
                                  select(scl_low, sda_delayed, sda_out_reg));
         sda_out_reg->next = sda_target;
         io().sda = sda_out_reg;
@@ -127,19 +127,19 @@ public:
         // - SCL 下降沿 (clk_div=0): 主机改变 SDA (移位)
         
         // 在 START 状态结束时加载数据 (clk_div=31)
-        auto load_data = is_start_state && (clk_div == ch_uint<5>(31_d));
+        auto load_data = is_start_state & (clk_div == ch_uint<5>(31_d));
         
         // SCL 下降沿 (clk_div=0) 移位 - 为下一个上升沿采样准备数据
         auto sclk_falling = (clk_div == ch_uint<5>(0_d));
-        auto shift_en = is_transfer && sclk_falling;
+        auto shift_en = is_transfer & sclk_falling;
         
         // SCL 上升沿 (clk_div=16) 采样接收数据
         auto sclk_rising = (clk_div == ch_uint<5>(16_d));
-        auto sample_en = is_transfer && sclk_rising;
+        auto sample_en = is_transfer & sclk_rising;
         
         // 位计数 (在采样时递增)
         auto next_bit = select(load_data, ch_uint<3>(0_d),
-                               select(sample_en && (bit_counter != ch_uint<3>(7_d)),
+                               select(sample_en & (bit_counter != ch_uint<3>(7_d)),
                                       bit_counter + ch_uint<3>(1_d), bit_counter));
         bit_counter->next = next_bit;
         
@@ -160,11 +160,11 @@ public:
         // ==================== ACK ====================
         
         // 在 ACK 状态 clk_div=16 时采样 SDA
-        io().ack = select(is_ack && (clk_div == ch_uint<5>(16_d)), sda_in_sig, ch_bool(false));
+        io().ack = select(is_ack & (clk_div == ch_uint<5>(16_d)), sda_in_sig, ch_bool(false));
         
         // ==================== DONE ====================
         
-        io().done = is_stop && (clk_div == ch_uint<5>(31_d));
+        io().done = is_stop & (clk_div == ch_uint<5>(31_d));
     }
 };
 
@@ -236,7 +236,7 @@ int main() {
         
         sim.set_input_value(top_device.instance().io().sda_in, static_cast<uint64_t>(sda));
         
-        if (cycle < 100 || cycle % 500 == 0 || static_cast<uint64_t>(done)) {
+        if (cycle < 100 | cycle % 500 == 0 | static_cast<uint64_t>(done)) {
             std::cout << "Cycle " << cycle << ": scl=" << static_cast<uint64_t>(scl)
                       << ", sda=" << static_cast<uint64_t>(sda)
                       << ", done=" << static_cast<uint64_t>(done) << std::endl;

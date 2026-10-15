@@ -129,7 +129,7 @@ public:
             io().rst,
             ch_bool(false),
             select(
-                io().stall || io().flush,
+                io().stall | io().flush,
                 ch_bool(false),
                 ch_bool(true)
             )

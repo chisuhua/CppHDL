@@ -153,7 +153,7 @@ public:
         interconnect.io().m0_awlen <<= ch_uint<4>(0_d);
         interconnect.io().m0_awsize <<= ch_uint<3>(2_d);
         interconnect.io().m0_awburst <<= ch_uint<2>(1_d);
-        interconnect.io().m0_awvalid <<= io().start && io().is_write;
+        interconnect.io().m0_awvalid <<= io().start & io().is_write;
         io().done <<= interconnect.io().m0_bvalid;
         
         // W 通道

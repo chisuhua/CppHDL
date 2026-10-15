@@ -31,7 +31,7 @@ StreamM2SPipeResult<T> stream_m2s_pipe(ch_stream<T> input_stream) {
     ch_reg<T> payload_reg{};
     ch_reg<ch_bool> valid_reg{};
     
-    ch_bool input_fire = input_stream.valid && input_stream.ready;
+    ch_bool input_fire = input_stream.valid & input_stream.ready;
     
     payload_reg->next = ch::core::select(input_fire, input_stream.payload, payload_reg);
     valid_reg->next = input_fire;
@@ -112,14 +112,14 @@ StreamHalfPipeResult<T> stream_half_pipe(ch_stream<T> input_stream) {
     ch_reg<ch_bool> toggle_reg{};
     
     // Compute input fire condition
-    ch_bool input_fire = input_stream.valid && input_stream.ready;
+    ch_bool input_fire = input_stream.valid & input_stream.ready;
     
     // Toggle signal - flips every time there's a transfer
     // Only accept data when toggle is high (halves bandwidth)
     toggle_reg->next = select(input_fire, !toggle_reg, toggle_reg);
     
     // Only fire when toggle was low (meaning we accept every other cycle)
-    ch_bool accept_data = toggle_reg && input_fire;
+    ch_bool accept_data = toggle_reg & input_fire;
     
     // Register payload and valid
     payload_reg->next = ch::core::select(accept_data, input_stream.payload, payload_reg);

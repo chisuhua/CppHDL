@@ -375,7 +375,7 @@ public:
  * 逻辑：当下游未就绪或有停顿请求时，产生 stall
  */
 inline ch_bool pipeline_stall_ctrl(ch_bool stall_req, ch_bool ready) {
-    return !ready || stall_req;
+    return !ready | stall_req;
 }
 
 /**
@@ -386,7 +386,7 @@ inline ch_bool pipeline_stall_ctrl(ch_bool stall_req, ch_bool ready) {
  * @return 组合后的 flush 信号
  */
 inline ch_bool pipeline_flush_ctrl(ch_bool flush_req, ch_bool exception) {
-    return flush_req || exception;
+    return flush_req | exception;
 }
 
 } // namespace chlib

@@ -149,9 +149,9 @@ public:
         //   010 = LW (word, 32 位)
         //   100 = LBU (zero-extended byte)
         //   101 = LHU (zero-extended half)
-        auto is_byte = (io().funct3 == ch_uint<3>(0_d)) || 
+        auto is_byte = (io().funct3 == ch_uint<3>(0_d)) | 
                        (io().funct3 == ch_uint<3>(4_d));
-        auto is_half = (io().funct3 == ch_uint<3>(1_d)) || 
+        auto is_half = (io().funct3 == ch_uint<3>(1_d)) | 
                        (io().funct3 == ch_uint<3>(5_d));
         auto is_word = (io().funct3 == ch_uint<3>(2_d));
         
@@ -163,7 +163,7 @@ public:
         // 根据 funct3 确定是否符号扩展
         // 符号扩展：LB (000), LH (001)
         // 零扩展：LBU (100), LHU (101)
-        auto is_signed = (io().funct3 == ch_uint<3>(0_d)) || 
+        auto is_signed = (io().funct3 == ch_uint<3>(0_d)) | 
                          (io().funct3 == ch_uint<3>(1_d));
         io().mem_signed = is_signed;
     }

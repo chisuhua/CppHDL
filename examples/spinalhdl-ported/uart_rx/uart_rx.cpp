@@ -35,7 +35,7 @@ public:
         rx_d->next = io().rx;
         
         // 起始位检测：下降沿 (rx_d=高 且 rx=低)
-        auto start = idle && rx_d && (io().rx == ch_bool(false));
+        auto start = idle & rx_d & (io().rx == ch_bool(false));
         
         // 采样点：每位中间 (div == prescale/2)
         // prescale=9, prescale/2=4, 所以采样点在 div=4
@@ -53,8 +53,8 @@ public:
         auto not_idle = (idle == ch_bool(false));
         
         // 在 sample_point 时计数和采样
-        auto sample = not_idle && sample_point;
-        auto sample_and_not_done = sample && (!cnt_done);
+        auto sample = not_idle & sample_point;
+        auto sample_and_not_done = sample & (!cnt_done);
         auto next_cnt = select(start, ch_uint<4>(0_d),
                                select(sample_and_not_done, cnt_inc, cnt));
         cnt->next = next_cnt;
@@ -66,11 +66,11 @@ public:
         auto new_shift = shifted | rx_bit;
         auto cnt_ge_1 = (cnt != ch_uint<4>(0_d));
         shift->next = select(start, ch_uint<8>(0_d),
-                             select(sample && cnt_ge_1, new_shift, shift));
+                             select(sample & cnt_ge_1, new_shift, shift));
         
         // 状态转换：9 个采样点完成后回到 IDLE
         // done 在 cnt=8 且 sample 时触发，valid 延迟一周期
-        auto done = sample && cnt_done;
+        auto done = sample & cnt_done;
         idle->next = select(start, ch_bool(false), select(done, ch_bool(true), idle));
         
         io().data = shift;
@@ -116,15 +116,15 @@ int main() {
     for (int c = 0; c < 300; ++c) {
         // 确定当前 RX 值
         int rx_val = 1;  // 默认空闲
-        if (c >= 20 && c < 30) rx_val = 0;  // 起始位
-        else if (c >= 30 && c < 40) rx_val = 0;  // bit0=0
-        else if (c >= 40 && c < 50) rx_val = 1;  // bit1=1
-        else if (c >= 50 && c < 60) rx_val = 0;  // bit2=0
-        else if (c >= 60 && c < 70) rx_val = 1;  // bit3=1
-        else if (c >= 70 && c < 80) rx_val = 1;  // bit4=1
-        else if (c >= 80 && c < 90) rx_val = 0;  // bit5=0
-        else if (c >= 90 && c < 100) rx_val = 1;  // bit6=1
-        else if (c >= 100 && c < 110) rx_val = 0;  // bit7=0
+        if (c >= 20 & c < 30) rx_val = 0;  // 起始位
+        else if (c >= 30 & c < 40) rx_val = 0;  // bit0=0
+        else if (c >= 40 & c < 50) rx_val = 1;  // bit1=1
+        else if (c >= 50 & c < 60) rx_val = 0;  // bit2=0
+        else if (c >= 60 & c < 70) rx_val = 1;  // bit3=1
+        else if (c >= 70 & c < 80) rx_val = 1;  // bit4=1
+        else if (c >= 80 & c < 90) rx_val = 0;  // bit5=0
+        else if (c >= 90 & c < 100) rx_val = 1;  // bit6=1
+        else if (c >= 100 & c < 110) rx_val = 0;  // bit7=0
         else if (c >= 110) rx_val = 1;  // 停止位
         
         // 在周期边界打印
@@ -144,7 +144,7 @@ int main() {
         
         auto v = sim.get_port_value(top.instance().io().valid);
         auto d = sim.get_port_value(top.instance().io().data);
-        if (c < 150 || static_cast<uint64_t>(v)) {
+        if (c < 150 | static_cast<uint64_t>(v)) {
             std::cout << "Cyc " << c << ": v=" << static_cast<uint64_t>(v)
                       << " d=0x" << std::hex << static_cast<uint64_t>(d) << std::dec << "\n";
         }

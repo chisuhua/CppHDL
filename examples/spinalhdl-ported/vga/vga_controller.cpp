@@ -74,19 +74,19 @@ public:
         // HSync 在 hcnt >= H_DISPLAY + H_FRONT 时拉低，持续 H_SYNC 周期
         auto hsync_start = ch_uint<10>(H_DISPLAY + H_FRONT);
         auto hsync_end = ch_uint<10>(H_DISPLAY + H_FRONT + H_SYNC);
-        auto hsync_active = (hcnt >= hsync_start) && (hcnt < hsync_end);
+        auto hsync_active = (hcnt >= hsync_start) & (hcnt < hsync_end);
         io().hsync = !hsync_active;  // 低电平有效
         
         // 垂直同步脉冲 (低电平有效)
         auto vsync_start = ch_uint<10>(V_DISPLAY + V_FRONT);
         auto vsync_end = ch_uint<10>(V_DISPLAY + V_FRONT + V_SYNC);
-        auto vsync_active = (vcnt >= vsync_start) && (vcnt < vsync_end);
+        auto vsync_active = (vcnt >= vsync_start) & (vcnt < vsync_end);
         io().vsync = !vsync_active;  // 低电平有效
         
         // 显示区域检测
         auto h_display = (hcnt < ch_uint<10>(H_DISPLAY));
         auto v_display = (vcnt < ch_uint<10>(V_DISPLAY));
-        auto in_display = h_display && v_display;
+        auto in_display = h_display & v_display;
         
         // 简单测试图案：棋盘格
         // 每 32 像素交替颜色
@@ -104,7 +104,7 @@ public:
         hcnt->next = select(h_reset, ch_uint<10>(0_d), hcnt + ch_uint<10>(1_d));
         
         auto v_reset = (vcnt == ch_uint<10>(V_TOTAL - 1));
-        vcnt->next = select(v_reset && h_reset, ch_uint<10>(0_d),
+        vcnt->next = select(v_reset & h_reset, ch_uint<10>(0_d),
                             select(h_reset, vcnt + ch_uint<10>(1_d), vcnt));
         
         io().hcount = hcnt;
@@ -175,13 +175,13 @@ int main() {
         
         // 检测 HSync 下降沿
         static uint64_t prev_hsync = 1;
-        if (prev_hsync && !static_cast<uint64_t>(hsync)) {
+        if (prev_hsync & !static_cast<uint64_t>(hsync)) {
             hsync_seen = true;
             std::cout << "HSync pulse at hcount=" << static_cast<uint64_t>(hcount) << std::endl;
         }
         prev_hsync = static_cast<uint64_t>(hsync);
         
-        if (static_cast<uint64_t>(hsync) && hsync_seen) {
+        if (static_cast<uint64_t>(hsync) & hsync_seen) {
             hsync_count++;
             if (hsync_count >= 3) break;
         }
@@ -221,7 +221,7 @@ int main() {
     toVerilog("vga_controller.v", top_device.context());
     std::cout << "Verilog generated" << std::endl;
     
-    if (hsync_seen && vsync_seen) {
+    if (hsync_seen & vsync_seen) {
         std::cout << "\n✅ VGA Controller test PASSED!" << std::endl;
     } else {
         std::cout << "\n❌ VGA Controller test FAILED!" << std::endl;

@@ -241,7 +241,7 @@ int main() {
 
         void create_ports() override {}
 
-        void describe() override { io.ready = io.flag1 && io.flag2; }
+        void describe() override { io.ready = io.flag1 & io.flag2; }
     };
 
     ch::ch_device<TestLargeDataModule> test_large_device;

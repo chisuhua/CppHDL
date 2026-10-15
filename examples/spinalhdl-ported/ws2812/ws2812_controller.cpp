@@ -83,7 +83,7 @@ public:
         
         // TRANSMIT -> DONE (所有位传输完成)
         auto transmit_done = (bit_cnt == ch_uint<16>(TOTAL_BITS - 1));
-        auto next_state_transmit = select(transmit_done && (tick_cnt == ch_uint<8>(100_d)),
+        auto next_state_transmit = select(transmit_done & (tick_cnt == ch_uint<8>(100_d)),
                                            ch_uint<2>(3_d), ch_uint<2>(2_d));
         
         // DONE -> IDLE
@@ -99,15 +99,15 @@ public:
         
         // tick_cnt 在 RESET 和 TRANSMIT 状态递增
         auto tick_advance = (tick_cnt == ch_uint<8>(100_d));
-        tick_cnt->next = select(!is_reset && !is_transmit, ch_uint<8>(0_d),
+        tick_cnt->next = select(!is_reset & !is_transmit, ch_uint<8>(0_d),
                                 select(tick_advance, ch_uint<8>(0_d),
                                        tick_cnt + ch_uint<8>(1_d)));
         
         // ==================== 位计数器 ====================
         
-        auto bit_advance = is_transmit && (tick_cnt == ch_uint<8>(100_d));
+        auto bit_advance = is_transmit & (tick_cnt == ch_uint<8>(100_d));
         auto next_bit_cnt = select(is_reset, ch_uint<16>(0_d),
-                                   select(bit_advance && (bit_cnt != ch_uint<16>(TOTAL_BITS-1)),
+                                   select(bit_advance & (bit_cnt != ch_uint<16>(TOTAL_BITS-1)),
                                           bit_cnt + ch_uint<16>(1_d), bit_cnt));
         bit_cnt->next = next_bit_cnt;
         
@@ -209,7 +209,7 @@ int main() {
         auto dout = sim.get_port_value(top_device.instance().io().dout);
         auto bit_cnt = sim.get_port_value(top_device.instance().io().bit_cnt);
         
-        if (static_cast<uint64_t>(done) && !done_seen) {
+        if (static_cast<uint64_t>(done) & !done_seen) {
             done_seen = true;
             std::cout << "Transmission complete at cycle " << cycle << std::endl;
             std::cout << "Total ticks: " << tick_count << std::endl;

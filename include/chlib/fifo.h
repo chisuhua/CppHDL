@@ -64,7 +64,7 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
     read_data <<= memory.sread(read_ptr, ch_bool(true));
     
     // 计算下一周期计数器值（用于满/空判断）
-    // 使用 select 代替 && 以支持 IO 端口类型
+    // 使用 select 代替 & 以支持 IO 端口类型
     ch_bool will_write = select(wren, ch_bool(!is_full(count)), ch_bool(false));
     ch_bool will_read = select(rden, ch_bool(!is_empty(count)), ch_bool(false));
     
@@ -131,7 +131,7 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
     ch_reg<ch_uint<DATA_WIDTH>> output_reg(0_d, "fwft_fifo_output");
 
     // 写入操作
-    ch_bool write_enable = wren && !is_full(count);
+    ch_bool write_enable = wren & !is_full(count);
     memory.write(write_ptr, din, write_enable);
 
     // 更新写指针
@@ -142,7 +142,7 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
     // 读取操作 - 创建读端口
     ch_uint<DATA_WIDTH> read_port;
     read_port <<= memory.sread(read_ptr, ch_bool(1_b));
-    ch_bool read_enable = rden && !is_empty(count);
+    ch_bool read_enable = rden & !is_empty(count);
 
     // 更新读指针
     ch_uint<ADDR_WIDTH> next_read_ptr =
@@ -155,7 +155,7 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
                output_reg,      // 否则更新为下一个可读取的数据
                read_port);      // 使用读端口数据
     output_reg->next =
-        select(read_enable || is_empty(count + 1_d), // 如果读使能或下个周期为空
+        select(read_enable | is_empty(count + 1_d), // 如果读使能或下个周期为空
                new_output,                           // 更新输出
                output_reg                            // 否则保持不变
         );
@@ -163,8 +163,8 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
     // 更新计数器
     ch_uint<ADDR_WIDTH + 1> next_count;
     next_count =
-        select(write_enable && !read_enable, count + 1_d,
-               select(!write_enable && read_enable, count - 1_d, count));
+        select(write_enable & !read_enable, count + 1_d,
+               select(!write_enable & read_enable, count - 1_d, count));
     count->next = next_count;
 
     FwftFifoResult<DATA_WIDTH, ADDR_WIDTH> result;
@@ -370,7 +370,7 @@ async_fifo(ch_bool wr_clk, ch_bool wr_rst, ch_bool wren,
     ch_uint<ADDR_WIDTH> wr_ptr_gray = to_gray(wr_ptr);
     ch_bool wr_full = (to_gray(rd_ptr_gray_sync) ==
                        wr_ptr_gray + (1ULL << make_literal(ADDR_WIDTH - 1)));
-    ch_bool write_enable = wren && !wr_full;
+    ch_bool write_enable = wren & !wr_full;
 
     memory.write(wr_clk, wr_ptr, din, write_enable);
 
@@ -380,7 +380,7 @@ async_fifo(ch_bool wr_clk, ch_bool wr_rst, ch_bool wren,
     // 读取操作
     ch_uint<ADDR_WIDTH> rd_ptr_gray = to_gray(rd_ptr);
     ch_bool rd_empty = (wr_ptr_gray_sync == rd_ptr_gray);
-    ch_bool read_enable = rden && !rd_empty;
+    ch_bool read_enable = rden & !rd_empty;
     ch_uint<DATA_WIDTH> output_data = memory.read(rd_ptr);
 
     // 更新读指针
@@ -438,18 +438,18 @@ lifo_stack(ch_bool push, ch_uint<DATA_WIDTH> din, ch_bool pop) {
     ch_reg<ch_uint<ADDR_WIDTH>> stack_ptr(0_d, "lifo_stack_ptr");
 
     // push操作
-    ch_bool push_enable = push && !is_full(stack_ptr);
+    ch_bool push_enable = push & !is_full(stack_ptr);
     memory.write(stack_ptr, din, push_enable);
 
     // 更新栈指针
     ch_uint<ADDR_WIDTH> next_stack_ptr =
-        select(push_enable && !pop, stack_ptr + 1_d,
-               select(!push_enable && pop && !is_empty(stack_ptr),
+        select(push_enable & !pop, stack_ptr + 1_d,
+               select(!push_enable & pop & !is_empty(stack_ptr),
                       stack_ptr - 1_d, stack_ptr));
     stack_ptr->next = next_stack_ptr;
 
     // pop操作
-    ch_bool pop_enable = pop && !is_empty(stack_ptr);
+    ch_bool pop_enable = pop & !is_empty(stack_ptr);
     ch_uint<ADDR_WIDTH> pop_addr =
         select(pop_enable, stack_ptr - 1_d, stack_ptr);
     ch_uint<DATA_WIDTH> read_port;

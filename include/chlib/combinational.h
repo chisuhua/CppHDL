@@ -228,8 +228,8 @@ ComparatorResult<N> comparator(ch_uint<N> a, ch_uint<N> b) {
         ch_bool b_bit = bit_select(b, i);
 
         // 如果当前位不同
-        ch_bool a_gt_b = a_bit && !b_bit;
-        ch_bool a_lt_b = !a_bit && b_bit;
+        ch_bool a_gt_b = a_bit & !b_bit;
+        ch_bool a_lt_b = !a_bit & b_bit;
 
         // 更新比较结果
         ch_bool update = result.equal; // 只有在前面的位相等时才更新
@@ -241,7 +241,7 @@ ComparatorResult<N> comparator(ch_uint<N> a, ch_uint<N> b) {
         result.less = select(update, new_less, result.less);
 
         ch_bool new_equal =
-            select(a_gt_b || a_lt_b, ch_bool(false), result.equal);
+            select(a_gt_b | a_lt_b, ch_bool(false), result.equal);
         result.equal = select(update, new_equal, result.equal);
     }
 
@@ -319,7 +319,7 @@ ch_bool in_range(ch_uint<N> input, unsigned min_val, unsigned max_val) {
     ch_uint<N> max_literal = make_literal(max_val, N);
     ch_bool greater_equal_min = input >= min_literal;
     ch_bool less_equal_max = input <= max_literal;
-    return greater_equal_min && less_equal_max;
+    return greater_equal_min & less_equal_max;
 }
 
 } // namespace chlib

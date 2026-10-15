@@ -72,7 +72,7 @@ public:
         auto count_done = (count_reg == period_sig);
         count_reg->next = select(!enable_sig, ch_uint<COUNT_WIDTH>(0_d),
                                  select(restart_sig, ch_uint<COUNT_WIDTH>(0_d),
-                                        select(prescale_done && count_done, ch_uint<COUNT_WIDTH>(0_d),
+                                        select(prescale_done & count_done, ch_uint<COUNT_WIDTH>(0_d),
                                                select(prescale_done, count_reg + ch_uint<COUNT_WIDTH>(1_d),
                                                       count_reg))));
         
@@ -81,7 +81,7 @@ public:
         // ==================== 中断生成 ====================
         
         // 当计数器达到周期值时生成中断脉冲
-        // 使用 select 替代 &&
+        // 使用 select 替代 &
         auto interrupt_gen = select(enable_sig,
                                      select(prescale_done, count_done, ch_bool(false)),
                                      ch_bool(false));
@@ -154,7 +154,7 @@ int main() {
         auto interrupt = sim.get_port_value(top_device.instance().io().interrupt);
         auto counter = sim.get_port_value(top_device.instance().io().counter);
         
-        if (cycle < 50 || cycle % 50 == 0 || static_cast<uint64_t>(interrupt)) {
+        if (cycle < 50 | cycle % 50 == 0 | static_cast<uint64_t>(interrupt)) {
             std::cout << "Cycle " << cycle << ": counter=" << static_cast<uint64_t>(counter)
                       << ", interrupt=" << static_cast<uint64_t>(interrupt) << std::endl;
         }

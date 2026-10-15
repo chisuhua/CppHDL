@@ -34,7 +34,7 @@ ch_uint<compute_bit_width(N)> leading_zero_detector(ch_uint<N> input) {
 
         // 如果当前位为0，则更新计数
         lz_count =
-            select(is_zero && (lz_count == make_uint<OUTPUT_WIDTH>(N - i - 1)),
+            select(is_zero & (lz_count == make_uint<OUTPUT_WIDTH>(N - i - 1)),
                    current_count + 1_d, lz_count);
     }
 
@@ -65,7 +65,7 @@ ch_uint<compute_bit_width(N)> leading_one_detector(ch_uint<N> input) {
 
         // 如果当前位为1，则更新计数
         lo_count =
-            select(is_one && (lo_count == make_uint<OUTPUT_WIDTH>(N - i - 1)),
+            select(is_one & (lo_count == make_uint<OUTPUT_WIDTH>(N - i - 1)),
                    current_count + 1_d, lo_count);
     }
 
@@ -95,7 +95,7 @@ ch_uint<compute_bit_width(N)> trailing_zero_detector(ch_uint<N> input) {
         ch_uint<OUTPUT_WIDTH> current_count = make_uint<OUTPUT_WIDTH>(i);
 
         // 如果当前位为0且前面都是0，则更新计数
-        tz_count = select(is_zero && !found_one, current_count + 1_d, tz_count);
+        tz_count = select(is_zero & !found_one, current_count + 1_d, tz_count);
         found_one = select(is_zero, found_one, 1_b);
     }
 
@@ -125,7 +125,7 @@ ch_uint<compute_bit_width(N)> trailing_one_detector(ch_uint<N> input) {
         ch_uint<OUTPUT_WIDTH> current_count = make_uint<OUTPUT_WIDTH>(i);
 
         // 如果当前位为1且前面都是1，则更新计数
-        to_count = select(is_one && !found_zero, current_count + 1_d, to_count);
+        to_count = select(is_one & !found_zero, current_count + 1_d, to_count);
         found_zero = select(is_one, found_zero, 1_b);
     }
 

@@ -100,7 +100,7 @@ public:
         bytes_rem->next = select(start, io().reg_length, select(b_hs, select(stop, ch_uint<32>(0_d), bytes_rem - bytes_in_burst), select(stop, ch_uint<32>(0_d), bytes_rem)));
         
         auto wlast = (beat_cnt == burst_len);
-        beat_cnt->next = select(start || is_done_st, ch_uint<4>(0_d),
+        beat_cnt->next = select(start | is_done_st, ch_uint<4>(0_d),
                                select(r_hs, select(rlast, ch_uint<4>(0_d), beat_cnt + ch_uint<4>(1_d)),
                                select(w_hs, select(wlast, ch_uint<4>(0_d), beat_cnt + ch_uint<4>(1_d)), beat_cnt)));
         
@@ -111,7 +111,7 @@ public:
         
         auto rd_err = select(is_rd_data, select(r_vld, rresp != ch_uint<2>(0_d), ch_bool(false)), ch_bool(false));
         auto wr_err = select(is_wr_resp, select(b_vld, bresp != ch_uint<2>(0_d), ch_bool(false)), ch_bool(false));
-        err_flag->next = select(start, ch_bool(false), select(rd_err || wr_err || stop, ch_bool(true), err_flag));
+        err_flag->next = select(start, ch_bool(false), select(rd_err | wr_err | stop, ch_bool(true), err_flag));
         
         auto rd_complete = select(is_rd_data, select(r_vld, select(r_rdy_sig, rlast, ch_bool(false)), ch_bool(false)), ch_bool(false));
         auto wr_complete = select(is_wr_data, select(w_vld, select(w_rdy, wlast, ch_bool(false)), ch_bool(false)), ch_bool(false));
@@ -123,7 +123,7 @@ public:
                                 select(is_wr_addr, select(aw_rdy, ch_uint<3>(4_d), ch_uint<3>(3_d)),
                                 select(is_wr_data, select(wr_complete, ch_uint<3>(5_d), ch_uint<3>(4_d)),
                                 select(is_wr_resp, select(b_hs, select(more_data, ch_uint<3>(1_d), ch_uint<3>(6_d)), ch_uint<3>(5_d)), ch_uint<3>(5_d)))))));
-        state->next = select(stop && !is_done_st, ch_uint<3>(6_d), next_state);
+        state->next = select(stop & !is_done_st, ch_uint<3>(6_d), next_state);
         
         auto aligned_raddr = curr_raddr & ~(ch_uint<ADDR_WIDTH>(NUM_BYTES - 1));
         auto aligned_waddr = curr_waddr & ~(ch_uint<ADDR_WIDTH>(NUM_BYTES - 1));
@@ -151,8 +151,8 @@ public:
         auto done = select(is_done_st, select(err_flag, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().status_busy = busy; io().status_done = done; io().status_error = err_flag;
         
-        irq_en->next = select(start, ch_bool(true), select(done || err_flag, ch_bool(false), irq_en));
-        io().irq = select(done || err_flag, irq_en, ch_bool(false));
+        irq_en->next = select(start, ch_bool(true), select(done | err_flag, ch_bool(false), irq_en));
+        io().irq = select(done | err_flag, irq_en, ch_bool(false));
     }
 };
 

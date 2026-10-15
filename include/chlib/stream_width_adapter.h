@@ -74,10 +74,10 @@ ch_stream<TWide> stream_narrow_to_wide(ch_stream<TNarrow> input) {
     TWide new_accumulator = accumulator | shifted_data;
     
     // Update accumulator
-    accumulator->next = select(input.valid && input.ready, new_accumulator, accumulator);
+    accumulator->next = select(input.valid & input.ready, new_accumulator, accumulator);
     
     // Update counter
-    counter->next = select(input.valid && input.ready,
+    counter->next = select(input.valid & input.ready,
                            select(is_full, ch_uint<8>(0_d), counter + ch_uint<8>(1_d)),
                            counter);
     
@@ -128,13 +128,13 @@ ch_stream<TNarrow> stream_wide_to_narrow(ch_stream<TWide> input) {
     TNarrow narrow_data = TNarrow(data_reg >> shift_amount);
     
     // Load new wide data when input is valid and we're done with previous data
-    ch_bool load_new = input.valid && !valid_flag;
+    ch_bool load_new = input.valid & !valid_flag;
     data_reg->next = select(load_new, input.payload, data_reg);
-    valid_flag->next = select(load_new, ch_bool(true), select(is_done && result.ready, ch_bool(false), valid_flag));
+    valid_flag->next = select(load_new, ch_bool(true), select(is_done & result.ready, ch_bool(false), valid_flag));
     
     // Update counter
     counter->next = select(load_new, ch_uint<8>(0_d),
-                           select(is_done && result.ready, ch_uint<8>(0_d),
+                           select(is_done & result.ready, ch_uint<8>(0_d),
                                   select(result.ready, counter + ch_uint<8>(1_d), counter)));
     
     // Output valid when we have data
