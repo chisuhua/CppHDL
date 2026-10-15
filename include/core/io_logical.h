@@ -61,8 +61,14 @@ auto operator!=(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
 }
 
 // 为端口添加逻辑操作符支持
-// TODO: 这些操作符应标记为已废弃——在硬件中 &&/|| 和 &/| 对 1-bit 信号效果相同，
-// 但 C++ 的短路语义让用户误以为有特殊行为。推荐使用 select() 替代。
+//
+// DEPRECATED (2026-10-16 ADR-036). The && / || overloads below are
+// marked [[deprecated]]; use the bitwise operators & / | on 1-bit
+// signals (hardware-identical, no C++ short-circuit semantics that
+// could mislead readers). select() is for value muxing, not boolean
+// conjunction. See docs/adr/ADR-036-deprecate-hdl-logical-operators.md
+// for the decision rationale and the migration policy that the rest
+// of the codebase already follows.
 template <typename T1, typename Dir1, typename T2, typename Dir2>
 [[deprecated("use operator& for 1-bit AND; select() is for value muxing")]]
 auto operator&&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
@@ -75,6 +81,7 @@ auto operator&&(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
 template <typename T1, typename Dir1, typename T2, typename Dir2>
 [[deprecated("use operator| for 1-bit OR; select() is for value muxing")]]
 auto operator||(const port<T1, Dir1> &lhs, const port<T2, Dir2> &rhs) {
+    // See ADR-036 / comment on operator&& above.
     static_assert(ch_width_v<T1> == 1 && ch_width_v<T2> == 1,
                   "Logical OR only supported for 1-bit types");
     // 在硬件中，逻辑或和按位或效果相同
