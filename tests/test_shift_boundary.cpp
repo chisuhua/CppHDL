@@ -32,7 +32,7 @@ TEST_CASE("FIFO shift expressions compile", "[shift][fifo]") {
     REQUIRE(n4 == 2147483648);
 }
 
-// 测试 3: 验证 axi4lite.h 中的位移修复
+// 测试 3: 验证 AXI4-Lite 地址常量位移表达式 (chlib/axi4lite.h 已删除;此测试保留作通用常量位移回归)
 TEST_CASE("AXI4-Lite shift expressions compile", "[shift][axi4]") {
     constexpr unsigned addr12 = (1ULL << 12);  // 4096
     constexpr unsigned addr20 = (1ULL << 20);  // 1048576

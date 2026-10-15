@@ -227,6 +227,16 @@ jobs:
       shell: bash
       run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4)
 
+    - name: Verify AGENTS.md test counts
+      # Single source of truth check: the documented CTest total in root
+      # AGENTS.md NOTES §Test counts must match `ctest -N` at build time.
+      # This prevents the historical drift where the documented number
+      # (142/161) silently fell behind the actual registered count (159).
+      # See openspec/changes/cleanup-orphan-code for the audit trail.
+      if: matrix.os == 'ubuntu-22.04' && matrix.build_type == 'Release'
+      shell: bash
+      run: scripts/verify_test_counts.sh
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4

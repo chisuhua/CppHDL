@@ -97,7 +97,6 @@ set_tests_properties(test_axi_lite_verilator_e2e PROPERTIES
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
 add_catch_test(test_assert chlib/test_assert.cpp)
-add_catch_test(test_axi4lite chlib/test_axi4lite.cpp)
 add_catch_test(test_bitwise chlib/test_bitwise.cpp)
 add_catch_test(test_cache_simple chlib/test_cache_simple.cpp)
 add_catch_test(test_cam chlib/test_cam.cpp)
@@ -282,7 +281,12 @@ add_catch_test(test_mem_comb_read test_mem_comb_read.cpp)
 
 # 组件测试
 add_catch_test(test_state_machine test_state_machine.cpp)
-add_catch_test(test_pipeline_regs test_pipeline_regs.cpp)
+# test_pipeline_regs.cpp deleted in cleanup-orphan-code (commit B)
+# The PipelineReg Component coverage lives in:
+#   - tests/chlib/test_forwarding.cpp  (chlib::ForwardingMux + IfIdRegs struct field access)
+#   - examples/riscv-mini/src/rv32i_pipeline.h  (full 5-stage integration via ch::ch_device<Rv32iSoc>)
+# The deleted file was a 2-TEST_CASE compile-only smoke that hit 0 assertions
+# (only `(void)reg;` discard). See openspec/changes/cleanup-orphan-code/proposal.md.
 add_catch_test(test_fragment test_fragment.cpp)
 
 # AXI 测试

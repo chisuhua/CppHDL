@@ -64,7 +64,7 @@ static_cast<uint64_t>(1) << N
 |------|------|----------|------|
 | `include/core/operators.h` | 758 | 左移操作符掩码计算 | ✅ |
 | `include/chlib/fifo.h` | 30,54,120,316 | FIFO 容量计算 | ✅ |
-| `include/chlib/axi4lite.h` | 116 | AXI4-Lite 内存大小 | ✅ |
+| `include/chlib/axi4lite.h` | 116 | AXI4-Lite 内存大小 | 🗑️ 文件已删除 (2026-10 cleanup-orphan-code) |
 | `include/riscv/rv32i_tcm.h` | 28,71,111 | TCM 存储器大小 | ✅ |
 
 ---
