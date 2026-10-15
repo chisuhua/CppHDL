@@ -15,8 +15,8 @@ include/cpu/
 ├── hazard/
 │   └── hazard_unit_bundle.h        # Bundle interface (namespace cpu)
 ├── cache/
-│   ├── i_cache.h / i_cache_complete.h / i_cache_prefetch.h
-│   └── d_cache.h / d_cache_complete.h / d_cache_write_buffer.h
+│   ├── i_cache_stub.h / i_cache_complete.h / i_cache_prefetch.h
+│   └── d_cache_stub.h / d_cache_complete.h / d_cache_write_buffer.h
 ├── pipeline/
 │   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode
 │   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 lines — largest)
