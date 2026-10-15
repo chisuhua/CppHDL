@@ -29,7 +29,7 @@ CppHDL/
 │   ├── axi4/              # AXI4 bus demos
 │   ├── stream/            # Stream Mux/Demux/Arbiter/Fork
 │   └── riscv-mini/        # RV32I 5-stage pipeline (partial)
-├── tests/            # 111 Catch2 test files (83 base + 28 chlib)
+├── tests/            # Catch2 unit tests (counts in NOTES §Test counts)
 │   └── chlib/              # Component library tests
 └── docs/             # Architecture plans, usage guides, phase reports
 ```
@@ -138,6 +138,12 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 - **`ch_mem` imem in RV32I / RISC-V fixtures MUST use sread (not aread)**. `mem.sread(addr, enable=true)` is posedge-aligned and trace-parity-safe with both InterpreterBackend and VerilatorBackend. `mem.aread(addr)` is 0-cycle combinational in Verilog (Verilator returns the value in the same cycle as the address change) but posedge-sampled in the Simulator (the value lands in the next cycle's data_map_) — a 1-cycle skew that breaks trace parity. See `verilator-e2e-coverage` spec §Requirement 1 invariant 3.
 - **Hierarchical input driver MUST be emitted by codegen**. A submodule `ch_in` with an internal driver (`sub.io().x <<= some_wire` invokes `inputimpl::set_driver`, equivalent to `num_srcs() > 0`) MUST NOT be emitted as a top-level Verilog `input` port — it becomes an internal `logic` wire (`src/codegen_verilog.cpp::print_header` filters these out), declared by `print_decl`, and assigned from its driver in `print_logic` (walks the unnamed-proxy chain, mirroring `type_output`). The matching backend code MUST also skip them: `emit_sim_main_postlude` skips the `set_input_Vtop` / `get_field_ptr_Vtop` case (the Vtop field does not exist), and `build_port_access_table` does not add the port to `port_access_` (`sync_inputs_to_vtop` won't try to write it). Skipping any of the four sites makes verilator either reference a non-existent Vtop field (compile/link error) or keep the port at X (=0 after `initialize()`'s reset pulse), silently disabling every `ch_in` below the top component — RV32I `instr_data` becomes NOP (commit_count=0), AXI4-Lite `slave.awvalid` triggers handshake deadlock (rvalid=0). This was originally misdiagnosed as issue #25 register propagation. JIT already follows the same rule (`src/jit/jit_ir_gen_lnode_io.cpp:31-46`); the verilog codegen path is now in parity.
 
+## KNOWN LIMITATIONS
+Documented gaps that are by-design or awaiting redesign. Each entry points to authoritative docs (ADR / usage guide) to avoid drift between this file and the linked source.
+
+- **`Simulator::set_ab_verification()` is a no-op stub** (ADR-035 R9, `docs/usage_guide/10-verilator-backend.md:133`). After the dual-function JIT refactor (`tick_comb` + `tick_seq`), the A/B comparison logic was not redesigned — enabling the flag only emits a `CHWARN` per `tick()` (`src/simulator.cpp:332-338`) but does not actually diff interpreter vs JIT `data_map_`. Re-enabling dual-backend comparison requires saving snapshots around the JIT `eval_fn_` call and reconciling per-instruction. Do NOT depend on `is_ab_verification()` returning meaningful parity status. The whole `set_ab_verification` block is guarded by `#if __has_include("jit/jit_compiler.h")` (`include/simulator.h:90-97`); with `CH_JIT_ENABLE=OFF` the symbol is absent.
+- **Cache stubs `i_cache.h` / `d_cache.h` are pass-through** (no real Hit/Miss or LRU). Semantics: `ready := req, miss := false, data := axi_data`. The full implementation lives in `include/cpu/cache/{i,d}_cache_complete.h` and is what `examples/riscv-mini/src/{i_cache_prefetch.h,d_cache_write_buffer.h}` actually instantiate. If you need a real cache, use the `_complete` variants directly. **Do not co-include the stub with the `_complete` header** — both define `chlib::ICacheConfig` / `chlib::DCacheConfig` and the ODR clash breaks the build. See `include/cpu/AGENTS.md` for the canonical key-files table.
+
 ## ZERO-DEBT POLICY
 Every Phase must exit with **zero technical debt** before marking complete:
 - **No dead code**: Delete stubs, skeleton files, and unused includes immediately. Never "leave for later".
@@ -179,7 +185,21 @@ ctest --output-on-failure
 ```
 
 ## NOTES
-- 142 CTest tests registered. `perf_tests` runs `perf_tests --all` (F2 subprocess-isolated), wall-clock ~15-20 min; TIMEOUT 1800 in CMake. Pass count rerun before claiming.
+<!-- CI anchor: the next line is the single-source-of-truth CTest total.
+     scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
+     parse this line. Update this number (and the matching ctest -N output)
+     together when adding/removing tests. Do not reformat. -->
+- CTEST_TOTAL: 159
+- **Test counts (single source of truth — re-verify before quoting in PRs/docs)**
+  - **159 CTest tests registered** as of 2026-10-15. Verify: `cd build && ctest -N | tail -1`.
+  - **148 non-perf CTest** (= 159 − 11 perf). Verify: `cd build && ctest -N -LE perf | tail -1`.
+  - **91 Catch2 test source files** at `tests/test_*.cpp` (all registered; 3 bit-rot orphans — `test_memory_leak.cpp` / `test_memory_optimization.cpp` / `test_memory_performance.cpp` — deleted 2026-10-15 because they used a pre-refactor `ch_reg` API that no longer compiles; see `tests/CMakeLists.txt:279-281`).
+  - **27 Catch2 test source files** at `tests/chlib/test_*.cpp` (all registered).
+  - **3 Catch2 test source files** at `tests/jit/test_*.cpp` (registered separately).
+  - **40 sample programs** at `samples/*.cpp`.
+  - **32 main()-bearing examples** in `examples/`. **28 are tracked** by `run_all_ported_tests.sh`; the remaining 4 (`examples/verilator/0{1,2,3}_*.cpp` + `examples/spinalhdl-ported/testbench_template.cpp`) are demos not run by CI.
+  - Verify: `ls tests/test_*.cpp tests/chlib/test_*.cpp tests/jit/test_*.cpp | wc -l` (= 121) and `grep -rl '^int main' examples --include='*.cpp' | wc -l` (= 32).
+- `perf_tests` runs `perf_tests --all` (F2 subprocess-isolated), wall-clock ~15-20 min; TIMEOUT 1800 in CMake. Pass count rerun before claiming.
 - 28 main() examples tracked by `run_all_ported_tests.sh` (28/28 pass)
 - riscv-mini: Pipeline compile-time fixes complete, runtime requires ch_device wrapper
 - I2C controller is simplified (no ACK handling)

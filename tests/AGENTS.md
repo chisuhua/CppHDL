@@ -4,14 +4,14 @@ Parent: [AGENTS.md](../AGENTS.md)
 
 ## OVERVIEW
 
-Catch2 v3.7.0 unit tests validating AST, Core, Simulator, CodeGen. 109 test files: 79 base + 30 chlib.
+Catch2 v3.7.0 unit tests validating AST, Core, Simulator, CodeGen. For test counts and verification commands, see root `AGENTS.md` NOTES §Test counts (single source of truth).
 
 ## STRUCTURE
 
 ```
 tests/
 ├── test_*.cpp          # 79 base tests (core functionality)
-├── chlib/              # 30 chlib component tests
+├── chlib/              # chlib component tests (count in root AGENTS.md NOTES)
 │   ├── test_assert.cpp
 │   ├── test_if_stmt.cpp
 │   └── test_simulator_trace.cpp

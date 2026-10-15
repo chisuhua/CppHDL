@@ -3,7 +3,7 @@
 Child of `tests/AGENTS.md`. Tag all TEST_CASE with `[chlib]`.
 
 ## OVERVIEW
-17 Catch2 test files validating chlib components: arithmetic, logic, streams, FIFO, pipeline, arbiter.
+Catch2 test files validating chlib components: arithmetic, logic, streams, FIFO, pipeline, arbiter. For the current count and verification command, see root `AGENTS.md` NOTES §Test counts (single source of truth).
 
 ## STRUCTURE
 ```
@@ -17,7 +17,7 @@ tests/chlib/
 ├── test_logic.cpp             # Logic operations
 ├── test_memory.cpp            # RAM components
 ├── test_onehot.cpp            # One-hot encoding
-├── test_pipeline_lib.cpp      # Pipeline components
+├── test_pipeline.cpp          # Pipeline components (target: test_pipeline_lib)
 ├── test_selector_*.cpp        # Priority, round-robin, arbiter selection
 ├── test_sequential.cpp        # Sequential logic
 ├── test_stream*.cpp           # Stream arbiter tests

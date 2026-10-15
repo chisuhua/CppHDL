@@ -10,7 +10,6 @@ Header-only HDL library: core primitives, AST definitions, component library, bu
 include/
 ├── ch.hpp              # Aggregator: core + types (use in examples/tests)
 ├── chlib.h             # Aggregator: chlib components (arithmetic, stream, fifo...)
-├── bundle.h            # Bundle base template
 ├── component.h         # Component base class
 ├── device.h            # Device wrapper for simulation
 ├── simulator.h         # Simulator main interface

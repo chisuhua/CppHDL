@@ -55,7 +55,6 @@ include/axi4/
 ## TESTS
 | File | Tag | Focus |
 |------|-----|-------|
-| `test_axi4lite.cpp` | `[axi][lite]` | Lite protocol |
 | `test_axi_lite_bundle.cpp` | `[bundle][axi]` | Bundle integration |
 | `test_axi_dma.cpp` | `[axi][dma]` | DMA controller |
 | `test_axi_pwm_simple.cpp` | `[axi][pwm]` | PWM basic |

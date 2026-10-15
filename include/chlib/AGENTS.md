@@ -34,7 +34,6 @@ include/chlib/
 | Width adapter | chlib/stream_width_adapter.h |
 | Sequential logic | chlib/sequential.h |
 | Memory | chlib/memory.h |
-| AXI4-Lite | chlib/axi4lite.h |
 
 ## CONVENTIONS
 - Namespace: `ch::chlib`
@@ -49,7 +48,7 @@ include/chlib/
 - **Blocking in pipelines**: Use combinational/sequential components correctly
 
 ## RELATED DIRECTORIES
-- tests/chlib/       # 17 test files for chlib components
+- tests/chlib/       # chlib component test sources (count in root AGENTS.md NOTES)
 - include/bundle/    # Stream and Flow bundle definitions
 
 ## PHASE GATES
