@@ -322,6 +322,19 @@ void verilogwriter::print_header(std::ostream &out) {
 
         // Emit default clock/reset FIRST so they occupy stable positions
         // across designs (Verilator dlopen / SHA-1 cache key stability).
+        // verilator-hier-input-flattening-fix: filter out `type_input`
+        // nodes whose `inputimpl::driver() != nullptr` (equivalently
+        // `num_srcs() > 0`) — these are driven submodule inputs and MUST
+        // NOT appear as top-level ports. They are emitted as internal
+        // `logic` wires in print_decl() and assigned from their driver
+        // in print_logic(). Without this filter, verilator sees
+        // top-level input ports that nothing drives, so they stay X
+        // (=0 after issue #25's 2-step reset pulse), silently
+        // disabling every `ch_in` that lives below the top component
+        // (e.g. RV32I's `if_stage.io().instr_data`, AXI4-Lite slave
+        // inputs). JIT already handles this correctly
+        // (src/jit/jit_ir_gen_lnode_io.cpp:31-46); this brings the
+        // Verilog codegen path into parity with JIT semantics.
         std::vector<ch::core::lnodeimpl *> filtered_ports;
         for (auto *port_node : ports) {
             if (port_node->type() == ch::core::lnodetype::type_clock) {
@@ -335,7 +348,12 @@ void verilogwriter::print_header(std::ostream &out) {
         }
         for (auto *port_node : ports) {
             if (port_node->type() == ch::core::lnodetype::type_input) {
-                filtered_ports.push_back(port_node);
+                // Driven submodule inputs become internal logic in
+                // print_decl() / print_logic(); skip top-port emit.
+                auto *in = static_cast<ch::core::inputimpl *>(port_node);
+                if (in->driver() == nullptr) {
+                    filtered_ports.push_back(port_node);
+                }
             }
         }
         for (auto *port_node : ports) {
@@ -409,10 +427,23 @@ void verilogwriter::print_decl(std::ostream &out) {
                 continue; // Skip if already processed
 
             switch (node->type()) {
-            case ch::core::lnodetype::type_input:
-                inputs.push_back(node);
+            case ch::core::lnodetype::type_input: {
+                // verilator-hier-input-flattening-fix: input nodes with
+                // an internal driver (submodule `ch_in <<= ...`) are not
+                // top-level ports (filtered out in print_header), but
+                // they still need a `logic` declaration so the
+                // downstream assigns can read them. Driver-less inputs
+                // keep their existing semantics (top-level `input`
+                // port, no internal declaration needed).
+                auto *in = static_cast<ch::core::inputimpl *>(node);
+                if (in->driver() != nullptr) {
+                    wires.push_back(node);
+                } else {
+                    inputs.push_back(node);
+                }
                 declared_nodes_.insert(node);
                 break;
+            }
             case ch::core::lnodetype::type_output:
                 outputs.push_back(node);
                 declared_nodes_.insert(node);
@@ -554,6 +585,41 @@ void verilogwriter::print_logic(std::ostream &out) {
                                 out << "    assign " << output_name
                                     << " = " << driver_name << ";\n";
                             }
+                        }
+                    }
+                }
+                printed_logic_nodes_.insert(node);
+                break;
+            case ch::core::lnodetype::type_input:
+                // verilator-hier-input-flattening-fix: emit
+                // `assign <input> = <driver>;` for driven submodule
+                // inputs. Mirrors type_output logic (walk unnamed
+                // proxy chain to reach the real driver). Driver-less
+                // inputs (top-level ch_in with no `<<=` wiring) get
+                // filtered out here because there is nothing to
+                // assign — their values come from the testbench via
+                // Vtop field writes (sync_inputs_to_vtop).
+                {
+                    auto *input_node =
+                        static_cast<ch::core::inputimpl *>(node);
+                    ch::core::lnodeimpl *driver = input_node->driver();
+                    if (driver != nullptr) {
+                        // Walk only UNNAMED proxies; named wires
+                        // already have their own declaration +
+                        // assign, so we want to read the value at
+                        // that wire's name.
+                        while (driver &&
+                               driver->type() ==
+                                   ch::core::lnodetype::type_proxy &&
+                               !node_names_.count(driver) &&
+                               driver->num_srcs() > 0) {
+                            driver = driver->src(0);
+                        }
+                        if (driver && node_names_.count(driver) &&
+                            node_names_.count(node)) {
+                            out << "    assign "
+                                << node_names_[node] << " = "
+                                << node_names_[driver] << ";\n";
                         }
                     }
                 }

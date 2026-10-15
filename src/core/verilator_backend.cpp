@@ -200,6 +200,20 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
     auto nodes = ctx->get_eval_list();
     using ch::core::lnodetype;
 
+    // verilator-hier-input-flattening-fix: a `ch_in` with an internal
+    // driver (submodule `sub.io().in <<= ...`) is no longer a top-level
+    // Vtop port — print_header filtered it out, so its Vtop field does
+    // not exist. Skip the case generation here; otherwise the generated
+    // `case <id>: v->vname = bits;` would fail to compile. The
+    // testbench should not (and cannot) write these inputs anyway —
+    // their value comes from the codegen-emitted `assign` in
+    // print_logic().
+    auto is_driven_input = [](const ch::core::lnodeimpl *n) -> bool {
+        if (n->type() != lnodetype::type_input) return false;
+        auto *in = static_cast<const ch::core::inputimpl *>(n);
+        return in->driver() != nullptr;
+    };
+
     auto emit_case =
         [&](const std::function<bool(const ch::core::lnodeimpl *)>& accepts,
             const std::function<void(std::ostream &,
@@ -207,6 +221,7 @@ void emit_sim_main_postlude(const std::string& path, ch::core::context* ctx,
                                      const std::string &)> &body) {
         for (auto* node : nodes) {
             if (!node || !accepts(node)) continue;
+            if (is_driven_input(node)) continue;
             uint32_t id = node->id();
             std::string vname = writer.get_verilog_name(node);
             out << "    case " << id << ": ";
@@ -589,6 +604,18 @@ VerilatorResult VerilatorBackend::build_port_access_table() {
         if (t != lnodetype::type_clock && t != lnodetype::type_reset &&
             t != lnodetype::type_input && t != lnodetype::type_output) {
             continue;
+        }
+        // verilator-hier-input-flattening-fix: a `ch_in` with an
+        // internal driver is no longer a top-level Vtop port
+        // (print_header filtered it out), so we must NOT add it to
+        // port_access_. Without this skip, get_field_ptr_Vtop()'s
+        // generated switch would reference a non-existent Vtop field
+        // and the dlopen'd libVtop.so would crash on lookup.
+        if (t == lnodetype::type_input) {
+            auto *in = static_cast<ch::core::inputimpl *>(node);
+            if (in->driver() != nullptr) {
+                continue;
+            }
         }
         // ADR-035 §M1.7 (R3 fix): Verilator's QData/UData accessor
         // model caps at 64 bits. VlWide vectors (bw>64) would be
