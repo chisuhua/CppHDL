@@ -169,6 +169,45 @@ Note: The legacy `perf_tests` ctest entry already injects `VERILATOR_ROOT=${CPPH
 - **THEN** at least one verilator backend row in the resulting `perf_results.json` has `status=PASS` (i.e., the verilator binary was successfully invoked via the injected path)
 - **AND** the verilator rows that still have `status=SKIPPED` are only those with documented harness/width gaps (TC-09 / TC-11 per `perf-report-todo.md` W5), which are out of scope for the `perf_three_way` subset
 
+### Requirement: perf_main 接收 CMake 注入的 harness 绝对路径
+
+When CppHDL is built, the CMake configuration **MUST** inject an absolute harness directory path into the `perf_tests` target via `target_compile_definitions(perf_tests PRIVATE CPPHDL_PERF_HARNESS_DIR="...")`. The macro value **MUST** resolve to the build-tree directory where `configure_file()` copies the `verilator_harness_tc{07,08}.cpp` sources — i.e. `${CMAKE_CURRENT_BINARY_DIR}` of `tests/benchmark/CMakeLists.txt`. The macro **MUST** be defined when `perf_tests` is built via cmake; if a hand-built binary compiles without the cmake reconfigure path, `perf_main.cpp` **MUST** fall back to a relative string `"build/tests/benchmark"` so the legacy relative form still resolves under the standard project-root CWD.
+
+Rationale: `subprocess_runner.h` chdirs the child process to a per-TC temp directory before fork() (`subprocess_runner.h:186`). Any relative path the child receives — harness_path, cache_root, workdir — then resolves against the wrong CWD. Without an absolute harness directory, `std::filesystem::exists(harness_path)` returns false and `run_three_way()` records a `status=SKIPPED` row with reason `"verilog or harness file missing"`, masking which file is actually missing. The fix unifies both sites: (a) harness_path is absolute at compile time, (b) cache_root / workdir are absolute-ized at `main()` start against the parent's CWD (which ctest sets to `${CMAKE_SOURCE_DIR}` via `WORKING_DIRECTORY`).
+
+#### Scenario: harness 路径解析独立于子进程 cwd
+
+- **WHEN** `ctest -R perf_three_way` spawns 6 child perf_tests processes (TC-07/08 × {10,100,1000}), each chdir'd into a unique temp dir
+- **THEN** every child's `std::filesystem::exists(harness_path)` returns true for the configured absolute path
+- **AND** the corresponding verilator backend rows for TC-07 / TC-08 SHALL have `status=PASS` with non-zero `median_us`
+- **AND** verilator backend rows for TC-09 / TC-11 (no harness file exists) SHALL have `status=SKIPPED` with `skip_reason="verilator harness not implemented: <absolute harness path>"`
+
+#### Scenario: 缺失文件分支给出独立 reason
+
+- **WHEN** `run_three_way()` cannot find either `verilog_path` or `harness_path`
+- **THEN** the `skip_reason` SHALL distinguish the two cases:
+  - missing verilog → `"verilog file missing: <verilog_path>"`
+  - missing harness → `"verilator harness not implemented: <harness_path>"`
+- **AND** the legacy merged reason `"verilog or harness file missing"` SHALL NOT appear in any row
+
+#### Scenario: 手工编译无 cmake 注入仍能工作
+
+- **WHEN** a developer hand-compiles `perf_main.cpp` without re-running cmake configure (so `CPPHDL_PERF_HARNESS_DIR` is undefined)
+- **THEN** the `#ifndef CPPHDL_PERF_HARNESS_DIR` fallback in `perf_main.cpp` provides `"build/tests/benchmark"`
+- **AND** the binary still resolves harness paths correctly when run from the project root CWD
+
+### Requirement: perf_main 接受相对 cache_root / workdir 并在 main() 入口 absolute-ize
+
+The `perf_main.cpp` command-line defaults for `--cache-root=` (`build/perf_cache`) and `--workdir=` (`build/perf_work`) **MAY** remain relative for ergonomic CLI use. The `main()` entry **MUST** call `std::filesystem::absolute()` on both before any subprocess dispatch so the resolved absolute paths survive the child process's `chdir` to a per-TC temp dir. The absolute-ization **MUST** anchor against the parent's CWD (which ctest sets to `${CMAKE_SOURCE_DIR}`); if `absolute()` fails for any reason, `main()` **MUST** exit 1 with a diagnostic on stderr.
+
+Rationale: the subprocess runner writes `verilator_runner.h::cache_dir_for_key()` results into `cache_root`. If `cache_root` is relative and the child has been chdir'd to a temp dir, the cache is written under the temp dir, which `remove_all()` deletes on subprocess exit. Subsequent subprocess runs cannot find the cached `libVtop.so` and recompile from scratch every time — risking TIMEOUT 360 on `perf_three_way` and defeating the SHA-1 cache invariant documented in `verilator_runner.h:6`.
+
+#### Scenario: 子进程 verilator cache 跨 subprocess 命中
+
+- **WHEN** `ctest -R perf_three_way` runs TC-07 depth=100 after TC-07 depth=10 has already built the cache
+- **THEN** the TC-07 depth=100 subprocess finds the cache hit and `verilator_runner.h::build()` returns with `cache_hit=true` and `build_time_ns` near zero
+- **AND** the resulting row's `build_us` is 0 (cache hit), not the cold-compile cost
+
 ### Requirement: perf_three_way ctest 入口存在且仅跑 TC-07/08 三路 perf 对比
 
 The CTest configuration **MUST** register a `perf_three_way` test target distinct from the existing `perf_tests` target. The `perf_three_way` target **MUST** invoke `perf_tests --tc=07 --tc=08` (two separate `--tc=` flags, NOT `--all` and NOT the comma syntax `--tc=07,08` which `perf_main` does not parse) with the `--verilator=` injection per the prior requirement, **MUST** be labeled `LABELS "perf;verilator"` to allow filtering via `ctest -L verilator`, **MUST** be configured with `TIMEOUT 360` (360 seconds, providing ≥1.24× safety margin over the measured 291s TC-07/08 subset runtime including the first-build verilator cache cold path), and **MUST** set `WORKING_DIRECTORY` to the project source root.

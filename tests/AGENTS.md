@@ -75,7 +75,7 @@ ctest -L reg
 
 Conventions for perf benchmarks:
 - **`--direct` flag**: when passed, `perf_main` runs the requested TC **in-process** (no subprocess spawn). Use for: (a) standalone `--tc=NN` invocations, (b) the parent always passes `--direct` when invoking children. Without `--direct`, the child would itself spawn another child (infinite recursion).
-- **Subprocess inherits the parent's --workdir** as a per-TC temp dir, so the child's `perf_results.json` is captured in isolation, not written to the project root.
+- **Subprocess dispatch** chdirs the child process into a unique temp dir (`subprocess_runner.h:186`) before `fork()`, so the child's CWD is **NOT** the project root. The runner also appends `--workdir=<absolute temp_dir>` to the child command (`subprocess_runner.h:180`), overriding any `--workdir=` the parent passed. Any caller-side absolute-ization of paths (cache_root, workdir, harness_path) **MUST** happen in the parent before dispatch — the child cannot rely on relative paths resolving against the project root.
 - **No cross-DUT state**: each TC starts with a clean LLVM ORC state. Do not write tests that depend on shared `JitCompiler` state across multiple TC calls.
 
 ## PHASE GATES
