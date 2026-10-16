@@ -36,7 +36,7 @@
 
 - **NG1**：不修改 `VerilatorBackend` 实现（verilator-reset-initial-value-mismatch change 已修过；本次 change 仅测试 + spec）。
 - **NG2**：不引入新依赖。
-- **NG3**：不覆盖 load-use hazard / branch flush / 数据冒险 / 控制冒险 —— 这些场景已在 `tests/test_rv32i_pipeline.cpp` + `tests/test_hazard.cpp` + `tests/test_forwarding.cpp` 的 interpreter 层覆盖。本 fixture 只覆盖 EX→EX / MEM→WB forwarding 的 3 条无 hazard 短指令序列，目标是 backend parity 而非 Python correctness。
+- **NG3**：不覆盖 load-use hazard / branch flush / 数据冒险 / 控制冒险 —— 这些场景已在 `tests/test_rv32i_pipeline.cpp` + `tests/test_hazard.cpp` + `tests/chlib/test_forwarding.cpp` 的 interpreter 层覆盖（cleanup-orphan-code 把 `tests/test_forwarding.cpp` 根级副本删除后，canonical 路径在 `tests/chlib/`）。本 fixture 只覆盖 EX→EX / MEM→WB forwarding 的 3 条无 hazard 短指令序列，目标是 backend parity 而非 Python correctness。
 - **NG4**：不实现 full RV32I SoC（含 clint / csr / exception handler）—— 见 `examples/riscv-mini/` 的相关示例，本 change scope 仅限 `Rv32iPipeline` 顶层 + 简化 imem/dmem stub。
 - **NG5**：不优化 verilator 编译时间 —— RV32I 命令数 > 200（`include/cpu/` 全部 .h），冷编译可能 1-3 min；TIMEOUT 600s 已足够 warm cache 跑，cold cache 可能接近 TIMEOUT 边界但不会超（实测见 tasks.md 5.1）。
 

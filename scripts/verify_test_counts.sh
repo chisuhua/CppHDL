@@ -6,7 +6,7 @@
 #
 # Used by .github/workflows/ci.yml to prevent the historical pattern
 # where the documented CTest count (142/161) silently fell behind the
-# actual registered count (159). See openspec/changes/cleanup-orphan-code
+# actual registered count (159). See openspec/changes/archive/2026-10-15-cleanup-orphan-code
 # for the audit trail.
 #
 # Parsing rules: AGENTS.md must contain a literal line of the form

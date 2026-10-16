@@ -286,7 +286,7 @@ add_catch_test(test_state_machine test_state_machine.cpp)
 #   - tests/chlib/test_forwarding.cpp  (chlib::ForwardingMux + IfIdRegs struct field access)
 #   - examples/riscv-mini/src/rv32i_pipeline.h  (full 5-stage integration via ch::ch_device<Rv32iSoc>)
 # The deleted file was a 2-TEST_CASE compile-only smoke that hit 0 assertions
-# (only `(void)reg;` discard). See openspec/changes/cleanup-orphan-code/proposal.md.
+# (only `(void)reg;` discard). See openspec/changes/archive/2026-10-15-cleanup-orphan-code/proposal.md.
 add_catch_test(test_fragment test_fragment.cpp)
 
 # AXI 测试

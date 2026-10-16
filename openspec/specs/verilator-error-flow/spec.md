@@ -56,7 +56,7 @@ TBD - created by archiving change verilator-std-expected. Update Purpose after a
 - **THEN** 每个变体上方有 `/// @adr ADR-035 §5 R<n>` 注释，n ∈ {1, 5, 8, 10}
 
 #### Scenario: design.md D5 表格完整
-- **WHEN** 阅读 `openspec/changes/verilator-std-expected/design.md` 的 D5 表格
+- **WHEN** 阅读 `openspec/changes/archive/2026-10-12-verilator-std-expected/design.md` 的 D5 表格
 - **THEN** 8 个变体全部列出对应的 ADR-035 风险或标注"无 ADR 风险"
 
 ### Requirement: 错误携带 std::source_location 用于日志

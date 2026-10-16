@@ -188,7 +188,7 @@ TBD - created by archiving change strengthen-verilator-e2e-coverage. Update Purp
 
 #### Scenario: 8 阶段 tasks 完整
 
-- **WHEN** 阅读 `openspec/changes/strengthen-verilator-e2e-coverage/tasks.md`
+- **WHEN** 阅读 `openspec/changes/archive/2026-10-14-strengthen-verilator-e2e-coverage/tasks.md`
 - **THEN** 包含 8 个 `##` 阶段 heading（阶段 1-4 + 阶段 5 verify gate + 阶段 6/7 + 阶段 8 最终 verify + archive），每阶段含 ≥3 个 `- [ ]` task 且以 commit 或 verify 任务收尾
 - **AND** 所有 task 最终状态为 `[x]` 后才能 `openspec archive`（archive 只在阶段 8 一次，阶段 5 仅有 verify gate 不 archive）
 

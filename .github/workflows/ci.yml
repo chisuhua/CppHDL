@@ -232,7 +232,7 @@ jobs:
       # AGENTS.md NOTES §Test counts must match `ctest -N` at build time.
       # This prevents the historical drift where the documented number
       # (142/161) silently fell behind the actual registered count (159).
-      # See openspec/changes/cleanup-orphan-code for the audit trail.
+      # See openspec/changes/archive/2026-10-15-cleanup-orphan-code for the audit trail.
       # Runs on every OS in the matrix because the check is portable
       # bash (`ls | wc -l`, `grep -oE`) and the build dir / CTest
       # environment is the same on all runners.
