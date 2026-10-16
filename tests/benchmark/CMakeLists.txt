@@ -16,6 +16,17 @@ if(TARGET cpphdl)
     target_link_libraries(perf_tests cpphdl)
 endif()
 
+# Inject the build-tree directory where configure_file() below copies the
+# verilator_harness_tc{07,08}.cpp sources. perf_main.cpp substitutes the
+# macro into the harness_path string at the call sites in
+# run_three_way_tc{07,08,09,11}, so the exists() check at runtime resolves
+# correctly even when the subprocess chdir's to a per-TC temp dir
+# (subprocess_runner.h:186). Without this, relative "build/tests/..."
+# paths would be looked up under the temp dir and miss.
+target_compile_definitions(perf_tests PRIVATE
+    CPPHDL_PERF_HARNESS_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+)
+
 # W9 (perf-report-followup.md): standalone perf_regression executable that
 # compares perf_results.json against tests/benchmark/perf_baseline.json
 # and exits non-zero on >1.2x regression. Wired into ctest in the root

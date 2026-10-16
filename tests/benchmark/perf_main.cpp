@@ -33,6 +33,18 @@
 #include <string>
 #include <vector>
 
+// CPPHDL_PERF_HARNESS_DIR is injected by tests/benchmark/CMakeLists.txt
+// (target_compile_definitions) and points at the build directory where
+// configure_file() copies verilator_harness_tc{07,08}.cpp at configure
+// time. Without an absolute path, the subprocess runner's chdir-to-temp
+// (subprocess_runner.h:186) would resolve "build/tests/benchmark/..."
+// against the wrong cwd and the exists() check at line ~483 would fail.
+// The fallback keeps the legacy relative form working for hand-built
+// binaries that bypass cmake reconfigure.
+#ifndef CPPHDL_PERF_HARNESS_DIR
+#define CPPHDL_PERF_HARNESS_DIR "build/tests/benchmark"
+#endif
+
 using namespace ch;
 using namespace ch::core;
 
@@ -480,10 +492,15 @@ static ThreeWayResult run_three_way(const std::string& test_name,
         twr.verilator = make_row(test_name, params, "verilator",
                                  0.0, 0.0, 0, 0.0, "UNSUPPORTED");
         twr.verilator.skip_reason = twr.skip_reason;
-    } else if (!std::filesystem::exists(verilog_path) ||
-               !std::filesystem::exists(harness_path)) {
+    } else if (!std::filesystem::exists(verilog_path)) {
         twr.verilator_skipped = true;
-        twr.skip_reason = "verilog or harness file missing";
+        twr.skip_reason = "verilog file missing: " + verilog_path;
+        twr.verilator = make_row(test_name, params, "verilator",
+                                 0.0, 0.0, 0, 0.0, "SKIPPED");
+        twr.verilator.skip_reason = twr.skip_reason;
+    } else if (!std::filesystem::exists(harness_path)) {
+        twr.verilator_skipped = true;
+        twr.skip_reason = "verilator harness not implemented: " + harness_path;
         twr.verilator = make_row(test_name, params, "verilator",
                                  0.0, 0.0, 0, 0.0, "SKIPPED");
         twr.verilator.skip_reason = twr.skip_reason;
@@ -522,7 +539,8 @@ static ThreeWayResult run_three_way_tc07(int depth, int ticks, int warmup,
                                          const std::string& wd) {
     return run_three_way<Tc07XorChain>(
         "TC-07", "depth=" + std::to_string(depth), ticks, warmup, measured,
-        wd + "/tc07_top.v", "build/tests/benchmark/verilator_harness_tc07.cpp",
+        wd + "/tc07_top.v",
+        std::string(CPPHDL_PERF_HARNESS_DIR) + "/verilator_harness_tc07.cpp",
         vb, cr, wd, depth);
 }
 
@@ -533,7 +551,8 @@ static ThreeWayResult run_three_way_tc08(int regs, int ticks, int warmup,
                                          const std::string& wd) {
     return run_three_way<Tc08RegChain>(
         "TC-08", "regs=" + std::to_string(regs), ticks, warmup, measured,
-        wd + "/tc08_top.v", "build/tests/benchmark/verilator_harness_tc08.cpp",
+        wd + "/tc08_top.v",
+        std::string(CPPHDL_PERF_HARNESS_DIR) + "/verilator_harness_tc08.cpp",
         vb, cr, wd, regs);
 }
 
@@ -547,7 +566,8 @@ static ThreeWayResult run_three_way_tc09(int depth, int ticks, int warmup,
                                          const std::string& wd) {
     return run_three_way<Tc09ArithChain>(
         "TC-09", "depth=" + std::to_string(depth), ticks, warmup, measured,
-        wd + "/tc09_top.v", "build/tests/benchmark/verilator_harness_tc09.cpp",
+        wd + "/tc09_top.v",
+        std::string(CPPHDL_PERF_HARNESS_DIR) + "/verilator_harness_tc09.cpp",
         vb, cr, wd, depth);
 }
 
@@ -579,7 +599,8 @@ static ThreeWayResult run_three_way_tc11(int regs, int ticks, int warmup,
                                          const std::string& wd) {
     return run_three_way<Tc11WideReg>(
         "TC-11", "regs=" + std::to_string(regs), ticks, warmup, measured,
-        wd + "/tc11_top.v", "build/tests/benchmark/verilator_harness_tc11.cpp",
+        wd + "/tc11_top.v",
+        std::string(CPPHDL_PERF_HARNESS_DIR) + "/verilator_harness_tc11.cpp",
         vb, cr, wd, regs);
 }
 
@@ -655,6 +676,23 @@ int main(int argc, char* argv[]) {
         } else {
             std::cerr << "error: unknown argument '" << argv[i] << "'\n";
             print_usage(argv[0]); return 1;
+        }
+    }
+    // Subprocess mode chdirs to a per-TC temp dir (subprocess_runner.h:186)
+    // before fork(); relative cache_root / workdir would then resolve
+    // inside the temp dir and either fail exists() checks or write the
+    // verilator cache into a path that remove_all() later deletes —
+    // forcing a cold recompile every subprocess and risking TIMEOUT 360
+    // on perf_three_way. Absolute-ize against the parent's CWD, which
+    // ctest sets to ${CMAKE_SOURCE_DIR} (tests/benchmark/CMakeLists.txt
+    // WORKING_DIRECTORY property).
+    {
+        std::error_code abs_ec;
+        cache_root = std::filesystem::absolute(cache_root, abs_ec).string();
+        workdir    = std::filesystem::absolute(workdir,    abs_ec).string();
+        if (abs_ec) {
+            std::cerr << "error: failed to absolute-ize paths: " << abs_ec.message() << "\n";
+            return 1;
         }
     }
     if (!run_all && !tc01 && !tc02 && !tc04 && !tc06 && !tc07 && !tc08 &&

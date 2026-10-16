@@ -334,6 +334,15 @@ add_catch_test(test_user_tracking test_user_tracking.cpp)
 add_catch_test(test_verilog_arith test_verilog_arith.cpp)
 add_catch_test(test_verilog_compare test_verilog_compare.cpp)
 add_catch_test(test_verilog_gen test_verilog_gen.cpp)
+# Inject verilator bin into PATH so detect_verilator() in test_verilog_gen.cpp
+# resolves via `which verilator` instead of falling back to the relative
+# "build/verilator-install/bin/verilator" candidates (which silently fail
+# under ctest's WORKING_DIRECTORY=project root when invoked from a different
+# cwd, e.g. a developer running the binary by hand from build/tests/).
+# Same ENV injection pattern as the other verilator_* test targets above.
+set_tests_properties(test_verilog_gen PROPERTIES
+    ENVIRONMENT "${_vl_path_env}"
+)
 add_catch_test(test_verilog_shift test_verilog_shift.cpp)
 # ADR-035 / Phase 1.6: end-to-end validation of generated Verilog
 # via external tools (iverilog + verilator --lint-only). Tests skip
