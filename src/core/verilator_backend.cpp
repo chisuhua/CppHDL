@@ -511,24 +511,29 @@ VerilatorResult VerilatorBackend::invoke_verilator(const std::string & /*verilog
     // verilator --cc puts Vtop*.cpp inside obj_dir/; sim_main.cpp
     // stays at workdir/ root, so reference it via ../ from the obj_dir
     // cwd the shell will land in. VERILATOR_ROOT is set by --cc;
-    // fall back to the host toolchain if unset.
+    // detect_verilator_root() must succeed for the link to find
+    // verilated.cpp / verilated_threads.cpp / include/ headers.
+    // Previously a hardcoded "/workspace/main/opt/verilator/..."
+    // fallback masked the missing-verilator failure with a cryptic
+    // g++ -I error; now bail out early with a clear VerilatorError
+    // so the caller sees the real root cause (AGENTS.md deferred J).
+    if (verilator_root_.empty()) {
+        return std::unexpected(VerilatorError{
+            VerilatorErrorCode::VerilatorCompile,
+            "VERILATOR_ROOT unset; cannot locate verilated.cpp / "
+            "verilated_threads.cpp. Run 'verilator -getenv VERILATOR_ROOT' "
+            "or set VERILATOR_ROOT in the environment."});
+    }
     std::ostringstream link;
     link << "cd " << verilator_work_dir_
          << "/obj_dir && "
          << "g++ -shared -fPIC -std=c++17 -o libVtop.so "
          << "../sim_main.cpp "
          << "./*.cpp "  // verilator 5.x split: Vtop___024root*.cpp + Vtop.cpp
-         << (verilator_root_.empty()
-             ? std::string("/workspace/main/opt/verilator/share/verilator/include/verilated.cpp /workspace/main/opt/verilator/share/verilator/include/verilated_threads.cpp")
-             : (verilator_root_ + "/include/verilated.cpp " + verilator_root_ + "/include/verilated_threads.cpp"))
+         << (verilator_root_ + "/include/verilated.cpp " + verilator_root_ + "/include/verilated_threads.cpp")
          << " -I. "  // Vtop.h is in obj_dir/ (verilator --cc output)
-
-         << "-I" << (verilator_root_.empty()
-             ? "/workspace/main/opt/verilator/share/verilator"
-             : verilator_root_) << "/include "
-         << "-L" << (verilator_root_.empty()
-             ? "/workspace/main/opt/verilator/share/verilator"
-             : verilator_root_) << "/include "
+         << "-I" << verilator_root_ << "/include "
+         << "-L" << verilator_root_ << "/include "
          << "-pthread -lz 2>&1";
 
     if (!run_shell(link.str())) {

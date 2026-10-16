@@ -167,14 +167,24 @@ static BenchmarkResult run_batch_tick_benchmark(int nodes, int ticks) {
 // or the SHA file cannot be read.
 static std::string capture_git_sha() {
     std::string sha = "unknown";
-    if (std::system("git rev-parse --short HEAD > /tmp/cpphdl_git_sha.txt 2>/dev/null") == 0) {
-        std::ifstream in("/tmp/cpphdl_git_sha.txt");
+    // Per AGENTS.md "Do not use /tmp" — use std::filesystem::temp_directory_path()
+    // (honors TMPDIR on POSIX / TMP/TEMP on Windows) and a project-specific name
+    // so concurrent runs don't collide. The file is created in tempdir rather
+    // than the workdir because workdir may be a per-TC temp dir that gets
+    // remove_all()'d before the reporter is serialized.
+    std::filesystem::path sha_path =
+        std::filesystem::temp_directory_path() / "cpphdl_git_sha.txt";
+    std::string cmd = "git rev-parse --short HEAD > \"" + sha_path.string() + "\" 2>/dev/null";
+    if (std::system(cmd.c_str()) == 0) {
+        std::ifstream in(sha_path);
         if (in.good()) {
             std::getline(in, sha);
             while (!sha.empty() && (sha.back() == '\n' || sha.back() == '\r' ||
                    sha.back() == ' '))
                 sha.pop_back();
         }
+        std::error_code ec;
+        std::filesystem::remove(sha_path, ec);  // best-effort cleanup
     }
     return sha;
 }

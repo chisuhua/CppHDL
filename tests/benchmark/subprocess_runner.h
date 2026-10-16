@@ -179,21 +179,48 @@ inline SubprocessResult run_perf_subprocess(
     cmd << " --report=json";
     cmd << " --workdir=\"" << result.temp_dir.string() << "\"";
     cmd << " 2>&1";
+    // Materialize the command before fork() so the child does not
+    // depend on std::ostringstream's internal buffer (libc++/libstdc++
+    // are not async-signal-safe in the child between fork and exec).
+    std::string cmd_str = cmd.str();
 
-    // chdir 到临时目录,这样子进程写的 perf_results.json 会落在这里
-    auto saved_cwd = std::filesystem::current_path();
+    // Subprocess dispatch no longer mutates the parent's cwd.
+    // Previously run_perf_subprocess() called current_path(temp_dir)
+    // before fork(), then restored it after waitpid(). That pattern
+    // was fragile in any multi-threaded parent (current_path() is
+    // process-wide; another thread could observe the temp-dir cwd),
+    // and it forced callers to remember to absolute-ize relative paths
+    // in the parent before they were forwarded to the child.
+    //
+    // Now the child does its own chdir after fork and before exec, so:
+    //   - parent's cwd stays at the project root (ctest sets it via
+    //     WORKING_DIRECTORY=${CMAKE_SOURCE_DIR}) and any relative
+    //     std::filesystem operation the parent does between fork and
+    //     waitpid resolves correctly.
+    //   - child's cwd is still the per-TC temp dir, so the relative
+    //     "perf_results.json" written by the child lands under
+    //     result.temp_dir as before.
+    // The caller must still pass absolute paths (or absolute-ize them
+    // before dispatch) for harness_path / cache_root / workdir, since
+    // the child's cwd is the temp dir — see openspec/specs/perf-test-
+    // isolation/spec.md for the contract.
     std::error_code ec;
-    std::filesystem::current_path(result.temp_dir, ec);
 
-    // 用 alarm() + waitpid 轮询实现超时
     pid_t pid = fork();
     if (pid == 0) {
-        // 子进程执行 shell
-        ::execl("/bin/sh", "sh", "-c", cmd.str().c_str(), (char*)nullptr);
+        // 子进程:先 chdir 到 temp_dir,再 exec。这样父进程的 cwd 不动。
+        if (::chdir(result.temp_dir.c_str()) != 0) {
+            // chdir 失败:用 _exit(126) 标记,父进程通过 exit_code 区分
+            // (sh 也用 126 表示"found but not executable",本场景下区分不
+            // 重要——父进程只检查 result.output_file 是否存在)。
+            ::_exit(126);
+        }
+        ::execl("/bin/sh", "sh", "-c", cmd_str.c_str(), (char*)nullptr);
         ::_exit(127);
     } else if (pid < 0) {
         result.error_msg = "fork failed";
-        std::filesystem::current_path(saved_cwd, ec);
+        // 清理 fork 失败留下的 temp_dir,避免泄漏 perf_main_<pid>_tcNN
+        std::filesystem::remove_all(result.temp_dir, ec);
         return result;
     }
 
@@ -220,7 +247,7 @@ inline SubprocessResult run_perf_subprocess(
         }
     }
 
-    std::filesystem::current_path(saved_cwd, ec);
+    // 父进程的 cwd 不再需要 saved_cwd / restore——这是本 change 的核心收益。
 
     // 读取 perf_results.json
     result.output_file = result.temp_dir / "perf_results.json";
