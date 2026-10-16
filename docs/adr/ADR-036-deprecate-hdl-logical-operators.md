@@ -159,10 +159,127 @@ As of 2026-10-16, the deprecation is **live** in main:
   to use the explicit nonzero-test form
   (`(lhs != 0_d) & rhs` etc.). Tracked separately, not in this
   change.
+  See **§8 Removal Gate** below for the concrete calendar deadline
+  and machine-checkable trigger.
 - **`docs/skills/archive/cpphdl-shift-fix/SKILL.md`**: this archived
   skill still references the now-deleted `include/chlib/axi4lite.h`
   header but the deletion label has been set. No further action
   needed — archive copies are frozen by convention.
+
+## 8. Removal Gate
+
+This section makes the "≥1 release cycle" promise from §6
+verifiable. The project has no formal release cadence (every
+change merges when CI green), so the deprecation period is
+defined by **a concrete calendar deadline + a low-activity
+extension clause**, parallel to `ADR-037 §3`.
+
+### 8.1 Trigger
+
+The earliest allowed date for the removal commit is
+**2027-04-17** (6 months after the deprecation landed on
+2026-10-16). The CI guard:
+
+```bash
+# Reject any removal commit before 2027-04-17:
+git log --since=2026-10-16 --until=2027-04-17 --pretty=oneline | wc -l
+#  → at least 1 deprecation-period commit; not the removal commit
+```
+
+A pre-removal commit opening PRs against main **before**
+2027-04-17 is rejected; the deprecation period is not
+shortenable.
+
+### 8.2 Low-activity extension
+
+If `git log --since=2026-10-16 --until=$(date +%Y-%m-%d) | wc -l`
+is fewer than 5 commits at the proposed removal date, the
+deadline rolls forward 3 months (to 2027-07-17). Rationale: a
+6-month window with <5 commits means external users have had
+little chance to react; collapse the deadline prematurely and
+the deprecation becomes a paper tiger.
+
+### 8.3 Removal commit checklist
+
+The removal commit (one atomic commit, not a multi-commit
+sequence) MUST:
+
+1. **`git rm` the 8 overloads** at their canonical locations:
+   - `include/core/io_logical.h:74` — `port<ch_bool> && port<ch_bool>`
+   - `include/core/io_logical.h:83` — `port<ch_bool> || port<ch_bool>`
+   - `include/core/operators_logic.h:162` — `ch_bool && ch_bool`
+   - `include/core/operators_logic.h:167` — `ch_bool || ch_bool`
+   - `include/core/operators_logic.h:178` — `ch_bool && ch_uint<N>`
+   - `include/core/operators_logic.h:185` — `ch_uint<N> && ch_bool`
+   - `include/core/operators_logic.h:192` — `ch_bool || ch_uint<N>`
+   - `include/core/operators_logic.h:199` — `ch_uint<N> || ch_bool`
+
+2. **Update the 2 pragma-wrapped test files**:
+   - `tests/test_chipforge_mux_segv_repro.cpp:226,238,281` —
+     rewrite the 3 `ch_bool(false) && (a != 0)` and the
+     cascade `we && (rd_addr == ai)` SEGV-repro patterns to
+     `ch_bool(false) & (a != 0_d)` / `we & (rd_addr == ai)`.
+     The SEGV-reproduction intent (catch null impl from
+     `binary_bool_operation` with a null lhs) is preserved
+     by the `&` form, which goes through the same null-impl
+     path. Verify by `ctest -R test_chipforge_mux_segv_repro`.
+   - `tests/test_operator_advanced.cpp:540-543` — rewrite
+     the 4 mixed `ch_bool && ch_uint<N>` lines to the
+     explicit nonzero-test form: `ch_bool(bool_val) &
+     ch_bool(uint_val != ch_uint<N>(0_d))` and the symmetric
+     variants for the other 3 cases. Update the inline
+     comment to drop the "deprecation" wording (the comment
+     was explaining why we pragma-wrapped; after migration it
+     just documents the nonzero-test reduction). Drop the
+     `pragma GCC diagnostic` wrapper. Verify by
+     `ctest -R test_operator_advanced`.
+
+3. **Drop the §5 "Test File Policy" subsection** in this ADR
+   (becomes historical).
+
+4. **Update this ADR's §5 Status** to record the removal date
+   and commit SHA.
+
+5. **Update `openspec/specs/`** if any spec currently
+   references the deprecated overloads by signature (none
+   expected — the deprecation touched the `ch_bool` /
+   `port<ch_bool>` operator surface, which is a `core/`
+   primitive not spec'd in any `openspec/specs/` capability;
+   verify with `git grep -nE 'operator&&|operator\|\|'
+   openspec/specs/`).
+
+6. **Update `root AGENTS.md`** to drop the `## 已消除`
+   bullet that pointed to this ADR's deprecation
+   (the deprecation is no longer "ongoing").
+
+### 8.4 CI guard (optional but recommended)
+
+A cheap regression guard the project can add before the
+removal commit:
+
+```yaml
+# .github/workflows/ci.yml: fail if any new code uses the
+# deprecated API
+- name: reject-new-deprecated-calls
+  shell: bash
+  run: |
+    # Tolerate the 2 pragma-wrapped test files (their use is
+    # scoped + explained; they will be cleaned up at removal time).
+    count=$(git grep -nE 'ch_bool .* && .*ch_bool' -- 'include/' 'src/' \
+           ':!tests/test_chipforge_mux_segv_repro.cpp' \
+           ':!tests/test_operator_advanced.cpp' | wc -l)
+    test "$count" -eq 0
+```
+
+The 2 exempt files match the policy in §4 of this ADR. If
+that count is non-zero, fail the build (new contributor
+regressed on a forbidden pattern).
+
+### 8.5 Status of this gate
+
+As of 2026-10-17, the gate is **in effect** (the deprecation
+landed 2026-10-16; removal earliest 2027-04-17). No removal
+commit is allowed before then.
 
 ## 7. Consequences
 
