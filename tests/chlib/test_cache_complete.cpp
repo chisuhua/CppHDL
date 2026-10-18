@@ -19,6 +19,8 @@
 #include "catch_amalgamated.hpp"
 #include "cpu/cache/i_cache_complete.h"
 #include "cpu/cache/d_cache_complete.h"
+#include "cpu/cache/i_cache_async.h"
+#include "cpu/cache/d_cache_async.h"
 #include "simulator.h"
 
 using namespace chlib;
@@ -286,4 +288,153 @@ TEST_CASE("ICache hit + miss-fill concurrency (g2)", "[cache][complete][concurre
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data))  == 0xAAAA0000u);
+}
+
+// =============================================================================
+// ICacheAsync / DCacheAsync (0-cycle aread, TCM-style) — ADR-041 §variant
+// =============================================================================
+//
+// 关键区别 vs Sync:
+//   - Sync: ch_mem::sread (1-cycle registered) — RV32I L1 imem 默认
+//   - Async: ch_mem::aread (0-cycle combinational) — 软核 TCM, 低频设计
+//
+// 本测试覆盖 Async 版本 4 个核心场景, 验证与 Sync 等效语义但时序差异
+
+TEST_CASE("ICacheAsync miss-fill-then-hit (0-cycle)", "[cache][async][icache][miss-fill]") {
+    ch::core::context ctx("icache_async_miss_fill");
+    ch::core::ctx_swap swap(&ctx);
+
+    ch::ch_device<chlib::ICacheAsync> ic_dev;
+    ch::Simulator sim(ic_dev.context());
+    auto& ic = ic_dev.instance();
+
+    // 周期 1: 触发 miss fill (aread 0-cycle: 立即 miss)
+    sim.set_input_value(ic.io().addr,           0x1000u);
+    sim.set_input_value(ic.io().req,            1u);
+    sim.set_input_value(ic.io().axi_data,       0xDEADBEEFu);
+    sim.set_input_value(ic.io().axi_resp_valid, 1u);
+    sim.set_input_value(ic.io().axi_ready,      1u);
+    sim.tick();
+
+    // 周期 2: 关 AXI, 同地址再读 → hit (1-cycle NOP 等 ch_mem::write 完成)
+    sim.set_input_value(ic.io().addr,           0x1000u);
+    sim.set_input_value(ic.io().req,            1u);
+    sim.set_input_value(ic.io().axi_data,       0x0u);
+    sim.set_input_value(ic.io().axi_resp_valid, 0u);
+    sim.set_input_value(ic.io().axi_ready,      0u);
+    sim.tick();
+
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 0u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data))  == 0xDEADBEEFu);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ready)) == 1u);
+}
+
+TEST_CASE("DCacheAsync read miss-fill (0-cycle)", "[cache][async][dcache][miss-fill]") {
+    ch::core::context ctx("dcache_async_miss_fill");
+    ch::core::ctx_swap swap(&ctx);
+
+    ch::ch_device<chlib::DCacheAsync> dc_dev;
+    ch::Simulator sim(dc_dev.context());
+    auto& dc = dc_dev.instance();
+
+    // 周期 1: read miss fill
+    sim.set_input_value(dc.io().addr,           0x2000u);
+    sim.set_input_value(dc.io().wdata,          0x0u);
+    sim.set_input_value(dc.io().we,             0u);
+    sim.set_input_value(dc.io().req,            1u);
+    sim.set_input_value(dc.io().axi_rdata,      0x12345678u);
+    sim.set_input_value(dc.io().axi_resp_valid, 1u);
+    sim.set_input_value(dc.io().axi_ready,      1u);
+    sim.tick();
+
+    // 周期 2: 1-cycle NOP, ch_mem::write 完成
+    sim.set_input_value(dc.io().addr,           0x2000u);
+    sim.set_input_value(dc.io().wdata,          0x0u);
+    sim.set_input_value(dc.io().we,             0u);
+    sim.set_input_value(dc.io().req,            1u);
+    sim.set_input_value(dc.io().axi_rdata,      0x0u);
+    sim.set_input_value(dc.io().axi_resp_valid, 0u);
+    sim.set_input_value(dc.io().axi_ready,      0u);
+    sim.tick();
+
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().miss))  == 0u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().rdata)) == 0x12345678u);
+}
+
+TEST_CASE("ICacheSync vs ICacheAsync same fill behavior", "[cache][sync][async][variant]") {
+    // 同一 fill 序列在 Sync 和 Async 上都应得到相同最终状态
+    // (sync 多 1 cycle latency 但数据语义一致)
+
+    auto run_fill_and_read = [](auto& ic, ch::Simulator& sim, uint32_t addr, uint32_t data) {
+        sim.set_input_value(ic.io().addr, addr);
+        sim.set_input_value(ic.io().req, 1u);
+        sim.set_input_value(ic.io().axi_data, data);
+        sim.set_input_value(ic.io().axi_resp_valid, 1u);
+        sim.set_input_value(ic.io().axi_ready, 1u);
+        sim.tick();
+        // 1-cycle NOP 等 write 完成 (sync 和 async 都需要)
+        sim.set_input_value(ic.io().addr, addr);
+        sim.set_input_value(ic.io().req, 1u);
+        sim.set_input_value(ic.io().axi_data, 0u);
+        sim.set_input_value(ic.io().axi_resp_valid, 0u);
+        sim.set_input_value(ic.io().axi_ready, 0u);
+        sim.tick();
+    };
+
+    // ICacheSync (1-cycle sread)
+    ch::core::context ctx_s("icache_sync_variant");
+    ch::core::ctx_swap swap_s(&ctx_s);
+    ch::ch_device<chlib::ICacheSync> ic_s_dev;
+    ch::Simulator sim_s(ic_s_dev.context());
+    run_fill_and_read(ic_s_dev.instance(), sim_s, 0x100000u, 0x11223344u);
+    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(ic_s_dev.instance().io().miss)) == 0u);
+    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(ic_s_dev.instance().io().data)) == 0x11223344u);
+
+    // ICacheAsync (0-cycle aread)
+    ch::core::context ctx_a("icache_async_variant");
+    ch::core::ctx_swap swap_a(&ctx_a);
+    ch::ch_device<chlib::ICacheAsync> ic_a_dev;
+    ch::Simulator sim_a(ic_a_dev.context());
+    run_fill_and_read(ic_a_dev.instance(), sim_a, 0x100000u, 0x11223344u);
+    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(ic_a_dev.instance().io().miss)) == 0u);
+    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(ic_a_dev.instance().io().data)) == 0x11223344u);
+}
+
+TEST_CASE("DCacheSync vs DCacheAsync same fill behavior", "[cache][sync][async][variant]") {
+    auto run_fill_and_read = [](auto& dc, ch::Simulator& sim, uint32_t addr, uint32_t data) {
+        sim.set_input_value(dc.io().addr, addr);
+        sim.set_input_value(dc.io().wdata, 0u);
+        sim.set_input_value(dc.io().we, 0u);
+        sim.set_input_value(dc.io().req, 1u);
+        sim.set_input_value(dc.io().axi_rdata, data);
+        sim.set_input_value(dc.io().axi_resp_valid, 1u);
+        sim.set_input_value(dc.io().axi_ready, 1u);
+        sim.tick();
+        sim.set_input_value(dc.io().addr, addr);
+        sim.set_input_value(dc.io().wdata, 0u);
+        sim.set_input_value(dc.io().we, 0u);
+        sim.set_input_value(dc.io().req, 1u);
+        sim.set_input_value(dc.io().axi_rdata, 0u);
+        sim.set_input_value(dc.io().axi_resp_valid, 0u);
+        sim.set_input_value(dc.io().axi_ready, 0u);
+        sim.tick();
+    };
+
+    // DCacheSync (1-cycle sread)
+    ch::core::context ctx_s("dcache_sync_variant");
+    ch::core::ctx_swap swap_s(&ctx_s);
+    ch::ch_device<chlib::DCacheSync> dc_s_dev;
+    ch::Simulator sim_s(dc_s_dev.context());
+    run_fill_and_read(dc_s_dev.instance(), sim_s, 0x200000u, 0x55667788u);
+    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(dc_s_dev.instance().io().miss)) == 0u);
+    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(dc_s_dev.instance().io().rdata)) == 0x55667788u);
+
+    // DCacheAsync (0-cycle aread)
+    ch::core::context ctx_a("dcache_async_variant");
+    ch::core::ctx_swap swap_a(&ctx_a);
+    ch::ch_device<chlib::DCacheAsync> dc_a_dev;
+    ch::Simulator sim_a(dc_a_dev.context());
+    run_fill_and_read(dc_a_dev.instance(), sim_a, 0x200000u, 0x55667788u);
+    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(dc_a_dev.instance().io().miss)) == 0u);
+    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(dc_a_dev.instance().io().rdata)) == 0x55667788u);
 }

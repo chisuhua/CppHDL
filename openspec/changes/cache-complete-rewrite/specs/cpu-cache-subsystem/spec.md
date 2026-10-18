@@ -180,3 +180,36 @@ The stub classes (`include/cpu/cache/{i,d}_cache_stub.h`) SHALL remain marked `[
 - **WHEN** this change's commits are reviewed
 - **THEN** `include/cpu/cache/i_cache_stub.h` and `include/cpu/cache/d_cache_stub.h` SHALL NOT appear in the diff
 - **AND** both files SHALL retain their `[[deprecated("...")]]` attribute on the stub class
+
+### Requirement: cache variant selection (Sync default, Async for TCM-style)
+
+The cache subsystem SHALL provide two latency variants for both instruction and data cache, allowing users to select based on integration context. ADR-041 documents the rationale (Fmax, RV32I pipeline pc_lag alignment, industry convention).
+
+#### Scenario: Sync variant (1-cycle sread, default for RV32I L1)
+
+- **WHEN** the cache is instantiated as `ICacheSync` or `DCacheSync` (or legacy alias `ICacheComplete` / `DCacheComplete`)
+- **THEN** the hit-path SHALL use `ch_mem::sread(addr, enable=ch_bool(true))` for tag/data/valid read
+- **AND** the hit latency SHALL be 1 cycle (sread is registered)
+- **AND** RV32I 5-stage pipeline pc_lag SHALL be naturally aligned (no extra IF/ID reg adjustment needed)
+- **AND** this variant SHALL be the default (recommended for RV32I L1 imem/dmem)
+
+#### Scenario: Async variant (0-cycle aread, for soft-core TCM)
+
+- **WHEN** the cache is instantiated as `ICacheAsync` or `DCacheAsync`
+- **THEN** the hit-path SHALL use `ch_mem::aread(addr)` for tag/data/valid read
+- **AND** the hit latency SHALL be 0 cycle (aread is combinational)
+- **AND** the Fmax SHALL be lower than Sync (due to longer combinational read path)
+- **AND** this variant SHALL be appropriate for soft-core TCM-style designs (low-frequency, latency-critical)
+- **AND** this variant SHALL NOT be used for RV32I imem (verilator-e2e-coverage spec §R1 invariant 3 requires imem sread)
+
+#### Scenario: legacy `*_complete` shim alias
+
+- **WHEN** the legacy class name `ICacheComplete` or `DCacheComplete` is used
+- **THEN** it SHALL resolve to `ICacheSync` / `DCacheSync` (1-cycle sread, default) via `using` type alias
+- **AND** no behavior change SHALL occur for existing callers
+
+#### Scenario: variant equivalence on identical fill sequence
+
+- **WHEN** the same fill sequence (addr + axi_data + axi_resp_valid=1) is executed on Sync and Async variants
+- **THEN** the final cache state (memory contents) SHALL be identical after fill + 1-cycle NOP
+- **AND** the test_case `Sync vs Async same fill behavior` in `tests/chlib/test_cache_complete.cpp` SHALL verify this equivalence

@@ -9,9 +9,13 @@ RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC i
 ## STRUCTURE
 ```
 include/cpu/
-├── cache/
-│   ├── i_cache_stub.h / i_cache_complete.h / i_cache_prefetch.h
-│   └── d_cache_stub.h / d_cache_complete.h / d_cache_write_buffer.h
+├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
+│   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
+│   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
+│   ├── i_cache_complete.h / d_cache_complete.h  # 兼容 shim (= *_sync.h 别名)
+│   ├── i_cache_stub.h / d_cache_stub.h       # [[deprecated]] pass-through
+│   ├── i_cache_prefetch.h                    # riscv-mini wrapper (instance ICacheSync)
+│   └── d_cache_write_buffer.h                # riscv-mini wrapper (instance DCacheSync)
 ├── pipeline/
 │   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode
 │   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 lines — largest)
@@ -47,14 +51,22 @@ include/cpu/
 | CSR registers | `riscv/rv32i_csr.h` |
 | Exception handling | `riscv/rv32i_exception.h` |
 | Full SoC | `riscv/rv32i_soc.h` |
-| I-Cache | `cache/i_cache_complete.h` |
-| D-Cache | `cache/d_cache_complete.h` |
+| I-Cache (1-cycle, RV32I L1 默认) | `cache/i_cache_sync.h` (`i_cache_complete.h` 是兼容 shim 别名) |
+| I-Cache (0-cycle, TCM-style) | `cache/i_cache_async.h` |
+| D-Cache (1-cycle, RV32I L1 默认) | `cache/d_cache_sync.h` (`d_cache_complete.h` 是兼容 shim 别名) |
+| D-Cache (0-cycle, TCM-style) | `cache/d_cache_async.h` |
+| I-Cache wrapper (riscv-mini) | `cache/i_cache_prefetch.h` (instance ICacheSync) |
+| D-Cache wrapper (riscv-mini) | `cache/d_cache_write_buffer.h` (instance DCacheSync) |
 
 ## CONVENTIONS
 - **Pipeline instantiation**: `ch::ch_module<T>` inside `Component::describe()` — see root AGENTS.md
 - **Runtime**: Pipeline requires `ch::ch_device<Rv32iSoc>` wrapper in main() (per README)
 - **Bundle vs Port**: Pipeline uses port-based `hazard_unit.h` (riscv namespace), NOT `hazard_unit_bundle.h` (cpu namespace)
 - **TCM**: `rv32i_tcm.h` provides single-cycle instruction/data memories
+- **Cache variant selection** (ADR-041):
+  - **RV32I L1 imem/dmem** (默认) → `ICacheSync` / `DCacheSync` (1-cycle sread)
+  - **软核 TCM-style** (低频, 延迟关键) → `ICacheAsync` / `DCacheAsync` (0-cycle aread)
+  - **imem 必须 sread** (per `verilator-e2e-coverage` spec §R1 invariant 3): 不要在 RV32I imem 用 Async
 
 ## ANTI-PATTERNS
 - **Namespace inconsistency**: CPU components split across 4 namespaces (`riscv`, `chlib`, `cpu`, `ch::chlib`)
