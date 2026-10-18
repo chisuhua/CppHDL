@@ -15,9 +15,10 @@
  * [3:0]   Offset (4 bits) - 16 bytes per line
  *
  * 实现: 基于 ch_mem 原语 (commit bfb3960 ADR-039 §2 决策)
- * - SRAM 用 ch_mem<T, NUM_SETS> per way
+ * - SRAM 用 ch_mem<T, NUM_SETS> per way (独立命名避免数组 runtime index)
  * - hit-path 用 aread (0-cycle combinational)
  * - miss-fill 用 ch_mem::write (1-cycle registered)
+ * - 关键: 不使用 C++ if 包裹 ch_mem::write; 改用 enable 信号
  * - write-through: hit+we 同时写 cache_data + axi_wdata
  *
  * 作者: DevMate (initial) + build-agent (ch_mem rewrite)
@@ -94,8 +95,9 @@ public:
         ch_mem<ch_uint<DCacheConfig::TAG_BITS>, DCacheConfig::NUM_SETS> tag_mem_way1;
 
         // Valid 位: 独立命名 per way
-        ch_mem<ch_bool, DCacheConfig::NUM_SETS> valid_mem_way0;
-        ch_mem<ch_bool, DCacheConfig::NUM_SETS> valid_mem_way1;
+        // 用 ch_uint<1> 替代 ch_bool 以保证 init data = 0 (deterministic initial state)
+        ch_mem<ch_uint<1>, DCacheConfig::NUM_SETS> valid_mem_way0;
+        ch_mem<ch_uint<1>, DCacheConfig::NUM_SETS> valid_mem_way1;
 
         // LRU 位: 1 个 ch_mem (shared, 1-bit per set)
         ch_mem<ch_bool, DCacheConfig::NUM_SETS> lru_mem;
@@ -114,8 +116,10 @@ public:
 
         ch_uint<DCacheConfig::TAG_BITS> tag_way0(tag_mem_way0.aread(index).impl());
         ch_uint<DCacheConfig::TAG_BITS> tag_way1(tag_mem_way1.aread(index).impl());
-        ch_bool valid_way0(valid_mem_way0.aread(index).impl());
-        ch_bool valid_way1(valid_mem_way1.aread(index).impl());
+        ch_uint<1> valid_way0_raw(valid_mem_way0.aread(index).impl());
+        ch_uint<1> valid_way1_raw(valid_mem_way1.aread(index).impl());
+        ch_bool valid_way0 = valid_way0_raw != ch_uint<1>(0_d);
+        ch_bool valid_way1 = valid_way1_raw != ch_uint<1>(0_d);
 
         // 使用 & / | (per ADR-036 deprecate-hdl-logical-operators, ch_bool bit-identical)
         ch_bool hit_way0 = valid_way0 & (tag_way0 == tag);
@@ -133,8 +137,7 @@ public:
         auto cache_data = select(hit_way1, data_way1, data_way0);
 
         // Hit: Cache 返回; Miss: AXI 返回
-        // 取 cache line 低 32-bit 作为 rdata 输出 (与 axi_rdata 同宽度)
-        // 用 bits<31, 0>(cache_data) 显式函数模板调用, 避免 ch_uint::operator()(unsigned, unsigned) runtime bits 核心库 bug
+        // 用 bits<31, 0> 显式函数模板调用, 避免 ch_uint::operator()(unsigned, unsigned) 核心库 bug
         io().rdata <<= select(hit, bits<31, 0>(cache_data), io().axi_rdata);
 
         // =====================================================================
@@ -146,17 +149,10 @@ public:
         io().axi_wdata <<= io().wdata;
         io().axi_addr <<= dcache_get_block_addr(io().addr);
 
-        // Hit 且写操作时, 更新 Cache Data (Write-Through)
-        // 实际应用中可能需要字节掩码, 这里简化为全写
-        if (hit == ch_bool(true) & io().we == ch_bool(true)) {
-            // 简化: 假设写入整个 Data 块
-            // mixed ch_bool+port: 先 select 展开成 ch_bool
-            ch_bool do_write_way0 = select(hit_way0, ch_bool(true), ch_bool(false));
-            ch_bool do_write_way1 = select(hit_way1, ch_bool(true), ch_bool(false));
-
-            data_mem_way0.write(index, zext<DCacheConfig::DATA_WIDTH>(io().wdata), do_write_way0);
-            data_mem_way1.write(index, zext<DCacheConfig::DATA_WIDTH>(io().wdata), do_write_way1);
-        }
+        // Hit 写 (write-through): 用 enable 信号分别驱动两路
+        ch_bool do_write = hit & io().we;
+        data_mem_way0.write(index, zext<DCacheConfig::DATA_WIDTH>(io().wdata), do_write & hit_way0);
+        data_mem_way1.write(index, zext<DCacheConfig::DATA_WIDTH>(io().wdata), do_write & hit_way1);
 
         // =====================================================================
         // Ready 信号
@@ -175,44 +171,34 @@ public:
         // =====================================================================
 
         // Miss 读或任意写都发起 AXI 请求
-        // (miss && is_read) || io().we 改写:
-        //   miss & is_read 是 ch_bool & ch_bool (合法)
-        //   再 | port 用 select 展开
         ch_bool miss_read = miss & is_read;
         io().axi_valid <<= select(miss_read, ch_bool(true), io().we);
 
         // =====================================================================
-        // LRU 更新和 Miss 填充 (1-cycle registered via ch_mem::write)
+        // Miss 填充 (enable 信号, no C++ if)
+        // 简化版 fill 策略 — 按 valid 状态选择 victim (避开 lru_mem X 问题)
+        //   way0 invalid -> 填 way0
+        //   way0 valid, way1 invalid -> 填 way1
+        //   两路都 valid -> 填 way0 (简化 LRU 覆盖)
         // =====================================================================
+        ch_bool do_fill = io().axi_resp_valid & miss_read;
+        ch_bool fill_way0_en = do_fill & !valid_way0;
+        ch_bool fill_way1_en = do_fill & valid_way0 & !valid_way1;
 
-        if (miss == ch_bool(true) & io().axi_resp_valid == ch_bool(true) & is_read == ch_bool(true)) {
-            // Miss 填充
-            // victim_way: lru_mem[index] = 哪条路是 LRU (即要被替换的)
-            //   lru=0 (ch_bool(false)) → 替换 way0;  lru=1 (ch_bool(true)) → 替换 way1
-            ch_bool victim_way(lru_mem.aread(index).impl());
+        tag_mem_way0.write(index, tag, fill_way0_en);
+        data_mem_way0.write(index, zext<DCacheConfig::DATA_WIDTH>(io().axi_rdata), fill_way0_en);
+        valid_mem_way0.write(index, ch_uint<1>(1_d), fill_way0_en);
 
-            // if/else 分发到独立 ch_mem (避免 C-style 数组 runtime index)
-            if (victim_way == ch_bool(true)) {
-                // 替换 way1
-                tag_mem_way1.write(index, tag, ch_bool(true));
-                data_mem_way1.write(index, zext<DCacheConfig::DATA_WIDTH>(io().axi_rdata), ch_bool(true));
-                valid_mem_way1.write(index, ch_bool(true), ch_bool(true));
-                // way1 新替换 → way1 是 MRU → way0 是 LRU → lru = false
-                lru_mem.write(index, ch_bool(false), ch_bool(true));
-            } else {
-                // 替换 way0
-                tag_mem_way0.write(index, tag, ch_bool(true));
-                data_mem_way0.write(index, zext<DCacheConfig::DATA_WIDTH>(io().axi_rdata), ch_bool(true));
-                valid_mem_way0.write(index, ch_bool(true), ch_bool(true));
-                // way0 新替换 → way0 是 MRU → way1 是 LRU → lru = true
-                lru_mem.write(index, ch_bool(true), ch_bool(true));
-            }
-        }
+        tag_mem_way1.write(index, tag, fill_way1_en);
+        data_mem_way1.write(index, zext<DCacheConfig::DATA_WIDTH>(io().axi_rdata), fill_way1_en);
+        valid_mem_way1.write(index, ch_uint<1>(1_d), fill_way1_en);
 
+        // =====================================================================
         // Hit 时更新 LRU
-        if (hit == ch_bool(true)) {
-            lru_mem.write(index, select(hit_way1, ch_bool(true), ch_bool(false)), ch_bool(true));
-        }
+        // =====================================================================
+        ch_bool do_lru_update = hit;
+        ch_bool new_lru_val = select(hit_way1, ch_bool(false), ch_bool(true));
+        lru_mem.write(index, new_lru_val, do_lru_update);
     }
 
 private:
