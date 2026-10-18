@@ -60,7 +60,38 @@ cmake build probe 2026-10-18（`tests/chlib/test_cache_simple.cpp` 临时 probe�
 
 **注意**：probe 只验证**编译可行性**，**未验证 simulator 运行时行为**（aread 0-cycle / sread 1-cycle 时序、LRU 状态机、miss-fill 路径）。这是 builder 阶段必须跑 test 验证的。
 
-### 2.2 不采用 ADR-037 §4 variant (a) 的 BYPASS mode
+### 2.2 R2 aread/sread 时序 spike — 用既有证据闭环（2026-10-18）
+
+`.rddf/improvements/cache-complete-doa-note.md §6.1.R2` 要求"cache hit 通路用 aread 还是 sread"必须有 runtime probe 实证。**结论：cache hit 通路用 `aread`，证据已在 tree 中**：
+
+`tests/test_mem_comb_read.cpp`（2026-10-12 commit `4c19d5c` 等价提交 `test(mem): pin same-cycle write+aread race`）的 4 个 TEST_CASE 已 pin 死以下事实：
+
+| TEST_CASE 行号 | 行为 | 结论 |
+|---|---|---|
+| 行 135-177 `[mem][comb-read][sim]` | aread same-tick 可见（addr 改变后下一个 `tick()` 立即看到新值）| ✅ aread 在 Simulator 0-cycle |
+| 行 179-210 `[mem][comb-read][sim][sread-regression]` | sread 1-cycle（`tick()` 后才可见）| ✅ sread 1-cycle |
+| 行 216-277 `[mem][comb-read][codegen]` | Verilog: aread → `assign`、sread → `always_ff` | ✅ Verilog 端 aread=0-cycle 组合逻辑、sread=1-cycle 时序逻辑 |
+| 行 286-331 `[mem][comb-read][sim][write-read]` | 写后下一周期 aread 见 post-write 值 | ✅ write→aread 跨周期正确 |
+| 行 340-371 `[mem][aread][race]` | same-cycle write+aread 返回 **pre-write** 值 | ✅ race 语义锁定（cache miss-fill 需注意这点）|
+
+`tests/test_mem_comb_read.cpp:4-31` doc-comment 把以上语义形式化为可读契约：
+- "aread emits `assign` in Verilog (0-cycle); sread continues to emit `always_ff` (1-cycle)"
+- "Both use sequential list [in Simulator], observed same-tick via trailing eval_combinational"
+- "Same-cycle write+read race: Simulator aread returns pre-write value"
+- "imem must remain on sread to keep fetch/pc_lag alignment"
+
+**对 cache hit 通路的决策**：
+- **cache hit 数据通路** = 纯组合读 SRAM → 用 `aread`（同 dmem 风格）
+- **imem（instruction fetch）** = 必须 `sread`（与 pc_lag 1 周期对齐）
+- icache 用 `aread` 后，下游需要 1 个寄存器 stage 来对齐 CPU pipeline 的 fetch 阶段（详见 §3 集成层）
+
+**R2 缺口（已纳入 §6 Step 3 覆盖）**：
+- ❌ **multi-port aread 隔离性**：2-way cache = 2 个独立 `aread` 端口，需要确认 read_port 不会因共享底层 proxyimpl 而互相污染。现有 `test_mem_comb_read.cpp` 只有 single-port，未直接覆盖。
+- ❌ **写端口在 hit 时与 aread 端口的并发**：cache hit 时既要 `write` SRAM（miss-fill），又要 `aread` 数据通路读 SRAM。`test_mem_comb_read.cpp` 行 286-331 测了 cross-cycle 但不是同时钟 cycle。
+
+**这两个缺口不是 R2 阻塞项**（基础原语已实证），而是 §6 Step 3 `tests/chlib/test_cache_complete.cpp` 必须覆盖的 cache-specific 行为 —— 在 builder 阶段实现。
+
+### 2.3 不采用 ADR-037 §4 variant (a) 的 BYPASS mode
 
 `*.research.md §A4.1` 已论证（4 个理由）：架构污染、bypass 跨 Hit/Miss 状态机、新测试等于搬 stub 断言、违反 ZERO-DEBT。**BYPASS mode 不在范围内**。
 
@@ -100,11 +131,12 @@ cmake build probe 2026-10-18（`tests/chlib/test_cache_simple.cpp` 临时 probe�
 - root AGENTS.md §KNOWN LIMITATIONS 少 1 个 bullet（dead-on-arrival 消失）
 - riscv-mini 集成 path 不再依赖 stub 当 mock
 - 11 个 pre-existing build error 一并消失（zero-debt 政策）
-- rv32i imem + icache 用相同 sread 原语，集成期减少认知负担
+- rv32i imem 用 `sread`（pc_lag 1 周期对齐），icache/dcache hit 通路用 `aread`（纯组合读 SRAM），两种原语各司其职，与 `tests/test_mem_comb_read.cpp` 已 pin 的语义对齐
 
 ### 5.2 负面
 - builder 阶段需要：
-  - 验证 ch_mem aread/sread 在 simulator 的时序行为（**0-cycle / 1-cycle 是关键**，root AGENTS.md §KNOWN LIMITATIONS "imem must use sread" 提到过）
+  - ~~验证 ch_mem aread/sread 在 simulator 的时序行为~~（**已被 §2.2 R2 闭环**：`tests/test_mem_comb_read.cpp` 5 个 test_case 已 pin 死）
+  - 验证 2-way multi-port aread 隔离性（2 个独立 read_port 不互相污染）—— §6 Step 3 覆盖
   - 验证 LRU 状态机（hit_way1 / hit_way0 → lru bit update 路径）
   - 验证 miss-fill 路径（axi_resp_valid=1 时 tag/data/valid 写 + LRU 翻转）
 - 工作量 3-5 天（5-8 commit），1 个 builder change
@@ -123,7 +155,12 @@ cmake build probe 2026-10-18（`tests/chlib/test_cache_simple.cpp` 临时 probe�
 
 1. **修复 `i_cache_complete.h` 的非架构 bug**（10 个 typo / port-conv / 运算符）+ SRAM 声明改成 ch_mem 数组（2-way）→ 验证 `tests/test_cache_simple` 改用 ICacheComplete 能 build
 2. **修复 `d_cache_complete.h` 同 10 个 bug** + 改 ch_mem → 验证同上
-3. **新增 `tests/chlib/test_cache_complete.cpp`** — 至少 2 test_case（icache miss-fill-then-hit + dcache read miss-fill）→ ctest -R test_cache_complete 通过
+3. **新增 `tests/chlib/test_cache_complete.cpp`** — 至少 4 个 test_case（覆盖 §2.2 R2 缺口）：
+   - **icache miss-fill-then-hit**：验证 2-way aread 在 miss 后 fill，下一周期 read 应 hit
+   - **dcache read miss-fill**：同上但 write-through 路径
+   - **2-way multi-port aread 隔离性**（§2.2 R2 缺口 1）：同时读 way0 和 way1 不同 set，确认 read_port 不互相污染
+   - **同周期 hit-aread + miss-fill-write**（§2.2 R2 缺口 2）：一个 way 是 hit（aread），另一个 way miss（fill write），确认两条路径独立
+   - → ctest -R test_cache_complete 通过
 4. **riscv-mini 串接验证** — 加 `examples/riscv-mini/CMakeLists.txt` smoke target，实例化 `ICachePrefetch` + `DCacheWriteBuffer` → ctest -R riscv_mini_smoke 通过
 5. **文档同步** — 改 root AGENTS.md §KNOWN LIMITATIONS 删 dead-on-arrival bullet + ADR-037 §5 Status 增补"rewrite 完成"+ `include/cpu/AGENTS.md` STRUCTURE 加 ch_mem 描述
 6. **archive / 复审** — 复审 + 启动 ADR-037 §2 重启（docs-only 收尾变 active 执行）
