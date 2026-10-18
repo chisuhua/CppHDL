@@ -145,6 +145,26 @@ pragma-wrap their use. This ADR records the removal plan;
 implementation follows in a future change gated on the 6-month
 deadline.
 
+**2026-10-18 update (architect review)**: A first attempt to execute
+the §4 plan ahead of schedule (in change
+`.rddf/improvements/cache-stub-physical-removal.md`, status: docs-only
+phase) revealed that the migration target (`*_complete.h`) is
+**dead-on-arrival**: cmake build probe of the `describe()` body surfaces
+11 pre-existing compile errors, including a structural one (SRAM
+declared as C-style `ch_reg<...>[128][2]` but indexed at runtime via
+`ch_uint<7>` from `bits<...>(io().addr)`). The rewrite required to
+make `*_complete.h` actually instantiable is **out of scope of this
+ADR** — it is tracked separately as improvement
+`.rddf/improvements/cache-complete-doa-note.md` (a `ch_mem`-based
+rewrite). Consequence: the 6-month deadline (2027-04-17) now has a
+**hard prerequisite** (the ch_mem rewrite must land first). If the
+rewrite is not done by 2027-04-17, the stubs are **kept** (with their
+existing `[[deprecated]]` attribute) rather than deleted with a broken
+replacement, per ZERO-DEBT POLICY "no orphan files / no broken
+build". The §2 variant (b) "delete only `test_cache_pipeline_integration.cpp`"
+remains a valid fallback if the rewrite is still in progress at the
+deadline.
+
 ## 6. Future Work (Out of Scope)
 
 - A new `BYPASS` mode in `*_complete.h` is a substantive
