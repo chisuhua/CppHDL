@@ -1,3 +1,13 @@
+---
+name: cache-stub-physical-removal
+priority: P0
+source: 用户"选择 2"（ADR-037 cache stub 物理删除 6-month plan 提前落地）
+phase: phase-5
+category: cache
+type: feature
+created_at: 2026-10-18
+---
+
 # Improvement: cache-stub 物理删除 (ADR-037 落地)
 
 - **Date drafted**: 2026-10-18
