@@ -123,7 +123,7 @@ public:
         ch_uint<32> sra_result_temp = srl_result;
         // 简化算术右移实现 (对于短移位量足够)
         for (int i = 0; i < 32; ++i) {
-            ch_bool should_fill = sign_bit && (shift_amt > ch_uint<5>(i));
+            ch_bool should_fill = sign_bit & (shift_amt > ch_uint<5>(i));
             ch_uint<32> fill_mask = select(should_fill, 
                 ch_uint<32>(~0_d) << make_literal(31 - i), 
                 ch_uint<32>(0_d));

@@ -1,0 +1,22 @@
+## Tasks
+
+- [x] ### Task 1: sed-rewrite `examples/riscv-mini/src/stages/ex_stage.h:126`
+  - **action**: `ch_bool should_fill = sign_bit && (shift_amt > ch_uint<5>(i));` → `&`
+  - **verify**: `grep -nE "(\|\||\&\&)" examples/riscv-mini/src/stages/ex_stage.h` 输出 0 行（与 ch_bool 相关）
+- [x] ### Task 2: sed-rewrite `examples/riscv-mini/src/stages/id_stage.h:174` + `:177`
+  - **action**: 2 处 `||` → `|`
+  - **verify**: `grep -nE "(\|\||\&\&)" examples/riscv-mini/src/stages/id_stage.h` 输出 0 行
+- [x] ### Task 3: 全量 file-level audit
+  - **verify**: `grep -rnE "(ch_bool|ch_uint)\b.*(\|\||\&\&)" examples/riscv-mini/src/stages/*.h` 输出 0 行
+- [x] ### Task 4: 编译不退化
+  - **verify**: `cmake --build build -j$(nproc) 2>&1 | grep -E "error|Error"` → 0 行
+- [x] ### Task 5: ctest 全量不退化
+  - **verify**: `ctest -LE perf --output-on-failure` → 156/156 PASS
+  - **AND** `ctest -L verilator_e2e -LE perf` → 21/21 PASS
+- [x] ### Task 6: archive 前置 gate
+  - **verify**:
+    - `openspec validate fix-deprecate-logical-operators-residual --strict` → valid
+    - `cmake --build build -j$(nproc) 2>&1 | grep -c deprecated` → 0
+- [x] ### Task 7: archive
+  - **action**: `openspec archive fix-deprecate-logical-operators-residual --yes --skip-specs`
+  - **verify**: `ls openspec/changes/archive/ | grep deprecate-logical-operators-residual` → `2026-10-19-fix-deprecate-logical-operators-residual`
