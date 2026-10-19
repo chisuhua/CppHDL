@@ -1,4 +1,8 @@
 // tests/test_verilator_error_flow.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
+//
 // verilator-std-expected: unit tests for VerilatorError / VerilatorErrorCode
 // / try_initialize() and the bool initialize() wrapper.
 //

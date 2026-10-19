@@ -1,4 +1,8 @@
 // tests/test_verilator_bundle_e2e.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9: 9 reference impls unchanged).
+//
 // strengthen-verilator-e2e-coverage phase 2 (GREEN):
 // 4 bundle e2e scenarios. The fixture-level pattern matches
 // tests/test_bundle.cpp:18-29 (CRTP with bundle_base<Derived> +

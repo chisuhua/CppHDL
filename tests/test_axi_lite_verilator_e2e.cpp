@@ -1,4 +1,7 @@
 // tests/test_axi_lite_verilator_e2e.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
 // AXI4-Lite end-to-end VerilatorBackend integration test.
 //
 // Closes Gap F2 from the verilator-perf-three-way review:

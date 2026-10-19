@@ -1,4 +1,8 @@
 // tests/test_verilator_complex_e2e.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
+//
 // strengthen-verilator-e2e-coverage phase 7 (GREEN):
 // 2 representative complex design fixtures — RV32I pipeline + SPI FSM —
 // under VerilatorBackend simulation. Each fixture runs interpreter

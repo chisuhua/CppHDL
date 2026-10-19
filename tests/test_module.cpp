@@ -2,6 +2,7 @@
 #include "ch.hpp"
 #include "codegen_dag.h"
 #include "codegen_verilog.h"
+#include "dual_backend_fixture.h"
 #include "module.h"
 #include "simulator.h"
 #include <cstdint>
@@ -79,146 +80,137 @@ TEST_CASE("CH_MODULE - Code Generation", "[module][codegen]") {
     REQUIRE_NOTHROW(toDAG("test_module_codgen.dot", device.context()));
 }
 
-TEST_CASE("CH_MODULE - Simulation Value Transfer", "[module][simulation]") {
-    class Top : public Component {
-    public:
-        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
+// dual-backend-test-coverage (Phase 1): CH_MODULE - Simulation Value
+// Transfer driven through InterpreterBackend + VerilatorBackend.
+// Pass-through SimpleModule<4> (Top.io().in_data → mod → Top.io().out_data).
+class ModuleValueTransferTop : public Component {
+public:
+    __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
 
-            Top(Component *parent = nullptr, const std::string &name = "top")
-            : Component(parent, name) {}
+    ModuleValueTransferTop(Component *parent = nullptr,
+                           const std::string &name = "top_xfer")
+        : Component(parent, name) {}
 
-        void create_ports() override { new (this->io_storage_) io_type; }
+    void create_ports() override { new (this->io_storage_) io_type; }
 
-        void describe() override {
-            ch::ch_module<SimpleModule<4>> mod{"mod"};
-
-            // 连接端口: 顶层输入 -> 子模块输入，子模块输出 -> 顶层输出
-            mod.io().in_port <<= io().in_data;
-            io().out_data <<= mod.io().out_port;
-        }
-    };
-
-    ch_device<Top> device;
-    Simulator sim(device.context());
-
-    // 测试不同的输入值
-    auto in_data = device.io().in_data;
-    auto out_data = device.io().out_data;
-
-    for (uint64_t i = 0; i < 16; ++i) {
-        sim.set_input_value(in_data, i);
-        sim.tick();
-        REQUIRE(sim.get_value(out_data) == i);
+    void describe() override {
+        ch::ch_module<SimpleModule<4>> mod{"mod"};
+        mod.io().in_port <<= io().in_data;
+        io().out_data <<= mod.io().out_port;
     }
-}
+};
 
-TEST_CASE("CH_MODULE - Connection Between Child Modules",
-          "[module][child-connection]") {
-    class Top : public Component {
-    public:
-        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
-
-            Top(Component *parent = nullptr, const std::string &name = "top")
-            : Component(parent, name) {}
-
-        void create_ports() override { new (this->io_storage_) io_type; }
-
-        void describe() override {
-            ch::ch_module<SimpleModule<4>> mod1{"mod1"};
-            ch::ch_module<SimpleModule<4>> mod2{"mod2"};
-
-            // 修复循环连接：正确的级联应该是 顶层输入 -> mod1 -> mod2 ->
-            // 顶层输出
-            mod1.io().in_port <<= io().in_data;
-            mod2.io().in_port <<= mod1.io().out_port;
-            io().out_data <<= mod2.io().out_port;
+DUAL_BACKEND_TEST_PAIR(
+    ModuleValueTransferTop,
+    "CH_MODULE - Simulation Value Transfer",
+    "[module][simulation][dual]",
+    [&]() {
+        for (uint64_t i = 0; i < 16; ++i) {
+            sim.set_input_value(dev.instance().io().in_data, i);
+            sim.tick();
+            REQUIRE(sim.get_value(dev.instance().io().out_data) == i);
         }
-    };
+    });
 
-    ch_device<Top> device;
-    Simulator sim(device.context());
+// dual-backend-test-coverage (Phase 1): CH_MODULE - Connection Between
+// Child Modules driven through both backends. Two pass-through
+// SimpleModule<4> chained: top.in → mod1 → mod2 → top.out.
+class ModuleChainTop : public Component {
+public:
+    __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;)
 
-    // 测试不同的输入值
-    auto in_data = device.io().in_data;
-    auto out_data = device.io().out_data;
+    ModuleChainTop(Component *parent = nullptr,
+                   const std::string &name = "top_chain")
+        : Component(parent, name) {}
 
-    for (uint64_t i = 0; i < 16; ++i) {
-        sim.set_input_value(in_data, i);
-        sim.tick();
-        // 因为mod1和mod2都只是直接传递输入到输出，所以输出应该和输入相同
-        REQUIRE(sim.get_value(out_data) == i);
+    void create_ports() override { new (this->io_storage_) io_type; }
+
+    void describe() override {
+        ch::ch_module<SimpleModule<4>> mod1{"mod1"};
+        ch::ch_module<SimpleModule<4>> mod2{"mod2"};
+        mod1.io().in_port <<= io().in_data;
+        mod2.io().in_port <<= mod1.io().out_port;
+        io().out_data <<= mod2.io().out_port;
     }
-}
+};
 
-TEST_CASE("CH_MODULE - Connection Between Different IO Directions",
-          "[module][io-direction]") {
-    class DataProcessor : public Component {
-    public:
-        __io(ch_in<ch_uint<4>> input; ch_out<ch_uint<4>> output;
-             ch_in<bool> enable;)
-
-            DataProcessor(Component *parent = nullptr,
-                          const std::string &name = "DataProcessor")
-            : Component(parent, name) {}
-
-        void create_ports() override { new (this->io_storage_) io_type; }
-
-        void describe() override {
-            // 简单的条件传递逻辑：如果enable为true，则传递input到output
-            io().output <<= select(io().enable, io().input, 0_d);
+DUAL_BACKEND_TEST_PAIR(
+    ModuleChainTop,
+    "CH_MODULE - Connection Between Child Modules",
+    "[module][child-connection][dual]",
+    [&]() {
+        for (uint64_t i = 0; i < 16; ++i) {
+            sim.set_input_value(dev.instance().io().in_data, i);
+            sim.tick();
+            REQUIRE(sim.get_value(dev.instance().io().out_data) == i);
         }
-    };
+    });
 
-    class Top : public Component {
-    public:
-        __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;
-             ch_in<bool> enable1; ch_in<bool> enable2;)
+// dual-backend-test-coverage (Phase 1): CH_MODULE - Connection Between
+// Different IO Directions (select-based DataProcessor chained) driven
+// through both backends.
+class ModuleDataProcessor : public Component {
+public:
+    __io(ch_in<ch_uint<4>> input; ch_out<ch_uint<4>> output;
+         ch_in<bool> enable;)
 
-            Top(Component *parent = nullptr, const std::string &name = "top")
-            : Component(parent, name) {}
+    ModuleDataProcessor(Component *parent = nullptr,
+                        const std::string &name = "DataProc")
+        : Component(parent, name) {}
 
-        void create_ports() override { new (this->io_storage_) io_type; }
+    void create_ports() override { new (this->io_storage_) io_type; }
 
-        void describe() override {
-            ch::ch_module<DataProcessor> proc1{"proc1"};
-            ch::ch_module<DataProcessor> proc2{"proc2"};
-
-            // 连接端口: 顶层输入 -> proc1输入 -> proc2输入 -> 顶层输出
-            proc1.io().input <<= io().in_data;
-            proc1.io().enable <<= io().enable1;
-            proc2.io().input <<= proc1.io().output;
-            proc2.io().enable <<= io().enable2;
-            io().out_data <<= proc2.io().output;
-        }
-    };
-
-    ch_device<Top> device;
-    Simulator sim(device.context());
-
-    // 测试不同的输入值和使能信号组合
-    auto in_data = device.io().in_data;
-    auto out_data = device.io().out_data;
-    auto enable1 = device.io().enable1;
-    auto enable2 = device.io().enable2;
-
-    // 测试使能信号都为真时
-    sim.set_input_value(enable1, 1);
-    sim.set_input_value(enable2, 1);
-    for (uint64_t i = 0; i < 16; ++i) {
-        sim.set_input_value(in_data, i);
-        sim.tick();
-        REQUIRE(sim.get_value(out_data) == i);
+    void describe() override {
+        io().output <<= select(io().enable, io().input, 0_d);
     }
+};
 
-    // 测试使能信号不同组合
-    sim.set_input_value(in_data, 5);
-    sim.set_input_value(enable1, 1); // proc1使能
-    sim.set_input_value(enable2, 0); // proc2不使能
-    sim.tick();
-    REQUIRE(sim.get_value(out_data) == 0); // 应该是0，因为proc2输出0
+class ModuleIoDirectionTop : public Component {
+public:
+    __io(ch_in<ch_uint<4>> in_data; ch_out<ch_uint<4>> out_data;
+         ch_in<bool> enable1; ch_in<bool> enable2;)
 
-    sim.set_input_value(enable1, 0); // proc1不使能
-    sim.set_input_value(enable2, 1); // proc2使能
-    sim.tick();
-    REQUIRE(sim.get_value(out_data) == 0); // 应该是0，因为proc1输出0
-}
+    ModuleIoDirectionTop(Component *parent = nullptr,
+                         const std::string &name = "top_io_dir")
+        : Component(parent, name) {}
+
+    void create_ports() override { new (this->io_storage_) io_type; }
+
+    void describe() override {
+        ch::ch_module<ModuleDataProcessor> proc1{"proc1"};
+        ch::ch_module<ModuleDataProcessor> proc2{"proc2"};
+        proc1.io().input <<= io().in_data;
+        proc1.io().enable <<= io().enable1;
+        proc2.io().input <<= proc1.io().output;
+        proc2.io().enable <<= io().enable2;
+        io().out_data <<= proc2.io().output;
+    }
+};
+
+DUAL_BACKEND_TEST_PAIR(
+    ModuleIoDirectionTop,
+    "CH_MODULE - Connection Between Different IO Directions",
+    "[module][io-direction][dual]",
+    [&]() {
+        // Enable both processors — data passes through.
+        sim.set_input_value(dev.instance().io().enable1, 1);
+        sim.set_input_value(dev.instance().io().enable2, 1);
+        for (uint64_t i = 0; i < 16; ++i) {
+            sim.set_input_value(dev.instance().io().in_data, i);
+            sim.tick();
+            REQUIRE(sim.get_value(dev.instance().io().out_data) == i);
+        }
+
+        // proc2 disabled — outputs 0.
+        sim.set_input_value(dev.instance().io().in_data, 5);
+        sim.set_input_value(dev.instance().io().enable1, 1);
+        sim.set_input_value(dev.instance().io().enable2, 0);
+        sim.tick();
+        REQUIRE(sim.get_value(dev.instance().io().out_data) == 0);
+
+        // proc1 disabled — outputs 0.
+        sim.set_input_value(dev.instance().io().enable1, 0);
+        sim.set_input_value(dev.instance().io().enable2, 1);
+        sim.tick();
+        REQUIRE(sim.get_value(dev.instance().io().out_data) == 0);
+    });

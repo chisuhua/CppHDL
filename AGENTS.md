@@ -203,12 +203,12 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 159
+- CTEST_TOTAL: 164
 - **Test counts (single source of truth — re-verify before quoting in PRs/docs)**
-  - **159 CTest tests registered** as of 2026-10-15. Verify: `cd build && ctest -N | tail -1`.
-  - **148 non-perf CTest** (= 159 − 11 perf). Verify: `cd build && ctest -N -LE perf | tail -1`.
-  - **91 Catch2 test source files** at `tests/test_*.cpp` (all registered; 3 bit-rot orphans — `test_memory_leak.cpp` / `test_memory_optimization.cpp` / `test_memory_performance.cpp` — deleted 2026-10-15 because they used a pre-refactor `ch_reg` API that no longer compiles; see `tests/CMakeLists.txt:279-281`).
-  - **27 Catch2 test source files** at `tests/chlib/test_*.cpp` (all registered).
+  - **164 CTest tests registered** as of 2026-10-19 (post verilator-parity-all-tests Phase 1: was 160 baseline +4 dual_backend_* targets = 164). Verify: `cd build && ctest -N | tail -1`.
+  - **153 non-perf CTest** (= 164 − 11 perf). Verify: `cd build && ctest -N -LE perf | tail -1`.
+  - **95 Catch2 test source files** at `tests/test_*.cpp` (all registered; 3 bit-rot orphans — `test_memory_leak.cpp` / `test_memory_optimization.cpp` / `test_memory_performance.cpp` — deleted 2026-10-15 because they used a pre-refactor `ch_reg` API that no longer compiles; see `tests/CMakeLists.txt:279-281`; +4 dual_backend_* added 2026-10-19 by verilator-parity-all-tests Phase 1 = 91+4 = 95).
+  - **28 Catch2 test source files** at `tests/chlib/test_*.cpp` (all registered; was 27, +1 from cleanup-orphan-code reroll).
   - **3 Catch2 test source files** at `tests/jit/test_*.cpp` (registered separately).
   - **40 sample programs** at `samples/*.cpp`.
   - **32 main()-bearing examples** in `examples/`. **28 are tracked** by `run_all_ported_tests.sh`; the remaining 4 (`examples/verilator/0{1,2,3}_*.cpp` + `examples/spinalhdl-ported/testbench_template.cpp`) are demos not run by CI.

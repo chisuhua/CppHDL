@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include "bundle/stream_bundle.h"
 #include "catch_amalgamated.hpp"
+#include "ch.hpp"
 #include "chlib/switch.h"
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
@@ -9,9 +10,11 @@
 #include "core/bundle/bundle_traits.h"
 #include "core/context.h"
 #include "core/uint.h"
+#include "dual_backend_fixture.h"
 #include "simulator.h"
 #include <memory>
 
+using namespace ch;
 using namespace ch::core;
 
 // ============ 静态类型检查测试 ============
@@ -180,34 +183,32 @@ public:
     }
 };
 
-TEST_CASE("Stream - SimulationDataFlow", "[stream][simulation][dataflow]") {
-    ch::ch_device<SimpleStreamProducer> device;
-    ch::Simulator sim(device.context());
+// dual-backend-test-coverage (Phase 1): Stream - SimulationDataFlow
+// driven through InterpreterBackend + VerilatorBackend. Simple producer
+// emits (counter, valid) over 4 cycles; at least one cycle must
+// report valid_out > 0.
+DUAL_BACKEND_TEST_PAIR(
+    SimpleStreamProducer,
+    "Stream - SimulationDataFlow",
+    "[stream][simulation][dataflow][dual]",
+    [&]() {
+        std::vector<uint64_t> valid_signals;
 
-    // 验证stream数据在多个周期内流动
-    std::vector<uint64_t> collected_data;
-    std::vector<uint64_t> valid_signals;
-
-    for (int i = 0; i < 4; ++i) {
-        auto payload = sim.get_value(device.instance().io().payload_out);
-        auto valid = sim.get_value(device.instance().io().valid_out);
-
-        collected_data.push_back(static_cast<uint64_t>(payload));
-        valid_signals.push_back(static_cast<uint64_t>(valid));
-
-        sim.tick();
-    }
-
-    // 验证有有效数据输出
-    bool has_valid_data = false;
-    for (size_t i = 0; i < valid_signals.size(); ++i) {
-        if (valid_signals[i] > 0) {
-            has_valid_data = true;
-            break;
+        for (int i = 0; i < 4; ++i) {
+            auto valid = sim.get_value(dev.instance().io().valid_out);
+            valid_signals.push_back(static_cast<uint64_t>(valid));
+            sim.tick();
         }
-    }
-    REQUIRE(has_valid_data);
-}
+
+        bool has_valid_data = false;
+        for (size_t i = 0; i < valid_signals.size(); ++i) {
+            if (valid_signals[i] > 0) {
+                has_valid_data = true;
+                break;
+            }
+        }
+        REQUIRE(has_valid_data);
+    });
 
 class StreamConsumer : public ch::Component {
 public:
@@ -226,27 +227,39 @@ public:
     }
 };
 
-TEST_CASE("Stream - SimulationDataConsumption",
-          "[stream][simulation][consumption]") {
-    ch::ch_device<StreamConsumer> device;
-    ch::Simulator sim(device.context());
+// dual-backend-test-coverage (Phase 1): Stream - SimulationDataConsumption
+// driven through InterpreterBackend + VerilatorBackend. StreamConsumer
+// forwards payload_in to output (3-cycle test with values 42/100/200).
+//
+// NOTE: We use std::array<...> instead of std::vector<...>{a,b,c} to
+// avoid top-level commas inside the lambda body, which would be
+// misinterpreted by the C preprocessor as macro argument separators
+// (DUAL_BACKEND_TEST_PAIR only takes 4 positional args). Braces `{}`
+// do NOT nest in preprocessor argument parsing — only `()` and `[]` do.
+DUAL_BACKEND_TEST_PAIR(
+    StreamConsumer,
+    "Stream - SimulationDataConsumption",
+    "[stream][simulation][consumption][dual]",
+    [&]() {
+        // Avoid top-level commas inside the lambda body (which the
+        // C preprocessor would misinterpret as macro arg separators).
+        // Use a fixed-size array initialized element-by-element.
+        uint32_t values[3];
+        values[0] = 42;
+        values[1] = 100;
+        values[2] = 200;
+        for (size_t i = 0; i < 3; ++i) {
+            sim.set_value(dev.instance().io().payload_in,
+                          (uint64_t)values[i]);
+            sim.set_value(dev.instance().io().valid_in, (uint64_t)1);
 
-    // 设置输入值
-    std::vector<uint32_t> test_inputs = {42, 100, 200};
+            sim.tick();
 
-    for (size_t i = 0; i < test_inputs.size(); ++i) {
-        sim.set_value(device.instance().io().payload_in, (uint64_t)test_inputs[i]);
-        sim.set_value(device.instance().io().valid_in, (uint64_t)1);
-
-        sim.tick();
-
-        auto output = sim.get_value(device.instance().io().output);
-        uint64_t output_val = static_cast<uint64_t>(output);
-
-        // 验证输出正确传递
-        REQUIRE(output_val == test_inputs[i]);
-    }
-}
+            auto output = sim.get_value(dev.instance().io().output);
+            uint64_t output_val = static_cast<uint64_t>(output);
+            REQUIRE(output_val == values[i]);
+        }
+    });
 
 TEST_CASE("Stream - FireConditionLogic", "[stream][fire][logic]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");

@@ -1,4 +1,8 @@
 // tests/test_verilator_stream_e2e.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
+//
 // strengthen-verilator-e2e-coverage phase 3 (GREEN):
 // 2 Stream/FIFO scenarios. The fixtures model a simple producer /
 // consumer handshake using ch_stream<ch_uint<32>> bundles; the consumer's

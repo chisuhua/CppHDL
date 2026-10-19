@@ -1,4 +1,8 @@
 // tests/test_verilator_e2e_harness.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
+//
 // ADR-035 §M5 e2e tier — real Verilator compile + dlopen + counter verification.
 //
 // Tagged [verilator][e2e]: skipped when verilator tool not on PATH (PR matrix).

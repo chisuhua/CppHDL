@@ -1,4 +1,8 @@
 // tests/test_verilator_memory_e2e.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
+//
 // strengthen-verilator-e2e-coverage phase 6 (GREEN):
 // 2 representative Memory design fixtures (sync FIFO + AXI4-Full slave)
 // under VerilatorBackend simulation. Each fixture runs interpreter

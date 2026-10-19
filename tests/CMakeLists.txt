@@ -16,6 +16,33 @@ function(add_catch_test TEST_NAME)
     set_tests_properties(${TEST_NAME} PROPERTIES LABELS "base")
 endfunction()
 
+# dual-backend-test-coverage (Phase 1) — wraps add_catch_test with the
+# `verilator_e2e` LABELS + `RESOURCE_LOCK "verilator_backend"` +
+# `_vl_path_env` ENVIRONMENT trio, mirroring the existing
+# `test_verilator_*` tests (test_verilator_trace_parity, etc.). Accepts
+# an optional `TIMEOUT <N>` kwarg (default 60s).
+function(add_dual_backend_test TEST_NAME)
+    set(_opts TIMEOUT)
+    set(_multival_args SOURCES)
+    set(_oneval_args ${_opts})
+    cmake_parse_arguments(DBT "" "${_oneval_args}" "${_multival_args}" ${ARGN})
+
+    if(NOT DBT_SOURCES)
+        message(FATAL_ERROR "add_dual_backend_test(${TEST_NAME}): SOURCES missing")
+    endif()
+    if(NOT DBT_TIMEOUT)
+        set(DBT_TIMEOUT 60)
+    endif()
+
+    add_catch_test(${TEST_NAME} ${DBT_SOURCES})
+    set_tests_properties(${TEST_NAME} PROPERTIES
+        LABELS "base;verilator_e2e"
+        RESOURCE_LOCK "verilator_backend"
+        ENVIRONMENT "${_vl_path_env}"
+        TIMEOUT ${DBT_TIMEOUT}
+    )
+endfunction()
+
 enable_testing()
 
 # ============================================================================
@@ -88,9 +115,46 @@ else()
 endif()
 add_catch_test(test_axi_lite_verilator_e2e test_axi_lite_verilator_e2e.cpp)
 set_tests_properties(test_axi_lite_verilator_e2e PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
+)
+
+# dual-backend-test-coverage (Phase 1): DUAL_BACKEND_TEST_PAIR macro
+# self-validation. Tagged [dual][template][counter]; registered via the
+# new add_dual_backend_test() helper so it inherits the verilator_e2e
+# label + resource lock + PATH env injection. The verilator half
+# generates real Verilog → verilator compile → dlopen → counter
+# check; the interpreter half is the source of truth.
+add_dual_backend_test(test_dual_backend_template
+    SOURCES test_dual_backend_template.cpp
+    TIMEOUT 300
+)
+
+# 64-bit port boundary fixture (spec R10 §"64-bit cap"). Tagged
+# [dual][width-cap]. Registered as `verilator_e2e` so it picks up
+# the resource lock + PATH env, but the test itself is structured
+# to PASS even when verilator rejects >64-bit designs (CounterWide96
+# case). TIMEOUT 300 to accommodate cold verilator compile.
+add_dual_backend_test(test_dual_backend_64_bit
+    SOURCES test_dual_backend_64_bit.cpp
+    TIMEOUT 300
+)
+
+# 2-step clock toggle fixture (spec R10 §"2-step clock toggle").
+# Tagged [dual][clock]. Verifies `eval_sequential` 2-step toggle
+# fires `always_ff @(posedge clk)` and counter increments correctly.
+add_dual_backend_test(test_dual_backend_clock
+    SOURCES test_dual_backend_clock.cpp
+    TIMEOUT 300
+)
+
+# default_reset pulse fixture (spec R10 §"default_reset pulse").
+# Tagged [dual][reset-init]. Verifies init values are loaded by
+# `try_initialize()`'s reset pulse.
+add_dual_backend_test(test_dual_backend_reset
+    SOURCES test_dual_backend_reset.cpp
+    TIMEOUT 300
 )
 
 # 基础功能测试
@@ -122,6 +186,14 @@ add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
 
 # RISC-V Mini 组件测试
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
+# dual-backend-test-coverage (Phase 1): 3 BranchPredictorV2 timing
+# tests migrated to DUAL_BACKEND_TEST_PAIR.
+set_tests_properties(test_branch_predictor_v2 PROPERTIES
+    LABELS "chlib;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 300
+)
 
 # W1: TC-08 JIT register path perf regression (perf-report-followup.md Task 1)
 add_catch_test(perf_jit_reg benchmark/test_jit_reg_perf.cpp)
@@ -238,6 +310,15 @@ add_catch_test(test_literal_width test_literal_width.cpp)
 add_catch_test(test_reg test_reg.cpp)
 add_catch_test(test_reg_linking test_reg_linking.cpp)
 add_catch_test(test_reg_timing test_reg_timing.cpp)
+# dual-backend-test-coverage (Phase 1): reg_timing timing tests migrated
+# to DUAL_BACKEND_TEST_PAIR. Each TEST_CASE produces a [verilator]
+# half that runs real verilator compile + dlopen.
+set_tests_properties(test_reg_timing PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 300
+)
 add_catch_test(test_operator test_operator.cpp)
 add_catch_test(test_operator_advanced test_operator_advanced.cpp)
 add_catch_test(test_operator_connection test_operator_connection.cpp)
@@ -265,6 +346,15 @@ add_catch_test(test_tlm_bundle_phase1 test_tlm_bundle_phase1.cpp)
 
 # Stream 测试
 add_catch_test(test_ch_stream test_ch_stream.cpp)
+# dual-backend-test-coverage (Phase 1): 2 ch_stream timing tests
+# (SimulationDataFlow + SimulationDataConsumption) migrated to
+# DUAL_BACKEND_TEST_PAIR.
+set_tests_properties(test_ch_stream PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 300
+)
 add_catch_test(test_stream_arbiter test_stream_arbiter.cpp)
 add_catch_test(test_stream_builder test_stream_builder.cpp)
 add_catch_test(test_stream_operators test_stream_operators.cpp)
@@ -304,6 +394,14 @@ add_catch_test(test_bitvector test_bitvector.cpp)
 add_catch_test(test_bool_connection test_bool_connection.cpp)
 add_catch_test(test_comparison_ops test_comparison_ops.cpp)
 add_catch_test(test_uint_compare test_uint_compare.cpp)
+# dual-backend-test-coverage (Phase 1): 3 ch_uint compare tests migrated
+# to DUAL_BACKEND_TEST_PAIR.
+set_tests_properties(test_uint_compare PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 300
+)
 add_catch_test(test_mod_width test_mod_width.cpp)
 add_catch_test(test_popcount test_popcount.cpp)
 add_catch_test(test_precise_width test_precise_width.cpp)
@@ -323,6 +421,14 @@ add_catch_test(test_bv_cmp test_bv_cmp.cpp)
 add_catch_test(test_bv_truncate test_bv_truncate.cpp)
 add_catch_test(test_ch_reg_bitwise test_ch_reg_bitwise.cpp)
 add_catch_test(test_module test_module.cpp)
+# dual-backend-test-coverage (Phase 1): 3 CH_MODULE timing tests
+# migrated to DUAL_BACKEND_TEST_PAIR.
+set_tests_properties(test_module PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+    TIMEOUT 300
+)
 add_catch_test(test_module_advanced test_module_advanced.cpp)
 add_catch_test(test_multithread test_multithread.cpp)
 add_catch_test(test_operation_results test_operation_results.cpp)
@@ -362,7 +468,7 @@ target_compile_definitions(test_verilog_external PRIVATE
 # verilator invocation, resource cleanup).
 add_catch_test(test_verilator_backend test_verilator_backend.cpp)
 set_tests_properties(test_verilator_backend PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
@@ -370,7 +476,7 @@ set_tests_properties(test_verilator_backend PROPERTIES
 # + dlopen + counter verification (closes R5/R7 in tasks v2).
 add_catch_test(test_verilator_e2e_harness test_verilator_e2e_harness.cpp)
 set_tests_properties(test_verilator_e2e_harness PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
@@ -383,7 +489,7 @@ target_compile_definitions(test_verilator_trace_parity PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(test_verilator_trace_parity PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
@@ -394,7 +500,7 @@ target_compile_definitions(test_verilator_bundle_e2e PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(test_verilator_bundle_e2e PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
@@ -405,7 +511,7 @@ target_compile_definitions(test_verilator_stream_e2e PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(test_verilator_stream_e2e PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
 )
@@ -418,7 +524,7 @@ target_compile_definitions(test_verilator_memory_e2e PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(test_verilator_memory_e2e PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
     TIMEOUT 300
@@ -431,7 +537,7 @@ target_compile_definitions(test_verilator_complex_e2e PRIVATE
     CATCH_AMALGAMATED_CUSTOM_MAIN
 )
 set_tests_properties(test_verilator_complex_e2e PROPERTIES
-    LABELS "base"
+    LABELS "base;verilator_e2e"
     RESOURCE_LOCK "verilator_backend"
     ENVIRONMENT "${_vl_path_env}"
     TIMEOUT 600
@@ -448,6 +554,11 @@ target_include_directories(test_verilator_complex_e2e PRIVATE
 # required — exercises the type API and the try_initialize() rich-error
 # return path against VerilogGeneration (unwritable work_dir).
 add_catch_test(test_verilator_error_flow test_verilator_error_flow.cpp)
+set_tests_properties(test_verilator_error_flow PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+)
 add_catch_test(test_wires_connection test_wires_connection.cpp)
 # JIT compiler tests
 add_catch_test(test_jit_compiler test_jit_compiler.cpp)

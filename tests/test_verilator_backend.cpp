@@ -1,4 +1,8 @@
 // tests/test_verilator_backend.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). Retain
+// hand-crafted structure (spec R9).
+//
 // ADR-035 / Phase 4.1: Tests for the VerilatorBackend scaffolding.
 // Validates:
 //   - SHA-1 cache key is deterministic and version-sensitive

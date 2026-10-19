@@ -1,4 +1,11 @@
 // tests/test_verilator_trace_parity.cpp
+// Reference implementation for DUAL_BACKEND_TEST_PAIR macro
+// (see openspec/specs/dual-backend-test-coverage/spec.md). The hand-
+// crafted counter/AXI-Lite/bundle fixtures here are the pattern that
+// the macro factors out — they MUST NOT be migrated to the macro
+// (spec R9 requirement: 9 reference impls retain their original
+// TEST_CASE structure + 4-line diff per file).
+//
 // strengthen-verilator-e2e-coverage phase 1 (RED):
 // Trace parity single-test for 3 fixtures (counter / AXI4-Lite / bundle
 // multi-field). In each TEST_CASE we run the SAME fixture through

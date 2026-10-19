@@ -344,6 +344,159 @@ jobs:
       continue-on-error: true
 
   # ---------------------------------------------------------------
+  # PR dual-backend fast feedback (verilator-parity-all-tests Phase 1).
+  # Runs ONLY on pull_request events; in parallel with the existing
+  # `build-and-test` job (`pr-build` analogue, BUILD_VERILATOR=OFF,
+  # 5-8 min). This job rebuilds with BUILD_VERILATOR=ON and runs
+  # `ctest -L verilator_e2e -LE perf`, executing the
+  # DUAL_BACKEND_TEST_PAIR-migrated unit tests through the actual
+  # VerilatorBackend (real verilator compile + dlopen per fixture).
+  #
+  # Targets ≤45 min total wall-clock (R10). On overflow, Phase 1
+  # scope is preserved; Phase 2-5 are deferred (per design.md §7).
+  # See openspec/specs/dual-backend-test-coverage/spec.md §"PR
+  # verilator-fast" for the full contract.
+  # ---------------------------------------------------------------
+  pr-verilator-fast:
+    name: PR Verilator Dual-Backend Fast
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 45
+
+    env:
+      BUILD_VERILATOR: 'ON'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    # ccache cache (separate key from `build-and-test` to avoid
+    # clobbering the fast-path cache).
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-pr-verilator-fast-${{ github.sha }}
+        restore-keys: |
+          ccache-pr-verilator-fast-
+
+    - name: Install g++ (Linux)
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common ccache
+        if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+           && sudo apt-get update \
+           && sudo apt-get install -y g++-13; then
+          echo "Installed g++-13 via PPA"
+          GCC_BIN=gcc-13
+          GXX_BIN=g++-13
+        else
+          echo "::warning::g++-13 PPA install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12
+          GCC_BIN=gcc-12
+          GXX_BIN=g++-12
+        fi
+        sudo ln -sf "/usr/bin/$GCC_BIN" /usr/local/bin/gcc
+        sudo ln -sf "/usr/bin/$GXX_BIN" /usr/local/bin/g++
+        g++ --version
+
+    - name: Install LLVM
+      shell: bash
+      run: |
+        set -e
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-get update
+        sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
+                                clang-${{ env.LLVM_VERSION }}
+        LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
+          | grep 'LLVMConfig\.cmake$' | head -1)
+        if [ -z "$LLVM_CONFIG_CMAKE" ]; then
+          echo "::error::Could not find LLVMConfig.cmake for llvm-${{ env.LLVM_VERSION }}-dev"
+          exit 1
+        fi
+        LLVM_DIR="$(dirname "$LLVM_CONFIG_CMAKE")"
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+
+    # Install verilator build deps (smaller subset than nightly;
+    # avoids the 10-30 min cold verilator build by using
+    # pre-installed / cached artifacts when available).
+    - name: Install verilator host deps
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get install -y flex bison perl python3 make \
+           libfl2 libfl-dev zlibc liblzma-dev libsystemd-dev \
+           libgmp-dev autoconf help2man
+
+    - name: Configure CMake (with Verilator)
+      shell: bash
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_CXX_COMPILER=g++
+        -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
+        -DENABLE_ASAN=OFF
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    # Build verilator first (cold build 10-30 min); stream log.
+    - name: Build verilator
+      shell: bash
+      run: |
+        set -o pipefail
+        cmake --build build --target verilator -j$(nproc) 2>&1 | tee verilator-build.log
+        rc=$?
+        if [ $rc -ne 0 ]; then
+          echo "::error::verilator build failed with exit $rc"
+          exit $rc
+        fi
+
+    - name: Upload verilator build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pr-verilator-fast-verilator-build-log
+        path: verilator-build.log
+        if-no-files-found: ignore
+
+    - name: Build CppHDL
+      shell: bash
+      run: cmake --build build -j$(nproc)
+
+    # Wall-clock measurement per R10 (also written to GH Actions
+    # step summary so reviewer can see at a glance).
+    - name: Run verilator_e2e non-perf tests (dual-backend parity)
+      shell: bash
+      run: |
+        echo "## pr-verilator-fast: ctest -L verilator_e2e -LE perf" >> "$GITHUB_STEP_SUMMARY"
+        start=$(date +%s)
+        ctest --test-dir build --output-on-failure -L verilator_e2e -LE perf
+        rc=$?
+        end=$(date +%s)
+        wall=$((end - start))
+        echo "wall_clock_seconds=${wall}" >> "$GITHUB_STEP_SUMMARY"
+        echo "::notice::pr-verilator-fast wall clock = ${wall}s"
+        if [ $rc -ne 0 ]; then
+          exit $rc
+        fi
+
+    - name: Verify AGENTS.md test counts
+      shell: bash
+      run: scripts/verify_test_counts.sh
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pr-verilator-fast-test-results
+        path: build/Testing/Temporary/*.xml
+        if-no-files-found: ignore
+
+  # ---------------------------------------------------------------
   # Nightly full build including Verilator. Triggered by cron
   # (02:00 UTC, main branch only) or manual workflow_dispatch.
   # Verilator's cold build is 10-30 min, so it stays out of the
