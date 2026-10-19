@@ -451,6 +451,14 @@ add_catch_test(test_operation_results test_operation_results.cpp)
 add_catch_test(test_operation_widths test_operation_widths.cpp)
 add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
 target_include_directories(test_rv32i_pipeline PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
+# dual-backend-rv32i-pipeline-behavior-tests: RV32I microarchitecture 子组件
+# dual 行为 parity. _behavior suffix 区别原 test_rv32i_pipeline.cpp (per spec R6 #5
+# SECTION 排除 + R7 "原文件不动"). 原文件 MUST NOT 改动.
+add_dual_backend_test(test_rv32i_pipeline_behavior
+    SOURCES test_rv32i_pipeline_behavior.cpp
+    TIMEOUT 300
+)
+target_include_directories(test_rv32i_pipeline_behavior PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 # test_simplified_creation 已删除 — easy_nodes.h 不再存在
 add_catch_test(test_trace test_trace.cpp)
 add_catch_test(test_user_tracking test_user_tracking.cpp)

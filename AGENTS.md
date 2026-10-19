@@ -203,10 +203,11 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 166
+- CTEST_TOTAL: 167
 - **Test counts (single source of truth — re-verify before quoting in PRs/docs)**
-  - **166 CTest tests registered** as of 2026-10-19 (post axi-spi-behavior-tests Phase 3 partial: was 165 post dual-backend-cache-tests Phase 2 +1 test_axi_spi_behavior = 166). Verify: `cd build && ctest -N | tail -1`.
-  - **155 non-perf CTest** (= 166 − 11 perf). Verify: `cd build && ctest -N -LE perf | tail -1`.
+  - **167 CTest tests registered** as of 2026-10-20 (post dual-backend-rv32i-pipeline-behavior-tests Phase 4: was 166 post axi-spi-behavior-tests Phase 3 partial +1 test_rv32i_pipeline_behavior = 167). Verify: `cd build && ctest -N | tail -1`.
+  - **156 non-perf CTest** (= 167 − 11 perf). Verify: `cd build && ctest -N -LE perf | tail -1`.
+  - **97 Catch2 test source files** at `tests/test_*.cpp` (all registered; was 96, +1 from dual-backend-rv32i-pipeline-behavior-tests Phase 4 = 96+1 = 97).
   - **96 Catch2 test source files** at `tests/test_*.cpp` (all registered; 3 bit-rot orphans — `test_memory_leak.cpp` / `test_memory_optimization.cpp` / `test_memory_performance.cpp` — deleted 2026-10-15 because they used a pre-refactor `ch_reg` API that no longer compiles; see `tests/CMakeLists.txt:279-281`; +4 dual_backend_* added 2026-10-19 by verilator-parity-all-tests Phase 1 +1 test_axi_spi_behavior added 2026-10-19 by axi-spi-behavior-tests Phase 3 = 91+5 = 96).
   - **29 Catch2 test source files** at `tests/chlib/test_*.cpp` (all registered; was 28, +1 from dual-backend-cache-tests Phase 2 partial: `test_cache_sync.cpp` for ADR-041 `ICacheSync` / `DCacheSync`).
   - **3 Catch2 test source files** at `tests/jit/test_*.cpp` (registered separately).

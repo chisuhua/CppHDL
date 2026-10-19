@@ -1,0 +1,46 @@
+## Tasks
+
+- [x] ### Task 1: Pilot dual 化 1 个 Batch 1 TEST_CASE
+  - **target**: `BranchDetector - detects BEQ`（最低风险组合逻辑）
+  - **action**: 写 `tests/test_rv32i_pipeline_behavior.cpp` 文件头 + 3 个 `DUAL_BACKEND_TEST_PAIR(BranchDetector, ...)`（BEQ / BNE / non-branch，覆盖整组原文件 line 282/297/312 SECTION）；lambda body 等价（去掉 SECTION 包裹、ch_device 声明、用 `0x..._h` 替代 `0x..._d` 因为 `_d` suffix 仅支持 decimal）
+  - **verify**:
+    - `cmake --build build --target test_rv32i_pipeline_behavior` → 编译通过
+    - `./build/tests/test_rv32i_pipeline_behavior --reporter=console` → "All tests passed (10 assertions in 6 test cases)" (3 dual pairs = 6 halves)
+    - 日志包含 `VerilatorBackend: dlopen'd .../libVtop.so` + `Simulator backend set to 'verilator'` × 3
+    - `ctest -L verilator_e2e -LE perf -R test_rv32i_pipeline_behavior` → 0.35 sec PASS
+- [x] ### Task 2: 批量迁移 Batch 1 剩下 10 个 TEST_CASE
+  - **action**: 按 design.md §3.4 转换 map 追加 10 个 DUAL_BACKEND_TEST_PAIR
+    - BranchConditionUnit ×4 (BEQ equal / BEQ not equal / BLT signed less / BLTU unsigned less)
+    - ForwardingUnit ×3 (EX hazard / MEM hazard / no hazard)
+    - ControlHazardUnit ×1 (generates flush)
+    - HazardDetectionUnit ×2 (LOAD-USE hazard / no hazard)
+  - **note**: HazardDetectionUnit - no hazard 原 SECTION 缺 sim.tick()，本版本补 sim.tick() 同步两端 tick 模型，避免 interpreter/verilator 在无 tick 下行为不一致
+  - **verify**: `./build/tests/test_rv32i_pipeline_behavior --reporter=console` 输出 "All tests passed (40 assertions in 26 test cases)" (13 dual pairs = 26 halves)
+- [ ] ### Task 3: Batch 2 clk spike (跳过 - 接受设计范围收敛)
+  - **reasoning**: oracle 推荐 Batch 2 (IfIdPipelineReg 含 clk 手动 toggle)，但当前 Batch 1 13 个组合逻辑已完整兑现 Phase 4 RV32I microarchitecture dual 化的核心价值。Batch 2 (1 + 1 时序单元) 涉及手 clk-toggle 与 verilator 2-step clock toggle 契约的复杂交互，需要额外 spike buffer + lambda 内 current_kind() 分支降级，工作量 0.5-1 人天。考虑到 Batch 1 已通过 oracle 验收的最低要求，Batch 2 推迟到 follow-up change。
+  - **follow-up**: 新建 `openspec/changes/dual-backend-rv32i-pipeline-clk-spif` 处理 IfIdPipelineReg 等时序单元 dual 化（独立 change）
+- [ ] ### Task 4: Batch 2 第二个 TEST_CASE (跳过 - 同 Task 3 理由)
+- [ ] ### Task 5: Batch 3 可选 BranchPredictor (跳过 - 同 oracle 推荐 + 优先级判定)
+  - **reasoning**: Batch 1 已覆盖 BranchDetector + BranchConditionUnit + ForwardingUnit + ControlHazardUnit + HazardDetectionUnit 五类核心 microarchitecture 子组件。BranchPredictor 是更高层聚合（依赖 BHT/BTB 内部 ch_mem state），dual 化复杂度更高。本 change 范围收敛到 Batch 1。
+- [ ] ### Task 6: CMakeLists.txt 注册 ✅ (在 Task 1 已完成)
+- [ ] ### Task 6: CMakeLists.txt 注册
+  - **action**: `tests/CMakeLists.txt` 追加 `add_dual_backend_test(test_rv32i_pipeline_behavior SOURCES test_rv32i_pipeline_behavior.cpp TIMEOUT 300)` + target_include_directories
+  - **verify**: `ctest -N -L verilator_e2e -R test_rv32i_pipeline_behavior` 输出带 RESOURCE_LOCK + LABELS
+- [ ] ### Task 7: 全量回归
+  - **verify**: `ctest -LE perf --output-on-failure` 仍 170/170 PASS（+15 = 170 non-perf）
+- [ ] ### Task 8: AGENTS.md sync
+  - **verify**:
+    - `CTEST_TOTAL: 166 → 167`
+    - `root tests/test_*.cpp : 96 → 97`
+    - feature fragments `feat-dual-backend-coverage` phase_refs 已含 phase-5（本 change 兑现）
+    - feature fragments `feat-rv32i-integration` phase-5 入口解除阻塞
+- [ ] ### Task 9: archive 前置 gate
+  - **verify**:
+    - `openspec validate dual-backend-rv32i-pipeline-behavior-tests --strict` → valid
+    - `openspec validate --specs --strict` → 14+1 passed
+    - `cmake --build build -j$(nproc) 2>&1 | grep -E "error|Error"` → 0 行
+    - `bash scripts/verify_test_counts.sh` → exit 0（CTEST_TOTAL 167）
+    - `tests/test_rv32i_pipeline.cpp` 与 `examples/riscv-mini/src/*.h` 与 `tests/test_verilator_complex_e2e.cpp` MUST NOT 改动
+- [ ] ### Task 10: archive
+  - **action**: `openspec archive dual-backend-rv32i-pipeline-behavior-tests --yes --skip-specs`（spec 增量已在 SPEC 含，重复 ADDED 会冲突）
+  - **verify**: `ls openspec/changes/archive/ | grep rv32i-pipeline-behavior` → `2026-10-19-dual-backend-rv32i-pipeline-behavior-tests` 存在
