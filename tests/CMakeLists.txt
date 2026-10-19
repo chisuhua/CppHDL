@@ -184,6 +184,22 @@ add_catch_test(test_switch chlib/test_switch.cpp)
 # Cache 相关测试
 add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
 
+# dual-backend-cache-tests: ICacheSync / DCacheSync runtime test
+# (ADR-041 Sync variant, 1-cycle sread) — new file, dual verified via
+# DUAL_BACKEND_TEST_PAIR macro. See openspec/changes/dual-backend-cache-tests/.
+add_dual_backend_test(test_cache_sync
+    SOURCES chlib/test_cache_sync.cpp
+    TIMEOUT 60
+)
+
+# axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
+# (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
+# macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
+add_dual_backend_test(test_axi_spi_behavior
+    SOURCES test_axi_spi_behavior.cpp
+    TIMEOUT 300
+)
+
 # RISC-V Mini 组件测试
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 # dual-backend-test-coverage (Phase 1): 3 BranchPredictorV2 timing

@@ -5,9 +5,7 @@
 定义 CppHDL 单元测试统一跑 InterpreterBackend 与 VerilatorBackend 的契约：通过 `DUAL_BACKEND_TEST` macro + `add_dual_backend_test` CMake function，让**任何可观测顶层 `ch_out` 端口、且具有 `ch_device` / `ch_module` 形态的设计**自动走两套 backend，逐周期比较 `ch_out` 端口值，使得 codegen 错误与底层 eval 错误在测试时即时暴露，而非延迟到 nightly / nightly-rv32i 集成时才发现。
 
 In English: Defines the contract for CppHDL unit tests uniformly exercising both InterpreterBackend and VerilatorBackend through a `DUAL_BACKEND_TEST` macro + `add_dual_backend_test` CMake function. The macro MUST automatically construct two `ch_device<T>` instances (one per backend), run the same per-cycle assertions across both, and surface codegen or eval errors at test-time rather than during nightly RV32I integration.
-
 ## Requirements
-
 ### Requirement: DUAL_BACKEND_TEST macro MUST 钉死 InterpreterBackend 与禁用 JIT
 
 `tests/dual_backend_fixture.h` 提供的 `DUAL_BACKEND_TEST(DutType, name, tags)` macro MUST 在 interpreter 那一遍**同时**调用 `sim.set_jit_enabled(false)` 与 `sim.set_backend(std::make_unique<InterpreterBackend>())`，以确保该 path 真正走 InterpreterBackend 而非 inlined JIT。
@@ -246,6 +244,58 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 - **WHEN** PR 触发了 `pr-build` 与 `pr-verilator-fast` 两个 job
 - **THEN** 两个 MUST 平行运行（不互相 wait）
 - **AND** 任一失败 MUST 触发 PR review-blocker
+
+### Requirement: cache Sync runtime test SHALL 走 DUAL_BACKEND_TEST_PAIR macro
+
+`tests/chlib/test_cache_sync.cpp` MUST 使用 `tests/dual_backend_fixture.h::DUAL_BACKEND_TEST_PAIR` macro，让 `ICacheSync` / `DCacheSync` 每个 TEST_CASE 都跑 interpreter + verilator 双后端。**不允许**用裸 `TEST_CASE` 单独跑 interpreter；**不允许**手写 dual half（避免与 macro 漂移）。
+
+#### Scenario: macro invocation 计数
+
+- **WHEN** 在 `tests/chlib/test_cache_sync.cpp` grep `DUAL_BACKEND_TEST_PAIR`
+- **THEN** 必须 ≥ 9 个 macro invocation（5 ICacheSync + 4 DCacheSync）
+
+#### Scenario: register 接口约束
+
+- **WHEN** 测试用 `sim.set_input_value(io().port, value)` 和 `sim.get_port_value(io().port)`
+- **THEN** 不允许直接访问 `sim.data_map()[node_id]`（与 macro R3 per-cycle REQUIRE 契约一致）；不允许用 `node_id` 跳过 ch_out 接口
+
+#### Scenario: spec R6 排除清单遵守
+
+- **WHEN** runtime test 涉及 `ICacheAsync` 或 `DCacheAsync`
+- **THEN** MUST NOT 使用 `DUAL_BACKEND_TEST_PAIR`（Async variant 是 0-cycle aread，命中 R6 #3，verilator 0-cycle vs simulator posedge 1-cycle skew）；runtime test 仅适用 Sync variant（1-cycle sread，RV32I L1 默认）
+
+### Requirement: cache Sync runtime test MUST 用 Sync variant 而非 stub
+
+`tests/chlib/test_cache_sync.cpp` SHALL 实例化 `chlib::ICacheSync` 和 `chlib::DCacheSync`（来自 `include/cpu/cache/i_cache_sync.h` 与 `d_cache_sync.h`，ADR-041 双变体之一）。**不允许**实例化 `cpu/cache/i_cache_stub.h` 或 `d_cache_stub.h`（stub 是 ADR-037 待退役对象，2027-04-17 deadline）。允许 `#pragma GCC diagnostic ignored "-Wdeprecated-declarations"` 包裹（与 `tests/chlib/test_cache_pipeline_integration.cpp` 一致），但不进 stub 头文件。
+
+#### Scenario: include 头文件约束
+
+- **WHEN** runtime test 用 `#include "cpu/cache/i_cache_sync.h"` 和 `#include "cpu/cache/d_cache_sync.h"`
+- **THEN** 不允许 `#include "cpu/cache/i_cache_stub.h"` 或 `#include "cpu/cache/d_cache_stub.h"`
+
+#### Scenario: instance 类型约束
+
+- **WHEN** runtime test 用 `ch::ch_device<ICacheSync>` 和 `ch::ch_device<DCacheSync>`
+- **THEN** 不允许 `ch::ch_device<ICache>` (stub 别名) 或 `ch::ch_device<DCache>` (stub 别名)
+
+### Requirement: AXI4 peripheral behavior test SHALL 走 DUAL_BACKEND_TEST_PAIR
+
+`tests/test_axi_*_behavior.cpp`（MUST 用 `_behavior` suffix 区别原 `test_axi_*.cpp` 接口结构测试） MUST 用 `tests/dual_backend_fixture.h::DUAL_BACKEND_TEST_PAIR` macro。
+
+#### Scenario: file 命名约束
+
+- **WHEN** 新增 AXI4 peripheral behavior runtime test
+- **THEN** 文件名 MUST 用 `_behavior` suffix（如 `test_axi_spi_behavior.cpp`）区别原 `test_axi_*.cpp` 接口结构测试；不允许覆盖现有 `test_axi_*.cpp` 行为契约
+
+#### Scenario: macro 接口契约
+
+- **WHEN** 测试访问 `ch_out<ch_uint<N>>` 等端口值
+- **THEN** MUST 用 `sim.set_input_value(io().port, value)` + `sim.get_port_value(io().port)`；MUST NOT 用 `port.impl()` 跳过 ch_out 接口（违反 macro R3 契约）
+
+#### Scenario: 原 test_axi_*.cpp 不动
+
+- **WHEN** 本 change 涉及 `tests/test_axi_spi.cpp` 或其他原 test_axi_*.cpp
+- **THEN** MUST NOT 修改原文件 —— 原文件是接口结构测试（interpreter-only），保留为 fixture 一致性 baseline
 
 ## See also
 
