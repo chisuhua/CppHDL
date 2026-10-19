@@ -63,6 +63,12 @@ riscv_mini_catch_test(test_wrapper_pipeline tests/test_wrapper_pipeline.cpp)
 riscv_mini_catch_test(test_rv32i_pipeline_device tests/test_rv32i_pipeline_device.cpp)
 riscv_mini_catch_test(test_ifstage_device tests/test_ifstage_device.cpp)
 
+# cache-complete-rewrite §3.4 smoke: ICachePrefetch + DCacheWriteBuffer wrapper build probe
+riscv_mini_catch_test(riscv_mini_cache_smoke tests/test_cache_smoke.cpp)
+# include path 需覆盖 include/cpu/cache (wrapper 用 #include "i_cache_complete.h")
+target_include_directories(riscv_mini_cache_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/cache)
+
 # === 安装 (Phase 1-3 + 5 个核心 Pipeline 测试) ===
 install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test
               test_pipeline_exec test_soc_hello_world test_riscv_tests

@@ -88,7 +88,8 @@ public:
         // =====================================================================
         
         // 检测 Miss
-        ch_bool cache_miss = !icache.io().hit;
+        // fix: ICacheSync/ICacheAsync 没有 `hit` 输出端口, 只有 `miss` (root AGENTS.md ANTI-PATTERNS)
+        ch_bool cache_miss(icache.io().miss.impl());
         
         // 预取下一个 Cache line (对齐到 16 字节)
         auto next_line_addr = icache.io().addr + ch_uint<32>(16_d);
@@ -135,7 +136,7 @@ public:
     
 private:
     ch_uint<32> get_block_addr(const ch_uint<32>& addr) {
-        return addr & ch_uint<32>(0xFFFFFFF0_d);
+        return addr & ch_uint<32>(0xFFFFFFF0_h);
     }
 };
 

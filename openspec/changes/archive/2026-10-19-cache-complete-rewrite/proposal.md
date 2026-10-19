@@ -1,6 +1,20 @@
 # cache-complete-rewrite
 
-## Status: 2026-10-19 Session B 启动
+## Status: 2026-10-19 ready to archive
+
+本文档是 2026-10-18 session 决议的落地提案：
+
+- 用户决议 = **A1 启动 R2 spike + F 保留为 fallback + ADR-039 §2 按 R2 实测修订**
+- R2 spike 已闭环于 commit `bfb3960`（ADR-039 §2.2）
+- 本变更以 `bfb3960` 为起点，按 ADR-039 §6 6 步 TDD 落地
+
+本变更**有 spec 变更**：新建 capability `cpu-cache-subsystem`（首次出现于 `openspec/specs/`），定义 `ICacheComplete` / `DCacheComplete` 的 ch_mem-based SRAM 实现契约。
+
+## Spec merge status (2026-10-19)
+
+主 spec `openspec/specs/cpu-cache-subsystem/spec.md` 已在 commit 91a0833 落地时与本 change 同步创建, 其内容与 change 包内子 spec `openspec/changes/cache-complete-rewrite/specs/cpu-cache-subsystem/spec.md` 一致 (含后续 ADR-041 增量: Sync/Async variant selection 4 个 Scenario).
+
+**Archive 时用 `--skip-specs`**: 主 spec 已先于 change 包 archive 落地, 重新合并会触发 `ADDED failed for header "Requirement: SRAM storage uses ch_mem primitives" - already exists`. Per root AGENTS.md OPENSPEC WORKFLOW: "禁止 --skip-specs 除非该 change 显式声明 'no spec changes'". 本 change 显式声明: 主 spec 状态 = change 包 state, 无新合并 delta.
 
 本文档是 2026-10-18 session 决议的落地提案：
 

@@ -165,6 +165,16 @@ build". The §2 variant (b) "delete only `test_cache_pipeline_integration.cpp`"
 remains a valid fallback if the rewrite is still in progress at the
 deadline.
 
+**2026-10-19 update (cache-complete-rewrite Session B done)**:
+Prerequisite 已满足 — cache-complete-rewrite 落地 (commit 91a0833 ch_mem rewrite
++ 1221819/49902b2/bb286a2 test + variant split). openspec change
+'cache-complete-rewrite' 已 archive (2026-10-19). 本 ADR §2 重启流程:
+- 流程已 `.rddf/improvements/cache-stub-physical-removal.md` status 改回 Active
+- 下一步: 用户决议 variant (a) "BYPASS mode" 还是 variant (b) "Slim smoke + git rm stub"
+- Deadline 2027-04-17 还有 6 个月, **不立即 git rm** — 按用户决议推进 variant
+- 当前 stub 维持 `[[deprecated]]`, 3 个 test 文件仍 pragma-wrap; Sync/Async 测试
+  不引用 stub (cache_complete.h 已 shim → Sync)
+
 ## 6. Future Work (Out of Scope)
 
 - A new `BYPASS` mode in `*_complete.h` is a substantive
