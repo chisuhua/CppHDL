@@ -21,6 +21,7 @@
 #include "ch.hpp"
 #include "component.h"
 #include "i_cache_complete.h"
+#include "module.h"
 
 namespace chlib {
 
@@ -65,23 +66,24 @@ public:
 
     void describe() override {
         // =====================================================================
-        // 调用基础 I-Cache
+        // 调用基础 I-Cache (ch_module 创建子 component, 自动管理 Component::current())
         // =====================================================================
-        ICacheComplete icache{this, "icache_base"};
-        
+        ch::ch_module<ICacheComplete> icache_base{"icache_base"};
+        auto& icache = icache_base.instance();
+
         // =====================================================================
-        // 预取缓冲 (简化框架)
+        // 预取缓冲 (ch_mem-based per ADR-039 + cache-complete-doa-note §6.1 R1)
         // =====================================================================
-        
+        // C-style ch_reg<T>[N] 数组在 runtime init 时触发 SIGSEGV (Context 还未就绪)。
+        // ch_mem<T, N> 默认值 0, sread/write 接口兼容, 不会 SIGSEGV。
+        //
         // 预取缓冲：存储预取的数据和地址
-        ch_reg<ch_uint<32>> prefetch_data[PrefetchConfig::PREFETCH_BUFFER_SIZE];
-        ch_reg<ch_uint<32>> prefetch_addr[PrefetchConfig::PREFETCH_BUFFER_SIZE];
-        ch_reg<ch_bool> prefetch_valid[PrefetchConfig::PREFETCH_BUFFER_SIZE];
-        
-        // 初始化
-        for (unsigned i = 0; i < PrefetchConfig::PREFETCH_BUFFER_SIZE; i++) {
-            prefetch_valid[i] = ch_reg<ch_bool>(ch_bool(false));
-        }
+        ch_mem<ch_uint<32>, PrefetchConfig::PREFETCH_BUFFER_SIZE> prefetch_data;
+        ch_mem<ch_uint<32>, PrefetchConfig::PREFETCH_BUFFER_SIZE> prefetch_addr;
+        ch_mem<ch_uint<1>,   PrefetchConfig::PREFETCH_BUFFER_SIZE> prefetch_valid;
+        // ch_mem 默认 0, 无需 runtime init loop
+
+        (void)prefetch_data; (void)prefetch_addr; (void)prefetch_valid;
         
         // =====================================================================
         // 顺序预取逻辑

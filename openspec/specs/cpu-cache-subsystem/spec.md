@@ -5,9 +5,7 @@
 定义 CppHDL CPU cache subsystem 的可实例化实现契约：基于 `ch_mem` 原语构建的 4KB 2-way set-associative L1 cache（`ICacheComplete` + `DCacheComplete`），包括 Hit/Miss 检测、LRU 替换、AXI 填充、写策略。该能力让 RV32I 顶层集成（`riscv-mini` SOC）能以可预测、可追溯、可测量的方式实例化 cache 子模块。
 
 In English: Defines the contract of CppHDL's CPU cache subsystem — `ICacheComplete` and `DCacheComplete` classes built on `ch_mem` primitives — supporting Hit/Miss detection, LRU replacement, AXI fill, and write strategies. Enables RV32I top-level integration to instantiate cache submodules with predictable, traceable, measurable behavior.
-
 ## Requirements
-
 ### Requirement: SRAM storage uses ch_mem primitives
 
 The `ICacheComplete` / `DCacheComplete` cache classes SHALL use `ch_mem<T, N>` for tag / data / valid / LRU storage, where N equals `NUM_SETS = 128`. Static C-style `ch_reg<T>[N]` arrays with runtime indexing SHALL NOT be used.
@@ -213,6 +211,21 @@ The cache subsystem SHALL provide two latency variants for both instruction and 
 - **WHEN** the same fill sequence (addr + axi_data + axi_resp_valid=1) is executed on Sync and Async variants
 - **THEN** the final cache state (memory contents) SHALL be identical after fill + 1-cycle NOP
 - **AND** the test_case `Sync vs Async same fill behavior` in `tests/chlib/test_cache_complete.cpp` SHALL verify this equivalence
+
+### Requirement: riscv-mini cache wrapper MUST NOT use C-style ch_reg array
+
+`examples/riscv-mini/src/i_cache_prefetch.h` 与 `examples/riscv-mini/src/d_cache_write_buffer.h` **不允许**使用 `ch_reg<T>[N]` C-style 数组（runtime init 触发 SIGSEGV）。MUST 用 `ch_mem<T, N>` 替代（per ADR-039 + cache-complete-doa-note §6.1 R1）。
+
+#### Scenario: line-level grep 检查
+
+- **WHEN** `grep -nE "ch_reg<[^>]+>\s*\[" examples/riscv-mini/src/i_cache_prefetch.h examples/riscv-mini/src/d_cache_write_buffer.h`
+- **THEN** 输出必须为空（无 C-style ch_reg 数组）
+- **AND** 如有命中，则该 wrapper MUST 用 `ch_mem<T, N>` 替换
+
+#### Scenario: instantiation smoke 测试必通过
+
+- **WHEN** `cd build && ./examples/riscv-mini/riscv_mini_cache_smoke "[fixed]"`
+- **THEN** instantiation 必通过；不允许 SIGSEGV
 
 ## See also
 
