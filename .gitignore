@@ -95,3 +95,10 @@ verilator-prefix/
 # 这些 .v 文件是 Verilator 编译中间产物，每次跑测试都重新生成
 /tests/*.v
 /tests/**/*.v
+
+# rdd-workflow runtime state (per rdd-workflow reference .gitignore):
+# .rddf/state/ and .rddf/wt/ are ephemeral per-session artifacts
+# (arch/builder handoffs, worktree, role.json); .rddf/plans/ IS tracked.
+# 不在 .rddf/state/ 入库避免 PR diff 噪声 + 角色/会话身份泄露。
+/.rddf/state/
+/.rddf/wt/
