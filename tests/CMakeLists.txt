@@ -409,11 +409,14 @@ add_catch_test(test_fragment test_fragment.cpp)
 
 # AXI 测试
 add_catch_test(test_axi_dma test_axi_dma.cpp)
+add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)
 add_catch_test(test_axi_pwm test_axi_pwm.cpp)
 add_catch_test(test_axi_pwm_simple test_axi_pwm_simple.cpp)
 add_catch_test(test_axi_spi test_axi_spi.cpp)
+add_catch_test(test_axi_timer test_axi_timer.cpp)
+add_catch_test(test_axi_uart test_axi_uart.cpp)
 
 # 运算测试
 add_catch_test(test_bits_update test_bits_update.cpp)

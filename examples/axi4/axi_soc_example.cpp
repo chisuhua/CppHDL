@@ -215,11 +215,16 @@ public:
         // GPIO 物理接口
         io().gpio_out <<= gpio.io().gpio_out;
         gpio.io().gpio_in <<= io().gpio_in;
-        
+
         // UART 物理接口
         io().uart_tx <<= uart.io().uart_tx;
         uart.io().uart_rx <<= io().uart_rx;
-        
+
+        // 从设备复位 (低电平有效)。本 example 不演示复位流程，
+        // 故直接接常 1；若不接，从设备会被永久按住复位。
+        gpio.io().rst_n <<= ch_bool(true);
+        uart.io().rst_n <<= ch_bool(true);
+
         // 主设备控制接口
         master.io().start <<= io().start;
         master.io().write <<= io().write;

@@ -36,15 +36,38 @@ include/axi4/
 
 ## CONVENTIONS
 - **Namespace**: `axi4`
-- **Handshake pattern**: All peripherals use `busy/aw_done/r_valid` register trio for AW/W and AR/R phase separation
+- **Handshake pattern**: All peripherals use `busy/aw_done/b_valid/r_valid` register quartet for AW/W and AR/R phase separation
+  - `aw_done`: set on AW handshake, cleared when the B handshake completes (`b_valid && bready`)
+  - `b_valid`: set when WDATA is accepted → `bvalid` rises **after** the write data and **holds until BREADY**
+  - `r_valid`: set on AR handshake, cleared on RREADY → `rvalid` holds until RREADY
+  - `busy`: gates new AW/AR; cleared when a transaction actually completes
+  - ⚠️ `aw_done` MUST NOT be cleared on raw `bready` — a master that holds BREADY high
+    would clear `aw_done` before WDATA arrives and the write would never be accepted
+- **地址锁存**: AXI 只要求 `AWADDR`/`ARADDR` 保持到对应握手，握手后 master 即可改写它们。
+  W 可能延后多个周期才到达，因此 peripheral MUST 在 AW/AR 握手时把地址锁存进寄存器，
+  写侧/读侧地址解码 MUST 基于**锁存**的地址 —— MUST NOT 基于活的 `io().awaddr` / `io().araddr`。
+  （否则 master 在 AW 握手后改写地址会让写落到错误寄存器 —— 静默数据损坏）
+- **复位**: AXI4-Lite slave peripherals MUST expose `ch_in<ch_bool> rst_n` (低有效异步复位),
+  and every `ch_reg` MUST use the `select(!io().rst_n, <init_val>, ...)` reset pattern
+  (`<init_val>` MUST carry the register's explicit width, e.g. `ch_uint<32>(0_d)`)
+  - ⚠️ 未驱动的 `ch_in<ch_bool>` 读出为 **0** —— 即"永久复位"。
+    新增 `rst_n` 端口时 MUST 检查所有实例化点都已接线。
 - **Address decode**: `addr >> 2 & mask` (4-byte aligned per register)
 - **Response**: All peripherals return `bresp=OKAY(0)`. `axi_interconnect_4x4.h` returns `DECERR` for unmapped addresses.
 - **Peripheral registers**: 4–8 registers per device, 4-byte aligned
 
 ## ANTI-PATTERNS
-- **IO port `&&`**: Do NOT use `&&` on IO ports (e.g., `io().awvalid && (!busy)`). Use `ch::select()` instead. Found at `axi_timer.h:77-81`.
+- **IO port `&&`**: Do NOT use `&&` on IO ports (e.g., `io().awvalid && (!busy)`). Use `ch::select()` instead.
+  Verify with: `grep -nE 'io\(\)\.[a-z_]+ *(&&|\|\|)' include/axi4/peripherals/*.h` (MUST hit 0 lines)
 - **Peripheral without busy flag**: Every peripheral must have a `busy` register that gates new requests.
 - **Unmapped address DECERR**: Any address not decoded should return `DECERR`, not OKAY.
+- **Combinational BVALID/RVALID**: Do NOT drive `bvalid`/`rvalid` from a combinational handshake
+  (`bvalid = w_handshake`). The response MUST hold until the master raises BREADY/RREADY,
+  otherwise a compliant master waits forever and the peripheral deadlocks.
+- **Unlatched address with phase separation**: Do NOT decode the register offset from the live
+  `io().awaddr` / `io().araddr` once W/R may arrive in a later cycle. Latch the address at the
+  AW/AR handshake. Verify: `grep -nE 'addr_bits = io\(\)\.aw?r?addr' include/axi4/peripherals/*.h`
+  (MUST hit 0 lines)
 
 ## EXAMPLES
 - `examples/axi4/axi4_lite_example.cpp` — Lite slave timing, VCD recording, assertion checks
@@ -57,6 +80,9 @@ include/axi4/
 |------|-----|-------|
 | `test_axi_lite_bundle.cpp` | `[bundle][axi]` | Bundle integration |
 | `test_axi_dma.cpp` | `[axi][dma]` | DMA controller |
+| `test_axi_gpio.cpp` | `[axi][gpio]` | GPIO 通道/复位语义（含 AW→W 相位分离、BVALID 保持） |
+| `test_axi_timer.cpp` | `[axi][timer]` | Timer 通道/复位语义 |
+| `test_axi_uart.cpp` | `[axi][uart]` | UART 通道/复位语义 |
 | `test_axi_pwm_simple.cpp` | `[axi][pwm]` | PWM basic |
 | `test_axi_pwm_timed.cpp` | `[axi][pwm]` | PWM with timing |
 | `test_axi_spi.cpp` | `[axi][spi]` | SPI master |
