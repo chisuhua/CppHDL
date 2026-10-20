@@ -692,8 +692,10 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
             // mismatch is visible during the codegen stage rather than
             // surfacing as a silent trace-parity bug downstream.
             CHWARN("[print_reg] ch_reg init_node is not type_lit "
-                   "(type=%d); reset branch falls back to 1'b0",
-                   static_cast<int>(init_node->type()));
+                   "(type=%d, size=%u, name=%s); reset branch falls back to 1'b0",
+                   static_cast<int>(init_node->type()),
+                   init_node->size(),
+                   node->name().c_str());
         }
 
         if (next_node && node_names_.count(next_node)) {
@@ -713,9 +715,18 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
 
             emit_always_ff(out, reg_name, next_name, reset_value);
         } else {
-            // If next is not found or not named, print a warning
-            out << "    // Warning: Register '" << node_names_[node]
-                << "' has no named 'next' source.\n";
+            // If next is not found or not named, emit a hold-state
+            // always_ff so the register's init value is still applied
+            // at the reset pulse (otherwise uart_tx etc. never see
+            // their declared init value).
+            std::string reg_name = node_names_[node];
+            out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
+                << "Register update (no next) for " << reg_name << "\n";
+            out << "        if (!default_reset)\n";
+            out << "            " << reg_name << " <= " << reg_name << ";\n";
+            out << "        else\n";
+            out << "            " << reg_name << " <= " << reset_value << ";\n";
+            out << "    end\n";
         }
     } catch (...) {
         // Silently ignore exceptions
