@@ -50,19 +50,22 @@ inline bool wait_for(ch::Simulator &sim, const Port &port, int max_cycles = 32) 
 // separate_aw_w = false: AW 与 W 同周期（master 常见的紧凑写法）
 // separate_aw_w = true : AW 与 W 分两周期（AXI4-Lite 允许，用于验证相位分离）
 //
+// wstrb = 0xF（默认）: 整字写；其他值表示**字节道掩码**（bit0 → byte0 …
+// bit3 → byte3）—— AXI4-Lite 要求 master 始终驱动 WSTRB。
+//
 // ⚠️ 协议合规要点：AWVALID / WVALID 各自**只**保持到对应的握手完成。
 // 若 master 在 AW 握手后仍持有 AWVALID，slave 会接受**第二笔** AW 事务
 // 并等待它的 WDATA —— 而 master 若此时撤掉 AWVALID，该笔事务永远等不到 WDATA，
 // busy 永久卡住（后续所有 AXI 事务阻塞）。
 template <typename Io>
 inline void write_io(ch::Simulator &sim, Io &io, uint32_t addr, uint32_t data,
-                      bool separate_aw_w = false) {
+                      bool separate_aw_w = false, uint8_t wstrb = 0xF) {
     // --- AW 阶段 ---
     sim.set_input_value(io.awaddr, addr);
     sim.set_input_value(io.awprot, 0);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, data);
-    sim.set_input_value(io.wstrb, 0xF);
+    sim.set_input_value(io.wstrb, wstrb);
     sim.set_input_value(io.wvalid, separate_aw_w ? 0 : 1);
     sim.tick();  // AW 握手发生在本次时钟沿
     sim.set_input_value(io.awvalid, 0);  // 握手完成即撤（否则会开出第二笔事务）
@@ -110,8 +113,8 @@ inline uint32_t read_io(ch::Simulator &sim, Io &io, uint32_t addr) {
 // AXI4-Lite 写事务（device 级）
 template <typename Dev>
 inline void write(ch::Simulator &sim, Dev &dev, uint32_t addr, uint32_t data,
-                  bool separate_aw_w = false) {
-    write_io(sim, dev.instance().io(), addr, data, separate_aw_w);
+                  bool separate_aw_w = false, uint8_t wstrb = 0xF) {
+    write_io(sim, dev.instance().io(), addr, data, separate_aw_w, wstrb);
 }
 
 // AXI4-Lite 读事务（device 级），返回读到的数据

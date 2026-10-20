@@ -38,6 +38,7 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace axi4 {
 
@@ -144,18 +145,27 @@ public:
         TS &s,
         ch_bool aw_handshake, ch_bool w_handshake, ch_bool ar_handshake,
         ch_bool we_ctrl, ch_bool we_tx_data, ch_bool we_prescale) {
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
+
         // Control register update (clear START/STOP bits)
-        auto ctrl_write_val = io().wdata & ch_uint<32>(~static_cast<uint32_t>(6_d));
+        // —— 掩码只作用在**写入数据**上，未被 WSTRB 选中的字节保持原值
+        auto ctrl_wdata = io().wdata & ch_uint<32>(~static_cast<uint32_t>(6_d));
+        auto ctrl_write_val = axi4::detail::byte_lane_apply<32>(s.ctrl_reg, ctrl_wdata, wstrb_mask);
         s.ctrl_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
                                   select(we_ctrl, ctrl_write_val, s.ctrl_reg));
 
-        // TX data register
+        // TX data register（8 bit —— 仅 byte0 有效道）
+        auto tx_data_next = ch_uint<8>(axi4::detail::byte_lane_apply<8>(ch_uint<32>(s.tx_data_reg),
+                                                                         io().wdata, wstrb_mask));
         s.tx_data_reg->next = select(!io().rst_n, ch_uint<8>(0_d),
-                                     select(we_tx_data, io().wdata, s.tx_data_reg));
+                                     select(we_tx_data, tx_data_next, s.tx_data_reg));
 
-        // Prescale register
+        // Prescale register（PRESCALE_WIDTH bit）
+        auto prescale_next = ch_uint<PRESCALE_WIDTH>(axi4::detail::byte_lane_apply<PRESCALE_WIDTH>(
+            ch_uint<32>(s.prescale_reg), io().wdata, wstrb_mask));
         s.prescale_reg->next = select(!io().rst_n, ch_uint<PRESCALE_WIDTH>(100_d),
-                                      select(we_prescale, io().wdata, s.prescale_reg));
+                                      select(we_prescale, prescale_next, s.prescale_reg));
 
         // RX data register: 本 peripheral 无 RX 引擎（移位寄存器未回接），
         // 该寄存器恒为初值 —— 显式写出复位保持，使复位契约可被 grep 校验。

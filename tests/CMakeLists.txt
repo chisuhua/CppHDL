@@ -424,6 +424,13 @@ add_catch_test(test_fragment test_fragment.cpp)
 
 # AXI 测试
 add_catch_test(test_axi_dma test_axi_dma.cpp)
+# 字节道（WSTRB）写语义 —— axi4-peripheral-deferred-2026-10 D1
+# 双后端：窄寄存器截断（ch_uint<8>/<16>）在 Verilog codegen 路径上与
+# interpreter 不同，必须跑 verilator 半边。
+add_dual_backend_test(test_axi_byte_lane
+    SOURCES test_axi_byte_lane.cpp
+    TIMEOUT 300
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)

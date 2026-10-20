@@ -26,6 +26,7 @@
 #include "simulator.h"
 #include "codegen_verilog.h"
 #include <iostream>
+#include <cstdint>
 
 using namespace ch;
 using namespace ch::core;
@@ -88,6 +89,11 @@ public:
         ch_reg<ch_bool> ar_done(ch_bool(false));
         // 读数据在 R 握手时捕获（slave 的 RDATA 在后续事务中可能变化）
         ch_reg<ch_uint<32>> rdata_reg(0_d);
+        // 完成脉冲（注册一拍）—— 组合单拍脉冲在读事务上必然丢失：
+        // 读完成那一拍 state 与 read_done 同拍归位（见下方 state->next），
+        // 组合派生的 done 随之消失，而测试台是在 tick() **之后**采样 done。
+        // 写事务只是"侥幸"可见（完成拍 state 仍为 1）。
+        ch_reg<ch_bool> done_reg(ch_bool(false));
 
         auto is_idle = (state == ch_uint<2>(0_d));
         auto is_write = (state == ch_uint<2>(1_d));
@@ -139,7 +145,10 @@ public:
                                            select(read_done, ch_uint<2>(0_d), state))));
 
         io().rdata = rdata_reg;
-        io().done = select(write_done, ch_bool(true), read_done);
+        // done 由寄存器打一拍 —— 保证在 tick() 之后仍可被采样到
+        done_reg->next = select(write_done, ch_bool(true),
+                                select(read_done, ch_bool(true), done_reg));
+        io().done = done_reg;
     }
 };
 
@@ -280,7 +289,8 @@ int main() {
     sim.set_input_value(top_device.instance().io().write, false);
     // 释放从设备复位（低有效）
     sim.set_input_value(top_device.instance().io().rst_n, true);
-    sim.set_input_value(top_device.instance().io().gpio_in, 0_d);
+    // GPIO 输入给一个非零值 —— 读回 DATA_IN 才能证明读通道真的取到了数据
+    sim.set_input_value(top_device.instance().io().gpio_in, 0x5a_h);
     sim.set_input_value(top_device.instance().io().uart_rx, true);
     
     std::cout << "\n=== Test 1: Write GPIO DATA_OUT (addr=0x00) ===" << std::endl;
@@ -333,12 +343,13 @@ int main() {
         }
     }
     if (!read_ok) {
-        // 已知限制：读通道经 2x2 矩阵的 AR 路由尚未打通（见 OpenSpec change
-        // axi4-peripheral-followups-2026-10 的 F10）。写通道已验证可用。
-        std::cout << "Read did NOT complete (known limitation, see change "
-                     "axi4-peripheral-followups-2026-10 F10)" << std::endl;
+        // 读事务未完成 —— 属真实失败（不再是"已知限制"），直接以非零码退出，
+        // 避免 example 静默通过。
+        std::cerr << "ERROR: AXI4-Lite read transaction did not complete"
+                  << std::endl;
+        return 1;
     }
-    
+
     std::cout << "\n=== Generating Verilog ===" << std::endl;
     toVerilog("axi_soc_example.v", top_device.context());
     std::cout << "Verilog generated: axi_soc_example.v" << std::endl;

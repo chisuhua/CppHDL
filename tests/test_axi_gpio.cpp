@@ -163,6 +163,7 @@ TEST_CASE("AxiLiteGpio - AW 握手后改写 awaddr 不改变写目标", "[axi][g
     sim.set_input_value(io.awaddr, kRegDataOut);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, 0x3Cu);
+    sim.set_input_value(io.wstrb, 0xF);  // AXI4-Lite: master 必须驱动 WSTRB
     sim.set_input_value(io.wvalid, 0);
     sim.tick();  // AW 握手
 
@@ -196,6 +197,7 @@ TEST_CASE("AxiLiteGpio - BVALID 保持到 BREADY（master 不预拉 BREADY 不�
     sim.set_input_value(io.awaddr, kRegDataOut);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, 0x11u);
+    sim.set_input_value(io.wstrb, 0xF);  // AXI4-Lite: master 必须驱动 WSTRB
     sim.set_input_value(io.wvalid, 1);
 
     // BVALID 必须自己出现（不能靠 BREADY 触发）

@@ -1,16 +1,31 @@
 /**
  * AXI4-Lite UART Controller
  *
- * 将 Phase 1+2 的 UART TX 封装成 AXI4 从设备
+ * 带**真实串行收发引擎**的 AXI4-Lite 从设备（见 openspec change
+ * `axi4-peripheral-deferred-2026-10` D2）。
  *
  * 寄存器映射:
- * - 0x00: TX_DATA  - 发送数据寄存器
- * - 0x04: RX_DATA  - 接收数据寄存器
- * - 0x08: STATUS   - 状态寄存器 (TX_EMPTY, RX_VALID)
- * - 0x0C: CTRL     - 控制寄存器 (ENABLE, INTERRUPT_EN)
+ * - 0x00: TX_DATA  - 发送数据寄存器（写入即启动一帧发送；**仅低 8 bit 有效**）
+ * - 0x04: RX_DATA  - 接收数据寄存器（只读；读走即清 `rx_valid`；
+ *                    **仅低 8 bit 有效**，高字节恒 0）
+ * - 0x08: STATUS   - 状态寄存器
+ *   - bit0: TX_EMPTY        - 发送移位寄存器为空
+ *   - bit1: RX_VALID        - 收到完整帧
+ *   - bit2: RX_FRAME_ERROR  - 停止位错误（仅由 `rst_n` 清除）
+ * - 0x0C: CTRL     - 控制寄存器（**当前保留**，不参与门控）
+ *
+ * 串行时序（8N1，无校验）：
+ * - 帧格式：1 起始位(0) + 8 数据位(LSB 先出) + 1 停止位(1)
+ * - **bit 周期 = `UART_BIT_PERIOD` 个时钟周期**（波特率 = 时钟频率 / bit 周期）
+ * - TX：写 `TX_DATA` 启动发送（发送 `TX_DATA[7:0]`，高字节被忽略）；
+ *   `uart_tx` 空闲为高电平
+ * - RX：检测 `uart_rx` 下降沿（起始位），等待 1.5 bit 后按 bit 周期采样 8 个数据位，
+ *   再校验停止位；停止位为高 → 写入 `RX_DATA[7:0]` 并置 `rx_valid`，
+ *   停止位为低 → 置 `RX_FRAME_ERROR`
+ * - `uart_rx` 空闲电平为**高**（低电平被视作起始位）
  *
  * 通道形态（AXI4-Lite 规范形态，见 openspec change
- * fix-axi4-peripheral-rst-n-port-2026-10）:
+ * fix-axi4-peripheral-rst-n-port-2026-10）：
  * - AW 与 W 相位分离（W 可在 AW 之后的任意周期被接受）
  * - BVALID 在 WDATA 被接受之后拉高，并保持到 BREADY
  * - RVALID 保持到 RREADY
@@ -21,12 +36,17 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace axi4 {
 
 using namespace ch::core;
 
-template <unsigned PRESCALE_WIDTH = 16>
+/**
+ * @tparam UART_BIT_PERIOD 一个 bit 占用的时钟周期数（bit 周期）。
+ *        波特率 = 系统时钟频率 / UART_BIT_PERIOD。
+ */
+template <unsigned UART_BIT_PERIOD = 16>
 class AxiLiteUart : public ch::Component {
 public:
     __io(
@@ -85,8 +105,22 @@ public:
         ch_reg<ch_uint<32>> ctrl_reg(0_d);
 
         // UART 状态
-        ch_reg<ch_bool> tx_empty(ch_bool(true));
         ch_reg<ch_bool> rx_valid(ch_bool(false));
+        ch_reg<ch_bool> rx_frame_err(ch_bool(false));  // 停止位错误（仅 rst_n 清除）
+
+        // ---------------- 串行引擎（TX） ----------------
+        // bit 周期 = UART_BIT_PERIOD 个时钟周期
+        constexpr unsigned BIT_PERIOD = (UART_BIT_PERIOD < 2) ? 2 : UART_BIT_PERIOD;
+        ch_reg<ch_uint<8>> tx_sr(0_d);        // 数据移位寄存器（LSB 先出）
+        ch_reg<ch_uint<4>> tx_phase(0_d);     // 0=起始位 1..8=数据位 9=停止位
+        ch_reg<ch_uint<16>> tx_div(0_d);       // bit 周期分频计数
+        ch_reg<ch_bool> tx_busy(ch_bool(false));
+
+        // ---------------- 串行引擎（RX） ----------------
+        ch_reg<ch_uint<4>> rx_state(0_d);     // 0=idle 1=起始位 2=数据位 3=停止位
+        ch_reg<ch_uint<16>> rx_div(0_d);       // bit 周期分频计数
+        ch_reg<ch_uint<4>> rx_bits(0_d);       // 已采样的数据位数
+        ch_reg<ch_uint<8>> rx_sr(0_d);         // 接收移位寄存器
 
         // 地址锁存寄存器：AXI 只要求 AWADDR/ARADDR 保持到对应握手，
         // 握手后 master 即可改写它们；W 可能延后多个周期到达，
@@ -120,10 +154,17 @@ public:
 
         auto we_tx_data = select(w_handshake, sel_tx_data, ch_bool(false));
         auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
+
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
         tx_data_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                   select(we_tx_data, io().wdata, tx_data_reg));
+                                   select(we_tx_data,
+                                          axi4::detail::byte_lane_apply<32>(tx_data_reg, io().wdata, wstrb_mask),
+                                          tx_data_reg));
         ctrl_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                select(we_ctrl, io().wdata, ctrl_reg));
+                                select(we_ctrl,
+                                       axi4::detail::byte_lane_apply<32>(ctrl_reg, io().wdata, wstrb_mask),
+                                       ctrl_reg));
 
         // ---------------- 读通道 ----------------
         auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
@@ -151,28 +192,167 @@ public:
 
         io().rdata = read_val;
 
-        // ---------------- UART 状态 ----------------
-        // TX 侧：1 深 holding register（tx_data_reg）。写 TX_DATA → tx_empty=0
-        // （"缓冲非空"）；下一拍回到 1（简化模型：写即完成，无波特率/移位引擎）。
-        tx_empty->next = select(!io().rst_n, ch_bool(true),
-                                select(we_tx_data, ch_bool(false), ch_bool(true)));
+        // ---------------- 串行 TX 引擎 ----------------
+        // 帧格式：起始位(0) + 8 数据位(LSB 先出) + 停止位(1)
+        // bit 周期 = BIT_PERIOD 个时钟周期
+        //
+        // 发送启动：写 TX_DATA 且当前不在发送中
+        auto tx_start = select(we_tx_data,
+                               select(tx_busy, ch_bool(false), ch_bool(true)),
+                               ch_bool(false));
+        // bit 周期到点（仅在发送中计数）
+        auto tx_tick = (tx_div == ch_uint<16>(BIT_PERIOD - 1));
+        auto tx_advance = select(tx_busy, tx_tick, ch_bool(false));
+        // 数据位阶段（phase 1..8）
+        auto tx_in_data = select(tx_phase >= ch_uint<4>(1_d),
+                                 select(tx_phase <= ch_uint<4>(8_d),
+                                        ch_bool(true), ch_bool(false)),
+                                 ch_bool(false));
 
-        // RX 侧：**无 RX 引擎** —— `uart_rx` 输入未使用、`rx_data_reg` 无回接路径，
-        // 因此 rx_valid 恒为 false、`irq` 恒为 0 是**设计结果**而非缺陷。
-        // 完整的串行收发引擎（波特率 + 移位 + 起始位检测）见 change
-        // `axi4-peripheral-deferred-2026-10`。
-        rx_valid->next = select(!io().rst_n, ch_bool(false), rx_valid);
+        // 输出位：起始位=0，数据位=tx_sr[0]，停止位=1
+        auto tx_data_bit = bits<0, 0>(tx_sr);
+        auto tx_out_bit = select(tx_phase == ch_uint<4>(0_d), ch_bool(false),
+                                 select(tx_in_data,
+                                        select(tx_data_bit != ch_uint<1>(0_d),
+                                               ch_bool(true), ch_bool(false)),
+                                        ch_bool(true)));
+        // 空闲（未发送）时 uart_tx 恒为高电平
+        io().uart_tx = select(tx_busy, tx_out_bit, ch_bool(true));
 
-        // status_reg **单一赋值点**：bit0 = TX_EMPTY、bit1 = RX_VALID
-        auto status_mask = ch_uint<32>(~static_cast<uint32_t>(3));
+        // 发送移位寄存器：启动时装载 wdata[7:0]，每个数据位结束时右移一位
+        tx_sr->next = select(!io().rst_n, ch_uint<8>(0_d),
+                             select(tx_start,
+                                    ch_uint<8>(io().wdata & ch_uint<32>(255_d)),
+                                    select(select(tx_in_data, tx_tick, ch_bool(false)),
+                                           tx_sr >> ch_uint<8>(1_d),
+                                           tx_sr)));
+
+        // 相位推进：起始位(0) → 数据位(1..8) → 停止位(9) → 结束
+        //
+        // ⚠️ 判定用**下一个**相位值（而非当前值）：本框架的组合求值是单遍、
+        // 无拓扑序的（`src/simulator.cpp::eval_combinational`），寄存器比较的
+        // 求值时机受节点创建顺序影响 —— 用当前值判定会让"结束"判定早/晚一拍，
+        // 进而丢掉最后一个数据位。用 next 值判定可对该抖动免疫。
+        auto tx_phase_next = select(tx_advance,
+                                    tx_phase + ch_uint<4>(1_d),
+                                    tx_phase);
+        auto tx_finish = select(tx_advance,
+                                select(tx_phase_next == ch_uint<4>(10_d),
+                                       ch_bool(true), ch_bool(false)),
+                                ch_bool(false));
+        tx_phase->next = select(!io().rst_n, ch_uint<4>(0_d), tx_phase_next);
+        // bit 周期分频计数（仅发送中计数，到点归零）
+        tx_div->next = select(!io().rst_n, ch_uint<16>(0_d),
+                              select(tx_start, ch_uint<16>(0_d),
+                                     select(tx_busy,
+                                            select(tx_tick, ch_uint<16>(0_d),
+                                                   tx_div + ch_uint<16>(1_d)),
+                                            tx_div)));
+        tx_busy->next = select(!io().rst_n, ch_bool(false),
+                               select(tx_start, ch_bool(true),
+                                      select(tx_finish, ch_bool(false), tx_busy)));
+
+        // TX_EMPTY：移位寄存器为空 = 未在发送（组合视图，与 tx_busy 严格一致）
+        auto tx_empty = select(tx_busy, ch_bool(false), ch_bool(true));
+
+        // ---------------- 串行 RX 引擎 ----------------
+        // 状态：0=idle（等起始位） 1=起始位（等 1.5 bit） 2=数据位 3=停止位
+        auto rx_is_idle = (rx_state == ch_uint<4>(0_d));
+        auto rx_is_start = (rx_state == ch_uint<4>(1_d));
+        auto rx_is_data = (rx_state == ch_uint<4>(2_d));
+        auto rx_is_stop = (rx_state == ch_uint<4>(3_d));
+
+        // 空闲时检测到低电平 → 起始位
+        auto rx_detect = select(rx_is_idle,
+                                select(io().uart_rx, ch_bool(false), ch_bool(true)),
+                                ch_bool(false));
+        // 采样点：起始位阶段在 1.5 bit 后采样首个数据位；数据位阶段每 bit 采一次
+        auto rx_start_sample = select(rx_is_start,
+                                      select(rx_div == ch_uint<16>(BIT_PERIOD + BIT_PERIOD / 2),
+                                             ch_bool(true), ch_bool(false)),
+                                      ch_bool(false));
+        auto rx_data_sample = select(rx_is_data,
+                                     select(rx_div == ch_uint<16>(BIT_PERIOD - 1),
+                                            ch_bool(true), ch_bool(false)),
+                                     ch_bool(false));
+        auto rx_stop_sample = select(rx_is_stop,
+                                     select(rx_div == ch_uint<16>(BIT_PERIOD - 1),
+                                            ch_bool(true), ch_bool(false)),
+                                     ch_bool(false));
+        // 采样到的位（1 → 0x80，0 → 0x00），右移并插入最高位 → LSB 先收
+        auto rx_sampled = select(io().uart_rx, ch_uint<8>(128_d), ch_uint<8>(0_d));
+        auto rx_sr_next = (rx_sr >> ch_uint<8>(1_d)) | rx_sampled;
+        // 位计数的**下一个**值（采样时 +1）
+        auto rx_bits_next = select(rx_data_sample,
+                                   rx_bits + ch_uint<4>(1_d),
+                                   rx_bits);
+        // 第 8 个数据位采完 → 进入停止位校验
+        // ⚠️ 用 next 值判定（见上方 TX 相位推进的说明）：若用当前值判定，
+        // 单遍求值的抖动会让状态机在第 8 次采样**之前**就离开 DATA 态，
+        // 导致最后一个数据位丢失（收到 7 位的字节）。
+        auto rx_data_done = select(rx_is_data,
+                                   select(rx_bits_next == ch_uint<4>(8_d),
+                                          ch_bool(true), ch_bool(false)),
+                                   ch_bool(false));
+        // 停止位为高 → 帧有效；为低 → 帧错误
+        auto rx_frame_ok = select(rx_stop_sample,
+                                  select(io().uart_rx, ch_bool(true), ch_bool(false)),
+                                  ch_bool(false));
+        auto rx_frame_bad = select(rx_stop_sample,
+                                   select(io().uart_rx, ch_bool(false), ch_bool(true)),
+                                   ch_bool(false));
+
+        rx_sr->next = select(!io().rst_n, ch_uint<8>(0_d),
+                             select(select(rx_start_sample, ch_bool(true),
+                                           select(rx_data_sample, ch_bool(true), ch_bool(false))),
+                                    rx_sr_next, rx_sr));
+        rx_bits->next = select(!io().rst_n, ch_uint<4>(0_d),
+                               select(rx_start_sample, ch_uint<4>(1_d), rx_bits_next));
+
+        // RX 状态机
+        auto rx_next_state = select(rx_is_idle,
+                                    select(rx_detect, ch_uint<4>(1_d), ch_uint<4>(0_d)),
+                                    select(rx_is_start,
+                                           select(rx_start_sample, ch_uint<4>(2_d), ch_uint<4>(1_d)),
+                                           select(rx_is_data,
+                                                  select(rx_data_done, ch_uint<4>(3_d), ch_uint<4>(2_d)),
+                                                  select(rx_is_stop,
+                                                         select(rx_stop_sample, ch_uint<4>(0_d), ch_uint<4>(3_d)),
+                                                         ch_uint<4>(0_d)))));
+        rx_state->next = select(!io().rst_n, ch_uint<4>(0_d), rx_next_state);
+        // 分频计数：起始位 / 数据位 / 停止位阶段计数，到点归零
+        rx_div->next = select(!io().rst_n, ch_uint<16>(0_d),
+                              select(rx_detect, ch_uint<16>(0_d),
+                                     select(rx_is_idle, rx_div,
+                                            select(select(rx_start_sample, ch_bool(true),
+                                                          select(rx_data_sample, ch_bool(true),
+                                                                 select(rx_stop_sample, ch_bool(true),
+                                                                        ch_bool(false)))),
+                                                   ch_uint<16>(0_d),
+                                                   rx_div + ch_uint<16>(1_d)))));
+
+        // 收到完整帧 → 写入 RX_DATA 并置 rx_valid；停止位错误 → 置帧错误标志
+        rx_data_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                   select(rx_frame_ok, ch_uint<32>(rx_sr), rx_data_reg));
+        // 读走 RX_DATA → 清 rx_valid
+        // ⚠️ 必须用 **R 握手**（读事务完成）而不是 AR 握手：地址在 AR 握手时才
+        // 被锁存，握手当拍 `ar_addr_reg` 还是旧值，解码会指向错误的寄存器。
+        auto rx_read_done = select(r_valid, io().rready, ch_bool(false));
+        auto rx_read = select(rx_read_done, read_sel_rx_data, ch_bool(false));
+        rx_valid->next = select(!io().rst_n, ch_bool(false),
+                                select(rx_frame_ok, ch_bool(true),
+                                       select(rx_read, ch_bool(false), rx_valid)));
+        rx_frame_err->next = select(!io().rst_n, ch_bool(false),
+                                    select(rx_frame_bad, ch_bool(true), rx_frame_err));
+
+        // status_reg **单一赋值点**：bit0 = TX_EMPTY、bit1 = RX_VALID、bit2 = RX_FRAME_ERROR
+        auto status_mask = ch_uint<32>(~static_cast<uint32_t>(7));
         auto tx_empty_bit = select(tx_empty, ch_uint<32>(1_d), ch_uint<32>(0_d));
         auto rx_valid_bit = select(rx_valid, ch_uint<32>(2_d), ch_uint<32>(0_d));
+        auto rx_err_bit = select(rx_frame_err, ch_uint<32>(4_d), ch_uint<32>(0_d));
         status_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                  (status_reg & status_mask) | tx_empty_bit | rx_valid_bit);
-
-        // UART TX：简化实现 —— 无波特率 / 无移位寄存器，
-        // uart_tx 恒为空闲高电平（不产生伪串行波形）
-        io().uart_tx = ch_bool(true);
+                                  (status_reg & status_mask) | tx_empty_bit | rx_valid_bit
+                                      | rx_err_bit);
         io().irq = rx_valid;
 
         // ---------------- 状态更新 ----------------

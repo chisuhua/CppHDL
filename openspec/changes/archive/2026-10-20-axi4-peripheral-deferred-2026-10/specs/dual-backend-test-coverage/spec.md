@@ -29,6 +29,9 @@ MUST NOT 整字覆盖寄存器。字节道语义 MUST 按
 
 `include/axi4/peripherals/axi_uart.h` MUST 提供 TX 移位引擎与 RX 接收引擎，
 使 `uart_tx` / `uart_rx` / `rx_data_reg` / `rx_valid` / `irq` 具备真实串行语义。
+帧格式 MUST 为 8N1（1 起始位 + 8 数据位 LSB 先出 + 1 停止位），且
+**bit 周期 MUST 确定为编译期常量**（`AxiLiteUart<UART_BIT_PERIOD>` 模板参数，
+MUST 在 `include/axi4/AGENTS.md` 登记），以保证串行波形可被确定性断言。
 
 #### Scenario: TX 输出可还原的串行帧
 
@@ -44,3 +47,21 @@ MUST NOT 整字覆盖寄存器。字节道语义 MUST 按
 - **AND** `rx_valid` MUST 置 1，`status_reg` bit1 MUST 反映 `rx_valid`
 - **AND** `irq` MUST 由 `rx_valid` 驱动
 - **AND** master 读走 `RX_DATA` 后 `rx_valid` MUST 清零
+
+#### Scenario: 停止位错误置帧错误标志
+
+- **WHEN** 外部在 `uart_rx` 上发送一帧且**停止位为低**
+- **THEN** `status_reg` bit2（`RX_FRAME_ERROR`）MUST 置 1
+- **AND** `rx_valid` MUST 保持 0（该帧不视为有效）
+- **AND** `RX_DATA` MUST NOT 被该帧改写
+
+#### Scenario: 帧错误标志仅由复位清除
+
+- **WHEN** `RX_FRAME_ERROR` 已置 1 且之后又收到合法帧
+- **THEN** `RX_FRAME_ERROR` MUST 保持 1（仅 `rst_n` 清除）
+
+#### Scenario: 串行引擎行为 MUST 双后端一致
+
+- **WHEN** 同一串行场景分别在 InterpreterBackend 与 VerilatorBackend 下执行
+- **THEN** `uart_tx` 波形 MUST 逐拍一致
+- **AND** 收到的字节 / `rx_valid` / 帧错误标志 MUST 一致

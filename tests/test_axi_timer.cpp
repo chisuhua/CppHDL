@@ -129,6 +129,7 @@ TEST_CASE("AxiLiteTimer - AW 握手后改写 awaddr 不改变写目标", "[axi][
     sim.set_input_value(io.awaddr, kRegLoad);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, 0x3Cu);
+    sim.set_input_value(io.wstrb, 0xF);  // AXI4-Lite: master 必须驱动 WSTRB
     sim.set_input_value(io.wvalid, 0);
     sim.tick();  // AW 握手
 
@@ -160,6 +161,7 @@ TEST_CASE("AxiLiteTimer - BVALID 保持到 BREADY（master 不预拉 BREADY 不�
     sim.set_input_value(io.awaddr, kRegLoad);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, 0x66u);
+    sim.set_input_value(io.wstrb, 0xF);  // AXI4-Lite: master 必须驱动 WSTRB
     sim.set_input_value(io.wvalid, 1);
 
     const bool b_seen = wait_for(sim, io.bvalid);

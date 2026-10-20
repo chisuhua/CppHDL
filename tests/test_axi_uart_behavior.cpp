@@ -8,9 +8,9 @@
 // (interpreter-only); this file tests observable register behavior and
 // assertion parity across both backends.
 //
-// 注意：本 peripheral **无 TX 移位 / RX 接收引擎**（归 change
-// `axi4-peripheral-deferred-2026-10` 的 D2）。因此本文件只断言寄存器级语义
-// （tx_empty / status_reg bit0），不断言 uart_tx 串行波形或 rx_valid 行为。
+// 串行引擎：自 change `axi4-peripheral-deferred-2026-10` D2 起，本 peripheral
+// 具备**真实 TX 移位 / RX 接收引擎**（bit 周期 = 16 周期，8N1）——
+// 因此本文件同时断言 `uart_tx` 串行波形、`rx_valid` / `rx_data_reg` 行为。
 //
 // Per ADR-035: max ch_out = 32 bits (rdata), well under the 64-bit cap.
 // Per dual-backend-test-coverage R3: only set_input_value / get_port_value.
@@ -23,6 +23,9 @@
 #include "device.h"
 #include "dual_backend_fixture.h"
 #include "simulator.h"
+
+#include <cstdint>
+#include <vector>
 
 using namespace ch;
 using namespace axi4;
@@ -45,7 +48,7 @@ inline void uart_init(ch::Simulator &sim, Uart16 &uart) {
     sim.set_input_value(io.bready, 0);
     sim.set_input_value(io.arvalid, 0);
     sim.set_input_value(io.rready, 0);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
     sim.set_input_value(io.rst_n, 0);
     sim.tick();
     sim.set_input_value(io.rst_n, 1);
@@ -85,6 +88,115 @@ inline void write_expect_bvalid_hold(ch::Simulator &sim, Io &io,
     sim.tick();
     sim.set_input_value(io.bready, 0);
     REQUIRE(ch_test::axi_lite::pv(sim, io.bvalid) == 0u);
+}
+
+// ---------------------------------------------------------------------------
+// 串行引擎辅助
+// ---------------------------------------------------------------------------
+
+// bit 周期（与 AxiLiteUart<16> 的 UART_BIT_PERIOD 一致）
+constexpr unsigned kBitPeriod = 16;
+
+// 写 TX_DATA 并**逐拍采集** uart_tx 波形（覆盖写事务全程 + 整帧）
+inline void uart_write_capture_tx(ch::Simulator &sim, Uart16 &uart, uint8_t byte,
+                                  std::vector<bool> &wave) {
+    auto &io = uart.io();
+    const auto sample = [&]() {
+        wave.push_back(ch_test::axi_lite::pv(sim, io.uart_tx) != 0);
+    };
+
+    sim.set_input_value(io.awaddr, kRegTxData);
+    sim.set_input_value(io.awprot, 0);
+    sim.set_input_value(io.awvalid, 1);
+    sim.set_input_value(io.wdata, byte);
+    sim.set_input_value(io.wstrb, 0xF);
+    sim.set_input_value(io.wvalid, 1);
+
+    // AW 与 W 同周期发出（AXI4-Lite 允许），W 在下一拍被接受
+    for (int i = 0; i < 16; ++i) {
+        sim.tick();
+        sample();
+        if (ch_test::axi_lite::pv(sim, io.bvalid) == 1u) {
+            break;
+        }
+    }
+    sim.set_input_value(io.awvalid, 0);
+    sim.set_input_value(io.wvalid, 0);
+    sim.set_input_value(io.bready, 1);
+    sim.tick();
+    sample();
+    sim.set_input_value(io.bready, 0);
+
+    // 采集整帧（10 bit × 16 周期 = 160 周期）
+    for (int i = 0; i < 220; ++i) {
+        sim.tick();
+        sample();
+    }
+}
+
+// 从波形中解码一帧 8N1：返回 {起始位, 数据字节, 停止位}
+// 找不到起始位时 data = 0xFF 作为哨兵
+struct RxFrame {
+    bool start_bit = false;
+    uint8_t data = 0xFF;
+    bool stop_bit = false;
+};
+
+inline RxFrame decode_uart_frame(const std::vector<bool> &wave) {
+    RxFrame out;
+    // 找起始位（1 → 0 的下降沿）
+    std::size_t start = wave.size();
+    for (std::size_t i = 1; i < wave.size(); ++i) {
+        if (wave[i - 1] && !wave[i]) {
+            start = i;
+            break;
+        }
+    }
+    if (start == wave.size()) {
+        return out;
+    }
+    // 各位中点采样：起始位中点 = start + 8，第 k 位中点 = start + 8 + 16*k
+    const auto mid = [&](int k) -> bool {
+        const std::size_t idx = start + 8 + static_cast<std::size_t>(k) * kBitPeriod;
+        if (idx >= wave.size()) {
+            return false;
+        }
+        return wave[idx];
+    };
+    out.start_bit = mid(0);
+    uint8_t data = 0;
+    for (int b = 0; b < 8; ++b) {
+        if (mid(b + 1)) {
+            data |= static_cast<uint8_t>(1u << b);
+        }
+    }
+    out.data = data;
+    out.stop_bit = mid(9);
+    return out;
+}
+
+// 在 uart_rx 上发送一帧 8N1（LSB 先出）
+inline void uart_send_frame(ch::Simulator &sim, Uart16 &uart, uint8_t byte,
+                            bool bad_stop = false) {
+    auto &io = uart.io();
+    // 起始位（低）
+    sim.set_input_value(io.uart_rx, 0);
+    for (unsigned i = 0; i < kBitPeriod; ++i) {
+        sim.tick();
+    }
+    // 8 个数据位（LSB 先出）
+    for (int b = 0; b < 8; ++b) {
+        sim.set_input_value(io.uart_rx, (byte >> b) & 1u);
+        for (unsigned i = 0; i < kBitPeriod; ++i) {
+            sim.tick();
+        }
+    }
+    // 停止位（高；bad_stop 时故意拉低制造帧错误）
+    sim.set_input_value(io.uart_rx, bad_stop ? 0u : 1u);
+    for (unsigned i = 0; i < kBitPeriod; ++i) {
+        sim.tick();
+    }
+    sim.set_input_value(io.uart_rx, 1);
 }
 
 } // namespace
@@ -210,4 +322,56 @@ DUAL_BACKEND_TEST_PAIR(
         write_expect_bvalid_hold(sim, dev.instance().io(), kRegTxData, 0x33u);
 
         REQUIRE(uart_read(sim, dev.instance(), kRegTxData) == 0x33ULL);
+    });
+
+
+// ============================================================================
+// 串行引擎（change axi4-peripheral-deferred-2026-10 D2）
+// ============================================================================
+
+DUAL_BACKEND_TEST_PAIR(
+    Uart16,
+    "AxiLiteUart - TX 串行帧可还原（起始位 + 8 数据位 + 停止位）",
+    "[axi][uart][behavior][serial-tx][dual]",
+    [&]() {
+        uart_init(sim, dev.instance());
+
+        std::vector<bool> wave;
+        uart_write_capture_tx(sim, dev.instance(), 0x5Au, wave);
+
+        const RxFrame frame = decode_uart_frame(wave);
+        REQUIRE(frame.start_bit == false);   // 起始位为低
+        REQUIRE(frame.data == 0x5Au);        // 数据位 LSB 先出，可还原
+        REQUIRE(frame.stop_bit == true);     // 停止位为高
+    });
+
+DUAL_BACKEND_TEST_PAIR(
+    Uart16,
+    "AxiLiteUart - RX 收到帧后 rx_valid 置位、RX_DATA 可读、读走即清",
+    "[axi][uart][behavior][serial-rx][dual]",
+    [&]() {
+        uart_init(sim, dev.instance());
+
+        uart_send_frame(sim, dev.instance(), 0xA5u);
+
+        // bit1 = RX_VALID
+        REQUIRE((uart_read(sim, dev.instance(), kRegStatus) & 0x2ULL) == 0x2ULL);
+        // 收到的字节
+        REQUIRE(uart_read(sim, dev.instance(), 0x04) == 0xA5ULL);
+        // 读走 RX_DATA 后 rx_valid 清零
+        REQUIRE((uart_read(sim, dev.instance(), kRegStatus) & 0x2ULL) == 0x0ULL);
+    });
+
+DUAL_BACKEND_TEST_PAIR(
+    Uart16,
+    "AxiLiteUart - RX 停止位错误置 RX_FRAME_ERROR 且不置 rx_valid",
+    "[axi][uart][behavior][serial-rx-error][dual]",
+    [&]() {
+        uart_init(sim, dev.instance());
+
+        uart_send_frame(sim, dev.instance(), 0x3Cu, /*bad_stop=*/true);
+
+        const uint64_t status = uart_read(sim, dev.instance(), kRegStatus);
+        REQUIRE((status & 0x4ULL) == 0x4ULL);  // bit2 = RX_FRAME_ERROR
+        REQUIRE((status & 0x2ULL) == 0x0ULL);  // bit1 = RX_VALID 保持 0
     });

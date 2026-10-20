@@ -81,7 +81,7 @@ TEST_CASE("AxiLiteUart - 写 TX_DATA 可读回", "[axi][uart][reg]") {
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     write(sim, dev, kRegTxData, 0x41u);
 
@@ -94,7 +94,7 @@ TEST_CASE("AxiLiteUart - 写 CTRL 可读回", "[axi][uart][reg]") {
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     write(sim, dev, kRegCtrl, 0x03u);
 
@@ -108,7 +108,7 @@ TEST_CASE("AxiLiteUart - STATUS 位语义：bit0=TX_EMPTY、bit1=RX_VALID",
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     // bit0 = TX_EMPTY（TX holding 为空 → 1）
     // bit1 = RX_VALID（本 peripheral **无 RX 引擎** → 恒 0，irq 亦恒 0）
@@ -118,20 +118,29 @@ TEST_CASE("AxiLiteUart - STATUS 位语义：bit0=TX_EMPTY、bit1=RX_VALID",
     REQUIRE(status == 0x1u);
 }
 
-TEST_CASE("AxiLiteUart - 写 TX_DATA 后 TX_EMPTY 恢复为 1（写即排空）",
+TEST_CASE("AxiLiteUart - 写 TX_DATA 后 TX_EMPTY 在发送期间为 0、帧结束后回 1",
           "[axi][uart][reg]") {
     ch::ch_device<AxiLiteUart<16>> dev;
     ch::Simulator sim(dev.context());
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     write(sim, dev, kRegTxData, 0x41u);
 
-    // 简化模型：写即完成（无移位引擎）→ holding 下一拍即排空 → TX_EMPTY 回到 1
-    const uint32_t status = read(sim, dev, kRegStatus);
-    REQUIRE((status & 0x1u) == 0x1u);
+    // 真实移位引擎：帧 = 起始位 + 8 数据位 + 停止位 = 10 bit × 16 周期 = 160 周期。
+    // 发送期间移位寄存器非空 → TX_EMPTY = 0
+    const uint32_t status_during = read(sim, dev, kRegStatus);
+    REQUIRE((status_during & 0x1u) == 0x0u);
+
+    // 帧结束后移位寄存器空 → TX_EMPTY 回到 1
+    // （帧长 = 10 bit × 16 周期 = 160 周期，多等 200 拍确保帧已结束）
+    for (int i = 0; i < 200; ++i) {
+        sim.tick();
+    }
+    const uint32_t status_after = read(sim, dev, kRegStatus);
+    REQUIRE((status_after & 0x1u) == 0x1u);
 }
 
 // ============================================================================
@@ -144,7 +153,7 @@ TEST_CASE("AxiLiteUart - AW/W 相位分离后写仍落地", "[axi][uart][axi-pro
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     write(sim, dev, kRegTxData, 0x55u, /*separate_aw_w=*/true);
 
@@ -157,12 +166,13 @@ TEST_CASE("AxiLiteUart - AW 握手后改写 awaddr 不改变写目标", "[axi][u
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     // AW 阶段：目标 = TX_DATA (0x00)
     sim.set_input_value(io.awaddr, kRegTxData);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, 0x3Cu);
+    sim.set_input_value(io.wstrb, 0xF);  // AXI4-Lite: master 必须驱动 WSTRB
     sim.set_input_value(io.wvalid, 0);
     sim.tick();  // AW 握手
 
@@ -190,11 +200,12 @@ TEST_CASE("AxiLiteUart - BVALID 保持到 BREADY（master 不预拉 BREADY 不�
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     sim.set_input_value(io.awaddr, kRegTxData);
     sim.set_input_value(io.awvalid, 1);
     sim.set_input_value(io.wdata, 0x66u);
+    sim.set_input_value(io.wstrb, 0xF);  // AXI4-Lite: master 必须驱动 WSTRB
     sim.set_input_value(io.wvalid, 1);
 
     const bool b_seen = wait_for(sim, io.bvalid);
@@ -217,7 +228,7 @@ TEST_CASE("AxiLiteUart - RVALID 保持到 RREADY", "[axi][uart][axi-protocol]") 
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
     write(sim, dev, kRegTxData, 0x99u);
 
     sim.set_input_value(io.araddr, kRegTxData);
@@ -243,7 +254,7 @@ TEST_CASE("AxiLiteUart - 事务结束后可接受下一笔", "[axi][uart][axi-pr
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     write(sim, dev, kRegTxData, 0x01u);
     write(sim, dev, kRegTxData, 0x02u);
@@ -261,7 +272,7 @@ TEST_CASE("AxiLiteUart - rst_n 复位清空寄存器并释放 busy", "[axi][uart
     auto &io = dev.instance().io();
 
     sim.set_input_value(io.rst_n, 1);
-    sim.set_input_value(io.uart_rx, 0);
+    sim.set_input_value(io.uart_rx, 1);  // UART 空闲电平为高（低电平=起始位）
 
     write(sim, dev, kRegTxData, 0xABu);
     write(sim, dev, kRegCtrl, 0x05u);

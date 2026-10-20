@@ -23,6 +23,7 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace axi4 {
 
@@ -150,15 +151,36 @@ public:
         auto we_interrupt = select(w_handshake, sel_interrupt, ch_bool(false));
         
         // 写寄存器 (带异步复位)
-        period_reg->next = select(!io().rst_n, ch_uint<32>(255_d), select(we_period, io().wdata, period_reg));
-        duty0_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty0, io().wdata, duty0_reg));
-        duty1_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty1, io().wdata, duty1_reg));
-        duty2_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty2, io().wdata, duty2_reg));
-        duty3_reg->next = select(!io().rst_n, ch_uint<32>(128_d), select(we_duty3, io().wdata, duty3_reg));
-        enable_reg->next = select(!io().rst_n, ch_uint<32>(0_d), select(we_enable, io().wdata, enable_reg));
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
+        period_reg->next = select(!io().rst_n, ch_uint<32>(255_d),
+                                  select(we_period,
+                                         axi4::detail::byte_lane_apply<32>(period_reg, io().wdata, wstrb_mask),
+                                         period_reg));
+        duty0_reg->next = select(!io().rst_n, ch_uint<32>(128_d),
+                                 select(we_duty0,
+                                        axi4::detail::byte_lane_apply<32>(duty0_reg, io().wdata, wstrb_mask),
+                                        duty0_reg));
+        duty1_reg->next = select(!io().rst_n, ch_uint<32>(128_d),
+                                 select(we_duty1,
+                                        axi4::detail::byte_lane_apply<32>(duty1_reg, io().wdata, wstrb_mask),
+                                        duty1_reg));
+        duty2_reg->next = select(!io().rst_n, ch_uint<32>(128_d),
+                                 select(we_duty2,
+                                        axi4::detail::byte_lane_apply<32>(duty2_reg, io().wdata, wstrb_mask),
+                                        duty2_reg));
+        duty3_reg->next = select(!io().rst_n, ch_uint<32>(128_d),
+                                 select(we_duty3,
+                                        axi4::detail::byte_lane_apply<32>(duty3_reg, io().wdata, wstrb_mask),
+                                        duty3_reg));
+        enable_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                  select(we_enable,
+                                         axi4::detail::byte_lane_apply<32>(enable_reg, io().wdata, wstrb_mask),
+                                         enable_reg));
         // interrupt_reg: clear on reset or write, set on overflow
         interrupt_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                     select(we_interrupt, io().wdata,
+                                     select(we_interrupt,
+                                            axi4::detail::byte_lane_apply<32>(interrupt_reg, io().wdata, wstrb_mask),
                                             select(overflow, interrupt_reg | ch_uint<32>(1_d), interrupt_reg)));
         
         // Write response (由 b_valid 寄存器驱动，见上)

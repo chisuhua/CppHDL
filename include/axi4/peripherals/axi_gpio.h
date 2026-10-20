@@ -21,6 +21,7 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace axi4 {
 
@@ -120,12 +121,21 @@ public:
         auto we_data_out = select(w_handshake, sel_data_out, ch_bool(false));
         auto we_direction = select(w_handshake, sel_direction, ch_bool(false));
         auto we_interrupt = select(w_handshake, sel_interrupt, ch_bool(false));
+
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
         data_out_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                    select(we_data_out, io().wdata, data_out_reg));
+                                    select(we_data_out,
+                                           axi4::detail::byte_lane_apply<32>(data_out_reg, io().wdata, wstrb_mask),
+                                           data_out_reg));
         direction_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                     select(we_direction, io().wdata, direction_reg));
+                                     select(we_direction,
+                                            axi4::detail::byte_lane_apply<32>(direction_reg, io().wdata, wstrb_mask),
+                                            direction_reg));
         interrupt_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                     select(we_interrupt, io().wdata, interrupt_reg));
+                                     select(we_interrupt,
+                                            axi4::detail::byte_lane_apply<32>(interrupt_reg, io().wdata, wstrb_mask),
+                                            interrupt_reg));
 
         // ---------------- 读通道 ----------------
         auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));

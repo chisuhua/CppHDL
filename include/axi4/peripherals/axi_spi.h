@@ -32,6 +32,7 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace axi4 {
 
@@ -287,28 +288,29 @@ public:
         status_val = select(status_rx_overrun, status_val | ch_uint<32>(8_d), status_val);
         s.status_reg->next = select(!io().rst_n, ch_uint<32>(0_d), status_val);
 
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
+
         // TX data register
-        s.tx_data_reg->next = select(!io().rst_n, ch_uint<32>(0_d), select(we_tx_data, io().wdata, s.tx_data_reg));
+        s.tx_data_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                     select(we_tx_data,
+                                            axi4::detail::byte_lane_apply<32>(s.tx_data_reg, io().wdata, wstrb_mask),
+                                            s.tx_data_reg));
 
         // Control register with self-clearing START and CLR_RX bits
-        ch_uint<32> ctrl_next = select(we_ctrl, io().wdata, s.ctrl_reg);
+        ch_uint<32> ctrl_next = select(we_ctrl,
+                                       axi4::detail::byte_lane_apply<32>(s.ctrl_reg, io().wdata, wstrb_mask),
+                                       s.ctrl_reg);
         ctrl_next = select(select(start_pulse, select(!we_ctrl, ch_bool(true), ch_bool(false)), ch_bool(false)),
                            ctrl_next & ch_uint<32>(0xFFFFFFFD_h), ctrl_next);
         ctrl_next = select(select(clr_rx_pulse, select(!we_ctrl, ch_bool(true), ch_bool(false)), ch_bool(false)),
                            ctrl_next & ch_uint<32>(0xFFFFFFF7_h), ctrl_next);
         s.ctrl_reg->next = select(!io().rst_n, ch_uint<32>(0_d), ctrl_next);
 
-        // Baud rate - mask wdata to BAUD_WIDTH bits
-        ch_uint<32> wdata_baud_masked;
-        if constexpr (BAUD_WIDTH == 8) {
-            wdata_baud_masked = io().wdata & ch_uint<32>(255_d);
-        } else if constexpr (BAUD_WIDTH == 16) {
-            wdata_baud_masked = io().wdata & ch_uint<32>(65535_d);
-        } else {
-            wdata_baud_masked = io().wdata;
-        }
-        ch_uint<BAUD_WIDTH> wdata_baud = ch_uint<BAUD_WIDTH>(wdata_baud_masked);
-        s.baud_reg->next = select(!io().rst_n, ch_uint<BAUD_WIDTH>(100_d), select(we_baud, wdata_baud, s.baud_reg));
+        // Baud rate register (BAUD_WIDTH bits —— 仅低位字节道有效)
+        auto baud_next = ch_uint<BAUD_WIDTH>(axi4::detail::byte_lane_apply<BAUD_WIDTH>(
+            ch_uint<32>(s.baud_reg), io().wdata, wstrb_mask));
+        s.baud_reg->next = select(!io().rst_n, ch_uint<BAUD_WIDTH>(100_d), select(we_baud, baud_next, s.baud_reg));
 
         // Read data mux —— 基于**锁存**的地址
         auto rd_addr_latched = s.ar_addr_reg >> ch_uint<32>(2_d);

@@ -21,6 +21,7 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace axi4 {
 
@@ -114,10 +115,17 @@ public:
 
         auto we_load = select(w_handshake, sel_load, ch_bool(false));
         auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
+
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
         load_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                select(we_load, io().wdata, load_reg));
+                                select(we_load,
+                                       axi4::detail::byte_lane_apply<32>(load_reg, io().wdata, wstrb_mask),
+                                       load_reg));
         ctrl_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                select(we_ctrl, io().wdata, ctrl_reg));
+                                select(we_ctrl,
+                                       axi4::detail::byte_lane_apply<32>(ctrl_reg, io().wdata, wstrb_mask),
+                                       ctrl_reg));
 
         // ---------------- 读通道 ----------------
         auto ar_handshake = select(io().arvalid, select(busy, ch_bool(false), ch_bool(true)), ch_bool(false));
