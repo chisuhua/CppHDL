@@ -60,7 +60,7 @@ cyc2 (W later) : awready=0 wready=0 bvalid=0 gpio_dir=0x0   # DIRECTION 写没�
 
 | Peripheral | rst_n | aw_done | r_valid | `bvalid` 语义 |
 |---|---|---|---|---|
-| `axi_spi.h` | ✅ L98 | ✅ L115 | ✅ L116 | `select(aw_done,true,false)` — 保持（唯一正确） |
+| `axi_spi.h` | ✅ L98 | ✅ L115 | ✅ L116 | `select(aw_done,true,false)` — **早于 WDATA 拉高**（AW 完成即拉高），且 `aw_done` 在裸 `bready` 上清零 → 常态拉高 BREADY 的 master 会丢写。**非正确参考实现**（2026-10-20 review 更正：先前标注为"唯一正确"是错的） |
 | `axi_pwm.h` | ✅ L70 | ✅ L86 | ✅ L87 | L116 被 L153 `w_handshake` 覆盖 → **不保持** |
 | `axi_i2c.h` | ✅ L86 | ✅ L99 | ✅ L100 | L290 被 L149（helper，后调用）覆盖 → **不保持** |
 | `axi_uart.h` | ❌ | ❌ | ❌ | 组合，不保持 |

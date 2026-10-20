@@ -68,6 +68,13 @@ include/axi4/
   `io().awaddr` / `io().araddr` once W/R may arrive in a later cycle. Latch the address at the
   AW/AR handshake. Verify: `grep -nE 'addr_bits = io\(\)\.aw?r?addr' include/axi4/peripherals/*.h`
   (MUST hit 0 lines)
+- **Master 用从设备的 ready gate 自己的 valid**: Do NOT write
+  `io().wvalid = select(write_start, io().awready, false)`（或用 `io().bvalid` 推 `bready`）。
+  AXI 禁止；且 CppHDL 的组合求值是**单遍、无拓扑序**（`src/simulator.cpp:257`
+  `eval_combinational()` 单遍遍历 `combinational_instr_list_`，不迭代到不动点），
+  跨模块组合路径中"消费方节点先于生产方节点创建"时就会读到**上一拍**的陈旧值。
+  Master 的 `wvalid` / `bready` MUST 由**自身状态**驱动（状态保持到 `write_done`），
+  且 `awaddr` / `wdata` MUST 在整个事务期间保持稳定。
 
 ## EXAMPLES
 - `examples/axi4/axi4_lite_example.cpp` — Lite slave timing, VCD recording, assertion checks

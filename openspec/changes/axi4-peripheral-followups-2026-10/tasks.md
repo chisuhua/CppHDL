@@ -3,8 +3,10 @@
 > 前置依赖：`fix-axi4-peripheral-rst-n-port-2026-10` 必须先 ship
 > （本 change 假定 3 个 AXI4-Lite slave 已收敛到规范形态）。
 
-- [ ] ### Task 1 (F7): 主 spec 类名修正 —— **验证项，不提交 spec delta**
+- [x] ### Task 1 (F7): 主 spec 类名修正 —— **验证项，不提交 spec delta**
   - **action**:
+    - ✅ **已验证**：`git log -p --all -- openspec/specs/dual-backend-test-coverage/spec.md | grep -c "AxiLiteDma"` = 0
+      → 主 spec 从未出现该错误类名（**空验证项**）
     - 确认下游 change `dual-backend-axi4-peripherals-extended-2026-10` 已 archive，
       且其 MODIFIED delta 已把主 spec 的 `AxiLiteDma` 修正为 `AxiDma`
     - 本 change **MUST NOT** 提交同一条 Requirement 的 MODIFIED delta（避免 archive 冲突）
@@ -22,26 +24,39 @@
     - `cd build && ctest -R test_axi_dma --output-on-failure` → PASS
     - reviewer 复核：13 个 `ch_reg` 每个都有显式复位值（无占位）
 
-- [ ] ### Task 3 (F2): `axi_pwm.h` / `axi_i2c.h` 消除 `bvalid` 双赋值
+- [ ] ### Task 3 (F2 + F2'): `axi_pwm.h` / `axi_i2c.h` 回收为规范形态
   - **action**:
-    - `axi_pwm.h`：删除 L153 `io().bvalid = w_handshake;`
-    - `axi_i2c.h`：`build_register_bank()` L149 与 `describe()` L290 取一
-    - 两者改用与规范形态一致的 `b_valid` 寄存器（若 F3 同步进行则一并改）
-    - **同时补地址锁存**：AW / AR 握手时锁存 `AWADDR` / `ARADDR`，
+    - **现状**（实测）：两者都**已有** `rst_n` / `busy` / `aw_done` / `r_valid` / AW→W 相位分离
+      - `axi_pwm.h`：`bvalid` 双赋值（L116 `= aw_done` / L153 `= w_handshake`）→ **L153 覆盖 L116**，
+        实际生效组合脉冲（不保持）
+      - `axi_i2c.h`：`bvalid` 双赋值（L290 `= aw_done` / L149 `= w_handshake`，
+        L149 在 `build_register_bank()` 内、于 `describe()` L310 被调用）→ **L149 覆盖 L290**
+    - 新增 `b_valid` 寄存器；`bvalid` 由其驱动，**在 WDATA 被接受后**拉高、保持到 BREADY
+    - `aw_done` 清零条件：裸 `bready` → **`b_valid && bready`**
+    - 删除多余的那处 `bvalid` 赋值
+    - **同时补地址锁存**：新增 `addr_reg` / `ar_addr_reg`，AW / AR 握手时采样地址，
       解码 MUST 基于锁存寄存器（MUST NOT 基于活的 `io().awaddr` / `io().araddr`）
   - **verify**:
     - `grep -c "bvalid = " include/axi4/peripherals/axi_pwm.h` → 1
     - `grep -c "bvalid = " include/axi4/peripherals/axi_i2c.h` → 1
+    - `grep -cE 'addr_bits = io\(\)\.aw?r?addr' include/axi4/peripherals/axi_{pwm,i2c}.h` → 0 行
+    - `grep -n "aw_done->next" include/axi4/peripherals/axi_{pwm,i2c}.h` → MUST 出现 `b_valid`（非裸 `bready`）
     - `cd build && ctest -R "test_axi_(pwm|i2c)" --output-on-failure` → PASS
+      （**防假阳性**：`_behavior` 是 dual-backend 测试，改坏会同时挂两个后端）
 
-- [ ] ### Task 4 (F3): `axi_spi.h` 的 `bvalid` 改为 `b_valid` 寄存器
+- [ ] ### Task 4 (F3 + F2'): `axi_spi.h` 回收为规范形态
   - **action**:
-    - 新增 `b_valid` 寄存器；`bvalid` 由其驱动
+    - **现状**（实测）：`bvalid` **只有 1 处**赋值（L350 `= aw_done`），
+      但它**早于 WDATA 被接受**就拉高 → 违反"BVALID 在 WDATA 之后"
+    - 新增 `b_valid` 寄存器；`bvalid` 由其驱动（WDATA 之后拉高，保持到 BREADY）
     - `aw_done` 改为在 `b_valid && bready` 时清零
     - **同时补地址锁存**：AW / AR 握手时锁存 `AWADDR` / `ARADDR`，
       解码 MUST 基于锁存寄存器
+    - **补 `io().bresp = ch_uint<2>(0_d);`**（当前完全未驱动 BRESP → Verilog 里悬空）
   - **verify**:
     - `grep -c "bvalid = " include/axi4/peripherals/axi_spi.h` → 1
+    - `grep -c "io().bresp = " include/axi4/peripherals/axi_spi.h` ≥ 1
+    - `grep -cE 'addr_bits = io\(\)\.aw?r?addr' include/axi4/peripherals/axi_spi.h` → 0 行
     - `cd build && ctest -R "test_axi_spi" --output-on-failure` → PASS
 
 - [ ] ### Task 5 (F4): UART status / irq 语义
@@ -52,29 +67,38 @@
   - **verify**:
     - `cd build && ctest -R test_axi_uart --output-on-failure` → PASS（含 status 位断言）
 
-- [ ] ### Task 6 (F5): 孤儿头 `rv32i_soc.h` 处置
+- [ ] ### Task 6 (F5): 孤儿头 `rv32i_soc.h` 处置 —— **定案：删除（选项 A）**
   - **action**:
-    - 先 `git log --oneline -- examples/riscv-mini/src/rv32i_soc.h` 确认无其它引用
-    - 默认选项 A：删除该文件（ZERO-DEBT "no orphan files"）
-    - 若选 B：纳入构建 + 补 `AxiLiteUart` 的 `rst_n` 接线 + 补测试
-    - ⚠️ **实测约束**（2026-10-20 review）：未驱动的 `ch_in<ch_bool>` 读出为 **0**。
-      该文件 L111 实例化了 `AxiLiteUart<16>` 但**未接 `rst_n`** ——
-      若纳入构建，UART 会永久处于复位态（所有寄存器恒为 init 值、
-      AXI 事务不响应）。选 B 时**必须**同时补 `rst_n` 接线。
+    - ✅ 已确认无引用：`grep -rn "rv32i_soc" --include=*.cpp --include=*.h . | grep -v "src/rv32i_soc.h:"` → 0 行
+    - `git rm examples/riscv-mini/src/rv32i_soc.h`（ZERO-DEBT "no orphan files"）
+    - ⚠️ 归档说明中记一笔：若将来有人要恢复该头，
+      **必须**同时补 `AxiLiteUart` 的 `rst_n` 接线 ——
+      实测未驱动的 `ch_in<ch_bool>` 读出为 **0** → peripheral **永久复位**
+      （寄存器恒为 init 值、AXI 事务不响应）
   - **verify**:
     - `grep -rn "rv32i_soc" --include=*.cpp --include=*.h . | grep -v "src/rv32i_soc.h:"` → 0 行
     - `cmake --build build -j$(nproc) 2>&1 | grep -cE "error:|Error"` → 0
-    - 若选 B：reviewer 复核 `rst_n` 已接线（否则 peripheral 永久复位）
 
 - [ ] ### Task 7 (F6 + F8): `axi_soc_example.cpp` 写路径修复 + `rst_n` 暴露
   - **action**:
     - `AxiSocTop` 加 `ch_in<ch_bool> rst_n` 并透传给 gpio / uart（F8）
-    - 定位 `GPIO_OUT` 打印 0x0 的根因（`AxiLiteTestMaster` / `AxiLiteMatrix2x2` 路径）并修复（F6）
+    - **F6 根因（已实测定位，双重）**：
+      1. `src/simulator.cpp:257` `eval_combinational()` 是**单遍、无拓扑序、不迭代**；
+         `master`(L154) 先于 `matrix`(L157)/`gpio`(L160) 创建 →
+         `master.wvalid`(L89)/`master.bready`(L95) 读到**上一拍**的 `awready`/`bvalid`
+      2. `io().wvalid = select(write_start, io().awready, false)`（L88-89）
+         用**从设备的 ready** gate 自己的 valid（违 AXI），且只拉 1 拍 →
+         新规范形态（`w_handshake` 需 `aw_done`）下必挂
+    - **正解**：master 的 `wvalid` / `bready` 改为**状态驱动**
+      （`state == WRITE` → `wvalid = 1`，`state` 保持到 `write_done`），
+      **不依赖从设备的组合输出**；`awaddr` / `wdata` 全程保持稳定
+    - ⚠️ **不要**靠调整模块创建顺序来"碰巧"让单遍求值 work（脆弱）
     - 补 `REQUIRE(gpio_out == 0xAB)` 断言
-    - 复核 `AxiLiteTestMaster` 是否满足 AXI4-Lite "WVALID 保持到 WREADY"
   - **verify**:
     - `./build/examples/axi4/axi_soc_example` → 输出 `GPIO_OUT = 0xab` 且 exit 0
     - `./run_all_ported_tests.sh` → `axi_soc` 项 PASS
+    - reviewer 复核：`AxiLiteTestMaster` 不再出现 `io().awvalid`/`io().bvalid`
+      这类从设备组合输出的**门控依赖**
 
 - [ ] ### Task 8 (F9): GPIO 写侧 / 读侧地址映射对齐
   - **action**:
@@ -87,14 +111,25 @@
     - `cd build && ctest -R test_axi_gpio --output-on-failure` → PASS
     - reviewer 复核：写侧与读侧的寄存器偏移一一对应
 
-- [ ] ### Task 9: 全量回归 + 计数同步
+- [ ] ### Task 9 (F10): `wstrb` 字节写语义 + `bresp` 完整性 + 未映射地址 DECERR
+  - **action**:
+    - 6 个 peripheral 的写路径消费 `wstrb`：
+      `new = (old & ~mask) | (wdata & mask)`，`mask` 由 `wstrb` 逐字节展开
+    - `axi_spi.h` 补 `io().bresp = ch_uint<2>(0_d);`（当前 BRESP 悬空）
+    - 未解码地址返回 `DECERR(3)`（对齐 `include/axi4/AGENTS.md` 已有的 ANTI-PATTERN）
+  - **verify**:
+    - 对 6 个 peripheral 统计 `io().wstrb` 的**使用**次数（排除端口声明）→ MUST ≥ 1
+    - `grep -c "io().bresp = " include/axi4/peripherals/axi_spi.h` ≥ 1
+    - `cd build && ctest -R "test_axi_(pwm|i2c|spi|gpio|uart|timer)" --output-on-failure` → 全 PASS
+
+- [ ] ### Task 10: 全量回归 + 计数同步
   - **verify**:
     - `cd build && ctest -LE perf --output-on-failure` → 全 PASS
     - `cd build && ctest -L verilator_e2e -LE perf --output-on-failure` → 全 PASS
     - `bash scripts/verify_test_counts.sh` → exit 0
     - 根 `AGENTS.md` 的 `CTEST_TOTAL` 与 `ctest -N | tail -1` 一致
 
-- [ ] ### Task 10: openspec archive（**禁用 `--skip-specs`**）
+- [ ] ### Task 11: openspec archive（**禁用 `--skip-specs`**）
   - **action**:
     - `openspec archive axi4-peripheral-followups-2026-10 --yes`
   - **verify**:
