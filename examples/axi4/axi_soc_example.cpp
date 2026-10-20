@@ -42,6 +42,8 @@ public:
         ch_in<ch_bool> write;
         ch_in<ch_uint<32>> addr;
         ch_in<ch_uint<32>> wdata;
+        // 从设备复位 (低电平有效) —— 透传给 gpio / uart
+        ch_in<ch_bool> rst_n;
         ch_out<ch_uint<32>> rdata;
         ch_out<ch_bool> done;
         
@@ -152,6 +154,8 @@ public:
         ch_in<ch_bool> write;
         ch_in<ch_uint<32>> addr;
         ch_in<ch_uint<32>> wdata;
+        // 从设备复位 (低电平有效) —— 透传给 gpio / uart
+        ch_in<ch_bool> rst_n;
         ch_out<ch_uint<32>> rdata;
         ch_out<ch_bool> done;
         
@@ -245,10 +249,10 @@ public:
         io().uart_tx <<= uart.io().uart_tx;
         uart.io().uart_rx <<= io().uart_rx;
 
-        // 从设备复位 (低电平有效)。本 example 不演示复位流程，
-        // 故直接接常 1；若不接，从设备会被永久按住复位。
-        gpio.io().rst_n <<= ch_bool(true);
-        uart.io().rst_n <<= ch_bool(true);
+        // 从设备复位 (低电平有效) —— 由顶层 rst_n 透传
+        // （不接则从设备会被永久按住复位：未驱动的 ch_in 读出为 0）
+        gpio.io().rst_n <<= io().rst_n;
+        uart.io().rst_n <<= io().rst_n;
 
         // 主设备控制接口
         master.io().start <<= io().start;
@@ -274,6 +278,8 @@ int main() {
     // 初始化
     sim.set_input_value(top_device.instance().io().start, false);
     sim.set_input_value(top_device.instance().io().write, false);
+    // 释放从设备复位（低有效）
+    sim.set_input_value(top_device.instance().io().rst_n, true);
     sim.set_input_value(top_device.instance().io().gpio_in, 0_d);
     sim.set_input_value(top_device.instance().io().uart_rx, true);
     

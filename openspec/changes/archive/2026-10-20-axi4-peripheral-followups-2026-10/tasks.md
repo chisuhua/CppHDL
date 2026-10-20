@@ -110,6 +110,9 @@
     - reviewer 复核：`AxiLiteTestMaster` 不再出现 `io().awvalid`/`io().bvalid`
       这类从设备组合输出的**门控依赖** ✅
   - **note**:
+    - F8 已完成：`AxiSocTop` 新增 `ch_in<ch_bool> rst_n` 并透传给 gpio / uart，
+      `main()` 中 `sim.set_input_value(top.io().rst_n, true)` 释放复位
+      （未驱动的 `ch_in` 读出为 0 → 从设备会永久复位）
     - 实测根因有两层（A: master 的 WVALID 生成违 AXI；B: `AxiLiteMatrix2x2` 的 6 类缺陷），
       详见 proposal 的 F6 章节。写路径已打通（`GPIO_OUT = 0xab`）✅
     - **读路径（Test 2）仍未打通** —— 根因是框架层的"子模块输入端口值在 tick 内被覆盖"
@@ -140,7 +143,7 @@
     - 新增用例：写未解码地址 → `bresp == 3`（DECERR）
     - `cd build && ctest -R "test_axi_(pwm|i2c|spi|gpio|uart|timer)" --output-on-failure` → 全 PASS
 
-- [ ] ### Task 10: 全量回归 + 计数同步
+- [x] ### Task 10: 全量回归 + 计数同步
   - **verify**:
     - `cd build && ctest -LE perf --output-on-failure` → 全 PASS
     - `cd build && ctest -L verilator_e2e -LE perf --output-on-failure` → 全 PASS
