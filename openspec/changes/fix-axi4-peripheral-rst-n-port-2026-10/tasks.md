@@ -1,0 +1,35 @@
+## Tasks
+
+- [ ] ### Task 1: `axi_uart.h` 加 rst_n + busy self-clear
+  - **action**:
+    - `__io` 加 `ch_in<ch_bool> rst_n;`
+    - `busy->next` (line 142) 改用 `select(!rst_n, false, ...)` reset
+    - `tx_empty` / `rx_valid` / `status_reg` 加 rst_n reset
+    - 其他 ch_reg<bool> 加 reset
+  - **verify**: compile 通过
+- [ ] ### Task 2: `axi_timer.h` 加 rst_n + 修 IO port `&&` 反模式
+  - **action**:
+    - `__io` 加 `ch_in<ch_bool> rst_n;`
+    - 4 处 IO port `&&` → `select()` (line 77 / 79 / 94 / 124)
+    - `busy->next` 加 rst_n reset
+  - **verify**: compile 通过 + 无 `-Wdeprecated-declarations` warning
+- [ ] ### Task 3: `axi_gpio.h` 加 rst_n + busy self-clear
+  - **action**:
+    - `__io` 加 `ch_in<ch_bool> rst_n;`
+    - `busy->next` 加 rst_n reset
+  - **verify**: compile 通过
+- [ ] ### Task 4: `axi_dma.h` 加 rst_n + 状态 registers reset
+  - **action**:
+    - `__io` 加 `ch_in<ch_bool> rst_n;`
+    - 所有 ch_reg<bool> + ch_reg<uint> 加 `select(!rst_n, init_val, ...)` reset
+  - **verify**: compile 通过
+- [ ] ### Task 5: 全量回归
+  - **verify**: `ctest -LE perf --output-on-failure` → 158/158 PASS（不变）
+  - **AND** `ctest -L verilator_e2e -LE perf` → 23/23 PASS（不变）
+  - **AND** `cmake --build build -j$(nproc) 2>&1 | grep -c deprecated` → 0
+- [ ] ### Task 6: openspec validate + archive
+  - **verify**:
+    - `openspec validate fix-axi4-peripheral-rst-n-port-2026-10 --strict` → valid
+    - `bash scripts/verify_test_counts.sh` → exit 0（CTEST_TOTAL 169 不变）
+  - **action**: `openspec archive fix-axi4-peripheral-rst-n-port-2026-10 --yes --skip-specs`
+  - **verify**: `ls openspec/changes/archive/ | grep rst-n-port`

@@ -1,0 +1,32 @@
+## Tasks
+
+- [ ] ### Task 0 (前置): 等待 `fix-axi4-peripheral-rst-n-port-2026-10` ship
+  - **action**: 等待 `fix-axi4-peripheral-rst-n-port-2026-10` change archive 完成
+  - **note**: 本 change 启动条件是 4 个 peripheral design 含 rst_n + busy self-clear
+- [ ] ### Task 1: AxiLiteTimer behavior parity
+  - **target**: `tests/test_axi_timer_behavior.cpp`（timer counter + 中断寄存器）
+  - **action**: 7 dual pairs
+- [ ] ### Task 2: AxiLiteGpio behavior parity
+  - **target**: `tests/test_axi_gpio_behavior.cpp`（GPIO data dir / 输出寄存器）
+  - **action**: 7 dual pairs
+- [ ] ### Task 3: AxiLiteDma behavior parity
+  - **target**: `tests/test_axi_dma_behavior.cpp`（AXI burst + descriptor）
+  - **action**: 7 dual pairs
+- [ ] ### Task 4: AxiLiteUart behavior parity
+  - **target**: `tests/test_axi_uart_behavior.cpp`（AXI-Lite UART，rst_n 已有后）
+  - **action**: 7 dual pairs
+- [ ] ### Task 5: CMakeLists.txt 注册 4 个 test_target
+  - **action**: 4 个 `add_dual_backend_test` + target_include_directories
+  - **verify**: `ctest -N -L verilator_e2e -RE "test_axi_(timer|gpio|dma|uart)_behavior"` 输出 4 个
+- [ ] ### Task 6: 全量回归
+  - **verify**: `ctest -LE perf --output-on-failure` 仍 PASS（+4 = 162 non-perf）
+- [ ] ### Task 7: AGENTS.md sync
+  - **action**: CTEST_TOTAL 169→173 + root tests/test_*.cpp 99→103
+  - **verify**: `bash scripts/verify_test_counts.sh` exit 0
+- [ ] ### Task 8: archive 前置 gate
+  - **verify**:
+    - `openspec validate dual-backend-axi4-peripherals-extended-2026-10 --strict` → valid
+    - `cmake --build build -j$(nproc) 2>&1 | grep -E "error|Error"` → 0 行
+    - `bash scripts/verify_test_counts.sh` → exit 0
+- [ ] ### Task 9: archive
+  - **action**: `openspec archive dual-backend-axi4-peripherals-extended-2026-10 --yes --skip-specs`
