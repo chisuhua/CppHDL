@@ -200,6 +200,17 @@ add_dual_backend_test(test_axi_spi_behavior
     TIMEOUT 300
 )
 
+# dual-backend-axi4-peripherals: 2 个 AXI4-Lite peripheral (Pwm + I2c) behavior
+# runtime dual 化 (per Phase 3 partial 续, _behavior suffix 区别原结构测)
+add_dual_backend_test(test_axi_pwm_behavior
+    SOURCES test_axi_pwm_behavior.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_axi_i2c_behavior
+    SOURCES test_axi_i2c_behavior.cpp
+    TIMEOUT 300
+)
+
 # RISC-V Mini 组件测试
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 # dual-backend-test-coverage (Phase 1): 3 BranchPredictorV2 timing

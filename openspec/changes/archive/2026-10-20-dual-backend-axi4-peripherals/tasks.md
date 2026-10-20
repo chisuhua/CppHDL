@@ -1,0 +1,24 @@
+## Tasks
+
+- [x] ### Task 1: AxiLitePwm behavior parity pilot (Phase 3 部分 preview)
+  - **target**: `tests/test_axi_pwm_behavior.cpp`（PWM 4 channel + duty cycle + period）
+  - **action**: 仿照 `test_axi_spi_behavior.cpp` 模式写 7 个 DUAL_BACKEND_TEST_PAIR
+  - **verify**: 14 assertions / 14 test cases PASS (interpreter + verilator dual)
+- [x] ### Task 2: AxiLiteI2c behavior parity
+  - **target**: `tests/test_axi_i2c_behavior.cpp`（I2C 7-bit addr + ACK/NACK + 9-state）
+  - **action**: 7 dual pairs
+  - **verify**: 14 assertions / 14 test cases PASS
+- [x] ### Task 3: CMakeLists.txt 注册 2 个 test_target
+  - **action**: 2 个 `add_dual_backend_test` + target_include_directories
+  - **verify**: `ctest -N -L verilator_e2e -RE "test_axi_(pwm|i2c)_behavior"` 输出 2 个
+- [x] ### Task 4: 全量回归
+  - **verify**: `ctest -LE perf --output-on-failure` → 158/158 PASS（+2 = 158 non-perf）
+  - **AND** `ctest -L verilator_e2e -LE perf` → 23/23 PASS
+- [x] ### Task 5: AGENTS.md sync
+  - **action**: CTEST_TOTAL 167→169 + root tests/test_*.cpp 97→99
+  - **verify**: `bash scripts/verify_test_counts.sh` exit 0（实测匹配）
+- [ ] ### Task 6: archive 前置 gate
+- [ ] ### Task 7: archive
+- [ ] ### Task 8: follow-up backlog 记录
+  - **action**: 在 `.rddf/improvements/` 立 follow-up placeholders for 4 rst_n-missing peripherals (Timer/Uart/Gpio/Dma)
+  - **note**: 这些 peripheral 需先修 design（加 rst_n port + busy self-clear）后才能 dual 化
