@@ -146,7 +146,7 @@ public:
         ch_bool aw_handshake, ch_bool w_handshake, ch_bool ar_handshake,
         ch_bool we_ctrl, ch_bool we_tx_data, ch_bool we_prescale) {
         // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
-        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
+        const auto wstrb_mask = axi4::detail::byte_lane_mask<32>(io().wstrb);
 
         // Control register update (clear START/STOP bits)
         // —— 掩码只作用在**写入数据**上，未被 WSTRB 选中的字节保持原值

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "axi4/byte_lane.h"
 #include "ch.hpp"
 #include "component.h"
 
@@ -189,6 +190,11 @@ public:
     // Data channels: register file + W channel register writes + R channel mux
     template <typename TS>
     void build_data_channels(TS &s, ch_bool w_ready_sig) {
+        // 字节写：WSTRB 逐 beat 展开（WSTRB 逐 beat 有效，见 AXI4 规范）。
+        // 掩码在 W 握手拍按当拍 io().wstrb 现场展开 —— MUST NOT 只在 AW 拍展开一次。
+        const auto wstrb_mask =
+            axi4::detail::byte_lane_mask<DATA_WIDTH>(io().wstrb);
+
         auto addr_index = io().awaddr >> ch_uint<ADDR_WIDTH>(2_d);
 
         auto sel0 = (addr_index == ch_uint<ADDR_WIDTH>(0_d));
@@ -225,22 +231,86 @@ public:
         auto we14 = w_ready_sig & sel14;
         auto we15 = w_ready_sig & sel15;
 
-        s.reg0->next = select(we0, io().wdata, s.reg0);
-        s.reg1->next = select(we1, io().wdata, s.reg1);
-        s.reg2->next = select(we2, io().wdata, s.reg2);
-        s.reg3->next = select(we3, io().wdata, s.reg3);
-        s.reg4->next = select(we4, io().wdata, s.reg4);
-        s.reg5->next = select(we5, io().wdata, s.reg5);
-        s.reg6->next = select(we6, io().wdata, s.reg6);
-        s.reg7->next = select(we7, io().wdata, s.reg7);
-        s.reg8->next = select(we8, io().wdata, s.reg8);
-        s.reg9->next = select(we9, io().wdata, s.reg9);
-        s.reg10->next = select(we10, io().wdata, s.reg10);
-        s.reg11->next = select(we11, io().wdata, s.reg11);
-        s.reg12->next = select(we12, io().wdata, s.reg12);
-        s.reg13->next = select(we13, io().wdata, s.reg13);
-        s.reg14->next = select(we14, io().wdata, s.reg14);
-        s.reg15->next = select(we15, io().wdata, s.reg15);
+        s.reg0->next = select(
+            we0,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg0, io().wdata,
+                                                      wstrb_mask),
+            s.reg0);
+        s.reg1->next = select(
+            we1,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg1, io().wdata,
+                                                      wstrb_mask),
+            s.reg1);
+        s.reg2->next = select(
+            we2,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg2, io().wdata,
+                                                      wstrb_mask),
+            s.reg2);
+        s.reg3->next = select(
+            we3,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg3, io().wdata,
+                                                      wstrb_mask),
+            s.reg3);
+        s.reg4->next = select(
+            we4,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg4, io().wdata,
+                                                      wstrb_mask),
+            s.reg4);
+        s.reg5->next = select(
+            we5,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg5, io().wdata,
+                                                      wstrb_mask),
+            s.reg5);
+        s.reg6->next = select(
+            we6,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg6, io().wdata,
+                                                      wstrb_mask),
+            s.reg6);
+        s.reg7->next = select(
+            we7,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg7, io().wdata,
+                                                      wstrb_mask),
+            s.reg7);
+        s.reg8->next = select(
+            we8,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg8, io().wdata,
+                                                      wstrb_mask),
+            s.reg8);
+        s.reg9->next = select(
+            we9,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg9, io().wdata,
+                                                      wstrb_mask),
+            s.reg9);
+        s.reg10->next = select(
+            we10,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg10, io().wdata,
+                                                      wstrb_mask),
+            s.reg10);
+        s.reg11->next = select(
+            we11,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg11, io().wdata,
+                                                      wstrb_mask),
+            s.reg11);
+        s.reg12->next = select(
+            we12,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg12, io().wdata,
+                                                      wstrb_mask),
+            s.reg12);
+        s.reg13->next = select(
+            we13,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg13, io().wdata,
+                                                      wstrb_mask),
+            s.reg13);
+        s.reg14->next = select(
+            we14,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg14, io().wdata,
+                                                      wstrb_mask),
+            s.reg14);
+        s.reg15->next = select(
+            we15,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(s.reg15, io().wdata,
+                                                      wstrb_mask),
+            s.reg15);
 
         // Read mux (computed here, used by response_logic via scratch)
         auto read_addr_index = s.read_addr_reg >> ch_uint<ADDR_WIDTH>(2_d);

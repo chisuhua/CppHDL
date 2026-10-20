@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "axi4/byte_lane.h"
 #include "ch.hpp"
 #include "component.h"
 
@@ -81,10 +82,26 @@ public:
         auto we2 = select(w_handshake, sel2, ch_bool(false));
         auto we3 = select(w_handshake, sel3, ch_bool(false));
         
-        reg0->next = select(we0, io().wdata, reg0);
-        reg1->next = select(we1, io().wdata, reg1);
-        reg2->next = select(we2, io().wdata, reg2);
-        reg3->next = select(we3, io().wdata, reg3);
+        // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
+        const auto wstrb_mask =
+            axi4::detail::byte_lane_mask<DATA_WIDTH>(io().wstrb);
+
+        reg0->next = select(
+            we0,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(reg0, io().wdata, wstrb_mask),
+            reg0);
+        reg1->next = select(
+            we1,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(reg1, io().wdata, wstrb_mask),
+            reg1);
+        reg2->next = select(
+            we2,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(reg2, io().wdata, wstrb_mask),
+            reg2);
+        reg3->next = select(
+            we3,
+            axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(reg3, io().wdata, wstrb_mask),
+            reg3);
         
         // 写响应
         io().bvalid = w_handshake;

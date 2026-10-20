@@ -13,7 +13,7 @@ include/axi4/
 ├── axi4_lite_matrix.h       # 2x2 crossbar, round-robin, address decode
 ├── axi_interconnect_4x4.h   # 4x4 full AXI crossbar (635 lines — most complex)
 ├── axi_to_axilite.h        # AXI ↔ AXI-Lite bidirectional converter
-├── byte_lane.h             # AXI4-Lite 字节道（WSTRB）掩码工具
+├── byte_lane.h             # 字节道（WSTRB）掩码工具（支持 8/16/32/64 bit 总线）
 └── peripherals/
     ├── axi_gpio.h           # GPIO: data/dir/interrupt, 4 registers
     ├── axi_uart.h           # UART: TX/RX data, status, ctrl
@@ -32,7 +32,7 @@ include/axi4/
 | 2x2 crossbar | `axi4_lite_matrix.h` |
 | 4x4 crossbar (full) | `axi_interconnect_4x4.h` |
 | Protocol conversion | `axi_to_axilite.h` |
-| 字节道（WSTRB）掩码 | `byte_lane.h` — `byte_lane_mask` / `byte_lane_apply<W>` |
+| 字节道（WSTRB）掩码 | `byte_lane.h` — `byte_lane_mask<DATA_WIDTH>` / `byte_lane_apply<W>` |
 | Peripherals | `peripherals/axi_gpio.h`, `axi_uart.h`, `axi_timer.h`, `axi_pwm.h`, `axi_i2c.h`, `axi_spi.h`, `axi_dma.h` |
 
 ## CONVENTIONS
@@ -56,9 +56,13 @@ include/axi4/
 - **Address decode**: `addr >> 2 & mask` (4-byte aligned per register)
 - **Response**: All peripherals return `bresp=OKAY(0)`. `axi_interconnect_4x4.h` returns `DECERR` for unmapped addresses.
 - **Peripheral registers**: 4–8 registers per device, 4-byte aligned
-- **字节道语义（WSTRB）**: AXI4-Lite slave peripheral 的写路径 MUST 消费 `wstrb`，
-  MUST NOT 整字覆盖寄存器。语义（`include/axi4/byte_lane.h` 实现）：
-  1. `WSTRB` 位 i ↔ 字节道 i（bit0 → byte0 … bit3 → byte3），每道 8 bit
+- **字节道语义（WSTRB）**: AXI slave 的写路径 MUST 消费 `wstrb`，
+  MUST NOT 整字覆盖寄存器。**适用范围**：6 个 AXI4-Lite peripheral
+  （`peripherals/axi_*.h`）与通用 slave（`axi4_lite_slave.h` 的 `AxiLiteSlave`、
+  `axi4_full.h` 的 `Axi4Slave`）遵守**同一套**语义。
+  实现（`include/axi4/byte_lane.h`）：
+  1. `WSTRB` 位 i ↔ 字节道 i（bit0 → byte0 …），每道 8 bit；
+     `WSTRB` 宽度 = `DATA_WIDTH / 8`（一条总线有 `DATA_WIDTH / 8` 条字节道）
   2. 写路径：`new = (old & ~mask) | (wdata & mask)`，`mask` 由 `WSTRB` 逐字节展开
   3. `mask` MUST 与目标寄存器的**有效字节道**相交：宽度 W 的寄存器有效道数为
      `ceil(W / 8)`（W=8 → 仅 byte0；W=16 → byte0..1；W=32 → byte0..3）；
@@ -66,9 +70,18 @@ include/axi4/
   4. 结果 MUST 按寄存器宽度 W 截断
   5. `WSTRB == 0` → 无字节被选中 → 寄存器保持原值（地址已解码，响应仍 `OKAY`）
   6. 只读寄存器 MUST NOT 进入写路径（写其地址 → `DECERR`，值不变）
-  - 实现入口：`axi4::detail::byte_lane_mask(wstrb)` 展开一次，
+  7. **字节道索引相对被访问的*字***（`DATA_WIDTH` 宽的 word），
+     MUST NOT 相对寄存器重新编号 —— 寄存器地址先解码到字，再按 `WSTRB` 数道
+  8. **亚 32 位寄存器位于所在字的首字节道**（byte0 起）—— 因此其有效道就是
+     低 `ceil(W / 8)` 条（当前全部寄存器均如此）
+  9. `WSTRB` **逐 W 握手有效**：`Axi4Slave` MUST 在每次 W 握手拍按当拍
+     `io().wstrb` 重新展开掩码，MUST NOT 在 AW 拍锁存
+     （⚠️ `Axi4Slave` 的写状态机当前每笔事务只接受 1 个 W beat，
+     多 beat burst 属待修语义，见 `openspec/changes/axi4-slave-byte-lane-2026-10` 非目标）
+  - 实现入口：`axi4::detail::byte_lane_mask<DATA_WIDTH>(wstrb)` 展开一次，
     `axi4::detail::byte_lane_apply<W>(old, wdata, mask)` 逐寄存器套用
-  - ⚠️ master 侧 MUST 驱动 `WSTRB`（AXI4-Lite 要求）—— 未驱动的 `wstrb` 读出为 0，
+    （`BUS_WIDTH` 默认 `max(W, 32)`，非推导上下文；32 bit 调用点写 `byte_lane_mask<32>`）
+  - ⚠️ master 侧 MUST 驱动 `WSTRB`（AXI 要求）—— 未驱动的 `wstrb` 读出为 0，
     此时写为"无字节被选中"的空写，寄存器值不变
 - **UART 串行语义（`AxiLiteUart<UART_BIT_PERIOD>`）**:
   - 帧格式 8N1：1 起始位(0) + 8 数据位(LSB 先出) + 1 停止位(1)
@@ -91,7 +104,10 @@ include/axi4/
 - **Unmapped address DECERR**: Any address not decoded should return `DECERR`, not OKAY.
 - **整字覆盖写（忽略 `wstrb`）**: Do NOT write `reg->next = select(we, io().wdata, reg)` ——
   写路径 MUST 走 `byte_lane_apply<W>`。Verify:
-  `grep -c 'byte_lane_apply' include/axi4/peripherals/axi_*.h`（每个 peripheral MUST ≥ 1）
+  `grep -c 'byte_lane_apply' include/axi4/peripherals/axi_*.h`（每个 peripheral MUST ≥ 1；
+  `axi_dma.h` 是 AXI4 **master**，无寄存器写路径，不适用）+
+  `grep -c 'byte_lane_apply' include/axi4/axi4_lite_slave.h include/axi4/axi4_full.h`
+  （通用 slave MUST ≥ 1）
 - **用寄存器当前值判定"结束"**: Do NOT 用 `phase == 9` / `bits == 7` 这类**当前值**
   比较来判定状态机结束 —— 组合求值单遍无拓扑序，比较的求值时机受节点创建顺序
   影响，会让状态机早/晚一拍（实测：RX 引擎只采到 7 位）。

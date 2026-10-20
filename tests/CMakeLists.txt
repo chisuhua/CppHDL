@@ -431,6 +431,13 @@ add_dual_backend_test(test_axi_byte_lane
     SOURCES test_axi_byte_lane.cpp
     TIMEOUT 300
 )
+# 通用 AXI slave 的字节道写语义（AxiLiteSlave / Axi4Slave）—— axi4-slave-byte-lane-2026-10
+# 双后端：byte_lane_mask<DATA_WIDTH> 的泛化掩码展开 + 64 bit 总线宽度
+# 在 Verilog codegen 路径上与 interpreter 差异最大。
+add_dual_backend_test(test_axi_slave_byte_lane
+    SOURCES test_axi_slave_byte_lane.cpp
+    TIMEOUT 300
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)

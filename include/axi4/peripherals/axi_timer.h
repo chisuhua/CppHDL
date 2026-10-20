@@ -117,7 +117,7 @@ public:
         auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
 
         // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
-        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
+        const auto wstrb_mask = axi4::detail::byte_lane_mask<32>(io().wstrb);
         load_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
                                 select(we_load,
                                        axi4::detail::byte_lane_apply<32>(load_reg, io().wdata, wstrb_mask),

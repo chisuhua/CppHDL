@@ -152,7 +152,7 @@ public:
         
         // 写寄存器 (带异步复位)
         // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
-        const auto wstrb_mask = axi4::detail::byte_lane_mask(io().wstrb);
+        const auto wstrb_mask = axi4::detail::byte_lane_mask<32>(io().wstrb);
         period_reg->next = select(!io().rst_n, ch_uint<32>(255_d),
                                   select(we_period,
                                          axi4::detail::byte_lane_apply<32>(period_reg, io().wdata, wstrb_mask),
