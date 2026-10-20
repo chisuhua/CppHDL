@@ -18,7 +18,7 @@
 | `AxiLiteTimer` | ❌ 0 | 需 `fix-axi4-peripheral-rst-n-port` | ✅ 本次可做 |
 | `AxiLiteGpio` | ❌ 0 | 需 `fix-axi4-peripheral-rst-n-port` | ✅ 本次可做 |
 | `AxiLiteUart` | ❌ 0 | 需 `fix-axi4-peripheral-rst-n-port` | ✅ 本次可做 |
-| `AxiDma` | ❌ 0 | 是 AXI4 **master**（非 Lite slave），复位契约不同 | ➡️ 移出本 change，见 `axi4-peripheral-followups-2026-10` |
+| `AxiDma` | ❌ 0 | 是 AXI4 **master**（非 Lite slave），复位契约不同 | ➡️ 移出本 change，未排期 |
 
 **预期收益**：
 
@@ -35,8 +35,8 @@
 **Out of Scope**（明确划线）：
 
 - ❌ 改 3 个 peripheral 头文件本身（design 收敛已在 `fix-axi4-peripheral-rst-n-port` 完成）
-- ❌ **`AxiDma` 的 dual 化** → 移入 `axi4-peripheral-followups-2026-10`
-  （`AxiDma` 是 AXI4 master，`rst_n` 复位契约与 slave 不同，且 `AxiLiteDma` 类从不存在）
+- ❌ **`AxiDma` 的 dual 化** → 未排期（follow-up；`AxiDma` 是 AXI4 master，
+  `rst_n` 复位契约与 slave 不同，且 `AxiLiteDma` 类从不存在）
 - ❌ 改既有 `tests/test_axi_{uart,timer,gpio}.cpp` 结构测
   （由 `fix-axi4-peripheral-rst-n-port` 新建；spec R"原 test_axi_*.cpp 不动"约束其内容）
 - ❌ 改 `tests/test_axi_{pwm,i2c,spi}_behavior.cpp`（已 archive）
@@ -56,6 +56,10 @@
 - **AW→W 相位分离**（AW 与 W 分两周期，验证 W 仍被接受）
 - **响应保持**（BVALID 在 BREADY 拉高前必须已被 master 观察到）
 
+> `AxiLiteUart` 无 TX 移位 / RX 接收引擎（归 `axi4-peripheral-deferred-2026-10` 的 D2），
+> 其 7 pairs MUST 只断言寄存器级语义（`tx_empty` / `status_reg` bit0），
+> MUST NOT 断言 `uart_tx` 串行波形或 `rx_valid` 行为。
+
 | 文件 | peripheral | dual pairs | TIMEOUT |
 |------|-----------|------------|---------|
 | `tests/test_axi_timer_behavior.cpp` | `AxiLiteTimer` | 7 | 300 |
@@ -70,19 +74,21 @@ add_dual_backend_test(test_axi_<peripheral>_behavior
     SOURCES test_axi_<peripheral>_behavior.cpp
     TIMEOUT 300
 )
-target_include_directories(test_axi_<peripheral>_behavior PRIVATE ${PROJECT_SOURCE_DIR}/include)
 ```
+（`add_catch_test` 已注入 `${PROJECT_SOURCE_DIR}/include`，无需额外
+`target_include_directories`。）
 
 ### 3. spec 增量
 
 `openspec/specs/dual-backend-test-coverage/spec.md` **MODIFIED** "AXI4 peripheral behavior test
-SHALL 走 DUAL_BACKEND_TEST_PAIR"：把 peripheral 列表补全为**实际有 `_behavior` 测试**的集合，
-并修正错误类名 `AxiLiteDma` → `AxiDma`（该类从不存在；`AxiDma` 尚无 `_behavior` 测试，
-故不进本列表，其 dual 化归 `axi4-peripheral-followups-2026-10`）。
+SHALL 走 DUAL_BACKEND_TEST_PAIR"：把 peripheral 列表补全为**实际有 `_behavior` 测试**的集合
+（6 个 AXI4-Lite slave：Spi / Pwm / I2c / Timer / Gpio / Uart），并明确 `AxiDma`
+（AXI4 master，无 `_behavior` 测试）不在本 Requirement 范围。
 
 > 现状主 spec 的该 Requirement **没有** peripheral 列表 —— 上一个已归档 change
 > `2026-10-20-dual-backend-axi4-peripherals` 用了 `--skip-specs`，其 delta 被静默丢弃。
-> 本 change 显式用 MODIFIED 修正。
+> 本 change 显式用 MODIFIED 修正。注意主 spec **从未**出现过 `AxiLiteDma` 这个类名
+> （`axi4-peripheral-followups` F7 已验证），delta 不得声称"修正错误类名"。
 
 ## Acceptance
 
@@ -98,8 +104,9 @@ SHALL 走 DUAL_BACKEND_TEST_PAIR"：把 peripheral 列表补全为**实际有 `_
 
 #### Scenario: 资源锁注入
 
-- **WHEN** `cd build && ctest -N -L verilator_e2e -RE "test_axi_(timer|gpio|uart)_behavior"`
+- **WHEN** `cd build && ctest --show-only=json-v1 -L verilator_e2e | grep -A2 'test_axi_\(timer\|gpio\|uart\)_behavior'`
 - **THEN** 每个 RESOURCE_LOCK "verilator_backend"，LABELS "base;verilator_e2e"，TIMEOUT 300
+- **NOTE** `ctest -N -RE` 是**排除**正则，列不出这 3 个 target；必须用 `-R` 或 json 输出
 
 #### Scenario: 不破反约束
 

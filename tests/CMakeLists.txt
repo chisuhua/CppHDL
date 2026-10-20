@@ -211,6 +211,21 @@ add_dual_backend_test(test_axi_i2c_behavior
     TIMEOUT 300
 )
 
+# dual-backend-axi4-peripherals-extended-2026-10: Phase 3 收尾 —
+# Timer / Gpio / Uart behavior parity runtime tests (6/6 AXI4-Lite slaves).
+add_dual_backend_test(test_axi_timer_behavior
+    SOURCES test_axi_timer_behavior.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_axi_gpio_behavior
+    SOURCES test_axi_gpio_behavior.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_axi_uart_behavior
+    SOURCES test_axi_uart_behavior.cpp
+    TIMEOUT 300
+)
+
 # RISC-V Mini 组件测试
 add_catch_test(test_branch_predictor_v2 chlib/test_branch_predictor_v2.cpp)
 # dual-backend-test-coverage (Phase 1): 3 BranchPredictorV2 timing
