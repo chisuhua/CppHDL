@@ -28,9 +28,9 @@ CppHDL 的 L1 cache 子系统经历了一次死而复生的重建：原 `*_compl
 
 ### phase-5
 - ⏳ `dual-backend-cache-tests` 落地（Sync 走 parity / Async 走 golden-value）
-- ⏳ cache-stub 物理删除（`git rm include/cpu/cache/{i,d}_cache_stub.h`）
-- ⏳ 重写 `test_cache_pipeline_integration.cpp`（脱离 stub）
-- ⏳ `git rm` 2 个 SKIP-only test
+- ✅ cache-stub 物理删除（`git rm include/cpu/cache/{i,d}_cache_stub.h`，2026-10-20，variant b）
+- ✅ 重写 `test_cache_pipeline_integration.cpp`（脱离 stub，5 TEST_CASE 全改 `ICacheSync` / `DCacheSync` 真实时序）
+- ✅ 3 个 stub 消费者改而非删（`test_cache_simple.cpp` / `test_phase4_integration.cpp` 保留 smoke 锚点，计数不变）
 
 ## 验收标准
 

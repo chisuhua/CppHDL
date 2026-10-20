@@ -175,6 +175,28 @@ Prerequisite 已满足 — cache-complete-rewrite 落地 (commit 91a0833 ch_mem 
 - 当前 stub 维持 `[[deprecated]]`, 3 个 test 文件仍 pragma-wrap; Sync/Async 测试
   不引用 stub (cache_complete.h 已 shim → Sync)
 
+**2026-10-20 update (Executed — variant b, 提前 6 个月)**:
+用户决议采用 **variant (b)**（§2 fallback 条款），`openspec/changes/cache-stub-physical-removal-2026-10/`
+落地并归档. **§4 commit 1 的 BYPASS mode 方案被否决**, 理由:
+- ADR-041 之后 `*_complete.h` 只是 `using ICacheComplete = ICacheSync;` 别名, 文件内
+  没有 `describe()` 可插分支; 唯一可改处是 `*_sync.h`, 而 `ICacheConfig` 是纯
+  `static constexpr` 常量 struct (无实例字段), 组件 ctor 只有 `(parent, name)` ——
+  库内不存在运行时 config 通道, `ch_module` 也不转发 ctor 参数
+- stub 语义不构成合法 cache 行为: `ready := req` 无视 `axi_ready` (吞 backpressure),
+  `data := axi_data` 无视 `axi_resp_valid` (把残留数据当有效数据), `axi_addr` 未做
+  block 对齐, `miss` 恒 false —— 写进 spec 只会成为错误 contract
+- 上游 improvement §5.4 / §6 决策 #2 的 architect 推荐本就是"不做 BYPASS"
+实际执行内容: `git rm include/cpu/cache/{i,d}_cache_stub.h` (pass-through stub 类
+`chlib::ICache` / `chlib::DCache` 一并消失); 3 个 stub 消费方**改而非删**
+(`test_cache_pipeline_integration.cpp` 5 个 TEST_CASE 全改用 `ICacheSync` /
+`DCacheSync`, 断言从 stub 直通语义换成真实 cold-miss → AXI fill → refilled-hit
+时序, 模板取自 `test_cache_sync.cpp`; `test_cache_simple.cpp` /
+`test_phase4_integration.cpp` 仅换类型, HazardUnit 相关 case 原样保留).
+测试可执行数不变 (CTEST_TOTAL 169 / non-perf 158). 本 ADR §1-§4 正文未改写,
+本条为 append-only 状态追加. 提前 6 个月执行的理由: 0 生产调用方 + 3 个 blocker
+已解除 (dual-backend cache 测试 / ch_reg init 修复 / riscv-mini wrapper 修复) +
+ADR-037 §3 的 6 个月 deprecation 观察期在本 change 内已由上述 3 项覆盖.
+
 ## 6. Future Work (Out of Scope)
 
 - A new `BYPASS` mode in `*_complete.h` is a substantive

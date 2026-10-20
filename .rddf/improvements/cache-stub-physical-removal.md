@@ -161,15 +161,20 @@ created_at: 2026-10-18
 
 | # | 决策 | architect 推荐 | 用户决定 |
 |---|------|----------------|----------|
-| 1 | 何时做 | 今天（deadline 提前 6 个月）| ? |
-| 2 | 加 BYPASS mode 到 `_complete.h`？| **不做**（架构污染）| ? |
-| 3 | `test_cache_pipeline_integration.cpp` 5 个 test_case | 全部改用 `_complete.h` | ? |
-| 4 | `test_cache_simple.cpp` 改而非删 | 改 | ? |
-| 5 | `test_phase4_integration.cpp` 改而非删 | 改 | ? |
-| 6 | 新增 `test_cache_complete_bypass.cpp`？| **可选**（加 1 个 = 160 tests；不加 = 159 tests 不变）| ? |
-| 7 | ADR-037 §5 Status 标记 executed | 标 | ? |
-| 8 | 走 openspec change 流程？| **走**（触及 header 删除 + 公共 header 树；按 root AGENTS.md OPENSPEC §3）| ? |
-| 9 | 走 rdd-workflow 完整 rdd-arch → rdd-planner → rdd-builder → rdd-verifier？ | **跳过 rdd-arch/planner**（已有 ADR-037 = 已是 arch 决策；本 change 是 ADR-037 §4 Implementation Order 执行；走 rdd-builder 即可）| ? |
+| 1 | 何时做 | 今天（deadline 提前 6 个月）| **今天**（2026-10-20）|
+| 2 | 加 BYPASS mode 到 `_complete.h`？| **不做**（架构污染）| **不做** —— 2026-10-20 确认走 variant (b)。理由：ADR-041 后 `*_complete.h` 已是 `*_sync.h` 的 alias（无 `describe()` 可改），`ICacheConfig` 是纯 `static constexpr` 常量 struct（无运行时 config 通道），bypass 无落点；且 stub 语义（`ready := req` / `data := axi_data` / 未对齐 `axi_addr`）不构成合法 cache 行为 |
+| 3 | `test_cache_pipeline_integration.cpp` 5 个 test_case | 全部改用 `_complete.h` | **全部改用 `_sync.h`**（5 个 case 全改，断言换真实 fill-then-hit 时序）|
+| 4 | `test_cache_simple.cpp` 改而非删 | 改 | **改** |
+| 5 | `test_phase4_integration.cpp` 改而非删 | 改 | **改** |
+| 6 | 新增 `test_cache_complete_bypass.cpp`？| **可选**（加 1 个 = 160 tests；不加 = 159 tests 不变）| **不加**（variant (b) 不引入 bypass 语义 → 无新测试；CTEST_TOTAL 保持 169）|
+| 7 | ADR-037 §5 Status 标记 executed | 标 | **标**（实现阶段 append-only 追加 dated "Executed" note）|
+| 8 | 走 openspec change 流程？| **走**（触及 header 删除 + 公共 header 树；按 root AGENTS.md OPENSPEC §3）| **走** |
+| 9 | 走 rdd-workflow 完整 rdd-arch → rdd-planner → rdd-builder → rdd-verifier？ | **跳过 rdd-arch/planner**（已有 ADR-037 = 已是 arch 决策；本 change 是 ADR-037 §4 Implementation Order 执行；走 rdd-builder 即可）| **跳过 rdd-arch/planner** |
+
+> 决议落档：2026-10-20 用户拍板 → openspec change
+> `openspec/changes/cache-stub-physical-removal-2026-10/`（proposal / tasks / spec delta
+> 已按 variant (b) 重写，spec delta 用 `## REMOVED Requirements` 退役
+> "stub_stub.h deprecation is preserved"）。
 
 ---
 

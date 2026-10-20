@@ -1,8 +1,8 @@
 ---
 id: objective-cache-stub-retired
-status: active
+status: completed
 created: 2026-10-19
-last_revised: 2026-10-19
+last_revised: 2026-10-20
 review_by: 2027-01-17
 owner: rdd-planner
 priority: P0
@@ -25,11 +25,16 @@ theme: cache stub 物理删除（ADR-037 deadline 2027-04-17）
 - 所有 stub 消费者迁移到 `ICacheSync` / `DCacheSync`（或 `_complete.h` 兼容 alias）
 - `test_cache_pipeline_integration.cpp` 重写为脱离 stub
 - 完成判据（done-when）：
-  - [ ] `git rm include/cpu/cache/{i,d}_cache_stub.h` 完成
-  - [ ] 0 个文件 `#include "*_cache_stub.h"`
-  - [ ] 2 个 SKIP-only test `git rm`
-  - [ ] `test_cache_pipeline_integration.cpp` 重写并绿
-  - [ ] CTEST_TOTAL 同步 + `verify_test_counts.sh` 绿
+  - [x] `git rm include/cpu/cache/{i,d}_cache_stub.h` 完成
+  - [x] 0 个文件 `#include "*_cache_stub.h"`
+  - [x] 3 个 stub 消费者**改而非删**（`test_cache_pipeline_integration.cpp` /
+        `test_cache_simple.cpp` / `test_phase4_integration.cpp` 全部改用
+        `ICacheSync` / `DCacheSync`；原计划"git rm 2 个 SKIP-only test"经用户决议
+        取消 —— 会连带丢失 HazardUnit / cache 共存 smoke 锚点）
+  - [x] `test_cache_pipeline_integration.cpp` 重写并绿（5 TEST_CASE 全改真实
+        cold-miss → fill → refilled-hit 时序，29 assertions PASS）
+  - [x] CTEST_TOTAL 同步 + `verify_test_counts.sh` 绿（计数不变：169 / non-perf 158 /
+        `tests/chlib/test_*.cpp`=29）
 
 ## 3. 架构依据
 
@@ -54,8 +59,8 @@ theme: cache stub 物理删除（ADR-037 deadline 2027-04-17）
 
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 2 条 → 转 completed）：
-  - [ ] ADR-037 §2 前置条件（cache-complete-rewrite + dual-backend-cache-tests）满足
-  - [ ] 调用面 grep 显示 0 个非 test 消费者
+  - [x] ADR-037 §2 前置条件（cache-complete-rewrite + dual-backend-cache-tests）满足
+  - [x] 调用面 grep 显示 0 个非 test 消费者
 - **No-Go 判据**（任一成立 → defer）：
   - deadline（2027-04-17）前 dual-backend-cache-tests 未落地
   - 发现 stub 仍是某 active 路径的唯一实现
@@ -73,3 +78,4 @@ theme: cache stub 物理删除（ADR-037 deadline 2027-04-17）
 |--------|------|------|---------------|------|
 | sprint-2026-10 | sprint-review | objective 创建（roadmap 首次初始化） | 激活，deadline 2027-04-17 | cache-complete-rewrite（ADR-039）已完成，前置条件部分满足 |
 | sprint-2026-10 | deferral-rationale | 实际删除推迟到 dual-backend-cache-tests 之后 | 延迟 | 避免同一批 cache test 被改两次（metis gap 分析） |
+| sprint-2026-10 | completion | objective 达成：stub 物理删除 + 3 个消费者改用 Sync 变体 | 走 **variant (b)**（ADR-037 §2 fallback），否决 §4 commit 1 的 BYPASS mode | ADR-041 后 `*_complete.h` 已是 `_sync.h` alias 无 `describe()` 可改；`ICacheConfig` 无运行时 config 通道；stub 语义（`ready := req` 无视 `axi_ready` / `data := axi_data` 无视 `axi_resp_valid`）不构成合法 cache 行为。提前 6 个月执行（0 生产调用方 + 3 blocker 已解除）。change `cache-stub-physical-removal-2026-10` 已 archive |

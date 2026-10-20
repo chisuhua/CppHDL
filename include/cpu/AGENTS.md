@@ -13,7 +13,6 @@ include/cpu/
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
 │   ├── i_cache_complete.h / d_cache_complete.h  # 兼容 shim (= *_sync.h 别名)
-│   ├── i_cache_stub.h / d_cache_stub.h       # [[deprecated]] pass-through
 │   ├── i_cache_prefetch.h                    # riscv-mini wrapper (instance ICacheSync)
 │   └── d_cache_write_buffer.h                # riscv-mini wrapper (instance DCacheSync)
 ├── pipeline/
@@ -81,7 +80,7 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`:
 | `test_hazard` | `tests/chlib/test_hazard_complete.cpp` | Hazard detection + forwarding |
 | `test_rv32i_pipeline` | `tests/test_rv32i_pipeline.cpp` | 5-stage pipeline integration (Catch2) |
 | `test_csr_unit` | `examples/riscv-mini/tests/test_csr_unit.cpp` | CSR register reset, R/W, MRET, exceptions, WFI, interrupts |
-| `test_phase4_chlib` | `tests/chlib/test_phase4_integration.cpp` | Phase-4 chlib / CPU integration smoke (cache stubs + pipeline) |
+| `test_phase4_chlib` | `tests/chlib/test_phase4_integration.cpp` | Phase-4 chlib / CPU integration smoke (cache 用 `ICacheSync` / `DCacheSync` + hazard) |
 
 `examples/riscv-mini/tests/` contains additional exploratory scripts
 (`test_pipeline_debug*.cpp`, `test_pipeline_minimal.cpp`, etc.) that

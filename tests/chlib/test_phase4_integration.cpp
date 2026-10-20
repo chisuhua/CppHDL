@@ -19,17 +19,16 @@
  *   `${PROJECT_SOURCE_DIR}/examples/riscv-mini/src` 以解析
  *   `rv32i_hazard_complete.h` 头文件。
  *
- * ICache / DCache are [[deprecated]] (2026-10-17 deprecate-cache-stubs);
- * suppress the local warning to preserve regression coverage.
+ * Cache 使用真实实现 `chlib::ICacheSync` / `chlib::DCacheSync` (ADR-039 ch_mem
+ * 重写 + ADR-041 Sync/Async 双变体)。原 pass-through stub 已于
+ * cache-stub-physical-removal-2026-10 物理删除，本文件不再需要任何
+ * `-Wdeprecated-declarations` 抑制。
  */
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include "catch_amalgamated.hpp"
 #include "rv32i_hazard_complete.h"   // 来自 examples/riscv-mini/src
-#include "cpu/cache/i_cache_stub.h"
-#include "cpu/cache/d_cache_stub.h"
+#include "cpu/cache/i_cache_sync.h"
+#include "cpu/cache/d_cache_sync.h"
 
 using namespace riscv;
 using namespace chlib;
@@ -43,8 +42,8 @@ TEST_CASE("Phase4 Integration - Basic Execution", "[phase4][basic][chlib]") {
 
     // 验证现有组件可以同时实例化 (HazardUnitComplete + ICache + DCache)
     ch::ch_device<HazardUnitComplete> hu_dev;
-    ch::ch_device<ICache> icache_dev;
-    ch::ch_device<DCache> dcache_dev;
+    ch::ch_device<ICacheSync> icache_dev;
+    ch::ch_device<DCacheSync> dcache_dev;
 
     REQUIRE(true);
 
@@ -108,7 +107,7 @@ TEST_CASE("Phase4 Integration - I-Cache", "[phase4][icache][chlib]") {
     ch::core::context ctx("phase4_icache");
     ch::core::ctx_swap swap(&ctx);
 
-    ch::ch_device<ICache>             icache_dev;
+    ch::ch_device<ICacheSync>             icache_dev;
 
     // 验证 I-Cache 可独立实例化 (详细接口测试见 chlib/test_cache_simple.cpp)
     REQUIRE(true);
@@ -124,7 +123,7 @@ TEST_CASE("Phase4 Integration - D-Cache", "[phase4][dcache][chlib]") {
     ch::core::context ctx("phase4_dcache");
     ch::core::ctx_swap swap(&ctx);
 
-    ch::ch_device<DCache>             dcache_dev;
+    ch::ch_device<DCacheSync>             dcache_dev;
 
     // 验证 D-Cache 可独立实例化 (详细接口测试见 chlib/test_cache_simple.cpp)
     REQUIRE(true);
@@ -141,8 +140,8 @@ TEST_CASE("Phase4 Integration - Full Pipeline", "[phase4][full][chlib]") {
 
     // 现有可共存组件：Hazard + ICache + DCache
     ch::ch_device<HazardUnitComplete> hu_dev;
-    ch::ch_device<ICache> icache_dev;
-    ch::ch_device<DCache> dcache_dev;
+    ch::ch_device<ICacheSync> icache_dev;
+    ch::ch_device<DCacheSync> dcache_dev;
 
     // 验证上述组件可以共存
     REQUIRE(true);
@@ -167,4 +166,3 @@ TEST_CASE("Phase4 Integration - Performance Benchmark", "[phase4][benchmark][chl
     SKIP("Rv32iPipelineWithCache not implemented; perf benchmark awaiting reconstruction.");
 }
 
-#pragma GCC diagnostic pop
