@@ -105,12 +105,17 @@ public:
 
         // 写响应：WDATA 被接受之后才拉高，并保持到 BREADY
         io().bvalid = select(b_valid, ch_bool(true), ch_bool(false));
-        io().bresp = ch_uint<2>(0_d);  // OKAY
 
         // 写寄存器
+        // 写侧解码与读侧 + 头部文档一致：0x00→DATA_OUT、0x08→DIRECTION、
+        // 0x0C→INTERRUPT（0x04 DATA_IN 为只读，写入被忽略并回 DECERR）
         auto sel_data_out = (addr_bits == ch_uint<32>(0_d));
-        auto sel_direction = (addr_bits == ch_uint<32>(1_d));
-        auto sel_interrupt = (addr_bits == ch_uint<32>(2_d));
+        auto sel_direction = (addr_bits == ch_uint<32>(2_d));
+        auto sel_interrupt = (addr_bits == ch_uint<32>(3_d));
+
+        // 未映射地址（此处为只读的 0x04 DATA_IN）→ DECERR
+        auto write_mapped = sel_data_out | sel_direction | sel_interrupt;
+        io().bresp = select(write_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
 
         auto we_data_out = select(w_handshake, sel_data_out, ch_bool(false));
         auto we_direction = select(w_handshake, sel_direction, ch_bool(false));

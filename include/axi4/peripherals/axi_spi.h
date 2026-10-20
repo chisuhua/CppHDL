@@ -114,7 +114,13 @@ public:
         // AXI handshake
         ch_reg<ch_bool> busy;
         ch_reg<ch_bool> aw_done;
+        ch_reg<ch_bool> b_valid;   // W 已接收，B 响应待取
         ch_reg<ch_bool> r_valid;
+        // 地址锁存寄存器：AXI 只要求 AWADDR/ARADDR 保持到对应握手，
+        // 握手后 master 即可改写它们；W 可能延后多个周期到达，
+        // 因此地址必须在握手时锁存，否则写会落到改变后 AWADDR 指向的寄存器。
+        ch_reg<ch_uint<32>> addr_reg;
+        ch_reg<ch_uint<32>> ar_addr_reg;
         // Register storage
         ch_reg<ch_uint<32>> tx_data_reg;
         ch_reg<ch_uint<32>> rx_data_reg;
@@ -134,7 +140,10 @@ public:
         TransferState()
             : busy(ch_bool(false)),
               aw_done(ch_bool(false)),
+              b_valid(ch_bool(false)),
               r_valid(ch_bool(false)),
+              addr_reg(0_d),
+              ar_addr_reg(0_d),
               tx_data_reg(0_d),
               rx_data_reg(0_d),
               status_reg(0_d),
@@ -301,27 +310,40 @@ public:
         ch_uint<BAUD_WIDTH> wdata_baud = ch_uint<BAUD_WIDTH>(wdata_baud_masked);
         s.baud_reg->next = select(!io().rst_n, ch_uint<BAUD_WIDTH>(100_d), select(we_baud, wdata_baud, s.baud_reg));
 
-        // Read data mux
+        // Read data mux —— 基于**锁存**的地址
+        auto rd_addr_latched = s.ar_addr_reg >> ch_uint<32>(2_d);
+        rd_addr_latched = rd_addr_latched & ch_uint<32>(0x0F);
         ch_uint<32> read_val(0_d);
-        read_val = select((io().araddr >> ch_uint<32>(2_d) & ch_uint<32>(0x0F)) == ch_uint<32>(0_d), s.tx_data_reg, read_val);
-        read_val = select((io().araddr >> ch_uint<32>(2_d) & ch_uint<32>(0x0F)) == ch_uint<32>(1_d), s.rx_data_reg, read_val);
-        read_val = select((io().araddr >> ch_uint<32>(2_d) & ch_uint<32>(0x0F)) == ch_uint<32>(2_d), s.status_reg, read_val);
-        read_val = select((io().araddr >> ch_uint<32>(2_d) & ch_uint<32>(0x0F)) == ch_uint<32>(3_d), s.ctrl_reg, read_val);
+        read_val = select(rd_addr_latched == ch_uint<32>(0_d), s.tx_data_reg, read_val);
+        read_val = select(rd_addr_latched == ch_uint<32>(1_d), s.rx_data_reg, read_val);
+        read_val = select(rd_addr_latched == ch_uint<32>(2_d), s.status_reg, read_val);
+        read_val = select(rd_addr_latched == ch_uint<32>(3_d), s.ctrl_reg, read_val);
         ch_uint<32> baud_32 = ch_uint<32>(s.baud_reg);
-        read_val = select((io().araddr >> ch_uint<32>(2_d) & ch_uint<32>(0x0F)) == ch_uint<32>(4_d), baud_32, read_val);
+        read_val = select(rd_addr_latched == ch_uint<32>(4_d), baud_32, read_val);
         io().rdata = read_val;
         io().rresp = ch_uint<2>(0_d);
 
-        // aw_done and r_valid
+        // aw_done / b_valid / r_valid
+        // 事务真正完成的条件（不是裸 bready/rready）
+        auto write_done = select(s.b_valid, io().bready, ch_bool(false));
+        auto read_done = select(s.r_valid, io().rready, ch_bool(false));
+
+        // aw_done 仅在 B 握手完成时清零 —— 若在裸 bready 上清零，
+        // master 常态拉高 BREADY 时 W 永远不会被接受。
         s.aw_done->next = select(!io().rst_n, ch_bool(false),
-                                  select(aw_handshake, ch_bool(true), select(io().bready, ch_bool(false), s.aw_done)));
+                                  select(aw_handshake, ch_bool(true),
+                                         select(write_done, ch_bool(false), s.aw_done)));
+        // b_valid: WDATA 被接受后置位，保持到 BREADY
+        s.b_valid->next = select(!io().rst_n, ch_bool(false),
+                                 select(w_handshake, ch_bool(true),
+                                        select(io().bready, ch_bool(false), s.b_valid)));
         s.r_valid->next = select(!io().rst_n, ch_bool(false),
                                   select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), s.r_valid)));
         s.busy->next = select(!io().rst_n, ch_bool(false),
                               select(aw_handshake, ch_bool(true),
                                      select(ar_handshake, ch_bool(true),
-                                            select(io().bready, ch_bool(false),
-                                                   select(io().rready, ch_bool(false), s.busy)))));
+                                            select(write_done, ch_bool(false),
+                                                   select(read_done, ch_bool(false), s.busy)))));
     }
 
     // Interrupt: combine transfer-complete and RX-overrun events, masked by INT_EN.
@@ -337,9 +359,10 @@ public:
         // ========================================================================
         // AXI4-Lite Address Decode
         // ========================================================================
-        auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
+        // 地址解码 —— 基于**锁存**的地址
+        auto wr_addr = s.addr_reg >> ch_uint<32>(2_d);
         wr_addr = wr_addr & ch_uint<32>(0x0F);
-        auto rd_addr = io().araddr >> ch_uint<32>(2_d);
+        auto rd_addr = s.ar_addr_reg >> ch_uint<32>(2_d);
         rd_addr = rd_addr & ch_uint<32>(0x0F);
 
         // Write/read handshakes
@@ -347,15 +370,29 @@ public:
         io().awready = aw_handshake;
         auto w_handshake = select(io().wvalid, s.aw_done, ch_bool(false));
         io().wready = w_handshake;
-        io().bvalid = select(s.aw_done, ch_bool(true), ch_bool(false));
+        // BVALID 由 b_valid 寄存器驱动：WDATA 被接受后才拉高，保持到 BREADY
+        io().bvalid = select(s.b_valid, ch_bool(true), ch_bool(false));
         auto ar_handshake = select(io().arvalid, select(s.busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().arready = ar_handshake;
         io().rvalid = select(s.r_valid, ch_bool(true), ch_bool(false));
+
+        // 地址锁存（AW / AR 握手时采样）
+        s.addr_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                  select(aw_handshake, io().awaddr, s.addr_reg));
+        s.ar_addr_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                     select(ar_handshake, io().araddr, s.ar_addr_reg));
 
         // Register write enables
         auto we_tx_data = select(w_handshake, (wr_addr == ch_uint<32>(0_d)), ch_bool(false));
         auto we_ctrl = select(w_handshake, (wr_addr == ch_uint<32>(3_d)), ch_bool(false));
         auto we_baud = select(w_handshake, (wr_addr == ch_uint<32>(4_d)), ch_bool(false));
+
+        // BRESP：先前本文件**完全没有驱动** BRESP（Verilog 里是悬空 wire）；
+        // 未映射地址 → DECERR
+        auto write_mapped = select(wr_addr == ch_uint<32>(0_d), ch_bool(true), ch_bool(false))
+                           | select(wr_addr == ch_uint<32>(3_d), ch_bool(true), ch_bool(false))
+                           | select(wr_addr == ch_uint<32>(4_d), ch_bool(true), ch_bool(false));
+        io().bresp = select(write_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
 
         // Control register bits
         auto ctrl_bit0 = bits<0, 0>(s.ctrl_reg);

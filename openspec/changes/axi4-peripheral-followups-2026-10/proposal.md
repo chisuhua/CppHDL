@@ -17,13 +17,14 @@ AW→W 相位分离 + 响应保持）。
 | F2 | `bvalid` 退化为组合脉冲（不保持） | `include/axi4/peripherals/axi_pwm.h:116,153`、`include/axi4/peripherals/axi_i2c.h:149,290` | 两处赋值，**后执行者覆盖先执行者** → 实际生效 `bvalid = w_handshake`（组合、仅 1 周期），违反 AXI4-Lite 响应保持。`axi_i2c.h` 的覆盖顺序：`build_register_bank()`（内含 L149）在 `describe()` L310 被调用 → **L149 覆盖 L290** |
 | F3 | `bvalid = aw_done`（BVALID 早于 WDATA） | `include/axi4/peripherals/axi_spi.h:350` | **只有 1 处赋值**（非双赋值），但 BVALID 在 AW 完成、**WDATA 尚未被接受**时就拉高 → 违反"BVALID 在 WDATA 之后" |
 | F2' | 三者缺 `b_valid` 寄存器、`aw_done` 在裸 `bready` 上清零、缺地址锁存 | `axi_pwm.h:245` / `axi_i2c.h:172` / `axi_spi.h:316`（`aw_done->next`） | `aw_done->next = ... select(io().bready, false, aw_done)` → master 常态拉高 BREADY 时 `aw_done` 被提前清零 → W 永不被接受。**这与主 spec 规范形态 Requirement 第 326 行直接冲突**。三者均无 `addr_reg`/`ar_addr_reg` → 与主 spec 第 7 条（地址锁存）冲突 |
-| F4 | UART status / irq 语义缺失 | `include/axi4/peripherals/axi_uart.h` | TX_EMPTY status 位是死代码；`tx_empty`/`rx_valid` 无 next 逻辑；`irq` 恒 0 |
+| F4 | UART status / irq 语义缺失 | `include/axi4/peripherals/axi_uart.h` | TX_EMPTY status 位是死代码（`status_reg->next` 双赋值，后者只处理 RX_VALID → bit0 永不清）；`tx_empty`/`rx_valid` 无 next 逻辑；`irq` 恒 0。**范围决策（2026-10-20）**：TX 侧实现 1 深缓冲（`tx_empty` 真实语义），RX 侧**不实现引擎**、明确标注"未实现"—— `irq` 恒 0 是**设计结果**而非 bug |
 | F5 | 孤儿头 `rv32i_soc.h` | `examples/riscv-mini/src/rv32i_soc.h` | 全仓库无任何 TU include（`grep -rn rv32i_soc` 除自身外零命中）→ 改动不会被编译；其中还实例化了 `AxiLiteUart`（缺 `rst_n` 接线） |
-| F6 | `AxiSocTop` example 的 `GPIO_OUT` 打印 0x0 | `examples/axi4/axi_soc_example.cpp` | 写 0xAB 未落地。**实测根因（见下方 F6 章节）**：`AxiLiteTestMaster` 的 `wvalid = write_start && awready` 依赖跨模块组合路径，而 simulator 的组合求值是**单遍无拓扑序** → master 读到上一拍的 `awready` → WVALID 恒 0。与 peripheral 无关；无 assert → CI 察觉不到 |
+| F6 | `AxiSocTop` example 的 `GPIO_OUT` 打印 0x0 | `examples/axi4/axi_soc_example.cpp` + `include/axi4/axi4_lite_matrix.h` | **已定位并修复**：写 0xAB 未落地。根因两层：(a) `AxiLiteTestMaster` 的 `wvalid = write_start && awready` —— 用从设备的 ready gate 自己的 valid（违 AXI）且只拉一拍，新规范形态下 W 在 AW 之后一拍才被接受 → W 永不被接受；(b) **`AxiLiteMatrix2x2` 的 6 类缺陷**（端口方向声明反了 24 处使赋值成运行时 no-op、AWVALID/ARVALID/WVALID 转发完全缺失、B/R 响应转发缺失、AW 地址链式赋值自读成组合环、仲裁器按 AW 握手轮转、grant 不看读通道）—— 此前全被"赋值是 no-op"掩盖 |
 | F7 | 主 spec 的 `AxiLiteDma` 类名不存在 | `openspec/specs/dual-backend-test-coverage/spec.md` | **已验证满足**：`git log -p -- openspec/specs/dual-backend-test-coverage/spec.md \| grep -c "AxiLiteDma"` = 0 → 主 spec 从未出现过该错误类名。**注**：该 Requirement 的 MODIFIED 由下游 change `dual-backend-axi4-peripherals-extended-2026-10` 统一负责（它重写整个 peripheral 列表），本 change 只做**验证**，不重复提交 MODIFIED delta（避免两个 change 同时 MODIFIED 同一 Requirement 造成 archive 冲突） |
 | F8 | 顶层 SoC 未暴露 `rst_n` | `examples/axi4/axi_soc_example.cpp` 的 `AxiSocTop` | peripheral 有复位口但 SoC 顶层没有；复位逃生路径无法从 SoC 外部触达 |
 | F9 | GPIO 写侧/读侧地址映射不一致 | `include/axi4/peripherals/axi_gpio.h` | 写侧：`0x00→DATA_OUT`、`0x04→DIRECTION`、`0x08→INTERRUPT`；读侧：`0x00→DATA_OUT`、`0x04→DATA_IN`、`0x08→DIRECTION`、`0x0C→INTERRUPT`。按头部文档的映射写 DIRECTION(0x08) 会落到 INTERRUPT 寄存器；写侧比读侧少了 DATA_IN 一档，整体错位一档。**影响面已核实**：唯一写 0x04 的是 `tests/test_axi_gpio.cpp`（`kRegDirectionWrite`）；example 只**读** 0x04 → 低风险 |
-| F10 | `wstrb` 被忽略 + `spi` 不驱动 `bresp` + 未映射地址返回 OKAY | 全部 6 个 peripheral | ① `wstrb` 只在端口声明出现，**无任何一处使用** → 写始终整字覆盖（违 AXI4-Lite 字节写语义）；② `axi_spi.h` **完全没有 `io().bresp = ...` 赋值** → BRESP 悬空（Verilog 里是未驱动 wire）；③ 全部 peripheral 对未解码地址返回 `bresp=OKAY`（`include/axi4/AGENTS.md` 已列为 ANTI-PATTERN，但主 spec 规范形态 Requirement 未收录） |
+| F10 | `spi` 不驱动 `bresp` + 未映射地址返回 OKAY | `include/axi4/peripherals/axi_spi.h` + 全部 6 个 peripheral | ① `axi_spi.h` **完全没有 `io().bresp = ...` 赋值** → BRESP 悬空（Verilog 里是未驱动 wire）；② 全部 peripheral 对未解码地址返回 `bresp=OKAY`（`include/axi4/AGENTS.md` 已列为 ANTI-PATTERN）。**范围决策（2026-10-20，用户拍板）**：只修这两处真缺陷；`wstrb` 字节写另拆 change（它要改 6 个 peripheral 的所有写路径并定义字节道语义，属新增功能而非修缺陷） |
+| F11 | 子模块输入端口的值在 tick 内被覆盖（框架层） | `src/ast/instr_io.cpp` / `src/simulator.cpp` | 实测：example 中 `sim.set_input_value(top.io().write, false)` 写进 `data_map[4]=0`，但一次 `tick()` 后 `data_map[4]` 变回 1（与同时被置位的 `start` 相同）→ 顶层输入节点的值在求值过程中被覆盖，导致**测试台无法在仿真中途改变子模块的输入**（读事务因此无法发起）。该节点 `num_srcs()==0`（无 `<<=` 驱动），按 `instr_input::eval()` 语义不应被写 —— 需定位真正的写入者 |
 
 ## 目标
 
@@ -75,12 +76,22 @@ AW→W 相位分离 + 响应保持）。
 且 `spi_behavior` 的等待循环能等到 `bvalid` → **新旧形态都能通过**，
 但改完后 MUST 重跑确认（`ctest -R "test_axi_(pwm|i2c|spi)"`）。
 
-### F4: UART status / irq 语义
+### F4: UART status / irq 语义 —— **定案：最小诚实**
 
-- 明确 `tx_empty` / `rx_valid` 的状态机（何时置位 / 清除）
-- `status_reg` bit0 = TX_EMPTY、bit1 = RX_VALID（与寄存器映射表 L9 对齐）
-- `irq` 由 `rx_valid` 驱动（现状 L137 已是，但因 `rx_valid` 恒 false 而恒 0）
-- 需要决定 TX 侧的"发送完成"事件来源（当前 UART TX 是简化实现：写 TX_DATA 即发送）
+**范围决策（2026-10-20，用户拍板）**：只做 TX 侧的 1 深缓冲 + RX 侧的"未实现"标注，
+**不实现 UART 串行引擎**（RX 引擎 / TX 移位寄存器 / 波特率）—— 那属新增功能，
+另拆 change `axi4-peripheral-deferred-2026-10`。
+
+- **TX 侧**：`tx_data_reg` 作为 1 深 TX holding register
+  - 写 TX_DATA → `tx_empty` 置 0（"缓冲非空"）；下一拍回到 1（简化模型：写即完成）
+  - `tx_empty->next = select(!rst_n, true, select(we_tx_data, false, tx_empty))`
+- **`status_reg` 单一赋值点**（当前只有 RX_VALID 一支，TX_EMPTY 位是死代码）：
+  - bit0 = TX_EMPTY（跟随 `tx_empty`）
+  - bit1 = RX_VALID（跟随 `rx_valid`）
+- **RX 侧**：`rx_valid` 恒 false（**无 RX 引擎**）→ `irq` 恒 0 是**设计结果**而非 bug
+  - MUST 在 `axi_uart.h` 注释中显式写明"RX 引擎未实现，`uart_rx` 输入未使用"
+  - `uart_tx` 保持空闲高电平（无移位引擎，不产生伪波形）
+- **遗留**：`uart_rx` 输入端口保留（接口不变），待 deferred change 实现引擎
 
 ### F5: 孤儿头 `rv32i_soc.h` 处置 —— **定案：选项 A（删除）**
 
@@ -92,35 +103,45 @@ AW→W 相位分离 + 响应保持）。
   （所有寄存器恒为 init 值、AXI 事务不响应）
 - 选项 B（纳入构建 + 补 `rst_n` 接线 + 补测试）成本显著更高，**不推荐**
 
-### F6: `AxiSocTop` example 的写路径 —— **根因已实测定位**
+### F6: `AxiSocTop` example 的写路径 —— **已定位并修复**
 
 **症状**：`GPIO_OUT = 0x0`（写 0xAB 未落地），且**新旧 peripheral 形态下都是 0x0**
-（已用 `git show 15545d3^:` 回退验证 → **不是**本轮改动引入的回归）。
+（已用 `git show 15545d3^:` 回退验证 → **不是**规范形态改动引入的回归）。
 
-**根因（双重，均在 example 侧，与 peripheral 无关）**：
+**根因 A：`AxiLiteTestMaster` 的 WVALID 生成方式违 AXI**
 
-1. **组合求值是单遍的，跨模块组合路径读到陈旧值**
-   - `src/simulator.cpp:257` `eval_combinational()` 对 `combinational_instr_list_`
-     **单遍遍历，无拓扑序、不迭代到不动点**
-   - 节点按创建顺序入列；`AxiSocTop::describe()` 的创建顺序是
-     `master`(L154) → `matrix`(L157) → `gpio`(L160) → `uart`(L163)
-   - `master` 的组合节点（`wvalid` L89 / `bready` L95）**先于** `gpio`/`matrix`
-     的组合输出被求值 → master 读到的是**上一拍**的 `awready` / `bvalid`
-2. **master 的 WVALID 生成方式违 AXI 且不满足新规范形态**
-   - `io().wvalid = select(write_start, io().awready, false)`（L88-89）
-     —— 用**从设备的 ready** gate 自己的 valid（AXI 禁止），
-     且只在 `write_start` 那一拍可能为 1
-   - 旧形态下 `w_handshake = wvalid && aw_handshake`（同拍即可接受）→ 侥幸能写
-   - **新规范形态下 `w_handshake = wvalid && aw_done`（需 AW 握手后 1 拍）→ 必挂**
+- `io().wvalid = select(write_start, io().awready, false)` —— 用**从设备的 ready**
+  gate 自己的 valid（AXI 禁止），且只在 `write_start` 那一拍可能为 1
+- 旧形态下 `w_handshake = wvalid && aw_handshake`（同拍即可接受）→ 侥幸能写
+- **新规范形态下 `w_handshake = wvalid && aw_done`（需 AW 握手后一拍）→ 必挂**
+- **修复**：master 改为状态驱动（2-bit state + `aw_done`/`w_done`/`ar_done` 标志）——
+  `AWVALID` 保持到 AW 握手、`WVALID` 保持到 W 握手、`BREADY` 在写事务期间恒拉高；
+  `awaddr`/`wdata` 全程稳定；读数据在 R 握手时捕获到 `rdata_reg`
 
-**正解**：master 的 `wvalid` / `bready` 改为**状态驱动**（`state == WRITE` → `wvalid = 1`，
-`state` 保持到 `write_done`），**不依赖从设备的组合输出**；`awaddr` / `wdata` 在整个
-写事务期间保持稳定。**不要**靠调整模块创建顺序来"碰巧"让单遍求值 work —— 那是脆弱的。
+**根因 B：`AxiLiteMatrix2x2`（`include/axi4/axi4_lite_matrix.h`）的 6 类缺陷**
 
-**附带产出（架构约束，应写入 `include/axi4/AGENTS.md`）**：
-CppHDL 的组合求值是单遍无拓扑序 → **跨模块组合路径要求"生产方先于消费方"创建**，
-否则同一拍内读到上一拍的陈旧值。规范形态（`w_handshake` 只依赖输入与寄存器）天然免疫；
-任何"用从设备 ready gate 自己 valid"的 master 都会踩坑。
+此前**全部被掩盖**：矩阵的端口方向声明反了（"父驱动"与"矩阵驱动"搞反），
+使所有 `io().x = ...` 赋值都变成**运行时 no-op**
+（`[ERROR] Cannot assign value to input port!`）→ 端口"看起来"在连，
+实际信号恒为未驱动值。逐项：
+
+| # | 缺陷 | 后果 |
+|---|---|---|
+| B1 | 24 个端口方向声明反了 | 所有矩阵内部赋值是 no-op → 全部转发信号恒为未驱动值 |
+| B2 | `s0/s1_awvalid`、`s0/s1_awprot`、`s0/s1_arvalid`、`s0/s1_arprot` **完全无赋值** | 从设备的 AWVALID/ARVALID 恒 0 → 从设备永不接受地址 |
+| B3 | `s0/s1_wvalid` **完全无赋值** | 从设备的 WVALID 恒 0 → 写数据永不被接受 |
+| B4 | `m0/m1_rresp` 无赋值；B/R 响应通道方向反了 | 响应信号悬空 |
+| B5 | AW 地址通道"两次赋值 + 读回自己"（优先级 mux 写成链式赋值） | 组合环 → 拓扑排序报 `Cycle detected in IR graph`（因 B1 掩盖而未暴露） |
+| B6 | 仲裁器以 **AW 握手**为 `transaction_done`；`grant` 只看 `awvalid`、不看读通道；读地址未单独解码 | AW 握手一完成就切换授权 → W 被路由到别的从设备；读事务永远拿不到总线 |
+
+**修复**：端口方向按"父驱动 → `ch_in`；矩阵驱动 → `ch_out`"全面重写；补齐全部转发
+赋值；AW 地址改**单次赋值**的优先级 mux（消除自环）；仲裁器改为按**响应握手**轮转；
+新增**在途事务跟踪**（`m0/m1_active` + `m0/m1_route_s1`）—— AW 握手时锁存路由，
+W 通道按锁存路由转发（AXI 允许 AW 与 W 相隔任意周期）；读通道按**读地址**单独解码。
+
+**结果**：`GPIO_OUT = 0xab` ✅（example 写路径打通）。
+读路径（Test 2）**仍未打通** —— 根因是框架层的"子模块输入端口值在 tick 内被覆盖"
+（见 **F11**），已在 example 中显式标注为已知限制，不再静默"成功"。
 
 ### F7: 主 spec 类名修正 —— **已验证满足（空验证项）**
 
@@ -147,18 +168,19 @@ CppHDL 的组合求值是单遍无拓扑序 → **跨模块组合路径要求"�
 - 同步更新 `tests/test_axi_gpio.cpp` 中依赖写侧旧映射的用例
   （当前用 `kRegDirectionWrite = 0x04` 锁定旧行为）
 
-### F10: `wstrb` 字节写语义 + `bresp` 完整性
+### F10: `bresp` 完整性 + 未映射地址 DECERR —— **定案：只修真缺陷**
 
-- **`wstrb` 被忽略**：6 个 peripheral 的 `wstrb` 只出现在端口声明，写路径
-  （`select(we_xxx, io().wdata, xxx_reg)`）**整字覆盖**，违 AXI4-Lite 字节写语义
-  - 改法：写掩码合并（`new = (old & ~mask) | (wdata & mask)`），`mask` 由 `wstrb` 逐字节展开
-  - 影响面：6 个 peripheral 的所有 `ch_reg` 写路径
+**范围决策（2026-10-20，用户拍板）**：`wstrb` 字节写**不在本 change**，
+另拆 change `axi4-peripheral-deferred-2026-10`（它要改 6 个 peripheral 的所有写路径
+并定义字节道语义，属新增功能而非修缺陷）。
+
 - **`axi_spi.h` 不驱动 `bresp`**：`grep -c "io().bresp = " include/axi4/peripherals/axi_spi.h` = 0
   → BRESP 悬空（Verilog 里是未驱动 wire，interpreter 里靠默认值 0 侥幸为 OKAY）
   - 改法：与其它 peripheral 一致 `io().bresp = ch_uint<2>(0_d);`
 - **未映射地址返回 OKAY**：全部 peripheral 对未解码地址返回 `bresp=OKAY`，
   与 `include/axi4/AGENTS.md` 已有的 ANTI-PATTERN"Unmapped address DECERR"冲突
   - 改法：地址未命中任何 `sel_*` 时返回 `DECERR(3)`
+  - 前提：地址解码已锁存（`addr_reg` / `ar_addr_reg`）→ 响应可正确归属到该笔事务
 
 ## 非目标（Out of Scope）
 
@@ -199,12 +221,12 @@ CppHDL 的组合求值是单遍无拓扑序 → **跨模块组合路径要求"�
 - **AND** `cd build && ctest -R "test_axi_(pwm|i2c|spi)" --output-on-failure` → 全 PASS
   （**防假阳性**：`_behavior` 测试是 dual-backend 的，改坏会同时挂两个后端）
 
-### Scenario: F10 字节写与 bresp 完整性
+### Scenario: F10 bresp 完整性与未映射地址 DECERR
 
-- **WHEN** 对 6 个 peripheral 统计 `io().wstrb` 的**使用**（非声明）次数
-- **THEN** MUST ≥ 1（写路径 MUST 消费字节掩码）
-- **AND** `grep -c "io().bresp = " include/axi4/peripherals/axi_spi.h` ≥ 1（BRESP MUST 被驱动）
+- **WHEN** 对 6 个 peripheral 执行 `grep -c "io().bresp = " <file>`
+- **THEN** 每个文件 MUST 命中 ≥ 1（BRESP MUST 被驱动）
 - **AND** 未解码地址 MUST 返回 `DECERR`（而非 OKAY）
+- **AND** `wstrb` 字节写 MUST NOT 被当作本 change 的验收项（见 deferred change）
 
 ### Scenario: F5 孤儿头处置完成
 

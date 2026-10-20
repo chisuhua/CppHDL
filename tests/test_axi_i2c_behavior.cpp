@@ -21,6 +21,7 @@
  */
 
 #include "catch_amalgamated.hpp"
+#include "axi_lite_slave_fixture.h"
 #include "axi4/peripherals/axi_i2c.h"
 #include "ch.hpp"
 #include "component.h"
@@ -39,35 +40,25 @@ using I2c16 = axi4::AxiLiteI2c<16>;
 // ============================================================================
 
 // Combinational AXI4-Lite write: assert + read BRESP in same cycle.
+// AXI4-Lite write —— 复用共享的**协议合规** master (tests/axi_lite_slave_fixture.h)
+// 旧写法（断言即撤的一次性脉冲）在规范形态下不合法：
+// AW 握手后仍持有 AWVALID 会开出第二笔事务，而 master 随后撤掉 AWVALID
+// → 该笔永远等不到 WDATA → busy 永久卡住。
 static inline void axi_write_assert_bresp(
     ch::Simulator &sim,
     I2c16 &i2c,
     uint32_t addr, uint32_t data) {
-    sim.set_input_value(i2c.io().awaddr,  addr);
-    sim.set_input_value(i2c.io().awvalid, 1);
-    sim.set_input_value(i2c.io().wdata,   data);
-    sim.set_input_value(i2c.io().wvalid,  1);
-    sim.set_input_value(i2c.io().bready,  1);
-    sim.tick();
-    sim.set_input_value(i2c.io().awvalid, 0);
-    sim.set_input_value(i2c.io().wvalid,  0);
-    sim.tick();
+    ch_test::axi_lite::write_io(sim, i2c.io(), addr, data);
 }
 
-// Combinational AXI4-Lite read: assert + read rdata in same cycle.
+// AXI4-Lite read —— 复用共享的协议合规 master。
+// 规范形态下 R 响应在 AR 握手**之后**才拉高并保持到 RREADY，
+// 必须等 RVALID 再采样 RDATA。
 static inline uint64_t axi_read_assert_rdata(
     ch::Simulator &sim,
     I2c16 &i2c,
     uint32_t addr) {
-    sim.set_input_value(i2c.io().araddr,  addr);
-    sim.set_input_value(i2c.io().arvalid, 1);
-    sim.set_input_value(i2c.io().rready,  1);
-    sim.tick();
-    auto rdata = static_cast<uint64_t>(
-        sim.get_port_value(i2c.io().rdata));
-    sim.set_input_value(i2c.io().arvalid, 0);
-    sim.tick();
-    return rdata;
+    return ch_test::axi_lite::read_io(sim, i2c.io(), addr);
 }
 
 // Initialize i2c to idle state + reset asserted (rst_n=0).
@@ -214,6 +205,10 @@ DUAL_BACKEND_TEST_PAIR(
     "AxiLiteI2c - rst_n=0 reset clears CTRL register",
     "[axi][i2c][behavior][rst-n-reset][dual]",
     [&]() {
+        // 先建立初始态（复位脉冲 + 释放复位）——
+        // 未驱动的 rst_n 读出为 0 = 永久复位，peripheral 不响应任何 AXI 事务
+        i2c_init(sim, dev.instance());
+
         // First write CTRL = 0x1 (ENABLE bit set)
         axi_write_assert_bresp(sim, dev.instance(), 0x00, 0x1);
 
@@ -222,15 +217,12 @@ DUAL_BACKEND_TEST_PAIR(
         sim.tick();
         sim.tick();
 
-        // Read CTRL after reset (must specify araddr=0x00)
-        sim.set_input_value(dev.instance().io().araddr,  0x00);
-        sim.set_input_value(dev.instance().io().arvalid, 1);
-        sim.set_input_value(dev.instance().io().rready,  1);
+        // 复位**期间** peripheral 处于复位态（r_valid 被清零 → 不响应 AXI 事务），
+        // 且读地址锁存也被复位清零 → 此时采样 RDATA 没有意义。先释放复位再读回。
+        sim.set_input_value(dev.instance().io().rst_n, 1);
         sim.tick();
-        auto ctrl_after_reset = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rdata));
-        sim.set_input_value(dev.instance().io().arvalid, 0);
-        sim.tick();
+
+        auto ctrl_after_reset = axi_read_assert_rdata(sim, dev.instance(), 0x00);
 
         // After rst_n=0 reset, CTRL = 0
         REQUIRE(ctrl_after_reset == 0x0ULL);

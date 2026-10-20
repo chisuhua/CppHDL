@@ -76,43 +76,68 @@ public:
     }
     
     void describe() override {
-        ch_reg<ch_bool> state(ch_bool(false));
-        
-        // 写事务
+        // 状态：0=idle, 1=write, 2=read
+        ch_reg<ch_uint<2>> state(0_d);
+        // 各通道的握手完成标志 —— AXI4-Lite 允许 AW 与 W **相隔任意周期**
+        // （slave 侧是相位分离的），因此 master 的 AWVALID / WVALID 必须
+        // 各自保持到对应握手完成，不能只拉一拍。
+        ch_reg<ch_bool> aw_done(ch_bool(false));
+        ch_reg<ch_bool> w_done(ch_bool(false));
+        ch_reg<ch_bool> ar_done(ch_bool(false));
+        // 读数据在 R 握手时捕获（slave 的 RDATA 在后续事务中可能变化）
+        ch_reg<ch_uint<32>> rdata_reg(0_d);
+
+        auto is_idle = (state == ch_uint<2>(0_d));
+        auto is_write = (state == ch_uint<2>(1_d));
+        auto is_read = (state == ch_uint<2>(2_d));
+
         auto start_and_write = select(io().start, io().write, ch_bool(false));
-        auto not_state = select(state, ch_bool(false), ch_bool(true));
-        auto write_start = select(start_and_write, not_state, ch_bool(false));
-        
-        io().awvalid = write_start;
-        io().awaddr = io().addr;
-        auto wvalid_cond = select(write_start, io().awready, ch_bool(false));
-        io().wvalid = wvalid_cond;
-        io().wdata_axi = io().wdata;
-        
-        auto write_done = select(io().bvalid, io().bready, ch_bool(false));
-        auto next_state_write = select(write_start, ch_bool(true), select(write_done, ch_bool(false), state));
-        
-        io().bready = select(io().bvalid, state, ch_bool(false));
-        io().done = write_done;
-        
-        // 读事务
         auto not_write = select(io().write, ch_bool(false), ch_bool(true));
         auto start_and_not_write = select(io().start, not_write, ch_bool(false));
-        auto read_start = select(start_and_not_write, not_state, ch_bool(false));
-        
-        io().arvalid = read_start;
+
+        auto write_start = select(start_and_write, is_idle, ch_bool(false));
+        auto read_start = select(start_and_not_write, is_idle, ch_bool(false));
+
+        // ---------------- 写通道 ----------------
+        // VALID 由**自身状态**驱动 —— 不得用从设备的 ready gate 自己的 valid
+        // （AXI 禁止；且 slave 侧是相位分离的，W 会在 AW 之后一拍才被接受）
+        auto aw_active = select(write_start, ch_bool(true),
+                                 select(is_write, select(aw_done, ch_bool(false), ch_bool(true)), ch_bool(false)));
+        auto w_active = select(write_start, ch_bool(true),
+                                select(is_write, select(w_done, ch_bool(false), ch_bool(true)), ch_bool(false)));
+        io().awvalid = aw_active;
+        io().awaddr = io().addr;      // 事务期间保持稳定
+        io().wvalid = w_active;
+        io().wdata_axi = io().wdata;  // 事务期间保持稳定
+        io().bready = is_write;       // 写事务期间恒拉高（B 响应随时可能到）
+
+        auto aw_hs = select(io().awvalid, io().awready, ch_bool(false));
+        auto w_hs = select(io().wvalid, io().wready, ch_bool(false));
+        auto write_done = select(io().bvalid, is_write, ch_bool(false));  // bvalid && bready
+
+        // ---------------- 读通道 ----------------
+        auto ar_active = select(read_start, ch_bool(true),
+                                 select(is_read, select(ar_done, ch_bool(false), ch_bool(true)), ch_bool(false)));
+        io().arvalid = ar_active;
         io().araddr = io().addr;
-        
-        auto read_done = select(io().rvalid, io().rready, ch_bool(false));
-        io().rready = select(io().rvalid, state, ch_bool(false));
-        io().rdata = io().rdata_axi;
-        
-        auto next_state_read = select(read_start, ch_bool(true), select(read_done, ch_bool(false), state));
-        
-        // 合并写和读的状态更新
-        state->next = select(write_start, next_state_write, select(read_start, next_state_read, state));
-        
-        io().done = select(write_start, write_done, read_done);
+        io().rready = is_read;
+        auto ar_hs = select(io().arvalid, io().arready, ch_bool(false));
+        auto read_done = select(io().rvalid, is_read, ch_bool(false));    // rvalid && rready
+
+        // ---------------- 握手标志 ----------------
+        aw_done->next = select(aw_hs, ch_bool(true), select(write_start, ch_bool(false), aw_done));
+        w_done->next = select(w_hs, ch_bool(true), select(write_start, ch_bool(false), w_done));
+        ar_done->next = select(ar_hs, ch_bool(true), select(read_start, ch_bool(false), ar_done));
+        rdata_reg->next = select(read_done, io().rdata_axi, rdata_reg);
+
+        // ---------------- 状态更新 ----------------
+        state->next = select(write_start, ch_uint<2>(1_d),
+                             select(read_start, ch_uint<2>(2_d),
+                                    select(write_done, ch_uint<2>(0_d),
+                                           select(read_done, ch_uint<2>(0_d), state))));
+
+        io().rdata = rdata_reg;
+        io().done = select(write_done, ch_bool(true), read_done);
     }
 };
 
@@ -272,6 +297,10 @@ int main() {
         }
     }
     
+    // 等 master 从写状态回到 idle（done 与 idle 差一拍 —— master 的状态在
+    // 响应握手后的**下一个**时钟沿才回到 idle）
+    sim.tick();
+
     auto gpio_out = sim.get_port_value(top_device.instance().io().gpio_out);
     std::cout << "GPIO_OUT = 0x" << std::hex << static_cast<uint64_t>(gpio_out) << std::dec << std::endl;
     
@@ -285,6 +314,7 @@ int main() {
     sim.set_input_value(top_device.instance().io().start, false);
     
     // 等待完成
+    bool read_ok = false;
     for (int i = 0; i < 10; ++i) {
         sim.tick();
         auto done = sim.get_port_value(top_device.instance().io().done);
@@ -292,8 +322,15 @@ int main() {
         
         if (static_cast<uint64_t>(done)) {
             std::cout << "Read complete! DATA_IN = 0x" << std::hex << static_cast<uint64_t>(rdata) << std::dec << std::endl;
+            read_ok = true;
             break;
         }
+    }
+    if (!read_ok) {
+        // 已知限制：读通道经 2x2 矩阵的 AR 路由尚未打通（见 OpenSpec change
+        // axi4-peripheral-followups-2026-10 的 F10）。写通道已验证可用。
+        std::cout << "Read did NOT complete (known limitation, see change "
+                     "axi4-peripheral-followups-2026-10 F10)" << std::endl;
     }
     
     std::cout << "\n=== Generating Verilog ===" << std::endl;

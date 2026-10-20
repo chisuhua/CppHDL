@@ -109,11 +109,14 @@ public:
 
         // 写响应：WDATA 被接受之后才拉高，并保持到 BREADY
         io().bvalid = select(b_valid, ch_bool(true), ch_bool(false));
-        io().bresp = ch_uint<2>(0_d);
 
         // 写寄存器
         auto sel_tx_data = (addr_bits == ch_uint<32>(0_d));
         auto sel_ctrl = (addr_bits == ch_uint<32>(3_d));
+
+        // 未映射地址（0x04 RX_DATA / 0x08 STATUS 为只读）→ DECERR
+        auto write_mapped = sel_tx_data | sel_ctrl;
+        io().bresp = select(write_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
 
         auto we_tx_data = select(w_handshake, sel_tx_data, ch_bool(false));
         auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
@@ -149,21 +152,27 @@ public:
         io().rdata = read_val;
 
         // ---------------- UART 状态 ----------------
-        // TX_EMPTY / RX_VALID 的有效语义由 follow-up change
-        // (axi4-peripheral-followups-2026-10) 定义；此处保持当前行为
-        // (tx_empty 恒为 true、rx_valid 恒为 false) 并补上显式复位/保持赋值。
-        tx_empty->next = select(!io().rst_n, ch_bool(true), tx_empty);
+        // TX 侧：1 深 holding register（tx_data_reg）。写 TX_DATA → tx_empty=0
+        // （"缓冲非空"）；下一拍回到 1（简化模型：写即完成，无波特率/移位引擎）。
+        tx_empty->next = select(!io().rst_n, ch_bool(true),
+                                select(we_tx_data, ch_bool(false), ch_bool(true)));
+
+        // RX 侧：**无 RX 引擎** —— `uart_rx` 输入未使用、`rx_data_reg` 无回接路径，
+        // 因此 rx_valid 恒为 false、`irq` 恒为 0 是**设计结果**而非缺陷。
+        // 完整的串行收发引擎（波特率 + 移位 + 起始位检测）见 change
+        // `axi4-peripheral-deferred-2026-10`。
         rx_valid->next = select(!io().rst_n, ch_bool(false), rx_valid);
 
-        // status_reg 单一赋值点（RX_VALID 位）
-        auto rx_valid_set = select(rx_valid, ch_uint<32>(2_d), ch_uint<32>(0_d));
-        auto rx_valid_clear = select(rx_valid, ch_uint<32>(0_d), ch_uint<32>(~static_cast<uint32_t>(2)));
+        // status_reg **单一赋值点**：bit0 = TX_EMPTY、bit1 = RX_VALID
+        auto status_mask = ch_uint<32>(~static_cast<uint32_t>(3));
+        auto tx_empty_bit = select(tx_empty, ch_uint<32>(1_d), ch_uint<32>(0_d));
+        auto rx_valid_bit = select(rx_valid, ch_uint<32>(2_d), ch_uint<32>(0_d));
         status_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
-                                  select(rx_valid, status_reg | rx_valid_set,
-                                         status_reg & rx_valid_clear));
+                                  (status_reg & status_mask) | tx_empty_bit | rx_valid_bit);
 
-        // UART TX 简化实现 (写入 TX_DATA 后自动发送)
-        io().uart_tx = select(tx_empty, ch_bool(true), ch_bool(false));
+        // UART TX：简化实现 —— 无波特率 / 无移位寄存器，
+        // uart_tx 恒为空闲高电平（不产生伪串行波形）
+        io().uart_tx = ch_bool(true);
         io().irq = rx_valid;
 
         // ---------------- 状态更新 ----------------

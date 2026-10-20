@@ -71,19 +71,15 @@
 - **THEN** MUST 命中 0 行（解码 MUST 基于锁存寄存器）
 - **AND** MUST 存在 `addr_reg` / `ar_addr_reg`
 
-### Requirement: AXI4 peripheral MUST 遵守字节写与响应错误契约
+### Requirement: AXI4 peripheral MUST 驱动响应错误信号
 
 `include/axi4/peripherals/*.h` MUST：
 
-1. 在写路径消费 `wstrb`（字节掩码），MUST NOT 整字覆盖；
-2. 驱动 `bresp`（MUST NOT 悬空）；
-3. 对未解码地址返回 `DECERR`，MUST NOT 返回 OKAY。
+1. 驱动 `bresp` 与 `rresp`（MUST NOT 悬空）；
+2. 对未解码地址返回 `DECERR`，MUST NOT 返回 OKAY。
 
-#### Scenario: wstrb 被消费
-
-- **WHEN** master 以部分字节掩码写寄存器
-- **THEN** 未选中字节 MUST 保持原值
-- **AND** 选中字节 MUST 被写入
+> `wstrb` 字节写语义**不在本 Requirement 范围**（另见 change
+> `axi4-peripheral-deferred-2026-10`）—— 它属新增功能而非修缺陷。
 
 #### Scenario: bresp 不悬空
 

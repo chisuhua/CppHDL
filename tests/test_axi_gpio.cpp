@@ -39,12 +39,9 @@ constexpr uint32_t kRegDataIn = 0x04;
 constexpr uint32_t kRegDirection = 0x08;
 constexpr uint32_t kRegInterrupt = 0x0C;
 
-// 写侧地址映射：**当前实现**与读侧/文档不一致 ——
-//   写侧 0x00→DATA_OUT、0x04→DIRECTION、0x08→INTERRUPT
-//   读侧 0x00→DATA_OUT、0x04→DATA_IN、 0x08→DIRECTION、0x0C→INTERRUPT
-// 该不一致由 follow-up change (axi4-peripheral-followups-2026-10) 修正；
-// 本 change 只锁定写侧当前行为，不改动地址映射。
-constexpr uint32_t kRegDirectionWrite = 0x04;
+// 写侧与读侧地址映射已统一（follow-up change
+// axi4-peripheral-followups-2026-10 的 F9 落地）：
+//   0x00→DATA_OUT、0x04→DATA_IN（只读）、0x08→DIRECTION、0x0C→INTERRUPT
 
 } // namespace
 
@@ -104,8 +101,7 @@ TEST_CASE("AxiLiteGpio - 写 DIRECTION 反映到 gpio_dir", "[axi][gpio][reg]") 
     sim.set_input_value(io.rst_n, 1);
     sim.set_input_value(io.gpio_in, 0);
 
-    // 注意：写侧 DIRECTION 的偏移当前是 0x04（见 kRegDirectionWrite 注释）
-    write(sim, dev, kRegDirectionWrite, 0x0Fu);
+    write(sim, dev, kRegDirection, 0x0Fu);
 
     REQUIRE(pv(sim, io.gpio_dir) == 0x0Fu);
 }
@@ -173,7 +169,7 @@ TEST_CASE("AxiLiteGpio - AW 握手后改写 awaddr 不改变写目标", "[axi][g
     // AXI 只要求 AWADDR 保持到 AW 握手 —— master 此后可以改写它。
     // peripheral 必须在握手时锁存地址，否则写会落到错误寄存器。
     sim.set_input_value(io.awvalid, 0);
-    sim.set_input_value(io.awaddr, kRegDirectionWrite);
+    sim.set_input_value(io.awaddr, kRegDirection);
     sim.set_input_value(io.wvalid, 1);
 
     const bool b_seen = wait_for(sim, io.bvalid);
@@ -262,6 +258,27 @@ TEST_CASE("AxiLiteGpio - 事务结束后可接受下一笔", "[axi][gpio][axi-pr
 }
 
 // ============================================================================
+// 未映射地址 → DECERR
+// ============================================================================
+
+TEST_CASE("AxiLiteGpio - 写未映射地址返回 DECERR", "[axi][gpio][resp]") {
+    ch::ch_device<AxiLiteGpio<8>> dev;
+    ch::Simulator sim(dev.context());
+    auto &io = dev.instance().io();
+
+    sim.set_input_value(io.rst_n, 1);
+    sim.set_input_value(io.gpio_in, 0);
+
+    // 0x04 = DATA_IN（只读）→ 未映射写 → BRESP = DECERR(3)
+    write(sim, dev, 0x04u, 0x5Au);
+    REQUIRE(pv(sim, io.bresp) == 3u);
+
+    // 0x00 = DATA_OUT（可写）→ BRESP = OKAY(0)
+    write(sim, dev, 0x00u, 0x5Au);
+    REQUIRE(pv(sim, io.bresp) == 0u);
+}
+
+// ============================================================================
 // 复位语义
 // ============================================================================
 
@@ -274,7 +291,7 @@ TEST_CASE("AxiLiteGpio - rst_n 复位清空寄存器并释放 busy", "[axi][gpio
     sim.set_input_value(io.gpio_in, 0);
 
     write(sim, dev, kRegDataOut, 0xABu);
-    write(sim, dev, kRegDirectionWrite, 0x0Fu);
+    write(sim, dev, kRegDirection, 0x0Fu);
     REQUIRE(pv(sim, io.gpio_out) == 0xABu);
     REQUIRE(pv(sim, io.gpio_dir) == 0x0Fu);
 

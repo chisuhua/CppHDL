@@ -85,7 +85,14 @@ public:
         
         ch_reg<ch_bool> busy(ch_bool(false));
         ch_reg<ch_bool> aw_done(ch_bool(false));
+        ch_reg<ch_bool> b_valid(ch_bool(false));   // W 已接收，B 响应待取
         ch_reg<ch_bool> r_valid(ch_bool(false));
+
+        // 地址锁存寄存器：AXI 只要求 AWADDR/ARADDR 保持到对应握手，
+        // 握手后 master 即可改写它们；W 可能延后多个周期到达，
+        // 因此地址必须在握手时锁存，否则写会落到改变后 AWADDR 指向的寄存器。
+        ch_reg<ch_uint<32>> addr_reg(0_d);
+        ch_reg<ch_uint<32>> ar_addr_reg(0_d);
         
         // 配置寄存器
         ch_reg<ch_uint<32>> period_reg(ch_uint<32>(255_d));      // 默认周期 255
@@ -112,11 +119,11 @@ public:
         auto w_handshake = select(io().wvalid, aw_done, ch_bool(false));
         io().wready = w_handshake;
         
-        // Write response
-        io().bvalid = select(aw_done, ch_bool(true), ch_bool(false));
-        
-        // Address decode (2-bit, 4-byte aligned)
-        auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
+        // Write response: 由 b_valid 寄存器驱动，WDATA 被接受后才拉高，保持到 BREADY
+        io().bvalid = select(b_valid, ch_bool(true), ch_bool(false));
+
+        // Address decode (2-bit, 4-byte aligned) —— 基于**锁存**的地址
+        auto wr_addr = addr_reg >> ch_uint<32>(2_d);
         wr_addr = wr_addr & ch_uint<32>(15_d);
         
         // 寄存器选择信号 (使用右移后的地址)
@@ -127,6 +134,11 @@ public:
         auto sel_duty3 = (wr_addr == ch_uint<32>(7_d));
         auto sel_enable = (wr_addr == ch_uint<32>(8_d));
         auto sel_interrupt = (wr_addr == ch_uint<32>(9_d));
+
+        // 未映射地址 → DECERR
+        auto write_mapped = sel_period | sel_duty0 | sel_duty1 | sel_duty2
+                          | sel_duty3 | sel_enable | sel_interrupt;
+        io().bresp = select(write_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
         
         // 写使能信号
         auto we_period = select(w_handshake, sel_period, ch_bool(false));
@@ -149,16 +161,14 @@ public:
                                      select(we_interrupt, io().wdata,
                                             select(overflow, interrupt_reg | ch_uint<32>(1_d), interrupt_reg)));
         
-        // Write response (combinational)
-        io().bvalid = w_handshake;
-        io().bresp = ch_uint<2>(0_d);  // OKAY
+        // Write response (由 b_valid 寄存器驱动，见上)
         
         // ====================================================================
         // AXI4-Lite Read Channel
         // ====================================================================
         
-        // Read address decode
-        auto rd_addr = io().araddr >> ch_uint<32>(2_d);
+        // Read address decode —— 基于**锁存**的地址
+        auto rd_addr = ar_addr_reg >> ch_uint<32>(2_d);
         rd_addr = rd_addr & ch_uint<32>(15_d);
         
         // Read address handshake: accept when !busy
@@ -176,6 +186,12 @@ public:
         auto read_sel_duty3 = (rd_addr == ch_uint<32>(7_d));
         auto read_sel_enable = (rd_addr == ch_uint<32>(8_d));
         auto read_sel_interrupt = (rd_addr == ch_uint<32>(9_d));
+
+        // 未映射地址 → DECERR
+        auto read_mapped = read_sel_period | read_sel_duty0 | read_sel_duty1
+                         | read_sel_duty2 | read_sel_duty3 | read_sel_enable
+                         | read_sel_interrupt;
+        io().rresp = select(read_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
         
         // Read data mux
         ch_uint<32> read_val(0_d);
@@ -188,7 +204,6 @@ public:
         read_val = select(read_sel_interrupt, interrupt_reg, read_val);
         
         io().rdata = read_val;
-        io().rresp = ch_uint<2>(0_d);  // OKAY
         
         // ====================================================================
         // PWM 计数器逻辑
@@ -241,20 +256,38 @@ public:
         // 中断输出
         io().irq = irq_bit != ch_uint<1>(0_d);
         
+        // 事务真正完成的条件（不是裸 bready/rready）
+        auto write_done = select(b_valid, io().bready, ch_bool(false));
+        auto read_done = select(r_valid, io().rready, ch_bool(false));
+
         // State update: aw_done (with async reset)
+        // aw_done 仅在 B 握手完成时清零 —— 若在裸 bready 上清零，
+        // master 常态拉高 BREADY 时 W 永远不会被接受。
         aw_done->next = select(!io().rst_n, ch_bool(false),
-                               select(aw_handshake, ch_bool(true), select(io().bready, ch_bool(false), aw_done)));
-        
+                               select(aw_handshake, ch_bool(true),
+                                      select(write_done, ch_bool(false), aw_done)));
+
+        // State update: b_valid (with async reset) —— BVALID 保持到 BREADY
+        b_valid->next = select(!io().rst_n, ch_bool(false),
+                               select(w_handshake, ch_bool(true),
+                                      select(io().bready, ch_bool(false), b_valid)));
+
         // State update: r_valid (with async reset)
         r_valid->next = select(!io().rst_n, ch_bool(false),
                                select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), r_valid)));
-        
-        // Busy update (with async reset)
+
+        // 地址锁存（AW / AR 握手时采样）
+        addr_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                select(aw_handshake, io().awaddr, addr_reg));
+        ar_addr_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                   select(ar_handshake, io().araddr, ar_addr_reg));
+
+        // Busy update (with async reset) —— 事务真正完成才释放
         busy->next = select(!io().rst_n, ch_bool(false),
                             select(aw_handshake, ch_bool(true),
                                    select(ar_handshake, ch_bool(true),
-                                          select(io().bready, ch_bool(false),
-                                                 select(io().rready, ch_bool(false), busy)))));
+                                          select(write_done, ch_bool(false),
+                                                 select(read_done, ch_bool(false), busy)))));
     }
 };
 

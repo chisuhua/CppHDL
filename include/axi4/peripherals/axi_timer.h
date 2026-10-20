@@ -103,11 +103,14 @@ public:
 
         // 写响应：WDATA 被接受之后才拉高，并保持到 BREADY
         io().bvalid = select(b_valid, ch_bool(true), ch_bool(false));
-        io().bresp = ch_uint<2>(0_d);
 
         // 写寄存器
         auto sel_load = (addr_bits == ch_uint<32>(0_d));
         auto sel_ctrl = (addr_bits == ch_uint<32>(2_d));
+
+        // 未映射地址（0x04 COUNT / 0x0C STATUS 为只读）→ DECERR
+        auto write_mapped = sel_load | sel_ctrl;
+        io().bresp = select(write_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
 
         auto we_load = select(w_handshake, sel_load, ch_bool(false));
         auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));

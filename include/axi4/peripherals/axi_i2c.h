@@ -98,6 +98,7 @@ public:
     struct I2cState {
         ch_reg<ch_bool> busy;
         ch_reg<ch_bool> aw_done;
+        ch_reg<ch_bool> b_valid;   // W 已接收，B 响应待取
         ch_reg<ch_bool> r_valid;
         ch_reg<ch_uint<32>> ctrl_reg;
         ch_reg<ch_uint<32>> status_reg;
@@ -110,10 +111,16 @@ public:
         ch_reg<ch_uint<8>> shift_reg;
         ch_reg<ch_bool> sda_out_reg;
         ch_reg<ch_bool> scl_out_reg;
+        // 地址锁存寄存器：AXI 只要求 AWADDR/ARADDR 保持到对应握手，
+        // 握手后 master 即可改写它们；W 可能延后多个周期到达，
+        // 因此地址必须在握手时锁存，否则写会落到改变后 AWADDR 指向的寄存器。
+        ch_reg<ch_uint<32>> addr_reg;
+        ch_reg<ch_uint<32>> ar_addr_reg;
 
         I2cState()
             : busy(ch_bool(false)),
               aw_done(ch_bool(false)),
+              b_valid(ch_bool(false)),
               r_valid(ch_bool(false)),
               ctrl_reg(0_d),
               status_reg(0_d),
@@ -125,7 +132,9 @@ public:
               clk_div(0_d),
               shift_reg(0_d),
               sda_out_reg(ch_bool(true)),
-              scl_out_reg(ch_bool(true)) {}
+              scl_out_reg(ch_bool(true)),
+              addr_reg(0_d),
+              ar_addr_reg(0_d) {}
     };
 
     // Register bank: address decode + AXI4-Lite read/write transactions
@@ -137,26 +146,35 @@ public:
         ch_bool we_ctrl, ch_bool we_tx_data, ch_bool we_prescale) {
         // Control register update (clear START/STOP bits)
         auto ctrl_write_val = io().wdata & ch_uint<32>(~static_cast<uint32_t>(6_d));
-        s.ctrl_reg->next = select(we_ctrl, ctrl_write_val, s.ctrl_reg);
+        s.ctrl_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                  select(we_ctrl, ctrl_write_val, s.ctrl_reg));
 
         // TX data register
-        s.tx_data_reg->next = select(we_tx_data, io().wdata, s.tx_data_reg);
+        s.tx_data_reg->next = select(!io().rst_n, ch_uint<8>(0_d),
+                                     select(we_tx_data, io().wdata, s.tx_data_reg));
 
         // Prescale register
-        s.prescale_reg->next = select(we_prescale, io().wdata, s.prescale_reg);
+        s.prescale_reg->next = select(!io().rst_n, ch_uint<PRESCALE_WIDTH>(100_d),
+                                      select(we_prescale, io().wdata, s.prescale_reg));
 
-        // AXI write response
-        io().bvalid = w_handshake;
-        io().bresp = ch_uint<2>(0_d);
+        // RX data register: 本 peripheral 无 RX 引擎（移位寄存器未回接），
+        // 该寄存器恒为初值 —— 显式写出复位保持，使复位契约可被 grep 校验。
+        s.rx_data_reg->next = select(!io().rst_n, ch_uint<8>(0_d), s.rx_data_reg);
+
 
         // AXI read response
-        auto rd_addr = io().araddr >> ch_uint<32>(2_d);
+        auto rd_addr = s.ar_addr_reg >> ch_uint<32>(2_d);
         rd_addr = rd_addr & ch_uint<32>(7_d);
         auto sel_read_ctrl = (rd_addr == ch_uint<32>(0_d));
         auto sel_read_status = (rd_addr == ch_uint<32>(1_d));
         auto sel_read_tx = (rd_addr == ch_uint<32>(2_d));
         auto sel_read_rx = (rd_addr == ch_uint<32>(3_d));
         auto sel_read_prescale = (rd_addr == ch_uint<32>(4_d));
+
+        // 未映射地址 → DECERR
+        auto read_mapped = sel_read_ctrl | sel_read_status | sel_read_tx
+                         | sel_read_rx | sel_read_prescale;
+        io().rresp = select(read_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
 
         ch_uint<32> read_val(0_d);
         read_val = select(sel_read_ctrl, s.ctrl_reg, read_val);
@@ -166,15 +184,28 @@ public:
         read_val = select(sel_read_prescale, ch_uint<32>(s.prescale_reg), read_val);
 
         io().rdata = read_val;
-        io().rresp = ch_uint<2>(0_d);
 
         // AXI handshake registers
-        s.aw_done->next = select(aw_handshake, ch_bool(true), select(io().bready, ch_bool(false), s.aw_done));
-        s.r_valid->next = select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), s.r_valid));
-        s.busy->next = select(aw_handshake, ch_bool(true),
-                              select(ar_handshake, ch_bool(true),
-                                     select(io().bready, ch_bool(false),
-                                            select(io().rready, ch_bool(false), s.busy))));
+        // 事务真正完成的条件（不是裸 bready/rready）
+        auto write_done = select(s.b_valid, io().bready, ch_bool(false));
+        auto read_done = select(s.r_valid, io().rready, ch_bool(false));
+
+        // aw_done 仅在 B 握手完成时清零 —— 若在裸 bready 上清零，
+        // master 常态拉高 BREADY 时 W 永远不会被接受。
+        s.aw_done->next = select(!io().rst_n, ch_bool(false),
+                                 select(aw_handshake, ch_bool(true),
+                                        select(write_done, ch_bool(false), s.aw_done)));
+        // b_valid: WDATA 被接受后置位，保持到 BREADY
+        s.b_valid->next = select(!io().rst_n, ch_bool(false),
+                                 select(w_handshake, ch_bool(true),
+                                        select(io().bready, ch_bool(false), s.b_valid)));
+        s.r_valid->next = select(!io().rst_n, ch_bool(false),
+                                 select(ar_handshake, ch_bool(true), select(io().rready, ch_bool(false), s.r_valid)));
+        s.busy->next = select(!io().rst_n, ch_bool(false),
+                              select(aw_handshake, ch_bool(true),
+                                     select(ar_handshake, ch_bool(true),
+                                            select(write_done, ch_bool(false),
+                                                   select(read_done, ch_bool(false), s.busy)))));
     }
 
     // I2C FSM: clock divider, state machine, SCL/SDA outputs, shift register,
@@ -198,12 +229,13 @@ public:
         auto ctrl_stop = (s.ctrl_reg & ch_uint<32>(4_d)) != ch_uint<32>(0_d);
 
         // Clock divider
-        auto clk_en = !is_idle & ctrl_enable;
+        auto clk_en = (!is_idle) & ctrl_enable;
         auto clk_div_max = s.prescale_reg - ch_uint<PRESCALE_WIDTH>(1_d);
-        s.clk_div->next = select(clk_en,
-                                  select(s.clk_div >= clk_div_max, ch_uint<PRESCALE_WIDTH>(0_d),
-                                         s.clk_div + ch_uint<PRESCALE_WIDTH>(1_d)),
-                                  ch_uint<PRESCALE_WIDTH>(0_d));
+        s.clk_div->next = select(!io().rst_n, ch_uint<PRESCALE_WIDTH>(0_d),
+                                 select(clk_en,
+                                        select(s.clk_div >= clk_div_max, ch_uint<PRESCALE_WIDTH>(0_d),
+                                               s.clk_div + ch_uint<PRESCALE_WIDTH>(1_d)),
+                                        ch_uint<PRESCALE_WIDTH>(0_d)));
         auto clk_end = (s.clk_div == clk_div_max);
 
         // State transitions
@@ -223,15 +255,15 @@ public:
         next_state_val = select(is_stop, select(clk_end, ch_uint<4>(9_d), ch_uint<4>(8_d)), next_state_val);
         next_state_val = select(is_done, ch_uint<4>(0_d), next_state_val);
 
-        s.i2c_state->next = next_state_val;
+        s.i2c_state->next = select(!io().rst_n, ch_uint<4>(0_d), next_state_val);
 
         // SCL output
-        auto scl_toggle = !is_idle & !is_done & ctrl_enable;
+        auto scl_toggle = (!is_idle) & (!is_done) & ctrl_enable;
         auto scl_target = select(scl_toggle,
                                   select(s.clk_div < (s.prescale_reg >> ch_uint<PRESCALE_WIDTH>(1_d)),
                                          ch_bool(false), ch_bool(true)),
                                   ch_bool(true));
-        s.scl_out_reg->next = scl_target;
+        s.scl_out_reg->next = select(!io().rst_n, ch_bool(true), scl_target);
         io().i2c_scl = s.scl_out_reg;
 
         // SDA output
@@ -244,7 +276,7 @@ public:
         auto sda_target = select(start_cond, ch_bool(false),
                                   select(stop_cond, ch_bool(true),
                                          select(!s.scl_out_reg, sda_data, s.sda_out_reg)));
-        s.sda_out_reg->next = sda_target;
+        s.sda_out_reg->next = select(!io().rst_n, ch_bool(true), sda_target);
         io().i2c_sda = s.sda_out_reg;
 
         // Shift register
@@ -254,20 +286,21 @@ public:
         auto next_bit_counter = select(load_tx, ch_uint<3>(0_d),
                                         select(shift_en & !shift_done,
                                                 s.bit_counter + ch_uint<3>(1_d), s.bit_counter));
-        s.bit_counter->next = next_bit_counter;
+        s.bit_counter->next = select(!io().rst_n, ch_uint<3>(0_d), next_bit_counter);
 
         auto shifted_val = (s.shift_reg << ch_uint<8>(1_d)) | ch_uint<8>(0_d);
-        s.shift_reg->next = select(load_tx, s.tx_data_reg,
-                                    select(shift_en, shifted_val, s.shift_reg));
+        s.shift_reg->next = select(!io().rst_n, ch_uint<8>(0_d),
+                                    select(load_tx, s.tx_data_reg,
+                                           select(shift_en, shifted_val, s.shift_reg)));
 
         // Status register
-        auto busy_set = !is_idle & !is_done;
+        auto busy_set = (!is_idle) & (!is_done);
         auto tx_empty = is_idle;
 
         ch_uint<32> status_next(0_d);
         status_next = select(busy_set, status_next | ch_uint<32>(1_d), status_next);
         status_next = select(tx_empty, status_next | ch_uint<32>(8_d), status_next);
-        s.status_reg->next = status_next;
+        s.status_reg->next = select(!io().rst_n, ch_uint<32>(0_d), status_next);
 
         // Interrupt (simplified)
         io().irq = ch_bool(false);
@@ -279,7 +312,8 @@ public:
         // ========================================================================
         // AXI4-Lite Address Decode
         // ========================================================================
-        auto wr_addr = io().awaddr >> ch_uint<32>(2_d);
+        // 基于**锁存**的地址（AW/AR 握手时采样）
+        auto wr_addr = s.addr_reg >> ch_uint<32>(2_d);
         wr_addr = wr_addr & ch_uint<32>(7_d);
 
         // Write/read handshakes
@@ -287,16 +321,27 @@ public:
         io().awready = aw_handshake;
         auto w_handshake = select(io().wvalid, s.aw_done, ch_bool(false));
         io().wready = w_handshake;
-        io().bvalid = select(s.aw_done, ch_bool(true), ch_bool(false));
+        // BVALID 由 b_valid 寄存器驱动：WDATA 被接受后才拉高，保持到 BREADY
+        io().bvalid = select(s.b_valid, ch_bool(true), ch_bool(false));
 
         auto ar_handshake = select(io().arvalid, select(s.busy, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().arready = ar_handshake;
         io().rvalid = select(s.r_valid, ch_bool(true), ch_bool(false));
 
+        // 地址锁存（AW / AR 握手时采样）
+        s.addr_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                  select(aw_handshake, io().awaddr, s.addr_reg));
+        s.ar_addr_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                     select(ar_handshake, io().araddr, s.ar_addr_reg));
+
         // Write enable signals
         auto sel_ctrl = (wr_addr == ch_uint<32>(0_d));
         auto sel_tx_data = (wr_addr == ch_uint<32>(2_d));
         auto sel_prescale = (wr_addr == ch_uint<32>(4_d));
+
+        // 未映射地址 → DECERR
+        auto write_mapped = sel_ctrl | sel_tx_data | sel_prescale;
+        io().bresp = select(write_mapped, ch_uint<2>(0_d), ch_uint<2>(3_d));
         auto we_ctrl = select(w_handshake, sel_ctrl, ch_bool(false));
         auto we_tx_data = select(w_handshake, sel_tx_data, ch_bool(false));
         auto we_prescale = select(w_handshake, sel_prescale, ch_bool(false));

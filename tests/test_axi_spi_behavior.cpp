@@ -11,6 +11,7 @@
 // Per dual-backend-test-coverage R3: only set_input_value / get_port_value.
 
 #include "catch_amalgamated.hpp"
+#include "axi_lite_slave_fixture.h"
 #include "axi4/peripherals/axi_spi.h"
 #include "ch.hpp"
 #include "component.h"
@@ -33,52 +34,28 @@ using Spi32x16 = axi4::AxiLiteSpi<32, 16>;
 // ============================================================================
 
 // Issue a single AXI4-Lite write transaction, wait for bvalid=1.
-// Writes (addr, data) and asserts BRESP=OKAY at the end.
+// 复用共享的**协议合规** master (tests/axi_lite_slave_fixture.h)。
+//
+// 旧写法在 phase 1 结束时**同时**撤掉 awvalid 与 wvalid —— 在规范形态下
+// wvalid 会在 W 握手（AW 握手后一拍）之前就掉下去 → 写数据永不被接受 →
+// bvalid 永不拉高。规范形态要求 WVALID 保持到 W 握手完成。
 template <typename SpiT>
 static inline void axi_write_and_wait_bvalid(
     ch::Simulator &sim,
     SpiT &spi,
     uint32_t addr, uint32_t data) {
-    // phase 1: assert awvalid + wvalid
-    sim.set_input_value(spi.io().awaddr,  addr);
-    sim.set_input_value(spi.io().awvalid, 1);
-    sim.set_input_value(spi.io().wdata,   data);
-    sim.set_input_value(spi.io().wvalid,  1);
-    sim.set_input_value(spi.io().bready,  1);
-    sim.tick();
-
-    // phase 2: de-assert awvalid/wvalid; expect bvalid=1 (BRESP OKAY)
-    sim.set_input_value(spi.io().awvalid, 0);
-    sim.set_input_value(spi.io().wvalid,  0);
-    // a few cycles for state machine to ack and produce bvalid
-    for (int i = 0; i < 4; ++i) {
-        if (static_cast<uint64_t>(
-                sim.get_port_value(spi.io().bvalid)) == 1u) {
-            break;
-        }
-        sim.tick();
-    }
+    ch_test::axi_lite::write_io(sim, spi.io(), addr, data);
 }
 
 // Issue a single AXI4-Lite read transaction, wait for rvalid=1.
+// 复用共享的协议合规 master：规范形态下 R 响应在 AR 握手**之后**才拉高，
+// 必须等 RVALID 再继续。
 template <typename SpiT>
 static inline void axi_read_and_wait_rvalid(
     ch::Simulator &sim,
     SpiT &spi,
     uint32_t addr) {
-    sim.set_input_value(spi.io().araddr,  addr);
-    sim.set_input_value(spi.io().arvalid, 1);
-    sim.set_input_value(spi.io().rready,  1);
-    sim.tick();
-
-    sim.set_input_value(spi.io().arvalid, 0);
-    for (int i = 0; i < 4; ++i) {
-        if (static_cast<uint64_t>(
-                sim.get_port_value(spi.io().rvalid)) == 1u) {
-            break;
-        }
-        sim.tick();
-    }
+    ch_test::axi_lite::read_io(sim, spi.io(), addr);
 }
 
 // ============================================================================
@@ -106,8 +83,10 @@ DUAL_BACKEND_TEST_PAIR(
         // BRESP must be OKAY (0)
         REQUIRE(static_cast<uint64_t>(
             sim.get_port_value(dev.instance().io().bresp)) == 0u);
+        // B 握手已完成 → BVALID 合法地落下。
+        // （"BVALID 曾被 master 观察到"由共享 fixture 内部 REQUIRE 断言）
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().bvalid)) == 1u);
+            sim.get_port_value(dev.instance().io().bvalid)) == 0u);
     });
 
 // ============================================================================
@@ -135,9 +114,9 @@ DUAL_BACKEND_TEST_PAIR(
         // AXI write 0x00 = 0x55
         axi_write_and_wait_bvalid(sim, dev.instance(), 0x00, 0x55);
 
-        // bvalid must be 1 (BRESP=OKAY) by now — parity safe
+        // B 握手完成后 BVALID 落下（BVALID 曾被观察到的断言在共享 fixture 内）
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().bvalid)) == 1u);
+            sim.get_port_value(dev.instance().io().bvalid)) == 0u);
         REQUIRE(static_cast<uint64_t>(
             sim.get_port_value(dev.instance().io().bresp))  == 0u);
     });
@@ -237,8 +216,9 @@ DUAL_BACKEND_TEST_PAIR(
 
         REQUIRE(static_cast<uint64_t>(
             sim.get_port_value(dev.instance().io().bresp)) == 0u);
+        // B 握手已完成 → BVALID 合法地落下
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().bvalid)) == 1u);
+            sim.get_port_value(dev.instance().io().bvalid)) == 0u);
     });
 
 // ============================================================================
@@ -268,6 +248,11 @@ DUAL_BACKEND_TEST_PAIR(
         // Assert reset (rst_n=0)
         sim.set_input_value(dev.instance().io().rst_n, 0);
         sim.tick();
+        sim.tick();
+
+        // 复位**期间** peripheral 处于复位态（r_valid 被清零 → 不响应 AXI 事务），
+        // 且读地址锁存也被复位清零 → 此时采样 RDATA 没有意义。先释放复位再读。
+        sim.set_input_value(dev.instance().io().rst_n, 1);
         sim.tick();
 
         // Read STATUS — busy should be cleared

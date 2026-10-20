@@ -101,7 +101,7 @@ TEST_CASE("AxiLiteUart - 写 CTRL 可读回", "[axi][uart][reg]") {
     REQUIRE(read(sim, dev, kRegCtrl) == 0x03u);
 }
 
-TEST_CASE("AxiLiteUart - 读 STATUS 恒为 0（TX_EMPTY/RX_VALID 语义待 follow-up）",
+TEST_CASE("AxiLiteUart - STATUS 位语义：bit0=TX_EMPTY、bit1=RX_VALID",
           "[axi][uart][reg]") {
     ch::ch_device<AxiLiteUart<16>> dev;
     ch::Simulator sim(dev.context());
@@ -110,9 +110,28 @@ TEST_CASE("AxiLiteUart - 读 STATUS 恒为 0（TX_EMPTY/RX_VALID 语义待 follo
     sim.set_input_value(io.rst_n, 1);
     sim.set_input_value(io.uart_rx, 0);
 
-    // STATUS 位的有效语义由 follow-up change（axi4-peripheral-followups-2026-10）定义，
-    // 本测试只锁定"复位后为 0"这一当前实际行为。
-    REQUIRE(read(sim, dev, kRegStatus) == 0u);
+    // bit0 = TX_EMPTY（TX holding 为空 → 1）
+    // bit1 = RX_VALID（本 peripheral **无 RX 引擎** → 恒 0，irq 亦恒 0）
+    const uint32_t status = read(sim, dev, kRegStatus);
+    REQUIRE((status & 0x1u) == 0x1u);
+    REQUIRE((status & 0x2u) == 0x0u);
+    REQUIRE(status == 0x1u);
+}
+
+TEST_CASE("AxiLiteUart - 写 TX_DATA 后 TX_EMPTY 恢复为 1（写即排空）",
+          "[axi][uart][reg]") {
+    ch::ch_device<AxiLiteUart<16>> dev;
+    ch::Simulator sim(dev.context());
+    auto &io = dev.instance().io();
+
+    sim.set_input_value(io.rst_n, 1);
+    sim.set_input_value(io.uart_rx, 0);
+
+    write(sim, dev, kRegTxData, 0x41u);
+
+    // 简化模型：写即完成（无移位引擎）→ holding 下一拍即排空 → TX_EMPTY 回到 1
+    const uint32_t status = read(sim, dev, kRegStatus);
+    REQUIRE((status & 0x1u) == 0x1u);
 }
 
 // ============================================================================

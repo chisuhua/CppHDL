@@ -28,6 +28,7 @@
  */
 
 #include "catch_amalgamated.hpp"
+#include "axi_lite_slave_fixture.h"
 #include "axi4/peripherals/axi_pwm.h"
 #include "ch.hpp"
 #include "component.h"
@@ -45,38 +46,29 @@ using Pwm4x16 = axi4::AxiLitePwm<16, 4>;
 // Helpers — AXI4-Lite write / read helpers
 // ============================================================================
 
-// Combinational AXI-Lite write: assert + read BRESP in same cycle.
-// Pwm bvalid = w_handshake (combinational, last assignment).
+// AXI4-Lite write —— 复用共享的**协议合规** master (tests/axi_lite_slave_fixture.h)
+//
+// 旧实现（组合 bvalid = w_handshake）下本文件用"断言即撤"的一次性脉冲：
+//   assert(awvalid, wvalid, bready) -> tick -> de-assert -> tick
+// 该写法在规范形态下**不合法**：AW 握手后仍持有 AWVALID 会开出第二笔事务，
+// 而 master 随后撤掉 AWVALID -> 该笔永远等不到 WDATA -> busy 永久卡住。
+// 规范形态要求 AWVALID / WVALID 各自保持到对应握手完成 —— 共享 fixture 正是如此。
 static inline void axi_write_assert_bvalid(
     ch::Simulator &sim,
     Pwm4x16 &pwm,
     uint32_t addr, uint32_t data) {
-    sim.set_input_value(pwm.io().awaddr,  addr);
-    sim.set_input_value(pwm.io().awvalid, 1);
-    sim.set_input_value(pwm.io().wdata,   data);
-    sim.set_input_value(pwm.io().wvalid,  1);
-    sim.set_input_value(pwm.io().bready,  1);
-    sim.tick();
-    // de-assert
-    sim.set_input_value(pwm.io().awvalid, 0);
-    sim.set_input_value(pwm.io().wvalid,  0);
-    sim.tick();
+    ch_test::axi_lite::write_io(sim, pwm.io(), addr, data);
 }
 
-// Combinational AXI-Lite read: assert + read rdata in same cycle.
+// AXI4-Lite read —— 复用共享的协议合规 master。
+// 规范形态下 R 响应在 AR 握手**之后**才拉高并保持到 RREADY，
+// 因此必须等 RVALID 再采样 RDATA（旧实现里 rvalid 是组合的 ar_handshake，
+// 才可以在握手当拍直接采样）。
 static inline uint64_t axi_read_assert_rdata(
     ch::Simulator &sim,
     Pwm4x16 &pwm,
     uint32_t addr) {
-    sim.set_input_value(pwm.io().araddr,  addr);
-    sim.set_input_value(pwm.io().arvalid, 1);
-    sim.set_input_value(pwm.io().rready,  1);
-    sim.tick();
-    auto rdata = static_cast<uint64_t>(
-        sim.get_port_value(pwm.io().rdata));
-    sim.set_input_value(pwm.io().arvalid, 0);
-    sim.tick();
-    return rdata;
+    return ch_test::axi_lite::read_io(sim, pwm.io(), addr);
 }
 
 // Initialize pwm to idle state + reset asserted (rst_n=0).
@@ -217,6 +209,10 @@ DUAL_BACKEND_TEST_PAIR(
     "AxiLitePwm - rst_n=0 reset clears ENABLE register",
     "[axi][pwm][behavior][rst-n-reset][dual]",
     [&]() {
+        // 先建立初始态（复位脉冲 + 释放复位）——
+        // 未驱动的 rst_n 读出为 0 = 永久复位，peripheral 不会响应任何 AXI 事务
+        pwm_init(sim, dev.instance());
+
         // First, write ENABLE = 0xF (all 4 channels enabled) + read back to verify
         axi_write_assert_bvalid(sim, dev.instance(), 0x20, 0xF);
         auto enable_written = axi_read_assert_rdata(sim, dev.instance(), 0x20);
@@ -227,20 +223,17 @@ DUAL_BACKEND_TEST_PAIR(
         sim.tick();
         sim.tick();
 
-        // After rst_n=0, read ENABLE register (must specify araddr=0x20)
-        sim.set_input_value(dev.instance().io().araddr,  0x20);
-        sim.set_input_value(dev.instance().io().arvalid, 1);
-        sim.set_input_value(dev.instance().io().rready,  1);
-        sim.tick();
-        auto enable_after_reset = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rdata));
-        sim.set_input_value(dev.instance().io().arvalid, 0);
+        // 复位**期间** peripheral 处于复位态（r_valid 被清零 → 不响应 AXI 事务），
+        // 且读地址锁存也被复位清零 → 此时采样 RDATA 没有意义。
+        // 规范流程：先释放复位，再读回。
+        sim.set_input_value(dev.instance().io().rst_n, 1);
         sim.tick();
 
-        // After reset, ENABLE = 0 (or unchanged if rst_n+ latch interaction is more subtle)
+        auto enable_after_reset = axi_read_assert_rdata(sim, dev.instance(), 0x20);
+
+        // 复位后 ENABLE MUST 为 0（复位把寄存器打回 init 值）
         const bool is_reset = (enable_after_reset == 0x0ULL);
-        const bool is_latched = (enable_after_reset == 0xFULL);
-        REQUIRE((is_reset || is_latched));
+        REQUIRE(is_reset);
 
         // Verify the latch worked before reset (control)
         if (wrote_latched) {

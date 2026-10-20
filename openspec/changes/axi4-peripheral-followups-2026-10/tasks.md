@@ -14,7 +14,7 @@
     - `grep -c "AxiLiteDma" openspec/specs/dual-backend-test-coverage/spec.md` → 0
     - `grep -c "AxiDma" openspec/specs/dual-backend-test-coverage/spec.md` ≥ 1
 
-- [ ] ### Task 2 (F1): `axi_dma.h` 加 `rst_n` + 显式复位值表
+- [x] ### Task 2 (F1): `axi_dma.h` 加 `rst_n` + 显式复位值表
   - **action**:
     - `__io` 加 `ch_in<ch_bool> rst_n;`
     - 13 个 `ch_reg` 逐个加 `select(!io().rst_n, <显式 init>, ...)` 复位
@@ -24,7 +24,7 @@
     - `cd build && ctest -R test_axi_dma --output-on-failure` → PASS
     - reviewer 复核：13 个 `ch_reg` 每个都有显式复位值（无占位）
 
-- [ ] ### Task 3 (F2 + F2'): `axi_pwm.h` / `axi_i2c.h` 回收为规范形态
+- [x] ### Task 3 (F2 + F2'): `axi_pwm.h` / `axi_i2c.h` 回收为规范形态
   - **action**:
     - **现状**（实测）：两者都**已有** `rst_n` / `busy` / `aw_done` / `r_valid` / AW→W 相位分离
       - `axi_pwm.h`：`bvalid` 双赋值（L116 `= aw_done` / L153 `= w_handshake`）→ **L153 覆盖 L116**，
@@ -44,7 +44,7 @@
     - `cd build && ctest -R "test_axi_(pwm|i2c)" --output-on-failure` → PASS
       （**防假阳性**：`_behavior` 是 dual-backend 测试，改坏会同时挂两个后端）
 
-- [ ] ### Task 4 (F3 + F2'): `axi_spi.h` 回收为规范形态
+- [x] ### Task 4 (F3 + F2'): `axi_spi.h` 回收为规范形态
   - **action**:
     - **现状**（实测）：`bvalid` **只有 1 处**赋值（L350 `= aw_done`），
       但它**早于 WDATA 被接受**就拉高 → 违反"BVALID 在 WDATA 之后"
@@ -59,15 +59,25 @@
     - `grep -cE 'addr_bits = io\(\)\.aw?r?addr' include/axi4/peripherals/axi_spi.h` → 0 行
     - `cd build && ctest -R "test_axi_spi" --output-on-failure` → PASS
 
-- [ ] ### Task 5 (F4): UART status / irq 语义
+- [x] ### Task 5 (F4): UART status / irq 语义 —— **定案：最小诚实**
   - **action**:
-    - 定义 `tx_empty` / `rx_valid` 的置位 / 清除条件
-    - `status_reg` bit0 = TX_EMPTY、bit1 = RX_VALID
-    - `irq` 由 `rx_valid` 驱动
+    - **范围决策（2026-10-20，用户拍板）**：只做 TX 1 深缓冲 + RX 标注未实现；
+      **不实现 UART 串行引擎**（RX 引擎 / TX 移位 / 波特率）→ deferred change
+    - TX 侧 1 深缓冲：`tx_empty->next = select(!rst_n, true, select(we_tx_data, false, tx_empty))`
+      （写 TX_DATA → `tx_empty=0` 一拍 → 回 1）
+    - `status_reg` **单一赋值点**（当前只有 RX_VALID 一支，TX_EMPTY 位是死代码）：
+      bit0 = TX_EMPTY（跟随 `tx_empty`）、bit1 = RX_VALID（跟随 `rx_valid`）
+    - RX 侧：`rx_valid` 恒 false（**无 RX 引擎**）→ `irq` 恒 0 是**设计结果**
+      —— MUST 在 `axi_uart.h` 注释中显式写明"RX 引擎未实现，`uart_rx` 未使用"
+    - `uart_tx` 保持空闲高电平（无移位引擎，不产生伪波形）
+    - 同步更新 `tests/test_axi_uart.cpp` 的 STATUS 用例（现状断言 `== 0`，
+      新的 TX_EMPTY 语义下应为 bit0=1）
   - **verify**:
     - `cd build && ctest -R test_axi_uart --output-on-failure` → PASS（含 status 位断言）
+    - reviewer 复核：`axi_uart.h` 中 `status_reg->next` **只有 1 处**赋值
+    - reviewer 复核：注释里明确写明 RX 引擎未实现（不留"看起来是 bug"的歧义）
 
-- [ ] ### Task 6 (F5): 孤儿头 `rv32i_soc.h` 处置 —— **定案：删除（选项 A）**
+- [x] ### Task 6 (F5): 孤儿头 `rv32i_soc.h` 处置 —— **定案：删除（选项 A）**
   - **action**:
     - ✅ 已确认无引用：`grep -rn "rv32i_soc" --include=*.cpp --include=*.h . | grep -v "src/rv32i_soc.h:"` → 0 行
     - `git rm examples/riscv-mini/src/rv32i_soc.h`（ZERO-DEBT "no orphan files"）
@@ -79,7 +89,7 @@
     - `grep -rn "rv32i_soc" --include=*.cpp --include=*.h . | grep -v "src/rv32i_soc.h:"` → 0 行
     - `cmake --build build -j$(nproc) 2>&1 | grep -cE "error:|Error"` → 0
 
-- [ ] ### Task 7 (F6 + F8): `axi_soc_example.cpp` 写路径修复 + `rst_n` 暴露
+- [x] ### Task 7 (F6 + F8): `axi_soc_example.cpp` 写路径修复 + `rst_n` 暴露
   - **action**:
     - `AxiSocTop` 加 `ch_in<ch_bool> rst_n` 并透传给 gpio / uart（F8）
     - **F6 根因（已实测定位，双重）**：
@@ -95,12 +105,18 @@
     - ⚠️ **不要**靠调整模块创建顺序来"碰巧"让单遍求值 work（脆弱）
     - 补 `REQUIRE(gpio_out == 0xAB)` 断言
   - **verify**:
-    - `./build/examples/axi4/axi_soc_example` → 输出 `GPIO_OUT = 0xab` 且 exit 0
-    - `./run_all_ported_tests.sh` → `axi_soc` 项 PASS
+    - `./build/examples/axi4/axi_soc_example` → 输出 `GPIO_OUT = 0xab` 且 exit 0 ✅
+    - `./run_all_ported_tests.sh` → `axi_soc` 项 PASS ✅
     - reviewer 复核：`AxiLiteTestMaster` 不再出现 `io().awvalid`/`io().bvalid`
-      这类从设备组合输出的**门控依赖**
+      这类从设备组合输出的**门控依赖** ✅
+  - **note**:
+    - 实测根因有两层（A: master 的 WVALID 生成违 AXI；B: `AxiLiteMatrix2x2` 的 6 类缺陷），
+      详见 proposal 的 F6 章节。写路径已打通（`GPIO_OUT = 0xab`）✅
+    - **读路径（Test 2）仍未打通** —— 根因是框架层的"子模块输入端口值在 tick 内被覆盖"
+      （proposal 的 **F11**）。example 已显式打印该已知限制，不再静默"成功"。
+      F11 需另开 change 跟进（框架层 `src/ast/instr_io.cpp` / `src/simulator.cpp`）
 
-- [ ] ### Task 8 (F9): GPIO 写侧 / 读侧地址映射对齐
+- [x] ### Task 8 (F9): GPIO 写侧 / 读侧地址映射对齐
   - **action**:
     - `axi_gpio.h` 写侧解码改为与读侧 + 头部文档一致：
       `0x00→DATA_OUT`、`0x04→DATA_IN`（只读）、`0x08→DIRECTION`、`0x0C→INTERRUPT`
@@ -111,15 +127,17 @@
     - `cd build && ctest -R test_axi_gpio --output-on-failure` → PASS
     - reviewer 复核：写侧与读侧的寄存器偏移一一对应
 
-- [ ] ### Task 9 (F10): `wstrb` 字节写语义 + `bresp` 完整性 + 未映射地址 DECERR
+- [x] ### Task 9 (F10): `bresp` 完整性 + 未映射地址 DECERR —— **定案：只修真缺陷**
   - **action**:
-    - 6 个 peripheral 的写路径消费 `wstrb`：
-      `new = (old & ~mask) | (wdata & mask)`，`mask` 由 `wstrb` 逐字节展开
+    - **范围决策（2026-10-20，用户拍板）**：`wstrb` 字节写**不在本 change**
+      （另拆 `axi4-peripheral-deferred-2026-10`）
     - `axi_spi.h` 补 `io().bresp = ch_uint<2>(0_d);`（当前 BRESP 悬空）
-    - 未解码地址返回 `DECERR(3)`（对齐 `include/axi4/AGENTS.md` 已有的 ANTI-PATTERN）
+    - 6 个 peripheral：地址未命中任何 `sel_*` 时 `bresp` / `rresp` 返回 `DECERR(3)`
+      （依赖地址锁存 → 响应正确归属该笔事务）
   - **verify**:
-    - 对 6 个 peripheral 统计 `io().wstrb` 的**使用**次数（排除端口声明）→ MUST ≥ 1
-    - `grep -c "io().bresp = " include/axi4/peripherals/axi_spi.h` ≥ 1
+    - 对 6 个 peripheral 执行 `grep -c "io().bresp = " <file>` → MUST ≥ 1
+    - `grep -c "io().rresp = " <file>` → MUST ≥ 1
+    - 新增用例：写未解码地址 → `bresp == 3`（DECERR）
     - `cd build && ctest -R "test_axi_(pwm|i2c|spi|gpio|uart|timer)" --output-on-failure` → 全 PASS
 
 - [ ] ### Task 10: 全量回归 + 计数同步

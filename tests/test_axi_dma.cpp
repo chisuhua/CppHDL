@@ -6,11 +6,23 @@
 #include "axi4/axi4_full.h"
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "device.h"
+#include "simulator.h"
 #include <memory>
 
 using namespace ch;
 using namespace ch::core;
 using namespace axi4;
+
+namespace {
+
+// 读取端口当前值
+template <typename Port>
+inline uint64_t pv(ch::Simulator &sim, const Port &port) {
+    return static_cast<uint64_t>(sim.get_port_value(port));
+}
+
+} // namespace
 
 // ============================================================================
 // Test Cases

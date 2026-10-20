@@ -45,15 +45,18 @@ inline bool wait_for(ch::Simulator &sim, const Port &port, int max_cycles = 32) 
     return pv(sim, port) == 1;
 }
 
-// AXI4-Lite 写事务。
+// AXI4-Lite 写事务（io 级核心）。
 //
 // separate_aw_w = false: AW 与 W 同周期（master 常见的紧凑写法）
 // separate_aw_w = true : AW 与 W 分两周期（AXI4-Lite 允许，用于验证相位分离）
-template <typename Dev>
-inline void write(ch::Simulator &sim, Dev &dev, uint32_t addr, uint32_t data,
-                  bool separate_aw_w = false) {
-    auto &io = dev.instance().io();
-
+//
+// ⚠️ 协议合规要点：AWVALID / WVALID 各自**只**保持到对应的握手完成。
+// 若 master 在 AW 握手后仍持有 AWVALID，slave 会接受**第二笔** AW 事务
+// 并等待它的 WDATA —— 而 master 若此时撤掉 AWVALID，该笔事务永远等不到 WDATA，
+// busy 永久卡住（后续所有 AXI 事务阻塞）。
+template <typename Io>
+inline void write_io(ch::Simulator &sim, Io &io, uint32_t addr, uint32_t data,
+                      bool separate_aw_w = false) {
     // --- AW 阶段 ---
     sim.set_input_value(io.awaddr, addr);
     sim.set_input_value(io.awprot, 0);
@@ -62,10 +65,10 @@ inline void write(ch::Simulator &sim, Dev &dev, uint32_t addr, uint32_t data,
     sim.set_input_value(io.wstrb, 0xF);
     sim.set_input_value(io.wvalid, separate_aw_w ? 0 : 1);
     sim.tick();  // AW 握手发生在本次时钟沿
+    sim.set_input_value(io.awvalid, 0);  // 握手完成即撤（否则会开出第二笔事务）
 
     if (separate_aw_w) {
         // AW 与 W 分离：master 在 AW 之后（下一周期）才送 W
-        sim.set_input_value(io.awvalid, 0);
         sim.set_input_value(io.wvalid, 1);
         sim.tick();  // W 握手发生在本次时钟沿
     }
@@ -75,20 +78,17 @@ inline void write(ch::Simulator &sim, Dev &dev, uint32_t addr, uint32_t data,
     // 因此观察到 BVALID 即证明 W 已被接受（且 BVALID 会保持到 BREADY）。
     const bool b_seen = wait_for(sim, io.bvalid);
     REQUIRE(b_seen);
+    sim.set_input_value(io.wvalid, 0);
 
     // --- B 阶段：拉 BREADY 完成写响应握手（并释放 busy）---
-    sim.set_input_value(io.awvalid, 0);
-    sim.set_input_value(io.wvalid, 0);
     sim.set_input_value(io.bready, 1);
     sim.tick();
     sim.set_input_value(io.bready, 0);
 }
 
-// AXI4-Lite 读事务，返回读到的数据
-template <typename Dev>
-inline uint32_t read(ch::Simulator &sim, Dev &dev, uint32_t addr) {
-    auto &io = dev.instance().io();
-
+// AXI4-Lite 读事务（io 级核心），返回读到的数据
+template <typename Io>
+inline uint32_t read_io(ch::Simulator &sim, Io &io, uint32_t addr) {
     // --- AR 阶段 ---
     sim.set_input_value(io.araddr, addr);
     sim.set_input_value(io.arprot, 0);
@@ -105,6 +105,19 @@ inline uint32_t read(ch::Simulator &sim, Dev &dev, uint32_t addr) {
     sim.tick();  // R 握手 → 释放 busy
     sim.set_input_value(io.rready, 0);
     return rdata;
+}
+
+// AXI4-Lite 写事务（device 级）
+template <typename Dev>
+inline void write(ch::Simulator &sim, Dev &dev, uint32_t addr, uint32_t data,
+                  bool separate_aw_w = false) {
+    write_io(sim, dev.instance().io(), addr, data, separate_aw_w);
+}
+
+// AXI4-Lite 读事务（device 级），返回读到的数据
+template <typename Dev>
+inline uint32_t read(ch::Simulator &sim, Dev &dev, uint32_t addr) {
+    return read_io(sim, dev.instance().io(), addr);
 }
 
 } // namespace ch_test::axi_lite

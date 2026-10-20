@@ -38,6 +38,11 @@ public:
         ch_in<ch_uint<32>> reg_length;
         ch_out<ch_bool> status_busy; ch_out<ch_bool> status_done;
         ch_out<ch_bool> status_error; ch_out<ch_bool> irq;
+        // 异步复位 (低电平有效)。注意：AxiDma 是 AXI4 **master**，
+        // 复位对象是 master 自身的 FSM 状态（不是 AXI4-Lite slave 的寄存器值），
+        // 语义与 slave 的 rst_n 契约不同 —— 见 spec
+        // "AXI4 master peripheral MUST 有独立于 slave 的复位契约"。
+        ch_in<ch_bool> rst_n;
     )
     
     AxiDma(ch::Component* parent = nullptr, const std::string& name = "axi_dma") : ch::Component(parent, name) {}
@@ -92,26 +97,40 @@ public:
         auto w_hs = select(is_wr_data, select(w_vld, w_rdy, ch_bool(false)), ch_bool(false));
         auto b_hs = select(is_wr_resp, select(b_vld, b_rdy, ch_bool(false)), ch_bool(false));
         
-        src_addr->next = select(start, io().reg_src_addr, select(ar_hs, curr_raddr + addr_inc, src_addr));
-        dst_addr->next = select(start, io().reg_dst_addr, select(aw_hs, curr_waddr + addr_inc, dst_addr));
-        length_reg->next = select(start, io().reg_length, select(b_hs, bytes_rem, length_reg));
-        curr_raddr->next = select(start, src_addr, select(ar_hs, curr_raddr + addr_inc, curr_raddr));
-        curr_waddr->next = select(start, dst_addr, select(aw_hs, curr_waddr + addr_inc, curr_waddr));
-        bytes_rem->next = select(start, io().reg_length, select(b_hs, select(stop, ch_uint<32>(0_d), bytes_rem - bytes_in_burst), select(stop, ch_uint<32>(0_d), bytes_rem)));
-        
+        // ---------------- 复位契约 ----------------
+        // 全部 13 个 ch_reg 都有显式复位值（不复用 init 占位）。
+        // 复位语义：FSM 回 idle、地址/长度/计数器归零、标志位清除。
+        src_addr->next = select(!io().rst_n, ch_uint<ADDR_WIDTH>(0_d),
+                                select(start, io().reg_src_addr, select(ar_hs, curr_raddr + addr_inc, src_addr)));
+        dst_addr->next = select(!io().rst_n, ch_uint<ADDR_WIDTH>(0_d),
+                                select(start, io().reg_dst_addr, select(aw_hs, curr_waddr + addr_inc, dst_addr)));
+        length_reg->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                  select(start, io().reg_length, select(b_hs, bytes_rem, length_reg)));
+        curr_raddr->next = select(!io().rst_n, ch_uint<ADDR_WIDTH>(0_d),
+                                  select(start, src_addr, select(ar_hs, curr_raddr + addr_inc, curr_raddr)));
+        curr_waddr->next = select(!io().rst_n, ch_uint<ADDR_WIDTH>(0_d),
+                                  select(start, dst_addr, select(aw_hs, curr_waddr + addr_inc, curr_waddr)));
+        bytes_rem->next = select(!io().rst_n, ch_uint<32>(0_d),
+                                 select(start, io().reg_length, select(b_hs, select(stop, ch_uint<32>(0_d), bytes_rem - bytes_in_burst), select(stop, ch_uint<32>(0_d), bytes_rem))));
+
         auto wlast = (beat_cnt == burst_len);
-        beat_cnt->next = select(start | is_done_st, ch_uint<4>(0_d),
-                               select(r_hs, select(rlast, ch_uint<4>(0_d), beat_cnt + ch_uint<4>(1_d)),
-                               select(w_hs, select(wlast, ch_uint<4>(0_d), beat_cnt + ch_uint<4>(1_d)), beat_cnt)));
-        
-        rdata_buf->next = select(r_hs, io().rdata, rdata_buf);
-        data_vld->next = select(r_hs, ch_bool(true), select(w_hs, ch_bool(false), data_vld));
+        beat_cnt->next = select(!io().rst_n, ch_uint<4>(0_d),
+                                select(start | is_done_st, ch_uint<4>(0_d),
+                                       select(r_hs, select(rlast, ch_uint<4>(0_d), beat_cnt + ch_uint<4>(1_d)),
+                                       select(w_hs, select(wlast, ch_uint<4>(0_d), beat_cnt + ch_uint<4>(1_d)), beat_cnt))));
+
+        rdata_buf->next = select(!io().rst_n, ch_uint<DATA_WIDTH>(0_d),
+                                 select(r_hs, io().rdata, rdata_buf));
+        data_vld->next = select(!io().rst_n, ch_bool(false),
+                                select(r_hs, ch_bool(true), select(w_hs, ch_bool(false), data_vld)));
         // ID increments only at transaction start (reg_start), stays same for all beats/bursts in same transaction
-        id_reg->next = select(start, id_reg + ch_uint<ID_WIDTH>(1_d), id_reg);
-        
+        id_reg->next = select(!io().rst_n, ch_uint<ID_WIDTH>(0_d),
+                              select(start, id_reg + ch_uint<ID_WIDTH>(1_d), id_reg));
+
         auto rd_err = select(is_rd_data, select(r_vld, rresp != ch_uint<2>(0_d), ch_bool(false)), ch_bool(false));
         auto wr_err = select(is_wr_resp, select(b_vld, bresp != ch_uint<2>(0_d), ch_bool(false)), ch_bool(false));
-        err_flag->next = select(start, ch_bool(false), select(rd_err | wr_err | stop, ch_bool(true), err_flag));
+        err_flag->next = select(!io().rst_n, ch_bool(false),
+                                select(start, ch_bool(false), select(rd_err | wr_err | stop, ch_bool(true), err_flag)));
         
         auto rd_complete = select(is_rd_data, select(r_vld, select(r_rdy_sig, rlast, ch_bool(false)), ch_bool(false)), ch_bool(false));
         auto wr_complete = select(is_wr_data, select(w_vld, select(w_rdy, wlast, ch_bool(false)), ch_bool(false)), ch_bool(false));
@@ -123,7 +142,8 @@ public:
                                 select(is_wr_addr, select(aw_rdy, ch_uint<3>(4_d), ch_uint<3>(3_d)),
                                 select(is_wr_data, select(wr_complete, ch_uint<3>(5_d), ch_uint<3>(4_d)),
                                 select(is_wr_resp, select(b_hs, select(more_data, ch_uint<3>(1_d), ch_uint<3>(6_d)), ch_uint<3>(5_d)), ch_uint<3>(5_d)))))));
-        state->next = select(stop & !is_done_st, ch_uint<3>(6_d), next_state);
+        state->next = select(!io().rst_n, ch_uint<3>(0_d),
+                             select(stop & !is_done_st, ch_uint<3>(6_d), next_state));
         
         auto aligned_raddr = curr_raddr & ~(ch_uint<ADDR_WIDTH>(NUM_BYTES - 1));
         auto aligned_waddr = curr_waddr & ~(ch_uint<ADDR_WIDTH>(NUM_BYTES - 1));
@@ -151,7 +171,8 @@ public:
         auto done = select(is_done_st, select(err_flag, ch_bool(false), ch_bool(true)), ch_bool(false));
         io().status_busy = busy; io().status_done = done; io().status_error = err_flag;
         
-        irq_en->next = select(start, ch_bool(true), select(done | err_flag, ch_bool(false), irq_en));
+        irq_en->next = select(!io().rst_n, ch_bool(false),
+                              select(start, ch_bool(true), select(done | err_flag, ch_bool(false), irq_en)));
         io().irq = select(done | err_flag, irq_en, ch_bool(false));
     }
 };
