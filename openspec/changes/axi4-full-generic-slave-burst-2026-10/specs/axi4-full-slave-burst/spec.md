@@ -119,6 +119,8 @@
 
 1. 写状态机 MUST 在整笔 burst 期间持续拉高 `wready`（直到 `wlast` 到达或长度超限），
    MUST NOT 在第 1 个 beat 之后停止。
+   → burst 结束后 `wready` MUST 撤销：本笔事务**不再接受**额外的 W beat
+     （否则越界 beat 会静默写入寄存器）。
 2. 目标地址 MUST 按 burst 类型逐 beat 计算（见下一条 Requirement），
    MUST NOT 恒用同一个地址索引。
 3. 每一拍 MUST 用**当拍**的 `io().wstrb` 重新展开字节道掩码
@@ -132,6 +134,7 @@
      第 `awlen + 2` 个 beat，与「只接受 `awlen + 1` 个」自相矛盾
 5. `awlen + 1 > MAX_BURST_LEN` → 该笔事务 MUST 以 `SLVERR` 结束，
    MUST NOT 静默截断。
+   → 该笔事务的 W beat **不被写入**（事务整体被拒绝），响应为 `SLVERR`。
 6. **INCR burst 越界**：burst 中途某 beat 的地址跨出已实现寄存器窗口时，
    该 beat MUST 被抑制（写：寄存器保持原值；读：`rdata = 0`），
    且该笔事务 MUST 以 `DECERR` 结束。
@@ -170,18 +173,30 @@
    MUST NOT 恒返回首拍的值。
 2. `rlast` MUST 只在**最后一个 beat** 拉高。
 3. 读 beat 计数 MUST 与**锁存的** `arlen` 比较，MUST NOT 依赖活的 `io().arlen`。
+   → 被拒绝的读事务（burst 类型不支持 / 超 `MAX_BURST_LEN`）每个 beat MUST 呈现
+     `rdata = 0` 且 `rresp = SLVERR`。
 4. 读地址 MUST 按 burst 类型逐 beat 计算。
 5. **`rvalid` 的形态 MUST 明确**：本 capability 采用**流式**形态 ——
    `rvalid` 在整个 burst 期间**连续保持为 1**，每拍呈现一个 beat 的数据，
    直到 `rready` 接受该 beat 为止；MUST NOT 采用「每 beat 独立等待 `rready` 再出下一拍」
    的形态（后者会让 master 看到 `rvalid` 断续，行为与 6 个 peripheral 不一致）。
-6. ⚠️ **`rlast` / 末拍判定 MUST 用「下一个值」**（`next_beat_cnt == arlen` 之类），
-   MUST NOT 用「当前值」比较（`beat_cnt == arlen`）——
+6. ⚠️ **写侧的末拍判定 MUST 用「下一个值」**（`next_beat_cnt == awlen + 1` 之类），
+   MUST NOT 用当前寄存器值比较（`beat_cnt == awlen`）——
    仓库已登记该坑（`include/axi4/AGENTS.md` ANTI-PATTERNS：
    UART RX 引擎因用当前值判定结束而只采到 7 位）。
    同理，burst 结束判定 MUST 基于 `w_handshake` 组合出的**下一状态**，
    MUST NOT 基于当前寄存器值。
-7. **INCR burst 越界**：某 beat 的地址跨出已实现窗口时，
+7. ⚠️ **读侧的 `rlast` MUST 与「正在呈现的 beat」同源**：
+   `rdata` 与 `rlast` MUST 由**同一个** beat 索引驱动
+   （该索引 = 已被 `rready` 接受的 beat 数），即 `rlast = (beat_idx == arlen)`
+   —— 这里用**当前值**是**正确**的，MUST NOT 改用「下一值」形式
+   （`next_beat_cnt == arlen`）：
+   流式形态下末拍在 `rready` 拉低期间**仍停留在总线上**，
+   「下一值」形式会在该周期给出错误的 `rlast = 0`
+   （master 会认为 burst 未结束 → 末拍被重复接受 / 事务挂起）。
+   「下一个值」规则针对的是**写侧**的「本拍是否为末拍」判定
+   与「burst 结束判定基于 `w_handshake` 的下一状态」这两条。
+8. **INCR burst 越界**：某 beat 的地址跨出已实现窗口时，
    该 beat MUST 呈现 `rdata = 0` 且 `rresp = DECERR`，
    该笔事务 MUST 以 `DECERR` 结束（与写侧对称）。
 
@@ -206,6 +221,7 @@
 3. `WRAP`（`0b10`）：本 capability **不要求**支持；
    MUST 以 `SLVERR` **明确拒绝**，MUST NOT 静默当作 `INCR` 处理
    （静默降级是数据损坏级别的缺陷）
+   → 该笔事务的 W beat **不被写入**（事务整体被拒绝）
 4. **步长与总线宽度的关系**：解码步长固定为 4 字节（`addr >> 2`），
    而寄存器宽度为 `DATA_WIDTH`。当 `DATA_WIDTH == 64` 且 `awsize < 3` 时，
    相邻 beat 会落到**同一个** 64 位寄存器（窄传输）。

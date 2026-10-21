@@ -185,6 +185,10 @@ public:
         ch_out<ch_bool>     rlast;
         ch_out<ch_bool>     rvalid;
         ch_in<ch_bool>      rready;
+
+        // 复位（低有效，在时钟沿生效）—— Axi4Slave 的必需端口：
+        // 未接线的 ch_in<ch_bool> 读出为 0 = 永久复位（静默破坏）
+        ch_in<ch_bool>      rst_n;
     )
     AxiFullFixture(ch::Component *parent = nullptr,
                    const std::string &name = "axi_full")
@@ -233,6 +237,9 @@ public:
         io().rlast  <<= slave.io().rlast;
         io().rvalid <<= slave.io().rvalid;
         slave.io().rready <<= io().rready;
+
+        // 复位透传（必需端口，未接线 = 永久复位）
+        slave.io().rst_n <<= io().rst_n;
     }
 };
 
@@ -308,10 +315,12 @@ TEST_CASE("MemoryE2E - SyncFifoTraceParity",
 }
 
 // ============================================================================
-// AXI4-Full burst write/read. We do not enforce exact rdata parity per
-// cycle here; instead we only check that both backends successfully drive
-// the slave through a burst transaction and that the burst-ready /
-// burst-valid handshakes reach a stable end-state matching expectations.
+// AXI4-Full burst write/read. Both backends drive the slave through a
+// 4-beat INCR burst; the write is now checked by **data assertions**
+// (4 distinct registers receive 4 distinct values) and the read is checked
+// **per beat** (4 distinct values returned in order, rlast only on the last
+// beat). Comparing handshake signals alone would stay green even when the
+// follow-up beats of a burst are silently dropped.
 // (Register-driven rdata is exercised in test_axi_lite_verilator_e2e.cpp
 // and test_verilator_complex_e2e.cpp after verilator-hier-input-
 // flattening-fix, 2026-10-15.)
@@ -367,6 +376,8 @@ TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
         sim.set_input_value(dev.instance().io().arsize,  static_cast<uint64_t>(2));
         sim.set_input_value(dev.instance().io().awlen,   static_cast<uint64_t>(3));  // 4 beats
         sim.set_input_value(dev.instance().io().arlen,   static_cast<uint64_t>(3));
+        // `rst_n` 是 Axi4Slave 的必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(dev.instance().io().rst_n,   true);
     };
 
     drive_defaults(*sim_a, *dev_a);
@@ -374,15 +385,24 @@ TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
     sim_a->tick(1);
     sim_b->tick(1);
 
-    // Burst write: assert awvalid + wvalid together for 4 cycles.
-    auto drive_write = [](ch::Simulator &sim,
-                          ch::ch_device<AxiFullFixture> &dev,
-                          uint32_t beat, uint64_t data) {
+    // Burst write: AW 一拍 + 4 个 W beat。
+    // ⚠️ AW→W 相位分离：同拍 AW+W 时该拍 W **不被接受**（`aw_done` 是寄存器）
+    //    → master MUST 保持 WVALID 到 WREADY（AXI 合规 master 的义务）。
+    //    之前的 stimulus 把 AW 与 W 同拍拉高 → 第一个 beat 被静默丢弃，
+    //    多 beat 语义无从验证。
+    auto drive_aw = [](ch::Simulator &sim,
+                       ch::ch_device<AxiFullFixture> &dev) {
         sim.set_input_value(dev.instance().io().awaddr,
                             static_cast<uint64_t>(0));
         sim.set_input_value(dev.instance().io().awvalid, true);
-        sim.set_input_value(dev.instance().io().wdata,
-                            data);
+        sim.set_input_value(dev.instance().io().wvalid, false);
+    };
+
+    auto drive_w = [](ch::Simulator &sim,
+                      ch::ch_device<AxiFullFixture> &dev,
+                      uint32_t beat, uint64_t data) {
+        sim.set_input_value(dev.instance().io().awvalid, false);
+        sim.set_input_value(dev.instance().io().wdata, data);
         sim.set_input_value(dev.instance().io().wstrb,
                             static_cast<uint64_t>(0xF));
         sim.set_input_value(dev.instance().io().wlast,
@@ -390,10 +410,15 @@ TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
         sim.set_input_value(dev.instance().io().wvalid, true);
     };
 
+    drive_aw(*sim_a, *dev_a);
+    drive_aw(*sim_b, *dev_b);
+    sim_a->tick(1);
+    sim_b->tick(1);
+
     const uint64_t write_data[] = {0x11, 0x22, 0x33, 0x44};
     for (uint32_t beat = 0; beat < 4; ++beat) {
-        drive_write(*sim_a, *dev_a, beat, write_data[beat]);
-        drive_write(*sim_b, *dev_b, beat, write_data[beat]);
+        drive_w(*sim_a, *dev_a, beat, write_data[beat]);
+        drive_w(*sim_b, *dev_b, beat, write_data[beat]);
         sim_a->tick(1);
         sim_b->tick(1);
     }
@@ -406,7 +431,7 @@ TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
         sim_b->tick(1);
     }
 
-    // Burst read.
+    // Burst read: AR 一拍 + 4 个流式 R beat。
     auto drive_read = [](ch::Simulator &sim,
                          ch::ch_device<AxiFullFixture> &dev) {
         sim.set_input_value(dev.instance().io().araddr,
@@ -419,7 +444,22 @@ TEST_CASE("MemoryE2E - AxiFullBurstWriteRead",
     sim_b->tick(1);
     drive_defaults(*sim_a, *dev_a);
     drive_defaults(*sim_b, *dev_b);
-    for (int i = 0; i < 8; ++i) {
+
+    // ⚠️ 数据断言（不是仅握手断言）：4 个 beat 必须依次返回 4 个**不同**的值。
+    //    只比较握手信号时，多 beat 被静默丢弃测试仍绿。
+    auto *rdata_a = dev_a->instance().io().rdata.impl();
+    auto *rdata_b = dev_b->instance().io().rdata.impl();
+    for (uint32_t beat = 0; beat < 4; ++beat) {
+        const uint64_t da = read_port_output(*sim_a, rdata_a);
+        const uint64_t db = read_port_output(*sim_b, rdata_b);
+        UNSCOPED_INFO("beat=" << beat << " rdata interp=" << da
+                     << " vl=" << db);
+        REQUIRE(da == db);
+        REQUIRE(da == write_data[beat]);
+        sim_a->tick(1);
+        sim_b->tick(1);
+    }
+    for (int i = 0; i < 4; ++i) {
         sim_a->tick(1);
         sim_b->tick(1);
     }

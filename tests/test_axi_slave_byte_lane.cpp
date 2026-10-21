@@ -9,16 +9,17 @@
 //   * 覆盖通用 slave：`AxiLiteSlave`（32 / 64 bit 总线）与
 //     `Axi4Slave`（32 / 64 bit 总线）
 //
-// ⚠️ Axi4Slave 的写状态机当前**每笔事务只接受 1 个 W beat**
-// （`include/axi4/axi4_full.h` 中 `wready = (write_state == 1) && wvalid`）——
-// 多 beat burst 属 `proposal.md` 的非目标，单独立项。
-// 因此本文件的 Axi4Slave 用例验证的是**每次 W 握手用当拍 WSTRB**：
-// AW 拍先给一个不同的 WSTRB，W 拍再改成掩码，断言用的是 W 拍的值
-// （等价于"掩码 MUST NOT 在 AW 拍锁存"）。
+// ⚠️ Axi4Slave 的多 beat burst 语义（INCR / FIXED / WRAP→SLVERR / 逐 beat
+//    wstrb / 越界 DECERR）由独立 capability `axi4-full-slave-burst` 承载
+//    （openspec/specs/axi4-full-slave-burst/spec.md），用例见
+//    `tests/test_axi4_full_burst.cpp`。
+//    因此本文件的 Axi4Slave 用例验证的是**每次 W 握手用当拍 WSTRB**：
+//    AW 拍先给一个不同的 WSTRB，W 拍再改成掩码，断言用的是 W 拍的值
+//    （等价于"掩码 MUST NOT 在 AW 拍锁存"）。
 //
-// ⚠️ `Axi4Slave`（AXI4 Full）仍**没有** `rst_n`、且响应是组合单拍（规范形态偏差，
-//    属 `axi4-full-generic-slave-burst-2026-10` 的范围）—— 因此 Full slave 的用例
-//    不等待 BVALID/RVALID，按已知时序推进，断言只针对寄存器读回值。
+// ✅ `Axi4Slave` 已收敛到规范形态（`axi4-full-slave-burst` capability）：
+//    `rst_n` + AW→W 相位分离 + 地址锁存 + 响应保持 + 未映射 DECERR。
+//    → Full slave 用例 MUST 驱动 `rst_n`（未接线读出为 0 = 永久复位）。
 //
 // ✅ `AxiLiteSlave` 已收敛到规范形态（`axi-slave-conformance` capability）：
 //    `rst_n` + AW→W 相位分离 + 地址锁存 + 响应保持 + 未映射 DECERR。
@@ -245,6 +246,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[axi][byte-lane][full][dual]",
     [&]() {
         auto &io = dev.instance().io();
+        // `rst_n` 是必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(io.rst_n, 1);
 
         full_write(sim, io, kReg0, 0xAABBCCDDu, 0xF);
         REQUIRE(full_read(sim, io, kReg0) == 0xAABBCCDDu);
@@ -268,6 +271,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[axi][byte-lane][full][dual]",
     [&]() {
         auto &io = dev.instance().io();
+        // `rst_n` 是必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(io.rst_n, 1);
 
         full_write(sim, io, kReg0, 0x11223344u, 0xF);
         full_write(sim, io, kReg1, 0x55667788u, 0xF);
@@ -288,6 +293,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[axi][byte-lane][full][dual]",
     [&]() {
         auto &io = dev.instance().io();
+        // `rst_n` 是必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(io.rst_n, 1);
 
         full_write(sim, io, kReg0, 0x1122334455667788ull, 0xFF);
         REQUIRE(full_read(sim, io, kReg0) == 0x1122334455667788ull);

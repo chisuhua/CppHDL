@@ -35,7 +35,7 @@
 > D4 → Task 7；D5 → Task 8；D6 → Task 7；D7 → Task 3 / Task 5-7 / Task 10；
 > D8 → Task 11。
 
-- [ ] ### Task 0: spec 冲突消解 + delta 完整性核对
+- [x] ### Task 0: spec 冲突消解 + delta 完整性核对
   - **action**:
     - 本 change 的 spec delta MUST 保持 **3 个文件**齐全：
       - `specs/axi4-full-slave-burst/spec.md`（新 capability，ADDED ×7）
@@ -54,7 +54,7 @@
     - `openspec validate --strict` MUST 通过
   - **verify**: `openspec validate axi4-full-generic-slave-burst-2026-10 --strict && echo VALIDATE_OK`
 
-- [ ] ### Task 1: 实例化点全量清点（`rst_n` 静默破坏护栏）
+- [x] ### Task 1: 实例化点全量清点（`rst_n` 静默破坏护栏）
   - **action**:
     - 清点全仓 `Axi4Slave` 的实例化点，记入 proposal 或 design 文档
     - 预期 3 个文件：`examples/axi4/axi4_full_example.cpp`、
@@ -67,7 +67,7 @@
     ```
     MUST 命中 3 个 `.cpp` 文件（数量变化时 MUST 在 tasks 里记录原因）
 
-- [ ] ### Task 2: 先加 `rst_n` 端口声明 + 接线（行为不变）
+- [x] ### Task 2: 先加 `rst_n` 端口声明 + 接线（行为不变）
   - **action**:
     - `include/axi4/axi4_full.h`：`__io` 末尾新增 `ch_in<ch_bool> rst_n;`
       （**只加端口声明**，本 Task 不加复位 pattern、不改状态机）
@@ -79,6 +79,11 @@
         （只构建 + 打印）→ 无 testbench 可放；MUST 用
         「wrapper 透传 `rst_n` 端口」或「tie `ch_bool(true)`」的方式处理，
         并在 design 文档记录选择
+        - ✅ **已裁决（2026-10-21）**：选「**wrapper 透传 `rst_n` 端口**」
+          （`Axi4Top::__io` 末尾新增 `ch_in<ch_bool> rst_n;` +
+          `axi_slave.io().rst_n <<= io().rst_n;`）。
+          理由：与 `examples/axi4/axi4_lite_example.cpp`（Lite 版本）同源；
+          tie `true` 会让 wrapper 无法仿真复位场景
     - ⚠️ 加了端口但**未加复位 pattern** 时，`rst_n` 当前**无效果** →
       既有行为 MUST NOT 变化 → **全部既有测试 MUST 仍然全绿**
       （这是本 Task 的验收判据）
@@ -89,7 +94,7 @@
     ```
     第 1 条 MUST 命中 ≥ 1；第 2 条 MUST **全绿**（行为未变）
 
-- [ ] ### Task 3: 写会失败的 burst 用例（RED）
+- [x] ### Task 3: 写会失败的 burst 用例（RED）
   - **action**:
     - 新建 `tests/test_axi4_full_burst.cpp`，用
       `tests/dual_backend_fixture.h::DUAL_BACKEND_TEST_PAIR` macro
@@ -122,7 +127,7 @@
     第 3 条 MUST 命中 **1**（1 个文件 = 1 个 ctest 条目）；
     **此时测试 MUST 是红的**（RED 基线）
 
-- [ ] ### Task 4: 全部 `ch_reg` 加复位 pattern
+- [x] ### Task 4: 全部 `ch_reg` 加复位 pattern
   - **action**:
     - `SlaveState` 全部 `ch_reg`（24 个：2 个状态机 + 16 个数据寄存器 + 6 个计数/锁存）
       的 `next` 表达式 MUST 包上 `select(!io().rst_n, <init_val>, <expr>)`，
@@ -142,7 +147,7 @@
     ```
     MUST 观察到复位用例由红转绿（用 Catch2 名称过滤，**不要**用 ctest 粒度）
 
-- [ ] ### Task 5: 写侧多 beat burst（AW→W 相位分离 + 地址锁存 + 逐 beat 地址）
+- [x] ### Task 5: 写侧多 beat burst（AW→W 相位分离 + 地址锁存 + 逐 beat 地址）
   - **action**:
     - 写状态机 MUST 在整笔 burst 期间持续拉高 `wready`（直到 `wlast` 或长度超限）
     - AW 握手时把地址 / `awlen` / `awsize` / `awburst` / `awid` 锁存进寄存器
@@ -158,21 +163,46 @@
     ./build/tests/test_axi4_full_burst "*write*"
     ```
     Task 3 的用例 1 / 3 / 4 / 5 MUST 转绿（用 Catch2 名称过滤逐项确认）
+  - ⚠️ **实施时补强（2026-10-21）**：
+    1. **「wlast 缺失」必须检出**：原实现只检出了「wlast 提前」，
+       「预期末拍到了但 wlast=0」会漏检 → 事务错误地返回 `OKAY`。
+       改为**异或**判定（`wlast != expected_last`），
+       并新增回归用例「wlast mismatch ends with SLVERR」（双后端）。
+    2. **burst 结束后 `wready` MUST 撤销**（新增 `write_done` 寄存器）：
+       否则 master 多发的 beat 会被静默写入寄存器（越界写入）。
+       → 同步补进 spec delta（写 burst Requirement 第 1 条）。
+    3. **被拒绝的事务（WRAP / 超 `MAX_BURST_LEN`）不写入任何 beat**：
+       事务整体被拒绝（响应 `SLVERR`），与「长度不符」的情形
+       （已写入的 beat **不**回滚，AXI 允许部分写入 + 错误响应）区分开。
+       → 同步补进 spec delta。
 
-- [ ] ### Task 6: 读侧多 beat burst
+- [x] ### Task 6: 读侧多 beat burst
   - **action**:
     - AR 握手时把地址 / `arlen` / `arsize` / `arburst` / `arid` 锁存进寄存器
     - 每一拍的 `rdata` MUST 取该拍对应地址的寄存器值
     - `rlast` MUST 只在最后一个 beat 拉高，
       且**判定 MUST 用「下一个值」**（同 Task 5 的坑）
     - 读 beat 计数 MUST 与**锁存的** `arlen` 比较
+    - ⚠️ **实施时裁决（2026-10-21）**：读侧 `rlast` 的「下一个值」写法与本 change
+      原 spec 的 Requirement 6 **字面冲突**，且**字面写法是错的**：
+      流式形态下末拍在 `rready` 拉低期间**仍停留在总线上**，
+      `rlast = (next_beat_cnt == arlen)` 会在该周期给出错误的 `rlast = 0`
+      （master 认为 burst 未结束 → 末拍被重复接受 / 事务挂起）。
+      **裁决**：读侧 `rlast` MUST 与「正在呈现的 beat」同源
+      → `rlast = (beat_idx == arlen)`（`beat_idx` = 已被 `rready` 接受的 beat 数，
+      **当前值**）；「下一个值」规则只约束**写侧**的「本拍是否为末拍」判定
+      与「burst 结束判定基于 `w_handshake` 的下一状态」。
+      → 已同步修正本 change 的 spec delta
+      （`specs/axi4-full-slave-burst/spec.md` 的该 Requirement 第 6/7 条）
+      + 新增回归用例「rlast is asserted while the last beat is held on the bus」
+      （`tests/test_axi4_full_burst.cpp`，双后端）
   - **verify**:
     ```bash
     ./build/tests/test_axi4_full_burst "*read*"
     ```
     Task 3 的用例 2 MUST 转绿
 
-- [ ] ### Task 7: burst 类型语义 + 响应语义化
+- [x] ### Task 7: burst 类型语义 + 响应语义化
   - **action**:
     - `INCR`：地址每 beat 递增 `2^awsize` / `2^arsize` 字节
       - ⚠️ `2^awsize` **MUST NOT 用运行期移位** ——
@@ -189,12 +219,19 @@
     ```
     Task 3 的用例 6 / 7 MUST 转绿
 
-- [ ] ### Task 8: 模板参数 honor 化（含决策点裁决）
+- [x] ### Task 8: 模板参数 honor 化（含决策点裁决）
   - **action**:
-    - ⚠️ **先裁决**（MUST NOT 由实施者临场随机选）：
-      `NUM_REGS` 走「固定 16 + `static_assert`」还是「改名 `NUM_REGS_FIXED`」？
-      → 裁决结果 MUST 写进 design 文档（本 change 的 tasks 记录选择与理由）
-      补充事实：现有 3 个实例化点全部用**位置参数**
+    - ✅ **已裁决（2026-10-21，实施时记录）**：走「**固定 16 + `static_assert`**」，
+      **不改名**。
+      理由：① 与 `AxiLiteSlave`（`include/axi4/axi4_lite_slave.h:41-43`）
+      **同源**（同一仓库先例：`static_assert(NUM_REGS == 4, ...)`）；
+      ② `NUM_REGS` 这个名字在「未 honor」的状态下本就是**接口谎言**，
+      改名成 `NUM_REGS_FIXED` 会把谎言换成「名字正确但语义仍不生效」，
+      比 `static_assert` 更危险（用户会以为传 8 就能拿 8 个寄存器）；
+      ③ 保持参数名 → 3 个位置实参实例化点源码兼容，零 API 破坏面。
+      实现：`static_assert(NUM_REGS == NUM_IMPL_REGS /* 16 */, ...)`
+      （`include/axi4/axi4_full.h:92`）
+    - 补充事实：现有 3 个实例化点全部用**位置参数**
       （`Axi4Slave<32,32,4,16,16>`）→ 改名对它们源码兼容
     - `MAX_BURST_LEN` MUST 真正参与长度上限检查
     - MUST 加 `static_assert(MAX_BURST_LEN <= 16)`（`awlen` 是 4 bit，物理上限 16 beat）
@@ -221,8 +258,25 @@
     MUST **编译失败**且诊断中 MUST 含 `static_assert` 相关文本
     （若先死在 `ast_nodes.h` 的 `#include "lnodeimpl.h"` → 补齐缺失的 include 目录，
     **假负不算通过**）
+    - ⚠️ **实测修正（2026-10-21）**：原命令用 `using Bad = axi4::Axi4Slave<...>;`
+      **不触发类模板实例化** → `static_assert` 根本不求值 → 编译**通过** = **假负**。
+      MUST 改为**真实实例化**：
+      ```bash
+      cat > /tmp/opencode/neg_tu.cpp <<'EOF'
+      #include "axi4/axi4_full.h"
+      // 真实实例化（`using` 别名不会触发类模板实例化 → static_assert 不会求值）
+      axi4::Axi4Slave<32, 32, 4, 8, 16> bad;   // NUM_REGS = 8 与实现不符
+      int main() { return 0; }
+      EOF
+      g++ -std=c++20 -fsyntax-only /tmp/opencode/neg_tu.cpp \
+        -I include -I include/core -I include/ast -I include/lnode \
+        -I include/bv -I include/utils
+      ```
+      实测输出：
+      `include/axi4/axi4_full.h:92:28: error: static assertion failed: Axi4Slave: NUM_REGS is not honoured ...`
+      另两条亦实测触发：`MAX_BURST_LEN=32` → line 97；`DATA_WIDTH=128` → line 102
 
-- [ ] ### Task 9: 回归 —— 既有测试必须仍然全绿
+- [x] ### Task 9: 回归 —— 既有测试必须仍然全绿
   - **action**:
     - `tests/test_axi_slave_byte_lane.cpp`（`Axi4Slave` 的 `Full32` / `Full64` 用例）
       MUST 适配：`rst_n` 接线（Task 2 已做）+ 写事务**是否需要改两拍**
@@ -239,7 +293,7 @@
     ```
     MUST 全绿
 
-- [ ] ### Task 10: 双后端一致性回归
+- [x] ### Task 10: 双后端一致性回归
   - **action**:
     - `tests/test_axi4_full_burst.cpp` MUST 在 interpreter 与 verilator 两后端下
       给出**逐周期一致**的结果（`DUAL_BACKEND_TEST_PAIR` 的 per-cycle parity）
@@ -253,7 +307,7 @@
     ```
     第 1 条 MUST 全绿；第 2 条 MUST 输出 **0**（无 skip）
 
-- [ ] ### Task 11: 文档同步 + 测试计数更新
+- [x] ### Task 11: 文档同步 + 测试计数更新
   - **action**:
     - `include/axi4/AGENTS.md`：
       - CONVENTIONS 段「通用 AXI slave 规范形态」第 9 条

@@ -444,6 +444,12 @@ add_dual_backend_test(test_axi_lite_slave_conformance
     SOURCES test_axi_lite_slave_conformance.cpp
     TIMEOUT 300
 )
+# 通用 AXI4 Full slave 的多 beat burst 语义回归（INCR / FIXED / WRAP→SLVERR /
+# 逐 beat wstrb / 越界 DECERR / 超 MAX_BURST_LEN→SLVERR / rst_n 复位）——双后端。
+add_dual_backend_test(test_axi4_full_burst
+    SOURCES test_axi4_full_burst.cpp
+    TIMEOUT 300
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)

@@ -80,8 +80,38 @@ include/axi4/
   8. 解码步长**固定 4 字节**（`addr >> 2`），与 `DATA_WIDTH` 无关；
      窗口 = 字节地址 `0x00..0x0C`
   9. `NUM_REGS` 模板参数**未 honor**（固定 4 个寄存器）→ 用 `static_assert` 在
-     编译期暴露，MUST NOT 静默接受（`Axi4Slave` 仍有 `NUM_REGS` / `MAX_BURST_LEN`
-     两个未 honor 的参数，属 `axi4-full-generic-slave-burst-2026-10` 的范围）
+     编译期暴露，MUST NOT 静默接受。
+     ✅ `Axi4Slave`（AXI4 **Full**）的 `NUM_REGS` / `MAX_BURST_LEN` / `DATA_WIDTH`
+     三个参数已在 `axi4-full-generic-slave-burst-2026-10` 中 honor 化 / 编译期暴露
+     （见下方「AXI4 Full burst 语义」段）
+- **AXI4 Full burst 语义**（`axi4_full.h` 的 `Axi4Slave`）：
+  契约见 `openspec/specs/axi4-full-slave-burst/spec.md`
+  （`axi4-full-generic-slave-burst-2026-10` 落地）。
+  1. **规范形态与 Lite 同源**：`rst_n`（低有效，**在时钟沿生效**）+ 全部 36 个
+     `ch_reg` 的复位 pattern + AW→W 相位分离 + 写/读**地址锁存** +
+     `bvalid` 保持到 `bready` / `rvalid` 保持到 `rready` +
+     未映射地址 → `DECERR`
+  2. ⚠️ **写 / 读方向各自独立 outstanding**（AXI4 的 AW/W/B 与 AR/R 是独立通道组）：
+     本组件**不使用**共享 `busy`（`AxiLiteSlave` 的读写互斥形态）→
+     降级为互斥属于行为回退，MUST NOT 发生
+  3. `awlen` / `arlen` 是「beat 数 − 1」的 AXI 编码 → 一笔事务 = `len + 1` 个 beat
+  4. `INCR`：每 beat 地址前进 `2^awsize` / `2^arsize` 字节
+     （**查表**实现 —— MUST NOT 用运行期移位算 `2^awsize`）
+  5. `FIXED`：每 beat 地址不变
+  6. `WRAP`：**不支持** → 以 `SLVERR` **明确拒绝**（MUST NOT 静默当作 INCR）
+  7. 每一拍按**当拍** `wstrb` 重新展开字节道掩码（MUST NOT 在 AW 拍锁存）
+  8. `wlast` 与预期 beat 数不符（提前 / 缺失）→ `SLVERR`
+     （已写入的 beat **不**回滚 —— 部分写入 + 错误响应是 AXI 允许的行为）
+  9. `awlen + 1 > MAX_BURST_LEN` → `SLVERR`（MUST NOT 静默截断并返回 `OKAY`）
+  10. INCR burst 越界（某 beat 跨出 0x00..0x3C 窗口）→ 该 beat 被抑制
+      （写：寄存器保持原值；读：`rdata = 0` 且 `rresp = DECERR`），事务以 `DECERR` 结束
+  11. 读侧 `rvalid` 采用**流式**形态：整个 burst 期间连续为 1，每拍呈现一个 beat，
+      直到该 beat 被 `rready` 接受
+  12. ⚠️ **窄传输（`awsize < log2(DATA_WIDTH/8)`）的字节道重编号未实现**：
+      `DATA_WIDTH == 64` 且 `awsize < 3` 时相邻 beat 落到**同一个** 64 位寄存器
+      （解码步长固定 4 字节，寄存器宽度为 `DATA_WIDTH`）
+  13. 模板参数：`NUM_REGS` 固定 16（`static_assert` 暴露）、
+      `MAX_BURST_LEN` 真正生效（超限 → `SLVERR`）、`DATA_WIDTH` MUST ≤ 64
 - **Address decode**: `addr >> 2` (4-byte aligned per register；通用 slave 不用掩码截断，
   截断会把窗口外地址别名到已实现寄存器)
 - **Response**: 6 个 peripheral 对已映射地址返回 `bresp=OKAY(0)`；
@@ -109,8 +139,8 @@ include/axi4/
      低 `ceil(W / 8)` 条（当前全部寄存器均如此）
   9. `WSTRB` **逐 W 握手有效**：`Axi4Slave` MUST 在每次 W 握手拍按当拍
      `io().wstrb` 重新展开掩码，MUST NOT 在 AW 拍锁存
-     （⚠️ `Axi4Slave` 的写状态机当前每笔事务只接受 1 个 W beat，
-     多 beat burst 属待修语义，见 `openspec/changes/axi4-slave-byte-lane-2026-10` 非目标）
+     （✅ 多 beat burst 的逐 beat 语义已在 `axi4-full-generic-slave-burst-2026-10`
+     中落地，见上方「AXI4 Full burst 语义」段）
   - 实现入口：`axi4::detail::byte_lane_mask<DATA_WIDTH>(wstrb)` 展开一次，
     `axi4::detail::byte_lane_apply<W>(old, wdata, mask)` 逐寄存器套用
     （`BUS_WIDTH` 默认 `max(W, 32)`，非推导上下文；32 bit 调用点写 `byte_lane_mask<32>`）
@@ -186,6 +216,7 @@ include/axi4/
 | `test_axi_pwm_simple.cpp` | `[axi][pwm]` | PWM basic |
 | `test_axi_pwm_timed.cpp` | `[axi][pwm]` | PWM with timing |
 | `test_axi_spi.cpp` | `[axi][spi]` | SPI master |
+| `test_axi4_full_burst.cpp` | `[axi][axi4][burst][dual]` | 通用 AXI4 Full slave 的多 beat burst 语义（INCR / FIXED / WRAP→SLVERR / 逐 beat wstrb / 越界 DECERR / 超 MAX_BURST_LEN→SLVERR / rst_n 复位；**双后端**） |
 | `test_axi_i2c.cpp` | `[axi][i2c]` | I2C master |
 
 ## PHASE GATES

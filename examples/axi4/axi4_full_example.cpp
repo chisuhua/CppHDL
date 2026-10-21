@@ -63,6 +63,12 @@ public:
         ch_out<ch_bool> rlast;
         ch_out<ch_bool> rvalid;
         ch_in<ch_bool> rready;
+
+        // 复位（低有效，在时钟沿生效）—— Axi4Slave 的必需端口：
+        // 未接线的 ch_in<ch_bool> 读出为 0 = 永久复位（静默破坏）。
+        // 本 example 的 main() 不做仿真（只构建 + 打印），因此复位由
+        // 顶层 wrapper 透传，由未来的 testbench 驱动。
+        ch_in<ch_bool> rst_n;
     )
     
     Axi4Top(ch::Component* parent = nullptr, const std::string& name = "axi4_top")
@@ -111,6 +117,9 @@ public:
         io().rlast <<= axi_slave.io().rlast;
         io().rvalid <<= axi_slave.io().rvalid;
         axi_slave.io().rready <<= io().rready;
+
+        // 复位透传（必需端口，未接线 = 永久复位）
+        axi_slave.io().rst_n <<= io().rst_n;
     }
 };
 
