@@ -166,9 +166,11 @@ int main() {
     // 生成 Verilog
     std::cout << "\n=== Generating Verilog ===" << std::endl;
     // aread codegen note: this FIFO emits `assign dout = mem[rd_ptr]` (0-cycle
-    // combinational read, no downstream register). See
-    // docs/simulation/ARCHITECTURE.md "Memory read port timing" for the
-    // simulator-vs-Verilog drift contract.
+    // combinational read, no downstream register). The Simulator matches this
+    // 0-cycle timing exactly — after the pop edge `dout` follows the advanced
+    // head pointer, so sample `dout` before the pop edge to get the element
+    // being popped. See docs/simulation/ARCHITECTURE.md "Memory read port
+    // timing".
     toVerilog("stream_fifo.v", top_device.context());
     std::cout << "Verilog generated: stream_fifo.v" << std::endl;
     

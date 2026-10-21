@@ -1,34 +1,32 @@
 // tests/test_mem_comb_read.cpp
 //
-// B' (ChipForge Phase 6d.7+): per-port opt-out of 1-cycle read latency.
-//
-// aread (ch_mem::aread) historically misnamed — although the C++ class is
-// named "async_read_port", it was classified into sequential_instr_list_
-// and emitted as `always_ff @(posedge)` in Verilog, giving 1-cycle latency.
-// This test pins down the NEW semantics for aread:
+// Memory read port timing: `ch_mem::aread` (async_read, 0-cycle) vs
+// `ch_mem::sread` (sync_read, 1-cycle).
 //
 //   1. Verilog codegen: aread emits `assign proxy = mem[addr]` (continuous
 //      assignment, 0-cycle latency in Verilog). sread continues to emit
 //      `always_ff` (1-cycle).
 //
-//   2. Simulator: aread is evaluated in `sequential_instr_list_` at posedge
-//      (`src/simulator_init.cpp:116-121`), same phase as sread. The
-//      observed "same-cycle" visibility of aread comes from the trailing
-//      `eval_combinational()` in `Simulator::tick()` (`src/simulator.cpp`)
-//      that propagates the proxy to output ports within the same tick.
-//      So in the Simulator, aread and sread are observationally identical
-//      to a testbench that sets the address before tick() and reads after.
+//   2. Simulator: aread is evaluated in `combinational_instr_list_`
+//      (`src/simulator_init.cpp`), sread in `sequential_instr_list_` at
+//      posedge. Both now match the generated Verilog exactly.
 //
-// Known simulator-vs-Verilog drift (documented in
-// docs/simulation/ARCHITECTURE.md "Memory read port timing"):
-//   - Register-driven read address: Simulator aread effectively 1-cycle
-//     behind a register update at the same posedge; Verilog `assign`
-//     reflects the new address immediately.
-//   - Same-cycle write+read race: Simulator aread returns pre-write
-//     value; Verilog `assign` returns post-write value (NBA update).
-// ChipForge dmem tolerates both drifts because the downstream reg_file
-// provides the required 1-cycle latency. imem must remain on sread to
-// keep fetch/pc_lag alignment.
+// This test file pins the contract (OpenSpec change
+// `sim-mem-read-timing-align-2026-10`, capability `mem-read-timing`):
+//
+//   - aread is 0-cycle: a *register-driven* read address is reflected in
+//     the same cycle the register commits it.
+//   - sread keeps 1-cycle: the sync port still observes the pre-edge
+//     address, matching the Verilog `always_ff` (and the RV32I imem's
+//     `pc_lag` alignment).
+//   - A same-cycle write+aread race returns the POST-write value, matching
+//     the Verilog `assign` (which sees the NBA-updated memory).
+//   - The generated Verilog never references an undeclared signal (a mem
+//     read port is a fictional node with no signal of its own).
+//
+// A downstream consumer that needs the pre-write value MUST provide the
+// 1-cycle latency explicitly with a downstream register (ChipForge dmem's
+// `reg_file <<=`). imem must remain on sread to keep fetch/pc_lag alignment.
 
 #include "catch_amalgamated.hpp"
 
@@ -36,6 +34,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <unistd.h>
@@ -62,8 +62,10 @@ namespace {
 class CombReadFixture : public ch::Component {
 public:
     __io(ch_in<ch_uint<4>> addr_sync; ch_in<ch_uint<4>> addr_async;
+         ch_in<ch_uint<4>> next_addr;
          ch_in<ch_uint<8>> wdata; ch_in<ch_bool> we;
-         ch_out<ch_uint<8>> rdata_sync; ch_out<ch_uint<8>> rdata_async;)
+         ch_out<ch_uint<8>> rdata_sync; ch_out<ch_uint<8>> rdata_async;
+         ch_out<ch_uint<8>> rdata_reg_async; ch_out<ch_uint<8>> rdata_reg_sync;)
 
         CombReadFixture(ch::Component *parent = nullptr,
                         const std::string &name = "comb_read_mem")
@@ -98,6 +100,22 @@ public:
             mem.aread(ch_uint<4>(io().addr_async.impl()), "async_port");
         io().rdata_async = ch_uint<8>(async_port.impl());
 
+        // Register-driven read address (the FIFO `raddr` pattern). The
+        // address passes through a `ch_reg`, whose *value proxy* node is
+        // refreshed in the pre-edge combinational pass — this is the shape
+        // that used to expose the 1-cycle aread skew (see the
+        // "register-driven address" test cases below).
+        ch_reg<ch_uint<4>> addr_reg(0_d, "addr_reg");
+        addr_reg->next = io().next_addr;
+
+        auto reg_async_port =
+            mem.aread(ch_uint<4>(addr_reg.impl()), "reg_async_port");
+        io().rdata_reg_async = ch_uint<8>(reg_async_port.impl());
+
+        auto reg_sync_port = mem.sread(ch_uint<4>(addr_reg.impl()),
+                                       ch_bool(true), "reg_sync_port");
+        io().rdata_reg_sync = ch_uint<8>(reg_sync_port.impl());
+
         // Write port (no enable — always-on for test simplicity)
         auto write_port =
             mem.write(ch_uint<4>(io().addr_sync.impl()),
@@ -114,6 +132,56 @@ std::string read_file(const std::string& path) {
     std::stringstream ss;
     ss << f.rdbuf();
     return ss.str();
+}
+
+// Identifiers declared in the generated module (logic / wire / reg /
+// input / output). Used by the "no undeclared signal" guard below.
+std::set<std::string> collect_declared_signals(const std::string &verilog) {
+    static const std::regex decl_re(
+        R"RX(\b(?:logic|wire|reg|input|output)\b([^;]*))RX");
+    static const std::regex ident_re(R"RX([A-Za-z_][A-Za-z0-9_]*)RX");
+
+    std::set<std::string> declared;
+    std::istringstream iss(verilog);
+    std::string line;
+    while (std::getline(iss, line)) {
+        auto comment = line.find("//");
+        if (comment != std::string::npos) line.erase(comment);
+        std::smatch m;
+        if (!std::regex_search(line, m, decl_re)) continue;
+        const std::string tail = m[1];
+        for (auto it = std::sregex_iterator(tail.begin(), tail.end(),
+                                             ident_re);
+             it != std::sregex_iterator(); ++it) {
+            declared.insert((*it).str());
+        }
+    }
+    return declared;
+}
+
+// Identifiers referenced on the right-hand side of every `assign`.
+std::vector<std::string> collect_assign_references(const std::string &verilog) {
+    static const std::regex assign_re(
+        R"RX(^\s*assign\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.+?);)RX");
+    static const std::regex ident_re(R"([A-Za-z_][A-Za-z0-9_]*)");
+
+    std::vector<std::string> refs;
+    std::istringstream iss(verilog);
+    std::string line;
+    while (std::getline(iss, line)) {
+        auto comment = line.find("//");
+        if (comment != std::string::npos) line.erase(comment);
+        std::smatch m;
+        if (!std::regex_search(line, m, assign_re)) continue;
+        const std::string rhs = m[1];
+        // Sized literals (1'b0, 8'ha1) are not signal references.
+        if (rhs.find('\'') != std::string::npos) continue;
+        for (auto it = std::sregex_iterator(rhs.begin(), rhs.end(), ident_re);
+             it != std::sregex_iterator(); ++it) {
+            refs.push_back((*it).str());
+        }
+    }
+    return refs;
 }
 
 // Unique per-process temp path to avoid parallel ctest collisions and to
@@ -210,6 +278,90 @@ TEST_CASE("sread retains 1-cycle latency (regression for codegen "
 }
 
 // =============================================================================
+// Register-driven read address — the shape that exposes the aread skew
+// (the FIFO `raddr` pattern). The address passes through a `ch_reg`, whose
+// *value proxy* node is refreshed in the pre-edge combinational pass.
+//
+// Generated Verilog: `assign proxy = mem[addr];` → 0-cycle, reflects the new
+// address immediately.
+// =============================================================================
+
+TEST_CASE("aread with register-driven address reflects the new address in the "
+          "same tick (0-cycle, matches generated Verilog)",
+          "[mem][comb-read][sim][reg-addr]") {
+    ch_device<CombReadFixture> device;
+    Simulator simulator(device.context());
+
+    simulator.set_input_value(device.instance().io().addr_sync,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().addr_async,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().wdata,
+                              static_cast<uint64_t>(0x00));
+    simulator.set_input_value(device.instance().io().we,
+                              static_cast<uint64_t>(0));
+
+    // Tick 1: the address register loads 4 (mem[4] = 0xE5).
+    simulator.set_input_value(device.instance().io().next_addr,
+                              static_cast<uint64_t>(0x4));
+    simulator.tick();
+
+    auto async_t1 = simulator.get_port_value(
+        device.instance().io().rdata_reg_async);
+    REQUIRE(static_cast<uint64_t>(async_t1) == 0xE5);
+
+    // Tick 2: the address register loads 3 (mem[3] = 0xD4).
+    simulator.set_input_value(device.instance().io().next_addr,
+                              static_cast<uint64_t>(0x3));
+    simulator.tick();
+
+    auto async_t2 = simulator.get_port_value(
+        device.instance().io().rdata_reg_async);
+    REQUIRE(static_cast<uint64_t>(async_t2) == 0xD4);
+}
+
+TEST_CASE("sread with register-driven address retains 1-cycle latency "
+          "(regression guard for the always_ff path)",
+          "[mem][comb-read][sim][sread-regression][reg-addr]") {
+    ch_device<CombReadFixture> device;
+    Simulator simulator(device.context());
+
+    simulator.set_input_value(device.instance().io().addr_sync,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().addr_async,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().wdata,
+                              static_cast<uint64_t>(0x00));
+    simulator.set_input_value(device.instance().io().we,
+                              static_cast<uint64_t>(0));
+
+    // Tick 1: the address register loads 4. The sync port still observes the
+    // *old* address (0) in this tick — 1-cycle latency.
+    simulator.set_input_value(device.instance().io().next_addr,
+                              static_cast<uint64_t>(0x4));
+    simulator.tick();
+    auto sync_t1 = simulator.get_port_value(
+        device.instance().io().rdata_reg_sync);
+    REQUIRE(static_cast<uint64_t>(sync_t1) == 0xA1);
+
+    // Tick 2: the address register loads 3. The sync port now observes the
+    // address committed during tick 1 (4).
+    simulator.set_input_value(device.instance().io().next_addr,
+                              static_cast<uint64_t>(0x3));
+    simulator.tick();
+    auto sync_t2 = simulator.get_port_value(
+        device.instance().io().rdata_reg_sync);
+    REQUIRE(static_cast<uint64_t>(sync_t2) == 0xE5);
+
+    // Tick 3: settle — the sync port observes the address committed during
+    // tick 2 (3).
+    simulator.tick();
+    auto sync_t3 = simulator.get_port_value(
+        device.instance().io().rdata_reg_sync);
+    REQUIRE(static_cast<uint64_t>(sync_t3) == 0xD4);
+}
+
+// =============================================================================
 // Verilog codegen: aread -> `assign`, sread -> `always_ff`
 // =============================================================================
 
@@ -276,6 +428,42 @@ TEST_CASE("aread Verilog codegen emits assign (no always_ff)",
     std::filesystem::remove(out_file, ec);
 }
 
+// A mem read port is a *fictional* node: it has no Verilog signal. The
+// read_port -> data_proxy edge in the AST makes the proxy's source the read
+// port, so any codegen path that walks the proxy chain up to the read port
+// would emit `assign out = <read_port>;` — a reference to an undeclared
+// signal, i.e. invalid Verilog.
+//
+// This guard is the executable form of that invariant: every identifier
+// referenced on the right-hand side of an `assign` must be declared.
+TEST_CASE("generated Verilog references no undeclared signals",
+          "[mem][comb-read][codegen][undeclared-signal]") {
+    ch_device<CombReadFixture> device;
+
+    const std::string out_file = unique_temp_verilog_path();
+    toVerilog(out_file, device.context());
+
+    std::string verilog = read_file(out_file);
+    REQUIRE(!verilog.empty());
+
+    const auto declared = collect_declared_signals(verilog);
+    const auto references = collect_assign_references(verilog);
+    REQUIRE(!references.empty());
+
+    std::vector<std::string> undeclared;
+    for (const auto &ref : references) {
+        if (!declared.count(ref)) undeclared.push_back(ref);
+    }
+    INFO("undeclared signal references: " << undeclared.size());
+    for (const auto &ref : undeclared) {
+        INFO("undeclared: " << ref);
+    }
+    REQUIRE(undeclared.empty());
+
+    std::error_code ec;
+    std::filesystem::remove(out_file, ec);
+}
+
 // =============================================================================
 // Cross-cycle write+read: write commits at tick N posedge; aread at tick N+1
 // observes the new value (post-write). This validates the standard SRAM
@@ -331,13 +519,16 @@ TEST_CASE("aread cross-cycle write-then-read consistency",
 }
 
 // =============================================================================
-// Same-cycle write+aread race: AREAD returns PRE-WRITE value (spec R4 third
-// bullet). This test pins the chosen Simulator semantic — if a future
-// refactor lets aread observe the same-tick we=1 write, this test fails and
-// requires a coordinated spec/ARCHITECTURE.md update.
+// Same-cycle write+aread race: AREAD returns the POST-WRITE value.
+// This test pins the chosen Simulator semantic — the async read port is
+// combinational, so it re-reads the memory *after* the write port commits,
+// exactly like the generated Verilog `assign proxy = mem[addr];` (which also
+// sees the NBA-updated memory content). If a future refactor lets aread
+// observe the same-tick we=1 write *as a pre-write value* again, this test
+// fails and requires a coordinated spec/ARCHITECTURE.md update.
 // =============================================================================
 
-TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
+TEST_CASE("mem_comb_read same_cycle write_plus_aread returns post_write value",
           "[mem][aread][race]") {
     ch::core::context ctx("race_test");
     ch::core::ctx_swap swap(&ctx);
@@ -350,6 +541,8 @@ TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
     simulator.set_input_value(device.instance().io().addr_sync,
                               static_cast<uint64_t>(0x0));
     simulator.set_input_value(device.instance().io().addr_async,
+                              static_cast<uint64_t>(0x0));
+    simulator.set_input_value(device.instance().io().next_addr,
                               static_cast<uint64_t>(0x0));
     simulator.set_input_value(device.instance().io().wdata,
                               static_cast<uint64_t>(0x00));
@@ -365,8 +558,8 @@ TEST_CASE("mem_comb_read same_cycle write_plus_aread returns pre_write value",
                               static_cast<uint64_t>(0x2));
     simulator.tick();
 
-    constexpr uint64_t kPreWriteValueAtAddr2 = 0xC3;
+    constexpr uint64_t kPostWriteValueAtAddr2 = 0xEE;
     auto rdata = simulator.get_port_value(
         device.instance().io().rdata_async);
-    REQUIRE(static_cast<uint64_t>(rdata) == kPreWriteValueAtAddr2);
+    REQUIRE(static_cast<uint64_t>(rdata) == kPostWriteValueAtAddr2);
 }

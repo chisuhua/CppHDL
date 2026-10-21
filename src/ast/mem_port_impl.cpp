@@ -41,18 +41,28 @@ mem_read_port_impl::create_instruction(ch::data_map_t &data_map) const {
         // instr->set_id(id());
 
         // 初始化端口指令对象
+        //
+        // The read port writes its OWN data_map slot; the data proxy then
+        // copies that slot into the proxy's slot via `instr_proxy` (the
+        // `read_port -> data_proxy` edge established in
+        // `mem_read_port_impl`'s constructor).
+        //
+        // Both the async AND the sync port MUST do this: the proxy's source
+        // is the port's own slot for both, so changing only one of them
+        // would leave the other's slot permanently unwritten — the sync port
+        // would then silently read 0 forever.
         if (port_type_ == mem_port_type::async_read) {
             auto *async_read_port =
                 static_cast<ch::instr_mem_async_read_port *>(instr.get());
             uint32_t enable_node_id = has_enable() ? enable()->id() : 0;
-            async_read_port->init_port(addr()->id(), enable_node_id,
-                                       data_output()->id(), data_map);
+            async_read_port->init_port(addr()->id(), enable_node_id, id(),
+                                       data_map);
         } else if (port_type_ == mem_port_type::sync_read) {
             auto *sync_read_port =
                 static_cast<ch::instr_mem_sync_read_port *>(instr.get());
             uint32_t enable_node_id = has_enable() ? enable()->id() : 0;
             sync_read_port->init_port(cd()->id(), addr()->id(), enable_node_id,
-                                      data_output()->id(), data_map);
+                                      id(), data_map);
         }
 
         // 设置data_map引用

@@ -213,3 +213,60 @@ TEST_CASE("Register - Component Interface", "[reg][interface]") {
     // Test that we can declare register-based components
     REQUIRE(std::is_class_v<SimpleRegister>);
 }
+
+// =============================================================================
+// FIFO read-data behavior.
+//
+// `dout` is a REGISTER-DRIVEN `aread` (`assign dout = mem[rd_ptr]` in the
+// generated Verilog). `rd_ptr` advances on the pop edge, so after the pop
+// edge `dout` follows the *new* head pointer — exactly like the Verilog
+// continuous assignment, which sees the updated `rd_ptr` immediately.
+//
+// A consumer that wants the popped element must sample `dout` BEFORE the pop
+// edge (i.e. at the end of the previous tick) — that is the FIFO protocol.
+// The previous implementation lagged one extra tick behind, so the value
+// observed *after* the pop edge was the popped element itself.
+// =============================================================================
+
+TEST_CASE("FIFO - read data follows the head pointer (aread 0-cycle)",
+          "[fifo][behavior][mem-timing]") {
+    ch_device<FiFo<ch_uint<8>, 4>> fifo;
+    Simulator simulator(fifo.context());
+
+    simulator.set_input_value(fifo.instance().io().din,
+                              static_cast<uint64_t>(0x00));
+    simulator.set_input_value(fifo.instance().io().push,
+                              static_cast<uint64_t>(0));
+    simulator.set_input_value(fifo.instance().io().pop,
+                              static_cast<uint64_t>(0));
+
+    // Tick 1: push 0x11.
+    simulator.set_input_value(fifo.instance().io().din,
+                              static_cast<uint64_t>(0x11));
+    simulator.set_input_value(fifo.instance().io().push,
+                              static_cast<uint64_t>(1));
+    simulator.tick();
+
+    // Tick 2: push 0x22.
+    simulator.set_input_value(fifo.instance().io().din,
+                              static_cast<uint64_t>(0x22));
+    simulator.tick();
+
+    // The head element is visible before any pop — this is what a consumer
+    // looks at before deciding to pop.
+    auto head = simulator.get_port_value(fifo.instance().io().dout);
+    REQUIRE(static_cast<uint64_t>(head) == 0x11);
+    REQUIRE(static_cast<uint64_t>(
+                simulator.get_port_value(fifo.instance().io().empty)) == 0);
+
+    // Tick 3: pop. The head pointer advances on this edge, so `dout` now
+    // follows the *new* head pointer.
+    simulator.set_input_value(fifo.instance().io().push,
+                              static_cast<uint64_t>(0));
+    simulator.set_input_value(fifo.instance().io().pop,
+                              static_cast<uint64_t>(1));
+    simulator.tick();
+
+    auto after_pop = simulator.get_port_value(fifo.instance().io().dout);
+    REQUIRE(static_cast<uint64_t>(after_pop) == 0x22);
+}

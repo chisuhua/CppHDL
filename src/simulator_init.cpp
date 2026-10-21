@@ -114,11 +114,28 @@ void Simulator::initialize() {
                 break;
 
             case ch::core::lnodetype::type_reg:
-            case ch::core::lnodetype::type_mem_read_port:
             case ch::core::lnodetype::type_mem_write_port:
                 sequential_instr_list_.emplace_back(node_id,
                                                     instr_map_[node_id]);
                 break;
+            case ch::core::lnodetype::type_mem_read_port: {
+                // Async read ports (`ch_mem::aread`) are combinational (0-cycle)
+                // to match the generated Verilog `assign proxy = mem[addr];`.
+                // Sync read ports (`ch_mem::sread`) stay sequential (1-cycle)
+                // to match `always_ff` — the RV32I imem depends on that
+                // latency for its `pc_lag` alignment.
+                const auto *read_port =
+                    static_cast<const ch::core::mem_read_port_impl *>(node);
+                if (read_port->port_type() ==
+                    ch::core::mem_port_type::async_read) {
+                    combinational_instr_list_.emplace_back(node_id,
+                                                           instr_map_[node_id]);
+                } else {
+                    sequential_instr_list_.emplace_back(node_id,
+                                                        instr_map_[node_id]);
+                }
+                break;
+            }
             default:
                 // 其他所有节点归类为组合逻辑节点
                 combinational_instr_list_.emplace_back(node_id,

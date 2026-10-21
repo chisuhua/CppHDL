@@ -360,21 +360,30 @@ void Simulator::tick(size_t count) {
 ## Memory read port timing (B' ChipForge Phase 6d.7+)
 
 ### `aread` (async_read)
-- **Verilog codegen** (`src/codegen_verilog.cpp`): emits `assign proxy = mem[addr];` — continuous assignment, **0-cycle latency** in generated Verilog.
-- **Simulator**: `instr_mem_async_read_port::eval` is in `sequential_instr_list_` (`src/simulator_init.cpp:116-121`), evaluated at posedge. Observable same-tick visibility comes from the trailing `eval_combinational()` in `Simulator::tick()` (`src/simulator.cpp`), which propagates the proxy to output ports within the same tick.
-- **Use when**: read-only consumer, where a downstream register provides the 1-cycle latency (e.g., ChipForge dmem → `reg_file`).
+- **Verilog codegen** (`src/codegen_verilog.cpp::print_mem_read_port`): emits `assign proxy = mem[addr];` — continuous assignment, **0-cycle latency** in generated Verilog.
+- **Simulator**: `instr_mem_async_read_port::eval` is in `combinational_instr_list_` (`src/simulator_init.cpp`), evaluated in `eval_combinational()` — **0-cycle**, matching the generated Verilog. The read port writes its own `data_map` slot; the data proxy copies it via `instr_proxy`. The AST carries a `read_port → data_proxy` edge so that `context::get_eval_list()`'s topological sort evaluates the port before the proxy.
+- **Use when**: the consumer wants the data in the same cycle as the address.
 
 ### `sread` (sync_read)
 - **Verilog codegen**: emits `always_ff @(posedge default_clock or posedge default_reset)` — registered read, **1-cycle latency**.
-- **Simulator**: `instr_mem_sync_read_port::eval` is also in `sequential_instr_list_`, with a clk-high check. Same observable timing as `aread` from the testbench's perspective in the Simulator.
+- **Simulator**: `instr_mem_sync_read_port::eval` is in `sequential_instr_list_`, with a clk-high check — **1-cycle**, matching `always_ff` (which samples the address as it was *before* the edge).
 - **Use when**: 1-cycle registered read semantics required (e.g., imem fetch — must keep `pc_lag` alignment).
 
-### Known simulator↔Verilog drift
+### Observable consequence: register-driven read addresses
 
-1. **Register-driven read address**: Simulator `aread` effectively lags 1 cycle behind a register update at the same posedge (the proxy updates only at the *next* `eval_sequential()` pass); Verilog `assign` reflects the new address immediately within the same time step. ChipForge dmem tolerates this because the downstream `reg_file <<=` provides the required latency.
-2. **Same-cycle write+read race**: Simulator `aread` returns the pre-write value; Verilog `assign` returns the post-write value after the NBA update in the same time step.
+Because `aread` is 0-cycle, a consumer whose read address comes from a **register** observes the *new* address in the same cycle the register commits it. The classic example is a FIFO:
 
-These drifts are documented in `openspec/changes/cleanup-250198a-aread-combinational-debt/specs/mem-read-timing/spec.md` and tracked separately.
+```
+assign dout = mem[rd_ptr];   // rd_ptr advances on the pop edge
+```
+
+After the pop edge, `dout` shows the **next** head element. A consumer that wants the element being popped must sample `dout` **before** the pop edge (i.e. at the end of the previous cycle) — which is the FIFO protocol anyway.
+
+### Same-cycle write+read race
+
+A same-cycle write+`aread` race returns the **post-write** value in the Simulator, matching the generated Verilog `assign` (which sees the NBA-updated memory content). A downstream consumer that needs the pre-write value MUST provide the 1-cycle latency explicitly with a downstream register (e.g. ChipForge dmem's `reg_file <<=`).
+
+The historical drift (register-driven address skew + pre-write race value) was removed by the OpenSpec change `sim-mem-read-timing-align-2026-10`; the contract lives in the `mem-read-timing` capability (`openspec/specs/mem-read-timing/spec.md`).
 
 ## VerilatorBackend clock toggle contract (verilator-issue-25-fix)
 

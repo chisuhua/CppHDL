@@ -167,6 +167,7 @@ int main() {
             break;
         case 2:
             // 在Cycle 2，停止写入，开始读取
+            // 本拍结束时 dout = 队首元素（0x1）—— FIFO 协议要求在 pop 沿**之前**采样
             std::cout << "  Checking FIFO state after first write" << std::endl;
             sim.set_input_value(top_device.instance().io().push, false);
             sim.set_input_value(top_device.instance().io().pop, true);
@@ -174,15 +175,16 @@ int main() {
                       << std::endl;
             break;
         case 3:
-            // 在Cycle 3，应该读取到第一个数据(1)
-            std::cout << "  Checking if first data (1) is available"
+            // pop 沿在本拍生效：rd_ptr 前进 → dout 变为**下一个**队首（0x2）
+            // （aread 是 0-cycle，`assign dout = mem[rd_ptr]` 与 Verilog 一致）
+            std::cout << "  Checking next head (0x2) after the pop edge"
                       << std::endl;
             sim.set_input_value(top_device.instance().io().pop, true);
             std::cout << "  Continuing read" << std::endl;
             break;
         case 4:
-            // 在Cycle 4，应该读取到第二个数据(2)
-            std::cout << "  Checking if second data (2) is available"
+            // 第二次 pop 沿生效：rd_ptr 绕回 → dout = 0x1
+            std::cout << "  Checking head after the second pop edge"
                       << std::endl;
             sim.set_input_value(top_device.instance().io().pop, false);
             std::cout << "  Stopping read" << std::endl;
@@ -195,9 +197,11 @@ int main() {
 
     // 生成Verilog
     // aread codegen note: this FIFO emits `assign dout = mem[rd_ptr]` (0-cycle
-    // combinational read, no downstream register). See
-    // docs/simulation/ARCHITECTURE.md "Memory read port timing" for the
-    // simulator-vs-Verilog drift contract.
+    // combinational read, no downstream register). The Simulator matches this
+    // 0-cycle timing exactly — after the pop edge `dout` follows the advanced
+    // head pointer, so sample `dout` before the pop edge to get the element
+    // being popped. See docs/simulation/ARCHITECTURE.md "Memory read port
+    // timing".
     ch::toVerilog("fifo.v", top_device.context());
 
     std::cout << "FIFO simulation completed successfully!" << std::endl;

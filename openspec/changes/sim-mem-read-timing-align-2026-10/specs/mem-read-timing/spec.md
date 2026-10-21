@@ -22,19 +22,44 @@ The Simulator SHALL 将 `type_mem_read_port` 的 **async** 子类（`ch_mem::are
 （`assign` vs `always_ff`）；Simulator 用同一条求值路径服务两者是 drift 的根源。
 `sread` 的 1-cycle 语义被 RV32I 的 `pc_lag` 对齐依赖 → MUST NOT 改动。
 
-#### Scenario: aread 在地址变化的同一拍反映新值
+#### Scenario: aread 在寄存器驱动地址变化的同一拍反映新值
 
-- **WHEN** `addr_async` 在某个 tick 的输入阶段被改为新地址
-- **THEN** 该 tick 结束后的 `get_port_value(rdata_async)` SHALL 是**新地址**的值
+- **WHEN** 读地址由**寄存器**驱动（`ch_reg` → `mem.aread(reg)`），
+  且该寄存器在某个 tick 的输入阶段被改为新地址 B（此前为 A）
+- **THEN** 该 tick 结束后的 `get_port_value(rdata_async)` SHALL 是 `mem[B]` 的值
   （0-cycle，与 Verilog `assign` 一致）
-- **AND** `get_port_value(rdata_sync)` SHALL 仍是**旧地址**的值（1-cycle）
+- **AND** 在**改实现之前**，该值 SHALL 是 `mem[A]` 的值（1-cycle skew）——
+  本 Scenario 是区分「修复前 / 修复后」的**可执行层锁**
+- **AND** `get_port_value(rdata_sync)`（同一地址寄存器驱动的 `sread`）SHALL 仍是
+  `mem[A]` 的值（1-cycle）
+
+> ⚠️ **本 Scenario MUST 用「寄存器驱动地址」，MUST NOT 用「输入端口驱动地址」**：
+> 地址直接来自顶层输入端口时，Simulator 与 Verilog **本来就一致**（都同拍可见），
+> 这样的断言**区分不了修复前后** → 作为可执行层锁**锁不住任何东西**。
 
 #### Scenario: sread 保持 1-cycle 语义
 
-- **WHEN** `addr_sync` 在某个 tick 的输入阶段被改为新地址
-- **THEN** 该 tick 结束后的 `get_port_value(rdata_sync)` SHALL 仍是旧地址的值
+- **WHEN** 读地址由**寄存器**驱动，且该寄存器在某个 tick 的输入阶段被改为新地址
+- **THEN** 该 tick 结束后的 `get_port_value(rdata_sync)` SHALL 仍是**旧地址**的值
 - **AND** 下一次 tick 之后 SHALL 是新地址的值
+- **AND** 该行为 SHALL 与生成的 Verilog `always_ff` **一致**（always_ff 在时钟沿
+  采样沿前的地址值）→ `sread` **本来就没有 drift**，本 Requirement 的改动
+  MUST NOT 影响它的观测时序
 - **AND** RV32I 的 `pc_lag` / FLUSH 对齐 MUST NOT 受影响（imem MUST 继续用 `sread`）
+
+#### Scenario: 读端口是虚构节点，生成的 Verilog 不得引用它
+
+读端口在 AST 中是数据代理的**源**（`read_port → data_proxy` 边），使拓扑排序
+把读端口排在代理之前。但读端口在 Verilog 里**没有对应的信号**（被驱动的是
+数据代理）→ codegen MUST NOT 把它当作信号引用。
+
+- **WHEN** 一个设计用 `ch_mem::aread` / `ch_mem::sread`，且其数据代理驱动某个输出端口
+- **THEN** 生成的 Verilog SHALL NOT 出现该读端口的节点名
+- **AND** 每一条 `assign` 的右值 SHALL 是模块内**已声明**的信号
+- **AND** 该性质 MUST 有**可执行**的回归护栏
+  （`tests/test_mem_comb_read.cpp` 的 `[mem][comb-read][codegen][undeclared-signal]`
+  用例：收集所有 `assign` 右值标识符并断言其均已声明）
+- **AND** 该护栏 MUST 对「codegen 越过读端口」的实现改动**报错**（非空转）
 
 ### Requirement: known simulator-vs-Verilog drift is documented
 
@@ -57,6 +82,17 @@ The following drift between Simulator 与生成 Verilog SHALL 在
 - **THEN** 该差异 SHALL NOT 触发任何回归 fail
 - **AND** 下游若依赖「写前值」语义（例如 ChipForge dmem 的 `reg_file <<=`），
   MUST 通过**下游寄存器**提供 1-cycle 依赖，而不是依赖 Simulator 的写前值
+
+#### Scenario: 消除 skew 对寄存器驱动消费者的可观测影响
+
+- **WHEN** 一个消费者用**寄存器驱动的** `aread` 读数据，且该寄存器在时钟沿前进
+  （典型：FIFO 的 `rd_ptr` + `assign dout = mem[rd_ptr]`）
+- **THEN** 该消费者在**时钟沿之后**观测到的数据 SHALL 是**新指针**对应的数据
+  （与 Verilog 连续赋值的语义一致）
+- **AND** 依赖「沿前旧值」的测试台 MUST 改为**在沿前采样**（FIFO 协议：
+  在 `pop` 生效前取值）
+- **AND** 此类消费者的测试 MUST 有**行为断言**（仅打印或仅做结构检查
+  **不足以**发现该时序变化）
 
 ### Requirement: same-cycle write+aread race has an executable regression fence
 
@@ -92,3 +128,5 @@ silently drift dmem by 1 cycle without any test failing.
   （`tests/test_mem_comb_read.cpp:62-108`），MUST NOT 为其新建 fixture
 - **THEN** 测试 MUST 把 `we=1` / `wdata=Y` / `waddr=X` / `aread_addr=X`
   放在**同一个** `tick()` 块内，使同拍语义无歧义
+- **AND** 该竞态用例的读地址 MUST 保持**输入驱动**（与既有实现一致）——
+  读端口的**寄存器驱动**语义由本 Requirement 的第一个 Scenario 单独覆盖

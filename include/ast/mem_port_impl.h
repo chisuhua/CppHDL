@@ -87,10 +87,21 @@ public:
                         sloc, ctx),
           data_output_(data_output) {
 
-        // 添加数据输出节点作为源
-        // if (data_output) {
-        //     data_output->add_src(this);
-        // }
+        // Establish the dataflow edge `read_port -> data_proxy`.
+        //
+        // The data proxy is the port's public output node. Making the port
+        // its source expresses "the port drives the proxy" in the AST, so
+        // `context::get_eval_list()`'s topological sort (which only follows
+        // `src` edges) evaluates the read port *before* the proxy and,
+        // transitively, before the output ports fed by the proxy.
+        //
+        // Without this edge the ordering constraint is invisible to the
+        // topological sort: the async (combinational) read port and its
+        // consumer could land in the same combinational pass in either
+        // order, and the consumer would observe a stale value.
+        if (data_output) {
+            data_output->add_src(this);
+        }
 
         // 添加父内存节点
         add_src(parent);

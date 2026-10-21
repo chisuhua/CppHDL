@@ -479,7 +479,14 @@ void verilogwriter::print_decl(std::ostream &out) {
                 declared_nodes_.insert(node);
                 break;
             default:
-                // Other types like cd, etc., might not need declarations here
+                // Other types like cd, etc., might not need declarations here.
+                //
+                // NOTE: `type_mem_read_port` deliberately has NO declaration
+                // case. A mem read port is a fictional node — it has no
+                // Verilog signal. Its data proxy is driven directly by
+                // `print_mem_read_port` (`assign proxy = mem[addr];` /
+                // `always_ff`), so declaring the read port would only create
+                // a declared-but-undriven wire.
                 break;
             }
         }
@@ -575,7 +582,20 @@ void verilogwriter::print_logic(std::ostream &out) {
                                driver->type() ==
                                    ch::core::lnodetype::type_proxy &&
                                driver->num_srcs() > 0) {
-                            driver = driver->src(0);
+                            // A mem read port's data proxy is the real Verilog
+                            // driver (`assign proxy = mem[addr];`), while the
+                            // read port itself is a fictional node with no
+                            // Verilog signal. Stop the walk at the proxy
+                            // instead of advancing to the read port, which
+                            // would emit `assign out = <read_port>;` — a
+                            // reference to an undeclared signal.
+                            ch::core::lnodeimpl *next = driver->src(0);
+                            if (next &&
+                                next->type() ==
+                                    ch::core::lnodetype::type_mem_read_port) {
+                                break;
+                            }
+                            driver = next;
                         }
                         if (driver && node_names_.count(driver)) {
                             std::string driver_name = node_names_[driver];
@@ -613,7 +633,19 @@ void verilogwriter::print_logic(std::ostream &out) {
                                    ch::core::lnodetype::type_proxy &&
                                !node_names_.count(driver) &&
                                driver->num_srcs() > 0) {
-                            driver = driver->src(0);
+                            // Same guard as in `print_output`: never walk
+                            // past a mem read port — it is a fictional node
+                            // with no Verilog signal. (A mem data proxy is
+                            // always *named*, so the loop normally stops
+                            // before this; the guard keeps that from being
+                            // an accident.)
+                            ch::core::lnodeimpl *next = driver->src(0);
+                            if (next &&
+                                next->type() ==
+                                    ch::core::lnodetype::type_mem_read_port) {
+                                break;
+                            }
+                            driver = next;
                         }
                         if (driver && node_names_.count(driver) &&
                             node_names_.count(node)) {
@@ -1022,6 +1054,17 @@ void verilogwriter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
         // themselves
         if (node->num_srcs() > 0) {
             auto *src_node = node->src(0);
+            // A mem read port's data proxy is driven by `print_mem_read_port`
+            // (`assign proxy = mem[addr];` for async, `always_ff` for sync).
+            // The read port itself is a *fictional* node — it has no Verilog
+            // signal — so emitting `assign proxy = <read_port>` here would
+            // double-drive the wire AND reference an undeclared signal.
+            // Skip those proxies; `print_mem_read_port` owns them.
+            if (src_node &&
+                src_node->type() ==
+                    ch::core::lnodetype::type_mem_read_port) {
+                return;
+            }
             if (src_node && node_names_.count(src_node) &&
                 node_names_.count(node)) {
                 std::string src_name = node_names_[src_node];
@@ -1168,24 +1211,18 @@ void verilogwriter::print_mem_read_port(
 
         // B' (ChipForge Phase 6d.7+): per-port opt-out of 1-cycle latency.
         // aread (async_read) emits a continuous `assign` (combinational read,
-        // 0-cycle latency in Verilog). In the Simulator, aread is evaluated
-        // in `sequential_instr_list_` at posedge (`src/simulator_init.cpp`),
-        // and the trailing `eval_combinational()` in `Simulator::tick()` makes
-        // the proxy visible to output ports within the same tick — hence the
-        // observed "same-cycle" behavior in the Simulator matches the
-        // 0-cycle Verilog `assign` from a testbench perspective. This is
-        // NOT a 0-cycle property of the aread instr itself (it still ticks);
-        // it is a property of the Simulator's tick ordering.
+        // 0-cycle latency in Verilog). The Simulator classifies async_read
+        // ports in `combinational_instr_list_` (`src/simulator_init.cpp`),
+        // so they are evaluated in `eval_combinational()` — the same 0-cycle
+        // semantics as the generated Verilog.
         //
-        // Known simulator-vs-Verilog drift (documented in
-        // docs/simulation/ARCHITECTURE.md "Memory read port timing"):
-        //   - Register-driven read address: Simulator aread lags by 1 cycle
-        //     relative to a register update at the same posedge; Verilog
-        //     `assign` reflects the new address immediately.
-        //   - Same-cycle write+read race: Simulator aread returns pre-write
-        //     value; Verilog `assign` returns post-write value (NBA update).
-        // ChipForge dmem tolerates both drifts because downstream `reg_file`
-        // provides the required 1-cycle latency.
+        // The read port is a *fictional* node: it has no Verilog signal of its
+        // own. The data proxy is the signal, and it is driven here. The AST
+        // carries a `read_port → data_proxy` edge (established in
+        // `mem_read_port_impl`'s constructor) so that the topological sort
+        // evaluates the read port *before* the proxy — hence `print_proxy`
+        // must skip such proxies, and `print_output` must stop its
+        // proxy-chain walk at the read port (see the comments there).
         //
         // For sync_read (sread) we keep the historical 1-cycle always_ff,
         // which is what the CPU's pc_lag / FLUSH mechanism depends on for
@@ -1201,9 +1238,9 @@ void verilogwriter::print_mem_read_port(
             // latency). `ch_mem::aread()` (include/core/mem.h) always passes
             // `nullptr` for the enable argument, so this branch has no
             // enable-gated path (a previous dead enable-branch was removed).
-            // The Simulator classifies async_read ports in the same
-            // sequential_instr_list_ as sync reads; see the doc comment
-            // above for the simulator↔Verilog drift details.
+            // The Simulator classifies async_read ports in
+            // `combinational_instr_list_` → 0-cycle there too, matching this
+            // `assign` exactly.
             out << "    assign " << proxy_name << " = " << mem_name
                 << "[" << addr_name << "]; // Comb read " << proxy_name << "\n";
             return;
