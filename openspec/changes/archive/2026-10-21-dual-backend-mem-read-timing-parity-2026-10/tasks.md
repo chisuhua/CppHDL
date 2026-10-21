@@ -1,6 +1,6 @@
 ## Tasks
 
-> **状态：已实施（Task 0-4 完成；Task 5 回归已通过，archive 待执行）。**
+> **状态：已实施并 archive（2026-10-21，`2026-10-21-dual-backend-mem-read-timing-parity-2026-10`）。**
 > 起因：`sim-mem-read-timing-align-2026-10` 落地后的**测试完备性审计**发现 ——
 > 该 change 的核心主张「interpreter == Verilog」**没有任何跨后端测试验证**：
 > capability `dual-backend-test-coverage` 的 R6 排除清单第 3 条把 aread-based
@@ -88,8 +88,7 @@
     ctest -N -L verilator_e2e | tail -1
     ```
 
-- [ ] ### Task 5: 全量回归 + archive
-  - **回归实测**：`ctest -LE perf` **170/170 全绿**（含新增的 `test_mem_read_timing_dual`）；`run_all_ported_tests.sh` **28/28 PASS**；`openspec validate --specs --strict` **16/16 通过**
+- [x] ### Task 5: 全量回归 + archive ✅（`ctest -LE perf` **170/170 全绿**（含新增的 `test_mem_read_timing_dual`）；`run_all_ported_tests.sh` **28/28 PASS**；`openspec validate --specs --strict` **16/16 通过**；主 spec 无残留 change 名引用）
   - **action**:
     - `ctest -LE perf`（新增 1 个 target → 期望 170/170 全绿）
     - `./run_all_ported_tests.sh`

@@ -5,7 +5,6 @@
 定义内存读端口（`ch_mem::aread` / `ch_mem::sread`）在生成 Verilog 与 Simulator 中的时序语义：两者**完全一致** —— `aread` 是 0-cycle 组合读（Verilog `assign proxy = mem[addr];`），`sread` 是 1-cycle 寄存读（Verilog `always_ff`）。该能力保证下游用户对生成的 Verilog 与 Simulator 行为有可预期、可追溯的契约，并把历史上的 drift（寄存器驱动读地址的 1 拍 skew、同拍写+读竞态返回写前值）以**可执行回归护栏**锁住，防止其复发。
 
 In English: Defines the timing semantics of `ch_mem::aread` (async_read, 0-cycle combinational) and `ch_mem::sread` (sync_read, 1-cycle registered). The Simulator now matches the generated Verilog exactly for both; the historical drift (1-cycle skew on register-driven read addresses, same-cycle write+read race returning the pre-write value) is eliminated and locked by executable regression fences.
-
 ## Requirements
 ### Requirement: aread emits combinational assign in Verilog
 
@@ -63,7 +62,7 @@ The following drift between Simulator 与生成 Verilog SHALL 在
 The codebase SHALL provide at least one Catch2 `TEST_CASE` that pins the `ch_mem::aread` combinational `assign` emission in generated Verilog. The cleanup change `2026-10-11-cleanup-250198a-aread-combinational-debt` delivered exactly such a test:
 
 - **NAME**: `aread Verilog codegen emits assign (no always_ff)`
-- **LOCATION**: `tests/test_mem_comb_read.cpp` (TEST_CASE at lines 216-277 as of issue #27)
+- **LOCATION**: `tests/test_mem_comb_read.cpp`（**按 TEST_CASE 名称引用**，MUST NOT 写行号 —— 行号会随同文件的新增用例漂移）
 - **CATCH2 TAG**: `[mem][comb-read][codegen]` (current implementation) — alternately `[mem][aread][golden]` is accepted per future migration
 
 This requirement delegates implementation to that test; any future refactor that renames or removes that test MUST replace it with an equivalent test (same assertions, same coverage scope, same tag-either side of the or).
@@ -164,7 +163,8 @@ silently drift dmem by 1 cycle without any test failing.
 
 - **WHEN** 该竞态测试位于 `tests/test_mem_comb_read.cpp`
 - **THEN** 它 SHALL 复用既有的 `CombReadFixture`
-  （`tests/test_mem_comb_read.cpp:62-108`），MUST NOT 为其新建 fixture
+  （**按 fixture 类名引用**，MUST NOT 写行号 —— 该 fixture 会随新增用例而
+  增删端口，行号必然漂移），MUST NOT 为其新建 fixture
 - **THEN** 测试 MUST 把 `we=1` / `wdata=Y` / `waddr=X` / `aread_addr=X`
   放在**同一个** `tick()` 块内，使同拍语义无歧义
 - **AND** 该竞态用例的读地址 MUST 保持**输入驱动**（与既有实现一致）——
