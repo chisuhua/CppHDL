@@ -5,86 +5,119 @@
 > `AxiToAxiLiteConverter` 的 `rst_n` 透传与相位分离状态机在该 change 中落地，
 > `examples/axi4/phase3a_complete.cpp` 的 AXI-Lite 路径只有在其之后才可能真的跑通。
 >
-> **执行顺序**：Task 0 → Task 1 → Task 2 → Task 3 → Task 4 → Task 5 → Task 6 →
-> Task 7 → Task 8 → Task 9。
+> ⚠️ **顺序建议：与 `axi4-full-generic-slave-burst-2026-10` 串行，且本 change 在后**
+> （理由：两者都改 `tests/CMakeLists.txt` / 根 `AGENTS.md` / `include/axi4/AGENTS.md`，
+> 并行必然文本冲突；且 `CTEST_TOTAL` 增量可预测 178 → 179 → 181）。
+> 本 change 的测试 MUST 用 **testbench 扮演 slave**，MUST NOT 实例化 `Axi4Slave`
+> —— 后者会隐含依赖 burst change 落地。
+>
+> **执行顺序**：Task 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9。
 >
 > **TDD 纪律**：Task 2 先写会失败的用例（RED），Task 3-6 逐条转绿（GREEN），
 > Task 7-9 回归。每个 Task 的 verify 必须是**可执行命令**，
 > 不接受「人工检查通过」作为唯一验收。
 >
-> ⚠️ **verify 必须是本机实测过的命令**（`openspec validate` 只做结构/标题校验）。
-> 已知踩坑（承自既往 change）：
+> ⚠️ **verify 必须是本机实测过的命令**。已知踩坑：
 >
 > | 踩坑 | 后果 | 正确写法 |
 > |---|---|---|
-> | `add_dual_backend_test` 写成位置参数 | **全仓 configure FATAL_ERROR**（该函数用 `cmake_parse_arguments`，只认 `SOURCES`） | `add_dual_backend_test(name SOURCES file.cpp TIMEOUT 300)` |
-> | 多路选择写成「先赋 m0 再读回 `io().s0_awaddr`」 | 输出读自己 → 拓扑排序报 `Cycle detected in IR graph` | 每路 **单次赋值**（见 `AxiLiteMatrix2x2:226-233` 的修复注释） |
-> | 用 `grep -c "io().m1_wready ="` 统计赋值 | 端口声明行也会命中 → 计数虚高 → 验收条件永真 | `grep -cE "^[[:space:]]*io\(\)\.m1_wready *="` |
-> | `ctest -R "…interconnect…"` 目标不存在 | 静默跳过（假绿） | 先用 `ctest -N -R` 断言命中数 |
+> | `add_dual_backend_test` 写成位置参数 | **全仓 configure FATAL_ERROR**（该函数用 `cmake_parse_arguments`，只认 `SOURCES`） | `add_dual_backend_test(name SOURCES file.cpp TIMEOUT 600)` |
+> | **`ctest -N -R` 数 TEST_CASE** | 每个**文件**只注册 **1 个** ctest 条目（双后端在同一个 Catch2 二进制内跑）→ 期望「命中 16 个」**永假红** | ctest 侧期望恒为 **1**（本 change 共 2 个新文件 → 2 个条目）；TEST_CASE 数用 `./build/tests/<name> --list-tests \| grep -c .` |
+> | **`grep -cE "route"` 验证路由锁存** | 文件头注释（`:7` "route to slave 0-3"）就命中 → **永假绿**，与是否实现锁存无关 | MUST 匹配**具体的寄存器名**（如 `write_route` / `read_route`） |
+> | verify 只查 `m1_` / `s1_` 前缀 | m2/m3/s2/s3 全漏接也照样通过验收 | MUST 覆盖 `{1,2,3}` 全部前缀 |
+> | **给 `ch_in` 端口赋值** | `m*_bready` / `m*_rready` 是 `ch_in`（master 驱动）→ 赋值是运行时 no-op，**编译零报错** | 只对 `ch_out` 赋值；`m*_bready`/`m*_rready` 是**输入**，不由互连驱动 |
+> | 用 ctest 粒度验「部分用例转绿」 | ctest 以**整个二进制**为粒度 → 无法观测中间态 → TDD 节奏名存实亡 | 用 Catch2 名称过滤：`./build/tests/test_axi_interconnect_4x4 "<name-glob>"` |
+> | **无界握手等待** | C1 类缺陷的表现是握手**永不完成**（hang），不是断言失败 → 挂到 ctest TIMEOUT（600s × N 用例） | 所有握手等待 MUST 是**有界循环**（≤ 64 拍）+ 超时即 FAIL |
+> | 多路选择写成「输出读自己」 | 拓扑排序报 `Cycle detected in IR graph` | 每路**单次赋值**（见 `AxiLiteMatrix2x2:226-233` 的修复注释） |
+> | `grep ... \| wc -l` 期望「= N 个文件」 | `wc -l` 数**行**不数文件 → 永假红 | `grep -rl ... \| wc -l` |
+> | 临时文件写 `/tmp` | 违反仓库约定（root AGENTS.md：临时文件 MUST 用 `/tmp/opencode/<name>`） | 一律用 `/tmp/opencode/` |
 >
 > **proposal → task 映射**：D1 → Task 3；D2 → Task 4；D3 → Task 5；D4 → Task 6；
-> D5 → Task 6；D6 → Task 7；D7 → Task 2 / Task 3-6 / Task 8；D8 → Task 9。
+> D5 → Task 3（裁决）；D6 → Task 6；D7 → Task 7；D8 → Task 2 / Task 3-6 / Task 8；
+> D9 → Task 8；D10 → Task 9。
 
 - [ ] ### Task 0: spec 冲突消解 + 变更影响面清点
   - **action**:
-    - 本 change 的 spec delta 为 **1 个新 capability**：`specs/axi-interconnect-routing/spec.md`
-      （ADDED ×5）
+    - 本 change 的 spec delta 为 **1 个新 capability**：
+      `specs/axi-interconnect-routing/spec.md`（ADDED ×6）
     - 确认主 spec 中 **无** 已有 requirement 管辖互连层
       （`axi-slave-conformance` 管从设备侧、`dual-backend-test-coverage` 管双后端一致性）
       → 若发现冲突，MUST 在本 Task 记录并与 `axi-slave-conformance` 的边界写清
     - 清点 `AxiInterconnect4x4` / `AxiLiteMatrix2x2` 的实例化点
-      （预期：`examples/axi4/phase3a_complete.cpp:75`、
-      `examples/axi4/axi_soc_example.cpp:195`）
+      （预期 **2 个** example 文件：`examples/axi4/phase3a_complete.cpp`、
+      `examples/axi4/axi_soc_example.cpp`）
     - `openspec validate --strict` MUST 通过
   - **verify**:
     ```bash
-    openspec validate --strict && echo VALIDATE_OK
-    grep -rn "AxiInterconnect4x4\|AxiLiteMatrix2x2" --include=*.cpp .
+    openspec validate axi4-interconnect-routing-2026-10 --strict && echo VALIDATE_OK
+    grep -rl "AxiInterconnect4x4\|AxiLiteMatrix2x2" --include=*.cpp . | wc -l
     ```
+    第 2 条 MUST 输出 **2**
 
 - [ ] ### Task 1: 建立「缺陷可观测」基线（不改实现）
   - **action**:
-    - 写一个**最小复现**程序（可放在 `/tmp` 或临时 testbench），
+    - 写一个**最小复现**程序（临时文件 MUST 放 `/tmp/opencode/`），
       逐条确认 C1-C4 的症状确实存在：
-      1. m1 发起写 → `m1_awready` 恒 0（写不被接受）
+      1. m1 发起写 → `m1_awready` 有值但 `m1_wready` 恒 0（写不被接受）
       2. m1 发起读 → `m1_arready` 恒 0
       3. slave 1 的 `s1_arvalid` 恒 0（读地址到不了 slave 1）
       4. slave 1 的 `s1_bready` 恒 0（响应永不握手）
+    - 同时确认 C11 / C12 / C14：
+      5. 地址 ≥ `0xC000_0000` 的写 → `bresp` 为 DECERR（即使 s3 返回 OKAY）
+      6. `m0_rresp` 恒 0
+      7. 指针指向无请求的 master 时，其他 master 拿不到 grant
     - 把复现步骤记入本 Task 的完成说明（供 Task 2 的 RED 用例对齐）
   - **verify**:
     ```bash
-    grep -cE "^[[:space:]]*io\(\)\.m1_(wready|arready|bready|rready) *=" include/axi4/axi_interconnect_4x4.h
-    grep -cE "^[[:space:]]*io\(\)\.s1_(araddr|arvalid|bready|rready) *=" include/axi4/axi_interconnect_4x4.h
+    grep -cE "^[[:space:]]*io\(\)\.m[1-3]_(wready|arready) *=" include/axi4/axi_interconnect_4x4.h
+    grep -cE "^[[:space:]]*io\(\)\.s[1-3]_(araddr|arvalid|bready|rready) *=" include/axi4/axi_interconnect_4x4.h
+    grep -cE "^[[:space:]]*io\(\)\.m[0-3]_rresp *=" include/axi4/axi_interconnect_4x4.h
     ```
-    两条 MUST 均为 **0**（确认缺陷存在，Task 3-4 之后 MUST 变为非 0）
+    三条 MUST 均为 **0**（确认缺陷存在，Task 4 之后 MUST 变为非 0）
 
 - [ ] ### Task 2: 写会失败的路由用例（RED）
   - **action**:
     - 新建 `tests/test_axi_interconnect_4x4.cpp` 与
       `tests/test_axi_lite_matrix_2x2.cpp`，用
       `tests/dual_backend_fixture.h::DUAL_BACKEND_TEST_PAIR` macro
-    - 先写下列用例（此时**全部应失败**）：
+    - ⚠️ **DUT 形态**：互连测试 MUST 用 **testbench 扮演 slave**
+      （驱动 4×~13 个 slave 侧输入），MUST NOT 实例化 `Axi4Slave` 当 fixture
+    - ⚠️ **master stimulus MUST 复用/仿照 `tests/axi_lite_slave_fixture.h`**
+      （仓库已有的协议合规 master fixture）→ MUST NOT 手写违规 stimulus
+    - ⚠️ **所有握手等待 MUST 是有界循环**（≤ 64 拍）+ 超时即 FAIL
+    - 先写下列用例（此时**全部应红**）：
       1. 4 个 master 各自到达全部 4 个 slave（16 对全扇出）
       2. 地址映射正确（每个 slave 拿到自己窗口内的地址）
       3. 写事务 AW → W → B 全链路，**数据断言**
       4. 读事务 AR → R 全链路，**数据断言**
-      5. 未映射地址 → `DECERR`
-      6. 写/读并发（不同 master 同时发起）不串扰
-      7. 路由锁存：AW 握手后改写 AWADDR，数据仍落到原 slave
-      8. W 通道不被仲裁轮转改投
-      9. `WSTRB` 完整转发
-      10. 读事务不被写请求阻塞
+      5. 未映射地址 → 写 `DECERR`（`bvalid` 保持到 `bready`）
+      6. 未映射地址 → 读 `arlen + 1` 个 `DECERR` beat，末拍 `rlast`
+      7. 写/读并发（不同 master 同时发起）不串扰
+      8. 路由锁存：AW 握手后改写 AWADDR，数据仍落到原 slave
+      9. W 通道不被仲裁轮转改投
+      10. `WSTRB` 完整转发
+      11. 读事务不被写请求阻塞
+      12. 仲裁不饿死（指针指向无请求的 master 时其他 master 仍能拿到 grant）
+      13. 在途期间 `awready` MUST 为 0
+    - ⚠️ 用例 5 / 6 需要**非默认地址映射配置**（默认映射覆盖全空间 → DECERR 不可测）
+      → 该配置 MUST 在测试里显式实例化并在 design 文档记录
     - 在 `tests/CMakeLists.txt` 用 `add_dual_backend_test` 注册
-      （**MUST 用 `SOURCES` 关键字形式**）
+      （**MUST 用 `SOURCES` 关键字形式**，`TIMEOUT 600`）
   - **verify**:
     ```bash
     cmake -B build && cmake --build build -j$(nproc) --target test_axi_interconnect_4x4 test_axi_lite_matrix_2x2
-    cd build && ctest -N -R "test_axi_interconnect_4x4|test_axi_lite_matrix_2x2" | tail -3
+    ./build/tests/test_axi_interconnect_4x4 --list-tests | grep -c .
+    cd build && ctest -N -R "test_axi_interconnect_4x4|test_axi_lite_matrix_2x2" | tail -1
     ```
-    MUST 命中预期数量；**此时测试 MUST 是红的**（RED 基线）
+    第 2 条 MUST 命中 **26**（13 对 × 2 后端）；
+    第 3 条 MUST 命中 **2**（2 个文件 = 2 个 ctest 条目）；
+    **此时测试 MUST 是红的**（RED 基线）
 
-- [ ] ### Task 3: 引入路由锁存（写侧 + 读侧）
+- [ ] ### Task 3: 引入路由锁存 + 复位契约裁决
   - **action**:
+    - ⚠️ **先裁决**（MUST NOT 由实施者临场随机选）：
+      互连层是否暴露 `ch_in<ch_bool> rst_n`？
+      → 裁决结果 MUST 写进 design 文档（spec 的「复位契约」Requirement 记录该决策）
     - `AxiInterconnect4x4` 每个 master 引入：
       `write_route`（2 bit）+ `write_active`、`read_route`（2 bit）+ `read_active`
     - 路由 MUST 在 AW / AR 握手当拍由**该通道自己的地址**解码并锁存
@@ -93,81 +126,114 @@
       （`include/axi4/axi4_lite_matrix.h:146-149`、`:212-213`），但 MUST 覆盖写读两个方向
   - **verify**:
     ```bash
-    grep -cE "route" include/axi4/axi_interconnect_4x4.h
-    cd build && ctest -R test_axi_interconnect_4x4 --output-on-failure
+    grep -cE "write_route|read_route" include/axi4/axi_interconnect_4x4.h
+    ./build/tests/test_axi_interconnect_4x4 "*lock*"
     ```
-    Task 2 的用例 7 MUST 转绿
+    第 1 条 MUST ≥ 4（4 个 master 各一组）
+    （⚠️ MUST NOT 用 `grep -cE "route"` —— 文件头注释就命中，**永假绿**）；
+    第 2 条：路由锁存用例 MUST 由红转绿（用 Catch2 名称过滤，**不要**用 ctest 粒度）
 
 - [ ] ### Task 4: 16 对全扇出（AW / W / AR 正向 + B / R 反向）
   - **action**:
-    - 补齐 C1-C4 的全部缺失赋值：
-      - `m1/m2/m3` 的 `wready` / `arready` / `bready` / `rready`
-      - `s1/s2/s3` 的 `araddr` / `arid` / `arlen` / `arsize` / `arburst` / `arvalid`
-      - `s1/s2/s3` 的 `bready` / `rready`
+    - 补齐 C1-C4 / C12 的全部缺失赋值（**只对 `ch_out` 赋值**）：
+      - `m1/m2/m3` 的 `wready` / `arready`（**输出**）
+      - `s1/s2/s3` 的 `araddr` / `arid` / `arlen` / `arsize` / `arburst` / `arvalid`（**输出**）
+      - `s1/s2/s3` 的 `bready` / `rready`（**输出**）
+      - `m0/m1/m2/m3` 的 `rresp`（**输出**）
+      - ⚠️ `m*_bready` / `m*_rready` 是 **`ch_in`**（master 驱动）→ **MUST NOT 赋值**
     - AW / W / AR 三个正向通道 MUST 覆盖全部 16 对
     - B / R 反向通道 MUST 按**写/读路由锁存**反查来源
     - 每次 mux MUST **单次赋值**（MUST NOT 出现输出读自己的自环）
     - `WSTRB` MUST 随 W 通道一起转发
+    - ⚠️ **在途门控**：`m*_awready` MUST 被 `!write_active[m]` 门控，
+      `m*_arready` MUST 被 `!read_active[m]` 门控（修 C13）
   - **verify**:
     ```bash
-    grep -cE "^[[:space:]]*io\(\)\.m1_(wready|arready|bready|rready) *=" include/axi4/axi_interconnect_4x4.h
-    grep -cE "^[[:space:]]*io\(\)\.s1_(araddr|arvalid|bready|rready) *=" include/axi4/axi_interconnect_4x4.h
-    cd build && ctest -R test_axi_interconnect_4x4 --output-on-failure
+    for p in m1 m2 m3; do grep -cE "^[[:space:]]*io\(\)\.${p}_(wready|arready) *=" include/axi4/axi_interconnect_4x4.h; done
+    for s in s1 s2 s3; do grep -cE "^[[:space:]]*io\(\)\.${s}_(araddr|arvalid|bready|rready) *=" include/axi4/axi_interconnect_4x4.h; done
+    grep -cE "^[[:space:]]*io\(\)\.m[0-3]_rresp *=" include/axi4/axi_interconnect_4x4.h
     ```
-    前两条 MUST 由 0 变为非 0；Task 2 的用例 1 / 2 / 3 / 4 / 6 / 9 MUST 转绿
+    7 条 MUST **全部**由 0 变为非 0
+    （⚠️ MUST 覆盖 `{1,2,3}` 全部前缀 —— 只查 `m1_`/`s1_` 会漏接 m2/m3/s2/s3）
+  - **action（续）**:
+    - Task 2 的用例 1 / 2 / 3 / 4 / 7 / 10 / 13 MUST 转绿
+  - **verify（续）**:
+    ```bash
+    ./build/tests/test_axi_interconnect_4x4 "*fanout*" && ./build/tests/test_axi_interconnect_4x4 "*write*" && ./build/tests/test_axi_interconnect_4x4 "*read*"
+    ```
+    MUST 逐项转绿
 
 - [ ] ### Task 5: 独立仲裁器（AW / AR 各一套）
   - **action**:
     - 拆成 2 个 `ch_reg<ch_uint<2>>` 指针 + 各自的 grant：
       写仲裁用 `awvalid`，读仲裁用 `arvalid`
-    - 轮转条件 MUST 是**事务真正完成**
-      （写：slave 的 `bvalid && bready`；读：slave 的 `rvalid && rready`），
-      MUST NOT 用「某个 slave 的 `awready` 为 1」
+    - 轮转条件 MUST 是**事务真正完成**：
+      写 = **当前 grant 指向的**那个 slave 的 `bvalid && bready`；
+      读 = **当前 grant 指向的**那个 slave 的 `rvalid && rready`
+      ⚠️ MUST NOT 写成「任一 slave 的 `bvalid && bready`」（那是 C7 的换皮）
     - 在途事务的 master MUST 保持授权（`active` 优先于轮询）
-    - MUST NOT 出现「所有 grant 恒为 0」的饿死状态
+    - **让位逻辑**（修 C14）：指针指向无请求的 master 时 MUST 让位给有请求的 master
+      （形态参照 `AxiLiteMatrix2x2:181-193` 的 `m0_only` / `m1_only`）
   - **verify**:
     ```bash
-    cd build && ctest -R test_axi_interconnect_4x4 --output-on-failure
+    ./build/tests/test_axi_interconnect_4x4 "*arbit*" && ./build/tests/test_axi_interconnect_4x4 "*starv*"
     ```
-    Task 2 的用例 8 / 10 MUST 转绿
+    Task 2 的用例 9 / 11 / 12 MUST 转绿
 
-- [ ] ### Task 6: 地址映射参数化 + DECERR + 死代码清理
+- [ ] ### Task 6: 地址映射参数化 + error responder + 死代码清理
   - **action**:
     - 把硬编码的 `awaddr >> 30` 改为**编译期可配置**的窗口映射
       （base / size 或等价形式）
     - 默认值 MUST 与当前 `>>30` 行为**等价**（避免破坏
       `examples/axi4/phase3a_complete.cpp`）
-    - MUST 存在未映射区域 → 返回 `DECERR`
+      ⚠️ 默认映射覆盖**全部** 32 位地址空间 → DECERR 在默认配置下不可测
+      → MUST 在文档中记录该事实
+    - **新增 error responder**（未映射地址由互连层应答）：
+      - 写：`awready` 拉高 + `bvalid`（**寄存器**，保持到 `bready`）+ `bresp = DECERR`
+      - 读：`arready` 拉高 + 返回 **`arlen + 1` 个 beat**，每拍 `rresp = DECERR`，
+        末拍 `rlast = 1`
+      - ⚠️ MUST NOT 用组合单拍脉冲（合规 master 看不到 BVALID → 永久死锁）
     - 读通道 MUST 用**读地址**解码
     - 删除 `build_decoder()` 空壳死代码（`include/axi4/axi_interconnect_4x4.h:210-221`）
     - 删除本 change 中被替代的任何旧路径（MUST NOT 留死代码 —— ZERO-DEBT POLICY）
   - **verify**:
     ```bash
     grep -c "build_decoder" include/axi4/axi_interconnect_4x4.h
-    cd build && ctest -R test_axi_interconnect_4x4 --output-on-failure
+    ./build/tests/test_axi_interconnect_4x4 "*decerr*"
     ```
-    第 1 条 MUST 为 0；Task 2 的用例 5 MUST 转绿
+    第 1 条 MUST 为 0；第 2 条 Task 2 的用例 5 / 6 MUST 转绿
 
 - [ ] ### Task 7: `AxiLiteMatrix2x2` 的活地址解码修正
   - **action**:
-    - `m0_awready` / `m1_awready`（`include/axi4/axi4_lite_matrix.h:251-252`）
-      MUST 基于**锁存的写路由**，MUST NOT 基于活的 `awaddr`
     - 读侧引入 `ar_route` 锁存（2x2 当前完全没有）；
       `m*_rdata` / `m*_rresp` / `m*_rvalid` / `s*_rready` MUST 基于该锁存
-    - `s*_rready` MUST NOT 用**写**通道的 grant（`:326-329`）
+    - `s*_rready` MUST NOT 用**写**通道的 grant（`include/axi4/axi4_lite_matrix.h:326-329`）
+    - `m0_awready` / `m1_awready`（`:251-252`）MUST 改为
+      「**`!m*_active` 门控 + 按当拍地址解码的目标 slave 的 `awready`**」
+      ⚠️ MUST NOT 写成「按锁存的写路由」—— 反例：锁存残留 `route = s1` 时，
+      一笔新的到 s0 的 AW 会拿到 `s1_awready` → **AW 半丢失**
   - **verify**:
     ```bash
     cd build && ctest -R test_axi_lite_matrix_2x2 --output-on-failure
     ```
-    Task 2 的 2x2 用例 MUST 全绿
+    2x2 用例 MUST 全绿
 
 - [ ] ### Task 8: 回归 —— 既有测试与 examples 必须仍然全绿
   - **action**:
     - `examples/axi4/phase3a_complete.cpp`（4×4）与
       `examples/axi4/axi_soc_example.cpp`（2×2）MUST 仍可编译
     - `phase3a_complete` 的 `main()` 当前**只构建不仿真** ——
-      本 change MUST 至少让它的 AXI-Lite 路径**真的跑起来**并断言结果
-      （否则改了也无法验证）
+      本 Task MUST 让它的 AXI-Lite 路径**真的跑起来**并断言结果
+      - ⚠️ 该 example 有 2 个**已确认的现存缺陷**，MUST 一并处理：
+        1. `io().done` 被 `<<=` 驱动**两次**（`:165` = `m0_bvalid`，
+           `:187` = `m0_rvalid`）→ 同一个 `ch_out` 双 driver
+        2. `done` 组合直出 + `awvalid` / `wvalid` 同拍驱动
+           → 同拍 AW+W 会被相位分离的 `AxiToAxiLiteConverter` 拒收
+      - ⚠️ **工作量校准**：该 example 没有 `Simulator`、没有 master stimulus、
+        s1-3 被 tie-off → 「跑起来」≈ 写一个 AXI4 Full master testbench
+        + 驱动顶层 `rst_n` + 数据断言，且只能验证 s0 一路
+        → **16 对路由的验收由 Task 2-6 的单元测试承担，MUST NOT 把 example
+        当作 16 对路由的验收手段**
     - `run_all_ported_tests.sh` 跟踪的 examples MUST 全绿
   - **verify**:
     ```bash
@@ -179,15 +245,17 @@
 - [ ] ### Task 9: 文档同步 + 测试计数更新
   - **action**:
     - `include/axi4/AGENTS.md`：
-      - 新增「互连层」段（地址映射、路由锁存、仲裁、DECERR 语义）
+      - 新增「互连层」段（地址映射、路由锁存、仲裁、error responder、复位契约）
       - STRUCTURE 表中 `axi_interconnect_4x4.h` / `axi4_lite_matrix.h` 的行注 MUST 更新
       - TESTS 表 MUST 列出两个新测试文件
     - 根 `AGENTS.md`：
       - NOTES 中「`axi4-interconnect-routing-2026-10` —— 4×4 全路由」MUST 改写为已实施
-      - `CTEST_TOTAL` / non-perf 计数 MUST 与 `cd build && ctest -N | tail -1` 一致
+      - `CTEST_TOTAL` MUST 更新：**178 → 180**（本 change 独立落地）
+        或 **179 → 181**（若 burst change 已先落地）→ 以实际 `ctest -N` 为准
+        （**2 个新文件 = 2 个 ctest 条目**，双后端不增加条目数）
     - `scripts/verify_test_counts.sh` MUST 通过
   - **verify**:
     ```bash
     ./scripts/verify_test_counts.sh && cd build && ctest -N | tail -1
     ```
-    MUST 全绿且计数一致
+    MUST 全绿且计数与实际一致

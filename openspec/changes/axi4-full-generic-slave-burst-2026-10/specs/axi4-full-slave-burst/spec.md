@@ -71,7 +71,16 @@
 3. **响应保持**：`bvalid` MUST 保持到 `bready`，`rvalid` MUST 保持到 `rready`。
 4. **置 1 条件 MUST 优先于清 0 条件**（`b_valid` / `r_valid`）——
    写成清 0 优先会在 `bready` 常态拉高时让 `b_valid` 永远为 0。
-5. **单 outstanding 事务**：新的 AW/AR MUST NOT 在上一笔事务真正完成前被接受。
+5. **单 outstanding 事务（按方向独立）**：
+   - **写通道**与**读通道**各自最多 1 笔在途事务；两者**互不阻塞**
+     （AXI4 Full 的 AW/W/B 与 AR/R 是独立通道组，AXI4 允许读写并发）。
+   - 写方向：新的 AW MUST NOT 在上一笔**写**事务真正完成（B 握手）前被接受。
+   - 读方向：新的 AR MUST NOT 在上一笔**读**事务真正完成（R 握手）前被接受。
+   - ⚠️ 本条**不是**共享 `busy`（`AxiLiteSlave` 的形态是读写互斥，见
+     `openspec/specs/axi-slave-conformance/spec.md`）。
+     把 `Axi4Slave` 降级为读写互斥属于**行为回退**，MUST NOT 发生。
+6. **`bid` / `rid` MUST 是握手时锁存的 ID**（既有行为保留：
+   `include/axi4/axi4_full.h` 的 `write_id_reg` / `read_id_reg` 已在 AW/AR 握手时锁存）。
 
 #### Scenario: AW 与 W 相隔多个周期仍能完成写事务
 
@@ -79,6 +88,16 @@
 - **THEN** `wready` MUST 在 `WVALID` 拉高后的某一拍拉高
 - **AND** 该 W beat MUST 被接受并写入正确的寄存器
 - **AND** `bvalid` MUST 在 W 被接受后拉高并保持到 `bready`
+
+#### Scenario: 同拍 AW+W 不被接受（既有行为，非本 change 引入）
+
+- **WHEN** master 在同一拍拉高 `AWVALID` 与 `WVALID`
+- **THEN** 该拍的 W MUST NOT 被接受
+- **AND** `wready` MUST 在 AW 握手之后的某一拍才拉高
+- **AND** master MUST 保持 `WVALID` 到 `WREADY`（AXI 合规 master 的义务）
+- **AND** ⚠️ 本行为是 `Axi4Slave` 的**既有行为**（`wready` 由 `write_state == 1` 门控，
+  而 state 1 只能在 AW 握手后一拍进入），
+  本 change MUST NOT 把它描述为「行为变化」
 
 #### Scenario: AW 握手后改写 AWADDR 不影响落点
 
@@ -105,10 +124,17 @@
 3. 每一拍 MUST 用**当拍**的 `io().wstrb` 重新展开字节道掩码
    （MUST NOT 在 AW 拍锁存 `wstrb`）。
 4. `wlast` MUST 与预期的 beat 数一致：
-   - `wlast` 提前到达 → 该笔事务 MUST 以 `SLVERR` 结束
-   - beat 数超过 `awlen + 1` → 该笔事务 MUST 以 `SLVERR` 结束
+   - 第 `awlen + 1` 个 beat 携带 `wlast = 0`（`wlast` 缺失）→
+     该笔事务 MUST 以 `SLVERR` 结束
+   - 第 `awlen + 1` 个 beat 之前就携带 `wlast = 1`（`wlast` 提前）→
+     该笔事务 MUST 以 `SLVERR` 结束
+   - ⚠️ MUST NOT 表述为「beat 数超过 `awlen + 1`」—— 检测「超过」要求先接受
+     第 `awlen + 2` 个 beat，与「只接受 `awlen + 1` 个」自相矛盾
 5. `awlen + 1 > MAX_BURST_LEN` → 该笔事务 MUST 以 `SLVERR` 结束，
    MUST NOT 静默截断。
+6. **INCR burst 越界**：burst 中途某 beat 的地址跨出已实现寄存器窗口时，
+   该 beat MUST 被抑制（写：寄存器保持原值；读：`rdata = 0`），
+   且该笔事务 MUST 以 `DECERR` 结束。
 
 #### Scenario: 4-beat INCR 写写入 4 个不同寄存器
 
@@ -145,6 +171,19 @@
 2. `rlast` MUST 只在**最后一个 beat** 拉高。
 3. 读 beat 计数 MUST 与**锁存的** `arlen` 比较，MUST NOT 依赖活的 `io().arlen`。
 4. 读地址 MUST 按 burst 类型逐 beat 计算。
+5. **`rvalid` 的形态 MUST 明确**：本 capability 采用**流式**形态 ——
+   `rvalid` 在整个 burst 期间**连续保持为 1**，每拍呈现一个 beat 的数据，
+   直到 `rready` 接受该 beat 为止；MUST NOT 采用「每 beat 独立等待 `rready` 再出下一拍」
+   的形态（后者会让 master 看到 `rvalid` 断续，行为与 6 个 peripheral 不一致）。
+6. ⚠️ **`rlast` / 末拍判定 MUST 用「下一个值」**（`next_beat_cnt == arlen` 之类），
+   MUST NOT 用「当前值」比较（`beat_cnt == arlen`）——
+   仓库已登记该坑（`include/axi4/AGENTS.md` ANTI-PATTERNS：
+   UART RX 引擎因用当前值判定结束而只采到 7 位）。
+   同理，burst 结束判定 MUST 基于 `w_handshake` 组合出的**下一状态**，
+   MUST NOT 基于当前寄存器值。
+7. **INCR burst 越界**：某 beat 的地址跨出已实现窗口时，
+   该 beat MUST 呈现 `rdata = 0` 且 `rresp = DECERR`，
+   该笔事务 MUST 以 `DECERR` 结束（与写侧对称）。
 
 #### Scenario: 4-beat INCR 读依次返回 4 个不同数据
 
@@ -159,10 +198,19 @@
 
 1. `INCR`（`0b01`）：地址每 beat 递增 `2^awsize` / `2^arsize` 字节
    （MUST 使用端口上的 `awsize` / `arsize`，MUST NOT 硬编码 4 字节）
+   - ⚠️ `2^awsize` **MUST NOT 用运行期移位**计算 ——
+     `ch_uint::operator<<` 按右操作数类型宽度推算结果宽度
+     （`include/axi4/AGENTS.md` 已登记该坑）→ MUST 用 `select` 链查表
+     （`awsize` 0..7 → 1/2/4/8/16/32/64/128 字节）
 2. `FIXED`（`0b00`）：地址每 beat 保持不变
 3. `WRAP`（`0b10`）：本 capability **不要求**支持；
    MUST 以 `SLVERR` **明确拒绝**，MUST NOT 静默当作 `INCR` 处理
    （静默降级是数据损坏级别的缺陷）
+4. **步长与总线宽度的关系**：解码步长固定为 4 字节（`addr >> 2`），
+   而寄存器宽度为 `DATA_WIDTH`。当 `DATA_WIDTH == 64` 且 `awsize < 3` 时，
+   相邻 beat 会落到**同一个** 64 位寄存器（窄传输）。
+   本 capability **不实现窄传输的字节道重编号**（Non-Goal），
+   MUST 在文档中显式声明该限制，MUST NOT 静默产生错误的数据落点。
 
 **说明**：`AxiBurst` 枚举（`include/axi4/axi4_full.h`）的 `FIXED` / `INCR` / `WRAP`
 MUST 与 AXI 规范的 `AxBURST` 编码一致。
@@ -184,12 +232,25 @@ MUST 与 AXI 规范的 `AxBURST` 编码一致。
 `Axi4Slave` 的 `NUM_REGS` 与 `MAX_BURST_LEN` 模板参数 MUST 真正生效。
 
 1. `MAX_BURST_LEN` MUST 作为 burst 长度上限参与检查（超限 → `SLVERR`）。
+   ⚠️ `awlen` 端口宽度为 4 bit（物理上限 16 beat），
+   `MAX_BURST_LEN > 16` 恒空转 → MUST 有 `static_assert(MAX_BURST_LEN <= 16)`
+   暴露（把 `awlen` 宽度参数化属公开 API 变更，**不在本 change 范围**）。
 2. `NUM_REGS` MUST 决定寄存器数量。MUST NOT 用「变长数组」实现
    （本仓库无寄存器数组原语，变长数组会触发 CHWARN + O(N) 节点爆炸）。
    可行路径：把寄存器集合固定为具名的 16 个 + 编译期 `static_assert` 暴露
    与实际值不符的 `NUM_REGS`（与 `AxiLiteSlave` 的处理同源），
    或把参数改名为明确「固定 16」语义的名称。
-3. 任一参数未被 honor → MUST 用 `static_assert` 在**编译期**暴露，MUST NOT 静默接受。
+   ⚠️ 这两条路径是**互斥的决策点**，实施前 MUST 在 change 内显式裁决其一
+   （不得由实施者临场随机选择）。
+   补充事实：现有 3 个实例化点全部使用**位置参数**
+   （`Axi4Slave<32,32,4,16,16>`）→ 参数**改名**对它们源码兼容，
+   实际 API 破坏面比直觉小。
+3. `DATA_WIDTH` MUST ≤ 64：`include/axi4/byte_lane.h` 的 `static_assert` 已封顶 64，
+   且 Verilator 后端拒绝 >64 bit 端口（ADR-035 R3）
+   → MUST 有 `static_assert(DATA_WIDTH <= 64)`。
+   ⚠️ `include/axi4/axi4_full.h:9` 的头注释当前宣称支持 128–1024 位数据宽度，
+   与该上限矛盾 → MUST 同步修正头注释。
+4. 任一参数未被 honor → MUST 用 `static_assert` 在**编译期**暴露，MUST NOT 静默接受。
 
 #### Scenario: 模板参数与实际实现不符时编译失败
 

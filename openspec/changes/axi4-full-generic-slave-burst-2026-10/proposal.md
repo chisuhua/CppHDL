@@ -21,7 +21,7 @@ slave 组件，但当前状态差距极大：
 | B2 | **写状态机每笔事务只接受 1 个 W beat** | `write_state == 1` 时 `wready = io().wvalid`；W 握手且 `!wlast` → next state = 2，而 state 2 的 `is_aw_wait` 为 0 → **`wready` 恒 0** → 后续 beat **静默丢弃** | `:360-361`（`is_aw_wait` / `w_ready_sig`）；`:164-171`（`next_write_state`：非 `wlast` → 2）；`:356-362`（`wready` 只在 state 1 有效） |
 | B3 | **写地址用活的 `io().awaddr`**，且 burst 内**不递增** | master 在 AW 握手后改写 AWADDR（AXI 允许）→ 写落到**错误寄存器**；即使不改写，多 beat burst 的所有 beat 也写**同一个**寄存器 | `:198`（`addr_index = io().awaddr >> 2`）；`:217-232`（16 个 `weN` 全部用同一个 `addr_index`） |
 | B4 | **读地址只锁存一次**，burst 内每个 beat 返回**同一个**寄存器值 | INCR 读 burst 拿回 N 份相同数据 → 静默数据错误（无任何报错） | `:146`（`read_addr_reg` 在 AR 握手时锁存一次）；`:316-333`（读 mux 只按 `read_addr_reg` 选一次）；`:345`（`rdata` 恒为该值） |
-| B5 | **burst 类型完全未实现** | `AxiBurst` 枚举（FIXED/INCR/WRAP）定义在 `:41-45` 但**零引用**；`awburst` / `arburst` 端口存在却被忽略 → master 的 WRAP 请求被当作 INCR 处理 | `:41-45`（enum 定义）；`:58-99`（`awburst` / `arburst` 端口）；全文 grep `AxiBurst` 仅 1 处命中（定义处） |
+| B5 | **burst 类型完全未实现** | `AxiBurst` 枚举（FIXED/INCR/WRAP）定义在 `:41-45` 但**零引用**；`awburst` / `arburst` 端口存在却被忽略 → master 的 WRAP 请求被当作 INCR 处理 | `:41-45`（enum 定义）；`:58-99`（`awburst` / `arburst` 端口）；**本文件内** grep `AxiBurst` 仅 1 处命中（定义处） |
 | B6 | **`awlen` / `arlen` 语义不完整** | 写侧 `awlen` **完全被忽略**（`write_burst_cnt` 计数但从不参与地址计算或结束判定，`:150-153`）；读侧仅用 `arlen` 做一次长度比较 | `:150-153`（`write_burst_cnt` 无消费者）；`:370`（`burst_len_match = (read_burst_cnt == io().arlen)`） |
 | B7 | **`MAX_BURST_LEN` 模板参数未 honor** | 模板是「接口谎言」：`Axi4Slave<32,32,4,16,64>` 的 64 长度上限不生效 | `:52`（模板参数）；全文无引用 |
 | B8 | **`NUM_REGS` 模板参数未 honor** | 硬编码 16 个寄存器（`reg0..reg15`），`NUM_REGS` 改了也没用 | `:51`（模板参数）；`:115-116`（硬编码 16 个 `ch_reg`） |
@@ -60,6 +60,12 @@ slave 组件，但当前状态差距极大：
 - 写/读地址**锁存**（`write_addr_reg` / `read_addr_reg`），解码 MUST 基于锁存值
 - `bvalid` / `rvalid` 保持到 `bready` / `rready`；置 1 条件 MUST 优先于清 0 条件
 - 未映射地址 → `DECERR`（写）/ `DECERR`（读），MUST NOT 静默丢弃
+- ⚠️ **读写方向各自独立 outstanding**：写通道与读通道各自最多 1 笔在途，
+  **互不阻塞**（AXI4 Full 的 AW/W/B 与 AR/R 是独立通道组）。
+  `AxiLiteSlave` 的规范形态用的是**共享 `busy`**（读写互斥），
+  照抄会把 `Axi4Slave` 现有的读写并发能力**降级**为互斥 → 属于行为回退，MUST NOT 发生。
+  两者是「同源但不同形」：同源指 `rst_n` / 复位 pattern / 相位分离 / 地址锁存 /
+  响应保持这 5 条；读写并发性因通道组不同而不同。
 
 ### D2: 写侧多 beat burst
 
@@ -76,15 +82,30 @@ slave 组件，但当前状态差距极大：
 - 每一拍的 `rdata` MUST 取**该拍对应地址**的寄存器值（MUST NOT 恒返回首拍的值 —— B4）
 - `rlast` MUST 只在**最后一个 beat** 拉高
 - 读 beat 计数 MUST 与 `arlen` 独立比较，MUST NOT 依赖「活」的 `arlen`
+- **`rvalid` 形态 MUST 明确**：采用**流式**形态 —— `rvalid` 在整个 burst 期间连续保持为 1，
+  每拍呈现一个 beat，直到 `rready` 接受该 beat 为止
+  （MUST NOT 采用「每 beat 独立等待 `rready` 再出下一拍」的断续形态）
+- ⚠️ **末拍 / 结束判定 MUST 用「下一个值」**（`next_beat_cnt == arlen` 之类），
+  MUST NOT 用当前寄存器值比较 —— 仓库已登记该坑
+  （`include/axi4/AGENTS.md` ANTI-PATTERNS：UART RX 引擎因用当前值判定结束
+  而只采到 7 位）。burst 结束判定同理 MUST 基于组合出的**下一状态**。
 
 ### D4: burst 类型语义
 
 - `INCR`（`0b01`）：地址每 beat 递增 `2^awsize` 字节（MUST 用 `awsize` / `arsize`，
   MUST NOT 硬编码 4）
+  - ⚠️ `2^awsize` **MUST NOT 用运行期移位**计算 ——
+    `ch_uint::operator<<` 按右操作数类型宽度推算结果宽度
+    （`include/axi4/AGENTS.md` 已登记该坑）→ MUST 用 `select` 链查表
+    （`awsize` 0..7 → 1/2/4/8/16/32/64/128 字节）
 - `FIXED`（`0b00`）：地址每 beat 保持不变
 - `WRAP`（`0b10`）：**本 change 的非目标**。MUST 以 `SLVERR` 明确拒绝
   （MUST NOT 静默当作 INCR —— 那是 B5 的静默数据损坏）
   → WRAP 的完整语义另开 change 立项
+- **步长与总线宽度的关系**：解码步长固定 4 字节（`addr >> 2`），寄存器宽度为 `DATA_WIDTH`。
+  `DATA_WIDTH == 64` 且 `awsize < 3` 时，相邻 beat 会落到**同一个** 64 位寄存器（窄传输）。
+  本 change **不实现**窄传输的字节道重编号（Non-Goal 4），
+  MUST 在文档中显式声明该限制，MUST NOT 静默产生错误的数据落点
 
 ### D5: 模板参数 honor 化
 
@@ -94,7 +115,18 @@ slave 组件，但当前状态差距极大：
   （与 `AxiLiteSlave` 对 `NUM_REGS` 的处理同源，见
   `openspec/specs/axi-slave-conformance/spec.md`），
   或改名为 `NUM_REGS_FIXED` 明确「固定 16」语义
-- `MAX_BURST_LEN`：MUST 真正作为 burst 长度上限被检查（配合 D2 的 `SLVERR`）
+  - ⚠️ **这是一个决策点，MUST 在 change 内显式裁决其一**（tasks Task 8），
+    MUST NOT 由实施者临场随机选
+  - 补充事实：现有 3 个实例化点全部使用**位置参数**
+    （`Axi4Slave<32,32,4,16,16>`）→ 参数**改名**对它们源码兼容，
+    实际 API 破坏面比直觉小
+- `MAX_BURST_LEN`：MUST 真正作为 burst 长度上限被检查（配合 D2 的 `SLVERR`），
+  并 MUST 加 `static_assert(MAX_BURST_LEN <= 16)`
+  （`awlen` 端口宽度为 4 bit，物理上限 16 beat → `> 16` 恒空转）
+- `DATA_WIDTH`：MUST 加 `static_assert(DATA_WIDTH <= 64)`
+  （`byte_lane.h` 已封顶 64 + Verilator 后端拒 >64 bit 端口 ADR-035 R3），
+  并 MUST 修正 `include/axi4/axi4_full.h:9` 的头注释 ——
+  它当前宣称支持 128–1024 位数据宽度，与实际上限矛盾
 - 两个参数**任一未被 honor** → MUST 用 `static_assert` 在编译期暴露，MUST NOT 静默接受
 
 ### D6: 响应语义
@@ -115,8 +147,17 @@ slave 组件，但当前状态差距极大：
   - 不支持的 burst 类型（WRAP）→ `SLVERR`
   - 未映射地址 → `DECERR`
   - `rst_n` 复位清零全部状态
+  - 64 bit 总线（`DATA_WIDTH = 64`）的 4-beat INCR 写
+    （补既有 `tests/test_axi_slave_byte_lane.cpp` 的 `Full64` 覆盖面）
+- ⚠️ **master stimulus MUST 复用/仿照 `tests/axi_lite_slave_fixture.h`**
+  （仓库已有的协议合规 master fixture，专治「master 用从设备的 ready
+  gate 自己的 valid」这一 ANTI-PATTERN）
+- ⚠️ **所有握手等待 MUST 是有界循环**（如 ≤ 64 拍），超时即 FAIL ——
+  「握手永不完成」类缺陷的表现是 hang 而非断言失败
 - ⚠️ 现有 `tests/test_verilator_memory_e2e.cpp` 的 4-beat 写只断言握手信号，
   MUST 补数据断言（否则 B2 的回归护栏不存在）
+  → 该文件受 `dual-backend-test-coverage` 的 spec 锁约束，
+  MUST 先在本 change 的 spec delta 中解锁
 
 ### D8: 文档同步
 
@@ -143,10 +184,10 @@ slave 组件，但当前状态差距极大：
 | 项 | 影响 |
 |---|---|
 | `include/axi4/axi4_full.h` | 主要改动：新增 `rst_n` 端口、全部 `ch_reg` 加复位 pattern、状态机重写（写侧 4 态、读侧 3 态）、地址锁存 + 逐 beat 计算、burst 类型判定、`bresp` / `rresp` 语义化 |
-| 模板参数 | `NUM_REGS` / `MAX_BURST_LEN` 的语义收口（可能改名）→ **公开 API 变更** |
+| 模板参数 | `NUM_REGS` / `MAX_BURST_LEN` 的语义收口（可能改名）→ **公开 API 变更**（但现有 3 个实例化点全用位置参数 → 改名源码兼容）；另加 `static_assert(DATA_WIDTH <= 64)` / `MAX_BURST_LEN <= 16` |
 | 端口 | 新增 `ch_in<ch_bool> rst_n` → **公开 API 变更**；未接线的实例化点读出 0 = 永久复位（**静默破坏**）→ MUST 全量核查实例化点 |
 | 实例化点 | 全仓仅 3 处 MUST 接线 `rst_n`：`examples/axi4/axi4_full_example.cpp:77`、`tests/test_axi_slave_byte_lane.cpp:49-50`（`Full32` / `Full64` 别名，**双后端**测试）、`tests/test_verilator_memory_e2e.cpp:194` |
-| 测试 | 新增 `tests/test_axi4_full_burst.cpp`；`tests/test_verilator_memory_e2e.cpp` 补数据断言；`tests/CMakeLists.txt` 注册 |
-| spec | 新 capability `axi4-full-slave-burst`（ADDED）；`dual-backend-test-coverage`（MODIFIED，移除「多 beat 未实现」限制说明） |
+| 测试 | 新增 `tests/test_axi4_full_burst.cpp`（**1 个 ctest 条目**）；`tests/test_verilator_memory_e2e.cpp` 补数据断言（**受 spec 锁约束 → 需 delta 解锁**）；`tests/CMakeLists.txt` 注册 |
+| spec | 新 capability `axi4-full-slave-burst`（ADDED ×7）；`dual-backend-test-coverage`（MODIFIED ×3：解锁 `test_verilator_memory_e2e.cpp` + 移除「多 beat 未实现」限制说明 + 「不破既有 spec 锁」追加例外）；`axi-slave-conformance`（MODIFIED ×1：把指向 change 名的引用改为指向 capability，避免 archive 后 dangling） |
 | 文档 | `include/axi4/AGENTS.md`、根 `AGENTS.md`（NOTES 计数 + KNOWN LIMITATIONS） |
-| 风险 | ⚠️ 中高。写状态机重写会改变「同拍 AW+W」的行为（同拍 W 不再被接受）—— 与仓库规范形态一致，但属于**行为变化**，需在 commit message 与 spec 中显式声明 |
+| 风险 | ⚠️ 中。**「同拍 AW+W 不被接受」不是行为变化** —— `Axi4Slave` 今天的 `wready` 已由 `write_state == 1` 门控（state 1 只能在 AW 握手后一拍进入），同拍 W 本就不被接受，3 个实例化点也已是两拍驱动 → 本 change 在该维度**行为不变**，与仓库规范形态天然一致。真正的风险在：写状态机重写 + 24 个 `ch_reg` 的复位 pattern 漏配（静默破坏），以及 burst 末拍判定踩「用当前值判定结束」的已登记坑 |
