@@ -450,6 +450,11 @@ add_dual_backend_test(test_axi4_full_burst
     SOURCES test_axi4_full_burst.cpp
     TIMEOUT 300
 )
+# 「未接线 rst_n = 永久复位」的可执行护栏（零编译错误的静默破坏）——双后端。
+add_dual_backend_test(test_axi_rst_n_guard
+    SOURCES test_axi_rst_n_guard.cpp
+    TIMEOUT 300
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)

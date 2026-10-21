@@ -16,79 +16,6 @@ using namespace ch::core;
 using namespace axi4;
 
 // ============================================================================
-// Helper Functions for AXI4-Lite Transactions
-// ============================================================================
-
-template <typename T>
-void axi_lite_write(ch::Simulator& sim, T& device, uint32_t addr, uint32_t data) {
-    // Ensure bready is set before write transaction
-    sim.set_input_value(device.instance().io().bready, 1);
-    
-    // Write address
-    sim.set_input_value(device.instance().io().awaddr, addr);
-    sim.set_input_value(device.instance().io().awprot, 0);
-    sim.set_input_value(device.instance().io().awvalid, 1);
-    
-    // Tick to propagate and check AW ready
-    sim.tick();
-    
-    // Wait for AW ready
-    while (sim.get_port_value(device.instance().io().awready) == 0) {
-        sim.tick();
-    }
-    sim.set_input_value(device.instance().io().awvalid, 0);
-    
-    // Write data
-    sim.set_input_value(device.instance().io().wdata, data);
-    sim.set_input_value(device.instance().io().wstrb, 0xF);
-    sim.set_input_value(device.instance().io().wvalid, 1);
-    
-    // Tick to propagate and check W ready
-    sim.tick();
-    
-    // Wait for W ready
-    while (sim.get_port_value(device.instance().io().wready) == 0) {
-        sim.tick();
-    }
-    sim.set_input_value(device.instance().io().wvalid, 0);
-    
-    // Wait for B valid
-    while (sim.get_port_value(device.instance().io().bvalid) == 0) {
-        sim.tick();
-    }
-    sim.set_input_value(device.instance().io().bready, 0);
-}
-
-template <typename T>
-uint32_t axi_lite_read(ch::Simulator& sim, T& device, uint32_t addr) {
-    // Ensure rready is set before read transaction
-    sim.set_input_value(device.instance().io().rready, 1);
-    
-    // Read address
-    sim.set_input_value(device.instance().io().araddr, addr);
-    sim.set_input_value(device.instance().io().arprot, 0);
-    sim.set_input_value(device.instance().io().arvalid, 1);
-    
-    // Tick to propagate and check AR ready
-    sim.tick();
-    
-    // Wait for AR ready
-    while (sim.get_port_value(device.instance().io().arready) == 0) {
-        sim.tick();
-    }
-    sim.set_input_value(device.instance().io().arvalid, 0);
-    
-    // Wait for R valid
-    while (sim.get_port_value(device.instance().io().rvalid) == 0) {
-        sim.tick();
-    }
-    uint32_t data = static_cast<uint64_t>(sim.get_port_value(device.instance().io().rdata));
-    sim.set_input_value(device.instance().io().rready, 0);
-    
-    return data;
-}
-
-// ============================================================================
 // Test Cases
 // ============================================================================
 
@@ -122,6 +49,9 @@ TEST_CASE("AxiLiteSpi - RegisterAccess", "[axi][spi][register]") {
     ch::Simulator sim(spi_device.context());
     
     // Initialize inputs
+    // `rst_n` 是必需端口：未接线的 ch_in<ch_bool> 读出为 0 = 永久复位
+    // （零编译错误的静默破坏：寄存器永远停在初值）
+    sim.set_input_value(spi_device.instance().io().rst_n, 1);
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 0);
     sim.set_input_value(spi_device.instance().io().rready, 0);
@@ -143,6 +73,9 @@ TEST_CASE("AxiLiteSpi - SpiTransfer8Bit", "[axi][spi][transfer]") {
     ch::Simulator sim(spi_device.context());
     
     // Initialize inputs
+    // `rst_n` 是必需端口：未接线的 ch_in<ch_bool> 读出为 0 = 永久复位
+    // （零编译错误的静默破坏：寄存器永远停在初值）
+    sim.set_input_value(spi_device.instance().io().rst_n, 1);
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 1);
     sim.set_input_value(spi_device.instance().io().rready, 1);
@@ -172,6 +105,9 @@ TEST_CASE("AxiLiteSpi - SpiTransfer32Bit", "[axi][spi][transfer32]") {
     ch::Simulator sim(spi_device.context());
     
     // Initialize inputs
+    // `rst_n` 是必需端口：未接线的 ch_in<ch_bool> 读出为 0 = 永久复位
+    // （零编译错误的静默破坏：寄存器永远停在初值）
+    sim.set_input_value(spi_device.instance().io().rst_n, 1);
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 1);
     sim.set_input_value(spi_device.instance().io().rready, 1);
@@ -200,6 +136,9 @@ TEST_CASE("AxiLiteSpi - BaudRateControl", "[axi][spi][baud]") {
     ch::Simulator sim(spi_device.context());
     
     // Initialize inputs
+    // `rst_n` 是必需端口：未接线的 ch_in<ch_bool> 读出为 0 = 永久复位
+    // （零编译错误的静默破坏：寄存器永远停在初值）
+    sim.set_input_value(spi_device.instance().io().rst_n, 1);
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 1);
     sim.set_input_value(spi_device.instance().io().rready, 1);
@@ -225,6 +164,9 @@ TEST_CASE("AxiLiteSpi - StatusFlags", "[axi][spi][status]") {
     ch::Simulator sim(spi_device.context());
     
     // Initialize inputs
+    // `rst_n` 是必需端口：未接线的 ch_in<ch_bool> 读出为 0 = 永久复位
+    // （零编译错误的静默破坏：寄存器永远停在初值）
+    sim.set_input_value(spi_device.instance().io().rst_n, 1);
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 1);
     sim.set_input_value(spi_device.instance().io().rready, 1);
@@ -251,6 +193,8 @@ TEST_CASE("AxiLiteSpi - VerilogGeneration", "[axi][spi][codegen]") {
     ch::core::ctx_swap ctx_guard(ctx.get());
     
     ch::ch_device<AxiLiteSpi<8, 16>> spi_device;
+    // 注：codegen 路径不读 `rst_n`（此处不建仿真器），故不驱动它；
+    //     `rst_n` 是必需端口（未接线 = 永久复位），**仿真**用例 MUST 驱动。
     
     // Generate Verilog
     std::string vlog_file = "axi_spi_generated.v";
@@ -286,6 +230,8 @@ TEST_CASE("AxiLiteSpi - FullTransactionSequence", "[axi][spi][integration]") {
     ch::Simulator sim(spi_device.context());
     
     // Initialize
+    // `rst_n` 是必需端口：未接线的 ch_in<ch_bool> 读出为 0 = 永久复位
+    sim.set_input_value(spi_device.instance().io().rst_n, 1);
     sim.set_input_value(spi_device.instance().io().spi_miso, 0);
     sim.set_input_value(spi_device.instance().io().bready, 1);
     sim.set_input_value(spi_device.instance().io().rready, 1);

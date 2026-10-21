@@ -239,6 +239,18 @@ jobs:
       shell: bash
       run: scripts/verify_test_counts.sh
 
+    - name: Verify rst_n wiring
+      # An unwired `ch_in<ch_bool> rst_n` reads back as 0 = PERMANENTLY IN RESET:
+      # the component compiles, the test builds, the simulation reports no error,
+      # but every register stays at its init value -> the test is silently
+      # vacuous (ZERO-COMPILE-ERROR silent breakage).
+      # The check is per test case (a file that drives rst_n for one DUT would
+      # otherwise mask another DUT in the same file) and per wrapper
+      # (a wrapper must forward the port so an outer testbench can drive it).
+      # Portable bash + awk (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_rst_n_wiring.sh
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -487,6 +499,18 @@ jobs:
     - name: Verify AGENTS.md test counts
       shell: bash
       run: scripts/verify_test_counts.sh
+
+    - name: Verify rst_n wiring
+      # An unwired `ch_in<ch_bool> rst_n` reads back as 0 = PERMANENTLY IN RESET:
+      # the component compiles, the test builds, the simulation reports no error,
+      # but every register stays at its init value -> the test is silently
+      # vacuous (ZERO-COMPILE-ERROR silent breakage).
+      # The check is per test case (a file that drives rst_n for one DUT would
+      # otherwise mask another DUT in the same file) and per wrapper
+      # (a wrapper must forward the port so an outer testbench can drive it).
+      # Portable bash + awk (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_rst_n_wiring.sh
 
     - name: Upload test results
       if: always()

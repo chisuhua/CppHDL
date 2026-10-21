@@ -57,6 +57,15 @@ include/axi4/
     新增 `rst_n` 端口时 MUST 检查所有实例化点都已接线。
     这是**零编译错误的静默破坏**：未接线的实例化点编译通过、运行时不报错，
     但寄存器永远停在初值（写不进、读全 0）。
+  - 🛡️ **自动化护栏（2026-10-21 起）**：
+    - 静态：`scripts/verify_rst_n_wiring.sh`（已挂进 CI 的 2 个 job）。
+      **per-test-case** 粒度：「**仿真**了带必需 `rst_n` 端口的组件的用例 MUST 驱动它」
+      +「wrapper MUST 透传 `rst_n <<=`」。
+      只认**真实驱动**（`set_input_value(...rst_n...)` / `rst_n <<=`）——
+      **注释里提到 `rst_n` 不算数**（否则护栏会被注释骗过）。
+      组件清单在脚本头部 `COMPONENTS_W_RST_N`，新增带 `rst_n` 的组件时 MUST 同步维护。
+    - 运行时：`tests/test_axi_rst_n_guard.cpp`（双后端）——
+      故意不驱动 `rst_n` → 断言无 B/R 响应 + 寄存器保持初值。
   - 层级传递时**无需额外约束** —— `context::topological_sort_visit`
     （`src/core/context.cpp:273`）沿 `src` 边递归，父的 `ch_out` 排在子组件的
     `ch_in` 之前 → 同一拍内传递生效。`operator<<=` 只做 `set_driver`
