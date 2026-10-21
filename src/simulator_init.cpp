@@ -114,27 +114,11 @@ void Simulator::initialize() {
                 break;
 
             case ch::core::lnodetype::type_reg:
+            case ch::core::lnodetype::type_mem_read_port:
             case ch::core::lnodetype::type_mem_write_port:
                 sequential_instr_list_.emplace_back(node_id,
                                                     instr_map_[node_id]);
                 break;
-            case ch::core::lnodetype::type_mem_read_port: {
-                // EXPERIMENT (方案 B): classify async_read ports as
-                // combinational so the Simulator matches the generated
-                // Verilog's continuous `assign` (0-cycle).
-                const auto* rp = dynamic_cast<const ch::core::mem_read_port_impl*>(
-                    node);
-                const bool is_async =
-                    rp && rp->port_type() == ch::core::mem_port_type::async_read;
-                if (is_async) {
-                    combinational_instr_list_.emplace_back(node_id,
-                                                           instr_map_[node_id]);
-                } else {
-                    sequential_instr_list_.emplace_back(node_id,
-                                                        instr_map_[node_id]);
-                }
-                break;
-            }
             default:
                 // 其他所有节点归类为组合逻辑节点
                 combinational_instr_list_.emplace_back(node_id,
