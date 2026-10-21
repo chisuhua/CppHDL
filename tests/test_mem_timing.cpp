@@ -495,3 +495,68 @@ TEST_CASE("Memory Timing - Sequential Writes and Reads",
                 static_cast<uint64_t>(0x3000 + addr));
     }
 }
+// --------------------------------------------------------------------------
+// Enable-gated sync read port.
+//
+// The read port writes its own data_map slot and the data proxy copies it
+// (see the `read_port -> data_proxy` edge). When the enable is low the port
+// does NOT update its slot, so the observable value must HOLD — the same
+// semantics as the generated Verilog `always_ff` (the inner `if (enable)`
+// has no else branch). This path is the one that would silently read 0 if
+// only the async port were switched to writing its own slot.
+// --------------------------------------------------------------------------
+class EnabledSReadMem : public ch::Component {
+public:
+    __io(ch_in<ch_uint<4>> addr_in; ch_in<ch_bool> en_in;
+         ch_out<ch_uint<8>> data_out;)
+
+        EnabledSReadMem(ch::Component *parent = nullptr,
+                        const std::string &name = "enabled_sread_mem")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        std::vector<uint8_t> init = {0xA1, 0xB2, 0xC3, 0xD4};
+        ch_mem<ch_uint<8>, 16> mem(init, "enabled_sread_mem");
+
+        auto read_port = mem.sread(ch_uint<4>(io().addr_in.impl()),
+                                   ch_bool(io().en_in.impl()),
+                                   "enabled_sread_port");
+        io().data_out = ch_uint<8>(read_port.impl());
+    }
+};
+
+TEST_CASE("Memory Timing - sread holds its value while the enable is low",
+          "[mem][timing][sread-enable]") {
+    ch_device<EnabledSReadMem> device;
+    Simulator simulator(device.context());
+
+    auto addr_in = device.instance().io().addr_in;
+    auto en_in = device.instance().io().en_in;
+    auto data_out = device.instance().io().data_out;
+
+    // Enable high: the port samples mem[1] = 0xB2.
+    simulator.set_input_value(addr_in, static_cast<uint64_t>(1));
+    simulator.set_input_value(en_in, static_cast<uint64_t>(1));
+    simulator.tick();
+    simulator.tick();
+    REQUIRE(static_cast<uint64_t>(simulator.get_port_value(data_out)) ==
+            static_cast<uint64_t>(0xB2));
+
+    // Enable low: the port must HOLD its last value — not read 0, and not
+    // read the new address. (Verilog `always_ff` hold semantics.)
+    simulator.set_input_value(addr_in, static_cast<uint64_t>(3));
+    simulator.set_input_value(en_in, static_cast<uint64_t>(0));
+    simulator.tick();
+    simulator.tick();
+    REQUIRE(static_cast<uint64_t>(simulator.get_port_value(data_out)) ==
+            static_cast<uint64_t>(0xB2));
+
+    // Enable high again: the port samples mem[3] = 0xD4.
+    simulator.set_input_value(en_in, static_cast<uint64_t>(1));
+    simulator.tick();
+    simulator.tick();
+    REQUIRE(static_cast<uint64_t>(simulator.get_port_value(data_out)) ==
+            static_cast<uint64_t>(0xD4));
+}

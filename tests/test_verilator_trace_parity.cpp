@@ -24,9 +24,15 @@
 //     observe deep-internal memory / reg-file via dlopen accessor table)
 //   - we read post-tick values; do NOT depend on intermediate 3-eval/tick
 //     state
-//   - fixtures MUST NOT contain `ch_mem` `aread` read ports (those are
-//     0-cycle comb in Verilog but posedge in Simulator → 1-cycle skew
-//     makes parity fail by design); `sread` is fine
+//   - fixtures MUST NOT contain `ch_mem` `aread` read ports *for the
+//     reason that used to apply*: the Simulator's aread was posedge-based
+//     while Verilog's `assign` is 0-cycle → a 1-cycle skew made parity fail
+//     by design. That drift was eliminated by
+//     `sim-mem-read-timing-align-2026-10` (the Simulator's aread is now
+//     combinational), so aread fixtures CAN be dual-run — see
+//     tests/test_mem_read_timing_dual.cpp. This fixture still scopes itself
+//     down to combinationally-driven outputs for its own per-cycle
+//     assertion stability. `sread` is fine either way.
 //   - register-driven `ch_out` ports propagate correctly through
 //     VerilatorBackend after verilator-hier-input-flattening-fix
 //     (2026-10-15); however this fixture deliberately scopes down to

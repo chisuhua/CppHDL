@@ -171,15 +171,13 @@
     cd build && ctest -R "test_cache_sync|test_branch_predictor_v2|test_verilator_memory_e2e|test_verilator_complex_e2e|spinalhdl_branch_predictor_v2" --output-on-failure
     ```
     MUST 全绿（原实验下这 5 个转红）
-    ⚠️ **额外 MUST 人工检查生成的 Verilog**（断言「无未声明信号引用」不是
-    现有测试能覆盖的）—— 例如生成 `tests/test_mem_comb_read.cpp` 用的 fixture 的
-    Verilog，grep `assign` 行，确认**每个被赋值的信号都在 wire/logic 声明列表里**：
-    ```bash
-    # 期望：assign 右侧的每个标识符都能在声明列表中找到
-    grep -E "^\s+(logic|output|input)" gen.v | grep -oE "[A-Za-z_][A-Za-z0-9_]*" | sort -u > /tmp/decl.txt
-    grep -E "^\s*assign" gen.v | grep -oE "=\s*[A-Za-z_][A-Za-z0-9_]*" | awk '{print $2}' | sort -u > /tmp/refs.txt
-    comm -13 /tmp/decl.txt /tmp/refs.txt   # MUST 为空
-    ```
+    ✅ **「无未声明信号引用」已实现为自动化护栏**（不只靠人工检查）——
+    `tests/test_mem_comb_read.cpp` 新增用例
+    「generated Verilog references no undeclared signals」
+    （tag `[mem][comb-read][codegen][undeclared-signal]`）：收集生成 Verilog 里
+    每条 `assign` 右值的标识符，断言其**全部已声明**。
+    **非空转已实测**：临时撤掉 A′.3（`print_output` 的代理链修复）即抓到
+    **4 处**未声明引用。
 
 - [x] ### Task 5: 文档同步
   - **action**:
@@ -208,8 +206,16 @@
       cd build && ctest -L perf --output-on-failure      # ~15-20 min
       ./run_all_ported_tests.sh                          # 28 examples
       ./build/samples/fifo_example                       # ⚠️ 不在 ctest，必须手工跑
-      ./build/samples/fifo_bundle                        # ⚠️ 同上
+      ./build/samples/fifo_bundle                        # ⚠️ 同上；见下方「已知例外」
       ```
+    ⚠️ **已知例外：`samples/fifo_bundle` 在 pristine HEAD 即失败**
+    （`empty=0` / exit=1，**与本 change 无关**）—— 根因是
+    `include/bundle/common_bundles.h` 的 `fifo_bundle::as_slave_direction()`
+    把 `push` 声明成了**输出**（方向反了），且该 sample 的 FIFO 从未把读数据
+    接到 `io.data`。两者都是**共享 bundle API** 的独立缺陷 → 本 change
+    **不修**（见 `dual-backend-mem-read-timing-parity-2026-10` 的 Non-Goal #4），
+    需独立立项。⇒ 本 Task 的「MUST 全绿」判据**排除**该 sample，其余命令
+    MUST 全绿。
     - 重点观察（时序敏感）：`test_mem_comb_read` / `test_cache_sync` /
       `test_cache_complete` / `test_branch_predictor_v2` /
       `test_rv32i_pipeline` / `test_verilator_memory_e2e` / `test_verilator_complex_e2e`

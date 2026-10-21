@@ -46,10 +46,16 @@
 // Out of scope (documented in spec R6 exclusion list):
 //   - STATIC_REQUIRE / pure compile-time tests
 //   - bare-context tests (no ch_device / ch_module)
-//   - aread-based designs (mem-read-timing spec 1-cycle skew)
 //   - Catch2 SECTION re-entry (each backend-run re-enters SECTIONs)
 //   - >64-bit port fixtures (R5 above; tests must use the dedicated
 //     test_dual_backend_64_bit fixture with [verilator-skip-wide] tag)
+//
+// NOTE: aread-based designs are NO LONGER excluded. They used to be, because
+// the Simulator's `ch_mem::aread` was posedge-based while the generated
+// Verilog `assign proxy = mem[addr];` is 0-cycle — a 1-cycle skew that made
+// parity fail by design. `sim-mem-read-timing-align-2026-10` eliminated that
+// drift (the Simulator's aread is now combinational), so aread fixtures can
+// and should be dual-run. See tests/test_mem_read_timing_dual.cpp.
 
 #pragma once
 

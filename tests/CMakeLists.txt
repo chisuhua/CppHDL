@@ -192,6 +192,17 @@ add_dual_backend_test(test_cache_sync
     TIMEOUT 60
 )
 
+# mem-read-timing: cross-backend parity for the memory read port timing
+# contract. The Simulator's `ch_mem::aread` is 0-cycle, matching the
+# generated Verilog `assign proxy = mem[addr];`, so interpreter and verilator
+# MUST observe the same value for a register-driven read address.
+# Weread-based designs were excluded from the dual-backend matrix before
+# `sim-mem-read-timing-align-2026-10` eliminated the 1-cycle skew.
+add_dual_backend_test(test_mem_read_timing_dual
+    SOURCES test_mem_read_timing_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
