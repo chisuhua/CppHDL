@@ -1,6 +1,6 @@
 ## Tasks
 
-> **状态：已实施（Task 0-6 完成；Task 7 archive 待执行）。**
+> **状态：已实施并 archive（2026-10-21，`2026-10-21-sim-mem-read-timing-align-2026-10`）。**
 > 实施分支：`feature/sim-mem-read-timing-align-2026-10`（基于 `bd56b4c`）。
 >
 > **执行结果（2026-10-21）**：
@@ -225,7 +225,7 @@
       若某个 dual-backend 用例转红，先怀疑 interpreter 侧的新语义
   - **verify**: 上述命令 MUST 全绿（0 failed）
 
-- [ ] ### Task 7: spec 落地 + archive
+- [x] ### Task 7: spec 落地 + archive ✅（3 modified + 2 renamed；主 spec `## Purpose` 已补写；`openspec validate --specs --strict` 16/16 通过；无 dangling change 名引用）
   - **action**:
     - `openspec validate sim-mem-read-timing-align-2026-10 --strict` MUST 通过
     - `openspec archive sim-mem-read-timing-align-2026-10 -y`（**MUST NOT** 用
