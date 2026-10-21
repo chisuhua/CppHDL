@@ -156,6 +156,20 @@ Capability MUST 明确划分"不可 dual"测试类别，避免迁移工作浪费
 除上述四类变更外，这两个文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
 + 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
 
+**例外（`axi4-full-slave-burst` 引入）**：
+`tests/test_verilator_memory_e2e.cpp` 内嵌 `Axi4Slave`（`Axi4Slave<32,32,4,16,16>`），
+而 `rst_n` 是该 slave 的**必需端口**（未接线的 `ch_in<ch_bool>` 读出为 0 = 永久复位）
+→ 该文件 MUST 被允许**受限**变更：
+
+1. fixture 暴露 `rst_n` 端口并透传给 slave；
+2. testbench 侧 `sim.set_input_value(io().rst_n, 1)`；
+3. 该文件既有的 4-beat 写用例 MUST 补**数据断言**
+   （当前只比较握手信号 → 多 beat burst 的后续 beat 被静默丢弃时测试仍绿）；
+4. 相应断言按新规范更新（`bresp` / `rresp` 语义化、`bvalid` 保持到 `bready`）。
+
+除上述四类变更外，该文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
++ 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
+
 #### Scenario: 9 个测试保留原状
 
 - **WHEN** 本 capability 的 builder 阶段执行
@@ -168,7 +182,16 @@ Capability MUST 明确划分"不可 dual"测试类别，避免迁移工作浪费
 - **THEN** `tests/test_verilator_trace_parity.cpp` 与 `tests/test_axi_lite_verilator_e2e.cpp`
   的 `git diff` MUST 仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明 +
   fixture 暴露并透传 `rst_n` + testbench 驱动 `rst_n` + 写事务改两拍 + 相应断言更新"
-- **AND** 其余 7 个文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明"
+- **AND** 除本 Requirement 明确列出的例外文件外，其余文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明"
+- **AND** MUST NOT 修改这 9 个文件中的 TEST_CASE 名与 Catch2 SECTION 结构
+
+#### Scenario: 内嵌 Axi4Slave 的 fixture 允许受限变更（burst change）
+
+- **WHEN** `axi4-full-slave-burst` 的 builder 阶段执行
+- **THEN** `tests/test_verilator_memory_e2e.cpp` 的 `git diff` MUST 仅限
+  "加 `LABELS verilator_e2e` 标签 + 顶注释声明 + fixture 暴露并透传 `rst_n`
+  + testbench 驱动 `rst_n` + 4-beat 写补数据断言 + 相应断言更新"
+- **AND** 其余 8 个文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明"
 - **AND** MUST NOT 修改这 9 个文件中的 TEST_CASE 名与 Catch2 SECTION 结构
 
 #### Scenario: 全 9 个测试贴上 verilator_e2e label
@@ -350,6 +373,9 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 - **AND** MUST NOT 改 `tests/test_axi_lite_verilator_e2e.cpp`，
   **除了**同上的受限例外
 - **AND** MUST NOT 改 `tests/test_axi_{spi,pwm,i2c}_behavior.cpp`（已 archived）
+- **AND**（`axi4-full-slave-burst` 追加的例外）
+  MUST 允许改 `tests/test_verilator_memory_e2e.cpp`：
+  接入 `Axi4Slave` 新增的 `rst_n` + 4-beat 写补数据断言 + 相应断言更新
 
 ### Requirement: AXI4-Lite slave peripheral MUST 收敛到相位分离 + 响应保持的规范形态
 
@@ -537,11 +563,10 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 
 ### Requirement: AXI4 peripheral MUST 支持字节写
 
-- **MODIFIED**: 适用范围 MUST 扩到**通用 AXI slave**（`AxiLiteSlave` / `Axi4Slave`）——
-  两者的写路径 MUST 消费 `wstrb`，MUST NOT 整字覆盖寄存器；并**合并**
-  `axi4-byte-lane-dual-parity-2026-10`（archive
-  `2026-10-20-axi4-byte-lane-dual-parity-2026-10`）加入的 2 个双后端 Scenario
-  —— openspec 的 `MODIFIED` 是**整条替换**，不显式合并会丢掉那两条 MUST 断言。
+适用范围 MUST 覆盖**通用 AXI slave**（`AxiLiteSlave` / `Axi4Slave`）——
+两者的写路径 MUST 消费 `wstrb`，MUST NOT 整字覆盖寄存器；
+本条同时覆盖 `axi4-byte-lane-dual-parity-2026-10` 加入的 2 个双后端 Scenario
+（openspec 的 `MODIFIED` 是**整条替换**，不显式合并会丢掉那两条 MUST 断言）。
 
 AXI4 slave 的写路径 MUST 消费 `wstrb` 字节掩码，MUST NOT 整字覆盖寄存器。
 字节道语义 MUST 按 `include/axi4/AGENTS.md` CONVENTIONS 登记的规则执行。
@@ -577,8 +602,10 @@ AXI4 slave 的写路径 MUST 消费 `wstrb` 字节掩码，MUST NOT 整字覆盖
 - **WHEN** master 对 `Axi4Slave` 发一次写事务，AW 拍与 W 拍的 `wstrb` 不同
 - **THEN** 写路径 MUST 采用 **W 握手拍** 的 `wstrb`（MUST NOT 在 AW 拍锁存）
 - **AND** 未被该 `wstrb` 选中的字节 MUST 保持原值
-- **AND** 多 beat burst 的逐 beat 语义当前**未实现**（`Axi4Slave` 写状态机每笔事务
-  只接受 1 个 W beat）—— MUST NOT 被本 Requirement 隐含为已实现，单独立项
+- **AND** 多 beat burst 的逐 beat 语义由独立 capability `axi4-full-slave-burst`
+  承载（`openspec/specs/axi4-full-slave-burst/spec.md`）——
+  本 Requirement 只约束「每次 W 握手取当拍 `wstrb`」这一条，
+  MUST NOT 被本 Requirement 隐含为 burst 语义已实现
 
 #### Scenario: 字节道索引相对被访问的字
 

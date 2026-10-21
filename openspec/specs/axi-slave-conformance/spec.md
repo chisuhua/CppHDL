@@ -9,7 +9,7 @@
 该 capability 的「AXI4-Lite slave peripheral MUST 收敛到相位分离 + 响应保持的规范形态」
 Requirement 管辖 **6 个 `include/axi4/peripherals/*.h` 的 AXI4-Lite peripheral**；
 本 capability 管辖**通用 AXI slave**（`AxiLiteSlave`；`Axi4Slave` 属 AXI4 **Full**，
-其规范形态与 burst 语义由 `axi4-full-generic-slave-burst-2026-10` 承载）与**适配器**。
+其规范形态与 burst 语义由 `axi4-full-slave-burst` 承载）与**适配器**。
 两者规则**同源**（同一套 `busy` / `aw_done` / `b_valid` / `r_valid` 四件套形态），
 适用范围不同。`dual-backend-test-coverage` 另管辖「同一场景在 interpreter 与
 verilator 两后端的一致性」——本 capability **不重复**该维度，只在新增行为引入时
@@ -23,7 +23,6 @@ Requirement 为准**（该 Requirement 的适用范围已包含 `AxiLiteSlave`�
 `select(!io().rst_n, <init_val>, ...)` 落在 `ch_reg` 的 `next` 表达式上，由时钟沿采样
 （`include/core/node_builder.h:180-182` 的 `ch_reg` 原生复位接的是 context 的
 `default_reset`，组件级 `rst_n` 只能走 `next` 表达式），实为**沿上生效**。
-
 ## Requirements
 ### Requirement: 通用 AXI4-Lite slave MUST 提供低有效复位
 
@@ -34,7 +33,12 @@ Requirement 为准**（该 Requirement 的适用范围已包含 `AxiLiteSlave`�
 
 1. 本 Requirement 管辖 `AxiLiteSlave`（`include/axi4/axi4_lite_slave.h`）。
    `Axi4Slave`（`include/axi4/axi4_full.h`，AXI4 **Full**）的规范形态与 burst 语义
-   由独立 change `axi4-full-generic-slave-burst-2026-10` 承载，**不在本 Requirement 范围**。
+   由独立 capability `axi4-full-slave-burst` 承载
+   （`openspec/specs/axi4-full-slave-burst/spec.md`），
+   **不在本 Requirement 范围**。
+   ⚠️ MUST NOT 用「未实现的 change 名」做交叉引用 ——
+   change 归档后目录会移入 `openspec/changes/archive/`，
+   指向 change 名的引用会成为 dangling 指针；MUST 指向 **capability**。
 2. 本 Requirement 与 `dual-backend-test-coverage` 的「AXI4-Lite slave peripheral MUST 收敛到
    相位分离 + 响应保持的规范形态」Requirement **同源**（同一套四件套形态），
    区别在**适用对象**：那条管辖 6 个 `include/axi4/peripherals/*.h` 的 AXI4-Lite peripheral，
