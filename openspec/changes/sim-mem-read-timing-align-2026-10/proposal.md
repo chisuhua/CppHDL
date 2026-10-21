@@ -71,6 +71,33 @@ drift is documented」），并在 `docs/simulation/ARCHITECTURE.md`「Memory re
 > `context::get_eval_list()` 的拓扑排序，而该排序**只沿 `src` 边递归**
 > → 不加 `src` 边就无法表达「端口先于代理」。→ **倾向方案 A**。
 
+> **2026-10-21 补充实测（决策依据）**：在同一会话中对 B2 做了**变体实验**，
+> 得到与「方案 A」倾向一致的关键证据：
+>
+> | 变体 | 改动 | 上游 mem 套件结果 |
+> |---|---|---|
+> | B2-原样（附录 A） | 加 `src` 边 + **仅 async** 写自身槽位 | `test_mem_timing` / `test_mem_connection` / `test_memory` **3 个套件转红**（sync 仍写代理槽位、而代理已改为从 sync 端口自身槽位取源 ⇒ **sync 读到 0**） |
+> | B2-变体 | 加 `src` 边 + **async 与 sync 都**写自身槽位 | 3 个套件**恢复全绿**；仅剩 `test_mem_comb_read` 的竞态用例 1 处红（**预期** —— 竞态钉住值从「写前值」反转为「写后值」，属 D4 的显式契约变更） |
+>
+> ⇒ **裁决结论（Task 0）**：
+> 1. **加 `src` 边是必要的**（无 `src` 边则 interpreter 拓扑序无法表达
+>    「端口先于代理」）⇒ 排除「方案 B（只在 codegen 侧排序）」，**采用方案 A**；
+> 2. **读端口写自身槽位必须 async + sync 同步改**（只改 async 会让 sync 读到 0）；
+> 3. 变体实测的**上游侧净破坏面 = 1 个断言**（竞态契约反转），
+>    而 B2-原样是 **3 个套件** ⇒ **变体是更小的起点**。
+>
+> ⚠️ **变体仍需 Task 4 的 codegen 配套**：加 `src` 边后 `print_proxy` 会为
+> 该代理额外发射 `assign <proxy> = <read_port>`，而 `type_mem_read_port` 不在
+> wire 声明列表 ⇒ **未声明信号 + 双驱动**。Task 4 MUST 同时解决这两点。
+> （2026-10-21 实测：变体 + codegen 未配套时，生成 Verilog 的 5 个套件转红。）
+>
+> ⚠️ **本 change 的收益已被下游实测确认**：该上游改动落地后，**ChipForge 侧
+> 的 10 个 rv32ui load/store ELF 全部转绿**（`[chmem]` 从 10 failed → 0 failed，
+> 47 个 vendored ELF 全 PASS，`[verilator]` 4 case / 122 assertions 不变）
+> ⇒ 该 change 是 ChipForge 那 10 个红点的**唯一零数据通路改动**的解法
+> （ChipForge 侧改 `sread` 单独实测反而从 10 恶化到 11 个红点）。
+
+
 ### D2: Simulator 的 async read port 归类
 
 `src/simulator_init.cpp`：`type_mem_read_port` 的 **async** 子类改入

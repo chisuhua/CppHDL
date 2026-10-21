@@ -25,9 +25,29 @@
       → 裁决结果 MUST 写进本 change 的 tasks
     - 记录 RED 基线：在 Task 3 之前，当前 HEAD（`7aefdfe` 之后）的
       `ctest -LE perf` 必须全绿 → 若已红，先修红再动本 change
+      ⚠️ **2026-10-21 实测修正（基线并非全绿）**：在 pristine HEAD
+      （`87d498d`，无任何实验补丁）实测 `ctest -LE perf` = **28 failed / 167**，
+      其中 **24 个是 `spinalhdl_*` "Not Run"**（该配置的构建里 SpinalHDL
+      套件**根本没编出来**，非回归 —— 需 SpinalHDL 工具链）与 **4 个真红**：
+      | 套件 | pristine HEAD 实测 | 归属 |
+      |---|---|---|
+      | `test_mem_comb_read` | 1 failed / 15 | **pre-existing**（见下） |
+      | `test_mem_timing` | 2 failed / 30 | **pre-existing** |
+      | `test_mem_connection` | 1 failed / 16 | **pre-existing** |
+      | `test_jit_compiler` | 40 failed / 40 | pre-existing（JIT 未启用） |
+      ⇒ **这 3 个 mem 套件的红与本 change 无关**：在 `5fec554`（夹带方案 B）
+      **之前**的 `9b74a0a` 上复测，结果完全相同（1/2/1 failed）⇒ 早于
+      2026-10-21 的全部实验即已红。
+      ⚠️ 因此 `7aefdfe` 提交信息里「Non-perf ctest: 167/167 green」的表述
+      **与实测不符**（很可能是 SpinalHDL 套件在当时的构建配置里被跳过、
+      而 mem 三红被误判为本次实验引入）。**实施前 MUST 先把这 3 个 mem 红的
+      根因查清并单独修复（或明确记为已知 baseline 红）**，否则 Task 6 的
+      「MUST 全绿」判据无法区分「本 change 引入的回归」与「既有红」。
   - **verify**:
     ```bash
     cd build && ctest -LE perf -j4 --output-on-failure
+    # 基线对照（可选，用于确认 pre-existing）：
+    git worktree add /tmp/cpphdl-base 9b74a0a   # 5fec554 之前
     ```
 
 - [ ] ### Task 1: 建立隔离的实验分支 / worktree
@@ -65,11 +85,20 @@
       `data_map` 槽位，由代理的 `instr_proxy` 搬运到代理槽位
     - ⚠️ **必须同时保证**：`data_map` 中读端口节点自身的槽位存在且宽度正确
       （`size_` = `DATA_WIDTH`）
+    - ⚠️ **sync 路径也必须改为写自身槽位**（2026-10-21 增补，实测决定）：
+      若只改 async 而不改 sync，sync 端口仍写代理槽位、而代理的
+      `instr_proxy` 已改为从 sync 端口自身槽位取源 ⇒ **sync 读到 0**
+      （实测 `test_mem_timing` / `test_mem_connection` / `test_memory` 共 3 个
+      套件转红）。async + sync **两处都要改**写自身槽位。
   - **verify**:
     ```bash
     ./build/tests/test_mem_comb_read "*aread*"
+    ./build/tests/test_mem_timing
+    ./build/tests/test_mem_connection
+    ./build/tests/test_memory
     ```
-    Task 2 的用例 1 MUST 转绿；用例 2 MUST 仍绿
+    Task 2 的用例 1 MUST 转绿；用例 2 MUST 仍绿；
+    且上述 3 个内存语义套件 MUST 保持全绿（**async+sync 同步改**的回归证据）
 
 - [ ] ### Task 4: codegen 侧 —— 让数据流边不破坏 Verilog 生成
   - **action**:
