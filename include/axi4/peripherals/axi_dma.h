@@ -38,7 +38,7 @@ public:
         ch_in<ch_uint<32>> reg_length;
         ch_out<ch_bool> status_busy; ch_out<ch_bool> status_done;
         ch_out<ch_bool> status_error; ch_out<ch_bool> irq;
-        // 异步复位 (低电平有效)。注意：AxiDma 是 AXI4 **master**，
+        // 复位 (低电平有效，在时钟沿生效)。注意：AxiDma 是 AXI4 **master**，
         // 复位对象是 master 自身的 FSM 状态（不是 AXI4-Lite slave 的寄存器值），
         // 语义与 slave 的 rst_n 契约不同 —— 见 spec
         // "AXI4 master peripheral MUST 有独立于 slave 的复位契约"。

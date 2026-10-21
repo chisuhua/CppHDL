@@ -55,6 +55,9 @@ public:
         ch_in<ch_uint<32>> wdata;
         ch_out<ch_uint<32>> rdata;
         ch_out<ch_bool> done;
+        
+        // 复位（低有效，在时钟沿生效）—— 透传到 converter 与 AXI4-Lite slave
+        ch_in<ch_bool> rst_n;
     )
     
     Phase3ATop(ch::Component* parent = nullptr, const std::string& name = "phase3a_top")
@@ -117,6 +120,11 @@ public:
         interconnect.io().s0_rlast <<= converter.io().axi_rlast;
         interconnect.io().s0_rvalid <<= converter.io().axi_rvalid;
         converter.io().axi_rready <<= interconnect.io().s0_rready;
+        
+        // 复位链路：顶层 → converter → AXI4-Lite slave
+        // （`rst_n` 是 converter 与 slave 的必需端口，未接线读出为 0 = 永久复位）
+        converter.io().rst_n <<= io().rst_n;
+        axil_slave.io().rst_n <<= converter.io().axil_rst_n;
         
         // Converter AXI4-Lite 从设备 → AXI4-Lite Slave
         axil_slave.io().awaddr <<= converter.io().axil_awaddr;
@@ -238,6 +246,10 @@ int main() {
     
     // 创建顶层模块
     Phase3ATop top(nullptr, "phase3a_top");
+    
+    // 注：本 example 只构建设计，不跑仿真 → 顶层 `rst_n` 无人驱动。
+    // 若后续加仿真，MUST 驱动 `top.io().rst_n = true`
+    // （未接线的 `rst_n` 读出为 0 = 永久复位）。
     
     // 生成 Verilog
     std::cout << "Generating Verilog..." << std::endl;

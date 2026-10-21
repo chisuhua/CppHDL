@@ -40,6 +40,9 @@ public:
         ch_out<ch_uint<2>> rresp;
         ch_out<ch_bool> rvalid;
         ch_in<ch_bool> rready;
+        
+        // 复位（低有效，在时钟沿生效）—— AxiLiteSlave 的必需端口
+        ch_in<ch_bool> rst_n;
     )
     
     AxiLiteTop(ch::Component* parent = nullptr, const std::string& name = "axi_top")
@@ -75,6 +78,8 @@ public:
         io().rresp <<= slave.io().rresp;
         io().rvalid <<= slave.io().rvalid;
         slave.io().rready <<= io().rready;
+        
+        slave.io().rst_n <<= io().rst_n;
     }
 };
 
@@ -181,6 +186,8 @@ int main() {
     sim.set_input_value(top_device.instance().io().arvalid, false);
     sim.set_input_value(top_device.instance().io().bready, true);
     sim.set_input_value(top_device.instance().io().rready, true);
+    // `rst_n` 是 AxiLiteSlave 的必需端口：未接线读出为 0 = 永久复位
+    sim.set_input_value(top_device.instance().io().rst_n, true);
     
     VcdRecorder vcd("axi4_lite_waveform.vcd");
     vcd.record(0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0);
@@ -243,8 +250,10 @@ int main() {
     vcd.record(0, 0, 0, 0, 0, 1, arvalid, arready, rvalid, 1, rdata, 0, 0);
     
     // 数据验证
+    bool data_ok = false;
     if (rdata == 0x12345678) {
         std::cout << "  [DATA] PASS: Read data matches written data!" << std::endl;
+        data_ok = true;
     } else {
         std::cout << "  [DATA] FAIL: Expected 0x12345678, got 0x" << std::hex << rdata << std::dec << std::endl;
     }
@@ -267,8 +276,10 @@ int main() {
     std::cout << "B response: OK" << std::endl;
     std::cout << "AR handshake: OK" << std::endl;
     std::cout << "R data valid: OK" << std::endl;
-    std::cout << "Data integrity: OK" << std::endl;
+    std::cout << "Data integrity: " << (data_ok ? "OK" : "FAIL") << std::endl;
     
     std::cout << "\nAXI4-Lite timing verification completed!" << std::endl;
-    return 0;
+    // 数据校验失败 MUST 非零退出 —— 否则写不进去也会「绿」
+    // （run_all_ported_tests.sh 以 exit code 判定成败）
+    return data_ok ? 0 : 1;
 }

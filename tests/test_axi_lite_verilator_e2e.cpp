@@ -97,6 +97,9 @@ public:
         ch_out<ch_uint<2>>  rresp;
         ch_out<ch_bool>     rvalid;
         ch_in<ch_bool>      rready;
+
+        // 复位（低有效，在时钟沿生效）—— AxiLiteSlave 的必需端口
+        ch_in<ch_bool>      rst_n;
     )
 
     AxiLiteTop(ch::Component *parent = nullptr,
@@ -133,6 +136,8 @@ public:
         io().rresp  <<= slave.io().rresp;
         io().rvalid <<= slave.io().rvalid;
         slave.io().rready <<= io().rready;
+
+        slave.io().rst_n <<= io().rst_n;
     }
 };
 
@@ -219,21 +224,27 @@ TEST_CASE("AXI4-Lite VerilatorBackend E2E WriteReadReg0ThroughBackend",
     sim.set_input_value(device->instance().io().arvalid, false);
     sim.set_input_value(device->instance().io().bready,  true);
     sim.set_input_value(device->instance().io().rready,  true);
+    // `rst_n` 是 AxiLiteSlave 的必需端口：未接线读出为 0 = 永久复位
+    sim.set_input_value(device->instance().io().rst_n,   true);
     sim.tick();
 
-    // --- Write transaction: AW + W asserted simultaneously ---
+    // --- Write transaction: AW 一拍 + W 一拍（AXI4-Lite slave 的 AW→W 相位分离）---
+    // 同拍 AW+W 时该拍 W **不被接受**（`aw_done` 是寄存器，AW 握手当拍仍为 0）
+    // → master 必须保持 WVALID 到 WREADY。
     sim.set_input_value(device->instance().io().awaddr,  static_cast<uint64_t>(0x0));
     sim.set_input_value(device->instance().io().awprot,  static_cast<uint64_t>(0x0));
     sim.set_input_value(device->instance().io().awvalid, true);
+    sim.set_input_value(device->instance().io().wvalid,  false);
+    sim.tick();
+    sim.set_input_value(device->instance().io().awvalid, false);
+
     sim.set_input_value(device->instance().io().wdata,   static_cast<uint64_t>(0xDEADBEEF));
     sim.set_input_value(device->instance().io().wstrb,   static_cast<uint64_t>(0xF));
     sim.set_input_value(device->instance().io().wvalid,  true);
     sim.tick();
+    sim.set_input_value(device->instance().io().wvalid,  false);
 
-    // After the write-tick, busy has latched (axi4_lite_slave.h:67
-    // `busy <= aw_handshake`), so awready/wready/bvalid are 0 in
-    // post-edge combinational view. Handshake is verified instead by
-    // reading back rdata after the read transaction.
+    // W 拍之后：BVALID 拉高并保持到 BREADY；busy 已置位 → AWREADY 为 0。
     {
         auto *awready_lnode = device->instance().io().awready.impl();
         auto *wready_lnode  = device->instance().io().wready.impl();
@@ -241,10 +252,12 @@ TEST_CASE("AXI4-Lite VerilatorBackend E2E WriteReadReg0ThroughBackend",
         uint64_t awready_v  = read_port_output(sim, awready_lnode);
         uint64_t wready_v   = read_port_output(sim, wready_lnode);
         uint64_t bvalid_v   = read_port_output(sim, bvalid_lnode);
-        UNSCOPED_INFO("post-tick: awready=" << awready_v
+        UNSCOPED_INFO("post-W-tick: awready=" << awready_v
                      << " wready=" << wready_v
-                     << " bvalid=" << bvalid_v
-                     << " (busy latched; 0 expected)");
+                     << " bvalid=" << bvalid_v);
+        // 规范形态断言（openspec/specs/verilator-backend-e2e 的 MODIFIED delta）
+        REQUIRE(bvalid_v == 1);   // 写数据已被接受 → BVALID 拉高
+        REQUIRE(awready_v == 0);  // busy 置位 → 不接受新 AW
     }
 
     // The slave uses `busy` reg to gate subsequent handshakes; the write

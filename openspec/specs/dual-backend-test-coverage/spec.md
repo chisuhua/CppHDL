@@ -137,16 +137,39 @@ Capability MUST 明确划分"不可 dual"测试类别，避免迁移工作浪费
 
 ### Requirement: 现有 9 个 verilator 测试 MUST 保留原状
 
-`tests/test_verilator_trace_parity.cpp` / `tests/test_verilator_bundle_e2e.cpp` / `tests/test_verilator_stream_e2e.cpp` / `tests/test_verilator_memory_e2e.cpp` / `tests/test_verilator_complex_e2e.cpp` / `tests/test_verilator_e2e_harness.cpp` / `tests/test_axi_lite_verilator_e2e.cpp` / `tests/test_verilator_backend.cpp` / `tests/test_verilator_error_flow.cpp` 9 个测试 MUST 保留原状，不迁移到 `DUAL_BACKEND_TEST` macro。理由：
+`tests/test_verilator_trace_parity.cpp` / `tests/test_verilator_bundle_e2e.cpp` / `tests/test_verilator_stream_e2e.cpp` / `tests/test_verilator_memory_e2e.cpp` / `tests/test_verilator_complex_e2e.cpp` / `tests/test_verilator_e2e_harness.cpp` / `tests/test_axi_lite_verilator_e2e.cpp` / `tests/test_verilator_backend.cpp` / `tests/test_verilator_error_flow.cpp` 9 个测试 MUST 保留原状（例外见下方），不迁移到 `DUAL_BACKEND_TEST` macro。理由：
 1. 它们是 macro 的 **reference implementation**，将 macro 与现有 hand-crafted 代码漂移会破坏 pattern 传承
 2. `verilator-e2e-coverage` / `verilator-backend-e2e` / `verilator-rv32i-e2e` 等既有 spec 已锁定其 file-level / count-level requirements
 3. 这些测试已配置 `CATCH_AMALGAMATED_CUSTOM_MAIN` 与个性化 `main()`（verilator 缺失时 return 0），迁移会导致既有 TIMEOUT 与 exit-code 契约二次破坏
 
+**例外（`axi4-lite-generic-slave-conformance-2026-10` 引入）**：
+`tests/test_verilator_trace_parity.cpp` 与 `tests/test_axi_lite_verilator_e2e.cpp`
+的 fixture 内嵌 `AxiLiteSlave`，而 `rst_n` 是该 slave 的**必需端口**
+（未接线的 `ch_in<ch_bool>` 读出为 0 = 永久复位）→ 这两个文件 MUST 被允许
+**受限**变更：
+
+1. fixture 暴露 `rst_n` 端口并透传给 slave；
+2. testbench 侧 `sim.set_input_value(io().rst_n, 1)`；
+3. 写事务由「AW+W 同拍」改为「AW 一拍 + W 另一拍」（AXI4-Lite slave 的 AW→W 相位分离）；
+4. 相应断言按新规范更新（`bvalid` / `rvalid` 改为保持到 `bready` / `rready`）。
+
+除上述四类变更外，这两个文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
++ 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
+
 #### Scenario: 9 个测试保留原状
 
 - **WHEN** 本 capability 的 builder 阶段执行
-- **THEN** 上述 9 个文件的 `git diff` MUST 仅限"加 `LABELS verilator_e2e` 标签 + 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更
-- **AND** 测试体、TEST_CASE 名、Catch2 SECTION、add_catch_test / set_tests_properties 调用 MUST NOT 变化
+- **THEN** **除本 Requirement 明确列出的例外外**，上述 9 个文件的 `git diff` MUST 仅限"加 `LABELS verilator_e2e` 标签 + 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更
+- **AND** 测试体、TEST_CASE 名、Catch2 SECTION、add_catch_test / set_tests_properties 调用 MUST NOT 变化（例外文件适用上方例外）
+
+#### Scenario: 内嵌通用 slave 的两个 fixture 允许受限变更
+
+- **WHEN** `axi4-lite-generic-slave-conformance-2026-10` 的 builder 阶段执行
+- **THEN** `tests/test_verilator_trace_parity.cpp` 与 `tests/test_axi_lite_verilator_e2e.cpp`
+  的 `git diff` MUST 仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明 +
+  fixture 暴露并透传 `rst_n` + testbench 驱动 `rst_n` + 写事务改两拍 + 相应断言更新"
+- **AND** 其余 7 个文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明"
+- **AND** MUST NOT 修改这 9 个文件中的 TEST_CASE 名与 Catch2 SECTION 结构
 
 #### Scenario: 全 9 个测试贴上 verilator_e2e label
 
@@ -320,15 +343,19 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 #### Scenario: 不破既有 spec 锁
 
 - **WHEN** reviewer 检查本 change 的 diff
-- **THEN** MUST NOT 改 `tests/test_verilator_*.cpp` 测试体（spec 锁定 macro reference impl）
-- **AND** MUST NOT 改 `tests/test_axi_lite_verilator_e2e.cpp`（spec 锁定 reference impl）
+- **THEN** MUST NOT 改 `tests/test_verilator_*.cpp` 测试体（spec 锁定 macro reference impl），
+  **除了** `tests/test_verilator_trace_parity.cpp` 的「内嵌 `AxiLiteSlave` 的 fixture
+  MUST 暴露并透传 `rst_n` + testbench MUST 驱动 `rst_n` + 写事务 MUST 改两拍
+  + 相应断言 MUST 按新规范更新」这一受限例外
+- **AND** MUST NOT 改 `tests/test_axi_lite_verilator_e2e.cpp`，
+  **除了**同上的受限例外
 - **AND** MUST NOT 改 `tests/test_axi_{spi,pwm,i2c}_behavior.cpp`（已 archived）
 
 ### Requirement: AXI4-Lite slave peripheral MUST 收敛到相位分离 + 响应保持的规范形态
 
 `AxiLiteUart` / `AxiLiteTimer` / `AxiLiteGpio` 三个 AXI4-Lite slave MUST 同时满足：
 
-1. 具备 `ch_in<ch_bool> rst_n` 端口（低有效异步复位）；
+1. 具备 `ch_in<ch_bool> rst_n` 端口（低有效，在时钟沿生效）；
 2. 所有 `ch_reg` MUST 用 `select(!io().rst_n, <init_val>, ...)` 复位 pattern，
    且 `<init_val>` MUST 显式带寄存器位宽（如 `ch_uint<32>(0_d)`）；
 3. 具备 `busy` / `aw_done` / `b_valid` / `r_valid` 状态寄存器组，实现 AW→W 相位分离；
@@ -338,6 +365,13 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 7. **MUST 在 AW / AR 握手时锁存地址**（见下方 Scenario）。
 
 `AxiDma`（AXI4 master）不在本 Requirement 范围内。
+
+> **NOTE（`axi4-lite-generic-slave-conformance-2026-10` 引入）**：
+> 第 1 条的复位措辞由「低有效**异步**复位」修正为「低有效，**在时钟沿生效**」——
+> `select(!io().rst_n, <init_val>, ...)` 落在 `ch_reg` 的 `next` 表达式上，
+> 由时钟沿采样，实为沿上生效（`include/core/node_builder.h:180-182` 的 `ch_reg`
+> 原生复位接的是 context 的 `default_reset`，组件级 `rst_n` 只能走 `next` 表达式）。
+> **同源规则的通用 slave 延伸见 `axi-slave-conformance` capability。**
 
 #### Scenario: 三个 peripheral 含 rst_n 端口
 

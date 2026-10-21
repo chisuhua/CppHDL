@@ -135,11 +135,18 @@ The Verilator backend (`src/core/verilator_backend.cpp`) SHALL propagate Vtop ou
 
 #### Scenario: Combinational wire reflected in data_map after single tick
 
-- **WHEN** a port is driven by a pure `assign` expression in the generated Verilog (no register in the path)
+- **WHEN** a port is driven by a combinational output expression in the generated Verilog
+  （`assign ...` 表达式，其输入 MAY 含寄存器）
 - **AND** the upstream inputs are set via `sim.set_input_value(...)`
 - **AND** `sim.tick()` is called once
-- **THEN** the corresponding entry in `sim.data_map()` SHALL match the assigned value (e.g., `awready == 1` when `awvalid == 1 && busy == 0`)
-- **AND** the existing `tests/test_axi_lite_verilator_e2e.cpp::WriteReadReg0ThroughBackend` test case **MUST** see `awready_v == 1`, `wready_v == 1`, and `bvalid_v == 1` after the write tick
+- **THEN** the corresponding entry in `sim.data_map()` SHALL match the assigned value
+- **AND** the existing `tests/test_axi_lite_verilator_e2e.cpp::WriteReadReg0ThroughBackend` test case **MUST** see `bvalid_v == 1` after the **W-beat tick**（`WVALID` 被拉高且 `WREADY` 拉高的那一拍之后）
+- **AND** that test case MUST see `awready_v == 0` after the W-beat tick
+  （`AxiLiteSlave` 收敛到规范形态后，AW 握手即置 `busy`，`awready` MUST 为 0；
+  与 `awready == 1` 的旧期望互斥，故本 Scenario 的期望以
+  `axi-slave-conformance` capability 为准）
+- **AND** that test case MUST assert the AW→W phase separation
+  （AW 一拍、W 另一拍），MUST NOT 依赖「AW 与 W 同拍」
 
 #### Scenario: Sequential register reflected in data_map after N ticks
 
@@ -166,6 +173,7 @@ The Verilator backend (`src/core/verilator_backend.cpp`) SHALL propagate Vtop ou
 
 - **WHEN** the design wraps `ch::ch_module<AxiLiteSlave<32, 32, 4>>` (`tests/test_axi_lite_verilator_e2e.cpp::AxiLiteTop`)
 - **AND** a write transaction writes `0xDEADBEEF` to `addr=0x00` (reg0)
+  （AW 一拍、W 另一拍 —— `AxiLiteSlave` 的 AW→W 相位分离）
 - **AND** a subsequent read transaction reads `addr=0x00`
 - **THEN** `sim.data_map()[io().rdata.id()]` SHALL equal `0xDEADBEEF`
 - **AND** the existing `tests/test_axi_lite_verilator_e2e.cpp::WriteReadReg0ThroughBackend` test case **MUST** pass with `REQUIRE(rdata_val == 0xDEADBEEF)` (currently an `INFO` log only)

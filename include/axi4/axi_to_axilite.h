@@ -66,6 +66,11 @@ public:
         ch_out<ch_bool> axi_rvalid;
         ch_in<ch_bool> axi_rready;
         
+        // 复位（低有效，在时钟沿生效）—— 必需端口，实例化点 MUST 显式接线。
+        // 求值顺序由 `context` 的拓扑排序保证（`src/core/context.cpp:273`）：
+        // 父的 `ch_out` 排在子组件的 `ch_in` 之前 → 同一拍内传递生效。
+        ch_in<ch_bool> rst_n;
+        
         // ==================== AXI4-Lite 从设备接口 (输出) ====================
         ch_out<ch_uint<ADDR_WIDTH>> axil_awaddr;
         ch_out<ch_uint<2>> axil_awprot;
@@ -90,6 +95,9 @@ public:
         ch_in<ch_uint<2>> axil_rresp;
         ch_in<ch_bool> axil_rvalid;
         ch_out<ch_bool> axil_rready;
+        
+        // 复位透传给下游 AXI4-Lite slave（`rst_n` 是下游的必需端口）
+        ch_out<ch_bool> axil_rst_n;
     )
     
     AxiToAxiLiteConverter(ch::Component* parent = nullptr, const std::string& name = "axi_to_axilite")
@@ -109,6 +117,12 @@ public:
         
         // 读状态机：0=IDLE, 1=AR, 2=R
         ch_reg<ch_uint<2>> read_state(0_d);
+        
+        // ========================================================================
+        // 复位透传（下游 AXI4-Lite slave 的 `rst_n` 是必需端口）
+        // ========================================================================
+        
+        io().axil_rst_n = io().rst_n;
         
         // ========================================================================
         // AXI4 → AXI4-Lite 地址转换
@@ -139,7 +153,7 @@ public:
                                         select(is_write_aw,
                                             select(io().axil_awready, ch_uint<2>(2_d), ch_uint<2>(1_d)),
                                             select(io().axi_bready, ch_uint<2>(0_d), ch_uint<2>(3_d))));
-        write_state->next = next_write_state;
+        write_state->next = select(!io().rst_n, ch_uint<2>(0_d), next_write_state);
         
         // ========================================================================
         // 写数据通道 (W)
@@ -179,7 +193,7 @@ public:
                                            select(io().axil_arready, ch_uint<2>(2_d), ch_uint<2>(1_d)),
                                            select(io().axi_rready & io().axi_rvalid,
                                                ch_uint<2>(0_d), ch_uint<2>(2_d))));
-        read_state->next = next_read_state;
+        read_state->next = select(!io().rst_n, ch_uint<2>(0_d), next_read_state);
         
         // ========================================================================
         // 读数据通道 (R)

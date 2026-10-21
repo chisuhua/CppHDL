@@ -67,7 +67,7 @@ public:
         // 中断输出 (计数器溢出)
         ch_out<ch_bool> irq;
         
-        // 异步复位 (低电平有效)
+        // 复位 (低电平有效，在时钟沿生效)
         ch_in<ch_bool> rst_n;
     )
     
@@ -150,7 +150,7 @@ public:
         auto we_enable = select(w_handshake, sel_enable, ch_bool(false));
         auto we_interrupt = select(w_handshake, sel_interrupt, ch_bool(false));
         
-        // 写寄存器 (带异步复位)
+        // 写寄存器 (带复位)
         // 字节写：WSTRB 逐字节展开（语义见 include/axi4/AGENTS.md 字节道语义）
         const auto wstrb_mask = axi4::detail::byte_lane_mask<32>(io().wstrb);
         period_reg->next = select(!io().rst_n, ch_uint<32>(255_d),
@@ -236,7 +236,7 @@ public:
         auto counter_max = (counter >= counter_width_period);
         overflow = counter_max;  // 更新溢出标志
         
-        // 计数器更新：递增或回绕 (带异步复位)
+        // 计数器更新：递增或回绕 (带复位)
         counter->next = select(!io().rst_n, ch_uint<COUNTER_WIDTH>(0_d),
                                select(counter_max, 
                                       ch_uint<COUNTER_WIDTH>(0_d),  // 回绕到 0

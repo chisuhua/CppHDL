@@ -16,9 +16,15 @@
 // AW 拍先给一个不同的 WSTRB，W 拍再改成掩码，断言用的是 W 拍的值
 // （等价于"掩码 MUST NOT 在 AW 拍锁存"）。
 //
-// ⚠️ 两个通用 slave 都没有 `rst_n`、且响应是组合单拍（规范形态偏差，
-// 属 proposal 非目标）—— 因此测试不等待 BVALID/RVALID，按已知时序推进，
-// 断言只针对寄存器读回值。
+// ⚠️ `Axi4Slave`（AXI4 Full）仍**没有** `rst_n`、且响应是组合单拍（规范形态偏差，
+//    属 `axi4-full-generic-slave-burst-2026-10` 的范围）—— 因此 Full slave 的用例
+//    不等待 BVALID/RVALID，按已知时序推进，断言只针对寄存器读回值。
+//
+// ✅ `AxiLiteSlave` 已收敛到规范形态（`axi-slave-conformance` capability）：
+//    `rst_n` + AW→W 相位分离 + 地址锁存 + 响应保持 + 未映射 DECERR。
+//    → Lite 用例 MUST 驱动 `rst_n`（未接线读出为 0 = 永久复位），
+//      且写事务 MUST 走「AW 一拍 + W 一拍 + B 一拍」三拍形式
+//      （同拍 AW+W 时该拍 W 不被接受）。
 
 #define CATCH_CONFIG_MAIN
 #include "catch_amalgamated.hpp"
@@ -49,24 +55,33 @@ constexpr std::uint64_t kReg0 = 0x00;
 constexpr std::uint64_t kReg1 = 0x04;
 
 // ---------------------------------------------------------------------------
-// AxiLiteSlave：AW 与 W 必须同拍握手（wready 由 awready 门控），
-// bvalid 是组合单拍 → 不能用 "等 BVALID" 同步，按两拍推进：
-//   拍 1：AW + W 握手（写提交，busy 置位）
-//   拍 2：BREADY 释放 busy
+// AxiLiteSlave：AW 与 W **相位分离**（W 可在 AW 之后的任意周期被接受），
+// bvalid 保持到 BREADY → 按三拍推进：
+//   拍 1：AW 握手（地址锁存，busy 置位）
+//   拍 2：W 握手（写提交，bvalid 拉高并保持到 BREADY）
+//   拍 3：BREADY 握手（bvalid 清除，busy 释放）
+//
+// ⚠️ 同拍 AW+W 时该拍 W **不被接受**（`aw_done` 是寄存器，AW 握手当拍仍为 0）
+//    → master 必须保持 WVALID 到 WREADY（AXI 合规 master 的义务）。
 // ---------------------------------------------------------------------------
 template <typename Io>
 inline void lite_write(ch::Simulator &sim, Io &io, std::uint64_t addr,
                        std::uint64_t data, std::uint64_t wstrb) {
+    // --- AW 拍 ---
     sim.set_input_value(io.awaddr, addr);
     sim.set_input_value(io.awvalid, 1);
+    sim.set_input_value(io.wvalid, 0);
+    sim.tick();
+    sim.set_input_value(io.awvalid, 0);
+    // --- W 拍 ---
     sim.set_input_value(io.wdata, data);
     sim.set_input_value(io.wstrb, wstrb);
     sim.set_input_value(io.wvalid, 1);
-    sim.set_input_value(io.bready, 1);
-    sim.tick(); // AW + W 握手，写提交
-    sim.set_input_value(io.awvalid, 0);
+    sim.tick();
     sim.set_input_value(io.wvalid, 0);
-    sim.tick(); // BREADY 释放 busy
+    // --- B 拍 ---
+    sim.set_input_value(io.bready, 1);
+    sim.tick();
     sim.set_input_value(io.bready, 0);
 }
 
@@ -75,7 +90,7 @@ inline std::uint64_t lite_read(ch::Simulator &sim, Io &io, std::uint64_t addr) {
     sim.set_input_value(io.araddr, addr);
     sim.set_input_value(io.arvalid, 1);
     sim.set_input_value(io.rready, 1);
-    sim.tick(); // AR 握手；rdata 组合自 araddr
+    sim.tick(); // AR 握手；rdata 组合自**锁存**的 ar_addr_reg
     const std::uint64_t value = pv(sim, io.rdata);
     sim.set_input_value(io.arvalid, 0);
     sim.tick(); // RREADY 释放 busy
@@ -145,6 +160,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[axi][byte-lane][lite][dual]",
     [&]() {
         auto &io = dev.instance().io();
+        // `rst_n` 是必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(io.rst_n, 1);
 
         lite_write(sim, io, kReg0, 0xAABBCCDDu, 0xF);
         REQUIRE(lite_read(sim, io, kReg0) == 0xAABBCCDDu);
@@ -168,6 +185,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[axi][byte-lane][lite][dual]",
     [&]() {
         auto &io = dev.instance().io();
+        // `rst_n` 是必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(io.rst_n, 1);
 
         lite_write(sim, io, kReg0, 0x11223344u, 0xF);
         lite_write(sim, io, kReg1, 0x55667788u, 0xF);
@@ -193,6 +212,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[axi][byte-lane][lite][dual]",
     [&]() {
         auto &io = dev.instance().io();
+        // `rst_n` 是必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(io.rst_n, 1);
 
         lite_write(sim, io, kReg0, 0x1122334455667788ull, 0xFF);
         REQUIRE(lite_read(sim, io, kReg0) == 0x1122334455667788ull);

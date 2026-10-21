@@ -59,7 +59,7 @@ public:
         // Timer 物理接口
         ch_out<ch_bool> irq;
 
-        // 异步复位 (低电平有效)
+        // 复位 (低电平有效，在时钟沿生效)
         ch_in<ch_bool> rst_n;
     )
 

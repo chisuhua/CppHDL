@@ -80,7 +80,7 @@ public:
         ch_in<ch_bool> uart_rx;
         ch_out<ch_bool> irq;
 
-        // 异步复位 (低电平有效)
+        // 复位 (低电平有效，在时钟沿生效)
         ch_in<ch_bool> rst_n;
     )
 

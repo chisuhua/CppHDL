@@ -104,22 +104,5 @@ byte_lane_apply(std::type_identity_t<ch::core::ch_uint<BUS_WIDTH>> old_value,
     return (old_value & ~m) | (wdata & m);
 }
 
-/**
- * 同上，但掩码由 `WSTRB` 现场展开（单寄存器场景；多寄存器共用时用
- * `byte_lane_mask` + `byte_lane_apply` 只展开一次）。
- *
- * @tparam W         目标寄存器宽度
- * @tparam BUS_WIDTH 总线位宽（默认 `max(W, 32)`）
- */
-template <unsigned W, unsigned BUS_WIDTH = ((W > 32u) ? W : 32u)>
-inline ch::core::ch_uint<BUS_WIDTH>
-byte_lane_write(
-    std::type_identity_t<ch::core::ch_uint<BUS_WIDTH>> old_value,
-    std::type_identity_t<ch::core::ch_uint<BUS_WIDTH>> wdata,
-    std::type_identity_t<ch::core::ch_uint<BUS_WIDTH / 8>> wstrb) {
-    return byte_lane_apply<W, BUS_WIDTH>(old_value, wdata,
-                                         byte_lane_mask<BUS_WIDTH>(wstrb));
-}
-
 } // namespace detail
 } // namespace axi4

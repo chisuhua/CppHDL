@@ -48,13 +48,46 @@ include/axi4/
   W 可能延后多个周期才到达，因此 peripheral MUST 在 AW/AR 握手时把地址锁存进寄存器，
   写侧/读侧地址解码 MUST 基于**锁存**的地址 —— MUST NOT 基于活的 `io().awaddr` / `io().araddr`。
   （否则 master 在 AW 握手后改写地址会让写落到错误寄存器 —— 静默数据损坏）
-- **复位**: AXI4-Lite slave peripherals MUST expose `ch_in<ch_bool> rst_n` (低有效异步复位),
+- **复位**: AXI4-Lite slave peripherals MUST expose `ch_in<ch_bool> rst_n`
+  (低有效，**在时钟沿生效** —— `select(!io().rst_n, <init_val>, ...)` 落在 `ch_reg` 的
+  `next` 表达式上，由时钟沿采样；**不是**异步复位),
   and every `ch_reg` MUST use the `select(!io().rst_n, <init_val>, ...)` reset pattern
   (`<init_val>` MUST carry the register's explicit width, e.g. `ch_uint<32>(0_d)`)
   - ⚠️ 未驱动的 `ch_in<ch_bool>` 读出为 **0** —— 即"永久复位"。
     新增 `rst_n` 端口时 MUST 检查所有实例化点都已接线。
-- **Address decode**: `addr >> 2 & mask` (4-byte aligned per register)
-- **Response**: All peripherals return `bresp=OKAY(0)`. `axi_interconnect_4x4.h` returns `DECERR` for unmapped addresses.
+    这是**零编译错误的静默破坏**：未接线的实例化点编译通过、运行时不报错，
+    但寄存器永远停在初值（写不进、读全 0）。
+  - 层级传递时**无需额外约束** —— `context::topological_sort_visit`
+    （`src/core/context.cpp:273`）沿 `src` 边递归，父的 `ch_out` 排在子组件的
+    `ch_in` 之前 → 同一拍内传递生效。`operator<<=` 只做 `set_driver`
+    （**不创建节点**），接线语句在 `describe()` 中的位置**不影响**求值顺序。
+- **通用 AXI slave 规范形态**（`axi4_lite_slave.h` 的 `AxiLiteSlave`）：
+  与 6 个 peripheral **同源**（同一套 `busy/aw_done/b_valid/r_valid` 四件套），
+  契约见 `openspec/specs/axi-slave-conformance/spec.md`。要点：
+  1. `rst_n` + 全部 `ch_reg` 的复位 pattern（初值 MUST 带显式位宽）
+  2. **AW→W 相位分离**：W 可在 AW 之后的任意周期被接受；
+     ⚠️ `aw_done` 是**寄存器**（表达式中读到的是**当前值**），因此
+     **同拍 AW+W 时该拍 W 不被接受** —— master MUST 保持 `WVALID` 到 `WREADY`
+     （AXI 合规 master 的义务）。这是规范形态的固有性质，**不是缺陷**
+  3. 地址锁存（写侧 `addr_reg` / 读侧 `ar_addr_reg`）
+  4. 响应保持：`bvalid` 保持到 `BREADY`，`rvalid` 保持到 `RREADY`
+  5. **置 1 条件 MUST 优先于清 0 条件**（`b_valid` / `r_valid`）——
+     写成清 0 优先会在 `bready` 常态拉高时让 `b_valid` 永远为 0 →
+     `bvalid` 永不拉高（master 死等）且 `aw_done` 永不清零（同一笔 W 被反复接受）
+  6. `busy` 只在事务**真正完成**（`b_valid && bready` / `r_valid && rready`）时释放
+  7. 未映射地址 → `DECERR`(0b11)，MUST NOT 别名到已实现寄存器；
+     已映射但 `wstrb == 0` 的空写 → 响应仍为 `OKAY`(0b00)
+  8. 解码步长**固定 4 字节**（`addr >> 2`），与 `DATA_WIDTH` 无关；
+     窗口 = 字节地址 `0x00..0x0C`
+  9. `NUM_REGS` 模板参数**未 honor**（固定 4 个寄存器）→ 用 `static_assert` 在
+     编译期暴露，MUST NOT 静默接受（`Axi4Slave` 仍有 `NUM_REGS` / `MAX_BURST_LEN`
+     两个未 honor 的参数，属 `axi4-full-generic-slave-burst-2026-10` 的范围）
+- **Address decode**: `addr >> 2` (4-byte aligned per register；通用 slave 不用掩码截断，
+  截断会把窗口外地址别名到已实现寄存器)
+- **Response**: 6 个 peripheral 对已映射地址返回 `bresp=OKAY(0)`；
+  通用 slave `AxiLiteSlave` 对**未映射地址**返回 `DECERR`(0b11)；
+  `axi_interconnect_4x4.h` 的 DECERR 分支当前**不可达**（地址解码恒为 0..3），
+  路由补全属 `axi4-interconnect-routing-2026-10` 的范围。
 - **Peripheral registers**: 4–8 registers per device, 4-byte aligned
 - **字节道语义（WSTRB）**: AXI slave 的写路径 MUST 消费 `wstrb`，
   MUST NOT 整字覆盖寄存器。**适用范围**：6 个 AXI4-Lite peripheral
@@ -93,9 +126,15 @@ include/axi4/
     bit2 = `RX_FRAME_ERROR`（停止位错误，**仅 `rst_n` 清除**）
   - `CTRL`（0x0C）当前**保留**（不参与 TX/RX 门控）
   - ⚠️ 组合逻辑的"结束/完成"判定 MUST 用**下一个值**（如 `next_phase == 10`、
-    `next_bits == 8`）而非当前值：本框架的组合求值是**单遍、无拓扑序**
-    （`src/simulator.cpp::eval_combinational`），寄存器比较的求值时机受节点
-    创建顺序影响，用当前值判定会让状态机早/晚一拍 → 丢失最后一个数据位
+    `next_bits == 8`）而非当前值：组合求值是**单遍**、不迭代到不动点，
+    而寄存器把组合 DAG 切成了时序边 —— 用**当前值**判定会让状态机
+    早/晚一拍（实测：RX 引擎只采到 7 位）
+    - 📌 **求值顺序事实**（2026-10-21 核实）：组合指令列表来自
+      `context::get_eval_list()` 的**拓扑排序**
+      （`src/core/context.cpp:273` `topological_sort_visit` 沿 `src` 边递归），
+      **数据依赖是被尊重的**；纯组合环在 `Simulator::initialize()` 触发
+      `CHFATAL`（响亮失败），寄存器则天然打断组合环。
+      → 「单遍、**无拓扑序**」是**过时且不准确**的表述，勿再沿用。
 
 ## ANTI-PATTERNS
 - **IO port `&&`**: Do NOT use `&&` on IO ports (e.g., `io().awvalid && (!busy)`). Use `ch::select()` instead.
@@ -109,8 +148,8 @@ include/axi4/
   `grep -c 'byte_lane_apply' include/axi4/axi4_lite_slave.h include/axi4/axi4_full.h`
   （通用 slave MUST ≥ 1）
 - **用寄存器当前值判定"结束"**: Do NOT 用 `phase == 9` / `bits == 7` 这类**当前值**
-  比较来判定状态机结束 —— 组合求值单遍无拓扑序，比较的求值时机受节点创建顺序
-  影响，会让状态机早/晚一拍（实测：RX 引擎只采到 7 位）。
+  比较来判定状态机结束 —— 寄存器把组合 DAG 切成了时序边，用当前值判定会让
+  状态机早/晚一拍（实测：RX 引擎只采到 7 位）。
   MUST 用**下一个值**判定（`next_phase == 10` / `next_bits == 8`）
 - **Combinational BVALID/RVALID**: Do NOT drive `bvalid`/`rvalid` from a combinational handshake
   (`bvalid = w_handshake`). The response MUST hold until the master raises BREADY/RREADY,
@@ -121,9 +160,11 @@ include/axi4/
   (MUST hit 0 lines)
 - **Master 用从设备的 ready gate 自己的 valid**: Do NOT write
   `io().wvalid = select(write_start, io().awready, false)`（或用 `io().bvalid` 推 `bready`）。
-  AXI 禁止；且 CppHDL 的组合求值是**单遍、无拓扑序**（`src/simulator.cpp:257`
-  `eval_combinational()` 单遍遍历 `combinational_instr_list_`，不迭代到不动点），
-  跨模块组合路径中"消费方节点先于生产方节点创建"时就会读到**上一拍**的陈旧值。
+  AXI 禁止；且 CppHDL 的组合求值是**单遍**、不迭代到不动点
+  （`src/simulator.cpp:257` `eval_combinational()` 单遍遍历
+  `combinational_instr_list_`），跨模块组合路径的**求值顺序由拓扑排序保证**
+  （`src/core/context.cpp:273`），但**单遍**意味着"消费方读到的是本拍开头
+  求值出的值"，跨模块组合环会被 `initialize()` 的 `CHFATAL` 直接打断。
   Master 的 `wvalid` / `bready` MUST 由**自身状态**驱动（状态保持到 `write_done`），
   且 `awaddr` / `wdata` MUST 在整个事务期间保持稳定。
 

@@ -438,6 +438,12 @@ add_dual_backend_test(test_axi_slave_byte_lane
     SOURCES test_axi_slave_byte_lane.cpp
     TIMEOUT 300
 )
+# 通用 AXI4-Lite slave 的协议规范形态回归（rst_n / AW→W 相位分离 / 地址锁存 /
+# 响应保持 / 未映射 DECERR / 别名禁止）——双后端。
+add_dual_backend_test(test_axi_lite_slave_conformance
+    SOURCES test_axi_lite_slave_conformance.cpp
+    TIMEOUT 300
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)

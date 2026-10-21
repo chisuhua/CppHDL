@@ -151,6 +151,9 @@ public:
         ch_out<ch_uint<2>>  rresp;
         ch_out<ch_bool>     rvalid;
         ch_in<ch_bool>      rready;
+
+        // 复位（低有效，在时钟沿生效）—— AxiLiteSlave 的必需端口
+        ch_in<ch_bool>      rst_n;
     )
 
     TraceParityAxiLite(ch::Component *parent = nullptr,
@@ -187,6 +190,8 @@ public:
         io().rresp  <<= slave.io().rresp;
         io().rvalid <<= slave.io().rvalid;
         slave.io().rready <<= io().rready;
+
+        slave.io().rst_n <<= io().rst_n;
     }
 };
 
@@ -360,17 +365,27 @@ TEST_CASE("TraceParity - AxiLiteTenCycles",
         sim.set_input_value(dev.instance().io().arvalid, false);
         sim.set_input_value(dev.instance().io().bready,  true);
         sim.set_input_value(dev.instance().io().rready,  true);
+        // `rst_n` 是 AxiLiteSlave 的必需端口：未接线读出为 0 = 永久复位
+        sim.set_input_value(dev.instance().io().rst_n,   true);
     };
 
     // Drive identical inputs on both sides, copying values from the
     // interpreter side's view to the verilator side's view.
-    auto drive_write = [](ch::Simulator &sim,
-                          ch::ch_device<TraceParityAxiLite> &dev) {
+    // AW 拍：只握手写地址（AXI4-Lite slave 的 AW→W 相位分离：
+    // 同拍 AW+W 时该拍 W 不被接受，master 必须保持 WVALID 到 WREADY）
+    auto drive_aw = [](ch::Simulator &sim,
+                       ch::ch_device<TraceParityAxiLite> &dev) {
         sim.set_input_value(dev.instance().io().awaddr,
                             static_cast<uint64_t>(0x0));
         sim.set_input_value(dev.instance().io().awprot,
                             static_cast<uint64_t>(0x0));
         sim.set_input_value(dev.instance().io().awvalid, true);
+        sim.set_input_value(dev.instance().io().wvalid, false);
+    };
+    // W 拍：写数据握手
+    auto drive_w = [](ch::Simulator &sim,
+                      ch::ch_device<TraceParityAxiLite> &dev) {
+        sim.set_input_value(dev.instance().io().awvalid, false);
         sim.set_input_value(dev.instance().io().wdata,
                             static_cast<uint64_t>(0xDEADBEEF));
         sim.set_input_value(dev.instance().io().wstrb,
@@ -405,9 +420,9 @@ TEST_CASE("TraceParity - AxiLiteTenCycles",
     REQUIRE(read_port_output(sim_a, arready_a) ==
             read_port_output(sim_b, arready_b));
 
-    // Cycle 1: assert write.
-    drive_write(sim_a, *dev_a);
-    drive_write(sim_b, *dev_b);
+    // Cycle 1: assert AW (写地址握手).
+    drive_aw(sim_a, *dev_a);
+    drive_aw(sim_b, *dev_b);
     sim_a.tick(1);
     sim_b.tick(1);
     REQUIRE(read_port_output(sim_a, awready_a) ==
@@ -415,7 +430,17 @@ TEST_CASE("TraceParity - AxiLiteTenCycles",
     REQUIRE(read_port_output(sim_a, wready_a) ==
             read_port_output(sim_b, wready_b));
 
-    // Cycles 2-4: idle. Walk 3 cycles with await.
+    // Cycle 2: assert W (写数据握手 —— AW→W 相位分离).
+    drive_w(sim_a, *dev_a);
+    drive_w(sim_b, *dev_b);
+    sim_a.tick(1);
+    sim_b.tick(1);
+    REQUIRE(read_port_output(sim_a, awready_a) ==
+            read_port_output(sim_b, awready_b));
+    REQUIRE(read_port_output(sim_a, wready_a) ==
+            read_port_output(sim_b, wready_b));
+
+    // Cycles 3-5: idle. Walk 3 cycles with await.
     drive_defaults(sim_a, *dev_a);
     drive_defaults(sim_b, *dev_b);
     sim_a.tick(3);
