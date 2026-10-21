@@ -27,7 +27,7 @@
 | **D2** | `set_bundle_value()` 用 `field = ch_bool(v)` → **指针重绑定**（`logic_buffer::operator=` → `node_impl_ = other.node_impl_`），**不是驱动** | `include/simulator.h:541-548` + `include/lnode/logic_buffer.tpp:21-26` | 代码路径确认：TB 写的值落到字段的**新字面量节点**，不进入设计图 |
 | **D3** | bundle 字段连接用 `operator=` → 对普通信号字段同样是**重绑定** → **原驱动节点被孤儿化** | `include/core/bundle/bundle_base.h:153-165` | 探针日志：`[WARN] Value not found for signal node ID: 57`（master 的原字段节点不再可达） |
 | **D4** | `connect()` **方向盲**：对每个字段无条件 `dst.field = src.field` | `include/core/bundle/bundle_base.h:360-367` | 对 master/slave 对，这会把 slave 的**输出**（`full`/`empty`）用 master 的**未驱动输入**覆盖 |
-| **D5** | `fifo_bundle` 的字段方向**未镜像**（`push`：master=IN / slave=OUT） | `include/bundle/common_bundles.h:31-41` | 与同文件的 `config_bundle`（`:88-97`）、`interrupt_bundle`（`:57-68`）对比：那两个是**严格镜像**的，`fifo_bundle` 是唯一的例外 |
+| **D5** | `fifo_bundle` 的 **`push` 方向指认错误**（master=IN / slave=OUT；push 是 master 发出的命令，应为 master OUT）—— ⚠️ **其余 4 个字段（`data`/`pop`/`full`/`empty`）已经是镜像的**，问题只在 `push` 放错边 | `include/bundle/common_bundles.h:31-41` | 逐字段核对：master = OUT{`data`,`pop`} / IN{`push`,`full`,`empty`}，slave 完全互反 ⇒ 4/5 已镜像。⇒ **「镜像」只是必要条件，不是充分条件**（镜像但两侧指认反了同样错） |
 | **D6** | 顶层 bundle **未注册为组件 IO**（sample 的 `create_ports()` 是空的）→ master 的字段节点不在图里 | `samples/fifo_bundle.cpp:100-102` | 探针：`[WARN] Value not found for signal node ID: 57..61`（master 的 5 个字段节点全部缺失） |
 
 ### D0 为什么是根因（而不只是又一个 bug）
@@ -73,7 +73,7 @@
 | **D2** `set_bundle_value` 走节点重绑定 | D2 写 data_map 槽位 | 2 |
 | **D3** 字段连接用 `operator=`（重绑定） | D3 改用 `operator<<=`（数据流边） | 3 |
 | **D4** `connect()` 方向盲 | D4 方向感知 | 3 |
-| **D5** `fifo_bundle` 方向未镜像 | D5 严格镜像 | 4 |
+| **D5** `fifo_bundle` 的 `push` 方向指认错误 | D5 方向指认与协议语义一致 | 4 |
 | **D6** 顶层 bundle 未注册为组件 IO | D6 顶层改用普通端口（裁决方案 c） | 5 |
 | —— | D8 可执行回归护栏 | 贯穿 |
 
@@ -99,6 +99,19 @@ TB 的值落到字段的新字面量节点上，不进入设计图。
 > TB 要驱动的那一侧（与 top-level `ch_in`/`ch_out` 的直觉相反）。
 > 本 change 只保证「读写走槽位、逐字段、不截断」；
 > 「谁写哪个字段」由 D6 的裁决（顶层改用普通端口）自然消解。
+>
+> ⚠️ **适用面（复审补充）**：**已连接**的字段其值由设计每拍求值产生，TB 的写入会被
+> 下一拍覆写 ⇒ `set_bundle_value()` 的合法用途是**未连接**的 bundle 字段
+> （调试 / 独立驱动）⇒ 护栏需要**第二个 DUT**（未连接的 standalone bundle），
+> 已连接的 master↔slave DUT **不能**用来断言「TB 写入被设计观察到」。
+>
+> ⚠️ **宽度 enforcement（复审补充）**：`get_bundle_value()` / `set_bundle_value()`
+> 的签名是 `uint64_t` 打包 ⇒ 总宽 > 64 的 bundle（实测 `axi_lite_bundle<32,32>` 宽
+> **142** 位）**今天截断、改完仍截断** ⇒ spec 的「MUST NOT 静默截断」MUST 有
+> **机制**（运行时 CHERROR / CHWARN / 逐字段 API），MUST NOT 只是文档说明。
+> 另：单字段宽度 > 64 时 `get_bundle_field_value` 的 `uint64_t` 返回同样会截断。
+> 另：现 `(1ULL << width) - 1`（`include/simulator.h:531`）在 `width == 64` 时是
+> `1ULL << 64` = **未定义行为** ⇒ MUST 一并修。
 
 ### D3: bundle 字段连接 MUST 用 `operator<<=`（数据流边），不得用 `operator=`
 
@@ -119,6 +132,13 @@ TB 的值落到字段的新字面量节点上，不进入设计图。
 > `fifo_bundle`（2 个 sample）、`config_bundle` / `interrupt_bundle`
 > （只用于打印宽度/角色/命名，从未做过真实连接）。
 >
+> ⚠️ **设计侧驱动字段 MUST 用 `<<=`（复审补充）**：`field = expr` 是**重绑定**
+> ⇒ 若它在 connect **之后**执行，字段被指向另一个节点，而 master 侧的 src 仍指向
+> **被孤儿化的旧节点** ⇒ 读到 0。
+> 现状之所以能工作，只是因为 `ch_module` 的 `describe()` 恰好先于 `connect()` 执行
+> —— **顺序巧合，不是语义保证** ⇒ 两个 sample 的 `io.empty = ...` / `io.full = ...`
+> MUST 改为 `<<=`。
+>
 > ⚠️ **特例：`ch_stream` 依赖「重绑定」语义** ——
 > `include/chlib/stream_operators.h:25-33` 的**自由** `operator<<=(ch_stream&, ch_stream&)`
 > 在重载决议中**优先于**成员版 `bundle_base::operator<<=`，且它内部就是字段级 `=`
@@ -127,8 +147,11 @@ TB 的值落到字段的新字面量节点上，不进入设计图。
 
 ### D4: `bundle_base::connect()` MUST 方向感知
 
-现状无条件 `dst.field = src.field`。改为逐字段复用 D3 的方向感知逻辑
-（`dst.connect_field_based_on_direction_and_source(dst.field, src.field)`）。
+现状无条件 `dst.field = src.field`。改为逐字段复用 D3 的方向感知逻辑。
+
+⚠️ **参数顺序 MUST 写明**（复审补充）：`connect(src, dst)` ≡
+`dst.connect_field_based_on_direction_and_source(dst.field, src.field)`。
+两种顺序在**第三分支**（同方向）下结果相反（src 驱动 dst vs dst 驱动 src）。
 
 > ⚠️ `bundle_base.h:163-164` 还有**第三个分支**（方向相同 / 无方向 → `left = right`
 > 同样重绑定），初版提案只提了「两个分支」⇒ MUST 一并处理
@@ -143,17 +166,22 @@ TB 的值落到字段的新字面量节点上，不进入设计图。
 > ⇒ 改成数据流边后节点不再共享 ⇒ 这 6 处 MUST 改成表达其**注释里声明的意图**
 > （dst 节点独立、但由 src 驱动；用「值能传播」而不是「指针相等」来断言）。
 
-### D5: `fifo_bundle` 的字段方向 MUST 严格镜像
+### D5: `fifo_bundle` 的字段方向指认 MUST 与协议语义一致
 
-改为与 `config_bundle` / `interrupt_bundle` 同构：
+⚠️ **2026-10-21 复审更正**：初版此处写的是「方向未镜像」并把 `fifo_bundle`
+称作「唯一不镜像的 bundle」。**逐字段核对后不成立**：`data`/`pop`/`full`/`empty`
+**已经是镜像的**，唯一错的是 **`push`**（master 发出的命令被放到了 master 的**输入**侧）。
 
-| 字段 | master | slave |
-|---|---|---|
-| `data`（写数据） | output | input |
-| `push` | output | input |
-| `pop` | output | input |
-| `full` | input | output |
-| `empty` | input | output |
+⇒ 正确的契约是「**方向指认 MUST 与协议语义一致**」（master = 发起方，
+slave = 响应方），「镜像」只是它的**必要条件**。
+
+| 字段 | 协议角色 | master | slave | 现状 |
+|---|---|---|---|---|
+| `data`（写数据） | master → slave | output | input | ✓ 已对 |
+| `push` | master → slave | **output** | **input** | ✗ **错（今天反了）** |
+| `pop` | master → slave | output | input | ✓ 已对 |
+| `full` | slave → master | input | output | ✓ 已对 |
+| `empty` | slave → master | input | output | ✓ 已对 |
 
 ### D6: 顶层不用 bundle 承载 TB 接口（裁决：方案 c）
 
@@ -179,13 +207,35 @@ sample 的 `Top` 用 `create_ports() override {}`（空）+ bundle 作为普通�
 > ℹ️ 若未来确需「bundle 作为顶层 IO」，那是 (b)（**逐字段生成真端口**），
 > 架构上最正确但超出「修既有缺陷」的范围 ⇒ 独立立项。
 >
+> ⚠️ **文档一致性清扫（复审补充）**：D6 之后，下列文档仍在教
+> 「bundle 作顶层 IO + `set_bundle_value()`」的用法，MUST 一并同步
+> （否则仓库文档会继续教一条被本 change 判为「非推荐路径」的用法）：
+> `skills/cpphdl-bundle-patterns/SKILL.md:75,262,265,410`、
+> `docs/skills/SIMULATOR-API-GUIDE.md:232`、
+> `docs/usage_guide/04-simulator-api.md:68,415`。
+>
 > ⚠️ **D0（字段节点身份）与 D6 正交**：即便选 (c)，FIFO 模块自己的 bundle 字段
 > 若仍是「零字面量总线的切片」，顶层端口驱动它依然无效 ⇒ **D0 MUST 先修**。
 
-### D7: 字段节点身份 MUST 稳定（`as_master()` / `as_slave()` MUST NOT 重建字段节点）
+### D7: 字段节点 MUST 是一等节点，且节点起源 MUST 明确
 
 `set_role()` MUST NOT 通过 `create_field_slices_from_node()` 把字段**重绑定**成
 总线的位切片。字段 MUST 是**一等节点**（各自拥有节点身份）。
+
+> ⚠️ **2026-10-21 复审发现的空洞（阻塞项）**：「字段是一等节点」这句话**本身不完整** ——
+> 字段**默认构造即 `nullptr`**（`ch_bool()` → `logic_buffer()` →
+> `node_impl_ = nullptr`，`include/lnode/logic_buffer.tpp:13`），
+> 今天字段能拿到节点**完全靠** `create_field_slices_from_node()`。
+> 删掉它之后，字段节点**从哪来**就成了未定义：
+>
+> - **何时创建**：bundle 构造时 / `as_master()` / `as_slave()`？
+> - **什么节点种类**：必须能与 `set_src(0, ...)` 兼容、必须能进
+>   `context::get_eval_list()` 从而拿到 `data_map` 槽位
+>   —— ⚠️ **MUST NOT 用字面量节点**（`litimpl` 的 src 不被求值，`set_src` 打上去无效）
+> - **未驱动时的取值语义**：必须确定
+>
+> ⇒ **实施 MUST 先做一个 spike 验证这三点**（`tasks.md` Task 2），
+> 并把结论（节点种类 + 创建时机）写进实施记录。在此之前 **D0 不可实施**。
 
 - 若确实需要一个「聚合总线」视图（例如打包/解包），它 MUST 由字段
   **concat 派生**（方向：字段 → 总线），而不是由总线**切片**得到字段。
@@ -233,8 +283,10 @@ RED→GREEN 的分步验证会被污染。
 | `samples/fifo_bundle.cpp` / `samples/minimal_fifo_bundle.cpp` | 顶层 bundle 注册方式（D6）；`data` 回读的语义修正（见下） |
 | `tests/test_bundle_connection.cpp` | D0/D3/D4 导致的断言变更（**6 处**，见 D4） |
 | `tests/test_bundle_master_slave.cpp` | **新增**（D8） |
-| 根 `AGENTS.md` | `CTEST_TOTAL` 181 → **182**；`tests/test_*.cpp` 111 → **112** |
-| 风险 | ⚠️ **中高**。① **D0 是语义变更最大的一条**（字段节点身份稳定性）—— 现有 `bundle_base` 的「总线 + 切片」模型被整体换掉；② **D3/D4 改的是 bundle 框架的核心连接语义** —— 爆炸半径是**全部普通信号字段 bundle**（**不存在**「端口型 bundle」这类，初版提案的该论证已删除）；③ 但**实际回归面很小**：这些 bundle 的使用点极少（`fifo_bundle` 2 个 sample、`config_bundle`/`interrupt_bundle` 只打印宽度/角色）；④ **`ch_stream` 走自由 `operator<<=`**（`include/chlib/stream_operators.h:25-33`）⇒ 不经 bundle_base 的连接路径 ⇒ D3/D4 对它 no-op，但**它内部用的正是重绑定语义**（见「遗留债务」）；⑤ `fifo_bundle` 是**公开头文件** ⇒ 方向变更对下游是行为变更（但方向此前**根本没生效**，下游不可能依赖它）；⑥ D0 会改变**所有** bundle 的字段节点身份 ⇒ 对依赖切片节点的下游代码有影响（当前仓库内无此类依赖，但下游未知） |
+| `docs/adr/ADR-014-bundle-reflection-system.md` | ⚠️ **D0 反转了该 ADR 的既定决策** —— `:131` 把「确认 `bundle_base::create_field_slices_from_node()` 能正确处理 >10 个字段的切片创建」列为**前置条件确认项** ⇒ MUST 新增 ADR 或追加 supersede 注记 |
+| `skills/cpphdl-bundle-patterns/SKILL.md` / `docs/skills/SIMULATOR-API-GUIDE.md` / `docs/usage_guide/04-simulator-api.md` | ⚠️ 仍在教「bundle 作顶层 IO + `set_bundle_value()`」（`SKILL.md:75,262,265,410`、`SIMULATOR-API-GUIDE.md:232`、`04-simulator-api.md:68,415`）⇒ D6 之后 MUST 同步 |
+| 根 `AGENTS.md` | `CTEST_TOTAL` 181 → **182**；non-perf 170 → **171**；`tests/test_*.cpp` 111 → **112** |
+| 风险 | ⚠️ **高**。⛔ **D0 反转了一个已记录的 ADR 决策**（ADR-014 的切片模型是「确认项」）⇒ MUST 走 ADR 流程（`tasks.md` Task 7）。⛔ **D0 的「节点起源」当前未定义**（字段默认构造即 nullptr）⇒ 实施前 MUST 先做 spike，否则 D0 不可实施。⚠️ **D0 的静默受害者**（仓库内无使用点，但语义会变）：`bundle_concat` / `bundle_slice_view`（靠「拷贝共享总线 + 切片重派字段」工作）、`deserialize_bits_to_fields()`（同样切片重绑定）、`master()`/`slave()` 工厂（按值拷贝）、`flip()`。① **D0 是语义变更最大的一条**（字段节点身份稳定性）—— 现有 `bundle_base` 的「总线 + 切片」模型被整体换掉；② **D3/D4 改的是 bundle 框架的核心连接语义** —— 爆炸半径是**全部普通信号字段 bundle**（**不存在**「端口型 bundle」这类，初版提案的该论证已删除）；③ 但**实际回归面很小**：这些 bundle 的使用点极少（`fifo_bundle` 2 个 sample、`config_bundle`/`interrupt_bundle` 只打印宽度/角色）；④ **`ch_stream` 走自由 `operator<<=`**（`include/chlib/stream_operators.h:25-33`）⇒ 不经 bundle_base 的连接路径 ⇒ D3/D4 对它 no-op，但**它内部用的正是重绑定语义**（见「遗留债务」）；⑤ `fifo_bundle` 是**公开头文件** ⇒ 方向变更对下游是行为变更（但方向此前**根本没生效**，下游不可能依赖它）；⑥ D0 会改变**所有** bundle 的字段节点身份 ⇒ 对依赖切片节点的下游代码有影响（当前仓库内无此类依赖，但下游未知） |
 
 ## 遗留债务（本 change 记录但**不修**，各自独立立项）
 
@@ -244,7 +296,16 @@ RED→GREEN 的分步验证会被污染。
 2. **`bundle_base::operator=`（`bundle_base.h:170-175`）只拷贝总线节点、不同步字段成员**
    （其注释自承「不再自动同步成员」）⇒ `bundle_utils.h:10-17` 的
    `master()` / `slave()` helper 依赖**按值拷贝**穿过它 ⇒ 潜伏陷阱。
-3. **FIFO 的读数据通路**（见 Non-Goals #1）。
+3. **`deserialize_bits_to_fields()`（`include/core/bundle/bundle_serialization.h:85-97`）**
+   仍把字段重绑定成 `bit_select`/`bits<>` 切片 ⇒ 与「字段一等节点」原则冲突；
+   本 change 记录但**不修**（它是序列化路径，与连接路径正交）。
+4. **`bundle_concat` / `bundle_slice_view`（`include/core/bundle/bundle_operations.h:14,58`）**
+   靠「拷贝共享总线 + 切片重派字段」工作 ⇒ D0 之后其字段与原 bundle 断连
+   ⇒ 从「能工作」变「静默失效」。仓库内**零使用点**，但它们在
+   `openspec/specs/bundle-base-integer-ctor/spec.md:7` 的 22 个公开派生类清单里。
+5. **`get/set_bundle_value` 的去留**：D6 之后它们只对**未连接**字段有效
+   ⇒ 接近死 API ⇒ 需要显式的「保留 / 标记 deprecated」裁决。
+6. **FIFO 的读数据通路**（见 Non-Goals #1）。
 
 ## Non-Goals
 
@@ -277,6 +338,34 @@ D0-D5 已在本次审计中**逐环取证**（D0 有决定性探针），但「�
      与 master/slave 探针**分开**跑，用于区分「slave 自身没驱动」与「连接没传过去」
    - **「只读不写字段」的探针**（本次决定性证据）：把 slave 的 `push`（设计只读）
      引到顶层端口，TB 驱动 master 的 `push=1` ⇒ slave 侧 MUST 读到 1
+
+## 附录 C：二次复审（oracle + metis，2026-10-21）结论与处置
+
+两路评审均判定**当前版本不宜直接进入实施**（D0 的「节点起源」未定义 ⇒
+TDD 的 RED→GREEN 分步在实现路径上不可达）。以下为逐条处置：
+
+| # | 来源 | 结论 | 处置 |
+|---|---|---|---|
+| C1 | oracle | **D0 的最大空洞**：字段「从哪来」未定义（默认构造即 nullptr，今天全靠切片机制）⇒ `master()`/`slave()` 工厂、`impl() != nullptr` 断言、`auto writing = io.push;` 全部受影响 | ✅ 新增 spike 前置（Task 2）+ D7 补「节点起源」三问（何时创建 / 什么节点种类 / 未驱动语义） |
+| C2 | oracle | spec R1 Scenario 2 与三处既定事实冲突（`ch_stream` 自由运算符、`deserialize_bits_to_fields`、`test_verilator_bundle_e2e` 的 `bundle.a = ...`） | ✅ R1 Scenario 2 收窄为「**连接**语义不得用重绑定」；「设计侧驱动 MUST 用 `<<=`」降级为 convention + 注释，与遗留债务 #1 一致 |
+| C3 | oracle + metis | **D5 诊断措辞错误**：`fifo_bundle` 实为 4/5 已镜像，唯 `push` 放错边 ⇒ spec 的「MUST 严格镜像」对今天的 buggy 代码会通过（空转条款） | ✅ D5 改为「方向指认 MUST 与协议语义一致」+ 逐字段现状表；spec R3 同步改写并删除「reviewer 人工对比」型 Scenario |
+| C4 | oracle | D0 的静默受害者未计入爆炸半径（`bundle_concat`/`bundle_slice_view`/`deserialize`/工厂/`flip()`） | ✅ Impact 表点名 + 遗留债务 3/4 条 + Task 2 的「MUST 一并处理或显式排除」 |
+| C5 | oracle | D2 在 D6 之后接近死 API 且**护栏覆盖不了它**（已连接字段的 TB 写入会被 eval 覆写）⇒ spec 的「写入并被设计观察到」在已连接 DUT 上不可断言 | ✅ D2 补适用面说明 + 护栏**新增第二个 DUT**（未连接 standalone bundle）+ spec 的 Scenario 改为「写入**未连接**字段」 |
+| C6 | oracle | `field = expr` 在 connect 之后执行会**静默炸掉已建立的边**（现状只是顺序巧合） | ✅ D3 补注 + Task 4 要求两个 sample 的 `io.empty = ...` / `io.full = ...` 改 `<<=` |
+| C7 | metis | **D0 反转了 ADR-014 的既定决策**（`:131` 把切片模型列为前置条件**确认项**） | ✅ Impact 表标注 + Task 7 新增 ADR 同步（新增 ADR 或 supersede 注记） |
+| C8 | metis | D6 之后仓库文档仍在教「bundle 作顶层 IO」 | ✅ D6 补文档清扫清单（5 处）+ Task 7 |
+| C9 | metis | `connect()` 的**参数顺序**未定义（第三分支下两种顺序结果相反） | ✅ D4 写明等价式 + spec R4 加可执行 Scenario |
+| C10 | metis | Task 1 的 DUT 接线方式未指定 ⇒ 若手工逐字段 `<<=`，D4/D5 的变异不会让测试转红（D8 空话） | ✅ Task 1 强制「bundle 级接线」+ spec 护栏 Requirement 加对应 Scenario |
+| C11 | metis | `set_bundle_field_value` 的 `(1ULL << width) - 1` 在 width=64 时是 **UB** | ✅ Task 3 列为必修项 |
+| C12 | metis | >64 位的截断**没有 enforcement 机制**（spec 只说「明确约束」）⇒ 空转条款 | ✅ D2 补机制要求（CHERROR/CHWARN/逐字段 API）+ spec R5 加可断言 Scenario |
+| C13 | metis | 断言迁移清单漏了 `impl() != nullptr` 的 4 处 | ✅ 清单从 6 处扩到 **10 处** |
+| C14 | metis | verify 清单漏 `test_bundle_serialization` / `test_tlm_bundle_phase1` / `test_verilator_bundle_e2e` / `test_verilator_trace_parity` | ✅ Task 4 verify 全补 |
+| C15 | metis | Task 0 的探针任务无产物/格式/复核点，且编译行未验证 ⇒ 降级为可选 | ✅ Task 0 降级为「可选」 |
+| C16 | metis | sample 的 exit 判据变弱（初始检查绿就交差 ⇒ pop 路径可能仍坏） | ✅ Task 6 要求演示完整序列 `push→empty=0→pop→empty=1` |
+| C17 | metis | 变异验证在未 commit 的工作区做有还原风险 | ✅ Task 1 加「每项变异前 MUST 先清零 diff」 |
+| C18 | metis | Task 7 的 `grep -c TEST_CASE` 不构成 Requirement↔测试映射验证 | ✅ 新增 Task 8：产出**显式映射表** + 不可自动断言的条款 MUST 改写或删除 |
+| C19 | metis | `deserialize_bits_to_fields()` 也是切片重绑定 ⇒ R1 的覆盖面宣称与修法不匹配 | ✅ R1 加注（要么一并修、要么显式排除）+ 遗留债务 |
+| C20 | metis | 嵌套 stream 字段是「外层数据流边 + 内层重绑定」的混合体，无覆盖 | ✅ 遗留记录 + Task 4 verify 补 bitstream 套件 |
 
 ## 附录 B：实施前 gap 分析（2026-10-21，自补；`metis` subagent 因 provider 鉴权故障不可用）
 
