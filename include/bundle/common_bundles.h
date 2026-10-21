@@ -29,15 +29,18 @@ template <typename T> struct fifo_bundle : public bundle_base<fifo_bundle<T>> {
     CH_BUNDLE_FIELDS_T(data, push, full, pop, empty)
 
     void as_master_direction() {
-        // Master: 输出数据和pop信号，输入push信号
-        this->make_output(data, pop);
-        this->make_input(push, full, empty);
+        // Master = 发起方：驱动 push / pop 与写数据；读取 full / empty 状态。
+        // ⚠️ `push` 此前被误放到 master 的**输入**侧（master IN / slave OUT）——
+        // 与 `data`/`pop`/`full`/`empty` 的分配不一致：push 是 master 发出的命令，
+        // 必须由 master 驱动。详见 OpenSpec change `bundle-master-slave-io-2026-10`。
+        this->make_output(data, push, pop);
+        this->make_input(full, empty);
     }
 
     void as_slave_direction() {
-        // Slave: 输入数据和pop信号，输出push信号
-        this->make_input(data, pop);
-        this->make_output(push, full, empty);
+        // Slave = 响应方：接收 push / pop 与写数据；驱动 full / empty 状态。
+        this->make_input(data, push, pop);
+        this->make_output(full, empty);
     }
 };
 

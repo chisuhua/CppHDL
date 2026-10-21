@@ -1,9 +1,11 @@
 #pragma once
 
+#include "ast/ast_nodes.h"
 #include "bundle_traits.h"
 #include "core/bundle/bundle_layout.h"
 #include "core/bundle/bundle_serialization.h"
 #include "core/bundle/bundle_traits.h"
+#include "core/context.h" // create_node() 需要 context 的完整类型
 #include "core/direction.h"
 #include "core/literal.h" // 添加对literal.h的包含
 #include "core/logic_buffer.h"
@@ -150,18 +152,22 @@ public:
 
             // 根据方向连接：右操作数的输出连接到左操作数的输入
             // 如果右字段是输出方向，左字段是输入方向，则右字段驱动左字段
+            // ⚠️ MUST 用 `operator<<=`（**数据流边**）而不是 `operator=`
+            // （**节点重绑定**）—— 后者只改指针，会把字段原有的驱动**孤儿化**
+            // （该节点从设计图里消失），而新指向的节点没有驱动 ⇒ 连接静默失效。
+            // （OpenSpec change `bundle-master-slave-io-2026-10` 的 D3）
             if (std::holds_alternative<output_direction>(right_dir) &&
                 std::holds_alternative<input_direction>(left_dir)) {
-                left_field = right_field;
+                left_field <<= right_field;
             }
             // 如果右字段是输入方向，左字段是输出方向，则左字段驱动右字段
             else if (std::holds_alternative<input_direction>(right_dir) &&
                      std::holds_alternative<output_direction>(left_dir)) {
-                right_field = left_field;
+                right_field <<= left_field;
             }
-            // 默认情况下，按原始方式连接（如果方向相同或未指定方向）
+            // 默认情况下（方向相同或未指定方向）：仍 MUST 建立数据流边
             else {
-                left_field = right_field;
+                left_field <<= right_field;
             }
         }
     }
@@ -284,6 +290,11 @@ private:
         role_ = new_role;
 
         // 创建总线节点（若尚未存在）
+        //
+        // ⚠️ 该总线节点**不再**是字段的来源 —— 字段现在是**一等节点**
+        // （见 `create_field_proxy_nodes()`）。它保留下来是为了
+        // ① `bundle_base::impl()` 始终非空（既有测试断言这一点）；
+        // ② 打包 / 序列化路径仍需要一个「整体」节点。
         if (!this->node_impl_) {
             unsigned W = get_bundle_width<Derived>();
             const std::string &name = "bundle_lit";
@@ -292,51 +303,51 @@ private:
                 node_builder::instance().build_literal(lit, name);
         }
 
-        // 将字段初始化为总线的位切片
-        create_field_slices_from_node();
+        // 为每个叶子字段建立**自己的**节点（值代理）
+        create_field_proxy_nodes();
     }
 
 protected:
-    // 创建字段的位切片节点
-    void create_field_slices_from_node() {
-        unsigned offset = 0;
+    // 为每个叶子字段创建一个**独立的无 src 值代理**节点。
+    //
+    // 设计要点（OpenSpec change `bundle-master-slave-io-2026-10` 的 D0/D7）：
+    //   - 字段 MUST 是一等节点：它拥有自己的节点身份，不依赖「总线 + 位切片」。
+    //     旧实现把字段**重绑定**成零字面量总线的 `bit_select` / `bits<>` 切片 ⇒
+    //     设计**只读不写**的字段恒为 0（切片读的是那条无人驱动的零字面量总线）。
+    //   - 节点种类 MUST 是 `proxyimpl`（值代理）：
+    //     ① 无 src 时没有指令 ⇒ 槽位保持确定的初值 0（可寻址、确定）；
+    //     ② 被 `set_src(0, ...)` 驱动后，`instr_proxy` 把源的值搬进本节点；
+    //     ③ codegen 对有 src 的代理发射 `assign field = <src>;`（不是悬空 wire）。
+    void create_field_proxy_nodes() {
         const auto layout = get_bundle_layout<Derived>();
         std::apply(
             [&](auto &&...field_info) {
                 (([&]() {
                      auto &field_ref = derived()->*(field_info.ptr);
                      using FieldType = std::decay_t<decltype(field_ref)>;
-                     auto bundle_lnode = get_lnode(*derived());
                      if constexpr (is_bundle_v<FieldType>) {
+                         // 嵌套 bundle：它**自己**的字段由它自己的
+                         // `as_master()` / `as_slave()` 建立 ⇒ 这里不动它。
                          static_assert(!std::is_same_v<FieldType, Derived>,
                                        "Bundle cannot contain itself");
-                         constexpr unsigned W = get_bundle_width<FieldType>();
-                         if constexpr (W == 0) {
-                             static_assert(W != 0,
-                                           "Field width cannot be zero!");
-                         }
-
-                         // 使用get_lnode获取当前bundle的节点
-                         auto field_slice = bits<W>(bundle_lnode, offset);
-                         field_slice.impl()->set_name(std::string(field_info.name)); // T002: 保留字段名称
-                         field_ref = FieldType(field_slice.impl());
-                         offset += W;
                      } else {
                          constexpr unsigned W = ch_width_v<FieldType>;
-                         if constexpr (W == 0) {
-                             static_assert(W != 0,
-                                           "Field width cannot be zero!");
+                         static_assert(W != 0, "Field width cannot be zero!");
+                         // ⚠️ MUST **幂等**：字段已有节点时 MUST NOT 重建 ——
+                         // 否则 `as_master()` 之后再 `as_slave()` 会换掉字段的
+                         // **节点身份** ⇒ 已建立的数据流边仍指向被孤儿化的旧节点
+                         // ⇒ 连接静默失效。
+                         // （节点身份 MUST 稳定，见 ADR-042 Decision 1）
+                         if (field_ref.impl() != nullptr) {
+                             return;
                          }
-
-                         if constexpr (W == 1) {
-                             field_ref = bit_select(bundle_lnode, offset);
-                             auto* temp_node1 = field_ref.impl(); temp_node1->set_name(std::string(field_info.name)); // T002: 保留字段名称
-                             offset++;
-                         } else {
-                             field_ref = bits<W>(bundle_lnode, offset);
-                             auto* temp_node2 = field_ref.impl(); temp_node2->set_name(std::string(field_info.name)); // T002: 保留字段名称
-                             offset += W;
-                         }
+                         auto *ctx = this->node_impl_->ctx();
+                         // `ctx` 的类型依赖 Derived ⇒ 需要 `template` 关键字
+                         auto *field_proxy =
+                             ctx->template create_node<proxyimpl>(
+                                 W, std::string(field_info.name),
+                                 std::source_location::current());
+                         field_ref = FieldType(field_proxy);
                      }
                  }()),
                  ...);
@@ -361,9 +372,20 @@ template <typename BundleT> void connect(BundleT &src, BundleT &dst) {
     static_assert(std::is_base_of_v<bundle_base<BundleT>, BundleT>,
                   "connect() only works with bundle_base-derived types");
 
+    // ⚠️ MUST **方向感知**：旧实现无条件 `dst.field = src.field` ⇒ 对 master/slave
+    // 对会把 slave 的**输出**（full/empty）用 master 的**未驱动输入**覆盖。
+    // 参数顺序约定：`connect(src, dst)` ≡
+    //     `dst.connect_field_based_on_direction_and_source(dst.field, src.field)`
+    // （第三分支「同方向」下两种顺序结果相反，故必须写明）
+    // （OpenSpec change `bundle-master-slave-io-2026-10` 的 D4）
     const auto &fields = src.__bundle_fields();
-    std::apply([&](auto &&...f) { ((dst.*(f.ptr) = src.*(f.ptr)), ...); },
-               fields);
+    std::apply(
+        [&](auto &&...f) {
+            (dst.connect_field_based_on_direction_and_source(dst.*(f.ptr),
+                                                             src.*(f.ptr)),
+             ...);
+        },
+        fields);
 }
 
 } // namespace ch::core

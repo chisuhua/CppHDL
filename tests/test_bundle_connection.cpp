@@ -15,6 +15,23 @@
 
 using namespace ch::core;
 
+// 「字段已连接」的判定：目标是**数据流边**（目标节点被源节点驱动），
+// 而**不是**节点共享。
+// ⚠️ 旧实现用 `operator=`（节点重绑定）连接字段 ⇒ 目标字段与源字段**共享同一个
+// 节点**，原有驱动被孤儿化。OpenSpec change `bundle-master-slave-io-2026-10`
+// （D3/D4）把它改成了数据流边 ⇒ 这些断言 MUST 表达新语义。
+// （各测试点自己的注释一直写的是「不会共享节点」—— 断言与注释本就矛盾。）
+static void require_driven_by(ch::core::lnodeimpl *dst,
+                              ch::core::lnodeimpl *src) {
+    REQUIRE(dst != nullptr);
+    REQUIRE(src != nullptr);
+    // 节点独立（不共享）
+    REQUIRE(dst != src);
+    // 目标节点被源节点驱动（数据流边）
+    REQUIRE(dst->num_srcs() > 0);
+    REQUIRE(dst->src(0) == src);
+}
+
 // 定义一个简单的Bundle，只包含一个ch_uint字段
 struct SimpleBundle : public bundle_base<SimpleBundle> {
     using Self = SimpleBundle;
@@ -371,9 +388,9 @@ TEST_CASE("test_bundle_connection - Bundle using connect function",
     // 使用connect函数连接两个bundle
     ch::core::connect(bundle_src, bundle_dst);
 
-    // 验证bundle内的字段连接
-    REQUIRE(bundle_dst.data.impl() ==
-            bundle_src.data.impl()); // connect函数逐字段连接，不会共享节点
+    // 验证bundle内的字段连接：connect() 逐字段建立**数据流边**，
+    // 节点**不共享**（与本用例的注释一致）
+    require_driven_by(bundle_dst.data.impl(), bundle_src.data.impl());
 }
 
 TEST_CASE("test_bundle_connection - Bundle with master/slave direction control",
@@ -442,14 +459,15 @@ TEST_CASE("test_bundle_connection - Bundle operator<<= connects both bundle "
     REQUIRE(bundle_src.impl() != nullptr);
     REQUIRE(bundle_src.impl() != bundle_dst.impl());
 
-    // 验证bundle的字段也被连接
+    // 验证bundle的字段也被连接：通过 operator<<= 建立**数据流边**，
+    // 节点**不共享**（与本用例的注释一致）
     REQUIRE(bundle_dst.data.impl() != nullptr);
     REQUIRE(bundle_src.data.impl() != nullptr);
-    REQUIRE(bundle_dst.data.impl() ==
-            bundle_src.data.impl()); // 通过operator<<=连接，不共享节点
+    require_driven_by(bundle_dst.data.impl(), bundle_src.data.impl());
 
     auto source = make_uint<ch_width_v<decltype(bundle_src.data)>>(0);
     bundle_src.data = source;
+    // `=` 是**软件拷贝 / 节点重绑定**语义（刻意保留）：源的节点被换成 source 的
     REQUIRE(bundle_dst.data.impl() != bundle_src.data.impl());
     REQUIRE(bundle_src.data.impl() == source.impl());
 }
@@ -481,14 +499,19 @@ TEST_CASE(
     REQUIRE(bundle_dst.output_field.impl() != nullptr);
     REQUIRE(bundle_dst.enable.impl() != nullptr);
 
-    // 验证字段连接成功（虽然节点不共享，但已建立了连接）
-    REQUIRE(bundle_dst.input_field.impl() == bundle_src.input_field.impl());
-    REQUIRE(bundle_dst.output_field.impl() == bundle_src.output_field.impl());
-    REQUIRE(bundle_dst.enable.impl() == bundle_src.enable.impl());
+    // 验证字段连接成功：节点**不共享**，但已通过**数据流边**连接
+    // （与本用例的注释一致）
+    require_driven_by(bundle_dst.input_field.impl(),
+                       bundle_src.input_field.impl());
+    require_driven_by(bundle_dst.output_field.impl(),
+                       bundle_src.output_field.impl());
+    require_driven_by(bundle_dst.enable.impl(), bundle_src.enable.impl());
 
     auto source = make_uint<ch_width_v<decltype(bundle_src.output_field)>>(0);
     bundle_src.output_field <<= source;
-    REQUIRE(bundle_dst.output_field.impl() == bundle_src.output_field.impl());
+    // 源节点被 source 驱动后，边依然指向源节点（不是节点共享）
+    require_driven_by(bundle_dst.output_field.impl(),
+                       bundle_src.output_field.impl());
 }
 
 // 新增测试：bundle之间的连接测试

@@ -77,35 +77,49 @@ public:
         // 数据输出通过其他方式提供，这里我们不直接连接io.data
 
         // 状态信号 - 使用更标准的FIFO空/满检测
+        //
+        // ⚠️ MUST 用 `<<=`（数据流边）而不是 `=`（节点重绑定）：
+        // `=` 会把字段指向另一个节点 ⇒ 若该赋值发生在 connect() **之后**，
+        // 已建立的连接边仍指向被孤儿化的旧节点 ⇒ master 侧读到 0。
+        // （OpenSpec change `bundle-master-slave-io-2026-10`）
         // 空状态：读指针等于写指针
-        io.empty = (rd_ptr == wr_ptr);
+        io.empty <<= (rd_ptr == wr_ptr);
         // 满状态：写指针+1等于读指针
         auto wr_plus_one = wr_ptr + 1_b;
-        io.full = (wr_plus_one == rd_ptr);
+        io.full <<= (wr_plus_one == rd_ptr);
     }
 };
 
-// 顶层模块 - 使用Bundle作为IO接口
+// 顶层模块 —— 顶层用**普通端口**承载 TB 接口，bundle 只用于**模块间**连接。
+//
+// ⚠️ 为什么顶层不用 bundle（OpenSpec change `bundle-master-slave-io-2026-10` 的 D6）：
+// 一个 bundle 成员**不会**被注册为组件的 IO ⇒ 它的信号不会成为生成的 Verilog 的
+// **顶层端口**（实测：改前生成的 fifo_bundle.v 顶层只有 default_clock /
+// default_reset，bundle 的 data/push/pop/full/empty 全是内部 logic）
+// ⇒ 生成的 Verilog 无法被外部 TB 驱动。
+// 根 `AGENTS.md` CONVENTIONS 亦有明文裁决：
+// 「Bundle as IO: Use individual `ch_bool`/`ch_uint` ports, NOT bundle struct」。
 class Top : public ch::Component {
 public:
-    // 直接使用Bundle作为顶层IO接口
-    fifo_bundle<ch_uint<2>> io_bundle;
+    __io(ch_in<ch_uint<2>> data; ch_in<ch_bool> push; ch_in<ch_bool> pop;
+         ch_out<ch_bool> full; ch_out<ch_bool> empty;)
 
     Top(ch::Component *parent = nullptr, const std::string &name = "top")
-        : ch::Component(parent, name) {
-        // 设置IO方向为master（作为顶层模块，对外提供接口）
-        io_bundle.as_master();
-    }
+        : ch::Component(parent, name) {}
 
-    void create_ports() override {
-        // 不需要创建传统端口
-    }
+    void create_ports() override { new (io_storage_) io_type; }
 
     void describe() override {
         ch::ch_module<FiFo<ch_uint<2>, 2>> fifo_inst{"fifo_inst"};
 
-        // 直接连接Bundle
-        connect(io_bundle, fifo_inst.instance().io);
+        // 顶层端口 → FIFO 模块的 bundle 字段（逐字段接线）
+        // ⚠️ 这里的 bundle 是 **slave** 侧：`push` / `pop` / `data` 是它的输入，
+        //    `full` / `empty` 是它的输出。
+        fifo_inst.instance().io.push <<= io().push;
+        fifo_inst.instance().io.pop <<= io().pop;
+        fifo_inst.instance().io.data <<= io().data;
+        io().full <<= fifo_inst.instance().io.full;
+        io().empty <<= fifo_inst.instance().io.empty;
     }
 };
 
@@ -115,12 +129,11 @@ int main() {
 
         ch::Simulator sim(top_device.context());
 
-        // 初始化输入
-        // 使用Bundle设置输入值
-        uint64_t initial_bundle_value =
-            0; // [empty=0, full=0, pop=0, push=0, data=0]
-        sim.set_bundle_value(top_device.instance().io_bundle,
-                             initial_bundle_value);
+        // 初始化输入（顶层是普通端口）
+        auto &io = top_device.instance().io();
+        sim.set_input_value(io.data, 0);
+        sim.set_input_value(io.push, 0);
+        sim.set_input_value(io.pop, 0);
 
         std::cout << "Starting FIFO Bundle simulation..." << std::endl;
         std::cout << "FIFO size: 2, addr_width: 1, pointer width: 2"
@@ -129,82 +142,66 @@ int main() {
         for (int cycle = 0; cycle <= 12; ++cycle) {
             sim.tick();
 
-            // 获取Bundle输出值
-            uint64_t bundle_value =
-                sim.get_bundle_value(top_device.instance().io_bundle);
+            // 读取状态（由 slave 侧的 bundle 字段驱动，穿过连接到达顶层端口）
+            uint64_t data_val =
+                static_cast<uint64_t>(sim.get_port_value(io.data));
+            uint64_t full_val =
+                static_cast<uint64_t>(sim.get_port_value(io.full));
+            uint64_t empty_val =
+                static_cast<uint64_t>(sim.get_port_value(io.empty));
 
-            // 解析Bundle字段
-            uint64_t data_val = bundle_value & 0x3;         // 低2位 (data)
-            uint64_t push_val = (bundle_value >> 2) & 0x1;  // 第2位 (push)
-            uint64_t full_val = (bundle_value >> 3) & 0x1;  // 第3位 (full)
-            uint64_t pop_val = (bundle_value >> 4) & 0x1;   // 第4位 (pop)
-            uint64_t empty_val = (bundle_value >> 5) & 0x1; // 第5位 (empty)
-
+            // ⚠️ `data` 是**写**数据路径（master → slave）。FIFO 的**读**数据
+            // 目前**没有**通路（`fifo_bundle` 没有独立的读数据字段）⇒ 这里打印的
+            // 是 TB 刚写进去的值，**不是** FIFO 弹出的元素。
+            // 见 OpenSpec change `bundle-master-slave-io-2026-10` 的 Non-Goal #1。
             std::cout << "Cycle " << cycle << ": data=0x" << std::hex
-                      << data_val << ", push=" << push_val
-                      << ", full=" << full_val << ", pop=" << pop_val
+                      << data_val << ", full=" << full_val
                       << ", empty=" << empty_val << std::dec << std::endl;
 
             // 测试激励
             switch (cycle) {
             case 0:
-                // 初始状态检查
+                // 初始状态检查：空且不满
                 std::cout << "  Initial state check..." << std::endl;
                 if (empty_val != 1 || full_val != 0) {
                     std::cerr << "ERROR: Initial state incorrect!" << std::endl;
                     return 1;
                 }
-                // 写入数据1
-                {
-                    uint64_t bundle_input = (1 << 2) | 1; // push=1, data=1
-                    sim.set_bundle_value(top_device.instance().io_bundle,
-                                         bundle_input);
-                }
+                // 写入数据 1
+                sim.set_input_value(io.data, 1);
+                sim.set_input_value(io.push, 1);
                 std::cout << "  Writing data 1 to FIFO" << std::endl;
                 break;
             case 1:
-                // 在Cycle 1，继续写入数据2
+                // 继续写入数据 2
                 std::cout << "  Continuing write of data 1, writing data 2"
                           << std::endl;
-                {
-                    uint64_t bundle_input = (1 << 2) | 2; // push=1, data=2
-                    sim.set_bundle_value(top_device.instance().io_bundle,
-                                         bundle_input);
-                }
+                sim.set_input_value(io.data, 2);
+                sim.set_input_value(io.push, 1);
                 break;
             case 2:
-                // 在Cycle 2，停止写入，开始读取
-                // 本拍结束时 dout = 队首元素 —— FIFO 协议要求在 pop 沿**之前**采样
+                // 停止写入，开始读取
                 std::cout << "  Checking FIFO state after first write"
                           << std::endl;
-                {
-                    uint64_t bundle_input = (1 << 4); // pop=1
-                    sim.set_bundle_value(top_device.instance().io_bundle,
-                                         bundle_input);
-                }
+                sim.set_input_value(io.push, 0);
+                sim.set_input_value(io.pop, 1);
                 std::cout << "  Preparing to read first data from FIFO"
                           << std::endl;
                 break;
             case 3:
-                // pop 沿在本拍生效：rd_ptr 前进 → dout 变为**下一个**队首
-                // （aread 是 0-cycle，`assign dout = mem[rd_ptr]` 与 Verilog 一致）
-                std::cout << "  Checking next head after the pop edge"
-                          << std::endl;
-                {
-                    uint64_t bundle_input = (1 << 4); // pop=1
-                    sim.set_bundle_value(top_device.instance().io_bundle,
-                                         bundle_input);
-                }
+                // 继续弹出
                 std::cout << "  Continuing read" << std::endl;
+                sim.set_input_value(io.pop, 1);
                 break;
             case 4:
-                // 第二次 pop 沿生效：rd_ptr 绕回
-                std::cout << "  Checking head after the second pop edge"
+                // 停止读取：此时 FIFO 应回到「空」
+                std::cout << "  Checking FIFO state after the pops"
                           << std::endl;
-                {
-                    uint64_t bundle_input = 0; // pop=0
-                    sim.set_bundle_value(top_device.instance().io_bundle,
-                                         bundle_input);
+                sim.set_input_value(io.pop, 0);
+                if (empty_val != 1) {
+                    std::cerr << "ERROR: FIFO should be empty after popping "
+                              << "both elements!" << std::endl;
+                    return 1;
                 }
                 std::cout << "  Stopping read" << std::endl;
                 break;

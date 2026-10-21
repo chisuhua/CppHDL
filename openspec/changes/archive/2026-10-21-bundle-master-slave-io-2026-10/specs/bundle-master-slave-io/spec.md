@@ -159,11 +159,15 @@ MUST NOT 无条件执行 `dst.field = src.field`。
 - **AND** 字段级读写 MUST NOT 受总宽限制
 - **AND** 单个字段宽度 > 64 位时 MUST 显式拒绝或告警（MUST NOT 静默截断）
 
-#### Scenario: 64 位宽字段 MUST NOT 触发位移溢出
+#### Scenario: 64 位宽字段 MUST 精确往返
 
-- **WHEN** 一个 bundle 含**宽度恰为 64** 的字段
-- **THEN** 位段提取 MUST NOT 使用 `1ULL << 64` 形式的移位
-  （该形式是未定义行为）
+- **WHEN** 一个 bundle 含**宽度恰为 64** 的字段，且测试台写入一个 64 位模式
+- **THEN** 读回的值 MUST **逐位相同**
+- **AND** 位段提取 MUST NOT 依赖 `1ULL << 64` 形式的移位（该形式是未定义行为）
+- **AND** ⚠️ 该断言锁的是**值往返**；它**不是**未定义行为本身的探测器
+  （GCC 对常量 `1ULL << 64` 折叠为 0 ⇒ 掩码恰好正确 ⇒ 值断言无法暴露它）
+  ⇒ 未定义行为的避免靠**实现**（`width >= 64` 特判），本 Scenario 保证该特判
+  不被误删
 
 ### Requirement: bundle master/slave 连接 MUST 有可执行回归护栏
 

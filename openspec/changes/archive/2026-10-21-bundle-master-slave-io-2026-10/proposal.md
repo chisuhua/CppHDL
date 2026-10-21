@@ -195,11 +195,17 @@ sample 的 `Top` 用 `create_ports() override {}`（空）+ bundle 作为普通�
 1. **根 `AGENTS.md` CONVENTIONS 已有明文裁决**：「**Bundle as IO**: Use individual
    `ch_bool`/`ch_uint` ports, **NOT** bundle struct」—— sample 本就违反既定约定，
    本 change 顺带把它收敛回约定。
-2. **TB↔设计边界需要「输入端口」语义**（`inputimpl` / `outputimpl`：
-   TB 驱动、**不被求值覆写**，见 `include/core/io.h` 与
-   `src/simulator_init.cpp:94-96` 的 `input_instr_list_`）。普通字段节点一旦被
-   `<<=` 驱动，就会**每拍被求值覆写** TB 写入的值 ⇒ bundle 字段天然拿不到
-   「TB 驱动」的语义 ⇒ (a) 解决不了这个语义鸿沟。
+2. ⚠️ **2026-10-22 实施后修正**：原先的理由二（"TB 驱动语义需要
+   `inputimpl`/`outputimpl`，普通字段节点会被每拍求值覆写"）**在 D0-D5 落地后
+   已不成立** —— master 侧的 output 字段**没有驱动者** ⇒ 不会被求值覆写 ⇒
+   TB 的写入能保持 ⇒ **顶层 bundle 在仿真里其实能工作**（实测：改成普通端口前，
+   `samples/fifo_bundle.cpp` 已经 `exit=0` 且演示出完整序列）。
+   ⇒ **真正的理由是 codegen**：bundle 成员**不会**被注册为组件 IO ⇒ 它的信号
+   **不会**成为生成 Verilog 的**顶层端口**（实测：改前生成的 `fifo_bundle.v`
+   顶层只有 `default_clock` / `default_reset`，bundle 的
+   `data`/`push`/`pop`/`full`/`empty` 全是内部 logic）⇒ **外部 TB 无法驱动
+   生成的 Verilog**。
+   ⇒ 因此顶层用普通端口，bundle 只用于**模块间**连接。
 3. **(a) 其实已半存在**：`tests/test_bundle_connection.cpp:222-228` 的
    `__io(SimpleBundle ...)` + placement new **能编译** ⇒ 恰恰证明 (a) 给不了
    TB 驱动语义。
@@ -236,6 +242,17 @@ sample 的 `Top` 用 `create_ports() override {}`（空）+ bundle 作为普通�
 >
 > ⇒ **实施 MUST 先做一个 spike 验证这三点**（`tasks.md` Task 2），
 > 并把结论（节点种类 + 创建时机）写进实施记录。在此之前 **D0 不可实施**。
+
+> ✅ **spike 结论（2026-10-22，已实施）**：
+>
+> | 问题 | 结论 |
+> |---|---|
+> | **何时创建** | `as_master()` / `as_slave()`（即 `set_role()`）时为每个**叶子**字段创建；且 MUST **幂等**（字段已有节点时 MUST NOT 重建 —— 否则方向切换会换掉节点身份、孤儿化已建立的边。**该幂等性是实测抓到的真缺陷**） |
+> | **什么节点种类** | **无 src 的 `proxyimpl`（值代理）** —— ① 无 src 时没有指令 ⇒ 槽位保持确定的初值 0（可寻址、确定）；② 被 `set_src(0, ...)` 驱动后 `instr_proxy` 搬运源的值；③ codegen 发射 `assign field = <src>;`（不是悬空 wire）。⚠️ **MUST NOT 用字面量节点**（`litimpl` 的 src 不被求值，`set_src` 打上去无效） |
+> | **未驱动时的取值语义** | 确定的 0（`data_map_` 分配时的初值） |
+>
+> spike 探针实测：`tick1: din=1 dout=1 undriven=0`（驱动字段正常传播、未驱动字段读出确定的 0），
+> 生成的 Verilog 为 `assign top_field_a = top_unnamed_input;`（不是悬空 wire）。
 
 - 若确实需要一个「聚合总线」视图（例如打包/解包），它 MUST 由字段
   **concat 派生**（方向：字段 → 总线），而不是由总线**切片**得到字段。
@@ -319,6 +336,24 @@ RED→GREEN 的分步验证会被污染。
 3. **不**改 `config_bundle` / `interrupt_bundle` 的字段布局（本次只让它们能真正连接）。
 4. **不**引入 bundle 的新能力（如 `flip()` 语义、协议层 bundle）。
 5. **不**把「bundle 作为顶层组件 IO」做成框架特性（裁决见 D6；未来若需要 ⇒ (b) 独立立项）。
+
+## 实施结果（2026-10-22）
+
+| 项 | 结果 |
+|---|---|
+| **spike** | ✅ 结论见 D7（节点种类 = 无 src 的 `proxyimpl`；创建时机 = `set_role()` 且**幂等**） |
+| **D0** | ✅ 字段改为一等节点；**顺带修掉一个实测抓到的真缺陷**：字段节点创建**不幂等** ⇒ `as_master()` 后再 `as_slave()` 会换掉节点身份、孤儿化已建立的边 |
+| **D1/D2** | ✅ `get/set_bundle_value` 走 `data_map` 槽位；修 `1ULL << 64` 的 UB；加总宽 > 64 的显式拒绝 |
+| **D3/D4** | ✅ 字段连接改 `<<=`（含**第三分支**）；`connect()` 方向感知（参数顺序写明） |
+| **D5** | ✅ `push` 归 master OUT（其余 4 个字段本就镜像） |
+| **D6** | ✅ 两个 sample 的顶层改用普通端口；理由修正为 **codegen 限制**（见上） |
+| **D7/D8** | ✅ 新增 `docs/adr/ADR-042-bundle-field-first-class-nodes.md`（supersede ADR-014 的切片确认项 + ADR-002 的变通）；3 处文档补 codegen 限制说明；根 AGENTS.md 计数同步（CTEST_TOTAL 181→182） |
+| **回归护栏** | ✅ `tests/test_bundle_master_slave.cpp`（**8 用例 / 30 断言**）+ `tests/test_bundle_connection.cpp` 的 6 处断言迁移为「数据流边 + 节点不共享」 |
+| **变异验证** | ✅ D0/D1/D2/D3/D4/D5 **六项全部被抓到**；另加「节点身份幂等」「宽度 enforcement」两项 ⇒ **八项**。⚠️ 其中 **D5 只有方向元数据断言能抓**（连接级测试对同方向字段会碰巧接对） |
+| **样例** | ✅ `samples/fifo_bundle.cpp` 从 pristine HEAD 的 `exit=1` 变为 `exit=0`，且演示完整序列 `push → empty=0 → pop → empty=1`（Task 6 的强化判据） |
+| **全量回归** | ✅ `ctest -LE perf` **171/171 全绿**；`run_all_ported_tests.sh` **28/28 PASS**；三个 FIFO sample 全部 `exit=0` |
+| **遗留债务** | 记录不修：`bundle_concat` / `bundle_slice_view` / `deserialize_bits_to_fields()` 仍依赖切片重绑定；`bundle_base::operator=` 不同步字段成员；`get/set_bundle_value` 的去留 |
+| **相邻发现**（本 change 之外） | 全量跑 40 个 sample 时发现 **2 个既有 segfault**（**基线同样 segfault**，与本 change 无关）：`samples/nested_bundle_demo.cpp`（用 `connect()` 连 AXI bundle）与 `samples/switch_demo.cpp`。二者都**不在 ctest / CI** ⇒ 长期不可见。与 `samples/fifo_bundle.cpp` 同族问题，**建议单独立项**（samples 缺失回归防护） |
 
 ## 附录 A：实施期 MUST 实测的设计点
 

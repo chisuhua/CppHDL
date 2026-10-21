@@ -73,6 +73,10 @@ public:
 - 使用 `as_master()` 或 `as_slave()` 设置方向
 - `describe()` 中直接访问 `bundle.payload`、`bundle.valid`、`bundle.ready`
 - 可用于顶层外部接口，Simulator 使用 `set_bundle_value()` / `get_bundle_value()`
+  - ⚠️ **codegen 限制**：bundle 成员**不会**被注册为组件 IO ⇒ 它的信号**不会**成为
+    生成 Verilog 的**顶层端口** ⇒ 需要可综合 / 可被外部 TB 驱动的顶层时，
+    顶层请用普通 `ch_in`/`ch_out` 端口，bundle 只用于**模块间**连接
+    （见 `docs/adr/ADR-042-bundle-field-first-class-nodes.md` 的 Decision 5）
 
 ---
 

@@ -24,7 +24,7 @@
 > （「取对方 1-bit 节点的第 2 位」），`offset == 0` 的单字段 bundle 会**假绿**
 > ⇒ RED→GREEN 的分步验证被污染。
 
-- [ ] ### Task 0: 探针基线（**可选**，结论已折进 `proposal.md`）
+- [x] ### Task 0: 探针基线（**可选**，结论已折进 `proposal.md`）
   - **action**:
     - 三支探针的结论**已在 `proposal.md` 的 D0 取证行里**（决定性探针：
       TB 驱动 master `push=1` 而 slave `io.push` 读到 0）
@@ -38,7 +38,7 @@
         与 master/slave 探针**分开**跑，用于区分「slave 自身没驱动」与「连接没传过去」
   - **verify**: 无（可选任务）
 
-- [ ] ### Task 1: 写会失败的用例（RED）
+- [x] ### Task 1: 写会失败的用例（RED）
   - **action**:
     - 新建 `tests/test_bundle_master_slave.cpp`，**两个 DUT**：
       1. **已连接的 master↔slave FIFO**（`connect(master, slave)` 或
@@ -68,7 +68,7 @@
     ```
     MUST 观察到**红**（且 4 个用例都红）
 
-- [ ] ### Task 2: 字段节点起源 + 节点身份稳定（D0 / 决策 D7）—— **MUST 最先**
+- [x] ### Task 2: 字段节点起源 + 节点身份稳定（D0 / 决策 D7）—— **MUST 最先**
   - **action**:
     - ⚠️ **本 Task MUST 先做一个 spike**（阻塞项）：验证「每个字段拥有一个
       **独立的、无 src 的占位节点**」是否可行：
@@ -102,7 +102,7 @@
     ```
     用例 3（只读字段）MUST 转绿；用例 1/2/4 仍红
 
-- [ ] ### Task 3: 修 `Simulator` 的 bundle 字段读写（D1 / D2）
+- [x] ### Task 3: 修 `Simulator` 的 bundle 字段读写（D1 / D2）
   - **action**:
     - `include/simulator.h`：
       - `get_bundle_field_value()`：非端口字段 MUST 读该字段节点的 `data_map` 槽位
@@ -126,7 +126,7 @@
     ```
     用例 1（TB → slave）MUST 转绿；用例 2 仍红
 
-- [ ] ### Task 4: 修 bundle 字段连接 + `connect()`（D3 / D4）
+- [x] ### Task 4: 修 bundle 字段连接 + `connect()`（D3 / D4）
   - **action**:
     - `include/core/bundle/bundle_base.h`：
       - `connect_field_based_on_direction_and_source()` 的**两个方向分支** MUST 用
@@ -169,7 +169,7 @@
     ```
     Task 1 的用例 1/2 MUST 转绿；其余 bundle / stream / verilator 套件 MUST 保持全绿
 
-- [ ] ### Task 5: `fifo_bundle` 方向指认修正（D5）
+- [x] ### Task 5: `fifo_bundle` 方向指认修正（D5）
   - **action**:
     - `include/bundle/common_bundles.h`：`push` MUST 归到 **master OUT / slave IN**
       （今天它在 master IN / slave OUT —— **其余 4 个字段（`data`/`pop`/`full`/`empty`）
@@ -183,7 +183,7 @@
     MUST 有一个**逐字段枚举并比对方向**的 Catch2 断言
     （MUST NOT 只靠 `grep make_output|make_input` —— 那种检查证明不了方向正确）
 
-- [ ] ### Task 6: 顶层改用普通端口（D6，裁决方案 c）
+- [x] ### Task 6: 顶层改用普通端口（D6，裁决方案 c）
   - **action**:
     - `samples/fifo_bundle.cpp` / `samples/minimal_fifo_bundle.cpp`：
       顶层 MUST 改用普通 `ch_in`/`ch_out` 端口承载 TB 接口，
@@ -207,7 +207,7 @@
     仍是坏的却无人发现）⇒ MUST 用 stdout 的 grep 断言这个序列
     ⇒ 且 MUST 有 Task 1 的 Catch2 用例兜底
 
-- [ ] ### Task 7: 文档同步 + ADR 同步 + 计数同步
+- [x] ### Task 7: 文档同步 + ADR 同步 + 计数同步
   - **action**:
     - ⚠️ **ADR 同步（必做）**：D0 **反转了 ADR-014 的既定决策**
       （`docs/adr/ADR-014-bundle-reflection-system.md:131` 把
@@ -236,20 +236,47 @@
     ls docs/adr/ | grep -i bundle
     ```
 
-- [ ] ### Task 8: Requirement ↔ 测试 映射核对
+- [x] ### Task 8: Requirement ↔ 测试 映射核对 ✅
   - **action**:
-    - 逐条核对 `specs/bundle-master-slave-io/spec.md` 的每条 Requirement / Scenario
-      都有对应的 Catch2 断言，产出一张**显式映射表**（Requirement → 测试名）
-      写进本 change 的实施记录
-    - ⚠️ `grep -c "TEST_CASE"` **不构成**映射验证（6 条 Requirement 十几个 Scenario
-      对 N 个 TEST_CASE，计数无法证明覆盖）⇒ MUST 用映射表
+    - 逐条核对 `specs/bundle-master-slare-io/spec.md` 的每条 Requirement / Scenario
+      都有对应的 Catch2 断言，产出**显式映射表**（Requirement → 测试名）
+    - ⚠️ `grep -c "TEST_CASE"` **不构成**映射验证 ⇒ MUST 用映射表
     - ⚠️ 无法自动断言的条款（「reviewer 人工对比」类）MUST 改写为可断言的形式
       或从 spec 中删除
-  - **verify**: 映射表覆盖每条 Requirement / Scenario（人工核对 + 记录）
+  - **映射表（2026-10-22）**：
 
-- [ ] ### Task 9: 全量回归 + archive
+    | Requirement / Scenario | 对应断言 |
+    |---|---|
+    | R1 · 字段 MUST 拥有自己的节点 | `tests/test_bundle_master_slave.cpp` 的全部用例（DUT 的字段均为一等节点） |
+    | R1 · 设计只读不写的字段 MUST NOT 恒为 0 | `bundle master/slave: TB 驱动的 push 到达 slave 侧`（`push` 是只读字段；用例先断言初值 `empty==1` 再断言 push 后 `empty==0` ⇒ 非空洞） |
+    | R1 · 字段节点 MUST 能在仿真中被寻址 | 同上（无「Value not found」告警）+ `bundle: 未连接 bundle 的字段值可写可读` |
+    | R1 · 未驱动的字段取值 MUST 确定 | `bundle: 未连接 bundle 的字段值可写可读`（未连接字段） |
+    | R1 · 字段节点身份在方向切换前后 MUST 不变 | `bundle: 字段节点身份在方向切换前后 MUST 不变` ✅（**实测抓到过真缺陷**：实现最初不幂等 → 方向切换会换掉节点身份 ⇒ 已修为幂等） |
+    | R2 · 连接后原驱动节点仍可达 | 变异验证 D3（改回 `operator=` ⇒ 红）+ `tests/test_bundle_connection.cpp` 的 `require_driven_by()` |
+    | R2 · 连接后值能跨 bundle 边界传播 | `bundle master/slave: TB 驱动的 push 到达 slave 侧` / `slave 产生的 empty 到达 master 侧` |
+    | R2 · offset 非零的字段 MUST 正确传播 | `bundle master/slave: offset 非零的字段（push）能正确传播` |
+    | R3 · fifo_bundle 的方向指认 | `bundle: master/slave 的字段方向指认与协议语义一致` ✅（**实测**：D5 变异「push 方向反转」**只有**本断言能抓到 —— 连接级测试对同方向字段会碰巧接对） |
+    | R3 · 方向指认 MUST 可被自动断言 | 同上（逐字段枚举 + `std::holds_alternative`） |
+    | R4 · connect() 不覆盖接收方的输出字段 | `bundle master/slave: slave 产生的 empty 到达 master 侧`（`empty` 是 slave 的输出）+ 变异 D4 |
+    | R4 · 同方向字段时 src 驱动 dst | `tests/test_bundle_connection.cpp` 的 `require_driven_by()`（`SimpleBundle` 双方 `as_master()` ⇒ 同方向） |
+    | R5 · 读取运行时驱动的 bundle 字段 | `bundle master/slave: slave 产生的 empty 到达 master 侧`（`empty` 由设计驱动） |
+    | R5 · 写入未连接字段并被设计观察到 | `bundle: 未连接 bundle 的字段值可写可读` |
+    | R5 · 读写 MUST 对称 | 同上 |
+    | R5 · 打包 API 的宽度约束 MUST 被强制 | `bundle: 总宽 > 64 位的打包式 API MUST 显式拒绝而非静默截断` ✅（变异「去掉宽度 enforcement」⇒ 红） |
+    | R5 · 64 位宽字段 MUST 精确往返 | `bundle: 64 位宽字段的位段提取 MUST NOT 触发位移溢出` ⚠️ 锁的是**值往返**，**不是** UB 探测器（GCC 把常量 `1ULL << 64` 折叠为 0 ⇒ 掩码恰好正确 ⇒ 值断言无法暴露 UB） |
+    | R6 · 回归护栏存在且非空转 | 变异验证：D0/D1/D2/D3/D4/D5 **六项全部被抓到** |
+    | R6 · 护栏 MUST 用 bundle 级接线 | `tests/test_bundle_master_slave.cpp` 的 DUT 用 `connect(master, slave)` |
+    | R6 · 护栏 MUST 覆盖 offset 非零与只读字段 | 同上（`fifo_bundle` 5 字段、`push` 在 offset 8、`push`/`pop` 只读） |
+    | R6 · 护栏 MUST 另有一个「未连接 bundle」用例 | `bundle: 未连接 bundle 的字段值可写可读` |
+    | R6 · 护栏 MUST 在 ctest 内 | `tests/CMakeLists.txt` 的 `add_catch_test(test_bundle_master_slave ...)`（`ctest -N` = 182） |
+
+    ⇒ **无「无断言覆盖」的条款**；唯一不可自动检测的是 R5 的 UB 一条（已如实标注）。
+  - **verify**: 映射表覆盖每条 Requirement / Scenario ✅（上表）
+
+- [x] ### Task 9: 全量回归 + archive ✅
   - **action**:
     - `ctest -LE perf`（新增 1 个 target → 期望 **171/171** 全绿）
+      → **实测 171/171 全绿**；`ctest -L perf` **11/11 全绿**（1330 s）
     - `./run_all_ported_tests.sh`
     - `./build/samples/fifo_bundle`（MUST 退出 0 且演示完整序列）
     - `./build/samples/minimal_fifo_bundle`

@@ -221,6 +221,18 @@ public:
         // 获取Bundle的总宽度
         constexpr unsigned width = ch::core::get_bundle_width<BundleT>();
 
+        // ⚠️ 打包式 API 的宽度约束：总宽 > 64 位的 bundle **无法**用一个
+        // uint64_t 表示 ⇒ MUST **显式拒绝**，MUST NOT 静默截断。
+        // （逐字段的槽位读写不受此限 —— 见 `get_bundle_field_value()`）
+        // （OpenSpec change `bundle-master-slave-io-2026-10` 的 D2）
+        if (width > 64) {
+            CHERROR("bundle total width %u exceeds 64 bits; the packed "
+                    "uint64_t API cannot represent it (use the per-field "
+                    "slot API instead)",
+                    width);
+            return;
+        }
+
         // 遍历Bundle的所有字段并设置值
         const auto &fields = bundle.__bundle_fields();
         unsigned offset = 0;
@@ -245,6 +257,16 @@ public:
 
         if (!initialized_) {
             CHABORT("Simulator not initialized when getting bundle value");
+        }
+
+        // ⚠️ 打包式 API 的宽度约束（与 `set_bundle_value()` 对称）：
+        // 总宽 > 64 位 ⇒ MUST 显式拒绝，MUST NOT 静默截断。
+        if constexpr (ch::core::get_bundle_width<BundleT>() > 64) {
+            CHERROR("bundle total width %u exceeds 64 bits; the packed "
+                    "uint64_t API cannot represent it (use the per-field "
+                    "slot API instead)",
+                    ch::core::get_bundle_width<BundleT>());
+            return 0;
         }
 
         // 序列化Bundle字段为一个整数值
@@ -451,6 +473,11 @@ public:
     void disconnect();
 
     // 获取Bundle字段值的辅助函数
+    //
+    // ⚠️ 普通信号字段（`ch_bool` / `ch_uint<N>` 成员）MUST 读其**节点的
+    // data_map 槽位** —— 旧实现用 `static_cast<uint64_t>(field)`，那是**编译期
+    // 常量转换**，对运行时驱动的节点必然失败并静默返回 0
+    // （OpenSpec change `bundle-master-slave-io-2026-10` 的 D1）。
     template <typename FieldType>
     uint64_t get_bundle_field_value(const FieldType &field) const {
         // 对于端口类型字段
@@ -460,13 +487,43 @@ public:
                 auto value = get_port_value(field);
                 return static_cast<uint64_t>(value);
             } else {
-                return static_cast<uint64_t>(field);
+                return get_signal_node_value(field.impl());
             }
         }
         // 对于其他类型字段
         else {
             return static_cast<uint64_t>(field);
         }
+    }
+
+    // 读一个普通信号节点在 data_map 中的槽位值。
+    template <typename NodeT>
+    uint64_t get_signal_node_value(NodeT *node) const {
+        if (!node) {
+            CHWARN("bundle field node is null");
+            return 0;
+        }
+        auto it = data_map_.find(node->id());
+        if (it == data_map_.end()) {
+            CHWARN("Value not found for signal node ID: %u", node->id());
+            return 0;
+        }
+        return static_cast<uint64_t>(it->second);
+    }
+
+    // 写一个普通信号节点在 data_map 中的槽位值。
+    template <typename NodeT>
+    void set_signal_node_value(NodeT *node, uint64_t value) {
+        if (!node) {
+            CHWARN("bundle field node is null");
+            return;
+        }
+        auto it = data_map_.find(node->id());
+        if (it == data_map_.end()) {
+            CHWARN("Value not found for signal node ID: %u", node->id());
+            return;
+        }
+        it->second = ch::core::sdata_type(value, it->second.bitwidth());
     }
 
     void reinitialize();
@@ -527,8 +584,24 @@ private:
     template <typename FieldType>
     void set_bundle_field_value(FieldType &field, uint64_t value,
                                 unsigned offset, unsigned width) {
+        uint64_t field_value = 0;
         // 提取对应位段的值
-        uint64_t field_value = (value >> offset) & ((1ULL << width) - 1);
+        //
+        // ⚠️ `1ULL << width` 在 `width == 64` 时是**未定义行为** ⇒ MUST 特判
+        // （OpenSpec change `bundle-master-slave-io-2026-10` 的 D2）。
+        if (width >= 64) {
+            if (width > 64) {
+                CHERROR("bundle field width %u exceeds 64 bits; the packed "
+                        "uint64_t API cannot represent it (use the per-field "
+                        "slot API instead)",
+                        width);
+                return;
+            }
+            // width == 64: 整个字都是该字段（避免 1ULL << 64 的 UB）
+            field_value = (offset == 0) ? value : 0;
+        } else {
+            field_value = (value >> offset) & ((1ULL << width) - 1);
+        }
 
         // 对于端口类型字段
         if constexpr (requires { field.impl(); }) {
@@ -536,12 +609,10 @@ private:
             if constexpr (requires { typename FieldType::direction; }) {
                 set_port_value(field, field_value);
             } else {
-                // 对于其他类型字段
-                if constexpr (std::is_same_v<FieldType, ch::core::ch_bool>) {
-                    field = ch::core::ch_bool(field_value != 0);
-                } else {
-                    field = FieldType(field_value);
-                }
+                // 普通信号字段：MUST **写槽位** —— `field = ch_bool(v)` 走的是
+                // `logic_buffer::operator=`（**节点重绑定**），会把值写到设计图
+                // 之外的节点上（D2）。
+                set_signal_node_value(field.impl(), field_value);
             }
         }
         // 对于其他类型字段

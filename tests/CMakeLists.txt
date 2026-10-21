@@ -192,6 +192,12 @@ add_dual_backend_test(test_cache_sync
     TIMEOUT 60
 )
 
+# bundle master/slave connection regression fence (capability
+# `bundle-master-slave-io`). Guards the cross-boundary value propagation that
+# `samples/fifo_bundle.cpp` silently lost: the samples are NOT in ctest / CI,
+# so without this Catch2 test a broken bundle connection is invisible.
+add_catch_test(test_bundle_master_slave test_bundle_master_slave.cpp)
+
 # mem-read-timing: cross-backend parity for the memory read port timing
 # contract. The Simulator's `ch_mem::aread` is 0-cycle, matching the
 # generated Verilog `assign proxy = mem[addr];`, so interpreter and verilator

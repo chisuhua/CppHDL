@@ -67,6 +67,11 @@ int main() {
 | `set_value(signal, value)` | `ch_bool` | 设置布尔值 | 3+ |
 | `set_bundle_value(bundle, val)` | Bundle | 设置整个 Bundle | 3+ |
 
+> ⚠️ **Bundle 的 codegen 限制**：bundle 成员**不会**被注册为组件 IO ⇒ 它的信号
+> **不会**成为生成 Verilog 的**顶层端口**。需要可综合的顶层时请用普通
+> `ch_in`/`ch_out` 端口（bundle 只用于模块间连接）。
+> 见 `docs/adr/ADR-042-bundle-field-first-class-nodes.md` Decision 5。
+
 ---
 
 ### 1. set_input_value() - 设置信号值
@@ -413,6 +418,8 @@ Simulator sim2(comp.context());
 │
 └─ Bundle 整体
     └─ 使用：set_bundle_value/get_bundle_value(bundle)
+        ⚠️ 仅限**仿真**；顶层用 bundle 时其信号不会成为 Verilog 顶层端口
+           （见 ADR-042 Decision 5）
 ```
 
 ---
