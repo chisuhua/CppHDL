@@ -5,9 +5,10 @@
 > `AxiToAxiLiteConverter` 的 `rst_n` 透传与相位分离状态机在该 change 中落地，
 > `examples/axi4/phase3a_complete.cpp` 的 AXI-Lite 路径只有在其之后才可能真的跑通。
 >
-> ⚠️ **顺序建议：与 `axi4-full-generic-slave-burst-2026-10` 串行，且本 change 在后**
-> （理由：两者都改 `tests/CMakeLists.txt` / 根 `AGENTS.md` / `include/axi4/AGENTS.md`，
-> 并行必然文本冲突；且 `CTEST_TOTAL` 增量可预测 178 → 179 → 181）。
+> ⚠️ **顺序：已定串行 —— `axi4-full-generic-slave-burst-2026-10` 先，本 change 在后**
+> （2026-10-21 决策；理由：两者都改 `tests/CMakeLists.txt` / 根 `AGENTS.md` /
+> `include/axi4/AGENTS.md`，并行必然文本冲突；且 `CTEST_TOTAL` 增量可预测
+> 178 → 179 → 181）。
 > 本 change 的测试 MUST 用 **testbench 扮演 slave**，MUST NOT 实例化 `Axi4Slave`
 > —— 后者会隐含依赖 burst change 落地。
 >
@@ -99,6 +100,10 @@
       11. 读事务不被写请求阻塞
       12. 仲裁不饿死（指针指向无请求的 master 时其他 master 仍能拿到 grant）
       13. 在途期间 `awready` MUST 为 0
+      14. **中途复位逃生路径**：事务在途时拉低 `rst_n` ≥1 拍 →
+          全部 `active` 清零 → 复位后可接受全新事务
+          （⚠️ MUST 双后端一致 —— 两后端的中途复位语义只由组件级 `rst_n` 保证一致；
+          `Simulator::reset()` 不委派 backend，interpreter 清 0 而 verilator 加载 INIT）
     - ⚠️ 用例 5 / 6 需要**非默认地址映射配置**（默认映射覆盖全空间 → DECERR 不可测）
       → 该配置 MUST 在测试里显式实例化并在 design 文档记录
     - 在 `tests/CMakeLists.txt` 用 `add_dual_backend_test` 注册
@@ -109,29 +114,53 @@
     ./build/tests/test_axi_interconnect_4x4 --list-tests | grep -c .
     cd build && ctest -N -R "test_axi_interconnect_4x4|test_axi_lite_matrix_2x2" | tail -1
     ```
-    第 2 条 MUST 命中 **26**（13 对 × 2 后端）；
+    第 2 条 MUST 命中 **28**（14 对 × 2 后端）；
     第 3 条 MUST 命中 **2**（2 个文件 = 2 个 ctest 条目）；
     **此时测试 MUST 是红的**（RED 基线）
 
-- [ ] ### Task 3: 引入路由锁存 + 复位契约裁决
+- [ ] ### Task 3: 引入 `rst_n` + 路由锁存
   - **action**:
-    - ⚠️ **先裁决**（MUST NOT 由实施者临场随机选）：
-      互连层是否暴露 `ch_in<ch_bool> rst_n`？
-      → 裁决结果 MUST 写进 design 文档（spec 的「复位契约」Requirement 记录该决策）
-    - `AxiInterconnect4x4` 每个 master 引入：
-      `write_route`（2 bit）+ `write_active`、`read_route`（2 bit）+ `read_active`
+    - **复位契约已裁决**（2026-10-21，proposal D5）：互连层**暴露** `rst_n`
+      → 本 Task MUST 落地，不存在「选不选」的分支
+    - `include/axi4/axi_interconnect_4x4.h`：`__io` 末尾新增 `ch_in<ch_bool> rst_n;`
+      （仓库惯例：`AxiLiteSlave` 在 `include/axi4/axi4_lite_slave.h:71`，
+      注释标明「必需端口，实例化点 MUST 显式接线」）
+    - 全部 `ch_reg`（含既有 `IcState::arb_state`）的 `->next` MUST 包上
+      `select(!io().rst_n, <init_val>, ...)`，`<init_val>` MUST 带**显式位宽**
+      （`ch_bool` → `ch_bool(false)`；`ch_uint<N>` → `ch_uint<N>(0_d)`）
+    - **接线 2 个实例化点**（顶层 `rst_n` 已存在且已驱动下游，接线是纯增量）：
+      - `examples/axi4/phase3a_complete.cpp`：
+        `interconnect.io().rst_n <<= io().rst_n;`
+        （顶层 `rst_n` 在 `:60`，已透传到 converter `:126` / slave `:127`）
+      - `examples/axi4/axi_soc_example.cpp`：
+        `matrix.io().rst_n <<= io().rst_n;`
+        （顶层 `rst_n` 在 `:47`，已透传到 gpio/uart `:263-264`）
+      - ⚠️ MUST NOT tie 常量（`<<= ch_bool(true)`）—— 那会永久掩盖复位路径
+    - 每个 master 引入：`write_route`（2 bit）+ `write_active`、
+      `read_route`（2 bit）+ `read_active`
     - 路由 MUST 在 AW / AR 握手当拍由**该通道自己的地址**解码并锁存
     - 写侧与读侧 MUST 各自独立锁存
     - 形态参照 `AxiLiteMatrix2x2` 已验证的 `m0_route_s1` / `m1_route_s1`
       （`include/axi4/axi4_lite_matrix.h:146-149`、`:212-213`），但 MUST 覆盖写读两个方向
   - **verify**:
     ```bash
+    grep -cE "select\(!io\(\)\.rst_n" include/axi4/axi_interconnect_4x4.h
+    grep -c "ch_reg<" include/axi4/axi_interconnect_4x4.h
+    grep -rn "interconnect.io().rst_n <<=" examples/ | wc -l
+    grep -rn "matrix.io().rst_n <<=" examples/ | wc -l
     grep -cE "write_route|read_route" include/axi4/axi_interconnect_4x4.h
+    ```
+    第 1 条 MUST = 第 2 条（每个 `ch_reg` 都有复位 pattern，漏一个 = 静默破坏）；
+    第 3 / 4 条 MUST 各 = 1（接线护栏）；
+    第 5 条 MUST ≥ 4（4 个 master 各一组）
+    （⚠️ MUST NOT 用 `grep -cE "route"` —— 文件头注释就命中，**永假绿**）
+  - **action（续）**:
+    - 路由锁存用例 MUST 由红转绿
+  - **verify（续）**:
+    ```bash
     ./build/tests/test_axi_interconnect_4x4 "*lock*"
     ```
-    第 1 条 MUST ≥ 4（4 个 master 各一组）
-    （⚠️ MUST NOT 用 `grep -cE "route"` —— 文件头注释就命中，**永假绿**）；
-    第 2 条：路由锁存用例 MUST 由红转绿（用 Catch2 名称过滤，**不要**用 ctest 粒度）
+    MUST 转绿（用 Catch2 名称过滤，**不要**用 ctest 粒度）
 
 - [ ] ### Task 4: 16 对全扇出（AW / W / AR 正向 + B / R 反向）
   - **action**:
@@ -212,11 +241,19 @@
       「**`!m*_active` 门控 + 按当拍地址解码的目标 slave 的 `awready`**」
       ⚠️ MUST NOT 写成「按锁存的写路由」—— 反例：锁存残留 `route = s1` 时，
       一笔新的到 s0 的 AW 会拿到 `s1_awready` → **AW 半丢失**
+    - **新增 `rst_n` 端口 + 全部 5 个既有 `ch_reg`（`arb_state` / `m0_active` /
+      `m0_route_s1` / `m1_active` / `m1_route_s1`）加复位 pattern**
+      （2x2 当前 `rst_n` 命中 0 —— proposal D5）
+    - `examples/axi4/axi_soc_example.cpp` MUST 接线
+      `matrix.io().rst_n <<= io().rst_n;`
   - **verify**:
     ```bash
+    grep -cE "select\(!io\(\)\.rst_n" include/axi4/axi4_lite_matrix.h
+    grep -c "ch_reg<" include/axi4/axi4_lite_matrix.h
+    grep -rn "matrix.io().rst_n <<=" examples/ | wc -l
     cd build && ctest -R test_axi_lite_matrix_2x2 --output-on-failure
     ```
-    2x2 用例 MUST 全绿
+    前两条 MUST 相等；第 3 条 MUST = 1；第 4 条 2x2 用例 MUST 全绿
 
 - [ ] ### Task 8: 回归 —— 既有测试与 examples 必须仍然全绿
   - **action**:

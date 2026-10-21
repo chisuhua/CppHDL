@@ -4,6 +4,12 @@
 > （archive `2026-10-21-axi4-lite-generic-slave-conformance-2026-10`）
 > —— 本 change 在其确立的「通用 slave 规范形态」之上补齐 AXI4 Full 特有的 burst 语义。
 >
+> ⚠️ **顺序：已定串行 —— 本 change 先，`axi4-interconnect-routing-2026-10` 在后**
+> （2026-10-21 决策；理由：两者共享 `tests/CMakeLists.txt` / 根 `AGENTS.md` /
+> `include/axi4/AGENTS.md`，并行必然文本冲突；且 `CTEST_TOTAL` 增量可预测
+> 178 → 179 → 181）。本 change 落地后 `Axi4Slave` 才成为可用的 fixture slave，
+> 供后继的互连 change 使用。
+>
 > **执行顺序**：Task 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11。
 >
 > **TDD 纪律**：Task 3 先写会失败的用例（RED），Task 4-8 逐条转绿（GREEN），

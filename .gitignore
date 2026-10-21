@@ -103,3 +103,7 @@ verilator-prefix/
 # 不在 .rddf/state/ 入库避免 PR diff 噪声 + 角色/会话身份泄露。
 /.rddf/state/
 /.rddf/wt/
+
+# 忽略其它构建目录变体
+build-test/
+build*/

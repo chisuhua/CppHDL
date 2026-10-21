@@ -165,18 +165,37 @@
   → DECERR 用例 MUST 用**非默认配置**实例化（tasks Task 2 MUST 明确该配置）；
   同时 MUST 记录「默认配置 = 4 个 1GB 窗口，覆盖全空间」这一事实。
 
-### D5: 互连层的复位契约 MUST 显式裁决
+### D5: 互连层 MUST 暴露 `rst_n`（已裁决，2026-10-21）
 
-- 本 change 引入 4×(write_route + write_active + read_route + read_active)
-  + 2 个仲裁指针 + error responder 状态 → **全是状态寄存器**
-- 仓库刚把「状态寄存器 MUST 有 `rst_n` 复位 pattern」确立为规范形态
-  （`openspec/specs/axi-slave-conformance/spec.md`）
-  → **决策点**：互连层是否暴露 `ch_in<ch_bool> rst_n`？
-  - 选项 (a) 暴露并透传 → 公开 API 变更 + `examples/axi4/phase3a_complete.cpp`
-    的顶层 `rst_n` 需接线
-  - 选项 (b) 不暴露 → MUST 在 spec 中**显式豁免**并写明理由
-    （互连为纯路由，复位由寄存器 INIT + backend 的 reset pulse 保证）
-- ⚠️ 该决策 MUST 在 change 内显式裁决，MUST NOT 由实施者临场随机选
+**裁决：选项 A —— 暴露并透传 `rst_n`**（不再是决策点）。
+
+- `AxiInterconnect4x4` 与 `AxiLiteMatrix2x2` MUST 暴露 `ch_in<ch_bool> rst_n`
+  （低有效，**在时钟沿生效**），其**全部**状态寄存器 MUST 使用
+  `select(!io().rst_n, <init_val>, ...)` 复位 pattern，`<init_val>` MUST 带显式位宽
+- 理由链：
+  1. 改造完成后互连层**不再是纯路由**（路由锁存 + `active` 标志 + 双仲裁指针 +
+     error responder 状态）→「纯路由故由 INIT 保证复位」的前提不成立
+  2. 「backend reset pulse 保证复位」**只在 t=0 成立**：
+     `Simulator::reset()` 把 `data_map_` 全清 0 且**不委派给 backend**
+     （`src/simulator.cpp:422-441`）→ interpreter 清 0 而 verilator 加载 INIT
+     → **两后端中途复位语义分歧**。唯一两后端一致、testbench 可控的中途复位机制
+     = 组件级 `rst_n`
+  3. 互连在 rst_n 链路上是**唯一断点**：
+     `examples/axi4/phase3a_complete.cpp` 顶层 `rst_n`（`:60`）已透传到
+     converter（`:126`）与 slave（`:127`），唯独互连（`:75`）无该端口；
+     `examples/axi4/axi_soc_example.cpp` 同理（顶层 `:47` → gpio/uart `:263-264`，
+     唯独 matrix `:195` 断开）
+  4. 中途复位时若互连不复位：slave 的在途标志被清零而互连的 `write_active` 残留
+     → 互连永远等不到 B 握手 → **该 master 永久死锁且无任何报错**
+  5. 「可选端口」在本框架**不可行**：未接线的 `ch_in<ch_bool>` 读出为 0，
+     配标准 pattern 即永久复位；「未接线 = 不复位」需运行期「是否被驱动」查询，
+     而 `num_srcs()` / `driver()` 是**构图期**属性
+     （子组件 `describe()` 执行时父的 `<<=` 接线尚未发生）→ 不可靠
+- ⚠️ **`AxiLiteMatrix2x2` 当前是「有状态无 rst_n」的沉默先例**
+  （5 个 `ch_reg`、`rst_n` 命中 0）→ 本 change MUST 一并补齐，
+  消解该先例带来的持续审计债
+- ⚠️ 复位契约的措辞 MUST 与 `axi-slave-conformance` 同源
+  （同一套 `rst_n` + 复位 pattern 形态），MUST NOT 出现形态分歧
 
 ### D6: 死代码清理
 
@@ -189,6 +208,9 @@
 - 读侧 MUST 引入 `ar_route` 锁存（2x2 当前**完全没有**），
   `m*_rdata` / `m*_rresp` / `m*_rvalid` / `s*_rready` MUST 基于该锁存
 - `s*_rready` MUST NOT 用**写**通道的 grant（`:326-329`）
+- **新增 `rst_n` 端口 + 全部 5 个既有 `ch_reg`（`arb_state` / `m0_active` /
+  `m0_route_s1` / `m1_active` / `m1_route_s1`）加复位 pattern**
+  （2x2 当前 `rst_n` 命中 0 —— 见 D5）
 - ⚠️ `m0_awready` / `m1_awready`（`:251-252`）的处方 MUST 是
   「**`!m*_active` 门控 + 按当拍地址解码的目标 slave 的 `awready`**」，
   **MUST NOT** 写成「按锁存的写路由」——
@@ -277,8 +299,8 @@
 |---|---|
 | `include/axi4/axi_interconnect_4x4.h` | 主要改动：新增路由锁存与两套仲裁器状态、error responder 状态；16 对 AW/W/AR mux 全量展开；B/R 反向 mux 按锁存索引重写；地址映射参数化；删除 `build_decoder` 死代码。**文件规模会显著增长**（当前 520 行 → 预计 900+ 行）→ MUST 保留并扩展现有 4 个 helper 的切分点（`build_address_map` / `build_arbiter` / `build_decoder` / `build_mux`） |
 | `include/axi4/axi4_lite_matrix.h` | 读侧路由锁存 + 响应侧改用锁存；`awready` 加 `!active` 门控 |
-| 公开 API | `AxiInterconnect4x4` 的**端口集合**原则上不变（无需用户改接线）；但**地址映射从硬编码改为可配置**、**是否新增 `rst_n`** → 若新增则是**公开 API 变更**（默认值 MUST 保持与当前 `>>30` 行为等价，避免破坏 `examples/axi4/phase3a_complete.cpp`） |
-| 实例化点 | `examples/axi4/phase3a_complete.cpp:75`（4×4）、`examples/axi4/axi_soc_example.cpp:195`（2×2）—— MUST 保持可编译 |
+| 公开 API | `AxiInterconnect4x4` 与 `AxiLiteMatrix2x2` 各新增 `ch_in<ch_bool> rst_n`（D5 已裁决）→ **公开 API 变更**；**地址映射从硬编码改为可配置** → 默认值 MUST 保持与当前 `>>30` 行为等价，避免破坏 `examples/axi4/phase3a_complete.cpp` |
+| 实例化点 | `examples/axi4/phase3a_complete.cpp:75`（4×4，+1 行 `interconnect.io().rst_n <<= io().rst_n;`）、`examples/axi4/axi_soc_example.cpp:195`（2×2，+1 行）—— 两处的顶层 `rst_n` **已存在且已驱动下游**，接线是**纯增量**（无悬空端口问题） |
 | 测试 | 新增 `tests/test_axi_interconnect_4x4.cpp` + `tests/test_axi_lite_matrix_2x2.cpp`（**各 1 个 ctest 条目** → CTEST_TOTAL **+2**）；`tests/CMakeLists.txt` 注册（`add_dual_backend_test` MUST 用 `SOURCES` 关键字形式，`TIMEOUT 600` —— 4×4 全展开的组合 mux 编译量大，参照 `test_verilator_complex_e2e` 的 600） |
 | spec | 新 capability `axi-interconnect-routing`（ADDED ×5） |
 | 文档 | `include/axi4/AGENTS.md`、根 `AGENTS.md`（NOTES 计数 + 立项状态） |
