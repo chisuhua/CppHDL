@@ -27,6 +27,21 @@
 #       for constructs R1 cannot see, e.g. a DUT instantiated in a
 #       fixture header).
 #
+# Opt-out: a file that deliberately exercises the UNWIRED (permanently
+# reset) behaviour - i.e. the runtime guard itself - MUST carry the
+# marker line
+#
+#     // rst_n_guard: intentionally-unwired
+#
+# Such a file is exempted from R1/R3 (it is the thing that proves the
+# unwired behaviour is a real, observable state) but it is NOT silent:
+# the script prints a NOTE naming every exempted file, so a reviewer sees
+# the exemption in the CI log.
+#
+# The exemption is NARROW: besides the marker, the file name must contain
+# "rst_n_guard" (only the runtime guard may claim it). A marker dropped
+# into an arbitrary test file does NOT exempt that file.
+#
 # Exit codes: 0 = all sites wired, 1 = at least one missing.
 #
 # Usage: scripts/verify_rst_n_wiring.sh
@@ -62,7 +77,8 @@ violations=0
 
 for f in $(scan_files); do
   # ---- R1 + R3 -----------------------------------------------------------
-  out=$(awk -v comps="$COMPONENTS_W_RST_N" '
+  base=$(basename "$f")
+  out=$(awk -v comps="$COMPONENTS_W_RST_N" -v base="$base" '
     function has_comp(s,   i, c, n, arr) {
         n = split(comps, arr, " ")
         for (i = 1; i <= n; i++) {
@@ -98,12 +114,16 @@ for f in $(scan_files); do
         # uses the DUAL_BACKEND_TEST_PAIR macro (which builds one)
         has_sim   = (block ~ /Simulator[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/) || (block_is_macro == 1)
         has_drive = (block ~ /set_input_value\([^;]*rst_n/) || calls_driver(block)
-        if (has_comp_or_alias(block) && has_dev && has_sim && !has_drive) {
+        if (!optout && has_comp_or_alias(block) && has_dev && has_sim && !has_drive) {
             printf("VIOLATION\t%s\t%s\n", FILENAME, tcname)
         }
     }
     { lines[NR] = $0 }
     END {
+        # the whole file, and the explicit opt-out marker
+        whole = ""
+        for (i = 1; i <= NR; i++) whole = whole lines[i] "\n"
+        optout = (whole ~ /rst_n_guard: intentionally-unwired/) && (base ~ /rst_n_guard/)
         # pass 1: collect aliases of mandatory-rst_n components
         for (i = 1; i <= NR; i++) {
             if (lines[i] ~ /using[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*=/) {
@@ -152,19 +172,26 @@ for f in $(scan_files); do
         }
         flush_block()
         # R3: the file as a whole must contain a drive somewhere
-        whole = ""
-        for (i = 1; i <= NR; i++) whole = whole lines[i] "\n"
         w_comp   = has_comp_or_alias(whole)
         w_dev    = (whole ~ /ch_device|ch_module|DUAL_BACKEND_TEST/)
         w_sim    = (whole ~ /Simulator[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/)
         w_drive  = (whole ~ /set_input_value\([^;]*rst_n/)
-        if (w_comp && w_dev && w_sim && !w_drive) {
+        if (!optout && w_comp && w_dev && w_sim && !w_drive) {
             printf("VIOLATION_FILE\t%s\t-\n", FILENAME)
+        }
+        if (optout) {
+            printf("EXEMPT\t%s\t-\n", FILENAME)
         }
     }
   ' "$f")
   if [ -n "$out" ]; then
     while IFS=$'\t' read -r kind file tc; do
+      if [ "$kind" = "EXEMPT" ]; then
+        echo "::notice file=$file exempted from the rst_n wiring check"
+        echo "        (marker: rst_n_guard: intentionally-unwired - this file exercises the"
+        echo "         UNWIRED = permanently-reset behaviour on purpose)"
+        continue
+      fi
       if [ "$kind" = "VIOLATION_FILE" ]; then
         echo "::error file=$file"
         echo "        This file simulates a component with a mandatory 'rst_n' port but never"

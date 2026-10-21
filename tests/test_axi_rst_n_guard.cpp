@@ -14,6 +14,11 @@
 //
 // ⚠️ 静态护栏（`scripts/verify_rst_n_wiring.sh`）负责「别忘了接线」，
 //    本文件负责「接错了会怎样」——两者互补。
+//
+//    本文件**故意不接线** → 因此它必须豁免静态护栏的「MUST 驱动 rst_n」检查。
+//    豁免标记（护栏脚本按此行识别，并在 CI 日志里打印 NOTE，不会静默豁免）：
+//
+//    rst_n_guard: intentionally-unwired
 
 #define CATCH_CONFIG_MAIN
 #include "catch_amalgamated.hpp"

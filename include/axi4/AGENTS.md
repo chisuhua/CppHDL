@@ -66,6 +66,10 @@ include/axi4/
       组件清单在脚本头部 `COMPONENTS_W_RST_N`，新增带 `rst_n` 的组件时 MUST 同步维护。
     - 运行时：`tests/test_axi_rst_n_guard.cpp`（双后端）——
       故意不驱动 `rst_n` → 断言无 B/R 响应 + 寄存器保持初值。
+      ⚠️ 该文件因此需要**豁免**静态护栏的「MUST 驱动 `rst_n`」检查：
+      文件里 MUST 带标记行 `rst_n_guard: intentionally-unwired`。
+      豁免**仅对文件名含 `rst_n_guard` 的文件生效**（往普通测试文件塞标记**不豁免**），
+      且护栏会在 CI 日志里打印 `::notice` 点名被豁免的文件 —— **豁免不是静默的**。
   - 层级传递时**无需额外约束** —— `context::topological_sort_visit`
     （`src/core/context.cpp:273`）沿 `src` 边递归，父的 `ch_out` 排在子组件的
     `ch_in` 之前 → 同一拍内传递生效。`operator<<=` 只做 `set_driver`
