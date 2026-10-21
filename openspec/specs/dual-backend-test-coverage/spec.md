@@ -338,11 +338,25 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 
 原 `tests/test_axi_<peripheral>.cpp` MUST NOT 修改（interpreter-only baseline）。
 
+**例外（本 capability 的「未接线 rst_n MUST 有自动化护栏」Scenario 引入）**：
+`tests/test_axi_{spi,pwm,i2c}.cpp` 三个遗留文件 MUST 被允许**受限**变更：
+
+1. 删除**零调用**的 helper（`axi_lite_write` / `axi_lite_read`）——
+   它们含无界握手等待（`while (ready == 0) tick();`），一旦被调用即 hang 到
+   ctest TIMEOUT（而非断言失败）；
+2. 所有**仿真**了 device（构造了 `Simulator`）的用例 MUST 驱动 `rst_n = 1`
+   （未接线的 `ch_in<ch_bool>` 读出为 0 = **永久复位** = 零编译错误的静默破坏）；
+   ⚠️ 只建 device 但**不建 Simulator** 的纯 codegen 用例不适用（端口根本没被求值）；
+3. MUST NOT 削弱 / 删除 / 改名任何既有 TEST_CASE 或断言。
+
+除上述三类变更外，这三个文件的 `git diff` MUST 仍为空。
+
 #### Scenario: file 命名约束
 
 - **WHEN** 新增 AXI4 peripheral behavior runtime test
 - **THEN** 文件名 MUST 用 `_behavior` suffix 区别原 `test_axi_<peripheral>.cpp`
 - **AND** 原 `test_axi_<peripheral>.cpp` MUST NOT 修改
+  （**例外**：`test_axi_{spi,pwm,i2c}.cpp` 的受限清理，见上方例外条款）
 
 #### Scenario: peripheral 列表与 `_behavior` 文件一一对应
 
@@ -376,6 +390,19 @@ CI PR matrix 落地后，所有 dual-backend tests 在 PR feedback cycle MUST �
 - **AND**（`axi4-full-slave-burst` 追加的例外）
   MUST 允许改 `tests/test_verilator_memory_e2e.cpp`：
   接入 `Axi4Slave` 新增的 `rst_n` + 4-beat 写补数据断言 + 相应断言更新
+- **AND**（本 capability 的「未接线 rst_n MUST 有自动化护栏」Scenario 追加的例外）
+  MUST 允许改 `tests/test_axi_{spi,pwm,i2c}.cpp`：
+  删除零调用死 helper + 驱动 `rst_n`（且 MUST NOT 削弱既有断言）
+
+#### Scenario: 未接线 rst_n MUST 有自动化护栏
+
+- **WHEN** 新增带**必需** `rst_n` 端口的组件，或新增其实例化点
+- **THEN** `scripts/verify_rst_n_wiring.sh` MUST 在 CI 中被调用并通过
+  （该脚本按 **per test case** 粒度检查：仿真了这类组件的用例 MUST 驱动 `rst_n`；
+  wrapper MUST 透传 `rst_n <<=`；只认**真实驱动**，注释里提到 `rst_n` 不算数）
+- **AND** MUST 至少存在一个**双后端** Catch2 用例，断言
+  「不驱动 `rst_n` → 无 B/R 响应 + 寄存器保持初值」
+  （把「未接线 = 永久复位」钉成可执行契约，而不只是文档里的一句话）
 
 ### Requirement: AXI4-Lite slave peripheral MUST 收敛到相位分离 + 响应保持的规范形态
 
