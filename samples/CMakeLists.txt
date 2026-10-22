@@ -1,7 +1,13 @@
 # samples/CMakeLists.txt
+# 注册的 sample target 列表 = 回归护栏 scripts/run_all_samples.sh 的覆盖集合。
+#
+# ⚠️ **每个 samples/*.cpp MUST 要么在此注册，要么登记进 samples/disabled_samples.txt**
+#    （带理由 + 归位条件）⇒ 否则护栏的 C1「注册一致性」会失败。
+#    未注册的 sample 见 samples/disabled_samples.txt（14 个，2026-10-22 实测）。
 set(CH_SAMPLE_TARGETS
     counter
     test_dag
+    dag_compare
     simple_io
     handshake
     fifo_example
@@ -13,7 +19,7 @@ set(CH_SAMPLE_TARGETS
     axi_lite_demo
     nested_bundle_demo
     nested_fragment_demo
-    # tlm_bundle_demo
+    tlm_bundle_demo
     pod_bundle_conversion
     minimal_fifo_bundle
     feedback_counter
@@ -25,16 +31,6 @@ set(CH_SAMPLE_TARGETS
     onehot_example
     configured_trace_example
     switch_demo
-    #if_demo
-    # stream_fifo_example
-    # stream_fork_example
-    # stream_join_example
-    # stream_arbiter_example
-    # stream_demux_example
-    # stream_flow_basic_example
-    # spinalhdl_stream_example
-    # spinalhdl_component_function_area_example
-    # stream_handshake_example
 )
 
 # 为每个示例创建可执行文件

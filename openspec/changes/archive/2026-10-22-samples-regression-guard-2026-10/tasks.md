@@ -1,6 +1,6 @@
 ## Tasks
 
-> **状态：草案（尚未实施）。**
+> **状态：已实施并归档（2026-10-22）。**
 > 立项自 2026-10-22 的全仓遗留审计：**40 个 sample 源文件零自动化覆盖** ⇒ 坏了没人知道
 > （实测发现 2 个既有 segfault）。与 `bundle-ecosystem-hardening-2026-10` 分工：
 > 本 change 只做**覆盖面**（samples 的回归护栏 + 修 `switch_demo`），
@@ -20,7 +20,7 @@
 > ⚠️ **跨 change 顺序**：本 change **先**落地（护栏带 `nested_bundle_demo` 的
 > **显式豁免**，失效条件 = `bundle-ecosystem-hardening-2026-10` archive）。
 
-- [ ] ### Task 0: 全量基线 + 注册面清点（逐个定性既有失败）
+  - [x] ### Task 0: 全量基线 + 注册面清点（逐个定性既有失败）
   - **action**:
     - 跑一遍全部**已构建**的 sample，记录每个的退出码与耗时：
       ```bash
@@ -45,7 +45,7 @@
     ```
     MUST 产出两份清单，且 16 个未注册 sample **逐个**有定性结论
 
-- [ ] ### Task 1: 写 `scripts/run_all_samples.sh`（护栏）
+  - [x] ### Task 1: 写 `scripts/run_all_samples.sh`（护栏）
   - **action**:
     - 新建 `scripts/run_all_samples.sh`：
       - 遍历 `build/samples/` 下的**可执行文件**（MUST 跳过目录与非可执行文件
@@ -80,7 +80,7 @@
     MUST 列出全部 sample，且把 Task 0 发现的既有失败**报为失败**（或**显式豁免**，
     但 MUST 在输出里点名，并 MUST NOT 把它从执行集合里去掉）
 
-- [ ] ### Task 2: 修既有失败（MUST 逐个，不得静默跳过）
+  - [x] ### Task 2: 修既有失败（MUST 逐个，不得静默跳过）
   - **action**:
     - `samples/switch_demo.cpp`：**缺 `ctx_swap`** ⇒ `make_uint<4>(0)`
       （`:10`，首个失败点）在无 context 下创建节点失败（`node_builder` 报
@@ -102,7 +102,7 @@
     bash scripts/run_all_samples.sh                 # 豁免项 MUST 被点名打印且仍被执行
     ```
 
-- [ ] ### Task 3: 注册面收敛 + CI + 文档同步
+  - [x] ### Task 3: 注册面收敛 + CI + 文档同步
   - **action**:
     - **注册一致性**（D2）：
       - 16 个未注册 sample 逐个处置：**未经修改即可编译** ⇒ 补进
@@ -139,7 +139,7 @@
       | grep . && echo "FAIL: 有 sample 既未注册也未登记" || echo "OK"
     ```
 
-- [ ] ### Task 4: 全量回归 + archive
+  - [x] ### Task 4: 全量回归 + archive
   - **action**:
     - `bash scripts/run_all_samples.sh` ⇒ MUST 全绿（既有失败已修或显式豁免，
       且**无 stale 豁免**）

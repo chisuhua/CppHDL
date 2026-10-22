@@ -1,0 +1,41 @@
+# samples/disabled_samples.txt
+#
+# 登记**未注册**的 sample（源文件存在于 samples/ 但不在 CH_SAMPLE_TARGETS 里）。
+#
+# 格式：<sample 名>\t<为什么不能编>\t<归位条件：什么时候回来>
+#
+# 为什么需要它：护栏 scripts/run_all_samples.sh 的 C1「注册一致性」要求每个
+# samples/*.cpp 要么已注册、要么在此登记（带理由 + 归位条件）
+# => 「为什么它没被编译」不再失传。
+#
+# ⚠️ 本清单只做**登记**，不负责修复（修复是独立工作，见归位条件列）。
+# ⚠️ 归位条件一旦达成，MUST 从本清单移除该行并补进 samples/CMakeLists.txt。
+#
+# 判定基准（2026-10-22 实测，g++ -std=c++23 -fsyntax-only）：
+#   已注册 26 / 源文件 40 / 本清单 14
+
+# --- POD bundle 序列化 API 漂移（part1/part2 不再是类型名）---
+advanced_pod_bundle_serialization	编译失败: :55 `part1/part2` 不是类型名 —— POD bundle 的分区构造 API 已改版	改用当前 POD bundle 分区 API 改造后移除本行并补进 CH_SAMPLE_TARGETS
+large_pod_bundle_example	编译失败: :55 `part1/part2` 不是类型名 —— 同上（大规模 POD bundle 变体）	同上改造后移除本行并补进 CH_SAMPLE_TARGETS
+
+# --- chlib 头文件 / 命名空间漂移 ---
+conditional_demo	编译失败: :8 `chlib` 不是命名空间名（头文件聚合方式已变）=> 连带 `if_then` 未声明	改为当前 include 约定并恢复 `if_then` 用法后移除本行
+spinalhdl_component_function_area_example	编译失败: :14 基类名不认识 + `ch_sint` 未声明 —— 组件 API 已改版	按当前 Component/ch_sint API 改造后移除本行
+spinalhdl_stream_example	编译失败: :2 `#include <chlib/fragment.h>` 文件不存在（fragment 头已重组/移除）	改用现存的 stream 头文件后移除本行
+
+# --- 字面量后缀 API 漂移（0xAB_d 不再被 lit_dec 解析）---
+stream_arbiter_example	编译失败: `0xAB_d` 十六进制字面量带 `_d` 后缀不被 lit_dec 接受	去掉十六进制字面量的 `_d` 后缀后移除本行
+stream_demux_example	编译失败: 同上（`0xAB_d`）	同上
+stream_flow_basic_example	编译失败: 同上（`0xAB_d`）	同上
+stream_fork_example	编译失败: 同上（`0xAB_d`）	同上
+stream_join_example	编译失败: 同上（`0xAB_d`）	同上
+
+# --- stream_fifo 构造签名漂移 ---
+stream_fifo_example	编译失败: :28 `stream_fifo<...>` 无匹配重载（构造签名已改）	按当前 stream_fifo 签名改造后移除本行
+stream_component_example	编译失败: :37 `stream_fifo<...>` 无匹配重载 + :69 `context::get_default_clk` 已改名	同上改造后移除本行
+
+# --- context 时钟/复位访问器改名 ---
+stream_handshake_example	编译失败: :34 `context::get_default_clk` / `get_default_rst` 已改名为 get_default_clock / get_default_reset	改用当前访问器名后移除本行
+
+# --- if/else DSL 签名漂移 ---
+if_demo	编译失败: :39 字面量宽度不匹配（ch_literal_impl<255,8> -> ch_literal_impl<0,1>）+ :59 ch_in<ch_bool> 不能绑到 const ch_bool&	按当前 if/else DSL 改造后移除本行

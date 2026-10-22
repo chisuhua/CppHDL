@@ -6,6 +6,13 @@ using namespace ch::core;
 using namespace chlib;
 
 int main() {
+    // ⚠️ 节点创建（make_uint / case_ / switch_）需要**活跃的 context**，
+    //    否则 node_builder 报「No active context for literal creation」并返回
+    //    nullptr ⇒ 后续解引用 segfault（历史遗留，本 sample 长期零覆盖 ⇒ 无人发现）。
+    //    约定见 samples/AGENTS.md 与 tests/test_fifo_example.cpp。
+    ch::core::context ctx("switch_demo_ctx");
+    ch::core::ctx_swap swap(&ctx);
+
     // 创建一些测试信号
     ch_uint<4> input = make_uint<4>(0);
     ch_uint<8> output = make_uint<8>(0);

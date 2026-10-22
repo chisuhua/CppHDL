@@ -356,6 +356,94 @@ jobs:
       continue-on-error: true
 
   # ---------------------------------------------------------------
+  # samples regression guard (Linux only).
+  #
+  # `samples/` had ZERO automated coverage until this job: the 40
+  # sample source files were never executed by ctest nor by
+  # run_all_ported_tests.sh, so two of them had been segfaulting
+  # for months without anybody noticing.
+  #
+  # Linux-only: the guard needs a POSIX `timeout` (GNU coreutils);
+  # macOS has no `timeout` by default (it ships `gtimeout` via
+  # brew coreutils), so the job would be platform-dependent there.
+  #
+  # Budget: 26 samples x 60s timeout = 26 min worst case, plus the
+  # library build. `timeout-minutes: 30` caps it.
+  # ---------------------------------------------------------------
+  samples-regression:
+    name: Samples Regression Guard
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    env:
+      BUILD_VERILATOR: 'OFF'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install g++ (Linux)
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common
+        if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+           && sudo apt-get update \
+           && sudo apt-get install -y g++-13; then
+          echo "Installed g++-13 via PPA"
+          GCC_BIN=gcc-13
+          GXX_BIN=g++-13
+        else
+          echo "::warning::g++-13 PPA install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12
+          GCC_BIN=gcc-12
+          GXX_BIN=g++-12
+        fi
+        sudo ln -sf "/usr/bin/$GCC_BIN" /usr/local/bin/gcc
+        sudo ln -sf "/usr/bin/$GXX_BIN" /usr/local/bin/g++
+        g++ --version
+
+    - name: Install LLVM
+      shell: bash
+      run: |
+        set -e
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-get update
+        sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
+                                clang-${{ env.LLVM_VERSION }}
+        LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
+          | grep 'LLVMConfig\.cmake$' | head -1)
+        if [ -z "$LLVM_CONFIG_CMAKE" ]; then
+          echo "::error::LLVMConfig.cmake not found for llvm-${{ env.LLVM_VERSION }}-dev"
+          exit 1
+        fi
+        LLVM_DIR="$(dirname "$LLVM_CONFIG_CMAKE")"
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+
+    - name: Configure CMake
+      shell: bash
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_CXX_COMPILER=g++
+        -DENABLE_ASAN=OFF
+        -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
+
+    # Only the samples (+ the library they link against) are built here;
+    # the test suite is the `build-and-test` job's business.
+    - name: Build samples
+      shell: bash
+      run: cmake --build build --target all-samples -j$(nproc 2>/dev/null || echo 4)
+
+    - name: Run samples regression guard
+      shell: bash
+      run: bash scripts/run_all_samples.sh
+
+  # ---------------------------------------------------------------
   # PR dual-backend fast feedback (verilator-parity-all-tests Phase 1).
   # Runs ONLY on pull_request events; in parallel with the existing
   # `build-and-test` job (`pr-build` analogue, BUILD_VERILATOR=OFF,
