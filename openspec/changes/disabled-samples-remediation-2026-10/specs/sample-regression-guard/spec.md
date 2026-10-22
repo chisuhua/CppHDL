@@ -5,7 +5,8 @@
 ### Requirement: 禁用清单 MUST 可收缩，被修复的 sample MUST 移出清单
 
 `samples/disabled_samples.txt`（禁用清单）里的每一项 MUST 带**理由**与
-**归位条件**。当某个 sample 的根因被修复（它**未经修改即可编译**）时：
+**归位条件**。当某个 sample 的根因被修复（它**未经修改即可编译**，或**经 API
+漂移修复后编译通过**）时：
 
 - 该 sample MUST 被补进 `samples/CMakeLists.txt` 的 `CH_SAMPLE_TARGETS`
   （⇒ 从此被护栏**执行**）；
@@ -14,15 +15,24 @@
 
 ⇒ 禁用清单 MUST 是一个**收敛**的集合，MUST NOT 成为「永久排除名单」。
 
-> ℹ️ 这条 Requirement 与「全部 sample MUST 被纳入自动化回归护栏的覆盖集合」
-> 互为补充：后者保证「没有 sample 无归属」，本条保证「无归属是**暂时的**」。
+> ℹ️ 与「全部 sample MUST 被纳入自动化回归护栏的覆盖集合」互为补充：
+> 后者保证「没有 sample 无归属」，本条保证「无归属是**暂时的**」。
 
 #### Scenario: 修好的 sample MUST 移出禁用清单并被注册
 
-- **WHEN** 某个被禁用的 sample 未经修改即可编译
+- **WHEN** 某个被禁用的 sample 未经修改即可编译，或经 API 漂移修复后编译通过
 - **THEN** 它 MUST 被补进 `CH_SAMPLE_TARGETS`
 - **AND** 它 MUST 从禁用清单里移除
 - **AND** 护栏 MUST 全量重跑并保持绿
+- **AND** ⚠️ **「经 API 漂移修复后编译通过」是本 change 的主路径**
+  （改 sample 源码）—— 只覆盖「未经修改即可编译」会让该路径**不受契约约束**
+
+#### Scenario: 编译通过但**运行**失败的 sample MUST NOT 移出清单
+
+- **WHEN** 某个 sample 编译通过、但运行护栏报告它失败
+- **THEN** 它 MUST **留在**禁用清单里
+- **AND** 它的归位条件 MUST 指向一个**具体的运行期缺陷**
+  （MUST NOT 移出清单 —— 移出后护栏会因它运行失败而红）
 
 #### Scenario: 禁用清单 MUST 记录归位条件
 

@@ -6,9 +6,14 @@
 跟踪）在 CI 里**只有编译覆盖**、**没有运行覆盖** ⇒ example 的**运行时崩溃**与
 **行为退化**只能靠人偶然发现。
 
+⚠️ 另有一类**更严重**的缺口：`examples/riscv-mini/` 注册了 **19 个 Catch2
+测试 target** —— 它们**每次 CI 都在编译**，但 `grep -rn "add_test" examples/`
+= 0 ⇒ `ctest` **从不认它们** ⇒ **零运行覆盖**（实测 2026-10-22）。
+
 本 capability 规定 examples 的**运行护栏契约**：被跟踪的 example MUST 被一条
-自动化路径执行并检查退出码；护栏 MUST 有超时保护；既有失败 MUST 被**显式**
-记录且豁免 MUST **可失效、不静默**。
+自动化路径执行并检查退出码；护栏 MUST 有超时保护；护栏 MUST NOT 因单个
+example 缺失而**中止整轮**（那会让受护集合静默缩面）；实际执行数 MUST 等于
+跟踪数；既有失败 MUST 被**显式**记录且豁免 MUST **可失效、不静默**。
 
 > ℹ️ 本 capability 是 `sample-regression-guard`（samples 侧）的**镜像** ——
 > 两者是同一类缺口的两个实例，故用同一套契约措辞，便于对读。
@@ -50,6 +55,34 @@
 - **THEN** 护栏 MUST 把它记为**失败**
 - **AND** MUST NOT 记为 SKIP —— SKIP 语义会让 example **静默退出**受护集合
   （与 samples 护栏的 C3 同型）
+
+#### Scenario: 缺失二进制 MUST NOT 中止整轮运行
+
+- **WHEN** 某个被跟踪的 example 的二进制不存在
+- **THEN** 护栏 MUST **继续执行**其余被跟踪的 example
+- **AND** MUST NOT 在该点**中止**（中止 ⇒ 后续 example 从不执行 ⇒ 受护集合
+  **静默缩面** ⇒ 比 SKIP 更坏）
+- **AND** MUST 在汇总中给出**失败计数**与**缺失清单**
+
+#### Scenario: 实际执行数 MUST 等于跟踪数
+
+- **WHEN** 护栏跑完一轮
+- **THEN** 实际执行的 example 数 MUST 等于被跟踪的 example 数
+- **AND** 不等时 MUST 判**失败**（对齐 samples 护栏的 C2 数量守恒）
+
+#### Scenario: 被跟踪集合 MUST 有**单一来源**
+
+- **WHEN** reviewer 检查「哪些 example 被跟踪」
+- **THEN** 该集合 MUST 由**一处**定义，且 MUST 同时驱动构建侧的聚合 target
+  与运行侧的护栏
+- **AND** MUST NOT 存在「构建侧有、运行侧无」的新增即漏缺口
+
+#### Scenario: 未被跟踪的程序 MUST 有归属
+
+- **WHEN** `examples/` 下存在 main() 程序或已注册的测试二进制，但它们**不在**
+  被跟踪集合内
+- **THEN** 它们 MUST 被**显式登记**（带理由与归位条件）
+- **AND** MUST NOT 处于「既不被跟踪、也没有归属」的静默状态
 
 ### Requirement: example 的既有失败 MUST 被显式记录，豁免 MUST 可失效
 
