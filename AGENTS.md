@@ -194,6 +194,10 @@ cmake -B build && cmake --build build -j$(nproc)
 # Run all samples (regression guard for samples/ — Linux: `timeout`, macOS: `gtimeout`)
 bash scripts/run_all_samples.sh
 
+# OpenSpec 提案阶段的 delta 自检（4 条：delta 无 change 名 / 无占位符路径 /
+# MODIFIED 标题逐字匹配主 spec / tasks 的 verify 块语法可达）
+bash scripts/verify_openspec_delta.sh
+
 # Run Catch2 tests
 ctest --output-on-failure
 

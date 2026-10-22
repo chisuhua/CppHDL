@@ -251,6 +251,18 @@ jobs:
       shell: bash
       run: scripts/verify_rst_n_wiring.sh
 
+    - name: Verify OpenSpec delta self-check
+      # 4 rules distilled from the four rounds of adversarial review of the
+      # 2026-10-22 changes (samples-regression-guard /
+      # bundle-ecosystem-hardening): a delta must not name its own change
+      # (it is merged verbatim into the main spec), must not carry
+      # placeholder paths, MODIFIED titles must match the main spec
+      # character-for-character (otherwise the CLI silently skips the
+      # merge), and every verify block must be syntactically reachable.
+      # Portable bash + awk + sed (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_openspec_delta.sh
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -599,6 +611,18 @@ jobs:
       # Portable bash + awk (runs on every OS in the matrix).
       shell: bash
       run: scripts/verify_rst_n_wiring.sh
+
+    - name: Verify OpenSpec delta self-check
+      # 4 rules distilled from the four rounds of adversarial review of the
+      # 2026-10-22 changes (samples-regression-guard /
+      # bundle-ecosystem-hardening): a delta must not name its own change
+      # (it is merged verbatim into the main spec), must not carry
+      # placeholder paths, MODIFIED titles must match the main spec
+      # character-for-character (otherwise the CLI silently skips the
+      # merge), and every verify block must be syntactically reachable.
+      # Portable bash + awk + sed (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_openspec_delta.sh
 
     - name: Upload test results
       if: always()

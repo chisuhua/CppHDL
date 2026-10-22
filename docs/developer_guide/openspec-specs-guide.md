@@ -59,6 +59,33 @@ openspec/
 |------------|------|----------------|
 | `chlib-aggregator/` | fix-include-aggregation | 2 |
 
+## 提案阶段的 delta 自检 4 条（2026-10-22 补）
+
+> 这 4 条来自 2026-10-22 两次 change（`samples-regression-guard-2026-10` 与
+> `bundle-ecosystem-hardening-2026-10`）的**四轮对抗式审稿** —— 那四轮审稿
+> **全部**在补同一类错误 ⇒ 值得固化成规则。
+> ⚠️ 配套的自动化护栏：`scripts/verify_openspec_delta.sh`（CI 2 个 job 都跑）。
+
+| # | 规则 | 为什么 | 怎么查 |
+|---|------|--------|--------|
+| **1** | delta 内 **MUST NOT** 写含 **change 名**的具体文件名 | archive 会把 delta **逐字**并入主 spec ⇒ 主 spec 会残留 change 名（仓库既有约定：主 spec 内的 change 名引用必须全部改为指向 capability） | `scripts/verify_openspec_delta.sh`（规则 1） |
+| **2** | delta 内 **MUST NOT** 写**占位符路径**（`<change-name>` / `<file>` 之类） | 占位符在归档后仍是占位符 ⇒ 主 spec 里的路径**不可寻址** ⇒ verifier 无法判 done。若确实需要「一个可寻址的路径」，把它**写进 change 的 tasks**（用 `test -f` 断言），**不要**写进 spec | 同上（规则 2） |
+| **3** | `## MODIFIED Requirements` **MUST 完整重述**该 Requirement（含**全部** Scenario），且**标题与主 spec 逐字一致** | 只写「改动点」⇒ archive 后主 spec 里该条 Requirement 的**其余部分丢失**；标题不一致 ⇒ CLI 匹配不到 ⇒ **静默不合并**（最坏的失败模式：看起来归档成功了，主 spec 却没变） | 同上（规则 3） |
+| **4** | 每个 verify **MUST「按字面执行可达」** | 「按字面执行必红」的 guard 是最常见的自欺 —— 它看起来在守护，实际上永远红（或永远绿）⇒ 护栏形同虚设。**判据**：把 verify 逐字复制到 shell 里跑，期望它**绿**；再把被守护的代码改坏，期望它**红** | 同上（规则 4：`bash -n` + 人工核对可达性） |
+
+### 补充：`## Purpose` 段 **MUST 在 archive 之后手工写入**
+
+⚠️ **实测**（CLI 1.4.1）：archive 对**新建** capability **一律生成**骨架
+
+```
+## Purpose
+TBD - created by archiving change <change-name>. Update Purpose after archive.
+```
+
+⇒ delta 里的 `## Purpose` **不会**被合并 ⇒ MUST 在 archive **之后**用 delta 的
+Purpose **替换**该骨架行（仓库先例：`axi4-full-slave-burst` / `sample-regression-guard`）。
+⚠️ 骨架行里带着 **change 名** ⇒ 不替换就违反规则 1。
+
 ## 验证命令
 
 ```bash
@@ -75,6 +102,10 @@ openspec validate --specs --strict
 
 # 显示具体 spec 内容
 openspec show <capability-name>
+
+# ⚠️ 提案阶段的 delta 自检（4 条）—— MUST 在提 PR 前跑
+bash scripts/verify_openspec_delta.sh            # 检查全部 active change
+bash scripts/verify_openspec_delta.sh <change>   # 只检查一个
 ```
 
 ## 未来规则
