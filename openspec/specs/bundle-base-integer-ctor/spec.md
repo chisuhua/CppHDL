@@ -4,13 +4,30 @@
 
 `bundle_base<Derived>` 是所有 Bundle 类型的基类。本 capability 规范通过整数字面量 SFINAE 构造函数，确保 `bundle_base<Derived>(0)` 等用户合法代码不会被 null pointer constant 标准转换劫持到 `bundle_base(lnodeimpl *node)` 路径产生 `node_impl_ = nullptr` 节点，从而消除 muximpl SEGV 等下游级联崩溃。
 
-通过 `CH_BUNDLE_FIELDS_T` 宏（`bundle_meta.h:155`）的 `using bundle_base<Self>::bundle_base;`，本 capability 自动覆盖全部 22 个 bundle 派生类（`ch_stream<T>`、`ch_flow<T>`、`fifo_bundle<T>`、`interrupt_bundle`、`config_bundle<...>`、所有 AXI/axi_lite 通道 bundle、`ch_fragment`、`bundle_slice_view`、`bundle_concat`）——本 capability 是修复漏洞的最后一扇门。
+通过 `CH_BUNDLE_FIELDS_T` 宏（`bundle_meta.h:155`）的 `using bundle_base<Self>::bundle_base;`，本 capability 自动覆盖全部 20 个 bundle 派生类（`ch_stream<T>`、`ch_flow<T>`、`fifo_bundle<T>`、`interrupt_bundle`、`config_bundle<...>`、所有 AXI/axi_lite 通道 bundle、`ch_fragment`）——本 capability 是修复漏洞的最后一扇门。
+
+> ℹ️ 2026-10-22 订正：派生类清单由 **22** 减为 **20** —— 「拼接 / 切片」设施
+> （连同它们的公开工厂）已被移除（见 `docs/adr/ADR-043-bundle-operations-removal.md`）。
+> ⚠️ **本段是手工订正的**：OpenSpec 的 delta **不合并** `## Purpose` ⇒ 归档后
+> 必须人工改（仓库先例：`axi4-full-slave-burst` / `sample-regression-guard`）。
 ## Requirements
 ### Requirement: bundle_base 整数字面量构造必须产生有效节点
 
 `bundle_base<Derived>` 是所有 Bundle 类型的基类。当用户用整数字面量（如 `0`、`42`）构造 `bundle_base<Derived>` 时，**MUST** 产生一个 `node_impl_` 非空的 IR 节点（即字面量节点），而**MUST NOT** 通过 null pointer constant 标准转换匹配 `bundle_base(lnodeimpl *node)` 产生 `node_impl_ = nullptr` 的空节点。
 
-通过 `CH_BUNDLE_FIELDS_T` 宏（`bundle_meta.h:155`）的 `using bundle_base<Self>::bundle_base;`，此 ctor 被所有 22 个 bundle 派生类（`ch_stream<T>`、`ch_flow<T>`、`fifo_bundle<T>`、`interrupt_bundle`、`config_bundle<...>`、所有 AXI/axi_lite 通道 bundle、`ch_fragment`、`bundle_slice_view`、`bundle_concat`）继承——本 Requirement 隐式覆盖全部派生类。
+通过 `CH_BUNDLE_FIELDS_T` 宏（`bundle_meta.h:155`）的 `using bundle_base<Self>::bundle_base;`，此 ctor 被所有 20 个 bundle 派生类（`ch_stream<T>`、`ch_flow<T>`、`fifo_bundle<T>`、`interrupt_bundle`、`config_bundle<...>`、所有 AXI/axi_lite 通道 bundle、`ch_fragment`）继承——本 Requirement 隐式覆盖全部派生类。
+
+> ℹ️ 派生类清单由 22 个减为 20 个：`bundle_slice_view` 与 `bundle_concat`
+> （连同返回它们的公开工厂 `bundle_slice()` / `bundle_cat()`）已被移除 ——
+> 二者在「字段一等节点」模型下语义已失效（字段与原 bundle 断连 ⇒ 静默失效），
+> 且 `bundle_slice_view` 的 `Start` / `Count` 从未被使用（它**根本不做切片**）。
+> 移除走 ADR 流程（公开 API 变更）。
+>
+> ℹ️ **计数口径**（实测 `grep -rnE "public[^;]*bundle_base<" --include=*.h include/ examples/ | wc -l`
+> ⇒ 22）：移除前 = `include/` 的 20 个 + `examples/riscv-mini/src/` 的 2 个
+> （`BranchPredictorBundle` / `HazardUnitBundle`）；移除后 = **20 个**
+> （`include/` 18 个 + `examples/` 2 个）。本 Requirement 上文的枚举按
+> `include/` 的类逐个列出（AXI/axi_lite 通道 bundle 是一组）。
 
 #### Scenario: bundle_base<Derived>(0) 不再被空指针转换劫持
 - **WHEN** 用户在 active context 中执行 `bundle_base<SomeType> b(0);`
