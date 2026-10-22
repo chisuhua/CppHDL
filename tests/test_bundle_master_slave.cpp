@@ -83,6 +83,15 @@ public:
         // `full` / `empty` 是**写**字段（设计驱动它们）
         io.empty <<= (rd_ptr == wr_ptr);
         io.full <<= ((wr_ptr + 1_b) == rd_ptr);
+
+        // ⚠️ **读数据通路**（ADR-044）：`rdata` 是**独立**的读数据字段
+        //    （master IN / slave OUT）。
+        //    ⚠️ 用 `aread`（0-cycle 组合读）⇒ 与生成的 Verilog
+        //    `assign dout = mem[rd_ptr];` 完全一致（见
+        //    `sim-mem-read-timing-align-2026-10`）。
+        //    ⚠️ FIFO 协议：`dout` 在 pop 沿**之后**指向**下一个**队首 ⇒
+        //    消费者 MUST 在 pop 沿**之前**采样（ADR-044 裁决 5）。
+        io.rdata <<= mem.aread(rd_a);
     }
 };
 
@@ -175,13 +184,17 @@ public:
     void describe() override {}
 };
 
-// `fifo_bundle` 的位布局：data(8) push(1) full(1) pop(1) empty(1)
+// `fifo_bundle` 的位布局：data(8) push(1) full(1) pop(1) empty(1) rdata(8)
 // → push 在 bit 8、full 在 bit 9、pop 在 bit 10、empty 在 bit 11
+// ⚠️ `rdata` **追加在末尾**（ADR-044 裁决 2）⇒ 既有 5 个偏移**完全不变**。
 constexpr unsigned kFifoDataBits = 8;
 constexpr unsigned kFifoPushBit = 8;
 constexpr unsigned kFifoFullBit = 9;
 constexpr unsigned kFifoPopBit = 10;
 constexpr unsigned kFifoEmptyBit = 11;
+constexpr unsigned kFifoRdataBit = 12;       // rdata 起始 bit
+constexpr unsigned kFifoRdataBits = 8;       // rdata 宽度
+constexpr uint64_t kFifoRdataMask = (1ULL << kFifoRdataBits) - 1;
 
 uint64_t field_bit(uint64_t packed, unsigned bit) {
     return (packed >> bit) & 0x1ULL;
@@ -224,6 +237,51 @@ TEST_CASE("bundle master/slave: TB 驱动的 push 到达 slave 侧",
     sim.tick();
     packed = sim.get_bundle_value(dev.instance().io_bundle);
     REQUIRE(field_bit(packed, kFifoEmptyBit) == 1);
+}
+
+TEST_CASE("bundle master/slave: **读数据通路** —— 推入的元素真的被读回",
+          "[bundle][master-slave][read-path]") {
+    // ⚠️ ADR-044 的核心断言：**读数据必须真的到达 master 侧**。
+    //    ⚠️ 这条断言在 `rdata` 存在**之前**是**无法表达**的（`data` 是
+    //    写数据、master 侧是它的驱动方）⇒ 「只读字段恒为 0」这类缺陷
+    //    根本测不出来（这正是本 change 要治的病）。
+    ch_device<BundleFifoTop> dev;
+    Simulator sim(dev.context());
+
+    constexpr uint64_t kPushBit = 1ULL << kFifoPushBit;
+    constexpr uint64_t kPopBit = 1ULL << kFifoPopBit;
+
+    // 初始：空 ⇒ `rdata` 是 don't-care（ADR-044 裁决 4）⇒ **不**断言它的值
+    sim.set_bundle_value(dev.instance().io_bundle, 0);
+    sim.tick();
+    uint64_t packed = sim.get_bundle_value(dev.instance().io_bundle);
+    REQUIRE(field_bit(packed, kFifoEmptyBit) == 1);
+
+    // ---- 推入第 1 个元素 0x5A ----
+    sim.set_bundle_value(dev.instance().io_bundle, kPushBit | 0x5A);
+    sim.tick();
+    packed = sim.get_bundle_value(dev.instance().io_bundle);
+
+    // 非空 ⇒ `rdata` 有效 ⇒ MUST 是**刚推入的那个值**
+    REQUIRE(field_bit(packed, kFifoEmptyBit) == 0);
+    REQUIRE(((packed >> kFifoRdataBit) & kFifoRdataMask) == 0x5A);
+
+    // ---- 再推入第 2 个元素 0x3C ----
+    // ⚠️ 0-cycle `aread` ⇒ `dout` 跟随 `rd_ptr` ⇒ 此时 `rd_ptr` 仍指向
+    //    **队首**（第 1 个元素）⇒ `rdata` 仍是 0x5A。
+    sim.set_bundle_value(dev.instance().io_bundle, kPushBit | 0x3C);
+    sim.tick();
+    packed = sim.get_bundle_value(dev.instance().io_bundle);
+    REQUIRE(((packed >> kFifoRdataBit) & kFifoRdataMask) == 0x5A);
+
+    // ---- 弹出第 1 个元素 ----
+    // ⚠️ ADR-044 裁决 5：pop 沿**之后** `dout` 指向**下一个**队首 ⇒
+    //    弹出 0x5A 之后，`rdata` MUST 变成 **0x3C**（下一个队首）。
+    sim.set_bundle_value(dev.instance().io_bundle, kPopBit);
+    sim.tick();
+    packed = sim.get_bundle_value(dev.instance().io_bundle);
+    REQUIRE(((packed >> kFifoRdataBit) & kFifoRdataMask) == 0x3C);
+    REQUIRE(field_bit(packed, kFifoEmptyBit) == 0);
 }
 
 TEST_CASE("bundle master/slave: slave 产生的 empty 到达 master 侧",
@@ -295,6 +353,8 @@ TEST_CASE("bundle: master/slave 的字段方向指认与协议语义一致",
     // master = 响应方读状态：full / empty 由 slave 驱动
     REQUIRE(std::holds_alternative<input_direction>(master.full.direction()));
     REQUIRE(std::holds_alternative<input_direction>(master.empty.direction()));
+    // ⚠️ ADR-044：`rdata`（读数据）是 master 的**输入**（由 slave 驱动）
+    REQUIRE(std::holds_alternative<input_direction>(master.rdata.direction()));
 
     // slave 侧 MUST 与 master 侧**互为镜像**
     REQUIRE(std::holds_alternative<input_direction>(slave.data.direction()));
@@ -302,6 +362,8 @@ TEST_CASE("bundle: master/slave 的字段方向指认与协议语义一致",
     REQUIRE(std::holds_alternative<input_direction>(slave.pop.direction()));
     REQUIRE(std::holds_alternative<output_direction>(slave.full.direction()));
     REQUIRE(std::holds_alternative<output_direction>(slave.empty.direction()));
+    // ⚠️ ADR-044：`rdata`（读数据）是 slave 的**输出**（与 master 侧镜像）
+    REQUIRE(std::holds_alternative<output_direction>(slave.rdata.direction()));
 }
 
 TEST_CASE("bundle: 字段节点身份在方向切换前后 MUST 不变",

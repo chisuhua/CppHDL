@@ -1,6 +1,6 @@
 # Change: fifo-read-data-path-2026-10 — `fifo_bundle` 的**读数据通路**
 
-- Status: **草案（尚未实施）**
+- Status: **已实施（2026-10-22）**
 - 立项自 2026-10-22 的 `bundle-ecosystem-hardening-2026-10`（其 L10，用户裁决**不在该 change 处理** ⇒ 独立立项）
 - 关联 capability：`bundle-master-slave-io`（**必然**需要 MODIFIED —— 见 D3；
   ⚠️ 主 spec 已把 `fifo_bundle` 的 5 字段与方向写死）
@@ -141,16 +141,25 @@ ADR-042 / ADR-043；**ADR-044 编号可用** —— `docs/adr/` 现存最大编�
 | `openspec/specs/bundle-master-slave-io/spec.md` | MODIFIED（**必然**，见 D3）—— Requirement 标题与 Scenario 名 MUST 逐字匹配主 spec |
 | 计数 | ⚠️ **CTEST_TOTAL 按新增 TEST_CASE 数同步**（原提案写「可能 +1」—— 行为级 + 时序级**至少 +2**；若新建文件还要注册 target）⇒ MUST 同步根 `AGENTS.md` 的 `CTEST_TOTAL:` 行 + NOTES 计数 + `scripts/verify_test_counts.sh` |
 
-> ⚠️ **2026-10-22 实测补充的 4 处「硬编码断言」**（加字段后**必然**要改，
+> ⚠️ **2026-10-22 实测补充的「硬编码断言」**（加字段后**必然**要改，
 > 否则**当场红**；其中 1 处是 `STATIC_REQUIRE` ⇒ **编译期**就断）：
 >
 > | 文件 | 断言 | 加 `rdata` 后 |
 > |---|---|---|
 > | `tests/test_bundle_bitstream.cpp:85` | `REQUIRE(get_bundle_width<fifo_bundle<ch_uint<4>>>() == 8)` | → **12** |
 > | `tests/test_bundle_bitstream.cpp:99` | 同上 | → **12** |
+> | `tests/test_bundle_bitstream.cpp:93` | `REQUIRE(std::tuple_size_v<decltype(fields)> == 5)` | → **6** |
+> | `tests/test_bundle_bitstream.cpp:109` | 同上 | → **6** |
 > | `tests/test_bundle_advanced_features.cpp:75` | `STATIC_REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<32>>> == 5)` | → **6**（**编译期**断） |
 > | `tests/test_bundle_ecosystem.cpp:487` | `REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<8>>> == 5)` | → **6** |
 >
+> ⚠️ **实测更正**：原提案只列了 **4 处** ⇒ 实施时 `test_bundle_bitstream` 的
+> **2 处 `tuple_size` 断言**（`:93` / `:109`）漏网 ⇒ `ctest` 报
+> `test_bundle_bitstream` **失败**（`6 == 5`）⇒ 才被补上。
+> ⇒ **教训**：字段数假设**不止**出现在 `bundle_field_count_v` / `get_bundle_width`
+> 里，**`tuple_size_v<decltype(__bundle_fields())>`** 也是同一类硬编码
+> ⇒ 清点 MUST 覆盖这三种写法。
+
 > ⇒ **更好的做法**：这 4 处断言 SHOULD 改成**不依赖具体字段数**的写法
 > （例如断言「字段集合」而非「个数」）⇒ 否则**每加一个字段都要回来改一遍**。
 > ⚠️ 但那是**独立的重构**（4 处断言的语义改写）⇒ MUST NOT 与本 change 混做

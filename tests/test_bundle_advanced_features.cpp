@@ -72,7 +72,7 @@ TEST_CASE("BundleAdvanced - TypeTraits", "[bundle][traits]") {
 
     // 测试字段计数
     STATIC_REQUIRE(bundle_field_count_v<ch_stream<ch_uint<8>>> == 3);
-    STATIC_REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<32>>> == 5);
+    STATIC_REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<32>>> == 6);
 }
 
 TEST_CASE("BundleAdvanced - NamingIntegration", "[bundle][naming]") {

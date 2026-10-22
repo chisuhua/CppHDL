@@ -83,20 +83,20 @@ TEST_CASE("BundleBitstream - SerializationDeserialization",
 
     // 测试Bundle宽度计算
     REQUIRE(get_bundle_width<fifo_bundle<ch_uint<4>>>() ==
-            8); // data(4) + push(1) + full(1) + pop(1) + empty(1) = 8
+            12); // data(4) + push(1) + full(1) + pop(1) + empty(1) + rdata(4) = 12
 
     // 测试序列化功能存在（编译期检查）
     REQUIRE(true);
 
     // 测试Bundle字段访问
     auto fields = bundle.__bundle_fields();
-    REQUIRE(std::tuple_size_v<decltype(fields)> == 5);
+    REQUIRE(std::tuple_size_v<decltype(fields)> == 6);   // 5 + rdata（ADR-044）
 }
 
 TEST_CASE("BundleBitstream - SimulatorBundleSupport",
           "[bundle][bitstream][simulator]") {
     // 测试真实的Bundle宽度
-    REQUIRE(get_bundle_width<fifo_bundle<ch_uint<4>>>() == 8);
+    REQUIRE(get_bundle_width<fifo_bundle<ch_uint<4>>>() == 12);
 
     // 验证实际的Bundle类型
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
@@ -106,5 +106,5 @@ TEST_CASE("BundleBitstream - SimulatorBundleSupport",
     auto fields = bundle.__bundle_fields();
 
     // 验证字段数量
-    REQUIRE(std::tuple_size_v<decltype(fields)> == 5);
+    REQUIRE(std::tuple_size_v<decltype(fields)> == 6);   // 5 + rdata（ADR-044）
 }

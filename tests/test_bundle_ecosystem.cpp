@@ -484,5 +484,5 @@ TEST_CASE("bundle: 公开派生类清单 MUST NOT 含已移除的拼接/切片�
 
     // 被移除的两个类型**不在**清单里 ⇒ 全仓清单 22 → 20
     // （18 库内 + 2 examples/riscv-mini）
-    REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<8>>> == 5);
+    REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<8>>> == 6);
 }
