@@ -1,19 +1,36 @@
 // include/core/bundle_utils.h
 #pragma once
 
+#include "bundle_base.h"  // 需要 bundle_base（detach_field_nodes）
 #include "bundle_serialization.h"  // Include the main serialization header
 
 namespace ch::core {
 
 // Master/Slave 工厂函数
-template<typename BundleT>
-BundleT master(BundleT bundle) {
+//
+// ⚠️ 契约（OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D4）：
+//   工厂 MUST 产出**字段节点独立**的 bundle —— 每个字段节点 MUST NOT 与源
+//   bundle 的对应字段共享节点。
+//   拷贝构造会**共享**字段节点 ⇒ 直接 `as_master()` 会让副本与原件共享
+//   字段节点 ⇒ MUST 先 `detach_field_nodes()`。
+//   ⚠️ **总线节点**按拷贝构造语义**仍然共享**（既有测试
+//   `tests/test_bundle_node_management.cpp` 钉住该语义）⇒ 本契约**只**约束
+//   **字段**节点，MUST NOT 要求总线节点独立。
+//   ⚠️ 现状下 12 个调用点全部传**临时对象**（源字段无节点）⇒ 解绑对它们是
+//   no-op ⇒ **零行为变化**；本契约是**面向未来**的（调用方可能传入已设角色
+//   的 bundle）。
+template <typename BundleT> BundleT master(BundleT bundle) {
+    static_assert(std::is_base_of_v<bundle_base<BundleT>, BundleT>,
+                  "master() only works with bundle_base-derived types");
+    bundle.detach_field_nodes();
     bundle.as_master();
     return bundle;
 }
 
-template<typename BundleT>
-BundleT slave(BundleT bundle) {
+template <typename BundleT> BundleT slave(BundleT bundle) {
+    static_assert(std::is_base_of_v<bundle_base<BundleT>, BundleT>,
+                  "slave() only works with bundle_base-derived types");
+    bundle.detach_field_nodes();
     bundle.as_slave();
     return bundle;
 }

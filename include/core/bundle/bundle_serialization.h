@@ -62,9 +62,23 @@ template <typename BundleT> auto serialize(const BundleT &bundle) {
 }
 
 // 从位向量反序列化到 Bundle 的字段
+//
+// ⚠️ MUST NOT 把字段**重绑定**成源位串的 `bit_select` / `bits<>` 切片 ——
+//    字段 MUST 拥有**自己的**节点（「字段一等节点」原则，ADR-042）。
+//    切片只作为**驱动源**（数据流边），MUST NOT 成为字段的节点本身。
+//    理由：被重绑定成切片的字段，其「节点身份」= 源位串的某个位区间 ⇒
+//    ① 字段不再是独立可寻址的一等节点；② 与 bundle 的其余连接语义不一致。
+// （OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D2 / L3）
 template <typename BundleT, unsigned W>
 void deserialize_bits_to_fields(const ch_uint<W> &src_bits, BundleT &bundle) {
     if constexpr (is_bundle_v<BundleT>) {
+        static_assert(requires { bundle.create_field_nodes(); },
+                      "deserialize_bits_to_fields() requires a "
+                      "bundle_base-derived bundle type");
+
+        // 先为所有叶子字段建立**自己的**节点（幂等：已有节点不动）
+        bundle.create_field_nodes();
+
         unsigned offset = 0;
         constexpr auto layout = get_bundle_layout<BundleT>();
 
@@ -76,24 +90,23 @@ void deserialize_bits_to_fields(const ch_uint<W> &src_bits, BundleT &bundle) {
                          std::remove_reference_t<decltype(field_ref)>;
 
                      if constexpr (is_bundle_v<FieldType>) {
-                         // 对于嵌套的 Bundle 类型
+                         // 嵌套 Bundle：**就地**反序列化（其字段同样是一等节点）
                          constexpr unsigned field_width =
                              get_bundle_width<FieldType>();
 
-                         // 提取对应宽度的位并反序列化嵌套 Bundle
                          auto field_bits = bits<field_width>(src_bits, offset);
-                         field_ref = deserialize<FieldType>(field_bits);
+                         deserialize_bits_to_fields(field_bits, field_ref);
                          offset += field_width;
                      } else if constexpr (std::is_same_v<FieldType, ch_bool>) {
-                         // ch_bool 类型：使用 bit_select
+                         // ch_bool 类型：使用 bit_select 作为**驱动源**
                          auto field_bit = bit_select(src_bits, offset);
-                         field_ref = ch_bool(field_bit.impl());
+                         field_ref <<= field_bit;
                          offset++;
                      } else {
-                         // ch_uint 等其他类型：使用 bits 提取
+                         // ch_uint 等其他类型：使用 bits 提取作为**驱动源**
                          constexpr unsigned field_width = ch_width_v<FieldType>;
                          auto field_bits = bits<field_width>(src_bits, offset);
-                         field_ref = FieldType(field_bits);
+                         field_ref <<= field_bits;
                          offset += field_width;
                      }
                  }()),

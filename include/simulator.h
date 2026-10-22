@@ -208,6 +208,14 @@ public:
     }
 
     // 为Bundle类型添加特殊支持
+    //
+    // ⚠️ **适用范围**：打包式 bundle API（`set_bundle_value()` /
+    // `get_bundle_value()`）**只适用于未连接的 bundle**。
+    //    已连接字段的值由**设计每拍求值**产生 ⇒ TB 的写入会被**下一拍覆写**
+    //    ⇒ MUST NOT 把它当作「驱动已连接设计逻辑」的手段。
+    //    （OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D9：
+    //      ADR-042 Decision 5 之后 TB 侧改用普通端口，打包式 API 只对
+    //      未连接 bundle 有用 ⇒ 保留（调试用途）+ 写明适用范围。）
     template <typename BundleT>
         requires std::is_base_of_v<ch::core::bundle_base<BundleT>, BundleT>
     void set_bundle_value(BundleT &bundle, uint64_t value) {

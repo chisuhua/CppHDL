@@ -57,10 +57,14 @@ TIMEOUT_SECONDS="${SAMPLE_TIMEOUT_SECONDS:-60}"
 # The invalidation condition MUST be decidable: whoever fixes the root cause
 # MUST remove the line here (and the guard will then fail with a STALE
 # exemption if the line is left behind after the sample goes green).
+#
+# ℹ️ 2026-10-22: the last entry (`nested_bundle_demo`) was removed when
+#    `bundle-ecosystem-hardening-2026-10` fixed the root cause (the base
+#    constructor no longer calls a virtual function on a not-yet-constructed
+#    nested bundle member). The guard reported it as a STALE exemption
+#    first — which is exactly that mechanism working as designed.
 # ---------------------------------------------------------------------------
-KNOWN_FAILING=(
-  $'nested_bundle_demo\tbundle_base(const std::string&) calls the virtual set_name_prefix() from the BASE constructor => a virtual call on a not-yet-constructed nested bundle member (UB). Root cause lives in the bundle framework.\tbundle-ecosystem-hardening-2026-10\tinvalidate when bundle-ecosystem-hardening-2026-10 is archived'
-)
+KNOWN_FAILING=()
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

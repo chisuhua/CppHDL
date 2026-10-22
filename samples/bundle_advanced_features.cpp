@@ -5,7 +5,6 @@
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
-#include "core/bundle/bundle_operations.h"
 #include "core/bundle/bundle_protocol.h"
 #include "core/bundle/bundle_traits.h"
 #include "core/bundle/bundle_utils.h"

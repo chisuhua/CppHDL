@@ -27,16 +27,45 @@ template <typename Derived> class bundle_base : public logic_buffer<Derived> {
 protected:
     bundle_role role_ = bundle_role::unknown; // 默认为内部角色
 
+    /// 本 bundle 的**节点名前缀**。
+    ///
+    /// ⚠️ 它**只**在「字段节点建立」的那一刻被使用（见
+    ///    `create_field_proxy_nodes()`）⇒ **命名与建节点同刻完成** ⇒
+    ///    - **幂等**：字段节点只创建一次 ⇒ 名字只拼一次（不会重复拼接）；
+    ///    - **无空窗**：不会出现「节点已建但名字未设」的中间态。
+    ///
+    /// ⚠️ 构造期**只存** prefix，MUST NOT 在此触碰派生类成员
+    ///    （见下方 ctor 的说明）。
+    std::string prefix_;
+
 public:
+    /// 供外部（工厂函数、嵌套 bundle 的**非虚** prefix 下推）定位基类子对象。
+    using bundle_base_type = bundle_base<Derived>;
+
     // (1) 默认构造：创建未驱动的字面量节点并通过assign操作连接
     bundle_base() : logic_buffer<Derived>(){};
     bundle_base(const std::string &prefix) : logic_buffer<Derived>() {
-        this->set_name_prefix(prefix);
+        // ⚠️ MUST **只存 prefix**：基类构造期，派生类成员**尚未构造** ⇒ 在此
+        //    调用虚函数 `set_name_prefix()` 去触碰派生类成员（尤其是**嵌套
+        //    bundle 字段**）是**未定义行为**。
+        //    实测：`samples/nested_bundle_demo` segfault（gdb 精确帧
+        //    `bundle_traits.h:135` ← `bundle_base.h:34`）—— `set_field_name()`
+        //    对 bundle 类型字段调 `bundle.set_name_prefix()` ⇒ 对**尚未构造**的
+        //    嵌套 bundle 成员派发虚调用。
+        //    ⇒ 命名改在「字段节点建立」时**内生**完成（见
+        //    `create_field_proxy_nodes()`）。
+        prefix_ = prefix;
     }
 
     // (2) 拷贝构造：共享节点（硬件连接语义）
+    //
+    // ⚠️ MUST 复制 **role_**：否则副本的「角色」与它的字段方向**不一致**
+    //    （字段方向随成员一起被拷贝，角色却退回 unknown）⇒
+    //    `master()` / `slave()` 工厂返回的副本会声称自己是 unknown
+    //    （该缺陷由 `tests/test_bundle_ecosystem.cpp` 的工厂用例钉住）。
     bundle_base(const bundle_base &other)
-        : logic_buffer<Derived>(other.impl()) {
+        : logic_buffer<Derived>(other.impl()), role_(other.role_),
+          prefix_(other.prefix_) {
         // 不再自动同步成员
     }
 
@@ -79,9 +108,9 @@ public:
     //
     // Through `using bundle_base<Self>::bundle_base;` in the
     // CH_BUNDLE_FIELDS_T macro (bundle_meta.h:155), this ctor is
-    // inherited by all 22 bundle derived classes (ch_stream, ch_flow,
+    // inherited by all 20 bundle derived classes (ch_stream, ch_flow,
     // all AXI/axi_lite channels, fifo_bundle, interrupt_bundle,
-    // config_bundle, ch_fragment, bundle_slice_view, bundle_concat).
+    // config_bundle, ch_fragment).
     //
     // `bool` is excluded (mirror P0 ch_bool pattern) so that
     // `bundle_base<Derived>(false)` doesn't become ambiguous.
@@ -172,7 +201,16 @@ public:
         }
     }
 
-    // 赋值操作符 - 保持不变
+    // 赋值操作符 —— **软件拷贝 / 节点重绑定**语义，**不是**连接手段。
+    //
+    // ⚠️ 与 `operator<<=` 的区别（OpenSpec change
+    //    `bundle-ecosystem-hardening-2026-10` 的 D5）：
+    //   - `operator<<=` 建立**数据流边**（源节点**仍然是**源节点，目标节点
+    //     拿到一条 `src` 边）；
+    //   - 本操作符只把目标**指向**源的节点 ⇒ 目标**原有的驱动会被孤儿化**
+    //     （那个节点从设计图里消失）⇒ **连接 MUST 用 `operator<<=` /
+    //     `connect()`**。
+    //   本操作符保留为**显式的软件拷贝**语义（ADR-042 的遗留债务 #1）。
     Derived &operator=(const Derived &other) {
         if (this != &other) {
             this->node_impl_ = other.impl();
@@ -184,11 +222,35 @@ public:
     // 使用 bundle_serialization.h 中的 deserialize 函数
 
     // 自动生成 flip()
+    //
+    // ⚠️ 语义（OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D3）：
+    //   方向 MUST **取反**（master→slave、slave→master），
+    //   MUST NOT 硬编码 `as_slave()`；
+    //   **未设角色**（`role_ == unknown`）MUST 按 **unknown→slave** 处理。
+    //   理由：现存 8 个调用点里 **6 个**翻转的是从未设角色的 bundle、
+    //   **2 个**翻转的是已设 `master` 的 bundle（后者 master→slave 本就与
+    //   现状一致）⇒ unknown→slave 让这 8 处**全部保持零行为变化**。
+    //   返回的副本 MUST 是**未连接**的（调用方负责连接）。
     std::unique_ptr<Derived> flip() const {
         auto flipped = std::make_unique<Derived>();
-        // 在flip时自动设置为slave方向
-        if constexpr (requires { flipped->as_slave(); }) {
-            flipped->as_slave();
+        switch (role_) {
+        case bundle_role::master:
+            if constexpr (requires { flipped->as_slave(); }) {
+                flipped->as_slave();
+            }
+            break;
+        case bundle_role::slave:
+            if constexpr (requires { flipped->as_master(); }) {
+                flipped->as_master();
+            }
+            break;
+        case bundle_role::unknown:
+        default:
+            // unknown → slave
+            if constexpr (requires { flipped->as_slave(); }) {
+                flipped->as_slave();
+            }
+            break;
         }
         return flipped;
     }
@@ -206,12 +268,70 @@ public:
     }
 
     // 命名支持
+    //
+    // ⚠️ 语义（OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D1）：
+    //   - 它**设置 prefix**，MUST NOT 改名**已建立**的字段节点
+    //     （节点身份 MUST 稳定 —— 改名会孤儿化已建立的数据流边）；
+    //   - 它**只影响此后**新建的字段节点；
+    //   - 嵌套 bundle 的 prefix MUST 通过**非虚**通道下推
+    //     （见 `push_prefix_to_nested_fields()`）。
     virtual void set_name_prefix(const std::string &prefix) {
+        prefix_ = prefix;
+        push_prefix_to_nested_fields();
+    }
+
+    /// **非虚**的 prefix 设置通道 —— 供「嵌套 bundle 的 prefix 下推」使用。
+    ///
+    /// ⚠️ MUST 走**非虚**通道：派生类可以 override `set_name_prefix()` 且
+    ///    未必下推 prefix ⇒ 若下推走虚通道，「嵌套 bundle 拿到什么名字」将
+    ///    取决于派生类 override 是否恰好调用了基类实现 ⇒ **语义不统一**。
+    ///    （仓库先例：历史上有一个「把两个 bundle 拼起来」的派生类型就
+    ///    override 了它且**不下推** ⇒ 正是本裁决要消除的那类不统一。）
+    void set_prefix_non_virtual(const std::string &prefix) {
+        prefix_ = prefix;
+    }
+
+    /// 为所有叶子字段建立**自己的**节点（值代理）—— `create_field_proxy_nodes()`
+    /// 的**公开入口**。
+    ///
+    /// 用途：「从外部数据构造 bundle」的路径（如
+    /// `deserialize_bits_to_fields()`）也需要得到「字段一等节点」，
+    /// 而不是把字段重绑定成位串的切片。
+    ///
+    /// ⚠️ **幂等**：字段已有节点时 MUST NOT 重建（节点身份 MUST 稳定）。
+    void create_field_nodes() { create_field_proxy_nodes(); }
+
+    /// 把所有叶子字段的节点**解绑**（置空），使随后的 `as_master()` /
+    /// `as_slave()` 为它们建立**新的**节点。
+    ///
+    /// 用途：`master()` / `slave()` 工厂 MUST 产出**字段节点独立**的 bundle
+    /// —— 拷贝构造会**共享**字段节点 ⇒ 直接 `as_master()` 会让副本与原件
+    /// 共享字段节点（OpenSpec change `bundle-ecosystem-hardening-2026-10`
+    /// 的 D4）。
+    ///
+    /// ⚠️ **总线节点不受影响**（拷贝构造语义保持 —— 既有测试钉住该语义）。
+    void detach_field_nodes() {
+        // ⚠️ 用 `__bundle_fields()` 而不是 `get_bundle_layout()` ——
+        //    后者会计算**字段宽度** ⇒ 对「payload 不是硬件类型」的 bundle
+        //    会触发 `ch_width_impl` 的编译期硬错误（见
+        //    `push_prefix_to_nested_fields()` 的同类说明）。
         const auto &fields = derived()->__bundle_fields();
         std::apply(
-            [&](auto &&...f) {
-                ((set_field_name(derived()->*(f.ptr),
-                                 prefix + "." + std::string(f.name))),
+            [&](auto &&...field_info) {
+                (([&]() {
+                     auto &field_ref = derived()->*(field_info.ptr);
+                     using FieldType = std::decay_t<decltype(field_ref)>;
+                     if constexpr (is_bundle_v<FieldType>) {
+                         static_cast<typename FieldType::bundle_base_type &>(
+                             field_ref)
+                             .detach_field_nodes();
+                     } else {
+                         // ⚠️ 用显式 `lnodeimpl*` 以避开 `ch_bool(bool)` 与
+                         //    `ch_bool(lnodeimpl*)` 对 `nullptr` 的歧义。
+                         field_ref =
+                             FieldType(static_cast<lnodeimpl *>(nullptr));
+                     }
+                 }()),
                  ...);
             },
             fields);
@@ -255,14 +375,12 @@ protected:
     }
 
     // 更新字段命名辅助函数
-    template <typename T>
-    void set_field_name(T &field, const std::string &name) {
-        if constexpr (bundle_field_traits<T>::is_bundle) {
-            bundle_field_traits<T>::set_name(field, name);
-        } else if constexpr (requires { field.set_name(name); }) {
-            field.set_name(name);
-        }
-    }
+    //
+    // ⚠️ 已移除：命名 MUST **内生于「字段节点建立」**（见
+    //    `create_field_proxy_nodes()`）⇒ 不再需要「事后给字段改名」这条路径
+    //    （它对普通信号字段本就是 no-op —— `ch_uint` / `ch_bool` 没有
+    //    `set_name`；而对 bundle 字段它会派发虚调用到尚未构造的成员 ⇒ UB）。
+    // （OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D1 / L11）
 
     // 字段方向设置 - 支持任意数量字段 (C++20)
     template <typename... Fields> void make_output(Fields &...fields) {
@@ -285,26 +403,74 @@ protected:
     }
 
 private:
+    // 创建总线节点（若尚未存在）。
+    //
+    // ⚠️ 该总线节点**不再**是字段的来源 —— 字段现在是**一等节点**
+    // （见 `create_field_proxy_nodes()`）。它保留下来是为了
+    // ① `bundle_base::impl()` 始终非空（既有测试断言这一点）；
+    // ② 打包 / 序列化路径仍需要一个「整体」节点；
+    // ③ 字段节点需要借它的 **context** 来创建。
+    void ensure_bus_node() {
+        if (this->node_impl_) {
+            return;
+        }
+        unsigned W = get_bundle_width<Derived>();
+        const std::string &name = "bundle_lit";
+        auto lit = make_literal(0, W);
+        this->node_impl_ = node_builder::instance().build_literal(lit, name);
+    }
+
     void set_role(bundle_role new_role) {
         // 允许设置或改变 role
         role_ = new_role;
 
         // 创建总线节点（若尚未存在）
-        //
-        // ⚠️ 该总线节点**不再**是字段的来源 —— 字段现在是**一等节点**
-        // （见 `create_field_proxy_nodes()`）。它保留下来是为了
-        // ① `bundle_base::impl()` 始终非空（既有测试断言这一点）；
-        // ② 打包 / 序列化路径仍需要一个「整体」节点。
-        if (!this->node_impl_) {
-            unsigned W = get_bundle_width<Derived>();
-            const std::string &name = "bundle_lit";
-            auto lit = make_literal(0, W);
-            this->node_impl_ =
-                node_builder::instance().build_literal(lit, name);
-        }
+        ensure_bus_node();
+
+        // ⚠️ prefix MUST 在**嵌套 bundle 自己建节点之前**下推 ——
+        //    嵌套 bundle 的字段节点是在派生类的 `as_master_direction()` /
+        //    `as_slave_direction()` 里（它调嵌套的 `as_master()`）建立的 ⇒
+        //    本步骤 MUST 早于那一步 ⇒ 放在这里。
+        push_prefix_to_nested_fields();
 
         // 为每个叶子字段建立**自己的**节点（值代理）
         create_field_proxy_nodes();
+    }
+
+    // 把本 bundle 的 prefix **非虚**地传给嵌套 bundle 字段。
+    //
+    // 嵌套 bundle 的 prefix = 「本 bundle 的 prefix」+「.」+「字段名」
+    // ⇒ 嵌套 bundle 的叶子节点名形如 `outer.inner.field`。
+    //
+    // ⚠️ MUST 是**非虚**通道（见 `set_prefix_non_virtual()` 的说明）。
+    void push_prefix_to_nested_fields() {
+        // ⚠️ 用 `__bundle_fields()`（只要**名字 + 指针**）而不是
+        //    `get_bundle_layout()`（后者还会计算**字段宽度**）——
+        //    有些 bundle 的 payload 类型不是硬件类型（如
+        //    `ch_stream<StreamCombinePayload<...>>`）⇒ 计算宽度会实例化
+        //    不存在的 `ch_width_impl` ⇒ 编译期硬错误。
+        const auto &fields = derived()->__bundle_fields();
+        std::apply(
+            [&](auto &&...field_info) {
+                (([&]() {
+                     auto &field_ref = derived()->*(field_info.ptr);
+                     using FieldType = std::decay_t<decltype(field_ref)>;
+                     if constexpr (is_bundle_v<FieldType>) {
+                         static_assert(!std::is_same_v<FieldType, Derived>,
+                                       "Bundle cannot contain itself");
+                         const std::string child_prefix =
+                             prefix_.empty()
+                                 ? std::string(field_info.name)
+                                 : prefix_ + "." +
+                                       std::string(field_info.name);
+                         static_cast<typename FieldType::bundle_base_type &>(
+                             field_ref)
+                             .set_prefix_non_virtual(child_prefix);
+                     }
+                 }()),
+                 ...);
+            },
+            fields);
     }
 
 protected:
@@ -319,6 +485,12 @@ protected:
     //     ② 被 `set_src(0, ...)` 驱动后，`instr_proxy` 把源的值搬进本节点；
     //     ③ codegen 对有 src 的代理发射 `assign field = <src>;`（不是悬空 wire）。
     void create_field_proxy_nodes() {
+        // ⚠️ 字段节点需要**总线节点的 context** ⇒ 总线节点 MUST 先存在。
+        //    （默认构造的 bundle 没有总线节点 —— 它此前只在 `set_role()` 里
+        //      被创建 ⇒ 「未设角色就建字段节点」的路径（如
+        //      `deserialize_bits_to_fields()`）会空指针解引用。）
+        ensure_bus_node();
+
         const auto layout = get_bundle_layout<Derived>();
         std::apply(
             [&](auto &&...field_info) {
@@ -343,9 +515,22 @@ protected:
                          }
                          auto *ctx = this->node_impl_->ctx();
                          // `ctx` 的类型依赖 Derived ⇒ 需要 `template` 关键字
+                         //
+                         // ⚠️ 命名 MUST **内生于建节点**：用「prefix + 字段名」
+                         //    为节点命名 ⇒
+                         //    - **幂等**（节点只建一次 ⇒ 名字只拼一次）；
+                         //    - **无空窗**（不会出现「节点已建但名字未设」）。
+                         //    （原先的 `set_name_prefix()` 是**事后**改名，
+                         //      且对普通信号字段是 no-op ⇒ prefix 从来没落到
+                         //      叶子节点名上。）
+                         const std::string node_name =
+                             prefix_.empty()
+                                 ? std::string(field_info.name)
+                                 : prefix_ + "." +
+                                       std::string(field_info.name);
                          auto *field_proxy =
                              ctx->template create_node<proxyimpl>(
-                                 W, std::string(field_info.name),
+                                 W, node_name,
                                  std::source_location::current());
                          field_ref = FieldType(field_proxy);
                      }

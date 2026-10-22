@@ -6,14 +6,16 @@
 // `bundle_base(lnodeimpl *node)` via null pointer constant standard
 // conversion, creating a node with node_impl_ = nullptr. Through the
 // `using bundle_base<Self>::bundle_base;` line in CH_BUNDLE_FIELDS_T
-// (bundle_meta.h:155), this vulnerability was inherited by all 22
+// (bundle_meta.h:155), this vulnerability was inherited by all
 // bundle-derived classes — including ch_stream, ch_flow, and the AXI
 // channel bundles.
-//
 // FIX: SFINAE-restricted integer template ctor on bundle_base wins via
 // identity match over the null pointer conversion. Through the same
-// `using` inheritance, the fix propagates to all 22 derived classes
+// `using` inheritance, the fix propagates to all 20 derived classes
 // automatically.
+//
+// ℹ️ 2026-10-22: 派生类清单由 22 减为 20 —— 「拼接 / 切片」设施
+// （连同它们的公开工厂）已被移除（见 ADR-043）。
 
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"

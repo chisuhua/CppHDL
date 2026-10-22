@@ -78,12 +78,18 @@ ADR-002 修 bundle 连接时发现「字段已有节点，无法使用 `operator
 
 - **反转了 ADR-014 的确认项**（§4.1 第 4 条）与 ADR-002 的变通思路 ⇒
   本 ADR supersede 该确认项；
-- `bundle_concat` / `bundle_slice_view`（靠「拷贝共享总线 + 切片重派字段」工作）
-  与 `deserialize_bits_to_fields()`（同样切片重绑定）**语义会变**
-  ⇒ 仓库内**零使用点**，但它们在 `bundle-base-integer-ctor` capability 的
-  22 个公开派生类清单里 ⇒ 记为**遗留债务**，独立 follow-up；
+- 「拼接 / 切片」设施（`bundle_concat` / `bundle_slice_view`，靠「拷贝共享总线 +
+  切片重派字段」工作）**已移除** ⇒ 见 **ADR-043**（它们在「字段一等节点」模型下
+  **语义已失效** ⇒ 静默失效；仓库内零存活消费者）。⇒
+  `bundle-base-integer-ctor` capability 的公开派生类清单由 **22 → 20**。
+- `deserialize_bits_to_fields()`（同样切片重绑定）**已改为字段一等节点** ⇒
+  见 `bundle-ecosystem-hardening-2026-10`（D2）；它**不是**死代码
+  （经 `deserialize<>` 有活跃消费方）。
 - `bundle_base::operator=`（只拷总线节点、不同步字段成员）与
-  `master()` / `slave()` 工厂（按值拷贝）仍是**已知债务**；
+  `master()` / `slave()` 工厂（按值拷贝）仍是**已知债务**
+  —— 工厂的**字段节点独立性**已在 `bundle-ecosystem-hardening-2026-10`
+  的 D4 收口（`operator=` 的「软件拷贝」语义则被**显式记录**进 capability，
+  D5）。
 - 顶层 bundle 仍**不是** Verilog 端口（见 Decision 5）。
 
 ## Supersedes / 相关

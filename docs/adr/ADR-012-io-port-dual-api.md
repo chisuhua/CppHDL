@@ -104,7 +104,12 @@ describe() 被调用
 - `port<T, input_direction>`（`io.h:193`） — 包装 `ch_logic_in<T>`，删除 `operator=`，提供只读访问
 - `port<T, output_direction>`（`io.h:250`） — 包装 `ch_logic_out<T>`，`operator=` 委托写入
 
-方向由三个空标签类型（`direction.h:9-11`）在编译期确定：`input_direction`、`output_direction`、`internal_direction`。
+方向由两个空标签类型（`direction.h:8-9`）在编译期确定：`input_direction`、`output_direction`。
+
+> ℹ️ 2026-10-22 更新：第三个标签 `internal_direction`（及其 trait
+> `is_internal_v`）因**全仓零使用**被删除（ZERO-DEBT POLICY 的
+> 「No dead code」）—— 见 `bundle-ecosystem-hardening-2026-10` 的 D8。
+> 本 ADR 记录的是**决策**，标签集合的变化不影响该决策。
 
 ---
 
@@ -265,7 +270,7 @@ class HazardUnit : public ComponentWithIO<HazardUnitIO> {
 **相关链接**:
 - `include/core/io.h:301-339` — `ch_in`/`ch_out` 类型别名 + `__io` 宏定义 + `__in`/`__out` 宏
 - `include/core/io.h:190-298` — `port<T, Dir>` 模板类定义（输入/输出特化）
-- `include/core/direction.h:9-11` — `input_direction`/`output_direction`/`internal_direction` 标签
+- `include/core/direction.h:8-9` — `input_direction`/`output_direction` 标签（`internal_direction` 已于 2026-10-22 删除，见正文 §3.3 的注记）
 - `include/component.h:16-101` — `Component` 基类（无 `io()` 方法）
 - `include/device.h:8-32` — `ch_device<T>` 封装
 - `include/module.h:35-101` — `ch_module<T>` 封装

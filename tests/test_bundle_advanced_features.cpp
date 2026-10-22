@@ -6,7 +6,6 @@
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/bundle/bundle_meta.h"
-#include "core/bundle/bundle_operations.h"
 #include "core/bundle/bundle_protocol.h"
 #include "core/bundle/bundle_traits.h"
 #include "core/bundle/bundle_utils.h"
@@ -60,20 +59,6 @@ TEST_CASE("BundleAdvanced - ProtocolValidation", "[bundle][protocol]") {
                                      structural_string{"nonexistent"}> ==
                    false);
 }
-/*
-TEST_CASE("BundleAdvanced - BundleOperations", "[bundle][operations]") {
-    auto ctx = std::make_unique<ch::core::context>("test_ctx");
-    ch::core::ctx_swap ctx_guard(ctx.get());
-
-    // 测试Bundle连接 (简化版)
-    ch_stream<ch_uint<16>> stream1;
-    ch_stream<ch_uint<16>> stream2;
-
-    auto concat_bundle = ch::core::bundle_cat(stream1, stream2);
-    REQUIRE(concat_bundle.is_valid());
-}
-*/
-
 TEST_CASE("BundleAdvanced - TypeTraits", "[bundle][traits]") {
     auto ctx = std::make_unique<ch::core::context>("test_ctx");
     ch::core::ctx_swap ctx_guard(ctx.get());

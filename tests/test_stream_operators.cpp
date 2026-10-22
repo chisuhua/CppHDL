@@ -6,6 +6,7 @@
 #include "core/bool.h"
 #include "core/context.h"
 #include "core/uint.h"
+#include "simulator.h"
 
 using namespace ch::core;
 
@@ -116,6 +117,50 @@ TEST_CASE("Stream Operators - Different Payload Widths", "[stream][operators][wi
     }
 }
 
+
+// ============ Test: 行为级 + 区分性断言 ============
+//
+// ⚠️ 此前本文件的 10 个用例**全是结构性断言**（`impl() != nullptr`）⇒
+//    在「节点重绑定」与「数据流边」两种语义下**都会绿** ⇒ **零信号**。
+//    （OpenSpec change `bundle-ecosystem-hardening-2026-10` 的 D6 阶段 1）
+//
+// 本用例补两条：
+//   ① **区分性**断言：连接建立的是**数据流边**（两侧是不同节点 + 一条
+//      src 边），而不是**节点重绑定**（两侧是同一个节点）；
+//   ② **行为级**断言：源字段的值**真的**传播到 sink 字段。
+TEST_CASE("Stream Operators - Direct Connection 是数据流边且值能传播",
+          "[stream][operators][behavior]") {
+    auto ctx = std::make_unique<ch::core::context>("test_ctx");
+    ch::core::ctx_swap ctx_guard(ctx.get());
+
+    ch_stream<ch_uint<8>> source;
+    ch_stream<ch_uint<8>> sink;
+    source.as_master();
+    sink.as_slave();
+
+    sink <<= source;
+
+    // ---- ① 区分性断言：数据流边 ----
+    REQUIRE(sink.payload.impl() != source.payload.impl());
+    REQUIRE(sink.valid.impl() != source.valid.impl());
+    REQUIRE(sink.payload.impl()->num_srcs() == 1);
+    REQUIRE(sink.payload.impl()->src(0) == source.payload.impl());
+    REQUIRE(sink.valid.impl()->src(0) == source.valid.impl());
+    // ready 反向流动
+    REQUIRE(source.ready.impl()->num_srcs() == 1);
+    REQUIRE(source.ready.impl()->src(0) == sink.ready.impl());
+
+    // ---- ② 行为级断言：值传播 ----
+    // ⚠️ Simulator MUST 在连接**之后**创建（它的构造会初始化求值表 ⇒
+    //    之后建立的边不会被求值）。
+    ch::Simulator sim(ctx.get());
+    sim.set_signal_node_value(source.payload.impl(), 0x5A);
+    sim.set_signal_node_value(source.valid.impl(), 1);
+    sim.tick();
+
+    REQUIRE(sim.get_signal_node_value(sink.payload.impl()) == 0x5A);
+    REQUIRE(sim.get_signal_node_value(sink.valid.impl()) == 1);
+}
 
 // ============ Test: Pipeline connection operators ============
 

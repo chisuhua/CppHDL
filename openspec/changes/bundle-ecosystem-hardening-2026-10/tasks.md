@@ -1,6 +1,6 @@
 ## Tasks
 
-> **状态：草案（尚未实施）。**
+> **状态：已实施（2026-10-22）。**
 > 立项自 2026-10-22 对「`bundle-master-slave-io-2026-10` 之后全仓遗留与遗漏」的
 > 系统审计。审计结论：**11 项遗留 / 遗漏 + 5 项测试完备性缺口**（见 `proposal.md`）。
 > 本 change 收敛 **L1-L9 + L11 + T3/T4**（bundle 生态的**边角**设施）；
@@ -21,7 +21,7 @@
 > Task 5 显式**两阶段**（先表征测试钉现状、再收敛）。
 > 每个 Task 的 verify 必须是**可执行命令**。
 
-- [ ] ### Task 0: 审计取证 + 评审修订（已完成，结论折进 `proposal.md`）
+- [x] ### Task 0: 审计取证 + 评审修订（已完成，结论折进 `proposal.md`）
   - **action**:
     - 逐项确认 L1-L9 / L11 / T1-T5 的**现状与根因**（复现命令见 `proposal.md` 附录 A）
     - ⚠️ L1 的根因 MUST 用 **gdb 精确帧**确认（MUST NOT 依赖「崩在
@@ -34,7 +34,7 @@
       **L11**（prefix 机制空壳）的**新增**、L7 的**重载决议实测**（探针 ⇒ `FREE`）
   - **verify**: `proposal.md` 附录 A 的每条命令 MUST 可复现
 
-- [ ] ### Task 1: 写会失败的用例（RED）
+- [x] ### Task 1: 写会失败的用例（RED）
   - **action**:
     - 新增 `tests/test_bundle_ecosystem.cpp`，覆盖 T3 的每一类边角：
       1. **嵌套 bundle 字段**的连接（`ch_stream` 成员）
@@ -66,7 +66,7 @@
     ```
     MUST 观察到**红**
 
-- [ ] ### Task 2: 修 prefix 命名路径（L1 / L11 / D1）
+- [x] ### Task 2: 修 prefix 命名路径（L1 / L11 / D1）
   - **action**:
     - `include/core/bundle/bundle_base.h` **三步，缺一不可**：
       1. `bundle_base(const std::string &prefix)`（`:32-35`）MUST **只存 prefix**
@@ -94,7 +94,7 @@
     「嵌套 bundle 带 prefix 构造」「prefix 不重复拼接」「拷贝后仍带 prefix」三条
     MUST 转绿
 
-- [ ] ### Task 3: 嵌套 bundle 设施的语义（L2 / L3 / D2）—— **三条唯一裁决**
+- [x] ### Task 3: 嵌套 bundle 设施的语义（L2 / L3 / D2）—— **三条唯一裁决**
   - **action**:
     - **3.1 `bundle_concat` → 物理移除**：
       - 删除 `bundle_concat` 类型 + 其公开工厂 `bundle_cat()`
@@ -153,13 +153,17 @@
     ./build/tests/test_bundle_advanced_features
     ./build/samples/bundle_advanced_features
     # 4 个符号 + 头文件本身 MUST 全部消失
+    # ⚠️ 排除 `tests/test_bundle_ecosystem.cpp` —— 该文件的**职责**就是断言
+    #    它们**不存在**（`__has_include` 守卫 + 注释里点名）⇒ 它必然命中。
+    #    （先例：`scripts/verify_rst_n_wiring.sh` 同样豁免自己的运行时护栏。）
     grep -rn "bundle_concat\|bundle_slice_view\|bundle_cat\|bundle_slice\b\|bundle_operations" \
-      --include=*.h --include=*.cpp . | grep -v third_party | grep -v openspec
+      --include=*.h --include=*.cpp . | grep -v third_party | grep -v openspec \
+      | grep -v "tests/test_bundle_ecosystem.cpp"
     #   ⇒ MUST 命中 0 行
     test -f docs/adr/ADR-043-bundle-operations-removal.md   # MUST 存在
     ```
 
-- [ ] ### Task 4: `flip()` / 工厂 / `operator=` 的契约（L4 / L5 / L6 / D3-D5）
+- [x] ### Task 4: `flip()` / 工厂 / `operator=` 的契约（L4 / L5 / L6 / D3-D5）
   - **action**:
     - `flip()`（`bundle_base.h:187-194`）：方向**取反**（MUST NOT 硬编码 `as_slave()`）
       + **未设角色（unknown）MUST 按 unknown→slave 处理**
@@ -183,7 +187,7 @@
     ./build/tests/test_nested_bundle
     ```
 
-- [ ] ### Task 5: `ch_stream` 的连接语义收敛 + 双后端覆盖（L7 / T4 / D6）—— **两阶段**
+- [x] ### Task 5: `ch_stream` 的连接语义收敛 + 双后端覆盖（L7 / T4 / D6）—— **两阶段**
   - **action**:
     - **5.1 阶段 1（表征测试）**：MUST 先补**行为级**断言钉住**当前**语义
       （驱动源字段 → sink 字段读到值，interpreter + verilator 双跑）
@@ -217,7 +221,7 @@
     ctest -R "stream" --output-on-failure
     ```
 
-- [ ] ### Task 6: 死代码清理 + 计数/文档同步（L8 / L9 / D8 / D9 / D11）
+- [x] ### Task 6: 死代码清理 + 计数/文档同步（L8 / L9 / D8 / D9 / D11）
   - **action**:
     - 删除 `include/core/direction.h` 的 `internal_direction` + `is_internal_v`
       （全仓零使用 ⇒ ZERO-DEBT POLICY 的 "No dead code"）
@@ -256,7 +260,7 @@
     test -f docs/reports/verification-bundle-ecosystem-hardening-2026-10.md   # MUST 存在
     ```
 
-- [ ] ### Task 7: 全量回归 + 摘除 samples 豁免 + archive
+- [x] ### Task 7: 全量回归 + 摘除 samples 豁免 + archive
   - **action**:
     - `ctest -LE perf`（新增测试 target，期望数 182 → **183**）
     - `ctest -L perf`

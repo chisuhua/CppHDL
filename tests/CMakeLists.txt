@@ -197,6 +197,7 @@ add_dual_backend_test(test_cache_sync
 # `samples/fifo_bundle.cpp` silently lost: the samples are NOT in ctest / CI,
 # so without this Catch2 test a broken bundle connection is invisible.
 add_catch_test(test_bundle_master_slave test_bundle_master_slave.cpp)
+add_catch_test(test_bundle_ecosystem test_bundle_ecosystem.cpp)
 
 # mem-read-timing: cross-backend parity for the memory read port timing
 # contract. The Simulator's `ch_mem::aread` is 0-cycle, matching the
@@ -206,6 +207,17 @@ add_catch_test(test_bundle_master_slave test_bundle_master_slave.cpp)
 # `sim-mem-read-timing-align-2026-10` eliminated the 1-cycle skew.
 add_dual_backend_test(test_mem_read_timing_dual
     SOURCES test_mem_read_timing_dual.cpp
+    TIMEOUT 300
+)
+
+# bundle-ecosystem-hardening (D6): the FREE `operator<<=` connection path
+# for ch_stream. tests/test_ch_stream.cpp's 2 dual pairs cover bare-port
+# dataflow, NOT the stream-to-stream connection (the only place in the
+# repo that goes through the free operator) => that path had no parity
+# coverage at all. The connection was converted from node-rebinding to
+# data-flow edges (ADR-042 semantics).
+add_dual_backend_test(test_stream_connect_dual
+    SOURCES test_stream_connect_dual.cpp
     TIMEOUT 300
 )
 
