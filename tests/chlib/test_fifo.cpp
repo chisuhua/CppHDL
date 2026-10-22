@@ -105,8 +105,190 @@ TEST_CASE("Memory: sync FIFO", "[memory][sync_fifo]") {
     }
 }
 
-TEST_CASE("FIFO: sync_fifo", "[fifo][sync_fifo]") {
+TEST_CASE("FIFO: sync_fifo 自保护 —— 指针 MUST NOT 自由运行",
+          "[fifo][sync_fifo][regression]") {
+    // ⚠️ 2026-10-22 新增（ADR-045 / change `chlib-stream-semantics-2026-10`）。
+    //
+    // 背景：`sync_fifo` 此前对**写口**与**双指针**都没有空/满门控：
+    //   - `memory.write(write_ptr, din, wren)`          ← 满 FIFO 再写 ⇒ 覆写槽位
+    //   - `next_write_ptr = select(wren, ...)`           ← 满 FIFO 时写指针照常前进
+    //   - `next_read_ptr  = select(rden, ...)`           ← 空 FIFO 时读指针照常前进
+    // 而 `count` 用的 `will_write`/`will_read`（`include/chlib/fifo.h:68-69`）
+    // **是**带门的 ⇒ 计数与指针脱钩 ⇒ **静默数据损坏**。
+    //
+    // 本用例是**判别性**断言：每一条都能区分「正确实现」与「指针自由运行」，
+    // 而不是只区分「能构造」与「崩溃」。
 
+    SECTION("满 FIFO 再写 MUST NOT 破坏已写入的数据") {
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_full_write");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din(0_d);
+        ch_bool wren(false), rden(false);
+        // ADDR_WIDTH=2 ⇒ 深度 4；写指针是 2 位寄存器（会回绕）
+        SyncFifoResult<8, 2> fifo = sync_fifo<8, 2>(wren, din, rden);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 填满：1, 2, 3, 4
+        for (int i = 0; i < 4; ++i) {
+            sim.set_value(din, i + 1);
+            sim.set_value(wren, true);
+            sim.tick();
+        }
+        REQUIRE(sim.get_value(fifo.full) == true);
+        REQUIRE(sim.get_value(fifo.count) == 4);
+
+        // ⚠️ 调用方没检查 full ⇒ 又写了一次 0xFF。
+        //    修复前：写指针已回绕到 0 ⇒ **mem[0] 被覆盖** ⇒ 数据静默损坏。
+        sim.set_value(din, 0xFF);
+        sim.tick();
+
+        // 排空 —— 期望仍是原来的 1,2,3,4（`q` 是 1-cycle sread 视图 ⇒
+        // 第 i 拍读到第 i 个元素）
+        sim.set_value(wren, false);
+        sim.set_value(rden, true);
+        for (int i = 0; i < 4; ++i) {
+            sim.tick();
+            REQUIRE(sim.get_value(fifo.q) == i + 1);
+        }
+        REQUIRE(sim.get_value(fifo.count) == 0);
+    }
+
+    SECTION("读走唯一元素的那一拍，q MUST 即为该元素") {
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_read_drift");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din(0_d);
+        ch_bool wren(false), rden(true);   // rden 恒高
+        SyncFifoResult<8, 2> fifo = sync_fifo<8, 2>(wren, din, rden);
+
+        ch::Simulator sim(ctx.get());
+
+        // ⚠️ 只空转 **1** 拍：2 位读指针绕 4 圈，空转 3 拍会恰好回绕对齐、
+        //    让数据「碰巧」飘出来 ⇒ 那是**假绿**。1 拍 ⇒ 漂移 1 ⇒ 队首被跳过。
+        sim.tick();
+
+        // 写入 0x5A（落在 write_ptr = 0）
+        sim.set_value(din, 0x5A);
+        sim.set_value(wren, true);
+        sim.tick();
+        sim.set_value(wren, false);
+        REQUIRE(sim.get_value(fifo.count) == 1);
+
+        // 读走唯一元素的那一拍 ⇒ q MUST 就是 0x5A
+        //    修复前：读指针已漂移到 1 ⇒ q 读到 mem[1]（从未写过）⇒ 0x0，
+        //    且 count 照样归零 ⇒ **数据丢失**。
+        sim.tick();
+        REQUIRE(sim.get_value(fifo.q) == 0x5A);
+        REQUIRE(sim.get_value(fifo.count) == 0);
+    }
+
+    SECTION("写 N 读 N MUST 逐个比对（数据完整性 · 非判别性回归护栏）") {
+        // ⚠️ 本组**不是**判别性变异载体（当前实现下它本来就绿）——
+        //    它是**非判别性回归护栏**：确保「指针门控」没有改变干净路径的行为。
+        //    判别性载体是上面两组 + 下面两组（count / 排空后再写）。
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_integrity");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din(0_d);
+        ch_bool wren(false), rden(false);
+        SyncFifoResult<8, 2> fifo = sync_fifo<8, 2>(wren, din, rden);   // 深度 4
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        for (int i = 0; i < 4; ++i) {
+            sim.set_value(din, 0x10 + i);
+            sim.set_value(wren, true);
+            sim.tick();
+        }
+        sim.set_value(wren, false);
+        sim.set_value(rden, true);
+
+        // ⚠️ `q` 是 1-cycle `sread` 视图 ⇒ 读指针沿后才前进 ⇒ 读出的第 i 个
+        //    值对应第 i 个沿。与既有 "Basic FIFO operations" 用例同一时序约定。
+        for (int i = 0; i < 4; ++i) {
+            sim.tick();
+            REQUIRE(sim.get_value(fifo.q) == 0x10 + i);
+        }
+        REQUIRE(sim.get_value(fifo.count) == 0);
+    }
+
+    SECTION("count MUST 只统计真正发生的传输（空读 / 满写都不改变 count）") {
+        // ⚠️ 本组是**变异 #4**（`next_count` 改用裸 `wren`/`rden`）的判别性载体。
+        //    若 count 用裸 wren/rden：空 FIFO 上 rden=1 ⇒ count 会下溢成非 0；
+        //    满 FIFO 上 wren=1 ⇒ count 会溢出回绕 ⇒ FIFO「满而空」。
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_count");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din(0_d);
+        ch_bool wren(false), rden(false);
+        SyncFifoResult<8, 2> fifo = sync_fifo<8, 2>(wren, din, rden);   // 深度 4
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // ---- 空 FIFO 上连续 rden=1 ⇒ count MUST 保持 0 ----
+        sim.set_value(rden, true);
+        for (int i = 0; i < 3; ++i) {
+            sim.tick();
+            REQUIRE(sim.get_value(fifo.count) == 0);
+            REQUIRE(sim.get_value(fifo.empty) == true);
+        }
+
+        // ---- 填满后 wren=1 ⇒ count MUST 保持 4（不得溢出回绕）----
+        sim.set_value(rden, false);
+        sim.set_value(wren, true);
+        for (int i = 0; i < 4; ++i) {
+            sim.set_value(din, i + 1);
+            sim.tick();
+        }
+        REQUIRE(sim.get_value(fifo.count) == 4);
+        sim.set_value(din, 0xFF);
+        sim.tick();
+        REQUIRE(sim.get_value(fifo.count) == 4);
+        REQUIRE(sim.get_value(fifo.full) == true);
+    }
+
+    SECTION("排空后再写 MUST 能被读回（写指针 MUST NOT 越过队尾）") {
+        // ⚠️ 本组是**变异 #3**（写指针去掉 `will_write` 门）的判别性载体。
+        //    若写指针自由前进：排空后写指针已越过队尾 ⇒ 新写的元素落在
+        //    一个「读指针不会到达」的槽位 ⇒ 读回的是旧数据（实测 0x1）。
+        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo_rewrap");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+        ch_uint<8> din(0_d);
+        ch_bool wren(false), rden(false);
+        SyncFifoResult<8, 2> fifo = sync_fifo<8, 2>(wren, din, rden);   // 深度 4
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        // 填满 → 满时多写一次（应被丢弃，不应推进写指针）→ 排空
+        for (int i = 0; i < 4; ++i) {
+            sim.set_value(din, i + 1);
+            sim.set_value(wren, true);
+            sim.tick();
+        }
+        sim.set_value(din, 0xFF);
+        sim.tick();
+        sim.set_value(wren, false);
+        sim.set_value(rden, true);
+        for (int i = 0; i < 4; ++i) {
+            sim.tick();
+        }
+        REQUIRE(sim.get_value(fifo.count) == 0);
+
+        // 再写 0x55 ⇒ MUST 能被读回
+        sim.set_value(rden, false);
+        sim.set_value(wren, true);
+        sim.set_value(din, 0x55);
+        sim.tick();
+        sim.set_value(wren, false);
+        sim.set_value(rden, true);
+        sim.tick();
+        REQUIRE(sim.get_value(fifo.q) == 0x55);
+    }
+}
+
+TEST_CASE("FIFO: sync_fifo", "[fifo][sync_fifo]") {
     SECTION("Basic write and read operations") {
         auto ctx = std::make_unique<ch::core::context>("test_sync_fifo");
         ch::core::ctx_swap ctx_swapper(ctx.get());
@@ -114,10 +296,8 @@ TEST_CASE("FIFO: sync_fifo", "[fifo][sync_fifo]") {
         ch_bool wren(false);
         ch_uint<8> din(0x00_h);
         ch_bool rden(false);
-        ch_uint<3> threshold(0_d);
 
-        SyncFifoResult<8, 3> result =
-            sync_fifo<8, 3>(wren, din, rden, threshold);
+        SyncFifoResult<8, 3> result = sync_fifo<8, 3>(wren, din, rden);
 
         ch::Simulator sim(ctx.get());
 
@@ -125,17 +305,15 @@ TEST_CASE("FIFO: sync_fifo", "[fifo][sync_fifo]") {
         sim.set_value(wren, true);
         sim.set_value(din, 0x55);
         sim.set_value(rden, false);
-        sim.set_value(threshold, 0);
 
         // 获取输入值并打印
         auto wren_val = sim.get_value(wren);
         auto din_val = sim.get_value(din);
         auto rden_val = sim.get_value(rden);
-        auto threshold_val = sim.get_value(threshold);
 
         std::cout << "SyncFIFO Input: wren=" << wren_val << ", din=0x"
                   << std::hex << din_val << std::dec << ", rden=" << rden_val
-                  << ", threshold=" << threshold_val << std::endl;
+                  << std::endl;
 
         sim.tick();
 

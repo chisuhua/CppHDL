@@ -322,6 +322,25 @@ int main() {
         return 1;
     }
 
+    // Stream FIFO（2026-10-22，ADR-045 裁决 2.2 / change
+    // `chlib-stream-semantics-2026-10`）：**数据通路**断言。
+    //
+    // ⚠️ 此前只断言 empty ⇒ payload 再错也 exit 0 ⇒ sample 绿没有信号。
+    //    FWFT（0-cycle）+ write-through ⇒ 推入 0x11 之后**同拍**
+    //    `pop.valid == 1` 且 `pop.payload == 0x11`。
+    //    （1-cycle `sread` 在这一拍 payload 是 0x0 ⇒ 可区分。）
+    auto pop_valid = static_cast<uint64_t>(sim.get_value(fifo_result.pop.valid));
+    auto pop_payload =
+        static_cast<uint64_t>(sim.get_value(fifo_result.pop.payload));
+    std::cout << "fifo pop valid=" << pop_valid << " payload=0x" << std::hex
+              << pop_payload << std::dec << std::endl;
+    if (pop_valid != 1 || pop_payload != 0x11) {
+        std::cerr << "ERROR: FWFT head must show the pushed value 0x11 in the "
+                     "same tick (valid=" << pop_valid << ", payload=0x"
+                  << std::hex << pop_payload << std::dec << ")" << std::endl;
+        return 1;
+    }
+
     std::cout << "\nStream/Flow examples initialized successfully!" << std::endl;
     std::cout << "Ready to simulate hardware designs..." << std::endl;
 

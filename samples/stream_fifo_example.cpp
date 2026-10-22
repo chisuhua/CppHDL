@@ -157,6 +157,26 @@ int main() {
         return 1;
     }
 
+    // 自检 2（2026-10-22，ADR-045 裁决 2.2 / change `chlib-stream-semantics-2026-10`）：
+    // **数据通路**断言。
+    //
+    // ⚠️ 此前本 sample 只断言 empty/occupancy ⇒ **payload 再错也 exit 0** ⇒
+    //    「sample 绿」没有信号（实测：`stream_fifo` 修复前 10 拍 payload 全
+    //    打印 0x0，exit 却是 0）。
+    //
+    //    FWFT（0-cycle）+ write-through ⇒ **最后推入的值（0x10 + 9 == 0x19）**
+    //    必须在队首可见（valid == 1）。1-cycle `sread` 队首会停在 0x18 ⇒ 可区分。
+    auto out_valid = static_cast<uint64_t>(sim.get_port_value(io.out_valid));
+    auto out_payload = static_cast<uint64_t>(sim.get_port_value(io.out_payload));
+    std::cout << "\nFinal head: valid=" << out_valid
+              << ", payload=0x" << std::hex << out_payload << std::dec << std::endl;
+    if (out_valid != 1 || out_payload != 0x19) {
+        std::cerr << "ERROR: FWFT head must show the last pushed value 0x19 (valid="
+                  << out_valid << ", payload=0x" << std::hex << out_payload
+                  << std::dec << ")" << std::endl;
+        return 1;
+    }
+
     std::cout << "\nStream FIFO example with backpressure completed successfully!"
               << std::endl;
 

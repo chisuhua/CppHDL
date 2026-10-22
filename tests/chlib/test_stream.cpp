@@ -481,21 +481,53 @@ TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结�
     ch::core::ctx_swap ctx_swapper(ctx.get());
 
     // ---- 1) stream_fifo：写一个元素 ⇒ occupancy == 1、empty == 0 ----
+    // ⚠️ 2026-10-22 强化（ADR-045 / change `chlib-stream-semantics-2026-10`）。
+    //
+    // 此前本段**只**断言 `occupancy` / `empty`，**从不断言 `payload`**
+    // ⇒ 对「数据通路根本读不出数据」这一缺陷**零信号**（实测：把
+    // `stream.h` 的 `pop_stream.payload = fifo_result.q;` 改成常量 0，
+    // 本用例**仍然全绿**）。⇒ 本次改为**三元组**断言：
+    //   （tick 序号, valid, payload）三者同时钉住。
+    //
+    // ⚠️ **为什么 payload 必须每拍变化**：若 payload 恒定，1-cycle `sread`
+    //    版本也会在（错开的）某拍显示同一个值 ⇒ 断言无区分力。
+    //    每拍变化后，FWFT（0-cycle）显示的是「**本拍**推入的值」，
+    //    而 1-cycle `sread` 显示的是「**上一拍**推入的值」⇒ 可区分。
+    //
+    // ⚠️ **为什么必须钉 tick 序号**：只断言 payload 会被 sread 实现在
+    //    `valid == 0` 的那一拍骗过 ⇒ MUST 同时断言 `valid` 与 tick 位置。
     {
+        // ⚠️ 所有节点 MUST 在 `ch::Simulator` 构造**之前**创建
+        //    （Simulator 构造时建立 data_map_，之后新建的节点不在其中）。
+        ch_uint<8> payload(0_d);
         ch_stream<ch_uint<8>> in;
-        in.payload = make_uint<8>(0x5A);
+        in.payload = payload;      // `=` = 节点重绑定（chlib 组合子对 stream
+                                   // 字段做**值**运算 ⇒ MUST 用 `=`，见
+                                   // `include/core/bundle/bundle_base.h:184-196`）
         in.valid = ch_bool(true);
         in.ready = ch_bool(true);
 
         auto fifo = stream_fifo<ch_uint<8>, 4>(in);
 
         ch::Simulator sim(ctx.get());
-        sim.tick();
 
-        auto occ = static_cast<uint64_t>(sim.get_value(fifo.occupancy));
-        auto empty = static_cast<uint64_t>(sim.get_value(fifo.empty));
-        REQUIRE(empty == 0);   // 写了一个元素 ⇒ 不应是空的
-        REQUIRE(occ == 1);
+        // 每拍推入一个**不同**的值
+        static const uint64_t kExpect[3] = {0x5A, 0x3C, 0x7E};
+        for (int i = 0; i < 3; ++i) {
+            sim.set_value(payload, kExpect[i]);
+            sim.tick();
+
+            auto valid = static_cast<uint64_t>(sim.get_value(fifo.pop_stream.valid));
+            auto got = static_cast<uint64_t>(sim.get_value(fifo.pop_stream.payload));
+            auto occ = static_cast<uint64_t>(sim.get_value(fifo.occupancy));
+            auto empty = static_cast<uint64_t>(sim.get_value(fifo.empty));
+
+            // ⚠️ FWFT（0-cycle）+ write-through ⇒ **本拍**推入的值在**本拍**可见
+            REQUIRE(valid == 1);
+            REQUIRE(got == kExpect[i]);
+            REQUIRE(empty == 0);   // 写了一个元素 ⇒ 不应是空的
+            REQUIRE(occ == 1);
+        }
     }
 
     // ---- 2) stream_fork：payload 复制到所有输出、valid 透传 ----

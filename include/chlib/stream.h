@@ -263,8 +263,20 @@ stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
 /**
  * Stream FIFO implementation - 带反压的FIFO
  */
+// ⚠️ `DEPTH` MUST 是 2 的幂：`compute_idx_width(DEPTH)` 会把非 2 的幂映射到
+//    **下一个** 2 的幂（`DEPTH=5` ⇒ `compute_idx_width(5)=3` ⇒ 实际深度 8）
+//    ⇒ 「FIFO 深度」本身将未定义。
+//    ⚠️ 外溢面：`include/chlib/stream_builder.h` 的 `StreamBuilder::queue<DEPTH>()`
+//    直接实例化本模板 ⇒ 该约束同时是 `StreamBuilder` 的公开约束。
+//    （ADR-045 裁决 2.3 / capability `chlib-stream-semantics`）
 template <typename T, unsigned DEPTH>
 StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
+    static_assert(DEPTH > 0, "stream_fifo DEPTH must be greater than 0");
+    static_assert((DEPTH & (DEPTH - 1)) == 0,
+                  "stream_fifo DEPTH must be a power of 2 "
+                  "(compute_idx_width rounds non-powers-of-2 up to the next "
+                  "power of 2, so the actual depth would differ from DEPTH)");
+
     StreamFifoResult<T, DEPTH> result;
 
     // 计算地址宽度：log2(DEPTH)
@@ -284,8 +296,12 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     //    "Invalid data parameter" ⇒ **`stream_fifo` 完全不可用**。
     //    （该缺陷此前**零行为覆盖**：`tests/chlib/test_stream.cpp` 的
     //    "Stream: Stream FIFO" 只做结构断言、从不跑仿真。）
-    //    语义上：消费端恒就绪 ⇒ FIFO 非空即弹出；空/满由 `sync_fifo`
-    //    内部的 `is_empty(count)` 处理（见 include/chlib/fifo.h:69）。
+    //
+    //    ⚠️ 语义（ADR-045 裁决 2.1）：`sync_fifo` 的写口 / 写指针 / 读指针
+    //    **全部**由 `will_write` / `will_read` 门控 ⇒ **自保护**：
+    //    消费端恒就绪 ⇒ FIFO **非空即弹**；空/满由内部的空/满门处理。
+    //    ⚠️ **MUST NOT** 说 `fifo.h:69` 保护读指针 —— 它保护的是**计数器**；
+    //    读指针的门在 `fifo.h` 的「更新读指针」段（与写口同一组门控）。
     auto fifo_result = sync_fifo<ch_width_v<T>, ADDR_WIDTH>(
         input_stream.valid & input_stream.ready,          // 写使能
         input_stream.payload,                              // 写数据
@@ -298,7 +314,19 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     result.push_stream.ready = !fifo_result.full; // FIFO未满时就绪
 
     // 连接FIFO到输出
-    result.pop_stream.payload = fifo_result.q;
+    //
+    // ⚠️ `pop_stream.payload` MUST 用 `q_async`（0-cycle `aread` 组合读），
+    //    **MUST NOT** 用 `q`（1-cycle `sread` 寄存读）：
+    //    `q` 是「沿弹出」语义（落后一拍），用它 ⇒ `payload` 与 `valid` **不同拍**
+    //    ⇒ 消费者读到的是**上一个**元素（实测：推入 0x5A 后前 4 拍 payload 全 0x0）。
+    //    `q_async` 是「队首 show-ahead」语义 ⇒ `payload` 与 `valid` **同拍**。
+    //    （ADR-045 裁决 2.2 / capability `chlib-stream-semantics`）
+    //
+    // ⚠️ FIFO 协议：`aread` 是 0-cycle ⇒ `payload` 在 pop 沿**之后**指向
+    //    **下一个**队首 ⇒ 消费者 MUST 在 pop 沿**之前**采样才能拿到
+    //    **正在被弹出**的那个元素（与 ADR-044 裁决 5 同型）。
+    // ⚠️ `empty` 时 `payload` 是 **don't-care**（MUST NOT 被强制为 0）。
+    result.pop_stream.payload = fifo_result.q_async;
     result.pop_stream.valid = !fifo_result.empty;
     result.pop_stream.ready = pop_ready; // 假设输出端总是就绪
 

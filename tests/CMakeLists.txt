@@ -221,6 +221,18 @@ add_dual_backend_test(test_stream_connect_dual
     TIMEOUT 300
 )
 
+# chlib-stream-semantics-2026-10: `chlib::stream_fifo` / `chlib::sync_fifo`
+# 的 FWFT（0-cycle）语义的双后端 parity 覆盖。
+# ⚠️ 动机：0-cycle 的 `aread` 语义是历史上漂移过的地方
+#    （`sim-mem-read-timing-align-2026-10` 才发现 interpreter 与 Verilog
+#    差 1 拍）⇒ 只跑 interpreter 的断言 MUST NOT 被当作契约已被守住的证据。
+# ⚠️ 本文件同时是仓库第一例「同一个 ch_mem 同时挂 aread + sread 两个读端口」
+#    的设计 ⇒ 顺带覆盖 codegen 的多读端口路径。
+add_dual_backend_test(test_stream_fifo_dual
+    SOURCES test_stream_fifo_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

@@ -38,14 +38,20 @@ template <unsigned N> ch_bool is_full(ch_uint<N> count) {
 template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct SyncFifoResult {
     ch_bool empty;
     ch_bool full;
+    /// ⚠️ **1-cycle 寄存视图**（`sread`）：呈现的是**上一拍沿被弹出的**元素。
+    ///    「沿弹出」语义 —— 读指针沿后才前进。
     ch_uint<DATA_WIDTH> q;
     ch_uint<ADDR_WIDTH + 1> count;
+    /// ⚠️ **0-cycle 组合视图**（`aread`）：呈现的是**当前队首**（show-ahead）。
+    ///    「队首」语义 —— 与 `count` / 读指针**同拍**。
+    ///    ⚠️ `q` 与 `q_async` 语义**不同**，MUST NOT 互换
+    ///    （详见 ADR-045 裁决 2.2 与 capability `chlib-stream-semantics`）。
+    ch_uint<DATA_WIDTH> q_async;
 };
 
 template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH, typename WrenT, typename RdenT>
 SyncFifoResult<DATA_WIDTH, ADDR_WIDTH>
-sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
-          ch_uint<ADDR_WIDTH> threshold = 0_d) {
+sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden) {
     static_assert(DATA_WIDTH > 0, "Data width must be greater than 0");
     static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
 
@@ -72,17 +78,42 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
     next_count = select(select(will_write, ch_bool(!will_read), ch_bool(false)), count + 1_d,
                         select(select(ch_bool(!will_write), will_read, ch_bool(false)), count - 1_d, count));
     
-    // 写入操作 - 使用简化的写使能（外部负责背压）
-    memory.write(write_ptr, din, wren);
+    // 写入操作
+    //
+    // ⚠️ 写使能 MUST 是 `will_write`（= `wren & !is_full(count)`），
+    //    **MUST NOT** 直接用裸 `wren`：
+    //    满 FIFO 时 `wren` 仍为高 ⇒ 写指针会回绕并**覆写已读槽位**
+    //    ⇒ 数据静默损坏（详见 ADR-045 / change
+    //    `chlib-stream-semantics-2026-10`）。
+    //    `will_write` 已在上面定义，与 `next_count` 同源 ⇒ 计数与指针不脱钩。
+    memory.write(write_ptr, din, will_write);
+
+    // ⚠️ **0-cycle 组合读端口**（`aread`）—— 呈现**当前队首**（show-ahead）。
+    //
+    // ⚠️ `sread`（`q`，1-cycle）与 write 口同在 `sequential_instr_list_`，
+    //    两者之间**无 src 边** ⇒ posedge 求值顺序回退到**节点创建序**。
+    //    **真正承重的不变量：`sread` 端口 MUST 先于 write 口创建**
+    //    （本函数内 `sread` 的创建早于 write 口，沿求值顺序 sread → write
+    //    ⇒ 同拍写读看到**写前**值，与 Verilog `always_ff` 的 NBA 语义一致）。
+    //    `aread` 在 `combinational_instr_list_`，创建位置对 `sread` 时序**零影响**。
+    //
+    //    `aread` 是**组合**读 ⇒ 沿后的第二次 comb 求值（`src/simulator.cpp:328`）
+    //    会读到**刚写入**的值 ⇒ 「首拍 write-through」语义成立。
+    ch_uint<DATA_WIDTH> read_data_async;
+    read_data_async <<= memory.aread(read_ptr);
 
     // 更新写指针
     ch_uint<ADDR_WIDTH> next_write_ptr =
-        select(wren, write_ptr + 1_d, write_ptr);
+        select(will_write, write_ptr + 1_d, write_ptr);
     write_ptr->next = next_write_ptr;
 
     // 更新读指针
+    //
+    // ⚠️ 读指针 MUST 由 `will_read`（= `rden & !is_empty(count)`）门控：
+    //    空 FIFO 时 `rden` 仍为高 ⇒ 读指针每拍自由运行 ⇒ 与写指针失步 ⇒
+    //    之后写入的元素**永远读不出来**（count 归零但读到的是错槽）。
     ch_uint<ADDR_WIDTH> next_read_ptr =
-        select(rden, read_ptr + 1_d, read_ptr);
+        select(will_read, read_ptr + 1_d, read_ptr);
     read_ptr->next = next_read_ptr;
 
     // 更新计数器
@@ -93,6 +124,7 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
     result.full = is_full(count);
     result.q = read_data;
     result.count = count;
+    result.q_async = read_data_async;
 
     return result;
 }
@@ -101,6 +133,13 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden,
  * First-Word Fall-Through (FWFT) FIFO - 先字后进FIFO
  *
  * 输出端口始终显示下一个可读取的数据
+ *
+ * ⚠️ **本组件不是 FWFT**：实测写入后 `q` 恒为初值，直到发起读才出现队首
+ *    （`output_reg` 更新条件有缺陷，见 `fifo.h:152-160`）。
+ *    真正的 FWFT（show-ahead）实现是 `sync_fifo` 的 `q_async` 字段
+ *    （0-cycle `aread`）与 `stream_fifo::pop_stream.payload`。
+ *    MUST NOT 把本组件当作 FWFT 参照 —— `fwft_fifo` 的重写/改名单独立项
+ *    （ADR-045 裁决 2.4 / capability `chlib-stream-semantics`）。
  */
 template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FwftFifoResult {
     ch_bool empty;
