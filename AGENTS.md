@@ -198,6 +198,13 @@ ctest --output-on-failure
 ./build/examples/stream/stream_mux_demo
 ```
 
+> ⚠️ **openspec CLI 版本钉在 1.4.1**（`pnpm add -g @fission-ai/openspec@1.4.1`）。
+> 仓库的 `openspec/specs/**` 是按 **1.4.1** 的校验规则写就的；CLI **1.14.x** 新增了两条
+> strict 规则（「Requirement 正文 > 500 字符」「Purpose 仍是占位符」）⇒ 现有 **15/17** 个主
+> spec 会变红（**与本仓库改动无关**，纯净 HEAD 同样红）⇒ 看到 `openspec validate` 报这
+> 两类 warning 时，**先确认 CLI 版本**，不要误判为自己改坏了 spec。
+> ⚠️ CI **不跑** `openspec validate`（`.github/workflows/ci.yml` 无此步骤）⇒ 该漂移不阻断合并。
+
 ## NOTES
 <!-- CI anchor: the next line is the single-source-of-truth CTest total.
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
