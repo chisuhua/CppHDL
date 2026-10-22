@@ -45,6 +45,7 @@ tests/output/
 # 忽略代码生成 / 仿真调试产物（防止 verilog_gen 测试运行后产物被误提交）
 *.dot
 *.v
+*.dag
 verilog_gen.v
 test_reg_timing_feedback.dot
 

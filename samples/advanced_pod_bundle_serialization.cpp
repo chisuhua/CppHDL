@@ -1,4 +1,14 @@
 // samples/advanced_pod_bundle_serialization.cpp
+//
+// 演示：把一个**超过 uint64_t 宽度**的 POD 结构体与等价的 bundle 互转。
+//
+// ⚠️ API 漂移记录（2026-10-22）：
+// ① `CH_BUNDLE_FIELDS(Self, a, b, …)` 宏已被 **ADR-043** 移除
+//    ⇒ 当前用 `CH_BUNDLE_FIELDS_T(a, b, …)`（不带 `Self` 参数）。
+// ② 十六进制字面量带 `_d` 后缀不被 `lit_dec` 接受
+//    ⇒ 十六进制一律用 `_h`（`lit_hex::is_escape` 认 `'x'`）。
+// ③ `bundle.to_bits()` 不是 bundle 的公开 API ⇒ 改用 `bundle.width()`
+//    与逐字段的 `get_bundle_field_value()`。
 #include "bundle/common_bundles.h"
 #include "ch.hpp"
 #include "codegen_verilog.h"
@@ -52,7 +62,8 @@ struct very_large_data_bundle : public bundle_base<very_large_data_bundle> {
         this->set_name_prefix(prefix);
     }
 
-    CH_BUNDLE_FIELDS(Self, part1, part2, part3, part4, flag, ready)
+    // ⚠️ ADR-043 之后是 `CH_BUNDLE_FIELDS_T(...)`（不再传 `Self`）
+    CH_BUNDLE_FIELDS_T(part1, part2, part3, part4, flag, ready)
 
     void as_master_direction() {
         // 分多次调用make_output，因为最多支持4个参数
@@ -104,38 +115,66 @@ int main() {
     std::cout << "Equal? " << (large == deserialized_large ? "Yes" : "No")
               << std::endl;
 
-    // 测试3: Bundle序列化
-    std::cout << "\n=== Test 3: Bundle Serialization ===" << std::endl;
+    // 测试3: Bundle字段数量和宽度
+    std::cout << "\n=== Test 3: Bundle Field Count and Width ===" << std::endl;
+
+    // ⚠️ 建 bundle 需要**活跃 context**（字段节点是在构造时建立的）
+    ch::core::context ctx("advanced_pod_bundle_serialization");
+    ch::core::ctx_swap swap(&ctx);
+
     very_large_data_bundle bundle;
-    bundle.part1 = 0x1111111111111111_d;
-    bundle.part2 = 0x22222222_d;
-    bundle.part3 = 0x3333_d;
-    bundle.part4 = 0x44_d;
-    bundle.flag = true;
-    bundle.ready = false;
+    bundle.part1 = ch_uint<64>(0x1111111111111111_h);
+    bundle.part2 = ch_uint<32>(0x22222222_h);
+    bundle.part3 = ch_uint<16>(0x3333_h);
+    bundle.part4 = ch_uint<8>(0x44_h);
+    bundle.flag = ch_bool(true);
+    bundle.ready = ch_bool(false);
 
-    auto bundle_bits = bundle.to_bits();
-    std::cout << "Bundle serialized to bits: 0x" << std::hex
-              << bundle_bits.value() << std::dec << std::endl;
-
-    // 测试4: Bundle字段数量和宽度
-    std::cout << "\n=== Test 4: Bundle Field Count and Width ===" << std::endl;
     std::cout << "Field count: " << bundle_field_count_v<very_large_data_bundle>
               << std::endl;
     std::cout << "Bundle width: " << bundle.width() << " bits" << std::endl;
 
-    // 测试5: Bundle字段访问
-    std::cout << "\n=== Test 5: Bundle Field Access ===" << std::endl;
+    // 测试4: Bundle字段访问
+    std::cout << "\n=== Test 4: Bundle Field Access ===" << std::endl;
     auto fields = bundle.__bundle_fields();
     std::cout << "Number of fields in tuple: " << std::tuple_size_v<decltype(fields)> << std::endl;
 
-    // 测试6: Bundle方向设置
-    std::cout << "\n=== Test 6: Bundle Direction Setting ===" << std::endl;
+    // 测试5: Bundle方向设置
+    std::cout << "\n=== Test 5: Bundle Direction Setting ===" << std::endl;
     bundle.as_master();
     std::cout << "Bundle set as master, role is now: " << static_cast<int>(bundle.get_role()) << std::endl;
 
     bundle.as_slave();
     std::cout << "Bundle set as slave, role is now: " << static_cast<int>(bundle.get_role()) << std::endl;
+
+    // 测试6: 逐字段读回（经 Simulator 的槽位 API）
+    // ⚠️ bundle 字段的值存在 Simulator 的 data_map_ 槽位里 ⇒ MUST 经
+    //    `get_bundle_field_value()` 读，**MUST NOT** 直接把字段当宿主值用。
+    std::cout << "\n=== Test 6: Per-field Readback via Simulator ===" << std::endl;
+    ch::Simulator sim(&ctx);
+    sim.tick();
+
+    std::cout << "  part1 = 0x" << std::hex
+              << sim.get_bundle_field_value(bundle.part1) << std::dec << std::endl;
+    std::cout << "  part2 = 0x" << std::hex
+              << sim.get_bundle_field_value(bundle.part2) << std::dec << std::endl;
+    std::cout << "  part3 = 0x" << std::hex
+              << sim.get_bundle_field_value(bundle.part3) << std::dec << std::endl;
+    std::cout << "  part4 = 0x" << std::hex
+              << sim.get_bundle_field_value(bundle.part4) << std::dec << std::endl;
+    std::cout << "  flag  = " << sim.get_bundle_field_value(bundle.flag)
+              << std::endl;
+
+    // 自检：写入 bundle 的字段值必须能被逐字段读回
+    if (sim.get_bundle_field_value(bundle.part1) != 0x1111111111111111ULL ||
+        sim.get_bundle_field_value(bundle.part2) != 0x22222222ULL ||
+        sim.get_bundle_field_value(bundle.part3) != 0x3333U ||
+        sim.get_bundle_field_value(bundle.part4) != 0x44U ||
+        sim.get_bundle_field_value(bundle.flag) != 1) {
+        std::cerr << "ERROR: per-field readback does not match what was written"
+                  << std::endl;
+        return 1;
+    }
 
     std::cout << "\nDemo completed successfully!" << std::endl;
 

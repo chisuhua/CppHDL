@@ -467,6 +467,83 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
     }
 }
 
+TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结构正确）",
+          "[stream][behavior][regression]") {
+    // ⚠️ 2026-10-22 新增。此前 `tests/chlib/test_stream.cpp` 的
+    // "Stream: Stream FIFO" 只做**结构断言**（width 之类）⇒
+    // `chlib::stream_fifo` / `stream_fork` / `stream_arbiter_round_robin`
+    // 里三处「**先读后写**」的空操作数缺陷（读尚未赋值的字段 ⇒ null
+    // operand ⇒ node_builder 报 "Invalid operands for binary operation"）
+    // **零行为覆盖、长期无人发现**。
+    //
+    // 本用例用**行为级**断言把三条路径钉住：值必须真的被算出来。
+    auto ctx = std::make_unique<ch::core::context>("test_stream_behavior");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    // ---- 1) stream_fifo：写一个元素 ⇒ occupancy == 1、empty == 0 ----
+    {
+        ch_stream<ch_uint<8>> in;
+        in.payload = make_uint<8>(0x5A);
+        in.valid = ch_bool(true);
+        in.ready = ch_bool(true);
+
+        auto fifo = stream_fifo<ch_uint<8>, 4>(in);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        auto occ = static_cast<uint64_t>(sim.get_value(fifo.occupancy));
+        auto empty = static_cast<uint64_t>(sim.get_value(fifo.empty));
+        REQUIRE(empty == 0);   // 写了一个元素 ⇒ 不应是空的
+        REQUIRE(occ == 1);
+    }
+
+    // ---- 2) stream_fork：payload 复制到所有输出、valid 透传 ----
+    {
+        ch_stream<ch_uint<8>> in;
+        in.payload = make_uint<8>(0x3C);
+        in.valid = ch_bool(true);
+        in.ready = ch_bool(true);
+
+        auto fork = stream_fork<ch_uint<8>, 2>(in, false);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        for (unsigned i = 0; i < 2; ++i) {
+            auto d = static_cast<uint64_t>(
+                sim.get_value(fork.output_streams[i].payload));
+            auto v = static_cast<uint64_t>(
+                sim.get_value(fork.output_streams[i].valid));
+            REQUIRE(d == 0x3C);
+            REQUIRE(v == 1);
+        }
+    }
+
+    // ---- 3) stream_arbiter_round_robin：选中唯一有效的输入 ----
+    {
+        std::array<ch_stream<ch_uint<8>>, 4> ins;
+        for (unsigned i = 0; i < 4; ++i) {
+            ins[i].payload = make_uint<8>(0x10 + i);
+            ins[i].valid = ch_bool(i == 2);   // 只有输入 2 有效
+            ins[i].ready = ch_bool(true);
+        }
+
+        auto arb = stream_arbiter_round_robin<ch_uint<8>, 4>(ins);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+
+        auto sel = static_cast<uint64_t>(sim.get_value(arb.selected));
+        auto valid = static_cast<uint64_t>(sim.get_value(arb.output_stream.valid));
+        auto data = static_cast<uint64_t>(
+            sim.get_value(arb.output_stream.payload));
+        REQUIRE(valid == 1);
+        REQUIRE(sel == 2);
+        REQUIRE(data == 0x12);
+    }
+}
+
 TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
     auto ctx = std::make_unique<ch::core::context>("test_stream_fork");
     ch::core::ctx_swap ctx_swapper(ctx.get());

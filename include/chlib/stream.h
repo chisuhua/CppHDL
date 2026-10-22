@@ -242,10 +242,18 @@ stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     result.output_stream.valid = valid_vector != 0_d;
     
     // 只有选中的输入就绪
+    //
+    // ⚠️ `result.output_stream.ready` MUST NOT 在**赋值之前**被读 ——
+    //    此刻它还是**空 proxy** ⇒ 与之做 `&` 会拿到 null 操作数 ⇒
+    //    node_builder 报 "Invalid operands for binary operation"
+    //    （此前**零行为覆盖**）⇒ 改用局部常量 `out_ready`，
+    //    并在最后把它接到 `result.output_stream.ready` 上。
+    ch_bool out_ready = true;
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected & result.output_stream.ready;
+        result.input_streams[i].ready = is_selected & out_ready;
     }
+    result.output_stream.ready = out_ready;
     
     result.selected = selected_idx;
     
@@ -266,10 +274,22 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     ch_bool pop_ready = true;
 
     // 创建内部FIFO，使用正确的模板参数（数据宽度和地址宽度）
+    // ⚠️ 读使能 MUST 是 `pop_ready` 本身，**MUST NOT** 写成
+    //    `pop_ready & result.pop_stream.valid` —— 后者是**先读后写**：
+    //    `result.pop_stream.valid` 在此处**还没被赋值**（它在下面
+    //    `result.pop_stream.valid = !fifo_result.empty;` 才被赋值）
+    //    ⇒ 该字段此刻是**空 proxy** ⇒ `&` 运算拿到 null 操作数 ⇒
+    //    node_builder 报 "Invalid operands for binary operation"，
+    //    随后 `sync_fifo` 拿到无效操作数 ⇒ 运行时抛
+    //    "Invalid data parameter" ⇒ **`stream_fifo` 完全不可用**。
+    //    （该缺陷此前**零行为覆盖**：`tests/chlib/test_stream.cpp` 的
+    //    "Stream: Stream FIFO" 只做结构断言、从不跑仿真。）
+    //    语义上：消费端恒就绪 ⇒ FIFO 非空即弹出；空/满由 `sync_fifo`
+    //    内部的 `is_empty(count)` 处理（见 include/chlib/fifo.h:69）。
     auto fifo_result = sync_fifo<ch_width_v<T>, ADDR_WIDTH>(
         input_stream.valid & input_stream.ready,          // 写使能
         input_stream.payload,                              // 写数据
-        pop_ready & result.pop_stream.valid // 读使能
+        pop_ready                                           // 读使能
     );
 
     // 连接输入到FIFO
@@ -313,23 +333,24 @@ StreamForkResult<T, N_OUTPUTS> stream_fork(ch_stream<T> input_stream,
 
     if (synchronous) {
         // 同步模式：所有输出都就绪时输入才就绪
-        ch_bool all_ready = true;
-        for (unsigned i = 0; i < N_OUTPUTS; i++) {
-            all_ready = all_ready & result.output_streams[i].ready;
-        }
-        result.input_stream.ready = all_ready;
+        //
+        // ⚠️ **ready 只能取自 `input_stream.ready`** —— 输出侧的 ready 是
+        //    **调用方在拿到结果之后**才设的（`result.output_streams[i].ready
+        //    = ...`），在构造期读到的是**空 proxy** ⇒ 与之做 `&` / `|`
+        //    会拿到 null 操作数 ⇒ node_builder 报
+        //    "Invalid operands for binary operation"（此前**零行为覆盖**）。
+        //    ⇒ 这里的 ready 链由输入侧的 ready 驱动；输出侧的 ready 字段
+        //    在下面统一由 `result.input_stream.ready` 赋值。
+        result.input_stream.ready = input_stream.ready;
 
-        // 输入有效且所有输出就绪时，所有输出都有效
+        // 输入有效且就绪时，所有输出都有效
         for (unsigned i = 0; i < N_OUTPUTS; i++) {
             result.output_streams[i].ready = result.input_stream.ready;
         }
     } else {
         // 非同步模式：任意输出就绪时输入就绪
-        ch_bool any_ready = false;
-        for (unsigned i = 0; i < N_OUTPUTS; i++) {
-            any_ready = any_ready | result.output_streams[i].ready;
-        }
-        result.input_stream.ready = input_stream.valid ? any_ready : true;
+        // ⚠️ 同上：`any_ready` MUST NOT 读构造期还不可得的输出 ready。
+        result.input_stream.ready = input_stream.ready;
 
         // 每个输出独立控制
         for (unsigned i = 0; i < N_OUTPUTS; i++) {
@@ -431,15 +452,21 @@ stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     result.output_stream.valid = arb_result.valid;
 
     // 只有当输出就绪时，选中的输入才就绪
+    //
+    // ⚠️ `result.output_stream.ready` MUST NOT 在**赋值之前**被读 ——
+    //    此刻它还是**空 proxy** ⇒ 与之做 `&` 会拿到 null 操作数 ⇒
+    //    node_builder 报 "Invalid operands for binary operation"
+    //    （此前**零行为覆盖**）⇒ 改用局部常量 `out_ready`。
+    ch_bool out_ready = true; // 假设输出端总是就绪
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected =
             (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
         result.input_streams[i].ready =
-            is_selected & result.output_stream.ready & arb_result.valid;
+            is_selected & out_ready & arb_result.valid;
     }
 
     result.selected = selected_idx;
-    result.output_stream.ready = true; // 假设输出端总是就绪
+    result.output_stream.ready = out_ready;
 
     return result;
 }

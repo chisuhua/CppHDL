@@ -18,17 +18,19 @@
 
 按根因分组（实测，`g++ -std=c++23 -fsyntax-only`）：
 
-| 根因 | sample | **全部 error 数** | 修复难度 |
-|---|---|---|---|
-| **字面量后缀**：十六进制字面量带 `_d` 后缀不被 `lit_dec` 接受 | `stream_arbiter_example` / `stream_demux_example` / `stream_flow_basic_example` / `stream_fork_example` / `stream_join_example`（5 个） | 12 / 5 / 20 / 5 / 5 | 🟢 低（改后缀，见下方「⚠️ 修法不是去后缀」） |
-| **POD bundle 分区 API**：`part1` / `part2` 不再是类型名 | `advanced_pod_bundle_serialization` / `large_pod_bundle_example`（2 个） | 19 / 14 | 🟡 中 |
-| **context 访问器改名**：`get_default_clk` → `get_default_clock`、`get_default_rst` → `get_default_reset` | `stream_handshake_example`（1 个） | 15 | 🟢 低 |
-| **`stream_fifo` 构造签名漂移** | `stream_fifo_example` / `stream_component_example`（2 个） | 14 / 4 | 🟡 中 |
-| **头文件 / 命名空间漂移**：`chlib/fragment.h` 不存在；`chlib` 不是命名空间名 | `spinalhdl_stream_example` / `conditional_demo`（2 个） | 1 / 11 | 🟡 中 |
-| **组件 API 漂移**：基类名不认识 + `ch_sint` 未声明 | `spinalhdl_component_function_area_example`（1 个） | **98** | 🔴 **高**（见下） |
-| **if/else DSL 签名漂移**：字面量宽度不匹配 + `ch_in<ch_bool>` 不能绑到 `const ch_bool&` | `if_demo`（1 个） | 7 | 🔴 高（DSL 语义） |
+| 根因 | sample | **全部 error 数** | 修复难度 | **落地结果** |
+|---|---|---|---|---|
+| **字面量后缀**：十六进制字面量带 `_d` 后缀不被 `lit_dec` 接受 | `stream_arbiter_example` / `stream_demux_example` / `stream_flow_basic_example` / `stream_fork_example` / `stream_join_example`（5 个） | 12 / 5 / 20 / 5 / 5 | 🟢 低（改后缀，见下方「⚠️ 修法不是去后缀」） | ✅ **5/5 已修**（组 A） |
+| **POD bundle 分区 API**：`part1` / `part2` 不再是类型名 | `advanced_pod_bundle_serialization` / `large_pod_bundle_example`（2 个） | 19 / 14 | 🟡 中 | ✅ **2/2 已修**（组 E） |
+| **context 访问器改名**：`get_default_clk` → `get_default_clock`、`get_default_rst` → `get_default_reset` | `stream_handshake_example`（1 个） | 15 | 🟢 低 | ⛔ **留在清单**（组 B，见 D3） |
+| **`stream_fifo` 构造签名漂移** | `stream_fifo_example` / `stream_component_example`（2 个） | 14 / 4 | 🟡 中 | ✅ 1/2 已修（`stream_fifo_example`）／⛔ 1 留在清单（组 C，见 D3） |
+| **头文件 / 命名空间漂移**：`chlib/fragment.h` 不存在；`chlib` 不是命名空间名 | `spinalhdl_stream_example` / `conditional_demo`（2 个） | 1 / 11 | 🟡 中 | ✅ 1/2 已修（`spinalhdl_stream_example`）／⛔ 1 留在清单（组 D2，见 D3） |
+| **组件 API 漂移**：基类名不认识 + `ch_sint` 未声明 | `spinalhdl_component_function_area_example`（1 个） | **98** | 🔴 **高**（见下） | ⛔ **留在清单**（组 F，见 D3） |
+| **if/else DSL 签名漂移**：字面量宽度不匹配 + `ch_in<ch_bool>` 不能绑到 `const ch_bool&` | `if_demo`（1 个） | 7 | 🔴 高（DSL 语义） | ⛔ **留在清单**（组 G，见 D3） |
 
 ⇒ 合计 **14 个**，**全部 error 数 229**（不是 14 个「一个问题」）。
+⇒ **落地结果：9 个已修并注册，5 个逐个定性后留在清单**（各自被一个
+**具体的框架层缺口**挡住 ⇒ 归位条件已指向那个缺口，见 D3）。
 
 > ⚠️ **2026-10-22 实测更正（工作量此前被系统性低估）**：
 > 提案原有的根因表是按 **首个 error**（`grep -m1 "error:"`）统计的 ⇒
@@ -116,21 +118,58 @@
 ⇒ **本 change 的目标清单长度**：14 → **≤ 2**（预期剩下：组 F 的 98-error 那
 个 + 组 G 的 `if_demo`）⇒ 「最多 38」的旧说法是错的（见 Impact 表）。
 
+#### 落地后的实际定性（5 个留在清单的，**逐个**给出被挡住的缺口）
+
+| sample | 被哪个缺口挡住 | 证据 |
+|---|---|---|
+| `stream_component_example` | **`chlib::stream_fifo` 的读使能硬编码为 `pop_ready = true`** ⇒ 消费端恒就绪 ⇒ FIFO 永远在排空 ⇒ **`full` 不可达** ⇒ 该 sample 的全部价值（反压场景）**无法演示** | `include/chlib/stream.h` 的 `stream_fifo()` |
+| `stream_handshake_example` | 同上（它的核心演示就是 stream 握手 + 反压） | 同上 |
+| `conditional_demo` | **语句块 DSL 的条件块内寄存器赋值捕获是空实现** ⇒ `reg_count->next = ...` 写进分支里**静默不生效** ⇒ 改完能编译但计数器**永远不计数**（「绿 ≠ 对」） | `include/chlib/if_stmt.h:160-166`（`conditional_reg_assignment::next_proxy::operator=` 的注释「实际实现需要更复杂的机制」） |
+| `spinalhdl_component_function_area_example` | 需**重写 sample 本身**（98 个 error，占全组 43%）⇒ 独立立项 | 实测 error 计数 |
+| `if_demo` | 需**框架层新能力**（`ch_in<ch_bool>` 绑到 `const ch_bool&`） | 实测 error |
+
+⇒ **5 个**（不是原估的 2 个）⇒ 差异的根因是：**另外 3 个不是「改个 API」就
+能修的** —— 它们各自依赖一个**框架层缺口**，而那三个缺口都是**公开 API 语义
+级别**的（读使能外部化 / 条件赋值捕获 / 端口绑定）⇒ 按仓库规约都需要先有
+**ADR** ⇒ MUST NOT 在本 change 内顺手改。
+
 ### D4: 禁用清单的**格式**保持不变（每行 `名字 <TAB> 理由 <TAB> 归位条件`）
 
 护栏 `scripts/run_all_samples.sh` 的 C1 解析它 ⇒ 格式 MUST NOT 变。
+
+### D5: 本 change 允许的**框架层例外**（3 处 chlib 缺陷修复，**逐条记录**）
+
+⚠️ Non-Goal 3 写的是「不引入框架层**新能力**」⇒ 修**缺陷**不属于新能力，
+但仍 MUST **显式记录**（D3 的选项 ②）。本 change 修了 3 处**同一类**缺陷：
+
+| 位置 | 缺陷 | 症状 | 修法 |
+|---|---|---|---|
+| `include/chlib/stream.h` `stream_fifo()` | 读使能写成 `pop_ready & result.pop_stream.valid` —— **先读后写**（`result.pop_stream.valid` 在下面才被赋值）⇒ null operand | `node_builder` 报 "Invalid operands for binary operation"；随后 `sync_fifo` 拿到无效操作数 ⇒ 运行时抛 "Invalid data parameter" ⇒ **`stream_fifo` 完全不可用** | 读使能改为 `pop_ready`（`sync_fifo` 内部用 `is_empty(count)` 处理空） |
+| `include/chlib/stream.h` `stream_fork()` | 同步/异步两条分支都读**构造期还不可得**的 `result.output_streams[i].ready` ⇒ null operand | 同上的 node_builder 错误（每次 fork 2 处） | ready 链改由 `input_stream.ready` 驱动（输出侧 ready 字段在构造期**原理上**不可得 —— 调用方是拿到结果之后才设的） |
+| `include/chlib/stream.h` `stream_arbiter_round_robin()` / `stream_arbiter_priority()` | `result.input_streams[i].ready = ... & result.output_stream.ready` —— **先读后写** ⇒ null operand | 同上的 node_builder 错误（每次仲裁 4 处） | 改用局部常量 `ch_bool out_ready = true;`，并在最后接到 `result.output_stream.ready` |
+
+⇒ **为什么这些缺陷此前没被发现**：`tests/chlib/test_stream.cpp` 的
+"Stream: Stream FIFO" 用例**只做结构断言**（`width == 8` 之类）⇒
+**零行为覆盖**。
+⇒ **本次补上行为级护栏**：`tests/chlib/test_stream.cpp` 新增
+「Stream: chlib stream 组合子必须**行为正确**（不只是结构正确）」用例
+（3 组行为断言：FIFO 的 occupancy/empty、fork 的 payload 复制、仲裁器的
+selected/data）⇒ **变异验证**：把 `stream_fifo` 的读使能改回原写法 ⇒
+该用例转红（1 failed / 59 assertions）⇒ 证明它是真护栏。
 
 ## Impact
 
 | 项 | 影响 |
 |---|---|
-| `samples/*.cpp`（最多 14 个） | 逐个修 API 漂移（⚠️ 全部 error 数 229 ⇒ 工作量远大于「首个 error」给人的印象） |
-| `samples/CMakeLists.txt` | `CH_SAMPLE_TARGETS` **26 → 最多 40**（= 40 源文件 − 0 剩余禁用）；⚠️ 原提案写的「24 → 38」**两个数字都错**：当前实测是 **26**（`samples/CMakeLists.txt:7-33`），而「最多」是 40（不是 38） |
+| `samples/*.cpp`（9 个已修） | 逐个修 API 漂移（⚠️ 全部 error 数 229 ⇒ 工作量远大于「首个 error」给人的印象） |
+| `include/chlib/stream.h` | **3 处「先读后写」空操作数缺陷**（见 D5）⇒ `stream_fifo` / `stream_fork` / 两个 arbiter 此前**完全不可用** |
+| `tests/chlib/test_stream.cpp` | 新增 1 个**行为级**用例（3 组断言）⇒ 把上述 3 处缺陷钉住（变异验证：改回原写法 ⇒ 转红） |
+| `samples/CMakeLists.txt` | `CH_SAMPLE_TARGETS` **26 → 35**（新增 9 个）；⚠️ 原提案写的「24 → 最多 38」**两个数字都错**：当前实测是 **26**（`samples/CMakeLists.txt:7-33`），而「最多」是 40（不是 38） |
 | `samples/CMakeLists.txt:6` | ⚠️ 头注释里嵌了计数（「未注册的 sample 见 samples/disabled_samples.txt（**14 个**，2026-10-22 实测）」）⇒ 每移出一行就漂移 ⇒ **MUST 同步** |
-| `samples/disabled_samples.txt` | 14 → 最少 0 行（预期 ≤ 2）；⚠️ `:15` 的判定基准注释同样嵌了计数（「已注册 26 / 源文件 40 / 本清单 **14**」）⇒ **MUST 同步** |
+| `samples/disabled_samples.txt` | **14 → 5 行**（9 个已修并移出；剩 5 个逐个定性为「被框架层缺口挡住」⇒ 归位条件已指向具体缺口）；⚠️ `:15` 的判定基准注释同样嵌了计数 ⇒ **MUST 同步**（已改为 35 / 40 / 5） |
 | `samples/disabled_samples.txt`（格式） | 格式**不变**（`名字 TAB 理由 TAB 归位条件`）—— 护栏 C1 解析它 ⇒ 变格式即破护栏 |
 | 计数 | **CTEST_TOTAL 不变**（samples 不是 ctest target） |
-| 风险 | 🟡 中。① 每修一个 sample 就多一个**运行**回归对象 ⇒ 可能暴露**运行期**失败（编译过了但行为错）⇒ 护栏会报出来（这是**好事**，但要有处置流程 —— 见 D3 第三态）；② 组 F（**98 error**，占 43%）接近重写 ⇒ 建议独立立项；③ 组 G（`if_demo`）可能需要框架变更 ⇒ 触发 D3；④ ⚠️ **「删」是合法归宿** ⇒ 删源文件会改变 `samples/*.cpp` 的**总数**（40 → 39）⇒ 那些嵌了「40」的注释（`samples/CMakeLists.txt:6`、`samples/disabled_samples.txt:15`、根 `AGENTS.md`）MUST 一并同步 |
+| 风险 | 🟡 中。① 每修一个 sample 就多一个**运行**回归对象 ⇒ 可能暴露**运行期**失败（编译过了但行为错）⇒ 护栏会报出来（这是**好事**，但要有处置流程 —— 见 D3 第三态）；② 组 F（**98 error**，占 43%）接近重写 ⇒ 建议独立立项；③ 组 G（`if_demo`）可能需要框架变更 ⇒ 触发 D3；④ ⚠️ **「删」是合法归宿** ⇒ 删源文件会改变 `samples/*.cpp` 的**总数**（40 → 39）⇒ 那些嵌了「40」的注释（`samples/CMakeLists.txt:6`、`samples/disabled_samples.txt:15`、根 `AGENTS.md`）MUST 一并同步 ；⑤ ⚠️ **D5 的 3 处 chlib 修复**改的是**共享库头文件** ⇒ 爆炸半径覆盖全仓 stream 组件 ⇒ MUST 有行为级护栏（已加）+ 全量 `ctest` 回归 |
 
 ## Non-Goals
 
