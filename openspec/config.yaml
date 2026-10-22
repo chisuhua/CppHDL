@@ -76,6 +76,6 @@ rules:
   # tasks 规则
   tasks:
     - 每个任务需对应一个可验证的测试
-    - TDD 流程: RED → GREEN → REFACTOR
+    - "TDD 流程: RED → GREEN → REFACTOR"
     - 涉及多文件修改的任务需拆分
-    - 完成后必须: clang-tidy clean, clang-format applied
+    - "完成后必须: clang-tidy clean, clang-format applied"
