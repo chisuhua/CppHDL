@@ -94,8 +94,30 @@ ADR-042 / ADR-043）。
 | `docs/adr/ADR-044-*.md` | **新增**（形态裁决 + 时序协议） |
 | `samples/fifo_bundle.cpp` | 实现读数据通路 |
 | `tests/test_bundle_master_slave.cpp` | 位偏移常量 + DUT + 断言（**读数据必须真的到达 master 侧**） |
-| `openspec/specs/bundle-master-slave-io/spec.md` | 可能 MODIFIED（字段布局相关的 Requirement） |
+| `openspec/specs/bundle-master-slave-io/spec.md` | MODIFIED（方向指认 Requirement —— 本 change 的 delta 已起草） |
 | 计数 | ⚠️ **CTEST_TOTAL 可能 +1**（若新增读通路的专门用例） |
+
+> ⚠️ **2026-10-22 实测补充的 4 处「硬编码断言」**（加字段后**必然**要改，
+> 否则**当场红**；其中 1 处是 `STATIC_REQUIRE` ⇒ **编译期**就断）：
+>
+> | 文件 | 断言 | 加 `rdata` 后 |
+> |---|---|---|
+> | `tests/test_bundle_bitstream.cpp:85` | `REQUIRE(get_bundle_width<fifo_bundle<ch_uint<4>>>() == 8)` | → **12** |
+> | `tests/test_bundle_bitstream.cpp:99` | 同上 | → **12** |
+> | `tests/test_bundle_advanced_features.cpp:75` | `STATIC_REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<32>>> == 5)` | → **6**（**编译期**断） |
+> | `tests/test_bundle_ecosystem.cpp:487` | `REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<8>>> == 5)` | → **6** |
+>
+> ⇒ **更好的做法**：这 4 处断言 SHOULD 改成**不依赖具体字段数**的写法
+> （例如断言「字段集合」而非「个数」）⇒ 否则**每加一个字段都要回来改一遍**。
+> ⚠️ 但那是**独立的重构**（4 处断言的语义改写）⇒ MUST NOT 与本 change 混做
+> （会让「加一个字段」这件事的回归面变大）⇒ 建议**先按数字改**，把
+> 「断言不依赖字段数」记为 follow-up。
+>
+> **另有两处消费方**（实测 `fifo_bundle` 共 **8** 个文件 / 45 处引用）：
+> - `samples/bundle_advanced_features.cpp:79` **打印** bundle 的宽度 ⇒ 打印值会变
+>   （12 → 20）⇒ 该 sample 的输出随之变化（无断言，但属可观测行为变化）；
+> - `samples/minimal_fifo_bundle.cpp` 是一个 FIFO 消费方（只接 `full`/`empty`，
+>   **不接读数据**）⇒ 加了 `rdata` 后它**必须**决定是否接线 ⇒ 否则新字段恒 0。
 | 风险 | 🔴 **高**。① **公开 API 布局变更**（位宽变化 ⇒ 打包布局变化 ⇒ 既有断言的位偏移常量要改）；② 时序协议（FIFO 的 `dout` 语义）容易再次出错；③ 与 ADR-042/043 的「字段一等节点」模型必须保持一致 |
 
 ## Non-Goals

@@ -16,6 +16,12 @@
       ```
     - 清点 `ch_stream` 的 `payload` 是否构成同病（**预期：不构成** —— stream 协议
       规定 `payload` 由 master 驱动）⇒ 在 ADR 里写明该清点结论
+    - ⚠️ **实测已有结论（2026-10-22，落地前请复核）**：
+      `fifo_bundle` 共 **8** 个文件 / 45 处引用；其中 **4 处是硬编码的宽度/字段数
+      断言**（`tests/test_bundle_bitstream.cpp:85,99` /
+      `tests/test_bundle_advanced_features.cpp:75`（**`STATIC_REQUIRE`** ⇒ 编译期断）/
+      `tests/test_bundle_ecosystem.cpp:487`）⇒ 加 `rdata` 后 MUST 同步
+      （`== 8` → `== 12`；`== 5` → `== 6`）
   - **verify**:
     ```bash
     test -f docs/reports/verification-fifo-read-data-path-2026-10.md
@@ -51,6 +57,9 @@
     - `include/bundle/common_bundles.h`：`fifo_bundle` 加 `rdata` 字段 + 方向
     - `samples/fifo_bundle.cpp`：读数据通路实现（不再丢弃 `data_out`）
     - `tests/test_bundle_master_slave.cpp`：位偏移常量更新 + 新断言
+    - ⚠️ **4 处硬编码断言同步**（`test_bundle_bitstream.cpp:85,99` /
+      `test_bundle_advanced_features.cpp:75` / `test_bundle_ecosystem.cpp:487`）
+      ⇒ 不改则**当场红**（其中 1 处是 `STATIC_REQUIRE` ⇒ 编译期断）
   - **verify**:
     ```bash
     ./build/tests/test_bundle_master_slave       # MUST 转绿

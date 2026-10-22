@@ -38,8 +38,22 @@
   （保守：macOS runner 的 example 行为与 Linux 可能有差异，先只在 Linux 上守）。
 - MUST 设 job 级 `timeout-minutes`（28 × 30s ≈ 14 min 上界）。
 - ⚠️ 该 job MUST 在**构建之后**跑（example 二进制由 `build-and-test` job 构建；
-  新 job 需要自己构建或复用 artifact ⇒ **裁决**：新 job 自己跑
-  `cmake --build build --target <examples>`，避免跨 job 的 artifact 依赖）。
+  新 job 需要自己构建或复用 artifact ⇒ **裁决**：新 job 自己构建，避免跨 job
+  的 artifact 依赖）。
+
+> ⚠️ **2026-10-22 实测更正**：**没有** `all-examples` 这样的聚合 target ——
+> 每个 example 是独立 target，由根 `CMakeLists.txt` 的 20 个
+> `add_subdirectory(examples/...)` 引入 ⇒ `cmake --build build --target <examples>`
+> **无法执行**。
+> ⇒ **裁决**：新增聚合 target `all-examples`（**镜像** samples 侧既有的
+> `all-samples`，`samples/CMakeLists.txt:73`）⇒ 新 job 跑
+> `cmake --build build --target all-examples`。
+> ⚠️ 该 target MUST 只含**被脚本跟踪的 28 个** example（其余 4 个 demo 不必构建）。
+>
+> ✅ **已实测（2026-10-22）**：被脚本跟踪的 **28 个** example **全部**是已注册的
+> CMake target、**全部**会被默认构建（`build/` 下 28/28 二进制存在；
+> `examples/**/CMakeLists.txt` 无 `EXCLUDE_FROM_ALL`）⇒ D2 的「缺失二进制 = 失败」
+> **不会**让 CI 在第一天就红。
 
 ### D2: 脚本的「缺失二进制 = SKIP」语义 MUST 复核
 
