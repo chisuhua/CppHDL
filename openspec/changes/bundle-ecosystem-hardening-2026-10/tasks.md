@@ -281,6 +281,14 @@
     ./run_all_ported_tests.sh
     bash scripts/run_all_samples.sh          # MUST 全绿（豁免已摘除）
     openspec validate --specs --strict       # MUST 17/17 通过（本 change 不新增 capability）
+    # ⚠️ **CLI 版本前置**：该断言依赖 openspec CLI **1.4.1**（仓库现有 spec 是按该
+    #    版本的校验规则写就的）。CLI **1.14.x** 新增了两条 strict 规则
+    #    （「Requirement 正文 > 500 字符」「Purpose 仍是占位符」），仓库现有 **15/17**
+    #    个主 spec 会因此变红 ⇒ 与本 change 无关（纯净 HEAD 同样红）。
+    #    ⇒ 本 change 的 delta 已按新规则收敛（ADDED 段每条 Requirement 正文 ≤ 500 字符），
+    #    但「17/17」这个断言在 CLI 升级后需要**先解决仓库级迁移**（见下）才能成立。
+    #    ⚠️ CI **不跑** `openspec validate`（`.github/workflows/ci.yml` 无此步骤）⇒
+    #    该漂移**不阻断合并**，但会让本 Task 的断言在本地判红。
     # 主 spec MUST NOT 残留本 change 名（delta 内 MUST NOT 写含 change 名的具体文件名）
     grep -rn "bundle-ecosystem-hardening-2026-10" openspec/specs/   # MUST 命中 0 行
     # 派生类清单句里 MUST NOT 再列已移除的类型

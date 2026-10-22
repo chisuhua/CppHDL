@@ -165,6 +165,11 @@
     (cd build && ctest -LE perf -j4 --output-on-failure)
     ./run_all_ported_tests.sh
     openspec validate --specs --strict
+    # ⚠️ **CLI 版本前置**：该断言依赖 openspec CLI **1.4.1**（仓库现有 spec 是按该
+    #    版本的校验规则写就的）。CLI **1.14.x** 新增了两条 strict 规则
+    #    （「Requirement 正文 > 500 字符」「Purpose 仍是占位符」），仓库现有 **15/17**
+    #    个主 spec 会因此变红 ⇒ 与本 change 无关（纯净 HEAD 同样红）。
+    #    ⚠️ CI **不跑** `openspec validate` ⇒ 该漂移**不阻断合并**。
     # 主 spec MUST NOT 残留本 change 名（Purpose 骨架已手工替换 ⇒ 0 行）
     grep -rn "samples-regression-guard-2026-10" openspec/specs/   # MUST 命中 0 行
     # Purpose MUST 是真实内容（MUST NOT 仍是 TBD 骨架）
