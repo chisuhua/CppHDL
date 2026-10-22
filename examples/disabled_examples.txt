@@ -1,0 +1,53 @@
+# examples/disabled_examples.txt
+#
+# 登记**未被运行护栏跟踪**的 example 程序 / 测试二进制。
+#
+# 格式：<名字> <TAB> <为什么不被跟踪> <TAB> <归位条件：什么时候回来>
+#
+# 为什么需要它：护栏 `run_all_ported_tests.sh` 的跟踪集合只有**一处**
+# （`examples/CMakeLists.txt` 的 `CH_TRACKED_EXAMPLE_TARGETS`）⇒ 任何
+# 「不在集合里」的 program 就会**静默地**从运行覆盖中消失 ⇒ 「新增即漏」
+# （与 `samples-regression-guard-2026-10` 的 C1 同型 —— samples 侧的对应物是
+# `samples/disabled_samples.txt`）。
+#
+# ⚠️ 本清单只做**登记**，不负责修复（修复是独立工作，见归位条件列）。
+# ⚠️ 归位条件一旦达成，MUST 从本清单移除该行**并**补进
+#    `CH_TRACKED_EXAMPLE_TARGETS`。
+#
+# 判定基准（2026-10-22 实测）：
+#   被跟踪 28 / main() 程序 32（其中 4 个未被跟踪）/ 本清单 23
+#   （23 = 4 个未跟踪的 main() 程序 + 19 个从不执行的 Catch2 测试二进制）
+
+# --- Verilator 后端 demo（是已注册 target，但不属于「被跟踪集合」）---
+verilator_01_minimal	已注册 CMake target（默认构建），但不被护栏跟踪：它是 ADR-035 的 Verilator 后端**演示**，其行为依赖 Verilator 工具链（构建需 10-30 min），放进每次 CI 的护栏会拖垮 job 预算	归位条件：护栏支持「按需启用需 Verilator 的集合」后，补进 CH_TRACKED_EXAMPLE_TARGETS 并移除本行
+verilator_02_counter	同上（Verilator 后端演示 + 计数器）	同上
+verilator_03_component	同上（Verilator 后端演示 + 组件风格）	同上
+
+# --- 未注册为 target 的 main() 源文件 ---
+# ⚠️ 本条按**源文件**登记（它不是 target ⇒ 从不构建 ⇒ C1 的「已构建程序」
+# 扫描看不到它）⇒ 属**纯文档**条目：C1 的反向检查（双重登记）同样不涉及它。
+testbench_template	源文件 `examples/spinalhdl-ported/testbench_template.cpp` 含 `int main` 但**未注册**为 CMake target（它是一个**模板**，供人复制改写，不是可运行 demo）	归位条件：若它被改造为可运行 demo ⇒ 注册为 target 并补进 CH_TRACKED_EXAMPLE_TARGETS；否则删除该源文件
+
+# --- examples 内的 Catch2 测试二进制（是已注册 target，但从未被执行）---
+# ⚠️ 2026-10-22 实测：`grep -rn "add_test" examples/` = 0 ⇒ `ctest -N` 对它们
+# **0 命中** ⇒ 它们**每次 CI 都在编译、却从未被执行过**。它们是**测试**而不是
+# demo ⇒ 归位条件是「进 CTest 体系」（`add_test`）而不是「进 example 护栏」。
+test_pipeline_exec	examples/riscv-mini 内的 Catch2 测试 target：已注册、每次 CI 都编译，但从未被 ctest 执行（examples/ 下零 add_test）	归位条件：补 add_test 注册进 CTest（比塞进 example 护栏更合适 —— 它是测试不是 demo）
+test_soc_hello_world	同上	同上
+test_riscv_tests	同上	同上
+test_address_decoder	同上	同上
+test_riscv_tests_pipeline	同上	同上
+test_pipeline_smoke	同上	同上
+test_pipeline_minimal	同上	同上
+test_pipeline_debug	同上	同上
+test_pipeline_debug3	同上	同上
+test_pipeline_debug4	同上	同上
+test_pipeline_debug5	同上	同上
+test_pipeline_debug6	同上	同上
+test_pipeline_wrapper	同上	同上
+test_wrapper_simple	同上	同上
+test_wrapper_ifstage	同上	同上
+test_wrapper_pipeline	同上	同上
+test_rv32i_pipeline_device	同上	同上
+test_ifstage_device	同上	同上
+riscv_mini_cache_smoke	同上（cache-complete-rewrite §3.4 smoke）	同上

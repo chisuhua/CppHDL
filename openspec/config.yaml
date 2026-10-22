@@ -47,6 +47,8 @@ context: |
   # 测试验证命令
   - Build: cmake --build build -j$(nproc)
   - Tests: ctest --output-on-failure
+  # Examples 运行护栏（CI job `examples-runtime`）：缺失二进制 = 失败；
+  # 需先构建 `cmake --build build --target all-examples`
   - Examples: ./run_all_ported_tests.sh
 
 # ---------------------------------------------------------------------------

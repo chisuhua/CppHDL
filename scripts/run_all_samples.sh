@@ -8,9 +8,20 @@
 # samples had been segfaulting for months without anybody noticing.
 #
 # The guard is deliberately stronger than `run_all_ported_tests.sh`, which
-# SKIPs a missing binary. A missing binary is exactly how a sample would
-# silently disappear from the guarded set (the same failure mode as
+# used to SKIP a missing binary. A missing binary is exactly how a sample
+# would silently disappear from the guarded set (the same failure mode as
 # `samples/fifo_bundle` rotting away unnoticed), so here it is a FAILURE.
+#
+# ℹ️ 2026-10-22 correction: the sentence above was itself WRONG.
+# `run_all_ported_tests.sh` did not "skip" a missing binary — under
+# `set -euo pipefail` its `run_test()` returned 2, which **aborted the whole
+# script** at the first missing binary (exit 2, summary never reached). That
+# is worse than a skip: a skip at least shows up in the summary, whereas an
+# abort truncates the report and silently shrinks the guarded set.
+# `examples-runtime-coverage-2026-10` fixed it: the missing-binary branch is
+# now structurally identical to the failure branch (counts as FAIL, continues)
+# plus an explicit EXECUTED-vs-tracked count conservation check.
+# This file's own guard has always had the correct behaviour (C3 below).
 #
 # Three conservation rules keep the guarded set from shrinking silently:
 #

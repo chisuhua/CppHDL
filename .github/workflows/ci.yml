@@ -456,6 +456,106 @@ jobs:
       run: bash scripts/run_all_samples.sh
 
   # ---------------------------------------------------------------
+  # examples-runtime-coverage-2026-10: the `examples/` runtime guard.
+  #
+  # Before this job existed, `examples/` had **compile** coverage only
+  # (`build-and-test` builds every example target) but **no runtime
+  # coverage at all** — an example could crash at runtime and CI would
+  # never know. `samples/` got the same treatment in
+  # `samples-regression-guard-2026-10`; this job is its `examples/` twin.
+  #
+  # Toolchain note: the job installs LLVM + g++-13 explicitly because the
+  # root CMakeLists defaults `CH_JIT_ENABLE=ON` ⇒ `find_package(LLVM
+  # REQUIRED)` ⇒ a bare runner would fail at **configure** time. This
+  # mirrors the `samples-regression` job step-for-step.
+  #
+  # Budget: 28 examples x 30s timeout = 14 min worst case, plus the
+  # library + example build. `timeout-minutes: 30` caps it.
+  # ---------------------------------------------------------------
+  examples-runtime:
+    name: Examples Runtime Guard
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    env:
+      BUILD_VERILATOR: 'OFF'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install g++ (Linux)
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get update
+        sudo apt-get install -y software-properties-common
+        if sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+           && sudo apt-get update \
+           && sudo apt-get install -y g++-13; then
+          echo "Installed g++-13 via PPA"
+          GCC_BIN=gcc-13
+          GXX_BIN=g++-13
+        else
+          echo "::warning::g++-13 PPA install failed, falling back to g++-12"
+          sudo apt-get install -y g++-12
+          GCC_BIN=gcc-12
+          GXX_BIN=g++-12
+        fi
+        sudo ln -sf "/usr/bin/$GCC_BIN" /usr/local/bin/gcc
+        sudo ln -sf "/usr/bin/$GXX_BIN" /usr/local/bin/g++
+        g++ --version
+
+    - name: Install LLVM
+      shell: bash
+      run: |
+        set -e
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        sudo apt-get update
+        sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
+                                clang-${{ env.LLVM_VERSION }}
+        LLVM_CONFIG_CMAKE=$(dpkg -L llvm-${{ env.LLVM_VERSION }}-dev \
+          | grep 'LLVMConfig\.cmake$' | head -1)
+        if [ -z "$LLVM_CONFIG_CMAKE" ]; then
+          echo "::error::LLVMConfig.cmake not found for llvm-${{ env.LLVM_VERSION }}-dev"
+          exit 1
+        fi
+        LLVM_DIR="$(dirname "$LLVM_CONFIG_CMAKE")"
+        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
+
+    - name: Configure CMake
+      shell: bash
+      run: >
+        cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_CXX_COMPILER=g++
+        -DENABLE_ASAN=OFF
+        -DBUILD_VERILATOR=${{ env.BUILD_VERILATOR }}
+
+    # Only the tracked examples (+ the library they link against) are built
+    # here; the test suite is the `build-and-test` job's business.
+    - name: Build examples
+      shell: bash
+      run: cmake --build build --target all-examples -j$(nproc 2>/dev/null || echo 4)
+
+    - name: Run examples runtime guard
+      shell: bash
+      run: bash run_all_ported_tests.sh
+
+    # The guard writes one log per example (build/logs/examples/<name>.log);
+    # without them a CI failure is just an exit code.
+    - name: Upload example logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: examples-runtime-logs
+        path: build/logs/examples
+        if-no-files-found: ignore
+
+  # ---------------------------------------------------------------
   # PR dual-backend fast feedback (verilator-parity-all-tests Phase 1).
   # Runs ONLY on pull_request events; in parallel with the existing
   # `build-and-test` job (`pr-build` analogue, BUILD_VERILATOR=OFF,

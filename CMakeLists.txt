@@ -248,36 +248,13 @@ install(TARGETS cpphdl bitvector ch_includes
 if(CPPHDL_BUILD_EXAMPLES)
     add_subdirectory(samples)
 
-    # 添加 SpinalHDL 移植示例
-    add_subdirectory(examples/spinalhdl-ported/counter)
-    add_subdirectory(examples/spinalhdl-ported/uart)
-    add_subdirectory(examples/spinalhdl-ported/fifo)
-    add_subdirectory(examples/spinalhdl-ported/width_adapter)
-    add_subdirectory(examples/spinalhdl-ported/pwm)
-    add_subdirectory(examples/spinalhdl-ported/gpio)
-    add_subdirectory(examples/spinalhdl-ported/spi)
-    add_subdirectory(examples/spinalhdl-ported/i2c)
-    add_subdirectory(examples/spinalhdl-ported/timer)
-    add_subdirectory(examples/spinalhdl-ported/assert)
-    add_subdirectory(examples/spinalhdl-ported/phase1c)
-    add_subdirectory(examples/spinalhdl-ported/uart_rx)
-    add_subdirectory(examples/spinalhdl-ported/vga)
-    add_subdirectory(examples/spinalhdl-ported/ws2812)
-    add_subdirectory(examples/spinalhdl-ported/quadrature_encoder)
-    add_subdirectory(examples/spinalhdl-ported/sigma_delta_dac)
-
-    # Phase 3: Stream 组件
-    add_subdirectory(examples/stream)
-
-    # Phase 4: Verilator 仿真后端示例 (ADR-035)
-    add_subdirectory(examples/verilator)
-
-    # Phase 3: AXI4 总线系统
-    add_subdirectory(examples/axi4)
-
-    # Phase 3A: RISC-V SoC (Temporarily disabled due to API changes)
-    # add_subdirectory(examples/riscv)  # Deprecated, use riscv-mini
-    add_subdirectory(examples/riscv-mini)  # Phase B: API 兼容,已启用
+    # examples/ 的聚合入口：子目录清单 + **被运行护栏跟踪**的 target 单一来源
+    # （CH_TRACKED_EXAMPLE_TARGETS）+ 聚合 target `all-examples`。
+    # ⚠️ 迁移前这里是 21 个 `add_subdirectory(examples/...)`；迁入
+    # `examples/CMakeLists.txt` 后，二进制目录**完全一致**
+    # （`build/examples/<相对路径>/`），因为 `add_subdirectory(examples)`
+    # 的 binary dir 就是 `build/examples`。
+    add_subdirectory(examples)
 endif()
 
 # ===========================================================================
