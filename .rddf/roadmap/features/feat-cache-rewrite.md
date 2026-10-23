@@ -37,5 +37,6 @@ CppHDL 的 L1 cache 子系统经历了一次死而复生的重建：原 `*_compl
 - [x] ADR-039 ch_mem 重写完成（含 R2 spike + R3 hard-gate）
 - [x] ADR-041 Sync/Async variant split 完成
 - [x] cache 行为测试全绿
-- [ ] cache 双后端 e2e 通过（Sync parity + Async golden-value）
-- [ ] cache stub 物理删除（ADR-037，deadline 2027-04-17）
+- [x] cache stub 物理删除（ADR-037，**2026-10-20 提前 6 个月落地**，variant b，
+      change `cache-stub-physical-removal-2026-10` 已 archive；`objective-cache-stub-retired` 已 completed）
+- [x] cache 双后端 Sync variant parity（`tests/chlib/test_cache_sync.cpp`，2026-10-19 archive `aed33be`）

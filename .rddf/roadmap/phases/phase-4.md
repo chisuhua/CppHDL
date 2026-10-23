@@ -1,7 +1,7 @@
 ---
 id: phase-4
 kind: phase
-status: active
+status: done
 phase_refs: []
 主题: [dual-backend 测试完整化, cache 子系统重建, 逻辑算子 deprecation 落地]
 ---
@@ -50,6 +50,16 @@ Phase 4 是**当前进行中**的阶段：把 CppHDL 的测试与组件基础设
 - [x] ADR-041 Sync/Async 拆分落地
 - [x] ADR-036 deprecation 标记落地
 - [x] `dual-backend-test-coverage` capability spec 通过 validate
-- [ ] `verilator-parity-all-tests` Phase 1 ship（macro + 8-10 test + 3 专项 fixture + ci.yml）
-- [ ] cache 双后端 e2e 通过（Phase 2）
-- [ ] CTEST_TOTAL 同步 + `verify_test_counts.sh` 绿
+- [x] `verilator-parity-all-tests` Phase 1 ship（macro + 5 base test + 3 专项 fixture + ci.yml
+      `pr-verilator-fast`，commit `5f634f2`，archive `d6954ef`）
+- [x] cache 双后端 e2e 通过（`tests/chlib/test_cache_sync.cpp`，2026-10-19 archive `aed33be`）
+- [x] CTEST_TOTAL 同步 + `verify_test_counts.sh` 绿（**2026-10-23 实测 185**）
+
+## 收口备注（2026-10-23）
+
+Phase 4 的三条主题全部落地（cache 重建 ✅ / deprecation 标记 ✅ / dual-backend 基础设施 + Phase 1-3 ✅）。
+**唯一延伸到 phase-5 的残余**是 dual-backend 的全量覆盖（Phase 4 RV32I / Phase 5 全量）—— 该残余
+**不是** phase-4 的未完成项，而是 `feat-dual-backend-coverage` 按设计跨阶段（`phase_refs: [phase-4, phase-5]`）
+继续推进的部分。故 phase-4 正常收口归档。
+
+> ⚠️ 上表「dual-backend test」行标 🔄 是 **2026-10-19 的旧状态**；2026-10-23 复核：Phase 1-3 均已 archived。
