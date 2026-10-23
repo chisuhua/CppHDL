@@ -1,7 +1,7 @@
 # RV32I Mini CMakeLists.txt
 # ISA 组件验证:RegFile + ALU + Decoder + Branch + Load/Store
 #
-# 两个 helper 函数消除 18 个 Catch2 + 3 个 unit add_executable 目标的样板代码,
+# 两个 helper 函数消除 14 个 Catch2 + 1 个 noctest + 3 个 unit 目标的样板代码,
 # 模式对齐 tests/CMakeLists.txt 的 add_catch_test()。
 
 # ISA 单元测试(自带 main(),无 Catch2)
@@ -82,11 +82,8 @@ riscv_mini_catch_test(test_address_decoder tests/test_riscv_tests_soc.cpp)
 riscv_mini_catch_test_noctest(test_riscv_tests_pipeline tests/test_riscv_tests_pipeline.cpp)
 target_include_directories(test_riscv_tests_pipeline PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
-riscv_mini_catch_test(test_pipeline_smoke tests/test_pipeline_smoke.cpp)
 riscv_mini_catch_test(test_pipeline_minimal tests/test_pipeline_minimal.cpp)
 riscv_mini_catch_test(test_pipeline_debug tests/test_pipeline_debug.cpp)
-riscv_mini_catch_test(test_pipeline_debug3 tests/test_pipeline_debug3.cpp)
-riscv_mini_catch_test(test_pipeline_debug6 tests/test_pipeline_debug6.cpp)
 riscv_mini_catch_test(test_pipeline_wrapper tests/test_pipeline_wrapper.cpp)
 riscv_mini_catch_test(test_wrapper_simple tests/test_wrapper_simple.cpp)
 riscv_mini_catch_test(test_wrapper_ifstage tests/test_wrapper_ifstage.cpp)
@@ -104,5 +101,5 @@ target_include_directories(riscv_mini_cache_smoke PRIVATE
 # === 安装 (Phase 1-3 + 5 个核心 Pipeline 测试) ===
 install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test
               test_pipeline_exec test_soc_hello_world test_riscv_tests
-              test_address_decoder test_riscv_tests_pipeline test_pipeline_smoke
+              test_address_decoder test_riscv_tests_pipeline
         RUNTIME DESTINATION bin/riscv-mini)

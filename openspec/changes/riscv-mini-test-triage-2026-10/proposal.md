@@ -80,10 +80,26 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 | `test_pipeline_debug` | **修** | 同上；9 个用例是 5 个 stage + HazardUnit 的逐组件构造冒烟，有真实回归价值 |
 | `test_pipeline_debug4` | **删** | 16 个「增量接地输入」用例**互为重复**——未显式驱动的输入默认为 0 ⇒ 16 例行为完全相同，零增量价值（292 LOC） |
 | `test_pipeline_debug5` | **删** | 与 debug4 同型的 2 个端点用例（62 LOC） |
+| `test_pipeline_debug3` | **删** | 与已删的 `test_hazard_minimal` **逐字同型**（同一个 0 断言的 HazardUnit 构造冒烟），且 `ch_module` 放 TEST_CASE 顶层违反 AGENTS.md 约定 |
+| `test_pipeline_debug6` | **删** | 与已删的 `test_pipeline_debug4` 同型（16 输入全 0 ≡ 完全不驱动 ⇒ 那 16 行 `set_input_value` 零判别力） |
+| `test_pipeline_smoke` | **删** | `Rv32iPipelineTop` 的端口列表在 **ADR-046 D10 被冻结**（C3 的 DUT 依赖它）⇒ MUST NOT 为其加观测端口；而其现有端口**全部是输入**（零可观测输出）⇒ **无法写出非空洞断言**。覆盖由 `test_pipeline_wrapper`（带观测 + 真实断言）承接 |
 | `test_rv32i_pipeline_device` | **删** | 其前提「`ch_device<Rv32iPipeline>` 直接可用」在当前组件设计下**结构性不可实现**；等价覆盖由 `test_pipeline_minimal`（修后）+ `test_pipeline_smoke`（`Rv32iPipelineTop`）提供 |
 | `test_address_decoder` | **修** | `sim.eval()` → `sim.tick()`（`eval()` 是时钟沿原语，对无时钟的纯组合设计不适用） |
 | `test_riscv_tests` | **修** | ① 修 4 个手写用例的指令编码；② 依赖仓外 riscv-tests 二进制的 43 个用例在资源缺失时显式 `SKIP`（用 `is_regular_file` 而非 `exists` —— 目录会让 `load_binary` 以 `std::bad_alloc` 崩掉）；③ `RISCV_TESTS_PATH` 改为可由环境变量覆盖 |
 | `test_riscv_tests_pipeline` | **只构建、不进 CTest** | 46 个用例**全部**依赖仓外二进制 ⇒ CI 中全部 SKIP ⇒ Catch2 v3 退出码 **4**（= 没有真正跑起来的用例）⇒ **CTest 判红** ⇒ 登记在 `examples/disabled_examples.txt`（带归位条件） |
+
+### 统一判据（第二轮审稿后确立）
+
+> **一个 examples 内的测试 target MUST 至少断言一个语义确定的输出**
+> （不能只有 `SUCCEED`）。达不到 ⇒ 补断言，或删 + 留痕
+> （留痕在 `examples/removed_examples.txt`，**不是**豁免清单）。
+
+按此判据，9 个「0 断言」target 的处置：**6 个补断言**（`test_pipeline_minimal` /
+`test_pipeline_wrapper` / `test_wrapper_simple` / `test_wrapper_ifstage` /
+`test_wrapper_pipeline` / `test_ifstage_device`）+ **3 个删除**（`debug3` / `debug6` /
+`smoke`）。补断言的手法：把 DUT 的某个语义输出引到顶层 `ch_out`（`ch_device<T>`
+的顶层组件则直接用其自身端口），断言一个**非平凡值**（0x80000004 / 0x33 / 1 / 2 /
+0x1234 / 0xABCD / 前推选择非零 …）。
 
 ### C1-c 7 个 orphan 测试源文件定性
 | 源文件 | 处置 |
@@ -110,14 +126,15 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 
 ### C1-d 新护栏
 - 新增 `scripts/verify_example_test_wiring.sh`（命名对齐 `scripts/verify_rst_n_wiring.sh` 范式）：
-  - **C1 归属守恒**：每个 `examples/riscv-mini/` 的 Catch2 target 及其源文件
-    要么被注册进 CTest、要么登记在 `examples/disabled_examples.txt`（带理由 + 归位条件）；
-  - **C1b 源文件守恒**：每个 `examples/**/tests/test_*.cpp` MUST 被某个 target 编译
-    （否则 = 从不编译的静默腐坏）；
-  - **C2 数量守恒**：已覆盖数 + 已登记数 == 源文件总数（防静默缩面）。
-  - **C3 运行期检查**：examples 的每个 CTest 条目 MUST **实际跑出 exit 0**
-    —— 起因：Catch2 v3 在「全部用例被 SKIP」时返回 **4**，而 `ctest -N` 仍会
-    列出该条目 ⇒「CTest 里认得它」**不等于**「它会绿」。
+  - **C0（源码级）**：根 `CMakeLists.txt` 的 `enable_testing()` MUST 排在
+    `add_subdirectory(examples)` 之前 —— 陈旧构建目录会掩盖这个问题 ⇒
+    不能只靠 `ctest -N`。
+  - **C1 归属守恒**：每个 example 测试源 MUST 被某个「已进 CTest」或
+    「已被 example 运行护栏跟踪」的 target 编译，否则登记在 `disabled_examples.txt`。
+  - **C2 数量守恒**：源文件总数 MUST 等于 root `AGENTS.md` 的
+    `EXAMPLES_TEST_SOURCES` **锚点**（机制与 `CTEST_TOTAL` 同型）。
+  - **C3 运行期**：examples 的每个 CTest 条目 MUST 跑出 exit 0 **且日志无
+    error/fatal**；既有例外走显式 allowlist（带 stale 检查）。
   挂进 CI（2 处 job）。
 - **`run_all_ported_tests.sh` 的 C1 检查需认得 CTest 归属**：17 个 riscv-mini 测试
   现在**是构建产物但由 CTest 覆盖**，不属于 example demo 护栏 ⇒ 该检查必须把
@@ -160,11 +177,17 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 
 ### 登记的框架缺陷（本 change 不修，单独立项）
 
-3. **6 个新注册的 target 在运行期打印 error 级 CHERROR，但退出码仍是 0**
+3. **CLINT 的 `mtime` 不会自动递增**（`include/cpu/riscv/clint.h`）：RISC-V
+   规范要求 `mtime` 是自由运行计数器，而当前实现只能由软件通过写端口显式写入
+   ⇒ 只构成「静态比较器」。文件头注释此前**声称**「每个 `tick()` 递增」而
+   `tick()` 是空实现 ⇒ 本 change 删掉了该空实现与 2 个恒返 0 的占位 getter，
+   并把注释改成如实描述。修复（递增频率 + `mtimecmp` 语义联动）单独立项。
+4. **6 个 target 在运行期打印 error 级 CHERROR，但退出码仍是 0**
    （`[ERROR] Requirement failed [driver_impl->get_parent() == lnodeimpl::current_component()]`，
    `include/core/io.h:385`；`CHREQUIRE` 只记日志不中止）：
-   `test_riscv_tests_pipeline`(144) / `test_pipeline_debug`(9) / `test_pipeline_wrapper`(9) /
-   `test_wrapper_pipeline`(6) / `test_pipeline_smoke`(3) / `test_pipeline_minimal`(3)。
+   `test_riscv_tests_pipeline`(135，不进 CTest) / `test_pipeline_debug`(9) /
+   `test_pipeline_wrapper`(9) / `test_wrapper_pipeline`(6) / `test_pipeline_minimal`(3)。
+   ⇒ 进 CTest 的 4 个走护栏 `CHERROR_ALLOWLIST`（带 stale 检查）。
    ⇒ 这是缺陷 #1（`ch_module` 作为 `Component` 成员无法绑 parent ⇒ 子 stage
    挂到**祖父**节点下 ⇒ `<<=` 的 driver 归属检查失败）的**可观测症状**。
    ⇒ 「exit 0」**不等于**「日志干净」——本 change 如实登记该计数，不掩盖。
@@ -181,10 +204,10 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 - [x] 19 个原「不执行」target 全部有归属：绿的进 CTest、红的修好或删除并登记；
       另 2 个高价值 orphan（`test_interrupt_flow` / example 版 `test_rv32i_pipeline`）
       修好并进 CTest
-- [x] `ctest -N` = **202**（基线 185 + 17；`test_riscv_tests_pipeline` 因 Catch2 exit 4 不进 CTest），
+- [x] `ctest -N` = **199**（基线 185 + 14；5 个 0 断言 target 被删、1 个因 Catch2 exit 4 只构建），
       与 root `AGENTS.md` `CTEST_TOTAL` 一致
 - [x] `bash scripts/verify_example_test_wiring.sh` 绿
 - [x] `bash scripts/verify_openspec_delta.sh riscv-mini-test-triage-2026-10` 绿
-- [x] `ctest -LE perf` 零回归（**191/191 全绿**，基线 174 + 17 新增）
+- [x] `ctest -LE perf` 零回归（**188/188 全绿**，基线 174 + 14 新增）
 - [x] `bash scripts/verify_test_counts.sh` 绿
 - [x] `bash run_all_ported_tests.sh` 绿（28/28，PASS 28 / FAIL 0）

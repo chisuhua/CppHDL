@@ -167,6 +167,25 @@ disabled_examples() {
 # 但运行覆盖由 **CTest** 提供 (不是本护栏) => 「已构建但未跟踪」检查必须
 # 认得 CTest 这个归属, 否则会把 18 个已被 CTest 覆盖的测试误判为「无归属」。
 # 判据用 `ctest -N` (CTest 条目的**唯一真相**), 而不是解析 CMake 源码。
+# 一个名字是否仍是**已声明**的 CMake target（跨所有 CMakeLists）。
+# ⚠️ 用于区分两种「已构建但无归属」：
+#   ① target 仍在 CMake 里但没有任何归属 ⇒ **真问题**（UNTRACKED）；
+#   ② target 已从 CMake 里**删除**、只是构建目录残留了旧二进制
+#      ⇒ **陈旧产物**（STALE ARTIFACT），不是归属问题（清一下 build 目录即可）。
+#    2026-10-23（change `riscv-mini-test-triage-2026-10`）新增该区分：
+#    删掉若干个 target 后，本地旧构建目录里的孤儿二进制会让 C1 报一串
+#    「无归属」，而其中没有一个是真实问题 ⇒ 报告误导。
+is_declared_target() {
+    local want="$1" f
+    # ⚠️ 收窄到 examples/ 域：本护栏是 examples 的护栏，而 CTest 的名字集是**全局**的
+    #    ⇒ 若不过滤，一个与根 `tests/` 同名的 example 二进制会被判为「已声明/已注册」
+    #    而侥幸通过（跨域同名风险）。
+    for f in $(find "$EXAMPLES_DIR" -name CMakeLists.txt 2>/dev/null) "$EXAMPLES_DIR/CMakeLists.txt"; do
+        grep -qE "^[[:space:]]*(riscv_mini_catch_test|riscv_mini_catch_test_noctest|riscv_mini_unit_test|add_executable|add_catch_test|add_test)[[:space:]]*\\([[:space:]]*${want}([[:space:]]|,|\\))" "$f" 2>/dev/null && return 0
+    done
+    return 1
+}
+
 ctest_registered_tests() {
     ctest --test-dir "$BUILD_DIR_ABS" -N 2>/dev/null \
         | sed -n 's/^[[:space:]]*Test[[:space:]]*#[0-9][0-9]*:[[:space:]]*//p' \
@@ -227,6 +246,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "--- C1: 注册一致性（每个已构建的 example 程序必须被跟踪或已登记）---"
 CONSISTENCY_FAIL=0
+STALE_ARTIFACTS=0
 for prog in $(built_example_programs); do
     if printf '%s\n' "$TRACKED_NAMES" | grep -qx "$prog"; then
         continue
@@ -238,6 +258,14 @@ for prog in $(built_example_programs); do
     # ⚠️ 用 `> /dev/null` 而非 `grep -q`：`grep -q` 提前关管道 ⇒ 上游收
     #    SIGPIPE(141) ⇒ 在 `set -o pipefail` 下整条管道被判失败 ⇒ 误判。
     if ctest_registered_tests | grep -x "$prog" > /dev/null 2>&1; then
+        continue
+    fi
+    # 已从 CMake 里删除的 target ⇒ 构建目录残留的陈旧二进制（非归属问题）
+    if ! is_declared_target "$prog"; then
+        STALE_ARTIFACTS=$((STALE_ARTIFACTS + 1))
+        printf "${YELLOW}  STALE-ARTIFACT  %s${NC}\n" "$prog"
+        echo "      该 target 已从 CMake 中删除（不在任何 CMakeLists 里声明）"
+        echo "      => 只是旧构建目录残留的二进制；清理 build 目录后即消失，不是归属问题"
         continue
     fi
     printf "${RED}  UNTRACKED  %s${NC}\n" "$prog"
@@ -255,6 +283,9 @@ for prog in $(disabled_examples); do
         CONSISTENCY_FAIL=$((CONSISTENCY_FAIL + 1))
     fi
 done
+if [ "$STALE_ARTIFACTS" -gt 0 ]; then
+    echo "  ℹ️  $STALE_ARTIFACTS 个陈旧二进制（target 已删，仅构建目录残留）"
+fi
 if [ "$CONSISTENCY_FAIL" -eq 0 ]; then
     echo "  OK：全部已构建的 example 程序都有归属（被跟踪 $TRACKED_COUNT）"
 else

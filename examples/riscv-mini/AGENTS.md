@@ -19,8 +19,8 @@ examples/riscv-mini/
 │   ├── i_cache_prefetch.h   # I-Cache wrapper (instance ICacheSync, handoff §3.4)
 │   ├── d_cache_write_buffer.h # D-Cache wrapper (instance DCacheSync, handoff §3.4)
 │   └── stages/              # IF/ID/EX/MEM/WB stage headers
-└── tests/                   # ✅ 18 个 Catch2 target 已注册进 CTest
-    ├── test_*.cpp           # 19 test files（其中 5 个已删除，见 disabled 清单）
+└── tests/                   # ✅ 14 个 Catch2 target 已注册进 CTest
+    ├── test_*.cpp           # 16 test files（其中 8 个已删除，见 removed_examples.txt）
     └── catch_amalgamated.*  # Catch2 framework
 ```
 

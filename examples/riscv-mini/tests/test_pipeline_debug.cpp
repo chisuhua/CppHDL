@@ -114,7 +114,10 @@ public:
     void describe() override {
         ch::ch_module<IdStage> id_stage{"id_stage"};
         id_stage.io().pc <<= ch_uint<32>(0x80000000_h);
-        id_stage.io().instruction <<= ch_uint<32>(0x13_h);   // ADDI x0, x0, 0
+        // ⚠️ 用 `add x3, x1, x2`（0x002081B3）而不是 `addi x0,x0,0`(0x13)：
+        //    后者的 rs1/rs2 本来就都是 x0 ⇒ 断言 `rs1_addr==0 && rs2_addr==0`
+        //    是**恒真**的（解码器坏了也过），零判别力。
+        id_stage.io().instruction <<= ch_uint<32>(0x002081B3_h);
         id_stage.io().valid <<= ch_bool(true);
         id_stage.io().reg_rs1_data <<= ch_uint<32>(0_d);
         id_stage.io().reg_rs2_data <<= ch_uint<32>(0_d);
@@ -250,10 +253,11 @@ TEST_CASE("DEBUG 3: IdStage standalone", "[debug][3]") {
     ch::Simulator sim(top.context());
     sim.tick();
 
-    // 0x00000013 = ADDI x0, x0, 0 ⇒ opcode=0x13，源寄存器均为 x0
-    REQUIRE(sim.get_port_value(top.instance().io().opcode) == 0x13u);
-    REQUIRE(sim.get_port_value(top.instance().io().rs1_addr) == 0u);
-    REQUIRE(sim.get_port_value(top.instance().io().rs2_addr) == 0u);
+    // 0x002081B3 = `add x3, x1, x2` ⇒ opcode=0x33(R 型), rs1=1, rs2=2
+    // ⚠️ rd(3) / funct3(0) 也要对：用非零源寄存器才能真正验证解码
+    REQUIRE(sim.get_port_value(top.instance().io().opcode) == 0x33u);
+    REQUIRE(sim.get_port_value(top.instance().io().rs1_addr) == 1u);
+    REQUIRE(sim.get_port_value(top.instance().io().rs2_addr) == 2u);
 }
 
 // ===== Test 4: ExStage standalone =====

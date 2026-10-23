@@ -4,24 +4,21 @@
 
 ### Requirement: example 内的 Catch2 测试 target MUST 注册进 CTest 体系
 
-`examples/**` 下注册的 Catch2 测试 target MUST 通过 `add_test` 注册进 CTest，
+`examples/**` 下的 Catch2 测试 target MUST 通过 `add_test` 注册进 CTest，
 且该注册 MUST 实际生效（`ctest -N` 列出它、`ctest` 执行它）。
 
 这些 target MUST NOT 以「example 运行护栏」代替 CTest 注册 —— 它们是**测试**
 而不是 demo。
 
-注册进 CTest 的测试 MUST 以**退出码 0** 结束；既有失败 MUST 被**显式记录**
-（带根因与归位条件），MUST NOT 通过「跳过它」让 CTest 变绿。
+注册进 CTest 的测试 MUST 以**退出码 0** 结束，且运行日志 MUST NOT 含
+error/fatal 级条目（「跑但报错」≠ 通过）；既有例外 MUST 走**显式 allowlist**
+（带根因 + 归位条件 + stale 检查）。
 
-依赖**仓外**资源的用例在该资源缺失时 MUST **显式 SKIP**（MUST NOT 以失败告终）。
-⚠️ CTest 的粒度是**测试二进制**而不是**用例** ⇒ 单个用例的 SKIP 在 `ctest`
-输出中不可见；可审计的形态是**直接运行该二进制**并读其 Catch2 汇总行
-（`test cases: N | P passed | S skipped`）。
-⇒ 当一个二进制的**全部**用例都被跳过时，Catch2 v3 的退出码为 **4**
-⇒ CTest 会把它判为 FAILED ⇒ **这样的二进制 MUST NOT 注册进 CTest**。
+既有失败 MUST 被**显式记录**（带根因与归位条件），MUST NOT 通过「跳过它」
+让 CTest 变绿。
 
-每个 `examples/**/tests/test_*.cpp` MUST 满足二者之一：① 已被注册进 CTest；
-② 登记在 `examples/disabled_examples.txt`（带理由 + 归位条件）。
+每个 example 测试源文件 MUST 满足二者之一：① 被某个**已进 CTest** 的 target
+编译；② 登记在 `examples/disabled_examples.txt`（带理由 + 归位条件）。
 
 #### Scenario: example 内的测试 target MUST 被 ctest 执行
 

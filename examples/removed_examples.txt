@@ -1,0 +1,29 @@
+# examples/removed_examples.txt
+#
+# **删除留痕**（audit trail）—— 不参与任何「豁免」判定。
+#
+# ⚠️ 为什么与 `examples/disabled_examples.txt` 分开（2026-10-23，对抗审稿 B3）：
+#    `disabled_examples.txt` 的语义是「**存活但未跑** ⇒ 豁免」，判定方式是**按名字**。
+#    把「删除留痕」也塞进那个文件，会让它变成**按名字的永久自动豁免** ——
+#    实测：新建一个与已删项**同名**的测试（且不注册进 CTest），
+#    `scripts/verify_example_test_wiring.sh` 与 `run_all_ported_tests.sh` **双绿**。
+#    ⇒ 删除留痕 MUST 与豁免分开，且**不得**被当成「该名字已豁免」。
+#
+# 格式：<target 名>	<删除理由>	<归位条件>
+#
+# 本文件的唯一用途：**人可读的审计记录**（为什么删、什么条件下重建）。
+# ⚠️ 它**不参与任何自动化判定** —— 护栏只读 `disabled_examples.txt`。
+#    （「旧构建目录残留孤儿二进制」这一情况已由 `run_all_ported_tests.sh` 的
+#      `is_declared_target()` 判为 STALE-ARTIFACT，无需本文件参与。）
+#
+# 与 C2 锚点（root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES`）的关系：
+#   本文件里的每一条都对应一次**已发生**的源文件减少 ⇒ 当初必然同步改小了
+#   那个锚点。锚点是「防静默缩面」的机制，本文件是「那次缩面的理由」。
+test_pipeline_debug4	已删除（2026-10-23）：16 个「增量接地输入」用例**互为重复**——未显式驱动的 `ch_in` 输入默认为 0 ⇒「只接地 1 个输入」与「接地 16 个输入」行为完全相同，零增量价值（292 LOC）。**删除判据是「组件覆盖」而非「断言数」**：它测的组件（HazardUnit）与 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」完全相同，而后者**已带真实断言**（stall/flush/forward_a，2026-10-23 补齐）⇒ 覆盖不丢	归位条件：若将来需要覆盖「部分输入未驱动」的真实语义（区别于默认值 0），需先让 `ch_in` 具备 X/未驱动语义，再重建该 target
+test_pipeline_debug5	已删除（2026-10-23）：与 `test_pipeline_debug4` 同型的 2 个端点用例（62 LOC），且原本示范的「parent component 包裹」写法本身是错的（`ch_module` 放在 TEST_CASE 顶层而非 `describe()` 内）	归位条件：同上；正确的包裹写法见 `test_pipeline_debug.cpp` 的 `*Top` 承载组件
+test_pipeline_debug2	已删除（2026-10-23）：标题即「Minimal reproduction of "Child component has been destroyed" crash」——纯崩溃复现脚手架（43 LOC / 1 用例 / 0 断言）；其复现的缺陷已定位为框架级（`ch_module` 放 TEST_CASE 顶层），登记在 change `riscv-mini-test-triage-2026-10` 的框架缺陷清单中	归位条件：框架缺陷修复后若需保留回归探针，应改写为断言式用例并注册进 CTest
+test_hazard_minimal	已删除（2026-10-23）：19 LOC / 1 用例 / 0 断言的「HazardUnit instantiation only」，与 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」完全同型且被其覆盖	归位条件：若 `test_pipeline_debug` 被移除，则需重建一个带真实断言的 HazardUnit 构造冒烟
+test_rv32i_pipeline_device	已删除（2026-10-23）：其前提「`ch_device<Rv32iPipeline>` 直接可用（无 wrapper）」在当前组件设计下**结构性不可实现** —— `Rv32iPipeline` 把 `ch_module<IfStage>` 等声明为**成员变量**（`include/cpu/pipeline/rv32i_pipeline.h:75-81`），成员在构造函数期初始化，早于 `build()` 设置 `Component::current()` ⇒ `ch_module` 全部早退 ⇒ 必 SIGSEGV	归位条件：框架缺陷（`ch_module` 作为 Component 成员无法绑 parent）修复后重建；等价覆盖现由 `test_pipeline_minimal`（`ch_module<Rv32iPipeline>` 包裹版）与 `test_pipeline_smoke`（`Rv32iPipelineTop`）提供
+test_pipeline_debug3	已删除（2026-10-23）：标题即「ABSOLUTE MINIMAL: HazardUnit instance only」——与 `test_hazard_minimal` 逐字同型（同一个 0 断言构造冒烟）；且把 `ch::ch_module<HazardUnit>` 直接放在 TEST_CASE 顶层，违反根 AGENTS.md §COMPONENT LIFECYCLE PATTERNS 的规定用法。等价覆盖由 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」（已带真实断言）提供	归位条件：若 `test_pipeline_debug` 被移除，则需重建一个**带真实断言**的 HazardUnit 行为测试
+test_pipeline_debug6	已删除（2026-10-23）：与已删的 `test_pipeline_debug4` 同型——16 个输入**全部置 0**，而未驱动的 `ch_in` 默认值也是 0 ⇒ 行为与「完全不驱动」等价 ⇒ 它的 16 行 `set_input_value` 不增加任何判别力。等价覆盖由 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」提供	归位条件：同 `test_pipeline_debug4`
+test_pipeline_smoke	已删除（2026-10-23）：`Rv32iPipelineTop` 的端口列表在 **ADR-046 D10 被冻结**（C3 的 DUT 依赖它）⇒ 本 change MUST NOT 为观测给它加输出端口；而它现有端口**全部是输入**（零可观测输出）⇒ 无法写出非空洞断言。其「流水线 + ITCM/DTCM 装配」覆盖由 `test_pipeline_wrapper`（带 `instr_addr` / `perf_cycles` 观测 + 真实断言）提供	归位条件：C3 建立 dual-parity 观测点后，由 C3 的双后端 parity 覆盖

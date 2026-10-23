@@ -179,6 +179,38 @@ stall/flush/forward_a）⇒ 从 **0 断言 / 9 SUCCEED** 变为 **14 断言 / 9 
 `ch_uint<32>(0x80000000_d)` 编译失败（`_d` = 十进制）⇒ 仓库约定十六进制用 `_h`。
 ⚠️ 且 `ch_uint<4>(0x33_h)` 也不行（0x33 需 6 bit）—— ex_stage 的 opcode 字段只有 4 bit。
 
+### R19. 第二轮审稿（REJECT）后的 6 个设计约束
+
+见 `scripts/verify_example_test_wiring.sh` 头部注释（**勿退化**）：
+① 判据 = `ctest -N`；② 基准 = 文件系统源文件集合；③ 映射用精确路径；
+④ 源文件枚举**按内容/目录**（不按 `test_*.cpp` 命名）；
+⑤ 源文件总数 vs `EXAMPLES_TEST_SOURCES` **锚点**（防「源文件+声明一起删」）；
+⑥ 删除留痕与豁免**分开**（`removed_examples.txt`）；
+⑦ 运行期检查 MUST 同时看 **exit 0** 与**日志 error/fatal**。
+
+变异验证 6 条全被抓：不叫 `test_*.cpp` 的测试源 / 藏在 `tests/` 之外的测试源 /
+源文件+声明一起删 / 新建与已删项同名 / `enable_testing()` 移回 examples 之后 /
+一个 target 打印 `[ERROR]` 但 exit 0。
+
+### R20. 统一判据：examples 测试 target MUST 断言一个语义输出
+
+9 个「0 断言」target ⇒ 6 补断言 + 3 删除。补断言手法：DUT 的语义输出引到顶层
+`ch_out`，断言非平凡值。删除的 3 个各有明确理由（同型重复 / 纯脚手架 /
+ADR-046 D10 冻结端口 ⇒ 零可观测输出）。
+
+### R21. `debug` 的 2 个恒真断言（第二轮审稿 S7）
+
+`DEBUG 3` 原本用 `addi x0,x0,0`(0x13) 断言 `rs1_addr==0 && rs2_addr==0` ——
+该指令的 rs1/rs2 本来就是 x0 ⇒ 解码器坏了也过（恒真）。改用
+`add x3, x1, x2`(0x002081B3) ⇒ 断言 opcode=0x33 / rs1=1 / rs2=2，才有判别力。
+
+### R22. 陈旧产物 vs 无归属（`run_all_ported_tests.sh`）
+
+删 target 后，本地旧构建目录残留的孤儿二进制会被 C1 报成「无归属」——
+而它们**不是**归属问题。⇒ 新增 `is_declared_target()`（收窄到 `examples/` 域，
+顺带解掉第二轮审稿 S8 的跨域同名风险）：不在任何 CMakeLists 里声明者报
+`STALE-ARTIFACT`（不计失败），其余才是 `UNTRACKED`。
+
 ---
 
 ## File Structure

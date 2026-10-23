@@ -26,8 +26,13 @@ using namespace ch::core;
  * CLINT 模块 - 64位定时器比较器
  *
  * 提供机器定时器中断 (MTIP) 用于 FreeRTOS 等操作系统
- * 64位 mtime 计数器在每个 tick() 调用时递增
  * 当 mtime >= mtimecmp 时，mtip 中断信号置高
+ *
+ * ⚠️ 已知缺口（2026-10-23 登记，本文件不修）：`mtime` **不会自动递增** ——
+ *    它只能由软件通过写端口 (addr 0x0/0x4) 显式写入。RISC-V 规范要求 mtime
+ *    是自由运行的计数器，故当前实现只构成「静态比较器」。
+ *    该缺口已登记在 change `riscv-mini-test-triage-2026-10`（"框架/组件缺陷"节），
+ *    修复需单独立项（涉及 mtime 递增频率与 mtimecmp 语义的联动）。
  */
 class Clint : public ch::Component {
 public:
@@ -115,29 +120,11 @@ public:
         io().mtip = mtip_cond;
     }
 
-    /**
-     * C++ 层 tick 方法 - 在每个时钟周期调用以更新 mtime 计数器
-     * 此方法供 Simulator 在每个 tick 周期调用
-     */
-    void tick() {
-        // mtime 计数器递增 (在 describe() 之外由 Simulator 调用)
-        // 注意: 由于 mtime_lo 和 mtime_hi 是 ch_reg，
-        // 实际递增逻辑需要在 describe() 中通过组合逻辑实现
-    }
-
-    /**
-     * 获取当前 mtime 值 (低32位)
-     */
-    ch_uint<32> get_mtime_lo() const {
-        return ch_uint<32>(0_d); // 占位，实际值由内部寄存器提供
-    }
-
-    /**
-     * 获取当前 mtimecmp 值 (低32位)
-     */
-    ch_uint<32> get_mtimecmp_lo() const {
-        return ch_uint<32>(0_d); // 占位，实际值由内部寄存器提供
-    }
+    // ⚠️ 2026-10-23（change `riscv-mini-test-triage-2026-10`）删除了三处死代码：
+    //    `void tick()`（空实现，注释还声称「Simulator 在每个 tick 调用」——
+    //    但没有任何调用方）、`get_mtime_lo()` / `get_mtimecmp_lo()`
+    //    （恒返 0 的占位 getter，全仓零调用方，且会让读者以为能读到真值）。
+    //    观察 mtime/mtimecmp 请走读端口 (`read_en` + `read_data`)。
 };
 
 } // namespace ch::chlib
