@@ -179,9 +179,14 @@ function eval_cond(c) {
     return 2
 }
 # 在任意文本里数「可执行断言」：断言宏 + 词边界（前驱不是标识符字符）
+# ⚠️ 词边界实现：**不**用「交替组里的 `^`」（`(^|[^A-Za-z0-9_])`）——
+#    POSIX 对「子表达式内的 `^` 是否仍是锚点」**未定义** ⇒ 不同 awk 实现
+#    （尤其 BSD/BWK awk = macOS 默认）可能按字面字符处理 ⇒ 行为分叉。
+#    改为在串首**垫一个哨兵空格**（空格不是标识符字符 ⇒ 满足词边界），
+#    这样边界判定只需 `[^A-Za-z0-9_]`，全部落在 POSIX 明确定义的范围内。
 function count_asserts(str,   cnt, s) {
-    cnt = 0; s = str
-    while (match(s, "(^|[^A-Za-z0-9_])" ASM "[[:space:]]*\\(") > 0) {
+    cnt = 0; s = " " str
+    while (match(s, "[^A-Za-z0-9_]" ASM "[[:space:]]*\\(") > 0) {
         cnt++
         s = substr(s, RSTART + RLENGTH)
     }
