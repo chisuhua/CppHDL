@@ -181,7 +181,11 @@ is_declared_target() {
     #    ⇒ 若不过滤，一个与根 `tests/` 同名的 example 二进制会被判为「已声明/已注册」
     #    而侥幸通过（跨域同名风险）。
     for f in $(find "$EXAMPLES_DIR" -name CMakeLists.txt 2>/dev/null) "$EXAMPLES_DIR/CMakeLists.txt"; do
-        grep -qE "^[[:space:]]*(riscv_mini_catch_test|riscv_mini_catch_test_noctest|riscv_mini_unit_test|add_executable|add_catch_test|add_test)[[:space:]]*\\([[:space:]]*${want}([[:space:]]|,|\\))" "$f" 2>/dev/null && return 0
+        # ⚠️ 判据刻意**放宽**为「该名字是任意 `fn(` 行的第一个实参」，
+        #    而**不是**一份写死的 helper 白名单。理由：白名单太窄 ⇒ 真实的
+        #    UNTRACKED 会被误判成 STALE-ARTIFACT ⇒ **静默掩盖真问题**；
+        #    放宽 ⇒ 最坏只是把陈旧产物报成 UNTRACKED（吵，但安全）。
+        grep -qE "^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*${want}([[:space:]]|,|\\))" "$f" 2>/dev/null && return 0
     done
     return 1
 }
