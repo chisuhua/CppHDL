@@ -31,6 +31,28 @@
 | `test_rv32i_pipeline_device` | `ch_device<Rv32iPipeline>` —— `Rv32iPipeline` 把 `ch_module` 声明为**成员变量**，成员在构造函数期初始化，**早于** `build()` 设置 `Component::current()` ⇒ 永远绑不到 parent | **框架/组件设计缺陷**，前提不可实现 ⇒ 删 |
 | `test_address_decoder` | `Simulator::eval()` **无空指针保护**地解引用 `default_clock_instr_`；而 `simulator_init.cpp:152` 在 `sequential_instr_list_` 为空（纯组合设计）时把该指针置 null；`tick()` 有 `if (default_clock_instr_)` 保护，`eval()` 没有 | **框架缺陷**（1 行可修）+ 测试用错了 API |
 
+### 机制性根因：`enable_testing()` 的位置让 `add_test()` 成了空操作
+
+「19 个 target 编译但从不执行」的**机制**在此：根 `CMakeLists.txt` 的 `enable_testing()`
+原本位于**第 324 行**，而 `add_subdirectory(examples)` 在**第 257 行** ⇒ examples 子目录
+在 testing 启用**之前**被处理 ⇒ CMake 不为它生成 `CTestTestfile.cmake`
+（实测 `build/examples/riscv-mini/CTestTestfile.cmake` **根本不存在**）
+⇒ 其中的 `add_test()` **静默无效**。
+
+⇒ 这是「补 `add_test` 就够了」这一预判的**唯一拦路虎**：只加 `add_test` 而不调顺序，
+CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有子目录之前。
+
+### 顺带挖出的真实 RTL bug：CLINT 地址解码用了错误的位域
+
+`include/cpu/riscv/clint.h` 用 `bits<1, 0>(io().addr)` 解码地址偏移，但文件头注释声明的
+寄存器映射是 `0x0/0x4/0x8/0xC` ⇒ 偏移必须取 **bits[3:2]**。用 bits[1:0] 时
+**四个寄存器全部解码为偏移 0** ⇒ `mtime_hi` / `mtimecmp_lo` / `mtimecmp_hi` **完全不可达**
+⇒ 整个 CLINT 寄存器组只有 `mtime_lo` 可写。
+
+该缺陷此前**零覆盖** —— 因为 CLINT 唯一的测试（`test_interrupt_flow.cpp`，502 LOC /
+10 用例 / 28 断言）**从未被编译过**。⇒ 修 1 行（`bits<1,0>` → `bits<3,2>`）后，
+该测试的 2 个 mtip 断言即转绿。
+
 `test_riscv_tests` 的 44 个失败**不是 RTL 分歧**（草稿 §1 的预诊断有误）：
 - **40 个**是 `Failed to load binary: /workspace/project/riscv-tests/build/rv32ui/*.bin`
   —— 依赖**仓外** riscv-tests 套件的预编译二进制，硬编码绝对路径，CI 中永不存在；
@@ -44,9 +66,12 @@
 
 **In Scope**:
 
-### C1-a 12 个绿 target 注册进 CTest
-- 在 `examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test()` 里补 `add_test`。
-- `examples/disabled_examples.txt` 移除对应行（归位）。
+### C1-a 绿 target 注册进 CTest（**含根 CMakeLists 的 `enable_testing()` 顺序修复**）
+- **根因修复**：把根 `CMakeLists.txt` 的 `enable_testing()` 提到
+  `add_subdirectory(examples)` **之前**（否则 examples 内的 `add_test()` 是空操作）。
+- 在 `examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test()` helper 内
+  统一补 `add_test`（一次覆盖全部 18 个 target）+ `LABELS "base"` + `TIMEOUT 300`。
+- `examples/disabled_examples.txt` 移除已归位条目。
 
 ### C1-b 7 个红 target 修或删（逐个带理由）
 | target | 处置 | 理由 |
@@ -57,22 +82,46 @@
 | `test_pipeline_debug5` | **删** | 与 debug4 同型的 2 个端点用例（62 LOC） |
 | `test_rv32i_pipeline_device` | **删** | 其前提「`ch_device<Rv32iPipeline>` 直接可用」在当前组件设计下**结构性不可实现**；等价覆盖由 `test_pipeline_minimal`（修后）+ `test_pipeline_smoke`（`Rv32iPipelineTop`）提供 |
 | `test_address_decoder` | **修** | `sim.eval()` → `sim.tick()`（`eval()` 是时钟沿原语，对无时钟的纯组合设计不适用） |
-| `test_riscv_tests` | **修** | ① 修 4 个手写用例的指令编码；② 依赖仓外 riscv-tests 二进制的 41 个用例在资源缺失时显式 `SKIP`；③ `RISCV_TESTS_PATH` 改为可由环境变量覆盖 |
+| `test_riscv_tests` | **修** | ① 修 4 个手写用例的指令编码；② 依赖仓外 riscv-tests 二进制的 43 个用例在资源缺失时显式 `SKIP`（用 `is_regular_file` 而非 `exists` —— 目录会让 `load_binary` 以 `std::bad_alloc` 崩掉）；③ `RISCV_TESTS_PATH` 改为可由环境变量覆盖 |
+| `test_riscv_tests_pipeline` | **只构建、不进 CTest** | 46 个用例**全部**依赖仓外二进制 ⇒ CI 中全部 SKIP ⇒ Catch2 v3 退出码 **4**（= 没有真正跑起来的用例）⇒ **CTest 判红** ⇒ 登记在 `examples/disabled_examples.txt`（带归位条件） |
 
 ### C1-c 7 个 orphan 测试源文件定性
 | 源文件 | 处置 |
 |---|---|
-| `test_pipeline_debug2.cpp` / `test_hazard_minimal.cpp` / `test_interrupt_flow.cpp` | **从未编译**；`test_interrupt_flow.cpp` 依赖仓外 riscv-tests 二进制且含 `sim.eval()`（框架缺陷）⇒ 删（带理由登记） |
-| `test_csr_unit.cpp` | 已以 `test_csr_unit` 注册进根 `tests/CMakeLists.txt` ⇒ **已归位**（不删，登记已归位） |
-| `test_riscv_tests_soc.cpp` | 已以 `test_address_decoder` 注册 ⇒ **已归位** |
+| `test_pipeline_debug2.cpp` | **从未编译**；标题即「Minimal reproduction of "Child component has been destroyed" crash」= 纯崩溃复现脚手架（43 LOC / 1 用例 / **0 断言**）⇒ **删**（带理由登记） |
+| `test_hazard_minimal.cpp` | **从未编译**；19 LOC / 1 用例 / **0 断言**的「HazardUnit instantiation only」，与 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」完全同型且被其覆盖 ⇒ **删**（带理由登记） |
+| `test_interrupt_flow.cpp` | **从未编译**，但**不是**死脚手架 —— **502 LOC / 10 用例 / 28 断言**，覆盖 CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET ⇒ **修好并注册进 CTest**（实测转绿；顺带暴露 CLINT 地址解码 bug） |
+| `test_csr_unit.cpp` | 已以 `test_csr_unit` 注册进根 `tests/CMakeLists.txt` ⇒ **已归位**（不删） |
+| `test_riscv_tests_soc.cpp` | 已以 `test_address_decoder` 注册 ⇒ **已归位**（修 `sim.eval()` → `sim.tick()`） |
 | `test_cache_smoke.cpp` | 已以 `riscv_mini_cache_smoke` 注册 ⇒ **已归位** |
-| `test_rv32i_pipeline.cpp`（example 副本） | 根 `tests/test_rv32i_pipeline.cpp` 是权威副本（545 行 vs example 203 行，内容不同）⇒ **删 example 副本**（带理由登记） |
+| `test_rv32i_pipeline.cpp`（example 副本） | **不是**根副本的过期副本 —— 根副本 12 个用例、example 副本 **5 个**用例，且测的是**不同组件**（example 副本测 example 侧**前推启用版** `hazard_unit.h`，根副本测 `rv32i_core.h` 的 `HazardDetectionUnit`）⇒ **修好并注册进 CTest**（实测 10 断言 / 5 用例全绿），**不删** |
+
+### C1-d 新护栏（`scripts/verify_example_test_wiring.sh`）
+
+> ⚠️ 本护栏经对抗审稿 REJECT 后**重写**过两次。三个不可退化的设计约束：
+> ① 判据是 **`ctest -N`（CTest 条目的唯一真相）**，不是解析 CMake 源码；
+> ② 基准是**文件系统上的源文件集合**（外部事实），不是「CMake 里声明了什么」
+> —— 否则删一条声明会让「声明集」与「覆盖集」同步缩小 ⇒ 守恒恒等 ⇒ 对缩面无判别力；
+> ③ 源文件→target 的映射 MUST 用**精确路径**，不得用 basename
+> —— 否则 example 侧的 `test_rv32i_pipeline.cpp` 会被根 `tests/` 的同名文件顶替。
+> 变异验证（5 条全被抓）：注释掉 example 侧 target / 行尾注释塞文件名 /
+> 新增不走 helper 的 `add_executable` / `enable_testing()` 移回 `examples` 之后 /
+> 删除源文件。
 
 ### C1-d 新护栏
 - 新增 `scripts/verify_example_test_wiring.sh`（命名对齐 `scripts/verify_rst_n_wiring.sh` 范式）：
-  每个 `examples/**/tests/test_*.cpp` 要么被注册进 CTest、要么登记在
-  `examples/disabled_examples.txt`（带理由 + 归位条件），否则 exit 1。
-  挂进 CI。
+  - **C1 归属守恒**：每个 `examples/riscv-mini/` 的 Catch2 target 及其源文件
+    要么被注册进 CTest、要么登记在 `examples/disabled_examples.txt`（带理由 + 归位条件）；
+  - **C1b 源文件守恒**：每个 `examples/**/tests/test_*.cpp` MUST 被某个 target 编译
+    （否则 = 从不编译的静默腐坏）；
+  - **C2 数量守恒**：已覆盖数 + 已登记数 == 源文件总数（防静默缩面）。
+  - **C3 运行期检查**：examples 的每个 CTest 条目 MUST **实际跑出 exit 0**
+    —— 起因：Catch2 v3 在「全部用例被 SKIP」时返回 **4**，而 `ctest -N` 仍会
+    列出该条目 ⇒「CTest 里认得它」**不等于**「它会绿」。
+  挂进 CI（2 处 job）。
+- **`run_all_ported_tests.sh` 的 C1 检查需认得 CTest 归属**：17 个 riscv-mini 测试
+  现在**是构建产物但由 CTest 覆盖**，不属于 example demo 护栏 ⇒ 该检查必须把
+  「已进 CTest」也算作归属（用 `ctest -N` 作唯一真相）。
 
 ### C1-e 计数同步
 - 根 `AGENTS.md` `CTEST_TOTAL` 与 NOTES §Test counts 同步（新增 N 个 ctest 条目）。
@@ -102,7 +151,23 @@
 | 修 `test_riscv_tests` 的指令编码可能暴露解释器的更深缺陷 | 逐条解码核对；若修完仍红 ⇒ 登记为独立 change，不阻塞 C1 |
 | `add_test` 改变 CTEST_TOTAL ⇒ 根 `AGENTS.md` 漂移 | 同步 NOTES + `scripts/verify_test_counts.sh` 绿 |
 
+### 本 change 超出「纯测试面」的一处（已实测并论证）
+- **修 `include/cpu/riscv/clint.h` 的地址解码**（`bits<1,0>` → `bits<3,2]`，1 行）。
+  理由：① 该缺陷使 CLINT 的 3/4 寄存器**完全不可达**，是**真实 RTL bug**；
+  ② 它是**新注册的 `test_interrupt_flow` 唯一的失败根因** —— 不修则该
+  28 断言的测试无法进 CTest；③ 修复面 = 1 行，回归由该测试 + 现有 192 个 CTest 覆盖。
+  ⚠️ 这是本 change 唯一触碰 `include/**` 的地方，已在验收中显式记录。
+
 ### 登记的框架缺陷（本 change 不修，单独立项）
+
+3. **6 个新注册的 target 在运行期打印 error 级 CHERROR，但退出码仍是 0**
+   （`[ERROR] Requirement failed [driver_impl->get_parent() == lnodeimpl::current_component()]`，
+   `include/core/io.h:385`；`CHREQUIRE` 只记日志不中止）：
+   `test_riscv_tests_pipeline`(144) / `test_pipeline_debug`(9) / `test_pipeline_wrapper`(9) /
+   `test_wrapper_pipeline`(6) / `test_pipeline_smoke`(3) / `test_pipeline_minimal`(3)。
+   ⇒ 这是缺陷 #1（`ch_module` 作为 `Component` 成员无法绑 parent ⇒ 子 stage
+   挂到**祖父**节点下 ⇒ `<<=` 的 driver 归属检查失败）的**可观测症状**。
+   ⇒ 「exit 0」**不等于**「日志干净」——本 change 如实登记该计数，不掩盖。
 1. **`ch_module` 作为 `Component` 成员永远绑不到 parent** —— 成员在构造函数期初始化，
    早于 `build()` → `build_internal()` 设置 `Component::current()`；⇒
    `ch_device<Rv32iPipeline>` 结构性 SIGSEGV，且经 `ch_module` 路径使用时
@@ -112,9 +177,14 @@
 
 ## Acceptance
 
-- [ ] `cmake --build build -j$(nproc)` 0 error 0 warning
-- [ ] 19 个原「不执行」target 全部有归属：绿的进 CTest、红的修好或删除并登记
-- [ ] `ctest -N` 中新增条目数与 root `AGENTS.md` `CTEST_TOTAL` 一致
-- [ ] `bash scripts/verify_example_test_wiring.sh` 绿
-- [ ] `bash scripts/verify_openspec_delta.sh riscv-mini-test-triage-2026-10` 绿
-- [ ] `ctest -LE perf` 零回归（基线 174/174）
+- [x] `cmake --build build -j$(nproc)` 0 error 0 warning
+- [x] 19 个原「不执行」target 全部有归属：绿的进 CTest、红的修好或删除并登记；
+      另 2 个高价值 orphan（`test_interrupt_flow` / example 版 `test_rv32i_pipeline`）
+      修好并进 CTest
+- [x] `ctest -N` = **202**（基线 185 + 17；`test_riscv_tests_pipeline` 因 Catch2 exit 4 不进 CTest），
+      与 root `AGENTS.md` `CTEST_TOTAL` 一致
+- [x] `bash scripts/verify_example_test_wiring.sh` 绿
+- [x] `bash scripts/verify_openspec_delta.sh riscv-mini-test-triage-2026-10` 绿
+- [x] `ctest -LE perf` 零回归（**191/191 全绿**，基线 174 + 17 新增）
+- [x] `bash scripts/verify_test_counts.sh` 绿
+- [x] `bash run_all_ported_tests.sh` 绿（28/28，PASS 28 / FAIL 0）

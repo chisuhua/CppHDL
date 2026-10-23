@@ -244,6 +244,16 @@ install(TARGETS cpphdl bitvector ch_includes
     INCLUDES DESTINATION include/cpp-hdl
 )
 
+# ⚠️ 2026-10-23（change `riscv-mini-test-triage-2026-10`）：`enable_testing()`
+# MUST 在**任何**注册了 `add_test()` 的子目录被处理**之前**调用 —— CMake 只会为
+# testing 已启用的目录生成 `CTestTestfile.cmake`。
+# 此前 `enable_testing()` 在本文件第 324 行，而 `add_subdirectory(examples)` 在
+# 第 257 行 ⇒ examples 子目录在 testing 启用**之前**被处理 ⇒ 其中的
+# `add_test()` 是**空操作** ⇒ `build/examples/riscv-mini/CTestTestfile.cmake`
+# 根本不会生成 ⇒ examples 内的测试 target「每次 CI 都编译、却从未被执行」。
+# ⇒ 把 `enable_testing()` 提到所有子目录之前。
+enable_testing()
+
 # 添加示例子目录 (可由父项目通过 CPPHDL_BUILD_EXAMPLES=OFF 关闭)
 if(CPPHDL_BUILD_EXAMPLES)
     add_subdirectory(samples)
@@ -321,7 +331,8 @@ else()
 endif()
 
 # 添加测试
-enable_testing()
+# ⚠️ `enable_testing()` 已提到本文件上方（examples/samples 子目录之前）——
+# 见那里的注释：examples 内的 `add_test()` 曾因顺序问题而静默失效。
 # 添加测试子目录 (可由父项目通过 CPPHDL_BUILD_TESTS=OFF 关闭)
 if(CPPHDL_BUILD_TESTS)
     add_subdirectory(tests)

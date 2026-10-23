@@ -251,6 +251,20 @@ jobs:
       shell: bash
       run: scripts/verify_rst_n_wiring.sh
 
+    - name: Verify example test wiring
+      # Every example-local test source MUST have a home: either registered
+      # into CTest (`add_test`) or explicitly listed in
+      # `examples/disabled_examples.txt` with a reason + a re-entry condition.
+      # Before 2026-10-23 the 19 `examples/riscv-mini/` Catch2 targets were
+      # built on every CI run but NEVER executed (their `add_test()` was a
+      # no-op because `enable_testing()` came after `add_subdirectory(examples)`),
+      # and 4 more test sources were not compiled at all -> silent rot.
+      # C1 = per-target/source attribution, C2 = count conservation
+      # (guards against the protected set silently shrinking).
+      # Portable bash + grep + awk + find (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_example_test_wiring.sh
+
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
       # 2026-10-22 changes (samples-regression-guard /
@@ -711,6 +725,20 @@ jobs:
       # Portable bash + awk (runs on every OS in the matrix).
       shell: bash
       run: scripts/verify_rst_n_wiring.sh
+
+    - name: Verify example test wiring
+      # Every example-local test source MUST have a home: either registered
+      # into CTest (`add_test`) or explicitly listed in
+      # `examples/disabled_examples.txt` with a reason + a re-entry condition.
+      # Before 2026-10-23 the 19 `examples/riscv-mini/` Catch2 targets were
+      # built on every CI run but NEVER executed (their `add_test()` was a
+      # no-op because `enable_testing()` came after `add_subdirectory(examples)`),
+      # and 4 more test sources were not compiled at all -> silent rot.
+      # C1 = per-target/source attribution, C2 = count conservation
+      # (guards against the protected set silently shrinking).
+      # Portable bash + grep + awk + find (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_example_test_wiring.sh
 
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the

@@ -45,6 +45,15 @@ TEST_CASE("mtip triggers when mtime >= mtimecmp", "[interrupt][clint][timer]") {
     auto& clint = clint_device.instance();
     Simulator sim(clint_device.context());
     
+    // ⚠️ 必须同时写 mtimecmp 的**高 32 位**：mtimecmp_hi 的复位值是 0xFFFFFFFF
+    // （RISC-V 规范：复位后不产生定时器中断）。只写低 32 位会让 64 位比较的
+    // 「hi 分支」恒不相等（mtime_hi=0 != 0xFFFFFFFF）⇒ mtip 永远不触发。
+    sim.set_input_value(clint.io().addr, 0xC);  // mtimecmp_hi 偏移
+    sim.set_input_value(clint.io().write_data, 0);
+    sim.set_input_value(clint.io().write_en, 1);
+    sim.set_input_value(clint.io().read_en, 0);
+    sim.tick();
+    sim.set_input_value(clint.io().write_en, 0);
     // 设置 mtimecmp_lo = 100 (设置比较值为 100)
     sim.set_input_value(clint.io().addr, 0x8);  // mtimecmp_lo 偏移
     sim.set_input_value(clint.io().write_data, 100);
@@ -62,7 +71,7 @@ TEST_CASE("mtip triggers when mtime >= mtimecmp", "[interrupt][clint][timer]") {
     sim.tick();
     
     sim.set_input_value(clint.io().write_en, 0);
-    sim.eval();
+    sim.tick();
     
     // mtime(50) < mtimecmp(100)，mtip 应为 0
     bool mtip_before = to_bool(sim.get_value(clint.io().mtip));
@@ -75,7 +84,7 @@ TEST_CASE("mtip triggers when mtime >= mtimecmp", "[interrupt][clint][timer]") {
     sim.tick();
     
     sim.set_input_value(clint.io().write_en, 0);
-    sim.eval();
+    sim.tick();
     
     // mtime(100) >= mtimecmp(100)，mtip 应为 1
     bool mtip_eq = to_bool(sim.get_value(clint.io().mtip));
@@ -88,7 +97,7 @@ TEST_CASE("mtip triggers when mtime >= mtimecmp", "[interrupt][clint][timer]") {
     sim.tick();
     
     sim.set_input_value(clint.io().write_en, 0);
-    sim.eval();
+    sim.tick();
     
     // mtime(150) > mtimecmp(100)，mtip 应保持为 1
     bool mtip_after = to_bool(sim.get_value(clint.io().mtip));
@@ -112,7 +121,7 @@ TEST_CASE("interrupt_req = mtip && mie.MTIE && mstatus.MIE", "[interrupt][csr][m
     sim.set_input_value(csr.io().mtip, 0);
     sim.set_input_value(csr.io().meip, 0);
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     bool int_req_initial = to_bool(sim.get_value(csr.io().interrupt_req));
     REQUIRE(int_req_initial == false);
@@ -121,7 +130,7 @@ TEST_CASE("interrupt_req = mtip && mie.MTIE && mstatus.MIE", "[interrupt][csr][m
     // 条件不满足，interrupt_req 应为 0
     sim.set_input_value(csr.io().mtip, 1);
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 需要通过 CSR 写操作设置 mie.MTIE 和 mstatus.MIE
     // 但 CSR Bank 的写接口需要连接到流水线，此处简化为检查内部逻辑
@@ -163,7 +172,7 @@ TEST_CASE("CsrBank generates flush signal for IF stage on timer interrupt", "[in
     sim.set_input_value(csr.io().mtip, 0);
     sim.set_input_value(csr.io().meip, 0);
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 验证 mtip 相关的 timer_interrupt_pending 信号
     bool tip_initial = to_bool(sim.get_value(csr.io().timer_interrupt_pending));
@@ -176,7 +185,7 @@ TEST_CASE("CsrBank generates flush signal for IF stage on timer interrupt", "[in
     // 设置 mtip=1 但 interrupt_req 仍应为 0 (因为 mie.MTIE=0)
     sim.set_input_value(csr.io().mtip, 1);
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     bool tip_with_mtip = to_bool(sim.get_value(csr.io().timer_interrupt_pending));
     REQUIRE(tip_with_mtip == false);  // mie.MTIE=0 所以仍为 0
@@ -215,7 +224,7 @@ TEST_CASE("mepc saves PC when exception/timer interrupt occurs", "[interrupt][me
     sim.set_input_value(exc.io().csr_mcause, 0x00000000);
     
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 验证 CSR 写地址为 mepc (0x341)
     auto csr_addr = to_uint64(sim.get_value(exc.io().csr_write_addr));
@@ -262,7 +271,7 @@ TEST_CASE("mcause = 7 on machine timer interrupt", "[interrupt][mcause][timer]")
     sim.set_input_value(exc.io().csr_mcause, 0x00000000);
     
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 由于 mepc 和 mcause 都需要写，验证 CSR 写地址切换
     // 第一次 tick 时写 mepc，第二次 tick 时写 mcause
@@ -305,7 +314,7 @@ TEST_CASE("mtvec base address used as trap entry PC", "[interrupt][mtvec][trap]"
     sim.set_input_value(exc.io().csr_mcause, 0x00000000);
     
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 验证 trap_entry_pc = mtvec_base (清除低2位模式位)
     auto trap_pc = to_uint64(sim.get_value(exc.io().trap_entry_pc));
@@ -345,7 +354,7 @@ TEST_CASE("MRET restores PC from mepc", "[interrupt][mret][pc]") {
     sim.set_input_value(exc.io().csr_mcause, 7);
     
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 验证 mret_pc = mepc
     auto mret_pc = to_uint64(sim.get_value(exc.io().mret_pc));
@@ -387,7 +396,7 @@ TEST_CASE("MRET restores mstatus.MIE from mstatus.MPIE", "[interrupt][mret][msta
     sim.set_input_value(exc.io().csr_mcause, 7);
     
     sim.tick();
-    sim.eval();
+    sim.tick();
     
     // 验证 MRET 有效
     bool mret_valid = to_bool(sim.get_value(exc.io().mret_valid));
@@ -414,6 +423,16 @@ TEST_CASE("Complete timer interrupt flow: trigger to MRET return", "[interrupt][
     auto& clint = clint_device.instance();
     Simulator sim(clint_device.context());
     
+    // Step 1: 初始化 mtimecmp（高 32 位必须清零，见下方注释）
+    // ⚠️ 必须同时写 mtimecmp 的**高 32 位**：mtimecmp_hi 的复位值是 0xFFFFFFFF
+    // （RISC-V 规范：复位后不产生定时器中断）。只写低 32 位会让 64 位比较的
+    // 「hi 分支」恒不相等（mtime_hi=0 != 0xFFFFFFFF）⇒ mtip 永远不触发。
+    sim.set_input_value(clint.io().addr, 0xC);  // mtimecmp_hi 偏移
+    sim.set_input_value(clint.io().write_data, 0);
+    sim.set_input_value(clint.io().write_en, 1);
+    sim.set_input_value(clint.io().read_en, 0);
+    sim.tick();
+    sim.set_input_value(clint.io().write_en, 0);
     // Step 1: 初始化 mtimecmp
     sim.set_input_value(clint.io().addr, 0x8);  // mtimecmp_lo
     sim.set_input_value(clint.io().write_data, 100);
@@ -428,7 +447,7 @@ TEST_CASE("Complete timer interrupt flow: trigger to MRET return", "[interrupt][
     sim.set_input_value(clint.io().write_en, 1);
     sim.tick();
     sim.set_input_value(clint.io().write_en, 0);
-    sim.eval();
+    sim.tick();
     
     // Step 3: 验证 mtip 触发
     bool mtip_triggered = to_bool(sim.get_value(clint.io().mtip));
@@ -445,6 +464,10 @@ TEST_CASE("Complete timer interrupt flow: trigger to MRET return", "[interrupt][
     // 提供 mtip 信号
     sim2.set_input_value(csr.io().mtip, 1);  // mtip 已触发
     sim2.set_input_value(csr.io().meip, 0);
+    // ⚠️ 必须先 tick 一次：`mstatus_value` / `mie_value` 等是**组合输出**
+    // （`io().x = reg`），不求值就读取拿到的是 data_map 里的初值 0，
+    // 而不是寄存器的 INIT（mstatus 的 INIT = 0x80 / MPIE=1）。
+    sim2.tick();
     
     // 注意: 需要设置 mie.MTIE=1 和 mstatus.MIE=1 才能产生 interrupt_req
     // 这需要通过 CSR 写接口操作，当前测试框架不支持直接写 CSR 寄存器

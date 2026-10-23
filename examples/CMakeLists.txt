@@ -20,7 +20,7 @@
 # `examples/disabled_examples.txt`（带理由 + 归位条件）⇒ 「新增即漏」不再静默。
 #
 # ⚠️ `all-examples` **MUST 只含被跟踪的那 28 个** —— 不可整目录收编：
-# `examples/riscv-mini/` 另有 19 个 Catch2 测试 target（见
+# `examples/riscv-mini/` 另有 18 个 Catch2 测试 target（见
 # `examples/disabled_examples.txt`），`examples/verilator/` 另有 3 个 demo。
 # ---------------------------------------------------------------------------
 

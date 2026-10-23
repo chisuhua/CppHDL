@@ -72,7 +72,9 @@ include/cpu/
 - **Duplicate forwarding**: `include/chlib/forwarding.h` vs `include/cpu/pipeline/hazard_unit.h` — overlapping functionality (forwarding mover per ADR-038; merge deferred to a future change)
 
 ## TESTS
-Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`:
+Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
+(the `test_interrupt_flow` row below is registered in
+`examples/riscv-mini/CMakeLists.txt` instead):
 
 | Target | Source path | Focus |
 |--------|-------------|-------|
@@ -80,14 +82,19 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`:
 | `test_hazard` | `tests/chlib/test_hazard_complete.cpp` | Hazard detection + forwarding |
 | `test_rv32i_pipeline` | `tests/test_rv32i_pipeline.cpp` | 5-stage pipeline integration (Catch2) |
 | `test_csr_unit` | `examples/riscv-mini/tests/test_csr_unit.cpp` | CSR register reset, R/W, MRET, exceptions, WFI, interrupts |
+| `test_interrupt_flow` | `examples/riscv-mini/tests/test_interrupt_flow.cpp` | CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET（10 用例 / 28 断言；2026-10-23 注册进 CTest，此前从未编译） |
 | `test_phase4_chlib` | `tests/chlib/test_phase4_integration.cpp` | Phase-4 chlib / CPU integration smoke (cache 用 `ICacheSync` / `DCacheSync` + hazard) |
 
-`examples/riscv-mini/tests/` contains additional exploratory scripts
-(`test_pipeline_debug*.cpp`, `test_pipeline_minimal.cpp`, etc.) that
-are **not** registered in `tests/CMakeLists.txt` — they are kept as
-runnable prototypes only. Run them with `cmake --build build --target
-<name>` after wiring the source files in `examples/riscv-mini/CMakeLists.txt`,
-or directly via `g++ -std=c++23 -Iinclude -Iexamples/riscv-mini/src`.
+`examples/riscv-mini/tests/` 的 Catch2 测试 target 自 2026-10-23 起
+**已注册进 CTest**（change `riscv-mini-test-triage-2026-10`，18 个 target），
+由 `examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test()` helper
+统一 `add_test`。⚠️ 此前它们「每次 CI 都编译、却从未被执行」——根因是根
+`CMakeLists.txt` 的 `enable_testing()` 排在 `add_subdirectory(examples)` **之后**
+⇒ examples 子目录的 `add_test()` 是空操作。护栏：
+`scripts/verify_example_test_wiring.sh`（归属守恒 + 数量守恒）。
+
+其余 `examples/riscv-mini/src/` 下的头文件仍**不在**本目录的包含图里
+（它们是 example 专属件或待收敛对象，见 ADR-046 `rv32i-canonical-home`）。
 
 ## PHASE GATES
 Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**.

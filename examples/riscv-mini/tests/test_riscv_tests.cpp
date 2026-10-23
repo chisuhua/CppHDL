@@ -22,6 +22,8 @@
 #include "../src/rv32i_tcm.h"
 
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <vector>
 #include <string>
@@ -484,6 +486,23 @@ public:
  * @return true 如果测试通过
  */
 bool run_riscv_test(const std::string& test_name, const std::string& bin_path) {
+    // ⚠️ riscv-tests 的预编译二进制属于**仓外**资源（默认在
+    // `/workspace/project/riscv-tests/build/rv32ui/`，可用环境变量
+    // `RISCV_TESTS_PATH` 覆盖）。CI 中不存在该 checkout ⇒ 这些用例
+    // MUST 显式 SKIP（而不是失败）——「失败」会把这个**环境依赖**误报成
+    // 「实现坏了」。
+    // ⚠️ **CTest 的粒度是「二进制」而不是「用例」** ⇒ 单个用例的 SKIP 在
+    //    `ctest`（不带 -V）输出里**不可见**；可读的是该二进制的 Catch2 汇总行
+    //    （`test cases: N | P passed | S skipped`）。故「跳过」的可审计形态是
+    //    **直接运行该二进制**看汇总行，不是看 CTest 输出。
+    // ⚠️ 用 `is_regular_file` 而非 `exists` —— `exists` 对**目录**也返回 true
+    //    ⇒ 路径指向一个目录时会走进 `load_binary` 并以 `std::bad_alloc` 崩掉
+    //    （把环境问题误报成实现坏了）。
+    if (!std::filesystem::is_regular_file(bin_path)) {
+        SKIP("riscv-tests binary not present: " + bin_path +
+             " (checkout riscv-tests and build rv32ui, or set RISCV_TESTS_PATH)");
+    }
+
     Rv32iInterpreter interpreter;
     
     if (!interpreter.load_binary(bin_path)) {
@@ -508,7 +527,17 @@ bool run_riscv_test(const std::string& test_name, const std::string& bin_path) {
 // riscv-tests 二进制文件路径
 // ============================================================================
 
-const char* RISCV_TESTS_PATH = "/workspace/project/riscv-tests/build/rv32ui/";
+// riscv-tests 二进制目录：优先读环境变量 `RISCV_TESTS_PATH`，
+// 否则用默认的仓外 checkout 路径。
+inline const char* riscv_tests_path() {
+    static const std::string path = [] {
+        const char* env = std::getenv("RISCV_TESTS_PATH");
+        std::string p = (env && *env) ? env : "/workspace/project/riscv-tests/build/rv32ui/";
+        if (p.empty() || p.back() != '/') p += '/';
+        return p;
+    }();
+    return path.c_str();
+}
 
 const std::vector<std::pair<const char*, const char*>> RV32UI_TESTS = {
     {"add", "add.bin"},
@@ -592,7 +621,7 @@ TEST_CASE("rv32i_tests: add instruction", "[rv32i][riscv-tests]") {
     uint32_t prog[] = {
         0x00A00093,  // addi x1, x0, 10
         0x01400113,  // addi x2, x0, 20
-        0x002181B3   // add x3, x1, x2
+        0x002081B3   // add x3, x1, x2
     };
     
     for (size_t i = 0; i < 3; i++) {
@@ -616,27 +645,27 @@ TEST_CASE("rv32i_tests: load/store instructions", "[rv32i][riscv-tests]") {
     uint32_t test_addr = RV32I_ENTRY_POINT + 0x100;
     uint32_t test_value = 0x12345678;
     
-    // sw x1, 0(x2)
-    // lw x3, 0(x2)
-    
-    // lui x1, imm (加载地址高位)
-    uint32_t lui_instr = (0x80000 << 12) | (1 << 7) | 0x37;  // lui x1, 0x80000
+    // sw x2, 0(x1)   —— 把 x2(=test_value) 写到 mem[x1]
+    // lw x3, 0(x1)   —— 把 mem[x1] 读回 x3
     
     // 直接设置寄存器然后执行
     interp.regs[1] = test_addr;
     interp.regs[2] = test_value;
     
     // SW: 存储
-    uint32_t sw_instr = 0x00022023;  // sw x2, 0(x1)
+    uint32_t sw_instr = 0x0020A023;  // sw x2, 0(x1)
     interp.memory.write_word(interp.pc, sw_instr);
     interp.step();
     
-    // LW: 加载
-    uint32_t lw_instr = 0x00020103;  // lw x2, 0(x1)
+    // LW: 加载到 **x3**（不是 x2！）——
+    // ⚠️ 若仍加载到 x2，断言 `regs[2] == test_value` 是**恒真**的
+    // （x2 在 sw 之前就已被赋成 test_value）⇒ 断言无法区分
+    // 「load 生效」与「load 没生效」。加载到 x3 才能真正验证往返。
+    uint32_t lw_instr = 0x0000A183;  // lw x3, 0(x1)
     interp.memory.write_word(interp.pc, lw_instr);
     interp.step();
     
-    REQUIRE(interp.regs[2] == test_value);
+    REQUIRE(interp.regs[3] == test_value);
 }
 
 TEST_CASE("rv32i_tests: branch instructions", "[rv32i][riscv-tests]") {
@@ -653,9 +682,9 @@ TEST_CASE("rv32i_tests: branch instructions", "[rv32i][riscv-tests]") {
     uint32_t prog[] = {
         0x00A00093,  // addi x1, x0, 10
         0x00A00113,  // addi x2, x0, 10
-        0x00408263,  // beq x1, x2, +8 (PC+8)
-        0x00100113,  // addi x3, x0, 1
-        0x00200113   // addi x3, x0, 2
+        0x00208463,  // beq x1, x2, +8 (PC+8)
+        0x00100193,  // addi x3, x0, 1
+        0x00200193   // addi x3, x0, 2
     };
     
     for (size_t i = 0; i < 5; i++) {
@@ -701,26 +730,41 @@ TEST_CASE("rv32i_tests: jal instructions", "[rv32i][riscv-tests]") {
 }
 
 TEST_CASE("rv32i_tests: binary file loading", "[rv32i][riscv-tests][file]") {
-    std::string simple_path = std::string(RISCV_TESTS_PATH) + "simple.bin";
+    std::string simple_path = std::string(riscv_tests_path()) + "simple.bin";
     
+    // ⚠️ 仓外二进制缺失时 MUST 显式 SKIP —— 否则该用例会**空洞通过**
+    // （`if (loaded)` 分支永不执行 ⇒ 断言数 0 ⇒ CTest 看起来是绿的，
+    //  实际什么也没验证）。
+    if (!std::filesystem::is_regular_file(simple_path)) {
+        SKIP("riscv-tests binary not present: " + simple_path +
+             " (checkout riscv-tests and build rv32ui, or set RISCV_TESTS_PATH)");
+    }
+
     Rv32iInterpreter interp;
     bool loaded = interp.load_binary(simple_path);
-    
-    // 如果文件存在, 验证加载成功
-    if (loaded) {
-        // 至少应该加载了一些指令
-        uint32_t first_word = interp.memory.read_word(RV32I_ENTRY_POINT);
-        REQUIRE(first_word != 0);
-    }
+    REQUIRE(loaded == true);
+
+    // 至少应该加载了一些指令
+    uint32_t first_word = interp.memory.read_word(RV32I_ENTRY_POINT);
+    REQUIRE(first_word != 0);
 }
 
 TEST_CASE("rv32i_tests: simple binary execution", "[rv32i][riscv-tests][file]") {
-    std::string simple_path = std::string(RISCV_TESTS_PATH) + "simple.bin";
+    std::string simple_path = std::string(riscv_tests_path()) + "simple.bin";
+    
+    // ⚠️ SKIP 的触发条件 MUST 覆盖「文件不存在」**与**「存在但无法加载」两种
+    //   情况 —— 只判 `load_binary()` 的返回值会在「路径指向一个目录」时
+    //   以 `std::bad_alloc` 崩掉（而不是 SKIP）⇒ 把环境问题误报成实现坏了。
+    // ⚠️ `is_regular_file` 而非 `exists` —— `exists` 对**目录**也返回 true
+    //    ⇒ 路径指向一个目录时会走进 `load_binary` 并以 `std::bad_alloc` 崩掉
+    //    （把环境问题误报成实现坏了）。
+    if (!std::filesystem::is_regular_file(simple_path)) {
+        SKIP("riscv-tests binary not present: " + simple_path +
+             " (checkout riscv-tests and build rv32ui, or set RISCV_TESTS_PATH)");
+    }
     
     Rv32iInterpreter interp;
-    if (!interp.load_binary(simple_path)) {
-        SKIP("simple.bin not found");
-    }
+    REQUIRE(interp.load_binary(simple_path) == true);
     
     bool passed = interp.run_until_tohost();
     REQUIRE(passed == true);
@@ -729,7 +773,7 @@ TEST_CASE("rv32i_tests: simple binary execution", "[rv32i][riscv-tests][file]") 
 // 运行单个测试的辅助 TEST_CASE 工厂
 #define TEST_CASE_FOR_each(test_name, test_file) \
 TEST_CASE("rv32i_tests: " #test_name, "[rv32i][riscv-tests][" #test_name "]") { \
-    std::string path = std::string(RISCV_TESTS_PATH) + test_file; \
+    std::string path = std::string(riscv_tests_path()) + test_file; \
     bool passed = run_riscv_test(#test_name, path); \
     REQUIRE(passed == true); \
 }

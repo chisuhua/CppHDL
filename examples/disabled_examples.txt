@@ -14,9 +14,16 @@
 # ⚠️ 归位条件一旦达成，MUST 从本清单移除该行**并**补进
 #    `CH_TRACKED_EXAMPLE_TARGETS`。
 #
-# 判定基准（2026-10-22 实测）：
-#   被跟踪 28 / main() 程序 32（其中 4 个未被跟踪）/ 本清单 23
-#   （23 = 4 个未跟踪的 main() 程序 + 19 个从不执行的 Catch2 测试二进制）
+# 判定基准（2026-10-23 实测）：
+#   被跟踪 28 / main() 程序 32（其中 4 个未被跟踪）/ 本清单 10
+#   （10 = 4 个未跟踪的 main() 程序 + 5 个已删除 target 的删除留痕
+#        + 1 个「已构建但不进 CTest」的 target）
+#   ⚠️ 2026-10-23 起，`examples/riscv-mini/` 的 18 个 Catch2 target **已进
+#   CTest**（`add_test`）⇒ 它们不再登记在本清单（归位条件已达成 ⇒ MUST 移除）。
+#   剩余的 5 条「删除留痕」是审计记录：target 与源文件都已被 `git rm`。
+#   ⚠️ 这些留痕条目在**干净的构建目录**下不产生任何二进制 ⇒ 不会被
+#   `run_all_ported_tests.sh` 的「已构建但未跟踪」检查命中；它们的作用是
+#   在**旧构建目录残留孤儿二进制**时仍给出稳定解释。
 
 # --- Verilator 后端 demo（是已注册 target，但不属于「被跟踪集合」）---
 verilator_01_minimal	已注册 CMake target（默认构建），但不被护栏跟踪：它是 ADR-035 的 Verilator 后端**演示**，其行为依赖 Verilator 工具链（构建需 10-30 min），放进每次 CI 的护栏会拖垮 job 预算	归位条件：护栏支持「按需启用需 Verilator 的集合」后，补进 CH_TRACKED_EXAMPLE_TARGETS 并移除本行
@@ -28,26 +35,24 @@ verilator_03_component	同上（Verilator 后端演示 + 组件风格）	同上
 # 扫描看不到它）⇒ 属**纯文档**条目：C1 的反向检查（双重登记）同样不涉及它。
 testbench_template	源文件 `examples/spinalhdl-ported/testbench_template.cpp` 含 `int main` 但**未注册**为 CMake target（它是一个**模板**，供人复制改写，不是可运行 demo）	归位条件：若它被改造为可运行 demo ⇒ 注册为 target 并补进 CH_TRACKED_EXAMPLE_TARGETS；否则删除该源文件
 
-# --- examples 内的 Catch2 测试二进制（是已注册 target，但从未被执行）---
-# ⚠️ 2026-10-22 实测：`grep -rn "add_test" examples/` = 0 ⇒ `ctest -N` 对它们
-# **0 命中** ⇒ 它们**每次 CI 都在编译、却从未被执行过**。它们是**测试**而不是
-# demo ⇒ 归位条件是「进 CTest 体系」（`add_test`）而不是「进 example 护栏」。
-test_pipeline_exec	examples/riscv-mini 内的 Catch2 测试 target：已注册、每次 CI 都编译，但从未被 ctest 执行（examples/ 下零 add_test）	归位条件：补 add_test 注册进 CTest（比塞进 example 护栏更合适 —— 它是测试不是 demo）
-test_soc_hello_world	同上	同上
-test_riscv_tests	同上	同上
-test_address_decoder	同上	同上
-test_riscv_tests_pipeline	同上	同上
-test_pipeline_smoke	同上	同上
-test_pipeline_minimal	同上	同上
-test_pipeline_debug	同上	同上
-test_pipeline_debug3	同上	同上
-test_pipeline_debug4	同上	同上
-test_pipeline_debug5	同上	同上
-test_pipeline_debug6	同上	同上
-test_pipeline_wrapper	同上	同上
-test_wrapper_simple	同上	同上
-test_wrapper_ifstage	同上	同上
-test_wrapper_pipeline	同上	同上
-test_rv32i_pipeline_device	同上	同上
-test_ifstage_device	同上	同上
-riscv_mini_cache_smoke	同上（cache-complete-rewrite §3.4 smoke）	同上
+# --- examples 内的 Catch2 测试二进制 ---
+# ✅ 2026-10-23 已归位（change `riscv-mini-test-triage-2026-10`）：
+# 根 `CMakeLists.txt` 的 `enable_testing()` 此前位于 `add_subdirectory(examples)`
+# **之后** ⇒ examples 子目录在 testing 启用前被处理 ⇒ 其 `add_test()` 是
+# **空操作**（`build/examples/riscv-mini/CTestTestfile.cmake` 根本不会生成）。
+# 修复：`enable_testing()` 提前 + `riscv_mini_catch_test()` helper 内统一
+# `add_test` ⇒ 全部 18 个 riscv-mini 测试 target 现已进 CTest。
+# 护栏：`scripts/verify_example_test_wiring.sh`（C1 归属守恒 + C2 数量守恒）。
+# 本节保留**已删除 target 的登记**（带理由 + 归位条件）—— 删除 MUST 留痕。
+
+# --- 已删除的 riscv-mini 测试 target（2026-10-23，change `riscv-mini-test-triage-2026-10`）---
+# ⚠️ 这 5 条是**删除留痕**：target 与其源文件都已被 `git rm` 物理删除。
+#    保留登记是为了让「已构建但未跟踪」检查（`run_all_ported_tests.sh` 的 C1）
+#    在**旧构建目录残留孤儿二进制**时仍然稳定，并给后人留档删除理由。
+#    归位条件 = 框架缺陷修复后重建该测试（见各条说明）。
+test_pipeline_debug4	已删除（2026-10-23）：16 个「增量接地输入」用例**互为重复**——未显式驱动的 `ch_in` 输入默认为 0 ⇒「只接地 1 个输入」与「接地 16 个输入」行为完全相同，零增量价值（292 LOC）。**删除判据是「组件覆盖」而非「断言数」**：它测的组件（HazardUnit）与 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」完全相同，而后者**已带真实断言**（stall/flush/forward_a，2026-10-23 补齐）⇒ 覆盖不丢	归位条件：若将来需要覆盖「部分输入未驱动」的真实语义（区别于默认值 0），需先让 `ch_in` 具备 X/未驱动语义，再重建该 target
+test_pipeline_debug5	已删除（2026-10-23）：与 `test_pipeline_debug4` 同型的 2 个端点用例（62 LOC），且原本示范的「parent component 包裹」写法本身是错的（`ch_module` 放在 TEST_CASE 顶层而非 `describe()` 内）	归位条件：同上；正确的包裹写法见 `test_pipeline_debug.cpp` 的 `*Top` 承载组件
+test_pipeline_debug2	已删除（2026-10-23）：标题即「Minimal reproduction of "Child component has been destroyed" crash」——纯崩溃复现脚手架（43 LOC / 1 用例 / 0 断言）；其复现的缺陷已定位为框架级（`ch_module` 放 TEST_CASE 顶层），登记在 change `riscv-mini-test-triage-2026-10` 的框架缺陷清单中	归位条件：框架缺陷修复后若需保留回归探针，应改写为断言式用例并注册进 CTest
+test_hazard_minimal	已删除（2026-10-23）：19 LOC / 1 用例 / 0 断言的「HazardUnit instantiation only」，与 `test_pipeline_debug` 的「DEBUG 1: HazardUnit standalone」完全同型且被其覆盖	归位条件：若 `test_pipeline_debug` 被移除，则需重建一个带真实断言的 HazardUnit 构造冒烟
+test_riscv_tests_pipeline	**已构建但不进 CTest**（2026-10-23）：其 46 个用例**全部**依赖仓外 riscv-tests 的预编译二进制 ⇒ 在 CI（无该 checkout）里全部被 SKIP ⇒ Catch2 v3 退出码为 **4**（= 没有真正跑起来的用例）⇒ **CTest 会把它判为 FAILED**。⚠️ `ctest -N` 仍会列出它 ⇒「CTest 里认得它」**不等于**「它会绿」——这正是本 change 新增的护栏 C3（实际运行 + 要求 exit 0）要抓的形态。归位条件：CI 引入 riscv-tests checkout（或提供等价的预编译二进制）后，改回 `riscv_mini_catch_test` 并从本清单移除	归位条件：CI 具备 riscv-tests 的预编译二进制（`RISCV_TESTS_PATH` 可指向）后，注册进 CTest 并从本清单移除
+test_rv32i_pipeline_device	已删除（2026-10-23）：其前提「`ch_device<Rv32iPipeline>` 直接可用（无 wrapper）」在当前组件设计下**结构性不可实现** —— `Rv32iPipeline` 把 `ch_module<IfStage>` 等声明为**成员变量**（`include/cpu/pipeline/rv32i_pipeline.h:75-81`），成员在构造函数期初始化，早于 `build()` 设置 `Component::current()` ⇒ `ch_module` 全部早退 ⇒ 必 SIGSEGV	归位条件：框架缺陷（`ch_module` 作为 Component 成员无法绑 parent）修复后重建；等价覆盖现由 `test_pipeline_minimal`（`ch_module<Rv32iPipeline>` 包裹版）与 `test_pipeline_smoke`（`Rv32iPipelineTop`）提供

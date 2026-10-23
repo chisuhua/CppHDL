@@ -23,7 +23,7 @@ TEST_CASE("address_decoder: hardware instantiation", "[address-decoder]") {
     Simulator sim(decoder.context());
 
     sim.set_input_value(decoder.instance().io().addr, ADDR_ITCM_BASE);
-    sim.eval();
+    sim.tick();
 
     auto i_tcm = sim.get_port_value(decoder.instance().io().i_tcm_cs);
     auto d_tcm = sim.get_port_value(decoder.instance().io().d_tcm_cs);
@@ -39,7 +39,7 @@ TEST_CASE("address_decoder: DTCM detection", "[address-decoder]") {
     Simulator sim(decoder.context());
 
     sim.set_input_value(decoder.instance().io().addr, ADDR_DTCM_BASE);
-    sim.eval();
+    sim.tick();
 
     auto d_tcm = sim.get_port_value(decoder.instance().io().d_tcm_cs);
     REQUIRE(d_tcm != 0);
@@ -52,7 +52,7 @@ TEST_CASE("address_decoder: CLINT detection", "[address-decoder]") {
     Simulator sim(decoder.context());
 
     sim.set_input_value(decoder.instance().io().addr, ADDR_CLINT_BASE);
-    sim.eval();
+    sim.tick();
 
     auto cs = sim.get_port_value(decoder.instance().io().clint_cs);
     REQUIRE(cs != 0);
@@ -65,7 +65,7 @@ TEST_CASE("address_decoder: UART detection", "[address-decoder]") {
     Simulator sim(decoder.context());
 
     sim.set_input_value(decoder.instance().io().addr, ADDR_UART_BASE);
-    sim.eval();
+    sim.tick();
 
     auto cs = sim.get_port_value(decoder.instance().io().uart_cs);
     REQUIRE(cs != 0);
@@ -78,7 +78,7 @@ TEST_CASE("address_decoder: invalid address", "[address-decoder]") {
     Simulator sim(decoder.context());
 
     sim.set_input_value(decoder.instance().io().addr, 0x12345678);
-    sim.eval();
+    sim.tick();
 
     auto cs = sim.get_port_value(decoder.instance().io().error_cs);
     REQUIRE(cs != 0);
@@ -93,11 +93,11 @@ TEST_CASE("itcm: load and read instruction", "[itcm]") {
     sim.set_input_value(itcm.instance().io().write_addr, 0);
     sim.set_input_value(itcm.instance().io().write_data, 0xDEADBEEF);
     sim.set_input_value(itcm.instance().io().write_en, 1);
-    sim.eval();
+    sim.tick();
     sim.set_input_value(itcm.instance().io().write_en, 0);
 
     sim.set_input_value(itcm.instance().io().addr, 0);
-    sim.eval();
+    sim.tick();
     auto data = sim.get_port_value(itcm.instance().io().data);
     REQUIRE(static_cast<uint32_t>(static_cast<uint64_t>(data)) == 0xDEADBEEF);
 }

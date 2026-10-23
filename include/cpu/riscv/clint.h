@@ -60,8 +60,13 @@ public:
         ch_reg<ch_uint<32>> mtimecmp_lo(0xFFFFFFFF);  // mtimecmp[31:0]
         ch_reg<ch_uint<32>> mtimecmp_hi(0xFFFFFFFF); // mtimecmp[63:32]
 
-        // 计算地址偏移 (低2位)
-        ch_uint<2> addr_offset = bits<1, 0>(io().addr);
+        // 计算地址偏移 (bits[3:2])
+        // ⚠️ 必须是 bits[3:2] 而非 bits[1:0]：寄存器映射是 0x0/0x4/0x8/0xC
+        // （见文件头注释），即偏移由地址的第 2-3 位给出。用 bits[1:0] 会让
+        // 0x0/0x4/0x8/0xC 全部解码为偏移 0 ⇒ mtime_hi / mtimecmp_lo /
+        // mtimecmp_hi 三个寄存器**完全不可达**（整个 CLINT 寄存器组只有
+        // mtime_lo 可写）。该缺陷此前无任何覆盖 —— CLINT 从未被任何测试执行过。
+        ch_uint<2> addr_offset = bits<3, 2>(io().addr);
 
         // 地址解码 - 使用 select 实现多路选择
         ch_bool is_mtime_lo  = (addr_offset == ch_uint<2>(0_d));

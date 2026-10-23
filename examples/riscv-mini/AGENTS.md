@@ -19,10 +19,16 @@ examples/riscv-mini/
 │   ├── i_cache_prefetch.h   # I-Cache wrapper (instance ICacheSync, handoff §3.4)
 │   ├── d_cache_write_buffer.h # D-Cache wrapper (instance DCacheSync, handoff §3.4)
 │   └── stages/              # IF/ID/EX/MEM/WB stage headers
-└── tests/                   # ⚠️ CMakeLists NOT registered (isolated)
-    ├── test_*.cpp           # 9 test files (forwarding, hazard, cache, etc.)
+└── tests/                   # ✅ 18 个 Catch2 target 已注册进 CTest
+    ├── test_*.cpp           # 19 test files（其中 5 个已删除，见 disabled 清单）
     └── catch_amalgamated.*  # Catch2 framework
 ```
+
+> ⚠️ **2026-10-23（change `riscv-mini-test-triage-2026-10`）**：本目录的 18 个
+> Catch2 target **已注册进 CTest**（此前「每次 CI 都编译、却从未被执行」——
+> 根因是根 `CMakeLists.txt` 的 `enable_testing()` 排在 `add_subdirectory(examples)`
+> 之后 ⇒ examples 子目录的 `add_test()` 是空操作）。
+> 护栏：`scripts/verify_example_test_wiring.sh`。
 
 ## PASSING TESTS
 - Phase 1 (RegFile/ALU/Decoder): ✅ 537 lines test_forwarding, 235 lines test_hazard_complete
@@ -34,8 +40,16 @@ examples/riscv-mini/
 - `rv32i_pipeline_cache.h` — I/D-Cache integration chain incomplete
 - `dynamic_branch_predict.h` — DELETED during code debt cleanup
 - `phase3b_complete.cpp` — DELETED (used `ch::log2_ceil` and `ch_array` which don't exist)
-- `tests/` subdirectory — CMakeLists.txt placeholder only (test moved to root)
-- 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 10 assertions)
+- `tests/` subdirectory — ✅ 已注册进 CTest（2026-10-23，18 个 target）；
+  `test_csr_unit` 早已以根 `tests/` 的 target 身份存在
+- 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 10 assertions)；
+  **2026-10-23 起以 `test_rv32i_pipeline_example` 注册进 CTest**（此前从未编译）。
+  ⚠️ 它与根 `tests/test_rv32i_pipeline.cpp`（12 用例）**不是**副本关系：前者测
+  example 侧**前推启用版** `hazard_unit.h`，后者测 `rv32i_core.h` 的 `HazardDetectionUnit`。
+- `test_interrupt_flow.cpp` — ✅ **2026-10-23 修好并注册进 CTest**（10 用例 / 28 断言；
+  覆盖 CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET）。修它时挖出
+  `include/cpu/riscv/clint.h` 的**真实 RTL bug**：地址解码用 `bits<1,0>` 而非
+  `bits<3,2>` ⇒ 4 个寄存器全部别名到 `mtime_lo`（已修 1 行）。
 - **`i_cache_prefetch.h` SIGSEGV** ✅ **FIXED** (2026-10-20, change `fix-riscv-mini-cache-prefetch-sigsegv`): (1) `ch_reg<ch_bool>[N]` + runtime init for-loop → `ch_mem<ch_uint<1>, N>` (per ADR-039 + cache-complete-doa-note §6.1 R1); (2) `ICacheComplete icache{this, ...}` 替换为 `ch::ch_module<ICacheComplete>` (per ROOT AGENTS.md "COMPONENT LIFECYCLE PATTERNS"). Smoke test 2 SKIP → 2 PASS instantiate.
 - **`d_cache_write_buffer.h` review** (2026-10-20): buffer 是普通 struct 数组 (WriteBufferEntry buffer[4])，**非 ch_reg 数组**, 无根架构问题; instantiate PASS 验证无 SIGSEGV.
 - **wrapper 端口契约错误** (2026-10-19) — `i_cache_prefetch.h:91` 引用 `icache.io().hit` (不存在); 已修: `ch_bool(icache.io().miss.impl())`. 同时 `0xFFFFFFF0_d` → `0xFFFFFFF0_h` typo fix.

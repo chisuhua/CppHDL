@@ -88,6 +88,97 @@ if (sequential_instr_list_.empty()) { default_clock_instr_ = nullptr; }
 `scripts/verify_test_counts.sh` 是 CI 防 drift 护栏。
 ⚠️ `CTEST_TOTAL` 只统计 **CTest 条目**；example 内的 target 现在会变成 CTest 条目 ⇒ 计数 +N。
 
+### R9. 实施期修正：example 版 `test_rv32i_pipeline.cpp` **不是**过期副本 ⇒ 注册而非删除
+
+计划原文按「根副本是权威」判定为删除。实施时逐条比对 TEST_CASE 后**证伪**：
+
+| | 根 `tests/test_rv32i_pipeline.cpp` | example `tests/test_rv32i_pipeline.cpp` |
+|---|---|---|
+| 行数 / 用例数 | 545 / **12** | 203 / **5** |
+| 测的组件 | `rv32i_core.h` 的 `HazardDetectionUnit` + `rv32i_branch_predict.h` | example 侧 `hazard_unit.h`（**前推启用版**） |
+
+⇒ 二者测的是**不同组件** ⇒ example 副本有 5 个**根副本没有**的用例
+⇒ 删除即丢覆盖 ⇒ **注册进 CTest**（实测 10 断言 / 5 用例全绿）。
+⚠️ 计划原文的「删 example 副本前 MUST 确认根副本覆盖其断言」这道闸门救了这一手。
+
+### R10. 实施期修正：`test_interrupt_flow.cpp` **不是**死脚手架 ⇒ 修好并注册
+
+502 LOC / **10 用例 / 28 断言**（CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET）。
+修 3 处后全绿：①`sim.eval()` → `sim.tick()`（框架缺陷 F2）；
+②补写 `mtimecmp_hi`（复位值 0xFFFFFFFF ⇒ 64 位比较的 hi 分支恒不相等 ⇒ mtip 永不触发）；
+③读组合输出前先 tick 一次（`mstatus_value` 是 `io().x = reg` 的组合输出，不求值读到的是 0）。
+
+### R11. 实施期发现：`enable_testing()` 排序是「编译但从不执行」的**机制性根因**
+
+根 `CMakeLists.txt` 的 `enable_testing()` 原在第 324 行，`add_subdirectory(examples)` 在第 257 行
+⇒ examples 子目录在 testing 启用**前**被处理 ⇒ **不生成** `CTestTestfile.cmake`
+⇒ 其 `add_test()` 是**空操作**。⇒ 只补 `add_test` 而不调顺序，CTest 仍一个都认不出。
+⇒ 必须把 `enable_testing()` 提到所有子目录之前。
+
+### R12. 实施期发现：CLINT 地址解码是**真实 RTL bug**
+
+`include/cpu/riscv/clint.h` 用 `bits<1,0>(io().addr)` 解码，但寄存器映射是 `0x0/0x4/0x8/0xC`
+⇒ 必须用 `bits<3,2]` ⇒ 当前实现下 **4 个寄存器全部别名到 `mtime_lo`**，
+`mtime_hi` / `mtimecmp_lo` / `mtimecmp_hi` **完全不可达**。
+该缺陷零覆盖，因为 CLINT 唯一的测试从未被编译过。⇒ 修 1 行。
+
+### R13. example 运行护栏必须认得 CTest 归属
+
+`run_all_ported_tests.sh` 的「已构建但未跟踪」检查只看
+`CH_TRACKED_EXAMPLE_TARGETS` ∪ `disabled_examples.txt` ⇒ 18 个已进 CTest 的
+riscv-mini 测试二进制会被判为「无归属」。⇒ 该检查须把「已进 `ctest -N`」也算作归属
+（`ctest -N` 是 CTest 条目的唯一真相）。
+
+### R14. bash 陷阱：`pipefail` + `grep -q` ⇒ 明明命中却判未命中
+
+`grep -q` 命中即提前关闭管道 ⇒ 上游 grep 收 SIGPIPE(141) ⇒ 在 `set -o pipefail` 下
+整条管道被判为失败。⇒ 一律用 `grep -F ... > /dev/null`（读完整个输入，不提前关管道）。
+（本 change 的两个脚本都踩过：护栏的 C1b 与 example 护栏的 CTest 归属检查。）
+
+### R15. 对抗审稿（REJECT）后的护栏重写：三个不可退化的设计约束
+
+审稿证伪了护栏的第一版（判据 = 解析 CMake + basename 匹配）：
+① 根 `tests/CMakeLists.txt` 存在**同名** `test_rv32i_pipeline.cpp` ⇒ basename
+匹配把 example 侧源文件误判成根 tests 的 ⇒ 注释掉 example 侧 target 护栏仍 exit 0；
+② 只剥整行注释 ⇒ 行尾注释里的文件名被当成「已使用」；
+③ 只认固定 helper 名 ⇒ 不走 helper 的 `add_executable` 完全看不见；
+④ 对**自己治的那个病**（`enable_testing()` 顺序）零感知。
+
+⇒ 重写后的三个约束（**勿退化**）：
+1. 判据是 **`ctest -N`（CTest 条目的唯一真相）**；
+2. 基准是**文件系统上的源文件集合**（外部事实），不是「CMake 里声明了什么」
+   —— 否则删一条声明会让声明集与覆盖集**同步缩小** ⇒ 守恒恒等 ⇒ 对缩面无判别力；
+3. 源文件→target 的映射 MUST 用**精确路径**，不得用 basename。
+变异验证 5 条全被抓：注释掉 example 侧 target / 行尾注释塞文件名 / 新增不走
+helper 的 `add_executable` / `enable_testing()` 移回 `examples` 之后 / 删除源文件。
+
+### R16. Catch2 v3 的 exit 4：「全部跳过」= CTest 判红
+
+对抗审稿的 B3 牵出这个机制：当一个 Catch2 二进制的**全部**用例都因「仓外资源
+缺失」而被 SKIP 时，Catch2 v3 返回 **4**（= 没有真正跑起来的用例）⇒ **CTest 判 FAILED**。
+⚠️ `ctest -N` 仍会列出它 ⇒「CTest 里认得它」**不等于**「它会绿」。
+
+⇒ 处置：`test_riscv_tests_pipeline`（46 个用例全部依赖仓外二进制）**只构建、
+不进 CTest**，登记在 `examples/disabled_examples.txt`（带归位条件）；
+`CTEST_TOTAL` 因此是 **202**（基线 185 + **17**，不是 +18）。
+⇒ 并给护栏加 **C3**：examples 的每个 CTest 条目 MUST **实际跑出 exit 0**
+（实测约 12 s，与 ctest 跑一遍同量级）。
+
+### R17. `test_pipeline_debug` 的 9 个 `SUCCEED` ⇒ 补真实断言
+
+审稿的 S2 指出「删 debug4 的判据（0 断言 ⇒ 零价值）同样适用于保留的
+`test_pipeline_debug`」—— 判据不自洽。⇒ **统一判据为「组件覆盖」**，并给
+`test_pipeline_debug` 的 9 个用例**各补至少一个语义确定的输出断言**
+（0x80000004 的 PC / 0x13 的 opcode / 5+7=12 的 ALU / 0x1234 的透传 / 0xABCD 的写回 /
+stall/flush/forward_a）⇒ 从 **0 断言 / 9 SUCCEED** 变为 **14 断言 / 9 用例全绿**。
+⚠️ pipeline 的 `commit_count` 只统计 **load** 指令（`mem_valid_out = is_load & mem_valid`）
+⇒ 断言改用 `perf_cycles`（每拍递增、复位期冻结）。
+
+### R18. 十六进制字面量的后缀是 `_h` 不是 `_d`
+
+`ch_uint<32>(0x80000000_d)` 编译失败（`_d` = 十进制）⇒ 仓库约定十六进制用 `_h`。
+⚠️ 且 `ch_uint<4>(0x33_h)` 也不行（0x33 需 6 bit）—— ex_stage 的 opcode 字段只有 4 bit。
+
 ---
 
 ## File Structure

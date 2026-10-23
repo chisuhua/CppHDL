@@ -161,6 +161,18 @@ disabled_examples() {
         | cut -f1
 }
 
+# 已注册进 CTest 的测试名。
+# ⚠️ 2026-10-23 (change `riscv-mini-test-triage-2026-10`): example 内的
+# Catch2 测试 target 现在通过 `add_test` 进 CTest => 它们**是构建产物**,
+# 但运行覆盖由 **CTest** 提供 (不是本护栏) => 「已构建但未跟踪」检查必须
+# 认得 CTest 这个归属, 否则会把 18 个已被 CTest 覆盖的测试误判为「无归属」。
+# 判据用 `ctest -N` (CTest 条目的**唯一真相**), 而不是解析 CMake 源码。
+ctest_registered_tests() {
+    ctest --test-dir "$BUILD_DIR_ABS" -N 2>/dev/null \
+        | sed -n 's/^[[:space:]]*Test[[:space:]]*#[0-9][0-9]*:[[:space:]]*//p' \
+        | sort -u
+}
+
 exemption_text() {
     local want="$1" line
     for line in "${KNOWN_FAILING[@]}"; do
@@ -220,6 +232,12 @@ for prog in $(built_example_programs); do
         continue
     fi
     if disabled_examples | grep -qx "$prog"; then
+        continue
+    fi
+    # 已进 CTest 的测试 target 也有自动化运行归属（CTest）⇒ 不是「无归属」
+    # ⚠️ 用 `> /dev/null` 而非 `grep -q`：`grep -q` 提前关管道 ⇒ 上游收
+    #    SIGPIPE(141) ⇒ 在 `set -o pipefail` 下整条管道被判失败 ⇒ 误判。
+    if ctest_registered_tests | grep -x "$prog" > /dev/null 2>&1; then
         continue
     fi
     printf "${RED}  UNTRACKED  %s${NC}\n" "$prog"

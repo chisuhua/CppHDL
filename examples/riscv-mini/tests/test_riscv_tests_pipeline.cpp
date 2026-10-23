@@ -22,6 +22,7 @@
 #include "../../include/cpu/pipeline/rv32i_tcm.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <vector>
 #include <string>
@@ -29,6 +30,20 @@
 #include <iomanip>
 
 using namespace ch::core;
+
+// riscv-tests 预编译二进制目录：优先读环境变量 `RISCV_TESTS_PATH`，
+// 否则用默认的仓外 checkout 路径。
+// ⚠️ 此前本文件**硬编码**了该路径（48 处）⇒ 换 checkout 位置就全失效。
+// 与 `test_riscv_tests.cpp` 保持同一约定。
+inline const char* riscv_tests_path() {
+    static const std::string path = [] {
+        const char* env = std::getenv("RISCV_TESTS_PATH");
+        std::string p = (env && *env) ? env : "/workspace/project/riscv-tests/build/rv32ui/";
+        if (p.empty() || p.back() != '/') p += '/';
+        return p;
+    }();
+    return path.c_str();
+}
 using namespace riscv;
 
 // ============================================================================
@@ -180,7 +195,7 @@ bool run_riscv_test_pipeline(const std::string& test_name, const std::string& bi
     ch::ch_device<PipelineTestTop> top;
     Simulator sim(top.context());
 
-    std::string bin_path = "/workspace/project/riscv-tests/build/rv32ui/" + bin_filename;
+    std::string bin_path = std::string(riscv_tests_path()) + "" + bin_filename;
     std::vector<uint32_t> program = load_binary_file(bin_path);
 
     if (program.empty()) {
@@ -469,7 +484,7 @@ public:
 
 ReferenceResult run_reference_interpreter(const std::string& bin_filename) {
     ReferenceInterpreter interp;
-    std::string path = "/workspace/project/riscv-tests/build/rv32ui/" + bin_filename;
+    std::string path = std::string(riscv_tests_path()) + "" + bin_filename;
     if (!interp.load_binary(path)) return {0, 0};
     return interp.run();
 }
@@ -494,7 +509,7 @@ TEST_CASE("rv32ui-p-simple benchmark", "[benchmark][pipeline][rv32ui][simple]") 
     bool passed = run_riscv_test_pipeline("simple", "simple.bin", result);
     print_benchmark_report("simple", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/simple.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "simple.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -506,7 +521,7 @@ TEST_CASE("rv32ui-p-add benchmark", "[benchmark][pipeline][rv32ui][add]") {
     bool passed = run_riscv_test_pipeline("add", "add.bin", result);
     print_benchmark_report("add", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/add.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "add.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -518,7 +533,7 @@ TEST_CASE("rv32ui-p-addi benchmark", "[benchmark][pipeline][rv32ui][addi]") {
     bool passed = run_riscv_test_pipeline("addi", "addi.bin", result);
     print_benchmark_report("addi", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/addi.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "addi.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -530,7 +545,7 @@ TEST_CASE("rv32ui-p-and benchmark", "[benchmark][pipeline][rv32ui][and]") {
     bool passed = run_riscv_test_pipeline("and", "and.bin", result);
     print_benchmark_report("and", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/and.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "and.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -542,7 +557,7 @@ TEST_CASE("rv32ui-p-andi benchmark", "[benchmark][pipeline][rv32ui][andi]") {
     bool passed = run_riscv_test_pipeline("andi", "andi.bin", result);
     print_benchmark_report("andi", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/andi.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "andi.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -554,7 +569,7 @@ TEST_CASE("rv32ui-p-auipc benchmark", "[benchmark][pipeline][rv32ui][auipc]") {
     bool passed = run_riscv_test_pipeline("auipc", "auipc.bin", result);
     print_benchmark_report("auipc", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/auipc.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "auipc.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -566,7 +581,7 @@ TEST_CASE("rv32ui-p-beq benchmark", "[benchmark][pipeline][rv32ui][beq]") {
     bool passed = run_riscv_test_pipeline("beq", "beq.bin", result);
     print_benchmark_report("beq", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/beq.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "beq.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -578,7 +593,7 @@ TEST_CASE("rv32ui-p-bge benchmark", "[benchmark][pipeline][rv32ui][bge]") {
     bool passed = run_riscv_test_pipeline("bge", "bge.bin", result);
     print_benchmark_report("bge", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/bge.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "bge.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -590,7 +605,7 @@ TEST_CASE("rv32ui-p-bgeu benchmark", "[benchmark][pipeline][rv32ui][bgeu]") {
     bool passed = run_riscv_test_pipeline("bgeu", "bgeu.bin", result);
     print_benchmark_report("bgeu", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/bgeu.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "bgeu.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -602,7 +617,7 @@ TEST_CASE("rv32ui-p-blt benchmark", "[benchmark][pipeline][rv32ui][blt]") {
     bool passed = run_riscv_test_pipeline("blt", "blt.bin", result);
     print_benchmark_report("blt", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/blt.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "blt.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -614,7 +629,7 @@ TEST_CASE("rv32ui-p-bltu benchmark", "[benchmark][pipeline][rv32ui][bltu]") {
     bool passed = run_riscv_test_pipeline("bltu", "bltu.bin", result);
     print_benchmark_report("bltu", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/bltu.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "bltu.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -626,7 +641,7 @@ TEST_CASE("rv32ui-p-bne benchmark", "[benchmark][pipeline][rv32ui][bne]") {
     bool passed = run_riscv_test_pipeline("bne", "bne.bin", result);
     print_benchmark_report("bne", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/bne.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "bne.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -638,7 +653,7 @@ TEST_CASE("rv32ui-p-fence_i benchmark", "[benchmark][pipeline][rv32ui][fence_i]"
     bool passed = run_riscv_test_pipeline("fence_i", "fence_i.bin", result);
     print_benchmark_report("fence_i", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/fence_i.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "fence_i.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -650,7 +665,7 @@ TEST_CASE("rv32ui-p-jal benchmark", "[benchmark][pipeline][rv32ui][jal]") {
     bool passed = run_riscv_test_pipeline("jal", "jal.bin", result);
     print_benchmark_report("jal", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/jal.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "jal.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -662,7 +677,7 @@ TEST_CASE("rv32ui-p-jalr benchmark", "[benchmark][pipeline][rv32ui][jalr]") {
     bool passed = run_riscv_test_pipeline("jalr", "jalr.bin", result);
     print_benchmark_report("jalr", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/jalr.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "jalr.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -674,7 +689,7 @@ TEST_CASE("rv32ui-p-lb benchmark", "[benchmark][pipeline][rv32ui][lb]") {
     bool passed = run_riscv_test_pipeline("lb", "lb.bin", result);
     print_benchmark_report("lb", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lb.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lb.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -686,7 +701,7 @@ TEST_CASE("rv32ui-p-lbu benchmark", "[benchmark][pipeline][rv32ui][lbu]") {
     bool passed = run_riscv_test_pipeline("lbu", "lbu.bin", result);
     print_benchmark_report("lbu", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lbu.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lbu.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -698,7 +713,7 @@ TEST_CASE("rv32ui-p-lh benchmark", "[benchmark][pipeline][rv32ui][lh]") {
     bool passed = run_riscv_test_pipeline("lh", "lh.bin", result);
     print_benchmark_report("lh", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lh.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lh.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -710,7 +725,7 @@ TEST_CASE("rv32ui-p-lhu benchmark", "[benchmark][pipeline][rv32ui][lhu]") {
     bool passed = run_riscv_test_pipeline("lhu", "lhu.bin", result);
     print_benchmark_report("lhu", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lhu.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lhu.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -722,7 +737,7 @@ TEST_CASE("rv32ui-p-lui benchmark", "[benchmark][pipeline][rv32ui][lui]") {
     bool passed = run_riscv_test_pipeline("lui", "lui.bin", result);
     print_benchmark_report("lui", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lui.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lui.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -734,7 +749,7 @@ TEST_CASE("rv32ui-p-lw benchmark", "[benchmark][pipeline][rv32ui][lw]") {
     bool passed = run_riscv_test_pipeline("lw", "lw.bin", result);
     print_benchmark_report("lw", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lw.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lw.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -746,7 +761,7 @@ TEST_CASE("rv32ui-p-ma_data benchmark", "[benchmark][pipeline][rv32ui][ma_data]"
     bool passed = run_riscv_test_pipeline("ma_data", "ma_data.bin", result);
     print_benchmark_report("ma_data", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/ma_data.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "ma_data.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -758,7 +773,7 @@ TEST_CASE("rv32ui-p-or benchmark", "[benchmark][pipeline][rv32ui][or]") {
     bool passed = run_riscv_test_pipeline("or", "or.bin", result);
     print_benchmark_report("or", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/or.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "or.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -770,7 +785,7 @@ TEST_CASE("rv32ui-p-ori benchmark", "[benchmark][pipeline][rv32ui][ori]") {
     bool passed = run_riscv_test_pipeline("ori", "ori.bin", result);
     print_benchmark_report("ori", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/ori.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "ori.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -782,7 +797,7 @@ TEST_CASE("rv32ui-p-sb benchmark", "[benchmark][pipeline][rv32ui][sb]") {
     bool passed = run_riscv_test_pipeline("sb", "sb.bin", result);
     print_benchmark_report("sb", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sb.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sb.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -794,7 +809,7 @@ TEST_CASE("rv32ui-p-sh benchmark", "[benchmark][pipeline][rv32ui][sh]") {
     bool passed = run_riscv_test_pipeline("sh", "sh.bin", result);
     print_benchmark_report("sh", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sh.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sh.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -806,7 +821,7 @@ TEST_CASE("rv32ui-p-sll benchmark", "[benchmark][pipeline][rv32ui][sll]") {
     bool passed = run_riscv_test_pipeline("sll", "sll.bin", result);
     print_benchmark_report("sll", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sll.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sll.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -818,7 +833,7 @@ TEST_CASE("rv32ui-p-slli benchmark", "[benchmark][pipeline][rv32ui][slli]") {
     bool passed = run_riscv_test_pipeline("slli", "slli.bin", result);
     print_benchmark_report("slli", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/slli.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "slli.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -830,7 +845,7 @@ TEST_CASE("rv32ui-p-slt benchmark", "[benchmark][pipeline][rv32ui][slt]") {
     bool passed = run_riscv_test_pipeline("slt", "slt.bin", result);
     print_benchmark_report("slt", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/slt.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "slt.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -842,7 +857,7 @@ TEST_CASE("rv32ui-p-slti benchmark", "[benchmark][pipeline][rv32ui][slti]") {
     bool passed = run_riscv_test_pipeline("slti", "slti.bin", result);
     print_benchmark_report("slti", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/slti.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "slti.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -854,7 +869,7 @@ TEST_CASE("rv32ui-p-sltiu benchmark", "[benchmark][pipeline][rv32ui][sltiu]") {
     bool passed = run_riscv_test_pipeline("sltiu", "sltiu.bin", result);
     print_benchmark_report("sltiu", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sltiu.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sltiu.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -866,7 +881,7 @@ TEST_CASE("rv32ui-p-sltu benchmark", "[benchmark][pipeline][rv32ui][sltu]") {
     bool passed = run_riscv_test_pipeline("sltu", "sltu.bin", result);
     print_benchmark_report("sltu", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sltu.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sltu.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -878,7 +893,7 @@ TEST_CASE("rv32ui-p-sra benchmark", "[benchmark][pipeline][rv32ui][sra]") {
     bool passed = run_riscv_test_pipeline("sra", "sra.bin", result);
     print_benchmark_report("sra", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sra.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sra.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -890,7 +905,7 @@ TEST_CASE("rv32ui-p-srai benchmark", "[benchmark][pipeline][rv32ui][srai]") {
     bool passed = run_riscv_test_pipeline("srai", "srai.bin", result);
     print_benchmark_report("srai", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/srai.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "srai.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -902,7 +917,7 @@ TEST_CASE("rv32ui-p-srl benchmark", "[benchmark][pipeline][rv32ui][srl]") {
     bool passed = run_riscv_test_pipeline("srl", "srl.bin", result);
     print_benchmark_report("srl", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/srl.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "srl.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -914,7 +929,7 @@ TEST_CASE("rv32ui-p-srli benchmark", "[benchmark][pipeline][rv32ui][srli]") {
     bool passed = run_riscv_test_pipeline("srli", "srli.bin", result);
     print_benchmark_report("srli", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/srli.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "srli.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -926,7 +941,7 @@ TEST_CASE("rv32ui-p-st_ld benchmark", "[benchmark][pipeline][rv32ui][st_ld]") {
     bool passed = run_riscv_test_pipeline("st_ld", "st_ld.bin", result);
     print_benchmark_report("st_ld", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/st_ld.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "st_ld.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -938,7 +953,7 @@ TEST_CASE("rv32ui-p-sub benchmark", "[benchmark][pipeline][rv32ui][sub]") {
     bool passed = run_riscv_test_pipeline("sub", "sub.bin", result);
     print_benchmark_report("sub", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sub.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sub.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -950,7 +965,7 @@ TEST_CASE("rv32ui-p-sw benchmark", "[benchmark][pipeline][rv32ui][sw]") {
     bool passed = run_riscv_test_pipeline("sw", "sw.bin", result);
     print_benchmark_report("sw", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/sw.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "sw.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -962,7 +977,7 @@ TEST_CASE("rv32ui-p-xor benchmark", "[benchmark][pipeline][rv32ui][xor]") {
     bool passed = run_riscv_test_pipeline("xor", "xor.bin", result);
     print_benchmark_report("xor", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/xor.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "xor.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -974,7 +989,7 @@ TEST_CASE("rv32ui-p-xori benchmark", "[benchmark][pipeline][rv32ui][xori]") {
     bool passed = run_riscv_test_pipeline("xori", "xori.bin", result);
     print_benchmark_report("xori", result);
     if (!passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/xori.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "xori.bin");
         if (!f.is_open()) SKIP("Binary not available");
         FAIL("Test failed or timed out");
     }
@@ -993,7 +1008,7 @@ TEST_CASE("rv32ui-ref-simple vs HW", "[benchmark][reference][simple]") {
     print_reference_comparison("simple", hw, ref);
 
     if (!hw_passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/simple.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "simple.bin");
         if (!f.is_open()) SKIP("Binary not available");
     }
     REQUIRE(hw_passed);
@@ -1008,7 +1023,7 @@ TEST_CASE("rv32ui-ref-add vs HW", "[benchmark][reference][add]") {
     print_reference_comparison("add", hw, ref);
 
     if (!hw_passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/add.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "add.bin");
         if (!f.is_open()) SKIP("Binary not available");
     }
     REQUIRE(hw_passed);
@@ -1023,7 +1038,7 @@ TEST_CASE("rv32ui-ref-beq vs HW", "[benchmark][reference][branch]") {
     print_reference_comparison("beq", hw, ref);
 
     if (!hw_passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/beq.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "beq.bin");
         if (!f.is_open()) SKIP("Binary not available");
     }
     REQUIRE(hw_passed);
@@ -1038,7 +1053,7 @@ TEST_CASE("rv32ui-ref-lw vs HW", "[benchmark][reference][memory]") {
     print_reference_comparison("lw", hw, ref);
 
     if (!hw_passed) {
-        std::ifstream f("/workspace/project/riscv-tests/build/rv32ui/lw.bin");
+        std::ifstream f(std::string(riscv_tests_path()) + "lw.bin");
         if (!f.is_open()) SKIP("Binary not available");
     }
     REQUIRE(hw_passed);
@@ -1066,6 +1081,17 @@ TEST_CASE("rv32ui-p-aggregate benchmark report", "[benchmark][aggregate]") {
               << "\n";
     std::cout << "--------------------------------------------------------\n";
 
+    // ⚠️ 仓外二进制缺失时 MUST 显式 SKIP（与同批的 45 个用例一致）——
+    // 否则本用例在 CI 里既不 SKIP 也不失败，只是**空洞通过**（0 断言）。
+    {
+        std::ifstream probe(std::string(riscv_tests_path()) + "simple.bin");
+        if (!probe.is_open()) {
+            SKIP("riscv-tests binary not present: " +
+                 std::string(riscv_tests_path()) +
+                 " (checkout riscv-tests and build rv32ui, or set RISCV_TESTS_PATH)");
+        }
+    }
+
     for (const auto& [name, bin] : tests) {
         BenchmarkResult result;
         bool passed = run_riscv_test_pipeline(name, bin, result);
@@ -1075,4 +1101,11 @@ TEST_CASE("rv32ui-p-aggregate benchmark report", "[benchmark][aggregate]") {
     }
 
     print_aggregate_report(all_results);
+
+    // ⚠️ 本用例此前**零断言**（只打印 benchmark 表）⇒ 在 CTest 里表现为
+    // 「0 断言的通过」= 账面覆盖。补上真实断言：跑到的每个用例必须通过。
+    REQUIRE(all_results.size() == tests.size());
+    for (const auto& r : all_results) {
+        REQUIRE(r.passed == true);
+    }
 }
