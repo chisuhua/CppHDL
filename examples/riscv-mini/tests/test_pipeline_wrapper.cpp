@@ -4,8 +4,8 @@
  *
  * ⚠️ 2026-10-23（change `riscv-mini-test-triage-2026-10`）：
  * 本文件此前 3 个用例**全是 `SUCCEED`（0 断言）**= 账面覆盖。现补真实断言：
- * ① 复位期周期计数冻结；② ITCM 写入后能被流水线取到（`instr_addr` 推进）；
- * ③ 释放复位后周期计数开始递增。
+ * ① 复位期周期计数冻结（`perf_cycles == 0`）；② 释放复位后取指路径活着
+ * （`instr_addr` 推进）；③ 释放复位后周期计数递增。
  *
  * ⚠️ `ch_module` MUST 位于 `describe()` 内部（根 AGENTS.md
  * §COMPONENT LIFECYCLE PATTERNS）—— 本文件原本就是正确写法，保留。
@@ -78,8 +78,13 @@ TEST_CASE("PipelineTestTop: construct + reset held", "[pipe][1]") {
     REQUIRE(sim.get_port_value(top.instance().io().instr_addr) == 0x80000000u);
 }
 
-// ===== 用例 2：向 ITCM 写入后，取指地址推进 =====
-TEST_CASE("PipelineTestTop: ITCM write then fetch advances PC", "[pipe][2]") {
+// ===== 用例 2：复位释放后取指路径活着（PC 推进）=====
+// ⚠️ 标题/注释此前声称本用例验证「ITCM 写入后能被取到」—— **变异证伪了该归因**：
+//    把 ITCM 写入整段删掉，PC 依旧推进（`instr_ready` 恒 1 时 PC 只依赖 rst/stall）
+//    ⇒ 本用例实际验证的是「复位释放后取指路径活着」，与 ITCM 内容无关。
+//    ITCM **写路径**的直接覆盖在 `test_pipeline_exec.cpp`（`ch_device<InstrTCM>` +
+//    写后读回断言）。
+TEST_CASE("PipelineTestTop: PC advances after reset release", "[pipe][2]") {
     ch::ch_device<PipelineTestTop> top;
     ch::Simulator sim(top.context());
 
@@ -95,7 +100,7 @@ TEST_CASE("PipelineTestTop: ITCM write then fetch advances PC", "[pipe][2]") {
     sim.tick(4);
     auto pc_after = sim.get_port_value(top.instance().io().instr_addr);
 
-    // 取指路径活着 ⇒ PC 必须推进（若 ITCM 接线断了，PC 会卡住）
+    // 取指路径活着 ⇒ PC 必须推进（若 `instr_ready` 或 PC 寄存器接线断了，PC 会卡住）
     REQUIRE(pc_after > pc_before);
 }
 
