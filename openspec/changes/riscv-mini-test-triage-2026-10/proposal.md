@@ -131,7 +131,7 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 | # | 缺陷 | 整改 |
 |---|---|---|
 | B1 | 自述「6 补断言」实为 3 个：3 个 target 仍 0 断言（变异清理时 `git checkout --` 把改写覆盖掉了） | 4 个文件全部改写并复核（`test_wrapper_ifstage` / `test_ifstage_device` / `test_wrapper_pipeline`，`test_wrapper_pipeline` 原从未改） |
-| B2 | 「MUST 断言一个语义输出」**无自动化护栏**、delta 也无该 Requirement ⇒ 把 52 断言的文件掏空成 `REQUIRE(1==1)` 全绿 | 新增 **C4**：每个测试源 MUST 登记「真断言数**下限**」锚点（`CH4_ANCHOR`，机制同 `CTEST_TOTAL`）+ delta 新增 Requirement |
+| B2 | 「MUST 断言一个语义输出」**无自动化护栏**、delta 也无该 Requirement ⇒ 把 52 断言的文件掏空成 `REQUIRE(1==1)` 全绿 | 新增 **C4**：每个测试源 MUST 登记「真断言数**下限**」锚点（`CH4_ANCHOR`，机制同 `CTEST_TOTAL`）+ delta 新增 Requirement。⚠️ **该机制的措辞与实现能力在第四、五轮审稿后各被纠正一次** —— 后来者请以「第五轮审稿后的整改」表与 delta 的最新措辞为准（C4 **不防**等量替换；计数只认**活代码**） |
 | B3 | 源文件枚举漏 `.cc`/`.cxx` 与 `SCENARIO` 等非 `TEST_CASE` 宏；C3 只遍历「有 `.cpp` 声明行」的 target ⇒ 用 `.cc` 注册的失败测试逃逸 | 枚举扩展为「4 种后缀 × 全部 Catch2 用例宏 ∪ `tests/` 下任意文件」；**C3 改为遍历 CTest 条目 ∩ `build/examples/` 下的可执行文件**（后缀无关） |
 | B4 | `is_declared_target` 只匹配**单行** `fn(name` ⇒ 多行声明（本仓自己就用）被误判 STALE-ARTIFACT ⇒ 静默掩盖真问题（与自述的安全方向相反） | 判据改为**构建系统自己的 target 列表**（`cmake --build --target help`，对语法变体免疫）+ 折行文本匹配回退 |
 | B5 | `rv32i_pipeline_top.h` 删除其唯一消费者后成为**孤儿头**；`removed_examples.txt` 的「等价覆盖」声明是虚假的且自指 | 修正措辞；把「该头文件暂时零消费者」作为**已知缺口**登记（归位条件：C3 落地时它成为 C3 的 DUT） |
