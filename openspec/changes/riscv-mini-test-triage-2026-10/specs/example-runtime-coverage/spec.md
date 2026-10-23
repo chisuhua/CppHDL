@@ -65,46 +65,18 @@ error/fatal 级条目（「跑但报错」≠ 通过）；既有例外 MUST 走*
 - **AND** MUST 修复它，或把它登记在 `examples/disabled_examples.txt`（附根因与归位条件）
 - **AND** MUST NOT 用「跳过它」的方式让 CTest 变绿
 
-#### Scenario: 测试 MUST 断言语义输出（不得只 SUCCEED）
+#### Scenario: 被注册进 CTest 的测试 MUST 真的断言语义输出
 
 - **WHEN** 一个 examples 内的测试 target 被注册进 CTest
-- **THEN** 它的**每个**用例 MUST 至少断言一个**语义确定的输出**（`REQUIRE` / `CHECK`）
+- **THEN** 它的**每个**用例 MUST 至少断言一个**语义确定的输出**
+  （`REQUIRE` / `CHECK` / 其 throws / nothrow / STATIC 变体）
 - **AND** MUST NOT 仅以 `SUCCEED(...)` 作为用例的全部内容
   （那只能证明「构造没崩」，不能证明行为对 ⇒ 是**账面覆盖**）
 - **AND** 该测试源的可执行断言数 MUST 不低于仓库登记的下限锚点
-  （机制与 `CTEST_TOTAL` 同型：让**删除/注释掉/`#if 0` 掉断言**成为必须显式
+  （机制与 `CTEST_TOTAL` 同型：让**删除/注释掉/条件编译掉**断言成为必须显式
   改锚点的行为）
-- **AND** 该锚点**不**声称能防「等量替换」（把 `REQUIRE(pc == X)` 换成
-  `REQUIRE(1 == 1)` 时断言数不变，任何基于计数的守恒都发现不了）——
-  那一条 MUST 由 code review 承担，护栏 MUST NOT 假装覆盖它
-- **AND** 计数 MUST 只统计**活代码**：宏体（`#define` 行）、`#if 0` 区段、
-  任何**死分支**（`#if 1` 之后的 `#elif`/`#else`、`#ifdef` 整组）内的断言
-  MUST NOT 计入（它们可能永不执行 ⇒ 计入就等于给了「灌计数」的后门）；
-  反之**活分支**（`#if 0` 之后的 `#else`、`#if 0 / #elif 1` 的 `#elif` 体）
-  MUST 计入
-- **AND** 计数 MUST NOT 把 `#ifdef` / 非常量 `#if` 的**任一分支**当成活代码 ——
-  该条件在目标平台上真假未知 ⇒ 整组跳过（**宁可少算**）。跳过的区段里若有用例宏，
-  护栏 MUST **点名**它（不得完全静默）
-- **AND** 计数 MUST 是**逐用例**的（每用例一行），以便「某个用例只有 `SUCCEED`」
-  这种**被同文件其它用例掩盖**的情形可被发现
-
-#### Scenario: 宏生成的用例不计入锚点（已声明的局限）
-
-- **WHEN** 测试用 `#define` 出来的宏**生成**用例（如 `test_riscv_tests.cpp` 的
-  `TEST_CASE_FOR_each(...)`，41 个调用点）
-- **THEN** 这些用例体内的断言位于**宏体**中，按「宏体 MUST NOT 计入」的规则
-  **不进入**锚点计数
-- **AND** 该局限 MUST 在锚点条目里显式写明（避免读者以为 41 个用例的断言已被覆盖）
-- **AND** 这些用例的行为覆盖 MUST 由**运行期**证据承担（其所在二进制在 CTest 中
-  真实执行）
-
-#### Scenario: 测试源文件总数 MUST 有记录式锚点
-
-- **WHEN** 仓库维护 `examples/**` 下的测试源文件
-- **THEN** 其**总数** MUST 与 root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点一致
-- **AND** 该锚点 MUST 被自动化护栏（`scripts/verify_example_test_wiring.sh` 的 C2）校验
-- **AND** 任何增减 MUST 显式更新锚点 —— 这防的是「源文件与其 CMake 声明
-  **一起**被删除」的静默缩面（只比对「声明集 vs 覆盖集」抓不到：两边同减 ⇒ 守恒恒等）
+- **AND** 该约束的**自动化执行**由 capability `example-assertion-quality` 承担
+  （C1 只负责把「注册」这件事做对；断言质量的护栏见该 capability）
 
 #### Scenario: 测试源文件 MUST 被编译
 - **WHEN** `examples/**/tests/` 下存在 `test_*.cpp` 源文件

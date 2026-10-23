@@ -265,6 +265,17 @@ jobs:
       shell: bash
       run: scripts/verify_example_test_wiring.sh
 
+    - name: Verify example assertion quality
+      # Assertion-quality guardrail (split out of verify_example_test_wiring.sh
+      # on 2026-10-24): the wiring guardrail owns *attribution* (is the test
+      # source executed at all?), this one owns *assertion quality* (does the
+      # executed test actually assert a semantic output, or is it SUCCEED-only?).
+      # ⚠️ Its static analyser is a hand-rolled C-subset lexer and therefore
+      # NOT fully closable — hence a separate change
+      # (example-assertion-quality-2026-10) owns it, with a fixture set as spec.
+      shell: bash
+      run: scripts/verify_example_assertion_quality.sh
+
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
       # 2026-10-22 changes (samples-regression-guard /
@@ -739,6 +750,17 @@ jobs:
       # Portable bash + grep + awk + find (runs on every OS in the matrix).
       shell: bash
       run: scripts/verify_example_test_wiring.sh
+
+    - name: Verify example assertion quality
+      # Assertion-quality guardrail (split out of verify_example_test_wiring.sh
+      # on 2026-10-24): the wiring guardrail owns *attribution* (is the test
+      # source executed at all?), this one owns *assertion quality* (does the
+      # executed test actually assert a semantic output, or is it SUCCEED-only?).
+      # ⚠️ Its static analyser is a hand-rolled C-subset lexer and therefore
+      # NOT fully closable — hence a separate change
+      # (example-assertion-quality-2026-10) owns it, with a fixture set as spec.
+      shell: bash
+      run: scripts/verify_example_assertion_quality.sh
 
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the

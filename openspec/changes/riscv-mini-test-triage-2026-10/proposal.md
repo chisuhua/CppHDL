@@ -162,6 +162,16 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 
 ### C1-d 新护栏（`scripts/verify_example_test_wiring.sh`）
 
+> ⚠️ **2026-10-24 拆分**：本护栏原含两个维度 —— 「**归属守恒**」与「**断言质量**」。
+> 后者依赖一个自研的「C 子集静态分析器」，而它**不可能被完全闭合**
+> （第 4/5/6 轮对抗审稿的**全部** BLOCKER 都出在它身上：词频冒充可执行断言 /
+> 宏体与死分支灌计数 / `#elif` 与 `#ifdef` 的死分支被计入）。
+> ⇒ 「断言质量」已拆为独立 change **`example-assertion-quality-2026-10`**
+> （脚本 `scripts/verify_example_assertion_quality.sh`，自带 fixture 集作为规格）。
+> ⇒ **本护栏只保留归属守恒**（判据 = `ctest -N`、基准 = 文件系统源文件集合、
+> 锚点 = root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES`、运行期 exit + error/fatal 判据）
+> —— 这部分**不依赖**静态分析器，简单可审、portable。
+
 > ⚠️ 本护栏经**三轮**对抗审稿 REJECT 后重写。七条不可退化的设计约束
 > （详见脚本头部注释）：
 > ① 判据是 **`ctest -N`（CTest 条目的唯一真相）**，不是解析 CMake 源码；
@@ -234,7 +244,9 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
    规范要求 `mtime` 是自由运行计数器，而当前实现只能由软件通过写端口显式写入
    ⇒ 只构成「静态比较器」。文件头注释此前**声称**「每个 `tick()` 递增」而
    `tick()` 是空实现 ⇒ 本 change 删掉了该空实现与 2 个恒返 0 的占位 getter，
-   并把注释改成如实描述。修复（递增频率 + `mtimecmp` 语义联动）单独立项。
+   并把注释改成如实描述。
+   ⇒ **修复已移出本 change** ⇒ draft `.rddf/improvements/clint-mtime-autoincrement-2026-10.md`
+     （建议在 C2 之后实施，避免同一批文件被两个 change 反复改）。
 4. **`examples/riscv-mini/src/rv32i_pipeline_top.h` 暂时零消费者（孤儿头）** ——
    本 change 删掉了它的唯一消费者 `test_pipeline_smoke`（该测试无法写出非空洞断言：
    它的端口**全部是输入**，且 ADR-046 D10 冻结了端口列表 ⇒ MUST NOT 为观测加输出端口）。
@@ -251,9 +263,12 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
    正确写法是 `select(...)` 表达式或 `chlib/if_stmt.h` 的 `_if(...)` DSL
    （仓库其它组件都这么写）。本 change **不修**该 wrapper（属功能补全，
    需连同「把 `addr`/`req` 接到内层 cache」一起做，单独立项）；
-   仅把 `test_cache_smoke` 的断言从「不可证伪」改为**可证伪**（实测挖出）+
-   在此登记。⚠️ `test_cache_smoke` 中钉住「未驱动 ⇒ 读 0」的那两条断言
-   在缺陷修好后**会转红**，那时 MUST 连同本条登记一起更新。
+   仅把 `test_cache_smoke` 的断言从「不可证伪」改为**可证伪**（实测挖出）。
+   ⇒ **修复已移出本 change** ⇒ draft
+     `.rddf/improvements/riscv-mini-cache-wrapper-dead-branch-2026-10.md`
+     （**强前置 = C2**：C2 会把这些 wrapper 收敛进 `include/cpu/**`）。
+   ⚠️ `test_cache_smoke` 中钉住「未驱动 ⇒ 读 0」的那两条断言在缺陷修好后
+   **会转红**，那时 MUST 连同该 draft 一起更新。
 6. **4 个进 CTest 的 target（+1 个不进 CTest 的）在运行期打印 error 级 CHERROR，退出码仍是 0**
    （`[ERROR] Requirement failed [driver_impl->get_parent() == lnodeimpl::current_component()]`，
    `include/core/io.h:385`；`CHREQUIRE` 只记日志不中止）：
