@@ -205,7 +205,20 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
    该头文件是 **ADR-046 D10 指定的 C3 DUT** ⇒ 本 change 只删它的**测试**、不删头文件，
    因此它暂时违反 ZERO-DEBT「每个头文件都必须被 include」。
    **归位条件**：C3（`rv32i-soc-dual-parity-2026-10`）落地时它成为 C3 的 DUT。
-5. **4 个 target 在运行期打印 error 级 CHERROR，但退出码仍是 0**
+5. **riscv-mini 的两个 cache wrapper 的分支驱动输出从不发射**
+   （`examples/riscv-mini/src/{i_cache_prefetch,d_cache_write_buffer}.h`）：
+   `if (io().req == ch_bool(true) && io().we == ch_bool(true)) { io().ready <<= ...; }`
+   这类分支的条件在**建图期**求值 —— `ch_bool` 有 `explicit operator bool()`
+   ⇒ C++ `if` 拿到的是「当前节点是否非零」（建图期为假），**不是**运行期条件
+   ⇒ 分支体内的 `io().xxx <<=` **从不发射** ⇒ `DCacheWriteBuffer::ready` 与
+   两个 wrapper 的 `axi_valid`/`axi_addr` **恒为未驱动**（读到 0）。
+   正确写法是 `select(...)` 表达式或 `chlib/if_stmt.h` 的 `_if(...)` DSL
+   （仓库其它组件都这么写）。本 change **不修**该 wrapper（属功能补全，
+   需连同「把 `addr`/`req` 接到内层 cache」一起做，单独立项）；
+   仅把 `test_cache_smoke` 的断言从「不可证伪」改为**可证伪**（实测挖出）+
+   在此登记。⚠️ `test_cache_smoke` 中钉住「未驱动 ⇒ 读 0」的那两条断言
+   在缺陷修好后**会转红**，那时 MUST 连同本条登记一起更新。
+6. **4 个进 CTest 的 target（+1 个不进 CTest 的）在运行期打印 error 级 CHERROR，退出码仍是 0**
    （`[ERROR] Requirement failed [driver_impl->get_parent() == lnodeimpl::current_component()]`，
    `include/core/io.h:385`；`CHREQUIRE` 只记日志不中止）：
    `test_riscv_tests_pipeline`(135，不进 CTest) / `test_pipeline_debug`(9) /

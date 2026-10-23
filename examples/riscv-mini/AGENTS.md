@@ -20,7 +20,8 @@ examples/riscv-mini/
 │   ├── d_cache_write_buffer.h # D-Cache wrapper (instance DCacheSync, handoff §3.4)
 │   └── stages/              # IF/ID/EX/MEM/WB stage headers
 └── tests/                   # ✅ 14 个 Catch2 target 已注册进 CTest
-    ├── test_*.cpp           # 16 test files（其中 8 个已删除，见 removed_examples.txt）
+    ├── test_*.cpp           # 16 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
+    ├── minitest_prog.h      # 测试辅助头（非 test source）
     └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
 ```
 

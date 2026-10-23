@@ -86,21 +86,27 @@ test_wrapper_pipeline|framework-defect-1|6"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# C4 的锚点：examples 测试源文件的**真断言数下限**。
-# 格式：<源文件>|<该文件保护的语义>|<REQUIRE/CHECK 数下限>
+# C4 的锚点：examples 测试源文件的**可执行断言数下限**。
+# 格式：<源文件>|<该文件保护的语义>|<可执行断言数下限>
 #
-# ⚠️ 为什么需要它（第三轮对抗审稿 BLOCKER-2）：一切既有护栏都是**粗粒度**的
-#    （target 数 / 源文件数 / 退出码 / error 条数）⇒ 把 `test_pipeline_exec`
-#    （12 用例 / 52 断言）整体掏空成 `REQUIRE(1 == 1)`，`ctest -N` 仍 199、
-#    所有护栏 PASS、`verify_test_counts.sh` PASS —— **等量替换无法被任何
-#    计数守恒发现**。⇒ 必须记下「每个文件至少有多少条真断言」。
-#    机制与 `CTEST_TOTAL` 同型：任何**减**都必须显式改锚点（可审计的行为）。
-#    ⚠️ 用「下限」而不是「精确值」：允许正常增删断言，但禁止把它掏空。
-#    只在**放宽**（下调下限 / 删除条目）时才需要解释；**收紧**（上调）无需理由。
+# ⚠️ **C4 的能力边界（如实声明，勿夸张）**（第四轮对抗审稿 BLOCKER-1）：
+#    它防的是**断言被移除**：删掉、被 `//` 注释掉、被 `/* */` 包住、
+#    被 `#if 0` 条件编译掉 —— 这些都会让「可执行断言数」下降。
+#    ⚠️ 它**不防**「**等量替换**」：把 `REQUIRE(pc == 0x80000004)` 换成
+#    `REQUIRE(1 == 1)` 断言数**不变**，任何基于计数的守恒都发现不了
+#    （这与 `CTEST_TOTAL` 对「等量替换一个测试」同样无能为力是同型局限）。
+#    ⇒ 「等量替换」只能靠 **code review**；本锚点不假装能覆盖它。
+#
+# ⚠️ 为什么仍需要它：在 C4 之前，本护栏只有**粗粒度**计数（target 数 / 源文件数
+#    / 退出码 / error 条数）⇒ 一个文件被删到只剩 1 条断言都不报警（实测：
+#    `test_pipeline_exec` 52 → 1，`ctest -N` 仍 199、所有护栏 PASS）。C4 把
+#    「每个文件至少有多少条断言」记下来，让**减**变成必须显式改锚点的行为
+#    （机制与 `CTEST_TOTAL` 同型）。
+#    只在**下调 / 删除条目**时需要解释（那是放宽）；上调无需理由。
 # 归位条件：无（这是长期护栏）。新增测试源 MUST 在此登记一行。
 # ═══════════════════════════════════════════════════════════════════════════
-CH4_ANCHOR_README='C4 锚点：examples 测试源的真断言数下限。格式 <源文件>|<语义>|<下限>。\n                                    任何下调/删除 MUST 在 commit message 里解释（防掏空测试）。'
-CH4_ANCHOR="examples/riscv-mini/tests/test_cache_smoke.cpp|riscv-mini cache wrapper 可实例化|2
+CH4_ANCHOR_README='C4 锚点：examples 测试源的可执行断言数下限。格式 <源文件>|<语义>|<下限>。下调/删除 MUST 在 commit message 里解释（放宽即需理由）。'
+CH4_ANCHOR="examples/riscv-mini/tests/test_cache_smoke.cpp|ICache 冷 miss 透出 + DCache 未驱动端口的当前事实|3
 examples/riscv-mini/tests/test_csr_unit.cpp|CSR 寄存器复位/读写/MRET/异常/WFI/中断|42
 examples/riscv-mini/tests/test_ifstage_device.cpp|ch_device<IfStage> 的 PC 复位/推进/stall 冻结|2
 examples/riscv-mini/tests/test_interrupt_flow.cpp|CLINT 定时器/CSR 中断条件/陷阱入口/MRET|28
@@ -111,16 +117,68 @@ examples/riscv-mini/tests/test_pipeline_wrapper.cpp|Rv32iPipeline + ITCM 装配�
 examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP|15
 examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
 examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
-examples/riscv-mini/tests/test_rv32i_pipeline.cpp|example 侧前推启用版 hazard + 分支检测|10
+examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + example 侧前推版 hazard + 分支检测|21
 examples/riscv-mini/tests/test_soc_hello_world.cpp|SoC 顶层 hello-world|8
 examples/riscv-mini/tests/test_wrapper_ifstage.cpp|IfStage 的 PC 复位/IF-ID 锁存/stall 冻结|4
 examples/riscv-mini/tests/test_wrapper_pipeline.cpp|Rv32iPipeline 直接包裹的周期行为|3
 examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前推选择|4"
 
-# 真断言计数（排除纯注释行；`SUCCEED` 不算断言）
+# 可执行断言语句数（近似）—— `SUCCEED` **不算**断言。
+#   ① 剥**全部**注释：整行 + 行尾 + 跨行块注释；
+#   ② 剥字符串 / 字符字面量（防 `printf("REQUIRE(x)")` 之类灌计数）；
+#   ③ 跳过 `#if 0 ... #endif` 区域（含嵌套）；
+#   ④ 按**出现次数**计（同一行写两条也计入 —— 旧实现用 `grep -c` 数**行**，
+#      把 3 条断言挤到 1 行会被误判成「少了 2 条」）；
+#   ⑤ 词边界：`MYREQUIRE(` 不计入。
+# ⚠️ 仍不覆盖：`#ifdef NEVER_DEFINED` 之类的条件编译（罕见，且 code review 可见）。
 real_assert_count() {
-    grep -vE '^[[:space:]]*(//|/\*|\*)' "$1" 2>/dev/null \
-        | grep -cE '\b(REQUIRE|CHECK|REQUIRE_FALSE|CHECK_FALSE)\b'
+    awk '
+    BEGIN { inbc = 0; skipdepth = 0; cnt = 0 }
+    {
+        line = $0
+        out = ""
+        i = 1; n = length(line)
+        instr = 0; inchr = 0
+        while (i <= n) {
+            c   = substr(line, i, 1)
+            two = substr(line, i, 2)
+            if (inbc) {
+                if (two == "*/") { inbc = 0; i += 2 } else { i++ }
+                continue
+            }
+            if (instr) {
+                if (c == "\\") { i += 2; continue }
+                if (c == "\"") { instr = 0 }
+                i++; continue
+            }
+            if (inchr) {
+                if (c == "\\") { i += 2; continue }
+                if (c == "'"'"'") { inchr = 0 }
+                i++; continue
+            }
+            if (two == "/*") { inbc = 1; i += 2; continue }
+            if (two == "//") { break }
+            if (c == "\"") { instr = 1; i++; continue }
+            if (c == "'"'"'") { inchr = 1; i++; continue }
+            out = out c
+            i++
+        }
+        if (out ~ /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/) { skipdepth++; next }
+        if (skipdepth > 0) {
+            if (out ~ /^[[:space:]]*#[[:space:]]*if/) skipdepth++
+            else if (out ~ /^[[:space:]]*#[[:space:]]*endif/) skipdepth--
+            next
+        }
+        t = out
+        while (length(t) > 0) {
+            if (match(t, /(REQUIRE_FALSE|CHECK_FALSE|REQUIRE|CHECK)[[:space:]]*\(/) == 0) break
+            pre = (RSTART > 1) ? substr(t, RSTART - 1, 1) : ""
+            if (pre == "" || pre ~ /[^A-Za-z0-9_]/) cnt++
+            t = substr(t, RSTART + RLENGTH)
+        }
+    }
+    END { print cnt }
+    ' "$1"
 }
 
 echo "=== verify_example_test_wiring: examples 测试归属护栏 ==="
@@ -138,7 +196,12 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 echo ""
 echo "--- C0: enable_testing() MUST 先于 add_subdirectory(examples) ---"
 et_line="$(grep -n '^[[:space:]]*enable_testing()' CMakeLists.txt | head -1 | cut -d: -f1)"
+ex_n="$(grep -c '^[[:space:]]*add_subdirectory(examples)' CMakeLists.txt)"
 ex_line="$(grep -n '^[[:space:]]*add_subdirectory(examples)' CMakeLists.txt | head -1 | cut -d: -f1)"
+if [ "$ex_n" -ne 1 ]; then
+    # 若将来出现第 2 处，`head -1` 的判定就不再代表全部 ⇒ 必须显式报出（而非静默只看第一处）
+    violation "根 CMakeLists.txt 里 'add_subdirectory(examples…)' 出现 $ex_n 次（期望恰好 1 次）—— C0 的判定会只覆盖第一处"
+fi
 if [ -z "$et_line" ] || [ -z "$ex_line" ]; then
     violation "在根 CMakeLists.txt 里找不到 enable_testing()（行 $et_line）或 add_subdirectory(examples)（行 $ex_line）"
 elif [ "$et_line" -gt "$ex_line" ]; then
@@ -236,7 +299,7 @@ SRC_LIST="$TMP/src_list"
 {
     grep -rlE '^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(' \
         examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
-    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' 2>/dev/null
+    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
     find examples -path '*/tests/*' -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.C' \) 2>/dev/null
 } | sed 's|^\./||' | sort -u > "$SRC_LIST"
 n_total=$(wc -l < "$SRC_LIST" | tr -d ' ')
@@ -295,6 +358,26 @@ else
     fi
 fi
 
+# 声明在 `examples/**/CMakeLists.txt` 里的 target 名（从 $MAP 的 `mdecl` 列派生）。
+# 用途：区分「examples 域的 CTest 条目」与「根 `tests/` 等其它域的条目」——
+# 前者缺失二进制要报违规，后者不属本护栏职责。
+EX_TARGETS="$TMP/ex_targets"
+# ⚠️ 两个来源并集，避免只认 `.cpp` 声明行而漏掉非 `.cpp` 源的 target：
+#   ① $MAP 的 target 列（精确路径，但只含 `.cpp` 声明）；
+#   ② `examples/**/CMakeLists.txt` 的折行文本里「作为任意 `fn(` 首个实参」的名字
+#      （覆盖 `.cc`/`.cxx` 源、多行声明）。
+{
+    awk -F'\t' '$3 ~ /^(\.\/)?examples\// { print $2 }' "$MAP"
+    for f in $(find examples -name CMakeLists.txt 2>/dev/null); do
+        awk '{printf "%s ", $0}' "$f" \
+            | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*' \
+            | sed -E 's/.*\([[:space:]]*//'
+    done
+} | grep -v '^$' | sort -u > "$EX_TARGETS"
+is_declared_example_target() {
+    grep -qx -- "$1" "$EX_TARGETS"
+}
+
 # ---------------------------------------------------------------------------
 # C3 运行期：每个 examples 的 CTest 条目 MUST exit 0 且日志无 error/fatal
 # ---------------------------------------------------------------------------
@@ -306,7 +389,19 @@ echo "--- C3: CTest 条目 MUST 跑出 exit 0 且日志无 error/fatal ---"
 while IFS= read -r mtarget; do
     [ -z "$mtarget" ] && continue
     bin="$(find "$BUILD_DIR/examples" -type f -name "$mtarget" -perm -u+x 2>/dev/null | head -1)"
-    [ -z "$bin" ] && continue   # 非 examples 域的 CTest 条目（根 tests/ 等）
+    if [ -z "$bin" ]; then
+        # ⚠️ 不能一律 `continue`（第四轮对抗审稿 SHOULD_FIX #2）：那会让
+        #    「声明了 CTest 条目但**从未构建**」的树**假绿** —— 而「编译了但
+        #    从不执行」正是本 change 要治的病，它的孪生形态就是「注册了但
+        #    从不构建」。区分两种情形：
+        #      ① 该名字声明在 `examples/**/CMakeLists.txt` ⇒ **本护栏的职责**
+        #         ⇒ 必须报违规（构建产物缺失）；
+        #      ② 否则（根 `tests/` 等其它域）⇒ 不属本护栏职责，跳过。
+        if is_declared_example_target "$mtarget"; then
+            violation "CTest 条目 $mtarget 声明在 examples/ 域但**找不到可执行文件**（未构建？）—— 注册了却从不执行"
+        fi
+        continue
+    fi
     # ⚠️ 加 timeout：`ctest` 对这些条目设了 TIMEOUT 300，护栏直接跑二进制时
     #    MUST 有等价的保护，否则一个挂死的 target 会把护栏本身也挂死。
     #    （`timeout` 来自 coreutils；macOS 上是 `gtimeout`（homebrew）。）
@@ -336,7 +431,7 @@ while IFS= read -r mtarget; do
     elif [ "$errs" -eq "$expected" ]; then
         note "OK  $mtarget → exit 0（$errs 条 error/fatal = allowlist 期望值：framework-defect-1）"
     else
-        violation "CTest 条目 $mtarget 的 error/fatal 条数（$errs）≠ allowlist 期望值（$expected）—— 新增的报错 MUST 单独处置，不得躲在豁免里"
+        violation "CTest 条目 $mtarget 的 error/fatal 条数（$errs）≠ allowlist 期望值（$expected）—— **变多** = 新增报错 MUST 单独处置（不得躲在豁免里）；**变少** = 缺陷已被部分修复 ⇒ MUST 把期望值下调"
     fi
 done < "$CTEST_LIST"
 
@@ -361,7 +456,7 @@ EOF
 # C4 真断言数下限（防「等量替换 / 掏空测试」）
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- C4: 每个测试源的真断言数 MUST ≥ 锚点下限 ---"
+echo '--- C4: 每个测试源的可执行断言数 MUST ≥ 锚点下限（防「删除/注释掉/#if 0 掉断言」；**不防**「等量替换」，见脚本头注释）---'
 printf '%s\n' "$CH4_ANCHOR_README"
 while IFS= read -r src; do
     [ -z "$src" ] && continue
@@ -372,7 +467,7 @@ while IFS= read -r src; do
     fi
     n="$(real_assert_count "$src")"
     if [ "$n" -lt "$min" ]; then
-        violation "$src 的真断言数（$n）< 锚点下限（$min）—— 测试被掏空？（下调下限 MUST 在 commit message 里解释）"
+        violation "$src 的可执行断言数（$n）< 锚点下限（$min）—— 断言被删除 / 注释掉 / 条件编译掉了？（下调下限是**放宽**，MUST 在 commit message 里解释）"
     else
         note "OK  $src → $n ≥ $min"
     fi

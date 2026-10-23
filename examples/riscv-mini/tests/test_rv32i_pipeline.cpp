@@ -29,31 +29,65 @@ using namespace riscv;
 inline bool to_bool(const sdata_type& val) { return val != 0; }
 
 // ============================================================================
-// 测试用例 1: 流水线寄存器实例化
+// 测试用例 1: 流水线寄存器**行为**（不是「构造没崩」）
 // ============================================================================
-TEST_CASE("Pipeline Registers - Instantiation", "[pipeline][regs]") {
-    SECTION("IfIdPipelineReg compiles and instantiates") {
-        ch::Component* parent = nullptr;
-        IfIdPipelineReg reg(parent, "test_if_id");
-        (void)reg;
+// ⚠️ 2026-10-23（change `riscv-mini-test-triage-2026-10`，第四轮对抗审稿 BLOCKER-2）：
+//    本用例此前 4 个 SECTION 各只有 `(void)reg;` —— **零断言**，是本 change
+//    立论对象「账面覆盖」的同型物（且本 target 正是本 change 新注册进 CTest 的）。
+//    现改为驱动 `ch_device<T>` 并断言可观测输出。
+//    `update = select(!rst, select(!stall, !flush, 0), 0)`（rv32i_pipeline_regs.h:210）
+//    ⇒ 锁存条件 = `rst==0 && stall==0 && flush==0`。
+TEST_CASE("Pipeline Registers - latch / stall / flush behavior", "[pipeline][regs]") {
+    SECTION("IfIdPipelineReg latches only when rst/stall/flush all clear") {
+        ch::ch_device<IfIdPipelineReg> reg;
+        ch::Simulator sim(reg.context());
+        sim.set_input_value(reg.instance().io().rst, 1);
+        sim.set_input_value(reg.instance().io().stall, 0);
+        sim.set_input_value(reg.instance().io().flush, 0);
+        sim.set_input_value(reg.instance().io().if_pc, 0x80000010);
+        sim.set_input_value(reg.instance().io().if_instruction, 0x00000013);
+        sim.set_input_value(reg.instance().io().if_instr_valid, 1);
+        sim.tick();
+        // rst=1 ⇒ 冻结在复位值
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().id_pc)) == 0u);
+
+        sim.set_input_value(reg.instance().io().rst, 0);
+        sim.tick();
+        // 锁存条件满足 ⇒ 输出反映输入
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().id_pc)) == 0x80000010u);
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().id_instruction)) == 0x00000013u);
+        REQUIRE(to_bool(sim.get_port_value(reg.instance().io().id_instr_valid)));
+
+        // stall=1 且输入改变 ⇒ MUST 保持旧值（不锁存）
+        sim.set_input_value(reg.instance().io().if_pc, 0xDEADBEEF);
+        sim.set_input_value(reg.instance().io().stall, 1);
+        sim.tick();
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().id_pc)) == 0x80000010u);
+
+        // flush=1（stall=0）⇒ valid MUST 被冲刷
+        sim.set_input_value(reg.instance().io().stall, 0);
+        sim.set_input_value(reg.instance().io().flush, 1);
+        sim.tick();
+        REQUIRE(!to_bool(sim.get_port_value(reg.instance().io().id_instr_valid)));
     }
-    
-    SECTION("IdExPipelineReg compiles and instantiates") {
-        ch::Component* parent = nullptr;
-        IdExPipelineReg reg(parent, "test_id_ex");
-        (void)reg;
-    }
-    
-    SECTION("ExMemPipelineReg compiles and instantiates") {
-        ch::Component* parent = nullptr;
-        ExMemPipelineReg reg(parent, "test_ex_mem");
-        (void)reg;
-    }
-    
-    SECTION("MemWbPipelineReg compiles and instantiates") {
-        ch::Component* parent = nullptr;
-        MemWbPipelineReg reg(parent, "test_mem_wb");
-        (void)reg;
+
+    SECTION("MemWbPipelineReg latches write-back fields") {
+        ch::ch_device<MemWbPipelineReg> reg;
+        ch::Simulator sim(reg.context());
+        sim.set_input_value(reg.instance().io().rst, 0);
+        sim.set_input_value(reg.instance().io().stall, 0);
+        sim.set_input_value(reg.instance().io().flush, 0);
+        sim.set_input_value(reg.instance().io().mem_read_data, 0x000000AA);
+        sim.set_input_value(reg.instance().io().mem_alu_result, 0x000000BB);
+        sim.set_input_value(reg.instance().io().mem_reg_write, 1);
+        sim.set_input_value(reg.instance().io().mem_is_load, 1);
+        sim.set_input_value(reg.instance().io().mem_rd, 7);
+        sim.tick();
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().wb_read_data)) == 0xAAu);
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().wb_alu_result)) == 0xBBu);
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(reg.instance().io().wb_rd)) == 7u);
+        REQUIRE(to_bool(sim.get_port_value(reg.instance().io().wb_reg_write)));
+        REQUIRE(to_bool(sim.get_port_value(reg.instance().io().wb_is_load)));
     }
 }
 

@@ -175,36 +175,59 @@ disabled_examples() {
 #    2026-10-23（change `riscv-mini-test-triage-2026-10`）新增该区分：
 #    删掉若干个 target 后，本地旧构建目录里的孤儿二进制会让 C1 报一串
 #    「无归属」，而其中没有一个是真实问题 ⇒ 报告误导。
-# 已声明的 target 集合 —— 优先用**构建系统自己的**列表
-# （`cmake --build --target help`），它对 CMake 的语法变体免疫：
+# 已声明的 target 集合 —— 优先用**构建系统自己的**列表，它对 CMake 的语法变体免疫：
 # 一个**多行**声明 `add_executable(\n  name\n  src)` 用文本正则匹配会漏
 # （实测：真实程序被误判成 STALE-ARTIFACT ⇒ **静默掩盖真问题**），
-# 而构建系统必然认得它。仅在构建系统不提供该查询时回退到文本匹配。
-DECLARED_TARGETS_CACHE=""
-declared_targets() {
-    if [ -z "$DECLARED_TARGETS_CACHE" ]; then
-        DECLARED_TARGETS_CACHE="$(cmake --build "$BUILD_DIR_ABS" --target help 2>/dev/null \
-            | sed -n 's/^\.\.\. //p' | sort -u)"
-    fi
-    printf '%s\n' "$DECLARED_TARGETS_CACHE"
+# 而构建系统必然认得它。
+#
+# ⚠️ 「权威来源」**随生成器而变**（实测，勿过度声明）：
+#   - Unix Makefiles：`cmake --build <dir> --target help` 输出 `... <name>` ⇒ 完整；
+#   - Ninja：同一个命令**只列 convenience targets**（`all` / `clean` /
+#     `edit_cache` / …），**不含**用户 target ⇒ 该来源在 Ninja 下是**空壳**；
+#     真正的权威来源是 `ninja -t targets`。
+#   ⇒ 两条都试，并集使用；都拿不到时回退文本匹配（回退只会说「declared」
+#     ⇒ 最坏把陈旧产物报成 UNTRACKED（吵但安全））。
+#
+# ⚠️ 缓存 MUST 落到**文件**（而不是 shell 变量）：变量在管道子 shell 里赋值
+#    不会回流父 shell（实测 `f | grep -q x` 内赋值后父 shell 仍为空）⇒
+#     缓存变空壳 ⇒ 每次调用都跑一次外部进程（O(N) 次）。
+DECLARED_TARGETS_FILE=""
+declared_targets_init() {
+    [ -n "$DECLARED_TARGETS_FILE" ] && return 0
+    DECLARED_TARGETS_FILE="$(mktemp)"
+    {
+        # Ninja（若该构建目录是 Ninja 生成的）
+        if [ -f "$BUILD_DIR_ABS/build.ninja" ] && command -v ninja >/dev/null 2>&1; then
+            ( cd "$BUILD_DIR_ABS" && ninja -t targets 2>/dev/null ) \
+                | sed -n 's/^\([^:][^:]*\):.*/\1/p'
+        fi
+        # Makefiles（`... <name>`）；Ninja 下这里只会得到 convenience targets，无害
+        cmake --build "$BUILD_DIR_ABS" --target help 2>/dev/null \
+            | sed -n -e 's/^\.\.\. //p' -e 's/^\([A-Za-z0-9_.-][A-Za-z0-9_.-]*\): .*/\1/p'
+    } | sed -e 's/[[:space:]]*$//' -e '/^$/d' | sort -u > "$DECLARED_TARGETS_FILE"
 }
 
 is_declared_target() {
     local want="$1" f
     # ① 构建系统认得（权威）
-    if [ -n "$DECLARED_TARGETS_CACHE" ] || cmake --build "$BUILD_DIR_ABS" --target help >/dev/null 2>&1; then
-        if declared_targets | grep -qx -- "$want"; then
-            return 0
-        fi
+    declared_targets_init
+    if grep -qx -- "$want" "$DECLARED_TARGETS_FILE"; then
+        return 0
     fi
     # ② 回退：文本匹配（把整个文件折成一行，多行声明也能匹配）。
     #    ⚠️ 回退只会说「declared」⇒ 最坏把陈旧产物报成 UNTRACKED（吵但安全）。
     # ⚠️ 收窄到 examples/ 域：本护栏是 examples 的护栏，而 CTest 的名字集是**全局**的
     #    ⇒ 若不过滤，一个与根 `tests/` 同名的 example 二进制会被判为「已声明/已注册」
     #    而侥幸通过（跨域同名风险）。
+    # ⚠️ 先把「名字」提出来再 `grep -qx` 比对，**不要**把 `$want` 直接插进 ERE
+    #    （target 名含 `.` / `+` 等元字符时会过度匹配）。
     for f in $(find "$EXAMPLES_DIR" -name CMakeLists.txt 2>/dev/null); do
-        awk '{printf "%s ", $0}' "$f" 2>/dev/null \
-            | grep -qE "[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*${want}([[:space:]]|,|\\))" && return 0
+        if awk '{printf "%s ", $0}' "$f" 2>/dev/null \
+            | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*' \
+            | sed -E 's/.*\([[:space:]]*//' \
+            | grep -qx -- "$want"; then
+            return 0
+        fi
     done
     return 1
 }
