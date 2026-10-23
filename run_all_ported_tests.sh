@@ -175,17 +175,36 @@ disabled_examples() {
 #    2026-10-23（change `riscv-mini-test-triage-2026-10`）新增该区分：
 #    删掉若干个 target 后，本地旧构建目录里的孤儿二进制会让 C1 报一串
 #    「无归属」，而其中没有一个是真实问题 ⇒ 报告误导。
+# 已声明的 target 集合 —— 优先用**构建系统自己的**列表
+# （`cmake --build --target help`），它对 CMake 的语法变体免疫：
+# 一个**多行**声明 `add_executable(\n  name\n  src)` 用文本正则匹配会漏
+# （实测：真实程序被误判成 STALE-ARTIFACT ⇒ **静默掩盖真问题**），
+# 而构建系统必然认得它。仅在构建系统不提供该查询时回退到文本匹配。
+DECLARED_TARGETS_CACHE=""
+declared_targets() {
+    if [ -z "$DECLARED_TARGETS_CACHE" ]; then
+        DECLARED_TARGETS_CACHE="$(cmake --build "$BUILD_DIR_ABS" --target help 2>/dev/null \
+            | sed -n 's/^\.\.\. //p' | sort -u)"
+    fi
+    printf '%s\n' "$DECLARED_TARGETS_CACHE"
+}
+
 is_declared_target() {
     local want="$1" f
+    # ① 构建系统认得（权威）
+    if [ -n "$DECLARED_TARGETS_CACHE" ] || cmake --build "$BUILD_DIR_ABS" --target help >/dev/null 2>&1; then
+        if declared_targets | grep -qx -- "$want"; then
+            return 0
+        fi
+    fi
+    # ② 回退：文本匹配（把整个文件折成一行，多行声明也能匹配）。
+    #    ⚠️ 回退只会说「declared」⇒ 最坏把陈旧产物报成 UNTRACKED（吵但安全）。
     # ⚠️ 收窄到 examples/ 域：本护栏是 examples 的护栏，而 CTest 的名字集是**全局**的
     #    ⇒ 若不过滤，一个与根 `tests/` 同名的 example 二进制会被判为「已声明/已注册」
     #    而侥幸通过（跨域同名风险）。
-    for f in $(find "$EXAMPLES_DIR" -name CMakeLists.txt 2>/dev/null) "$EXAMPLES_DIR/CMakeLists.txt"; do
-        # ⚠️ 判据刻意**放宽**为「该名字是任意 `fn(` 行的第一个实参」，
-        #    而**不是**一份写死的 helper 白名单。理由：白名单太窄 ⇒ 真实的
-        #    UNTRACKED 会被误判成 STALE-ARTIFACT ⇒ **静默掩盖真问题**；
-        #    放宽 ⇒ 最坏只是把陈旧产物报成 UNTRACKED（吵，但安全）。
-        grep -qE "^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*${want}([[:space:]]|,|\\))" "$f" 2>/dev/null && return 0
+    for f in $(find "$EXAMPLES_DIR" -name CMakeLists.txt 2>/dev/null); do
+        awk '{printf "%s ", $0}' "$f" 2>/dev/null \
+            | grep -qE "[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\\([[:space:]]*${want}([[:space:]]|,|\\))" && return 0
     done
     return 1
 }

@@ -112,6 +112,21 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 | `test_cache_smoke.cpp` | 已以 `riscv_mini_cache_smoke` 注册 ⇒ **已归位** |
 | `test_rv32i_pipeline.cpp`（example 副本） | **不是**根副本的过期副本 —— 根副本 12 个用例、example 副本 **5 个**用例，且测的是**不同组件**（example 副本测 example 侧**前推启用版** `hazard_unit.h`，根副本测 `rv32i_core.h` 的 `HazardDetectionUnit`）⇒ **修好并注册进 CTest**（实测 10 断言 / 5 用例全绿），**不删** |
 
+### 第三轮审稿（REJECT）后的整改
+
+| # | 缺陷 | 整改 |
+|---|---|---|
+| B1 | 自述「6 补断言」实为 3 个：3 个 target 仍 0 断言（变异清理时 `git checkout --` 把改写覆盖掉了） | 4 个文件全部改写并复核（`test_wrapper_ifstage` / `test_ifstage_device` / `test_wrapper_pipeline`，`test_wrapper_pipeline` 原从未改） |
+| B2 | 「MUST 断言一个语义输出」**无自动化护栏**、delta 也无该 Requirement ⇒ 把 52 断言的文件掏空成 `REQUIRE(1==1)` 全绿 | 新增 **C4**：每个测试源 MUST 登记「真断言数**下限**」锚点（`CH4_ANCHOR`，机制同 `CTEST_TOTAL`）+ delta 新增 Requirement |
+| B3 | 源文件枚举漏 `.cc`/`.cxx` 与 `SCENARIO` 等非 `TEST_CASE` 宏；C3 只遍历「有 `.cpp` 声明行」的 target ⇒ 用 `.cc` 注册的失败测试逃逸 | 枚举扩展为「4 种后缀 × 全部 Catch2 用例宏 ∪ `tests/` 下任意文件」；**C3 改为遍历 CTest 条目 ∩ `build/examples/` 下的可执行文件**（后缀无关） |
+| B4 | `is_declared_target` 只匹配**单行** `fn(name` ⇒ 多行声明（本仓自己就用）被误判 STALE-ARTIFACT ⇒ 静默掩盖真问题（与自述的安全方向相反） | 判据改为**构建系统自己的 target 列表**（`cmake --build --target help`，对语法变体免疫）+ 折行文本匹配回退 |
+| B5 | `rv32i_pipeline_top.h` 删除其唯一消费者后成为**孤儿头**；`removed_examples.txt` 的「等价覆盖」声明是虚假的且自指 | 修正措辞；把「该头文件暂时零消费者」作为**已知缺口**登记（归位条件：C3 落地时它成为 C3 的 DUT） |
+
+**SHOULD_FIX**：allowlist 改为记**期望条数**（原先整条豁免 ⇒ 注入任意多条无关错误仍判 OK）；
+C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ 拼错的行永久残留）；
+`test_pipeline_wrapper` 的「ITCM 写入」归因被变异证伪 ⇒ 用例改名/改注释为实际验证的语义；
+文档计数（`18 个` ×4 → 14、「本清单 10」→ 5、`catch_amalgamated` 位置、DEBUG 3 的指令描述）。
+
 ### C1-d 新护栏（`scripts/verify_example_test_wiring.sh`）
 
 > ⚠️ 本护栏经对抗审稿 REJECT 后**重写**过两次。三个不可退化的设计约束：
@@ -204,7 +219,7 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 - [x] 19 个原「不执行」target 全部有归属：绿的进 CTest、红的修好或删除并登记；
       另 2 个高价值 orphan（`test_interrupt_flow` / example 版 `test_rv32i_pipeline`）
       修好并进 CTest
-- [x] `ctest -N` = **199**（基线 185 + 14；5 个 0 断言 target 被删、1 个因 Catch2 exit 4 只构建），
+- [x] `ctest -N` = **199**（基线 185 + 14；**8** 个 0 断言/不可观测 target 被删、1 个因 Catch2 exit 4 只构建），
       与 root `AGENTS.md` `CTEST_TOTAL` 一致
 - [x] `bash scripts/verify_example_test_wiring.sh` 绿
 - [x] `bash scripts/verify_openspec_delta.sh riscv-mini-test-triage-2026-10` 绿

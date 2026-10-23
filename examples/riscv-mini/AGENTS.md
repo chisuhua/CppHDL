@@ -21,10 +21,10 @@ examples/riscv-mini/
 │   └── stages/              # IF/ID/EX/MEM/WB stage headers
 └── tests/                   # ✅ 14 个 Catch2 target 已注册进 CTest
     ├── test_*.cpp           # 16 test files（其中 8 个已删除，见 removed_examples.txt）
-    └── catch_amalgamated.*  # Catch2 framework
+    └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
 ```
 
-> ⚠️ **2026-10-23（change `riscv-mini-test-triage-2026-10`）**：本目录的 18 个
+> ⚠️ **2026-10-23（change `riscv-mini-test-triage-2026-10`）**：本目录的 14 个
 > Catch2 target **已注册进 CTest**（此前「每次 CI 都编译、却从未被执行」——
 > 根因是根 `CMakeLists.txt` 的 `enable_testing()` 排在 `add_subdirectory(examples)`
 > 之后 ⇒ examples 子目录的 `add_test()` 是空操作）。
@@ -40,7 +40,7 @@ examples/riscv-mini/
 - `rv32i_pipeline_cache.h` — I/D-Cache integration chain incomplete
 - `dynamic_branch_predict.h` — DELETED during code debt cleanup
 - `phase3b_complete.cpp` — DELETED (used `ch::log2_ceil` and `ch_array` which don't exist)
-- `tests/` subdirectory — ✅ 已注册进 CTest（2026-10-23，18 个 target）；
+- `tests/` subdirectory — ✅ 已注册进 CTest（2026-10-23，14 个 target）；
   `test_csr_unit` 早已以根 `tests/` 的 target 身份存在
 - 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 10 assertions)；
   **2026-10-23 起以 `test_rv32i_pipeline_example` 注册进 CTest**（此前从未编译）。

@@ -5,7 +5,7 @@
  * 测试范围（每个 stage 单独实例化 → 接地输入 → tick → 断言其语义输出）：
  *   DEBUG 1  HazardUnit    —— 无冒险时 stall/flush 为假、前推源为 0
  *   DEBUG 2  IfStage       —— PC 初值为 ITCM 基址 0x80000000
- *   DEBUG 3  IdStage       —— 解码 ADDI x0,x0,0：opcode/rs1_addr/rs2_addr
+ *   DEBUG 3  IdStage       —— 解码 add x3,x1,x2(0x002081B3)：opcode/rs1/rs2
  *   DEBUG 4  ExStage       —— ALU ADD：5 + 7 = 12
  *   DEBUG 5  MemStage      —— 非 load 时透传 ALU 结果
  *   DEBUG 6  WbStage       —— 非访存时写回 ALU 结果，且写使能有效

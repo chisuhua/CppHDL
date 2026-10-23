@@ -67,7 +67,8 @@ note()  { printf "  %s\n" "$1"; }
 violation() { printf "${RED}VIOLATION${NC} %s\n" "$1" >&2; violations=$((violations+1)); }
 
 DISABLED_FILE="examples/disabled_examples.txt"
-REMOVED_FILE="examples/removed_examples.txt"
+# ⚠️ `examples/removed_examples.txt`（删除留痕）**刻意不被本护栏读取** ——
+#    它只是审计记录。把它当豁免用会退化成「按名字的永久自动豁免」（第二轮 B3）。
 AGENTS_MD="AGENTS.md"
 
 # ---------------------------------------------------------------------------
@@ -78,10 +79,49 @@ AGENTS_MD="AGENTS.md"
 # 归位条件：框架缺陷修复后，这些行 MUST 被移除（否则报 STALE）。
 # 格式：<target>|<缺陷编号>
 # ---------------------------------------------------------------------------
-CHERROR_ALLOWLIST="test_pipeline_minimal|framework-defect-1
-test_pipeline_debug|framework-defect-1
-test_pipeline_wrapper|framework-defect-1
-test_wrapper_pipeline|framework-defect-1"
+CHERROR_ALLOWLIST="test_pipeline_minimal|framework-defect-1|3
+test_pipeline_debug|framework-defect-1|9
+test_pipeline_wrapper|framework-defect-1|9
+test_wrapper_pipeline|framework-defect-1|6"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# C4 的锚点：examples 测试源文件的**真断言数下限**。
+# 格式：<源文件>|<该文件保护的语义>|<REQUIRE/CHECK 数下限>
+#
+# ⚠️ 为什么需要它（第三轮对抗审稿 BLOCKER-2）：一切既有护栏都是**粗粒度**的
+#    （target 数 / 源文件数 / 退出码 / error 条数）⇒ 把 `test_pipeline_exec`
+#    （12 用例 / 52 断言）整体掏空成 `REQUIRE(1 == 1)`，`ctest -N` 仍 199、
+#    所有护栏 PASS、`verify_test_counts.sh` PASS —— **等量替换无法被任何
+#    计数守恒发现**。⇒ 必须记下「每个文件至少有多少条真断言」。
+#    机制与 `CTEST_TOTAL` 同型：任何**减**都必须显式改锚点（可审计的行为）。
+#    ⚠️ 用「下限」而不是「精确值」：允许正常增删断言，但禁止把它掏空。
+#    只在**放宽**（下调下限 / 删除条目）时才需要解释；**收紧**（上调）无需理由。
+# 归位条件：无（这是长期护栏）。新增测试源 MUST 在此登记一行。
+# ═══════════════════════════════════════════════════════════════════════════
+CH4_ANCHOR_README='C4 锚点：examples 测试源的真断言数下限。格式 <源文件>|<语义>|<下限>。\n                                    任何下调/删除 MUST 在 commit message 里解释（防掏空测试）。'
+CH4_ANCHOR="examples/riscv-mini/tests/test_cache_smoke.cpp|riscv-mini cache wrapper 可实例化|2
+examples/riscv-mini/tests/test_csr_unit.cpp|CSR 寄存器复位/读写/MRET/异常/WFI/中断|42
+examples/riscv-mini/tests/test_ifstage_device.cpp|ch_device<IfStage> 的 PC 复位/推进/stall 冻结|2
+examples/riscv-mini/tests/test_interrupt_flow.cpp|CLINT 定时器/CSR 中断条件/陷阱入口/MRET|28
+examples/riscv-mini/tests/test_pipeline_debug.cpp|5 个 stage + hazard + pipeline 的逐组件行为断言|14
+examples/riscv-mini/tests/test_pipeline_exec.cpp|流水线执行（指令级）|52
+examples/riscv-mini/tests/test_pipeline_minimal.cpp|Rv32iPipeline 构造 + 复位期周期计数冻结|1
+examples/riscv-mini/tests/test_pipeline_wrapper.cpp|Rv32iPipeline + ITCM 装配的取指/周期行为|5
+examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP|15
+examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
+examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
+examples/riscv-mini/tests/test_rv32i_pipeline.cpp|example 侧前推启用版 hazard + 分支检测|10
+examples/riscv-mini/tests/test_soc_hello_world.cpp|SoC 顶层 hello-world|8
+examples/riscv-mini/tests/test_wrapper_ifstage.cpp|IfStage 的 PC 复位/IF-ID 锁存/stall 冻结|4
+examples/riscv-mini/tests/test_wrapper_pipeline.cpp|Rv32iPipeline 直接包裹的周期行为|3
+examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前推选择|4"
+
+# 真断言计数（排除纯注释行；`SUCCEED` 不算断言）
+real_assert_count() {
+    grep -vE '^[[:space:]]*(//|/\*|\*)' "$1" 2>/dev/null \
+        | grep -cE '\b(REQUIRE|CHECK|REQUIRE_FALSE|CHECK_FALSE)\b'
+}
 
 echo "=== verify_example_test_wiring: examples 测试归属护栏 ==="
 
@@ -187,9 +227,17 @@ sort -u -o "$MAP" "$MAP"
 #    只按 `test_*.cpp` 命名枚举会漏掉 `pipeline_check.cpp` 这类源（实测逃逸）。
 # ---------------------------------------------------------------------------
 SRC_LIST="$TMP/src_list"
+# ⚠️ 枚举 MUST 覆盖：
+#    ① 任意 C++ 后缀（`.cpp` / `.cc` / `.cxx` / `.C`）—— 只认 `.cpp` 会漏掉
+#       `tests/test_x.cc`（实测：`.cc` + TEST_CASE 的源此前完全不可见）；
+#    ② Catch2 的**全部**用例宏（不只 `TEST_CASE`）—— `SCENARIO(...)` / 
+#       `TEMPLATE_TEST_CASE` 等宏写的测试同样要算；
+#    ③ `examples/*/tests/` 下的任意文件（不论内容）—— 兜住「还没写断言」的新测试。
 {
-    grep -rl 'TEST_CASE' examples --include='*.cpp' 2>/dev/null
-    find examples -path '*/tests/*.cpp' -type f 2>/dev/null
+    grep -rlE '^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(' \
+        examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
+    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' 2>/dev/null
+    find examples -path '*/tests/*' -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.C' \) 2>/dev/null
 } | sed 's|^\./||' | sort -u > "$SRC_LIST"
 n_total=$(wc -l < "$SRC_LIST" | tr -d ' ')
 note "examples 测试源文件总数：$n_total 个"
@@ -252,18 +300,13 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- C3: CTest 条目 MUST 跑出 exit 0 且日志无 error/fatal ---"
-while IFS="$(printf '\t')" read -r msrc mtarget mdecl; do
+# ⚠️ 遍历 **CTest 条目 ∩ `build/examples/` 下的可执行文件**，而**不是**遍历
+#    「有 `.cpp` 声明行」的 target —— 否则一个用 `.cc` 源注册进 CTest 的测试
+#    永远不被运行期检查（实测：它失败时护栏仍 PASS）。
+while IFS= read -r mtarget; do
     [ -z "$mtarget" ] && continue
-    grep -qx -- "$mtarget" "$CTEST_LIST" || continue
-    case "$mdecl" in
-        ./examples/*) ;;
-        *) continue ;;   # 根 tests/ 的 target 不在本护栏职责内
-    esac
     bin="$(find "$BUILD_DIR/examples" -type f -name "$mtarget" -perm -u+x 2>/dev/null | head -1)"
-    if [ -z "$bin" ]; then
-        violation "CTest 条目 $mtarget 找不到对应可执行文件（构建产物缺失）"
-        continue
-    fi
+    [ -z "$bin" ] && continue   # 非 examples 域的 CTest 条目（根 tests/ 等）
     # ⚠️ 加 timeout：`ctest` 对这些条目设了 TIMEOUT 300，护栏直接跑二进制时
     #    MUST 有等价的保护，否则一个挂死的 target 会把护栏本身也挂死。
     #    （`timeout` 来自 coreutils；macOS 上是 `gtimeout`（homebrew）。）
@@ -275,37 +318,75 @@ while IFS="$(printf '\t')" read -r msrc mtarget mdecl; do
         out="$("$bin" 2>&1)"; rc=$?
     fi
     errs="$(printf '%s' "$out" | grep -cE '^\[(ERROR|FATAL)\]')"
-    allowed=0
-    printf '%s\n' "$CHERROR_ALLOWLIST" | grep -qx -- "$mtarget|framework-defect-1" && allowed=1
+    # allowlist 记的是**期望条数**（而不是「整条豁免」）—— 否则往一个已豁免的
+    # target 里注入任意多条**无关**错误仍会被判 OK（实测踩过）。
+    expected="$(printf '%s\n' "$CHERROR_ALLOWLIST" | awk -F'|' -v t="$mtarget" '$1==t {print $3; exit}')"
 
     if [ "$rc" -ne 0 ]; then
         violation "CTest 条目 $mtarget 退出码 $rc（≠ 0）⇒ CTest 会判红。输出末尾：$(printf '%s' "$out" | grep -vE '^\[INFO\]' | tail -2 | tr '\n' ' ')"
-    elif [ "$errs" -gt 0 ] && [ "$allowed" -eq 0 ]; then
+    elif [ "$errs" -eq 0 ]; then
+        # 日志干净 ⇒ 若 allowlist 里仍有它 ⇒ STALE 豁免
+        if [ -n "$expected" ]; then
+            violation "allowlist 里的 $mtarget 已不再打印 error/fatal ⇒ MUST 从 CHERROR_ALLOWLIST 移除该行（STALE 豁免）"
+        else
+            note "OK  $mtarget → exit 0，日志干净"
+        fi
+    elif [ -z "$expected" ]; then
         violation "CTest 条目 $mtarget 退出码 0 但日志有 $errs 条 error/fatal（「跑但报错」≠ 通过）。首条：$(printf '%s' "$out" | grep -E '^\[(ERROR|FATAL)\]' | head -1)"
-    elif [ "$errs" -gt 0 ]; then
-        note "OK  $mtarget → exit 0（$errs 条 error/fatal 走 allowlist：framework-defect-1）"
+    elif [ "$errs" -eq "$expected" ]; then
+        note "OK  $mtarget → exit 0（$errs 条 error/fatal = allowlist 期望值：framework-defect-1）"
     else
-        note "OK  $mtarget → exit 0，日志干净"
+        violation "CTest 条目 $mtarget 的 error/fatal 条数（$errs）≠ allowlist 期望值（$expected）—— 新增的报错 MUST 单独处置，不得躲在豁免里"
     fi
-done < "$MAP"
+done < "$CTEST_LIST"
 
 # allowlist 的 stale 检查：条目对应的 target 若已不再打印 error ⇒ MUST 移除该行
 echo ""
 echo "--- C3b: allowlist stale 检查 ---"
-while IFS='|' read -r atarget adefect; do
+while IFS='|' read -r atarget adefect aexp; do
     [ -z "$atarget" ] && continue
-    grep -qx -- "$atarget" "$CTEST_LIST" || { note "（$atarget 不在 CTest 中，跳过）"; continue; }
-    abin="$(find "$BUILD_DIR/examples" -type f -name "$atarget" -perm -u+x 2>/dev/null | head -1)"
-    [ -z "$abin" ] && continue
-    aerrs="$("$abin" 2>&1 | grep -cE '^\[(ERROR|FATAL)\]')"
-    if [ "$aerrs" -eq 0 ]; then
-        printf "${YELLOW}STALE${NC} allowlist 里的 $atarget 已不再打印 error/fatal ⇒ MUST 从 CHERROR_ALLOWLIST 移除该行\n"
+    # ⚠️ 不在 CTest 里的 allowlist 行 MUST 报 STALE（而不是「跳过」）——
+    #    否则拼错的名字 / 已失效的豁免行会**永久残留**且无声。
+    if ! grep -qx -- "$atarget" "$CTEST_LIST"; then
+        printf "${YELLOW}STALE${NC} allowlist 里的 $atarget 不在 CTest 中 ⇒ 该行永不生效，MUST 移除\n"
         violations=$((violations+1))
-    else
-        note "OK  $atarget 仍打印 $aerrs 条（$adefect）"
+        continue
     fi
+    note "OK  $atarget 在 CTest 中（$adefect，期望 $aexp 条）"
 done <<EOF
 $CHERROR_ALLOWLIST
+EOF
+
+# ---------------------------------------------------------------------------
+# C4 真断言数下限（防「等量替换 / 掏空测试」）
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- C4: 每个测试源的真断言数 MUST ≥ 锚点下限 ---"
+printf '%s\n' "$CH4_ANCHOR_README"
+while IFS= read -r src; do
+    [ -z "$src" ] && continue
+    min="$(printf '%s\n' "$CH4_ANCHOR" | awk -F'|' -v f="$src" '$1==f {print $3; exit}')"
+    if [ -z "$min" ]; then
+        violation "$src 不在 CH4_ANCHOR 中 —— 新增测试源 MUST 登记一行（含真断言数下限）"
+        continue
+    fi
+    n="$(real_assert_count "$src")"
+    if [ "$n" -lt "$min" ]; then
+        violation "$src 的真断言数（$n）< 锚点下限（$min）—— 测试被掏空？（下调下限 MUST 在 commit message 里解释）"
+    else
+        note "OK  $src → $n ≥ $min"
+    fi
+done < "$SRC_LIST"
+
+# stale：锚点条目对应的文件必须存在
+while IFS='|' read -r fsrc fdesc fmin; do
+    [ -z "$fsrc" ] && continue
+    if [ ! -f "$fsrc" ]; then
+        printf "${YELLOW}STALE${NC} CH4_ANCHOR 里的 $fsrc 已不存在 ⇒ MUST 移除该行\n"
+        violations=$((violations+1))
+    fi
+done <<EOF
+$CH4_ANCHOR
 EOF
 
 # ---------------------------------------------------------------------------

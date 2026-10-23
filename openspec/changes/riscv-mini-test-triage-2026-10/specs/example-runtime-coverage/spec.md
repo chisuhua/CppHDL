@@ -65,6 +65,17 @@ error/fatal 级条目（「跑但报错」≠ 通过）；既有例外 MUST 走*
 - **AND** MUST 修复它，或把它登记在 `examples/disabled_examples.txt`（附根因与归位条件）
 - **AND** MUST NOT 用「跳过它」的方式让 CTest 变绿
 
+#### Scenario: 测试 MUST 断言语义输出（不得只 SUCCEED）
+
+- **WHEN** 一个 examples 内的测试 target 被注册进 CTest
+- **THEN** 它的用例 MUST 至少断言一个**语义确定的输出**（`REQUIRE` / `CHECK`）
+- **AND** MUST NOT 仅以 `SUCCEED(...)` 作为用例的全部内容
+  （那只能证明「构造没崩」，不能证明行为对 ⇒ 是**账面覆盖**）
+- **AND** 该测试源的**真断言数** MUST 不低于仓库登记的下限锚点
+  （机制与 `CTEST_TOTAL` 同型：把测试**掏空**成 `REQUIRE(1 == 1)` 属于
+  **等量替换**，任何基于「文件数 / target 数 / 退出码」的守恒检查都发现不了
+  ⇒ MUST 有「断言数下限」这一维度的锚点）
+
 #### Scenario: 测试源文件 MUST 被编译
 
 - **WHEN** `examples/**/tests/` 下存在 `test_*.cpp` 源文件

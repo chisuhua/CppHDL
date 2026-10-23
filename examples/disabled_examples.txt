@@ -15,10 +15,10 @@
 #    `CH_TRACKED_EXAMPLE_TARGETS`。
 #
 # 判定基准（2026-10-23 实测）：
-#   被跟踪 28 / main() 程序 32（其中 4 个未被跟踪）/ 本清单 10
-#   （10 = 4 个未跟踪的 main() 程序 + 5 个已删除 target 的删除留痕
-#        + 1 个「已构建但不进 CTest」的 target）
-#   ⚠️ 2026-10-23 起，`examples/riscv-mini/` 的 18 个 Catch2 target **已进
+#   被跟踪 28 / main() 程序 32（其中 4 个未被跟踪）/ 本清单 5
+#   （5 = 4 个未跟踪的 main() 程序 + 1 个「已构建但不进 CTest」的 target）
+#   ⚠️ 已删除 target 的**删除留痕不在本清单**，在 `examples/removed_examples.txt`。
+#   ⚠️ 2026-10-23 起，`examples/riscv-mini/` 的 14 个 Catch2 target **已进
 #   CTest**（`add_test`）⇒ 它们不再登记在本清单（归位条件已达成 ⇒ MUST 移除）。
 #   剩余的 5 条「删除留痕」是审计记录：target 与源文件都已被 `git rm`。
 #   ⚠️ 这些留痕条目在**干净的构建目录**下不产生任何二进制 ⇒ 不会被
@@ -41,7 +41,7 @@ testbench_template	源文件 `examples/spinalhdl-ported/testbench_template.cpp` 
 # **之后** ⇒ examples 子目录在 testing 启用前被处理 ⇒ 其 `add_test()` 是
 # **空操作**（`build/examples/riscv-mini/CTestTestfile.cmake` 根本不会生成）。
 # 修复：`enable_testing()` 提前 + `riscv_mini_catch_test()` helper 内统一
-# `add_test` ⇒ 全部 18 个 riscv-mini 测试 target 现已进 CTest。
+# `add_test` ⇒ riscv-mini 的 14 个 Catch2 测试 target 现已进 CTest。
 # 护栏：`scripts/verify_example_test_wiring.sh`（C1 归属守恒 + C2 数量守恒）。
 # 本节保留**已删除 target 的登记**（带理由 + 归位条件）—— 删除 MUST 留痕。
 

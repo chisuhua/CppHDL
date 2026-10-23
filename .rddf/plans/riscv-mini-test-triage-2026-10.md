@@ -194,7 +194,9 @@ stall/flush/forward_a）⇒ 从 **0 断言 / 9 SUCCEED** 变为 **14 断言 / 9 
 
 ### R20. 统一判据：examples 测试 target MUST 断言一个语义输出
 
-9 个「0 断言」target ⇒ 6 补断言 + 3 删除。补断言手法：DUT 的语义输出引到顶层
+9 个「0 断言」target ⇒ 6 补断言 + 3 删除。⚠️ 第一轮实施时 3 个补断言的改写被
+变异测试的 `git checkout --` 覆盖掉了（第三轮审稿 B1 抓到），已重做并复核。
+补断言手法：DUT 的语义输出引到顶层
 `ch_out`，断言非平凡值。删除的 3 个各有明确理由（同型重复 / 纯脚手架 /
 ADR-046 D10 冻结端口 ⇒ 零可观测输出）。
 
@@ -210,6 +212,22 @@ ADR-046 D10 冻结端口 ⇒ 零可观测输出）。
 而它们**不是**归属问题。⇒ 新增 `is_declared_target()`（收窄到 `examples/` 域，
 顺带解掉第二轮审稿 S8 的跨域同名风险）：不在任何 CMakeLists 里声明者报
 `STALE-ARTIFACT`（不计失败），其余才是 `UNTRACKED`。
+
+### R23. 第三轮审稿（REJECT）后的 5 个 BLOCKER
+
+- **B1** 自述「6 补断言」实为 3 个（变异清理的 `git checkout --` 覆盖了改写）
+  ⇒ 重做 4 个文件。⚠️ **教训：变异测试 MUST 在 commit 之后做** ——
+  用 `git checkout --` 恢复文件会静默丢弃未提交的改写。
+- **B2** 「MUST 断言语义输出」无护栏 + delta 无 Requirement ⇒ 新增 **C4**
+  （真断言数**下限**锚点 `CH4_ANCHOR`）+ delta Requirement。
+  ⚠️ 「等量替换」（52 断言 → `REQUIRE(1==1)`）无法被任何计数守恒发现。
+- **B3** 源文件枚举漏 `.cc`/`.cxx` 与 `SCENARIO` 等宏；C3 遍历 `$MAP`（只有
+  `.cpp` 声明）⇒ 用 `.cc` 注册的失败测试逃逸 ⇒ 枚举扩展 + C3 改为遍历
+  「CTest 条目 ∩ `build/examples/` 下的可执行文件」。
+- **B4** `is_declared_target` 只匹配单行声明 ⇒ 多行声明被误判 STALE-ARTIFACT
+  ⇒ 改用**构建系统自己的 target 列表**（`--target help`）。
+- **B5** `rv32i_pipeline_top.h` 成了**孤儿头**（其唯一消费者被删）；
+  `removed_examples.txt` 的等价覆盖声明虚假且自指 ⇒ 修正 + 登记已知缺口。
 
 ---
 
