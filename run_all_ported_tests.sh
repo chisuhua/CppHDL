@@ -423,8 +423,8 @@ fi
 echo ""
 
 echo "=========================================="
-printf "  ${GREEN}PASS: %-4d${NC} ${RED}FAIL: %-4d${NC} ${YELLOW}STALE: %-4d${NC} ${YELLOW}MISSING: %-4d${NC}\n" \
-    "$PASS" "$FAIL" "$STALE" "$MISSING"
+printf "  ${GREEN}PASS: %-4d${NC} ${RED}FAIL: %-4d${NC} ${YELLOW}STALE: %-4d${NC} ${YELLOW}MISSING: %-4d${NC} ${YELLOW}STALE-ARTIFACT: %-4d${NC}\n" \
+    "$PASS" "$FAIL" "$STALE" "$MISSING" "${STALE_ARTIFACTS:-0}"
 echo "=========================================="
 
 if [ ${#FAIL_NAMES[@]} -gt 0 ]; then
