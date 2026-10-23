@@ -89,6 +89,38 @@ TEST_CASE("Pipeline Registers - latch / stall / flush behavior", "[pipeline][reg
         REQUIRE(to_bool(sim.get_port_value(reg.instance().io().wb_reg_write)));
         REQUIRE(to_bool(sim.get_port_value(reg.instance().io().wb_is_load)));
     }
+
+    // ⚠️ 2026-10-23（第五轮对抗审稿 SHOULD_FIX）：`hazard_unit.h:134` 文档化的
+    //    优先级「EX=1 > MEM=2 > REG=0」此前**无判别力** —— 上面两个用例从不让
+    //    `ex_rd_addr` 与 `mem_rd_addr` **同时**命中同一个 `id_rs1`（一个置 0）。
+    //    实测把优先级倒过来（MEM 盖过 EX）全部用例仍绿。本 SECTION 让两者同时命中。
+    SECTION("HazardUnit: EX beats MEM when both match same rs1") {
+        ch::ch_device<HazardUnit> unit;
+        ch::Simulator sim(unit.context());
+
+        sim.set_input_value(unit.instance().io().id_rs1_addr, 5);
+        sim.set_input_value(unit.instance().io().id_rs2_addr, 0);
+        // EX 与 MEM **同时**写 x5 ⇒ 必须选 EX（优先级 1），而非 MEM（2）
+        sim.set_input_value(unit.instance().io().ex_rd_addr, 5);
+        sim.set_input_value(unit.instance().io().ex_reg_write, 1);
+        sim.set_input_value(unit.instance().io().mem_rd_addr, 5);
+        sim.set_input_value(unit.instance().io().mem_reg_write, 1);
+        sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
+        sim.set_input_value(unit.instance().io().wb_reg_write, 0);
+        sim.set_input_value(unit.instance().io().rs1_data_raw, 100);
+        sim.set_input_value(unit.instance().io().rs2_data_raw, 200);
+        sim.set_input_value(unit.instance().io().ex_alu_result, 0xE1);
+        sim.set_input_value(unit.instance().io().mem_alu_result, 0xE2);
+        sim.set_input_value(unit.instance().io().wb_write_data, 0);
+        sim.set_input_value(unit.instance().io().mem_is_load, 0);
+        sim.set_input_value(unit.instance().io().ex_branch, 0);
+        sim.set_input_value(unit.instance().io().ex_branch_taken, 0);
+        sim.tick();
+
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(unit.instance().io().forward_a)) == 1u);
+        // 前推的**数据**也 MUST 来自 EX（`hazard_unit.h:134` 的优先级）
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_data)) == 0xE1u);
+    }
 }
 
 // ============================================================================

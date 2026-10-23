@@ -151,7 +151,7 @@ find_binary() {
 # would false-positive on every one of them.
 built_example_programs() {
     find "$BUILD_DIR_ABS/examples" -type f -perm -u+x 2>/dev/null \
-        | xargs -r -n1 basename | sort -u
+        | while read -r _p; do basename "$_p"; done | sort -u
 }
 
 disabled_examples() {
@@ -195,6 +195,8 @@ DECLARED_TARGETS_FILE=""
 declared_targets_init() {
     [ -n "$DECLARED_TARGETS_FILE" ] && return 0
     DECLARED_TARGETS_FILE="$(mktemp)"
+    # ⚠️ 临时文件 MUST 清理（否则每次运行在 `$TMPDIR` 泄漏一个文件）。
+    trap 'rm -f "$DECLARED_TARGETS_FILE"' EXIT INT TERM
     {
         # Ninja（若该构建目录是 Ninja 生成的）
         if [ -f "$BUILD_DIR_ABS/build.ninja" ] && command -v ninja >/dev/null 2>&1; then

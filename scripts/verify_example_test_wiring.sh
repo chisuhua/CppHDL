@@ -37,6 +37,10 @@
 #   C2  数量守恒：源文件总数 == root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点。
 #   C3  运行期：examples 的每个 CTest 条目 MUST 跑出**退出码 0** 且
 #              日志**无 error/fatal**（既有例外走显式 allowlist，带 stale 检查）。
+#   C4  可执行断言数下限：每个测试源 MUST ≥ 仓库登记的锚点下限
+#              （防「断言被删除 / 注释掉 / 条件编译掉」；**不防**等量替换）。
+#   C4b 逐用例下限：每个**字面**用例 MUST ≥ 1 条可执行断言
+#              （防「某用例只有 SUCCEED」—— 文件级下限会被同文件其它用例掩盖）。
 #
 # Exit codes: 0 = 全部通过, 1 = 至少一处违规。
 #
@@ -114,71 +118,150 @@ examples/riscv-mini/tests/test_pipeline_debug.cpp|5 个 stage + hazard + pipelin
 examples/riscv-mini/tests/test_pipeline_exec.cpp|流水线执行（指令级）|52
 examples/riscv-mini/tests/test_pipeline_minimal.cpp|Rv32iPipeline 构造 + 复位期周期计数冻结|1
 examples/riscv-mini/tests/test_pipeline_wrapper.cpp|Rv32iPipeline + ITCM 装配的取指/周期行为|5
-examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP|15
+examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP（⚠️ 用 `TEST_CASE_FOR_each` 宏**生成**的 41 个用例的断言在宏体里 ⇒ 按「宏体整行不计」的保守规则不计入，故下限 = 9 个字面用例的 14）|14
 examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
 examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
-examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + example 侧前推版 hazard + 分支检测|21
+examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + hazard 前推（含 EX>MEM 双源优先级）+ 分支检测|23
 examples/riscv-mini/tests/test_soc_hello_world.cpp|SoC 顶层 hello-world|8
 examples/riscv-mini/tests/test_wrapper_ifstage.cpp|IfStage 的 PC 复位/IF-ID 锁存/stall 冻结|4
 examples/riscv-mini/tests/test_wrapper_pipeline.cpp|Rv32iPipeline 直接包裹的周期行为|3
 examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前推选择|4"
 
-# 可执行断言语句数（近似）—— `SUCCEED` **不算**断言。
-#   ① 剥**全部**注释：整行 + 行尾 + 跨行块注释；
-#   ② 剥字符串 / 字符字面量（防 `printf("REQUIRE(x)")` 之类灌计数）；
-#   ③ 跳过 `#if 0 ... #endif` 区域（含嵌套）；
-#   ④ 按**出现次数**计（同一行写两条也计入 —— 旧实现用 `grep -c` 数**行**，
-#      把 3 条断言挤到 1 行会被误判成「少了 2 条」）；
-#   ⑤ 词边界：`MYREQUIRE(` 不计入。
-# ⚠️ 仍不覆盖：`#ifdef NEVER_DEFINED` 之类的条件编译（罕见，且 code review 可见）。
-real_assert_count() {
-    awk '
-    BEGIN { inbc = 0; skipdepth = 0; cnt = 0 }
-    {
-        line = $0
-        out = ""
-        i = 1; n = length(line)
-        instr = 0; inchr = 0
-        while (i <= n) {
-            c   = substr(line, i, 1)
-            two = substr(line, i, 2)
-            if (inbc) {
-                if (two == "*/") { inbc = 0; i += 2 } else { i++ }
-                continue
-            }
-            if (instr) {
-                if (c == "\\") { i += 2; continue }
-                if (c == "\"") { instr = 0 }
-                i++; continue
-            }
-            if (inchr) {
-                if (c == "\\") { i += 2; continue }
-                if (c == "'"'"'") { inchr = 0 }
-                i++; continue
-            }
-            if (two == "/*") { inbc = 1; i += 2; continue }
-            if (two == "//") { break }
-            if (c == "\"") { instr = 1; i++; continue }
-            if (c == "'"'"'") { inchr = 1; i++; continue }
-            out = out c
-            i++
+# ═══════════════════════════════════════════════════════════════════════════
+# 源文件静态分析：**活代码提取** + **逐用例断言计数**
+#
+# 输出两行：
+#   `A <n>`            —— 活代码里的可执行断言总数
+#   `C <n> <用例名>`   —— 每个用例体内的可执行断言数（每用例一行）
+#
+# ⚠️ 能力边界（如实声明；第四/五轮对抗审稿各纠正过一次，勿再夸张）：
+#   ① **已覆盖**：整行/行尾/跨行块注释、字符串与字符字面量、`#if 0` 区段、
+#      宏体（`#define` 行**整行不计**）、词边界（`MYREQUIRE(` 不计）、
+#      按**出现次数**计（同一行两条都算）。
+#   ② **不覆盖（保守跳过）**：`#ifdef` / `#ifndef` / 非常量 `#if` 的**整个区段**
+#      一律按「可能不编译」跳过 ⇒ 宁可少算（吵但安全），不会多算。
+#      代价：本仓 `test_riscv_tests.cpp` 用 `TEST_CASE_FOR_each(...)` 宏**生成**的
+#      41 个用例（宏体里的 `REQUIRE(passed == true)`）不进计数 ⇒ 该文件的
+#      锚点是 14（9 个字面用例），不是 55。**这是已知且已声明的局限**。
+#   ③ **不防「等量替换」**：把 `REQUIRE(pc == X)` 换成 `REQUIRE(1 == 1)` 断言数
+#      不变 ⇒ 任何计数守恒都发现不了 ⇒ 由 **code review** 承担。
+#      脚本 MUST NOT 声称覆盖它。
+#
+# ⚠️ 为什么「宏体整行不计」（第五轮对抗审稿 BLOCKER-1）：宏体**可能永不展开** ——
+#    实测把一个 52 条 `REQUIRE` 的 `#define DEAD_NEVER_EXPANDED()` 追加到被掏空的
+#    文件尾，就能把计数从 0 灌回 52 而护栏全绿。宏体里的断言因此 MUST NOT 计入
+#    （保守方向：少算 ⇒ 只可能误报，不会漏报）。
+#
+# ⚠️ 为什么「逐用例」而不只是「逐文件」（第五轮 BLOCKER-2）：文件级下限会被同文件
+#    其它用例掩盖 —— 实测往 `test_pipeline_exec.cpp` 追加一个只有 `SUCCEED` 的
+#    TEST_CASE，文件级计数不变 ⇒ 护栏全绿，而 delta 里写着「**每个**用例 MUST
+#    至少断言一个语义确定的输出」。
+# ═══════════════════════════════════════════════════════════════════════════
+analyze_source() {
+    awk 'BEGIN {
+    SQ = "\047"; inbc = 0; depth = 0; pending = ""; live = ""; A = 0; nc = 0
+}
+function total_skip(   i) {
+    for (i = 1; i <= depth; i++) if (gskip[i]) return 1
+    return 0
+}
+{
+    line = $0
+    if (pending != "") line = pending line
+    if (line ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, "", line); pending = line; next }
+    pending = ""
+
+    # 剥注释（两种输出：keep = 保留字符串字面量，out = 连同字符串一起剥掉）
+    keep = ""; out = ""; i = 1; n = length(line); instr = 0; inchr = 0
+    while (i <= n) {
+        c = substr(line, i, 1); two = substr(line, i, 2)
+        if (inbc) { if (two == "*/") { inbc = 0; i += 2 } else { i++ }; continue }
+        if (instr) {
+            if (c == "\\") { keep = keep substr(line, i, 2); i += 2; continue }
+            if (c == "\"") instr = 0
+            keep = keep c; i++; continue
         }
-        if (out ~ /^[[:space:]]*#[[:space:]]*if[[:space:]]+0([[:space:]]|$)/) { skipdepth++; next }
-        if (skipdepth > 0) {
-            if (out ~ /^[[:space:]]*#[[:space:]]*if/) skipdepth++
-            else if (out ~ /^[[:space:]]*#[[:space:]]*endif/) skipdepth--
-            next
+        if (inchr) {
+            if (c == "\\") { keep = keep substr(line, i, 2); i += 2; continue }
+            if (c == SQ) inchr = 0
+            keep = keep c; i++; continue
         }
-        t = out
-        while (length(t) > 0) {
-            if (match(t, /(REQUIRE_FALSE|CHECK_FALSE|REQUIRE|CHECK)[[:space:]]*\(/) == 0) break
-            pre = (RSTART > 1) ? substr(t, RSTART - 1, 1) : ""
-            if (pre == "" || pre ~ /[^A-Za-z0-9_]/) cnt++
-            t = substr(t, RSTART + RLENGTH)
+        if (two == "/*") { inbc = 1; i += 2; continue }
+        if (two == "//") break
+        if (c == "\"") { instr = 1; keep = keep c; i++; continue }
+        if (c == SQ) { inchr = 1; keep = keep c; i++; continue }
+        keep = keep c; out = out c; i++
+    }
+
+    # 预处理指令
+    if (out ~ /^[[:space:]]*#[[:space:]]*define([[:space:]]|$)/) next   # 宏体不计（可能永不展开）
+    if (out ~ /^[[:space:]]*#[[:space:]]*if[[:space:]]/) {
+        cond = out; sub(/^[[:space:]]*#[[:space:]]*if[[:space:]]*/, "", cond); sub(/[[:space:]]+$/, "", cond)
+        res = 2                                                # 非常量 ⇒ 保守整组跳过
+        if (cond ~ /^[-+]?[0-9]+$/) res = (cond + 0 != 0) ? 1 : 0
+        depth++; gskip[depth] = (res == 1 ? 0 : 1); gtaken[depth] = (res == 1)
+        next
+    }
+    if (out ~ /^[[:space:]]*#[[:space:]]*(ifdef|ifndef)/) { depth++; gskip[depth] = 1; gtaken[depth] = 0; next }
+    if (out ~ /^[[:space:]]*#[[:space:]]*elif/)            { if (depth > 0 && gtaken[depth] == 0) gskip[depth] = 1; next }
+    # ⚠️ `#if 0 ... #else <活代码> ... #endif`：`#else` 之后**是活的** ⇒ 必须放行，
+    #    否则「语义等价的重写」会被误报（第五轮对抗审稿 SHOULD_FIX）。
+    #    `#if 1 ... #else <死代码> ... #endif`：`#else` 之后是死的 ⇒ 保持跳过。
+    if (out ~ /^[[:space:]]*#[[:space:]]*else/) {
+        if (depth > 0) gskip[depth] = gtaken[depth] ? 1 : 0
+        next
+    }
+    if (out ~ /^[[:space:]]*#[[:space:]]*endif/)           { if (depth > 0) depth--; next }
+
+    if (total_skip()) next
+
+    # 记录用例名（从**保留字符串**的 keep 里取，注意 out 已把字符串剥空）
+    if (keep ~ /^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(/) {
+        if (match(keep, /"[^"]*"/)) {
+            nm = substr(keep, RSTART + 1, RLENGTH - 2)
+            nc++; casenames[nc] = nm
         }
     }
-    END { print cnt }
-    ' "$1"
+    live = live "\n" out
+}
+END {
+    s = live
+    while (length(s) > 0) {
+        if (match(s, /(REQUIRE_FALSE|CHECK_FALSE|REQUIRE|CHECK)[[:space:]]*\(/) == 0) break
+        pre = (RSTART > 1) ? substr(s, RSTART - 1, 1) : ""
+        if (pre == "" || pre ~ /[^A-Za-z0-9_]/) A++
+        s = substr(s, RSTART + RLENGTH)
+    }
+    printf "A %d\n", A
+
+    t = live; m = length(t); pos = 1; inbody = 0; bd = 0; ca = 0; cur = ""; cni = 0
+    while (pos <= m) {
+        if (!inbody) {
+            if (substr(t, pos, 9) == "TEST_CASE" || substr(t, pos, 10) == "TEMPLATE_T" || substr(t, pos, 8) == "SCENARIO") {
+                cni++
+                cur = (cni <= nc) ? casenames[cni] : "?"
+                pos += 8; continue
+            }
+            if (substr(t, pos, 1) == "{" && cur != "") { inbody = 1; bd = 1; ca = 0; pos++; continue }
+            pos++; continue
+        }
+        ch = substr(t, pos, 1)
+        if (ch == "{") bd++
+        else if (ch == "}") {
+            bd--
+            if (bd == 0) { printf "C %d %s\n", ca, cur; inbody = 0; cur = "" }
+        } else {
+            # ⚠️ 对**任意**字符位置试 match（不能挂在 `ch == "("` 上）
+            if (match(substr(t, pos), /^(REQUIRE_FALSE|CHECK_FALSE|REQUIRE|CHECK)[[:space:]]*\(/)) ca++
+        }
+        pos++
+    }
+}' "$1"
+}
+
+# 活代码里的可执行断言总数
+real_assert_count() {
+    analyze_source "$1" | awk '/^A /{print $2; exit}'
 }
 
 echo "=== verify_example_test_wiring: examples 测试归属护栏 ==="
@@ -333,7 +416,7 @@ while IFS= read -r src; do
     if [ "$covered" -eq 1 ]; then
         n_covered=$((n_covered+1))
         note "OK  $src →${owners}"
-    elif grep -qx -- "${base%.cpp}" "$DISABLED_LIST"; then
+    elif grep -qx -- "${base%.*}" "$DISABLED_LIST"; then
         n_registered=$((n_registered+1))
         note "OK  $src → 已在 disabled 清单登记（待归位）"
     else
@@ -371,7 +454,8 @@ EX_TARGETS="$TMP/ex_targets"
     for f in $(find examples -name CMakeLists.txt 2>/dev/null); do
         awk '{printf "%s ", $0}' "$f" \
             | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*' \
-            | sed -E 's/.*\([[:space:]]*//'
+            | sed -E 's/.*\([[:space:]]*//' \
+            | grep -E '_test$|_demo$|_example$|_smoke$|_prog$|_check$'
     done
 } | grep -v '^$' | sort -u > "$EX_TARGETS"
 is_declared_example_target() {
@@ -453,7 +537,7 @@ $CHERROR_ALLOWLIST
 EOF
 
 # ---------------------------------------------------------------------------
-# C4 真断言数下限（防「等量替换 / 掏空测试」）
+# C4 可执行断言数下限（防「断言被删除/注释掉/条件编译掉」；**不防**等量替换）+ C4b 逐用例下限
 # ---------------------------------------------------------------------------
 echo ""
 echo '--- C4: 每个测试源的可执行断言数 MUST ≥ 锚点下限（防「删除/注释掉/#if 0 掉断言」；**不防**「等量替换」，见脚本头注释）---'
@@ -470,6 +554,30 @@ while IFS= read -r src; do
         violation "$src 的可执行断言数（$n）< 锚点下限（$min）—— 断言被删除 / 注释掉 / 条件编译掉了？（下调下限是**放宽**，MUST 在 commit message 里解释）"
     else
         note "OK  $src → $n ≥ $min"
+    fi
+done < "$SRC_LIST"
+
+# ---- C4b: 逐用例 MUST 至少 1 条可执行断言（delta 的「**每个**用例」措辞）----
+# ⚠️ 为什么需要它（第五轮对抗审稿 BLOCKER-2）：文件级下限会被同文件**其它**用例
+#    掩盖 —— 实测往 `test_pipeline_exec.cpp` 追加一个只有 `SUCCEED` 的 TEST_CASE，
+#    文件级计数不变 ⇒ 护栏全绿，而 delta 写着「每个用例 MUST 至少断言一个语义输出」。
+#    即：delta 里那条 MUST 曾经**零机制**。
+# ⚠️ 能力边界：只看得见**字面**的用例宏；宏**生成**的用例（如 `test_riscv_tests.cpp`
+#    的 `TEST_CASE_FOR_each`）不可见（其断言在宏体里，已被「宏体整行不计」排除）。
+echo ""
+echo "--- C4b: 逐用例 MUST ≥ 1 条可执行断言 ---"
+while IFS= read -r src; do
+    [ -z "$src" ] && continue
+    zero="$(analyze_source "$src" | awk '/^C / && $2 == 0 { $1=""; $2=""; sub(/^ +/, ""); print }')"
+    ncases="$(analyze_source "$src" | grep -c '^C ')"
+    if [ -n "$zero" ]; then
+        while IFS= read -r z; do
+            [ -n "$z" ] && violation "$src 的用例「$z」有 0 条可执行断言（只有 SUCCEED 之类）—— MUST 补断言或删除并登记"
+        done <<EOF
+$zero
+EOF
+    else
+        note "OK  $src → $ncases 个字面用例，每个都 ≥ 1 条断言"
     fi
 done < "$SRC_LIST"
 

@@ -70,7 +70,7 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 - **根因修复**：把根 `CMakeLists.txt` 的 `enable_testing()` 提到
   `add_subdirectory(examples)` **之前**（否则 examples 内的 `add_test()` 是空操作）。
 - 在 `examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test()` helper 内
-  统一补 `add_test`（一次覆盖全部 18 个 target）+ `LABELS "base"` + `TIMEOUT 300`。
+  统一补 `add_test`（一次覆盖全部 19 个 Catch2 target）+ `LABELS "base"` + `TIMEOUT 300`。
 - `examples/disabled_examples.txt` 移除已归位条目。
 
 ### C1-b 7 个红 target 修或删（逐个带理由）
@@ -112,6 +112,20 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 | `test_cache_smoke.cpp` | 已以 `riscv_mini_cache_smoke` 注册 ⇒ **已归位** |
 | `test_rv32i_pipeline.cpp`（example 副本） | **不是**根副本的过期副本 —— 根副本 12 个用例、example 副本 **5 个**用例，且测的是**不同组件**（example 副本测 example 侧**前推启用版** `hazard_unit.h`，根副本测 `rv32i_core.h` 的 `HazardDetectionUnit`）⇒ **修好并注册进 CTest**（实测 10 断言 / 5 用例全绿），**不删** |
 
+### 第五轮审稿（REJECT）后的整改
+
+| # | 缺陷 | 整改 |
+|---|---|---|
+| B1 | `real_assert_count()` 数的是「文件里的 `REQUIRE` 字面量」而非「可执行断言」：① 追加一个**从不展开**的 `#define DEAD_NEVER_EXPANDED()` 宏体（体内 52 条 `REQUIRE`）即可把被掏空的文件灌回锚点 ⇒ 护栏全绿；② `#if 1 / #else` 的**死分支**同样可灌。⚠️ **in-tree 已存在实例**：`test_riscv_tests.cpp` 的 41 个宏生成用例的断言在宏体里，计数只认 9 个字面用例 | 计数器重写为「**活代码提取**」awk：宏体**整行不计**（可能永不展开）、`#if 0` 与 `#if 1/#else` 的死分支不计、`#else` 之后的活代码**计入**（修掉反向假阳性）。`test_riscv_tests.cpp` 锚点随之 15 → 14（如实反映「宏生成用例不计」这一已声明局限） |
+| B2 | delta 写的「**每个**用例 MUST 至少断言一个语义输出」**零机制**：往文件尾追加一个只有 `SUCCEED` 的 `TEST_CASE` 即可违反而护栏全绿（文件级下限被同文件其它用例掩盖） | 新增 **C4b**：`analyze_source` 增加 brace-matching 的逐用例扫描，每个**字面**用例 MUST ≥ 1 条可执行断言；复现该攻击 ⇒ 现在报违规 |
+| SF1 | `#if 0 ... #else <活断言> ... #endif` 被误判成死代码 ⇒ 语义等价的重写被误报 | 同上（`#else` 后的活代码计入） |
+| SF2 | `proposal.md` 仍写「防『掏空测试』的**等量替换**」，与刚同步的三处冲突 | 同步为「防断言被删除/注释掉/条件编译掉；**不防**等量替换（由 code review 承担）」 |
+| SF3 | `AGENTS.md` KNOWN LIMITATIONS 引用 `tests/test_cache_smoke.cpp`（路径不存在） | 改为 `examples/riscv-mini/tests/test_cache_smoke.cpp` |
+| SF4 | `test_cache_smoke.cpp` 交叉引用「框架缺陷 #6」，实际编号为 #5 | 改为 #5 |
+| SF5 | 「**8** 个 target 被删除」与史实不符 —— 全历史扫描确认只有 **6** 个曾声明为 CMake target（`test_pipeline_debug3/4/5/6`、`test_pipeline_smoke`、`test_rv32i_pipeline_device`）；`test_pipeline_debug2` / `test_hazard_minimal` **从未出现在任何 CMakeLists** | 文档改为「6 个 target + 2 个从未进 CMakeLists 的孤儿源文件 = 8 条留痕」 |
+| SF6 | `hazard_unit.h` 文档化的优先级 `EX=1 > MEM=2 > REG=0` **无判别力**（两个用例从不让 EX 与 MEM 同时命中同一 rs1）⇒ 实测把优先级倒过来仍全绿 | 新增「EX beats MEM when both match same rs1」用例（断言 `forward_a == 1` 且数据取自 EX）⇒ 变异（优先级反转）**转红** |
+| NIT | `EX_TARGETS` 混入 CMake 关键字；`base%.cpp` 只剥 `.cpp`；`declared_targets_init` 的 `mktemp` 无 `trap` 清理；`xargs -r`（GNU 扩展）| 分别：收窄到 `_test/_demo/_example/_smoke/_prog/_check` 结尾；改 `base%.*`；加 `trap ... EXIT INT TERM`；改 POSIX `while read` 循环 |
+
 ### 第三轮审稿（REJECT）后的整改
 
 | # | 缺陷 | 整改 |
@@ -140,12 +154,15 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 > 不得按 `test_*.cpp` 命名 —— 否则 `pipeline_check.cpp` / `.cc` 源完全不可见；
 > ⑤ 「跑得起来」还不够：MUST 同时看 **exit 0** 与**日志无 error/fatal**；
 > ⑥ 删除留痕 MUST NOT 与「豁免」混在一个文件里（否则退化成按名字的永久自动豁免）；
-> ⑦ 测试 MUST 真的断言：按**真断言数下限**锚点检查（防「掏空测试」的等量替换）。
+> ⑦ 测试 MUST 真的断言：按**可执行断言数下限**锚点检查（防「断言被删除 / 注释掉 /
+>    条件编译掉」）+ **逐用例**下限（防「某用例只有 `SUCCEED`」）。
+>    ⚠️ 它**不防「等量替换」**（`REQUIRE(pc == X)` → `REQUIRE(1 == 1)` 断言数不变）——
+>    那一条由 **code review** 承担，护栏不假装覆盖。
 >
 > 检查项：**C0** `enable_testing()` 顺序（源码级，陈旧构建目录掩盖不了）/
 > **C1** 源文件归属守恒 / **C2** 源文件数 vs `EXAMPLES_TEST_SOURCES` 锚点 /
 > **C3** 每个 CTest 条目 exit 0 且日志干净（例外走带**期望条数**的 allowlist）/
-> **C3b** allowlist stale / **C4** 真断言数下限（`CH4_ANCHOR`）。
+> **C3b** allowlist stale / **C4** 可执行断言数下限（`CH4_ANCHOR`）/ **C4b** 逐用例下限。
 > 挂进 CI（2 处 job）。
 - **`run_all_ported_tests.sh` 的 C1 检查需认得 CTest 归属**：17 个 riscv-mini 测试
   现在**是构建产物但由 CTest 覆盖**，不属于 example demo 护栏 ⇒ 该检查必须把

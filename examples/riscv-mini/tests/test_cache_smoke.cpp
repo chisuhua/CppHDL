@@ -16,7 +16,7 @@
  *    非 null；构造失败时 ctor 就崩了，断言根本执行不到）⇒ 信息量等同于被删掉
  *    的那个 build-probe 用例。现改为**可证伪的行为断言**。
  *
- * ⚠️ 实测挖出的缺陷（本 change 不修，已登记在 proposal §登记的框架缺陷 #6）：
+ * ⚠️ 实测挖出的缺陷（本 change 不修，已登记在 proposal §登记的框架缺陷 #5）：
  *    两个 wrapper 里 `if (io().req == ch_bool(true) && io().we == ch_bool(true))`
  *    这类分支，其条件在 **建图期**求值（`ch_bool` 有 `explicit operator bool()`
  *    ⇒ C++ `if` 拿到的是「当前节点是否非零」，而不是一个运行期条件）⇒
@@ -78,7 +78,7 @@ TEST_CASE("DCacheWriteBuffer instantiation + documented-undriven outputs",
     // ⚠️ 见文件头「实测挖出的缺陷」：`ready` / `axi_valid` 只在**建图期求值**的
     //    `if` 分支里被驱动 ⇒ 分支永不发射 ⇒ 两者恒为未驱动（读到 0）。
     //    断言它们为 0 = 钉住**当前事实**（不是「这是对的」）；缺陷修好后本断言
-    //    会转红，那时 MUST 连同 proposal §登记的框架缺陷 #6 一起更新。
+    //    会转红，那时 MUST 连同 proposal §登记的框架缺陷 #5 一起更新。
     REQUIRE(to_bool(sim.get_port_value(dev.instance().io().ready)) == false);
     REQUIRE(to_bool(sim.get_port_value(dev.instance().io().axi_valid)) == false);
 }
