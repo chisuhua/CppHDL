@@ -129,28 +129,24 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 
 ### C1-d 新护栏（`scripts/verify_example_test_wiring.sh`）
 
-> ⚠️ 本护栏经对抗审稿 REJECT 后**重写**过两次。三个不可退化的设计约束：
+> ⚠️ 本护栏经**三轮**对抗审稿 REJECT 后重写。七条不可退化的设计约束
+> （详见脚本头部注释）：
 > ① 判据是 **`ctest -N`（CTest 条目的唯一真相）**，不是解析 CMake 源码；
 > ② 基准是**文件系统上的源文件集合**（外部事实），不是「CMake 里声明了什么」
 > —— 否则删一条声明会让「声明集」与「覆盖集」同步缩小 ⇒ 守恒恒等 ⇒ 对缩面无判别力；
 > ③ 源文件→target 的映射 MUST 用**精确路径**，不得用 basename
-> —— 否则 example 侧的 `test_rv32i_pipeline.cpp` 会被根 `tests/` 的同名文件顶替。
-> 变异验证（5 条全被抓）：注释掉 example 侧 target / 行尾注释塞文件名 /
-> 新增不走 helper 的 `add_executable` / `enable_testing()` 移回 `examples` 之后 /
-> 删除源文件。
-
-### C1-d 新护栏
-- 新增 `scripts/verify_example_test_wiring.sh`（命名对齐 `scripts/verify_rst_n_wiring.sh` 范式）：
-  - **C0（源码级）**：根 `CMakeLists.txt` 的 `enable_testing()` MUST 排在
-    `add_subdirectory(examples)` 之前 —— 陈旧构建目录会掩盖这个问题 ⇒
-    不能只靠 `ctest -N`。
-  - **C1 归属守恒**：每个 example 测试源 MUST 被某个「已进 CTest」或
-    「已被 example 运行护栏跟踪」的 target 编译，否则登记在 `disabled_examples.txt`。
-  - **C2 数量守恒**：源文件总数 MUST 等于 root `AGENTS.md` 的
-    `EXAMPLES_TEST_SOURCES` **锚点**（机制与 `CTEST_TOTAL` 同型）。
-  - **C3 运行期**：examples 的每个 CTest 条目 MUST 跑出 exit 0 **且日志无
-    error/fatal**；既有例外走显式 allowlist（带 stale 检查）。
-  挂进 CI（2 处 job）。
+> —— 否则 example 侧的 `test_rv32i_pipeline.cpp` 会被根 `tests/` 的同名文件顶替；
+> ④ 源文件枚举 **MUST 按内容/目录**（4 种后缀 × 全部 Catch2 用例宏 ∪ `tests/` 下任意文件），
+> 不得按 `test_*.cpp` 命名 —— 否则 `pipeline_check.cpp` / `.cc` 源完全不可见；
+> ⑤ 「跑得起来」还不够：MUST 同时看 **exit 0** 与**日志无 error/fatal**；
+> ⑥ 删除留痕 MUST NOT 与「豁免」混在一个文件里（否则退化成按名字的永久自动豁免）；
+> ⑦ 测试 MUST 真的断言：按**真断言数下限**锚点检查（防「掏空测试」的等量替换）。
+>
+> 检查项：**C0** `enable_testing()` 顺序（源码级，陈旧构建目录掩盖不了）/
+> **C1** 源文件归属守恒 / **C2** 源文件数 vs `EXAMPLES_TEST_SOURCES` 锚点 /
+> **C3** 每个 CTest 条目 exit 0 且日志干净（例外走带**期望条数**的 allowlist）/
+> **C3b** allowlist stale / **C4** 真断言数下限（`CH4_ANCHOR`）。
+> 挂进 CI（2 处 job）。
 - **`run_all_ported_tests.sh` 的 C1 检查需认得 CTest 归属**：17 个 riscv-mini 测试
   现在**是构建产物但由 CTest 覆盖**，不属于 example demo 护栏 ⇒ 该检查必须把
   「已进 CTest」也算作归属（用 `ctest -N` 作唯一真相）。
@@ -192,26 +188,31 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 
 ### 登记的框架缺陷（本 change 不修，单独立项）
 
-3. **CLINT 的 `mtime` 不会自动递增**（`include/cpu/riscv/clint.h`）：RISC-V
-   规范要求 `mtime` 是自由运行计数器，而当前实现只能由软件通过写端口显式写入
-   ⇒ 只构成「静态比较器」。文件头注释此前**声称**「每个 `tick()` 递增」而
-   `tick()` 是空实现 ⇒ 本 change 删掉了该空实现与 2 个恒返 0 的占位 getter，
-   并把注释改成如实描述。修复（递增频率 + `mtimecmp` 语义联动）单独立项。
-4. **6 个 target 在运行期打印 error 级 CHERROR，但退出码仍是 0**
-   （`[ERROR] Requirement failed [driver_impl->get_parent() == lnodeimpl::current_component()]`，
-   `include/core/io.h:385`；`CHREQUIRE` 只记日志不中止）：
-   `test_riscv_tests_pipeline`(135，不进 CTest) / `test_pipeline_debug`(9) /
-   `test_pipeline_wrapper`(9) / `test_wrapper_pipeline`(6) / `test_pipeline_minimal`(3)。
-   ⇒ 进 CTest 的 4 个走护栏 `CHERROR_ALLOWLIST`（带 stale 检查）。
-   ⇒ 这是缺陷 #1（`ch_module` 作为 `Component` 成员无法绑 parent ⇒ 子 stage
-   挂到**祖父**节点下 ⇒ `<<=` 的 driver 归属检查失败）的**可观测症状**。
-   ⇒ 「exit 0」**不等于**「日志干净」——本 change 如实登记该计数，不掩盖。
 1. **`ch_module` 作为 `Component` 成员永远绑不到 parent** —— 成员在构造函数期初始化，
    早于 `build()` → `build_internal()` 设置 `Component::current()`；⇒
    `ch_device<Rv32iPipeline>` 结构性 SIGSEGV，且经 `ch_module` 路径使用时
    子 stage 实际挂到**祖父**节点下（父子关系错误但可运行）。
 2. **`Simulator::eval()` 无空指针保护** —— `default_clock_instr_` 在纯组合设计下为 null
    （`src/simulator_init.cpp:152`），`eval()` 直接解引用（`tick()` 有保护）。
+3. **CLINT 的 `mtime` 不会自动递增**（`include/cpu/riscv/clint.h`）：RISC-V
+   规范要求 `mtime` 是自由运行计数器，而当前实现只能由软件通过写端口显式写入
+   ⇒ 只构成「静态比较器」。文件头注释此前**声称**「每个 `tick()` 递增」而
+   `tick()` 是空实现 ⇒ 本 change 删掉了该空实现与 2 个恒返 0 的占位 getter，
+   并把注释改成如实描述。修复（递增频率 + `mtimecmp` 语义联动）单独立项。
+4. **`examples/riscv-mini/src/rv32i_pipeline_top.h` 暂时零消费者（孤儿头）** ——
+   本 change 删掉了它的唯一消费者 `test_pipeline_smoke`（该测试无法写出非空洞断言：
+   它的端口**全部是输入**，且 ADR-046 D10 冻结了端口列表 ⇒ MUST NOT 为观测加输出端口）。
+   该头文件是 **ADR-046 D10 指定的 C3 DUT** ⇒ 本 change 只删它的**测试**、不删头文件，
+   因此它暂时违反 ZERO-DEBT「每个头文件都必须被 include」。
+   **归位条件**：C3（`rv32i-soc-dual-parity-2026-10`）落地时它成为 C3 的 DUT。
+5. **4 个 target 在运行期打印 error 级 CHERROR，但退出码仍是 0**
+   （`[ERROR] Requirement failed [driver_impl->get_parent() == lnodeimpl::current_component()]`，
+   `include/core/io.h:385`；`CHREQUIRE` 只记日志不中止）：
+   `test_riscv_tests_pipeline`(135，不进 CTest) / `test_pipeline_debug`(9) /
+   `test_pipeline_wrapper`(9) / `test_wrapper_pipeline`(6) / `test_pipeline_minimal`(3)。
+   ⇒ 进 CTest 的 4 个走护栏 `CHERROR_ALLOWLIST`（记**期望条数**，带 stale 检查）。
+   ⇒ 这是缺陷 #1 的**可观测症状**。
+   ⇒ 「exit 0」**不等于**「日志干净」——本 change 如实登记该计数，不掩盖。
 
 ## Acceptance
 
