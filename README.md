@@ -33,10 +33,11 @@ The repository is organized into several components:
 
 For detailed documentation, please refer to the following guides in the `docs/` directory:
 
-- **[Stream/Flow Usage Comparison](docs/CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)**: Comparison between CppHDL and SpinalHDL Stream/Flow usage patterns
-- **[Stream Connection Features Comparison](docs/SpinalHDL_Stream_Connection_Features_Comparison.md)**: Comprehensive comparison of SpinalHDL Stream connection operators and CppHDL ch_stream connection operations (连接功能对比)
-- **[Stream Operators Implementation](docs/SpinalHDL_Stream_Operators_Implementation.md)**: Implementation of SpinalHDL-like stream operators in CppHDL (操作符实现)
-- **[Bundle Usage Guide](docs/Bundle_UsageGuide.md)**: Guide for using Bundle types
+- **[Usage Guide Index](docs/usage_guide/README.md)**: Entry point of the user-facing guides (simulator API / bundle patterns / testbench / Verilator backend / Stream-Flow comparison)
+- **[Stream/Flow Usage Comparison](docs/usage_guide/11-stream-flow-comparison.md)**: Comparison between CppHDL and SpinalHDL Stream/Flow usage patterns
+- **[Bundle Usage Patterns](docs/usage_guide/06-bundle-patterns.md)**: Guide for using Bundle types
+- **[Stream Connection Features Comparison](docs/archive/spinalhdl-comparison/SpinalHDL_Stream_Connection_Features_Comparison.md)**: Comprehensive comparison of SpinalHDL Stream connection operators and CppHDL ch_stream connection operations (连接功能对比) — *archived*
+- **[Stream Operators Implementation](docs/archive/spinalhdl-comparison/SpinalHDL_Stream_Operators_Implementation.md)**: Implementation of SpinalHDL-like stream operators in CppHDL (操作符实现) — *archived*
 
 ## Usage
 To build and run the project:
