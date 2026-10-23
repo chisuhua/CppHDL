@@ -118,7 +118,7 @@ examples/riscv-mini/tests/test_pipeline_debug.cpp|5 个 stage + hazard + pipelin
 examples/riscv-mini/tests/test_pipeline_exec.cpp|流水线执行（指令级）|52
 examples/riscv-mini/tests/test_pipeline_minimal.cpp|Rv32iPipeline 构造 + 复位期周期计数冻结|1
 examples/riscv-mini/tests/test_pipeline_wrapper.cpp|Rv32iPipeline + ITCM 装配的取指/周期行为|5
-examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP（⚠️ 用 `TEST_CASE_FOR_each` 宏**生成**的 41 个用例的断言在宏体里 ⇒ 按「宏体整行不计」的保守规则不计入，故下限 = 9 个字面用例的 14）|14
+examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP（⚠️ 用 `TEST_CASE_FOR_each` 宏**生成**的 41 个用例的断言在宏体里 ⇒ 按「宏体整行不计」的保守规则不计入，故下限 = 8 个字面用例的 14）|14
 examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
 examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
 examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + hazard 前推（含 EX>MEM 双源优先级）+ 分支检测|23
@@ -130,19 +130,26 @@ examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前�
 # ═══════════════════════════════════════════════════════════════════════════
 # 源文件静态分析：**活代码提取** + **逐用例断言计数**
 #
-# 输出两行：
+# 输出三行：
 #   `A <n>`            —— 活代码里的可执行断言总数
+#   `S <n>`            —— 因条件编译被**跳过**的区段里出现的用例宏数（可见性用）
 #   `C <n> <用例名>`   —— 每个用例体内的可执行断言数（每用例一行）
 #
-# ⚠️ 能力边界（如实声明；第四/五轮对抗审稿各纠正过一次，勿再夸张）：
-#   ① **已覆盖**：整行/行尾/跨行块注释、字符串与字符字面量、`#if 0` 区段、
-#      宏体（`#define` 行**整行不计**）、词边界（`MYREQUIRE(` 不计）、
-#      按**出现次数**计（同一行两条都算）。
-#   ② **不覆盖（保守跳过）**：`#ifdef` / `#ifndef` / 非常量 `#if` 的**整个区段**
-#      一律按「可能不编译」跳过 ⇒ 宁可少算（吵但安全），不会多算。
+# ⚠️ 能力边界（如实声明；第四/五/六轮对抗审稿各纠正过一次，**勿再夸张**）：
+#   ① **已覆盖**：整行/行尾/跨行块注释、字符串与字符字面量、
+#      宏体（`#define` 行**整行不计**）、词边界（`MYREQUIRE(` / `XCHECK(` 不计）、
+#      按**出现次数**计（同一行两条都算）、Catch2 的 throws/nothrow/STATIC 系断言宏。
+#      条件编译：`#if <字面常量>` 求值；`#if 0` 区段跳过但**其 `#else` 之后的活代码计入**；
+#      `#if 1` 之后的 `#elif` / `#else` **都是死的** ⇒ 跳过（`#elif` 曾漏判，第六轮 BLOCKER-1）；
+#      `#if 0 / #elif 1` 的 `#elif` 体**是活的** ⇒ 计入。
+#   ② **不覆盖（整组保守跳过）**：`#ifdef` / `#ifndef` / 非常量 `#if` —— **连同其
+#      `#elif` / `#else` 一起跳过**（可能不编译 ⇒ 宁可少算）。
+#      ⚠️ 第六轮 BLOCKER-2：此前只跳过 `#else` **之前**，恰好把**死**的那一半算进来
+#      （`#ifdef X` 在 X 已定义的平台上，`#else` 正是死分支）⇒ 与「不会多算」的声明矛盾。
 #      代价：本仓 `test_riscv_tests.cpp` 用 `TEST_CASE_FOR_each(...)` 宏**生成**的
 #      41 个用例（宏体里的 `REQUIRE(passed == true)`）不进计数 ⇒ 该文件的
-#      锚点是 14（9 个字面用例），不是 55。**这是已知且已声明的局限**。
+#      锚点是 14（8 个字面用例），不是 55。**这是已知且已声明的局限**。
+#      被跳过区段里出现的用例宏由 `S` 计数**点名**（不再完全静默）。
 #   ③ **不防「等量替换」**：把 `REQUIRE(pc == X)` 换成 `REQUIRE(1 == 1)` 断言数
 #      不变 ⇒ 任何计数守恒都发现不了 ⇒ 由 **code review** 承担。
 #      脚本 MUST NOT 声称覆盖它。
@@ -159,11 +166,26 @@ examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前�
 # ═══════════════════════════════════════════════════════════════════════════
 analyze_source() {
     awk 'BEGIN {
-    SQ = "\047"; inbc = 0; depth = 0; pending = ""; live = ""; A = 0; nc = 0
+    SQ = "\047"; inbc = 0; depth = 0; pending = ""; live = ""; nc = 0; sk = 0
+    ASM = "(REQUIRE_THROWS_MATCHES|CHECK_THROWS_MATCHES|REQUIRE_THROWS_WITH|CHECK_THROWS_WITH|REQUIRE_THROWS_AS|CHECK_THROWS_AS|REQUIRE_NOTHROW|CHECK_NOTHROW|REQUIRE_THROWS|CHECK_THROWS|REQUIRE_FALSE|CHECK_FALSE|STATIC_REQUIRE|STATIC_CHECK|REQUIRE|CHECK)"
 }
 function total_skip(   i) {
     for (i = 1; i <= depth; i++) if (gskip[i]) return 1
     return 0
+}
+function eval_cond(c) {
+    sub(/[[:space:]]+$/, "", c)
+    if (c ~ /^[-+]?[0-9]+$/) return (c + 0 != 0) ? 1 : 0
+    return 2
+}
+# 在任意文本里数「可执行断言」：断言宏 + 词边界（前驱不是标识符字符）
+function count_asserts(str,   cnt, s) {
+    cnt = 0; s = str
+    while (match(s, "(^|[^A-Za-z0-9_])" ASM "[[:space:]]*\\(") > 0) {
+        cnt++
+        s = substr(s, RSTART + RLENGTH)
+    }
+    return cnt
 }
 {
     line = $0
@@ -171,7 +193,6 @@ function total_skip(   i) {
     if (line ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, "", line); pending = line; next }
     pending = ""
 
-    # 剥注释（两种输出：keep = 保留字符串字面量，out = 连同字符串一起剥掉）
     keep = ""; out = ""; i = 1; n = length(line); instr = 0; inchr = 0
     while (i <= n) {
         c = substr(line, i, 1); two = substr(line, i, 2)
@@ -193,29 +214,44 @@ function total_skip(   i) {
         keep = keep c; out = out c; i++
     }
 
-    # 预处理指令
-    if (out ~ /^[[:space:]]*#[[:space:]]*define([[:space:]]|$)/) next   # 宏体不计（可能永不展开）
+    # ---- 预处理条件状态机（规则见 guardrail 头注释）----
+    if (out ~ /^[[:space:]]*#[[:space:]]*define([[:space:]]|$)/) next
     if (out ~ /^[[:space:]]*#[[:space:]]*if[[:space:]]/) {
-        cond = out; sub(/^[[:space:]]*#[[:space:]]*if[[:space:]]*/, "", cond); sub(/[[:space:]]+$/, "", cond)
-        res = 2                                                # 非常量 ⇒ 保守整组跳过
-        if (cond ~ /^[-+]?[0-9]+$/) res = (cond + 0 != 0) ? 1 : 0
-        depth++; gskip[depth] = (res == 1 ? 0 : 1); gtaken[depth] = (res == 1)
+        c = out; sub(/^[[:space:]]*#[[:space:]]*if[[:space:]]*/, "", c)
+        r = eval_cond(c)
+        depth++; gres[depth] = r
+        gskip[depth] = (r == 1) ? 0 : 1
+        gtaken[depth] = (r == 1)
         next
     }
-    if (out ~ /^[[:space:]]*#[[:space:]]*(ifdef|ifndef)/) { depth++; gskip[depth] = 1; gtaken[depth] = 0; next }
-    if (out ~ /^[[:space:]]*#[[:space:]]*elif/)            { if (depth > 0 && gtaken[depth] == 0) gskip[depth] = 1; next }
-    # ⚠️ `#if 0 ... #else <活代码> ... #endif`：`#else` 之后**是活的** ⇒ 必须放行，
-    #    否则「语义等价的重写」会被误报（第五轮对抗审稿 SHOULD_FIX）。
-    #    `#if 1 ... #else <死代码> ... #endif`：`#else` 之后是死的 ⇒ 保持跳过。
+    if (out ~ /^[[:space:]]*#[[:space:]]*(ifdef|ifndef)/) {
+        depth++; gres[depth] = 2; gskip[depth] = 1; gtaken[depth] = 0
+        next
+    }
+    if (out ~ /^[[:space:]]*#[[:space:]]*elif/) {
+        if (depth > 0) {
+            if (gres[depth] == 2 || gtaken[depth]) {
+                gskip[depth] = 1
+            } else {
+                c = out; sub(/^[[:space:]]*#[[:space:]]*elif[[:space:]]*/, "", c)
+                r = eval_cond(c)
+                if (r == 1) { gskip[depth] = 0; gtaken[depth] = 1 } else { gskip[depth] = 1 }
+            }
+        }
+        next
+    }
     if (out ~ /^[[:space:]]*#[[:space:]]*else/) {
-        if (depth > 0) gskip[depth] = gtaken[depth] ? 1 : 0
+        if (depth > 0) gskip[depth] = (gres[depth] == 2 || gtaken[depth]) ? 1 : 0
         next
     }
-    if (out ~ /^[[:space:]]*#[[:space:]]*endif/)           { if (depth > 0) depth--; next }
+    if (out ~ /^[[:space:]]*#[[:space:]]*endif/) { if (depth > 0) depth--; next }
 
-    if (total_skip()) next
+    if (total_skip()) {
+        # 被跳过的区段里若有用例宏 ⇒ 记一笔（让「不可见的用例」至少**可见**）
+        if (keep ~ /^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(/) sk++
+        next
+    }
 
-    # 记录用例名（从**保留字符串**的 keep 里取，注意 out 已把字符串剥空）
     if (keep ~ /^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(/) {
         if (match(keep, /"[^"]*"/)) {
             nm = substr(keep, RSTART + 1, RLENGTH - 2)
@@ -225,16 +261,10 @@ function total_skip(   i) {
     live = live "\n" out
 }
 END {
-    s = live
-    while (length(s) > 0) {
-        if (match(s, /(REQUIRE_FALSE|CHECK_FALSE|REQUIRE|CHECK)[[:space:]]*\(/) == 0) break
-        pre = (RSTART > 1) ? substr(s, RSTART - 1, 1) : ""
-        if (pre == "" || pre ~ /[^A-Za-z0-9_]/) A++
-        s = substr(s, RSTART + RLENGTH)
-    }
-    printf "A %d\n", A
+    printf "A %d\n", count_asserts(live)
+    printf "S %d\n", sk
 
-    t = live; m = length(t); pos = 1; inbody = 0; bd = 0; ca = 0; cur = ""; cni = 0
+    t = live; m = length(t); pos = 1; inbody = 0; bd = 0; cur = ""; cni = 0; body = ""
     while (pos <= m) {
         if (!inbody) {
             if (substr(t, pos, 9) == "TEST_CASE" || substr(t, pos, 10) == "TEMPLATE_T" || substr(t, pos, 8) == "SCENARIO") {
@@ -242,18 +272,16 @@ END {
                 cur = (cni <= nc) ? casenames[cni] : "?"
                 pos += 8; continue
             }
-            if (substr(t, pos, 1) == "{" && cur != "") { inbody = 1; bd = 1; ca = 0; pos++; continue }
+            if (substr(t, pos, 1) == "{" && cur != "") { inbody = 1; bd = 1; body = ""; pos++; continue }
             pos++; continue
         }
         ch = substr(t, pos, 1)
-        if (ch == "{") bd++
+        if (ch == "{") { bd++; body = body ch }
         else if (ch == "}") {
             bd--
-            if (bd == 0) { printf "C %d %s\n", ca, cur; inbody = 0; cur = "" }
-        } else {
-            # ⚠️ 对**任意**字符位置试 match（不能挂在 `ch == "("` 上）
-            if (match(substr(t, pos), /^(REQUIRE_FALSE|CHECK_FALSE|REQUIRE|CHECK)[[:space:]]*\(/)) ca++
-        }
+            if (bd == 0) { printf "C %d %s\n", count_asserts(body), cur; inbody = 0; cur = ""; body = "" }
+            else body = body ch
+        } else body = body ch
         pos++
     }
 }' "$1"
@@ -568,8 +596,11 @@ echo ""
 echo "--- C4b: 逐用例 MUST ≥ 1 条可执行断言 ---"
 while IFS= read -r src; do
     [ -z "$src" ] && continue
-    zero="$(analyze_source "$src" | awk '/^C / && $2 == 0 { $1=""; $2=""; sub(/^ +/, ""); print }')"
-    ncases="$(analyze_source "$src" | grep -c '^C ')"
+    # ⚠️ 只调 `analyze_source` **一次**（原先调 3 次：C4 的 real_assert_count + 这里 2 次）
+    as_out="$(analyze_source "$src")"
+    ncases="$(printf '%s\n' "$as_out" | grep -c '^C ')"
+    nskip="$(printf '%s\n' "$as_out" | awk '/^S /{print $2; exit}')"
+    zero="$(printf '%s\n' "$as_out" | awk '/^C / && $2 == 0 { $1=""; $2=""; sub(/^ +/, ""); print }')"
     if [ -n "$zero" ]; then
         while IFS= read -r z; do
             [ -n "$z" ] && violation "$src 的用例「$z」有 0 条可执行断言（只有 SUCCEED 之类）—— MUST 补断言或删除并登记"
@@ -578,6 +609,10 @@ $zero
 EOF
     else
         note "OK  $src → $ncases 个字面用例，每个都 ≥ 1 条断言"
+    fi
+    # 被条件编译跳过的区段里有用例宏 ⇒ **点名**（不静默：它没被 C4b 检查到）
+    if [ -n "$nskip" ] && [ "$nskip" -gt 0 ]; then
+        printf "${YELLOW}NOTICE${NC} %s：有 %s 个用例宏位于被条件编译跳过的区段 ⇒ C4b 未检查它们（见脚本头注释 ②）\n" "$src" "$nskip"
     fi
 done < "$SRC_LIST"
 

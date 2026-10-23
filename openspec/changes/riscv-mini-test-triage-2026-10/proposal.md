@@ -110,13 +110,32 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 | `test_csr_unit.cpp` | 已以 `test_csr_unit` 注册进根 `tests/CMakeLists.txt` ⇒ **已归位**（不删） |
 | `test_riscv_tests_soc.cpp` | 已以 `test_address_decoder` 注册 ⇒ **已归位**（修 `sim.eval()` → `sim.tick()`） |
 | `test_cache_smoke.cpp` | 已以 `riscv_mini_cache_smoke` 注册 ⇒ **已归位** |
-| `test_rv32i_pipeline.cpp`（example 副本） | **不是**根副本的过期副本 —— 根副本 12 个用例、example 副本 **5 个**用例，且测的是**不同组件**（example 副本测 example 侧**前推启用版** `hazard_unit.h`，根副本测 `rv32i_core.h` 的 `HazardDetectionUnit`）⇒ **修好并注册进 CTest**（实测 10 断言 / 5 用例全绿），**不删** |
+| `test_rv32i_pipeline.cpp`（example 副本） | **不是**根副本的过期副本 —— 根副本 12 个用例、example 副本 **5 个**用例，且测的是**不同组件**（example 副本测 example 侧**前推启用版** `hazard_unit.h`，根副本测 `rv32i_core.h` 的 `HazardDetectionUnit`）⇒ **修好并注册进 CTest**（实测 23 断言 / 5 用例全绿 —— 断言数随第五轮新增的「EX>MEM 双源优先级」用例从 10 增至 23），**不删** |
+
+### 第六轮审稿（REJECT）后的整改
+
+本轮两处**新写的收窄声明**被实现证伪（都落在「护栏自称覆盖」的范围内），故**修实现**而非改声明：
+
+| # | 缺陷 | 整改 |
+|---|---|---|
+| B1 | `#elif` **从不求值自己的条件**：`#if 1 / #elif 1 / REQUIRE(x)` 里 `#elif` 体是**死的**，却被当活代码计入 ⇒ 把 52 条活断言包进死的 `#elif` 即可让被掏空的文件回到 `52 ≥ 52` 全绿。直接违反 delta 新写的「死分支内的断言 MUST NOT 计入」 | 条件状态机重写：每层记 `gres`（求值结果 0/1/2未知）+ `gtaken`（是否已有分支被取）。`#if 1` 之后的 `#elif`/`#else` **都是死的**；`#if 0 / #elif 1` 的 `#elif` 体**是活的**（同时修掉少算方向的噪声） |
+| B2 | `#ifdef` 的 `#else` 被**无条件当活代码**：`#ifdef __linux__ / #else / REQUIRE(x)` 在 Linux 上 `#else` 恰是死分支 ⇒ 计数只算死的那半、漏掉活的那半，与脚本头「宁可少算，**不会多算**」的声明**方向相反** | `#ifdef`/`#ifndef`/非常量 `#if` 一律记 `gres=2` ⇒ **连同其 `#elif`/`#else` 整组跳过**（保守：只可能少算） |
+| SF-1 | C4b 的逐用例扫描**丢了 C4 的词边界保护** ⇒ `MYREQUIRE(` / `XCHECK(` 被计入该用例的断言数（头注释却声称「已覆盖词边界」） | C4b 改用与 C4 **同一个** `count_asserts()`（共享 `ASM` 宏表 + 词边界） |
+| SF-2 | C4b 不认 `REQUIRE_THROWS` / `REQUIRE_NOTHROW` / `STATIC_REQUIRE` 等 ⇒ 合法用例被误报「0 条断言」 | `ASM` 宏表补齐 Catch2 的 throws/nothrow/STATIC 系断言宏（本仓当前 0 处使用，属预防性） |
+| SF-3 | `#ifdef` 整组包住的 `TEST_CASE` 对 C4b **完全不可见**（漏报方向） | 新增 `S` 计数 + `NOTICE`：被跳过区段里出现的用例宏**点名**报出（不静默） |
+| SF-4 | 「9 个字面用例」实为 **8**（第 9 个 `grep` 命中的 `TEST_CASE` 就在宏体里）⇒ 脚本锚点条目 / 头注释 / proposal / commit message 四处同错 | 四处统一为 8 |
+| SF-5 | `examples/riscv-mini/AGENTS.md` 与 proposal 仍写 `test_rv32i_pipeline` 是「5 tests, **10** assertions」 | 改为 23（第五轮新增双源优先级用例后） |
+| SF-6 | proposal 风险表写「删 **3** 个测试源文件」且「登记在 `examples/disabled_examples.txt`」——两者都错（实删 **8** 个；删除留痕在 `removed_examples.txt`） | 逐项订正 |
+| SF-7 | 同文件另一处仍写「**8** 个 target 被删」，与已改的「6 target + 2 孤儿源」口径冲突 | 统一 |
+
+⚠️ **两轮连续出现「新写的收窄声明立刻被实现证伪」**（第四轮 C4 的立法理由、第六轮 delta 的「只统计活代码」）。
+结论：**本 change 不再新增能力声明**；后续若有人要扩展 C4/C4b 的覆盖面，MUST 先补变异 fixture 再改文档。
 
 ### 第五轮审稿（REJECT）后的整改
 
 | # | 缺陷 | 整改 |
 |---|---|---|
-| B1 | `real_assert_count()` 数的是「文件里的 `REQUIRE` 字面量」而非「可执行断言」：① 追加一个**从不展开**的 `#define DEAD_NEVER_EXPANDED()` 宏体（体内 52 条 `REQUIRE`）即可把被掏空的文件灌回锚点 ⇒ 护栏全绿；② `#if 1 / #else` 的**死分支**同样可灌。⚠️ **in-tree 已存在实例**：`test_riscv_tests.cpp` 的 41 个宏生成用例的断言在宏体里，计数只认 9 个字面用例 | 计数器重写为「**活代码提取**」awk：宏体**整行不计**（可能永不展开）、`#if 0` 与 `#if 1/#else` 的死分支不计、`#else` 之后的活代码**计入**（修掉反向假阳性）。`test_riscv_tests.cpp` 锚点随之 15 → 14（如实反映「宏生成用例不计」这一已声明局限） |
+| B1 | `real_assert_count()` 数的是「文件里的 `REQUIRE` 字面量」而非「可执行断言」：① 追加一个**从不展开**的 `#define DEAD_NEVER_EXPANDED()` 宏体（体内 52 条 `REQUIRE`）即可把被掏空的文件灌回锚点 ⇒ 护栏全绿；② `#if 1 / #else` 的**死分支**同样可灌。⚠️ **in-tree 已存在实例**：`test_riscv_tests.cpp` 的 41 个宏生成用例的断言在宏体里，计数只认 8 个字面用例（第 9 个 `grep` 命中的 `TEST_CASE` 就在宏体里） | 计数器重写为「**活代码提取**」awk：宏体**整行不计**（可能永不展开）、`#if 0` 与 `#if 1/#else` 的死分支不计、`#else` 之后的活代码**计入**（修掉反向假阳性）。`test_riscv_tests.cpp` 锚点随之 15 → 14（8 个字面用例；如实反映「宏生成用例不计」这一已声明局限） |
 | B2 | delta 写的「**每个**用例 MUST 至少断言一个语义输出」**零机制**：往文件尾追加一个只有 `SUCCEED` 的 `TEST_CASE` 即可违反而护栏全绿（文件级下限被同文件其它用例掩盖） | 新增 **C4b**：`analyze_source` 增加 brace-matching 的逐用例扫描，每个**字面**用例 MUST ≥ 1 条可执行断言；复现该攻击 ⇒ 现在报违规 |
 | SF1 | `#if 0 ... #else <活断言> ... #endif` 被误判成死代码 ⇒ 语义等价的重写被误报 | 同上（`#else` 后的活代码计入） |
 | SF2 | `proposal.md` 仍写「防『掏空测试』的**等量替换**」，与刚同步的三处冲突 | 同步为「防断言被删除/注释掉/条件编译掉；**不防**等量替换（由 code review 承担）」 |
@@ -192,7 +211,7 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 | 风险 | 缓解 |
 |---|---|
 | `test_riscv_tests` 的 41 个用例在 CI 中恒为 SKIP ⇒ 表面覆盖 | 4 个自包含用例仍真实执行；SKIP 在 CTest 输出中可见（不是静默跳过） |
-| 删 3 个测试源文件（debug4 / debug5 / test_rv32i_pipeline 副本）⇒ 覆盖净减少 | 每个删除都**带理由**登记在 `examples/disabled_examples.txt` + 护栏强制归属 |
+| 删 **8** 个 `examples/riscv-mini/tests/` 下的测试源文件（`test_hazard_minimal` / `test_pipeline_debug2..6` / `test_pipeline_smoke` / `test_rv32i_pipeline_device`）⇒ 覆盖净减少（example 版 `test_rv32i_pipeline.cpp` **存活**，只被改写） | 每个删除都**带理由**登记在 `examples/removed_examples.txt`（**删除留痕**，8 条）+ 护栏强制归属（`examples/disabled_examples.txt` 是**另一件事**：存活但未跑的豁免） |
 | 修 `test_riscv_tests` 的指令编码可能暴露解释器的更深缺陷 | 逐条解码核对；若修完仍红 ⇒ 登记为独立 change，不阻塞 C1 |
 | `add_test` 改变 CTEST_TOTAL ⇒ 根 `AGENTS.md` 漂移 | 同步 NOTES + `scripts/verify_test_counts.sh` 绿 |
 
@@ -250,7 +269,7 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 - [x] 19 个原「不执行」target 全部有归属：绿的进 CTest、红的修好或删除并登记；
       另 2 个高价值 orphan（`test_interrupt_flow` / example 版 `test_rv32i_pipeline`）
       修好并进 CTest
-- [x] `ctest -N` = **199**（基线 185 + 14；**8** 个 0 断言/不可观测 target 被删、1 个因 Catch2 exit 4 只构建），
+- [x] `ctest -N` = **199**（基线 185 + 14；**6** 个 0 断言/不可观测 target 被删（另有 2 个从未进 CMakeLists 的孤儿源文件一并删除，共 8 条留痕）、1 个因 Catch2 exit 4 只构建），
       与 root `AGENTS.md` `CTEST_TOTAL` 一致
 - [x] `bash scripts/verify_example_test_wiring.sh` 绿
 - [x] `bash scripts/verify_openspec_delta.sh riscv-mini-test-triage-2026-10` 绿

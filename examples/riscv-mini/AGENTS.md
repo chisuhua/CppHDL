@@ -43,7 +43,7 @@ examples/riscv-mini/
 - `phase3b_complete.cpp` — DELETED (used `ch::log2_ceil` and `ch_array` which don't exist)
 - `tests/` subdirectory — ✅ 已注册进 CTest（2026-10-23，14 个 target）；
   `test_csr_unit` 早已以根 `tests/` 的 target 身份存在
-- 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 10 assertions)；
+- 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 23 assertions)；
   **2026-10-23 起以 `test_rv32i_pipeline_example` 注册进 CTest**（此前从未编译）。
   ⚠️ 它与根 `tests/test_rv32i_pipeline.cpp`（12 用例）**不是**副本关系：前者测
   example 侧**前推启用版** `hazard_unit.h`，后者测 `rv32i_core.h` 的 `HazardDetectionUnit`。
