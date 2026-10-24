@@ -286,8 +286,13 @@ jobs:
       # ⚠️ C4's dead-header verdict uses TWO independent evidence sources
       # (source-level #include reverse lookup + compiler .d dependency files,
       # with stale-target .d filtered out) and only reports a header as dead
-      # when BOTH agree => conservative (may under-report, never mis-reports
-      # a live header as dead).
+      # when BOTH agree => conservative (may under-report; it NEVER reports a
+      # live header as dead — if either source sees an includer, the header is
+      # treated as alive).
+      # ⚠️ The "source has an includer but no TU compiled it" shape is a
+      # WARNING only, never a violation (it may be transitive deadness OR a
+      # target-name extraction blind spot => a violation could lead an agent
+      # to delete a LIVE header).
       shell: bash
       run: scripts/verify_no_duplicate_rv32i_headers.sh
 

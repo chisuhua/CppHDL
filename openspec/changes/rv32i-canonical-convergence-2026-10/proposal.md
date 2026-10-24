@@ -143,7 +143,9 @@ STRUCTURE 表列出**磁盘上不存在**的文件（`riscv/rv32i_control.h` / `
 | C1 | `include/cpu/**` 与 `examples/riscv-mini/src/**` **同 basename 头文件数 ≤ 1** |
 | C2 | 根 `tests/CMakeLists.txt` 无 `examples/riscv-mini/src` 的 `-I` |
 | C3 | 根 `tests/**` 的 TU 不 `#include` `examples/**` 路径 |
-| C4 | **零消费者头** ≤ 允许清单（带**期望条数**，沿用 `verify_example_test_wiring.sh` 的 allowlist 模式） |
+| C4 | **硬死头**（两个独立证据源都判定无 includer）≤ 允许清单（带**期望条数**，沿用 `verify_example_test_wiring.sh` 的 allowlist 模式） |
+| C5 | `include/cpu/AGENTS.md` 的 STRUCTURE / KEY FILES 表与磁盘一致（ADR-046 D9）+ 自述计数一致 |
+| C6 | SoC 顶层 `Rv32iPipelineTop` 的端口集合（**名 + 方向 + 位宽**）与登记快照一致（ADR-046 D10） |
 
 ⚠️ C4 的允许清单**当前只有 1 条**（`rv32i_pipeline_top.h`，C3 的预定 DUT，零消费者已登记在
 root `AGENTS.md` 的 KNOWN LIMITATIONS）⇒ C3 落地时**必须**移除该条
@@ -159,7 +161,9 @@ root `AGENTS.md` 的 KNOWN LIMITATIONS）⇒ C3 落地时**必须**移除该条
 - [ ] `cmake --build build -j$(nproc)` 0 error 0 warning
 - [ ] `ctest -LE perf` 全绿（2026-10-24 基线 **188/188**，C2 不得引入回归）
 - [ ] `ctest -L verilator_e2e` 全绿（基线 34）
-- [ ] `bash scripts/verify_no_duplicate_rv32i_headers.sh` 绿（4 条检查）
+- [x] `bash scripts/verify_no_duplicate_rv32i_headers.sh` 绿（**6 条检查**）
+- [x] `bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test` 绿
+      （**19 个 fixture** ⇒ 断言 6 条判据各自有判别力；护栏自身的回归测试）
 - [ ] `find examples/riscv-mini/src -name '*.h' | wc -l` = **1**（只剩 SoC 顶层）
 - [ ] `find examples/riscv-mini/src -name '*.h'` 与 `git ls-files` 一致（无未跟踪新增）
 - [ ] `include/cpu/AGENTS.md` 列出的每个 `.h` 都在磁盘上存在（无幽灵条目）

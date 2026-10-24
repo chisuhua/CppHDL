@@ -31,18 +31,22 @@
 - **THEN** 其内容 MUST 只包含：
   - **SoC 顶层装配**（把流水线 / TCM / cache 组装成 example 的 SoC 顶层）
   - **example 专属件**（仅供该 example 的测试/演示使用、且**不构成可复用微架构组件**的文件）
-- **AND** SoC 顶层的**端口列表** MUST 被冻结（供下游双后端 parity 作为 DUT）
-- **AND** 任何改变该端口列表的修改 MUST 单独裁决
+- **AND** SoC 顶层的**端口集合** MUST 被冻结 —— 冻结范围含**端口名 + 方向
+  （`ch_in` / `ch_out`）+ 位宽**（供下游双后端 parity 作为 DUT；方向翻转对 DUT 的
+  破坏力等同改名）
+- **AND** 任何改变该端口集合的修改 MUST 单独裁决
 
 #### Scenario: SoC 顶层端口 MUST 被冻结
 
 - **WHEN** 收敛工作修改 SoC 顶层的内部装配
-- **THEN** 它的**端口列表** MUST NOT 改变
-- **AND** 该约束 MUST 有**可执行的验证**（端口集合的快照比对）
+- **THEN** 它的**端口集合** MUST NOT 改变（**名 + 方向 + 位宽**三者皆冻结）
+- **AND** 该约束 MUST 有**可执行的验证**（护栏的「SoC 顶层端口快照」检查：
+  改动端口名 / 方向 / 位宽任一 ⇒ 护栏 MUST 报违规）
 
 ### Requirement: 零消费者的头文件 MUST 被删除
 
-- **WHEN** 一个头文件**零消费者**（没有任何 TU 的 `#include` 闭包包含它）
+- **WHEN** 一个头文件**零消费者**（**两个独立证据源都**判定没有任何 TU 的
+  `#include` 闭包包含它）
 - **THEN** 它 MUST 被删除，MUST NOT 以「提升回 `include/cpu/`」的方式保留
 - **AND** 删除 MUST 有留痕
 - **AND** 例外 MUST 被登记，且 MUST 有**失效条件**（条件达成后 MUST 移除登记）
@@ -51,6 +55,8 @@
 
 - **WHEN** 一个头文件曾因「未被使用」而被移出 `include/cpu/`
 - **THEN** 「提升回 `include/cpu/`」MUST NOT 作为保留它的理由
+- **AND** 判定 MUST **保守**：任一证据源说「有 includer」⇒ MUST NOT 判死
+  （绝不把**活头**误判成死头）
 - **AND** 该约束 MUST 有**可执行的验证**（零消费者头出现在 `include/cpu/` ⇒ 护栏 MUST 报违规）
 
 #### Scenario: 零消费者头 MUST 登记

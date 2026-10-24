@@ -12,7 +12,7 @@ All header-only.
 > **10 组同 basename 头文件**，消歧纯靠 `-I` 顺序（无护栏 ⇒ 调序即静默换实现），
 > 且根 `tests/` 反向依赖 example 源码。⇒ 已收敛：`examples/riscv-mini/src/`
 > 现只剩 SoC 顶层 `rv32i_pipeline_top.h`。
-> 护栏：`scripts/verify_no_duplicate_rv32i_headers.sh`（4 条检查）。
+> 护栏：`scripts/verify_no_duplicate_rv32i_headers.sh`（**6 条检查** + `--self-test` 自测）。
 
 ## STRUCTURE
 ```
