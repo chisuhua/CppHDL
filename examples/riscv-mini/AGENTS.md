@@ -37,7 +37,7 @@ examples/riscv-mini/
 - cache-complete-rewrite smoke (`riscv_mini_cache_smoke`): ✅ compile probe + 3 PASS instantiate (2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复: ch_reg array → ch_mem + ch_module 替换)
 
 ## KNOWN ISSUES
-- `rv32i_pipeline_cache.h` — I/D-Cache integration chain incomplete
+- ~~`rv32i_pipeline_cache.h` — I/D-Cache integration chain incomplete~~ —— ⚠️ 该文件**在磁盘上不存在**（零消费者 ⇒ 已于 2026-10-24 按 ADR-046 D4 删除）
 - `dynamic_branch_predict.h` — DELETED during code debt cleanup
 - `phase3b_complete.cpp` — DELETED (used `ch::log2_ceil` and `ch_array` which don't exist)
 - `tests/` subdirectory — ✅ 已注册进 CTest（2026-10-23，14 个 target）；

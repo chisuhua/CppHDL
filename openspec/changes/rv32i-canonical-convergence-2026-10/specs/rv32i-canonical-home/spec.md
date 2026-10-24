@@ -20,7 +20,10 @@
 
 - **WHEN** 某个头文件在两个目录下同名
 - **THEN** 编译结果 MUST NOT 取决于 `-I` 顺序
-- **AND** 该约束 MUST 有**可执行的验证**（调整 `-I` 顺序 ⇒ 行为 MUST 不变）
+- **AND** 该约束 MUST 由「**同名双副本 MUST NOT 存在**」保证
+  （同名副本一旦消失，顺序就不再决定实现）
+- **AND** 该约束 MUST 有**可执行的验证**（护栏的「同名双副本」检查：
+  构造一个同名副本 ⇒ 护栏 MUST 报违规）
 
 ### Requirement: example 侧 MUST 只保留 SoC 顶层与 example 专属件
 

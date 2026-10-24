@@ -177,6 +177,25 @@ successful Verilator build:** Check that
 Re-run `cmake -B build` to refresh the cached `CPPHDL_VERILATOR_*`
 paths.
 
+**Verilator's own build fails with "bison: /usr/share/bison/m4sugar/m4sugar.m4:
+cannot open: No such file or directory"** (or any `m4sugar.m4` /
+`bisonpre: %Error` message): the `bison` binary has its **data directory
+compiled in** (`/usr/share/bison`), and your machine's bison actually
+lives in a different prefix. Bison honours **`BISON_PKGDATADIR`**
+(not `BISON_PKGDATA`) and `M4` for that:
+
+```bash
+export BISON_PKGDATADIR=<prefix>/share/bison
+export M4=<prefix>/bin/m4
+cmake --build build --target verilator
+```
+
+⚠️ CMake's ExternalProject calls bison by its **absolute** path ⇒ a
+`bison` wrapper script on `PATH` does **not** help ⇒ the env vars MUST be
+exported for the build. Symptom of the missing vars: the `verilator`
+target fails while the rest of the project builds fine, and every
+`verilator_e2e` ctest entry then fails.
+
 **Generated `obj_dir/Makefile` fails with "verilated.mk: No such
 file or directory":** `VERILATOR_ROOT` is not set to the install
 prefix (only relevant when `BUILD_VERILATOR=ON`). The ctest test

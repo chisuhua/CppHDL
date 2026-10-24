@@ -43,9 +43,12 @@ struct LargeBundle25 : public bundle_base<LargeBundle25> {
     )
 };
 
-// 23-field bundle: matches the real HazardUnitBundle in
-// examples/riscv-mini/src/hazard_unit_bundle.h which is the documented
+// 23-field bundle: matches the (now-deleted) real HazardUnitBundle in
+// examples/riscv-mini/src/hazard_unit_bundle.h, which was the documented
 // motivating case for extending the macro beyond 20 fields.
+// ⚠️ 2026-10-24 (ADR-046 D4): that header was deleted as a zero-consumer
+// header, so this test now locks the *macro capability* rather than a
+// live in-tree component.
 struct HazardUnitLike23 : public bundle_base<HazardUnitLike23> {
     using Self = HazardUnitLike23;
     ch_uint<5> id_rs1_addr, id_rs2_addr, ex_rd_addr, mem_rd_addr, wb_rd_addr;
@@ -118,8 +121,8 @@ TEST_CASE("BundleLarge - 23-field HazardUnitLike bundle", "[bundle][large][hazar
     HazardUnitLike23 bundle;
     auto fields = bundle.__bundle_fields();
 
-    // Real HazardUnitBundle in examples/riscv-mini/src/hazard_unit_bundle.h
-    // declares 23 fields. Pre-fix (20-field limit) would silently drop 3.
+    // The (now-deleted) real HazardUnitBundle declared 23 fields.
+    // Pre-fix (20-field limit) would silently drop 3.
     STATIC_REQUIRE(std::tuple_size_v<decltype(fields)> == 23);
     REQUIRE(std::tuple_size_v<decltype(fields)> == 23);
 

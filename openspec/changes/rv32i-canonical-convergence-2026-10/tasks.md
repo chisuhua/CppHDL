@@ -5,14 +5,20 @@
 
 ### Task 1: 建立单源化护栏（先立尺子，再改代码）
 
-- [x] T1.1 新建 `scripts/verify_no_duplicate_rv32i_headers.sh`，含 4 条检查：
-      C1 同 basename ≤ 1 / C2 根 tests 无反向 `-I` / C3 根 tests 无 example include /
-      C4 零消费者头 ≤ 允许清单（**带期望条数**）
+- [x] T1.1 新建 `scripts/verify_no_duplicate_rv32i_headers.sh`，含 **6** 条检查：
+      C1 同 basename ≤ 1 / C2 根 tests 无反向 `-I`（**跨行续行也 MUST 抓到**）/
+      C3 根 tests 无 example include / C4 **硬**死头 ≤ 允许清单（**带期望条数**）/
+      C5 `include/cpu/AGENTS.md` 与磁盘一致（ADR-046 D9）/
+      C6 SoC 顶层端口集合与登记快照一致（ADR-046 D10）
 - [x] T1.2 允许清单初始内容 = `examples/riscv-mini/src/rv32i_pipeline_top.h`（1 条，
       理由：C3 的预定 DUT；失效条件：C3 落地）
 - [x] T1.3 **RED 验证**：故意造一个同名副本 ⇒ 护栏 MUST exit 1；
       故意加一处反向 `-I` ⇒ MUST exit 1；
       故意删掉允许清单里那条的「零消费者」状态 ⇒ MUST exit 1（stale 检查）
+- [x] T1.5 护栏自带 **`--self-test`**（构造合成树 ⇒ 断言 6 条判据**各自有判别力**：
+      干净树 MUST 通过；每个注入的变异 MUST 被抓到；分析器失效 MUST fail-closed）
+      —— 护栏自身的回归测试（第一轮对抗审稿要求：否则同类缺陷会重演）
+      ⇒ 挂进 CI（与护栏本体同一 job 的独立 step）
 - [x] T1.4 护栏挂进 CI（与既有 5 个护栏同一 job）
 
 ### Task 2: 删死头（17 个）

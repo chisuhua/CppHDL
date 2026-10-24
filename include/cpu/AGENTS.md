@@ -48,7 +48,7 @@ include/cpu/                             # 30 headers, 5,520 lines（实测）
 ## NAMESPACE MAP
 | Namespace | Files | Purpose |
 |-----------|-------|---------|
-| `riscv` | `pipeline/stages/*.h`, `riscv/*.h` | Pipeline stages, decoder, CSR, exception |
+| `riscv` | `pipeline/*.h`（13 个：ALU / RegFile / PC / decoder / 流水线寄存器 / stage 组件 / hazard / forwarding / branch 预测 / TCM）、`pipeline/stages/*.h`（5 个）、`riscv/*.h`（4 个）| 全部 RV32I 微架构组件 |
 | `chlib` | `cache/*.h` | Cache controllers (`i_cache_*`, `d_cache_*`) — forwarding.h moved to `include/chlib/` per ADR-038 |
 | `cpu` | (no in-tree headers under this namespace) | Historic placeholders `branch_predictor/*.h` and `hazard/*.h` were removed; their live successors now live under `include/cpu/pipeline/` (`riscv` namespace) |
 | `ch::chlib` | `clint.h` | CLINT timer |
@@ -78,7 +78,7 @@ include/cpu/                             # 30 headers, 5,520 lines（实测）
 ## CONVENTIONS
 - **Pipeline instantiation**: `ch::ch_module<T>` inside `Component::describe()` — see root AGENTS.md
 - **Runtime**: Pipeline requires `ch::ch_device<Rv32iSoc>` wrapper in main() (per README)
-- **Bundle vs Port**: Pipeline uses port-based `hazard_unit.h` (riscv namespace), NOT `hazard_unit_bundle.h` (cpu namespace)
+- **Bundle vs Port**: Pipeline uses port-based `hazard_unit.h` (riscv namespace)。⚠️ 旧的 bundle 版 `hazard_unit_bundle.h`（cpu namespace）**已于 2026-10-24 作为零消费者头删除**（ADR-046 D4）
 - **TCM**: `rv32i_tcm.h` provides single-cycle instruction/data memories
 - **Cache variant selection** (ADR-041):
   - **RV32I L1 imem/dmem** (默认) → `ICacheSync` / `DCacheSync` (1-cycle sread)

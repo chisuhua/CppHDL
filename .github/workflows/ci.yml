@@ -291,6 +291,14 @@ jobs:
       shell: bash
       run: scripts/verify_no_duplicate_rv32i_headers.sh
 
+    - name: Verify RV32I single-source convergence (self-test)
+      # The guardrail's OWN regression test: builds a synthetic tree and asserts
+      # each of the 6 checks has discriminating power (a clean tree MUST pass;
+      # each injected mutation MUST be caught). Without it, a defect in the
+      # guardrail itself would be invisible until it silently stopped guarding.
+      shell: bash
+      run: scripts/verify_no_duplicate_rv32i_headers.sh --self-test
+
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
       # 2026-10-22 changes (samples-regression-guard /
@@ -791,6 +799,14 @@ jobs:
       # a live header as dead).
       shell: bash
       run: scripts/verify_no_duplicate_rv32i_headers.sh
+
+    - name: Verify RV32I single-source convergence (self-test)
+      # The guardrail's OWN regression test: builds a synthetic tree and asserts
+      # each of the 6 checks has discriminating power (a clean tree MUST pass;
+      # each injected mutation MUST be caught). Without it, a defect in the
+      # guardrail itself would be invisible until it silently stopped guarding.
+      shell: bash
+      run: scripts/verify_no_duplicate_rv32i_headers.sh --self-test
 
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the

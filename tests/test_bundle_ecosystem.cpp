@@ -464,8 +464,10 @@ TEST_CASE("bundle: 公开派生类清单 MUST NOT 含已移除的拼接/切片�
     // ⚠️ 「不存在」这件事只能**编译期**断言（见文件顶部的 `__has_include`
     //    守卫）—— 类型不存在时无法在运行时引用它。
     //
-    // 本用例锁定**库内**的 bundle 派生类清单（`include/` 下的 18 个；
-    // 另有 2 个在 `examples/riscv-mini/src/` ⇒ 全仓 20 个）。
+    // 本用例锁定**库内**的 bundle 派生类清单（`include/` 下的 18 个）。
+    // ⚠️ 2026-10-24（ADR-046 D4）：原先在 `examples/riscv-mini/src/` 的另 2 个
+    // （`hazard_unit_bundle.h` / `branch_predictor_bundle.h`）作为**零消费者头**
+    // 已删除 ⇒ 全仓清单 20 → **18**（本断言仍锁 18 个库内类型 ⇒ 不受影响）。
     using LibraryBundleTypes = std::tuple<
         axi_addr_channel<32>, axi_write_data_channel<32>,
         axi_write_resp_channel, axi_write_channel<32, 32>,
@@ -482,7 +484,7 @@ TEST_CASE("bundle: 公开派生类清单 MUST NOT 含已移除的拼接/切片�
     STATIC_REQUIRE(is_bundle_v<std::tuple_element_t<
                        17, LibraryBundleTypes>>);
 
-    // 被移除的两个类型**不在**清单里 ⇒ 全仓清单 22 → 20
-    // （18 库内 + 2 examples/riscv-mini）
+    // 被移除的两个类型**不在**清单里 ⇒ 全仓清单 22 → 20 →（2026-10-24 后）18
+    // （18 库内；原 examples/riscv-mini 的 2 个已按 ADR-046 D4 删除）
     REQUIRE(bundle_field_count_v<fifo_bundle<ch_uint<8>>> == 6);
 }

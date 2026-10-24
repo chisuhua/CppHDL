@@ -217,12 +217,21 @@ C3 的观测点全部重做。
 
 ### D11. 自动化护栏
 
-新增 `scripts/verify_no_duplicate_rv32i_headers.sh`（挂进 CI），三条检查：
+新增 `scripts/verify_no_duplicate_rv32i_headers.sh`（挂进 CI），**六条**检查
+（2026-10-24 C2 实施时扩充；原三条 = 现 C1/C2/C3）：
 
-1. `include/cpu/**` 与 `examples/riscv-mini/src/**` **同 basename 头文件数 ≤ 1**；
-2. 根 `tests/CMakeLists.txt` 无 `examples/riscv-mini/src` 的 `-I`；
-3. 任何 TU 不得 `#include` example 路径
-   （`grep -rn '\.\./examples/riscv-mini/src' tests/` 为空）。
+1. **C1** `include/cpu/**` 与 `examples/riscv-mini/src/**` **同 basename 头文件数 ≤ 1**；
+2. **C2** 根 `tests/CMakeLists.txt` 无 `examples/riscv-mini/src` 的 `-I`
+   （**跨行续行也 MUST 抓到** —— CMake 的多行命令靠括号配平，不靠反斜杠）；
+3. **C3** 任何 TU 不得 `#include` example 路径；
+4. **C4** **硬死头**（两个独立证据源都判定无 includer）MUST 删除；
+   ⚠️ 「源码有 includer 但无 TU 编译它」**只警告不违规**（可能是传递性死，
+   也可能是 target 名抽取盲区 ⇒ 误报会诱导删掉**活头**）；
+5. **C5** `include/cpu/AGENTS.md` 的 STRUCTURE 表 MUST 与磁盘一致（**D9** 的机械化）；
+6. **C6** SoC 顶层 `Rv32iPipelineTop` 的**端口集合** MUST 与登记快照一致（**D10** 的机械化）。
+
+⚠️ 护栏自带 `--self-test`（构造合成树 ⇒ 断言 6 条判据**各自有判别力**）——
+护栏自身的回归测试（否则同类缺陷会重演）。
 
 ⚠️ 该护栏 MUST 对 `include/cpu/cache/` 与 `examples/riscv-mini/src/` 两组同名文件同样生效
 （D3 #9/#10 提升后即不再同名）。

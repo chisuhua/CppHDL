@@ -58,7 +58,9 @@ public:
         // 前推数据输入
         ch_in<ch_uint<32>> ex_alu_result;
         ch_in<ch_uint<32>> mem_alu_result;
-        ch_in<ch_uint<32>> wb_write_data;
+        ch_in<ch_uint<32>> wb_write_data;   // ⚠️ 死输入：lib `HazardUnit`
+                                              // 声明了它但从不消费（example 旧版
+                                              // 同样未用）⇒ 保留仅为维持端口签名
 
         // 原始寄存器数据
         ch_in<ch_uint<32>> rs1_data_raw;

@@ -16,7 +16,8 @@
  *   顶层包装，符合 AGENTS.md "standalone test uses ch_device" 规范。
  * - 所有 TEST_CASE 标注 `[chlib]` 标签，纳入 ctest -L chlib 过滤分组。
  * - 通过 CMake 的 `target_include_directories` 注入
- *   `${PROJECT_SOURCE_DIR}/examples/riscv-mini/src` 以解析
+ *   ⚠️ 2026-10-24（ADR-046 D7）：该反向 `-I` **已删除** —— 组件已提升到
+ *   `include/cpu/pipeline/`，include 路径也随之规范化
  *   `rv32i_hazard_complete.h` 头文件。
  *
  * Cache 使用真实实现 `chlib::ICacheSync` / `chlib::DCacheSync` (ADR-039 ch_mem
