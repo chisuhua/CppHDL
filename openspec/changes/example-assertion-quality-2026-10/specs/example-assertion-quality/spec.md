@@ -1,3 +1,5 @@
+# Capability: example-assertion-quality
+
 ## ADDED Requirements
 
 ### Requirement: examples 内的测试 MUST 断言语义输出
@@ -32,6 +34,17 @@
 - **AND** 该检查 MUST NOT 仅做**文件级**下限 —— 文件级下限会被同文件其它用例掩盖
   （实测：往一个 52 断言的文件尾追加一个只有 `SUCCEED` 的 `TEST_CASE`，
   文件级计数不变 ⇒ 护栏全绿）
+
+#### Scenario: 宏生成的用例 MUST 在锚点里被写明
+
+- **WHEN** 测试用 `#define` 出来的宏**生成**用例（如 `test_riscv_tests.cpp` 的
+  `TEST_CASE_FOR_each(...)`，41 个调用点）
+- **THEN** 这些用例体内的断言位于**宏体**中，按「宏体 MUST NOT 计入」的规则
+  **不进入**锚点计数
+- **AND** 该局限 MUST 在锚点条目里**显式写明**（避免读者以为那 41 个用例的断言
+  已被覆盖）
+- **AND** 这些用例的行为覆盖 MUST 由**运行期**证据承担（其所在二进制在 CTest 中
+  真实执行）
 
 #### Scenario: 不可见的用例 MUST 被点名
 

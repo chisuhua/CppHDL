@@ -20,10 +20,11 @@
 #   ⚠️ 已删除 target 的**删除留痕不在本清单**，在 `examples/removed_examples.txt`。
 #   ⚠️ 2026-10-23 起，`examples/riscv-mini/` 的 14 个 Catch2 target **已进
 #   CTest**（`add_test`）⇒ 它们不再登记在本清单（归位条件已达成 ⇒ MUST 移除）。
-#   剩余的 5 条「删除留痕」是审计记录：target 与源文件都已被 `git rm`。
-#   ⚠️ 这些留痕条目在**干净的构建目录**下不产生任何二进制 ⇒ 不会被
-#   `run_all_ported_tests.sh` 的「已构建但未跟踪」检查命中；它们的作用是
-#   在**旧构建目录残留孤儿二进制**时仍给出稳定解释。
+#   ⚠️ **已删除 target 的删除留痕不在本清单**，在 `examples/removed_examples.txt`
+#      （8 条：6 个曾声明过的 CMake target + 2 个从未进 CMakeLists 的孤儿源文件）。
+#      两个文件 MUST 分开：本清单是「**存活但未跑**」的豁免（按名字判定），
+#      那一份是纯审计记录（**不参与任何自动化判定**）—— 混在一起会让删除留痕
+#      退化成「按名字的永久自动豁免」（新建同名测试会静默通过）。
 
 # --- Verilator 后端 demo（是已注册 target，但不属于「被跟踪集合」）---
 verilator_01_minimal	已注册 CMake target（默认构建），但不被护栏跟踪：它是 ADR-035 的 Verilator 后端**演示**，其行为依赖 Verilator 工具链（构建需 10-30 min），放进每次 CI 的护栏会拖垮 job 预算	归位条件：护栏支持「按需启用需 Verilator 的集合」后，补进 CH_TRACKED_EXAMPLE_TARGETS 并移除本行
@@ -43,11 +44,11 @@ testbench_template	源文件 `examples/spinalhdl-ported/testbench_template.cpp` 
 # 修复：`enable_testing()` 提前 + `riscv_mini_catch_test()` helper 内统一
 # `add_test` ⇒ riscv-mini 的 14 个 Catch2 测试 target 现已进 CTest。
 # 护栏：`scripts/verify_example_test_wiring.sh`（C1 归属守恒 + C2 数量守恒）。
-# 本节保留**已删除 target 的登记**（带理由 + 归位条件）—— 删除 MUST 留痕。
+# 本节只保留**存活但未跑**的条目 —— 已删除 target 的留痕在
+# `examples/removed_examples.txt`（不在本清单）。
 
-# --- 已删除的 riscv-mini 测试 target（2026-10-23，change `riscv-mini-test-triage-2026-10`）---
-# ⚠️ 这 5 条是**删除留痕**：target 与其源文件都已被 `git rm` 物理删除。
-#    保留登记是为了让「已构建但未跟踪」检查（`run_all_ported_tests.sh` 的 C1）
-#    在**旧构建目录残留孤儿二进制**时仍然稳定，并给后人留档删除理由。
-#    归位条件 = 框架缺陷修复后重建该测试（见各条说明）。
-test_riscv_tests_pipeline	**已构建但不进 CTest**（2026-10-23）：其 46 个用例**全部**依赖仓外 riscv-tests 的预编译二进制 ⇒ 在 CI（无该 checkout）里全部被 SKIP ⇒ Catch2 v3 退出码为 **4**（= 没有真正跑起来的用例）⇒ **CTest 会把它判为 FAILED**。⚠️ `ctest -N` 仍会列出它 ⇒「CTest 里认得它」**不等于**「它会绿」——这正是本 change 新增的护栏 C3（实际运行 + 要求 exit 0）要抓的形态。归位条件：CI 引入 riscv-tests checkout（或提供等价的预编译二进制）后，改回 `riscv_mini_catch_test` 并从本清单移除	归位条件：CI 具备 riscv-tests 的预编译二进制（`RISCV_TESTS_PATH` 可指向）后，注册进 CTest 并从本清单移除
+# --- 存活但未进 CTest 的 riscv-mini Catch2 测试二进制 ---
+# ⚠️ 下面这 1 条是**活着的** target（源文件在、`CMakeLists.txt` 里以
+#    `riscv_mini_catch_test_noctest` 声明、只构建不注册）⇒ 它属「存活但未跑」
+#    ⇒ 登记在本清单（豁免），**不是**删除留痕。
+test_riscv_tests_pipeline	**已构建但不进 CTest**（2026-10-23）：其 46 个用例**全部**依赖仓外 riscv-tests 的预编译二进制 ⇒ 在 CI（无该 checkout）里全部被 SKIP ⇒ Catch2 v3 退出码为 **4**（= 没有真正跑起来的用例）⇒ **CTest 会把它判为 FAILED**。⚠️ `ctest -N` 仍会列出它 ⇒「CTest 里认得它」**不等于**「它会绿」——这正是护栏 C3（实际运行 + 要求 exit 0）要抓的形态	归位条件：CI 具备 riscv-tests 的预编译二进制（`RISCV_TESTS_PATH` 可指向）后，改回 `riscv_mini_catch_test` 注册进 CTest 并从本清单移除

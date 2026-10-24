@@ -172,8 +172,8 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 > 锚点 = root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES`、运行期 exit + error/fatal 判据）
 > —— 这部分**不依赖**静态分析器，简单可审、portable。
 
-> ⚠️ 本护栏经**三轮**对抗审稿 REJECT 后重写。七条不可退化的设计约束
-> （详见脚本头部注释）：
+> ⚠️ 本护栏经**第 1–7 轮**对抗审稿 REJECT 后重写（拆分后为第 7 轮）。
+> **六条**不可退化的设计约束（详见脚本头部注释）：
 > ① 判据是 **`ctest -N`（CTest 条目的唯一真相）**，不是解析 CMake 源码；
 > ② 基准是**文件系统上的源文件集合**（外部事实），不是「CMake 里声明了什么」
 > —— 否则删一条声明会让「声明集」与「覆盖集」同步缩小 ⇒ 守恒恒等 ⇒ 对缩面无判别力；
@@ -182,16 +182,19 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 > ④ 源文件枚举 **MUST 按内容/目录**（4 种后缀 × 全部 Catch2 用例宏 ∪ `tests/` 下任意文件），
 > 不得按 `test_*.cpp` 命名 —— 否则 `pipeline_check.cpp` / `.cc` 源完全不可见；
 > ⑤ 「跑得起来」还不够：MUST 同时看 **exit 0** 与**日志无 error/fatal**；
-> ⑥ 删除留痕 MUST NOT 与「豁免」混在一个文件里（否则退化成按名字的永久自动豁免）；
-> ⑦ 测试 MUST 真的断言：按**可执行断言数下限**锚点检查（防「断言被删除 / 注释掉 /
->    条件编译掉」）+ **逐用例**下限（防「某用例只有 `SUCCEED`」）。
->    ⚠️ 它**不防「等量替换」**（`REQUIRE(pc == X)` → `REQUIRE(1 == 1)` 断言数不变）——
->    那一条由 **code review** 承担，护栏不假装覆盖。
+> ⑥ 删除留痕 MUST NOT 与「豁免」混在一个文件里（否则退化成按名字的永久自动豁免）。
 >
-> 检查项：**C0** `enable_testing()` 顺序（源码级，陈旧构建目录掩盖不了）/
-> **C1** 源文件归属守恒 / **C2** 源文件数 vs `EXAMPLES_TEST_SOURCES` 锚点 /
-> **C3** 每个 CTest 条目 exit 0 且日志干净（例外走带**期望条数**的 allowlist）/
-> **C3b** allowlist stale / **C4** 可执行断言数下限（`CH4_ANCHOR`）/ **C4b** 逐用例下限。
+> ⚠️ **原第 ⑦ 条（「测试 MUST 真的断言」）已随拆分移出本护栏** ⇒ 它归
+> change `example-assertion-quality-2026-10`（脚本
+> `scripts/verify_example_assertion_quality.sh`）。拆分理由：该条依赖一个自研的
+> 「C 子集静态分析器」，而它**不可能被完全闭合**（第 4/5/6 轮的**全部** BLOCKER
+> 都出在它身上）⇒ 两条约束分开演进、分开承担风险。
+>
+> 检查项（**归属守恒**，共 6 项）：**C0** `enable_testing()` 顺序（源码级，陈旧
+> 构建目录掩盖不了）/ **C1** 源文件归属守恒 / **C2** 源文件数 vs
+> `EXAMPLES_TEST_SOURCES` 锚点 / **C3** 每个 CTest 条目 exit 0 且日志干净
+> （例外走带**期望条数**的 allowlist）/ **C3b** allowlist stale /
+> **C3c** examples 域 target 缺失可执行文件即违规。
 > 挂进 CI（2 处 job）。
 - **`run_all_ported_tests.sh` 的 C1 检查需认得 CTest 归属**：17 个 riscv-mini 测试
   现在**是构建产物但由 CTest 覆盖**，不属于 example demo 护栏 ⇒ 该检查必须把

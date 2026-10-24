@@ -12,7 +12,8 @@
 #    ⇒ 归属守恒（简单、可审、portable）与断言质量（复杂、需长期演进）分开演进。
 #
 # ⚠️ 本脚本的静态分析**不可能完全闭合** —— 下述「能力边界」是**如实声明**，
-#    不是「已覆盖」的承诺。任何扩展 MUST 先补 fixture（见本 change 的 tasks）。
+#    不是「已覆盖」的承诺。任何扩展 MUST 先补 fixture（见 change
+#    `example-assertion-quality-2026-10` 的 tasks）。
 #
 # Exit codes: 0 = 全部通过, 1 = 至少一处违规。
 #
@@ -20,6 +21,8 @@
 #
 # ⚠️ 可移植性：只用 POSIX sh + awk（**不使用** GNU 扩展）。
 #    ⚠️ **BSD/BWK awk（macOS 默认）未实测** —— 本机只有 mawk。
+#    ⇒ 括号表达式内 MUST 用 `[[:space:]]`（POSIX 明确定义），
+#      **不可**用 `[ \t]`（POSIX 未定义 ⇒ 各实现可能不同）。
 
 set -uo pipefail
 
@@ -64,7 +67,7 @@ examples/riscv-mini/tests/test_pipeline_debug.cpp|5 个 stage + hazard + pipelin
 examples/riscv-mini/tests/test_pipeline_exec.cpp|流水线执行（指令级）|52
 examples/riscv-mini/tests/test_pipeline_minimal.cpp|Rv32iPipeline 构造 + 复位期周期计数冻结|1
 examples/riscv-mini/tests/test_pipeline_wrapper.cpp|Rv32iPipeline + ITCM 装配的取指/周期行为|5
-examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP（⚠️ 用 `TEST_CASE_FOR_each` 宏**生成**的 41 个用例的断言在宏体里 ⇒ 按「宏体整行不计」的保守规则不计入，故下限 = 8 个字面用例的 14）|14
+examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP（⚠️ 用 TEST_CASE_FOR_each 宏**生成**的 41 个用例的断言在宏体里 ⇒ 按「宏体整行不计」的保守规则不计入，故下限 = 8 个字面用例的 14）|14
 examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
 examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
 examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + hazard 前推（含 EX>MEM 双源优先级）+ 分支检测|23
@@ -141,7 +144,7 @@ function count_asserts(str,   cnt, s) {
 {
     line = $0
     if (pending != "") line = pending line
-    if (line ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, "", line); pending = line; next }
+    if (line ~ /\\[[:space:]]*$/) { sub(/\\[[:space:]]*$/, "", line); pending = line; next }
     pending = ""
 
     keep = ""; out = ""; i = 1; n = length(line); instr = 0; inchr = 0
@@ -240,142 +243,10 @@ END {
 
 # 活代码里的可执行断言总数
 real_assert_count() {
-    analyze_source "$1" | awk '/^A /{print $2; exit}'
+    # ⚠️ `|| true`：分析器失败时 awk 无输出 ⇒ `n` 为空 ⇒ 由调用点的
+    #    fail-closed 检查报违规（而不是让 `set -e` 在赋值处直接中止）。
+    analyze_source "$1" 2>/dev/null | awk '/^A /{print $2; exit}' || true
 }
-
-analyze_source() {
-    awk 'BEGIN {
-    SQ = "\047"; inbc = 0; depth = 0; pending = ""; live = ""; nc = 0; sk = 0
-    ASM = "(REQUIRE_THROWS_MATCHES|CHECK_THROWS_MATCHES|REQUIRE_THROWS_WITH|CHECK_THROWS_WITH|REQUIRE_THROWS_AS|CHECK_THROWS_AS|REQUIRE_NOTHROW|CHECK_NOTHROW|REQUIRE_THROWS|CHECK_THROWS|REQUIRE_FALSE|CHECK_FALSE|STATIC_REQUIRE|STATIC_CHECK|REQUIRE|CHECK)"
-}
-function total_skip(   i) {
-    for (i = 1; i <= depth; i++) if (gskip[i]) return 1
-    return 0
-}
-function eval_cond(c) {
-    sub(/[[:space:]]+$/, "", c)
-    if (c ~ /^[-+]?[0-9]+$/) return (c + 0 != 0) ? 1 : 0
-    return 2
-}
-# 在任意文本里数「可执行断言」：断言宏 + 词边界（前驱不是标识符字符）
-# ⚠️ 词边界实现：**不**用「交替组里的 `^`」（`(^|[^A-Za-z0-9_])`）——
-#    POSIX 对「子表达式内的 `^` 是否仍是锚点」**未定义** ⇒ 不同 awk 实现
-#    （尤其 BSD/BWK awk = macOS 默认）可能按字面字符处理 ⇒ 行为分叉。
-#    改为在串首**垫一个哨兵空格**（空格不是标识符字符 ⇒ 满足词边界），
-#    这样边界判定只需 `[^A-Za-z0-9_]`，全部落在 POSIX 明确定义的范围内。
-function count_asserts(str,   cnt, s) {
-    cnt = 0; s = " " str
-    while (match(s, "[^A-Za-z0-9_]" ASM "[[:space:]]*\\(") > 0) {
-        cnt++
-        s = substr(s, RSTART + RLENGTH)
-    }
-    return cnt
-}
-{
-    line = $0
-    if (pending != "") line = pending line
-    if (line ~ /\\[ \t]*$/) { sub(/\\[ \t]*$/, "", line); pending = line; next }
-    pending = ""
-
-    keep = ""; out = ""; i = 1; n = length(line); instr = 0; inchr = 0
-    while (i <= n) {
-        c = substr(line, i, 1); two = substr(line, i, 2)
-        if (inbc) { if (two == "*/") { inbc = 0; i += 2 } else { i++ }; continue }
-        if (instr) {
-            if (c == "\\") { keep = keep substr(line, i, 2); i += 2; continue }
-            if (c == "\"") instr = 0
-            keep = keep c; i++; continue
-        }
-        if (inchr) {
-            if (c == "\\") { keep = keep substr(line, i, 2); i += 2; continue }
-            if (c == SQ) inchr = 0
-            keep = keep c; i++; continue
-        }
-        if (two == "/*") { inbc = 1; i += 2; continue }
-        if (two == "//") break
-        if (c == "\"") { instr = 1; keep = keep c; i++; continue }
-        if (c == SQ) { inchr = 1; keep = keep c; i++; continue }
-        keep = keep c; out = out c; i++
-    }
-
-    # ---- 预处理条件状态机（规则见 guardrail 头注释）----
-    if (out ~ /^[[:space:]]*#[[:space:]]*define([[:space:]]|$)/) next
-    if (out ~ /^[[:space:]]*#[[:space:]]*if[[:space:]]/) {
-        c = out; sub(/^[[:space:]]*#[[:space:]]*if[[:space:]]*/, "", c)
-        r = eval_cond(c)
-        depth++; gres[depth] = r
-        gskip[depth] = (r == 1) ? 0 : 1
-        gtaken[depth] = (r == 1)
-        next
-    }
-    if (out ~ /^[[:space:]]*#[[:space:]]*(ifdef|ifndef)/) {
-        depth++; gres[depth] = 2; gskip[depth] = 1; gtaken[depth] = 0
-        next
-    }
-    if (out ~ /^[[:space:]]*#[[:space:]]*elif/) {
-        if (depth > 0) {
-            if (gres[depth] == 2 || gtaken[depth]) {
-                gskip[depth] = 1
-            } else {
-                c = out; sub(/^[[:space:]]*#[[:space:]]*elif[[:space:]]*/, "", c)
-                r = eval_cond(c)
-                if (r == 1) { gskip[depth] = 0; gtaken[depth] = 1 } else { gskip[depth] = 1 }
-            }
-        }
-        next
-    }
-    if (out ~ /^[[:space:]]*#[[:space:]]*else/) {
-        if (depth > 0) gskip[depth] = (gres[depth] == 2 || gtaken[depth]) ? 1 : 0
-        next
-    }
-    if (out ~ /^[[:space:]]*#[[:space:]]*endif/) { if (depth > 0) depth--; next }
-
-    if (total_skip()) {
-        # 被跳过的区段里若有用例宏 ⇒ 记一笔（让「不可见的用例」至少**可见**）
-        if (keep ~ /^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(/) sk++
-        next
-    }
-
-    if (keep ~ /^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(/) {
-        if (match(keep, /"[^"]*"/)) {
-            nm = substr(keep, RSTART + 1, RLENGTH - 2)
-            nc++; casenames[nc] = nm
-        }
-    }
-    live = live "\n" out
-}
-END {
-    printf "A %d\n", count_asserts(live)
-    printf "S %d\n", sk
-
-    t = live; m = length(t); pos = 1; inbody = 0; bd = 0; cur = ""; cni = 0; body = ""
-    while (pos <= m) {
-        if (!inbody) {
-            if (substr(t, pos, 9) == "TEST_CASE" || substr(t, pos, 10) == "TEMPLATE_T" || substr(t, pos, 8) == "SCENARIO") {
-                cni++
-                cur = (cni <= nc) ? casenames[cni] : "?"
-                pos += 8; continue
-            }
-            if (substr(t, pos, 1) == "{" && cur != "") { inbody = 1; bd = 1; body = ""; pos++; continue }
-            pos++; continue
-        }
-        ch = substr(t, pos, 1)
-        if (ch == "{") { bd++; body = body ch }
-        else if (ch == "}") {
-            bd--
-            if (bd == 0) { printf "C %d %s\n", count_asserts(body), cur; inbody = 0; cur = ""; body = "" }
-            else body = body ch
-        } else body = body ch
-        pos++
-    }
-}' "$1"
-}
-
-# 活代码里的可执行断言总数
-real_assert_count() {
-    analyze_source "$1" | awk '/^A /{print $2; exit}'
-}
-
 # ---------------------------------------------------------------------------
 # 源文件集合（与 verify_example_test_wiring.sh 的口径一致：4 种后缀 ×
 # 全部 Catch2 用例宏 ∪ examples/**/tests/ 下的任意文件）
@@ -384,14 +255,15 @@ SRC_LIST="$(mktemp)"
 trap 'rm -f "$SRC_LIST"' EXIT INT TERM
 {
     grep -rlE '^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(' \
-        examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
-    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
+        examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null || true
+    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null || true
     find examples -path '*/tests/*' -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.C' \) 2>/dev/null
 } | sed 's|^\./||' | sort -u > "$SRC_LIST"
 
 echo "=== verify_example_assertion_quality: examples 测试断言质量护栏 ==="
 note "examples 测试源文件总数：$(wc -l < "$SRC_LIST" | tr -d ' ') 个"
 
+# ---------------------------------------------------------------------------
 # C4 可执行断言数下限（防「断言被删除/注释掉/条件编译掉」；**不防**等量替换）+ C4b 逐用例下限
 # ---------------------------------------------------------------------------
 echo ""
@@ -405,6 +277,16 @@ while IFS= read -r src; do
         continue
     fi
     n="$(real_assert_count "$src")"
+    # ⚠️ MUST **fail-closed**：分析器失败时 `real_assert_count` 会返回**空串**，
+    #    而 `[ "" -lt "$min" ]` 会打印 "integer expression expected" 并取**假**分支
+    #    ⇒ 走进 else 打印 OK ⇒ violations 仍 0 ⇒ **PASS**（假绿！）。
+    #    ⇒ 非数字计数 MUST 报违规（工具坏了 ≠ 没问题）。
+    case "$n" in
+        ''|*[!0-9]*)
+            violation "$src 的可执行断言数统计**失败**（得到 '$n'）—— 分析器出错 MUST 视为违规，不得静默放行"
+            continue
+            ;;
+    esac
     if [ "$n" -lt "$min" ]; then
         violation "$src 的可执行断言数（$n）< 锚点下限（$min）—— 断言被删除 / 注释掉 / 条件编译掉了？（下调下限是**放宽**，MUST 在 commit message 里解释）"
     else
@@ -425,7 +307,7 @@ while IFS= read -r src; do
     [ -z "$src" ] && continue
     # ⚠️ 只调 `analyze_source` **一次**（原先调 3 次：C4 的 real_assert_count + 这里 2 次）
     as_out="$(analyze_source "$src")"
-    ncases="$(printf '%s\n' "$as_out" | grep -c '^C ')"
+    ncases="$(printf '%s\n' "$as_out" | grep -c '^C ' || true)"
     nskip="$(printf '%s\n' "$as_out" | awk '/^S /{print $2; exit}')"
     zero="$(printf '%s\n' "$as_out" | awk '/^C / && $2 == 0 { $1=""; $2=""; sub(/^ +/, ""); print }')"
     if [ -n "$zero" ]; then
@@ -453,7 +335,6 @@ while IFS='|' read -r fsrc fdesc fmin; do
 done <<EOF
 $CH4_ANCHOR
 EOF
-
 # ---------------------------------------------------------------------------
 # 汇总
 # ---------------------------------------------------------------------------

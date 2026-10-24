@@ -15,11 +15,12 @@
 
 ## Phase 2: 护栏收尾
 
-- [ ] T2.1 `scripts/verify_example_assertion_quality.sh` 的 `CH4_ANCHOR`
-  与 `CH4_ANCHOR_README` 迁入本 change 的独立文件（不与 C1 的护栏共享）
+- [x] T2.1 ✅ `CH4_ANCHOR` 与 `CH4_ANCHOR_README` **已在**
+  `scripts/verify_example_assertion_quality.sh` 内（随 C1 拆分交付，**不**与
+  C1 的护栏共享）
 - [ ] T2.2 确认 `scripts/verify_example_test_wiring.sh` 内**零**静态分析代码
   （`grep -c 'analyze_source\|CH4_ANCHOR\|count_asserts'` = 0）
-- [ ] T2.3 护栏文档补「能力边界」小节（明确不覆盖等量替换 / 宏生成用例）
+- [x] T2.3 ✅ 护栏文档已含「能力边界」小节（①②③，明确不覆盖等量替换 / 宏生成用例）
 
 ## Phase 3: 跨平台
 

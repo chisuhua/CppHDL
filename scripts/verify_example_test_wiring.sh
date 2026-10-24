@@ -10,7 +10,8 @@
 # 是**空操作**。
 #
 # ═══════════════════════════════════════════════════════════════════════════
-# ⚠️ 本护栏经两轮对抗审稿（均 REJECT）后重写。以下约束**勿退化**：
+# ⚠️ 本护栏经**第 1–7 轮**对抗审稿（均 REJECT）后重写（拆分后为第 7 轮）。
+# 以下约束**勿退化**：
 #
 # ① 判据是 **`ctest -N`（CTest 条目的唯一真相）**，不是解析 CMake 源码。
 # ② 基准是**文件系统上的测试源文件集合**（外部事实），不是「CMake 里声明了什么」
@@ -27,6 +28,12 @@
 #    —— 见 `examples/removed_examples.txt` 的头部注释（按名字的永久自动豁免是个坑）。
 # ⑦ 「跑起来」还不够：MUST 同时要求**退出码 0** 与**日志无 error/fatal**
 #    —— 否则「跑但报错」会被判成 OK。
+#
+# ⚠️ **「测试 MUST 真的断言」不在本护栏** ⇒ 已拆到
+#    `scripts/verify_example_assertion_quality.sh`
+#    （change `example-assertion-quality-2026-10`）——
+#    那一条依赖自研静态分析器，**不可能被完全闭合**（第 4/5/6 轮的**全部**
+#    BLOCKER 都出在它身上）⇒ 两条约束分开演进、分开承担风险。
 #
 # 检查：
 #   C0  源码级：`enable_testing()` MUST 排在 `add_subdirectory(examples)` 之前
@@ -101,7 +108,7 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 echo ""
 echo "--- C0: enable_testing() MUST 先于 add_subdirectory(examples) ---"
 et_line="$(grep -n '^[[:space:]]*enable_testing()' CMakeLists.txt | head -1 | cut -d: -f1)"
-ex_n="$(grep -c '^[[:space:]]*add_subdirectory(examples)' CMakeLists.txt)"
+ex_n="$(grep -c '^[[:space:]]*add_subdirectory(examples)' CMakeLists.txt || true)"
 ex_line="$(grep -n '^[[:space:]]*add_subdirectory(examples)' CMakeLists.txt | head -1 | cut -d: -f1)"
 if [ "$ex_n" -ne 1 ]; then
     # 若将来出现第 2 处，`head -1` 的判定就不再代表全部 ⇒ 必须显式报出（而非静默只看第一处）
@@ -155,14 +162,14 @@ for f in $ALL_CMAKE; do
     awk -v out="$MAP" '
     {
         line = $0
-        sub(/[ \t]*#.*$/, "", line)                       # 剥行尾注释
+        sub(/[[:space:]]*#.*$/, "", line)                       # 剥行尾注释
         if (match(line, /[A-Za-z0-9_]*\(/) == 0) next
         rest = substr(line, RSTART + RLENGTH)
-        if (rest !~ /^[A-Za-z0-9_.-]+[ \t,]/) next        # 排除 ${...} 模板
-        n = split(rest, a, /[ \t,)]+/)
+        if (rest !~ /^[A-Za-z0-9_.-]+[[:space:],]/) next        # 排除 ${...} 模板
+        n = split(rest, a, /[[:space:],)]+/)
         target = a[1]
         if (target == "") next
-        m = split(rest, b, /[ \t,)]+/)
+        m = split(rest, b, /[[:space:],)]+/)
         src = ""
         for (i = m; i >= 1; i--) {
             if (b[i] ~ /\.cpp$/) { src = b[i]; break }
@@ -203,8 +210,8 @@ SRC_LIST="$TMP/src_list"
 #    ③ `examples/*/tests/` 下的任意文件（不论内容）—— 兜住「还没写断言」的新测试。
 {
     grep -rlE '^[[:space:]]*(TEST_CASE|TEST_CASE_METHOD|TEMPLATE_TEST_CASE|TEMPLATE_PRODUCT_TEST_CASE|SCENARIO)[[:space:]]*\(' \
-        examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
-    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null
+        examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null || true
+    grep -rl 'CATCH_' examples --include='*.cpp' --include='*.cc' --include='*.cxx' --include='*.C' 2>/dev/null || true
     find examples -path '*/tests/*' -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.C' \) 2>/dev/null
 } | sed 's|^\./||' | sort -u > "$SRC_LIST"
 n_total=$(wc -l < "$SRC_LIST" | tr -d ' ')
@@ -277,7 +284,7 @@ EX_TARGETS="$TMP/ex_targets"
         awk '{printf "%s ", $0}' "$f" \
             | grep -oE '[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*' \
             | sed -E 's/.*\([[:space:]]*//' \
-            | grep -E '_test$|_demo$|_example$|_smoke$|_prog$|_check$'
+            | grep -E '_test$|_demo$|_example$|_smoke$|_prog$|_check$' || true
     done
 } | grep -v '^$' | sort -u > "$EX_TARGETS"
 is_declared_example_target() {
@@ -318,7 +325,9 @@ while IFS= read -r mtarget; do
     else
         out="$("$bin" 2>&1)"; rc=$?
     fi
-    errs="$(printf '%s' "$out" | grep -cE '^\[(ERROR|FATAL)\]')"
+    # ⚠️ `|| true`：`grep -c` 在**零匹配**时返回 1 ⇒ 配合 `pipefail` + `set -e`
+    #    会让脚本在 `bash -e` 下提前中止（实测 exit 1 而非判违规）。
+    errs="$(printf '%s' "$out" | grep -cE '^\[(ERROR|FATAL)\]' || true)"
     # allowlist 记的是**期望条数**（而不是「整条豁免」）—— 否则往一个已豁免的
     # target 里注入任意多条**无关**错误仍会被判 OK（实测踩过）。
     expected="$(printf '%s\n' "$CHERROR_ALLOWLIST" | awk -F'|' -v t="$mtarget" '$1==t {print $3; exit}')"

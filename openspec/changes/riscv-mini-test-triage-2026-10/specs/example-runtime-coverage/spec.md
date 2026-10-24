@@ -65,18 +65,13 @@ error/fatal 级条目（「跑但报错」≠ 通过）；既有例外 MUST 走*
 - **AND** MUST 修复它，或把它登记在 `examples/disabled_examples.txt`（附根因与归位条件）
 - **AND** MUST NOT 用「跳过它」的方式让 CTest 变绿
 
-#### Scenario: 被注册进 CTest 的测试 MUST 真的断言语义输出
+#### Scenario: 测试源文件总数 MUST 有记录式锚点
 
-- **WHEN** 一个 examples 内的测试 target 被注册进 CTest
-- **THEN** 它的**每个**用例 MUST 至少断言一个**语义确定的输出**
-  （`REQUIRE` / `CHECK` / 其 throws / nothrow / STATIC 变体）
-- **AND** MUST NOT 仅以 `SUCCEED(...)` 作为用例的全部内容
-  （那只能证明「构造没崩」，不能证明行为对 ⇒ 是**账面覆盖**）
-- **AND** 该测试源的可执行断言数 MUST 不低于仓库登记的下限锚点
-  （机制与 `CTEST_TOTAL` 同型：让**删除/注释掉/条件编译掉**断言成为必须显式
-  改锚点的行为）
-- **AND** 该约束的**自动化执行**由 capability `example-assertion-quality` 承担
-  （C1 只负责把「注册」这件事做对；断言质量的护栏见该 capability）
+- **WHEN** 仓库维护 `examples/**` 下的测试源文件
+- **THEN** 其**总数** MUST 与 root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点一致
+- **AND** 该锚点 MUST 被自动化护栏（`scripts/verify_example_test_wiring.sh` 的 C2）校验
+- **AND** 任何增减 MUST 显式更新锚点 —— 这防的是「源文件与其 CMake 声明
+  **一起**被删除」的静默缩面（只比对「声明集 vs 覆盖集」抓不到：两边同减 ⇒ 守恒恒等）
 
 #### Scenario: 测试源文件 MUST 被编译
 - **WHEN** `examples/**/tests/` 下存在 `test_*.cpp` 源文件

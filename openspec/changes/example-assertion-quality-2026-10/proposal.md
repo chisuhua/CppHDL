@@ -27,7 +27,15 @@ C1 在连续三轮对抗审稿（第 4 / 5 / 6 轮）里，**全部** BLOCKER �
 
 ## What Changes
 
-### 新增 `scripts/verify_example_assertion_quality.sh`
+### `scripts/verify_example_assertion_quality.sh`
+
+> ⚠️ **该脚本与其 CI 挂载已随 C1 的拆分一并交付**（commit `fadf500`）⇒
+> 本 change **不是**「引入」它，而是**把它规格化 + 补齐其验证**：
+> ① fixture 集（当前**零**规格覆盖 ⇒ 脚本进了 CI 却没有可执行的期望值）；
+> ② 跨平台实测（当前 macOS/BSD awk **未实测**）；
+> ③ 文档与能力边界对齐（护栏头的「能力边界」必须与 delta 一致）。
+>
+> 拆分时的归属：C1 只保留「归属守恒」，「断言质量」连同该脚本归本 change。
 
 - **静态分析**（`analyze_source`）：从测试源提取「**活代码**」并计数
   - 剥：整行/行尾/跨行块注释、字符串与字符字面量
@@ -70,7 +78,10 @@ C1 在连续三轮对抗审稿（第 4 / 5 / 6 轮）里，**全部** BLOCKER �
 
 ## Acceptance
 
-- [ ] `bash scripts/verify_example_assertion_quality.sh` 在当前 examples 树上绿
+> ✅ = **随 C1 拆分已交付**（`fadf500`）；⬜ = 本 change 待做
+
+- ✅ [x] `bash scripts/verify_example_assertion_quality.sh` 在当前 examples 树上绿
+- ✅ [x] 该脚本已挂进 CI 的 2 个 job
 - [ ] 上表 **10 个 fixture** 全部被自检脚本验证（期望值逐一相符）
 - [ ] 变异验证：注释掉断言 / 死宏体 / `#elif` 死分支 / `#ifdef` 死 `#else` /
       `SUCCEED`-only 用例 —— **全部**被护栏报违规
@@ -89,8 +100,10 @@ C1 在连续三轮对抗审稿（第 4 / 5 / 6 轮）里，**全部** BLOCKER �
 
 ## Impact
 
-- **新增**：`scripts/verify_example_assertion_quality.sh`、
-  `tests/fixtures/assertion_quality/**`、CI 挂载
+- **已交付**（随 C1 的拆分 `fadf500`）：`scripts/verify_example_assertion_quality.sh`、
+  其 CI 挂载（2 处）
+- **本 change 新增**：`tests/fixtures/assertion_quality/**`、
+  `scripts/verify_assertion_quality_fixtures.sh`、跨平台实测记录
 - **不改**：`scripts/verify_example_test_wiring.sh`（C1 已拆干净）
 - **依赖**：C1 的 `riscv-mini-test-triage-2026-10` 归档（本 change 承接其维度 2）
 - **风险**：静态分析**不可能完全闭合**（本 change 的存在本身即为此断言）⇒
