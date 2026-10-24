@@ -276,6 +276,21 @@ jobs:
       shell: bash
       run: scripts/verify_example_assertion_quality.sh
 
+    - name: Verify RV32I single-source convergence
+      # ADR-046 guardrail (change rv32i-canonical-convergence-2026-10):
+      #   C1 no same-basename duplicate headers between include/cpu/** and
+      #      examples/riscv-mini/src/** (disambiguation MUST NOT depend on -I order)
+      #   C2 root tests/CMakeLists.txt MUST NOT add examples/riscv-mini/src to -I
+      #   C3 root tests/** MUST NOT #include examples/** paths (layer inversion)
+      #   C4 no zero-consumer headers (dead code MUST be deleted, not "promoted back")
+      # ⚠️ C4's dead-header verdict uses TWO independent evidence sources
+      # (source-level #include reverse lookup + compiler .d dependency files,
+      # with stale-target .d filtered out) and only reports a header as dead
+      # when BOTH agree => conservative (may under-report, never mis-reports
+      # a live header as dead).
+      shell: bash
+      run: scripts/verify_no_duplicate_rv32i_headers.sh
+
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
       # 2026-10-22 changes (samples-regression-guard /
@@ -761,6 +776,21 @@ jobs:
       # (example-assertion-quality-2026-10) owns it, with a fixture set as spec.
       shell: bash
       run: scripts/verify_example_assertion_quality.sh
+
+    - name: Verify RV32I single-source convergence
+      # ADR-046 guardrail (change rv32i-canonical-convergence-2026-10):
+      #   C1 no same-basename duplicate headers between include/cpu/** and
+      #      examples/riscv-mini/src/** (disambiguation MUST NOT depend on -I order)
+      #   C2 root tests/CMakeLists.txt MUST NOT add examples/riscv-mini/src to -I
+      #   C3 root tests/** MUST NOT #include examples/** paths (layer inversion)
+      #   C4 no zero-consumer headers (dead code MUST be deleted, not "promoted back")
+      # ⚠️ C4's dead-header verdict uses TWO independent evidence sources
+      # (source-level #include reverse lookup + compiler .d dependency files,
+      # with stale-target .d filtered out) and only reports a header as dead
+      # when BOTH agree => conservative (may under-report, never mis-reports
+      # a live header as dead).
+      shell: bash
+      run: scripts/verify_no_duplicate_rv32i_headers.sh
 
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
