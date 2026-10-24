@@ -165,7 +165,8 @@ disabled_examples() {
 # ⚠️ 2026-10-23 (change `riscv-mini-test-triage-2026-10`): example 内的
 # Catch2 测试 target 现在通过 `add_test` 进 CTest => 它们**是构建产物**,
 # 但运行覆盖由 **CTest** 提供 (不是本护栏) => 「已构建但未跟踪」检查必须
-# 认得 CTest 这个归属, 否则会把 18 个已被 CTest 覆盖的测试误判为「无归属」。
+# 认得 CTest 这个归属, 否则会把已被 CTest 覆盖的测试误判为「无归属」
+# (数量随 CTest 变化 ⇒ 刻意不写死数字)。
 # 判据用 `ctest -N` (CTest 条目的**唯一真相**), 而不是解析 CMake 源码。
 # 一个名字是否仍是**已声明**的 CMake target（跨所有 CMakeLists）。
 # ⚠️ 用于区分两种「已构建但无归属」：

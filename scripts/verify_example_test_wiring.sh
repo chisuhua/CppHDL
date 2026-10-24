@@ -234,9 +234,16 @@ while IFS= read -r src; do
         [ "$msrc" = "$src" ] && owners="$owners $mtarget"
     done < "$MAP"
 
+    # ⚠️ 判据 MUST 与 delta 的措辞**逐字一致**：「被某个**已进 CTest** 的 target
+    #    编译」（delta：example-runtime-coverage §测试源文件 MUST 被编译）。
+    #    原先还接受「被 example 运行护栏跟踪」⇒ 那是 delta **明令禁止**的第三态
+    #    （「MUST NOT 仅依赖 run_all_ported_tests.sh 的跟踪集合来获得运行覆盖」）
+    #    ⇒ 护栏判 OK 而 delta 应为违规 = **MUST 无机制**（第八轮 SHOULD_FIX）。
+    #    实测当前 14 个 example 域 CTest 条目**全部**来自 CTEST_LIST，
+    #    TRACKED_LIST 的 28 个全是 demo（不编译 examples/**/tests/ 下的源）⇒ 收紧无影响。
     covered=0
     for t in $owners; do
-        if grep -qx -- "$t" "$CTEST_LIST" || grep -qx -- "$t" "$TRACKED_LIST"; then
+        if grep -qx -- "$t" "$CTEST_LIST"; then
             covered=1
             break
         fi

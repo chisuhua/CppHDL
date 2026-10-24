@@ -30,6 +30,14 @@
 - [ ] T3.2 若 BSD awk 有差异：改用 POSIX 明确定义的构造（哨兵空格法已在 C1 采用）
 - [ ] T3.3 在 proposal 里记录实测平台与结果（不写「假定 OK」）
 
+## Phase 3.5: 失效路径护栏（2026-10-24 第 8 轮审稿新增）
+
+- [ ] T3.5.1 fixture 增两个「分析器失效」形态：
+      ① `analyze_source` 返回空；② awk 在输出 `A`/`S` 之后 `exit 3`
+      ⇒ 两者 MUST 都被护栏报违规（**不是**打出「0 个字面用例」的假 OK）
+- [ ] T3.5.2 护栏 MUST 有**结束标记**（`E` 行）以区分「完整跑完」与「中途退出」
+- [ ] T3.5.3 `SRC_LIST` 为空 ⇒ MUST 报违规（否则两个循环都不执行 ⇒ 假绿）
+
 ## Phase 4: 验收
 
 - [ ] T4.1 `bash scripts/verify_example_assertion_quality.sh` 绿

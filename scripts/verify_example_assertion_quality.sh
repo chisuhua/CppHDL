@@ -238,6 +238,9 @@ END {
         } else body = body ch
         pos++
     }
+    # ⚠️ 结束标记：证明 awk **完整执行到底**（没在中间出错退出）。
+    #    调用方据此判 fail-closed（分析器半途失败 ⇒ 无此标记 ⇒ 报违规）。
+    printf "E %d\n", nc
 }' "$1"
 }
 
@@ -262,6 +265,11 @@ trap 'rm -f "$SRC_LIST"' EXIT INT TERM
 
 echo "=== verify_example_assertion_quality: examples 测试断言质量护栏 ==="
 note "examples 测试源文件总数：$(wc -l < "$SRC_LIST" | tr -d ' ') 个"
+# ⚠️ 源文件集合为空 ⇒ 两个 while 循环都不执行 ⇒ violations=0 ⇒ 假绿。
+#    （例如 `examples/` 被改名/移动 ⇒ 枚举不到任何源文件。）
+if [ ! -s "$SRC_LIST" ]; then
+    violation "未枚举到任何 examples 测试源文件（examples/ 目录结构异常？）—— 空集合 MUST 视为违规"
+fi
 
 # ---------------------------------------------------------------------------
 # C4 可执行断言数下限（防「断言被删除/注释掉/条件编译掉」；**不防**等量替换）+ C4b 逐用例下限
@@ -274,6 +282,11 @@ while IFS= read -r src; do
     min="$(printf '%s\n' "$CH4_ANCHOR" | awk -F'|' -v f="$src" '$1==f {print $3; exit}')"
     if [ -z "$min" ]; then
         violation "$src 不在 CH4_ANCHOR 中 —— 新增测试源 MUST 登记一行（含真断言数下限）"
+        continue
+    fi
+    as_out_full="$(analyze_source "$src" 2>/dev/null || true)"
+    if ! printf '%s\n' "$as_out_full" | grep -q '^E '; then
+        violation "$src 的断言分析**未完整执行**（缺少结束标记）—— 分析器中途失败 MUST 视为违规"
         continue
     fi
     n="$(real_assert_count "$src")"
@@ -306,10 +319,24 @@ echo "--- C4b: 逐用例 MUST ≥ 1 条可执行断言 ---"
 while IFS= read -r src; do
     [ -z "$src" ] && continue
     # ⚠️ 只调 `analyze_source` **一次**（原先调 3 次：C4 的 real_assert_count + 这里 2 次）
-    as_out="$(analyze_source "$src")"
+    as_out="$(analyze_source "$src" 2>/dev/null || true)"
     ncases="$(printf '%s\n' "$as_out" | grep -c '^C ' || true)"
     nskip="$(printf '%s\n' "$as_out" | awk '/^S /{print $2; exit}')"
     zero="$(printf '%s\n' "$as_out" | awk '/^C / && $2 == 0 { $1=""; $2=""; sub(/^ +/, ""); print }')"
+    # ⚠️ **fail-closed**（第八轮对抗审稿 BLOCKER-1）：C4b MUST 与 C4 一样，在
+    #    **分析器半途失败**时报违规，而不是打出假 OK。
+    #    失效形态（实测复现）：① `analyze_source` 返回空 ⇒ `as_out` 为空；
+    #      ② awk 在输出 `A`/`S` 之后**出错退出** ⇒ `as_out` 非空但**没有结束标记 `E`**
+    #      ⇒ 逐用例扫描根本没跑 ⇒ 原实现会打印「0 个字面用例，每个都 ≥ 1 条断言」
+    #      且 `violations` 保持 0 ⇒ **假绿**（16 个文件全绿、exit 0）。
+    if [ -z "$as_out" ]; then
+        violation "$src 的断言分析**没有任何输出** —— 分析器失效 MUST 视为违规，不得静默放行"
+        continue
+    fi
+    if ! printf '%s\n' "$as_out" | grep -q '^E '; then
+        violation "$src 的断言分析**未完整执行**（缺少结束标记）—— 分析器中途失败 MUST 视为违规"
+        continue
+    fi
     if [ -n "$zero" ]; then
         while IFS= read -r z; do
             [ -n "$z" ] && violation "$src 的用例「$z」有 0 条可执行断言（只有 SUCCEED 之类）—— MUST 补断言或删除并登记"

@@ -287,10 +287,10 @@ C3b 对不在 CTest 的 allowlist 行改为报 STALE（原先静默跳过 ⇒ �
 - [x] 19 个原「不执行」target 全部有归属：绿的进 CTest、红的修好或删除并登记；
       另 2 个高价值 orphan（`test_interrupt_flow` / example 版 `test_rv32i_pipeline`）
       修好并进 CTest
-- [x] `ctest -N` = **199**（基线 185 + 14；**6** 个 0 断言/不可观测 target 被删（另有 2 个从未进 CMakeLists 的孤儿源文件一并删除，共 8 条留痕）、1 个因 Catch2 exit 4 只构建），
+- [x] `ctest -N` = **199**（基线 185 + 14〔CTEST_TOTAL 口径〕；**6** 个 0 断言/不可观测 target 被删（另有 2 个从未进 CMakeLists 的孤儿源文件一并删除，共 8 条留痕）、1 个因 Catch2 exit 4 只构建），
       与 root `AGENTS.md` `CTEST_TOTAL` 一致
 - [x] `bash scripts/verify_example_test_wiring.sh` 绿
 - [x] `bash scripts/verify_openspec_delta.sh riscv-mini-test-triage-2026-10` 绿
-- [x] `ctest -LE perf` 零回归（**188/188 全绿**，基线 174 + 14 新增）
+- [x] `ctest -LE perf` 零回归（**188/188 全绿**，基线 174 + 14〔non-perf 口径〕）
 - [x] `bash scripts/verify_test_counts.sh` 绿
 - [x] `bash run_all_ported_tests.sh` 绿（28/28，PASS 28 / FAIL 0）
