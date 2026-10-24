@@ -1,7 +1,7 @@
 #include "../../../tests/catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "rv32i_tcm.h"
+#include "cpu/pipeline/rv32i_tcm.h"
 #include "address_decoder.h"
 
 #include <cstdint>

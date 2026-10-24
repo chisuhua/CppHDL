@@ -26,7 +26,7 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "rv32i_hazard_complete.h"   // 来自 examples/riscv-mini/src
+#include "cpu/pipeline/rv32i_hazard_complete.h"   // ADR-046：已提升到 include/cpu/pipeline/
 #include "cpu/cache/i_cache_sync.h"
 #include "cpu/cache/d_cache_sync.h"
 

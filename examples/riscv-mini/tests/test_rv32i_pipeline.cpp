@@ -14,10 +14,11 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../src/rv32i_pipeline_regs.h"
-#include "../src/rv32i_forwarding.h"
-#include "../src/rv32i_branch_predict.h"
-#include "../src/hazard_unit.h"
+#include "cpu/pipeline/rv32i_pipeline_regs.h"
+#include "cpu/pipeline/rv32i_forwarding.h"
+#include "cpu/pipeline/rv32i_branch_predict.h"
+#include "cpu/pipeline/hazard_unit.h"
+#include "forwarding_dut_fixture.h"
 
 #include <iostream>
 
@@ -95,7 +96,9 @@ TEST_CASE("Pipeline Registers - latch / stall / flush behavior", "[pipeline][reg
     //    `ex_rd_addr` 与 `mem_rd_addr` **同时**命中同一个 `id_rs1`（一个置 0）。
     //    实测把优先级倒过来（MEM 盖过 EX）全部用例仍绿。本 SECTION 让两者同时命中。
     SECTION("HazardUnit: EX beats MEM when both match same rs1") {
-        ch::ch_device<HazardUnit> unit;
+        // ⚠️ 2026-10-24（ADR-046 D3 #14）：前推数据由 `chlib::ForwardingMux` 承担 ⇒
+        //    DUT 改为组合（断言值不变）。
+        ch::ch_device<riscv_test::ForwardingDut> unit;
         ch::Simulator sim(unit.context());
 
         sim.set_input_value(unit.instance().io().id_rs1_addr, 5);
@@ -127,7 +130,9 @@ TEST_CASE("Pipeline Registers - latch / stall / flush behavior", "[pipeline][reg
 // 测试用例 2: HazardUnit 前推逻辑（匹配当前 API）
 // ============================================================================
 TEST_CASE("HazardUnit: Forwarding EX hazard", "[hazard][forwarding]") {
-    ch::ch_device<HazardUnit> unit;
+    // ⚠️ 2026-10-24（ADR-046 D3 #14）：前推数据由 `chlib::ForwardingMux` 承担 ⇒
+    //    DUT 改为组合（断言值不变）。
+    ch::ch_device<riscv_test::ForwardingDut> unit;
     ch::Simulator sim(unit.context());
     
     // ID 阶段读寄存器 x1

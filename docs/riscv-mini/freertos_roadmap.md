@@ -54,9 +54,9 @@ Phase D (SoC+Peripherals) ──→ Phase E (FreeRTOS)
 
 | File | Description |
 |------|-------------|
-| `examples/riscv-mini/src/rv32i_csr.h` | 16-entry CSR register bank: mstatus, mie, mtvec, mscratch, mepc, mcause, mtval, mip |
-| `examples/riscv-mini/src/rv32i_system.h` | SYSTEM instruction executor: csrrw/csrrs/csrrc variants, mret, ecall, ebreak |
-| `examples/riscv-mini/src/rv32i_decoder.h` (modify) | Add SYSTEM opcode (0b1110011) handling |
+| `include/cpu/riscv/rv32i_csr.h` | 16-entry CSR register bank: mstatus, mie, mtvec, mscratch, mepc, mcause, mtval, mip |
+| `include/cpu/riscv/rv32i_system.h`（⚠️ **当前不存在** —— ADR-046 D4 已作为零消费者头删除） | SYSTEM instruction executor: csrrw/csrrs/csrrc variants, mret, ecall, ebreak |
+| `include/cpu/pipeline/rv32i_decoder.h` (modify) | Add SYSTEM opcode (0b1110011) handling |
 | `examples/riscv-mini/rv32i_system_test.cpp` | CSR read/write tests, MRET entry/return test |
 
 ### Critical CSR Registers
@@ -81,7 +81,7 @@ Phase D (SoC+Peripherals) ──→ Phase E (FreeRTOS)
 
 ### Current State Analysis
 
-The existing `Rv32iPipeline` in `examples/riscv-mini/src/rv32i_pipeline.h` has:
+The existing `Rv32iPipeline` in `include/cpu/pipeline/rv32i_pipeline.h` has:
 - ✅ All 5 stage components defined (IfStage, IdStage, ExStage, MemStage, WbStage)
 - ✅ Forwarding, hazard detection, branch predictor
 - ❌ TODO stubs in describe() — e.g., `mem_stage.io().mem_valid <<= ch_bool(true)`
@@ -93,10 +93,10 @@ The existing `Rv32iPipeline` in `examples/riscv-mini/src/rv32i_pipeline.h` has:
 
 | File | Description |
 |------|-------------|
-| `examples/riscv-mini/src/rv32i_pipeline.h` (rewrite) | Complete IF→ID→EX→MEM→WB wiring, all signals connected |
-| `examples/riscv-mini/src/rv32i_control.h` | Main control unit: opcode → reg_write, alu_src, mem_read, mem_write, branch, jump |
-| `examples/riscv-mini/src/rv32i_tcm.h` (modify) | Add `loadProgram(vector<uint32_t>)` API, firmware initialization |
-| `examples/riscv-mini/src/rv32i_cpu.h` | Top-level CPU: pipeline + I-TCM + D-TCM, `step()` function |
+| `include/cpu/pipeline/rv32i_pipeline.h` (rewrite) | Complete IF→ID→EX→MEM→WB wiring, all signals connected |
+| `include/cpu/pipeline/rv32i_control.h`（⚠️ **当前不存在** —— ADR-046 D4 已作为零消费者头删除） | Main control unit: opcode → reg_write, alu_src, mem_read, mem_write, branch, jump |
+| `include/cpu/pipeline/rv32i_tcm.h` (modify) | Add `loadProgram(vector<uint32_t>)` API, firmware initialization |
+| `include/cpu/pipeline/rv32i_pipeline.h`（⚠️ `rv32i_cpu.h` 从不存在） | Top-level CPU: pipeline + I-TCM + D-TCM, `step()` function |
 | `examples/riscv-mini/tests/test_pipeline_execution.cpp` | Load raw instructions, tick N cycles, verify results |
 
 ### Pipeline Wiring Checklist
@@ -121,8 +121,8 @@ The existing `Rv32iPipeline` in `examples/riscv-mini/src/rv32i_pipeline.h` has:
 | File | Description |
 |------|-------------|
 | `include/chlib/clint.h` | CLINT model: 64-bit mtime counter, mtimecmp, generates MTIP signal |
-| `examples/riscv-mini/src/rv32i_exception.h` | Exception detection, cause encoding, mtvec dispatch |
-| `examples/riscv-mini/src/rv32i_pipeline.h` (modify) | Add `ch_in<ch_bool> mtip` IRQ input pin |
+| `include/cpu/riscv/rv32i_exception.h` | Exception detection, cause encoding, mtvec dispatch |
+| `include/cpu/pipeline/rv32i_pipeline.h` (modify) | Add `ch_in<ch_bool> mtip` IRQ input pin |
 | `examples/riscv-mini/tests/test_exception_flow.cpp` | Trap entry → verify mepc/mcause → MRET → verify PC restored |
 | `examples/riscv-mini/tests/test_timer_interrupt.cpp` | CLINT triggers MTIP → CPU catches → executes handler → MRET returns |
 
@@ -168,9 +168,9 @@ Phase MEM/WB boundary:
 
 | File | Description |
 |------|-------------|
-| `examples/riscv-mini/src/apb_interconnect.h` | Address decoder, CPU → multiple peripherals |
-| `examples/riscv-mini/src/uart_16550.h` | Simplified UART (tx buffer, rx buffer) |
-| `examples/riscv-mini/src/rv32i_soc.h` | SoC top-level: CPU + ROM + RAM + CLINT + UART |
+| `include/cpu/pipeline/apb_interconnect.h` | Address decoder, CPU → multiple peripherals —— ⚠️ **待新建**（当前不存在）|
+| `include/cpu/pipeline/uart_16550.h` | Simplified UART (tx buffer, rx buffer) —— ⚠️ **待新建**（当前不存在）|
+| `examples/riscv-mini/src/rv32i_soc.h` | SoC top-level: CPU + ROM + RAM + CLINT + UART —— ⚠️ **当前不存在**（2026-10-20 作为零引用孤儿头删除；SoC 顶层现为 `examples/riscv-mini/src/rv32i_pipeline_top.h`，ADR-046 D3 #15）|
 | `include/chlib/firmware_loader.h` | Parse RISC-V ELF/.hex → load into ch_mem vectors |
 | `docs/memory_map.md` | Memory map documentation |
 | `examples/riscv-mini/tests/test_soc_integration.cpp` | Load firmware, tick simulation, verify UART output |

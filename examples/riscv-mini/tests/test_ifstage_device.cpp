@@ -11,7 +11,7 @@
 #include "../../../tests/catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../../include/cpu/pipeline/stages/if_stage.h"
+#include "cpu/pipeline/stages/if_stage.h"
 
 using namespace ch::core;
 using namespace riscv;

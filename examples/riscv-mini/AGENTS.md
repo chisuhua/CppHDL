@@ -3,7 +3,8 @@
 Child of root `AGENTS.md`.
 
 ## OVERVIEW
-Partial RV32I 5-stage pipeline implementation. Phases 1-3 pass, full pipeline has compile errors.
+RV32I 5-stage pipeline 的**示例与测试**。微架构组件本身已收敛到 `include/cpu/`
+（本目录只留 SoC 顶层，ADR-046）。Phases 1-3 pass.
 
 ## STRUCTURE
 ```
@@ -12,13 +13,11 @@ examples/riscv-mini/
 ├── rv32i_phase1_test.cpp    # RegFile + ALU + Decoder
 ├── rv32i_phase2_test.cpp    # Branch + Jump (13/13)
 ├── rv32i_phase3_test.cpp    # Load/Store (13/13)
-├── src/                     # Pipeline stages + components
-│   ├── forwarding.h         # Data forwarding mux
-│   ├── hazard_detection.h   # Hazard detection unit
-│   ├── branch_predictor_v2.h # BHT + BTB predictor
-│   ├── i_cache_prefetch.h   # I-Cache wrapper (instance ICacheSync, handoff §3.4)
-│   ├── d_cache_write_buffer.h # D-Cache wrapper (instance DCacheSync, handoff §3.4)
-│   └── stages/              # IF/ID/EX/MEM/WB stage headers
+├── src/                     # ⚠️ 只剩 **1** 个头（SoC 顶层）
+│   └── rv32i_pipeline_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
+│                             #  ⚠️ 当前**零消费者**（唯一消费者 test_pipeline_smoke
+│                             #  在 C1 被删除）⇒ 登记在单源化护栏的豁免表，
+│                             #  归位条件 = C3（rv32i-soc-dual-parity-2026-10）
 └── tests/                   # ✅ 14 个 Catch2 target 已注册进 CTest
     ├── test_*.cpp           # 16 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
@@ -46,7 +45,13 @@ examples/riscv-mini/
 - 5-stage pipeline `test_rv32i_pipeline.cpp` — ✅ rewritten, passes (5 tests, 23 assertions)；
   **2026-10-23 起以 `test_rv32i_pipeline_example` 注册进 CTest**（此前从未编译）。
   ⚠️ 它与根 `tests/test_rv32i_pipeline.cpp`（12 用例）**不是**副本关系：前者测
-  example 侧**前推启用版** `hazard_unit.h`，后者测 `rv32i_core.h` 的 `HazardDetectionUnit`。
+  **前推通路**（`HazardUnit` + `chlib::ForwardingMux` 组合 DUT，见
+  `tests/forwarding_dut_fixture.h`），后者测 `hazard_detection_unit.h` 的
+  `HazardDetectionUnit`。
+  ⚠️ 2026-10-24（ADR-046 D3 #14）：前推数据 mux 从 `HazardUnit` 拆到
+  **既有的** `chlib::ForwardingMux` —— 因为 mux 留在 `HazardUnit` 里并接进真实
+  流水线装配会形成**组合环**（实测 `FATAL: Cycle detected in IR graph during
+  topological sort`）。断言的**期望值不变**。
 - `test_interrupt_flow.cpp` — ✅ **2026-10-23 修好并注册进 CTest**（10 用例 / 28 断言；
   覆盖 CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET）。修它时挖出
   `include/cpu/riscv/clint.h` 的**真实 RTL bug**：地址解码用 `bits<1,0>` 而非
@@ -58,12 +63,21 @@ examples/riscv-mini/
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Forwarding logic | `src/forwarding.h` |
-| Hazard detection | `src/hazard_detection.h` |
-| Branch predictor | `src/branch_predictor_v2.h` |
-| I-Cache wrapper | `src/i_cache_prefetch.h` (✅ FIXED 2026-10-20) |
-| D-Cache wrapper | `src/d_cache_write_buffer.h` (✅ review PASS 2026-10-20) |
-| Pipeline stages | `src/stages/` |
+| Forwarding (源选择) | `include/cpu/pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）|
+| Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）|
+| Hazard detection | `include/cpu/pipeline/hazard_unit.h` + `hazard_detection_unit.h` |
+| Branch predictor | `include/cpu/pipeline/branch_predictor_v2.h` / `rv32i_branch_predict.h` |
+| I-Cache wrapper | `include/cpu/cache/i_cache_prefetch.h` (✅ FIXED 2026-10-20) |
+| D-Cache wrapper | `include/cpu/cache/d_cache_write_buffer.h` (✅ review PASS 2026-10-20) |
+| Pipeline stages | `include/cpu/pipeline/stages/` |
+| ALU / RegFile / PC / decoder | `include/cpu/pipeline/{rv32i_alu,rv32i_regfile,rv32i_pc,rv32i_decoder}.h` |
+| SoC 顶层（唯一留在本目录的头）| `src/rv32i_pipeline_top.h` |
+
+> ⚠️ **2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）**：
+> 本目录的 `src/` 曾有 **32** 个头，其中 10 组与 `include/cpu/` **同名**
+> （消歧纯靠 `-I` 顺序 ⇒ 调序即静默换实现）⇒ 已收敛到**只剩 1 个**
+> （SoC 顶层）。所有可复用的微架构组件现在都在 `include/cpu/`。
+> 护栏：`scripts/verify_no_duplicate_rv32i_headers.sh`。
 
 ## PHASE GATES
 Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**. For riscv-mini:

@@ -5,9 +5,9 @@
  */
 
 #include "ch.hpp"
-#include "src/rv32i_regfile.h"
-#include "src/rv32i_alu.h"
-#include "src/rv32i_decoder.h"
+#include "cpu/pipeline/rv32i_regfile.h"
+#include "cpu/pipeline/rv32i_alu.h"
+#include "cpu/pipeline/rv32i_decoder.h"
 #include "component.h"
 #include "simulator.h"
 #include "codegen_verilog.h"

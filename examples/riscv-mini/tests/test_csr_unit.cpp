@@ -21,8 +21,8 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../../include/cpu/riscv/rv32i_csr.h"
-#include "../../include/cpu/riscv/rv32i_exception.h"
+#include "cpu/riscv/rv32i_csr.h"
+#include "cpu/riscv/rv32i_exception.h"
 
 #include <iostream>
 

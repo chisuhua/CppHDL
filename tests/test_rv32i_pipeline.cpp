@@ -22,10 +22,10 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../examples/riscv-mini/src/rv32i_pipeline_regs.h"
-#include "../examples/riscv-mini/src/rv32i_forwarding.h"
-#include "../examples/riscv-mini/src/rv32i_branch_predict.h"
-#include "../examples/riscv-mini/src/rv32i_core.h"
+#include "cpu/pipeline/rv32i_pipeline_regs.h"
+#include "cpu/pipeline/rv32i_forwarding.h"
+#include "cpu/pipeline/rv32i_branch_predict.h"
+#include "cpu/pipeline/hazard_detection_unit.h"
 
 // 注: rv32i_core_simple.h 是不完整的骨架实现 (使用 ch_var/CH_PROCESS 等
 // 未实现的 API), 此处仅前向声明 Rv32iCore 类用于测试用例保留.

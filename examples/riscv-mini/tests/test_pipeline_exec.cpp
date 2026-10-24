@@ -21,10 +21,11 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../src/rv32i_tcm.h"
-#include "../src/hazard_unit.h"
-#include "../src/rv32i_alu.h"
-#include "../src/rv32i_decoder.h"
+#include "cpu/pipeline/rv32i_tcm.h"
+#include "cpu/pipeline/hazard_unit.h"
+#include "forwarding_dut_fixture.h"
+#include "cpu/pipeline/rv32i_alu.h"
+#include "cpu/pipeline/rv32i_decoder.h"
 
 #include <cstdint>
 
@@ -343,7 +344,10 @@ TEST_CASE("Pipeline: BNE branch encoding", "[pipeline][branch]") {
 }
 
 TEST_CASE("Pipeline: Data forwarding", "[pipeline][forward]") {
-    ch::ch_device<HazardUnit> hazard;
+    // ⚠️ 2026-10-24（ADR-046 D3 #14）：收敛后前推数据 mux 由 `chlib::ForwardingMux`
+    //    承担（`HazardUnit` 保持唯一一份且不带 mux —— 带 mux 接进流水线会成组合环）。
+    //    ⇒ DUT 改为「HazardUnit + ForwardingMux」组合；**断言值不变**。
+    ch::ch_device<riscv_test::ForwardingDut> hazard;
     ch::Simulator sim(hazard.context());
     
     SECTION("Forwarding: EX to ID (EX hazard)") {
@@ -496,7 +500,9 @@ TEST_CASE("Pipeline: Load-Use stall", "[pipeline][hazard][load-use]") {
 }
 
 TEST_CASE("Pipeline: Multi-instruction hazard chain", "[pipeline][hazard][chain]") {
-    ch::ch_device<HazardUnit> hazard;
+    // ⚠️ 2026-10-24（ADR-046 D3 #14）：前推数据由 `chlib::ForwardingMux` 承担 ⇒
+    //    DUT 改为组合（断言值不变）。
+    ch::ch_device<riscv_test::ForwardingDut> hazard;
     ch::Simulator sim(hazard.context());
     
     SECTION("Chain: First ADD forwarding to second ADD") {

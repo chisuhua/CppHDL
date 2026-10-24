@@ -6,7 +6,7 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "../examples/riscv-mini/src/rv32i_hazard_complete.h"
+#include "cpu/pipeline/rv32i_hazard_complete.h"
 #include "component.h"
 #include "core/context.h"
 #include "device.h"

@@ -36,6 +36,12 @@ state of CPU forwarding infrastructure:
 | `include/cpu/hazard/...` | — | (missing dir) | 0 |
 | `examples/riscv-mini/src/rv32i_forwarding.h` | (own ns) | — | 1 (`rv32i_core.h`, `tests/test_rv32i_pipeline.cpp`) |
 
+> ⚠️ **2026-10-24 更新（ADR-046 `rv32i-canonical-home`）**：本表中的路径已随 C2 收敛而
+> 变更 —— `examples/riscv-mini/src/rv32i_forwarding.h` → **`include/cpu/pipeline/rv32i_forwarding.h`**
+> （namespace 仍是 `riscv`，ADR-046 D8）；`rv32i_core.h` → **`include/cpu/pipeline/hazard_detection_unit.h`**（改名，ADR-046 D8）。
+> ⇒ §2.2「example 下的组件**无 canonical home**」的表述**已被 ADR-046 D6 修正**：
+> 它们现在**有** canonical home（`include/cpu/`），只是当时尚未迁移。
+
 So **forwarding.h has exactly one consumer** (a smoke test) and
 is functionally distinct from `riscv::HazardUnit` (which is the
 real production forwarding/hazard logic in `examples/riscv-mini`).

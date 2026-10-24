@@ -19,7 +19,7 @@
 #include "../../../tests/catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../src/rv32i_tcm.h"
+#include "cpu/pipeline/rv32i_tcm.h"
 
 #include <cstdint>
 #include <cstdlib>

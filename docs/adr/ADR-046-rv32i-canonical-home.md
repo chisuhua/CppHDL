@@ -279,10 +279,44 @@ C2 的代码改动 MUST 与 capability delta **同批落地**（新 capability `
 | 项 | 状态 |
 |---|---|
 | ADR 裁决（本文件）落盘 | ✅ 2026-10-23 |
-| 强前置 C1 `riscv-mini-test-triage-2026-10` | ⏳ 未开始 |
-| C2 `rv32i-canonical-convergence-2026-10` 实施 D1–D12 | ⏳ 未开始（等 C1） |
+| 强前置 C1 `riscv-mini-test-triage-2026-10` | ✅ 2026-10-24 归档 |
+| C2 `rv32i-canonical-convergence-2026-10` 实施 D1–D12 | ✅ 2026-10-24（`examples/riscv-mini/src/` 32 → **1** 个头） |
 | C2 archive 后回填本表（标 `executed`） | ⏳ |
 | 下游 C3 `rv32i-soc-dual-parity-2026-10` | ⏳ 依赖 C2 |
+
+### D3 #14 的落地形态修订（2026-10-24，C2 实施时回报）
+
+D3 #14 原文：「`hazard_unit.h` —— **lib 为权威（仅结构）**；example 副本删；**前推语义不在本 ADR 裁决**（见 D5）」。
+
+C2 实施时实测发现 **D3 #14 与 D5 互斥**，并据此修订落地形态：
+
+- 两版**端口列表完全相同**，差异只在数据 mux。lib 版**必须**禁用 mux：
+  把 mux 搬进 lib 版 ⇒ **5 个 target 直接红**（`FATAL: Cycle detected in IR graph
+  during topological sort`，`top.ex_stage._lt_lt`）。根因：`hazard_unit` 一旦接入
+  真实流水线装配，`hazard.rs1_data → ex_alu_result → ex_stage → id_stage →
+  reg_file → hazard` 形成**组合环**（全链路无寄存器/存储器节点）。
+  `git show bf78367`（2026-04-15，"Phase F - IR cycle resolution"）证明 lib 版
+  的注释「已禁用：会导致 IR 图循环依赖」是**事故记录**，不是臆测。
+- ⇒ 「删 example 副本 + 消费者重指 lib」对 3 个 example 消费者是**功能回退**
+  （它们确实断言「前推后的数据」）⇒ 不能照字面执行。
+- ⇒ **C2 的裁决**：数据 mux 拆到**既有的** `chlib::ForwardingMux`
+  （`include/chlib/forwarding.h:183-246`，档位语义与原 mux **逐档等价**：
+  0→REG / 1→EX / 2→MEM）⇒ `HazardUnit` 保持**唯一一份**且**不带** mux；
+  3 个测试改用组合 DUT（`examples/riscv-mini/tests/forwarding_dut_fixture.h`）。
+  **零新增组件、断言值不变、覆盖不丢。**
+- ⇒ **D5 悬置的问题仍未裁决**：lib 流水线**仍然不接**数据前推
+  （`rv32i_pipeline.h` 仍不消费 `hazard.io().rs1_data`）。
+  ⚠️ 另发现（**不在 C2 范围**，须独立 ADR）：`rv32i_pipeline.h` 的
+  `hazard.io().ex_rd_addr` / `mem_rd_addr` 接的是 **ID 级当前指令自己的 rd**
+  ⇒ 即使破环，前推语义也是错的（正确前推源应为 EX/MEM 级**流水线寄存器**）。
+
+### D5 的补充表述（2026-10-24）
+
+D5 说「前推语义（启用 / 禁用 / 重构为真正的转发通路）MUST 单独立项」。
+C2 做的是「把**已存在**的 mux 能力从 `HazardUnit` 挪到已有组件」——
+**不新增、不删除任何前推能力**，也不裁决「流水线该不该有前推」
+⇒ D5 的实质**保留**，其待裁决范围**扩大**为：流水线前推的**数据源**
+（应为 EX/MEM 流水线寄存器）与**接线**（`ex_rd_addr` / `mem_rd_addr` 的自我匹配缺陷）。
 
 ## 6. 参考
 

@@ -15,10 +15,15 @@ function(riscv_mini_unit_test TEST_NAME TEST_SOURCE)
 endfunction()
 
 # Catch2 集成测试(链接 catch_amalgamated)
-# 重要: include 顺序敏感 — include/cpu/pipeline 必须在 src 之前,
-# 否则 #include "rv32i_decoder.h" 优先匹配到 examples/riscv-mini/src/rv32i_decoder.h,
-# 之后 include/cpu/pipeline/rv32i_decoder.h 被 include 时触发 struct 重定义。
-# include/cpu/pipeline 对 4 个非-pipeline 测试是无害的多余路径。
+# ⚠️ 2026-10-24 (change `rv32i-canonical-convergence-2026-10`, ADR-046 D7):
+# 此前此处有一段「include 顺序敏感 — include/cpu/pipeline 必须在 src 之前」的注释,
+# 因为 include/cpu/ 与 src/ 存在 **10 组同 basename 头文件**, 消歧纯靠 -I 顺序
+# (无任何护栏 ⇒ 调序即静默换实现)。
+# ⇒ 收敛后 example/src 只剩 SoC 顶层 (rv32i_pipeline_top.h), **同名头不再存在**
+#   ⇒ -I 顺序**不再**决定实现 ⇒ 该约束**作废**。
+# ⇒ -I 列表里保留 src/ 与 include/cpu/pipeline/ 是为了 (a) SoC 顶层可被 include,
+#   (b) include/cpu/pipeline/stages/*.h 内部的同目录 include ("rv32i_decoder.h")
+#   仍按「includer 自身目录优先」解析。
 # 实现细节：真正的 target 构造在 `_riscv_mini_catch_test_impl` 里，
 # 由两个 wrapper 调用：
 #   riscv_mini_catch_test       —— 进 CTest（add_test）

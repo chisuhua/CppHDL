@@ -34,8 +34,8 @@
 #include "component.h"
 #include "simulator.h"
 
-#include "i_cache_prefetch.h"
-#include "d_cache_write_buffer.h"
+#include "cpu/cache/i_cache_prefetch.h"
+#include "cpu/cache/d_cache_write_buffer.h"
 
 using namespace ch::core;
 using namespace chlib;

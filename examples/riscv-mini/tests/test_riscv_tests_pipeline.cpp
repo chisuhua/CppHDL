@@ -18,8 +18,8 @@
 #include "ch.hpp"
 #include "simulator.h"
 #include "component.h"
-#include "../../include/cpu/pipeline/rv32i_pipeline.h"
-#include "../../include/cpu/pipeline/rv32i_tcm.h"
+#include "cpu/pipeline/rv32i_pipeline.h"
+#include "cpu/pipeline/rv32i_tcm.h"
 
 #include <cstdint>
 #include <cstdlib>

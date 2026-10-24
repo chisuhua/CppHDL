@@ -15,7 +15,7 @@
 #include "ch.hpp"
 #include "simulator.h"
 #include "component.h"
-#include "../../include/cpu/pipeline/hazard_unit.h"
+#include "cpu/pipeline/hazard_unit.h"
 
 using namespace ch::core;
 using namespace riscv;

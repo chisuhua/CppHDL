@@ -4,33 +4,45 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-22 files, ~5,600 lines. All header-only.
+**30 headers, 5,520 lines**（2026-10-24 实测，ADR-046 D9：磁盘是权威）。
+All header-only.
+
+> ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
+> 本目录是 RV32I 微架构的**唯一权威**。此前 `examples/riscv-mini/src/` 存在
+> **10 组同 basename 头文件**，消歧纯靠 `-I` 顺序（无护栏 ⇒ 调序即静默换实现），
+> 且根 `tests/` 反向依赖 example 源码。⇒ 已收敛：`examples/riscv-mini/src/`
+> 现只剩 SoC 顶层 `rv32i_pipeline_top.h`。
+> 护栏：`scripts/verify_no_duplicate_rv32i_headers.sh`（4 条检查）。
 
 ## STRUCTURE
 ```
-include/cpu/
+include/cpu/                             # 30 headers, 5,520 lines（实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
 │   ├── i_cache_complete.h / d_cache_complete.h  # 兼容 shim (= *_sync.h 别名)
-│   ├── i_cache_prefetch.h                    # riscv-mini wrapper (instance ICacheSync)
-│   └── d_cache_write_buffer.h                # riscv-mini wrapper (instance DCacheSync)
-├── pipeline/
-│   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode
-│   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 lines — largest)
-│   ├── rv32i_pipeline.h            # 5-stage top-level
-│   ├── rv32i_tcm.h                # Tightly-coupled memory (ITCM/DTCM)
-│   ├── hazard_unit.h               # Port-based hazard (riscv namespace)
+│   ├── i_cache_prefetch.h                    # wrapper (instance ICacheSync)
+│   └── d_cache_write_buffer.h                # wrapper (instance DCacheSync)
+├── pipeline/                          # 流水线数据通路（ADR-046 D2）
+│   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode (161)
+│   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 — largest)
+│   ├── rv32i_pipeline.h            # 5-stage top-level (247)
+│   ├── rv32i_tcm.h                # Tightly-coupled memory (ITCM/DTCM) (133)
+│   ├── hazard_unit.h               # 冒险检测 + 停顿/冲刷控制 (178)
+│   ├── hazard_detection_unit.h     # Load-Use 冒险检测（独立组件） (65)
+│   ├── rv32i_hazard_complete.h     # 组合式 hazard 单元 (195)
+│   ├── rv32i_alu.h                # ALU (172)
+│   ├── rv32i_regfile.h            # 寄存器堆 (316)
+│   ├── rv32i_pc.h                  # PC (47)
+│   ├── rv32i_forwarding.h         # riscv::ForwardingUnit（源选择） (174)
+│   ├── rv32i_branch_predict.h     # Branch/条件/预测/控制冒险 (475)
+│   ├── branch_predictor_v2.h       # 2-bit 分支预测器 (151)
 │   └── stages/{if,id,ex,mem,wb}_stage.h
-└── riscv/
-    ├── rv32i_control.h             # Control signal generation
-    ├── rv32i_csr.h                 # CSR bank (9 registers, 252 lines)
-    ├── rv32i_exception.h          # Trap entry + MRET
-    ├── rv32i_system.h              # SYSTEM instr (CSRRW/CSRRS/MRET/ECALL)
-    ├── address_decoder.h          # MMIO 6-region decoder
-    ├── clint.h                    # Core Local Interrupt Controller
-    ├── firmware_loader.h          # Intel HEX loader (non-HDL)
-    └── rv32i_soc.h                # Full SoC integration (359 lines)
+└── riscv/                            # 体系结构 / 特权级
+    ├── rv32i_csr.h                 # CSR bank (9 registers, 252)
+    ├── rv32i_exception.h          # Trap entry + MRET (177)
+    ├── address_decoder.h          # MMIO 6-region decoder (119)
+    └── clint.h                    # Core Local Interrupt Controller (130)
 ```
 
 ## NAMESPACE MAP
@@ -38,7 +50,7 @@ include/cpu/
 |-----------|-------|---------|
 | `riscv` | `pipeline/stages/*.h`, `riscv/*.h` | Pipeline stages, decoder, CSR, exception |
 | `chlib` | `cache/*.h` | Cache controllers (`i_cache_*`, `d_cache_*`) — forwarding.h moved to `include/chlib/` per ADR-038 |
-| `cpu` | (no in-tree headers under this namespace) | Historic placeholders `branch_predictor/*.h` and `hazard/*.h` were removed; the live bundle interfaces live under `examples/riscv-mini/src/` and are not part of the main `include/cpu/` graph |
+| `cpu` | (no in-tree headers under this namespace) | Historic placeholders `branch_predictor/*.h` and `hazard/*.h` were removed; their live successors now live under `include/cpu/pipeline/` (`riscv` namespace) |
 | `ch::chlib` | `clint.h` | CLINT timer |
 
 ## KEY FILES
@@ -46,16 +58,22 @@ include/cpu/
 |------|------|
 | 5-stage pipeline | `pipeline/rv32i_pipeline.h` |
 | Pipeline registers | `pipeline/rv32i_pipeline_regs.h` (490 lines) |
-| Instruction decode | `riscv/rv32i_decoder.h` |
+| Instruction decode | `pipeline/rv32i_decoder.h` |
 | CSR registers | `riscv/rv32i_csr.h` |
 | Exception handling | `riscv/rv32i_exception.h` |
-| Full SoC | `riscv/rv32i_soc.h` |
+| ALU | `pipeline/rv32i_alu.h` |
+| Register file | `pipeline/rv32i_regfile.h` |
+| Forwarding (源选择) | `pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）|
+| Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）—— ADR-046 D3 #14 |
+| Branch 预测 / 控制冒险 | `pipeline/rv32i_branch_predict.h` |
+| 冒险检测（Load-Use） | `pipeline/hazard_detection_unit.h` |
 | I-Cache (1-cycle, RV32I L1 默认) | `cache/i_cache_sync.h` (`i_cache_complete.h` 是兼容 shim 别名) |
 | I-Cache (0-cycle, TCM-style) | `cache/i_cache_async.h` |
 | D-Cache (1-cycle, RV32I L1 默认) | `cache/d_cache_sync.h` (`d_cache_complete.h` 是兼容 shim 别名) |
 | D-Cache (0-cycle, TCM-style) | `cache/d_cache_async.h` |
-| I-Cache wrapper (riscv-mini) | `cache/i_cache_prefetch.h` (instance ICacheSync) |
-| D-Cache wrapper (riscv-mini) | `cache/d_cache_write_buffer.h` (instance DCacheSync) |
+| I-Cache wrapper | `cache/i_cache_prefetch.h` (instance ICacheSync) |
+| D-Cache wrapper | `cache/d_cache_write_buffer.h` (instance DCacheSync) |
+| SoC 顶层装配 | `examples/riscv-mini/src/rv32i_pipeline_top.h`（**唯一**留在 example 侧的头；ADR-046 D3 #15）|
 
 ## CONVENTIONS
 - **Pipeline instantiation**: `ch::ch_module<T>` inside `Component::describe()` — see root AGENTS.md
@@ -69,7 +87,8 @@ include/cpu/
 
 ## ANTI-PATTERNS
 - **Namespace inconsistency**: CPU components split across 4 namespaces (`riscv`, `chlib`, `cpu`, `ch::chlib`)
-- **Duplicate forwarding**: `include/chlib/forwarding.h` vs `include/cpu/pipeline/hazard_unit.h` — overlapping functionality (forwarding mover per ADR-038; merge deferred to a future change)
+- **Duplicate forwarding**: `include/chlib/forwarding.h`（`chlib::ForwardingUnit` + `chlib::ForwardingMux`）vs `include/cpu/pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）—— 并存，靠 namespace 区分（ADR-038 §2.3 已裁决「合并留给未来 change」）；`chlib::ForwardingMux` 是 ADR-046 D3 #14 指定的**唯一**数据 mux 实现
+- **把数据 mux 放进 `HazardUnit`**：会与真实流水线装配形成**组合环**（实测 `FATAL: Cycle detected in IR graph during topological sort`；`git show bf78367` 是当年的消环事故记录）⇒ mux MUST 由独立的 `ForwardingMux` 承担
 
 ## TESTS
 Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
@@ -94,8 +113,12 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
 ⇒ examples 子目录的 `add_test()` 是空操作。护栏：
 `scripts/verify_example_test_wiring.sh`（归属守恒 + 数量守恒）。
 
-其余 `examples/riscv-mini/src/` 下的头文件仍**不在**本目录的包含图里
-（它们是 example 专属件或待收敛对象，见 ADR-046 `rv32i-canonical-home`）。
+⚠️ **2026-10-24 收敛后**：`examples/riscv-mini/src/` 只剩 **1** 个头
+（SoC 顶层 `rv32i_pipeline_top.h`，ADR-046 D1 类别 1 / D3 #15）——
+其余 31 个头已删除（17 个死头）或提升到本目录（10 个）或删除重复副本（4 个）。
+`rv32i_pipeline_top.h` 当前**零消费者**（其唯一消费者 `test_pipeline_smoke`
+在 C1 被删除）⇒ 已登记在 `scripts/verify_no_duplicate_rv32i_headers.sh` 的
+零消费者豁免表里，**归位条件 = C3**（`rv32i-soc-dual-parity-2026-10`）落地。
 
 ## PHASE GATES
 Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**.

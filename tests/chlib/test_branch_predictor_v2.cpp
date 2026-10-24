@@ -4,7 +4,7 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "../examples/riscv-mini/src/branch_predictor_v2.h"
+#include "cpu/pipeline/branch_predictor_v2.h"
 #include "component.h"
 #include "core/context.h"
 #include "device.h"

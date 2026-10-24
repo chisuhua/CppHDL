@@ -19,9 +19,9 @@
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../../include/cpu/riscv/rv32i_csr.h"
-#include "../../include/cpu/riscv/rv32i_exception.h"
-#include "../../include/cpu/riscv/clint.h"
+#include "cpu/riscv/rv32i_csr.h"
+#include "cpu/riscv/rv32i_exception.h"
+#include "cpu/riscv/clint.h"
 
 using namespace ch::core;
 using namespace ch::chlib;

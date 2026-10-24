@@ -52,11 +52,10 @@
 #include "dual_backend_fixture.h"
 #include "simulator.h"
 
-#include "../examples/riscv-mini/src/rv32i_branch_predict.h"
-#include "../examples/riscv-mini/src/rv32i_forwarding.h"
-#include "../examples/riscv-mini/src/rv32i_core.h"
-#include "../examples/riscv-mini/src/rv32i_pipeline_regs.h"
-#include "../examples/riscv-mini/src/hazard_unit.h"
+#include "cpu/pipeline/rv32i_branch_predict.h"
+#include "cpu/pipeline/rv32i_forwarding.h"
+#include "cpu/pipeline/hazard_detection_unit.h"
+#include "cpu/pipeline/rv32i_pipeline_regs.h"
 
 using namespace ch;
 using namespace ch::core;

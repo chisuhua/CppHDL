@@ -14,7 +14,7 @@
 #include "ch.hpp"
 #include "simulator.h"
 #include "component.h"
-#include "../../include/cpu/pipeline/rv32i_pipeline.h"
+#include "cpu/pipeline/rv32i_pipeline.h"
 
 using namespace ch::core;
 using namespace riscv;

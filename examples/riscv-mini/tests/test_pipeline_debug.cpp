@@ -32,13 +32,13 @@
 #include "../../../tests/catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "simulator.h"
-#include "../../include/cpu/pipeline/rv32i_pipeline.h"
-#include "../../include/cpu/pipeline/hazard_unit.h"
-#include "../../include/cpu/pipeline/stages/if_stage.h"
-#include "../../include/cpu/pipeline/stages/id_stage.h"
-#include "../../include/cpu/pipeline/stages/ex_stage.h"
-#include "../../include/cpu/pipeline/stages/mem_stage.h"
-#include "../../include/cpu/pipeline/stages/wb_stage.h"
+#include "cpu/pipeline/rv32i_pipeline.h"
+#include "cpu/pipeline/hazard_unit.h"
+#include "cpu/pipeline/stages/if_stage.h"
+#include "cpu/pipeline/stages/id_stage.h"
+#include "cpu/pipeline/stages/ex_stage.h"
+#include "cpu/pipeline/stages/mem_stage.h"
+#include "cpu/pipeline/stages/wb_stage.h"
 
 using namespace ch::core;
 using namespace riscv;

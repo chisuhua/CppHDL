@@ -51,9 +51,7 @@ enable_testing()
 
 add_catch_test(test_forwarding chlib/test_forwarding.cpp)
 add_catch_test(test_hazard chlib/test_hazard_complete.cpp)
-target_include_directories(test_hazard PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
-target_include_directories(test_forwarding PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
 # RV32I Pipeline integration test (from examples/riscv-mini/tests/)
 # Includes IF/ID/EX/MEM/WB stage registers, forwarding, hazard, branch predictor
@@ -63,7 +61,6 @@ target_include_directories(test_forwarding PRIVATE ${PROJECT_SOURCE_DIR}/example
 # CSR unit test (from examples/riscv-mini/tests/)
 # Tests CSR register reset values, read/write, set/clear, MRET, exceptions, WFI, interrupt logic
 add_catch_test(test_csr_unit ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)
-target_include_directories(test_csr_unit PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
 # ============================================================================
 # chlib 库测试 (26 个测试文件)
@@ -378,7 +375,6 @@ add_catch_test(test_stream_mux_demux chlib/test_stream_mux_demux.cpp)
 
 # Phase 4 集成测试 (chlib 版本)
 add_catch_test(test_phase4_chlib chlib/test_phase4_integration.cpp)
-target_include_directories(test_phase4_chlib PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 
 # ============================================================================
 # 根目录测试 (之前未注册)
@@ -458,7 +454,7 @@ add_catch_test(test_state_machine test_state_machine.cpp)
 # test_pipeline_regs.cpp deleted in cleanup-orphan-code (commit B)
 # The PipelineReg Component coverage lives in:
 #   - tests/chlib/test_forwarding.cpp  (chlib::ForwardingMux + IfIdRegs struct field access)
-#   - examples/riscv-mini/src/rv32i_pipeline.h  (full 5-stage integration via ch::ch_device<Rv32iSoc>)
+#   - cpu/pipeline/rv32i_pipeline.h  (full 5-stage integration via ch::ch_device<Rv32iSoc>)
 # The deleted file was a 2-TEST_CASE compile-only smoke that hit 0 assertions
 # (only `(void)reg;` discard). See openspec/changes/archive/2026-10-15-cleanup-orphan-code/proposal.md.
 add_catch_test(test_fragment test_fragment.cpp)
@@ -551,7 +547,6 @@ add_catch_test(test_multithread test_multithread.cpp)
 add_catch_test(test_operation_results test_operation_results.cpp)
 add_catch_test(test_operation_widths test_operation_widths.cpp)
 add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
-target_include_directories(test_rv32i_pipeline PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 # dual-backend-rv32i-pipeline-behavior-tests: RV32I microarchitecture 子组件
 # dual 行为 parity. _behavior suffix 区别原 test_rv32i_pipeline.cpp (per spec R6 #5
 # SECTION 排除 + R7 "原文件不动"). 原文件 MUST NOT 改动.
@@ -559,7 +554,6 @@ add_dual_backend_test(test_rv32i_pipeline_behavior
     SOURCES test_rv32i_pipeline_behavior.cpp
     TIMEOUT 300
 )
-target_include_directories(test_rv32i_pipeline_behavior PRIVATE ${PROJECT_SOURCE_DIR}/examples/riscv-mini/src)
 # test_simplified_creation 已删除 — easy_nodes.h 不再存在
 add_catch_test(test_trace test_trace.cpp)
 add_catch_test(test_user_tracking test_user_tracking.cpp)
