@@ -125,7 +125,7 @@ if (sequential_instr_list_.empty()) { default_clock_instr_ = nullptr; }
 ### R13. example 运行护栏必须认得 CTest 归属
 
 `run_all_ported_tests.sh` 的「已构建但未跟踪」检查只看
-`CH_TRACKED_EXAMPLE_TARGETS` ∪ `disabled_examples.txt` ⇒ 18 个已进 CTest 的
+`CH_TRACKED_EXAMPLE_TARGETS` ∪ `disabled_examples.txt` ⇒ 14 个已进 CTest 的
 riscv-mini 测试二进制会被判为「无归属」。⇒ 该检查须把「已进 `ctest -N`」也算作归属
 （`ctest -N` 是 CTest 条目的唯一真相）。
 

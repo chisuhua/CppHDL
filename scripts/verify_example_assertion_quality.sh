@@ -337,6 +337,16 @@ while IFS= read -r src; do
         violation "$src 的断言分析**未完整执行**（缺少结束标记）—— 分析器中途失败 MUST 视为违规"
         continue
     fi
+    # ⚠️ 结束标记**只证明 awk 跑到 END**，不证明**逐用例扫描真的产出了 `C` 行**。
+    #    失效形态（第九轮对抗审稿 SHOULD_FIX）：源文件里含 raw string
+    #    （`R"( ... )"`）⇒ 其中的裸 `{` / `"` 破坏扫描器的 brace-matching
+    #    ⇒ 一行 `C` 都没产出 ⇒ 原实现会打「0 个字面用例，每个都 ≥ 1 条断言」并
+    #    以 0 违规退出（假绿）。⇒ 逐用例计数 MUST 与 `E` 行携带的字面用例数**相等**。
+    e_nc="$(printf '%s\n' "$as_out" | awk '/^E /{print $2; exit}')"
+    if [ "$ncases" != "$e_nc" ]; then
+        violation "$src 的逐用例计数（$ncases）与分析器报告的字面用例数（$e_nc）不符 —— 逐用例扫描**未完整执行**（如 raw string 破坏 brace-matching）MUST 视为违规"
+        continue
+    fi
     if [ -n "$zero" ]; then
         while IFS= read -r z; do
             [ -n "$z" ] && violation "$src 的用例「$z」有 0 条可执行断言（只有 SUCCEED 之类）—— MUST 补断言或删除并登记"

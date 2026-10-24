@@ -86,7 +86,8 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
 | `test_phase4_chlib` | `tests/chlib/test_phase4_integration.cpp` | Phase-4 chlib / CPU integration smoke (cache 用 `ICacheSync` / `DCacheSync` + hazard) |
 
 `examples/riscv-mini/tests/` 的 Catch2 测试 target 自 2026-10-23 起
-**已注册进 CTest**（change `riscv-mini-test-triage-2026-10`，18 个 target），
+**已注册进 CTest**（change `riscv-mini-test-triage-2026-10`，**14** 个 target；
+另有 1 个 `riscv_mini_catch_test_noctest` 只构建不注册 ⇒ 共 15 个声明），
 由 `examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test()` helper
 统一 `add_test`。⚠️ 此前它们「每次 CI 都编译、却从未被执行」——根因是根
 `CMakeLists.txt` 的 `enable_testing()` 排在 `add_subdirectory(examples)` **之后**

@@ -38,9 +38,12 @@
 # 检查：
 #   C0  源码级：`enable_testing()` MUST 排在 `add_subdirectory(examples)` 之前
 #                （陈旧构建目录会掩盖这个问题 ⇒ 不能只靠 `ctest -N`）。
-#   C1  源文件归属守恒：每个 examples 测试源 MUST 被某个「已进 CTest」或
-#                       「已被 example 运行护栏跟踪」的 target 编译；否则 MUST
-#                       登记在 `examples/disabled_examples.txt`（带理由 + 归位条件）。
+#   C1  源文件归属守恒：每个 examples 测试源 MUST 被某个「**已进 CTest**」的
+#                       target 编译；否则 MUST 登记在
+#                       `examples/disabled_examples.txt`（带理由 + 归位条件）。
+#                       ⚠️ 判据**只认 CTest** ——「被 example 运行护栏跟踪」**不算**
+#                       （delta 明令「MUST NOT 仅依赖 run_all_ported_tests.sh 的
+#                       跟踪集合来获得运行覆盖」⇒ 判据 MUST 与 delta 逐字一致）。
 #   C2  数量守恒：源文件总数 == root `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点。
 #   C3  运行期：examples 的每个 CTest 条目 MUST 跑出**退出码 0** 且
 #              日志**无 error/fatal**（既有例外走显式 allowlist，带 stale 检查）。
