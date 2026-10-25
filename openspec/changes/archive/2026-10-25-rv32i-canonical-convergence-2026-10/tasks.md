@@ -252,4 +252,10 @@
          **任意字符** ⇒ 把每个字符都替换 ⇒ 正则永不匹配）与
          `dep_mentions_basename` 的**参数顺序颠倒**（把 `.d` 路径当成
          basename）⇒ 两者都由新 fixture 暴露（⑨c / ⑩g 转红）。
-- [ ] T8.4 `openspec archive` 合并主 spec + 手写补写 `## Purpose`（归档不会改它）
+- [x] T8.4 `openspec archive` 合并主 spec + 手写补写 `## Purpose`
+      ⇒ 已归档为 `2026-10-25-rv32i-canonical-convergence-2026-10`
+      （`openspec/specs/rv32i-canonical-home/` 新建 6 条 Requirement；
+      `openspec/specs/perf-test-isolation/` +1 条）；两个 spec 的 `## Purpose` 已手写
+      （archive 只写占位句）；`openspec validate rv32i-canonical-home --type spec
+      --strict` = valid（`perf-test-isolation` 的 warning 全部是**既有**
+      11 条正文 >500 字符 —— CLI 1.14.x 新规则，仓库钉 1.4.1，纯净 HEAD 同样红）
