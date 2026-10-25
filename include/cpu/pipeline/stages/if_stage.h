@@ -88,17 +88,18 @@ public:
             select(io().stall, ch_bool(false), ch_bool(true))
         );
         
-        // flush 时 PC 重置为 0 (简化处理，实际应该是分支目标)
-        auto pc_flush_val = select(
-            io().flush,
-            ch_uint<32>(0_d),
-            next_pc_target
-        );
-        
+        // ⚠️ 历史注释「flush 时 PC 重置为 0 (简化处理，实际应该是分支目标)」是一个
+        //    **占位实现**，它让每一次 flush 都把 PC 打回 0 ⇒ 程序每几拍就从头重启
+        //    （SoC 级实测：41 条固件 200 拍只退休 18 条，`perf_branch_mispredict`
+        //    与重启次数同步增长）。flush 的唯一来源是 `hazard.io().flush =
+        //    is_branch & branch_taken`（`hazard_unit.h`），而 `branch_valid` 接的
+        //    正是同一个 `ex_stage.branch_taken` ⇒ flush 时 `next_pc_target`
+        //    已经是分支目标 ⇒ **不需要**任何 flush 覆盖。
+        //
         // PC 寄存器更新
         pc_reg->next = select(
             pc_update_en,
-            pc_flush_val,
+            next_pc_target,
             pc_reg
         );
         
