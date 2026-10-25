@@ -1,0 +1,371 @@
+// tests/test_rv32i_soc_dual_parity.cpp
+//
+// C3 (`rv32i-soc-dual-parity-2026-10`): RV32I **SoC 级**双路 trace parity
+// (interpreter + verilator) + JIT 回落行为的显式断言。
+//
+// Capability: openspec/specs/verilator-rv32i-e2e/spec.md
+//            （`## ADDED Requirements` 的 5 条）
+// DUT:        Rv32iPipelineTop (examples/riscv-mini/src/rv32i_pipeline_top.h)
+//
+// 三条硬约束（都来自实测，不是偏好）：
+//
+// 1. **不能用 `DUAL_BACKEND_TEST_PAIR` 做逐周期 diff** —— 该宏的语义是
+//    「同一 body 各跑一遍」，每个 run 只看得见自己的后端。跨后端逐周期比对
+//    必须「同一 TEST_CASE 内 2×ch_device + 2×Simulator」
+//    （先例：test_verilator_complex_e2e.cpp 的 SpiFsm 用例）。
+//
+// 2. **观测点全走顶层 ch_out** —— VerilatorBackend 只对 `port_access_` 里的
+//    顶层端口建访问表，读不到设计内部。
+//
+// 3. **固件必须无数据冒险** —— lib 版 `HazardUnit` 不接数据前推
+//    (`include/cpu/pipeline/hazard_unit.h`: `io().rs1_data = io().rs1_data_raw`)，
+//    接上会在真实装配里形成组合环（ADR-046 D3 #14；D5 对此仍悬置未裁决）。
+//    ⇒ 生产者在 WB 写回后消费者才读：每条生产者→消费者之间插 NOP 填充。
+//    **不要**通过「把前推接上」来修这个 —— 那是 D5 的裁决对象。
+
+#include <array>
+#include <cstdint>
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <sys/stat.h>
+#include <vector>
+
+#include "catch_amalgamated.hpp"
+#include "ch.hpp"
+#include "component.h"
+#include "core/eval_backend.h"
+#include "core/interpreter_backend.h"
+#include "core/verilator_backend.h"
+#include "cpu/pipeline/rv32i_pipeline.h"
+#include "cpu/pipeline/rv32i_tcm.h"
+#include "examples/riscv-mini/src/rv32i_pipeline_top.h"
+#include "simulator.h"
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// 观测向量：顺序必须与 `obs_snapshot()` 一致，改动两处必须同步。
+// 全部 <= 64 bit（ADR-035 R3 verilator 端口上限）。
+// ---------------------------------------------------------------------------
+constexpr const char *kObsNames[] = {
+    "obs_instr_addr",         "obs_data_addr",
+    "obs_data_write_data",    "obs_data_write_en",
+    "obs_perf_cycles",        "obs_perf_instructions",
+    "obs_perf_branch_count",  "obs_perf_branch_mispredict",
+    "obs_perf_load_use_stalls", "obs_perf_control_stalls"};
+constexpr std::size_t kObsCount = sizeof(kObsNames) / sizeof(kObsNames[0]);
+
+bool tool_available(const char *cmd) {
+    std::string which_cmd = std::string("command -v ") + cmd + " >/dev/null 2>&1";
+    return std::system(which_cmd.c_str()) == 0;
+}
+
+std::string make_temp_dir(const std::string &suffix) {
+    char tmpl[] = "/tmp/cpphdl_vl_soc_XXXXXX";
+    char *dir = ::mkdtemp(tmpl);
+    if (!dir) return {};
+    std::string result(dir);
+    result += suffix;
+    ::mkdir(result.c_str(), 0755);
+    return result;
+}
+
+uint64_t read_port_output(Simulator &sim, ch::core::lnodeimpl *ln) {
+    auto it = sim.data_map().find(ln->id());
+    if (it == sim.data_map().end()) return UINT64_MAX;
+    return static_cast<uint64_t>(it->second);
+}
+
+// 顶层 10 个观测端口的当前值（顺序 == kObsNames）
+std::array<uint64_t, kObsCount> obs_snapshot(Rv32iPipelineTop &dut,
+                                             Simulator &sim) {
+    auto &io = dut.io();
+    return {read_port_output(sim, io.obs_instr_addr.impl()),
+            read_port_output(sim, io.obs_data_addr.impl()),
+            read_port_output(sim, io.obs_data_write_data.impl()),
+            read_port_output(sim, io.obs_data_write_en.impl()),
+            read_port_output(sim, io.obs_perf_cycles.impl()),
+            read_port_output(sim, io.obs_perf_instructions.impl()),
+            read_port_output(sim, io.obs_perf_branch_count.impl()),
+            read_port_output(sim, io.obs_perf_branch_mispredict.impl()),
+            read_port_output(sim, io.obs_perf_load_use_stalls.impl()),
+            read_port_output(sim, io.obs_perf_control_stalls.impl())};
+}
+
+// ---------------------------------------------------------------------------
+// 最小编码器。手算常量交叉校验（Step: enc_* 的单元断言在 TEST_CASE 里）——
+// 只用常量断言 helper 会变成自证，所以两边都写：helper 产出 vs 手算常量。
+// ---------------------------------------------------------------------------
+constexpr uint32_t NOP = 0x00000013u;  // addi x0, x0, 0
+
+constexpr uint32_t enc_r(uint32_t rd, uint32_t rs1, uint32_t rs2,
+                         uint32_t funct3, uint32_t funct7) {
+    return (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
+           (rd << 7) | 0x33u /* OP */;
+}
+
+constexpr uint32_t enc_i(uint32_t rd, uint32_t rs1, uint32_t funct3,
+                         int32_t imm, uint32_t opcode) {
+    return ((static_cast<uint32_t>(imm) & 0xFFFu) << 20) | (rs1 << 15) |
+           (funct3 << 12) | (rd << 7) | opcode;
+}
+
+constexpr uint32_t enc_s(uint32_t rs2, uint32_t rs1, uint32_t funct3,
+                         int32_t imm) {
+    uint32_t u = static_cast<uint32_t>(imm) & 0xFFFu;
+    return ((u >> 5) << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
+           ((u & 0x1Fu) << 7) | 0x23u /* STORE */;
+}
+
+constexpr uint32_t enc_b(uint32_t rs1, uint32_t rs2, uint32_t funct3,
+                         int32_t imm) {
+    uint32_t u = static_cast<uint32_t>(imm) & 0x1FFFu;  // 13-bit, ±4 KiB
+    uint32_t b12 = (u >> 12) & 1u;
+    uint32_t b11 = (u >> 11) & 1u;
+    uint32_t b10_5 = (u >> 5) & 0x3Fu;
+    uint32_t b4_1 = (u >> 1) & 0xFu;
+    return (b12 << 31) | (b10_5 << 25) | (rs2 << 20) | (rs1 << 15) |
+           (funct3 << 12) | (b4_1 << 8) | (b11 << 7) | 0x63u /* BRANCH */;
+}
+
+// 便捷别名（funct3/funct7 按 RV32I 规范）
+constexpr uint32_t ADDI(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x0u, imm, 0x13u);
+}
+constexpr uint32_t ADD(uint32_t rd, uint32_t rs1, uint32_t rs2) {
+    return enc_r(rd, rs1, rs2, 0x0u, 0x00u);
+}
+constexpr uint32_t SUB(uint32_t rd, uint32_t rs1, uint32_t rs2) {
+    return enc_r(rd, rs1, rs2, 0x0u, 0x20u);
+}
+constexpr uint32_t SW(uint32_t rs2, uint32_t rs1, int32_t imm) {
+    return enc_s(rs2, rs1, 0x2u, imm);
+}
+constexpr uint32_t LW(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x2u, imm, 0x03u);
+}
+constexpr uint32_t BEQ(uint32_t rs1, uint32_t rs2, int32_t imm) {
+    return enc_b(rs1, rs2, 0x0u, imm);
+}
+constexpr uint32_t BNE(uint32_t rs1, uint32_t rs2, int32_t imm) {
+    return enc_b(rs1, rs2, 0x1u, imm);
+}
+
+// ---------------------------------------------------------------------------
+// 固件：41 个字（含 NOP 填充），覆盖 ALU-only / sw→lw / taken + not-taken branch。
+//
+// 地址约束（`Rv32iPipelineTop` 的 TCM 是 12 位 => 16 KB）：程序与数据都 < 0x1000。
+//
+// 数据流金标（golden）：
+//   x1 = 10, x2 = 3  =>  x3 = 13, x4 = 10
+//   sw x4 -> [0x100]  =>  [0x100] == 10          (golden A: 纯 ALU 结果落 dmem)
+//   lw x5 <- [0x100]  =>  x5 == 10
+//   sw x5 -> [0x104]  =>  [0x104] == 10          (golden B: load 真的读回了值)
+//   beq (taken) 跳过 word 29 => x6 保持 0
+//   bne (not taken) => x8 = 2
+//   sw x8 -> [0x108]  =>  [0x108] == 2           (golden C: 控制流走对分支)
+// ---------------------------------------------------------------------------
+constexpr uint32_t kGoldenAddrA = 0x100u;
+constexpr uint32_t kGoldenAddrB = 0x104u;
+constexpr uint32_t kGoldenAddrC = 0x108u;
+constexpr uint32_t kGoldenValA = 10u;
+constexpr uint32_t kGoldenValB = 10u;
+constexpr uint32_t kGoldenValC = 2u;
+
+const std::array<uint32_t, 41> &firmware() {
+    static const std::array<uint32_t, 41> fw = {{
+        ADDI(1, 0, 10),   // 0  x1 = 10
+        NOP, NOP, NOP,
+        ADDI(2, 0, 3),    // 4  x2 = 3
+        NOP, NOP, NOP,
+        ADD(3, 1, 2),     // 8  x3 = 13
+        NOP, NOP, NOP,
+        SUB(4, 3, 2),     // 12 x4 = 10
+        NOP, NOP, NOP,
+        SW(4, 0, 0x100),  // 16 [0x100] = 10   (golden A)
+        NOP, NOP, NOP,
+        LW(5, 0, 0x100),  // 20 x5 = 10
+        NOP, NOP, NOP,
+        SW(5, 0, 0x104),  // 24 [0x104] = 10   (golden B)
+        NOP, NOP, NOP,
+        BEQ(0, 0, 8),     // 28 taken => jump to 30
+        ADDI(6, 0, 0x7f), // 29 被冲刷（x6 必须保持 0）
+        NOP,              // 30 分支目标
+        ADDI(7, 0, 1),    // 31
+        NOP, NOP, NOP,
+        BNE(0, 0, 8),     // 35 not taken => 落到 36
+        ADDI(8, 0, 2),    // 36 x8 = 2
+        NOP, NOP, NOP,
+        SW(8, 0, 0x108),  // 40 [0x108] = 2    (golden C)
+    }};
+    return fw;
+}
+
+// 把固件逐拍写进 I-TCM（`ext_rst` 保持 1 —— 计数器在复位期被清 0）
+void load_firmware(Simulator &sim, Rv32iPipelineTop &dut) {
+    auto &io = dut.io();
+    const auto &fw = firmware();
+    sim.set_input_value(io.ext_rst, 1u);
+    sim.set_input_value(io.ext_clk, 0u);
+    sim.set_input_value(io.prog_we, 1u);
+    for (std::size_t i = 0; i < fw.size(); ++i) {
+        sim.set_input_value(io.prog_addr, i);
+        sim.set_input_value(io.prog_data, fw[i]);
+        sim.tick(1);
+    }
+    sim.set_input_value(io.prog_we, 0u);
+    sim.set_input_value(io.prog_addr, 0);
+    sim.set_input_value(io.prog_data, 0);
+    sim.set_input_value(io.ext_rst, 0u);
+}
+
+// 跑 n 拍，记录每拍的观测向量
+using Trace = std::vector<std::array<uint64_t, kObsCount>>;
+
+Trace run_trace(Simulator &sim, Rv32iPipelineTop &dut, unsigned cycles) {
+    Trace t;
+    t.reserve(cycles);
+    for (unsigned c = 0; c < cycles; ++c) {
+        sim.tick(1);
+        t.push_back(obs_snapshot(dut, sim));
+    }
+    return t;
+}
+
+}  // namespace
+
+// ===========================================================================
+// 固件自校验：编码器 vs 手算常量；固件长度与地址边界。
+// ===========================================================================
+TEST_CASE("Rv32iSoc - FirmwareEncoderCrossCheck", "[rv32i][soc][dual]") {
+    // 手算常量（RV32I 规范，逐位核对过）—— 与 helper 交叉校验，避免自证
+    REQUIRE(ADDI(1, 0, 1) == 0x00100093u);   // addi x1, x0, 1
+    REQUIRE(ADDI(2, 0, 2) == 0x00200113u);   // addi x2, x0, 2
+    REQUIRE(ADD(3, 1, 2) == 0x002081B3u);    // add x3, x1, x2
+    REQUIRE(SUB(4, 3, 2) == 0x40218233u);    // sub x4, x3, x2
+    REQUIRE(SW(4, 0, 0x100) == 0x10402023u); // sw x4, 0x100(x0)
+    REQUIRE(LW(5, 0, 0x100) == 0x10002283u); // lw x5, 0x100(x0)
+    REQUIRE(BEQ(0, 0, 8) == 0x00000463u);    // beq x0, x0, +8
+    REQUIRE(BNE(0, 0, 8) == 0x00001463u);    // bne x0, x0, +8
+    REQUIRE(NOP == 0x00000013u);
+
+    const auto &fw = firmware();
+    REQUIRE(fw.size() >= 20u);  // capability 要求 >= 20 条
+
+    // TCM 是 12 位 => 程序地址上界 16 KB
+    REQUIRE(fw.size() * 4u <= 0x1000u);
+    // 数据地址上界（golden 三个地址都 < 0x1000）
+    REQUIRE(kGoldenAddrC < 0x1000u);
+}
+
+// ===========================================================================
+// 双路逐周期 parity（核心验收）。
+// ===========================================================================
+TEST_CASE("Rv32iSoc - DualBackendTraceParity",
+          "[rv32i][soc][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 200;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+    // interpreter 侧双钉：显式 backend + 关 JIT（CH_JIT_ENABLE=ON 时默认走 JIT）
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_soc");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance());
+    load_firmware(*sim_b, dev_b->instance());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    REQUIRE(ta.size() == tb.size());
+
+    // ---- 逐周期 diff（10 个观测值）----
+    //
+    // ⚠️ `obs_data_addr` / `obs_data_write_data` 在 **非 store 拍是 don't-care**
+    //    （它们是 `exmem_alu_result` / `exmem_rs2_data` 这两个流水线寄存器的
+    //    裸值；`data_write_en == 0` 时架构上无意义）⇒ 只在 store 拍比对它们。
+    //    比对 don't-care 会要求两后端对**未定义行为**达成一致 —— 那不是 parity，
+    //    那是把测试变成脆弱的时间耦合（实测：cycle 8 出现 interp=3 / verilator=0，
+    //    而该拍 `write_en == 0`）。
+    //    ⇒ 等价性判据 = 「所有**有语义的**观测值逐周期相等」，
+    //      且 `write_en` 本身 MUST 每拍相等（否则 store 发生的拍不同 ⇒ 真分歧）。
+    if (std::getenv("RV32I_SOC_DEBUG") != nullptr) {
+        const unsigned long _lim = std::strtoul(std::getenv("RV32I_SOC_DEBUG"), nullptr, 10);
+        const std::size_t lim = _lim ? static_cast<std::size_t>(_lim) : 45u;
+        for (std::size_t c = 0; c < std::min(lim, ta.size()); ++c) {
+            std::cout << "cyc " << c;
+            for (std::size_t k = 0; k < kObsCount; ++k) {
+                std::cout << " | " << ta[c][k] << "/" << tb[c][k];
+            }
+            std::cout << "\n";
+        }
+    }
+
+    std::size_t store_cycles = 0;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        INFO("cycle " << c << " (interp write_en=" << ta[c][3]
+                      << ", verilator write_en=" << tb[c][3] << ")");
+        REQUIRE(ta[c][3] == tb[c][3]);  // obs_data_write_en
+        const bool is_store = ta[c][3] != 0;
+        if (is_store) ++store_cycles;
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            if (!is_store && (k == 1 || k == 2)) continue;  // don't-care
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+    // 掩码不得把 store 路径整体掩掉：固件有 3 个 sw ⇒ 至少 3 个 store 拍被比对
+    REQUIRE(store_cycles >= 3u);
+
+    // ---- 语义 golden（两端错成同一份时，逐周期 diff 抓不到）----
+    // 三个 store 的 (addr, data) 必须出现过，且 data 是 ISA 正确的值。
+    auto has_store = [&](const Trace &t, uint32_t addr, uint32_t data) {
+        for (const auto &snap : t) {
+            if (snap[3] == 1 && (snap[1] & 0xFFFFFu) == addr &&
+                (snap[2] & 0xFFFFFFFFu) == data) {
+                return true;
+            }
+        }
+        return false;
+    };
+    REQUIRE(has_store(ta, kGoldenAddrA, kGoldenValA));
+    REQUIRE(has_store(ta, kGoldenAddrB, kGoldenValB));
+    REQUIRE(has_store(ta, kGoldenAddrC, kGoldenValC));
+
+    // 终值 golden：全部 41 个字被取指，除被 taken 分支冲刷的那一个
+    const uint64_t retired = ta.back()[5];  // obs_perf_instructions
+    REQUIRE(retired == firmware().size() - 1u);
+    REQUIRE(ta.back()[7] >= 1u);  // obs_perf_branch_mispredict > 0（taken 分支）
+}

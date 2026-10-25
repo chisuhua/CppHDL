@@ -1,0 +1,104 @@
+// rv32i_pipeline_top.h
+//
+// RV32I SoC 顶层（pipeline + I-TCM + D-TCM）。
+//
+// ⚠️ 端口契约（ADR-046 D10 / D10-rev，2026-10-25 C3
+//    `rv32i-soc-dual-parity-2026-10`）：
+//    - 观测 MUST 走顶层 `ch_out`（verilator 只能读顶层端口）；
+//    - 固件 MUST 能经 `prog_*` 写进 I-TCM（此前本顶层根本没接 TCM 写端口
+//      ⇒ imem 恒 0 ⇒ 只能跑 NOP）；
+//    - 端口集合由 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 C6 快照钉住。
+//
+// ⚠️ TCM 规模 `ADDR_WIDTH = 12`（4096 字 = 16 KB）：
+//    `1 << 20` 字的 `ch_mem` 在 verilator 下是 4 MB 展开数组，对 parity 固件
+//    毫无收益。代价 = **地址高位被截断**（`pc` / 数据地址只看低 12 位）
+//    ⇒ 固件与数据 MUST 落在 < 0x1000。
+//    IF 阶段 `pc_reg` 复位为 0x80000000（`stages/if_stage.h`），其低 12 位为 0
+//    ⇒ 从字 0 开始取指，按 +4 递增。
+//
+// ⚠️ 固件 MUST 无数据冒险：lib 版 `HazardUnit` 不接数据前推
+//    （`pipeline/hazard_unit.h` 的 `io().rs1_data = io().rs1_data_raw`，
+//    接上会在真实装配里形成组合环 —— ADR-046 D3 #14；D5 对此仍悬置）。
+#pragma once
+
+#include "ch.hpp"
+#include "component.h"
+#include "cpu/pipeline/rv32i_pipeline.h"
+#include "cpu/pipeline/rv32i_tcm.h"
+
+using namespace ch::core;
+using namespace riscv;
+
+class Rv32iPipelineTop : public ch::Component {
+public:
+    static constexpr unsigned kTcmAddrWidth = 12;
+
+    __io(
+        // 时钟 / 复位
+        ch_in<ch_bool>          ext_clk;
+        ch_in<ch_bool>          ext_rst;
+
+        // 固件加载（写 I-TCM；加载期保持 ext_rst = 1，计数器不会被污染）
+        ch_in<ch_bool>          prog_we;
+        ch_in<ch_uint<kTcmAddrWidth>> prog_addr;
+        ch_in<ch_uint<32>>      prog_data;
+
+        // 观测输出（verilator 可读；ADR-035 R3：位宽 MUST <= 64）
+        ch_out<ch_uint<32>>     obs_instr_addr;
+        ch_out<ch_uint<32>>     obs_data_addr;
+        ch_out<ch_uint<32>>     obs_data_write_data;
+        ch_out<ch_bool>         obs_data_write_en;
+        ch_out<ch_uint<48>>     obs_perf_cycles;
+        ch_out<ch_uint<48>>     obs_perf_instructions;
+        ch_out<ch_uint<32>>     obs_perf_branch_count;
+        ch_out<ch_uint<32>>     obs_perf_branch_mispredict;
+        ch_out<ch_uint<32>>     obs_perf_load_use_stalls;
+        ch_out<ch_uint<32>>     obs_perf_control_stalls;
+    )
+
+    Rv32iPipelineTop(ch::Component* parent = nullptr,
+                     const std::string& name = "rv32i_pipeline_top")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override {
+        new (io_storage_) io_type;
+    }
+
+    void describe() override {
+        ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};
+        ch::ch_module<InstrTCM<kTcmAddrWidth, 32>> itcm{"itcm"};
+        ch::ch_module<DataTCM<kTcmAddrWidth, 32>> dtcm{"dtcm"};
+
+        // ---- I-TCM：取指 + 固件写 ----
+        itcm.io().addr <<= pipeline.io().instr_addr;
+        itcm.io().write_en <<= io().prog_we;
+        itcm.io().write_addr <<= io().prog_addr;
+        itcm.io().write_data <<= io().prog_data;
+        pipeline.io().instr_data <<= itcm.io().data;
+        pipeline.io().instr_ready <<= itcm.io().ready;
+
+        // ---- D-TCM：load / store ----
+        dtcm.io().addr <<= pipeline.io().data_addr;
+        dtcm.io().wdata <<= pipeline.io().data_write_data;
+        dtcm.io().write <<= pipeline.io().data_write_en;
+        dtcm.io().valid <<= ch_bool(true);
+        pipeline.io().data_read_data <<= dtcm.io().rdata;
+        pipeline.io().data_ready <<= dtcm.io().ready;
+
+        // ---- 时钟 / 复位 ----
+        pipeline.io().rst <<= io().ext_rst;
+        pipeline.io().clk <<= io().ext_clk;
+
+        // ---- 观测输出 ----
+        io().obs_instr_addr <<= pipeline.io().instr_addr;
+        io().obs_data_addr <<= pipeline.io().data_addr;
+        io().obs_data_write_data <<= pipeline.io().data_write_data;
+        io().obs_data_write_en <<= pipeline.io().data_write_en;
+        io().obs_perf_cycles <<= pipeline.io().perf_cycles;
+        io().obs_perf_instructions <<= pipeline.io().perf_instructions;
+        io().obs_perf_branch_count <<= pipeline.io().perf_branch_count;
+        io().obs_perf_branch_mispredict <<= pipeline.io().perf_branch_mispredict;
+        io().obs_perf_load_use_stalls <<= pipeline.io().perf_load_use_stalls;
+        io().obs_perf_control_stalls <<= pipeline.io().perf_control_stalls;
+    }
+};

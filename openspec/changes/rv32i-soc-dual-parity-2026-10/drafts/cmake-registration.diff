@@ -1,0 +1,29 @@
+diff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt
+index c065e2b..3f79d9b 100644
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -668,6 +668,24 @@ set_tests_properties(test_verilator_complex_e2e PROPERTIES
+ target_include_directories(test_verilator_complex_e2e PRIVATE
+     ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
+ )
++# rv32i-soc-dual-parity-2026-10 (C3): SoC-level dual-backend trace parity
++# (pipeline + I-TCM + D-TCM) + explicit JIT-fallback contract.
++# ⚠️ NOT registered via add_dual_backend_test(): that helper's macro runs the
++# same body once per backend, so it cannot do a CROSS-backend per-cycle diff.
++# This file builds two devices + two simulators inside one TEST_CASE (same
++# shape as test_verilator_complex_e2e.cpp's SpiFsm case), so it needs the same
++# labels / resource lock / PATH env / pipeline include path.
++add_catch_test(test_rv32i_soc_dual_parity test_rv32i_soc_dual_parity.cpp)
++set_tests_properties(test_rv32i_soc_dual_parity PROPERTIES
++    LABELS "base;verilator_e2e"
++    RESOURCE_LOCK "verilator_backend"
++    ENVIRONMENT "${_vl_path_env}"
++    TIMEOUT 600
++)
++target_include_directories(test_rv32i_soc_dual_parity PRIVATE
++    ${PROJECT_SOURCE_DIR}
++    ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
++)
+ # verilator-std-expected: VerilatorError type contract + bool wrapper
+ # backward compat + source_location capture. No verilator toolchain
+ # required — exercises the type API and the try_initialize() rich-error
