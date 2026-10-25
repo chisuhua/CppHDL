@@ -66,12 +66,73 @@
 - **AND** 允许清单 MUST 记**期望条数**（防止豁免项静默增加）
 - **AND** 清单项一旦不再成立（该头重新有了消费者）⇒ 护栏 MUST 失败（stale 豁免不得静默残留）
 
-### Requirement: 库 MUST NOT 依赖 example 源码
+#### Scenario: 「stale 豁免」的「已有消费者」MUST 是**真 include 证据**且必须是**当前的**
+
+- **WHEN** 护栏检查允许清单里的某个头是否已不再零消费者
+- **THEN** 「已有消费者」的判据 MUST 是**真 include 证据**（编译器的 `.d` 记录）
+- **AND** 该证据 MUST 是**当前的**：① `.d` 所引用的源文件 MUST 仍存在于磁盘；
+  ② 该源文件 MUST **仍 `#include` 该 basename**（⚠️ 比对对象是 `#include`
+  的**操作数**（引号 / 尖括号内的文本，取最后一段 == basename）——
+  若只查「文本提及」，则**注释**里的提及也会被当成证据；若只比对
+  「行首是 `#include` 的整行」，则行尾注释（`#include "other.h" // foo.h`）
+  的提及仍会被当成证据 ⇒ 收窄到操作数消除了该形态）；
+  ③ 该 `.d` MUST **不早于该源文件**（⚠️ 阈值 = 0）：`.d` 由预处理阶段写出，
+  与源文件 mtime 的间隔常常 < 1s（实测 `g++ -MD` 产出同秒的 `.d`）⇒
+  硬阈值「≥ 1 秒」会**必然**漏判（假阴性）⇒ 用**显式时间差 ≥ 0** 而非裸 `-nt`
+  （macOS 自带 bash 3.2 的 `-nt` 只比秒级 `st_mtime`）
+  （`.d` 是**累积**构建产物 ⇒ TU 被删 / target 被移除后它不会被清掉 ⇒
+  「`.d` 里出现过」**不等于**「现在有消费者」）
+- **AND** ⚠️ **已知误报向量（如实声明，MUST NOT 记成「漏判」）**：
+  条件编译**非激活区**（`#if 0` / `#ifdef`）里的**字面** `#include`
+  仍被计入证据 —— 预处理器语义不在判据 (b) 内
+  （真修需完整预处理器语义：
+  嵌套 `#if` / `#else` ⇒ 当时被否决；实际行为由自测 fixture 钉住 ⇒ 行为变化可见）
+- **AND** 不满足「当前性」时 MUST **降级为警告**（与源① 一致的安全方向），
+  MUST NOT 报违规（破坏性结论 ⇒ 假违规会诱导删掉被**冻结**的 DUT）
+- **AND** MUST NOT 使用「源码里**原文提及**过该 basename」作为「已有消费者」的判据
+  —— 源① 的语义是「任何原文提及 ⇒ 可能 include 过」，它在「判死」方向是保守的
+  （漏报，安全）；若用**同一谓词**证明「已有真实消费者」，方向相反 ⇒
+  一个**纯注释**里的提及即产生假违规，且错误信息会指示「MUST 移除该行」
+  ⇒ 移除后护栏报「硬死头 MUST 删除」⇒ 会诱导删掉被**冻结**的 DUT
+- **AND** 只有「原文提及」而无 `.d` 证据时 ⇒ MUST **只警告**（提请人工确认），
+  且警告措辞 MUST NOT 指示删除允许清单行
+
+#### Scenario: 「零消费者」判定 MUST 只漏报、且其边界由 fail-closed 探针守着
+
+- **WHEN** 护栏判定某头文件零消费者
+- **THEN** 判定 MUST **只漏报**：任何**原文提及**该 basename 的文件（不论
+  `#include` 写成引号 / 尖括号 / 宏 / 续行 / 仓库根相对路径）都 MUST 算作
+  includer ⇒ 代价是注释或文档里的提及也让它判活（**有意**，方向安全）
+- **AND** 该头**自身**的提及（`/** @file foo.h */`）MUST NOT 算作 includer
+  （否则每个头恒活 ⇒ 判定失去判别力）
+- **AND** 源码级证据源的**扫描面** MUST 覆盖仓库自有的 C/C++ 扩展名；
+  出现扫描面**之外**的 C/C++ 扩展名 ⇒ 护栏 MUST 报违规
+  （不得在注释里默默承认覆盖不全）
+- **AND** 扫描面的 **prune 列表 MUST 只包含**（a）第三方 / VCS 元数据目录
+  **与**（b）**构建输出目录**；构建输出目录 MUST 用**纯内容**判定（实测判据：
+  含 `CMakeCache.txt`，**与目录名无关**）⇒ MUST NOT 只按**目录名前缀** prune
+  （`build*` 这类 glob 会连带 prune 掉 `buildtools/`、`builder/` 以及
+  `openspec/specs/build-cpp-standard/` 这类**非构建目录** ⇒ 那里面的
+  消费者既不被扫到、也不被上面的探针报出 ⇒ 活头会被误判成死头）
+- **AND** 允许清单的每条豁免 MUST 是 **3 个 TAB 分隔字段**
+  （路径 / 理由 / 失效条件）⇒ 字段数不符 MUST 报违规
+  （人工编辑破坏格式 ⇒ 理由与失效条件丢失 ⇒ 豁免变成「无期限」，而护栏看不出来）
+- **AND** 该证据源实际处理的 TU 数 MUST 等于扫描面文件数（崩溃 / 少读 ⇒ 违规）
+
+### Requirement: 库测试 MUST NOT 通过 include 路径依赖 example 源码
 
 - **WHEN** 根 `tests/**` 的编译单元需要 RV32I 微架构组件
 - **THEN** 它们 MUST 从 `include/cpu/` 获取
 - **AND** 根 `tests/CMakeLists.txt` MUST NOT 出现指向 `examples/**/src` 的 `-I`
 - **AND** 根 `tests/**` 的任何 TU MUST NOT `#include` `examples/**` 路径
+
+#### Scenario: 护栏覆盖面 MUST 被如实声明
+
+- **WHEN** 本 Requirement 的护栏只覆盖「反向 `-I`」与「反向 `#include`」两种形态
+- **THEN** 覆盖面边界 MUST 被如实记录（不得让护栏 PASS 掩盖未覆盖面）
+- **AND** **第三种**形态 —— 根 `tests/CMakeLists.txt` 把 `examples/**` 下的**源文件本身**
+  编进库测试 target（当前 1 处：编译 `examples/riscv-mini/tests/test_csr_unit.cpp`）
+  —— 是**已知债务**，MUST NOT 被本护栏的 PASS 掩盖
 
 #### Scenario: 反向 -I MUST 被消除
 

@@ -70,11 +70,18 @@ tests/chlib/test_phase4_integration.cpp → rv32i_hazard_complete.h（经 -I 解
 - **零 incluer（12 个）**：`branch_predictor_bundle.h`(133) / `d_tcm.h`(329) /
   `firmware_loader.h`(279) / `hazard_unit_bundle.h`(194) / `i_tcm.h`(255) /
   `rv32i_axi_interface.h`(171) / `rv32i_control.h`(142) / `rv32i_core_simple.h`(324) /
-  `rv32i_isa.h`(243) / `rv32i_regs.h`(160) / `rv32i_system.h`(238)
+  `rv32i_isa.h`(243) / `rv32i_pipeline.h`(207) / `rv32i_regs.h`(160) /
+  `rv32i_system.h`(238)
+  （⚠️ `rv32i_pipeline.h` 指 **example 副本** —— 它的 includer 全部指向 lib 副本
+  `cpu/pipeline/rv32i_pipeline.h`，故 example 副本零消费者；它同时是下面
+  5 个 stage 头的唯一 includer）
 - **传递性死（5 个）**：其唯一 includer 是同样死掉的 example `rv32i_pipeline.h` ⇒
   `stages/{ex,id,if,mem,wb}_stage.h`(988)
 
-12 + 5 = **17**。其中 **8 个**是 `ba04fdb`(2026-06-15, `refactor(riscv-mini): move 8 unused CPU headers to examples/`)
+12 + 5 = **17**（**零消费者**头）。另有 **4 个**「**同名双副本**」被删
+（`hazard_unit.h` / `rv32i_decoder.h` / `rv32i_pipeline_regs.h` / `rv32i_tcm.h`
+—— 它们**有**消费者，只是消费者用的是 lib 副本 ⇒ 不属「零消费者」）⇒ 本 change
+合计删 **21** 个头（17 + 4）。其中 **8 个**是 `ba04fdb`(2026-06-15, `refactor(riscv-mini): move 8 unused CPU headers to examples/`)
 从 `include/cpu/` **移出**的：`branch_predictor_bundle.h` / `d_cache_write_buffer.h` /
 `firmware_loader.h` / `hazard_unit_bundle.h` / `i_cache_prefetch.h` / `rv32i_control.h` /
 `rv32i_soc.h` / `rv32i_system.h` ⇒ 对它们「提升回 `include/cpu/`」是**反向操作**，须逐个裁决。
@@ -227,6 +234,37 @@ C3 的观测点全部重做。
 4. **C4** **硬死头**（两个独立证据源都判定无 includer）MUST 删除；
    ⚠️ 「源码有 includer 但无 TU 编译它」**只警告不违规**（可能是传递性死，
    也可能是 target 名抽取盲区 ⇒ 误报会诱导删掉**活头**）；
+   ⚠️ **源① = basename 原文提及**（**不做** include 形态识别）：某文件里出现
+   `foo.h` 这个字符串 ⟺ 它**可能** `#include` 了该头（引号 / 尖括号 / 宏
+   `#include HDR` / 续行 / 仓库根相对路径 / `-I` 差异一律覆盖）⇒ **不存在
+   「解析失败」状态** ⇒ 只**漏报**（注释或文档里提到死头名字即判活，方向安全）。
+   6 轮审稿中前 5 轮各在上一版 ~420 行手写解析器上找到新洞 ⇒ 整段删除而非继续
+   打补丁（同类教训见 `verify_example_assertion_quality.sh`）。自身提及
+   （`/** @file foo.h */`）MUST **按文件归属**排除 —— 不排除则每个头恒活；
+   续行按 C++ 语义**零插入拼接**、状态按文件重置、文件末尾悬空续行仍参与判定。
+   两条 fail-closed 探针：扫描面**之外**的 C/C++ 扩展名 ⇒ 违规；
+   源① 实际处理 TU 数 ≠ 扫描面文件数（崩溃 / 少读）⇒ 违规；
+   ⚠️ **扫描面的 prune 列表 MUST 只含**「第三方 / VCS 元数据」**与**
+   「**构建输出目录**」；构建输出目录 MUST 用**纯内容**判定（实测判据：含
+   `CMakeCache.txt`，**与目录名无关**）⇒ MUST NOT 只按**目录名前缀** prune
+   （`build*` 这类 glob
+   会连带 prune 掉 `buildtools/`、`builder/`、以及本仓真实存在的
+   `openspec/specs/build-cpp-standard/` 这类**非构建目录** ⇒ 那里面的
+   消费者既不被扫到、也不被探针报出 ⇒ 活头会被误判成死头）；
+   ⚠️ **豁免 stale 检查的方向 MUST 正确**：「已有消费者」只能由**真 include
+   证据**（编译器 `.d`）**且必须是当前的**证明 —— `.d` 是**累积**构建产物
+   （TU 被删 / target 被移除后不会被清掉）⇒ 「`.d` 里出现过」**不等于**
+   「现在有消费者」⇒ 当前性判据 = 源文件**仍存在** + **仍 `#include` 它**
+   （比对对象是 include 的**操作数**：只查「文本提及」连注释也算证据；
+   只查「行首是 `#include` 的整行」则行尾注释里的提及仍被当成证据
+   ⇒ 方向倒置。⚠️ **已知误报向量**（如实声明）：`#if 0` / `#ifdef`
+   **非激活区**里的字面 `#include` **仍被计入证据**（预处理语义不在
+   判据内；真修需嵌套 `#if`/`#else` ⇒ 否决；实际行为由 fixture ⑨h
+   钉住））+ `.d` **不早于**该源文件（阈值 0：预处理
+   与源文件常**同秒** ⇒ 硬阈值会必然漏判）；任一不满足 ⇒ **只警告**（不报违规）⇒ 源① 的
+   「原文提及」也**只警告**且措辞不得指示删除豁免行（否则注释里提到头名即
+   假违规，且错误信息会指示删豁免行 ⇒ 移除后护栏报「硬死头 MUST 删除」⇒
+   会诱导删掉 D10 **冻结**的 C3 DUT）；
 5. **C5** `include/cpu/AGENTS.md` 的 STRUCTURE 表 MUST 与磁盘一致（**D9** 的机械化）；
 6. **C6** SoC 顶层 `Rv32iPipelineTop` 的**端口集合** MUST 与登记快照一致（**D10** 的机械化）。
 
@@ -318,6 +356,28 @@ C2 实施时实测发现 **D3 #14 与 D5 互斥**，并据此修订落地形态�
   ⚠️ 另发现（**不在 C2 范围**，须独立 ADR）：`rv32i_pipeline.h` 的
   `hazard.io().ex_rd_addr` / `mem_rd_addr` 接的是 **ID 级当前指令自己的 rd**
   ⇒ 即使破环，前推语义也是错的（正确前推源应为 EX/MEM 级**流水线寄存器**）。
+
+### 附带改动：perf baseline 重生成 + 守恒护栏（2026-10-25，C2 实施时回报）
+
+C2 本身**不碰**任何 perf 路径（perf 基准是寄存器链 / 异或链，不含 `include/cpu/` 头），
+但 C2 实施期发现旧 `perf_baseline.json`（2026-10-16 在 `37ab63f` 采的）已对当前机器过时
+⇒ `perf_regression` 报 9–11 处「回归」（比率 1.3×–6.9×）。**对照实验**证明这不是 C2 的
+性能变化：pre-C2 worktree（`5191c47`）与 C2 HEAD **背靠背**跑 `perf_tests --tc=07 --tc=08`
+⇒ **HEAD/pre-C2 = 0.89–1.21（均值 ~1.03）**，而 pre-C2/baseline 同样 1.01–2.36×
+⇒ 漂移是**环境性的**。⇒ 按仓库既有先例**重生成 baseline**。
+
+⚠️ 重生成暴露出一个**此前无任何自动化检查**的盲区：
+`perf_regression.cpp:179` 的判据是 `if (base <= 0.0) continue;`
+⇒ baseline 里 `median_us == 0` 的行**永久退出比较集合** ⇒ 该行的未来真回归
+**永久不可见**（本次采集 TC-09 全 SKIPPED ⇒ 若照抄，6 个锚点会被静默丢弃）。
+⇒ **新增护栏 `scripts/verify_perf_baseline_anchors.sh`**（3 条守恒检查：
+行集守恒 / 锚点守恒 / 变松披露），并把它挂在 CI 两个 job 内
+（PR 比 base branch、push 比 `HEAD`）；护栏自带 `--self-test`（15 项断言）。
+⚠️ 阈值 MUST 从**权威源**（`tests/benchmark/perf_regression.cpp` 的
+`kBackendThresholds`）读出，且权威源不可解析时 **fail-closed**
+（MUST NOT 回落到脚本内置副本 —— 回落是 fail-open：权威源被改写时护栏会
+静默用旧阈值判 ⇒ 恰好复现本条要消除的漂移）。
+契约落在 capability `perf-test-isolation`（本 change 的 delta）。
 
 ### D5 的补充表述（2026-10-24）
 

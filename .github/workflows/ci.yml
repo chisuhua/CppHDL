@@ -284,11 +284,32 @@ jobs:
       #   C3 root tests/** MUST NOT #include examples/** paths (layer inversion)
       #   C4 no zero-consumer headers (dead code MUST be deleted, not "promoted back")
       # ⚠️ C4's dead-header verdict uses TWO independent evidence sources
-      # (source-level #include reverse lookup + compiler .d dependency files,
-      # with stale-target .d filtered out) and only reports a header as dead
-      # when BOTH agree => conservative (may under-report; it NEVER reports a
-      # live header as dead — if either source sees an includer, the header is
-      # treated as alive).
+      # and only reports a header as dead when BOTH say "no includer" AND
+      # source ② is trustworthy:
+      #   source ① = **basename textual mention** (NO include-form parsing).
+      #     A file containing the string `foo.h` may #include that header in
+      #     ANY form (quotes / angle brackets / macro `#include HDR` /
+      #     line continuation / repo-root-relative path / -I variance).
+      #     => there is no "unparsed form" state at all => no parse failure
+      #     possible. Continuation joins follow C++ semantics (drop `\` +
+      #     newline, concatenate the rest VERBATIM -- inserting a space would
+      #     silently corrupt the basename and kill a live header).
+      #     Self-mentions (`/** @file foo.h */`, present in 29 of 31 headers)
+      #     MUST be excluded BY FILE IDENTITY, otherwise every header would be
+      #     permanently "alive" and C4 would lose all discriminating power.
+      #     Cost: under-report only (a comment mentioning a dead header's name
+      #     keeps it alive) -- never a false "dead" verdict.
+      #   source ② = compiler `.d` basenames, trustworthy iff there is .d
+      #     evidence AND every .d file belongs to THIS tree.
+      # .d evidence is NEVER filtered by target name (the name extraction has
+      # blind spots => filtering would drop real .d records => a live header
+      # would be judged dead). Conservative: may under-report; it NEVER reports
+      # a live header as dead — if either source sees an includer, the header
+      # is treated as alive.
+      # ⚠️ Fail-closed probes: an out-of-surface C/C++ extension (.c/.inl/.hxx)
+      # is a violation (source ① could not see its #include), and the awk pass
+      # MUST report as many TU files as the scan surface contains (crash or
+      # partial read => violation).
       # ⚠️ The "source has an includer but no TU compiled it" shape is a
       # WARNING only, never a violation (it may be transitive deadness OR a
       # target-name extraction blind spot => a violation could lead an agent
@@ -303,6 +324,53 @@ jobs:
       # guardrail itself would be invisible until it silently stopped guarding.
       shell: bash
       run: scripts/verify_no_duplicate_rv32i_headers.sh --self-test
+
+    - name: Verify perf baseline anchor conservation
+      # `tests/benchmark/perf_baseline.json` is the reference for
+      # `perf_regression`, whose judgement is
+      # `if (base <= 0.0) continue;` — a row with `median_us == 0` is SKIPPED
+      # forever, so losing an anchor makes that regression permanently
+      # invisible (real incident 2026-10-25: 6 TC-09 anchors were dropped when
+      # the baseline was regenerated). Three checks:
+      #   C1 row set MUST equal the reference row set (no silent row loss)
+      #   C2 every reference anchor (status=PASS and median_us>0) MUST still
+      #      exist AND still be > 0 — the judgement is PER ROW (not a count
+      #      comparison), so a row that was downgraded to 0 is caught
+      #      ("no degrade to 0" escape). A `note_restored` marker is NOT an
+      #      escape: such a row MUST assert its median_us equals the
+      #      reference value verbatim.
+      #   C3 any looseness (an anchor raised / a row that got slower) MUST be
+      #      disclosed in the baseline's `note` field, keyed by
+      #      (test, params, backend) AND with matching old=/new=/ratio=
+      #      numbers — otherwise a regenerated baseline could silently accept
+      #      a real regression. The thresholds are read from
+      #      `tests/benchmark/perf_regression.cpp` (the authoritative
+      #      `kBackendThresholds`); an unreadable/unparsable authority is
+      #      FAIL-CLOSED (no built-in fallback copy).
+      # ⚠️ Reference commit: on PRs it is the PR's BASE BRANCH (fetched
+      # explicitly — actions/checkout's default refs do not include it); on
+      # push it is `HEAD`, where the check passes trivially (a shallow clone
+      # has no `HEAD^`). This gate bites at PR time, where a regenerated
+      # baseline is reviewed.
+      shell: bash
+      run: |
+        REF="HEAD"
+        if [ -n "${{ github.base_ref }}" ]; then
+          # ⚠️ fetch 失败 MUST **硬失败**（不加 `|| true`）：fetch 失败意味着
+          #    「基准取不到」⇒ 闸门**跑不了** ⇒ 若吞掉它，脚本会走
+          #    「ref 解析不到 ⇒ ::warning + 跳过」路径 ⇒ 这道闸门在 PR 上
+          #    **静默失效**，而 CI 仍显示绿（第六轮审稿 SHOULD_FIX-4）。
+          git fetch --no-tags --depth=1 origin \
+            "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+          REF="origin/${{ github.base_ref }}"
+        fi
+        # The guard's own regression test runs FIRST: three of its checks were
+        # found broken during development (a stale `RC=$?` swallowed the exit
+        # code; the disclosure check accepted unrelated token mentions; and a
+        # `note_restored` JSON marker was a "degrade to 0" escape hatch), so an
+        # untested guard here would be a gate that only looks like one.
+        scripts/verify_perf_baseline_anchors.sh --self-test
+        scripts/verify_perf_baseline_anchors.sh "$REF"
 
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
@@ -798,10 +866,25 @@ jobs:
       #   C3 root tests/** MUST NOT #include examples/** paths (layer inversion)
       #   C4 no zero-consumer headers (dead code MUST be deleted, not "promoted back")
       # ⚠️ C4's dead-header verdict uses TWO independent evidence sources
-      # (source-level #include reverse lookup + compiler .d dependency files,
-      # with stale-target .d filtered out) and only reports a header as dead
-      # when BOTH agree => conservative (may under-report, never mis-reports
-      # a live header as dead).
+      # and only reports a header as dead when BOTH say "no includer" AND
+      # source ② is trustworthy:
+      #   source ① = **basename textual mention** (NO include-form parsing):
+      #     a file containing the string `foo.h` may #include that header in ANY
+      #     form (quotes / angle brackets / macro `#include HDR` / line
+      #     continuation / repo-root-relative path / -I variance) => there is no
+      #     "unparsed form" state at all => no parse failure possible.
+      #     Continuation joins follow C++ semantics (drop `\` + newline,
+      #     concatenate the rest VERBATIM -- inserting a space would corrupt the
+      #     basename and kill a live header). Self-mentions (`/** @file foo.h */`)
+      #     MUST be excluded BY FILE IDENTITY, else every header is permanently
+      #     "alive" and C4 loses all discriminating power. Cost: under-report only.
+      #   source ② = compiler `.d` basenames, trustworthy iff there is .d
+      #     evidence AND every .d file belongs to THIS tree.
+      # .d evidence is NEVER filtered by target name (the name extraction has
+      # blind spots => filtering would drop real .d records => a live header
+      # would be judged dead). Conservative: may under-report, never mis-reports
+      # a live header as dead. Fail-closed probes: out-of-surface C/C++
+      # extensions and a TU count mismatch are violations.
       shell: bash
       run: scripts/verify_no_duplicate_rv32i_headers.sh
 
@@ -812,6 +895,53 @@ jobs:
       # guardrail itself would be invisible until it silently stopped guarding.
       shell: bash
       run: scripts/verify_no_duplicate_rv32i_headers.sh --self-test
+
+    - name: Verify perf baseline anchor conservation
+      # `tests/benchmark/perf_baseline.json` is the reference for
+      # `perf_regression`, whose judgement is
+      # `if (base <= 0.0) continue;` — a row with `median_us == 0` is SKIPPED
+      # forever, so losing an anchor makes that regression permanently
+      # invisible (real incident 2026-10-25: 6 TC-09 anchors were dropped when
+      # the baseline was regenerated). Three checks:
+      #   C1 row set MUST equal the reference row set (no silent row loss)
+      #   C2 every reference anchor (status=PASS and median_us>0) MUST still
+      #      exist AND still be > 0 — the judgement is PER ROW (not a count
+      #      comparison), so a row that was downgraded to 0 is caught
+      #      ("no degrade to 0" escape). A `note_restored` marker is NOT an
+      #      escape: such a row MUST assert its median_us equals the
+      #      reference value verbatim.
+      #   C3 any looseness (an anchor raised / a row that got slower) MUST be
+      #      disclosed in the baseline's `note` field, keyed by
+      #      (test, params, backend) AND with matching old=/new=/ratio=
+      #      numbers — otherwise a regenerated baseline could silently accept
+      #      a real regression. The thresholds are read from
+      #      `tests/benchmark/perf_regression.cpp` (the authoritative
+      #      `kBackendThresholds`); an unreadable/unparsable authority is
+      #      FAIL-CLOSED (no built-in fallback copy).
+      # ⚠️ Reference commit: on PRs it is the PR's BASE BRANCH (fetched
+      # explicitly — actions/checkout's default refs do not include it); on
+      # push it is `HEAD`, where the check passes trivially (a shallow clone
+      # has no `HEAD^`). This gate bites at PR time, where a regenerated
+      # baseline is reviewed.
+      shell: bash
+      run: |
+        REF="HEAD"
+        if [ -n "${{ github.base_ref }}" ]; then
+          # ⚠️ fetch 失败 MUST **硬失败**（不加 `|| true`）：fetch 失败意味着
+          #    「基准取不到」⇒ 闸门**跑不了** ⇒ 若吞掉它，脚本会走
+          #    「ref 解析不到 ⇒ ::warning + 跳过」路径 ⇒ 这道闸门在 PR 上
+          #    **静默失效**，而 CI 仍显示绿（第六轮审稿 SHOULD_FIX-4）。
+          git fetch --no-tags --depth=1 origin \
+            "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+          REF="origin/${{ github.base_ref }}"
+        fi
+        # The guard's own regression test runs FIRST: three of its checks were
+        # found broken during development (a stale `RC=$?` swallowed the exit
+        # code; the disclosure check accepted unrelated token mentions; and a
+        # `note_restored` JSON marker was a "degrade to 0" escape hatch), so an
+        # untested guard here would be a gate that only looks like one.
+        scripts/verify_perf_baseline_anchors.sh --self-test
+        scripts/verify_perf_baseline_anchors.sh "$REF"
 
     - name: Verify OpenSpec delta self-check
       # 4 rules distilled from the four rounds of adversarial review of the
