@@ -39,10 +39,13 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| AXI 互连 | phase-5 | P0 | none | axi4-interconnect-routing-2026-10 |
 | examples 测试护栏 | phase-5 | P1 | none | example-assertion-quality-2026-10 |
 
 ### Unmapped (0)
+
+> ✅ **sprint-2026-10 已完成**：`axi4-interconnect-routing-2026-10`（P0）
+> 于 2026-10-26 归档（`openspec/changes/archive/2026-10-26-axi4-interconnect-routing-2026-10/`），
+> 新 capability `axi-interconnect-routing`（6 条 Requirement）。
 <!-- AUTO-SPRINT-END -->
 
 ### Objectives

@@ -82,9 +82,8 @@ include/axi4/
   契约见 `openspec/specs/axi-interconnect-routing/spec.md`
   （`axi4-interconnect-routing-2026-10` 落地，管辖**互连侧**；
   `axi-slave-conformance` 管**从设备侧**，两者不重叠）。
-  ⚠️ 该主 spec 由 change 的 delta 在 **archive 时**创建（delta 在
-  `openspec/changes/axi4-interconnect-routing-2026-10/specs/axi-interconnect-routing/spec.md`；
-  change 未归档前该主 spec 路径**尚不存在**）。
+  ✅ 该主 spec 已由 change `axi4-interconnect-routing-2026-10` 归档时建立
+  （`openspec/changes/archive/2026-10-26-axi4-interconnect-routing-2026-10/`）。
   适用对象：`axi_interconnect_4x4.h` 的 `AxiInterconnect4x4`（AXI4 Full，4×4）
   与 `axi4_lite_matrix.h` 的 `AxiLiteMatrix2x2`（AXI4-Lite，2×2）。
   1. **路由锁存**：目标 slave 在 **AW / AR 握手当拍**由**该通道自己的地址**解码
