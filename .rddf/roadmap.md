@@ -41,8 +41,14 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| examples 测试护栏 | phase-5 | P1 | none | example-assertion-quality-2026-10 |
-| RV32I 字节道写语义 | phase-5 | P0 | none | rv32i-store-byte-enable-2026-10 |
+| RV32I 跳转与 SRA 语义 | phase-5 | P0 | none | rv32i-jump-sra-2026-10 |
+
+> ✅ **sprint-2026-10 本轮归档**（2026-10-26）：`example-assertion-quality-2026-10`（P1，
+> 新 capability `example-assertion-quality`）与 `rv32i-store-byte-enable-2026-10`（P0，
+> 新 capability `rv32i-isa-semantics`）—— 两者各经 **2 轮对抗审稿**（第 1 轮
+> APPROVE_WITH_CONDITIONS ⇒ 条件项同批整改；第 2 轮 **APPROVE**）⇒ 均已归档。
+> ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
+> 该 job 红 ⇒ MUST revert 归档 commit。
 
 ### Unmapped (2)
 

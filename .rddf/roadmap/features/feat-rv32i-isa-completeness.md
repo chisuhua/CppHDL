@@ -38,7 +38,9 @@ phase_refs: [phase-5]
 | ④ | `rv32i-fetch-skid-buffer-2026-10` | 取指 skid buffer + PC 回退（消除「停顿丢弃指令」）+ 取指填充期双装（**框架层 `sread` 语义**，影响所有用户） | ③（无前推时的停顿语义要先定） | 固件**删除**所有手工 NOP 后仍逐拍 parity；退休数 == 指令数 |
 
 > **① 的实施结果（2026-10-26）**：change `rv32i-store-byte-enable-2026-10` 已实施
-> （待对抗审稿 + 归档）。要点：
+> **并归档**（2 轮对抗审稿：第 1 轮 APPROVE_WITH_CONDITIONS ⇒ 条件项同批整改；
+> 第 2 轮 **APPROVE** ⇒ `openspec/changes/archive/2026-10-26-rv32i-store-byte-enable-2026-10/`，
+> 新 capability `rv32i-isa-semantics`）。要点：
 > ① `DataTCM` 新增 `strbe` 端口 ⇒ **公共 API 面变化** ⇒ 4 个既有实例化点全部审计并显式驱动
 >    （⚠️ 实测：未驱动的输入端口读到的是**全 1** 而非 0 ⇒ 整字写会「碰巧」通过 ⇒ 未定义行为依赖）；
 > ② 合并复用 `include/axi4/byte_lane.h`（与 AXI 侧同一份字节道语义）；
@@ -58,8 +60,8 @@ phase_refs: [phase-5]
 ## 跨阶段拆分
 
 ### phase-5
-- ⏳ ① `rv32i-store-byte-enable-2026-10`（2026-10-26 立项登记）
-- ⏳ ② `rv32i-jump-sra-2026-10`
+- ✅ ① `rv32i-store-byte-enable-2026-10`（2026-10-26 **已归档** ⇒ capability `rv32i-isa-semantics`）
+- 🟡 ② `rv32i-jump-sra-2026-10`（2026-10-26 实施中）
 - ⏳ ③ `rv32i-forwarding-decision-2026-10`（前置：ADR-046 D5 裁决）
 - ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置：③）
 
