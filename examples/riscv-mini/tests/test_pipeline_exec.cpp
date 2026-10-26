@@ -197,6 +197,12 @@ TEST_CASE("Pipeline: Load/Store roundtrip", "[pipeline][mem]") {
         sim.set_input_value(dmem.instance().io().wdata, store_value);
         sim.set_input_value(dmem.instance().io().write, 1);
         sim.set_input_value(dmem.instance().io().valid, 1);
+        // ⚠️ **字节使能 MUST 显式驱动**（2026-10-26 新增，`DataTCM` 新增 `strbe` 端口）：
+        //    本用例是**整字写** ⇒ 车道 = 0xF。
+        //    ⚠️ 未驱动的输入端口在本框架里读到的是**全 1**（不是 0）⇒ 恰好等价于
+        //    整字写 ⇒ **测试会「碰巧」通过** ⇒ 但那是未定义行为依赖
+        //    （verilator 与 interpreter 的未驱动初值未必相同）⇒ MUST 显式接线。
+        sim.set_input_value(dmem.instance().io().strbe, 15);
         sim.tick();
         
         auto ready = sim.get_port_value(dmem.instance().io().ready);
@@ -208,6 +214,7 @@ TEST_CASE("Pipeline: Load/Store roundtrip", "[pipeline][mem]") {
         sim.set_input_value(dmem.instance().io().wdata, store_value);
         sim.set_input_value(dmem.instance().io().write, 1);
         sim.set_input_value(dmem.instance().io().valid, 1);
+        sim.set_input_value(dmem.instance().io().strbe, 15);  // 整字写 ⇒ 全车道
         sim.tick();
         
         sim.set_input_value(dmem.instance().io().addr, mem_addr);
@@ -224,6 +231,7 @@ TEST_CASE("Pipeline: Load/Store roundtrip", "[pipeline][mem]") {
         sim.set_input_value(dmem.instance().io().wdata, store_value);
         sim.set_input_value(dmem.instance().io().write, 1);
         sim.set_input_value(dmem.instance().io().valid, 1);
+        sim.set_input_value(dmem.instance().io().strbe, 15);  // 整字写 ⇒ 全车道
         sim.tick();
         
         sim.set_input_value(dmem.instance().io().addr, mem_addr);

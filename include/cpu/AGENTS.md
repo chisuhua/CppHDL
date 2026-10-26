@@ -81,6 +81,10 @@ include/cpu/                             # 30 headers, 6016 lines（2026-10-25 �
 - **Runtime**: Pipeline requires `ch::ch_device<Rv32iSoc>` wrapper in main() (per README)
 - **Bundle vs Port**: Pipeline uses port-based `hazard_unit.h` (riscv namespace)。⚠️ 旧的 bundle 版 `hazard_unit_bundle.h`（cpu namespace）**已于 2026-10-24 作为零消费者头删除**（ADR-046 D4）
 - **TCM**: `rv32i_tcm.h` provides single-cycle instruction/data memories
+  - ⚠️ **`DataTCM` 的字节道契约**（2026-10-26 新增 `strbe` 端口）：`addr` 是**字地址**、
+    `wdata` MUST 已**lane 对齐**（`rs2 << 8*addr[1:0]`，由流水线负责）、`strbe` 是车道掩码
+    ⇒ 写路径是**读-改-写**（`ch_mem` 无字节使能写 API）。⚠️ `strbe` 是**新增输入端口**
+    ⇒ **全部实例化点 MUST 显式驱动**（未驱动端口读到的是**全 1** 而非 0 ⇒ 整字写会「碰巧」通过）
 - **Cache variant selection** (ADR-041):
   - **RV32I L1 imem/dmem** (默认) → `ICacheSync` / `DCacheSync` (1-cycle sread)
   - **软核 TCM-style** (低频, 延迟关键) → `ICacheAsync` / `DCacheAsync` (0-cycle aread)

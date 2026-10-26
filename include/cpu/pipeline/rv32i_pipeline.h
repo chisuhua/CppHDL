@@ -361,7 +361,28 @@ public:
 
         // Data memory interface
         io().data_addr <<= exmem_alu_result;
-        io().data_write_data <<= exmem_rs2_data;
+        // ⚠️ **SB/SH 的写数据 MUST「lane 对齐」**（2026-10-26 新增）：
+        //    RISC-V 规定 store 的源数据**低位对齐**，由**总线**按 `addr[1:0]`
+        //    选车道 ⇒ `sb` 到偏移 1 时，源字节 MUST 落在 **lane 1**
+        //    （即 `rs2 << 8`）⇒ 否则「掩码对了、数据在错 lane」——
+        //    那是一个比「字节写没生效」**更隐蔽**的错误。
+        //
+        //    ⚠️ **只对 SB/SH 位移**（funct3 = 000 / 001）：
+        //    `sw` MUST 保持原样（**含非对齐 `sw` 的既有行为**：整字写到
+        //    所在字地址）⇒ 这里的改动**不改变**任何既有 `sw` 行为。
+        //    ⚠️ 移位量 MUST 用**运行期节点** ⇒ 用 `shl<N>`（显式结果宽度）；
+        //    `operator<<` 会按 RHS 的**类型宽度**推算结果宽度 ⇒ 运行期移位量
+        //    会把结果宽度算错（见 `include/axi4/byte_lane.h` 的同型警告）。
+        auto store_byte_offset = bits<1, 0>(exmem_alu_result);
+        // SB/SH = funct3 000/001；SW = 010 ⇒ `!= 010` 即「部分写」
+        auto store_is_partial = exmem_is_store &
+                                (exmem_funct3 != ch_uint<3>(2_d));
+        auto lane_shift = select(!store_is_partial, ch_uint<5>(0_d),
+                          select(store_byte_offset == ch_uint<2>(0_d), ch_uint<5>(0_d),
+                          select(store_byte_offset == ch_uint<2>(1_d), ch_uint<5>(8_d),
+                          select(store_byte_offset == ch_uint<2>(2_d), ch_uint<5>(16_d),
+                                                 ch_uint<5>(24_d)))));
+        io().data_write_data <<= shl<32>(exmem_rs2_data, lane_shift);
         // ⚠️ 字节使能 MUST 来自 **MEM 级**（2026-10-25，第 14 轮 critic
         //    SHOULD_FIX #5/#6）：此前**恒接 0xF** ⇒ SB/SH 的字节使能
         //    **从未生效**（mem_stage 里算好的 `store_byte_enable` 是死代码）。

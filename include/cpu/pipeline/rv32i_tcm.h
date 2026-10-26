@@ -13,6 +13,7 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/byte_lane.h"
 
 namespace riscv {
 
@@ -76,6 +77,13 @@ public:
         ch_in<ch_bool> write;
         ch_in<ch_uint<DATA_WIDTH>> wdata;
         ch_in<ch_bool> valid;
+        // ⚠️ **字节使能**（2026-10-26 新增）：`sb` / `sh` MUST 只写**选中车道**。
+        //    ⚠️ 约定（与 AXI 侧一致，见 `include/axi4/byte_lane.h`）：
+        //      ① `addr` 是**字地址**（SoC 侧已做 `addr >> 2`）；
+        //      ② `wdata` MUST 已**按车道对齐**（`sb`/`sh` 的源数据低位对齐，
+        //         由流水线按 `addr[1:0]` 左移后送来 —— 见 `rv32i_pipeline.h`）；
+        //      ③ 本组件用 `strbe` 把**选中车道**合并进原字。
+        ch_in<ch_uint<4>> strbe;
         ch_out<ch_bool> ready;
         ch_out<ch_uint<DATA_WIDTH>> rdata;
     )
@@ -91,7 +99,22 @@ public:
         // SRAM 模型
         ch_mem<ch_uint<DATA_WIDTH>, SIZE> memory("dtcm_memory");
         
-        memory.write(io().addr, io().wdata, io().write & io().valid);
+        // ⚠️ **字节写 MUST 是「读-改-写」**（2026-10-26 新增）：
+        //    `ch_mem::write(addr, data, en)` 只写**整字**（`include/core/mem.h`）
+        //    ⇒ `sb` / `sh` 若直接写，会把**整字**覆盖（此前 SoC 里字节写
+        //    **完全不生效**：流水线算好的 `data_strbe` 全仓**无消费者**）。
+        //    ⇒ 先组合读出该字（`aread`，0-cycle，与 MEM 级同拍采样一致），
+        //      再按 `strbe` 合并出要写的字，最后整字写回。
+        //
+        // ⚠️ 读-改-写的**同拍**语义：组合读返回的是**边沿前**的值 ⇒ 合并结果
+        //    正是「旧字 + 新字节」⇒ 与 RISC-V 的字节写语义一致。
+        //    ⚠️ 与 imem 的约定**不冲突**（ADR-041 只强制 **imem** 用 `sread`）。
+        ch_uint<DATA_WIDTH> old_word;
+        old_word <<= memory.aread(io().addr);
+        auto lane_mask = axi4::detail::byte_lane_mask<DATA_WIDTH>(io().strbe);
+        auto merged_word = axi4::detail::byte_lane_apply<DATA_WIDTH, DATA_WIDTH>(
+            old_word, io().wdata, lane_mask);
+        memory.write(io().addr, merged_word, io().write & io().valid);
         
         // 读操作
         //
@@ -102,8 +125,7 @@ public:
         //    ⇒ 用 `aread`（组合读）让数据与地址同拍可用。
         //    ⚠️ 与 imem 的约定**不冲突**：ADR-041 强制的是 **imem** 用 sread
         //    （取指要 1 拍 pc_lag 对齐）；**dmem 不在此列**。
-        auto read_data = memory.aread(io().addr);
-        io().rdata <<= read_data;
+        io().rdata <<= old_word;
         io().ready = ch_bool(true);  // 单周期访问
     }
 };

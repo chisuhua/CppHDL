@@ -241,6 +241,14 @@ constexpr uint32_t SUB(uint32_t rd, uint32_t rs1, uint32_t rs2) {
 constexpr uint32_t SW(uint32_t rs2, uint32_t rs1, int32_t imm) {
     return enc_s(rs2, rs1, 0x2u, imm);
 }
+// ⚠️ **字节 / 半字写**（2026-10-26 新增）：funct3 = 000 / 001。
+//    源数据**低位对齐**，由总线按 `addr[1:0]` 选车道（RISC-V 语义）。
+constexpr uint32_t SB(uint32_t rs2, uint32_t rs1, int32_t imm) {
+    return enc_s(rs2, rs1, 0x0u, imm);
+}
+constexpr uint32_t SH(uint32_t rs2, uint32_t rs1, int32_t imm) {
+    return enc_s(rs2, rs1, 0x1u, imm);
+}
 constexpr uint32_t LW(uint32_t rd, uint32_t rs1, int32_t imm) {
     return enc_i(rd, rs1, 0x2u, imm, 0x03u);
 }
@@ -273,12 +281,25 @@ constexpr uint32_t kGoldenValA = 10u;
 constexpr uint32_t kGoldenValB = 20u;   // x6 = x5 + x5 = 20（load-use 停顿后仍正确）
 constexpr uint32_t kGoldenValC = 2u;
 
-constexpr size_t kFirmwareWords = 48;
+// ⚠️ **字节 / 半字写 golden**（2026-10-26 新增）：
+//   sb x2(=3) -> [0x101] ⇒ 字 0x100 的 **lane 1** ⇒ 字 = (10 & ~0xFF00) | (3<<8)
+//                                        = 0x0000_030A
+//   sh x3(=13) -> [0x122] ⇒ 字 0x120 的 **lane 2-3** ⇒ 字 = 13 << 16 = 0x000D_0000
+// ⚠️ `kGoldenDataSB/SH` 是**store 拍上的写数据**（= 源数据左移到位）⇒
+//    它直接钉住「lane 对齐」这个**易错点**（未对齐时是 3 / 13 ⇒ 断言转红）。
+constexpr uint32_t kGoldenAddrSB = 0x101u;
+constexpr uint32_t kGoldenDataSB = 0x300u;    // 3 << 8
+constexpr uint32_t kGoldenWordSB = 0x30Au;    // [0x100] = 0x0A | (3 << 8)
+constexpr uint32_t kGoldenAddrSH = 0x122u;
+constexpr uint32_t kGoldenDataSH = 0xD0000u;  // 13 << 16
+constexpr uint32_t kGoldenWordSH = 0xD0000u;  // [0x120] = 13 << 16
+
+constexpr size_t kFirmwareWords = 64;
 
 // 期望的写回序列（ISA 语义）。
 // ⚠️ **不含 x7** —— 它在 taken 分支的错误路径上 ⇒ MUST 被冲刷 ⇒ 不写回。
 // ⚠️ **不含 x6 之前任何「消费者」的错误值** —— 紧邻的 load→use 必须拿到**新值**。
-constexpr std::array<std::pair<uint64_t, uint64_t>, 11> kExpectedWritebacks = {{
+constexpr std::array<std::pair<uint64_t, uint64_t>, 13> kExpectedWritebacks = {{
     {1, 10},   // addi x1, x0, 10
     {2, 3},    // addi x2, x0, 3
     {3, 13},   // add  x3, x1, x2
@@ -290,6 +311,8 @@ constexpr std::array<std::pair<uint64_t, uint64_t>, 11> kExpectedWritebacks = {{
     {10, 7},   // addi x10, x0, 7  ← 「较老指令写同一 rd」用例的前半
     {10, 0},   // lw   x10, 0x110  ← load 读到 0（dmem 零初始化）
     {11, 0},   // add  x11, x10,x10 ⇒ **0**（若提前解除 ⇒ 会是 14）
+    {12, kGoldenWordSB},  // lw  x12, 0x100 ⇒ **0x030A**（含 sb 的字节写）
+    {13, kGoldenWordSH},  // lw  x13, 0x120 ⇒ **0xD0000**（含 sh 的半字写）
 }};
 
 // ⚠️ MUST 是 **constexpr**（不是 `static const`）⇒ 才能被编译期护栏检查
@@ -341,6 +364,21 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
         ADDI(10, 0, 7),   // 42 较老指令，写 x10
         LW(10, 0, 0x110), // 43 被阻塞的 load，**也**写 x10（读到 0）
         ADD(11, 10, 10),  // 44 消费者 ⇒ x11 = 0
+        NOP, NOP, NOP,
+        // ⚠️ **字节 / 半字写**（2026-10-26 新增）：
+        //    ⚠️ 追加在**尾部** ⇒ 既有 word 索引（含 taken 分支的 29/30/31）
+        //      **一个都不移动** ⇒ 既有断言全部保持有效。
+        //    ⚠️ `sb` / `sh` 的源数据**低位对齐**，由总线按 `addr[1:0]` 选车道：
+        //      ① `sb x2(=3) -> [0x101]` ⇒ 字 0x100 的 lane 1 ⇒ 字 = 0x030A
+        //      ② `sh x3(=13) -> [0x122]` ⇒ 字 0x120 的 lane 2-3 ⇒ 字 = 0xD0000
+        //    ⇒ 两条 load 读回**整字** ⇒ 同时钉住「掩码」与「lane 对齐」两件事。
+        SB(2, 0, 0x101),  // 48 [0x101] = 3（字节写，lane 1）
+        NOP, NOP, NOP,
+        LW(12, 0, 0x100), // 52 x12 = 0x030A（读回含字节写的字）
+        NOP, NOP, NOP,
+        SH(3, 0, 0x122),  // 56 [0x122] = 13（半字写，lane 2-3）
+        NOP, NOP, NOP,
+        LW(13, 0, 0x120), // 60 x13 = 0xD0000
         NOP, NOP, NOP,
     }};
 }
@@ -438,6 +476,8 @@ TEST_CASE("Rv32iSoc - FirmwareEncoderCrossCheck", "[rv32i][soc][dual]") {
     REQUIRE(ADD(3, 1, 2) == 0x002081B3u);    // add x3, x1, x2
     REQUIRE(SUB(4, 3, 2) == 0x40218233u);    // sub x4, x3, x2
     REQUIRE(SW(4, 0, 0x100) == 0x10402023u); // sw x4, 0x100(x0)
+    REQUIRE(SB(2, 0, 0x101) == 0x102000A3u); // sb x2, 0x101(x0)
+    REQUIRE(SH(3, 0, 0x122) == 0x12301123u); // sh x3, 0x122(x0)
     REQUIRE(LW(5, 0, 0x100) == 0x10002283u); // lw x5, 0x100(x0)
     REQUIRE(BEQ(0, 0, 8) == 0x00000463u);    // beq x0, x0, +8
     REQUIRE(BNE(0, 0, 8) == 0x00001463u);    // bne x0, x0, +8
@@ -619,6 +659,11 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     REQUIRE(has_store(ta, kGoldenAddrB, kGoldenValB));
     // C: 控制流走对分支（bne 未成立 ⇒ x8 = 2）
     REQUIRE(has_store(ta, kGoldenAddrC, kGoldenValC));
+    // D: **字节写**（sb）—— store 拍上的写数据 MUST 已**lane 对齐**
+    //    （3 << 8 = 0x300 ⇒ lane 1；未对齐时是 3 ⇒ 本断言转红）
+    REQUIRE(has_store(ta, kGoldenAddrSB, kGoldenDataSB));
+    // E: **半字写**（sh）—— 13 << 16 = 0xD0000 ⇒ lane 2-3
+    REQUIRE(has_store(ta, kGoldenAddrSH, kGoldenDataSH));
 
     // ⚠️ **store 拍的**个数** MUST 恰好是 3**（2026-10-25，第 14 轮 critic
     //    SHOULD_FIX #2）：`has_store` 只是**存在性**断言 ⇒ 若回归出第 4 个
@@ -631,12 +676,16 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
                 ++store_cycles;
             }
         }
-        REQUIRE(store_cycles == 3u);
+        REQUIRE(store_cycles == 5u);
     }
 
     // 反向：错误的值 MUST NOT 出现（防止「碰巧出现过一次」也算过）
     REQUIRE_FALSE(has_store(ta, kGoldenAddrA, kGoldenValA + 1));
     REQUIRE_FALSE(has_store(ta, kGoldenAddrC, kGoldenValC + 1));
+    // ⚠️ **未 lane 对齐的写数据 MUST NOT 出现**（2026-10-26 新增）：
+    //    「掩码对了、数据在错 lane」是最隐蔽的错误 ⇒ 必须显式排除。
+    REQUIRE_FALSE(has_store(ta, kGoldenAddrSB, 3u));
+    REQUIRE_FALSE(has_store(ta, kGoldenAddrSH, 13u));
 
     // ---- 分支 / 停顿计数 ----
     // 固件里恰好 2 条分支（beq + bne）⇒ branch_count == 2
@@ -706,9 +755,9 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //    ⇒ 任何**计数**断言都抓不到（变异验证实测：`exmem_valid` 改回取
     //    ID 级的 valid ⇒ 计数不变 ⇒ 零信号）⇒ 只有序列能抓。
     //
-    // 期望序列（固件 **48 字**；word 29 的 BEQ 被 taken ⇒ 冲刷 word 30 的
+    // 期望序列（固件 **64 字**；word 29 的 BEQ 被 taken ⇒ 冲刷 word 30 的
     // `addi x7,x0,0x7f` ⇒ **x7 MUST NOT 出现**）：
-    //   x1=10, x2=3, x3=13, x4=10, x5=10, x6=20, x8=1, x9=2
+    //   x1=10, x2=3, x3=13, x4=10, x5=10, x6=20, x8=1, x9=2, x12=0x30A, x13=0xD0000
     {
         std::vector<std::pair<uint64_t, uint64_t>> wb;
         for (std::size_t c = 0; c < ta.size(); ++c) {

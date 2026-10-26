@@ -122,6 +122,13 @@ public:
         dtcm.io().wdata <<= pipeline.io().data_write_data;
         dtcm.io().write <<= pipeline.io().data_write_en;
         dtcm.io().valid <<= ch_bool(true);
+        // ⚠️ **字节使能 MUST 接到 D-TCM**（2026-10-26 新增）：
+        //    此前 `data_strbe`（MEM 级算好的车道掩码）**全仓无消费者**
+        //    ⇒ `sb` / `sh` 在 SoC 里**完全不生效**（整字覆盖）。
+        //    ⇒ 现在接线 ⇒ D-TCM 按 `strbe` 做读-改-写。
+        //    ⚠️ 约定：`wdata` 已由流水线**lane 对齐**（`rv32i_pipeline.h`），
+        //    `addr` 在此已右移 2 位 ⇒ 是**字地址**。
+        dtcm.io().strbe <<= pipeline.io().data_strbe;
         pipeline.io().data_read_data <<= dtcm.io().rdata;
         pipeline.io().data_ready <<= dtcm.io().ready;
 
