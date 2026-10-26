@@ -131,7 +131,8 @@
     ./build/tests/test_axi_interconnect_4x4 --list-tests | grep -cE "^  [A-Za-z]"
     cd build && ctest -N -R "test_axi_interconnect_4x4" | tail -1
     ```
-    第 2 条 MUST 命中 **28**（14 对 × 2 后端）
+    第 2 条 MUST 命中 **28**（14 对 × 2 后端；Task 2 的 RED 基线规模 ——
+    后续 critic 修复批扩到 23 对 / 46 TEST_CASE，见文末记录）
     （⚠️ as-built 订正：原判据 `grep -c .` 数的是**行**（含 tag 行）⇒ 实测 **68** ⇒ 永假红；
     真判据是 `grep -cE "^  [A-Za-z]"` = **28**）
     第 3 条 MUST 命中 **1**（1 个文件 = 1 个 ctest 条目）
@@ -288,8 +289,9 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
 测试用 `SparseTestMap`（4×4KiB 窗口）⇒ DECERR 可测）。
 
 **验收实测**：
-- `test_axi_interconnect_4x4` interpreter 半边：**14/14 通过，354 断言**
-- 同上 verilator 半边：**14/14 通过，354 断言**
+- `test_axi_interconnect_4x4` interpreter 半边：**14/14 通过，354 断言**（critic 修复**前**的基线）
+- 同上 verilator 半边：**14/14 通过，354 断言**（同上）
+- ⚠️ 最终计数见文末「critic 对抗审稿 第 1 轮」——修复后为 **23 对 / 461 断言 × 2 后端**
 - `ctest -LE perf` 全量：**190/190 通过**（基线 189 + 本 change 的 1 个新文件 ⇒ 无回归）
 - `ctest -N`：**201**（原 200）
 
@@ -319,8 +321,9 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
 - 此前**只构建设计、不跑仿真** ⇒ AXI-Lite 链路从未被验证过 ⇒ 现补上
   **协议合规的内部 AXI4 Full master** + 写/读回**数据断言**（写 0xAB → 读回 0xAB）。
 
-**新测试文件**：`tests/test_axi_interconnect_4x4.cpp`（28 TEST_CASE / 354 断言 × 2 后端）、
-`tests/test_axi_lite_matrix_2x2.cpp`（28 TEST_CASE / 126 断言 × 2 后端）。
+**新测试文件**（最终规模，含 critic 修复批的补强）：
+`tests/test_axi_interconnect_4x4.cpp`（**46** TEST_CASE / **474** 断言 × 2 后端）、
+`tests/test_axi_lite_matrix_2x2.cpp`（**34** TEST_CASE / **170** 断言 × 2 后端）。
 
 - [x] ### Task 7: `AxiLiteMatrix2x2` 的活地址解码修正
   - **action**:
@@ -350,7 +353,9 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
     ```
     第 1 与第 2 条 MUST 相等（实测 **18 == 18**）；第 3 条 MUST = 1；
     第 4 条 MUST ≥ 2（读侧 + 写侧各一组路由锁存，实测 **32**）；
-    第 5 条 2x2 用例 MUST 全绿（实测 **28/28** = 14 对 × 2 后端，126 断言 × 2）
+    第 5 条 2x2 用例 MUST 全绿
+    （Task 7 当时实测 **28/28** = 14 对 × 2 后端 / 126 断言 × 2；
+      critic 修复批补强后为 **34/34** = 17 对 × 2 后端 / 170 断言 × 2）
 
 - [x] ### Task 8: 回归 —— 既有测试与 examples 必须仍然全绿
   - **action**:
@@ -404,3 +409,119 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
     Catch2 二进制内跑 ⇒ 每文件只占 1 个条目）⇒ **202**；
     non-perf **189 → 191**；perf 恒 **11**；
     `tests/test_*.cpp` **115 → 117**（2 个新文件都在根 `tests/` 下））
+
+### critic 对抗审稿 第 1 轮（2026-10-26）—— REJECT ⇒ 已修复
+
+**结论**：**2 BLOCKER + 4 SHOULD_FIX + 5 NIT**，全部用**独立复现程序**实测确认
+（源码与二进制留在 `/tmp/opencode/critic-ic/`）。
+
+#### BLOCKER（2 项，均已修）
+
+| # | 缺陷 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | **未映射地址的多 beat 写永久死锁**（`axi_interconnect_4x4.h`） | `err_w_hs` 在**第一个** W beat 握手时就置位 `err_w_valid` ⇒ ① `m*_wready` 随之恒 0 ⇒ 后续 beat **永不被接受** ⇒ master 持 `wvalid` 永久挂死；② B 响应在 `wlast` 之前发出，违反 AXI | `err_w_remaining`（**「当前拍之后」还需的 beat 数**，4 bit，初值 = `awlen`）逐拍递减（带 `!= 0` 守卫 ⇒ 无下溢）；`err_w_valid` **只在最后一拍被接受后**置位 |
+| 2 | **幻影 AW / AR**（两个组件同型） | 正向转发（`aw_sel` / `ar_sel`）只吃**当拍** grant，**没吃** `!active` 门控 ⇒ master 在途期间合法举起的下一笔 `awvalid` 被**转发**给 slave 并被接受，而互连侧 `awready=0` ⇒ slave 等不到 W、master 等不到 `awready` ⇒ **双向永久死锁** | 正向转发加 `!write_active[m]` / `!read_active[m]` 门控（4×4 + 2×2）；**spec 第 4 条同步补该条款**（此前 spec 只说「`m*_awready` 吃门控」⇒ 漏了正向转发这一面） |
+
+#### SHOULD_FIX（4 项，均已修）
+
+1. `m*_rid` / `m*_rlast` **未按在途标志门控** ⇒ 空闲时 `rlast` 恒 1、`rid` 镜像某个从设备的值（可能是**另一个 master 的在途读**在用的）。
+2. DECERR 响应**不回显事务 ID**（与 `Axi4Slave` 的 `write_id_reg` / `read_id_reg` 形态不一致）⇒ 加 `err_w_id` / `err_r_id` 锁存 + 回显。
+3. `decode_addr` 的 `static_assert` **只校验了窗口 [0]**（4×4 一个都不校验）⇒ 改为**全窗口** `axi_window_is_valid`（`size` 为 2 的幂 + `base` 按 `size` 对齐）。
+4. `window_hit` 用 64 位掩码构造 32 bit 逻辑值 ⇒ **调试构建**（assert 打开）触发 `CH_CHECK`「value out of range」；NDEBUG 下静默截断（行为仍正确）⇒ 此前被 NDEBUG 掩盖。修法：先截到 `ADDR_WIDTH` 位。
+
+#### NIT（5 项，均已处理）
+
+`err_r_busy` 与 `err_r_valid` 转移完全相同（删除冗余）；`wr_done` / `rd_done` 的 `& active` 冗余（`b_hs` / `r_hs` 已蕴含）；`AxiResp4x4` 与 `AxiResp` 逐值重复且 guard 宏不同（**死 guard**）⇒ 统一到新头 `include/axi4/axi_resp.h`；`AGENTS.md` 的「5 条 Requirement」→ **6 条**；`include/axi4/AGENTS.md` 的 spec 路径加「archive 前主 spec 不存在」说明。
+
+#### 测试补强（critic 指出的盲区）
+
+`write_txn` / `read_txn` 此前**恒 `len = 0`** ⇒ 多 beat 路径与 `wlast` **零覆盖**。
+
+- 4×4：**14 → 23 对**（46 TEST_CASE，**474 断言** × 2 后端）
+- 2×2：**14 → 17 对**（34 TEST_CASE，**170 断言** × 2 后端）
+
+新增用例：多 beat mapped 写（逐 beat 数据 + `wlast`）/ **多 beat unmapped 写**（逐 beat 接受 + B 只在末拍后出现 + ID 回显）/ 多 beat mapped 读（`rlast` 只在末拍）/ **幻影 AW** / **幻影 AR** / 4×4「**恰好一个 grant**」（旋转编码判别力）/ 4×4 + 2×2 **复位清 error responder** / DECERR 读的 ID 回显。
+
+#### 变异验证 9/9 全部符合预期
+
+脚本：`/tmp/opencode/mutation_check.sh`。
+⚠️ **脚本 MUST 校验编译成功** —— 第 1 轮过早的版本有 3 个变异**编译失败却跑旧二进制** ⇒ 假绿（已修）。
+
+| # | 变异 | 预期 | 实测 |
+|---|---|---|---|
+| 1 | 删 `aw_sel` 在途门控 | 幻影 AW 用例转红 | ✅ fail |
+| 2 | `err_w_valid` 改任意 beat 即置位 | 多 beat DECERR 写转红 | ✅ fail |
+| 3 | 仲裁 `g3 = q3`（少一级优先编码） | 恰好一个 grant 转红 | ✅ fail |
+| 4 | `rd_active` 清零去掉 `& m2_rlast` | 多 beat 读转红 | ✅ fail |
+| 5a / 5b | DECERR 写 / 读不锁存 ID | ID 回显用例转红 | ✅ fail ×2 |
+| 6 | 2×2 删 `ar_sel` 在途门控 | 幻影 AR 转红 | ✅ fail |
+| 7 / 8 | 2×2 / 4×4 的 `err_w_busy` 复位 pattern 去掉 | 复位用例转红 | ✅ fail ×2 |
+| 9 | `window_hit` 去掉位宽截断 | （仅调试构建受影响） | ✅ pass |
+
+**4 个 critic 复现程序全部转为修复后行为**：`repro`（多 beat DECERR 写 ⇒ 第 2 拍 `wready=1`）、`repro2` / `repro3`（幻影 AW ⇒ `s*_awvalid=0`）、`repro4`（空闲 ⇒ `rid=0` / `rlast=0`）。
+
+#### 修复后回归（2026-10-26 实测）
+
+```
+cmake --build build -j$(nproc)                  # 0 error / 改动文件 0 warning
+cd build && ctest -LE perf                      # 191/191 通过（800 s）
+./run_all_ported_tests.sh                       # 28/28
+bash scripts/run_all_samples.sh                 # 35/35
+scripts/verify_{example_assertion_quality,example_test_wiring,
+  no_duplicate_rv32i_headers,openspec_delta,rst_n_wiring,test_counts}.sh   # 全 exit 0
+cd build && ctest -N                            # 202（未变：新增的是用例不是文件）
+```
+
+
+### critic 对抗审稿 第 2 轮（2026-10-26）—— APPROVE_WITH_CONDITIONS ⇒ 条件项已全部处理
+
+**结论**：第 1 轮的 **11 项（2 BLOCKER + 4 SHOULD_FIX + 5 NIT）已全部正确修复**，
+修复本身**未引入新 BLOCKER**。critic 逐条核对了实现并**实际运行**了两个测试二进制 +
+4 个复现程序。剩 **2 SHOULD_FIX + 4 NIT**（含一条「注释与代码矛盾」，矛盾的恰好是
+BLOCKER #1 修复所依赖的那条不变量）。
+
+#### SHOULD_FIX（2 项，均已修）
+
+1. **新增注释与紧邻代码直接矛盾**（`axi_interconnect_4x4.h`）——
+   struct 声明处写的是正确语义「当前拍**之后**还需的 beat 数」，而实现段注释
+   写的是**相反的**「含当前这一拍在内 … 末拍 ⟺ 剩余 == 1」（代码实际是 `== 0`），
+   且写着「`err_w_remaining` 用 **5 bit** —— 4 bit 会溢出」而声明就是
+   `ch_reg<ch_uint<4>>`。**这不是无害笔误**：它精确反转了 BLOCKER #1 修复所依赖的
+   不变量 ⇒ 按注释改代码就会重新引入「首拍即置位 / 下溢回绕」。
+   ⇒ 全部注释改为与代码一致，并把「MUST NOT 改成 5 bit（`ch_uint<5>` 无法从
+   `ch_in<ch_uint<4>>` 构造，实测编译失败）」写进注释。
+2. **`axi_window_is_valid` 不校验 `base` 相对 `ADDR_WIDTH` 的上界** ——
+   本批新增的 `base & addr_bits_mask()` 截断使 `base >= 2^ADDR_WIDTH` 的窗口
+   **静默别名**到低地址（与低窗口双命中 ⇒ 按优先级静默错路由），而截断**消除**了
+   原本唯一的配置错误检测（改动前调试构建会 `CH_CHECK`）。
+   ⇒ 新增 `constexpr bool axi_window_fits(w, addr_width)`（用 `base | (size-1)`
+   避免 64 位溢出）+ 两个组件的 `decode_addr` 对**每个**窗口 `static_assert`。
+   **验证**：探针 `Map` 的第 4 个窗口 `base = 0x1_0000_0000` ⇒ 编译失败且错误信息
+   命中「地址窗口 3 超出 ADDR_WIDTH 位地址空间」；对照探针（合法窗口）⇒ 编译通过。
+
+#### NIT（4 项，均已处理）
+
+1. `axi_resp.h` 的 `#pragma once` 之内又套 `#ifndef AXI4_AXIRESP_DEFINED`
+   ⇒ 删掉（该头存在的理由正是消灭一个永不可能碰撞的死 guard 宏）。
+2. 文档 stale：`include/axi4/AGENTS.md` 的 STRUCTURE 树**漏 `axi_resp.h`**、
+   行数 stale（949 / 525）⇒ 补入并刷新为 **1094 / 544**；
+   根 `AGENTS.md` 的「变更面」同步（并补 `axi_resp.h` 的来龙去脉）。
+3. 幻影 AW/AR 用例**只有负向半面**（4 拍内不转发），没有验证排队那笔**最终被接受**
+   —— 一个把请求**永久丢弃**的实现同样能通过纯负向断言。
+   ⇒ 4 个用例（4×4 AW / 4×4 AR / 2×2 AW / 2×2 AR）各补 **liveness 半面**：
+   完成在途事务后断言排队那笔 `awready`/`arready` 拉高、且转发到**正确**的 slave。
+4. `addr_bits_mask()` 对 `ADDR_WIDTH == 0` / `> 64` 无约束 ⇒ 加 `static_assert`
+   （0 会让掩码恒 0 ⇒ 全地址命中；> 64 会静默丢掉地址高位）。
+
+#### 变异验证 12/12 全部符合预期
+
+第 1 轮的 9 项 + 本轮新增 2 项（`wr_active` 永不清零 ⇒ liveness 半面转红；
+窗口 base 越界 ⇒ 探针编译失败 + 对照探针编译通过）。脚本同时校验**编译成功**
+（编译失败的变异会跑旧二进制 ⇒ 假绿）。
+
+#### 最终计数
+
+- `test_axi_interconnect_4x4`：**23 对 = 46 TEST_CASE / 474 断言 × 2 后端**
+- `test_axi_lite_matrix_2x2`：**17 对 = 34 TEST_CASE / 170 断言 × 2 后端**
+- `ctest -N` = **202**（未变 —— 新增的是用例，不是文件）
+

@@ -197,6 +197,9 @@ inline uint64_t o_s_wdata(Sim &sim, auto &io, int s) {
 inline uint64_t o_s_wstrb(Sim &sim, auto &io, int s) {
     return get4(sim, s, io.s0_wstrb, io.s1_wstrb, io.s2_wstrb, io.s3_wstrb);
 }
+inline uint64_t o_s_wlast(Sim &sim, auto &io, int s) {
+    return get4(sim, s, io.s0_wlast, io.s1_wlast, io.s2_wlast, io.s3_wlast);
+}
 inline uint64_t o_s_bready(Sim &sim, auto &io, int s) {
     return get4(sim, s, io.s0_bready, io.s1_bready, io.s2_bready, io.s3_bready);
 }
@@ -774,3 +777,348 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 mid-transaction reset clears sta
 });
 
 }  // namespace ch_test::axi_ic
+
+// ===========================================================================
+// critic SHOULD_FIX #3 的补强用例（2026-10-26）：
+//   ① 多 beat 路径（mapped 写 / mapped 读 / **unmapped 写**）—— 此前恒 len=0
+//      ⇒ `err_w_valid` 的「第一个 W beat 即置位」缺陷无判别力；且
+//      `rd_active` 清零条件里的 `& m*_rlast` 无判别力。
+//   ② 幻影 AW / AR：在途期间本 master 合法地举起下一笔请求时，
+//      MUST NOT 被转发给 slave（否则 slave 接受了一个互连从未锁存路由的 AW
+//      ⇒ 双向永久死锁）。
+//   ③ DECERR 响应的**事务 ID 回显**（同 `Axi4Slave` 的 `write_id_reg` 形态）。
+//   ④ 4×4 的**仲裁让位**（此前只有 2×2 有该用例 ⇒ 4×4 的旋转编码零判别力）。
+//   ⑤ 复位后立即做 DECERR 事务（钉住 error responder 状态复位）。
+// ===========================================================================
+namespace ch_test::axi_ic_extra {
+
+using namespace ch_test::axi_ic;
+
+// --- ① 多 beat mapped 写：每个 W beat 都 MUST 被转发 ------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 multi-beat write: every W beat is forwarded",
+                       "[axi][interconnect][dual][burst]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    drv_aw(sim, io, 0, kSlaveBase[1] + 0x4u, 0x3u, 1 /*awlen => 2 beats*/, 2, 1, 1);
+    slv_awready(sim, io, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_aw(sim, io, 0, 0, 0, 0, 0, 0, 0);
+    slv_awready(sim, io, 1, 0);
+
+    // beat 1（wlast = 0）
+    drv_w(sim, io, 0, 0x1111u, 0xFu, 0, 1);
+    slv_wready(sim, io, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    REQUIRE(o_s_wdata(sim, io, 1) == 0x1111u);
+    REQUIRE(o_s_wlast(sim, io, 1) == 0);
+    sim.tick();
+
+    // beat 2（wlast = 1）
+    drv_w(sim, io, 0, 0x2222u, 0xFu, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    REQUIRE(o_s_wdata(sim, io, 1) == 0x2222u);
+    REQUIRE(o_s_wlast(sim, io, 1) == 1);
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0, 0);
+    slv_wready(sim, io, 1, 0);
+
+    slv_b(sim, io, 1, 1, 0 /*OKAY*/, 0x3u);
+    drv_bready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_bvalid(sim, io, 0) == 1; }));
+    REQUIRE(o_bresp(sim, io, 0) == 0u);
+    REQUIRE(o_bid(sim, io, 0) == 0x3u);
+    sim.tick();
+});
+
+// --- ① 多 beat unmapped 写（BLOCKER #1 的回归护栏）---------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 DECERR: multi-beat unmapped write accepts every beat",
+                       "[axi][interconnect][dual][decerr][burst]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    drv_aw(sim, io, 1, kUnmappedAddr, 0x6u, 1 /*awlen => 2 beats*/, 2, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 1) == 1; }));
+    sim.tick();
+    drv_aw(sim, io, 1, 0, 0, 0, 0, 0, 0);
+
+    // beat 1：B 响应 MUST **尚未**出现（AXI：B 在最后一个 W beat 之后才发）
+    drv_w(sim, io, 1, 0x1111u, 0xFu, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 1) == 1; }));
+    REQUIRE(o_bvalid(sim, io, 1) == 0u);
+    sim.tick();
+
+    // beat 2（wlast）：旧实现在这里 `wready` 恒 0 ⇒ master 永久挂死
+    drv_w(sim, io, 1, 0x2222u, 0xFu, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 1) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 1, 0, 0, 0, 0);
+
+    // B 响应：DECERR + **事务 ID 回显**
+    REQUIRE(wait_until(sim, [&] { return o_bvalid(sim, io, 1) == 1; }));
+    REQUIRE(o_bresp(sim, io, 1) == 3u);
+    REQUIRE(o_bid(sim, io, 1) == 0x6u);
+    sim.tick();
+});
+
+// --- ① 多 beat mapped 读（`rd_active` 只在末拍清零）--------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 multi-beat read: rlast only on the last beat",
+                       "[axi][interconnect][dual][burst]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    drv_ar(sim, io, 2, kSlaveBase[2] + 0x8u, 0x9u, 1 /*arlen => 2 beats*/, 2, 1, 1);
+    slv_arready(sim, io, 2, 1);
+    REQUIRE(wait_until(sim, [&] { return o_arready(sim, io, 2) == 1; }));
+    sim.tick();
+    drv_ar(sim, io, 2, 0, 0, 0, 0, 0, 0);
+    slv_arready(sim, io, 2, 0);
+
+    // beat 1（rlast = 0）
+    slv_r(sim, io, 2, 1, 0xAAAAu, 0, 0x9u, 0);
+    drv_rready(sim, io, 2, 1);
+    REQUIRE(wait_until(sim, [&] { return o_rvalid(sim, io, 2) == 1; }));
+    REQUIRE(o_rdata(sim, io, 2) == 0xAAAAu);
+    REQUIRE(o_rlast(sim, io, 2) == 0u);
+    REQUIRE(o_rid(sim, io, 2) == 0x9u);
+    sim.tick();
+
+    // beat 2（rlast = 1）
+    slv_r(sim, io, 2, 1, 0xBBBBu, 0, 0x9u, 1);
+    REQUIRE(wait_until(sim, [&] { return o_rvalid(sim, io, 2) == 1; }));
+    REQUIRE(o_rdata(sim, io, 2) == 0xBBBBu);
+    REQUIRE(o_rlast(sim, io, 2) == 1u);
+    sim.tick();
+    slv_r(sim, io, 2, 0, 0, 0, 0, 0);
+    drv_rready(sim, io, 2, 0);
+});
+
+// --- ② 幻影 AW / AR 护栏 ----------------------------------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 in-flight: the next AW is not forwarded to any slave",
+                       "[axi][interconnect][dual][inflight]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    drv_aw(sim, io, 0, kSlaveBase[0], 0x1u, 0, 2, 1, 1);
+    slv_awready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+
+    // 在途：m0 合法地举起**下一笔** AW（AXI4 允许多 outstanding）
+    drv_aw(sim, io, 0, kSlaveBase[1], 0x2u, 0, 2, 1, 1);
+    slv_awready(sim, io, 1, 1);
+    for (int i = 0; i < 4; ++i) {
+        INFO("in-flight cycle " << i);
+        REQUIRE(o_awready(sim, io, 0) == 0);
+        // ⚠️ 幻影 AW 护栏：MUST NOT 被转发给任何 slave
+        //    （旧实现会转发 ⇒ slave 接受了一个互连从未锁存路由的 AW
+        //      ⇒ slave 等不到 W、master 等不到 awready ⇒ 双向永久死锁）
+        REQUIRE(o_s_awvalid(sim, io, 0) == 0);
+        REQUIRE(o_s_awvalid(sim, io, 1) == 0);
+        REQUIRE(o_s_awvalid(sim, io, 2) == 0);
+        REQUIRE(o_s_awvalid(sim, io, 3) == 0);
+        sim.tick();
+    }
+
+    // ---- liveness 半面（critic NIT #3）：在途事务完成后，**排队的那笔 MUST 最终被接受** ----
+    // 只验「不转发」是不够的 —— 一个把请求**永久丢弃**的实现同样能通过纯负向断言。
+    drv_w(sim, io, 0, 0x1111u, 0xFu, 1, 1);       // 在途那笔的 W（m0 → s0）
+    slv_wready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0, 0);
+    slv_wready(sim, io, 0, 0);
+
+    slv_b(sim, io, 0, 1, 0 /*OKAY*/, 0x1u);
+    drv_bready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_bvalid(sim, io, 0) == 1; }));
+    sim.tick();                                    // B 握手 ⇒ wr_active_m0 清零
+    slv_b(sim, io, 0, 0, 0, 0);
+    drv_bready(sim, io, 0, 0);
+
+    // 排队的 AW（m0 → s1）此时 MUST 被接受并转发到 s1
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    REQUIRE(o_s_awvalid(sim, io, 1) == 1);
+    REQUIRE(o_s_awaddr(sim, io, 1) == kSlaveBase[1]);
+    REQUIRE(o_s_awvalid(sim, io, 0) == 0);         // MUST NOT 落到 s0
+    REQUIRE(o_s_awvalid(sim, io, 2) == 0);
+    REQUIRE(o_s_awvalid(sim, io, 3) == 0);
+});
+
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 in-flight: the next AR is not forwarded to any slave",
+                       "[axi][interconnect][dual][inflight]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    drv_ar(sim, io, 3, kSlaveBase[3], 0x1u, 0, 2, 1, 1);
+    slv_arready(sim, io, 3, 1);
+    REQUIRE(wait_until(sim, [&] { return o_arready(sim, io, 3) == 1; }));
+    sim.tick();
+
+    drv_ar(sim, io, 3, kSlaveBase[0], 0x2u, 0, 2, 1, 1);
+    slv_arready(sim, io, 0, 1);
+    for (int i = 0; i < 4; ++i) {
+        INFO("in-flight cycle " << i);
+        REQUIRE(o_arready(sim, io, 3) == 0);
+        REQUIRE(o_s_arvalid(sim, io, 0) == 0);
+        REQUIRE(o_s_arvalid(sim, io, 1) == 0);
+        REQUIRE(o_s_arvalid(sim, io, 2) == 0);
+        REQUIRE(o_s_arvalid(sim, io, 3) == 0);
+        sim.tick();
+    }
+
+    // ---- liveness 半面（critic NIT #3）：在途读完成后，排队的那笔 MUST 最终被接受 ----
+    slv_r(sim, io, 3, 1, 0xAAAAu, 0 /*OKAY*/, 0x1u, 1 /*rlast*/);
+    drv_rready(sim, io, 3, 1);
+    REQUIRE(wait_until(sim, [&] { return o_rvalid(sim, io, 3) == 1; }));
+    sim.tick();                                    // R 握手（末拍）⇒ rd_active_m3 清零
+    slv_r(sim, io, 3, 0, 0, 0, 0, 0);
+    drv_rready(sim, io, 3, 0);
+
+    REQUIRE(wait_until(sim, [&] { return o_arready(sim, io, 3) == 1; }));
+    REQUIRE(o_s_arvalid(sim, io, 0) == 1);         // 排队那笔的目标是 s0
+    REQUIRE(o_s_araddr(sim, io, 0) == kSlaveBase[0]);
+    REQUIRE(o_s_arvalid(sim, io, 3) == 0);         // MUST NOT 落回 s3
+});
+
+// --- ③ DECERR 读的事务 ID 回显 ----------------------------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 DECERR: unmapped read echoes the transaction ID",
+                       "[axi][interconnect][dual][decerr]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    drv_ar(sim, io, 0, kUnmappedAddr, 0xDu, 0, 2, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_arready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_ar(sim, io, 0, 0, 0, 0, 0, 0, 0);
+
+    drv_rready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_rvalid(sim, io, 0) == 1; }));
+    REQUIRE(o_rresp(sim, io, 0) == 3u);
+    REQUIRE(o_rid(sim, io, 0) == 0xDu);  // ID 回显
+    sim.tick();
+    drv_rready(sim, io, 0, 0);
+});
+
+// --- ④ 4×4 仲裁让位（指针指向无请求的 master 时 MUST 让位）------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 arbitration: the requesting master always gets the grant",
+                       "[axi][interconnect][dual][arbitration]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    // m0 连做 3 笔写（每笔完成都轮转指针 ⇒ 指针最终指向 m1 / m2）
+    for (int i = 0; i < 3; ++i) {
+        WriteObs o;
+        INFO("round " << i);
+        REQUIRE(write_txn(sim, io, 0, 0, kSlaveBase[0], 0x20u + i, 0xFu, 0x1u, &o));
+        REQUIRE(o.bresp == 0u);
+    }
+    // 只让 m0 请求 ⇒ m0 MUST 仍然拿到 grant（**让位**逻辑）
+    drv_aw(sim, io, 0, kSlaveBase[0], 0x5u, 0, 2, 1, 1);
+    slv_awready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    REQUIRE(awvalid_mask(sim, io) == (1ull << 0));
+    sim.tick();
+});
+
+// --- ⑤ 复位后 error responder 状态 MUST 被清零 ------------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 reset clears the DECERR error responder state",
+                       "[axi][interconnect][dual][reset]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    // 造一笔未映射写（AW + W 握手，但**不**做 B 握手）⇒ err_w_busy / err_w_valid = 1
+    drv_aw(sim, io, 0, kUnmappedAddr, 0x6u, 0, 2, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_aw(sim, io, 0, 0, 0, 0, 0, 0, 0);
+    drv_w(sim, io, 0, 0x1111u, 0xFu, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0, 0);
+    REQUIRE(o_bvalid(sim, io, 0) == 1u);
+
+    // ⚠️ 先撤掉总线上的 VALID/READY，**再**进复位窗口
+    drv_bready(sim, io, 0, 0);
+
+    sim.set_input_value(io.rst_n, 0);
+    sim.tick();
+    sim.set_input_value(io.rst_n, 1);
+    sim.tick();
+
+    // 复位后：一笔**新的**未映射写 MUST 能被接受
+    //    （若 err_w_busy / err_w_valid 未被复位 ⇒ `awready` 恒 0 ⇒ 假超时）
+    drv_aw(sim, io, 0, kUnmappedAddr, 0x7u, 0, 2, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_aw(sim, io, 0, 0, 0, 0, 0, 0, 0);
+    drv_w(sim, io, 0, 0x3333u, 0xFu, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0, 0);
+    REQUIRE(wait_until(sim, [&] { return o_bvalid(sim, io, 0) == 1; }));
+    REQUIRE(o_bresp(sim, io, 0) == 3u);
+    REQUIRE(o_bid(sim, io, 0) == 0x7u);
+});
+
+}  // namespace ch_test::axi_ic_extra
+
+// ===========================================================================
+// 4x4 仲裁的**旋转编码**判别力用例（critic SHOULD_FIX #3.2）：
+//   此前 4x4 的 round-robin 旋转 / 反旋转编码（16 个 mux）**零判别性覆盖**
+//   （只有 2x2 有让位用例）⇒ 旋转错位类缺陷（如 `g3` 少一级优先编码）
+//   无任何测试能抓到。
+//
+// 关键性质（AXI 语义）：**同一时刻最多一个 master 拿到 grant**
+//   —— 旋转编码若算错，会出现**双 grant**（两个 master 同时认为自己的 AW
+//   被接受，而 slave 只接受一个 ⇒ 事务静默丢失）。
+//
+// 覆盖手法：每轮完成一笔写（推进 round-robin 指针），然后让 **m0 与 m1 同时请求**
+//   ⇒ 指针相对这一对 master 的位置每轮变化 ⇒ 4 轮覆盖 4 种不同的相对位置
+//   ⇒ 断言「恰好一个 grant」即可抓住旋转错位。
+// ===========================================================================
+namespace ch_test::axi_ic_arb {
+
+using namespace ch_test::axi_ic;
+
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 arbitration: exactly one master is granted",
+                       "[axi][interconnect][dual][arbitration]", [&] {
+    auto &io = dev.instance().io();
+    ic_init(sim, io);
+
+    for (int round = 0; round < 4; ++round) {
+        // 完成一笔写（推进 round-robin 指针）
+        WriteObs o;
+        INFO("round " << round);
+        REQUIRE(write_txn(sim, io, 0, 0, kSlaveBase[0], 0x30u + static_cast<uint32_t>(round),
+                          0xFu, 0x1u, &o));
+        REQUIRE(o.bresp == 0u);
+
+        // m0 与 m1 **同时**请求 AW（目标不同）
+        drv_aw(sim, io, 0, kSlaveBase[0], 0x2u, 0, 2, 1, 1);
+        drv_aw(sim, io, 1, kSlaveBase[1], 0x3u, 0, 2, 1, 1);
+        slv_awready(sim, io, 0, 1);
+        slv_awready(sim, io, 1, 1);
+
+        sim.eval_combinational();
+        const int g0 = (o_awready(sim, io, 0) == 1) ? 1 : 0;
+        const int g1 = (o_awready(sim, io, 1) == 1) ? 1 : 0;
+        INFO("round " << round << " g0=" << g0 << " g1=" << g1);
+        // ⚠️ **恰好一个** grant —— 双 grant 会让两个 master 同时认为自己的 AW
+        //    被接受，而 slave 只接受一个 ⇒ 事务静默丢失
+        REQUIRE(g0 + g1 == 1);
+
+        // 撤掉输家，让赢家把事务走完（指针再前进一轮）
+        const int winner = g0 ? 0 : 1;
+        const int loser = g0 ? 1 : 0;
+        drv_aw(sim, io, loser, 0, 0, 0, 0, 0, 0);
+        slv_awready(sim, io, loser, 0);
+        WriteObs w;
+        REQUIRE(write_txn(sim, io, winner, winner, kSlaveBase[winner], 0x40u, 0xFu, 0x4u, &w));
+        REQUIRE(w.bresp == 0u);
+        slv_awready(sim, io, winner, 0);
+    }
+});
+
+}  // namespace ch_test::axi_ic_arb

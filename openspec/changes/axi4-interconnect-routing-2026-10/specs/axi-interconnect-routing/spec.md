@@ -76,6 +76,13 @@ MUST 由单元测试逐一覆盖。
      故握手窗口内的「活地址」是安全的）。
    - **握手后的转发**（W / B / R 通道）MUST 用**锁存路由**，
      MUST NOT 用活的 `awaddr` / `araddr` 或活的仲裁 grant。
+   - ⚠️ **正向转发 MUST 同时吃「在途门控」**（`!write_active[m]` /
+     `!read_active[m]`）：该 master 在自己的事务在途期间合法地举起**下一笔**
+     `awvalid` / `arvalid`（AXI4 允许多 outstanding）时，本笔请求 MUST NOT
+     被转发给 slave —— 否则 slave 会接受一个**互连从未锁存路由**的请求
+     （幻影 AW / AR）⇒ slave 等不到 W、master 等不到 `awready`
+     ⇒ **双向永久死锁**。该门控与第 5 条的 `m*_awready` 门控是**同一件事的
+     两面**：master 侧看不到 `awready` ⇒ slave 侧也 MUST NOT 看到 `awvalid`。
 5. **在途门控**：`m*_awready` MUST 被 `!write_active[m]` 门控，
    `m*_arready` MUST 被 `!read_active[m]` 门控
    —— 在途期间 MUST 为 0，否则 master 认为 AW/AR 被接受而互连悄悄吞掉

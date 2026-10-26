@@ -194,13 +194,15 @@ public:
         ch_reg<ch_bool>    rd_active_m0, rd_active_m1, rd_active_m2, rd_active_m3;
 
         // error responder（写）：未映射地址由互连层自己应答
-        ch_reg<ch_bool> err_w_busy;  // 已被一笔未映射写占用（AW 已握手）
-        ch_reg<ch_bool> err_w_valid; // bvalid，保持到 bready
+        ch_reg<ch_bool> err_w_busy;      // 已被一笔未映射写占用（AW 已握手，W 未收完）
+        ch_reg<ch_bool> err_w_valid;     // bvalid，**最后一个 W beat 被接受后**才置位
+        ch_reg<ch_uint<4>> err_w_remaining;  // 当前 W beat **之后**还需被接受的 beat 数
+        ch_reg<ch_uint<ID_WIDTH>> err_w_id;   // 锁存的 awid（DECERR 响应 MUST 回显事务 ID）
 
         // error responder（读）：未映射读返回 `arlen + 1` 个 DECERR beat
-        ch_reg<ch_bool>    err_r_busy;
-        ch_reg<ch_uint<4>> err_r_remaining;
-        ch_reg<ch_bool>    err_r_valid;
+        ch_reg<ch_bool> err_r_valid;         // rvalid（流式：整个 burst 期间为 1）
+        ch_reg<ch_uint<4>> err_r_remaining;  // 当前 R beat **之后**还需被返回的 beat 数
+        ch_reg<ch_uint<ID_WIDTH>> err_r_id;   // 锁存的 arid（DECERR 响应 MUST 回显事务 ID）
 
         IcState()
             : aw_ptr(0_d), ar_ptr(0_d),
@@ -210,8 +212,8 @@ public:
               rd_route_m0(0_d), rd_route_m1(0_d), rd_route_m2(0_d), rd_route_m3(0_d),
               rd_mapped_m0(false), rd_mapped_m1(false), rd_mapped_m2(false), rd_mapped_m3(false),
               rd_active_m0(false), rd_active_m1(false), rd_active_m2(false), rd_active_m3(false),
-              err_w_busy(false), err_w_valid(false),
-              err_r_busy(false), err_r_remaining(0_d), err_r_valid(false) {}
+              err_w_busy(false), err_w_valid(false), err_w_remaining(0_d), err_w_id(0_d),
+              err_r_valid(false), err_r_remaining(0_d), err_r_id(0_d) {}
     };
 
     // -------- 4 选 1 正向转发（**单次赋值** —— MUST NOT 写成「输出读自己」的自环，
@@ -237,14 +239,46 @@ public:
     }
 
     // -------- 地址窗口命中：`addr & ~(size-1) == base`（编译期常量掩码）--------
+    // 地址位掩码（ADDR_WIDTH 位全 1）—— `ADDR_WIDTH % 64` 避免 `1 << 64` 的 UB。
+    static constexpr uint64_t addr_bits_mask() {
+        static_assert(ADDR_WIDTH > 0 && ADDR_WIDTH <= 64,
+                      "ADDR_WIDTH MUST 在 1..64 —— 0 会让掩码恒 0（全地址命中），"
+                      "> 64 会静默丢掉地址高位");
+        return ADDR_WIDTH >= 64 ? ~uint64_t(0)
+                                 : ((uint64_t(1) << (ADDR_WIDTH % 64)) - uint64_t(1));
+    }
+
     static ch_bool window_hit(const ch_uint<ADDR_WIDTH> &addr, uint64_t base, uint64_t size) {
         const uint64_t mask = ~(size - 1ull);
-        return (addr & ch_uint<ADDR_WIDTH>(mask)) == ch_uint<ADDR_WIDTH>(base);
+        // ⚠️ MUST 先把 base / mask 截到 ADDR_WIDTH 位 —— 否则 `ch_uint<ADDR_WIDTH>(mask)`
+        //    会用 48/64 位值构造 32 bit 逻辑值 ⇒ **调试构建**（assert 打开）触发
+        //    `CH_CHECK`「value out of range」；NDEBUG 构建下静默截断（行为仍正确）
+        //    ⇒ 该缺陷此前被 NDEBUG 掩盖。
+        const uint64_t m = mask & addr_bits_mask();
+        const uint64_t b = base & addr_bits_mask();
+        return (addr & ch_uint<ADDR_WIDTH>(m)) == ch_uint<ADDR_WIDTH>(b);
     }
 
     // -------- 当拍地址解码：`target` = 命中的 slave 索引，`mapped` = 是否落在窗口内 --------
     void decode_addr(const ch_uint<ADDR_WIDTH> &addr, ch_uint<2> &target, ch_bool &mapped) {
-        static_assert(Map::windows[0].size != 0, "地址窗口 size MUST 非 0");
+        // ⚠️ 全部 4 个窗口都 MUST 校验（此前只校验了 [0]）—— 窗口定义是**编译期常量**，
+        //    传错（size 非 2 的幂 / base 未对齐）会得到**静默的错误解码**。
+        static_assert(axi_window_is_valid(Map::windows[0]), "地址窗口 0 非法：size MUST 非 0 且为 2 的幂，base MUST 按 size 对齐");
+        static_assert(axi_window_is_valid(Map::windows[1]), "地址窗口 1 非法：size MUST 非 0 且为 2 的幂，base MUST 按 size 对齐");
+        static_assert(axi_window_is_valid(Map::windows[2]), "地址窗口 2 非法：size MUST 非 0 且为 2 的幂，base MUST 按 size 对齐");
+        static_assert(axi_window_is_valid(Map::windows[3]), "地址窗口 3 非法：size MUST 非 0 且为 2 的幂，base MUST 按 size 对齐");
+        static_assert(axi_window_fits(Map::windows[0], ADDR_WIDTH),
+                      "地址窗口 0 超出 ADDR_WIDTH 位地址空间：base 的高位会被静默丢掉 "
+                      "⇒ 别名到低地址（与低窗口双命中 ⇒ 静默错路由）");
+        static_assert(axi_window_fits(Map::windows[1], ADDR_WIDTH),
+                      "地址窗口 1 超出 ADDR_WIDTH 位地址空间：base 的高位会被静默丢掉 "
+                      "⇒ 别名到低地址（与低窗口双命中 ⇒ 静默错路由）");
+        static_assert(axi_window_fits(Map::windows[2], ADDR_WIDTH),
+                      "地址窗口 2 超出 ADDR_WIDTH 位地址空间：base 的高位会被静默丢掉 "
+                      "⇒ 别名到低地址（与低窗口双命中 ⇒ 静默错路由）");
+        static_assert(axi_window_fits(Map::windows[3], ADDR_WIDTH),
+                      "地址窗口 3 超出 ADDR_WIDTH 位地址空间：base 的高位会被静默丢掉 "
+                      "⇒ 别名到低地址（与低窗口双命中 ⇒ 静默错路由）");
         ch_bool h0 = window_hit(addr, Map::windows[0].base, Map::windows[0].size);
         ch_bool h1 = window_hit(addr, Map::windows[1].base, Map::windows[1].size);
         ch_bool h2 = window_hit(addr, Map::windows[2].base, Map::windows[2].size);
@@ -325,8 +359,10 @@ public:
                   ar_grant_m0, ar_grant_m1, ar_grant_m2, ar_grant_m3);
 
         // ================= 3. error responder 的接受能力 =================
+        // ⚠️ 读侧**不需要**独立的 `busy` 标志：`err_r_valid` 已覆盖
+        //    「AR 已握手 ⇒ 响应正在流式返回」整个窗口（两者转移完全相同 ⇒ 恒等）。
         ch_bool err_w_can_accept = (!s.err_w_busy) & (!s.err_w_valid);
-        ch_bool err_r_can_accept = (!s.err_r_busy) & (!s.err_r_valid);
+        ch_bool err_r_can_accept = (!s.err_r_valid);
 
         // ================= 4. 每 (slave, master) 的转发选择 =================
         // 正向（AW / AR）：当拍地址解码 + 当拍 grant + 已映射
@@ -340,8 +376,15 @@ public:
                               : (mi == 2) ? aw_mapped_m2 : aw_mapped_m3;
             const ch_uint<2> &tg = (mi == 0) ? aw_target_m0 : (mi == 1) ? aw_target_m1
                                 : (mi == 2) ? aw_target_m2 : aw_target_m3;
+            // ⚠️ MUST 吃 `!wr_active[mi]` 门控 —— 否则该 master 在自己的写事务
+            //    在途期间合法地举起**下一笔** `awvalid`（AXI4 允许多 outstanding）时，
+            //    本笔 AW 会被**转发**给 slave 并被其接受，而互连侧 `awready=0`
+            //    ⇒ 互连从未锁存这条路由 ⇒ slave 等不到 W、master 等不到 awready
+            //    ⇒ **双向永久死锁**（幻影 AW）。
+            const ch_bool &act = (mi == 0) ? s.wr_active_m0 : (mi == 1) ? s.wr_active_m1
+                               : (mi == 2) ? s.wr_active_m2 : s.wr_active_m3;
             for (int si = 0; si < 4; ++si) {
-                aw_sel[si][mi] = g & mp & (tg == ch_uint<2>(si));
+                aw_sel[si][mi] = (!act) & g & mp & (tg == ch_uint<2>(si));
             }
             const ch_bool &g2 = (mi == 0) ? ar_grant_m0 : (mi == 1) ? ar_grant_m1
                               : (mi == 2) ? ar_grant_m2 : ar_grant_m3;
@@ -349,8 +392,11 @@ public:
                                : (mi == 2) ? ar_mapped_m2 : ar_mapped_m3;
             const ch_uint<2> &tg2 = (mi == 0) ? ar_target_m0 : (mi == 1) ? ar_target_m1
                                  : (mi == 2) ? ar_target_m2 : ar_target_m3;
+            // 同上：AR 侧也 MUST 吃 `!rd_active[mi]` 门控（幻影 AR）
+            const ch_bool &act2 = (mi == 0) ? s.rd_active_m0 : (mi == 1) ? s.rd_active_m1
+                                : (mi == 2) ? s.rd_active_m2 : s.rd_active_m3;
             for (int si = 0; si < 4; ++si) {
-                ar_sel[si][mi] = g2 & mp2 & (tg2 == ch_uint<2>(si));
+                ar_sel[si][mi] = (!act2) & g2 & mp2 & (tg2 == ch_uint<2>(si));
             }
         }
 
@@ -621,18 +667,20 @@ public:
         io().m3_arready = m3_arready;
 
         // ================= 7. 反向通道：按**锁存路由**反查 =================
-        const ch_uint<2> DECERR_V(static_cast<unsigned>(AxiResp4x4::DECERR));
+        const ch_uint<2> DECERR_V(static_cast<unsigned>(AxiResp::DECERR));
 
         // ---- m0 ----
         ch_bool m0_bvalid = s.wr_active_m0 & select(s.wr_mapped_m0,
                                 idx4(s.wr_route_m0, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
+        // 未映射写回显锁存的 `awid`（DECERR 响应 MUST 回显事务 ID，
+        // 同 `Axi4Slave` 的 `write_id_reg` 形态）。
         ch_uint<ID_WIDTH> m0_bid = select(s.wr_active_m0,
                                 select(s.wr_mapped_m0,
                                        idx4(s.wr_route_m0, io().s0_bid, io().s1_bid,
                                             io().s2_bid, io().s3_bid),
-                                       ch_uint<ID_WIDTH>(0_d)),
+                                       s.err_w_id),
                                 ch_uint<ID_WIDTH>(0_d));
         io().m0_bvalid = m0_bvalid;
         io().m0_bid = m0_bid;
@@ -648,10 +696,16 @@ public:
                                 idx4(s.rd_route_m0, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
                                 s.err_r_valid);
-        ch_bool m0_rlast = select(s.rd_mapped_m0,
-                                idx4(s.rd_route_m0, io().s0_rlast, io().s1_rlast,
-                                     io().s2_rlast, io().s3_rlast),
-                                s.err_r_remaining == ch_uint<4>(0_d));
+        // MUST 按**在途标志**门控 —— 否则空闲时 rlast 恒为 1
+        // (旧判据 err_r_remaining == 0 在复位后即为真 => 实测空闲时 m0_rlast=1)。
+        // `err_r_remaining` 是「当前拍**之后**还需被返回的 beat 数」
+        // => 当前拍是末拍 <=> 剩余 == 0。
+        ch_bool m0_rlast = select(s.rd_active_m0,
+                                select(s.rd_mapped_m0,
+                                       idx4(s.rd_route_m0, io().s0_rlast, io().s1_rlast,
+                                            io().s2_rlast, io().s3_rlast),
+                                       s.err_r_remaining == ch_uint<4>(0_d)),
+                                ch_bool(false));
         io().m0_rvalid = m0_rvalid;
         io().m0_rlast = m0_rlast;
         io().m0_rdata = select(s.rd_active_m0,
@@ -660,9 +714,16 @@ public:
                                             io().s2_rdata, io().s3_rdata),
                                        ch_uint<DATA_WIDTH>(0_d)),
                                 ch_uint<DATA_WIDTH>(0_d));
-        io().m0_rid = select(s.rd_mapped_m0,
-                                idx4(s.rd_route_m0, io().s0_rid, io().s1_rid,
-                                     io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
+        // ⚠️ 同 `m*_rdata`：MUST 按在途标志门控（否则空闲时会镜像某个从设备的
+        //    `rid` —— 可能正是**另一个 master 的在途读**在用的值）。
+        //    未映射读回显锁存的 `arid`（DECERR 响应 MUST 回显事务 ID，
+        //    同 `Axi4Slave` 的 `read_id_reg` 形态）。
+        io().m0_rid = select(s.rd_active_m0,
+                               select(s.rd_mapped_m0,
+                                      idx4(s.rd_route_m0, io().s0_rid, io().s1_rid,
+                                           io().s2_rid, io().s3_rid),
+                                      s.err_r_id),
+                               ch_uint<ID_WIDTH>(0_d));
         io().m0_rresp = select(s.rd_active_m0,
                                 select(s.rd_mapped_m0,
                                        idx4(s.rd_route_m0, io().s0_rresp, io().s1_rresp,
@@ -674,11 +735,13 @@ public:
                                 idx4(s.wr_route_m1, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
+        // 未映射写回显锁存的 `awid`（DECERR 响应 MUST 回显事务 ID，
+        // 同 `Axi4Slave` 的 `write_id_reg` 形态）。
         ch_uint<ID_WIDTH> m1_bid = select(s.wr_active_m1,
                                 select(s.wr_mapped_m1,
                                        idx4(s.wr_route_m1, io().s0_bid, io().s1_bid,
                                             io().s2_bid, io().s3_bid),
-                                       ch_uint<ID_WIDTH>(0_d)),
+                                       s.err_w_id),
                                 ch_uint<ID_WIDTH>(0_d));
         io().m1_bvalid = m1_bvalid;
         io().m1_bid = m1_bid;
@@ -691,10 +754,16 @@ public:
                                 idx4(s.rd_route_m1, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
                                 s.err_r_valid);
-        ch_bool m1_rlast = select(s.rd_mapped_m1,
-                                idx4(s.rd_route_m1, io().s0_rlast, io().s1_rlast,
-                                     io().s2_rlast, io().s3_rlast),
-                                s.err_r_remaining == ch_uint<4>(0_d));
+        // MUST 按**在途标志**门控 —— 否则空闲时 rlast 恒为 1
+        // (旧判据 err_r_remaining == 0 在复位后即为真 => 实测空闲时 m0_rlast=1)。
+        // `err_r_remaining` 是「当前拍**之后**还需被返回的 beat 数」
+        // => 当前拍是末拍 <=> 剩余 == 0。
+        ch_bool m1_rlast = select(s.rd_active_m1,
+                                select(s.rd_mapped_m1,
+                                       idx4(s.rd_route_m1, io().s0_rlast, io().s1_rlast,
+                                            io().s2_rlast, io().s3_rlast),
+                                       s.err_r_remaining == ch_uint<4>(0_d)),
+                                ch_bool(false));
         io().m1_rvalid = m1_rvalid;
         io().m1_rlast = m1_rlast;
         io().m1_rdata = select(s.rd_active_m1,
@@ -703,9 +772,16 @@ public:
                                             io().s2_rdata, io().s3_rdata),
                                        ch_uint<DATA_WIDTH>(0_d)),
                                 ch_uint<DATA_WIDTH>(0_d));
-        io().m1_rid = select(s.rd_mapped_m1,
-                                idx4(s.rd_route_m1, io().s0_rid, io().s1_rid,
-                                     io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
+        // ⚠️ 同 `m*_rdata`：MUST 按在途标志门控（否则空闲时会镜像某个从设备的
+        //    `rid` —— 可能正是**另一个 master 的在途读**在用的值）。
+        //    未映射读回显锁存的 `arid`（DECERR 响应 MUST 回显事务 ID，
+        //    同 `Axi4Slave` 的 `read_id_reg` 形态）。
+        io().m1_rid = select(s.rd_active_m1,
+                               select(s.rd_mapped_m1,
+                                      idx4(s.rd_route_m1, io().s0_rid, io().s1_rid,
+                                           io().s2_rid, io().s3_rid),
+                                      s.err_r_id),
+                               ch_uint<ID_WIDTH>(0_d));
         io().m1_rresp = select(s.rd_active_m1,
                                 select(s.rd_mapped_m1,
                                        idx4(s.rd_route_m1, io().s0_rresp, io().s1_rresp,
@@ -717,11 +793,13 @@ public:
                                 idx4(s.wr_route_m2, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
+        // 未映射写回显锁存的 `awid`（DECERR 响应 MUST 回显事务 ID，
+        // 同 `Axi4Slave` 的 `write_id_reg` 形态）。
         ch_uint<ID_WIDTH> m2_bid = select(s.wr_active_m2,
                                 select(s.wr_mapped_m2,
                                        idx4(s.wr_route_m2, io().s0_bid, io().s1_bid,
                                             io().s2_bid, io().s3_bid),
-                                       ch_uint<ID_WIDTH>(0_d)),
+                                       s.err_w_id),
                                 ch_uint<ID_WIDTH>(0_d));
         io().m2_bvalid = m2_bvalid;
         io().m2_bid = m2_bid;
@@ -734,10 +812,16 @@ public:
                                 idx4(s.rd_route_m2, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
                                 s.err_r_valid);
-        ch_bool m2_rlast = select(s.rd_mapped_m2,
-                                idx4(s.rd_route_m2, io().s0_rlast, io().s1_rlast,
-                                     io().s2_rlast, io().s3_rlast),
-                                s.err_r_remaining == ch_uint<4>(0_d));
+        // MUST 按**在途标志**门控 —— 否则空闲时 rlast 恒为 1
+        // (旧判据 err_r_remaining == 0 在复位后即为真 => 实测空闲时 m0_rlast=1)。
+        // `err_r_remaining` 是「当前拍**之后**还需被返回的 beat 数」
+        // => 当前拍是末拍 <=> 剩余 == 0。
+        ch_bool m2_rlast = select(s.rd_active_m2,
+                                select(s.rd_mapped_m2,
+                                       idx4(s.rd_route_m2, io().s0_rlast, io().s1_rlast,
+                                            io().s2_rlast, io().s3_rlast),
+                                       s.err_r_remaining == ch_uint<4>(0_d)),
+                                ch_bool(false));
         io().m2_rvalid = m2_rvalid;
         io().m2_rlast = m2_rlast;
         io().m2_rdata = select(s.rd_active_m2,
@@ -746,9 +830,16 @@ public:
                                             io().s2_rdata, io().s3_rdata),
                                        ch_uint<DATA_WIDTH>(0_d)),
                                 ch_uint<DATA_WIDTH>(0_d));
-        io().m2_rid = select(s.rd_mapped_m2,
-                                idx4(s.rd_route_m2, io().s0_rid, io().s1_rid,
-                                     io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
+        // ⚠️ 同 `m*_rdata`：MUST 按在途标志门控（否则空闲时会镜像某个从设备的
+        //    `rid` —— 可能正是**另一个 master 的在途读**在用的值）。
+        //    未映射读回显锁存的 `arid`（DECERR 响应 MUST 回显事务 ID，
+        //    同 `Axi4Slave` 的 `read_id_reg` 形态）。
+        io().m2_rid = select(s.rd_active_m2,
+                               select(s.rd_mapped_m2,
+                                      idx4(s.rd_route_m2, io().s0_rid, io().s1_rid,
+                                           io().s2_rid, io().s3_rid),
+                                      s.err_r_id),
+                               ch_uint<ID_WIDTH>(0_d));
         io().m2_rresp = select(s.rd_active_m2,
                                 select(s.rd_mapped_m2,
                                        idx4(s.rd_route_m2, io().s0_rresp, io().s1_rresp,
@@ -760,11 +851,13 @@ public:
                                 idx4(s.wr_route_m3, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
+        // 未映射写回显锁存的 `awid`（DECERR 响应 MUST 回显事务 ID，
+        // 同 `Axi4Slave` 的 `write_id_reg` 形态）。
         ch_uint<ID_WIDTH> m3_bid = select(s.wr_active_m3,
                                 select(s.wr_mapped_m3,
                                        idx4(s.wr_route_m3, io().s0_bid, io().s1_bid,
                                             io().s2_bid, io().s3_bid),
-                                       ch_uint<ID_WIDTH>(0_d)),
+                                       s.err_w_id),
                                 ch_uint<ID_WIDTH>(0_d));
         io().m3_bvalid = m3_bvalid;
         io().m3_bid = m3_bid;
@@ -777,10 +870,16 @@ public:
                                 idx4(s.rd_route_m3, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
                                 s.err_r_valid);
-        ch_bool m3_rlast = select(s.rd_mapped_m3,
-                                idx4(s.rd_route_m3, io().s0_rlast, io().s1_rlast,
-                                     io().s2_rlast, io().s3_rlast),
-                                s.err_r_remaining == ch_uint<4>(0_d));
+        // MUST 按**在途标志**门控 —— 否则空闲时 rlast 恒为 1
+        // (旧判据 err_r_remaining == 0 在复位后即为真 => 实测空闲时 m0_rlast=1)。
+        // `err_r_remaining` 是「当前拍**之后**还需被返回的 beat 数」
+        // => 当前拍是末拍 <=> 剩余 == 0。
+        ch_bool m3_rlast = select(s.rd_active_m3,
+                                select(s.rd_mapped_m3,
+                                       idx4(s.rd_route_m3, io().s0_rlast, io().s1_rlast,
+                                            io().s2_rlast, io().s3_rlast),
+                                       s.err_r_remaining == ch_uint<4>(0_d)),
+                                ch_bool(false));
         io().m3_rvalid = m3_rvalid;
         io().m3_rlast = m3_rlast;
         io().m3_rdata = select(s.rd_active_m3,
@@ -789,9 +888,16 @@ public:
                                             io().s2_rdata, io().s3_rdata),
                                        ch_uint<DATA_WIDTH>(0_d)),
                                 ch_uint<DATA_WIDTH>(0_d));
-        io().m3_rid = select(s.rd_mapped_m3,
-                                idx4(s.rd_route_m3, io().s0_rid, io().s1_rid,
-                                     io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
+        // ⚠️ 同 `m*_rdata`：MUST 按在途标志门控（否则空闲时会镜像某个从设备的
+        //    `rid` —— 可能正是**另一个 master 的在途读**在用的值）。
+        //    未映射读回显锁存的 `arid`（DECERR 响应 MUST 回显事务 ID，
+        //    同 `Axi4Slave` 的 `read_id_reg` 形态）。
+        io().m3_rid = select(s.rd_active_m3,
+                               select(s.rd_mapped_m3,
+                                      idx4(s.rd_route_m3, io().s0_rid, io().s1_rid,
+                                           io().s2_rid, io().s3_rid),
+                                      s.err_r_id),
+                               ch_uint<ID_WIDTH>(0_d));
         io().m3_rresp = select(s.rd_active_m3,
                                 select(s.rd_mapped_m3,
                                        idx4(s.rd_route_m3, io().s0_rresp, io().s1_rresp,
@@ -847,8 +953,9 @@ public:
                                select(b_hs_m3, ch_bool(false), s.wr_active_m3)));
 
         // 轮转条件 MUST 是**该方向事务真正完成**（NOT 任一 slave 的 ready/bvalid）
-        ch_bool wr_done = (s.wr_active_m0 & b_hs_m0) | (s.wr_active_m1 & b_hs_m1) |
-                          (s.wr_active_m2 & b_hs_m2) | (s.wr_active_m3 & b_hs_m3);
+        // 注：`b_hs_mX` 已蕴含 `wr_active_mX`（`mX_bvalid` 本身就被它门控）⇒
+        // 不必重复相与（与 `rd_done` 同构）。
+        ch_bool wr_done = b_hs_m0 | b_hs_m1 | b_hs_m2 | b_hs_m3;
         s.aw_ptr->next = select(!io().rst_n, ch_uint<2>(0_d),
                          select(wr_done,
                                 (s.aw_ptr + ch_uint<2>(1_d)) & ch_uint<2>(3_d),
@@ -885,10 +992,8 @@ public:
                                select(ar_hs_m3, ch_bool(true),
                                select(r_hs_m3 & m3_rlast, ch_bool(false), s.rd_active_m3)));
 
-        ch_bool rd_done = (s.rd_active_m0 & r_hs_m0 & m0_rlast) |
-                          (s.rd_active_m1 & r_hs_m1 & m1_rlast) |
-                          (s.rd_active_m2 & r_hs_m2 & m2_rlast) |
-                          (s.rd_active_m3 & r_hs_m3 & m3_rlast);
+        ch_bool rd_done = (r_hs_m0 & m0_rlast) | (r_hs_m1 & m1_rlast) |
+                          (r_hs_m2 & m2_rlast) | (r_hs_m3 & m3_rlast);
         s.ar_ptr->next = select(!io().rst_n, ch_uint<2>(0_d),
                          select(rd_done,
                                 (s.ar_ptr + ch_uint<2>(1_d)) & ch_uint<2>(3_d),
@@ -897,12 +1002,36 @@ public:
         // ================= 11. error responder（写）=================
         // 未映射写：互连层自己接受 AW/W 并返回 DECERR；`bvalid` MUST 是**寄存器**
         // 且保持到 `bready`（组合单拍脉冲会让合规 master 永久死锁）
-        ch_bool err_aw_hs = (aw_hs_m0 & (!aw_mapped_m0)) | (aw_hs_m1 & (!aw_mapped_m1)) |
-                            (aw_hs_m2 & (!aw_mapped_m2)) | (aw_hs_m3 & (!aw_mapped_m3));
+        // MUST 逐 beat 收完才能应答 (critic BLOCKER #1)：
+        // 一笔写的 beat 数 = awlen + 1。旧实现在**第一个** W beat 握手时就置位
+        // err_w_valid => (1) m*_wready 随之恒 0 => 后续 beat 永不被接受
+        // => master 持 wvalid 永久挂死；(2) B 响应在 wlast 之前发出，违反 AXI。
+        // => `err_w_remaining` 记「当前拍**之后**还需被接受的 beat 数」，逐拍递减
+        //    （递减带 `!= 0` 守卫 => 末拍不会下溢回绕）；
+        //    `err_w_valid` (= BVALID) 只在最后一拍被接受后才置位。
+        // 宽度 = 4 bit：`awlen` 最大 15，而初值就是 `awlen`（不是 `awlen + 1`）
+        // => 4 bit 恰好装下 0..15。⚠️ MUST NOT 改成 5 bit ——
+        //    `ch_uint<5>` 无法从 `ch_in<ch_uint<4>>` 端口构造（无隐式转换，实测编译失败）。
+        ch_bool err_aw_sel_m0 = aw_hs_m0 & (!aw_mapped_m0);
+        ch_bool err_aw_sel_m1 = aw_hs_m1 & (!aw_mapped_m1);
+        ch_bool err_aw_sel_m2 = aw_hs_m2 & (!aw_mapped_m2);
+        ch_bool err_aw_sel_m3 = aw_hs_m3 & (!aw_mapped_m3);
+        ch_bool err_aw_hs = err_aw_sel_m0 | err_aw_sel_m1 | err_aw_sel_m2 | err_aw_sel_m3;
+        // 锁存事务 ID (DECERR 响应 MUST 回显，同 Axi4Slave 的 write_id_reg 形态)
+        ch_uint<ID_WIDTH> err_aw_id =
+            select(err_aw_sel_m0, io().m0_awid,
+            select(err_aw_sel_m1, io().m1_awid,
+            select(err_aw_sel_m2, io().m2_awid, io().m3_awid)));
+        // 本笔写在「当前拍之后」还需被接受的 beat 数 = awlen
+        ch_uint<4> err_aw_len = select(err_aw_sel_m0, io().m0_awlen,
+                                select(err_aw_sel_m1, io().m1_awlen,
+                                select(err_aw_sel_m2, io().m2_awlen, io().m3_awlen)));
         ch_bool err_w_hs = (io().m0_wvalid & m0_wready & (!s.wr_mapped_m0)) |
                            (io().m1_wvalid & m1_wready & (!s.wr_mapped_m1)) |
                            (io().m2_wvalid & m2_wready & (!s.wr_mapped_m2)) |
                            (io().m3_wvalid & m3_wready & (!s.wr_mapped_m3));
+        // 末拍判定：剩余 beat 数 == 1 <=> 当前这一拍是最后一拍
+        ch_bool err_w_last_hs = err_w_hs & (s.err_w_remaining == ch_uint<4>(0_d));
         ch_bool err_b_hs = s.err_w_valid &
                            ((s.wr_active_m0 & (!s.wr_mapped_m0) & io().m0_bready) |
                             (s.wr_active_m1 & (!s.wr_mapped_m1) & io().m1_bready) |
@@ -911,8 +1040,15 @@ public:
         s.err_w_busy->next = select(!io().rst_n, ch_bool(false),
                               select(err_aw_hs, ch_bool(true),
                               select(err_b_hs, ch_bool(false), s.err_w_busy)));
+        s.err_w_remaining->next = select(!io().rst_n, ch_uint<4>(0_d),
+                              select(err_aw_hs, err_aw_len,
+                              select(err_w_hs & (s.err_w_remaining != ch_uint<4>(0_d)),
+                                     s.err_w_remaining - ch_uint<4>(1_d),
+                                     s.err_w_remaining)));
+        s.err_w_id->next = select(!io().rst_n, ch_uint<ID_WIDTH>(0_d),
+                              select(err_aw_hs, err_aw_id, s.err_w_id));
         s.err_w_valid->next = select(!io().rst_n, ch_bool(false),
-                               select(err_w_hs, ch_bool(true),
+                               select(err_w_last_hs, ch_bool(true),
                                select(err_b_hs, ch_bool(false), s.err_w_valid)));
 
         // ================= 12. error responder（读）=================
@@ -923,6 +1059,12 @@ public:
         ch_bool err_ar_sel_m2 = ar_hs_m2 & (!ar_mapped_m2);
         ch_bool err_ar_sel_m3 = ar_hs_m3 & (!ar_mapped_m3);
         ch_bool err_ar_hs = err_ar_sel_m0 | err_ar_sel_m1 | err_ar_sel_m2 | err_ar_sel_m3;
+        // 锁存事务 ID (DECERR 响应 MUST 回显，同 Axi4Slave 的 read_id_reg 形态)
+        ch_uint<ID_WIDTH> err_ar_id =
+            select(err_ar_sel_m0, io().m0_arid,
+            select(err_ar_sel_m1, io().m1_arid,
+            select(err_ar_sel_m2, io().m2_arid, io().m3_arid)));
+        // 本笔读在「当前拍之后」还需被返回的 beat 数 = arlen
         ch_uint<4> err_ar_len = select(err_ar_sel_m0, io().m0_arlen,
                                 select(err_ar_sel_m1, io().m1_arlen,
                                 select(err_ar_sel_m2, io().m2_arlen, io().m3_arlen)));
@@ -931,15 +1073,18 @@ public:
                                  (s.rd_active_m1 & (!s.rd_mapped_m1) & io().m1_rready) |
                                  (s.rd_active_m2 & (!s.rd_mapped_m2) & io().m2_rready) |
                                  (s.rd_active_m3 & (!s.rd_mapped_m3) & io().m3_rready));
+        // `err_r_remaining` 与写侧同构：「当前拍**之后**还需被返回的 beat 数」
+        // （初值 = `arlen`）=> 末拍 <=> 剩余 == 0，递减带 `!= 0` 守卫。
+        // ⚠️ 旧实现用 `arlen` 作初值却以「剩余 == 0 即末拍」+ 无守卫递减
+        //    => 把 `arlen + 1` 个 beat 少算一拍，且末拍时下溢回绕。
         ch_bool err_r_last_hs = err_r_beat_hs & (s.err_r_remaining == ch_uint<4>(0_d));
-        s.err_r_busy->next = select(!io().rst_n, ch_bool(false),
-                              select(err_ar_hs, ch_bool(true),
-                              select(err_r_last_hs, ch_bool(false), s.err_r_busy)));
         s.err_r_remaining->next = select(!io().rst_n, ch_uint<4>(0_d),
                                    select(err_ar_hs, err_ar_len,
-                                   select(err_r_beat_hs,
+                                   select(err_r_beat_hs & (s.err_r_remaining != ch_uint<4>(0_d)),
                                           s.err_r_remaining - ch_uint<4>(1_d),
                                           s.err_r_remaining)));
+        s.err_r_id->next = select(!io().rst_n, ch_uint<ID_WIDTH>(0_d),
+                              select(err_ar_hs, err_ar_id, s.err_r_id));
         s.err_r_valid->next = select(!io().rst_n, ch_bool(false),
                                select(err_ar_hs, ch_bool(true),
                                select(err_r_last_hs, ch_bool(false), s.err_r_valid)));

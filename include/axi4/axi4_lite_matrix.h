@@ -183,7 +183,6 @@ public:
         ch_reg<ch_bool> err_w_valid;  // bvalid，保持到 bready
 
         // error responder（读）：未映射读返回 1 个 DECERR beat（AXI4-Lite 无 arlen）
-        ch_reg<ch_bool> err_r_busy;
         ch_reg<ch_bool> err_r_valid;
 
         MatrixState()
@@ -195,7 +194,7 @@ public:
               rd_mapped_m0(false), rd_mapped_m1(false),
               rd_active_m0(false), rd_active_m1(false),
               err_w_busy(false), err_w_valid(false),
-              err_r_busy(false), err_r_valid(false) {}
+              err_r_valid(false) {}
     };
 
     // -------- 2 选 1 正向转发（**单次赋值** —— MUST NOT 写成「输出读自己」的自环，
@@ -215,15 +214,38 @@ public:
     }
 
     // -------- 地址窗口命中：`addr & ~(size-1) == base`（编译期常量掩码）--------
+    // 地址位掩码（ADDR_WIDTH 位全 1）—— `ADDR_WIDTH % 64` 避免 `1 << 64` 的 UB。
+    static constexpr uint64_t addr_bits_mask() {
+        static_assert(ADDR_WIDTH > 0 && ADDR_WIDTH <= 64,
+                      "ADDR_WIDTH MUST 在 1..64 —— 0 会让掩码恒 0（全地址命中），"
+                      "> 64 会静默丢掉地址高位");
+        return ADDR_WIDTH >= 64 ? ~uint64_t(0)
+                                 : ((uint64_t(1) << (ADDR_WIDTH % 64)) - uint64_t(1));
+    }
+
     static ch_bool window_hit(const ch_uint<ADDR_WIDTH> &addr, uint64_t base, uint64_t size) {
         const uint64_t mask = ~(size - 1ull);
-        return (addr & ch_uint<ADDR_WIDTH>(mask)) == ch_uint<ADDR_WIDTH>(base);
+        // ⚠️ MUST 先把 base / mask 截到 ADDR_WIDTH 位 —— 否则 `ch_uint<ADDR_WIDTH>(mask)`
+        //    会用 48/64 位值构造 32 bit 逻辑值 ⇒ **调试构建**（assert 打开）触发
+        //    `CH_CHECK`「value out of range」；NDEBUG 构建下静默截断（行为仍正确）
+        //    ⇒ 该缺陷此前被 NDEBUG 掩盖。
+        const uint64_t m = mask & addr_bits_mask();
+        const uint64_t b = base & addr_bits_mask();
+        return (addr & ch_uint<ADDR_WIDTH>(m)) == ch_uint<ADDR_WIDTH>(b);
     }
 
     // -------- 当拍地址解码：`target` = 命中的 slave（1 ⇒ s1），`mapped` = 是否落在窗口内 --------
     void decode_addr(const ch_uint<ADDR_WIDTH> &addr, ch_bool &target, ch_bool &mapped) {
-        static_assert(Map::windows[0].size != 0, "地址窗口 size MUST 非 0");
-        static_assert(Map::windows[1].size != 0, "地址窗口 size MUST 非 0");
+        static_assert(axi_window_is_valid(Map::windows[0]),
+                      "地址窗口 0 非法：size MUST 非 0 且为 2 的幂，base MUST 按 size 对齐");
+        static_assert(axi_window_is_valid(Map::windows[1]),
+                      "地址窗口 1 非法：size MUST 非 0 且为 2 的幂，base MUST 按 size 对齐");
+        static_assert(axi_window_fits(Map::windows[0], ADDR_WIDTH),
+                      "地址窗口 0 超出 ADDR_WIDTH 位地址空间：base 的高位会被静默丢掉 "
+                      "⇒ 别名到低地址（与低窗口双命中 ⇒ 静默错路由）");
+        static_assert(axi_window_fits(Map::windows[1], ADDR_WIDTH),
+                      "地址窗口 1 超出 ADDR_WIDTH 位地址空间：base 的高位会被静默丢掉 "
+                      "⇒ 别名到低地址（与低窗口双命中 ⇒ 静默错路由）");
         const ch_bool h0 = window_hit(addr, Map::windows[0].base, Map::windows[0].size);
         const ch_bool h1 = window_hit(addr, Map::windows[1].base, Map::windows[1].size);
         mapped = h0 | h1;
@@ -277,18 +299,18 @@ public:
 
         // ================= 3. error responder 的接受能力 =================
         const ch_bool err_w_can_accept = (!s.err_w_busy) & (!s.err_w_valid);
-        const ch_bool err_r_can_accept = (!s.err_r_busy) & (!s.err_r_valid);
+        const ch_bool err_r_can_accept = (!s.err_r_valid);
 
         // ================= 4. 转发选择 =================
         // 正向（AW / AR）：当拍地址解码 + 当拍 grant + 已映射
-        const ch_bool aw_sel_s0_m0 = aw_grant_m0 & aw_mapped_m0 & (!aw_target_m0);
-        const ch_bool aw_sel_s1_m0 = aw_grant_m0 & aw_mapped_m0 & aw_target_m0;
-        const ch_bool aw_sel_s0_m1 = aw_grant_m1 & aw_mapped_m1 & (!aw_target_m1);
-        const ch_bool aw_sel_s1_m1 = aw_grant_m1 & aw_mapped_m1 & aw_target_m1;
-        const ch_bool ar_sel_s0_m0 = ar_grant_m0 & ar_mapped_m0 & (!ar_target_m0);
-        const ch_bool ar_sel_s1_m0 = ar_grant_m0 & ar_mapped_m0 & ar_target_m0;
-        const ch_bool ar_sel_s0_m1 = ar_grant_m1 & ar_mapped_m1 & (!ar_target_m1);
-        const ch_bool ar_sel_s1_m1 = ar_grant_m1 & ar_mapped_m1 & ar_target_m1;
+        const ch_bool aw_sel_s0_m0 = (!s.wr_active_m0) & aw_grant_m0 & aw_mapped_m0 & (!aw_target_m0);
+        const ch_bool aw_sel_s1_m0 = (!s.wr_active_m0) & aw_grant_m0 & aw_mapped_m0 & aw_target_m0;
+        const ch_bool aw_sel_s0_m1 = (!s.wr_active_m1) & aw_grant_m1 & aw_mapped_m1 & (!aw_target_m1);
+        const ch_bool aw_sel_s1_m1 = (!s.wr_active_m1) & aw_grant_m1 & aw_mapped_m1 & aw_target_m1;
+        const ch_bool ar_sel_s0_m0 = (!s.rd_active_m0) & ar_grant_m0 & ar_mapped_m0 & (!ar_target_m0);
+        const ch_bool ar_sel_s1_m0 = (!s.rd_active_m0) & ar_grant_m0 & ar_mapped_m0 & ar_target_m0;
+        const ch_bool ar_sel_s0_m1 = (!s.rd_active_m1) & ar_grant_m1 & ar_mapped_m1 & (!ar_target_m1);
+        const ch_bool ar_sel_s1_m1 = (!s.rd_active_m1) & ar_grant_m1 & ar_mapped_m1 & ar_target_m1;
 
         // 反向（W / B 用写路由锁存；R 用读路由锁存）—— MUST NOT 用活的地址或活的 grant
         const ch_bool wr_sel_s0_m0 = s.wr_active_m0 & s.wr_mapped_m0 & (!s.wr_route_m0);
@@ -375,7 +397,7 @@ public:
         io().m1_arready = m1_arready;
 
         // ================= 7. 反向通道：按**锁存路由**反查 =================
-        const ch_uint<2> DECERR_V(static_cast<unsigned>(AxiResp4x4::DECERR));
+        const ch_uint<2> DECERR_V(static_cast<unsigned>(AxiResp::DECERR));
 
         // ---- m0 ----
         const ch_bool m0_bvalid = s.wr_active_m0 & select(s.wr_mapped_m0,
@@ -513,9 +535,6 @@ public:
         const ch_bool err_r_hs = s.err_r_valid &
                                  ((s.rd_active_m0 & (!s.rd_mapped_m0) & io().m0_rready) |
                                   (s.rd_active_m1 & (!s.rd_mapped_m1) & io().m1_rready));
-        s.err_r_busy->next = select(!io().rst_n, ch_bool(false),
-                              select(err_ar_hs, ch_bool(true),
-                              select(err_r_hs, ch_bool(false), s.err_r_busy)));
         s.err_r_valid->next = select(!io().rst_n, ch_bool(false),
                                select(err_ar_hs, ch_bool(true),
                                select(err_r_hs, ch_bool(false), s.err_r_valid)));

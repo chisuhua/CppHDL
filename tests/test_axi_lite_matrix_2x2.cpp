@@ -708,3 +708,129 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiLiteMatrix2x2 reset clears all routing state",
 });
 
 }  // namespace ch_test::axi_mx
+
+// ===========================================================================
+// critic SHOULD_FIX #3 的 2x2 补强用例（2026-10-26）：
+//   ① 幻影 AW / AR 护栏（2x2 与 4x4 同型缺陷）。
+//   ② 复位后 error responder 状态 MUST 被清零。
+// ===========================================================================
+namespace ch_test::axi_mx_extra {
+
+using namespace ch_test::axi_mx;
+
+// --- ① 幻影 AW / AR 护栏 ----------------------------------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiLiteMatrix2x2 in-flight: the next AW is not forwarded to any slave",
+                       "[axi][matrix][dual][inflight]", [&] {
+    auto &io = dev.instance().io();
+    mx_init(sim, io);
+
+    drv_aw(sim, io, 0, kSlaveBase[0], 1);
+    slv_awready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+
+    // 在途：m0 合法地举起**下一笔** AW
+    drv_aw(sim, io, 0, kSlaveBase[1], 1);
+    slv_awready(sim, io, 1, 1);
+    for (int i = 0; i < 4; ++i) {
+        INFO("in-flight cycle " << i);
+        REQUIRE(o_awready(sim, io, 0) == 0);
+        // 幻影 AW 护栏：MUST NOT 被转发给任何 slave
+        REQUIRE(o_s_awvalid(sim, io, 0) == 0);
+        REQUIRE(o_s_awvalid(sim, io, 1) == 0);
+        sim.tick();
+    }
+
+    // ---- liveness 半面（critic NIT #3）：在途事务完成后，排队的那笔 MUST 最终被接受 ----
+    drv_w(sim, io, 0, 0x1111u, 0xFu, 1);            // 在途那笔的 W（m0 → s0）
+    slv_wready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0);
+    slv_wready(sim, io, 0, 0);
+
+    slv_b(sim, io, 0, 1, 0 /*OKAY*/);
+    drv_bready(sim, io, 0, 1);
+    REQUIRE(wait_until(sim, [&] { return o_bvalid(sim, io, 0) == 1; }));
+    sim.tick();                                    // B 握手 ⇒ wr_active_m0 清零
+    slv_b(sim, io, 0, 0, 0);
+    drv_bready(sim, io, 0, 0);
+
+    // 排队的 AW（m0 → s1）此时 MUST 被接受并转发到 s1
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    REQUIRE(o_s_awvalid(sim, io, 1) == 1);
+    REQUIRE(o_s_awaddr(sim, io, 1) == kSlaveBase[1]);
+    REQUIRE(o_s_awvalid(sim, io, 0) == 0);         // MUST NOT 落到 s0
+});
+
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiLiteMatrix2x2 in-flight: the next AR is not forwarded to any slave",
+                       "[axi][matrix][dual][inflight]", [&] {
+    auto &io = dev.instance().io();
+    mx_init(sim, io);
+
+    drv_ar(sim, io, 1, kSlaveBase[1], 1);
+    slv_arready(sim, io, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_arready(sim, io, 1) == 1; }));
+    sim.tick();
+
+    drv_ar(sim, io, 1, kSlaveBase[0], 1);
+    slv_arready(sim, io, 0, 1);
+    for (int i = 0; i < 4; ++i) {
+        INFO("in-flight cycle " << i);
+        REQUIRE(o_arready(sim, io, 1) == 0);
+        REQUIRE(o_s_arvalid(sim, io, 0) == 0);
+        REQUIRE(o_s_arvalid(sim, io, 1) == 0);
+        sim.tick();
+    }
+
+    // ---- liveness 半面（critic NIT #3）：在途读完成后，排队的那笔 MUST 最终被接受 ----
+    slv_r(sim, io, 1, 1, 0xAAAAu, 0 /*OKAY*/);
+    drv_rready(sim, io, 1, 1);
+    REQUIRE(wait_until(sim, [&] { return o_rvalid(sim, io, 1) == 1; }));
+    sim.tick();                                    // R 握手 ⇒ rd_active_m1 清零
+    slv_r(sim, io, 1, 0, 0, 0);
+    drv_rready(sim, io, 1, 0);
+
+    REQUIRE(wait_until(sim, [&] { return o_arready(sim, io, 1) == 1; }));
+    REQUIRE(o_s_arvalid(sim, io, 0) == 1);         // 排队那笔的目标是 s0
+    REQUIRE(o_s_araddr(sim, io, 0) == kSlaveBase[0]);
+    REQUIRE(o_s_arvalid(sim, io, 1) == 0);         // MUST NOT 落回 s1
+});
+
+// --- ② 复位后 error responder 状态 MUST 被清零 ------------------------------
+DUAL_BACKEND_TEST_PAIR(Dut, "AxiLiteMatrix2x2 reset clears the DECERR error responder state",
+                       "[axi][matrix][dual][reset]", [&] {
+    auto &io = dev.instance().io();
+    mx_init(sim, io);
+
+    // 造一笔未映射写（AW + W 握手，但**不**做 B 握手）⇒ err_w_busy / err_w_valid = 1
+    drv_aw(sim, io, 0, kUnmappedAddr, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_aw(sim, io, 0, 0, 0);
+    drv_w(sim, io, 0, 0x1111u, 0xFu, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0);
+    REQUIRE(o_bvalid(sim, io, 0) == 1u);
+    drv_bready(sim, io, 0, 0);
+
+    sim.set_input_value(io.rst_n, 0);
+    sim.tick();
+    sim.set_input_value(io.rst_n, 1);
+    sim.tick();
+
+    // 复位后：一笔**新的**未映射写 MUST 能被接受
+    drv_aw(sim, io, 0, kUnmappedAddr, 1);
+    REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_aw(sim, io, 0, 0, 0);
+    drv_w(sim, io, 0, 0x3333u, 0xFu, 1);
+    REQUIRE(wait_until(sim, [&] { return o_wready(sim, io, 0) == 1; }));
+    sim.tick();
+    drv_w(sim, io, 0, 0, 0, 0);
+    REQUIRE(wait_until(sim, [&] { return o_bvalid(sim, io, 0) == 1; }));
+    REQUIRE(o_bresp(sim, io, 0) == 3u);
+});
+
+}  // namespace ch_test::axi_mx_extra

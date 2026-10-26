@@ -5,7 +5,8 @@
  * 契约：`openspec/specs/axi-interconnect-routing/spec.md`
  *
  * 本头只放**两个互连组件共享**的类型：
- *   * `AxiResp4x4` —— AXI 响应码（互连层的 error responder 用它回 DECERR）
+ *   * `AxiResp` —— AXI 响应码（互连层的 error responder 用它回 DECERR；
+ *     定义在 `axi4/axi_resp.h`，**全 AXI 家族的唯一权威**）
  *   * `AxiAddrWindow` + 两个默认地址映射 —— **编译期可配置**的地址窗口
  *
  * ⚠️ **为什么地址映射 MUST 可配置**：
@@ -20,20 +21,12 @@
 
 #pragma once
 
+#include "axi4/axi_resp.h"
 #include <cstdint>
 
 namespace axi4 {
 
-#ifndef AXI4_AXIRESP_DEFINED_IC
-#define AXI4_AXIRESP_DEFINED_IC
-// AXI 响应码（`ch_uint<2>` 的编码）
-enum class AxiResp4x4 : uint8_t {
-    OKAY   = 0b00,
-    EXOKAY = 0b01,
-    SLVERR = 0b10,
-    DECERR = 0b11
-};
-#endif
+// AXI 响应码来自 `axi4/axi_resp.h`（**全 AXI 家族的唯一权威定义**）
 
 // 地址窗口：`size` MUST 是 2 的幂，`base` MUST 按 `size` 对齐。
 // 窗口命中判据 = `(addr & ~(size-1)) == base`
@@ -42,6 +35,26 @@ struct AxiAddrWindow {
     uint64_t base;
     uint64_t size;
 };
+
+// 窗口合法性（**编译期**校验 —— 传错会得到静默的错误解码）：
+//   * `size` MUST 非 0 且为 2 的幂（否则 `~(size-1)` 掩码不是「按 size 对齐」）
+//   * `base` MUST 按 `size` 对齐（否则窗口会与其前一个窗口重叠）
+constexpr bool axi_window_is_valid(const AxiAddrWindow &w) {
+    return w.size != 0 && (w.size & (w.size - 1)) == 0 && (w.base & (w.size - 1)) == 0;
+}
+
+// 窗口 MUST **完整落在** `addr_width` 位地址空间内。
+//
+// ⚠️ 为什么必需：`window_hit` 会把 base / 掩码**截到 `addr_width` 位**再构造逻辑值
+//   （否则调试构建触发 `CH_CHECK`「value out of range」）。截断的副作用是：
+//   `base >= 2^addr_width` 的窗口会**静默别名**到低地址（与窗口 0 双命中 ⇒
+//   按优先级静默错路由），而截断**消除**了原本唯一的配置错误检测。
+//   ⇒ 用编译期断言把这个检测补回来（`decode_addr` 里实例化）。
+//
+// 用 `base | (size - 1)` 而不是 `base + size - 1`：后者在极端配置下会 64 位溢出。
+constexpr bool axi_window_fits(const AxiAddrWindow &w, unsigned addr_width) {
+    return addr_width >= 64 ? true : ((w.base | (w.size - 1)) >> addr_width) == 0;
+}
 
 // 默认映射（4×4 互连）：4 个 1 GiB 窗口把 32 位地址空间完整铺满。
 // ⚠️ 与旧的硬编码 `awaddr >> 30` **逐位等价**（避免破坏既有实例化点）。

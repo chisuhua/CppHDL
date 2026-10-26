@@ -10,9 +10,10 @@ AXI4 bus protocol (Full/Lite) + 7 peripherals. All header-only, `ch::Component` 
 include/axi4/
 ├── axi4_full.h              # AXI4 Full slave (5 channels, burst)
 ├── axi4_lite_slave.h        # Simplified Lite slave (4-register state machine)
-├── axi4_lite_matrix.h       # 2x2 AXI4-Lite crossbar (525 lines)
-├── axi_interconnect_4x4.h   # 4x4 full AXI crossbar (949 lines — most complex)
-├── interconnect_common.h    # 互连层共用契约类型（AXI 响应码 + 地址窗口 + 默认映射）
+├── axi4_lite_matrix.h       # 2x2 AXI4-Lite crossbar (544 lines)
+├── axi_interconnect_4x4.h   # 4x4 full AXI crossbar (1094 lines — most complex)
+├── interconnect_common.h    # 互连层共用契约类型（地址窗口 + 默认映射 + 合法性校验）
+├── axi_resp.h               # AXI 响应码（`AxiResp`，**全 AXI 家族唯一权威**）
 ├── axi_to_axilite.h        # AXI ↔ AXI-Lite bidirectional converter
 ├── byte_lane.h             # 字节道（WSTRB）掩码工具（支持 8/16/32/64 bit 总线）
 └── peripherals/
@@ -32,7 +33,8 @@ include/axi4/
 | 5-channel AXI4 slave | `axi4_full.h` |
 | 2x2 crossbar（AXI4-Lite） | `axi4_lite_matrix.h` |
 | 4x4 crossbar (full) | `axi_interconnect_4x4.h` |
-| 互连层共用契约类型（响应码 / 地址窗口 / 默认映射） | `interconnect_common.h` |
+| 互连层共用契约类型（地址窗口 / 默认映射 / 合法性校验） | `interconnect_common.h` |
+| AXI 响应码（唯一权威） | `axi_resp.h` |
 | Protocol conversion | `axi_to_axilite.h` |
 | 字节道（WSTRB）掩码 | `byte_lane.h` — `byte_lane_mask<DATA_WIDTH>` / `byte_lane_apply<W>` |
 | Peripherals | `peripherals/axi_gpio.h`, `axi_uart.h`, `axi_timer.h`, `axi_pwm.h`, `axi_i2c.h`, `axi_spi.h`, `axi_dma.h` |
@@ -80,6 +82,9 @@ include/axi4/
   契约见 `openspec/specs/axi-interconnect-routing/spec.md`
   （`axi4-interconnect-routing-2026-10` 落地，管辖**互连侧**；
   `axi-slave-conformance` 管**从设备侧**，两者不重叠）。
+  ⚠️ 该主 spec 由 change 的 delta 在 **archive 时**创建（delta 在
+  `openspec/changes/axi4-interconnect-routing-2026-10/specs/axi-interconnect-routing/spec.md`；
+  change 未归档前该主 spec 路径**尚不存在**）。
   适用对象：`axi_interconnect_4x4.h` 的 `AxiInterconnect4x4`（AXI4 Full，4×4）
   与 `axi4_lite_matrix.h` 的 `AxiLiteMatrix2x2`（AXI4-Lite，2×2）。
   1. **路由锁存**：目标 slave 在 **AW / AR 握手当拍**由**该通道自己的地址**解码
@@ -89,7 +94,13 @@ include/axi4/
        （AXI 要求 master 在 `awvalid && !awready` 期间保持地址稳定 ⇒ 握手窗口内的
        「活地址」是安全的）；
      - **握手后的转发**（W / B / R 通道）MUST 用**锁存路由**，
-       MUST NOT 用活的 `awaddr` / `araddr` 或活的仲裁 grant。
+       MUST NOT 用活的 `awaddr` / `araddr` 或活的仲裁 grant；
+     - ⚠️ **正向转发 MUST 同时吃「在途门控」**（`!write_active[m]` /
+       `!read_active[m]`）—— 该 master 在自己的事务在途期间合法地举起**下一笔**
+       `awvalid` / `arvalid`（AXI4 允许多 outstanding）时，本笔请求 MUST NOT
+       被转发给 slave（否则 slave 接受了一个**互连从未锁存路由**的请求 ⇒ 幻影
+       AW / AR ⇒ slave 等不到 W、master 等不到 `awready` ⇒ 双向永久死锁）。
+       该门控与第 2 条的 `m*_awready` 门控是**同一件事的两面**。
   2. **在途门控**：`m*_awready` MUST 被 `!write_active[m]` 门控、
      `m*_arready` MUST 被 `!read_active[m]` 门控 —— 在途期间 MUST 为 0，
      否则 master 认为 AW/AR 被接受而互连悄悄吞掉（**AW 静默丢失**）。
@@ -291,8 +302,8 @@ include/axi4/
 | `test_axi_spi.cpp` | `[axi][spi]` | SPI master |
 | `test_axi4_full_burst.cpp` | `[axi][axi4][burst][dual]` | 通用 AXI4 Full slave 的多 beat burst 语义（INCR / FIXED / WRAP→SLVERR / 逐 beat wstrb / 越界 DECERR / 超 MAX_BURST_LEN→SLVERR / rst_n 复位；**双后端**） |
 | `test_axi_i2c.cpp` | `[axi][i2c]` | I2C master |
-| `test_axi_interconnect_4x4.cpp` | `[axi][interconnect][dual]` | 4×4 互连的 16 对全路由 / 路由锁存 / 独立仲裁 / 在途门控 / DECERR error responder / rst_n 中途复位（**双后端**） |
-| `test_axi_lite_matrix_2x2.cpp` | `[axi][matrix][dual]` | 2×2 矩阵的 4 对全路由 / 读侧 `ar_route` 锁存 / `s*_rready` 用读路由 / 写读独立仲裁 / DECERR / rst_n（**双后端**） |
+| `test_axi_interconnect_4x4.cpp` | `[axi][interconnect][dual]` | 4×4 互连的 16 对全路由 / 路由锁存 / 独立仲裁（恰一个 grant）/ 在途门控 + **幻影 AW·AR** / 多 beat mapped 写读 / **多 beat unmapped 写（逐 beat 收完才应答）** / DECERR 与 **事务 ID 回显** / rst_n 中途复位 + error responder 复位（**双后端**，23 对 = 46 TEST_CASE / 474 断言） |
+| `test_axi_lite_matrix_2x2.cpp` | `[axi][matrix][dual]` | 2×2 矩阵的 4 对全路由 / 读侧 `ar_route` 锁存 / `s*_rready` 用读路由 / 写读独立仲裁 / 在途门控 + **幻影 AW·AR** / DECERR / rst_n + error responder 复位（**双后端**，17 对 = 34 TEST_CASE / 170 断言） |
 
 ## PHASE GATES
 Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**.

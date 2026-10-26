@@ -46,6 +46,7 @@
 #pragma once
 
 #include "axi4/byte_lane.h"
+#include "axi4/axi_resp.h"
 #include "ch.hpp"
 #include "component.h"
 
@@ -55,15 +56,8 @@ namespace axi4 {
 
 using namespace ch::core;
 
-#ifndef AXI4_AXIRESP_DEFINED
-#define AXI4_AXIRESP_DEFINED
-enum class AxiResp : uint8_t {
-    OKAY   = 0b00,
-    EXOKAY = 0b01,
-    SLVERR = 0b10,
-    DECERR = 0b11
-};
-#endif
+// AXI 响应码：**全 AXI 家族的唯一权威定义**在 `axi4/axi_resp.h`
+// （此前此处与 `axi_interconnect_4x4.h` 各有一份逐值相同的副本）
 
 enum class AxiBurst : uint8_t {
     FIXED = 0b00,
