@@ -152,7 +152,7 @@ bash scripts/run_all_samples.sh  # 35/35
 | T1 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿（本机 Linux 不可完成） | ⚠️ 该 job 红 ⇒ MUST **revert 归档 commit**（含主 spec 新增 capability） |
 | **T2** `rv32i-store-byte-enable-2026-10` | ✅ **已归档**（2026-10-26） | `DataTCM` 加 `strbe` + 读-改-写合并（复用 `byte_lane.h`）+ 流水线 lane 对齐（`shl<32>`，**只对 SB/SH** ⇒ `sw` 零回退）+ SoC 接线 + **4 个实例化点显式驱动**；固件尾部追加 `sb`/`sh` 用例（既有 word 索引不动）；归档 → `openspec/changes/archive/2026-10-26-rv32i-store-byte-enable-2026-10/`；新 capability `rv32i-isa-semantics`（2 条 Requirement） |
 | T2 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿 | 同上（revert 条件相同） |
-| **T3** `rv32i-jump-sra-2026-10` | 🟡 **实施中**（2026-10-26 起） | 5 段 improvement 草案 + openspec change 已建；实现要点：JAL/JALR 目标 + `pc+4` 写回 + 真 SRA |
+| **T3** `rv32i-jump-sra-2026-10` | 🟡 **已实施，待对抗审稿** | commit `0972f4d`；JAL/JALR 重定向（复用条件分支通路，**未**加第三路 PC 源）+ 返回地址走**新增** `link_value` 通路 + SRA 真算术右移（**两处**：`ex_stage` 内联 + `Rv32iAlu` 组件）；**连带修复 2 个既有缺陷**（U 型立即数 / `alu_op` 对 I 型的 SUB 误判）；固件 64 → 100 字；`non_retired` 11 → 17（实测）；**变异 6/6 全被抓**；`ctest -LE perf` 191/191；6229 断言绿 |
 | T4–T9 | ⏳ 未开始 | 每个需 planner 的 5 段 improvement 草案 + openspec change |
 
 ### 2026-10-26 对抗审稿第 1 轮结果（两个 change 均**无 BLOCKER**）
@@ -178,6 +178,15 @@ bash scripts/run_all_samples.sh  # 35/35
   （critic 标 `scope_exceeded`）：需要先设计「必需端口注册表」
   （不同端口的未驱动读值语义不同：`rst_n` 读 0 = 永久复位、`strbe` 读全 1 = 碰巧整字写）
   ⇒ 已登记进根 `AGENTS.md` 的约定层 ⇒ **独立立项**（建议单开一个 change）。
+
+> **T3 实施中挖出的三个可复用事实**（已写进 `include/cpu/AGENTS.md` 的约定层）：
+> ① **`funct7[5]`（= `instr[30]`）只对 R 型 与 SRAI 有意义** —— 对 I 型那是 `imm[10]`
+>    ⇒ 用它判 SUB 会把 `imm >= 0x400` / 负数误判成 SUB（既有固件 imm 全 `< 0x400` 才侥幸
+>    未暴露）；**任何按 `funct7` 分派 ALU 操作的代码 MUST 用 opcode 门控**；
+> ② **U 型立即数 MUST 是 `instr[31:12] << 12`** —— 20 位掩码再左移会把 `rd`/`opcode`
+>    算进去（`auipc x18, 0` ⇒ `pc + 0x917000`）；
+> ③ **新端口的「间接验证」陷阱**：`link_value` 没有观测端口（D10 冻结 32 端口）
+>    ⇒ 只能靠写回值间接验证 ⇒ 写回序列断言是它的**唯一**判据。
 
 > **T2 实施中挖出的两个可复用事实**（已写进 capability `rv32i-isa-semantics`）：
 > ① **未驱动的输入端口读到的是「全 1」而不是 0** ⇒ 依赖默认值的实现会「碰巧」通过
