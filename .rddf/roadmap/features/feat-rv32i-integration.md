@@ -28,8 +28,8 @@ phase_refs: [phase-5]
 | `i_cache_prefetch.h` wrapper SIGSEGV 修复 | ✅ 已实施（2026-10-20 change `fix-riscv-mini-cache-prefetch-sigsegv`，archive `2026-10-19-fix-riscv-mini-cache-prefetch-sigsegv`） |
 | RV32I microarchitecture dual-backend behavior parity（Batch 1，13 dual pairs / 5 component classes） | ✅ 已实施（2026-10-19 commit `bbf536d`） |
 | RV32I 单源化收敛（`feat-riscv-mini-convergence`） | ✅ 已归档（C2，2026-10-25） |
-| **RV32I 流水线 commit/valid 通路修复**（change `rv32i-pipeline-commit-path-2026-10`） | 🟡 **实施中** —— 观测面（**32 端口**）+ **17 个流水线缺陷**；第 18 轮 critic 收官审稿中（load-use 多拍停顿已按 A1-a 落地） |
-| riscv-mini SOC 双路 parity + JIT 回落断言 | ⏸ **C3 挂起**（`rv32i-soc-dual-parity-2026-10`）—— 前提被实测证伪：SoC 此前**跑不动程序** ⇒ 须等前置 change 落地 |
+| **RV32I 流水线 commit/valid 通路修复**（change `rv32i-pipeline-commit-path-2026-10`） | ✅ **已归档**（2026-10-26）—— 观测面（**32 端口**）+ **17 个流水线缺陷**（含 load-use 多拍停顿 A1-a + flush 多杀一拍） |
+| riscv-mini SOC 双路 parity + JIT 回落断言 | ✅ **已归档**（2026-10-26，change `rv32i-soc-dual-parity-2026-10`）—— 200 拍 × **27** 个输出观测值**逐拍全等**（无掩码）+ 3 个 store 的 ISA golden + 写回序列断言 + **JIT 回落契约**（原因可归因：`unsupported node width: mem (…, 131072 bits > 64)`） |
 
 ## 跨阶段拆分
 
