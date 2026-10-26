@@ -43,6 +43,10 @@
 - [ ] T3.1 **macOS-14（BSD/BWK awk）实测**：`bash scripts/verify_example_assertion_quality.sh`
       与 fixture 自检在 macos-14 上均绿
       （⚠️ C1 第 6 轮才发现「组内 `^`」在 POSIX 中未定义 ⇒ 这条不可省）
+      ⚠️ **2026-10-26 补注**：本机是 Linux ⇒ **本地无法完成** ⇒ 权威结果 =
+      **CI 的 `macos-14` job** ⇒ 归档前 MUST 看到该 job 绿（禁止「假定 OK」）。
+      ⚠️ 本次抽取 lib 时已把「组内 `^`」换成**哨兵空格**写法（lib 的 `count_asserts`
+      里 `s = " " str` + `[^A-Za-z0-9_]`）⇒ 规避了该 POSIX 未定义项 ⇒ macOS 风险面收窄。
 - [ ] T3.2 若 BSD awk 有差异：改用 POSIX 明确定义的构造（哨兵空格法已在 C1 采用）
 - [ ] T3.3 在 proposal 里记录实测平台与结果（不写「假定 OK」）
 
@@ -62,12 +66,21 @@
 
 ## Phase 4: 验收
 
-- [ ] T4.1 `bash scripts/verify_example_assertion_quality.sh` 绿
-- [ ] T4.2 fixture 自检绿（10/10）
-- [ ] T4.3 变异验证 4 条全被抓：注释掉断言 / 死宏体 / `#elif` 死分支 / `SUCCEED`-only 用例
-- [ ] T4.4 假阳性回归：`#if 0 / #else` 内的活断言**不**报违规
-- [ ] T4.5 `openspec validate --strict` 通过
-- [ ] T4.6 `scripts/verify_example_test_wiring.sh` 仍绿（拆分未破坏归属守恒）
+- [x] T4.1 ✅ `bash scripts/verify_example_assertion_quality.sh` 绿
+      （2026-10-26 实测；且重构前后输出**逐字一致** ⇒ 抽取 lib 无行为漂移）
+- [x] T4.2 ✅ fixture 自检绿（11/11 —— 比 proposal 的 10 个多 1 个
+      `identifier_lookalike`，钉住实测确认的局限「名字错位、计数不错」）
+- [x] T4.3 ✅ 变异验证 4 条全被抓（2026-10-26 实测，逐一改坏 lib 后自检转红）：
+      ① 行注释不剥离 ② 宏体被计入 ③ `#elif` 死分支被计入 ④ `SUCCEED` 被当断言
+      ⇒ 自检对每种机制都有判别力（非「能跑 vs 崩」）
+- [x] T4.4 ✅ 假阳性回归：`#if 0 / #else` 内的活断言**不**报违规
+      （fixture `live_else.cpp` 期望 `A`=1 ⇒ 活断言计入 ⇒ 不误报）
+- [x] T4.5 ✅ `openspec validate --strict` 通过
+      （2026-10-26：`Change 'example-assertion-quality-2026-10' is valid`）
+- [x] T4.6 ✅ `scripts/verify_example_test_wiring.sh` 仍绿（拆分未破坏归属守恒）
+- [ ] T4.7 ⏳ **macOS-14 实测**（= Phase 3 的 T3.1–T3.3）：
+      本机是 Linux ⇒ **无法本地完成** ⇒ 权威结果 = **CI 的 `macos-14` job**
+      ⇒ 归档前 MUST 看到该 job 绿（禁止用「假定 OK」代替）
 
 ## Out of Scope
 

@@ -16,7 +16,6 @@
 ---
 
 ## 0. planner 审查记录（2026-10-26）
-
 **审查范围**：本计划 ↔ `.rddf/roadmap/**` 的双向映射、验收可核性、前置依赖完整性、判据一致性。
 
 ### 0.1 映射核对结论 —— **全覆盖，无越界**
@@ -144,6 +143,15 @@ bash scripts/run_all_samples.sh  # 35/35
 ---
 
 ## 3. 任务详述
+
+### 执行进度（2026-10-26，builder 实做后回填）
+
+| 任务 | 状态 | 证据 |
+|---|---|---|
+| **T1** `example-assertion-quality-2026-10` | 🟡 **Phase 1 完成**（T1.1–T1.4 / T2.2 / T3.5.1 / T4.1–T4.6） | commit `0e765d4`；11 fixture + 自检脚本 + 共享 lib；**变异验证 4/4 全被抓**；护栏重构前后输出**逐字一致**；`ctest -LE perf` **191/191** 绿；7 个护栏全 PASS |
+| T1 剩余门 | ⏳ **T4.7 = macOS-14 实测**（本机 Linux 不可完成 ⇒ 权威 = CI 的 `macos-14` job） | ⇒ **T1 归档的唯一阻塞项** |
+| T2–T9 | ⏳ 未开始 | 每个需 planner 的 5 段 improvement 草案 + openspec change（T2 的草案尚缺） |
+
 
 ### T1 · `example-assertion-quality-2026-10`（P1 · 唯一 active change）
 
