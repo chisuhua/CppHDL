@@ -2,7 +2,7 @@
 id: objective-rv32i-e2e
 status: active
 created: 2026-10-19
-last_revised: 2026-10-23
+last_revised: 2026-10-26
 review_by: 2027-01-17
 owner: rdd-planner
 priority: P0
@@ -32,6 +32,22 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 > 审计确认 `include/cpu/pipeline/` 与 `examples/riscv-mini/src/` 是**两套不同架构**，各自被不同测试覆盖
 > ⇒ 不存在「单一 SoC」可供 parity。必须先收敛（C1 + C2）才有 parity 对象。
 
+> ⚠️ **2026-10-26 状态更新（诊断已被后续三个 change 消解）**：
+> 1. **2026-10-24** C1 `riscv-mini-test-triage-2026-10` 归档（19 个「编译但从不执行」的
+>    target 清零 ⇒ CTest 条目与实际执行对齐）。
+> 2. **2026-10-25** C2 `rv32i-canonical-convergence-2026-10` 归档 ⇒ **两套架构已收敛**
+>    （`examples/riscv-mini/src/` 32 头 → **1** 头；`include/cpu/**` 成为唯一权威；
+>    ADR-046 D10 端口契约）。
+> 3. **2026-10-26** 前置 change `rv32i-pipeline-commit-path-2026-10` 归档 ⇒
+>    **SoC 从「跑不动程序」变成能正确执行 48 字固件**（观测面 **32 端口**；
+>    **17 个流水线缺陷**修复，含 load-use 多拍停顿 A1-a 与 flush 多杀一拍）。
+> 4. **2026-10-26** C3 `rv32i-soc-dual-parity-2026-10` 归档 ⇒ 本 objective 的
+>    **SoC 级双路 parity**（200 拍 × **27** 个输出观测值**逐拍全等**，无掩码）
+>    与 **JIT 回落契约**（回落原因可归因：`unsupported node width: mem
+>    (…, 131072 bits > 64)`）落地。
+> ⇒ 本 objective 的**主线已闭合**；仅剩「`dual-backend-rv32i-integration` change
+> archived」一条未达成（Batch 2/3 未做）⇒ objective 保持 `active`。
+
 适用场景：RV32I 顶层集成 + 双路 trace parity 验证；不适用场景：单模块单元测试（已有 dual-backend Phase 1 覆盖）、JIT mem-read lowering（见独立 objective）。
 
 ## 2. 目标愿景 + 完成判据
@@ -42,9 +58,9 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 - `i_cache_prefetch.h` / `d_cache_write_buffer.h` wrapper 无 SIGSEGV
 - 完成判据（done-when）：
   - [x] `examples/riscv-mini/src/i_cache_prefetch.h` 实例化 `ICacheSync` 通过（无 SIGSEGV）— 2026-10-20 已修复
-  - [ ] `objective-riscv-mini-convergence` 完成（单一 RV32I 实现，本 objective 的前置）
-  - [ ] riscv-mini SOC **双路** trace parity 通过（≥ 20 指令序列，含 load/store/branch）
-  - [ ] JIT 回落行为显式断言通过
+  - [x] `objective-riscv-mini-convergence` 完成（单一 RV32I 实现，本 objective 的前置）— 2026-10-25
+  - [x] riscv-mini SOC **双路** trace parity 通过（≥ 20 指令序列，含 load/store/branch）— 2026-10-26 C3
+  - [x] JIT 回落行为显式断言通过 — 2026-10-26 C3 的 T6
   - [ ] `dual-backend-rv32i-integration` change archived
 
 ## 3. 架构依据
@@ -54,6 +70,15 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 - **ADR-041** — cache Sync/Async variant（RV32I L1 用 Sync）
 - **ADR-046** `rv32i-canonical-home` — RV32I canonical home（本 objective 的前置 objective 的架构裁决；✅ 2026-10-23 起草落盘）
 - `openspec/specs/verilator-rv32i-e2e/spec.md` — RV32I + Verilator e2e 契约
+  （⚠️ **2026-10-26 更新**：`## Purpose` 已手写；C3 归档时 **+5 个 Requirement**
+  —— SoC 观测输出 / 固件写端口与死端口 / 双路逐周期 parity / JIT 跳过原因可归因 /
+  JIT 回落行为显式断言）
+- `openspec/specs/rv32i-commit-path/spec.md` — **RV32I 流水线 commit/valid 通路契约**
+  （2026-10-26 归档的新 capability，6 个 Requirement：退休语义 / 有效链 /
+  级间信号不串级 / 观测面契约 / 全观测值 parity / **load-use 保持型停顿** +
+  **停顿·冲刷期间有效链自洽**）
+- **ADR-046 `rv32i-canonical-home` D10-rev** — SoC 端口契约修订（**32 端口**
+  = 5 输入 + 27 输出 = 11 功能 `obs_*` + 16 诊断 `dbg_*`）
 - `openspec/specs/dual-backend-test-coverage/spec.md` — dual-backend 契约（Phase 4 续接）
 - root `AGENTS.md §KNOWN LIMITATIONS` — JIT 对 `ch_mem` 读端口回落记录（本 objective 把它变成显式断言）
 
@@ -77,9 +102,9 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 4 条 → 转 completed）：
   - [x] `i_cache_prefetch.h` wrapper SIGSEGV 修复（真实实例化 ICacheSync 通过）— 2026-10-20
-  - [ ] `objective-riscv-mini-convergence` 完成（单一 RV32I 实现）
-  - [ ] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过
-  - [ ] JIT 回落行为显式断言通过（检测 + 回落结果一致）
+  - [x] `objective-riscv-mini-convergence` 完成（单一 RV32I 实现）— 2026-10-25
+  - [x] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过 — 2026-10-26
+  - [x] JIT 回落行为显式断言通过（检测 + 回落结果一致）— 2026-10-26
 - **No-Go 判据**（任一成立 → defer）：
   - verilator codegen 对 RV32I 完整设计暴露无法在合理工期内修复的 bug
   - 收敛（`objective-riscv-mini-convergence`）判定 No-Go
@@ -91,9 +116,13 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 
 ## 10. next_sprint_candidates
 - sprint-2026-10: ~~ADR-046（归 `objective-riscv-mini-convergence`）~~ ✅ 2026-10-23 完成
-- sprint-2026-10: `rv32i-canonical-convergence-2026-10`（C2，归 `objective-riscv-mini-convergence`）
-- sprint-2026-11+: `rv32i-soc-dual-parity-2026-10`（C3，**本 objective 的首个可执行 change**，依赖 C2）
+- sprint-2026-10: ~~`rv32i-canonical-convergence-2026-10`（C2）~~ ✅ 2026-10-25 归档
+- sprint-2026-11: ~~`rv32i-pipeline-commit-path-2026-10`（C3 的前置：流水线 commit/valid 修复 + 观测面）~~ ✅ 2026-10-26 归档
+- sprint-2026-11: ~~`rv32i-soc-dual-parity-2026-10`（C3）~~ ✅ 2026-10-26 归档
 - sprint-2026-11+: `dual-backend-rv32i-integration` Batch 2/3（`IfIdPipelineReg` clk-spike + `BranchPredictor`）
+  ⇒ **本 objective Go 判据的最后一条**（`dual-backend-rv32i-integration` archived）
+- sprint-2026-11+: `axi4-interconnect-routing-2026-10`（AXI 4×4 全路由；与本 objective 无耦合）
+- sprint-2026-12+: `jit-mem-read-port-support`（独立 objective：JIT-native 三路）
 
 ## 11. 跟踪台账（append-only）
 | Sprint | kind | 内容 | Decision/调整 | 原因 |
@@ -101,3 +130,6 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 | sprint-2026-10 | sprint-review | objective 创建（roadmap 首次初始化） | 激活为 Phase 5 旗舰目标 | Phase 4 dual-backend 基础设施就绪后即可启动 |
 | sprint-2026-10 | revise | 「三路 → 双路 + JIT 回落断言」重定义 | 采纳用户裁决（2026-10-23） | `type_mem_read_port` → `UNSUPPORTED_OP` ⇒ RV32I 的 JIT 路必然回落，三路不可能原生成立 |
 | sprint-2026-10 | revise | 新增强前置 `objective-riscv-mini-convergence` | 采纳用户裁决（2026-10-23） | 审计发现两个 cluster 是**两套不同架构**，无单一实现则 parity 无对象 |
+| sprint-2026-11 | sprint-review | C1 / C2 / 前置 change / C3 连续四个 change 归档 | 主线闭合（2026-10-26） | C3 起步时实测证明「SoC 跑不动程序」⇒ 挂起并立前置 change；前置落地后 SoC 能正确执行 48 字固件 ⇒ C3 的 SoC 级双路 parity 可写 |
+| sprint-2026-11 | revise | JIT 归因的失败出口从 1 个改为 **2 个** | 采纳实测（2026-10-26） | `allocate_buffer` 的「节点宽度 > 64」在 `generate_ir` **之前** ⇒ 它才是首个命中点 ⇒ 原方案只改 `generate_ir` ⇒ 回落日志的原因**是空的** |
+| sprint-2026-11 | revise | SoC 端口契约 15 → **32**（ADR-046 **D10-rev**） | 采纳（2026-10-26） | 观测需要「指令流 / 有效链 / 写回 / 冒险脉冲」的可观测点，而 verilator 只能读**顶层**端口 |

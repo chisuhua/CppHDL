@@ -1,8 +1,8 @@
 ---
 id: objective-riscv-mini-convergence
-status: active
+status: completed
 created: 2026-10-23
-last_revised: 2026-10-23
+last_revised: 2026-10-26
 review_by: 2027-01-23
 owner: rdd-planner
 priority: P0
@@ -89,11 +89,11 @@ exit=0: 其余 12 个
 - 无任何同 basename 头文件跨两个目录；无任何根 tests/ → example 的反向 include
 - 无从未编译的头文件；无「编译但从不执行」的测试 target
 - 完成判据（done-when）：
-  - [ ] C1 `riscv-mini-test-triage-2026-10` archived（19 target 清零 / 7 orphan 定性 / CTEST_TOTAL 同步）
+  - [x] C1 `riscv-mini-test-triage-2026-10` archived（19 target 清零 / 7 orphan 定性 / CTEST_TOTAL 同步）— 2026-10-24
   - [x] ADR-046 `rv32i-canonical-home` 落盘（2026-10-23）
-  - [ ] C2 `rv32i-canonical-convergence-2026-10` archived（17 死头删 / 10 组同名裁决 / 反向 include 消除 / grep-lint 护栏）
-  - [ ] `bash scripts/verify_no_duplicate_rv32i_headers.sh`（新护栏）绿
-  - [ ] `include/cpu/AGENTS.md` STRUCTURE 表与磁盘一致
+  - [x] C2 `rv32i-canonical-convergence-2026-10` archived（17 死头删 / 10 组同名裁决 / 反向 include 消除 / grep-lint 护栏）— 2026-10-25
+  - [x] `bash scripts/verify_no_duplicate_rv32i_headers.sh`（新护栏）绿（含 `--self-test`）
+  - [x] `include/cpu/AGENTS.md` STRUCTURE 表与磁盘一致
 
 ## 3. 架构依据
 
@@ -123,10 +123,10 @@ exit=0: 其余 12 个
 
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 4 条 → 转 completed）：
-  - [ ] C1 + C2 两个 change 均 archived
-  - [ ] `scripts/verify_no_duplicate_rv32i_headers.sh` + `scripts/verify_example_test_wiring.sh` 双护栏绿
-  - [ ] `ctest -LE perf` 174/174 零回归 + CTEST_TOTAL 同步
-  - [ ] `include/cpu/AGENTS.md` STRUCTURE 与磁盘一致
+  - [x] C1 + C2 两个 change 均 archived（2026-10-24 / 2026-10-25）
+  - [x] `scripts/verify_no_duplicate_rv32i_headers.sh` + `scripts/verify_example_test_wiring.sh` 双护栏绿
+  - [x] `ctest -LE perf` **189/189** 零回归 + `CTEST_TOTAL` 同步（**200**）
+  - [x] `include/cpu/AGENTS.md` STRUCTURE 与磁盘一致
 - **No-Go 判据**（任一成立 → defer）：
   - `hazard_unit.h` 前推语义冲突无法在不改行为的前提下裁决（需升级为独立 ADR + change）
   - Cluster B 组件的提升需要重写 `Rv32iPipeline` 装配（超出 scope）

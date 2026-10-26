@@ -49,6 +49,6 @@ phase_refs: [phase-5]
 - [x] RV32I 3 条无 hazard 指令 trace parity（commit `8facced`）
 - [x] `i_cache_prefetch.h` wrapper SIGSEGV 修复（2026-10-20 change `fix-riscv-mini-cache-prefetch-sigsegv`）
 - [x] RV32I microarchitecture dual-backend behavior parity partial（commit `bbf536d`）
-- [ ] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过（≥20 指令序列）
-- [ ] JIT 回落行为显式断言通过（含 `ch_mem` 读端口的设计 → JIT 返回 `UNSUPPORTED_OP` → 回落结果与 interpreter 一致）
+- [x] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过（≥20 指令序列）— 2026-10-26 C3 归档（200 拍 × **27** 个输出观测值逐拍全等，无掩码）
+- [x] JIT 回落行为显式断言通过（含 `ch_mem` 读端口的设计 → JIT 回落 → 回落结果与 interpreter 一致）— 2026-10-26 C3 的 T6（归因实测：`unsupported node width: mem (…, 131072 bits > 64)`）
 - [ ] `dual-backend-rv32i-integration` change archived

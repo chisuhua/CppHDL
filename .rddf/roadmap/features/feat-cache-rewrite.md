@@ -16,7 +16,7 @@ CppHDL 的 L1 cache 子系统经历了一次死而复生的重建：原 `*_compl
 | Sync/Async variant split | ADR-041 | ✅ 已实施（commit `49902b2`） |
 | cache 行为测试 9 test_case | — | ✅ 已实施（commit `1221819` + `bb286a2`） |
 | cache 双后端 e2e | dual-backend-test-coverage | ⏳ Phase 5 |
-| stub 物理删除 | ADR-037 | ⏳ Phase 5（deadline 2027-04-17） |
+| stub 物理删除 | ADR-037 | ✅ 已实施（2026-10-20 归档 `cache-stub-physical-removal-2026-10`，**提前 6 个月**完成 ADR-037 的 calendar deadline） |
 
 ## 跨阶段拆分
 

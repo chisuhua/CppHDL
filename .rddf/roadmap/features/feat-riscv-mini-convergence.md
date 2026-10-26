@@ -1,7 +1,7 @@
 ---
 id: feat-riscv-mini-convergence
 kind: feature
-status: active
+status: completed
 phase_refs: [phase-5]
 主题: 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现
 ---
@@ -39,10 +39,10 @@ phase_refs: [phase-5]
 - ⏳ `include/cpu/AGENTS.md` STRUCTURE / NAMESPACE MAP 同步
 
 ## 验收标准
-- [ ] 收敛后 `include/cpu/**` 与 `examples/riscv-mini/src/**` **无同 basename 头文件**（grep-lint 护栏）
-- [ ] `examples/riscv-mini/src/` 只剩 SoC 顶层 + example 专属件（逐文件归属表落地）
-- [ ] 17 个从未编译的头（3,663 LOC）已 `git rm`（或逐文件给出保留理由 + 加消费者）
-- [ ] 4 组 dual-live 同名对（`hazard_unit` / `rv32i_decoder` / `rv32i_pipeline_regs` / `rv32i_tcm`）裁决并单源化
-- [ ] 根 `tests/CMakeLists.txt` 无 `target_include_directories(... examples/riscv-mini/src)`
-- [ ] `include/cpu/AGENTS.md` STRUCTURE 表与磁盘一致（无幽灵文件）
-- [ ] C1 清零后 `ctest -N` 与 `CTEST_TOTAL` 同步，`test_verify_test_counts.sh` 绿
+- [x] 收敛后 `include/cpu/**` 与 `examples/riscv-mini/src/**` **无同 basename 头文件**（grep-lint 护栏）— 2026-10-25 C2 归档
+- [x] `examples/riscv-mini/src/` 只剩 SoC 顶层 + example 专属件（逐文件归属表落地）— 2026-10-25 C2（32 头 → **1** 头）
+- [x] 17 个从未编译的头（3,663 LOC）已 `git rm`（或逐文件给出保留理由 + 加消费者）— 2026-10-25 C2
+- [x] 4 组 dual-live 同名对（`hazard_unit` / `rv32i_decoder` / `rv32i_pipeline_regs` / `rv32i_tcm`）裁决并单源化 — 2026-10-25 C2
+- [x] 根 `tests/CMakeLists.txt` 无 `target_include_directories(... examples/riscv-mini/src)` — 2026-10-25 C2（6 处反向 include 消除）
+- [x] `include/cpu/AGENTS.md` STRUCTURE 表与磁盘一致（无幽灵文件）— 护栏 C5 绿
+- [x] C1 清零后 `ctest -N` 与 `CTEST_TOTAL` 同步，`test_verify_test_counts.sh` 绿 — 2026-10-25（`CTEST_TOTAL` = **200**）

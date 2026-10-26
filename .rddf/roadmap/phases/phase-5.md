@@ -78,10 +78,11 @@ follow-up）可与 C1 并行（互不触碰）。
 
 ## 完成条件
 
-- [ ] C1 `riscv-mini-test-triage-2026-10` archive（19 target 清零 + 护栏 + CTEST_TOTAL 同步）
+- [x] C1 `riscv-mini-test-triage-2026-10` archive（19 target 清零 + 护栏 + CTEST_TOTAL 同步）— 2026-10-24
 - [x] ADR-046 `rv32i-canonical-home` 落盘（2026-10-23，rdd-arch 职责，C2 前置）
-- [ ] C2 `rv32i-canonical-convergence-2026-10` archive（17 死头删除 + 10 组同名裁决 + 反向 include 消除 + 护栏）
-- [ ] C3 `rv32i-soc-dual-parity-2026-10` archive（双路 parity + JIT 回落断言）
+- [x] C2 `rv32i-canonical-convergence-2026-10` archive（17 死头删除 + 10 组同名裁决 + 反向 include 消除 + 护栏）— 2026-10-25
+- [x] **前置** `rv32i-pipeline-commit-path-2026-10` archive（SoC 观测面 **32 端口** + **17 个流水线缺陷**）— 2026-10-26
+- [x] C3 `rv32i-soc-dual-parity-2026-10` archive（双路 parity + JIT 回落断言）— 2026-10-26
 - [x] cache-stub 物理删除（ADR-037）— 2026-10-20 落地（variant b，change `cache-stub-physical-removal-2026-10` 已 archive）
 - [ ] dual-backend 全量覆盖（`feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量）
 - [ ] 逻辑算子 `[[deprecated]]` 移除（ADR-036 §8，deadline 2027-04-17）

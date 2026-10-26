@@ -2,7 +2,7 @@
 id: objective-test-coverage-100pct
 status: active
 created: 2026-10-19
-last_revised: 2026-10-19
+last_revised: 2026-10-26
 review_by: 2027-01-17
 owner: rdd-planner
 priority: P1
@@ -19,16 +19,23 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 
 适用场景：所有 device+port 形态单元测试；不适用场景：纯编译期 / 裸 context / aread-based / >64-bit 端口测试（见 capability spec 排除清单）。
 
+> ⚠️ **2026-10-26 状态更新**：本 objective 的 **Phase 1–3 已 ship**
+> （`verilator-parity-all-tests` + `dual-backend-cache-tests` + Batch 1）；
+> **Phase 4（RV32I 残余）/ Phase 5（全量）仍未完成**。
+> ⇒ `ctest -L verilator_e2e` = **35**（2026-10-26 实测；2026-10-23 时为 34，
+> 新增来自 RV32I SoC 级双路 parity 测试 `test_rv32i_soc_dual_parity`）。
+> ⇒ 全量目标（≥ 100）**未达成** ⇒ 本 objective 保持 `active`。
+
 ## 2. 目标愿景 + 完成判据
 
 - 所有可 dual 的单元测试走 `DUAL_BACKEND_TEST` macro（interpreter + verilator 双跑）
 - `ctest -L verilator_e2e` ≥ 100 test
 - 单元测试 verilator 覆盖 7% → 100%
 - 完成判据（done-when）：
-  - [ ] `dual-backend-test-coverage` capability spec 落地 ✅（已达成）
-  - [ ] Phase 1-5 of `verilator-parity-all-tests` 全部 ship
-  - [ ] `ctest -L verilator_e2e` ≥ 100 test
-  - [ ] `ctest -LE perf` 零回归 + CTEST_TOTAL 同步
+  - [x] `dual-backend-test-coverage` capability spec 落地 ✅（已达成）
+  - [ ] Phase 1-5 of `verilator-parity-all-tests` 全部 ship（**Phase 1–3 已 ship；4–5 未完成**）
+  - [ ] `ctest -L verilator_e2e` ≥ 100 test（**2026-10-26 实测 35** ⇒ 未达成）
+  - [x] `ctest -LE perf` 零回归（**189/189**）+ CTEST_TOTAL 同步（**200**）
 
 ## 3. 架构依据
 
@@ -53,9 +60,9 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 3 条 → 转 completed）：
-  - [ ] Phase 1-5 全部 ship + archived
-  - [ ] `ctest -L verilator_e2e` ≥ 100 test 全绿
-  - [ ] CTEST_TOTAL 同步 + `verify_test_counts.sh` 绿
+  - [ ] Phase 1-5 全部 ship + archived（**Phase 1–3 已 ship；4–5 未完成**）
+  - [ ] `ctest -L verilator_e2e` ≥ 100 test 全绿（**2026-10-26 实测 35**）
+  - [x] CTEST_TOTAL 同步（**200**）+ `verify_test_counts.sh` 绿
 - **No-Go 判据**（任一成立 → defer）：
   - PR feedback 墙钟持续 > 45 min（需降级 Phase 2-5）
   - verilator codegen 暴露无法在合理工期内修复的系统性 bug
