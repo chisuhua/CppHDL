@@ -81,7 +81,32 @@ public:
         );
         
         // PC 更新使能信号：
-        // - 不复位 且 不 stall 且 不 flush 时更新
+        // - 不复位 且 不 stall 时更新（**flush 不在此列** —— 见下方说明）
+        //
+        // ⚠️ `pc_update_en` **不看 `flush`**（2026-10-25，第 14 轮 critic NIT
+        //    补注）：今天安全，因为 flush 的**唯一**来源是
+        //    `hazard.io().flush = ex_branch & ex_branch_taken`，而
+        //    `next_pc_target` 的选择条件 `branch_valid` 接的正是同一个
+        //    `ex_stage.io().branch_taken` ⇒ flush 为真时 `next_pc_target`
+        //    **已经是**分支目标 ⇒ PC 无需额外覆盖。
+        //    ⇒ 这是一条**隐式不变量**：若将来 flush 有第二个来源
+        //      （例如预测失败），此处 MUST 改为「flush 时也更新 PC」。
+        //
+        // ⚠️ **flush 与 stall 不会同拍**（第 18 轮 critic 要求写明的互斥论证）：
+        //    flush 由 **EX 级**的 `branch_taken` 产生 ⇒ 触发那一拍 EX 级只有
+        //    那一条（分支）指令 ⇒ 它**不是** load ⇒ `ex_is_load` 为假 ⇒
+        //    load-use 检测不可能同拍成立。
+        //    ⇒ 若将来引入**第二个 flush 来源**（如预测失败）或让 stall 与
+        //      flush 可同拍，MUST 重新审视此处（stall 冻结 PC 会让 PC 失去
+        //      分支重定向）。
+        //
+        // ⚠️ **flush 与 stall 不会同拍**（第 18 轮 critic 要求写明的互斥论证）：
+        //    flush 由 **EX 级**的 `branch_taken` 产生 ⇒ 触发那一拍 EX 级只有
+        //    那一条（分支）指令 ⇒ 它**不是** load ⇒ `ex_is_load` 为假 ⇒
+        //    load-use 检测不可能同拍成立。
+        //    ⇒ 若将来引入**第二个 flush 来源**（如预测失败）或让 stall 与
+        //      flush 可同拍，MUST 重新审视此处（stall 冻结 PC 会让 PC 失去
+        //      分支重定向）。
         auto pc_update_en = select(
             io().rst,
             ch_bool(false),
@@ -120,26 +145,57 @@ public:
         ch_reg<ch_uint<32>> if_id_pc_reg(0_d, "if_id_pc");
         ch_reg<ch_uint<32>> if_id_instr_reg(0_d, "if_id_instr");
         ch_reg<ch_bool>     if_id_valid_reg(false, "if_id_valid");
+
+        // ⚠️⚠️ **flush MUST 多杀一拍**（2026-10-25，第 16 轮 critic BLOCKER B1）：
+        //    imem 是 **1-cycle `sread`** ⇒ flush 那一拍（T）`pc_reg` 已经指向
+        //    「分支 + 12 字节」处 ⇒ **该地址在 T 拍已经提交给 imem** ⇒
+        //    T+1 拍数据才返回。
+        //    ⇒ 只在 T 拍门控 IF/ID 装载**不够**：T+1 拍那条「错误路径」的
+        //      指令会**正常锁存进 IF/ID** ⇒ 它被执行了（且在分支目标**之前**，
+        //      顺序也乱）。
+        //    ⇒ 用 `flush_d1`（flush 延迟一拍）把 T+1 拍的 IF/ID 装载**也**门掉。
+        //    ⚠️ 代价：分支目标的指令要到 T+2 才进 ID ⇒ 冲刷气泡多 1 拍。
+        ch_reg<ch_bool>     flush_d1(false, "flush_d1");
+
+        // ⚠️ **pc 必须与指令同拍进 ID**（实测缺陷，见下）
+        //
+        // imem 是 **1-cycle `sread`**（ADR-041 强制：RV32I imem MUST sread）。
+        // 时序：周期 T 提交地址 word W_T ⇒ 周期 T+1 `instr_data` = word W_T
+        //       ⇒ 周期 T+2 `if_id_instr_reg` 装 word W_T。
+        // 而 `pc_reg` 已在 T→T+1 边沿前进 ⇒ 直接锁存 `pc_reg` 会让
+        // `if_id_pc_reg`(T+2) = pc_reg(T+1) = **word W_{T+1}** ⇒ 比它译码的
+        // 指令**晚一个字**（实测：ID 解码 word T-1 而 dbg_id_pc 是 word T）。
+        // ⇒ 分支目标 `pc + imm` 会算在错误的 pc 上（差 4 字节）。
+        //
+        // ⇒ pc 必须与指令**同样延迟一拍**：这里加一个 `fetch_pc_reg` 把 pc
+        //    推迟一拍，再由 IF/ID 寄存器锁存它。
+        ch_reg<ch_uint<32>> fetch_pc_reg(0_d, "fetch_pc");
         
+        // flush 延迟一拍（见 `flush_d1` 的说明）
+        flush_d1->next = io().flush;
+
         // IF/ID 寄存器更新使能：
         // - 指令存储器就绪
         // - 不复位
         // - 不 stall
-        // - 不 flush
+        // - 不 flush（**也不在 flush 的下一拍** —— 见 `flush_d1`）
         auto if_id_update_en = select(
             io().rst,
             ch_bool(false),
             select(
-                io().stall | io().flush,
+                io().stall | io().flush | flush_d1,
                 ch_bool(false),
                 ch_bool(true)
             )
         );
         
-        // IF/ID 寄存器更新
+        // fetch_pc_reg：把 pc 推迟一拍（与 imem 的 1-cycle sread 对齐）
+        fetch_pc_reg->next = pc_reg;
+
+        // IF/ID 寄存器更新（pc 取**延迟一拍**的值，与指令同拍）
         if_id_pc_reg->next = select(
             if_id_update_en,
-            pc_reg,
+            fetch_pc_reg,
             if_id_pc_reg
         );
         
@@ -149,12 +205,12 @@ public:
             if_id_instr_reg
         );
         
-        // 有效信号在 flush 时清零
+        // 有效信号在 flush 时清零（**含 flush 的下一拍** —— 见 `flush_d1`）
         if_id_valid_reg->next = select(
             if_id_update_en,
             io().instr_ready,
             select(
-                io().flush,
+                io().flush | flush_d1,
                 ch_bool(false),
                 if_id_valid_reg
             )

@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 5,521 lines**（2026-10-24 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6016 lines**（2026-10-25 实测，ADR-046 D9：磁盘是权威）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 5,521 lines（实测）
+include/cpu/                             # 30 headers, 6016 lines（2026-10-25 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -74,6 +74,7 @@ include/cpu/                             # 30 headers, 5,521 lines（实测）
 | I-Cache wrapper | `cache/i_cache_prefetch.h` (instance ICacheSync) |
 | D-Cache wrapper | `cache/d_cache_write_buffer.h` (instance DCacheSync) |
 | SoC 顶层装配 | `examples/riscv-mini/src/rv32i_pipeline_top.h`（**唯一**留在 example 侧的头；ADR-046 D3 #15）|
+| 流水线诊断观测 | `pipeline/rv32i_pipeline.h` 的 `dbg_*` 输出（ID 级指令流 / 分支判定 / 有效链 / 写回 / EX-MEM 数据通路；**SoC 顶层须逐个引出**，否则 verilator 读不到 ⇒ 2026-10-25 追出 17 个流水线缺陷）|
 
 ## CONVENTIONS
 - **Pipeline instantiation**: `ch::ch_module<T>` inside `Component::describe()` — see root AGENTS.md
@@ -116,7 +117,8 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
 ⚠️ **2026-10-24 收敛后**：`examples/riscv-mini/src/` 只剩 **1** 个头
 （SoC 顶层 `rv32i_pipeline_top.h`，ADR-046 D1 类别 1 / D3 #15）——
 其余 31 个头已删除（17 个死头）或提升到本目录（10 个）或删除重复副本（4 个）。
-`rv32i_pipeline_top.h` 当前**零消费者**（其唯一消费者 `test_pipeline_smoke`
+`rv32i_pipeline_top.h` **已归位**（不再是零消费者；2026-10-25，change
+`rv32i-pipeline-commit-path-2026-10`）—— 此前它**零消费者**（其唯一消费者 `test_pipeline_smoke`
 在 C1 被删除）⇒ 已登记在 `scripts/verify_no_duplicate_rv32i_headers.sh` 的
 零消费者豁免表里，**归位条件 = C3**（`rv32i-soc-dual-parity-2026-10`）落地。
 

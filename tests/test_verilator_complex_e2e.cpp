@@ -198,6 +198,12 @@ class Rv32iPipelineFixture : public ch::Component {
 public:
     __io(
         ch_out<ch_uint<48>> perf_instructions;
+        // ⚠️ 写回观测（2026-10-25，change rv32i-pipeline-commit-path-2026-10）：
+        //    `perf_instructions == N` 是**可被伪事件满足**的断言（钉不住行为）
+        //    ⇒ 必须能**看到寄存器堆的写回值**才能断言 ISA 语义。
+        ch_out<ch_bool>     wb_write_en;
+        ch_out<ch_uint<32>> wb_write_data;
+        ch_out<ch_uint<5>>  wb_rd_addr;
     )
     Rv32iPipelineFixture(ch::Component *parent = nullptr,
                          const std::string &name = "rv32i_top")
@@ -206,35 +212,74 @@ public:
     void describe() override {
         ch::ch_module<riscv::Rv32iPipeline> cpu{"cpu"};
 
-        // Internal imem: a 4-word ch_mem holding the 3 test
-        // instructions + 1 padding. The IF stage pc_reg resets to
-        // 0x80000000 (if_stage.h:66); we map that PC range to our
-        // 4-word array via the low 2 bits of (pc >> 2) — i.e.
-        // PC[3:15] = word index in the 4-word array, padded with the
-        // last word for cycles that fetch beyond program[2].
+        // Internal imem: a 16-word ch_mem holding the **3 effective test
+        // instructions + 3 NOPs** (6 words total) + 10 padding words.
+        // The IF stage pc_reg resets to 0x80000000 (if_stage.h:66); we map
+        // that PC range to our 16-word array via the low **4** bits of
+        // (pc >> 2) — i.e. PC[6:15] = word index in the 16-word array
+        // (`bits<5,2>` ⇒ 4 bits ⇒ all 16 words reachable), padded with
+        // NOPs for cycles that fetch beyond program[5].
         //
         // NOTE (verilator-e2e-coverage spec §Requirement 1 invariant
         // 3): uses ch_mem sread (posedge aligned) — aread would be
         // 0-cycle comb in Verilog but posedge in Simulator, breaking
         // trace parity. sread is safe for both backends.
-        ch_mem<ch_uint<32>, 4> imem{
-            std::array<uint32_t, 4>{0x00000094u, 0x00000113u,
-                                    0x002081B3u, 0x00000013u},
+        // ⚠️ 16 字（原来 4 字）：程序 MUST **无数据冒险** ——
+        //    lib 版 `HazardUnit` **不接数据前推**
+        //    （include/cpu/pipeline/hazard_unit.h: `io().rs1_data = io().rs1_data_raw`）
+        //    ⇒ 生产者→消费者之间必须插 NOP，否则读到的是**上一条**的值。
+        //    程序（**6 字**：3 条有效指令 + 3 条 NOP；其余 10 个字为 NOP 填充）：
+        //      0: addi x1, x0, 1   = 0x00100093
+        //      1: addi x2, x0, 2   = 0x00200113
+        //      2,3,4: NOP          （等 x1/x2 写回：生产者 WB 在 ID+3 拍）
+        //      5: add  x3, x1, x2  = 0x002081B3   ⇒ x3 == 3
+        //      6..15: NOP
+        //    ⇒ x3 == 3 是**ISA 正确**的值，可被外部观测（写回数据）验证。
+        //    ⚠️ NOP 数 = 3：没有前推时，生产者的写回发生在 ID+3 拍
+        //    （EX→MEM→WB）⇒ 消费者至少要隔 3 条指令。
+        ch_mem<ch_uint<32>, 16> imem{
+            std::array<uint32_t, 16>{0x00100093u, 0x00200113u,
+                                     0x00000013u, 0x00000013u,
+                                     0x00000013u,
+                                     0x002081B3u, 0x00000013u,
+                                     0x00000013u, 0x00000013u,
+                                     0x00000013u, 0x00000013u,
+                                     0x00000013u, 0x00000013u,
+                                     0x00000013u, 0x00000013u},
             "imem"};
 
-        // instr_data is sread from imem[pc[3:2]] (the low 2 address bits
-        // after shifting right by 2). ch_uint<2> selects one of 4
-        // words; ch_bool(true) always enables the read (no gating).
-        ch_uint<2> word_sel;
-        word_sel <<= imem.sread(bits<3, 2>(cpu.io().instr_addr),
-                                ch_bool(true));
+        // instr_data is sread from imem[pc[6:2]] (the low **5** address
+        // bits after shifting right by 2) ⇒ 16 个字里选 1 个；
+        // ch_bool(true) always enables the read (no gating).
+        //
+        // ⚠️⚠️ 位宽 MUST 与 `ch_mem` 的容量**一致**（2026-10-25，第 15 轮 critic
+        //    SHOULD_FIX #2 —— **第 14 轮我误判了这条 NIT，现纠正**）：
+        //    `bits<MSB,LSB>` 是**闭区间** ⇒ 宽度 = MSB−LSB+1 ⇒
+        //    `bits<4,2>` 只有 **3 位** ⇒ 只可达 **8 个字** ⇒ 与
+        //    `ch_mem<ch_uint<32>, 16>` **不匹配**（后 8 个字不可达 ⇒ 程序
+        //    放过 word 7 就会静默回绕）。
+        //    ⇒ 正确写法：`bits<5,2>`（4 位 ⇒ 16 字 ✔）。
+        //
+        // ⚠️ **必须把 read_port 直接接到端口**（2026-10-25 实测修复）：
+        //    此前先落进一个 `ch_uint<4>` 中间变量 ⇒ 宽度不匹配（read_port 的
+        //    元素类型是 `ch_uint<32>`）⇒ 取到的**不是读数据**（实测恒为 3）
+        //    ⇒ 这个 fixture 的 imem **从来没有真正工作过**，而旧断言
+        //    `perf_instructions == 12` 钉的是**垃圾值**（"绿 ≠ 对"）。
+        //    先例：`include/cpu/pipeline/rv32i_tcm.h` 的 `InstrTCM` 也是
+        //    直接 `io().data <<= read_data;`。
+        auto word_sel = imem.sread(bits<5, 2>(cpu.io().instr_addr),
+                                   ch_bool(true));
 
         // Drive the pipeline.
         cpu.io().instr_data <<= word_sel;
         cpu.io().instr_ready <<= ch_bool(true);
 
         // Data memory stub — no loads/stores in this fixture.
-        cpu.io().data_write_en <<= ch_bool(false);
+        // ⚠️ **不要**驱动 `data_write_en`（2026-10-25，第 14 轮 critic NIT）：
+        //    它是 `Rv32iPipeline` 的**输出**端口（由流水线自己驱动
+        //    `io().data_write_en <<= exmem_is_store`）⇒ 父组件驱动子组件的
+        //    输出端口是**反向**连接（写法可疑，语义未定义）。
+        //    ⇒ 本 fixture 不需要它：该固件**无 store** ⇒ 流水线侧恒 0。
         cpu.io().data_read_data <<= ch_uint<32>(0_d);
         cpu.io().data_ready <<= ch_bool(true);
 
@@ -242,8 +287,11 @@ public:
         // directly without a reset cycle).
         cpu.io().rst <<= ch_bool(false);
 
-        // Expose perf_instructions.
+        // Expose perf_instructions + 写回（ISA 语义断言的观测面）
         io().perf_instructions <<= cpu.io().perf_instructions;
+        io().wb_write_en <<= cpu.io().dbg_wb_write_en;
+        io().wb_write_data <<= cpu.io().dbg_wb_write_data;
+        io().wb_rd_addr <<= cpu.io().dbg_wb_rd_addr;
     }
 };
 
@@ -345,16 +393,28 @@ TEST_CASE("ComplexE2E - Rv32iShortInstructionTraceParity",
 
     auto *perf_a = dev_a->instance().io().perf_instructions.impl();
     auto *perf_b = dev_b->instance().io().perf_instructions.impl();
+    auto *wb_en_a = dev_a->instance().io().wb_write_en.impl();
+    auto *wb_data_a = dev_a->instance().io().wb_write_data.impl();
+    auto *wb_rd_a = dev_a->instance().io().wb_rd_addr.impl();
+    auto *wb_en_b = dev_b->instance().io().wb_write_en.impl();
+    auto *wb_data_b = dev_b->instance().io().wb_write_data.impl();
+    auto *wb_rd_b = dev_b->instance().io().wb_rd_addr.impl();
 
+    // 观测「x3 的写回」：两后端都 MUST 出现 (rd=3, data=3) —— ISA 语义断言
+    bool saw_x3_interp = false;
+    bool saw_x3_verilator = false;
     for (int cycle = 0; cycle < 20; ++cycle) {
         sim_a->tick(1);
         sim_b->tick(1);
-        uint64_t p_a = read_port_output(*sim_a, perf_a);
-        uint64_t p_b = read_port_output(*sim_b, perf_b);
-        if (cycle == 4 || cycle == 9 || cycle == 14 || cycle == 19) {
-            std::fprintf(stderr, "DEBUG cycle=%d perf:interp=%llu vl=%llu\n",
-                         cycle, (unsigned long long)p_a,
-                         (unsigned long long)p_b);
+        if (read_port_output(*sim_a, wb_en_a) == 1 &&
+            read_port_output(*sim_a, wb_rd_a) == 3 &&
+            read_port_output(*sim_a, wb_data_a) == 3) {
+            saw_x3_interp = true;
+        }
+        if (read_port_output(*sim_b, wb_en_b) == 1 &&
+            read_port_output(*sim_b, wb_rd_b) == 3 &&
+            read_port_output(*sim_b, wb_data_b) == 3) {
+            saw_x3_verilator = true;
         }
     }
 
@@ -363,17 +423,29 @@ TEST_CASE("ComplexE2E - Rv32iShortInstructionTraceParity",
     UNSCOPED_INFO("perf_instructions interp=" << perf_a_val
                  << " verilator=" << perf_b_val);
 
-    // verilator-hier-input-flattening-fix (2026-10-14 archive):
-    // D8 (b) SKIP is no longer needed. Verilator now produces 12
-    // (matches interpreter) because the codegen fix prevents driven
-    // submodule `ch_in` ports from being flattened to top-level
-    // ports that nothing drives. The end value is 12 because the
-    // 4-word imem wraps (bits<3,2>(cpu.io().instr_addr) cycles
-    // through 0..3), and commit_count accumulates commit_valid
-    // every cycle (no hazard stalls for these 3 ALU instructions),
-    // landing at 12 after 20 cycles of pipeline draining.
+    // ⚠️ **语义断言**（2026-10-25，change rv32i-pipeline-commit-path-2026-10）：
+    //    固件 = `addi x1,x0,1; addi x2,x0,2; NOP; NOP; NOP; add x3,x1,x2` ⇒
+    //    **x3 == 3** 是 ISA 正确值（固件无数据冒险：生产者与消费者之间有 NOP，
+    //    因为 lib 版 HazardUnit 不接数据前推）。
+    //    ⇒ 「计数器 == N」这类断言**不能**替代它：计数器可被伪事件满足
+    //    （此前 `perf_instructions == 12` 钉的是**坏行为** —— 当时
+    //    `mem_valid_out = is_load & mem_valid` ⇒ 退休数统计的是 load 次数）。
+    REQUIRE(saw_x3_interp);
+    REQUIRE(saw_x3_verilator);
+
+    // 退休指令数：20 拍 − **3 拍填充**（IF/ID → ID/EX → EX/MEM → MEM/WB
+    // 依次就绪；退休发生在 MEM 级 ⇒ 3 拍后才有第一条退休）= **17**
+    //
+    // ⚠️ 修复前这里是 **18** —— 那是**多算了 1**：「绿而错」的又一例：
+    //    当时 EX/MEM 的 valid 取自 **ID 级**的 valid（而数据取自 **EX 级**
+    //    的结果）⇒ **有效位与数据错开一级** ⇒ 填充期产生了一次
+    //    「数据无效但 valid 为真」的**假退休**。
+    //    （2026-10-25 改成 `exmem_valid <<= select(exmem_en, valid_out, false)`
+    //    ⇒ 有效位与数据同源 ⇒ 假退休消失。）
+    //    ⚠️ 更早之前是 **12** —— 那时流水线每 11 拍被 flush 重启，退休语义
+    //    也完全是错的（「退休 = load 数据有效」）。
     REQUIRE(perf_a_val == perf_b_val);
-    REQUIRE(perf_a_val == 12);
+    REQUIRE(perf_a_val == 17);
 }
 
 // Custom main(): exit 0 when verilator is missing.

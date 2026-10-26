@@ -222,6 +222,27 @@ C2 MUST 把「AGENTS.md 与磁盘一致」纳入验收（防止再次漂移）�
 改端口。理由：C3（`rv32i-soc-dual-parity-2026-10`）的 DUT 就是它，C2 改端口会让
 C3 的观测点全部重做。
 
+### D10-rev. 端口契约的**观测面**修订（2026-10-25，change `rv32i-pipeline-commit-path-2026-10`）
+
+D10 原文冻结的是「**C2** 不得改端口」（理由：「C3 的观测点会被重做」——
+即观测点由 C3 定义）。本 change 是 C3 的**前置**，实测证明**原端口集合无法观测**
+（6 个端口全是 `ch_in`，无固件加载、无输出）⇒ 必须扩端口。
+
+**D10-rev 裁决**：
+
+1. `Rv32iPipelineTop` 的端口集合**由 C2 的「冻结」改为「由 C3 重新定义并冻结」**：
+   **32 个端口**（5 输入 + 27 输出 = 11 功能 `obs_*` + 16 诊断 `dbg_*`）。
+   ⇒ 诊断面是必要的：`VerilatorBackend` 只对 `port_access_` 里的**顶层**端口
+   建访问表 ⇒ 内部信号必须一路引到顶层，否则无法在 verilator 下观测。
+2. 新端口集合由护栏 C6 快照钉住（名 + 方向 + 位宽）⇒ 之后的改动仍不可静默。
+3. 本次同时删掉 4 个**死端口**（`ext_instr_data` / `ext_instr_ready` /
+   `ext_data_read_data` / `ext_data_ready` —— 在 `describe()` 里从未被引用）。
+   ⇒ ZERO-DEBT 的「无死代码」优先于「冻结」：被冻结的接口里若有死端口，
+   冻结只是把死代码永久保留。
+4. **零消费者豁免随之失效**：`rv32i_pipeline_top.h` 获得了消费者
+   （`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp`）⇒
+   单源化护栏的豁免条目 MUST 移除（`rv32i-canonical-home` 主 spec 的既有条款）。
+
 ### D11. 自动化护栏
 
 新增 `scripts/verify_no_duplicate_rv32i_headers.sh`（挂进 CI），**六条**检查

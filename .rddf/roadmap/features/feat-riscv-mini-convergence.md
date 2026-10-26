@@ -24,10 +24,10 @@ phase_refs: [phase-5]
 
 | 子项 | 状态 |
 |---|---|
-| C1: 19 个「编译但从不执行」target 清零 + 7 orphan 测试定性 | ⏳ 计划中 |
-| C2: 单源化收敛（17 死头删除 + 10 组同名裁决 + 根 tests/ 反向 include 消除 + grep-lint 护栏） | ⏳ 计划中（前置 C1 基线；ADR-046 ✅ 已落盘） |
-| `include/cpu/AGENTS.md` STRUCTURE 漂移修正（6 个不存在文件的条目） | ⏳ 计划中（随 C2） |
-| `tests/CMakeLists.txt` 6 处 `-Iexamples/riscv-mini/src` 反向依赖消除 | ⏳ 计划中（随 C2） |
+| C1: 19 个「编译但从不执行」target 清零 + 7 orphan 测试定性 | ✅ 已归档（`2026-10-24-riscv-mini-test-triage-2026-10`） |
+| C2: 单源化收敛（17 死头删除 + 10 组同名裁决 + 根 tests/ 反向 include 消除 + grep-lint 护栏） | ✅ 已归档（`2026-10-25-rv32i-canonical-convergence-2026-10`；ADR-046 ✅ 已落盘） |
+| `include/cpu/AGENTS.md` STRUCTURE 漂移修正（6 个不存在文件的条目） | ✅ 已实施（随 C2） |
+| `tests/CMakeLists.txt` 6 处 `-Iexamples/riscv-mini/src` 反向依赖消除 | ✅ 已实施（随 C2） |
 
 ## 跨阶段拆分
 

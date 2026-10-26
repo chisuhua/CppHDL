@@ -71,6 +71,7 @@ examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓
 examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
 examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
 examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + hazard 前推（含 EX>MEM 双源优先级）+ 分支检测|23
+examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp|SoC 级双路 parity（200 拍 × 27 观测值逐拍全等）+ 3 个 store 的 ISA 语义 golden + 分支/停顿计数 + 指令与 pc 对齐 + 编码器 × 手算常量交叉校验|24
 examples/riscv-mini/tests/test_soc_hello_world.cpp|SoC 顶层 hello-world|8
 examples/riscv-mini/tests/test_wrapper_ifstage.cpp|IfStage 的 PC 复位/IF-ID 锁存/stall 冻结|4
 examples/riscv-mini/tests/test_wrapper_pipeline.cpp|Rv32iPipeline 直接包裹的周期行为|3

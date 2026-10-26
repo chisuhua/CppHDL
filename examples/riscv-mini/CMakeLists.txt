@@ -97,6 +97,26 @@ riscv_mini_catch_test(test_ifstage_device tests/test_ifstage_device.cpp)
 riscv_mini_catch_test(test_rv32i_pipeline_example tests/test_rv32i_pipeline.cpp)
 riscv_mini_catch_test(test_interrupt_flow tests/test_interrupt_flow.cpp)
 
+# === SoC 级双后端 parity（change rv32i-pipeline-commit-path-2026-10）===
+# DUT = `src/rv32i_pipeline_top.h`（SoC 顶层，在 example 侧 ⇒ 测试也必须在
+# example 侧：根 `tests/**` 不许 include example 路径，护栏 C3 会拦）。
+# 本测试用 verilator 后端 ⇒ 需要 `verilator_e2e` 标签 + `verilator_backend`
+# 资源锁 + verilator 安装目录的 PATH 注入（与根 `tests/CMakeLists.txt` 的
+# `add_dual_backend_test` 同款；这里不能直接用那个函数，因为它在根 tests/ 作用域）。
+riscv_mini_catch_test(test_rv32i_soc_dual_parity tests/test_rv32i_soc_dual_parity.cpp)
+if(CPPHDL_VERILATOR_WRAPPER)
+    get_filename_component(_soc_vl_bin_dir "${CPPHDL_VERILATOR_WRAPPER}" DIRECTORY)
+    set(_soc_vl_path_env "PATH=$ENV{PATH}:${_soc_vl_bin_dir}")
+else()
+    set(_soc_vl_path_env "")
+endif()
+set_tests_properties(test_rv32i_soc_dual_parity PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_soc_vl_path_env}"
+    TIMEOUT 600
+)
+
 # cache-complete-rewrite §3.4 smoke: ICachePrefetch + DCacheWriteBuffer wrapper build probe
 riscv_mini_catch_test(riscv_mini_cache_smoke tests/test_cache_smoke.cpp)
 # include path 需覆盖 include/cpu/cache (wrapper 用 #include "i_cache_complete.h")

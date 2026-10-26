@@ -100,8 +100,14 @@ public:
         // I-type (ADDI, ANDI, ORI, etc.): second operand = imm
         // U-type (LUI, AUIPC): second operand = imm  
         // R-type (ADD, SUB, AND, OR, etc.): second operand = rs2_data
+        // ⚠️ **OP_STORE 必须在此列表内**（2026-10-25 实测修复）：
+        //    store 的 ALU 结果是**访存地址** = rs1 + imm（S 型立即数），
+        //    而被存的数据走独立通路（`exmem_rs2_data`）。
+        //    漏掉 OP_STORE ⇒ 第二操作数取 `rs2_data` ⇒ 地址算成 rs1+rs2_data
+        //    （实测：store 地址恒为 0，dmem 被写到 word 0）。
         auto is_i_type = (io().opcode == ch_uint<7>(OP_OPIMM)) | 
                          (io().opcode == ch_uint<7>(OP_LOAD)) |
+                         (io().opcode == ch_uint<7>(OP_STORE)) |
                          (io().opcode == ch_uint<7>(OP_JALR)) |
                          (io().opcode == ch_uint<7>(OP_LUI)) |
                          (io().opcode == ch_uint<7>(OP_AUIPC));
@@ -219,7 +225,14 @@ public:
         // 6. 输出端口连接
         // ====================================================================
 
-        io().alu_result = alu_out;
+        // ⚠️ **LUI / AUIPC 的结果不是「rs1 + imm」**：
+        //    LUI = imm（高位填充）；AUIPC = pc + imm。
+        //    而 ALU 的第二操作数选择把 LUI/AUIPC 归到「用 imm」的 I 型 ⇒
+        //    结果会是 `rs1 + imm`（静默错误）。
+        auto ex_is_lui = (io().opcode == ch_uint<7>(OP_LUI));
+        auto ex_is_auipc = (io().opcode == ch_uint<7>(OP_AUIPC));
+        io().alu_result = select(ex_is_lui, io().imm,
+                                 select(ex_is_auipc, io().pc + io().imm, alu_out));
         io().branch_target = branch_target_calc;
         io().branch_taken = branch_taken_sig;
         io().zero = zero_flag;

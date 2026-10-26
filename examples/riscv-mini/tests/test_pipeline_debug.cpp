@@ -175,6 +175,10 @@ public:
     __io(
         ch_out<ch_uint<32>> write_data;
         ch_out<ch_bool>     write_en;
+        // ⚠️ 「WB 级那条指令是否**有效**」由 TB 驱动（2026-10-25）：
+        //    写使能 MUST 以它为前提 ⇒ 必须能**独立驱动**才能钉住该门控
+        //    （否则断言永远是同一个值 ⇒ **零信号**）。
+        ch_in<ch_bool>      wb_mem_valid;
     )
     WbStageTop(ch::Component* parent = nullptr, const std::string& name = "top")
         : ch::Component(parent, name) {}
@@ -187,7 +191,13 @@ public:
         wb_stage.io().is_load <<= ch_bool(false);
         wb_stage.io().is_alu <<= ch_bool(true);
         wb_stage.io().is_jump <<= ch_bool(false);
-        wb_stage.io().mem_valid <<= ch_bool(false);
+        // ⚠️ `mem_valid` = 「WB 级那条指令**有效**」（2026-10-25 修正）：
+        //    `wb_stage` 的写使能是 `needs_writeback & rd_not_zero & mem_valid`
+        //    —— 此前 fixture 把它硬连成 `false` 却仍期望 `write_en == 1`
+        //    ⇒ **钉的是坏行为**（在「没有有效指令」时也写回）。
+        //    ⇒ 改为**由 TB 驱动**（顶层端口 `wb_mem_valid`）⇒ 用例可分别
+        //    验证「有效 ⇒ 写回」与「无效 ⇒ 不写回」两条 ⇒ 门控有判别力。
+        wb_stage.io().mem_valid <<= io().wb_mem_valid;
         io().write_data <<= wb_stage.io().write_data;
         io().write_en <<= wb_stage.io().write_en;
     }
@@ -282,13 +292,29 @@ TEST_CASE("DEBUG 5: MemStage standalone", "[debug][5]") {
 
 // ===== Test 6: WbStage standalone =====
 TEST_CASE("DEBUG 6: WbStage standalone", "[debug][6]") {
-    ch::ch_device<WbStageTop> top;
-    ch::Simulator sim(top.context());
-    sim.tick();
+    // —— ① WB 级那条指令**有效** ⇒ 写回 ALU 结果 0xABCD；rd != x0 ⇒ 写使能有效
+    {
+        ch::ch_device<WbStageTop> top;
+        ch::Simulator sim(top.context());
+        sim.set_input_value(top.io().wb_mem_valid, 1);
+        sim.tick();
 
-    // 非访存 ⇒ 写回 ALU 结果 0xABCD；rd != x0 ⇒ 写使能有效
-    REQUIRE(sim.get_port_value(top.instance().io().write_data) == 0xABCDu);
-    REQUIRE(sim.get_port_value(top.instance().io().write_en) == 1u);
+        REQUIRE(sim.get_port_value(top.instance().io().write_data) == 0xABCDu);
+        REQUIRE(sim.get_port_value(top.instance().io().write_en) == 1u);
+    }
+
+    // —— ② ⚠️ **写使能 MUST 以「该指令有效」为前提**（2026-10-25 新增断言）：
+    //    没有有效指令时 MUST NOT 写回 —— 否则气泡拍会把陈旧指令**再写回一次**
+    //    （实测：x1 在连续两拍各写回一次）。
+    //    ⚠️ 这条断言是**门控的判别力来源**：去掉 `& mem_valid` ⇒ 它转红。
+    {
+        ch::ch_device<WbStageTop> top;
+        ch::Simulator sim(top.context());
+        sim.set_input_value(top.io().wb_mem_valid, 0);
+        sim.tick();
+
+        REQUIRE(sim.get_port_value(top.instance().io().write_en) == 0u);
+    }
 }
 
 // ===== Test 7: Pipeline - inputs grounded =====

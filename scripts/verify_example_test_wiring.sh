@@ -89,10 +89,12 @@ AGENTS_MD="AGENTS.md"
 # 归位条件：框架缺陷修复后，这些行 MUST 被移除（否则报 STALE）。
 # 格式：<target>|<缺陷编号>
 # ---------------------------------------------------------------------------
-CHERROR_ALLOWLIST="test_pipeline_minimal|framework-defect-1|3
-test_pipeline_debug|framework-defect-1|9
-test_pipeline_wrapper|framework-defect-1|9
-test_wrapper_pipeline|framework-defect-1|6"
+# ⚠️ 2026-10-25（change rv32i-pipeline-commit-path-2026-10）：**豁免表已清空** ——
+#    此前 4 个 target 的 error/fatal 全部来自**坏流水线**（commit/valid 通路、
+#    观测面、地址单位、ALU/分支操作码……）⇒ 流水线修复后它们**不再打印任何
+#    error/fatal** ⇒ 护栏的 stale 检查要求 MUST 移除这些行（豁免不得静默残留）。
+#    ⇒ 现在的状态：**没有 target 在「跑但报错」**。
+CHERROR_ALLOWLIST=""
 
 
 

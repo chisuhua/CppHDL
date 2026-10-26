@@ -15,11 +15,13 @@ examples/riscv-mini/
 ├── rv32i_phase3_test.cpp    # Load/Store (13/13)
 ├── src/                     # ⚠️ 只剩 **1** 个头（SoC 顶层）
 │   └── rv32i_pipeline_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
-│                             #  ⚠️ 当前**零消费者**（唯一消费者 test_pipeline_smoke
-│                             #  在 C1 被删除）⇒ 登记在单源化护栏的豁免表，
-│                             #  归位条件 = C3（rv32i-soc-dual-parity-2026-10）
-└── tests/                   # ✅ 14 个 Catch2 target 已注册进 CTest
-    ├── test_*.cpp           # 16 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
+│                             #  ✅ **已有消费者**（2026-10-25）：`tests/
+│                             #  test_rv32i_soc_dual_parity.cpp`（SoC 级双路
+│                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
+│                             #  豁免条目已移除（ADR-046 D10-rev 端口契约）
+└── tests/                   # ✅ 15 个 Catch2 target 已注册进 CTest（2026-10-25 +1：
+                              #   test_rv32i_soc_dual_parity —— SoC 级双后端 parity）
+    ├── test_*.cpp           # 17 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
     └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
 ```

@@ -12,183 +12,159 @@ created_at: 2026-10-25
 
 - **Date drafted**: 2026-10-25
 - **Drafted by**: build-agent（builder 角色，C3 P2 实测时发现）
-- **Status**: 📋 Handoff document — 5-segment draft，等待 rdd-builder 启动
-- **Objective**: `objective-rv32i-e2e` 的**前置**（原 C3 `rv32i-soc-dual-parity-2026-10` 已挂起）
-- **阻塞对象**：`openspec/changes/rv32i-soc-dual-parity-2026-10`（C3，已挂起，草稿存于该目录 `drafts/`）
+- **Status**: ✅ **已实施**（change `rv32i-pipeline-commit-path-2026-10`；追因记录见该 change 的 `design.md` §2）
+- **Objective**: `objective-rv32i-e2e` 的**前置**（C3 `rv32i-soc-dual-parity-2026-10` 挂起中，恢复条件见本文件 §3.3）
 
 ## 1. Why（背景与动机）
 
-C3 的目标是「RV32I **SoC 级**双路 parity」。为此先把 `Rv32iPipelineTop` 从空壳
-（6 个端口全是 `ch_in`、无固件加载、无观测输出）改造成真 DUT，再写 41 条指令的
-双后端逐周期比对测试。
+C3 的目标是「让 RV32I **SoC 级**双路 parity 成立」。P2 起步时先把
+`Rv32iPipelineTop` 从**空壳**（6 个端口全是 `ch_in`、无固件加载、无观测输出）
+改造成真 DUT，再写 41 条指令的双后端逐周期比对测试 ⇒
 
-**结果：测试立刻证明 SoC 根本跑不动程序。**
+> **测试立刻证明 SoC 根本跑不动程序。**
 
-| 实测（改造后的 DUT，41 条固件，200 拍） | 现象 |
+| 实测（41 条固件 / 200 拍） | 现象 |
 |---|---|
-| `perf_instructions` | **18**（应为 41）——且这 18 次全是「重启后头几条」 |
-| `perf_branch_count` / `perf_branch_mispredict` | **18 / 18**（固件里只有 2 条分支） |
+| `perf_instructions` | **18**（固件 41 条）——且这 18 次全是「重启后头几条」 |
+| `perf_branch_count` / `perf_branch_mispredict` | **18 / 18**（固件只有 2 条分支） |
 | `obs_instr_addr` | 每 11 拍从 `0x80000028` 跳回 **0** |
 | `obs_data_write_en` | 53/200 拍置位，地址是 ALU 结果（10 / 13 / 0），**不是** store 地址 |
 
-注入探针（在固件开头插一个 NOP，整体右移一字）⇒ 重启点从 cyc 10 移到 cyc 12
-⇒ **触发点跟着程序走**，确认是「某条指令触发 flush ⇒ PC 归零」而非固定周期噪声。
+注入探针（固件开头插一个 NOP，整体右移一字）⇒ 重启点从 cyc 10 移到 cyc 12
+⇒ **触发点跟着程序走** ⇒ 是「某条指令触发 flush ⇒ PC 归零」而非固定周期噪声。
 
-### 为什么这件事必须先做
+### 为什么必须先修，而不是「记一笔继续做 C3」
 
-1. 没有可运行的程序，C3 的「≥20 指令双路 parity」写不出来；强行写只能断言「两端
-   一致地错」——与仓库的「绿 ≠ 对」原则直接冲突（C1 的立论）。
-2. 这些缺陷**不是 C3 引入的**：`if_stage` 的 flush 分支带着作者注释
-   「简化处理，实际应该是分支目标」；`mem_valid_out` 的语义错误在
-   `rv32i_pipeline.h:220` 的 `commit_count` 上已经存在。此前它们**不可观测**，
-   因为 SoC 顶层没有任何输出端口（C2 的 AGENTS.md 也因此把它登记为零消费者豁免头）。
+1. **C3 的验收不可达**：没有可运行的程序，「≥20 指令双路 parity」写不出来。
+   强行写只能断言「两端一致地错」—— 与 C1 立的「绿 ≠ 对」原则直接冲突。
+2. **这些缺陷不是 C3 引入的**，而是**此前不可观测**：SoC 顶层此前**没有任何输出
+   端口** ⇒ 谁也看不见。而顶层之所以不可观测，是因为它**从未被运行过**
+   （ADR-046 D10 冻结的端口集合里，4 个是死端口，另 2 个从未被引用）。
+3. **既有测试是「绿而错」**：`tests/test_verilator_complex_e2e.cpp` 的 RV32I 用例
+   断言 `perf_instructions == 12`，而该 fixture 的 imem **从来没有真正工作过**
+   （把 `read_port` 落进了宽度不匹配的中间变量 ⇒ 取到的恒为 3）⇒ 12 是垃圾值。
 
 ## 2. What Changes（变更范围）
 
-### D1 `if_stage` 的 flush ⇒ PC 归零（**已落地**，本次）
+**17 个缺陷**（逐条追因记录见 change 的 `design.md` §2；此处只列清单）：
 
-```cpp
-// 旧（include/cpu/pipeline/stages/if_stage.h，注释自认占位实现）
-// flush 时 PC 重置为 0 (简化处理，实际应该是分支目标)
-auto pc_flush_val = select(io().flush, ch_uint<32>(0_d), next_pc_target);
-```
+| # | 缺陷 | 位置 | 症状 |
+|---|---|---|---|
+| D1 | `flush` ⇒ PC 归零（作者自认的占位） | `stages/if_stage.h` | 每 11 拍程序重启 |
+| D2 | 指令流与 PC 错开一拍（imem 的 `sread` 延迟） | `stages/if_stage.h` | ID 译码的指令比 PC 晚一个字 |
+| D3 | EX 级没有自己的 pc（接的是 IF/ID 的 pc） | `stages/id_stage.h` | 分支目标偏 1 个字 |
+| D4 | 冒险单元的「MEM 级」输入取自 ID 级 | `rv32i_pipeline.h` | load-use 检测退化成「与自身比较」 |
+| D5 | MEM/WB 寄存器装载别级的信号 + WB 组合直连 MEM | `rv32i_pipeline.h` | WB 写回**上一条**指令的数据 |
+| D6 | `mem_valid_out` 语义错（= load 数据有效） | `stages/mem_stage.h` | ALU 指令**永不写回**；退休数 = load 次数 |
+| D7 | MEM 级没有内存读数据端口（局部常量 0） | `stages/mem_stage.h` | **load 路径完全没实现** |
+| D8 | SoC 顶层把**字节地址**喂给**字索引**的 TCM | `examples/riscv-mini/src/rv32i_pipeline_top.h` | 取指**快 4 倍**（最初那批症状的总根源） |
+| D9 | `OP_STORE` 不在「第二操作数用 imm」白名单 | `stages/ex_stage.h` | store 地址恒 0 |
+| D10 | `ex_stage.io().alu_op` **从未被驱动** | `rv32i_pipeline.h` | **所有 ALU 操作都算 ADD** |
+| D11 | `funct3` 对访存指令编码的是**访存宽度** | `rv32i_pipeline.h` | `sw` 被当成 `SLT`（地址 = 1） |
+| D12 | `ex_stage.io().branch_type` **从未被驱动** | `rv32i_pipeline.h` | **所有分支都按 BEQ 判定** |
+| D13 | 寄存器堆读地址取自**寄存后**的 ID/EX 地址 | `rv32i_pipeline.h` | 读到**上一条**指令的寄存器值 |
+| D14 | 寄存器堆 `sread` + ID/EX 寄存器 = 2 拍延迟 | `rv32i_pipeline.h` | 同上（另一半原因） |
+| D15 | 既有 fixture 把 `read_port` 落进宽度不匹配的中间变量 | `tests/test_verilator_complex_e2e.cpp` | 该 fixture 的 imem **从未工作过** |
+| D16 | D-TCM 读端口用 `sread` ⇒ load 数据晚一拍 | `include/cpu/pipeline/rv32i_tcm.h` | load 恒读回 0 |
+| **D17** | **load-use 检测晚一级（用 MEM 级 load）+ 停顿是单拍脉冲** | `include/cpu/pipeline/hazard_unit.h` | `ld_stall` **恒 0** ⇒ 冒险从未被检测；紧邻 load→use 时消费者拿到**旧值** |
 
-**推理**：`hazard.io().flush = is_branch & branch_taken`（`hazard_unit.h`），
-而 `if_stage.io().branch_valid` 接的**正是** `ex_stage.io().branch_taken`
-（`rv32i_pipeline.h:117`）⇒ flush 断言时 `next_pc_target` 已经是分支目标
-⇒ **不需要**任何 flush 覆盖。
+**附带**：LUI / AUIPC 的 ALU 结果（`imm` / `pc + imm`）。
 
-**落地结果**：PC 不再归零（实测 pc 一路 `0x8000002c → … → 0x800000c8` 前进），
-且 7 个相关测试（`test_verilator_complex_e2e` / `test_rv32i_pipeline` /
-`test_rv32i_pipeline_behavior` / `test_forwarding` / `test_hazard` /
-`test_phase4_chlib` / `test_axi_*` 无关项未跑）全绿。
+**观测面**（前置条件）：SoC 顶层 **32 个端口**（5 输入 + 27 输出 = 11 功能 `obs_*`
++ 16 诊断 `dbg_*`）+ `Rv32iPipeline` 的 **17** 个 `dbg_*` 输出 ⇒ ADR-046 **D10-rev**。
 
-### D2 `mem_stage.mem_valid_out` 的语义错误（**待修**，阻塞 commit 计数）
-
-```cpp
-// include/cpu/pipeline/stages/mem_stage.h:206-217
-auto mem_data_valid = io().is_load & io().mem_valid;
-io().mem_valid_out = mem_data_valid;   // ← 端口名是「MEM 级有效」，实现是「load 数据有效」
-```
-
-`commit_count`（`perf_instructions` 的唯一来源）与 `memwb_valid` 都接它：
-
-```cpp
-// include/cpu/pipeline/rv32i_pipeline.h:220-221
-auto commit_valid = mem_stage.io().mem_valid_out;
-commit_count->next = select(reset_active, 0, commit_count + commit_valid);
-```
-
-⇒ **`perf_instructions` 统计的是「load 指令次数」**，不是退休指令数。
-实测固件只有 1 条 `lw` ⇒ `perf_instructions` 卡在 1。
-
-⚠️ 这同时意味着**既有测试是「绿而错」**：`tests/test_verilator_complex_e2e.cpp`
-的 RV32I 用例断言 `perf_instructions == 3`（3 条 ALU 指令，无 load），
-在该语义下**不可能是「3 条指令退休」** ⇒ 它被别的机制（spurious `is_load` /
-早期 PC 重启）满足。
-
-### D3 「EX/MEM 级寄存器装 ID 级信号」一整族（**待修**）
-
-| 位置 | 现状 | 问题 |
-|---|---|---|
-| `rv32i_pipeline.h:143` | `exmem_is_load <<= id_stage.io().is_load` | EX/MEM 寄存器装**ID 级**标记 ⇒ 与同拍的 EX 指令错位 |
-| `rv32i_pipeline.h:164-165` | `memwb_is_alu/is_jump->next = select(mem_stage.io().mem_valid, id_stage.io().is_alu/is_jump, …)` | MEM/WB 寄存器装 ID 级信号 |
-| `rv32i_pipeline.h:192-193` | `hazard.io().ex_rd_addr/mem_rd_addr <<= id_stage.io().rd_addr` | EX / MEM 级的 rd 用 ID 级 ⇒ 冒险判定与前推选择错位 |
-| `rv32i_pipeline.h:199` | `hazard.io().ex_branch <<= id_stage.io().is_branch` | 「EX 是分支」用 ID 级 ⇒ 与 `ex_branch_taken`（EX 级）**拍不对齐** ⇒ 实测 cyc 10 出现**无分支指令时的 spurious flush** |
-
-（`hazard_detection_unit.h` 那处独立的 load-use 检测已在 C2 讨论中记录同样问题。）
-
-### D4 `data_write_en` 在非 store 拍置位（**待定位**，现象已实测）
-
-`ex_stage.io().is_store_alu = io().is_store`（`ex_stage.h:228`）与
-`exmem_is_store <<= ex_stage.io().is_store_alu`（`rv32i_pipeline.h:138`）**看起来是接对的**，
-所以 53/200 拍的 spurious `write_en` 需要逐拍追（候选：`ch_reg::operator<<=`
-在 `ex_run` 路径上的语义、或 `is_store` 从 ID 到 EX 的传播）。
-**MUST NOT** 当作「don't-care」掩盖 —— 它说明 dmem 被写了垃圾。
-
-### D5 EX/MEM 寄存器裸值两后端分歧（**待定位**）
-
-C3 的逐周期 diff 显示：`obs_instr_addr` + 6 个 `perf_*` **200 拍 0 处不同**，
-而 `obs_data_addr` 17 处、`obs_data_write_data` 35 处不同（interp 13 / verilator 3；
-interp 3 / verilator 0）。候选根因：父组件读**子组件输出**（`ex_stage.io().alu_result`
-→ `exmem_alu_result`）时的求值序，或 `ch_reg::operator<<=` 的 codegen 形态。
-
-⚠️ 这条**独立于 D1–D4**：即使 D1–D4 修完，它仍会让 C3 的逐周期 diff 失败。
+**契约**：新 capability `rv32i-commit-path`（ADDED **×6**）+ `verilator-rv32i-e2e`
+（MODIFIED ×1：既有「绿而错」断言 ⇒ 语义断言）。
 
 ## 3. Acceptance（验收标准）
 
-### 3.1 D1（已落地部分）
+### 3.1 核心：SoC 能跑完真实程序
 
-- [x] `if_stage` 在 flush 时 PC 走向 `branch_target`（不再归零）
-- [x] `ctest -R "test_verilator_complex_e2e|test_rv32i_pipeline|test_rv32i_pipeline_behavior|test_forwarding|test_hazard|test_phase4_chlib"` 全绿
+> ⚠️ 2026-10-25 第 13 轮 critic 追加了 **D17（load-use）** 与
+> 「被冲刷的指令 MUST 从未执行」两条 ⇒ 下列金标已随之变化。
+> 固件 = **48 字**（新增**紧邻 load→use** ×2 以覆盖停顿路径；其中第二处是
+> 「较老指令写同一 rd」的回归用例）。
 
-### 3.2 核心验收：SoC 能跑完一段真实程序
+- [x] 取指序列与程序一致（含 taken 分支的跳转）；ID 的 pc 与它译码的指令**始终同拍**
+- [x] `obs_data_write_en` **只在** store 拍置位（3 条 `sw` ⇒ 恰好 **3** 个 store 拍）
+      ⇒ 并补了「store 拍**计数**」断言（存在性断言抓不到第 4 个 spurious 拍）
+- [x] 三个 store 的 `(地址, 数据)` == ISA 正确值
+      （`0x100←10`（纯 ALU）/ `0x104←**20**`（load-use 停顿后）/ `0x108←2`）
+- [x] 固件 **48 字**（含「较老指令写同一 rd」回归用例）
+- [x] `perf_branch_count` == 2 / mispredict == 1 / control_stalls == 1
+- [x] **被冲刷的指令 MUST 从未执行**（错误路径的寄存器保持 0）
+- [x] **`perf_load_use_stalls` == 6**（两处紧邻 load→use × 3 拍；修复前**恒 0**）
+- [x] 「紧邻 load→use」的消费者拿到 **load 写回后的新值**（`0x104 ← 20`）
+- [x] **「较老指令写同一 rd」** 的消费者同样拿到新值（`x11 == 0`，不是 14）
+- [x] 「store 拍的**个数**」== 3（不只是存在性）
+- [x] 退休指令数 == 推导值（**188** = 199 个拍间隔 − 11 个不增长间隔
+      = 200 拍 − 2 填充 − 3+3 停顿 − 3 冲刷；⚠️ 含 §3.6 填充期的 +1）
 
-- [ ] 41 条固件的 SoC 在 interpreter 下 `perf_instructions` 到达**预期退休数**
-      （由程序结构推导，含被 taken 分支冲刷的那一条）
-- [ ] `obs_instr_addr` 序列与程序的取指顺序一致（含 taken 分支的跳转）
-- [ ] `obs_data_write_en` **只在** store 拍置位（3 条 `sw` ⇒ 恰好 3 个 store 拍）
-- [ ] 三个 store 的 `(addr, data)` 等于 ISA 正确值（`0x100←10` / `0x104←10` / `0x108←2`）
-- [ ] `perf_branch_count` == 固件分支数；`perf_branch_mispredict` 有确定值
+### 3.2 双后端
 
-### 3.3 后端一致性
+- [x] 200 拍 × 27 个输出观测值**逐拍全等**（**无掩码**）
 
-- [ ] 10 个观测值在 200 拍内**逐周期完全一致**（不再需要用 don't-care 掩码绕开
-      `data_addr`/`data_write_data`）
+### 3.3 恢复条件（供 C3 续跑）
 
-### 3.4 测试诚实性
+- [x] 前置 change 归档 ⇒ C3 可从 T2 续跑（草稿在
+      `openspec/changes/rv32i-soc-dual-parity-2026-10/drafts/`）
+- [ ] C3 剩余项：JIT 回落三件套断言（`is_jit_enabled` / `is_jit_compiled` /
+      日志归因）+ `verilator-rv32i-e2e` 的 ADDED ×5 delta + 归档
 
-- [ ] `test_verilator_complex_e2e` 的 RV32I 断言改为**语义断言**
-      （3 条 ALU 指令必须让 x3 == 3；`perf_instructions` 断言改为「≥ 3 且 `x3` 正确」
-      或直接改为依赖 store 结果），**不得**继续用「计数器 == 3」这种可被 spurious 事件满足的断言
-- [ ] 若某断言在修复前后都绿 ⇒ 必须查明它到底钉了什么（「绿 ≠ 对」）
+### 3.4 门禁
 
-### 3.5 门禁
-
-- [ ] `ctest -LE perf` 零回归；`CTEST_TOTAL` 同步
-- [ ] 护栏脚本全绿（若 C3 的 DUT 端口契约随之落地 ⇒ C6 快照 + 零消费者豁免同步）
+- [x] `ctest -LE perf` 189/189；examples 28/28；samples 35/35
+- [x] 7 个护栏 exit 0（含单源化护栏的零消费者豁免**已清空**）
+- [x] `openspec validate rv32i-pipeline-commit-path-2026-10 --strict` valid
 
 ## 4. Capabilities（涉及的能力维度）
 
 | Capability | 影响 | 备注 |
 |------------|------|------|
-| `rv32i-canonical-home` | 可能 MODIFIED | 若落地 C3 的 DUT 端口契约 ⇒ 零消费者豁免条目失效（其既有条款要求移除） |
-| 新 `rv32i-commit-path` | ADDED（建议） | 「退休 = 流水线有效 & 未被冲刷」；「EX/MEM 级寄存器 MUST NOT 装 ID 级信号」；「观测端口契约」 |
-| `verilator-rv32i-e2e` | MODIFIED | 既有 Requirement 只钉 3 条 ALU 指令的 `perf_instructions == 3`，需改为语义断言 |
+| 新 `rv32i-commit-path` | ADDED **×6** | 退休语义 / 有效链 / 级间信号不串级 / 观测面与双后端比对 / **load-use 保持型停顿** / **停顿·冲刷期间有效链自洽** |
+| `verilator-rv32i-e2e` | MODIFIED ×1 | 既有 RV32I 用例的「绿而错」断言 ⇒ 语义断言 |
+| `rv32i-canonical-home` | 无 delta | 其既有条款已要求「stale 豁免 MUST 失败」⇒ 本 change 移除豁免条目即可 |
 
 ## 5. Impact（影响面）
 
 ### 5.1 风险
 
 | 风险 | 等级 | 缓解 |
-|---|---|---|
-| D3「ID 级信号装进 EX/MEM 寄存器」是一整族，逐个修会连环改行为 | 🔴 高 | 先修 D2（commit 通路，收益最大且可独立验证），再逐个修 D3 的 4 处并每处跑 C3 的逐周期 diff |
-| 修 D2 会改变 `perf_instructions` 的**所有**既有断言 | 🟡 中 | 先 grep 全部 `perf_instructions` 断言（`tests/`、`openspec/specs/verilator-rv32i-e2e/`），逐个改为语义断言 |
-| D5 疑似 codegen 求值序 ⇒ 可能牵进 `src/codegen_verilog.cpp` | 🟡 中 | 先用最小 DUT 二分（单寄存器跨层次读）定位，再决定是否进 codegen |
-| 修完 D1–D4 后 load/store 才真正执行 ⇒ 可能暴露 dmem 时序问题 | 🟡 中 | 固件已按「无前推」构造（ADR-046 D5 悬置），load-use 间隔 ≥3 NOP |
+|------|------|------|
+| 16 处流水线改动连环影响行为 | 🔴 高 | 每改一处都跑 SoC 级逐拍 diff（观测面已就位 ⇒ 可即时判别）+ 既有 RV32I 测试 |
+| `Rv32iPipeline` / `MemStage` / `IfStage` / `IdStage` / `ExStage` 的**端口变更** | 🟡 中 | 只**新增**端口（`mem_read_data` / `pc_out` / `rs*_addr_id` / `funct7_out`），不改既有端口 ⇒ 既有消费者不受影响 |
+| 「两后端分歧」曾疑似 codegen 缺陷 | 🟢 已排除 | 修完流水线后**分歧归零** ⇒ 那 52 处是坏流水线的症状 ⇒ **不得**去改 `src/codegen_verilog.cpp` |
+| ADR-046 D10「冻结端口」被修订 | 🟡 中 | D10 约束对象是 C2；D10-rev 记录修订理由 + 护栏 C6 快照钉住新集合 |
 
 ### 5.2 明确不做（Non-Goals）
 
-- **不接数据前推**（ADR-046 **D5** 仍悬置未裁决）—— 固件按无前推构造
-- **不实现 JIT 的 mem-read lowering**（独立 objective `jit-mem-read-port-support`）
-- **不做 cache 的 SoC 级集成**
+- **不接数据前推**（ADR-046 **D5** 仍悬置）—— 但**落地多拍停顿自保**
+  （2026-10-25 用户裁决 A1-a）⇒ 固件**不再需要** ≥3 NOP 间隔
+  （停顿会自保，但仍是「无前推」⇒ 停顿若干拍）
+- **不实现 JIT 的 mem-read lowering**（独立 objective）
 - **不重写流水线**：目标是让现有装配正确，不是换架构
+- **不做 cache 的 SoC 级集成**（follow-up）
+- **不做 AXI 互连**（独立 change）
+- **不改 `src/codegen_verilog.cpp`**（无证据表明它有问题）
 
-### 5.3 复现材料（C3 已备好，直接可用）
+### 5.2b A1-a 裁决记录（2026-10-25）
+
+第 13 轮 critic 的 BLOCKER 2 = 「load-use 冒险从未被检测」。两条候选路径：
+
+| 方案 | 内容 | 裁决 |
+|------|------|------|
+| A1-a 多拍停顿 | 修检测时序（EX 级 load vs ID 级消费者）+ 停顿改**保持型**（持续到那条 load 写回） | ✅ **已裁决采用** |
+| A1-b 显式降级 | 承认「无停顿自保」，固件 MUST 保持 ≥3 NOP 间隔 | ❌ 未采用 |
+
+**A1-a 的边界**：= 「无前推 + 多拍停顿自保」⇒ **不触碰** ADR-046 D5
+（D5 的对象是「要不要接数据前推」）。
+设计细节（时序表 + 逐文件改动清单 + 波及面）见
+`openspec/changes/rv32i-pipeline-commit-path-2026-10/design.md` §3。
+
+### 5.3 复现材料
 
 ```bash
-# 1) 把 C3 的草稿 DUT + 测试放回（C3 挂起时它们不在树里）
-cp openspec/changes/rv32i-soc-dual-parity-2026-10/drafts/rv32i_pipeline_top.h.draft \
-   examples/riscv-mini/src/rv32i_pipeline_top.h
-cp openspec/changes/rv32i-soc-dual-parity-2026-10/drafts/test_rv32i_soc_dual_parity.cpp.draft \
-   tests/test_rv32i_soc_dual_parity.cpp
-git apply openspec/changes/rv32i-soc-dual-parity-2026-10/drafts/cmake-registration.diff
-
-# 2) 构建 + 跑
-cmake -S . -B build && cmake --build build -j"$(nproc)" --target test_rv32i_soc_dual_parity
-RV32I_SOC_DEBUG=200 ./build/tests/test_rv32i_soc_dual_parity "Rv32iSoc - DualBackendTraceParity"
-#   ⇒ 每拍打印 10 个观测值的 interp/verilator 对（`-` 分隔），
-#     以及逐周期 diff 的首个失败点。
+# SoC 级逐拍 trace（每个观测值的 interp/verilator 对）
+RV32I_SOC_DEBUG=200 ./build/examples/riscv-mini/test_rv32i_soc_dual_parity \
+    "Rv32iSoc - DualBackendTraceParity"
 ```
-
-固件与 golden 值、编码器（含手算常量交叉校验）都在该草稿测试里，可直接复用。

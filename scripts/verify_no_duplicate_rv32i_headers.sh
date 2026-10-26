@@ -141,8 +141,15 @@ EX_DIR="examples/riscv-mini/src"
 CH_DUP_ALLOWANCE=""
 EXPECTED_DUP_ALLOWANCES=0
 
-CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h	零消费者 —— 其唯一消费者 \`test_pipeline_smoke\` 在 C1（riscv-mini-test-triage-2026-10）被删除（该测试无法写出非空洞断言：端口全是输入，而 ADR-046 D10 冻结了端口列表）	ADR-046 D10 指定它是下游 C3（rv32i-soc-dual-parity-2026-10）的 DUT ⇒ C3 落地时它成为 C3 的 DUT，本条 MUST 移除"
-EXPECTED_DEAD_ALLOWANCES=1
+CH_DEAD_ALLOWANCE=""
+# ⚠️ 豁免表已**清空**（change rv32i-pipeline-commit-path-2026-10，2026-10-25）：
+#   `examples/riscv-mini/src/rv32i_pipeline_top.h` 获得了消费者 ——
+#   `tests/test_rv32i_soc_dual_parity.cpp` 直接 `#include` 它（SoC 级双后端
+#   比对测试的 DUT）。该头此前因「端口全是输入、无观测面」而零消费者；
+#   本 change 落地了观测端口契约（ADR-046 D10-rev）⇒ 它成为真 DUT。
+#   ⇒ 原豁免行的**失效条件已达成**（`rv32i-canonical-home` 主 spec 的
+#     「stale 豁免 MUST 失败」条款要求移除登记）。
+EXPECTED_DEAD_ALLOWANCES=0
 
 # ---------------------------------------------------------------------------
 # C6 —— SoC 顶层端口快照（ADR-046 D10）
@@ -152,7 +159,7 @@ EXPECTED_DEAD_ALLOWANCES=1
 #    对下游 DUT 而言，方向翻转的破坏力等同改名）。
 # ---------------------------------------------------------------------------
 SOC_TOP_HEADER="examples/riscv-mini/src/rv32i_pipeline_top.h"
-SOC_TOP_PORTS="ext_clk:ch_in:ch_bool ext_data_read_data:ch_in:ch_uint<32> ext_data_ready:ch_in:ch_bool ext_instr_data:ch_in:ch_uint<32> ext_instr_ready:ch_in:ch_bool ext_rst:ch_in:ch_bool"
+SOC_TOP_PORTS="dbg_branch_taken:ch_out:ch_bool dbg_exmem_alu_result:ch_out:ch_uint<32> dbg_exmem_imm:ch_out:ch_uint<32> dbg_exmem_rs2_data:ch_out:ch_uint<32> dbg_exmem_valid:ch_out:ch_bool dbg_id_instr:ch_out:ch_uint<32> dbg_id_is_branch:ch_out:ch_bool dbg_id_is_load:ch_out:ch_bool dbg_id_is_store:ch_out:ch_bool dbg_id_pc:ch_out:ch_uint<32> dbg_id_valid:ch_out:ch_bool dbg_load_use_detected:ch_out:ch_bool dbg_mem_valid_out:ch_out:ch_bool dbg_wb_rd_addr:ch_out:ch_uint<5> dbg_wb_write_data:ch_out:ch_uint<32> dbg_wb_write_en:ch_out:ch_bool ext_clk:ch_in:ch_bool ext_rst:ch_in:ch_bool obs_data_addr:ch_out:ch_uint<32> obs_data_rdata:ch_out:ch_uint<32> obs_data_write_data:ch_out:ch_uint<32> obs_data_write_en:ch_out:ch_bool obs_instr_addr:ch_out:ch_uint<32> obs_perf_branch_count:ch_out:ch_uint<32> obs_perf_branch_mispredict:ch_out:ch_uint<32> obs_perf_control_stalls:ch_out:ch_uint<32> obs_perf_cycles:ch_out:ch_uint<48> obs_perf_instructions:ch_out:ch_uint<48> obs_perf_load_use_stalls:ch_out:ch_uint<32> prog_addr:ch_in:ch_uint<32> prog_data:ch_in:ch_uint<32> prog_we:ch_in:ch_bool"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT INT TERM
@@ -179,6 +186,13 @@ if [ "${1:-}" = "--self-test" ]; then
                                 "$root/examples/riscv-mini/src" "$root/tests" \
                                 "$root/build/tests/CMakeFiles/test_alpha.dir"
         cp "$REPO_ROOT/scripts/verify_no_duplicate_rv32i_headers.sh" "$root/scripts/"
+        # 每个 fixture 树都带一条**自己的**零消费者豁免：
+        #   「stale 豁免」判据的 fixture 需要一个**真实的豁免项**才能被检验，
+        #   而真实仓库的豁免表现已清空（`rv32i_pipeline_top.h` 获得了消费者）。
+        sed_inplace "$root/scripts/verify_no_duplicate_rv32i_headers.sh" \
+            's|^CH_DEAD_ALLOWANCE=""$|CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h\tfixture\tfixture"|'
+        sed_inplace "$root/scripts/verify_no_duplicate_rv32i_headers.sh" \
+            's|^EXPECTED_DEAD_ALLOWANCES=0$|EXPECTED_DEAD_ALLOWANCES=1|'
         cat > "$root/include/cpu/AGENTS.md" <<'AGEOF'
 ## STRUCTURE
 ```
@@ -199,12 +213,38 @@ AGEOF
 class Rv32iPipelineTop : public ch::Component {
 public:
     __io(
-        ch_in<ch_bool>      ext_rst;
-        ch_in<ch_bool>      ext_clk;
-        ch_in<ch_uint<32>>  ext_instr_data;
-        ch_in<ch_bool>      ext_instr_ready;
-        ch_in<ch_uint<32>>  ext_data_read_data;
-        ch_in<ch_bool>      ext_data_ready;
+        ch_out<ch_bool>          dbg_branch_taken;
+        ch_out<ch_uint<32>>      dbg_exmem_alu_result;
+        ch_out<ch_uint<32>>      dbg_exmem_imm;
+        ch_out<ch_uint<32>>      dbg_exmem_rs2_data;
+        ch_out<ch_bool>          dbg_exmem_valid;
+        ch_out<ch_uint<32>>      dbg_id_instr;
+        ch_out<ch_bool>          dbg_id_is_branch;
+        ch_out<ch_bool>          dbg_id_is_load;
+        ch_out<ch_bool>          dbg_id_is_store;
+        ch_out<ch_uint<32>>      dbg_id_pc;
+        ch_out<ch_bool>          dbg_id_valid;
+        ch_out<ch_bool>          dbg_load_use_detected;
+        ch_out<ch_bool>          dbg_mem_valid_out;
+        ch_out<ch_uint<5>>       dbg_wb_rd_addr;
+        ch_out<ch_uint<32>>      dbg_wb_write_data;
+        ch_out<ch_bool>          dbg_wb_write_en;
+        ch_in<ch_bool>          ext_clk;
+        ch_in<ch_bool>          ext_rst;
+        ch_out<ch_uint<32>>      obs_data_addr;
+        ch_out<ch_uint<32>>      obs_data_rdata;
+        ch_out<ch_uint<32>>      obs_data_write_data;
+        ch_out<ch_bool>          obs_data_write_en;
+        ch_out<ch_uint<32>>      obs_instr_addr;
+        ch_out<ch_uint<32>>      obs_perf_branch_count;
+        ch_out<ch_uint<32>>      obs_perf_branch_mispredict;
+        ch_out<ch_uint<32>>      obs_perf_control_stalls;
+        ch_out<ch_uint<48>>      obs_perf_cycles;
+        ch_out<ch_uint<48>>      obs_perf_instructions;
+        ch_out<ch_uint<32>>      obs_perf_load_use_stalls;
+        ch_in<ch_uint<32>>      prog_addr;
+        ch_in<ch_uint<32>>      prog_data;
+        ch_in<ch_bool>          prog_we;
     )
 };
 TOPEOF
@@ -226,7 +266,11 @@ TEOF
         } > "$root/build/tests/CMakeFiles/test_alpha.dir/use_alpha.cpp.o.d"
     }
 
-    run_guard() { ( cd "$1" && bash scripts/verify_no_duplicate_rv32i_headers.sh >/dev/null 2>&1 ) && echo 0 || echo $?; }
+    # ⚠️ 同时把输出落盘（诊断用）：断言只看 exit code 时，
+    #    「为什么红了」不可见 ⇒ 失败时可直接看 $WORK/last_guard.log。
+    run_guard() {
+        ( cd "$1" && bash scripts/verify_no_duplicate_rv32i_headers.sh ) >"$1/last_guard.log" 2>&1 && echo 0 || echo $?
+    }
 
     # ⚠️ **输出级断言**（exit code 不够用时的必要工具）：
     #    有些缺陷「exit code 相同但成因不同」⇒ 靠 exit 无法区分 ⇒ 必须断言输出。
@@ -315,7 +359,7 @@ CMEOF
 
     # ⑨ C4 豁免 stale MUST 被抓到
     F="$WORK/fx_dead_stale"; mk_fixture "$F"
-    sed_inplace "$F/scripts/verify_no_duplicate_rv32i_headers.sh" 's|^CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h.*|CH_DEAD_ALLOWANCE="include/cpu/pipeline/alpha.h\\tx\\ty"|'
+    sed_inplace "$F/scripts/verify_no_duplicate_rv32i_headers.sh" 's|^CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h.*|CH_DEAD_ALLOWANCE="include/cpu/pipeline/alpha.h\tx\ty"|'
     st_check "C4 豁免 stale MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑨b **纯注释里的提及 MUST NOT 被当成「已有消费者」**（BLOCKER-2 回归）
@@ -526,17 +570,17 @@ CMEOF
 
     # ⑭ C6 SoC 顶层端口变化 MUST 被抓到
     F="$WORK/fx_ports"; mk_fixture "$F"
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|        ch_in<ch_bool>      ext_clk;||'
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *ext_clk;||'
     st_check "SoC 顶层端口变化 MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑮ C6 端口**方向**翻转 MUST 被抓到
     F="$WORK/fx_ports_dir"; mk_fixture "$F"
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool>      ext_rst;|ch_out<ch_bool>      ext_rst;|'
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *ext_rst;|ch_out<ch_bool> ext_rst;|'
     st_check "SoC 顶层端口方向翻转 MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑯ C6 端口**位宽**变化 MUST 被抓到
     F="$WORK/fx_ports_w"; mk_fixture "$F"
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_uint<32>>  ext_instr_data;|ch_in<ch_uint<64>>  ext_instr_data;|'
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_uint<32>> *prog_data;|ch_in<ch_uint<64>> prog_data;|'
     st_check "SoC 顶层端口位宽变化 MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑰ **续行状态 MUST 按文件重置，且文件末尾的悬空续行 MUST 参与判定**

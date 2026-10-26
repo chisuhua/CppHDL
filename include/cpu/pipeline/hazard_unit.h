@@ -49,6 +49,13 @@ public:
         // 指令类型
         // ========================================================================
         ch_in<ch_bool> mem_is_load;          // MEM 级是加载指令
+        // ⚠️ **EX 级**的加载标记（2026-10-25，change rv32i-pipeline-commit-path-2026-10）
+        //    5 级流水线的标准 load-use 检测点是「**EX 级**的 load vs **ID 级**的
+        //    消费者」：load 在 EX、消费者在 ID ⇒ 检测到的当拍，消费者的操作数
+        //    **尚未锁存** ⇒ 停顿来得及生效。
+        //    用 MEM 级（`mem_is_load`）会**晚一级**（消费者此时已进 EX、操作数
+        //    已锁存）⇒ 停顿「停了个寂寞」（实测：`ld_stall` 恒 0）。
+        ch_in<ch_bool> ex_is_load;           // EX 级是加载指令
         ch_in<ch_bool> ex_branch;            // EX 级是分支指令
         ch_in<ch_bool> ex_branch_taken;      // 分支已采取
         
@@ -82,6 +89,11 @@ public:
         // 冒险控制输出 (单独信号，不使用 bundle)
         // ========================================================================
         ch_out<ch_bool> stall;               // Load-Use 停顿信号
+        // ⚠️ 「**这一拍**检测到 load-use 冒险」的脉冲（2026-10-25 补）：
+        //    `stall` 是**保持型**（持续到被阻塞的 load 写回寄存器堆）⇒ 它计的是
+        //    「**停顿拍数**」；而「**冒险次数**」需要单独的单拍脉冲信号。
+        //    两者 MUST 可区分（capability `rv32i-commit-path` 的 Requirement）。
+        ch_out<ch_bool> load_use_detected;   // Load-Use 冒险检测脉冲（单拍）
         ch_out<ch_bool> flush;               // 分支冲刷信号
         ch_out<ch_bool> pc_src;              // PC 源选择 (分支跳转)
     )
@@ -93,10 +105,45 @@ public:
         new (io_storage_) io_type; 
     }
     
+    // -----------------------------------------------------------------------
+    // 保持型停顿的状态（2026-10-25，change rv32i-pipeline-commit-path-2026-10）
+    //
+    // ⚠️ 为什么必须「保持」而不是单拍脉冲：
+    //    在**无数据前推**的前提下，load 的数据要到 **WB** 拍才写回寄存器堆
+    //    ⇒ 消费者至少要等 **3 拍**。单拍脉冲只能延迟 1 拍 ⇒ 仍读到旧值。
+    //
+    // ⚠️⚠️ 为什么用「**固定延迟的移位链**」而**不是**「按 rd 匹配解除」
+    //    （第 14 轮 critic 的 BLOCKER 1，实测复现）：
+    //    按 rd 匹配（`wb_rd_addr == 被阻塞的 load 的 rd`）**无法区分**
+    //    「那条 load 写回了」与「**比它老一条**的指令写回了同一个 rd」：
+    //      addi x5, x0, 7      ← 较老指令，写 x5
+    //      lw   x5, 0x100(x0)  ← 被阻塞的 load，也写 x5
+    //      add  x6, x5, x5     ← 紧邻消费者
+    //    ⇒ 老指令在下一拍到达 WB ⇒ rd 匹配成立 ⇒ 停顿**提前一拍**解除
+    //    ⇒ 消费者在 load 写回的**同一边沿**锁存操作数（`aread` 组合读 ⇒
+    //      读到边沿前的旧值 7）⇒ **x6 = 14 而不是 0**（实测）。
+    //
+    //    ⇒ 改用**固定延迟**：load 从 EX 到 WB 是 **2 级**（EX/MEM → MEM/WB）
+    //    ⇒ 它的数据在「检测拍 + 2」的边沿写回 ⇒ 消费者 MUST 等到
+    //    「检测拍 + 3」才进 EX ⇒ 停顿 = **检测拍 + 3 拍**。
+    //    ⇒ 用两级移位链实现，**不依赖 rd** ⇒
+    //      ① 不会被「较老指令写同一 rd」提前解除；
+    //      ② **load 被冲刷时也不会永久卡死**（固定延迟天然免疫 ——
+    //         而「按写回解除」在 load 被冲刷时会**永远等不到写回** ⇒ 死锁）。
+    // -----------------------------------------------------------------------
+    ch_reg<ch_bool> stall_hold_d1{false, "stall_hold_d1"};
+    ch_reg<ch_bool> stall_hold_d2{false, "stall_hold_d2"};
+
     void describe() override {
         // 将 IO 端口赋值给 auto 变量（避免类型转换问题）
         auto ex_reg_wr = io().ex_reg_write;
         auto mem_reg_wr = io().mem_reg_write;
+        // ⚠️ 下列几个端口在本组件里**只被赋给 auto 变量、无下游消费者**
+        //    （`wb_reg_write` / `wb_rd_addr` / `ex_alu_result` /
+        //    `mem_alu_result` / `wb_write_data`）—— 数据前推通路已拆走
+        //    （ADR-038：前推 mux 移到 `chlib::ForwardingMux`）⇒ 它们是
+        //    **既有 API 面**上的「预留输入」，本组件内不再使用。
+        //    ⇒ 保留端口（公共 API 兼容）但**如实注释**；清理留给独立立项。
         auto wb_reg_wr = io().wb_reg_write;
         auto is_load = io().mem_is_load;
         auto is_branch = io().ex_branch;
@@ -154,12 +201,33 @@ public:
         // ========================================================================
         // Load-Use 冒险检测
         // ========================================================================
+        // ---- EX 级检测（**流水线装配走这一路**）----
+        // 「EX 级的 load」与「ID 级的消费者」比较 ⇒ 检测当拍消费者的操作数
+        // 尚未锁存 ⇒ 停顿来得及生效。
+        //
+        // ⚠️ 已知局限（2026-10-25，第 15 轮 critic NIT）：本检测**不校验
+        //    ID 侧是否真的在消费**（`io().valid` / rs 是否真被使用）⇒ 若 IF/ID
+        //    里 valid=0 的残留指令字**碰巧**匹配 `ex_rd` ⇒ 会产生一次
+        //    **假停顿**（3 拍，纯延迟，无语义影响）⇒ 固件一变，钉死的
+        //    「停顿拍数 == 6」会漂移 ⇒ 断言时 MUST 留意这一点。
+        auto ex_rs1_match = ex_rd == id_rs1;
+        auto ex_rs2_match = ex_rd == id_rs2;
+        auto ex_any_match = ex_rs1_match | ex_rs2_match;
+        auto ex_load_use = io().ex_is_load & ex_rd_nz & ex_any_match;
+
+        // ---- MEM 级检测（保留给**独立使用**本组件的场景）----
         auto rs1_match_load = mem_rd == id_rs1;
         auto rs2_match_load = mem_rd == id_rs2;
         auto any_rs_match = rs1_match_load | rs2_match_load;
-        
-        // Load-Use 停顿条件：MEM 是 load && rd!=0 && (匹配 RS1 或 RS2)
-        auto load_use_hazard = is_load & mem_rd_nz & any_rs_match;
+        auto mem_load_use = is_load & mem_rd_nz & any_rs_match;
+
+        // ⚠️ 两条检测路**或**在一起（组件级语义）：
+        //    流水线装配只驱动 `ex_is_load`（EX 级那一路）；`mem_is_load` 那一路
+        //    在流水线里**永不触发**（MEM 级 load 到达时消费者早已进 EX），
+        //    但它让 `HazardUnit` 作为**独立组件**仍支持 MEM 级输入
+        //    （既有测试 `test_rv32i_pipeline.cpp` / `test_pipeline_exec.cpp`
+        //    直接驱动 `mem_is_load`）。
+        auto load_use_hazard = ex_load_use | mem_load_use;
         
         // ========================================================================
         // 控制冒险处理
@@ -167,9 +235,31 @@ public:
         auto branch_flush = is_branch & branch_taken;
         
         // ========================================================================
+        // 保持型停顿（固定延迟的移位链）
+        // ========================================================================
+        // 检测拍 T：`ex_load_use` 为真 ⇒
+        //   T   ：组合置位 ⇒ 停顿当拍生效
+        //   T+1 ：`stall_hold_d1` 为真
+        //   T+2 ：`stall_hold_d2` 为真（此刻那条 load 正在 WB ⇒ 边沿写回）
+        //   T+3 ：全假 ⇒ 放行（消费者在 T+3 的边沿进 ID/EX ⇒ 读到**新值**）
+        stall_hold_d1->next = ex_load_use;
+        stall_hold_d2->next = stall_hold_d1;
+
+        // ========================================================================
         // 控制信号输出
         // ========================================================================
-        io().stall = load_use_hazard;
+        // ⚠️ `stall` = 「组合置位（当拍生效）+ 两级移位保持（固定 3 拍）」
+        //    组合部分用 `load_use_hazard`（EX 级 + MEM 级两路）：
+        //    流水线装配只接 EX 级那一路（`mem_is_load` 保持未连接）⇒
+        //    在流水线里 `stall` 完全由 EX 级检测驱动；
+        //    而「独立使用 HazardUnit」的场景可以直接驱动 `mem_is_load`
+        //    得到一个单拍停顿（既有测试即此用法）。
+        io().stall = load_use_hazard | stall_hold_d1 | stall_hold_d2;
+        // 冒险脉冲（单拍）—— 与上面的「停顿拍数」区分开。
+        // ⚠️ 只反映 **EX 级**那一路（流水线装配走的就是它）⇒ 「独立使用
+        //    HazardUnit」并驱动 `mem_is_load` 的场景会得到 stall 但**没有脉冲**
+        //    ⇒ 「次数 vs 拍数可区分」对那种用法**不成立**。
+        io().load_use_detected = ex_load_use;
         io().flush = branch_flush;
         io().pc_src = branch_flush;
     }

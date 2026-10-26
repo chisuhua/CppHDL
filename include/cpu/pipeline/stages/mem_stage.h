@@ -46,6 +46,10 @@ public:
         ch_in<ch_bool>     is_store;     // 是否为存储指令
         ch_in<ch_uint<3>>  funct3;       // 功能码 (决定数据宽度)
         ch_in<ch_bool>     mem_valid;    // 内存访问有效信号 (来自控制单元)
+        // ⚠️ **内存读数据输入**（2026-10-25 补）：此前 MEM 级**没有**这个端口，
+        //    `mem_read_data` 是个**局部常量 0** ⇒ load 路径**完全没实现**
+        //    （实测：`lw` 恒读回 0 ⇒ 依赖 load 的程序永远算错）。
+        ch_in<ch_uint<32>> mem_read_data; // 来自数据存储器的读数据
         
         // ====================================================================
         // 输出端口：写入 MEM/WB 流水线寄存器
@@ -53,8 +57,9 @@ public:
         ch_out<ch_uint<32>> alu_result_out; // ALU 结果传递到 WB (流水线寄存器)
         ch_out<ch_uint<5>>  rd_addr_out;  // rd_addr 流水线寄存器
         ch_out<ch_uint<32>> mem_data;    // 从内存读出的数据 (WB 级使用)
+        // 存储字节使能（SB=0001/0010/0100/1000 · SH=0011/1100 · SW=1111）
+        ch_out<ch_uint<4>>  store_byte_enable_out;
         ch_out<ch_bool>     mem_valid_out; // 内存数据有效 (用于 WB 级多选)
-        ch_out<ch_bool>     is_store_out; // 存储指令标记 (用于 DTCM write en)
     )
 
     MemStage(ch::Component* parent = nullptr, const std::string& name = "mem_stage")
@@ -70,9 +75,6 @@ public:
         // ====================================================================
         // 只有当 is_load 或 is_store 为真时才进行内存访问
         // mem_valid 信号控制是否真正访问内存
-
-        auto do_mem_access = io().is_load | io().is_store;
-        auto mem_access_valid = do_mem_access & io().mem_valid;
 
         // ====================================================================
         // 2. 加载指令处理 (Load)
@@ -91,17 +93,18 @@ public:
         // 实际实现中，这里会连接真实的内存模块
         // memory.sread(alu_result, clk_en)
         // 这里我们使用一个占位值，实际数据由外部内存模块提供
-        ch_uint<32> mem_read_data = ch_uint<32>(0_d);
+        // ⚠️ 读数据来自端口 `io().mem_read_data`（此前这里是**局部常量 0**
+        //    ⇒ load 路径从未生效）
 
         // ---- 2.2 字节加载 (LB/LBU) ----
         // 提取地址的低位 2bit 来确定字节位置
         auto byte_offset = bits<1, 0>(io().alu_result);
         
         // 根据字节偏移选择对应的字节
-        auto byte0 = bits<7, 0>(mem_read_data);   // 地址 [1:0] == 00
-        auto byte1 = bits<15, 8>(mem_read_data);  // 地址 [1:0] == 01
-        auto byte2 = bits<23, 16>(mem_read_data); // 地址 [1:0] == 10
-        auto byte3 = bits<31, 24>(mem_read_data); // 地址 [1:0] == 11
+        auto byte0 = bits<7, 0>(io().mem_read_data);   // 地址 [1:0] == 00
+        auto byte1 = bits<15, 8>(io().mem_read_data);  // 地址 [1:0] == 01
+        auto byte2 = bits<23, 16>(io().mem_read_data); // 地址 [1:0] == 10
+        auto byte3 = bits<31, 24>(io().mem_read_data); // 地址 [1:0] == 11
 
         // 字节选择器
         ch_uint<8> selected_byte = ch_uint<8>(0_d);
@@ -125,8 +128,8 @@ public:
         auto half_offset = bit_select(io().alu_result, 1_d);
         
         // 根据半字偏移选择对应的半字
-        auto half0 = bits<15, 0>(mem_read_data);  // 地址 [1] == 0
-        auto half1 = bits<31, 16>(mem_read_data); // 地址 [1] == 1
+        auto half0 = bits<15, 0>(io().mem_read_data);  // 地址 [1] == 0
+        auto half1 = bits<31, 16>(io().mem_read_data); // 地址 [1] == 1
 
         // 半字选择器
         ch_uint<16> selected_half = select(half_offset == ch_bool(false), half0, half1);
@@ -142,7 +145,7 @@ public:
 
         // ---- 2.4 字加载 (LW) ----
         // 直接读取 32 位数据，无需扩展
-        ch_uint<32> lw_result = mem_read_data;
+        ch_uint<32> lw_result = io().mem_read_data;
 
         // ---- 2.5 加载结果多选器 ----
         // 根据 funct3 选择正确的加载结果
@@ -170,6 +173,12 @@ public:
 
         // 存储字节使能信号 (用于内存接口的 strbe)
         // 根据 funct3 生成对应的字节使能
+        //
+        // ⚠️ 2026-10-25（第 14 轮 critic SHOULD_FIX #5/#6）：此前这里算完
+        //    **从不输出** ⇒ 死代码，且 `data_strbe` 在流水线里被**旁路**
+        //    （恒 0xF）⇒ SB/SH 的字节使能**从未生效**。
+        //    ⇒ 现在把它**接到输出端口** `store_byte_enable_out`，
+        //      由 `Rv32iPipeline::data_strbe` 转出 ⇒ SB/SH 字节使能真正生效。
         ch_uint<4> store_byte_enable = ch_uint<4>(0_d);
         
         // SB (000): 存储单个字节
@@ -190,10 +199,6 @@ public:
         store_byte_enable = select(io().funct3 == ch_uint<3>(1_d), sh_be, store_byte_enable);
         store_byte_enable = select(io().funct3 == ch_uint<3>(2_d), sw_be, store_byte_enable);
 
-        // 存储数据也需要根据 funct3 选择正确的部分
-        // 但对于输出到 WB 级，存储指令不需要数据
-        // 这里我们只输出一个占位值
-        ch_uint<32> store_data_out = ch_uint<32>(0_d);
 
         // ====================================================================
         // 4. MEM 级输出多选器
@@ -213,8 +218,18 @@ public:
         // 内存读出的数据 (用于 WB 级)
         io().mem_data = select(io().is_load, final_load_data, ch_uint<32>(0_d));
         
-        // 内存数据有效信号 (用于 WB 级判断是否使用 mem_data)
-        io().mem_valid_out = mem_data_valid;
+        // ⚠️ **`mem_valid_out` 是「MEM 级指令有效」信号**（MEM/WB 与 WB 都用它
+        //    判断「WB 级那条指令有效」），**不是**「load 数据有效」：
+        //    此前实现为 `mem_data_valid`（= is_load & mem_valid）⇒
+        //      ① `perf_instructions`（= commit_count）统计的是 **load 次数**
+        //         而不是退休指令数；
+        //      ② MEM/WB 的 `memwb_is_alu` 永远不更新（它的使能是 mem_valid）
+        //         ⇒ **ALU 指令永远不写回寄存器堆**（实测：x1/x2/x3/x4 恒 0，
+        //            store 的写数据恒 0）。
+        //    ⇒ 改为 MEM 级有效；「load 数据有效」只在内部数据选择器里用。
+        io().mem_valid_out = io().mem_valid;
+        // 字节使能输出（SB/SH/SW）
+        io().store_byte_enable_out = store_byte_enable;
 
         // ALU 结果传递到 WB 级
         io().alu_result_out = io().alu_result;

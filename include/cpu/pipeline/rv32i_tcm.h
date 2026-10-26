@@ -94,7 +94,15 @@ public:
         memory.write(io().addr, io().wdata, io().write & io().valid);
         
         // 读操作
-        auto read_data = memory.sread(io().addr, !io().write);
+        //
+        // ⚠️ **MUST 用 `aread`（0-cycle 组合读），不能用 `sread`**（2026-10-25 实测修复）：
+        //    MEM 级在**当前拍**采样 `rdata`（load 的结果要进 MEM/WB 寄存器），
+        //    而 `sread` 是「地址在 T 拍给出、数据在 T+1 拍输出」⇒ MEM 采样到的是
+        //    **上一拍**的读数据（实测：load 恒读回 0）。
+        //    ⇒ 用 `aread`（组合读）让数据与地址同拍可用。
+        //    ⚠️ 与 imem 的约定**不冲突**：ADR-041 强制的是 **imem** 用 sread
+        //    （取指要 1 拍 pc_lag 对齐）；**dmem 不在此列**。
+        auto read_data = memory.aread(io().addr);
         io().rdata <<= read_data;
         io().ready = ch_bool(true);  // 单周期访问
     }

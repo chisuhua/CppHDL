@@ -99,7 +99,10 @@ public:
         
         // ---- 2.3 最终写使能信号 ----
         // 只有当需要写回且目标寄存器不是 x0 时才允许写入
-        auto write_enable_sig = needs_writeback & rd_not_zero;
+        // ⚠️ MUST 以「该指令有效」为前提（`mem_valid` = MEM/WB 有效寄存器）：
+        //    否则**气泡拍**里 MEM/WB 寄存器 hold 住旧值 ⇒ `write_en` 持续为 1
+        //    ⇒ 同一条指令被**重复写回**（实测：x1 在连续两拍各写回一次）。
+        auto write_enable_sig = needs_writeback & rd_not_zero & io().mem_valid;
 
         // ====================================================================
         // 3. 写回寄存器地址

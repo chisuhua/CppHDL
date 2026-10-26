@@ -71,10 +71,18 @@ TEST_CASE("IfStageWrapper: IF/ID latch holds, stall freezes PC", "[if][2]") {
     sim.set_input_value(top.instance().io().instr_data, 0x00000013);  // ADDI x0,x0,0
     sim.set_input_value(top.instance().io().instr_ready, 1);
     sim.set_input_value(top.instance().io().stall, 0);
-    sim.tick();
+    // ⚠️ **2 拍**（2026-10-25，change rv32i-pipeline-commit-path-2026-10）：
+    //    `pc` / `instruction` 是 **IF/ID 流水寄存器**的输出（if_stage.h）。
+    //    IF/ID 的 pc 被**额外延迟一拍**（`fetch_pc_reg`）：imem 是 1-cycle
+    //    `sread`（ADR-041 强制）⇒ 指令比地址晚到 ⇒ pc 必须同样延迟，
+    //    否则 ID 拿到的 pc 与它译码的指令**错开一个字**
+    //    （实测：分支目标会算在错误的 pc 上）。
+    //    ⇒ 延迟之后，pc 与指令**恰好同拍**成立（见下面的断言）。
+    //    ⇒ 第一对 (pc, instruction) 在第 2 拍才同时成立。
+    sim.tick(2);
 
-    // `pc` / `instruction` 是 **IF/ID 流水寄存器**的输出（if_stage.h:165-166）
-    // ⇒ 它们锁存的是**上一拍**的 pc 与取到的指令
+    // `pc` / `instruction` 是 IF/ID 流水寄存器的输出 ⇒ 二者**同一拍**成立，
+    // 且 pc 就是这条指令的地址（0x80000000 = pc_reg 的 INIT）
     REQUIRE(sim.get_port_value(top.instance().io().pc) == 0x80000000u);
     REQUIRE(sim.get_port_value(top.instance().io().instruction) == 0x00000013u);
 
