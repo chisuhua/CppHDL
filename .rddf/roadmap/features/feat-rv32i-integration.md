@@ -15,7 +15,12 @@ phase_refs: [phase-5]
 > 实测 `src/jit/jit_ir_gen_lnode_state.cpp:58-60` 对 `type_mem_read_port` 返回 `UNSUPPORTED_OP`，而 RV32I 必有
 > imem（`ch_mem` 读端口）⇒ 整个设计 JIT 必然回落 interpreter（`jit_compiler.cpp:256-264` 注释即为此设计）。
 > 故目标改为「**双路 parity（interpreter + verilator）+ JIT 回落行为显式断言**」；JIT-native 三路作为
-> 独立 objective `jit-mem-read-port-support` 排期（非本 feature 范围）。
+> **backlog（`jit-mem-read-port-support`，未立项 —— 2026-10-26 订正：此前误称「独立 objective」）** 排期，非本 feature 范围。
+>
+> ⚠️ **2026-10-26 边界澄清**：本 feature 达成的是「SoC 级双路 parity + JIT 回落契约」，
+> **不包含 ISA 语义完整性** —— 实测固件只覆盖 ADDI/ADD/SUB/LW/SW/BEQ/BNE，SB/SH 无字节使能、
+> JAL/JALR 不重定向、SRA==SRL ⇒ 这些归 `feat-rv32i-isa-completeness`。
+> **「parity 通」≠「ISA 完整」** ⇒ 本 feature 的验收不得被当作 RV32I 可交付的依据。
 
 > ⚠️ **2026-10-23 收敛前提**：本 feature 的 e2e 目标**依赖** `feat-riscv-mini-convergence`
 > （当前 `include/cpu/pipeline/` 与 `examples/riscv-mini/src/` 是**两套不同架构**，各自被不同测试覆盖 ⇒
@@ -34,7 +39,7 @@ phase_refs: [phase-5]
 ## 跨阶段拆分
 
 ### phase-5
-- ✅ 单独立项修复 `examples/riscv-mini/src/i_cache_prefetch.h` wrapper SIGSEGV（`ch_reg + C-style 数组`
+- ✅ 单独立项修复 `include/cpu/cache/i_cache_prefetch.h` wrapper SIGSEGV（`ch_reg + C-style 数组`
       → `ch_mem` + `ch::ch_module<ICacheSync>` 替换 `Component ctor + parent`；change
       `fix-riscv-mini-cache-prefetch-sigsegv`，2026-10-20 archive）
 - ✅ `i_cache_prefetch.h` 实例化 `ICacheSync`（非 stub，3 PASS instantiate）

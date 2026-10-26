@@ -81,7 +81,7 @@ exit=0: 其余 12 个
 `#include "../examples/riscv-mini/src/..."` ⇒ **库测试依赖 example 源码**。
 
 适用场景：收敛 riscv-mini 的 RV32I 实现、消除技术债、为 e2e parity 建立单一实现基线；
-不适用场景：JIT 支持 mem read port（见 `jit-mem-read-port-support`，独立 objective）。
+不适用场景：JIT 支持 mem read port（见 `jit-mem-read-port-support`，**backlog 未立项**，2026-10-26 订正）。
 
 ## 2. 目标愿景 + 完成判据
 
@@ -125,7 +125,7 @@ exit=0: 其余 12 个
 - **Go 判据**（满足全部 4 条 → 转 completed）：
   - [x] C1 + C2 两个 change 均 archived（2026-10-24 / 2026-10-25）
   - [x] `scripts/verify_no_duplicate_rv32i_headers.sh` + `scripts/verify_example_test_wiring.sh` 双护栏绿
-  - [x] `ctest -LE perf` **189/189** 零回归 + `CTEST_TOTAL` 同步（**200**）
+  - [x] `ctest -LE perf` **189/189** 零回归 + `CTEST_TOTAL` 同步（**200**）— **归档时**值（当前 191/191 + 202，见 `objective-test-coverage-100pct`）
   - [x] `include/cpu/AGENTS.md` STRUCTURE 与磁盘一致
 - **No-Go 判据**（任一成立 → defer）：
   - `hazard_unit.h` 前推语义冲突无法在不改行为的前提下裁决（需升级为独立 ADR + change）

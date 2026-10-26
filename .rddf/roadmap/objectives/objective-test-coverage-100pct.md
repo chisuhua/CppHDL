@@ -22,8 +22,9 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 > ⚠️ **2026-10-26 状态更新**：本 objective 的 **Phase 1–3 已 ship**
 > （`verilator-parity-all-tests` + `dual-backend-cache-tests` + Batch 1）；
 > **Phase 4（RV32I 残余）/ Phase 5（全量）仍未完成**。
-> ⇒ `ctest -L verilator_e2e` = **35**（2026-10-26 实测；2026-10-23 时为 34，
-> 新增来自 RV32I SoC 级双路 parity 测试 `test_rv32i_soc_dual_parity`）。
+> ⇒ `ctest -L verilator_e2e` = **37**（2026-10-26 实测；34 @ 2026-10-23 →
+> 35（`test_rv32i_soc_dual_parity`，C3）→ 37（`test_axi_interconnect_4x4` +
+> `test_axi_lite_matrix_2x2`，`axi4-interconnect-routing-2026-10`））。
 > ⇒ 全量目标（≥ 100）**未达成** ⇒ 本 objective 保持 `active`。
 
 ## 2. 目标愿景 + 完成判据
@@ -34,8 +35,8 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 - 完成判据（done-when）：
   - [x] `dual-backend-test-coverage` capability spec 落地 ✅（已达成）
   - [ ] Phase 1-5 of `verilator-parity-all-tests` 全部 ship（**Phase 1–3 已 ship；4–5 未完成**）
-  - [ ] `ctest -L verilator_e2e` ≥ 100 test（**2026-10-26 实测 35** ⇒ 未达成）
-  - [x] `ctest -LE perf` 零回归（**189/189**）+ CTEST_TOTAL 同步（**200**）
+  - [ ] `ctest -L verilator_e2e` ≥ 100 test（**2026-10-26 实测 37** ⇒ 未达成）
+  - [x] `ctest -LE perf` 零回归（**2026-10-26 实测 191/191**）+ CTEST_TOTAL 同步（**202**）
 
 ## 3. 架构依据
 
@@ -61,8 +62,8 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 3 条 → 转 completed）：
   - [ ] Phase 1-5 全部 ship + archived（**Phase 1–3 已 ship；4–5 未完成**）
-  - [ ] `ctest -L verilator_e2e` ≥ 100 test 全绿（**2026-10-26 实测 35**）
-  - [x] CTEST_TOTAL 同步（**200**）+ `verify_test_counts.sh` 绿
+  - [ ] `ctest -L verilator_e2e` ≥ 100 test 全绿（**2026-10-26 实测 37**）
+  - [x] CTEST_TOTAL 同步（**202**）+ `verify_test_counts.sh` 绿
 - **No-Go 判据**（任一成立 → defer）：
   - PR feedback 墙钟持续 > 45 min（需降级 Phase 2-5）
   - verilator codegen 暴露无法在合理工期内修复的系统性 bug

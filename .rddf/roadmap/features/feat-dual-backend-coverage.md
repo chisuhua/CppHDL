@@ -38,7 +38,9 @@ capability spec 已建：`openspec/specs/dual-backend-test-coverage/spec.md`（1
 - [x] Phase 2 ship（commit aed33be, archive 2026-10-19）
 - [x] Phase 3 partial ship（axi-spi-behavior 7 dual pairs, archive 2026-10-19）
 - [x] Phase 4 partial ship（rv32i-pipeline-behavior 13 dual pairs, commit bbf536d, archive 2026-10-19）
-- [ ] `ctest -L verilator_e2e` ≥ 100 test（全量目标，**2026-10-26 实测 35**）
+- [ ] `ctest -L verilator_e2e` ≥ 100 test（全量目标，**2026-10-26 实测 37**）
 - [ ] 单元测试 verilator 覆盖 7% → 100%（Phase 3 续 + Phase 5）
-- [x] `ctest -LE perf` 零回归（**2026-10-23 实测 174/174 PASS**）+ **CTEST_TOTAL 185** 同步
-  （extended change 已 archive；计数经 chlib-stream-semantics-2026-10 更新到 185）
+- [x] `ctest -LE perf` 零回归（**2026-10-26 实测 191/191 PASS**）+ **CTEST_TOTAL 202** 同步
+  （计数沿革：185 @ 2026-10-23 → 200 @ `rv32i-pipeline-commit-path-2026-10` →
+  202 @ `axi4-interconnect-routing-2026-10`；`ctest -L verilator_e2e` 37 同理
+  = 35 @ C3 → 37 @ 互连层 +2 个 dual 测试）

@@ -12,7 +12,7 @@ created_at: 2026-10-24
 
 - **Date drafted**: 2026-10-24
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，等待立项实施
+- **Status**: 📋 5-segment draft，已归属 feature `feat-riscv-mini-rtl-debt` ②（2026-10-26 roadmap 审计）；无前置 ⇒ 可立项
 - **来源**: change `riscv-mini-test-triage-2026-10` 实测挖出（C1 修 `test_interrupt_flow`
   的断言时发现），**原登记在该 change 的「框架缺陷」节** ⇒ 本 draft 承接之，C1 归档时移除该条。
 

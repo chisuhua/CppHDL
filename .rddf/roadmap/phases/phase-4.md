@@ -8,7 +8,7 @@ phase_refs: []
 
 ## phase-4 概览
 
-Phase 4 是**当前进行中**的阶段：把 CppHDL 的测试与组件基础设施推向"双后端可验证"状态。核心三条线：
+Phase 4 已**归档**（frontmatter `status: done`，2026-10-23 收口）：把 CppHDL 的测试与组件基础设施推向"双后端可验证"状态。核心三条线：
 1. **cache 子系统重建** — ADR-037 撞墙事件后，`*_complete.h` 用 `ch_mem` 重写（ADR-039），并拆 Sync/Async 双变体（ADR-041）
 2. **dual-backend test 完整化** — 单元测试统一跑 interpreter + verilator，`dual-backend-test-coverage` capability spec 已建，change `verilator-parity-all-tests` proposal/design 已就绪
 3. **逻辑算子 deprecation** — ADR-036 已落地 `[[deprecated]]` 标记（35 文件 migration）
@@ -27,10 +27,10 @@ Phase 4 是**当前进行中**的阶段：把 CppHDL 的测试与组件基础设
 - **deprecate-hdl-logical-operators**（ADR-036）— 35 文件 migration + 8 个 `ch_bool` overload `[[deprecated]]`（2026-10-16）
 - **dual-backend-test-coverage capability spec** — 13 requirements，`openspec validate --specs --strict` 通过（2026-10-19）
 
-## 进行中工作
+## 归档时点的在办项（均已交付，2026-10-23 复核）
 
-- **`verilator-parity-all-tests` change**（Phase 1 of 5）— proposal.md + design.md + specs/ delta 已就绪；等 builder 阶段填 tasks.md 并实施
-- **cache 双后端 e2e** — cache-complete-rewrite 的 Verilator codegen 路径尚未 e2e 验证（`dual-backend-cache-tests` Phase 2 目标）
+- **`verilator-parity-all-tests` change**（Phase 1 of 5）— ✅ 已 ship + archive（`d6954ef`）
+- **cache 双后端 e2e** — ✅ 已交付（`dual-backend-cache-tests` Phase 2，archive `aed33be`）
 
 ## 架构文档锚点
 

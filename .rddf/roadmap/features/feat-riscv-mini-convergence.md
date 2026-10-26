@@ -44,4 +44,4 @@ phase_refs: [phase-5]
 - [x] 4 组 dual-live 同名对（`hazard_unit` / `rv32i_decoder` / `rv32i_pipeline_regs` / `rv32i_tcm`）裁决并单源化 — 2026-10-25 C2
 - [x] 根 `tests/CMakeLists.txt` 无 `target_include_directories(... examples/riscv-mini/src)` — 2026-10-25 C2（6 处反向 include 消除）
 - [x] `include/cpu/AGENTS.md` STRUCTURE 表与磁盘一致（无幽灵文件）— 护栏 C5 绿
-- [x] C1 清零后 `ctest -N` 与 `CTEST_TOTAL` 同步，`test_verify_test_counts.sh` 绿 — 2026-10-25（`CTEST_TOTAL` = **200**）
+- [x] C1 清零后 `ctest -N` 与 `CTEST_TOTAL` 同步，`test_verify_test_counts.sh` 绿 — 2026-10-25（`CTEST_TOTAL` = **200**，**归档时**值；当前 202，见 `feat-dual-backend-coverage`）
