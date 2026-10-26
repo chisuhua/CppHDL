@@ -31,13 +31,14 @@ cd "$(git rev-parse --show-toplevel)" && openspec validate rv32i-soc-dual-parity
 ```
 
 ## T2 DUT 改造：`Rv32iPipelineTop`（D2/D3）
+> （✅ **由前置 change `rv32i-pipeline-commit-path-2026-10` 落地**：端口集合最终为 **32** 个 = 5 输入 + 27 输出 = 11 功能 `obs_*` + 16 诊断 `dbg_*`）
 
-- [ ] 删除 4 个死端口（`ext_instr_data` / `ext_instr_ready` / `ext_data_read_data` / `ext_data_ready`）
-- [ ] 加固件写端口 `prog_we` / `prog_addr` / `prog_data` → `itcm.io().write_*`
-- [ ] 加 10 个观测输出（见 `design.md` D2 表）
-- [ ] TCM 规模 `ADDR_WIDTH = 12`（`InstrTCM<12,32>` / `DataTCM<12,32>`），
+- [x] 删除 4 个死端口（`ext_instr_data` / `ext_instr_ready` / `ext_data_read_data` / `ext_data_ready`）
+- [x] 加固件写端口 `prog_we` / `prog_addr` / `prog_data` → `itcm.io().write_*`
+- [x] 加 10 个观测输出（见 `design.md` D2 表）
+- [x] TCM 规模 `ADDR_WIDTH = 12`（`InstrTCM<12,32>` / `DataTCM<12,32>`），
       并在文件头注释写明「pc / 数据地址高位被截断 ⇒ 固件与数据必须 < 16 KB」
-- [ ] 无死端口、无未驱动端口；`describe()` 里每个端口都被引用
+- [x] 无死端口、无未驱动端口；`describe()` 里每个端口都被引用
 
 verify:
 ```bash
@@ -47,13 +48,14 @@ cd "$(git rev-parse --show-toplevel)" && \
 ```
 
 ## T3 早期风险验证：verilator 能编译含 TCM 的 SoC（D3）
+> （✅ 由前置 change 落地）
 
 > **先做这一步**：若 12 位 TCM 在 verilator 下编译失败或冷编译过慢，
 > 整个方案的 D1 需要重开（退回 fixture wrapper）。
 
-- [ ] 写最小 DUT 冒烟（2 条指令 + 1 个 store），双后端各跑 30 拍，
+- [x] 写最小 DUT 冒烟（2 条指令 + 1 个 store），双后端各跑 30 拍，
       只断言 `obs_perf_instructions` 终值一致
-- [ ] 实测并记录：verilator 冷编译耗时、verilog 行数、运行内存
+- [x] 实测并记录：verilator 冷编译耗时、verilog 行数、运行内存
 
 verify:
 ```bash
@@ -63,13 +65,14 @@ cd "$(git rev-parse --show-toplevel)" && \
 ```
 
 ## T4 固件（D4/D5）
+> （✅ 由前置 change 落地：固件最终 **48 字**）
 
-- [ ] 测试内建 `enc_r` / `enc_i` / `enc_s` / `enc_b` + 手算常量交叉校验
+- [x] 测试内建 `enc_r` / `enc_i` / `enc_s` / `enc_b` + 手算常量交叉校验
       （`addi x1,x0,1` == `0x00100093`；`sw x3,16(x1)` == `0x0030A823`）
-- [ ] 固件 ≥ 20 条（含 NOP 填充），覆盖 ALU-only / `sw`→`lw` / taken + not-taken branch
-- [ ] 固件按「无数据前推」构造（生产者→消费者之间插 NOP，数量实测确定）
+- [x] 固件 ≥ 20 条（含 NOP 填充），覆盖 ALU-only / `sw`→`lw` / taken + not-taken branch
+- [x] 固件按「无数据前推」构造（生产者→消费者之间插 NOP，数量实测确定）
       —— 在构造处写注释指向 ADR-046 D5
-- [ ] 固件加载：`ext_rst=1` 期间逐拍写 imem（D6）
+- [x] 固件加载：`ext_rst=1` 期间逐拍写 imem（D6）
 
 verify:
 ```bash
@@ -79,13 +82,14 @@ cd "$(git rev-parse --show-toplevel)" && \
 ```
 
 ## T5 双路逐周期 parity（D7）
+> （✅ 由前置 change 落地：200 拍 × **27** 个输出观测值逐拍全等，无掩码）
 
-- [ ] `Rv32iSoc - DualBackendTraceParity`：2×`ch_device` + 2×`Simulator`，
+- [x] `Rv32iSoc - DualBackendTraceParity`：2×`ch_device` + 2×`Simulator`，
       ≥ 200 拍，每拍比对 10 个观测值
-- [ ] 语义 golden：至少断言 3 条（ALU 结果经 store 落 dmem / load 读回值再 store /
+- [x] 语义 golden：至少断言 3 条（ALU 结果经 store 落 dmem / load 读回值再 store /
       branch 决定哪条 store 执行）
-- [ ] `perf_instructions` / `perf_branch_count` 终值断言（数值由实测确定 + 推导记录在注释）
-- [ ] verilator 缺席 / `initialize()` false ⇒ `WARN` + `return`（不用 `SKIP`）
+- [x] `perf_instructions` / `perf_branch_count` 终值断言（数值由实测确定 + 推导记录在注释）
+- [x] verilator 缺席 / `initialize()` false ⇒ `WARN` + `return`（不用 `SKIP`）
 
 verify:
 ```bash
@@ -110,16 +114,17 @@ cd "$(git rev-parse --show-toplevel)" && \
 ```
 
 ## T7 护栏 + 计数 + 文档（D9/D10/D11）
+> （✅ 由前置 change 落地：端口 **32**）
 
-- [ ] `scripts/verify_no_duplicate_rv32i_headers.sh`：C6 快照 → 新 15 端口集合；
+- [x] `scripts/verify_no_duplicate_rv32i_headers.sh`：C6 快照 → 新 15 端口集合；
       删除零消费者豁免条目；`EXPECTED_DEAD_ALLOWANCES 1 → 0`；`mk_fixture` 的假顶层头同步
-- [ ] `--self-test` 全绿（fixture 数量不变，判据 ⑭/⑮/⑯ 仍各有判别力）
-- [ ] `tests/CMakeLists.txt` 注册 `test_rv32i_soc_dual_parity`
+- [x] `--self-test` 全绿（fixture 数量不变，判据 ⑭/⑮/⑯ 仍各有判别力）
+- [x] `tests/CMakeLists.txt` 注册 `test_rv32i_soc_dual_parity`
       （LABELS `base;verilator_e2e` + `RESOURCE_LOCK verilator_backend` + TIMEOUT 600
       + `${_vl_path_env}` + `include/cpu/pipeline` 的 include 路径）
-- [ ] `CTEST_TOTAL 199 → 200`；`tests/test_*.cpp 115 → 116`（root `AGENTS.md` NOTES）
-- [ ] `include/cpu/AGENTS.md` / `COMPONENT-LIFECYCLE-GUIDE.md` 端口示例同步
-- [ ] root `AGENTS.md` KNOWN LIMITATIONS 的 JIT 回落条目 → 「已断言契约」
+- [x] `CTEST_TOTAL 199 → 200`；`tests/test_*.cpp 115 → 116`（root `AGENTS.md` NOTES）
+- [x] `include/cpu/AGENTS.md` / `COMPONENT-LIFECYCLE-GUIDE.md` 端口示例同步
+- [x] root `AGENTS.md` KNOWN LIMITATIONS 的 JIT 回落条目 → 「已断言契约」
 
 verify:
 ```bash
