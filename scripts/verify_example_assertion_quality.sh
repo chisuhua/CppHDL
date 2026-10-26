@@ -93,7 +93,11 @@ examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前�
 #    「两处对同一机制的两种理解」上）。分析器的**能力边界**声明也随实现一起搬进 lib，
 #    避免「实现」与「边界声明」分处两地。
 # ═══════════════════════════════════════════════════════════════════════════
-. "$(dirname "$0")/lib/assertion_quality.sh"
+# ⚠️ 路径 MUST 基于 **$REPO_ROOT**（不是 `dirname "$0"`）——
+#    `cd scripts && bash verify_example_assertion_quality.sh` 这种调用形态下
+#    `dirname "$0"` = `.` ⇒ `./lib/...` 不存在 ⇒ source 失败
+#    （虽然失败是 fail-closed 响报而非假绿，但那是「意外的响」不是「设计的对」）。
+. "$REPO_ROOT/scripts/lib/assertion_quality.sh"
 
 # 活代码里的可执行断言总数
 real_assert_count() {

@@ -49,7 +49,9 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════
 # 期望值表（**规格本体**）
 # 格式：<fixture>|<A 活代码断言总数>|<S 被跳过区段的用例宏数>|<E 字面用例数>|<逐用例断言数(逗号分隔)>
-# ⚠️ 每一行都 MUST 与 fixture 文件头的「期望」注释**逐字一致** ⇒ 两处不一致即违规。
+# ⚠️ 表的每一行 MUST 与 fixture 文件头里的**机器可读**期望行
+#    （`// EXPECT: A=.. S=.. E=.. C=[..]`）**逐项一致** ⇒ 由 **C4** 强制
+#    （不是「纪律性约定」—— 本仓反复被「声称的机制 ≠ 实际机制」烧过）。
 # ═══════════════════════════════════════════════════════════════════════════
 EXPECTED="live_assert.cpp|1|0|1|1
 commented_out.cpp|0|0|1|0
@@ -103,15 +105,96 @@ $EXPECTED
 EOF
 
 # ---------------------------------------------------------------------------
+# C4：期望值**两份副本**必须一致
+#    （期望表 ←→ fixture 文件头的 `// EXPECT:` 行）
+#
+# ⚠️ 为什么要有这条（2026-10-26 critic SHOULD_FIX #1）：
+#    期望值存在**两份副本**（自检脚本的表 + fixture 的头注释）。
+#    若只有「表 vs 分析器」一条比较 ⇒ 两份副本会**静默漂移**
+#    （改了表忘了改注释 ⇒ 注释变成**过期文档**）⇒ 违反本仓反复被烧过的
+#    「声称的机制 ≠ 实际机制」纪律。
+#    ⇒ 这里把 fixture 的机器可读期望行解析出来，与表**逐项**比对。
+# ⚠️ 期望行 MUST 是**机器可读**的 ASCII 形式（全角逗号/括号在 POSIX awk
+#    的非 UTF-8 locale 下解析脆弱）⇒ 规范形式：
+#        // EXPECT: A=<n> S=<n> E=<n> C=[<n,n,...>]
+# ---------------------------------------------------------------------------
+echo ""
+echo '--- C4: fixture 头注释的 EXPECT 行 MUST 与期望表一致（两份副本不得漂移）---'
+# 解析一行 `// EXPECT: A=1 S=0 E=1 C=[1]` ⇒ 输出 "A S E C"
+parse_expect() {
+    printf '%s\n' "$1" | awk '
+    {
+        a = ""; s = ""; e = ""; c = ""
+        if (match($0, /A=[0-9]+/)) { a = substr($0, RSTART + 2, RLENGTH - 2) }
+        if (match($0, /S=[0-9]+/)) { s = substr($0, RSTART + 2, RLENGTH - 2) }
+        if (match($0, /E=[0-9]+/)) { e = substr($0, RSTART + 2, RLENGTH - 2) }
+        if (match($0, /C=\[[0-9,]*\]/)) { c = substr($0, RSTART + 3, RLENGTH - 4) }
+        printf "%s %s %s %s\n", a, s, e, c
+    }'
+}
+while IFS='|' read -r fname exp_a exp_s exp_e exp_c; do
+    [ -z "${fname:-}" ] && continue
+    path="$FIXTURE_DIR/$fname"
+    [ -f "$path" ] || continue
+    # MUST **恰好一行** EXPECT（0 行 = 没写；2 行 = 有歧义）
+    n_expect="$(grep -cE '^[[:space:]]*//[[:space:]]*EXPECT:' "$path" || true)"
+    if [ "$n_expect" != "1" ]; then
+        violation "$fname 的机器可读期望行（// EXPECT:）数量为 $n_expect —— MUST **恰好一行**"
+        continue
+    fi
+    exp_line="$(grep -E '^[[:space:]]*//[[:space:]]*EXPECT:' "$path")"
+    got="$(parse_expect "$exp_line")"
+    got_a="$(printf '%s\n' "$got" | awk '{print $1}')"
+    got_s="$(printf '%s\n' "$got" | awk '{print $2}')"
+    got_e="$(printf '%s\n' "$got" | awk '{print $3}')"
+    got_c="$(printf '%s\n' "$got" | awk '{print $4}')"
+    if [ "$got_a" != "$exp_a" ] || [ "$got_s" != "$exp_s" ] ||
+       [ "$got_e" != "$exp_e" ] || [ "$got_c" != "$exp_c" ]; then
+        violation "$fname 的期望**两份副本不一致**：期望表 A=$exp_a S=$exp_s E=$exp_e C=[$exp_c]，头注释 A=$got_a S=$got_s E=$got_e C=[$got_c] —— 两处 MUST 同步"
+    else
+        note "OK  $fname → 期望行与表一致（A=$got_a S=$got_s E=$got_e C=[$got_c]）"
+    fi
+done <<EOF
+$EXPECTED
+EOF
+
+# ---------------------------------------------------------------------------
 # C2：fixture 目录里**不得有**期望表未登记的文件（防止「新增 fixture 忘了写期望」）
+# ⚠️ 扫描面是**目录下的全部文件**（不只 `*.cpp`）—— 否则未来混入 `.h` / `.cc`
+#    形态的未登记 fixture 会被漏掉（声明 MUST 宽于实现是本仓反复吃过的亏）。
+#    `README.md` 是**刻意**豁免（目录说明，不是 fixture）。
 # ---------------------------------------------------------------------------
 echo ""
 echo '--- C2: fixture 目录 MUST 无「期望表未登记」的文件 ---'
-for f in "$FIXTURE_DIR"/*.cpp; do
+for f in "$FIXTURE_DIR"/*; do
     [ -e "$f" ] || continue
     base="$(basename "$f")"
+    if [ "$base" = "README.md" ]; then
+        continue
+    fi
     if ! printf '%s\n' "$EXPECTED" | grep -q "^${base}|"; then
         violation "$base 在 fixture 目录里但**未登记**期望值 —— 新增 fixture MUST 同时登记期望"
+    fi
+done
+
+# ---------------------------------------------------------------------------
+# C5：fixture 文件 MUST NOT 含「组件实例化」相关的三个 token
+#
+# ⚠️ 为什么（2026-10-26 critic SHOULD_FIX #2）：
+#    `scripts/verify_rst_n_wiring.sh` 的扫描面是 `examples tests src include`，
+#    按 `ch_device|ch_module|DUAL_BACKEND_TEST` 过滤 ⇒ fixture 里出现这三个
+#    token（**包括注释里**）⇒ 该文件被收进那条护栏的扫描集 ⇒ 引入未预期的耦合。
+#    ⚠️ 「注释里也不许出现」—— 否则**注释自己**就会把文件收进去。
+#    ⇒ 用**机器可读的** token 检查强制，而不是靠纪律。
+# ---------------------------------------------------------------------------
+echo ""
+echo '--- C5: fixture 文件 MUST NOT 含组件实例化 token（否则被别的护栏扫进去）---'
+for f in "$FIXTURE_DIR"/*; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f")"
+    [ "$base" = "README.md" ] && continue
+    if grep -qE 'ch_device|ch_module|DUAL_BACKEND_TEST' "$f"; then
+        violation "$base 含组件实例化 token（ch_device / ch_module / DUAL_BACKEND_TEST）—— 会被 verify_rst_n_wiring.sh 的扫描面收进去 ⇒ MUST 避免"
     fi
 done
 

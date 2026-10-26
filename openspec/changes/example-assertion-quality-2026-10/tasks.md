@@ -82,6 +82,32 @@
       本机是 Linux ⇒ **无法本地完成** ⇒ 权威结果 = **CI 的 `macos-14` job**
       ⇒ 归档前 MUST 看到该 job 绿（禁止用「假定 OK」代替）
 
+## 审稿记录（2026-10-26 · critic 第 1 轮）
+
+**结论**：**APPROVE_WITH_CONDITIONS**（`mergeable: yes` / `scope_exceeded: false`）——
+**无 BLOCKER**；2 条 SHOULD_FIX + 5 条 NITS ⇒ 按评审预算规则**同批处理**（下表）。
+
+| # | finding | 处置 |
+|---|---|---|
+| SHOULD_FIX 1 | 自检脚本注释声称「期望表与 fixture 头注释逐字一致 ⇒ 不一致即违规」，但**该检查不存在** | ✅ **实现交叉检查**（新增 **C4**）：fixture 头的**机器可读**期望行 `// EXPECT: A=.. S=.. E=.. C=[..]` MUST **恰好一行**且与期望表**逐项一致**；同时把 11 个 fixture 的期望行**规范化**成 ASCII（全角标点在该 awk 下解析脆弱） |
+| SHOULD_FIX 2 | `live_assert.cpp` 的注释含三个 token ⇒ **该文件自己**就在 `verify_rst_n_wiring.sh` 的扫描集里 | ✅ 新增 **C5**（fixture MUST NOT 含 `ch_device`/`ch_module`/`DUAL_BACKEND_TEST`，**注释里也不行**）+ 改写该注释为不含 token 的措辞 |
+| NIT 1 | lib 声称「不设变量」但 `_aq_*` 是全局 | ✅ 全部改 `local` + 注释限定为「source 时」 |
+| NIT 2 | 护栏用 `$(dirname "$0")` ⇒ `cd scripts && bash verify_...sh` 会 source 失败 | ✅ 改用 `"$REPO_ROOT/scripts/lib/assertion_quality.sh"`（与 fixtures 脚本写法对齐） |
+| NIT 3 | `identifier_lookalike` 的归位条件描述不准（期望表**不含**用例名 ⇒ 修好后**不会**转红） | ✅ 改写为「期望值不变、只需更新名字错位的描述」 |
+| NIT 4 | C2 只 glob `*.cpp` ⇒ 未来 `.h`/`.cc` 形态的未登记 fixture 会漏 | ✅ 扫描面改为目录内**全部文件**（`README.md` 刻意豁免） |
+| NIT 5 | fail-closed 的可执行验证只到**函数级**，未做端到端 | ✅ **补做端到端**：把 lib 的 awk 改成「输出 A/S 后 `exit 3`」⇒ 跑**护栏本体** ⇒ 报「未完整执行」且退出码非 0（变异证据见下） |
+
+**变异验证（整改后新增 3 条，全被抓）**
+
+- **M-A** 改 fixture 头的 `EXPECT` 行 ⇒ **C4** 报「两份副本不一致」
+  （⚠️ 这条变异当场抓到了我自己的解析 off-by-one ⇒ C4 有真实判别力）
+- **M-B** fixture 里加一个 token ⇒ **C5** 报违规
+- **M-C** 把分析器改成中途 `exit 3` ⇒ **护栏本体**报「未完整执行」并退出码非 0
+  ⇒ 补上 spec「分析器失效 MUST 视为违规」的**端到端半面**
+
+⚠️ 护栏输出在 lib 抽取 + 整改后**仍逐字一致**（除 `test_rv32i_soc_dual_parity.cpp`
+的断言数因 T2 变更而变 ⇒ 预期内）。
+
 ## Out of Scope
 
 - 防「等量替换」（由 code review 承担，护栏 MUST NOT 声称覆盖）

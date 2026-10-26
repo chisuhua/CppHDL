@@ -13,7 +13,9 @@
 # 用法（**source**，不是执行）：
 #     . "$(dirname "$0")/lib/assertion_quality.sh"
 #
-# ⚠️ 本文件**不产生任何副作用**（不设变量、不建临时文件、不退出）⇒ 可安全 source。
+# ⚠️ 本文件**不产生任何副作用**：source 时不设全局变量、不建临时文件、不改
+#    shell 选项、不 `cd`、不 `exit` ⇒ 可安全 source。
+#    （函数内部的临时变量一律 `local` ⇒ 调用后也不污染调用方的环境。）
 #
 # 提供：
 #   analyze_source <file>          —— 静态分析器；输出 `A`/`S`/`C`/`E` 四类行
@@ -208,11 +210,12 @@ END {
 #    ⇒ 状态判定 MUST **先于**任何「看起来 OK」的结论。
 aq_analyze_status() {
     # $1 = 分析器输出（可能为空 / 可能缺结束标记）
-    if [ -z "$1" ]; then
+    local _aq_in="$1"
+    if [ -z "$_aq_in" ]; then
         printf 'empty\n'
         return 0
     fi
-    if ! printf '%s\n' "$1" | grep -q '^E '; then
+    if ! printf '%s\n' "$_aq_in" | grep -q '^E '; then
         printf 'no_end_marker\n'
         return 0
     fi
@@ -224,8 +227,9 @@ aq_analyze_status() {
 #    逐字一致是刻意的：任何消息改动都应先改这里，避免两处漂移。
 aq_violation_reason() {
     # $1 = 源文件路径（用于消息）；$2 = 分析器输出
-    _aq_src="$1"
-    _aq_out="$2"
+    local _aq_src="$1"
+    local _aq_out="$2"
+    local _aq_status _aq_ncases _aq_e_nc
 
     _aq_status="$(aq_analyze_status "$_aq_out")"
     if [ "$_aq_status" = "empty" ]; then
