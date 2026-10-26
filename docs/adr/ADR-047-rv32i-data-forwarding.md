@@ -124,6 +124,8 @@ dtcm 的地址 ← `exmem_alu_result` 寄存器）。
 「`jal ra,…; addi x,ra,…` 紧邻序列会静默错值」这个描述的序列**不会执行**。
 ⇒ 真正覆盖 jump 生产者的是**档位 2**（`wb_stage.write_data` 已含 `link_value`；
 目标指令最早**距离 3** 到达 EX ⇒ 此时它已在 MEM/WB ⇒ 档位 2 命中）。
+⚠️ 「距离 3」是**分析性下界**（按 D5 的打拍语义推得）⇒ **验收以实测为准**，
+MUST NOT 当作已证事实（与 D9 第 6 类用例的「距离 MUST 由实施期实测确定」一致）。
 ⇒ ⇒ **保留**档位 1 的 `link_value` 分支作为**防御**（无害），
 但它的验收**不得**靠固件（见 D9 的变异项改写）。
 
@@ -175,6 +177,9 @@ dtcm 的地址 ← `exmem_alu_result` 寄存器）。
 （`test_pipeline_debug.cpp` / `test_wrapper_simple.cpp` / `test_pipeline_exec.cpp` /
 `examples/riscv-mini/tests/test_rv32i_pipeline.cpp` ×2 / `forwarding_dut_fixture.h`）
 **都未驱动**它 ⇒ 它们的读值是**未定义值**。
+（口径：**按实例**计 = 6（总 7 − 装配 1）；**按文件**计 = 5 个测试文件 + 装配 = 6。
+⚠️ `forwarding_dut_fixture.h` 的实例化写的是 `ch::ch_module<riscv::HazardUnit>`
+⇒ **不带 namespace 前缀的 grep 会漏掉它** ⇒ 计数时须按 §5.3 的 7 个实例逐个核对。）
 
 ⚠️ **措辞更正（critic NIT #1）**：根 `AGENTS.md` 记录的是「未驱动端口读到的是
 **未定义值**」——`strbe` 个案读到**全 1**、`rst_n` 个案读到 **0** ⇒ **两种读值都是坏行为**，
@@ -360,7 +365,16 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 ### 5.3 爆炸半径（删端口的可枚举清单）
 
 ⚠️ 以下清单为 **2026-10-27 实测**（初稿曾把它标为「实测」却**漏了 `set_input_value`
-这个驱动模式** —— 已更正）。`HazardUnit` 共 **6 个实例化点**，**6 个全部驱动**了这 5 个端口：
+这个驱动模式** —— 已更正）。`HazardUnit` 共 **7 个实例化点**（分布在 **6 个文件**），
+**7 个全部驱动**了这 5 个端口：
+
+⚠️ **计数口径（2026-10-27 critic NIT #1）**：**按实例** = 7（`rv32i_pipeline.h:114` 装配 1 +
+`forwarding_dut_fixture.h:90` 组合 DUT 1 + `test_pipeline_debug.cpp:62` 1 +
+`test_wrapper_simple.cpp:39` 1 + `test_pipeline_exec.cpp:595` 1 +
+`examples/riscv-mini/tests/test_rv32i_pipeline.cpp:179` 与 `:239` **2**）；
+**按文件** = 6。⚠️ `forwarding_dut_fixture.h:90` 写的是 `ch::ch_module<riscv::HazardUnit>`
+（**带 namespace 前缀**）⇒ 用 `ch_module<HazardUnit>` 这类模式 grep 会**漏掉它**
+（⇒ 本条曾被两轮误数）。
 
 | 文件 | 位置 | 数量 |
 |---|---|---|
@@ -376,7 +390,8 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 ⚠️ `examples/riscv-mini/tests/test_rv32i_pipeline.cpp:82` 的
 `reg.instance().io().mem_alu_result` 是**另一个组件**（`reg`）⇒ 不在清单内。
 ⚠️ 根 `tests/test_rv32i_pipeline.cpp` 实例化的是 `riscv::ForwardingUnit` / `ControlHazardUnit`
-（`:151` / `:188` / `:425`）⇒ **不受** `HazardUnit` 改动影响（初稿误列了它，已更正）。
+（`ForwardingUnit` **3** 处：`:151` / `:188` / `:225`；`ControlHazardUnit` 1 处：`:425`）
+⇒ **不受** `HazardUnit` 改动影响（初稿误列了它，已更正）。
 
 ⇒ 另：`scripts/verify_example_assertion_quality.sh` 钉住断言计数 ⇒ 删驱动后
 **MUST 重跑该护栏**（删驱动语句不动断言数，但计数护栏会验证这一点）。
