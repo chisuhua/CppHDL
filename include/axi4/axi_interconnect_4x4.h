@@ -13,39 +13,11 @@
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/interconnect_common.h"
 
 namespace axi4 {
 
 using namespace ch::core;
-
-#ifndef AXI4_AXIRESP_DEFINED_IC
-#define AXI4_AXIRESP_DEFINED_IC
-enum class AxiResp4x4 : uint8_t {
-    OKAY   = 0b00,
-    EXOKAY = 0b01,
-    SLVERR = 0b10,
-    DECERR = 0b11
-};
-#endif
-
-// 地址窗口：`size` MUST 是 2 的幂，`base` MUST 按 `size` 对齐。
-// 窗口命中判据 = `(addr & ~(size-1)) == base`（MUST NOT 用运行期移位）。
-struct AxiAddrWindow {
-    uint64_t base;
-    uint64_t size;
-};
-
-// 默认映射：与旧的硬编码 `awaddr >> 30` **逐位等价** —— 4 个 1 GiB 窗口把
-// 32 位地址空间完整铺满。⚠️ 因此**默认配置下 DECERR 不可触发**（每个地址都命中
-// 恰好一个窗口）；测试 DECERR 路径 MUST 用非默认映射实例化。
-struct AxiDefaultInterconnectMap {
-    static constexpr AxiAddrWindow windows[4] = {
-        {0x0000'0000ull, 0x4000'0000ull},
-        {0x4000'0000ull, 0x4000'0000ull},
-        {0x8000'0000ull, 0x4000'0000ull},
-        {0xC000'0000ull, 0x4000'0000ull},
-    };
-};
 
 template <
     unsigned ADDR_WIDTH = 32,
@@ -353,8 +325,8 @@ public:
                   ar_grant_m0, ar_grant_m1, ar_grant_m2, ar_grant_m3);
 
         // ================= 3. error responder 的接受能力 =================
-        ch_bool err_w_can_accept = !s.err_w_busy & !s.err_w_valid;
-        ch_bool err_r_can_accept = !s.err_r_busy & !s.err_r_valid;
+        ch_bool err_w_can_accept = (!s.err_w_busy) & (!s.err_w_valid);
+        ch_bool err_r_can_accept = (!s.err_r_busy) & (!s.err_r_valid);
 
         // ================= 4. 每 (slave, master) 的转发选择 =================
         // 正向（AW / AR）：当拍地址解码 + 当拍 grant + 已映射
@@ -569,25 +541,25 @@ public:
 
         // ================= 6. 握手决策（当拍地址 + 当拍 grant + 在途门控）=================
         // 在途期间 MUST 为 0 —— 否则 master 认为 AW/AR 被接受而互连悄悄吞掉（AW 静默丢失）
-        ch_bool m0_awready = !s.wr_active_m0 & select(aw_grant_m0,
+        ch_bool m0_awready = (!s.wr_active_m0) & select(aw_grant_m0,
                                  select(aw_mapped_m0,
                                         idx4(aw_target_m0, io().s0_awready, io().s1_awready,
                                              io().s2_awready, io().s3_awready),
                                         err_w_can_accept),
                                  ch_bool(false));
-        ch_bool m1_awready = !s.wr_active_m1 & select(aw_grant_m1,
+        ch_bool m1_awready = (!s.wr_active_m1) & select(aw_grant_m1,
                                  select(aw_mapped_m1,
                                         idx4(aw_target_m1, io().s0_awready, io().s1_awready,
                                              io().s2_awready, io().s3_awready),
                                         err_w_can_accept),
                                  ch_bool(false));
-        ch_bool m2_awready = !s.wr_active_m2 & select(aw_grant_m2,
+        ch_bool m2_awready = (!s.wr_active_m2) & select(aw_grant_m2,
                                  select(aw_mapped_m2,
                                         idx4(aw_target_m2, io().s0_awready, io().s1_awready,
                                              io().s2_awready, io().s3_awready),
                                         err_w_can_accept),
                                  ch_bool(false));
-        ch_bool m3_awready = !s.wr_active_m3 & select(aw_grant_m3,
+        ch_bool m3_awready = (!s.wr_active_m3) & select(aw_grant_m3,
                                  select(aw_mapped_m3,
                                         idx4(aw_target_m3, io().s0_awready, io().s1_awready,
                                              io().s2_awready, io().s3_awready),
@@ -619,25 +591,25 @@ public:
         io().m2_wready = m2_wready;
         io().m3_wready = m3_wready;
 
-        ch_bool m0_arready = !s.rd_active_m0 & select(ar_grant_m0,
+        ch_bool m0_arready = (!s.rd_active_m0) & select(ar_grant_m0,
                                  select(ar_mapped_m0,
                                         idx4(ar_target_m0, io().s0_arready, io().s1_arready,
                                              io().s2_arready, io().s3_arready),
                                         err_r_can_accept),
                                  ch_bool(false));
-        ch_bool m1_arready = !s.rd_active_m1 & select(ar_grant_m1,
+        ch_bool m1_arready = (!s.rd_active_m1) & select(ar_grant_m1,
                                  select(ar_mapped_m1,
                                         idx4(ar_target_m1, io().s0_arready, io().s1_arready,
                                              io().s2_arready, io().s3_arready),
                                         err_r_can_accept),
                                  ch_bool(false));
-        ch_bool m2_arready = !s.rd_active_m2 & select(ar_grant_m2,
+        ch_bool m2_arready = (!s.rd_active_m2) & select(ar_grant_m2,
                                  select(ar_mapped_m2,
                                         idx4(ar_target_m2, io().s0_arready, io().s1_arready,
                                              io().s2_arready, io().s3_arready),
                                         err_r_can_accept),
                                  ch_bool(false));
-        ch_bool m3_arready = !s.rd_active_m3 & select(ar_grant_m3,
+        ch_bool m3_arready = (!s.rd_active_m3) & select(ar_grant_m3,
                                  select(ar_mapped_m3,
                                         idx4(ar_target_m3, io().s0_arready, io().s1_arready,
                                              io().s2_arready, io().s3_arready),
@@ -656,14 +628,22 @@ public:
                                 idx4(s.wr_route_m0, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
-        ch_uint<ID_WIDTH> m0_bid = select(s.wr_mapped_m0,
-                                idx4(s.wr_route_m0, io().s0_bid, io().s1_bid,
-                                     io().s2_bid, io().s3_bid), ch_uint<ID_WIDTH>(0_d));
+        ch_uint<ID_WIDTH> m0_bid = select(s.wr_active_m0,
+                                select(s.wr_mapped_m0,
+                                       idx4(s.wr_route_m0, io().s0_bid, io().s1_bid,
+                                            io().s2_bid, io().s3_bid),
+                                       ch_uint<ID_WIDTH>(0_d)),
+                                ch_uint<ID_WIDTH>(0_d));
         io().m0_bvalid = m0_bvalid;
         io().m0_bid = m0_bid;
-        io().m0_bresp = select(s.wr_mapped_m0,
-                                idx4(s.wr_route_m0, io().s0_bresp, io().s1_bresp,
-                                     io().s2_bresp, io().s3_bresp), DECERR_V);
+        // ⚠️ 响应载荷 MUST 也按**在途标志**门控（见 spec §「每个 slave 的响应 MUST
+        //    回到发起它的 master」）—— 否则本 master 没有在途事务时，`bresp` / `bid`
+        //    仍会镜像某个从设备的当前值（可能是**另一个 master 正在用**的那个）。
+        io().m0_bresp = select(s.wr_active_m0,
+                                select(s.wr_mapped_m0,
+                                       idx4(s.wr_route_m0, io().s0_bresp, io().s1_bresp,
+                                            io().s2_bresp, io().s3_bresp), DECERR_V),
+                                ch_uint<2>(0_d));
         ch_bool m0_rvalid = s.rd_active_m0 & select(s.rd_mapped_m0,
                                 idx4(s.rd_route_m0, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
@@ -674,29 +654,39 @@ public:
                                 s.err_r_remaining == ch_uint<4>(0_d));
         io().m0_rvalid = m0_rvalid;
         io().m0_rlast = m0_rlast;
-        io().m0_rdata = select(s.rd_mapped_m0,
-                                idx4(s.rd_route_m0, io().s0_rdata, io().s1_rdata,
-                                     io().s2_rdata, io().s3_rdata), ch_uint<DATA_WIDTH>(0_d));
+        io().m0_rdata = select(s.rd_active_m0,
+                                select(s.rd_mapped_m0,
+                                       idx4(s.rd_route_m0, io().s0_rdata, io().s1_rdata,
+                                            io().s2_rdata, io().s3_rdata),
+                                       ch_uint<DATA_WIDTH>(0_d)),
+                                ch_uint<DATA_WIDTH>(0_d));
         io().m0_rid = select(s.rd_mapped_m0,
                                 idx4(s.rd_route_m0, io().s0_rid, io().s1_rid,
                                      io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
-        io().m0_rresp = select(s.rd_mapped_m0,
-                                idx4(s.rd_route_m0, io().s0_rresp, io().s1_rresp,
-                                     io().s2_rresp, io().s3_rresp), DECERR_V);
+        io().m0_rresp = select(s.rd_active_m0,
+                                select(s.rd_mapped_m0,
+                                       idx4(s.rd_route_m0, io().s0_rresp, io().s1_rresp,
+                                            io().s2_rresp, io().s3_rresp), DECERR_V),
+                                ch_uint<2>(0_d));
 
         // ---- m1 ----
         ch_bool m1_bvalid = s.wr_active_m1 & select(s.wr_mapped_m1,
                                 idx4(s.wr_route_m1, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
-        ch_uint<ID_WIDTH> m1_bid = select(s.wr_mapped_m1,
-                                idx4(s.wr_route_m1, io().s0_bid, io().s1_bid,
-                                     io().s2_bid, io().s3_bid), ch_uint<ID_WIDTH>(0_d));
+        ch_uint<ID_WIDTH> m1_bid = select(s.wr_active_m1,
+                                select(s.wr_mapped_m1,
+                                       idx4(s.wr_route_m1, io().s0_bid, io().s1_bid,
+                                            io().s2_bid, io().s3_bid),
+                                       ch_uint<ID_WIDTH>(0_d)),
+                                ch_uint<ID_WIDTH>(0_d));
         io().m1_bvalid = m1_bvalid;
         io().m1_bid = m1_bid;
-        io().m1_bresp = select(s.wr_mapped_m1,
-                                idx4(s.wr_route_m1, io().s0_bresp, io().s1_bresp,
-                                     io().s2_bresp, io().s3_bresp), DECERR_V);
+        io().m1_bresp = select(s.wr_active_m1,
+                                select(s.wr_mapped_m1,
+                                       idx4(s.wr_route_m1, io().s0_bresp, io().s1_bresp,
+                                            io().s2_bresp, io().s3_bresp), DECERR_V),
+                                ch_uint<2>(0_d));
         ch_bool m1_rvalid = s.rd_active_m1 & select(s.rd_mapped_m1,
                                 idx4(s.rd_route_m1, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
@@ -707,29 +697,39 @@ public:
                                 s.err_r_remaining == ch_uint<4>(0_d));
         io().m1_rvalid = m1_rvalid;
         io().m1_rlast = m1_rlast;
-        io().m1_rdata = select(s.rd_mapped_m1,
-                                idx4(s.rd_route_m1, io().s0_rdata, io().s1_rdata,
-                                     io().s2_rdata, io().s3_rdata), ch_uint<DATA_WIDTH>(0_d));
+        io().m1_rdata = select(s.rd_active_m1,
+                                select(s.rd_mapped_m1,
+                                       idx4(s.rd_route_m1, io().s0_rdata, io().s1_rdata,
+                                            io().s2_rdata, io().s3_rdata),
+                                       ch_uint<DATA_WIDTH>(0_d)),
+                                ch_uint<DATA_WIDTH>(0_d));
         io().m1_rid = select(s.rd_mapped_m1,
                                 idx4(s.rd_route_m1, io().s0_rid, io().s1_rid,
                                      io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
-        io().m1_rresp = select(s.rd_mapped_m1,
-                                idx4(s.rd_route_m1, io().s0_rresp, io().s1_rresp,
-                                     io().s2_rresp, io().s3_rresp), DECERR_V);
+        io().m1_rresp = select(s.rd_active_m1,
+                                select(s.rd_mapped_m1,
+                                       idx4(s.rd_route_m1, io().s0_rresp, io().s1_rresp,
+                                            io().s2_rresp, io().s3_rresp), DECERR_V),
+                                ch_uint<2>(0_d));
 
         // ---- m2 ----
         ch_bool m2_bvalid = s.wr_active_m2 & select(s.wr_mapped_m2,
                                 idx4(s.wr_route_m2, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
-        ch_uint<ID_WIDTH> m2_bid = select(s.wr_mapped_m2,
-                                idx4(s.wr_route_m2, io().s0_bid, io().s1_bid,
-                                     io().s2_bid, io().s3_bid), ch_uint<ID_WIDTH>(0_d));
+        ch_uint<ID_WIDTH> m2_bid = select(s.wr_active_m2,
+                                select(s.wr_mapped_m2,
+                                       idx4(s.wr_route_m2, io().s0_bid, io().s1_bid,
+                                            io().s2_bid, io().s3_bid),
+                                       ch_uint<ID_WIDTH>(0_d)),
+                                ch_uint<ID_WIDTH>(0_d));
         io().m2_bvalid = m2_bvalid;
         io().m2_bid = m2_bid;
-        io().m2_bresp = select(s.wr_mapped_m2,
-                                idx4(s.wr_route_m2, io().s0_bresp, io().s1_bresp,
-                                     io().s2_bresp, io().s3_bresp), DECERR_V);
+        io().m2_bresp = select(s.wr_active_m2,
+                                select(s.wr_mapped_m2,
+                                       idx4(s.wr_route_m2, io().s0_bresp, io().s1_bresp,
+                                            io().s2_bresp, io().s3_bresp), DECERR_V),
+                                ch_uint<2>(0_d));
         ch_bool m2_rvalid = s.rd_active_m2 & select(s.rd_mapped_m2,
                                 idx4(s.rd_route_m2, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
@@ -740,29 +740,39 @@ public:
                                 s.err_r_remaining == ch_uint<4>(0_d));
         io().m2_rvalid = m2_rvalid;
         io().m2_rlast = m2_rlast;
-        io().m2_rdata = select(s.rd_mapped_m2,
-                                idx4(s.rd_route_m2, io().s0_rdata, io().s1_rdata,
-                                     io().s2_rdata, io().s3_rdata), ch_uint<DATA_WIDTH>(0_d));
+        io().m2_rdata = select(s.rd_active_m2,
+                                select(s.rd_mapped_m2,
+                                       idx4(s.rd_route_m2, io().s0_rdata, io().s1_rdata,
+                                            io().s2_rdata, io().s3_rdata),
+                                       ch_uint<DATA_WIDTH>(0_d)),
+                                ch_uint<DATA_WIDTH>(0_d));
         io().m2_rid = select(s.rd_mapped_m2,
                                 idx4(s.rd_route_m2, io().s0_rid, io().s1_rid,
                                      io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
-        io().m2_rresp = select(s.rd_mapped_m2,
-                                idx4(s.rd_route_m2, io().s0_rresp, io().s1_rresp,
-                                     io().s2_rresp, io().s3_rresp), DECERR_V);
+        io().m2_rresp = select(s.rd_active_m2,
+                                select(s.rd_mapped_m2,
+                                       idx4(s.rd_route_m2, io().s0_rresp, io().s1_rresp,
+                                            io().s2_rresp, io().s3_rresp), DECERR_V),
+                                ch_uint<2>(0_d));
 
         // ---- m3 ----
         ch_bool m3_bvalid = s.wr_active_m3 & select(s.wr_mapped_m3,
                                 idx4(s.wr_route_m3, io().s0_bvalid, io().s1_bvalid,
                                      io().s2_bvalid, io().s3_bvalid),
                                 s.err_w_valid);
-        ch_uint<ID_WIDTH> m3_bid = select(s.wr_mapped_m3,
-                                idx4(s.wr_route_m3, io().s0_bid, io().s1_bid,
-                                     io().s2_bid, io().s3_bid), ch_uint<ID_WIDTH>(0_d));
+        ch_uint<ID_WIDTH> m3_bid = select(s.wr_active_m3,
+                                select(s.wr_mapped_m3,
+                                       idx4(s.wr_route_m3, io().s0_bid, io().s1_bid,
+                                            io().s2_bid, io().s3_bid),
+                                       ch_uint<ID_WIDTH>(0_d)),
+                                ch_uint<ID_WIDTH>(0_d));
         io().m3_bvalid = m3_bvalid;
         io().m3_bid = m3_bid;
-        io().m3_bresp = select(s.wr_mapped_m3,
-                                idx4(s.wr_route_m3, io().s0_bresp, io().s1_bresp,
-                                     io().s2_bresp, io().s3_bresp), DECERR_V);
+        io().m3_bresp = select(s.wr_active_m3,
+                                select(s.wr_mapped_m3,
+                                       idx4(s.wr_route_m3, io().s0_bresp, io().s1_bresp,
+                                            io().s2_bresp, io().s3_bresp), DECERR_V),
+                                ch_uint<2>(0_d));
         ch_bool m3_rvalid = s.rd_active_m3 & select(s.rd_mapped_m3,
                                 idx4(s.rd_route_m3, io().s0_rvalid, io().s1_rvalid,
                                      io().s2_rvalid, io().s3_rvalid),
@@ -773,15 +783,20 @@ public:
                                 s.err_r_remaining == ch_uint<4>(0_d));
         io().m3_rvalid = m3_rvalid;
         io().m3_rlast = m3_rlast;
-        io().m3_rdata = select(s.rd_mapped_m3,
-                                idx4(s.rd_route_m3, io().s0_rdata, io().s1_rdata,
-                                     io().s2_rdata, io().s3_rdata), ch_uint<DATA_WIDTH>(0_d));
+        io().m3_rdata = select(s.rd_active_m3,
+                                select(s.rd_mapped_m3,
+                                       idx4(s.rd_route_m3, io().s0_rdata, io().s1_rdata,
+                                            io().s2_rdata, io().s3_rdata),
+                                       ch_uint<DATA_WIDTH>(0_d)),
+                                ch_uint<DATA_WIDTH>(0_d));
         io().m3_rid = select(s.rd_mapped_m3,
                                 idx4(s.rd_route_m3, io().s0_rid, io().s1_rid,
                                      io().s2_rid, io().s3_rid), ch_uint<ID_WIDTH>(0_d));
-        io().m3_rresp = select(s.rd_mapped_m3,
-                                idx4(s.rd_route_m3, io().s0_rresp, io().s1_rresp,
-                                     io().s2_rresp, io().s3_rresp), DECERR_V);
+        io().m3_rresp = select(s.rd_active_m3,
+                                select(s.rd_mapped_m3,
+                                       idx4(s.rd_route_m3, io().s0_rresp, io().s1_rresp,
+                                            io().s2_rresp, io().s3_rresp), DECERR_V),
+                                ch_uint<2>(0_d));
 
         // ================= 8. 握手脉冲 =================
         ch_bool aw_hs_m0 = io().m0_awvalid & m0_awready;
@@ -882,17 +897,17 @@ public:
         // ================= 11. error responder（写）=================
         // 未映射写：互连层自己接受 AW/W 并返回 DECERR；`bvalid` MUST 是**寄存器**
         // 且保持到 `bready`（组合单拍脉冲会让合规 master 永久死锁）
-        ch_bool err_aw_hs = (aw_hs_m0 & !aw_mapped_m0) | (aw_hs_m1 & !aw_mapped_m1) |
-                            (aw_hs_m2 & !aw_mapped_m2) | (aw_hs_m3 & !aw_mapped_m3);
-        ch_bool err_w_hs = (io().m0_wvalid & m0_wready & !s.wr_mapped_m0) |
-                           (io().m1_wvalid & m1_wready & !s.wr_mapped_m1) |
-                           (io().m2_wvalid & m2_wready & !s.wr_mapped_m2) |
-                           (io().m3_wvalid & m3_wready & !s.wr_mapped_m3);
+        ch_bool err_aw_hs = (aw_hs_m0 & (!aw_mapped_m0)) | (aw_hs_m1 & (!aw_mapped_m1)) |
+                            (aw_hs_m2 & (!aw_mapped_m2)) | (aw_hs_m3 & (!aw_mapped_m3));
+        ch_bool err_w_hs = (io().m0_wvalid & m0_wready & (!s.wr_mapped_m0)) |
+                           (io().m1_wvalid & m1_wready & (!s.wr_mapped_m1)) |
+                           (io().m2_wvalid & m2_wready & (!s.wr_mapped_m2)) |
+                           (io().m3_wvalid & m3_wready & (!s.wr_mapped_m3));
         ch_bool err_b_hs = s.err_w_valid &
-                           ((s.wr_active_m0 & !s.wr_mapped_m0 & io().m0_bready) |
-                            (s.wr_active_m1 & !s.wr_mapped_m1 & io().m1_bready) |
-                            (s.wr_active_m2 & !s.wr_mapped_m2 & io().m2_bready) |
-                            (s.wr_active_m3 & !s.wr_mapped_m3 & io().m3_bready));
+                           ((s.wr_active_m0 & (!s.wr_mapped_m0) & io().m0_bready) |
+                            (s.wr_active_m1 & (!s.wr_mapped_m1) & io().m1_bready) |
+                            (s.wr_active_m2 & (!s.wr_mapped_m2) & io().m2_bready) |
+                            (s.wr_active_m3 & (!s.wr_mapped_m3) & io().m3_bready));
         s.err_w_busy->next = select(!io().rst_n, ch_bool(false),
                               select(err_aw_hs, ch_bool(true),
                               select(err_b_hs, ch_bool(false), s.err_w_busy)));
@@ -903,19 +918,19 @@ public:
         // ================= 12. error responder（读）=================
         // 返回 `arlen + 1` 个 beat，每拍 rresp=DECERR，**末拍** rlast=1
         // （只回 1 拍会让 master 等不到 rlast 而挂死）
-        ch_bool err_ar_sel_m0 = ar_hs_m0 & !ar_mapped_m0;
-        ch_bool err_ar_sel_m1 = ar_hs_m1 & !ar_mapped_m1;
-        ch_bool err_ar_sel_m2 = ar_hs_m2 & !ar_mapped_m2;
-        ch_bool err_ar_sel_m3 = ar_hs_m3 & !ar_mapped_m3;
+        ch_bool err_ar_sel_m0 = ar_hs_m0 & (!ar_mapped_m0);
+        ch_bool err_ar_sel_m1 = ar_hs_m1 & (!ar_mapped_m1);
+        ch_bool err_ar_sel_m2 = ar_hs_m2 & (!ar_mapped_m2);
+        ch_bool err_ar_sel_m3 = ar_hs_m3 & (!ar_mapped_m3);
         ch_bool err_ar_hs = err_ar_sel_m0 | err_ar_sel_m1 | err_ar_sel_m2 | err_ar_sel_m3;
         ch_uint<4> err_ar_len = select(err_ar_sel_m0, io().m0_arlen,
                                 select(err_ar_sel_m1, io().m1_arlen,
                                 select(err_ar_sel_m2, io().m2_arlen, io().m3_arlen)));
         ch_bool err_r_beat_hs = s.err_r_valid &
-                                ((s.rd_active_m0 & !s.rd_mapped_m0 & io().m0_rready) |
-                                 (s.rd_active_m1 & !s.rd_mapped_m1 & io().m1_rready) |
-                                 (s.rd_active_m2 & !s.rd_mapped_m2 & io().m2_rready) |
-                                 (s.rd_active_m3 & !s.rd_mapped_m3 & io().m3_rready));
+                                ((s.rd_active_m0 & (!s.rd_mapped_m0) & io().m0_rready) |
+                                 (s.rd_active_m1 & (!s.rd_mapped_m1) & io().m1_rready) |
+                                 (s.rd_active_m2 & (!s.rd_mapped_m2) & io().m2_rready) |
+                                 (s.rd_active_m3 & (!s.rd_mapped_m3) & io().m3_rready));
         ch_bool err_r_last_hs = err_r_beat_hs & (s.err_r_remaining == ch_uint<4>(0_d));
         s.err_r_busy->next = select(!io().rst_n, ch_bool(false),
                               select(err_ar_hs, ch_bool(true),

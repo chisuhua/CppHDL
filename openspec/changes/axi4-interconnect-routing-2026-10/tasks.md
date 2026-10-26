@@ -293,7 +293,36 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
 - `ctest -LE perf` 全量：**190/190 通过**（基线 189 + 本 change 的 1 个新文件 ⇒ 无回归）
 - `ctest -N`：**201**（原 200）
 
-- [ ] ### Task 7: `AxiLiteMatrix2x2` 的活地址解码修正
+### Tasks 7-9 完成记录（2026-10-26，builder）
+
+| Task | 交付 | 实测验收 |
+|---|---|---|
+| 7 | `AxiLiteMatrix2x2` 活地址解码修正 | 读侧 `rd_route` 锁存（此前**完全没有**）；`s*_rready` 改用**读**路由（此前用**写**通道 grant）；`m*_awready`/`m*_arready` 加 `!active` 门控 + **当拍**地址解码；AW/AR **独立**仲裁；新增 `rst_n` + **18 个寄存器 / 18 个复位 pattern**（1:1）；`axi_soc_example.cpp` 接线 1 处 |
+| 8 | 回归 + `phase3a_complete` 真跑 | `run_all_ported_tests.sh` **28/28**、`ctest -LE perf` **191/191**、`run_all_samples.sh` **35/35**、7 个护栏脚本全 exit 0 |
+| 9 | 文档同步 + 计数 | `CTEST_TOTAL` **200 → 202**、non-perf **189 → 191**、`tests/test_*.cpp` **115 → 117**；`include/axi4/AGENTS.md` 新增「互连层」段（7 条契约）+ STRUCTURE/KEY FILES/TESTS 表 + 2 条 ANTI-PATTERN；根 `AGENTS.md` NOTES 新增条目 |
+
+**Task 7 顺带修掉的额外缺陷**（超出 Task 7 的 5 条 action，但**由 spec 契约要求**）：
+- **响应载荷按在途标志门控**：`m*_bresp`/`m*_bid`/`m*_rdata`/`m*_rresp` 在没有在途事务时
+  MUST 为 0 —— 否则本 master 会镜像某个从设备的当前值（可能是**另一个 master 正在用**的
+  那个）⇒ 表面上像「响应串到了别人身上」。**4×4 同步修正**（同一缺陷）。
+- **2×2 也实现了可配置地址映射 + DECERR error responder + 独立仲裁** ——
+  `axi-interconnect-routing` 的 5 条 Requirement 是**泛化**表述（同时管辖两个组件），
+  只做 Task 7 列的 5 条 ⇒ 归档后主 spec 会含 2×2 **不满足**的条款 ⇒ spec/实现漂移。
+- **新增 `include/axi4/interconnect_common.h`**：两个互连组件共用的 `AxiResp4x4` +
+  `AxiAddrWindow` + 两个默认映射（避免 2×2 反向依赖 4×4 的头）。
+
+**Task 8 顺带修掉的 example 缺陷**（`examples/axi4/phase3a_complete.cpp`）：
+- `io().done` 与 `io().rdata` 此前被 `<<=` **双驱动**（`m0_bvalid` + `m0_rvalid` /
+  常量 0 + `m0_rdata`）⇒ 行为未定义 ⇒ 改为各由**一个**寄存器驱动。
+- `awvalid` / `wvalid` 此前**同拍**拉高，而下游 converter 与 slave 都是**相位分离**的
+  ⇒ 同拍 AW+W 的 W **永不被接受** ⇒ 改为 AWVALID / WVALID **各自保持到对应握手**。
+- 此前**只构建设计、不跑仿真** ⇒ AXI-Lite 链路从未被验证过 ⇒ 现补上
+  **协议合规的内部 AXI4 Full master** + 写/读回**数据断言**（写 0xAB → 读回 0xAB）。
+
+**新测试文件**：`tests/test_axi_interconnect_4x4.cpp`（28 TEST_CASE / 354 断言 × 2 后端）、
+`tests/test_axi_lite_matrix_2x2.cpp`（28 TEST_CASE / 126 断言 × 2 后端）。
+
+- [x] ### Task 7: `AxiLiteMatrix2x2` 的活地址解码修正
   - **action**:
     - 读侧引入 `ar_route` 锁存（2x2 当前完全没有）；
       `m*_rdata` / `m*_rresp` / `m*_rvalid` / `s*_rready` MUST 基于该锁存
@@ -309,14 +338,21 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
       `matrix.io().rst_n <<= io().rst_n;`
   - **verify**:
     ```bash
-    grep -cE "select\(!io\(\)\.rst_n" include/axi4/axi4_lite_matrix.h
-    grep -c "ch_reg<" include/axi4/axi4_lite_matrix.h
+    # ⚠️ as-built 订正（2026-10-26，builder）：原判据**两处失真**（与 Task 3 同型）——
+    #   ① `grep -c "ch_reg<"` 数的是**行**（12）而非寄存器数（18）；
+    #   ② 注释里也含 `select(!io().rst_n` ⇒ 多命中 2 次（20 vs 18）。
+    #   ⇒ 唯一有判别力的判据 = 「`->next` 赋值次数 == 寄存器个数」。
+    grep -cE "\->next *= *select\(!io\(\)\.rst_n" include/axi4/axi4_lite_matrix.h
+    grep -oE "ch_reg<[^>]*>[^;]*" include/axi4/axi4_lite_matrix.h | grep -oE "[a-z_][a-z_0-9]*" | grep -cE "^(aw_ptr|ar_ptr|wr_|rd_|err_)"
     grep -rn "matrix.io().rst_n <<=" examples/ | wc -l
+    grep -cE "rd_route|wr_route" include/axi4/axi4_lite_matrix.h
     cd build && ctest -R test_axi_lite_matrix_2x2 --output-on-failure
     ```
-    前两条 MUST 相等；第 3 条 MUST = 1；第 4 条 2x2 用例 MUST 全绿
+    第 1 与第 2 条 MUST 相等（实测 **18 == 18**）；第 3 条 MUST = 1；
+    第 4 条 MUST ≥ 2（读侧 + 写侧各一组路由锁存，实测 **32**）；
+    第 5 条 2x2 用例 MUST 全绿（实测 **28/28** = 14 对 × 2 后端，126 断言 × 2）
 
-- [ ] ### Task 8: 回归 —— 既有测试与 examples 必须仍然全绿
+- [x] ### Task 8: 回归 —— 既有测试与 examples 必须仍然全绿
   - **action**:
     - `examples/axi4/phase3a_complete.cpp`（4×4）与
       `examples/axi4/axi_soc_example.cpp`（2×2）MUST 仍可编译
@@ -339,8 +375,14 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
     cd build && ctest -L verilator_e2e -R "interconnect|matrix" --output-on-failure
     ```
     MUST 全绿
+    （⚠️ as-built：`run_all_ported_tests.sh` 要求**先**构建被跟踪的 examples
+    ⇒ `cmake --build build --target all-examples`；否则「缺失二进制 = 失败」）
+    **实测（2026-10-26）**：`run_all_ported_tests.sh` **28/28**；
+    `ctest -L verilator_e2e -R "interconnect|matrix"` **2/2**；
+    `ctest -LE perf` **191/191**；`run_all_samples.sh` **35/35**；
+    `scripts/verify_test_counts.sh` exit 0；`scripts/verify_rst_n_wiring.sh` exit 0
 
-- [ ] ### Task 9: 文档同步 + 测试计数更新
+- [x] ### Task 9: 文档同步 + 测试计数更新
   - **action**:
     - `include/axi4/AGENTS.md`：
       - 新增「互连层」段（地址映射、路由锁存、仲裁、error responder、复位契约）
@@ -357,3 +399,8 @@ C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Ma
     ./scripts/verify_test_counts.sh && cd build && ctest -N | tail -1
     ```
     MUST 全绿且计数与实际一致
+    （⚠️ as-built 计数口径：基线是 **200**（`rv32i-pipeline-commit-path-2026-10` 之后），
+    本 change 独立落地 **+2**（2 个新测试文件 = 2 个 ctest 条目；双后端在**同一个**
+    Catch2 二进制内跑 ⇒ 每文件只占 1 个条目）⇒ **202**；
+    non-perf **189 → 191**；perf 恒 **11**；
+    `tests/test_*.cpp` **115 → 117**（2 个新文件都在根 `tests/` 下））

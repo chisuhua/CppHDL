@@ -60,7 +60,7 @@ cd "$REPO_ROOT"
 
 # Components exposing a MANDATORY rst_n port (low active, effective on the
 # clock edge). An unwired instance is permanently in reset.
-COMPONENTS_W_RST_N="AxiLiteSlave Axi4Slave AxiToAxiLiteConverter AxiLiteGpio AxiLiteUart AxiLiteTimer AxiLitePwm AxiLiteI2c AxiLiteSpi AxiDma"
+COMPONENTS_W_RST_N="AxiLiteSlave Axi4Slave AxiToAxiLiteConverter AxiLiteGpio AxiLiteUart AxiLiteTimer AxiLitePwm AxiLiteI2c AxiLiteSpi AxiDma AxiInterconnect4x4 AxiLiteMatrix2x2"
 
 # Component definitions and non-product trees are excluded from the scan.
 scan_files() {
@@ -216,7 +216,7 @@ for f in $(scan_files); do
 
   # ---- R2: per file, wrapper forwarding ---------------------------------
   if grep -qE "ch_module" "$f" && \
-     grep -qE "AxiLiteSlave|Axi4Slave|AxiToAxiLiteConverter|AxiLiteGpio|AxiLiteUart|AxiLiteTimer|AxiLitePwm|AxiLiteI2c|AxiLiteSpi|AxiDma" "$f" && \
+     grep -qE "AxiLiteSlave|Axi4Slave|AxiToAxiLiteConverter|AxiLiteGpio|AxiLiteUart|AxiLiteTimer|AxiLitePwm|AxiLiteI2c|AxiLiteSpi|AxiDma|AxiInterconnect4x4|AxiLiteMatrix2x2" "$f" && \
      ! grep -qE "rst_n[ \t]*<<" "$f"; then
     echo "::error file=$f"
     echo "        This file wraps a component with a mandatory 'rst_n' port but never forwards"

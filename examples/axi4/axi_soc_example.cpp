@@ -262,6 +262,9 @@ public:
         // （不接则从设备会被永久按住复位：未驱动的 ch_in 读出为 0）
         gpio.io().rst_n <<= io().rst_n;
         uart.io().rst_n <<= io().rst_n;
+        // 互连层是 rst_n 链路的**中间节点**：MUST 透传父级复位源
+        // （MUST NOT tie 常量 —— 那会永久掩盖复位路径）
+        matrix.io().rst_n <<= io().rst_n;
 
         // 主设备控制接口
         master.io().start <<= io().start;

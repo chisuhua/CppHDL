@@ -395,6 +395,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 fanout: all 16 (master,slave) wr
                        "[axi][interconnect][dual][fanout]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
     for (int m = 0; m < 4; ++m) {
         for (int s = 0; s < 4; ++s) {
             const uint32_t data = 0xA000u + static_cast<uint32_t>(m * 16 + s);
@@ -418,6 +420,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 fanout: all 16 (master,slave) re
                        "[axi][interconnect][dual][fanout]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
     for (int m = 0; m < 4; ++m) {
         for (int s = 0; s < 4; ++s) {
             const uint32_t data = 0xB000u + static_cast<uint32_t>(m * 16 + s);
@@ -439,6 +443,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 address map: window addresses fo
                        "[axi][interconnect][dual][addr-map]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
     for (int s = 0; s < 4; ++s) {
         const uint32_t addr = kSlaveBase[s] + 0x10u;
         WriteObs o;
@@ -454,6 +460,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 write: AW-W-B full chain with da
                        "[axi][interconnect][dual][write]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
     WriteObs o;
     REQUIRE(write_txn(sim, io, 2, 3, kSlaveBase[3], 0xDEADBEEFu, 0xFu, 0x9u, &o));
     REQUIRE(o.awvalid_mask == (1ull << 3));
@@ -467,6 +475,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 read: AR-R full chain with data 
                        "[axi][interconnect][dual][read]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
     ReadObs o;
     REQUIRE(read_txn(sim, io, 1, 2, kSlaveBase[2], 0x1234ABCDu, 0x3u, &o));
     REQUIRE(o.arvalid_mask == (1ull << 2));
@@ -481,6 +491,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 DECERR: unmapped write answers w
                        "[axi][interconnect][dual][decerr]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     drv_aw(sim, io, 1, kUnmappedAddr, 0x6u, 0, 2, 1, 1);
     REQUIRE(wait_until(sim, [&] { return o_awready(sim, io, 1) == 1; }));
@@ -519,6 +531,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 DECERR: unmapped read returns ar
                        "[axi][interconnect][dual][decerr]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     constexpr uint32_t kLen = 3;  // ⇒ 4 个 beat
     drv_ar(sim, io, 2, kUnmappedAddr, 0x8u, kLen, 2, 1, 1);
@@ -549,6 +563,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 concurrency: write and read on d
                        "[axi][interconnect][dual][concurrency]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     // m0 → s2 写（先完成 AW + W，响应暂不返回）
     drv_aw(sim, io, 0, kSlaveBase[2], 0x2u, 0, 2, 1, 1);
@@ -596,6 +612,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 route latch: changing AWADDR aft
                        "[axi][interconnect][dual][latch]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     drv_aw(sim, io, 0, kSlaveBase[1], 0x1u, 0, 2, 1, 1);
     slv_awready(sim, io, 1, 1);
@@ -620,6 +638,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 arbitration: in-flight master ke
                        "[axi][interconnect][dual][arbitration]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     drv_aw(sim, io, 0, kSlaveBase[1], 0x1u, 0, 2, 1, 1);
     slv_awready(sim, io, 1, 1);
@@ -659,6 +679,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 WSTRB forwarded verbatim",
                        "[axi][interconnect][dual][wstrb]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
     WriteObs o;
     REQUIRE(write_txn(sim, io, 3, 0, kSlaveBase[0], 0x11223344u, 0x5u, 0x0u, &o));
     REQUIRE(o.s_wstrb == 0x5u);
@@ -670,6 +692,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 read is not blocked by a pending
                        "[axi][interconnect][dual][arbitration]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     // m1 的写已在途（AW 已握手、W 未到）
     drv_aw(sim, io, 1, kSlaveBase[2], 0x2u, 0, 2, 1, 1);
@@ -700,6 +724,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 awready is low while a transacti
                        "[axi][interconnect][dual][inflight]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     drv_aw(sim, io, 2, kSlaveBase[0], 0x1u, 0, 2, 1, 1);
     slv_awready(sim, io, 0, 1);
@@ -718,6 +744,8 @@ DUAL_BACKEND_TEST_PAIR(Dut, "AxiInterconnect4x4 mid-transaction reset clears sta
                        "[axi][interconnect][dual][reset]", [&] {
     auto &io = dev.instance().io();
     ic_init(sim, io);
+    // `rst_n` 是必需端口：未接线读出为 0 = 永久复位（见 spec 陷阱条目）
+    sim.set_input_value(io.rst_n, 1);
 
     // 造一笔在途写（AW 已握手，W 未到）
     drv_aw(sim, io, 0, kSlaveBase[0], 0x1u, 0, 2, 1, 1);

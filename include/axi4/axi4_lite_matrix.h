@@ -1,22 +1,34 @@
 /**
- * AXI4-Lite 2x2 Matrix
- * 
+ * @file axi4_lite_matrix.h
+ * @brief AXI4-Lite 2x2 Matrix
+ *
  * 连接 2 个主设备到 2 个从设备，支持：
- * - 轮询仲裁
- * - 地址解码
- * - 错误响应
+ * - 写 / 读**各自独立**的 round-robin 仲裁（AW / AR 各一套指针）
+ * - 路由在 AW / AR 握手当拍**锁存**（写侧与读侧各自独立）
+ * - 编译期可配置的地址窗口映射 + 互连层自应答的 DECERR error responder
+ * - 低有效 `rst_n`（**在时钟沿生效**），全部状态寄存器带复位 pattern
+ *
+ * 契约：`openspec/specs/axi-interconnect-routing/spec.md`
+ *
+ * ⚠️ **AXI4-Lite 无 `arlen`**（AXI4-Lite 是单拍协议）⇒ error responder 的读侧
+ * 恒返回 **1 个 beat**（不是 AXI4 Full 的 `arlen + 1`）。
  */
 
 #pragma once
 
 #include "ch.hpp"
 #include "component.h"
+#include "axi4/interconnect_common.h"
 
 namespace axi4 {
 
 using namespace ch::core;
 
-template <unsigned ADDR_WIDTH = 32, unsigned DATA_WIDTH = 32>
+template <
+    unsigned ADDR_WIDTH = 32,
+    unsigned DATA_WIDTH = 32,
+    typename Map = AxiLiteDefaultMatrixMap
+>
 class AxiLiteMatrix2x2 : public ch::Component {
 public:
     // 端口方向约定（与 ch::operator<<= 的连接语义一致）：
@@ -124,210 +136,390 @@ public:
         ch_in<ch_uint<2>> s1_rresp;
         ch_in<ch_bool> s1_rvalid;
         ch_out<ch_bool> s1_rready;
+
+        // 复位（低有效，**在时钟沿生效** —— 配 `select(!io().rst_n, <init>, ...)`）。
+        // `rst_n` 是**必需端口**，实例化点 MUST 显式接线；未接线读出为 0 = **永久复位**
+        // （零编译错误的静默破坏：编译通过、运行时不报错，但状态永远停在初值）。
+        // 互连层是 rst_n 链路的**中间节点**，MUST 与下游 slave 在同一复位窗口内复位。
+        ch_in<ch_bool> rst_n;
     )
-    
+
     AxiLiteMatrix2x2(ch::Component* parent = nullptr, const std::string& name = "axi_matrix_2x2")
         : ch::Component(parent, name) {}
-    
+
     void create_ports() override {
         new (io_storage_) io_type;
     }
-    
+
+    // ==================== 状态 ====================
+    // 全部 `ch_reg` MUST 有 `select(!io().rst_n, <init>, ...)` 复位 pattern
+    // （低有效，**在时钟沿生效** —— 落在 `->next` 表达式上由时钟沿采样，**不是**异步复位）；
+    // `<init>` MUST 带该寄存器的**显式位宽**。
+    //
+    // 设计要点：
+    //   * 路由目标在 **AW / AR 握手当拍**锁存 ⇒ W / B / R 通道 MUST 用**锁存值**转发，
+    //     MUST NOT 用活的 `awaddr` / `araddr`（否则 master 握手后改写地址会改错落点）。
+    //   * 握手**决策**（`s*_awvalid` / `s*_arvalid` 的正向转发、`m*_awready` /
+    //     `m*_arready` 的反查）MUST 用**当拍**地址解码 + **当拍** grant
+    //     （AXI 要求 master 在 `awvalid && !awready` 期间保持地址稳定 ⇒ 握手窗口内的
+    //     「活地址」是安全的）。
+    //   * 写 / 读 MUST 各自独立仲裁（AXI4-Lite 的 AW/W/B 与 AR/R 是独立通道组）。
+    struct MatrixState {
+        ch_reg<ch_bool> aw_ptr;  // 写仲裁指针：0 ⇒ m0 优先
+        ch_reg<ch_bool> ar_ptr;  // 读仲裁指针：0 ⇒ m0 优先
+
+        // 写侧：AW 握手当拍锁存（route：0 ⇒ s0，1 ⇒ s1）
+        ch_reg<ch_bool> wr_route_m0, wr_route_m1;
+        ch_reg<ch_bool> wr_mapped_m0, wr_mapped_m1;
+        ch_reg<ch_bool> wr_active_m0, wr_active_m1;
+
+        // 读侧：AR 握手当拍锁存
+        ch_reg<ch_bool> rd_route_m0, rd_route_m1;
+        ch_reg<ch_bool> rd_mapped_m0, rd_mapped_m1;
+        ch_reg<ch_bool> rd_active_m0, rd_active_m1;
+
+        // error responder（写）：未映射地址由互连层自己应答
+        ch_reg<ch_bool> err_w_busy;   // 已被一笔未映射写占用（AW 已握手）
+        ch_reg<ch_bool> err_w_valid;  // bvalid，保持到 bready
+
+        // error responder（读）：未映射读返回 1 个 DECERR beat（AXI4-Lite 无 arlen）
+        ch_reg<ch_bool> err_r_busy;
+        ch_reg<ch_bool> err_r_valid;
+
+        MatrixState()
+            : aw_ptr(false), ar_ptr(false),
+              wr_route_m0(false), wr_route_m1(false),
+              wr_mapped_m0(false), wr_mapped_m1(false),
+              wr_active_m0(false), wr_active_m1(false),
+              rd_route_m0(false), rd_route_m1(false),
+              rd_mapped_m0(false), rd_mapped_m1(false),
+              rd_active_m0(false), rd_active_m1(false),
+              err_w_busy(false), err_w_valid(false),
+              err_r_busy(false), err_r_valid(false) {}
+    };
+
+    // -------- 2 选 1 正向转发（**单次赋值** —— MUST NOT 写成「输出读自己」的自环，
+    //          那会让拓扑排序报 `Cycle detected in IR graph`）--------
+    // `V` 独立推导：实参是 `ch_in<T>`（端口），T 只由 `ch_out<T>` 与 `dflt` 决定
+    // ⇒ 避免「deduced conflicting types for T」。
+    template <typename T, typename V>
+    static void fwd2(ch_out<T> &dst, const ch_bool &s0, const ch_bool &s1,
+                     const V &v0, const V &v1, const T &dflt) {
+        dst = select(s0, v0, select(s1, v1, dflt));
+    }
+
+    // -------- 按 1 bit 索引 2 选 1（反向通道用**锁存路由**反查）--------
+    template <typename V>
+    static auto idx2(const ch_bool &idx, const V &v0, const V &v1) {
+        return select(idx, v1, v0);
+    }
+
+    // -------- 地址窗口命中：`addr & ~(size-1) == base`（编译期常量掩码）--------
+    static ch_bool window_hit(const ch_uint<ADDR_WIDTH> &addr, uint64_t base, uint64_t size) {
+        const uint64_t mask = ~(size - 1ull);
+        return (addr & ch_uint<ADDR_WIDTH>(mask)) == ch_uint<ADDR_WIDTH>(base);
+    }
+
+    // -------- 当拍地址解码：`target` = 命中的 slave（1 ⇒ s1），`mapped` = 是否落在窗口内 --------
+    void decode_addr(const ch_uint<ADDR_WIDTH> &addr, ch_bool &target, ch_bool &mapped) {
+        static_assert(Map::windows[0].size != 0, "地址窗口 size MUST 非 0");
+        static_assert(Map::windows[1].size != 0, "地址窗口 size MUST 非 0");
+        const ch_bool h0 = window_hit(addr, Map::windows[0].base, Map::windows[0].size);
+        const ch_bool h1 = window_hit(addr, Map::windows[1].base, Map::windows[1].size);
+        mapped = h0 | h1;
+        target = select(h0, ch_bool(false), h1);  // s0 优先（窗口重叠时）
+    }
+
+    // -------- round-robin 仲裁（2 master）：在途保持授权 + 指针指向无请求者时让位 --------
+    // 请求实参是 `ch_in<ch_bool>`（端口）⇒ 用模板参数独立推导（与 `fwd2` 同理：
+    // 直接写 `const ch_bool &` 会因「端口 → 基础类型」不可隐式转换而编译失败）。
+    template <typename R0, typename R1>
+    void arbitrate(const ch_bool &ptr, const R0 &req0, const R1 &req1,
+                   const ch_bool &act0, const ch_bool &act1,
+                   ch_bool &grant0, ch_bool &grant1) {
+        // ptr == false ⇒ 优先 m0；ptr == true ⇒ 优先 m1
+        const ch_bool prefer0 = !ptr;
+        // 旋转到「以优先方为起点」的请求顺序
+        const ch_bool q0 = select(prefer0, req0, req1);
+        const ch_bool q1 = select(prefer0, req1, req0);
+        // 旋转空间里的优先编码：q0 优先 ⇒ 优先方有请求时独占（**让位**在 q0=0 时发生）
+        const ch_bool g0 = q0;
+        const ch_bool g1 = select(q0, ch_bool(false), q1);
+        // 旋转回真实 master 序号
+        const ch_bool rr0 = select(prefer0, g0, g1);
+        const ch_bool rr1 = select(prefer0, g1, g0);
+        // 在途事务的 master MUST 保持授权（active 优先于轮询）
+        const ch_bool any_act = act0 | act1;
+        grant0 = select(any_act, act0, rr0);
+        grant1 = select(any_act, act1, rr1);
+    }
+
     void describe() override {
-        // 仲裁器：轮询
-        ch_reg<ch_bool> arb_state(ch_bool(false));  // 0=主设备 0, 1=主设备 1
+        MatrixState s;
 
-        // ---------------- 在途事务跟踪 ----------------
-        // AXI4-Lite 允许 AW 与 W **相隔任意周期**（本项目的 slave 是相位分离的），
-        // 且 master 在 AW 握手后即可撤掉 AWVALID —— 因此"当前哪个 master 在用总线、
-        // 走哪个从设备"必须**在 AW/AR 握手时锁存**，不能靠活的 awvalid 推导
-        // （活的 grant 在 AW 握手后即掉 → W 通道被路由到别的从设备 → 写丢失）。
-        ch_reg<ch_bool> m0_active(ch_bool(false));   // m0 有在途写事务
-        ch_reg<ch_bool> m0_route_s1(ch_bool(false)); // m0 的在途事务走 s1
-        ch_reg<ch_bool> m1_active(ch_bool(false));
-        ch_reg<ch_bool> m1_route_s1(ch_bool(false));
+        // ================= 1. 每 master 的**当拍**地址解码 =================
+        // 写侧 MUST 用 awaddr、读侧 MUST 用 araddr（此前读通道复用写地址 ⇒ 读事务按写地址路由）
+        ch_bool aw_target_m0, aw_target_m1, aw_mapped_m0, aw_mapped_m1;
+        ch_bool ar_target_m0, ar_target_m1, ar_mapped_m0, ar_mapped_m1;
+        decode_addr(io().m0_awaddr, aw_target_m0, aw_mapped_m0);
+        decode_addr(io().m1_awaddr, aw_target_m1, aw_mapped_m1);
+        decode_addr(io().m0_araddr, ar_target_m0, ar_mapped_m0);
+        decode_addr(io().m1_araddr, ar_target_m1, ar_mapped_m1);
 
-        
-        // 地址解码：高位选择从设备
-        auto addr_bit_m0 = io().m0_awaddr >> ch_uint<ADDR_WIDTH>(ADDR_WIDTH-1_d);
-        auto addr_bit_m1 = io().m1_awaddr >> ch_uint<ADDR_WIDTH>(ADDR_WIDTH-1_d);
-        
-        auto select_s1_m0 = (addr_bit_m0 != ch_uint<ADDR_WIDTH>(0_d));
-        auto select_s1_m1 = (addr_bit_m1 != ch_uint<ADDR_WIDTH>(0_d));
+        // ================= 2. 仲裁（AW / AR 各自独立）=================
+        // 请求取自该通道**自己的** valid；轮转只由该方向**事务真正完成**触发
+        ch_bool aw_grant_m0, aw_grant_m1;
+        arbitrate(s.aw_ptr, io().m0_awvalid, io().m1_awvalid,
+                  s.wr_active_m0, s.wr_active_m1, aw_grant_m0, aw_grant_m1);
+        ch_bool ar_grant_m0, ar_grant_m1;
+        arbitrate(s.ar_ptr, io().m0_arvalid, io().m1_arvalid,
+                  s.rd_active_m0, s.rd_active_m1, ar_grant_m0, ar_grant_m1);
 
-        // 读通道地址**单独解码**（原实现用写地址的解码结果路由读事务）
-        auto ar_addr_bit_m0 = io().m0_araddr >> ch_uint<ADDR_WIDTH>(ADDR_WIDTH-1_d);
-        auto ar_addr_bit_m1 = io().m1_araddr >> ch_uint<ADDR_WIDTH>(ADDR_WIDTH-1_d);
-        auto ar_select_s1_m0 = (ar_addr_bit_m0 != ch_uint<ADDR_WIDTH>(0_d));
-        auto ar_select_s1_m1 = (ar_addr_bit_m1 != ch_uint<ADDR_WIDTH>(0_d));
+        // ================= 3. error responder 的接受能力 =================
+        const ch_bool err_w_can_accept = (!s.err_w_busy) & (!s.err_w_valid);
+        const ch_bool err_r_can_accept = (!s.err_r_busy) & (!s.err_r_valid);
 
-        // AW 握手（目标从设备在握手当拍由地址解码确定并锁存）
-        auto m0_aw_hs = io().m0_awvalid & select(m0_active, ch_bool(false), ch_bool(true));
-        auto m1_aw_hs = io().m1_awvalid & select(m1_active, ch_bool(false), ch_bool(true));
-        // 锁存路由 → 目标从设备（1 = s1）
-        auto m0_to_s0 = select(m0_route_s1, ch_bool(false), ch_bool(true));
-        auto m1_to_s0 = select(m1_route_s1, ch_bool(false), ch_bool(true));
-        
-        // 仲裁逻辑：请求同时包含写地址与读地址两个通道
-        // （原实现只看 awvalid → 读事务永远拿不到总线 → AR 从不发出）
-        auto m0_req = io().m0_awvalid | io().m0_arvalid;
-        auto m1_req = io().m1_awvalid | io().m1_arvalid;
+        // ================= 4. 转发选择 =================
+        // 正向（AW / AR）：当拍地址解码 + 当拍 grant + 已映射
+        const ch_bool aw_sel_s0_m0 = aw_grant_m0 & aw_mapped_m0 & (!aw_target_m0);
+        const ch_bool aw_sel_s1_m0 = aw_grant_m0 & aw_mapped_m0 & aw_target_m0;
+        const ch_bool aw_sel_s0_m1 = aw_grant_m1 & aw_mapped_m1 & (!aw_target_m1);
+        const ch_bool aw_sel_s1_m1 = aw_grant_m1 & aw_mapped_m1 & aw_target_m1;
+        const ch_bool ar_sel_s0_m0 = ar_grant_m0 & ar_mapped_m0 & (!ar_target_m0);
+        const ch_bool ar_sel_s1_m0 = ar_grant_m0 & ar_mapped_m0 & ar_target_m0;
+        const ch_bool ar_sel_s0_m1 = ar_grant_m1 & ar_mapped_m1 & (!ar_target_m1);
+        const ch_bool ar_sel_s1_m1 = ar_grant_m1 & ar_mapped_m1 & ar_target_m1;
 
-        // 选择哪个主设备：
-        //   1) 有在途事务的 master 保持总线
-        //   2) 否则按轮询仲裁（arb_state 指示优先方），**但优先方无请求时
-        //      必须让给另一方** —— 原实现 `select(!arb_state, m0_req, false)`
-        //      在 arb_state=1 且只有 m0 请求时两个 grant 都是 0 → 总线死锁
-        auto prefer_m0 = select(arb_state, ch_bool(false), ch_bool(true));
-        auto m0_only = select(m0_req, select(m1_req, ch_bool(false), ch_bool(true)), ch_bool(false));
-        auto m1_only = select(m1_req, select(m0_req, ch_bool(false), ch_bool(true)), ch_bool(false));
-        auto grant_m0 = select(m0_active, ch_bool(true),
-                               select(m1_active, ch_bool(false),
-                                      select(prefer_m0,
-                                             select(m0_req, ch_bool(true), ch_bool(false)),
-                                             select(m0_only, ch_bool(true), ch_bool(false)))));
-        auto grant_m1 = select(m1_active, ch_bool(true),
-                               select(m0_active, ch_bool(false),
-                                      select(prefer_m0,
-                                             select(m1_only, ch_bool(true), ch_bool(false)),
-                                             select(m1_req, ch_bool(true), ch_bool(false)))));
-        
-        // 更新仲裁器：在**整笔事务完成**（B/R 响应握手）后轮转。
-        // 原实现用 AW 握手作为 transaction_done —— AXI4-Lite 允许 AW 与 W 相隔
-        // 任意周期（本项目的 slave 是相位分离的），AW 握手一完成就切换授权 →
-        // WDATA 随后到达时已被路由到另一条通道 → 写数据丢失。
-        auto b_done_s0 = io().s0_bvalid & io().s0_bready;
-        auto b_done_s1 = io().s1_bvalid & io().s1_bready;
-        auto r_done_s0 = io().s0_rvalid & io().s0_rready;
-        auto r_done_s1 = io().s1_rvalid & io().s1_rready;
-        auto transaction_done = b_done_s0 | b_done_s1 | r_done_s0 | r_done_s1;
-        arb_state->next = select(transaction_done, !arb_state, arb_state);
+        // 反向（W / B 用写路由锁存；R 用读路由锁存）—— MUST NOT 用活的地址或活的 grant
+        const ch_bool wr_sel_s0_m0 = s.wr_active_m0 & s.wr_mapped_m0 & (!s.wr_route_m0);
+        const ch_bool wr_sel_s1_m0 = s.wr_active_m0 & s.wr_mapped_m0 & s.wr_route_m0;
+        const ch_bool wr_sel_s0_m1 = s.wr_active_m1 & s.wr_mapped_m1 & (!s.wr_route_m1);
+        const ch_bool wr_sel_s1_m1 = s.wr_active_m1 & s.wr_mapped_m1 & s.wr_route_m1;
+        const ch_bool rd_sel_s0_m0 = s.rd_active_m0 & s.rd_mapped_m0 & (!s.rd_route_m0);
+        const ch_bool rd_sel_s1_m0 = s.rd_active_m0 & s.rd_mapped_m0 & s.rd_route_m0;
+        const ch_bool rd_sel_s0_m1 = s.rd_active_m1 & s.rd_mapped_m1 & (!s.rd_route_m1);
+        const ch_bool rd_sel_s1_m1 = s.rd_active_m1 & s.rd_mapped_m1 & s.rd_route_m1;
 
-        // 在途事务标志：AW 握手置位，响应握手（B/R 完成）清零
-        // 目标从设备在 AW 握手当拍锁存（AXI 允许 AW 与 W 相隔任意周期）
-        auto m0_resp_done = (io().m0_bvalid & io().m0_bready) | (io().m0_rvalid & io().m0_rready);
-        auto m1_resp_done = (io().m1_bvalid & io().m1_bready) | (io().m1_rvalid & io().m1_rready);
-        m0_active->next = select(m0_aw_hs, ch_bool(true), select(m0_resp_done, ch_bool(false), m0_active));
-        m1_active->next = select(m1_aw_hs, ch_bool(true), select(m1_resp_done, ch_bool(false), m1_active));
-        m0_route_s1->next = select(m0_aw_hs, select_s1_m0, m0_route_s1);
-        m1_route_s1->next = select(m1_aw_hs, select_s1_m1, m1_route_s1);
-        
-        // ==================== 写地址通道 ====================
-        
-        // 主设备 0 → 从设备
-        auto grant_m0_s0 = select(grant_m0, select(!select_s1_m0, ch_bool(true), ch_bool(false)), ch_bool(false));
-        auto grant_m0_s1 = select(grant_m0, select_s1_m0, ch_bool(false));
-        
-        // 主设备 1 → 从设备
-        auto grant_m1_s0 = select(grant_m1, select(!select_s1_m1, ch_bool(true), ch_bool(false)), ch_bool(false));
-        auto grant_m1_s1 = select(grant_m1, select_s1_m1, ch_bool(false));
+        // ================= 5. 正向通道 =================
+        // ---- AW ----
+        fwd2(io().s0_awaddr, aw_sel_s0_m0, aw_sel_s0_m1, io().m0_awaddr, io().m1_awaddr,
+             ch_uint<ADDR_WIDTH>(0_d));
+        fwd2(io().s1_awaddr, aw_sel_s1_m0, aw_sel_s1_m1, io().m0_awaddr, io().m1_awaddr,
+             ch_uint<ADDR_WIDTH>(0_d));
+        io().s0_awvalid = (aw_sel_s0_m0 & io().m0_awvalid) | (aw_sel_s0_m1 & io().m1_awvalid);
+        io().s1_awvalid = (aw_sel_s1_m0 & io().m0_awvalid) | (aw_sel_s1_m1 & io().m1_awvalid);
+        fwd2(io().s0_awprot, aw_sel_s0_m0, aw_sel_s0_m1, io().m0_awprot, io().m1_awprot,
+             ch_uint<2>(0_d));
+        fwd2(io().s1_awprot, aw_sel_s1_m0, aw_sel_s1_m1, io().m0_awprot, io().m1_awprot,
+             ch_uint<2>(0_d));
 
+        // ---- W（按**锁存的写路由**转发）----
+        fwd2(io().s0_wdata, wr_sel_s0_m0, wr_sel_s0_m1, io().m0_wdata, io().m1_wdata,
+             ch_uint<DATA_WIDTH>(0_d));
+        fwd2(io().s1_wdata, wr_sel_s1_m0, wr_sel_s1_m1, io().m0_wdata, io().m1_wdata,
+             ch_uint<DATA_WIDTH>(0_d));
+        fwd2(io().s0_wstrb, wr_sel_s0_m0, wr_sel_s0_m1, io().m0_wstrb, io().m1_wstrb,
+             ch_uint<DATA_WIDTH / 8>(0_d));
+        fwd2(io().s1_wstrb, wr_sel_s1_m0, wr_sel_s1_m1, io().m0_wstrb, io().m1_wstrb,
+             ch_uint<DATA_WIDTH / 8>(0_d));
+        io().s0_wvalid = (wr_sel_s0_m0 & io().m0_wvalid) | (wr_sel_s0_m1 & io().m1_wvalid);
+        io().s1_wvalid = (wr_sel_s1_m0 & io().m0_wvalid) | (wr_sel_s1_m1 & io().m1_wvalid);
 
-        // 合并两个主设备的地址（m0 优先）—— 必须**单次赋值**：
-        // 旧写法先赋 m0 再用 `select(grant_m1_s0, m1_awaddr, io().s0_awaddr)` 读回
-        // 自己来表达优先级，形成"输出读自己"的自环 → 拓扑排序报
-        // "Cycle detected in IR graph"（此前因赋值是 no-op 而被掩盖）。
-        auto s0_awaddr_val = select(grant_m0_s0, io().m0_awaddr,
-                                     select(grant_m1_s0, io().m1_awaddr, ch_uint<ADDR_WIDTH>(0_d)));
-        auto s1_awaddr_val = select(grant_m0_s1, io().m0_awaddr,
-                                     select(grant_m1_s1, io().m1_awaddr, ch_uint<ADDR_WIDTH>(0_d)));
-        io().s0_awaddr = s0_awaddr_val;
-        io().s1_awaddr = s1_awaddr_val;
+        // ---- AR ----
+        fwd2(io().s0_araddr, ar_sel_s0_m0, ar_sel_s0_m1, io().m0_araddr, io().m1_araddr,
+             ch_uint<ADDR_WIDTH>(0_d));
+        fwd2(io().s1_araddr, ar_sel_s1_m0, ar_sel_s1_m1, io().m0_araddr, io().m1_araddr,
+             ch_uint<ADDR_WIDTH>(0_d));
+        io().s0_arvalid = (ar_sel_s0_m0 & io().m0_arvalid) | (ar_sel_s0_m1 & io().m1_arvalid);
+        io().s1_arvalid = (ar_sel_s1_m0 & io().m0_arvalid) | (ar_sel_s1_m1 & io().m1_arvalid);
+        fwd2(io().s0_arprot, ar_sel_s0_m0, ar_sel_s0_m1, io().m0_arprot, io().m1_arprot,
+             ch_uint<2>(0_d));
+        fwd2(io().s1_arprot, ar_sel_s1_m0, ar_sel_s1_m1, io().m0_arprot, io().m1_arprot,
+             ch_uint<2>(0_d));
 
-        // AWVALID / AWPROT 转发（原实现**完全缺失** —— 从设备的 AWVALID 是悬空输出，
-        // 恒为未驱动值 0 → 从设备永不接受 AW 地址，事务在第一拍就断掉）
-        io().s0_awvalid = select(grant_m0_s0, io().m0_awvalid,
-                           select(grant_m1_s0, io().m1_awvalid, ch_bool(false)));
-        io().s1_awvalid = select(grant_m0_s1, io().m0_awvalid,
-                           select(grant_m1_s1, io().m1_awvalid, ch_bool(false)));
-        io().s0_awprot = select(grant_m0_s0, io().m0_awprot,
-                          select(grant_m1_s0, io().m1_awprot, ch_uint<2>(0_d)));
-        io().s1_awprot = select(grant_m0_s1, io().m0_awprot,
-                          select(grant_m1_s1, io().m1_awprot, ch_uint<2>(0_d)));
-        
-        // 从设备就绪
-        
-        // 主设备就绪
-        io().m0_awready = select(!select_s1_m0, io().s0_awready, io().s1_awready);
-        io().m1_awready = select(!select_s1_m1, io().s0_awready, io().s1_awready);
-        
-        // ==================== 写数据通道 (简化) ====================
-        
-        io().s0_wdata = select(grant_m0, select(m0_to_s0, io().m0_wdata, ch_uint<DATA_WIDTH>(0_d)),
-                          select(grant_m1, select(m1_to_s0, io().m1_wdata, ch_uint<DATA_WIDTH>(0_d)), ch_uint<DATA_WIDTH>(0_d)));
-        io().s1_wdata = select(grant_m0, select(m0_to_s0, ch_uint<DATA_WIDTH>(0_d), io().m0_wdata),
-                          select(grant_m1, select(m1_to_s0, ch_uint<DATA_WIDTH>(0_d), io().m1_wdata), ch_uint<DATA_WIDTH>(0_d)));
-        
-        io().s0_wstrb = select(grant_m0, select(m0_to_s0, io().m0_wstrb, ch_uint<DATA_WIDTH/8>(0_d)),
-                          select(grant_m1, select(m1_to_s0, io().m1_wstrb, ch_uint<DATA_WIDTH/8>(0_d)), ch_uint<DATA_WIDTH/8>(0_d)));
-        io().s1_wstrb = select(grant_m0, select(m0_to_s0, ch_uint<DATA_WIDTH/8>(0_d), io().m0_wstrb),
-                          select(grant_m1, select(m1_to_s0, ch_uint<DATA_WIDTH/8>(0_d), io().m1_wstrb), ch_uint<DATA_WIDTH/8>(0_d)));
-        
-        // WVALID 转发（原先**完全缺失** —— s0_wvalid 声明为输入且无任何赋值，
-        // 导致从设备的 WVALID 恒为未驱动值 → 写数据永不被接受）
-        // W 通道：**按锁存的路由**转发（AW 握手时已确定目标从设备）
-        io().s0_wvalid = select(grant_m0, select(m0_to_s0, io().m0_wvalid, ch_bool(false)),
-                          select(grant_m1, select(m1_to_s0, io().m1_wvalid, ch_bool(false)), ch_bool(false)));
-        io().s1_wvalid = select(grant_m0, select(m0_to_s0, ch_bool(false), io().m0_wvalid),
-                          select(grant_m1, select(m1_to_s0, ch_bool(false), io().m1_wvalid), ch_bool(false)));
+        // ================= 6. 握手决策（当拍地址 + 当拍 grant + 在途门控）=================
+        // 在途期间 MUST 为 0 —— 否则 master 认为 AW/AR 被接受而互连悄悄吞掉（AW 静默丢失）
+        const ch_bool m0_awready = (!s.wr_active_m0) & select(aw_grant_m0,
+                                 select(aw_mapped_m0,
+                                        idx2(aw_target_m0, io().s0_awready, io().s1_awready),
+                                        err_w_can_accept),
+                                 ch_bool(false));
+        const ch_bool m1_awready = (!s.wr_active_m1) & select(aw_grant_m1,
+                                 select(aw_mapped_m1,
+                                        idx2(aw_target_m1, io().s0_awready, io().s1_awready),
+                                        err_w_can_accept),
+                                 ch_bool(false));
+        io().m0_awready = m0_awready;
+        io().m1_awready = m1_awready;
 
-        
-        io().m0_wready = select(!select_s1_m0, io().s0_wready, io().s1_wready);
-        io().m1_wready = select(!select_s1_m1, io().s0_wready, io().s1_wready);
-        
-        // ==================== 写响应通道 (简化) ====================
-        
-        io().m0_bresp = select(!select_s1_m0, io().s0_bresp, io().s1_bresp);
-        io().m1_bresp = select(!select_s1_m1, io().s0_bresp, io().s1_bresp);
-        
-        io().m0_bvalid = select(!select_s1_m0, io().s0_bvalid, io().s1_bvalid);
-        io().m1_bvalid = select(!select_s1_m1, io().s0_bvalid, io().s1_bvalid);
-        
-        io().s0_bready = select(grant_m0_s0, io().m0_bready,
-                           select(grant_m1_s0, io().m1_bready, ch_bool(false)));
-        io().s1_bready = select(grant_m0_s1, io().m0_bready,
-                           select(grant_m1_s1, io().m1_bready, ch_bool(false)));
-        
-        // ==================== 读地址通道 (简化) ====================
-        
-        // AR 通道：按**读地址**解码路由（写通道的 grant 组合只适用于 AW）
-        auto grant_m0_s0_ar = select(grant_m0, select(!ar_select_s1_m0, ch_bool(true), ch_bool(false)), ch_bool(false));
-        auto grant_m1_s0_ar = select(grant_m1, select(!ar_select_s1_m1, ch_bool(true), ch_bool(false)), ch_bool(false));
-        auto grant_m0_s1_ar = select(grant_m0, ar_select_s1_m0, ch_bool(false));
-        auto grant_m1_s1_ar = select(grant_m1, ar_select_s1_m1, ch_bool(false));
-        io().s0_araddr = select(grant_m0_s0_ar, io().m0_araddr,
-                           select(grant_m1_s0_ar, io().m1_araddr, ch_uint<ADDR_WIDTH>(0_d)));
-        io().s1_araddr = select(grant_m0_s1_ar, io().m0_araddr,
-                           select(grant_m1_s1_ar, io().m1_araddr, ch_uint<ADDR_WIDTH>(0_d)));
-        // ARVALID / ARPROT 转发（同 AW 通道，原实现缺失）
-        io().s0_arvalid = select(grant_m0_s0_ar, io().m0_arvalid,
-                           select(grant_m1_s0_ar, io().m1_arvalid, ch_bool(false)));
-        io().s1_arvalid = select(grant_m0_s1_ar, io().m0_arvalid,
-                           select(grant_m1_s1_ar, io().m1_arvalid, ch_bool(false)));
-        io().s0_arprot = select(grant_m0_s0_ar, io().m0_arprot,
-                          select(grant_m1_s0_ar, io().m1_arprot, ch_uint<2>(0_d)));
-        io().s1_arprot = select(grant_m0_s1_ar, io().m0_arprot,
-                          select(grant_m1_s1_ar, io().m1_arprot, ch_uint<2>(0_d)));
-        
-        
-        io().m0_arready = select(!ar_select_s1_m0, io().s0_arready, io().s1_arready);
-        io().m1_arready = select(!ar_select_s1_m1, io().s0_arready, io().s1_arready);
-        
-        // ==================== 读数据通道 (简化) ====================
-        
-        io().m0_rdata = select(!ar_select_s1_m0, io().s0_rdata, io().s1_rdata);
-        io().m0_rresp = select(!ar_select_s1_m0, io().s0_rresp, io().s1_rresp);
-        io().m1_rdata = select(!ar_select_s1_m1, io().s0_rdata, io().s1_rdata);
-        io().m1_rresp = select(!ar_select_s1_m1, io().s0_rresp, io().s1_rresp);
-        
-        io().m0_rvalid = select(!ar_select_s1_m0, io().s0_rvalid, io().s1_rvalid);
-        io().m1_rvalid = select(!ar_select_s1_m1, io().s0_rvalid, io().s1_rvalid);
-        
-        io().s0_rready = select(grant_m0_s0, io().m0_rready,
-                           select(grant_m1_s0, io().m1_rready, ch_bool(false)));
-        io().s1_rready = select(grant_m0_s1, io().m0_rready,
-                           select(grant_m1_s1, io().m1_rready, ch_bool(false)));
+        const ch_bool m0_wready = s.wr_active_m0 & select(s.wr_mapped_m0,
+                                idx2(s.wr_route_m0, io().s0_wready, io().s1_wready),
+                                !s.err_w_valid);
+        const ch_bool m1_wready = s.wr_active_m1 & select(s.wr_mapped_m1,
+                                idx2(s.wr_route_m1, io().s0_wready, io().s1_wready),
+                                !s.err_w_valid);
+        io().m0_wready = m0_wready;
+        io().m1_wready = m1_wready;
+
+        const ch_bool m0_arready = (!s.rd_active_m0) & select(ar_grant_m0,
+                                 select(ar_mapped_m0,
+                                        idx2(ar_target_m0, io().s0_arready, io().s1_arready),
+                                        err_r_can_accept),
+                                 ch_bool(false));
+        const ch_bool m1_arready = (!s.rd_active_m1) & select(ar_grant_m1,
+                                 select(ar_mapped_m1,
+                                        idx2(ar_target_m1, io().s0_arready, io().s1_arready),
+                                        err_r_can_accept),
+                                 ch_bool(false));
+        io().m0_arready = m0_arready;
+        io().m1_arready = m1_arready;
+
+        // ================= 7. 反向通道：按**锁存路由**反查 =================
+        const ch_uint<2> DECERR_V(static_cast<unsigned>(AxiResp4x4::DECERR));
+
+        // ---- m0 ----
+        const ch_bool m0_bvalid = s.wr_active_m0 & select(s.wr_mapped_m0,
+                                idx2(s.wr_route_m0, io().s0_bvalid, io().s1_bvalid),
+                                s.err_w_valid);
+        io().m0_bvalid = m0_bvalid;
+        // ⚠️ 响应载荷 MUST 也按**在途标志**门控 —— 否则本 master 没有在途写事务时，
+        //    `bresp` 仍会镜像某个从设备的当前值（可能是**另一个 master 正在读/写**
+        //    的那个从设备）⇒ 表面上像「响应串到了别人身上」。
+        //    契约（spec §「每个 slave 的响应 MUST 回到发起它的 master」）：
+        //    该响应 MUST **只**出现在发起它的 master 的 `bvalid` / `bresp` 上。
+        io().m0_bresp = select(s.wr_active_m0,
+                               select(s.wr_mapped_m0,
+                                      idx2(s.wr_route_m0, io().s0_bresp, io().s1_bresp),
+                                      DECERR_V),
+                               ch_uint<2>(0_d));
+        const ch_bool m0_rvalid = s.rd_active_m0 & select(s.rd_mapped_m0,
+                                idx2(s.rd_route_m0, io().s0_rvalid, io().s1_rvalid),
+                                s.err_r_valid);
+        io().m0_rvalid = m0_rvalid;
+        io().m0_rdata = select(s.rd_active_m0,
+                               select(s.rd_mapped_m0,
+                                      idx2(s.rd_route_m0, io().s0_rdata, io().s1_rdata),
+                                      ch_uint<DATA_WIDTH>(0_d)),
+                               ch_uint<DATA_WIDTH>(0_d));
+        io().m0_rresp = select(s.rd_active_m0,
+                               select(s.rd_mapped_m0,
+                                      idx2(s.rd_route_m0, io().s0_rresp, io().s1_rresp),
+                                      DECERR_V),
+                               ch_uint<2>(0_d));
+
+        // ---- m1 ----
+        const ch_bool m1_bvalid = s.wr_active_m1 & select(s.wr_mapped_m1,
+                                idx2(s.wr_route_m1, io().s0_bvalid, io().s1_bvalid),
+                                s.err_w_valid);
+        io().m1_bvalid = m1_bvalid;
+        io().m1_bresp = select(s.wr_active_m1,
+                               select(s.wr_mapped_m1,
+                                      idx2(s.wr_route_m1, io().s0_bresp, io().s1_bresp),
+                                      DECERR_V),
+                               ch_uint<2>(0_d));
+        const ch_bool m1_rvalid = s.rd_active_m1 & select(s.rd_mapped_m1,
+                                idx2(s.rd_route_m1, io().s0_rvalid, io().s1_rvalid),
+                                s.err_r_valid);
+        io().m1_rvalid = m1_rvalid;
+        io().m1_rdata = select(s.rd_active_m1,
+                               select(s.rd_mapped_m1,
+                                      idx2(s.rd_route_m1, io().s0_rdata, io().s1_rdata),
+                                      ch_uint<DATA_WIDTH>(0_d)),
+                               ch_uint<DATA_WIDTH>(0_d));
+        io().m1_rresp = select(s.rd_active_m1,
+                               select(s.rd_mapped_m1,
+                                      idx2(s.rd_route_m1, io().s0_rresp, io().s1_rresp),
+                                      DECERR_V),
+                               ch_uint<2>(0_d));
+
+        // ---- 从设备侧的反向 ready（按**锁存路由**反查来源 master）----
+        // ⚠️ MUST NOT 用**写**通道的 grant（旧实现用 `grant_m0_s0` ⇒ 读事务的
+        // `rready` 走错通道 ⇒ 读响应永不被接受）。
+        io().s0_bready = (wr_sel_s0_m0 & io().m0_bready) | (wr_sel_s0_m1 & io().m1_bready);
+        io().s1_bready = (wr_sel_s1_m0 & io().m0_bready) | (wr_sel_s1_m1 & io().m1_bready);
+        io().s0_rready = (rd_sel_s0_m0 & io().m0_rready) | (rd_sel_s0_m1 & io().m1_rready);
+        io().s1_rready = (rd_sel_s1_m0 & io().m0_rready) | (rd_sel_s1_m1 & io().m1_rready);
+
+        // ================= 8. 握手脉冲 =================
+        const ch_bool aw_hs_m0 = io().m0_awvalid & m0_awready;
+        const ch_bool aw_hs_m1 = io().m1_awvalid & m1_awready;
+        const ch_bool ar_hs_m0 = io().m0_arvalid & m0_arready;
+        const ch_bool ar_hs_m1 = io().m1_arvalid & m1_arready;
+        const ch_bool b_hs_m0 = m0_bvalid & io().m0_bready;
+        const ch_bool b_hs_m1 = m1_bvalid & io().m1_bready;
+        const ch_bool r_hs_m0 = m0_rvalid & io().m0_rready;
+        const ch_bool r_hs_m1 = m1_rvalid & io().m1_rready;
+
+        // ================= 9. 写侧状态：路由锁存 + 在途标志 + 仲裁指针 =================
+        s.wr_route_m0->next = select(!io().rst_n, ch_bool(false),
+                              select(aw_hs_m0, aw_target_m0, s.wr_route_m0));
+        s.wr_route_m1->next = select(!io().rst_n, ch_bool(false),
+                              select(aw_hs_m1, aw_target_m1, s.wr_route_m1));
+        s.wr_mapped_m0->next = select(!io().rst_n, ch_bool(false),
+                               select(aw_hs_m0, aw_mapped_m0, s.wr_mapped_m0));
+        s.wr_mapped_m1->next = select(!io().rst_n, ch_bool(false),
+                               select(aw_hs_m1, aw_mapped_m1, s.wr_mapped_m1));
+        s.wr_active_m0->next = select(!io().rst_n, ch_bool(false),
+                               select(aw_hs_m0, ch_bool(true),
+                               select(b_hs_m0, ch_bool(false), s.wr_active_m0)));
+        s.wr_active_m1->next = select(!io().rst_n, ch_bool(false),
+                               select(aw_hs_m1, ch_bool(true),
+                               select(b_hs_m1, ch_bool(false), s.wr_active_m1)));
+
+        // 轮转条件 MUST 是**该方向事务真正完成**
+        const ch_bool wr_done = (s.wr_active_m0 & b_hs_m0) | (s.wr_active_m1 & b_hs_m1);
+        s.aw_ptr->next = select(!io().rst_n, ch_bool(false),
+                         select(wr_done, !s.aw_ptr, s.aw_ptr));
+
+        // ================= 10. 读侧状态 =================
+        s.rd_route_m0->next = select(!io().rst_n, ch_bool(false),
+                              select(ar_hs_m0, ar_target_m0, s.rd_route_m0));
+        s.rd_route_m1->next = select(!io().rst_n, ch_bool(false),
+                              select(ar_hs_m1, ar_target_m1, s.rd_route_m1));
+        s.rd_mapped_m0->next = select(!io().rst_n, ch_bool(false),
+                               select(ar_hs_m0, ar_mapped_m0, s.rd_mapped_m0));
+        s.rd_mapped_m1->next = select(!io().rst_n, ch_bool(false),
+                               select(ar_hs_m1, ar_mapped_m1, s.rd_mapped_m1));
+        s.rd_active_m0->next = select(!io().rst_n, ch_bool(false),
+                               select(ar_hs_m0, ch_bool(true),
+                               select(r_hs_m0, ch_bool(false), s.rd_active_m0)));
+        s.rd_active_m1->next = select(!io().rst_n, ch_bool(false),
+                               select(ar_hs_m1, ch_bool(true),
+                               select(r_hs_m1, ch_bool(false), s.rd_active_m1)));
+
+        const ch_bool rd_done = (s.rd_active_m0 & r_hs_m0) | (s.rd_active_m1 & r_hs_m1);
+        s.ar_ptr->next = select(!io().rst_n, ch_bool(false),
+                         select(rd_done, !s.ar_ptr, s.ar_ptr));
+
+        // ================= 11. error responder（写）=================
+        // 未映射写：互连层自己接受 AW/W 并返回 DECERR；`bvalid` MUST 是**寄存器**
+        // 且保持到 `bready`（组合单拍脉冲会让合规 master 永久死锁）
+        const ch_bool err_aw_hs = (aw_hs_m0 & (!aw_mapped_m0)) | (aw_hs_m1 & (!aw_mapped_m1));
+        const ch_bool err_w_hs = (io().m0_wvalid & m0_wready & (!s.wr_mapped_m0)) |
+                                 (io().m1_wvalid & m1_wready & (!s.wr_mapped_m1));
+        const ch_bool err_b_hs = s.err_w_valid &
+                                 ((s.wr_active_m0 & (!s.wr_mapped_m0) & io().m0_bready) |
+                                  (s.wr_active_m1 & (!s.wr_mapped_m1) & io().m1_bready));
+        s.err_w_busy->next = select(!io().rst_n, ch_bool(false),
+                              select(err_aw_hs, ch_bool(true),
+                              select(err_b_hs, ch_bool(false), s.err_w_busy)));
+        s.err_w_valid->next = select(!io().rst_n, ch_bool(false),
+                               select(err_w_hs, ch_bool(true),
+                               select(err_b_hs, ch_bool(false), s.err_w_valid)));
+
+        // ================= 12. error responder（读）=================
+        // AXI4-Lite **无 arlen** ⇒ 恒返回 **1 个 beat**（每拍 rresp=DECERR）
+        const ch_bool err_ar_hs = (ar_hs_m0 & (!ar_mapped_m0)) | (ar_hs_m1 & (!ar_mapped_m1));
+        const ch_bool err_r_hs = s.err_r_valid &
+                                 ((s.rd_active_m0 & (!s.rd_mapped_m0) & io().m0_rready) |
+                                  (s.rd_active_m1 & (!s.rd_mapped_m1) & io().m1_rready));
+        s.err_r_busy->next = select(!io().rst_n, ch_bool(false),
+                              select(err_ar_hs, ch_bool(true),
+                              select(err_r_hs, ch_bool(false), s.err_r_busy)));
+        s.err_r_valid->next = select(!io().rst_n, ch_bool(false),
+                               select(err_ar_hs, ch_bool(true),
+                               select(err_r_hs, ch_bool(false), s.err_r_valid)));
     }
 };
 
-} // namespace axi4
+}  // namespace axi4

@@ -498,7 +498,12 @@ add_dual_backend_test(test_axi_interconnect_4x4
     SOURCES test_axi_interconnect_4x4.cpp
     TIMEOUT 600
 )
-# 2x2 AXI-Lite 矩阵的活地址解码修正 ——双后端。（Task 7 随实现一起注册）
+# 2x2 AXI-Lite 矩阵的活地址解码修正（读侧 ar_route 锁存 / s*_rready 用读路由 /
+# awready 在途门控 / 独立仲裁 / rst_n / DECERR）——双后端。
+add_dual_backend_test(test_axi_lite_matrix_2x2
+    SOURCES test_axi_lite_matrix_2x2.cpp
+    TIMEOUT 600
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)
