@@ -61,7 +61,7 @@ phase_refs: [phase-5]
 
 ### phase-5
 - ✅ ① `rv32i-store-byte-enable-2026-10`（2026-10-26 **已归档** ⇒ capability `rv32i-isa-semantics`）
-- 🟡 ② `rv32i-jump-sra-2026-10`（2026-10-26 实施中）
+- ✅ ② `rv32i-jump-sra-2026-10`（2026-10-27 **已归档** ⇒ capability `rv32i-isa-semantics` 2 → 6 条）
 - ⏳ ③ `rv32i-forwarding-decision-2026-10`（前置：ADR-046 D5 裁决）
 - ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置：③）
 
@@ -80,8 +80,8 @@ phase_refs: [phase-5]
 ## 验收标准
 
 - [ ] SB/SH/LB/LH/LBU/LHU 的字节/半字语义在双后端一致且符合 ISA（含非零 offset）
-- [ ] JAL / JALR 真正重定向且 `ra` 正确
-- [ ] SRA 对有符号负数正确
+- [x] JAL / JALR 真正重定向且 `ra` 正确（② 2026-10-27 归档）
+- [x] SRA 对有符号负数正确（② 2026-10-27 归档）
 - [ ] 固件**无**手工 NOP 填充仍能正确执行（④ 完成）
 - [ ] 退休指令数 == 实际指令数（④ 完成）
 - [ ] 上述每项都有**变异验证**（改坏即转红），而非仅「跑绿」

@@ -152,7 +152,8 @@ bash scripts/run_all_samples.sh  # 35/35
 | T1 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿（本机 Linux 不可完成） | ⚠️ 该 job 红 ⇒ MUST **revert 归档 commit**（含主 spec 新增 capability） |
 | **T2** `rv32i-store-byte-enable-2026-10` | ✅ **已归档**（2026-10-26） | `DataTCM` 加 `strbe` + 读-改-写合并（复用 `byte_lane.h`）+ 流水线 lane 对齐（`shl<32>`，**只对 SB/SH** ⇒ `sw` 零回退）+ SoC 接线 + **4 个实例化点显式驱动**；固件尾部追加 `sb`/`sh` 用例（既有 word 索引不动）；归档 → `openspec/changes/archive/2026-10-26-rv32i-store-byte-enable-2026-10/`；新 capability `rv32i-isa-semantics`（2 条 Requirement） |
 | T2 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿 | 同上（revert 条件相同） |
-| **T3** `rv32i-jump-sra-2026-10` | 🟡 **已实施，待对抗审稿** | commit `0972f4d`；JAL/JALR 重定向（复用条件分支通路，**未**加第三路 PC 源）+ 返回地址走**新增** `link_value` 通路 + SRA 真算术右移（**两处**：`ex_stage` 内联 + `Rv32iAlu` 组件）；**连带修复 2 个既有缺陷**（U 型立即数 / `alu_op` 对 I 型的 SUB 误判）；固件 64 → 100 字；`non_retired` 11 → 17（实测）；**变异 6/6 全被抓**；`ctest -LE perf` 191/191；6229 断言绿 |
+| **T3** `rv32i-jump-sra-2026-10` | ✅ **已归档**（2026-10-27） | commit `0972f4d` + `0eb554b`；JAL/JALR 重定向（复用条件分支通路，**未**加第三路 PC 源）+ 返回地址走**新增** `link_value` 通路 + SRA 真算术右移（**两处**）；**连带修复 3 个既有缺陷**（U 型立即数 / `alu_op` 对 I 型的 SUB 误判 / **错误路径的 JAL·JALR 劫持 PC**）；归档 → `openspec/changes/archive/2026-10-27-rv32i-jump-sra-2026-10/`；capability `rv32i-isa-semantics` **2 → 6** 条 Requirement |
+| T3 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿 | 同 T1/T2（revert 条件相同） |
 | T4–T9 | ⏳ 未开始 | 每个需 planner 的 5 段 improvement 草案 + openspec change |
 
 ### 2026-10-26 对抗审稿第 1 轮结果（两个 change 均**无 BLOCKER**）
@@ -161,6 +162,25 @@ bash scripts/run_all_samples.sh  # 35/35
 |---|---|---|
 | T1 `example-assertion-quality-2026-10` | APPROVE_WITH_CONDITIONS（mergeable: yes） | 2 SHOULD_FIX + 5 NITS **同批整改**（C4 期望值交叉检查 / C5 token 检查 / lib 变量改 `local` / source 路径改 `$REPO_ROOT` / C2 扫描面扩到全部文件 / 端到端 fail-closed 变异补做）⇒ 新增变异 3 条全被抓 |
 | T2 `rv32i-store-byte-enable-2026-10` | APPROVE_WITH_CONDITIONS（mergeable: yes / scope_exceeded: true） | 3 SHOULD_FIX + 2 NITS **同批整改**（design.md §5 的非对齐 `sh` 声称改正 / `test_riscv_tests_pipeline` 的 `strbe` 改为随写路径 mux / spec Requirement 收窄到 `DataTCM.strbe` 并把框架层约定移到 `AGENTS.md`） |
+
+### 2026-10-27 对抗审稿（T3）—— 第 1 轮 **REJECT**（1 BLOCKER）⇒ 整改 ⇒ 第 2 轮 **APPROVE_WITH_CONDITIONS** ⇒ 归档
+
+**BLOCKER（真缺陷，非误报）**：`ex_stage` 初版用**裸 opcode** 判「这是不是跳转」，
+而 `idex_opcode` / `idex_pc` / `idex_imm` 在**气泡拍不清零**（只有 `is_branch`/`is_load`/
+`is_store`/`is_jump`/`is_alu`/`rd_addr`/`valid` 被清）⇒ **错误路径上的 `JAL`/`JALR`**
+被锁进 ID/EX 后，下一拍气泡仍拉高 `branch_taken` —— 而 `ex_branch = 0` ⇒ **`flush = 0`**
+⇒ **无人拦** ⇒ **PC 被静默劫持**（`call; call` 就跳错）。
+
+⇒ 修复：`ex_stage` 新增 `is_jump` 输入（接 `idex_is_jump`，**已气泡清零**）⇒
+重定向判定与 `hazard` 的 flush 判定**同源** ⇒ 「`branch_taken=1` 但 `ex_branch=0`」
+**不再可达**（这是**结构收敛**，不是测试碰巧变绿）。
+
+⚠️ **最贵的教训**：初版固件**抓不到**它 —— 错误路径放 `JAL(27, 8)` 时残留的 `pc+imm`
+**恰好**是正确目标 ⇒ 巧合通过；`JAL(27, 20)` 也只偏一点 ⇒ 仍绿；
+最后用 **`JALR(27, 100(x0))`**（目标 = 低地址 100）才暴露成「程序重启」
+（`store_cycles` 5 → **11**）⇒ 修复后回到 5。
+⇒ 该用例已永久保留（固件 word 100-102）。
+⇒ **「跑绿 ≠ 对」**：错误路径上的指令 MUST 是**会暴露问题**的形态（不是 NOP、不是同类型跳转）。
 
 ### 2026-10-26 对抗审稿第 2 轮（复审）结果 —— 两个 change 均 **APPROVE**
 

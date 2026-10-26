@@ -139,7 +139,8 @@ public:
         ex_stage.io().rs2_data <<= ch_uint<32>(7_d);
         ex_stage.io().imm <<= ch_uint<32>(0_d);
         ex_stage.io().pc <<= ch_uint<32>(0x80000000_h);
-        // ⚠️ ex_stage 的 opcode 字段只有 4 bit（lib 的 id_stage 才是 7 bit
+        // ⚠️ `ex_stage` 的 `opcode` 是 **7 bit**（`ex_stage.h` 的端口已标 FIX）；
+        //    本注释此前写「4 bit」是过期描述，2026-10-27 订正。
         // —— 见 ADR-046 D3 的漂移记录）⇒ 放不下 0x33；本用例由 alu_op 驱动
         // ALU，与 opcode 无关。
         ex_stage.io().opcode <<= ch_uint<4>(0_d);

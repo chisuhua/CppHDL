@@ -41,7 +41,14 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| RV32I 跳转与 SRA 语义 | phase-5 | P0 | none | rv32i-jump-sra-2026-10 |
+| RV32I 前推裁决（ADR-046 D5） | phase-5 | P0 | none | （待 rdd-arch 出 ADR 后立项） |
+
+> ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`rv32i-jump-sra-2026-10`（P0）——
+> JAL/JALR 重定向 + 返回地址写回 + SRA 真算术右移，**连带修复 3 个既有缺陷**
+> （U 型立即数 / `alu_op` 对 I 型的 SUB 误判 / 错误路径的 JAL·JALR 劫持 PC）。
+> 2 轮对抗审稿（第 1 轮 **REJECT** 1 BLOCKER ⇒ 整改 ⇒ 第 2 轮 APPROVE_WITH_CONDITIONS）
+> ⇒ `openspec/changes/archive/2026-10-27-rv32i-jump-sra-2026-10/`，
+> capability `rv32i-isa-semantics` **2 → 6** 条 Requirement。
 
 > ✅ **sprint-2026-10 本轮归档**（2026-10-26）：`example-assertion-quality-2026-10`（P1，
 > 新 capability `example-assertion-quality`）与 `rv32i-store-byte-enable-2026-10`（P0，
