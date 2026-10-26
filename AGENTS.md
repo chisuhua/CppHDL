@@ -171,7 +171,22 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   ⚠️ 「紧邻」的依赖现在能拿到**新值**（不需要插 NOP）；但「仍无前推」⇒ 停顿期间消费者停在 ID 级（延迟若干拍），不是 0 拍。
   ⚠️⚠️ **但**：停顿会**丢弃「消费者之后的第一条指令」**（见下一条）⇒ 「紧邻依赖之后的那条指令 MUST 是 NOP」⇒ 这条约束与「不再需要插 NOP」**并存**（前者说的是依赖**本身**的间隔，后者说的是依赖**之后**那条）。
 - **`HazardUnit` 的「预留输入」端口无内部消费者**（2026-10-25 登记）：`wb_reg_write` / `wb_rd_addr` / `ex_alu_result` / `mem_alu_result` / `wb_write_data` 在 `describe()` 里只被赋给 `auto` 变量 ⇒ 数据前推通路已拆走（ADR-038）⇒ 它们是**公共 API 面**上的预留输入。⚠️ 本 change 为 `mem_alu_result` 做了「MUST 用 EX/MEM 寄存器」的**正确驱动**（不是死驱动）⇒ 保留端口 + 如实注释；**彻底清理**（删端口）留给独立立项。
-- **RV32I 的 ISA 覆盖边界**（2026-10-25 实测登记，第 14 轮 critic SHOULD_FIX #6；2026-10-26 **部分修复**）：固件**只覆盖** ALU（ADD/SUB/ADDI）+ `LW`/`SW` + `BEQ`/`BNE`。**未实现 / 未验证**的部分：① ~~**SB/SH 的字节使能**~~ —— ✅ **已修复**（2026-10-26，change `rv32i-store-byte-enable-2026-10`）：`DataTCM` 新增 `strbe` 端口 + 读-改-写合并（`include/cpu/pipeline/rv32i_tcm.h`），流水线侧按 `addr[1:0]` 做 **lane 对齐**（`rv32i_pipeline.h` 的 `shl<32>(rs2, 8*addr[1:0])`，**只对 SB/SH** ⇒ `sw` 零回退），SoC 接线 `dtcm.io().strbe <<= pipeline.io().data_strbe`。⚠️ `DataTCM` 的 `strbe` 是**新增输入端口** ⇒ 全部实例化点 MUST 显式驱动（未驱动端口读到的值是**全 1**，不是 0 ⇒ 整字写会「碰巧」通过 ⇒ 未定义行为依赖）。② **JAL/JALR 不重定向 PC**（`if_stage` 的 `branch_valid` 只接 `branch_taken`）且 JAL 的写回值也不是 `pc+4`；③ **SRA 简化为 SRL**（`ex_stage.h` 的 `sra_result` 未与 `srl_result` 区分）。⇒ 固件 MUST 避开 ②③ 两类。
+- **RV32I 的 ISA 覆盖边界**（2026-10-25 实测登记，第 14 轮 critic SHOULD_FIX #6；2026-10-26 **部分修复**）：固件**只覆盖** ALU（ADD/SUB/ADDI）+ `LW`/`SW` + `BEQ`/`BNE`。**未实现 / 未验证**的部分：① ~~**SB/SH 的字节使能**~~ —— ✅ **已修复**（2026-10-26，change `rv32i-store-byte-enable-2026-10`）：`DataTCM` 新增 `strbe` 端口 + 读-改-写合并（`include/cpu/pipeline/rv32i_tcm.h`），流水线侧按 `addr[1:0]` 做 **lane 对齐**（`rv32i_pipeline.h` 的 `shl<32>(rs2, 8*addr[1:0])`，**只对 SB/SH** ⇒ `sw` 零回退），SoC 接线 `dtcm.io().strbe <<= pipeline.io().data_strbe`。⚠️ `DataTCM` 的 `strbe` 是**新增输入端口** ⇒ 全部实例化点 MUST 显式驱动（未驱动端口读到的值是**全 1**，不是 0 ⇒ 整字写会「碰巧」通过 ⇒ 未定义行为依赖）。② ~~**JAL/JALR 不重定向 PC**~~ —— ✅ **已修复**（2026-10-27，change `rv32i-jump-sra-2026-10`）：
+`ex_stage.branch_taken`/`branch_target` 扩为「重定向成立/目标」（`JAL` = `pc+imm_j`、
+`JALR` = `(rs1+imm_i)&~1`，两者**无条件**），`hazard.ex_branch` 加入 `is_jump` 使其也 flush
+错误路径，返回地址走**新增**的 `link_value` 通路（**不再**是 `alu_result`）。⚠️ **已知限制**：
+`JALR` 的 `rs1` **无数据前推**（ADR-046 **D5** 悬置）⇒ 固件 MUST NOT 依赖「`JALR` 的 `rs1`
+刚被前一条指令写」；跳转延迟 = 2 拍（EX 级解析），冲刷代价 3 拍（与条件分支同构）。
+③ ~~**SRA 简化为 SRL**~~ —— ✅ **已修复**（同一 change）：**两处**都改（`ex_stage.h` 的内联 ALU
++ `rv32i_alu.h` 的 `Rv32iAlu` 组件）；框架层仍**没有**算术右移原语（`operator>>>` 是注释状态）
+⇒ 实现在 ALU 层合成（逻辑右移 + 符号位填充，`sh == 0` 不填充）。
+⚠️ **同一 change 连带修复两个既有缺陷**（实施中被固件用例逼出）：**(a) U 型立即数**——
+`id_stage` 用 20 位掩码（`instr & 0x000FFFFF`）再左移 12 ⇒ 把 `rd`/`opcode` 算进立即数
+（`auipc x18, 0` ⇒ `pc + 0x917000`）⇒ `LUI`/`AUIPC` **一直是错的**（此前零覆盖：唯一消费者是
+仓外 riscv-tests，CI 全 SKIP）；**(b) `alu_op` 的 SUB/SRA 判定**——用 `funct7[5]`（= `instr[30]`）
+判 SUB，但**对 I 型那是 `imm[10]`** ⇒ 任何 `imm >= 0x400` 或负数被误判成 SUB
+（`addi x, x0, -8` ⇒ `0 - (-8)` = 8）⇒ 既有固件 imm 全部 `< 0x400` 才侥幸未暴露。
+⇒ 固件现在**可以**用 `JAL`/`JALR`/`SRA` 与负数/大立即数。
 - **RV32I 的 load-use 停顿会丢弃「消费者之后的第一条指令」**（2026-10-25 实测挖出，第 17 轮 critic BLOCKER）：imem 是 **1-cycle `sread`** ⇒ 停顿那一拍，「**已提交但还没锁存进 IF/ID**」的那条指令**无处可存** ⇒ 它**从指令流里消失**。⇒ **固件 MUST 保证「load-use 停顿点之后的那条指令是 NOP」**（当前固件恰是这样 ⇒ 语义无损 ⇒ 但这是**巧合**，不是保证）。⚠️ 正解需要**取指 skid buffer + PC 回退**（结构性改动 ⇒ 全部时序/金标重算）⇒ **独立立项**。详见 `openspec/changes/rv32i-pipeline-commit-path-2026-10/design.md` §3.10。
 - **RV32I 取指填充期的「同一条指令被装两次」**（2026-10-25 实测挖出，**已登记为残留**）：固件开头那条指令会被**写回两次**（连续两拍 `wb_write_en=1`，值相同 ⇒ **幂等、语义无害**）⚠️ 但**退休数会 +1**（该指令被计了**两次**退休）。根因在**框架层**：`ch_mem::sread` 的输出端口（`data_proxy`）在**建图期**就被组合求值过一次 ⇒ 其初值 = `mem[addr(拍 0)]`；`if_stage` 的 IF/ID 在拍 0 就把这个「尚未真正取指」的初值装了进来，而拍 1 装的是**同一个地址**（`pc_reg` 的初值就是第一次取指地址）的真数据 ⇒ 同一条指令进了流水线两次。**修它需改框架层语义（影响所有 `sread` 用户）** ⇒ 独立立项。详见 `openspec/changes/rv32i-pipeline-commit-path-2026-10/design.md` §3.6。
 - **RV32I imem 的 1 拍 `pc_lag`**（2026-10-25 实测确认）：imem MUST 用 `sread`（ADR-041）⇒ 指令比地址晚 1 拍到 ⇒ IF/ID 的 pc **必须同样延迟**（`fetch_pc_reg`），否则 ID 拿到「比它译码的指令晚一个字」的 pc ⇒ 分支目标算错 4 字节。⚠️ 与 **dmem** 相反：dmem MUST 用 `aread`（0-cycle）—— MEM 级在**当前拍**采样读数据。

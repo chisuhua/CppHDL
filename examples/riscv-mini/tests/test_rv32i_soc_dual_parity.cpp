@@ -259,6 +259,40 @@ constexpr uint32_t BNE(uint32_t rs1, uint32_t rs2, int32_t imm) {
     return enc_b(rs1, rs2, 0x1u, imm);
 }
 
+// ⚠️ **跳转 / U 型 / 算术右移**（2026-10-26 新增，T3 `JAL`/`JALR`/`SRA`）：
+//
+// J 型格式（RISC-V）：`imm[20|10:1|11|19:12]` 散落在
+//   instr[31] = imm[20] · instr[30:21] = imm[10:1] · instr[20] = imm[11] ·
+//   instr[19:12] = imm[19:12]
+// ⚠️ `imm` 是**字节**偏移（bit0 恒 0 ⇒ JAL 目标天然 2 字节对齐）。
+constexpr uint32_t enc_j(uint32_t rd, int32_t imm) {
+    uint32_t u = static_cast<uint32_t>(imm) & 0x1FFFFFu;  // 21-bit, ±1 MiB
+    uint32_t b20    = (u >> 20) & 1u;
+    uint32_t b10_1  = (u >> 1) & 0x3FFu;
+    uint32_t b11    = (u >> 11) & 1u;
+    uint32_t b19_12 = (u >> 12) & 0xFFu;
+    return (b20 << 31) | (b10_1 << 21) | (b11 << 20) | (b19_12 << 12) |
+           (rd << 7) | 0x6Fu /* JAL */;
+}
+constexpr uint32_t JAL(uint32_t rd, int32_t imm) { return enc_j(rd, imm); }
+
+// `JALR`：I 型格式，funct3 = 000，opcode = 0x67
+// ⚠️ 目标地址 = `(rs1 + imm) & ~1`（**MUST** 清最低位）
+constexpr uint32_t JALR(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x0u, imm, 0x67u);
+}
+
+// `AUIPC`：U 型格式（opcode 0x17）⇒ `rd = pc + (imm_hi20 << 12)`
+// ⚠️ U 型的立即数**只能是 4 KiB 的倍数** ⇒ 算任意目标地址 MUST 配合 `ADDI`
+constexpr uint32_t AUIPC(uint32_t rd, uint32_t imm_hi20) {
+    return ((imm_hi20 & 0xFFFFFu) << 12) | (rd << 7) | 0x17u;
+}
+
+// `SRA`：R 型格式，funct3 = 101，funct7 = 0x20（区分 SRL）
+constexpr uint32_t SRA(uint32_t rd, uint32_t rs1, uint32_t rs2) {
+    return enc_r(rd, rs1, rs2, 0x5u, 0x20u);
+}
+
 // ---------------------------------------------------------------------------
 // 固件：**48 个字**（含 NOP 填充），覆盖 ALU-only / sw→lw / **紧邻 load→use** ×2 /
 // taken + not-taken branch。
@@ -294,12 +328,40 @@ constexpr uint32_t kGoldenAddrSH = 0x122u;
 constexpr uint32_t kGoldenDataSH = 0xD0000u;  // 13 << 16
 constexpr uint32_t kGoldenWordSH = 0xD0000u;  // [0x120] = 13 << 16
 
-constexpr size_t kFirmwareWords = 64;
+// ⚠️ **跳转 / SRA golden**（2026-10-26 新增，T3）：
+//
+//   地址基址 = 0x80000000（`pc_reg` 初值）⇒ word N 的地址 = 基址 + 4N
+//
+//   ① `JAL x14, +12`（word 64）⇒ 跳到 word 67
+//      link = word 64 的 pc + 4 = word 65 的地址 = 基址 + 260 = 0x80000104
+//   ② `ADDI x16, x0, 0x2A`（word 67）⇒ **只有真的跳到 67 才会写回** x16 = 42
+//   ③ `AUIPC x18, 0`（word 72）⇒ x18 = 基址 + 288 = 0x80000120
+//      `ADDI x18, x18, 44`（word 76）⇒ x18 = 0x80000120 + 44 = 0x8000014C（word 83）
+//   ④ `JALR x17, x18, 0`（word 80）⇒ 跳到 (x18 & ~1) = word 83
+//      link = word 80 的 pc + 4 = word 81 的地址 = 基址 + 324 = 0x80000144
+//   ⑤ `ADDI x20, x0, 0x3C`（word 83）⇒ **只有真的跳到 83 才会写回** x20 = 60
+//   ⑥ `ADDI x21, x0, -8`（word 87）⇒ x21 = 0xFFFFFFF8
+//      `SRA x22, x21, x2`（word 91）⇒ x2 = 3 ⇒ 0xFFFFFFF8 >>> 3 = **0xFFFFFFFF**
+//         （若 SRA 退化为 SRL ⇒ 0x1FFFFFFF ⇒ 断言转红）
+//      `SRA x24, x21, x0`（word 95）⇒ 移位量 0 ⇒ **0xFFFFFFF8**（MUST NOT 填充）
+constexpr uint32_t kGoldenLinkJal  = 0x80000104u;  // word 65 的地址
+constexpr uint32_t kGoldenSubBody  = 0x2Au;        // 42
+constexpr uint32_t kGoldenAuipc    = 0x80000120u;  // word 72 的地址
+constexpr uint32_t kGoldenJalrBase = 0x8000014Cu;  // word 83 的地址
+constexpr uint32_t kGoldenLinkJalr = 0x80000144u;  // word 81 的地址
+constexpr uint32_t kGoldenJalrBody = 0x3Cu;        // 60
+constexpr uint32_t kGoldenSraSrc   = 0xFFFFFFF8u;  // -8
+constexpr uint32_t kGoldenSraSh3   = 0xFFFFFFFFu;  // -8 >>> 3
+constexpr uint32_t kGoldenSraSh0   = 0xFFFFFFF8u;  // 移位 0 ⇒ 不变
+
+constexpr size_t kFirmwareWords = 100;
 
 // 期望的写回序列（ISA 语义）。
 // ⚠️ **不含 x7** —— 它在 taken 分支的错误路径上 ⇒ MUST 被冲刷 ⇒ 不写回。
 // ⚠️ **不含 x6 之前任何「消费者」的错误值** —— 紧邻的 load→use 必须拿到**新值**。
-constexpr std::array<std::pair<uint64_t, uint64_t>, 13> kExpectedWritebacks = {{
+// ⚠️ **不含 x19 / x23** —— 它们分别在 JAL / JALR 之后的错误路径上
+//    ⇒ MUST 被冲刷（见下方专项断言）。
+constexpr std::array<std::pair<uint64_t, uint64_t>, 22> kExpectedWritebacks = {{
     {1, 10},   // addi x1, x0, 10
     {2, 3},    // addi x2, x0, 3
     {3, 13},   // add  x3, x1, x2
@@ -313,6 +375,16 @@ constexpr std::array<std::pair<uint64_t, uint64_t>, 13> kExpectedWritebacks = {{
     {11, 0},   // add  x11, x10,x10 ⇒ **0**（若提前解除 ⇒ 会是 14）
     {12, kGoldenWordSB},  // lw  x12, 0x100 ⇒ **0x030A**（含 sb 的字节写）
     {13, kGoldenWordSH},  // lw  x13, 0x120 ⇒ **0xD0000**（含 sh 的半字写）
+    // ── 跳转 / SRA（2026-10-26 新增，T3）──
+    {14, kGoldenLinkJal},   // JAL x14  ⇒ link = word 65 的地址
+    {16, kGoldenSubBody},   // addi x16 ⇒ **只有真的跳到 word 67 才会出现**
+    {18, kGoldenAuipc},     // auipc x18 ⇒ = word 72 的地址
+    {18, kGoldenJalrBase},  // addi x18 ⇒ = word 83 的地址（第二条 x18）
+    {17, kGoldenLinkJalr},  // JALR x17 ⇒ link = word 81 的地址
+    {20, kGoldenJalrBody},  // addi x20 ⇒ **只有真的跳到 word 83 才会出现**
+    {21, kGoldenSraSrc},    // addi x21 ⇒ 0xFFFFFFF8（-8）
+    {22, kGoldenSraSh3},    // sra  x22 ⇒ -8 >>> 3 = **0xFFFFFFFF**
+    {24, kGoldenSraSh0},    // sra  x24 ⇒ 移位 0 ⇒ **0xFFFFFFF8**
 }};
 
 // ⚠️ MUST 是 **constexpr**（不是 `static const`）⇒ 才能被编译期护栏检查
@@ -380,6 +452,30 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
         NOP, NOP, NOP,
         LW(13, 0, 0x120), // 60 x13 = 0xD0000
         NOP, NOP, NOP,
+        // ⚠️ **跳转 / SRA**（2026-10-26 新增，T3）：
+        //    ⚠️ 追加在**尾部**（既有 word 索引一个都不移动）⇒ 既有断言全部保持有效。
+        //    ⚠️ 2 拍跳转延迟（EX 级解析）⇒ 跳转后**紧跟的 2 条**是错误路径 ⇒
+        //      用它们写**不会被执行的**寄存器（x19 / x23）⇒ 冲刷失效即转红。
+        JAL(14, 12),       // 64 x14 = 0x80000104（link = word 65）；跳到 word 67
+        NOP,               // 65 ← link 指向这里（本固件不从这继续）
+        ADDI(19, 0, 0x66), // 66 **错误路径** ⇒ MUST 被冲刷（x19 MUST NOT 写回）
+        ADDI(16, 0, 0x2A), // 67 子程序体 ⇒ **只有真的跳到 67 才写** x16 = 42
+        NOP, NOP, NOP, NOP,
+        AUIPC(18, 0),      // 72 x18 = 0x80000120（= word 72 的地址）
+        NOP, NOP, NOP,
+        ADDI(18, 18, 44),  // 76 x18 = 0x8000014C（= word 83 的地址）
+        NOP, NOP, NOP,
+        JALR(17, 18, 0),   // 80 x17 = 0x80000144（link）；跳到 (x18 & ~1) = word 83
+        NOP,               // 81 **错误路径**
+        ADDI(23, 0, 0x77), // 82 **错误路径** ⇒ MUST 被冲刷（x23 MUST NOT 写回）
+        ADDI(20, 0, 0x3C), // 83 目标 ⇒ **只有真的跳到 83 才写** x20 = 60
+        NOP, NOP, NOP,
+        ADDI(21, 0, -8),   // 87 x21 = 0xFFFFFFF8（-8）
+        NOP, NOP, NOP,
+        SRA(22, 21, 2),    // 91 x22 = 0xFFFFFFFF（x2 = 3 ⇒ -8 >>> 3）
+        NOP, NOP, NOP,
+        SRA(24, 21, 0),    // 95 x24 = 0xFFFFFFF8（移位 0 ⇒ MUST NOT 填充）
+        NOP, NOP, NOP, NOP,// 96-99
     }};
 }
 
@@ -481,6 +577,11 @@ TEST_CASE("Rv32iSoc - FirmwareEncoderCrossCheck", "[rv32i][soc][dual]") {
     REQUIRE(LW(5, 0, 0x100) == 0x10002283u); // lw x5, 0x100(x0)
     REQUIRE(BEQ(0, 0, 8) == 0x00000463u);    // beq x0, x0, +8
     REQUIRE(BNE(0, 0, 8) == 0x00001463u);    // bne x0, x0, +8
+    // ⚠️ 跳转 / U 型 / SRA（2026-10-26 新增，T3）—— 同样手算交叉校验
+    REQUIRE(JAL(14, 12) == 0x00C0076Fu);     // jal x14, +12
+    REQUIRE(JALR(17, 18, 0) == 0x000908E7u); // jalr x17, 0(x18)
+    REQUIRE(AUIPC(18, 0) == 0x00000917u);    // auipc x18, 0
+    REQUIRE(SRA(22, 21, 2) == 0x402ADB33u);  // sra x22, x21, x2
     REQUIRE(NOP == 0x00000013u);
 
     const auto &fw = firmware();
@@ -701,8 +802,12 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //    ⚠️ 修复前这个计数器**恒为 0**（检测用的是 MEM 级 load ⇒ 晚一级
     //    ⇒ 永远对不上）⇒ 本断言是「冒险真的被检测到」的判别力来源。
     REQUIRE(ta.back()[kIdxLoadUseStalls] == 6u);
-    // 控制停顿 == 误预测次数
-    REQUIRE(ta.back()[kIdxControlStalls] == 1u);
+    // 控制停顿 = **全部控制重定向**造成的停顿拍数（2026-10-26 起含 JAL/JALR）
+    //   = 1（taken 的 beq 误预测）+ 2（JAL @word64 + JALR @word80）
+    // ⚠️ 与 `mispredict` **分离**：`mispredict` 只统计**条件分支**的误预测
+    //    （JAL/JALR 是**无条件**跳 ⇒ 不是「预测错误」），而跳转同样让流水线空拍
+    //    ⇒ 计入 `control_stalls` 但不计入 `mispredict`。
+    REQUIRE(ta.back()[kIdxControlStalls] == 3u);
 
     // ---- 被冲刷的指令 MUST **从未执行**（控制冒险的核心契约）----
     //
@@ -719,10 +824,28 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
                        ta[c][kIdxWbRdAddr] == 7u));  // wb_write_en && rd == x7
     }
 
+    // ---- 被冲刷的指令 MUST **从未执行**（`JAL` / `JALR` 的错误路径）----
+    //
+    // 固件 word 66 = `addi x19, x0, 0x66` 位于 `JAL`（word 64）之后的**错误路径**；
+    // word 82 = `addi x23, x0, 0x77` 位于 `JALR`（word 80）之后的**错误路径**。
+    // ⇒ 两者 MUST NOT 被写回。
+    // ⚠️ 这两条断言是「**`JAL`/`JALR` 也触发 flush**」的**唯一**判别力来源：
+    //    `hazard.io().ex_branch` 若仍只接 `is_branch`（不含 `is_jump`）
+    //    ⇒ PC 跳了、错误路径的指令却照常执行 ⇒ x19 / x23 被写 ⇒ 转红
+    //    （2026-10-26 变异验证 M4 实测）。
+    // ⚠️ 它们**只**由这两条指令写 ⇒ 「不出现」是强断言。
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        INFO("cycle " << c);
+        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
+                       ta[c][kIdxWbRdAddr] == 19u));
+        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
+                       ta[c][kIdxWbRdAddr] == 23u));
+    }
+
     // ---- 退休指令数（按**逐拍实测**的非退休拍推导，不拍脑袋）----
     //
-    // 退休数在 **cyc 1..199** 这 199 个拍间隔里有 **11** 个「不增长」，
-    // 分四段：
+    // 退休数在 **cyc 1..199** 这 199 个拍间隔里有 **17** 个「不增长」，
+    // 分六段：
     //   ① 2 拍填充（cyc 1..2：IF/ID → ID/EX → EX/MEM → MEM/WB 依次就绪；
     //      cyc 0 是第 1 拍，退休数从 0 起，故填充段落在 cyc 1..2）
     //   ② 3 拍 **load-use 停顿 #1**（消费者留在 ID 级；EX/MEM 与 MEM/WB 灌气泡）
@@ -731,18 +854,22 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //      flush 当拍提交的那条在下一拍才返回 ⇒ `flush_d1` 再门一拍）⇒
     //      代价 = 分支目标的指令晚 1 拍进 ID
     //   ④ 3 拍 **load-use 停顿 #2**（第二处紧邻 load→use）
-    // ⇒ 199 − 11 = 188 条指令退休
+    //   ⑤ 3 拍 **`JAL` 冲刷**（word 64；**与条件分支同构** ⇒ 同样 3 拍）
+    //   ⑥ 3 拍 **`JALR` 冲刷**（word 80）
+    // ⇒ 199 − 17 = 182 条指令退休
     //
     // ⚠️ 「不增长的间隔数」与「退休数」**分别断言** ⇒ 若流水深度变了，
     //    两条断言**一起**转红（不会「一条变、一条不变」而掩盖）。
+    // ⚠️ ⑤/⑥ 是**2026-10-26 实测**（不是推导）：加入两个跳转后
+    //    `non_retired` 从 11 变为 17（各 +3）⇒ 与条件分支的冲刷代价一致。
     std::size_t non_retired = 0;
     for (std::size_t c = 1; c < ta.size(); ++c) {
         if (ta[c][kIdxInstructions] == ta[c - 1][kIdxInstructions]) {
             ++non_retired;
         }
     }
-    REQUIRE(non_retired == 11u);
-    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 12u);
+    REQUIRE(non_retired == 17u);
+    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 18u);
 
     // ---- 写回序列（ISA 语义的最强判据）----
     //

@@ -40,3 +40,35 @@
 - **WHEN** 流水线内联的 ALU 与独立的 ALU 组件都实现 `SRA`
 - **THEN** 两者 MUST 给出**逐位相同**的结果
 - **AND** MUST NOT 只实现其中一处（否则留下「组件层对、流水线层错」的分裂）
+
+### Requirement: I 型大立即数 MUST NOT 被误判为 SUB
+
+- **WHEN** 一条 I 型指令（`ADDI` / `ANDI` / `ORI` / …）的 12 位立即数 **`>= 0x400`** 或为负数
+- **THEN** ALU 操作 MUST 仍是该 `funct3` 对应的操作（`ADDI` ⇒ `ADD`）
+- **AND** MUST NOT 因为 `instr[30]` 为 1 就被判成 `SUB` / `SRA`
+  （对 I 型而言 `instr[30]` 是 **`imm[10]`**，不是 `funct7[5]`）
+- **AND** `SUB` / `SRA` 的判定 MUST 只对 **R 型** 与 `SRAI` 生效
+
+#### Scenario: 负数立即数
+
+- **WHEN** 执行 `addi x21, x0, -8`（`0xFF800A93`）
+- **THEN** 结果 MUST 是 `0xFFFFFFF8`
+- **AND** `0 - (-8)` 得到的 `8` MUST NOT 出现
+
+#### Scenario: 大正立即数
+
+- **WHEN** 执行 `addi x, x0, 0x7FF`（`0x7FF00A93`）
+- **THEN** 结果 MUST 是 `2047`
+- **AND** `0 - 0x7FF` 得到的 `0xFFFFF801` MUST NOT 出现
+
+### Requirement: U 型立即数 MUST 是 `instr[31:12] << 12`
+
+- **WHEN** 一条 `LUI` 或 `AUIPC` 执行
+- **THEN** 立即数 MUST 是 `instr[31:12] << 12`（**低 12 位 MUST 清零**）
+- **AND** MUST NOT 包含 `rd` / `opcode` 位
+
+#### Scenario: `auipc` 的立即数为 0
+
+- **WHEN** 执行 `auipc x18, 0`（`0x00000917`）
+- **THEN** 立即数 MUST 是 `0`（结果 = 该指令自身的 `pc`）
+- **AND** `0x917000`（把 `rd<<7 | opcode` 当立即数）MUST NOT 出现

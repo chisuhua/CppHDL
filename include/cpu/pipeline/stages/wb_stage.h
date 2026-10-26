@@ -40,6 +40,7 @@ public:
         // ====================================================================
         ch_in<ch_uint<32>> alu_result;   // ALU 计算结果 (来自 EX/MEM)
         ch_in<ch_uint<32>> mem_data;     // 内存读出的数据 (来自 MEM 级)
+        ch_in<ch_uint<32>> link_value;   // **返回地址** = pc + 4 (JAL/JALR 的写回值)
         ch_in<ch_uint<5>>  rd_addr;      // 目标寄存器地址 (来自 ID 级)
         ch_in<ch_bool>     is_load;      // 是否为加载指令
         ch_in<ch_bool>     is_alu;       // 是否为 ALU 指令 (R 型/I 型算术逻辑)
@@ -76,9 +77,13 @@ public:
         ch_uint<32> wb_data = ch_uint<32>(0_d);
         
         // 使用 select() 进行数据选择 (关键：不能用 && 运算符)
-        // 优先级：加载指令 > ALU 指令/跳转指令
+        // 优先级（后者覆盖前者）：load > jump > alu
+        // ⚠️ 2026-10-26 修正：`is_jump` 此前与 `is_alu` **合并** ⇒ JAL/JALR 写回的
+        //    是 `alu_result`（垃圾）⇒ `ra` 不是返回地址。现在 `jump` 单独一支
+        //    取 `link_value`（= pc + 4）。
         wb_data = select(io().is_load, io().mem_data, wb_data);
-        wb_data = select(io().is_alu | io().is_jump, io().alu_result, wb_data);
+        wb_data = select(io().is_alu, io().alu_result, wb_data);
+        wb_data = select(io().is_jump, io().link_value, wb_data);
 
         // ====================================================================
         // 2. 写使能生成逻辑

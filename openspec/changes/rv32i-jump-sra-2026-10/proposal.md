@@ -47,6 +47,33 @@
 
 ## What Changes
 
+### 0. 两个**前置修复**（实施中实测挖出的既有缺陷；无它们则 JAL/JALR/SRA 的用例无法构造）
+
+这两条**不在**原始立项范围内，是实施 `JAL`/`JALR`/`SRA` 时**被固件用例逼出来的**。
+保留它们在本 change 而非另开 change 的理由：两者都是**一行级**修复，
+且分别是「JALR 的目标地址必须能装进一个寄存器」与「SRA 的负数源必须能构造」的
+**直接前提**（没有它们，本 change 的验收断言根本写不出来）。
+
+#### 0a. U 型立即数解码（`include/cpu/pipeline/stages/id_stage.h`）
+
+- 原实现：`instr_masked = instruction & 0x000FFFFF`（**20 位**掩码）再 `<< 12`
+  ⇒ 把 **`rd` / `opcode` 位也算进了立即数**（实测 `auipc x18, 0` ⇒ `pc + 0x917000`，
+  其中 `0x917 = rd<<7 | opcode`）
+- 正确：`imm[31:12] = instr[31:12]`（**低 12 位 MUST 清零**）
+- ⚠️ 此前**无任何覆盖**：唯一消费者是仓外的 riscv-tests 二进制（CI 全 SKIP）
+  ⇒ `LUI` / `AUIPC` **一直是错的**
+
+#### 0b. `alu_op` 的 SUB/SRA 判定对 I 型的误判（`include/cpu/pipeline/rv32i_pipeline.h`）
+
+- 原实现：`alu_is_sub_sra = funct7[5]`（= `instr[30]`），**对所有 opcode 都生效**
+- ⚠️ 对 **I 型**（`ADDI` / `ANDI` / …）而言 `instr[30]` 是 **`imm[10]`** 的一部分
+  ⇒ **任何 `imm >= 0x400` 或负数都被误判成 SUB**
+  - 实测：`addi x21, x0, -8`（`0xFF800A93`）⇒ `0 - (-8)` = **8**
+  - 实测：`addi x21, x0, 0x7FF`（`0x7FF00A93`）⇒ `0 - 0x7FF` = **0xFFFFF801**
+- 正确：MUST 用「**R 型** 或 **`OP_OPIMM` 且 `funct3=101`（SRAI）**」门控
+- ⚠️ 本固件原有 imm 全部 `< 0x400`（`0x100` / `0x122`）⇒ 侥幸未暴露；
+  但**大偏移的 `lw`/`sw` / 负数立即数**一直受影响
+
 ### 1. `ex_stage` 的重定向语义（`include/cpu/pipeline/stages/ex_stage.h`）
 
 - `branch_target` 语义从「条件分支目标」扩展为「**重定向目标**」：
@@ -94,7 +121,11 @@
 - [ ] `JAL` **真的跳**到子程序且能**返回**（子程序写的寄存器值被主程序读回）
 - [ ] `ra`（x1）== 返回地址（`JAL` 指令的 `pc + 4`）
 - [ ] `JALR` 跳到 `(rs1 + imm) & ~1`
-- [ ] `SRA` 对负数正确（`-8 >> 1 == -4`，即 `0xFFFFFFF8 → 0xFFFFFFFC`）
+- [ ] `SRA` 对负数正确（`-8 >> 3 == -1`，即 `0xFFFFFFF8 → 0xFFFFFFFF`）
+- [ ] **前置修复 0a**：`LUI` / `AUIPC` 的立即数 = `instr[31:12] << 12`
+      （`auipc x18, 0` ⇒ `pc + 0`）
+- [ ] **前置修复 0b**：I 型的大立即数/负数 MUST NOT 被误判为 SUB
+      （`addi x21, x0, -8` ⇒ `0xFFFFFFF8`；`addi x, x0, 0x7FF` ⇒ `2047`）
 - [ ] **两处** `SRA` 实现（`ex_stage` 内联 + `Rv32iAlu` 组件）都正确
 - [ ] 既有固件的 golden 除「新增用例导致的变化」外**不变**
 - [ ] 双后端逐拍全等（无掩码）

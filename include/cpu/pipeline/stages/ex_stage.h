@@ -78,8 +78,9 @@ public:
         // 输出端口：写入 EX/MEM 流水线寄存器
         // ====================================================================
         ch_out<ch_uint<32>> alu_result;   // ALU 计算结果
-        ch_out<ch_bool>     branch_taken; // 分支是否跳转
-        ch_out<ch_uint<32>> branch_target; // 分支目标地址
+        ch_out<ch_bool>     branch_taken; // **重定向成立**（条件分支成立 / JAL·JALR 无条件跳）
+        ch_out<ch_uint<32>> branch_target; // **重定向目标**（B 型 = pc+imm_b；JAL = pc+imm_j；JALR = (rs1+imm_i)&~1）
+        ch_out<ch_uint<32>> link_value;   // **返回地址** = pc + 4（JAL/JALR 的写回值）
         ch_out<ch_bool>     zero;         // 零标志 (result == 0)
         ch_out<ch_bool>     less_than;    // 有符号小于标志
         ch_out<ch_bool>     less_than_u;  // 无符号小于标志
@@ -128,10 +129,20 @@ public:
         auto sll_result = io().rs1_data << shift_amt;  // 逻辑左移
         auto srl_result = io().rs1_data >> shift_amt;  // 逻辑右移
 
-        // 1.3b 算术右移 (SRA)
-        // 完整 SRA 需根据符号位填充高位，当前简化为 SRL。
-        // 不影响 rv32ui 基础路径（simple/add/addi 不含 SRA 指令）。
-        ch_uint<32> sra_result = srl_result;
+        // 1.3b 算术右移 (SRA) —— 2026-10-26 实现（此前 `sra_result = srl_result`）
+        //
+        // ⚠️ 框架层**没有**算术右移原语：`include/core/operators_shift.h` 里
+        //    `operator>>>`（`sshr_op`）是**被注释掉**的 ⇒ 在 ALU 层合成：
+        //      sra = (a >> sh) | (sign ? (0xFFFFFFFF << (32 - sh)) : 0)
+        //    `ch_uint` 无符号 ⇒ `>>` 天然是**逻辑**右移 ⇒ 只需补**高位符号填充**。
+        // ⚠️ `sh == 0` 时 MUST NOT 填充（否则 `32 - 0 = 32` ⇒ 移位量越界）；
+        //    `sh ∈ [1,31]` ⇒ `32 - sh ∈ [1,31]` ⇒ 不触越界。
+        auto sra_sign_set = (bits<31, 31>(io().rs1_data) == ch_uint<1>(1_d));
+        auto sra_fill = select(sra_sign_set & (shift_amt != ch_uint<5>(0_d)),
+                               shl<32>(ch_uint<32>(0xFFFFFFFF_h),
+                                       ch_uint<32>(32_d) - zext<32>(shift_amt)),
+                               ch_uint<32>(0_d));
+        auto sra_result = srl_result | sra_fill;
 
         // ---- 1.4 比较运算 ----
         // SLT: 有符号比较 (rs1 < rs2)
@@ -170,14 +181,26 @@ public:
         alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SLTU), zext<32>(sltu_result_sig), alu_out);
 
         // ====================================================================
-        // 3. 分支目标地址计算
+        // 3. 重定向目标地址计算（2026-10-26 扩展：不止条件分支）
         // ====================================================================
-        // 分支目标 = PC + imm (imm 已在 ID 级符号扩展)
-        // 注意：PC 已经是当前指令地址，imm 是相对偏移量
-
-        auto branch_target_calc = io().pc + io().imm;
-        // 对于 B 型指令，imm[0] 总是 0，所以目标地址是字对齐的
-        // 对于 J 型指令，imm 已经包含 x2 因子
+        // 三种来源（一条指令**至多命中一种** ⇒ 三者互斥）：
+        //   OP_BRANCH ⇒ pc + imm_b            （条件分支目标）
+        //   OP_JAL    ⇒ pc + imm_j            （无条件跳；imm_j 已是**字节**偏移 ——
+        //                                     decoder 把 instr[10:1] 放在 bit[10:1]
+        //                                     ⇒ bit0 恒 0 ⇒ 天然 2 字节对齐）
+        //   OP_JALR   ⇒ (rs1 + imm_i) & ~1    （最低位 MUST 清零，RISC-V 规范）
+        // ⚠️ `JALR` 的 `rs1` 取 `io().rs1_data` ⇒ **无数据前推**（ADR-046 D5 悬置）
+        //    ⇒ 若 `rs1` 由**前一条**指令写入 ⇒ 读到**旧值** ⇒ 已知限制
+        //    （见 design.md §5）。
+        auto is_op_branch = (io().opcode == ch_uint<7>(OP_BRANCH));
+        auto is_op_jal    = (io().opcode == ch_uint<7>(OP_JAL));
+        auto is_op_jalr   = (io().opcode == ch_uint<7>(OP_JALR));
+        auto branch_target_calc = io().pc + io().imm;  // B 型 / JAL 共用
+        auto jalr_target_calc =
+            (io().rs1_data + io().imm) & ch_uint<32>(0xFFFFFFFE_h);  // & ~1
+        auto jump_target_calc = select(is_op_jalr, jalr_target_calc,
+                                       branch_target_calc);
+        auto jump_unconditional = is_op_jal | is_op_jalr;
 
         // ====================================================================
         // 4. 分支条件判断
@@ -210,8 +233,12 @@ public:
         branch_cond = select(io().branch_type == ch_uint<3>(6_d), rs1_lt_rs2_unsigned, branch_cond); // BLTU
         branch_cond = select(io().branch_type == ch_uint<3>(7_d), rs1_ge_rs2_unsigned, branch_cond); // BGEU
 
-        // 最终分支跳转信号
-        auto branch_taken_sig = select(io().is_branch, branch_cond, ch_bool(false));
+        // 最终**重定向**信号（2026-10-26 扩展）：
+        //   - 条件分支 ⇒ 条件成立才跳
+        //   - JAL / JALR ⇒ **无条件**跳（优先级高于条件分支 —— 三者互斥，取哪支都一样）
+        auto branch_taken_sig = select(jump_unconditional, ch_bool(true),
+                                       select(io().is_branch, branch_cond,
+                                              ch_bool(false)));
 
         // ====================================================================
         // 5. 零标志生成
@@ -233,8 +260,12 @@ public:
         auto ex_is_auipc = (io().opcode == ch_uint<7>(OP_AUIPC));
         io().alu_result = select(ex_is_lui, io().imm,
                                  select(ex_is_auipc, io().pc + io().imm, alu_out));
-        io().branch_target = branch_target_calc;
+        io().branch_target = select(jump_unconditional, jump_target_calc,
+                                    branch_target_calc);
         io().branch_taken = branch_taken_sig;
+        // 返回地址（JAL/JALR 的写回值）= pc + 4
+        // ⚠️ `pc` 是**该指令自己的** pc（ID/EX 锁存）⇒ +4 就是「下一条指令」的地址
+        io().link_value = io().pc + ch_uint<32>(4_d);
         io().zero = zero_flag;
         io().less_than = slt_result_sig;
         io().less_than_u = sltu_result_sig;

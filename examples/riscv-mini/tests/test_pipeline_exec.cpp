@@ -26,6 +26,8 @@
 #include "forwarding_dut_fixture.h"
 #include "cpu/pipeline/rv32i_alu.h"
 #include "cpu/pipeline/rv32i_decoder.h"
+#include "cpu/pipeline/stages/id_stage.h"
+#include "cpu/pipeline/stages/ex_stage.h"
 
 #include <cstdint>
 
@@ -182,6 +184,148 @@ TEST_CASE("Pipeline: SUB sequence execution", "[pipeline][arith][sub]") {
     SECTION("SUB: x1=10, x2=25, underflow check") {
         uint32_t result = alu_test.execute_alu(10, 25, ALU_SUB);
         REQUIRE(result == static_cast<uint32_t>(-15));
+    }
+}
+
+TEST_CASE("Pipeline: SRA arithmetic shift", "[pipeline][arith][sra]") {
+    AluTestHelper alu_test;
+
+    // ⚠️ 2026-10-26 新增：`sra_result` 此前是 `srl_result` 的占位（SRA == SRL）
+    //    ⇒ 这里钉住「**算术**右移」语义，并用**反向断言**钉住 SRL 的结果
+    //    MUST NOT 出现（否则「改回 SRL」这种变异不会被抓到）。
+
+    SECTION("SRA: -8 >> 3 == -1（算术 ⇒ 高位补 1）") {
+        // 0xFFFFFFF8 >>> 3 = 0xFFFFFFFF；若退化 SRL ⇒ 0x1FFFFFFF
+        uint32_t result = alu_test.execute_alu(0xFFFFFFF8u, 3, ALU_SRA);
+        REQUIRE(result == 0xFFFFFFFFu);
+        REQUIRE(result != 0x1FFFFFFFu);
+    }
+
+    SECTION("SRA: 移位量 0 ⇒ 结果 == 源操作数（MUST NOT 填充）") {
+        uint32_t result = alu_test.execute_alu(0xFFFFFFF8u, 0, ALU_SRA);
+        REQUIRE(result == 0xFFFFFFF8u);
+    }
+
+    SECTION("SRA: 正数同 SRL（符号位 0 ⇒ 不填充）") {
+        uint32_t result = alu_test.execute_alu(0x00000010u, 2, ALU_SRA);
+        REQUIRE(result == 0x00000004u);
+    }
+
+    SECTION("SRA: 最大移位量 31") {
+        // 0x80000000 >>> 31 = 0xFFFFFFFF（算术）；若退化 SRL ⇒ 0x00000001
+        uint32_t result = alu_test.execute_alu(0x80000000u, 31, ALU_SRA);
+        REQUIRE(result == 0xFFFFFFFFu);
+    }
+}
+
+TEST_CASE("Pipeline: immediate decoding (sign extension)",
+          "[pipeline][decode][imm]") {
+    ch::ch_device<Rv32iDecoder> dec;
+    ch::Simulator sim(dec.context());
+
+    auto decode_imm = [&](uint32_t instr) {
+        sim.set_input_value(dec.instance().io().instruction, instr);
+        sim.tick();
+        return static_cast<uint32_t>(static_cast<uint64_t>(
+            sim.get_port_value(dec.instance().io().imm)));
+    };
+
+    // ⚠️ 2026-10-26 新增：**负数立即数**从未被覆盖过（既有固件只用 0..0x1FF）
+    //    ⇒ 这里钉住符号扩展。`addi x21, x0, -8` 的机器码 = 0xFF800A93。
+    SECTION("I-type 负数：addi x21, x0, -8 ⇒ imm = 0xFFFFFFF8") {
+        REQUIRE(decode_imm(0xFF800A93u) == 0xFFFFFFF8u);
+    }
+
+    SECTION("I-type 正数：addi x16, x0, 42 ⇒ imm = 42") {
+        // (42 << 20) | (16 << 7) | 0x13
+        REQUIRE(decode_imm(0x02A00813u) == 42u);
+    }
+
+    SECTION("I-type 边界：addi x1, x0, 0x7FF ⇒ imm = 2047") {
+        REQUIRE(decode_imm(0x7FF00093u) == 2047u);
+    }
+
+    SECTION("I-type 边界：addi x1, x0, -2048 ⇒ imm = 0xFFFFF800") {
+        REQUIRE(decode_imm(0x80000093u) == 0xFFFFF800u);
+    }
+
+    SECTION("U-type：auipc x18, 0 ⇒ imm = 0（低 12 位 MUST 清零）") {
+        // ⚠️ 2026-10-26 修正前，这里会得到 `0x917000`（把 rd/opcode 当立即数）。
+        REQUIRE(decode_imm(0x00000917u) == 0u);
+    }
+
+    SECTION("U-type：lui x10, 0x1 ⇒ imm = 0x1000") {
+        REQUIRE(decode_imm(0x00001537u) == 0x1000u);
+    }
+}
+
+TEST_CASE("Pipeline: ID stage immediate path (sign extension)",
+          "[pipeline][decode][imm][idstage]") {
+    // ⚠️ 2026-10-26 新增：**`id_stage` 有一份自己的 imm 实现**（与
+    //    `Rv32iDecoder` 的同名表达式**并列**，互不复用）⇒ MUST 单独验证。
+    //    背景：SoC 级实测 `addi x21, x0, -8`（`0xFF800A93`）写回的是 **8**，
+    //    而 decoder 对同一机器码给出正确的 `0xFFFFFFF8` ⇒ 分歧只能在 id_stage。
+    ch::ch_device<IdStage> id;
+    ch::Simulator sim(id.context());
+
+    auto decode_imm = [&](uint32_t instr) {
+        sim.set_input_value(id.instance().io().instruction, instr);
+        sim.set_input_value(id.instance().io().pc, 0x80000000u);
+        sim.set_input_value(id.instance().io().valid, 1u);
+        sim.set_input_value(id.instance().io().flush, 0u);
+        sim.set_input_value(id.instance().io().stall, 0u);
+        sim.set_input_value(id.instance().io().reg_rs1_data, 0u);
+        sim.set_input_value(id.instance().io().reg_rs2_data, 0u);
+        // `imm` 是 ID/EX 寄存器后的值 ⇒ tick 2 次才把它搬出来
+        sim.tick(2);
+        return static_cast<uint32_t>(static_cast<uint64_t>(
+            sim.get_port_value(id.instance().io().imm)));
+    };
+
+    SECTION("I-type 正数：addi x16, x0, 42 ⇒ imm = 42") {
+        REQUIRE(decode_imm(0x02A00813u) == 42u);
+    }
+
+    SECTION("I-type 负数：addi x21, x0, -8 ⇒ imm = 0xFFFFFFF8") {
+        REQUIRE(decode_imm(0xFF800A93u) == 0xFFFFFFF8u);
+    }
+}
+
+TEST_CASE("Pipeline: EX stage operand selection (I-type imm)",
+          "[pipeline][exec][imm]") {
+    // ⚠️ 2026-10-26 新增：SoC 级实测 `addi x21, x0, -8` 写回 **8**，
+    //    而 decoder 与 id_stage 对同一机器码都给出 `0xFFFFFFF8`
+    //    ⇒ 分歧只能在 EX 级 ⇒ 这里逐级隔离。
+    ch::ch_device<ExStage> ex;
+    ch::Simulator sim(ex.context());
+
+    auto exec = [&](uint32_t opcode, uint32_t rs1, uint32_t imm, uint32_t alu_op) {
+        auto &io = ex.instance().io();
+        sim.set_input_value(io.rs1_data, rs1);
+        sim.set_input_value(io.rs2_data, 0u);
+        sim.set_input_value(io.imm, imm);
+        sim.set_input_value(io.pc, 0x80000000u);
+        sim.set_input_value(io.opcode, opcode);
+        sim.set_input_value(io.funct3, 0u);
+        sim.set_input_value(io.funct7, 0u);
+        sim.set_input_value(io.alu_op, alu_op);
+        sim.set_input_value(io.is_branch, 0u);
+        sim.set_input_value(io.branch_type, 0u);
+        sim.set_input_value(io.is_store, 0u);
+        sim.tick();
+        return static_cast<uint32_t>(static_cast<uint64_t>(
+            sim.get_port_value(io.alu_result)));
+    };
+
+    constexpr uint32_t OP_OPIMM_ = 0x13u;
+    constexpr uint32_t ALU_OP_ADD_ = 0u;
+
+    SECTION("addi 正数：0 + 42 = 42") {
+        REQUIRE(exec(OP_OPIMM_, 0u, 42u, ALU_OP_ADD_) == 42u);
+    }
+
+    SECTION("addi 负数：0 + (-8) = 0xFFFFFFF8（MUST 用 imm，不是 rs2）") {
+        REQUIRE(exec(OP_OPIMM_, 0u, 0xFFFFFFF8u, ALU_OP_ADD_) == 0xFFFFFFF8u);
     }
 }
 

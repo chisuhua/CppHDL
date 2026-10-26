@@ -187,6 +187,11 @@ public:
         ch::ch_module<WbStage> wb_stage{"wb_stage"};
         wb_stage.io().alu_result <<= ch_uint<32>(0xABCD_h);
         wb_stage.io().mem_data <<= ch_uint<32>(0_d);
+        // ⚠️ **返回地址端口 MUST 显式驱动**（2026-10-26 新增 `link_value`）：
+        //    未驱动的输入端口在本框架里读到的是**全 1**（不是 0）⇒
+        //    `is_jump` 为真时会写回 `0xFFFFFFFF` ⇒ **未定义行为依赖**。
+        //    本 fixture 的用例都是 `is_jump=false`，但仍 MUST 显式接线。
+        wb_stage.io().link_value <<= ch_uint<32>(0x1234_h);
         wb_stage.io().rd_addr <<= ch_uint<5>(3_d);
         wb_stage.io().is_load <<= ch_bool(false);
         wb_stage.io().is_alu <<= ch_bool(true);

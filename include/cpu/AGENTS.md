@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6059 lines**（2026-10-26 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6166 lines**（2026-10-27 实测，ADR-046 D9：磁盘是权威）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6059 lines（2026-10-26 实测）
+include/cpu/                             # 30 headers, 6166 lines（2026-10-27 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -80,6 +80,17 @@ include/cpu/                             # 30 headers, 6059 lines（2026-10-26 �
 - **Pipeline instantiation**: `ch::ch_module<T>` inside `Component::describe()` — see root AGENTS.md
 - **Runtime**: Pipeline requires `ch::ch_device<Rv32iSoc>` wrapper in main() (per README)
 - **Bundle vs Port**: Pipeline uses port-based `hazard_unit.h` (riscv namespace)。⚠️ 旧的 bundle 版 `hazard_unit_bundle.h`（cpu namespace）**已于 2026-10-24 作为零消费者头删除**（ADR-046 D4）
+- **跳转 / 重定向语义**（2026-10-27，T3）：`ex_stage.branch_taken` / `branch_target` 的语义
+  已扩展为「**重定向成立 / 重定向目标**」（含 `JAL`/`JALR` 的**无条件**跳，不只是条件分支）
+  ⇒ `if_stage` 的 PC 选择器**仍是两路**（`branch_valid` / `branch_target`），**没有**第三路
+  「`jump_valid`」—— 因为 flush 的唯一来源仍是 `ex_branch & ex_branch_taken`，而
+  `ex_branch = is_branch | is_jump`（两成分互斥）。⚠️ 引入**第三个** flush 来源前 MUST 重读
+  `if_stage.h` 的不变量注释。
+  ⚠️ `JAL`/`JALR` 的返回地址（`pc + 4`）走**独立通路** `link_value`（EX 级算 ⇒
+  `exmem_link_value` ⇒ `memwb_link_value` ⇒ `wb_stage.link_value`），**不是** `alu_result`。
+- **`alu_op` 的 SUB/SRA 判定 MUST 只对 R 型 与 SRAI 生效**（2026-10-27 修复）：`funct7[5]`
+  （= `instr[30]`）对 **I 型**是 **`imm[10]`** ⇒ 直接用它判 SUB 会把 `imm >= 0x400`
+  或负数误判成 SUB（实测 `addi x, x0, -8` ⇒ `0 - (-8)` = 8）。
 - **TCM**: `rv32i_tcm.h` provides single-cycle instruction/data memories
   - ⚠️ **`DataTCM` 的字节道契约**（2026-10-26 新增 `strbe` 端口）：`addr` 是**字地址**、
     `wdata` MUST 已**lane 对齐**（`rs2 << 8*addr[1:0]`，由流水线负责）、`strbe` 是车道掩码

@@ -145,9 +145,21 @@ public:
             bits<7, 7>(io().instruction);
         ch_uint<32> imm_b = sext<32>(imm_b_base);
 
-        // U-type 立即数：instr[31:12] 直接作为高 20 位
-        ch_uint<32> instr_masked = io().instruction & ch_uint<32>(1048575_d);
-        ch_uint<32> imm_u = instr_masked << ch_uint<5>(12_d);
+        // U-type 立即数：imm[31:12] = instr[31:12]（**低 12 位 MUST 清零**）
+        //
+        // ⚠️ **2026-10-26 修正（既有缺陷）**：原实现是
+        //      `instr_masked = instruction & ch_uint<32>(1048575_d)`（= 0x000FFFFF，
+        //      **20 位**掩码 ⇒ 把 **rd / opcode 位也算进了立即数**）
+        //      `imm_u = instr_masked << 12`
+        //    ⇒ 实测 `auipc x18, 0`（机器码 `0x00000917`）得到 `pc + 0x917000`
+        //      （0x917 = `rd<<7 | opcode` 左移 12）——**U 型立即数一直是错的**。
+        //    此前无固件 / 无测试覆盖 LUI / AUIPC（唯二消费者是仓外的 riscv-tests
+        //    二进制，CI 全 SKIP）⇒ 缺陷从未暴露。
+        //    ⇒ 掩码 MUST 是 `instr[31:12]`（0xFFFFF000）且**不再左移**。
+        //    ⚠️ 十进制字面量（本仓惯例：`0x..._d` 会被 `lit_dec` 拒绝，见
+        //    `mem_stage.h:120/140` 的同型写法）。
+        ch_uint<32> instr_masked = io().instruction & ch_uint<32>(4294963200_d);
+        ch_uint<32> imm_u = instr_masked;
 
         // J-type 立即数：instr[31|30:21|20|19:12], 符号扩展
         ch_uint<21> imm_j_base =

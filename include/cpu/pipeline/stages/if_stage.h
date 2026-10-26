@@ -84,13 +84,23 @@ public:
         // - 不复位 且 不 stall 时更新（**flush 不在此列** —— 见下方说明）
         //
         // ⚠️ `pc_update_en` **不看 `flush`**（2026-10-25，第 14 轮 critic NIT
-        //    补注）：今天安全，因为 flush 的**唯一**来源是
+        //    补注）：
+        //    **隐式不变量**：flush 的**唯一**来源是
         //    `hazard.io().flush = ex_branch & ex_branch_taken`，而
         //    `next_pc_target` 的选择条件 `branch_valid` 接的正是同一个
         //    `ex_stage.io().branch_taken` ⇒ flush 为真时 `next_pc_target`
-        //    **已经是**分支目标 ⇒ PC 无需额外覆盖。
-        //    ⇒ 这是一条**隐式不变量**：若将来 flush 有第二个来源
-        //      （例如预测失败），此处 MUST 改为「flush 时也更新 PC」。
+        //    **已经是**重定向目标 ⇒ PC 无需额外覆盖。
+        //    ⚠️ **2026-10-26 更新（`JAL`/`JALR` 接入后）**：`ex_branch` 的成分
+        //    从「仅条件分支（OP_BRANCH）」扩展为「条件分支 **+** 跳转
+        //    （OP_JAL / OP_JALR）」，`ex_branch_taken` 也相应包含「JAL/JALR 恒 true」。
+        //    ⇒ 不变量的**结构完全不变**（flush 仍只来自这一个表达式，且
+        //    `branch_valid` 仍接同一个 `ex_stage.branch_taken`）；
+        //    且 `ex_branch` 的两个成分**互斥**（一条指令不可能同时是 OP_BRANCH
+        //    与 OP_JAL/OP_JALR）⇒ 不存在「两个来源同时成立」的情形。
+        //    ⇒ 本 change **不需要**「第三路 PC 源」（`jump_valid` / `jump_target`）——
+        //      新增第三路反而会引入**第二个**无条件跳转来源 ⇒ 必须重新论证本不变量。
+        //    ⇒ 若将来引入**第三个** flush 来源（例如分支预测失败），此处 MUST
+        //      改为「flush 时也更新 PC」。
         //
         // ⚠️ **flush 与 stall 不会同拍**（第 18 轮 critic 要求写明的互斥论证）：
         //    flush 由 **EX 级**的 `branch_taken` 产生 ⇒ 触发那一拍 EX 级只有

@@ -98,9 +98,20 @@ public:
         // SRL: res = a >> b[4:0] (逻辑右移)
         auto srl_result = io().operand_a >> shift_amt;
         
-        // SRA: res = a >> b[4:0] (算术右移，符号扩展)
-        // 简化实现：对于正数同 SRL，负数需要特殊处理
-        auto sra_result = srl_result;  // TODO: 完善算术右移
+        // SRA: res = a >>> b[4:0] (算术右移，符号扩展)
+        //
+        // ⚠️ 2026-10-26 实现（此前是 `sra_result = srl_result` 的占位）：
+        //    框架层**没有**算术右移原语（`include/core/operators_shift.h` 里
+        //    `operator>>>` / `sshr_op` 被注释掉）⇒ 在 ALU 层合成：
+        //      sra = (a >> sh) | (sign ? (0xFFFFFFFF << (32 - sh)) : 0)
+        //    `ch_uint` 无符号 ⇒ `>>` 天然是**逻辑**右移 ⇒ 只需补高位符号填充。
+        // ⚠️ `sh == 0` 时 MUST NOT 填充（否则 `32 - 0 = 32` ⇒ 移位量越界）。
+        auto sra_sign_set = (a_sign == ch_uint<1>(1_d));
+        auto sra_fill = select(sra_sign_set & (shift_amt != ch_uint<5>(0_d)),
+                               shl<32>(ch_uint<32>(0xFFFFFFFF_h),
+                                       ch_uint<32>(32_d) - zext<32>(shift_amt)),
+                               ch_uint<32>(0_d));
+        auto sra_result = srl_result | sra_fill;
         
         // OR: res = a | b
         auto or_result = io().operand_a | io().operand_b;

@@ -117,6 +117,9 @@ public:
 
     ch_reg<ch_bool>     exmem_is_store{false, "exmem_is_store"};
     ch_reg<ch_uint<32>> exmem_alu_result{0_d, "exmem_alu_result"};
+    // ⚠️ **返回地址通路**（2026-10-26 新增）：JAL/JALR 的写回值是 `pc + 4`，
+    //    而 WB 级没有 `pc` 通路 ⇒ MUST 在 **EX 级**算好并逐级锁存过来。
+    ch_reg<ch_uint<32>> exmem_link_value{0_d, "exmem_link_value"};
     ch_reg<ch_uint<32>> exmem_rs2_data{0_d, "exmem_rs2_data"};
     ch_reg<ch_uint<5>>  exmem_rd_addr{0_d, "exmem_rd_addr"};
     ch_reg<ch_uint<3>>  exmem_funct3{0_d, "exmem_funct3"};
@@ -138,6 +141,7 @@ public:
     //    ⇒ 写回的是**上一条**指令的 ALU 结果 / 内存数据。
     ch_reg<ch_bool>     memwb_is_load{false, "memwb_is_load"};
     ch_reg<ch_uint<32>> memwb_alu_result{0_d, "memwb_alu_result"};
+    ch_reg<ch_uint<32>> memwb_link_value{0_d, "memwb_link_value"};
     ch_reg<ch_uint<32>> memwb_mem_data{0_d, "memwb_mem_data"};
     ch_reg<ch_bool>     memwb_is_jump{false, "memwb_is_jump"};
     ch_reg<ch_uint<5>>  memwb_rd_addr{0_d, "memwb_rd_addr"};
@@ -217,7 +221,20 @@ public:
         //    100=XOR · 101=SRL/SRA · 110=OR · 111=AND；funct7[5] 区分 SUB / SRA。
         {
             auto alu_f3 = id_stage.io().funct3;
-            auto alu_is_sub_sra = bits<5, 5>(id_stage.io().funct7_out);  // funct7[5] = instr[30]
+            // ⚠️⚠️ **`funct7[5]`（= `instr[30]`）只对 R 型 与 SRAI 有意义**
+            //    （2026-10-26 实测修复）：
+            //      对 **I 型的 `ADDI` / `ANDI` / …** 而言，`instr[30]` 是 **`imm[10]`**
+            //      的一部分 ⇒ 直接用它判 SUB/SRA 会把 **`imm >= 0x400`** 或
+            //      负数误判成 SUB：
+            //        `addi x21, x0, -8`（`0xFF800A93`）⇒ `0 - (-8)` = **8**
+            //        `addi x21, x0, 0x7FF`（`0x7FF00A93`）⇒ `0 - 0x7FF` = **0xFFFFF801**
+            //      ⇒ 本固件原来的 imm 全部 < 0x400（`0x100` / `0x122`）⇒ 侥幸未暴露。
+            //    ⇒ MUST 用「**R 型** 或 **`OP_OPIMM` 且 funct3=101（SRAI）**」门控。
+            auto alu_is_r_type = (id_stage.io().opcode == ch_uint<7>(OP_OP));
+            auto alu_is_srai = (id_stage.io().opcode == ch_uint<7>(OP_OPIMM)) &
+                               (alu_f3 == ch_uint<3>(5_d));
+            auto alu_is_sub_sra = bits<5, 5>(id_stage.io().funct7_out) &
+                                  (alu_is_r_type | alu_is_srai);
             // ⚠️ **访存指令的 funct3 编码的是「访存宽度」而不是 ALU 操作**
             //    （S/L 型：000=byte 001=half 010=word）⇒ LOAD/STORE 的
             //    ALU 结果必须是 **ADD**（rs1 + imm = 访存地址）。
@@ -292,6 +309,9 @@ public:
                                   ch_bool(false));
         exmem_alu_result <<= select(exmem_en, ex_stage.io().alu_result,
                                     exmem_alu_result);
+        // 返回地址（JAL/JALR 的写回值）—— 与 ALU 结果**同拍**锁存
+        exmem_link_value <<= select(exmem_en, ex_stage.io().link_value,
+                                    exmem_link_value);
         exmem_rs2_data <<= select(exmem_en, ex_stage.io().rs2_data,
                                   exmem_rs2_data);
         exmem_rd_addr <<= select(exmem_en, id_stage.io().rd_addr,
@@ -345,6 +365,8 @@ public:
         memwb_is_load->next    = select(exmem_valid, exmem_is_load, memwb_is_load);
         memwb_rd_addr->next    = select(exmem_valid, mem_stage.io().rd_addr_out, memwb_rd_addr);
         memwb_alu_result->next = select(exmem_valid, mem_stage.io().alu_result_out, memwb_alu_result);
+        // ⚠️ 返回地址**不过 MEM 级**（MEM 不碰它）⇒ 直接从 EX/MEM 寄存器抓
+        memwb_link_value->next = select(exmem_valid, exmem_link_value, memwb_link_value);
         memwb_mem_data->next   = select(exmem_valid, mem_stage.io().mem_data, memwb_mem_data);
         // MEM/WB 的 valid = MEM 级的 valid（气泡以 valid=0 逐级传播 ⇒
         // 数据保持、valid 清零 ⇒ WB 不会把陈旧指令再写回一次）
@@ -352,6 +374,7 @@ public:
 
         // MEM/WB -> WB stage（WB 只能看到 MEM/WB 寄存器 ⇒ 与 WB 级指令同拍）
         wb_stage.io().alu_result <<= memwb_alu_result;
+        wb_stage.io().link_value <<= memwb_link_value;
         wb_stage.io().rd_addr <<= memwb_rd_addr;
         wb_stage.io().mem_data <<= memwb_mem_data;
         wb_stage.io().is_load <<= memwb_is_load;
@@ -429,7 +452,14 @@ public:
         //    **不必要**的（消费者进 EX 时那条 load 已在 WB 写回）。
         //    `mem_is_load` 只给「独立使用 HazardUnit」的场景用。
         hazard.io().ex_is_load <<= id_stage.io().is_load;
-        hazard.io().ex_branch <<= id_stage.io().is_branch;
+        // ⚠️ `ex_branch` = **条件分支 + 跳转**（2026-10-26 扩展）：
+        //    `JAL`/`JALR` 是**无条件**跳 ⇒ 也必须 flush 错误路径
+        //    （否则 PC 跳了、错误路径的指令却继续流下去 ⇒ 效果泄漏）。
+        //    ⚠️ 两者**互斥**（一条指令不可能同时是 OP_BRANCH 与 OP_JAL/OP_JALR）
+        //    ⇒ `if_stage` 的隐式不变量（flush 的唯一来源是
+        //    `ex_branch & ex_branch_taken`，且 `branch_valid` 接同一个
+        //    `ex_stage.branch_taken`）**结构不变**。
+        hazard.io().ex_branch <<= id_stage.io().is_branch | id_stage.io().is_jump;
         hazard.io().ex_branch_taken <<= ex_stage.io().branch_taken;
         hazard.io().ex_alu_result <<= ex_stage.io().alu_result;
         // ⚠️ MUST 用 `exmem_alu_result`（EX/MEM 寄存器）而**不是**
@@ -463,15 +493,23 @@ public:
         auto branch_decoded = id_stage.io().is_branch;
         branch_count->next = select(reset_active, ch_uint<32>(0_d), branch_count + branch_decoded);
 
-        // ⚠️ `& hazard.io().flush` 冗余（`flush = ex_branch & branch_taken`
-        //    已蕴含 branch_taken）⇒ 保留只为可读性。
-        // ⚠️ 「背靠背 taken 分支」的误预测计数语义**未定义**（固件未覆盖）
-        //    ⇒ 已登记为已知边界。
-        auto branch_mispred_detected = ex_stage.io().branch_taken & if_stage.io().valid & hazard.io().flush;
+        // ⚠️ **控制重定向**（2026-10-26）：`ex_branch` 已扩为「条件分支 **+** 跳转」
+        //    ⇒ `branch_taken & flush` 现在同时包含 `JAL`/`JALR` 的重定向。
+        auto control_redirect =
+            ex_stage.io().branch_taken & if_stage.io().valid & hazard.io().flush;
+        // ⚠️ **误预测**只统计**条件分支**（`JAL`/`JALR` 是**无条件**跳 ⇒ 不是
+        //    「预测错误」）⇒ MUST 用 `id_stage.io().is_branch` 门控
+        //    （它是 **EX 级**那条指令的类型，与 `ex_stage.branch_taken` 同拍）。
+        //    ⚠️ 不加这个门控 ⇒ 每执行一条 `JAL`/`JALR` 都会被记一次「误预测」
+        //    ⇒ 性能计数器语义被污染（实测会多出 2 次）。
+        auto branch_mispred_detected = id_stage.io().is_branch & control_redirect;
         branch_mispredict->next = select(reset_active, ch_uint<32>(0_d), branch_mispredict + branch_mispred_detected);
 
         load_use_stalls->next = select(reset_active, ch_uint<32>(0_d), load_use_stalls + hazard.io().stall);
-        control_stalls->next = select(reset_active, ch_uint<32>(0_d), control_stalls + branch_mispred_detected);
+        // ⚠️ `control_stalls` 统计**全部**控制重定向造成的停顿拍数
+        //    （含 `JAL`/`JALR` —— 它们同样让流水线空 3 拍）⇒ 与「误预测」**分离**
+        //    （此前两者同源，只因固件里只有条件分支）。
+        control_stalls->next = select(reset_active, ch_uint<32>(0_d), control_stalls + control_redirect);
 
         io().perf_cycles <<= cycle_count;
         io().perf_instructions <<= commit_count;
