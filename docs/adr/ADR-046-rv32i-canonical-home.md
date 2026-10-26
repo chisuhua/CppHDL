@@ -326,6 +326,12 @@ C2 的代码改动 MUST 与 capability delta **同批落地**（新 capability `
 ### 不在本 ADR 范围
 
 - `hazard_unit.h` 前推语义裁决（D5）—— 独立 ADR + change。
+  ✅ **已裁决（2026-10-27）**：`docs/adr/ADR-047-rv32i-data-forwarding.md`
+  —— 裁决**接**前推，形态 = `chlib::ForwardingMux`（零新增组件）+ 档位 select
+  **打一拍** + 档位 1 源含 `link_value` + 档位 2 = `wb_stage.write_data`
+  + 删 5 个预留端口（含**环饵** `ex_alu_result`）+ 收敛 `ex_stage.rs1_data` 的
+  **双驱动**；验收 MUST 含**判别性固件**（当前固件刻意无冒险 ⇒ 前推接错全仓照绿）。
+  ⇒ 本 ADR 的 D5 **原文决策不变**（本 ADR 只裁决结构），语义由 ADR-047 承接。
 - `chlib::ForwardingUnit` 与 `riscv::ForwardingUnit` 的合并（D6）—— ADR-038 §2.3 已留。
 - JIT 对 `ch_mem` 读端口的 lowering —— 独立 objective `jit-mem-read-port-support`。
 - e2e parity 本身 —— C3 / `objective-rv32i-e2e`。

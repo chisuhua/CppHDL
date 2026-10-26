@@ -41,6 +41,14 @@ state of CPU forwarding infrastructure:
 > （namespace 仍是 `riscv`，ADR-046 D8）；`rv32i_core.h` → **`include/cpu/pipeline/hazard_detection_unit.h`**（改名，ADR-046 D8）。
 > ⇒ §2.2「example 下的组件**无 canonical home**」的表述**已被 ADR-046 D6 修正**：
 > 它们现在**有** canonical home（`include/cpu/`），只是当时尚未迁移。
+>
+> ⚠️ **2026-10-27 更新（ADR-047 `rv32i-data-forwarding`）**：流水线**侧**的前推接法
+> 已由 ADR-047 裁决（**接**；mux = 既有 `chlib::ForwardingMux`，零新增组件）。
+> ⇒ 本 ADR §2.3 的「两个 `ForwardingUnit` 合并留未来 change」**仍然有效**
+> （ADR-047 **不动** `riscv::ForwardingUnit`）。
+> ⚠️ **但必须点名警告**：`riscv::ForwardingUnit` 的 `ex_alu_result` 输入语义就是
+> 「**活的 EX 级组合输出**」⇒ **拿它直接接进流水线装配会形成组合环**
+> （= ADR-046 §1.3 的事故形态）⇒ 它是**环饵**，不得接入流水线。
 
 So **forwarding.h has exactly one consumer** (a smoke test) and
 is functionally distinct from `riscv::HazardUnit` (which is the
