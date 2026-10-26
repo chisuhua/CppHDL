@@ -452,7 +452,88 @@ TEST_CASE("Rv32iSoc - FirmwareEncoderCrossCheck", "[rv32i][soc][dual]") {
 }
 
 // ===========================================================================
-// ② 双路逐周期 parity + ISA 语义 golden（核心验收）。
+// ② JIT 回落契约（change rv32i-soc-dual-parity-2026-10 · T6 / D8）
+//
+// ⚠️ RV32I 的 imem/dmem 用 `ch_mem` ⇒ 图里有 `type_mem_read_port` ⇒
+//    JIT **必然回落**（`jit_ir_gen_lnode_state.cpp` 对它返回 UNSUPPORTED_OP）
+//    ⇒ 这不是缺陷，而是**必须被显式断言的契约**：
+//      ① 「回落」≠「未启用」（`is_jit_enabled()` 真但 `is_jit_compiled()` 假）
+//      ② 回落**原因可归因**（日志含 `JIT skipped` + `mem_read_port`）
+//      ③ 回落后的 trace 与**显式 interpreter** 的 trace 逐拍相同
+// ===========================================================================
+#if __has_include("jit/jit_compiler.h")
+TEST_CASE("Rv32iSoc - JitFallbackContract",
+          "[rv32i][soc][jit][verilator][e2e]") {
+    // ---- 捕获 `std::cout`（`CHINFO` 走 `std::cout`，见 include/utils/logger.h）----
+    // ⚠️ 捕获窗口 MUST 包住 **`Simulator` 的构造** —— 编译尝试发生在那里
+    //    （`src/simulator.cpp:55`：构造函数里就 `try_jit_compile()`）⇒
+    //    只包住后面的 `set_jit_enabled(true)` 会**漏掉**第一次尝试的日志。
+    std::ostringstream captured;
+    std::streambuf *saved = std::cout.rdbuf(captured.rdbuf());
+
+    auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim = std::make_unique<Simulator>(dev->context());
+    // 显式再触发一次（幂等；`jit_compiled_==false` 时会重新尝试）⇒
+    // 保证「JIT 被启用过」这个事实与日志无关地成立。
+    sim->set_jit_enabled(true);
+
+    const std::string log = captured.str();
+    std::cout.rdbuf(saved);  // 恢复
+
+    // ---- ① 回落 ≠ 「未启用」 ----
+    REQUIRE(sim->is_jit_enabled());
+    REQUIRE_FALSE(sim->is_jit_compiled());
+
+    // ---- ② 回落原因可归因 ----
+    // ⚠️ 「mem_read_port」这个归因来自 D8：在 `generate_ir` 的**中心失败点**
+    //    写 `last_error_msg_ = "unsupported node type: <type> (node_id=N)"` ⇒
+    //    「mem read port」与「图太小」**可区分**（此前两者都只打印
+    //    「small graph or unsupported op」⇒ 不可归因）。
+    REQUIRE(log.find("JIT skipped") != std::string::npos);
+    // ⚠️ 归因消息 MUST **非空**且指明「**哪个节点**、**多宽**/什么类型」——
+    //    此前这个失败出口**不写** `last_error_msg_` ⇒ 原因**是空的**
+    //    ⇒ 回落完全不可归因（实测）。
+    // ⚠️ 断言 MUST 精确匹配归因**格式**，MUST NOT 用宽泛的子串
+    //    （如 `find("mem_read_port")`）—— 那会命中**建图日志**里的
+    //    「Created node ... (mem_read_port, 32 bits)」⇒ **假阳性**。
+    // ⚠️ Catch2 不支持在断言里做链式比较 ⇒ 先算成局部 bool
+    const bool has_skipped = log.find("JIT skipped: ") != std::string::npos;
+    const bool reason_empty = log.find("JIT skipped: \n") != std::string::npos;
+    const bool has_width_reason =
+        log.find("unsupported node width: ") != std::string::npos;
+    const bool has_type_reason =
+        log.find("unsupported node type: ") != std::string::npos;
+    REQUIRE(has_skipped);
+    REQUIRE_FALSE(reason_empty);   // 原因 MUST 非空
+    const bool has_reason = has_width_reason || has_type_reason;
+    REQUIRE(has_reason);
+
+    // ---- ③ 回落后的 trace == 显式 interpreter 的 trace（逐拍全等）----
+    constexpr unsigned kCycles = 50;
+    load_firmware(*sim, dev->instance());
+    const Trace t_fallback = run_trace(*sim, dev->instance(), kCycles);
+
+    auto dev_i = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_i = std::make_unique<Simulator>(dev_i->context());
+    sim_i->set_backend(std::make_unique<ch::InterpreterBackend>());
+    load_firmware(*sim_i, dev_i->instance());
+    const Trace t_interp = run_trace(*sim_i, dev_i->instance(), kCycles);
+
+    REQUIRE(t_fallback.size() == t_interp.size());
+    for (std::size_t c = 0; c < t_fallback.size(); ++c) {
+        INFO("cycle " << c);
+        REQUIRE(t_fallback[c] == t_interp[c]);
+    }
+}
+#else
+TEST_CASE("Rv32iSoc - JitFallbackContract",
+          "[rv32i][soc][jit][verilator][e2e]") {
+    WARN("CH_JIT_ENABLE=OFF：JIT 回落契约不适用（无 JIT 编译器）");
+}
+#endif
+
+// ===========================================================================
+// ③ 双路逐周期 parity + ISA 语义 golden（核心验收）。
 // ===========================================================================
 TEST_CASE("Rv32iSoc - DualBackendTraceParity",
           "[rv32i][soc][dual][verilator][e2e]") {

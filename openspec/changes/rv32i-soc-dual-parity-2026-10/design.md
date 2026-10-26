@@ -105,19 +105,37 @@ DD2 实测确定（初值 3），并把该约束写成固件构造处的注释�
 **verilator 缺席处理**：`WARN` + `return`（**不是** `SKIP`）——
 `dual-backend-test-coverage` R4 的既有条款（全 SKIP ⇒ Catch2 exit 4 ⇒ CTest 判红）。
 
-## D8. JIT 归因：在 `generate_ir` 的中心失败点写原因
+## D8. JIT 归因：在**所有**失败出口写原因
 
-`generate_ir` 的循环里已有统一失败出口：
+⚠️ **2026-10-26 实测订正**：本节原方案只改 `generate_ir` 的循环失败出口
+（`if (r != JitResult::SUCCESS) { return r; }`）⇒ **实测不够**：
+`JitCompiler::compile()` 里 **`allocate_buffer` 在 `generate_ir` 之前**，
+而它的「节点宽度 > 64」检查**不设** `last_error_msg_` ⇒ **它才是本 SoC 的
+首个命中点** ⇒ 回落日志的原因**是空的** ⇒ 完全不可归因。
+
+⇒ **实施**（两个失败出口都写归因）：
 
 ```cpp
-if (r != JitResult::SUCCESS) { return r; }
+// allocate_buffer（实测的首个命中点）
+last_error_msg_ = "unsupported node width: " + to_string(node->type()) +
+                  " (node_id=" + ... + ", size=" + ... + " bits > 64)";
+
+// generate_ir 的循环（类型不支持，如 mem read port）
+last_error_msg_ = "unsupported node type: " + to_string(node_type) +
+                  " (node_id=" + ... + ")";
 ```
 
-⇒ 在此处设置 `last_error_msg_ = "unsupported node type: <type> (node_id=N)"`。
 **不改** `jit_ir_gen_lnode_state.cpp` 的签名（那是 free function，拿不到
 `last_error_msg_`），也**不改** `JitResult` 枚举。
 
-⇒ `CHINFO("JIT skipped ...")` 从此打印真实原因，「mem read port」与「图太小」可区分。
+⇒ `CHINFO("JIT skipped: %s")` 从此打印**真实原因**。实测（RV32I SoC）：
+`unsupported node width: mem (node_id=2460, size=131072 bits > 64)`
+（D-TCM 的 `ch_mem<ch_uint<32>, 4096>`）⇒ 「宽度超限」与「类型不支持」与
+「图太小」三者**可区分**。
+
+⚠️ 连带结论：**任何含大 `ch_mem`（> 2 个字）的设计都必然回落**（节点宽度
+> 64 bit）⇒ 这不是缺陷，而是 JIT 的**已知能力边界** ⇒ 回落契约 MUST 被
+**显式断言**（而非当作意外）。
 
 **测试如何读日志**：`CHINFO` → `log_message_simple` → **`std::cout`**（
 `include/utils/logger.h:351`，注意**不是** `cerr`）⇒ 测试内 `std::cout.rdbuf(oss.rdbuf())`

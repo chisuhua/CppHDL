@@ -497,7 +497,12 @@ void Simulator::try_jit_compile() {
         // W2 (perf-report-followup.md): small graphs intentionally skip JIT
         // to avoid paying LLVM ORC setup cost. Silent fallback to interpreter.
         jit_compiled_ = false;
-        CHINFO("JIT skipped (small graph or unsupported op): %s",
+        // ⚠️ 措辞改准（2026-10-26，D8）：此前括号里的「small graph or
+        //    unsupported op」**无法区分**两种原因 ⇒ 回落不可归因。
+        //    ⇒ 现在直接打印 `last_error_msg()` 的**真实原因**
+        //    （「graph too small for JIT (N nodes < …)」或
+        //    「unsupported node type: mem_read_port (node_id=…)」）。
+        CHINFO("JIT skipped: %s",
                jit_compiler_->last_error_msg().c_str());
     } else {
         std::string combined = result.error_msg;

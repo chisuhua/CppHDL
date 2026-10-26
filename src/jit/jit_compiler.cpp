@@ -206,6 +206,16 @@ JitResult JitCompiler::allocate_buffer(ch::core::context *ctx) {
       max_node_id = node->id();
     }
     if (node->size() > 64) {
+      // ⚠️ **归因**（2026-10-26，change `rv32i-soc-dual-parity-2026-10` D8）：
+      //    这个失败出口在 `generate_ir` **之前** ⇒ **实测它是 RV32I SoC 的
+      //    首个命中点**（此前 `last_error_msg_` 未被设置 ⇒ 回落日志的
+      //    原因**是空的** ⇒ 完全不可归因）。
+      //    ⇒ 在此写明「哪个节点、多宽、什么类型」。
+      last_error_msg_ =
+          std::string("unsupported node width: ") +
+          ch::core::to_string(node->type()) + " (node_id=" +
+          std::to_string(node->id()) + ", size=" +
+          std::to_string(node->size()) + " bits > 64)";
       return JitResult::UNSUPPORTED_OP;
     }
   }
@@ -310,6 +320,17 @@ JitResult JitCompiler::generate_ir(ch::core::context *ctx,
     }
 
     if (r != JitResult::SUCCESS) {
+      // ⚠️ **中心失败点的归因**（2026-10-26，change
+      //    `rv32i-soc-dual-parity-2026-10` D8）：
+      //    此处是所有「节点不支持」的**统一出口** ⇒ 在此写
+      //    `last_error_msg_` ⇒ `simulator.cpp` 的 `CHINFO("JIT skipped …")`
+      //    就能打印**真实原因**（「mem read port」vs「图太小」可区分）。
+      //    ⚠️ 不改 `generate_ir_lnode_state.cpp` 的签名（它是 free function，
+      //    拿不到 `last_error_msg_`），也不改 `JitResult` 枚举。
+      last_error_msg_ =
+          std::string("unsupported node type: ") +
+          ch::core::to_string(node_type) + " (node_id=" +
+          std::to_string(node->id()) + ")";
       return r;
     }
     if (count_comb) {

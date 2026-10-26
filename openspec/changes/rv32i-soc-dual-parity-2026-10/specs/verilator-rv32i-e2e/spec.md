@@ -6,9 +6,12 @@
 
 - **WHEN** `Rv32iPipelineTop`（`examples/riscv-mini/src/rv32i_pipeline_top.h`）被用作
   双后端 parity 的 DUT
-- **THEN** 它 MUST 以 `ch_out` 暴露 10 个观测信号：`obs_instr_addr`、`obs_data_addr`、
-  `obs_data_write_data`、`obs_data_write_en` + 6 个 `obs_perf_*`（与
-  `Rv32iPipeline` 的 6 个 `perf_*` 端口一一对应）
+- **THEN** 它 MUST 以 `ch_out` 暴露观测信号：`obs_instr_addr`、`obs_data_addr`、
+  `obs_data_write_data`、`obs_data_write_en`、`obs_data_rdata` + 6 个 `obs_perf_*`
+  （与 `Rv32iPipeline` 的 6 个 `perf_*` 端口一一对应）= **11 个功能观测**
+- **AND** 它 MUST 额外暴露**诊断观测**（`dbg_*`）以定位「指令流 / 有效链 /
+  写回 / 冒险脉冲」⇒ 合计 **27 个输出**（总端口 **32** = 5 输入 + 27 输出）
+  ⚠️ 实际集合由护栏 C6 快照钉住 ⇒ 以快照为准
 - **AND** 每个观测端口的位宽 MUST ≤ 64（ADR-035 R3 verilator 端口上限）
 
 #### Scenario: 观测点必须走顶层端口
@@ -101,11 +104,25 @@
 
 - **WHEN** `JitCompiler::generate_ir` 因某个节点的类型返回非 `SUCCESS`
 - **THEN** 它 MUST 设置 `last_error_msg_`，内容 MUST 标识**失败的节点类型**
-- **AND** `Simulator` 的 `CHINFO("JIT skipped ...")` MUST 打印该原因
+- **AND** `Simulator` 的 `CHINFO("JIT skipped: %s")` MUST 打印该原因
+  （实测：`unsupported node width: mem (node_id=…, size=131072 bits > 64)`）
+  ⇒ MUST NOT 是**空**字符串，也 MUST NOT 是「small graph or unsupported op」
+  这类**不可区分**的措辞
 - **AND** MUST NOT 出现「日志说 `graph too small` 而真实原因是 mem read port」
   这种归因错误
 
-#### Scenario: mem read port 回落 MUST 可归因
+#### Scenario: JIT 回落原因 MUST 可归因（实测：**首个命中点是「节点宽度 > 64」**）
+
+- **WHEN** JIT 编译失败并回落
+- **THEN** 日志 MUST 打印**具体**原因（节点类型 / node_id / 宽度）
+- **AND** MUST NOT 是空字符串或「small graph or unsupported op」这类**不可区分**的措辞
+- **NOTE**: **实测**（2026-10-26）：RV32I SoC 的**首个**命中点是
+  `allocate_buffer` 的「节点宽度 > 64」检查 ——
+  `unsupported node width: mem (node_id=…, size=131072 bits > 64)`
+  （D-TCM 的 `ch_mem<ch_uint<32>, 4096>` = 32 bit × 4096 字 = 131072 bit）。
+  ⚠️ 因此**「mem read port」不是本 SoC 的首个命中点**（imem/dmem 确实含
+  `type_mem_read_port`，但宽度检查**更早**）⇒ 断言 MUST 匹配**归因格式**，
+  MUST NOT 匹配具体 node_id 或具体原因。
 
 - **WHEN** 设计含 `ch_mem` 读端口（RV32I 必有 imem）
 - **THEN** `generate_ir` MUST 返回 `UNSUPPORTED_OP` 且 `last_error_msg_`
@@ -115,7 +132,8 @@
 
 - **WHEN** 对含 imem 的 RV32I SoC DUT 调用 `set_jit_enabled(true)`
 - **THEN** 测试 MUST 断言：① `is_jit_enabled() == true` **且**
-  `is_jit_compiled() == false`；② 日志含 `JIT skipped` 且原因可归因到
+  `is_jit_compiled() == false`；② 日志含 `JIT skipped` 且原因**非空**且指明
+  「节点类型 / node_id / 宽度」
   `mem_read_port`；③ 回落后的观测向量与显式 `set_jit_enabled(false)` 的
   interpreter 结果逐周期一致
 - **AND** `CH_JIT_ENABLE=OFF` 的构建里 MUST 编译通过并跳过该用例

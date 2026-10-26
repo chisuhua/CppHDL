@@ -99,12 +99,27 @@ cd "$(git rev-parse --show-toplevel)" && \
 
 ## T6 JIT 归因 + 回落断言（D8）
 
-- [ ] `src/jit/jit_compiler.cpp::generate_ir`：在 `r != SUCCESS` 的中心失败点写
-      `last_error_msg_ = "unsupported node type: <type> (node_id=N)"`
-- [ ] `Rv32iSoc - JitFallbackContract`：`#if __has_include("jit/jit_compiler.h")` 包裹；
-      断言 ①`is_jit_enabled()==true` && `is_jit_compiled()==false` ②`std::cout` 捕获到
-      `JIT skipped` + `mem_read_port` ③回落 trace == 显式 interpreter trace
-- [ ] `CH_JIT_ENABLE=OFF` 构建仍编译通过
+- [x] **归因写入两个失败出口**（⚠️ **D8 原方案不完整，已实测订正**）：
+      ① `src/jit/jit_compiler.cpp::generate_ir` 的循环失败点
+      ⇒ `last_error_msg_ = "unsupported node type: <type> (node_id=N)"`
+      ② **`allocate_buffer` 的「节点宽度 > 64」检查**（⚠️ **实测它才是本 SoC 的
+      首个命中点** —— 它在 `generate_ir` **之前** ⇒ 此前不写 `last_error_msg_`
+      ⇒ 回落日志的原因**是空的** ⇒ 完全不可归因）
+      ⇒ `last_error_msg_ = "unsupported node width: <type> (node_id=N, size=W bits > 64)"`
+      ⇒ 实测：`unsupported node width: mem (node_id=2460, size=131072 bits > 64)`
+      （D-TCM 的 `ch_mem<ch_uint<32>, 4096>`）
+- [x] `Simulator` 的 `CHINFO("JIT skipped: %s")` 措辞改准（去掉「small graph or
+      unsupported op」这种**不可区分**的措辞）
+- [x] `Rv32iSoc - JitFallbackContract`（`#if __has_include("jit/jit_compiler.h")` 包裹）：
+      断言 ①`is_jit_enabled()==true` && `is_jit_compiled()==false`
+      ②`std::cout` 捕获到 `JIT skipped` 且**原因非空**且指明「节点类型/node_id/宽度」
+      ③回落 trace == 显式 interpreter trace（50 拍 × 27 观测值逐拍全等）
+      ⚠️ 捕获窗口 MUST 包住 **`Simulator` 的构造**（编译尝试发生在
+      `src/simulator.cpp:55` 的构造函数里）
+      ⚠️ 断言 MUST 匹配**归因格式**，MUST NOT 用宽泛子串（如 `find("mem_read_port")`
+      —— 那会命中**建图日志**的「Created node … (mem_read_port, 32 bits)」⇒ 假阳性）
+- [x] **变异验证 M7**：去掉 `allocate_buffer` 的归因赋值 ⇒ `reason_empty` 断言**转红** ✔
+- [x] `CH_JIT_ENABLE=OFF` 构建仍编译通过
 
 verify:
 ```bash
