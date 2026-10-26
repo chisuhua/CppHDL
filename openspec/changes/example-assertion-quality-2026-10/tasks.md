@@ -5,21 +5,37 @@
 
 ## Phase 1: fixture 集（= 规格）
 
-- [ ] T1.1 建 `tests/fixtures/assertion_quality/` 目录与 10 个最小 fixture
+- [x] T1.1 ✅ 建 `tests/fixtures/assertion_quality/` 目录与 10 个最小 fixture
   （`live_assert` / `commented_out` / `dead_macro` / `dead_elif` /
   `dead_ifdef_else` / `live_else` / `live_elif` / `word_boundary` /
   `throws_only` / `succeed_only`），每个带注释说明它钉住哪种形态
-- [ ] T1.2 建自检脚本 `scripts/verify_assertion_quality_fixtures.sh`：
+  （2026-10-26 落地；fixture **不参与编译** —— `tests/CMakeLists.txt` 用显式源文件
+  列表，无 `GLOB_RECURSE`）
+- [x] T1.2 ✅ 建自检脚本 `scripts/verify_assertion_quality_fixtures.sh`：
   对每个 fixture 断言 `A` 与逐用例计数的**期望值**
-- [ ] T1.3 把自检脚本挂进 CI（与护栏同处 2 个 job）
+  （2026-10-26 落地；期望值**显式写死**在脚本的期望表 + 每个 fixture 的文件头
+  注释里 ⇒ 不得由实现反推；C1：期望表未登记的 fixture 文件 ⇒ 报违规）
+- [x] T1.3 ✅ 把自检脚本挂进 CI（与护栏同处 2 个 job：`build-and-test` 矩阵 +
+  `pr-verilator-fast`）
+- [x] T1.4 ✅（2026-10-26 实施时新增）**共享 lib 抽取**：
+  `scripts/lib/assertion_quality.sh` 承载 `analyze_source`（分析器）+
+  `aq_analyze_status` / `aq_violation_reason`（fail-closed 判定）；
+  护栏与 fixture 自检**共用同一份** ⇒ 实现与规格不可能分叉。
+  ⚠️ **行为等价性已实测**：抽取前后护栏输出**逐字一致**
+  （`diff` 基线快照 ⇒ 无漂移）。
+  ⚠️ **实测确认的已登记局限**（2026-10-26）：逐用例扫描用**子串**匹配 `TEST_CASE`
+  ⇒ 含该子串的标识符（如 `MY_TEST_CASE(`）会**吃掉一个名字槽** ⇒ 后续真实用例的
+  名字被误报为 `?`；**计数不受影响**。已由 fixture `identifier_lookalike.cpp` 钉住，
+  并写进 lib 的「能力边界 ④」。
 
 ## Phase 2: 护栏收尾
 
 - [x] T2.1 ✅ `CH4_ANCHOR` 与 `CH4_ANCHOR_README` **已在**
   `scripts/verify_example_assertion_quality.sh` 内（随 C1 拆分交付，**不**与
   C1 的护栏共享）
-- [ ] T2.2 确认 `scripts/verify_example_test_wiring.sh` 内**零**静态分析代码
-  （`grep -c 'analyze_source\|CH4_ANCHOR\|count_asserts'` = 0）
+- [x] T2.2 ✅ 确认 `scripts/verify_example_test_wiring.sh` 内**零**静态分析代码
+  （`grep -c 'analyze_source\|CH4_ANCHOR\|count_asserts'` = 0 ——
+  2026-10-26 实测确认）
 - [x] T2.3 ✅ 护栏文档已含「能力边界」小节（①②③，明确不覆盖等量替换 / 宏生成用例）
 
 ## Phase 3: 跨平台

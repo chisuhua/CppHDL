@@ -69,6 +69,7 @@ C1 在连续三轮对抗审稿（第 4 / 5 / 6 轮）里，**全部** BLOCKER �
 | `word_boundary.cpp` | `MYREQUIRE(` / `XCHECK(` | `A` = 0 |
 | `throws_only.cpp` | 只有 `REQUIRE_THROWS` | `A` = 1、C4b 通过 |
 | `succeed_only.cpp` | 只有 `SUCCEED` | `A` = 0、C4b **报违规** |
+| `identifier_lookalike.cpp` | `MY_TEST_CASE(` 这类**含 `TEST_CASE` 子串的标识符** | `A` = 2、`E` = 2、`C` = [1,1]（**钉住已登记的局限**：名字错位、计数不错） |
 
 ### 挂进 CI
 

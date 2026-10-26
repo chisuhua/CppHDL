@@ -233,6 +233,13 @@ bash scripts/run_all_samples.sh
 # MODIFIED 标题逐字匹配主 spec / tasks 的 verify 块语法可达）
 bash scripts/verify_openspec_delta.sh
 
+# 断言质量护栏（examples 内的测试 MUST 真的断言，不得只有 SUCCEED）
+bash scripts/verify_example_assertion_quality.sh
+
+# 该护栏的 fixture 自检 = **规格**（11 个 fixture 钉住每种计数形态；
+# 护栏与自检共用 scripts/lib/assertion_quality.sh 的同一份分析器）
+bash scripts/verify_assertion_quality_fixtures.sh
+
 # Run Catch2 tests
 ctest --output-on-failure
 

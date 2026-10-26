@@ -276,6 +276,20 @@ jobs:
       shell: bash
       run: scripts/verify_example_assertion_quality.sh
 
+    - name: Verify assertion quality fixtures (spec)
+      # The fixture set IS the spec of the assertion-quality guardrail:
+      # each fixture pins one mechanism (comment stripping / macro bodies /
+      # #elif dead branches / word boundary / throws-only / SUCCEED-only ...)
+      # with its expected executable-assertion counts.
+      # WHY A SEPARATE SCRIPT (not assertions inside the guardrail): the guardrail
+      # and the spec MUST share ONE analyser implementation
+      # (scripts/lib/assertion_quality.sh) - two copies would drift, which is
+      # exactly how C1's review rounds 4/5/6 found their BLOCKERs.
+      # Also checks the guardrail's fail-closed behaviour (empty output /
+      # missing end marker MUST be reported as violations, never as a false OK).
+      shell: bash
+      run: scripts/verify_assertion_quality_fixtures.sh
+
     - name: Verify RV32I single-source convergence
       # ADR-046 guardrail (change rv32i-canonical-convergence-2026-10):
       #   C1 no same-basename duplicate headers between include/cpu/** and
@@ -857,6 +871,20 @@ jobs:
       # (example-assertion-quality-2026-10) owns it, with a fixture set as spec.
       shell: bash
       run: scripts/verify_example_assertion_quality.sh
+
+    - name: Verify assertion quality fixtures (spec)
+      # The fixture set IS the spec of the assertion-quality guardrail:
+      # each fixture pins one mechanism (comment stripping / macro bodies /
+      # #elif dead branches / word boundary / throws-only / SUCCEED-only ...)
+      # with its expected executable-assertion counts.
+      # WHY A SEPARATE SCRIPT (not assertions inside the guardrail): the guardrail
+      # and the spec MUST share ONE analyser implementation
+      # (scripts/lib/assertion_quality.sh) - two copies would drift, which is
+      # exactly how C1's review rounds 4/5/6 found their BLOCKERs.
+      # Also checks the guardrail's fail-closed behaviour (empty output /
+      # missing end marker MUST be reported as violations, never as a false OK).
+      shell: bash
+      run: scripts/verify_assertion_quality_fixtures.sh
 
     - name: Verify RV32I single-source convergence
       # ADR-046 guardrail (change rv32i-canonical-convergence-2026-10):
