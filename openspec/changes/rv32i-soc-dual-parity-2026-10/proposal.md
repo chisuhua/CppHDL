@@ -1,9 +1,18 @@
 # 提案：RV32I SoC 双路 parity（interpreter + verilator）+ JIT 回落行为显式断言
 
-> ## ⏸ 状态：**挂起**（2026-10-25 P2 实测后）
+> ## ✅ 状态：**已恢复**（2026-10-26）
 >
-> **阻塞于** `.rddf/improvements/rv32i-pipeline-commit-path-2026-10.md`
-> （RV32I 流水线 commit / valid 通路修复）。
+> **前置 change `rv32i-pipeline-commit-path-2026-10` 已归档**
+> （`openspec/changes/archive/2026-10-26-rv32i-pipeline-commit-path-2026-10/`）
+> ⇒ SoC 现在能正确执行 48 字固件（3 个 store 的地址与数据全对、分支/停顿计数对、
+> 指令流与 PC 始终对齐、200 拍 × 27 个输出观测值**两后端零分歧**）⇒
+> 本 change 的「≥20 指令 SoC 级双路 parity」**可写了**。
+>
+> ⚠️ 落地时顺带修掉的：SoC 顶层从 6 个端口扩到 **32 个**（ADR-046 **D10-rev**），
+> 流水线 **17 个缺陷**（含 load-use 多拍停顿 A1-a、flush 漏杀在飞取指）。
+>
+> **本 change 剩余项**：T6（JIT 回落三件套断言）+ T8（门禁 + 审稿 + 归档）。
+> 下面这段是**历史记录**（挂起的原因）：
 >
 > **原因**：P2 起步时把 `Rv32iPipelineTop` 从空壳改成真 DUT 并写了 41 条指令的双后端
 > 逐周期比对测试 ⇒ **测试立刻证明 SoC 根本跑不动程序**：41 条固件 200 拍只退休 18 条，

@@ -129,8 +129,18 @@ cd "$(git rev-parse --show-toplevel)" && \
 - [x] `ctest -LE perf` 全绿；examples 28/28；samples 35/35；7 护栏 exit 0
 - [x] 第 13 轮 critic 整改（BLOCKER 1–4）
 - [x] 第 14 轮 critic 整改（BLOCKER 1 = 释放条件；BLOCKER 2 = spec 文本脱节）
-- [ ] 第 15 轮 critic 通过
-- [ ] `openspec archive` + 手写主 spec `## Purpose`
+- [x] 第 15 轮 critic 整改（BLOCKER 2 = spec 文本脱节；SHOULD_FIX 1–9；NIT 1–7）
+- [x] 第 16 轮 critic 整改（BLOCKER B1 = flush 漏杀在飞取指；B2 = spec 自相矛盾；
+      SHOULD_FIX 1–9；NIT 1–7）
+- [x] 第 17 轮 critic 整改（BLOCKER 1 = 停顿丢弃「消费者之后的第一条指令」⇒
+      **边界登记** + compile-time 静态护栏；BLOCKER 2 = 金标漂移；BLOCKER 3 =
+      spec 内部矛盾 R2/R5；SHOULD_FIX 1–6；NIT 1–4）
+- [x] 第 18 轮 critic 整改（BLOCKER = 退休数公式与测试不同义；SHOULD_FIX 1–4；
+      NIT 1–4）
+- [x] ⚠️ **第 19 轮 critic 因 subagent 配额用尽未能执行** ⇒ 由 build agent
+      自查等价核验（契约层无自相矛盾 / compile-time 护栏有判别力（已用变异
+      验证）/ 数字漂移清零 / 残留均已登记）⇒ **待配额恢复后补审**
+- [x] `openspec archive` + 手写主 spec `## Purpose`
 
 verify:
 ```bash
