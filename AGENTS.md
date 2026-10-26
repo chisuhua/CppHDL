@@ -122,6 +122,7 @@ See `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` for full detail
 - `ch_module` in standalone tests: use `ch_device` instead
 - Empty TEST_CASE: use SKIP() or delete
 - Missing ctx_swap: register ops segfault without it
+- **新增组件输入端口 ⇒ 全部实例化点 MUST 显式驱动**（2026-10-26 登记）：未驱动的输入端口读到的是**未定义值**（实测 `strbe` 读到**全 1**、`rst_n` 读到 0）⇒ 依赖默认值会让测试「**碰巧**通过」而跨后端行为可能分叉。⚠️ 当前**无自动化护栏**覆盖这一类（`scripts/verify_rst_n_wiring.sh` 只覆盖 `rst_n`）⇒ **独立立项**（需要「必需端口注册表」）。具体实例见 `openspec/specs/rv32i-isa-semantics/spec.md`。
 
 ## OPENSPEC WORKFLOW
 The project is `schema: spec-driven` (see `openspec/config.yaml`). `openspec/specs/` is the **current spec source of truth** — never bypass it.

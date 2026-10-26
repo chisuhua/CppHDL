@@ -149,12 +149,17 @@ public:
 
         dtcm.io().wdata <<= select(io().dtcm_write_en, io().dtcm_write_data, pipeline.io().data_write_data);
         dtcm.io().write <<= io().dtcm_write_en | pipeline.io().data_write_en;
-        // ⚠️ **字节使能 MUST 显式驱动**（2026-10-26 新增，`DataTCM` 新增 `strbe` 端口）：
-        //    本 fixture 的写都是**整字写** ⇒ 车道 = 0xF（全 4 字节）。
-        //    ⚠️ 未驱动的输入端口在本框架里读到的是**全 1**（不是 0）⇒ 恰好等价
-        //    于整字写 ⇒ **测试会「碰巧」通过** ⇒ 但那是未定义行为依赖
-        //    （verilator 与 interpreter 的未驱动初值未必相同）⇒ MUST 显式接线。
-        dtcm.io().strbe <<= ch_uint<4>(15_d);
+        // ⚠️ **字节使能 MUST 随写路径切换**（2026-10-26 新增，`DataTCM` 新增 `strbe` 端口）：
+        //    本 fixture 有**两条**写路径：
+        //      ① 测试台直接写（`dtcm_write_en`）⇒ **整字写** ⇒ 车道 = 0xF；
+        //      ② **流水线**写（`pipeline.data_write_en`）⇒ MUST 用流水线算出的
+        //         `data_strbe`（含 `sb`/`sh` 的车道掩码）。
+        //    ⚠️ 恒驱动 0xF 会让 riscv-tests 里的 `rv32ui-p-sb` / `rv32ui-p-sh`
+        //    变成「**lane 对齐数据的整字覆盖**」⇒ 结果错误（当前 CI 全 SKIP、
+        //    该 target 只构建不注册 ⇒ 这颗雷是**已定位未引爆**的）。
+        //    ⇒ mux 条件与上面 `wdata` 的 mux **同构**。
+        dtcm.io().strbe <<= select(io().dtcm_write_en, ch_uint<4>(15_d),
+                                  pipeline.io().data_strbe);
 
         io().perf_cycles <<= pipeline.io().perf_cycles;
         io().perf_instructions <<= pipeline.io().perf_instructions;
