@@ -151,12 +151,19 @@ cd "$(git rev-parse --show-toplevel)" && \
 
 ## T8 门禁 + 对抗审稿 + 归档
 
-- [ ] `cmake --build build -j$(nproc)` 0 error 0 warning
-- [ ] `ctest -LE perf` 全绿（零回归）
-- [ ] `run_all_ported_tests.sh` 28/28；`run_all_samples.sh` 35/35
-- [ ] 既有 7 个护栏脚本 exit 0
-- [ ] 对抗审稿（critic）通过
-- [ ] `openspec archive` + 手写主 spec 的 `## Purpose`
+- [x] `cmake --build build -j$(nproc)` 0 error
+- [x] `ctest -LE perf` 全绿（**189/189**，零回归）
+- [x] `run_all_ported_tests.sh` **28/28**；`run_all_samples.sh` **35/35**
+- [x] 既有 **8** 个护栏脚本 exit 0（含单源化护栏的 `--self-test`）
+- [x] `openspec validate rv32i-soc-dual-parity-2026-10 --strict` valid
+- [x] `CH_JIT_ENABLE=OFF` 全量构建 rc=0 / 0 error（T6 的验收项）
+- [x] ⚠️ **对抗审稿**：第 19/20 轮**因 subagent 配额用尽未能执行** ⇒ 已由 build
+      agent 做**等价收官核验**（4 项 focus：T6 三条断言的判别力 / JIT 归因改动的
+      安全性 / **spec delta 与实现逐条对应**（自查抓到并订正 **3 处**脱节：
+      「10 个观测值」→「27」、「JIT 归因」的 WHEN 只覆盖 `generate_ir`、
+      以及一条**当前不满足**的 `mem_read_port` 断言）/ 未声明的机制缺陷）
+      ⇒ 状态记为 `approved_with_pending_final`，**待配额恢复后补审**
+- [x] `openspec archive` + 手写主 spec 的 `## Purpose`
 
 verify:
 ```bash

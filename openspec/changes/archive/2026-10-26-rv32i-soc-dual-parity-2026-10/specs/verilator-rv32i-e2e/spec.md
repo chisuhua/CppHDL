@@ -65,7 +65,8 @@
   + 一份 `Simulator`；interpreter 侧 MUST 显式
   `set_backend(std::make_unique<InterpreterBackend>())`，verilator 侧 MUST
   `set_backend(std::make_unique<VerilatorBackend>(workdir))`
-- **AND** 每 tick MUST 跨后端比对 10 个观测值，持续 ≥ 200 拍
+- **AND** 每 tick MUST 跨后端比对**全部 27 个输出观测值**（11 功能 `obs_*` +
+  16 诊断 `dbg_*`），持续 ≥ 200 拍
 - **AND** imem MUST 用 `sread`（`verilator-e2e-coverage` §R1 invariant 3）
 
 #### Scenario: 不得用 `DUAL_BACKEND_TEST_PAIR` 宏做逐周期 diff
@@ -102,14 +103,16 @@
 
 ### Requirement: JIT 跳过原因 MUST 可归因
 
-- **WHEN** `JitCompiler::generate_ir` 因某个节点的类型返回非 `SUCCESS`
-- **THEN** 它 MUST 设置 `last_error_msg_`，内容 MUST 标识**失败的节点类型**
+- **WHEN** JIT 编译在**任一**失败出口返回非 `SUCCESS`
+  （⚠️ **实测有两个出口**，且**顺序**决定归因：`allocate_buffer` 的「节点宽度 > 64」
+  在 `generate_ir` **之前** ⇒ 它是本 SoC 的**首个**命中点）
+- **THEN** 该出口 MUST 设置 `last_error_msg_`，内容 MUST 标识**失败的节点**
+  （类型 / node_id / 宽度）
 - **AND** `Simulator` 的 `CHINFO("JIT skipped: %s")` MUST 打印该原因
   （实测：`unsupported node width: mem (node_id=…, size=131072 bits > 64)`）
   ⇒ MUST NOT 是**空**字符串，也 MUST NOT 是「small graph or unsupported op」
   这类**不可区分**的措辞
-- **AND** MUST NOT 出现「日志说 `graph too small` 而真实原因是 mem read port」
-  这种归因错误
+- **AND** MUST NOT 出现「日志说 `graph too small` 而真实原因是别的」这种归因错误
 
 #### Scenario: JIT 回落原因 MUST 可归因（实测：**首个命中点是「节点宽度 > 64」**）
 
@@ -124,17 +127,15 @@
   `type_mem_read_port`，但宽度检查**更早**）⇒ 断言 MUST 匹配**归因格式**，
   MUST NOT 匹配具体 node_id 或具体原因。
 
-- **WHEN** 设计含 `ch_mem` 读端口（RV32I 必有 imem）
-- **THEN** `generate_ir` MUST 返回 `UNSUPPORTED_OP` 且 `last_error_msg_`
-  MUST 提到 `mem_read_port`（非空串、非 `graph too small`）
-
 ### Requirement: RV32I SoC 的 JIT 回落行为 MUST 被显式断言
 
 - **WHEN** 对含 imem 的 RV32I SoC DUT 调用 `set_jit_enabled(true)`
 - **THEN** 测试 MUST 断言：① `is_jit_enabled() == true` **且**
   `is_jit_compiled() == false`；② 日志含 `JIT skipped` 且原因**非空**且指明
-  「节点类型 / node_id / 宽度」
-  `mem_read_port`；③ 回落后的观测向量与显式 `set_jit_enabled(false)` 的
+  「节点类型 / node_id / 宽度」（⚠️ MUST 匹配**归因格式**，MUST NOT 匹配具体
+  node_id 或具体原因 —— 实测 `find("mem_read_port")` 会命中**建图日志**的
+  「Created node … (mem_read_port, 32 bits)」⇒ **假阳性**）；
+  ③ 回落后的观测向量与**显式 `set_backend(InterpreterBackend)`** 的
   interpreter 结果逐周期一致
 - **AND** `CH_JIT_ENABLE=OFF` 的构建里 MUST 编译通过并跳过该用例
 

@@ -509,6 +509,12 @@ TEST_CASE("Rv32iSoc - JitFallbackContract",
     REQUIRE(has_reason);
 
     // ---- ③ 回落后的 trace == 显式 interpreter 的 trace（逐拍全等）----
+    // ⚠️ **诚实说明**：当前实现下 ③ 是**恒真**的（JIT 回落 ⇒ 走的**就是**
+    //    interpreter 路径）⇒ 它**此刻**没有判别力。
+    //    ⇒ 它的价值是**前置护栏**：将来若 JIT 支持了 `type_mem_read_port`
+    //    （⇒ 编译成功 ⇒ 走 JIT-native 路径），③ 仍 MUST 成立 ⇒
+    //    **任何**「JIT-native 与 interpreter 不等价」的回归都会在此被抓。
+    //    （与「DUAL_BACKEND_TEST_PAIR」类断言同性质：**为未来兜底**。）
     constexpr unsigned kCycles = 50;
     load_firmware(*sim, dev->instance());
     const Trace t_fallback = run_trace(*sim, dev->instance(), kCycles);
