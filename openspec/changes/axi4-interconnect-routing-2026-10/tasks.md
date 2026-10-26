@@ -33,12 +33,16 @@
 > | `grep ... \| wc -l` 期望「= N 个文件」 | `wc -l` 数**行**不数文件 → 永假红 | `grep -rl ... \| wc -l` |
 > | 临时文件写 `/tmp` | 违反仓库约定（root AGENTS.md：临时文件 MUST 用 `/tmp/opencode/<name>`） | 一律用 `/tmp/opencode/` |
 > | **`openspec validate --strict` 直接当布尔用** | 本机 CLI **1.14.3** 会对本 change 的 5 条长 Requirement 报 `>500 characters` ⇒ **exit 1 假红**（本仓钉 1.4.1；该规则是 1.14.x 新增，纯净 HEAD 同样红） | 用 Task 0 的**版本容忍**写法：只对 `[ERROR]` / `Unknown item` 判红 |
+> | **`grep -c` 数「行」当「个数」用** | `ch_reg<...> a, b, c;` **一行声明多个**寄存器 ⇒ `grep -c "ch_reg<"` = 13 而寄存器数 = 31；文件头**注释**里也含 `select(!io().rst_n` ⇒ 33 | 数**寄存器个数**用 `grep -oE "ch_reg<[^>]*>[^;]*" \| grep -oE "[a-z_][a-z_0-9]*" \| grep -cE "^(aw_ptr\|ar_ptr\|wr_\|rd_\|err_)"`；数**复位 pattern 个数**用 `grep -cE "\->next *= *select\(!io\(\)\.rst_n"`（两者 MUST 相等） |
+> | **`ch_reg<T>` 写成裸 `T`** | `struct` 成员写成 `ch_bool x;` 而非 `ch_reg<ch_bool> x;` ⇒ `x->next = ...` 编译报 `base operand of '->' has non-pointer type` | 状态成员 MUST 是 `ch_reg<T>`；`IcState` 里全部 31 个成员均如此 |
+> | **`set_input_value()` 后直接 `get_port_value()`** | `set_input_value()` **只写数据槽、不触发重新求值** ⇒ 紧随其后的读拿到的是**上一次 tick** 的组合值 ⇒ 所有握手等待**假超时**（现象：`awready` 恒读出 0，而内部 `active` 已是 1） | 等待循环里 MUST 先 `sim.eval_combinational()` 再读组合值 |
+> | **复位窗口内仍挂着 `valid`/`ready`** | 复位释放那一拍 `valid & ready` 同时为高 ⇒ **再握手一次**（在途标志被立刻重新置位）⇒ 复位后「全新事务」用例假红 | 进复位窗口**之前**先撤掉总线上的 VALID/READY |
 >
 > **proposal → task 映射**：D1 → Task 3；D2 → Task 4；D3 → Task 5；D4 → Task 6；
 > D5 → Task 3（裁决）；D6 → Task 6；D7 → Task 7；D8 → Task 2 / Task 3-6 / Task 8；
 > D9 → Task 8；D10 → Task 9。
 
-- [ ] ### Task 0: spec 冲突消解 + 变更影响面清点
+- [x] ### Task 0: spec 冲突消解 + 变更影响面清点
   - **action**:
     - 本 change 的 spec delta 为 **1 个新 capability**：
       `specs/axi-interconnect-routing/spec.md`（ADDED ×6）
@@ -68,7 +72,7 @@
     上一段 MUST 输出 **VALIDATE_OK**；实例化点计数 MUST 为 **2**
     （已实测：`examples/axi4/axi_soc_example.cpp` + `examples/axi4/phase3a_complete.cpp`）
 
-- [ ] ### Task 1: 建立「缺陷可观测」基线（不改实现）
+- [x] ### Task 1: 建立「缺陷可观测」基线（不改实现）
   - **action**:
     - 写一个**最小复现**程序（临时文件 MUST 放 `/tmp/opencode/`），
       逐条确认 C1-C4 的症状确实存在：
@@ -89,7 +93,7 @@
     ```
     三条 MUST 均为 **0**（确认缺陷存在，Task 4 之后 MUST 变为非 0）
 
-- [ ] ### Task 2: 写会失败的路由用例（RED）
+- [x] ### Task 2: 写会失败的路由用例（RED）
   - **action**:
     - 新建 `tests/test_axi_interconnect_4x4.cpp` 与
       `tests/test_axi_lite_matrix_2x2.cpp`，用
@@ -123,15 +127,22 @@
       （**MUST 用 `SOURCES` 关键字形式**，`TIMEOUT 600`）
   - **verify**:
     ```bash
-    cmake -B build && cmake --build build -j$(nproc) --target test_axi_interconnect_4x4 test_axi_lite_matrix_2x2
-    ./build/tests/test_axi_interconnect_4x4 --list-tests | grep -c .
-    cd build && ctest -N -R "test_axi_interconnect_4x4|test_axi_lite_matrix_2x2" | tail -1
+    cmake -B build && cmake --build build -j$(nproc) --target test_axi_interconnect_4x4
+    ./build/tests/test_axi_interconnect_4x4 --list-tests | grep -cE "^  [A-Za-z]"
+    cd build && ctest -N -R "test_axi_interconnect_4x4" | tail -1
     ```
-    第 2 条 MUST 命中 **28**（14 对 × 2 后端）；
-    第 3 条 MUST 命中 **2**（2 个文件 = 2 个 ctest 条目）；
+    第 2 条 MUST 命中 **28**（14 对 × 2 后端）
+    （⚠️ as-built 订正：原判据 `grep -c .` 数的是**行**（含 tag 行）⇒ 实测 **68** ⇒ 永假红；
+    真判据是 `grep -cE "^  [A-Za-z]"` = **28**）
+    第 3 条 MUST 命中 **1**（1 个文件 = 1 个 ctest 条目）
+    （⚠️ as-built **偏差（已记录，非疏漏）**：原计划本 Task 同时建
+    `test_axi_lite_matrix_2x2.cpp`，但它的 DUT（`AxiLiteMatrix2x2`）在本 change 里
+    **要到 Task 7 才修** ⇒ 本 Task 无法写出有判别力的 RED（2×2 的期望语义需与
+    实现同读）⇒ **2×2 的测试文件 + CMake 注册随 Task 7 一并落地**，
+    见 Task 7 的 verify。）
     **此时测试 MUST 是红的**（RED 基线）
 
-- [ ] ### Task 3: 引入 `rst_n` + 路由锁存
+- [x] ### Task 3: 引入 `rst_n` + 路由锁存
   - **action**:
     - **复位契约已裁决**（2026-10-21，proposal D5）：互连层**暴露** `rst_n`
       → 本 Task MUST 落地，不存在「选不选」的分支
@@ -157,25 +168,38 @@
       （`include/axi4/axi4_lite_matrix.h:146-149`、`:212-213`），但 MUST 覆盖写读两个方向
   - **verify**:
     ```bash
-    grep -cE "select\(!io\(\)\.rst_n" include/axi4/axi_interconnect_4x4.h
-    grep -c "ch_reg<" include/axi4/axi_interconnect_4x4.h
+    # ⚠️ as-built 订正（2026-10-26，builder）：原判据**两处失真** ——
+    #   ① `ch_reg<...> a, b, c;` **一行声明多个**寄存器 ⇒ `grep -c "ch_reg<"` 数的是
+    #      **行**（13）而非寄存器数（31）；
+    #   ② 文件头与 `IcState` 的**注释**里也写着 `select(!io().rst_n, ...)`
+    #      ⇒ `grep -cE "select\(!io\(\)"` 多命中 2 次（33 vs 31）。
+    #   ⇒ 唯一有判别力的判据 = 「`->next` 赋值次数 == 寄存器个数」
+    #      （漏一个复位 pattern = 静默破坏 ⇒ 两者 MUST 相等）。
+    grep -cE "\->next *= *select\(!io\(\)\.rst_n" include/axi4/axi_interconnect_4x4.h
+    grep -oE "ch_reg<[^>]*>[^;]*" include/axi4/axi_interconnect_4x4.h | grep -oE "[a-z_][a-z_0-9]*" | grep -cE "^(aw_ptr|ar_ptr|wr_|rd_|err_)"
     grep -rn "interconnect.io().rst_n <<=" examples/ | wc -l
-    grep -rn "matrix.io().rst_n <<=" examples/ | wc -l
-    grep -cE "write_route|read_route" include/axi4/axi_interconnect_4x4.h
+    grep -cE "wr_route|rd_route" include/axi4/axi_interconnect_4x4.h
     ```
-    第 1 条 MUST = 第 2 条（每个 `ch_reg` 都有复位 pattern，漏一个 = 静默破坏）；
-    第 3 / 4 条 MUST 各 = 1（接线护栏）；
-    第 5 条 MUST ≥ 4（4 个 master 各一组）
+    第 1 与第 2 条 MUST 相等（实测 **31 == 31**）：每个 `ch_reg` 都有复位 pattern；
+    第 3 条 MUST = 1（4×4 接线护栏）；
+    第 4 条 MUST ≥ 4（4 个 master 各一组，实测 **60**）
     （⚠️ MUST NOT 用 `grep -cE "route"` —— 文件头注释就命中，**永假绿**）
+    （⚠️ 原判据里的 `grep -rn "matrix.io().rst_n <<=" ... MUST = 1` **移入 Task 7** ——
+    2×2 的 `rst_n` 端口本身在 Task 7 才存在 ⇒ Task 3 无法接线
+    ⇒ **计划排序缺陷**，as-built 修正为「4×4 在 Task 3 接线 / 2×2 在 Task 7 接线」）
   - **action（续）**:
     - 路由锁存用例 MUST 由红转绿
   - **verify（续）**:
     ```bash
-    ./build/tests/test_axi_interconnect_4x4 "*lock*"
+    ./build/tests/test_axi_interconnect_4x4 "*latch*"
+    ./build/tests/test_axi_interconnect_4x4 "*route latch*"
     ```
     MUST 转绿（用 Catch2 名称过滤，**不要**用 ctest 粒度）
+    （⚠️ as-built 订正：原过滤串 `*lock*` **匹配不到任何用例**（用例名是
+    `... route latch: changing AWADDR after handshake`，无 `lock` 子串）
+    ⇒ 空过滤 ⇒ 0 用例 ⇒ **恒过**（永假绿）⇒ 改用 `*latch*`）
 
-- [ ] ### Task 4: 16 对全扇出（AW / W / AR 正向 + B / R 反向）
+- [x] ### Task 4: 16 对全扇出（AW / W / AR 正向 + B / R 反向）
   - **action**:
     - 补齐 C1-C4 / C12 的全部缺失赋值（**只对 `ch_out` 赋值**）：
       - `m1/m2/m3` 的 `wready` / `arready`（**输出**）
@@ -205,7 +229,7 @@
     ```
     MUST 逐项转绿
 
-- [ ] ### Task 5: 独立仲裁器（AW / AR 各一套）
+- [x] ### Task 5: 独立仲裁器（AW / AR 各一套）
   - **action**:
     - 拆成 2 个 `ch_reg<ch_uint<2>>` 指针 + 各自的 grant：
       写仲裁用 `awvalid`，读仲裁用 `arvalid`
@@ -222,7 +246,7 @@
     ```
     Task 2 的用例 9 / 11 / 12 MUST 转绿
 
-- [ ] ### Task 6: 地址映射参数化 + error responder + 死代码清理
+- [x] ### Task 6: 地址映射参数化 + error responder + 死代码清理
   - **action**:
     - 把硬编码的 `awaddr >> 30` 改为**编译期可配置**的窗口映射
       （base / size 或等价形式）
@@ -244,6 +268,30 @@
     ./build/tests/test_axi_interconnect_4x4 "*decerr*"
     ```
     第 1 条 MUST 为 0；第 2 条 Task 2 的用例 5 / 6 MUST 转绿
+
+### Tasks 0-6 完成记录（2026-10-26，builder）
+
+| Task | 交付 | 实测验收 |
+|---|---|---|
+| 0 | spec 冲突消解 + 实例化点清点 | `VALIDATE_OK`；实例化点 = **2**（`phase3a_complete.cpp` + `axi_soc_example.cpp`） |
+| 1 | 缺陷面基线（15 项逐条确认） | `m1-3 wready/arready`=0、`s1-3 AR/B/R`=0、`m0-3 rresp`=0、`build_decoder` 死码、两组件 `rst_n`=0 —— 全部确认缺陷**仍在** |
+| 2 | RED 测试骨架（`tests/test_axi_interconnect_4x4.cpp`） | 14 对 × 2 后端 = **28** 个 TEST_CASE |
+| 3 | `rst_n` + 路由锁存 | **31 个寄存器 / 31 个复位 pattern**（1:1）；4×4 接线 1 处 |
+| 4 | 16 对全扇出（AW/W/B/AR/R 五通道）+ 在途门控 | `m1-3 wready/arready`=**6**、`s1-3 AR/B/R`=**9**、`m0-3 rresp`=**4**；120 个 `ch_out` **各赋值恰好 1 次** |
+| 5 | AW/AR **独立**仲裁 + 让位 + 在途保持 + 仅事务完成才轮转 | `*arbit*` / `*inflight*` / `*concurrency*` 用例转绿 |
+| 6 | 编译期可配置窗口映射 + error responder + 删死码 | `build_decoder`=**0**；`*decerr*` 用例转绿（写 = bvalid 保持；读 = `arlen+1` 个 DECERR beat + 末拍 rlast） |
+
+**核心改动**：`include/axi4/axi_interconnect_4x4.h` 从 520 行 → **923 行**（接近重写：
+C1-C14 横跨全部 5 个通道 + 读侧错误解码）。新增模板参数 `Map`（尾部默认参数，
+向后兼容 `AxiInterconnect4x4<32,32,4>`）+ `AxiAddrWindow` / `AxiDefaultInterconnectMap`
+（4×1GiB 窗口，与旧 `awaddr >> 30` **逐位等价** ⇒ 默认配置下 DECERR 不可触发；
+测试用 `SparseTestMap`（4×4KiB 窗口）⇒ DECERR 可测）。
+
+**验收实测**：
+- `test_axi_interconnect_4x4` interpreter 半边：**14/14 通过，354 断言**
+- 同上 verilator 半边：**14/14 通过，354 断言**
+- `ctest -LE perf` 全量：**190/190 通过**（基线 189 + 本 change 的 1 个新文件 ⇒ 无回归）
+- `ctest -N`：**201**（原 200）
 
 - [ ] ### Task 7: `AxiLiteMatrix2x2` 的活地址解码修正
   - **action**:

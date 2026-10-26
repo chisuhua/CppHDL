@@ -73,6 +73,9 @@ public:
         // ========================================================================
         
         ch::ch_module<AxiInterconnect4x4<32, 32, 4>> interconnect{"interconnect"};
+        // 互连层是 rst_n 链路的中间节点：MUST 透传父级复位源（MUST NOT tie 常量，
+        // 那会永久掩盖复位路径）。顶层 rst_n 已驱动 converter / slave，此处是纯增量。
+        interconnect.io().rst_n <<= io().rst_n;
         
         // ========================================================================
         // 2. AXI to AXI-Lite Converter (从设备 0 路径)

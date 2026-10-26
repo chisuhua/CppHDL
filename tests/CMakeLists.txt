@@ -492,6 +492,13 @@ add_dual_backend_test(test_axi_rst_n_guard
     SOURCES test_axi_rst_n_guard.cpp
     TIMEOUT 300
 )
+# 4x4 AXI 互连的 16 对全路由 / 路由锁存 / 独立仲裁 / DECERR error responder / rst_n
+# ——双后端。TB 同时扮演 master 与 slave（MUST NOT 实例化 Axi4Slave 当 fixture）。
+add_dual_backend_test(test_axi_interconnect_4x4
+    SOURCES test_axi_interconnect_4x4.cpp
+    TIMEOUT 600
+)
+# 2x2 AXI-Lite 矩阵的活地址解码修正 ——双后端。（Task 7 随实现一起注册）
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)
