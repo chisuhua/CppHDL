@@ -71,6 +71,14 @@ public:
         ch_in<ch_uint<7>>  funct7;     // 功能码 7 位
         ch_in<ch_uint<4>>  alu_op;     // ALU 操作类型选择
         ch_in<ch_bool>     is_branch;  // 是否为分支指令
+        // ⚠️ **跳转标志 MUST 由 `idex_is_jump`（**气泡时清零**）驱动**，不得靠
+        //    `opcode` 比较判断 —— `idex_opcode` / `idex_pc` / `idex_imm` 在气泡拍
+        //    **不清零**（它们被当作「valid=0 即无害」的数据字段）⇒ 若用裸 opcode
+        //    判「这是不是跳转」，则**错误路径上的 JAL/JALR** 会在气泡拍继续
+        //    拉高 `branch_taken`（此时 `ex_branch=0` ⇒ flush=0 ⇒ 无人拦住）
+        //    ⇒ **静默劫持 PC**（实测：错误路径放 `JALR x27, 100(x0)` ⇒
+        //    PC 被拽到 100 ⇒ 程序重启 ⇒ `store_cycles` 断言转红）。
+        ch_in<ch_bool>     is_jump;    // 跳转指令（JAL/JALR）—— **气泡时已被清零**
         ch_in<ch_uint<3>>  branch_type; // 分支类型 (funct3)
         ch_in<ch_bool>     is_store;   // 存储指令 (传递到输出)
         
@@ -192,15 +200,18 @@ public:
         // ⚠️ `JALR` 的 `rs1` 取 `io().rs1_data` ⇒ **无数据前推**（ADR-046 D5 悬置）
         //    ⇒ 若 `rs1` 由**前一条**指令写入 ⇒ 读到**旧值** ⇒ 已知限制
         //    （见 design.md §5）。
-        auto is_op_branch = (io().opcode == ch_uint<7>(OP_BRANCH));
-        auto is_op_jal    = (io().opcode == ch_uint<7>(OP_JAL));
-        auto is_op_jalr   = (io().opcode == ch_uint<7>(OP_JALR));
+        auto is_op_jalr   = (io().opcode == ch_uint<7>(OP_JALR)) & io().is_jump;
         auto branch_target_calc = io().pc + io().imm;  // B 型 / JAL 共用
         auto jalr_target_calc =
             (io().rs1_data + io().imm) & ch_uint<32>(0xFFFFFFFE_h);  // & ~1
         auto jump_target_calc = select(is_op_jalr, jalr_target_calc,
                                        branch_target_calc);
-        auto jump_unconditional = is_op_jal | is_op_jalr;
+        // ⚠️ **无条件跳转 MUST 用气泡清零后的 `is_jump`**（见端口注释）：
+        //    用裸 opcode 会让「错误路径的 JAL/JALR」在气泡拍劫持 PC（实测复现）。
+        //    ⚠️ `is_op_jalr` 也 MUST 与 `is_jump` 相与（否则气泡拍的残留 opcode
+        //    会让 JALR 分支被选中 —— 虽然此时 `jump_unconditional=0` ⇒ 不会被选，
+        //    但显式相与让「这个信号只在真跳转时才有意义」成为可读的契约）。
+        auto jump_unconditional = io().is_jump;
 
         // ====================================================================
         // 4. 分支条件判断

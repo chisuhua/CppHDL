@@ -310,6 +310,7 @@ TEST_CASE("Pipeline: EX stage operand selection (I-type imm)",
         sim.set_input_value(io.funct7, 0u);
         sim.set_input_value(io.alu_op, alu_op);
         sim.set_input_value(io.is_branch, 0u);
+        sim.set_input_value(io.is_jump, 0u);   // 新增端口 MUST 显式驱动
         sim.set_input_value(io.branch_type, 0u);
         sim.set_input_value(io.is_store, 0u);
         sim.tick();

@@ -353,15 +353,20 @@ constexpr uint32_t kGoldenJalrBody = 0x3Cu;        // 60
 constexpr uint32_t kGoldenSraSrc   = 0xFFFFFFF8u;  // -8
 constexpr uint32_t kGoldenSraSh3   = 0xFFFFFFFFu;  // -8 >>> 3
 constexpr uint32_t kGoldenSraSh0   = 0xFFFFFFF8u;  // 移位 0 ⇒ 不变
+// ⚠️ 「错误路径上的跳转」用例（word 100-102）：
+//   `JAL x26, +8` @word100 ⇒ link = word 101 的地址 = 基址 + 404 = 0x80000194
+//   `ADDI x28, x0, 0x5A` @word102 ⇒ **只有 PC 没被 word101 的 JAL 劫持才会执行**
+constexpr uint32_t kGoldenLinkJal2 = 0x80000194u;  // word 101 的地址
+constexpr uint32_t kGoldenNestedBody = 0x5Au;      // 90
 
-constexpr size_t kFirmwareWords = 100;
+constexpr size_t kFirmwareWords = 108;
 
 // 期望的写回序列（ISA 语义）。
 // ⚠️ **不含 x7** —— 它在 taken 分支的错误路径上 ⇒ MUST 被冲刷 ⇒ 不写回。
 // ⚠️ **不含 x6 之前任何「消费者」的错误值** —— 紧邻的 load→use 必须拿到**新值**。
 // ⚠️ **不含 x19 / x23** —— 它们分别在 JAL / JALR 之后的错误路径上
 //    ⇒ MUST 被冲刷（见下方专项断言）。
-constexpr std::array<std::pair<uint64_t, uint64_t>, 22> kExpectedWritebacks = {{
+constexpr std::array<std::pair<uint64_t, uint64_t>, 24> kExpectedWritebacks = {{
     {1, 10},   // addi x1, x0, 10
     {2, 3},    // addi x2, x0, 3
     {3, 13},   // add  x3, x1, x2
@@ -385,6 +390,9 @@ constexpr std::array<std::pair<uint64_t, uint64_t>, 22> kExpectedWritebacks = {{
     {21, kGoldenSraSrc},    // addi x21 ⇒ 0xFFFFFFF8（-8）
     {22, kGoldenSraSh3},    // sra  x22 ⇒ -8 >>> 3 = **0xFFFFFFFF**
     {24, kGoldenSraSh0},    // sra  x24 ⇒ 移位 0 ⇒ **0xFFFFFFF8**
+    // ⚠️ 「错误路径上的跳转」（2026-10-27 第 1 轮 critic BLOCKER 的最小复现）
+    {26, kGoldenLinkJal2},   // JAL x26 ⇒ link = word 101 的地址
+    {28, kGoldenNestedBody}, // addi x28 ⇒ **只有 PC 未被 word101 的 JAL 劫持才出现**
 }};
 
 // ⚠️ MUST 是 **constexpr**（不是 `static const`）⇒ 才能被编译期护栏检查
@@ -476,6 +484,17 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
         NOP, NOP, NOP,
         SRA(24, 21, 0),    // 95 x24 = 0xFFFFFFF8（移位 0 ⇒ MUST NOT 填充）
         NOP, NOP, NOP, NOP,// 96-99
+        // ⚠️ **「错误路径上的跳转」用例**（2026-10-27，第 1 轮 critic BLOCKER 的最小复现）：
+        //    `ID/EX` 的**控制信号**在气泡时清零，但 **`opcode` / `pc` / `imm` 不清**
+        //    （它们被当作「valid=0 即无害」的数据字段）⇒ 若 `ex_stage` 用**裸 opcode**
+        //    判「这是不是跳转」，那么「flush 当拍被锁进 ID/EX 的错误路径 JAL」
+        //    会在下一拍的气泡里**劫持 PC**（此时 `ex_branch=0` ⇒ flush=0 ⇒ 无人拦住）。
+        //    ⇒ 固件 MUST 让**紧跟 JAL 的那条也是 JAL**（`call; call` 是最真实的形态）。
+        JAL(26, 8),        // 100 x26 = word 101 的地址；跳到 word 102
+        JALR(27, 0, 100),  // 101 **错误路径上的 JALR** ⇒ target = 100（低地址）⇒ 劫持则程序重启
+        ADDI(28, 0, 0x5A), // 102 目标 ⇒ **只有正确重定向才会写** x28 = 0x5A
+        NOP, NOP, NOP,     // 103-105
+        NOP, NOP,          // 106-107
     }};
 }
 
@@ -766,6 +785,33 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     // E: **半字写**（sh）—— 13 << 16 = 0xD0000 ⇒ lane 2-3
     REQUIRE(has_store(ta, kGoldenAddrSH, kGoldenDataSH));
 
+    // ---- 被冲刷的指令 MUST **从未执行**（`JAL` / `JALR` 的错误路径）----
+    //
+    // 固件 word 66 = `addi x19, x0, 0x66` 位于 `JAL`（word 64）之后的**错误路径**；
+    // word 82 = `addi x23, x0, 0x77` 位于 `JALR`（word 80）之后的**错误路径**。
+    // ⇒ 两者 MUST NOT 被写回。
+    // ⚠️ **位置纪律**（2026-10-27 第 1 轮 critic SHOULD_FIX #1）：这一组断言
+    //    MUST 排在**派生计数器**（`control_stalls` 等）**之前** —— Catch2 的
+    //    `REQUIRE` 失败会中止当前 `TEST_CASE` ⇒ 若排在后面，`control_stalls`
+    //    会抢先失败 ⇒ 它们**永远不会被执行** ⇒ 丧失独立判别力
+    //    （实测：变异「`ex_branch` 去掉 `is_jump`」只被 `control_stalls` 抓到）。
+    // ⚠️ 这两条断言是「**`JAL`/`JALR` 也触发 flush**」的**唯一**判别力来源：
+    //    `hazard.io().ex_branch` 若仍只接 `is_branch`（不含 `is_jump`）
+    //    ⇒ PC 跳了、错误路径的指令却照常执行 ⇒ x19 / x23 被写 ⇒ 转红
+    //    （2026-10-26 变异验证 M4 实测）。
+    // ⚠️ 它们**只**由这两条指令写 ⇒ 「不出现」是强断言。
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        INFO("cycle " << c);
+        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
+                       ta[c][kIdxWbRdAddr] == 19u));
+        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
+                       ta[c][kIdxWbRdAddr] == 23u));
+        // ⚠️ word 101 = **错误路径上的 JAL** ⇒ 它 MUST NOT 写回 x27
+        //    （若它执行了 ⇒ PC 已被它劫持 ⇒ x28 也不会写回）
+        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
+                       ta[c][kIdxWbRdAddr] == 27u));
+    }
+
     // ⚠️ **store 拍的**个数** MUST 恰好是 3**（2026-10-25，第 14 轮 critic
     //    SHOULD_FIX #2）：`has_store` 只是**存在性**断言 ⇒ 若回归出第 4 个
     //    **spurious** store 拍（正是 X1 防的「气泡拍静默误写 dmem」），
@@ -790,6 +836,9 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
 
     // ---- 分支 / 停顿计数 ----
     // 固件里恰好 2 条分支（beq + bne）⇒ branch_count == 2
+    // ⚠️ **口径**（2026-10-27 第 1 轮 critic NIT #2）：`perf_branch_count` 只统计
+    //    **条件分支**（`id_stage.is_branch` = `OP_BRANCH`）⇒ `JAL`/`JALR` **不计入**。
+    //    这是定义性选择（跳转不是「分支」），也已写进 spec delta。
     REQUIRE(ta.back()[kIdxBranchCount] == 2u);
     // 只有 taken 的 beq 被判为误预测（bne 不成立）⇒ mispredict == 1
     REQUIRE(ta.back()[kIdxMispredict] == 1u);
@@ -802,12 +851,14 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //    ⚠️ 修复前这个计数器**恒为 0**（检测用的是 MEM 级 load ⇒ 晚一级
     //    ⇒ 永远对不上）⇒ 本断言是「冒险真的被检测到」的判别力来源。
     REQUIRE(ta.back()[kIdxLoadUseStalls] == 6u);
-    // 控制停顿 = **全部控制重定向**造成的停顿拍数（2026-10-26 起含 JAL/JALR）
-    //   = 1（taken 的 beq 误预测）+ 2（JAL @word64 + JALR @word80）
+    // 控制停顿 = **全部控制重定向**的**次数**（2026-10-26 起含 JAL/JALR）
+    //   = 1（taken 的 beq 误预测）+ 3（JAL @word64 + JALR @word80 + JAL @word100）
+    // ⚠️ 口径是「**重定向次数**」而不是「停顿拍数」—— 每次重定向实际代价是 **3 拍**
+    //    气泡（实测 `non_retired` 每个跳转 +3），计数器只 +1。
     // ⚠️ 与 `mispredict` **分离**：`mispredict` 只统计**条件分支**的误预测
     //    （JAL/JALR 是**无条件**跳 ⇒ 不是「预测错误」），而跳转同样让流水线空拍
     //    ⇒ 计入 `control_stalls` 但不计入 `mispredict`。
-    REQUIRE(ta.back()[kIdxControlStalls] == 3u);
+    REQUIRE(ta.back()[kIdxControlStalls] == 4u);
 
     // ---- 被冲刷的指令 MUST **从未执行**（控制冒险的核心契约）----
     //
@@ -824,24 +875,6 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
                        ta[c][kIdxWbRdAddr] == 7u));  // wb_write_en && rd == x7
     }
 
-    // ---- 被冲刷的指令 MUST **从未执行**（`JAL` / `JALR` 的错误路径）----
-    //
-    // 固件 word 66 = `addi x19, x0, 0x66` 位于 `JAL`（word 64）之后的**错误路径**；
-    // word 82 = `addi x23, x0, 0x77` 位于 `JALR`（word 80）之后的**错误路径**。
-    // ⇒ 两者 MUST NOT 被写回。
-    // ⚠️ 这两条断言是「**`JAL`/`JALR` 也触发 flush**」的**唯一**判别力来源：
-    //    `hazard.io().ex_branch` 若仍只接 `is_branch`（不含 `is_jump`）
-    //    ⇒ PC 跳了、错误路径的指令却照常执行 ⇒ x19 / x23 被写 ⇒ 转红
-    //    （2026-10-26 变异验证 M4 实测）。
-    // ⚠️ 它们**只**由这两条指令写 ⇒ 「不出现」是强断言。
-    for (std::size_t c = 0; c < ta.size(); ++c) {
-        INFO("cycle " << c);
-        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
-                       ta[c][kIdxWbRdAddr] == 19u));
-        REQUIRE_FALSE((ta[c][kIdxWbWriteEn] == 1u &&
-                       ta[c][kIdxWbRdAddr] == 23u));
-    }
-
     // ---- 退休指令数（按**逐拍实测**的非退休拍推导，不拍脑袋）----
     //
     // 退休数在 **cyc 1..199** 这 199 个拍间隔里有 **17** 个「不增长」，
@@ -856,7 +889,8 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //   ④ 3 拍 **load-use 停顿 #2**（第二处紧邻 load→use）
     //   ⑤ 3 拍 **`JAL` 冲刷**（word 64；**与条件分支同构** ⇒ 同样 3 拍）
     //   ⑥ 3 拍 **`JALR` 冲刷**（word 80）
-    // ⇒ 199 − 17 = 182 条指令退休
+    //   ⑦ 3 拍 **`JAL` 冲刷**（word 100 —— 「错误路径上的跳转」用例）
+    // ⇒ 199 − 20 = 179 条指令退休
     //
     // ⚠️ 「不增长的间隔数」与「退休数」**分别断言** ⇒ 若流水深度变了，
     //    两条断言**一起**转红（不会「一条变、一条不变」而掩盖）。
@@ -868,8 +902,8 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
             ++non_retired;
         }
     }
-    REQUIRE(non_retired == 17u);
-    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 18u);
+    REQUIRE(non_retired == 20u);
+    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 21u);
 
     // ---- 写回序列（ISA 语义的最强判据）----
     //

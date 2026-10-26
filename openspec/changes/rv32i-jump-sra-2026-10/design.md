@@ -144,7 +144,10 @@ plan 写「写回通路可能缺失 ⇒ 若需扩流水线写回接口，本 cha
 ### D8：**必须**连带修 U 型立即数（否则 JALR 的用例无法构造）
 
 - `JALR` 的目标 = `(rs1 + imm) & ~1` ⇒ 要把「任意固件地址」装进 `rs1`
-  ⇒ 标准做法是 `auipc x18, 0` + `addi x18, x18, off`（`auipc` 的 imm 只能是 4 KiB 倍数）
+  ⇒ **标准做法**是 `auipc x18, 0` + `addi x18, x18, off`（`auipc` 的 imm 只能是 4 KiB 倍数）
+  ⚠️ 如实声明：**不是唯一办法**（`slli` 也能合成基址）⇒ 本修复的理由是
+  「U 型立即数是本 capability 内的一行级真缺陷 + 有独立 Requirement 钉住」，
+  不是「没它写不出用例」（2026-10-27 第 1 轮 critic NIT #1）。
 - ⚠️ 实测 `auipc x18, 0` 得到 `pc + 0x917000`：`id_stage` 用 **20 位掩码**
   （`instruction & 0x000FFFFF`）再左移 12 ⇒ 把 `rd`/`opcode` 位算进了立即数
 - ⇒ 修复为 `imm[31:12] = instr[31:12]`（一行）；`LUI` 同时被修好
@@ -161,6 +164,29 @@ plan 写「写回通路可能缺失 ⇒ 若需扩流水线写回接口，本 cha
 - ⇒ 修复：`alu_is_sub_sra = funct7[5] & (is_op | (opcode == OP_OPIMM & funct3 == 5))`
 - ⚠️ 本固件原有 imm 全部 `< 0x400` ⇒ 侥幸未暴露（但**大偏移访存 / 负数立即数**
   一直受影响 —— 这是本 change 挖出的**独立价值**）
+
+### D10：跳转标志 MUST 用**气泡清零后**的 `is_jump`，**不得**用裸 `opcode`
+
+⚠️ **这是第 1 轮对抗审稿的 BLOCKER（2026-10-27）**，也是本 change **最隐蔽**的一个缺陷：
+
+- 初版实现用 `jump_unconditional = (opcode == OP_JAL) | (opcode == OP_JALR)`
+- 但 **`idex_opcode` / `idex_pc` / `idex_imm` 在气泡拍不清零**（它们被当作
+  「`valid=0` 即无害」的数据字段；只有 `is_branch`/`is_load`/`is_store`/`is_jump`/
+  `is_alu`/`rd_addr`/`valid` 被气泡清零）
+- ⇒ **错误路径上的 `JAL`/`JALR`** 被锁进 ID/EX 后，下一拍的**气泡**仍会
+  拉高 `branch_taken` —— 而此时 `ex_branch = idex_is_branch | idex_is_jump = 0`
+  ⇒ **`flush = 0`** ⇒ **无人拦住** ⇒ PC 被劫持
+- 触发条件是「**`JAL`/`JALR` 紧跟 `JAL`/`JALR`**」（`call; call` 是最真实的形态）
+- ⇒ 修复：`ex_stage` 新增 `is_jump` 输入（接 `idex_is_jump`，**已气泡清零**），
+  `jump_unconditional = io().is_jump`；`is_op_jalr` 也与 `io().is_jump` 相与
+- ⇒ **结构收益**：`ex_stage` 的重定向判定与 `hazard` 的 flush 判定**同源**
+  （都用 `idex_is_jump`）⇒ 「`branch_taken=1` 但 `ex_branch=0`」这个**坏状态
+  不再可达**
+- ⚠️ **为什么初版固件抓不到**：错误路径放 `JAL(27, 8)` 时，残留的
+  `pc`+`imm` **恰好**给出正确目标（`word100.pc + 8 = word102`）⇒ **巧合通过**；
+  `JAL(27, 20)` 也只有 2 字节偏移 ⇒ 仍落回正确路径附近。
+  最终用 **`JALR(27, 100(x0))`**（目标 = 低地址 `100`）才把缺陷暴露成
+  「程序重启」⇒ `store_cycles` 断言转红。⇒ 该用例已作为**回归用例**保留。
 
 ## 3. 时序
 

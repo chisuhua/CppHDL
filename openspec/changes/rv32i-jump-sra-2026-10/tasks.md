@@ -69,3 +69,46 @@
 - 不改框架层 `ch_mem` / 不启用 `operator>>>`（算术右移原语仍是注释状态）
 - 不改 ADR-046 **D10** 的 SoC 32 端口契约（本 change 不新增顶层端口）
 - 不实现地址不对齐异常（RISC-V 允许实现自定义非对齐行为）
+
+## 审稿记录（2026-10-27 · critic 第 1 轮）
+
+**结论**：**REJECT**（`mergeable: no` / `scope_exceeded: false`）——
+**1 个 BLOCKER** + 2 个 SHOULD_FIX + 2 个 NITS。
+
+| # | finding | 处置 |
+|---|---|---|
+| **BLOCKER 1** | `ex_stage` 用**裸 `opcode`** 判 `jump_unconditional`，而 `idex_opcode`/`idex_pc`/`idex_imm` 在**气泡拍不清零** ⇒ **错误路径上的 `JAL`/`JALR`** 被锁进 ID/EX 后，下一拍气泡仍拉高 `branch_taken`，而此时 `ex_branch = is_branch \| is_jump = 0` ⇒ **`flush = 0` ⇒ 无人拦** ⇒ **静默劫持 PC** | ✅ `ex_stage` **新增输入 `is_jump`**（接 `idex_is_jump`，**已气泡清零**）⇒ `jump_unconditional = io().is_jump`；`is_op_jalr` 也与 `is_jump` 相与。**结构收益**：重定向判定与 `hazard` 的 flush 判定**同源** ⇒ 「`branch_taken=1` 但 `ex_branch=0`」**不再可达**。3 个实例化点（pipeline / `ExStageTop` / `test_pipeline_exec`）全部显式驱动 |
+| SHOULD_FIX 1 | `x19`/`x23` 的行为级断言排在**派生计数器之后** ⇒ `control_stalls` 抢先失败（Catch2 `REQUIRE` 中止 TEST_CASE）⇒ 它们**从未被执行** ⇒ 丧失独立判别力 | ✅ 整块**移到** `store_cycles` 之前，并在注释里写明这条**位置纪律** |
+| SHOULD_FIX 2 | `control_stalls` 注释称「停顿**拍数**」，实现是**事件数**（每次 +1，实际代价 3 拍） | ✅ 注释订正为「**重定向次数**」+ spec delta 加 Scenario 写明口径 |
+| NIT 1 | `design.md` D8/D9 与 `proposal.md` §0 的「缺一不可 / 根本写不出来」**言过其实**（`sub` 可造负数源、`slli` 可合成基址） | ✅ 措辞降级为「**标准做法**的前提」+ 如实声明「不是没有就写不出用例」；保留理由是「同 capability 内的一行级真缺陷 + 各有独立 Requirement」 |
+| NIT 2 | `branch_count` 只统计 `is_branch` ⇒ spec 未写明口径 | ✅ spec delta 加 Scenario 写明三个计数器的口径；测试侧加注释 |
+
+### BLOCKER 的最小复现与「先红后绿」证据
+
+⚠️ **初版固件抓不到它**（这是本 change 最大的教训）：
+- 错误路径放 `JAL(27, 8)` ⇒ 残留的 `pc + imm` **恰好**给出正确目标 ⇒ **巧合通过**
+- 改成 `JAL(27, 20)` ⇒ 仍落在正确路径附近 ⇒ 仍绿
+- 最终用 **`JALR(27, 100(x0))`**（目标 = **低地址 `100`**）⇒ 缺陷暴露成「**程序重启**」
+  ⇒ `store_cycles == 5` 断言转红（**修复前红 / 修复后绿**，实测）
+
+⇒ 该用例已作为**回归用例**永久保留在固件里（word 100-102）。
+
+### 变异验证（整改后 6/6 + **M7 的判别力边界如实记录**）
+
+原有 6 条（M1–M6）**全部仍被抓**（SRA×2 / `JAL` 目标 / `ex_branch` 去 `is_jump` /
+`link_value` / `alu_op` 门控）。
+
+**M7（BLOCKER 的回归护栏）—— 判别力有边界，如实记录**：
+
+| 变异形态 | 结果 | 解释 |
+|---|---|---|
+| **M7a**：只把 `jump_unconditional` 改回裸 opcode（保留 `is_op_jalr & io().is_jump`） | ❌ **不红** | `is_op_jalr` 的门控在气泡拍把 `is_op_jalr` 压成 0 ⇒ `branch_target` 退回 `pc + imm` ⇒ 落回正确目标附近 ⇒ 这个特定用例被**挡住**了 |
+| **M7b**：**两处都还原**（= 修复前的实现） | ✅ **红**（`store_cycles == 11`，期望 5 ⇒ 程序被劫持重启） | 这才是 BLOCKER 的真实形态 |
+
+⇒ **结论**：修复的判别力由 **M7b** 承担（已实测红）；M7a 不红说明
+「`is_op_jalr` 与 `is_jump` 相与」这条**防御性门控**单独也能挡住本用例 ——
+它是**冗余保险**（当 `jump_unconditional` 已经过门控时非必需），但保留它让
+「`is_op_jalr` 只在真跳转时有意义」成为可读的契约。
+
+⚠️ 这条记录本身就是教训：**变异脚本「只还原一处」会低估修复的必要性**
+⇒ 报告变异结果时 MUST 说清「还原了几处」。

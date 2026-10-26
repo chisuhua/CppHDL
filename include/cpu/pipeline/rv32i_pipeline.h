@@ -267,6 +267,11 @@ public:
             ex_stage.io().alu_op <<= alu_op_calc;
         }
         ex_stage.io().opcode <<= id_stage.io().opcode;
+        // ⚠️ **跳转标志 MUST 走 `idex_is_jump`（气泡清零）而非 opcode 比较**：
+        //    `idex_opcode` 在气泡拍不清零 ⇒ 错误路径的 JAL/JALR 会让气泡拍
+        //    继续拉高 `branch_taken`（而 `ex_branch=0` ⇒ flush=0 ⇒ 无人拦）
+        //    ⇒ **静默劫持 PC**（实测复现，见 `ex_stage.h` 的端口注释）。
+        ex_stage.io().is_jump <<= id_stage.io().is_jump;
 
         // EX -> EX/MEM pipeline regs
         //

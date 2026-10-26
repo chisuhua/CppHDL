@@ -72,3 +72,20 @@
 - **WHEN** 执行 `auipc x18, 0`（`0x00000917`）
 - **THEN** 立即数 MUST 是 `0`（结果 = 该指令自身的 `pc`）
 - **AND** `0x917000`（把 `rd<<7 | opcode` 当立即数）MUST NOT 出现
+
+#### Scenario: 跳转 MUST NOT 劫持 PC（错误路径上的跳转）
+
+- **WHEN** 一条 `JAL`/`JALR` 的**错误路径**上紧跟着另一条 `JAL`/`JALR`
+  （`call; call`）
+- **THEN** 第二条跳转 MUST NOT 改变 PC（它 MUST 被冲刷）
+- **AND** 「是否跳转」的判定 MUST 用**气泡清零后**的跳转标志
+  （MUST NOT 只看 `opcode` —— 错误路径的 `opcode` 会在气泡拍残留）
+
+#### Scenario: 性能计数器口径
+
+- **WHEN** 统计 `branch_count` / `branch_mispredict` / `control_stalls`
+- **THEN** `branch_count` 与 `branch_mispredict` MUST 只统计**条件分支**
+  （`JAL`/`JALR` 是**无条件**跳，不是「分支」也不是「误预测」）
+- **AND** `control_stalls` MUST 统计**全部控制重定向次数**（含 `JAL`/`JALR`）
+- **AND** `control_stalls` 的口径 MUST 是**次数**（每次 +1），MUST NOT 被描述为「停顿拍数」
+  （每次重定向的实际代价是 3 拍气泡）
