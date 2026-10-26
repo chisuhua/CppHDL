@@ -108,6 +108,39 @@
 ⚠️ 护栏输出在 lib 抽取 + 整改后**仍逐字一致**（除 `test_rv32i_soc_dual_parity.cpp`
 的断言数因 T2 变更而变 ⇒ 预期内）。
 
+## 对抗审稿第 2 轮（复审）结论
+
+**结论**：**APPROVE**（`mergeable: yes` / `scope_exceeded: false`）——
+**无 BLOCKER、无 SHOULD_FIX**；仅 1 条 NIT。
+
+- 复审范围（严格限定）：第 1 轮 7 条 finding 的**闭合证据** + `2396aa1` 的新增 diff
+  ⇒ **不重审全文**（分析器本体、护栏原逻辑、fixture 语义、CI 设计第 1 轮已审完）
+- critic 逐条核对：SHOULD_FIX 1 ✅（**实现**了 C4 而非降级注释；11 个 fixture 的
+  `EXPECT` 行与期望表**独立复核 11/11 一致**；「恰好一行」约束实测 11 个文件各恰好 1 行）、
+  SHOULD_FIX 2 ✅（`grep -rnE 'ch_device|ch_module|DUAL_BACKEND_TEST' tests/fixtures/...`
+  = **0 命中**；C5 豁免 `README.md` 不留洞 —— 该护栏的扫描面是 `*.cpp`/`*.h`，`.md` 本就进不去）、
+  NIT 1 ✅（`_aq_*` 全部落在已声明 `local` 的函数体内）、NIT 2 ✅（`cd scripts && bash ...`
+  形态实测正确）、NIT 3 ✅、NIT 4 ✅、NIT 5 ✅（函数级 fail-closed 路径在 lib 层成立）
+- 新增 diff 引入新 BLOCKER？**否** —— C4/C5 只用 POSIX 明确定义的 awk/grep 构造
+  ⇒ 未加重 macOS awk 风险（但**不能代替**实测）
+- **NIT**（不阻断）：lib 头注释的用法示例仍是 `. "$(dirname "$0")/lib/assertion_quality.sh"`，
+  已与两个真实消费者都不一致 ⇒ 已改为展示**真实写法**（`$REPO_ROOT` / `$SCRIPT_DIR`）
+
+### 归档事实（2026-10-26）
+
+- `openspec archive example-assertion-quality-2026-10 --yes`
+  ⇒ 归档为 `openspec/changes/archive/2026-10-26-example-assertion-quality-2026-10/`
+- 新 capability `example-assertion-quality`（**2** 条 Requirement）已合并进
+  `openspec/specs/example-assertion-quality/spec.md`
+- ⚠️ `openspec archive` 自动写的 `## Purpose` 是**占位句** ⇒ 已**补写**为该 capability 的
+  长期契约说明 ⇒ `openspec validate example-assertion-quality --type spec --strict` ⇒ **valid**
+
+### 归档后剩余门（**合并门**，非本地可完成）
+
+- [ ] **T4.7 CI 的 `macos-14` job 绿**（= T3.1–T3.3 的 BSD/BWK awk 实测）
+      ⚠️ 本机是 Linux ⇒ **不可本地完成** ⇒ 这是本 change 归档前登记的唯一阻塞项
+      ⇒ 若该 job 红 ⇒ MUST **revert 本归档 commit**（含主 spec 的新增 capability）
+
 ## Out of Scope
 
 - 防「等量替换」（由 code review 承担，护栏 MUST NOT 声称覆盖）

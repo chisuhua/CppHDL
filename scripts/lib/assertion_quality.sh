@@ -10,8 +10,12 @@
 #    若各写一份 ⇒ 分析器会**漂移**（C1 连续三轮对抗审稿的 BLOCKER 全部出在
 #    「两处对同一机制的两种理解」上）⇒ 抽 lib 让「护栏行为」与「规格」不可能分叉。
 #
-# 用法（**source**，不是执行）：
-#     . "$(dirname "$0")/lib/assertion_quality.sh"
+# 用法（**source**，不是执行）—— 两个消费方的**真实写法**：
+#     . "$REPO_ROOT/scripts/lib/assertion_quality.sh"      # 护栏本体（用仓库根）
+#     . "$SCRIPT_DIR/lib/assertion_quality.sh"              # fixture 自检（用脚本自身目录）
+# ⚠️ **不要**用 `. "$(dirname "$0")/lib/assertion_quality.sh"`：
+#    `dirname "$0"` 在「从别的 cwd 调用」时是相对路径 ⇒ source 可能失败；
+#    且它与两个真实消费者都不一致 ⇒ 文档示例会变成**过期文档**。
 #
 # ⚠️ 本文件**不产生任何副作用**：source 时不设全局变量、不建临时文件、不改
 #    shell 选项、不 `cd`、不 `exit` ⇒ 可安全 source。

@@ -57,10 +57,38 @@
   golden 读回断言（`0x030A` vs 整字覆盖的 `0x0300`）会转红。
   ⇒ **独立立项**（已登记进 `AGENTS.md` 的约定层 + 阶段级执行计划的 backlog）。
 
-### 归档前剩余门
+### 对抗审稿第 2 轮（复审）结论
 
-- [ ] T3.7 **对抗审稿第 2 轮**（复审：只提交「第 1 轮 finding 的闭合证据 + 本轮新增 diff」）
-- [ ] T3.8 CI 的 `macos-14` job 绿（`example-assertion-quality-2026-10` 的 T4.7 同款要求）
+**结论**：**APPROVE**（`mergeable: yes` / `scope_exceeded: false`）——
+**无 BLOCKER、无 SHOULD_FIX**；仅 1 条 NIT。
+
+- 复审范围（严格限定）：第 1 轮 3 SHOULD_FIX + 2 NITS 的**闭合证据**
+  + `b4ad90f` 的新增 diff ⇒ **不重审全文**（第 1 轮已审过的实现正文未被本轮 diff 触碰）
+- critic 逐条核对：SHOULD_FIX 1 ✅（§5 拆两条 + §1 注明两套偏移来源）、SHOULD_FIX 2 ✅
+  （`select(io().dtcm_write_en, 0xF, pipeline.io().data_strbe)` 与同处 `wdata` mux 逐字同构）、
+  SHOULD_FIX 3 ✅（Requirement 收窄 + 全仓 3 个实例化点已逐一过目 + 框架层约定已移到
+  `AGENTS.md`）、NIT 2 ✅（design.md §5「只支持 32 位」在档）、scope_exceeded 处置 ✅
+- **NIT**（不阻断）：根 `AGENTS.md:125` 引用的 `openspec/specs/rv32i-isa-semantics/spec.md`
+  在归档前是**悬空指针**（该 capability 由本 change 新建）⇒ **归档后自动消解**
+  （已核实 `openspec/specs/rv32i-isa-semantics/spec.md` 存在且 `openspec validate --strict` 通过）
+
+### 归档事实（2026-10-26）
+
+- `openspec archive rv32i-store-byte-enable-2026-10 --yes`
+  ⇒ 归档为 `openspec/changes/archive/2026-10-26-rv32i-store-byte-enable-2026-10/`
+- 新 capability `rv32i-isa-semantics`（**2** 条 Requirement）已合并进
+  `openspec/specs/rv32i-isa-semantics/spec.md`
+- ⚠️ `openspec archive` 自动写的 `## Purpose` 是**占位句** ⇒ 已**补写**为该 capability 的
+  长期契约说明（CLI 明确要求直接编辑主 spec；既有先例 = `axi-interconnect-routing`）
+  ⇒ `openspec validate rv32i-isa-semantics --type spec --strict` ⇒ **valid**
+
+### 归档后剩余门（**合并门**，非本地可完成）
+
+- [ ] CI 的 `macos-14` job 绿（BSD/BWK awk + macOS 编译器；本机是 Linux ⇒ 不可本地完成）
+      ⇒ ⚠️ 若该 job 红 ⇒ MUST **revert 本归档 commit**（含主 spec 的新增 capability）
+- ⚠️ 本机 `openspec validate --specs --strict` 的既有红（15/17 主 spec）= **CLI 1.14.3
+  与仓库钉的 1.4.1 的规则漂移**（与本 change 无关，纯净 HEAD 同样红）；CI **不跑**
+  `openspec validate` ⇒ 不阻断合并
 
 ## Out of Scope
 
