@@ -148,11 +148,25 @@ bash scripts/run_all_samples.sh  # 35/35
 
 | 任务 | 状态 | 证据 |
 |---|---|---|
-| **T1** `example-assertion-quality-2026-10` | 🟡 **Phase 1 完成**（T1.1–T1.4 / T2.2 / T3.5.1 / T4.1–T4.6） | commit `0e765d4`；11 fixture + 自检脚本 + 共享 lib；**变异验证 4/4 全被抓**；护栏重构前后输出**逐字一致**；`ctest -LE perf` **191/191** 绿；7 个护栏全 PASS |
+| **T1** `example-assertion-quality-2026-10` | 🟡 **Phase 1 完成 + 第 1 轮审稿整改完成** | commit `0e765d4`；11 fixture + 自检脚本 + 共享 lib；**变异验证 4/4 + 整改后 3 条全被抓**；护栏重构前后输出**逐字一致**；`ctest -LE perf` **191/191** 绿；7 个护栏全 PASS |
 | T1 剩余门 | ⏳ **T4.7 = macOS-14 实测**（本机 Linux 不可完成 ⇒ 权威 = CI 的 `macos-14` job） | ⇒ **T1 归档的唯一阻塞项** |
 | **T2** `rv32i-store-byte-enable-2026-10` | 🟡 **已实施，待审稿归档** | `DataTCM` 加 `strbe` + 读-改-写合并（复用 `byte_lane.h`）+ 流水线 lane 对齐（`shl<32>`，**只对 SB/SH** ⇒ `sw` 零回退）+ SoC 接线 + **4 个实例化点显式驱动**；固件尾部追加 `sb`/`sh` 用例（既有 word 索引不动）；新 capability `rv32i-isa-semantics`；`ctest -LE perf` 191/191 绿 |
-| T2 剩余门 | ⏳ **对抗审稿 + `openspec archive`** | 本仓惯例：归档前 MUST 过 critic |
+| T2 剩余门 | ⏳ **审稿第 2 轮 + `openspec archive`** | 第 1 轮 **APPROVE_WITH_CONDITIONS**（无 BLOCKER）⇒ 3 SHOULD_FIX + 2 NITS 已同批整改 ⇒ 复审只提交「第 1 轮闭合证据 + 新增 diff」 |
 | T3–T9 | ⏳ 未开始 | 每个需 planner 的 5 段 improvement 草案 + openspec change（T3 的草案尚缺） |
+
+### 2026-10-26 对抗审稿第 1 轮结果（两个 change 均**无 BLOCKER**）
+
+| change | 结论 | 处置 |
+|---|---|---|
+| T1 `example-assertion-quality-2026-10` | APPROVE_WITH_CONDITIONS（mergeable: yes） | 2 SHOULD_FIX + 5 NITS **同批整改**（C4 期望值交叉检查 / C5 token 检查 / lib 变量改 `local` / source 路径改 `$REPO_ROOT` / C2 扫描面扩到全部文件 / 端到端 fail-closed 变异补做）⇒ 新增变异 3 条全被抓 |
+| T2 `rv32i-store-byte-enable-2026-10` | APPROVE_WITH_CONDITIONS（mergeable: yes / scope_exceeded: true） | 3 SHOULD_FIX + 2 NITS **同批整改**（design.md §5 的非对齐 `sh` 声称改正 / `test_riscv_tests_pipeline` 的 `strbe` 改为随写路径 mux / spec Requirement 收窄到 `DataTCM.strbe` 并把框架层约定移到 `AGENTS.md`） |
+
+### backlog（审稿产出，**不在** T1/T2 内返工）
+
+- **「任意新增输入端口 ⇒ 全实例化点 MUST 显式驱动」的 rst_n 同型自动化护栏**
+  （critic 标 `scope_exceeded`）：需要先设计「必需端口注册表」
+  （不同端口的未驱动读值语义不同：`rst_n` 读 0 = 永久复位、`strbe` 读全 1 = 碰巧整字写）
+  ⇒ 已登记进根 `AGENTS.md` 的约定层 ⇒ **独立立项**（建议单开一个 change）。
 
 > **T2 实施中挖出的两个可复用事实**（已写进 capability `rv32i-isa-semantics`）：
 > ① **未驱动的输入端口读到的是「全 1」而不是 0** ⇒ 依赖默认值的实现会「碰巧」通过
