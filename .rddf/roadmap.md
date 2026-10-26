@@ -3,7 +3,7 @@
 ## 元信息
 - **版本**: 1
 - **创建时间**: 2026-10-19
-- **最后更新**: 2026-10-23
+- **最后更新**: 2026-10-26
 - **当前阶段**: phase-5
 - **当前 Sprint**: sprint-2026-10
 
@@ -39,9 +39,8 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| riscv-mini 收敛 | phase-5 | P0 | none | riscv-mini-test-triage-2026-10 |
-| riscv-mini 收敛 | phase-5 | P0 | none | rv32i-canonical-convergence-2026-10 |
-| RV32I 集成 | phase-5 | P0 | none | rv32i-soc-dual-parity-2026-10 |
+| AXI 互连 | phase-5 | P0 | none | axi4-interconnect-routing-2026-10 |
+| examples 测试护栏 | phase-5 | P1 | none | example-assertion-quality-2026-10 |
 
 ### Unmapped (0)
 <!-- AUTO-SPRINT-END -->

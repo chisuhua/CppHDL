@@ -32,6 +32,7 @@
 > | 多路选择写成「输出读自己」 | 拓扑排序报 `Cycle detected in IR graph` | 每路**单次赋值**（见 `AxiLiteMatrix2x2:226-233` 的修复注释） |
 > | `grep ... \| wc -l` 期望「= N 个文件」 | `wc -l` 数**行**不数文件 → 永假红 | `grep -rl ... \| wc -l` |
 > | 临时文件写 `/tmp` | 违反仓库约定（root AGENTS.md：临时文件 MUST 用 `/tmp/opencode/<name>`） | 一律用 `/tmp/opencode/` |
+> | **`openspec validate --strict` 直接当布尔用** | 本机 CLI **1.14.3** 会对本 change 的 5 条长 Requirement 报 `>500 characters` ⇒ **exit 1 假红**（本仓钉 1.4.1；该规则是 1.14.x 新增，纯净 HEAD 同样红） | 用 Task 0 的**版本容忍**写法：只对 `[ERROR]` / `Unknown item` 判红 |
 >
 > **proposal → task 映射**：D1 → Task 3；D2 → Task 4；D3 → Task 5；D4 → Task 6；
 > D5 → Task 3（裁决）；D6 → Task 6；D7 → Task 7；D8 → Task 2 / Task 3-6 / Task 8；
@@ -47,13 +48,25 @@
     - 清点 `AxiInterconnect4x4` / `AxiLiteMatrix2x2` 的实例化点
       （预期 **2 个** example 文件：`examples/axi4/phase3a_complete.cpp`、
       `examples/axi4/axi_soc_example.cpp`）
-    - `openspec validate --strict` MUST 通过
+    - `openspec validate --strict` MUST 通过（⚠️ **版本容忍**，见下方 verify 的注释）
   - **verify**:
     ```bash
-    openspec validate axi4-interconnect-routing-2026-10 --strict && echo VALIDATE_OK
+    # ⚠️ CLI 版本容忍（必读）：本仓钉 openspec **1.4.1**（root AGENTS.md §COMMANDS），
+    #   而 1.14.x 新增了「Requirement 正文 > 500 字符」「Purpose 仍是占位符」两条 strict 规则
+    #   ⇒ 纯净 HEAD 的 15/17 个主 spec 在 1.14.x 同样变红（与本仓改动无关）。
+    #   ⇒ 本 verify MUST 只对**结构错误**判红，MUST NOT 对上述版本差异判红。
+    out="$(openspec validate axi4-interconnect-routing-2026-10 --strict 2>&1)"; rc=$?
+    printf '%s\n' "$out"
+    printf '%s\n' "$out" | grep -qE "Unknown item|\[ERROR\]" && { echo "VALIDATE_FAIL：change 不存在或有结构错误"; exit 1; }
+    bad="$(printf '%s\n' "$out" | grep "\[WARNING\]" | grep -vE "very long \(>500 characters\)|placeholder")"
+    [ -n "$bad" ] && { printf '%s\n' "$bad"; echo "VALIDATE_FAIL：存在非已知版本差异的告警"; exit 1; }
+    [ "$rc" -eq 0 ] || echo "NOTE：CLI 退出码 $rc 仅源于 1.14.x 的版本差异规则"
+    echo VALIDATE_OK
+
     grep -rl "AxiInterconnect4x4\|AxiLiteMatrix2x2" --include=*.cpp . | wc -l
     ```
-    第 2 条 MUST 输出 **2**
+    上一段 MUST 输出 **VALIDATE_OK**；实例化点计数 MUST 为 **2**
+    （已实测：`examples/axi4/axi_soc_example.cpp` + `examples/axi4/phase3a_complete.cpp`）
 
 - [ ] ### Task 1: 建立「缺陷可观测」基线（不改实现）
   - **action**:

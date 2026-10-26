@@ -15,7 +15,7 @@ CppHDL 的 L1 cache 子系统经历了一次死而复生的重建：原 `*_compl
 | `*_complete.h` ch_mem 重写 | ADR-039 | ✅ 已实施（commit `91a0833`） |
 | Sync/Async variant split | ADR-041 | ✅ 已实施（commit `49902b2`） |
 | cache 行为测试 9 test_case | — | ✅ 已实施（commit `1221819` + `bb286a2`） |
-| cache 双后端 e2e | dual-backend-test-coverage | ⏳ Phase 5 |
+| cache 双后端 e2e | dual-backend-test-coverage | 🟡 Sync variant ✅ parity（`tests/chlib/test_cache_sync.cpp`，2026-10-19 归档 `dual-backend-cache-tests`）；**全量收口**随 `feat-dual-backend-coverage` Phase 5 |
 | stub 物理删除 | ADR-037 | ✅ 已实施（2026-10-20 归档 `cache-stub-physical-removal-2026-10`，**提前 6 个月**完成 ADR-037 的 calendar deadline） |
 
 ## 跨阶段拆分
@@ -24,10 +24,10 @@ CppHDL 的 L1 cache 子系统经历了一次死而复生的重建：原 `*_compl
 - ✅ ADR-039 ch_mem 重写（`include/cpu/cache/{i,d}_cache_complete.h`）
 - ✅ ADR-041 Sync/Async 拆分（`{i,d}_cache_{sync,async}.h` + `_complete.h` 兼容 shim）
 - ✅ `tests/chlib/test_cache_complete.cpp` 9 test_case / 53 assertions
-- ⏳ cache 双后端 e2e（`dual-backend-cache-tests`，Phase 2 of dual-backend）
+- ✅ cache 双后端 e2e（`dual-backend-cache-tests`，Phase 2 of dual-backend）— 2026-10-19 归档 `aed33be`
 
 ### phase-5
-- ⏳ `dual-backend-cache-tests` 落地（Sync 走 parity / Async 走 golden-value）
+- ✅ `dual-backend-cache-tests` 落地（Sync 走 parity / Async 走 golden-value）— 2026-10-19 归档
 - ✅ cache-stub 物理删除（`git rm include/cpu/cache/{i,d}_cache_stub.h`，2026-10-20，variant b）
 - ✅ 重写 `test_cache_pipeline_integration.cpp`（脱离 stub，5 TEST_CASE 全改 `ICacheSync` / `DCacheSync` 真实时序）
 - ✅ 3 个 stub 消费者改而非删（`test_cache_simple.cpp` / `test_phase4_integration.cpp` 保留 smoke 锚点，计数不变）

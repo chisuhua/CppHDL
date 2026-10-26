@@ -100,11 +100,14 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 - `objective-cache-stub-retired` — cache stub 退役后 RV32I 才能用真实 cache（**已 completed 2026-10-20**）
 
 ### 9.2 Go / No-Go Decision Gate
-- **Go 判据**（满足全部 4 条 → 转 completed）：
+- **Go 判据**（满足全部 5 条 → 转 completed）：
   - [x] `i_cache_prefetch.h` wrapper SIGSEGV 修复（真实实例化 ICacheSync 通过）— 2026-10-20
   - [x] `objective-riscv-mini-convergence` 完成（单一 RV32I 实现）— 2026-10-25
   - [x] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过 — 2026-10-26
   - [x] JIT 回落行为显式断言通过（检测 + 回落结果一致）— 2026-10-26
+  - [ ] `dual-backend-rv32i-integration` change archived（Batch 2/3）
+        —— 与 §2 的第 5 条 done-when 同一条（2026-10-26 补齐：此前 §9.2 只列 4 条，
+        导致「4 条全 `[x]`」与 `status: active` 互相矛盾）
 - **No-Go 判据**（任一成立 → defer）：
   - verilator codegen 对 RV32I 完整设计暴露无法在合理工期内修复的 bug
   - 收敛（`objective-riscv-mini-convergence`）判定 No-Go

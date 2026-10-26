@@ -40,9 +40,11 @@ phase_refs: [phase-5]
 - ✅ `i_cache_prefetch.h` 实例化 `ICacheSync`（非 stub，3 PASS instantiate）
 - 🟡 `dual-backend-rv32i-integration` partial（Batch 1 5 component classes 13 dual pairs archived；
       Batch 2 `IfIdPipelineReg` ×2 clk-spike + Batch 3 `BranchPredictor` ×1 follow-up）
-- ⏳ **前置**：`feat-riscv-mini-convergence`（C2）—— 收敛成单一 SoC 实现
-- ⏳ riscv-mini SOC **双路** trace parity（interpreter + verilator，≥20 指令含 load/store/branch）
-- ⏳ JIT 回落行为显式断言（`UNSUPPORTED_OP` 检测 + 回落结果 == interpreter）
+- ✅ **前置**：`feat-riscv-mini-convergence`（C2）—— 收敛成单一 SoC 实现（2026-10-25 归档）
+- ✅ riscv-mini SOC **双路** trace parity（interpreter + verilator，≥20 指令含 load/store/branch）
+      — 2026-10-26 C3 归档（200 拍 × **27** 个输出观测值逐拍全等，无掩码）
+- ✅ JIT 回落行为显式断言（`UNSUPPORTED_OP` 检测 + 回落结果 == interpreter）
+      — 2026-10-26 C3 的 T6（归因实测：`unsupported node width: mem (…, 131072 bits > 64)`）
 
 ## 验收标准
 - [x] RV32I pipeline 编译期修复

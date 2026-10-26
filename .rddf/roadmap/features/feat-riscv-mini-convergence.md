@@ -32,11 +32,10 @@ phase_refs: [phase-5]
 ## 跨阶段拆分
 
 ### phase-5
-- ⏳ **C1 `riscv-mini-test-triage-2026-10`** — 见 `objective-riscv-mini-convergence` §10；
-  15 绿注册 / 7 红修或删 / 7 orphan 定性；新护栏 `scripts/verify_example_test_wiring.sh`
+- ✅ **C1 `riscv-mini-test-triage-2026-10`** — 2026-10-24 归档；15 绿注册 / 7 红修或删 / 7 orphan 定性；新护栏 `scripts/verify_example_test_wiring.sh`
 - ✅ **ADR-046** `rv32i-canonical-home`（rdd-arch 职责，2026-10-23 落盘）— 裁决方向：`include/cpu/` 唯一权威 + example 只留 SoC 顶层；C2 实施依据其 D1–D12
-- ⏳ **C2 `rv32i-canonical-convergence-2026-10`** — 收敛实施（逐文件归属表见 improvement 草稿）
-- ⏳ `include/cpu/AGENTS.md` STRUCTURE / NAMESPACE MAP 同步
+- ✅ **C2 `rv32i-canonical-convergence-2026-10`** — 2026-10-25 归档（逐文件归属表见 improvement 草稿）
+- ✅ `include/cpu/AGENTS.md` STRUCTURE / NAMESPACE MAP 同步（随 C2）
 
 ## 验收标准
 - [x] 收敛后 `include/cpu/**` 与 `examples/riscv-mini/src/**` **无同 basename 头文件**（grep-lint 护栏）— 2026-10-25 C2 归档

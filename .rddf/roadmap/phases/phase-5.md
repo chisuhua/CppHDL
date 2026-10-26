@@ -20,9 +20,9 @@ Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是�
 
 | Theme | 覆盖 | 状态 |
 |-------|------|------|
-| riscv-mini 技术债清零 | 19 个「编译但从不执行」的 Catch2 target + 7 个 orphan 测试文件 | ⏳ 计划中（C1） |
-| RV32I 单源化收敛 | 17 个死头删除 + 10 组同名头裁决 + 根 tests/ 反向 include 消除 | ⏳ 计划中（C2；ADR-046 ✅ 已落盘，前置 C1 基线） |
-| SoC 双路 parity | `Rv32iPipelineTop` interpreter + verilator 逐周期 parity + JIT 回落断言 | ⏳ 计划中（C3，依赖 C2） |
+| riscv-mini 技术债清零 | 19 个「编译但从不执行」的 Catch2 target + 7 个 orphan 测试文件 | ✅ 完成（C1，2026-10-24 归档） |
+| RV32I 单源化收敛 | 17 个死头删除 + 10 组同名头裁决 + 根 tests/ 反向 include 消除 | ✅ 完成（C2，2026-10-25 归档；ADR-046 已落盘） |
+| SoC 双路 parity | `Rv32iPipelineTop` interpreter + verilator 逐周期 parity + JIT 回落断言 | ✅ 完成（C3，2026-10-26 归档；前置 `rv32i-pipeline-commit-path-2026-10` 同日归档） |
 | dual-backend 全量覆盖 | `feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量（跨阶段残余） | 🟡 进行中 |
 | cache-stub 退役 | `include/cpu/cache/{i,d}_cache_stub.h` 物理删除 | ✅ 完成（2026-10-20，提前 6 个月，variant b） |
 | 平台矩阵 | Windows-2022 CI 启用 | ⏳ 计划中 |
