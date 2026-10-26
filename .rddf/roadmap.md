@@ -42,6 +42,7 @@
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
 | examples 测试护栏 | phase-5 | P1 | none | example-assertion-quality-2026-10 |
+| RV32I 字节道写语义 | phase-5 | P0 | none | rv32i-store-byte-enable-2026-10 |
 
 ### Unmapped (2)
 
