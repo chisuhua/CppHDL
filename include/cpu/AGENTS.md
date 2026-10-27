@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6182 lines**（2026-10-27 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6277 lines**（2026-10-27 实测，ADR-046 D9：磁盘是权威）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6182 lines（2026-10-27 实测）
+include/cpu/                             # 30 headers, 6277 lines（2026-10-27 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -64,7 +64,7 @@ include/cpu/                             # 30 headers, 6182 lines（2026-10-27 �
 | ALU | `pipeline/rv32i_alu.h` |
 | Register file | `pipeline/rv32i_regfile.h` |
 | Forwarding (源选择) | `pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）|
-| Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）—— ADR-046 D3 #14 |
+| Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）—— ADR-046 D3 #14 / ADR-047 D2（**已接入真实流水线**）|
 | Branch 预测 / 控制冒险 | `pipeline/rv32i_branch_predict.h` |
 | 冒险检测（Load-Use） | `pipeline/hazard_detection_unit.h` |
 | I-Cache (1-cycle, RV32I L1 默认) | `cache/i_cache_sync.h` (`i_cache_complete.h` 是兼容 shim 别名) |
@@ -91,6 +91,15 @@ include/cpu/                             # 30 headers, 6182 lines（2026-10-27 �
 - **`alu_op` 的 SUB/SRA 判定 MUST 只对 R 型 与 SRAI 生效**（2026-10-27 修复）：`funct7[5]`
   （= `instr[30]`）对 **I 型**是 **`imm[10]`** ⇒ 直接用它判 SUB 会把 `imm >= 0x400`
   或负数误判成 SUB（实测 `addi x, x0, -8` ⇒ `0 - (-8)` = 8）。
+- **数据前推（2026-10-27，ADR-047）**：lib 流水线**已接**数据前推 ——
+  mux = `chlib::ForwardingMux<32>`（**零新增组件**），档位 select **打一拍**
+  （`fwd_a_d1`/`fwd_b_d1`）⇒ 档位 1 = EX/MEM 级、档位 2 = MEM/WB 级合并写回值。
+  ⚠️ 数据源的**叶子** MUST 是**流水线寄存器**（MUST NOT 取 EX/MEM 级的**组合输出**
+  —— `bf78367` 的事故形态）⇒ **负向对照**是**常驻**测试
+  （`tests/chlib/test_forwarding.cpp`）。
+  ⚠️ `HazardUnit` 的 5 个**预留输入端口已删**（D7）⇒ 只剩 4 个直通端口。
+  ⚠️ 前推判定带 `& !ex_is_load` 门控（D6）⇒ 档位 1 **不覆盖 load**
+  ⇒ **load-use 停顿契约不变**。
 - **TCM**: `rv32i_tcm.h` provides single-cycle instruction/data memories
   - ⚠️ **`DataTCM` 的字节道契约**（2026-10-26 新增 `strbe` 端口）：`addr` 是**字地址**、
     `wdata` MUST 已**lane 对齐**（`rs2 << 8*addr[1:0]`，由流水线负责）、`strbe` 是车道掩码

@@ -258,6 +258,55 @@ TEST_CASE("ForwardingMux: level-1 source selects jump return address",
 }
 
 // ============================================================================
+// 测试 1c: **负向对照** —— 组合环 MUST 仍然被拓扑排序抓到
+//
+// ⚠️ ADR-047 D9 的「负向对照」：事故形态（`git show bf78367`，2026-04-15）
+//    是「前推的数据源取自 **EX 级组合输出**」⇒ mux 的输出又喂回 EX
+//    ⇒ **纯组合环** ⇒ 拓扑排序 MUST 报环。
+//    ⚠️ **为什么必须有这条**：若环检测本身失效（`type_reg` 不再是断路器 /
+//    `type_mem_read_port` 被豁免）⇒「新形态不成环」这个结论**没有意义**
+//    （它可能只是**环检测坏了**）⇒ ⇒ 负向对照 MUST 是**常驻**的
+//    （一次性的人工检查 ⇒ 护栏失效无人守）。
+//    ⇒ 本用例把「环检测仍有效」变成**常驻回归**。
+// ============================================================================
+class ForwardingCycleFixture : public ch::Component {
+public:
+    __io(ch_out<ch_uint<32>> y;)
+
+    ForwardingCycleFixture(ch::Component *parent = nullptr,
+                           const std::string &name = "cycle_fixture")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        ch::ch_module<chlib::ForwardingMux<32>> mux{"forwarding_mux"};
+        mux.io().forward_a <<= ch_uint<2>(1_d);
+        mux.io().forward_b <<= ch_uint<2>(0_d);
+        mux.io().rs1_data_reg <<= ch_uint<32>(0_d);
+        mux.io().rs2_data_reg <<= ch_uint<32>(0_d);
+        mux.io().is_jump <<= ch_bool(false);
+        mux.io().jump_result <<= ch_uint<32>(0_d);
+        mux.io().mem_wb_result <<= ch_uint<32>(0_d);
+        // ⚠️ **事故形态**：档位 `1` 的数据源 ← mux **自己的输出**
+        //    ⇒ 纯组合环（无寄存器节点可断环）⇒ 拓扑排序 MUST 报环。
+        mux.io().ex_mem_alu_result <<= mux.io().alu_input_a;
+        io().y <<= mux.io().alu_input_a;
+    }
+};
+
+TEST_CASE("ForwardingMux: negative control - combinational cycle MUST be detected",
+          "[forwarding][negative][cycle]") {
+    REQUIRE_THROWS_AS(
+        [] {
+            ch::ch_device<ForwardingCycleFixture> dev;
+            ch::Simulator sim(dev.context());
+            sim.tick();
+        }(),
+        std::runtime_error);
+}
+
+// ============================================================================
 // 测试 2: ForwardingMux 数据选择 (使用函数式接口)
 // ============================================================================
 TEST_CASE("ForwardingMux: Data selection", "[forwarding][mux][functional]") {
