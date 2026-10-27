@@ -101,7 +101,8 @@ ADR-047 §5.2 把实施拆成 C1 / C2 两阶段，各阶段**可独立验收**�
   - [x] 前推判定漏 `& !ex_is_load` ⇒ 红 —— **组件级**（1.5）
   - [x] 档位 1 忘接 `link_value` ⇒ 红 —— **组件级**（1.5）
   - [x] 去掉 D11 的读点旁路 ⇒ 红 —— **固件级**（距离 3 用例）
-  - [ ] ⚠️ 编译失败的变异 MUST NOT 计入「已抓到」（跑的是**旧二进制** ⇒ 假绿）
+  - [x] 函数式 `forward_select<>` 漏接 `is_jump` ⇒ 红 —— **组件级/函数级**（SF4）
+  - [x] ⚠️ 编译失败的变异 MUST NOT 计入「已抓到」（跑的是**旧二进制** ⇒ 假绿）
 
 ## C2：端口清理 + 双驱动收敛 + 文档 / 规格 / 簿记
 
@@ -138,14 +139,15 @@ ADR-047 §5.2 把实施拆成 C1 / C2 两阶段，各阶段**可独立验收**�
   - [x] 7 个护栏脚本全 exit 0
   - [x] **既有 golden 零变化**（既有 SoC 固件的 24 条写回序列 / 停顿计数 /
         退休数 MUST **一个都不变** ⇒ 归因 = 零）
-- [ ] **2.6 规格同步**（archive 时）
-  - [ ] 5 个 capability 的 delta 合并进主 spec
-  - [ ] ⚠️ `rv32i-data-forwarding` 的 `## Purpose` **手工补写**
+- [x] **2.6 规格同步**（archive 时）
+  - [x] 5 个 capability 的 delta 合并进主 spec
+  - [x] ⚠️ `rv32i-data-forwarding` 的 `## Purpose` **手工补写**
         （delta 里的 `## Purpose` **不会被 CLI 合并**）
 
 ## 验收（对齐 ADR-047 §5.2 的 C1 / C2 判据）
 
-- [ ] **C1** ✅ 双后端 parity + **7 类**判别性用例 + **2 条组件级**验收
+- [x] **C1** ✅ 双后端 parity + **7 类**判别性用例 + **2 条组件级**验收
       + **档位对齐的实测**（距离由实测钉住，MUST NOT 预先断言）
-- [ ] **C2** ✅ 护栏 + spec delta + 簿记
-- [ ] **对抗审稿**（critic，≤ 2 轮）+ `openspec archive`
+- [x] **C2** ✅ 护栏 + spec delta + 簿记
+- [x] **对抗审稿**（critic，≤ 2 轮）+ `openspec archive`
+      ⇒ 第 1 轮 APPROVE_WITH_CONDITIONS（无 BLOCKER ⇒ 不发起第 2 轮）

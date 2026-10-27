@@ -347,3 +347,34 @@ id_stage.io().reg_rs1_data <<= select(wb_bypass_hit_a,
 - **分支预测**（`rv32i_branch_predict.h` 未接入流水线）
 - **框架层改动**（`operator>>>` 仍是注释状态；`ch_mem` 语义）
 - **不新建第二个 capability** ⇒ 5 个（1 新建 + 4 MODIFIED）已覆盖全部契约面
+
+## 对抗审稿记录
+
+### 第 1 轮（2026-10-27）⇒ APPROVE_WITH_CONDITIONS
+
+`review_profile: plan, build` ⇒ **两档结论一致**：`mergeable: yes` /
+`scope_exceeded: false` / **无 BLOCKER**；4 条 SHOULD_FIX + 2 条 NIT。
+处置提交 `7071f9c`，**全部 CLOSED**：
+
+| 编号 | 档位 | 问题 | 处置 |
+|------|------|------|------|
+| SF1 | plan | 距离矩阵表第 1 行未在**表内**标注 **load 例外** | 表内加例外标注；ADR-047 D11 与 capability 两处**逐字一致** |
+| SF2 | plan | 根 `AGENTS.md` **压缩复述**矩阵 ⇒ 与「MUST NOT 自述一份」有张力 | 改为**只给指针**，保留「不再需要插 NOP」的**结论**（结论不是矩阵） |
+| SF3 | build | `ex_stage.h` 注释**修了一半**（新结论下残留旧限制行） | 删残留行 + 显式标注「旧限制已作废（ADR-047）」 |
+| SF4 | build | 函数式 `forward_select<>` 的 `is_jump=true` 分支**零调用点覆盖**（与组件侧同逻辑的两处实现 ⇒ 可能分叉） | 新增 jump 用例（`is_jump` 按值传入 ⇒ 调两次）+ 变异 M6 |
+| NIT1 | build | `tasks.md` §2.4 陈旧计数遗留 | 改为「202 / 17 / NOTES 算术链**均不变**」（判别性固件进**既有** target） |
+| NIT2 | build | 用例 ⑦ 的反向期望叙述不精确 | 改为如实描述真实判别路径 |
+
+**按评审预算不发起第 2 轮**：规则是「只有 BLOCKER 触发返工与复审」
+⇒ 本轮无 BLOCKER ⇒ 条件项在同批 commit 内闭合即放行。
+
+**变异验证 6/6 全被抓到**（每条先确认编译成功，否则跑的是旧二进制 ⇒ 假绿）：
+
+| # | 变异 | 被抓形态 |
+|---|------|---------|
+| M1 | 去掉 `fwd_a_d1`/`fwd_b_d1` 打拍 | 判别性固件转红 |
+| M2 | 交换档位 1/2 的数据源 | 判别性固件转红 |
+| M3 | 漏 `& !ex_is_load` 门控 | 组件级真值表转红 |
+| M4 | 档位 1 忘接 `link_value` | 组件级真值表转红 |
+| M5 | 去掉 D11 寄存器堆读点旁路 | 距离 3 用例转红 |
+| M6 | 函数式接口漏接 `is_jump` | `forward_select` jump 用例转红 |
