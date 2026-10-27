@@ -41,7 +41,7 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/rv32i-fetch-skid-buffer-2026-10/`（架构依据 = **ADR-048**，Accepted 2026-10-27 / 2 轮 critic ⇒ APPROVE）⇒ **一个 change、两个 commit**（C1 缺陷 A skid / C2 缺陷 B `primed`）⇒ 需 builder |
+| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ **已归档**（2026-10-27）：`openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`（ADR-048；一个 change、两个 commit = C1 skid / C2 `primed`）⇒ `rv32i-commit-path` MODIFIED ×2 ⇒ **`feat-rv32i-isa-completeness` ④ 收口** |
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`dual-backend-rv32i-integration-2026-10`（P1）——
 > RV32I 子组件的 dual-backend 覆盖补齐 **Batch 2/3**（`IfIdPipelineReg` ×2 + `BranchPredictor` ×1
@@ -84,15 +84,15 @@
 > ⇒ 立项时 MUST 统一，见「实施规划」§遗留项 3）；
 > `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②。
 >
-> ✅ **已立项**：
-> - `dual-backend-rv32i-integration-2026-10`（P1，2026-10-27）→
->   `openspec/changes/dual-backend-rv32i-integration-2026-10/`（proposal 已就绪，
->   **无 spec 变更**）⇒ 覆盖 `feat-dual-backend-coverage` Phase 4 残余 +
->   `objective-rv32i-e2e` 判据第 5 条；
-> - `rv32i-fetch-skid-buffer-2026-10`（P0，2026-10-27）→
->   `openspec/changes/rv32i-fetch-skid-buffer-2026-10/`（proposal + spec delta
->   `rv32i-commit-path` MODIFIED ×2）⇒ 架构依据 = **ADR-048**（Accepted 2026-10-27）⇒
->   `feat-rv32i-isa-completeness` ④。
+> ✅ **sprint-2026-10 再归档一项**（2026-10-27）：`rv32i-fetch-skid-buffer-2026-10`（P0）——
+> **RV32I 取指 skid buffer + 填充期 `primed` 门控**（ADR-048，一个 change、两个 commit）：
+> C1 消除「load-use 停顿丢弃消费者之后第一条指令」（⇒ 固件**不再**需要在停顿点后插 NOP）；
+> C2 消除「取指填充期同一条指令被装两次」（退休数 **179 → 178**、`non_retired` **20 → 21**，
+> fill 段 2 → 3 拍，停顿/冲刷段不变）⇒ 同时消掉 ADR-047 之后升级成的**正确性**地雷
+> （自依赖首条 + 前推 ⇒ 双装非幂等）；
+> **变异 6/6 全被抓**（其中「删掉 flush 清空 skid」**只有组件级**能抓 ⇒ 与 ADR-048 D5 一致）；
+> ⚠️ 实测补充：停顿后还有一次**重复装载** ⇒ C1 的「救回 1 条」与它**相抵** ⇒ C1 单独零观测面扰动。
+> ⇒ `feat-rv32i-isa-completeness` ④ 收口（ISA 语义边界除 CSR/ECALL/FENCE/LB·LH 外全部落地）。
 
 > ✅ **sprint-2026-10 已完成**：`axi4-interconnect-routing-2026-10`（P0）
 > 于 2026-10-26 归档（`openspec/changes/archive/2026-10-26-axi4-interconnect-routing-2026-10/`），

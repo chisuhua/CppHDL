@@ -35,7 +35,7 @@ phase_refs: [phase-5]
 | ① | `rv32i-store-byte-enable-2026-10` | `DataTCM` 加 `strbe` 端口 + **wdata lane 对齐**（`rs2 << 8*addr[1:0]`）+ SoC 接线 + SB/SH 固件用例 | 无 | 同一地址先 `sw 0xFFFFFFFF` 再 `sb 0x00`（offset 1/2/3）⇒ 读回逐字节正确；双后端 parity |
 | ② | `rv32i-jump-sra-2026-10` | `if_stage` 的 PC 源加入「JAL/JALR 目标」选择器 + JAL 写回 `pc+4` + `sra_result` 真算术右移 | 无 | JAL/JALR 固件用例（跳转 + `ra` 回读）+ `-8 >> 1 == -4` 用例；双后端 parity |
 | ③ | `rv32i-forwarding-decision-2026-10` | **ADR-046 D5 裁决**（接/不接前推）+ 按裁决清理 `hazard_unit.h` 的 5 个预留输入端口 | **需 ADR**（行为变更） | 裁决文档 + 回归（若接前推：`bf78367` 的组合环 MUST NOT 复现） |
-| ④ | `rv32i-fetch-skid-buffer-2026-10` | 取指 skid buffer + PC 回退（消除「停顿丢弃指令」）+ 取指填充期双装（**框架层 `sread` 语义**，影响所有用户） | ③（无前推时的停顿语义要先定）⇒ **已解锁** | 固件**删除**所有手工 NOP 后仍逐拍 parity；退休数 == 指令数 |
+| ④ | `rv32i-fetch-skid-buffer-2026-10` | 取指 skid buffer（消除「停顿丢弃指令」，**不需要 PC 回退** —— ADR-048 D3）+ 取指填充期双装（**`primed` 门控**，ADR-048 D6；**不动框架层 `sread` 语义** —— D7 不启动） | ③（无前推时的停顿语义要先定）⇒ **已解锁** | 固件**删除**所有手工 NOP 后仍逐拍 parity；每条指令退休**恰好一次** |
 
 > **① 的实施结果（2026-10-26）**：change `rv32i-store-byte-enable-2026-10` 已实施
 > **并归档**（2 轮对抗审稿：第 1 轮 APPROVE_WITH_CONDITIONS ⇒ 条件项同批整改；
@@ -79,11 +79,28 @@ phase_refs: [phase-5]
 - ✅ ② `rv32i-jump-sra-2026-10`（2026-10-27 **已归档** ⇒ capability `rv32i-isa-semantics` 2 → 6 条）
 - ✅ ③ `rv32i-forwarding-decision-2026-10`（2026-10-27 **已归档** ⇒ 新 capability
   `rv32i-data-forwarding`；实施结果见上方 ③ 条目）
-- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置 ③ ⇒ **已解锁**；✅ **已立项**：
-  `openspec/changes/rv32i-fetch-skid-buffer-2026-10/`（proposal + spec delta，
-  **ADR-048** 为架构依据 ⇒ **一个 change、两个 commit**：C1 缺陷 A（skid buffer）/
-  C2 缺陷 B（`primed` 门控）⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md`
-  （**Accepted** 2026-10-27，2 轮 critic ⇒ 第 2 轮 APPROVE））
+- ✅ ④ `rv32i-fetch-skid-buffer-2026-10`（2026-10-27 **已归档** ⇒ `rv32i-commit-path` 的
+  **2 条 Requirement MODIFIED**；架构依据 = ADR-048，**一个 change、两个 commit**：
+  C1 缺陷 A（skid buffer）/ C2 缺陷 B（`primed` 门控）⇒ 实施结果见上方 ④ 条目）
+
+> **④ 的实施结果（2026-10-27）**：change `rv32i-fetch-skid-buffer-2026-10` 已实施
+> **并归档**（ADR-048 已 Accepted，2 轮 critic；归档**禁** `--skip-specs` ⇒ 走 MODIFIED delta）。
+> 要点：
+> ① **C1 = 1 级 skid buffer**（`IfStage` 内 3 个寄存器）—— 填充在**停顿首拍**抓
+>    `(fetched_instr, fetch_pc_reg)` 这一对（⚠️ `skid_pc` MUST 取 `fetch_pc_reg`），
+>    排空与 `if_id_update_en` **同拍原子**；**不做 PC 回退**（ADR-048 D3）；
+> ② **C2 = `primed` 标志**（复位后首个非复位周期置 1）**只门控 IF/ID 的 `valid`**
+>    ⇒ 幻影装载不再执行 ⇒ 退休数 **179 → 178**、`non_retired` **20 → 21**
+>    （fill 段 2 → 3 拍；停顿 / 冲刷段**逐段不变**）；
+> ③ ⚠️ **实施时实测到 ADR 未记载的事实**：停顿之后还有一次**重复装载**（同一 word 连装两拍）
+>    ⇒ C1 的「救回 1 条」与「消掉 1 条重复」在计数上**相抵** ⇒ C1 单独**零观测面扰动**
+>    （既有金标：退休数 179 / `non_retired` 20 / 写回序列 24 项全部不变）；
+> ④ **变异 6/6 全被抓到**（M1 `skid_pc` 取错 / M2 关排空 / M3 排空写反 /
+>    M4 删 flush 清空 skid —— **只有组件级能抓** / M5 去 `primed` / M6 门控全部装载）；
+> ⑤ **删掉 3 条失效护栏**（`stall_drop_slots_are_nop` / `fwd_stall_drop_slots_are_nop` /
+>    `fwd_first_instruction_not_self_dependent`）+ **删掉「连续重复去重」掩码**
+>    （缺陷 B 修复后，任何连续重复都是真回归）；
+> ⑥ `CTEST_TOTAL` **202 不变** / `EXAMPLES_TEST_SOURCES` **17 不变**（用例进既有 target）。
 
 ## 反例
 
@@ -103,8 +120,9 @@ phase_refs: [phase-5]
 - [x] JAL / JALR 真正重定向且 `ra` 正确（② 2026-10-27 归档）
 - [x] SRA 对有符号负数正确（② 2026-10-27 归档）
 - [x] 依赖指令在**距离 1–3** 内拿到新值（③ 2026-10-27 归档；距离 3 靠 D11 读点旁路）
-- [ ] 固件**无**手工 NOP 填充仍能正确执行（④ 完成 —— ⚠️ ③ 只消除了**依赖间隔**的 NOP，
-      未被 ③ 覆盖的两条并列约束「load-use 停顿」+「停顿丢弃消费者之后第一条指令」仍要求
-      固件在 load-use 之后放一条 NOP）
-- [ ] 退休指令数 == 实际指令数（④ 完成）
+- [x] 固件**无**手工 NOP 填充仍能正确执行（④ 2026-10-27 归档 ⇒ 判别性固件
+      `skid_firmware()` 在停顿点之后放**非 NOP**（`ADDI x19` + `SW x19`）且 MUST 执行到；
+      ⚠️ 既有 108 字固件**仍**在那两处放 NOP —— 那是**允许**的，不再**必需**）
+- [x] 每条指令退休**恰好一次**（④ 2026-10-27 归档 ⇒ `x16` 写回恰好 1 次且值 != 2、
+      `x20` 写回恰好 1 次、ID word 序列去重后逐 4 递增 = 无跳号/无倒退）
 - [ ] 上述每项都有**变异验证**（改坏即转红），而非仅「跑绿」

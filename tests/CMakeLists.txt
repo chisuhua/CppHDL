@@ -566,6 +566,12 @@ add_dual_backend_test(test_rv32i_pipeline_behavior
     SOURCES test_rv32i_pipeline_behavior.cpp
     TIMEOUT 300
 )
+# `stages/if_stage.h`（Batch 4 的 DUT）用**相对**路径 include 兄弟头
+# (`#include "rv32i_tcm.h"`) ⇒ 该测试必须把 include/cpu/pipeline/ 放进
+# 搜索路径（同 `test_verilator_complex_e2e` 的处理）。
+target_include_directories(test_rv32i_pipeline_behavior PRIVATE
+    ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
+)
 # test_simplified_creation 已删除 — easy_nodes.h 不再存在
 add_catch_test(test_trace test_trace.cpp)
 add_catch_test(test_user_tracking test_user_tracking.cpp)
@@ -767,5 +773,6 @@ add_spinalhdl_ported_test(branch_predictor_v2 test_branch_predictor_v2)
 # Performance Benchmarks
 # ============================================================================
 add_subdirectory(benchmark)
+
 
 

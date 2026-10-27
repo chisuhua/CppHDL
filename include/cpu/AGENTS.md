@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6278 lines**（2026-10-27 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6364 lines**（2026-10-27 实测，ADR-046 D9：磁盘是权威）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6278 lines（2026-10-27 实测）
+include/cpu/                             # 30 headers, 6364 lines（2026-10-27 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -105,6 +105,20 @@ include/cpu/                             # 30 headers, 6278 lines（2026-10-27 �
     `wdata` MUST 已**lane 对齐**（`rs2 << 8*addr[1:0]`，由流水线负责）、`strbe` 是车道掩码
     ⇒ 写路径是**读-改-写**（`ch_mem` 无字节使能写 API）。⚠️ `strbe` 是**新增输入端口**
     ⇒ **全部实例化点 MUST 显式驱动**（未驱动端口读到的是**全 1** 而非 0 ⇒ 整字写会「碰巧」通过）
+- **取指侧契约（2026-10-27，ADR-048 / change `rv32i-fetch-skid-buffer-2026-10`）**：
+  `stages/if_stage.h` 的 `IfStage` 内置 **1 级 skid buffer** 与 `primed` 标志，二者都
+  **依赖 imem 的 1 拍 `sread`** 这个前提 ⇒ 改取指结构前 MUST 重读 ADR-048：
+  - **skid**（D1–D5）：填充只在**停顿拍**抓 `(fetched_instr, fetch_pc_reg)` 这一对
+    （⚠️ `skid_pc` MUST 取 `fetch_pc_reg`，取 `pc_reg` 会错 4 字节）；排空**必须与
+    `if_id_update_en` 同拍原子**；`flush | flush_d1 | rst` 一律清空。
+    ⚠️ **不做 PC 回退**（停顿已冻结 `pc_reg` ⇒ 在途数据至多一条；回退会制造双装）。
+  - **`primed`**（D6）：复位后首个非复位周期置 1，**只门控 IF/ID 的 `valid`**
+    ⇒ 幻影装载的 pc 仍写入（`dbg_id_pc` 序列不变）但 `valid=0` ⇒ 不进 EX。
+    ⚠️ 判据 MUST 内生于 `IfStage` —— `instr_ready` **恒为 1**，不携带信息。
+  - ⚠️ 编译期护栏 `stall_drop_slots_are_nop` 与测试里的「连续重复去重」掩码**已删除**
+    （前提消失）⇒ 判别性证据在 `test_rv32i_soc_dual_parity.cpp` 的
+    `FetchSkidBufferDiscriminating` 用例与 `tests/test_rv32i_pipeline_behavior.cpp` 的
+    **Batch 4**（`IfStage` 的 `flush × skid` 防御性契约 —— 流水线级**不可达** ⇒ 只有组件级能测）。
 - **Cache variant selection** (ADR-041):
   - **RV32I L1 imem/dmem** (默认) → `ICacheSync` / `DCacheSync` (1-cycle sread)
   - **软核 TCM-style** (低频, 延迟关键) → `ICacheAsync` / `DCacheAsync` (0-cycle aread)

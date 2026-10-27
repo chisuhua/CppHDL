@@ -121,6 +121,7 @@ constexpr std::size_t kIdxDataWriteEn = obs_idx("obs_data_write_en");
 constexpr std::size_t kIdxDataAddr = obs_idx("obs_data_addr");
 constexpr std::size_t kIdxDataWriteData = obs_idx("obs_data_write_data");
 constexpr std::size_t kIdxIdPc = obs_idx("dbg_id_pc");
+constexpr std::size_t kIdxIdValid = obs_idx("dbg_id_valid");
 constexpr std::size_t kIdxIdInstr = obs_idx("dbg_id_instr");
 constexpr std::size_t kIdxWbWriteEn = obs_idx("dbg_wb_write_en");
 constexpr std::size_t kIdxWbWriteData = obs_idx("dbg_wb_write_data");
@@ -135,6 +136,7 @@ static_assert(kIdxDataWriteEn != kObsCount, "obs_data_write_en 未在 kObsNames 
 static_assert(kIdxDataAddr != kObsCount, "obs_data_addr 未在 kObsNames 中");
 static_assert(kIdxDataWriteData != kObsCount, "obs_data_write_data 未在 kObsNames 中");
 static_assert(kIdxIdPc != kObsCount, "dbg_id_pc 未在 kObsNames 中");
+static_assert(kIdxIdValid != kObsCount, "dbg_id_valid 未在 kObsNames 中");
 static_assert(kIdxIdInstr != kObsCount, "dbg_id_instr 未在 kObsNames 中");
 static_assert(kIdxWbWriteEn != kObsCount, "dbg_wb_write_en 未在 kObsNames 中");
 static_assert(kIdxWbWriteData != kObsCount, "dbg_wb_write_data 未在 kObsNames 中");
@@ -398,7 +400,7 @@ constexpr std::array<std::pair<uint64_t, uint64_t>, 24> kExpectedWritebacks = {{
 }};
 
 // ⚠️ MUST 是 **constexpr**（不是 `static const`）⇒ 才能被编译期护栏检查
-//    （见下 `stall_drop_slots_are_nop`）。
+//    （见 `skid_firmware()` 的 `skid_slot_is_discriminating()`）。
 constexpr std::array<uint32_t, kFirmwareWords> firmware() {
     return {{
         ADDI(1, 0, 10),   // 0  x1 = 10
@@ -415,9 +417,12 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
         // ⚠️ **紧邻的 load → use**：考验 load-use 冒险的**停顿**是否真的生效
         //    （若停顿不生效，x6 会拿到旧值 0 ⇒ golden B 变 0）。
         ADD(6, 5, 5),     // 21 x6 = 20
-        // ⚠️ word 22 **MUST 是 NOP**：load-use 停顿会**丢弃「消费者之后的
+        // ⚠️ word 22 曾是**必需**的 NOP：load-use 停顿会**丢弃「消费者之后的
         //    第一条指令」**（imem 的 1 拍 sread + IF/ID 冻结 ⇒ 已提交未锁存
-        //    的那条无处可存）⇒ 该位置只能是 NOP（详见 design.md §3.10）。
+        //    的那条无处可存）。**2026-10-27 起该约束已消除**（取指 skid buffer，
+        //    ADR-048 D1–D5）⇒ 放 NOP 不再是**必需**（但仍**允许**）。
+        //    ⇒ 本固件保持原样（既有 golden 零变化），**判别性证据**放在
+        //      `skid_firmware()`（该处故意放**非 NOP**）。
         NOP,
         NOP, NOP,
         SW(6, 0, 0x104),  // 25 [0x104] = 20   (golden B)
@@ -555,43 +560,6 @@ bool has_store(const Trace &t, uint32_t addr, uint32_t data) {
 }
 
 }  // namespace
-
-// ===========================================================================
-// ⚠️ **编译期护栏**：load-use 停顿点之后的位置 MUST 是 NOP
-//
-// 背景（design.md §3.10，第 17 轮 critic BLOCKER）：load-use 停顿会**丢弃
-// 「消费者之后的第一条指令」**（imem 是 1-cycle `sread` ⇒ 该指令的地址已在
-// 停顿前提交、数据在停顿首拍返回，而 IF/ID 在停顿期间冻结 ⇒ 无处可存）。
-// ⇒ 固件 MUST 保证那个位置是 NOP，否则该指令会**静默消失**。
-//
-// 判定条件与 `hazard_unit.h` 的检测条件**同构**
-// （`ex_is_load & rd!=0 & (rs1==rd | rs2==rd)`）⇒ 不误报；
-// 方向是 fail-safe（将来加 U/J 型指令时只会**多**要求 NOP，不会放过）。
-//
-// ⚠️ **compile-time** ⇒ 零运行时成本、零误报、固件一改就编译失败。
-// ===========================================================================
-constexpr bool stall_drop_slots_are_nop() {
-    for (std::size_t i = 0; i + 2 < kFirmwareWords; ++i) {
-        const std::uint32_t w = firmware()[i];
-        if ((w & 0x7Fu) != 0x03u) {
-            continue;  // 不是 LOAD
-        }
-        const std::uint32_t rd = (w >> 7) & 31u;
-        if (rd == 0) {
-            continue;  // 写 x0 ⇒ 不会有依赖
-        }
-        const std::uint32_t c = firmware()[i + 1];  // 紧邻的消费者
-        if (((c >> 15) & 31u) == rd || ((c >> 20) & 31u) == rd) {
-            if (firmware()[i + 2] != NOP) {
-                return false;  // 被丢的位置 MUST 是 NOP
-            }
-        }
-    }
-    return true;
-}
-static_assert(stall_drop_slots_are_nop(),
-              "load-use 停顿点之后的位置 MUST 是 NOP（design.md §3.10）："
-              "该指令会被停顿静默丢弃 ⇒ 固件 MUST 用 NOP 填充该位置");
 
 // ===========================================================================
 // ① 固件自校验：编码器 vs 手算常量；固件长度与地址边界。
@@ -785,6 +753,19 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
 
     // ---- ③ ISA 语义 golden（两端一致 ≠ 两端都对）----
     //
+    // ⚠️ **取指填充期的两条不变量**（2026-10-27，ADR-048 D6 方案 1）：
+    //   第 0 拍 IF/ID 装入的是**幻影**（复位前 `load_firmware` 的加载拍已把
+    //   imem 的 sync 读端口预填成 word 0）——
+    //     ① `dbg_id_pc` MUST **仍是** PC 复位值 `0x80000000`
+    //        ⇒ 钉住「**只门控 `valid`**」这个选择：若改成「门控全部三个装载」
+    //        ⇒ 第 0 拍的 `dbg_id_pc` 会是复位值 **0** ⇒ 本断言转红（= M6）；
+    //     ② `dbg_id_valid` MUST 为 **0** ⇒ 幻影不进 ID/EX ⇒ 同一条指令
+    //        只退休**一次**（缺陷 B 修复的直接观测）。
+    //   ⚠️ 反向期望：修复前 ② 是 **1**（幻影真的执行了）。
+    REQUIRE(ta[0][kIdxIdPc] == 0x80000000u);
+    REQUIRE(ta[0][kIdxIdValid] == 0u);
+    REQUIRE(ta[1][kIdxIdValid] == 1u);   // 第 1 拍是真取指的 word 0 ⇒ valid
+    //
     // A: 纯 ALU 结果落 dmem（x4 = 13 - 3 = 10）
     REQUIRE(has_store(ta, kGoldenAddrA, kGoldenValA));
     // B: load 真的读回了值（x5 = [0x100] = 10）⇒ load 路径确实生效
@@ -889,10 +870,12 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
 
     // ---- 退休指令数（按**逐拍实测**的非退休拍推导，不拍脑袋）----
     //
-    // 退休数在 **cyc 1..199** 这 199 个拍间隔里有 **17** 个「不增长」，
-    // 分六段：
-    //   ① 2 拍填充（cyc 1..2：IF/ID → ID/EX → EX/MEM → MEM/WB 依次就绪；
-    //      cyc 0 是第 1 拍，退休数从 0 起，故填充段落在 cyc 1..2）
+    // 退休数在 **cyc 1..199** 这 199 个拍间隔里有 **21** 个「不增长」，
+    // 分七段：
+    //   ① **3 拍填充**（cyc 1..3）：IF/ID → ID/EX → EX/MEM → MEM/WB 依次就绪。
+    //      ⚠️ **2026-10-27 起是 3 拍（原 2 拍）**：`primed` 门控（ADR-048 D6）
+    //      把复位后**第 0 拍**的幻影装载的 `valid` 压成 0
+    //      ⇒ 第一条指令进 ID/EX 晚一拍 ⇒ **fill 段 +1**（这就是缺陷 B 的 −1）
     //   ② 3 拍 **load-use 停顿 #1**（消费者留在 ID 级；EX/MEM 与 MEM/WB 灌气泡）
     //   ③ 3 拍 **冲刷气泡**（taken 分支让出错误路径 + 重新取指目标）
     //      ⚠️ **3** 拍：flush MUST **多杀一拍**（imem 是 1-cycle `sread` ⇒
@@ -902,7 +885,14 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //   ⑤ 3 拍 **`JAL` 冲刷**（word 64；**与条件分支同构** ⇒ 同样 3 拍）
     //   ⑥ 3 拍 **`JALR` 冲刷**（word 80）
     //   ⑦ 3 拍 **`JAL` 冲刷**（word 100 —— 「错误路径上的跳转」用例）
-    // ⇒ 199 − 20 = 179 条指令退休
+    //   ⇒ **填充 3 + 停顿 6 + 冲刷 12 = 21** ⇒ 199 − 21 = **178** 条指令退休
+    //
+    // ⚠️ **分段不变式**（ADR-048 D9.2）：取指 skid buffer **不改**停顿拍数与
+    //    冲刷拍数（仍各 3）⇒ ②④ 与 ③⑤⑥⑦ **逐段不变**，只有 ① 随 `primed` 变。
+    //    实测（2026-10-27）：skid 落地（C1）后本段三处**全部不变**
+    //    （non_retired 仍 20 / 退休数仍 179 —— skid 救回一条、同时消掉一次
+    //    **重复装载**，两者在计数上相抵；详见 design.md §1.3）；
+    //    `primed`（C2）落地后只多出 cyc 3 这一拍 ⇒ 21 / 178。
     //
     // ⚠️ 「不增长的间隔数」与「退休数」**分别断言** ⇒ 若流水深度变了，
     //    两条断言**一起**转红（不会「一条变、一条不变」而掩盖）。
@@ -914,35 +904,34 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
             ++non_retired;
         }
     }
-    REQUIRE(non_retired == 20u);
-    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 21u);
+    REQUIRE(non_retired == 21u);
+    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 22u);
 
     // ---- 写回序列（ISA 语义的最强判据）----
     //
-    // 逐拍收集所有写回 `(rd, data)`，**去掉连续重复项**（已知残留：取指
-    // 填充期同一条指令被装两次 ⇒ 幂等地写回两次 —— 见 design.md §3.6），
-    // 然后与固件的**期望序列**逐项比对。
+    // 逐拍收集所有写回 `(rd, data)`，与固件的**期望序列**逐项比对。
+    //
+    // ⚠️ **不再去重**（2026-10-27，ADR-048 D11）：此前的「连续重复去重」
+    //    是为**缺陷 B**（取指填充期同一条指令被装两次 ⇒ 幂等地写回两次）
+    //    设计的；`primed` 门控（C2）修掉缺陷 B 之后，**任何**连续重复
+    //    都是**真回归** ⇒ 掩码若留着会反过来把它掩盖。
     //
     // ⚠️ 为什么必须是**序列**而不是计数：
     //    「多一次假退休」会让「退休数」与「写回次数」**同步** +1
     //    ⇒ 任何**计数**断言都抓不到（变异验证实测：`exmem_valid` 改回取
     //    ID 级的 valid ⇒ 计数不变 ⇒ 零信号）⇒ 只有序列能抓。
     //
-    // 期望序列（固件 **64 字**；word 29 的 BEQ 被 taken ⇒ 冲刷 word 30 的
-    // `addi x7,x0,0x7f` ⇒ **x7 MUST NOT 出现**）：
-    //   x1=10, x2=3, x3=13, x4=10, x5=10, x6=20, x8=1, x9=2, x12=0x30A, x13=0xD0000
+    // 期望序列（固件的**全部**写回，按程序顺序）：
+    //   x1=10, x2=3, x3=13, x4=10, x5=10, x6=20, x8=1, x9=2, ...
+    //   （word 29 的 BEQ 被 taken ⇒ 冲刷 word 30 的 `addi x7,x0,0x7f`
+    //    ⇒ **x7 MUST NOT 出现**）
     {
         std::vector<std::pair<uint64_t, uint64_t>> wb;
         for (std::size_t c = 0; c < ta.size(); ++c) {
             if (ta[c][kIdxWbWriteEn] != 1u) {
                 continue;
             }
-            const std::pair<uint64_t, uint64_t> item{
-                ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]};
-            if (!wb.empty() && wb.back() == item) {
-                continue;  // 连续重复 ⇒ 已知残留（幂等写回）
-            }
-            wb.push_back(item);
+            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
         }
         REQUIRE(wb.size() == kExpectedWritebacks.size());
         for (std::size_t i = 0; i < wb.size() && i < kExpectedWritebacks.size();
@@ -958,8 +947,10 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     // 背景（第 16 轮 critic BLOCKER B1）：taken 分支的 flush 此前**漏杀**
     // 「flush 当拍提交地址」的那条在飞取指（imem 是 1-cycle `sread` ⇒ 数据在
     // 下一拍才返回 ⇒ 只在 flush 拍门控不够）⇒ 该错误路径指令被执行了**两次**。
-    // ⇒ 它被上面的「连续重复去重」**掩盖**了（去重是为 §3.6 的填充期残留设计的）
-    // ⇒ 必须**单独**断言「**原始**写回序列里 `(8,1)` 只出现一次」。
+    // ⇒ 它曾被「连续重复去重」**掩盖**了（去重是为填充期残留设计的 —— 该掩码
+    //    已于 2026-10-27 随缺陷 B 的修复**删除**，ADR-048 D11）
+    // ⇒ 仍保留本**计数**断言：把「只写一次」写成显式的 liveness 判据
+    //    （序列断言已覆盖，但计数断言的失败信息更直接）。
     {
         std::size_t x8_writes = 0;
         for (std::size_t c = 0; c < ta.size(); ++c) {
@@ -1127,45 +1118,6 @@ constexpr uint32_t kFwdStoreData = 0xABu;  // 0xAB
 // 判别性固件的**编译期**纪律
 // ===========================================================================
 
-// ⚠️ **load-use 停顿点之后的位置 MUST 是 NOP**（design.md §3.10）：
-//    load-use 停顿会**丢弃「消费者之后的第一条指令」**。
-//    本固件的 load 消费者都在**距离 ≥ 2** ⇒ 停顿**不触发** ⇒ 无槽位被丢弃
-//    ⇒ 但仍按**同一条纪律**自检（将来有人把间隔改成 0 ⇒ 立刻编译失败）。
-constexpr bool fwd_stall_drop_slots_are_nop() {
-    for (std::size_t i = 0; i + 2 < kFwdFirmwareWords; ++i) {
-        const std::uint32_t w = fwd_firmware()[i];
-        if ((w & 0x7Fu) != 0x03u) continue;      // 不是 LOAD
-        const std::uint32_t rd = (w >> 7) & 31u;
-        if (rd == 0) continue;                    // 写 x0 ⇒ 不会有依赖
-        const std::uint32_t c = fwd_firmware()[i + 1];   // 紧邻的消费者
-        if (((c >> 15) & 31u) == rd || ((c >> 20) & 31u) == rd) {
-            if (fwd_firmware()[i + 2] != NOP) return false;
-        }
-    }
-    return true;
-}
-static_assert(fwd_stall_drop_slots_are_nop(),
-              "判别性固件：load-use 停顿点之后的位置 MUST 是 NOP");
-
-// ⚠️ **首条指令 MUST NOT 自依赖**（取指填充期「同一条指令被装两次」
-//    ⇒ 接前推后第二次会读到第一次的结果 ⇒ **非幂等**）。
-//    判据：首条指令**写**的 rd MUST NOT 是它自己**读**的 rs1 / rs2。
-//    （I 型没有 rs2 —— bits[24:20] 是立即数的一部分 ⇒ 只查 rs1。）
-constexpr bool fwd_first_instruction_not_self_dependent() {
-    const std::uint32_t w = fwd_firmware()[0];
-    const std::uint32_t opcode = w & 0x7Fu;
-    const std::uint32_t rd = (w >> 7) & 31u;
-    const std::uint32_t rs1 = (w >> 15) & 31u;
-    if (rd == rs1) return false;
-    if (opcode == 0x33u) {            // OP（R 型）⇒ 有 rs2
-        const std::uint32_t rs2 = (w >> 20) & 31u;
-        if (rd == rs2) return false;
-    }
-    return true;
-}
-static_assert(fwd_first_instruction_not_self_dependent(),
-              "判别性固件：首条指令 MUST NOT 自依赖（填充期双装的非幂等前提）");
-
 // ===========================================================================
 // 判别性测试
 // ===========================================================================
@@ -1305,5 +1257,247 @@ TEST_CASE("Rv32iSoc - ForwardingDiscriminatingCases",
             }
         }
         REQUIRE(x29_writes == 1u);
+    }
+}
+
+// ===========================================================================
+// ⑤ 判别性固件（ADR-048 D9.1 / D9.4）—— 取指 skid buffer 与填充期语义的
+//    **判别性**证据
+//
+// ⚠️ **为什么是独立的一套固件**（2026-10-27，change
+//    `rv32i-fetch-skid-buffer-2026-10`）：
+//    既有固件（`firmware()`，108 字）在**两处停顿点之后都放 NOP** ⇒ 缺陷 A
+//    （丢弃消费者之后的第一条指令）与缺陷 B（填充期双装）**全仓照绿**
+//    ⇒ 它对这两个缺陷是**零信号**的。本套固件故意在两处都放**会写寄存器 /
+//    会 store** 的指令 ⇒ 「丢了」与「重了」都直接可见。
+//
+// ---------------------------------------------------------------------------
+// 固件布局（word N 的地址 = 0x80000000 + 4N；立即数一律**字节**为单位）
+//
+//   w0   ADDI x16, x16, 1      x16 = 0 + 1 = 1     ← **自依赖**（缺陷 B 的判别）
+//   w1-3 NOP
+//   w4   ADDI x21, x0, 0x33    x21 = 0x33
+//   w5-7 NOP                                        ← 距离 4 ⇒ 寄存器堆路径
+//   w8   SW   x21, 0x140       [0x140] = 0x33
+//   w9   NOP
+//   w10  LW   x17, 0x140       x17 = 0x33
+//   w11  ADD  x18, x17, x0     x18 = 0x33          ← **紧邻消费者** ⇒ 触发停顿
+//   w12  ADDI x19, x0, 0x5A    x19 = 0x5A          ← **停顿点之后那条**（缺陷 A）
+//   w13  ADDI x20, x0, 0xA5    x20 = 0xA5          ← **停顿后第一条**（重复装载）
+//   w14-15 NOP
+//   w16  SW   x19, 0x144       [0x144] = 0x5A      ← 救回的指令**真的执行到 MEM**
+//   w17-19 NOP
+//   w20  SW   x20, 0x148       [0x148] = 0xA5      ← 重复装载会写**两次**
+//
+// ---------------------------------------------------------------------------
+// **反向期望**（每条都是「未修时会读到的值」）：
+//
+//   ① `x16`：填充期双装 ⇒ 第二条 word0 与第一条**紧邻**（指令距离 1）
+//      ⇒ 由**档位 1**（EX/MEM）前推 ⇒ 读到第一条写入的 1 ⇒ `x16 = **2**`
+//      ⇒ 与 1 不同 ⇒ 「`x16 == 1` 且**不出现** 2」是缺陷 B 的判别断言；
+//      若不修则写回序列变成 `(16,1), (16,2), …` ⇒ 序列断言也转红。
+//   ② `x19`：该指令被**丢弃**（其地址已越过 `pc_reg`，不会重读）
+//      ⇒ `written` 里**没有** 19 ⇒ `expect_written(19, …)` 的「MUST 被写回过」转红。
+//   ③ `[0x144] = 0x5A`：同上，store 拍**不出现**。
+//   ④ `x20` 的写回**次数**：停顿后的**重复装载**（同一 word 连续两拍进 IF/ID，
+//      两拍 `valid` 都是 1）⇒ 该指令被执行**两次** ⇒ 写回**两次**。
+//      ⇒ 「恰好 1 次」是重复装载的判别断言（值相同 ⇒ 序列去重/集合断言都抓不到）。
+// ===========================================================================
+
+constexpr std::size_t kSkidFirmwareWords = 24;
+
+constexpr std::array<uint32_t, kSkidFirmwareWords> skid_firmware() {
+    return {{
+        ADDI(16, 16, 1),     // 0   x16 = 1（自依赖：双装时 = 2）
+        NOP,                 // 1
+        NOP,                 // 2
+        NOP,                 // 3
+        ADDI(21, 0, 0x33),   // 4   x21 = 0x33
+        NOP,                 // 5
+        NOP,                 // 6
+        NOP,                 // 7
+        SW(21, 0, 0x140),    // 8   [0x140] = 0x33
+        NOP,                 // 9
+        LW(17, 0, 0x140),    // 10  x17 = 0x33
+        ADD(18, 17, 0),      // 11  x18 = 0x33  ← 紧邻消费者 ⇒ 停顿
+        ADDI(19, 0, 0x5A),   // 12  x19 = 0x5A  ← **停顿点之后**（缺陷 A）
+        ADDI(20, 0, 0xA5),   // 13  x20 = 0xA5  ← **停顿后第一条**（重复装载）
+        NOP,                 // 14
+        NOP,                 // 15
+        SW(19, 0, 0x144),    // 16  [0x144] = 0x5A
+        NOP,                 // 17
+        NOP,                 // 18
+        NOP,                 // 19
+        SW(20, 0, 0x148),    // 20  [0x148] = 0xA5
+        NOP,                 // 21
+        NOP,                 // 22
+        NOP,                 // 23
+    }};
+}
+
+// ===========================================================================
+// 判别性固件的**编译期**纪律（方向与旧护栏**相反**）
+//
+// 旧护栏 `stall_drop_slots_are_nop`（已于 2026-10-27 删除，ADR-048 D11）要求
+// 「停顿点之后的位置 MUST 是 NOP」—— 那是缺陷 A 下的**规避**手段。
+// skid buffer 落地后**约束消失**，但本测试的判别力**依赖**该位置是非 NOP
+// ⇒ 用一条**反向**护栏把「测试不会退化成空转」钉死。
+// ===========================================================================
+constexpr bool skid_slot_is_discriminating() {
+    bool found = false;
+    for (std::size_t i = 0; i + 2 < kSkidFirmwareWords; ++i) {
+        const std::uint32_t w = skid_firmware()[i];
+        if ((w & 0x7Fu) != 0x03u) continue;   // 不是 LOAD
+        const std::uint32_t rd = (w >> 7) & 31u;
+        if (rd == 0) continue;                // 写 x0 ⇒ 不会有依赖
+        const std::uint32_t c = skid_firmware()[i + 1];   // 紧邻的消费者
+        if (((c >> 15) & 31u) == rd || ((c >> 20) & 31u) == rd) {
+            const std::uint32_t slot = skid_firmware()[i + 2];
+            // 该位置 MUST **不是** NOP（否则「丢掉它」不可观测）
+            if (slot == NOP) return false;
+            // 且 MUST 写一个**非 x0** 寄存器（否则「丢了」也不可见）
+            if (((slot >> 7) & 31u) == 0u) return false;
+            found = true;
+        }
+    }
+    return found;   // MUST 至少有一处（否则本测试对缺陷 A 零信号）
+}
+static_assert(skid_slot_is_discriminating(),
+              "判别性固件：load-use 停顿点之后 MUST 是**非 NOP** 且写非 x0 寄存器"
+              "（否则本测试对「停顿丢指令」零信号）");
+
+TEST_CASE("Rv32iSoc - FetchSkidBufferDiscriminating",
+          "[rv32i][soc][fetch][skid][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 80;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_skid");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), skid_firmware());
+    load_firmware(*sim_b, dev_b->instance(), skid_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（**无掩码**，比对 kObsNames 的 27 个输出）----
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② 写回序列（**强断言**：既抓「丢」也抓「重」）----
+    //
+    // 手工推导（固件只有一条直路径 ⇒ 程序顺序即写回顺序）：
+    //   w0  ⇒ (16, 1)
+    //   w4  ⇒ (21, 0x33)
+    //   w10 ⇒ (17, 0x33)
+    //   w11 ⇒ (18, 0x33)
+    //   w12 ⇒ (19, 0x5A)   ← 缺陷 A 的判别位：丢了就没有这条
+    //   w13 ⇒ (20, 0xA5)   ← 缺陷 B/重复装载的判别位：双装时这里会有**两条**
+    const std::vector<std::pair<uint64_t, uint64_t>> expect_wb = {
+        {16, 0x01u}, {21, 0x33u}, {17, 0x33u},
+        {18, 0x33u}, {19, 0x5Au}, {20, 0xA5u}};
+    {
+        std::vector<std::pair<uint64_t, uint64_t>> wb;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u) continue;
+            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
+        }
+        REQUIRE(wb.size() == expect_wb.size());
+        for (std::size_t i = 0; i < wb.size(); ++i) {
+            INFO("writeback #" << i << " got (rd=" << wb[i].first
+                               << ", data=" << wb[i].second << ")");
+            REQUIRE(wb[i] == expect_wb[i]);
+        }
+    }
+
+    // ---- ③ 缺陷 B：首条指令（自依赖）MUST 只写回**一次**且值为 1 ----
+    {
+        std::size_t x16_writes = 0;
+        bool saw_two = false;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u || ta[c][kIdxWbRdAddr] != 16u) {
+                continue;
+            }
+            ++x16_writes;
+            if (ta[c][kIdxWbWriteData] == 2u) saw_two = true;
+        }
+        REQUIRE(x16_writes == 1u);
+        // 反向期望：双装 + 前推 ⇒ 2（MUST NOT 出现）
+        REQUIRE_FALSE(saw_two);
+    }
+
+    // ---- ④ 缺陷 A：救回的指令 MUST **真的执行** ----
+    // store 拍是「执行到这里」的最强证据（比只写寄存器更靠下游一级）
+    REQUIRE(has_store(ta, 0x140u, 0x33u));
+    REQUIRE(has_store(ta, 0x144u, 0x5Au));   // 反向期望：丢弃 ⇒ 不出现
+    REQUIRE_FALSE(has_store(ta, 0x144u, 0x0u));
+
+    // ---- ⑤ 重复装载：`x20` 的写回次数 MUST 恰好 1 ----
+    // ⚠️ 值与「重了一次」不同 ⇒ 集合/去重断言都抓不到 ⇒ MUST 用**计数**断言
+    {
+        std::size_t x20_writes = 0;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] == 1u && ta[c][kIdxWbRdAddr] == 20u) {
+                ++x20_writes;
+            }
+        }
+        REQUIRE(x20_writes == 1u);
+    }
+
+    // ---- ⑥ 取指流的顺序不变式：ID 看到的**去重后**word 序列 MUST 逐 4 递增 ----
+    //
+    // 手工推导：本固件**无分支** ⇒ 程序顺序 = 取指顺序 ⇒
+    // 「ID 级相邻两个**不同** word MUST 相差 +4」
+    // ⇒ ① 跳号 = 丢指令（缺陷 A）；② 倒退 = 重取指令。
+    // ⚠️ 停顿期间 ID **保持**同一个 word ⇒ 必须先去重再判（否则正常停顿会误报）。
+    {
+        std::vector<uint64_t> words;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            const uint64_t pc = ta[c][kIdxIdPc];
+            if (pc < 0x80000000ull) continue;
+            const uint64_t w = (pc - 0x80000000ull) / 4u;
+            if (w >= kSkidFirmwareWords) continue;   // 跑出尾部（补 0）
+            if (words.empty() || words.back() != w) {
+                words.push_back(w);
+            }
+        }
+        REQUIRE(words.size() == kSkidFirmwareWords);   // 24 个 word **一个不少**
+        for (std::size_t i = 0; i < words.size(); ++i) {
+            INFO("distinct id word #" << i << " = " << words[i]);
+            REQUIRE(words[i] == i);
+        }
     }
 }

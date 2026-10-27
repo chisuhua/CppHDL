@@ -109,14 +109,11 @@ public:
         //    ⇒ 若将来引入**第二个 flush 来源**（如预测失败）或让 stall 与
         //      flush 可同拍，MUST 重新审视此处（stall 冻结 PC 会让 PC 失去
         //      分支重定向）。
-        //
-        // ⚠️ **flush 与 stall 不会同拍**（第 18 轮 critic 要求写明的互斥论证）：
-        //    flush 由 **EX 级**的 `branch_taken` 产生 ⇒ 触发那一拍 EX 级只有
-        //    那一条（分支）指令 ⇒ 它**不是** load ⇒ `ex_is_load` 为假 ⇒
-        //    load-use 检测不可能同拍成立。
-        //    ⇒ 若将来引入**第二个 flush 来源**（如预测失败）或让 stall 与
-        //      flush 可同拍，MUST 重新审视此处（stall 冻结 PC 会让 PC 失去
-        //      分支重定向）。
+        //    ⚠️ **取指 skid buffer 也不改变本互斥论证**（ADR-048）：skid 的
+        //    填充条件已排除 `flush | flush_d1`，且在写 `skid_valid` 时被
+        //    flush 清空 ⇒ 「flush ∥ skid 非空」在**本微架构**下不可达
+        //    （ADR-048 D5；组件级负向对照见
+        //    `tests/test_rv32i_pipeline_behavior.cpp`）。
         auto pc_update_en = select(
             io().rst,
             ch_bool(false),
@@ -202,25 +199,114 @@ public:
         // fetch_pc_reg：把 pc 推迟一拍（与 imem 的 1-cycle sread 对齐）
         fetch_pc_reg->next = pc_reg;
 
+        // ========================================================================
+        // 取指 skid buffer（1 级）—— ADR-048 D1/D2，change
+        // `rv32i-fetch-skid-buffer-2026-10`
+        // ========================================================================
+        // 为什么需要它（缺陷 A）：imem 是 1-cycle `sread` ⇒ 停顿首拍
+        // `fetched_instr` / `fetch_pc_reg` 恰好给出「**已到达但 IF/ID 装不进**」
+        // 的那一对；而 `pc_reg` 已越过它 ⇒ 其地址**不会**再次提交
+        // ⇒ 没有存放点就等于**永久丢弃**（实测：既有固件 word 22 / 45 从未进 ID）。
+        //
+        // 逐拍（停顿窗口 T..T+d-1，ID 持有消费者 A_c，`pc_reg` 冻结在 A_c+8）：
+        //   T      : stall ⇒ **填充** skid ← (fetched_instr = mem[A_c+4], fetch_pc_reg = A_c+4)
+        //   T+1..  : skid 已满 ⇒ 不再填充（流上是 A_c+8，pc 冻结 ⇒ 可重读）
+        //   T+d    : stall 释放 ⇒ **排空** IF/ID ← skid（= A_c+4）；流上数据被丢弃
+        //   T+d+1  : 正常流（A_c+8）⇒ 下一拍 A_c+12
+        //   ⇒ 序列 A_c → **A_c+4** → A_c+8 ⇒ 无丢失、无重复
+        //
+        // ⚠️ **不做 PC 回退**（ADR-048 D3）：停顿已让 `pc_reg` 冻结 ⇒ 地址流自我
+        //    重复 ⇒ 落在 PC 之后的在途数据**至多一条**（D4）⇒ 1 级足够。
+        //    `PC ← skid_pc` 会把已排空的指令**再取一次**（制造双装）；
+        //    `PC ← skid_pc + 4` 恒等于冻结的 `pc_reg`（空操作）。
+        ch_reg<ch_uint<32>> skid_instr(0_d, "skid_instr");
+        ch_reg<ch_uint<32>> skid_pc(0_d, "skid_pc");
+        ch_reg<ch_bool>     skid_valid(false, "skid_valid");
+
+        // 排空 MUST 与 IF/ID 的**实际装载**同拍原子 ⇒ 直接由 `if_id_update_en`
+        // 派生（该使能已含 `!rst` / `!stall` / `!flush` / `!flush_d1`）
+        auto skid_drain_en = if_id_update_en & skid_valid;
+
+        // 填充：只在**停顿拍**且 skid 空、且不在 flush 路径上
+        // （`flush` 拍的数据属于错误路径 ⇒ 存进 skid 等于之后把它塞进 ID）
+        auto skid_fill_en = select(
+            io().rst,
+            ch_bool(false),
+            select(
+                io().stall & io().instr_ready & !skid_valid &
+                    !(io().flush | flush_d1),
+                ch_bool(true),
+                ch_bool(false)
+            )
+        );
+
+        skid_instr->next = select(skid_fill_en, fetched_instr, skid_instr);
+        // ⚠️ `skid_pc` MUST 取 `fetch_pc_reg`（**不是** `pc_reg`，两者差 4 字节 ——
+        //    ADR-048 D2.1）⇒ 否则 skid 里的指令与它的 pc 错开一个字，
+        //    分支目标会算错（与 `flush_d1` 缺陷同型）。
+        skid_pc->next = select(skid_fill_en, fetch_pc_reg, skid_pc);
+        // 排空优先于填充且**同拍互斥**（排空要求 `!stall`、填充要求 `stall`）；
+        // flush（含 `flush_d1`）与 `rst` 一律清空（防御性契约，见上）
+        skid_valid->next = select(
+            skid_fill_en,
+            ch_bool(true),
+            select(
+                skid_drain_en | io().flush | flush_d1 | io().rst,
+                ch_bool(false),
+                skid_valid
+            )
+        );
+
+        // IF/ID 寄存器的取数源：`skid_valid ? skid : 流上`（pc 同理）
+        auto if_id_instr_src = select(skid_valid, skid_instr, fetched_instr);
+        auto if_id_pc_src    = select(skid_valid, skid_pc, fetch_pc_reg);
+
         // IF/ID 寄存器更新（pc 取**延迟一拍**的值，与指令同拍）
         if_id_pc_reg->next = select(
             if_id_update_en,
-            fetch_pc_reg,
+            if_id_pc_src,
             if_id_pc_reg
         );
         
         if_id_instr_reg->next = select(
             if_id_update_en,
-            fetched_instr,
+            if_id_instr_src,
             if_id_instr_reg
         );
         
         // 有效信号在 flush 时清零（**含 flush 的下一拍** —— 见 `flush_d1`）
+        //
+        // ⚠️ **`primed` 门控**（ADR-048 D6，change `rv32i-fetch-skid-buffer-2026-10`
+        //    的 C2）：取指填充期的「同一条指令被装两次」（缺陷 B）。
+        //
+        // 机制（实测，ADR-048 §1.3.3）：`load_firmware` 的**加载拍**（每 word 一拍，
+        // `ext_rst=1`）让 imem 的 **sync 读端口**在复位期就照常采样 —— 解释器
+        // **无 reset 意识**，Verilog 的 reset 分支只对框架 `default_reset` 生效
+        // 而 `ext_rst` 是 fabric 端口 ⇒ **两后端对称**地把 proxy 预填成 word 0。
+        // ⇒ 复位撤除后的**第 0 拍**，IF/ID 就会装进 word 0（幻影），
+        //    第 1 拍再装一次真取指的 word 0 ⇒ 同一指令进流水线**两次**。
+        //
+        // ⇒ 判据 MUST **内生于 IfStage**：`instr_ready` **恒为 1**
+        //    （`rv32i_tcm.h:58`）⇒ 不能由它导出「已就绪」。
+        //
+        // ⚠️ 默认只门控 **`valid`**（ADR-048 D6 方案 1）：幻影装载的 `pc` / `instruction`
+        //    仍会装入（其 `pc` = 0x80000000、指令 = word 0，与下一拍的真取指
+        //    **逐字相同**）⇒ `dbg_id_pc` 观测序列**零变化**；只有 `valid = 0`
+        //    ⇒ `idex_update_en = io().valid`（`id_stage.h:248`）⇒ 幻影不进 EX
+        //    ⇒ **退休数 −1**，且消除「自依赖首条指令 + 前推 ⇒ 非幂等」的正确性地雷。
+        ch_reg<ch_bool>     primed(false, "primed");
+
+        // 复位后**首个非复位周期**结束即置 1 ⇒ 第 0 拍的幻影装载 `primed = 0`
+        primed->next = select(io().rst, ch_bool(false), ch_bool(true));
+
         if_id_valid_reg->next = select(
-            if_id_update_en,
+            if_id_update_en & primed,
             io().instr_ready,
             select(
-                io().flush | flush_d1,
+                // ⚠️ `!primed` 也清零（不只是 flush）：复位后的首个周期
+                // MUST 是**气泡** —— 否则「`valid` 保持复位前的旧值 1」而
+                // `pc` / `instruction` 已装进幻影 ⇒ 有效位与数据**错配**。
+                io().flush | flush_d1 | !primed,
                 ch_bool(false),
                 if_id_valid_reg
             )

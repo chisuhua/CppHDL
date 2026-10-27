@@ -116,8 +116,9 @@ imem(sread 1拍) ──► IF/ID ──► ID/EX ──► EX/MEM ──► MEM/
 
 | 残留 | 现状 | 归属 |
 |---|---|---|
-| load-use 停顿**丢弃「消费者之后的第一条指令」** | 固件 MUST 在停顿点后放 NOP（**巧合保证**，非语义保证） | **ADR-048** D1–D5（skid buffer）⇒ change 待立项 |
-| 取指填充期**同一条指令被装两次** | 退休数 +1（幂等写回）⇒ ⚠️ ADR-047 接前推后**不再恒幂等**（自依赖时是正确性地雷） | **ADR-048** D6（`primed` 门控）⇒ 同一 change 的第 2 个 commit |
+| ~~load-use 停顿**丢弃「消费者之后的第一条指令」**~~ | ✅ **已修**（1 级 skid buffer；「停顿点之后 MUST 是 NOP」的固件约束已取消） | ✅ ADR-048 D1–D5（change `rv32i-fetch-skid-buffer-2026-10`） |
+| ~~取指填充期**同一条指令被装两次**~~ | ✅ **已修**（`primed` 门控 `valid` ⇒ 退休数 179 → **178**、`non_retired` 20 → **21**） | ✅ ADR-048 D6（同一 change 的 C2） |
+| 停顿之后的**重复装载**（同一 word 连装两拍） | ✅ **被 skid 的排空拍顶替**（既有金标零变化）⇒ 该形态已无独立项 | ✅ 已随 C1 消除（ADR-048 未记载，实施时实测发现） |
 | 寄存器堆读点的**同沿竞态**（距离 3 读旧值） | **已修**（ADR-047 D11 的读点旁路） | ✅ |
 | imem 的 1 拍 `pc_lag` | 设计前提（ADR-041 强制 `sread`） | ✅ 契约化 |
 | CLINT `mtime` 不自增 | 只构成静态比较器 | `feat-riscv-mini-rtl-debt` ②（P2） |
@@ -133,7 +134,7 @@ ADR-035（verilator 后端：64-bit 端口上限 / 2-step clock / reset pulse）
          └─► ADR-046（唯一归属 + D10 32 端口冻结）
                └─► ADR-047（前推：接 / mux 归属 / 档位 / D11 读点旁路）
                      └─► ADR-048（取指：skid buffer + 填充期语义；否决 PC 回退）
-                           └─► change rv32i-fetch-skid-buffer-2026-10（待立项）
+                           └─► change rv32i-fetch-skid-buffer-2026-10（✅ 已归档）
                                  （C1 缺陷 A / C2 缺陷 B，**同一 change 两个 commit**）
 
 ADR-039（ch_mem 底座） ─► ADR-041（Sync/Async 拆分） ─► imem MUST sread（1 拍）
@@ -150,14 +151,13 @@ ADR-037（stub 退役） ─► ADR-038（forwarding 归属） ─► ADR-047 �
 ## 未决与独立立项（不在本文裁决范围）
 
 - **V2**：档位 `1` 覆盖 load ⇒ 消除 load-use 停顿（独立立项）
-- **T5 / ADR-048 的 change**：`rv32i-fetch-skid-buffer-2026-10`（**待立项**；一个 proposal、
-  两个 commit）
-- **框架层加 API**（ADR-048 D7）：为 `ch_mem` 的 sync 读端口提供「未就绪」判据
-  ⇒ 仅在 D6 的局部修法不可行时启动 ⇒ 独立立项
+- ~~**框架层加 API**（ADR-048 D7）~~：D6 的**局部修法（`primed`）已足够** ⇒ D7 **不启动**
+  （`sread` 的初值语义与 `aread` 契约零改动）
 - **ISA 覆盖缺口**：CSR / ECALL / EBREAK / FENCE / LB·LH·LBU·LHU 仍无固件验证
   （现有固件只覆盖 ALU + LW/SW + BEQ/BNE + JAL/JALR + SB/SH）
-- **取指双装**若最终不修 ⇒ `fwd_first_instruction_not_self_dependent` 这条
-  compile-time 护栏 MUST **升格为 spec 义务**（ADR-048 D11）
+- **取指侧的判据边界**：`primed` 是**「靠时序假设」的正确性依赖**（依赖 imem 的 1 拍
+  `sread` 延迟）⇒ 若将来换 imem 变体（`aread`）或引入预测取指，MUST 重审 ADR-048 D6 与
+  D3/D4 的前提（该约束已写进 `rv32i-commit-path` 的 Scenario 与 ADR-048 §3「负面/代价」）
 
 ## 维护约定
 
