@@ -29,7 +29,8 @@ capability spec 已建：`openspec/specs/dual-backend-test-coverage/spec.md`（1
 ### phase-5
 - ✅ Phase 2: cache 双后端 Sync variant 9 dual pairs（test_cache_sync, archive 2026-10-19 commit aed33be）
 - ✅ Phase 3: chlib AXI4-Lite slave dual 覆盖 6/6（SPI/Pwm/I2c archived；Timer/Gpio/Uart archived `2026-10-20-dual-backend-axi4-peripherals-extended-2026-10`；AxiDma 未排期）
-- 🟡 Phase 4: RV32I partial（Batch 1 5 component classes 13 dual pairs archived；Batch 2/3 follow-up）
+- ✅ Phase 4: RV32I **完成**（Batch 1 = 13 dual pairs，2026-10-19；Batch 2/3 = 3 dual pairs，
+      2026-10-27 归档 `dual-backend-rv32i-integration-2026-10` ⇒ 该文件共 **16** dual pair / 32 用例）
 - ⏳ Phase 5: 全量覆盖（`dual-backend-full-coverage`；原前置 cache-stub 退役已于 2026-10-20 解除）
 
 ## 验收标准

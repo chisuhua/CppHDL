@@ -1,7 +1,7 @@
 ---
 id: feat-rv32i-integration
 kind: feature
-status: active
+status: completed
 phase_refs: [phase-5]
 主题: RV32I 5-stage 流水线 + riscv-mini SOC 端到端集成（双路 parity + JIT 回落断言）
 ---
@@ -43,8 +43,10 @@ phase_refs: [phase-5]
       → `ch_mem` + `ch::ch_module<ICacheSync>` 替换 `Component ctor + parent`；change
       `fix-riscv-mini-cache-prefetch-sigsegv`，2026-10-20 archive）
 - ✅ `i_cache_prefetch.h` 实例化 `ICacheSync`（非 stub，3 PASS instantiate）
-- 🟡 `dual-backend-rv32i-integration` partial（Batch 1 5 component classes 13 dual pairs archived；
-      Batch 2 `IfIdPipelineReg` ×2 clk-spike + Batch 3 `BranchPredictor` ×1 follow-up）
+- ✅ `dual-backend-rv32i-integration` **已归档**（2026-10-27）—— Batch 1（13 dual pairs）
+      + Batch 2/3（`IfIdPipelineReg` ×2 + `BranchPredictor` ×1）⇒ 该文件共 **16** dual pair /
+      32 用例；⚠️ 「Batch 2 需要 clk-spike」的说法**已被读码推翻**（`IfIdPipelineReg.clk`
+      是**死端口** ⇒ 真实风险只是「输入端口漏驱动」）
 - ✅ **前置**：`feat-riscv-mini-convergence`（C2）—— 收敛成单一 SoC 实现（2026-10-25 归档）
 - ✅ riscv-mini SOC **双路** trace parity（interpreter + verilator，≥20 指令含 load/store/branch）
       — 2026-10-26 C3 归档（200 拍 × **27** 个输出观测值逐拍全等，无掩码）
