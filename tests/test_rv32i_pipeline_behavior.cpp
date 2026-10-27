@@ -19,13 +19,17 @@
  *     - ControlHazardUnit ×1 (flush logic)
  *     - HazardDetectionUnit ×2 (LOAD-USE / LOAD-USE no stall)
  *
- *   Batch 2（含 clk，需 spike）= 1 + 1：
- *     - IfIdPipelineReg - transfers PC and instruction (Task 3 spike)
- *     - IfIdPipelineReg - clears instr_valid on flush (spike 通过后)
+ *   Batch 2（含 ch_reg 的时序组件）= 1 + 1 —— ✅ 2026-10-27 实施
+ *     （change dual-backend-rv32i-integration-2026-10）：
+ *     - IfIdPipelineReg - transfers PC and instruction
+ *     - IfIdPipelineReg - clears instr_valid on flush
+ *     ⚠️ 原计划里的「Task 3 clk spike」**不需要**：读码确认 `IfIdPipelineReg` 的 `clk`
+ *       是**死端口**（`rv32i_pipeline_regs.h:190` 声明了它，`describe()` 从不读它）
+ *       ⇒ 寄存器推进靠隐式时钟 ⇒ 该能力已由 `tests/test_dual_backend_clock.cpp`
+ *       证明 ⇒ 真实风险 = **输入端口漏驱动读到未定义值**（见文件末尾 Batch 2/3 段）。
  *
- *   Batch 3（可选）= 1：
+ *   Batch 3（纯组合）= 1 —— ✅ 2026-10-27 实施：
  *     - BranchPredictor - BNT strategy
- *
  * 显式不迁移清单（per oracle 调研 + R6 #1/#2/#6 排除）：
  *   - 原 test_rv32i_pipeline.cpp line 47-69 (4 个 pipeline reg 裸构造)        R6 #1/#2
  *   - 原 test_rv32i_pipeline.cpp line 144 (ForwardingUnit instantiate)        R6 #1/#2
@@ -412,4 +416,173 @@ DUAL_BACKEND_TEST_PAIR(
         auto stall_if = static_cast<uint64_t>(
             sim.get_port_value(dev.instance().io().stall_if));
         REQUIRE(stall_if == 0);
+    });
+// ============================================================================
+// Batch 2 — 含 ch_reg 的时序组件（2 个） + Batch 3 — 纯组合（1 个）
+// ============================================================================
+// ⚠️ **机制说明**（change `dual-backend-rv32i-integration-2026-10` 的 design.md §2）：
+//
+// ① **不存在**「含 clk 的组件能否走 dual」的风险 —— `IfIdPipelineReg` 的 `clk` 是
+//    **死端口**（`include/cpu/pipeline/rv32i_pipeline_regs.h:190` 声明了它，
+//    但 `describe()`（:203-227）**从不读** `io().clk`）；寄存器推进靠 `ch_reg::next`
+//    + Simulator/Verilog 的**隐式时钟** ⇒ 该能力已由 `tests/test_dual_backend_clock.cpp`
+//    （Phase 1，spec R10「2-step clock toggle fixture」）证明。
+//    ⇒ 隐含地推翻了「Task 3 clk spike」这一步（原文件头与 plan T6 的说法）。
+//
+// ② **唯一**实质风险 = **输入端口漏驱动读到未定义值**（`AGENTS.md §ANTI-PATTERNS`：
+//    实测 `strbe` 读全 1、`rst_n` 读 0）⇒ 未驱动的端口在两后端未必同值
+//    ⇒ **同时红或同时绿都可能是假绿** ⇒ 下文 7 个 / 4 个输入端口**逐个显式驱动**。
+//
+// ③ ⚠️ **不**照抄原 interpreter-only 用例（`tests/test_rv32i_pipeline.cpp:104-107`）
+//    的手动 clk toggle：
+//        set clk=true → tick() → set clk=false → tick()
+//    那是**死端口上的两次额外 tick** ⇒ 会把「一拍」变成三拍 ⇒ 若将来该端口被接回
+//    内部逻辑，用例会因**多打两拍**而静默改变语义。
+//    ⇒ 本实现**只显式置 `clk=1`**（满足「不读未定义值」），节拍数由 `sim.tick()` 决定
+//    （`sim.tick()` 本身已做 2-step toggle，Verilog 侧亦然）。
+
+// ----------------------------------------------------------------------------
+// Batch 2-a: IfIdPipelineReg - transfers PC and instruction（原 line 69 SECTION body）
+// ----------------------------------------------------------------------------
+DUAL_BACKEND_TEST_PAIR(
+    IfIdPipelineReg,
+    "IfIdPipelineReg - transfers PC and instruction",
+    "[pipeline][regs][behavior][transfer][dual]",
+    [&]() {
+        // 金标推导（**手工推导**，非抄仿真输出；见 design.md §4.1）：
+        //   update = select(!rst, select(!stall, !flush, false), false)
+        //          = select(!rst=1, select(!stall=1, !flush=1, false), false) = true
+        //   ⇒ pc_reg    ← if_pc          = 0x100
+        //   ⇒ instr_reg ← if_instruction = 0x00100093
+        //   ⇒ valid_reg ← if_instr_valid = 1
+        //
+        // **反向期望**（判别力）：若 IF/ID 的装载被 stall/flush 误门控
+        //   ⇒ id_pc 停在 INIT(0) ⇒ `0x100 != 0` ⇒ 本断言不是恒真、也不是初值巧合。
+        sim.set_input_value(dev.instance().io().if_pc, 0x100_h);
+        sim.set_input_value(dev.instance().io().if_instruction, 0x00100093_h);
+        sim.set_input_value(dev.instance().io().if_instr_valid, true);
+        // ⚠️ 该组件的 `rst` 是**高有效**（`update = select(!io().rst, ...)`
+        //    ⇒ `rst=0` 才是「正常工作」）⇒ 驱动 **0**（不是 1！）
+        sim.set_input_value(dev.instance().io().rst, false);
+        sim.set_input_value(dev.instance().io().stall, false);
+        sim.set_input_value(dev.instance().io().flush, false);
+        // ⚠️ `clk` 是**死端口** ⇒ 仍 MUST 显式驱动（否则读到未定义值）；
+        //    但**只置 1**，不做手动 toggle（见上方 ③）
+        sim.set_input_value(dev.instance().io().clk, true);
+
+        sim.tick();
+
+        auto id_pc = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_pc));
+        auto id_instr = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_instruction));
+        auto id_valid = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_instr_valid));
+
+        REQUIRE(id_pc == 0x100);
+        REQUIRE(id_instr == 0x00100093);
+        REQUIRE(id_valid == 1);
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 2-b: IfIdPipelineReg - clears instr_valid on flush（原 line 100 SECTION body）
+// ----------------------------------------------------------------------------
+DUAL_BACKEND_TEST_PAIR(
+    IfIdPipelineReg,
+    "IfIdPipelineReg - clears instr_valid on flush",
+    "[pipeline][regs][behavior][flush][dual]",
+    [&]() {
+        // 金标推导（**手工推导**，见 design.md §4.2）：
+        //  第 1 拍（flush=0）：update = true ⇒ 装入
+        //      pc_reg=0x100 / instr_reg=0x00100093 / valid_reg=1
+        //  第 2 拍（flush=1）：
+        //      update = select(!rst, select(!stall, !flush, false), false)
+        //             = select(1, select(1, 0, false), false) = **false**
+        //      ⇒ pc_reg->next   = select(false, if_pc, pc_reg)   = **保持 0x100**
+        //      ⇒ instr_reg->next = select(false, if_instruction, …) = **保持 0x00100093**
+        //      ⇒ valid_reg->next = select(update=false, instr_ready,
+        //                            select(flush=true, false, valid_reg))
+        //                         = select(flush, false, valid_reg) = **false**
+        //      ⇒ **flush 只清 valid，不清 pc / instruction**
+        //
+        // **反向期望**（判别力）：
+        //   ① flush 后 `id_instr_valid` MUST NOT 仍为 1（清零语义）
+        //   ② `id_pc` MUST **仍是** 0x100 ⇒ 若实现把 flush 误写成「清一切」
+        //      ⇒ id_pc 会变 0 ⇒ 本断言能抓到
+        sim.set_input_value(dev.instance().io().if_pc, 0x100_h);
+        sim.set_input_value(dev.instance().io().if_instruction, 0x00100093_h);
+        sim.set_input_value(dev.instance().io().if_instr_valid, true);
+        sim.set_input_value(dev.instance().io().rst, false);
+        sim.set_input_value(dev.instance().io().stall, false);
+        // ⚠️ **第 1 拍前 MUST 驱动 `flush`**（否则该拍 7 个输入端口只驱动了 6 个
+        //    ⇒ 读到未定义值 ⇒ 本次实测恰好是 0 而在两后端「碰巧」等价于 flush=0，
+        //    但那是**未定义行为依赖**（`AGENTS.md §ANTI-PATTERNS`：`strbe` 实测读全 1）
+        //    ⇒ 若某后端读到 1，`update=false` ⇒ 下面的 `valid_after_load == 1` 会
+        //    **假性转红**）
+        sim.set_input_value(dev.instance().io().flush, false);
+        sim.set_input_value(dev.instance().io().clk, true);
+
+        // 第 1 拍：正常装载
+        sim.tick();
+
+        auto valid_after_load = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_instr_valid));
+        REQUIRE(valid_after_load == 1);   // 前置条件：先装上 valid
+
+        // 第 2 拍：flush ⇒ 只清 valid
+        sim.set_input_value(dev.instance().io().flush, true);
+        sim.tick();
+
+        auto id_valid = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_instr_valid));
+        auto id_pc = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_pc));
+        auto id_instr = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().id_instruction));
+
+        REQUIRE(id_valid == 0);       // valid 被清零
+        REQUIRE(id_pc == 0x100);      // pc **保持**（flush 不清 pc）
+        REQUIRE(id_instr == 0x00100093);  // instruction **保持**
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 3: BranchPredictor - BNT strategy（原 line 403 SECTION body）
+// ----------------------------------------------------------------------------
+DUAL_BACKEND_TEST_PAIR(
+    BranchPredictor,
+    "BranchPredictor - BNT strategy",
+    "[pipeline][branch][behavior][predict][dual]",
+    [&]() {
+        // 金标推导（**手工推导**，见 design.md §4.3）：
+        //   instruction = 0x00000063 = BEQ x0, x0, +0
+        //     opcode = bits<6,0>  = 0x63 = 99 ⇒ is_branch = 1
+        //     funct3 = bits<14,12> = 0    ⇒ is_beq = 1
+        //   rs1_data = rs2_data = 0 ⇒ equal = 1
+        //   branch_condition = (is_beq & equal) | … = 1
+        //   branch_taken = is_branch & branch_condition = 1
+        //   predict_error = branch_taken（BNT：预测「不跳」⇒ 实际跳 ⇒ 预测错）= 1
+        //   B 型立即数 = 0 ⇒ imm_extended = 0 ⇒ branch_target = pc + 0 = 0x100
+        //
+        // **反向期望**：`predict_error` MUST NOT 为 0（BNT 的定义）；
+        //   `branch_taken` MUST NOT 为 0；`branch_target` MUST NOT 是 pc 之外的乱值。
+        sim.set_input_value(dev.instance().io().instruction, 0x00000063_h);
+        sim.set_input_value(dev.instance().io().rs1_data, 0x0_h);
+        sim.set_input_value(dev.instance().io().rs2_data, 0x0_h);
+        sim.set_input_value(dev.instance().io().pc, 0x100_h);
+
+        sim.tick();
+
+        auto is_branch = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().is_branch));
+        auto branch_taken = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().branch_taken));
+        auto predict_error = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().predict_error));
+        auto branch_target = static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().branch_target));
+
+        REQUIRE(is_branch == 1);
+        REQUIRE(branch_taken == 1);
+        REQUIRE(predict_error == 1);
+        REQUIRE(branch_target == 0x100);
     });

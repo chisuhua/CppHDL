@@ -42,7 +42,16 @@
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
 | RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/rv32i-fetch-skid-buffer-2026-10/`（架构依据 = **ADR-048**，Accepted 2026-10-27 / 2 轮 critic ⇒ APPROVE）⇒ **一个 change、两个 commit**（C1 缺陷 A skid / C2 缺陷 B `primed`）⇒ 需 builder |
-| dual-backend RV32I Batch 2/3 | phase-5 | P1 | none | ✅ **proposal 已就绪**：`openspec/changes/dual-backend-rv32i-integration-2026-10/`（**无 spec 变更**，`.openspec.yaml` 已声明 `skip_specs`）⇒ 可直接进 builder |
+
+> ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`dual-backend-rv32i-integration-2026-10`（P1）——
+> RV32I 子组件的 dual-backend 覆盖补齐 **Batch 2/3**（`IfIdPipelineReg` ×2 + `BranchPredictor` ×1
+> ⇒ 该文件 13 → **16** dual pair / 26 → 32 用例）；**变异 3/3 全被抓**（第 1 轮 critic 抓到的
+> BLOCKER = Batch 2-b 第 1 拍漏驱动 `flush` ⇒ 已修；M3' 实测**零判别力** ⇒ 如实记录
+> 「未驱动端口没有通用变异判别力 ⇒ 靠端口驱动表 + 代码评审兜住」）；
+> **无 spec 变更**（`.openspec.yaml` 显式声明 `skip_specs`）⇒
+> `openspec/changes/archive/2026-10-27-dual-backend-rv32i-integration-2026-10/`；
+> `CTEST_TOTAL` 202 / `EXAMPLES_TEST_SOURCES` 17 / `ctest -L verilator_e2e` 37 **均不变**。
+> ⇒ **`objective-rv32i-e2e` 的 Go 判据 6/6 全部达成 ⇒ 转 `completed`**。
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`rv32i-forwarding-decision-2026-10`（P0）——
 > ADR-047 裁决「接」数据前推：mux = 既有 `chlib::ForwardingMux`（**零新增组件**）+ 档位 select
@@ -93,7 +102,7 @@
 ### Objectives
 - `objective-cache-stub-retired` — cache stub 物理删除（ADR-037 deadline 2027-04-17）— **completed**
 - `objective-riscv-mini-convergence` — 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 — **completed**
-- `objective-rv32i-e2e` — RV32I 完整 e2e 在 interpreter + verilator 双路 trace parity 通过（+ JIT 回落行为显式断言）— **active**（Go 判据 6 条：**5 ✅ + 1 ⏳** —— 仅剩 `dual-backend-rv32i-integration` Batch 2/3 archived；「RV32I ISA 语义边界」判据已于 2026-10-27 达成 —— 见该 objective §9.2 的范围说明）
+- `objective-rv32i-e2e` — RV32I 完整 e2e 在 interpreter + verilator 双路 trace parity 通过（+ JIT 回落行为显式断言）— **completed**（Go 判据 **6/6** 全部达成，2026-10-27：判据 5「`dual-backend-rv32i-integration` archived」由 Batch 2/3 归档达成；判据 6「ISA 语义边界」由 ①②③ 达成 —— 范围注解见该 objective §2/§9.2）
 - `objective-test-coverage-100pct` — 单元测试 100% 双后端（interpreter + verilator）覆盖 — **active**（`ctest -L verilator_e2e` = 37，目标 ≥ 100）
 - `jit-mem-read-port-support` — JIT 对 `ch_mem` 读端口的 lowering（真三路 parity 前提）— **backlog，未建档**（当前 JIT 回落是有意设计且已断言；建档前置 = 出现必须 JIT-native 跑 RV32I 的需求）
 - `roadmap-fragments-consistency-guard` — roadmap fragments 一致性自检脚本 + CI 挂载 — **backlog 候选**（2026-10-26 planner 登记；起因 = `rddf roadmap` 子命令全坏 ⇒ AUTO 块 / Fragment Index / R1–R8 校验只能手工 ⇒ 多类漂移的根因；独立小 change，不占 phase-5 完成条件）

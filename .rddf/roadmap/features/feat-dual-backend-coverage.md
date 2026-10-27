@@ -17,7 +17,7 @@ capability spec 已建：`openspec/specs/dual-backend-test-coverage/spec.md`（1
 | Phase 1: macro + 8-10 基础 test + 3 专项 fixture | `verilator-parity-all-tests` | ✅ Archived 2026-10-19 |
 | Phase 2: cache 迁移 | `dual-backend-cache-tests` | ✅ Archived 2026-10-19 |
 | Phase 3: chlib（bundle/stream/fifo/axi4） | `axi-spi-behavior-tests` + `dual-backend-axi4-peripherals` + `dual-backend-axi4-peripherals-extended-2026-10` | ✅ 6/6（SPI/Pwm/I2c + Timer/Gpio/Uart 均已 archived；AxiDma 未排期） |
-| Phase 4: RV32I integration | `dual-backend-rv32i-pipeline-behavior-tests`（Batch 1 only） | 🟡 部分 ✅（2026-10-19 commit bbf536d；Batch 2 IfIdPipelineReg + Batch 3 BranchPredictor —— ✅ **已立项** `openspec/changes/dual-backend-rv32i-integration-2026-10/`（P1，2026-10-27，**无 spec 变更**）；⚠️ 「clk-spike」经读码确认**不是风险项**：`IfIdPipelineReg.clk` 是死端口、`BranchPredictor` 纯组合 ⇒ 真实工作 = SECTION-free 重写 3 个用例） |
+| Phase 4: RV32I integration | `dual-backend-rv32i-pipeline-behavior-tests`（Batch 1 only） | ✅ **完成**（Batch 1 = 2026-10-19 commit bbf536d；**Batch 2/3 = 2026-10-27**，change `dual-backend-rv32i-integration-2026-10`：`IfIdPipelineReg` ×2 + `BranchPredictor` ×1 ⇒ 该文件 13 → **16** dual pair / 26 → 32 用例；⚠️ 复核确认「clk-spike」**不是风险项**（`IfIdPipelineReg.clk` 是死端口、`BranchPredictor` 纯组合）⇒ 真实工作是 SECTION-free 重写 + 端口驱动纪律） |
 | Phase 5: 全量覆盖 | `dual-backend-full-coverage` | ⏳ 未开始（原前置 cache-stub 退役已于 2026-10-20 解除） |
 
 ## 跨阶段拆分

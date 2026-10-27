@@ -1,8 +1,8 @@
 ---
 id: objective-rv32i-e2e
-status: active
+status: completed
 created: 2026-10-19
-last_revised: 2026-10-26
+last_revised: 2026-10-27
 review_by: 2027-01-17
 owner: rdd-planner
 priority: P0
@@ -123,7 +123,10 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
   - [x] `objective-riscv-mini-convergence` 完成（单一 RV32I 实现）— 2026-10-25
   - [x] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过 — 2026-10-26
   - [x] JIT 回落行为显式断言通过（检测 + 回落结果一致）— 2026-10-26
-  - [ ] `dual-backend-rv32i-integration` change archived（Batch 2/3）
+  - [x] `dual-backend-rv32i-integration` change archived（Batch 2/3）
+        ✅ **2026-10-27 达成**（`openspec/changes/archive/2026-10-27-dual-backend-rv32i-integration-2026-10/`
+        —— `IfIdPipelineReg` ×2 + `BranchPredictor` ×1 ⇒ 该文件 13 → **16** dual pair /
+        26 → 32 用例；变异 **3/3** 全被抓；**无 spec 变更**（`skip_specs` 合法声明））
         —— 与 §2 的第 5 条 done-when 同一条（2026-10-26 补齐：此前 §9.2 只列 4 条，
         导致「4 条全 `[x]`」与 `status: active` 互相矛盾）
         ⚠️ **2026-10-27 planner 复核 + 处置**：该 change **从未立项**、`.rddf/improvements/`
@@ -171,3 +174,4 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 | sprint-2026-10 | revise | Go 判据 6 条 + sprint 编号口径澄清 | 采纳 2026-10-26 roadmap 审计 | ①「parity 通 ≠ ISA 完整」⇒ 第 6 条判据；② 本表此前把 C1/C2/C3 归档记为 `sprint-2026-11`，而 `roadmap.md` 的当前 sprint 是 `sprint-2026-10` ⇒ **编号口径以 `roadmap.md` 为准**（本表 append-only 不改写历史行，只追加本澄清行） |
 | sprint-2026-10 | go-decision | Go 判据第 6 条（ISA 语义边界）**达成** ⇒ 勾选（5 ✅ + 1 ⏳） | 采纳 2026-10-27 roadmap 审查 | ①②③ 三个 change 已归档（SB/SH · JAL/JALR · SRA · 数据前推）；判据按**字面范围**勾选，并在 §2/§9.2 写明「≠ RV32I 完整」，避免被误读为可交付 |
 | sprint-2026-10 | revise | 判据第 5 条的载体缺失登记（`dual-backend-rv32i-integration` 从未立项）+ **已补载体** | 采纳 2026-10-27 roadmap 审查 | 该 change 名只出现在 roadmap / plan 的判据文字里，`.rddf/improvements/` 无草案 ⇒ 判据无执行载体 ⇒ 起草 `.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`（P1），并纠正 plan T6 的计数错误（`add_dual_backend_test` = 一文件一条目 ⇒ 加 pair 不改 `verilator_e2e` 计数） |
+| sprint-2026-10 | go-decision | **Go 判据 6/6 全部达成 ⇒ 转 `completed`**（2026-10-27） | 采纳 §9.2 逐条复核 | 判据 5 由 change `dual-backend-rv32i-integration-2026-10` 归档达成（Batch 2/3：`IfIdPipelineReg` ×2 + `BranchPredictor` ×1）；判据 6 已于 2026-10-27 达成；⇒ 本 objective 的 6 条判据**全部** `[x]` ⇒ status `active` → `completed` |

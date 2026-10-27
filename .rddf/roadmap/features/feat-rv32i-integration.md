@@ -58,4 +58,6 @@ phase_refs: [phase-5]
 - [x] RV32I microarchitecture dual-backend behavior parity partial（commit `bbf536d`）
 - [x] riscv-mini SOC **双路**（interpreter + verilator）trace parity 通过（≥20 指令序列）— 2026-10-26 C3 归档（200 拍 × **27** 个输出观测值逐拍全等，无掩码）
 - [x] JIT 回落行为显式断言通过（含 `ch_mem` 读端口的设计 → JIT 回落 → 回落结果与 interpreter 一致）— 2026-10-26 C3 的 T6（归因实测：`unsupported node width: mem (…, 131072 bits > 64)`）
-- [ ] `dual-backend-rv32i-integration` change archived
+- [x] `dual-backend-rv32i-integration` change archived
+      ✅ 2026-10-27（Batch 2/3 = `IfIdPipelineReg` ×2 + `BranchPredictor` ×1 ⇒
+      该文件 13 → 16 dual pair / 26 → 32 用例；变异 **3/3** 全被抓）
