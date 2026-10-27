@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6364 lines**（2026-10-27 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6383 lines**（2026-10-28 实测，ADR-046 D9：磁盘是权威）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6364 lines（2026-10-27 实测）
+include/cpu/                             # 30 headers, 6383 lines（2026-10-28 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -105,6 +105,23 @@ include/cpu/                             # 30 headers, 6364 lines（2026-10-27 �
     `wdata` MUST 已**lane 对齐**（`rs2 << 8*addr[1:0]`，由流水线负责）、`strbe` 是车道掩码
     ⇒ 写路径是**读-改-写**（`ch_mem` 无字节使能写 API）。⚠️ `strbe` 是**新增输入端口**
     ⇒ **全部实例化点 MUST 显式驱动**（未驱动端口读到的是**全 1** 而非 0 ⇒ 整字写会「碰巧」通过）
+- **load 侧的字节道契约**（2026-10-28，change `rv32i-load-byte-lane-2026-10`）：
+  `stages/mem_stage.h` 的 `MemStage` 实现 `LB`/`LH`/`LW`/`LBU`/`LHU`：
+  - **车道选择**：字节道按 `addr[1:0]`（4 个车道）；半字道按 `addr[1]`（2 个车道）
+    ⇒ ⚠️ 半字道**只**看 `addr[1]` ⇒ **半字对齐**（`addr[0]` 被忽略）
+  - **扩展方式**：`LB`/`LH` **符号**扩展、`LBU`/`LHU` **零**扩展、`LW` 整字
+  - ⚠️ **符号扩展 MUST 用 `sext<32>` 原语**（`include/core/operators_width.h`），
+    **MUST NOT** 手写填充掩码 —— 此前 LB 用 `ch_uint<32>(4278190080_d)`（=
+    `0xFF000000`，而注释写 `0xFFFFFF00`）⇒ `lb` 返回 `0xFF0000C3`
+    （应为 `0xFFFFFFC3`）；`sext` 在 interpreter / JIT / Verilog codegen
+    **三后端都支持** ⇒ 不会造成双后端语义分叉
+  - ⚠️ 该缺陷**从未被暴露**：LB/LBU/LH/LHU 在仓内的唯一用例依赖**仓外**
+    riscv-tests 二进制（`lb.bin`）⇒ CI 中全部 SKIP ⇒ 有效覆盖为 0
+    ⇒ 固件级覆盖见 `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp`
+    的 `Rv32iSoc - LoadByteLaneDiscriminating`
+  - ⚠️ **造字 MUST 用 `SB`/`SH`**：`SW` 的字节使能是 `0xF`（**整字**）且其数据
+    **不**按 `addr[1:0]` 移位 ⇒ 4 次 `SW` 会**互相覆盖** ⇒ 被读字的 4 个车道
+    退化成「1 个非零 + 3 个相同的 0x00」⇒ **判别力归零**
 - **取指侧契约（2026-10-27，ADR-048 / change `rv32i-fetch-skid-buffer-2026-10`）**：
   `stages/if_stage.h` 的 `IfStage` 内置 **1 级 skid buffer** 与 `primed` 标志，二者都
   **依赖 imem 的 1 拍 `sread`** 这个前提 ⇒ 改取指结构前 MUST 重读 ADR-048：

@@ -434,7 +434,8 @@ TEST_CASE("ComplexE2E - Rv32iShortInstructionTraceParity",
     REQUIRE(saw_x3_verilator);
 
     // 退休指令数：20 拍 − **3 拍填充**（IF/ID → ID/EX → EX/MEM → MEM/WB
-    // 依次就绪；退休发生在 MEM 级 ⇒ 3 拍后才有第一条退休）= **17**
+    // 依次就绪；退休发生在 MEM 级 ⇒ 3 拍后才有第一条退休）− **1 条填充期指令**
+    // = **16**
     //
     // ⚠️ 修复前这里是 **18** —— 那是**多算了 1**：「绿而错」的又一例：
     //    当时 EX/MEM 的 valid 取自 **ID 级**的 valid（而数据取自 **EX 级**
@@ -444,8 +445,21 @@ TEST_CASE("ComplexE2E - Rv32iShortInstructionTraceParity",
     //    ⇒ 有效位与数据同源 ⇒ 假退休消失。）
     //    ⚠️ 更早之前是 **12** —— 那时流水线每 11 拍被 flush 重启，退休语义
     //    也完全是错的（「退休 = load 数据有效」）。
+    //
+    // ⚠️ **2026-10-28 订正 17 → 16**（change `rv32i-load-byte-lane-2026-10`
+    //    顺带修的**既有红**）：ADR-048 D6 的 **`primed` 门控**
+    //    （`stages/if_stage.h`：复位后首个非复位周期结束前，`if_id_update_en`
+    //    被 `primed` 门掉 + `flush` ⇒ **填充期取到的那条指令不进 EX
+    //    ⇒ 不退休**）⇒ 退休数比「纯填充拍数」**少 1**。
+    //    ⇒ ADR-048 落地时**更新了它自己那个** SoC 用例的金标（179 → 178），
+    //      却**漏了本用例** ⇒ 本断言自那时起一直是红的。
+    //    ⚠️ 归因：**与本 change 的主题无关**（本用例的固件是
+    //      `addi/addi/NOP×3/add`，**零** `LB`/`LH` ⇒ 本 change 的
+    //      `sext` 修复对它**零影响**）⇒ 已实测确认：在**本 change 之前**
+    //      （HEAD `6d28264`）本断言**同样**失败（`16 == 17`）。
+    //    ⇒ 按 ZERO-DEBT「Red → fix immediately」顺带收口。
     REQUIRE(perf_a_val == perf_b_val);
-    REQUIRE(perf_a_val == 17);
+    REQUIRE(perf_a_val == 16);
 }
 
 // Custom main(): exit 0 when verilator is missing.

@@ -34,14 +34,14 @@
 - `feat-riscv-mini-convergence` — 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 (refs: phase-5)
 - `feat-riscv-mini-rtl-debt` — riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增） (refs: phase-5)
 - `feat-rv32i-integration` — RV32I 5-stage 流水线 + riscv-mini SOC 端到端集成（双路 parity + JIT 回落断言） (refs: phase-5)
-- `feat-rv32i-isa-completeness` — RV32I 语义边界收口（SB/SH 字节使能 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装） (refs: phase-5)
+- `feat-rv32i-isa-completeness` — RV32I 语义边界收口（SB/SH 写字节道 · LB/LH 读字节道 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装） (refs: phase-5)
 
 <!-- AUTO-SPRINT-START -->
 ## Current Sprint: sprint-2026-10
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| RV32I ISA ⑤ load 字节道固件验证 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/rv32i-load-byte-lane-2026-10/`（LB/LH/LBU/LHU ⇒ **实现已在** `mem_stage.h:82-163`，本 change 只**验证** ⇒ spec delta = `rv32i-isa-semantics` ADDED ×1 ⇒ 归档**禁** `--skip-specs`）⇒ 需 builder |
+| RV32I ISA ⑤ load 字节道固件验证 | phase-5 | P0 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-rv32i-load-byte-lane-2026-10/`（⚠️ **原计划是「只验证」⇒ 实施期发现 `LB` 符号扩展是**错的** ⇒ 改为「**含 2 行实现修复**」；spec delta = `rv32i-isa-semantics` ADDED ×1 ⇒ 归档**禁** `--skip-specs` ⇒ 主 spec 合并 +1 条）⇒ **`feat-rv32i-isa-completeness` ⑤ 收口** |
 | cache wrapper 活逻辑（T8 ①） | phase-5 | P2 | none | ✅ **已立项**：`openspec/changes/riscv-mini-cache-wrapper-live-logic-2026-10/`（⚠️ **既有断言会转红** ⇒ 改断言与修实现**同 commit**；spec delta = `cpu-cache-subsystem` MODIFIED ×1（**路径订正**）+ ADDED ×1）⇒ 需 builder |
 | T7 可 dual 上限盘点 | phase-5 | P1 | none | ✅ **已立项**：`openspec/changes/dual-backend-full-coverage-inventory-2026-10/`（**只读**交付物；⚠️ **决策门**：若可达上限 < 100 ⇒ **MUST 由 planner** 修订 `objective-test-coverage-100pct` 的 Go 判据） |
 | roadmap 簿记一致性护栏 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/roadmap-fragments-consistency-guard-2026-10/`（无 spec 变更 ⇒ `--skip-specs`） |

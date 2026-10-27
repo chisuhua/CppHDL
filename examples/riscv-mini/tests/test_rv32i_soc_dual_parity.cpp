@@ -256,6 +256,23 @@ constexpr uint32_t SH(uint32_t rs2, uint32_t rs1, int32_t imm) {
 constexpr uint32_t LW(uint32_t rd, uint32_t rs1, int32_t imm) {
     return enc_i(rd, rs1, 0x2u, imm, 0x03u);
 }
+// ⚠️ **字节 / 半字读**（2026-10-28 新增，change `rv32i-load-byte-lane-2026-10`）：
+//    funct3 = 000 (LB，**符号**扩展) / 001 (LH，**符号**) / 100 (LBU，**零**)
+//    / 101 (LHU，**零**)。
+//    ⚠️ 半字道按 `addr[1]` 选 ⇒ **半字对齐**（`addr[0]` 被忽略）
+//    ⇒ 用例 MUST 用**偶地址**。
+constexpr uint32_t LB(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x0u, imm, 0x03u);
+}
+constexpr uint32_t LH(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x1u, imm, 0x03u);
+}
+constexpr uint32_t LBU(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x4u, imm, 0x03u);
+}
+constexpr uint32_t LHU(uint32_t rd, uint32_t rs1, int32_t imm) {
+    return enc_i(rd, rs1, 0x5u, imm, 0x03u);
+}
 constexpr uint32_t BEQ(uint32_t rs1, uint32_t rs2, int32_t imm) {
     return enc_b(rs1, rs2, 0x0u, imm);
 }
@@ -1499,5 +1516,283 @@ TEST_CASE("Rv32iSoc - FetchSkidBufferDiscriminating",
             INFO("distinct id word #" << i << " = " << words[i]);
             REQUIRE(words[i] == i);
         }
+    }
+}
+
+// ===========================================================================
+// ⑦ load 字节道固件（change `rv32i-load-byte-lane-2026-10`）
+//
+// ⚠️ **为什么是独立的一套固件**：
+//    既有固件（`firmware()`，108 字）只有 `LW`/`SW`/`SB`/`SH` ⇒ **零** `LB`/`LH`
+//    /`LBU`/`LHU` ⇒ load 侧的「车道选择 + 扩展方式」**从未被任何固件跑过**
+//    ⇒ 若 lane 选择或符号扩展写错，**全仓照绿**（典型的「绿 ≠ 对」）。
+//    ⇒ 本套固件**专门**覆盖 4 个字节道 + 2 个半字道。
+//    ⇒ 独立成一套 ⇒ 既有固件的 golden（24 条写回序列 / 停顿计数 / 退休数）
+//    **零变化** ⇒ 「既有 golden 的变化 MUST 全部可归因」⇒ 本次归因 = **零**。
+//
+// ⚠️ 本 change 同时**修复**了 `mem_stage.h` 的 LB 符号扩展缺陷
+//    （`0xFF000000` ⇒ 应为 `0xFFFFFF00`）—— 那是个**从未被文档化**的缺陷，
+//    因为 LB/LBU/LH/LHU 在仓内的唯一用例依赖**仓外** riscv-tests 二进制
+//    （`lb.bin`）⇒ CI 中全部 SKIP ⇒ 有效覆盖为 0。
+// ===========================================================================
+
+constexpr std::size_t kLoadByteLaneFirmwareWords = 20;
+
+// ⚠️ 造字 MUST 用 **`SB`**（**不是** `SW`）：
+//    `SW` 的 `funct3=010` ⇒ 字节使能是 `0xF`（**整字**）且其数据**不**按
+//    `addr[1:0]` 移位（`rv32i_pipeline.h` 的 lane 对齐**显式排除** funct3=010）
+//    ⇒ 4 次 `SW` 会**互相覆盖**成最后一个值 ⇒ 被读字的 4 个车道退化成
+//    「1 个非零 + 3 个相同的 0x00」⇒ **恰好毁掉**判别力前提。
+constexpr std::array<uint32_t, kLoadByteLaneFirmwareWords>
+load_byte_lane_firmware() {
+    return {{
+        // ⚠️ 4 个字节值**两两不同**且 **bit7 全为 1**
+        //    ⇒ 「车道选错」与「符号 vs 零扩展」**都**可观测。
+        ADDI(1, 0, 0xD4),   // 0   x1 = 0xD4  ← 字节值 lane 0
+        ADDI(2, 0, 0xC3),   // 1   x2 = 0xC3  ← lane 1
+        ADDI(3, 0, 0xB2),   // 2   x3 = 0xB2  ← lane 2
+        ADDI(4, 0, 0xA1),   // 3   x4 = 0xA1  ← lane 3
+        // ⚠️ 每条 `SB` 与它的 `ADDI` 相距 **4**（中间隔 3 条无关指令）
+        //    ⇒ 走**寄存器堆路径**（ADR-047 D11 的组合旁路修的是**距离 3**）
+        //    ⇒ 不把「前推」混进本用例的判别里。
+        SB(1, 0, 0x100),    // 4   [0x100] lane 0 = 0xD4
+        SB(2, 0, 0x101),    // 5   [0x101] lane 1 = 0xC3
+        SB(3, 0, 0x102),    // 6   [0x102] lane 2 = 0xB2
+        SB(4, 0, 0x103),    // 7   [0x103] lane 3 = 0xA1
+        // ⇒ 被读的字 = **0xA1B2C3D4**（4 个车道各不相同）
+        NOP, NOP, NOP, NOP,  // 8..11
+        // ⚠️ 8 条 load **连续**且写**互不相干**的 rd ⇒ 无数据依赖
+        //    ⇒ 无 load-use 停顿 ⇒ 本用例**不**测停顿（停顿由既有固件覆盖）。
+        LB(5, 0, 0x100),    // 12  x5  = 0xFFFFFFD4  ← lane 0，符号扩展
+        LB(6, 0, 0x101),    // 13  x6  = 0xFFFFFFC3  ← lane 1，符号扩展
+        LBU(7, 0, 0x102),   // 14  x7  = 0x000000B2  ← lane 2，零扩展
+        LBU(8, 0, 0x103),   // 15  x8  = 0x000000A1  ← lane 3，零扩展
+        LH(9, 0, 0x100),    // 16  x9  = 0xFFFFC3D4  ← half 0，符号扩展
+        LH(10, 0, 0x102),   // 17  x10 = 0xFFFFA1B2  ← half 1，符号扩展
+        LHU(11, 0, 0x100),  // 18  x11 = 0x0000C3D4  ← half 0，零扩展
+        LHU(12, 0, 0x102),  // 19  x12 = 0x0000A1B2  ← half 1，零扩展
+    }};
+}
+
+// ---------------------------------------------------------------------------
+// 判别性固件的**编译期**纪律：把「可观测性前提」钉死
+//
+// ⚠️ 这与 `skid_slot_is_discriminating()` 同一纪律：把「测试不会退化成空转」
+//    用**编译期断言**钉死 ⇒ 任何人「顺手把某个字节值改成 0x00」都会
+//    **编译失败**，而不是让判别力**静默**归零。
+//
+// 钉住的三件事（对应主 spec `rv32i-isa-semantics` 的可观测性 Scenario）：
+//   ① 4 个字节值 MUST 两两不同 且 bit7 MUST 全为 1
+//      ⇒ 否则「车道选错」或「符号 vs 零扩展」**不可观测**；
+//   ② 4 条 `SB` MUST 打到 4 个**不同**的字节车道；
+//   ③ 8 条 load MUST 覆盖 **4 个字节道 + 2 个半字道**。
+// ---------------------------------------------------------------------------
+constexpr bool load_byte_lane_is_discriminating() {
+    // ① 4 个字节值：两两不同 + bit7 全为 1
+    std::uint32_t bytes[4] = {0u, 0u, 0u, 0u};
+    for (int i = 0; i < 4; ++i) {
+        const std::uint32_t w = load_byte_lane_firmware()[i];
+        if ((w & 0x7Fu) != 0x13u) return false;        // 必须是 OP-IMM
+        if (((w >> 12) & 7u) != 0u) return false;      // funct3 = ADDI
+        const std::uint32_t imm = (w >> 20) & 0xFFFu;
+        if ((imm & 0x80u) == 0u) return false;          // bit7 MUST 为 1
+        bytes[i] = imm & 0xFFu;
+    }
+    for (int i = 0; i < 4; ++i) {
+        for (int j = i + 1; j < 4; ++j) {
+            if (bytes[i] == bytes[j]) return false;      // MUST 两两不同
+        }
+    }
+    // ② 4 条 SB MUST 打到 4 个不同的字节车道
+    std::uint32_t lanes[4] = {0u, 0u, 0u, 0u};
+    for (int i = 0; i < 4; ++i) {
+        const std::uint32_t w = load_byte_lane_firmware()[4u + static_cast<std::size_t>(i)];
+        if ((w & 0x7Fu) != 0x23u) return false;        // 必须是 STORE
+        if (((w >> 12) & 7u) != 0u) return false;      // funct3 = SB
+        // S 型立即数：imm[4:0] 在 instr[11:7]，imm[11:5] 在 instr[31:25]
+        const std::uint32_t imm =
+            (((w >> 25) & 0x7Fu) << 5) | ((w >> 7) & 0x1Fu);
+        lanes[i] = imm & 0x3u;                         // 只看 addr[1:0]
+    }
+    for (int i = 0; i < 4; ++i) {
+        for (int j = i + 1; j < 4; ++j) {
+            if (lanes[i] == lanes[j]) return false;     // 4 个车道 MUST 都覆盖
+        }
+    }
+    // ③ 8 条 load MUST 覆盖 4 个字节道 + 2 个半字道
+    unsigned byte_lanes = 0u;
+    unsigned half_lanes = 0u;
+    for (std::size_t i = 12; i < kLoadByteLaneFirmwareWords; ++i) {
+        const std::uint32_t w = load_byte_lane_firmware()[i];
+        if ((w & 0x7Fu) != 0x03u) return false;        // 必须是 LOAD
+        const std::uint32_t f3 = (w >> 12) & 7u;
+        const std::uint32_t imm = (w >> 20) & 0xFFFu;
+        if (f3 == 0u || f3 == 4u) {                    // LB / LBU
+            byte_lanes |= 1u << (imm & 3u);
+        } else if (f3 == 1u || f3 == 5u) {             // LH / LHU
+            half_lanes |= 1u << ((imm >> 1) & 1u);
+        } else {
+            return false;                              // MUST 只有这 4 种
+        }
+    }
+    return byte_lanes == 0xFu && half_lanes == 0x3u;
+}
+
+static_assert(load_byte_lane_is_discriminating(),
+              "load 字节道固件 MUST 保持判别力：4 个字节值两两不同且 bit7 全为 1、"
+              "4 条 SB 覆盖 4 个不同车道、8 条 load 覆盖 4 字节道 + 2 半字道");
+
+// ---------------------------------------------------------------------------
+// 金标：**12 项写回序列**（4 条 ADDI + 8 条 load；store 不写回）
+//
+// ⚠️ 期望值由**机制手工推导**（见该 change 的 design.md §2.3），
+//    **不是**抄仿真输出 ⇒ 实测只用于**交叉核对**。
+// ⚠️ 「反向期望」逐条留痕在 design.md §2.3 —— 每项都写了「写错时会是多少」。
+// ---------------------------------------------------------------------------
+constexpr std::array<std::pair<uint64_t, uint64_t>, 12> kLoadByteLaneWritebacks = {{
+    {1, 0x000000D4u},   // addi x1,x0,0xD4
+    {2, 0x000000C3u},   // addi x2,x0,0xC3
+    {3, 0x000000B2u},   // addi x3,x0,0xB2
+    {4, 0x000000A1u},   // addi x4,x0,0xA1
+    {5, 0xFFFFFFD4u},   // lb  x5,0x100  ← lane0=0xD4 符号扩展
+                         //   反向期望：零扩展⇒0x000000D4；填充掩码错⇒0xFF0000D4
+    {6, 0xFFFFFFC3u},   // lb  x6,0x101  ← lane1=0xC3 符号扩展
+                         //   反向期望：lane 恒取 0⇒0xFFFFFFD4；零扩展⇒0x000000C3；
+                         //             填充掩码错⇒0xFF0000C3
+    {7, 0x000000B2u},   // lbu x7,0x102  ← lane2=0xB2 零扩展
+                         //   反向期望：lane 恒取 0⇒0x000000D4
+    {8, 0x000000A1u},   // lbu x8,0x103  ← lane3=0xA1 零扩展
+                         //   反向期望：lane 恒取 0⇒0x000000D4
+    {9, 0xFFFFC3D4u},   // lh  x9,0x100  ← half0=0xC3D4 符号扩展
+                         //   反向期望：half 取反⇒0xFFFFA1B2；零扩展⇒0x0000C3D4；
+                         //             填充掩码错⇒0xFF00C3D4
+    {10, 0xFFFFA1B2u},  // lh  x10,0x102 ← half1=0xA1B2 符号扩展
+                         //   反向期望：half 恒取 half0⇒0xFFFFC3D4；零扩展⇒0x0000A1B2；
+                         //             填充掩码错⇒0xFF00A1B2
+    {11, 0x0000C3D4u},  // lhu x11,0x100 ← half0=0xC3D4 零扩展
+                         //   反向期望：half 取反⇒0x0000A1B2
+                         //   ⚠️「half 恒取 half0」⇒ **仍是 0x0000C3D4** ⇒ 对该变异零判别力
+    {12, 0x0000A1B2u},  // lhu x12,0x102 ← half1=0xA1B2 零扩展
+                         //   反向期望：half 恒取 half0⇒0x0000C3D4
+}};
+
+// store 侧的期望：`SB` 的源数据**低位对齐**，由总线按 `addr[1:0]` 选车道
+// ⇒ `obs_data_addr` 是**字节地址**，`obs_data_write_data` 是**已对齐**的数据。
+constexpr std::array<std::pair<uint32_t, uint32_t>, 4> kLoadByteLaneStores = {{
+    {0x100u, 0x000000D4u},   // sb x1,0x100 ⇒ lane 0，数据在 bits[7:0]
+    {0x101u, 0x0000C300u},   // sb x2,0x101 ⇒ lane 1，数据左移 8
+    {0x102u, 0x00B20000u},   // sb x3,0x102 ⇒ lane 2，数据左移 16
+    {0x103u, 0xA1000000u},   // sb x4,0x103 ⇒ lane 3，数据左移 24
+}};
+
+TEST_CASE("Rv32iSoc - LoadByteLaneDiscriminating",
+          "[rv32i][soc][isa][load][byte-lane][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 80;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_lbl");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), load_byte_lane_firmware());
+    load_firmware(*sim_b, dev_b->instance(), load_byte_lane_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（**无掩码**，全部 27 个 SoC 顶层输出）----
+    //
+    // ⚠️ 「无掩码」是**可执行**的：比对端口清单 = `kObsNames`（27 个）
+    //    ⇒ 只证明「两个后端一样」；**③** 才证明「两个后端都对」。
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② 写回序列逐项比对（**12 项**，**不去重**）----
+    //
+    // ⚠️ **不去重**：任何连续重复都是**真回归**（去重掩码会反过来掩盖它）。
+    // ⚠️ 用**序列**而不是计数：「多一次假退休」会让计数**同步** +1
+    //    ⇒ 任何计数断言都抓不到 ⇒ 只有序列能抓。
+    {
+        std::vector<std::pair<uint64_t, uint64_t>> wb;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u) continue;
+            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
+        }
+        REQUIRE(wb.size() == kLoadByteLaneWritebacks.size());
+        for (std::size_t i = 0; i < wb.size(); ++i) {
+            INFO("writeback #" << i << " got (rd=" << wb[i].first
+                                << ", data=" << wb[i].second << ")");
+            REQUIRE(wb[i] == kLoadByteLaneWritebacks[i]);
+        }
+    }
+
+    // ---- ③ store 侧：4 条 `SB` MUST 打到**正确的车道**且数据**已对齐**----
+    //
+    // ⚠️ 这一组断言钉的是 load 断言**抓不到**的另一半：
+    //    「车道**对齐**」（源数据落在哪个 lane）vs load 侧的「车道**选择**」。
+    // ⚠️ 反向期望：数据未对齐 ⇒ 该条 `REQUIRE` 转红。
+    for (const auto &s : kLoadByteLaneStores) {
+        INFO("store addr=0x" << std::hex << s.first << " data=0x" << s.second);
+        REQUIRE(has_store(ta, s.first, s.second));
+    }
+
+    // ---- ④ 逐个 load 的**独立**断言（反向期望显式留痕）----
+    //
+    // ⚠️ 与 ② 的序列断言**互补**：② 是「顺序 + 值」的强判据；
+    //    ④ 让每条 load 的失败信息**直接指向那条指令**。
+    {
+        std::map<uint64_t, std::set<uint64_t>> written;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u) continue;
+            written[ta[c][kIdxWbRdAddr]].insert(ta[c][kIdxWbWriteData]);
+        }
+        auto expect_written = [&written](uint64_t rd, uint64_t value,
+                                         const char *what) {
+            INFO(what << ": rd=" << rd << " expected=0x" << std::hex << value);
+            const auto it = written.find(rd);
+            REQUIRE(it != written.end());      // MUST 被写回过
+            REQUIRE(it->second.size() == 1u);  // 且**只**被写成这一个值
+            REQUIRE(*it->second.begin() == value);
+        };
+        expect_written(5, 0xFFFFFFD4u, "lb  x5,0x100 (lane0, 符号扩展)");
+        expect_written(6, 0xFFFFFFC3u, "lb  x6,0x101 (lane1, 符号扩展)");
+        expect_written(7, 0x000000B2u, "lbu x7,0x102 (lane2, 零扩展)");
+        expect_written(8, 0x000000A1u, "lbu x8,0x103 (lane3, 零扩展)");
+        expect_written(9, 0xFFFFC3D4u, "lh  x9,0x100 (half0, 符号扩展)");
+        expect_written(10, 0xFFFFA1B2u, "lh  x10,0x102 (half1, 符号扩展)");
+        expect_written(11, 0x0000C3D4u, "lhu x11,0x100 (half0, 零扩展)");
+        expect_written(12, 0x0000A1B2u, "lhu x12,0x102 (half1, 零扩展)");
     }
 }

@@ -114,10 +114,18 @@ public:
         selected_byte = select(byte_offset == ch_uint<2>(3_d), byte3, selected_byte);
 
         // LB: 符号扩展到 32 位
-        // 方法：检查最高位，如果为 1 则填充 1
+        // ⚠️ **2026-10-28 修复**（change `rv32i-load-byte-lane-2026-10`）：
+        //    此前是 `ch_uint<32>(4278190080_d) | zext<32>(selected_byte)`，
+        //    而 `4278190080 == 0xFF000000`（**不是**本行注释原先所写的
+        //    `0xFFFFFF00`）⇒ 符号位只被填到 bit31..24 ⇒ `lb` 返回
+        //    `0xFF0000C3`（应为 `0xFFFFFFC3`）。
+        //    ⇒ 改用框架已有的 `sext<32>` 原语（interpreter / JIT / Verilog
+        //      codegen **三后端都支持**）⇒ 一次消掉「手写填充掩码」整类错误。
+        // ⚠️ 缺陷为何从未暴露：LB/LBU/LH/LHU 在仓内的唯一用例依赖**仓外**
+        //    riscv-tests 二进制（`lb.bin`）⇒ CI 中全部 SKIP ⇒ 有效覆盖为 0。
         auto byte_sign = bits<7, 7>(selected_byte);
-        ch_uint<32> lb_result = select(byte_sign, 
-            ch_uint<32>(4278190080_d) | zext<32>(selected_byte),  // 0xFFFFFF00
+        ch_uint<32> lb_result = select(byte_sign,
+            sext<32>(selected_byte),
             zext<32>(selected_byte));
 
         // LBU: 零扩展到 32 位
@@ -135,9 +143,15 @@ public:
         ch_uint<16> selected_half = select(half_offset == ch_bool(false), half0, half1);
 
         // LH: 符号扩展到 32 位
+        // ⚠️ **2026-10-28 同批修复**（change `rv32i-load-byte-lane-2026-10`）：
+        //    这里的 `4294901760 == 0xFFFF0000` **本来就是对的** ⇒ 本改动
+        //    **逐位等价**（`sext<32>(x16)` ≡ `x | (x[15] ? 0xFFFF0000 : 0)`
+        //    ≡ 原式）⇒ 既有 golden 零变化。
+        //    ⇒ 一并改的理由：与 LB **同型**的「手写填充掩码」⇒ 只修 LB 会把
+        //      这一类错误留在原地 ⇒ 一次消掉整类。
         auto half_sign = bits<15, 15>(selected_half);
         ch_uint<32> lh_result = select(half_sign,
-            ch_uint<32>(4294901760_d) | zext<32>(selected_half),  // 0xFFFF0000
+            sext<32>(selected_half),
             zext<32>(selected_half));
 
         // LHU: 零扩展到 32 位
@@ -209,7 +223,12 @@ public:
         // - 对于其他指令：传递 ALU 结果到 WB 级 (在 WB 级处理)
         
         // 内存数据有效信号：只有加载指令才有效
-        auto mem_data_valid = io().is_load & io().mem_valid;
+        //
+        // ⚠️ 2026-10-28（change `rv32i-load-byte-lane-2026-10`）：**删除**这个
+        //    中间量。`io().mem_valid_out` 已改为直接接 `io().mem_valid`
+        //    （见下方注释）⇒ `mem_data_valid` **再无消费者**
+        //    ⇒ `-Wunused-but-set-variable` 警告 ⇒ 违反 ZERO-DEBT
+        //    「changed files MUST warning-clean」。
 
         // ====================================================================
         // 5. 输出端口连接

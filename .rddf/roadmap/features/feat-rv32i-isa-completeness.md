@@ -3,7 +3,7 @@ id: feat-rv32i-isa-completeness
 kind: feature
 status: active
 phase_refs: [phase-5]
-主题: RV32I 语义边界收口（SB/SH 字节使能 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装）
+主题: RV32I 语义边界收口（SB/SH 写字节道 · LB/LH 读字节道 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装）
 ---
 
 ## 概述
@@ -36,6 +36,7 @@ phase_refs: [phase-5]
 | ② | `rv32i-jump-sra-2026-10` | `if_stage` 的 PC 源加入「JAL/JALR 目标」选择器 + JAL 写回 `pc+4` + `sra_result` 真算术右移 | 无 | JAL/JALR 固件用例（跳转 + `ra` 回读）+ `-8 >> 1 == -4` 用例；双后端 parity |
 | ③ | `rv32i-forwarding-decision-2026-10` | **ADR-046 D5 裁决**（接/不接前推）+ 按裁决清理 `hazard_unit.h` 的 5 个预留输入端口 | **需 ADR**（行为变更） | 裁决文档 + 回归（若接前推：`bf78367` 的组合环 MUST NOT 复现） |
 | ④ | `rv32i-fetch-skid-buffer-2026-10` | 取指 skid buffer（消除「停顿丢弃指令」，**不需要 PC 回退** —— ADR-048 D3）+ 取指填充期双装（**`primed` 门控**，ADR-048 D6；**不动框架层 `sread` 语义** —— D7 不启动） | ③（无前推时的停顿语义要先定）⇒ **已解锁** | 固件**删除**所有手工 NOP 后仍逐拍 parity；每条指令退休**恰好一次** |
+| ⑤ | `rv32i-load-byte-lane-2026-10` | **load 侧**字节道语义（`LB`/`LH`/`LBU`/`LHU` 的**车道选择 + 符号/零扩展**）+ 修 `LB` 的符号扩展缺陷 + 独立固件级判别性用例 | 无（**不依赖** ①–④） | 12 项手推写回金标逐项比对 + 双后端逐拍全等 + **变异 7/7 全转红**（含 `LB` 掩码回归锁） |
 
 > **① 的实施结果（2026-10-26）**：change `rv32i-store-byte-enable-2026-10` 已实施
 > **并归档**（2 轮对抗审稿：第 1 轮 APPROVE_WITH_CONDITIONS ⇒ 条件项同批整改；
@@ -82,6 +83,8 @@ phase_refs: [phase-5]
 - ✅ ④ `rv32i-fetch-skid-buffer-2026-10`（2026-10-27 **已归档** ⇒ `rv32i-commit-path` 的
   **2 条 Requirement MODIFIED**；架构依据 = ADR-048，**一个 change、两个 commit**：
   C1 缺陷 A（skid buffer）/ C2 缺陷 B（`primed` 门控）⇒ 实施结果见上方 ④ 条目）
+- ✅ ⑤ `rv32i-load-byte-lane-2026-10`（2026-10-28 **已归档** ⇒ `rv32i-isa-semantics`
+  **ADDED ×1**；实施结果见下方 ⑤ 条目）
 
 > **④ 的实施结果（2026-10-27）**：change `rv32i-fetch-skid-buffer-2026-10` 已实施
 > **并归档**（ADR-048 已 Accepted，2 轮 critic；归档**禁** `--skip-specs` ⇒ 走 MODIFIED delta）。
@@ -116,7 +119,10 @@ phase_refs: [phase-5]
 
 ## 验收标准
 
-- [ ] SB/SH/LB/LH/LBU/LHU 的字节/半字语义在双后端一致且符合 ISA（含非零 offset）
+- [x] SB/SH/LB/LH/LBU/LHU 的字节/半字语义在双后端一致且符合 ISA（含非零 offset）
+      —— 写侧（`SB`/`SH`）由 ① `rv32i-store-byte-enable-2026-10`（2026-10-26 归档）覆盖；
+      **读侧**（`LB`/`LH`/`LBU`/`LHU`）由 ⑤ `rv32i-load-byte-lane-2026-10`（2026-10-28）
+      覆盖 ⇒ ⚠️ 读侧在 ⑤ 之前是**错的**（`LB` 的符号扩展掩码 `0xFF000000` ⇒ `0xFF0000C3`）
 - [x] JAL / JALR 真正重定向且 `ra` 正确（② 2026-10-27 归档）
 - [x] SRA 对有符号负数正确（② 2026-10-27 归档）
 - [x] 依赖指令在**距离 1–3** 内拿到新值（③ 2026-10-27 归档；距离 3 靠 D11 读点旁路）
@@ -125,4 +131,37 @@ phase_refs: [phase-5]
       ⚠️ 既有 108 字固件**仍**在那两处放 NOP —— 那是**允许**的，不再**必需**）
 - [x] 每条指令退休**恰好一次**（④ 2026-10-27 归档 ⇒ `x16` 写回恰好 1 次且值 != 2、
       `x20` 写回恰好 1 次、ID word 序列去重后逐 4 递增 = 无跳号/无倒退）
-- [ ] 上述每项都有**变异验证**（改坏即转红），而非仅「跑绿」
+- [x] 上述每项都有**变异验证**（改坏即转红），而非仅「跑绿」
+      —— ① 2 条 / ② **6/6** / ③ **6/6** / ④ **6/6** / ⑤ **7/7**（每条都**先确认编译成功**
+      ⇒ 否则跑的是旧二进制 ⇒ 假绿）
+
+> **⑤ 的实施结果（2026-10-28）**：change `rv32i-load-byte-lane-2026-10` 已实施
+> （**含 2 行实现修复** —— 不是纯验证 change）。要点：
+> ① **修掉一个从未被文档化的缺陷**：`mem_stage.h` 的 `LB` 符号扩展掩码是
+>    `0xFF000000`（注释却写 `0xFFFFFF00`）⇒ `lb` 返回 `0xFF0000C3`
+>    ⇒ 改用框架已有的 `sext<32>` 原语（**三后端都支持** ⇒ 不会双后端分叉）；
+>    `LH` 一并改（**逐位等价** ⇒ 既有 golden 零变化）⇒ 一次消掉「手写填充掩码」整类错误；
+> ② ⚠️ **缺陷为何从未暴露**：`LB`/`LBU`/`LH`/`LHU` 的唯一仓内用例依赖**仓外**
+>    riscv-tests 二进制（`lb.bin`）⇒ CI 中**全部 SKIP** ⇒ 有效覆盖为 0；
+> ③ **独立 20 字判别性固件**（4× `SB` 造字 + 8 条 load）+ **12 项手推写回金标**
+>    + **编译期判别力护栏**（`static_assert`）⇒ 判别力前提被钉死，不会静默归零；
+> ④ ⚠️ **实测推翻**提案里「4 次 `SW` 能拼出 `0xA1B2C3D4`」：`SW` 的字节使能是 `0xF`
+>    且数据**不**按 `addr[1:0]` 移位 ⇒ 实测 `[0x100] = 0x000000A1` ⇒ **造字 MUST 用 `SB`**；
+> ⑤ **变异 7/7 全被抓**（M1–M6 运行期转红；**M7 被编译期护栏先抓**，另单独验证
+>    护栏中性化后运行期亦转红）；
+> ⑥ **顺带收口一个既有红**：`tests/test_verilator_complex_e2e.cpp` 的退休数金标
+>    **17 → 16**（ADR-048 D6 的 `primed` 门控落地时漏改 ⇒ 自那时起一直红；
+>    ⚠️ 已实测确认在**本 change 之前**（HEAD `6d28264`）**同样失败** ⇒ 与本 change 无关）；
+> ⑦ 计数**三者均不变**（用例进既有 target）：`CTEST_TOTAL` **202** /
+>    `EXAMPLES_TEST_SOURCES` **17** / `ctest -L verilator_e2e` **37**；
+>    验收 = 单测 **13062 断言 / 6 用例**全绿 + `ctest -LE perf` **191/191** +
+>    `run_all_ported_tests.sh` **28/28** + `run_all_samples.sh` **35/35** +
+>    8 个护栏脚本全 exit 0。
+>    ⚠️ `ctest -L perf` **10/11**：唯一失败 `perf_regression`
+>    （`TC-08|regs=1000|verilator` 比率 1.403 > 阈 1.3）⇒ **环境漂移**（五项证据：
+>    perf target 零依赖 `include/cpu/**` · interpreter/jit 同档正常 · verilator
+>    绝对值不随工作量变化 · 同二进制三次测量超阈档位每次不同 · 与上次失败同型）
+>    ⇒ 与本 change 无关；baseline 重采集已独立立项。
+> ⇒ **本 feature 的 ISA 语义边界（不含 CSR / ECALL / FENCE / 预测取指）全部落地**
+> ⇒ 剩余三项（CSR / `ECALL`/`EBREAK` / `FENCE`）**不在**任何仓内 capability 覆盖内
+> ⇒ 需**独立立项**（不可顺手塞进本 feature）。
