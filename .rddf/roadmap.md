@@ -3,7 +3,7 @@
 ## 元信息
 - **版本**: 1
 - **创建时间**: 2026-10-19
-- **最后更新**: 2026-10-26
+- **最后更新**: 2026-10-27
 - **当前阶段**: phase-5
 - **当前 Sprint**: sprint-2026-10
 
@@ -41,7 +41,17 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| RV32I 前推裁决（ADR-046 D5） | phase-5 | P0 | none | （待 rdd-arch 出 ADR 后立项） |
+| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | （前置 ③ 已解锁；⚠️ **improvement 草案同样未起草** —— 目前只有 `feat-rv32i-isa-completeness` 的 ④ 条目与 plan T5 的范围定义 ⇒ 立项前需先起草） |
+| dual-backend RV32I Batch 2/3 | phase-5 | P1 | none | ✅ 载体已起草 `.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`（`objective-rv32i-e2e` 判据第 5 条） |
+
+> ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`rv32i-forwarding-decision-2026-10`（P0）——
+> ADR-047 裁决「接」数据前推：mux = 既有 `chlib::ForwardingMux`（**零新增组件**）+ 档位 select
+> 打一拍 + 档位 1 源选择收进组件（`is_jump`/`jump_result`）+ `HazardUnit` 删 5 个预留端口 +
+> **D11 寄存器堆读点 WB→ID 旁路**（修掉「距离 3 读旧值」的既有缺陷 —— 两后端**同构地错** ⇒
+> 双后端 parity 抓不到）。第 1 轮对抗审稿 **APPROVE_WITH_CONDITIONS / 无 BLOCKER** ⇒ 按预算
+> 不发起第 2 轮 ⇒ `openspec/changes/archive/2026-10-27-rv32i-forwarding-decision-2026-10/`，
+> **新 capability `rv32i-data-forwarding`**（5 条 Requirement，距离矩阵的唯一权威）+ 4 个 MODIFIED。
+> 变异 **6/6** 全被抓到；`CTEST_TOTAL` **202 不变**。
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`rv32i-jump-sra-2026-10`（P0）——
 > JAL/JALR 重定向 + 返回地址写回 + SRA 真算术右移，**连带修复 3 个既有缺陷**
@@ -57,11 +67,13 @@
 > ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
 > 该 job 红 ⇒ MUST revert 归档 commit。
 
-### Unmapped (2)
+### Unmapped (3)
 
-> 两个 **P2** improvement 草案尚无 change 目录（已归属 feature，待立项）：
+> 三个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
 > `riscv-mini-cache-wrapper-dead-branch-2026-10` → `feat-riscv-mini-rtl-debt` ①；
-> `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②。
+> `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②；
+> `dual-backend-rv32i-integration-2026-10`（P1，2026-10-27 起草）→
+> `feat-dual-backend-coverage` Phase 4 残余 + `objective-rv32i-e2e` 判据第 5 条。
 
 > ✅ **sprint-2026-10 已完成**：`axi4-interconnect-routing-2026-10`（P0）
 > 于 2026-10-26 归档（`openspec/changes/archive/2026-10-26-axi4-interconnect-routing-2026-10/`），
@@ -71,7 +83,7 @@
 ### Objectives
 - `objective-cache-stub-retired` — cache stub 物理删除（ADR-037 deadline 2027-04-17）— **completed**
 - `objective-riscv-mini-convergence` — 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 — **completed**
-- `objective-rv32i-e2e` — RV32I 完整 e2e 在 interpreter + verilator 双路 trace parity 通过（+ JIT 回落行为显式断言）— **active**（Go 判据 6 条：4 ✅ + 2 ⏳ —— `dual-backend-rv32i-integration` archived / **RV32I ISA 语义边界**）
+- `objective-rv32i-e2e` — RV32I 完整 e2e 在 interpreter + verilator 双路 trace parity 通过（+ JIT 回落行为显式断言）— **active**（Go 判据 6 条：**5 ✅ + 1 ⏳** —— 仅剩 `dual-backend-rv32i-integration` Batch 2/3 archived；「RV32I ISA 语义边界」判据已于 2026-10-27 达成 —— 见该 objective §9.2 的范围说明）
 - `objective-test-coverage-100pct` — 单元测试 100% 双后端（interpreter + verilator）覆盖 — **active**（`ctest -L verilator_e2e` = 37，目标 ≥ 100）
 - `jit-mem-read-port-support` — JIT 对 `ch_mem` 读端口的 lowering（真三路 parity 前提）— **backlog，未建档**（当前 JIT 回落是有意设计且已断言；建档前置 = 出现必须 JIT-native 跑 RV32I 的需求）
 - `roadmap-fragments-consistency-guard` — roadmap fragments 一致性自检脚本 + CI 挂载 — **backlog 候选**（2026-10-26 planner 登记；起因 = `rddf roadmap` 子命令全坏 ⇒ AUTO 块 / Fragment Index / R1–R8 校验只能手工 ⇒ 多类漂移的根因；独立小 change，不占 phase-5 完成条件）

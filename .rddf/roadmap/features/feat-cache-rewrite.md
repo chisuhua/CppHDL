@@ -1,7 +1,7 @@
 ---
 id: feat-cache-rewrite
 kind: feature
-status: active
+status: completed
 phase_refs: [phase-4, phase-5]
 主题: cache 子系统从 C-style 数组重写为 ch_mem（ADR-039）+ Sync/Async 双变体（ADR-041）+ stub 物理退役（ADR-037）
 ---
@@ -15,8 +15,13 @@ CppHDL 的 L1 cache 子系统经历了一次死而复生的重建：原 `*_compl
 | `*_complete.h` ch_mem 重写 | ADR-039 | ✅ 已实施（commit `91a0833`） |
 | Sync/Async variant split | ADR-041 | ✅ 已实施（commit `49902b2`） |
 | cache 行为测试 9 test_case | — | ✅ 已实施（commit `1221819` + `bb286a2`） |
-| cache 双后端 e2e | dual-backend-test-coverage | 🟡 Sync variant ✅ parity（`tests/chlib/test_cache_sync.cpp`，2026-10-19 归档 `dual-backend-cache-tests`）；**全量收口**随 `feat-dual-backend-coverage` Phase 5 |
+| cache 双后端 e2e | dual-backend-test-coverage | 🟡 Sync variant ✅ parity（`tests/chlib/test_cache_sync.cpp`，2026-10-19 归档 `dual-backend-cache-tests`）；**全量收口不属本 feature** —— 已明确交给 `feat-dual-backend-coverage` Phase 5 |
 | stub 物理删除 | ADR-037 | ✅ 已实施（2026-10-20 归档 `cache-stub-physical-removal-2026-10`，**提前 6 个月**完成 ADR-037 的 calendar deadline） |
+
+> ✅ **本 feature 已收口**（2026-10-27 planner 复核）：三条主线（ADR-039 重写 / ADR-041 拆分 /
+> ADR-037 stub 退役）全部落地且验收 5/5 勾满 ⇒ `status: completed`。唯一「未全量」的那一项
+> （cache 的全量双后端覆盖）**按定义属** `feat-dual-backend-coverage` Phase 5
+> （它管全仓的覆盖率目标，不管 cache 子系统本身）⇒ 不阻塞本 feature 收口。
 
 ## 跨阶段拆分
 

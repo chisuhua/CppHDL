@@ -31,6 +31,13 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 
 - 所有可 dual 的单元测试走 `DUAL_BACKEND_TEST` macro（interpreter + verilator 双跑）
 - `ctest -L verilator_e2e` ≥ 100 test
+  ⚠️ **单位澄清（2026-10-27 审查）**：该指标的实现是 `add_dual_backend_test()` =
+  `add_catch_test(TEST_NAME …)` + `set_tests_properties(LABELS "base;verilator_e2e")`
+  ⇒ **一个文件 = 一个 ctest 条目**，`ctest -N -L verilator_e2e` 数的是**文件/二进制**，
+  不是 Catch2 用例数（实测 **37** = 含 `DUAL_BACKEND_TEST_PAIR` 的 `.cpp` 文件数）。
+  ⇒ 「≥ 100」= **100 个 dual 文件**。⚠️ 因此「在既有文件里加 dual pair」**不会**推进本指标
+  （它只增加覆盖广度，不增加文件数）⇒ Phase 5 的全量推进 MUST 以**新文件**为主，
+  或在判据里显式改成「用例数」口径（那是改判据 ⇒ planner 决策门，见 plan T7）
 - 单元测试 verilator 覆盖 7% → 100%
 - 完成判据（done-when）：
   - [x] `dual-backend-test-coverage` capability spec 落地 ✅（已达成）
@@ -62,7 +69,8 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 3 条 → 转 completed）：
   - [ ] Phase 1-5 全部 ship + archived（**Phase 1–3 已 ship；4–5 未完成**）
-  - [ ] `ctest -L verilator_e2e` ≥ 100 test 全绿（**2026-10-26 实测 37**）
+  - [ ] `ctest -L verilator_e2e` ≥ 100 test（**2026-10-27 复核仍 37**；⚠️ 单位 = **dual 文件数**，
+        不是 Catch2 用例数 —— 见 §2 的单位澄清）
   - [x] CTEST_TOTAL 同步（**202**）+ `verify_test_counts.sh` 绿
 - **No-Go 判据**（任一成立 → defer）：
   - PR feedback 墙钟持续 > 45 min（需降级 Phase 2-5）
@@ -82,3 +90,4 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
 |--------|------|------|---------------|------|
 | sprint-2026-10 | sprint-review | objective 创建（roadmap 首次初始化） | 激活为 P1 | Phase 4 核心目标 |
 | sprint-2026-10 | go-decision | capability spec 落地（2026-10-19） | Go（Phase 1 启动） | `dual-backend-test-coverage` spec 13 requirements 通过 validate |
+| sprint-2026-10 | revise | 「`ctest -L verilator_e2e` ≥ 100」的**单位**澄清（= dual **文件数**，非用例数） | 采纳 2026-10-27 roadmap 审查 | `add_dual_backend_test` 一个文件注册一个 ctest 条目 ⇒ 在既有文件里加 pair 不推进本指标（实测 37 = 含 `DUAL_BACKEND_TEST_PAIR` 的 `.cpp` 文件数） |

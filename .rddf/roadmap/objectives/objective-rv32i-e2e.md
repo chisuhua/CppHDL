@@ -69,9 +69,16 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
   - [x] riscv-mini SOC **双路** trace parity 通过（≥ 20 指令序列，含 load/store/branch）— 2026-10-26 C3
   - [x] JIT 回落行为显式断言通过 — 2026-10-26 C3 的 T6
   - [ ] `dual-backend-rv32i-integration` change archived
-  - [ ] **RV32I ISA 语义边界**闭合（SB/SH 字节使能 / JAL·JALR PC 重定向 / SRA
+  - [x] **RV32I ISA 语义边界**闭合（SB/SH 字节使能 / JAL·JALR PC 重定向 / SRA
         有符号右移）—— 归 `feat-rv32i-isa-completeness`（2026-10-26 审计新登记：
         SoC parity 只证明「实现与自身一致」，不证明「实现符合 ISA」）
+        ✅ **2026-10-27 达成**：① `rv32i-store-byte-enable-2026-10`（2026-10-26）·
+        ② `rv32i-jump-sra-2026-10` · ③ `rv32i-forwarding-decision-2026-10`（同日）
+        均已归档。⚠️ **本判据的范围 = 括号内的三项 + 前推**（③ 使距离 1–3 的依赖也拿到新值）；
+        **不**等于「RV32I 完整」—— CSR / ECALL / EBREAK / FENCE / LB·LH·LBU·LHU
+        仍无固件验证（既有固件只覆盖 ALU + LW/SW + BEQ/BNE）⇒ 若要纳入另立判据。
+        ⚠️ `feat-rv32i-isa-completeness` 的 **④ skid buffer 不属本判据**（它是流水线健壮性，
+        判据文字未含）⇒ 未做 ④ **不阻塞**本 objective。
 
 ## 3. 架构依据
 
@@ -119,8 +126,15 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
   - [ ] `dual-backend-rv32i-integration` change archived（Batch 2/3）
         —— 与 §2 的第 5 条 done-when 同一条（2026-10-26 补齐：此前 §9.2 只列 4 条，
         导致「4 条全 `[x]`」与 `status: active` 互相矛盾）
-  - [ ] RV32I ISA 语义边界闭合（SB/SH / JAL·JALR / SRA）—— 2026-10-26 新登记，
+        ⚠️ **2026-10-27 planner 复核 + 处置**：该 change **从未立项**、`.rddf/improvements/`
+        亦无对应草案 ⇒ 本判据此前**没有可执行载体**（只有 `.rddf/plans/…` 的 T6 有范围定义）
+        ⇒ ✅ **已起草载体**：`.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`
+        （P1 5 段草案，沿用 T6 的范围 + 纠正其「`verilator_e2e` 37 → 40」的计数错误 ——
+        一文件一条目 ⇒ 在**既有**文件加 pair **不改计数**）
+  - [x] RV32I ISA 语义边界闭合（SB/SH / JAL·JALR / SRA）—— 2026-10-26 新登记，
         与 §2 第 6 条 done-when 同一条；归 `feat-rv32i-isa-completeness`
+        ✅ **2026-10-27 达成**（①②③ 归档；③ = ADR-047 数据前推）—— 范围见 §2 第 6 条的注解
+        （**不含** CSR / ECALL / FENCE / LB·LH，也**不含** ④ skid buffer）
 - **No-Go 判据**（任一成立 → defer）：
   - verilator codegen 对 RV32I 完整设计暴露无法在合理工期内修复的 bug
   - 收敛（`objective-riscv-mini-convergence`）判定 No-Go
@@ -138,6 +152,9 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 - sprint-2026-11: ~~`axi4-interconnect-routing-2026-10`（AXI 4×4 全路由；与本 objective 无耦合）~~ ✅ 2026-10-26 归档
 - sprint-2026-12: `dual-backend-rv32i-integration` Batch 2/3（`IfIdPipelineReg` clk-spike + `BranchPredictor`）
   ⇒ Go 判据第 5 条
+  ⚠️ 2026-10-27：**载体已起草** → `.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`
+  （P1）；「clk-spike」经读码确认**不是风险项**（`IfIdPipelineReg.clk` 是死端口，
+  `BranchPredictor` 纯组合）⇒ 真实工作 = SECTION-free 重写 3 个用例
 - sprint-2026-12: `feat-rv32i-isa-completeness`（4 个候选 change，见该 feature）⇒ Go 判据第 6 条
 - sprint-2026-13+: `jit-mem-read-port-support`（**backlog，未立项**：JIT-native 三路的前提；
   无真实需求前不启动 —— 当前 JIT 回落是**有意设计**且已显式断言）
@@ -152,3 +169,5 @@ RV32I 5-stage 流水线（`include/cpu/pipeline/rv32i_pipeline.h`）是 CppHDL �
 | sprint-2026-11 | revise | JIT 归因的失败出口从 1 个改为 **2 个** | 采纳实测（2026-10-26） | `allocate_buffer` 的「节点宽度 > 64」在 `generate_ir` **之前** ⇒ 它才是首个命中点 ⇒ 原方案只改 `generate_ir` ⇒ 回落日志的原因**是空的** |
 | sprint-2026-11 | revise | SoC 端口契约 15 → **32**（ADR-046 **D10-rev**） | 采纳（2026-10-26） | 观测需要「指令流 / 有效链 / 写回 / 冒险脉冲」的可观测点，而 verilator 只能读**顶层**端口 |
 | sprint-2026-10 | revise | Go 判据 6 条 + sprint 编号口径澄清 | 采纳 2026-10-26 roadmap 审计 | ①「parity 通 ≠ ISA 完整」⇒ 第 6 条判据；② 本表此前把 C1/C2/C3 归档记为 `sprint-2026-11`，而 `roadmap.md` 的当前 sprint 是 `sprint-2026-10` ⇒ **编号口径以 `roadmap.md` 为准**（本表 append-only 不改写历史行，只追加本澄清行） |
+| sprint-2026-10 | go-decision | Go 判据第 6 条（ISA 语义边界）**达成** ⇒ 勾选（5 ✅ + 1 ⏳） | 采纳 2026-10-27 roadmap 审查 | ①②③ 三个 change 已归档（SB/SH · JAL/JALR · SRA · 数据前推）；判据按**字面范围**勾选，并在 §2/§9.2 写明「≠ RV32I 完整」，避免被误读为可交付 |
+| sprint-2026-10 | revise | 判据第 5 条的载体缺失登记（`dual-backend-rv32i-integration` 从未立项）+ **已补载体** | 采纳 2026-10-27 roadmap 审查 | 该 change 名只出现在 roadmap / plan 的判据文字里，`.rddf/improvements/` 无草案 ⇒ 判据无执行载体 ⇒ 起草 `.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`（P1），并纠正 plan T6 的计数错误（`add_dual_backend_test` = 一文件一条目 ⇒ 加 pair 不改 `verilator_e2e` 计数） |

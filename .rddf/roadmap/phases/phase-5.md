@@ -23,7 +23,7 @@ Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是�
 | riscv-mini 技术债清零 | 19 个「编译但从不执行」的 Catch2 target + 7 个 orphan 测试文件 | ✅ 完成（C1，2026-10-24 归档） |
 | RV32I 单源化收敛 | 17 个死头删除 + 10 组同名头裁决 + 根 tests/ 反向 include 消除 | ✅ 完成（C2，2026-10-25 归档；ADR-046 已落盘） |
 | SoC 双路 parity | `Rv32iPipelineTop` interpreter + verilator 逐周期 parity + JIT 回落断言 | ✅ 完成（C3，2026-10-26 归档；前置 `rv32i-pipeline-commit-path-2026-10` 同日归档） |
-| **RV32I ISA 语义边界**（`feat-rv32i-isa-completeness`） | SB/SH 字节使能 · JAL/JALR 重定向 · SRA + skid buffer + 取指双装 | ⏳ 计划中（2026-10-26 审计新登记） |
+| **RV32I ISA 语义边界**（`feat-rv32i-isa-completeness`） | SB/SH 字节使能 · JAL/JALR 重定向 · SRA · **数据前推**（①②③ 已归档）+ skid buffer / 取指双装（④ 剩余） | 🟡 进行中（① 2026-10-26 · ②③ 2026-10-27 已归档；④ 前置已解锁） |
 | **riscv-mini RTL 缺陷收口**（`feat-riscv-mini-rtl-debt`） | cache wrapper 分支从不发射 · CLINT mtime 不自增 | ⏳ 计划中（P2，两个 improvement 草案已有） |
 | dual-backend 全量覆盖 | `feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量（跨阶段残余） | 🟡 进行中（`ctest -L verilator_e2e` = 37，目标 ≥ 100） |
 | cache-stub 退役 | `include/cpu/cache/{i,d}_cache_stub.h` 物理删除 | ✅ 完成（2026-10-20，提前 6 个月，variant b） |
@@ -44,11 +44,18 @@ Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是�
    （≥20 指令序列含 load/store/branch）+ **JIT 回落行为显式断言**（`type_mem_read_port` →
    `UNSUPPORTED_OP` → 回落 interpreter 且结果一致）。依赖 C1 + C2。
 4. **`feat-rv32i-isa-completeness`**（2026-10-26 审计新登记，4 个独立 change，顺序 ①→②→③→④）：
-   ① `rv32i-store-byte-enable-2026-10`（DataTCM `strbe` + **wdata lane 对齐** + SB/SH 固件用例）；
-   ② `rv32i-jump-sra-2026-10`（JAL/JALR 重定向 + JAL 写回 pc+4 + SRA 真算术右移）；
-   ③ `rv32i-forwarding-decision-2026-10`（**ADR-046 D5 裁决** + HazardUnit 5 个预留输入端口清理）；
-   ④ `rv32i-fetch-skid-buffer-2026-10`（取指 skid buffer + 取指填充期双装）。
+   ① `rv32i-store-byte-enable-2026-10`（DataTCM `strbe` + **wdata lane 对齐** + SB/SH 固件用例）
+   —— ✅ 2026-10-26 归档；
+   ② `rv32i-jump-sra-2026-10`（JAL/JALR 重定向 + JAL 写回 pc+4 + SRA 真算术右移）
+   —— ✅ 2026-10-27 归档（连带修 U 型立即数 / I 型 SUB 误判 / 错误路径劫持 PC）；
+   ③ `rv32i-forwarding-decision-2026-10`（**ADR-046 D5 裁决** + HazardUnit 5 个预留输入端口清理）
+   —— ✅ 2026-10-27 归档（ADR-047 裁决「接」⇒ 新 capability `rv32i-data-forwarding`；
+   顺带修掉**距离 3 读旧值**的既有缺陷 —— 两后端同构地错 ⇒ parity 抓不到）；
+   ④ `rv32i-fetch-skid-buffer-2026-10`（取指 skid buffer + 取指填充期双装）—— ⏳ 唯一剩余项。
    **目的：把「parity 通」升级为「符合 ISA」** —— C3 只证明两后端彼此一致，不证明实现正确。
+   ⚠️ ①–③ 完成后**仍不覆盖**：CSR / ECALL / EBREAK / FENCE / LB·LH·LBU·LHU 的固件验证
+   （既有固件只覆盖 ALU + LW/SW + BEQ/BNE）⇒ 「ISA 语义边界」在本 phase 的口径 = **上述三项 + 前推**，
+   不是「RV32I 完整」。
 5. **`feat-riscv-mini-rtl-debt`**（P2）：`riscv-mini-cache-wrapper-live-logic-2026-10` +
    `clint-mtime-autoincrement-2026-10`（两个既有 improvement 草案的归属地）。
 6. **（独立 backlog，非本 sprint、未立项）** `jit-mem-read-port-support` — JIT 对 `ch_mem` 读端口的 lowering，
@@ -75,6 +82,7 @@ feat-rv32i-isa-completeness：
     ① store-byte-enable ──┐
     ② jump-sra ───────────┤ 全部依赖 C3 的 32 端口观测面 + 48 字固件金标
     ③ forwarding-decision ┘（需 ADR-046 D5 裁决）→ ④ fetch-skid-buffer（依赖 ③）
+    ✅ ①②③ 已归档（2026-10-26 / 2026-10-27）⇒ **只剩 ④**（前置已解锁）
 
 feat-riscv-mini-rtl-debt（独立，P2）：cache-wrapper-live-logic 依赖 C2 已迁移路径；
                                     clint-mtime 无依赖
@@ -83,21 +91,24 @@ feat-riscv-mini-rtl-debt（独立，P2）：cache-wrapper-live-logic 依赖 C2 �
 并行：`feat-dual-backend-coverage` Phase 4 RV32I 残余（IfIdPipelineReg clk-spike + BranchPredictor
 follow-up）与 `feat-riscv-mini-rtl-debt` 可与 ISA 线并行（互不触碰）。
 ⚠️ `feat-rv32i-isa-completeness` ① 会改变 store 写语义 ⇒ **MUST 先于**任何基于当前固件重算金标的 change。
+✅ **已满足**（① 2026-10-26 归档 ⇒ 其后 ②③ 的金标重算均以新写语义为基线）。
 
 ## 架构文档锚点
 
 | 文档 | 与本 phase 关联 |
 |------|----------------|
-| `docs/adr/ADR-046-rv32i-canonical-home.md`（✅ 2026-10-23 落盘，C2 实施依据 D1–D12） | 收敛方向裁决：`include/cpu/` 为唯一权威 + example 只留 SoC 顶层 |
-| `docs/adr/ADR-038-forwarding-namespace-orphan.md` | forwarding 重复的既有裁决（C2 收敛时需衔接） |
+| `docs/adr/ADR-046-rv32i-canonical-home.md`（✅ 2026-10-23 落盘，C2 实施依据 D1–D12） | 收敛方向裁决：`include/cpu/` 为唯一权威 + example 只留 SoC 顶层；**D5（前推是否接）已由 ADR-047 裁决** |
+| `docs/adr/ADR-047-rv32i-data-forwarding.md`（✅ 2026-10-27 落盘） | 数据前推裁决：接（D2/D5/D6/D7/D8）+ **D11 寄存器堆读点旁路**（距离 3）+ 距离矩阵成为 capability 契约 |
+| `docs/adr/ADR-038-forwarding-namespace-orphan.md` | forwarding 重复的既有裁决（C2 已收敛；`ForwardingMux` 与 `riscv::ForwardingUnit` 的合并仍是 backlog） |
 | `docs/adr/ADR-039-cache-complete-rewrite-via-ch-mem.md` | cache 重写路径 |
 | `docs/adr/ADR-041-cache-sync-async-variant.md` | cache Sync/Async 拆分 |
 | `.rddf/improvements/riscv-mini-test-triage-2026-10.md` | C1 improvement 草稿 |
 | `.rddf/improvements/rv32i-canonical-convergence-2026-10.md` | C2 improvement 草稿 |
 | `.rddf/improvements/rv32i-soc-dual-parity-2026-10.md` | C3 improvement 草稿 |
+| `.rddf/improvements/rv32i-forwarding-decision-2026-10.md` | ISA ③ improvement 草稿（✅ 已归档，2026-10-27） |
 | `.rddf/improvements/riscv-mini-cache-wrapper-dead-branch-2026-10.md` | RTL 缺陷收口 ① improvement 草稿（P2） |
 | `.rddf/improvements/clint-mtime-autoincrement-2026-10.md` | RTL 缺陷收口 ② improvement 草稿（P2） |
-| `.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` | **阶段级执行总纲**（T1–T9 的步骤 / 验收 / 验证矩阵 / planner 审查记录） |
+| `.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` | **阶段级执行总纲**（T1–T10 的步骤 / 验收 / 验证矩阵 / planner 审查记录） |
 | `include/cpu/AGENTS.md` | STRUCTURE 表（C2 已同步；新增组件需继续维护） |
 | root `AGENTS.md §KNOWN LIMITATIONS` | RV32I 的 6 处实现边界（ISA 3 + 流水线 3）+ Windows CI 延后 —— **ISA 线的事实依据** |
 
