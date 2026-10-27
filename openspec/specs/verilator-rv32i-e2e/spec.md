@@ -29,6 +29,11 @@
 
 ### Requirement: RV32I 5-stage 流水线 MUST 在 VerilatorBackend 下与 InterpreterBackend trace parity
 
+- **MODIFIED**: 该 fixture 的 NOP 间隔的**理由**从「为『**无数据前推**』留的间隔」
+  改为「固件布局的一部分」—— 数据前推已接入 ⇒ 间隔**不再是**读对新值的前提。
+  ⚠️ 并**新增**一条 Scenario 明确：该 fixture MUST NOT 被当作前推正确性的证据。
+  该 Requirement 验证的是 **trace parity**，**不是**前推语义 ⇒ 其余条款**不变**。
+
 `tests/test_verilator_complex_e2e.cpp::ComplexE2E - Rv32iShortInstructionTraceParity` MUST 在同一 fixture 上分别用 `InterpreterBackend` 与 `VerilatorBackend` 跑 ≥ 20 cycle。
 
 ⚠️ **断言 MUST 是语义断言**，MUST NOT 是可被「伪事件」满足的计数器
@@ -42,11 +47,12 @@ dmem 必须是简化 stub（write=0, read_data=0，因为该固件不触发 load
 
 - **WHEN** fixture 装以下 **3 条有效指令** + **3** 条 NOP（其余 **10** 个字为 NOP 填充；
   共 16 字）：
-  （3 条有效指令 = 2 条 `addi` + 1 条 `add`；NOP 是为「无数据前推」留的间隔）
+  （3 条有效指令 = 2 条 `addi` + 1 条 `add`；NOP 是**固件布局**的一部分
+  —— **前推已接入后**，间隔**不再是**读对新值的前提）
     - `addi x1, x0, 1` = `0x00100093`   （word 0）
     - `addi x2, x0, 2` = `0x00200113`   （word 1）
-    - `nop` = `0x00000013`（×3，word 2..4 —— 无前推 ⇒ 生产者与消费者之间
-      MUST 留间隔）
+    - `nop` = `0x00000013`（×3，word 2..4 —— 布局固定；
+      ⚠️ 这些间隔 MUST NOT 被当作「前推正确性」的证据）
     - `add x3, x1, x2` = `0x002081B3`    （word 5）
 - **AND** 分别用 interpreter 与 verilator 跑 20 cycle
 - **THEN** 两端的**退休指令数** MUST 相等
@@ -57,6 +63,23 @@ dmem 必须是简化 stub（write=0, read_data=0，因为该固件不触发 load
   （若退休被错接成「load 数据有效」，本固件**不含 load** ⇒ 退休数恒 0 ⇒ 断言失败）
 - **NOTE**: 观测点 `perf_instructions` / `wb_write_en` / `wb_write_data` /
   `wb_rd_addr` 是顶层 `ch_out` 端口（verilator 可观测）
+
+#### Scenario: 该 fixture MUST NOT 被当作前推正确性的证据
+
+- **WHEN** 判断前推接线是否正确
+- **THEN** MUST 使用**判别性固件**（相邻生产者与消费者之间**无间隔**等）
+- **AND** 该 fixture 的 NOP 间隔 MUST NOT 被当作前推正确性的证据
+  （该固件在**未接前推**时同样通过 ⇒ 对前推是**零信号**）
+- **AND** 该 fixture 在前推接入**前后**都 MUST 通过 trace parity
+  （它验证的是 trace parity，不是前推语义）
+
+#### Scenario: 「无掩码逐拍比对」MUST 有**显式的端口清单**
+
+- **WHEN** 声称「双后端逐拍全等（无掩码）」
+- **THEN** MUST 列出参与比对的**具体端口清单**
+- **AND** 清单 MUST 与该 SoC 顶层的可观测端口一致
+- **NOTE**: ⚠️ 「无掩码」**不是**「比对设计内部的一切」—— 顶层观测面是**有限**的
+  ⇒ 不写清单 ⇒ 该判据**不可执行**
 
 #### Scenario: 退休指令数的期望值 MUST 由**逐拍实测**推导并记录
 
