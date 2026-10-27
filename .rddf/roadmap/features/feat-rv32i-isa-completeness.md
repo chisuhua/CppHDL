@@ -35,7 +35,7 @@ phase_refs: [phase-5]
 | ① | `rv32i-store-byte-enable-2026-10` | `DataTCM` 加 `strbe` 端口 + **wdata lane 对齐**（`rs2 << 8*addr[1:0]`）+ SoC 接线 + SB/SH 固件用例 | 无 | 同一地址先 `sw 0xFFFFFFFF` 再 `sb 0x00`（offset 1/2/3）⇒ 读回逐字节正确；双后端 parity |
 | ② | `rv32i-jump-sra-2026-10` | `if_stage` 的 PC 源加入「JAL/JALR 目标」选择器 + JAL 写回 `pc+4` + `sra_result` 真算术右移 | 无 | JAL/JALR 固件用例（跳转 + `ra` 回读）+ `-8 >> 1 == -4` 用例；双后端 parity |
 | ③ | `rv32i-forwarding-decision-2026-10` | **ADR-046 D5 裁决**（接/不接前推）+ 按裁决清理 `hazard_unit.h` 的 5 个预留输入端口 | **需 ADR**（行为变更） | 裁决文档 + 回归（若接前推：`bf78367` 的组合环 MUST NOT 复现） |
-| ④ | `rv32i-fetch-skid-buffer-2026-10` | 取指 skid buffer + PC 回退（消除「停顿丢弃指令」）+ 取指填充期双装（**框架层 `sread` 语义**，影响所有用户） | ③（无前推时的停顿语义要先定） | 固件**删除**所有手工 NOP 后仍逐拍 parity；退休数 == 指令数 |
+| ④ | `rv32i-fetch-skid-buffer-2026-10` | 取指 skid buffer + PC 回退（消除「停顿丢弃指令」）+ 取指填充期双装（**框架层 `sread` 语义**，影响所有用户） | ③（无前推时的停顿语义要先定）⇒ **已解锁** | 固件**删除**所有手工 NOP 后仍逐拍 parity；退休数 == 指令数 |
 
 > **① 的实施结果（2026-10-26）**：change `rv32i-store-byte-enable-2026-10` 已实施
 > **并归档**（2 轮对抗审稿：第 1 轮 APPROVE_WITH_CONDITIONS ⇒ 条件项同批整改；
@@ -79,7 +79,11 @@ phase_refs: [phase-5]
 - ✅ ② `rv32i-jump-sra-2026-10`（2026-10-27 **已归档** ⇒ capability `rv32i-isa-semantics` 2 → 6 条）
 - ✅ ③ `rv32i-forwarding-decision-2026-10`（2026-10-27 **已归档** ⇒ 新 capability
   `rv32i-data-forwarding`；实施结果见上方 ③ 条目）
-- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置 ③ ⇒ **已解锁**）
+- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置 ③ ⇒ **已解锁**；✅ 载体已起草
+  `.rddf/improvements/rv32i-fetch-skid-buffer-2026-10.md`，含 **4 个决策门**：
+  ① 填充期双装是否一并消除（判据 = 能否不改框架层就表达「取指数据已就绪」）
+  ② 框架层改语义 vs 加 API（默认选加 API）③ 是否新开 ADR（**建议要**）
+  ④ 固件 NOP 的 compile-time 静态护栏如何处置）
 
 ## 反例
 

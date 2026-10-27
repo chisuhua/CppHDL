@@ -41,7 +41,7 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | （前置 ③ 已解锁；⚠️ **improvement 草案同样未起草** —— 目前只有 `feat-rv32i-isa-completeness` 的 ④ 条目与 plan T5 的范围定义 ⇒ 立项前需先起草） |
+| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ 载体已起草 `.rddf/improvements/rv32i-fetch-skid-buffer-2026-10.md`（含 4 个决策门） |
 | dual-backend RV32I Batch 2/3 | phase-5 | P1 | none | ✅ 载体已起草 `.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`（`objective-rv32i-e2e` 判据第 5 条） |
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`rv32i-forwarding-decision-2026-10`（P0）——
@@ -67,13 +67,16 @@
 > ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
 > 该 job 红 ⇒ MUST revert 归档 commit。
 
-### Unmapped (3)
+### Unmapped (4)
 
-> 三个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
+> 四个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
 > `riscv-mini-cache-wrapper-dead-branch-2026-10` → `feat-riscv-mini-rtl-debt` ①；
 > `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②；
 > `dual-backend-rv32i-integration-2026-10`（P1，2026-10-27 起草）→
-> `feat-dual-backend-coverage` Phase 4 残余 + `objective-rv32i-e2e` 判据第 5 条。
+> `feat-dual-backend-coverage` Phase 4 残余 + `objective-rv32i-e2e` 判据第 5 条；
+> `rv32i-fetch-skid-buffer-2026-10`（P0，2026-10-27 起草）→ `feat-rv32i-isa-completeness` ④
+> （含 4 个决策门：缺陷 B 是否一并消除 / 框架层改语义还是加 API / 是否新开 ADR /
+> 固件 NOP 的 compile-time 护栏如何处置）。
 
 > ✅ **sprint-2026-10 已完成**：`axi4-interconnect-routing-2026-10`（P0）
 > 于 2026-10-26 归档（`openspec/changes/archive/2026-10-26-axi4-interconnect-routing-2026-10/`），
