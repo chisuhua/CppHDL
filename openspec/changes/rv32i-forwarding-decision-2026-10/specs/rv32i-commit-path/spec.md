@@ -86,7 +86,9 @@
   ⚠️ MODIFIED 会**整体替换**该 Requirement ⇒ **既有 Scenario 一条都不删**
   （只改过时的那句）；
   ⚠️ 前推的**距离矩阵**（距离 1 / 2 / 3 / ≥ 4 各自的取值来源）MUST NOT 写在本
-  capability ⇒ 那是 `rv32i-data-forwarding` 的职责（**单一权威**）。
+  capability ⇒ 那是 `rv32i-data-forwarding` 的职责（**单一权威**）⇒ 本条只**引用**。
+  ⚠️ 该 Scenario 的**标题**沿用既有措辞（openspec 的 MODIFIED 规则要求既有
+  Scenario **一条都不删** ⇒ 标题**不可**改写）⇒ 「距离」的**消歧**放在**正文**。
   其余条款（气泡而非冻结 / 各级行为 / flush 优先）**不变**。
 
 - **WHEN** 流水线处于停顿（stall）或冲刷（flush）状态
@@ -145,9 +147,15 @@
 #### Scenario: load-use 自保 MUST 只覆盖**紧邻**（距离 1）的依赖
 
 - **WHEN** 固件是 `lw x5,0x100(x0)` → `nop` → `add x6,x5,x5`
-  （load 与消费者之间隔了 **1 条**指令）
+  （load 与消费者之间隔了 **1 条**指令 ⇒ 按 `rv32i-data-forwarding` 的定义
+  **生产者与消费者的指令距离 = 2**）
 - **THEN** 该依赖**不会**被停顿机制拦住
   （检测点是「**EX 级**的 load vs **ID 级**的消费者」⇒ **停顿**只覆盖**紧邻**）
 - **AND** 该消费者 MUST 读到 load 写入的**新值**
   （由**前推**覆盖 —— 前推接入后，该依赖**不再**读到旧值）
 - **AND** 固件 MUST NOT 再依赖「手工插 NOP 保证间隔」来避免读到旧值
+- **NOTE**: ⚠️ **本 Scenario 的标题沿用既有措辞**（openspec 的 MODIFIED 规则要求
+  既有 Scenario **一条都不删** ⇒ 标题**不可**改写）⇒ **标题里的「距离 1」与
+  正文的形状（距离 2）不一致**是**既有缺陷** ⇒ 消歧以**正文**与
+  `rv32i-data-forwarding` 的距离矩阵为准
+  ⇒ ⇒ **距离矩阵是唯一权威**（本 capability MUST NOT 自述矩阵）
