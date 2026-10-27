@@ -1,0 +1,9 @@
+schema: spec-driven
+created: 2026-10-27
+# 本 change **无 spec 变更**：它只补齐 `dual-backend-test-coverage` Phase 4 的
+# Batch 2/3（3 个 dual pair），不新增也不修改任何 Requirement。
+# 该 capability 治的是 macro / CMake / 排除清单，**不含**「按 Phase 记录进度」的条款。
+# ⇒ 归档时用 `openspec archive dual-backend-rv32i-integration-2026-10 --skip-specs`
+# （`AGENTS.md` 的规则：只有**显式声明 no spec changes** 的 change 才可用该标志
+#   —— 本文件即该显式声明）。
+skip_specs: true

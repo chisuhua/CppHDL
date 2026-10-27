@@ -41,8 +41,8 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
-| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ 载体已起草 `.rddf/improvements/rv32i-fetch-skid-buffer-2026-10.md`（含 4 个决策门） |
-| dual-backend RV32I Batch 2/3 | phase-5 | P1 | none | ✅ 载体已起草 `.rddf/improvements/dual-backend-rv32i-integration-2026-10.md`（`objective-rv32i-e2e` 判据第 5 条） |
+| RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ⏳ **待 architect**：裁决已定（开 **ADR-048**）⇒ 架构依据先于 change ⇒ 顺序 = architect 写 ADR-048 → planner 起草 change → builder 实施。5 段草案：`.rddf/improvements/rv32i-fetch-skid-buffer-2026-10.md` |
+| dual-backend RV32I Batch 2/3 | phase-5 | P1 | none | ✅ **proposal 已就绪**：`openspec/changes/dual-backend-rv32i-integration-2026-10/`（**无 spec 变更**，`.openspec.yaml` 已声明 `skip_specs`）⇒ 可直接进 builder |
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`rv32i-forwarding-decision-2026-10`（P0）——
 > ADR-047 裁决「接」数据前推：mux = 既有 `chlib::ForwardingMux`（**零新增组件**）+ 档位 select
@@ -67,16 +67,21 @@
 > ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
 > 该 job 红 ⇒ MUST revert 归档 commit。
 
-### Unmapped (4)
+### Unmapped (3)
 
-> 四个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
-> `riscv-mini-cache-wrapper-dead-branch-2026-10` → `feat-riscv-mini-rtl-debt` ①；
+> 三个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
+> `riscv-mini-cache-wrapper-dead-branch-2026-10` → `feat-riscv-mini-rtl-debt` ①
+> （⚠️ 名字与候选 change 名 `riscv-mini-cache-wrapper-live-logic-2026-10` **不一致**
+> ⇒ 立项时 MUST 统一，见「实施规划」§遗留项 3）；
 > `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②；
-> `dual-backend-rv32i-integration-2026-10`（P1，2026-10-27 起草）→
-> `feat-dual-backend-coverage` Phase 4 残余 + `objective-rv32i-e2e` 判据第 5 条；
 > `rv32i-fetch-skid-buffer-2026-10`（P0，2026-10-27 起草）→ `feat-rv32i-isa-completeness` ④
-> （含 4 个决策门：缺陷 B 是否一并消除 / 框架层改语义还是加 API / 是否新开 ADR /
-> 固件 NOP 的 compile-time 护栏如何处置）。
+> （⏳ 待 **ADR-048**；4 个决策门已由用户裁决：缺陷 B 按判据执行 / 框架层**加 API** /
+> **开 ADR** / NOP 护栏实施时先定位）。
+>
+> ✅ **已立项**：`dual-backend-rv32i-integration-2026-10`（P1，2026-10-27）
+> → `openspec/changes/dual-backend-rv32i-integration-2026-10/`（proposal 已就绪，
+> **无 spec 变更**）⇒ 覆盖 `feat-dual-backend-coverage` Phase 4 残余 +
+> `objective-rv32i-e2e` 判据第 5 条。
 
 > ✅ **sprint-2026-10 已完成**：`axi4-interconnect-routing-2026-10`（P0）
 > 于 2026-10-26 归档（`openspec/changes/archive/2026-10-26-axi4-interconnect-routing-2026-10/`），
