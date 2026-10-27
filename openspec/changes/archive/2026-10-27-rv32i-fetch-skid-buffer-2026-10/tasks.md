@@ -91,7 +91,12 @@
       `EXAMPLES_TEST_SOURCES` = **17**
 - [x] 5.7 `openspec validate rv32i-fetch-skid-buffer-2026-10 --strict` = **valid**；
       `--specs --strict` 的 7 passed / 19 failed 是 **CLI 1.14.3 漂移**（仓库钉 1.4.1）
-      ⇒ 与本 change 无关（纯净 HEAD 同样红）
+      ⇒ 与本 change 无关（纯净 HEAD 同样红）。
+      ⚠️ **如实登记**：本 change 给 `rv32i-commit-path` 的 **requirements[0]**（新增 Scenario
+      ⇒ 正文 > 500 字符）**新增了 1 条**该 CLI 的 warning —— 该 capability 在改动**前**
+      就已因 requirements[4]/[5] 的同类 warning 变红（已用 `git show HEAD~1:` 的旧版
+      实测对照确认）⇒ **无新增 ERROR**，且该规则在仓库钉的 1.4.1 上**不存在**
+      ⇒ 不阻断归档（CI 不跑 `openspec validate`）。
 
 ## 6. 文档与簿记
 
@@ -103,14 +108,15 @@
 - [x] 6.4 `docs/architecture/rv32i-microarchitecture.md`：「已知残留」两行改为 ✅ 已修
       + 决策依赖图 / 未决项（D7 不启动）同步
 - [x] 6.5 `feat-rv32i-isa-completeness` ④ 勾选 + `.rddf/roadmap.md`
-- [ ] 6.6 主 spec 的 `## Purpose`（`:33-36`）**归档后手工订正**
+- [x] 6.6 主 spec 的 `## Purpose`（`:33-36`）**归档后手工订正** ⇒ 已改为「取指侧的已知边界
+      （2026-10-27 已消解）」+ 两条消解路径 + **PC 回退已否决** + 「本段是手工同步的」说明
 
 ## 7. 审稿与归档
 
 - [x] 7.1 对抗审稿（critic，`review_profile: plan, build`）⇒ **第 1 轮 REJECT**
       （1 BLOCKER + 2 SHOULD_FIX + 1 NIT）⇒ 处置见 7.2 ⇒ 第 2 轮复审（只提交
       BLOCKER 闭合证据 + 新增 diff）
-- [ ] 7.2 审稿处置（BLOCKER ⇒ 返工；SF / NIT ⇒ 同批闭合留痕）
+- [x] 7.2 审稿处置（BLOCKER ⇒ 返工；SF / NIT ⇒ 同批闭合留痕）
       ✅ **第 1 轮处置（2026-10-27）**：
       - **BLOCKER**（spec delta 的退休数 NOTE 仍是实施前基线 179/20 + 冻结的 TODO
         ⇒ 归档会冻错主 spec）⇒ **已修**：NOTE 回填为 **199 − 21 ⇒ 178**、
@@ -125,5 +131,16 @@
         而非 0x80000004 —— `fetch_pc_reg` 无使能地跟 `pc_reg`，晚一拍）
         ⇒ **已修**（该 skid 随即被 flush 清空 ⇒ 值不被观测 ⇒ 断言判别力不受影响）；
       ⇒ 全部**同批**闭合并留痕（design.md §6.1 已记录「组件级抓不到」的三条变异）。
-- [ ] 7.3 `openspec archive rv32i-fetch-skid-buffer-2026-10 --yes`（**禁** `--skip-specs`）
-- [ ] 7.4 归档后核对：`openspec list` 无活跃 change + 主 spec 已合并两条 MODIFIED
+      ✅ **第 2 轮复审（2026-10-27）= APPROVE**（`mergeable: yes` / `scope_exceeded: false`；
+      **无 BLOCKER、无 SHOULD_FIX**）⇒ 复核逐项确认：① NOTE 的数字 / 行号 / 过程性指令 /
+      MODIFIED 头**四处齐平**；② §5.1 与 `skid_firmware()` + 判别性用例**逐条一致**；
+      ③ §5.3 的 7 个端口与 `if_stage.h` 的 `ch_in` 声明**恰好 7 个**一致；
+      ④ Batch 4-b 注释与同用例的 tick5 注释及断言**自洽**。
+      ⇒ 2 条 NIT 亦同批处置：① spec delta 里自指的「归档前 MUST 核对」改为既成事实；
+      ② design.md §5.2 表标注「改前 `:905,917` / 改后 `:907-908`」。
+      ⇒ **评审预算用尽（2/2）**。
+- [x] 7.3 `openspec archive rv32i-fetch-skid-buffer-2026-10 --yes`（**禁** `--skip-specs`）✅
+      ⇒ `openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`；
+      合并报告：`rv32i-commit-path: update`（**~ 2 modified**）
+- [x] 7.4 归档后核对：`openspec list` = **No active changes found**；主 spec 已合并
+      **2** 条 MODIFIED（退休数 NOTE = 199 − 21 ⇒ **178**，行号 `:907-908`）

@@ -30,14 +30,35 @@
    装**气泡**而非冻结；EX/MEM MUST 照常装载（否则 EX 级的 load 卡住 ⇒ 死锁）；
    气泡 MUST 清零控制信号（残留 `is_store` ⇒ 静默误写 dmem）。
 
-⚠️ **已知边界**（如实登记，见 `AGENTS.md` 的 KNOWN LIMITATIONS）：当前实现会丢弃
-「消费者之后的第一条指令」（imem 的 1 拍 `sread` + IF/ID 冻结 ⇒ 已提交未锁存的
-那条无处可存）⇒ 固件 MUST 用 NOP 填充该位置（已有 compile-time 静态护栏）；
-正解需**取指 skid buffer + PC 回退** ⇒ 独立立项。
+⚠️ **取指侧的已知边界（2026-10-27 已消解）**：此前登记的两条边界 ——
+①「load-use 停顿**丢弃『消费者之后的第一条指令』**」（imem 的 1 拍 `sread` + IF/ID 冻结
+⇒ 已提交未锁存的那条无处可存 ⇒ 固件 MUST 用 NOP 填充该位置，且有 compile-time 护栏）与
+②「取指填充期**同一条指令被装两次**」（退休数 +1；接上数据前推后自依赖时**不再幂等**）
+—— **均已消解**（架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md`，
+实施 = change `rv32i-fetch-skid-buffer-2026-10`）：
+- ① 由 `IfStage` 内置的 **1 级 skid buffer** 消解：停顿期间已到达的指令被接住、
+  排空时与 IF/ID 的装载**同拍原子** ⇒ 固件**不再**需要在停顿点后插 NOP
+  ⇒ 「停顿点之后 MUST 是 NOP」的 compile-time 护栏**已删除**；
+- ② 由 `IfStage` 内部的 **`primed` 标志**消解：复位后首个周期的幻影装载 `valid = 0`
+  ⇒ 同一条指令只退休**一次**（退休数基线 **188 → 179 → 178**）。
+⚠️ **PC 回退**（旧文档的表述）**已被否决**（ADR-048 D3）：停顿已让 `pc_reg` 冻结 ⇒
+落在 PC 之后的在途数据至多一条 ⇒ 1 级缓冲足够；`PC ← skid_pc` 会制造双装、
+`PC ← skid_pc + 4` 是空操作。
+⚠️ 本段是**手工**同步的（change 的 delta 只合并 `## Requirements` ⇒ delta 的
+`## Purpose` **不会**被合并进既有 capability）。
 
 ## Requirements
 
 ### Requirement: 「退休指令数」MUST 由流水线的**有效链**定义
+
+- **MODIFIED**: 本 Requirement 的**契约面**扩展 —— 新增一条 Scenario
+  「取指填充期 MUST NOT 把同一条指令装进流水线两次」。
+  理由：取指填充期的「同一条指令被装两次」**违反**本 Requirement 的
+  「退休指令数 MUST 由**有效链**定义」（该指令被计了**两次**退休 ⇒ 计数 ≠ 有效链）。
+  ⚠️ MODIFIED 会**整体替换**该 Requirement ⇒ **既有 Scenario 一条都不删**
+  （「ALU 指令必须计入退休数」/「有效链 MUST 逐级传递」**逐字保留**）；
+  ⚠️ 既有条款（WHEN/THEN/AND 全部）**逐字保留**，本 delta 只**追加**一条 Scenario
+  ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md`（D6 / D9.2）。
 
 - **WHEN** 统计已退休指令数（`perf_instructions` / `commit_count`）
 - **THEN** 「本拍有一条指令退休」MUST 等价于「MEM 级持有**有效**指令」
@@ -59,6 +80,23 @@
 - **WHEN** EX/MEM 有效寄存器为真
 - **THEN** MEM/WB 有效寄存器 MUST 在下一拍为真
 - **AND** WB 的 `write_en` MUST 以「该指令有效」为前提
+
+#### Scenario: 取指填充期 MUST NOT 把同一条指令装进流水线两次
+
+- **WHEN** 复位撤除后的**首个取指周期**
+- **THEN** 同一条指令 MUST NOT 被装进流水线**两次**
+  （⇒ 退休数 MUST NOT 把同一条指令计**两次**）
+- **AND** 该指令的**写回** MUST 只发生**一次**
+- **AND** 实现 MUST 用「取指数据**已就绪**」的判据来区分「已真正取指」与
+  「尚未取指」
+  （⚠️ imem 是 **1-cycle `sread`** ⇒ 复位后**首拍**返回的数据**不是**取指结果
+  ⇒ 该判据 MUST NOT 依赖 `instr_ready` —— 它恒为 1，不携带信息）
+- **NOTE**: 现状**违反**本条：固件的第一条指令被写回两次（连续两拍 `wb_write_en=1`，
+  `rd` / `data` 相同）⇒ 退休数 **+1**；⚠️ 该重复在**接上数据前推**（ADR-047）后
+  **不再恒幂等**（第二条会读到第一条的前推值 ⇒ 若该指令自依赖则**非幂等**）
+  ⇒ 架构依据 = ADR-048 D6（`primed` 门控）；修复后退休数 **−1**。
+
+---
 
 ### Requirement: 流水线级寄存器 MUST NOT 装载**其它级**的信号
 
@@ -223,6 +261,16 @@
   ⚠️ 该 Scenario 的**标题**沿用既有措辞（openspec 的 MODIFIED 规则要求既有
   Scenario **一条都不删** ⇒ 标题**不可**改写）⇒ 「距离」的**消歧**放在**正文**。
   其余条款（气泡而非冻结 / 各级行为 / flush 优先）**不变**。
+  **本轮追加（ADR-048）**：
+  ① 追加一条条款「IF/ID MUST NOT 因停顿而丢弃**已到达**的指令」；
+  ② 「停顿 MUST 只**延迟**退休」这一 Scenario 的**例外被消除**（取指 skid buffer
+  ⇒ ADR-048 D1–D5）⇒ 固件 MUST NOT 再依赖「停顿点之后那条指令是 NOP」；
+  ③ 「退休指令数的推导」这一 Scenario 的 **NOTE 数字基线订正**
+  （188 → 实现前的 **179**（199 − 20）→ **实现后的 178（199 − 21）**；
+  数字由**实测**回填并与测试断言**同批**更新，见该 NOTE）；
+  ⚠️ 「停顿 MUST 只**延迟**退休」这一 Scenario 的**标题**含
+  「⚠️ **当前有一处例外**」⇒ 该短语是**过时措辞**，按 MODIFIED 规则**不可**改写
+  ⇒ 消歧写在**正文**（见该 Scenario 的 NOTE）。
 
 - **WHEN** 流水线处于停顿（stall）或冲刷（flush）状态
 - **THEN** 被阻塞的指令 MUST **留在 ID 级**，MUST NOT 前进到 EX
@@ -233,6 +281,9 @@
 - **AND** 消费者在停顿解除后进入 EX 时，其操作数 MUST 取自**停顿解除之后**的
   寄存器堆内容
 - **AND** flush 优先于 stall（两者同时为真时 MUST 按 flush 处理）
+- **AND** IF/ID MUST NOT 因停顿而**丢弃已到达**的指令
+  （「已到达」= 该指令的取指地址已提交、数据已返回，而 IF/ID 因停顿未能装载
+  ⇒ 该指令 MUST 被保留，并在停顿解除后按**程序顺序**进入流水线）
 
 #### Scenario: 停顿 MUST NOT 把 EX 级的 load 卡住
 
@@ -260,12 +311,17 @@
 
 - **WHEN** 停顿发生
 - **THEN** 被停顿的消费者 MUST **最终仍要退休**（停顿只是延迟）
-- **AND** ⚠️ **当前实现会丢弃「消费者之后的第一条指令」**
-  （imem 是 1-cycle `sread` ⇒ 该指令的地址已在停顿前提交、数据在停顿首拍返回，
-  而 IF/ID 在停顿期间冻结 ⇒ 该数据无处可存 ⇒ 丢弃）
-  ⇒ **固件 MUST 保证该位置是 NOP**（或接入取指 skid buffer —— 独立立项）
-- **NOTE**: 该边界已登记在 `AGENTS.md` 的 KNOWN LIMITATIONS 与本 change 的
-  `design.md` §3.10
+- **AND** 停顿 MUST NOT 丢弃**任何**指令
+  （「消费者之后的那条指令」在取指 skid buffer 落地后 MUST 同样保留
+  ⇒ 见上一条款「IF/ID MUST NOT 因停顿而丢弃已到达的指令」）
+- **AND** 固件 MUST NOT 再依赖「load-use 停顿点之后的那条指令是 NOP」
+  （该位置曾被丢弃 ⇒ 现 MUST 被保留 ⇒ 放 NOP 不再是**必需**，但仍是**允许**的）
+- **NOTE**: ⚠️ **本 Scenario 的标题含「当前有一处例外」是过时措辞**（openspec 的
+  MODIFIED 规则要求既有 Scenario **一条都不删** ⇒ 标题**不可**改写）
+  ⇒ **该例外已消除**：取指侧引入 skid buffer（1 级）承接停顿期间已到达的指令
+  ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md`（D1–D5）；
+  ⚠️ 该边界此前登记在 `AGENTS.md` 的 KNOWN LIMITATIONS 与
+  `openspec/changes/archive/2026-10-26-rv32i-pipeline-commit-path-2026-10/design.md` §3.10。
 
 #### Scenario: 退休指令数的推导 MUST 与测试断言**同义**
 
@@ -274,8 +330,21 @@
   拍间隔数」
   （停顿拍**不退休**，但被停顿的指令**最终仍要退休** ⇒ 停顿只是延迟）
 - **AND** 该推导 MUST 与测试的断言**同义**（MUST NOT 写成与实现对不上的数字）
-- **NOTE**: 数字口径（当前固件 / 200 拍）：**199** 个拍间隔 − **11** 个不增长
-  ⇒ 退休 **188**
+- **AND** 该推导 MUST 覆盖「取指填充期」的重复退休
+  （⇒ 填充期的那条指令 MUST 只计一次，见「退休指令数」Requirement 的
+  「取指填充期 MUST NOT 把同一条指令装进流水线两次」）
+- **NOTE**: 数字口径由**实测**回填并与测试断言**同批**更新
+  （MUST NOT 预先断言）⇒ **本 change 实现后**的基线：
+  **199** 个拍间隔 − **21** 个不增长 ⇒ 退休 **178**
+  （`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:907-908`）；
+  ⚠️ **该基线此前写的是 188（199 − 11）⇒ 自 2026-10-26 的 JAL/JALR change 起
+  就已与测试脱节** ⇒ 本条先订正为实现前的 **179（199 − 20）**，再按本 change 的
+  实测值订正为 **178（199 − 21）** ⇒ 已与测试断言**逐字核对一致**
+  （`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:907-908`）。
+  ⚠️ 更稳的锚点是 `non_retired` 的**分段分解**（fill / stall / flush 各几拍）：
+  取指 skid buffer **不改**停顿拍数与冲刷拍数 ⇒ 停顿 / 冲刷段 MUST 不变
+  （实测：fill 段 2 → **3** 拍 —— `primed` 门控消掉填充期的重复退休；
+  停顿段 **6** 拍、冲刷段 **12** 拍 ⇒ 3 + 6 + 12 = **21**）。
 
 #### Scenario: load-use 自保 MUST 只覆盖**紧邻**（距离 1）的依赖
 

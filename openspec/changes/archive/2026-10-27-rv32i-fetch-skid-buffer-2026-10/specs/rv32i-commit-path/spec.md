@@ -142,7 +142,8 @@
   （`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:907-908`）；
   ⚠️ **该基线此前写的是 188（199 − 11）⇒ 自 2026-10-26 的 JAL/JALR change 起
   就已与测试脱节** ⇒ 本条先订正为实现前的 **179（199 − 20）**，再按本 change 的
-  实测值订正为 **178（199 − 21）** ⇒ 归档前 MUST 核对二者与测试断言**逐字一致**。
+  实测值订正为 **178（199 − 21）** ⇒ 已与测试断言**逐字核对一致**
+  （`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:907-908`）。
   ⚠️ 更稳的锚点是 `non_retired` 的**分段分解**（fill / stall / flush 各几拍）：
   取指 skid buffer **不改**停顿拍数与冲刷拍数 ⇒ 停顿 / 冲刷段 MUST 不变
   （实测：fill 段 2 → **3** 拍 —— `primed` 门控消掉填充期的重复退休；
