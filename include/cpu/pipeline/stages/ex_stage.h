@@ -203,8 +203,9 @@ public:
         //      ⇒ `JALR` 的 `rs1` 紧邻被写时 MUST 用**新值**算目标地址）。
         //    ⚠️ 副作用：`JALR` 的 PC 重定向路径从此**经过 mux**
         //      ⇒ 组合深度 +1（功能无害）。
-        //    ⇒ 若 `rs1` 由**前一条**指令写入 ⇒ 读到**旧值** ⇒ 已知限制
-        //    （见 design.md §5）。
+        //    ⚠️ **旧限制已作废**（2026-10-27，ADR-047）：此前此处写的是
+        //      「若 `rs1` 由**前一条**指令写入 ⇒ 读到**旧值** ⇒ 已知限制」
+        //      —— 该结论**随前推接入而失效** ⇒ **删**（留着会与上一段自相矛盾）。
         auto is_op_jalr   = (io().opcode == ch_uint<7>(OP_JALR)) & io().is_jump;
         auto branch_target_calc = io().pc + io().imm;  // B 型 / JAL 共用
         auto jalr_target_calc =

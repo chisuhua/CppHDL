@@ -307,6 +307,58 @@ TEST_CASE("ForwardingMux: negative control - combinational cycle MUST be detecte
 }
 
 // ============================================================================
+// 测试 1d: 函数式接口 `forward_select<>` 的 **is_jump** 分支
+//
+// ⚠️ 2026-10-27（ADR-047 D4 修订，第 1 轮 critic SHOULD_FIX #4）：
+//    `forward_select<>` 与 `ForwardingMux::describe()` 是**同一份逻辑的两处实现**
+//    ⇒ 头注释明文要求「MUST 同步修改」⇒ **只改组件侧**会让两个 API **行为分叉**
+//    ⇒ 函数式接口的 `is_jump` 分支 MUST 有**独立的覆盖**
+//    （此前 6 处调用**全走默认参数** `is_jump=false` ⇒ 该分支**零调用点覆盖**）。
+// ============================================================================
+TEST_CASE("forward_select: jump return address (functional interface)",
+          "[forwarding][mux][functional][jump]") {
+    auto ctx = std::make_unique<context>("test_mux_jump");
+    ctx_swap ctx_swapper(ctx.get());
+
+    ch_uint<2> forward_a = ch_uint<2>(1_d);
+    ch_uint<2> forward_b = ch_uint<2>(1_d);
+    ch_uint<32> rs1_data_reg = ch_uint<32>(0_d);
+    ch_uint<32> rs2_data_reg = ch_uint<32>(0_d);
+    ch_uint<32> ex_result = ch_uint<32>(0_d);
+    ch_uint<32> mem_result = ch_uint<32>(0_d);
+    ch_uint<32> jump_result = ch_uint<32>(0_d);
+
+    // ⚠️ `is_jump` 是**按值**传入的（函数式接口）⇒ 无法在调用后改
+    //    ⇒ MUST 调**两次**（两个结果结构）来覆盖两个分支。
+    auto result_alu = forward_select<32>(forward_a, forward_b, rs1_data_reg,
+                                          rs2_data_reg, ex_result, mem_result,
+                                          ch_bool(false), jump_result);
+    auto result_jump = forward_select<32>(forward_a, forward_b, rs1_data_reg,
+                                           rs2_data_reg, ex_result, mem_result,
+                                           ch_bool(true), jump_result);
+
+    ch::Simulator sim(ctx.get());
+    sim.tick();
+
+    sim.set_value(rs1_data_reg, 0x11111111);
+    sim.set_value(rs2_data_reg, 0x22222222);
+    sim.set_value(ex_result, 0xAAAAAAAA);
+    sim.set_value(mem_result, 0xBBBBBBBB);
+    sim.set_value(jump_result, 0x80000104);
+    sim.set_value(forward_a, 1);
+    sim.set_value(forward_b, 1);
+    sim.tick();
+
+    // ---- ① 不是跳转 ⇒ 档位 1 的数据 MUST 是 **ALU 结果** ----
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_alu.alu_input_a)) == 0xAAAAAAAAu);
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_alu.alu_input_b)) == 0xAAAAAAAAu);
+
+    // ---- ② 是跳转 ⇒ 档位 1 的数据 MUST 是**返回地址**（不是 ALU 结果）----
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_jump.alu_input_a)) == 0x80000104u);
+    REQUIRE(static_cast<uint64_t>(sim.get_value(result_jump.alu_input_b)) == 0x80000104u);
+}
+
+// ============================================================================
 // 测试 2: ForwardingMux 数据选择 (使用函数式接口)
 // ============================================================================
 TEST_CASE("ForwardingMux: Data selection", "[forwarding][mux][functional]") {

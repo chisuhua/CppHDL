@@ -124,15 +124,15 @@ ADR-047 §5.2 把实施拆成 C1 / C2 两阶段，各阶段**可独立验收**�
   - [x] `include/cpu/pipeline/hazard_unit.h:83-86`（1.2 已做）
   - [x] `examples/riscv-mini/tests/forwarding_dut_fixture.h` 头注释
 - [x] **2.4 簿记**
-  - [ ] `CTEST_TOTAL`（202 → +1 新测试 target）
-  - [ ] `EXAMPLES_TEST_SOURCES`（17 → +1）
-  - [ ] 根 `NOTES` 的算术链
-  - [ ] `scripts/verify_example_assertion_quality.sh` 重跑（钉住断言计数）
-  - [ ] `scripts/verify_example_test_wiring.sh` 重跑（归属 + 数量守恒）
-  - [ ] `scripts/verify_openspec_delta.sh` + `openspec validate --strict`
-- [ ] **2.5 回归**
+  - [x] `CTEST_TOTAL`（**202 不变** —— 判别性固件进**既有** target ⇒ 无新测试文件）
+  - [x] `EXAMPLES_TEST_SOURCES`（**17 不变**，同上）
+  - [x] 根 `NOTES` 的算术链（**191 non-perf / 202 total 不变**，同上）
+  - [x] `scripts/verify_example_assertion_quality.sh` 重跑（钉住断言计数）⇒ exit 0
+  - [x] `scripts/verify_example_test_wiring.sh` 重跑（归属 + 数量守恒）⇒ exit 0
+  - [x] `scripts/verify_openspec_delta.sh` + `openspec validate --strict` ⇒ 全绿
+- [x] **2.5 回归**
   - [x] `ctest -LE perf` 零回归
-  - [ ] `ctest -L perf` 全绿（**执行中** —— 2026-10-27 起跑，耗时 ~20-35 min）
+  - [x] `ctest -L perf` 全绿（**11/11**，1857 s，2026-10-27 实测）
   - [x] `run_all_ported_tests.sh` 28/28
   - [x] `run_all_samples.sh` 35/35
   - [x] 7 个护栏脚本全 exit 0
