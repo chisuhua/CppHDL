@@ -110,24 +110,56 @@ dtcm 的地址 ← `exmem_alu_result` 寄存器）。
 
 | 档位 | 来源 | 数据 |
 |---|---|---|
-| 0 = REG | 寄存器堆（`id_stage.rs1_data`） | 与今天的直通值**同源** ⇒ 行为零变化 |
-| 1 = EX/MEM | EX/MEM 流水线寄存器 | `select(exmem_is_jump, exmem_link_value, exmem_alu_result)` |
+| 0 = REG | 寄存器堆（`id_stage.rs1_data`） | 与今天的直通值**同源** ⇒ 行为零变化<br>⚠️ **距离 3** 的依赖需要 **D11 的读点旁路**才拿到新值 |
+| 1 = EX/MEM | EX/MEM 流水线寄存器 | `select(exmem_is_jump, exmem_link_value, exmem_alu_result)`<br>⚠️ 该 select MUST **收进 `ForwardingMux`**（见下） |
 | 2 = MEM/WB | MEM/WB 流水线寄存器 | `wb_stage.io().write_data`（**已合并** load/jump/alu 三路） |
+
+⚠️ **「数据源 MUST 取自流水线寄存器」的准确表述**：数据源的**叶子** MUST 是流水线
+寄存器 —— `wb_stage.io().write_data` **不是**字面的 `ch_reg`，它是对 `memwb_alu_result`
+/ `memwb_mem_data` / `memwb_link_value` 三个寄存器的**组合 select**（`wb_stage.h:84-87`）
+⇒ 「取自寄存器」是**传递性**成立 ⇒ 断环论证（D3）**不受影响**（叶子是寄存器 ⇒ 环断开）。
 
 ⚠️ **档位 1 MUST 含 `link_value` 分支**：`JAL`/`JALR` 的写回值是 `pc + 4`（不是 `alu_result`）
 ⇒ 漏掉它 ⇒ 档位 1 会把 **ALU 垃圾**当成 jump 的结果前推。
 （`exmem_link_value` 寄存器已存在，`rv32i_pipeline.h:122`）
 
-⚠️ **但这条失效模式在固件级「不可达成」（2026-10-27 critic 指出，已核实）**：
-`JAL`/`JALR` 是**无条件**跳 ⇒ 它的**距离-1 消费者必然落在错误路径上**（fall-through）
-⇒ 当拍就被 flush 成气泡 ⇒ **永远到不了真实消费者** ⇒
-「`jal ra,…; addi x,ra,…` 紧邻序列会静默错值」这个描述的序列**不会执行**。
-⇒ 真正覆盖 jump 生产者的是**档位 2**（`wb_stage.write_data` 已含 `link_value`；
-目标指令最早**距离 3** 到达 EX ⇒ 此时它已在 MEM/WB ⇒ 档位 2 命中）。
-⚠️ 「距离 3」是**分析性下界**（按 D5 的打拍语义推得）⇒ **验收以实测为准**，
-MUST NOT 当作已证事实（与 D9 第 6 类用例的「距离 MUST 由实施期实测确定」一致）。
-⇒ ⇒ **保留**档位 1 的 `link_value` 分支作为**防御**（无害），
-但它的验收**不得**靠固件（见 D9 的变异项改写）。
+⚠️ **该 select MUST 收进 `ForwardingMux`（端口面变化）—— 2026-10-27 缺口分析追加**：
+
+- **动机**：若该 select 留在 pipeline 装配里（内联），则**不可单测** ——
+  `ForwardingMux` 的端口面**没有** `is_jump` / `link` 输入
+  （`include/chlib/forwarding.h:188-206`），而 `exmem_is_jump` 是 pipeline 的
+  **成员 `ch_reg`**（`rv32i_pipeline.h:135`）⇒ **TB 无法驱动**
+  ⇒ D9 要求的「定向接线级单测」**照现文本无法落地**
+  ⇒ 实施者很可能交一个**复刻 DUT**（自己重建 select）⇒ 测的是**副本**
+  ⇒ 对**真实接线零信号** ⇒ **假绿**；
+- **裁决**：`chlib::ForwardingMux` 新增 **2 个输入端口** `is_jump` / `jump_result`
+  ⇒ 档位 `1` 的数据 = `select(is_jump, jump_result, ex_mem_alu_result)`
+  ⇒ **仍是既有组件**（**零新增组件**）⇒ 档位**编号**不变（`0`/`1`/`2`）
+  ⇒ **不违反** `rv32i-canonical-home` 的「逐档等价」（该条约束**档位编号**，
+  **不是**端口面）⇒ 该分支可由**组件级单测**判别；
+- **爆炸半径（实测）**：`ForwardingMux` 的**组件**实例化点**只有 1 个**
+  （`examples/riscv-mini/tests/forwarding_dut_fixture.h:91`）
+  ⇒ 该 fixture 的 2 个使用者（`test_pipeline_exec.cpp` / `test_rv32i_pipeline.cpp`）
+  MUST 显式驱动新端口；
+  ⚠️ 同头文件的**函数式接口** `forward_select<>`（`forwarding.h:326-344`）是
+  **同一份逻辑的第二实现** ⇒ MUST **同步修改**（否则两个 API 行为分叉）
+  ⇒ 其调用点**只有** `tests/chlib/test_forwarding.cpp`（6 处）⇒ 半径可控。
+
+⚠️ **档位 1 的 `link_value` 分支降级为「防御性」要求**：
+
+- 该分支的**失效模式在固件级不可达**：`JAL`/`JALR` 是**无条件**跳
+  ⇒ 它的**距离-1 消费者必然落在错误路径上**（fall-through）⇒ 当拍就被 flush
+  成气泡 ⇒ **永远到不了真实消费者**
+  ⇒ 「`jal ra,…; addi x,ra,…` 紧邻序列会静默错值」这个描述的序列**不会执行**；
+- ⚠️ **更正（2026-10-27 缺口分析，机制归因错误）**：
+  **没有任何前推档位能命中 jump 生产者** —— 跳转在 **EX 级**就重定向 PC
+  ⇒ 目标指令最早在**若干拍之后**才到 ID 级 ⇒ 届时生产者**已离开**可命中的级
+  ⇒ 它的返回地址**经寄存器堆写回路径**到达消费者
+  ⇒ ⇒ **不属**前推档位的覆盖范围
+  （⚠️ 初版本 ADR 写「真正覆盖 jump 生产者的是**档位 2**」是**错的** ⇒ 已更正；
+  ⇒ 对应的 D9 第 6 类用例因此**不判别** ⇒ 已从判别性清单移除并降级为回归用例）
+- ⇒ ⇒ 该分支 MUST **保留**（防御性，无害）但其验收 **MUST NOT** 靠固件
+  ⇒ MUST 由**组件级单测**验收（D9）。
 
 ⚠️ 档位 2 用 `wb_stage.io().write_data` 是**免费**的：它已经把 load 数据 / ALU 结果 /
 `link_value` 合并好了，且三个输入**全是 MEM/WB 寄存器** ⇒ 不成环。
@@ -213,9 +245,13 @@ MUST NOT 当作已证事实（与 D9 第 6 类用例的「距离 MUST 由实施�
 ⇒ 故 D7 的准确形态是：
 - **删 5 个预留输入端口**（公共 API 破坏性变更 ⇒ 爆炸半径见 §5.3）
 - **保留** 4 个直通端口（独立组件仍可用）
-- ⚠️ **但 pipeline 装配内 MUST 删掉 `:484` / `:485` 两处 `rs1_data_raw` / `rs2_data_raw` 的驱动**
-  —— 接 mux 后 `hazard.rs1_data` 在 pipeline 里**无消费者**（mux 直喂 `ex_stage.rs1_data`）
-  ⇒ 继续驱动 `rs1_data_raw` 就是「**喂了没人读**」⇒ ZERO-DEBT 违规
+- ⚠️ **pipeline 装配内 MUST **保留** `:484` / `:485` 两处 `rs1_data_raw` / `rs2_data_raw` 的驱动**
+  —— 初版本 ADR 要求删掉它（「喂了没人读」⇒ ZERO-DEBT），但**该要求与仓库反模式
+  「新增组件输入端口 ⇒ 全部实例化点 MUST 显式驱动」正面相撞**
+  （未驱动端口读到的是**未定义值** ⇒ 静默错值）
+  ⇒ **正确性优先于整洁** ⇒ **保留驱动**（驱动来源 `id_stage.io().rs1_data` 是**合法**的）
+  ⇒ 但 MUST 在注释里**如实说明**「该驱动的消费者已迁到 mux，本端口保留是因为它是
+  **合法输入**」⇒ 例外必须**显式登记**，不能靠沉默
 - ⇒ **不是「删 9 个」**：4 个直通端口有独立消费者（证据见上表）
 
 ### D8. 收敛 `ex_stage.io().rs1_data` / `rs2_data` 的**双驱动**
@@ -250,52 +286,146 @@ MUST NOT 当作已证事实（与 D9 第 6 类用例的「距离 MUST 由实施�
 ⚠️ **当前固件刻意无冒险**（`rv32i-soc-dual-parity` design.md §「固件」+ `verilator-rv32i-e2e`
 spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 / 没接，全仓照绿**。
 
-⇒ 实施 MUST 新增**判别性固件**，至少覆盖：
+⇒ 实施 MUST 新增**判别性固件**，至少覆盖 **8 类**：
 
-1. **相邻 ALU→ALU，无 NOP**（前推的核心收益）
-2. **距离 2 的 load→use**（档位 2 覆盖 load 的判据）
-3. **`JALR` 的 `rs1` 紧邻被写**（消除 `rv32i-isa-semantics` 的已知限制）
-4. **分支条件用紧邻新值**（前推给 BEQ/BNE 提供新值）
-5. **双生产者同 rd**（`hazard_unit.h:116-126` 注释里的陷阱形态）
-6. **jump 生产者的前推**（`JAL` → 若干条无关指令 → 消费者）
-   ⇒ 覆盖**档位 2** 对 jump 生产者的前推（`wb_stage.write_data` 已含 `link_value`）
-   ⇒ 这是固件级**唯一**能覆盖 jump 前推的形态（D4：距离 1 不可达）
-   ⚠️ **具体距离 MUST 由实施期实测确定**，MUST NOT 写死
-   （档位与数据源的时间对齐由 D5 的**打拍**保证 ⇒ 打拍后的对齐是唯一权威；
-   本 ADR 不预先断言「距离 N」—— 那正是 D5 要用实测钉住的东西）
+| # | 用例 | 覆盖 | 验收形态 |
+|---|---|---|---|
+| 1 | **相邻** ALU→ALU，**无 NOP** | 档位 `1`（前推的核心收益） | 固件 |
+| 2 | **距离 2** 的 load→use | 档位 `2` | 固件 |
+| 3 | **距离 3** 的 load→use | **D11 的读点旁路** | 固件 |
+| 4 | **`JALR` 的 `rs1` 紧邻被写** | 档位 `1`（消除 `rv32i-isa-semantics` 的已知限制） | 固件 |
+| 5 | **分支条件用紧邻新值** | 档位 `1`（前推给 BEQ/BNE 提供新值） | 固件 |
+| 6 | **store 的写数据（rs2）** 紧邻被写 | mux 的 **b 路**（此前零覆盖） | 固件 |
+| 7 | **双生产者同 rd** | 档位优先级（`hazard_unit.h:116-126` 注释里的陷阱形态） | 固件 |
+| 8 | **`x0` 的负向用例**（生产者写 x0 / 消费者读 x0） | `rd_nz` 门控 | 固件 |
+
+⚠️ **「jump 生产者的前推」NOT 在此列** —— 初版本 ADR 列它（第 6 类）是
+**机制归因错误**（D4 已更正：跳转的返回地址**不经**前推档位到达消费者）
+⇒ 该用例**不判别**（实为「`link_value` 经寄存器堆通路」的回归测试）
+⇒ **降级为回归用例**，MUST NOT 被当作前推的**判别性证据**。
+
+⇒ **每个**判别性用例 MUST 附带**反向期望**（「未接前推时此处读到旧值 `X_old`」）
+且 `X_old != X_new` ⇒ 否则该用例**可能已退化**（零信号）⇒ MUST 重写。
 
 ⇒ 验收 MUST 包含：
 
 - **双后端逐拍 parity**（无掩码）
-- **变异验证**（每条都先确认编译成功）：
-  - 去掉打拍 ⇒ 红（档位错一级）
-  - 交换档位 1 / 2 的数据源 ⇒ 红
-  - 前推判定漏 `& !ex_is_load` ⇒ 红（配合新增的 load 判别性用例）
-  - ⚠️ **「档位 1 忘接 `link_value`」** ⇒ **不得**用固件验收
-    （D4 已说明：`JAL`/`JALR` 的距离-1 消费者必在错误路径上 ⇒ 该失效模式固件级不可达）
-    ⇒ **MUST** 改用**定向接线级单测**：直接驱动 `exmem_is_jump = 1` + 档位 1，
-    断言 mux 输出 == `link_value`（而非 `alu_result`）
+  ⇒ ⚠️ 「无掩码」MUST 有**显式的端口清单**（顶层观测面是**有限**的
+  ⇒ 不写清单 ⇒ 该判据**不可执行**）；
+- **变异验证**（每条都先确认**编译成功** —— 编译失败的变异会跑**旧二进制**
+  ⇒ **假绿**）：
+
+  | 变异 | 期望 | ⚠️ 验收形态 |
+  |---|---|---|
+  | 去掉打拍 | 红（档位错一级） | **固件级**可判别 |
+  | 交换档位 1 / 2 的数据源 | 红 | **固件级**可判别 |
+  | 前推判定漏 `& !ex_is_load` | 红 | ⚠️ **固件级不可达**（误选只打进气泡 ⇒ 结果被丢弃）⇒ MUST 用**组件级真值表**（独立驱动 `ex_is_load=1` + `ex_reg_write=1` + rd 匹配 ⇒ 断言档位 **≠** `1`） |
+  | 档位 1 忘接 `link_value` | 红 | ⚠️ **固件级不可达**（D4）⇒ MUST 用**组件级单测**（直接驱动 mux 的 `is_jump=1` + `jump_result` + 档位 `1` ⇒ 断言 mux 输出 == `jump_result`） |
+
 - **负向对照**：实施期第一屏 MUST 先跑 **bf78367 形态**的最小复现
   ⇒ 确认环检测**仍然 FATAL**（证明护栏有效），再接新形态
-- `rv32i-canonical-home` spec 已要求的「**装配后无环**」的可执行验证
+  ⇒ 且 MUST **固化为常驻测试**（一次性人工检查 ⇒ 护栏失效无人守）；
+- **金标纪律**：所有重算的期望值（内存值 / 停顿拍数 / 退休数 / 控制停顿数）MUST
+  **手工推导**并在**代码注释**里留痕 ⇒ MUST NOT 从仿真输出**抄值**
+  （那是**循环论证**）；
+- `rv32i-canonical-home` spec 已要求的「**装配后无环**」的可执行验证。
 
 ### D10. 规格锁同步（MUST 走 MODIFIED delta，不得直接改主 spec）
 
 接前推会**过时**以下既有契约：
 
-| spec | 冲突点 |
+| spec | 动作 | 冲突点 |
+|---|---|---|
+| **`rv32i-data-forwarding`（新建）** | ADDED | 前推的**微架构契约**（档位 / 数据源 / 时间对齐 / **距离矩阵** / 装配无环 / 判别性证据）——⚠️ 它 MUST 是**距离矩阵的唯一权威**（D11）⇒ 其它 capability **MUST NOT** 自述矩阵 |
+| `rv32i-isa-semantics` | MODIFIED | 「`JALR` 的 `rs1` MUST 取 EX 级的寄存器值（**MUST NOT 依赖数据前推**）」——本 ADR 裁决「接」⇒ 该条必须 MODIFIED |
+| `rv32i-commit-path` | MODIFIED ×2 | ① load-use 停顿的「**无数据前推**」前提（改为「档位 1 **保守地**不覆盖 load」⇒ 停顿契约本身不变）；② 「load-use 自保只覆盖紧邻」的**取值结论**（读旧值 ⇒ 读**新值**）；③ 观测面 / 逐拍 parity 契约（固件变了 ⇒ golden 变了） |
+| `verilator-rv32i-e2e` | MODIFIED | 为「无前推」留的 NOP 间隔约定（间隔**不再是**读对新值的前提 ⇒ 且 MUST NOT 被当作前推正确性的证据） |
+| `rv32i-canonical-home` | MODIFIED | mux 归属（已要求「装配后无环」）—— 需登记新的验收证据；⚠️ 「逐档等价」条款 MUST 澄清：**档位编号**不变，档位 `1` 在**跳转**指令上的数据是**返回地址** |
+
+⇒ 实施 change MUST 用 **MODIFIED delta** 更新既有契约，并**新建** `rv32i-data-forwarding`
+⇒ 在 change 的 tasks 里逐条列出。
+
+⚠️ **文档同步（不在 spec 层，但同样 MUST 做）**：
+
+| 位置 | 过时之处 |
 |---|---|
-| `rv32i-isa-semantics` | 「`JALR` 的 `rs1` MUST 取 EX 级的寄存器值（**MUST NOT 依赖数据前推**）」——本 ADR 裁决「接」⇒ 该条必须 MODIFIED |
-| `rv32i-commit-path` | 观测面 / 逐拍 parity 契约（固件变了 ⇒ golden 变了） |
-| `verilator-rv32i-e2e` | 为「无前推」留的 NOP 间隔约定 |
-| `rv32i-canonical-home` | mux 归属（已要求「装配后无环」）—— 需登记新的验收证据 |
+| 根 `AGENTS.md §KNOWN LIMITATIONS` | **3 条**会过时：① 「无数据前推」约束；② 「距离 2 检测不到」；③ 「`JALR` 的 `rs1` 无前推」<br>⇒ 且 **「距离 3」的缺陷当前根本没写** ⇒ MUST **补写**（或随 D11 的旁路一并消除后写明「已消除」） |
+| `include/cpu/AGENTS.md` | 「`HazardUnit` 的『预留输入』端口无内部消费者」条目（D7 删端口 ⇒ 该条目消失） |
+| `include/cpu/pipeline/stages/ex_stage.h:200-202` | 「`JALR` 的 `rs1` 取 `io().rs1_data` ⇒ **无数据前推**（ADR-046 D5 悬置）」⇒ 本 ADR 裁决「接」⇒ 过时（⚠️ 且 `JALR` 的 PC 重定向路径从此**经过 mux** ⇒ 组合深度 +1） |
+| `include/cpu/pipeline/hazard_unit.h:83-86` | 「前推数据输出（**经过前推MUX 后的数据**）」⇒ **今天就是假的**（`:198-199` 是**直通**）⇒ MUST 改为如实描述 |
+| `examples/riscv-mini/tests/forwarding_dut_fixture.h` 头注释 | 该 fixture **不打拍**、**不含** link-select ⇒ 落地后它**不再镜像**真实流水线接法 ⇒ MUST **显式声明**它**不是**装配级证据（否则「装配错了」对它零信号） |
 
-⇒ 实施 change MUST 用 **MODIFIED delta** 更新它们，并在 change 的 tasks 里逐条列出。
+### D11. **距离 3** 的同沿竞态 MUST 由**寄存器堆读点旁路**解决（不是由 hazard 解决）
 
-⚠️ **文档同步（不在 spec 层，但同样 MUST 做）**：根 `AGENTS.md §KNOWN LIMITATIONS` 里的
-① 「距离 2 读旧值」与 ② 「`JALR` 的 `rs1` 无前推」两条会**过时** ⇒ MUST 同步更新；
-`include/cpu/AGENTS.md` 的「`HazardUnit` 的『预留输入』端口无内部消费者」条目也会过时
-（D7 删端口 ⇒ 该条目消失）。
+⚠️ **本条是 2026-10-27 的缺口分析（metis）追加的**，初版 ADR **遗漏**了它
+⇒ 它**推翻** §3「固件不再需要插 NOP」的承诺 ⇒ **先读本条**再读后果。
+
+#### 缺陷：ID/EX 锁存沿与 WB 写回沿**同沿**
+
+| 事实 | 位置 |
+|---|---|
+| ID/EX **锁存**了寄存器堆的**组合读** | `id_stage.h:255`（`idex_rs1_data->next = select(idex_update_en, io().reg_rs1_data, idex_rs1_data)`） |
+| 寄存器堆读点**无 WB 旁路** | `rv32i_pipeline.h:171-178`（`reg_file.aread(...)` 直连 `id_stage.io().reg_rs1_data`） |
+| 写回发生在**同一条 posedge** | `rv32i_pipeline.h:180`（`reg_file.write(...)`）⇒ `ch_mem` 的写是 posedge |
+
+⇒ 在「ID→EX 锁存」的那条沿上，寄存器堆里还是**写回前**的值
+⇒ ID/EX 锁存到的是**旧值**。
+
+⚠️ **Verilog 侧同构**（两个 `always_ff` 同沿 + 非阻塞赋值 ⇒ 都读旧值）
+⇒ **两后端一致地错** ⇒ **双后端 parity 抓不到它** ⇒ MUST 靠**判别性固件**抓
+（D9 第 3 类）。
+
+#### 后果：距离矩阵出现一个洞（1 ✓ / 2 ✓ / **3 ✗** / ≥4 ✓）
+
+| 距离 | 生产者所在级（消费者在 ID 时） | 可命中的前推档位 | 结论 |
+|---|---|---|---|
+| 1 | EX | 档位 `1` | ✅ |
+| 2 | MEM | 档位 `2` | ✅ |
+| **3** | **WB** | **无** —— hazard 只比较 EX / MEM **两级** ⇒ 生产者**已离开**可命中的级；且档位 `2` 的数据源 `wb_stage.write_data` 此时**也已不是**该生产者 | ❌ **读旧值** |
+| ≥ 4 | 已退休 | 无（前推不需要） | ✅（走寄存器堆路径 ⇒ 写回早已落地） |
+
+⚠️ **距离 3 的洞「今天就存在」**（无前推时同样读旧值）⇒ **不是**接前推引入的
+⇒ 现有固件用 **3 条 NOP（距离 4）恰好躲开** ⇒ **从未被文档化**。
+⚠️ 后果：「隔 2 条不行、隔 1 或 3 条才行」是**无法向固件作者交代**的约束
+⇒ MUST **修**，不能只登记为限制。
+
+#### 裁决：在**寄存器堆读点**加 WB→ID **组合旁路**
+
+形态（pipeline 级，约 10 行，`rv32i_pipeline.h:171-178`）：
+
+```
+auto wb_bypass_hit_a = wb_write_en
+                     & (wb_stage.io().rd_addr_out == id_stage.io().rs1_addr_id);
+id_stage.io().reg_rs1_data <<= select(wb_bypass_hit_a,
+                                      wb_stage.io().write_data,
+                                      rs1_data_result);
+```
+
+⇒ **不成环**：旁路的**数据叶**是 `memwb_*` **流水线寄存器**
+（`wb_stage.io().write_data` = 对 `memwb_alu_result` / `memwb_mem_data` /
+`memwb_link_value` 的组合 select；`rd_addr_out` ← `memwb_rd_addr`；
+`write_en` ← `memwb_valid`）⇒ 叶子是**寄存器** ⇒ 环断开（D3 的机制）
+⇒ 且 `type_mem_read_port` **不豁免** ⇒ 旁路的**地址链**也止于寄存器之后
+⇒ 不触发 `CHFATAL`；
+⇒ **与 D7 正交**：**不需要** hazard 的 `wb_reg_write` / `wb_rd_addr` / `wb_write_data`
+⇒ 那 3 个端口仍然**可以删**（见 §4「否决」）；
+⇒ **`x0` 无需特判**：`wb_write_en` 已含 `rd_addr_out != 0`（`rv32i_pipeline.h:179`）
+⇒ 命中时 `rs1_addr_id` 必然非 0；
+⇒ **两侧对称**：`rs1` / `rs2` 各一条（`rs2_data_result` 同理）。
+
+⚠️ **时序纪律**：旁路是**组合**的 ⇒ 它在「写回那一拍」就把**新值**喂给 ID 级
+⇒ ID/EX 在**同一条沿**上锁存到**新值** ⇒ 距离 3 的依赖被修复。
+⚠️ **不改变任何既有档位的语义**：旁路只影响**档位 0**（寄存器堆读）的**取值**
+⇒ 档位 1 / 2 命中时旁路值被 mux 丢弃 ⇒ **互不干扰**。
+
+#### **距离矩阵 = 本 ADR 的契约唯一权威**
+
+⚠️ 「距离 N 的依赖拿到什么值」是**固件作者唯一需要知道**的契约
+⇒ 它 MUST 有**唯一**出处 ⇒ **本表即该出处**
+⇒ 实施 change 新建的 `rv32i-data-forwarding` capability MUST **逐字**承载本表
+⇒ 其它 capability / 文档 **MUST NOT** 另写一份（否则必然漂移）
+⇒ ⚠️ `rv32i-commit-path` 里那条「load-use 自保只覆盖紧邻」的 Scenario
+MUST **引用**本矩阵，**MUST NOT** 自述矩阵。
 
 ## 3. Consequences
 
@@ -303,6 +433,9 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 
 - 相邻 ALU→ALU 依赖**零停顿** ⇒ 固件不再需要为它插 NOP
 - 距离 2 的 load→use 被**档位 2** 覆盖 ⇒ 「距离 2 读旧值」的缺口关闭
+- 距离 3 的 load→use 被 **D11 的读点旁路**覆盖 ⇒ 「距离 3 读旧值」的缺口关闭
+  （⚠️ 该缺口**今天就存在**，本 ADR 顺带修掉 ⇒ **不接前推也得修**）
+- ⇒ **配合 D11**，固件对 ALU 依赖 / load 依赖**不再需要插任何 NOP 间隔**
 - `JALR` 的 `rs1` 限制**消除** ⇒ `rv32i-isa-semantics` 的那条约束可放宽
 - 分支条件可用**紧邻**的新值 ⇒ 分支逻辑更短
 - 顺带清掉 5 个预留端口（含**环饵** `ex_alu_result`）⇒ ZERO-DEBT 合规
@@ -312,6 +445,12 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 
 - **load-use 停顿仍在**（3 拍 + 「丢弃消费者后第一条指令」）⇒ **T5（skid buffer）仍然必需**
   ⇒ 本 ADR **不**让 T5 变成冗余
+- ⚠️ **D11 的读点旁路是「组合旁路」** ⇒ 它在写回那一拍把新值喂给 ID 级
+  ⇒ **固件的依赖间隔约束被取消**（不再需要「隔 2 条」这类**不可解释**的规则）
+  ⇒ 代价：ID 级的组合逻辑多一个 `select`（深度 +1）
+- ⚠️ **`ForwardingMux` 的端口面变化**（新增 `is_jump` / `jump_result`）⇒
+  `chlib` 的**公共 API** 破坏性变更（爆炸半径小：组件实例化点**只有 1 个**，
+  函数式接口 `forward_select<>` 的调用点**只有 1 个测试文件**）
 - 固件 golden 大改（判别性固件 + 依赖关系变化）⇒ 时序类断言全部重算
 - 3 处「预留端口」删除是**破坏性公共 API 变更**（爆炸半径见 §5.3）
 - 档位语义依赖**打拍** ⇒ 若后人把打拍删掉 ⇒ 静默错值（⇒ 变异验证 D9 覆盖）
@@ -337,6 +476,8 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 | **档位 1 覆盖 load（V2 形态）** | 会消除 load-use 停顿 ⇒ 与 T5 的边界重叠 ⇒ 独立立项 |
 | **改检测点为 EX 视图**（免打拍） | `id_rs*_addr` 同时服务 load-use 检测（**MUST** 是 ID 视图）⇒ 需加端口 + 第三路比较 ⇒ 改动面更大 |
 | **保留 5 个预留端口** | `ex_alu_result` 是**环饵**（已接线到 EX 级组合输出）⇒ 留着就诱使后人复现 bf78367；ZERO-DEBT POLICY 倾向删 |
+| **距离 3 用 hazard 的**第三级**前推解决**（把 `wb_reg_write` / `wb_rd_addr` / `wb_write_data` 用起来） | ① 它要求 mux 有**第 4 个档位**（`ForwardSource::RESERVED = 3` 目前是**未用**的）；② 它把 D7 要删的 3 个端口**重新变成必需** ⇒ 与 D7 冲突；③ 档位 3 的语义与「档位 0 = 寄存器堆读」**重叠**（WB 的写回值**就是**下一拍寄存器堆里要写的值）⇒ 用旁路表达**更直接**、更少状态 |
+| **距离 3 登记为残留限制**（不修） | 「隔 2 条不行、隔 1 或 3 条才行」是**无法向固件作者交代**的约束 ⇒ 与 §3「固件不再需要插 NOP」**直接矛盾** ⇒ 只能作为**次选**（若实现期发现旁路有未预见的副作用）|
 
 ## 5. 实施追踪
 
@@ -344,10 +485,12 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 
 | 文件 | 改动 |
 |---|---|
-| `include/cpu/pipeline/rv32i_pipeline.h` | 加 `ForwardingMux` 实例；加 `fwd_a_d1`/`fwd_b_d1` 两个 `ch_reg`；接线 3 个前推源；**删 `:200`/`:201` 的旧驱动**（D8）；删 5 个预留端口的驱动（D7） |
-| `include/cpu/pipeline/hazard_unit.h` | 删 5 个预留端口（D7）；前推判定加 `& !ex_is_load`（D6） |
-| `include/cpu/pipeline/stages/ex_stage.h` | （无端口变化；`rs1_data` 的**驱动源**变） |
-| `examples/riscv-mini/tests/forwarding_dut_fixture.h` | 补 `ex_is_load` 驱动（D6 的连带约束） |
+| `include/cpu/pipeline/rv32i_pipeline.h` | 加 `ForwardingMux` 实例；加 `fwd_a_d1`/`fwd_b_d1` 两个 `ch_reg`；接线 3 个前推源；**删 `:200`/`:201` 的旧驱动**（D8）；删 5 个预留端口的驱动（D7）；**加 D11 的寄存器堆读点旁路**（rs1 / rs2 各一条） |
+| `include/cpu/pipeline/hazard_unit.h` | 删 5 个预留端口（D7）；前推判定加 `& !ex_is_load`（D6）；修 `:83-86` 的**假注释**（「前推数据输出（经过前推MUX 后的数据）」—— 今天 `:198-199` 是**直通** ⇒ 该注释**今天就是假的**） |
+| `include/chlib/forwarding.h` | `ForwardingMux` 新增 2 个输入端口 `is_jump` / `jump_result`（D4）；**同步**函数式接口 `forward_select<>`（同一份逻辑的第二实现 ⇒ 否则两个 API 行为分叉） |
+| `include/cpu/pipeline/stages/ex_stage.h` | （无端口变化；`rs1_data` 的**驱动源**变）；修 `:200-202` 的**过时注释**（「`JALR` 的 `rs1` 取 `io().rs1_data` ⇒ **无数据前推**（ADR-046 D5 悬置）」⇒ 本 ADR 裁决「接」⇒ 该注释过时） |
+| `examples/riscv-mini/tests/forwarding_dut_fixture.h` | 补 `ex_is_load` 驱动（D6 的连带约束）；**新增 `is_jump` / `jump_result` 端口并显式驱动**（D4 的端口面变化 ⇒ 该 fixture 是 `ForwardingMux` 的**唯一**组件实例化点）；头注释补「本 fixture **不打拍**、**不含**打拍后的对齐 ⇒ **不是**装配镜像 ⇒ MUST NOT 当作装配级证据」 |
+| `tests/chlib/test_forwarding.cpp` | 同步函数式接口 `forward_select<>` 的新参数（6 处调用） |
 | `examples/riscv-mini/tests/test_rv32i_pipeline.cpp` | **删 4 个区块 × 5 端口 = 20 处** `set_input_value`；补 `ex_is_load` 驱动 |
 | `examples/riscv-mini/tests/test_pipeline_exec.cpp` | **删 8 个区块 × 5 端口 = 40 处** `set_input_value`；补 `ex_is_load` 驱动 |
 | `examples/riscv-mini/tests/test_pipeline_debug.cpp` / `test_wrapper_simple.cpp` | 各删 5 处驱动；补 `ex_is_load` 驱动 |
@@ -357,8 +500,8 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 
 | 阶段 | 内容 | 可独立验收 |
 |---|---|---|
-| **C1** | 前推**接线**（mux + 打拍 + 源）+ 判别性固件 + 变异验证 | ✅ 双后端 parity + 6 类判别性用例 + **档位对齐的实测**（距离由实测钉住，MUST NOT 预先断言） |
-| **C2** | 端口清理（D7）+ 双驱动收敛（D8）+ 文档/spec 同步（D10） | ✅ 护栏 + spec delta |
+| **C1** | 前推**接线**（mux + 打拍 + 源）+ **D11 的读点旁路** + 判别性固件 + 变异验证 | ✅ 双后端 parity + **8 类**判别性用例 + **2 条组件级**验收（`& !ex_is_load` 门控 / 档位 1 的 `link_value`）+ **档位对齐的实测**（距离由实测钉住，MUST NOT 预先断言） |
+| **C2** | 端口清理（D7）+ 双驱动收敛（D8）+ `ForwardingMux` 端口面（D4）+ 文档/spec 同步（D10） | ✅ 护栏 + spec delta |
 
 ⚠️ C1 与 C2 **可以分开提**，但 C1 的验收**依赖**判别性固件 ⇒ **不得**先合 C1 再补固件。
 
@@ -410,6 +553,10 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 - `openspec/specs/rv32i-isa-semantics/spec.md`（「`JALR` 的 `rs1` MUST NOT 依赖数据前推」⇒ D10 需 MODIFIED）
 - `openspec/specs/rv32i-canonical-home/spec.md`（mux 归属 + 「装配后无环」的验证要求）
 - 根 `AGENTS.md §KNOWN LIMITATIONS`（load-use 停顿的「丢指令」面 ⇒ T5 仍必需）
+- `include/cpu/pipeline/stages/id_stage.h:255`（ID/EX **锁存**寄存器堆组合读 ⇒ D11 的竞态根源）
+- `include/cpu/pipeline/rv32i_pipeline.h:171-180`（寄存器堆读点 / 写回点 ⇒ D11 的旁路位置）
+- `include/cpu/pipeline/stages/wb_stage.h:84-87`（`write_data` 是对 `memwb_*` 的**组合 select**
+  ⇒ 「数据源的**叶子**」是寄存器 ⇒ 断环论证成立）
 
 ### 独立复核记录（oracle，2026-10-27）
 
@@ -424,3 +571,23 @@ spec 的 NOP 间隔都是为「无前推」留的）⇒ **前推接错 / 接反 
 
 ⇒ 且 oracle 独立确认：残留成环路径**无**；`type_mem_read_port` **不豁免**（环穿过它照样 FATAL）；
 现有测试对「装配级前推」**零覆盖**（⇒ D9 的判别性固件是必需项）。
+
+### 修订记录（2026-10-27，缺口分析后的修订）
+
+本 ADR 经过 **2 轮 critic 对抗审稿**（第 1 轮 APPROVE_WITH_CONDITIONS ⇒ 10 条处置
+全部 CLOSED；第 2 轮 **APPROVE**）。此后 planner 起草实施 change 时跑的**缺口分析
+（metis）**找出 **3 处架构级缺陷** ⇒ 本次修订：
+
+| # | 缺陷 | 修订 |
+|---|---|---|
+| 1 | **距离 3 的同沿竞态**（ID/EX 锁存沿 == WB 写回沿）⇒ ADR 的形态**修不了它** ⇒ §3「不再需要插 NOP」的承诺**不成立** | **新增 D11**（寄存器堆读点的 WB→ID 组合旁路）+ **距离矩阵成为契约的唯一权威** |
+| 2 | 档位 1 的 `link_value` 变异**没有可落地的 harness**（mux 无 `is_jump`/`link` 端口；`exmem_is_jump` 是 pipeline 的成员 `ch_reg` ⇒ TB 无法驱动）⇒ 实施者会交**复刻 DUT**（**假绿**） | **D4 改写**：该 select **收进 `ForwardingMux`**（端口面变化）⇒ 降级为**防御性**要求 + **组件级**验收；`& !ex_is_load` 变异同样改**组件级真值表** |
+| 3 | D4 / D9 第 6 类的**机制归因错误**（跳转在 EX 级就重定向 PC ⇒ 目标指令若干拍后才到 ID ⇒ **没有任何前推档位能命中 jump 生产者**） | **D4 更正**：跳转的返回地址**经寄存器堆写回路径**到达消费者 ⇒ **不属**前推档位的覆盖范围；D9 第 6 类**降级为回归用例**（不判别） |
+
+⚠️ 另修 **D7**（pipeline 内 `:484`/`:485` 的驱动**保留**而非删除）—— 与仓库反模式
+「新增组件输入端口 ⇒ 全部实例化点 MUST 显式驱动」正面相撞 ⇒ **正确性优先于整洁**。
+
+⚠️ **一条方法论教训**：本 ADR 过了 2 轮**架构**审稿却漏了这 3 条 ⇒ 因为它们全是
+**实现层时序细节**（锁存 vs 写回的同沿竞态 / mux 的端口面 / 跳转的到达路径）
+⇒ **架构审稿 ≠ 时序审稿** ⇒ 后者只能靠**组件级真值表 + 判别性固件**兜住
+⇒ 已写进 D9 的验收判据。

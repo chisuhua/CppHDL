@@ -332,6 +332,11 @@ C2 的代码改动 MUST 与 capability delta **同批落地**（新 capability `
   + 删 5 个预留端口（含**环饵** `ex_alu_result`）+ 收敛 `ex_stage.rs1_data` 的
   **双驱动**；验收 MUST 含**判别性固件**（当前固件刻意无冒险 ⇒ 前推接错全仓照绿）。
   ⇒ 本 ADR 的 D5 **原文决策不变**（本 ADR 只裁决结构），语义由 ADR-047 承接。
+  ⚠️ **2026-10-27 补充（ADR-047 修订）**：ADR-047 在起草实施 change 的缺口分析中
+  追加了 **D11** —— **距离 3** 的同沿竞态（ID/EX 锁存沿 == WB 写回沿）⇒
+  裁决在**寄存器堆读点**加 **WB→ID 组合旁路** ⇒ 并把**距离矩阵**定为契约的
+  **唯一权威**（`rv32i-data-forwarding` capability）⇒ ⚠️ 该缺陷**今天就存在**
+  （现有固件用 3 条 NOP 恰好躲开）⇒ **不接前推也得修**。
 - `chlib::ForwardingUnit` 与 `riscv::ForwardingUnit` 的合并（D6）—— ADR-038 §2.3 已留。
 - JIT 对 `ch_mem` 读端口的 lowering —— 独立 objective `jit-mem-read-port-support`。
 - e2e parity 本身 —— C3 / `objective-rv32i-e2e`。
@@ -383,6 +388,9 @@ C2 实施时实测发现 **D3 #14 与 D5 互斥**，并据此修订落地形态�
   ⚠️ 另发现（**不在 C2 范围**，须独立 ADR）：`rv32i_pipeline.h` 的
   `hazard.io().ex_rd_addr` / `mem_rd_addr` 接的是 **ID 级当前指令自己的 rd**
   ⇒ 即使破环，前推语义也是错的（正确前推源应为 EX/MEM 级**流水线寄存器**）。
+  ✅ **后续状态（2026-10-27）**：D5 已由 **ADR-047** 裁决（「接」），且上述
+  「前推源应是流水线寄存器」的发现已被 ADR-047 吸收（D3/D4）；另追加 **D11**
+  （**距离 3** 的读点旁路）。本条保留为 **C2 实施时点**的历史记录。
 
 ### 附带改动：perf baseline 重生成 + 守恒护栏（2026-10-25，C2 实施时回报）
 
