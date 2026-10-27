@@ -197,6 +197,17 @@ public:
         // EX 阶段数据 (前推源 1 - 最近)
         ch_in<ch_uint<DATA_WIDTH>> ex_mem_alu_result;
 
+        // ⚠️ **跳转的返回地址**（2026-10-27，ADR-047 D4 修订）：
+        //    `JAL`/`JALR` 的写回值是 `pc + 4`，**不是** ALU 结果 ⇒ 档位 1
+        //    MUST 在本组件**内部**按 `is_jump` 选择 `jump_result`。
+        //    ⚠️ 为什么放在**组件内部**而不是流水线装配里内联：
+        //      内联的话，它的输入是流水线的**成员寄存器**（`exmem_is_jump`）
+        //      ⇒ **测试台无法驱动** ⇒ 只能靠「实施者自己重建一份等价逻辑」
+        //      来测 ⇒ 测的是**副本** ⇒ 对**真实接线零信号** ⇒ **假绿**。
+        //      放在组件内部 ⇒ 可由**组件级单测**判别。
+        ch_in<ch_bool> is_jump;                 // EX/MEM 级那条指令是跳转
+        ch_in<ch_uint<DATA_WIDTH>> jump_result; // 跳转的返回地址 (pc + 4)
+
         // MEM/WB 阶段数据 (前推源 2 - 较旧)
         ch_in<ch_uint<DATA_WIDTH>> mem_wb_result;
 
@@ -214,9 +225,19 @@ public:
 
     void describe() override {
         // =========================================================================
+        // EX/MEM 级的数据选择（**跳转的返回地址 vs ALU 结果**）
+        // ⚠️ `JAL`/`JALR` 的写回值是 `pc + 4`，不是 ALU 结果 ⇒ 必须按
+        //    `is_jump` 选 `jump_result`。**这是防御性**要求：固件级不可达
+        //    （跳转的距离-1 消费者必在错误路径上）⇒ 验收走**组件级单测**。
+        // =========================================================================
+        auto ex_mem_selected = select(io().is_jump,
+                                       io().jump_result,
+                                       io().ex_mem_alu_result);
+
+        // =========================================================================
         // ALU 输入 A 选择 (RS1 路径)
         // forward_a = 0: 寄存器文件
-        // forward_a = 1: EX/MEM ALU 结果
+        // forward_a = 1: EX/MEM 级（跳转 ⇒ 返回地址）
         // forward_a = 2: MEM/WB 结果
         // =========================================================================
         auto sel_a_is_reg = io().forward_a == ch_uint<2>(static_cast<uint64_t>(ForwardSource::REG));
@@ -225,13 +246,13 @@ public:
         io().alu_input_a = select(sel_a_is_reg,
                                   io().rs1_data_reg,
                                   select(sel_a_is_ex,
-                                         io().ex_mem_alu_result,
+                                         ex_mem_selected,
                                          io().mem_wb_result));
 
         // =========================================================================
         // ALU 输入 B 选择 (RS2 路径)
         // forward_b = 0: 寄存器文件
-        // forward_b = 1: EX/MEM ALU 结果
+        // forward_b = 1: EX/MEM 级（跳转 ⇒ 返回地址）
         // forward_b = 2: MEM/WB 结果
         // =========================================================================
         auto sel_b_is_reg = io().forward_b == ch_uint<2>(static_cast<uint64_t>(ForwardSource::REG));
@@ -240,7 +261,7 @@ public:
         io().alu_input_b = select(sel_b_is_reg,
                                   io().rs2_data_reg,
                                   select(sel_b_is_ex,
-                                         io().ex_mem_alu_result,
+                                         ex_mem_selected,
                                          io().mem_wb_result));
     }
 };
@@ -313,9 +334,15 @@ forward_detect(ch_uint<REG_ADDR_WIDTH> rs1_addr, ch_uint<REG_ADDR_WIDTH> rs2_add
  * @param forward_b RS2 前推选择信号
  * @param rs1_data_reg RS1 寄存器数据
  * @param rs2_data_reg RS2 寄存器数据
- * @param ex_result EX 阶段结果
+ * @param ex_result EX 阶段结果（**非跳转**时的档位 1 数据）
  * @param mem_result MEM/WB 阶段结果
+ * @param is_jump EX/MEM 级那条指令是否是跳转（`JAL`/`JALR`）
+ * @param jump_result 跳转的**返回地址**（`pc + 4`）
  * @return 包含前推后数据的结构
+ *
+ * ⚠️ **与 `ForwardingMux` 组件保持同步**（2026-10-27，ADR-047 D4 修订）：
+ *    本函数与组件的 `describe()` 是**同一份逻辑的两处实现** ⇒ 只改一处
+ *    ⇒ 两个 API **行为分叉** ⇒ MUST 同步修改。
  */
 template <unsigned DATA_WIDTH>
 struct ForwardMuxResult {
@@ -327,18 +354,23 @@ template <unsigned DATA_WIDTH>
 ForwardMuxResult<DATA_WIDTH>
 forward_select(ch_uint<2> forward_a, ch_uint<2> forward_b,
                ch_uint<DATA_WIDTH> rs1_data_reg, ch_uint<DATA_WIDTH> rs2_data_reg,
-               ch_uint<DATA_WIDTH> ex_result, ch_uint<DATA_WIDTH> mem_result) {
+               ch_uint<DATA_WIDTH> ex_result, ch_uint<DATA_WIDTH> mem_result,
+               ch_bool is_jump = ch_bool(false),
+               ch_uint<DATA_WIDTH> jump_result = ch_uint<DATA_WIDTH>(0_d)) {
     ForwardMuxResult<DATA_WIDTH> result;
+
+    // 档位 1 的数据：跳转 ⇒ 返回地址；否则 ⇒ ALU 结果（与组件内部一致）
+    auto ex_mem_selected = select(is_jump, jump_result, ex_result);
 
     auto sel_a_is_reg = forward_a == ch_uint<2>(0_d);
     auto sel_a_is_ex = forward_a == ch_uint<2>(1_d);
     result.alu_input_a = select(sel_a_is_reg, rs1_data_reg,
-                                select(sel_a_is_ex, ex_result, mem_result));
+                                select(sel_a_is_ex, ex_mem_selected, mem_result));
 
     auto sel_b_is_reg = forward_b == ch_uint<2>(0_d);
     auto sel_b_is_ex = forward_b == ch_uint<2>(1_d);
     result.alu_input_b = select(sel_b_is_reg, rs2_data_reg,
-                                select(sel_b_is_ex, ex_result, mem_result));
+                                select(sel_b_is_ex, ex_mem_selected, mem_result));
 
     return result;
 }

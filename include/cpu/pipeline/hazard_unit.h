@@ -36,15 +36,20 @@ public:
         ch_in<ch_uint<5>> id_rs2_addr;       // ID 阶段 RS2 地址
         ch_in<ch_uint<5>> ex_rd_addr;        // EX 阶段目标寄存器
         ch_in<ch_uint<5>> mem_rd_addr;       // MEM 阶段目标寄存器
-        ch_in<ch_uint<5>> wb_rd_addr;        // WB 阶段目标寄存器
-        
+
         // ========================================================================
         // 写使能信号
         // ========================================================================
         ch_in<ch_bool> ex_reg_write;         // EX 级将写寄存器
         ch_in<ch_bool> mem_reg_write;        // MEM 级将写寄存器
-        ch_in<ch_bool> wb_reg_write;         // WB 级将写寄存器
-        
+        // ⚠️ **WB 级的写使能与目标寄存器已删除**（2026-10-27，ADR-047 D7）：
+        //    它们曾是「预留输入」—— `ForwardingMux` 只有 3 档 ⇒ WB 档位用不上
+        //    ⇒ 本组件内**零消费者** ⇒ 保留它们只是**公共 API 面的死重量**。
+        //    ⇒ 顺带消掉一个**环饵**（`ex_alu_result` 曾被接到 EX 级**组合
+        //      输出** ⇒ 留着就诱使后人「顺手消费它」⇒ **精确复现 bf78367**）。
+        //    ⚠️ **距离 3** 的依赖**不靠 hazard 解决**（ADR-047 D11）⇒ 用
+        //      「寄存器堆读点的 WB→ID 组合旁路」⇒ **不需要** WB 级端口。
+        //
         // ========================================================================
         // 指令类型
         // ========================================================================
@@ -60,30 +65,32 @@ public:
         ch_in<ch_bool> ex_branch_taken;      // 分支已采取
         
         // ========================================================================
-        // 前推数据输入
-        // ========================================================================
-        ch_in<ch_uint<32>> ex_alu_result;    // EX 级 ALU 结果
-        ch_in<ch_uint<32>> mem_alu_result;   // MEM 级 ALU 结果
-        ch_in<ch_uint<32>> wb_write_data;    // WB 级写回数据
-        
-        // ========================================================================
         // 原始寄存器数据
         // ========================================================================
         ch_in<ch_uint<32>> rs1_data_raw;     // 来自寄存器文件的 RS1
         ch_in<ch_uint<32>> rs2_data_raw;     // 来自寄存器文件的 RS2
-        
+
         // ========================================================================
         // 前推控制输出 (参考 forwarding.h 模式：使用 ch_uint 而非 bundle)
         // ========================================================================
         // forward_a/b: 0=来自寄存器，1=来自 EX，2=来自 MEM
+        // ⚠️ **档位编号表示「延迟一拍之后」的语义**（ADR-047 D5）：
+        //    `hazard` 的比较点是「**EX 级** rd vs **ID 级** rs」⇒ 拍 T 算出的
+        //    档位描述的是「T+1 消费者进 EX 时该选哪一级」⇒ 必须在**流水线级**
+        //    **打一拍**后再喂给 mux ⇒ 本组件的输出**必须**被打拍。
         ch_out<ch_uint<2>> forward_a;        // RS1 的前推源选择
         ch_out<ch_uint<2>> forward_b;        // RS2 的前推源选择
-        
+
         // ========================================================================
-        // 前推数据输出（经过前推MUX 后的数据）
+        // 直通数据输出
         // ========================================================================
-        ch_out<ch_uint<32>> rs1_data;        // 前推后的 RS1 数据
-        ch_out<ch_uint<32>> rs2_data;        // 前推后的 RS2 数据
+        // ⚠️ **不是「经过前推 MUX 后的数据」**（旧注释这样说，是**假的** ——
+        //    那时 `:198-199` 就是直通）⇒ 2026-10-27 如实更正。
+        //    数据 mux 由**独立的** `chlib::ForwardingMux` 承担
+        //    （ADR-046 D3 #14：mux 放进本组件并接进真实流水线装配会成**组合环**，
+        //      `git show bf78367` 是当年的消环事故记录）。
+        ch_out<ch_uint<32>> rs1_data;        // 直通的 RS1 数据（**不**含前推）
+        ch_out<ch_uint<32>> rs2_data;        // 直通的 RS2 数据（**不**含前推）
         
         // ========================================================================
         // 冒险控制输出 (单独信号，不使用 bundle)
@@ -114,7 +121,7 @@ public:
     //
     // ⚠️⚠️ 为什么用「**固定延迟的移位链**」而**不是**「按 rd 匹配解除」
     //    （第 14 轮 critic 的 BLOCKER 1，实测复现）：
-    //    按 rd 匹配（`wb_rd_addr == 被阻塞的 load 的 rd`）**无法区分**
+    //    按 rd 匹配（WB 级写回的目标寄存器 == 被阻塞的 load 的 rd）**无法区分**
     //    「那条 load 写回了」与「**比它老一条**的指令写回了同一个 rd」：
     //      addi x5, x0, 7      ← 较老指令，写 x5
     //      lw   x5, 0x100(x0)  ← 被阻塞的 load，也写 x5
@@ -138,20 +145,12 @@ public:
         // 将 IO 端口赋值给 auto 变量（避免类型转换问题）
         auto ex_reg_wr = io().ex_reg_write;
         auto mem_reg_wr = io().mem_reg_write;
-        // ⚠️ 下列几个端口在本组件里**只被赋给 auto 变量、无下游消费者**
-        //    （`wb_reg_write` / `wb_rd_addr` / `ex_alu_result` /
-        //    `mem_alu_result` / `wb_write_data`）—— 数据前推通路已拆走
-        //    （ADR-038：前推 mux 移到 `chlib::ForwardingMux`）⇒ 它们是
-        //    **既有 API 面**上的「预留输入」，本组件内不再使用。
-        //    ⇒ 保留端口（公共 API 兼容）但**如实注释**；清理留给独立立项。
-        auto wb_reg_wr = io().wb_reg_write;
         auto is_load = io().mem_is_load;
         auto is_branch = io().ex_branch;
         auto branch_taken = io().ex_branch_taken;
         
         auto ex_rd = io().ex_rd_addr;
         auto mem_rd = io().mem_rd_addr;
-        auto wb_rd = io().wb_rd_addr;
         auto id_rs1 = io().id_rs1_addr;
         auto id_rs2 = io().id_rs2_addr;
         
@@ -172,10 +171,20 @@ public:
         auto rs2_match_mem = mem_rd == id_rs2;
         
         // 前推使能条件：reg_write && rd!=0 && match
-        auto forward_ex_to_a = ex_reg_wr & ex_rd_nz & rs1_match_ex;
+        //
+        // ⚠️ **EX 级的前推 MUST 排除 load**（ADR-047 D6「保守边界」）：
+        //    `ex_reg_wr`（= `ex_reg_write`）**包含 load** ⇒ 若不排除，EX 级
+        //    的 load 会命中档位 `1` ⇒ 而档位 `1` 的数据是 **EX/MEM 级的 ALU
+        //    结果** ⇒ 对 load 而言那是**访存地址**，不是数据 ⇒ **前推错值**。
+        //    ⇒ 保守形态下档位 `1` **不覆盖 load** ⇒ load 的数据仍要到 WB 拍
+        //    才写回 ⇒ **load-use 停顿契约不变**（停顿是**选择**，不是无奈）。
+        //    ⚠️ 该门控在**固件级不可达**（误选只打进气泡 ⇒ 结果被丢弃）
+        //    ⇒ 它的验收 MUST 走**组件级真值表**（独立驱动 `ex_is_load=1`）。
+        auto ex_is_load_n = io().ex_is_load;
+        auto forward_ex_to_a = ex_reg_wr & ex_rd_nz & rs1_match_ex & !ex_is_load_n;
         auto forward_mem_to_a = mem_reg_wr & mem_rd_nz & rs1_match_mem;
-        
-        auto forward_ex_to_b = ex_reg_wr & ex_rd_nz & rs2_match_ex;
+
+        auto forward_ex_to_b = ex_reg_wr & ex_rd_nz & rs2_match_ex & !ex_is_load_n;
         auto forward_mem_to_b = mem_reg_wr & mem_rd_nz & rs2_match_mem;
         
         // 前推控制信号输出 (优先级：EX=1 > MEM=2 > REG=0)
@@ -192,8 +201,10 @@ public:
                                        ch_uint<2>(0_d)));
         
         // ========================================================================
-        // 数据前推 (已禁用：会导致 IR 图循环依赖)
-        // 直接传递原始寄存器数据，前推逻辑可以在 pipeline 层通过流水线寄存器实现
+        // 直通数据输出（**不含前推**）
+        // ⚠️ 数据 mux 由**独立的** `chlib::ForwardingMux` 承担
+        //    （ADR-046 D3 #14 / ADR-038）⇒ 本组件**只输出档位选择**，
+        //    数据选择**不在**这里做 ⇒ 这里没有组合环风险。
         // ========================================================================
         io().rs1_data = io().rs1_data_raw;
         io().rs2_data = io().rs2_data_raw;

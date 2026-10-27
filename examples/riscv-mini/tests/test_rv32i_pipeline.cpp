@@ -108,14 +108,14 @@ TEST_CASE("Pipeline Registers - latch / stall / flush behavior", "[pipeline][reg
         sim.set_input_value(unit.instance().io().ex_reg_write, 1);
         sim.set_input_value(unit.instance().io().mem_rd_addr, 5);
         sim.set_input_value(unit.instance().io().mem_reg_write, 1);
-        sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(unit.instance().io().wb_reg_write, 0);
         sim.set_input_value(unit.instance().io().rs1_data_raw, 100);
         sim.set_input_value(unit.instance().io().rs2_data_raw, 200);
         sim.set_input_value(unit.instance().io().ex_alu_result, 0xE1);
         sim.set_input_value(unit.instance().io().mem_alu_result, 0xE2);
-        sim.set_input_value(unit.instance().io().wb_write_data, 0);
         sim.set_input_value(unit.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(unit.instance().io().ex_is_load, 0);
         sim.set_input_value(unit.instance().io().ex_branch, 0);
         sim.set_input_value(unit.instance().io().ex_branch_taken, 0);
         sim.tick();
@@ -146,18 +146,18 @@ TEST_CASE("HazardUnit: Forwarding EX hazard", "[hazard][forwarding]") {
     // MEM/WB 阶段不冲突
     sim.set_input_value(unit.instance().io().mem_rd_addr, 0);
     sim.set_input_value(unit.instance().io().mem_reg_write, 0);
-    sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-    sim.set_input_value(unit.instance().io().wb_reg_write, 0);
     
     // 原始数据
     sim.set_input_value(unit.instance().io().rs1_data_raw, 100);
     sim.set_input_value(unit.instance().io().rs2_data_raw, 200);
     sim.set_input_value(unit.instance().io().ex_alu_result, 42);
     sim.set_input_value(unit.instance().io().mem_alu_result, 0);
-    sim.set_input_value(unit.instance().io().wb_write_data, 0);
     
     // 非 load 非 branch
     sim.set_input_value(unit.instance().io().mem_is_load, 0);
+    // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+    //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+    sim.set_input_value(unit.instance().io().ex_is_load, 0);
     sim.set_input_value(unit.instance().io().ex_branch, 0);
     sim.set_input_value(unit.instance().io().ex_branch_taken, 0);
     
@@ -190,16 +190,14 @@ TEST_CASE("HazardUnit: LOAD-USE hazard detection", "[hazard][load-use]") {
     sim.set_input_value(unit.instance().io().mem_rd_addr, 3);
     sim.set_input_value(unit.instance().io().mem_reg_write, 1);
     sim.set_input_value(unit.instance().io().mem_is_load, 1);
+    // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+    //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+    sim.set_input_value(unit.instance().io().ex_is_load, 0);
     
     // WB 阶段无写操作
-    sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-    sim.set_input_value(unit.instance().io().wb_reg_write, 0);
     
     sim.set_input_value(unit.instance().io().rs1_data_raw, 0);
     sim.set_input_value(unit.instance().io().rs2_data_raw, 0);
-    sim.set_input_value(unit.instance().io().ex_alu_result, 0);
-    sim.set_input_value(unit.instance().io().mem_alu_result, 0);
-    sim.set_input_value(unit.instance().io().wb_write_data, 0);
     
     sim.set_input_value(unit.instance().io().ex_branch, 0);
     sim.set_input_value(unit.instance().io().ex_branch_taken, 0);
@@ -233,6 +231,49 @@ TEST_CASE("BranchDetector: BEQ detection", "[branch][detect]") {
 }
 
 // ============================================================================
+// 测试用例 4b: HazardUnit 的 EX 级 load MUST NOT 被前推（组件级真值表）
+//
+// ⚠️ ADR-047 D6 的**组件级**验收（2026-10-27）：
+//    「前推判定漏 `& !ex_is_load`」这个变异在**固件级不可达**
+//    （EX 级 load 命中前推的当拍，load-use 停顿必然同时生效 ⇒ 消费者不进 EX
+//      ⇒ 误选只打进气泡 ⇒ 结果被丢弃）⇒ MUST 由**组件级真值表**验收
+//    ⇒ 否则该变异会**假绿**。
+//    ⇒ 本用例是该变异的**唯一**判别力来源。
+// ============================================================================
+TEST_CASE("HazardUnit: EX-level load MUST NOT be forwarded (level 1)",
+          "[hazard][forwarding][load-use]") {
+    ch::ch_device<HazardUnit> unit;
+    ch::Simulator sim(unit.context());
+
+    // ID 级消费者读 x5；EX 级那条指令写 x5（rd 匹配 ⇒ 若不门控就会命中档位 1）
+    sim.set_input_value(unit.instance().io().id_rs1_addr, 5);
+    sim.set_input_value(unit.instance().io().id_rs2_addr, 0);
+    sim.set_input_value(unit.instance().io().ex_rd_addr, 5);
+    sim.set_input_value(unit.instance().io().ex_reg_write, 1);
+    sim.set_input_value(unit.instance().io().mem_rd_addr, 0);
+    sim.set_input_value(unit.instance().io().mem_reg_write, 0);
+    sim.set_input_value(unit.instance().io().mem_is_load, 0);
+    sim.set_input_value(unit.instance().io().ex_branch, 0);
+    sim.set_input_value(unit.instance().io().ex_branch_taken, 0);
+    sim.set_input_value(unit.instance().io().rs1_data_raw, 0);
+    sim.set_input_value(unit.instance().io().rs2_data_raw, 0);
+
+    // ---- ① EX 级**不是** load ⇒ 档位 `1`（EX 级前推）MUST 成立 ----
+    sim.set_input_value(unit.instance().io().ex_is_load, 0);
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(unit.instance().io().forward_a)) == 1u);
+
+    // ---- ② EX 级**是** load ⇒ 档位 `1` MUST 被**排除**（保守边界）----
+    //    档位 `1` 的数据是 EX/MEM 级的 ALU 结果 ⇒ 对 load 而言那是**访存地址**
+    //    ⇒ 前推它就是**前推错值**。
+    sim.set_input_value(unit.instance().io().ex_is_load, 1);
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(unit.instance().io().forward_a)) != 1u);
+}
+
+// ============================================================================
 // 测试用例 5: HazardUnit 无前推情况
 // ============================================================================
 TEST_CASE("HazardUnit: No hazard - use register file", "[hazard][no-hazard]") {
@@ -247,16 +288,14 @@ TEST_CASE("HazardUnit: No hazard - use register file", "[hazard][no-hazard]") {
     sim.set_input_value(unit.instance().io().ex_reg_write, 0);
     sim.set_input_value(unit.instance().io().mem_rd_addr, 0);
     sim.set_input_value(unit.instance().io().mem_reg_write, 0);
-    sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-    sim.set_input_value(unit.instance().io().wb_reg_write, 0);
     
     sim.set_input_value(unit.instance().io().rs1_data_raw, 55);
     sim.set_input_value(unit.instance().io().rs2_data_raw, 66);
-    sim.set_input_value(unit.instance().io().ex_alu_result, 0);
-    sim.set_input_value(unit.instance().io().mem_alu_result, 0);
-    sim.set_input_value(unit.instance().io().wb_write_data, 0);
     
     sim.set_input_value(unit.instance().io().mem_is_load, 0);
+    // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+    //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+    sim.set_input_value(unit.instance().io().ex_is_load, 0);
     sim.set_input_value(unit.instance().io().ex_branch, 0);
     sim.set_input_value(unit.instance().io().ex_branch_taken, 0);
     

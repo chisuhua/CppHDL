@@ -62,18 +62,17 @@ public:
         ch::ch_module<HazardUnit> hazard{"hazard"};
         hazard.io().rs1_data_raw <<= ch_uint<32>(0_d);
         hazard.io().rs2_data_raw <<= ch_uint<32>(0_d);
-        hazard.io().ex_alu_result <<= ch_uint<32>(0_d);
-        hazard.io().mem_alu_result <<= ch_uint<32>(0_d);
-        hazard.io().wb_write_data <<= ch_uint<32>(0_d);
         hazard.io().id_rs1_addr <<= ch_uint<5>(0_d);
         hazard.io().id_rs2_addr <<= ch_uint<5>(0_d);
         hazard.io().ex_rd_addr <<= ch_uint<5>(0_d);
         hazard.io().mem_rd_addr <<= ch_uint<5>(0_d);
-        hazard.io().wb_rd_addr <<= ch_uint<5>(0_d);
         hazard.io().ex_reg_write <<= ch_bool(false);
         hazard.io().mem_reg_write <<= ch_bool(false);
-        hazard.io().wb_reg_write <<= ch_bool(false);
         hazard.io().mem_is_load <<= ch_bool(false);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 读到**未定义值**
+        //    ⇒ 前推档位不确定。
+        hazard.io().ex_is_load <<= ch_bool(false);
         hazard.io().ex_branch <<= ch_bool(false);
         hazard.io().ex_branch_taken <<= ch_bool(false);
         io().stall <<= hazard.io().stall;

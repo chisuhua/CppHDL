@@ -50,6 +50,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <utility>
+#include <map>
+#include <set>
 #include <vector>
 
 #include "catch_amalgamated.hpp"
@@ -499,9 +501,14 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
 }
 
 // 把固件逐拍写进 I-TCM（`ext_rst` 保持 1 —— 计数器在复位期被清 0）
-void load_firmware(Simulator &sim, Rv32iPipelineTop &dut) {
+//
+// ⚠️ 2026-10-27：拆成「带固件参数」的重载 ⇒ **判别性固件**（ADR-047 D9）
+//    可以是**独立**的一套 ⇒ 既有固件的 golden **零变化**
+//    ⇒ 「既有 golden 的变化 MUST 全部可归因」⇒ 本次归因 = **零**。
+template <std::size_t N>
+void load_firmware(Simulator &sim, Rv32iPipelineTop &dut,
+                    const std::array<uint32_t, N> &fw) {
     auto &io = dut.io();
-    const auto &fw = firmware();
     sim.set_input_value(io.ext_rst, 1u);
     sim.set_input_value(io.ext_clk, 0u);
     sim.set_input_value(io.prog_we, 1u);
@@ -514,6 +521,11 @@ void load_firmware(Simulator &sim, Rv32iPipelineTop &dut) {
     sim.set_input_value(io.prog_addr, 0);
     sim.set_input_value(io.prog_data, 0);
     sim.set_input_value(io.ext_rst, 0u);
+}
+
+// 既有固件（108 字）的重载
+void load_firmware(Simulator &sim, Rv32iPipelineTop &dut) {
+    load_firmware(sim, dut, firmware());
 }
 
 // 跑 n 拍，记录每拍的观测向量
@@ -980,5 +992,315 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
         if (word >= firmware().size()) continue;  // 程序跑出尾部（补 0）
         INFO("cycle " << c << " pc word " << word);
         REQUIRE(instr == firmware()[word]);
+    }
+}
+
+// ===========================================================================
+// ④ 判别性固件（ADR-047 D9）—— 数据前推的**判别性**证据
+//
+// ⚠️ **为什么是独立的一套固件**（2026-10-27）：
+//    既有固件（`firmware()`，108 字）**刻意无冒险** ⇒ 前推接错 / 接反 / 没接
+//    **全仓照绿** ⇒ 它对前推是**零信号**的。
+//    ⇒ 本套固件**专门**制造冒险（生产者与消费者之间**无间隔**）。
+//    ⇒ 独立成一套 ⇒ 既有固件的 golden（24 条写回序列 / 停顿计数 / 退休数）
+//    **零变化** ⇒ 「既有 golden 的变化 MUST 全部可归因」⇒ 本次归因 = **零**。
+//
+// ---------------------------------------------------------------------------
+// 固件布局（word N 的地址 = 0x80000000 + 4N；立即数一律**字节**为单位）
+//
+//   w0   ADDI x16, x0, 0x11      x16 = 17
+//   w1   ADD  x17, x16, x0       x17 = 17        ← ① 相邻 ALU→ALU（**无 NOP**）
+//   w2   ADDI x18, x0, 0x2A      x18 = 42
+//   w3   NOP
+//   w4   NOP
+//   w5   NOP
+//   w6   SW   x18, 0(x0)         [0x130] = 42
+//   w7   NOP
+//   w8   LW   x19, 0(x0)         x19 = 42
+//   w9   NOP                                    ← 间隔 1 条 ⇒ **距离 2**
+//   w10  ADD  x20, x19, x0       x20 = 42        ← ② 距离 2 的 load→use
+//   w11  NOP
+//   w12  NOP
+//   w13  LW   x21, 0(x0)         x21 = 42
+//   w14  NOP                                    ← 间隔 2 条 ⇒ **距离 3**
+//   w15  NOP
+//   w16  ADD  x22, x21, x0       x22 = 42        ← ③ 距离 3 的 load→use
+//   w17  ADDI x23, x0, 1         x23 = 1
+//   w18  BEQ  x23, x0, +8        **不成立**（x23 = 1）⇒ 落到 w19
+//   w19  ADDI x24, x0, 0x33      x24 = 51        ← ④ 分支条件用紧邻新值
+//   w20  ADDI x25, x0, 0xAB      x25 = 0xAB
+//   w21  SW   x25, 0(x0)         [0x134] = 0xAB  ← ⑤ store 的 **rs2** 紧邻被写
+//   w22  ADDI x26, x0, 0x11      x26 = 17
+//   w23  ADDI x26, x0, 0x22      x26 = 34        （**双生产者同 rd**）
+//   w24  ADD  x27, x26, x0       x27 = 34        ← ⑥ 档位优先级（取**较新**的）
+//   w25  AUIPC x28, 0            x28 = 0x80000064（= w25 的地址）
+//   w26  ADDI x28, x28, 16       x28 = 0x80000074（= w29 的地址）← **紧邻被写**
+//   w27  JALR x29, x28, 0        x29 = 0x80000070（link）；跳到 w29
+//   w28  NOP                                    ← 错误路径（MUST 被冲刷）
+//   w29  ADDI x30, x0, 0x44      x30 = 68        ← ⑦ `JALR` 的 `rs1` 紧邻被写
+//   w30  ADDI x0, x0, 0x55       写 x0 ⇒ MUST 被忽略
+//   w31  ADD  x31, x0, x0        x31 = 0         ← ⑧ `x0` 负向护栏
+//
+// ⚠️⚠️ **寄存器编号 MUST 在 x0..x31**（RV32I 只有 32 个寄存器）——
+//    初稿用了 x32..x45 ⇒ 译码器把 rd 按 **5 位**截断（x32 → x0、x33 → x1…）
+//    ⇒ 固件**静默**变成另一条程序（实测：`addi x32,x0,42` 被译成
+//    `addi x0,x0,42`）⇒ **整条判别性固件失效**（零信号）。
+//    ⇒ 故 MUST 只用 x16..x31（且与既有固件的 x1..x28 不冲突 ——
+//      两套固件是**独立**的程序，互不影响）。
+//
+// ---------------------------------------------------------------------------
+// **每个**用例的「反向期望」（未接前推 / 缺旁路时会读到的值）：
+//
+//   ① x17 : 无前推 ⇒ x16 在寄存器堆里还是 0 ⇒ x17 = **0**   ⇒ 与 17 不同 ✔
+//   ② x20 : 无前推 ⇒ x19 未写回 ⇒ x20 = **0**                 ⇒ 与 42 不同 ✔
+//   ③ x22 : 无 D11 旁路 ⇒ ID/EX 与 WB 写回**同沿** ⇒ x22 = **0** ⇒ 与 42 不同 ✔
+//   ④ x24 : 无前推 ⇒ x23 = 0 ⇒ BEQ **成立** ⇒ w19 被冲刷 ⇒ x24 **不出现** ✔
+//   ⑤ [0x134] : 无前推 ⇒ store 的 rs2 = 0 ⇒ [0x134] = **0**   ⇒ 与 0xAB 不同 ✔
+//   ⑥ x27 : 无前推 ⇒ x26 未写回 ⇒ x27 = **0**                ⇒ 与 34 不同 ✔
+//   ⑦ x30 : 无前推 ⇒ x28 = 0 ⇒ JALR 跳到地址 0 ⇒ x30 **不出现** ✔
+//   ⑧ x31 : **不是**「未接前推」的判别（两种实现都给 0）⇒ 它是
+//           「**去掉 `rd_nz` 门控**」的判别：那样 x31 会是 **0x55** ⇒ 与 0 不同 ✔
+//           ⇒ MUST 如实标注：**负向护栏**，不是「前推是否接通」的判别。
+//
+// ⚠️ **②③ 的前置（[0x130] = 42）刻意与前推无关**：`SW x18` 与 `ADDI x18`
+//   之间隔了 **3** 条 ⇒ 距离 4 ⇒ 走**寄存器堆路径** ⇒ 不依赖前推
+//   ⇒ ②③ 的判别力**只**来自「消费者是否拿到 load 的**新值**」。
+//
+// ⚠️ **首条指令 MUST NOT 自依赖**（取指填充期「同一条指令被装两次」的
+//    非幂等前提）：w0 的 `ADDI x16, x0, 0x11` 写 x16、读 x0 ⇒ 安全。
+constexpr std::size_t kFwdFirmwareWords = 32;
+
+constexpr std::array<uint32_t, kFwdFirmwareWords> fwd_firmware() {
+    return {{
+        ADDI(16, 0, 0x11),   // 0   x16 = 17
+        ADD(17, 16, 0),      // 1   x17 = 17   ← ①
+        ADDI(18, 0, 0x2A),   // 2   x18 = 42
+        NOP,                 // 3
+        NOP,                 // 4
+        NOP,                 // 5
+        SW(18, 0, 0x130),    // 6   [0x130] = 42
+        NOP,                 // 7
+        LW(19, 0, 0x130),    // 8   x19 = 42
+        NOP,                 // 9   ← 间隔 1 条 ⇒ 距离 2
+        ADD(20, 19, 0),      // 10  x20 = 42  ← ②
+        NOP,                 // 11
+        NOP,                 // 12
+        LW(21, 0, 0x130),    // 13  x21 = 42
+        NOP,                 // 14  ← 间隔 2 条 ⇒ 距离 3
+        NOP,                 // 15
+        ADD(22, 21, 0),      // 16  x22 = 42  ← ③
+        ADDI(23, 0, 1),      // 17  x23 = 1
+        BEQ(23, 0, 8),       // 18  **不成立** ⇒ 落到 19（成立则跳到 20）
+        ADDI(24, 0, 0x33),   // 19  x24 = 51  ← ④
+        ADDI(25, 0, 0xAB),   // 20  x25 = 0xAB
+        SW(25, 0, 0x134),    // 21  [0x134] = 0xAB  ← ⑤
+        ADDI(26, 0, 0x11),   // 22  x26 = 17
+        ADDI(26, 0, 0x22),   // 23  x26 = 34
+        ADD(27, 26, 0),      // 24  x27 = 34  ← ⑥
+        AUIPC(28, 0),        // 25  x28 = 0x80000064
+        ADDI(28, 28, 16),    // 26  x28 = 0x80000074
+        JALR(29, 28, 0),     // 27  x29 = link；跳到 w29
+        NOP,                 // 28  错误路径
+        ADDI(30, 0, 0x44),   // 29  x30 = 68  ← ⑦
+        ADDI(0, 0, 0x55),    // 30  写 x0 ⇒ MUST 被忽略
+        ADD(31, 0, 0),       // 31  x31 = 0   ← ⑧
+    }};
+}
+
+// 判别性固件的 golden（**手工推导**，推导过程见上方注释）
+// ⚠️ `x29` = w27 的 link = w27 的 pc + 4 = 0x80000000 + 4*27 + 4 = 0x80000070
+// ⚠️ `x28` = 0x80000000 + 4*25 + 16 = 0x80000074（= w29 的地址 ⇒ JALR 的目标）
+// ⚠️ `x30` = 0x44 = 68
+constexpr uint32_t kFwdBase = 0x80000000u;
+constexpr uint32_t kFwdX29Link = kFwdBase + 4u * 27u + 4u;    // 0x80000070
+constexpr uint32_t kFwdX28Target = kFwdBase + 4u * 25u + 16u;  // 0x80000074
+constexpr uint32_t kFwdX30Body = 0x44u;                        // 68
+constexpr uint32_t kFwdMemAddr = 0x130u;   // ②③ 的 load 源
+constexpr uint32_t kFwdMemVal = 0x2Au;     // 42
+constexpr uint32_t kFwdStoreAddr = 0x134u; // ⑤ 的 store 目标
+constexpr uint32_t kFwdStoreData = 0xABu;  // 0xAB
+
+// ===========================================================================
+// 判别性固件的**编译期**纪律
+// ===========================================================================
+
+// ⚠️ **load-use 停顿点之后的位置 MUST 是 NOP**（design.md §3.10）：
+//    load-use 停顿会**丢弃「消费者之后的第一条指令」**。
+//    本固件的 load 消费者都在**距离 ≥ 2** ⇒ 停顿**不触发** ⇒ 无槽位被丢弃
+//    ⇒ 但仍按**同一条纪律**自检（将来有人把间隔改成 0 ⇒ 立刻编译失败）。
+constexpr bool fwd_stall_drop_slots_are_nop() {
+    for (std::size_t i = 0; i + 2 < kFwdFirmwareWords; ++i) {
+        const std::uint32_t w = fwd_firmware()[i];
+        if ((w & 0x7Fu) != 0x03u) continue;      // 不是 LOAD
+        const std::uint32_t rd = (w >> 7) & 31u;
+        if (rd == 0) continue;                    // 写 x0 ⇒ 不会有依赖
+        const std::uint32_t c = fwd_firmware()[i + 1];   // 紧邻的消费者
+        if (((c >> 15) & 31u) == rd || ((c >> 20) & 31u) == rd) {
+            if (fwd_firmware()[i + 2] != NOP) return false;
+        }
+    }
+    return true;
+}
+static_assert(fwd_stall_drop_slots_are_nop(),
+              "判别性固件：load-use 停顿点之后的位置 MUST 是 NOP");
+
+// ⚠️ **首条指令 MUST NOT 自依赖**（取指填充期「同一条指令被装两次」
+//    ⇒ 接前推后第二次会读到第一次的结果 ⇒ **非幂等**）。
+//    判据：首条指令**写**的 rd MUST NOT 是它自己**读**的 rs1 / rs2。
+//    （I 型没有 rs2 —— bits[24:20] 是立即数的一部分 ⇒ 只查 rs1。）
+constexpr bool fwd_first_instruction_not_self_dependent() {
+    const std::uint32_t w = fwd_firmware()[0];
+    const std::uint32_t opcode = w & 0x7Fu;
+    const std::uint32_t rd = (w >> 7) & 31u;
+    const std::uint32_t rs1 = (w >> 15) & 31u;
+    if (rd == rs1) return false;
+    if (opcode == 0x33u) {            // OP（R 型）⇒ 有 rs2
+        const std::uint32_t rs2 = (w >> 20) & 31u;
+        if (rd == rs2) return false;
+    }
+    return true;
+}
+static_assert(fwd_first_instruction_not_self_dependent(),
+              "判别性固件：首条指令 MUST NOT 自依赖（填充期双装的非幂等前提）");
+
+// ===========================================================================
+// 判别性测试
+// ===========================================================================
+TEST_CASE("Rv32iSoc - ForwardingDiscriminatingCases",
+          "[rv32i][soc][forwarding][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 80;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_fwd");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), fwd_firmware());
+    load_firmware(*sim_b, dev_b->instance(), fwd_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（**无掩码**）----
+    // ⚠️ **比对端口清单 = `kObsNames`**（全部 27 个 SoC 顶层输出）
+    //    ⇒ 「无掩码」是**可执行**的（不是「比对设计内部的一切」——
+    //    顶层观测面是**有限**的 ⇒ 不写清单 ⇒ 判据不可执行）。
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② 收集写回值（rd → 该 rd 被写过的**所有**值）----
+    //
+    // ⚠️ 用「集合」而不是「序列」⇒ 对「取指填充期同一条指令被装两次」
+    //    （design.md §3.6，已知残留、幂等）**免疫**。
+    std::map<uint64_t, std::set<uint64_t>> written;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        if (ta[c][kIdxWbWriteEn] != 1u) continue;
+        written[ta[c][kIdxWbRdAddr]].insert(ta[c][kIdxWbWriteData]);
+    }
+
+    auto expect_written = [&written](uint64_t rd, uint64_t value) {
+        INFO("rd=" << rd << " expected value=" << value);
+        const auto it = written.find(rd);
+        REQUIRE(it != written.end());      // MUST 被写回过
+        REQUIRE(it->second.size() == 1u);  // 且**只**被写成这一个值
+        REQUIRE(*it->second.begin() == value);
+    };
+
+    // ---- ③ 逐个判别性用例 ----
+    // ① 相邻 ALU→ALU（无 NOP）—— 档位 1
+    expect_written(16, 0x11u);
+    expect_written(17, 0x11u);   // 反向期望：无前推时是 0
+
+    // ② 距离 2 的 load→use —— 档位 2
+    expect_written(18, kFwdMemVal);
+    expect_written(19, kFwdMemVal);
+    expect_written(20, kFwdMemVal);   // 反向期望：无前推时是 0
+
+    // ③ 距离 3 的 load→use —— D11 的读点旁路
+    expect_written(21, kFwdMemVal);
+    expect_written(22, kFwdMemVal);   // 反向期望：无旁路时是 0（同沿竞态）
+
+    // ④ 分支条件用紧邻新值
+    expect_written(23, 1u);
+    expect_written(24, 0x33u);   // 反向期望：无前推时 BEQ 成立 ⇒ x24 不出现
+
+    // ⑤ store 的写数据（rs2）紧邻被写 —— mux 的 b 路
+    expect_written(25, kFwdStoreData);
+    REQUIRE(has_store(ta, kFwdStoreAddr, kFwdStoreData));
+    REQUIRE_FALSE(has_store(ta, kFwdStoreAddr, 0u));  // 反向期望：0
+
+    // ⑥ 双生产者同 rd —— 档位优先级（取**较新**的那个）
+    {
+        INFO("x26 被写过两个值（17 然后 34）");
+        const auto it = written.find(26);
+        REQUIRE(it != written.end());
+        REQUIRE(it->second.size() == 2u);
+        REQUIRE(it->second.count(0x11u) == 1u);
+        REQUIRE(it->second.count(0x22u) == 1u);
+    }
+    expect_written(27, 0x22u);   // 反向期望：无前推时是 0
+
+    // ⑦ `JALR` 的 `rs1` 紧邻被写
+    //    ⚠️ x28 被**写两次**（AUIPC 写基址、ADDI 写基址+16）⇒ 断言两个值
+    //    都在，且**最后一个**是 JALR 的目标地址。
+    {
+        INFO("x28 被写过两个值（AUIPC 的基址，然后 ADDI 的目标）");
+        const auto it = written.find(28);
+        REQUIRE(it != written.end());
+        REQUIRE(it->second.size() == 2u);
+        REQUIRE(it->second.count(kFwdBase + 4u * 25u) == 1u);   // 0x80000064
+        REQUIRE(it->second.count(kFwdX28Target) == 1u);          // 0x80000074
+    }
+    expect_written(29, kFwdX29Link);
+    expect_written(30, kFwdX30Body);   // 反向期望：无前推时 JALR 跳到 0 ⇒ x30 不出现
+
+    // ⑧ `x0` 负向护栏（**不是**「前推是否接通」的判别 ⇒ 是「去掉 `rd_nz` 门控」
+    //    的判别：那样 x31 会是 0x55）
+    expect_written(31, 0u);
+
+    // ---- ④ 错误路径 MUST 被冲刷（w28 是 JALR 之后的错误路径）----
+    //    w28 是 NOP ⇒ 无写回 ⇒ 「w29 之后**继续**执行」由 x30 的写回见证
+    //    （上面已断言）。
+    //    ⇒ 额外断言：`JALR` 的 link（x29）**只**被写一次（不被重复写回）。
+    {
+        std::size_t x29_writes = 0;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] == 1u && ta[c][kIdxWbRdAddr] == 29u) {
+                ++x29_writes;
+            }
+        }
+        REQUIRE(x29_writes == 1u);
     }
 }

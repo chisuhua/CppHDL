@@ -197,7 +197,12 @@ public:
         //                                     decoder 把 instr[10:1] 放在 bit[10:1]
         //                                     ⇒ bit0 恒 0 ⇒ 天然 2 字节对齐）
         //   OP_JALR   ⇒ (rs1 + imm_i) & ~1    （最低位 MUST 清零，RISC-V 规范）
-        // ⚠️ `JALR` 的 `rs1` 取 `io().rs1_data` ⇒ **无数据前推**（ADR-046 D5 悬置）
+        // ⚠️ `JALR` 的 `rs1` 取 `io().rs1_data` ⇒ **现在可以拿到前推值**
+        //    （2026-10-27，ADR-047 裁决「接」⇒ 数据前推已接入；
+        //      `io().rs1_data` 由 `chlib::ForwardingMux` 的输出驱动
+        //      ⇒ `JALR` 的 `rs1` 紧邻被写时 MUST 用**新值**算目标地址）。
+        //    ⚠️ 副作用：`JALR` 的 PC 重定向路径从此**经过 mux**
+        //      ⇒ 组合深度 +1（功能无害）。
         //    ⇒ 若 `rs1` 由**前一条**指令写入 ⇒ 读到**旧值** ⇒ 已知限制
         //    （见 design.md §5）。
         auto is_op_jalr   = (io().opcode == ch_uint<7>(OP_JALR)) & io().is_jump;

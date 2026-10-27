@@ -25,6 +25,24 @@
  *
  *    ⇒ 被测逻辑（冒险检测真值表 + mux 真值表）**不变**；只是从「单组件内联」
  *      变为「两组件组合」。断言的**期望值不变**。
+ *
+ * ⚠️ 2026-10-27（change `rv32i-forwarding-decision-2026-10`，ADR-047 D4 / D6 / D7）：
+ *    ① `HazardUnit` 删掉 5 个**预留输入端口**（`wb_reg_write` / `wb_rd_addr` /
+ *       `ex_alu_result` / `mem_alu_result` / `wb_write_data`）⇒ 本 fixture 的
+ *       对应 IO 与驱动**一并删除**；
+ *    ② `HazardUnit` 的前推判定加了 `& !ex_is_load` 门控（保守边界：档位 1
+ *       **不覆盖 load**）⇒ 本 fixture **MUST 显式驱动** `ex_is_load`
+ *       （未驱动端口读到的是**未定义值** ⇒ 行为不确定 ⇒ 真值表不可靠）；
+ *    ③ `chlib::ForwardingMux` 新增 `is_jump` / `jump_result` 两个**输入端口**
+ *       （档位 1 的源选择在 mux **内部**完成 ⇒ 可组件级单测）⇒ 本 fixture
+ *       **MUST 显式驱动**它们。
+ *
+ * ⚠️⚠️ **本 fixture 不是「装配镜像」**（2026-10-27，ADR-047 D10）：
+ *    真实流水线里档位 select 还要**打一拍**（`fwd_a_d1` / `fwd_b_d1`），
+ *    本 fixture **直接**把 `hazard.forward_a/b` 接进 mux ⇒ **没有**那一拍
+ *    ⇒ ⇒ 本 fixture 的真值表**只能**证明「档位选择逻辑」与「mux 的数据选择」，
+ *    **不能**证明「装配的对齐」⇒ **MUST NOT** 当作**装配级**证据
+ *    （装配级证据 = SoC 级判别性固件 + 双后端 parity）。
  */
 #pragma once
 
@@ -43,24 +61,25 @@ public:
         ch_in<ch_uint<5>>  id_rs2_addr;
         ch_in<ch_uint<5>>  ex_rd_addr;
         ch_in<ch_uint<5>>  mem_rd_addr;
-        ch_in<ch_uint<5>>  wb_rd_addr;
 
         // 写使能信号
         ch_in<ch_bool>     ex_reg_write;
         ch_in<ch_bool>     mem_reg_write;
-        ch_in<ch_bool>     wb_reg_write;
 
         // 指令类型
         ch_in<ch_bool>     mem_is_load;
+        // ⚠️ **EX 级的 load 标记**（2026-10-27，ADR-047 D6）：
+        //    `HazardUnit` 的前推判定现在带 `& !ex_is_load` 门控 ⇒ 本 fixture
+        //    **MUST 显式驱动**它（未驱动 ⇒ 读到**未定义值** ⇒ 前推档位随机）。
+        ch_in<ch_bool>     ex_is_load;
         ch_in<ch_bool>     ex_branch;
         ch_in<ch_bool>     ex_branch_taken;
 
-        // 前推数据输入
+        // 前推数据输入（**档位 1 / 2 的数据源** —— 由 TB 直接给）
+        // ⚠️ `ex_alu_result` / `mem_alu_result` / `wb_write_data` 三个
+        //    「死输入」已删（ADR-047 D7）⇒ 它们的值现在直接喂给 mux。
         ch_in<ch_uint<32>> ex_alu_result;
         ch_in<ch_uint<32>> mem_alu_result;
-        ch_in<ch_uint<32>> wb_write_data;   // ⚠️ 死输入：lib `HazardUnit`
-                                              // 声明了它但从不消费（example 旧版
-                                              // 同样未用）⇒ 保留仅为维持端口签名
 
         // 原始寄存器数据
         ch_in<ch_uint<32>> rs1_data_raw;
@@ -95,18 +114,14 @@ public:
         hazard.io().id_rs2_addr     <<= io().id_rs2_addr;
         hazard.io().ex_rd_addr      <<= io().ex_rd_addr;
         hazard.io().mem_rd_addr     <<= io().mem_rd_addr;
-        hazard.io().wb_rd_addr      <<= io().wb_rd_addr;
         hazard.io().ex_reg_write    <<= io().ex_reg_write;
         hazard.io().mem_reg_write   <<= io().mem_reg_write;
-        hazard.io().wb_reg_write    <<= io().wb_reg_write;
         hazard.io().mem_is_load     <<= io().mem_is_load;
+        hazard.io().ex_is_load      <<= io().ex_is_load;
         hazard.io().ex_branch       <<= io().ex_branch;
         hazard.io().ex_branch_taken <<= io().ex_branch_taken;
         hazard.io().rs1_data_raw    <<= io().rs1_data_raw;
         hazard.io().rs2_data_raw    <<= io().rs2_data_raw;
-        hazard.io().ex_alu_result   <<= io().ex_alu_result;
-        hazard.io().mem_alu_result  <<= io().mem_alu_result;
-        hazard.io().wb_write_data   <<= io().wb_write_data;
 
         // --- 前推数据 mux：源选择来自 hazard，数据来自 TB / 流水线 ---
         mux.io().forward_a         <<= hazard.io().forward_a;
@@ -115,6 +130,12 @@ public:
         mux.io().rs2_data_reg      <<= io().rs2_data_raw;
         mux.io().ex_mem_alu_result <<= io().ex_alu_result;
         mux.io().mem_wb_result     <<= io().mem_alu_result;
+        // ⚠️ **新端口 MUST 显式驱动**（未驱动 ⇒ 读到**未定义值** ⇒ 档位 1 的
+        //    数据在「返回地址」与「ALU 结果」之间随机 ⇒ 真值表不可靠）。
+        //    本 fixture **不测**跳转路径（那由**组件级单测**覆盖）⇒ 显式给
+        //    `is_jump = false`（⇒ 档位 1 = ALU 结果，与既有断言一致）。
+        mux.io().is_jump            <<= ch_bool(false);
+        mux.io().jump_result        <<= ch_uint<32>(0_d);
 
         // --- 输出 ---
         io().forward_a <<= hazard.io().forward_a;

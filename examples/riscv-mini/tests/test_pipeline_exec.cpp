@@ -511,15 +511,15 @@ TEST_CASE("Pipeline: Data forwarding", "[pipeline][forward]") {
         sim.set_input_value(hazard.instance().io().ex_reg_write, 1);
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 0);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 0);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
         
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 100);
         sim.set_input_value(hazard.instance().io().ex_alu_result, 42);
         sim.set_input_value(hazard.instance().io().mem_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         
@@ -540,15 +540,15 @@ TEST_CASE("Pipeline: Data forwarding", "[pipeline][forward]") {
         sim.set_input_value(hazard.instance().io().ex_reg_write, 0);
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 1);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 1);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
         
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 100);
         sim.set_input_value(hazard.instance().io().ex_alu_result, 0);
         sim.set_input_value(hazard.instance().io().mem_alu_result, 99);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         
@@ -569,15 +569,15 @@ TEST_CASE("Pipeline: Data forwarding", "[pipeline][forward]") {
         sim.set_input_value(hazard.instance().io().ex_reg_write, 0);
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 0);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 0);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
         
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 55);
         sim.set_input_value(hazard.instance().io().ex_alu_result, 0);
         sim.set_input_value(hazard.instance().io().mem_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         
@@ -605,15 +605,12 @@ TEST_CASE("Pipeline: Load-Use stall", "[pipeline][hazard][load-use]") {
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 1);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 1);
         sim.set_input_value(hazard.instance().io().mem_is_load, 1);
-        
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
-        
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
+
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 0);
         sim.set_input_value(hazard.instance().io().rs2_data_raw, 0);
-        sim.set_input_value(hazard.instance().io().ex_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().mem_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
@@ -633,12 +630,10 @@ TEST_CASE("Pipeline: Load-Use stall", "[pipeline][hazard][load-use]") {
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 1);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 1);
         sim.set_input_value(hazard.instance().io().mem_is_load, 1);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 0);
-        sim.set_input_value(hazard.instance().io().ex_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().mem_alu_result, 77);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         
@@ -666,15 +661,15 @@ TEST_CASE("Pipeline: Multi-instruction hazard chain", "[pipeline][hazard][chain]
         sim.set_input_value(hazard.instance().io().ex_reg_write, 1);
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 0);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 0);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
         
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 100);
         sim.set_input_value(hazard.instance().io().ex_alu_result, 42);
         sim.set_input_value(hazard.instance().io().mem_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         
@@ -695,15 +690,15 @@ TEST_CASE("Pipeline: Multi-instruction hazard chain", "[pipeline][hazard][chain]
         sim.set_input_value(hazard.instance().io().ex_reg_write, 0);
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 1);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 1);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
         
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 100);
         sim.set_input_value(hazard.instance().io().ex_alu_result, 0);
         sim.set_input_value(hazard.instance().io().mem_alu_result, 99);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         
@@ -724,15 +719,15 @@ TEST_CASE("Pipeline: Multi-instruction hazard chain", "[pipeline][hazard][chain]
         sim.set_input_value(hazard.instance().io().ex_reg_write, 1);
         sim.set_input_value(hazard.instance().io().mem_rd_addr, 1);
         sim.set_input_value(hazard.instance().io().mem_reg_write, 0);
-        sim.set_input_value(hazard.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(hazard.instance().io().wb_reg_write, 0);
         
         sim.set_input_value(hazard.instance().io().rs1_data_raw, 100);
         sim.set_input_value(hazard.instance().io().ex_alu_result, 55);
         sim.set_input_value(hazard.instance().io().mem_alu_result, 0);
-        sim.set_input_value(hazard.instance().io().wb_write_data, 0);
         
         sim.set_input_value(hazard.instance().io().mem_is_load, 0);
+        // ⚠️ **新增端口 MUST 显式驱动**（2026-10-27，ADR-047 D6）：
+        //    前推判定带 `& !ex_is_load` 门控 ⇒ 未驱动 ⇒ 未定义值。
+        sim.set_input_value(hazard.instance().io().ex_is_load, 0);
         sim.set_input_value(hazard.instance().io().ex_branch, 0);
         sim.set_input_value(hazard.instance().io().ex_branch_taken, 0);
         

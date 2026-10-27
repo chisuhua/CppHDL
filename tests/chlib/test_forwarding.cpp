@@ -3,6 +3,7 @@
 #include "codegen_dag.h"
 #include "core/context.h"
 #include "core/literal.h"
+#include "device.h"
 #include "simulator.h"
 #include "utils/format_utils.h"
 #include <iostream>
@@ -194,6 +195,66 @@ TEST_CASE("ForwardingUnit: Component RAW hazard detection", "[forwarding][raw_ha
         // 验证：无写使能，不应该前推
         REQUIRE(static_cast<uint64_t>(sim.get_value(result.forward_a)) == 0);
     }
+}
+
+// ============================================================================
+// 测试 1b: ForwardingMux **组件级** —— 档位 1 的「跳转返回地址」
+//
+// ⚠️ 这是 ADR-047 D9 的「定向接线级单测」的**落点**（2026-10-27）：
+//    档位 `1` 的源选择（ALU 结果 vs 跳转返回地址）**在 mux 组件内部**完成
+//    ⇒ 可由**组件级**测试判别。
+//    ⚠️ 若它留在流水线装配里**内联**（`exmem_is_jump` 是 pipeline 的**成员
+//    `ch_reg`** ⇒ **测试台无法驱动**）⇒ 只能靠「实施者自己重建一份等价
+//    逻辑」来测 ⇒ 测的是**副本** ⇒ 对**真实接线零信号** ⇒ **假绿**。
+//    ⇒ 本用例是那条变异（「档位 1 忘接 `link_value`」）的**唯一**判别力来源。
+//    ⇒ 该失效模式在**固件级不可达**（`JAL`/`JALR` 是**无条件**跳 ⇒ 它的
+//      距离-1 消费者必在错误路径上 ⇒ 永远到不了真实消费者）。
+// ============================================================================
+TEST_CASE("ForwardingMux: level-1 source selects jump return address",
+          "[forwarding][mux][component][jump]") {
+    ch::ch_device<chlib::ForwardingMux<32>> mux;
+    ch::Simulator sim(mux.context());
+
+    // 档位 1（EX/MEM 级）
+    sim.set_input_value(mux.instance().io().forward_a, 1);
+    sim.set_input_value(mux.instance().io().forward_b, 1);
+    sim.set_input_value(mux.instance().io().rs1_data_reg, 0x11111111u);
+    sim.set_input_value(mux.instance().io().rs2_data_reg, 0x22222222u);
+    sim.set_input_value(mux.instance().io().ex_mem_alu_result, 0xAAAAAAAAu);
+    sim.set_input_value(mux.instance().io().mem_wb_result, 0xBBBBBBBBu);
+    // 跳转的返回地址（= `pc + 4`）—— 与 ALU 结果**刻意不同** ⇒ 可区分
+    sim.set_input_value(mux.instance().io().jump_result, 0x80000104u);
+
+    // ---- ① 是跳转 ⇒ 档位 1 的数据 MUST 是**返回地址**（不是 ALU 结果）----
+    sim.set_input_value(mux.instance().io().is_jump, 1);
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(mux.instance().io().alu_input_a)) == 0x80000104u);
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(mux.instance().io().alu_input_b)) == 0x80000104u);
+
+    // ---- ② 不是跳转 ⇒ 档位 1 的数据 MUST 是 **ALU 结果** ----
+    sim.set_input_value(mux.instance().io().is_jump, 0);
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(mux.instance().io().alu_input_a)) == 0xAAAAAAAAu);
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(mux.instance().io().alu_input_b)) == 0xAAAAAAAAu);
+
+    // ---- ③ 档位 0（寄存器堆）MUST **不受** `is_jump` 影响 ----
+    sim.set_input_value(mux.instance().io().is_jump, 1);
+    sim.set_input_value(mux.instance().io().forward_a, 0);
+    sim.set_input_value(mux.instance().io().forward_b, 0);
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(mux.instance().io().alu_input_a)) == 0x11111111u);
+
+    // ---- ④ 档位 2（MEM/WB）MUST **不受** `is_jump` 影响 ----
+    sim.set_input_value(mux.instance().io().forward_a, 2);
+    sim.set_input_value(mux.instance().io().forward_b, 2);
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(mux.instance().io().alu_input_a)) == 0xBBBBBBBBu);
 }
 
 // ============================================================================

@@ -28,6 +28,11 @@
 #include "stages/wb_stage.h"
 #include "hazard_unit.h"
 #include "rv32i_pipeline_regs.h"
+// ⚠️ 数据 mux（ADR-046 D3 #14 / ADR-047 D2）：**既有**的 `chlib::ForwardingMux`
+//    —— MUST NOT 新建组件，也 MUST NOT 把 mux 放回 `HazardUnit`
+//    （放进 `HazardUnit` 并接进真实流水线装配会成**组合环**，
+//      `git show bf78367` 是当年的消环事故记录）。
+#include "chlib/forwarding.h"
 
 namespace riscv {
 
@@ -112,6 +117,19 @@ public:
     ch::ch_module<MemStage> mem_stage{"mem_stage"};
     ch::ch_module<WbStage>  wb_stage{"wb_stage"};
     ch::ch_module<HazardUnit> hazard{"hazard_unit"};
+    // ⚠️ **数据 mux**（ADR-047 D2）：既有组件，**零新增组件**。
+    //    档位语义与当年被移出 `HazardUnit` 的 mux **逐档等价**
+    //    （0→REG / 1→EX/MEM / 2→MEM/WB）。
+    ch::ch_module<chlib::ForwardingMux<32>> fwd_mux{"forwarding_mux"};
+
+    // ⚠️ **档位 select 的打拍寄存器**（ADR-047 D5）：
+    //    `hazard` 的比较点是「**EX 级** rd vs **ID 级** rs」（那是 load-use
+    //    检测点）⇒ 拍 T 算出的档位描述的是「**T+1** 消费者进 EX 时该选哪一级」
+    //    ⇒ 若 mux 在拍 T 就用它 ⇒ **错一级** ⇒ 后果**不是「不前推」**，
+    //    而是把**错误数据**塞进当前 EX 指令 ⇒ **静默错值路径**。
+    //    ⇒ MUST 打一拍 ⇒ 拍 T 的档位在 T+1 生效。
+    ch_reg<ch_uint<2>> fwd_a_d1{0_d, "fwd_a_d1"};
+    ch_reg<ch_uint<2>> fwd_b_d1{0_d, "fwd_b_d1"};
 
     ch_mem<ch_uint<32>, 32> reg_file{"reg_file"};
 
@@ -172,12 +190,44 @@ public:
                                                "reg_file_rs1");
         auto rs2_data_result = reg_file.aread(id_stage.io().rs2_addr_id,
                                                "reg_file_rs2");
-        id_stage.io().reg_rs1_data <<= rs1_data_result;
-        id_stage.io().reg_rs2_data <<= rs2_data_result;
 
         // WB writes back to reg file
         auto wb_write_en = wb_stage.io().write_en & (wb_stage.io().rd_addr_out != ch_uint<5>(0_d));
         reg_file.write(wb_stage.io().rd_addr_out, wb_stage.io().write_data, wb_write_en, "reg_file_write");
+
+        // ⚠️⚠️ **D11：WB→ID 的组合旁路**（ADR-047 D11）
+        //
+        // 缺陷：`idex_rs1_data` **锁存**了寄存器堆的**组合读**
+        //      （`id_stage.h:255`）⇒ 「ID→EX 锁存沿」与「WB 写回沿」是
+        //      **同一条 posedge** ⇒ 锁存到的是**写回前**的旧值。
+        //      ⇒ **距离 3** 的依赖（生产者 → 2 条无关指令 → 消费者）读**旧值**。
+        //      ⚠️ Verilog 侧**同构**（两个 `always_ff` 同沿 + 非阻塞 ⇒ 都读旧值）
+        //      ⇒ **两后端一致地错** ⇒ 双后端 parity **抓不到** ⇒ 只能靠
+        //      **判别性固件**抓。
+        //      ⚠️ 该缺陷**今天就存在**（无前推时同样读旧值）⇒ 既有固件用
+        //      3 条 NOP（距离 4）恰好躲开 ⇒ 从未被文档化。
+        //
+        // 修法：在**读点**加组合旁路 ⇒ 写回那一拍就把**新值**喂给 ID 级
+        //      ⇒ ID/EX 在同一条沿上锁存到**新值**。
+        // 不成环：旁路的**数据叶**是 `memwb_*` **流水线寄存器**
+        //      （`wb_stage.io().write_data` 是对 `memwb_alu_result` /
+        //      `memwb_mem_data` / `memwb_link_value` 的**组合 select**；
+        //      `rd_addr_out` ← `memwb_rd_addr`；`write_en` ← `memwb_valid`）
+        //      ⇒ 叶子是**寄存器** ⇒ 环断开（`context.cpp` 的拓扑排序对
+        //      `type_reg` **只遍历 `init_val`**）。
+        // 与 D7 正交：**不需要** `HazardUnit` 的 WB 级端口（那 5 个已删）。
+        // `x0` 无需特判：`wb_write_en` 已含 `rd_addr_out != 0`
+        //      ⇒ 命中时 `rs1_addr_id` 必然非 0。
+        auto wb_bypass_hit_a = wb_write_en &
+                               (wb_stage.io().rd_addr_out == id_stage.io().rs1_addr_id);
+        auto wb_bypass_hit_b = wb_write_en &
+                               (wb_stage.io().rd_addr_out == id_stage.io().rs2_addr_id);
+        id_stage.io().reg_rs1_data <<= select(wb_bypass_hit_a,
+                                              wb_stage.io().write_data,
+                                              rs1_data_result);
+        id_stage.io().reg_rs2_data <<= select(wb_bypass_hit_b,
+                                              wb_stage.io().write_data,
+                                              rs2_data_result);
 
         // IF stage connections
         if_stage.io().branch_target <<= ex_stage.io().branch_target;
@@ -197,8 +247,12 @@ public:
         id_stage.io().stall <<= hazard.io().stall;
 
         // ID -> EX
-        ex_stage.io().rs1_data <<= id_stage.io().rs1_data;
-        ex_stage.io().rs2_data <<= id_stage.io().rs2_data;
+        // ⚠️ `ex_stage.io().rs1_data` / `rs2_data` 的**驱动源**在
+        //    `build_forwarding_paths()` 里（**前推 mux 的输出**）⇒
+        //    此处**不再**直连 `id_stage`（否则同一端口被 `<<=` **两次** ⇒
+        //    `set_driver` 替换 `driver_` 但 `add_src` **累积** ⇒ IR 图残留
+        //    **两条 src 边** ⇒ ZERO-DEBT / 拓扑排序 hygiene 问题，
+        //    ADR-047 D8）。
         ex_stage.io().imm <<= id_stage.io().imm;
         ex_stage.io().funct3 <<= id_stage.io().funct3;
         // ⚠️ **分支条件类型（funct3）MUST 接进 EX**（2026-10-25 实测修复）：
@@ -444,11 +498,9 @@ public:
         //      `id_stage.io().*` 是 ID/EX 寄存后的值 = EX 级的视图。）
         hazard.io().ex_rd_addr <<= id_stage.io().rd_addr;
         hazard.io().mem_rd_addr <<= exmem_rd_addr;
-        hazard.io().wb_rd_addr <<= wb_stage.io().rd_addr_out;
         hazard.io().ex_reg_write <<= id_stage.io().is_alu | id_stage.io().is_load |
                                     id_stage.io().is_jump;
         hazard.io().mem_reg_write <<= exmem_is_alu | exmem_is_load | exmem_is_jump;
-        hazard.io().wb_reg_write <<= wb_stage.io().write_en;
         // ⚠️ **load-use 检测 MUST 走 EX 级**（`ex_is_load`）：
         //    5 级流水线的标准检测点是「EX 级的 load vs ID 级的消费者」。
         //    `mem_is_load`（MEM 级那一路）**故意不连接**（保持 0）：
@@ -466,30 +518,57 @@ public:
         //    `ex_stage.branch_taken`）**结构不变**。
         hazard.io().ex_branch <<= id_stage.io().is_branch | id_stage.io().is_jump;
         hazard.io().ex_branch_taken <<= ex_stage.io().branch_taken;
-        hazard.io().ex_alu_result <<= ex_stage.io().alu_result;
-        // ⚠️ MUST 用 `exmem_alu_result`（EX/MEM 寄存器）而**不是**
-        //    `mem_stage.io().alu_result`（MEM 级的**输入端口**）：
-        //    框架禁止「**子输入 ← 同一个子的子输入**」（`child_in <<= child_in`）
-        //    ⇒ 父组件**读**子组件的输入端口会触发运行时 CHERROR
-        //    （⚠️「父输出 ← 子输入」是**允许**的）
-        //    （`in <<= in` 的 driver 必须是当前模块的端口）⇒ 运行时 CHERROR。
-        //    两者是同一个值（`mem_stage.io().alu_result <<= exmem_alu_result;`）。
-        hazard.io().mem_alu_result <<= exmem_alu_result;
-        hazard.io().wb_write_data <<= wb_stage.io().write_data;
+        // ⚠️ **5 个「预留输入」端口的驱动已删**（ADR-047 D7）：
+        //    `wb_reg_write` / `wb_rd_addr` / `ex_alu_result` /
+        //    `mem_alu_result` / `wb_write_data` —— 它们在 `HazardUnit` 内
+        //    **零消费者** ⇒ 留着只是**公共 API 面的死重量**；
+        //    且 `ex_alu_result` 曾被接到 EX 级**组合输出** ⇒ 它是**环饵**
+        //    ⇒ 删掉让 ADR **自执行**（否则后人「顺手消费它」就会
+        //    **精确复现 bf78367** 的组合环事故）。
     }
 
     // Forwarding paths: data forwarding + hazard detection + perf counters
     void build_forwarding_paths() {
         // Raw register values from ID (forwarded to hazard unit)
+        // ⚠️ **保留**这两处驱动（ADR-047 D7 修订）：接上 mux 后
+        //    `hazard.rs1_data` 在流水线里**无消费者** ⇒ 按 ZERO-DEBT 看是
+        //    「喂了没人读」；但**删除**它与本仓反模式
+        //    「新增组件输入端口 ⇒ **全部**实例化点 MUST 显式驱动」
+        //    （未驱动端口读到的是**未定义值** ⇒ 静默错值）**正面相撞**
+        //    ⇒ **正确性优先于整洁** ⇒ 保留驱动（驱动来源
+        //    `id_stage.io().rs1_data` 是**合法**的 ⇒ 零成本）。
+        //    ⚠️ 例外 MUST **显式登记**（本注释）⇒ 不能靠沉默。
         hazard.io().rs1_data_raw <<= id_stage.io().rs1_data;
         hazard.io().rs2_data_raw <<= id_stage.io().rs2_data;
 
-        // Forwarding MUX outputs override RS1/RS2 on EX inputs
-        ex_stage.io().rs1_data <<= hazard.io().rs1_data;
-        ex_stage.io().rs2_data <<= hazard.io().rs2_data;
+        // ---- 前推档位的**打拍**（ADR-047 D5）----
+        // `hazard` 的组合逻辑**一字不改** ⇒ 既有真值表测试**因打拍而全部保留**。
+        auto reset_active = io().rst;
+        fwd_a_d1->next = select(reset_active, ch_uint<2>(0_d), hazard.io().forward_a);
+        fwd_b_d1->next = select(reset_active, ch_uint<2>(0_d), hazard.io().forward_b);
+
+        // ---- 前推 mux 的接线（ADR-047 D2 / D4）----
+        // ⚠️ 三个数据源的**叶子** MUST 是**流水线寄存器** ⇒ 不成环
+        //    （`context.cpp` 的拓扑排序对 `type_reg` 只遍历 `init_val`）。
+        fwd_mux.io().forward_a <<= fwd_a_d1;
+        fwd_mux.io().forward_b <<= fwd_b_d1;
+        // 档位 0 = 寄存器堆（**ID/EX 锁存值** —— `idex_rs1_data`）
+        fwd_mux.io().rs1_data_reg <<= id_stage.io().rs1_data;
+        fwd_mux.io().rs2_data_reg <<= id_stage.io().rs2_data;
+        // 档位 1 = EX/MEM 级（**EX/MEM 寄存器**）
+        fwd_mux.io().ex_mem_alu_result <<= exmem_alu_result;
+        // ⚠️ 跳转的**返回地址**：`JAL`/`JALR` 的写回值是 `pc + 4`，不是 ALU 结果
+        //    ⇒ MUST 含 `link_value`。三个源同受 `exmem_en` 守卫 ⇒ **对齐**。
+        fwd_mux.io().is_jump <<= exmem_is_jump;
+        fwd_mux.io().jump_result <<= exmem_link_value;
+        // 档位 2 = MEM/WB 级的**合并写回值**（已含 load / jump / ALU 三路）
+        fwd_mux.io().mem_wb_result <<= wb_stage.io().write_data;
+
+        // 前推 mux 的输出**独占**驱动 EX 级的操作数（单一驱动 ⇒ ADR-047 D8）
+        ex_stage.io().rs1_data <<= fwd_mux.io().alu_input_a;
+        ex_stage.io().rs2_data <<= fwd_mux.io().alu_input_b;
 
         // Performance counters
-        auto reset_active = io().rst;
         cycle_count->next = select(reset_active, ch_uint<48>(0_d), cycle_count + 1_d);
 
         auto commit_valid = mem_stage.io().mem_valid_out;
