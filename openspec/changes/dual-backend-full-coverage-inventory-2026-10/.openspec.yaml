@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-10-27
+# 本 change 是**只读盘点**（无代码改动）⇒ 无 spec 变更 ⇒ 归档用 `--skip-specs`。
+# ⚠️ 若盘点结论要求修订 capability（`dual-backend-test-coverage`）或 objective 判据
+#   ⇒ 那属于**另一个** change（planner 裁决）⇒ 不在本 change 内合并。
+skip_specs: true

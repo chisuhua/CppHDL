@@ -106,7 +106,7 @@ follow-up）与 `feat-riscv-mini-rtl-debt` 可与 ISA 线并行（互不触碰�
 | `.rddf/improvements/rv32i-canonical-convergence-2026-10.md` | C2 improvement 草稿 |
 | `.rddf/improvements/rv32i-soc-dual-parity-2026-10.md` | C3 improvement 草稿 |
 | `.rddf/improvements/rv32i-forwarding-decision-2026-10.md` | ISA ③ improvement 草稿（✅ 已归档，2026-10-27） |
-| `.rddf/improvements/riscv-mini-cache-wrapper-dead-branch-2026-10.md` | RTL 缺陷收口 ① improvement 草稿（P2） |
+| `.rddf/improvements/riscv-mini-cache-wrapper-live-logic-2026-10.md` | RTL 缺陷收口 ① improvement 草稿（P2） |
 | `.rddf/improvements/clint-mtime-autoincrement-2026-10.md` | RTL 缺陷收口 ② improvement 草稿（P2） |
 | `.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` | **阶段级执行总纲**（T1–T10 的步骤 / 验收 / 验证矩阵 / planner 审查记录） |
 | `include/cpu/AGENTS.md` | STRUCTURE 表（C2 已同步；新增组件需继续维护） |

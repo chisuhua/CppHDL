@@ -41,6 +41,13 @@
 
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
+| RV32I ISA ⑤ load 字节道固件验证 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/rv32i-load-byte-lane-2026-10/`（LB/LH/LBU/LHU ⇒ **实现已在** `mem_stage.h:82-163`，本 change 只**验证** ⇒ spec delta = `rv32i-isa-semantics` ADDED ×1 ⇒ 归档**禁** `--skip-specs`）⇒ 需 builder |
+| cache wrapper 活逻辑（T8 ①） | phase-5 | P2 | none | ✅ **已立项**：`openspec/changes/riscv-mini-cache-wrapper-live-logic-2026-10/`（⚠️ **既有断言会转红** ⇒ 改断言与修实现**同 commit**；spec delta = `cpu-cache-subsystem` MODIFIED ×1（**路径订正**）+ ADDED ×1）⇒ 需 builder |
+| T7 可 dual 上限盘点 | phase-5 | P1 | none | ✅ **已立项**：`openspec/changes/dual-backend-full-coverage-inventory-2026-10/`（**只读**交付物；⚠️ **决策门**：若可达上限 < 100 ⇒ **MUST 由 planner** 修订 `objective-test-coverage-100pct` 的 Go 判据） |
+| roadmap 簿记一致性护栏 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/roadmap-fragments-consistency-guard-2026-10/`（无 spec 变更 ⇒ `--skip-specs`） |
+| perf baseline 重采集 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/perf-baseline-refresh-2026-10/`（**单独批次** + 空闲机器 + 锚点守恒流程） |
+| 输入端口驱动护栏（spike） | phase-5 | P1 | none | ✅ **已立项**：`openspec/changes/input-port-driving-guard-2026-10/`（**只出文档**；⚠️ 决策门 = 「实施 or 关闭」⇒ **不得**硬造高误报护栏） |
+| CLINT `mtime` 自增（T9 ②） | phase-5 | P2 | none | ⛔ **未立项 —— ADR-049 前置**：`mtime` 从静态比较器变自由运行计数器 = **契约变更**，而 **CLINT 不在任何 capability 覆盖内** ⇒ 归属本身待裁决 ⇒ delta 写不出 ⇒ **不得**先登记 change 再标 `skip_specs`（那会把契约变更静默丢掉）⇒ 决策门 D1–D5 已写入 `.rddf/improvements/clint-mtime-autoincrement-2026-10.md` §6 |
 | RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ **已归档**（2026-10-27）：`openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`（ADR-048；一个 change、两个 commit = C1 skid / C2 `primed`）⇒ `rv32i-commit-path` MODIFIED ×2 ⇒ **`feat-rv32i-isa-completeness` ④ 收口** |
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`dual-backend-rv32i-integration-2026-10`（P1）——
@@ -79,7 +86,7 @@
 ### Unmapped (2)
 
 > 两个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
-> `riscv-mini-cache-wrapper-dead-branch-2026-10` → `feat-riscv-mini-rtl-debt` ①
+> `riscv-mini-cache-wrapper-live-logic-2026-10` → `feat-riscv-mini-rtl-debt` ①
 > （⚠️ 名字与候选 change 名 `riscv-mini-cache-wrapper-live-logic-2026-10` **不一致**
 > ⇒ 立项时 MUST 统一，见「实施规划」§遗留项 3）；
 > `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②。

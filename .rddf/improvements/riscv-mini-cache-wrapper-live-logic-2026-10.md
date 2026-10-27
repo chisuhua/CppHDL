@@ -1,5 +1,5 @@
 ---
-name: riscv-mini-cache-wrapper-dead-branch-2026-10
+name: riscv-mini-cache-wrapper-live-logic-2026-10
 priority: P2
 source: riscv-mini-test-triage-2026-10（实测挖出的真实 RTL 缺口）
 phase: phase-5
@@ -13,6 +13,9 @@ created_at: 2026-10-24
 - **Date drafted**: 2026-10-24
 - **Drafted by**: build-agent (builder role)
 - **Status**: 📋 5-segment draft，已归属 feature `feat-riscv-mini-rtl-debt` ①（2026-10-26 roadmap 审计）；前置 C2 已满足 ⇒ 可立项
+  ⚠️ **2026-10-27 改名**：草案原名 `...-dead-branch-2026-10` ⇒ 统一为 `...-live-logic-2026-10`
+  （与 `.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` 的 T8 命名一致）
+  ⇒ **已立项**：`openspec/changes/riscv-mini-cache-wrapper-live-logic-2026-10/`
 - **来源**: change `riscv-mini-test-triage-2026-10` 实测挖出（C1 把
   `test_cache_smoke` 的断言从「不可证伪」改成「可证伪」时暴露），
   **原登记在该 change 的「框架缺陷」节** ⇒ 本 draft 承接之，C1 归档时移除该条。

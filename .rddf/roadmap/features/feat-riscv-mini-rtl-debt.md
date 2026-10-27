@@ -15,7 +15,7 @@ phase_refs: [phase-5]
 
 | 缺陷 | improvement 草案 | 2026-10-26 复核 |
 |---|---|---|
-| 两个 cache wrapper 的分支逻辑**从不发射** | `.rddf/improvements/riscv-mini-cache-wrapper-dead-branch-2026-10.md`（P2） | ✅ 仍在：`include/cpu/cache/d_cache_write_buffer.h:97` 的 `if (io().req == ch_bool(true) && io().we == ch_bool(true))` 在建图期求值 ⇒ 分支体内 `io().ready <<=` **不发射**；`i_cache_prefetch.h` 同类 |
+| 两个 cache wrapper 的分支逻辑**从不发射** | `.rddf/improvements/riscv-mini-cache-wrapper-live-logic-2026-10.md`（P2） | ✅ 仍在：`include/cpu/cache/d_cache_write_buffer.h:97` 的 `if (io().req == ch_bool(true) && io().we == ch_bool(true))` 在建图期求值 ⇒ 分支体内 `io().ready <<=` **不发射**；`i_cache_prefetch.h` 同类 |
 | CLINT `mtime` 不自增 | `.rddf/improvements/clint-mtime-autoincrement-2026-10.md`（P2） | ✅ 仍在：`include/cpu/riscv/clint.h` 的 `mtime` 只能由软件经写端口写入 ⇒ 只构成静态比较器 |
 
 > 两者均为 **P2**（不阻塞 parity / ISA 主线），因此排在新 feature `feat-rv32i-isa-completeness` 之后。

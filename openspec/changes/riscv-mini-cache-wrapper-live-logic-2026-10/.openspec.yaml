@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-27
+# 本 change **有** spec 变更（`cpu-cache-subsystem`：1 条 MODIFIED + 1 条 ADDED）
+# ⇒ 归档时 **禁** 用 `--skip-specs`。

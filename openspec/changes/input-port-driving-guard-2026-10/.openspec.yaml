@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-27
+# 本 change 是**可行性 spike**（无代码改动）⇒ 无 spec 变更 ⇒ 归档用 `--skip-specs`。
+# ⚠️ 若 spike 结论是「实施」⇒ 护栏本体是**另一个** change（可能还需 ADR）。
+skip_specs: true

@@ -65,3 +65,33 @@ created_at: 2026-10-24
 - **与 C2/C3 的关系**：C2（`rv32i-canonical-convergence`）会动 `include/cpu/**`；
   ⇒ **建议在 C2 之后实施**，避免同一批文件被两个 change 反复改
 - **强前置**：无（可独立实施）；**建议时序**：C2 之后
+
+
+---
+
+## 6. 立项前的**决策门**（2026-10-27 补）
+
+⚠️ **本项 MUST 先有 ADR-049 才能立项为 openspec change** ⇒ **当前没有** change 目录
+（`openspec/changes/` 里**不**登记本项）⇒ 理由：
+
+1. **契约变更**：`mtime` 从「静态比较器」变「自由运行计数器」⇒ **必然**要改 capability
+   ⇒ 而 **CLINT 目前不在任何 capability 的覆盖范围内**
+   （实测：`grep -rn "clint" openspec/specs/*/spec.md` 只在 `verilator-rv32i-e2e` 里
+   有一句「本路径不触发」）⇒ **归属 capability 本身是待裁决项**
+   ⇒ delta 无法在 ADR 落盘前写；
+2. **禁 `--skip-specs`**：本项**有**契约变更 ⇒ 若先登记 change 并标 `skip_specs: true`
+   ⇒ 归档会把契约变更**静默丢掉**（正是根 `AGENTS.md` 明令禁止的那类错误）；
+3. ⇒ **正确顺序**：architect 落 **ADR-049**（裁决下列 D1–D4 + capability 归属）
+   → planner 建 change（带 delta）→ builder 实施。
+
+### ADR-049 MUST 裁决的 4 项（+ 1 项归属）
+
+| # | 决策 | 选项 | 倾向（供裁决） |
+|---|---|---|---|
+| D1 | **递增频率** | 每拍 / 可配置分频 | 可配置分频（默认每拍 ⇒ 测试可写死期望） |
+| D2 | **软件写 `mtime` 与递增的优先级** | 写优先 / 递增优先 | 写优先 ⇒ 从写值继续（RISC-V 允许校时） |
+| D3 | **`mtime` 复位值** | 0 / 其它 | 0（与 `mtimecmp` 的全 1 形成对比 ⇒ 中断默认不触发） |
+| D4 | **32 位原子读** | `mtimeh`/`mtimel` 分离端口 / 允许撕裂 | 允许撕裂（RISC-V 允许 hi/lo 两读）⇒ **不**提供分离端口（记为已知边界） |
+| D5 | **capability 归属** | 新建 `rv32i-clint-timer` / 归 `rv32i-canonical-home` | 新建 capability（CLINT 是**外设**，语义独立） |
+
+⚠️ D1–D3 **直接决定** `test_interrupt_flow` 的期望值 ⇒ MUST 在 ADR 里写死。
