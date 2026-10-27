@@ -48,6 +48,21 @@ phase_refs: [phase-5]
 > ④ SoC 的 32 端口契约**未变** ⇒ **无需**改 ADR-046 D10。
 > 新 capability：`rv32i-isa-semantics`（字节道写语义 + 「新增输入端口 MUST 被显式驱动」）。
 
+> **③ 的实施结果（2026-10-27）**：change `rv32i-forwarding-decision-2026-10` 已实施
+> **并归档**（ADR-047 裁决「接」；对抗审稿第 1 轮 **APPROVE_WITH_CONDITIONS**、
+> **无 BLOCKER** ⇒ 按评审预算不发起第 2 轮 ⇒ `openspec/changes/archive/2026-10-27-rv32i-forwarding-decision-2026-10/`，
+> **新 capability `rv32i-data-forwarding`**（距离矩阵的唯一权威）+ 4 个 capability MODIFIED）。要点：
+> ① mux = **既有** `chlib::ForwardingMux<32>`（**零新增组件**）⇒ 档位 select **打一拍**：
+>    `1` = EX/MEM 级、`2` = MEM/WB 级的合并写回值；档位 `1` 的源选择收进 mux 内部
+>    （新增 `is_jump`/`jump_result` 端口）⇒ `JAL`/`JALR` 的写回值是**返回地址**；
+> ② `hazard_unit.h` 删 5 个预留输入端口 + 前推判定补 `& !ex_is_load`（档位 `1` **保守地不覆盖**
+>    load ⇒ load-use 停顿契约**零回退**）；
+> ③ **同时修掉一个今天就存在的缺陷**：距离 **3** 的依赖读**旧值**（ID→EX 锁存沿与 WB 写回沿同沿）
+>    ⇒ 用**寄存器堆读点的 WB→ID 组合旁路**消除；⚠️ 两后端**同构**地错 ⇒ 双后端 parity **抓不到**
+>    ⇒ 靠**判别性固件**（期望值手工推导 + 反向期望）；既有 108 字固件用 3 条 NOP（距离 4）恰好躲开；
+> ④ **变异 6/6 全被抓到**；`CTEST_TOTAL` **202 不变**（判别性固件进既有 target）。
+> ⚠️ 剩给 ④ 的两条**并列**约束未动：load-use 停顿（3 拍）与「停顿丢弃消费者之后第一条指令」。
+
 > ③ 与 ④ 的边界：③ 决定「依赖指令怎么拿数据」，④ 决定「停顿期间指令放哪」。
 > 两者都会重算时序金标 ⇒ **不得合并**（无法归因）。
 
@@ -62,8 +77,9 @@ phase_refs: [phase-5]
 ### phase-5
 - ✅ ① `rv32i-store-byte-enable-2026-10`（2026-10-26 **已归档** ⇒ capability `rv32i-isa-semantics`）
 - ✅ ② `rv32i-jump-sra-2026-10`（2026-10-27 **已归档** ⇒ capability `rv32i-isa-semantics` 2 → 6 条）
-- ⏳ ③ `rv32i-forwarding-decision-2026-10`（前置：ADR-046 D5 裁决）
-- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置：③）
+- ✅ ③ `rv32i-forwarding-decision-2026-10`（2026-10-27 **已归档** ⇒ 新 capability
+  `rv32i-data-forwarding`；实施结果见上方 ③ 条目）
+- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置 ③ ⇒ **已解锁**）
 
 ## 反例
 
@@ -82,6 +98,9 @@ phase_refs: [phase-5]
 - [ ] SB/SH/LB/LH/LBU/LHU 的字节/半字语义在双后端一致且符合 ISA（含非零 offset）
 - [x] JAL / JALR 真正重定向且 `ra` 正确（② 2026-10-27 归档）
 - [x] SRA 对有符号负数正确（② 2026-10-27 归档）
-- [ ] 固件**无**手工 NOP 填充仍能正确执行（④ 完成）
+- [x] 依赖指令在**距离 1–3** 内拿到新值（③ 2026-10-27 归档；距离 3 靠 D11 读点旁路）
+- [ ] 固件**无**手工 NOP 填充仍能正确执行（④ 完成 —— ⚠️ ③ 只消除了**依赖间隔**的 NOP，
+      未被 ③ 覆盖的两条并列约束「load-use 停顿」+「停顿丢弃消费者之后第一条指令」仍要求
+      固件在 load-use 之后放一条 NOP）
 - [ ] 退休指令数 == 实际指令数（④ 完成）
 - [ ] 上述每项都有**变异验证**（改坏即转红），而非仅「跑绿」

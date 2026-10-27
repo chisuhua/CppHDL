@@ -154,7 +154,9 @@ bash scripts/run_all_samples.sh  # 35/35
 | T2 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿 | 同上（revert 条件相同） |
 | **T3** `rv32i-jump-sra-2026-10` | ✅ **已归档**（2026-10-27） | commit `0972f4d` + `0eb554b`；JAL/JALR 重定向（复用条件分支通路，**未**加第三路 PC 源）+ 返回地址走**新增** `link_value` 通路 + SRA 真算术右移（**两处**）；**连带修复 3 个既有缺陷**（U 型立即数 / `alu_op` 对 I 型的 SUB 误判 / **错误路径的 JAL·JALR 劫持 PC**）；归档 → `openspec/changes/archive/2026-10-27-rv32i-jump-sra-2026-10/`；capability `rv32i-isa-semantics` **2 → 6** 条 Requirement |
 | T3 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿 | 同 T1/T2（revert 条件相同） |
-| T4–T9 | ⏳ 未开始 | 每个需 planner 的 5 段 improvement 草案 + openspec change |
+| **T4** `rv32i-forwarding-decision-2026-10` | ✅ **已归档**（2026-10-27） | ADR-047 裁决「接」⇒ `chlib::ForwardingMux<32>`（**零新增组件**）+ 档位 select 打一拍 + 档位 `1` 源选择收进 mux（`is_jump`/`jump_result`）+ `HazardUnit` 删 5 个预留端口 + `& !ex_is_load` 门控 + **D11 寄存器堆读点 WB→ID 旁路**（修距离 3 的既有缺陷，**两后端同构地错** ⇒ parity 抓不到 ⇒ 靠判别性固件）；**变异 6/6**；归档 → `openspec/changes/archive/2026-10-27-rv32i-forwarding-decision-2026-10/`；**新 capability `rv32i-data-forwarding`**（5 条 Requirement，距离矩阵的唯一权威）+ 4 个 MODIFIED |
+| T4 剩余门 | ⏳ **合并门**：CI 的 `macos-14` job 绿 | 同 T1/T2（revert 条件相同） |
+| T5–T9 | ⏳ 未开始 | 每个需 planner 的 5 段 improvement 草案 + openspec change |
 
 ### 2026-10-26 对抗审稿第 1 轮结果（两个 change 均**无 BLOCKER**）
 
