@@ -79,11 +79,11 @@ phase_refs: [phase-5]
 - ✅ ② `rv32i-jump-sra-2026-10`（2026-10-27 **已归档** ⇒ capability `rv32i-isa-semantics` 2 → 6 条）
 - ✅ ③ `rv32i-forwarding-decision-2026-10`（2026-10-27 **已归档** ⇒ 新 capability
   `rv32i-data-forwarding`；实施结果见上方 ③ 条目）
-- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置 ③ ⇒ **已解锁**；✅ 载体已起草
-  `.rddf/improvements/rv32i-fetch-skid-buffer-2026-10.md`，含 **4 个决策门**：
-  ① 填充期双装是否一并消除（判据 = 能否不改框架层就表达「取指数据已就绪」）
-  ② 框架层改语义 vs 加 API（默认选加 API）③ 是否新开 ADR（**建议要**）
-  ④ 固件 NOP 的 compile-time 静态护栏如何处置）
+- ⏳ ④ `rv32i-fetch-skid-buffer-2026-10`（前置 ③ ⇒ **已解锁**；✅ **已立项**：
+  `openspec/changes/rv32i-fetch-skid-buffer-2026-10/`（proposal + spec delta，
+  **ADR-048** 为架构依据 ⇒ **一个 change、两个 commit**：C1 缺陷 A（skid buffer）/
+  C2 缺陷 B（`primed` 门控）⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md`
+  （**Accepted** 2026-10-27，2 轮 critic ⇒ 第 2 轮 APPROVE））
 
 ## 反例
 

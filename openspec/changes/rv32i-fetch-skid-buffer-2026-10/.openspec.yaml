@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-27
+# 本 change **有** spec 变更（`rv32i-commit-path` 的 2 个 Requirement MODIFIED）⇒
+# 归档时 **禁** 用 `--skip-specs`。
