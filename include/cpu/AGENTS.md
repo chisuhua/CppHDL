@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6383 lines**（2026-10-28 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6376 lines**（2026-10-28 实测，ADR-046 D9：磁盘是权威）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,13 +16,13 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6383 lines（2026-10-28 实测）
+include/cpu/                             # 30 headers, 6376 lines（2026-10-28 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
 │   ├── i_cache_complete.h / d_cache_complete.h  # 兼容 shim (= *_sync.h 别名)
 │   ├── i_cache_prefetch.h                    # wrapper (instance ICacheSync)
-│   └── d_cache_write_buffer.h                # wrapper (instance DCacheSync)
+│   └── d_cache_write_buffer.h                # AXI 写直通 shim（**无**内层 cache）
 ├── pipeline/                          # 流水线数据通路（ADR-046 D2）
 │   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode (161)
 │   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 — largest)
@@ -72,7 +72,7 @@ include/cpu/                             # 30 headers, 6383 lines（2026-10-28 �
 | D-Cache (1-cycle, RV32I L1 默认) | `cache/d_cache_sync.h` (`d_cache_complete.h` 是兼容 shim 别名) |
 | D-Cache (0-cycle, TCM-style) | `cache/d_cache_async.h` |
 | I-Cache wrapper | `cache/i_cache_prefetch.h` (instance ICacheSync) |
-| D-Cache wrapper | `cache/d_cache_write_buffer.h` (instance DCacheSync) |
+| D-Cache 写直通 shim | `cache/d_cache_write_buffer.h`（**无**内层 cache / **无**读通路） |
 | SoC 顶层装配 | `examples/riscv-mini/src/rv32i_pipeline_top.h`（**唯一**留在 example 侧的头；ADR-046 D3 #15）|
 | 流水线诊断观测 | `pipeline/rv32i_pipeline.h` 的 `dbg_*` 输出（ID 级指令流 / 分支判定 / 有效链 / 写回 / EX-MEM 数据通路；**SoC 顶层须逐个引出**，否则 verilator 读不到 ⇒ 2026-10-25 追出 17 个流水线缺陷）|
 
@@ -140,6 +140,37 @@ include/cpu/                             # 30 headers, 6383 lines（2026-10-28 �
   - **RV32I L1 imem/dmem** (默认) → `ICacheSync` / `DCacheSync` (1-cycle sread)
   - **软核 TCM-style** (低频, 延迟关键) → `ICacheAsync` / `DCacheAsync` (0-cycle aread)
   - **imem 必须 sread** (per `verilator-e2e-coverage` spec §R1 invariant 3): 不要在 RV32I imem 用 Async
+- **cache wrapper 的「组合逻辑真发射」契约**（2026-10-28，change
+  `riscv-mini-cache-wrapper-live-logic-2026-10`）：
+  `cache/i_cache_prefetch.h` 与 `cache/d_cache_write_buffer.h` 是 **wrapper**
+  —— ⚠️ `i_cache_prefetch.h` 是 **`ICacheSync` 的 wrapper**；
+  `d_cache_write_buffer.h` 是 **AXI 写直通 shim**（**没有**内层 cache、**没有**读通路）。
+  三条硬约束：
+  - ⚠️ **MUST NOT 用 C++ `if` 决定「是否发射」** —— `ch_bool` 有
+    `explicit operator bool()` ⇒ C++ `if` 拿到的是「**当前节点是否非零**」，
+    而 `describe()` 在**建图期**执行 ⇒ 该条件建图期恒为假 ⇒
+    **分支体从不发射** ⇒ 输出**恒为未驱动**（读到 0）⇒ wrapper「功能上是死的」。
+    ⇒ 条件 MUST 落在**输出端口的取值**里（`select(...)` / 布尔 `&` / `|` / `!` 皆可；
+    ⚠️ 布尔 AND 用 `&` —— 框架已把 `&&` 标为 **deprecated**）。
+  - ⚠️ **每个 `ch_out` MUST 被无条件驱动** ⇒ 条件为假时也有确定值 ⇒
+    **不是**「条件为真才 `<<=`」。⚠️ 特别地：`axi_addr` / `axi_wdata` / `axi_we`
+    这类端口**只把 `if` 换掉也仍然未驱动**（驱动被注释掉 / 从未被驱动过）⇒
+    会发出「地址 0、无写使能」的 AXI 请求 ⇒ **比「恒未驱动」更危险**。
+  - ⚠️ **AXI 主端的 `axi_valid` MUST NOT 依赖 `axi_ready`**（AXI：「VALID
+    **不得**等 READY 才拉高」）⇒ READY 为低时该请求仍 MUST 保持在总线上；
+    而 wrapper **无状态/队列**可保留它 ⇒ 含了 READY 就等于**写被静默丢弃**。
+    ⇒ `ICachePrefetch` 的做法是**转发内层** `ICacheSync` 的 AXI 主端
+    （内层**本身**就是完整 AXI 主端 ⇒ 不在 wrapper 层重推导 ⇒ 纪律天然成立）。
+  - ⚠️ **内层 cache 的每个 `ch_in` MUST 被显式驱动**（未驱动端口读到的是
+    **未定义值**）⇒ 否则内层永远停在「冷 miss」⇒ hit / miss **不可区分**。
+    ⚠️ 本条**仅适用于 `i_cache_prefetch.h`**（`d_cache_write_buffer.h` 没有内层 cache）。
+  - ⚠️ **已知债务（如实登记）**：`DCacheWriteBuffer` **并不真缓冲**（直通式 ⇒
+    名字 over-promise ⇒ `ready` 无背压语义）；`ICachePrefetch` 的**预取缓冲**
+    是死数据（真预取未实现）；内层 cache 的 `miss`(1 拍 `sread`) 与
+    `axi_addr`(当拍地址) 存在 **1 拍错位**（属 cache 本体 ⇒ wrapper 转发
+    **不**加剧、也**不**修它）。
+    ⇒ 判别力证据：`examples/riscv-mini/tests/test_cache_smoke.cpp`
+    （**8 用例 / 58 断言**，**双后端**，含内层 **fill → hit** 路径）。
 
 ## ANTI-PATTERNS
 - **Namespace inconsistency**: CPU components split across 4 namespaces (`riscv`, `chlib`, `cpu`, `ch::chlib`)

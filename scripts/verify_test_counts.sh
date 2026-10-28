@@ -57,7 +57,27 @@ fi
 
 echo "AGENTS.md CTEST_TOTAL ($documented_total) matches ctest -N ($actual_total) ✓"
 
-# 2. Catch2 source file count — informational check for chlib directory.
+# 2. `verilator_e2e` 标签下的测试数 —— **独立**锚点。
+#    ⚠️ 为什么需要独立锚点（2026-10-28 新增）：`CTEST_TOTAL` 只统计**注册进
+#    CTest 的测试数**；而给一个**已注册**的 target 加/删 `verilator_e2e` 标签
+#    **不改变** `CTEST_TOTAL`（target 数不变）⇒ 只改标签的话，`CTEST_TOTAL`
+#    护栏**完全看不见** ⇒ 双后端覆盖会**静默缩面**。
+#    ⇒ 锚点格式：`VERILATOR_E2E_TOTAL: <N>`。
+if grep -qE 'VERILATOR_E2E_TOTAL: [0-9]+' "$AGENTS"; then
+    documented_vl=$(grep -oE 'VERILATOR_E2E_TOTAL: [0-9]+' "$AGENTS" | head -1 | grep -oE '[0-9]+$')
+    actual_vl=$(ctest --test-dir "$BUILD_DIR" -N -L verilator_e2e 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo "")
+    if [ -z "$actual_vl" ]; then
+        echo "::warning::ctest -N -L verilator_e2e produced no parseable total; skipping check"
+    elif [ "$actual_vl" != "$documented_vl" ]; then
+        echo "::error::AGENTS.md says VERILATOR_E2E_TOTAL=$documented_vl but ctest -N -L verilator_e2e reports $actual_vl"
+        echo "        Update root AGENTS.md NOTES §Test counts to match."
+        exit 1
+    else
+        echo "AGENTS.md VERILATOR_E2E_TOTAL ($documented_vl) matches ctest -N -L verilator_e2e ($actual_vl) ✓"
+    fi
+fi
+
+# 3. Catch2 source file count — informational check for chlib directory.
 #    The chlib count in AGENTS.md is line-anchored as
 #    '**27 Catch2 test source files** at `tests/chlib/test_*.cpp`'
 #    and we verify it by an explicit `ls | wc -l`. Drift here means the

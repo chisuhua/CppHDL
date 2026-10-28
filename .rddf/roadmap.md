@@ -42,7 +42,7 @@
 | Project | Phase | Priority | Feedback | Proposal |
 |---------|-------|----------|----------|----------|
 | RV32I ISA ⑤ load 字节道固件验证 | phase-5 | P0 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-rv32i-load-byte-lane-2026-10/`（⚠️ **原计划是「只验证」⇒ 实施期发现 `LB` 符号扩展是**错的** ⇒ 改为「**含 2 行实现修复**」；spec delta = `rv32i-isa-semantics` ADDED ×1 ⇒ 归档**禁** `--skip-specs` ⇒ 主 spec 合并 +1 条）⇒ **`feat-rv32i-isa-completeness` ⑤ 收口** |
-| cache wrapper 活逻辑（T8 ①） | phase-5 | P2 | none | ✅ **已立项**：`openspec/changes/riscv-mini-cache-wrapper-live-logic-2026-10/`（⚠️ **既有断言会转红** ⇒ 改断言与修实现**同 commit**；spec delta = `cpu-cache-subsystem` MODIFIED ×1（**路径订正**）+ ADDED ×1）⇒ 需 builder |
+| cache wrapper 活逻辑（T8 ①） | phase-5 | P2 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-riscv-mini-cache-wrapper-live-logic-2026-10/`（⚠️ **既有断言确实转红** ⇒ 反转断言与修实现**同 commit**；spec delta = `cpu-cache-subsystem` MODIFIED ×2（**路径订正**）+ ADDED ×1 ⇒ 归档**禁** `--skip-specs`）⇒ **`feat-riscv-mini-rtl-debt` ① 收口** |
 | T7 可 dual 上限盘点 | phase-5 | P1 | none | ✅ **已立项**：`openspec/changes/dual-backend-full-coverage-inventory-2026-10/`（**只读**交付物；⚠️ **决策门**：若可达上限 < 100 ⇒ **MUST 由 planner** 修订 `objective-test-coverage-100pct` 的 Go 判据） |
 | roadmap 簿记一致性护栏 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/roadmap-fragments-consistency-guard-2026-10/`（无 spec 变更 ⇒ `--skip-specs`） |
 | perf baseline 重采集 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/perf-baseline-refresh-2026-10/`（**单独批次** + 空闲机器 + 锚点守恒流程） |

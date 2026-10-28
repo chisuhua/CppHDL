@@ -118,10 +118,27 @@ set_tests_properties(test_rv32i_soc_dual_parity PROPERTIES
 )
 
 # cache-complete-rewrite §3.4 smoke: ICachePrefetch + DCacheWriteBuffer wrapper build probe
+# ⚠️ 2026-10-28（change `riscv-mini-cache-wrapper-live-logic-2026-10`）：本测试现在
+# **双后端**跑（interpreter + verilator）⇒ 需要 `verilator_e2e` 标签 +
+# `verilator_backend` 资源锁 + verilator 安装目录的 PATH 注入
+# （与上面 `test_rv32i_soc_dual_parity` 同款；`CTEST_TOTAL` **不变** ——
+# 该 target **已**注册进 CTest，只是加标签 ⇒ 只有 `verilator_e2e` 计数 +1）。
 riscv_mini_catch_test(riscv_mini_cache_smoke tests/test_cache_smoke.cpp)
 # include path 需覆盖 include/cpu/cache (wrapper 用 #include "i_cache_complete.h")
 target_include_directories(riscv_mini_cache_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include/cpu/cache)
+if(CPPHDL_VERILATOR_WRAPPER)
+    get_filename_component(_cache_vl_bin_dir "${CPPHDL_VERILATOR_WRAPPER}" DIRECTORY)
+    set(_cache_vl_path_env "PATH=$ENV{PATH}:${_cache_vl_bin_dir}")
+else()
+    set(_cache_vl_path_env "")
+endif()
+set_tests_properties(riscv_mini_cache_smoke PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_cache_vl_path_env}"
+    TIMEOUT 600
+)
 
 # === 安装 (Phase 1-3 + 5 个核心 Pipeline 测试) ===
 install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test
