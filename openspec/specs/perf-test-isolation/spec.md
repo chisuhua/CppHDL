@@ -125,7 +125,25 @@ The CTEST `TIMEOUT` property for any CTest that invokes `perf_tests --all` or `p
 - **AND** the `subprocess_runner.h:168` default `timeout_sec = 180` MAY be insufficient for this TC
 - **AND** TC-09 `depth=1000` rows in `perf_results.json` MAY have `status="SKIPPED"` and `median_us=0` due to subprocess timeout
 - **AND** the `tests/benchmark/perf_baseline.json` `note` field SHALL document this TC-09 SKIPPED status with the root cause (180s subprocess timeout insufficient)
-- **AND** this limitation is acceptable as long as both baseline AND current `perf_results.json` have TC-09 rows with `median_us=0` (so `perf_regression` skips the comparison — no false-positive)
+- **AND** this limitation MUST NOT produce a **false positive**, which admits exactly
+      two shapes:
+  - **Shape A（锚点保留）**：the baseline side MUST keep the TC-09 anchors
+        `median_us > 0`（逐字保留自上一份 baseline，并打 `note_restored` 标记）
+        while the current results have `median_us = 0`
+        ⇒ the computed ratio is 0 ⇒ `perf_regression` reports **no** regression;
+  - **Shape B（两侧皆空）**：both the baseline AND the current `perf_results.json`
+        have the TC-09 rows with `median_us = 0`
+        ⇒ the comparison is skipped entirely ⇒ no regression is reported.
+- **AND** Shape A is **REQUIRED** whenever the previous baseline held TC-09 rows
+      with `status=PASS` and `median_us > 0`
+      ⇒ 否则那些锚点会**静默退出** `perf_regression` 的比较集合
+      ⇒ 未来的 TC-09 真回归**永久不可见**
+      （该义务的裁决条款见「perf baseline 重生成 MUST 守恒」Requirement）
+- **NOTE**: 本条款的**旧措辞**（「both baseline AND current have TC-09 rows with
+      `median_us=0`」）只覆盖 Shape B，写于 F2 期（2026-06/07）⇒ 早于
+      2026-10-25 确立的「锚点守恒 + 逐字恢复」决策 ⇒ 与该决策**互斥**
+      ⇒ 本次重采集把它改写为**两种形态都合法、且明确各自的义务**，
+      以免契约与已提交的实现互相矛盾。
 
 ### Requirement: perf_baseline.json regenerated on measurement methodology change
 

@@ -1,7 +1,0 @@
-schema: spec-driven
-created: 2026-10-27
-# 本 change 重采集 `tests/benchmark/perf_baseline.json`（**数据文件**，非契约）
-# ⇒ 无 spec 变更 ⇒ 归档用 `--skip-specs`。
-# ⚠️ 若守护栏要求把「重采集的守恒流程」写进 `perf-test-isolation` 的契约
-#   ⇒ 那是**另一个** change ⇒ 不在本 change 内合并。
-skip_specs: true

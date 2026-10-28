@@ -1,0 +1,29 @@
+schema: spec-driven
+created: 2026-10-27
+# ⚠️ **2026-10-28 实施期订正**：初稿写「重采集的是**数据文件**（非契约）⇒ 无 spec 变更
+#   ⇒ `skip_specs: true`」⇒ **实测推翻**。
+#
+#   起因：仓内 `perf-test-isolation` capability 的**两条 Requirement 互相矛盾** ——
+#   ① 「perf_main CTEST TIMEOUT accommodates wall-clock with safety margin」
+#      的 **TC-09 subprocess timeout known limitation** Scenario 写：
+#      「this limitation is acceptable as long as **both baseline AND current**
+#      `perf_results.json` have TC-09 rows with `median_us=0`」
+#      （该条款写于 F2 期 2026-06/07）；
+#   ② 「perf baseline 重生成 MUST 守恒（行集 / 锚点 / 变松披露）」写：
+#      「基准里 `status=PASS` 且 `median_us > 0` 的锚点 MUST 仍存在**且仍 `> 0`**」
+#      （该 Requirement 于 2026-10-25 随 C2 的守恒护栏一并加入）。
+#
+#   ⇒ **实测事实**：仓内**已提交**的 baseline（2026-10-25 / `7c5038e`）里，TC-09 的
+#     6 个 interpreter/jit 锚点就是 **PASS 且 `median_us > 0`**（从 2026-10-16 逐字恢复）
+#     ⇒ ① 要求它们变成 0，② 禁止它们变成 0 ⇒ **同一批行，两条条款给出互斥指令**。
+#   ⇒ 且 ② 是**可执行**的：`scripts/verify_perf_baseline_anchors.sh` 的 C2 对
+#     「锚点降级为 0」**fail-closed** ⇒ 若按 ① 把 TC-09 降为 0，护栏必然报违规
+#     ⇒ 「无 spec 变更 ⇒ 归档用 `--skip-specs`」的前提**不成立**。
+#
+#   ⇒ **裁决**：以 ② 为准（它是**可执行**的契约，且锚点保留是**安全方向**：
+#     宁可误报不可漏报），并把 ① 的 TC-09 条款**改写为两种形态都合法**
+#     （Shape A = 锚点保留 + current 为 0 ⇒ 比值为 0 ⇒ 无假阳性；
+#       Shape B = 两侧皆 0 ⇒ 比较被跳过）⇒ 契约与实现**逐字一致**。
+#
+#   ⇒ 故本 change **有** spec 变更（MODIFIED ×1）⇒ 归档**不得**用 `--skip-specs`。
+skip_specs: false

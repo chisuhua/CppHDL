@@ -3,9 +3,10 @@
 - **架构依据**：无
 - **5 段草案**：`.rddf/improvements/perf-baseline-refresh-2026-10.md`
 - **roadmap 归属**：工程纪律项
-- **规格影响**：**无**（已判定：守恒流程**已在契约内** —— `perf-test-isolation`
-  已有 Requirement「perf baseline 重生成 MUST 守恒（行集 / 锚点 / 变松披露）」
-  ⇒ 无需 MODIFIED ⇒ 归档用 `--skip-specs` ✓（订正见下）
+- **规格影响**：**有**（⚠️ **2026-10-28 实施期订正** —— 初稿写「无」⇒ **实测推翻**）
+  —— MODIFIED ×1（`perf-test-isolation` 的「perf_main CTEST TIMEOUT accommodates
+  wall-clock with safety margin」Requirement 的 TC-09 Scenario）⇒ 归档**不得**用
+  `--skip-specs`。**订正的根因见下方「⚠️ 实施期发现：两条 Requirement 互相矛盾」**
 - **规模 / 风险**：**中**（重采集会**抬高**阈值 ⇒ 靠锚点守恒 + 变松披露把「变松」显式化）
 
 ## Why
@@ -66,10 +67,35 @@ baseline 与采集代码状态在**同一个 commit** 里 ⇒ `git_sha` 只能�
 
 ## Capabilities
 
-- `perf-test-isolation` —— **无需 MODIFIED**（已判定，2026-10-28 核对）：
-  该 capability **已有** Requirement「perf baseline 重生成 MUST 守恒
-  （行集 / 锚点 / 变松披露）」⇒ 本次「重采集 + 走守恒流程」**正是**执行既有契约
-  ⇒ 不改契约 ⇒ `skip_specs: true` **成立** ✓
+- `perf-test-isolation` —— ⚠️ **2026-10-28 实施期订正**：初稿判定「**无需 MODIFIED**
+  （该 capability 已有 Requirement「perf baseline 重生成 MUST 守恒（行集 / 锚点 /
+  变松披露）」⇒ 本次「重采集 + 走守恒流程」正是执行既有契约 ⇒ 不改契约）」⇒
+  **该判定基于一个假前提**：它只看了「守恒流程已有契约」，没发现**同一 capability 内
+  另有一条条款与之互斥** ⇒ 详见下方「⚠️ 实施期发现」⇒ 结论改为 **MODIFIED ×1**。
+
+### ⚠️ 实施期发现：两条 Requirement 互相矛盾（2026-10-28 实测）
+
+| # | Requirement | 条款 | 写入时间 |
+|---|---|---|---|
+| ① | `perf_main CTEST TIMEOUT accommodates wall-clock with safety margin` → Scenario「TC-09 subprocess timeout known limitation」 | 「this limitation is acceptable as long as **both baseline AND current** `perf_results.json` have TC-09 rows with `median_us=0`（so `perf_regression` **skips** the comparison）」 | F2 期（2026-06/07） |
+| ② | `perf baseline 重生成 MUST 守恒（行集 / 锚点 / 变松披露）」 | 「基准里 `status=PASS` 且 `median_us > 0` 的**锚点 MUST 仍存在且仍 `> 0`**」 | 2026-10-25（随 C2 的守恒护栏一并加入） |
+
+⇒ **实测事实**：仓内**已提交**的 baseline（2026-10-25 / `7c5038e`）里，TC-09 的
+**6 个 interpreter/jit 锚点**就是 `PASS` 且 `median_us > 0`（从 2026-10-16 逐字恢复）
+⇒ ① 要求它们变成 0，② 禁止它们变成 0 ⇒ **同一批行，两条条款给出互斥指令**。
+
+⇒ 且 ② 是**可执行**的：`scripts/verify_perf_baseline_anchors.sh` 的 C2 对
+「锚点降级为 0」**fail-closed**（`--self-test` fixture ⑤⑥ 钉住）⇒ 若按 ① 把 TC-09
+降为 0，护栏必然报违规 ⇒ 「无 spec 变更 ⇒ 归档用 `--skip-specs`」的前提**不成立**。
+
+⇒ **裁决**：以 ② 为准（它是**可执行**的契约；且锚点保留是**安全方向** —— 宁可误报
+不可漏报），把 ① 的 TC-09 条款**改写为两种形态都合法**：
+
+- **Shape A（锚点保留）**：baseline 侧 TC-09 锚点逐字保留（`median_us > 0` +
+  `note_restored`），current 侧 `median_us = 0` ⇒ 比值为 0 ⇒ **无假阳性**；
+- **Shape B（两侧皆空）**：两侧都 `median_us = 0` ⇒ 比较被跳过 ⇒ 无假阳性；
+
+⇒ 并明确「若上一份 baseline 持有 TC-09 的 PASS 锚点 ⇒ **必须**走 Shape A」。
 
 ## Impact
 

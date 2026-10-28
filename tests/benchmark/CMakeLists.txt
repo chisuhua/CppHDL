@@ -92,6 +92,23 @@ endif()
 # TIMEOUT 900 was insufficient and caused ctest to kill the test mid
 # TC-09 (F2 regression).
 #
+# Re-measured 2026-10-28 on a shared 4-core host (baseline refresh
+# `perf-baseline-refresh-2026-10`): 3 consecutive `perf_tests --all` runs
+# took 908.90 s / 899.87 s / 863.20 s ⇒ t_meas ≈ 905 s. The contract's
+# `1.5 × t_meas + 300` bound is satisfied both for the reference
+# workstation (1.5×930+300 = 1695 s) and for this host (1.5×905+300 =
+# 1657 s) ⇒ TIMEOUT 1800 stays unchanged.
+#
+# ⚠️ Measured run-to-run spread on that host (same binary, same flags):
+# most rows move ≤ 1.15×, but a few are BIMODAL — TC-11 regs=10 lands at
+# ~54 ms in one run and ~94-103 ms in another (1.87× apart), and
+# TC-08 regs=100 verilator once landed at 1.63× its usual value. Both
+# exceed their own backend threshold ⇒ those rows are inherently flaky
+# under the current thresholds (pre-existing: the threshold table in
+# perf_regression.cpp assumed verilator noise ≈ JIT noise). The perf
+# baseline therefore records the PER-ROW MEDIAN of 3 samples — see
+# tests/benchmark/perf_baseline.json's `note` field.
+#
 # perf_report_consistency (W7) fix (2026-10-13): the test asserts
 # that perf_results.{json,csv,md} all carry the same numeric
 # value for the same row. The cleanest contract is "all three
