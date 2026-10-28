@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-10-27
+# ⚠️ 2026-10-28 **订正**：初稿写「无 spec 变更 ⇒ `--skip-specs`」⇒ **与仓内惯例不符**
+#   —— 仓内**每个 CI 护栏都有 capability 契约**
+#   （`example-assertion-quality` / `example-runtime-coverage` / `sample-regression-guard`）
+#   ⇒ 本 change 新增 capability `roadmap-bookkeeping-consistency`
+#   ⇒ **不得**用 `--skip-specs`（否则归档后该闸门的契约**无 spec 承载**
+#   ⇒ 后人可无声削弱或删除它）。

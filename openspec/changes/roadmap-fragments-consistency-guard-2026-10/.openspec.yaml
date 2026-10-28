@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-10-27
-# 本 change **无 spec 变更**（只加护栏脚本 + CI）⇒ 归档用 `--skip-specs`。
-skip_specs: true

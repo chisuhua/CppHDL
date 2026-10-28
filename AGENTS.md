@@ -255,6 +255,15 @@ bash scripts/verify_openspec_delta.sh
 # 断言质量护栏（examples 内的测试 MUST 真的断言，不得只有 SUCCEED）
 bash scripts/verify_example_assertion_quality.sh
 
+# roadmap 簿记一致性护栏（根 AGENTS.md 的 AUTO 块 ↔ .rddf/roadmap/**；
+# C1 = AUTO 块逐字守恒 · C2/C3 = feature 文件内部的完成度一致性）
+bash scripts/verify_roadmap_fragments.sh
+bash scripts/verify_roadmap_fragments.sh --self-test
+# ⚠️ C1 红了怎么办：护栏打印的 unified diff **就是期望块** ⇒ 正确动作是
+#   ① 修 `.rddf/roadmap/**` 的 front-matter，或 ② 同步护栏的 vendored 渲染规则
+#   （工具链升级时）⇒ **不要**手工改 AGENTS.md 的 AUTO 块 —— 那正是本护栏要治的根因。
+# ⚠️ 判不了「叙事性陈旧」（符号一致、只是内容过时）⇒ 那类仍靠人工 + 代码评审。
+
 # 该护栏的 fixture 自检 = **规格**（11 个 fixture 钉住每种计数形态；
 # 护栏与自检共用 scripts/lib/assertion_quality.sh 的同一份分析器）
 bash scripts/verify_assertion_quality_fixtures.sh

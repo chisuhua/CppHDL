@@ -44,7 +44,7 @@
 | RV32I ISA ⑤ load 字节道固件验证 | phase-5 | P0 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-rv32i-load-byte-lane-2026-10/`（⚠️ **原计划是「只验证」⇒ 实施期发现 `LB` 符号扩展是**错的** ⇒ 改为「**含 2 行实现修复**」；spec delta = `rv32i-isa-semantics` ADDED ×1 ⇒ 归档**禁** `--skip-specs` ⇒ 主 spec 合并 +1 条）⇒ **`feat-rv32i-isa-completeness` ⑤ 收口** |
 | cache wrapper 活逻辑（T8 ①） | phase-5 | P2 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-riscv-mini-cache-wrapper-live-logic-2026-10/`（⚠️ **既有断言确实转红** ⇒ 反转断言与修实现**同 commit**；spec delta = `cpu-cache-subsystem` MODIFIED ×2（**路径订正**）+ ADDED ×1 ⇒ 归档**禁** `--skip-specs`）⇒ **`feat-riscv-mini-rtl-debt` ① 收口** |
 | T7 可 dual 上限盘点 | phase-5 | P1 | none | ✅ **已立项**：`openspec/changes/dual-backend-full-coverage-inventory-2026-10/`（**只读**交付物；⚠️ **决策门**：若可达上限 < 100 ⇒ **MUST 由 planner** 修订 `objective-test-coverage-100pct` 的 Go 判据） |
-| roadmap 簿记一致性护栏 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/roadmap-fragments-consistency-guard-2026-10/`（无 spec 变更 ⇒ `--skip-specs`） |
+| roadmap 簿记一致性护栏 | phase-5 | P0 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-roadmap-fragments-consistency-guard-2026-10/`（新增 capability `roadmap-bookkeeping-consistency` ⇒ **未**用 `--skip-specs`）⇒ `scripts/verify_roadmap_fragments.sh` + CI 2 处挂载 + `--self-test` 13 fixture |
 | perf baseline 重采集 | phase-5 | P0 | none | ✅ **已立项**：`openspec/changes/perf-baseline-refresh-2026-10/`（**单独批次** + 空闲机器 + 锚点守恒流程） |
 | 输入端口驱动护栏（spike） | phase-5 | P1 | none | ✅ **已立项**：`openspec/changes/input-port-driving-guard-2026-10/`（**只出文档**；⚠️ 决策门 = 「实施 or 关闭」⇒ **不得**硬造高误报护栏） |
 | CLINT `mtime` 自增（T9 ②） | phase-5 | P2 | none | ⛔ **未立项 —— ADR-049 前置**：`mtime` 从静态比较器变自由运行计数器 = **契约变更**，而 **CLINT 不在任何 capability 覆盖内** ⇒ 归属本身待裁决 ⇒ delta 写不出 ⇒ **不得**先登记 change 再标 `skip_specs`（那会把契约变更静默丢掉）⇒ 决策门 D1–D5 已写入 `.rddf/improvements/clint-mtime-autoincrement-2026-10.md` §6 |
@@ -112,7 +112,7 @@
 - `objective-rv32i-e2e` — RV32I 完整 e2e 在 interpreter + verilator 双路 trace parity 通过（+ JIT 回落行为显式断言）— **completed**（Go 判据 **6/6** 全部达成，2026-10-27：判据 5「`dual-backend-rv32i-integration` archived」由 Batch 2/3 归档达成；判据 6「ISA 语义边界」由 ①②③ 达成 —— 范围注解见该 objective §2/§9.2）
 - `objective-test-coverage-100pct` — 单元测试 100% 双后端（interpreter + verilator）覆盖 — **active**（`ctest -L verilator_e2e` = 37，目标 ≥ 100）
 - `jit-mem-read-port-support` — JIT 对 `ch_mem` 读端口的 lowering（真三路 parity 前提）— **backlog，未建档**（当前 JIT 回落是有意设计且已断言；建档前置 = 出现必须 JIT-native 跑 RV32I 的需求）
-- `roadmap-fragments-consistency-guard` — roadmap fragments 一致性自检脚本 + CI 挂载 — **backlog 候选**（2026-10-26 planner 登记；起因 = `rddf roadmap` 子命令全坏 ⇒ AUTO 块 / Fragment Index / R1–R8 校验只能手工 ⇒ 多类漂移的根因；独立小 change，不占 phase-5 完成条件）
+- ~~`roadmap-fragments-consistency-guard` — roadmap fragments 一致性自检脚本 + CI 挂载~~ —— ✅ **2026-10-28 已实施并归档**（见上表）。⚠️ 实施期的**根因订正**：初稿写「CLI flag 存在、脚本 payload 缺失」⇒ **实测两头都反了** —— payload **存在可用**（工具链 `rdd-workflow` 的 `roadmap_update_agent_md.sh`），缺的是 **CLI dispatch**（`rddf roadmap` 没暴露 `--update-agent-md`）⇒ 工具**不可达** ⇒ AUTO 块只能手工维护。⇒ 护栏因此采用**与生成器同源的渲染规则**（渲染期望块 + 逐字比对），并用工具做**一次性 oracle** 等价性验证（工具链 SHA 已记录 + 再验证触发条件已写明）
 
 > Sprint 编号口径：以本文件为准（`sprint-2026-10`）。三个 objective 的 append-only 台账曾把
 > C1/C2/C3 归档记为 `sprint-2026-11`，属编号漂移 ⇒ 已在 `objective-rv32i-e2e` §11 追加澄清行

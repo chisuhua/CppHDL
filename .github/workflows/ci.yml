@@ -239,6 +239,45 @@ jobs:
       shell: bash
       run: scripts/verify_test_counts.sh
 
+    - name: Verify roadmap fragments consistency
+      # Roadmap bookkeeping guardrail: the root AGENTS.md AUTO block and
+      # .rddf/roadmap/features/*.md front-matter are TWO sources of truth
+      # -> drift is silent (the historical drift was found by hand twice).
+      # C1 renders the expected AUTO block from the front-matter using the
+      # SAME rules as the toolchain generator and compares byte-for-byte
+      # (render+compare, NOT two-way field parsing => one parser => less
+      # false-positive surface).
+      # C2/C3: a feature file's `### phase-N` bullets and its `## 验收标准`
+      # checkboxes MUST agree on the completion symbol of the same phase
+      # label / known change name (line-start mentions only).
+      # ⚠️ ROOT CAUSE (corrected 2026-10-28): the toolchain payload EXISTS
+      # (rdd-workflow's skills/roadmap/scripts/roadmap_update_agent_md.sh)
+      # but the CLI dispatch does not expose --update-agent-md => the
+      # generator is unreachable => the AUTO block is hand-maintained.
+      # ⚠️ PORTABILITY: the script MUST avoid GNU-only forms (e.g. `sed -i`
+      # without a suffix) => its --self-test fixtures mutate files with
+      # `python3` heredocs only => BSD sed (macos-14) behaves identically.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_roadmap_fragments.sh
+
+    - name: Verify roadmap fragments consistency (self-test)
+      # The fixture set IS the spec of the guardrail: each fixture pins one
+      # mechanism (AUTO block status mismatch / missing row / duplicate
+      # front-matter key / missing sentinel / phase-label symbol conflict /
+      # line-start vs mid-line mention / ambiguous phase / change-name
+      # symbol conflict / narrative staleness MUST NOT be flagged).
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects (verify_perf_baseline_anchors.sh had
+      # 3 real ones; verify_example_assertion_quality.sh's analyser "cannot
+      # be fully closed") => every criterion needs a fixture proving it has
+      # discriminating power.
+      # ⚠️ The fixtures must stay portable (no `sed -i`): a GNU-only fixture
+      # mutation silently does nothing on BSD sed => the self-test turns RED
+      # on the macos-14 leg instead of testing anything.
+      shell: bash
+      run: scripts/verify_roadmap_fragments.sh --self-test
+
     - name: Verify rst_n wiring
       # An unwired `ch_in<ch_bool> rst_n` reads back as 0 = PERMANENTLY IN RESET:
       # the component compiles, the test builds, the simulation reports no error,
@@ -834,6 +873,39 @@ jobs:
     - name: Verify AGENTS.md test counts
       shell: bash
       run: scripts/verify_test_counts.sh
+
+    - name: Verify roadmap fragments consistency
+      # Roadmap bookkeeping guardrail: the root AGENTS.md AUTO block and
+      # .rddf/roadmap/features/*.md front-matter are TWO sources of truth
+      # -> drift is silent (the historical drift was found by hand twice).
+      # C1 renders the expected AUTO block from the front-matter using the
+      # SAME rules as the toolchain generator and compares byte-for-byte
+      # (render+compare, NOT two-way field parsing => one parser => less
+      # false-positive surface).
+      # C2/C3: a feature file's `### phase-N` bullets and its `## 验收标准`
+      # checkboxes MUST agree on the completion symbol of the same phase
+      # label / known change name (line-start mentions only).
+      # ⚠️ ROOT CAUSE (corrected 2026-10-28): the toolchain payload EXISTS
+      # (rdd-workflow's skills/roadmap/scripts/roadmap_update_agent_md.sh)
+      # but the CLI dispatch does not expose --update-agent-md => the
+      # generator is unreachable => the AUTO block is hand-maintained.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_roadmap_fragments.sh
+
+    - name: Verify roadmap fragments consistency (self-test)
+      # The fixture set IS the spec of the guardrail: each fixture pins one
+      # mechanism (AUTO block status mismatch / missing row / duplicate
+      # front-matter key / missing sentinel / phase-label symbol conflict /
+      # line-start vs mid-line mention / ambiguous phase / change-name
+      # symbol conflict / narrative staleness MUST NOT be flagged).
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects (verify_perf_baseline_anchors.sh had
+      # 3 real ones; verify_example_assertion_quality.sh's analyser "cannot
+      # be fully closed") => every criterion needs a fixture proving it has
+      # discriminating power.
+      shell: bash
+      run: scripts/verify_roadmap_fragments.sh --self-test
 
     - name: Verify rst_n wiring
       # An unwired `ch_in<ch_bool> rst_n` reads back as 0 = PERMANENTLY IN RESET:
