@@ -83,9 +83,15 @@
 > ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
 > 该 job 红 ⇒ MUST revert 归档 commit。
 
-### Unmapped (2)
+### Unmapped (3)
 
-> 两个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
+> 三个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
+> `uart-tx-fsm-live-logic-2026-10` → **examples 真实性**缺口（`feat-rv32i-isa-completeness`
+> 的同型坑：C++ 控制流包裹硬件表达式 ⇒ 建图期恒假）—— 2026-10-28 由
+> `input-port-assignment-antipattern-fix-2026-10` 实施期实测挖出（`uart_tx.v` 里
+> 输出是常量、状态寄存器自环）；⚠️ 全仓**只有** `uart_tx.cpp` 是 examples 内的坏例子，
+> 但**形态 ③（三元条件）** 在 `tests/test_verilator_complex_e2e.cpp:150` 也有一处
+> （`STOP` 不可达，parity 断言抓不到）；
 > `riscv-mini-cache-wrapper-live-logic-2026-10` → `feat-riscv-mini-rtl-debt` ①
 > （⚠️ 名字与候选 change 名 `riscv-mini-cache-wrapper-live-logic-2026-10` **不一致**
 > ⇒ 立项时 MUST 统一，见「实施规划」§遗留项 3）；

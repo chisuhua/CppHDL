@@ -190,8 +190,19 @@ int main() {
         std::cout << "\n=== UART TX Simulation ===" << std::endl;
         
         // 初始化
-        device.instance().io().frame_start = ch_bool(false);
-        device.instance().io().data = ch_uint<8>(85_d);  // 0x55 = 01010101
+        // ⚠️ **必须**用 `set_input_value` 驱动：`frame_start` / `data` 是**顶层**
+        // `ch_in`（`describe()` 把它们接线给子模块 ⇒ 顶层侧**无内部驱动**
+        // ⇒ 该由 TB 驱动）⇒ 而 `io().X = value` 对 `ch_in` **无 `operator=`**
+        // ⇒ 走 `CHERROR("Cannot assign value to input port!")` + **什么都不做**
+        // ⇒ **端口保持未驱动**（实测：这条路径每次运行打 4 条 ERROR）。
+        // ⚠️ 值侧 MUST 用**纯整数**：`ch_bool` 的 `operator uint64_t` 是
+        //    **explicit** ⇒ `set_input_value(port, ch_bool(false))` 编译不过
+        //    （与仓内既有写法一致：`tests/test_axi4_full_burst.cpp:187`）。
+        // ⚠️ **修好本处仍不会发出帧**：本 example 的状态机另有缺陷（`if (ch_bool)`
+        //    在建图期恒假 ⇒ 状态寄存器自环、输出是两个常量）⇒ 已独立立项
+        //    `.rddf/improvements/uart-tx-fsm-live-logic-2026-10.md`。
+        simulator.set_input_value(device.instance().io().frame_start, 0);
+        simulator.set_input_value(device.instance().io().data, 85);  // 0x55 = 01010101
         
         // 空闲几个周期
         for (int i = 0; i < 5; i++) {
@@ -200,9 +211,9 @@ int main() {
         
         // 启动发送
         std::cout << "Starting UART TX with data 85 (0x55)..." << std::endl;
-        device.instance().io().frame_start = ch_bool(true);
+        simulator.set_input_value(device.instance().io().frame_start, 1);
         simulator.tick();
-        device.instance().io().frame_start = ch_bool(false);
+        simulator.set_input_value(device.instance().io().frame_start, 0);
         
         // 仿真足够周期以完成一帧（10 位 * 434 波特率周期 + 余量）
         constexpr unsigned FRAME_CYCLES = 4500;

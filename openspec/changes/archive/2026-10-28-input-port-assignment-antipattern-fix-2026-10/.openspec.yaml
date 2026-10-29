@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-10-28
+# 本 change 是 **example 层的 bugfix**（4 处失效赋值）+ 文档
+# ⇒ **不改任何 capability 契约** ⇒ 归档用 `--skip-specs`。
+# ⚠️ 若后续要把「不得给输入端口赋值」写成 capability 条款
+#   ⇒ 那是**另一个** change（需契约 + CI 挂载点）⇒ 已独立立项。
+skip_specs: true
