@@ -16,8 +16,16 @@
 //
 // Fixture 2 — SpiFsmFixture:
 //   ch_state_machine with 4 states: IDLE -> START -> TRANSFER -> STOP
-//   -> IDLE. Send 1 byte 0xA5 (8-bit shift register), advance 8
+//   -> IDLE. Send 1 byte (8-bit shift register), advance 8
 //   transfers; observe `dbg_state` ch_out for state-transition parity.
+//
+//   ⚠️ 该 fixture 此前是一个**从未真正工作过**的 DUT（`shift` 恒 0 /
+//      `STOP` 永不可达 / `bit_count` 从不复位），而断言**只有 parity**
+//      ⇒ 两后端**同构** ⇒ 同构缺陷恒被 parity 掩盖 ⇒ 长期「假绿」。
+//      现已收敛到**正确形态**（每寄存器**单** next 写入点 / 每输出**只**
+//      驱动一次 / `transition_when` 的 target 是**编译期常量**），
+//      且断言升级为 **parity + 手推语义金标**。
+//      （见 openspec/changes/archive/2026-10-29-spi-fsm-fixture-live-logic-2026-10/）
 //
 // Tagged [verilator][e2e][complex]. Skipped cleanly when verilator is
 // not on PATH; CATCH_CONFIG_RUNNER keeps the executable exit 0 when
@@ -46,6 +54,7 @@
 #include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <vector>
 
 #define CATCH_CONFIG_RUNNER
 
@@ -93,6 +102,52 @@ enum class SpiState : uint8_t {
     STOP = 3,
 };
 
+// ---------------------------------------------------------------------------
+// SPI fixture 的**手推**金标（期望值 MUST 手推，MUST NOT 抄仿真输出 ——
+// 推导过程见本 change 的 design.md §3.1）。
+//
+// TB 约定：`start` 在 cycle **0** 与 cycle **12** 各拉高一次（⇒ **2 次**传输）
+//            —— 第二次传输是为了让「**重新装载时计数器 MUST 复位**」这条
+//            契约**可观测**（单次传输时计数器在装载前本来就是 0 ⇒ 复位与否
+//            **无差别** ⇒ 该缺陷类将**零判别力**）；`data_in` 恒 `kSpiByte`。
+// 采样点：**每次 `tick(1)` 之后**（⇒ 反映**边沿后**的寄存器值 —— 寄存器
+// proxy 在**组合表**里 ⇒ tick 末尾的组合重算会用边沿后的值）。
+//
+// ⚠️ `kSpiByte` MUST 是**非回文**字节（MSB-first ≠ LSB-first）—— 否则
+//    「位序」这一维度**零判别力**（「`mosi` == MSB-first 序列」这条断言
+//    抓不到位序错）。`0xA5` = `1010 0101` 是**回文** ⇒ 不可用；
+//    `0x96` = `1001 0110` ⇒ MSB-first = `1,0,0,1,0,1,1,0`，
+//    LSB-first = `0,1,1,0,1,0,0,1` ⇒ **不同** ✔
+// ---------------------------------------------------------------------------
+constexpr uint32_t kSpiCycles = 32;
+constexpr uint64_t kSpiByte = 0x96;
+constexpr uint32_t kSpiSecondStartCycle = 12;
+constexpr uint32_t kSpiTransfers = 2;
+constexpr uint32_t kSpiBitsPerTransfer = 8;
+
+constexpr uint64_t kSpiStateIdle = 0;
+constexpr uint64_t kSpiStateStart = 1;
+constexpr uint64_t kSpiStateTransfer = 2;
+constexpr uint64_t kSpiStateStop = 3;
+
+// 状态：IDLE, START, TRANSFER×8, STOP, IDLE, IDLE, START, TRANSFER×8,
+//       STOP, IDLE…
+constexpr uint64_t kSpiStateGolden[kSpiCycles] = {
+    0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 0, 0, 1, 2, 2,
+    2, 2, 2, 2, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+// 位计数：0,0,0,1,2,3,4,5,6,7,7,7,7, **0**（第二次装载 ⇒ 复位**可观测**）,
+//         0,1,2,3,4,5,6,7,7,7…
+constexpr uint64_t kSpiCountGolden[kSpiCycles] = {
+    0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 0, 0, 1,
+    2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+
+// mosi：0,0,1,0,0,1,0,1,1,0,0,0,0,0,1,0,0,1,0,1,1,0,0…
+//       （2 次传输 ⇒ 16 个 TRANSFER 拍 ⇒ 两段 0x96 的 MSB-first）
+constexpr uint64_t kSpiMosiGolden[kSpiCycles] = {
+    0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0,
+    0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
 class SpiFsmFixture : public ch::Component {
 public:
     __io(
@@ -109,31 +164,52 @@ public:
     void create_ports() override { new (io_storage_) io_type; }
 
     void describe() override {
-        // Bit counter — counts up to 7 (8 transfers total).
+        // ------------------------------------------------------------------
+        // ⚠️ **正确形态**（5 条纪律 —— 与 `uart-tx-fsm-live-logic-2026-10`
+        //    同型）：条件逻辑**只用**硬件原语 / 每寄存器**单** next 写入点 /
+        //    每输出**只**驱动一次 / `transition_when` 的 target 是编译期常量 /
+        //    **不**把 parity 当正确性证据。
+        // ------------------------------------------------------------------
+
+        // Bit counter — 当前正在发送的 bit 序号（0..7）。
         ch_reg<ch_uint<3>> bit_count(0_d, "bit_count");
 
         // Shift register — drives mosi_out (MSB-first).
         ch_reg<ch_uint<8>> shift(0_d, "shift");
 
+        // ⚠️ `start` 的**寄存器中转**：`port<ch_bool, input_direction>` **没有**
+        // `ch_bool` 转换（`include/core/io.h:232` —— **只有** `ch_uint` 有）
+        // ⇒ `io().start` MUST 经**寄存器**中转 ⇒ 条件**晚 1 拍**看到。
+        //    ⚠️ MUST 建在 `describe()` 顶层（**不是**在 `on_active` 闭包里）——
+        //       闭包是 describe 期的**一次性**执行体，在里面建寄存器会让
+        //       「谁拥有该寄存器」变得含糊。
+        ch_reg<ch_bool> start_latch(ch_bool(false), "start_latch");
+
         // ch_state_machine.
         chlib::ch_state_machine<SpiState, 4> sm;
 
+        // ---- 硬件条件（**不是** C++ 条件 ⇒ 建图期只建节点，运行时求值）----
+        start_latch->next = io().start;
+        ch_bool start_now = start_latch;          // 上一拍采到的 start
+
+        // `port<ch_uint<8>>` → `ch_uint<8>` 有转换（io.h:232）⇒ 可直接取
+        ch_uint<8> data_v = io().data_in;
+
+        // 最后一个 bit（bit_count == 7）
+        ch_bool last_bit = (bit_count == ch_uint<3>(7_d));
+
+        // ---- 状态转移（`on_active` 里**只**写 `transition_when`）------------
+        // ⚠️ `transition_when` 的 target MUST 是**编译期常量**
+        // （`ch_state_machine::build()` 按 state 遍历 `on_active` 注册转移 ⇒
+        //   注册时就固化 target）⇒ **禁**用 `last_bit ? STOP : TRANSFER`：
+        //   三元在**建图期**求值（`ch_bool::operator uint64_t()` **只对 const
+        //   节点返真值**）⇒ 恒取 `TRANSFER` ⇒ `STOP` **永不可达** ⇒ 状态卡死。
+        // ⇒ 拆成**两条互斥**的 `transition_when`（`last_bit` / `!last_bit`）。
+        //
         // IDLE: wait for start. On start, load shift + reset bit_count,
         // transition to START.
         sm.state(SpiState::IDLE).on_active([&] {
-            // The ch_in<ch_bool> port has no direct ch_bool conversion
-            // (see io.h:232 only ch_uint has it). We drive a ch_bool
-            // reg from the port via select(); the reg updates at
-            // posedge and becomes the transition_when condition.
-            ch_reg<ch_bool> start_latch(ch_bool(false), "start_latch");
-            start_latch->next = io().start;
-            ch_bool start_now = start_latch;
             sm.transition_when(start_now, SpiState::START);
-            // When the start signal is asserted (in IDLE), capture
-            // data_in into shift and reset bit_count.
-            shift->next = select(start_now, io().data_in, shift);
-            bit_count->next = select(start_now, make_literal<0>(),
-                                     bit_count);
         });
 
         // START: pulse 1 cycle, then advance to TRANSFER.
@@ -144,13 +220,8 @@ public:
         // TRANSFER: emit current MSB, advance shift + bit_count. After
         // bit_count == 7, transition to STOP.
         sm.state(SpiState::TRANSFER).on_active([&] {
-            ch_bool last_bit = (bit_count == make_literal<7>());
-            // Stay for 1 cycle.
-            sm.transition_when(ch_bool(true),
-                               last_bit ? SpiState::STOP
-                                        : SpiState::TRANSFER);
-            bit_count->next = bit_count + 1_d;
-            shift->next = shift << 1_d;
+            sm.transition_when(last_bit, SpiState::STOP);
+            sm.transition_when(!last_bit, SpiState::TRANSFER);
         });
 
         // STOP: pulse 1 cycle, then back to IDLE.
@@ -161,13 +232,43 @@ public:
         sm.set_entry(SpiState::IDLE);
         sm.build();
 
-        // Output assignments.
+        // ------------------------------------------------------------------
+        // ⚠️ 以下是**唯一的**寄存器 next 写入点与输出驱动点。
+        //    MUST 写在 `sm.build()` **之后** —— `build()` 内部会**执行各状态
+        //    的 `on_active`**；若在 `on_active` 里写 `reg->next` ⇒ 多状态
+        //    覆盖 ⇒ `regimpl::set_next` 是 `set_src(0,…)` ⇒ **last-wins**
+        //    ⇒ 只有**最后发射**的那个状态生效。
+        //    ⇒ 实测（缺陷版）：IDLE 的「载入 `data_in`」被 TRANSFER 的
+        //      「左移」覆盖 ⇒ `shift` **恒 0**、`bit_count` **从不 reset**。
+        // ------------------------------------------------------------------
+
+        // bit_count：IDLE 且 start ⇒ 清零；TRANSFER 且**非**最后一位 ⇒ +1；
+        // 最后一位（bit_count == 7）⇒ 保持 7（3-bit ⇒ 不回绕，观测面无歧义）。
+        // ⚠️ `bit_count + 1` 的结果宽度是 **4**（`add_op` = max(M,N)+1）⇒
+        //    这里显式截断回 **3** 位（两后端宽度一致，零歧义）。
+        bit_count->next = select(
+            sm.is_in(SpiState::IDLE) & start_now,
+            ch_uint<3>(0_d),
+            select(sm.is_in(SpiState::TRANSFER) & !last_bit,
+                   ch_uint<3>(bit_count + ch_uint<3>(1_d)),
+                   bit_count));
+
+        // shift：IDLE 且 start ⇒ 载入 `data_in`；TRANSFER ⇒ 左移 1 位
+        // （MSB-first：`mosi` 取 `shift[7]`，每拍左移 ⇒ 依次移出 bit7..bit0）。
+        shift->next = select(
+            sm.is_in(SpiState::IDLE) & start_now,
+            data_v,
+            select(sm.is_in(SpiState::TRANSFER),
+                   shl<8>(shift, 1_d),
+                   shift));
+
+        // ---- 输出：各**只驱动一次** --------------------------------------
         io().dbg_state = sm.current_state_uint();
         // mosi_out: in TRANSFER, top bit of shift (MSB). In other
         // states, 0. We extract the MSB via bit_select<7>(shift).
-        ch_bool in_transfer = sm.is_in(SpiState::TRANSFER);
-        ch_bool msb = bit_select<7>(shift);
-        io().mosi_out = select(in_transfer, msb, ch_bool(false));
+        io().mosi_out = select(sm.is_in(SpiState::TRANSFER),
+                               bit_select<7>(shift),
+                               ch_bool(false));
         io().dbg_bit_count = bit_count;
     }
 };
@@ -299,7 +400,11 @@ public:
 
 // ============================================================================
 // SpiFsm: assert state register parity after walking IDLE → START →
-// TRANSFER → STOP → IDLE once.
+// TRANSFER → STOP → IDLE **twice** (2 byte transfers).
+//
+// ⚠️ **parity 是必要条件，不是充分条件**：两个后端由**同一份** fixture 生成
+//    ⇒ 缺陷**同构** ⇒ 两边**同时错** ⇒ parity **恒绿**
+//    ⇒ ⇒ MUST 另断言**绝对**语义金标（手推，见文件头的 kSpi*Golden）。
 // ============================================================================
 TEST_CASE("ComplexE2E - SpiFsmStateTransitionTraceParity",
           "[verilator][e2e][complex][spi-fsm][m5]") {
@@ -327,16 +432,23 @@ TEST_CASE("ComplexE2E - SpiFsmStateTransitionTraceParity",
     auto *state_b = dev_b->instance().io().dbg_state.impl();
     auto *count_a = dev_a->instance().io().dbg_bit_count.impl();
     auto *count_b = dev_b->instance().io().dbg_bit_count.impl();
+    auto *mosi_a = dev_a->instance().io().mosi_out.impl();
+    auto *mosi_b = dev_b->instance().io().mosi_out.impl();
 
-    // Walk 32 cycles; toggle start on cycle 0 only.
-    for (uint32_t cycle = 0; cycle < 32; ++cycle) {
-        bool start_now = (cycle == 0);
+    // Walk 32 cycles; pulse start on cycle 0 and cycle 12 (⇒ 2 transfers).
+    // ⚠️ 第二次传输是**必需**的：单次传输时「装载时复位计数器」**不可观测**
+    //    （计数器在装载前本来就是 0）⇒ 该缺陷类**零判别力**。
+    std::vector<uint64_t> state_seq;
+    std::vector<uint64_t> count_seq;
+    std::vector<uint64_t> mosi_seq;
+    for (uint32_t cycle = 0; cycle < kSpiCycles; ++cycle) {
+        bool start_now = (cycle == 0 || cycle == kSpiSecondStartCycle);
         auto drive = [&](ch::Simulator &sim,
                          ch::ch_device<SpiFsmFixture> &dev) {
             sim.set_input_value(dev.instance().io().start,
                                 start_now ? 1u : 0u);
             sim.set_input_value(dev.instance().io().data_in,
-                                static_cast<uint64_t>(0xA5));
+                                static_cast<uint64_t>(kSpiByte));
             sim.set_input_value(dev.instance().io().miso_in, 0u);
         };
         drive(*sim_a, *dev_a);
@@ -347,11 +459,53 @@ TEST_CASE("ComplexE2E - SpiFsmStateTransitionTraceParity",
         uint64_t sb = read_port_output(*sim_b, state_b);
         uint64_t ba = read_port_output(*sim_a, count_a);
         uint64_t bb = read_port_output(*sim_b, count_b);
+        uint64_t ma = read_port_output(*sim_a, mosi_a);
+        uint64_t mb = read_port_output(*sim_b, mosi_b);
         UNSCOPED_INFO("cycle=" << cycle
                      << " state:interp=" << sa << " vl=" << sb
-                     << " count:interp=" << ba << " vl=" << bb);
+                     << " count:interp=" << ba << " vl=" << bb
+                     << " mosi:interp=" << ma << " vl=" << mb);
+        // ---- parity（**必要**条件；**不是**充分条件）----
         REQUIRE(sa == sb);
         REQUIRE(ba == bb);
+        REQUIRE(ma == mb);
+        state_seq.push_back(sa);
+        count_seq.push_back(ba);
+        mosi_seq.push_back(ma);
+    }
+
+    // ---- 语义金标（**手推**，MUST NOT 抄仿真输出）----------------------
+    // ⚠️ 这三条断言是**本用例的判别力承重件**：缺陷版（`shift` 恒 0 /
+    //    `STOP` 不可达 / `bit_count` 从不复位）**逐条**转红。
+    for (uint32_t cycle = 0; cycle < kSpiCycles; ++cycle) {
+        CAPTURE(cycle);
+        REQUIRE(state_seq[cycle] == kSpiStateGolden[cycle]);
+        REQUIRE(count_seq[cycle] == kSpiCountGolden[cycle]);
+        REQUIRE(mosi_seq[cycle] == kSpiMosiGolden[cycle]);
+    }
+
+    // 状态序列 MUST **真的经过 STOP**（⇒ 目标状态 MUST 可达），且**每次传输**
+    // 都要经过一次。缺陷版恒卡在 TRANSFER ⇒ 这条直接转红。
+    uint32_t stop_hits = 0;
+    for (uint32_t cycle = 0; cycle < kSpiCycles; ++cycle) {
+        if (state_seq[cycle] == kSpiStateStop) ++stop_hits;
+    }
+    REQUIRE(stop_hits == kSpiTransfers);
+
+    // 每次传输的 8 个 TRANSFER 拍的 `mosi` MUST == 发送字节的 **MSB-first**
+    // 序列。⚠️ `kSpiByte` MUST 非回文 ⇒ 「位序」维度才有判别力（见文件头注释）。
+    std::vector<uint64_t> wire;
+    for (uint32_t cycle = 0; cycle < kSpiCycles; ++cycle) {
+        if (state_seq[cycle] == kSpiStateTransfer) {
+            wire.push_back(mosi_seq[cycle]);
+        }
+    }
+    REQUIRE(wire.size() == kSpiTransfers * kSpiBitsPerTransfer);
+    for (size_t i = 0; i < wire.size(); ++i) {
+        CAPTURE(i);
+        REQUIRE(wire[i] ==
+                ((kSpiByte >> (kSpiBitsPerTransfer - 1 -
+                               (i % kSpiBitsPerTransfer))) & 1u));
     }
 }
 

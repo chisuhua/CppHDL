@@ -1,0 +1,9 @@
+schema: spec-driven
+created: 2026-10-29
+# 本 change **有** spec 变更（**2** 个 MODIFIED delta）：
+#   - `dual-backend-test-coverage` 的「现有 9 个 verilator 测试 MUST 保留原状」
+#     ⇒ 增补第 **3** 条例外（`test_verilator_complex_e2e.cpp` 的 SPI fixture
+#       MUST 被允许**受限**变更）；
+#   - `verilator-e2e-coverage` 的「代表性复杂设计在 Verilator 仿真下行为契约」
+#     ⇒ 把 SPI 场景的「parity 一致」收紧为「parity + **手推**语义金标」。
+# ⇒ 归档时 **禁** 用 `--skip-specs`。

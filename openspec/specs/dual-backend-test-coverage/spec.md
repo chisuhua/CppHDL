@@ -5,7 +5,9 @@
 定义 CppHDL 单元测试统一跑 InterpreterBackend 与 VerilatorBackend 的契约：通过 `DUAL_BACKEND_TEST` macro + `add_dual_backend_test` CMake function，让**任何可观测顶层 `ch_out` 端口、且具有 `ch_device` / `ch_module` 形态的设计**自动走两套 backend，逐周期比较 `ch_out` 端口值，使得 codegen 错误与底层 eval 错误在测试时即时暴露，而非延迟到 nightly / nightly-rv32i 集成时才发现。
 
 In English: Defines the contract for CppHDL unit tests uniformly exercising both InterpreterBackend and VerilatorBackend through a `DUAL_BACKEND_TEST` macro + `add_dual_backend_test` CMake function. The macro MUST automatically construct two `ch_device<T>` instances (one per backend), run the same per-cycle assertions across both, and surface codegen or eval errors at test-time rather than during nightly RV32I integration.
+
 ## Requirements
+
 ### Requirement: DUAL_BACKEND_TEST macro MUST 钉死 InterpreterBackend 与禁用 JIT
 
 `tests/dual_backend_fixture.h` 提供的 `DUAL_BACKEND_TEST(DutType, name, tags)` macro MUST 在 interpreter 那一遍**同时**调用 `sim.set_jit_enabled(false)` 与 `sim.set_backend(std::make_unique<InterpreterBackend>())`，以确保该 path 真正走 InterpreterBackend 而非 inlined JIT。
@@ -177,6 +179,28 @@ Capability MUST 明确划分"不可 dual"测试类别，避免迁移工作浪费
 除上述四类变更外，该文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
 + 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
 
+**例外（SPI fixture 语义修正引入）**：
+`tests/test_verilator_complex_e2e.cpp` 的 `SpiFsmFixture` 是一个**从未真正工作过**的
+DUT（实测：移位寄存器恒 `0x00`、FSM 状态卡死在 `TRANSFER`、`STOP` 永不可达、
+`mosi` 恒 0），而它的断言**只有 parity**（两后端由**同一份** fixture 生成 ⇒
+**同构** ⇒ 同构缺陷恒被 parity 掩盖 ⇒ 长期「假绿」）→ 该文件 MUST 被允许
+**受限**变更：
+
+1. `SpiFsmFixture::describe()` MUST 收敛到**正确形态** —— 条件逻辑**只用**硬件原语
+   （`transition_when` / `select`；**禁** `if (硬件值)` 与三元 `? :`）；
+   每个寄存器 MUST **只有 1 个** `next` 写入点（各状态候选值用 `select` 组合成
+   单一表达式，写在 `sm.build()` **之后**）；每个输出 MUST **只驱动 1 次**；
+   `transition_when` 的 target MUST 是**编译期常量**（⇒ 目标状态 MUST 用**多条**
+   `transition_when` 表达，**禁**用三元选 target）；
+2. 相应断言 MUST 从「仅 parity」升级为「parity **+** 语义金标」
+   （FSM 状态序列 MUST **真的经过** `STOP`；`mosi` 的 8 bit 序列 MUST == 发送字节的
+   **MSB-first** 序列；期望值 MUST **手推**，MUST NOT 抄仿真输出）；
+3. TEST_CASE 名与 Catch2 SECTION 结构 MUST NOT 变化；
+4. 该文件的**观测端口集合** MUST NOT 变化（⇒ Verilator 侧可观测面不变）。
+
+除上述四类变更外，该文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
++ 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
+
 #### Scenario: 9 个测试保留原状
 
 - **WHEN** 本 capability 的 builder 阶段执行
@@ -207,6 +231,17 @@ Capability MUST 明确划分"不可 dual"测试类别，避免迁移工作浪费
 - **THEN** 输出 MUST 包含这 9 个测试 + 所有用 `add_dual_backend_test` 注册的新测试
 - **AND** 总数 MUST ≥ 12（9 旧 + ≥ 3 新 Phase 1 target）
 - **NOTE**: 本 capability 落地后，label `verilator_e2e` 是统一对外标签，取代现有各种临时 label
+
+#### Scenario: SPI fixture 允许受限变更（语义修正）
+
+- **WHEN** 本 capability 的 builder 阶段修正 `SpiFsmFixture` 的 FSM 语义
+- **THEN** `tests/test_verilator_complex_e2e.cpp` 的 `git diff` MUST 仅限
+  "加 `LABELS verilator_e2e` 标签 + 顶注释声明 + `SpiFsmFixture::describe()`
+  收敛到正确形态 + 相应断言升级为语义金标"
+- **AND** MUST NOT 修改该文件的 TEST_CASE 名与 Catch2 SECTION 结构
+- **AND** MUST NOT 增删该文件的观测端口
+- **AND** ⚠️ **parity 断言 MUST 保留**（它是**必要**条件）⇒ 但 MUST NOT 被当作
+  **充分**条件（同构缺陷恒被 parity 掩盖 ⇒ MUST 另有**绝对**语义金标）
 
 ### Requirement: CTEST_TOTAL 同步 MUST 在 phase 边界更新根 AGENTS.md
 
