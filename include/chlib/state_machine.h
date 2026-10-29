@@ -102,6 +102,7 @@
 #include "core/uint.h"
 #include "core/bool.h"
 #include "core/operators.h"
+#include "utils/logger.h"
 #include <array>
 #include <functional>
 #include <vector>
@@ -145,11 +146,7 @@ public:
      * @brief State definition
      */
     struct state_def {
-        state_action_t entry_action;
         state_action_t active_action;
-        state_action_t exit_action;
-        StateEnum next_state_on_exit;  // For automatic transitions
-        bool has_exit_transition;
         
         // Phase 6d.6 (ADR-046): runtime transitions accumulated by
         // transition_when() / transition_to() during build(). Each entry is
@@ -161,44 +158,18 @@ public:
         };
         std::vector<runtime_transition> transitions;
         
-        state_def() : has_exit_transition(false) {}
-        
-        /**
-         * @brief Set entry action
-         */
-        state_def& on_entry(state_action_t action) {
-            entry_action = action;
-            return *this;
-        }
-        
         /**
          * @brief Set active action (executed while in this state)
+         *
+         * NOTE (ADR-050): the closure MUST register transitions ONLY
+         * (`transition_when` / `transition_to`). Writing a register's `next`
+         * or driving an IO port inside it is a **silent** breakage — see
+         * the discipline list in this file's header.
          */
         state_def& on_active(state_action_t action) {
             active_action = action;
             return *this;
         }
-        
-        /**
-         * @brief Set exit action
-         */
-        state_def& on_exit(state_action_t action) {
-            exit_action = action;
-            return *this;
-        }
-        
-        /**
-         * @brief Set automatic transition to next state on exit
-         */
-        ch_state_machine& then(StateEnum next) {
-            next_state_on_exit = next;
-            has_exit_transition = true;
-            return *parent;
-        }
-        
-    private:
-        ch_state_machine* parent;
-        friend class ch_state_machine;
     };
     
 private:
@@ -211,11 +182,10 @@ private:
     // Next state combinational logic
     ch_uint<STATE_BITS> next_state;
     
-    // State changed flag
-    ch_bool state_changed;
-    
-    // Entry state
-    StateEnum entry_state;
+    // Entry state（**编译期**描述值；运行时状态请用 current_state_uint() /
+    // is_in()）。⚠️ MUST 在 ctor 初始化列表中初始化（ADR-050 硬化：此前未初始化
+    // ⇒ 读取它是 UB）。
+    StateEnum entry_state_;
     
     // Build flag
     bool built;
@@ -224,15 +194,30 @@ private:
     // (used by transition_when/transition_to to attribute the transition).
     StateEnum cur_state_;
     
+    /**
+     * @brief Reject an out-of-range state enum value
+     *
+     * ADR-050 硬化：此前 `states_[static_cast<size_t>(s)]` **无边界检查** ⇒
+     * 越界的枚举值是 **UB**（越界读写）。这里改为**显式拒绝**。
+     */
+    static void require_state_in_range(StateEnum s, const char *where) {
+        if (static_cast<size_t>(s) >= N) {
+            CHFATAL_EXCEPTION(
+                "%s: state enum value %u is out of range (N=%zu)",
+                where, static_cast<unsigned>(s), static_cast<size_t>(N));
+        }
+    }
+    
 public:
     /**
      * @brief Constructor
      */
-    ch_state_machine() : state_reg(0_d), next_state(0_d), state_changed(false),
-                         built(false), cur_state_(static_cast<StateEnum>(0)) {
+    ch_state_machine() : state_reg(0_d), next_state(0_d),
+                         entry_state_(static_cast<StateEnum>(0)), built(false),
+                         cur_state_(static_cast<StateEnum>(0)) {
         // Initialize state definitions
         for (size_t i = 0; i < N; i++) {
-            states_[i].parent = this;
+            states_[i].active_action = nullptr;
         }
     }
     
@@ -240,6 +225,7 @@ public:
      * @brief Get state definition for a given state
      */
     state_def& state(StateEnum s) {
+        require_state_in_range(s, "ch_state_machine::state");
         cur_state_ = s;
         return states_[static_cast<size_t>(s)];
     }
@@ -248,6 +234,7 @@ public:
      * @brief Get state definition for a given state (const version)
      */
     const state_def& state(StateEnum s) const {
+        require_state_in_range(s, "ch_state_machine::state");
         return states_[static_cast<size_t>(s)];
     }
     
@@ -273,17 +260,23 @@ public:
      * Simulator every tick — this enables cycle-accurate multi-cycle FSMs.
      */
     void transition_when(const ch_bool& cond, StateEnum target) {
+        require_state_in_range(cur_state_,
+                               "ch_state_machine::transition_when (owner)");
+        require_state_in_range(target,
+                               "ch_state_machine::transition_when (target)");
         states_[static_cast<size_t>(cur_state_)].transitions.push_back(
             {cond, target});
     }
     
     /**
-     * @brief Get current state
+     * @brief Get the **entry** state (compile-time describe value)
+     *
+     * NOTE (ADR-050): renamed from `current_state()` — it never returned the
+     * runtime state. For the runtime state register value use
+     * `current_state_uint()` / `is_in()`.
      */
-    StateEnum current_state() const {
-        // Entry state (compile-time describe value). For the runtime state
-        // register value use current_state_uint() / is_in().
-        return entry_state;
+    StateEnum entry_state() const {
+        return entry_state_;
     }
     
     /**
@@ -297,19 +290,28 @@ public:
      * @brief Check if in a specific state (hardware comparison, runtime)
      */
     ch_bool is_in(StateEnum s) const {
-        return state_reg == ch_uint<STATE_BITS>(static_cast<uint8_t>(s));
+        require_state_in_range(s, "ch_state_machine::is_in");
+        // ⚠️ ADR-050 硬化：此前用 `static_cast<uint8_t>(s)` ⇒ STATE_BITS > 8 时
+        // 会**静默截断** ⇒ 指向错误状态。改用整型字面量构造（宽度 = STATE_BITS）。
+        return state_reg == ch_uint<STATE_BITS>(static_cast<uint32_t>(s));
     }
     
     /**
      * @brief Set entry state
      */
     void set_entry(StateEnum s) {
-        entry_state = s;
+        // ADR-050 硬化：`state_reg` 的初值在**构造期**定死为 `0_d` ⇒ 入口状态
+        // MUST 是**枚举值 0**；此前非 0 的入口会**静默**产生错误的复位态
+        // （`entry_state` 被记录成非 0，但硬件仍复位到 0）。
+        if (static_cast<uint32_t>(s) != 0) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine::set_entry: the entry state MUST be the enum "
+                "value 0 (the state register's reset value is fixed at 0_d); "
+                "got %u",
+                static_cast<unsigned>(s));
+        }
+        entry_state_ = s;
         // NOTE (Phase 6d.6): do NOT clobber state_reg's node with a literal.
-        // The register's init value is fixed at construction (0_d). Entry
-        // state enum value must be 0 for the register to reset to it.
-        // (ch_state_machine is constructed with state_reg(0_d) — keep enum
-        // value 0 == entry state, which holds for all ChipForge FSMs.)
     }
     
     /**
@@ -329,13 +331,8 @@ public:
         if (built) return;
         
         // Set initial state
-        // state_reg init value fixed at construction; entry_state recorded
-        // for current_state() reporting.
-        
-        auto& entry_state_def = states_[static_cast<size_t>(entry_state)];
-        if (entry_state_def.entry_action) {
-            entry_state_def.entry_action();
-        }
+        // state_reg init value fixed at construction; entry_state_ recorded
+        // for entry_state() reporting.
         
         // Phase 6d.6: run every state's active action at describe time so
         // its transition_when()/transition_to() calls (and any combinational
@@ -356,15 +353,11 @@ public:
             const auto& sd = states_[i];
             auto in_s = is_in(static_cast<StateEnum>(i));
             for (const auto& tr : sd.transitions) {
+                // ⚠️ ADR-050 硬化：此前 `static_cast<uint8_t>(tr.target)` 在
+                // STATE_BITS > 8 时会**静默截断** ⇒ 转移指向错误状态。
                 auto target_lit =
-                    ch_uint<STATE_BITS>(static_cast<uint8_t>(tr.target));
+                    ch_uint<STATE_BITS>(static_cast<uint32_t>(tr.target));
                 next_state = select(in_s & tr.cond, target_lit, next_state);
-            }
-            // Legacy automatic exit transition (then())
-            if (sd.has_exit_transition) {
-                auto target_lit = ch_uint<STATE_BITS>(
-                    static_cast<uint8_t>(sd.next_state_on_exit));
-                next_state = select(in_s, target_lit, next_state);
             }
         }
         
@@ -374,50 +367,5 @@ public:
         built = true;
     }
     
-    /**
-     * @brief Execute state machine logic (called in describe())
-     * 
-     * Legacy helper — executes the ENTRY state's active action once.
-     * For runtime behavior, the select-tree emitted by build() is
-     * evaluated by the Simulator each tick; no per-cycle call needed.
-     */
-    void tick_state() {
-        if (!built) {
-            build();
-        }
-        
-        // Execute on_active for current state
-        StateEnum current = current_state();
-        if (states_[static_cast<size_t>(current)].active_action) {
-            states_[static_cast<size_t>(current)].active_action();
-        }
-    }
-    
-    /**
-     * @brief Check if state machine is built
-     */
-    bool is_built() const {
-        return built;
-    }
 };
-
-/**
- * @brief Helper macro for defining state machines with cleaner syntax
- */
-#define CH_STATE_MACHINE(name, state_enum, n) \
-    ch_state_machine<state_enum, n> name;
-
-/**
- * @brief Helper macro for defining a state
- */
-#define CH_STATE(sm, state) \
-    sm.state(state)
-
-/**
- * @brief Helper macro for building state machine
- */
-#define CH_STATE_MACHINE_BUILD(sm, entry_state) \
-    sm.set_entry(entry_state); \
-    sm.build();
-
 } // namespace chlib

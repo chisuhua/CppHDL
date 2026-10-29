@@ -4,41 +4,41 @@
 > ⚠️ **两个 commit**（ADR-050 D10）：commit 1 = 移除+硬化；commit 2 = 贡献 API+dogfood。
 
 ## 0. 准备（**只读**核实 —— 不猜）
-- [ ] 0.1 核实待移除符号的**全仓消费者**（`grep`）⇒ 记录每个符号的消费者清单
+- [x] 0.1 核实待移除符号的**全仓消费者**（`grep`）⇒ 记录每个符号的消费者清单
       ⇒ ⚠️ 已知：`current_state()` / `on_entry` 的**唯一**消费者是
       `tests/test_state_machine.cpp`；其余（`on_exit` / `then()` / `state_changed`
       / `tick_state()` / `is_built()` / 三宏）**零消费者**
-- [ ] 0.2 核实 `set_entry` / `current_state` / `on_entry` 的**实测**行为
+- [x] 0.2 核实 `set_entry` / `current_state` / `on_entry` 的**实测**行为
       （`set_entry(非 0)` ⇒ 复位态仍为 0；`current_state()` ⇒ 返回**编译期** entry）
-- [ ] 0.3 核实 `in_static_destruction()` 的**当前**状态
+- [x] 0.3 核实 `in_static_destruction()` 的**当前**状态
       ⇒ `set_static_destruction()` 的 3 处调用点**全部被注释** ⇒ 守卫**从不生效**
-- [ ] 0.4 核实失败机制：`CHERROR` / `CHFATAL` / `CHREQUIRE` **只打日志**；
+- [x] 0.4 核实失败机制：`CHERROR` / `CHFATAL` / `CHREQUIRE` **只打日志**；
       **只有** `CHFATAL_EXCEPTION` 抛 `std::runtime_error` ⇒ 先例
       `src/core/context.cpp:308`、测试先例 `tests/chlib/test_forwarding.cpp:300`
 
 ## 1. commit 1 —— 移除 + 硬化（先清场）
-- [ ] 1.1 移除 `on_exit` / `exit_action`
-- [ ] 1.2 移除 `on_entry` / `entry_action` + `build()` 里的执行块
-- [ ] 1.3 移除 `then()` / `next_state_on_exit` / `has_exit_transition` +
+- [x] 1.1 移除 `on_exit` / `exit_action`
+- [x] 1.2 移除 `on_entry` / `entry_action` + `build()` 里的执行块
+- [x] 1.3 移除 `then()` / `next_state_on_exit` / `has_exit_transition` +
       `build()` 里的对应分支 + `state_def::parent` + `friend`
-- [ ] 1.4 移除 `state_changed`
-- [ ] 1.5 移除 `tick_state()`
-- [ ] 1.6 移除 `is_built()`
-- [ ] 1.7 移除 `CH_STATE_MACHINE` / `CH_STATE` / `CH_STATE_MACHINE_BUILD`
-- [ ] 1.8 `current_state()` → `entry_state()`；字段 `entry_state` → `entry_state_`
+- [x] 1.4 移除 `state_changed`
+- [x] 1.5 移除 `tick_state()`
+- [x] 1.6 移除 `is_built()`
+- [x] 1.7 移除 `CH_STATE_MACHINE` / `CH_STATE` / `CH_STATE_MACHINE_BUILD`
+- [x] 1.8 `current_state()` → `entry_state()`；字段 `entry_state` → `entry_state_`
       （⚠️ C++ 不允许成员与字段同名）
-- [ ] 1.9 **保留** `transition_to()`（⚠️ 主 spec 第 ② 条的 MUST 与 `## Purpose`
+- [x] 1.9 **保留** `transition_to()`（⚠️ 主 spec 第 ② 条的 MUST 与 `## Purpose`
       **都引用它** ⇒ 删它会**冻错主 spec**）
-- [ ] 1.10 硬化：`entry_state` 字段**在 ctor 初始化列表中初始化**（修 UB）
-- [ ] 1.11 硬化：`set_entry(非 0 枚举)` ⇒ `CHFATAL_EXCEPTION`
-- [ ] 1.12 硬化：`state()`（**const 与非 const 两个**重载）/ `transition_when()`
+- [x] 1.10 硬化：`entry_state` 字段**在 ctor 初始化列表中初始化**（修 UB）
+- [x] 1.11 硬化：`set_entry(非 0 枚举)` ⇒ `CHFATAL_EXCEPTION`
+- [x] 1.12 硬化：`state()`（**const 与非 const 两个**重载）/ `transition_when()`
       （**归属索引** + **target 字面量**）/ `contrib()` 的枚举越界 ⇒
       `CHFATAL_EXCEPTION`（⚠️ `states_[…]` **无边界检查** ⇒ 越界 UB；
       `static_cast<uint8_t>` 会**静默截断** ≥256 的 target）
-- [ ] 1.13 迁移 `tests/test_state_machine.cpp`（`current_state()` / `on_entry` 的
+- [x] 1.13 迁移 `tests/test_state_machine.cpp`（`current_state()` / `on_entry` 的
       **唯一**消费者）⇒ 含把「`on_entry` 在 build 期被调用」那条用例改为
       **反映新事实**（该 API 已不存在 ⇒ 用例 MUST 改为断言**运行时** `is_in()`）
-- [ ] 1.14 编译 0 error / 0 **新增** warning；`ctest -R state_machine` 绿
+- [x] 1.14 编译 0 error / 0 **新增** warning；`ctest -R state_machine` 绿
 
 ## 2. commit 2 —— 状态守卫贡献 API
 - [ ] 2.1 `ch_state_machine` 新增 `contribution` 结构 + `contributions_` +
