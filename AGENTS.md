@@ -368,6 +368,14 @@ ctest --output-on-failure
   **验收**：`ctest -LE perf` **191/191** · `run_all_ported_tests.sh` **28/28** · `run_all_samples.sh` **35/35** · 13 个护栏（含 4 个 `--self-test`）全 exit 0 · **计数不变**（202 / 38 / 191 / 17）。
   ⚠️ **待裁决（architect / ADR）**：`ch_reg` 的「**多源 next**」⇒ 选项 A（现状，单源 + `select`）/ B（多源合成 select 树）/ C（状态局部寄存器抽象）⇒ ⚠️ **选项 B 会静默改变既有语义**（当初那两处「多写」**正是缺陷** ⇒ 改成多源会让它们**变成合法的**）⇒ ⇒ **本 change 是选项 B 的前置**；决策材料见该 change 的 `design.md` §5。
 
+- **2026-10-29 FSM 的**状态动作语义**已立项（实施 ADR-050，`chlib-fsm-action-semantics-2026-10`）** → 上一条（`chlib-fsm-semantics-2026-10`）把两条陷阱写成**契约 + 静态护栏**（把「静默」变成「可抓」）；本条处理**更上位的根因** —— `ch_state_machine` 的**设计意图**（2026-03-30 设计文档：`on_active` ≡ SpinalHDL `whenIsActive` = **状态守卫**）与**实现**（`build()` **遍历所有** state 执行各自 `on_active` ⇒ 展平）的**语义分歧**。
+  ✅ **决策（ADR-050，2 轮对抗审稿：REJECT → APPROVE_WITH_CONDITIONS，0 BLOCKER）**：**状态守卫的组合贡献** —— 新增 `sm.contrib(target, S, value)` + `sm.resolve_hold(reg)` / `sm.resolve_or(target, default)` ⇒ 框架只合成**一条** select 链、**写入动作留在用户手里** ⇒ ⇒ **`core/` 与 `ch_reg`/`ch_out` 的公开契约零变化** ⇒ capability 第 ① 条零 MODIFIED。
+  ⚠️ **同时物理移除死 / 误导 API**（15 个符号 + `current_state()`→`entry_state()` 改名）—— 依 Zero-Debt「Never 'leave for later'」+ ADR-043 先例（`on_exit` **从不执行** · `on_entry` 只在 build 期对 entry 态执行一次 · `tick_state()` **说谎**（`current_state()` 返回**编译期** entry ⇒ 永远跑 entry 态闭包 + 二次执行重复发射节点）· `state_changed` **从不赋值**）。
+  ⚠️ **保留 `transition_to()`**（不删）：主 spec 第 ② 条的 MUST 与 `## Purpose` **都引用它** ⇒ 删它会**冻错主 spec** ⇒ 归档**禁** `--skip-specs`（capability **MODIFIED ×1**：第 ⑥ 条放宽为「手写 `select` **或** `resolve_*` 生成」+ **以 NOTE 冻结**已知盲区）。
+  ⚠️ **实施期 MUST 核对的高发点**：检出**必须**用 **`CHFATAL_EXCEPTION`** —— ⚠️ 实测 `CHERROR` / `CHFATAL` / `CHREQUIRE` **只打日志、不抛异常** ⇒ 用它们做安全网 = **假安全网**；合成链**必须**是**一条**表达式（**MUST NOT** 每状态一个 mux ⇒ 重新引入多驱动）；贡献表 key **必须**用 `impl()` 指针（⚠️ 全仓输入节点名恒为 `unnamed_input` ⇒ 用名字必错）；迁移时旧手写链**必须物理删除** ⇒ 否则双写 ⇒ last-wins ⇒ 金标仍全绿 ⇒ contrib 路径可能是**死的** ⇒ **变异 M1「删任一 contrib ⇒ 转红」是「假绿」的最后一道闸**。
+  ⚠️ **顺带挖出**：① `entry_state` 字段**未在 ctor 初始化列表** ⇒ 读它是 **UB**；② `set_entry(非 0 枚举)` = **静默错误复位态**（`state_reg` 初值构造期定死 `0_d`）；③ `set_static_destruction()` 的 **3** 处调用点**全部被注释** ⇒ `in_static_destruction()` 守卫**当前从不生效**（ADR-017 §2.2 的欠账仍在）。
+  **状态**：🟡 **已立项，未实施**（两个 commit：① 移除+硬化 ② 贡献 API+dogfood）⇒ 实施是 builder 的活。
+
 - **2026-10-28 `io().X = value` 落在 `ch_in` 上的静默失效修复（`input-port-assignment-antipattern-fix-2026-10`）** → 修 **4** 处（`examples/spinalhdl-ported/uart/uart_tx.cpp`：`frame_start`×3 + `data`×1）⇒ 改成 `simulator.set_input_value(port, <纯整数>)`。
   ⚠️ **缺陷机制**：`ch_in` 的 `operator=` 只做 `CHERROR("Cannot assign value to input port!")` + **无任何赋值动作**（`include/core/io.h:236-240`）⇒ 端口保持未驱动 ⇒ 但**编译通过 / 运行不崩 / exit 0** ⇒ `run_all_ported_tests.sh` 判 PASS ⇒ **静默失效**。
   ✅ **A/B 实测证据**（`git show HEAD:<file>` 取出旧源、同一份 flags/link 命令编成 `/tmp/opencode/uart_tx_old`）：`Cannot assign value to input port!` **4 条 → 0 条**。

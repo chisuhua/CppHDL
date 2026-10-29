@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-10-29
+# 本 change 实施 **ADR-050**（`ch_state_machine` 的状态动作语义 + 死/误导 API
+# 的物理移除）⇒ capability `chlib-state-machine-semantics` **MODIFIED ×1**
+# （第 ⑥ 条）⇒ 归档时 **禁** 用 `--skip-specs`。
+#
+# ⚠️ 实施分**两个 commit**（ADR-050 D10）：commit 1 = 移除 + 硬化（先清场）；
+#    commit 2 = 贡献 API + 迁移 dogfood。
