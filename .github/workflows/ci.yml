@@ -239,6 +239,22 @@ jobs:
       shell: bash
       run: scripts/verify_test_counts.sh
 
+    - name: Verify dual-backend parity coverage count
+      # Guards the **parity** count (not the label count): the 9 contract-locked
+      # SINGLE-backend verilator reference implementations also carry the
+      # `verilator_e2e` label => the label anchor (VERILATOR_E2E_TOTAL) cannot
+      # see parity shrinkage. This guard counts the test sources that really
+      # carry a `DUAL_BACKEND_TEST_PAIR(` call (comments/strings stripped) plus
+      # the hand-crafted真 dual whitelist, and cross-checks them against the
+      # labelled ctest entries via the CMake-generated build tree.
+      # See openspec/changes/archive/2026-10-28-dual-backend-full-coverage-inventory-2026-10/design.md
+      shell: bash
+      run: scripts/verify_dual_backend_parity.sh
+
+    - name: Verify dual-backend parity guard self-test
+      shell: bash
+      run: scripts/verify_dual_backend_parity.sh --self-test
+
     - name: Verify roadmap fragments consistency
       # Roadmap bookkeeping guardrail: the root AGENTS.md AUTO block and
       # .rddf/roadmap/features/*.md front-matter are TWO sources of truth
@@ -907,6 +923,14 @@ jobs:
     - name: Verify AGENTS.md test counts
       shell: bash
       run: scripts/verify_test_counts.sh
+
+    - name: Verify dual-backend parity coverage count
+      shell: bash
+      run: scripts/verify_dual_backend_parity.sh
+
+    - name: Verify dual-backend parity guard self-test
+      shell: bash
+      run: scripts/verify_dual_backend_parity.sh --self-test
 
     - name: Verify roadmap fragments consistency
       # Roadmap bookkeeping guardrail: the root AGENTS.md AUTO block and

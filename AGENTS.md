@@ -301,6 +301,23 @@ ctest --output-on-failure
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
 - VERILATOR_E2E_TOTAL: 38
+<!-- CI anchor: 「**双后端 parity 源文件数**」（2026-10-30，planner 判据修订配套）。
+     scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
+     口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
+     ⚠️ 它防的是「**parity** 静默缩面」—— VERILATOR_E2E_TOTAL 防的是
+     「**标签** 静默缩面」，而 9 个契约锁定的**单后端** verilator 参考实现
+     **也**带 verilator_e2e 标签 ⇒ ⇒ 标签数**看不见** parity 缩面。
+     ⚠️ 计数口径 = 「剥注释与字符串后含 `DUAL_BACKEND_TEST_PAIR(` **调用**的
+     测试源文件」+ 「hand-crafted 真 dual 白名单（1 个）」⇒ 现值 **29**。
+     任何增减 MUST 显式更新本行。Do not reformat. -->
+- DUAL_BACKEND_PARITY_TOTAL: 29
+<!-- CI anchor: 「**双后端 parity macro 调用数**」= 上一个锚点的**深度**维度。
+     ⚠️ 为什么两个锚点都要：只钉「文件数」的话，**从有多个 dual pair 的文件里
+     删掉 1 个 pair** ⇒ 该文件仍被计数 ⇒ 护栏**看不见**（实测：变异 M1 恒绿）
+     ⇒ ⇒ 深度锚点补上这个盲区。
+     计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
+     任何增减 MUST 显式更新本行。Do not reformat. -->
+- DUAL_BACKEND_PARITY_PAIRS: 184
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——
