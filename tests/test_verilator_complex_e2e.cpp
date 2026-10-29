@@ -242,25 +242,28 @@ public:
         //      「左移」覆盖 ⇒ `shift` **恒 0**、`bit_count` **从不 reset**。
         // ------------------------------------------------------------------
 
+        // ✅ ADR-050 D4：**状态守卫贡献 API** —— 「每状态各写一次」终于**可表达**
+        //    （此前 last-wins ⇒ 不可表达 ⇒ 只能手写一条 select 链）。
+        //    每状态一条 `contrib` ⇒ 框架合成**一条**链 ⇒ 末尾**一次** resolve
+        //    ⇒ **写入点仍由本文件持有**（`ch_reg` 的单 next 源契约零变化）。
+        //
         // bit_count：IDLE 且 start ⇒ 清零；TRANSFER 且**非**最后一位 ⇒ +1；
         // 最后一位（bit_count == 7）⇒ 保持 7（3-bit ⇒ 不回绕，观测面无歧义）。
         // ⚠️ `bit_count + 1` 的结果宽度是 **4**（`add_op` = max(M,N)+1）⇒
         //    这里显式截断回 **3** 位（两后端宽度一致，零歧义）。
-        bit_count->next = select(
-            sm.is_in(SpiState::IDLE) & start_now,
-            ch_uint<3>(0_d),
-            select(sm.is_in(SpiState::TRANSFER) & !last_bit,
-                   ch_uint<3>(bit_count + ch_uint<3>(1_d)),
-                   bit_count));
+        sm.contrib(bit_count, SpiState::IDLE,
+                   select(start_now, ch_uint<3>(0_d), bit_count));
+        sm.contrib(bit_count, SpiState::TRANSFER,
+                   select(!last_bit,
+                          ch_uint<3>(bit_count + ch_uint<3>(1_d)),
+                          bit_count));
+        bit_count->next = sm.resolve_hold(bit_count);
 
         // shift：IDLE 且 start ⇒ 载入 `data_in`；TRANSFER ⇒ 左移 1 位
         // （MSB-first：`mosi` 取 `shift[7]`，每拍左移 ⇒ 依次移出 bit7..bit0）。
-        shift->next = select(
-            sm.is_in(SpiState::IDLE) & start_now,
-            data_v,
-            select(sm.is_in(SpiState::TRANSFER),
-                   shl<8>(shift, 1_d),
-                   shift));
+        sm.contrib(shift, SpiState::IDLE, select(start_now, data_v, shift));
+        sm.contrib(shift, SpiState::TRANSFER, shl<8>(shift, 1_d));
+        shift->next = sm.resolve_hold(shift);
 
         // ---- 输出：各**只驱动一次** --------------------------------------
         io().dbg_state = sm.current_state_uint();

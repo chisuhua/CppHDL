@@ -124,52 +124,73 @@ public:
         //    —— MUST 写在 `sm.build()` **之后**（`build()` 内部会执行各状态的
         //    `on_active`；若在 `on_active` 里写 `reg->next` ⇒ 多状态覆盖 ⇒
         //    last-wins ⇒ 只有最后发射的那个状态生效）。
+        //
+        // ✅ ADR-050 D4：**状态守卫贡献 API** —— 「每状态各写一次」终于
+        //    **可表达**（此前 last-wins ⇒ 不可表达 ⇒ 只能手写一条 select 链）。
+        //    每状态一条 `contrib` ⇒ 框架合成**一条**链 ⇒ 末尾**一次** resolve
+        //    ⇒ **写入点仍由本文件持有**（`ch_reg` 的单 next 源契约零变化）。
         // ====================================================================
 
         // 波特率计数器：IDLE 保持；START/DATA/STOP 每拍 +1，到期清零
-        baud_counter->next = select(
-            sm.is_in(UartTxState::START) | sm.is_in(UartTxState::DATA) |
-                sm.is_in(UartTxState::STOP),
-            select(baud_done, ch_uint<16>(0_d), baud_counter + ch_uint<16>(1_d)),
-            baud_counter);
+        sm.contrib(baud_counter, UartTxState::START,
+                   select(baud_done, ch_uint<16>(0_d),
+                          baud_counter + ch_uint<16>(1_d)));
+        sm.contrib(baud_counter, UartTxState::DATA,
+                   select(baud_done, ch_uint<16>(0_d),
+                          baud_counter + ch_uint<16>(1_d)));
+        sm.contrib(baud_counter, UartTxState::STOP,
+                   select(baud_done, ch_uint<16>(0_d),
+                          baud_counter + ch_uint<16>(1_d)));
+        baud_counter->next = sm.resolve_hold(baud_counter);
 
         // 位计数器：START 到期清零；DATA 到期时按「是否最后一位」决定清零 / +1
-        bit_counter->next = select(
-            sm.is_in(UartTxState::DATA) & baud_done,
-            select(bit_last, ch_uint<3>(0_d), bit_counter + ch_uint<3>(1_d)),
-            select(sm.is_in(UartTxState::START) & baud_done,
-                   ch_uint<3>(0_d), bit_counter));
+        //   （未到期 ⇒ 保持 ⇒ 写进 value 表达式内部）
+        sm.contrib(bit_counter, UartTxState::DATA,
+                   select(baud_done,
+                          select(bit_last, ch_uint<3>(0_d),
+                                 bit_counter + ch_uint<3>(1_d)),
+                          bit_counter));
+        sm.contrib(bit_counter, UartTxState::START,
+                   select(baud_done, ch_uint<3>(0_d), bit_counter));
+        bit_counter->next = sm.resolve_hold(bit_counter);
 
         // 移位寄存器：
         //   IDLE 且 frame_start ⇒ 载入 {data, 起始位 0}（bit0 = 起始位）
         //   DATA 且波特到期     ⇒ 右移一位（最低位补 1；⚠️ 该补位**不参与**
         //                          输出 —— 停止位来自输出 `select` 的常量分支）
         //   STOP 且波特到期     ⇒ 恢复空闲全 1
-        shift_reg->next = select(
-            sm.is_in(UartTxState::DATA) & baud_done,
-            (shift_reg >> ch_uint<9>(1_d)) | ch_uint<9>(1_d),
-            select(sm.is_in(UartTxState::STOP) & baud_done,
-                   ch_uint<9>(511_d),
-                   select(sm.is_in(UartTxState::IDLE) & frame_start,
+        sm.contrib(shift_reg, UartTxState::DATA,
+                   select(baud_done,
+                          (shift_reg >> ch_uint<9>(1_d)) | ch_uint<9>(1_d),
+                          shift_reg));
+        sm.contrib(shift_reg, UartTxState::STOP,
+                   select(baud_done, ch_uint<9>(511_d), shift_reg));
+        sm.contrib(shift_reg, UartTxState::IDLE,
+                   select(frame_start,
                           (data_v << ch_uint<9>(1_d)) | ch_uint<9>(0_d),
-                          shift_reg)));
+                          shift_reg));
+        shift_reg->next = sm.resolve_hold(shift_reg);
 
         // 输出 uart_tx：**只驱动一次**（约束 ③）
         //   IDLE = 1（空闲高）/ START = 0（起始位）/ DATA = 数据位 / STOP = 1（停止位）
         //   ⚠️ 数据位取 `bit1`（= `(shift_reg >> 1) & 1`）⇒ 完整发出 bit1..bit8
         //      （原写法取 `bit0` = 起始位 ⇒ 少发 `data[7]` ⇒ off-by-one）
-        io().uart_tx <<= select(
-            sm.is_in(UartTxState::START),
-            ch_bool(false),
-            select(sm.is_in(UartTxState::DATA),
+        // ⚠️ 输出**必须**显式给默认（`resolve_or`）：输出的「保持」= 引用自身
+        //    = **组合环** ⇒ 拓扑排序 CHFATAL。
+        sm.contrib(io().uart_tx, UartTxState::IDLE, ch_bool(true));
+        sm.contrib(io().uart_tx, UartTxState::START, ch_bool(false));
+        sm.contrib(io().uart_tx, UartTxState::DATA,
                    ((shift_reg >> ch_uint<9>(1_d)) & ch_uint<9>(1_d)) !=
-                       ch_uint<9>(0_d),
-                   ch_bool(true)));
+                       ch_uint<9>(0_d));
+        sm.contrib(io().uart_tx, UartTxState::STOP, ch_bool(true));
+        io().uart_tx <<= sm.resolve_or(io().uart_tx, ch_bool(true));
 
         // 输出 busy：**只驱动一次** —— START/DATA 期间为 1，IDLE/STOP 为 0
-        io().busy <<= select(
-            sm.is_in(UartTxState::START) | sm.is_in(UartTxState::DATA),
-            ch_bool(true), ch_bool(false));
+        sm.contrib(io().busy, UartTxState::IDLE, ch_bool(false));
+        sm.contrib(io().busy, UartTxState::START, ch_bool(true));
+        sm.contrib(io().busy, UartTxState::DATA, ch_bool(true));
+        sm.contrib(io().busy, UartTxState::STOP, ch_bool(false));
+        io().busy <<= sm.resolve_or(io().busy, ch_bool(false));
     }
 };
 

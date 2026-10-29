@@ -119,6 +119,71 @@ uint64_t read_port(ch::Simulator &sim, ch::core::lnodeimpl *ln) {
     return static_cast<uint64_t>(it->second);
 }
 
+// ---------------------------------------------------------------------------
+// 「编译期拒绝」的**可执行**断言（ADR-050 §5.2）
+//
+// ⚠️ 被删除的调用在 SFINAE 语境下是**硬错误**（实测）⇒ 无法用 `void_t` 检测
+//    ⇒ 故框架**故意不提供**那些重载（「无匹配重载」形态）⇒ 这样「编译不过」
+//    才**可被自动化断言**。
+// ---------------------------------------------------------------------------
+template <typename Sm, typename Target, typename = void>
+struct can_contrib : std::false_type {};
+template <typename Sm, typename Target>
+struct can_contrib<Sm, Target, std::void_t<decltype(
+                     std::declval<Sm &>().contrib(
+                         std::declval<const Target &>(),
+                         std::declval<typename Sm::state_type>(),
+                         std::declval<const Target &>()))>> : std::true_type {};
+
+template <typename Sm, typename Target, typename = void>
+struct can_resolve_hold : std::false_type {};
+template <typename Sm, typename Target>
+struct can_resolve_hold<Sm, Target, std::void_t<decltype(
+                         std::declval<Sm &>().resolve_hold(
+                             std::declval<Target &>()))>> : std::true_type {};
+
+/// `resolve_or` **必须**带 default 形参 ⇒ 单参调用 MUST 编译不过。
+template <typename Sm, typename Target, typename = void>
+struct can_resolve_or_without_default : std::true_type {};
+template <typename Sm, typename Target>
+struct can_resolve_or_without_default<Sm, Target, std::void_t<decltype(
+    std::declval<Sm &>().resolve_or(std::declval<Target &>()))>>
+    : std::false_type {};
+
+// ---------------------------------------------------------------------------
+// 「默认尾部」的 DUT：只贡献 STATE_A ⇒ 其余状态走 `resolve_or` 的**显式默认**
+//
+// ⚠️ 这个 DUT 存在的理由（**变异发现**）：`resolve_or` 的 default 参数在两个
+//    dogfood fixture 里**永远取不到**（4 个状态**全部**被贡献）⇒ 变异
+//    「resolve_or 忽略 default」⇒ **恒绿** ⇒ ⇒ 默认尾部**零覆盖** ⇒
+//    ⇒ 必须有一个**未覆盖**状态的 DUT 才能守住它。
+// ---------------------------------------------------------------------------
+class DefaultTailDut : public ch::Component {
+public:
+    __io(ch_out<ch_uint<8>> dbg_value;);
+
+    DefaultTailDut(ch::Component *parent = nullptr,
+                   const std::string &name = "default_tail_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        ch_reg<ch_uint<8>> r(0_d, "r");
+        chlib::ch_state_machine<TestState, 3> sm;
+        sm.state(TestState::STATE_A).on_active([&] {
+            sm.transition_when(ch_bool(true), TestState::STATE_B);
+        });
+        sm.state(TestState::STATE_B).on_active([]() {});
+        sm.state(TestState::STATE_C).on_active([]() {});
+        sm.set_entry(TestState::STATE_A);
+        sm.build();
+        // ⚠️ **只**在 STATE_A 贡献 ⇒ STATE_B / STATE_C 走**默认尾部**（= 99）
+        sm.contrib(r, TestState::STATE_A, ch_uint<8>(7_d));
+        r->next = sm.resolve_or(r, ch_uint<8>(99_d));
+        io().dbg_value = r;
+    }
+};
+
 } // namespace
 
 TEST_CASE("State Machine: removed APIs MUST NOT exist",
@@ -135,6 +200,30 @@ TEST_CASE("State Machine: removed APIs MUST NOT exist",
     STATIC_REQUIRE(!has_tick_state<Sm>::value);
     STATIC_REQUIRE(!has_is_built<Sm>::value);
     STATIC_REQUIRE(!has_current_state<Sm>::value);
+}
+
+TEST_CASE("State Machine: contrib / resolve MUST reject invalid targets",
+          "[state_machine][adr050][compile]") {
+    using Sm = chlib::ch_state_machine<TestState, 3>;
+    using Reg = ch_reg<ch_uint<8>>;
+    using InPort = ch_in<ch_bool>;
+    using OutPort = ch_out<ch_bool>;
+
+    // ✅ 正向对照：寄存器 / 输出端口**可以** contrib。
+    STATIC_REQUIRE(can_contrib<Sm, Reg>::value);
+    STATIC_REQUIRE(can_contrib<Sm, OutPort>::value);
+    // ✅ 正向对照：寄存器**可以** resolve_hold。
+    STATIC_REQUIRE(can_resolve_hold<Sm, Reg>::value);
+
+    // ⛔ `ch_in` 参与 contrib ⇒ **编译不过**（输入由外部驱动；给它接状态逻辑
+    //    会让它不再是顶层端口 ⇒ 见根 AGENTS.md）。
+    STATIC_REQUIRE(!can_contrib<Sm, InPort>::value);
+    // ⛔ 输出端口调 `resolve_hold` ⇒ **编译不过**（输出的「保持」= 引用自身
+    //    = **组合环** ⇒ 拓扑排序 CHFATAL ⇒ 必须用 `resolve_or(out, default)`）。
+    STATIC_REQUIRE(!can_resolve_hold<Sm, OutPort>::value);
+    // ⛔ `resolve_or` 不带 default ⇒ **编译不过**。
+    STATIC_REQUIRE(can_resolve_or_without_default<Sm, Reg>::value);
+    STATIC_REQUIRE(can_resolve_or_without_default<Sm, OutPort>::value);
 }
 
 TEST_CASE("State Machine: entry_state() reports the compile-time entry state",
@@ -178,6 +267,126 @@ TEST_CASE("State Machine: runtime state after reset", "[state_machine][adr050]")
 
     auto *state = dev.instance().io().dbg_state.impl();
     REQUIRE(read_port(sim, state) == 0u); // STATE_A（枚举值 0 == 复位值）
+}
+
+// ---------------------------------------------------------------------------
+// 运行期拒绝（ADR-050 D5）
+//
+// ⚠️ 失败机制 MUST 是 **`CHFATAL_EXCEPTION`**（`throw std::runtime_error`）——
+//    实测 `CHERROR` / `CHFATAL` / `CHREQUIRE` **只打日志、不抛异常**
+//    ⇒ 用它们做安全网 = **假安全网**。
+// ---------------------------------------------------------------------------
+TEST_CASE("State Machine: contrib / resolve MUST reject misuse",
+          "[state_machine][adr050][negative]") {
+    // ⚠️ 用别名（`ch_state_machine<TestState, 3>` 里的逗号会被 `REQUIRE_THROWS_AS`
+    //    的预处理切开 ⇒ 宏参数数不对）。
+    using Sm = chlib::ch_state_machine<TestState, 3>;
+    // 重复贡献（同一 target + 同一 state）
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            sm.contrib(r, TestState::STATE_A, ch_uint<8>(1_d));
+            sm.contrib(r, TestState::STATE_A, ch_uint<8>(2_d));
+            // ⚠️ 补 resolve ⇒ **隔离**「析构未 resolve」那条检查
+            //    （否则该 lambda 会因析构抛异常 ⇒ 掩盖被测的那条 ⇒ 变异抓不到）
+            r->next = sm.resolve_hold(r);
+        }(),
+        std::runtime_error);
+
+    // resolve 之后再 contrib
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            sm.contrib(r, TestState::STATE_A, ch_uint<8>(1_d));
+            r->next = sm.resolve_hold(r);
+            sm.contrib(r, TestState::STATE_B, ch_uint<8>(2_d));
+        }(),
+        std::runtime_error);
+
+    // 同一 target 两次 resolve
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            sm.contrib(r, TestState::STATE_A, ch_uint<8>(1_d));
+            r->next = sm.resolve_hold(r);
+            (void)sm.resolve_hold(r);
+        }(),
+        std::runtime_error);
+
+    // contrib 了但**从未 resolve** ⇒ 析构时检出（贡献被静默丢弃 ⇒ 寄存器保持旧值）
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            sm.contrib(r, TestState::STATE_A, ch_uint<8>(1_d));
+            // ⚠️ 故意**不** resolve ⇒ 析构时抛
+        }(),
+        std::runtime_error);
+
+    // 直接写 + 贡献写并存（直接写在前 ⇒ contrib 时即可检出）
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            r->next = ch_uint<8>(7_d);   // 直接写
+            sm.contrib(r, TestState::STATE_A, ch_uint<8>(1_d));
+            r->next = sm.resolve_hold(r);
+        }(),
+        std::runtime_error);
+
+    // 枚举越界（`states_[…]` 越界是 UB ⇒ 显式拒绝）
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            sm.contrib(r, static_cast<TestState>(99), ch_uint<8>(1_d));
+            r->next = sm.resolve_hold(r);
+        }(),
+        std::runtime_error);
+
+    // value 宽度**窄于** target ⇒ 零扩展会改变语义 ⇒ 显式拒绝
+    REQUIRE_THROWS_AS(
+        [] {
+            auto ctx = std::make_unique<ch::core::context>("sm_ctx");
+            ch::core::ctx_swap swap(ctx.get());
+            Sm sm;
+            ch_reg<ch_uint<8>> r(0_d, "r");
+            sm.contrib(r, TestState::STATE_A, ch_uint<4>(1_d));
+            r->next = sm.resolve_hold(r);
+        }(),
+        std::runtime_error);
+}
+
+TEST_CASE("State Machine: resolve_or default tail MUST apply to uncovered states",
+          "[state_machine][adr050][default]") {
+    // ⚠️ 本用例守住 `resolve_or` 的**默认尾部**：未被贡献覆盖的状态 ⇒ 取
+    //    显式 default（99）⇒ 若 default 被忽略（变异 M4）⇒ 值变成 0 ⇒ 转红。
+    ch::ch_device<DefaultTailDut> dev;
+    ch::Simulator sim(dev.context());
+    auto *value = dev.instance().io().dbg_value.impl();
+
+    // cycle 0：状态 = STATE_A ⇒ 被贡献覆盖 ⇒ 7
+    sim.tick(1);
+    REQUIRE(read_port(sim, value) == 7u);
+
+    // cycle 1：状态已转到 STATE_B ⇒ **未被覆盖** ⇒ 默认尾部 = 99
+    sim.tick(1);
+    REQUIRE(read_port(sim, value) == 99u);
 }
 
 TEST_CASE("State Machine: compute_state_bits", "[state_machine][utility]") {

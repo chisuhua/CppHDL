@@ -99,17 +99,33 @@ std::vector<lnodeimpl *> resolved_targets_;   // 已 resolve 的 target（去重
 ⚠️ **析构期 `CHFATAL_EXCEPTION` 不可测** ⇒ 该检出 MUST 另有**可测**路径
 （静态护栏的词法规则：文件内出现 `contrib(` 但无对应 `resolve_*` ⇒ 违规）。
 
-### 2.5 `ch_in` 的编译期拒绝
+### 2.5 编译期拒绝：**无可用重载**（**不是** `= delete`）
 
-`port<T, input_direction>` 的方向是**类型参数** ⇒ 三个重载即可，**零 core 改动**：
+`port<T, input_direction>` 的方向是**类型参数** ⇒ 重载即可，**零 core 改动**。
+
+⚠️ **实施期实测的关键发现**：被**删除**的调用在 SFINAE 语境下是**硬错误**
+（实测：`std::void_t` 检测不到 ⇒ 整个 TU 编译失败）⇒ ⇒ 用 `= delete` 的写法
+**无法**写成**自动化**的编译期断言 ⇒ ⇒ 改用「**无可用重载**」形态：
 
 ```cpp
+// ✅ 提供：寄存器 / 输出端口
 template <typename T, typename V> void contrib(const ch_reg<T>&, StateEnum, const V&);
 template <typename T, typename V> void contrib(const port<T, output_direction>&, StateEnum, const V&);
-template <typename T, typename V> void contrib(const port<T, input_direction>&, StateEnum, const V&) = delete;
+// ⛔ **故意不提供**：`port<T, input_direction>` ⇒ 调用「无匹配重载」⇒ 编译不过
+//    （同理：`resolve_hold` 也不提供 `port<T, output_direction>` 重载）
 ```
 
-取 `regimpl*` 走 `ch_reg` 的 `operator lnode<T>()` ⇒ `.impl()`（公开 API）。
+⇒ ⇒ 这样「编译不过」才**可被自动化断言**（`std::void_t` 检测）⇒
+`tests/test_state_machine.cpp` 的 `STATIC_REQUIRE(!can_contrib<Sm, InPort>::value)`
+等 **6** 条**编译期**断言成立 ⇒ ADR-050 §5.2 的「`= delete` / **无该签名** ⇒
+编译不过」取**后者**。
+
+⚠️ **DX 代价（如实登记）**：错误信息是「no matching function」而非
+「use of deleted function」⇒ 头注释里写明了原因。
+
+取 `regimpl*` 走 `ch_reg` 的 `operator lnode<T>()` ⇒ `.impl()`（公开 API）；
+「目标已有 next 源」的检查走 **代理节点的 `src(0)`**（= 寄存器本体）⇒
+**零 `core/` 改动**。
 
 ## 3. 移除与硬化的逐项清单
 

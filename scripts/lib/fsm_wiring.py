@@ -15,6 +15,8 @@
 违规种类（`kind`）：
     `reg-next-in-closure`  —— 闭包内写 `<reg>->next = ...`
     `io-assign-in-closure`  —— 闭包内给 `io().<port>` 赋值（`=` 或 `<<=`）
+    `contrib-in-closure`   —— 闭包内调用 `sm.contrib(...)`（ADR-050 D4：
+                             贡献 MUST 在闭包**之外** ⇒ 闭包内**只**注册转移）
     `parse-error`          —— 闭包体无法配平（**fail-closed** ⇒ 判违规）
 
 ⚠️ **能力边界（如实声明，勿再夸张）**：
@@ -42,6 +44,8 @@ RE_REG_NEXT = re.compile(r"->\s*next\s*=(?!=)")
 # 闭包内给 IO 端口赋值（`=` / `<<=`；`==` / `!=` 不算）
 RE_IO_ASSIGN = re.compile(
     r"io\s*\(\s*\)\s*\.\s*[A-Za-z_]\w*\s*(?:<<\s*)?=(?!=)")
+# 闭包内调用 `contrib(...)`（ADR-050 D4：贡献 MUST 在闭包之外）
+RE_CONTRIB_CALL = re.compile(r"\bcontrib\s*\(")
 
 
 def strip_comments_and_strings(text):
@@ -199,6 +203,11 @@ def analyze_text(text, path="<text>"):
             off = body_start + m.start()
             line = stripped.count("\n", 0, off) + 1
             out.append(Violation("io-assign-in-closure", path, line,
+                                 _snippet(lines, line)))
+        for m in RE_CONTRIB_CALL.finditer(body):
+            off = body_start + m.start()
+            line = stripped.count("\n", 0, off) + 1
+            out.append(Violation("contrib-in-closure", path, line,
                                  _snippet(lines, line)))
     return out
 

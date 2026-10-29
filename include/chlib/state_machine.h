@@ -104,6 +104,7 @@
 #include "core/operators.h"
 #include "utils/logger.h"
 #include <array>
+#include <exception>
 #include <functional>
 #include <vector>
 #include <cstdint>
@@ -194,6 +195,23 @@ private:
     // (used by transition_when/transition_to to attribute the transition).
     StateEnum cur_state_;
     
+    // ------------------------------------------------------------------
+    // ADR-050 D4：状态守卫贡献（state-guarded contribution）
+    // ------------------------------------------------------------------
+    //
+    // 一条 contribution = 「在状态 S 下，target 的值是 value」。
+    // resolve_* 把同一 target 的全部贡献合成**一条** select 链（守卫 = is_in(S)），
+    // **写入动作仍由用户自己做**（`reg->next = sm.resolve_hold(reg);`）⇒
+    // `ch_reg` 的单 next 源契约**零变化**。
+    struct contribution {
+        lnodeimpl *target;  // 目标节点（reg 的 proxy / output 的 impl）
+        lnodeimpl *reg;     // 非空 ⇒ 目标是寄存器（用于查「已有 next 源」）
+        StateEnum state;    // 归属状态（守卫 = is_in(state)）
+        lnodeimpl *value;   // 贡献值（**eager** 捕获的节点）
+    };
+    std::vector<contribution> contributions_;
+    std::vector<lnodeimpl *> resolved_targets_;
+    
     /**
      * @brief Reject an out-of-range state enum value
      *
@@ -206,6 +224,103 @@ private:
                 "%s: state enum value %u is out of range (N=%zu)",
                 where, static_cast<unsigned>(s), static_cast<size_t>(N));
         }
+    }
+    
+private:
+    template <unsigned TargetW, unsigned ValueW, typename V>
+    void add_contribution(lnodeimpl *target, lnodeimpl *reg, StateEnum s,
+                          const V &value) {
+        // (1) 状态枚举越界（`states_[…]` 越界是 UB）
+        require_state_in_range(s, "ch_state_machine::contrib (state)");
+        // (2) 宽度：value 不得**窄于** target（否则 select 的 max(width) 会
+        //     **零扩展** ⇒ 语义被改变）⇒ 显式拒绝。
+        //     value **宽于** target 是允许的（手写 select 链同样如此：链宽 =
+        //     max(...) ⇒ 最终在寄存器赋值处截断）⇒ 此处**显式截断**到 target
+        //     宽度 ⇒ 与手写链**逐位等价**。
+        if (ValueW < TargetW) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine::contrib: value width %u is narrower than "
+                "target width %u (the select tree would zero-extend => the "
+                "value's semantics would change)",
+                ValueW, TargetW);
+        }
+        // (3) 不得贡献给状态寄存器自身（会覆盖 build() 写的转移树 ⇒ 转移全死）
+        if (target == state_reg.impl()) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine::contrib: the state register itself MUST NOT "
+                "receive a contribution");
+        }
+        // (4) 同一 (target, state) 不得重复贡献
+        for (const auto &c : contributions_) {
+            if (c.target == target && c.state == s) {
+                CHFATAL_EXCEPTION(
+                    "ch_state_machine::contrib: duplicate contribution for the "
+                    "same target and state");
+            }
+        }
+        // (5) 目标已有 next 源 ⇒ 「直接写 + 贡献写」并存
+        if (reg && reg->num_srcs() > 0) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine::contrib: the target already has a next "
+                "source (direct write + contribution MUST NOT coexist)");
+        }
+        // ⚠️ value 在**调用点**捕获（eager）⇒ 之后重绑定该 C++ 对象会让本贡献
+        //    持有**旧节点**（ADR-042 意义上的 operator=）⇒ 静默过期。
+        lnodeimpl *v = to_operand(value).impl();
+        if constexpr (ValueW > TargetW) {
+            // 显式截断到 target 宽度（与手写 select 链同型 ⇒ 逐位等价）
+            v = bits<TargetW - 1, 0>(ch_uint<ValueW>(v)).impl();
+        }
+        contributions_.push_back({target, reg, s, v});
+    }
+    
+    bool is_resolved(lnodeimpl *target) const {
+        for (auto *t : resolved_targets_) {
+            if (t == target) return true;
+        }
+        return false;
+    }
+    
+    void check_resolvable(lnodeimpl *target, lnodeimpl *reg) {
+        if (is_resolved(target)) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine::resolve: the same target MUST NOT be "
+                "resolved twice");
+        }
+        if (reg && reg->num_srcs() > 0) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine::resolve: the target already has a next "
+                "source (direct write + contribution MUST NOT coexist)");
+        }
+    }
+    
+    void mark_resolved(lnodeimpl *target) {
+        resolved_targets_.push_back(target);
+    }
+    
+    template <unsigned W, typename V>
+    static ch_uint<W> default_expr(const V &def) {
+        return ch_uint<W>(to_operand(def).impl());
+    }
+    
+    /// 把同一 target 的全部贡献合成**一条** select 链（守卫 = is_in(S)）。
+    template <unsigned W>
+    ch_uint<W> compose(lnodeimpl *target, const ch_uint<W> &acc0) {
+        // 各 is_in(S) 只算一次（避免重复建比较节点）
+        std::array<ch_bool, N> in_s{};
+        for (size_t i = 0; i < N; ++i) {
+            in_s[i] = is_in(static_cast<StateEnum>(i));
+        }
+        ch_uint<W> acc = acc0;
+        for (size_t i = 0; i < N; ++i) {
+            for (const auto &c : contributions_) {
+                if (c.target != target) continue;
+                if (static_cast<size_t>(c.state) != i) continue;
+                // ⚠️ 必须是**一条**表达式链（每状态一个 mux 组件会重新引入多驱动）
+                acc = select(in_s[i], ch_uint<W>(c.value), acc);
+            }
+        }
+        return acc;
     }
     
 public:
@@ -366,6 +481,123 @@ public:
         
         built = true;
     }
+    
+    /**
+     * @brief Destructor: reject contributions that were never resolved
+     *
+     * ADR-050 D5：「contrib 了但忘了 resolve」是**静默**失效（贡献被丢弃 ⇒
+     * 寄存器保持旧值）⇒ MUST 检出。
+     *
+     * ⚠️ 析构期抛异常 ⇒ 若正在**展开**中 ⇒ std::terminate ⇒ 故只在
+     *    「无待处理异常」且「非静态析构期」时抛。
+     */
+    // ⚠️ `noexcept(false)`：析构函数默认是 noexcept ⇒ 析构期抛异常会
+    //    `std::terminate` ⇒ 必须显式关闭 ⇒ 否则「未 resolve」的检出变成 abort
+    //    （不可捕获 ⇒ 不可测）。⚠️ 展开期（`uncaught_exceptions() > 0`）**不抛**
+    //    ⇒ 避免 terminate。
+    ~ch_state_machine() noexcept(false) {
+        for (const auto &c : contributions_) {
+            if (is_resolved(c.target)) continue;
+            if (std::uncaught_exceptions() == 0 &&
+                !ch::detail::in_static_destruction()) {
+                CHFATAL_EXCEPTION(
+                    "ch_state_machine: contributions were registered but never "
+                    "resolved (call resolve_hold / resolve_or for every target)");
+            }
+            return;
+        }
+    }
+    
+    /**
+     * @brief Register a state-guarded contribution for a **register**
+     *
+     * @param target  目标寄存器
+     * @param s       归属状态（守卫 = `is_in(s)`）
+     * @param value   贡献值（**已建好的**表达式；MUST NOT 用 lambda 延迟求值）
+     *
+     * ⚠️ MUST 在 `on_active` 闭包**之外**调用（ADR-050 D4）⇒ 闭包内**只**
+     *    注册转移。
+     * ⚠️ value 的宽度 MUST 与 target 相同（否则 `select` 的 `max(width)` 会
+     *    **静默**截断 / 扩展）⇒ 宽度不符即**显式拒绝**。
+     */
+    template <typename T, typename V>
+    void contrib(const ch_reg<T> &target, StateEnum s, const V &value) {
+        // `ch_reg` 的 impl() 是**代理**节点；其 src(0) 才是**寄存器本体**
+        // （`build_register`：`proxyimpl(reg_node, ...)`）。
+        add_contribution<ch_width_v<T>, ch_width_v<V>>(
+            target.impl(), target.impl()->src(0), s, value);
+    }
+    
+    /**
+     * @brief Register a state-guarded contribution for an **output port**
+     */
+    template <typename T, typename V>
+    void contrib(const port<T, output_direction> &target, StateEnum s,
+                 const V &value) {
+        add_contribution<ch_width_v<T>, ch_width_v<V>>(target.impl(),
+                                                         nullptr, s, value);
+    }
+    
+    // ⚠️ **故意不提供** `port<T, input_direction>` 的 `contrib` 重载 ——
+    //    输入端口由**外部**驱动；给它接状态逻辑会让它**不再是顶层端口**
+    //    （见根 AGENTS.md「Hierarchical input driver MUST be emitted by
+    //    codegen」）⇒ **编译不过**（无匹配重载）。
+    //
+    //    ⚠️ 为何**不用** `= delete`：被删除的调用在 SFINAE 语境下是**硬错误**
+    //    （实测）⇒ 无法写成**自动化**的编译期断言 ⇒ 「无匹配重载」形态才可被
+    //    `std::void_t` 检测 ⇒ 才有**可执行**的验收判据（ADR-050 §5.2）。
+    
+    /**
+     * @brief Compose a register's contributions; default tail = **hold**
+     *
+     * 用法：`reg->next = sm.resolve_hold(reg);` ⇒ **唯一**写入点仍由用户持有。
+     */
+    template <typename T>
+    ch_uint<ch_width_v<T>> resolve_hold(ch_reg<T> &target) {
+        lnodeimpl *tgt = target.impl();
+        check_resolvable(tgt, tgt->src(0));
+        // 起点 = 寄存器**当前值**（代理节点）⇒ 未覆盖的状态 ⇒ 保持。
+        ch_uint<ch_width_v<T>> acc = ch_uint<ch_width_v<T>>(tgt);
+        acc = compose(tgt, acc);
+        mark_resolved(tgt);
+        return acc;
+    }
+    
+    /**
+     * @brief Compose a register's contributions with an **explicit default**
+     *
+     * 「未覆盖的状态取某常量」时使用（默认尾部**不是**保持）。
+     */
+    template <typename T, typename V>
+    ch_uint<ch_width_v<T>> resolve_or(ch_reg<T> &target, const V &def) {
+        lnodeimpl *tgt = target.impl();
+        check_resolvable(tgt, tgt->src(0));
+        ch_uint<ch_width_v<T>> acc = default_expr<ch_width_v<T>>(def);
+        acc = compose(tgt, acc);
+        mark_resolved(tgt);
+        return acc;
+    }
+    
+    /**
+     * @brief Compose an **output port**'s contributions with an explicit default
+     *
+     * ⚠️ 输出**必须**显式给默认：输出引用自身 = **组合环** ⇒ 拓扑排序 CHFATAL。
+     */
+    template <typename T, typename V>
+    ch_uint<ch_width_v<T>> resolve_or(port<T, output_direction> &target,
+                                      const V &def) {
+        lnodeimpl *tgt = target.impl();
+        check_resolvable(tgt, nullptr);
+        ch_uint<ch_width_v<T>> acc = default_expr<ch_width_v<T>>(def);
+        acc = compose(tgt, acc);
+        mark_resolved(tgt);
+        return acc;
+    }
+    
+    // ⚠️ **故意不提供** `port<T, output_direction>` 的 `resolve_hold` 重载 ——
+    //    输出的「保持」= 引用自身 = **组合环** ⇒ 拓扑排序 CHFATAL ⇒ 输出**必须**
+    //    用 `resolve_or(out, default)` 显式给默认 ⇒ 误用即**编译不过**
+    //    （无匹配重载；`= delete` 形态无法被 SFINAE 检测 ⇒ 同上）。
     
 };
 } // namespace chlib

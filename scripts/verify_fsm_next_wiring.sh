@@ -374,6 +374,47 @@ EOF
         fi
     }
 
+    # --- 13. 闭包内调用 `contrib(...)`（ADR-050 D4 ⇒ 违规）---
+    fx fx_contrib_in_closure << 'EOF'
+#include "ch.hpp"
+class M : public ch::Component {
+public:
+    __io(ch_in<ch_bool> start; ch_out<ch_bool> busy;)
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch_reg<ch_uint<8>> counter(0_d);
+        chlib::ch_state_machine<S, 2> sm;
+        sm.state(S::A).on_active([&] {
+            sm.contrib(counter, S::A, ch_uint<8>(1_d));
+        });
+        sm.set_entry(S::A);
+        sm.build();
+        counter->next = sm.resolve_hold(counter);
+    }
+};
+EOF
+
+    # --- 14. 闭包**外**调用 `contrib(...)`（合法 ⇒ PASS）---
+    fx fx_contrib_outside << 'EOF'
+#include "ch.hpp"
+class M : public ch::Component {
+public:
+    __io(ch_in<ch_bool> start; ch_out<ch_bool> busy;)
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch_reg<ch_uint<8>> counter(0_d);
+        chlib::ch_state_machine<S, 2> sm;
+        sm.state(S::A).on_active([&] {
+            sm.transition_when(io().start, S::B);
+        });
+        sm.set_entry(S::A);
+        sm.build();
+        sm.contrib(counter, S::A, ch_uint<8>(1_d));
+        counter->next = sm.resolve_hold(counter);
+    }
+};
+EOF
+
     expect fx_clean          0 ""              ""
     expect fx_reg_next       1 "reg-next-in-closure" ""
     expect fx_io_assign      1 "io-assign-in-closure" ""
@@ -386,12 +427,14 @@ EOF
     expect fx_unbalanced     1 "parse-error"   ""
     expect fx_member_def     0 ""              ""
     expect fx_no_parens_lambda 0 ""            ""
+    expect fx_contrib_in_closure 1 "contrib-in-closure" ""
+    expect fx_contrib_outside  0 ""            ""
 
     if [ "$fails" -ne 0 ]; then
         echo "${RED}❌ verify_fsm_next_wiring self-test: $fails 个 fixture 失败${NC}" >&2
         exit 1
     fi
-    echo "${GREEN}✅ verify_fsm_next_wiring self-test: 12/12 fixture 全绿${NC}"
+    echo "${GREEN}✅ verify_fsm_next_wiring self-test: 14/14 fixture 全绿${NC}"
     exit 0
 fi
 
