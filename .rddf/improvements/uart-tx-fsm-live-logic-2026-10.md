@@ -103,21 +103,44 @@ C++ 控制流的写法都恒走「假」分支**。实测仓内出现三种形�
 ⇒ ⇒ 这是「**parity 通 ≠ 正确**」的又一实例（同
 `feat-rv32i-isa-completeness` 的核心论点）。
 
-⇒ ⇒ **正确形态的既成范例**在同一个文件里（`test_verilator_complex_e2e.cpp:119-170`）：
+⇒ ⇒ **部分正确形态的既成范例**在同一个文件里（`test_verilator_complex_e2e.cpp:119-170`）：
 
 ```cpp
-sm.transition_when(start_now, SpiState::START);                  // 不用 if
-shift->next = select(start_now, io().data_in, shift);            // 不用 if/else
-bit_count->next = select(start_now, make_literal<0>(), bit_count);
-ch_bool in_transfer = sm.is_in(SpiState::TRANSFER);              // 输出按状态多路选择
-io().mosi_out = select(in_transfer, msb, ch_bool(false));        // 且**只驱动一次**
+sm.transition_when(start_now, SpiState::START);                  // 不用 if ✓
+shift->next = select(start_now, io().data_in, shift);            // 不用 if/else ✓
+ch_bool in_transfer = sm.is_in(SpiState::TRANSFER);              // 输出按状态多路选择 ✓
+io().mosi_out = select(in_transfer, msb, ch_bool(false));        // 且**只驱动一次** ✓
 ```
 
-⇒ 该范例**避开**了 `uart_tx` 的三个错误（`if` 条件、`if/else` 赋值、多状态重复驱动
-同一 `ch_out`）⇒ ⇒ 本 issue 的实施应**照此改写**。
-⚠️ 但形态 ③（三元）**同文件里也有**（`:150`）⇒ 照抄范例时 MUST **同时**修掉它
-（改成 `transition_when(last_bit_cond, STOP)` 与 `transition_when(!last_bit_cond, TRANSFER)`
-两条，或用 `select` 生成目标枚举）。
+⇒ 该范例**避开**了 `uart_tx` 的「`if` 条件」「`if/else` 赋值」「多状态重复驱动同一
+`ch_out`」三个错误 ✓ ⇒ 本 issue 的实施应**照此改写**。
+
+⚠️⚠️ **但该范例自己也有一个缺陷**（2026-10-29 核实，**订正**本草案初稿的
+「正确形态」表述）：**寄存器 `next` 的多驱动**。
+
+`regimpl::set_next` 的实现是 **`set_src(0, next)`**（`include/ast/ast_nodes.h:47-54`）
+⇒ ⇒ **`next` 是 last-wins（覆盖），不是累加/合并** ⇒ ⇒ **同一个寄存器被多个状态
+各写一次 ⇒ 最后发射的那个状态赢**。
+
+⇒ 该范例里 `shift->next` 在 **IDLE**（`:134` `select(start_now, …)`）与
+**TRANSFER**（`:153` `shift << 1_d`）**两处**都发射 ⇒ `build()` 按状态枚举顺序
+执行（IDLE(0) → START(1) → TRANSFER(2) → STOP(3)）⇒ **TRANSFER 后发射 ⇒ 覆盖
+IDLE 的加载** ⇒ ⇒ 「IDLE 载入 `data_in`」**永不生效**；
+`bit_count->next` 同理（IDLE `:135` vs TRANSFER `:152`）。
+
+⇒ ⇒ **该范例的 SPI 状态机语义也是错的** ⇒ 但它的断言是
+`REQUIRE(sa == sb)`（**parity**）⇒ 两后端**同构** ⇒ ⇒ **抓不到**
+⇒ ⇒ 又一实例印证「**parity 通 ≠ 正确**」。
+
+⇒ ⇒ ⇒ **正确的 FSM 写法必须再加一条纪律**：
+
+> **每个寄存器 MUST 只有一个 `next` 写入点** ⇒ 各状态的候选值 MUST 用
+> **`select` 组合成单一表达式** ⇒ 典型形态：
+> `reg->next = select(is_in(S_A), v_A, select(is_in(S_B), v_B, reg));`
+
+⚠️ 而 `uart_tx` 的三个寄存器（`baud_counter` / `bit_counter` / `shift_reg`）
+在原代码里**各被 3–4 个状态写** ⇒ ⇒ 修它**必须**先做这个「单写入点」重构
+⇒ ⇒ 本 issue 的工作量**高于**初稿估计（不是「把 `if` 换成 `transition_when`」那么简单）。
 
 ## 2. What Changes (变更范围)
 
@@ -133,23 +156,60 @@ io().mosi_out = select(in_transfer, msb, ch_bool(false));        // 且**只驱�
 | `if (cond) { reg->next = A; } else { reg->next = B; }` | `reg->next = select(cond, A, B);` |
 | `if (cond) { out = X; }`（`ch_out`） | `out <<= select(cond, X, out_hold);` 或按状态多路选择 |
 | 4 个状态各自无条件写同一个 `ch_out` | **只驱动一次**：`out <<= select(sm.is_in(S0), v0, select(sm.is_in(S1), v1, …))` |
+| ⚠️ **多个状态各写同一 `reg->next`** | ⚠️ **每个寄存器只有一个写入点**（`set_next` = `set_src(0,…)` ⇒ **last-wins**）⇒ 各状态的候选值 MUST 用 `select` 组合成**单一表达式** |
 
-⚠️ **承重约束**：`sm.is_in(S)` 读的是 `state_reg`（构造时即存在）⇒ 可在
+⚠️ **承重约束 1**：`sm.is_in(S)` 读的是 `state_reg`（构造时即存在）⇒ 可在
 `build()` **之后**用；`on_active` 在 `build()` 内执行 ⇒ **不要**在 `on_active`
 里读 `is_in` 再赋同一状态机控制的输出（会引入顺序依赖）⇒ 建议在
 `sm.build()` **之后**统一做组合输出。
+
+⚠️ **承重约束 2（新增，2026-10-29 核实）**：`reg->next` 是 **last-wins**
+⇒ ⇒ **`on_active` 里 MUST NOT 写 `reg->next`** ⇒ ⇒ 全部寄存器赋值 MUST
+集中在 `sm.build()` **之后**，用 `select(is_in(S), v_S, …)` 组合
+⇒ ⇒ ⇒ `uart_tx` 的三个寄存器（`baud_counter` / `bit_counter` / `shift_reg`）
+各需**一条**组合表达式。
+
+⚠️ **承重约束 3（新增）**：**三元 `? :` 也是同坑**（形态 ③）⇒ 组合表达式里
+MUST 用 `select`，**不得**用三元。
+⚠️ **承重约束 4（2026-10-29 审稿新增，**最重要**）**：**`transition_when` 的条件是
+「电平敏感」**（每拍求值、为真即走），**不是**「事件 / 完成」语义 ⇒
+「持续 N 拍后转移」MUST 与计数器条件**合取**（例：`bit_last & baud_done`）。
+⚠️ **漏了这条 ⇒ 第 8 个数据位只发 1 拍**（而非 434 拍）⇒ 停止位提前 433 拍
+⇒ 且 ⚠️ **按波特周期采样的断言网格对此零判别力**（每位样本落在位段**末尾**）
+⇒ ⇒ **必须另加「时长」断言**（如 `busy` 高电平总拍数 == 9×434）。
+⚠️ **纪律 ① 的完整枚举**：`if` / `? :` / `switch (硬件值)` / `while`-`for` 行程条件 /
+early `return` / 把硬件值传给 **`bool` 形参** ⇒ **全部**触发 `explicit operator bool`。
 
 ### 2.2 加**自检断言**（否则「修好」不可验证）
 
 该 example 是 main() 程序 ⇒ 用「不匹配则 `return 1`」的方式加自检：
 
 - 采集发送期间 `uart_tx` 的**位序列** ⇒ MUST 等于
-  「起始位 `0` + `0x55` 的 8 位 LSB-first（`1,0,1,0,1,0,1,0`）+ 停止位 `1`」；
+  「起始位 `0` + 数据位的 8 位 LSB-first + 停止位 `1`」；
+- ⚠️ **数据 MUST 选判别性值**（**不可**用 `0x55`）：`0x55 = 01010101` ⇒
+  `bit7 = 0` ⇒ 与「起始位 0」相同 ⇒ **抓不到 off-by-one**（少发 `data[7]` 时
+  结果仍相同）⇒ ⇒ 应选 **`0xA5`（`10100101` ⇒ `bit7 = 1`）** ⇒ 才能钉住
+  「起始位 + **完整** 8 个数据位」这个契约；
 - 每位**持续时间** MUST = 波特率分频（434 拍 ±1）；
 - `busy` MUST 在 START→STOP 期间为 1、在 IDLE 为 0；
 - 帧完成后 MUST 回到 IDLE（`busy=0`、`uart_tx=1`）。
 
+⚠️ **2026-10-29 审稿的实测订正**：上面第 2、3 条在首次实现时被**静默丢弃**
+（未落进断言表 + 无丢弃记录）⇒ ⇒ 而它们**正是**能抓到「第 8 个数据位只发 1 拍」
+这个缺陷的那两条 ⇒ ⇒ **落地形态**：合并成一条**可执行**断言 ——
+「**`busy` 高电平总拍数 == 3906**」（= 9 位 × 434，手推）
+⇒ 实测去掉门控后为 **3473** ⇒ 转红 ⇒ ⇒ **「时长」维度的判别力 MUST 显式建立**。
+
 ⚠️ 期望值**手推**（不得抄仿真输出）。
+
+⚠️ **另有一处 off-by-one 需要裁决**（2026-10-29 核实）：原代码的注释写
+「移位寄存器（**9 位：起始位 + 8 数据位**）」⇒ `shift_reg` 的
+`bit0` = 起始位、`bit1..bit8` = 数据位 ⇒ ⇒ **期望发送 `bit1..bit8`**
+⇒ 而原代码在 DATA 里发的是 **`shift_reg & 1`（= `bit0`）** ⇒ **少发 `bit8`
+（= `data[7]`）、多发一个起始位 0** ⇒ ⇒ 原实现对 `data[7] = 0` 的值**碰巧正确**
+⇒ ⇒ 修的时候 MUST 改成发 `(shift_reg >> 1) & 1`
+⇒ ⇒ 这属「**首次实现**正确行为」（该 FSM 从未工作过 ⇒ 不存在「既有行为」可保持），
+但 MUST 在 design.md 里**如实记录**该 off-by-one 的存在与裁决。
 
 ### 2.3 可选：把该 example 升级为 Catch2 测试
 

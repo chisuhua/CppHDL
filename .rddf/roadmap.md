@@ -46,6 +46,7 @@
 | T7 可 dual 上限盘点 | phase-5 | P1 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-dual-backend-full-coverage-inventory-2026-10/`（**只读**；**172** 行盘点表）⇒ ⚠️ **决策门已触发**：**诚实**可达上限口径 A ∈ [**71**, **96**] / 口径 B ∈ [**62**, **87**] ⇒ **两种口径的乐观上限都 < 100** ⇒ ⇒ **判据在现有语料内不可达** ⇒ **MUST 由 planner** 修订 `objective-test-coverage-100pct` 的 Go 判据（**取舍集 4 个轴**见该 change 的 `design.md` §9.2.2；含 **3 处被证伪的前提**；⚠️ **口径 A 的技术上限其实无界** ⇒ 71/96 是「语义诚实」的上限）⇒ 已立项 **`.rddf/improvements/dual-backend-criterion-revision-2026-10.md`** |
 | roadmap 簿记一致性护栏 | phase-5 | P0 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-roadmap-fragments-consistency-guard-2026-10/`（新增 capability `roadmap-bookkeeping-consistency` ⇒ **未**用 `--skip-specs`）⇒ `scripts/verify_roadmap_fragments.sh` + CI 2 处挂载 + `--self-test` 13 fixture |
 | perf baseline 重采集 | phase-5 | P0 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-perf-baseline-refresh-2026-10/`（**3 次采样取逐行中位数** ⇒ `git_sha=0758fa0`；MODIFIED ×1 ⇒ **未**用 `--skip-specs`）⇒ `perf_regression` 恢复为「Compared 18 rows ⇒ No regressions」 |
+| `uart_tx` FSM 真正工作 | phase-5 | P2 | none | ✅ **已归档**（2026-10-29）：`openspec/changes/archive/2026-10-29-uart-tx-fsm-live-logic-2026-10/`（**首次实现**一个从未工作的 FSM + 自检断言 ⇒ 该 example 从「恒绿」变「可红」；⚠️ **正确形态的 5 条纪律**：条件只用硬件原语 · 每寄存器**单** next 写入点 · 每输出**只**驱动一次 · **`transition_when` 条件电平敏感**（须与计数器合取）· 不把 parity 当正确性证据） |
 | 输入端口驱动护栏（spike） | phase-5 | P1 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`（**只出文档**；零代码改动）⇒ ⚠️ **决策门结论：通用状态型护栏关闭**（实测：① 运行期**无法识别端口身份** ⇒ 诊断不可行动；② **语义判定缺承重件**（「从未被驱动」≠「应该被驱动」⇒ 需「必需端口注册表」，规范层已明文要求）且 **per-TEST-CASE 是必需粒度**而平规则在该粒度必然误报 ⇒ **死结**；③ 驱动藏在 29 个 helper + 186 次宏里 ⇒ 需过程间分析）⇒ ⇒ **义务继续留在 `AGENTS.md §ANTI-PATTERNS`** ⇒ ⇒ 3 个后续已立项：`input-port-driving-event-diff-check-2026-10`（**事件驱动增量检查**，实测新增端口负载 0–2/commit）/ `input-port-required-registry-2026-10`（**必需端口注册表**，规范层已承认需要）/ `input-port-assignment-antipattern-fix-2026-10`（**10 处存量静默失效**，独立可做） |
 | CLINT `mtime` 自增（T9 ②） | phase-5 | P2 | none | ⛔ **未立项 —— ADR-049 前置**：`mtime` 从静态比较器变自由运行计数器 = **契约变更**，而 **CLINT 不在任何 capability 覆盖内** ⇒ 归属本身待裁决 ⇒ delta 写不出 ⇒ **不得**先登记 change 再标 `skip_specs`（那会把契约变更静默丢掉）⇒ 决策门 D1–D5 已写入 `.rddf/improvements/clint-mtime-autoincrement-2026-10.md` §6 |
 | RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ **已归档**（2026-10-27）：`openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`（ADR-048；一个 change、两个 commit = C1 skid / C2 `primed`）⇒ `rv32i-commit-path` MODIFIED ×2 ⇒ **`feat-rv32i-isa-completeness` ④ 收口** |
@@ -83,15 +84,9 @@
 > ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
 > 该 job 红 ⇒ MUST revert 归档 commit。
 
-### Unmapped (3)
+### Unmapped (2)
 
-> 三个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
-> `uart-tx-fsm-live-logic-2026-10` → **examples 真实性**缺口（`feat-rv32i-isa-completeness`
-> 的同型坑：C++ 控制流包裹硬件表达式 ⇒ 建图期恒假）—— 2026-10-28 由
-> `input-port-assignment-antipattern-fix-2026-10` 实施期实测挖出（`uart_tx.v` 里
-> 输出是常量、状态寄存器自环）；⚠️ 全仓**只有** `uart_tx.cpp` 是 examples 内的坏例子，
-> 但**形态 ③（三元条件）** 在 `tests/test_verilator_complex_e2e.cpp:150` 也有一处
-> （`STOP` 不可达，parity 断言抓不到）；
+> 两个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
 > `riscv-mini-cache-wrapper-live-logic-2026-10` → `feat-riscv-mini-rtl-debt` ①
 > （⚠️ 名字与候选 change 名 `riscv-mini-cache-wrapper-live-logic-2026-10` **不一致**
 > ⇒ 立项时 MUST 统一，见「实施规划」§遗留项 3）；

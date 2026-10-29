@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-10-29
+# 本 change 是 **example 层的 bugfix**（首次实现一个从未工作的 FSM + 自检断言）
+# ⇒ **不改任何 capability 契约** ⇒ 归档用 `--skip-specs`。
+# ⚠️ 若要把「main() 型 example 的语义输出 MUST 被断言」写成 capability 条款
+#   ⇒ 那是**另一个** change（需 planner 裁决适用范围）⇒ 已登记为 planner 议题。
+skip_specs: true
