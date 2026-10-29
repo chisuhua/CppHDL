@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-29
+# 本 change **新增**一个 capability（`chlib-state-machine-semantics`）
+# ⇒ 归档时 **禁** 用 `--skip-specs`。

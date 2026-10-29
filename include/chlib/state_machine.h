@@ -6,48 +6,95 @@
  * 
  * Provides SpinalHDL-like state machine support for CppHDL.
  * 
- * Usage Example:
+ * Usage Example (CORRECT FORM — see the discipline list below):
  * @code{.cpp}
  * enum class MyState : uint8_t { IDLE, RUNNING, DONE };
- * 
+ *
  * class MyModule : public ch::Component {
  * public:
  *     void describe() override {
  *         ch_state_machine<MyState, 3> sm;
- *         
- *         sm.state(MyState::IDLE)
- *           .on_active([this, &sm]() {
- *               if (io().start) sm.transition_to(MyState::RUNNING);
- *           });
- *         
- *         sm.state(MyState::RUNNING)
- *           .on_active([this, &sm]() {
- *               if (io().done) sm.transition_to(MyState::DONE);
- *           });
- *         
+ *
+ *         // Hardware conditions are NODES, not C++ booleans.
+ *         auto start_sig = io().start;            // ch_bool
+ *
+ *         // The state closure registers TRANSITIONS ONLY.
+ *         sm.state(MyState::IDLE).on_active([&] {
+ *             sm.transition_when(start_sig, MyState::RUNNING);
+ *         });
+ *         sm.state(MyState::RUNNING).on_active([&] {
+ *             sm.transition_when(done_sig, MyState::DONE);
+ *         });
+ *
  *         sm.set_entry(MyState::IDLE);
  *         sm.build();
+ *
+ *         // Registers / outputs are driven AFTER build(), exactly once each.
+ *         counter->next = select(sm.is_in(MyState::IDLE) & start_sig,
+ *                                ch_uint<8>(1_d), counter);
+ *         io().busy = select(sm.is_in(MyState::RUNNING),
+ *                            ch_bool(true), ch_bool(false));
  *     }
  * };
  * @endcode
- * 
- * NOTE (Phase 6d / ADR-046): `if (ch_bool)` conditions inside on_active
- * closures are NOT hardware conditionals — ch_bool's contextual bool
- * conversion silently evaluates false at describe time. For runtime
- * (cycle-accurate) transitions use `transition_when(ch_bool, target)`:
- * @code{.cpp}
- *     ch_state_machine<MyState, 3> sm;
- *     auto start_sig = io().start;              // ch_bool
- *     sm.state(MyState::IDLE).on_active([&]{
- *         sm.transition_when(start_sig, MyState::RUNNING);  // emits select tree
- *     });
- *     sm.set_entry(MyState::IDLE);
- *     sm.build();   // state_reg->next = select-tree (works in Simulator)
- * @endcode
- * `build()` executes every state's on_active closure once at describe time;
- * each `transition_when` call accumulates into a ch select-tree for
- * `state_reg->next`. The Simulator evaluates that tree every tick, giving
- * cycle-accurate multi-cycle FSMs.
+ *
+ * ===========================================================================
+ * ⚠️ 写 FSM 的 5 条纪律（MUST；完整契约见 capability
+ *    `chlib-state-machine-semantics`）
+ * ===========================================================================
+ *
+ * ① **条件逻辑只用硬件原语**（`transition_when` / `select`）。MUST NOT 让硬件值
+ *    参与 C++ 控制流 —— `if (硬件值)` / 三元 `? :` / `switch` / `while`-`for`
+ *    的行程条件 / early `return` / 传给 `bool` 形参。
+ *    ⚠️ `ch_bool` / `ch_uint` 的 `operator uint64_t()` **只对 const 节点返真值**
+ *    （`src/lnode/bool.cpp:44-49`）⇒ 上述写法在**建图期**恒假 ⇒ 条件逻辑
+ *    **不发射**（无 else 的 `if` 分支体永不发射、有 else 的只发射 else）。
+ *
+ * ② **每个寄存器只有一个 `next` 写入点**。各状态的候选值用 `select` 组合成
+ *    **单一表达式**，写在 `sm.build()` **之后**。
+ *    ⚠️ `ch_reg` 的 `next` 是 **last-wins**：`regimpl::set_next` 就是
+ *    `set_src(0, next)`（`include/ast/ast_nodes.h:47-54`）⇒ 多次赋值时
+ *    **最后一次覆盖** ⇒ 「每状态各写一次」**无法**表达多状态 FSM。
+ *
+ * ③ **每个输出只驱动一次**（按 `sm.is_in(...)` 多路选择）。
+ *    ⚠️ `ch_out` 的 `operator=` 也是 `set_src(0, …)` ⇒ 多状态各驱动一次 ⇒
+ *    **最后发射者获胜**。
+ *
+ * ④ **`transition_when` 的条件是电平敏感**（每拍求值、为真即走），**不是**
+ *    「事件 / 完成」语义 ⇒ 「持续 N 拍后转移」MUST 与计数器条件**合取**
+ *    （例：`bit_last & baud_done`）。
+ *
+ * ⑤ **不把 parity 当正确性证据**（两后端由**同一份** fixture 生成 ⇒ 缺陷
+ *    **同构** ⇒ 两边**同时错** ⇒ parity **恒绿**）。
+ *
+ * ===========================================================================
+ * ⚠️ 两条**框架级**陷阱（读这段再写 FSM）
+ * ===========================================================================
+ *
+ * **(A) `build()` 遍历【所有】state 执行各自 `on_active`** ——
+ *    `build()` 按 state index 依次执行每个状态的 `on_active` 闭包（**一次性**，
+ *    在 describe 期），以便把 `transition_when` 注册进 select 树。
+ *    ⇒ 因此 **`on_active` 闭包内 MUST NOT 写寄存器 `next`、MUST NOT 驱动
+ *    输出**：那些写入会被**后执行的状态覆盖**（last-wins）⇒ 只有最后发射的
+ *    那个状态生效 ⇒ 典型症状 = 「装载数据的分支**永不生效**」。
+ *    ⇒ 正确形态：闭包内**只**写 `transition_when`；寄存器与输出写在
+ *    `build()` **之后**（纪律 ② / ③）。
+ *
+ * **(B) `transition_when` 的 `target` MUST 是【编译期常量】** ——
+ *    转移在 `build()` 注册时就把 target 固化了 ⇒ MUST NOT 用三元
+ *    `cond ? A : B` 选 target（三元在**建图期**求值 ⇒ 恒取一个分支 ⇒
+ *    另一个目标状态**永不可达** ⇒ 状态卡死）。
+ *    ⇒ 正确形态：拆成**多条** `transition_when`（条件**互斥**）。
+ *
+ * ===========================================================================
+ * 现状契约（把实现语义写死 ⇒ 将来若要改，MUST 走 OpenSpec MODIFIED delta）
+ * ===========================================================================
+ *
+ * - `build()` 执行每个状态的 `on_active` 闭包一次（describe 期），并把
+ *   期间注册的 `transition_when` 组合成 `state_reg->next` 的 select 树：
+ *   `next = state_reg`（默认保持），再对每个转移套
+ *   `select(is_in(S) & cond, target, next)` ⇒ **后注册者优先**。
+ * - 该 select 树由 Simulator **每拍**求值 ⇒ 周期精确的多周期 FSM。
  */
 
 #include "ch.hpp"

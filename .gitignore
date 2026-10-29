@@ -108,3 +108,7 @@ verilator-prefix/
 # 忽略其它构建目录变体
 build-test/
 build*/
+
+# Python 字节码缓存（护栏的分析器 `scripts/lib/fsm_wiring.py` 被 import 时生成）
+__pycache__/
+*.pyc

@@ -19,6 +19,7 @@ include/chlib/
 ├── onehot.h               # One-hot encoding
 ├── selector_arbiter.h     # Selection/arbitration
 ├── sequential.h           # Sequential logic
+├── state_machine.h        # FSM state machine DSL (ch_state_machine)
 ├── stream*.h              # Stream operators, pipelines, arbiters
 ├── switch.h               # Switch/routing logic
 └── stream_width_adapter.h # Width conversion
@@ -34,6 +35,7 @@ include/chlib/
 | Width adapter | chlib/stream_width_adapter.h |
 | Sequential logic | chlib/sequential.h |
 | Memory | chlib/memory.h |
+| FSM state machine | chlib/state_machine.h（**契约见 capability `chlib-state-machine-semantics`**） |
 
 ## CONVENTIONS
 - Namespace: `ch::chlib`
@@ -42,6 +44,13 @@ include/chlib/
 - Files under `bundle/` for stream/bundle types
 
 ## ANTI-PATTERNS
+- **FSM 的 `on_active` 闭包内写寄存器 / 驱动输出**：`ch_state_machine::build()`
+  **遍历所有** state 执行各自闭包 ⇒ 那些写入**必被覆盖**（`ch_reg::next` 是
+  last-wins）⇒ 闭包内**只**写 `transition_when`，寄存器与输出写在
+  `build()` **之后**（契约：`chlib-state-machine-semantics`；
+  护栏：`scripts/verify_fsm_next_wiring.sh`）
+- **用三元 `? :` 选择 `transition_when` 的 target**：target MUST 是**编译期常量**
+  ⇒ 三元在**建图期**求值 ⇒ 另一个目标状态**永不可达**
 - **Async stream patterns**: Not fully supported; avoid complex backpressure without FIFO
 - **Stream without termination**: Always connect streams to sink or FIFO
 - **Width mismatch**: Stream width adapters required for mismatched widths
