@@ -38,4 +38,15 @@ void probe(ch_in<ch_bool> &en, ch_out<ch_uint<9>> &out9,
 
     // ④ E3 + E1：端口条件 + 直接赋给 `ch_out`
     out8 = if_then(en, a).else_(a);
+
+    // ⑤ E3 的**延伸**：`elif` 分支的条件**也** MUST 能是端口
+    //    （⚠️ 此前 `multi_if::elif` 的条件形参仍是 `const ch_bool &`
+    //    ⇒ ⇒ 端口绑不上 ⇒ ⇒ 「`if_then` 的条件可以是端口、`.elif` 的不行」
+    //    = **同一能力面**上的**框架内不一致** ⇒ ⇒ 2026-10-30 补修）
+    out9 = if_then<ch_uint<9>>(en, ch_uint<8>(0xA5_h))
+               .elif(en, ch_uint<8>(0x5A_h))
+               .else_(ch_uint<8>(0x11_h));
+
+    // ⑥ 同上，但走 `multi_if` 的**直接**构造（`if_then` 之外）
+    out8 = multi_if<ch_uint<8>>(en, a).elif(en, a).else_(a);
 }

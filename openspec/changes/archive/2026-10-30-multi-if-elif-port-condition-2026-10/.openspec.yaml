@@ -1,0 +1,27 @@
+schema: spec-driven
+created: 2026-10-30
+# `multi_if::elif` 的条件 MUST **也**能是 `ch_in<ch_bool>` 端口（E3 的**延伸**）。
+#
+# ⚠️ **起因**（2026-10-30 实测）：归位 `samples/if_demo.cpp` 时**实测撞上** ——
+#   `if_then<ch_uint<8>>(io().is_zero, ...).elif(io().is_max, ...)`
+#   ⇒ ⇒ **编译不过**：
+#     `no matching function for call to
+#      'chlib::multi_if<ch::core::ch_uint<8> >::elif(
+#        ch::core::ch_in<ch::core::ch_bool>&, ch::core::ch_uint<8>)'`
+#   ⇒ ⇒ 根因：`multi_if::elif` 的条件形参**仍是** `const ch_bool &`
+#   ⇒ ⇒ 而 A3（E3）只把 **`if_then` 的首分支**条件模板化
+#   ⇒ ⇒ ⇒ 「`if_then` 的条件可以是端口、`.elif` 的不行」
+#   = **同一能力面**上的**框架内不一致** ⇒ ⇒ 补修。
+#
+# ⇒ ⇒ **修法**：`multi_if` 的 ctor 与 `elif` 的条件形参**模板化**
+#   （`const C &condition`）+ 经 **`to_operand`** 归一化
+#   ⇒ ⇒ 端口 / 硬件类型 / 表达式**都**可用
+#   ⇒ ⇒ 归一化**不新建节点** ⇒ ⇒ 既有行为**逐位不变**。
+#
+# ⇒ ⇒ **A3 的护栏盲区**（又一次「护栏自身有盲区」实例）：R3 只检查了
+#   `if_then` 的条件模板化 ⇒ ⇒ **漏了** `elif` 与 ctor ⇒ ⇒ 本次补 R3
+#   （正 + 负 + **原地投毒**的 self-test）。
+#
+# ⇒ 规格面：capability `chlib-conditional-semantics` **MODIFIED ×1**
+#   （E3 的 Scenario **原地订正** ⇒ ⚠️ **标题 MUST NOT 改**）
+#   ⇒ 归档**禁** `--skip-specs`。

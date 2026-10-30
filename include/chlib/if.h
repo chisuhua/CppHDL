@@ -160,8 +160,17 @@ private:
     }
 
 public:
-    template <typename U>
-    multi_if(const ch_bool &condition, const U &value,
+    // ⚠️ **条件形参 MUST 是模板**（2026-10-30 补修，ADR-051 E3 的**延伸**）：
+    //    此前形参是 `const ch_bool &` ⇒ ⇒ `ch_in<ch_bool>` **不能**绑到它
+    //    ⇒ ⇒ **首分支**（经 `if_then`）与 **`elif` 分支**的条件**行为不一致**
+    //    ⇒ ⇒ 「`if_then` 的条件可以是端口，但 `.elif` 的不行」= **框架内
+    //    不一致**（同一能力面 ⇒ 同一限制 ⇒ MUST 齐平）。
+    //    ⇒ ⇒ 条件经 **`to_operand`** 归一化 ⇒ ⇒ 端口 / 硬件类型 / 表达式
+    //    **都**可用。
+    //    ⇒ ⇒ 归一化**不新建节点**（`to_operand` 对硬件类型走 `get_lnode`
+    //    ⇒ 取现有节点）⇒ ⇒ 零额外节点 ⇒ ⇒ 既有行为**逐位不变**。
+    template <typename C, typename U>
+    multi_if(const C &condition, const U &value,
              std::source_location sloc = std::source_location::current())
         : creation_loc_(sloc) {
         static_assert(ch::core::HardwareType<T>,
@@ -169,15 +178,17 @@ public:
                       "would make the result unusable (operator T() returns T, and "
                       "T cannot be converted back into a hardware value). Declare the "
                       "width explicitly: if_then<ch_uint<N>>(condition, value)");
-        branches_.push_back({condition, checked_value(value, "first branch")});
+        ch_bool cond(to_operand(condition).impl());
+        branches_.push_back({cond, checked_value(value, "first branch")});
     }
 
-    template <typename U>
-    multi_if &elif(const ch_bool &condition, const U &value) {
+    template <typename C, typename U>
+    multi_if &elif(const C &condition, const U &value) {
         if (has_else_) {
             throw std::runtime_error("Cannot add elif after else");
         }
-        branches_.push_back({condition, checked_value(value, "elif")});
+        ch_bool cond(to_operand(condition).impl());
+        branches_.push_back({cond, checked_value(value, "elif")});
         return *this;
     }
 
@@ -241,6 +252,9 @@ template <typename T = void, typename U, typename C>
 auto if_then(const C &condition, const U &value) {
     // ⚠️ `to_operand` 对 port 走 `lnode<value_type>(value.impl())` 分支
     //    ⇒ 对 `ch_in<ch_bool>` 得到 `lnode<ch_bool>` ⇒ `.impl()` 即其节点。
+    //    ⇒ ⚠️ 归一化**不新建节点** ⇒ ⇒ 与 `multi_if` 内部那次归一化
+    //    （`multi_if` 的 ctor / `elif` 也做同样归一化）**幂等**
+    //    ⇒ ⇒ 零额外节点 ⇒ ⇒ 既有行为**逐位不变**。
     ch_bool cond(to_operand(condition).impl());
     if constexpr (std::is_same_v<T, void>) {
         return multi_if<branch_value_type_t<U>>(cond, value);

@@ -73,8 +73,16 @@ include/chlib/
 
 ### ⚠️ 框架层的 3 个实测约束（写 DSL / 扩 API 时）
 
-- **`ch_in<ch_bool>` 不能绑到 `const ch_bool&`** ⇒ 条件参数 MUST 是**模板**
-  （接受任意硬件操作数）—— 表达式形式 `if_then` **仍有**此限制；
+- ✅ **`ch_in<ch_bool>` 能绑到条件参数**（2026-10-30 修复）⇒ 条件参数 MUST 是
+  **模板**（接受任意硬件操作数）⇒ ⇒ **表达式形式的**每一个**分支**
+  （`if_then` 的首分支 · `multi_if::elif` · `multi_if` 的直接构造）MUST **齐平**
+  ⇒ ⇒ 端口 / 硬件类型 / 表达式**都**可用（经 `to_operand` 归一化 ⇒ **不新建
+  节点** ⇒ 既有行为**逐位不变**）。
+  ⚠️ **历史**：修复前 `if_then` 的首分支已模板化（2026-10-30 A3），但
+  **`multi_if::elif` 与 `multi_if` 的 ctor 漏了** ⇒ ⇒ 「`if_then` 的条件可以是
+  端口、`.elif` 的不行」= **同一能力面**上的**框架内不一致** ⇒ ⇒ 补修
+  （change `multi-if-elif-port-condition-2026-10`）；
+  ⚠️ **护栏 R3 已同步穷举**这三个入口（正 + 负 + 原地投毒自检）。
 - **`operator->` 只对类类型**对象**生效** ⇒ 指针上的 `reg->next` **不成立**
   ⇒ 须写 `(*reg)->next`；
 - **lambda MUST 按值捕获目标指针** —— `conditional_assign(x)` 是**临时对象**
@@ -99,9 +107,13 @@ include/chlib/
   `chlib-conditional-semantics`；护栏：`scripts/verify_if_stmt_wiring.sh`）
 - **给输出端口做条件赋值却漏写 `else_`**：输出「保持」= 引用自身 = **组合环**
   ⇒ ⇒ 构建期即被**显式拒绝**（**不**退化为「默认 0」）
-- **`multi_if` 直接赋给 `ch_out`**：`multi_if` **不能**直接赋值（实测：
-  `multi_if has no member named 'impl'`）⇒ ⇒ MUST 先显式转成目标宽度
-  （`ch_uint<N>(...)`）；且 `multi_if<T>` 要求**所有分支值同类型 T**
+- ~~**`multi_if` 直接赋给 `ch_out`**：`multi_if` **不能**直接赋值（实测：
+  `multi_if has no member named 'impl'`）~~ —— ✅ **2026-10-30 已修复**
+  （change `multi-if-output-assignability-2026-10`）⇒ ⇒ `multi_if` 现在
+  **可以**直接赋给 `ch_out`（经 `chlib::get_lnode(const multi_if<T> &)` +
+  `ch::core::ch_width_impl<chlib::multi_if<T>>` 特化 ⇒ 靠 **ADL** 命中 ⇒
+  ⇒ **`core/` 零改动**）⇒ ⇒ 与「先转成 `ch_uint<N>` 再赋值」**逐位等价**。
+  ⚠️ **仍然成立**的部分：`multi_if<T>` 要求**所有分支值同类型 T**
   （`a + b` 是 9 位、`a - b` 是 8 位 ⇒ **推导冲突**）⇒ ⇒ 每个分支 MUST 显式
   收敛到同一宽度
 - **Async stream patterns**: Not fully supported; avoid complex backpressure without FIFO

@@ -95,7 +95,7 @@ r1() {
             return
         fi
     done
-    ok "R1 `multi_if` 可直接赋给 `ch_out` 且条件可为端口（${CXX_LIST[*]} 各一次）"
+    ok "R1 multi_if 可直接赋给 ch_out 且条件可为端口（${CXX_LIST[*]} 各一次）"
 }
 
 # ── R2：判别力（对照 MUST 编译失败）────────────────────────────────────────
@@ -133,6 +133,21 @@ r3() {
     # ③ 负向：条件 MUST NOT 退回 `const ch_bool &`
     if grep -q "auto if_then(const ch_bool &condition" "$IF_H"; then
         missing="${missing}  E3：条件退回 \`const ch_bool &\` ⇒ 端口又绑不上\n"
+    fi
+    # ④ E3 的**延伸**（2026-10-30 补修）：`multi_if::elif` 的条件 MUST
+    #    **也**是模板参数 —— 否则「`if_then` 的条件可以是端口、`.elif` 的不行」
+    #    = **同一能力面**上的**框架内不一致**（实测：A3 收尾时**漏了**它 ⇒
+    #    `samples/if_demo.cpp` 归位时**实测撞上** ⇒ 又一次「护栏自身有盲区」）。
+    grep -q "multi_if &elif(const C &condition, const U &value)" "$IF_H" \
+        || missing="${missing}  E3 延伸：\`multi_if::elif\` 的条件未模板化\n"
+    if grep -q "multi_if &elif(const ch_bool &condition" "$IF_H"; then
+        missing="${missing}  E3 延伸：\`multi_if::elif\` 的条件退回 \`const ch_bool &\`\n"
+    fi
+    # ⑤ `multi_if` 的 ctor 条件同样 MUST 模板化（`if_then` 之外可直构）
+    grep -q "multi_if(const C &condition, const U &value" "$IF_H" \
+        || missing="${missing}  E3 延伸：\`multi_if\` 的 ctor 条件未模板化\n"
+    if grep -q "multi_if(const ch_bool &condition" "$IF_H"; then
+        missing="${missing}  E3 延伸：\`multi_if\` 的 ctor 条件退回 \`const ch_bool &\`\n"
     fi
     if [ -n "$missing" ]; then
         fail "R3 include/chlib/if.h 缺少实现："
@@ -188,6 +203,40 @@ PYEOF
             exit 1
         fi
         ok "R2 的失败确实来自那个不存在的 API ⇒ R2 判据精确"
+        # ③ 投毒：`multi_if::elif` 的条件退回 `const ch_bool &`
+        #    ⇒ ⇒ 端口绑不上 ⇒ ⇒ fixture 编译失败 ⇒ ⇒ R1 转红
+        #    ⇒ ⚠️ 这条**证明「`elif` 的条件模板化」被真的守着**
+        #       （A3 收尾时**漏了**它 ⇒ 又一次「护栏自身有盲区」实例）。
+        #
+        # ⚠️⚠️ MUST **原地**投毒（fixture 通过 `-I include` include **仓内**的
+        #    `if.h` ⇒ 投毒**副本**根本不会被 include ⇒ ⇒ 判据会**恒绿**）。
+        #    ⇒ ⇒ 备份 → 原地改 → 编译 → **还原**（`trap` 保证异常路径也还原）。
+        IF_H_BAK="$TMPF/if_h_orig.h"
+        cp "$IF_H" "$IF_H_BAK"
+        restore_if_h() { cp "$IF_H_BAK" "$IF_H"; }
+        trap 'restore_if_h; rm -rf "$TMPF"' EXIT
+        python3 - "$IF_H" <<'PYEOF'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding='utf-8')
+old = "multi_if &elif(const C &condition, const U &value) {"
+new = "multi_if &elif(const ch_bool &condition, const U &value) {"
+if old not in s:
+    raise SystemExit("SELF_TEST_FAIL: 找不到 `elif` 的投毒锚点")
+p.write_text(s.replace(old, new, 1), encoding='utf-8')
+PYEOF
+        if compile "$FIXTURES/pos_output_assignability.cpp" g++ >/dev/null 2>&1; then
+            echo "❌ 把 `elif` 的条件退回 \`const ch_bool &\` 后 fixture **仍编译通过** ⇒ 该判据无判别力"
+            restore_if_h
+            exit 1
+        fi
+        ok "elif 条件被投毒后 fixture **编译失败** ⇒ R1 确实会抓"
+        restore_if_h
+        # 还原后 MUST 再确认一次「恢复原状 ⇒ 编译通过」（⇒ 还原本身没写坏文件）
+        if ! compile "$FIXTURES/pos_output_assignability.cpp" g++ >/dev/null 2>&1; then
+            echo "❌ 还原后 fixture **仍编译失败** ⇒ 还原写坏了文件（self-test 自身有缺陷）"
+            exit 1
+        fi
+        ok "还原后 fixture 编译通过 ⇒ 还原未写坏源文件"
         echo "✅ 自检通过"
         exit 0
         ;;
