@@ -4,8 +4,8 @@
 - Date: 2026-10-30
 - Author: build-agent（architect role）
 - Parent: ADR-051（`chlib` 条件构造的语义模型 —— 守卫贡献 + 权威表面）· ADR-043（死 / 误导设施物理移除 —— 零消费者直接删、无别名期）· ADR-050（`ch_state_machine` 的「唯一写入点」纪律）
-- 关联 OpenSpec change：`multi-if-acceptance-surface-2026-10`（实施本 ADR；归档**禁** `--skip-specs`）
-- 关联 capability：`chlib-conditional-semantics`（**MODIFIED ×1**：权威表面的接受面条款 + E2 Scenario 订正）
+- 关联 OpenSpec change：**已归档** `openspec/changes/archive/2026-10-30-multi-if-acceptance-surface-2026-10/`（实施本 ADR，commit `c540980`；归档**未**用 `--skip-specs`）⇒ 后续（标题订正）= `chlib-conditional-acceptance-title-fix-2026-10`
+- 关联 capability：`chlib-conditional-semantics`（**MODIFIED ×1 + ADDED ×1**：权威表面的接受面条款 + E2 Scenario 的假 `THEN` 原地订正 + 「`multi_if` 的接受面 MUST 完备」新条款）
 - 证据：`docs/architecture/2026-10-30-n4-n6-evidence.md`（本 ADR 的全部实测数据在此，正文只留决策）
 
 ---

@@ -12,8 +12,14 @@ created_at: 2026-10-30
 
 - **Date drafted**: 2026-10-30
 - **Drafted by**: build-agent（planner role）
-- **Status**: ✅ **已立项** ⇒ change
-  `openspec/changes/multi-if-acceptance-surface-2026-10/`
+- **Status**: ✅ **已实施 + 已归档**（2026-10-30）⇒ 归档目录
+  `openspec/changes/archive/2026-10-30-multi-if-acceptance-surface-2026-10/`
+  （实现 commit `c540980`）⇒ capability `chlib-conditional-semantics`
+  **MODIFIED ×1 + ADDED ×1**（归档**未**用 `--skip-specs`）⇒ ⇒ 验收：`ctest -LE perf`
+  **194/194** · samples **36/36** · examples **28/28** · 护栏全 exit 0 · **变异 6/6**
+  全被抓 ⇒ ⚠️ **实施期抓到真缺陷**（`checked_value<T>(...)` 把显式实参绑到了**函数**
+  模板参数 `U` ⇒ **更宽的分支被隐式窄化** ⇒ **宽度判据根本没跑到** ⇒ D1 形同虚设）⇒
+  ⇒ 后续（标题订正）= `chlib-conditional-acceptance-title-fix-2026-10`（**已归档**）
 - **架构依据**：ADR-052（Accepted）· 证据 `docs/architecture/2026-10-30-n4-n6-evidence.md`
 - **归属 feature**：**待裁决**（与 `feat-dual-backend-coverage` 的「双后端」主题不直接相关；
   本项属 chlib 语义正确性）⇒ 暂挂 phase-5

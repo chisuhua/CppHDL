@@ -1,0 +1,73 @@
+# core-lnode-entry-set Specification
+
+## Purpose
+
+定义 CppHDL 核心层 `get_lnode`（**操作数 → `lnode<T>`** 的唯一转换入口）的
+**入口集合契约**：它的**通用**入口 MUST 恰为**一个**（受 `requires { t.impl(); }`
+约束的那个），MUST NOT 存在**无约束的通用**入口。
+
+**为什么需要这条契约**（ADR-053）：一个**无约束**的通用入口有**两重**危害 ——
+① 对**有** `impl()` 的类型它**永不选中**（C++20「约束更严者胜」偏序 ⇒ 受约束版
+恒胜）⇒ 纯死代码；② 对**无** `impl()` 的类型它**有害**：其返回类型**显式**
+⇒ `requires { get_lnode(x); }` 只检查重载决议、**不实例化函数体**
+⇒ ⇒ 探测返回 **`true`**（**假阳性**的能力探测）；且报错会指向**框架内部**
+（实测：`bundle_base.h: 'multi_if<…>' has no member named 'impl'`）
+⇒ ⇒ 用户误判为框架 bug。
+
+⚠️ **类型专用**入口（如 `get_lnode(const ch_uint<N> &)`）**允许**存在 —— 它们
+只匹配特定类型 ⇒ **不**产生假阳性探测。
+
+⚠️ **护栏 MUST 有两层**（实测踩中）：**编译期**判据（`static_assert`）**只能**
+看到**被 include 的**那些头文件 ⇒ ⇒ 缺陷真正的所在地若**没被** include
+⇒ ⇒ **漏报** ⇒ ⇒ 必须配一个**源码级扫描**（覆盖**全部**声明点）。
+
+## Requirements
+
+### Requirement: `get_lnode` MUST NOT 有**无约束的通用**入口
+
+`get_lnode` 的**通用**入口 MUST 恰为**一个**：`get_lnode(const T &)
+requires { t.impl(); }`（`bundle` 亦走它）；另有**恒等**版
+`get_lnode(const lnode<T> &)`。
+
+⇒ ⇒ MUST NOT 存在**无约束的通用**入口（`template <typename T> …(const T &)`
+且**无** `requires` 子句）：它对**有** `impl()` 的类型**永不选中**，对**无**
+`impl()` 的类型则产生**假阳性能力探测**（返回类型显式 ⇒ `requires` **不实例化**
+函数体）。
+
+⇒ ⇒ **类型专用**入口（如 `get_lnode(const ch_uint<N> &)`）**允许**存在。
+
+⇒ ⇒ 该契约 MUST 由**两层**可执行护栏核验（编译期 + 源码级扫描）⇒ 详见
+「护栏 MUST 有两层」Scenario。
+
+#### Scenario: 护栏 MUST 有两层（只靠编译期会漏报）
+
+- **WHEN** 一个**无约束的通用** `get_lnode` 入口被加入某个**未被**编译期 fixture
+      include 的头文件
+- **THEN** **编译期**判据 MUST **看不见**它（⇒ 它只看得到被 include 的头文件）
+- **AND** **源码级扫描** MUST 报违规（⇒ 覆盖**全部**声明点）
+- **AND** 两者 MUST **同批**落地（⇒ 否则修复期间无网）
+
+#### Scenario: 无约束的通用入口 MUST NOT 存在
+
+- **WHEN** 存在一个**无约束**的 `get_lnode(const T &)` 通用模板
+- **THEN** 该调用 MUST **违反**本条款（⇒ 无论其函数体是否可用）
+- **AND** `get_lnode` 的**通用**入口数 MUST 恰为 **1**
+
+#### Scenario: `requires` 探测 MUST 对无 `impl()` 的类型为 `false`
+
+- **WHEN** 对**无** `impl()` 成员的类型 `X` 求值 `requires { get_lnode(x); }`
+- **THEN** MUST 得 **`false`**（⇒ MUST NOT 因「函数体不实例化」而返回 `true`）
+- **AND** 该判据 MUST 以**编译期断言**形式常驻（破坏它 ⇒ 断言转红）
+
+#### Scenario: 对 bundle 的合法调用 MUST 仍可用
+
+- **WHEN** 对 `bundle_base` 派生类型调用 `get_lnode`
+- **THEN** MUST **编译通过**（走受约束的通用入口 —— `bundle_base` 继承
+  `logic_buffer::impl()`）
+- **AND** 结果 MUST 是 `lnode<该 bundle 类型>`
+
+#### Scenario: 无匹配时的诊断 MUST 指向调用点
+
+- **WHEN** 对无 `impl()` 的类型调用 `get_lnode`
+- **THEN** 报错 MUST 指向**用户的调用点** + 列出候选并说明**约束不满足**
+- **AND** MUST NOT 把错误帧指向框架内部实现文件（例：`bundle_base.h` 的某个行号）

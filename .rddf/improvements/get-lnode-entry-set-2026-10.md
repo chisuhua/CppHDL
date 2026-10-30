@@ -12,7 +12,16 @@ created_at: 2026-10-30
 
 - **Date drafted**: 2026-10-30
 - **Drafted by**: build-agent（planner role）
-- **Status**: ✅ **已立项** ⇒ change `openspec/changes/get-lnode-entry-set-2026-10/`
+- **Status**: ✅ **已实施 + 已归档**（2026-10-30）⇒ 归档目录
+  `openspec/changes/archive/2026-10-30-get-lnode-entry-set-2026-10/`
+  （实现 commit `8a0db15`）⇒ **新建** capability `core-lnode-entry-set`
+  （ADDED ×1，归档**未**用 `--skip-specs`）⇒ ⇒ 验收：`ctest -LE perf` **193/193**
+  · samples **36/36** · examples **28/28** · 护栏全 exit 0 · **变异 2/2** 全被抓 ⇒
+  ⚠️ **实施期实测订正**（**决策未变**）：① 「入口集合 = 2」**不准确** ⇒ 实测活声明是
+  **3** 个（`uint.h:197-200` 的 `get_lnode(const ch_uint<N>&)` **实测生效**）⇒ ⇒
+  契约精确化为「**通用**入口 = 1」② **只靠编译期判据会漏报**（它只看得到 fixture
+  include 到的头文件 ⇒ 缺陷真正的所在地 `bundle_base.h` 若没被 include ⇒ **漏**）⇒
+  ⇒ 必须配**源码级扫描**（本仓「护栏自身有盲区」病症的新实例）
 - **架构依据**：ADR-053（Accepted）· 证据 `docs/architecture/2026-10-30-n4-n6-evidence.md` §2/§4
 - **归属 feature**：**待裁决**（core 层 API 收敛，不属于现有 feature）⇒ 暂挂 phase-5
 

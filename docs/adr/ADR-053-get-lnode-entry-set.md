@@ -4,8 +4,8 @@
 - Date: 2026-10-30
 - Author: build-agent（architect role）
 - Parent: ADR-043（死 / 误导设施物理移除 —— 零消费者直接删、无别名期）· ADR-052（`multi_if` 的接受面 —— **相邻但不重叠**：`multi_if` 的 `get_lnode` 专属重载属该侧，不属本 ADR）
-- 关联 OpenSpec change：`get-lnode-entry-set-2026-10`（实施本 ADR）⇒ 归档**禁** `--skip-specs`（新建 capability `core-lnode-entry-set`）
-- 关联 capability：**待定**（本 ADR 的契约若需载体，归 `chlib-conditional-semantics` 或新建；由 planner 判）
+- 关联 OpenSpec change：**已归档** `openspec/changes/archive/2026-10-30-get-lnode-entry-set-2026-10/`（实施本 ADR，commit `8a0db15`；归档**未**用 `--skip-specs`）
+- 关联 capability：**新建** `core-lnode-entry-set`（ADDED ×1；契约载体 = `openspec/specs/core-lnode-entry-set/spec.md`）
 - 证据：`docs/architecture/2026-10-30-n4-n6-evidence.md` §2 / §4
 
 ---
