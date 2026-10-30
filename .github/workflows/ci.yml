@@ -392,6 +392,29 @@ jobs:
       shell: bash
       run: scripts/verify_get_lnode_entry_set.sh --self-test
 
+    - name: Verify multi_if acceptance surface
+      # Contract: capability `chlib-conditional-semantics` (ADR-052).
+      # `multi_if`'s acceptance surface MUST be complete: every cell is
+      # EITHER semantically correct OR loudly rejected - never a third state
+      # ("compiles but is semantically wrong"). The silent forms are the
+      # dangerous ones: a wider branch is truncated (a `bits<7:0>` node is
+      # inserted BEFORE the mux => both backends are isomorphic => dual
+      # backend parity is structurally blind, and Verilator's WIDTHTRUNC is
+      # globally disabled) and a single branch ignores its condition
+      # entirely (no mux is built at all).
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_multi_if_width.sh
+
+    - name: Verify multi_if acceptance surface (self-test)
+      # WHY a self-test: the compile-time criteria are only as good as their
+      # fixtures. This repo has shipped "looks like it works" defects (a
+      # compile-time criterion that never fired because an explicit template
+      # argument bound the WRONG parameter => wider branches were silently
+      # narrowed => the width criterion never ran at all).
+      shell: bash
+      run: scripts/verify_multi_if_width.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in

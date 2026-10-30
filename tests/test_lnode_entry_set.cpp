@@ -126,6 +126,8 @@ public:
         io.as_master();
     }
 
+    // ⚠️ 本组件**没有** `__io` 宏（bundle 是**成员**而非端口存储）⇒
+    //    `create_ports()` 无需 placement-new。
     void create_ports() override {}
     void describe() override {}
 };
