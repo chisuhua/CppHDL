@@ -16,7 +16,7 @@ phase_refs: [phase-5]
 | 缺陷 | improvement 草案 | 2026-10-26 复核 |
 |---|---|---|
 | 两个 cache wrapper 的分支逻辑**从不发射** | `.rddf/improvements/riscv-mini-cache-wrapper-live-logic-2026-10.md`（P2） | ✅ **已修复**（2026-10-28，change `riscv-mini-cache-wrapper-live-logic-2026-10` **已归档**）⇒ 3 处建图期 C++ `if` 全部清除 + 10 个 `ch_out` 全部无条件驱动 + 内层 cache 的 5 个输入全部显式驱动 |
-| CLINT `mtime` 不自增 | `.rddf/improvements/clint-mtime-autoincrement-2026-10.md`（P2） | ✅ 仍在：`include/cpu/riscv/clint.h` 的 `mtime` 只能由软件经写端口写入 ⇒ 只构成静态比较器 |
+| CLINT `mtime` 不自增 | `.rddf/improvements/clint-mtime-autoincrement-2026-10.md`（P2） | ✅ **已修复**（2026-10-30，change `clint-mtime-autoincrement-2026-10` **已归档**）⇒ `mtime` → **64 位自由运行计数器**（形态 B）+ **编译期** `TIMER_DIVIDER` + **写优先** + 复位值 0 ⇒ ⇒ **新建** capability `cpu-clint-timer`（ADDED ×6）⇒ ⇒ ⇒ **本 feature 的两项均已收口 ⇒ 可 `completed`** |
 
 > 两者均为 **P2**（不阻塞 parity / ISA 主线），因此排在新 feature `feat-rv32i-isa-completeness` 之后。
 
@@ -35,7 +35,7 @@ phase_refs: [phase-5]
 | # | 候选 change | 范围 | 前置 | 验收 |
 |---|---|---|---|---|
 | ① | `riscv-mini-cache-wrapper-live-logic-2026-10` | ⚠️ **裁决改为「无条件组合赋值」**（**不是** `select()`/`_if()` —— 后两者都是「条件块」形态，仍需判断「是否发射」）⇒ 把条件落到**输出端口的取值**里；`ICachePrefetch` 把 `addr`/`req`/`axi_ready`/`axi_data`/`axi_resp_valid` 真正接到内层 cache + 转发内层 AXI 主端；`DCacheWriteBuffer` 补齐 `axi_addr`/`axi_wdata`/`axi_we` 的驱动 | C2 ✅ 已归档 | ✅ **2026-10-28 已归档**：`req && we ⇒ ready==1`、`axi_ready ⇒ axi_valid==1`、`axi_addr`/`axi_wdata` 反映被写数据；`test_cache_smoke` 无「缺陷快照」断言 |
-| ② | `clint-mtime-autoincrement-2026-10` | `CLINT::tick()` 递增 `mtime`（或按 `mtimecmp` 语义补自由运行计数），恢复文件头注释所述契约 | 无 | 连续 N 拍后 `mtime == N`；写端口仍可覆盖；`test_interrupt_flow` 仍绿 |
+| ② | `clint-mtime-autoincrement-2026-10` | ⚠️ **实现形态与初稿不同**：**不**恢复 `CLINT::tick()`（C++ 侧方法**不在**仿真时序里 ⇒ 上一版它就是空实现）⇒ ⇒ 递增 MUST 由 RTL（`ch_reg` 的 `next`）实现 ⇒ 裁决见 **ADR-049** | 无（**ADR-049 已 Accepted**） | ✅ **2026-10-30 已归档**：连续 N 拍后 `mtime == N`（`TIMER_DIVIDER=1`）· **跨 32 位边界**正确 · 写端口**写优先**（写的那一拍不递增 · 另一半保持）· 分频相位**不被写复位** · `test_interrupt_flow` **18 用例 / 68 断言** 全绿 |
 
 ## 反例
 

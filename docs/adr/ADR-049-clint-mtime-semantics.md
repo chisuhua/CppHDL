@@ -4,8 +4,8 @@
 - Date: 2026-10-30
 - Author: build-agent（architect role）
 - Parent: ADR-046（RV32I 单源化 —— `include/cpu/` 是微架构唯一权威）· ADR-035（Verilator 后端 —— 64-bit 端口上限）· ADR-050（FSM 语义 —— 本 ADR 沿用其「契约 + 护栏 + 变异验证」三件套的落地形态）
-- 关联 OpenSpec change：**待立项**（实施本 ADR）
-- 关联 capability：**新建** `cpu-clint-timer`（ADDED ×N ⇒ 归档**禁** `--skip-specs`）
+- 关联 OpenSpec change：**已归档** `openspec/changes/archive/2026-10-30-clint-mtime-autoincrement-2026-10/`（实施本 ADR，commit 见 git log；归档**未**用 `--skip-specs`）
+- 关联 capability：**新建** `cpu-clint-timer`（ADDED ×6 ⇒ 归档**禁** `--skip-specs`）⇒ 契约载体 = `openspec/specs/cpu-clint-timer/spec.md`
 - 编号：⚠️ **049 由此前预留**（`.rddf/improvements/clint-mtime-autoincrement-2026-10.md:74,84`）⇒ ADR-050 明确让出该编号（见其 §头「编号」行）⇒ 本 ADR 取 **049**
 - 前置审查：本 ADR 的两个候选实现形态经**独立探针实测**（§1.4）⇒ 两条**实现陷阱**是实测发现，不是推理
 
@@ -165,6 +165,29 @@ CLINT 是**外设**，其语义与 RV32I 流水线微架构**无关** ⇒ ⇒ **
 - [ ] `include/cpu/AGENTS.md` 与 `clint.h` 的文件头注释**与实际行为一致**（不再有「声称」与「实现」不符）。
 
 ## 6. 实施追踪
+
+> ✅ **实施完成**（2026-10-30）⇒ 见 change 的 `design.md` §1.1（探针证据）·
+> §2（逐拍推导）· §4（变异清单）· §6（实施期实测记录）。
+>
+> ⚠️ **实施期实测新发现第 3 条陷阱**（本 ADR §1.4 只载了 2 条）：
+> **`bits_update<32>` 在 64 位 target 上返回的是 64 位值**
+> （`operators_width.h:192` 的 `make_uint_result<ch_width_v<Target>>`）
+> ⇒ ⇒ 用 `ch_uint<32>` 接收 ⇒ **静默截断** ⇒ ⇒ **「写高半」完全失效**
+> （探针实测：写 hi=7 ⇒ `mtime` 仍 `0x0`）⇒ ⇒ 已写入 capability 契约
+> （「实现 MUST 规避三条陷阱」Requirement）。
+>
+> ⚠️ **实施形态 = B**（D6 推荐）⇒ ⇒ **§1.4 陷阱 2 在形态 B 下**不存在**
+> （形态 A 才需要手拼 64 位 ⇒ 才有「`hi | lo` 漏移位」这条路径）⇒ ⇒
+> §5.4 的 M2 在形态 B 下**不适用**（ADR 已预留该情形）⇒ 改用等效变异
+> （位段位置写错）⇒ **变异 7/7 全被抓**。
+>
+> ⚠️ **读时序的三个实测事实**（决定全部用例的期望值模型）：
+> ① `read_data` 是**组合**输出 ⇒ 其值在**时序更新之后**求值
+> ② **读的那一拍本身会让 `mtime` 递增** ⇒ ⇒ **任何** tick 都推进**分频相位**
+> ③ ⇒ ⇒ **「写-读同拍」读到精确的写值**（写的那一拍不递增）⇒ ⇒ 这是
+> **消除时序脆弱性**的关键手段 ⇒ ⇒ 既有用例 1 已据此重写（§4 的要求）。
+
+## 6.1 实施追踪（原段）
 
 - **change**：**待立项**（planner 建 change，带 `cpu-clint-timer` 的 ADDED delta ⇒ 归档**禁** `--skip-specs`）⇒ 其 `design.md` 承载逐拍推导 / 变异清单 / 探针证据；`tasks.md` 承载可勾选任务（**过程日志不进本 ADR**）；
 - **改动面（预期）**：`include/cpu/riscv/clint.h`（+ `examples/riscv-mini/tests/test_interrupt_flow.cpp` 的期望值重推 + `include/cpu/AGENTS.md` + capability delta）；

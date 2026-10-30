@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6376 lines**（2026-10-28 实测，ADR-046 D9：磁盘是权威）。
+**30 headers, 6459 lines**（2026-10-30 实测，ADR-046 D9：磁盘是权威；2026-10-28 的 6376 因 ADR-049 落地（CLINT 契约段）而变）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6376 lines（2026-10-28 实测）
+include/cpu/                             # 30 headers, 6459 lines（2026-10-30 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -42,7 +42,7 @@ include/cpu/                             # 30 headers, 6376 lines（2026-10-28 �
     ├── rv32i_csr.h                 # CSR bank (9 registers, 252)
     ├── rv32i_exception.h          # Trap entry + MRET (177)
     ├── address_decoder.h          # MMIO 6-region decoder (119)
-    └── clint.h                    # Core Local Interrupt Controller (130)
+    └── clint.h                    # Core Local Interrupt Controller (~200)
 ```
 
 ## NAMESPACE MAP
@@ -172,6 +172,31 @@ include/cpu/                             # 30 headers, 6376 lines（2026-10-28 �
     ⇒ 判别力证据：`examples/riscv-mini/tests/test_cache_smoke.cpp`
     （**8 用例 / 58 断言**，**双后端**，含内层 **fill → hit** 路径）。
 
+## CLINT 的 `mtime` 契约（2026-10-30，ADR-049）
+
+- **`mtime` 是 64 位**自由运行计数器**（不是「只能由软件写」的静态比较器）**——
+  每个递增拍 +1（无符号回绕）⇒ 软件可以靠读它做时基；
+- **递增频率**：`Clint<TIMER_DIVIDER>` 的**编译期**常量（默认 1 = 每拍 +1）
+  ⇒ ⇒ **不是**运行期端口（新增输入端口 ⇒ 全部实例化点 MUST 显式驱动，
+  而未驱动端口读到**未定义值**）；
+- ⚠️ **分频相位 = 自复位以来的拍数** ⇒ ⇒ **任何** tick 都推进它
+  （包括写 `mtimecmp` 的拍）⇒ ⇒ 测试 MUST 逐拍计，期望值 MUST **手推**；
+- **写优先**（RISC-V 允许软件写 `mtime` 校时）：写的那一拍取**写值**、
+  **另一半保持**、**本拍不递增** ⇒ ⇒ 写后的值成为**下一次**递增的起点；
+  ⚠️ 写拍**照常推进**分频器（相位与写**无关**）⇒ ⇒ 写拍若恰是递增拍，
+  该次递增**被丢弃**但相位**不变**；
+- **复位值**：`mtime` = 0（`mtimecmp` 保持**全 1**）⇒ ⇒ 复位后**不**产生中断；
+- **64 位读允许撕裂**（已知边界）：经 `read_data` + 地址偏移分两次读
+  ⇒ 软件应读两次高半检测翻转 ⇒ ⇒ **不**新增原子读端口；
+- ⚠️ **三条已实测的实现陷阱**（ADR-049 §1.4 + 实施期探针）MUST 规避：
+  ① **进位 / 分频边界 MUST 用硬件原语**（`select`）—— C++ 三元在 `ch_bool`
+  上是**建图期**求值 ⇒ **恒取 0** ⇒ 计数器**永远跨不过边界**；
+  ② **「保高半换低半」MUST 用 `bits_update<32>`** —— `<<` 在 64 位上
+  **编译不过**；手写 `hi | lo` **漏移位** ⇒ **静默清零高半**；
+  ③ ⚠️ **`bits_update<32>` 在 64 位 target 上返回 64 位值** ⇒ MUST 用
+  **64 位**变量接收（用 32 位接收 ⇒ **静默截断** ⇒ 「写高半」完全失效 ——
+  实施期**实测踩中**过）。
+
 ## ANTI-PATTERNS
 - **Namespace inconsistency**: CPU components split across 4 namespaces (`riscv`, `chlib`, `cpu`, `ch::chlib`)
 - **Duplicate forwarding**: `include/chlib/forwarding.h`（`chlib::ForwardingUnit` + `chlib::ForwardingMux`）vs `include/cpu/pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）—— 并存，靠 namespace 区分（ADR-038 §2.3 已裁决「合并留给未来 change」）；`chlib::ForwardingMux` 是 ADR-046 D3 #14 指定的**唯一**数据 mux 实现
@@ -188,7 +213,7 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
 | `test_hazard` | `tests/chlib/test_hazard_complete.cpp` | Hazard detection + forwarding |
 | `test_rv32i_pipeline` | `tests/test_rv32i_pipeline.cpp` | 5-stage pipeline integration (Catch2) |
 | `test_csr_unit` | `examples/riscv-mini/tests/test_csr_unit.cpp` | CSR register reset, R/W, MRET, exceptions, WFI, interrupts |
-| `test_interrupt_flow` | `examples/riscv-mini/tests/test_interrupt_flow.cpp` | CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET（10 用例 / 28 断言；2026-10-23 注册进 CTest，此前从未编译） |
+| `test_interrupt_flow` | `examples/riscv-mini/tests/test_interrupt_flow.cpp` | CLINT 定时器 / CSR 中断条件 / 陷阱入口 / MRET（**18 用例 / 68 断言**；2026-10-30 ADR-049 落地 `mtime` 自由运行语义 ⇒ 新增 **8** 个判别性用例；2026-10-23 注册进 CTest，此前从未编译） |
 | `test_phase4_chlib` | `tests/chlib/test_phase4_integration.cpp` | Phase-4 chlib / CPU integration smoke (cache 用 `ICacheSync` / `DCacheSync` + hazard) |
 
 `examples/riscv-mini/tests/` 的 Catch2 测试 target 自 2026-10-23 起

@@ -1,0 +1,20 @@
+schema: spec-driven
+created: 2026-10-30
+# 实施 ADR-049（`docs/adr/ADR-049-clint-mtime-semantics.md`）。
+#
+# 把 `include/cpu/riscv/clint.h` 的 `mtime` 从「**只能由软件写**的静态比较器」
+# 改成「**64 位自由运行计数器**」（RISC-V 规范语义）。
+#
+# ⇒ **新建 capability** `cpu-clint-timer`（ADR-049 D7：CLINT 是**外设**，
+#   与 RV32I 流水线微架构**无共享语义** ⇒ 不塞进 `rv32i-canonical-home`，
+#   也不塞进 `cpu-cache-subsystem`）⇒ ⇒ 归档**禁** `--skip-specs`。
+#
+# ⇒ 裁决要点（ADR-049 D1–D8）：
+#   D1 64 位自由运行计数器 · D2 编译期可配置分频 `TIMER_DIVIDER`
+#   （写拍**照常推进**分频器、该次递增被丢弃）· D3 **写优先**（写的那一拍不递增）
+#   D4 复位值 0（`mtimecmp` 保持全 1）· D5 64 位读**允许撕裂**（不新增端口）
+#   D6 内部表示**实施者自选**（本 change 选**形态 B**：单一 64 位 `ch_reg`）
+#   D7 capability 归属 · D8 MUST 走 OpenSpec change
+#
+# ⚠️ 实施期 MUST 携带 ADR-049 §1.4 的**三条实测陷阱**（进位用硬件原语 /
+#   `bits_update<32>` / 64 位 target 的返回值宽度）⇒ 全部写进 capability 契约。

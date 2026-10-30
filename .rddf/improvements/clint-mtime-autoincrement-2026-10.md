@@ -12,10 +12,21 @@ created_at: 2026-10-24
 
 - **Date drafted**: 2026-10-24
 - **Drafted by**: build-agent (builder role)
-- **Status**: ✅ **决策门已解除**（2026-10-30，architect 落 **ADR-049**
-  `docs/adr/ADR-049-clint-mtime-semantics.md` ⇒ D1–D5 **已裁决** + capability 归属
-  已定（新建 `cpu-clint-timer`）⇒ ⇒ **可立项**（planner 建 change，带 ADDED delta
-  ⇒ 归档**禁** `--skip-specs`）
+- **Status**: ✅ **已实施**（2026-10-30）⇒ change `clint-mtime-autoincrement-2026-10`
+  （**新建** capability `cpu-clint-timer`，ADDED ×6 ⇒ 归档**禁** `--skip-specs`）
+  ⇒ ⚠️ **实施期实测新发现第 3 条陷阱**（ADR-049 §1.4 未载）：
+  `bits_update<32>` 在 **64 位 target** 上**返回 64 位值** ⇒ 用 32 位接收 ⇒
+  **静默截断** ⇒ 「写高半」**完全失效**（探针实测：写 hi=7 ⇒ mtime 仍 `0x0`）
+  ⇒ ⇒ 已写入 capability 契约（Requirement 6 + Scenario）
+  ⇒ ⇒ ⚠️ **读时序的三个实测事实**（决定了全部用例的期望值模型）：
+  ① `read_data` 是**组合**输出 ⇒ 其值在**时序更新之后**求值 ② **读的那一拍本身
+  会让 `mtime` 递增** ⇒ ⇒ **任何** tick 都推进分频相位 ③ ⇒ ⇒ **「写-读同拍」
+  读到精确的写值**（写的那一拍不递增）⇒ ⇒ **消除时序脆弱性**的关键手段
+  ⇒ ⇒ ✅ **判别性用例 8 个**（跨 32 位边界 / 分频相位 / 相位不被写复位 / 写拍落
+  递增边界 / 写优先三项 / 写后继续 / 复位后 `mtip=0`）
+  ⇒ ⇒ ✅ **变异 7/7 全被抓**（每条**先确认编译成功**）
+  ⇒ ⇒ ⚠️ **如实登记**：ADR-049 §5.4 的 M2（手写 `hi|lo` 漏移位）是**形态 A 专属**
+  ⇒ 形态 B 下**该路径不存在** ⇒ 改用等效变异（位段位置写错）
 - **来源**: change `riscv-mini-test-triage-2026-10` 实测挖出（C1 修 `test_interrupt_flow`
   的断言时发现），**原登记在该 change 的「框架缺陷」节** ⇒ 本 draft 承接之，C1 归档时移除该条。
 
