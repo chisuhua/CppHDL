@@ -135,10 +135,13 @@ E1 / E3 两条与「权威表面唯一」本身。
 
 #### Scenario: 表达式形式的接受面限制 MUST 可查
 
-- **WHEN** 使用者尝试把 `multi_if` 直接赋给 `ch_out`
-- **THEN** MUST **编译不过**（`multi_if has no member named 'impl'`）
-- **AND** MUST 有**明文契约**记录该限制（⇒ 而非只存在于注释里）
-- **AND** 该限制的**修复状态** MUST 可判定（已修 / 未修）
+- **WHEN** 使用者把 `multi_if` 直接赋给 `ch_out`
+- **THEN** MUST **编译通过**（⚠️ **订正记录**（2026-10-30）：本 Scenario 的
+  `THEN` 原写「MUST **编译不过**（`multi_if has no member named 'impl'`）」
+  —— 那是**修复前**的行为 ⇒ ⇒ 现已修复 ⇒ 改为「MUST 编译通过」）
+- **AND** 直接赋值 MUST 与「先转成 `ch_uint` 再赋值」**逐位等价**
+- **AND** MUST 有**明文契约**记录该行为（⇒ 而非只存在于注释里）
+- **AND** 该行为的**修复状态** MUST 可判定（已修 / 未修）
 
 #### Scenario: 表达式形式的分支值 MUST 同类型
 
@@ -154,10 +157,18 @@ E1 / E3 两条与「权威表面唯一」本身。
 #### Scenario: 表达式形式的条件不能是布尔输入端口
 
 - **WHEN** 以 `ch_in<ch_bool>` 端口作为 `if_then` 的条件
-- **THEN** MUST **编译不过**（`no matching function`）
-- **AND** 该限制 MUST 有**明文契约**记录
+- **THEN** MUST **编译通过**（⚠️ **订正记录**（2026-10-30）：本 Scenario 的
+  `THEN` 原写「MUST **编译不过**（`no matching function`）」—— 那是**修复前**
+  的行为 ⇒ ⇒ 现已修复 ⇒ 改为「MUST 编译通过」）
+- ⚠️ **本 Scenario 的标题已过时**（标题仍说「**不能**是」而正文说「MUST 编译
+  通过」）⇒ ⇒ **标题 MUST 保留原样**：OpenSpec CLI 按**标题**匹配 Scenario
+  ⇒ ⇒ 改标题会被判定为「丢弃旧 Scenario + 新增一个」⇒ ⇒ **拒绝归档**
+  （实测：`omits scenario(s) the current spec still has`）⇒ ⇒ 与 ADR-052
+  处理 E2 假 `THEN` 的做法**一致**（**原地订正内容**，不动标题）
+- **AND** 该行为 MUST 有**明文契约**记录
 - **AND** 语句块形式（`_if`）的条件参数 MUST 接受任意硬件操作数
-  （⇒ ⇒ 二者的**可表达性**差异 MUST 是**已知且有契约**的）
+  （⇒ ⇒ 二者的**可表达性** MUST **对齐** ⇒ ⇒ 表达式形式 MUST NOT 比语句块
+  形式更受限）
 
 #### Scenario: 裸 literal MUST 被接受
 

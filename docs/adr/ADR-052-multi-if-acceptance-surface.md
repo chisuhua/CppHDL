@@ -245,5 +245,5 @@ D5 钉住：**`operator T()` 的返回类型恒为 `T`**；宽度判据之外**�
 | 2 | 全局 `WIDTHTRUNC` 的移除 | **独立 change**（审计型）。codegen 已有结构性修宽先例（`print_reg` 的 `:743-746`、`print_mux` 的 `:1100-1110`）⇒ 可逐条消化 CH_MEM select-tree 后摘掉 `:299-300` |
 | 3 | `operator>` 在 `ch_uint` 上不可用（`if_then(a > b, x)` 直接失败）· 顶层 `ch_in` 在 `describe()` 内作值源得 null 节点（`io.h:451`） | **各自独立议题** |
 | 5 | `samples/if_demo.cpp` 归位 + 禁用清单订正 | **独立 change**（实测 5 类错误，清单只记 2 类 ⇒ 已过时） |
-| 6 | E1（`multi_if` 不能直接赋给 `ch_out`）与 E3（条件不能是 `ch_in<ch_bool>`） | **不在本 ADR**。E1 的修法是 `chlib` 侧加 `get_lnode(const multi_if<T>&)`（`core/` 零改动）⇒ 与 ADR-053 的次序见该 ADR |
+| 6 | E1（`multi_if` 不能直接赋给 `ch_out`）与 E3（条件不能是 `ch_in<ch_bool>`） | ✅ **已实施**（2026-10-30，change `multi-if-output-assignability-2026-10` **已归档**）⇒ **不在本 ADR**（本 ADR 只留「宽度 / 字面量 / 单分支」三类）。E1 的修法 = `chlib` 侧加 `get_lnode(const multi_if<T>&)`（**类型专用**入口 ⇒ 不违反 ADR-053）+ `ch::core::ch_width_impl<chlib::multi_if<T>>` 特化 ⇒ 靠 **ADL** 命中 ⇒ **`core/` 零改动**；E3 = `if_then` 的条件**模板化** + 经 `to_operand` 归一化 |
 | 7 | `ch_width_impl<Derived>` 的 bundle 特化（无消费者） | 只**登记**（类模板特化的删除判据不同 ⇒ 见 ADR-053 Non-Goals） |

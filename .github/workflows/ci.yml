@@ -440,6 +440,29 @@ jobs:
       shell: bash
       run: scripts/verify_conditional_assign_integrity.sh --self-test
 
+    - name: Verify multi_if output assignability (E1) and condition (E3)
+      # Contract: capability `chlib-conditional-semantics`.
+      # E1: a `multi_if` MUST be directly assignable to a `ch_out` (it did
+      # NOT compile: `ch_out::operator=` calls `get_lnode(value)` and
+      # `multi_if` has no `impl()` => no matching overload - while `select`
+      # DOES accept the same operands => framework inconsistency).
+      # E3: `if_then`'s condition MAY be a `ch_in<ch_bool>` port (it did NOT
+      # compile: the parameter was `const ch_bool&` - while `_if` DOES
+      # accept a port => framework inconsistency).
+      # Both fixes live in `chlib` => ZERO `core/` changes (E1 relies on
+      # ADL finding `chlib::get_lnode`).
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_multi_if_output_assignability.sh
+
+    - name: Verify multi_if output assignability (self-test)
+      # WHY a self-test: R1 only proves "it compiles" - a fixture that
+      # assigns via an intermediate `ch_uint` still compiles => R1 cannot
+      # catch it => R3 (source-level) is REQUIRED. This self-test proves
+      # that by poisoning the fixture and observing that R1 stays green.
+      shell: bash
+      run: scripts/verify_multi_if_output_assignability.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in

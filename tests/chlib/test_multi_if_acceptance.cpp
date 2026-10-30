@@ -85,6 +85,43 @@ uint64_t read_port(ch::Simulator &sim, lnodeimpl *ln) {
                                        : static_cast<uint64_t>(it->second);
 }
 
+// ===========================================================================
+// E1：`multi_if` 直接赋给 `ch_out`（此前 **编译不过**）
+//
+// ⚠️ 修复前：`ch_out<T>::operator=` 走 `get_lnode(value)` ⇒ 而 `multi_if<T>`
+//    **无** `impl()` ⇒ ⇒ **无匹配重载** ⇒ ⇒ `io().out = if_then(...);`
+//    **编译不过** ⇒ ⇒ 而 `select` 对同类操作数**可用** ⇒ ⇒ 框架内不一致。
+// ===========================================================================
+
+/// 顶层端口的输出：**直接**由 `multi_if` 驱动（E1）与**先转 `ch_uint`**
+/// 再驱动（对照）—— 两者 MUST **逐位相等**。
+class MultiIfOutputDut : public ch::Component {
+public:
+    __io(ch_in<ch_bool> sel;
+         ch_out<ch_uint<9>> direct;   // ← 直接赋 `multi_if`（E1）
+         ch_out<ch_uint<9>> via_uint;) // ← 对照：先转 `ch_uint`
+
+    MultiIfOutputDut(ch::Component *parent = nullptr,
+                      const std::string &name = "multi_if_output_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        // ⚠️ 手推金标（**不**抄仿真输出）：
+        //    结果宽度 **9 位**；分支一 = `ch_uint<8>(0xA5)` ⇒ **零扩展** ⇒ `0x0A5`；
+        //    分支二 = `ch_uint<4>(0xF)`   ⇒ **零扩展** ⇒ `0x00F`。
+        //    ⚠️ 取「高位为 1」的形态 ⇒ 若误用 **sext** ⇒ `0x1A5` / `0x01F`
+        //    ⇒ ⇒ **可判别**。
+        //
+        // ⚠️ 条件用**顶层 `ch_in<ch_bool>` 端口**（E3）⇒ 两条修复合在同一处验证。
+        io().direct = if_then<ch_uint<9>>(io().sel, ch_uint<8>(0xA5_h))
+                          .else_(ch_uint<4>(0xF_h));
+        ch_uint<9> v = if_then<ch_uint<9>>(io().sel, ch_uint<8>(0xA5_h))
+                            .else_(ch_uint<4>(0xF_h));
+        io().via_uint = v;
+    }
+};
+
 } // namespace
 
 // ===========================================================================
@@ -188,4 +225,33 @@ TEST_CASE("multi_if: a NARROW branch MUST be ZERO-extended into the wider "
         sim.tick();
         REQUIRE(read_port(sim, dev.instance().io().wide.impl()) == 0x00Fu);
     }
+}
+
+// ===========================================================================
+// E1 / E3：`multi_if` 直接赋给 `ch_out` + 端口作条件
+// ===========================================================================
+
+TEST_CASE("multi_if: it MUST be directly assignable to a ch_out, and its "
+          "condition MAY be a ch_in<ch_bool> port",
+          "[chlib][multi_if][adr052][e1][e3]") {
+    ch::ch_device<MultiIfOutputDut> dev;
+    ch::Simulator sim(dev.context());
+    auto *direct = dev.instance().io().direct.impl();
+    auto *via_uint = dev.instance().io().via_uint.impl();
+
+    // ⚠️ 手推：sel=1 ⇒ 取分支一 ⇒ `ch_uint<8>(0xA5)` 零扩展到 9 位
+    //    ⇒ **0x0A5** = 165（若误用 sext ⇒ 0x1A5 = 421 ⇒ 可判别）
+    sim.set_input_value(dev.instance().io().sel, 1u);
+    sim.tick();
+    REQUIRE(read_port(sim, direct) == 0x0A5u);
+    // ⚠️ **等价性**断言：直接赋 `multi_if` MUST 与「先转 `ch_uint` 再赋」
+    //    **逐位相等** ⇒ ⇒ 这是 E1 的**语义**判据（不只是「能编译」）。
+    REQUIRE(read_port(sim, direct) == read_port(sim, via_uint));
+
+    // ⚠️ 手推：sel=0 ⇒ 取 `else_` 分支 ⇒ `ch_uint<4>(0xF)` 零扩展
+    //    ⇒ **0x00F** = 15（若误用 sext ⇒ 0x01F = 31 ⇒ 可判别）
+    sim.set_input_value(dev.instance().io().sel, 0u);
+    sim.tick();
+    REQUIRE(read_port(sim, direct) == 0x00Fu);
+    REQUIRE(read_port(sim, direct) == read_port(sim, via_uint));
 }

@@ -228,12 +228,24 @@ public:
 // ⚠️ **D4**：`T` 未显式给出时 ⇒ 由**首分支**推导 ⇒ 首分支是 **port** 时
 //    **归一化**为它的 `value_type`（与 `select` / `to_operand` 的既有 port 特判
 //    一致 ⇒ 消除「`select` 能用 port 而 `if_then` 不能」的框架内不一致）。
-template <typename T = void, typename U>
-auto if_then(const ch_bool &condition, const U &value) {
+//
+// ⚠️ **条件参数 MUST 是模板**（E3 的修复）—— 此前形参是 `const ch_bool &` ⇒ ⇒
+//    `ch_in<ch_bool>` **不能**绑到它 ⇒ ⇒ `if_then(io().en, x)` **编译不过**
+//    ⇒ ⇒ 而 `select` / `_if` 对端口**都可用** ⇒ ⇒ 框架内不一致。
+//    ⇒ ⇒ 现在条件经 **`to_operand`** 归一化 ⇒ ⇒ 端口 / 硬件类型 / 表达式
+//    **都**可用 ⇒ ⇒ 与 `_if`（语句块形式）**可表达性对齐**。
+//
+// ⚠️ 归一化**不新建节点**：`to_operand` 对硬件类型走 `get_lnode`（取现有节点）
+//    ⇒ ⇒ 零额外节点 ⇒ ⇒ 既有行为**逐位不变**。
+template <typename T = void, typename U, typename C>
+auto if_then(const C &condition, const U &value) {
+    // ⚠️ `to_operand` 对 port 走 `lnode<value_type>(value.impl())` 分支
+    //    ⇒ 对 `ch_in<ch_bool>` 得到 `lnode<ch_bool>` ⇒ `.impl()` 即其节点。
+    ch_bool cond(to_operand(condition).impl());
     if constexpr (std::is_same_v<T, void>) {
-        return multi_if<branch_value_type_t<U>>(condition, value);
+        return multi_if<branch_value_type_t<U>>(cond, value);
     } else {
-        return multi_if<T>(condition, value);
+        return multi_if<T>(cond, value);
     }
 }
 
@@ -243,4 +255,52 @@ auto if_then(const ch_bool &condition, const U &value) {
 //    ⇒ ⇒ 名字 over-promise ⇒ 依 Zero-Debt + ADR-043 先例（零消费者 ⇒ 直接删、
 //    无 deprecation 别名期）⇒ ⇒ `multi_if` / `if_then` 是**唯一**的表达式形式。
 
+} // namespace chlib
+
+// ===========================================================================
+// E1 的修复：`multi_if` MUST 能**直接赋给 `ch_out`**
+// ===========================================================================
+//
+// ⚠️ **缺陷形态**：`ch_out<T>::operator=(const U &)` 走 `get_lnode(value)`
+//    ⇒ ⇒ 而 `multi_if<T>` **无** `impl()` ⇒ ⇒ **无匹配重载** ⇒ ⇒
+//    `io().out = if_then(c, a).else_(b);` **编译不过**
+//    （实测：`include/core/io.h:115: error: no matching function for call to
+//    'get_lnode(const chlib::multi_if<ch::core::ch_uint<9> >&)'`）。
+//    ⇒ ⇒ 而 `select` 对同类操作数**可用** ⇒ ⇒ 框架内不一致。
+//
+// ⚠️⚠️ **为什么必须写在 `namespace chlib`（而不是 `ch::core`）**：
+//    `core/io.h` 的 `get_lnode(value)` 是**非限定**调用 ⇒ ⇒ 候选集 =
+//    「定义点的普通查找」+「**实例化点的 ADL**」⇒ ⇒ `multi_if` 在 `chlib`
+//    ⇒ ⇒ ADL 会找到 `chlib::get_lnode` ⇒ ⇒ **核心层零改动**。
+//    ⇒ ⚠️ 写成 `namespace ch::core { ... get_lnode ... }` ⇒ ⇒ ADL **找不到**
+//    ⇒ ⇒ 修复**失效**（实测踩过）。
+//
+// ⚠️ **形参 MUST 是**具体类型**（`const multi_if<T> &`）⇒ ⇒ 它是**类型专用**
+//    入口 ⇒ ⇒ **不**违反 ADR-053（「MUST NOT 有**无约束的通用**入口」）。
+//
+// ⚠️ **为什么需要 `ch_width_impl` 特化**：`lnode<T>` 的 `ch_width_impl`
+//    （`include/core/lnode.h:38`）用 `ch_width_v<T>` ⇒ ⇒ `multi_if<T>` 必须
+//    有宽度 ⇒ ⇒ 结果类型宽度 = `ch_width_v<T>`（与 `multi_if` 的结果类型一致）。
+//
+// ⚠️ **语义**：`get_lnode(multi_if)` MUST 触发 `multi_if` 的**合成**
+//    （`operator T()`）⇒ ⇒ 返回的节点就是**合成后的值** ⇒ ⇒ 与
+//    `ch_uint<8> v = if_then(...); io().out = v;` **逐位等价**。
+
+namespace ch::core {
+// ⚠️ 特化 MUST 在 `ch::core`（主模板所在命名空间）⇒ ⇒ 在 `chlib` 内部写
+//    `namespace ch::core { ... }` **不成立** ⇒ ⇒ 必须写在**文件末尾**。
+template <typename T>
+struct ch_width_impl<::chlib::multi_if<T>, void> {
+    static constexpr unsigned value = ch_width_v<T>;
+};
+} // namespace ch::core
+
+namespace chlib {
+/// `multi_if` → `lnode`（**类型专用**入口；见上文的 E1 说明）
+template <typename T>
+inline ::ch::core::lnode<multi_if<T>> get_lnode(const multi_if<T> &m) {
+    // ⚠️ `operator T()` 是**建图期**的合成（它遍历分支体并合成一条 select 链）
+    //    ⇒ ⇒ 这里调用它就得到**合成后的节点**。
+    return ::ch::core::lnode<multi_if<T>>(static_cast<T>(m).impl());
+}
 } // namespace chlib

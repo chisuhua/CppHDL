@@ -1,0 +1,21 @@
+schema: spec-driven
+created: 2026-10-30
+# `multi_if` 的两条**可赋值性 / 可接受性**修复（**E1** + **E3**）：
+#
+#   **E1**：`multi_if` MUST 能**直接赋给 `ch_out`**
+#        （修复前 **编译不过**：`include/core/io.h:115: error: no matching
+#        function for call to 'get_lnode(const chlib::multi_if<...>&)'`
+#        ⇒ 而 `select` 对同类操作数**可用** ⇒ ⇒ 框架内不一致）
+#   **E3**：`if_then` 的条件 MUST 能是 **`ch_in<ch_bool>` 端口**
+#        （修复前 **编译不过**：`no matching function` ⇒ 而 `_if` 对端口
+#        **可用** ⇒ ⇒ 框架内不一致）
+#
+# ⇒ ⇒ 两条修复都在 **`chlib` 层** ⇒ ⇒ **`core/` 零改动**：
+#   * E1 = `chlib::get_lnode(const multi_if<T> &)`（**类型专用**入口 ⇒ **不**
+#     违反 ADR-053）+ `ch::core::ch_width_impl<chlib::multi_if<T>>` 特化
+#     ⇒ ⇒ 靠 **ADL** 命中 `core/io.h` 的非限定 `get_lnode(value)` 调用；
+#   * E3 = `if_then` 的条件形参**模板化** + 经 `to_operand` 归一化。
+#
+# ⇒ 规格面：capability `chlib-conditional-semantics` **MODIFIED ×1**
+#   （E1 / E3 两个 Scenario **原地订正** ⇒ ⚠️ OpenSpec CLI **拒绝删除**
+#   Scenario ⇒ ⇒ 只能原地订正）⇒ 归档**禁** `--skip-specs`。
