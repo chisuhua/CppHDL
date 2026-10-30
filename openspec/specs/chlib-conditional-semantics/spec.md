@@ -110,10 +110,35 @@ MUST **不**被条件化（⇒ 它是**无条件**的）⇒ ⇒ 该形态 MUST �
 
 ⇒ ⇒ 条件构造 MUST NOT 存在**两个**行为等价的入口。
 
+⇒ ⇒ 表达式表面的**接受面限制**（能否直接赋给输出端口 / 分支值是否须同类型 /
+条件能否是布尔输入端口）MUST 有**明文契约** ⇒ ⇒ 不得只存在于注释里 ⇒ ⇒
+（限制的逐条形态见下方 Scenario）。
+
 #### Scenario: priority_if 不再存在
 
 - **WHEN** 代码尝试使用 `priority_if` / `priority_if_then`
 - **THEN** MUST **编译不过**（无匹配重载）
+
+#### Scenario: 表达式形式的接受面限制 MUST 可查
+
+- **WHEN** 使用者尝试把 `multi_if` 直接赋给 `ch_out`
+- **THEN** MUST **编译不过**（`multi_if has no member named 'impl'`）
+- **AND** MUST 有**明文契约**记录该限制（⇒ 而非只存在于注释里）
+- **AND** 该限制的**修复状态** MUST 可判定（已修 / 未修）
+
+#### Scenario: 表达式形式的分支值 MUST 同类型
+
+- **WHEN** 各分支的值宽度**不同**（例：`a + b` 是 **9 位**、`a - b` 是 **8 位**）
+- **THEN** `multi_if<T>` 的类型推导 MUST 失败（⇒ 无法编译）
+- **AND** MUST 有**明文契约**记录该限制（⇒ 修复者 MUST 能区分「契约」与「偶然」）
+
+#### Scenario: 表达式形式的条件不能是布尔输入端口
+
+- **WHEN** 以 `ch_in<ch_bool>` 端口作为 `if_then` 的条件
+- **THEN** MUST **编译不过**（`no matching function`）
+- **AND** 该限制 MUST 有**明文契约**记录
+- **AND** 语句块形式（`_if`）的条件参数 MUST 接受任意硬件操作数
+  （⇒ ⇒ 二者的**可表达性**差异 MUST 是**已知且有契约**的）
 
 ### Requirement: 条件构造 MUST **零** `core/` 改动
 
@@ -125,3 +150,30 @@ MUST **不**被条件化（⇒ 它是**无条件**的）⇒ ⇒ 该形态 MUST �
 - **WHEN** 条件块内的赋值被合成为一条 `select` 链
 - **THEN** 每个目标 MUST 只有**一个** `next` 写入点
 - **AND** `core/` 的公开契约 MUST **零**变化
+
+### Requirement: 条件块的析构 MUST 兼容抛出路径
+
+条件块对象的析构函数 MUST 在**未终结**时兜底调用 `end()`（⇒ 保证候选值被
+合成、目标被写入）⇒ ⇒ 而 `end()` **可能**抛出（输出端口缺 `else_` 候选值 ⇒
+构建期拒绝）⇒ ⇒ 因此：
+
+- 析构函数 MUST 声明为 **`noexcept(false)`**（⇒ 析构默认 `noexcept` ⇒
+  析构期抛出会 `std::terminate` ⇒ ⇒ 检出变成 abort ⇒ **不可捕获** ⇒ **不可测**）；
+- 析构 MUST 在**展开期**（`std::uncaught_exceptions() > 0`）**不抛**
+  （⇒ 避免 `std::terminate`）；
+- 兜底 `end()` MUST **幂等**（⇒ 重复终结 MUST NOT 重复写入）。
+
+⇒ ⇒ 嵌套场景 MUST **显式** `end()`（兜底**不能**表达「内层先于外层合成」）。
+
+#### Scenario: 输出缺默认候选时的拒绝在析构路径上可捕获
+
+- **WHEN** 一个输出端口被条件赋值、且该输出**无** `else_` 候选值，
+      且异常经由条件块对象的**析构**触发
+- **THEN** MUST 抛出**可捕获**的异常（⇒ MUST NOT `std::terminate`）
+- **AND** 展开期 MUST **不抛**
+
+#### Scenario: end() 幂等
+
+- **WHEN** `end()` 在条件块上被调用**两次**
+- **THEN** MUST NOT 重复写入目标
+- **AND** MUST NOT 抛出

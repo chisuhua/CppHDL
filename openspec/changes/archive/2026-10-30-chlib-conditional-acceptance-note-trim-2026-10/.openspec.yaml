@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-10-30
+# 本 change 是一个**纯规格整理**（**零**行为变更）：把上一 change
+# `chlib-guard-contribution-priority-2026-10` 追加到 capability
+# `chlib-conditional-semantics` 的「权威表面」Requirement 上的
+# **接受面限制 NOTE**（E1/E2/E3）从**正文**移进 **Scenario** ⇒ ⇒
+# 该 Requirement 的正文从 **891** 字符回落到 **< 500** ⇒ ⇒
+# 满足 openspec CLI 的「Requirement 正文 > 500 字符」规则
+# （⚠️ 本仓 CLI 钉 1.4.1，该规则在 1.4.1 下**不存在**；但把正文写成
+# **可读的** 而不是**塞满**的，本身就是契约该有的形态 ⇒ ⇒ 值得做）。
+#
+# ⇒ 归档**禁** `--skip-specs`（有 MODIFIED delta）。

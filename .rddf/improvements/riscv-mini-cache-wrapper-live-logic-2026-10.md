@@ -12,10 +12,14 @@ created_at: 2026-10-24
 
 - **Date drafted**: 2026-10-24
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，已归属 feature `feat-riscv-mini-rtl-debt` ①（2026-10-26 roadmap 审计）；前置 C2 已满足 ⇒ 可立项
+- **Status**: ✅ **已实施 + 已归档**（2026-10-28）⇒ 归档目录
+  `openspec/changes/archive/2026-10-28-riscv-mini-cache-wrapper-live-logic-2026-10/`
+  ⇒ 实现 commit `0e117bb` · capability `cpu-cache-subsystem`（ADDED ×1 +
+  MODIFIED ×2）⇒ ⇒ 判别力：`examples/riscv-mini/tests/test_cache_smoke.cpp`
+  **8 用例 / 58 断言** + 3 处 `DUAL_BACKEND_TEST_PAIR`（双后端）⇒ ⇒
+  **`feat-riscv-mini-rtl-debt` ① 收口**
   ⚠️ **2026-10-27 改名**：草案原名 `...-dead-branch-2026-10` ⇒ 统一为 `...-live-logic-2026-10`
   （与 `.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` 的 T8 命名一致）
-  ⇒ **已立项**：`openspec/changes/riscv-mini-cache-wrapper-live-logic-2026-10/`
 - **来源**: change `riscv-mini-test-triage-2026-10` 实测挖出（C1 把
   `test_cache_smoke` 的断言从「不可证伪」改成「可证伪」时暴露），
   **原登记在该 change 的「框架缺陷」节** ⇒ 本 draft 承接之，C1 归档时移除该条。

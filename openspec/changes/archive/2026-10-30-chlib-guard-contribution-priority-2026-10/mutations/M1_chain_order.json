@@ -1,0 +1,15 @@
+{
+  "id": "M1",
+  "expect_red": "test_guard_contribution",
+  "build_targets": [
+    "test_guard_contribution"
+  ],
+  "edits": [
+    {
+      "file": "include/chlib/guard_contribution.h",
+      "line": 84,
+      "old": "    for (auto it = contribs.rbegin(); it != contribs.rend(); ++it) {",
+      "new": "    for (auto it = contribs.begin(); it != contribs.end(); ++it) {"
+    }
+  ]
+}

@@ -12,9 +12,17 @@ created_at: 2026-10-30
 
 - **Date drafted**: 2026-10-30
 - **Drafted by**: build-agent（planner role）
-- **Status**: ✅ **5-segment draft**，决策已在 **ADR-051** 落盘
-  （`docs/adr/ADR-051-chlib-conditional-semantics.md`；critic `review_profile: arch`
-  第 1 轮 **APPROVE_WITH_CONDITIONS**，**0 BLOCKER**）⇒ ⇒ **可立项**（change 目录待建）
+- **Status**: ✅ **已实施 + 已归档**（2026-10-30，commit `102f39b`）⇒ 归档目录
+  `openspec/changes/archive/2026-10-30-chlib-conditional-semantics-2026-10/`
+  ⇒ capability **新建** `chlib-conditional-semantics`（ADDED ×6，归档**未**用
+  `--skip-specs`）⇒ ⇒ 验收：`ctest -LE perf` **191/191** · examples **28/28** ·
+  samples **36/36** · 护栏全 exit 0 · **变异 6/6** 全被抓
+  ⚠️ **实施期实测订正**（3 条，见归档 change 的 `design.md` §5.5 / §5.6 / §6.1）：
+  ① 「计数会变」是**事实错误**（⇒ 真值：计数**全部不变**，202 / 38 / 191 / 17）；
+  ② **M6 的初稿预测被证伪**（链序对 ADR-050 **不可观测** ⇒ 状态守卫**互斥**）；
+  ③ **3 个独立缺陷**已登记（E1 / E2 / E3，见下）
+  ⚠️ **后续**：优先级链序的契约缺口 ⇒ 独立 change
+  `chlib-guard-contribution-priority-2026-10`
 - **归属 feature**：`feat-dual-backend-coverage`（覆盖质量族）—— ⚠️ 该 feature 的
   主题是「双后端覆盖」，与本项**不**直接相关 ⇒ **待裁决**：或新开 feature，或归
   `feat-riscv-mini-rtl-debt`（不对）⇒ ⇒ **本项暂挂在 phase-5**，归属待 planner 裁决。

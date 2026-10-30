@@ -1,0 +1,21 @@
+{
+  "id": "M2",
+  "expect_red": "test_guard_contribution",
+  "also_green": [
+    "spinalhdl_uart_tx",
+    "test_verilator_complex_e2e"
+  ],
+  "build_targets": [
+    "test_guard_contribution",
+    "uart_tx_example",
+    "test_verilator_complex_e2e"
+  ],
+  "edits": [
+    {
+      "file": "include/chlib/guard_contribution.h",
+      "line": 84,
+      "old": "    for (auto it = contribs.rbegin(); it != contribs.rend(); ++it) {",
+      "new": "    for (auto it = contribs.begin(); it != contribs.end(); ++it) {"
+    }
+  ]
+}

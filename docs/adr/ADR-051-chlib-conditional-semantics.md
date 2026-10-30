@@ -4,7 +4,7 @@
 - Date: 2026-10-30
 - Author: build-agent（architect role）
 - Parent: ADR-050（`ch_state_machine` 的状态动作语义 —— **同型机制**：守卫贡献 + 唯一写入点）· ADR-043（死 / 误导设施物理移除 —— 零消费者直接删、无别名期）· ADR-046（RV32I 单源化 —— 「一份权威」原则）
-- 关联 OpenSpec change：**待立项**（实施本 ADR）
+- 关联 OpenSpec change：**已归档** `openspec/changes/archive/2026-10-30-chlib-conditional-semantics-2026-10/`（实施本 ADR，commit `102f39b`）⇒ 后续（链序契约 + 结构级断言）= `chlib-guard-contribution-priority-2026-10`
 - 关联 capability：**新建** `chlib-conditional-semantics`（ADDED ×N ⇒ 归档**禁** `--skip-specs`）
 - 前置审查：本 ADR 的两个候选实现形态与「双重失效」机制经**源码逐行核实 + 独立探针**（§1.4）⇒ 两条结论是实测发现，不是推理
 
@@ -101,9 +101,36 @@
 
 ADR-050 的 `ch_state_machine::contrib` 与本 ADR 的语句块贡献是**同一个机制**（累积 `(守卫, 值)` + 合成**一条** select 链）⇒ ⇒ MUST 抽取**共享**组合器供两者使用 ⇒ ⇒ **一处实现、两处使用** ⇒ ⇒ 不重复实现同一语义（否则两份必然漂移）。
 
-⚠️ **约束**：ADR-050 的既有金标 MUST **逐项不变**（`uart_tx` 的 `busy` 高 **3906** 拍 + `0xA5` 位序；`complex_e2e` 的 `0x96` MSB-first 16 位 + 状态序列 + `bit_count` 复位）⇒ ⇒ 抽取是**纯重构**，不是行为变更。
+⚠️ **约束**：ADR-050 的既有金标 MUST **逐项不变**（`uart_tx` 的 `busy` 高 **3906** 拍 + `0xA5` 位序；`complex_e2e` 的 `0x96` MSB-first 16 位 + 状态序列 + `bit_count` 复位）。
 
-⚠️ **边界**：**不**把 ADR-050 的 `contrib` **泛化**成公开的通用 API（`core/` 与 `ch_reg`/`ch_out` 的公开契约**零变化**）⇒ ⇒ 共享的是**内部**组合器。
+⚠️⚠️ **实施期实测订正**（2026-10-30，**决策未变**，仅订正**事实表述**）：本 ADR
+初稿写的是「⇒ ⇒ 抽取是**纯重构**，不是行为变更」⇒ ⇒ **该表述不成立** ——
+在**链序（= 贡献优先级）**这一个维度上**是**行为变更：
+
+| | `is_in(S)` 比较的创建顺序（= 链的内→外） | 同一 target 多状态贡献时**谁**优先 |
+|---|---|---|
+| **抽取前**（旧内联 `compose()`，正向状态序迭代） | `3, 2, 1, 0` | **高编号** state（后写的在外层） |
+| **抽取后**（共享组合器 `rbegin→rend`） | `0, 1, 2, 3` | **低编号** state（先收集的在外层） |
+
+⇒ ⇒⇒ **ADR-050 的贡献优先级被静默翻转了。**
+
+⇒ ⇒⇒ **为什么既有金标 100% 绿**：状态守卫 `is_in(S)` = `state_reg ==
+ch_uint<STATE_BITS>(S)` ⇒ ⇒ 同一寄存器对**互不相同**的枚举字面量作比较
+⇒ ⇒ **两两互斥是构造保证** ⇒ ⇒ 同一时刻至多一个守卫为真 ⇒ ⇒ 无论链序如何，
+结果**逐位相同** ⇒ ⇒ ⇒ **运行期不可观测** ⇒ ⇒⇒ **「绿」完全掩盖了它**。
+
+⇒ ⇒⇒ **口径裁决**（2026-10-30）：**保留新行为**（=「先匹配者胜」= **低编号**
+state 优先）⇒ ⇒ 理由：① `_if` 与 `multi_if` **已是**该惯例；② 若回退旧行为 ⇒
+共享组合器的「先匹配者胜」文档对 ADR-050 侧就是**错的** ⇒ ⇒ 与 D10 的初衷
+**矛盾**；③ 旧行为是**偶然反转** ⇒ ⇒ 新行为是**修正**而非**破坏**。
+
+⇒ ⇒⇒ **后续**：该优先级 MUST 有**契约载体**（capability
+`chlib-state-machine-semantics` 从未写过优先级 ⇒ ⇒ 翻转**不违反任何契约** ⇒ ⇒
+无处登记）与**结构级断言**（运行期不可观测 ⇒ ⇒ 金标**钉不住**它）⇒ ⇒ 两者
+均落在 follow-up change `chlib-guard-contribution-priority-2026-10`。
+
+⇒ ⇒⚠️ **边界不变**：**不**把 `contrib` **泛化**成公开的通用 API（`core/` 与
+`ch_reg` / `ch_out` 的公开契约**零变化**）⇒ ⇒ 共享的是**内部**组合器。
 
 ## 3. 备选方案（否决）
 
@@ -186,6 +213,10 @@ ADR-050 的 `ch_state_machine::contrib` 与本 ADR 的语句块贡献是**同一
       （`is_in(S)`），**同一时刻至多一个为真** ⇒ ⇒ 无论链序如何，结果**逐位相同**
       ⇒ ⇒ 「D10 是纯重构」的证据 MUST 是「**ADR-050 的既有金标逐项不变**（绿灯）」
       （实测 ✅），**不**可能是「链序变异下金标转红」。
+- [ ] **（新增，2026-10-30）** 链序 MUST 有**结构级**断言钉住 —— 运行期**不可
+      观测** ⇒ ⇒ 金标**钉不住**它 ⇒ ⇒ MUST 断言最外层 mux 的守卫 =
+      **第一个**贡献的守卫 ⇒ ⇒ 见 follow-up change
+      `chlib-guard-contribution-priority-2026-10`。
 
 ### 5.5 回归与计数
 
@@ -204,4 +235,16 @@ ADR-050 的 `ch_state_machine::contrib` 与本 ADR 的语句块贡献是**同一
 
 - **依据**：`include/chlib/if_stmt.h`（现状：`next_proxy::operator=` 条件分支为空 · `end()` 的 `finalized_` 时序）· `include/chlib/if.h`（`multi_if` 正确实现 = 权威参照；`priority_if` 与之逐行等价）· `tests/chlib/test_if_stmt.cpp:204-226`（**钉住坏行为**的用例 + 注释）· `samples/conditional_demo.cpp`（用**已不存在**的 `seq_if` / `reg_if` / `.endif()`）· `samples/disabled_samples.txt`（归位条件指名本项）· `docs/adr/ADR-050-chlib-state-machine-semantics.md`（**同型机制** + 「唯一写入点」纪律 + 「贡献 API」形态）· `scripts/lib/fsm_wiring.py`（可复用的闭包解析器）。
 - **实测**：§1.2 的双重失效由**源码逐行核实**（`finalized_` 置位在遍历之前 ⇒ `is_active()` 在捕获期间恒 false）；§1.4 的消费者计数与「`priority_if` ≡ `multi_if`」由 **grep + 逐行比对**确认；`multi_if` 的「先匹配者胜」由其**从后往前**构链的代码结构确认。
+- ⚠️⚠️ **实施期实测（2026-10-30，第 2 轮：oracle + critic + 逐字节 Verilog
+  diff）**：**D10** 的「纯重构」表述**被证伪**（链序维度上是行为变更）⇒ ⇒
+  证据 = 对**真实 dogfood** 在抽取前后各生成一次 Verilog 做**逐字节 diff**
+  ⇒ ⇒ **既有的 critic SF1 正是把它抓出来的** ⇒ ⇒ **口径裁决**：**保留新
+  行为**、**决策未变**、仅订正**事实表述** + 补**契约载体**与**结构级断言**
+  （follow-up change `chlib-guard-contribution-priority-2026-10`；完整证据见其
+  `design.md` §1）。
+- ⚠️ **变异工具链自身的两条教训**（同一轮实测；细节见归档 change 的
+  `design.md` §6.2）：① 「**还原源码**」**不等于**「复原」—— **二进制也是状态**
+  ⇒ ⇒ MUST 还原后**重建**（否则跑的是上一条变异的二进制 ⇒ ⇒ **假红**）；
+  ② `build_targets` MUST 覆盖**每一个**被观测的测试 ⇒ ⇒ 两者现已**入仓**为
+  `scripts/lib/mutation_harness.py`。
 - **对抗审稿（critic，`review_profile: arch`，2026-10-30，第 1 轮）**：**APPROVE_WITH_CONDITIONS**（**0 BLOCKER** / `mergeable: yes` / `scope_exceeded: false`）⇒ 6 SHOULD_FIX + 4 NIT 同批闭合：SF1 = D3 的拒绝判据 MUST 是 **target 级**（块有 `else_` 但该输出无默认候选 ⇒ 组合环仍可达）⇒ 改写 + §5.1 AC 同步；SF2 = D2 的「逐位等价」与 D3 在**无 `else_` 的寄存器序列**上冲突（`multi_if` 尾部 = 末分支值 vs D3 = 保持）⇒ 等价范围限定为「优先级顺序等价 / **带 `else_` 的**序列逐位等价」；SF3 = D8 与 §4「不在本次范围」对 `if_demo` 给出不同答案 ⇒ D8 只承诺 `conditional_demo`，`if_demo` 归独立归位；SF4 = **析构兜底 × 抛出路径**（`~conditional_block()` 兜底调 `end()` ⇒ 新增的构建期抛异常经析构触发 ⇒ `std::terminate` ⇒ 继承 ADR-050 实测③ 的 `noexcept(false)` + 展开期不抛）；SF5 = D6 的护栏**未覆盖输出路径**（裸 `io().x = v` 同型）⇒ 纳入（`RE_IO_ASSIGN` 已存在 ⇒ 成本 ≈ 0）；SF6 = §1.4 末条含草稿残留且引用了不存在的探针 ⇒ 改写为实际核实方法；NIT = §5.3 的参照改为 `samples/conditional_demo.cpp:63-78` 的裸 `->next =` 形态 / D6 的「共用」口径限定为**词法器 + 花括号配平**（`find_closures` 的入口表是 `on_active(` 专用）/ D7 的「显式 `end()`」表述改为**纪律**。

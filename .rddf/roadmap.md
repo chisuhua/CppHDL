@@ -53,6 +53,7 @@
 | 输入端口驱动护栏（spike） | phase-5 | P1 | none | ✅ **已归档**（2026-10-28）：`openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`（**只出文档**；零代码改动）⇒ ⚠️ **决策门结论：通用状态型护栏关闭**（实测：① 运行期**无法识别端口身份** ⇒ 诊断不可行动；② **语义判定缺承重件**（「从未被驱动」≠「应该被驱动」⇒ 需「必需端口注册表」，规范层已明文要求）且 **per-TEST-CASE 是必需粒度**而平规则在该粒度必然误报 ⇒ **死结**；③ 驱动藏在 29 个 helper + 186 次宏里 ⇒ 需过程间分析）⇒ ⇒ **义务继续留在 `AGENTS.md §ANTI-PATTERNS`** ⇒ ⇒ 3 个后续已立项：`input-port-driving-event-diff-check-2026-10`（**事件驱动增量检查**，实测新增端口负载 0–2/commit）/ `input-port-required-registry-2026-10`（**必需端口注册表**，规范层已承认需要）/ `input-port-assignment-antipattern-fix-2026-10`（**10 处存量静默失效**，独立可做） |
 | CLINT `mtime` 自增（T9 ②） | phase-5 | P2 | none | ⛔ → ✅ **决策门已解除**（2026-10-30，architect 落 **ADR-049** `docs/adr/ADR-049-clint-mtime-semantics.md` ⇒ D1–D5 **已裁决**（写优先 / 可配置分频 / 复位值 0 / 允许撕裂 / capability 归属 = **新建 `cpu-clint-timer`**）⇒ critic 第 1 轮 **APPROVE_WITH_CONDITIONS**（**0 BLOCKER**）⇒ ⇒ **可立项**（planner 建 change，带 ADDED delta ⇒ 归档**禁** `--skip-specs`）；⚠️ **实施期 MUST 携带的 3 条实测结论**：① 进位 MUST 用硬件原语（C++ 三元在 `ch_bool` 上是**建图期**求值 ⇒ **恒 0** ⇒ 计数器永远跨不过 32 位边界）② 「保高半换低半」MUST 用 `bits_update<32>`（`<<` 在 64 位上**编译不过**；手写 `hi | lo` ⇒ **静默清零高半**）③ `test_interrupt_flow` 会变成「时序相关」的脆弱测试（写 `mtime=50` 后只 tick 1 拍 ⇒ 靠 **49** 的余量才通过）⇒ MUST 改成「每次采样前重写 `mtime`」 |
 | chlib 条件构造语义（ADR-051 落地） | phase-5 | P1 | none | ✅ **已归档**（2026-10-30，`openspec/changes/archive/2026-10-30-chlib-conditional-semantics-2026-10/`）：`docs/adr/ADR-051-chlib-conditional-semantics.md`（architect 落 ADR ⇒ critic 第 1 轮 **APPROVE_WITH_CONDITIONS**，**0 BLOCKER**）；⚠️ **起因**：`_if` 语句块 DSL **双重失效** ⇒ **条件被彻底忽略**（① 捕获分支体为空 ② `end()` 先置 `finalized_` 再遍历分支体 ⇒ `is_active()` 恒 false ⇒ 走「直接赋值」分支）⇒ 写 `_if(rst).then([&]{ reg->next = 0; })` ⇒ `reg` **每拍**被清零（与意图相反）⇒ 且 `test_if_stmt.cpp:204-226` **钉住了该坏行为** ⇒ 长期「假绿」⇒ ⇒ 裁决 = **守卫贡献**（与 ADR-050 同型 ⇒ 抽取**共享**组合器，一处实现两处使用）+ 优先级**先匹配者胜** + 拦截点改名 `conditional_assign` + `priority_if` **物理移除** + **词法级静态护栏** ⇒ capability **新建** `chlib-conditional-semantics` ⇒ 归档**禁** `--skip-specs`；⇒ 顺带让 `samples/conditional_demo` 归位 | ⇒ **实施完成**：语义模型 = **守卫贡献** + 优先级**先匹配者胜** + 拦截点改名 `conditional_assign` + `priority_if` **物理移除** + **词法级静态护栏** (`scripts/verify_if_stmt_wiring.sh`，CI 2 处挂载) ⇒ capability **新建** `chlib-conditional-semantics`（ADDED ×6，归档**未**用 `--skip-specs`）⇒ ⇒ 验收：`ctest -LE perf` **191/191** · examples **28/28** · samples **36/36** · 护栏全 exit 0 · **变异 6/6** 全被抓 ⇒ ⚠️ **计数全部不变**（202 / 38 / 191 / 17）⇒ ⚠️ **M6 的初稿预测被实测证伪**（链序对 ADR-050 **不可观测** ⇒ 状态守卫**互斥**）⇒ ⚠️ **变异工具链自身两条教训**（「还原源码」≠「复原」⇒ **二进制也是状态** ⇒ 还原后 MUST **重建**）⇒ ⚠️ 顺带登记 **3 个独立缺陷**（E1 `multi_if` 不能直接赋给 `ch_out` · E2 分支值须同类型 · E3 `if_then` 条件不能是 bool 端口）
+| 共享守卫贡献的优先级契约（ADR-051 D10 订正） | phase-5 | P0 | none | 🟡 **已立项**（2026-10-30）：change `chlib-guard-contribution-priority-2026-10`；⚠️ **起因**：ADR-051 D10 把 ADR-050 的 `contrib` 与 `_if` 的条件贡献统一到**同一个**共享组合器 ⇒ ⇒ **链构造方向**由「正向状态序」变为「反向迭代」 ⇒ ⇒ **贡献优先级被静默翻转**（高编号 state 优先 → 低编号 state 优先）⇒ ⇒ ⚠️ **运行期不可观测**（状态守卫**互斥** ⇒ 同一时刻至多一个为真）⇒ ⇒ **既有金标 100% 绿** ⇒ ⇒ ⇒ **「绿」完全掩盖了它** ⇒ ⇒ 三个后果：① **契约缺口**（`chlib-state-machine-semantics` 从未写过优先级 ⇒ 翻转**不违反任何契约** ⇒ 无处登记）② **文档缺口**（D10 的「纯重构」表述不成立）③ **覆盖缺口**（链序**零覆盖** ⇒ 运行期钉不住 ⇒ 须**结构级断言**）⇒ ⇒ 顺带收口 `chlib-conditional-semantics` 的**析构兜底**与**表达式形式接受面限制**两处**无契约载体**⇒ ⇒ 口径裁决（用户）：**保留新行为**（=「先匹配者胜」，与 `_if`/`multi_if` 一致）⇒ 归档**禁** `--skip-specs` |
 | RV32I ISA ④ 取指 skid buffer | phase-5 | P0 | none | ✅ **已归档**（2026-10-27）：`openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`（ADR-048；一个 change、两个 commit = C1 skid / C2 `primed`）⇒ `rv32i-commit-path` MODIFIED ×2 ⇒ **`feat-rv32i-isa-completeness` ④ 收口** |
 
 > ✅ **sprint-2026-10 又归档一项**（2026-10-27）：`dual-backend-rv32i-integration-2026-10`（P1）——
@@ -88,13 +89,23 @@
 > ⚠️ 两者共同的**合并门** = CI 的 `macos-14` job 绿（本机 Linux 不可完成）⇒
 > 该 job 红 ⇒ MUST revert 归档 commit。
 
-### Unmapped (2)
+### Unmapped (1)
 
-> 两个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
-> `riscv-mini-cache-wrapper-live-logic-2026-10` → `feat-riscv-mini-rtl-debt` ①
-> （⚠️ 名字与候选 change 名 `riscv-mini-cache-wrapper-live-logic-2026-10` **不一致**
-> ⇒ 立项时 MUST 统一，见「实施规划」§遗留项 3）；
+> 一个 improvement 草案尚无 change 目录（已归属 feature / objective，待立项）：
 > `clint-mtime-autoincrement-2026-10` → `feat-riscv-mini-rtl-debt` ②。
+> ⚠️ **2026-10-30 订正**：原段为「Unmapped (2)」，其中
+> `riscv-mini-cache-wrapper-live-logic-2026-10` → `feat-riscv-mini-rtl-debt` ①
+> **已于 2026-10-28 实施并归档**
+> （`openspec/changes/archive/2026-10-28-riscv-mini-cache-wrapper-live-logic-2026-10/`，
+> 实现 commit `0e117bb`）⇒ ⇒ **不是**「尚无 change 目录」⇒ ⇒ 本段减为 1；
+> 该 draft 的 Status 亦已同步订正 ⇒ ⇒ 另：「名字不一致 ⇒ 立项时 MUST 统一」
+> 这条遗留项**已随归档消解**（实际 change 名 = `riscv-mini-cache-wrapper-live-logic-2026-10`）。
+> ⚠️ **CLINT 的决策门已解除**（2026-10-30，architect 落 **ADR-049**
+> `docs/adr/ADR-049-clint-mtime-semantics.md` ⇒ D1–D5 **已裁决** + capability
+> 归属已定 = **新建 `cpu-clint-timer`**）⇒ ⇒ **可立项**（planner 建 change，
+> 带 ADDED delta ⇒ 归档**禁** `--skip-specs`）⇒ ⇒ **实施期 MUST 携带 ADR-049
+> §1.4 的 3 条实测结论**（进位 MUST 用硬件原语 / `bits_update<32>` /
+> `test_interrupt_flow` 须改「每次采样前重写 `mtime`」）。
 >
 > ✅ **sprint-2026-10 再归档一项**（2026-10-27）：`rv32i-fetch-skid-buffer-2026-10`（P0）——
 > **RV32I 取指 skid buffer + 填充期 `primed` 门控**（ADR-048，一个 change、两个 commit）：
