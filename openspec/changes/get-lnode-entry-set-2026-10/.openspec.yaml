@@ -1,0 +1,16 @@
+schema: spec-driven
+created: 2026-10-30
+# 实施 ADR-053（`docs/adr/ADR-053-get-lnode-entry-set.md`）。
+#
+# 删除 `include/core/bundle/bundle_base.h:551-553` 的**无约束** `get_lnode` 重载。
+#
+# 删除理由（两条，均已实测）：
+#   ① **对有 `impl()` 者「死」** —— C++20 约束更严者胜 ⇒ `lnode.h:24-28` 恒胜；
+#   ② **对无 `impl()` 者「有害」** —— 返回类型显式 ⇒ `requires { get_lnode(x); }`
+#      不实例化函数体 ⇒ 对无 `impl()` 的类型返回 **true**（SFINAE 毒化）
+#      + 报错指向框架内部 `bundle_base.h:552`（`samples/if_demo.cpp` 实测）。
+#
+# ⇒ **新建 capability** `core-lnode-entry-set`（本 ADR §5 Non-Goal 1 明确：
+#   `ch_width_impl<Derived>` 的 bundle 特化**只登记不删**，删除判据不同）。
+#
+# ⇒ 归档**禁** `--skip-specs`（新建 capability 是 delta）。
