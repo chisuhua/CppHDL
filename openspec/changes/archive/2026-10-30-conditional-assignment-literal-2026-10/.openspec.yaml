@@ -1,0 +1,21 @@
+schema: spec-driven
+created: 2026-10-30
+# `conditional_assign` MUST 接受**裸 literal**（`0_d` / `0xAA_h`）。
+#
+# ⚠️ 缺陷形态（实测）：`include/chlib/if_stmt.h` 的
+# `conditional_assignment::assign()` 的 else 分支（**块外直写**）写的是
+# `(*out_) <<= value;` ⇒ 它走 `operator<<=` ⇒ 用 `get_lnode(driver)`
+# ⇒ ⚠️ `ch_literal_impl` **没有** `get_lnode` 重载 ⇒ ⇒ **裸 literal 编译不过**
+# ⇒ ⇒ 连 `if_stmt.h` **自己的头注释示例**
+#     （`conditional_assign(count).next() = 0_d;`）都编译不过。
+#
+# ⇒ ⚠️ **该分支总被实例化**（`if` / `else` 都是模板代码）⇒ ⇒ 即使运行期
+#   走不到（`reg_` 非空）⇒ ⇒ 该行仍会编译 ⇒ ⇒ 一旦有 literal 实参
+#   ⇒ ⇒ **整个调用点编译失败** ⇒ ⇒ 「能不能编译」与「走哪条分支」**无关**。
+#
+# ⇒ ⇒ 修复 = 该分支经 `to_operand` 归一化（它对 hardware / port / literal /
+#   算术**四类**都有分支）⇒ ⇒ **零** `core/` 改动。
+#
+# ⇒ 规格面：capability `chlib-conditional-semantics` **MODIFIED ×1**
+#   （「权威表面」Requirement 追加「value MUST 接受裸 literal」条款）
+#   ⇒ 归档**禁** `--skip-specs`。

@@ -415,6 +415,31 @@ jobs:
       shell: bash
       run: scripts/verify_multi_if_width.sh --self-test
 
+    - name: Verify conditional_assign integrity
+      # Contract: capability `chlib-conditional-semantics`.
+      # `conditional_assign(target).next() = value` MUST accept a BARE
+      # literal (`0_d` / `0xAA_h`) just like a hardware expression.
+      # The defect: the "direct write outside a conditional block" branch
+      # wrote `(*out_) <<= value` => `operator<<=` => `get_lnode(driver)`
+      # => `ch_literal_impl` has NO `get_lnode` overload => a bare literal
+      # did NOT COMPILE (not even the framework's OWN header-comment
+      # example). And because `if`/`else` are BOTH template code, that
+      # branch is ALWAYS instantiated => "can it compile" is independent
+      # of "which branch runs".
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_conditional_assign_integrity.sh
+
+    - name: Verify conditional_assign integrity (self-test)
+      # WHY a self-test: the criteria are only as good as their fixtures.
+      # This repo has shipped "looks like it works" defects - and THIS
+      # guardrail itself had one (a MISSING fixture file made the
+      # compiler report "No such file" => the criterion read it as
+      # "did not compile" => TWO criteria went green on a FALSE PASS).
+      # Hence R0 = a fail-closed "the fixtures must exist" check.
+      shell: bash
+      run: scripts/verify_conditional_assign_integrity.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in

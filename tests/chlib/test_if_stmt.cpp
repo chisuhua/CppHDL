@@ -191,6 +191,51 @@ struct has_conditional_assign<T, std::void_t<decltype(
 ///    （`scripts/verify_if_stmt_wiring.sh` 的 R2「被移除的符号 MUST NOT 出现」）
 ///    承担。
 
+/// **裸 literal** 的条件赋值（回归点：修复前 `0xA5_h` **编译不过**）
+///
+/// ⚠️ 既有 DUT（`CondAssignDut` 等）全都写成 `ch_uint<8>(7_d)` ——
+///    **显式包裹** ⇒ ⇒ 那正是**绕过**缺陷的写法（缺陷期只有这种能编译）
+///    ⇒ ⇒ 本 DUT **刻意**用**裸 literal** ⇒ 它是回归的**编译期**证据。
+class ConditionalLiteralDut : public ch::Component {
+public:
+    __io(ch_in<ch_bool> en; ch_out<ch_uint<8>> q;);
+
+    ConditionalLiteralDut(ch::Component *parent = nullptr,
+                          const std::string &name = "conditional_literal_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        ch_reg<ch_uint<8>> r(0_d, "r");
+        _if(io().en)
+            .then([&] { conditional_assign(r).next() = 0xA5_h; })  // ⚠️ 裸 literal
+            .else_()
+            .then([&] { conditional_assign(r).next() = 0x5A_h; })  // ⚠️ 裸 literal
+            .end();
+        io().q = r;
+    }
+};
+
+/// **块外**的裸 literal 直写（走 `assign()` 的 else 分支 ⇒ 修复点所在）
+class ConditionalLiteralOutsideDut : public ch::Component {
+public:
+    __io(ch_out<ch_uint<8>> q;);
+
+    ConditionalLiteralOutsideDut(
+        ch::Component *parent = nullptr,
+        const std::string &name = "conditional_literal_outside_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        ch_reg<ch_uint<8>> r(0_d, "r");
+        // ⚠️ **不在**任何条件块内 ⇒ 走 `assign()` 的 else 分支 ⇒ **直写**
+        //    ⇒ ⇒ 这是修复点**本身**（该分支此前对 literal 编译不过）。
+        conditional_assign(r).next() = 0x5A_h;
+        io().q = r;
+    }
+};
+
 } // namespace
 
 // ===========================================================================
@@ -459,4 +504,46 @@ TEST_CASE("if_stmt: removed / renamed APIs MUST NOT exist",
     //    逐行等价 ⇒ 名字承诺「优先级 / 互斥优化」但**未兑现**）
     // ⇒ 这三个**自由函数**的「不存在」**无法**用 SFINAE 断言（见上方注释）
     // ⇒ ⇒ 由**静态护栏**的「被移除的符号 MUST NOT 出现」规则承担。
+}
+
+// ===========================================================================
+// `conditional_assign` 接受**裸 literal**（`0xA5_h` / `0x5A_h`）
+//
+// ⚠️ 修复前的缺陷：`assign()` 的 else 分支写 `(*out_) <<= value;` ⇒ 它走
+//   `operator<<=` ⇒ 用 `get_lnode(driver)` ⇒ `ch_literal_impl` **没有**
+//   `get_lnode` 重载 ⇒ ⇒ **裸 literal 编译不过** ⇒ ⇒ 连 `if_stmt.h` 的
+//   **头注释示例**都编译不过。
+//
+// ⚠️ 该分支**总被实例化** ⇒ ⇒ 即使运行期走不到 ⇒ 也会编译失败 ⇒ ⇒
+//   「能不能编译」与「走哪条分支」**无关**。
+// ===========================================================================
+
+TEST_CASE("if_stmt: a BARE literal is a valid conditional_assign value",
+          "[chlib][if_stmt][literal]") {
+    ch::ch_device<ConditionalLiteralDut> dev;
+    ch::Simulator sim(dev.context());
+    auto *q = dev.instance().io().q.impl();
+
+    // ⚠️ 手推：条件为真 ⇒ 取 `then` 分支的 **0xA5**；为假 ⇒ 取 `else_`
+    //    分支的 **0x5A**（两个值都是**裸 literal** ⇒ 编译期就证明修复生效）。
+    sim.set_input_value(dev.instance().io().en, 1u);
+    sim.tick(1);
+    REQUIRE(read_port(sim, q) == 0xA5u);
+
+    sim.set_input_value(dev.instance().io().en, 0u);
+    sim.tick(1);
+    REQUIRE(read_port(sim, q) == 0x5Au);
+}
+
+TEST_CASE("if_stmt: a bare literal OUTSIDE a conditional block is a direct write",
+          "[chlib][if_stmt][literal]") {
+    ch::ch_device<ConditionalLiteralOutsideDut> dev;
+    ch::Simulator sim(dev.context());
+    auto *q = dev.instance().io().q.impl();
+
+    // ⚠️ 手推：块外的 `conditional_assign(reg).next() = 0x5A_h;` ⇒ 走
+    //    `assign()` 的 else 分支 ⇒ **直写**（不捕获）⇒ ⇒ 读回 **0x5A**。
+    //    ⚠️ 该分支在修复前对 literal **编译不过** ⇒ ⇒ 这是**编译期**证据。
+    sim.tick(1);
+    REQUIRE(read_port(sim, q) == 0x5Au);
 }

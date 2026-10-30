@@ -16,9 +16,14 @@
  * _if(io().en)
  *     .then([&] { conditional_assign(count).next() = count + 1_d; })
  *     .else_()
- *     .then([&] { conditional_assign(count).next() = 0_d; })
+ *     .then([&] { conditional_assign(count).next() = 0_d; })   // ✅ 裸 literal 可用
  *     .end();
  * ```
+ *
+ * ⚠️ **裸 literal（`0_d` / `0xAA_h`）与硬件表达式（`count + 1_d`）都可用** ——
+ * 两者都经 `to_operand` 归一化（⚠️ 此前 `else_` 分支的 `(*out_) <<= value`
+ * 走 `get_lnode` ⇒ `ch_literal_impl` 无重载 ⇒ **裸 literal 编译不过**
+ * ⇒ ⇒ 连**本注释的示例**都编译不过）。
  *
  * ⚠️ **未走 `conditional_assign` 的普通 `reg->next = v` / `io().x = v`
  *   **不会**被条件化**（= **无条件**生效）⇒ ⇒ 有静态护栏检出
@@ -357,9 +362,24 @@ private:
             if (reg_) {
                 // ⚠️ `operator->` 只对**类类型对象**生效 ⇒ `reg_->next`
                 //    （`reg_` 是**指针**）**不成立** ⇒ 必须 `(*reg_)->next`。
+                // ⚠️ `next_assignment_proxy::operator=` 内部走 `to_operand`
+                //    ⇒ **裸 literal 也能用** ✔
                 (*reg_)->next = value;
             } else {
-                (*out_) <<= value;
+                // ⚠️⚠️ **必须经 `to_operand` 归一化** —— 直接 `(*out_) <<= value`
+                //    走的是 `operator<<=` ⇒ 它用 `get_lnode(driver)` ⇒
+                //    ⚠️ `ch_literal_impl` **没有** `get_lnode` 重载 ⇒ ⇒
+                //    **裸 literal（`0_d` / `0xAA_h`）编译不过**。
+                //    ⇒ ⇒ 而 `if_stmt.h` **自己的头注释示例**就是这个形态
+                //    （`conditional_assign(count).next() = 0_d;`）⇒ ⇒
+                //    **文档示例不可编译**。
+                //    ⇒ ⇒ `to_operand` 对 hardware / port / literal / 算术
+                //    **四类**都有分支 ⇒ ⇒ 统一走它 ⇒ 全部可用。
+                //
+                // ⚠️ **本行总被实例化**（`if` / `else` 两个分支都是模板代码）
+                //    ⇒ ⇒ **即使** `reg_` 非空（走不到这里）⇒ 该行仍会编译
+                //    ⇒ ⇒ 一旦有 literal 实参 ⇒ **整个调用点编译失败**。
+                (*out_) <<= ch_uint<ch_width_v<T>>(to_operand(value).impl());
             }
             return;
         }

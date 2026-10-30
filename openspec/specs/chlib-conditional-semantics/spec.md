@@ -116,6 +116,18 @@ MUST **不**被条件化（⇒ 它是**无条件**的）⇒ ⇒ 该形态 MUST �
 「`multi_if` 的接受面 MUST 完备」Requirement（ADR-052）⇒ 本条款只保留
 E1 / E3 两条与「权威表面唯一」本身。
 
+⇒ ⇒ ⚠️ **`conditional_assign` 的 value MUST 接受**裸 literal**（`0_d` / `0xAA_h`）
+—— 与硬件表达式（`count + 1_d`）**等价** ⇒ ⇒ 两者 MUST 都经 `to_operand` 归一化
+⇒ ⇒ 实现 MUST NOT 让其中一类**编译不过**。
+
+⇒ ⇒ ⚠️ **该归一化 MUST 覆盖**两条**写入路径**（`ch_reg` 的 `->next` 与 `ch_out`
+的 `<<=`）—— ⚠️ 因为 `if` / `else` 两个分支**都是模板代码** ⇒ ⇒ **两条路径都会
+被实例化** ⇒ ⇒ 只修一条 ⇒ ⇒ 另一条上的 literal 实参**编译不过**。
+
+⇒ ⇒ MUST NOT 用 `get_lnode` 直接取 literal（`ch_literal_impl` **没有**
+`get_lnode` 重载 ⇒ ⇒ 该路径对 literal **编译不过** ⇒ ⇒ 连框架**自己的头注释
+示例**都会编译不过）。
+
 #### Scenario: priority_if 不再存在
 
 - **WHEN** 代码尝试使用 `priority_if` / `priority_if_then`
@@ -146,6 +158,20 @@ E1 / E3 两条与「权威表面唯一」本身。
 - **AND** 该限制 MUST 有**明文契约**记录
 - **AND** 语句块形式（`_if`）的条件参数 MUST 接受任意硬件操作数
   （⇒ ⇒ 二者的**可表达性**差异 MUST 是**已知且有契约**的）
+
+#### Scenario: 裸 literal MUST 被接受
+
+- **WHEN** 写 `conditional_assign(target).next() = 0xAA_h;`（**裸** literal）
+- **THEN** 该调用 MUST **编译通过**
+- **AND** MUST 与硬件表达式（`count + 1_d`）**行为一致**
+- **AND** MUST 对 `ch_reg` 与 `ch_out` **两种** target 都成立
+
+#### Scenario: 归一化 MUST 覆盖两条写入路径
+
+- **WHEN** 检查 `conditional_assignment::assign()` 的实现
+- **THEN** `ch_reg` 路径（`->next`）与 `ch_out` 路径（`<<=`）MUST **都**经
+      `to_operand` 归一化
+- **AND** 只修其中一条 MUST 被护栏检出（⇒ 否则另一条上的 literal 仍编译不过）
 
 ### Requirement: 条件构造 MUST **零** `core/` 改动
 
