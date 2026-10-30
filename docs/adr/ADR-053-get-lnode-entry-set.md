@@ -4,7 +4,7 @@
 - Date: 2026-10-30
 - Author: build-agent（architect role）
 - Parent: ADR-043（死 / 误导设施物理移除 —— 零消费者直接删、无别名期）· ADR-052（`multi_if` 的接受面 —— **相邻但不重叠**：`multi_if` 的 `get_lnode` 专属重载属该侧，不属本 ADR）
-- 关联 OpenSpec change：`get-lnode-entry-set-2026-10`（实施本 ADR）
+- 关联 OpenSpec change：`get-lnode-entry-set-2026-10`（实施本 ADR）⇒ 归档**禁** `--skip-specs`（新建 capability `core-lnode-entry-set`）
 - 关联 capability：**待定**（本 ADR 的契约若需载体，归 `chlib-conditional-semantics` 或新建；由 planner 判）
 - 证据：`docs/architecture/2026-10-30-n4-n6-evidence.md` §2 / §4
 
@@ -41,15 +41,34 @@
 
 ## 2. Decision
 
-**删除 ②**（`include/core/bundle/bundle_base.h:551-553`）⇒ ⇒ `get_lnode` 的入口集合
-收敛为**两个**：
+**删除 ②**（`include/core/bundle/bundle_base.h:551-553`）⇒ ⇒ `get_lnode` 的
+**通用**入口收敛为**一个**：
 
-| 入口 | 用途 |
-|---|---|
-| `get_lnode(const lnode<T>&)`（恒等，`lnode.h:20`） | 已是 lnode ⇒ 直接返回 |
-| `get_lnode(const T&) requires { t.impl(); }`（`lnode.h:24-28`） | **唯一**通用入口（**bundle 也走它**） |
+| 入口 | 形态 | 分类 |
+|---|---|---|
+| `get_lnode(const lnode<T>&)`（恒等，`lnode.h:20`） | 模板参数**无法**从实参推导 | 恒等版 |
+| `get_lnode(const T&) requires { t.impl(); }`（`lnode.h:24-28`） | **有**约束 | **唯一通用入口**（**bundle 也走它**） |
+| `get_lnode(const ch_uint<N>&)`（`uint.h:197-200`，含 `uint.h:186` 的 friend 声明） | 无约束，但**类型专用** | **专用**入口（⚠️ 实测**生效** ⇒ 不是死代码） |
 
-⇒ ⇒ MUST NOT 存在**无约束**的第三个入口。
+⇒ ⇒ **MUST NOT** 存在**无约束的通用**入口（`template <typename T> …(const T&)`
+且**无** `requires` 子句）。
+
+⚠️⚠️ **实施期实测订正**（2026-10-30，**决策未变**，仅订正**事实表述**）：本 ADR
+初稿写的是「入口集合 = **两个**」⇒ ⇒ **该表述不准确** —— 实测穷举后，活声明是
+**三个**（上表），因为 `include/core/uint.h:197-200` 还有**第三个** `get_lnode`
+重载（`template <unsigned N> lnode<ch_uint<N>> get_lnode(const ch_uint<N> &)`）。
+
+⚠️ 该第三个重载**实测是生效的**（不是死代码）：C++20 的重载决议里它**胜出**
+（实测：把它的返回类型改成 `lnode<int>` 后，`get_lnode(ch_uint<8>)` 选中的是它）
+⇒ ⇒ 但它**不**违反本 ADR 的条款 —— 它的形参是**具体类型** `ch_uint<N>`
+⇒ ⇒ **只**匹配 `ch_uint` ⇒ ⇒ 对**无** `impl()` 的类型**不可行**
+⇒ ⇒ **不**产生假阳性探测 ⇒ ⇒ **合法**。
+
+⇒ ⇒⇒ **正确的契约表述**（初稿的「入口集合 = 2」应替换为）：**通用**入口 MUST 恰为
+**一个**（受约束的那个）；MUST NOT 存在**无约束的通用**入口；**类型专用**入口
+（`ch_uint<N>` / `ch_bool`）**允许**存在（它们不产生假阳性探测）。
+
+⇒ ⇒ 裁决**不变**（删除 ②），因为 ② **正是**那个「无约束的通用」入口。
 
 **MUST NOT** 用以下替代方案：
 
@@ -62,8 +81,17 @@
 - 「函数体写 `static_assert` 陷阱」—— 函数体**不实例化** ⇒ 探测仍返回 `true`
   ⇒ ⇒ **真正**的重新毒化。
 
-**契约载体**：`lnode.h` 的 `get_lnode` 声明处加一行注释写明「入口集合 = 2，
-MUST NOT 存在无约束模板入口」，并给出本 ADR 编号（**引用**，不复制论证）。
+**契约载体**：`lnode.h` 的 `get_lnode` 声明处加一行注释写明「**通用**入口 = 1，
+MUST NOT 存在**无约束的通用**入口」，并给出本 ADR 编号（**引用**，不复制论证）。
+
+⚠️ **可执行护栏必须同时有两层**（实施期实测的关键发现）：
+
+- **编译期**（`static_assert(!requires(no_impl_tag x) { get_lnode(x); })`）
+  ⇒ ⚠️ 它**只能看到 fixture 自己 include 的**那些头文件 ⇒ ⇒ 缺陷真正的所在地
+  （`bundle_base.h`）若**没被** fixture include ⇒ ⇒ **漏报**
+  （实测：恢复那个无约束重载后，编译期判据**仍全绿**）⇒ ⇒ 必须配一个
+  **源码级扫描**（`scripts/lib/get_lnode_entry_set.py`，覆盖 `include/**` +
+  `src/**` 的**全部**声明点）⇒ ⇒ 二者**同批**落地。
 
 ### 2.1 选项对比（现实存在的三条）
 

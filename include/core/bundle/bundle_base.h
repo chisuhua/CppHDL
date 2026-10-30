@@ -542,15 +542,22 @@ protected:
 
 };
 
-// 特化 ch_width_impl 和 get_lnode（必须在定义后）
+// 特化 ch_width_impl（必须在定义后）
+//
+// ⚠️ **ADR-053**：此处**曾**有一个**无约束**的 `get_lnode(const Derived &)`
+// 重载（与 `include/core/lnode.h:24-28` 的受约束版**签名完全相同**）⇒ 已**物理删除**。
+// 删除理由（两条，均已实测）：
+//   ① 对**有** `impl()` 的类型它**永不选中**（C++20「约束更严者胜」偏序 ⇒
+//      受约束版恒胜）⇒ bundle 也走受约束版 ⇒ **纯死代码**；
+//   ② 对**无** `impl()` 的类型它**有害**：返回类型显式 ⇒
+//      `requires { get_lnode(x); }` **不实例化函数体** ⇒ 探测返回 **true**
+//      （**假阳性**能力探测）；且报错会指向**框架内部**（实测：
+//      `bundle_base.h: 'multi_if<…>' has no member named 'impl'`）⇒ 用户误判为框架 bug。
+// ⇒ 契约见 ADR-053；可执行护栏见 `tests/test_lnode_entry_set.cpp`。
 template <typename Derived>
 struct ch_width_impl<Derived, std::enable_if_t<is_bundle_type<Derived>>> {
     static constexpr unsigned value = get_bundle_width<Derived>();
 };
-
-template <typename Derived> inline lnode<Derived> get_lnode(const Derived &b) {
-    return lnode<Derived>(b.impl());
-}
 
 // 连接两个相同类型的bundle
 template <typename BundleT> void connect(BundleT &src, BundleT &dst) {

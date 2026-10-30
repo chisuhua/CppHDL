@@ -368,6 +368,30 @@ jobs:
       shell: bash
       run: scripts/verify_if_stmt_wiring.sh --self-test
 
+    - name: Verify get_lnode entry set
+      # Contract: capability `core-lnode-entry-set` (ADR-053).
+      # `get_lnode` MUST NOT have an **unconstrained generic** entry
+      # (`template <typename T> ...(const T&)` without a `requires` clause).
+      # Such an entry is dead for types WITH `impl()` (C++20's "more
+      # constrained wins" makes the constrained overload always win) and
+      # HARMFUL for types WITHOUT `impl()`: its explicit return type means
+      # `requires { get_lnode(x); }` never instantiates the body => the
+      # probe returns TRUE (a false positive), and the diagnostic points at
+      # FRAMEWORK internals instead of the call site.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_get_lnode_entry_set.sh
+
+    - name: Verify get_lnode entry set (self-test)
+      # WHY a self-test: the compile-time criteria (R1-R3) can only see the
+      # headers the FIXTURE includes => the defect's real home
+      # (`core/bundle/bundle_base.h`) is NOT among them => a compile-time
+      # criterion alone SILENTLY MISSES it (measured: restoring the overload
+      # left R1-R3 green). Hence R4 = a source-level scan over include/** and
+      # src/**, and this self-test poisons the REAL header to prove R4 bites.
+      shell: bash
+      run: scripts/verify_get_lnode_entry_set.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in
