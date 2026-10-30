@@ -41,6 +41,7 @@ set(CH_SAMPLE_TARGETS
     large_pod_bundle_example
     spinalhdl_stream_example
     conditional_demo
+    if_demo
 )
 
 # 为每个示例创建可执行文件

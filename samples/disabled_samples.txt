@@ -11,16 +11,21 @@
 # ⚠️ 本清单只做**登记**，不负责修复（修复是独立工作，见归位条件列）。
 # ⚠️ 归位条件一旦达成，MUST 从本清单移除该行并补进 samples/CMakeLists.txt。
 #
-# 判定基准（2026-10-22 实测，g++ -std=c++23 -fsyntax-only）：
-#   已注册 36 / 源文件 40 / 本清单 4
+# 判定基准（2026-10-31 实测，g++ -std=c++23 -fsyntax-only）：
+#   已注册 37 / 源文件 40 / 本清单 3
 #
 # ──────────────────────────────────────────────────────────────────────────
 # 2026-10-22 `disabled-samples-remediation-2026-10` 落地后的现状：
 #   14 → 5（9 个已修复并注册：stream_{arbiter,demux,flow_basic,fork,join}_example
 #   / stream_fifo_example / spinalhdl_stream_example /
 #   advanced_pod_bundle_serialization / large_pod_bundle_example）
-#   剩下 5 个**逐个定性**如下 —— 它们不是「还没来得及改」，而是各自
+#   剩下 3 个**逐个定性**如下 —— 它们不是「还没来得及改」，而是各自
 #   **被一个框架层的缺口挡住**（归位条件列已指向具体缺口）。
+# ⚠️ **2026-10-31**：`if_demo` 已**归位**（其归位条件「`ch_in<ch_bool>` 可绑定
+#   到条件参数」已于 2026-10-30 由 **E3** 达成 —— 且顺带修出**第二个**同类缺陷
+#   （`multi_if::elif` 的条件漏改 ⇒ ⇒ 「`if_then` 的条件可以是端口、`.elif`
+#   的不行」⇒ ⇒ 补修于 `multi-if-elif-port-condition-2026-10`）
+#   ⇒ ⇒ 该 sample 同时按**当前 if/else DSL 重写**（并加**自检断言**）⇒ ⇒ 归位。
 # ──────────────────────────────────────────────────────────────────────────
 
 # --- chlib::stream_fifo 的读使能未外部化（公开 API 变更 ⇒ 需 ADR）---
@@ -31,5 +36,3 @@ stream_handshake_example	编译失败: :34 `context::get_default_clk` / `get_def
 # --- 组件 API 大改（需重写而非改名）---
 spinalhdl_component_function_area_example	编译失败: :14 基类名不认识 + `ch_sint` 未声明 —— 组件 API 已改版。⚠️ 实测**全部** error 数 = **98**（占 14 个禁用 sample 总 error 数 229 的 43%）⇒ 它**不是**「API 改名」而是**接近重写**（整个组件骨架要对齐当前 API）	归位条件：依赖「spinalhdl_component_function_area_example 重写」这一**独立立项**（本 change 不承担 sample 级重写）落地后移除本行
 
-# --- if/else DSL 签名漂移（需要框架层新能力）---
-if_demo	编译失败: :39 字面量宽度不匹配（ch_literal_impl<255,8> -> ch_literal_impl<0,1>）+ :59 `ch_in<ch_bool>` 不能绑到 `const ch_bool&`	归位条件：依赖「`ch_in<ch_bool>` 可绑定到 `const ch_bool&`」这一**框架层新能力**（或改用当前 if/else DSL 重写该 sample）落地后移除本行
