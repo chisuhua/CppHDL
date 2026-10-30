@@ -94,16 +94,25 @@ def strip_comments_and_strings(text):
 
 
 def find_closures(stripped):
-    """返回 `[(body_start, body_end_or_None)]` —— 每个 `on_active` **lambda** 闭包。
+    """返回 `[(body_start, body_end_or_None)]` —— 每个 `on_active` **lambda** 闭包。"""
+    return find_lambda_closures(stripped, r"\bon_active\s*\(")
 
-    ⚠️ 只有「`on_active(` 之后**先**出现 capture list `[`」的才当作 lambda 实参
+
+def find_lambda_closures(stripped, entry_re):
+    """返回 `[(body_start, body_end_or_None)]` —— 每个**入口调用**的 lambda 闭包。
+
+    ⚠️ 只有「入口 `(` 之后**先**出现 capture list `[`」的才当作 lambda 实参
     ⇒ 框架自身的成员函数**定义**
     （`state_def& on_active(state_action_t action) { ... }`）**不会**被误判。
     ⚠️ `body_end is None` ⇒ 花括号无法配平 ⇒ **fail-closed**（判违规）。
+
+    ⚠️ **为什么抽成通用**（ADR-051 D6）：`_if` 的护栏需要找 `.then(` / `.else_(`
+    的 lambda 闭包 ⇒ ⇒ **花括号配平**这套逻辑 MUST **只有一份**
+    ⇒ ⇒ 否则两份护栏的「什么算一个闭包」会漂移。
     """
     out = []
     n = len(stripped)
-    for m in re.finditer(r"\bon_active\s*\(", stripped):
+    for m in re.finditer(entry_re, stripped):
         j = m.end()
         while j < n and stripped[j].isspace():
             j += 1
@@ -156,7 +165,7 @@ def find_closures(stripped):
         if m2 >= n:
             out.append((j, None))
             continue
-        # ⚠️ 配平后的下一个非空白字符 MUST 是 `)`（`on_active(<lambda>)` 的收尾）
+        # ⚠️ 配平后的下一个非空白字符 MUST 是 `)`（入口调用 `<lambda>` 的收尾）
         #    ⇒ 否则说明**配平到了错误的 `}`**（典型：源码花括号本身不平衡 ⇒
         #    配平会一路吃到更外层的 `}`）⇒ **fail-closed**。
         p = m2 + 1

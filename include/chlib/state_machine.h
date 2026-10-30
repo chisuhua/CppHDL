@@ -102,6 +102,7 @@
 #include "core/uint.h"
 #include "core/bool.h"
 #include "core/operators.h"
+#include "chlib/guard_contribution.h"
 #include "utils/logger.h"
 #include <array>
 #include <exception>
@@ -304,6 +305,12 @@ private:
     }
     
     /// 把同一 target 的全部贡献合成**一条** select 链（守卫 = is_in(S)）。
+    ///
+    /// ⚠️ **ADR-051 D10**：合成逻辑已抽到**共享**组合器
+    /// （`chlib/guard_contribution.h`）⇒ ⇒ 与 `_if` 语句块的条件守卫
+    /// **共用同一份实现** ⇒ ⇒ 两份语义**不会漂移**。
+    /// ⚠️ **纯重构**：贡献的收集顺序（按**状态序** = 优先级序）与合成顺序
+    /// （**从后往前**）**逐位不变** ⇒ ADR-050 的既有金标 MUST 逐项不变。
     template <unsigned W>
     ch_uint<W> compose(lnodeimpl *target, const ch_uint<W> &acc0) {
         // 各 is_in(S) 只算一次（避免重复建比较节点）
@@ -311,16 +318,17 @@ private:
         for (size_t i = 0; i < N; ++i) {
             in_s[i] = is_in(static_cast<StateEnum>(i));
         }
-        ch_uint<W> acc = acc0;
+        // 收集该 target 的贡献，按**状态序**（= 优先级序）排列
+        std::vector<guard_contribution> contribs;
         for (size_t i = 0; i < N; ++i) {
             for (const auto &c : contributions_) {
                 if (c.target != target) continue;
                 if (static_cast<size_t>(c.state) != i) continue;
-                // ⚠️ 必须是**一条**表达式链（每状态一个 mux 组件会重新引入多驱动）
-                acc = select(in_s[i], ch_uint<W>(c.value), acc);
+                contribs.push_back({in_s[i], c.value});
             }
         }
-        return acc;
+        // ⚠️ 必须是**一条**表达式链（每状态一个 mux 组件会重新引入多驱动）
+        return compose_guard_chain<W>(contribs, acc0);
     }
     
 public:

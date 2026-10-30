@@ -340,6 +340,34 @@ jobs:
       shell: bash
       run: scripts/verify_fsm_next_wiring.sh --self-test
 
+    - name: Verify conditional-block assignment wiring
+      # `_if` statement blocks MUST route every register / IO assignment
+      # through `conditional_assign(target).next() = value`. A bare
+      # `reg->next = v` inside a branch body is NOT conditionalised => it takes
+      # effect UNCONDITIONALLY => the condition is silently ignored. That is
+      # exactly the defect ADR-051 removed (the DSL used to ignore its
+      # condition entirely), so the guardrail is the regression net for it.
+      # Also asserts the REMOVED symbols (`conditional_reg_assign` /
+      # `priority_if` / `priority_if_then`) do not reappear - they cannot be
+      # asserted at compile time (a deleted free function is a HARD error in a
+      # SFINAE context, not a deduction failure).
+      # Contract: capability `chlib-conditional-semantics`.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_if_stmt_wiring.sh
+
+    - name: Verify conditional-block assignment wiring (self-test)
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects => every criterion needs a fixture
+      # proving it has discriminating power. The fixtures cover: clean /
+      # bare `->next =` / bare `io().x =` / the `conditional_assign` form /
+      # a write OUTSIDE the closure / a non-lambda `then(...)` argument.
+      # ⚠️ The guardrail and the fixtures MUST share ONE analyser
+      # (scripts/lib/if_stmt_wiring.py, which reuses the lexer and the
+      # brace-balancer from scripts/lib/fsm_wiring.py).
+      shell: bash
+      run: scripts/verify_if_stmt_wiring.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in
@@ -1010,6 +1038,34 @@ jobs:
       # (scripts/lib/fsm_wiring.py) - two copies would drift.
       shell: bash
       run: scripts/verify_fsm_next_wiring.sh --self-test
+
+    - name: Verify conditional-block assignment wiring
+      # `_if` statement blocks MUST route every register / IO assignment
+      # through `conditional_assign(target).next() = value`. A bare
+      # `reg->next = v` inside a branch body is NOT conditionalised => it takes
+      # effect UNCONDITIONALLY => the condition is silently ignored. That is
+      # exactly the defect ADR-051 removed (the DSL used to ignore its
+      # condition entirely), so the guardrail is the regression net for it.
+      # Also asserts the REMOVED symbols (`conditional_reg_assign` /
+      # `priority_if` / `priority_if_then`) do not reappear - they cannot be
+      # asserted at compile time (a deleted free function is a HARD error in a
+      # SFINAE context, not a deduction failure).
+      # Contract: capability `chlib-conditional-semantics`.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_if_stmt_wiring.sh
+
+    - name: Verify conditional-block assignment wiring (self-test)
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects => every criterion needs a fixture
+      # proving it has discriminating power. The fixtures cover: clean /
+      # bare `->next =` / bare `io().x =` / the `conditional_assign` form /
+      # a write OUTSIDE the closure / a non-lambda `then(...)` argument.
+      # ⚠️ The guardrail and the fixtures MUST share ONE analyser
+      # (scripts/lib/if_stmt_wiring.py, which reuses the lexer and the
+      # brace-balancer from scripts/lib/fsm_wiring.py).
+      shell: bash
+      run: scripts/verify_if_stmt_wiring.sh --self-test
 
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered

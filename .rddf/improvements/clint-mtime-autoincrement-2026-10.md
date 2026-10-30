@@ -12,7 +12,10 @@ created_at: 2026-10-24
 
 - **Date drafted**: 2026-10-24
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，已归属 feature `feat-riscv-mini-rtl-debt` ②（2026-10-26 roadmap 审计）；无前置 ⇒ 可立项
+- **Status**: ✅ **决策门已解除**（2026-10-30，architect 落 **ADR-049**
+  `docs/adr/ADR-049-clint-mtime-semantics.md` ⇒ D1–D5 **已裁决** + capability 归属
+  已定（新建 `cpu-clint-timer`）⇒ ⇒ **可立项**（planner 建 change，带 ADDED delta
+  ⇒ 归档**禁** `--skip-specs`）
 - **来源**: change `riscv-mini-test-triage-2026-10` 实测挖出（C1 修 `test_interrupt_flow`
   的断言时发现），**原登记在该 change 的「框架缺陷」节** ⇒ 本 draft 承接之，C1 归档时移除该条。
 
@@ -95,3 +98,35 @@ created_at: 2026-10-24
 | D5 | **capability 归属** | 新建 `rv32i-clint-timer` / 归 `rv32i-canonical-home` | 新建 capability（CLINT 是**外设**，语义独立） |
 
 ⚠️ D1–D3 **直接决定** `test_interrupt_flow` 的期望值 ⇒ MUST 在 ADR 里写死。
+
+---
+
+## 7. ✅ 决策门的**关闭记录**（2026-10-30，architect）
+
+⚠️ §6 的 D1–D5 **已全部裁决** ⇒ 落在 **ADR-049**
+（`docs/adr/ADR-049-clint-mtime-semantics.md`；critic `review_profile: arch`
+第 1 轮 **APPROVE_WITH_CONDITIONS**，**0 BLOCKER**）：
+
+| 决策 | §6 的倾向 | ADR-049 的裁决 | 差异 |
+|---|---|---|---|
+| **D1** 递增频率 | 可配置分频（默认每拍） | ✅ 同 —— 编译期常量 `TIMER_DIVIDER`（默认 1） | 追加了**分频相位**的精确定义（写拍**照常推进**、该次递增被丢弃） |
+| **D2** 写 vs 递增 | 写优先 | ✅ 同 | 追加「写的那一拍**本拍不递增**」 |
+| **D3** 复位值 | 0 | ✅ 同 | — |
+| **D4** 32 位原子读 | 允许撕裂、不提供分离端口 | ✅ 同 | — |
+| **D5** capability 归属 | 新建 capability | ✅ 同 —— **新建 `cpu-clint-timer`** | ⚠️ **前缀**：不是 `rv32i-`（CLINT 是**外设** ⇒ 与 RV32I 微架构无关 ⇒ `rv32i-` 前缀会自反）⇒ 按仓内「前缀 = 子系统」惯例取 `cpu-`（对齐 `cpu-cache-subsystem`） |
+
+⇒ ⇒ **本草案的 §6 决策门已关闭** ⇒ ⇒ planner 可直接建 change。
+
+⚠️ **实施期 MUST 携带的三条实测结论**（ADR-049 §1.4，探针实测）：
+
+1. **进位 MUST 用硬件原语**：`carry ? 1_d : 0_d` 是 **C++ 三元** ⇒ 在 `ch_bool`
+   上**建图期**求值 ⇒ **恒取 0** ⇒ 计数器**永远跨不过 32 位边界**；
+2. **「保高半换低半」MUST 用 `bits_update<32>`**：`<<` 在 64 位上**编译不过**
+   （框架 shift 用 C++ `1 << N`）；手写 `hi | lo`（**漏移位**）⇒ **静默清零高半**；
+3. ⚠️ **`test_interrupt_flow` 会变成「时序相关」的脆弱测试**：它写 `mtime=50` 后只
+   tick 1 拍就断言 `mtime < mtimecmp(100)` ⇒ 新语义下 `mtime` 已是 51 ⇒ **靠 49
+   的余量才通过** ⇒ ⇒ MUST 改成「**每次采样前重写 `mtime`**」。
+
+⚠️ **ADR-049 未裁决的**（留给 change 的 `design.md`）：内部表示选形态 A
+（2×32 + 进位）还是形态 B（1×64 + 切片）—— 两者**逐拍等价**（实测）⇒ ADR-049
+只强制**可观测语义** + 上述两条陷阱。

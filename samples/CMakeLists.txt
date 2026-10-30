@@ -40,6 +40,7 @@ set(CH_SAMPLE_TARGETS
     advanced_pod_bundle_serialization
     large_pod_bundle_example
     spinalhdl_stream_example
+    conditional_demo
 )
 
 # 为每个示例创建可执行文件

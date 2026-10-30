@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-10-30
+# 本 change 实施 **ADR-051**（chlib 条件构造的语义模型 —— 守卫贡献 + 权威表面）
+# ⇒ capability `chlib-conditional-semantics` **ADDED ×N**（**新建** capability）
+# ⇒ 归档时 **禁** 用 `--skip-specs`。
+#
+# ⚠️ 实施顺序：commit 1 = 共享组合器 + `_if` 的守卫贡献实现 + 测试重写；
+#    commit 2 = 静态护栏 + `priority_if` 移除 + `conditional_demo` 归位。
