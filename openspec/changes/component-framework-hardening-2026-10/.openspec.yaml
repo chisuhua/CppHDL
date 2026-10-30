@@ -1,0 +1,15 @@
+schema: spec-driven
+created: 2026-10-30
+# ★ 由**下游消费者**（★ ChipForge · `ip/cpu/core/` 的开放核工作）实测暴露的**三处框架缺口**。
+#
+# ★ ★ 共同点：★ 三者都是**「下游正常使用上游公开 API 时会踩」**的缺口 ⇒ ★ 而非上游内部缺陷。
+# ★ ★ 其中 **U-4（`module.h` 的 ODR）经实测证明是上游自己的链接缺陷**（★ 2+ TU include
+#   `<ch.hpp>` ⇒ 链接期 multiple definition）⇒ ★ 上游目前只是**侥幸**（★ 所有 test
+#   target 都是单 TU）⇒ ★ 一旦出现 multi-source target 即炸。
+#
+# ★ ★ **尚无上游 ADR**：★ 上游惯例是「先立 ADR ⇒ 再立 change」（★ 先例：`get-lnode-entry-set-2026-10`
+#   引用 ADR-053）⇒ ★ 本 change 的 **proposal 即决策输入** ⇒ ★ 若评审倾向先立 ADR ⇒ ★ 需补。
+#
+# ⇒ **新建 3 个 capability** ⇒ 归档**禁** `--skip-specs`。
+#
+# ★ ★ 提案方：★ ChipForge（★ 下游）· ★ 证据见 proposal.md §Why（含**可复现命令**）
