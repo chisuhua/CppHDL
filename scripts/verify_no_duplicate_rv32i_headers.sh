@@ -25,6 +25,8 @@
 #       ⚠️ **fail-closed**：解析不出条目（表被清空 / 措辞变更 / 解析器坏了）
 #          ⇒ MUST 视为违规，不得静默放行（否则「删掉文档表」可让护栏静默失效）。
 #   C6  SoC 顶层端口冻结：Rv32iPipelineTop 的端口集合（**名 + 方向 + 位宽**）
+#   C7  库 → example 源文件耦合：根 tests/CMakeLists.txt MUST NOT 编译
+#        examples/ 目录里的 .cpp（ADR-046 D3 反向耦合的**第三种形态**）
 #       MUST 与登记快照一致 —— ADR-046 D10
 #
 # ⚠️ **判据边界（如实声明，不是「已覆盖」的承诺）**：
@@ -160,6 +162,71 @@ EXPECTED_DEAD_ALLOWANCES=0
 # ---------------------------------------------------------------------------
 SOC_TOP_HEADER="examples/riscv-mini/src/rv32i_pipeline_top.h"
 SOC_TOP_PORTS="dbg_branch_taken:ch_out:ch_bool dbg_exmem_alu_result:ch_out:ch_uint<32> dbg_exmem_imm:ch_out:ch_uint<32> dbg_exmem_rs2_data:ch_out:ch_uint<32> dbg_exmem_valid:ch_out:ch_bool dbg_id_instr:ch_out:ch_uint<32> dbg_id_is_branch:ch_out:ch_bool dbg_id_is_load:ch_out:ch_bool dbg_id_is_store:ch_out:ch_bool dbg_id_pc:ch_out:ch_uint<32> dbg_id_valid:ch_out:ch_bool dbg_load_use_detected:ch_out:ch_bool dbg_mem_valid_out:ch_out:ch_bool dbg_wb_rd_addr:ch_out:ch_uint<5> dbg_wb_write_data:ch_out:ch_uint<32> dbg_wb_write_en:ch_out:ch_bool ext_clk:ch_in:ch_bool ext_rst:ch_in:ch_bool obs_data_addr:ch_out:ch_uint<32> obs_data_rdata:ch_out:ch_uint<32> obs_data_write_data:ch_out:ch_uint<32> obs_data_write_en:ch_out:ch_bool obs_instr_addr:ch_out:ch_uint<32> obs_perf_branch_count:ch_out:ch_uint<32> obs_perf_branch_mispredict:ch_out:ch_uint<32> obs_perf_control_stalls:ch_out:ch_uint<32> obs_perf_cycles:ch_out:ch_uint<48> obs_perf_instructions:ch_out:ch_uint<48> obs_perf_load_use_stalls:ch_out:ch_uint<32> prog_addr:ch_in:ch_uint<32> prog_data:ch_in:ch_uint<32> prog_we:ch_in:ch_bool"
+
+# ---------------------------------------------------------------------------
+# 7) C7 —— 根 tests/CMakeLists.txt MUST NOT 编译 examples/ 目录的**源文件**
+#
+# ⚠️ 这是 ADR-046 D3「库 → example 反向依赖」的**第三种形态**：
+#    前两种（反向 `-I` 与反向 `#include`）已被 C2 / C3 覆盖，但**这一种**
+#    （**库**的测试 target 直接编译 **example** 目录里的 .cpp）**未被覆盖**。
+#    ⇒ 实测（2026-10-30）：根 `tests/CMakeLists.txt` 里有
+#      `add_catch_test(test_csr_unit
+#        ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)`
+#      ⇒ ⇒ 库测试 target 的编译闭包**依赖 example 目录** ⇒ ⇒ 已收口
+#      （归属改到 `examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test`
+#      ⇒ ⇒ **CTest 条目名不变** ⇒ ⇒ 计数锚点不变）。
+#    ⇒ ⇒ 本条把「已收口」**钉住** —— 否则它会**静默复发**（无护栏 ⇒ 零阻力）。
+#
+# ⚠️ **多行命令**：CMake 靠**括号配平**判定命令结束（仓库自身风格正是如此）
+#    ⇒ MUST 按括号深度拼接（与 C2 同构）⇒ 否则
+#    `add_catch_test(test_x\n  ${...}/examples/...)` 这种跨行形态会被**漏报**。
+# ⚠️ **注释**：CMake 的 `#` 到行尾是注释 ⇒ MUST **先剥注释再拼接**
+#    ⇒ 否则 ① 行尾注释会**截断**命令（⇒ 漏报）② 说明性注释里出现的
+#    `examples/` 会被**误判**（⇒ 误报）⇒ ⇒ 剥注释 MUST 在拼接**之前**。
+#    ⚠️ **已知边界**：`#` 在**引号内**时是字面量 ⇒ 本剥离会误伤 ⇒
+#    本仓 CMake 无「引号内 `#`」⇒ 零实际影响（如实登记，不是静默）。
+# ⚠️ **判据只认「源文件位置」**：只匹配 `add_catch_test` / `add_dual_backend_test`
+#    / `add_executable` / `add_library` / `target_sources` ⇒ ⇒ `add_test`
+#    （不带源文件）**不**算 ⇒ ⇒ 不会把「example 侧正常注册自己的 target」误判。
+# ---------------------------------------------------------------------------
+echo ""
+note "--- C7: 根 tests/CMakeLists.txt MUST NOT 编译 examples/ 的源文件 ---"
+if [ ! -f "tests/CMakeLists.txt" ]; then
+    violation "tests/CMakeLists.txt 不存在 ⇒ C7 fail-closed（不继续判定）"
+else
+c7_hits="$(awk '
+    {
+        line = $0
+        sub(/#.*/, "", line)            # 剥注释（**必须在拼接之前**）
+        if (buf == "") start = FNR
+        buf = (buf == "") ? line : buf " " line
+        o = gsub(/\(/, "&", line)
+        c = gsub(/\)/, "&", line)
+        depth += o - c
+        cont = (line ~ /\\[[:space:]]*$/)
+        if (depth > 0 || cont) next
+        if (buf ~ /examples\// && buf ~ /(add_catch_test|add_dual_backend_test|add_executable|add_library|target_sources)/) {
+            print FILENAME ":" start ": " buf
+        }
+        buf = ""; depth = 0
+    }
+    END {
+        if (buf != "" && buf ~ /examples\// && buf ~ /(add_catch_test|add_dual_backend_test|add_executable|add_library|target_sources)/) {
+            print FILENAME ":" start ": " buf
+        }
+    }
+' tests/CMakeLists.txt 2>/dev/null || true)"
+if [ -n "$c7_hits" ]; then
+    while IFS= read -r hit; do
+        [ -z "$hit" ] && continue
+        violation "tests/CMakeLists.txt 编译了 examples/ 的源文件（库 → example 反向耦合）：$hit"
+    done <<EOF
+$c7_hits
+EOF
+else
+    note "  OK：无库 → example 的源文件耦合"
+fi
+fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT INT TERM
@@ -582,6 +649,30 @@ CMEOF
     F="$WORK/fx_ports_w"; mk_fixture "$F"
     sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_uint<32>> *prog_data;|ch_in<ch_uint<64>> prog_data;|'
     st_check "SoC 顶层端口位宽变化 MUST 被抓" 1 "$(run_guard "$F")"
+
+    # ⑰ C7 库 → example 源文件耦合 MUST 被抓到（单行形态）
+    #    ⚠️ 增量归因：fixture 是**干净树**（① 已验证 PASS）⇒ ⇒ 只加这一行
+    #    ⇒ ⇒ exit=1 **只可能**来自 C7。
+    F="$WORK/fx_c7"; mk_fixture "$F"
+    cat >> "$F/tests/CMakeLists.txt" <<'CMEOF'
+add_catch_test(test_ghost ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)
+CMEOF
+    st_check "库编译 example 源文件 MUST 被抓" 1 "$(run_guard "$F")"
+
+    # ⑱ C7 **跨行**形态 MUST 被抓到（括号配平拼接 ⇒ 否则漏报）
+    F="$WORK/fx_c7_multi"; mk_fixture "$F"
+    cat >> "$F/tests/CMakeLists.txt" <<'CMEOF'
+add_catch_test(test_ghost
+    ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)
+CMEOF
+    st_check "跨行形态的库 → example 耦合 MUST 被抓" 1 "$(run_guard "$F")"
+
+    # ⑲ C7 **注释里**提到 examples/ MUST NOT 误报（剥注释 ⇒ 零误报）
+    F="$WORK/fx_c7_comment"; mk_fixture "$F"
+    cat >> "$F/tests/CMakeLists.txt" <<'CMEOF'
+# 曾在此处编译 examples/riscv-mini/tests/test_csr_unit.cpp ⇒ 已收口
+CMEOF
+    st_check "注释里提到 examples/ MUST NOT 误报" 0 "$(run_guard "$F")"
 
     # ⑰ **续行状态 MUST 按文件重置，且文件末尾的悬空续行 MUST 参与判定**
     #    形状：`include/cpu/aaa_dangling.cpp` 最后一行是 `/* see alpha.h */ \`（悬空续行）

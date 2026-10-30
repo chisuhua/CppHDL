@@ -78,6 +78,16 @@ riscv_mini_unit_test(rv32i_phase3_test rv32i_phase3_test.cpp)
 riscv_mini_catch_test(test_pipeline_exec tests/test_pipeline_exec.cpp)
 riscv_mini_catch_test(test_soc_hello_world tests/test_soc_hello_world.cpp)
 riscv_mini_catch_test(test_riscv_tests tests/test_riscv_tests.cpp)
+
+# ⚠️ 2026-10-30（ADR-046 D3「库 → example 反向耦合」的**第三种形态**收口）：
+#   `test_csr_unit` 此前由**库**的 `tests/CMakeLists.txt` 注册（编译本目录的
+#   `tests/test_csr_unit.cpp`）⇒ ⇒ 库测试 target 依赖 example 目录 ⇒ ⇒
+#   「库 → example 反向依赖」。
+#   ⇒ ⇒ 归属改到**本目录**（源文件在这里 ⇒ 依赖方向自然正确）。
+#   ⇒ ⇒ **CTest 条目名不变**（`test_csr_unit`）⇒ ⇒ 计数锚点不变。
+#   ⇒ ⇒ 本 helper 比库侧的 `add_catch_test` 多一条 `TIMEOUT 300`
+#     （⇒ 防止 CI 挂死 ⇒ 是**改善**）。
+riscv_mini_catch_test(test_csr_unit tests/test_csr_unit.cpp)
 riscv_mini_catch_test(test_address_decoder tests/test_riscv_tests_soc.cpp)
 
 # === Pipeline 单元 ===

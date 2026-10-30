@@ -63,6 +63,33 @@ tests/chlib/test_phase4_integration.cpp → rv32i_hazard_complete.h（经 -I 解
 
 ⇒ **库（`tests/`）依赖 example（`examples/`）**，层级倒置。
 
+#### 1.3.1 第三种形态：**库 target 直接编译 example 的源文件**（2026-10-30 补登记）
+
+⚠️ 本节记录的是 §1.3 **未覆盖**的**第三种**反向依赖形态（前两种 = 反向 `-I`
+与反向 `#include`）：
+
+```cmake
+# 根 tests/CMakeLists.txt（**收口前**）
+add_catch_test(test_csr_unit ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)
+```
+
+⇒ ⇒ **库**的测试 target 的编译闭包**包含 example 目录里的 `.cpp`** ⇒ ⇒
+依赖方向倒置 ⇒ ⇒ 且它**不被** §1.3 的两条判据（前两种形态）覆盖 ⇒ ⇒
+**零阻力复发**。
+
+⇒ ✅ **已收口**（2026-10-30）：归属改到**源文件所在的一侧** ——
+`examples/riscv-mini/CMakeLists.txt` 的 `riscv_mini_catch_test(test_csr_unit
+tests/test_csr_unit.cpp)` ⇒ ⇒ **CTest 条目名不变**（`test_csr_unit`）
+⇒ ⇒ **计数锚点不变**（`CTEST_TOTAL` 205 / non-perf 194 均未变）。
+
+⇒ ⇒ **护栏**：新增 **C7**（`scripts/verify_no_duplicate_rv32i_headers.sh`）
+—— 根 `tests/CMakeLists.txt` MUST NOT 编译 `examples/` 的源文件 ⇒ ⇒
+判定覆盖**单行**与**跨行**（括号配平拼接）两种形态 ⇒ ⇒ 且**先剥注释再拼接**
+⇒ ⇒ 说明性注释里的 `examples/` **不**误报 ⇒ ⇒ 3 个 self-test fixture 钉住。
+
+⚠️ **判据的已知边界**（如实登记）：`#` 在**引号内**时是字面量 ⇒ 剥注释会误伤
+⇒ ⇒ 本仓 CMake 无「引号内 `#`」⇒ ⇒ 零实际影响。
+
 ### 1.4 死头文件（源码级反查，非 build 目录反查）
 
 2026-10-23 用「源码级 `#include` 反查」判定（见 §1.6 的方法学说明），**17 个头文件零消费者**：

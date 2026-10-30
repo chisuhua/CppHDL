@@ -58,9 +58,16 @@ add_catch_test(test_hazard chlib/test_hazard_complete.cpp)
 # 已迁移到根目录测试: tests/test_rv32i_pipeline.cpp (12 个 TEST_CASEs)
 # 原 examples/ 版本 5 个测试已通过根目录版本覆盖
 
-# CSR unit test (from examples/riscv-mini/tests/)
-# Tests CSR register reset values, read/write, set/clear, MRET, exceptions, WFI, interrupt logic
-add_catch_test(test_csr_unit ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)
+# ⚠️ 2026-10-30（ADR-046 D3「库 → example 反向耦合」的**第三种形态**收口）：
+#   `test_csr_unit` 此前在此注册（`add_catch_test(test_csr_unit
+#   ${PROJECT_SOURCE_DIR}/examples/riscv-mini/tests/test_csr_unit.cpp)`）
+#   ⇒ ⇒ **库**的测试 target 编译**example** 目录里的源文件 ⇒ ⇒ 「库 → example」
+#   的**反向依赖**。
+#   ⇒ ⇒ 前两种形态（反向 `-I` 与反向 `#include`）已被 ADR-046 的护栏 C2/C3 覆盖，
+#     但**这一种**（库 target 编 example 源文件）**未被覆盖** ⇒ ⇒ 本次收口。
+#   ⇒ ⇒ 归属改到 example 侧：见 `examples/riscv-mini/CMakeLists.txt` 的
+#     `riscv_mini_catch_test(test_csr_unit tests/test_csr_unit.cpp)`。
+#   ⇒ ⇒ **CTest 条目名不变**（`test_csr_unit`）⇒ ⇒ 计数锚点不变。
 
 # ============================================================================
 # chlib 库测试 (26 个测试文件)
