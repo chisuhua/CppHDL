@@ -39,15 +39,24 @@ ready 字段。
 `openspec/changes/archive/2026-10-31-chlib-stream-ready-ownership-2026-10/design.md` §14~§15。
 
 ⚠️⚠️ **范围限定（2026-10-31 收口订正 · change
-`stream-ready-ownership-correction-2026-10`）**：上条的「实施完成且已验证」
-**仅覆盖 fifo 类**（`stream_fifo` / `stream_queue`）⇒ ⇒ **转发类**（mux /
-demux / arbiter / fork / join / filters）的 ready 链**两端都断**（实测：
-构造期 `Invalid operands` ⇒ ⇒ 结果字段是**空节点** ⇒ ⇒ **读即 ABORT**）
-⇒ ⇒ 且 `stream_mux_connect_ready` 的 `<<=` 修复在「调用方未建节点」时
-**静默无效** ⇒ ⇒ ⇒ **转发类 MUST NOT** 被本 capability 声称「已兑现」
-⇒ ⇒ ⇒ 其收口义务**显式移交**
-`.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账）
-⇒ ⇒ ⇒ 待其落地时经 delta **加回**。
+`stream-ready-ownership-correction-2026-10`；⚠️ **2026-11-01 更新** · change
+`stream-forward-ready-closure-p1a-2026-11`）**：上条的「实施完成且已验证」
+**仅覆盖 fifo 类**（`stream_fifo` / `stream_queue`）⇒ ⇒ ⇒
+⚠️ **转发类的收口进度（2026-11-01）**：
+- ✅ **已收口**（形态 E · 单阶段）：`mux` · `arbiter×4`（`priority` /
+  `round_robin` / `lock` / `sequence`）· `join` · `filters×6` ·
+  `combine_with` ⇒ ⇒ ⇒ 判别力用例（**调用方持有的** ready 节点**真有驱动**
+  且**值跟随**）⇒ ⇒ ⇒ 护栏 R8（**穷举** + **存在性判据**）⇒ ⇒ ⇒
+  ⇒ ⇒ ⇒ **8 种原地投毒全部被抓住**（行为 + 静态**双判据**）；
+- ❌ **仍未收口**：`demux`（方向修正是**行为变更** ⇒ ⇒ 独立 ADR）·
+  `fork`（同步语义**从未工作过** ⇒ ⇒ 等于**新功能**）⇒ ⇒ ⇒ 其义务**显式移交**
+  `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账）
+  ⇒ ⇒ ⇒ 待其落地时经 delta **加回**；
+- ⚠️ **另有一项独立的真实缺陷**（⇒ ⇒ **不属于**本 capability）：builder 的
+  链式 `queue<>()` **静默丢字** ⇒ ⇒ ⇒ `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`。
+
+⇒ ⇒ ⇒ **转发类 MUST NOT** 被本 capability 声称「**全部**已兑现」
+⇒ ⇒ ⇒ ⇒ 未收口者仍属「硬编码常量 ready ⇒ ⇒ **仍属违规**」。
 
 ⚠️ **覆盖生效的四个必要条件**（2026-10-31 机制级订正，实测）：① **目标** MUST
 是**已存在**的**非 literal** 节点（⇒ ⇒ `<<=` 在**空**目标上会**另建**节点
@@ -80,16 +89,26 @@ demux / arbiter / fork / join / filters）的 ready 链**两端都断**（实测
 
 - **WHEN** 检查本 capability 的**转发类**（mux / demux / arbiter / fork /
       join / filters）的 ready 链实现
-- **THEN** MUST 承认其 ready 链**两端都断**（实测：构造期 `Invalid operands`
-      ⇒ ⇒ 结果字段是**空节点** ⇒ ⇒ **读即 ABORT**）
-- **AND** MUST NOT 被本 capability 声称为「已兑现」
+- **THEN** MUST 承认其 ready 链的**现状**（⚠️ **2026-11-01 原地订正**：
+      P1-a 落地后 ⇒ ⇒ **转发类
+      （mux / arbiter / join / filters / combine_with）已收口**
+      ⇒ ⇒ ⇒ ⇒ 本 Scenario 的**「两端都断」**描述**仅对未收口者成立**
+      ⇒ ⇒ ⇒ ⇒ ⇒ **demux / fork**（独立 change `P1-b` / `P1-c`）**仍**是
+      **两端都断** ⇒ ⇒ ⇒ ⇒ ⇒ **本 Scenario 继续在约** ⇒ ⇒ 直至它们落地）
+- **AND** ⚠️ **仍**未收口者（`demux` / `fork`）MUST NOT 被本 capability
+      声称为「已兑现」
 - **AND** 「默认恒就绪」的豁免 MUST NOT 扩展到转发类（⇒ ⇒ 否则本豁免会成为
       「其它组合子也可硬编码常量 ready」的**先例**）
-- **AND** 其收口义务 MUST **显式移交**
+- **AND** 未收口者的收口义务 MUST **显式移交**
       `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账 §3）
-- **AND** 待 P1 落地时 MUST 经 delta **加回**本条 ⇒ ⇒ 届时 MUST 同时补齐
-      转发类的**行为判据**与**自动化护栏**（含「注入一处『转发类无条件忽略』
-      ⇒ MUST 转红」的自检）
+- **AND** 各自的收口落地时 MUST 经 delta **加回** ⇒ ⇒ 且 MUST 同时补齐
+      **行为判据**与**自动化护栏**（含「注入一处『转发类无条件忽略』⇒ MUST
+      转红」的自检）
+- **AND** ⚠️ **2026-11-01 限定措辞**（**避免假陈述**）：本条 MUST NOT 被读作
+      「**转发类全部**无条件忽略 ready」⇒ ⇒ ⇒ **硬编码常量 ready** 的转发类
+      （⇒ ⇒ **未收口**者：`demux` / `fork` ⇒ ⇒ P1-b / P1-c）**仍属违规**；
+      ⇒ ⇒ **已收口**者（mux / arbiter / join / filters / combine_with）
+      **不**属此类
 
 #### Scenario: 消费端不就绪 MUST 能阻止推进
 
@@ -132,8 +151,17 @@ MUST NOT 引用**局部**节点 ⇒ ⇒ 否则覆盖**不传播 ⇒ 静默失效
       孤儿化** ⇒ ⇒ ⇒ **MUST 用 `<<=`**）
   ② **源** MUST 是**非空**节点（⇒ ⇒ 否则 `CHERROR` 只打日志 ⇒ ⇒ **静默**）
   ③ **源** MUST 活得比结果对象久（⇒ ⇒ 否则 💥 **SIGSEGV**）
-  ④ **覆盖 MUST 在 `Simulator::initialize()` **之前**做**（⇒ ⇒ 改边
-      **不重建指令** ⇒ ⇒ 否则**静默**）
+  ④ **改边（`<<=` / `set_src`）MUST 在 `Simulator` 构造**之前**完成**
+      （⇒ ⇒ **可观测规则**：构造之后改边 ⇒ ⇒ 覆盖**不生效** ⇒ ⇒ 值读到的
+      仍是**旧**的 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 运行期 MUST 只改**
+      **值**（`sim.set_value`）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **「改值」是测试台的正常用法**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 不构成限制** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **但
+      「改边须在构造前」是**易踩的坑** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ MUST 在契约里
+      明写 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **确切机制尚未完全确定**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **（实测：改边**不生效** ⇒ ⇒ 且
+      `reinitialize()` **不**解决 ⇒ ⇒ 且源是**旧**节点时**同样不生效**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 故 MUST NOT 在契约里断言
+      未验证的机制** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 只写可观测规则**））
 - **AND** 四类失效（缺持久源 / 缺非空源 / 目标被重绑定成 literal / 覆盖晚于
       `initialize`）MUST NOT 用**单条**判据覆盖 ⇒ ⇒ 其中三类是**静默**的
 - **AND** ⚠️ **运行期改 ready ⇒ ⇒ 覆盖「不生效」⇒ ⇒ 任何据此写的断言
@@ -253,3 +281,88 @@ ready ⇒ ⇒ MUST 存在路径使 `ready == 0` 阻止推进 ⇒ ⇒ **效果判
 - **WHEN** 检查本 capability 的 MUST 集合
 - **THEN** MUST **不**包含「未连接 MUST 产生可诊断失败」这一条
 - **AND** MUST 包含其**可落地替代**（「MUST NOT 无条件忽略消费端 ready」）
+
+### Requirement: 转发类组合子的 ready 所有权 MUST 是**默认值 + 可覆盖**
+
+转发类组合子（mux / arbiter / join / filters / combine_with）的 ready
+所有权 MUST 采用**形态 E（默认值 + 可覆盖）** ⇒ ⇒ 与 fifo 类**同型**
+⇒ ⇒ ⇒ 心智模型统一 ⇒ ⇒ **无**两阶段 / 单阶段的分别。
+
+⇒ ⇒ ⚠️ **转发类现状 = 「上游恒不 ready = 死路」** ⇒ ⇒ 故本条是「把死路变成
+活路」⇒ ⇒ **零破坏**成立（⇒ ⇒ 逐条见 Scenario「转发类现状是死路」）。
+
+⇒ ⇒ ⚠️ **三条实现纪律** ⇒ ⇒ 逐条见 Scenario「转发类的三条实现纪律」。
+
+⇒ ⇒ ⚠️ **消费端表达「不就绪」的两种方式**（**都合法**）⇒ ⇒ 逐条见 Scenario
+「消费端表达不就绪的两种方式」。
+
+⇒ ⇒ ⚠️ **`connect_ready` MUST 是幂等的**（⇒ ⇒ 重复调用 MUST NOT 报错）
+⇒ ⇒ 逐条见 Scenario「`connect_ready` MUST 是幂等的」。
+
+#### Scenario: 转发类现状是死路
+
+- **WHEN** 检查转发类组合子**未**接消费端 ready 时的行为
+- **THEN** MUST 承认其上游 ready **恒为 0**（实测：不调 `connect_ready` ⇒ ⇒
+      上游 ready 恒为 0 ⇒ ⇒ 调用方永远推不动）
+- **AND** ⇒ ⇒ 本 capability 的转发类条款 MUST 被视为「把死路变成活路」
+      ⇒ ⇒ **MUST NOT** 被当作**行为变更**
+- **AND** ⇒ ⇒ **零破坏**成立（⇒ ⇒ 未接背压时的行为 = **既有旧语义**）
+
+#### Scenario: 转发类的三条实现纪律
+
+- **WHEN** 实现转发类组合子的 ready 所有权
+- **THEN** MUST **立即**建立「默认恒就绪」的 ready 节点（⇒ ⇒ 源 MUST 是
+      **非 literal** ⇒ ⇒ 可被覆盖）
+- **AND** 源的**节点** MUST **持久有效**（⇒ ⇒ MUST NOT 是**临时对象**
+      ⇒ ⇒ 临时对象的 `get_lnode` **无效** ⇒ ⇒ 驱动**未建立**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 具名的局部 `ch_bool` 与「结果对象持有成员」两种
+      形态**都**满足（框架**无引用计数、无析构** ⇒ ⇒ 节点不随 C++ 对象
+      析构而失效）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「持有者是谁」不是判据
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 节点是否持久才是判据**）
+- **AND** MUST 用 **`<<=`** 驱动上游的 ready 字段（**MUST NOT** 用
+      `operator=`）⇒ ⇒ ⚠️ 因为 `ch_stream` 的**拷贝与原对象共享同一 ready
+      节点** ⇒ ⇒ ⇒ `<<=` 能**穿透副本**驱动到**调用方**
+- **AND** MUST NOT 有 `out_ready = true` 这类**局部常量**充当 ready 源
+      （⇒ ⇒ 那是「无条件忽略」）
+
+#### Scenario: 消费端表达不就绪的两种方式
+
+- **WHEN** 消费端需要表达「不就绪」
+- **THEN** MAY 直接 `<<=` 覆盖 `result.output_stream.ready`
+      （⇒ ⇒ **单阶段** ⇒ ⇒ **不需要** `connect_ready`）
+- **AND** MAY 调用 `<组合子>_connect_ready(result, consumer_ready)`
+      （⇒ ⇒ 由它把消费端 ready **覆盖**到该字段 ⇒ ⇒ ⚠️ 与 fifo 类的
+      `connect_ready` **语义一致** ⇒ ⇒ 心智模型统一）
+- **AND** ⇒ ⇒ 两种方式 MUST **都**能达成「上游被阻塞」
+
+#### Scenario: 转发类的上游 MUST 真的收到反压
+
+- **WHEN** 消费端的 ready 为 **0**
+- **THEN** **调用方持有的** ready 节点 MUST **有驱动**（`num_srcs() > 0`）
+      ⇒ ⇒ 且其**值** MUST 为 **0**（⇒ ⇒ 上游被**真正**阻塞）
+- **AND** 该行为 MUST 可被**运行期**断言（⇒ ⇒ **结构**判据 + **值**判据）
+- **AND** ⚠️ **变异判别力**：把 `<<=` 改回 `operator=` ⇒ ⇒ MUST 转红
+      （⇒ ⇒ `operator=` 只重绑定副本 ⇒ ⇒ 调用方节点**仍无驱动**）
+
+#### Scenario: 未覆盖时 MUST 保持「恒就绪」（零破坏）
+
+- **WHEN** 调用方**不**覆盖 `result.output_stream.ready`（也**不**调
+      `connect_ready`）
+- **THEN** 上游 ready MUST 为 **1**（= **既有旧语义**「恒就绪」）
+- **AND** 既有调用点 MUST NOT 需要修改即可保持**逐位相同**的行为
+
+#### Scenario: `connect_ready` MUST 是幂等的
+
+- **WHEN** 调用方**重复**调用 `<组合子>_connect_ready(result, consumer_ready)`
+- **THEN** MUST **不**抛异常 ⇒ ⇒ 且最后一个覆盖 MUST 生效
+- **AND** MUST NOT 静默接受**空** ready 字段（⇒ ⇒ MUST 抛异常）
+
+#### Scenario: 转发类 MUST NOT 硬编码常量 ready
+
+- **WHEN** 检查转发类组合子的实现
+- **THEN** MUST NOT 存在 `out_ready = true` 这类**局部常量**充当 ready 源
+      （⇒ ⇒ 那是「无条件忽略消费端 ready」）
+- **AND** MUST 有**自动化护栏**检出（⇒ ⇒ 以**行为 / 结构**判据实现 ⇒ ⇒
+      **MUST NOT** 以「源码含常量 `true`」这类**词法**判据实现）
+- **AND** 该护栏 MUST 有**自检**（⇒ ⇒ 注入一处「硬编码常量 ready」
+      ⇒ MUST 转红）
