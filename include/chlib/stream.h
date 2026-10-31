@@ -640,6 +640,20 @@ template <unsigned N_INPUTS, typename T> struct StreamMuxResult {
     ch_stream<T> output_stream;
     std::array<ch_stream<T>, N_INPUTS> input_streams;
     ch_uint<compute_idx_width(N_INPUTS)> select;
+
+    // ⚠️ **ADR-054 形态 E（默认值 + 可覆盖）**：默认 ready 源的**持有者**
+    //
+    // ⚠️ **为什么需要它**（P1-a 探针 ⑩ C 实测）：
+    //   **struct 成员默认构造后是空节点**（`impl == nullptr`）⇒ ⇒ 若直接
+    //   `output_stream.ready <<= default_ready_source` ⇒ ⇒ `<<=` 落在**空**
+    //   成员上 ⇒ ⇒ `CHERROR`（**只打日志、不抛**）⇒ ⇒ **静默失效** ⇒ ⇒
+    //   ⇒ ⇒ **MUST 先 `default_ready_source = ch_bool(true)`（建立 literal
+    //   节点）再 `<<=`**（本成员在 `stream_mux` 内按此顺序初始化）。
+    //
+    // ⚠️ **源 MUST 持久**（与 fifo 的 `StreamFifoResult::default_ready_source`
+    //   **同型**）⇒ ⇒ 框架**无引用计数、无析构** ⇒ ⇒ 节点不随 C++ 对象析构
+    //   而失效 ⇒ ⇒ 源**持久有效** ⇒ ⇒ 覆盖**必然传播** ✔
+    ch_bool default_ready_source;
 };
 
 /**
@@ -686,8 +700,28 @@ stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
 
     result.output_stream.valid = selected_valid;
 
-    // Note: input_streams[].ready signals should be connected externally
-    // after setting output_stream.ready, using the stream_mux_connect_ready() function
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //
+    // ⚠️ **为什么在这里建立 ready 链**（P1-a 探针 ②/⑧ 实测）：
+    //   ① `ch_stream` 的**拷贝与原对象共享同一 ready 节点** ⇒ ⇒ 组合子内部
+    //      用 `<<=` 能**穿透副本**驱动到**调用方** ⇒ ⇒ ⇒ **调用方真收到反压**；
+    //   ② `output_stream.ready` MUST **有消费者**才会被求值（探针 ⑧ 反证组）
+    //      ⇒ ⇒ 本处的 `is_selected & output_stream.ready` 就是那个消费者
+    //      ⇒ ⇒ ⇒ **MUST 在组合子内部建立**（不能只等 `connect_ready`）。
+    //
+    // ⚠️ **MUST NOT** 用 `operator=`（MUST NOT 重绑定副本 ⇒ ⇒ 调用方被孤儿化）
+    //
+    // ⚠️ **默认驱动 = 恒就绪**（= **既有旧语义**）⇒ ⇒ 未接背压时行为**逐位
+    //   不变**⇒ ⇒ ⇒ **零破坏** ⇒ ⇒ 消费端可直接 `<<=` 覆盖它（**单阶段**）。
+    result.default_ready_source = ch_bool(true);          // ① 持久的 literal 源
+    result.output_stream.ready <<= result.default_ready_source;  // ② 默认恒就绪
+
+    for (unsigned i = 0; i < N_INPUTS; i++) {
+        ch_bool is_selected =
+            (result.select == make_uint<compute_idx_width(N_INPUTS)>(i));
+        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready);
+    }
 
     return result;
 }
@@ -711,6 +745,16 @@ void stream_mux_connect_ready(StreamMuxResult<N_INPUTS, T>& mux_result) {
         //    ⇒ ⇒ **调用方的上游永远收不到 ready** ⇒ ⇒ **静默**。
         //    ⇒ ⇒ `<<=` 走 `set_src(0, …)` ⇒ ⇒ 在**共享的那个节点**上建数据流边
         //    ⇒ ⇒ 调用方的上游**真的**收到 ready ✔
+        //
+        // ⚠️⚠️ **P1-a（ADR-054 形态 E · 单阶段 · architect 裁决 2026-11-01）**：
+        //    `stream_mux` **内部已建立**这条 ready 链（⇒ ⇒ 因为
+        //    `output_stream.ready` MUST **有消费者**才会被求值 ⇒ ⇒ 探针 ⑧）
+        //    ⇒ ⇒ ⇒ **本函数现在是「幂等重连」**（`<<=` = `set_src` 覆盖 ⇒ ⇒
+        //    重复调用**不报错**、行为不变）⇒ ⇒ ⇒ **可保留为向后兼容入口**
+        //    ⇒ ⇒ ⇒ ⇒ **消费端覆盖 ready MUST 直接 `<<=` 到
+        //    `result.output_stream.ready`**（⇒ ⇒ **单阶段** ⇒ ⇒ 无需本函数）
+        //    ⇒ ⇒ ⇒ ⇒ ⚠️ **本函数 MUST NOT** 照搬 fifo 的「多驱动拒绝」
+        //    守卫（⇒ ⇒ 那样会让重复调用抛异常 ⇒ ⇒ 破坏幂等性）。
         mux_result.input_streams[i].ready <<=
             (is_selected & mux_result.output_stream.ready);
     }
