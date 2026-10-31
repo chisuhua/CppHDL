@@ -43,8 +43,9 @@ EXEMPT_MARK = "stream_ready_ownership: intentionally-unwired"
 # ⚠️⚠️ **R8 的「已知未收口」豁免清单**（P1-a · 2026-11-01）
 # ⚠️ **MUST 显式登记 + 理由 + 归属 change**（⇒ ⇒ 豁免**非静默** ⇒ ⇒ 否则
 #    「已收口」的声明会变成谎言）
-# ⚠️ ⚠️ **本清单 MUST 只增不减到「全部收口」为止**（⇒ ⇒ 每次 P1 落地 MUST
-#    删掉对应条目 ⇒ ⇒ ⇒ 否则「未收口」会被**永久豁免** ⇒ ⇒ ⇒ ⇒ **假绿**）
+# ⚠️ ⚠️ **本清单 MUST 只减不增**（⇒ ⇒ 每次 P1 落地 MUST 删掉对应条目
+#    ⇒ ⇒ ⇒ 否则「未收口」会被**永久豁免** ⇒ ⇒ ⇒ ⇒ **假绿**）
+#    ⚠️ **新增豁免 MUST 有**：① 具体理由 ② 归属的独立 change ③ `::notice` 点名
 UNSETTLED = {
     "stream_fork": "P1-c（同步语义从未工作过 ⇒ 等于新功能 ⇒ 判据从零建）",
     "stream_demux": "P1-b（方向修正是行为变更 ⇒ 需独立 ADR）",
@@ -204,9 +205,17 @@ def r5() -> None:
 #    ⇒ ⇒ 否则 mux / arbiter / join 的上游驱动**全部漏检**
 #    ⇒ ⇒ ⇒ ⇒ ⇒ **（实测：投毒 `forward-upstream-operator-assign` 后静态判据仍绿
 #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 正是这个盲区**）**
+# ⚠️⚠️⚠️ **R8 的正则 MUST 区分「输出侧」与「上游侧」**（2026-11-01 实测）
+#    ⇒ ⇒ `result.output_stream.ready` 是**输出侧**（组合子**自己产出**）
+#    ⇒ ⇒ 而 `result.ready`（filters 形态：返回**裸** `ch_stream`）是**上游侧**
+#    ⇒ ⇒ ⇒ 若不区分 ⇒ ⇒ ⇒ **`has_drive` 会被输出侧的 `<<=` 置真**
+#    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「删驱动」投毒后存在性判据**抓不到**
+#    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **（实测：投毒后静态判据仍绿）**
 _UPSTREAM_READY = re.compile(
-    r"\b(input_stream|input_streams|input1|input2|result)\s*"
-    r"(?:\[[^\]]*\])?\s*\.ready\s*(<<=|=(?!=))")
+    r"(?P<tgt1>\b(?:input_stream|input_streams|input1|input2))\s*"
+    r"(?:\[[^\]]*\])?\s*\.ready\s*(?P<op1><<=|=(?!=))"
+    r"|(?P<tgt2>\bresult)\s*(?:\[[^\]]*\])?\s*\.ready\s*(?P<op2><<=|=(?!=))"
+    r"|(?P<tgt3>\bresult)\s*\.output_stream\s*\.ready\s*(?P<op3><<=|=(?!=))")
 
 
 def _iter_stream_functions() -> list[tuple[str, str]]:
@@ -234,6 +243,23 @@ def _iter_stream_functions() -> list[tuple[str, str]]:
     return out
 
 
+def _is_pure_forwarder(body: str) -> bool:
+    """该函数是否**纯转发**（只调用另一个组合子 ⇒ ⇒ 驱动在被调者里）。
+
+    ⚠️ **为什么需要**：如 `stream_continue_when` ⇒ ⇒ 它只是
+    `return stream_halt_when(input_stream, !continue_cond);` ⇒ ⇒ ⇒ **它自己
+    不写 ready** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 存在性判据会误报** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+    ⇒ ⇒ **⇒ MUST 排除**。
+    """
+    # ⚠️ 判据 = 函数体里**调用了另一个 `stream_*` 组合子** **且** 本身
+    #    **没有任何 ready 写入**（⇒ ⇒ 它的 ready 逻辑**全部**在被调者里）
+    #    ⚠️⚠️ **MUST 同时要求两者**（⇒ ⇒ 否则「既调用别人又自己漏驱动」的
+    #    组合子会被**误判为纯转发** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 漏检**）
+    if not re.search(r"\bstream_[a-z_]+\s*\(", body):
+        return False
+    return not _UPSTREAM_READY.search(body)
+
+
 def r8() -> None:
     """转发类 MUST 用 `<<=` 驱动上游 ready（**穷举** + **结构判据**）。"""
     if not ARBITER_H.exists():
@@ -258,15 +284,38 @@ def r8() -> None:
             continue
 
         bad = []
+        has_drive = False
         for m in _UPSTREAM_READY.finditer(body):
             # ⚠️ **输出侧**字段 ⇒ ⇒ 组合子**自己产出** ⇒ ⇒ 驱动它合法
-            target = m.group(1)
-            if target in OUTPUT_SIDE_FIELDS:
+            target = m.group("tgt1") or m.group("tgt2") or m.group("tgt3")
+            # ⚠️ **输出侧**判定：目标是 `output_stream` / `push_stream` /
+            #    `pop_stream` ⇒ ⇒ 组合子**自己产出** ⇒ ⇒ 驱动它合法
+            #    ⚠️ `result.output_stream.ready` ⇒ ⇒ target 是 `result`
+            #    ⇒ ⇒ **必须**看**完整匹配文本**才知它是输出侧
+            full = m.group(0)
+            if target in OUTPUT_SIDE_FIELDS or "output_stream" in full \
+                    or "push_stream" in full or "pop_stream" in full:
                 continue
-            if m.group(2) == "=":
+            op = m.group("op1") or m.group("op2") or m.group("op3")
+            if op == "<<=":
+                has_drive = True
+            else:
                 bad.append(f"{target}.ready = （operator= 重绑定 ⇒ ⇒ 调用方被孤儿化）")
         if bad:
             viol.append(f"{name}: " + "；".join(bad))
+        elif not has_drive and not _is_pure_forwarder(body):
+            # ⚠️⚠️⚠️ **存在性判据**（2026-11-01 critic SHOULD_FIX #3）
+            #    ⇒ ⇒ R8 原先**只**找 `operator=` 形态 ⇒ ⇒ ⇒ **完全删除**上游
+            #    驱动的组合子 ⇒ ⇒ **无 `=` 可匹配** ⇒ ⇒ ⇒ 被计为「已收口」
+            #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「删驱动」这类回归**双判据**均不可见**
+            #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST 补存在性判据**
+            viol.append(f"{name}: **无任何上游侧 `<<=` 驱动**"
+                        f"（⇒ ⇒ 删驱动 ⇒ ⇒ 调用方收不到反压 ⇒ ⇒ 静默）")
+        elif not has_drive:
+            # ⚠️ **纯转发器**（如 `stream_continue_when` ⇒ ⇒ 只调用另一个
+            #    组合子 ⇒ ⇒ 驱动在被调者里）⇒ ⇒ ⇒ **不在 R8 的管辖范围**
+            #    ⇒ ⇒ ⇒ **跳过**（⇒ ⇒ 否则会误报）
+            continue
         else:
             settled.append(name)
 
@@ -356,6 +405,14 @@ POISONS: dict[str, tuple[str, str]] = {
         """        result.input_streams[i].ready =
             (is_selected & result.output_stream.ready);""",
     ),
+    # ⚠️⚠️⚠️ **R8 专用投毒（P1-a · 存在性判据）**：**完全删掉**上游驱动
+    #    ⇒ ⇒ 无 `=` 可匹配 ⇒ ⇒ ⇒ 若无存在性判据 ⇒ ⇒ **R8 会误判为「已收口」**
+    #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ R8 MUST 转红**（判别力证明）
+    "forward-delete-upstream-drive": (
+        """        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready);""",
+        """        // ⚠️ 投毒：**删掉**上游驱动（⇒ ⇒ 无 `=` ⇒ ⇒ 靠存在性判据检出）""",
+    ),
     # ⚠️⚠️ **R8 专用投毒（P1-a）**：filters 的上游驱动 `<<=` ⇒ ⇒ `operator=`
     #    ⇒ ⇒ **调用方被孤儿化** ⇒ ⇒ ⇒ **R8 MUST 转红**
     "filter-upstream-operator-assign": (
@@ -366,6 +423,9 @@ POISONS: dict[str, tuple[str, str]] = {
 
 # ⚠️ **投毒的目标文件**（⇒ ⇒ R8 的投毒可能落在 `stream_arbiter.h`）
 POISON_TARGETS: dict[str, pathlib.Path] = {}
+
+# ⚠️ **上一次投毒的名字**（用于还原时确定「检测哪个文件」）
+_last_poison_name = ""''
 
 
 def poison(name: str) -> int:
@@ -379,6 +439,8 @@ def poison(name: str) -> int:
     if old not in s:
         print(f"POISON_FAIL: 模式未找到 ⇒ 投毒未生效（fail-closed）: {name}", file=sys.stderr)
         return 2
+    global _last_poison_name
+    _last_poison_name = name
     shutil.copy2(target, BACKUP)
     # ⚠️⚠️ **记录「被投毒的内容」**（用于还原前的**校验**）——
     #    见 `restore()` 的「第三方改动检测」⇒ ⇒ 防止还原**覆盖**备份之后的
@@ -402,7 +464,14 @@ def restore() -> int:
     #    ⇒ ⇒ 若不等 ⇒ ⇒ 说明**有第三方改动** ⇒ ⇒ ⇒ **拒绝还原并报错**
     #    ⇒ ⇒ ⇒ **MUST NOT** 覆盖它（⇒ ⇒ fail-closed）。
     if POISONED_SNAPSHOT.exists():
-        current = STREAM_H.read_text(encoding="utf-8")
+        # ⚠️⚠️ **检测范围 MUST 覆盖投毒的实际目标**（2026-11-01 NIT #2）
+        #    ⇒ ⇒ `POISON_TARGETS` 机制允许投毒落在 `stream_arbiter.h`
+        #    ⇒ ⇒ ⇒ 若只比对 `STREAM_H` ⇒ ⇒ 检测会**校验错文件**
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 当前无实际影响**（6 种投毒都在 stream.h）
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 但将来加 arbiter 侧投毒时会漏** ⇒ ⇒ ⇒
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已改为「比对所有候选目标」**
+        target = POISON_TARGETS.get(_last_poison_name, STREAM_H)
+        current = target.read_text(encoding="utf-8")
         poisoned = POISONED_SNAPSHOT.read_text(encoding="utf-8")
         if current != poisoned:
             print("RESTORE_FAIL: 当前文件已被第三方修改 ⇒ ⇒ 拒绝还原"

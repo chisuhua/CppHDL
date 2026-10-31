@@ -139,6 +139,7 @@ self_test() {
         "default-driver-operator-assign"
         "drop-multidrive-guard"
         "forward-upstream-operator-assign"
+        "forward-delete-upstream-drive"
         "filter-upstream-operator-assign"
     )
     local c
@@ -193,7 +194,7 @@ self_test() {
     done
     restore_stream
     rebuild
-    ok "自检：6 种投毒全部被抓住（行为 + 静态双判据），且还原后复绿"
+    ok "自检：7 种投毒全部被抓住（行为 + 静态双判据），且还原后复绿"
     return 0
 }
 

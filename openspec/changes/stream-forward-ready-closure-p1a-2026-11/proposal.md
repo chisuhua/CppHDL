@@ -22,8 +22,14 @@ ready 链从「死路」变成「活路」** ⇒ ⇒ ⇒ **履行**那条移交�
   ① 组合子**立即**建立「默认恒就绪」的 ready 节点（源由结果对象持有）；
   ② 组合子用 **`<<=`** 驱动上游（**MUST NOT** `operator=`）；
   ③ **MUST NOT** 有 `out_ready = true` 这类局部常量；
-- **`StreamBuilder::queue<>()`** ⇒ ⇒ 补**上游回接**（⇒ ⇒ 修「**静默丢字**」：
-  链长 ≥ 2 时 fifo1 弹出的 word 会被 fifo2 的写口自保护**静默吞掉**）；
+- ⚠️ **已移出**（2026-11-01 实测后的裁决）：**`StreamBuilder::queue<>()` 的
+  上游回接** ⇒ ⇒ **实测**：链长 1 也丢（⇒ ⇒ 台账原描述「链长 ≥ 2」**不准确**）
+  ⇒ ⇒ 数据**先出现后消失** ⇒ ⇒ ⇒ **根因**：`sync_fifo` **写口自保护**
+  （`chlib/fifo.h:74`）⇒ ⇒ ⇒ **FIFO 没有「写口 ready」输出** ⇒ ⇒ ⇒ ⇒ ⇒
+  ⇒ ⇒ **⇒ 上游回接在当前 fifo 语义下「无路可走」** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 修法
+  需改 `build()` 语义 + 与 ADR-054 §3.2 第 1 条**存在张力 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+  ⇒ ⇒ **⇒ 需 architect 裁决** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 另立**
+  `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`；
 - **`connect_ready`** ⇒ ⇒ 语义**重新定义**为「幂等覆盖消费端 ready」
   （⇒ ⇒ 与 fifo 类**同型** ⇒ ⇒ 心智模型统一；⇒ ⇒ 仓内已有 11 个调用点 ⇒ ⇒
   **不可删**）。
@@ -55,16 +61,18 @@ ready 链从「死路」变成「活路」** ⇒ ⇒ ⇒ **履行**那条移交�
 ## Impact
 
 - **改动文件**：`include/chlib/stream.h` · `include/chlib/stream_arbiter.h` ·
-  `include/chlib/stream_builder.h` · `tests/chlib/test_stream.cpp` ·
-  `tests/test_stream_builder.cpp` · `scripts/lib/stream_ready_ownership.py` ·
+  `tests/chlib/test_stream.cpp` · `scripts/lib/stream_ready_ownership.py` ·
   `scripts/verify_stream_ready_ownership.sh` ·
   `docs/adr/ADR-054-stream-ready-ownership-form.md`
+  ⇒ ⇒ ⚠️ **零改动**：`include/chlib/stream_builder.h` ·
+  `tests/test_stream_builder.cpp`（⇒ ⇒ 随 builder 子项**移出**）
 - **爆炸半径**：**中** —— 转发类组合子的 ready 语义**逐个改** ⇒ ⇒ 既有调用点
   （含 `samples/` 与 `examples/`）MUST 复核
-- **风险**：**中** —— ① **公开 API 变更**（结果 struct 加 `default_ready_source`
-  成员）② `connect_ready` 语义变化（幂等覆盖）③ **行为变化**（从「死路」变
-  「活路」⇒ ⇒ 上游 ready 从 0 变 1 ⇒ ⇒ **依赖「上游恒不 ready」的既有断言**
-  MUST 复核
+- **风险**：**中** —— ① ✅ **零公开 API 变更**（默认 ready 源用**具名的局部**
+  `ch_bool` ⇒ ⇒ 实测**可被覆盖** ⇒ ⇒ ⇒ **无需**给结果 struct 加成员）
+  ② `connect_ready` 语义 = **幂等重连**（保留 ⇒ ⇒ 仓内已有 11 个调用点 ⇒ ⇒
+  ⇒ **不可删**）③ **行为变化**（从「死路」变「活路」⇒ ⇒ 上游 ready 从 0 变 1
+  ⇒ ⇒ **依赖「上游恒不 ready」的既有断言** MUST 复核
 - **回滚路径**：`revert` 实施 commit ⇒ ⇒ 无持久化面
 
 ## 权限说明

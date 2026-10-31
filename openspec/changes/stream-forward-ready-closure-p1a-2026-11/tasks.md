@@ -26,15 +26,20 @@
 
 ## C3：实现（**逐个组合子** ⇒ ⇒ 每改一个就编译 + 跑用例）
 
-- [x] **T3.1** `stream.h`：`StreamMuxResult` 加 `ch_bool default_ready_source;`
-      ⇒ ⇒ `stream_mux` 内建默认驱动 + **内部**建立
+- [x] **T3.1** `stream.h`：`stream_mux` 内建默认驱动（**具名的局部** `ch_bool`
+      源 ⇒ ⇒ 探针 ⑩ A 实测：**可被覆盖** ⇒ ⇒ ⇒ **零公开 API 变更** ⇒ ⇒
+      ⇒ ⇒ **无需**给 `StreamMuxResult` 加成员）+ **内部**建立
       `input_streams[i].ready <<= (is_selected & output_stream.ready)`
       ⇒ ⇒ ⚠️ **删掉** `out_ready` 局部常量（mux 本来就没有，但 `connect_ready`
       里的 `output_stream.ready` 引用 MUST 保持）
+      ⚠️⚠️ **2026-11-01 critic BLOCKER 订正**：原表述「加成员」⇒ ⇒ ⇒ 已改
+      ⇒ ⇒ ⇒ ⇒ ⇒ **「节点是否持久」才是判据**（「持有者是谁」不是）⇒ ⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 局部具名 `ch_bool` 与「结果对象持有成员」**行为等价**
 - [x] **T3.2** `stream.h`：`stream_mux_connect_ready` ⇒ ⇒ **幂等化**
       （重复调用不报错）+ **源为空抛异常**（`CHFATAL_EXCEPTION`）
-- [x] **T3.3** `stream.h`：`StreamJoinResult` 加成员 + `stream_join` 内建默认
-      驱动 + `input_streams[i].ready <<= output_stream.ready`
+- [x] **T3.3** `stream.h`：`stream_join` 内建默认驱动（**具名的局部** `ch_bool`
+      源 ⇒ ⇒ 同 T3.1 ⇒ ⇒ **零公开 API 变更**）+ `input_streams[i].ready <<=
+      output_stream.ready`
 - [x] **T3.4** `stream.h`：filters×6（`throw_when` / `take_when` / `halt_when` /
       `translate_with` / `map` / `transpose`）⇒ ⇒ `=` ⇒ `<<=` + 建默认驱动
 - [x] **T3.5** `stream.h`：`stream_combine_with` ⇒ ⇒ `=` ⇒ `<<=` + 建默认驱动
