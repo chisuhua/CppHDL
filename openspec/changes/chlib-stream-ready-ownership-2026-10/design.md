@@ -280,3 +280,59 @@ E1 的**限定词是「驱动输出」**。
 ⚠️ ⚠️ **顺序约束**：**C3 的 delta MUST 与修订后的 ADR-054 同批落地**
 ⇒ ⇒ ⇒ **ADR-054 的修订（architect）必须先于 C1**，且 **C1~C3 之间不可插 ADR 修订**
 ⇒ ⇒ ⇒ 避免「实现依据的 ADR 版本」与「归档依据的 ADR 版本」不一致。
+
+## 11. 🔴 形态 E 的**实施尝试 2**（已回退）—— 「零回归」承诺**未达成**
+
+⚠️ 2026-10-31：按 ADR-054 修订（形态 E）实施 ⇒ ⇒ 编译通过 ⇒ ⇒ 但
+**既有测试 SIGSEGV** ⇒ ⇒ **已 `git checkout` 回退**（仓恢复 **194/194** 全绿）。
+
+⇒ ⇒ 🔴 **形态 E 的「零回归」承诺目前【未】被验证通过** ⇒ ⇒
+**不得**宣称形态 E 已成立 ⇒ ⇒ ⚠️ ADR-054 的「形态 E 采纳」**需要再验证**
+⇒ ⇒ 下一步**必须**先做**最小隔离复现**，定位 SIGSEGV 的根因。
+
+### 11.1 实施了什么（最小形态）
+
+- `stream_fifo` 改为：**立即**建内部 FIFO（**既有行为不变**）；
+- 读使能改为引用 **`result.pop_stream.ready`**（结果对象**自己的字段节点**）
+  ⇒ ⇒ 调用方覆盖它 ⇒ ⇒ 覆盖**传播**（oracle 的承重依赖 ②）；
+- 新增 `stream_fifo_connect_ready(result, consumer_ready)`：
+  `result.pop_stream.ready <<= consumer_ready;`（覆盖默认驱动）；
+- 默认驱动 = `true`（既有旧语义「恒就绪」）。
+
+### 11.2 🔴 失败现象
+
+```
+tests/chlib/test_stream_fifo_dual.cpp:133  →  FAILED: SIGSEGV
+tests/chlib/test_stream.cpp:470            →  FAILED: SIGSEGV
+```
+
+⚠️ **无栈**（Catch2 捕获了 SIGSEGV，未给 backtrace）⇒ ⇒ 根因**未定位**。
+
+### 11.3 ⚠️ 中途排除的一个假设（**有价值的新事实**）
+
+初版实现用 **`<<=`** 驱动 `result.pop_stream.ready`（bundle field 的 proxy）
+⇒ ⇒ **同样 SIGSEGV** ⇒ ⇒ 改回现状的 **`operator=`（节点重绑定，行为逐字不变）**
+⇒ ⇒ **仍然 SIGSEGV** ⇒ ⇒ ⇒ 「`<<=` 不能驱动 bundle field proxy」这条假设
+**【未】成立**（两者都崩）⇒ ⇒ ⚠️ 故**不能**把根因归给「`<<=` vs `operator=`」。
+
+⇒ ⇒ ⇒ **下一步**：用**最小隔离复现**（单文件 + 一个 `stream_fifo` 调用）
+定位 SIGSEGV ⇒ ⇒ 再决定形态 E 的实现细节。
+
+### 11.4 其它实测
+
+- ✅ `logic_buffer` 的**拷贝构造 = 共享节点**
+  （`include/lnode/logic_buffer.tpp:16-17` `node_impl_(other.node_impl_)`）
+  ⇒ ⇒ 「默认驱动」可随结果对象传出去 ⇒ ⇒ 形态 E 的**前提之一成立**；
+- ✅ `ch_bool(bool)` **会建 literal 节点**（`include/lnode/bool.tpp:12-14`
+  `build_literal`）⇒ ⇒ 「用常量 `true` 作默认驱动」的**源**是**有效**的
+  ⇒ ⇒ SIGSEGV **不是**「源无效」导致；
+- ⚠️ ⇒ ⇒ 因此 SIGSEGV 的根因**大概率**在「读使能引用**结果对象的字段节点**」
+这条新路径上（`sync_fifo` 的 `rden` 参数按值拷贝 ⇒ ⇒ 共享该节点）
+⇒ ⇒ **待最小复现确认**。
+
+### 11.5 对 ADR-054 的影响
+
+⚠️ ADR-054 已把形态 E 定为「采纳」，但**形态 E 的实现尚未通过「零回归」验证**
+⇒ ⇒ ⇒ **ADR-054 的裁决状态 MUST 标注为「待验证」** ⇒ ⇒
+⚠️ **builder 不得**据此继续实施 ⇒ ⇒ 需 architect 在**验证通过**后追认，
+或在验证失败后**再次**改裁 ⇒ ⇒ ⇒ **不得**让「未验证的形态」进入归档。
