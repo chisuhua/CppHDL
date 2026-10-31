@@ -74,11 +74,16 @@ consumer_ready=1 ⇒ fifo_read_en=1 (期望 1)
 | 判据 | 内容 | 防什么 |
 |---|---|---|
 | **R0** | 护栏自身可运行 + fixture 存在（**fail-closed**） | ⚠️ 本仓「护栏自身有盲区」病症（fixture 缺失被当成「通过」） |
-| **R1** | grep-lint：`stream.h` MUST NOT 有 `ready = true` / `pop_ready = true` 等**常量** ready | 硬编码常量 ready 复发 |
-| **R2** | **反向 fixture**：注入一处硬编码 ⇒ MUST 转红 | R1 恒真（无判别力） |
-| **R3** | 调用点护栏：`stream_fifo(` / `stream_queue(` / `queue<` 的调用点后 MUST 有对应 `*_connect_ready` | 旧调用点「**编译仍过但行为错**」 |
-| **R4** | **运行期**：未调 `connect_ready` 就读结果 ⇒ MUST 可诊断失败（NOT 读到 0/常量） | 「静默失效」 |
-| **R5** | **运行期**：`full` **可达** ⇒ 反压场景可断言 | 硬编码 ready 未真正修掉 |
+| **R1** | **效果判据**（**MUST NOT** 词法）：消费端 ready == 0 ⇒ MUST **阻止推进**（运行期断言） | 「无条件忽略消费端 ready」复发 |
+| **R2** | **反向 fixture / 原地投毒**：注入一处「无条件忽略」⇒ MUST 转红 | R1 恒真（无判别力） |
+| **R3** | 调用点护栏：调 `stream_fifo` 后 MUST 出现 `connect_ready` **或** 对 `pop_stream.ready` 的 `<<=` ⇒ ⇒ **或**显式豁免标记（豁免**非静默**） | 「忘了接」被误当成「故意恒就绪」 |
+| **R4** | **运行期**：调用方**已自行驱动** ready ⇒ `connect_ready` MUST **抛异常** | 多驱动 last-wins 静默 |
+| **R5** | **运行期**：`full` **可达**（DEPTH=4 ⇒ 写 4 个后 `full == 1`）⇒ ⇒ 反压可断言 | 硬编码 ready 未真正修掉 |
+| **R6** | **结构**：读使能 MUST 引用**字段节点本身**（MUST NOT 局部节点）⇒ ⇒ 覆盖 MUST **传播** | **覆盖不传播 ⇒ 静默失效**（测试全绿而功能死） |
+
+⚠️ ⚠️ **R1 MUST NOT 是词法判据**（critic BLOCKER 2 ②）：形态 E 的**合法**默认驱动
+（`ch_bool pop_ready = true`）必然触发 grep-lint ⇒ ⇒ 变异 M1 与**正确实现同构**
+⇒ ⇒ **判别力归零** ⇒ ⇒ 故 R1 改为**效果判据**。
 
 ## 7. 变异清单（每条**先确认编译成功**）
 
