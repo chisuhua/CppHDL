@@ -47,8 +47,18 @@ template <typename T, unsigned DEPTH> struct StreamFifoResult {
     //      无效 ⇒ ⇒ 那个 SIGSEGV。
     // ⇒ ⇒ 本成员**持有**那个 literal 节点（与结果对象**同生命周期**
     // ⇒ ⇒ 且节点**不随 C++ 对象析构而失效** —— 框架**无引用计数**、**无析构**）
-    // ⇒ ⇒ 于是：源**持久有效** + 目标（`pop_stream.ready` 的 **field proxy**）
-    // **非 literal** ⇒ ⇒ **覆盖必然传播** ✔
+    // ⇒ ⇒ 于是：源**持久有效** + 目标（`pop_stream.ready` 这个**已存在的**
+    // **非 literal** 节点）⇒ ⇒ **覆盖必然传播** ✔
+    // ⚠️⚠️ **2026-10-31 订正（ADR-054 §3.2 第 1 条）**：原注释写「目标 = field
+    // proxy」⇒ ⇒ **理由错误**（条款本身仍成立）⇒ ⇒ **真实机制** =
+    // 「`<<=` 在**已有**目标上 ⇒ ⇒ `set_src(0,…)` ⇒ ⇒ **覆盖生效**；
+    //  在**空**目标上 ⇒ ⇒ **另建**一个 assign 节点并绑到 `this`
+    //  ⇒ ⇒ **只驱动被 `<<=` 的那个对象** ⇒ ⇒ **调用方持有的节点被孤儿化**」
+    // ⇒ ⇒ ⇒ **「用 `<<=`」本身不是「覆盖已生效」的充分条件**
+    // ⇒ ⇒ ⇒ 「目标 MUST **已存在**」才是**必要条件**
+    // ⇒ ⇒ ⇒ ⚠️ 「`<<=` 在空目标上另建节点」是**实现细节**
+    // ⇒ ⇒ ⇒ **MUST NOT** 被当作公开契约语义（ADR-054 §3.1 形态 A「追认」段
+    // ⇒ ⇒ ⇒ 已收窄）⇒ ⇒ 正确路径 = 让空目标在调用链中**不可达**。
     ch_bool default_ready_source;
 };
 
@@ -343,14 +353,22 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     //    改动前逐位一致** ⇒ ⇒ **存量调用点不需迁移**。
     //
     // ⚠️⚠️ **两个约束**（实测，design.md §13）：
-    //   ① **目标** MUST 是**非 literal** 的节点 ⇒ ⇒ 用 `pop_stream.ready` 的
-    //      **field proxy**（⇒ ⇒ 调用方覆盖**有效**）⇒ ⇒ **MUST NOT** 重绑定到
-    //      literal 节点（⇒ ⇒ literal 不可被 `set_src` ⇒ ⇒ 覆盖无效）；
+    //   ① **目标** MUST 是**已存在**的**非 literal** 节点 ⇒ ⇒ 用
+    //      `pop_stream.ready` 这个**结果对象的字段**（⇒ ⇒ 调用方覆盖**有效**）
+    //      ⇒ ⇒ **MUST NOT** 重绑定到 literal 节点（⇒ ⇒ literal 不可被
+    //      `set_src` ⇒ ⇒ 覆盖无效）⇒ ⇒ ⚠️ 且目标 MUST **已存在**
+    //      ⇒ ⇒（`<<=` 在**空**目标上会**另建**节点 ⇒ ⇒ 只驱动被 `<<=` 的对象
+    //      ⇒ ⇒ ⇒ 调用方被**孤儿化** ⇒ ⇒ ⇒ 「用 `<<=`」不是充分条件）；
     //   ② **源** MUST 是**持久有效**的节点 ⇒ ⇒ 用**本结果对象持有的**
     //      `default_ready_source`（⇒ ⇒ **MUST NOT** 用临时 `ch_bool(true)`
     //      ⇒ ⇒ 那个源无效 ⇒ ⇒ 驱动建立失败 ⇒ ⇒ 无效操作数 ⇒ ⇒ 💥 SIGSEGV）。
     result.default_ready_source = ch_bool(true);          // ① 持有 literal 节点（持久）
-    result.pop_stream.ready <<= result.default_ready_source;  // ② 目标 = field proxy（非 literal）
+    // ② 目标 = **已存在的非 literal 节点**（结果对象的 ready 字段）
+    //    ⚠️「目标 MUST 已存在」是**必要条件** ⇒ ⇒（`<<=` 在空目标上会**另建**
+    //    节点 ⇒ ⇒ 只驱动被 `<<=` 的对象 ⇒ ⇒ 调用方被孤儿化）
+    //    ⚠️ 2026-10-31 订正：原注释写「目标 = field proxy」⇒ ⇒ **理由错误**
+    //    （条款仍成立）⇒ ⇒ 真实机制 = 「`<<=` 在**已有**目标上 ⇒ ⇒ 覆盖生效」
+    result.pop_stream.ready <<= result.default_ready_source;
 
     // 创建内部FIFO，使用正确的模板参数（数据宽度和地址宽度）
     // ⚠️ 读使能 MUST 是 `pop_ready` 本身，**MUST NOT** 写成

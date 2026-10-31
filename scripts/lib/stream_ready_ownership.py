@@ -34,6 +34,8 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 STREAM_H = REPO / "include" / "chlib" / "stream.h"
 BUILDER_H = REPO / "include" / "chlib" / "stream_builder.h"
 BACKUP = pathlib.Path("/tmp/opencode/stream_h_ownership.bak")
+# ⚠️ 「被投毒的内容」快照 —— 用于还原前的**第三方改动检测**
+POISONED_SNAPSHOT = pathlib.Path("/tmp/opencode/stream_h_ownership.poisoned")
 
 EXEMPT_MARK = "stream_ready_ownership: intentionally-unwired"
 
@@ -236,7 +238,7 @@ POISONS: dict[str, tuple[str, str]] = {
 
 def poison(name: str) -> int:
     if name not in POISONS:
-        print(f"POISON_FAIL: 未知投毒 '{name}'（可选：{', '.join(POISONS)}）", file=sys.stderr)
+        print(f"POISON_FAIL: 未知投毒名: {name}", file=sys.stderr)
         return 2
     old, new = POISONS[name]
     s = STREAM_H.read_text(encoding="utf-8")
@@ -244,6 +246,10 @@ def poison(name: str) -> int:
         print(f"POISON_FAIL: 模式未找到 ⇒ 投毒未生效（fail-closed）: {name}", file=sys.stderr)
         return 2
     shutil.copy2(STREAM_H, BACKUP)
+    # ⚠️⚠️ **记录「被投毒的内容」**（用于还原前的**校验**）——
+    #    见 `restore()` 的「第三方改动检测」⇒ ⇒ 防止还原**覆盖**备份之后的
+    #    工作区改动（本仓「还原源码 ≠ 复原」的**第三个维度**）。
+    POISONED_SNAPSHOT.write_text(s.replace(old, new, 1), encoding="utf-8")
     STREAM_H.write_text(s.replace(old, new, 1), encoding="utf-8")
     return 0
 
@@ -252,6 +258,24 @@ def restore() -> int:
     if not BACKUP.exists():
         print("RESTORE_FAIL: 无备份", file=sys.stderr)
         return 2
+    # ⚠️⚠️⚠️ **第三方改动检测（fail-closed）** ——
+    #    还原 MUST NOT **覆盖**「备份之后」发生的**其它**改动 ⇒ ⇒ 否则
+    #    「备份 → 投毒 → 还原」这条链路会**静默吞掉**工作区的并发编辑
+    #    ⇒ ⇒ ⇒ **实测踩中（2026-10-31）**：跑一次 `--self-test` ⇒ ⇒
+    #    `include/chlib/stream.h` 里**已应用的注释订正被冲掉** ⇒ ⇒
+    #    ⇒ 而 `git status` 当时**干净** ⇒ ⇒ ⇒ **改动凭空消失**。
+    #    ⇒ ⇒ **判据**：当前文件 MUST 仍**逐字等于**「被投毒的那份」
+    #    ⇒ ⇒ 若不等 ⇒ ⇒ 说明**有第三方改动** ⇒ ⇒ ⇒ **拒绝还原并报错**
+    #    ⇒ ⇒ ⇒ **MUST NOT** 覆盖它（⇒ ⇒ fail-closed）。
+    if POISONED_SNAPSHOT.exists():
+        current = STREAM_H.read_text(encoding="utf-8")
+        poisoned = POISONED_SNAPSHOT.read_text(encoding="utf-8")
+        if current != poisoned:
+            print("RESTORE_FAIL: 当前文件已被第三方修改 ⇒ ⇒ 拒绝还原"
+                  "（否则会覆盖那处改动）⇒ ⇒ 请人工处理", file=sys.stderr)
+            print(f"  备份: {BACKUP}", file=sys.stderr)
+            print(f"  投毒快照: {POISONED_SNAPSHOT}", file=sys.stderr)
+            return 2
     # ⚠️⚠️ **MUST 用 `copyfile`（不保留 mtime），MUST NOT 用 `copy2`** ——
     #    `copy2` **保留** mtime ⇒ ⇒ 还原后的文件 mtime **比备份还旧**
     #    ⇒ ⇒ `make` 判定「已是最新」⇒ ⇒ **不重新编译** ⇒ ⇒ **跑的仍是被投毒的
@@ -259,6 +283,8 @@ def restore() -> int:
     #    ⇒ ⇒ 这是本仓「**还原源码 ≠ 复原**（二进制也是状态）」那条教训的
     #    又一实例 ⇒ ⇒ 还原后 MUST 让 mtime **变新** ⇒ ⇒ 强制重建。
     shutil.copyfile(BACKUP, STREAM_H)
+    if POISONED_SNAPSHOT.exists():
+        POISONED_SNAPSHOT.unlink()
     return 0
 
 
