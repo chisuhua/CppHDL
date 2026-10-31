@@ -443,3 +443,96 @@ ready 节点 ⇒ ⇒ 一个实例的覆盖**影响另一个** ⇒ ⇒ **静默**
 的节点）⇒ ⇒ ⇒ ⚠️ 这是**第 4 次**实施尝试的**唯一**待办 ⇒ ⇒ 其余部分
 （读使能引用字段节点本身 / 写使能只读 `valid` / 覆盖用 `<<=`）**已实测正确**
 （既有测试 62/62 全绿 + 探针除 `full` 外全部符合手推）。
+
+## 13. E-1 / E-2 的**实测结论**（2026-10-31）+ 第 4 次实施尝试
+
+### 13.1 ✅ E-1：**literal 节点不可被 `set_src(0, …)` 变成数据流边**（**实测确认**）
+
+隔离实验（`/tmp/opencode/e1/e1.cpp`）：
+
+```
+[DBG] lit node id=8   nonlit node id=11
+s=0 ⇒ out_lit=1   out_nonlit=0
+s=1 ⇒ out_lit=1   out_nonlit=1
+```
+
+⇒ ⇒ `out_lit` **恒为 1**（= literal 的原值）⇒ ⇒ **对 literal 节点的
+`set_src` 完全无效**；⇒ ⇒ 而对照组（**mux 节点**）**正常跟随** `s` ✔
+
+⇒ ⇒ ⇒ **「默认驱动重绑定到 literal 节点 ⇒ ⇒ 覆盖无效」这条机制成立** ✔
+
+### 13.2 ✅ E-2：**proxy 节点可被 `set_src`**（**实测确认**）
+
+同实验加第三组（`ch_stream` 的 `ready` 字段 = **bundle field proxy**）：
+
+```
+[DBG] proxy node id = 14
+s=0 ⇒ out_lit=1   out_nonlit=0   out_proxy=0
+s=1 ⇒ out_lit=1   out_nonlit=1   out_proxy=1
+```
+
+⇒ ⇒ **`out_proxy` 正确跟随 `s`** ✔ ⇒ ⇒ **proxy 可被 set_src** ⇒ ⇒
+「目标 MUST 是非 literal 节点」这条**可行**。
+
+### 13.3 🔴 第 4 次实施尝试（已回退）：修法**实测仍不传播**
+
+按 13.1 / 13.2 的结论实施（**两个约束同时满足**）：
+
+```cpp
+result.default_ready_source = ch_bool(true);               // 源：**持久**的 literal 节点
+result.pop_stream.ready <<= result.default_ready_source;   // 目标：**field proxy**（非 literal）
+auto fifo_result = sync_fifo<...>(input_stream.valid, input_stream.payload,
+                                  result.pop_stream.ready); // 读使能 = **字段节点本身**
+```
+
+⇒ ⇒ **编译通过** · **既有测试 62/62 全绿** ⇒ ⇒ 但**判别性探针仍显示
+「覆盖不生效」**：
+
+```
+写 0x11 后: full=0 empty=0 rvalid=1 rdata=0x11
+写 0x22 后: full=0 empty=0 rvalid=1 rdata=0x11      ← 队首不动 ⇒ 未弹出 ⇒ 恒就绪
+写 0x44 后: full=1 empty=0 rvalid=1 rdata=0x11
+第 5 个写后: full=1 (期望 1)
+rready=1 后: full=0 rvalid=1 rdata=0x22 (期望 0x22)
+```
+
+⇒ ⇒ ⇒ **在「源持久 + 目标非 literal + 读使能引用字段节点本身」三个条件
+**全部满足**的情况下，覆盖**仍不传播** ⇒ ⇒ ⇒ **必有一个尚未识别的机制**。
+
+### 13.4 ⚠️ 已排除的假设（**5 条**，累计）
+
+| # | 假设 | 排除依据 |
+|---|---|---|
+| 1 | 节点随 C++ 对象析构而失效 | `grep` 析构 / 引用计数 / `release_node` = **零命中** ⇒ **无析构、无引用计数** |
+| 2 | 调用方与内部**不是**同一节点 | **节点 id 实测相同**（内部 = 调用方 = 覆盖后，**同一 id**） |
+| 3 | `select` 的条件在**建图期**求值 | `select` → `ternary_operation<mux_op>` ⇒ **硬件 mux** ⇒ **运行期**求值 |
+| 4 | **literal** 节点不可被覆盖 | ✅ **实测成立**（E-1）⇒ ⇒ 这**不是**本次失败的原因（修法已避开它） |
+| 5 | **proxy** 节点不可被覆盖 | ✅ **实测不成立**（E-2 ⇒ proxy **可以**被覆盖） |
+
+### 13.5 ⚠️ 代码阅读与现象的**矛盾**（⇒ 下一步必测）
+
+按代码阅读：`ch_stream() = default` ⇒ ⇒ **无自定义拷贝构造** ⇒ ⇒ 隐式拷贝
+⇒ ⇒ 成员 `ch_bool` 逐个拷贝 ⇒ ⇒ `logic_buffer` 拷贝 = **共享节点**
+⇒ ⇒ `bundle_base` 拷贝构造（`include/core/bundle/bundle_base.h:66-70`）**不**调
+`create_field_proxy_nodes()`（那个调用在**别的**函数里，`bundle_base.h:437`）
+⇒ ⇒ ⇒ **字段节点应当是共享的**。
+
+⇒ ⇒ ⚠️ 但探针显示调用方 `r.pop_stream.ready` 的 id = **19** ⇒ ⇒ **必须**与
+**内部** `result.pop_stream.ready` 的 id 对比才能定论。
+
+⇒ ⇒⇒ **E-3（下一步必测）**：在 `stream_fifo` **内部**打印
+`result.pop_stream.ready` 的节点 id ⇒ ⇒ 与调用方的 **19** 对比：
+- **若不同** ⇒ ⇒ 「按值返回」时字段节点**未共享** ⇒ ⇒ 与上面的代码阅读**矛盾**
+  ⇒ ⇒ ⇒ 需再挖（`bundle_base` 的派生链上是否有别的拷贝路径）；
+- **若相同** ⇒ ⇒ 则覆盖**建立**在**正确**的节点上、但 `sync_fifo` 内部
+  **读的不是它** ⇒ ⇒ ⇒ 需查 `sync_fifo` 内部的 `rden` 用法（`select(rden, …)`
+  的条件参数是否被**建图期**固化为常量 ⇒ ⇒ 那正是本仓的经典坑）。
+
+⇒ ⇒ ⚠️ **两条分支都指向一个「已知但被忽视」的机制** ⇒ ⇒ **E-3 是决定性的一测**。
+
+### 13.6 ⇒ ⇒ 对 ADR-054 的影响（**结论不变**）
+
+⚠️ 形态 E **方向仍成立**（默认恒就绪 + 可覆盖）⇒ ⇒ 但**实现细节仍未打通**
+⇒ ⇒ ⇒ ADR-054 的「**【待验证】**」标注**保持正确** ⇒ ⇒ **未**让任何未验证的
+形态进入归档 ✔
+⇒ ⇒ ⇒ **本 change 的下一步 = E-3**（一个 id 对比）⇒ ⇒ 之后才谈实施。
