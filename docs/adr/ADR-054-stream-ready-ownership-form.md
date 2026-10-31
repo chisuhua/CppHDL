@@ -3,6 +3,15 @@
 - **Status**: Accepted（**2026-10-31 修订** —— 实施期**证伪**形态 B ⇒ 改裁为**形态 E**；
   修订依据 = `openspec/changes/chlib-stream-ready-ownership-2026-10/design.md` §9
   的**实测** + critic 审查（`REJECT`，2 BLOCKER）的**具体条款**）
+- ⚠️⚠️ **状态：形态 E = 「已裁决 · 【待验证】」**（2026-10-31，实施尝试 2 之后）
+  ⇒ ⇒ 形态 E 的实施**编译通过**，但**既有测试 SIGSEGV**
+  （`tests/chlib/test_stream_fifo_dual.cpp:133` · `tests/chlib/test_stream.cpp:470`）
+  ⇒ ⇒ **已回退**（仓恢复 194/194 全绿）
+  ⇒ ⇒ ⇒ **「零回归」承诺【未】达成** ⇒ ⇒ **形态 E 目前【未】被验证成立**
+  ⇒ ⇒ ⇒ **builder 不得**据此继续实施 ⇒ ⇒ **不得**让「未验证的形态」进入归档
+  ⇒ ⇒ ⇒ 须先做**最小隔离复现**定位 SIGSEGV ⇒ ⇒ 验证通过后由 architect 追认，
+  否则**再次**改裁
+  ⇒ ⇒ 证据与排除的假设见 design.md **§11**。
 - **Date**: 2026-10-31（修订同日）
 - **Author**: build-agent（architect 角色，2026-10-31 用户口令切换后裁决）
 - **Parent**: `ADR-045-chlib-stream-semantics.md`（§1 决策 0-B「输入 ready 的所有权：两阶段」）
