@@ -416,11 +416,21 @@ result.pop_stream.ready = pop_ready;             // ← 重绑定：字段节点
 ② `get_lnode(ch_bool(true))` 为何**无效**（⇒ ⇒ 那个 SIGSEGV）⇒ ⇒ 需查
    `get_lnode` 对**临时对象**的处理。
 
-⇒ ⇒ ⇒ **默认驱动的正确形态**（**待实测确认后**再定）：
+⇒ ⇒ ⇒ **默认驱动的正确形态**（**已于 §14 实测确认成立**）：
 **默认驱动的源 MUST 活得比结果对象久** ⇒ ⇒ 最直接的形态 =
 **把那个 literal 节点存进结果对象**（新增成员持有它）⇒ ⇒ 默认驱动
-`result.pop_stream.ready = result.default_ready_source;` ⇒ ⇒ 两者**同生命周期**
+`result.pop_stream.ready <<= result.default_ready_source;` ⇒ ⇒ 两者**同生命周期**
 ⇒ ⇒ 覆盖**必然传播** ✔
+
+⚠️⚠️ **订正（2026-10-31，第三次）**：本节初版写的是
+`result.pop_stream.ready = result.default_ready_source;`（**`operator=` 重绑定**）
+⇒ ⇒ **该写法【实测无效】** ⇒ ⇒ 正确写法 MUST 是 **`<<=`**
+⇒ ⇒ 因为 `operator=` 会把**字段节点本身**重绑定到 literal 节点 ⇒ ⇒
+字段节点**变成**了 literal ⇒ ⇒ 而 **literal 节点不可被 `set_src`**
+（§14 的 E-1）⇒ ⇒ 覆盖**无效** ⇒ ⇒ ⇒ **这正是「id 相同但行为不变」的机制** ✔
+⇒ ⇒ ⇒ **两个约束缺一不可**：
+① **目标** MUST 是**非 literal** 的节点 ⇒ ⇒ MUST 用 **`<<=`**（MUST NOT `operator=`）；
+② **源** MUST 是**持久有效**的节点 ⇒ ⇒ MUST 由**结果对象持有**。
 
 ⚠️ **不可行的替代**：`static` 局部变量（节点永存）⇒ ⇒ **多实例共享**同一个
 ready 节点 ⇒ ⇒ 一个实例的覆盖**影响另一个** ⇒ ⇒ **静默** ⇒ ⇒ ❌
@@ -474,7 +484,10 @@ s=1 ⇒ out_lit=1   out_nonlit=1   out_proxy=1
 ⇒ ⇒ **`out_proxy` 正确跟随 `s`** ✔ ⇒ ⇒ **proxy 可被 set_src** ⇒ ⇒
 「目标 MUST 是非 literal 节点」这条**可行**。
 
-### 13.3 🔴 第 4 次实施尝试（已回退）：修法**实测仍不传播**
+### 13.3 🔴🔴 第 4 次实施尝试：**修法实测【成功】**（本节初版结论**错误** ⇒ 已订正）
+
+⚠️⚠️⚠️ **订正（2026-10-31，第四次）**：本节初版断言「修法**实测仍不传播** ⇒ ⇒ 必有一个
+尚未识别的机制」⇒ ⇒ **该断言【错误】** ⇒ ⇒ **错因 = 把探针输出【读反了】**。
 
 按 13.1 / 13.2 的结论实施（**两个约束同时满足**）：
 
@@ -485,19 +498,38 @@ auto fifo_result = sync_fifo<...>(input_stream.valid, input_stream.payload,
                                   result.pop_stream.ready); // 读使能 = **字段节点本身**
 ```
 
-⇒ ⇒ **编译通过** · **既有测试 62/62 全绿** ⇒ ⇒ 但**判别性探针仍显示
-「覆盖不生效」**：
+⇒ ⇒ **编译通过** · **既有测试 62/62 全绿** ⇒ ⇒ **判别性探针的实测输出**：
 
 ```
 写 0x11 后: full=0 empty=0 rvalid=1 rdata=0x11
-写 0x22 后: full=0 empty=0 rvalid=1 rdata=0x11      ← 队首不动 ⇒ 未弹出 ⇒ 恒就绪
-写 0x44 后: full=1 empty=0 rvalid=1 rdata=0x11
-第 5 个写后: full=1 (期望 1)
-rready=1 后: full=0 rvalid=1 rdata=0x22 (期望 0x22)
+写 0x22 后: full=0 empty=0 rvalid=1 rdata=0x11      ← 队首不动 ⇒ 未弹出 ⇒ **反压生效** ✔
+写 0x44 后: full=1 empty=0 rvalid=1 rdata=0x11      ← **full 可达** ✔
+第 5 个写后: full=1 (期望 1)                          ← **自保护** ✔
+rready=1 后: full=0 rvalid=1 rdata=0x22 (期望 0x22)   ← **恢复弹出** ✔
+再一拍:      rdata=0x33 (期望 0x33)                    ← **队列推进正确** ✔
 ```
 
-⇒ ⇒ ⇒ **在「源持久 + 目标非 literal + 读使能引用字段节点本身」三个条件
-**全部满足**的情况下，覆盖**仍不传播** ⇒ ⇒ ⇒ **必有一个尚未识别的机制**。
+⇒ ⇒ ⇒ **逐项对照手推金标：全部相符** ⇒ ⇒ ⇒ **覆盖【传播】了** ✔
+
+⚠️⚠️ **错因解剖（**元教训**，本仓第 N+1 次**）：
+初版把这段输出与「**未修复**时」的输出**并排**看 ⇒ ⇒ 误以为「队首停在 0x11」
+是「**没弹出 = 没生效**」⇒ ⇒ **实际**语义恰好相反：
+
+| | 未修复（恒就绪） | 修复后（反压生效） |
+|---|---|---|
+| 写 0x22 后队首 | **0x22**（弹出 ⇒ 排空） | **0x11**（**不弹出** ⇒ 反压） |
+| 写 4 个后 `full` | **0**（永远排空） | **1**（**满** ✔） |
+| 第 5 个写 | `full` 仍 0 | `full` 仍 1（自保护） |
+
+⇒ ⇒ ⇒ ⚠️ **「队首不动」恰恰是【反压生效】的证据**，而不是失效的证据
+⇒ ⇒ ⇒ ⚠️ **教训**：判别性探针 MUST 输出**显式 PASS/FAIL 判定**
+（而非把期望值塞进 printf 的括号里让人肉眼比对）⇒ ⇒ ⇒
+**自检已改成显式判定版**（§14.1）⇒ ⇒ **这才是本轮能一击定案的原因**。
+
+⇒ ⇒ ⇒ ⚠️ **代价**：「形态 E 第 4 次尝试**失败**」这个结论已被**写入仓库**
+（commit `fba4675`）⇒ ⇒ 本节是它的**订正** ⇒ ⇒ ⇒
+**元教训强化**：**推理出的结论**（含「实测输出」的解读）**同样**必须被
+**独立复核**才可写入结论 ⇒ ⇒ 不只是「根因推断」需要实测。
 
 ### 13.4 ⚠️ 已排除的假设（**5 条**，累计）
 
@@ -506,33 +538,226 @@ rready=1 后: full=0 rvalid=1 rdata=0x22 (期望 0x22)
 | 1 | 节点随 C++ 对象析构而失效 | `grep` 析构 / 引用计数 / `release_node` = **零命中** ⇒ **无析构、无引用计数** |
 | 2 | 调用方与内部**不是**同一节点 | **节点 id 实测相同**（内部 = 调用方 = 覆盖后，**同一 id**） |
 | 3 | `select` 的条件在**建图期**求值 | `select` → `ternary_operation<mux_op>` ⇒ **硬件 mux** ⇒ **运行期**求值 |
-| 4 | **literal** 节点不可被覆盖 | ✅ **实测成立**（E-1）⇒ ⇒ 这**不是**本次失败的原因（修法已避开它） |
+| 4 | **literal** 节点不可被覆盖 | ✅ **实测成立**（E-1）⇒ ⇒ ⚠️ **订正**：它**就是**根因（不是「与本次失败无关」）⇒ ⇒ 「默认驱动 MUST 用 `<<=` 打在**非 literal** 节点上」这条**正是修法** |
 | 5 | **proxy** 节点不可被覆盖 | ✅ **实测不成立**（E-2 ⇒ proxy **可以**被覆盖） |
+| 6 | 写使能 `valid & ready`（旧写法）是「不传播」的**原因** | ❌ **不成立** —— 它是**前置条件**而非失败原因：恢复旧写法 ⇒ ⇒ 直接 **`Invalid operands for binary operation`** ⇒ ⇒ 组合子**完全不可用** ⇒ ⇒ ⇒ **它是形态 E 契约的【必需】部分**（§14.3） |
 
-### 13.5 ⚠️ 代码阅读与现象的**矛盾**（⇒ 下一步必测）
+### 13.5 ✅ E-3（已解决）：节点 id **相同** ⇒ ⇒ 「按值返回时字段节点未共享」**不成立**
 
-按代码阅读：`ch_stream() = default` ⇒ ⇒ **无自定义拷贝构造** ⇒ ⇒ 隐式拷贝
-⇒ ⇒ 成员 `ch_bool` 逐个拷贝 ⇒ ⇒ `logic_buffer` 拷贝 = **共享节点**
-⇒ ⇒ `bundle_base` 拷贝构造（`include/core/bundle/bundle_base.h:66-70`）**不**调
-`create_field_proxy_nodes()`（那个调用在**别的**函数里，`bundle_base.h:437`）
-⇒ ⇒ ⇒ **字段节点应当是共享的**。
+**E-3 的实测**（临时诊断打印，`stream_fifo` 内部 vs 调用方）：
 
-⇒ ⇒ ⚠️ 但探针显示调用方 `r.pop_stream.ready` 的 id = **19** ⇒ ⇒ **必须**与
-**内部** `result.pop_stream.ready` 的 id 对比才能定论。
+```
+[DBG] stream_fifo: result.pop_stream.ready node id = 18
+[DBG] caller: r.pop_stream.ready node id = 18
+[DBG] caller: after connect_ready, node id = 18
+```
 
-⇒ ⇒⇒ **E-3（下一步必测）**：在 `stream_fifo` **内部**打印
-`result.pop_stream.ready` 的节点 id ⇒ ⇒ 与调用方的 **19** 对比：
-- **若不同** ⇒ ⇒ 「按值返回」时字段节点**未共享** ⇒ ⇒ 与上面的代码阅读**矛盾**
-  ⇒ ⇒ ⇒ 需再挖（`bundle_base` 的派生链上是否有别的拷贝路径）；
-- **若相同** ⇒ ⇒ 则覆盖**建立**在**正确**的节点上、但 `sync_fifo` 内部
-  **读的不是它** ⇒ ⇒ ⇒ 需查 `sync_fifo` 内部的 `rden` 用法（`select(rden, …)`
-  的条件参数是否被**建图期**固化为常量 ⇒ ⇒ 那正是本仓的经典坑）。
+⇒ ⇒ **三处 id 全同** ⇒ ⇒ 「按值返回时字段节点**未共享**」**不成立** ✔
+⇒ ⇒ ⇒ 与代码阅读（`ch_stream() = default` ⇒ 隐式拷贝 ⇒ `logic_buffer` 拷贝共享节点
+⇒ ⇒ `bundle_base` 拷贝构造**不**调 `create_field_proxy_nodes()`）**一致** ✔
 
-⇒ ⇒ ⚠️ **两条分支都指向一个「已知但被忽视」的机制** ⇒ ⇒ **E-3 是决定性的一测**。
+⇒ ⇒ ⇒ **E-3 的两条分支都不成立** ⇒ ⇒ ⇒ 「覆盖不传播」的真因**不在**节点身份上
+⇒ ⇒ ⇒ 真因 = **覆盖的【落点】不对**（打在 literal 节点上 ⇒ ⇒ `set_src` 无效）
+⇒ ⇒ ⇒ 即 §14 的 **E-1** ✔
 
-### 13.6 ⇒ ⇒ 对 ADR-054 的影响（**结论不变**）
+⇒ ⇒ ⚠️ **被推翻的推断保留在此**（不删）⇒ ⇒ 「若 id 不同 ⇒ ⇒ 查 `bundle_base` 的
+派生链拷贝路径」这条分支**已排除** ⇒ ⇒ 下轮不必重走。
 
-⚠️ 形态 E **方向仍成立**（默认恒就绪 + 可覆盖）⇒ ⇒ 但**实现细节仍未打通**
-⇒ ⇒ ⇒ ADR-054 的「**【待验证】**」标注**保持正确** ⇒ ⇒ **未**让任何未验证的
-形态进入归档 ✔
-⇒ ⇒ ⇒ **本 change 的下一步 = E-3**（一个 id 对比）⇒ ⇒ 之后才谈实施。
+### 13.6 ⇒ ⇒ 对 ADR-054 的影响（**已更新**）
+
+⚠️ 形态 E 的**方向**与**实现细节**均**已打通**（§14）⇒ ⇒ ⇒
+⇒ ⇒ **ADR-054 的「**【待验证】**」标注【可以撤销】** ⇒ ⇒ （architect 权限 ⇒ ⇒
+由 architect 追认，见 tasks.md 的第 5 组）
+
+⇒ ⇒ ⇒ **尚未完成** ⇒ ⇒ **不得**让本 change 归档：
+① `stream_fifo` 的**行为用例**（它至今**零行为覆盖** ⇒ ⇒ 本次修复 MUST 有可执行证据）；
+② **多驱动守卫**（ADR-054 §3.2 第 1 条）+ 配套用例；
+③ `stream_queue` / `StreamBuilder::queue<>` 的同步；
+④ `stream_mux_connect_ready` 的 `operator=` ⇒ **`<<=`**；
+⑤ 2 个 disabled sample 归位 + **6 处** `ch_in` 直写；
+⑥ 护栏（**效果判据** + **原地投毒**自检）+ 变异 + 归档。
+
+## 14. ✅ 形态 E **打通**（2026-10-31）—— 判别性探针（**显式 PASS/FAIL 判定版**）
+
+### 14.1 探针（自检版）：`/tmp/opencode/repro/e2.cpp`
+
+⚠️ **与 §13.3 用的是同一个探针** ⇒ ⇒ **唯一**差别 = **输出显式 PASS/FAIL**
+（`CHECK(...)` 宏 ⇒ ⇒ 失败计数 ⇒ ⇒ 退出码）⇒ ⇒ **消除「肉眼看错」的空间**
+⇒ ⇒ ⇒ **这正是本轮能一击定案的原因**（§13.3 的错因解剖）。
+
+实测输出：
+
+```
+场景 1：消费端 rready=0 ⇒ 反压生效
+  写 0x11 ⇒ full=0 rdata=0x11
+  [PASS] 队首停在 0x11（未被弹出）
+  写 0x22 ⇒ full=0 rdata=0x11
+  [PASS] 队首停在 0x11（未被弹出）
+  写 0x33 ⇒ full=0 rdata=0x11
+  [PASS] 队首停在 0x11（未被弹出）
+  写 0x44 ⇒ full=1 rdata=0x11
+  [PASS] 队首停在 0x11（未被弹出）
+  [PASS] 写满 4 个后 full == 1
+  [PASS] 第 5 个写后 full 仍 == 1（自保护）
+场景 2：消费端 rready=1 ⇒ 恢复弹出
+  [PASS] 弹出 0x11 后队首 == 0x22（得 0x22）
+  [PASS] 弹出后 full == 0
+  [PASS] 再一拍队首 == 0x33（得 0x33）
+
+==== ✅ 全部通过（FAIL 数 = 0）====
+```
+
+⇒ ⇒ **12/12 PASS** ⇒ ⇒ ⇒ **形态 E 的机制【成立】** ✔
+
+### 14.2 ✅ 对照组：**不调** `connect_ready` ⇒ MUST 保持**逐位旧语义**
+
+同一探针去掉 `stream_fifo_connect_ready` 调用 ⇒ ⇒ 实测：
+
+```
+写 0x11 ⇒ rdata=0x11
+写 0x22 ⇒ rdata=0x22      ← 队首逐拍推进 ⇒ 恒就绪
+写 0x33 ⇒ rdata=0x33
+写 0x44 ⇒ rdata=0x44
+写满 4 个后 full == 0      ← 永远排空 ⇒ full 恒 0（= 旧语义）
+```
+
+⇒ ⇒ ⇒ **「不调 = 恒就绪 · 行为逐位不变」** 这条契约**实测成立** ✔
+⇒ ⇒ ⇒ 这是形态 E 的**核心承诺**（ADR-054 §3.2 第 1 条第 1 项）⇒ ⇒ **已验证**
+
+### 14.3 🔴 写使能变更是**承重**的（形态 E 契约的**前置**，不是无关变更）
+
+实测：形态 E 的其余部分保持不变，仅把写使能**恢复**为旧写法
+`input_stream.valid & input_stream.ready` ⇒ ⇒
+
+```
+[ERROR] [node_builder] Invalid operands for binary operation at include/core/../lnode/node_builder.tpp:32
+```
+
+⇒ ⇒ `input_stream.ready` 在此**尚未被驱动**（是**空 proxy**）⇒ ⇒ `&` 拿到
+**null 操作数** ⇒ ⇒ `sync_fifo` 拿到**无效操作数** ⇒ ⇒ **组合子完全不可用**
+⇒ ⇒ ⇒ 写使能 MUST 只用 `input_stream.valid`（内部 `will_write` 已**自保护**）
+⇒ ⇒ ⇒ ⚠️ 这是**行为变更**（`wren` 由 `valid & ready` ⇒ `valid`）⇒ ⇒
+MUST **单独 commit + 单独测试 + 契约化**（⇒ ⇒ 不与形态 E 混在一个 commit 里
+⇒ ⇒ 但**实施顺序**上必须先于它 ⇒ ⇒ 因为它是形态 E 的**前提**）。
+
+### 14.4 ⇒ ⇒ 本 change 的**最终实施面**（`include/chlib/stream.h`）
+
+```cpp
+// ① 结果对象持有默认源（持久有效）
+ch_bool default_ready_source;
+// ② 默认驱动打在字段 proxy 上（非 literal）⇒ 用 `<<=`
+result.default_ready_source = ch_bool(true);
+result.pop_stream.ready <<= result.default_ready_source;
+// ③ 读使能引用字段节点本身 ⇒ 覆盖必然传播
+auto fifo_result = sync_fifo<...>(input_stream.valid, input_stream.payload,
+                                  result.pop_stream.ready);
+// ④ 调用方覆盖
+template <typename T, unsigned DEPTH, typename C>
+void stream_fifo_connect_ready(StreamFifoResult<T, DEPTH> &result,
+                               const C &consumer_ready) {
+    ch_bool cr(to_operand(consumer_ready).impl());
+    result.pop_stream.ready <<= cr;
+}
+```
+
+⚠️ **两个约束缺一不可**（§14.3 / §12.4）：
+① **目标** MUST 是**非 literal** 的节点 ⇒ MUST 用 **`<<=`**（MUST NOT `operator=`）；
+② **源** MUST 是**持久有效**的节点 ⇒ MUST 由**结果对象持有**。
+
+⇒ ⇒ ⇒ ⚠️ **「两个约束」的回归锁 MUST 落成护栏**（⇒ ⇒ 变异 **M1**：
+读使能改引用**局部常量节点** ⇒ ⇒ MUST 转红）⇒ ⇒ ⇒
+**结构判据**：MUST NOT 用 `operator=` 驱动 `pop_stream.ready`。
+
+## 15. 实施记录（2026-10-31，T3-a 完成）
+
+### 15.1 实施面（`include/chlib/stream.h`）
+
+| # | 改动 | 依据 |
+|---|---|---|
+| 1 | `StreamFifoResult` 新增 `ch_bool default_ready_source`（**持有**默认源） | §14.4 ① |
+| 2 | `result.default_ready_source = ch_bool(true);` + `result.pop_stream.ready <<= result.default_ready_source;` | §14.4 ②（**MUST `<<=`**） |
+| 3 | `sync_fifo` 的**读使能** ⇒ `result.pop_stream.ready`（**字段节点本身**） | ADR-054 §3.2 第 1 条 |
+| 4 | `sync_fifo` 的**写使能** ⇒ `input_stream.valid`（**不**含 `in.ready`） | §14.3（**承重**） |
+| 5 | 新增 `stream_fifo_connect_ready(result, consumer_ready)`：形参**模板化** + `to_operand` 归一化 | ADR-053 / E3 同型教训 |
+| 6 | `connect_ready` 的**多驱动守卫** ⇒ `CHFATAL_EXCEPTION` | ADR-054 §3.2 第 1 条（⚠️ `CHERROR` 只打日志） |
+| 7 | `stream_queue_connect_ready`（薄转发）⇒ ⇒ 别名路径也能接背压 | API 自洽 |
+| 8 | `stream_mux_connect_ready` 的 `operator=` ⇒ **`<<=`** | ADR-045 决策 0-B 第 2 条 |
+
+### 15.2 行为证据（`stream_fifo` 此前**零行为覆盖** ⇒ ⇒ 本次 MUST 有）
+
+| 文件 | 用例 | 断言数 |
+|---|---|---|
+| `tests/chlib/test_stream.cpp` | 反压阻止推进（`full` 可达 · 队首不动 · 自保护 · 恢复弹出） | 28 |
+| `tests/chlib/test_stream.cpp` | 未接背压 ⇒ **逐位旧语义**（恒就绪 · 队首逐拍推进 · `full` 恒 0） | 9 |
+| `tests/chlib/test_stream.cpp` | 多驱动 ⇒ `connect_ready` **抛异常** | 1 |
+| `tests/test_stream_builder.cpp` | `StreamBuilder::queue<>()` 的反压**传过 builder 链** | 6 |
+
+⇒ ⇒ `test_stream` **94 断言 / 12 用例** ⇒ **132 断言 / 15 用例**（+38）
+⇒ ⇒ `test_stream_builder` **4 用例** ⇒ **5 用例 / 10 断言**
+
+### 15.3 变异（每条**先确认编译成功**）
+
+| # | 注入 | 结果 |
+|---|---|---|
+| **M1** | 读使能改引用**局部常量节点** | ✅ 转红（`occ() == 2` 得 **1** ⇒ 无反压 ⇒ 排空） |
+| **M2''** | 字段连接 `<<=` ⇒ `operator=`（重绑定） | ✅ 转红（`default-driver-operator-assign` 投毒） |
+| **M3** | 删掉**多驱动守卫** | ✅ 转红（多驱动用例） |
+| **M4** | 写使能改回 `valid & ready` | ✅ 转红（**SIGSEGV** —— "Invalid operands" ⇒ 组合子不可用） |
+| **M5** | `stream_handshake_example` 的读使能**漏掉忙门控** | ✅ 转红（`popped payload MUST be 0x10 (got 0x12)` ⇒ **丢数据**） |
+
+### 15.4 护栏（`scripts/verify_stream_ready_ownership.sh` + `scripts/lib/stream_ready_ownership.py`）
+
+| 判据 | 类型 | 内容 |
+|---|---|---|
+| **R0** | fail-closed | 必需文件 / 二进制缺失 ⇒ **exit 1**（MUST NOT 当「通过」） |
+| **R1** | **效果** | 跑行为用例 ⇒ MUST 绿（**MUST NOT** 词法「源码含常量 `true`」） |
+| **R2** | 静态 | 读使能 MUST 引用 `result.pop_stream.ready`（**字段节点本身**） |
+| **R3** | 静态 | 默认驱动 MUST 用 `<<=`（MUST NOT `operator=` 重绑定） |
+| **R4** | 静态 | 写使能 MUST 只用 `input_stream.valid` |
+| **R5** | 静态 | `connect_ready` MUST 存在且形参**模板化** |
+| **R6** | 调用点 | 调 `stream_fifo` / `stream_queue` 后 MUST 接 ready ⇒ ⇒ **或**显式豁免标记（**豁免非静默** ⇒ `::notice` 点名 8 处） |
+
+⚠️ **静态判据 MUST 走 Python + 剥注释**（复用 `scripts/lib/fsm_wiring.py` 的
+`strip_comments_and_strings` ⇒ ⇒ 与 FSM 护栏口径**不漂移**）⇒ ⇒ 注释里的
+字面量不会误判（实测：shell + grep 的版本把**注释**里的 `valid & ready` 当成
+违规 ⇒ ⇒ 假红）。
+
+⚠️⚠️ **护栏自身踩的两个坑**（本仓「护栏自身有盲区」病症的新实例）：
+
+① **shell 双引号里的反引号** —— `ok "…用 <<= …"` 里的反引号被 shell 当
+   **命令替换** ⇒ ⇒ 护栏消息被**静默吞掉** ⇒ ⇒ **所有**消息 MUST NOT 含
+   反引号（改用「`<<=`」的纯文本描述）。
+
+② 🔴 **还原源码 ≠ 复原**（**二进制也是状态**）—— 原地投毒的还原用
+   `shutil.copy2` ⇒ ⇒ **保留 mtime** ⇒ ⇒ 还原后的文件 mtime **比备份还旧**
+   ⇒ ⇒ `make` 判定「已是最新」⇒ ⇒ **不重新编译** ⇒ ⇒ **跑的仍是被投毒的
+   二进制** ⇒ ⇒ 报「还原写坏了文件」的**假失败** ⇒ ⇒ 而且**下一轮**的
+   R1 也会**假红**（二进制还是脏的）⇒ ⇒ 修法：**还原 MUST 用 `copyfile`**
+   （刷新 mtime ⇒ 强制重建）**且** 护栏的 R1 MUST **先重建再跑**
+   ⇒ ⇒ 彻底消灭「stale binary」这一整类假结果。
+
+⇒ ⇒ **自检**：4 种投毒（读使能局部常量 · 写使能 `valid & ready` · 默认驱动
+`operator=` · 删多驱动守卫）⇒ ⇒ 每种 MUST 转红 ⇒ ⇒ 还原后 MUST 再绿一次 ✔
+
+### 15.5 2 个 disabled sample 的归位（**重写**）
+
+⚠️ 旧版同时踩了 **5** 个坑：旧 `stream_fifo` 签名 · `Stream<T>` 类型名 ·
+`get_default_clk/rst` 改名 · `ch_reg` 的 `->clk/->rst` 成员已移除 ·
+⚠️ **`bundle-as-IO` 违反仓库约定**（根 AGENTS.md「Bundle as IO」⇒ ⇒ bundle
+成员**不会**被注册为组件 IO ⇒ ⇒ **不会**成为生成 Verilog 的**顶层端口**）。
+
+⇒ ⇒ 重写后：独立端口 + **自检断言**（samples 护栏**只查退出码** ⇒ ⇒ 行为
+退化而 `return 0` 会被判 PASS ⇒ ⇒ 这正是本仓长期「假绿」的机制）
+⇒ ⇒ `stream_component_example` 演示「**FIFO 满 ⇒ 上游暂停**」
+⇒ ⇒ `stream_handshake_example` 演示「**有效消费端 ready**」这条纪律
+（FIFO 的读使能 MUST 用 `out_ready & !busy` ⇒ ⇒ 否则**丢数据且无报错**）
+⇒ ⇒ samples 护栏 **39/39** 全绿（37 → 39 / 禁用 3 → 1）
+
+### 15.6 ⚠️ 登记为**已知缺口**（不在本 change 范围 ⇒ ⇒ 独立立项）
+
+- **builder 链的上游侧反压**：`StreamBuilder::queue<>()` 把 FIFO 的
+  `push_stream.ready`（= `!full`）**丢弃**了 ⇒ ⇒ 链上游**收不到**「FIFO 满了」
+  ⇒ ⇒ ⚠️ 本 change 只打通**消费端 → 读使能**这条方向（形态 E 的标的）
+  ⇒ ⇒ 上游方向**独立立项**。
+- **demux / arbiter 的 ready 所有权**（T3-b，ADR-054 §6 已列）。
+- **`fwft_fifo` 重写 / 改名**（ADR-045:148 单独立项）。

@@ -3,15 +3,21 @@
 - **Status**: Accepted（**2026-10-31 修订** —— 实施期**证伪**形态 B ⇒ 改裁为**形态 E**；
   修订依据 = `openspec/changes/chlib-stream-ready-ownership-2026-10/design.md` §9
   的**实测** + critic 审查（`REJECT`，2 BLOCKER）的**具体条款**）
-- ⚠️⚠️ **状态：形态 E = 「已裁决 · 【待验证】」**（2026-10-31，实施尝试 2 之后）
-  ⇒ ⇒ 形态 E 的实施**编译通过**，但**既有测试 SIGSEGV**
-  （`tests/chlib/test_stream_fifo_dual.cpp:133` · `tests/chlib/test_stream.cpp:470`）
-  ⇒ ⇒ **已回退**（仓恢复 194/194 全绿）
-  ⇒ ⇒ ⇒ **「零回归」承诺【未】达成** ⇒ ⇒ **形态 E 目前【未】被验证成立**
-  ⇒ ⇒ ⇒ **builder 不得**据此继续实施 ⇒ ⇒ **不得**让「未验证的形态」进入归档
-  ⇒ ⇒ ⇒ 须先做**最小隔离复现**定位 SIGSEGV ⇒ ⇒ 验证通过后由 architect 追认，
-  否则**再次**改裁
-  ⇒ ⇒ 证据与排除的假设见 design.md **§11**。
+- ✅ **状态：形态 E = 「已裁决 · 【已验证成立】」**（2026-10-31，实施完成）
+  ⇒ ⇒ **零回归**：`ctest -LE perf` **194/194** · samples **39/39** ·
+  examples **28/28** · 护栏（含 `--self-test`）全 exit 0
+  ⇒ ⇒ **效果判据**实测通过（反压能阻止推进 · `full` 可达 · 旧语义逐位保持 ·
+  多驱动**抛异常**）
+  ⇒ ⇒ ⇒ 本 ADR 的裁决**全部**落地并**已验证**
+  ⇒ ⇒ 证据与**被推翻的推断**（保留为「已排除清单」）见 design.md **§11~§15**。
+- ⚠️⚠️ **实施期的两条新增承重约束**（**本 ADR 原地补入**，2026-10-31）：
+  ① **默认驱动的源 MUST 活得比结果对象久** ⇒ ⇒ 落地形态 = **结果对象持有
+     源节点**（`StreamFifoResult::default_ready_source`）⇒ ⇒ MUST NOT 指向
+     **局部**变量 / **临时**字面量（⇒ ⇒ 临时字面量 ⇒ 驱动未建立 ⇒ ⇒
+     `sync_fifo` 拿到**无效操作数** ⇒ ⇒ 💥 **SIGSEGV**）；
+  ② **写使能 MUST 只用 `input_stream.valid`** ⇒ ⇒ MUST NOT 与
+     `input_stream.ready` 合取（⇒ ⇒ **先读后写** ⇒ ⇒ `in.ready` 是空 proxy
+     ⇒ ⇒ 报 "Invalid operands" ⇒ ⇒ **组合子完全不可用**）。
 - **Date**: 2026-10-31（修订同日）
 - **Author**: build-agent（architect 角色，2026-10-31 用户口令切换后裁决）
 - **Parent**: `ADR-045-chlib-stream-semantics.md`（§1 决策 0-B「输入 ready 的所有权：两阶段」）
@@ -80,6 +86,15 @@ ADR-045 决策 0-B 裁决了 ready 所有权**归属**（组合子不拥有入�
    - ⚠️ **读使能 MUST 引用「字段节点本身」**（`result.pop_stream.ready` 的 proxy），
      MUST NOT 引用**局部**节点 ⇒ ⇒ 否则覆盖的是字段而内部表达式仍读局部节点
      ⇒ ⇒ **覆盖不传播 ⇒ 静默失效**（测试可能全绿而功能死）⇒ ⇒ 与现缺陷**同型**；
+   - ⚠️⚠️ **默认驱动的源 MUST 活得比结果对象久** ⇒ ⇒ 落地形态 =
+     **结果对象持有源节点**（`StreamFifoResult::default_ready_source`）
+     ⇒ ⇒ MUST NOT 指向**局部**变量 / **临时**字面量
+     ⇒ ⇒ **临时**字面量 ⇒ ⇒ `get_lnode` 对临时对象**无效** ⇒ ⇒ 驱动**未建立**
+     ⇒ ⇒ `sync_fifo` 拿到**无效操作数** ⇒ ⇒ 💥 **SIGSEGV**
+     ⇒ ⇒ 且目标 MUST 是**非 literal** 的节点 ⇒ ⇒ **MUST 用 `<<=`**
+     （MUST NOT `operator=` —— 重绑定会把字段换成 literal 节点 ⇒ ⇒ 而
+     **literal 节点不可被 `set_src`** ⇒ ⇒ 覆盖**无效**）
+     ⇒ ⇒ **两个约束缺一不可**（实测：缺任一 ⇒ ⇒ 覆盖**不传播**）；
    - ⚠️ **多驱动守卫**：组合子 MUST 记录默认驱动节点 ⇒ ⇒ `connect_ready` MUST 断言
      「当前驱动仍是默认节点」⇒ ⇒ 否则 MUST **`CHFATAL_EXCEPTION`**
      （⚠️ MUST NOT 用 `CHERROR` / `CHFATAL` —— 实测**只打日志不抛**，ADR-050 已踩过）
@@ -89,6 +104,16 @@ ADR-045 决策 0-B 裁决了 ready 所有权**归属**（组合子不拥有入�
    - MUST 提供 `<组合子>_connect_ready(result)`，由调用方在**设置好**消费端 ready **之后**调用；
    - `connect_ready` MUST 在**内部逻辑建立时**直接使用消费端 ready 的**同一节点**
      ⇒ ⇒ MUST NOT 引入代理节点 ⇒ ⇒ E1 MUST NOT 再出现。
+1-A. 🔴 **fifo 类组合子的写使能 MUST 只用 `input_stream.valid`** ⇒ ⇒ MUST NOT
+    与 `input_stream.ready` 合取（2026-10-31 实施期补入）：
+    - **先读后写** —— `in.ready` 是**调用方自己的**信号 ⇒ ⇒ 组合子内部读它时
+      调用方**还没**建立 ready 链 ⇒ ⇒ 该字段是**空 proxy** ⇒ ⇒ `&` 拿到
+      **null 操作数** ⇒ ⇒ 报 "Invalid operands for binary operation"
+      ⇒ ⇒ `sync_fifo` 拿到**无效操作数** ⇒ ⇒ **组合子完全不可用**；
+    - **语义** —— FIFO 的接收能力由 `result.push_stream.ready`（= `!full`）
+      表达 ⇒ ⇒ 组合子 MUST NOT 反过来依赖调用方的 `in.ready`；
+    - **自保护** —— 写口已用 `will_write = wren & !is_full(count)` 门控
+      ⇒ ⇒ 写使能**不需**再与 `ready` 合取。
 2. **mux / demux / arbiter 类 MUST 保持决策 0-B 的两阶段形态**，且连接手段 MUST 为 `<<=`
    ⇒ ⇒ **修订**决策 0-B 第 2 条的**适用范围**：其「构造期只产出 payload / valid」
    对该类**保持有效**（它们的结果字段节点已存在 ⇒ ⇒ 无 E1）。
@@ -164,6 +189,9 @@ ADR-045 决策 0-B 裁决了 ready 所有权**归属**（组合子不拥有入�
 - [ ] **2 个 disabled sample MUST 归位** ⇒ ⇒ `samples/disabled_samples.txt`
       MUST 移除对应行 + 补进 `CH_SAMPLE_TARGETS` ⇒ ⇒ samples 护栏数量守恒；
 - [ ] **变异**：读使能改引用**局部常量节点** ⇒ ⇒ MUST 转红（**判别力**证明，钉住「覆盖不传播」这条承重依赖）；
+- [ ] 🔴 **写使能 MUST 只用 `input_stream.valid`** ⇒ ⇒ 退回 `valid & ready`
+      的变异 MUST 转红（⚠️ 实测：退回后组合子报 "Invalid operands"
+      ⇒ ⇒ **完全不可用** ⇒ ⇒ 该变异是**承重**的）；
 - [ ] `ctest -LE perf` 零回归；**计数锚点不变**；
 - [ ] 契约载体：capability `chlib-stream-ready-ownership`（**ADDED ×N**）
       ⇒ ⇒ 归档**禁** `--skip-specs`。

@@ -89,6 +89,34 @@ MUST NOT 引用**局部**节点 ⇒ ⇒ 否则覆盖**不传播 ⇒ 静默失效
 - **THEN** `connect_ready` MUST 以**抛异常**的方式失败
 - **AND** MUST NOT 只打日志（MUST NOT 静默继续）
 
+### Requirement: fifo 类组合子的**写使能** MUST NOT 依赖调用方的 `in.ready`
+
+`chlib::stream_fifo` 的**写使能** MUST 只用 `input_stream.valid`
+⇒ ⇒ MUST NOT 用 `input_stream.valid & input_stream.ready`。
+
+⇒ ⇒ **为什么**：
+① **先读后写** —— `in.ready` 是**调用方自己的**信号 ⇒ ⇒ 组合子内部读它时
+   调用方**还没**建立 ready 链 ⇒ ⇒ 该字段是**空 proxy** ⇒ ⇒ `&` 拿到
+   **null 操作数** ⇒ ⇒ 报 "Invalid operands" ⇒ ⇒ **组合子完全不可用**；
+② **语义** —— FIFO 的接收能力由 `result.push_stream.ready`（= `!full`）表达
+   ⇒ ⇒ 组合子 MUST NOT 反过来依赖调用方的 `in.ready`；
+③ **自保护** —— 写口已用 `will_write = wren & !is_full(count)` 门控
+   ⇒ ⇒ 写使能**不需**再与 `ready` 合取。
+
+#### Scenario: 写使能 MUST NOT 读 `in.ready`
+
+- **WHEN** 检查 `chlib::stream_fifo` 的写使能
+- **THEN** MUST 是 `input_stream.valid`
+- **AND** MUST NOT 含 `input_stream.ready` 的合取
+- **AND** 把写使能改回 `valid & ready` 的变异 MUST **转红**
+
+#### Scenario: 调用方 MUST NOT 被要求驱动 `in.ready`
+
+- **WHEN** 调用方只驱动 `payload` / `valid`（**不**驱动 `in.ready`）并调用
+      `chlib::stream_fifo`
+- **THEN** 组合子 MUST **正常工作**（MUST NOT 报 "Invalid operands"）
+- **AND** 调用方 MUST NOT 被要求驱动 `in.ready`
+
 ### Requirement: ready 链 MUST 用 `<<=` 连接
 
 ready 链 MUST 用 **`<<=`**（数据流边）连接 ⇒ ⇒ MUST NOT 用 `operator=`

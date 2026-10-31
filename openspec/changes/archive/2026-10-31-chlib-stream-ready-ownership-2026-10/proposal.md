@@ -1,7 +1,7 @@
 # 提案：stream 组合子的 **ready 所有权**（ADR-054 形态 B）
 
 - **来源**：ADR-045 §1 决策 0-B 的具名 follow-up（**裁决已由 ADR-054 补齐**）
-- **规格影响**：**新建** capability `chlib-stream-ready-ownership`（ADDED ×4）
+- **规格影响**：**新建** capability `chlib-stream-ready-ownership`（ADDED ×5）
   ⇒ 归档**禁** `--skip-specs`
 - **规模 / 风险**：**中-大** —— **公开 API 变更**（`stream_fifo` 的结果类型 +
   调用方式）⇒ 波及全部调用点
@@ -30,6 +30,9 @@
     **不传播 ⇒ 静默失效**；
   - 🔴 多驱动守卫：`connect_ready` MUST 断言「当前驱动仍是默认节点」，
     否则 MUST **抛异常**（⚠️ `CHERROR` 只打日志不抛）；
+  - 🔴 **写使能 MUST 只用 `input_stream.valid`**（**不**含 `in.ready`）
+    ⇒ ⇒ 否则「先读后写」⇒ ⇒ `in.ready` 是空 proxy ⇒ ⇒ 报 "Invalid operands"
+    ⇒ ⇒ **组合子完全不可用**（⚠️ 这是**行为变更**，已实测**承重**）；
 - 迁移**活跃**调用点：`stream.h` 的 `stream_queue` 别名 · `stream_builder.h` 的
   `StreamBuilder::queue<DEPTH>()` · `samples/spinalhdl_stream_example.cpp`；
 - **归位** 2 个 disabled sample（`stream_component_example` /
@@ -54,6 +57,8 @@
 - [ ] ready 链的连接手段 MUST 是 `<<=`（MUST NOT `operator=`）⇒ ⇒ 字段孤儿化的
       变异 MUST 转红；
 - [ ] **6 处 `ch_in` 静默失效** MUST 全部修复（逐处核实端口方向）；
+- [ ] **写使能 MUST 只用 `input_stream.valid`** ⇒ ⇒ 退回 `valid & ready` 的
+      变异 MUST 转红；
 - [ ] **2 个 disabled sample MUST 归位** ⇒ samples 护栏数量守恒；
 - [ ] **调用点护栏**：调 `stream_fifo` 后 MUST 出现 `connect_ready` **或** 对
       `pop_stream.ready` 的 `<<=` ⇒ ⇒ **或**显式豁免标记（豁免**非静默**）；
@@ -66,9 +71,12 @@
 ## Impact
 
 - **改动文件**：`include/chlib/stream.h` · `include/chlib/stream_builder.h` ·
-  `samples/spinalhdl_stream_example.cpp` ·
+  `tests/chlib/test_stream.cpp` · `tests/test_stream_builder.cpp` ·
   `samples/stream_component_example.cpp` · `samples/stream_handshake_example.cpp` ·
-  `samples/disabled_samples.txt` · 护栏脚本（新建/扩展）。
+  `samples/stream_fifo_example.cpp` · `samples/spinalhdl_stream_example.cpp` ·
+  `tests/test_stream_fifo_dual.cpp` · `samples/CMakeLists.txt` ·
+  `samples/disabled_samples.txt` · `scripts/verify_stream_ready_ownership.sh`（新建）·
+  `scripts/lib/stream_ready_ownership.py`（新建）· `.github/workflows/ci.yml`。
 - **爆炸半径**：**中** —— **公开 API 变更** ⇒ 全部调用点 MUST 审计
   （实测：3 个活跃 + 2 个禁用）。
 - **风险**：**中** —— ⚠️ 旧调用点**编译仍过**（签名不变）但**行为错**

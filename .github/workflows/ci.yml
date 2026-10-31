@@ -463,6 +463,32 @@ jobs:
       shell: bash
       run: scripts/verify_multi_if_output_assignability.sh --self-test
 
+    - name: Verify stream ready ownership
+      # Contract: capability `chlib-stream-ready-ownership` (ADR-054 form E).
+      # The defect: `chlib::stream_fifo`'s read enable was hard-coded to
+      # `true` => the consumer was always ready => the FIFO always drained
+      # => `full` was UNREACHABLE => the "FIFO full => upstream stalls"
+      # backpressure scenario could not be demonstrated at all (and it
+      # violated the already-signed ADR-045:160).
+      # R1 = EFFECT criterion (runtime): consumer ready == 0 MUST stop the
+      #      advance (NOT a lexical "source contains `true`" check - that
+      #      would misjudge the legal "always-ready by default").
+      # R2~R6 = structural criteria (source-level, comment-stripped).
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_stream_ready_ownership.sh
+
+    - name: Verify stream ready ownership (self-test)
+      # WHY a self-test: a criterion is only as good as its ability to
+      # FAIL. This repo has shipped "looks like it works" defects (a
+      # criterion that never fired because the fixture was never built).
+      # This self-test POISONS THE REAL HEADER IN PLACE (a poisoned copy is
+      # useless - the fixture includes the repo's own header) and proves the
+      # runtime criterion turns red for 4 independent regressions, then
+      # restores it and proves green again.
+      shell: bash
+      run: scripts/verify_stream_ready_ownership.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in
