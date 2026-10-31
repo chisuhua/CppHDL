@@ -73,6 +73,6 @@
 - [x] **T7.2** `ctest -LE perf` ⇒ **194/194**（零回归）
 - [x] **T7.3** 全部护栏（含 `--self-test`）⇒ exit 0
 - [x] **T7.4** **计数锚点不变**：205 / 38 / 29 / 184 / 194 / 17 · samples 39/39 · examples 28/28
-- [ ] **T7.5** 第 **2** 轮 critic：只提交「**BLOCKER 闭合证据 + 本轮新增 diff**」
+- [x] **T7.5** 第 **2** 轮 critic：只提交「**BLOCKER 闭合证据 + 本轮新增 diff**」
 - [ ] **T7.6** 归档（**禁** `--skip-specs`）⇒ ⇒ 归档后**另行补写**主 spec 的 `## Purpose`
       （先例 `core-lnode-entry-set`）

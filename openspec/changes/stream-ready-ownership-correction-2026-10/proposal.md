@@ -73,6 +73,16 @@
 
 ## 评审记录
 
-- **第 1 轮 critic（REJECT）**：3 BLOCKER + 6 SHOULD_FIX + 3 NITS ⇒ ⇒ 全部处置
-  （见 `design.md` §「critic 第 1 轮的处置」）。
-- **第 2 轮 critic**：待执行（只提交「BLOCKER 闭合证据 + 本轮新增 diff」）。
+- **第 1 轮 critic（REJECT · mergeable: no）**：3 BLOCKER + 6 SHOULD_FIX + 3 NITS
+  ⇒ ⇒ 全部处置（见 `design.md` §「critic 第 1 轮的处置」）。
+- **第 2 轮 critic（APPROVE_WITH_CONDITIONS · mergeable: yes · scope_exceeded: false）**：
+  ⇒ ⇒ **3 个 BLOCKER 全部闭合**（B1/B2/B3 逐条确认）⇒ ⇒ **0 个新 BLOCKER**
+  ⇒ ⇒ 剩 1 条 SHOULD_FIX（SF4 部分未闭合：R3 的「0-A 退役」注记**只**写进了
+  design.md 的处置表、**未**落进 delta ⇒ ⇒ 已补进 R3 正文）
+  + 1 条 NIT（delta 里「三个必要条件」⇒ ⇒ 应为「四个」⇒ ⇒ 已改）
+  ⇒ ⇒ **评审预算（2 轮）已用尽** ⇒ ⇒ ⇒ **不再发起第 3 轮**
+  （⇒ ⇒ 第 3 轮起需用户明确批准）。
+  ⇒ ⇒ ⚠️ 第 2 轮 critic 的**事实核对**（`git show --name-only` + `grep`）
+  **抓到了**第 1 个 commit 漏了 `include/chlib/stream.h` 的 3 处订正
+  ⇒ ⇒ ⇒ **「自报」不等于「事实」** ⇒ ⇒ ⇒ 已修 + 已登记纪律
+  （design.md §7.6）。

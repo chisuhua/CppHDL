@@ -241,7 +241,7 @@ R1 转发类是「本仓**未做**」⇒ ⇒ **可援引的只是 R4 的写法�
 | SF1 | 权限判定规则（「实施方读完新文本后被允许/被要求做的事是否变了」）+ Q1 与 R4 **不同型** | **采纳** ⇒ ⇒ 写入 proposal「权限说明」+ design §4.3 |
 | SF2 | 「目标 MUST 已存在且非 literal」**不充分**（缺源侧）⇒ ⇒ MUST 写双侧 | **采纳** ⇒ ⇒ R2「覆盖生效的三个必要条件」+ 实测 V2 证据（§2.2） |
 | SF3 | 「`<<=` 空目标建节点」MUST NOT 作契约依据 ⇒ ⇒ 与形态 A 否决理由同型 | **采纳** ⇒ ⇒ §3 收窄「追认」范围 + R3 的「MUST NOT 被当作充分条件」 |
-| SF4 | 前置条件契约化须带 3 条件（① 含 `create_field_nodes()` ② 标注 0-A 落地时退役 ③ 配护栏） | **采纳 ①②** ⇒ ⇒ R3 写明「`as_master()` / `as_slave()` / `create_field_nodes()` 之一」+ 「0-A 落地时本条经 MODIFIED 退役」；**③ 配护栏** ⇒ ⇒ 属 **P1**（护栏在 P1 落地时才有转发类可检）⇒ ⇒ 本 change 只在**范围**上登记 |
+| SF4 | 前置条件契约化须带 3 条件（① 含 `create_field_nodes()` ② 标注 0-A 落地时退役 ③ 配护栏） | ✅ **采纳 ①②③**（**第 2 轮 critic 复核确认闭合**）：① R3 写明「`as_master()` / `as_slave()` / `create_field_nodes()` 之一」✔；② R3 补「**0-A 落地时本条经 `MODIFIED` delta 退役**」+「退役 MUST 走 `MODIFIED`（保留其余 Scenario）MUST NOT 删除 Requirement」✔（⚠️ 第 1 轮时**只**写进了本表而**未**落进 delta ⇒ ⇒ 第 2 轮 critic 的 grep 抓到 ⇒ ⇒ 已补 ⇒ ⇒ **「勾选 ≠ 落地」的第三次复刻**）；③ **配护栏** ⇒ ⇒ 属 **P1**（护栏在 P1 落地时才有转发类可检）⇒ ⇒ 本 change 只在**范围**上登记 |
 | SF5 | P1 应再拆（P1-a / P1-b / P1-c）+ `queue<>()` 优先级最高 | **采纳** ⇒ ⇒ 已回写 P1 台账 `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（拆分 + 优先级）⇒ ⇒ **本 change 不实施 P1** |
 | SF6 | P1-a 前 MUST 先定守卫统一规格 | **采纳** ⇒ ⇒ V3 实测**部分证伪**了 critic 的「误炸」推断（下游 `connect_ready` 不误炸）⇒ ⇒ 但「上游反压丢失」**确认** ⇒ ⇒ 规格方向成立（「逐节点单一所有权 + 所有权转移 MUST 经 `connect_ready`」）⇒ ⇒ 回写 P1 台账 |
 
