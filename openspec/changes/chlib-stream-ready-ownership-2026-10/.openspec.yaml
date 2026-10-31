@@ -1,0 +1,23 @@
+schema: spec-driven
+created: 2026-10-31
+# 实施 **ADR-054**（`docs/adr/ADR-054-stream-ready-ownership-form.md`）——
+# 它**修订**了 ADR-045 §1 决策 0-B 的**第 1 条**对 fifo 类的适用性。
+#
+# ⇒ ⇒ **新建** capability `chlib-stream-ready-ownership`（ADDED ×4）
+#   ⇒ ⇒ 归档**禁** `--skip-specs`。
+#   ⇒ ⚠️ ADR-045 明写「**未收录**为 capability `chlib-stream-semantics` 的
+#     in-force MUST（现存组合子代码不满足它们）」⇒ ⇒ **不能** MODIFIED 进
+#     既有 capability ⇒ ⇒ 只能**新建**。
+#
+# ⚠️ **实施期 MUST 携带的两条实测约束**（ADR-054 §1）：
+#   ① **E1**：**未驱动**的 `ch_bool` 代理节点**无法驱动任何输出**
+#      （`<<=` 要求 driver 非 null · `=` 要求 src_lnode 非 null ⇒ 两条路都不通）
+#      ⇒ ⇒ 形态 B（延迟构造）MUST NOT 引入代理；
+#   ② **E2**：代理 + 覆盖 ⇒ 存在**读临时值**的窗口 ⇒ ⇒ **静默** ⇒ ⇒ 形态 A
+#      MUST NOT 被采用。
+#
+# ⚠️ **前置探针已通过**（2026-10-31，`/tmp/opencode/t3a/p.cpp`）：
+#   「延迟构造」端到端可行 ⇒ 读使能取消费端 ready 的**同一节点**，值正确（0/1）
+#   ⇒ ⇒ 且 `ch_uint<N>::operator<<=`（`core/uint.h:158-162`）与 `ch_bool::operator<<=`
+#   （`lnode/bool.tpp:59-63`）**都会**在节点为 null 时**建节点** ⇒ ⇒ 形态 B 的
+#   前提成立。
