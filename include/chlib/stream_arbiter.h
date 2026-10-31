@@ -87,13 +87,31 @@ stream_arbiter_lock(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     result.output_stream.valid = valid_vector != 0_d;
 
     // Only the selected input is ready
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //
+    // ⚠️ **核心修复**：删掉了 `result.output_stream.ready = true;`（**硬编码**
+    //   「输出恒就绪」⇒ ⇒ ⇒ **无条件忽略消费端的 ready** ⇒ ⇒ ⇒ ⇒ **违反**
+    //   主 spec `chlib-stream-ready-ownership` 的 R1 ⇒ ⇒ ⇒ ⇒ 且无护栏检出）
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ **现状 = 「上游恒不 ready = 死路」** ⇒ ⇒ ⇒ ⇒ ⇒
+    //   ⇒ **修复不是行为变更 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 零破坏**成立。
+    //
+    // ⚠️ **同时修掉「先读后写」**：旧代码读 `result.output_stream.ready`（**空
+    //   proxy**）⇒ ⇒ 与之做 `&` ⇒ ⇒ 报 "Invalid operands"（**静默**）
+    //   ⇒ ⇒ ⇒ 现改为「**先**建默认驱动（使该字段有节点）**再**读它」。
+    ch_bool default_ready(true);                  // 局部 literal 源（可被覆盖）
+    result.output_stream.ready <<= default_ready; // ② 默认恒就绪（= 既有旧语义）
+
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected & result.output_stream.ready;
+        // ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+        // 反压**（`ch_stream` 的**拷贝与原对象共享同一 ready 节点** ⇒ ⇒ ⇒
+        // `<<=` 能**穿透副本**驱动到**调用方**）
+        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready);
     }
 
     result.selected = selected_idx;
-    result.output_stream.ready = true;
 
     return result;
 }
@@ -152,13 +170,21 @@ stream_arbiter_sequence(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     result.output_stream.valid = has_valid;
 
     // Only the selected input is ready
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**（同 `stream_arbiter_lock`
+    //   的注释 ⇒ ⇒ 核心修复 = 删硬编码 `= true` + 修「先读后写」）
+    ch_bool default_ready(true);
+    result.output_stream.ready <<= default_ready;
+
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected & result.output_stream.ready & has_valid;
+        // ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到反压**
+        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready & has_valid);
     }
 
     result.selected = selected_idx;
-    result.output_stream.ready = true;
+    // ⚠️ `result.output_stream.ready` 已在**上方**建立默认驱动 ⇒ ⇒ 无需再接
 
     return result;
 }

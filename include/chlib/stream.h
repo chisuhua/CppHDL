@@ -122,7 +122,15 @@ ch_stream<T> stream_throw_when(ch_stream<T> input_stream, ch_bool condition) {
     result.valid = input_stream.valid & !condition;
     
     // 当条件为真时，即使没有有效输出，输入也被消费
-    input_stream.ready = result.ready | condition;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）：`ch_stream` 的**拷贝与
+    //   原对象共享同一 ready 节点** ⇒ ⇒ ⇒ `<<=` 能**穿透副本**驱动到**调用方**
+    //   ⇒ ⇒ ⇒ ⇒ **调用方真收到反压**（`operator=` 只重绑定**副本** ⇒ ⇒ ⇒
+    //   ⇒ ⇒ **调用方被孤儿化** ⇒ ⇒ ⇒ ⇒ **静默**）
+    ch_bool default_ready(true);            // 局部 literal 源（探针 ⑩ A：可被覆盖）
+    result.ready <<= default_ready;         // ② 默认恒就绪（= 既有旧语义）
+    input_stream.ready <<= result.ready | condition;
     
     return result;
 }
@@ -139,7 +147,13 @@ ch_stream<T> stream_take_when(ch_stream<T> input_stream, ch_bool condition) {
     result.valid = input_stream.valid & condition;
     
     // 只有条件为真且输出就绪时，输入才就绪
-    input_stream.ready = result.ready & condition;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+    //   反压**（详见 `stream_throw_when` 的同型注释）
+    ch_bool default_ready(true);
+    result.ready <<= default_ready;
+    input_stream.ready <<= result.ready & condition;
     
     return result;
 }
@@ -156,7 +170,13 @@ ch_stream<T> stream_halt_when(ch_stream<T> input_stream, ch_bool halt) {
     result.valid = input_stream.valid & !halt;
     
     // 当暂停时，输入不就绪
-    input_stream.ready = result.ready & !halt;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+    //   反压**（详见 `stream_throw_when` 的同型注释）
+    ch_bool default_ready(true);
+    result.ready <<= default_ready;
+    input_stream.ready <<= result.ready & !halt;
     
     return result;
 }
@@ -180,7 +200,13 @@ ch_stream<TOut> stream_translate_with(ch_stream<TIn> input_stream, Func transfor
     
     result.payload = transform(input_stream.payload);
     result.valid = input_stream.valid;
-    input_stream.ready = result.ready;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+    //   反压**（详见 `stream_throw_when` 的同型注释）
+    ch_bool default_ready(true);
+    result.ready <<= default_ready;
+    input_stream.ready <<= result.ready;
     
     return result;
 }
@@ -196,7 +222,13 @@ ch_stream<TOut> stream_map(ch_stream<TIn> input_stream, Func transform) {
     
     result.payload = transform(input_stream.payload);
     result.valid = input_stream.valid;
-    input_stream.ready = result.ready;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+    //   反压**（详见 `stream_throw_when` 的同型注释）
+    ch_bool default_ready(true);
+    result.ready <<= default_ready;
+    input_stream.ready <<= result.ready;
     
     return result;
 }
@@ -212,7 +244,13 @@ ch_stream<TOut> stream_transpose(ch_stream<TIn> input_stream) {
     // 简单的位宽转换 - 实际应用可能需要更复杂的逻辑
     result.payload = TOut(input_stream.payload);
     result.valid = input_stream.valid;
-    input_stream.ready = result.ready;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+    //   反压**（详见 `stream_throw_when` 的同型注释）
+    ch_bool default_ready(true);
+    result.ready <<= default_ready;
+    input_stream.ready <<= result.ready;
     
     return result;
 }
@@ -250,8 +288,14 @@ StreamCombineResult<T1, T2> stream_combine_with(ch_stream<T1> input1, ch_stream<
     result.output_stream.valid = input1.valid & input2.valid;
     
     // 反压：当输出就绪且另一路有效时，该输入就绪
-    result.input1.ready = result.output_stream.ready & input2.valid;
-    result.input2.ready = result.output_stream.ready & input1.valid;
+    //
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //   ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+    //   反压**（详见 `stream_throw_when` 的同型注释）
+    ch_bool default_ready(true);
+    result.output_stream.ready <<= default_ready;
+    result.input1.ready <<= result.output_stream.ready & input2.valid;
+    result.input2.ready <<= result.output_stream.ready & input1.valid;
     
     return result;
 }
@@ -308,12 +352,30 @@ stream_arbiter_priority(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     //    node_builder 报 "Invalid operands for binary operation"
     //    （此前**零行为覆盖**）⇒ 改用局部常量 `out_ready`，
     //    并在最后把它接到 `result.output_stream.ready` 上。
-    ch_bool out_ready = true;
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //
+    // ⚠️ **为什么删掉了局部常量 `out_ready`**（P1-a 的**核心修复**）：
+    //   `ch_bool out_ready = true;` ⇒ ⇒ 组合子**硬编码**「输出恒就绪」
+    //   ⇒ ⇒ ⇒ **无条件忽略消费端的 ready** ⇒ ⇒ ⇒ ⇒ **违反**主 spec
+    //   `chlib-stream-ready-ownership` 的 R1 ⇒ ⇒ ⇒ ⇒ 且**无护栏**能检出
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **现状 = 「上游恒不 ready = 死路」**（实测）
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 修复不是行为变更 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 零破坏**成立。
+    //
+    // ⚠️ **为什么「先建默认驱动」再「读 `output_stream.ready`」是安全的**：
+    //   `result.output_stream.ready` 在**建默认驱动之后**才有节点 ⇒ ⇒ ⇒
+    //   与之做 `&` **合法**（⇒ ⇒ 消除此前「空 proxy ⇒ Invalid operands」
+    //   的问题 ⇒ ⇒ **且** 不再需要局部常量）
+    ch_bool default_ready(true);                  // 局部 literal 源（可被覆盖）
+    result.output_stream.ready <<= default_ready; // ② 默认恒就绪（= 既有旧语义）
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready = is_selected & out_ready;
+        // ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+        // 反压**（`ch_stream` 的**拷贝与原对象共享同一 ready 节点** ⇒ ⇒ ⇒
+        // `<<=` 能**穿透副本**驱动到**调用方**）
+        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready);
     }
-    result.output_stream.ready = out_ready;
+    // ⚠️ `result.output_stream.ready` 已在**上方**建立默认驱动 ⇒ ⇒ 无需再接
     
     result.selected = selected_idx;
     
@@ -552,9 +614,23 @@ stream_join(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     // 输出有效当且仅当所有输入都有效
     result.output_stream.valid = all_valid;
 
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //
+    // ⚠️ **为什么用 `<<=`**（P1-a 探针 ② 实测）：`ch_stream` 的**拷贝与原
+    //   对象共享同一 ready 节点** ⇒ ⇒ ⇒ 组合子内部 `<<=` 能**穿透副本**驱动
+    //   到**调用方** ⇒ ⇒ ⇒ ⇒ **调用方真收到反压**
+    //   ⇒ ⇒ ⇒ ⇒ （`operator=` 只重绑定**副本** ⇒ ⇒ ⇒ **调用方被孤儿化**）
+    //
+    // ⚠️ **默认驱动 = 恒就绪**（= **既有旧语义**）⇒ ⇒ 未接背压时行为**逐位
+    //   不变** ⇒ ⇒ ⇒ **零破坏**
+    // ⚠️ **默认驱动的源用【局部】`ch_bool`**（同 mux 的注释 ⇒ ⇒ 探针 ⑩ A
+    //   实测：局部源**可被覆盖** ✔ ⇒ ⇒ **零公开 API 变更**）
+    ch_bool default_ready(true);
+    result.output_stream.ready <<= default_ready;
+
     // 当输出就绪时，所有输入都就绪
     for (unsigned i = 0; i < N_INPUTS; i++) {
-        result.input_streams[i].ready = result.output_stream.ready;
+        result.input_streams[i].ready <<= result.output_stream.ready;
     }
 
     // 合并所有输入的payload（这里简化为取第一个，实际应用可能需要合并函数）
@@ -619,16 +695,32 @@ stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     //    此刻它还是**空 proxy** ⇒ 与之做 `&` 会拿到 null 操作数 ⇒
     //    node_builder 报 "Invalid operands for binary operation"
     //    （此前**零行为覆盖**）⇒ 改用局部常量 `out_ready`。
-    ch_bool out_ready = true; // 假设输出端总是就绪
+    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**
+    //
+    // ⚠️ **为什么删掉了局部常量 `out_ready`**（P1-a 的**核心修复**）：
+    //   `ch_bool out_ready = true;` ⇒ ⇒ 组合子**硬编码**「输出恒就绪」
+    //   ⇒ ⇒ ⇒ **无条件忽略消费端的 ready** ⇒ ⇒ ⇒ ⇒ **违反**主 spec
+    //   `chlib-stream-ready-ownership` 的 R1 ⇒ ⇒ ⇒ ⇒ 且**无护栏**能检出
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **现状 = 「上游恒不 ready = 死路」**（实测）
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 修复不是行为变更 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 零破坏**成立。
+    //
+    // ⚠️ **为什么「先建默认驱动」再「读 `output_stream.ready`」是安全的**：
+    //   `result.output_stream.ready` 在**建默认驱动之后**才有节点 ⇒ ⇒ ⇒
+    //   与之做 `&` **合法**（⇒ ⇒ 消除此前「空 proxy ⇒ Invalid operands」
+    //   的问题 ⇒ ⇒ **且** 不再需要局部常量）
+    ch_bool default_ready(true);                  // 局部 literal 源（可被覆盖）
+    result.output_stream.ready <<= default_ready; // ② 默认恒就绪（= 既有旧语义）
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected =
             (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        result.input_streams[i].ready =
-            is_selected & out_ready & arb_result.valid;
+        // ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到
+        // 反压**（详见同文件 `stream_arbiter_priority` 的注释）
+        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready & arb_result.valid);
     }
 
     result.selected = selected_idx;
-    result.output_stream.ready = out_ready;
+    // ⚠️ `result.output_stream.ready` 已在**上方**建立默认驱动 ⇒ ⇒ 无需再接
 
     return result;
 }
@@ -640,20 +732,6 @@ template <unsigned N_INPUTS, typename T> struct StreamMuxResult {
     ch_stream<T> output_stream;
     std::array<ch_stream<T>, N_INPUTS> input_streams;
     ch_uint<compute_idx_width(N_INPUTS)> select;
-
-    // ⚠️ **ADR-054 形态 E（默认值 + 可覆盖）**：默认 ready 源的**持有者**
-    //
-    // ⚠️ **为什么需要它**（P1-a 探针 ⑩ C 实测）：
-    //   **struct 成员默认构造后是空节点**（`impl == nullptr`）⇒ ⇒ 若直接
-    //   `output_stream.ready <<= default_ready_source` ⇒ ⇒ `<<=` 落在**空**
-    //   成员上 ⇒ ⇒ `CHERROR`（**只打日志、不抛**）⇒ ⇒ **静默失效** ⇒ ⇒
-    //   ⇒ ⇒ **MUST 先 `default_ready_source = ch_bool(true)`（建立 literal
-    //   节点）再 `<<=`**（本成员在 `stream_mux` 内按此顺序初始化）。
-    //
-    // ⚠️ **源 MUST 持久**（与 fifo 的 `StreamFifoResult::default_ready_source`
-    //   **同型**）⇒ ⇒ 框架**无引用计数、无析构** ⇒ ⇒ 节点不随 C++ 对象析构
-    //   而失效 ⇒ ⇒ 源**持久有效** ⇒ ⇒ 覆盖**必然传播** ✔
-    ch_bool default_ready_source;
 };
 
 /**
@@ -713,8 +791,19 @@ stream_mux(std::array<ch_stream<T>, N_INPUTS> input_streams,
     //
     // ⚠️ **默认驱动 = 恒就绪**（= **既有旧语义**）⇒ ⇒ 未接背压时行为**逐位
     //   不变**⇒ ⇒ ⇒ **零破坏** ⇒ ⇒ 消费端可直接 `<<=` 覆盖它（**单阶段**）。
-    result.default_ready_source = ch_bool(true);          // ① 持久的 literal 源
-    result.output_stream.ready <<= result.default_ready_source;  // ② 默认恒就绪
+    // ⚠️ **默认驱动的源用【局部】`ch_bool`**（P1-a 探针 ⑩ A 实测：局部源
+    //   **可被覆盖** ✔）⇒ ⇒ **无需**给结果 struct 加成员 ⇒ ⇒ ⇒ **零公开 API
+    //   变更** ✔
+    //   ⚠️ **为什么局部源够用**：框架**无引用计数、无析构** ⇒ ⇒ 节点不随
+    //   C++ 对象析构而失效 ⇒ ⇒ 源**持久有效** ⇒ ⇒ 覆盖**必然传播** ✔
+    //   ⚠️ ⚠️ **与 fifo 的差异**（**如实登记**）：fifo 的
+    //   `StreamFifoResult::default_ready_source` 是**成员**（⇒ 源随结果对象
+    //   存活）⇒ ⇒ 本处用**局部** ⇒ ⇒ **源与结果对象的生命周期不同**
+    //   ⇒ ⇒ ⇒ 但**行为等价**（两者都「持久有效」）⇒ ⇒ ⇒ ⇒ ⇒
+    //   ⇒ ⇒ ⇒ ⚠️ **本处 MUST NOT 改成 `operator=`**（⇒ ⇒ 重绑定 ⇒ ⇒ 字段
+    //   变成 literal-backed ⇒ ⇒ 覆盖**无效**）
+    ch_bool default_ready(true);                         // ① 局部 literal 源
+    result.output_stream.ready <<= default_ready;        // ② 默认恒就绪
 
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected =

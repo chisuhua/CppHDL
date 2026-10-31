@@ -82,7 +82,7 @@ demux / arbiter / fork / join / filters）的 ready 链**两端都断**（实测
 - **WHEN** 检查本 capability 的**转发类**（mux / demux / arbiter / fork /
       join / filters）的 ready 链实现
 - **THEN** MUST 承认其 ready 链的**现状**（⚠️ **2026-11-01 原地订正**：
-      change `stream-forward-ready-closure-p1a-2026-11` 落地后 ⇒ ⇒ **转发类
+      P1-a 落地后 ⇒ ⇒ **转发类
       （mux / arbiter / join / filters / combine_with）已收口**
       ⇒ ⇒ ⇒ ⇒ 本 Scenario 的**「两端都断」**描述**仅对未收口者成立**
       ⇒ ⇒ ⇒ ⇒ ⇒ **demux / fork**（独立 change `P1-b` / `P1-c`）**仍**是
@@ -111,6 +111,67 @@ demux / arbiter / fork / join / filters）的 ready 链**两端都断**（实测
       「源码含常量 `true`」这类**词法**判据实现 ⇒ ⇒ 否则「合法的默认恒就绪」
       会被误判 ⇒ ⇒ 判别力归零）
 - **AND** 该护栏 MUST 有**自检**（⇒ ⇒ 注入一处「无条件忽略」⇒ MUST 转红）
+
+### Requirement: fifo 类组合子的 ready 所有权 MUST 是**默认值 + 可覆盖**
+
+fifo 类组合子（读使能是**内部逻辑的输入**）MUST：
+
+1. **立即**建立内部逻辑 ⇒ ⇒ **既有行为逐位不变** ⇒ ⇒ 存量调用点 MUST NOT
+   被迫迁移；
+2. 读使能 MUST 接一个**带默认驱动**的字段 —— 该默认 MUST 等于**既有旧语义**
+   （恒就绪）⇒ ⇒ 未接背压时的行为与改动前**完全一致**；
+3. MUST 提供 `<组合子>_connect_ready(result)`，把消费端 ready **覆盖**到该字段。
+
+⇒ ⇒ ⚠️ **读使能 MUST 引用「字段节点本身」**（结果对象的 ready 字段的 proxy），
+MUST NOT 引用**局部**节点 ⇒ ⇒ 否则覆盖**不传播 ⇒ 静默失效**。
+
+⇒ ⇒ ⚠️ **多驱动守卫**：`connect_ready` MUST 断言「当前驱动仍是默认节点」，
+否则 MUST **抛异常**（⚠️ MUST NOT 只打日志）。
+
+#### Scenario: 覆盖生效 MUST 同时满足四个必要条件
+
+- **WHEN** 调用方用 `<组合子>_connect_ready` 覆盖消费端 ready
+- **THEN** 覆盖 MUST 生效 ⇒ ⇒ 且 MUST 同时满足：
+  ① **目标** MUST 是**已存在**的**非 literal** 节点（⇒ ⇒ `operator=` 重绑定
+      ⇒ ⇒ literal 节点**不可被 `set_src`** ⇒ ⇒ 覆盖**无效**；⇒ ⇒ `<<=` 在
+      **空节点**上**另建**节点 ⇒ ⇒ 只驱动被 `<<=` 的对象 ⇒ ⇒ **调用方被
+      孤儿化** ⇒ ⇒ ⇒ **MUST 用 `<<=`**）
+  ② **源** MUST 是**非空**节点（⇒ ⇒ 否则 `CHERROR` 只打日志 ⇒ ⇒ **静默**）
+  ③ **源** MUST 活得比结果对象久（⇒ ⇒ 否则 💥 **SIGSEGV**）
+  ④ **改边（`<<=` / `set_src`）MUST 在 `Simulator` 构造**之前**完成**
+      （⇒ ⇒ 指令的 `src0_` / `src1_` **缓冲指针**在 `initialize()` 时**绑定**
+      ⇒ ⇒ ⇒ **改边不更新它们** ⇒ ⇒ ⇒ **旧 src 仍在 eval list 里仍被求值**
+      ⇒ ⇒ ⇒ ⇒ **覆盖「看起来没生效」** ⇒ ⇒ ⇒ ⇒ ⇒ **运行期 MUST 只改**
+      **值**（`sim.set_value`）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **「改值」是测试台的正常用法**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 不构成限制** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **但「改边须在
+      构造前」是**易踩的坑** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ MUST 在契约里明写
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **当前框架无「改边后让指令重新绑定」的机制**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （实测：`reinitialize()` **不**解决））
+- **AND** 四类失效（缺持久源 / 缺非空源 / 目标被重绑定成 literal / 覆盖晚于
+      `initialize`）MUST NOT 用**单条**判据覆盖 ⇒ ⇒ 其中三类是**静默**的
+- **AND** ⚠️ **运行期改 ready ⇒ ⇒ 覆盖「不生效」⇒ ⇒ 任何据此写的断言
+      **恒绿** ⇒ ⇒ ⇒ ⇒ **判别力陷阱** ⇒ ⇒ MUST NOT 用它当判据
+
+#### Scenario: 未接背压时行为 MUST 与改动前一致
+
+- **WHEN** 调用方**不**调用 `connect_ready`
+- **THEN** 组合子 MUST 表现为**恒就绪**（= **既有旧语义**）
+- **AND** 既有调用点 MUST NOT 需要修改即可保持**逐位相同**的行为
+
+#### Scenario: `connect_ready` MUST 能覆盖默认驱动
+
+- **WHEN** 调用方把消费端 ready 接上并调用 `connect_ready`
+- **THEN** 读使能 MUST 取消费端 ready 的**值**
+- **AND** 读使能 MUST 引用**字段节点本身**（⇒ ⇒ 覆盖 MUST **传播**到内部逻辑）
+- **AND** 调用方 MUST 在 `Simulator` 构造**之前**完成该 ready 连接
+  （⇒ ⇒ 否则覆盖**不生效** ⇒ ⇒ ⇒ 任何据此写的断言**恒绿**
+  ⇒ ⇒ ⇒ ⇒ **判别力陷阱** ⇒ ⇒ MUST NOT 用它当判据）
+
+#### Scenario: 多驱动 MUST 被检出
+
+- **WHEN** 调用方**已自行驱动**该 ready 字段（⇒ ⇒ 与组合子的默认驱动冲突）
+- **THEN** `connect_ready` MUST 以**抛异常**的方式失败
+- **AND** MUST NOT 只打日志（MUST NOT 静默继续）
 
 ## ADDED Requirements
 

@@ -231,6 +231,49 @@ word 被 fifo2 的写口自保护**静默吞掉**）**优先于** `demux` 的行
 规避写法」的**记录** ⇒ ⇒ P1-c 修复后该注释 MUST **重写** ⇒ ⇒ 否则成为下一处
 「说谎注释」。
 
+### 2.2-2 🔴🔴 **P1-a 的 builder 子项 MUST 移出**（实施期实测 · 2026-11-01）
+
+⚠️ **实测**（探针 `/tmp/opencode/p1/p1a_probe11.cpp` + `dbg_builder.cpp`）：
+
+```
+链长 2：第 1 拍后 out.payload=0x00 out.valid=0
+         第 10 拍后 out.payload=0x00 out.valid=0（期望 5A 1）  ❌
+链长 1（对照组）：第 10 拍后 out.payload=0x00 out.valid=0（期望 5A 1）  ❌
+```
+
+⚠️ ⚠️ **但** `dbg_builder` 显示**第 1 拍**时 `out.payload=0x5A` `out.valid=1` ✔
+⇒ ⇒ ⇒ **数据**先出现**后消失** ⇒ ⇒ ⇒ ⇒ **⇒ 「静默丢字」成立**
+（= 被下游吞掉）⇒ ⇒ ⇒ ⇒ **⚠️ 台账原描述「链长 ≥ 2 才丢」**不准确**
+⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 链长 1 也丢** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 台账 MUST 订正**。
+
+⚠️ **根因**（实测）：
+- `in.ready`（调用方）**有节点**（`as_master()` 后）但 **srcs = 0**
+  ⇒ ⇒ ⇒ **上游反压丢失**；
+- `stream_fifo` 的 `sync_fifo` **写口自保护**（`chlib/fifo.h:74`
+  `will_write = wren & !is_full(count)`）⇒ ⇒ ⇒ **FIFO 没有「写口 ready」
+  输出** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 下游 FIFO 无法告诉上游「我还能收」**
+  ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 上游回接在当前 fifo 语义下「无路可走」**。
+
+⚠️ **可能的修法**（**未实施**）：builder 的 `build()` **延迟**把链上**中间级**的
+`pop_stream.ready` 接到**下一级**的 `push_stream.ready`（= `!full`）
+⇒ ⇒ ⇒ **但**：
+① 需要 builder 保存链上**所有** FIFO 的结果对象（⇒ ⇒ **加私有成员**）；
+② builder 的链是**逐步**建立的 ⇒ ⇒ ⇒ 第 1 次 `queue()` 时**不知道**后面还有
+   几级 ⇒ ⇒ ⇒ ⇒ **⇒ 连接 MUST 延迟到 `build()`**；
+③ ⚠️ **冲突**：中间级的 `pop_stream.ready` 被接到 `!full` ⇒ ⇒ ⇒ **消费端就
+   失去覆盖权** ⇒ ⇒ ⇒ ⇒ **⇒ 与 ADR-054 §3.2 第 1 条（读使能 = 消费端的
+   ready，可覆盖）**存在张力 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 需 architect 裁决**。
+
+⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 裁决（2026-11-01）**：**P1-a 的 builder 子项移出**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **P1-a 只做「纯修复」部分**（mux / arbiter×4 / join /
+filters×6 / combine_with）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ builder 的上游回接 +
+「静默丢字」另立 change**（⇒ ⇒ 需 architect 裁决 + 改 `build()` 语义）⇒ ⇒ ⇒
+
+⚠️ **但「静默丢字」是真实缺陷** ⇒ ⇒ ⇒ **MUST NOT 装作没看见** ⇒ ⇒ ⇒ ⇒ ⇒
+⇒ ⇒ ⇒ **已登记**为独立 improvement 草案
+（`stream-builder-chain-silent-word-loss-2026-11.md`）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 不得留在会话记忆里**。
+
 ### 2.3 ⚠️ **多驱动守卫**的框架内不一致
 
 `stream_fifo_connect_ready` 有守卫（`CHFATAL_EXCEPTION`）⇒ ⇒

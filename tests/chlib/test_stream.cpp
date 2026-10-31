@@ -1012,3 +1012,184 @@ TEST_CASE("Stream: connect_ready MUST 让**调用方持有的** ready 节点真�
         REQUIRE(in1.ready.impl() == nullptr);
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// P1-a 判别力用例：转发类组合子的**上游 MUST 真收到反压**
+//
+// 🔴 **为什么需要**（P1-a 探针实测，2026-11-01，见 change
+//    `stream-forward-ready-closure-p1a-2026-11` 的 design.md §2）：
+//    转发类（mux / arbiter / join / filters / combine_with）**原状**是
+//    「**上游恒不 ready = 死路**」（实测：不调 `connect_ready` ⇒ ⇒ 上游
+//    ready 恒为 0）⇒ ⇒ ⇒ 调用方**永远推不动** ⇒ ⇒ ⇒ 且**无任何报错**。
+//    ⇒ ⇒ 而既有用例**只**断言 `result.input_streams[i].ready`（= **组合子
+//    自己**的字段）⇒ ⇒ ⇒ **从不**断言**调用方持有的**那个节点 ⇒ ⇒ ⇒
+//    ⇒ ⇒ **「调用方被孤儿化」这件事在 ctest 里完全不可见** ⇒ ⇒ ⇒ 假绿。
+//
+// ⚠️ **判别力来源**：本用例断言**结构**（**调用方**节点的 `num_srcs() > 0`）
+//    ⇒ ⇒ 它与「组合子副本有驱动」是**两个不同的节点** ⇒ ⇒ ⇒ 变异
+//    「`<<=` → `operator=`」⇒ ⇒ 组合子副本**仍**有驱动（`operator=` 也
+//    重绑定副本）⇒ ⇒ ⇒ 但**调用方**的节点**仍**无驱动 ⇒ ⇒ ⇒ **转红** ✔
+//
+// ⚠️⚠️ **顺序纪律**：**改边（`<<=` / `set_src`）MUST 在 `Simulator` 构造
+//    **之前**完成**（ADR-054 §3.2 第 1 条第 4 个必要条件）⇒ ⇒ ⇒ 运行期
+//    只能改**值**（`sim.set_value`）⇒ ⇒ ⇒ ⇒ 本用例严格遵守 ⇒ ⇒ ⇒
+//    ⇒ ⇒ ⇒ **运行期改 ready 的断言会恒绿**（判别力陷阱）。
+// ════════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("Stream: 转发类组合子的**上游 MUST 真收到反压**",
+          "[stream][ready][backpressure][chlib]") {
+    // ── 变体 A：mux ──
+    SECTION("mux ⇒ 调用方 MUST 收到反压") {
+        auto ctx = std::make_unique<ch::core::context>("t_ready_mux");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;
+        in0.as_master();
+        in1.as_master();
+        in0.payload = ch_uint<8>(0x11);
+        in0.valid = ch_bool(true);
+        in1.payload = ch_uint<8>(0x22);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+        ch_uint<1> sel(0_d);
+        ch_bool consumer(false);   // ⚠️ 持久节点
+
+        auto mux = stream_mux<2, ch_uint<8>>(inputs, sel);
+        // ⚠️ 改边 MUST 在 Simulator 构造**之前**
+        mux.output_stream.ready <<= consumer;
+
+        // 🔴 关键：**调用方持有的** ready 节点 MUST 有驱动
+        REQUIRE(in0.ready.impl() != nullptr);
+        REQUIRE(in0.ready.impl()->num_srcs() > 0);
+        REQUIRE(in1.ready.impl() != nullptr);
+        REQUIRE(in1.ready.impl()->num_srcs() > 0);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        // ⇒ ⇒ 消费端不就绪 ⇒ ⇒ **选中**通道的调用方 ready = 0（被阻塞）
+        REQUIRE(sim.get_value(mux.output_stream.ready) == false);
+        REQUIRE(sim.get_value(in0.ready) == false);
+        // ⇒ ⇒ 未选中通道 = 0
+        REQUIRE(sim.get_value(in1.ready) == false);
+
+        // ⇒ ⇒ 运行期改**值** ⇒ ⇒ 立刻就绪 ⇒ ⇒ 调用方 ready 跟着变 1
+        sim.set_value(consumer, 1);
+        sim.tick();
+        REQUIRE(sim.get_value(in0.ready) == true);
+        REQUIRE(sim.get_value(in1.ready) == false);
+    }
+
+    // ── 变体 B：arbiter（priority）──
+    SECTION("arbiter ⇒ 调用方 MUST 收到反压") {
+        auto ctx = std::make_unique<ch::core::context>("t_ready_arb");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;
+        in0.as_master();
+        in1.as_master();
+        in0.payload = ch_uint<8>(0x11);
+        in0.valid = ch_bool(true);
+        in1.payload = ch_uint<8>(0x22);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+        ch_bool consumer(false);
+
+        auto arb = stream_arbiter_priority<ch_uint<8>, 2>(inputs);
+        arb.output_stream.ready <<= consumer;
+
+        REQUIRE(in0.ready.impl() != nullptr);
+        REQUIRE(in0.ready.impl()->num_srcs() > 0);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        REQUIRE(sim.get_value(in0.ready) == false);
+        sim.set_value(consumer, 1);
+        sim.tick();
+        REQUIRE(sim.get_value(in0.ready) == true);
+    }
+
+    // ── 变体 C：join ──
+    SECTION("join ⇒ 调用方 MUST 收到反压") {
+        auto ctx = std::make_unique<ch::core::context>("t_ready_join");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;
+        in0.as_master();
+        in1.as_master();
+        in0.payload = ch_uint<8>(0x11);
+        in0.valid = ch_bool(true);
+        in1.payload = ch_uint<8>(0x22);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+        ch_bool consumer(false);
+
+        auto jn = stream_join<ch_uint<8>, 2>(inputs);
+        jn.output_stream.ready <<= consumer;
+
+        REQUIRE(in0.ready.impl() != nullptr);
+        REQUIRE(in0.ready.impl()->num_srcs() > 0);
+        REQUIRE(in1.ready.impl() != nullptr);
+        REQUIRE(in1.ready.impl()->num_srcs() > 0);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        REQUIRE(sim.get_value(in0.ready) == false);
+        sim.set_value(consumer, 1);
+        sim.tick();
+        REQUIRE(sim.get_value(in0.ready) == true);
+    }
+
+    // ── 变体 D：filters（take_when）──
+    SECTION("filters ⇒ 调用方 MUST 收到反压") {
+        auto ctx = std::make_unique<ch::core::context>("t_ready_filter");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in;
+        in.as_master();
+        in.payload = ch_uint<8>(0x11);
+        in.valid = ch_bool(true);
+        ch_bool cond(true);
+        ch_bool consumer(false);
+
+        auto filtered = stream_take_when(in, cond);
+        filtered.ready <<= consumer;
+
+        REQUIRE(in.ready.impl() != nullptr);
+        REQUIRE(in.ready.impl()->num_srcs() > 0);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        REQUIRE(sim.get_value(in.ready) == false);
+        sim.set_value(consumer, 1);
+        sim.tick();
+        REQUIRE(sim.get_value(in.ready) == true);
+    }
+
+    // ── 变体 E：未覆盖时 MUST 恒就绪（= 零破坏）──
+    SECTION("未覆盖时上游 MUST 恒就绪（= 既有旧语义 · 零破坏）") {
+        auto ctx = std::make_unique<ch::core::context>("t_ready_default");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;
+        in0.as_master();
+        in1.as_master();
+        in0.payload = ch_uint<8>(0x11);
+        in0.valid = ch_bool(true);
+        in1.payload = ch_uint<8>(0x22);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+        ch_uint<1> sel(0_d);
+
+        // ⚠️ **故意不**覆盖 `output_stream.ready`
+        auto mux = stream_mux<2, ch_uint<8>>(inputs, sel);
+
+        REQUIRE(in0.ready.impl() != nullptr);
+        REQUIRE(in0.ready.impl()->num_srcs() > 0);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        // ⇒ ⇒ 默认 = 恒就绪（= **既有旧语义** ⇒ ⇒ 零破坏）
+        REQUIRE(sim.get_value(mux.output_stream.ready) == true);
+        REQUIRE(sim.get_value(in0.ready) == true);
+    }
+}
