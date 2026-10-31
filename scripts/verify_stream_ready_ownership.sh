@@ -11,6 +11,16 @@
 # ⚠️ **判据分两类**（MUST 分清，否则「合法的默认恒就绪」会被误判 ⇒ 判别力归零）：
 #   ① **效果判据**（运行期行为）⇒ ⇒ `R1`：跑行为用例（反压能阻止推进 +
 #      旧语义保持 + 多驱动抛异常）⇒ ⇒ MUST 用**行为**实现；
+#
+# ⚠️⚠️ **覆盖面声明（2026-10-31 收口订正 · MUST 与主 spec 的「适用范围」一致）**：
+#   **`R1` 与 `R2`~`R6` 当前只覆盖 `fifo` 侧**（`stream_fifo` / `stream_queue`）
+#   ⇒ ⇒ **转发类**（mux / demux / arbiter / fork / join / filters）
+#   **尚无**行为判据、**尚无**调用点判据 ⇒ ⇒ ⇒
+#   ⇒ ⇒ **转发类的收口义务已显式移交**
+#   `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账）
+#   ⇒ ⇒ ⇒ **本护栏当前** MUST NOT **被读作「转发类已合规」**
+#   ⇒ ⇒ ⇒ 主 spec `chlib-stream-ready-ownership` 的 Requirement 1
+#   「本条的适用范围」段已同步登记该限定。
 #   ② **静态判据**（结构）⇒ ⇒ `R2`~`R6` ⇒ ⇒ 走
 #      `scripts/lib/stream_ready_ownership.py`（**剥注释**后匹配 ⇒ ⇒ 注释里的
 #      字面量不会误判）⇒ ⇒ 这几条**明文**是结构性的（capability delta

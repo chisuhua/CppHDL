@@ -873,3 +873,142 @@ TEST_CASE("Stream: Stream Demux", "[stream][demux]") {
         REQUIRE(sim.get_value(demux_result.output_streams[1].payload) == 0x99);
     }
 }
+// ════════════════════════════════════════════════════════════════════════════
+// 判别力用例：`connect_ready` 之后，**调用方持有的** ready 节点 MUST 真被驱动
+//
+// 🔴 **为什么需要**（P0 探针实测，2026-10-31，见 change
+//    `stream-ready-ownership-correction-2026-10` 的 design.md §1 发现 ③）：
+//    `ch_bool::operator<<=` 在**空节点**上走 else 分支 ⇒ ⇒ **另建**一个 assign
+//    节点并绑到 `this` ⇒ ⇒ **只驱动被 `<<=` 的那个对象** ⇒ ⇒ ⇒ **调用方持有
+//    的节点仍是「无驱动的孤儿节点」** ⇒ ⇒ ⇒ **调用方被孤儿化**。
+//    ⇒ ⇒ 而既有 mux 用例**只**断言 `mux_result.input_streams[i].ready`
+//    （= **mux 自己**的字段）⇒ ⇒ **从不**断言调用方那个节点 ⇒ ⇒ ⇒
+//    **「`<<=` 修复无效」这件事在 ctest 里完全不可见** ⇒ ⇒ ⇒ **假绿**。
+//
+// ⚠️ **判别力来源**：本用例断言的是**结构**（`num_srcs() > 0`）⇒ ⇒ 它与
+//    「mux 副本有驱动」是**两个不同的节点** ⇒ ⇒ ⇒ 变异「`<<=` → `operator=`」
+//    ⇒ ⇒ mux 副本**仍**有驱动（`operator=` 也重绑定副本）⇒ ⇒ ⇒ 但**调用方**
+//    的节点**仍**无驱动 ⇒ ⇒ ⇒ **用例 MUST 转红** ⇒ ⇒ ⇒ **判别力成立**。
+// ════════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("Stream: connect_ready MUST 让**调用方持有的** ready 节点真被驱动",
+          "[stream][mux][ready][chlib]") {
+    // ── 变体 A：调用方**先** `as_master()`（建立了字段节点）──
+    //    ⇒ ⇒ `<<=` 落在**已有**节点上 ⇒ ⇒ `set_src(0,…)` ⇒ ⇒ **覆盖生效**
+    //    ⇒ ⇒ 调用方的节点**应当**被驱动
+    SECTION("调用方先建立字段节点 ⇒ 覆盖 MUST 到达调用方") {
+        auto ctx = std::make_unique<ch::core::context>("test_stream_ready_reach");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;
+        in0.as_master();
+        in1.as_master();
+        // ⚠️ **必须**驱动 payload / valid ⇒ ⇒ 否则 mux 构造期读空节点
+        //    ⇒ ⇒ 报 "Invalid operands"（既有行为，**不是**本用例要测的）
+        in0.payload = ch_uint<8>(0_d);
+        in0.valid = ch_bool(false);
+        in1.payload = ch_uint<8>(0_d);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+
+        ch_uint<1> sel(0_d);
+        auto mux = stream_mux<2, ch_uint<8>>(inputs, sel);
+
+        // 消费端先表达「就绪」
+        mux.output_stream.ready <<= ch_bool(true);
+        stream_mux_connect_ready(mux);
+
+        // 🔴 关键断言：**调用方持有的** ready 节点 MUST 有驱动
+        REQUIRE(in0.ready.impl() != nullptr);
+        REQUIRE(in0.ready.impl()->num_srcs() > 0);
+        REQUIRE(in1.ready.impl() != nullptr);
+        REQUIRE(in1.ready.impl()->num_srcs() > 0);
+
+        // ⇒ ⇒ 且其**值** MUST 跟随消费端 ready（选中通道 = 1，未选中 = 0）
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        REQUIRE(sim.get_value(in0.ready) == true);
+        REQUIRE(sim.get_value(in1.ready) == false);
+
+        // ⚠️⚠️⚠️ **不要**在运行期改 `output_stream.ready` 来测「不就绪」分支！
+        //    实测（2026-10-31）：`<<=` 改边（`set_src`）在 **Simulator
+        //    `initialize()` 之后不生效** ⇒ ⇒ 因为指令的 `src0_buf` 指针是在
+        //    `initialize()` 时绑定的 ⇒ ⇒ 改边**不重建指令** ⇒ ⇒ ⇒
+        //    ⇒ 覆盖「不生效」是**框架层约束**，不是被测语义
+        //    ⇒ ⇒ ⇒ 「消费端不就绪」分支 MUST 用**另一个 DUT 实例**测
+        //    ⇒ ⇒ ⇒ （见下一个 SECTION）
+    }
+
+    // ── 变体 A′：消费端**不就绪** ⇒ ⇒ 调用方的 ready MUST 跟着落 ──
+    //    ⚠️ MUST 用**独立的 DUT 实例**（不依赖运行期改边 ——
+    //    ⚠️ `set_src` 改边在 `initialize()` 之后不生效 ⇒ ⇒ 框架层约束）
+    SECTION("消费端不就绪 ⇒ 调用方的 ready MUST 跟着落") {
+        auto ctx = std::make_unique<ch::core::context>("test_stream_ready_stall");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;
+        in0.as_master();
+        in1.as_master();
+        // ⚠️ **必须**驱动 payload / valid（见上）
+        in0.payload = ch_uint<8>(0_d);
+        in0.valid = ch_bool(false);
+        in1.payload = ch_uint<8>(0_d);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+
+        ch_uint<1> sel(0_d);
+        auto mux = stream_mux<2, ch_uint<8>>(inputs, sel);
+
+        // ⚠️ 消费端**不就绪** ⇒ ⇒ 且 MUST 在 `Simulator` 构造**之前**设定
+        ch_bool consumer_not_ready(false);
+        mux.output_stream.ready <<= consumer_not_ready;
+        stream_mux_connect_ready(mux);
+
+        // 🔴 关键断言：**调用方持有的** ready 节点 MUST 有驱动（结构判据）
+        REQUIRE(in0.ready.impl() != nullptr);
+        REQUIRE(in0.ready.impl()->num_srcs() > 0);
+
+        // ⇒ ⇒ 且其**值** MUST 为「不就绪」（= 反压传到了调用方）
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        REQUIRE(sim.get_value(mux.output_stream.ready) == false);
+        REQUIRE(sim.get_value(in0.ready) == false);
+    }
+
+    // ── 变体 B：调用方**未**建立字段节点（默认构造 ⇒ 字段是**空节点**）──
+    //    ⇒ ⇒ 这**不是**「调用方忘了建角色」的用法建议，而是**判别力**的
+    //    对照：它 MUST 暴露「`<<=` 在空目标上另建节点 ⇒ ⇒ 调用方被孤儿化」
+    //    这条机制 ⇒ ⇒ 否则 P0 发现 ③ 会**永久隐形**。
+    //    ⇒ ⇒ ⚠️ 当前实现（`<<=`）下，调用方的节点**仍是空节点**
+    //    ⇒ ⇒ ⇒ 本段 MUST 断言「**尚未**被驱动」⇒ ⇒ 它是一条
+    //    ⇒ ⇒ ⇒ **已知缺口的显式登记**（P1 收口它）
+    //    ⇒ ⇒ ⇒ 一旦 P1 让空目标**不可达**（前置条件契约化），
+    //    ⇒ ⇒ ⇒ 本段的断言 MUST 相应更新（届时要么抛异常、要么调用方节点有驱动）。
+    SECTION("调用方未建立字段节点 ⇒ 当前实现 MUST 暴露「调用方被孤儿化」") {
+        auto ctx = std::make_unique<ch::core::context>("test_stream_ready_orphan");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in0, in1;   // ⚠️ **故意不** as_master()
+        in0.payload = ch_uint<8>(0_d);
+        in0.valid = ch_bool(false);
+        in1.payload = ch_uint<8>(0_d);
+        in1.valid = ch_bool(false);
+        std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+
+        ch_uint<1> sel(0_d);
+        auto mux = stream_mux<2, ch_uint<8>>(inputs, sel);
+
+        mux.output_stream.ready <<= ch_bool(true);
+        stream_mux_connect_ready(mux);
+
+        // ⚠️ 当前实现的**真实行为**：`<<=` 在空节点上**另建**节点 ⇒ ⇒
+        //    mux 自己的副本**有**驱动（⇒ ⇒ 组合子内部逻辑是活的）
+        REQUIRE(mux.input_streams[0].ready.impl() != nullptr);
+        REQUIRE(mux.input_streams[0].ready.impl()->num_srcs() > 0);
+
+        // 🔴 但**调用方持有的**那个节点**仍是空的** ⇒ ⇒ **被孤儿化**
+        //    ⇒ ⇒ ⇒ 「`<<=` 修复」在调用方未建节点时**无效**
+        REQUIRE(in0.ready.impl() == nullptr);
+        REQUIRE(in1.ready.impl() == nullptr);
+    }
+}

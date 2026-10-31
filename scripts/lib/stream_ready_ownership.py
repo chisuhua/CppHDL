@@ -164,6 +164,12 @@ def r5() -> None:
 
 
 # ── R6：调用点判据 —— 调 `stream_fifo` / `stream_queue` 后 MUST 接 ready ─────
+#
+# ⚠️⚠️ **覆盖面限定（2026-10-31）**：`CALL_RE` **只**覆盖 `stream_fifo` /
+#    `stream_queue` ⇒ ⇒ ⇒ **转发类**（mux / demux / arbiter / fork / join /
+#    filters）**当前不在**本判据的覆盖范围内 ⇒ ⇒ 其调用点判据属 **P1**
+#    ⇒ ⇒ （`.rddf/improvements/stream-forward-ready-closure-2026-10.md`）
+#    ⇒ ⇒ ⇒ **本判据当前** MUST NOT **被读作「转发类已合规」**。
 CALL_RE = re.compile(r"\bstream_fifo\s*<|\bstream_queue\s*<")
 SCAN_ROOTS = ["samples", "tests", "examples"]
 SCAN_FILES = [BUILDER_H]

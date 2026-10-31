@@ -44,6 +44,19 @@ auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, last_grant);  // 
 （`tests/chlib/test_stream.cpp` 的 arbiter 段）**只断言「选中唯一有效的输入」**
 ⇒ ⇒ 单输入场景下 round-robin 与 priority **逐位相同** ⇒ ⇒ ⇒ **零判别力**。
 
+## 1.1 🔴 **实测依据**（2026-10-31，P0 探针发现 ⑤）
+
+⚠️ **代码定位**（`include/chlib/stream.h`）：
+- `:564` —— `auto current_channel = ch_reg<ch_uint<compute_idx_width(N_INPUTS)>>(0_d);`
+  ⇒ ⇒ **从未接到任何地方** ⇒ ⇒ **死节点**；
+- `:581` —— `ch_uint<N_INPUTS> last_grant = 0_d;` ⇒ ⇒ **恒为 0**；
+- `:582` —— `auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, last_grant);`
+  ⇒ ⇒ ⇒ **每拍拿到的 `last_grant` 都相同** ⇒ ⇒ ⇒ **轮转从不发生**
+  ⇒ ⇒ ⇒ **低位输入饿死**。
+
+⇒ ⇒ ⇒ **「名为 round-robin、实为固定优先级」已被实测确认** ⇒ ⇒ ⇒
+本项 MUST 与 P1（ready 链收口）**串行**（两者是**正交**关注点）。
+
 ## 2. What Changes (变更范围)
 
 ### 2.1 候选方案（**待 architect 裁决**）
