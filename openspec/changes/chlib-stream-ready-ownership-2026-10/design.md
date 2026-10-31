@@ -95,3 +95,45 @@ consumer_ready=1 ⇒ fifo_read_en=1 (期望 1)
 - `fwft_fifo` 重写 / 改名（ADR-045:148 单独立项）；
 - 其余组合子的 ready 所有权（T3-b）；
 - `examples/.../fifo/stream_fifo_example.cpp` 的指针门控（ADR-045:197-198）。
+
+## 8. 实施期**新增**约束（前置分析产出；ADR-054 未记载 ⇒ MUST 携带）
+
+⚠️ 这两条是**实施前置检查**（`StreamFifoResult` 使用点审计 + `ch_stream` 拷贝语义
+核实）产出的 ⇒ ⇒ **ADR-054 未记载** ⇒ ⇒ **实施时 MUST 携带**。
+
+### 8.1 `StreamFifoResult` MUST 用**拷贝构造**接收输入，MUST NOT 用 `operator=`
+
+`StreamFifoResult` MUST 携带输入 stream（否则 `connect_ready` 无从建 FIFO）⇒ ⇒
+**怎么存**是有陷阱的：
+
+- ❌ **`operator=`（节点重绑定）** —— `bundle_base::operator=`（`bundle_base.h:214`）
+  是**节点重绑定**语义 ⇒ ⇒ ADR-042:48 明文「MUST NOT 用 `operator=` 的
+  **节点重绑定**语义」⇒ ⇒ 用它会把输入的字段节点**换掉** ⇒ ⇒ 拷贝来的输入
+  变成**孤儿节点** ⇒ ⇒ **静默**；
+- ✅ **拷贝构造** —— bundle 的普通拷贝**共享字段节点**
+  （`detach_field_nodes()` 才是**显式**分离，ADR-042 D4）⇒ ⇒ 存进结果对象的
+  输入，其 `payload` / `valid` 节点与调用方的**是同一个** ⇒ ⇒
+  `connect_ready` 里读到的**仍是同一节点** ✔
+
+⇒ ⇒ **结论**：形态 B 的「输入传递」**可行**，但 MUST 走**拷贝构造**
+⇒ ⇒ `StreamFifoResult` 需要一个**带参构造**（同时保留默认构造）
+⇒ ⇒ ⚠️ 它当前是 **aggregate** ⇒ ⇒ 加 ctor 会失去 aggregate 初始化能力
+⇒ ⇒ MUST 核对**全部** aggregate 初始化点（实测：`StreamFifoResult` 的使用点
+**只在 `include/chlib/stream.h` 内部 4 处** ⇒ ⇒ 无外部 aggregate 初始化 ⇒ ⇒ 安全）。
+
+### 8.2 `pop_stream.ready` 必须是**结果对象自己的**字段节点
+
+调用方 MUST 驱动 `result.pop_stream.ready`（`result` 是**结果对象**，不是入参）
+⇒ ⇒ 该字段节点由 `create_field_proxy_nodes()` 在 bundle 构造期建立
+（`bundle_base.h:487`）⇒ ⇒ **已存在** ⇒ ⇒ 可被 `<<=` 驱动 ✔
+⇒ ⇒ 且 `connect_ready` 里读到的**就是同一个节点** ✔
+⇒ ⇒ ⇒ **无需代理节点** ⇒ ⇒ E1 不适用（ADR-054 §3 的结论得到实现层确认）。
+
+### 8.3 爆炸半径实测（**比预估小**）
+
+`StreamFifoResult` / `stream_fifo` / `stream_queue` 的使用点**全部**在
+`include/chlib/stream.h` 内部（4 处：声明 / 定义 / 别名 / 内部构造）⇒ ⇒
+**无外部使用者** ⇒ ⇒ 「结果类型新增字段」的**公开面**变更**不波及**任何
+外部代码 ⇒ ⇒ 真正的外部影响面 = **调用点**（3 个活跃 + 2 个禁用）⇒ ⇒
+这与 ADR-054 §4「旧调用点**编译仍过**但**行为错**」的判断**一致**
+⇒ ⇒ ⇒ grep-lint 护栏仍是**必需**的。
