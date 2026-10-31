@@ -74,6 +74,10 @@ public:
         input_stream.valid = in_valid;   // ch_uint<1> ⇒ ch_bool（隐式转换）
         input_stream.ready = ch_bool(true);
 
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` ——
+        //    本 sample 演示**占用计数 / empty 状态 / ready-valid 握手**
+        //    ⇒ ⇒ **故意**保持恒就绪 ⇒ ⇒ 「FIFO 满 ⇒ 上游暂停」的演示见
+        //    `samples/stream_component_example.cpp`（那里接了消费端 ready）。
         auto fifo_result = stream_fifo<ch_uint<8>, 32>(input_stream);
 
         // 反压：FIFO 满时不再接收

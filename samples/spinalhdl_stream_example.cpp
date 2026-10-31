@@ -43,6 +43,10 @@ public:
         Result result;
 
         // 创建FIFO
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` ——
+        //    本 sample 演示 **fork / join** 的**结构** ⇒ ⇒ **故意**让 FIFO
+        //    恒就绪（默认驱动）⇒ ⇒ 反压场景的演示见
+        //    `samples/stream_component_example.cpp`。
         auto fifo_result = stream_fifo<ch_uint<8>, 4>(input_stream);
 
         // 连接输入到FIFO

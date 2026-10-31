@@ -441,6 +441,7 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
         input_stream.payload = 0_d;
         input_stream.valid = true;
         input_stream.ready = true;
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` —— 本段只做 **width 结构断言** ⇒ ⇒ **故意**不接消费端 ready
         auto fifo_result = stream_fifo<ch_uint<8>, 4>(input_stream);
 
         // Basic structural checks (avoid simulator crash in current FIFO impl)
@@ -458,6 +459,7 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
         input_stream.valid = true;
         input_stream.ready = true;
         
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` —— 本段只做 **width 结构断言** ⇒ ⇒ **故意**不接消费端 ready
         auto queue_result = stream_queue<ch_uint<8>, 8>(input_stream);
 
         // Basic structural checks
@@ -465,6 +467,177 @@ TEST_CASE("Stream: Stream FIFO", "[stream][fifo]") {
         REQUIRE(queue_result.push_stream.valid.width == 1);
         REQUIRE(queue_result.push_stream.ready.width == 1);
     }
+}
+
+// ⚠️ 2026-10-31 新增（change `chlib-stream-ready-ownership-2026-10`，
+// ADR-054 **形态 E**：默认值 + 可覆盖）。
+//
+// ⚠️ **为什么必须有这个用例**：`chlib::stream_fifo` 此前**零行为覆盖**
+//    （`"Stream: Stream FIFO"` 只做 **width** 结构断言；下面那个
+//    `"行为正确"` 用例只断言「写一个元素 ⇒ occupancy==1」）
+//    ⇒ ⇒ **「读使能硬编码为 `true`」这个缺陷结构性不可见**
+//    ⇒ ⇒ 本次修复 MUST 有**可执行证据**。
+//
+// ⚠️ **手推金标**（DEPTH=4 ⇒ 深度 4）：
+//    `sync_fifo` 的写口 / 读口**自保护**
+//    （`will_write = wren & !is_full(count)` · `will_read = rden & !is_empty(count)`）；
+//    `pop_stream.payload` 是 **0-cycle `aread`** ⇒ 呈现**当前队首**（show-ahead）。
+//
+//    **消费端 `ready == 0`** ⇒ `will_read == 0` ⇒ 读指针不动 ⇒ **队首不变**
+//    ⇒ ⇒ 元素**只进不出** ⇒ 写满 4 个后 `count == 4` ⇒ `full == 1`
+//    ⇒ ⇒ 第 5 个写 ⇒ `will_write == 0` ⇒ `count` **保持 4** ⇒ `full` 仍 1
+//    ⇒ ⇒ 消费端 `ready == 1` ⇒ 每拍弹出一个 ⇒ 队首依次 `0x22` / `0x33`
+//
+// ⚠️ **为什么不驱动 `in.ready`**：形态 E 的契约是「调用方读
+//    `result.push_stream.ready`（FIFO 告诉上游能不能收）」⇒ ⇒ `in.ready`
+//    是**上游自己**的信号 ⇒ ⇒ FIFO MUST NOT 依赖它 ⇒ ⇒ 写使能 MUST 只用
+//    `valid`（⚠️ 否则 `valid & ready` 是**先读后写** ⇒ ⇒ `in.ready` 是空
+//    proxy ⇒ ⇒ `node_builder` 报 "Invalid operands" ⇒ ⇒ 组合子**完全不可用**）。
+TEST_CASE("Stream: stream_fifo 的读使能 MUST 能被外部化（反压阻止推进）",
+          "[stream][fifo][backpressure]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_fifo_backpressure");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    // ⚠️ 所有节点 MUST 在 `ch::Simulator` 构造**之前**创建
+    //    （Simulator 构造时建立 data_map_，之后新建的节点不在其中）。
+    ch_uint<8> payload(0_d);
+    ch_bool valid(false);
+    ch_bool consumer_ready(false);
+
+    ch_stream<ch_uint<8>> in;
+    in.payload = payload;   // `=` = 节点重绑定（chlib 组合子对 stream 字段
+                             // 做**值**运算 ⇒ MUST 用 `=`，见
+                             // `include/core/bundle/bundle_base.h:184-196`）
+    in.valid = valid;
+    // ⚠️ **故意不驱动 `in.ready`**（理由见上）
+
+    auto fifo = stream_fifo<ch_uint<8>, 4>(in);
+    // ⚠️ **形态 E 第二阶段**：把消费端的 ready 接到 FIFO ⇒ ⇒ 覆盖默认驱动
+    //    （默认 = 恒就绪 = 既有旧语义）⇒ ⇒ 覆盖**传播**到内部读使能。
+    stream_fifo_connect_ready(fifo, consumer_ready);
+
+    ch::Simulator sim(ctx.get());
+
+    auto head = [&] { return static_cast<uint64_t>(sim.get_value(fifo.pop_stream.payload)); };
+    auto valid_out = [&] { return static_cast<uint64_t>(sim.get_value(fifo.pop_stream.valid)); };
+    auto full = [&] { return static_cast<uint64_t>(sim.get_value(fifo.full)); };
+    auto empty = [&] { return static_cast<uint64_t>(sim.get_value(fifo.empty)); };
+    auto occ = [&] { return static_cast<uint64_t>(sim.get_value(fifo.occupancy)); };
+
+    // ---- 1) 消费端不就绪 ⇒ MUST 阻止弹出 ⇒ 队首**不动** ⇒ 只进不出 ----
+    sim.set_value(valid, 1);
+    sim.set_value(consumer_ready, 0);
+
+    static const uint64_t kIn[4] = {0x11, 0x22, 0x33, 0x44};
+    for (int i = 0; i < 4; ++i) {
+        sim.set_value(payload, kIn[i]);
+        sim.tick();
+        // 手推：第 i 拍后 count == i+1（只进不出）· 队首恒为 0x11
+        REQUIRE(occ() == static_cast<uint64_t>(i + 1));
+        REQUIRE(head() == 0x11);
+        REQUIRE(valid_out() == 1);
+        REQUIRE(empty() == 0);
+        // 手推：count < 4 ⇒ full() == 0；count == 4 ⇒ full() == 1
+        REQUIRE(full() == static_cast<uint64_t>(i == 3 ? 1 : 0));
+    }
+
+    // ---- 2) 满后再写 ⇒ MUST **自保护**（不覆写、不越界）⇒ ----
+    sim.set_value(payload, 0x55);
+    sim.tick();
+    REQUIRE(occ() == 4);        // 手推：will_write == 0 ⇒ count 保持 4
+    REQUIRE(full() == 1);
+    REQUIRE(head() == 0x11);  // 队首仍是最早写入的那个
+
+    // ---- 3) 消费端就绪 ⇒ MUST 恢复弹出 ⇒ 队首依次 0x22 / 0x33 ----
+    sim.set_value(valid, 0);
+    sim.set_value(consumer_ready, 1);
+    sim.tick();
+    REQUIRE(occ() == 3);        // 手推：弹出 0x11 ⇒ count 4 → 3
+    REQUIRE(head() == 0x22);  // 手推：下一个队首是 0x22
+    REQUIRE(full() == 0);     // 手推：count 3 < 4 ⇒ 不满
+    sim.tick();
+    REQUIRE(occ() == 2);
+    REQUIRE(head() == 0x33);  // 手推：再弹出 0x22 ⇒ 队首 0x33
+}
+
+// ⚠️ 2026-10-31 新增（change `chlib-stream-ready-ownership-2026-10`）。
+//
+// ⚠️ **这个用例钉的是「零破坏」承诺**（ADR-054 §3.2 第 1 条第 1 项）：
+//    **不调** `stream_fifo_connect_ready` ⇒ ⇒ 组合子 MUST 表现为
+//    **恒就绪**（= 既有旧语义）⇒ ⇒ **存量调用点 MUST NOT 需要迁移**。
+//
+// ⚠️ **手推金标**（DEPTH=4，恒就绪 ⇒ 每拍「写 1 + 读 1」⇒ count **恒为 1**）：
+//    写 0x11 ⇒ 队首 0x11（write-through）· occupancy 1 · full 0
+//    写 0x22 ⇒ 弹出 0x11、写入 0x22 ⇒ 队首 0x22 · occupancy **仍 1** · full 0
+//    写 0x33 ⇒ 队首 0x33 · occupancy 仍 1 · full 0
+//    ⇒ ⇒ **永远排空** ⇒ ⇒ `full` **不可达**（这正是本次修复前的行为）
+TEST_CASE("Stream: stream_fifo 未接背压时 MUST 保持旧语义（恒就绪）",
+          "[stream][fifo][backpressure]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_fifo_legacy_ready");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    ch_uint<8> payload(0_d);
+    ch_bool valid(false);
+
+    ch_stream<ch_uint<8>> in;
+    in.payload = payload;
+    in.valid = valid;
+
+    // ⚠️ **故意不调** `stream_fifo_connect_ready` ⇒ ⇒ 默认驱动 = 恒就绪
+    // ⚠️ `stream_ready_ownership: intentionally-unwired` —— 本用例钉的正是「**未接** ⇒ 恒就绪」这条**旧语义契约**
+    auto fifo = stream_fifo<ch_uint<8>, 4>(in);
+
+    ch::Simulator sim(ctx.get());
+
+    auto head = [&] { return static_cast<uint64_t>(sim.get_value(fifo.pop_stream.payload)); };
+    auto full = [&] { return static_cast<uint64_t>(sim.get_value(fifo.full)); };
+    auto occ = [&] { return static_cast<uint64_t>(sim.get_value(fifo.occupancy)); };
+
+    sim.set_value(valid, 1);
+    static const uint64_t kIn[3] = {0x11, 0x22, 0x33};
+    for (int i = 0; i < 3; ++i) {
+        sim.set_value(payload, kIn[i]);
+        sim.tick();
+        // 手推：恒就绪 ⇒ 每拍写 1 读 1 ⇒ count 恒为 1 ⇒ 队首**逐拍推进**
+        REQUIRE(occ() == 1);
+        REQUIRE(head() == kIn[i]);
+        REQUIRE(full() == 0);   // 手推：永远排空 ⇒ full 不可达
+    }
+}
+
+// ⚠️ 2026-10-31 新增（change `chlib-stream-ready-ownership-2026-10`）。
+//
+// ⚠️ **这个用例钉的是「响亮失败」**：调用方**已自行驱动**
+//    `result.pop_stream.ready` ⇒ ⇒ 与组合子的默认驱动**冲突**
+//    ⇒ ⇒ 再调 `stream_fifo_connect_ready` ⇒ ⇒ MUST **抛异常**
+//    ⇒ ⇒ ⚠️ **MUST NOT 只打日志**（`CHERROR` / `CHFATAL` 实测**只打日志不抛**
+//    ⇒ ⇒ ⇒ 那是**假安全网** ⇒ ⇒ ADR-050 已踩过）。
+//
+// ⚠️ **为什么必须有它**：`ch_bool::operator<<=` 走 `set_src(0, …)`
+//    ⇒ ⇒ **last-wins** ⇒ ⇒ 没有守卫时，调用方的驱动会被**静默接管**
+//    ⇒ ⇒ 「我驱动的是我自己的信号」变成**假象** ⇒ ⇒ **静默失效**。
+TEST_CASE("Stream: stream_fifo_connect_ready MUST 检出多驱动（响亮失败）",
+          "[stream][fifo][backpressure]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_fifo_multidrive");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    ch_uint<8> payload(0_d);
+    ch_bool valid(false);
+    ch_bool consumer_ready(false);
+
+    ch_stream<ch_uint<8>> in;
+    in.payload = payload;
+    in.valid = valid;
+
+    auto fifo = stream_fifo<ch_uint<8>, 4>(in);
+
+    // ⚠️ **调用方已自行驱动** ready 字段 ⇒ ⇒ 默认驱动被顶掉
+    fifo.pop_stream.ready <<= consumer_ready;
+
+    // ⇒ ⇒ `connect_ready` MUST **抛异常** ⇒ ⇒ ⚠️ MUST NOT 只打日志
+    //    （⚠️ 整个表达式 MUST 用括号包起来 ⇒ ⇒ 否则 `,` 会拆散宏参数）
+    REQUIRE_THROWS_AS((void)stream_fifo_connect_ready(fifo, consumer_ready),
+                      std::runtime_error);
 }
 
 TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结构正确）",
@@ -507,6 +680,8 @@ TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结�
         in.valid = ch_bool(true);
         in.ready = ch_bool(true);
 
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` —— 本段钉的是「**写一个元素 ⇒ occupancy==1 / payload==本拍值**」
+        //    ⇒ ⇒ **故意**保持恒就绪（反压用例见本文件另两个用例）
         auto fifo = stream_fifo<ch_uint<8>, 4>(in);
 
         ch::Simulator sim(ctx.get());

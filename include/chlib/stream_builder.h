@@ -53,6 +53,12 @@ public:
      */
     template <unsigned DEPTH>
     StreamBuilder<T>& queue() {
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` ——
+        //    builder 的**链式** API **无处**插 `connect_ready` ⇒ ⇒ 本处靠
+        //    `current_stream_ = result.pop_stream` 把 FIFO 的 ready 字段
+        //    **透传**给消费者 ⇒ ⇒ 消费者 `<<=` 到 `build()` 结果的 ready
+        //    ⇒ ⇒ **同样**能覆盖 FIFO 的默认驱动
+        //    （实测见 `tests/test_stream_builder.cpp` 的「queue() 的反压」用例）。
         auto result = stream_fifo<T, DEPTH>(current_stream_);
         current_stream_ = result.pop_stream;
         return *this;

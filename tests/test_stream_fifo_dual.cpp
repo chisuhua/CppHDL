@@ -74,6 +74,9 @@ public:
         in.valid = ch_bool(io().in_valid.impl());
         in.ready = ch_bool(true);              // 消费端恒就绪
 
+        // ⚠️ `stream_ready_ownership: intentionally-unwired` ——
+        //    本 fixture 是**双后端 parity** 对照 ⇒ ⇒ 两个后端 MUST 用
+        //    **同一**的恒就绪语义 ⇒ ⇒ **故意**不接消费端 ready。
         auto fifo = stream_fifo<ch_uint<8>, 4>(in);
 
         io().out_payload = fifo.pop_stream.payload;

@@ -15,6 +15,7 @@
 #include "core/operators_runtime.h"
 #include "core/uint.h"
 #include "lnode/literal_ext.h"
+#include "utils/logger.h"
 #include <array>
 #include <cassert>
 #include <vector>
@@ -35,11 +36,44 @@ template <typename T, unsigned DEPTH> struct StreamFifoResult {
     ch_uint<compute_idx_width(DEPTH) + 1> occupancy; // 占用计数
     ch_bool full;                                    // 满标志
     ch_bool empty;                                   // 空标志
+
+    // ⚠️ **ADR-054 形态 E（默认值 + 可覆盖）**：默认 ready 源的**持有者**
+    //
+    // ⚠️ **为什么需要它**（实测，design.md §13）：
+    //   ① **literal 节点不可被 `set_src(0, …)` 变成数据流边** ⇒ ⇒ 若把默认
+    //      驱动**重绑定**到 literal 节点 ⇒ ⇒ 调用方的覆盖是**往常量节点上打**
+    //      ⇒ ⇒ **无效** ⇒ ⇒ 「覆盖不传播」（id 相同但行为不变）；
+    //   ② `<<=` 的**源** MUST 是**持久有效**的节点 ⇒ ⇒ **临时** `ch_bool(true)`
+    //      无效 ⇒ ⇒ 那个 SIGSEGV。
+    // ⇒ ⇒ 本成员**持有**那个 literal 节点（与结果对象**同生命周期**
+    // ⇒ ⇒ 且节点**不随 C++ 对象析构而失效** —— 框架**无引用计数**、**无析构**）
+    // ⇒ ⇒ 于是：源**持久有效** + 目标（`pop_stream.ready` 的 **field proxy**）
+    // **非 literal** ⇒ ⇒ **覆盖必然传播** ✔
+    ch_bool default_ready_source;
 };
 
 // Forward declaration
 template <typename T, unsigned DEPTH>
 StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream);
+
+/**
+ * @brief 把消费端的 ready 接到 FIFO —— **ADR-054 形态 E（默认值 + 可覆盖）**
+ *
+ * ⚠️ **契约**：
+ *   ① `stream_fifo` **立即**建立内部 FIFO ⇒ ⇒ 既有行为**逐位不变** ⇒ ⇒
+ *      **存量调用点不需迁移**；读使能的**默认** = **既有旧语义**（恒就绪）；
+ *   ② 调用方**可选**调用本函数 ⇒ ⇒ **不调** = 恒就绪（旧语义）⇒ ⇒
+ *      **不调不是缺陷**；
+ *   ③ 本函数把消费端 ready **覆盖**到 `result.pop_stream.ready` ⇒ ⇒ 而内部
+ *      FIFO 的读使能 MUST 引用**该字段节点本身** ⇒ ⇒ 覆盖**必然传播**。
+ *
+ * ⚠️ **消费端 ready 的形参 MUST 是模板**（ADR-053 / E3 的同型教训）：
+ *    `const ch_bool &` ⇒ ⇒ `ch_in<ch_bool>` **端口绑不上** ⇒ ⇒ 模板化 +
+ *    `to_operand` 归一化 ⇒ ⇒ 端口 / 硬件类型 / 表达式**都**可用。
+ */
+template <typename T, unsigned DEPTH, typename C>
+void stream_fifo_connect_ready(StreamFifoResult<T, DEPTH> &result,
+                               const C &consumer_ready);
 
 /**
  * Stream Queue/Buffer - 创建具有指定深度的流缓冲区（别名为stream_fifo）
@@ -48,6 +82,22 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream);
 template <typename T, unsigned DEPTH>
 StreamFifoResult<T, DEPTH> stream_queue(ch_stream<T> input_stream) {
     return stream_fifo<T, DEPTH>(input_stream);
+}
+
+/**
+ * @brief 把消费端的 ready 接到 **queue**（= `stream_fifo` 的别名）——
+ *   **ADR-054 形态 E**
+ *
+ * ⚠️ **为什么需要这个薄转发**：`stream_queue` 是 `stream_fifo` 的**别名**
+ *   （返回**同一个** `StreamFifoResult` 类型）⇒ ⇒ 类型上可以直接调
+ *   `stream_fifo_connect_ready` ⇒ ⇒ 但那要求调用方知道「queue 就是 fifo」
+ *   ⇒ ⇒ **API 不自洽** ⇒ ⇒ 提供同名转发 ⇒ ⇒ 与 mux 类的
+ *   `<组合子>_connect_ready` 心智模型**一致**。
+ */
+template <typename T, unsigned DEPTH, typename C>
+void stream_queue_connect_ready(StreamFifoResult<T, DEPTH> &result,
+                                const C &consumer_ready) {
+    stream_fifo_connect_ready(result, consumer_ready);
 }
 
 /**
@@ -282,8 +332,25 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     // 计算地址宽度：log2(DEPTH)
     constexpr unsigned ADDR_WIDTH = compute_idx_width(DEPTH);
 
-    // 默认输出端就绪信号（避免空节点）
-    ch_bool pop_ready = true;
+    // ⚠️ **ADR-054 形态 E（默认值 + 可覆盖）**
+    //
+    // 读使能 MUST 引用**结果对象自己的字段节点**（`result.pop_stream.ready`）
+    // ⇒ ⇒ 调用方覆盖该字段 ⇒ ⇒ 覆盖**必然传播**到内部 FIFO
+    // ⇒ ⇒ 若引用**局部**节点 ⇒ ⇒ 覆盖的是字段而内部表达式仍读局部节点
+    // ⇒ ⇒ **覆盖不传播 ⇒ 静默失效**（测试可能全绿而功能死）⇒ ⇒ 与现缺陷同型。
+    //
+    // ⚠️ 默认值 = **既有旧语义**（恒就绪）⇒ ⇒ **不调 `connect_ready` 时行为与
+    //    改动前逐位一致** ⇒ ⇒ **存量调用点不需迁移**。
+    //
+    // ⚠️⚠️ **两个约束**（实测，design.md §13）：
+    //   ① **目标** MUST 是**非 literal** 的节点 ⇒ ⇒ 用 `pop_stream.ready` 的
+    //      **field proxy**（⇒ ⇒ 调用方覆盖**有效**）⇒ ⇒ **MUST NOT** 重绑定到
+    //      literal 节点（⇒ ⇒ literal 不可被 `set_src` ⇒ ⇒ 覆盖无效）；
+    //   ② **源** MUST 是**持久有效**的节点 ⇒ ⇒ 用**本结果对象持有的**
+    //      `default_ready_source`（⇒ ⇒ **MUST NOT** 用临时 `ch_bool(true)`
+    //      ⇒ ⇒ 那个源无效 ⇒ ⇒ 驱动建立失败 ⇒ ⇒ 无效操作数 ⇒ ⇒ 💥 SIGSEGV）。
+    result.default_ready_source = ch_bool(true);          // ① 持有 literal 节点（持久）
+    result.pop_stream.ready <<= result.default_ready_source;  // ② 目标 = field proxy（非 literal）
 
     // 创建内部FIFO，使用正确的模板参数（数据宽度和地址宽度）
     // ⚠️ 读使能 MUST 是 `pop_ready` 本身，**MUST NOT** 写成
@@ -302,10 +369,18 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     //    消费端恒就绪 ⇒ FIFO **非空即弹**；空/满由内部的空/满门处理。
     //    ⚠️ **MUST NOT** 说 `fifo.h:69` 保护读指针 —— 它保护的是**计数器**；
     //    读指针的门在 `fifo.h` 的「更新读指针」段（与写口同一组门控）。
+    // ⚠️ **写使能 MUST 只用 `input_stream.valid`**（**不**含 `ready`）：
+    //    ① `sync_fifo` 的写口**自保护**（`chlib/fifo.h:74`
+    //       `will_write = wren & !is_full(count)`）⇒ ⇒ 满时内部自行拦住；
+    //    ② `valid & ready` 是**先读后写** ⇒ ⇒ `ready`（= 调用方的 `in.ready`）
+    //       在此**未必被驱动** ⇒ ⇒ 空操作数 ⇒ ⇒ **完全不可用**
+    //       （该缺陷此前**零行为覆盖**）。
+    //
+    // ⚠️ **读使能 MUST 引用「结果对象自己的字段节点」**（见上）⇒ ⇒ 覆盖**传播**。
     auto fifo_result = sync_fifo<ch_width_v<T>, ADDR_WIDTH>(
-        input_stream.valid & input_stream.ready,          // 写使能
+        input_stream.valid,                               // 写使能（自保护）
         input_stream.payload,                              // 写数据
-        pop_ready                                           // 读使能
+        result.pop_stream.ready                            // 读使能（**字段节点本身**）
     );
 
     // 连接输入到FIFO
@@ -328,7 +403,8 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     // ⚠️ `empty` 时 `payload` 是 **don't-care**（MUST NOT 被强制为 0）。
     result.pop_stream.payload = fifo_result.q_async;
     result.pop_stream.valid = !fifo_result.empty;
-    result.pop_stream.ready = pop_ready; // 假设输出端总是就绪
+    // ⚠️ `result.pop_stream.ready` **已在上方驱动**（默认恒就绪 ⇒ ⇒ 可被调用方
+    //    覆盖 ⇒ ⇒ 覆盖**传播**到读使能）⇒ ⇒ 此处 MUST NOT 再赋值。
 
     // 占用计数和状态
     result.occupancy = fifo_result.count;
@@ -336,6 +412,46 @@ StreamFifoResult<T, DEPTH> stream_fifo(ch_stream<T> input_stream) {
     result.empty = fifo_result.empty;
 
     return result;
+}
+
+template <typename T, unsigned DEPTH, typename C>
+void stream_fifo_connect_ready(StreamFifoResult<T, DEPTH> &result,
+                               const C &consumer_ready) {
+    // ⚠️⚠️ **多驱动守卫**（ADR-054 §3.2 第 1 条）：
+    //   `connect_ready` MUST 断言「当前驱动**仍是默认节点**」
+    //   ⇒ ⇒ 否则 MUST **`CHFATAL_EXCEPTION`**
+    //   ⇒ ⇒ ⚠️ **MUST NOT** 用 `CHERROR` / `CHFATAL` —— 实测**只打日志不抛**
+    //   ⇒ ⇒ ⇒ 那是**假安全网** ⇒ ⇒ ADR-050 已踩过 ⇒ ⇒ 本仓「静默失效」家族
+    //   ⇒ ⇒ ⇒ MUST 抛异常（构建期**响亮**失败）。
+    //
+    // ⚠️ **为什么这个守卫是必需的**：`ch_bool::operator<<=` 走
+    //    `set_src(0, …)`（`include/lnode/bool.tpp:58`）⇒ ⇒ **last-wins**
+    //    ⇒ ⇒ 若调用方**已自行驱动**该字段 ⇒ ⇒ 再调 `connect_ready` 会
+    //    ⇒ ⇒ **静默覆盖**调用方的驱动 ⇒ ⇒ 调用方以为「我驱动的是我自己的
+    //    信号」而实际被组合子接管 ⇒ ⇒ **静默失效**。
+    auto *ready_node = result.pop_stream.ready.impl();
+    auto *default_node = result.default_ready_source.impl();
+    if (!ready_node || !default_node) {
+        CHFATAL_EXCEPTION(
+            "[stream_fifo_connect_ready] ready 字段节点缺失"
+            "（result.pop_stream.ready / default_ready_source）"
+            " ⇒ ⇒ MUST NOT 静默继续");
+    }
+    if (ready_node->num_srcs() == 0 || ready_node->src(0) != default_node) {
+        CHFATAL_EXCEPTION(
+            "[stream_fifo_connect_ready] **多驱动检测**："
+            "result.pop_stream.ready 的当前驱动已不是默认节点"
+            " ⇒ ⇒ 覆盖将是 last-wins ⇒ ⇒ 静默 ⇒ ⇒ MUST NOT 继续"
+            "（提示：调用方 MUST NOT 自行驱动该字段，或 MUST NOT 重复调本函数）");
+    }
+
+    // ⚠️ **覆盖**默认驱动 ⇒ ⇒ 内部 FIFO 的读使能引用**该字段节点本身**
+    //    ⇒ ⇒ 覆盖**必然传播** ⇒ ⇒ 反压真正生效。
+    //
+    // ⚠️ 归一化（端口 / 硬件类型 / 表达式**都**可用；`const ch_bool &`
+    //    ⇒ ⇒ 端口绑不上 ⇒ ⇒ ADR-053 / E3 的同型教训）
+    ch_bool cr(to_operand(consumer_ready).impl());
+    result.pop_stream.ready <<= cr;
 }
 
 /**
@@ -567,7 +683,18 @@ void stream_mux_connect_ready(StreamMuxResult<N_INPUTS, T>& mux_result) {
     for (unsigned i = 0; i < N_INPUTS; i++) {
         ch_bool is_selected =
             (mux_result.select == make_uint<compute_idx_width(N_INPUTS)>(i));
-        mux_result.input_streams[i].ready = is_selected & mux_result.output_stream.ready;
+        // ⚠️⚠️ **连接手段 MUST 是 `<<=`（数据流边），MUST NOT 是 `operator=`**
+        //    （ADR-045 决策 0-B 第 2 条 + ADR-054 §3.2 第 2 条）
+        //
+        //    ⚠️ **为什么 `operator=` 是错的**：`result.input_streams = input_streams;`
+        //    拷贝后，**结果对象的 ready 字段与调用方的 ready 字段是【同一个节点】**
+        //    ⇒ ⇒ `operator=`（节点**重绑定**）只改**结果对象里那个成员指针**
+        //    ⇒ ⇒ 调用方的节点**被孤儿化**（永远没有驱动）
+        //    ⇒ ⇒ **调用方的上游永远收不到 ready** ⇒ ⇒ **静默**。
+        //    ⇒ ⇒ `<<=` 走 `set_src(0, …)` ⇒ ⇒ 在**共享的那个节点**上建数据流边
+        //    ⇒ ⇒ 调用方的上游**真的**收到 ready ✔
+        mux_result.input_streams[i].ready <<=
+            (is_selected & mux_result.output_stream.ready);
     }
 }
 
