@@ -1165,6 +1165,36 @@ TEST_CASE("Stream: 转发类组合子的**上游 MUST 真收到反压**",
         REQUIRE(sim.get_value(in.ready) == true);
     }
 
+    // ── 变体 D′：filters 家族（translate_with / map / transpose）──
+    //    ⚠️ **必须覆盖多个** ⇒ ⇒ 否则「只测 take_when」⇒ ⇒ ⇒ 其余 filters 的
+    //    `operator=` 回归**不可见**（⇒ ⇒ 实测：投毒
+    //    `filter-upstream-operator-assign` 时行为用例**仍绿** ⇒ ⇒ ⇒
+    //    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 必须补齐**）
+    SECTION("filters 家族（translate_with）⇒ 调用方 MUST 收到反压") {
+        auto ctx = std::make_unique<ch::core::context>("t_ready_translate");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        ch_stream<ch_uint<8>> in;
+        in.as_master();
+        in.payload = ch_uint<8>(0x11);
+        in.valid = ch_bool(true);
+        ch_bool consumer(false);
+
+        auto translated = stream_translate_with<ch_uint<8>, ch_uint<8>>(
+            in, [](const ch_uint<8> &v) { return v; });
+        translated.ready <<= consumer;
+
+        REQUIRE(in.ready.impl() != nullptr);
+        REQUIRE(in.ready.impl()->num_srcs() > 0);
+
+        ch::Simulator sim(ctx.get());
+        sim.tick();
+        REQUIRE(sim.get_value(in.ready) == false);
+        sim.set_value(consumer, 1);
+        sim.tick();
+        REQUIRE(sim.get_value(in.ready) == true);
+    }
+
     // ── 变体 E：未覆盖时 MUST 恒就绪（= 零破坏）──
     SECTION("未覆盖时上游 MUST 恒就绪（= 既有旧语义 · 零破坏）") {
         auto ctx = std::make_unique<ch::core::context>("t_ready_default");

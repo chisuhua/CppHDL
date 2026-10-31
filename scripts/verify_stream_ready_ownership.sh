@@ -13,14 +13,18 @@
 #      旧语义保持 + 多驱动抛异常）⇒ ⇒ MUST 用**行为**实现；
 #
 # ⚠️⚠️ **覆盖面声明（2026-10-31 收口订正 · MUST 与主 spec 的「适用范围」一致）**：
-#   **`R1` 与 `R2`~`R6` 当前只覆盖 `fifo` 侧**（`stream_fifo` / `stream_queue`）
-#   ⇒ ⇒ **转发类**（mux / demux / arbiter / fork / join / filters）
-#   **尚无**行为判据、**尚无**调用点判据 ⇒ ⇒ ⇒
-#   ⇒ ⇒ **转发类的收口义务已显式移交**
-#   `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账）
-#   ⇒ ⇒ ⇒ **本护栏当前** MUST NOT **被读作「转发类已合规」**
-#   ⇒ ⇒ ⇒ 主 spec `chlib-stream-ready-ownership` 的 Requirement 1
-#   「本条的适用范围」段已同步登记该限定。
+#   ⚠️⚠️ **覆盖面（2026-11-01 P1-a 后更新）**：
+#   · **`R1`（效果判据）** ⇒ ⇒ **已覆盖转发类**
+#     （判别力用例「转发类组合子的**上游 MUST 真收到反压**」在
+#     `tests/chlib/test_stream.cpp` ⇒ ⇒ 进**既有** target ⇒ ⇒ 锚点不变）
+#     ⇒ ⇒ 覆盖 mux / arbiter / join / filters / combine_with；
+#   · **`R8`（结构判据）** ⇒ ⇒ **穷举** `stream.h` + `stream_arbiter.h` 内
+#     **所有**接受 `ch_stream` 形参的组合子（⇒ ⇒ **不是**符号清单）
+#     ⇒ ⇒ 判定其上游 ready 是否全用 `<<=`；
+#   · ⚠️ **仍未收口** ⇒ ⇒ `stream_fork`（P1-c）· `stream_demux`（P1-b）
+#     ⇒ ⇒ ⇒ **显式豁免 + `::notice` 点名**（⇒ ⇒ 豁免**非静默**）
+#     ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 主 spec 的 R1「转发类 MUST NOT 被读作『已合规』」
+#     Scenario 继续在约**（⚠️ 标题 MUST NOT 改 ⇒ ⇒ 只能原地订正正文）。
 #   ② **静态判据**（结构）⇒ ⇒ `R2`~`R6` ⇒ ⇒ 走
 #      `scripts/lib/stream_ready_ownership.py`（**剥注释**后匹配 ⇒ ⇒ 注释里的
 #      字面量不会误判）⇒ ⇒ 这几条**明文**是结构性的（capability delta
@@ -91,7 +95,8 @@ r1() {
         printf '%s\n' "$out" | grep -E "FAILED|REQUIRE|with expansion" -A 2 | head -30 | sed 's/^/      /'
         return 1
     fi
-    ok "R1 行为用例全绿（反压阻止推进 · 旧语义保持 · 多驱动抛异常）"
+    ok "R1 行为用例全绿（fifo 侧：反压阻止推进 · 旧语义保持 · 多驱动抛异常
+         ｜ **转发类侧**：调用方真收到反压 · 未覆盖时恒就绪）"
     return 0
 }
 
@@ -124,15 +129,23 @@ rebuild() {
 }
 
 self_test() {
+    # ⚠️⚠️ **P1-a 新增 2 种 R8 专用投毒**（转发类上游 `<<=` ⇒ ⇒ `operator=`）
+    #    ⇒ ⇒ 它们会让 **R8（结构判据）**转红 ⇒ ⇒ ⇒ **自检 MUST 同时检查
+    #    「静态判据也红」** ⇒ ⇒ ⇒ 否则「R8 恒绿 ⇒ ⇒ 判别力为零」会被放过
+    #    ⇒ ⇒ ⇒ ⇒ ⇒ **（本仓已登记的护栏盲区：「自检只查一个判据」）**
     local cases=(
         "read-en-local-const"
         "write-en-valid-and-ready"
         "default-driver-operator-assign"
         "drop-multidrive-guard"
+        "forward-upstream-operator-assign"
+        "filter-upstream-operator-assign"
     )
     local c
     for c in "${cases[@]}"; do
-        restore_stream
+        # ⚠️ 开头这次 restore **可能失败**（无投毒快照 ⇒ ⇒ 陈旧备份检测 ⇒ ⇒
+        #    **拒绝**）⇒ ⇒ **忽略其退出码**（⇒ ⇒ 首次运行时本就没投过毒）
+        restore_stream || true
         if ! python3 "$ANALYZER" poison "$c" >/dev/null 2>&1; then
             fail "自检：投毒 [$c] 失败（模式未找到 ⇒ fail-closed）"
             return 1
@@ -146,6 +159,23 @@ self_test() {
             restore_stream; rebuild; return 1
         fi
         ok "自检：投毒 [$c] ⇒ 行为用例转红"
+        # ⚠️⚠️ **静态判据 MUST 也转红**（R8 的判别力证明 · P1-a）
+        #    ⚠️ **MUST NOT** 只查行为判据 ⇒ ⇒ 否则「结构判据恒绿」会被放过
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （⇒ 这是本仓登记的护栏盲区）
+        #    ⚠️⚠️ **但**：「多驱动守卫」类投毒**只**影响行为判据
+        #    ⇒ ⇒ ⇒ **静态判据仍绿是【正确】的** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **MUST NOT** 对它强制「静态也红」
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （⇒ 实测：强制 ⇒ ⇒ 自检失败 ⇒ ⇒
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **误报**）
+        case "$c" in
+            read-en-local-const|write-en-valid-and-ready|default-driver-operator-assign) ;;
+            drop-multidrive-guard) continue ;;
+        esac
+        if python3 "$ANALYZER" check >/dev/null 2>&1; then
+            fail "自检：投毒 [$c] 后**静态判据仍绿** ⇒ ⇒ 结构判据的判别力为零"
+            restore_stream; rebuild; return 1
+        fi
+        ok "自检：投毒 [$c] ⇒ 静态判据转红"
         restore_stream
         if ! rebuild; then
             fail "自检：还原后重建失败"
@@ -155,11 +185,15 @@ self_test() {
             fail "自检：还原后行为用例**仍红** ⇒ ⇒ 还原写坏了文件"
             return 1
         fi
-        ok "自检：还原后行为用例转绿"
+        if ! python3 "$ANALYZER" check >/dev/null 2>&1; then
+            fail "自检：还原后**静态判据仍红** ⇒ ⇒ 还原写坏了文件"
+            return 1
+        fi
+        ok "自检：还原后行为用例转绿 + 静态判据复绿"
     done
     restore_stream
     rebuild
-    ok "自检：4 种投毒全部被抓住，且还原后复绿"
+    ok "自检：6 种投毒全部被抓住（行为 + 静态双判据），且还原后复绿"
     return 0
 }
 

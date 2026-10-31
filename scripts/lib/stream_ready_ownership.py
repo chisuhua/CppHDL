@@ -33,11 +33,29 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parents[2]
 STREAM_H = REPO / "include" / "chlib" / "stream.h"
 BUILDER_H = REPO / "include" / "chlib" / "stream_builder.h"
+ARBITER_H = REPO / "include" / "chlib" / "stream_arbiter.h"
 BACKUP = pathlib.Path("/tmp/opencode/stream_h_ownership.bak")
 # ⚠️ 「被投毒的内容」快照 —— 用于还原前的**第三方改动检测**
 POISONED_SNAPSHOT = pathlib.Path("/tmp/opencode/stream_h_ownership.poisoned")
 
 EXEMPT_MARK = "stream_ready_ownership: intentionally-unwired"
+
+# ⚠️⚠️ **R8 的「已知未收口」豁免清单**（P1-a · 2026-11-01）
+# ⚠️ **MUST 显式登记 + 理由 + 归属 change**（⇒ ⇒ 豁免**非静默** ⇒ ⇒ 否则
+#    「已收口」的声明会变成谎言）
+# ⚠️ ⚠️ **本清单 MUST 只增不减到「全部收口」为止**（⇒ ⇒ 每次 P1 落地 MUST
+#    删掉对应条目 ⇒ ⇒ ⇒ 否则「未收口」会被**永久豁免** ⇒ ⇒ ⇒ ⇒ **假绿**）
+UNSETTLED = {
+    "stream_fork": "P1-c（同步语义从未工作过 ⇒ 等于新功能 ⇒ 判据从零建）",
+    "stream_demux": "P1-b（方向修正是行为变更 ⇒ 需独立 ADR）",
+}
+
+# ⚠️ **ready 字段的「角色」分类**（**结构判据** ⇒ ⇒ 不是符号清单）：
+#   · 输出侧 = 组合子**自己产出**的 ready（驱动它 ⇒ ⇒ 合法）
+#   · 输入侧 = 组合子**要驱动**的 ready（⇒ ⇒ MUST 用 `<<=`）
+# ⚠️ ⚠️ **角色分类 MUST 基于「字段名在组合子契约中的语义」**
+#   ⇒ ⇒ **不是**「硬编码符号清单」⇒ ⇒ ⇒ **新组合子自动被覆盖** ✔
+OUTPUT_SIDE_FIELDS = ("push_stream", "pop_stream", "output_stream")
 
 sys.path.insert(0, str(REPO / "scripts" / "lib"))
 from fsm_wiring import strip_comments_and_strings  # noqa: E402
@@ -165,6 +183,102 @@ def r5() -> None:
     ok("R5 `stream_fifo_connect_ready` 存在且形参模板化（端口可用）")
 
 
+# ── R7 / R8：转发类（mux / arbiter / join / filters / combine_with）────────
+#
+# ⚠️⚠️ **R8 的设计要点**（P1-a · 2026-11-01）：
+#   ① **穷举**：自动发现 `stream.h` + `stream_arbiter.h` 内**所有**接受
+#      `ch_stream` 形参的组合子 ⇒ ⇒ ⇒ **MUST NOT** 靠**人工符号清单**
+#      （⚠️ 本仓登记的护栏盲区：「只查已知符号 ⇒ ⇒ 漏掉同族入口」
+#      ⇒ ⇒ ⇒ **新组合子自动被覆盖** ✔）；
+#   ② **结构判据**（MUST NOT 词法）：判定「该组合子是否用 `<<=` 驱动上游」
+#      ⇒ ⇒ ⇒ 而**不是**「源码含常量 `true`」；
+#   ③ **角色区分**：组合子**自己产出**的 ready（`output_stream` /
+#      `push_stream` / `pop_stream`）驱动它 ⇒ ⇒ **合法**；
+#      **要驱动**的上游 ready ⇒ ⇒ MUST 用 `<<=`；
+#   ④ **豁免非静默**：**已知未收口**者（`stream_fork` / `stream_demux`）
+#      ⇒ ⇒ MUST 显式登记 + 理由 + 归属 change ⇒ ⇒ `::notice` 点名。
+
+# ⚠️ 组合子的「输入侧」ready 字段（**要驱动**的那些）
+#   ⚠️ 注意：`result.ready`（filters 形态：返回**裸** `ch_stream`）也属输入侧
+# ⚠️⚠️ **R8 的正则 MUST 支持下标形式**（`input_streams[i].ready`）
+#    ⇒ ⇒ 否则 mux / arbiter / join 的上游驱动**全部漏检**
+#    ⇒ ⇒ ⇒ ⇒ ⇒ **（实测：投毒 `forward-upstream-operator-assign` 后静态判据仍绿
+#    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 正是这个盲区**）**
+_UPSTREAM_READY = re.compile(
+    r"\b(input_stream|input_streams|input1|input2|result)\s*"
+    r"(?:\[[^\]]*\])?\s*\.ready\s*(<<=|=(?!=))")
+
+
+def _iter_stream_functions() -> list[tuple[str, str]]:
+    """自动发现 `stream_*` 函数体（**穷举** ⇒ ⇒ 不靠符号清单）。"""
+    out: list[tuple[str, str]] = []
+    for f in (STREAM_H, ARBITER_H):
+        if not f.exists():
+            continue
+        code = strip_comments_and_strings(f.read_text(encoding="utf-8"))
+        for m in re.finditer(r"\b(stream_\w+)\s*\(", code):
+            i = code.find("{", m.end())
+            if i < 0:
+                continue
+            depth = 0
+            j = i
+            while j < len(code):
+                if code[j] == "{":
+                    depth += 1
+                elif code[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            out.append((m.group(1), code[m.start(): j + 1]))
+    return out
+
+
+def r8() -> None:
+    """转发类 MUST 用 `<<=` 驱动上游 ready（**穷举** + **结构判据**）。"""
+    if not ARBITER_H.exists():
+        fail("R8 缺少 include/chlib/stream_arbiter.h")
+        return
+
+    viol: list[str] = []
+    settled: list[str] = []
+    exempt: list[str] = []
+
+    for name, body in _iter_stream_functions():
+        # ⚠️ **不是组合子**（无 `ch_stream` 形参）⇒ ⇒ 跳过（如 `connect_ready`）
+        head = body.split(")", 1)[0]
+        if "ch_stream<" not in head:
+            continue
+        # ⚠️ **fifo / queue 类**是**豁免**的（P0' 已落地 ⇒ ⇒ 契约已覆盖）
+        if name in ("stream_fifo", "stream_queue"):
+            continue
+        # ⚠️ **已知未收口**（显式登记 ⇒ ⇒ 豁免**非静默**）
+        if name in UNSETTLED:
+            exempt.append(f"{name}（{UNSETTLED[name]}）")
+            continue
+
+        bad = []
+        for m in _UPSTREAM_READY.finditer(body):
+            # ⚠️ **输出侧**字段 ⇒ ⇒ 组合子**自己产出** ⇒ ⇒ 驱动它合法
+            target = m.group(1)
+            if target in OUTPUT_SIDE_FIELDS:
+                continue
+            if m.group(2) == "=":
+                bad.append(f"{target}.ready = （operator= 重绑定 ⇒ ⇒ 调用方被孤儿化）")
+        if bad:
+            viol.append(f"{name}: " + "；".join(bad))
+        else:
+            settled.append(name)
+
+    for e in exempt:
+        notice(f"R8 豁免（已知未收口 · 归属独立 change）：{e}")
+    if viol:
+        fail("R8 转发类 MUST 用 `<<=` 驱动上游 ready：\n      " + "\n      ".join(viol))
+        return
+    ok(f"R8 转发类上游 ready 全部用 `<<=`（已收口 {len(settled)} 个："
+       + ", ".join(sorted(set(settled))) + "）")
+
+
 # ── R6：调用点判据 —— 调 `stream_fifo` / `stream_queue` 后 MUST 接 ready ─────
 #
 # ⚠️⚠️ **覆盖面限定（2026-10-31）**：`CALL_RE` **只**覆盖 `stream_fifo` /
@@ -233,7 +347,25 @@ POISONS: dict[str, tuple[str, str]] = {
         "if (ready_node->num_srcs() == 0 || ready_node->src(0) != default_node) {",
         "if (false) {",
     ),
+    # ⚠️⚠️ **R8 专用投毒（P1-a）**：转发类的上游驱动 `<<=` ⇒ ⇒ `operator=`
+    #    ⇒ ⇒ **调用方被孤儿化** ⇒ ⇒ ⇒ **R8（结构判据）MUST 转红**
+    #    ⇒ ⇒ ⇒ 同时 **R1（效果判据）** MUST 转红（判别力用例）
+    "forward-upstream-operator-assign": (
+        """        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready);""",
+        """        result.input_streams[i].ready =
+            (is_selected & result.output_stream.ready);""",
+    ),
+    # ⚠️⚠️ **R8 专用投毒（P1-a）**：filters 的上游驱动 `<<=` ⇒ ⇒ `operator=`
+    #    ⇒ ⇒ **调用方被孤儿化** ⇒ ⇒ ⇒ **R8 MUST 转红**
+    "filter-upstream-operator-assign": (
+        """    input_stream.ready <<= result.ready;""",
+        """    input_stream.ready = result.ready;""",
+    ),
 }
+
+# ⚠️ **投毒的目标文件**（⇒ ⇒ R8 的投毒可能落在 `stream_arbiter.h`）
+POISON_TARGETS: dict[str, pathlib.Path] = {}
 
 
 def poison(name: str) -> int:
@@ -241,16 +373,18 @@ def poison(name: str) -> int:
         print(f"POISON_FAIL: 未知投毒名: {name}", file=sys.stderr)
         return 2
     old, new = POISONS[name]
-    s = STREAM_H.read_text(encoding="utf-8")
+    # ⚠️ **投毒目标文件**：默认 `stream.h`；R8 的投毒可能落在 `stream_arbiter.h`
+    target = POISON_TARGETS.get(name, STREAM_H)
+    s = target.read_text(encoding="utf-8")
     if old not in s:
         print(f"POISON_FAIL: 模式未找到 ⇒ 投毒未生效（fail-closed）: {name}", file=sys.stderr)
         return 2
-    shutil.copy2(STREAM_H, BACKUP)
+    shutil.copy2(target, BACKUP)
     # ⚠️⚠️ **记录「被投毒的内容」**（用于还原前的**校验**）——
     #    见 `restore()` 的「第三方改动检测」⇒ ⇒ 防止还原**覆盖**备份之后的
     #    工作区改动（本仓「还原源码 ≠ 复原」的**第三个维度**）。
     POISONED_SNAPSHOT.write_text(s.replace(old, new, 1), encoding="utf-8")
-    STREAM_H.write_text(s.replace(old, new, 1), encoding="utf-8")
+    target.write_text(s.replace(old, new, 1), encoding="utf-8")
     return 0
 
 
@@ -276,6 +410,19 @@ def restore() -> int:
             print(f"  备份: {BACKUP}", file=sys.stderr)
             print(f"  投毒快照: {POISONED_SNAPSHOT}", file=sys.stderr)
             return 2
+    else:
+        # ⚠️⚠️⚠️ **陈旧备份检测**（P1-a 实测踩中 · **第 4 个盲区**）
+        #    ⇒ ⇒ `BACKUP` 是**固定路径** ⇒ ⇒ ⇒ **跨次运行会残留**
+        #    ⇒ ⇒ ⇒ **自检开头的 `restore_stream` 会用陈旧备份覆盖工作区**
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 实测：一次 `--self-test` 把工作区的全部改动冲掉**
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST 在「无投毒快照」时拒绝还原**
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （⇒ ⇒ 没有快照 ⇒ ⇒ 说明**本次运行没投毒**
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 此时还原无意义且危险**）
+        print("RESTORE_FAIL: 无投毒快照 ⇒ ⇒ 本次运行未投毒 ⇒ ⇒ 拒绝还原"
+              "（固定备份路径会跨次残留 ⇒ ⇒ 陈旧备份会覆盖工作区改动）",
+              file=sys.stderr)
+        print(f"  备份: {BACKUP}", file=sys.stderr)
+        return 2
     # ⚠️⚠️ **MUST 用 `copyfile`（不保留 mtime），MUST NOT 用 `copy2`** ——
     #    `copy2` **保留** mtime ⇒ ⇒ 还原后的文件 mtime **比备份还旧**
     #    ⇒ ⇒ `make` 判定「已是最新」⇒ ⇒ **不重新编译** ⇒ ⇒ **跑的仍是被投毒的
@@ -296,6 +443,7 @@ def main() -> int:
         r4()
         r5()
         r6()
+        r8()
         if FAILS:
             print(f"{RED}❌ 静态判据 FAIL（{FAILS} 项）{RESET}")
             return 1
