@@ -75,6 +75,18 @@ Catch2 用例。该提交的对抗审稿判定 **REJECT**，实测发现：
 
 ### 1. 输入 ready 的所有权：**两阶段**（决策 0-B）
 
+> ⚠️ **部分被修订**（2026-10-31，**ADR-054** `docs/adr/ADR-054-stream-ready-ownership-form.md`）：
+> **第 1 条**（「构造期只产出 payload / valid」）对 **fifo 类**组合子**不适用**
+> ⇒ ⇒ fifo 类改用**形态 B（延迟构造）**：构造期**不产出**任何字段，
+> `connect_ready()` **之后**才建内部逻辑 ⇒ ⇒ 读使能直接取消费端 ready 的
+> **同一节点** ⇒ ⇒ **不引入代理节点**。
+> ⇒ ⇒ 修订动因 = 实施期实测的 **E1**（未驱动的代理节点无法驱动任何输出 ⇒
+> `<<=` 与 `=` **两条路都不通**）与 **E2**（代理 + 覆盖 ⇒ 存在**读临时值**的
+> 窗口 ⇒ ⇒ **静默** ⇒ ⇒ 违反「要么语义正确、要么响亮拒绝」总原则）。
+> ⇒ ⇒ **其余条款**（组合子不拥有入参 ready · `<组合子>_connect_ready` 形态 ·
+> `<<=` 连接手段 · 读取规则）**保持有效**；mux / demux / arbiter 类**不受**修订影响。
+> ⇒ ⇒ 证据与逐条推导见 `.rddf/improvements/chlib-stream-ready-ownership-2026-10.md`。
+
 > ⏸ **本决策本次不生效**：下面的 MUST（`*_connect_ready` 形态、`<<=` 连接手段、
 > 读取规则）由 follow-up change `chlib-stream-ready-ownership-2026-10` 落地，
 > **未收录**为 capability `chlib-stream-semantics` 的 in-force MUST
