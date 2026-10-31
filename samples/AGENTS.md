@@ -37,9 +37,10 @@ Key files:
   `bash scripts/run_all_samples.sh` 守护（CI job `samples-regression`，
   **Linux-only**：macOS 无 GNU `timeout`，脚本内做 `timeout` → `gtimeout` 回退）。
 - **新增 sample MUST 同时注册进 `samples/CMakeLists.txt` 的 `CH_SAMPLE_TARGETS`**，
-  否则护栏的 **C1 注册一致性**会失败。⇒ 现状：**40 个源文件 = 37 已注册 +
-  3 已禁用**（`samples/disabled_samples.txt`；⚠️ **2026-10-31** `if_demo` 归位
-  ⇒ 36 → **37** / 4 → **3**）。
+  否则护栏的 **C1 注册一致性**会失败。⇒ 现状：**40 个源文件 = 39 已注册 +
+  1 已禁用**（`samples/disabled_samples.txt`；⚠️ **2026-10-31**
+  `stream_component_example` / `stream_handshake_example` 归位
+  ⇒ 37 → **39** / 3 → **1**）。
 - **禁用清单**（`samples/disabled_samples.txt`）每行格式
   `<sample 名> <TAB> 为什么不能编 <TAB> 归位条件` ⇒ 「为什么它没被编译」不再失传。
   ⚠️ 本清单只做**登记**，不负责修复；归位条件达成后 MUST 移除该行并补进

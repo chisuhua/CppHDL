@@ -42,6 +42,8 @@ set(CH_SAMPLE_TARGETS
     spinalhdl_stream_example
     conditional_demo
     if_demo
+    stream_component_example
+    stream_handshake_example
 )
 
 # 为每个示例创建可执行文件
