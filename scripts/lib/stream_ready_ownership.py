@@ -37,6 +37,12 @@ ARBITER_H = REPO / "include" / "chlib" / "stream_arbiter.h"
 BACKUP = pathlib.Path("/tmp/opencode/stream_h_ownership.bak")
 # ⚠️ 「被投毒的内容」快照 —— 用于还原前的**第三方改动检测**
 POISONED_SNAPSHOT = pathlib.Path("/tmp/opencode/stream_h_ownership.poisoned")
+# ⚠️⚠️ **投毒目标的 sidecar 状态文件**（2026-11-01 critic NIT）
+#    ⇒ ⇒ `poison` / `restore` 是**各自独立的 `python3` 进程**
+#    ⇒ ⇒ ⇒ **进程内的模块全局**（`_last_poison_name`）**跨进程无效**
+#    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 还原进程永远拿不到投毒名**
+#    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 必须落盘** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+POISON_TARGET_FILE = pathlib.Path("/tmp/opencode/stream_h_ownership.target")
 
 EXEMPT_MARK = "stream_ready_ownership: intentionally-unwired"
 
@@ -413,6 +419,17 @@ POISONS: dict[str, tuple[str, str]] = {
             (is_selected & result.output_stream.ready);""",
         """        // ⚠️ 投毒：**删掉**上游驱动（⇒ ⇒ 无 `=` ⇒ ⇒ 靠存在性判据检出）""",
     ),
+    # ⚠️⚠️⚠️ **跨文件投毒**（2026-11-01 critic NIT 的**验证**）：落在
+    #    `stream_arbiter.h` ⇒ ⇒ ⇒ **⇒ 必须验证「还原回到正确的文件」**
+    #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 进程内全局做不到** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ sidecar
+    #    状态文件是必需的**（⇒ ⇒ 守栏自检若不覆盖它 ⇒ ⇒ ⇒ **⇒ N2 的修复
+    #    仍是「未验证」** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 本投毒就是那个验证**）
+    "arbiter-upstream-operator-assign": (
+        """        result.input_streams[i].ready <<=
+            (is_selected & result.output_stream.ready);""",
+        """        result.input_streams[i].ready =
+            (is_selected & result.output_stream.ready);""",
+    ),
     # ⚠️⚠️ **R8 专用投毒（P1-a）**：filters 的上游驱动 `<<=` ⇒ ⇒ `operator=`
     #    ⇒ ⇒ **调用方被孤儿化** ⇒ ⇒ ⇒ **R8 MUST 转红**
     "filter-upstream-operator-assign": (
@@ -422,10 +439,32 @@ POISONS: dict[str, tuple[str, str]] = {
 }
 
 # ⚠️ **投毒的目标文件**（⇒ ⇒ R8 的投毒可能落在 `stream_arbiter.h`）
-POISON_TARGETS: dict[str, pathlib.Path] = {}
+POISON_TARGETS: dict[str, pathlib.Path] = {
+    # ⚠️ **跨文件投毒**（⇒ ⇒ 验证 sidecar 状态文件的必要性）
+    "arbiter-upstream-operator-assign": ARBITER_H,
+}
 
-# ⚠️ **上一次投毒的名字**（用于还原时确定「检测哪个文件」）
-_last_poison_name = ""''
+
+
+
+def _poison_target() -> pathlib.Path:
+    """本次投毒的目标文件（**跨进程** ⇒ ⇒ MUST 从**状态文件**读）。
+
+    ⚠️⚠️ **为什么 MUST 落盘**（2026-11-01 critic NIT）：
+    `poison` / `restore` / `check` 是**各自独立的 `python3` 进程**
+    ⇒ ⇒ ⇒ **进程内的模块全局**（如 `_last_poison_name`）**跨进程无效**
+    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 还原进程永远拿不到投毒名**
+    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「登记为已修但实际未修」**
+    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST 用 sidecar 状态文件**。
+    """
+    if POISON_TARGET_FILE.exists():
+        try:
+            p = pathlib.Path(POISON_TARGET_FILE.read_text(encoding="utf-8").strip())
+            if p.exists():
+                return p
+        except (OSError, ValueError):
+            pass
+    return STREAM_H
 
 
 def poison(name: str) -> int:
@@ -439,8 +478,8 @@ def poison(name: str) -> int:
     if old not in s:
         print(f"POISON_FAIL: 模式未找到 ⇒ 投毒未生效（fail-closed）: {name}", file=sys.stderr)
         return 2
-    global _last_poison_name
-    _last_poison_name = name
+    # ⚠️⚠️ **投毒目标 MUST 落盘**（跨进程 ⇒ ⇒ `restore` 是**另一个**进程）
+    POISON_TARGET_FILE.write_text(str(target), encoding="utf-8")
     shutil.copy2(target, BACKUP)
     # ⚠️⚠️ **记录「被投毒的内容」**（用于还原前的**校验**）——
     #    见 `restore()` 的「第三方改动检测」⇒ ⇒ 防止还原**覆盖**备份之后的
@@ -470,7 +509,7 @@ def restore() -> int:
         #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 当前无实际影响**（6 种投毒都在 stream.h）
         #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 但将来加 arbiter 侧投毒时会漏** ⇒ ⇒ ⇒
         #    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已改为「比对所有候选目标」**
-        target = POISON_TARGETS.get(_last_poison_name, STREAM_H)
+        target = _poison_target()
         current = target.read_text(encoding="utf-8")
         poisoned = POISONED_SNAPSHOT.read_text(encoding="utf-8")
         if current != poisoned:
@@ -498,9 +537,11 @@ def restore() -> int:
     #    二进制** ⇒ ⇒ 报「还原写坏了文件」的**假失败**。
     #    ⇒ ⇒ 这是本仓「**还原源码 ≠ 复原**（二进制也是状态）」那条教训的
     #    又一实例 ⇒ ⇒ 还原后 MUST 让 mtime **变新** ⇒ ⇒ 强制重建。
-    shutil.copyfile(BACKUP, STREAM_H)
+    shutil.copyfile(BACKUP, _poison_target())
     if POISONED_SNAPSHOT.exists():
         POISONED_SNAPSHOT.unlink()
+    if POISON_TARGET_FILE.exists():
+        POISON_TARGET_FILE.unlink()
     return 0
 
 

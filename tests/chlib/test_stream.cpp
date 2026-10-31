@@ -2,6 +2,7 @@
 #include "ch.hpp"
 #include "chlib/combinational.h"
 #include "chlib/stream.h"
+#include "chlib/stream_arbiter.h"
 #include "bundle/fragment.h"
 #include "core/context.h"
 #include "core/literal.h"
@@ -1106,6 +1107,53 @@ TEST_CASE("Stream: 转发类组合子的**上游 MUST 真收到反压**",
         sim.set_value(consumer, 1);
         sim.tick();
         REQUIRE(sim.get_value(in0.ready) == true);
+    }
+
+    // ── 变体 B′：arbiter（`stream_arbiter.h` 的 lock / sequence）──
+    //    ⚠️⚠️ **这两个入口此前**零行为覆盖** ⇒ ⇒ ⇒ 实测：投毒
+    //    `arbiter-upstream-operator-assign` 时行为用例**仍绿** ⇒ ⇒ ⇒
+    //    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 必须补**（⇒ ⇒ 否则「已收口」的 4 个 arbiter
+    //    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 里有 2 个行为上无覆盖**）
+    SECTION("arbiter（lock / sequence）⇒ 调用方 MUST 收到反压") {
+        for (int variant = 0; variant < 2; ++variant) {
+            auto ctx = std::make_unique<ch::core::context>(
+                variant ? "t_ready_seq" : "t_ready_lock");
+            ch::core::ctx_swap ctx_swapper(ctx.get());
+
+            ch_stream<ch_uint<8>> in0, in1;
+            in0.as_master();
+            in1.as_master();
+            in0.payload = ch_uint<8>(0x11);
+            in0.valid = ch_bool(true);
+            in1.payload = ch_uint<8>(0x22);
+            in1.valid = ch_bool(false);
+            std::array<ch_stream<ch_uint<8>>, 2> inputs = {in0, in1};
+            ch_bool consumer(false);
+
+            if (variant == 0) {
+                auto arb = stream_arbiter_lock<ch_uint<8>, 2>(inputs);
+                arb.output_stream.ready <<= consumer;
+                REQUIRE(in0.ready.impl() != nullptr);
+                REQUIRE(in0.ready.impl()->num_srcs() > 0);
+                ch::Simulator sim(ctx.get());
+                sim.tick();
+                REQUIRE(sim.get_value(in0.ready) == false);
+                sim.set_value(consumer, 1);
+                sim.tick();
+                REQUIRE(sim.get_value(in0.ready) == true);
+            } else {
+                auto arb = stream_arbiter_sequence<ch_uint<8>, 2>(inputs);
+                arb.output_stream.ready <<= consumer;
+                REQUIRE(in0.ready.impl() != nullptr);
+                REQUIRE(in0.ready.impl()->num_srcs() > 0);
+                ch::Simulator sim(ctx.get());
+                sim.tick();
+                REQUIRE(sim.get_value(in0.ready) == false);
+                sim.set_value(consumer, 1);
+                sim.tick();
+                REQUIRE(sim.get_value(in0.ready) == true);
+            }
+        }
     }
 
     // ── 变体 C：join ──

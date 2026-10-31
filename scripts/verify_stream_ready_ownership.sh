@@ -140,6 +140,7 @@ self_test() {
         "drop-multidrive-guard"
         "forward-upstream-operator-assign"
         "forward-delete-upstream-drive"
+        "arbiter-upstream-operator-assign"
         "filter-upstream-operator-assign"
     )
     local c
@@ -194,7 +195,8 @@ self_test() {
     done
     restore_stream
     rebuild
-    ok "自检：7 种投毒全部被抓住（行为 + 静态双判据），且还原后复绿"
+    ok "自检：8 种投毒全部被抓住（行为 + 静态双判据），且还原后复绿"
+    ok "（含**跨文件**投毒 ⇒ ⇒ 验证「还原回到正确的文件」⇒ ⇒ sidecar 状态文件）"
     return 0
 }
 
