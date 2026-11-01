@@ -64,48 +64,81 @@ MUST 是【有独立价值的新测试】**（⇒ ⇒ **不是**转换的复刻 
 
 ---
 
-## 3. 成本模型（**实测**，2026-11-01）
+## 3. 成本模型（**实测**，2026-11-01 —— ⚠️ **二次订正：单位错了**）
 
-| 场景 | 墙钟（实测） | 说明 |
-|---|---|---|
-| **冷缓存 · 小 DUT**（纯组合逻辑） | **13.5 s** | 试点 `test_blt_debug_behavior` |
-| **冷缓存 · mem 类 DUT**（`ch_mem` + FIFO） | **72.0 s** | `test_stream_fifo_dual`（假 HOME 测得） |
-| 热缓存 · 小 DUT | 0.6 – 3.0 s | `test_stream_fifo_dual` / `test_cache_sync` |
-| 热缓存 · RV32I 流水线 | 7.7 s | `test_rv32i_pipeline_behavior` |
+### 3.0 🔴🔴 **订正：成本单位是【pair 数】，不是 DUT 数、也不是文件数**
 
-⇒ ⇒⇒ **两条成本结论**：
-1. **冷编译是主成本**（10 s ~ 60 s / DUT）⇒ ⇒⇒ **CI 每次都是冷缓存**
-   ⇒ ⇒ ⇒ **CI 墙钟 ≈ 不同 DUT 类型数 × 平均编译成本**；
-2. **同 DUT 的多个 TC 只编译一次**（缓存按 SHA-1 key）⇒ ⇒⇒ **⇒ 必须按
-   「DUT 聚合」组织批次** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 同 DUT 的 TC 放同一文件**。
+⚠️ **逐 0.01 s 打点的实测**（假 HOME 全冷 · `test_assert_behavior` · **4 pair**）：
 
-⚠️⚠️ **CI 硬约束**：`.github/workflows/ci.yml` 的 verilator_e2e job
-**`timeout-minutes: 45`** ⇒ ⇒⇒ **且 `RESOURCE_LOCK "verilator_backend"`
-⇒ ⇒ 全部 dual 测试【串行】** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 累计墙钟直接吃这个预算**
-⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这正是 objective §9.2 的 No-Go 判据**（「PR feedback 墙钟
-持续 > 45 min ⇒ 需降级」）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 本计划的批次划分把「CI 墙钟」
-当作【首要约束】**。
+```
+[  0.02s] 写出 top.v / sim_main.cpp
+[  0.23s] Verilator: Walltime 0.012 s (elab=0.000, cvt=0.004, bld=0.000)
+[ 10.89s] VerilatorBackend: cached artifact at .../.cache/cpphdl/verilator/<key>
+[ 10.89s] VerilatorBackend: dlopen'd .../libVtop.so, created Vtop
+```
 
----
+⇒ ⇒ **Verilator 的 elaboration 只花 0.012 s** ⇒ ⇒ **那 10.66 s 是
+【C++ 编译 + 链接 `libVtop.so`】** ⇒ ⇒ ⇒ **且实测第 2/3/4 个 pair 各自又花
+~10.6 s** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 【根因】：`DUAL_BACKEND_TEST_PAIR` 为【每个 pair】
+建独立的 `ch_device<DutType>`** ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ 上下文的 verilog 源码不同
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ 缓存 key 不同 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 【每个 pair 一次编译】**
 
-## 4. 批次清单（**每批一个 change**；批次内按 DUT 聚合）
+⇒ ⇒⇒ **修正后的成本模型**：
+
+| 成本项 | 单位 | 实测 | 随什么增长 |
+|---|---|---|---|
+| **verilator 自身的 JIT 编译** | **每 job 一次** | ~3 s | **不随** pair 数增长 |
+| **每 pair 冷编译 + 链接 `.so`** | **每 pair** | **10.6 s**（组合逻辑 DUT） | **线性于 pair 数** |
+| **每 pair 冷编译（mem 类 DUT）** | 每 pair | **72 s** | 同上，单价高 **6.8 倍** |
+| **全热**（缓存命中） | 每 pair | ~0.15 s | — |
+
+⇒ ⇒⇒ ⚠️ ⚠️ **【重要推论】**：「每 pair 恰 1 条 `REQUIRE`」这条约定**代价很高**
+⇒ ⇒ ⇒ 因为**拆 pair = 增加编译次数**（每拆一个 pair ⇒ ⇒ **+10.6 s**
+（组合逻辑）/ **+72 s**（mem 类））⇒ ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ 【必须】改用「XML
+per-TEST_CASE 对比」的判据**（见 §4 验收模板）⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+⇒ ⇒ ⇒ ⇒ **⇒ 【断言强度 MUST NOT 被判据绑架】**
+
+### 3.1 修正后的**批次预算**（按 **pair 数**）
+
+| 批 | pair 数（估） | 冷编译预估 | 备注 |
+|---|---|---|---|
+| A | 1 | ~14 s | 实测 **13.5 s**（含一次性 JIT）✔ |
+| **B1**（✅ 已实施） | **4** | **~45 s** | 实测 **44.6 s** ✔ |
+| B（其余） | ~30 | ~5.3 min | 组合逻辑 |
+| C（AXI） | ~5 | ~3 min | AXI DUT 较大（单价待实测） |
+| D（mem） | ~11 | **~13 min** | ⚠️ 单价 **72 s/pair** ⇒ ⇒ 放最后 |
+| E（bundle/cache） | ~12 | ~8 min | cache DUT 单价待实测 |
+| F（大文件多 DUT） | ~62 | ~11 min | ⚠️ 原估 25 min **偏高**（按 pair 重算） |
+| H（路线 B） | ≥2 | ~1 min | — |
+
+⇒ ⇒⇒ **Σ ≈ 30–35 min**（原估 56 min）⇒ ⇒⇒ ⇒ ⇒ **⇒ 【修正后不再明显
+超标 45 min】** ⇒ ⇒⇒ ⇒ ⇒ ⇒ ⚠️ 但**仍须逐批实测回填**（D 批的 mem 单价
+72 s 是**实测值**，其余是**外推**）⇒ ⇒⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+
+
+## 4. 批次清单（**每批一个 change**；批次内按 **pair** 聚合 ⇒ ⇒ **不是**按 DUT ⇒ ⇒ 理由见 §3.0）
 
 ⚠️ **每批的验收模板**（**逐批复制**）：
 - [ ] 新增的 `_behavior` 文件**真跑 verilator**
-      ⇒ ⇒ **判据 = 「总断言数 == 2 × pair 数」**
-      ⇒ ⇒ ⇒ **⇒ 前提：每个 pair 体 MUST 恰好 1 条 `REQUIRE`**
-      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 理由（critic SHOULD_FIX #1 · 2026-11-01）**：
-      「断言数 = 2 × pair 数」**只在每 pair 恰 1 条 REQUIRE 时成立**
-      ⇒ ⇒ ⇒ Catch2 的**汇总输出不区分 per-TEST_CASE 断言数**
-      ⇒ ⇒ ⇒ ⇒ **⇒ 多断言批次下该判据要么恒假红、要么退化成无判别力**
-      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 泛化 = 约定「每 pair 一条断言」**
-      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 代价接近零**：同一 DUT 的多个 pair **只编译一次**
-      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （缓存按 SHA-1 key）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 拆 pair 不增加墙钟**
-      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **「TEST_CASE 数」不能替代本判据** ——
-      verilator 缺席时 macro 的 verilator 半边**仍然注册**（只 WARN + return）
-      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ TEST_CASE 数恒为 2 × pair 数 ⇒ ⇒ 无判别力**
-      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST 用【断言数】而非【用例数】**
-      ⇒ ⇒ **若 verilator 缺席则断言数只有 1 倍 ⇒ ⇒ 假绿**）
+      ⇒ ⇒ **判据 = 「verilator 半边每个 TEST_CASE 的 `successes`
+      == interpreter 半边对应 TEST_CASE 的 `successes`」**（用 Catch2 的
+      **XML reporter**（`-r xml`）逐 TEST_CASE 比对）
+      ⇒ ⇒ ⇒ **⇒ 这条判据【对多断言 pair 也成立】** ⇒ ⇒ ⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 【实测可行】**（XML 输出含
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ `<TestCase name=...><OverallResults successes="N"/>`）
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ **⇒ ⚠️ 废止早期两版写法**：
+      ⇒ ⇒ ⇒ ⇒ ⇒ ① 「总断言数 == 2 × pair 数」⇒ ⇒ **只在每 pair 恰 1 条
+      ⇒ ⇒ ⇒ ⇒ ⇒    REQUIRE 时成立** ⇒ ⇒ Catch2 汇总**不区分
+      ⇒ ⇒ ⇒ ⇒ ⇒    per-TEST_CASE** ⇒ ⇒ 多断言批次下**无判别力**；
+      ⇒ ⇒ ⇒ ⇒ ⇒ ② 「每 pair 恰 1 条 REQUIRE」这条约定 ⇒ ⇒ **代价很高**
+      ⇒ ⇒ ⇒ ⇒ ⇒    （见 §3.0）⇒ ⇒ 因为**拆 pair = 增加 verilator
+      ⇒ ⇒ ⇒ ⇒ ⇒    编译次数**（+10.6 s / +72 s 每个）⇒ ⇒ ⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 【断言强度 MUST NOT 被判据绑架】**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ **⇒ ⚠️ 「TEST_CASE 数」不能替代本判据** —— verilator 缺席时
+      ⇒ ⇒ ⇒ ⇒ macro 的 verilator 半边**仍然注册**（只 WARN + return）⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ ⇒ **⇒ 用例数恒为 2 × pair ⇒ ⇒ 无判别力**
 - [ ] `ctest -LE perf` 全绿（零回归）
 - [ ] **计数同步**：`CTEST_TOTAL`（每批 +N 个 ctest 条目）·
       `VERILATOR_E2E_TOTAL`（每批 +N）· `DUAL_BACKEND_PARITY_TOTAL`（每批 +N 文件）·
@@ -136,8 +169,9 @@ MUST 是【有独立价值的新测试】**（⇒ ⇒ **不是**转换的复刻 
 
 | 批 | 冷缓存墙钟（实测） | 累计 | CI 预算 45 min 余量 |
 |---|---|---|---|
-| A | 13.5 s | 13.5 s | 44.8 min |
-| B | 待测 | | |
+| A | **13.5 s**（含 verilator 自身 JIT 的一次性 ~3 s） | 13.5 s | 44.8 min |
+| **B1**（✅ 已实施） | **44.6 s**（4 pair ⇒ **10.6 s/pair** ⇒ ⇒ 与 §3.0 模型一致 ✔） | **58.1 s** | 44.0 min |
+| B（其余 7 文件） | 待测（~30 pair ⇒ 估 ~5.3 min） | | |
 | C | 待测 | | |
 | D | 待测 | | |
 | E | 待测 | | |
@@ -225,4 +259,5 @@ verilator 版本）。
 
 | 日期 | 变更 | 依据 |
 |---|---|---|
+| 2026-11-01 | 🔴 **成本模型二次订正**：单位 = **【pair 数】**（逐 0.01 s 打点：elaboration **0.012 s**，**C++ 编译+链接 10.66 s/pair**）⇒ ⇒ 「每 pair 一条 REQUIRE」代价很高 ⇒ ⇒ **判据改用 XML per-TEST_CASE 对比** ⇒ ⇒ 批次预算由 Σ 56 min 修正为 **~30–35 min** | 批次 B1 实施期实测（假 HOME 全冷） |
 | 2026-11-01 | **创建** ⇒ ⇒ 量化盘点（37 → 29）+ 成本模型（实测墙钟）+ 8 批清单 + 墙钟账本 | T7 步骤 1 · gap C · 2026-11-01 试点实测 |

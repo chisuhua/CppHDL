@@ -165,6 +165,16 @@ add_dual_backend_test(test_dual_backend_reset
 add_catch_test(test_arithmetic chlib/test_arithmetic.cpp)
 add_catch_test(test_arithmetic_advance chlib/test_arithmetic_advance.cpp)
 add_catch_test(test_assert chlib/test_assert.cpp)
+
+# ⚠️⚠️ **A5 批次 B1**（2026-11-01 · change `dual-backend-parity-batch-b-2026-11`）
+#    ⇒ ⇒ 双后端 parity 的**第 2 个新批次**（`chlib::AssertChecker` · **纯组合**）
+#    ⇒ ⇒ **新增 `_behavior` 文件** ⇒ ⇒ 原 `test_assert` MUST NOT 修改
+#    ⇒ ⇒ ⚠️ 只转 4 个 `AssertChecker` 用例 ⇒ ⇒ 原文件的 2 个
+#    ⇒ ⇒ **`std::cout` 重定向**用例 MUST NOT 转（断言的是 C++ 侧打印
+#    ⇒ ⇒ ⇒ 不是硬件信号 ⇒ ⇒ 双后端无意义 ⇒ ⇒ 且 stdout 是全局状态）
+add_dual_backend_test(test_assert_behavior
+    SOURCES chlib/test_assert_behavior.cpp
+)
 add_catch_test(test_bitwise chlib/test_bitwise.cpp)
 add_catch_test(test_cache_simple chlib/test_cache_simple.cpp)
 add_catch_test(test_cache_complete chlib/test_cache_complete.cpp)
