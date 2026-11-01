@@ -182,6 +182,73 @@ per-TEST_CASE 对比」的判据**（见 §4 验收模板）⇒ ⇒ ⇒ ⇒ ⇒ 
 
 ---
 
+## 4.1 🔴🔴 判据的**规模化障碍**（A5 可持续性的真正瓶颈）
+
+### 现象（实测数据）
+
+⚠️ 「每 pair 恰 1 条 `REQUIRE`」这条约定（§4 验收模板的**前提**）⇒ ⇒ 在
+**多断言用例**上代价极高 ⇒ ⇒ **且 AXI 类用例恰恰是多断言的**：
+
+| `tests/test_axi_gpio.cpp` 的用例 | REQUIRE 数 | 可转？ |
+|---|---|---|
+| `端口接口` | 0（width 结构断言） | ❌ 无增量价值 |
+| `VerilogGeneration` | 2 | ❌ codegen 测试 |
+| `ComponentCreation` | 1（name） | ❌ 价值低 |
+| 写 DATA_OUT 反映到 gpio_out | 1 | ✅ |
+| 写 DIRECTION 反映到 gpio_dir | 1 | ✅ |
+| 读 DATA_OUT 返回写入值 | 1 | ✅ |
+| 读 DATA_IN 反映 gpio_in | 1 | ✅ |
+| AW/W 相位分离后写仍落地 | 1 | ✅ |
+| AW 握手后改写 awaddr 不改变写目标 | 3 | ✅（须拆 3 pair） |
+| BVALID 保持到 BREADY | 3 | ✅（须拆 3 pair） |
+| RVALID 保持到 RREADY | 4 | ✅（须拆 4 pair） |
+| 事务结束后可接受下一笔 | 2 | ✅（须拆 2 pair） |
+| 写未映射地址返回 DECERR | 2 | ✅（须拆 2 pair） |
+| rst_n 复位清空寄存器并释放 busy | 5 | ✅（须拆 5 pair） |
+
+⇒ ⇒ **11 个可转用例 = 24 条 REQUIRE = 24 个 pair** ⇒ ⇒
+**24 × 10.66 s ≈ 4.3 min（仅 gpio 一个文件！）** ⇒ ⇒ ⇒ **⇒ 不可持续**
+⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「每 pair 一条 REQUIRE」这条约定【在规模化下失效】**。
+
+### ⭐ 候选解法（**假设已实测可行**）
+
+⇒ ⇒ **把每个 pair 的 body 包进 `SECTION`** ⇒ ⇒ Catch2 的 XML reporter 会给出
+**per-Section** 的 `successes` ⇒ ⇒ ⇒ **两半边的同名 Section 可按名字配对**
+⇒ ⇒ ⇒ **⇒ 判据可升级为「verilator 半边每个 Section 的 successes == interpreter
+半边对应 Section 的 successes」** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 多断言 pair【无需拆】**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 零额外编译成本** ✔✔
+
+⚠️ **实测证据**（2026-11-01，批次 B1 临时验证 ⇒ ⇒ 事后已撤销）：
+
+```xml
+<TestCase name="... [interpreter]">
+  <Section name="enable=1 & condition=0 => failed=1">
+    <OverallResults successes="1" .../>
+<TestCase name="... [verilator]">
+  <Section name="enable=1 & condition=0 => failed=1">
+    <OverallResults successes="1" .../>
+```
+
+⇒ ⇒ **⇒ per-Section 的 successes 确实可按名字配对** ✔
+
+⚠️ **但它落地是【基础设施级】** ⇒ ⇒ ⇒ **不在批次 change 里顺手做**：
+① 需要**机械核验脚本**（解析 XML + 按 Section 名配对比对）⇒ ⇒ ⇒ **要么新增
+护栏、要么扩展既有护栏**；
+② 需要**重新跑**已归档的批次 A / B1（它们的 pair **无 SECTION** ⇒ ⇒ ⇒ **不满足
+新判据的前置**）⇒ ⇒ ⇒ **返工**；
+③ **CI 墙钟**：XML 需要**额外跑一遍** dual 测试（`ctest` 不产 XML）⇒ ⇒ ⇒
+⇒ ⇒ **要么在 CI 里加一次（重复成本 ~40 min）**、⇒ ⇒ ⇒ ⇒ ⇒ **要么用
+Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零额外墙钟**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 但实现复杂** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 需 architect/planner
+定夺**）。
+
+⇒ ⇒⇒ **⇒ 决策门（独立立项）**：是否值得为「解除规模化障碍」升级判据？
+⇒ ⇒⇒ **收益**：批次 B/C/D/E/F 的墙钟从「拆分后」回到「不拆」
+⇒ ⇒⇒ ⇒ ⇒ ⇒ **（估算省 ~3–5 倍）** ⇒ ⇒⇒ ⇒ ⇒ ⇒ **⇒ 成本**：新护栏 +
+2 个批次返工 + CI 策略决策 ⇒ ⇒⇒ ⇒ ⇒ ⇒ **⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **建议：做**，
+但**作为独立 change**（⇒ ⇒ 不与任何批次耦合）⇒ ⇒⇒ ⇒ ⇒ ⇒
+**⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒**
+
 ## 5. 墙钟账本（**每批实测后回填** ⇒ ⇒ 不许拍脑袋**）
 
 | 批 | 冷缓存墙钟（实测） | 累计 | CI 预算 45 min 余量 |
