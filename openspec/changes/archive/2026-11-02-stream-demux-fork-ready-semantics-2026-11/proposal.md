@@ -7,6 +7,8 @@
 - **规模 / 风险**：中（1 个头文件 + 4 处调用点 + 1 个新 dual 测试 + 1 条新护栏判据）
 - **关联台账**：`.rddf/improvements/stream-forward-ready-closure-2026-10.md#demux` / `#fork`
 
+<!-- touched-components: stream_demux, stream_fork -->
+
 ## Why（两个组件都「不在任何 ready 契约的覆盖范围内」）
 
 ### 1. `stream_demux` 的 ready 方向**颠倒**

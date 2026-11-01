@@ -489,6 +489,31 @@ jobs:
       shell: bash
       run: scripts/verify_stream_ready_ownership.sh --self-test
 
+    - name: Verify chlib naming honesty registry
+      # WHY: this repo has shipped THREE "the name promises a behaviour that
+      # does not exist" defects (fwft_fifo promised FWFT, stream_arbiter_
+      # sequence's comment promised round-robin, stream_arbiter_round_robin
+      # promised rotation) => each was found by an ad-hoc audit => the next
+      # one would too. The registry binds "components whose names have lied /
+      # were changed" to the behaviour test that now locks their claimed
+      # semantics, so drift (component deleted / judge test removed) is
+      # detected mechanically.
+      # R1 = registry subset of the real components; R2 = every registered
+      # judge test still exists and still carries its tag; R3 = the latest
+      # chlib change MUST declare the components it touched (per-change
+      # obligation) and those MUST all be registered.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_chlib_naming_honesty.sh
+
+    - name: Verify chlib naming honesty registry (self-test)
+      # WHY a self-test: a criterion is only as good as its ability to FAIL.
+      # This self-test POISONS THE REGISTRY IN PLACE (pure data => the
+      # equivalent discipline is "restored => green again") and proves the
+      # verification turns red for 3 independent regressions.
+      shell: bash
+      run: scripts/verify_chlib_naming_honesty.sh --self-test
+
     - name: Verify stream domain closure checklist
       # The checklist (.rddf/checks/stream-domain-closure.md) is the SINGLE
       # place that says "what is still owed" for the chlib stream domain.
