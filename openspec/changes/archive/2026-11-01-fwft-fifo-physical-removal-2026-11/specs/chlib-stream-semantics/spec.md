@@ -50,9 +50,10 @@ MUST 与 `pop_stream.valid` **同拍**有效，且呈现**当前队首**。
 > （本仓 ADR-053 的同型先例：只能**原地订正内容**，不能删/改标题）。
 
 - **WHEN** 参照仓库中的 FIFO 组件
-- **THEN** `chlib::fwft_fifo` MUST **不存在**（零消费者 + 名字 over-promise
-  ⇒ ⇒ 2026-11-01 **物理删除**：实测其 `q` 在写入后仍恒为初值，直到发起读才
-  出现队首 ⇒ ⇒ 名字承诺 FWFT 而行为不是）
+- **THEN** `chlib::fwft_fifo` MUST **不存在**（名字 over-promise：实测其 `q`
+  在写入后仍恒为初值，直到发起读才出现队首 ⇒ ⇒ 名字承诺 FWFT 而行为不是）
+- **AND** 它的**唯一**消费者是它自己的测试，而该用例对 FWFT 语义**零判别力**
+  （只断言复位后的 `empty` / `full`）⇒ ⇒ 删除**零判别力损失**
 - **AND** MUST NOT 重新引入**名为 FWFT 却非 show-ahead** 的组件
   ⇒ ⇒ 该「不得回归」MUST 由**结构护栏**守住（源文件 MUST NOT 再出现该符号）
 - **AND** FWFT 语义 MUST 以本 Requirement 为准（真 show-ahead = `sync_fifo`

@@ -82,10 +82,20 @@ MUST 与 `pop_stream.valid` **同拍**有效，且呈现**当前队首**。
 
 #### Scenario: fwft_fifo MUST NOT 被当作 FWFT 参照
 
+> ⚠️ **本 Scenario 的标题已过时**（组件已**物理删除** ⇒ 「MUST NOT 被当作
+> 参照」升级为「**MUST 不存在**」）⇒ 标题**保留**的原因：OpenSpec CLI 按
+> **标题**匹配 Scenario ⇒ 改标题会被判为「丢弃旧 + 新增」⇒ **拒绝归档**
+> （本仓 ADR-053 的同型先例：只能**原地订正内容**，不能删/改标题）。
+
 - **WHEN** 参照仓库中的 FIFO 组件
-- **THEN** MUST NOT 把 `chlib::fwft_fifo` 当作 FWFT（show-ahead）实现的参照
-  （实测其 `q` 在写入后仍恒为初值，直到发起读才出现队首）
-- **AND** FWFT 语义 MUST 以本 Requirement 为准
+- **THEN** `chlib::fwft_fifo` MUST **不存在**（名字 over-promise：实测其 `q`
+  在写入后仍恒为初值，直到发起读才出现队首 ⇒ ⇒ 名字承诺 FWFT 而行为不是）
+- **AND** 它的**唯一**消费者是它自己的测试，而该用例对 FWFT 语义**零判别力**
+  （只断言复位后的 `empty` / `full`）⇒ ⇒ 删除**零判别力损失**
+- **AND** MUST NOT 重新引入**名为 FWFT 却非 show-ahead** 的组件
+  ⇒ ⇒ 该「不得回归」MUST 由**结构护栏**守住（源文件 MUST NOT 再出现该符号）
+- **AND** FWFT 语义 MUST 以本 Requirement 为准（真 show-ahead = `sync_fifo`
+  的 `q_async`，0-cycle `aread`）
 
 > ⚠️ **收口订正（2026-10-22，对抗审稿 BLOCKER）**：本 capability 归档时曾误并入两条
 > 「构造期纪律 / 两阶段 ready」Requirement。它们描述的是**尚未实施的后续立项**
