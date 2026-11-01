@@ -404,54 +404,6 @@ TEST_CASE("FIFO: sync_fifo", "[fifo][sync_fifo]") {
     }
 }
 
-TEST_CASE("FIFO: fwft_fifo", "[fifo][fwft_fifo]") {
-
-    SECTION("Basic write and read operations") {
-        auto ctx = std::make_unique<ch::core::context>("test_sync_fifo");
-        ch::core::ctx_swap ctx_swapper(ctx.get());
-        // 构建FIFO硬件描述
-        ch_bool wren(0_b);
-        ch_uint<8> din(0x00_h);
-        ch_bool rden(0_b);
-
-        FwftFifoResult<8, 3> result = fwft_fifo<8, 3>(wren, din, rden);
-
-        ch::Simulator sim(ctx.get());
-
-        // 设置初始输入值
-        sim.set_value(wren, false);
-        sim.set_value(din, 0x00);
-        sim.set_value(rden, false);
-
-        // 获取输入值并打印
-        auto wren_val = sim.get_value(wren);
-        auto din_val = sim.get_value(din);
-        auto rden_val = sim.get_value(rden);
-
-        std::cout << "FWFT FIFO Input: wren=" << wren_val << ", din=0x"
-                  << std::hex << din_val << std::dec << ", rden=" << rden_val
-                  << std::endl;
-
-        toDAG("1.dot", ctx.get(), sim);
-        sim.tick();
-        toDAG("2.dot", ctx.get(), sim);
-
-        // 获取输出值并打印
-        auto empty_val = sim.get_value(result.empty);
-        auto full_val = sim.get_value(result.full);
-        auto q_val = sim.get_value(result.q);
-        auto count_val = sim.get_value(result.count);
-
-        std::cout << "FWFT FIFO Output: empty=" << empty_val
-                  << ", full=" << full_val << ", q=0x" << std::hex << q_val
-                  << std::dec << ", count=" << count_val << std::endl;
-
-        // After reset, FIFO should be empty
-        REQUIRE(sim.get_value(result.empty) == true);
-        REQUIRE(sim.get_value(result.full) == false);
-    }
-}
-
 TEST_CASE("FIFO: lifo_stack", "[fifo][lifo_stack]") {
 
     SECTION("Basic push and pop operations") {

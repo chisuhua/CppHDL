@@ -129,98 +129,6 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden) {
     return result;
 }
 
-/**
- * ⚠️⚠️ **同步 FIFO —— 本组件【不是】FWFT**（2026-11-01 订正）
- *
- * ⚠️ **原标题「First-Word Fall-Through (FWFT) FIFO - 先字后进FIFO」是
- *    假陈述** ⇒ ⇒ **本组件的 `q` 并非「始终显示下一个可读取的数据」**
- * ⇒ ⇒ ⇒ ⇒ **⇒ 读的人若只看标题会被直接误导**（⇒ ⇒ 这就是本仓登记的
- * 「**名字/注释 over-promise**」类缺陷 ⇒ ⇒ 见 capability
- * `chlib-stream-arbitration` R2「命名与文档 MUST 与实现行为一致」）。
- *
- * ⚠️ **实测行为**（ADR-045 §2.4）：写入 `0xA1` / `0xB2` 后 **`q` 恒为
- *    `0x0`**，直到发起读才出现 `0xA1` ⇒ ⇒ ⇒ **⇒ `q` 只在读之后才更新**
- * ⇒ ⇒ ⇒ ⇒ **⇒ 它是「读触发输出」，不是 show-ahead**。
- *
- * ⇒ ⇒ **真正的 FWFT（show-ahead）实现**是 `sync_fifo` 的 `q_async` 字段
- *    （0-cycle `aread`）与 `stream_fifo::pop_stream.payload`。
- *
- * ⚠️ **MUST NOT** 把本组件当作 FWFT 参照 —— `fwft_fifo` 的重写/改名单独立项
- *    （ADR-045 裁决 2.4 / capability `chlib-stream-semantics`）。
- */
-template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FwftFifoResult {
-    ch_bool empty;
-    ch_bool full;
-    ch_uint<DATA_WIDTH> q; // ⚠️ 仅在**读之后**才更新（实测）⇒ 不是 show-ahead
-    ch_uint<ADDR_WIDTH + 1> count;
-};
-
-template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH>
-FwftFifoResult<DATA_WIDTH, ADDR_WIDTH>
-fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
-    static_assert(DATA_WIDTH > 0, "Data width must be greater than 0");
-    static_assert(ADDR_WIDTH > 0, "Address width must be greater than 0");
-
-    // 内部存储器
-    ch_mem<ch_uint<DATA_WIDTH>, (1ULL << ADDR_WIDTH)> memory("fwft_fifo_memory");
-
-    // 获取默认时钟和复位信号
-
-    // 读写指针
-    ch_reg<ch_uint<ADDR_WIDTH>> read_ptr(0_d, "fwft_fifo_read_ptr");
-    ch_reg<ch_uint<ADDR_WIDTH>> write_ptr(0_d, "fwft_fifo_write_ptr");
-
-    // 计数器
-    ch_reg<ch_uint<ADDR_WIDTH + 1>> count(0_d, "fwft_fifo_count");
-
-    // 数据输出寄存器
-    ch_reg<ch_uint<DATA_WIDTH>> output_reg(0_d, "fwft_fifo_output");
-
-    // 写入操作
-    ch_bool write_enable = wren & !is_full(count);
-    memory.write(write_ptr, din, write_enable);
-
-    // 更新写指针
-    ch_uint<ADDR_WIDTH> next_write_ptr =
-        select(write_enable, write_ptr + 1_d, write_ptr);
-    write_ptr->next = next_write_ptr;
-
-    // 读取操作 - 创建读端口
-    ch_uint<DATA_WIDTH> read_port;
-    read_port <<= memory.sread(read_ptr, ch_bool(1_b));
-    ch_bool read_enable = rden & !is_empty(count);
-
-    // 更新读指针
-    ch_uint<ADDR_WIDTH> next_read_ptr =
-        select(read_enable, read_ptr + 1_d, read_ptr);
-    read_ptr->next = next_read_ptr;
-
-    // 更新输出寄存器
-    ch_uint<DATA_WIDTH> new_output =
-        select(is_empty(count), // 如果为空，则输出保持不变
-               output_reg,      // 否则更新为下一个可读取的数据
-               read_port);      // 使用读端口数据
-    output_reg->next =
-        select(read_enable | is_empty(count + 1_d), // 如果读使能或下个周期为空
-               new_output,                           // 更新输出
-               output_reg                            // 否则保持不变
-        );
-
-    // 更新计数器
-    ch_uint<ADDR_WIDTH + 1> next_count;
-    next_count =
-        select(write_enable & !read_enable, count + 1_d,
-               select(!write_enable & read_enable, count - 1_d, count));
-    count->next = next_count;
-
-    FwftFifoResult<DATA_WIDTH, ADDR_WIDTH> result;
-    result.empty = is_empty(count);
-    result.full = is_full(count);
-    result.q = output_reg;
-    result.count = count;
-
-    return result;
-}
 
 /**
  * 异步 FIFO — 未实现（因 CppHDL 不支持 CDC）
@@ -234,10 +142,10 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
  *
  * 临时替代方案:
  * - 使用同步 FIFO（`sync_fifo`）+ 单时钟域设计
- *   ⚠️ **MUST NOT** 把 `fwft_fifo` 列作替代方案 —— 实测它**不是**
- *     FWFT（`q` 只在读之后才更新）⇒ ⇒ FWFT/show-ahead 语义请用
- *     `sync_fifo` 的 `q_async`（0-cycle `aread`）⇒ ⇒ 见上方的
- *     `FwftFifoResult` 注释与 capability `chlib-stream-semantics`。
+ *   ⚠️ **本仓没有 FWFT 组件**（历史上那个名字 over-promise 的组件已于
+ *     2026-11-01 **物理删除**）⇒ ⇒ FWFT/show-ahead 语义请用
+ *     `sync_fifo` 的 `q_async`（0-cycle `aread`）⇒ ⇒ capability
+ *     `chlib-stream-semantics`。
  * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
  * - 使用 SpinalHDL 的 StreamFifoCC 组件
  *
@@ -257,10 +165,10 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
  *
  * 临时替代方案:
  * - 使用同步 FIFO（`sync_fifo`）+ 单时钟域设计
- *   ⚠️ **MUST NOT** 把 `fwft_fifo` 列作替代方案 —— 实测它**不是**
- *     FWFT（`q` 只在读之后才更新）⇒ ⇒ FWFT/show-ahead 语义请用
- *     `sync_fifo` 的 `q_async`（0-cycle `aread`）⇒ ⇒ 见上方的
- *     `FwftFifoResult` 注释与 capability `chlib-stream-semantics`。
+ *   ⚠️ **本仓没有 FWFT 组件**（历史上那个名字 over-promise 的组件已于
+ *     2026-11-01 **物理删除**）⇒ ⇒ FWFT/show-ahead 语义请用
+ *     `sync_fifo` 的 `q_async`（0-cycle `aread`）⇒ ⇒ capability
+ *     `chlib-stream-semantics`。
  * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
  * - 使用 SpinalHDL 的 StreamFifoCC 组件
  * 

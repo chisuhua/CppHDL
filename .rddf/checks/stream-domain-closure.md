@@ -51,7 +51,7 @@ UNPAID_ROWS: 3
 | 12 | fork 同步语义（`input ready` = AND(各 output ready)） | — | `code:include/chlib/stream.h#stream_fork` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#fork` | ❌ |
 | 13 | builder 链**上游反压**（链内闭包不变式：中间级读使能 ← 下一级容量信号） | `spec:chlib-stream-ready-ownership#链内中间级的读使能 MUST 由` | `code:include/chlib/stream_builder.h#queue` | `test:tests/test_stream_builder_backpressure_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/lib/stream_ready_ownership.py#def r10()` | — | ✅ |
 | 13b | `stream_pipeline.h` 的 3 个 pipe（上游 ready 归属 + `output.ready` 可覆盖 + 数据通路保持） | `spec:chlib-stream-ready-ownership#链内中间级的读使能 MUST 由` | `code:include/chlib/stream_pipeline.h#stream_m2s_pipe` | `test:tests/test_stream_pipeline.cpp#[stream][pipeline][ready]` | `guard:scripts/lib/stream_ready_ownership.py#def r11()` | — | ✅ |
-| 14 | 命名诚实性（`fwft_fifo` 是**已知实例**：不是 FWFT） | `spec:chlib-stream-arbitration#仲裁器的命名与文档 MUST 与实现行为一致` | `code:include/chlib/fifo.h#fwft_fifo` | — | — | `debt:.rddf/improvements/chlib-naming-honesty-audit-2026-11.md#fwft_fifo` | ❌ |
+| 14 | 命名诚实性 —— `fwft_fifo` 实例**已消除**（2026-11-01 物理删除 + 回归禁令 R11）；**通用条款**（新增/改动组件 MUST 有行为用例锁定其**声称语义**）待 B8 | `spec:chlib-stream-arbitration#仲裁器的命名与文档 MUST 与实现行为一致` | `code:include/chlib/fifo.h#q_async` | — | `guard:scripts/lib/stream_domain_closure.py#def r11()` | `debt:.rddf/checks/architect-decisions-pending-2026-11.md#B8` | ❌ |
 
 ## 能力面说明（**为什么这样切**）
 
@@ -107,3 +107,4 @@ UNPAID_ROWS: 3
 | 2026-11-01 | A3：第 13 行**根因订正**（「静默丢字」被实测推翻 ⇒ ⇒ 真缺陷 = **上游反压从未建立**）· **删**第 15 行（「编号一致性」是**护栏实现细节**，不是能力面 ⇒ ⇒ 已在护栏脚本内就地订正）· **新增**第 07b 行（`connect_ready` 多驱动守卫 + R9 + 投毒） | A3 实测（`/tmp/opencode/a3/probe_*.cpp`）· shell 标签「R2~R6」⇒ ⇒ 「R2~R6 + R8 + R9」· python 侧登记「R7 是空号」 |
 | 2026-11-01 | 「已知边界」补登记**归档文档不改**（`fwft_fifo` over-promise 的两处历史快照保留） | A1 实施期发现：归档文档 + 历史计划属**历史快照**（保真性 > 现行正确性）⇒ ⇒ 不可用「全仓 grep 无残留」当验收判据 |
 | 2026-11-01 | **第 13 / 13b 行 → ✅**（ADR-055 的「链内闭包不变式」兑现：新增 Requirement + 各自的 dual/行为判据 + 独立护栏判据 R10 / R11）· **删第 15 行**（8 项裁决**全部完成** ⇒ ⇒ 该行是过程项，不是能力面 ⇒ ⇒ 素材仍留在 `.rddf/checks/architect-decisions-pending-2026-11.md`）· 锚点 `17/6 → 16/3` · 「已知边界」把 `stream_pipeline.h` 纳入覆盖面 | 归档 change `stream-builder-and-pipe-ready-ownership-2026-11`（接 ADR-055）。⚠️ **本行的出现本身就是清单的一个已知边界**：状态列由**手写指针**推导 ⇒ ⇒ 实施完成后**不会自动记账** ⇒ ⇒ 靠人工补（与「R1 验不了语义漂移」同型） |
+| 2026-11-01 | 第 14 行：`fwft_fifo` **实例已消除**（物理删除）⇒ `实现` 指针改指**真 FWFT**（`fifo.h#q_async`）· 补 `护栏` 指针（**R11 回归禁令**）· `欠账` 改指 **B8**（命名诚实性的**通用条款**仍未兑现）⇒ ⇒ **该行保持 ❌** | ⚠️ **不是「删了实例就改成 ✅」**：该行的 `test` 列**没有真实判据可填**（删除的正确性属于「不存在性」，只能由**结构护栏**守，无法由运行期断言证明）⇒ ⇒ 而**通用义务**（新增/改动组件 MUST 有行为用例锁定其声称语义）确实**未完成** ⇒ ⇒ ⇒ 保持 ❌ 才是诚实的口径 |

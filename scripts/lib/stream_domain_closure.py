@@ -394,6 +394,7 @@ def _do_check() -> int:
     r1()
     r2()
     r10()
+    r11()
     if FAILS:
         print(f"{RED}❌ 收口清单核验 FAIL（{FAILS} 项）{RESET}")
         return 1
@@ -501,6 +502,39 @@ def r10() -> None:
              + "（⇒ ⇒ 写口/读指针与 count 脱钩 ⇒ ⇒ 满写被覆写 / 空读读脏槽）")
         return
     ok("R10 `sync_fifo` 自保护结构完整（will_write / will_read 与 count 同源）")
+
+
+def r11() -> None:
+    """名字 over-promise 的 FIFO 组件 MUST NOT 回归（B4 · 物理删除的**回归禁令**）。
+
+    ⚠️ **为什么需要**（2026-11-01 · `fwft-fifo-physical-removal-2026-11`）：
+    `chlib::fwft_fifo` 的**名字**承诺 FWFT（show-ahead），实测 `q` 只在
+    **读之后**才更新 ⇒ ⇒ **名字说谎**。处置 = **物理删除**（零消费者）。
+    ⇒ ⇒ ⇒ **但「删掉」这件事本身没有守护**：下一个人可能重新加一个同名组件
+    （或被 `git revert` 带回来）⇒ ⇒ **同一个谎言会以「新代码」的形态复发**。
+
+    ⇒ ⇒ **判据两面**（都 MUST 成立）：
+      ① `include/chlib/fifo.h`（**剥注释**后）MUST NOT 出现 `fwft_fifo`
+         或 `FwftFifoResult` ⇒ ⇒ 出现即「被删组件回归」⇒ ⇒ 红；
+      ② 真 FWFT 能力 MUST **仍然在**（`q_async`）⇒ ⇒ 否则「删组件」把真能力
+         一起删了 ⇒ ⇒ 也是红（**反向判据**，防「为让判据绿而误删」）。
+    """
+    if not FIFO_H.exists():
+        fail("R11 缺少 include/chlib/fifo.h")
+        return
+    code = strip_comments_and_strings(FIFO_H.read_text(encoding="utf-8"))
+    ghosts = [sym for sym in ("fwft_fifo", "FwftFifoResult") if sym in code]
+    if ghosts:
+        fail("R11 名字 over-promise 的组件**回归**了：" + " / ".join(ghosts)
+             + "（它承诺 FWFT 但 `q` 只在读之后才更新 ⇒ ⇒ 名字说谎 ⇒ ⇒ "
+             "已于 2026-11-01 物理删除 ⇒ ⇒ MUST NOT 重新引入同名组件；"
+             "真 FWFT 语义请用 `sync_fifo` 的 `q_async`）")
+        return
+    if "q_async" not in code:
+        fail("R11 真 FWFT 能力**不见了**（`q_async` 缺失）⇒ ⇒ 删除说谎组件的"
+             "同时把真能力一起删了 ⇒ ⇒ MUST 恢复 `sync_fifo` 的 0-cycle `q_async`")
+        return
+    ok("R11 名字 over-promise 的 FIFO 组件未回归，且真 FWFT（`q_async`）仍在")
 
 
 def main() -> int:
