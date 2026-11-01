@@ -552,6 +552,14 @@ add_catch_test(test_stream_width_adapter test_stream_width_adapter.cpp)
 
 # 其它测试
 add_catch_test(test_blt_debug test_blt_debug.cpp)
+
+# ⚠️⚠️ **A5 试点**（2026-11-01 · change `dual-backend-parity-batch-2026-11`）
+#    ⇒ ⇒ 双后端 parity 的**第 1 个新批次**（组合逻辑 ⇒ 无 clk 风险）
+#    ⇒ ⇒ **新增 `_behavior` 文件** ⇒ ⇒ 原 `test_blt_debug` MUST NOT 修改
+#    ⇒ ⇒ （仓内既有 pattern：`_behavior` 后缀）
+add_dual_backend_test(test_blt_debug_behavior
+    SOURCES test_blt_debug_behavior.cpp
+)
 add_catch_test(test_bv_cmp test_bv_cmp.cpp)
 add_catch_test(test_bv_truncate test_bv_truncate.cpp)
 add_catch_test(test_ch_reg_bitwise test_ch_reg_bitwise.cpp)
