@@ -489,6 +489,30 @@ jobs:
       shell: bash
       run: scripts/verify_stream_ready_ownership.sh --self-test
 
+    - name: Verify stream domain closure checklist
+      # The checklist (.rddf/checks/stream-domain-closure.md) is the SINGLE
+      # place that says "what is still owed" for the chlib stream domain.
+      # Before it existed the unpaid items were scattered across FOUR places
+      # (a capability Purpose paragraph, several improvement ledgers, and an
+      # ADR's out-of-scope section) => nobody could tell what was left.
+      # KEY DESIGN: the checklist's "status" column is NOT a hand-written
+      # claim - it is DERIVED from the pointer set (a green row MUST carry
+      # spec + test + guard; a red row MUST carry a debt pointer and MUST
+      # NOT carry test + guard) => the checklist cannot contradict itself.
+      # Portable bash + python3 (runs on every OS in the matrix).
+      shell: bash
+      run: scripts/verify_stream_domain_closure.sh
+
+    - name: Verify stream domain closure checklist (self-test)
+      # WHY a self-test: a criterion is only as good as its ability to FAIL.
+      # This self-test POISONS THE CHECKLIST IN PLACE and proves the
+      # verification turns red for 4 independent regressions, then restores
+      # it and proves green again.
+      # NOTE: the checklist is pure data => "the mutation still compiles" does
+      # not apply; the equivalent discipline is "restored => green again".
+      shell: bash
+      run: scripts/verify_stream_domain_closure.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in

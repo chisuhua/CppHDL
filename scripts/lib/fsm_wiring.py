@@ -48,10 +48,22 @@ RE_IO_ASSIGN = re.compile(
 RE_CONTRIB_CALL = re.compile(r"\bcontrib\s*\(")
 
 
-def strip_comments_and_strings(text):
+def strip_comments_and_strings(text, strip_strings=True):
     """把注释与字符串/字符字面量替换成**等长空格**（保留换行 ⇒ 偏移量不变）。
 
     ⇒ 后续所有正则只在**真实代码**上匹配 ⇒ 注释里的 `->next =` 不会误报。
+
+    ⚠️ **2026-11-01 新增参数 `strip_strings`**（默认 `True` ⇒ ⇒ **既有调用点
+    行为逐位不变** ⇒ ⇒ 零漂移）：
+    - `strip_strings=True`（默认）⇒ ⇒ **注释 + 字符串**都替换成空格
+      （⇒ ⇒ 「只在真实代码上匹配」，既有护栏的口径）；
+    - `strip_strings=False` ⇒ ⇒ **只**替换注释，**保留字符串原文**
+      ⇒ ⇒ 用于「marker 本身就住在字符串里」的场景
+      （⇒ ⇒ 例：Catch2 的 `TEST_CASE("...", "[stream][fifo]")` ⇒ ⇒ tag 在
+      字符串里 ⇒ ⇒ 剥掉字符串就**永远匹配不上** ⇒ ⇒ 判据恒红 = 假红）。
+
+    ⇒ ⇒ **两种口径的差异只在「字符串是否参与匹配」** ⇒ ⇒ 「注释不算」
+    这条**共同语义**不变 ⇒ ⇒ ⇒ **不会漂移**。
     """
     out = list(text)
     i = 0
@@ -70,6 +82,21 @@ def strip_comments_and_strings(text):
             for k in range(i, j):
                 if out[k] != "\n":
                     out[k] = " "
+            i = j
+        elif (c == '"' or c == "'") and not strip_strings:
+            # ⚠️ **保留字符串原文**（只跳过它 ⇒ 避免把字符串里的 `//` 当注释）
+            quote = c
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == quote:
+                    j += 1
+                    break
+                if text[j] == "\n":
+                    break  # 未闭合 ⇒ 保守停在本行
+                j += 1
             i = j
         elif c == '"' or c == "'":
             quote = c
