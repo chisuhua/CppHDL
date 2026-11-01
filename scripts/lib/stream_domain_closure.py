@@ -395,6 +395,7 @@ def _do_check() -> int:
     r2()
     r10()
     r11()
+    r12()
     if FAILS:
         print(f"{RED}❌ 收口清单核验 FAIL（{FAILS} 项）{RESET}")
         return 1
@@ -535,6 +536,45 @@ def r11() -> None:
              "同时把真能力一起删了 ⇒ ⇒ MUST 恢复 `sync_fifo` 的 0-cycle `q_async`")
         return
     ok("R11 名字 over-promise 的 FIFO 组件未回归，且真 FWFT（`q_async`）仍在")
+
+
+def r12() -> None:
+    """名字 over-promise 的**仲裁器** MUST NOT 回归（B5 · 物理删除的回归禁令）。
+
+    ⚠️ **为什么需要**（2026-11-01 · `stream-arbiter-sequence-removal-2026-11`）：
+    `stream_arbiter_sequence` 的**注释**曾谎称「using round-robin selection」/
+    「wraps around」，而实现是 `priority_encoder`（固定优先级，**既不轮转也不
+    wrap**）⇒ ⇒ 且它与 `stream_arbiter_priority` 的**仲裁逻辑逐位相同**
+    （唯一差异是 ready 链多一个 `& has_valid` 门控）。
+    ⇒ ⇒ 处置 = **物理删除**（独立架构裁决 ⇒ 不是「在仲裁语义修复中顺手删」，
+    后者被 capability `chlib-stream-arbitration` 明文禁止）。
+
+    ⇒ ⇒ **判据两面**（都 MUST 成立）：
+      ① `include/chlib/stream_arbiter.h`（**剥注释**后）MUST NOT 出现
+         `stream_arbiter_sequence` / `StreamArbiterSequenceResult`；
+      ② 固定优先级能力 MUST **仍然在**（`stream_arbiter_priority`，在
+         `include/chlib/stream.h`）⇒ ⇒ 否则「删重复」把唯一实现也删了。
+    """
+    arb = REPO / "include" / "chlib" / "stream_arbiter.h"
+    stream = REPO / "include" / "chlib" / "stream.h"
+    if not arb.exists() or not stream.exists():
+        fail("R12 缺少 include/chlib/stream_arbiter.h 或 stream.h")
+        return
+    code = strip_comments_and_strings(arb.read_text(encoding="utf-8"))
+    ghosts = [sym for sym in ("stream_arbiter_sequence",
+                              "StreamArbiterSequenceResult") if sym in code]
+    if ghosts:
+        fail("R12 名字 over-promise 的仲裁器**回归**了：" + " / ".join(ghosts)
+             + "（注释谎称 round-robin / wraps around 而实现是 priority_encoder，"
+             "且与 stream_arbiter_priority 仲裁逻辑逐位相同 ⇒ ⇒ 已于 2026-11-01 "
+             "物理删除 ⇒ ⇒ MUST NOT 重新引入）")
+        return
+    scode = strip_comments_and_strings(stream.read_text(encoding="utf-8"))
+    if "stream_arbiter_priority" not in scode:
+        fail("R12 固定优先级仲裁能力**不见了**（`stream_arbiter_priority` 缺失）"
+             "⇒ ⇒ 删除重复组件的同时把唯一实现也删了")
+        return
+    ok("R12 名字 over-promise 的仲裁器未回归，且固定优先级（priority）仍在")
 
 
 def main() -> int:

@@ -1301,10 +1301,14 @@ TEST_CASE("Stream: 转发类组合子的**上游 MUST 真收到反压**",
     //    `arbiter-upstream-operator-assign` 时行为用例**仍绿** ⇒ ⇒ ⇒
     //    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 必须补**（⇒ ⇒ 否则「已收口」的 4 个 arbiter
     //    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 里有 2 个行为上无覆盖**）
-    SECTION("arbiter（lock / sequence）⇒ 调用方 MUST 收到反压") {
+    SECTION("arbiter（lock / priority）⇒ 调用方 MUST 收到反压") {
+        // ⚠️ 2026-11-01（B5）：原 variant 1 是 `stream_arbiter_sequence`
+        //    ⇒ 该组件已物理删除（与 priority 仲裁逻辑逐位相同 + 名字 over-promise）
+        //    ⇒ 改测 `priority`：同样覆盖「上游 ready 有驱动 + 反压能传到调用方」
+        //    ⇒ ⇒ 覆盖面**不减**（lock / priority 是仅存的两个非轮转仲裁器）
         for (int variant = 0; variant < 2; ++variant) {
             auto ctx = std::make_unique<ch::core::context>(
-                variant ? "t_ready_seq" : "t_ready_lock");
+                variant ? "t_ready_prio" : "t_ready_lock");
             ch::core::ctx_swap ctx_swapper(ctx.get());
 
             ch_stream<ch_uint<8>> in0, in1;
@@ -1329,7 +1333,7 @@ TEST_CASE("Stream: 转发类组合子的**上游 MUST 真收到反压**",
                 sim.tick();
                 REQUIRE(sim.get_value(in0.ready) == true);
             } else {
-                auto arb = stream_arbiter_sequence<ch_uint<8>, 2>(inputs);
+                auto arb = stream_arbiter_priority<ch_uint<8>, 2>(inputs);
                 arb.output_stream.ready <<= consumer;
                 REQUIRE(in0.ready.impl() != nullptr);
                 REQUIRE(in0.ready.impl()->num_srcs() > 0);

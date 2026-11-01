@@ -1,5 +1,5 @@
 // include/chlib/stream_arbiter.h
-// Additional stream arbiter strategies: locking and sequential
+// Additional stream arbiter strategy: locking
 
 #pragma once
 
@@ -112,98 +112,6 @@ stream_arbiter_lock(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     }
 
     result.selected = selected_idx;
-
-    return result;
-}
-
-/**
- * Stream Arbiter Sequence Result - 序列仲裁器结果
- * **固定优先级扫描**（高索引优先）—— 见 `stream_arbiter_sequence` 的注释
- */
-template <typename T, unsigned N_INPUTS> struct StreamArbiterSequenceResult {
-    std::array<ch_stream<T>, N_INPUTS> input_streams;
-    ch_stream<T> output_stream;
-    ch_uint<compute_idx_width(N_INPUTS)> selected; // 选择的输入索引
-};
-
-/**
- * Stream Arbiter Sequence - 序列仲裁器
- *
- * ⚠️⚠️ **名字与行为的如实说明**（2026-11-01 订正 · change
- *   `stream-arbiter-rr-rotation-2026-11`）：
- *   本组件是 **固定优先级扫描**（`priority_encoder` ⇒ ⇒ **较高索引优先**），
- *   **不是**轮转。
- *
- * ⚠️ **订正前的注释是假陈述**：原文写
- *   「Cycles through inputs in fixed order **using round-robin selection**」
- *   +「Fixed order arbitration, **wraps around**」⇒ ⇒ ⇒
- *   ⇒ **实现从 `priority_encoder` 取，既不轮转、也不 wrap**
- *   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 与 `stream_arbiter_round_robin` 的缺陷同族**
- *   （「名字/注释 over-promise」）。
- *
- * ⚠️ **为什么本组件【不】改成真轮转**（2026-11-01 用户裁决）：
- *   它会与 `stream_arbiter_round_robin` **语义重复**（⇒ ⇒ 仓内已有两个
- *   仲裁器在**仲裁逻辑上逐位相同**：本组件与 `stream_arbiter_priority`
- *   都用 `priority_encoder(valid_vector)`，唯一差异是本组件的 ready 链
- *   多一个 `& has_valid` 门控）
- *   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 再引入第二个轮转组件是【制造】重复，不是消除**
- *   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 本组件只订正注释（零行为变更）**
- *   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「与 priority 重复」的去留裁决登记 backlog**。
- */
-template <typename T, unsigned N_INPUTS>
-StreamArbiterSequenceResult<T, N_INPUTS>
-stream_arbiter_sequence(std::array<ch_stream<T>, N_INPUTS> input_streams) {
-    static_assert(N_INPUTS >= 2, "Sequence arbiter requires at least 2 inputs");
-
-    StreamArbiterSequenceResult<T, N_INPUTS> result;
-
-    // Initialize input streams
-    for (unsigned i = 0; i < N_INPUTS; i++) {
-        result.input_streams[i] = input_streams[i];
-    }
-
-    // Create valid vector (one-hot)
-    ch_uint<N_INPUTS> valid_vector = 0_d;
-    for (unsigned i = 0; i < N_INPUTS; i++) {
-        ch_bool is_valid = input_streams[i].valid;
-        ch_uint<N_INPUTS> mask = ch_uint<N_INPUTS>(1_d) << make_uint<compute_idx_width(N_INPUTS)>(i);
-        valid_vector = select(is_valid, valid_vector | mask, valid_vector);
-    }
-
-    // Check if there's any valid request
-    ch_bool has_valid = valid_vector != 0_d;
-
-    // Use priority encoder for sequential selection
-    constexpr unsigned IDX_WIDTH = compute_idx_width(N_INPUTS);
-    ch_uint<IDX_WIDTH> selected_idx = priority_encoder<N_INPUTS>(valid_vector);
-
-    // Select payload using mux
-    std::array<T, N_INPUTS> payloads;
-    for (unsigned i = 0; i < N_INPUTS; i++) {
-        payloads[i] = input_streams[i].payload;
-    }
-    T selected_payload = mux<N_INPUTS>(payloads, selected_idx);
-
-    // Output
-    result.output_stream.payload = selected_payload;
-    result.output_stream.valid = has_valid;
-
-    // Only the selected input is ready
-    //
-    // ⚠️⚠️ **ADR-054 形态 E（默认值 + 可覆盖）· P1-a**（同 `stream_arbiter_lock`
-    //   的注释 ⇒ ⇒ 核心修复 = 删硬编码 `= true` + 修「先读后写」）
-    ch_bool default_ready(true);
-    result.output_stream.ready <<= default_ready;
-
-    for (unsigned i = 0; i < N_INPUTS; i++) {
-        ch_bool is_selected = (selected_idx == make_uint<compute_idx_width(N_INPUTS)>(i));
-        // ⚠️ **MUST 用 `<<=`**（MUST NOT `operator=`）⇒ ⇒ ⇒ **调用方真收到反压**
-        result.input_streams[i].ready <<=
-            (is_selected & result.output_stream.ready & has_valid);
-    }
-
-    result.selected = selected_idx;
-    // ⚠️ `result.output_stream.ready` 已在**上方**建立默认驱动 ⇒ ⇒ 无需再接
 
     return result;
 }
