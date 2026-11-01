@@ -71,4 +71,5 @@
 - [x] `openspec validate stream-builder-and-pipe-ready-ownership-2026-11 --type change --strict` valid
 - [x] `scripts/verify_openspec_delta.sh` 全绿（4 条）
 - [x] `scripts/verify_test_counts.sh` / `scripts/verify_dual_backend_parity.sh` 通过
-- [ ] 归档：**禁用** `--skip-specs`（ADDED ×1 需合并进主 spec）
+- [x] 归档：**未**用 `--skip-specs`（ADDED ×1 已合并进主 spec ⇒ 6 → **7** Requirement / 20 → **28** Scenario）
+      ⇒ 归档于 `openspec/changes/archive/2026-11-01-stream-builder-and-pipe-ready-ownership-2026-11/`
