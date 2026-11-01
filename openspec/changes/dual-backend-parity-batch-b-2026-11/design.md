@@ -25,7 +25,7 @@
 
 ## 2. 🔴 成本模型的**二次订正**（**推导**）
 
-### 2.1 打点证据（假 HOME 全冷 · 4 pair · 逐 0.01 s）
+### 2.1 打点证据（假 HOME 全冷 · 4 pair · 逐 0.01 s；拆成 5 pair 后 57.5 s）
 
 ```
 [  0.02s] 写出 top.v / sim_main.cpp
@@ -62,19 +62,31 @@
 （每个 **+10.66 s**；mem 类 **+72 s**）⇒ ⇒⇒ ⇒ ⇒
 **⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 【断言强度 MUST NOT 被判据绑架】**
 
-⇒ ⇒⇒ **⇒ ⇒ ⇒ 替代判据（已实测可行）**：**Catch2 的 XML reporter**
-（`-r xml`）输出逐 `TestCase` 的 `<OverallResults successes="N"/>` ⇒ ⇒⇒
-**⇒ ⇒ ⇒ 判据 = 「verilator 半边每个 TEST_CASE 的 `successes` == interpreter
-半边对应 TEST_CASE 的 `successes`」** ⇒ ⇒ ⇒ ⇒ ⇒
-**⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 【对多断言 pair 也成立】** ✔
+⇒ ⇒⇒ **⇒ ⇒ ⇒ 替代判据**：最初选「Catch2 的 **XML reporter**（`-r xml`）
+逐 `TestCase` 比对 `successes`」⇒ ⇒⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 但该方案在【负向验证】
+时被实测证伪**（⇒ ⇒ XML 只给 per-run / per-Section 汇总）⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+**⇒ ⇒ 详见 §2.3（4 个方案的判定表）** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 最终判据 =
+「总断言数 == 2 × pair 数」+ 约定「每 pair 恰 1 条 `REQUIRE`」**
 
-### 2.3 ⚠️ 一条**被否**的替代判据（**记录以防复发**）
+### 2.3 ⚠️ **被否 / 被证伪**的替代判据（**记录以防复发**）
 
-| 候选 | 为什么不成立 |
-|---|---|
-| 「**TEST_CASE 数** == 2 × pair 数」 | 🔴 verilator 缺席时 macro 的 verilator 半边**仍然注册**（只 WARN + return）⇒ ⇒ ⇒ **用例数恒为 2 × pair ⇒ ⇒ 无判别力** |
-| 「**总断言数** == 2 × pair 数」 | 🔴 Catch2 汇总**不区分 per-TEST_CASE** ⇒ ⇒ ⇒ 多断言批次下**要么恒假红、要么无判别力** |
-| 「每个 pair 恰 1 条 `REQUIRE`」 | 🔴 **代价高**（拆 pair = 增加编译）⇒ ⇒ ⇒ 绑架断言强度 ⇒ ⇒ **废止** |
+| 候选 | 判定 | 理由 |
+|---|---|---|
+| 「**TEST_CASE 数** == 2 × pair 数」 | 🔴 **不成立** | verilator 缺席时 macro 的 verilator 半边**仍然注册**（只 WARN + return）⇒ ⇒ ⇒ **用例数恒为 2 × pair** ⇒ ⇒ ⇒ **无判别力** |
+| 「**总断言数** == 2 × pair 数」 | ⚠️ **只在每 pair 恰 1 条 `REQUIRE` 时成立** | Catch2 汇总**不区分 per-TEST_CASE** ⇒ ⇒ ⇒ 多断言批次下**要么恒假红、要么无判别力** ⇒ ⇒ ⇒ **⇒ 前提必须写进验收约定** |
+| 「**XML reporter 逐 TEST_CASE 比对 `successes`**」 | 🔴 **已被实测证伪** | XML 的 `<OverallResults successes="N"/>` 是 **per-run / per-Section** 汇总 ⇒ ⇒ **不给** 无 Section 的 TEST_CASE 的断言数 ⇒ ⇒ ⇒ **⇒ 方案作废**（⚠️ **上一轮曾误采此方案** ⇒ ⇒ ⇒ ⇒ **⇒ 「探针/工具输出」的解读也必须被独立复核** —— 这是本仓「**探针输出的解读必须被独立复核**」的第 6 次生效） |
+| 「**每 pair 恰 1 条 `REQUIRE`**」 | ✅ **采纳**（**代价已知**） | 拆 pair = **增加** verilator 编译次数（~10.66 s/pair）⇒ ⇒ ⇒ ⇒ **⇒ ④ 号用例拆成 2 个 pair**（断言**不删**）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「宁可多编译一次，也不删断言」** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 【断言强度 MUST NOT 被判据绑架】的正解** |
+
+### 2.4 ✅ 判别力的【双向】实测证明（批次 B1）
+
+| 方向 | 命令 | 实测 | 结论 |
+|---|---|---|---|
+| **正向** | `./build/tests/test_assert_behavior` | **10 assertions / 10 test cases** | **10 == 2 × 5 pair** ✔ |
+| **负向** | `env PATH=/usr/bin:/bin ./build/tests/test_assert_behavior` | **5 assertions / 10 test cases** | **5 ≠ 10** ⇒ ⇒ **【能识别 skip】** ✔ |
+
+⇒ ⇒⇒ **⇒ 这一步是 critic 明确要求的「唯一可证伪点」** ⇒ ⇒ ⇒ ⇒ ⇒
+**⇒ 本 change 之前只证了正向** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 现已补齐**。
+
 
 ## 3. 期望值的手推（**`AssertChecker` 是纯组合**）
 

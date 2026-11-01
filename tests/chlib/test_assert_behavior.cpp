@@ -81,23 +81,49 @@ DUAL_BACKEND_TEST_PAIR(
                     sim.get_port_value(dev.instance().io().failed)) == 0);
     });
 
-// ── ④ 输入变化在**后续拍**传播（手推：拍 1 = 1 ∧ ¬0 = 1；拍 2 = 1 ∧ ¬1 = 0）─
+// ── ④ 输入变化在**后续拍**传播 —— **拆成 2 个 pair**（每个恰 1 条 REQUIRE）──
+//
+// ⚠️⚠️ **为什么拆**（2026-11-01 负向验证后的订正）：
+//    判据 = 「**总断言数 == 2 × pair 数**」⇒ ⇒ ⇒ **前提 = 每个 pair 恰 1 条
+//    `REQUIRE`** ⇒ ⇒ ⇒ ⇒ **⇒ 而 ④ 原稿有 2 条（拍 1 + 拍 2）⇒ ⇒ ⇒ ⇒ ⇒
+//    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 故拆成两个 pair**（断言**不删**，只是各自独立）⇒ ⇒ ⇒ ⇒
+//    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 代价 = 多一次 verilator 编译（~10.66 s/pair）**
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这是「断言强度 MUST NOT 被判据绑架」的正解**：
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **宁可多编译一次，也不删断言**。
+//
+// ⚠️ **④-a 与 ④-b 是同一语义的两拍**（⇒ ⇒ 但每个 pair 是**独立**的
+//    device/context ⇒ ⇒ 各自重跑前导拍）。
+
+// ④-a 拍 1：enable=1 ∧ condition=0 ⇒ ⇒ failed = 1（手推：1 ∧ ¬0 = 1）
 DUAL_BACKEND_TEST_PAIR(
     AssertChecker,
-    "AssertChecker: input changes propagate on subsequent ticks",
+    "AssertChecker: input changes propagate on subsequent ticks (cycle 1)",
     "[chlib][assert][checker][toggle][dual]",
     [&]() {
         sim.set_input_value(dev.instance().io().enable, true);
         sim.set_input_value(dev.instance().io().condition, false);
 
         sim.tick();
-        // 手推：拍 1 ⇒ enable=1 ∧ condition=0 ⇒ failed = 1
+
         REQUIRE(static_cast<uint64_t>(
                     sim.get_port_value(dev.instance().io().failed)) == 1);
+    });
 
-        // 手推：拍 2 ⇒ condition 改为 1 ⇒ failed = 0
+// ④-b 拍 2：condition 改为 1 ⇒ ⇒ failed = 0（手推：1 ∧ ¬1 = 0）
+//    ⇒ ⇒ 前导拍（拍 1）跑过但**不断言** ⇒ ⇒ 只断言拍 2 的稳态。
+DUAL_BACKEND_TEST_PAIR(
+    AssertChecker,
+    "AssertChecker: input changes propagate on subsequent ticks (cycle 2)",
+    "[chlib][assert][checker][toggle][dual]",
+    [&]() {
+        sim.set_input_value(dev.instance().io().enable, true);
+        sim.set_input_value(dev.instance().io().condition, false);
+
+        sim.tick();  // 前导拍：建立「违反条件」的稳态（不断言）
+
         sim.set_input_value(dev.instance().io().condition, true);
         sim.tick();
+
         REQUIRE(static_cast<uint64_t>(
                     sim.get_port_value(dev.instance().io().failed)) == 0);
     });

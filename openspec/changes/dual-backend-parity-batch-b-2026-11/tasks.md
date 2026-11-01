@@ -25,8 +25,10 @@
 - [x] **T2.5** ⇒ ⇒ **连带废止**「每 pair 恰 1 条 `REQUIRE`」这条约定
       （**当时给的理由「拆 pair 不增墙钟」是错的** ⇒ ⇒ 拆 pair = **增加**
       编译次数 ⇒ ⇒ ⇒ **断言强度 MUST NOT 被判据绑架**）
-- [x] **T2.6** ⇒ ⇒ 判据改为 **XML reporter 逐 TEST_CASE 比对 `successes`**
-      （**已实测可行**）
+- [x] **T2.6** ⇒ ⇒ 判据**最终** = 「**总断言数 == 2 × pair 数**」+ 约定
+      「每 pair 恰 1 条 `REQUIRE`」
+      ⚠️ **（曾误采「XML reporter 逐 TEST_CASE 比对」⇒ ⇒ 该方案在【负向
+      验证】时被实测证伪 ⇒ ⇒ 已废止 ⇒ ⇒ 详见 design.md §2.3）**
 
 ## T3 实现
 
@@ -34,8 +36,9 @@
 - [x] **T3.2** **原 `tests/chlib/test_assert.cpp` MUST NOT 修改** ⇒ ⇒ 零回归
 - [x] **T3.3** **期望值全部手推**（`failed = enable & !condition` 真值表）
 - [x] **T3.4** `tests/CMakeLists.txt` 注册 `add_dual_backend_test`
-- [x] **T3.5** ④ 号用例**保留 2 条 `REQUIRE`**（⇒ ⇒ 正是旧判据失效的场景
-      ⇒ ⇒ 新判据覆盖它 ✔）
+- [x] **T3.5** ④ 号用例**拆成 2 个 pair**（每个恰 1 条 `REQUIRE`；断言
+      **不删**）⇒ ⇒ 代价 = 多一次 verilator 编译（~10.66 s）
+      ⇒ ⇒ ⇒ **⇒ 「宁可多编译一次，也不删断言」**
 
 ## T4 计数锚点同步（**每批必做**）
 
@@ -55,8 +58,11 @@
 
 ## T6 验收
 
-- [x] **T6.1** `10 assertions in 8 test cases`（8 = 2×4 pair · 10 = 5×2）
-      ⇒ ⇒ **verilator 半边真跑**（且**已用 XML per-TEST_CASE 判据核验**）
+- [x] **T6.1** **正向**：`10 assertions in 10 test cases` ⇒ ⇒ **10 == 2 × 5 pair**
+      ⇒ ⇒ **verilator 半边真跑**
+- [x] **T6.1b** **负向**（`env PATH=/usr/bin:/bin`）⇒ ⇒
+      `5 assertions in 10 test cases` ⇒ ⇒ **5 ≠ 10** ⇒ ⇒
+      **【判据能识别 skip】** ✔（critic 要求的「唯一可证伪点」）
 - [x] **T6.2** 冷缓存墙钟 **44.6 s** ⇒ ⇒ 已回填账本
 - [x] **T6.3** `ctest -LE perf` 全绿（**196/196**）
 - [x] **T6.4** 全部护栏 exit 0 · `verify_test_counts.sh` exit 0
@@ -79,3 +85,22 @@ bash scripts/verify_test_counts.sh
 bash scripts/verify_dual_backend_parity.sh
 openspec validate dual-backend-parity-batch-b-2026-11 --type change --strict
 ```
+
+## 评审记录
+
+- **critic**（2026-11-01）：**APPROVE_WITH_CONDITIONS** · `mergeable: yes` ·
+  `scope_exceeded: false` · **0 BLOCKER** ⇒ ⇒ **无返工队列**
+  ⇒ ⇒ 2 条 SHOULD_FIX + 3 条 NIT ⇒ ⇒ **同批闭合**（**未用第 2 轮**）
+- ✅ **SHOULD_FIX #1**（plan §4 验收模板）⇒ ⇒ 判据泛化 ⇒ ⇒ ⚠️ **但本轮
+  实施期的【负向验证】又证伪了我上一轮选的方案 (b)（XML）** ⇒ ⇒ ⇒
+  ⇒ ⇒ **⇒ 最终判据 = 方案 (a)（总断言数 == 2 × pair 数 + 每 pair 1 条
+  `REQUIRE`）** ⇒ ⇒ ⇒ **⇒ ④ 号用例拆成 2 个 pair** ⇒ ⇒ ⇒ ⇒ ⇒
+- ✅ **SHOULD_FIX #2**（plan 残留旧数字 / 风险表旧判据）⇒ ⇒ 已订正
+  （Σ 56 → **41 min** · 风险表改引用 §4 模板）
+- ✅ **NIT #1**（门槛①的机理表述不准）⇒ ⇒ 已订正（`DUT_TYPE` 在**函数体内**
+  使用 ⇒ ⇒ 真正的障碍是「DUT 类在原文件的函数作用域内 ⇒ 新文件够不着」）
+- ✅ **NIT #2**（成本表补 `dlopen + 初始化` 行 ≈ 0.01 s）⇒ ⇒ 已补
+- ✅ **NIT #3**（③ 号用例「regardless of condition」的完备性缺口：
+  `en=0 ∧ cond=1` 未测）⇒ ⇒ **如实登记**（不补测 ⇒ ⇒ 补测要新增一个
+  pair ⇒ ⇒ +10.66 s ⇒ ⇒ ⇒ 收益不足 ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 留待「命名诚实性
+  普查」批次一并处理**）

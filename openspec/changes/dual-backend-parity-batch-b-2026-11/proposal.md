@@ -20,7 +20,7 @@
 
 | 门槛 | 理由 | 淘汰者 |
 |---|---|---|
-| ① **零局部 DUT 类** | 局部类**无法**传给在文件作用域展开的宏 ⇒ ⇒ 必须提升到共享头 ⇒ ⇒ ⇒ **「原文件 MUST NOT 修改」纪律与它冲突** ⇒ ⇒ ⇒ 提升会引入「同一逻辑两处维护」⇒ ⇒ **本次不做** | `test_bool_connection`(4) · `test_operator_connection`(4) · `test_jit_concat`(**6**) · `test_interpreter_jit_compat`(2) · `test_wires_connection`(6) · `chlib/test_multi_if_acceptance`(1) |
+| ① **零局部 DUT 类** | ⚠️ **机理订正（critic NIT #1 · 2026-11-01）**：`DUAL_BACKEND_TEST_PAIR` 的 `DUT_TYPE` 实际在 **TEST_CASE 函数体内**使用（`tests/dual_backend_fixture.h:152,173`）⇒ ⇒ **不是**「宏在文件作用域展开」⇒ ⇒ ⇒ **真正的障碍**是：候选文件的 DUT 类定义在**原文件的函数作用域**内 ⇒ ⇒ **新文件够不着** ⇒ ⇒ ⇒ **⇒ 必须提升到共享头** ⇒ ⇒ ⇒ **⇒ 「原文件 MUST NOT 修改」纪律与它冲突** ⇒ ⇒ ⇒ 提升会引入「同一逻辑两处维护」⇒ ⇒ **本次不做**（共享 fixture + cache key 守恒 = 独立议题） |
 | ② **零平凡断言**（`REQUIRE(true)`） | 平凡断言 ⇒ ⇒ dual 化**零增量价值**（两半边都恒真） | `test_axi_pwm_simple`（Simulation 用例**只有** `REQUIRE(true)`）⇒ ⇒ 且它**自带 main**（`CATCH_CONFIG_MAIN`）⇒ ⇒ **不可用 macro** |
 | ③ **无 `std::cout` 重定向** | 那断言的是**C++ 侧打印**（不是硬件信号）⇒ ⇒ **双后端对它毫无意义**；⇒ ⇒ 且 stdout 是**全局状态**⇒ ⇒ 双跑结构下会互相干扰 | `chlib/test_assert` 的 **2 个宏用例**（`CH_ASSERT` / `ch_assert`）⇒ ⇒ **MUST NOT 转** |
 
@@ -47,14 +47,26 @@ DUT = `chlib::AssertChecker`（**库头类型**）⇒ ⇒ ⇒ **零原文件修�
 ⇒ ⇒⇒ **⇒ ⇒ 成本单位 = 【pair 数】，不是 DUT 数、不是文件数**
 ⇒ ⇒⇒ ⇒ ⇒ **⇒ ⇒ 批次预算由 Σ 56 min 修正为 ~30–35 min**（详见 plan §3.0）
 
-### ⚠️⚠️ 连带订正：**判据的「每 pair 一条 REQUIRE」约定代价很高** ⇒ ⇒ 废止
+⚠️⚠️⚠️ **但该方案在【负向验证】时被实测证伪**（2026-11-01 · critic 建议的
+方案 (b)）⇒ ⇒ XML 的 `<OverallResults successes="N"/>` 是 **per-run /
+per-Section** 汇总 ⇒ ⇒ **不给** 无 Section 的 TEST_CASE 的断言数 ⇒ ⇒
+⇒ ⇒ **⇒ 方案作废** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 最终判据 = 「总断言数 == 2 × pair 数」
++ 约定「每 pair 恰 1 条 `REQUIRE`」** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ ④ 号用例因此
+【拆成 2 个 pair】**（断言**不删**，只是各自独立）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒
+代价 = 多一次 verilator 编译（~10.66 s/pair）** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒
+⇒ 「宁可多编译一次，也不删断言」** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ 【断言强度 MUST NOT
+被判据绑架】的正解**。
 
-⚠️ 上一轮（critic SHOULD_FIX #1）我们把判据泛化为「每 pair 恰 1 条
-`REQUIRE`」⇒ ⇒ **当时给的理由是「同 DUT 的多个 pair 只编译一次 ⇒ ⇒ 拆 pair
-不增加墙钟」⇒ ⇒ 【那个理由是错的】** ⇒ ⇒⇒ **拆 pair 会【成倍】增加
-verilator 编译次数**（每个 +10.6 s / mem 类 +72 s）⇒ ⇒ ⇒ ⇒ ⇒
-⇒ ⇒⇒ **⇒ 【断言强度 MUST NOT 被判据绑架】** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ 改用
-「XML reporter 逐 TEST_CASE 比对 `successes`」**（**已实测可行**）。
+⇒ ⇒⇒ **判别力的【双向】实测证明**（批次 B1）：
+
+| 方向 | 命令 | 实测 |
+|---|---|---|
+| **正向** | `./build/tests/test_assert_behavior` | **10 assertions / 10 test cases** ⇒ **10 == 2 × 5 pair** ✔ |
+| **负向** | `env PATH=/usr/bin:/bin ./build/tests/test_assert_behavior` | **5 assertions / 10 test cases** ⇒ **5 ≠ 10** ⇒ ⇒ **【能识别 skip】** ✔ |
+
+⚠️ **用例数【不能】作判据**：负向时用例数**不变**（10）⇒ ⇒ 因为 macro 的
+verilator 半边在缺席时**仍然注册**（只 WARN + return）⇒ ⇒ ⇒ **⇒ 判据必须
+用【断言数】而非【用例数】**。
 
 ## What Changes
 
@@ -109,18 +121,17 @@ verilator 编译次数**（每个 +10.6 s / mem 类 +72 s）⇒ ⇒ ⇒ ⇒ ⇒
 
 ```
 $ ./build/tests/test_assert_behavior          （真实 HOME，冷缓存）
-All tests passed (10 assertions in 8 test cases)
-  ⇒ ⇒ 8 = 2 × 4 pair ✔   10 = 5 × 2 ✔   ⇒ ⇒ **verilator 半边真跑了**
+All tests passed (10 assertions in 10 test cases)
+  ⇒ ⇒ 10 = 2 × 5 pair ✔   ⇒ ⇒ **verilator 半边真跑了**
   ⇒ ⇒ ⚠️ **「TEST_CASE 数」本身【不能】证明这一点**（缺席时用例数不变）
-  ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 判据 MUST 用 XML per-TEST_CASE 的 successes**
+
+$ env PATH=/usr/bin:/bin ./build/tests/test_assert_behavior   （负向）
+All tests passed (5 assertions in 10 test cases)
+  ⇒ ⇒ **5 ≠ 10** ⇒ ⇒ **【判据能识别 skip】** ✔
 
 $ 假 HOME 全冷（逐 0.01 s 打点）
-  0.02s 写出 top.v / sim_main.cpp
-  0.23s Verilator Walltime 0.012 s
- 10.89s cached artifact + dlopen     ← ⚠️ 10.66 s = C++ 编译 + 链接 .so
-  ⇒ ⇒ **10.66 s / pair** ⇒ ⇒ **成本单位 = pair 数**
-
-$ 假 HOME 第二次（全热）⇒ ⇒ **0.6 s** ⇒ ⇒ 4 pair 全命中缓存
+  0.02s 写源码 → 0.23s elaboration → 10.89s 编译+链接完成（10.66 s/pair）
+$ 假 HOME 第二次（全热）⇒ ⇒ **0.6 s** ⇒ ⇒ 5 pair 全命中缓存
 ```
 
 ⚠️ **墙钟**：批次 B1 = **44.6 s**（真实 HOME 冷缓存）⇒ ⇒ 已回填 plan §5 账本
