@@ -18,8 +18,8 @@ evidence: test:tests/chlib/test_stream.cpp#[ready]
 > **本清单不可能自相矛盾**（⇒ ⇒ 「说谎」在结构上不可达）。
 
 <!-- COUNT-ANCHOR
-TOTAL_ROWS: 17
-UNPAID_ROWS: 6
+TOTAL_ROWS: 16
+UNPAID_ROWS: 3
 -->
 
 ## 指针语法
@@ -49,9 +49,8 @@ UNPAID_ROWS: 6
 | 10 | FIFO 指针 MUST 受空/满门控（自保护） | `spec:chlib-stream-semantics#FIFO 数据通路的指针 MUST 受空/满门控` | `code:include/chlib/fifo.h#will_write` | `test:tests/chlib/test_fifo.cpp#[fifo][sync_fifo]` | `guard:scripts/lib/stream_domain_closure.py#def r10()` | — | ✅ |
 | 11 | demux ready 方向（消费端 ⇒ 上游；现状**方向颠倒**） | — | `code:include/chlib/stream.h#stream_demux` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#demux` | ❌ |
 | 12 | fork 同步语义（`input ready` = AND(各 output ready)） | — | `code:include/chlib/stream.h#stream_fork` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#fork` | ❌ |
-| 13 | builder 链**上游反压从未建立**（`source.ready` 恒 0 ⇒ 死路） | — | `code:include/chlib/stream_builder.h#queue` | — | — | `debt:.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md#上游反压` | ❌ |
-| 13b | `stream_pipeline.h` 的 3 个 pipe（**只在常量接线下活着** + 不在契约覆盖范围） | — | `code:include/chlib/stream_pipeline.h#stream_m2s_pipe` | — | — | `debt:.rddf/improvements/chlib-naming-honesty-audit-2026-11.md#stream_pipeline.h` | ❌ |
-| 15 | **待 architect 裁决**（8 项 · 每项均有实测支撑） | — | `code:.rddf/checks/architect-decisions-pending-2026-11.md#B1` | — | — | `debt:.rddf/checks/architect-decisions-pending-2026-11.md#B1` | ❌ |
+| 13 | builder 链**上游反压**（链内闭包不变式：中间级读使能 ← 下一级容量信号） | `spec:chlib-stream-ready-ownership#链内中间级的读使能 MUST 由` | `code:include/chlib/stream_builder.h#queue` | `test:tests/test_stream_builder_backpressure_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/lib/stream_ready_ownership.py#def r10()` | — | ✅ |
+| 13b | `stream_pipeline.h` 的 3 个 pipe（上游 ready 归属 + `output.ready` 可覆盖 + 数据通路保持） | `spec:chlib-stream-ready-ownership#链内中间级的读使能 MUST 由` | `code:include/chlib/stream_pipeline.h#stream_m2s_pipe` | `test:tests/test_stream_pipeline.cpp#[stream][pipeline][ready]` | `guard:scripts/lib/stream_ready_ownership.py#def r11()` | — | ✅ |
 | 14 | 命名诚实性（`fwft_fifo` 是**已知实例**：不是 FWFT） | `spec:chlib-stream-arbitration#仲裁器的命名与文档 MUST 与实现行为一致` | `code:include/chlib/fifo.h#fwft_fifo` | — | — | `debt:.rddf/improvements/chlib-naming-honesty-audit-2026-11.md#fwft_fifo` | ❌ |
 
 ## 能力面说明（**为什么这样切**）
@@ -61,19 +60,25 @@ UNPAID_ROWS: 6
 - **07** = `capability chlib-stream-arbitration` R1（**轮转**）—— 与 ready 所有权
   **正交**（它管的是「选谁」，不是「何时能推进」）。
 - **08–10** = `capability chlib-stream-semantics` 的 FIFO 语义面。
-- **11–13** = **未兑现**的转发类 + builder（各有独立台账 ⇒ ⇒ **欠账可追溯**）。
+- **11–12** = **未兑现**的转发类（`demux` 方向 / `fork` 同步），各有独立台账
+  ⇒ ⇒ **欠账可追溯**。
+- **13 / 13b** = **链式组合的链内中间级**（builder 链 · pipe 族）—— 2026-11-01 由
+  ADR-055 的「链内闭包不变式」兑现（同一条 Requirement + 各自的判据 + 独立的
+  护栏判据 R10 / R11）。
 - **14** = 「名字/文档 over-promise」类缺陷（`fwft_fifo` 是**已知实例**；
   仓内**其它**实例待普查）。
-- **15** = **护栏自身**的表述缺陷（不影响判据功能，但会让下一个人**读错护栏覆盖面**）。
 
 ## 已知边界（如实声明）
 
-- ⚠️ 本清单只覆盖 **stream / fifo / builder** 三个头（`include/chlib/stream.h` ·
-  `stream_arbiter.h` · `stream_builder.h` · `fifo.h`）⇒ ⇒ **不含**
-  `stream_pipeline.h` / `stream_operators.h` / `stream_width_adapter.h`
+- ⚠️ 本清单覆盖 **stream / fifo / builder / pipe** 四个面（`include/chlib/stream.h` ·
+  `stream_arbiter.h` · `stream_builder.h` · `fifo.h` · **`stream_pipeline.h`**）
+  ⇒ ⇒ **不含** `stream_operators.h` / `stream_width_adapter.h`
   ⇒ ⇒ ⇒ **若将来扩面，MUST 同时扩清单**（⇒ ⇒ 否则清单自身会成为「缩面」）。
+  ⚠️ `stream_pipeline.h` 的纳入是 **2026-11-01（ADR-055）** 的事：此前它
+  **不在** R8 扫描面内 ⇒ ⇒ 三个 pipe **不在任何 ready 契约的覆盖范围内**。
 - ⚠️ 本清单**不断言**「stream 域已收官」⇒ ⇒ **收官的判据 = 本清单无 ❌ 行**
-  ⇒ ⇒ ⇒ **当前有 6 行 ❌** ⇒ ⇒ ⇒ **⇒ 未收官**。
+  ⇒ ⇒ ⇒ **当前有 3 行 ❌**（11 `demux` 方向 · 12 `fork` 同步 · 14 `fwft_fifo` 命名）
+  ⇒ ⇒ ⇒ **⇒ 未收官**。
 - ⚠️ **归档文档 / 历史计划里的假陈述 MUST NOT 顺手改** ⇒ ⇒ 它们是**历史
   快照**（保真性 > 现行正确性）⇒ ⇒ 本清单第 14 行登记的 `fwft_fifo`
   over-promise，**活文档与 in-force ADR 已订正**（2026-11-01）⇒ ⇒
@@ -101,3 +106,4 @@ UNPAID_ROWS: 6
 | 2026-11-01 | A4：第 14 行欠账指针改指**新台账**（命名诚实性审计）· **新增**第 13b 行（`stream_pipeline.h` 的 3 个 pipe：**实测零数据通过** + **不在任何 ready 契约覆盖范围** ⇒ ⇒ 契约缺口） | A4 实测（`/tmp/opencode/a4/probe_pipes*.cpp`）· 审计表见 `.rddf/improvements/chlib-naming-honesty-audit-2026-11.md` |
 | 2026-11-01 | A3：第 13 行**根因订正**（「静默丢字」被实测推翻 ⇒ ⇒ 真缺陷 = **上游反压从未建立**）· **删**第 15 行（「编号一致性」是**护栏实现细节**，不是能力面 ⇒ ⇒ 已在护栏脚本内就地订正）· **新增**第 07b 行（`connect_ready` 多驱动守卫 + R9 + 投毒） | A3 实测（`/tmp/opencode/a3/probe_*.cpp`）· shell 标签「R2~R6」⇒ ⇒ 「R2~R6 + R8 + R9」· python 侧登记「R7 是空号」 |
 | 2026-11-01 | 「已知边界」补登记**归档文档不改**（`fwft_fifo` over-promise 的两处历史快照保留） | A1 实施期发现：归档文档 + 历史计划属**历史快照**（保真性 > 现行正确性）⇒ ⇒ 不可用「全仓 grep 无残留」当验收判据 |
+| 2026-11-01 | **第 13 / 13b 行 → ✅**（ADR-055 的「链内闭包不变式」兑现：新增 Requirement + 各自的 dual/行为判据 + 独立护栏判据 R10 / R11）· **删第 15 行**（8 项裁决**全部完成** ⇒ ⇒ 该行是过程项，不是能力面 ⇒ ⇒ 素材仍留在 `.rddf/checks/architect-decisions-pending-2026-11.md`）· 锚点 `17/6 → 16/3` · 「已知边界」把 `stream_pipeline.h` 纳入覆盖面 | 归档 change `stream-builder-and-pipe-ready-ownership-2026-11`（接 ADR-055）。⚠️ **本行的出现本身就是清单的一个已知边界**：状态列由**手写指针**推导 ⇒ ⇒ 实施完成后**不会自动记账** ⇒ ⇒ 靠人工补（与「R1 验不了语义漂移」同型） |
