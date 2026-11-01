@@ -100,17 +100,23 @@ r1() {
     return 0
 }
 
-# ── R2~R6：静态判据（委派给 Python 分析器）─────────────────────────────────
+# ── R2~R6 + R8 + R9：静态判据（委派给 Python 分析器）──────────────────────
+# ⚠️⚠️ **2026-11-01 订正**：原标签写「R2~R6」⇒ ⇒ 但 Python 侧实际还跑
+#    `r8`（转发类结构判据）⇒ ⇒ ⇒ 标签**与实际覆盖面不符** ⇒ ⇒ ⇒
+#    ⇒ ⇒ **「标签漏一个判据」会让下一个人以为覆盖面更小** ⇒ ⇒ ⇒
+#    ⇒ ⇒ **已订正**（⇒ ⇒ 这是收口清单登记的「编号一致性」欠账）。
+#    ⚠️ **R7 是历史的空号**（P1-a 的归档 design.md 引用过，但**从未实现**）
+#    ⇒ ⇒ 转发类的**行为**判据由下面的 `R1` 承载 ⇒ ⇒ 详见 Python 侧注释。
 r_static() {
     local out rc
     out="$(python3 "$ANALYZER" check 2>&1)"
     rc=$?
     printf '%s\n' "$out" | sed 's/^/  /'
     if [ $rc -ne 0 ]; then
-        fail "R2~R6 静态判据未通过"
+        fail "R2~R6 + R8 + R9 静态判据未通过"
         return 1
     fi
-    ok "R2~R6 静态判据通过"
+    ok "R2~R6 + R8 + R9 静态判据通过"
     return 0
 }
 
@@ -143,6 +149,7 @@ self_test() {
         "arbiter-upstream-operator-assign"
         "filter-upstream-operator-assign"
         "rr-feedback-const"
+        "connect-ready-guard-removed"
     )
     local c
     for c in "${cases[@]}"; do
@@ -201,7 +208,22 @@ self_test() {
     done
     restore_stream
     rebuild
-    ok "自检：9 种投毒全部被抓住，且还原后复绿"
+    # ⚠️⚠️ **计数 MUST 动态**（从数组长度取）⇒ ⇒ 否则「投毒清单增删」时
+    #    这行文案会**静默漂移** ⇒ ⇒ ⇒ **⇒ 本仓登记的「计数锚点」教训**
+    #    ⚠️ 「全部被抓住」由**循环内**的 fail 早退保证（任何一种投毒未转红
+    #    ⇒ ⇒ 立刻 fail + return）⇒ ⇒ ⇒ 到达这里即代表**全部**通过 ✔
+    # ⚠️⚠️ **计数 MUST 与分析器【动态比对】**（`list-poisons` 的行数）
+    #    ⇒ ⇒ ⇒ **零硬编码** ⇒ ⇒ 「投毒清单增删」时**不会漂移**
+    #    ⇒ ⇒ ⇒ **⇒ 本仓登记的「计数锚点」教训**
+    local total=${#cases[@]}
+    local declared
+    declared="$(python3 "$ANALYZER" list-poisons | wc -l | tr -d ' ')"
+    if [ "$total" -ne "$declared" ]; then
+        fail "自检：自检清单 $total 种 ≠ 分析器声明 $declared 种"
+        fail "自检：⇒ ⇒ **投毒清单与分析器漂移**（⇒ ⇒ 漏投毒 ⇒ ⇒ 假绿）"
+    else
+        ok "自检：$total 种投毒全部被抓住，且还原后复绿"
+    fi
     ok "（含**跨文件**投毒 ⇒ ⇒ 验证「还原回到正确的文件」⇒ ⇒ sidecar 状态文件）"
     return 0
 }

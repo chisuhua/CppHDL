@@ -190,7 +190,17 @@ def r5() -> None:
     ok("R5 `stream_fifo_connect_ready` 存在且形参模板化（端口可用）")
 
 
-# ── R7 / R8：转发类（mux / arbiter / join / filters / combine_with）────────
+# ── R8 / R9：转发类（mux / arbiter / join / filters / combine_with）
+#     + `connect_ready` 的多驱动守卫
+#
+# ⚠️⚠️ **编号订正（2026-11-01 · A3）**：**`R7` 从未实现** ⇒ ⇒
+#   P1-a 的归档 `design.md` §4 曾写「R7（转发类**行为**判据）+ R8（转发类
+#   **调用点**判据）」⇒ ⇒ ⇒ **其中 R7 无对应实现** ⇒ ⇒ ⇒
+#   ⇒ **转发类的【行为】判据实际由 shell 侧的 `R1` 承载**（它跑整个
+#   `test_stream` 二进制 ⇒ ⇒ 含转发类的行为用例）⇒ ⇒ ⇒
+#   ⇒ ⇒ **本文件只有 `r2` / `r3` / `r4` / `r5` / `r6` / `r8` / `r9`** ⇒ ⇒
+#   ⇒ ⇒ ⇒ **⇒ 「R7」这个编号是历史的空号** ⇒ ⇒ ⇒
+#   ⇒ ⇒ ⇒ **⇒ 已在此如实登记（避免下一个人以为「少了一个判据」）**
 #
 # ⚠️⚠️ **R8 的设计要点**（P1-a · 2026-11-01）：
 #   ① **穷举**：自动发现 `stream.h` + `stream_arbiter.h` 内**所有**接受
@@ -346,6 +356,58 @@ SCAN_ROOTS = ["samples", "tests", "examples"]
 SCAN_FILES = [BUILDER_H]
 
 
+def r9() -> None:
+    """`connect_ready` MUST 有**多驱动守卫**（响亮失败 ⇒ 抛异常）。
+
+    ⚠️ **为什么需要这条**（A3 · 2026-11-01）：`connect_ready` 用
+    `<<=` 覆盖 ⇒ ⇒ `set_src(0, …)` ⇒ ⇒ **last-wins** ⇒ ⇒ 若调用方
+    **已自行驱动**该字段 ⇒ ⇒ 再调 `connect_ready` 会**静默接管**调用方的
+    驱动 ⇒ ⇒ 「我驱动的是我自己的信号」变成**假象** ⇒ ⇒ **静默失效**。
+
+    ⚠️⚠️ **判据 = 结构判据**（MUST NOT 词法）：MUST 同时具备
+      ① **比较式** `src(0) != default_node`（= 「当前驱动仍是默认节点」）
+      ② **`CHFATAL_EXCEPTION`**（⇒ ⇒ **抛异常** ⇒ ⇒ MUST NOT 只打日志 ——
+         实测 `CHERROR` / `CHFATAL` **只打日志不抛** ⇒ ⇒ 那是**假安全网**）
+
+    ⚠️⚠️ **为什么它承重**：builder 丢字问题的**候选修法**（上游回接）
+      **必须**让中间级的 `pop_stream.ready` 被覆盖 ⇒ ⇒ ⇒ ⇒ **⇒ 覆盖后
+      再调 `connect_ready` MUST 抛**（这是**正确**的行为）⇒ ⇒ ⇒
+      ⇒ ⇒ ⇒ **⇒ 而「串联场景对下游调 MUST NOT 抛」是它的孪生约束**
+      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 两者 MUST 同时成立** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 否则要么静默
+      接管、要么误抛** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 行为用例已覆盖**
+      （`tests/chlib/test_stream.cpp` 的 `[stream][ready][series]`）。
+    """
+    code = code_of(STREAM_H)
+    m = re.search(r"void\s+stream_fifo_connect_ready\s*\([^)]*\)\s*\{", code)
+    if not m:
+        fail("R9 找不到 `stream_fifo_connect_ready` 的定义体")
+        return
+    depth = 0
+    end = -1
+    for k in range(m.end() - 1, len(code)):
+        if code[k] == "{":
+            depth += 1
+        elif code[k] == "}":
+            depth -= 1
+            if depth == 0:
+                end = k
+                break
+    if end < 0:
+        fail("R9 `stream_fifo_connect_ready` 的函数体花括号不配平")
+        return
+    body = code[m.start(): end + 1]
+    if "src(0) != default_node" not in body:
+        fail("R9 `stream_fifo_connect_ready` 缺少多驱动守卫的**比较式**"
+             "（`src(0) != default_node`）⇒ ⇒ 覆盖将 last-wins ⇒ ⇒ 静默")
+        return
+    if "CHFATAL_EXCEPTION" not in body:
+        fail("R9 `stream_fifo_connect_ready` 的守卫 MUST 用 `CHFATAL_EXCEPTION`"
+             "（⇒ ⇒ 抛异常）⇒ ⇒ MUST NOT 只打日志"
+             "（`CHERROR` / `CHFATAL` 实测只打日志 ⇒ ⇒ 假安全网）")
+        return
+    ok("R9 `connect_ready` 有多驱动守卫（比较式 + `CHFATAL_EXCEPTION`）")
+
+
 def r6() -> None:
     files: list[pathlib.Path] = []
     for root in SCAN_ROOTS:
@@ -446,6 +508,16 @@ POISONS: dict[str, tuple[str, str]] = {
     #    驱动仍存在）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 静态判据仍绿是【正确】的**
     #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST NOT 强制「静态判据也红」**（会误报）
     #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 见 shell 侧的 `case` 分类**
+    # ⚠️⚠️ **A3 投毒（2026-11-01）**：把 `connect_ready` 的**多驱动守卫**
+    #    移除 ⇒ ⇒ 覆盖变 last-wins ⇒ ⇒ 静默接管调用方的驱动
+    #    ⇒ ⇒ ⇒ ⇒ **⇒ R9（结构判据）MUST 转红**（比较式消失）
+    #    ⇒ ⇒ ⇒ ⇒ **⇒ 且行为用例 MUST 转红**
+    #    （`REQUIRE_THROWS_AS` ⇒ ⇒ 用例期望抛异常 ⇒ ⇒ 不抛 ⇒ ⇒ 红）
+    "connect-ready-guard-removed": (
+        "    if (ready_node->num_srcs() == 0 || ready_node->src(0) != default_node) {",
+        "    if (false) {  // ⚠️ 投毒：移除多驱动守卫",
+    ),
+    # ⚠️⚠️ **P2 投毒（2026-11-01 · change `stream-arbiter-rr-rotation`）**
     "rr-feedback-const": (
         "auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, "
         "last_grant_reg);",
@@ -570,6 +642,7 @@ def main() -> int:
         r5()
         r6()
         r8()
+        r9()
         if FAILS:
             print(f"{RED}❌ 静态判据 FAIL（{FAILS} 项）{RESET}")
             return 1

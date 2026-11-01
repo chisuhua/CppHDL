@@ -34,14 +34,14 @@
 | 05 | 调用点 MUST 接 ready（或**显式豁免**，豁免非静默） | `spec:chlib-stream-ready-ownership#调用方 MUST 先建立字段节点` | `code:include/core/bundle/bundle_base.h#as_master` | `test:tests/chlib/test_stream.cpp#[stream][mux][ready][chlib]` | `guard:scripts/lib/stream_ready_ownership.py#def r6()` | — | ✅ |
 | 06 | 转发类 ready 所有权（形态 E · 单阶段） | `spec:chlib-stream-ready-ownership#转发类组合子的 ready 所有权 MUST 是` | `code:include/chlib/stream.h#stream_combine_with` | `test:tests/chlib/test_stream.cpp#[stream][mux][ready][chlib]` | `guard:scripts/lib/stream_ready_ownership.py#def r8()` | — | ✅ |
 | 07 | 轮转仲裁 MUST 真轮转（MUST NOT 饿死持续有效的通道） | `spec:chlib-stream-arbitration#轮转仲裁器 MUST 真正轮转` | `code:include/chlib/stream.h#stream_arbiter_round_robin` | `test:tests/chlib/test_stream.cpp#[stream][arbiter][round_robin][rotation]` | `guard:scripts/lib/stream_ready_ownership.py#rr-feedback-const` | — | ✅ |
+| 07b | `connect_ready` 多驱动守卫（响亮失败 · **串联不误炸**） | `spec:chlib-stream-ready-ownership#多驱动 MUST 被检出` | `code:include/chlib/stream.h#stream_fifo_connect_ready` | `test:tests/chlib/test_stream.cpp#[stream][ready][series]` | `guard:scripts/lib/stream_ready_ownership.py#def r9()` | — | ✅ |
 | 08 | FIFO 输出时序 MUST 被定义（FWFT 0-cycle `aread`） | `spec:chlib-stream-semantics#FIFO 类组件的输出时序 MUST 被定义` | `code:include/chlib/fifo.h#q_async` | `test:tests/test_stream_fifo_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/verify_dual_backend_parity.sh#DUAL_BACKEND_PARITY_TOTAL` | — | ✅ |
 | 09 | `stream_fifo` 行为 MUST 有双后端 parity 覆盖 | `spec:chlib-stream-semantics#的行为 MUST 有双后端 parity 覆盖` | `code:include/chlib/stream.h#stream_fifo` | `test:tests/test_stream_fifo_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/verify_dual_backend_parity.sh#DUAL_BACKEND_PARITY_TOTAL` | — | ✅ |
 | 10 | FIFO 指针 MUST 受空/满门控（自保护） | `spec:chlib-stream-semantics#FIFO 数据通路的指针 MUST 受空/满门控` | `code:include/chlib/fifo.h#will_write` | `test:tests/chlib/test_fifo.cpp#[fifo][sync_fifo]` | — | `debt:docs/adr/ADR-045-chlib-stream-semantics.md#自保护` | ❌ |
 | 11 | demux ready 方向（消费端 ⇒ 上游；现状**方向颠倒**） | — | `code:include/chlib/stream.h#stream_demux` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#demux` | ❌ |
 | 12 | fork 同步语义（`input ready` = AND(各 output ready)） | — | `code:include/chlib/stream.h#stream_fork` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#fork` | ❌ |
-| 13 | builder 链上游回接 + **零丢字** | — | `code:include/chlib/stream_builder.h#queue` | — | — | `debt:.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md#静默丢字` | ❌ |
+| 13 | builder 链**上游反压从未建立**（`source.ready` 恒 0 ⇒ 死路） | — | `code:include/chlib/stream_builder.h#queue` | — | — | `debt:.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md#上游反压` | ❌ |
 | 14 | 命名诚实性（`fwft_fifo` 是**已知实例**：不是 FWFT） | `spec:chlib-stream-arbitration#仲裁器的命名与文档 MUST 与实现行为一致` | `code:include/chlib/fifo.h#fwft_fifo` | — | — | `debt:docs/adr/ADR-045-chlib-stream-semantics.md#fwft_fifo` | ❌ |
-| 15 | 护栏判据编号一致性（`R7` 跳号 · shell 标签漏 `R8`） | — | `guard:scripts/verify_stream_ready_ownership.sh#R2~R6` | — | — | `debt:scripts/verify_stream_ready_ownership.sh#R2~R6` | ❌ |
 
 ## 能力面说明（**为什么这样切**）
 
@@ -71,6 +71,12 @@
   （归档于 2026-04-08 的 usage guide）
   ② `PHASE1-REVISED-PLAN.md:66`（分析时间 2026-03-30 的历史计划）
   ⇒ ⇒ ⇒ **⇒ 「全仓 grep 无残留」不是本项的验收判据**（会误报）。
+- ⚠️⚠️ **R1 只能验「指针可解析」（文件存在 + 标记命中）⇒ ⇒ 验不了
+  「语义没漂移」** ⇒ ⇒ 例：第 13 行的欠账 marker 若仍指向源文件里**已被
+  推翻**的旧表述，R1 **照样绿** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「可解析」≠「说的是同一件事」**
+  ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 语义同步靠人工**（⇒ ⇒ 本仓已登记的病症：机械核验有边界）
+  ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已在本仓实际发生一次**（2026-11-01：第 13 行的 marker 从
+  「静默丢字」改为「上游反压」⇒ ⇒ 靠人工发现）
 - ⚠️ 「护栏」指针指向的是**判据本体或投毒名** ⇒ ⇒ 它证明「**有**自动化守护」
   ⇒ ⇒ **不**证明「该守护**覆盖了全部**契约条款」⇒ ⇒ 契约条款的**逐条**覆盖
   仍靠 capability 自身的 Scenario + 护栏自身的判据设计。
@@ -80,4 +86,5 @@
 | 日期 | 变更 | 依据 |
 |---|---|---|
 | 2026-11-01 | **创建**（15 行）⇒ ⇒ 首次把散在 4 处的未收口项收敛到一处 | P2 归档后的梳理；`chlib-stream-ready-ownership` Purpose 的「范围限定」段 + P1 台账 + P2 台账 + ADR-054 §6 |
+| 2026-11-01 | A3：第 13 行**根因订正**（「静默丢字」被实测推翻 ⇒ ⇒ 真缺陷 = **上游反压从未建立**）· **删**第 15 行（「编号一致性」是**护栏实现细节**，不是能力面 ⇒ ⇒ 已在护栏脚本内就地订正）· **新增**第 07b 行（`connect_ready` 多驱动守卫 + R9 + 投毒） | A3 实测（`/tmp/opencode/a3/probe_*.cpp`）· shell 标签「R2~R6」⇒ ⇒ 「R2~R6 + R8 + R9」· python 侧登记「R7 是空号」 |
 | 2026-11-01 | 「已知边界」补登记**归档文档不改**（`fwft_fifo` over-promise 的两处历史快照保留） | A1 实施期发现：归档文档 + 历史计划属**历史快照**（保真性 > 现行正确性）⇒ ⇒ 不可用「全仓 grep 无残留」当验收判据 |

@@ -641,6 +641,78 @@ TEST_CASE("Stream: stream_fifo_connect_ready MUST 检出多驱动（响亮失败
                       std::runtime_error);
 }
 
+// ⚠️⚠️ **串联场景的多驱动守卫**（2026-11-01 · A3 · 实测）
+//
+// 🔴 **要钉住什么**：P1 台账曾担心「`stream_fifo_connect_ready` 的多驱动
+//    守卫（断言「当前驱动仍是默认节点」）在**串联**场景会**误抛**」
+//    ⇒ ⇒ ⇒ **实测结论：不会**（探针 `/tmp/opencode/a3/probe_chain.cpp`）
+//    ⇒ ⇒ ⇒ E6：对**下游** `f2` 调 `connect_ready` ⇒ ⇒ **不抛**
+//    ⇒ ⇒ ⇒ E5：中间级 `f1` 已被 `<<=` 覆盖后再调 ⇒ ⇒ **抛**（= **正确**的
+//    多驱动检测 ⇒ ⇒ 不是误抛）
+//
+// ⚠️⚠️ **为什么这条 MUST 有用例**：若将来有人把守卫改成「总是检查
+//    `num_srcs() > 0`」或「对任意调用都抛」⇒ ⇒ ⇒ 串联场景**全部崩**
+//    ⇒ ⇒ ⇒ 而「串联」正是 builder 丢字问题的**候选修法**（上游回接）
+//    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这条守卫是那条修法的前置条件** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST
+//    有可执行证据**（否则修法 A 会在落地时才撞上「误抛」）。
+//
+// ⚠️ **零丢字判据**：手写 2 级 + **显式回接**
+//    （`f1.pop_stream.ready <<= f2.push_stream.ready`）⇒ ⇒ 推入 4 个可区分
+//    word ⇒ ⇒ 消费端恒 ready ⇒ ⇒ **实测观测序列 = 0x10,0x11,0x12,0x13**
+//    （每个**恰好一次**）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这是「回接修法可行」的证据**。
+TEST_CASE("Stream: 串联场景的多驱动守卫 MUST NOT 误抛（且回接零丢字）",
+          "[stream][ready][series]") {
+    auto ctx = std::make_unique<ch::core::context>("test_stream_ready_series");
+    ch::core::ctx_swap ctx_swapper(ctx.get());
+
+    ch_uint<8> payload(0_d);
+    ch_bool valid(false);
+    ch_bool consumer_ready(true);
+
+    ch_stream<ch_uint<8>> in;
+    in.payload = payload;
+    in.valid = valid;
+
+    auto f1 = stream_fifo<ch_uint<8>, 4>(in);
+    auto f2 = stream_fifo<ch_uint<8>, 4>(f1.pop_stream);
+
+    // ── ① 对**下游** `f2` 调 `connect_ready` ⇒ ⇒ MUST **不抛** ──
+    //    （守卫只检查「该 result 自己的 ready 字段」⇒ ⇒ 下游的默认驱动
+    //    ⇒ ⇒ 仍是默认节点 ⇒ ⇒ 通过 ⇒ ⇒ **串联场景不误抛**）
+    REQUIRE_NOTHROW((void)stream_fifo_connect_ready(f2, consumer_ready));
+
+    // ── ② **回接**：中间级 `f1` 的读使能 ← 下一级的 `push_stream.ready` ──
+    //    ⇒ ⇒ 「下游满了 ⇒ ⇒ 中间级停下」⇒ ⇒ 这是 builder 丢字问题的
+    //    ⇒ ⇒ 候选修法（上游回接）的**核心机制**
+    //    ⚠️ MUST 在 `Simulator` 构造**之前**（改边不重建指令）
+    f1.pop_stream.ready <<= f2.push_stream.ready;
+
+    // ── ③ 已被覆盖的中间级 ⇒ ⇒ 再调 `connect_ready` ⇒ ⇒ MUST **抛** ──
+    //    （= **正确**的多驱动检测 ⇒ ⇒ **不是**误抛）
+    //    ⇒ ⇒ ⚠️ 这条与既有用例「已 `<<=` 覆盖后再调 ⇒ 抛」同型
+    //    ⇒ ⇒ ⇒ 但在**串联**语境下 ⇒ ⇒ 它证明「守卫是**逐 result** 的」
+    REQUIRE_THROWS_AS((void)stream_fifo_connect_ready(f1, consumer_ready),
+                      std::runtime_error);
+
+    // ── ④ **零丢字**（回接修法可行的可执行证据）──
+    ch::Simulator sim(ctx.get());
+    std::vector<uint64_t> seen;
+    for (unsigned t = 0; t < 12; ++t) {
+        bool pushing = (t < 4);
+        sim.set_value(payload, pushing ? (0x10 + t) : 0);
+        sim.set_value(valid, pushing);
+        sim.tick();
+        if (sim.get_value(f2.pop_stream.valid) == true) {
+            seen.push_back(
+                static_cast<uint64_t>(sim.get_value(f2.pop_stream.payload)));
+        }
+    }
+    // **手推期望**（实测逐项一致）：消费端恒 ready ⇒ ⇒ 每拍弹一个
+    // ⇒ ⇒ 4 个 word 依次出现 ⇒ ⇒ 每个**恰好一次**（无重复、无丢失）
+    const std::vector<uint64_t> golden = {0x10, 0x11, 0x12, 0x13};
+    REQUIRE(seen == golden);
+}
+
 TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结构正确）",
           "[stream][behavior][regression]") {
     // ⚠️ 2026-10-22 新增。此前 `tests/chlib/test_stream.cpp` 的
