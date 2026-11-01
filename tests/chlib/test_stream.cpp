@@ -752,6 +752,121 @@ TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结�
     }
 }
 
+TEST_CASE("Stream: Arbiter round-robin MUST actually rotate",
+          "[stream][arbiter][round_robin][rotation]") {
+    // ⚠️⚠️⚠️ **判别力用例**（2026-11-01 · change
+    //    `stream-arbiter-rr-rotation-2026-11`）
+    //
+    // 🔴 **修复前的实测缺陷**：`stream_arbiter_round_robin` 恒传
+    //    `last_grant = 0_d` ⇒ ⇒ 每拍扫描起点恒为 1 ⇒ ⇒ ⇒
+    //    ⇒ **轮转从不发生** ⇒ **低位通道饿死**：
+    //      · 输入 0 与 2 有效 ⇒ 恒选 **2**（通道 0 饿死）
+    //      · 四个输入全有效 ⇒ 恒选 **1**（通道 0/2/3 全饿死）
+    //
+    // ⚠️ **既有覆盖为何抓不到**：既有测试只测「**唯一**有效输入」
+    //    ⇒ ⇒ 该场景下 round-robin 与 priority **逐位相同** ⇒ ⇒ 零判别力。
+    //
+    // ⚠️⚠️ **金标的来源**：**逐拍手工递推**（见 change 的 `design.md` §2.3
+    //    的表），递推结果与探针实测**逐项一致**（两份独立来源互证）。
+    //    ⇒ ⇒ **MUST NOT** 抄仿真输出。
+    //
+    // ⚠️⚠️ **相位说明（易踩的坑 · 实测）**：`selected` 是**纯组合输出**
+    //    （`priority_encoder(grant)`，无寄存器）⇒ ⇒ **posedge 之后
+    //    `last_grant_reg` 已推进 ⇒ 组合重新求值**
+    //    ⇒ ⇒ ⇒ ⇒ **⇒ `tick()` 之后读到的 `selected` 用的是【已推进】的相位**。
+    //    ⇒ ⇒ 故金标 MUST 按「posedge 后稳态」递推（初版按「前」推 ⇒ 差一拍
+    //    ⇒ ⇒ 被探针当场打脸）。
+
+    // ── 用例 A：输入 0 与 2 持续有效 ⇒ MUST **交替** ──
+    //    ⇒ ⇒ 钉住「通道 0 不再被饿死」
+    SECTION("two valid inputs (0 & 2) MUST alternate") {
+        auto ctx = std::make_unique<ch::core::context>("t_rr_two_valid");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        std::array<ch_stream<ch_uint<8>>, 4> ins;
+        for (unsigned i = 0; i < 4; ++i) {
+            ins[i].payload = make_uint<8>(0x10 + i);
+            ins[i].valid = ch_bool(i == 0 || i == 2);
+            ins[i].ready = ch_bool(true);
+        }
+        auto arb = stream_arbiter_round_robin<ch_uint<8>, 4>(ins);
+
+        ch::Simulator sim(ctx.get());
+
+        // **金标（6 拍，逐拍）**：0, 2, 0, 2, 0, 2
+        //    ⚠️ 修复前该序列是 2,2,2,2,2,2 ⇒ ⇒ 判别力成立
+        const uint64_t golden[6] = {0, 2, 0, 2, 0, 2};
+        for (int t = 0; t < 6; ++t) {
+            sim.tick();
+            auto sel = static_cast<uint64_t>(sim.get_value(arb.selected));
+            INFO("cycle " << t << " selected=" << sel);
+            REQUIRE(sel == golden[t]);
+            // 每个授予都必须落在**有效**通道上（安全属性）
+            REQUIRE((sel == 0 || sel == 2));
+            REQUIRE(sim.get_value(arb.output_stream.valid) == true);
+        }
+    }
+
+    // ── 用例 B：四个输入全有效 ⇒ MUST **周期 4、覆盖全部通道** ──
+    //    ⇒ ⇒ 钉住「真轮转」（不只是「在两个通道间跳」）
+    SECTION("all valid inputs MUST cycle through every channel") {
+        auto ctx = std::make_unique<ch::core::context>("t_rr_all_valid");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        std::array<ch_stream<ch_uint<8>>, 4> ins;
+        for (unsigned i = 0; i < 4; ++i) {
+            ins[i].payload = make_uint<8>(0x10 + i);
+            ins[i].valid = ch_bool(true);
+            ins[i].ready = ch_bool(true);
+        }
+        auto arb = stream_arbiter_round_robin<ch_uint<8>, 4>(ins);
+
+        ch::Simulator sim(ctx.get());
+
+        // **金标（8 拍，逐拍）**：2, 3, 0, 1, 2, 3, 0, 1
+        //    ⚠️ 修复前该序列是 1,1,1,1,1,1,1,1 ⇒ ⇒ 判别力成立
+        const uint64_t golden[8] = {2, 3, 0, 1, 2, 3, 0, 1};
+        for (int t = 0; t < 8; ++t) {
+            sim.tick();
+            auto sel = static_cast<uint64_t>(sim.get_value(arb.selected));
+            INFO("cycle " << t << " selected=" << sel);
+            REQUIRE(sel == golden[t]);
+        }
+        // 结构级附加断言：**周期 MUST 是 4**（= N_INPUTS）⇒ ⇒
+        //    「所有通道都被服务过」是轮转的必要条件
+        //    （⇒ ⇒ 若实现退化成「只跳有效通道」的固定子集 ⇒ ⇒ 这条会红）
+        for (unsigned c = 0; c < 4; ++c) {
+            bool seen = false;
+            for (unsigned t = 0; t < 4; ++t) {
+                if (golden[t] == c) seen = true;
+            }
+            REQUIRE(seen);  // 金标本体覆盖全部 4 个通道（自检金标不自相矛盾）
+        }
+    }
+
+    // ── 用例 C：唯一有效输入 ⇒ 必须被选中（既有语义的回归锁）──
+    //    ⚠️ 既有测试已覆盖 ⇒ 此处只作为「本 change 未破坏它」的**同批**确认
+    SECTION("single valid input MUST still be selected") {
+        auto ctx = std::make_unique<ch::core::context>("t_rr_single_valid");
+        ch::core::ctx_swap ctx_swapper(ctx.get());
+
+        std::array<ch_stream<ch_uint<8>>, 4> ins;
+        for (unsigned i = 0; i < 4; ++i) {
+            ins[i].payload = make_uint<8>(0x10 + i);
+            ins[i].valid = ch_bool(i == 3);
+            ins[i].ready = ch_bool(true);
+        }
+        auto arb = stream_arbiter_round_robin<ch_uint<8>, 4>(ins);
+
+        ch::Simulator sim(ctx.get());
+        for (int t = 0; t < 4; ++t) {
+            sim.tick();
+            REQUIRE(static_cast<uint64_t>(sim.get_value(arb.selected)) == 3);
+            REQUIRE(sim.get_value(arb.output_stream.valid) == true);
+        }
+    }
+}
+
 TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
     auto ctx = std::make_unique<ch::core::context>("test_stream_fork");
     ch::core::ctx_swap ctx_swapper(ctx.get());

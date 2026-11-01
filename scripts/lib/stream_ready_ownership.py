@@ -436,6 +436,22 @@ POISONS: dict[str, tuple[str, str]] = {
         """    input_stream.ready <<= result.ready;""",
         """    input_stream.ready = result.ready;""",
     ),
+    # ⚠️⚠️⚠️ **P2 投毒（2026-11-01 · change `stream-arbiter-rr-rotation`）**
+    #    `stream_arbiter_round_robin` 的轮转反馈 ⇒ ⇒ **断回常量**
+    #    （= **修复前的形态**）⇒ ⇒ ⇒ **轮转消失 ⇒ 通道饿死**
+    #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 判别力用例（`[rotation]` tag）MUST 转红**
+    #
+    #    ⚠️⚠️ **归入「仅行为判据」类别**（同 `drop-multidrive-guard`）：
+    #    本变异**不改变任何结构判据**能看见的东西（`<<=` 仍是 `<<=`、
+    #    驱动仍存在）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 静态判据仍绿是【正确】的**
+    #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST NOT 强制「静态判据也红」**（会误报）
+    #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 见 shell 侧的 `case` 分类**
+    "rr-feedback-const": (
+        "auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, "
+        "last_grant_reg);",
+        "auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, "
+        "ch_uint<N_INPUTS>(0_d));",
+    ),
 }
 
 # ⚠️ **投毒的目标文件**（⇒ ⇒ R8 的投毒可能落在 `stream_arbiter.h`）

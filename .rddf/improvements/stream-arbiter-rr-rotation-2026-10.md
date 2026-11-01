@@ -12,7 +12,16 @@ created_at: 2026-10-31
 
 - **Date drafted**: 2026-10-31
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**决策权归 planner / architect**
+- **Status**: ✅ **已实施**（2026-11-01 · 方案 **A** —— 真轮转）
+  ⇒ ⇒ change `stream-arbiter-rr-rotation-2026-11`
+  ⇒ ⇒ **实施要点**：`last_grant_reg`（one-hot，**零初值**）反馈「上一次实际授予」
+  ⇒ ⇒ `valid` 条件更新（无授予则保持 ⇒ 不丢相位）⇒ ⇒ **相位 = 首拍从通道 1 起**
+  （选择器的既有语义，本 change 未改它 —— 实测金标已按「posedge 后稳态」递推）
+  ⇒ ⇒ `stream_arbiter_sequence` 按用户裁决 **只订正注释**（零行为变更）
+  ⇒ ⇒ ⚠️ **新发现**：`sequence` 与 `priority` 在**仲裁逻辑上逐位相同**
+  ⇒ ⇒ ⇒ **组件去留登记 backlog**（架构裁决，不在本 change 顺手删）
+  ⇒ ⇒ 判别力：`[rotation]` 3 个 SECTION / **38 断言**（逐拍金标）
+  ⇒ ⇒ 护栏：复用既有自检框架 + 投毒 `rr-feedback-const`（**9 种投毒全被抓**）
 - **来源**：P0 探针扫 `include/chlib/stream.h` 时的**静态阅读** ⇒ ⇒ 经**代码定位**
   确认（oracle 评审提出 ⇒ builder 抽验）
 

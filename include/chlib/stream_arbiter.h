@@ -118,7 +118,7 @@ stream_arbiter_lock(std::array<ch_stream<T>, N_INPUTS> input_streams) {
 
 /**
  * Stream Arbiter Sequence Result - 序列仲裁器结果
- * Fixed order arbitration, wraps around
+ * **固定优先级扫描**（高索引优先）—— 见 `stream_arbiter_sequence` 的注释
  */
 template <typename T, unsigned N_INPUTS> struct StreamArbiterSequenceResult {
     std::array<ch_stream<T>, N_INPUTS> input_streams;
@@ -128,8 +128,27 @@ template <typename T, unsigned N_INPUTS> struct StreamArbiterSequenceResult {
 
 /**
  * Stream Arbiter Sequence - 序列仲裁器
- * Cycles through inputs in fixed order using round-robin selection.
- * This implementation uses priority encoder for simplicity.
+ *
+ * ⚠️⚠️ **名字与行为的如实说明**（2026-11-01 订正 · change
+ *   `stream-arbiter-rr-rotation-2026-11`）：
+ *   本组件是 **固定优先级扫描**（`priority_encoder` ⇒ ⇒ **较高索引优先**），
+ *   **不是**轮转。
+ *
+ * ⚠️ **订正前的注释是假陈述**：原文写
+ *   「Cycles through inputs in fixed order **using round-robin selection**」
+ *   +「Fixed order arbitration, **wraps around**」⇒ ⇒ ⇒
+ *   ⇒ **实现从 `priority_encoder` 取，既不轮转、也不 wrap**
+ *   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 与 `stream_arbiter_round_robin` 的缺陷同族**
+ *   （「名字/注释 over-promise」）。
+ *
+ * ⚠️ **为什么本组件【不】改成真轮转**（2026-11-01 用户裁决）：
+ *   它会与 `stream_arbiter_round_robin` **语义重复**（⇒ ⇒ 仓内已有两个
+ *   仲裁器在**仲裁逻辑上逐位相同**：本组件与 `stream_arbiter_priority`
+ *   都用 `priority_encoder(valid_vector)`，唯一差异是本组件的 ready 链
+ *   多一个 `& has_valid` 门控）
+ *   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 再引入第二个轮转组件是【制造】重复，不是消除**
+ *   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 本组件只订正注释（零行为变更）**
+ *   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「与 priority 重复」的去留裁决登记 backlog**。
  */
 template <typename T, unsigned N_INPUTS>
 StreamArbiterSequenceResult<T, N_INPUTS>

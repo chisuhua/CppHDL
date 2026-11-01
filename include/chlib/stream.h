@@ -654,8 +654,29 @@ StreamArbiterResult<T, N_INPUTS>
 stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     StreamArbiterResult<T, N_INPUTS> result;
 
-    // 跟踪当前轮询位置的寄存器，使用默认时钟和复位
-    auto current_channel = ch_reg<ch_uint<compute_idx_width(N_INPUTS)>>(0_d);
+    // ⚠️⚠️⚠️ **轮转反馈寄存器**（2026-11-01 修「名为 round-robin、实为
+    //   固定优先级」⇒ ⇒ 饿死）
+    //
+    // ⚠️ **它存「上一次实际授予」的 one-hot `grant`** ⇒ ⇒ ⇒ 喂回
+    //   `round_robin_selector` 的 `last_grant` ⇒ ⇒ ⇒ **扫描起点 = 上次授予
+    //   的下一个** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 轮转真正发生**
+    //
+    // ⚠️⚠️ **初值 MUST 是 `0_d`（零）** ⇒ ⇒ ⇒ 理由（实测，2026-11-01）：
+    //   ① `ch_reg<T>` 的**非零初值**在 **Verilog codegen 侧失效**
+    //      （`print_reg` 的 reset 分支取到**脱节**的 init 节点 ⇒ ⇒ 值 0）
+    //      ⇒ ⇒ ⇒ **⇒ 非零初值会造成 interpreter / Verilog 双后端分歧**
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 故 MUST 用零初值**；
+    //   ② ⇒ ⇒ ⇒ 零初值 ⇒ ⇒ `has_last_grant = false` ⇒ ⇒ `last_grant_idx = 0`
+    //      ⇒ ⇒ ⇒ **⇒ `start_pos = 1` ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 首拍从通道 1 开始**
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 该相位 MUST 在契约里显式写明**（调用方无从预期
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 否则会被当成 bug**）
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **与 SpinalHDL 的 `RoundRobin` 不同**
+    //      （后者复位时 mask 的最后一位为 1 ⇒ ⇒ 首拍从通道 0 开始）
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已知差异**（见 capability 的 R1 Scenario）。
+    //
+    // ⚠️⚠️ **MUST NOT** 用 `ch_reg<ch_uint<...>>(1 << (N-1))` 之类的非零初值
+    //   ⇒ ⇒ ⇒ 理由同 ①。
+    ch_reg<ch_uint<N_INPUTS>> last_grant_reg(0_d, "rr_last_grant");
 
     // 初始化输入流
     for (unsigned i = 0; i < N_INPUTS; i++) {
@@ -672,8 +693,21 @@ stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     }
 
     // 使用round_robin_selector进行仲裁
-    ch_uint<N_INPUTS> last_grant = 0_d;
-    auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, last_grant);
+    //
+    // ⚠️⚠️ **`last_grant` MUST 是「上一次实际授予」的反馈**（不是常量）
+    //   ⇒ ⇒ ⇒ 此前恒传 `0_d` ⇒ ⇒ ⇒ 每拍扫描起点恒为 1 ⇒ ⇒ ⇒ ⇒ ⇒
+    //   ⇒ ⇒ ⇒ **⇒ 轮转从不发生 ⇒ ⇒ ⇒ 低位输入饿死**
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 详见 capability
+    //   `chlib-stream-arbitration` 的 R1**。
+    auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, last_grant_reg);
+
+    // ⚠️⚠️ **反馈更新时机**：**仅当本拍真的授予时**更新 ⇒ ⇒ ⇒ 否则
+    //   「无请求的拍」会把 `last_grant` 写成 0 ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 起点恒为 1
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 饿死复现**。
+    //   ⚠️ **第三分支 MUST 是「寄存器自身的当前值」** ⇒ ⇒ ⇒ **不是 `0_d`**
+    //   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这是「零破坏」的关键**（⇒ ⇒ 零初值仍能保持相位）。
+    last_grant_reg->next = select(arb_result.valid, arb_result.grant,
+                                  ch_uint<N_INPUTS>(last_grant_reg));
 
     // 获取选中的索引
     auto selected_idx = priority_encoder<N_INPUTS>(arb_result.grant);

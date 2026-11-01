@@ -142,6 +142,7 @@ self_test() {
         "forward-delete-upstream-drive"
         "arbiter-upstream-operator-assign"
         "filter-upstream-operator-assign"
+        "rr-feedback-const"
     )
     local c
     for c in "${cases[@]}"; do
@@ -172,6 +173,11 @@ self_test() {
         case "$c" in
             read-en-local-const|write-en-valid-and-ready|default-driver-operator-assign) ;;
             drop-multidrive-guard) continue ;;
+            # ⚠️⚠️ **P2（2026-11-01）**：轮转反馈 ⇒ 常量 ⇒ ⇒ **轮转消失**
+            #    ⇒ ⇒ 但**结构判据看不见**（`<<=` 仍是 `<<=`、驱动仍存在）
+            #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 静态判据仍绿是【正确】的**
+            #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 归入「仅行为判据」类别**
+            rr-feedback-const) continue ;;
         esac
         if python3 "$ANALYZER" check >/dev/null 2>&1; then
             fail "自检：投毒 [$c] 后**静态判据仍绿** ⇒ ⇒ 结构判据的判别力为零"
@@ -195,7 +201,7 @@ self_test() {
     done
     restore_stream
     rebuild
-    ok "自检：8 种投毒全部被抓住（行为 + 静态双判据），且还原后复绿"
+    ok "自检：9 种投毒全部被抓住，且还原后复绿"
     ok "（含**跨文件**投毒 ⇒ ⇒ 验证「还原回到正确的文件」⇒ ⇒ sidecar 状态文件）"
     return 0
 }
