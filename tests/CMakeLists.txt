@@ -271,6 +271,13 @@ add_dual_backend_test(test_stream_demux_fork_dual
     TIMEOUT 300
 )
 
+# B7 · capability `core-node-driver-visibility`：**未驱动字段的只读诊断**
+# （`ch::core::diagnose_drive` / `drive_state`）的可执行判据。
+# ⚠️ 判别性 = **五种状态逐一钉住**：少一格 ⇒ 「诊断说未驱动、实际已驱动」
+#    这类误判就可能溜过去。
+# ⚠️ **零回归**：本 API 是**只读**的 ⇒ 不改任何读取语义。
+add_catch_test(test_node_driver_diagnosis test_node_driver_diagnosis.cpp)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

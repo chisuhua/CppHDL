@@ -218,5 +218,78 @@ protected:
     ch::Component *parent_;
 };
 
+/**
+ * @brief 节点的**驱动状态**（只读诊断；MUST NOT 改变任何读取语义）
+ *
+ * ⚠️ **为什么需要它**（B7 · 框架层）：框架对「读一个**未被驱动**的字段 /
+ *   代理 / 端口」返回 **0** 且**不报错** ⇒ ⇒ **静默**（本仓第 3 个实例，
+ *   前两个是 `ch_in` 的 `operator=` 与未驱动代理节点）。
+ *   ⇒ ⇒ 「**诊断**」必须与「**读取**」**分开**：本枚举**只回答「它被驱动了
+ *   没有」**，MUST NOT 改变任何读取行为（⇒ ⇒ 对既有 194+ 个测试**零回归**）。
+ *
+ * ⚠️ **为什么是枚举而不是三个 bool**：两个「响亮拒绝」的实现（`stream.h` 的
+ *   `detail::drive_master_ready` 与 `stream_pipeline.h` 的
+ *   `detail::drive_upstream_ready`）需要区分**三种**「驱动不了」+ **一种**
+ *   「可以覆盖默认值」⇒ ⇒ 若各自用 bool 组合表达 ⇒ ⇒ **两份实现必然漂移**
+ *   ⇒ ⇒ ⇒ 用**同一个枚举** ⇒ ⇒ 判据只有**一处**。
+ */
+enum class drive_state {
+    /// 节点**不存在**（空指针 / 字段从未建节点）⇒ ⇒ `<<=` 会另建节点并
+    /// **只绑到本地副本** ⇒ ⇒ 调用方**看不到**任何效果（静默失效）
+    no_node,
+    /// 节点本身是**字面量**（值不随 src 变化）⇒ ⇒ 驱动它**无效**
+    literal,
+    /// 节点存在但**没有驱动源**（未接的 proxy / 未接的顶层端口）
+    undriven,
+    /// 有驱动源，但那个源是**字面量**（= 组合子的**默认值** ⇒ ⇒ **可以**被
+    /// 消费端覆盖 —— ADR-054 形态 E）
+    driven_by_literal,
+    /// 被**真信号**驱动（⇒ ⇒ 再驱动是 last-wins ⇒ ⇒ **静默接管**别人的信号）
+    driven,
+};
+
+/// 只读诊断：判定一个节点的驱动状态（`nullptr` ⇒ `no_node`）
+///
+/// ⚠️ **判定细则**（唯一的**一处**实现 ⇒ ⇒ 护栏与组合子共用 ⇒ ⇒ 不会漂移）：
+/// · `literal` 节点**自驱动**（值固定）⇒ ⇒ `literal`；
+/// · `proxy` / `input` 且**无 src** ⇒ ⇒ `undriven`；
+/// · 有 src 且 src 是**字面量** ⇒ ⇒ `driven_by_literal`；
+/// · 其余（组合逻辑 / 寄存器 / 已接真信号的 proxy / 端口）⇒ ⇒ `driven`。
+inline drive_state diagnose_drive(const lnodeimpl *n) {
+    if (n == nullptr) {
+        return drive_state::no_node;
+    }
+    if (n->type() == lnodetype::type_lit) {
+        return drive_state::literal;
+    }
+    if (n->num_srcs() == 0) {
+        switch (n->type()) {
+        case lnodetype::type_proxy:
+        case lnodetype::type_input:
+            return drive_state::undriven;
+        default:
+            // 寄存器 / 组合逻辑 / 内存等**自驱动**节点（它们不从 src 取值）
+            return drive_state::driven;
+        }
+    }
+    const lnodeimpl *src = n->src(0);
+    if (src != nullptr && src->type() == lnodetype::type_lit) {
+        return drive_state::driven_by_literal;
+    }
+    return drive_state::driven;
+}
+
+/// 只读诊断的**便捷谓词**（与 `diagnose_drive` 同源 ⇒ ⇒ 不会漂移）
+inline bool node_is_driven(const lnodeimpl *n) {
+    const drive_state st = diagnose_drive(n);
+    return st == drive_state::driven || st == drive_state::driven_by_literal;
+}
+
+inline bool node_is_literal(const lnodeimpl *n) {
+    return diagnose_drive(n) == drive_state::literal;
+}
+
+inline bool node_exists(const lnodeimpl *n) { return n != nullptr; }
+
 } // namespace ch::core
 

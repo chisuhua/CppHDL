@@ -543,12 +543,20 @@ def r11() -> None:
         fail("R11 `drive_upstream_ready()` 内 MUST NOT 用 `operator=` 驱动 "
              "`upstream.ready`（节点重绑定 ≠ 连接）")
         return
-    if "type_lit" not in body:
-        fail("R11 `drive_upstream_ready()` MUST 检出 **literal** 目标形态")
+    # ⚠️ **B7：判据 MUST 只有一处**（框架级只读诊断 `ch::core::diagnose_drive`）
+    #    ⇒ ⇒ 本 helper MUST 用它 ⇒ ⇒ 且 MUST NOT **自己重新实现**
+    #    （自己判 `type_lit` / `num_srcs()` ⇒ ⇒ 两份实现必然漂移）
+    if "diagnose_drive(" not in body:
+        fail("R11 `drive_upstream_ready()` MUST 用框架级的只读诊断 "
+             "`ch::core::diagnose_drive(...)` 判定驱动状态（B7）"
+             "⇒ ⇒ 否则 pipe 族的判据与 `stream.h` 的那份**各写各的** ⇒ ⇒ 漂移")
         return
-    if "num_srcs()" not in body:
-        fail("R11 `drive_upstream_ready()` MUST 检出**多驱动**")
-        return
+    for raw in ("type_lit", "num_srcs()"):
+        if raw in body:
+            fail(f"R11 `drive_upstream_ready()` MUST NOT 重新实现驱动判据"
+                 f"（出现 `{raw}`）⇒ ⇒ MUST 用 `ch::core::diagnose_drive(...)`"
+                 f" ⇒ ⇒ 判据只有一处 ⇒ ⇒ 不会漂移")
+            return
     n_loud = body.count("CHFATAL_EXCEPTION")
     if n_loud < 3:
         fail(f"R11 `drive_upstream_ready()` 的**响亮拒绝**只有 {n_loud} 处"
@@ -567,7 +575,7 @@ def r11() -> None:
             fail(f"R11 `{fn}`（{label} pipe）MUST 调用 `drive_upstream_ready(...)`"
                  "（上游 ready 由 pipe 驱动 ⇒ 否则上游收不到反压）")
             return
-    ok("R11 pipe 族上游驱动齐备（共用 `<<=` 实现 · 3 处响亮拒绝 · 3 个 pipe 全用）")
+    ok("R11 pipe 族上游驱动齐备（共用 `<<=` 实现 · 3 处响亮拒绝 · 3 个 pipe 全用 · 判据走共享 API）")
 
 
 def r6() -> None:
@@ -862,12 +870,19 @@ def r13() -> None:
         fail("R13 `drive_master_ready()` 内 MUST NOT 用 `operator=` 驱动 "
              "`upstream.ready`（节点重绑定 ≠ 连接）")
         return
-    if "type_lit" not in body:
-        fail("R13 `drive_master_ready()` MUST 检出 **literal** 目标形态")
+    # ⚠️ **B7：判据 MUST 只有一处**（框架级只读诊断 `ch::core::diagnose_drive`）
+    #    ⇒ ⇒ 本 helper MUST 用它 ⇒ ⇒ 且 MUST NOT **自己重新实现**
+    if "diagnose_drive(" not in body:
+        fail("R13 `drive_master_ready()` MUST 用框架级的只读诊断 "
+             "`ch::core::diagnose_drive(...)` 判定驱动状态（B7）"
+             "⇒ ⇒ 否则 demux/fork 的判据与 pipe 族的**各写各的** ⇒ ⇒ 漂移")
         return
-    if "num_srcs()" not in body:
-        fail("R13 `drive_master_ready()` MUST 检出**多驱动**")
-        return
+    for raw in ("type_lit", "num_srcs()"):
+        if raw in body:
+            fail(f"R13 `drive_master_ready()` MUST NOT 重新实现驱动判据"
+                 f"（出现 `{raw}`）⇒ ⇒ MUST 用 `ch::core::diagnose_drive(...)`"
+                 f" ⇒ ⇒ 判据只有一处 ⇒ ⇒ 不会漂移")
+            return
     n_loud = body.count("CHFATAL_EXCEPTION")
     if n_loud < 3:
         fail(f"R13 `drive_master_ready()` 的**响亮拒绝**只有 {n_loud} 处"
@@ -902,7 +917,7 @@ def r13() -> None:
             fail(f"R13 `{fn}`（{label}）MUST 调用 `drive_master_ready(...)`"
                  "（上游 ready 由组合子驱动 ⇒ 否则上游收不到反压）")
             return
-    ok("R13 demux / fork 的上游驱动齐备（共用 `<<=` 实现 · 3 处响亮拒绝 · 两处全用）")
+    ok("R13 demux / fork 的上游驱动齐备（共用 `<<=` 实现 · 3 处响亮拒绝 · 两处全用 · 判据走共享 API）")
 
 
 def main() -> int:

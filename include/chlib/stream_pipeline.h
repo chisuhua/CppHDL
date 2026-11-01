@@ -63,28 +63,33 @@ namespace detail {
 template <typename T, typename D>
 inline void drive_upstream_ready(ch_stream<T> &upstream, const D &driver,
                                  const char *what) {
+    // ⚠️ **判据只有这一处**（B7）：`ch::core::diagnose_drive` 是框架级的
+    //    **只读诊断** ⇒ ⇒ 本 helper 与 `stream.h` 的 `drive_master_ready`
+    //    **共用**同一判定 ⇒ ⇒ 两份实现不会漂移
+    //    ⇒ ⇒ **MUST NOT** 在此重新实现（护栏 R11 会检出）。
     auto *node = upstream.ready.impl();
-    if (!node) {
+    switch (ch::core::diagnose_drive(node)) {
+    case ch::core::drive_state::no_node:
         CHFATAL_EXCEPTION(
             "[%s] 上游 ready 字段**没有节点**：`<<=` 在空目标上会另建节点并"
             "只绑到本地副本 ⇒ ⇒ 调用方收不到反压（静默失效）。"
             "修法：MUST 先对 input_stream 调 as_master()。", what);
-    }
-    if (node->type() == lnodetype::type_lit) {
+        break;
+    case ch::core::drive_state::literal:
         CHFATAL_EXCEPTION(
             "[%s] 上游 ready 字段是**字面量**节点 ⇒ ⇒ literal 的值不随 src "
             "变化 ⇒ ⇒ 驱动无效（反压静默丢失）。"
             "修法：MUST NOT 用 operator= 给 input_stream.ready 喂常量。", what);
-    }
-    if (node->num_srcs() > 0) {
-        auto *cur = node->src(0);
-        // ⚠️ 「当前驱动是 literal」= 上一级的**默认值** ⇒ ⇒ 覆盖它是设计意图
-        if (cur && cur->type() != lnodetype::type_lit) {
-            CHFATAL_EXCEPTION(
-                "[%s] 上游 ready 字段**已被真信号驱动** ⇒ ⇒ 再驱动是 last-wins "
-                "⇒ ⇒ 会静默接管调用方的信号。"
-                "修法：input_stream.ready 留给 pipe 驱动。", what);
-        }
+        break;
+    case ch::core::drive_state::driven:
+        CHFATAL_EXCEPTION(
+            "[%s] 上游 ready 字段**已被真信号驱动** ⇒ ⇒ 再驱动是 last-wins "
+            "⇒ ⇒ 会静默接管调用方的信号。"
+            "修法：input_stream.ready 留给 pipe 驱动。", what);
+        break;
+    default:
+        // `undriven`（可驱动）/ `driven_by_literal`（= 上一级的默认值 ⇒ 可覆盖）
+        break;
     }
     upstream.ready <<= driver;
 }
