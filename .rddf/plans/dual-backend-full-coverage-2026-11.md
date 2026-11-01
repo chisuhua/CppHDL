@@ -91,7 +91,20 @@ MUST 是【有独立价值的新测试】**（⇒ ⇒ **不是**转换的复刻 
 ## 4. 批次清单（**每批一个 change**；批次内按 DUT 聚合）
 
 ⚠️ **每批的验收模板**（**逐批复制**）：
-- [ ] 新增的 `_behavior` 文件**真跑 verilator**（证据 = **断言数 = 2 × pair 数**
+- [ ] 新增的 `_behavior` 文件**真跑 verilator**
+      ⇒ ⇒ **判据 = 「总断言数 == 2 × pair 数」**
+      ⇒ ⇒ ⇒ **⇒ 前提：每个 pair 体 MUST 恰好 1 条 `REQUIRE`**
+      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 理由（critic SHOULD_FIX #1 · 2026-11-01）**：
+      「断言数 = 2 × pair 数」**只在每 pair 恰 1 条 REQUIRE 时成立**
+      ⇒ ⇒ ⇒ Catch2 的**汇总输出不区分 per-TEST_CASE 断言数**
+      ⇒ ⇒ ⇒ ⇒ **⇒ 多断言批次下该判据要么恒假红、要么退化成无判别力**
+      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 泛化 = 约定「每 pair 一条断言」**
+      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 代价接近零**：同一 DUT 的多个 pair **只编译一次**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （缓存按 SHA-1 key）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 拆 pair 不增加墙钟**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **「TEST_CASE 数」不能替代本判据** ——
+      verilator 缺席时 macro 的 verilator 半边**仍然注册**（只 WARN + return）
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ TEST_CASE 数恒为 2 × pair 数 ⇒ ⇒ 无判别力**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST 用【断言数】而非【用例数】**
       ⇒ ⇒ **若 verilator 缺席则断言数只有 1 倍 ⇒ ⇒ 假绿**）
 - [ ] `ctest -LE perf` 全绿（零回归）
 - [ ] **计数同步**：`CTEST_TOTAL`（每批 +N 个 ctest 条目）·
@@ -103,14 +116,14 @@ MUST 是【有独立价值的新测试】**（⇒ ⇒ **不是**转换的复刻 
 
 | 批 | 文件 | DUT 数 | 冷编译预估 | 风险 | 备注 |
 |---|---|---|---|---|---|
-| **A**（✅ 已完成） | `test_blt_debug_behavior.cpp` | 1 | 13.5 s | 低 | 试点；**2 断言 / 2 用例** ⇒ ⇒ verilator 半边真跑 ✔ |
-| **B** | `test_axi_pwm_simple` · `test_bool_connection` · `test_operator_connection` · `test_jit_concat` · `test_interpreter_jit_compat` · `chlib/test_assert` · `test_wires_connection` · `chlib/test_multi_if_acceptance` | **23** | ≈ 5 min | 低 | 纯组合逻辑；⚠️ `test_jit_concat` / `test_interpreter_jit_compat` 是 **JIT 相关** ⇒ ⇒ **JIT 与双后端的交互需先探针确认**（⇒ ⇒ 否则可能误判） |
+| **A**（✅ 已完成） | `test_blt_debug_behavior.cpp` | 1 | 13.5 s | 低 | 试点；**2 断言 / 2 用例** ⇒ ⇒ verilator 半边真跑 ✔（⚠️ **零 DUT 复制** —— DUT 是库头里的既有类型 `riscv::BranchConditionUnit` ⇒ ⇒ 宏第一个参数是**类型名**）|
+| **B** | `test_axi_pwm_simple` · `test_bool_connection` · `test_operator_connection` · `test_jit_concat` · `test_interpreter_jit_compat` · `chlib/test_assert` · `test_wires_connection` · `chlib/test_multi_if_acceptance` | **23** | ≈ 5 min | 低 | 纯组合逻辑；⚠️ **剔除 / 降级清单（oracle · 2026-11-01）**：① `test_jit_concat` / `test_interpreter_jit_compat` ⇒ ⇒ ⚠️ **JIT 混淆的担忧在机制上【不成立】**（macro 的解释器半边 `set_jit_enabled(false)` ⇒ ⇒ **两半边都不走 JIT** ⇒ ⇒ 归因不会混）⇒ ⇒ **真正问题是价值低**（身份是 JIT-vs-interpreter parity）⇒ ⇒ **降到批次末尾** + 先做 13.5 s 探针；② `chlib/test_multi_if_acceptance` 的 **3 个 `REQUIRE_THROWS_AS` 用例结构性不可转**（**构图期**拒绝 ⇒ 宏在函数体内自己构造 DUT ⇒ BODY 拿不到「构造失败」事件 ⇒ 且构图期异常对两后端是**同一段 C++ 代码** ⇒ ⇒ **dual 化零增量价值**）⇒ ⇒ **只转 3 个运行期用例**；③ `chlib/test_assert` ⇒ ⇒ 先探针「report」是可观测端口还是解释器侧打印；④ `test_axi_pwm_simple` 的 `VerilogGeneration` 用例是 **codegen 测试**（dual 无增量）⇒ ⇒ 只转 `Simulation` 用例；⑤ `test_wires_connection:274` 的「Empty constructed ch_uint」是**空节点语义**（解释器专属）⇒ ⇒ 剔除 |
 | **C** | `test_axi_gpio` · `test_axi_timer` · `test_axi_uart` · `test_axi_spi` | **5** | ≈ 3 min | 中 | AXI peripheral ⇒ ⇒ DUT 较大；⚠️ **`rst_n` 是必需端口**（未接线 = 永久复位）⇒ ⇒ **每个 DUT MUST 驱动 `rst_n`**（`axi4-peripheral-deferred` 的教训） |
 | **D** | `test_mem_comb_read` · `test_mem_connection` · `test_mem_timing` | **11** | ≈ 13 min | 中 | **mem 类**（冷编译 72 s/个）⇒ ⇒ ⚠️ `aread` 已在 R6 排除清单**移除**（drift 已消除）⇒ ⇒ 合法候选 |
 | **E** | `test_bundle_connection` · `test_bundle_master_slave` · `chlib/test_cache_complete` | **12** | ≈ 8 min | 中 | bundle / cache；⚠️ cache 类 DUT 可能触发 **ADR-041 Async 走 golden-value 而非 parity** 的分类 |
 | **F** | `chlib/test_onehot`(21) · `test_operation_results`(26) · `test_rv32i_pipeline`(7) · `test_module_advanced`(5) · `chlib/test_forwarding`(2) · `chlib/test_hazard_complete`(1) | **62** | ≈ 25 min | **高** | ⚠️ **本批单独一个 change** ⇒ ⇒ 且 ⚠️ **冷编译预估最高** ⇒ ⇒ ⇒ **CI 墙钟风险最大** ⇒ ⇒ ⇒ **必须先实测再决定是否拆分** |
-| **G** | `test_lnode_entry_set` · `test_axi_i2c` · `chlib/test_phase4_integration` · `test_multithread` | 4 | — | **高** | ⚠️ **无 runtime 语义**（无 `Simulator` 调用）⇒ ⇒ **dual 化前 MUST 先补 runtime 断言** ⇒ ⇒ 工作量**大于**其它批 ⇒ ⇒ ⇒ **独立 change**；⚠️ `test_multithread` 的**并发**语义在「双跑」下需专门确认 |
-| **H** | **路线 B：新增有意义的 dual 文件**（≥ 2 个） | ≥ 2 | ≈ 1 min | 中 | ⇒ ⇒ **补足 58 → ≥ 60** ⇒ ⇒ 每个 MUST 是**有独立价值的新测试**（⇒ ⇒ **不是**转换的复刻）⇒ ⇒ **候选方向**：`chlib` 的 `state_machine` / `guard_contribution` / `conditional` 语义（**目前零 dual 覆盖** ⇒ ⇒ 价值高） |
+| **G**（⚠️ **移出转换序列**） | `test_lnode_entry_set` · `test_axi_i2c` · `chlib/test_phase4_integration` · `test_multithread` | 4 | — | — | ⚠️ **oracle 裁决（2026-11-01）**：这 4 个**无 runtime 语义** ⇒ ⇒ 「先补 runtime 断言」**是路线 B 的新测试工作** ⇒ ⇒ ⇒ **伪装成转换会混淆两类产物的验收标准**（转换要求与原文**逐位等价**；新测试要求**手推期望**）⇒ ⇒ ⇒ **⇒ 移出转换序列** ⇒ ⇒ ⇒ ⇒ ⇒ 归入 **H 批**（路线 B）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 另**：`test_multithread` 的**并发**语义在「双跑」下需专门确认 |
+| **H** | **路线 B：新增有意义的 dual 文件** | ≥ 2 | ≈ 1 min | 中 | ⚠️ **立项理由 = 这些语义【值得】双后端覆盖**（`chlib` 的 `state_machine` / `guard_contribution` / `conditional` / **builder 反压** / **pipe 透传** ⇒ ⇒ **目前零 dual 覆盖** ⇒ ⇒ 价值高）⇒ ⇒ ⇒ **计数达标是其【副作用】，不是立项理由** ⇒ ⇒ ⇒ ⇒ ⇒ **（critic SHOULD_FIX #2 · 2026-11-01：「补足到 60」的动机表述本身有【诱导凑数】的嫌疑 ⇒ ⇒ MUST 改写）** ⇒ ⇒ ⇒ ⇒ 每个文件 MUST 是**有独立价值的新测试**（⇒ ⇒ **不是**转换的复刻） |
 
 ⇒ ⇒⇒ **Σ 冷编译预估 ≈ 13.5 s + 5 + 3 + 13 + 8 + 25 + 1 ≈ 56 min**
 ⇒ ⇒⇒ **⚠️⚠️ 已超 CI 的 45 min** ⇒ ⇒⇒ ⇒ ⇒ **⇒ 必须实测 + 报告**
@@ -146,6 +159,67 @@ MUST 是【有独立价值的新测试】**（⇒ ⇒ **不是**转换的复刻 
 | 6 | ⚠️ **SECTION 排除项的措辞可能已陈旧** | ⇒ ⇒ **不在本 change 改契约** ⇒ ⇒ 登记为**待 planner 复核**（§2.2） |
 
 ---
+
+## 6.1 🔴🔴 升级给 planner 的**决策材料**（2026-11-01 · oracle + critic **共同发现**）
+
+> ⚠️ **两处都独立复算出同一个比「差 2 个文件」更严重的事实** ⇒ ⇒ ⇒
+> **⇒ 阈值 60 已违反 objective 自己写下的不变量** ⇒ ⇒ ⇒ **⇒ 判据本身
+> 需要 planner 重新背书** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这才是决策门该 escalate 的内容**。
+
+### 6.1.1 阈值 60 **违反** objective §2 的自订不变量
+
+objective §2 明文：「⚠️ **阈值 MUST ≤ 诚实保守上限**（62）—— 否则就是『硬凑』的判据」
+⇒ ⇒ 而 62 的构成 = 「29 + 33 个可转换条目」⇒ ⇒ **那个 33 依赖 2026-10-28
+的盘点，而它把 4 个「无 runtime 语义」的文件错算在内** ⇒ ⇒ ⇒
+**⇒ 诚实保守上限的真值 = 29 + 29 = 58 < 60**
+⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 即「阈值 ≤ 诚实上限」这条 objective 自订规则【已被违反】**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **这不是「还差 2 个文件」的工程量问题**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 是判据本身与自己的不变量矛盾 ⇒ ⇒ ⇒ 需 planner 重新背书**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 两条出路（planner 裁决）**：
+① **明文背书「路线 B（新增有意义的 dual 文件）补足」** ⇒ ⇒ 判据不变
+② **修阈值**（⇒ ⇒ 改成可达值 + 说明）⇒ ⇒ **⚠️ 但「阈值 ≤ 诚实上限」这条
+不变量要求路线 B 被计入「诚实上限」** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 换句话说：无论选
+哪条，planner 都需要对「什么算『诚实上限』」重新表态** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+⇒ ⇒ ⇒ **⇒ build 不得代写（owner = rdd-planner）** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒
+**⇒ 本 change 只交数字 + 交证据**。
+
+### 6.1.2 CI 墙钟缺口是**结构性**的（比 56 − 45 = 11 min 更大）
+
+`.github/workflows/ci.yml` 的 `pr-verilator-fast` job（`timeout-minutes: 45`）
+覆盖的是**全部**：装依赖 + 编 verilator + **编整个 CppHDL** +
+`ctest -L verilator_e2e -LE perf`（既有 **39** 个条目）
+⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 计划里的「Σ ≈ 56 min」只是【新增】verilator 编译的增量**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 真实缺口比 11 min 大得多**
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ 且 CI **没有缓存** `~/.cache/cpphdl/verilator`
+（workflow 只缓存了 ccache）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「冷编译是主成本」在 CI 上
+每一轮都成立**（缓存 key 本身是内容寻址的：verilog 源 SHA-1 + 模板 + flags +
+verilator 版本）。
+
+### 6.1.3 CI 杠杆（**交 planner · build 不擅自改 workflow**）
+
+| # | 杠杆 | 安全性论证 | 效果 |
+|---|---|---|---|
+| ① | **缓存 `~/.cache/cpphdl/verilator`** | key **本身内容寻址** ⇒ ⇒ 改测试的 PR 全部命中 ⇒ ⇒ 缓存**不会**产生错配 | 不改测试的 PR ⇒ **全部变热缓存**（⇒ ⇒ 墙钟从「编译成本」降到「运行成本」） |
+| ② | **`ctest -I 0,2` / `-I 1,2` 把 verilator_e2e 套件跨 job 分片** | 两个 runner **各持各的** `RESOURCE_LOCK` ⇒ ⇒ **互不冲突** | 45 min 预算 ⇒ **变 2 × 45 min** |
+
+⚠️ **两者都不是任何测试批次 change 的一部分** ⇒ ⇒ ⇒ **是 CI 架构决策**
+⇒ ⇒ ⇒ **⇒ build 提请、planner / 用户裁决**。
+
+### 6.1.4 ⭐ 优先级建议（oracle · 2026-11-01）：**未收口项优先**，且**顺序反过来互相成就**
+
+| 理由 | 证据 |
+|---|---|
+| ① B1（builder 死路）/ B6（pipe 零通过）是**协议合规用法下的功能失效** ⇒ ⇒ 不是「覆盖率搬运」 | `source.ready` **恒 0**；pipe 在**正确接线**下**零数据通过** |
+| ② A5 的计划已**撞上 objective §9.2 自己的 No-Go 判据** ⇒ ⇒ 继续机械推进 = **朝着已知的墙走** | Σ ≈ 56 min > 45 min |
+| ③ 收口清单的**收官判据 = 无 ❌ 行** ⇒ ⇒ 而 **A5 全做完一行 ❌ 都不减少** | `.rddf/checks/stream-domain-closure.md`（17 行 · ✅ 10 / ❌ 7） |
+| ④ ⭐ **B1 / B6 的修复【必然附带新的行为测试】** ⇒ ⇒ 而这些测试**正是 H 批要找的「路线 B 文件」** | ⇒ ⇒ ⇒ **⇒ 两件事互相成就** ⇒ ⇒ ⇒ **⇒ 先裁 B1/B6 → 落地时顺带产出路线 B** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这是「顺序反过来互相成就」的机制** |
+
+⇒ ⇒⇒ **⇒ 建议的推进序列**（build 侧）：
+1. **architect 裁 B1 / B6 / B4**（证据已齐 ⇒ ⇒ 一次会议量级）⇒ ⇒ B4（`fwft_fifo` 物理删除，零消费者）可**搭 B1 的便车**作独立小 change；
+2. **planner 裁** 6.1.1（阈值）+ 6.1.3（CI 杠杆）；
+3. **B1 / B6 落地时**，行为测试**直接写成 dual pair**（计入路线 B）⇒ ⇒ 顺带把 `tests/test_stream_builder.cpp:116-117` 的 `operator=` 接线修掉（台账已登记的判据之一）；
+4. **A5 侧**只推**便宜批次**（B 按 §4 的剔除清单 + C）⇒ ⇒ 并**实测回填墙钟账本** ⇒ ⇒ 若 `pr-verilator-fast` 实测 > 40 min（留 5 min 余量）⇒ ⇒ **即停并报告**（把计划里的纪律**升级为验收模板的勾选项**）。
+
 
 ## 7. 变更记录
 
