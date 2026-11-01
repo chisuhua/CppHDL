@@ -75,6 +75,26 @@ def _read_lines() -> list[str]:
     return CHECKLIST.read_text(encoding="utf-8").split("\n")
 
 
+def _count_anchors() -> dict[str, int]:
+    """读清单里的**计数锚点**（`<!-- COUNT-ANCHOR ... -->` 段）。
+
+    ⚠️⚠️ **为什么需要它**（critic BLOCKER B1 · 2026-11-01）：
+    `MIN_ROWS` 只是个**地板** ⇒ ⇒ 清单 17 行时**删 1–5 行仍然绿**
+    ⇒ ⇒ ⇒ **静默缩面**（本仓最忌的病症family）⇒ ⇒ ⇒
+    ⇒ ⇒ 锚点把「**实际行数 / 未兑现行数**」**钉死** ⇒ ⇒ 删行 ⇒ ⇒
+    ⇒ ⇒ **锚点与实际不符 ⇒ ⇒ MUST 转红** ⇒ ⇒ ⇒ ⇒ ⇒
+    ⇒ ⇒ 与仓内既有 pattern 同型（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` /
+    ⇒ ⇒ `DUAL_BACKEND_PARITY_TOTAL`）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「人改了锚点」= 明示
+    ⇒ ⇒ ⇒ ⇒ 改动（由 code review 捕获）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 而「悄悄删行」
+    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 被机械拦住** ✔
+    """
+    raw = CHECKLIST.read_text(encoding="utf-8")
+    out: dict[str, int] = {}
+    for m in re.finditer(r"^([A-Z_]+):\s*(\d+)\s*$", raw, re.M):
+        out[m.group(1)] = int(m.group(2))
+    return out
+
+
 def _strip_cell(cell: str) -> str:
     """去掉反引号与空白；`—` ⇒ 空串。"""
     c = cell.strip()
@@ -156,7 +176,25 @@ def r0() -> None:
         fail(f"R0 收口清单数据行数 = {len(rows)} < {MIN_ROWS}"
              f"（⇒ ⇒ 清单被**截断/清空** ⇒ ⇒ MUST 转红）")
         return
-    ok(f"R0 收口清单存在且结构完整（{len(rows)} 行 · 阈值 {MIN_ROWS}）")
+    # ⚠️⚠️ **计数锚点校验**（critic BLOCKER B1）⇒ ⇒ 抓「静默缩面」
+    anchors = _count_anchors()
+    if "TOTAL_ROWS" not in anchors or "UNPAID_ROWS" not in anchors:
+        fail("R0 收口清单**缺计数锚点**（TOTAL_ROWS / UNPAID_ROWS）"
+             "（⇒ ⇒ 无法抓「静默删行 / 静默降级」⇒ ⇒ MUST 转红）")
+        return
+    if anchors["TOTAL_ROWS"] != len(rows):
+        fail(f"R0 收口清单行数 = {len(rows)} ≠ 锚点 TOTAL_ROWS = "
+             f"{anchors['TOTAL_ROWS']}"
+             f"（⇒ ⇒ **清单被改动但锚点未同步** ⇒ ⇒ 静默缩面 ⇒ ⇒ MUST 转红）")
+        return
+    unpaid = sum(1 for c in rows if c[COL["状态"]] == "❌")
+    if anchors["UNPAID_ROWS"] != unpaid:
+        fail(f"R0 收口清单未兑现行数 = {unpaid} ≠ 锚点 UNPAID_ROWS = "
+             f"{anchors['UNPAID_ROWS']}"
+             f"（⇒ ⇒ **状态被改动但锚点未同步** ⇒ ⇒ MUST 转红）")
+        return
+    ok(f"R0 收口清单存在且结构完整（{len(rows)} 行 · 锚点一致 · "
+       f"未兑现 {unpaid} 行）")
 
 
 def r1() -> None:
@@ -222,6 +260,18 @@ def r2() -> None:
             elif test and guard:
                 bad.append(f"{num} 标 ❌ 却同时具备**判据 + 护栏**"
                            f"（⇒ ⇒ **状态过时**：三者已齐 ⇒ ⇒ MUST 标 ✅）")
+            elif test:
+                # ⚠️⚠️ **收紧**（critic BLOCKER B1）：❌ 行若**已有判据**
+                #    ⇒ ⇒ ⇒ 「未兑现」与「有判据」**矛盾** ⇒ ⇒ ⇒
+                #    ⇒ ⇒ ⇒ **⇒ 这是「假 ❌」的形态**（⇒ ⇒ ❌ 计数虚增
+                #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 收官判据被一个错数度量**）
+                #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ MUST 转红**（⇒ ⇒ 逼出
+                #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 真正的修法：补 `guard:` 或
+                #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 删掉 `test:`）
+                bad.append(f"{num} 标 ❌ 却**已有可执行判据**"
+                           f"（⇒ ⇒ 「未兑现」与「有判据」矛盾 ⇒ ⇒ "
+                           f"**假 ❌** ⇒ ⇒ ❌ 计数虚增 ⇒ ⇒ MUST 标 ✅ "
+                           f"或删掉该判据指针）")
         else:
             bad.append(f"{num} 的状态列取值非法：`{state}`（MUST 是 ✅ 或 ❌）")
     if bad:
@@ -281,6 +331,33 @@ def _poison_truncate_rows(lines: list[str]) -> list[str]:
     return [ln for i, ln in enumerate(lines) if i not in drop]
 
 
+def _poison_downgrade_row(lines):
+    """把第一个 ✅ 行降级成 ❌（清空护栏格 + 填已存在的欠账指针）。"""
+    for i, ln in enumerate(lines):
+        if not ln.startswith("|") or "| \u2705 |" not in ln:
+            continue
+        c = ln.strip().strip("|").split("|")
+        if len(c) != 8:
+            continue
+        c[5] = " \u2014 "
+        c[6] = " `debt:docs/adr/ADR-045-chlib-stream-semantics.md#\u81ea\u4fdd\u62a4` "
+        c[7] = " \u274c "
+        lines[i] = "|" + "|".join(c) + "|"
+        return lines
+    raise RuntimeError("找不到可降级的 \u2705 行")
+
+
+def _poison_delete_one_row(lines):
+    """只删 1 行（旧实现在 MIN_ROWS 地板之上仍绿 ⇒ ⇒ 静默缩面）。"""
+    import re as _re
+    idx = [i for i, ln in enumerate(lines)
+           if ln.strip().startswith("|") and _re.match(r"^\|\s*\d+\s*\|", ln.strip())]
+    if len(idx) < 2:
+        raise RuntimeError("数据行不足")
+    del lines[idx[-1]]
+    return lines
+
+
 POISONS: dict[str, tuple[str, object]] = {
     "break-test-pointer": (
         "✅ 行把判据 tag 改成**不存在的** ⇒ ⇒ R1 MUST 转红"
@@ -295,6 +372,16 @@ POISONS: dict[str, tuple[str, object]] = {
         "❌ 行补上判据 + 护栏 ⇒ ⇒ R2 MUST 转红（状态过时）",
         _poison_stale_row_claims_covered,
     ),
+    "downgrade-row": (
+        "把 ✅ 行降级成 ❌（清空护栏格 + 填已存在的欠账指针）"
+        " => 旧实现全绿 => 新实现 MUST 转红",
+        _poison_downgrade_row,
+    ),
+    "delete-one-row": (
+        "只删 1 行（MIN_ROWS 地板之上仍绿 => 静默缩面）"
+        " => 新实现 MUST 转红（计数锚点 TOTAL_ROWS 不符）",
+        _poison_delete_one_row,
+    ),
     "truncate-rows": (
         "删掉 3 行 ⇒ ⇒ R0 MUST 转红（清单被截断 ⇒ ⇒ 假绿）",
         _poison_truncate_rows,
@@ -306,6 +393,7 @@ def _do_check() -> int:
     r0()
     r1()
     r2()
+    r10()
     if FAILS:
         print(f"{RED}❌ 收口清单核验 FAIL（{FAILS} 项）{RESET}")
         return 1
@@ -358,6 +446,61 @@ def restore() -> int:
     POISON_TARGET_FILE.unlink(missing_ok=True)
     print(f"已还原投毒：{name}")
     return 0
+
+
+FIFO_H = REPO / "include" / "chlib" / "fifo.h"
+
+
+def r10() -> None:
+    """`sync_fifo` 的**自保护**结构判据（写口/读指针 MUST 与 `count` 同源）。
+
+    ⚠️ **为什么需要**（critic BLOCKER B1 · 2026-11-01）：收口清单第 10 行
+    「FIFO 指针 MUST 受空/满门控（自保护）」原先标 ❌ 且其 `debt:` 指针指向
+    `ADR-045` 的**已兑现 MUST** ⇒ ⇒ ⇒ **那是「假 ❌」** ⇒ ⇒ ⇒
+    ⇒ ⇒ **本判据把那一条变成【可机械核验的 ✅】** ⇒ ⇒ ⇒ ⇒ ⇒
+    ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 一条判据换一行收口（零 verilator 编译、零 CI 墙钟）**.
+
+    ⇒ ⇒ **判据是结构性的**（MUST NOT 词法 grep 整个文件）：
+    `sync_fifo` 的**函数体内** MUST 同时出现
+      ① `will_write`（写口自保护：`wren & !is_full(count)`）
+      ② `will_read`（读口自保护：`rden & !is_empty(count)`）
+      ③ `is_full(count)` ④ `is_empty(count)`
+    ⇒ ⇒ 四者缺一 ⇒ ⇒ 「计数与指针脱钩」⇒ ⇒ ⇒ 满写被覆写 / 空读读出脏槽
+    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **（ADR-045 §2.1 的条款本体）**
+    """
+    if not FIFO_H.exists():
+        fail("R10 缺少 include/chlib/fifo.h")
+        return
+    code = strip_comments_and_strings(FIFO_H.read_text(encoding="utf-8"))
+    m = re.search(r"\bsync_fifo\s*\(", code)
+    if not m:
+        fail("R10 找不到 `sync_fifo` 的定义")
+        return
+    i = code.find("{", m.end())
+    if i < 0:
+        fail("R10 `sync_fifo` 未找到函数体")
+        return
+    depth = 0
+    end = -1
+    for k in range(i, len(code)):
+        if code[k] == "{":
+            depth += 1
+        elif code[k] == "}":
+            depth -= 1
+            if depth == 0:
+                end = k
+                break
+    if end < 0:
+        fail("R10 `sync_fifo` 的函数体花括号不配平")
+        return
+    body = code[i:end + 1]
+    missing = [mk for mk in ("will_write", "will_read", "is_full(count)",
+                             "is_empty(count)") if mk not in body]
+    if missing:
+        fail("R10 `sync_fifo` 的自保护结构缺 " + " / ".join(missing)
+             + "（⇒ ⇒ 写口/读指针与 count 脱钩 ⇒ ⇒ 满写被覆写 / 空读读脏槽）")
+        return
+    ok("R10 `sync_fifo` 自保护结构完整（will_write / will_read 与 count 同源）")
 
 
 def main() -> int:

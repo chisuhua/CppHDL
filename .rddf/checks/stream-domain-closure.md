@@ -13,6 +13,11 @@
 > ⇒ ⇒ 由 `scripts/verify_stream_domain_closure.sh` **机械核验** ⇒ ⇒
 > **本清单不可能自相矛盾**（⇒ ⇒ 「说谎」在结构上不可达）。
 
+<!-- COUNT-ANCHOR
+TOTAL_ROWS: 17
+UNPAID_ROWS: 6
+-->
+
 ## 指针语法
 
 | 前缀 | 解析规则 |
@@ -37,7 +42,7 @@
 | 07b | `connect_ready` 多驱动守卫（响亮失败 · **串联不误炸**） | `spec:chlib-stream-ready-ownership#多驱动 MUST 被检出` | `code:include/chlib/stream.h#stream_fifo_connect_ready` | `test:tests/chlib/test_stream.cpp#[stream][ready][series]` | `guard:scripts/lib/stream_ready_ownership.py#def r9()` | — | ✅ |
 | 08 | FIFO 输出时序 MUST 被定义（FWFT 0-cycle `aread`） | `spec:chlib-stream-semantics#FIFO 类组件的输出时序 MUST 被定义` | `code:include/chlib/fifo.h#q_async` | `test:tests/test_stream_fifo_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/verify_dual_backend_parity.sh#DUAL_BACKEND_PARITY_TOTAL` | — | ✅ |
 | 09 | `stream_fifo` 行为 MUST 有双后端 parity 覆盖 | `spec:chlib-stream-semantics#的行为 MUST 有双后端 parity 覆盖` | `code:include/chlib/stream.h#stream_fifo` | `test:tests/test_stream_fifo_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/verify_dual_backend_parity.sh#DUAL_BACKEND_PARITY_TOTAL` | — | ✅ |
-| 10 | FIFO 指针 MUST 受空/满门控（自保护） | `spec:chlib-stream-semantics#FIFO 数据通路的指针 MUST 受空/满门控` | `code:include/chlib/fifo.h#will_write` | `test:tests/chlib/test_fifo.cpp#[fifo][sync_fifo]` | — | `debt:docs/adr/ADR-045-chlib-stream-semantics.md#自保护` | ❌ |
+| 10 | FIFO 指针 MUST 受空/满门控（自保护） | `spec:chlib-stream-semantics#FIFO 数据通路的指针 MUST 受空/满门控` | `code:include/chlib/fifo.h#will_write` | `test:tests/chlib/test_fifo.cpp#[fifo][sync_fifo]` | `guard:scripts/lib/stream_domain_closure.py#def r10()` | — | ✅ |
 | 11 | demux ready 方向（消费端 ⇒ 上游；现状**方向颠倒**） | — | `code:include/chlib/stream.h#stream_demux` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#demux` | ❌ |
 | 12 | fork 同步语义（`input ready` = AND(各 output ready)） | — | `code:include/chlib/stream.h#stream_fork` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#fork` | ❌ |
 | 13 | builder 链**上游反压从未建立**（`source.ready` 恒 0 ⇒ 死路） | — | `code:include/chlib/stream_builder.h#queue` | — | — | `debt:.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md#上游反压` | ❌ |
