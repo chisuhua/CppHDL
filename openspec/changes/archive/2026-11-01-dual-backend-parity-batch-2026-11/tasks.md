@@ -61,7 +61,7 @@
 
 - [x] **T7.1** ⚠️ **零 spec 变更声明**（proposal 已明文）⇒ ⇒ 归档**允许**
       `--skip-specs`
-- [ ] **T7.2** critic 评审（本 change 独立预算）
+- [x] **T7.2** critic 评审（本 change 独立预算）
 
 ## 验证命令
 
@@ -74,3 +74,13 @@ bash scripts/verify_dual_backend_parity.sh
 bash scripts/verify_stream_ready_ownership.sh
 openspec validate dual-backend-parity-batch-2026-11 --type change --strict
 ```
+
+
+## 评审记录
+
+- **critic**（2026-11-01）：**APPROVE_WITH_CONDITIONS** · `mergeable: yes` ·
+  `scope_exceeded: false` · **0 BLOCKER** ⇒ ⇒ **无返工队列**
+  ⇒ ⇒ 2 条 SHOULD_FIX（判别力探针泛化 · H 批动机表述）+ 2 条 NIT
+  ⇒ ⇒ **同批闭合**（**未用第 2 轮**）
+- **oracle**（2026-11-01）：批次序列修正 + 「未收口项优先」优先级建议
+  ⇒ ⇒ ⇒ 详见 `.rddf/plans/dual-backend-full-coverage-2026-11.md` §4 / §6.1
