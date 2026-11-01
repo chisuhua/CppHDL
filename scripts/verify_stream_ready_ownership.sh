@@ -48,6 +48,12 @@ cd "$REPO_ROOT"
 STREAM_H="include/chlib/stream.h"
 TEST_SRC="tests/chlib/test_stream.cpp"
 TEST_BIN="build/tests/test_stream"
+# ⚠️ **R10（builder 链内闭包不变式）的判别力用例在另一个二进制里**
+#    ⇒ ⇒ 投毒目标不同 ⇒ ⇒ 跑的测试二进制也不同（否则「行为判据转红」是假象：
+#    该二进制**根本不 include** 被投毒的 `stream_builder.h`）。
+BUILDER_TEST_BIN="build/tests/test_stream_builder"
+# ⚠️ **R11（pipe 族的共享上游驱动）的判别力用例**在 `test_stream_pipeline`
+PIPE_TEST_BIN="build/tests/test_stream_pipeline"
 ANALYZER="scripts/lib/stream_ready_ownership.py"
 
 RED='\033[0;31m'; GRN='\033[0;32m'; RST='\033[0m'
@@ -100,7 +106,7 @@ r1() {
     return 0
 }
 
-# ── R2~R6 + R8 + R9：静态判据（委派给 Python 分析器）──────────────────────
+# ── R2~R6 + R8 + R9 + R10：静态判据（委派给 Python 分析器）──────────────────────
 # ⚠️⚠️ **2026-11-01 订正**：原标签写「R2~R6」⇒ ⇒ 但 Python 侧实际还跑
 #    `r8`（转发类结构判据）⇒ ⇒ ⇒ 标签**与实际覆盖面不符** ⇒ ⇒ ⇒
 #    ⇒ ⇒ **「标签漏一个判据」会让下一个人以为覆盖面更小** ⇒ ⇒ ⇒
@@ -113,10 +119,10 @@ r_static() {
     rc=$?
     printf '%s\n' "$out" | sed 's/^/  /'
     if [ $rc -ne 0 ]; then
-        fail "R2~R6 + R8 + R9 静态判据未通过"
+        fail "R2~R6 + R8 + R9 + R10 静态判据未通过"
         return 1
     fi
-    ok "R2~R6 + R8 + R9 静态判据通过"
+    ok "R2~R6 + R8 + R9 + R10 静态判据通过"
     return 0
 }
 
@@ -132,6 +138,29 @@ trap cleanup EXIT
 
 rebuild() {
     cmake --build build --target test_stream -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
+}
+
+# ⚠️⚠️ **投毒目标 ⇒ 判别力用例所在二进制 MUST 匹配**（2026-11-01 · R10）
+#    `builder-*` 投毒落在 `include/chlib/stream_builder.h` ⇒ ⇒ 只有
+#    `test_stream_builder` include 它 ⇒ ⇒ 拿 `test_stream` 判「行为是否转红」
+#    会**恒绿**（⇒ ⇒ 「判别力为零」被读成「投毒未被抓住」/ 或反之）。
+poison_bin() {
+    case "$1" in
+        builder-*) echo "$BUILDER_TEST_BIN" ;;
+        pipe-*) echo "$PIPE_TEST_BIN" ;;
+        *) echo "$TEST_BIN" ;;
+    esac
+}
+poison_target() {
+    case "$1" in
+        builder-*) echo "test_stream_builder" ;;
+        pipe-*) echo "test_stream_pipeline" ;;
+        *) echo "test_stream" ;;
+    esac
+}
+rebuild_for() {
+    cmake --build build --target "$(poison_target "$1")" \
+        -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
 }
 
 self_test() {
@@ -150,9 +179,13 @@ self_test() {
         "filter-upstream-operator-assign"
         "rr-feedback-const"
         "connect-ready-guard-removed"
+        "builder-drop-chain-closure"
+        "builder-upstream-operator-assign"
+        "pipe-upstream-operator-assign"
     )
-    local c
+    local c bin
     for c in "${cases[@]}"; do
+        bin="$(poison_bin "$c")"
         # ⚠️ 开头这次 restore **可能失败**（无投毒快照 ⇒ ⇒ 陈旧备份检测 ⇒ ⇒
         #    **拒绝**）⇒ ⇒ **忽略其退出码**（⇒ ⇒ 首次运行时本就没投过毒）
         restore_stream || true
@@ -160,15 +193,15 @@ self_test() {
             fail "自检：投毒 [$c] 失败（模式未找到 ⇒ fail-closed）"
             return 1
         fi
-        if ! rebuild; then
+        if ! rebuild_for "$c"; then
             fail "自检：投毒 [$c] 后重建失败（⇒ 变异不可编译 ⇒ 不算判别力）"
-            restore_stream; rebuild; return 1
+            restore_stream; rebuild_for "$c"; return 1
         fi
-        if "$TEST_BIN" >/dev/null 2>&1; then
+        if "$bin" >/dev/null 2>&1; then
             fail "自检：投毒 [$c] 后行为用例**仍绿** ⇒ ⇒ 判别力为零"
-            restore_stream; rebuild; return 1
+            restore_stream; rebuild_for "$c"; return 1
         fi
-        ok "自检：投毒 [$c] ⇒ 行为用例转红"
+        ok "自检：投毒 [$c] ⇒ 行为用例转红（$bin）"
         # ⚠️⚠️ **静态判据 MUST 也转红**（R8 的判别力证明 · P1-a）
         #    ⚠️ **MUST NOT** 只查行为判据 ⇒ ⇒ 否则「结构判据恒绿」会被放过
         #    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （⇒ 这是本仓登记的护栏盲区）
@@ -188,15 +221,15 @@ self_test() {
         esac
         if python3 "$ANALYZER" check >/dev/null 2>&1; then
             fail "自检：投毒 [$c] 后**静态判据仍绿** ⇒ ⇒ 结构判据的判别力为零"
-            restore_stream; rebuild; return 1
+            restore_stream; rebuild_for "$c"; return 1
         fi
         ok "自检：投毒 [$c] ⇒ 静态判据转红"
         restore_stream
-        if ! rebuild; then
+        if ! rebuild_for "$c"; then
             fail "自检：还原后重建失败"
             return 1
         fi
-        if ! "$TEST_BIN" >/dev/null 2>&1; then
+        if ! "$bin" >/dev/null 2>&1; then
             fail "自检：还原后行为用例**仍红** ⇒ ⇒ 还原写坏了文件"
             return 1
         fi
@@ -207,7 +240,12 @@ self_test() {
         ok "自检：还原后行为用例转绿 + 静态判据复绿"
     done
     restore_stream
+    # 两个二进制都要复原并重建（⇒ 投毒目标不同 ⇒ 各自受影响）
     rebuild
+    cmake --build build --target test_stream_builder \
+        -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
+    cmake --build build --target test_stream_pipeline \
+        -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
     # ⚠️⚠️ **计数 MUST 动态**（从数组长度取）⇒ ⇒ 否则「投毒清单增删」时
     #    这行文案会**静默漂移** ⇒ ⇒ ⇒ **⇒ 本仓登记的「计数锚点」教训**
     #    ⚠️ 「全部被抓住」由**循环内**的 fail 早退保证（任何一种投毒未转红

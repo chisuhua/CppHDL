@@ -250,6 +250,16 @@ add_dual_backend_test(test_stream_fifo_dual
     TIMEOUT 300
 )
 
+# stream-builder-and-pipe-ready-ownership-2026-11 (B1 · ADR-055):
+# `StreamBuilder` 链的**上游反压**（链内闭包不变式）。此前 builder 链里
+# **没人驱动** `source.ready` ⇒ ⇒ 它恒 0 ⇒ ⇒ 上游遵守 ready 协议 ⇒ ⇒ 永远推不动。
+# ⚠️ 判别性：本文件在**空链**时断言 `in_ready == 1`（修复前恒 0 ⇒ 必红）——
+#    「满时为 0」是**不可区分**的（修复前也是 0）。
+add_dual_backend_test(test_stream_builder_backpressure_dual
+    SOURCES test_stream_builder_backpressure_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

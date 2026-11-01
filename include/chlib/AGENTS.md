@@ -95,6 +95,14 @@ include/chlib/
 - Files under `bundle/` for stream/bundle types
 
 ## ANTI-PATTERNS
+- **用 `operator=` 驱动**上游/上一级**的 `ready`**：那只是**节点重绑定**
+  ⇒ ⇒ 被驱动方的驱动**孤儿化** ⇒ ⇒ 上游**永远收不到反压**（**静默**）
+  ⇒ ⇒ MUST 用 `<<=`（数据流边）。契约：`chlib-stream-ready-ownership`
+  （ADR-054 形态 E / ADR-055 链内闭包不变式）；护栏：R8 / R10 / R11
+  （`scripts/verify_stream_ready_ownership.sh`）
+  ⚠️ **链式组合的上游 ready 归属**：`StreamBuilder` 的**中间级**与
+  `stream_pipeline.h` 的 3 个 pipe ⇒ ⇒ 入参 ready **由组合子自己**驱动；
+  `stream_fifo` **不**驱动入参 ready（写使能只用 `valid`）⇒ ⇒ builder 补
 - **FSM 的 `on_active` 闭包内写寄存器 / 驱动输出**：`ch_state_machine::build()`
   **遍历所有** state 执行各自闭包 ⇒ 那些写入**必被覆盖**（`ch_reg::next` 是
   last-wins）⇒ 闭包内**只**写 `transition_when`，寄存器与输出写在

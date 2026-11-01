@@ -34,6 +34,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 STREAM_H = REPO / "include" / "chlib" / "stream.h"
 BUILDER_H = REPO / "include" / "chlib" / "stream_builder.h"
 ARBITER_H = REPO / "include" / "chlib" / "stream_arbiter.h"
+PIPELINE_H = REPO / "include" / "chlib" / "stream_pipeline.h"
 BACKUP = pathlib.Path("/tmp/opencode/stream_h_ownership.bak")
 # ⚠️ 「被投毒的内容」快照 —— 用于还原前的**第三方改动检测**
 POISONED_SNAPSHOT = pathlib.Path("/tmp/opencode/stream_h_ownership.poisoned")
@@ -237,7 +238,7 @@ _UPSTREAM_READY = re.compile(
 def _iter_stream_functions() -> list[tuple[str, str]]:
     """自动发现 `stream_*` 函数体（**穷举** ⇒ ⇒ 不靠符号清单）。"""
     out: list[tuple[str, str]] = []
-    for f in (STREAM_H, ARBITER_H):
+    for f in (STREAM_H, ARBITER_H, PIPELINE_H):
         if not f.exists():
             continue
         code = strip_comments_and_strings(f.read_text(encoding="utf-8"))
@@ -301,6 +302,13 @@ def r8() -> None:
 
         bad = []
         has_drive = False
+        # ⚠️⚠️ **`stream_pipeline.h` 的 pipe 族**把上游驱动**收在一个共享实现**里
+        #    （`detail::drive_upstream_ready`）⇒ ⇒ 它的函数体里**没有**
+        #    `input_stream.ready <<=` 字样 ⇒ ⇒ 只看字面 `<<=` 会**误报**
+        #    ⇒ ⇒ ⇒ 调用该 helper **就是**「驱动了上游」的证据
+        #    ⇒ ⇒ ⇒ ⇒ ⇒ helper 自身的 `<<=` 由 **R11** 判（否则等于没判）。
+        if re.search(r"\bdrive_upstream_ready\s*\(", body):
+            has_drive = True
         for m in _UPSTREAM_READY.finditer(body):
             # ⚠️ **输出侧**字段 ⇒ ⇒ 组合子**自己产出** ⇒ ⇒ 驱动它合法
             target = m.group("tgt1") or m.group("tgt2") or m.group("tgt3")
@@ -406,6 +414,154 @@ def r9() -> None:
              "（`CHERROR` / `CHFATAL` 实测只打日志 ⇒ ⇒ 假安全网）")
         return
     ok("R9 `connect_ready` 有多驱动守卫（比较式 + `CHFATAL_EXCEPTION`）")
+
+
+def _function_body(path: pathlib.Path, sig_re: str) -> str | None:
+    """取函数体（**剥注释**后按花括号配平）⇒ ⇒ 找不到 ⇒ `None`（fail-closed）。"""
+    if not path.exists():
+        return None
+    code = strip_comments_and_strings(path.read_text(encoding="utf-8"))
+    m = re.search(sig_re, code)
+    if not m:
+        return None
+    i = code.find("{", m.end() - 1)
+    if i < 0:
+        return None
+    depth = 0
+    j = i
+    while j < len(code):
+        if code[j] == "{":
+            depth += 1
+        elif code[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return code[m.start(): j + 1]
+        j += 1
+    return None
+
+
+# ── R10：`StreamBuilder` 的**链内闭包不变式**（ADR-055 · B1）──────────────
+#
+# ⚠️⚠️ **为什么 MUST 有这条**（2026-11-01）：
+#   `stream_fifo` **不驱动**入参 `ready`（写使能只用 `valid`）⇒ ⇒ builder 链里
+#   **没人驱动** `source.ready` ⇒ ⇒ 它**恒为 0** ⇒ ⇒ 上游遵守 ready 协议
+#   ⇒ ⇒ **永远推不动 = 死路**（实测 E10：正确接线 ⇒ 16 拍全 0）。
+#   ⇒ ⇒ R8 **看不见**它：R8 只穷举 `stream_*(ch_stream …)` 形态的自由函数
+#   ⇒ ⇒ ⇒ 而 builder 的链式入口是 **`StreamBuilder::queue<>()` 成员模板**
+#   ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 「扩 R8 扫描面」对 builder 无效** ⇒ ⇒ **必须独立判据**。
+#
+# ⚠️ **判据三条**（全部**结构**）：
+#   ① **存在性**：`queue()` 体 MUST 调 `drive_pending_ready(`
+#      ⇒ ⇒ 删掉回接 ⇒ ⇒ 上游收不到反压 ⇒ ⇒ **红**（⚠️ 本仓已登记的盲区：
+#      只查 `=` 形态 ⇒ ⇒ 「整个删掉」不可见）；
+#   ② **连接手段**：`drive_pending_ready()` 体的驱动 MUST 是 `<<=`
+#      ⇒ ⇒ `operator=`（只重绑定本地副本的指针）⇒ ⇒ **调用方被孤儿化** ⇒ ⇒ 红；
+#      ⚠️ 但 `adopt_stage_output()` 里的 `pending_ready_ = …` 是**别名登记**
+#      （不是连接）⇒ ⇒ 判据 MUST **限定在 `drive_pending_ready` 体内**；
+#   ③ **响亮拒绝**：`drive_pending_ready()` 体 MUST 有 ≥3 处
+#      `CHFATAL_EXCEPTION`（无节点 / literal / 多驱动三种「驱动不了」）
+#      + `type_lit` + `num_srcs()` ⇒ ⇒ 三者缺一 ⇒ ⇒ 「静默失效」回来了
+#      ⇒ ⇒ （⚠️ `CHERROR` / `CHFATAL` **只打日志不抛** ⇒ ⇒ 假安全网）。
+def r10() -> None:
+    """`StreamBuilder` 的链内闭包不变式 MUST 有可机械核验的实现。"""
+    if not BUILDER_H.exists():
+        fail("R10 缺少 include/chlib/stream_builder.h")
+        return
+
+    queue_body = _function_body(
+        BUILDER_H, r"StreamBuilder<T>\s*&\s*queue\s*\(\s*\)\s*\{")
+    if queue_body is None:
+        fail("R10 找不到 `StreamBuilder::queue<>()` 的定义体")
+        return
+    if "drive_pending_ready(" not in queue_body:
+        fail("R10 `queue()` MUST 调用 `drive_pending_ready(...)`（链内闭包"
+             "不变式：本级的容量信号 ⇒ ⇒ 驱动上一级的输出 ready）"
+             "⇒ ⇒ 缺 ⇒ ⇒ 上游永远收不到反压（`source.ready` 恒 0 = 死路）")
+        return
+
+    drive_body = _function_body(
+        BUILDER_H, r"void\s+drive_pending_ready\s*\([^)]*\)\s*\{")
+    if drive_body is None:
+        fail("R10 找不到 `drive_pending_ready()` 的定义体")
+        return
+    if "pending_ready_ <<=" not in drive_body:
+        fail("R10 `drive_pending_ready()` MUST 用 `<<=` 驱动 `pending_ready_`"
+             "（`operator=` 只重绑定指针 ⇒ ⇒ 上一级的驱动被孤儿化 ⇒ ⇒ 静默）")
+        return
+    if re.search(r"pending_ready_\s*=(?!=)", drive_body):
+        fail("R10 `drive_pending_ready()` 内 MUST NOT 用 `operator=` 驱动 "
+             "`pending_ready_`（节点重绑定 ≠ 连接）")
+        return
+    if "type_lit" not in drive_body:
+        fail("R10 `drive_pending_ready()` MUST 检出 **literal** 形态"
+             "（literal 不可被驱动 ⇒ ⇒ 反压静默丢失）")
+        return
+    if "num_srcs()" not in drive_body:
+        fail("R10 `drive_pending_ready()` MUST 检出**多驱动**（链首 `num_srcs() > 0`"
+             " ⇒ ⇒ 再驱动是 last-wins ⇒ ⇒ 静默接管调用方的信号）")
+        return
+    n_loud = drive_body.count("CHFATAL_EXCEPTION")
+    if n_loud < 3:
+        fail(f"R10 `drive_pending_ready()` 的**响亮拒绝**只有 {n_loud} 处"
+             "（MUST ≥3：无节点 / literal / 多驱动）⇒ ⇒ 少一处就有一格"
+             "「静默失效」⇒ ⇒ ⚠️ MUST 用 `CHFATAL_EXCEPTION`（**抛**），"
+             "MUST NOT 用只打日志的 `CHERROR` / `CHFATAL`")
+        return
+    ok("R10 builder 链内闭包不变式齐备（回接存在 · `<<=` 连接 · 3 处响亮拒绝）")
+
+
+# ── R11：`stream_pipeline.h` 的**共享上游驱动实现**（B6 · ADR-055）──────────
+#
+# ⚠️ **为什么 R8 不够**：R8 只看「组合子的函数体里有没有驱动上游」
+#   ⇒ ⇒ pipe 族把驱动收在 `detail::drive_upstream_ready` 里（⇒ 一处实现、
+#   三处使用）⇒ ⇒ **`<<=` 是否真的在那一处** R8 **看不见**
+#   ⇒ ⇒ ⇒ 若有人把 helper 里的 `<<=` 改成 `operator=` ⇒ ⇒ 三个 pipe **同时**
+#   静默失效 ⇒ ⇒ 而 R8 仍绿（它只看到「调用了 helper」）⇒ ⇒ **假绿**
+#   ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 必须对 helper 本身有结构判据**。
+def r11() -> None:
+    """`drive_upstream_ready` MUST 用 `<<=` 且 MUST 有 3 处响亮拒绝。"""
+    if not PIPELINE_H.exists():
+        fail("R11 缺少 include/chlib/stream_pipeline.h")
+        return
+    body = _function_body(
+        PIPELINE_H, r"void\s+drive_upstream_ready\s*\([^)]*\)\s*\{")
+    if body is None:
+        fail("R11 找不到 `drive_upstream_ready()` 的定义体")
+        return
+    if "upstream.ready <<=" not in body:
+        fail("R11 `drive_upstream_ready()` MUST 用 `<<=` 驱动 `upstream.ready`"
+             "（`operator=` 只重绑定本地副本 ⇒ ⇒ 调用方被孤儿化 ⇒ ⇒ 三个 pipe"
+             "**同时**静默失效）")
+        return
+    if re.search(r"upstream\.ready\s*=(?!=)", body):
+        fail("R11 `drive_upstream_ready()` 内 MUST NOT 用 `operator=` 驱动 "
+             "`upstream.ready`（节点重绑定 ≠ 连接）")
+        return
+    if "type_lit" not in body:
+        fail("R11 `drive_upstream_ready()` MUST 检出 **literal** 目标形态")
+        return
+    if "num_srcs()" not in body:
+        fail("R11 `drive_upstream_ready()` MUST 检出**多驱动**")
+        return
+    n_loud = body.count("CHFATAL_EXCEPTION")
+    if n_loud < 3:
+        fail(f"R11 `drive_upstream_ready()` 的**响亮拒绝**只有 {n_loud} 处"
+             "（MUST ≥3：无节点 / literal 目标 / 多驱动）⇒ ⇒ 少一处就有一格"
+             "「静默失效」")
+        return
+    # ⚠️ 三个 pipe MUST 真的**用它**（MUST NOT 各写各的 ⇒ 漂移）
+    for fn, label in (("stream_m2s_pipe", "m2s"),
+                      ("stream_s2m_pipe", "s2m"),
+                      ("stream_half_pipe", "half")):
+        b = _function_body(PIPELINE_H, rf"{fn}\s*\([^)]*\)\s*\{{")
+        if b is None:
+            fail(f"R11 找不到 `{fn}` 的定义体")
+            return
+        if "drive_upstream_ready(" not in b:
+            fail(f"R11 `{fn}`（{label} pipe）MUST 调用 `drive_upstream_ready(...)`"
+                 "（上游 ready 由 pipe 驱动 ⇒ 否则上游收不到反压）")
+            return
+    ok("R11 pipe 族上游驱动齐备（共用 `<<=` 实现 · 3 处响亮拒绝 · 3 个 pipe 全用）")
 
 
 def r6() -> None:
@@ -524,12 +680,37 @@ POISONS: dict[str, tuple[str, str]] = {
         "auto arb_result = round_robin_selector<N_INPUTS>(valid_vector, "
         "ch_uint<N_INPUTS>(0_d));",
     ),
+    # ⚠️⚠️⚠️ **R10 专用投毒（B1 · ADR-055）**：**完全删掉**链内回接
+    #    ⇒ ⇒ `queue()` 里不再有 `drive_pending_ready(` ⇒ ⇒ 存在性判据 MUST 转红
+    #    ⇒ ⇒ 行为：`source.ready` 无驱动 ⇒ ⇒ `num_srcs() == 0` ⇒ ⇒ 用例转红
+    "builder-drop-chain-closure": (
+        "        drive_pending_ready(result.push_stream.ready);",
+        "        // ⚠️ 投毒：删掉链内回接（上游收不到反压）",
+    ),
+    # ⚠️⚠️ **R10 专用投毒**：驱动 `<<=` ⇒ ⇒ `operator=`（**只重绑定本地副本**）
+    #    ⇒ ⇒ 调用方的 `source.ready` 仍无驱动 ⇒ ⇒ 静默
+    "builder-upstream-operator-assign": (
+        "        pending_ready_ <<= capacity;",
+        "        pending_ready_ = capacity;",
+    ),
+    # ⚠️⚠️⚠️ **R11 专用投毒（B6）**：pipe 族**共享**的上游驱动 `<<=` ⇒ `operator=`
+    #    ⇒ ⇒ **一条改动让三个 pipe 同时静默失效** ⇒ ⇒ R11 MUST 转红
+    #    ⇒ ⇒ 行为：`source.ready` 无驱动（`num_srcs() == 0`）⇒ ⇒ 用例转红
+    "pipe-upstream-operator-assign": (
+        "    upstream.ready <<= driver;",
+        "    upstream.ready = driver;",
+    ),
 }
 
 # ⚠️ **投毒的目标文件**（⇒ ⇒ R8 的投毒可能落在 `stream_arbiter.h`）
 POISON_TARGETS: dict[str, pathlib.Path] = {
     # ⚠️ **跨文件投毒**（⇒ ⇒ 验证 sidecar 状态文件的必要性）
     "arbiter-upstream-operator-assign": ARBITER_H,
+    # ⚠️ R10（builder 链内闭包不变式）⇒ ⇒ 落在 `stream_builder.h`
+    "builder-drop-chain-closure": BUILDER_H,
+    "builder-upstream-operator-assign": BUILDER_H,
+    # ⚠️ R11（pipe 族共享上游驱动）⇒ ⇒ 落在 `stream_pipeline.h`
+    "pipe-upstream-operator-assign": PIPELINE_H,
 }
 
 
@@ -643,6 +824,8 @@ def main() -> int:
         r6()
         r8()
         r9()
+        r10()
+        r11()
         if FAILS:
             print(f"{RED}❌ 静态判据 FAIL（{FAILS} 项）{RESET}")
             return 1
