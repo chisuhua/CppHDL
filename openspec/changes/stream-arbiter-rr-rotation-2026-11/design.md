@@ -169,9 +169,53 @@ last_grant_reg->next = select(arb_result.valid, arb_result.grant, <保持>);
 ⚠️ **它是纯行为判据** ⇒ ⇒ 自检的「静态判据也必须红」对**不适用**
 （同 P1-a 的 `drop-multidrive-guard` 类）⇒ ⇒ ⇒ **MUST 归入「仅行为」类别**。
 
-## 4. 实施记录
+## 4. 实施记录（2026-11-01）
 
-（实施期填写。）
+### 4.1 实际改动（`git show --name-only 57ec89a` 核对）
+
+| 文件 | 改动 |
+|---|---|
+| `include/chlib/stream.h` | `stream_arbiter_round_robin`：删 `current_channel` 死节点 + 加 `last_grant_reg` + 反馈 + `valid` 条件更新 |
+| `include/chlib/stream_arbiter.h` | `stream_arbiter_sequence` 的头注释与结果 struct 注释（**零行为变更**） |
+| `tests/chlib/test_stream.cpp` | **新增 TEST_CASE** `[stream][arbiter][round_robin][rotation]`（3 SECTION / **38 断言**） |
+| `scripts/lib/stream_ready_ownership.py` | 投毒 `rr-feedback-const` |
+| `scripts/verify_stream_ready_ownership.sh` | 自检加该投毒 + 归入「仅行为判据」类别 |
+| `openspec/changes/.../` | proposal / design / tasks / specs（**新 capability**） |
+| `.rddf/improvements/stream-arbiter-rr-rotation-2026-10.md` | 台账标注已实施 + 新发现（sequence 与 priority 重复） |
+
+### 4.2 实施期被推翻的推断（⚠️ 记下来防复发）
+
+| # | 我的推断 | 实测结果 |
+|---|---|---|
+| ① | 手推金标 `2,0,2,0,...`（按 posedge **前**的 `last_grant`） | ❌ 实际是 `0,2,0,2,...` ⇒ ⇒ 因为 `selected` 是**纯组合输出** ⇒ posedge 后重新求值用**新相位** |
+| ② | 探针可以直接读 `priority_encoder(grant)` | ❌ `Value not found for signal node` ⇒ 节点建在 `Simulator` 构造**之后**（不在 `data_map_`）⇒ 改「Simulator 前算 one-hot、C++ 侧解码」 |
+| ③ | Python 脚本首行可以写 `//` 注释 | ❌ `SyntaxError` ⇒ 当场失败、未写盘（纪律救回） |
+
+⇒ ⇒ ⇒ **⇒ 第 ①② 两条都是「探针/金标自身的缺陷」，不是实现缺陷**
+⇒ ⇒ ⇒ ⇒ **⇒ 「探针输出的解读必须被独立复核」第三次生效**。
+
+### 4.3 既有调用点复核（**零破坏**，逐项）
+
+| 调用点 | 断言 | 轮转后 |
+|---|---|---|
+| `examples/stream/stream_arbiter_demo.cpp` | **无断言**（只打印） | ✔ 不变 |
+| `samples/stream_arbiter_example.cpp` | `selected ∈ {0,2}`（有效即可） | ✔ 仍满足 |
+| `samples/spinalhdl_stream_example.cpp` | `selected` 仅传递，无断言 | ✔ 不变 |
+| `tests/chlib/test_stream.cpp:731`（唯一有效输入 2） | `sel == 2` | ✔ 唯一有效者必被选中 |
+| `tests/chlib/test_stream.cpp:820`（`N=2`） | **只做 `width` 断言** | ✔ 不变 |
+
+### 4.4 验收实测
+
+```
+ctest -LE perf            => 100% tests passed, 0 failed out of 194
+scripts/verify_*.sh       => FAIL=0（全部）
+--self-test               => 9 种投毒全部被抓住 + 还原后复绿
+run_all_samples.sh        => PASS: 39  FAIL: 0
+run_all_ported_tests.sh   => PASS: 28  FAIL: 0
+verify_openspec_delta.sh  => 4 条全绿
+openspec validate --specs --strict => 21 失败 = 基线（零新增）
+ctest -N                  => 205 / 194 / 38（锚点不变）
+```
 
 ## 5. 护栏
 

@@ -52,21 +52,21 @@
 
 ## T6 护栏（复用既有投毒框架，**不造新脚本**）
 
-- [ ] **T6.1** 在 `scripts/lib/stream_ready_ownership.py` 加投毒
+- [x] **T6.1** 在 `scripts/lib/stream_ready_ownership.py` 加投毒
       `rr-feedback-const`（反馈 ⇒ 常量，= 修复前形态）
-- [ ] **T6.2** 归入「**仅行为判据**」类别（同 P1-a 的 `drop-multidrive-guard`）
+- [x] **T6.2** 归入「**仅行为判据**」类别（同 P1-a 的 `drop-multidrive-guard`）
       ⇒ ⇒ 自检**MUST NOT** 对它强制「静态判据也红」
-- [ ] **T6.3** `--self-test` 实测：该投毒 **行为用例转红** + 还原后复绿
+- [x] **T6.3** `--self-test` 实测：该投毒 **行为用例转红** + 还原后复绿
 
 ## T7 验证与归档
 
-- [ ] **T7.1** `ctest -LE perf` 全绿（零回归）
-- [ ] **T7.2** 全部护栏 + 全部 `--self-test` exit 0
-- [ ] **T7.3** `run_all_samples.sh` + `run_all_ported_tests.sh` 全绿
+- [x] **T7.1** `ctest -LE perf` 全绿（零回归）
+- [x] **T7.2** 全部护栏 + 全部 `--self-test` exit 0
+- [x] **T7.3** `run_all_samples.sh` + `run_all_ported_tests.sh` 全绿
       （⚠️ 两者都含 `stream_arbiter` 消费者）
-- [ ] **T7.4** 计数锚点不变（`CTEST_TOTAL` / `verilator_e2e` /
+- [x] **T7.4** 计数锚点不变（`CTEST_TOTAL` / `verilator_e2e` /
       `DUAL_BACKEND_PARITY_*` / `EXAMPLES_TEST_SOURCES`）
-- [ ] **T7.5** `verify_openspec_delta.sh` 4 条全绿
+- [x] **T7.5** `verify_openspec_delta.sh` 4 条全绿
 - [ ] **T7.6** critic 评审（本 change 独立预算）
 - [ ] **T7.7** 归档（**禁** `--skip-specs`）⇒ ⇒ 归档后补写 Purpose（T5.4）
 
