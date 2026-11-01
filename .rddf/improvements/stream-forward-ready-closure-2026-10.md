@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-10-31
+evidence: test:tests/chlib/test_stream.cpp#[ready]
 ---
 
 # Improvement: 转发类 stream 组合子的 **ready 链收口**（+ 「调用方必须先建立角色」这条前置条件契约化）

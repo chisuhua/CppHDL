@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-10-31
+evidence: test:tests/chlib/test_stream.cpp#[rotation]
 ---
 
 # Improvement: `stream_arbiter_round_robin` 的 **round-robin 从不轮转**（名字 over-promise）

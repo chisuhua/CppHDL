@@ -1,3 +1,7 @@
+---
+evidence: unmeasured
+---
+
 # 待 architect 裁决清单（2026-11-01）
 
 > ⚠️ **本清单的定位**：builder 侧**已把每项的实测证据做齐**（探针 + 判别力

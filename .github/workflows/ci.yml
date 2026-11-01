@@ -513,6 +513,25 @@ jobs:
       shell: bash
       run: scripts/verify_stream_domain_closure.sh --self-test
 
+    - name: Verify ledger evidence (discipline M)
+      # WHY: three times in one session, a conclusion was written down BEFORE
+      # the measurement that refuted it (builder "silent word loss", the XML
+      # criterion, the cost unit). The common shape is "conclusion first,
+      # measurement later" => the ledger must carry machine-checkable evidence.
+      # FAIL-CLOSED: evidence pointing at a missing / unregistered source file,
+      # or at a /tmp probe (vanishes with the session), is a FAIL. A missing
+      # `evidence:` field is a WARN + named list (historical ledgers are not
+      # blocked yet, but the gap is VISIBLE).
+      shell: bash
+      run: scripts/verify_ledger_evidence.sh
+
+    - name: Verify ledger evidence (self-test)
+      # WHY a self-test: a criterion is only as good as its ability to FAIL.
+      # This one POISONS A LEDGER IN PLACE (evidence -> a non-existent file)
+      # and proves the check turns red, then restores and proves green again.
+      shell: bash
+      run: scripts/verify_ledger_evidence.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in

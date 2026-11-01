@@ -1,3 +1,7 @@
+---
+evidence: unmeasured
+---
+
 # 下一步执行说明（供 oracle / critic 审查 · 2026-11-01）
 
 ## 1. 已完成（本轮，可审查）

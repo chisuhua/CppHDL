@@ -1,3 +1,7 @@
+---
+evidence: test:tests/chlib/test_stream.cpp#[ready]
+---
+
 # stream 域收口清单（**契约 × 实现 × 判据 × 护栏** 对齐矩阵）
 
 > ⚠️ **本清单是「收口坐标系」** —— 用途：让「哪些已兑现、哪些还欠着」**收敛到

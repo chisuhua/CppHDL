@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: refactor
 created_at: 2026-10-31
+evidence: test:tests/chlib/test_stream.cpp#[ready]
 ---
 
 # Improvement: stream 组合子的 **ready 所有权**落地（ADR-045 具名 follow-up）

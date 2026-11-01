@@ -1,3 +1,7 @@
+---
+evidence: unmeasured
+---
+
 # 裁决请求单 B1：`StreamBuilder` 链内**中间级**的 ready 归属
 
 > **文档性质**：**决策前材料**（architect 起草 ⇒ ⇒ 供裁决会使用）⇒ ⇒ 裁决一旦
