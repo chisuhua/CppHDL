@@ -19,7 +19,7 @@ evidence: test:tests/chlib/test_stream.cpp#[ready]
 
 <!-- COUNT-ANCHOR
 TOTAL_ROWS: 16
-UNPAID_ROWS: 3
+UNPAID_ROWS: 1
 -->
 
 ## 指针语法
@@ -47,8 +47,8 @@ UNPAID_ROWS: 3
 | 08 | FIFO 输出时序 MUST 被定义（FWFT 0-cycle `aread`） | `spec:chlib-stream-semantics#FIFO 类组件的输出时序 MUST 被定义` | `code:include/chlib/fifo.h#q_async` | `test:tests/test_stream_fifo_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/verify_dual_backend_parity.sh#DUAL_BACKEND_PARITY_TOTAL` | — | ✅ |
 | 09 | `stream_fifo` 行为 MUST 有双后端 parity 覆盖 | `spec:chlib-stream-semantics#的行为 MUST 有双后端 parity 覆盖` | `code:include/chlib/stream.h#stream_fifo` | `test:tests/test_stream_fifo_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/verify_dual_backend_parity.sh#DUAL_BACKEND_PARITY_TOTAL` | — | ✅ |
 | 10 | FIFO 指针 MUST 受空/满门控（自保护） | `spec:chlib-stream-semantics#FIFO 数据通路的指针 MUST 受空/满门控` | `code:include/chlib/fifo.h#will_write` | `test:tests/chlib/test_fifo.cpp#[fifo][sync_fifo]` | `guard:scripts/lib/stream_domain_closure.py#def r10()` | — | ✅ |
-| 11 | demux ready 方向（消费端 ⇒ 上游；现状**方向颠倒**） | — | `code:include/chlib/stream.h#stream_demux` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#demux` | ❌ |
-| 12 | fork 同步语义（`input ready` = AND(各 output ready)） | — | `code:include/chlib/stream.h#stream_fork` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#fork` | ❌ |
+| 11 | demux ready 方向（消费端 ⇒ 上游；**非选中输出隔离** · 越界挡住上游） | `spec:chlib-stream-ready-ownership#分流 / 分叉类组合子的 ready 语义 MUST 是` | `code:include/chlib/stream.h#stream_demux` | `test:tests/test_stream_demux_fork_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/lib/stream_ready_ownership.py#def r13()` | — | ✅ |
+| 12 | fork 同步语义（`input ready` = AND(各 output ready)）· 数据面不随 ready 变 · `synchronous=false` 响亮拒绝 | `spec:chlib-stream-ready-ownership#分流 / 分叉类组合子的 ready 语义 MUST 是` | `code:include/chlib/stream.h#stream_fork` | `test:tests/test_stream_demux_fork_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/lib/stream_ready_ownership.py#def r13()` | — | ✅ |
 | 13 | builder 链**上游反压**（链内闭包不变式：中间级读使能 ← 下一级容量信号） | `spec:chlib-stream-ready-ownership#链内中间级的读使能 MUST 由` | `code:include/chlib/stream_builder.h#queue` | `test:tests/test_stream_builder_backpressure_dual.cpp#DUAL_BACKEND_TEST_PAIR` | `guard:scripts/lib/stream_ready_ownership.py#def r10()` | — | ✅ |
 | 13b | `stream_pipeline.h` 的 3 个 pipe（上游 ready 归属 + `output.ready` 可覆盖 + 数据通路保持） | `spec:chlib-stream-ready-ownership#链内中间级的读使能 MUST 由` | `code:include/chlib/stream_pipeline.h#stream_m2s_pipe` | `test:tests/test_stream_pipeline.cpp#[stream][pipeline][ready]` | `guard:scripts/lib/stream_ready_ownership.py#def r11()` | — | ✅ |
 | 14 | 命名诚实性 —— `fwft_fifo` 实例**已消除**（2026-11-01 物理删除 + 回归禁令 R11）；**通用条款**（新增/改动组件 MUST 有行为用例锁定其**声称语义**）待 B8 | `spec:chlib-stream-arbitration#仲裁器的命名与文档 MUST 与实现行为一致` | `code:include/chlib/fifo.h#q_async` | — | `guard:scripts/lib/stream_domain_closure.py#def r11()` | `debt:.rddf/checks/architect-decisions-pending-2026-11.md#B8` | ❌ |
@@ -60,8 +60,9 @@ UNPAID_ROWS: 3
 - **07** = `capability chlib-stream-arbitration` R1（**轮转**）—— 与 ready 所有权
   **正交**（它管的是「选谁」，不是「何时能推进」）。
 - **08–10** = `capability chlib-stream-semantics` 的 FIFO 语义面。
-- **11–12** = **未兑现**的转发类（`demux` 方向 / `fork` 同步），各有独立台账
-  ⇒ ⇒ **欠账可追溯**。
+- **11–12** = **分流 / 分叉类**（`demux` 方向 · `fork` 同步）—— 2026-11-02 由
+  **ADR-056 / ADR-057** 兑现（同一条 Requirement + 同一个 dual 文件 + 同一个
+  护栏判据 R13）。
 - **13 / 13b** = **链式组合的链内中间级**（builder 链 · pipe 族）—— 2026-11-01 由
   ADR-055 的「链内闭包不变式」兑现（同一条 Requirement + 各自的判据 + 独立的
   护栏判据 R10 / R11）。
@@ -77,8 +78,8 @@ UNPAID_ROWS: 3
   ⚠️ `stream_pipeline.h` 的纳入是 **2026-11-01（ADR-055）** 的事：此前它
   **不在** R8 扫描面内 ⇒ ⇒ 三个 pipe **不在任何 ready 契约的覆盖范围内**。
 - ⚠️ 本清单**不断言**「stream 域已收官」⇒ ⇒ **收官的判据 = 本清单无 ❌ 行**
-  ⇒ ⇒ ⇒ **当前有 3 行 ❌**（11 `demux` 方向 · 12 `fork` 同步 · 14 `fwft_fifo` 命名）
-  ⇒ ⇒ ⇒ **⇒ 未收官**。
+  ⇒ ⇒ ⇒ **当前有 1 行 ❌**（14 = 命名诚实性的**通用条款**，待 B8）
+  ⇒ ⇒ ⇒ **⇒ 未收官**（但**能力面**已全部兑现 ⇒ ⇒ 只差一条「立法」项）。
 - ⚠️ **归档文档 / 历史计划里的假陈述 MUST NOT 顺手改** ⇒ ⇒ 它们是**历史
   快照**（保真性 > 现行正确性）⇒ ⇒ 本清单第 14 行登记的 `fwft_fifo`
   over-promise，**活文档与 in-force ADR 已订正**（2026-11-01）⇒ ⇒
@@ -107,4 +108,5 @@ UNPAID_ROWS: 3
 | 2026-11-01 | A3：第 13 行**根因订正**（「静默丢字」被实测推翻 ⇒ ⇒ 真缺陷 = **上游反压从未建立**）· **删**第 15 行（「编号一致性」是**护栏实现细节**，不是能力面 ⇒ ⇒ 已在护栏脚本内就地订正）· **新增**第 07b 行（`connect_ready` 多驱动守卫 + R9 + 投毒） | A3 实测（`/tmp/opencode/a3/probe_*.cpp`）· shell 标签「R2~R6」⇒ ⇒ 「R2~R6 + R8 + R9」· python 侧登记「R7 是空号」 |
 | 2026-11-01 | 「已知边界」补登记**归档文档不改**（`fwft_fifo` over-promise 的两处历史快照保留） | A1 实施期发现：归档文档 + 历史计划属**历史快照**（保真性 > 现行正确性）⇒ ⇒ 不可用「全仓 grep 无残留」当验收判据 |
 | 2026-11-01 | **第 13 / 13b 行 → ✅**（ADR-055 的「链内闭包不变式」兑现：新增 Requirement + 各自的 dual/行为判据 + 独立护栏判据 R10 / R11）· **删第 15 行**（8 项裁决**全部完成** ⇒ ⇒ 该行是过程项，不是能力面 ⇒ ⇒ 素材仍留在 `.rddf/checks/architect-decisions-pending-2026-11.md`）· 锚点 `17/6 → 16/3` · 「已知边界」把 `stream_pipeline.h` 纳入覆盖面 | 归档 change `stream-builder-and-pipe-ready-ownership-2026-11`（接 ADR-055）。⚠️ **本行的出现本身就是清单的一个已知边界**：状态列由**手写指针**推导 ⇒ ⇒ 实施完成后**不会自动记账** ⇒ ⇒ 靠人工补（与「R1 验不了语义漂移」同型） |
+| 2026-11-02 | **第 11 / 12 行 → ✅**（`demux` 方向 · `fork` 同步语义：ADR-056 / ADR-057）⇒ 锚点 `16/3 → 16/1` ⇒ ⇒ **能力面全部兑现**，只剩第 14 行（B8 的「通用条款」） | 归档 change `stream-demux-fork-ready-semantics-2026-11`。⚠️ 第 11/12 行的 `guard` 指针指向 **R13**（`demux`/`fork` 共享上游驱动的结构判据）⇒ ⇒ 与 R8 **不可互相替代**（helper 的 `<<=` 被改成 `=` 时两个组件同时静默失效而 R8 仍绿） |
 | 2026-11-01 | 第 14 行：`fwft_fifo` **实例已消除**（物理删除）⇒ `实现` 指针改指**真 FWFT**（`fifo.h#q_async`）· 补 `护栏` 指针（**R11 回归禁令**）· `欠账` 改指 **B8**（命名诚实性的**通用条款**仍未兑现）⇒ ⇒ **该行保持 ❌** | ⚠️ **不是「删了实例就改成 ✅」**：该行的 `test` 列**没有真实判据可填**（删除的正确性属于「不存在性」，只能由**结构护栏**守，无法由运行期断言证明）⇒ ⇒ 而**通用义务**（新增/改动组件 MUST 有行为用例锁定其声称语义）确实**未完成** ⇒ ⇒ ⇒ 保持 ❌ 才是诚实的口径 |

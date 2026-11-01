@@ -48,8 +48,8 @@
 
 ## 验收
 
-- [ ] `ctest -LE perf` 零回归
-- [ ] `verify_stream_ready_ownership.sh --self-test` **15/15** 投毒全红 + 还原复绿
-- [ ] `openspec validate … --strict` valid · `verify_openspec_delta.sh` 4 条全绿
-- [ ] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过
-- [ ] 归档：**禁用** `--skip-specs`
+- [x] `ctest -LE perf` **198/198**（零回归）
+- [x] `verify_stream_ready_ownership.sh --self-test` **15/15** 投毒全红 + 还原复绿
+- [x] `openspec validate … --strict` valid · `verify_openspec_delta.sh` 4 条全绿
+- [x] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过
+- [x] 归档：**未**用 `--skip-specs`（ADDED ×1 已合并进主 spec）
