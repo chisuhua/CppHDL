@@ -37,9 +37,12 @@
 
 ## 验收
 
-- [ ] `ctest -LE perf` 零回归
-- [ ] `verify_stream_ready_ownership.sh` PASS + `--self-test`（15 种投毒全红）
-- [ ] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过
-- [ ] `openspec validate node-driver-diagnosis-2026-11 --type change --strict` valid
-- [ ] `scripts/verify_openspec_delta.sh` 4 条全绿
-- [ ] 归档：**禁用** `--skip-specs`（新 capability ⇒ ADDED ×1）
+- [x] `ctest -LE perf` **199/199**（零回归；⚠️ 第一轮因并发进程的坏符号链接导致**陈旧二进制**，已重建后重跑）
+- [x] `verify_stream_ready_ownership.sh` PASS + `--self-test` **15/15** 投毒全红
+- [x] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过
+- [x] `openspec validate node-driver-diagnosis-2026-11 --type change --strict` valid
+- [x] `scripts/verify_openspec_delta.sh` 4 条全绿
+- [x] 归档：**未**用 `--skip-specs`（新 capability `core-node-driver-visibility` ⇒ ADDED ×1
+      ⇒ 1 Requirement / 5 Scenario）
+      ⇒ 归档于 `openspec/changes/archive/2026-11-02-node-driver-diagnosis-2026-11/`
+      ⇒ ⚠️ archive 生成的 `## Purpose` 是 **TBD** ⇒ ⇒ 已**手写**替换（archive 不合并 Purpose）
