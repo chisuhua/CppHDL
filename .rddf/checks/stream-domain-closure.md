@@ -42,6 +42,7 @@
 | 12 | fork 同步语义（`input ready` = AND(各 output ready)） | — | `code:include/chlib/stream.h#stream_fork` | — | — | `debt:.rddf/improvements/stream-forward-ready-closure-2026-10.md#fork` | ❌ |
 | 13 | builder 链**上游反压从未建立**（`source.ready` 恒 0 ⇒ 死路） | — | `code:include/chlib/stream_builder.h#queue` | — | — | `debt:.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md#上游反压` | ❌ |
 | 13b | `stream_pipeline.h` 的 3 个 pipe（**只在常量接线下活着** + 不在契约覆盖范围） | — | `code:include/chlib/stream_pipeline.h#stream_m2s_pipe` | — | — | `debt:.rddf/improvements/chlib-naming-honesty-audit-2026-11.md#stream_pipeline.h` | ❌ |
+| 15 | **待 architect 裁决**（8 项 · 每项均有实测支撑） | — | `code:.rddf/checks/architect-decisions-pending-2026-11.md#B1` | — | — | `debt:.rddf/checks/architect-decisions-pending-2026-11.md#B1` | ❌ |
 | 14 | 命名诚实性（`fwft_fifo` 是**已知实例**：不是 FWFT） | `spec:chlib-stream-arbitration#仲裁器的命名与文档 MUST 与实现行为一致` | `code:include/chlib/fifo.h#fwft_fifo` | — | — | `debt:.rddf/improvements/chlib-naming-honesty-audit-2026-11.md#fwft_fifo` | ❌ |
 
 ## 能力面说明（**为什么这样切**）
@@ -87,6 +88,7 @@
 | 日期 | 变更 | 依据 |
 |---|---|---|
 | 2026-11-01 | **创建**（15 行）⇒ ⇒ 首次把散在 4 处的未收口项收敛到一处 | P2 归档后的梳理；`chlib-stream-ready-ownership` Purpose 的「范围限定」段 + P1 台账 + P2 台账 + ADR-054 §6 |
+| 2026-11-01 | **新增**第 15 行（待 architect 裁决的 8 项 ⇒ ⇒ 收敛到`.rddf/checks/architect-decisions-pending-2026-11.md` ⇒ ⇒ 此前散在 **6 处**） | A6 梳理轮结论：裁决项散落 6 处 ⇒ ⇒ 无人能一眼看出「还欠什么」 |
 | 2026-11-01 | A4：第 14 行欠账指针改指**新台账**（命名诚实性审计）· **新增**第 13b 行（`stream_pipeline.h` 的 3 个 pipe：**实测零数据通过** + **不在任何 ready 契约覆盖范围** ⇒ ⇒ 契约缺口） | A4 实测（`/tmp/opencode/a4/probe_pipes*.cpp`）· 审计表见 `.rddf/improvements/chlib-naming-honesty-audit-2026-11.md` |
 | 2026-11-01 | A3：第 13 行**根因订正**（「静默丢字」被实测推翻 ⇒ ⇒ 真缺陷 = **上游反压从未建立**）· **删**第 15 行（「编号一致性」是**护栏实现细节**，不是能力面 ⇒ ⇒ 已在护栏脚本内就地订正）· **新增**第 07b 行（`connect_ready` 多驱动守卫 + R9 + 投毒） | A3 实测（`/tmp/opencode/a3/probe_*.cpp`）· shell 标签「R2~R6」⇒ ⇒ 「R2~R6 + R8 + R9」· python 侧登记「R7 是空号」 |
 | 2026-11-01 | 「已知边界」补登记**归档文档不改**（`fwft_fifo` over-promise 的两处历史快照保留） | A1 实施期发现：归档文档 + 历史计划属**历史快照**（保真性 > 现行正确性）⇒ ⇒ 不可用「全仓 grep 无残留」当验收判据 |
