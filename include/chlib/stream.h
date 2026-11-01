@@ -661,18 +661,28 @@ stream_arbiter_round_robin(std::array<ch_stream<T>, N_INPUTS> input_streams) {
     //   `round_robin_selector` 的 `last_grant` ⇒ ⇒ ⇒ **扫描起点 = 上次授予
     //   的下一个** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 轮转真正发生**
     //
-    // ⚠️⚠️ **初值 MUST 是 `0_d`（零）** ⇒ ⇒ ⇒ 理由（实测，2026-11-01）：
-    //   ① `ch_reg<T>` 的**非零初值**在 **Verilog codegen 侧失效**
-    //      （`print_reg` 的 reset 分支取到**脱节**的 init 节点 ⇒ ⇒ 值 0）
-    //      ⇒ ⇒ ⇒ **⇒ 非零初值会造成 interpreter / Verilog 双后端分歧**
-    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 故 MUST 用零初值**；
+    // ⚠️⚠️ **初值 MUST 是 `0_d`（零）** ⇒ ⇒ ⇒ 理由（**实测**，2026-11-01）：
+    //   ① **`ch_reg<T>` 的【表达式】初值在 Verilog codegen 侧失效**
+    //      ⇒ ⇒ 实测对照（探针 `probe_reg_init.cpp`）：
+    //        · `ch_reg<ch_uint<4>>(5_d)` ⇒ 生成 `reg_r <= 4'h5` ⇒ **生效** ✔
+    //        · `ch_reg<ch_uint<4>>(ch_uint<4>(1_d) << make_uint<2>(1))`
+    //          ⇒ 生成 `reg_r <= 1'b0` + `CHWARN("init_node is not type_lit")`
+    //          ⇒ ⇒ **静默回退 0** ✗
+    //      ⇒ ⇒ ⇒ 根因（`src/codegen_verilog.cpp::print_reg`）：init 节点
+    //        只有 `type_lit` 才进 reset 分支，**其余一律回退 `1'b0`**
+    //        ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 若用表达式算初值 `1 << (N-1)` ⇒ 双后端分歧**
+    //        ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 故 MUST 用【字面量】零初值**
+    //      ⚠️ **本条与根 `AGENTS.md` 的 Verilator 契约不矛盾** ——
+    //        AGENTS.md 说的 `INIT_d` 是**字面量**（⇒ ⇒ 生效）；
+    //        失效的只有**表达式**形态（⇒ ⇒ 实测已区分）。
     //   ② ⇒ ⇒ ⇒ 零初值 ⇒ ⇒ `has_last_grant = false` ⇒ ⇒ `last_grant_idx = 0`
     //      ⇒ ⇒ ⇒ **⇒ `start_pos = 1` ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 首拍从通道 1 开始**
-    //      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 该相位 MUST 在契约里显式写明**（调用方无从预期
-    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 否则会被当成 bug**）
-    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **与 SpinalHDL 的 `RoundRobin` 不同**
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **该相位不写进契约** —— 契约只锁「**无饿死**」这条
+    //      **效果**属性（相位取决于状态初值 ⇒ ⇒ 锁死字面量会冻错主 spec
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 逐拍字面量只进判别力用例**）
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **与 SpinalHDL 的 `RoundRobin` 不同**
     //      （后者复位时 mask 的最后一位为 1 ⇒ ⇒ 首拍从通道 0 开始）
-    //      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已知差异**（见 capability 的 R1 Scenario）。
+    //      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已知差异（已登记在 change 的 design.md §2.3）**。
     //
     // ⚠️⚠️ **MUST NOT** 用 `ch_reg<ch_uint<...>>(1 << (N-1))` 之类的非零初值
     //   ⇒ ⇒ ⇒ 理由同 ①。

@@ -73,6 +73,15 @@ last_grant_reg->next = select(arb_result.valid, arb_result.grant, <保持>);
 | **更新条件 = `arb_result.valid`**（无授予则保持） | 若每拍都更新，则「没有有效输入的拍」会把指针推到 `grant == 0` ⇒ ⇒ 下一拍 `has_last_grant = false` ⇒ start_pos 回到 1 ⇒ ⇒ **轮转相位被静默重置** |
 | **删掉死节点 `current_channel`** | Zero-Debt「No dead code」；且它是 **binary 索引**（与 one-hot 反馈**形态不一致**）⇒ ⇒ 留着会诱导后人写成第二种反馈形态 |
 
+⚠️ **该决定的可观测后果（critic NIT · 如实登记）**：
+更新条件是 `arb_result.valid` 而**不是** `valid & ready`（fire）
+⇒ ⇒ ⇒ **输出被背压时指针仍会推进** ⇒ ⇒ 「背压期间授予已旋转、ready 回来那拍
+选中的通道可能已换」⇒ ⇒ ⚠️ **这不影响安全属性（无饿死仍成立）**
+⇒ ⇒ 且与「n 拍内覆盖全部通道」的契约义务**一致**
+⇒ ⇒ ⇒ **⇒ 但调用方若假设「背压期间的选择稳定」会踩到** ⇒ ⇒
+⇒ ⇒ ⇒ **⇒ 已在此登记；是否要在契约里补「背压下不保证选择稳定」由后续裁决**
+（本 change 不擅自扩契约）。
+
 ### 2.2 不成环的论证
 
 `last_grant_reg` 是 **`ch_reg`** ⇒ ⇒ 反馈路径为
@@ -190,6 +199,7 @@ last_grant_reg->next = select(arb_result.valid, arb_result.grant, <保持>);
 | ① | 手推金标 `2,0,2,0,...`（按 posedge **前**的 `last_grant`） | ❌ 实际是 `0,2,0,2,...` ⇒ ⇒ 因为 `selected` 是**纯组合输出** ⇒ posedge 后重新求值用**新相位** |
 | ② | 探针可以直接读 `priority_encoder(grant)` | ❌ `Value not found for signal node` ⇒ 节点建在 `Simulator` 构造**之后**（不在 `data_map_`）⇒ 改「Simulator 前算 one-hot、C++ 侧解码」 |
 | ③ | Python 脚本首行可以写 `//` 注释 | ❌ `SyntaxError` ⇒ 当场失败、未写盘（纪律救回） |
+| ④ | 实现注释断言「`ch_reg<T>` 的**非零初值**在 codegen 侧失效」 | ❌ **过宽**。实测（`probe_reg_init.cpp`）：**字面量** `5_d` ⇒ `reg_r <= 4'h5` **生效**；**表达式** `1<<1` ⇒ `reg_r <= 1'b0` + CHWARN「not type_lit」**失效** ⇒ ⇒ **已按实测收窄措辞**，且**与根 `AGENTS.md` 的 Verilator 契约不矛盾**（那里的 `INIT_d` 是字面量） |
 
 ⇒ ⇒ ⇒ **⇒ 第 ①② 两条都是「探针/金标自身的缺陷」，不是实现缺陷**
 ⇒ ⇒ ⇒ ⇒ **⇒ 「探针输出的解读必须被独立复核」第三次生效**。
@@ -200,7 +210,8 @@ last_grant_reg->next = select(arb_result.valid, arb_result.grant, <保持>);
 |---|---|---|
 | `examples/stream/stream_arbiter_demo.cpp` | **无断言**（只打印） | ✔ 不变 |
 | `samples/stream_arbiter_example.cpp` | `selected ∈ {0,2}`（有效即可） | ✔ 仍满足 |
-| `samples/spinalhdl_stream_example.cpp` | `selected` 仅传递，无断言 | ✔ 不变 |
+| `samples/spinalhdl_stream_example.cpp:306` | `sel != 0 ⇒ ERROR`；场景是「仅输入 0 有效」⇒ 唯一有效者必被选中 | ✔ 仍成立 |
+  ⚠️ **本行是 critic NIT 补充**：初版 §4.3 漏列了这一处断言（原写「仅传递，无断言」⇒ ⇒ **不准确**）⇒ ⇒ 补登后结论不变
 | `tests/chlib/test_stream.cpp:731`（唯一有效输入 2） | `sel == 2` | ✔ 唯一有效者必被选中 |
 | `tests/chlib/test_stream.cpp:820`（`N=2`） | **只做 `width` 断言** | ✔ 不变 |
 
@@ -239,6 +250,6 @@ ctest -N                  => 205 / 194 / 38（锚点不变）
 | **既有断言** | 已逐个核对（proposal §Impact）⇒ ⇒ **零破坏** |
 | **中央死节点** | `current_channel` 删除 ⇒ ⇒ 节点数**减少**（不影响任何输出） |
 | **生成 Verilog** | 新增 **1 个寄存器**（`rr_last_grant`）⇒ ⇒ 顶层端口**不变**（`ch_reg` 是内部状态） |
-| **资源** | `+1` 个 `compute_idx_width`… 实际是 `ch_uint<N_INPUTS>`（one-hot）⇒ `N` 个触发器 |
+| **资源** | `+1` 个寄存器 `last_grant_reg`，宽度 = `N_INPUTS`（**one-hot**）⇒ ⇒ `N` 个触发器；死节点 `current_channel` 的删除抵消一部分（它是 `compute_idx_width(N)` 位） |
 | **双后端** | 寄存器 + 组合选择 ⇒ 两后端同构；⚠️ **不做** parity 测试（属 P3，独立立项） |
 | **时序语义** | 反馈经 posedge ⇒ 授予决策**组合**依赖 `last_grant_reg` 的当前值 ⇒ 同一拍内稳定 ⇒ 不引入新延迟 |
