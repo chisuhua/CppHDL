@@ -72,7 +72,7 @@
 ## T7 归档
 
 - [x] **T7.1** ⚠️ **零 spec 变更声明**（`.openspec.yaml`：`schema` + `skip_specs`）
-- [ ] **T7.2** critic 评审（本 change 独立预算）
+- [x] **T7.2** critic 评审（本 change 独立预算）
 
 ## 验证命令
 
