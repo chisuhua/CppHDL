@@ -12,8 +12,17 @@ created_at: 2026-10-31
 
 - **Date drafted**: 2026-10-31
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**决策权归 planner / architect**
-  （⚠️ 本草案**只登记实测事实 + 范围界定**，**不**替 architect 裁决）
+- **Status**: 🟡 **P1-a 已实施并归档**（2026-11-01）· **P1-b / P1-c 未收口**
+  ⇒ ⇒ **已收口**（形态 E · 单阶段）：`mux` · `arbiter×4`（`priority` /
+  `round_robin` / `lock` / `sequence`）· `join` · `filters×6` · `combine_with`
+  ⇒ ⇒ **未收口**：**`demux`**（P1-b · 方向修正是**行为变更** ⇒ ⇒ 需独立 ADR）·
+  **`fork`**（P1-c · 同步语义**从未工作过** ⇒ ⇒ 等于新功能）
+  ⇒ ⇒ **builder 子项已移出**（⇒ 「静默丢字」⇒ ⇒ 另立台账
+  `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`
+  ⇒ ⇒ **需 architect 裁决**）
+  ⇒ ⇒ 归档工件：`openspec/changes/archive/2026-11-01-stream-forward-ready-closure-p1a-2026-11/`
+  ⇒ ⇒ ⚠️ **相关但独立**：`stream_arbiter_round_robin` 的「真轮转」缺陷
+  ⇒ ⇒ ⇒ 另立台账 `stream-arbiter-rr-rotation-2026-10.md`（**已归档**）
 - **来源**：change `chlib-stream-ready-ownership-2026-10`（已归档）落地后，**P0 探针**
   挖出的 **6 条**实测事实（其中 4 条是**未登记**的缺口 ⇒ 此前只存在于会话记忆里）
 - ⚠️ **关联**：capability `chlib-stream-ready-ownership`（**已在约**）· ADR-054
@@ -304,25 +313,55 @@ filters×6 / combine_with）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ builder �
 
 ## 3. Acceptance (验收判据 —— MUST 可勾选)
 
-- [ ] **效果判据**（**MUST NOT** 词法）：调用方 `as_master()` 后 ⇒ ⇒
+> ⚠️ **状态标注（2026-11-01 订正）**：本节原为**全未勾选**的草案清单
+> ⇒ ⇒ 但 **P1-a 已实施并归档** ⇒ ⇒ ⇒ 下方逐条标注**实际状态**
+> ⇒ ⇒ ⇒ **「未勾选」不再等于「未做」** ⇒ ⇒ ⇒ ⚠️ 这是本仓「台账漂移」
+> 病症的一个实例（台账比实现慢）⇒ ⇒ ⇒ **台账 MUST 与实现同步订正**。
+
+- [x] **效果判据**（**MUST NOT** 词法）：调用方 `as_master()` 后 ⇒ ⇒
       `connect_ready` ⇒ ⇒ **调用方持有的 ready 节点 `num_srcs() > 0`** 且其
       **值**跟随消费端 ready ⇒ ⇒ **判别力**（变异：去掉 `<<=` ⇒ 转红）
+      ⇒ ⇒ ✅ **P1-a 已达成**（⚠️ 落地为**形态 E · 单阶段** ⇒ ⇒ **不需**
+      `connect_ready` —— 调用方直接 `<<=` 覆盖 `result.output_stream.ready`
+      ⇒ ⇒ ⇒ 判据**等效且更强** ⇒ ⇒ 变异 `<<=` → `operator=` MUST 转红
+      ⇒ ⇒ 已由护栏 R7（**行为**判据）承载）
 - [ ] **效果判据**：fork 单个消费者不就绪 ⇒ ⇒ **上游 stall**（不推进）
+      ⇒ ⇒ ❌ **未做**（**P1-c**）⇒ ⇒ `fork` 的同步语义**从未工作过**
+      ⇒ ⇒ ⇒ 等于**新功能** ⇒ ⇒ 判据**从零建** ⇒ ⇒ 需独立 ADR
 - [ ] **效果判据**：demux 按 `select` 路由 ready ⇒ ⇒ 选中输出的消费端
       不就绪 ⇒ ⇒ **上游** stall
-- [ ] **效果判据**：filters 透传反压 ⇒ ⇒ 调用方 ready 跟随下游
+      ⇒ ⇒ ❌ **未做**（**P1-b**）⇒ ⇒ `demux` 现状 = **方向颠倒**
+      （`output_streams[i].ready = is_selected & input_stream.ready`
+      ⇒ ⇒ 消费端 ready **未**反馈给上游）⇒ ⇒ ⇒ **行为变更** ⇒ ⇒ 需独立 ADR
+- [x] **效果判据**：filters 透传反压 ⇒ ⇒ 调用方 ready 跟随下游
+      ⇒ ⇒ ✅ **P1-a 已达成**（`filters×6` + `combine_with` 全部改 `<<=`
+      ⇒ ⇒ + 建「默认恒就绪」源 ⇒ ⇒ 零破坏）
 - [ ] **效果判据**：builder 链**上游侧** ⇒ ⇒ 两级 FIFO 填满 ⇒ ⇒
       **链最上游**的 ready 读到 0 ⇒ ⇒ 且**零丢字**
+      ⇒ ⇒ ➡️ **已移出**（P1-a 的 builder 子项）⇒ ⇒ **另立台账**
+      `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`
+      ⇒ ⇒ ⇒ ⚠️ **需 architect 裁决**（修法 A 与 ADR-054 §3.2 第 1 条的张力）
 - [ ] ⚠️ **链长 ≥ 2 的用例**（`queue<4>().queue<4>()`）⇒ ⇒ 且**多驱动守卫在串联
       场景 MUST NOT 误炸**（⚠️ `stream_fifo_connect_ready` 的守卫断言「当前驱动
       仍是默认节点」⇒ ⇒ 串联时可能抛异常 ⇒ ⇒ **必须先实测**）
-- [ ] **穷举全部入口**（⚠️ `multi_if::elif` 事件的第三次复刻风险）：
+      ⇒ ⇒ ➡️ **随 builder 子项一并移出**（P1-a **未实施**）
+      ⇒ ⇒ ⇒ ⇒ ⚠️ 「守卫在串联场景不误炸」这一**独立问题**
+      ⇒ ⇒ ⇒ ⇒ ⚠️ **尚未实测** ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 仍欠着**
+- [x] **穷举全部入口**（⚠️ `multi_if::elif` 事件的第三次复刻风险）：
       `stream.h` 内 mux / demux / arbiter×2 / fork / join / filters×6 /
       `combine_with` + `stream_arbiter.h` 内 `lock` / `sequence`
-- [ ] 变异：每条**先确认编译成功**
-- [ ] 护栏：**扩展** `scripts/verify_stream_ready_ownership.sh`（同一契约 ⇒ 同一
+      ⇒ ⇒ ✅ **P1-a 已达成**（护栏 **R8** 穷举 + **存在性判据**
+      ⇒ ⇒ ⇒ ⇒ ⚠️ `demux` / `fork` **显式豁免** + `::notice` 点名
+      ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 豁免非静默**）
+- [x] 变异：每条**先确认编译成功**
+      ⇒ ⇒ ✅ 已达成（自检框架**强制**「编译失败 ⇒ 变异无效 ⇒ 失败」）
+- [x] 护栏：**扩展** `scripts/verify_stream_ready_ownership.sh`（同一契约 ⇒ 同一
       护栏）⇒ ⇒ 加**转发类**的静态 + 效果判据 ⇒ ⇒ **豁免非静默**
-- [ ] `ctest -LE perf` 零回归 · **计数锚点不变**
+      ⇒ ⇒ ✅ 已达成（**R7** 行为判据 + **R8** 调用点判据
+      ⇒ ⇒ ⇒ ⇒ ⚠️ 实施期踩到并修掉 **4 个护栏自身盲区**
+      ⇒ ⇒ ⇒ ⇒ ⇒ 见归档 design.md §3.6）
+- [x] `ctest -LE perf` 零回归 · **计数锚点不变**
+      ⇒ ⇒ ✅ 已达成（**194/194** · 锚点 **205 / 194 / 38** 不变）
 
 ## 4. Capabilities (契约影响)
 
