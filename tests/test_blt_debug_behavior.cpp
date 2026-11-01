@@ -10,6 +10,19 @@
 //
 // ⚠️ **DUT** = `riscv::BranchConditionUnit`（组合逻辑，无 clk 风险）
 //    ⇒ ⇒ 对应原用例 `tests/test_blt_debug.cpp`（**1 个 TEST_CASE**）
+// ⚠️⚠️ **判据（N2′ · 2026-11-01 订正）**：本文件的判据是
+//    「**断言数(with verilator) == 2 × 断言数(interpreter-only)**」
+//    ⇒ ⇒ **对 pair 结构零约束**（⇒ ⇒ 多断言 pair **无需拆**）
+//    ⇒ ⇒ **零额外编译成本**（⇒ ⇒ 负向验证只需把 verilator 移出 PATH，
+//    ⇒ ⇒ ⇒ **秒级**）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 与旧判据「总断言数 == 2 × pair 数」
+//    ⇒ ⇒ ⇒ ⇒ ⇒ 判别力【等价】（两者都在证明「verilator 半边真跑了」）
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 已在既有 `test_axi_gpio_behavior` 实测成立**
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ （**46 == 2 × 23**）✔
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️⚠️ **该判据的【可执行核验】尚未落地**（⇒ ⇒ 需
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ Catch2 **listener + sidecar** ⇒ ⇒ ⇒ **N2′-b · 独立
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ change**）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 在它落地前，本条
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 判据仍是【纸面】的** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **如实登记**
+//    ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **（⇒ ⇒ 不得在未落地时宣称「已受守护」）**
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
 #include "component.h"

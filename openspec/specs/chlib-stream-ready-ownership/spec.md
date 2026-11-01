@@ -53,7 +53,14 @@ ready 字段。
   `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账）
   ⇒ ⇒ ⇒ 待其落地时经 delta **加回**；
 - ⚠️ **另有一项独立的真实缺陷**（⇒ ⇒ **不属于**本 capability）：builder 的
-  链式 `queue<>()` **静默丢字** ⇒ ⇒ ⇒ `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`。
+  链式 `queue<>()` **上游反压从未建立**（实测 `source.ready` **恒 0** ⇒ ⇒ ⇒
+  上游若遵守 ready 协议 ⇒ ⇒ ⇒ **永远推不动 = 死路**）⇒ ⇒ ⇒
+  `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`。
+  ⚠️ **2026-11-01 事实订正**（change
+  `chlib-stream-ready-ownership-purpose-correction-2026-11`）：本段原写
+  「**静默丢字**」⇒ ⇒ ⇒ **该描述已被实测推翻**（⇒ ⇒ 「弹光后为空」被误读为
+  「丢字」）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 上面的「上游反压」才是真缺陷**（⇒ ⇒ 两者**不是**
+  ⇒ ⇒ ⇒ 同一件事 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒）。
 
 ⇒ ⇒ ⇒ **转发类 MUST NOT** 被本 capability 声称「**全部**已兑现」
 ⇒ ⇒ ⇒ ⇒ 未收口者仍属「硬编码常量 ready ⇒ ⇒ **仍属违规**」。
