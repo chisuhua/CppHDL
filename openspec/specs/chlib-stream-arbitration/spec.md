@@ -27,6 +27,14 @@
 回归禁令 = 结构护栏 R12）⇒ ⇒ 本 capability 的仲裁器清单收敛为 **3 个**。
 ⇒ ⇒ 来源：`openspec/changes/archive/2026-11-01-stream-arbiter-rr-rotation-2026-11/`。
 
+⚠️ **命名诚实性的**持续**机制**（2026-11-02 · B8）：本仓已发生**三次**「名字/注释
+承诺了不存在的行为」（`fwft_fifo` · `stream_arbiter_sequence` ·
+`stream_arbiter_round_robin`）⇒ ⇒ 三次都是**临时普查**发现的 ⇒ ⇒ 需要一条
+**持续**机制 ⇒ ⇒ ⇒ **命名诚实性登记表**（`.rddf/checks/chlib-naming-honesty-registry.md`）
+把「**被改动过 / 名字说过谎**」的组件与「**锁定它声称语义**的行为用例」绑定
+⇒ ⇒ 护栏 `scripts/lib/chlib_naming_honesty.py` 检出「登记漂移 / 判别力消失 /
+新增组件忘登记」。⇒ ⇒ ⚠️ 范围**刻意不是**全仓普查（不可达成 ⇒ 会立刻全红）。
+
 ## Requirements
 
 ### Requirement: 轮转仲裁器 MUST 真正轮转（MUST NOT 饿死持续有效的通道）
@@ -78,6 +86,10 @@ MUST NOT 要求某一具体相位（首拍授予谁取决于实现的状态初�
 （零行为变更）并把「组件去留」作为**独立架构裁决**登记，MUST NOT 在本类
 缺陷修复中**顺手改行为**。
 
+⇒ ⇒ **被改动过 / 名字说过谎**的组件 MUST 登记在**命名诚实性登记表**
+（`.rddf/checks/chlib-naming-honesty-registry.md`），并 MUST 绑定一条**行为**
+用例锁定其**声称语义** ⇒ ⇒ 登记漂移与判别力消失 MUST 由**自动化护栏**检出。
+
 #### Scenario: 固定优先级仲裁器 MUST NOT 声称轮转
 
 - **WHEN** 检查固定优先级仲裁器（现为 `stream_arbiter_priority`）的头注释
@@ -98,3 +110,14 @@ MUST NOT 要求某一具体相位（首拍授予谁取决于实现的状态初�
   ⇒ 删除是 API 变更）
 - **AND** 裁决为「删除」时，删除 MUST 走**独立的 change**（含消费者迁移 +
   回归禁令护栏）⇒ ⇒ MUST NOT 夹在语义修复里
+
+#### Scenario: 被改动的组件 MUST 登记并绑定判别性行为用例
+
+- **WHEN** 一个 change 引入 / 改名 / 订正注释 / 改动某个 `chlib` 组合子
+- **THEN** 该组件 MUST 在命名诚实性登记表中有**一行**（含它**声称**的语义 +
+  指向那条**行为**用例的 tag / macro）
+- **AND** 该 change 的 proposal MUST 用 `<!-- touched-components: ... -->`
+  声明它触及的组件 ⇒ ⇒ 那些组件 MUST 都已登记
+- **AND** 自动化护栏 MUST 检出「登记的组件已不存在」与「判别性用例被删 / 改名」
+- **AND** ⇒ ⇒ 本条的覆盖范围 MUST NOT 被读作「全仓普查」：既有组件**不**因
+  未登记而违规 ⇒ ⇒ 「新增组件忘了登记」那一格由 **per-change 义务** + 评审抓

@@ -31,6 +31,6 @@
 - [x] `scripts/verify_openspec_delta.sh` 4 条全绿
 - [x] CI YAML 合法 + 脚本 `bash -n` 通过
 - [x] 收口清单第 14 行 → ✅ ⇒ 锚点 `16/1 → 16/0`
-- [ ] `ctest -LE perf` 零回归（本 change **零代码改动** ⇒ 只跑护栏即可，
-      但仍跑一次以确保工作区整体健康）
-- [ ] 归档：**禁用** `--skip-specs`
+- [x] `ctest -LE perf` 零回归（本 change **零代码改动** ⇒ 只跑护栏即可）
+- [x] 归档：**未**用 `--skip-specs`（MODIFIED ×1 已合并进主 spec ⇒ 该 Requirement 新增 1 个 Scenario）
+      ⇒ 归档于 `openspec/changes/archive/2026-11-02-chlib-naming-honesty-clause-2026-11/`
