@@ -130,21 +130,28 @@ sync_fifo(WrenT wren, ch_uint<DATA_WIDTH> din, RdenT rden) {
 }
 
 /**
- * First-Word Fall-Through (FWFT) FIFO - 先字后进FIFO
+ * ⚠️⚠️ **同步 FIFO —— 本组件【不是】FWFT**（2026-11-01 订正）
  *
- * 输出端口始终显示下一个可读取的数据
+ * ⚠️ **原标题「First-Word Fall-Through (FWFT) FIFO - 先字后进FIFO」是
+ *    假陈述** ⇒ ⇒ **本组件的 `q` 并非「始终显示下一个可读取的数据」**
+ * ⇒ ⇒ ⇒ ⇒ **⇒ 读的人若只看标题会被直接误导**（⇒ ⇒ 这就是本仓登记的
+ * 「**名字/注释 over-promise**」类缺陷 ⇒ ⇒ 见 capability
+ * `chlib-stream-arbitration` R2「命名与文档 MUST 与实现行为一致」）。
  *
- * ⚠️ **本组件不是 FWFT**：实测写入后 `q` 恒为初值，直到发起读才出现队首
- *    （`output_reg` 更新条件有缺陷，见 `fifo.h:152-160`）。
- *    真正的 FWFT（show-ahead）实现是 `sync_fifo` 的 `q_async` 字段
+ * ⚠️ **实测行为**（ADR-045 §2.4）：写入 `0xA1` / `0xB2` 后 **`q` 恒为
+ *    `0x0`**，直到发起读才出现 `0xA1` ⇒ ⇒ ⇒ **⇒ `q` 只在读之后才更新**
+ * ⇒ ⇒ ⇒ ⇒ **⇒ 它是「读触发输出」，不是 show-ahead**。
+ *
+ * ⇒ ⇒ **真正的 FWFT（show-ahead）实现**是 `sync_fifo` 的 `q_async` 字段
  *    （0-cycle `aread`）与 `stream_fifo::pop_stream.payload`。
- *    MUST NOT 把本组件当作 FWFT 参照 —— `fwft_fifo` 的重写/改名单独立项
+ *
+ * ⚠️ **MUST NOT** 把本组件当作 FWFT 参照 —— `fwft_fifo` 的重写/改名单独立项
  *    （ADR-045 裁决 2.4 / capability `chlib-stream-semantics`）。
  */
 template <unsigned DATA_WIDTH, unsigned ADDR_WIDTH> struct FwftFifoResult {
     ch_bool empty;
     ch_bool full;
-    ch_uint<DATA_WIDTH> q; // 始终输出下一个可读取的数据
+    ch_uint<DATA_WIDTH> q; // ⚠️ 仅在**读之后**才更新（实测）⇒ 不是 show-ahead
     ch_uint<ADDR_WIDTH + 1> count;
 };
 
@@ -226,7 +233,11 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
  * 参见: docs/adr/ADR-008-single-clock-domain-constraint.md
  *
  * 临时替代方案:
- * - 使用同步 FIFO（sync_fifo / fwft_fifo）+ 单时钟域设计
+ * - 使用同步 FIFO（`sync_fifo`）+ 单时钟域设计
+ *   ⚠️ **MUST NOT** 把 `fwft_fifo` 列作替代方案 —— 实测它**不是**
+ *     FWFT（`q` 只在读之后才更新）⇒ ⇒ FWFT/show-ahead 语义请用
+ *     `sync_fifo` 的 `q_async`（0-cycle `aread`）⇒ ⇒ 见上方的
+ *     `FwftFifoResult` 注释与 capability `chlib-stream-semantics`。
  * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
  * - 使用 SpinalHDL 的 StreamFifoCC 组件
  *
@@ -245,7 +256,11 @@ fwft_fifo(ch_bool wren, ch_uint<DATA_WIDTH> din, ch_bool rden) {
  * 参见: docs/adr/ADR-008-single-clock-domain-constraint.md
  *
  * 临时替代方案:
- * - 使用同步 FIFO（sync_fifo / fwft_fifo）+ 单时钟域设计
+ * - 使用同步 FIFO（`sync_fifo`）+ 单时钟域设计
+ *   ⚠️ **MUST NOT** 把 `fwft_fifo` 列作替代方案 —— 实测它**不是**
+ *     FWFT（`q` 只在读之后才更新）⇒ ⇒ FWFT/show-ahead 语义请用
+ *     `sync_fifo` 的 `q_async`（0-cycle `aread`）⇒ ⇒ 见上方的
+ *     `FwftFifoResult` 注释与 capability `chlib-stream-semantics`。
  * - 使用外部异步 FIFO IP（如 Xilinx FIFO Generator）
  * - 使用 SpinalHDL 的 StreamFifoCC 组件
  * 

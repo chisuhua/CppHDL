@@ -102,7 +102,7 @@ resetimpl *default_reset_ = nullptr;     // 默认复位
 | 影响领域 | 说明 |
 |---------|------|
 | **用户设计** | 所有设计必须使用单时钟。CPU、流处理、FIFO 等都在单时钟下工作 |
-| **Async FIFO** | 不可用。需要使用单时钟同步 FIFO（`sync_fifo` / `fwft_fifo`） |
+| **Async FIFO** | 不可用。需要使用单时钟同步 FIFO（`sync_fifo` / `fwft_fifo`）。⚠️ **2026-11-01 事实订正**：`fwft_fifo` **不是** FWFT（实测其 `q` 只在**读之后**才更新 ⇒ ⇒ 不是 show-ahead）⇒ ⇒ **FWFT 语义请用 `sync_fifo` 的 `q_async`**（0-cycle `aread`）⇒ ⇒ 本行的 `fwft_fifo` 应读作 `sync_fifo`（**单时钟域决策本身未变**） |
 | **未来扩展** | CDC 支持需从 ClockDomain 对象 + 同步器原语开始，逐步实现 |
 | **代码生成** | Verilog 代码生成器只输出单时钟模块，无需多时钟逻辑 |
 | **测试** | 不需要编写多时钟测试用例 |
@@ -124,6 +124,7 @@ resetimpl *default_reset_ = nullptr;     // 默认复位
 | 日期 | 版本 | 变更 | 作者 |
 |------|------|------|------|
 | 2026-05-06 | v1.0 | 初始版本，记录单时钟域约束决策和 CDC 不支持 | Sisyphus + 用户 |
+| 2026-11-01 | v1.1 | **事实订正**（**决策未变**）：§4 把 `fwft_fifo` 列为 async FIFO 的替代方案 —— 实测它**不是** FWFT（`q` 只在读之后才更新）⇒ ⇒ 标注「FWFT 请用 `sync_fifo` 的 `q_async`」⇒ ⇒ **单时钟域约束本身零改动** | build-agent |
 
 ---
 
