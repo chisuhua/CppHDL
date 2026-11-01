@@ -68,7 +68,7 @@
       `DUAL_BACKEND_PARITY_*` / `EXAMPLES_TEST_SOURCES`）
 - [x] **T7.5** `verify_openspec_delta.sh` 4 条全绿
 - [x] **T7.6** critic 评审（本 change 独立预算）
-- [ ] **T7.7** 归档（**禁** `--skip-specs`）⇒ ⇒ 归档后补写 Purpose（T5.4）
+- [x] **T7.7** 归档（**禁** `--skip-specs`）⇒ ⇒ 归档后补写 Purpose（T5.4）
 
 ## 验证命令
 
