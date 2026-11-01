@@ -2,7 +2,7 @@
 
 ## Purpose
 定义 `chlib` 的 **stream 仲裁器**（`stream_arbiter_round_robin` /
-`stream_arbiter_priority` / `stream_arbiter_lock` / `stream_arbiter_sequence`）
+`stream_arbiter_priority` / `stream_arbiter_lock`）
 的**仲裁语义契约**：**名字承诺的语义 MUST 兑现**（round-robin 必须真轮转，
 不许饿死任何持续有效的通道）；**固定优先级类 MUST 如实描述**；
 **ready 链**受 `chlib-stream-ready-ownership` 管辖（本 capability 不重复）。
@@ -21,7 +21,10 @@
 ⇒ ⇒ 判别力用例（`[rotation]` tag · 逐拍金标）已进 `tests/chlib/test_stream.cpp`
 ⇒ ⇒ 护栏投毒 `rr-feedback-const`（9 种投毒全被抓）
 ⇒ ⇒ ⇒ `stream_arbiter_sequence` 的注释**已订正**（**零行为变更**）⇒ ⇒
-⚠️ 它与 `stream_arbiter_priority` 的**重复去留**仍是 **backlog**（架构裁决）。
+⚠️ 它与 `stream_arbiter_priority` 的**重复去留**曾是 **backlog**（架构裁决）
+⇒ ⇒ 2026-11-01 **裁决为删除**，已于 2026-11-02 走**独立 change** 物理删除
+（消费者已迁移：3 个用例移植/删除 + 1 处在 `test_stream.cpp` 改用 priority；
+回归禁令 = 结构护栏 R12）⇒ ⇒ 本 capability 的仲裁器清单收敛为 **3 个**。
 ⇒ ⇒ 来源：`openspec/changes/archive/2026-11-01-stream-arbiter-rr-rotation-2026-11/`。
 
 ## Requirements
@@ -77,15 +80,21 @@ MUST NOT 要求某一具体相位（首拍授予谁取决于实现的状态初�
 
 #### Scenario: 固定优先级仲裁器 MUST NOT 声称轮转
 
-- **WHEN** 检查 `stream_arbiter_sequence` 的头注释
+- **WHEN** 检查固定优先级仲裁器（现为 `stream_arbiter_priority`）的头注释
 - **THEN** 它 MUST NOT 声称 round-robin / wrap-around
 - **AND** 它 MUST 说明实际策略（固定优先级扫描、较高索引优先）
-- **AND** 本条要求**零行为变更**（只改文档）⇒ ⇒ 现有调用点的行为 MUST 逐位不变
+- **AND** `stream_arbiter_sequence` MUST **不存在**（它的注释曾谎称
+  「using round-robin selection」/「wraps around」而实现是 `priority_encoder`
+  ⇒ ⇒ 经**独立架构裁决**后于 2026-11-01 **物理删除**）
+- **AND** 该「不得回归」MUST 由**结构护栏**守住（源文件 MUST NOT 再出现该符号）
 
 #### Scenario: 与既有组件近乎重复时 MUST 登记而非删除
 
-- **WHEN** 发现两个仲裁器在**仲裁逻辑上逐位相同**（当前：
-  `stream_arbiter_sequence` 与 `stream_arbiter_priority` 都用
-  `priority_encoder(valid_vector)`，仅 ready 链的门控不同）
+- **WHEN** 发现两个仲裁器在**仲裁逻辑上逐位相同**（`stream_arbiter_sequence`
+  与 `stream_arbiter_priority` 都用 `priority_encoder(valid_vector)`，
+  仅 ready 链的门控不同）
 - **THEN** 该重复 MUST 作为**独立架构裁决**登记（组件身份/去留）
-- **AND** MUST NOT 在仲裁语义修复中**删除**其中一个（仓内有消费者 ⇒ 删除是 API 变更）
+- **AND** MUST NOT 在该类**语义修复**中**删除**其中一个（仓内有消费者
+  ⇒ 删除是 API 变更）
+- **AND** 裁决为「删除」时，删除 MUST 走**独立的 change**（含消费者迁移 +
+  回归禁令护栏）⇒ ⇒ MUST NOT 夹在语义修复里

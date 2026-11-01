@@ -27,8 +27,9 @@
 - [x] `include/chlib/stream_arbiter.h`（剥注释）无 `stream_arbiter_sequence`
 - [x] `stream_arbiter_priority` 仍在
 - [x] `verify_stream_domain_closure.sh` PASS（R12 绿）+ `--self-test` 6/6
-- [ ] `ctest -LE perf` 零回归
-- [ ] `openspec validate stream-arbiter-sequence-removal-2026-11 --type change --strict` valid
-- [ ] `scripts/verify_openspec_delta.sh` 4 条全绿
-- [ ] 归档：**禁用** `--skip-specs`
-- [ ] 计数锚点**不变**（无新增/删除 ctest 条目）
+- [x] `ctest -LE perf` **197/197**（零回归）
+- [x] `openspec validate stream-arbiter-sequence-removal-2026-11 --type change --strict` valid
+- [x] `scripts/verify_openspec_delta.sh` 4 条全绿
+- [x] 归档：**未**用 `--skip-specs`
+      ⇒ 归档于 `openspec/changes/archive/2026-11-02-stream-arbiter-sequence-removal-2026-11/`
+- [x] 计数锚点**不变**（CTEST_TOTAL 208 / verilator_e2e 41 / parity 32·192 / non-perf 197）
