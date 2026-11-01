@@ -53,10 +53,11 @@ EXEMPT_MARK = "stream_ready_ownership: intentionally-unwired"
 # ⚠️ ⚠️ **本清单 MUST 只减不增**（⇒ ⇒ 每次 P1 落地 MUST 删掉对应条目
 #    ⇒ ⇒ ⇒ 否则「未收口」会被**永久豁免** ⇒ ⇒ ⇒ ⇒ **假绿**）
 #    ⚠️ **新增豁免 MUST 有**：① 具体理由 ② 归属的独立 change ③ `::notice` 点名
-UNSETTLED = {
-    "stream_fork": "P1-c（同步语义从未工作过 ⇒ 等于新功能 ⇒ 判据从零建）",
-    "stream_demux": "P1-b（方向修正是行为变更 ⇒ 需独立 ADR）",
+UNSETTLED: dict[str, str] = {
+    # ⚠️ 2026-11-02：`stream_fork`（ADR-057）与 `stream_demux`（ADR-056）**已收口**
+    #    ⇒ ⇒ 两条豁免**已删除**（本清单「只减不增」）。
 }
+
 
 # ⚠️ **ready 字段的「角色」分类**（**结构判据** ⇒ ⇒ 不是符号清单）：
 #   · 输出侧 = 组合子**自己产出**的 ready（驱动它 ⇒ ⇒ 合法）
@@ -308,6 +309,11 @@ def r8() -> None:
         #    ⇒ ⇒ ⇒ 调用该 helper **就是**「驱动了上游」的证据
         #    ⇒ ⇒ ⇒ ⇒ ⇒ helper 自身的 `<<=` 由 **R11** 判（否则等于没判）。
         if re.search(r"\bdrive_upstream_ready\s*\(", body):
+            has_drive = True
+        # ⚠️ 同型：`stream.h` 的 `demux` / `fork` 把上游驱动收在
+        #    `detail::drive_master_ready`（ADR-056 D5 / ADR-057 D5）
+        #    ⇒ ⇒ 调用它就是「驱动了上游」的证据 ⇒ ⇒ helper 自身的 `<<=` 由 R13 判
+        if re.search(r"\bdrive_master_ready\s*\(", body):
             has_drive = True
         for m in _UPSTREAM_READY.finditer(body):
             # ⚠️ **输出侧**字段 ⇒ ⇒ 组合子**自己产出** ⇒ ⇒ 驱动它合法
@@ -693,6 +699,19 @@ POISONS: dict[str, tuple[str, str]] = {
         "        pending_ready_ <<= capacity;",
         "        pending_ready_ = capacity;",
     ),
+    # ⚠️⚠️ **R13 专用投毒（ADR-056 / ADR-057）**：`demux` / `fork` **共享**的
+    #    上游驱动 `<<=` ⇒ `operator=` ⇒ ⇒ **两个组件同时静默失效**
+    #    ⇒ ⇒ R13 MUST 转红；行为面 = `in_ready` 恒 0（默认态也收不到）
+    "demux-fork-master-ready-operator-assign": (
+        "    upstream.ready <<= driver;",
+        "    upstream.ready = driver;",
+    ),
+    # ⚠️⚠️⚠️ **存在性投毒**：**完全删掉** `stream_demux` 的上游驱动调用
+    #    ⇒ ⇒ 无 `=` 可匹配 ⇒ ⇒ 靠 R13 的「两处都必须用它」+ R8 的存在性判据
+    "demux-fork-drop-drive": (
+        '    detail::drive_master_ready(input_stream, upstream_ready, "stream_demux");',
+        "    // ⚠️ 投毒：删掉 demux 的上游驱动（上游收不到反压）",
+    ),
     # ⚠️⚠️⚠️ **R11 专用投毒（B6）**：pipe 族**共享**的上游驱动 `<<=` ⇒ `operator=`
     #    ⇒ ⇒ **一条改动让三个 pipe 同时静默失效** ⇒ ⇒ R11 MUST 转红
     #    ⇒ ⇒ 行为：`source.ready` 无驱动（`num_srcs() == 0`）⇒ ⇒ 用例转红
@@ -711,6 +730,9 @@ POISON_TARGETS: dict[str, pathlib.Path] = {
     "builder-upstream-operator-assign": BUILDER_H,
     # ⚠️ R11（pipe 族共享上游驱动）⇒ ⇒ 落在 `stream_pipeline.h`
     "pipe-upstream-operator-assign": PIPELINE_H,
+    # ⚠️ R13（demux / fork 共享上游驱动）⇒ ⇒ 落在 `stream.h`
+    "demux-fork-master-ready-operator-assign": STREAM_H,
+    "demux-fork-drop-drive": STREAM_H,
 }
 
 
@@ -814,6 +836,75 @@ def restore() -> int:
     return 0
 
 
+# ── R13：`stream.h` 的**共享上游驱动实现**（ADR-056 / ADR-057）────────────
+#
+# ⚠️ **为什么 R8 不够**：`demux` / `fork` 把上游驱动收在
+#   `chlib::detail::drive_master_ready`（一处实现、两处使用）
+#   ⇒ ⇒ 若有人把那里的 `<<=` 改成 `operator=` ⇒ ⇒ **两个组件同时静默失效**
+#   而 R8 仍绿（它只看到「调用了 helper」）⇒ ⇒ **必须对 helper 本身有判据**
+#   （与 R11 对 `stream_pipeline.h` 的 `drive_upstream_ready` 同型，理由同）。
+def r13() -> None:
+    """`drive_master_ready` MUST 用 `<<=` 且 MUST 有 3 处响亮拒绝。"""
+    if not STREAM_H.exists():
+        fail("R13 缺少 include/chlib/stream.h")
+        return
+    body = _function_body(
+        STREAM_H, r"void\s+drive_master_ready\s*\([^)]*\)\s*\{")
+    if body is None:
+        fail("R13 找不到 `detail::drive_master_ready()` 的定义体")
+        return
+    if "upstream.ready <<=" not in body:
+        fail("R13 `drive_master_ready()` MUST 用 `<<=` 驱动 `upstream.ready`"
+             "（`operator=` 只重绑定本地句柄 ⇒ ⇒ 调用方被孤儿化 ⇒ ⇒ demux/fork"
+             "**同时**静默失效）")
+        return
+    if re.search(r"upstream\.ready\s*=(?!=)", body):
+        fail("R13 `drive_master_ready()` 内 MUST NOT 用 `operator=` 驱动 "
+             "`upstream.ready`（节点重绑定 ≠ 连接）")
+        return
+    if "type_lit" not in body:
+        fail("R13 `drive_master_ready()` MUST 检出 **literal** 目标形态")
+        return
+    if "num_srcs()" not in body:
+        fail("R13 `drive_master_ready()` MUST 检出**多驱动**")
+        return
+    n_loud = body.count("CHFATAL_EXCEPTION")
+    if n_loud < 3:
+        fail(f"R13 `drive_master_ready()` 的**响亮拒绝**只有 {n_loud} 处"
+             "（MUST ≥3：无节点 / literal 目标 / 多驱动）")
+        return
+    # ⚠️ `demux` / `fork` MUST 真的**用它**（MUST NOT 各写各的 ⇒ 漂移）
+    # ⚠️ 不能用 `_function_body` 的 `[^)]*` 形参模式：`stream_demux` 的形参里
+    #    含 `compute_idx_width(N_OUTPUTS)` ⇒ ⇒ 第一个 `)` 就把匹配截断
+    #    ⇒ ⇒ 改用「找名字 ⇒ 定位其后的 `{` ⇒ 花括号配平」。
+    code_all = strip_comments_and_strings(STREAM_H.read_text(encoding="utf-8"))
+    for fn, label in (("stream_demux", "demux"), ("stream_fork", "fork")):
+        m = re.search(rf"\b{fn}\s*\(", code_all)
+        if not m:
+            fail(f"R13 找不到 `{fn}` 的定义")
+            return
+        i = code_all.find("{", m.end())
+        depth, j, end = 0, i, -1
+        while j >= 0 and j < len(code_all):
+            if code_all[j] == "{":
+                depth += 1
+            elif code_all[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = j
+                    break
+            j += 1
+        if end < 0:
+            fail(f"R13 `{fn}` 的函数体花括号不配平")
+            return
+        b = code_all[i:end + 1]
+        if "drive_master_ready(" not in b:
+            fail(f"R13 `{fn}`（{label}）MUST 调用 `drive_master_ready(...)`"
+                 "（上游 ready 由组合子驱动 ⇒ 否则上游收不到反压）")
+            return
+    ok("R13 demux / fork 的上游驱动齐备（共用 `<<=` 实现 · 3 处响亮拒绝 · 两处全用）")
+
+
 def main() -> int:
     cmd = sys.argv[1] if len(sys.argv) > 1 else "check"
     if cmd == "check":
@@ -826,6 +917,7 @@ def main() -> int:
         r9()
         r10()
         r11()
+        r13()
         if FAILS:
             print(f"{RED}❌ 静态判据 FAIL（{FAILS} 项）{RESET}")
             return 1

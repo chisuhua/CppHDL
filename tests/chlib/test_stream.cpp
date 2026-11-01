@@ -781,11 +781,13 @@ TEST_CASE("Stream: chlib stream 组合子必须**行为正确**（不只是结�
     // ---- 2) stream_fork：payload 复制到所有输出、valid 透传 ----
     {
         ch_stream<ch_uint<8>> in;
+        // ⚠️ ADR-057 D5：先建字段节点；ready 由 fork 驱动（MUST NOT 自行驱动）
+        in.as_master();
         in.payload = make_uint<8>(0x3C);
         in.valid = ch_bool(true);
-        in.ready = ch_bool(true);
 
-        auto fork = stream_fork<ch_uint<8>, 2>(in, false);
+        // ⚠️ ADR-057 D2：`synchronous=false` 已改为**响亮拒绝** ⇒ 本段改用 true
+        auto fork = stream_fork<ch_uint<8>, 2>(in, true);
 
         ch::Simulator sim(ctx.get());
         sim.tick();
@@ -945,6 +947,7 @@ TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
 
     SECTION("Stream Fork synchronous operation") {
         ch_stream<ch_uint<8>> input_stream;
+        input_stream.as_master();   // ADR-057 D5
         input_stream.payload = 0x12_h;
         input_stream.valid = true;
 
@@ -959,20 +962,17 @@ TEST_CASE("Stream: Stream Fork", "[stream][fork]") {
         REQUIRE(sim.get_value(fork_result.output_streams[1].valid) == true);
     }
 
-    SECTION("Stream Fork asynchronous operation") {
+    // ⚠️ ADR-057 D2：`synchronous=false` 的真异步语义**尚未实现** ⇒ 现为
+    //    **建图期响亮拒绝**（`CHFATAL_EXCEPTION`）⇒ 用例改成断言「会抛」
+    SECTION("Stream Fork asynchronous operation MUST be rejected loudly") {
         ch_stream<ch_uint<8>> input_stream;
+        input_stream.as_master();
         input_stream.payload = 0x34_h;
         input_stream.valid = true;
 
-        auto fork_result = stream_fork<ch_uint<8>, 2>(input_stream, false);
-        fork_result.output_streams[0].ready = true;
-        fork_result.output_streams[1].ready = true;
-
-        ch::Simulator sim(ctx.get());
-        sim.tick(); // Tick to allow combinatorial propagation
-
-        REQUIRE(sim.get_value(fork_result.output_streams[0].payload) == 0x34);
-        REQUIRE(sim.get_value(fork_result.output_streams[1].payload) == 0x34);
+        // ⚠️ 模板实参里的逗号会被宏当参数分隔 ⇒ MUST 再加一层括号
+        REQUIRE_THROWS_AS((stream_fork<ch_uint<8>, 2>(input_stream, false)),
+                          std::runtime_error);
     }
 }
 
@@ -1046,9 +1046,10 @@ TEST_CASE("Stream: Stream Demux", "[stream][demux]") {
 
     SECTION("Stream Demux operation") {
         ch_stream<ch_uint<8>> input_stream;
+        // ⚠️ ADR-056 D5：先建字段节点；ready 由 demux 驱动（MUST NOT 自行驱动）
+        input_stream.as_master();
         input_stream.payload = 0x99_h;
         input_stream.valid = true;
-        input_stream.ready = true;
 
         auto demux_result = stream_demux<ch_uint<8>, 2>(input_stream, 1_d);
 

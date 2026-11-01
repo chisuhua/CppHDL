@@ -260,6 +260,17 @@ add_dual_backend_test(test_stream_builder_backpressure_dual
     TIMEOUT 300
 )
 
+# ADR-056 / ADR-057（2026-11-02）：`stream_demux` 的 ready 方向 +
+# `stream_fork` 的 AND 同步语义。
+# ⚠️ 两个组件此前**零 dual 覆盖**，且在护栏 R8 里是**豁免**状态
+#    （「方向修正是行为变更」/「同步语义从未工作过」）⇒ 不在任何 ready 契约内。
+# ⚠️ 判别性 = **默认（未接反压）时 in_ready == 1**：修复前该节点是**孤儿**
+#    ⇒ 恒 0，而「被挡住」时也是 0 ⇒ 只断「为 0」不可区分（假绿）。
+add_dual_backend_test(test_stream_demux_fork_dual
+    SOURCES test_stream_demux_fork_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

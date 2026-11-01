@@ -54,6 +54,8 @@ TEST_BIN="build/tests/test_stream"
 BUILDER_TEST_BIN="build/tests/test_stream_builder"
 # ⚠️ **R11（pipe 族的共享上游驱动）的判别力用例**在 `test_stream_pipeline`
 PIPE_TEST_BIN="build/tests/test_stream_pipeline"
+# ⚠️ **R13（demux / fork 的共享上游驱动）的判别力用例**
+DEMUX_FORK_TEST_BIN="build/tests/test_stream_demux_fork_dual"
 ANALYZER="scripts/lib/stream_ready_ownership.py"
 
 RED='\033[0;31m'; GRN='\033[0;32m'; RST='\033[0m'
@@ -148,6 +150,7 @@ poison_bin() {
     case "$1" in
         builder-*) echo "$BUILDER_TEST_BIN" ;;
         pipe-*) echo "$PIPE_TEST_BIN" ;;
+        demux-fork-*) echo "$DEMUX_FORK_TEST_BIN" ;;
         *) echo "$TEST_BIN" ;;
     esac
 }
@@ -155,6 +158,7 @@ poison_target() {
     case "$1" in
         builder-*) echo "test_stream_builder" ;;
         pipe-*) echo "test_stream_pipeline" ;;
+        demux-fork-*) echo "test_stream_demux_fork_dual" ;;
         *) echo "test_stream" ;;
     esac
 }
@@ -182,6 +186,8 @@ self_test() {
         "builder-drop-chain-closure"
         "builder-upstream-operator-assign"
         "pipe-upstream-operator-assign"
+        "demux-fork-master-ready-operator-assign"
+        "demux-fork-drop-drive"
     )
     local c bin
     for c in "${cases[@]}"; do
@@ -245,6 +251,8 @@ self_test() {
     cmake --build build --target test_stream_builder \
         -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
     cmake --build build --target test_stream_pipeline \
+        -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
+    cmake --build build --target test_stream_demux_fork_dual \
         -j"$(nproc 2>/dev/null || echo 4)" >/dev/null 2>&1
     # ⚠️⚠️ **计数 MUST 动态**（从数组长度取）⇒ ⇒ 否则「投毒清单增删」时
     #    这行文案会**静默漂移** ⇒ ⇒ ⇒ **⇒ 本仓登记的「计数锚点」教训**

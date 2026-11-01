@@ -11,6 +11,7 @@
 #include "core/bool.h"
 #include "core/bundle/bundle_base.h"
 #include "core/literal.h"
+#include "core/lnodeimpl.h"
 #include "core/operators.h"
 #include "core/operators_runtime.h"
 #include "core/uint.h"
@@ -534,10 +535,74 @@ void stream_fifo_connect_ready(StreamFifoResult<T, DEPTH> &result,
     result.pop_stream.ready <<= cr;
 }
 
+namespace detail {
+
 /**
- * Stream Fork - 将输入流复制到多个输出流
- * synchronous=true: 所有输出必须同时就绪才传输
- * synchronous=false: 任意输出就绪即可传输
+ * @brief 把**上游 master 的 `ready`** 钉到 `driver` 上（demux / fork 共用）。
+ *
+ * ⚠️ **为什么需要它**（ADR-056 D5 / ADR-057 D5）：`demux` / `fork` 的
+ *   `input_stream` 是调用方持有的**上游 master** ⇒ ⇒ 它们的 `ready` MUST 由
+ *   组合子驱动。**MUST 用 `<<=`**（数据流边）；`operator=` 只重绑定**本地
+ *   句柄** ⇒ ⇒ 调用方持有的是**孤儿节点** ⇒ ⇒ **反压静默丢失**。
+ *
+ * ⚠️⚠️ **三种「驱动不了」MUST 响亮拒绝**（`CHFATAL_EXCEPTION` ⇒ **抛**；
+ *   `CHERROR` / `CHFATAL` 实测**只打日志不抛** ⇒ 用它们做安全网 = 假安全网）：
+ *   ① **无节点**（调用方没 `as_master()`）⇒ `<<=` 会另建节点并**只绑本地副本**；
+ *   ② **目标是 literal**（调用方用 `operator=` 喂了常量）⇒ literal 的值不随
+ *      src 变化 ⇒ 驱动无效；
+ *   ③ **已被真信号驱动** ⇒ 再驱动是 `set_src(0, …)` = last-wins ⇒ 静默接管。
+ *   ⚠️ 判据 ③ **允许**覆盖「当前驱动是 literal」—— 那是别的组合子的**默认值**
+ *      （ADR-054 形态 E）⇒ 与 `stream_pipeline.h` 的
+ *      `detail::drive_upstream_ready` **同型同判据**。
+ *      ⇒ ⚠️ 为什么**不直接复用**那个 helper：它被护栏 **R11** 钉在
+ *      `stream_pipeline.h`（判据要求「3 个 pipe 都调它」），而本文件与
+ *      `stream_pipeline.h` 的 include 关系是**反向**的 ⇒ 复用会打破 R11 的
+ *      定位。⇒ ⇒ 体量相同、判据相同，**语义不得漂移**（改动 MUST 同步两处）。
+ */
+template <typename T, typename D>
+inline void drive_master_ready(ch_stream<T> &upstream, const D &driver,
+                               const char *what) {
+    auto *node = upstream.ready.impl();
+    if (!node) {
+        CHFATAL_EXCEPTION(
+            "[%s] 上游 input_stream.ready **没有节点**：`<<=` 在空目标上会另建"
+            "节点并只绑到本地副本 ⇒ ⇒ 调用方收不到反压（静默失效）。"
+            "修法：MUST 先对 input_stream 调 as_master()。", what);
+    }
+    if (node->type() == lnodetype::type_lit) {
+        CHFATAL_EXCEPTION(
+            "[%s] 上游 input_stream.ready 是**字面量**节点 ⇒ ⇒ literal 的值不随"
+            " src 变化 ⇒ ⇒ 驱动无效（反压静默丢失）。"
+            "修法：MUST NOT 用 operator= 给 input_stream.ready 喂常量。", what);
+    }
+    if (node->num_srcs() > 0) {
+        auto *cur = node->src(0);
+        // 「当前驱动是 literal」= 别的组合子的**默认值** ⇒ 覆盖它是设计意图
+        if (cur && cur->type() != lnodetype::type_lit) {
+            CHFATAL_EXCEPTION(
+                "[%s] 上游 input_stream.ready **已被真信号驱动** ⇒ ⇒ 再驱动是"
+                " last-wins ⇒ ⇒ 会静默接管调用方的信号。"
+                "修法：input_stream.ready 留给组合子驱动。", what);
+        }
+    }
+    upstream.ready <<= driver;
+}
+
+} // namespace detail
+
+/**
+ * Stream Fork - 将输入流复制到多个输出流（**广播**）
+ *
+ * ⭐ 契约见 **ADR-057**：`input_stream.ready = AND(各输出 ready)`；
+ *    每个 `output_streams[i].ready` 是**形态 E 字段**（默认恒就绪 + 消费端
+ *    `<<=` 覆盖）；`valid` / `payload` **只依赖输入侧**（MUST NOT 依赖任何 ready）。
+ *
+ * ⚠️ `synchronous = false`（真异步：每输出独立消费）**尚未实现**
+ *    ⇒ ⇒ 传 `false` 会**建图期响亮拒绝**（`CHFATAL_EXCEPTION`，ADR-057 D2）
+ *    ⇒ ⇒ 归位条件 = 异步 fork 独立立项。
+ *
+ * ⚠️ **接线纪律**：`input_stream` MUST 先 `as_master()`；
+ *    `input_stream.ready` 由本组件驱动 ⇒ 调用方 MUST NOT 自行驱动它。
  */
 template <typename T, unsigned N_OUTPUTS> struct StreamForkResult {
     ch_stream<T> input_stream;
@@ -547,46 +612,54 @@ template <typename T, unsigned N_OUTPUTS> struct StreamForkResult {
 template <typename T, unsigned N_OUTPUTS>
 StreamForkResult<T, N_OUTPUTS> stream_fork(ch_stream<T> input_stream,
                                            bool synchronous = true) {
+    // ── ADR-057 D2：`synchronous=false` 的真异步语义**尚未实现** ⇒ 响亮拒绝 ──
+    //
+    // ⚠️ **为什么不返回半成品**：修复前的 `false` 分支把**数据面**的 `valid`
+    //    接到**反压面**的 `input_stream.ready` 上（`valid_i = input.valid &
+    //    input.ready`）⇒ ⇒ 上游不就绪时 `valid` 会**消失** ⇒ ⇒ 那是确定性缺陷，
+    //    不是「另一种语义」。
+    //
+    // ⚠️ **为什么现在不实现真异步**：它需要**每输出的持久状态**（谁已经消费过
+    //    本轮）+ 轮次计数器 ⇒ ⇒ **等于新功能**（判据从零、金标需手推）⇒ ⇒
+    //    与本文档的「同步语义」是**两个独立决策**（ADR-057 §2 的 D2 说明）。
+    //    归位条件 = 异步 fork 独立立项。
+    if (!synchronous) {
+        CHFATAL_EXCEPTION(
+            "[stream_fork] synchronous=false 的**真异步语义**（每个输出独立"
+            "消费、输入在所有输出都消费过之后才就绪）**尚未实现** ⇒ ⇒ 建图期"
+            "**响亮拒绝**（MUST NOT 返回一个「看起来像异步 fork」的半成品）。"
+            "临时修法：传 true（同步 fork），或自己用 per-output 寄存器实现。"
+            "归位条件：异步 fork 独立立项（ADR-057 D2）。");
+    }
+
     StreamForkResult<T, N_OUTPUTS> result;
 
-    // 复制输入数据到所有输出
+    // ── D3：数据面与反压面分离 ⇒ `valid` / `payload` MUST NOT 依赖任何 `ready` ──
+    //
+    // ── D1：`input_stream.ready = AND(各输出 ready)` ──
+    //
+    // ⚠️ 顺序承重：**先**给每个输出建「默认恒就绪」的驱动（形态 E / ADR-054），
+    //    **再**读它们的 `ready` ⇒ ⇒ 否则读到的是**空 proxy** ⇒ ⇒ `&` 拿到
+    //    null 操作数 ⇒ ⇒ node_builder 报 "Invalid operands"（修复前的老问题）。
+    ch_bool all_ready(true);
     for (unsigned i = 0; i < N_OUTPUTS; i++) {
         result.output_streams[i].payload = input_stream.payload;
         result.output_streams[i].valid = input_stream.valid;
+
+        ch_bool default_ready(true);              // 局部 literal 源（可被覆盖）
+        result.output_streams[i].ready <<= default_ready;
+
+        all_ready = all_ready & result.output_streams[i].ready;
     }
 
-    if (synchronous) {
-        // 同步模式：所有输出都就绪时输入才就绪
-        //
-        // ⚠️ **ready 只能取自 `input_stream.ready`** —— 输出侧的 ready 是
-        //    **调用方在拿到结果之后**才设的（`result.output_streams[i].ready
-        //    = ...`），在构造期读到的是**空 proxy** ⇒ 与之做 `&` / `|`
-        //    会拿到 null 操作数 ⇒ node_builder 报
-        //    "Invalid operands for binary operation"（此前**零行为覆盖**）。
-        //    ⇒ 这里的 ready 链由输入侧的 ready 驱动；输出侧的 ready 字段
-        //    在下面统一由 `result.input_stream.ready` 赋值。
-        result.input_stream.ready = input_stream.ready;
+    // D5：上游 ready 由 fork 驱动（MUST `<<=`；带三处响亮拒绝）
+    detail::drive_master_ready(input_stream, all_ready, "stream_fork");
 
-        // 输入有效且就绪时，所有输出都有效
-        for (unsigned i = 0; i < N_OUTPUTS; i++) {
-            result.output_streams[i].ready = result.input_stream.ready;
-        }
-    } else {
-        // 非同步模式：任意输出就绪时输入就绪
-        // ⚠️ 同上：`any_ready` MUST NOT 读构造期还不可得的输出 ready。
-        result.input_stream.ready = input_stream.ready;
-
-        // 每个输出独立控制
-        for (unsigned i = 0; i < N_OUTPUTS; i++) {
-            // 仅当输入有效且就绪时，输出才有效
-            result.output_streams[i].valid =
-                input_stream.valid & input_stream.ready;
-        }
-    }
-
-    // 输入流的信号
-    result.input_stream.payload = input_stream.payload;
-    result.input_stream.valid = input_stream.valid;
+    // 结果里的 input_stream 只作**只读别名**（整体拷贝 ⇒ 字段共享同一节点）
+    // ⚠️ MUST NOT 逐字段写 `result.input_stream.ready = input_stream.ready;`
+    //    —— 静态判据 R8 会把「某处的 `.ready =`」读成**上游驱动用了
+    //    `operator=`**（它只看 `xxx.ready =` 这个形态，不看前缀）⇒ ⇒ 误报。
+    result.input_stream = input_stream;
 
     return result;
 }
@@ -896,6 +969,9 @@ void stream_mux_connect_ready(StreamMuxResult<N_INPUTS, T>& mux_result) {
 /**
  * Stream Demux - 流解复用器
  */
+/**
+ * Stream Demux Result —— 见下方 `stream_demux` 的契约（**ADR-056**）
+ */
 template <typename T, unsigned N_OUTPUTS> struct StreamDemuxResult {
     ch_stream<T> input_stream;
     std::array<ch_stream<T>, N_OUTPUTS> output_streams;
@@ -907,31 +983,46 @@ StreamDemuxResult<T, N_OUTPUTS>
 stream_demux(ch_stream<T> input_stream,
              ch_uint<compute_idx_width(N_OUTPUTS)> select) {
     StreamDemuxResult<T, N_OUTPUTS> result;
-    result.input_stream = input_stream;
     result.select = select;
 
-    // 使用chlib中的demux函数来处理数据流
+    // 使用 chlib 的 demux 处理数据面（**当拍**选通，组合 0-cycle）
     auto demux_outputs = demux<N_OUTPUTS>(input_stream.payload, select);
 
-    // 将输入数据复制到所有输出
-    for (unsigned i = 0; i < N_OUTPUTS; i++) {
-        result.output_streams[i].payload = demux_outputs[i];
-        result.output_streams[i].valid =
-            input_stream.valid &
-            (select == make_uint<compute_idx_width(N_OUTPUTS)>(i));
-    }
+    // ── ADR-056 D1：`input_stream.ready` = **被选中**输出的 ready（消费端 ⇒ 上游）──
+    // ── D4：`select` 越界 ⇒ 全 `valid = 0` **且** `input.ready = 0` ──
+    //
+    // ⚠️ 顺序承重：**先**给每个输出建「默认恒就绪」的驱动（形态 E / ADR-054），
+    //    **再**读它们的 `ready` ⇒ ⇒ 否则读到空 proxy ⇒ `&` / `|` 拿到 null
+    //    操作数 ⇒ node_builder 报 "Invalid operands"。
+    ch_bool in_range(false);        // select 是否落在 [0, N_OUTPUTS)
+    ch_bool selected_ready(false);  // 被选中输出的 ready
 
-    // 只有选中的输出才就绪
-    ch_bool selected_ready = false;
     for (unsigned i = 0; i < N_OUTPUTS; i++) {
         ch_bool is_selected =
             (select == make_uint<compute_idx_width(N_OUTPUTS)>(i));
-        result.output_streams[i].ready = is_selected & input_stream.ready;
+
+        // D3：数据面 —— `valid` 只依赖 `input.valid`（MUST NOT 依赖任何 ready）
+        result.output_streams[i].payload = demux_outputs[i];
+        result.output_streams[i].valid = input_stream.valid & is_selected;
+
+        // D2：形态 E —— 默认恒就绪 + 消费端 `<<=` 覆盖
+        ch_bool default_ready(true);   // 局部 literal 源（可被覆盖）
+        result.output_streams[i].ready <<= default_ready;
+
         selected_ready =
             selected_ready | (is_selected & result.output_streams[i].ready);
+        in_range = in_range | is_selected;
     }
 
-    result.input_stream.ready = selected_ready;
+    // D4：越界时 `in_range == 0` ⇒ ready 落 0（**上游停顿**是可观测的，
+    //      而不是「ready=1 并丢弃」那种静默丢数据）
+    ch_bool upstream_ready = in_range & selected_ready;
+
+    // D1 / D5：上游 ready 由 demux 驱动（MUST `<<=`；带三处响亮拒绝）
+    detail::drive_master_ready(input_stream, upstream_ready, "stream_demux");
+
+    // 结果里的 input_stream 只作**只读别名**（整体拷贝 ⇒ 字段共享同一节点）
+    result.input_stream = input_stream;
 
     return result;
 }

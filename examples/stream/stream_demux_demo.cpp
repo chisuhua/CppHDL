@@ -24,6 +24,8 @@ int main() {
     ch::core::ctx_swap swap(&ctx);
 
     ch_stream<ch_uint<8>> input_stream;
+    // ⚠️ ADR-056 D5：MUST 先建字段节点 ⇒ demux 才能把反压钉到 ready 上
+    input_stream.as_master();
     input_stream.payload = make_uint<8>(0xAB);
     input_stream.valid = ch_bool(true);
 

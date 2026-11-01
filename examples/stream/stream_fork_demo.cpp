@@ -24,13 +24,14 @@ int main() {
     ch::core::ctx_swap swap(&ctx);
 
     ch_stream<ch_uint<8>> input_stream;
+    // ⚠️ ADR-057 D5：MUST 先建字段节点 ⇒ fork 才能把反压钉到 ready 上
+    input_stream.as_master();
     input_stream.payload = make_uint<8>(0x5A);
     input_stream.valid = ch_bool(true);
 
+    // ⚠️ 输出的 ready 已是**形态 E 默认恒就绪** ⇒ 不接反压时无需再赋值
+    //    （`= ch_bool(true)` 是**节点重绑定**，不是连接 ⇒ 已删除）
     auto fork_result = stream_fork<ch_uint<8>, N>(input_stream, true);
-    for (unsigned i = 0; i < N; ++i) {
-        fork_result.output_streams[i].ready = ch_bool(true);
-    }
 
     ch::Simulator sim(&ctx);
     sim.tick();

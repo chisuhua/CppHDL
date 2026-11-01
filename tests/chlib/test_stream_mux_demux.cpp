@@ -128,14 +128,14 @@ TEST_CASE("StreamDemux: Basic 1-to-4 routing", "[stream][demux]") {
 
     const unsigned N = 4;
     ch_stream<ch_uint<8>> input;
+    // ⚠️ ADR-056 D5：MUST 先建字段节点
+    input.as_master();
     input.payload = make_uint<8>(0xAB);
     input.valid = ch_bool(true);
 
     ch_uint<2> select(0_d);
+    // ⚠️ 输出的 ready 已是**形态 E 默认恒就绪** ⇒ 无需再赋值
     auto demux_result = stream_demux<ch_uint<8>, N>(input, select);
-    for (unsigned i = 0; i < N; ++i) {
-        demux_result.output_streams[i].ready = ch_bool(true);
-    }
 
     ch::Simulator sim(&ctx);
     sim.tick();
@@ -162,13 +162,13 @@ TEST_CASE("StreamDemux: 1-to-2 minimal", "[stream][demux]") {
     ch::core::ctx_swap ctx_swapper(&ctx);
 
     ch_stream<ch_uint<32>> input;
+    // ⚠️ ADR-056 D5：MUST 先建字段节点
+    input.as_master();
     input.payload = make_uint<32>(0xDEADBEEF);
     input.valid = ch_bool(true);
 
     ch_bool select(ch_bool(false));
     auto demux_result = stream_demux<ch_uint<32>, 2>(input, select);
-    demux_result.output_streams[0].ready = ch_bool(true);
-    demux_result.output_streams[1].ready = ch_bool(true);
 
     ch::Simulator sim(&ctx);
     sim.tick();
