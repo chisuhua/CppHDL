@@ -336,6 +336,20 @@ add_dual_backend_test(test_guard_contribution_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 3 批**（2026-11-02 · change
+#    `dual-backend-parity-route-b-fifo-2026-11`）
+#    ⇒ `sync_fifo` 是**所有** FIFO 型组件的本体，而它的**空/满门控（自保护）**
+#    在 codegen 路径上**零验证** —— 而该缺陷类在仓内**真实发生过**（ADR-045：
+#    满写覆写队首 / 空读让读指针自由运行 ⇒ 之后写入的元素永远读不出来）。
+#    ⇒ 既有的 `test_stream_fifo_dual` 覆盖的是 `stream_fifo` **wrapper**
+#    ⇒ ⇒ **不是**本体。
+#    ⇒ 既有 `test_fifo.cpp` 是**裸 context + 直接调 `sync_fifo()`**（无
+#    `ch_device` / 无端口）⇒ macro 不适用 ⇒ 必须新建带端口的 DUT。
+add_dual_backend_test(test_sync_fifo_dual
+    SOURCES chlib/test_sync_fifo_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
