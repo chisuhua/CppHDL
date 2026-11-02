@@ -312,6 +312,30 @@ add_dual_backend_test(test_state_machine_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 2 批**（2026-11-02 · change
+#    `dual-backend-parity-route-b-conditional-2026-11`）
+#    ⇒ `chlib::conditional_block`（ADR-051 的 `_if` 语句块 DSL）的**运行期
+#    语义**此前在 codegen 路径上**零验证**。
+#    ⇒ 该 DSL 正是本仓「假绿」病的**原型病例**（ADR-051 记录的实现缺陷曾被
+#    既有测试**钉住** ⇒ 绿灯承载的是缺陷）⇒ ⇒ 「条件真的参与了求值」的
+#    判据是该病种的疫苗。
+add_dual_backend_test(test_if_stmt_dual
+    SOURCES chlib/test_if_stmt_dual.cpp
+    TIMEOUT 300
+)
+
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 2 批**（同上一个 change）
+#    ⇒ `chlib::compose_guard_chain` 是仓内**唯一**一处「多条 (守卫, 值) 合成
+#    一条 select 链」的代码 ⇒ ⇒ 它是「优先级方向（先匹配者胜）」的**唯一定义点**。
+#    ⇒ ⚠️ 而那条契约在 ADR-050 的状态守卫侧是**运行期不可观测**的（`is_in(S)`
+#    两两互斥）⇒ ⇒ 只能靠**结构级**断言钉住 ⇒ ⇒ **结构断言验的是图，不是行为**
+#    ⇒ ⇒ 本文件用**非互斥**守卫让链序**运行期可观测** ⇒ ⇒ 「方向」第一次有了
+#    **运行期**判据。
+add_dual_backend_test(test_guard_contribution_dual
+    SOURCES chlib/test_guard_contribution_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
