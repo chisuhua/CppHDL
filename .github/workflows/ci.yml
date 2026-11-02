@@ -1015,6 +1015,23 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.event_name == 'pull_request'
     timeout-minutes: 45
+    # ---- P2 (2026-11-02): wall-clock levers ---------------------------
+    # ② 分片：verilator_e2e 的条目在仓内**全部**带
+    #    `RESOURCE_LOCK "verilator_backend"`（tests/CMakeLists.txt）
+    #    ⇒ ⇒ **单 job 内必然串行** ⇒ ⇒ 分片是唯一能把该阶段横切的
+    #    办法（两个 runner 各持各的 lock ⇒ 互不冲突）。
+    #    切分依据 = **label 过滤之后**的序号（1-based），实测：
+    #      `-I ,,2`  → 23 个
+    #      `-I 2,,2` → 23 个
+    #      交集 0 / 并集 46  ✔
+    #    ⚠️ `-I` **不写死上界**（不是 `-I 1,46,2`）⇒ 新增 parity 文件
+    #    后**无需**改本 workflow。
+    #    ⚠️ `fail-fast: false`：一个分片红不能让另一个分片被取消
+    #    （否则 `ctest -N` 的覆盖证据会随失败一起消失）。
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
 
     env:
       BUILD_VERILATOR: 'ON'
@@ -1025,6 +1042,30 @@ jobs:
       with:
         submodules: recursive
 
+    # ---- P2 lever ③: verilator 自身的构建产物缓存 ----------------------
+    # ⚠️ **这才是真正的「大象」**：`cmake --build build --target verilator`
+    # 是 ExternalProject（`BUILD_ALWAYS TRUE`）⇒ 冷构建 **10–30 min**，
+    # 而**增量构建实测 2 s**（2026-11-02 本机实测：暖 2 s / 冷 10–30 min）。
+    # 只缓存 fixture（lever ①）与分片（lever ②）都**不覆盖**这一段。
+    #
+    # ⚠️ **为什么这不会产生陈旧二进制**：key 里含
+    # `git rev-parse HEAD:third_party/verilator` ⇒ **submodule commit 一变，
+    # 缓存必然失效**（内容寻址，不是时间戳）。`BUILD_ALWAYS TRUE` 保证
+    # 构建步仍会跑 ⇒ 命中缓存时 `make` 是增量的 ⇒ 2 s。
+    - name: Compute verilator submodule SHA
+      id: vsub
+      shell: bash
+      run: |
+        echo "sha=$(git rev-parse HEAD:third_party/verilator)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache verilator build + install
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/verilator-build
+          build/verilator-install
+        key: verilator-build-${{ runner.os }}-${{ steps.vsub.outputs.sha }}
+
     # ccache cache (separate key from `build-and-test` to avoid
     # clobbering the fast-path cache).
     - name: Cache ccache
@@ -1034,6 +1075,26 @@ jobs:
         key: ccache-pr-verilator-fast-${{ github.sha }}
         restore-keys: |
           ccache-pr-verilator-fast-
+
+    # ---- P2 (2026-11-02): wall-clock lever ① -------------------------
+    # Verilator **fixture** cache. 每个 `DUAL_BACKEND_TEST_PAIR` 都会
+    # 为它那一个 DUT 生成 verilog 并编译/链接一份 `libVtop.so`
+    # （`VerilatorBackend::compute_cache_key` 的 key =
+    #  verilog 源 + sim_main 模板 + flags + verilator 版本 的 SHA-1）
+    # ⇒ ⇒ 冷编译约 **2.1 s/pair**（轻连线 DUT；mem 类 72 s/pair）。
+    #
+    # ⚠️ **为什么这个缓存不可能踩错配**：子目录名**本身就是
+    # 内容寻址的 SHA-1** ⇒ 缓存命中 ⇔ 内容相同；不命中只是重编译
+    # ⇒ ⇒ 陈旧条目的唯一代价是**磁盘**，不是正确性。
+    # ⚠️ restore-keys **故意不按 sha 收紧**：内容寻址意味着跨 commit
+    # 复用是安全的，而「只命中本 commit」等于让缓存恒 miss。
+    - name: Cache verilator fixture builds
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/cpphdl/verilator
+        key: cpphdl-verilator-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          cpphdl-verilator-${{ runner.os }}-
 
     - name: Install g++ (Linux)
       shell: bash
@@ -1120,19 +1181,48 @@ jobs:
       shell: bash
       run: cmake --build build -j$(nproc)
 
+    # ---- P2 lever ② 的护栏：分片 MUST 覆盖全集 ------------------------
+    # ⚠️ 为什么必需：`-I` 是在 **`-L` 过滤之后**的列表上做区间/步长选择
+    # （实测：`-I 1,12,2`→6 · `-I 1,24,2`→12 · `-I 1,46,2`→23 ⇒ 与过滤后
+    #  的总数线性对应）。一旦有人把步长/起点写错（例：把分片写成
+    #  `-I 0,2` —— 那是**区间 0..2** 不是「起点 0、步长 2」），
+    #  某些测试会**永远不跑而 CI 仍绿** ⇒ ⇒ 这正是本仓反复治的「假绿」。
+    # 判据三条：非空 · 两片**不相交** · 两片**并集 == 全集**。
+    - name: Verify shard partition covers all labelled tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        ids() { ctest --test-dir build -N -L verilator_e2e -LE perf "$@" 2>/dev/null \
+                  | grep -oE '^ *Test +#?[0-9]+' | tr -d ' ' | sort -u; }
+        full=$(ids | wc -l); s1=$(ids -I 1,,2 | wc -l); s2=$(ids -I 2,,2 | wc -l)
+        overlap=$(comm -12 <(ids -I 1,,2) <(ids -I 2,,2) | wc -l)
+        echo "full=$full shard1=$s1 shard2=$s2 overlap=$overlap"
+        if [ "$full" -eq 0 ]; then
+          echo "::error::verilator_e2e labelled set is empty"; exit 1
+        fi
+        if [ "$overlap" -ne 0 ]; then
+          echo "::error::shards overlap on $overlap test(s)"; exit 1
+        fi
+        if [ $((s1 + s2)) -ne "$full" ]; then
+          echo "::error::shards do not cover the labelled set ($s1 + $s2 != $full)"; exit 1
+        fi
+        echo "::notice::shard partition OK ($s1 + $s2 == $full, disjoint)"
+
     # Wall-clock measurement per R10 (also written to GH Actions
     # step summary so reviewer can see at a glance).
     - name: Run verilator_e2e non-perf tests (dual-backend parity)
       shell: bash
       run: |
-        echo "## pr-verilator-fast: ctest -L verilator_e2e -LE perf" >> "$GITHUB_STEP_SUMMARY"
+        echo "## pr-verilator-fast: ctest -L verilator_e2e -LE perf (shard ${{ matrix.shard }}/2)" >> "$GITHUB_STEP_SUMMARY"
         start=$(date +%s)
-        ctest --test-dir build --output-on-failure -L verilator_e2e -LE perf
+        ctest --test-dir build --output-on-failure \
+              --no-tests=error \
+              -L verilator_e2e -LE perf -I ${{ matrix.shard }},,2
         rc=$?
         end=$(date +%s)
         wall=$((end - start))
         echo "wall_clock_seconds=${wall}" >> "$GITHUB_STEP_SUMMARY"
-        echo "::notice::pr-verilator-fast wall clock = ${wall}s"
+        echo "::notice::pr-verilator-fast shard=${{ matrix.shard }} wall clock = ${wall}s"
         if [ $rc -ne 0 ]; then
           exit $rc
         fi

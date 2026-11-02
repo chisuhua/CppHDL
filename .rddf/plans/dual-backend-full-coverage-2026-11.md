@@ -253,6 +253,8 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 | E | 待测 | | |
 | F | 待测 | | |
 | G | 待测 | | |
+| **P2**（✅ 已实施 · CI 墙钟） | **未在 CI 实测**（本机只证了**分段**：verilator 增量构建 **2 s** vs 冷 10–30 min · fixture 缓存逐 DUT 2.1 s/pair ⇒ 命中即 ~0）⇒ ⇒ **总墙钟 MUST 由下一个 PR 的 step summary 回填** | — | — |
+| **P2 · 杠杆 ② 的负结果**（⚠️ 如实登记） | **分片未能缩短墙钟**：`-I 1,,2` 与 `-I 2,,2` 各 23 个，实测 **362 s / 361 s** ⇒ ⇒ 与**不**分片时同量级 ⇒ ⇒ 两个原因（均实测）：① **单个** `test_axi_interconnect_4x4` = **281–284 s**，吃掉一片的 **78%**；② 我在两次运行之间**新增了一个测试** ⇒ **所有后续序号奇偶翻转** ⇒ ⇒ **两片都跑了那个 281 s 的重测试**（各自 log 均命中）⇒ ⇒ ⇒ **⇒ 按序号分片**既**不均衡**也**不稳定** ⇒ ⇒ **真收益必须来自 ③（构建 10–30 min → 2 s）与 ①**；分片若要有效，需**按耗时装箱**或**把 `test_axi_interconnect_4x4` 单独剥离**（独立议题） | — | — |
 | H | 待测 | | |
 
 ---
@@ -310,7 +312,8 @@ verilator 版本）。
 | # | 杠杆 | 安全性论证 | 效果 |
 |---|---|---|---|
 | ① | **缓存 `~/.cache/cpphdl/verilator`** | key **本身内容寻址** ⇒ ⇒ 改测试的 PR 全部命中 ⇒ ⇒ 缓存**不会**产生错配 | 不改测试的 PR ⇒ **全部变热缓存**（⇒ ⇒ 墙钟从「编译成本」降到「运行成本」） |
-| ② | **`ctest -I 0,2` / `-I 1,2` 把 verilator_e2e 套件跨 job 分片** | 两个 runner **各持各的** `RESOURCE_LOCK` ⇒ ⇒ **互不冲突** | 45 min 预算 ⇒ **变 2 × 45 min** |
+| ② | **`ctest -I <start>,,<stride>` 分片**（⚠️ **不是** `-I 0,2` / `-I 1,2` —— 那两位是**区间 start,end** ⇒ 实测各只选 2 个测试且两片相同 ⇒ **44/46 静默不跑而 CI 仍绿**）⇒ 正确形式实测 **`-I 1,,2`=23 · `-I 2,,2`=23 · 交集 0 · 并集 46** | 两个 runner **各持各的** `RESOURCE_LOCK` ⇒ ⇒ **互不冲突** | 45 min 预算 ⇒ **变 2 × 45 min** |
+| ③ | **缓存 `build/verilator-build` + `build/verilator-install`**（key 含 `git rev-parse HEAD:third_party/verilator` ⇒ submodule 一变必失效） | ⚠️ **这才是「大象」**：`cmake --build build --target verilator` 是 ExternalProject（`BUILD_ALWAYS TRUE`）⇒ **冷 10–30 min / 增量实测 2 s**（2026-11-02 本机）。①② **都不覆盖**这一段 | 每轮省 **10–30 min** |
 
 ⚠️ **两者都不是任何测试批次 change 的一部分** ⇒ ⇒ ⇒ **是 CI 架构决策**
 ⇒ ⇒ ⇒ **⇒ build 提请、planner / 用户裁决**。
