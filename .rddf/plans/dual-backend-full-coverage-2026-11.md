@@ -246,7 +246,8 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 |---|---|---|---|
 | A | **13.5 s**（含 verilator 自身 JIT 的一次性 ~3 s） | 13.5 s | 44.8 min |
 | **B1**（✅ 已实施） | **57.5 s**（**5 pair** ⇒ ⇒ 10.66×5 + JIT ≈ 57.3 s ⇒ ⇒ 与 §3.0 模型一致 ✔） | **71 s**（A 13.5 s + B1 57.5 s） | 43.8 min |
-| B（其余 7 文件） | 待测（~30 pair ⇒ 估 ~5.3 min） | | |
+| **B2**（✅ 已实施 · 连接语义组） | **33 s**（**16** pair ⇒ ⇒ **≈2.1 s/pair** ⇒ ⇒ ⚠️ **比 §3 模型（10.66 s/pair）低 5 倍** ⇒ ⇒ **成本模型 MUST 按 DUT 复杂度分档**：本次全是**纯组合 / 轻连线** DUT ⇒ ⇒ AXI peripheral（批次 C）才是**重** DUT） | **104 s**（A 13.5 s + B1 57.5 s + B2 33 s） | 44.2 min |
+| B（其余：pwm / jit_concat / interpreter_jit_compat） | ⛔ **不转**（理由见 change 的 proposal「被刻意排除的」表：pwm 唯一可转用例**零判别力**且**已被** `test_axi_pwm_behavior` 覆盖；两个 JIT 文件的身份是 **JIT-vs-interpreter** parity ⇒ 与本主题**正交** ⇒ ⇒ **不为了计数而转换**） | — | — |
 | C | 待测 | | |
 | D | 待测 | | |
 | E | 待测 | | |

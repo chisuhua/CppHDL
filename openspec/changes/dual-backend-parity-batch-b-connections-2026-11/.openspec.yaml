@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-02
+# 本 change **无 spec 变更**：它只把**既有**用例转成双后端 parity（新增
+# `_behavior` 文件），**不新增也不修改任何 Requirement**。
+# 该 capability（`dual-backend-test-coverage`）治的是 macro / CMake / 排除清单，
+# **不含**「按批次记录进度」的条款 ⇒ ⇒ 计数锚点（`CTEST_TOTAL` /
+# `VERILATOR_E2E_TOTAL` / `DUAL_BACKEND_PARITY_*`）是 CI 锚点，不是契约条款。
+# ⇒ 归档时用 `openspec archive dual-backend-parity-batch-b-connections-2026-11
+#   --skip-specs`（`AGENTS.md` 的规则：只有**显式声明 no spec changes** 的
+#   change 才可用该标志 —— 本文件即该显式声明）。
+skip_specs: true

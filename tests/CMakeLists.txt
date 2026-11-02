@@ -278,6 +278,28 @@ add_dual_backend_test(test_stream_demux_fork_dual
 # ⚠️ **零回归**：本 API 是**只读**的 ⇒ 不改任何读取语义。
 add_catch_test(test_node_driver_diagnosis test_node_driver_diagnosis.cpp)
 
+# A5 批次 B（2026-11-02）：把既有**连接语义**用例转成双后端 parity。
+# ⚠️ 形态 = 新增 `_behavior` 文件 ⇒ **原文件 MUST NOT 修改**
+#    （保留 interpreter-only baseline ⇒ 零回归风险）。
+# ⚠️ 判据（N2′）= 断言数(with verilator) == 2 × 断言数(interpreter-only)
+#    ⇒ 证明 verilator 半边**真的跑了**。
+add_dual_backend_test(test_bool_connection_behavior
+    SOURCES test_bool_connection_behavior.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_operator_connection_behavior
+    SOURCES test_operator_connection_behavior.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_wires_connection_behavior
+    SOURCES test_wires_connection_behavior.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_multi_if_acceptance_behavior
+    SOURCES chlib/test_multi_if_acceptance_behavior.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
