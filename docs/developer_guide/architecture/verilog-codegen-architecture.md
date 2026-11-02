@@ -1,6 +1,6 @@
 # Verilog 代码生成架构
 
-> **版本**: v1.0 | **最后更新**: 2026-05-08 | **关联 ADR**: ADR-019
+> **版本**: v1.1 | **最后更新**: 2026-11-01 | **关联 ADR**: ADR-019
 
 ---
 
@@ -426,8 +426,44 @@ TEST_CASE("All ch_op values have Verilog mappings", "[verilog][coverage]") {
 | **单时钟域** | 所有寄存器使用 `default_clock` | ADR-008 已记录 |
 | **无复位** | 生成的 Verilog 无复位逻辑 | 待规划 |
 | **字段名丢失** | `__io` 宏不捕获端口名 | ADR-014 T002 |
-| **无层级模块** | 所有逻辑平铺在单个 `top` 模块中 | 待规划 |
+| **无层级模块** | 所有逻辑平铺在单个 `top` 模块中（无子模块实例化） | 见 §7.1 |
 | **不支持 CDC** | 异步设计需手动处理 | ADR-008 |
+
+### 7.1 层次化输出（当前不支持）
+
+`toVerilog(filename, ctx)` 只接收 `context*`（`include/codegen_verilog.h:36`），
+`print_header()` 固定发 `module top (`（`src/codegen_verilog.cpp:301`），
+`verilogwriter` 全文件**没有** `children()` 遍历、也没有实例化语句的发射路径。
+
+当前形态：
+
+- 层级信息只落在**信号名**里：节点名 = 组件路径 + `.` + 局部名
+  （`src/core/lnodeimpl.cpp:25-31`），codegen 把 `.` 换成 `_`
+  （`sanitize_name`，`src/codegen_verilog.cpp:59-88`）
+- 被驱动的子模块 `ch_in` 退化为内部 `logic` + `assign`（`:333-360`）
+- **任意层**的 `ch_out` 都会成为顶层 `output` 端口（只过滤 input，`:363-370`）
+
+要新增层次化 writer，必须先解决两个「归属」缺陷（2026-11-01 实测）：
+
+1. **成员节点的 `parent` 是父组件**：`ch_reg` / `ch_mem` / bundle 字段是在子组件
+   **构造期**创建的，那时 `Component::current()` 还是父组件 ⇒ 按
+   `node->get_parent()` 分组会把子模块的状态划到父模块。
+2. **组件名在深度 ≥ 3 时重复前缀**：`build_hierarchical_name()`
+   （`include/module.h:21`）用的是 `parent->hierarchical_name()`，而后者本身又会
+   把 `name_`（**已经是全路径**）再拼一次父路径（`include/component.h:61-73`）
+   ⇒ 实测 `Leaf` 的路径成了 `top.top.m.lf`。
+
+在这两个缺陷修复之前，可行的折中是「逐层单独生成 + 手写顶层例化」，
+做法与限制见 `docs/usage_guide/05-component-design.md` §5.4。
+
+> ⚠️ **本节已由 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` 取代**
+> （同一主题的两份描述必然漂移 ⇒ ⇒ 目标形态、模块关系、数据结构、命名规则、
+> 归属↔语义耦合与已知残留**以那份为准**）。
+> 决策：ADR-058（边界与等价性）· ADR-059（归属与命名）· ADR-060（端口策略与复用）。
+> ⚠️ 那份文档订正了本节的两处事实：**归属缺陷是 4 个**（新增「成员 `ch_module`
+> 因 `context()==nullptr` 早退」），且**归属不是纯命名属性**
+> （`src/simulator_init.cpp:95` 用 `get_parent()` 分流指令表 ⇒ 归属真源变更
+> **可能改变仿真行为** ⇒ 「逐位不变」是待验证项）。
 
 ---
 
@@ -436,6 +472,7 @@ TEST_CASE("All ch_op values have Verilog mappings", "[verilog][coverage]") {
 | 日期 | 版本 | 变更 | 作者 |
 |------|------|------|------|
 | 2026-05-08 | v1.0 | 初始版本，架构描述和操作映射表 | Sisyphus |
+| 2026-11-01 | v1.1 | §7 新增 7.1「层次化输出」：现状、端口规则与两个归属缺陷 | AI Agent |
 
 ---
 

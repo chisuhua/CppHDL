@@ -30,8 +30,9 @@
 
 | 文档 | 说明 | 状态 |
 |------|------|------|
-| [module-patterns.md](patterns/module-patterns.md) | 模块设计模式 | 🟡 规划中 |
-| [test-patterns.md](patterns/test-patterns.md) | 测试编写模式 | 🟡 规划中 |
+| [COMPONENT-LIFECYCLE-GUIDE.md](patterns/COMPONENT-LIFECYCLE-GUIDE.md) | `ch_device` vs `ch_module` 的生命周期与常见错误 | ✅ 已完成 |
+| [HIERARCHICAL-RTL-AUTHORING-GUIDE.md](patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md) | 多层模块 / 层级粒度（成层声明）/ 层次化 RTL 的写法纪律与方案审查 | ✅ 已完成 |
+| [JIT-DEBUGGING-GUIDE.md](patterns/JIT-DEBUGGING-GUIDE.md) | JIT 编译器的调试方法 | ✅ 已完成 |
 
 ### 集成
 
@@ -48,9 +49,9 @@
 | 架构文档 | 4 | 0 | 1 | 3 | 0% |
 | API 参考 | 按需 | 1 | 0 | 0 | 100% |
 | 技术报告 | 按需 | 0 | 1 | 0 | 0% |
-| 开发模式 | 3 | 0 | 0 | 3 | 0% |
+| 开发模式 | 3 | 3 | 0 | 0 | 100% |
 | 集成 | 按需 | 1 | 0 | 0 | 100% |
-| **总计** | **按需** | **2** | **2** | **6** | **~20%** |
+| **总计** | **按需** | **5** | **2** | **3** | **~50%** |
 
 ---
 

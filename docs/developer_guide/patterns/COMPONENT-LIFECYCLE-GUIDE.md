@@ -135,6 +135,23 @@ TEST_CASE("Correct with wrapper", "[correct]") {
 }
 ```
 
+### ⚠️ Common Mistake: `ch_module` as a member variable
+
+```cpp
+class Bad {
+    ch::ch_module<HazardUnit> hazard{"hazard"};  // ❌ 成员在**构造函数期**初始化
+};
+```
+
+Member initialisation runs **before** `build()` sets `Component::current()` ⇒ the
+child attaches to the **grandparent** (wrong parent, duplicate names for two
+instances of the same type); used directly as the root it fails outright
+(`Component::current() == nullptr` ⇒ ctor returns early ⇒ `io()` → SIGSEGV).
+
+Declare `ch_module` as a **local inside `describe()`** instead. Full rules and
+the member-variable alternatives (bundle / `ch_reg` / `ch_mem` / ctor injection)
+are in [Component 设计指南](../../usage_guide/05-component-design.md) §2.4 / §4.
+
 ## Architecture: Why Two Patterns?
 
 ### ch_device = Root Component
@@ -346,6 +363,7 @@ TEST_CASE("PipelineTop with ITCM/DTCM", "[pipeline]") {
 
 ## Related Files
 
+- [Component 设计指南（多层模块 / 跨层连线 / 成员接口 / RTL 输出）](../../usage_guide/05-component-design.md) — 完整的装配与连线规则
 - `include/module.h` — `ch_module` and `ch_device` implementation
 - `include/component.h` — `Component` base class, `add_child()`, `current()`
 - `include/core/context.h` — Context management

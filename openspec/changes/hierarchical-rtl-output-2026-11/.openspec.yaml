@@ -1,0 +1,14 @@
+schema: spec-driven
+created: 2026-11-02
+
+# 层次化 RTL 输出 —— 把「输出层次化 Verilog」从手工活变成框架能力。
+#
+# 决策正本 = ADR-058（边界与等价性）· ADR-059（归属与命名）·
+#          ADR-060（端口策略与复用）· ADR-061（层级粒度由用户显式控制）。
+# 本 change 只承载**实现载体**：proposal / design / tasks / specs delta。
+#
+# ⚠️ **实现顺序是承重的**：① 归属修正（ADR-059） MUST 先落 ——
+#    归属错 ⇒ emitter 会把子模块状态划进父模块 ⇒ 产出**看起来对、实际错**的 RTL。
+# ⚠️ **前置依赖**：同仓 change `component-framework-hardening-2026-10`（U-4 公共头 ODR）
+#    MUST 先落 —— 层次化 emitter 是库级代码 ⇒ 任何 2+ TU 的项目都会被 ODR 缺陷咬。
+# ⇒ **新建 2 个 capability** ⇒ 归档**禁** `--skip-specs`。
