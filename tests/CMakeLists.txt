@@ -378,6 +378,19 @@ add_dual_backend_test(test_sequential_counters_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 6 批**（2026-11-02 · change
+#    `dual-backend-parity-route-b-pipeline-2026-11`）
+#    ⇒ `chlib::pipeline`（`PipelineStage` / `PipelineStageDual` / `PipelineChain`
+#    + 函数式 `pipeline_reg`）是仓内**唯一的流水线寄存器组件族** ⇒ ⇒ 盘点实测
+#    dual 覆盖率 = **0** ⇒ ⇒ Verilog codegen 路径从未被验证。
+#    ⇒ 危险点：**rst / stall / flush 三条规则的相对优先级**（codegen 侧要写成
+#    `q <= rst ? 0 : (stall|flush) ? q : d`）⇒ ⇒ 而既有测试**全是裸 context**
+#    ⇒ ⇒ 连 interpreter 侧的「端口驱动」形态都没有覆盖。
+add_dual_backend_test(test_pipeline_dual
+    SOURCES chlib/test_pipeline_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
