@@ -264,14 +264,38 @@ analysis(root):
 | 5 | 用户把所有组件都声明成层 ⇒ 回到碎片化 | 诊断 API（路径图 P6）报告每层规模；**MUST NOT** 用启发式替用户裁剪 |
 | 6 | 下游 ODR 缺陷未修 ⇒ 多 TU 项目链接失败 | 前置依赖：`component-framework-hardening-2026-10`（U-4） |
 
-### 6.2 P0 之前的 **spike**（阻塞项 · oracle R1）
+### 6.2 P0 之前的 **spike**（阻塞项 · oracle R1）—— ✅ **已完成（2026-11-02）**
 
-「结构同构」的 RTL 树提取 **`--xml-only` 在本仓不可用**（verilator **5.048** 已删除该选项，
-`third_party/verilator/Changes:228`）⇒ ⇒ **P0 之前 MUST 先花半天验证**可用路径：
+**结论：可行** ⇒ 「结构同构」判据**成立**，C3/C6 的排期与成本**不变**。
 
-- 候选 ①：`verilator --json-only`（`bin/verilator:446`）⇒ `.tree.json` + `.tree.meta.json`
-  ⇒ 用 `ptrNames` 把 `AstCell::m_modp` 解成 module 名（`src/V3Ast.cpp:1496-1505`）；
-- 候选 ②：`--dump-tree`（会打 `-> modp()`）；
-- **出口判据**：能机械产出「父子 module + 实例名 + module 名」三元组 ⇒ 判据成立；
-  **提不出** ⇒ ⇒ 结构同构判据 MUST 重新设计（C3/C6 的排期与成本**都不成立**）。
-- ⚠️ 输入 MUST 用**手写**的 3 层 SV（不依赖 emitter）⇒ 否则这个 spike 自己就成了「自证」。
+**实测机制**（verilator **5.048**，`build/verilator-install/bin/verilator`）：
+
+| 步骤 | 实测 |
+|---|---|
+| ① 提取 | `verilator --json-only --Mdir obj_dir three_layer.v` ⇒ `.tree.json` + `.tree.meta.json` |
+| ② 结构 | `.tree.json` 的 **`modulesp` 是「模块列表」**（不是单指针）；每项带 `addr`（如 `'(M)'`）与 `name` |
+| ③ 实例 | 每个模块的 `stmtsp` 里 `type == 'CELL'` 的项 = 一个**实例**，带 `name`（实例名）与 `modp`（指向被实例化模块的 `addr`） |
+| ④ join | **`modp` 在 `addr → name` 表里查** ⇒ ⇒ 直接得到 `(parent_module, inst_name, module_name)` |
+
+⚠️ **比 oracle 预估的更简单**：oracle 曾担心「实例→模块名只能靠 `m_modp` 指针 join 到
+`.tree.meta.json` 的 `ptrNames` 表」⇒ ⇒ **实测不需要**：`modulesp` 本身就是列表，
+每个 CELL 的 `modp` 直接指向列表项的 `addr` ⇒ ⇒ **一次查表即可**。
+
+**实测输出**（手写 3 层 fixture ⇒ 提取器产出）：
+
+```
+mid_mod	u_leaf	leaf_mod
+top_mod	u_mid	mid_mod
+```
+
+**已固化为可复算资产**（⇒ 不再是「一次性探针」）：
+
+| 资产 | 作用 |
+|---|---|
+| `scripts/lib/verilog_tree_extract.py` | 提取器（`--json` 可选输出形态） |
+| `tests/fixtures/hierarchical_tree_extract/{three_layer.v,expected.tsv,README.md}` | **手写** 3 层 fixture + 期望结果（⚠️ 手写 ⇒ 不自证） |
+| `scripts/verify_hierarchical_tree_extract.sh` | 护栏 **R0** fail-closed（verilator/提取器/fixture 缺一即失败）· **R1** 逐字节相等 · **R2** 负向对照（改坏实例名 ⇒ 结果 MUST 变 ⇒ 非恒绿） |
+| `.github/workflows/ci.yml`（`pr-verilator-fast`，`if: matrix.shard == 1`） | CI 挂载点（该 job **已有** verilator 构建 ⇒ 零额外成本） |
+
+⚠️ **`--xml-only` 在本仓不可用**（verilator **5.048** 已删除，`Changes:228`）⇒ ⇒
+判据的提取源**钉死为** `--json-only`（`--dump-tree` 备选路径**未**采用）。

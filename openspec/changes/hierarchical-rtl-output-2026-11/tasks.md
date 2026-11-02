@@ -7,12 +7,15 @@
 
 ---
 
-## C0 —— **P0 之前的 spike**（阻塞项 · oracle R1）
+## C0 —— **P0 之前的 spike**（阻塞项 · oracle R1）—— ✅ **已完成 2026-11-02**
 
-- [ ] 0.1 用**手写**的 3 层 SV 验证 `verilator --json-only` 能否提 `(parent_module, inst_name,
-      module_name)`（`.tree.json` + `.tree.meta.json` 的 `ptrNames` join）；备选 `--dump-tree`
-- [ ] 0.2 **出口判据**：能机械产出上述三元组 ⇒ 结构同构判据成立；**提不出** ⇒
-      该判据 MUST 重新设计（C3/C6 排期与成本都不成立）⇒ ⇒ **先停，回到 ADR**
+- [x] 0.1 用**手写**的 3 层 SV 验证 `verilator --json-only` 能否提 `(parent_module, inst_name,
+      module_name)` ⇒ ✅ **能**（机制：`modulesp` 是列表 + CELL 的 `modp` ↔ MODULE 的 `addr` 查表）
+- [x] 0.2 **出口判据达成** ⇒ 结构同构判据**成立**（C3/C6 排期与成本不变）
+- [x] 0.3 **固化为可复算资产**：`scripts/lib/verilog_tree_extract.py` +
+      `tests/fixtures/hierarchical_tree_extract/{three_layer.v,expected.tsv}` +
+      `scripts/verify_hierarchical_tree_extract.sh`（R0 fail-closed · R1 逐字节 · R2 负向对照）
+      + CI 挂载（`pr-verilator-fast`，`if: matrix.shard == 1`）
 
 ## C1 —— 归属与命名修正（ADR-059）
 

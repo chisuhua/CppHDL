@@ -63,7 +63,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | 阶段 | 内容 | 前置 | 产出 | 验收 | 预估 |
 |---|---|---|---|---|---|
 | **P0** | **归属与命名修正**（ADR-059 全量）：作用域栈 · `node_owner()` · `ch_module` parent · **context 来源** · `build_hierarchical_name` · `local_name_` / `module_type_name()` | 无 | 归属正确 + 命名不重复 | ADR-059 §5 全部判据 | ~2 天 |
-| **P0-0** | **spike（阻塞项）**：验证 `verilator --json-only` 能否提 `(parent_module, inst_name, module_name)`（`--xml-only` 在仓内 **5.048** 已删除） | 无 | 一个可机械比对的 module 树提取器（或「判据必须重设计」的结论） | 3 层**手写** SV 上提取成功 | ~0.5 天 |
+| **P0-0** | ✅ **spike（阻塞项 · 已完成 2026-11-02）**：`verilator --json-only` 能否提 `(parent_module, inst_name, module_name)` ⇒ **能**（`modulesp` 是列表 + CELL 的 `modp` 查表）⇒ 已固化 `scripts/lib/verilog_tree_extract.py` + `tests/fixtures/hierarchical_tree_extract/` + `scripts/verify_hierarchical_tree_extract.sh`（含负向对照）+ CI 挂载 | 无 | 可机械比对的 module 树提取器 | 3 层**手写** SV 上提取成功 ✅ | ~0.5 天（已耗） |
 | **P0'** | **层级粒度声明机制**（ADR-061）：`CH_HIERARCHY_LAYER` 类级宏 · `ch_layer<T>` / `ch_inline<T>` 两个新 API 名 · `Component::is_layer()` · **无 active parent 处的装配点**（下游 N2） | P0 | 粒度可声明 · 装配点不受限 | ADR-061 §5 全部判据 | ~1.5 天 |
 | **P1** | **分析层**：`ModuleDef` / `InstanceDef` / 端口表 / 隐式端口识别 / 冒泡识别；产出**可逐字节比对的 golden 文本** | P0' | 模块清单 + 端口表 + 连接表（golden） | 5 个 DUT 与 `tests/golden/` 快照**逐字节比对零差异**（人工只**生成**快照，不**判定**） | ~2 天 |
 | **P2** | **emitter 拆分**：把 `verilogwriter` 拆成「接收节点子集 + 端口表 + 名字表」的 `ModuleEmitter` | P0 | 扁平产物**逐字节不变** | 相对 **P0 之后**的基线逐字节不变 + `ctest -LE perf` 全绿 | ~3 天 |

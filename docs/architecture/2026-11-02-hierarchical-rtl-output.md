@@ -278,7 +278,7 @@ P1 change 的 `design.md`（先定子模块端口名 → 再由父层实例化�
 | 9 | **>64-bit 端口的 DUT 无法进入 Verilator 等价性验证**（ADR-035 的 cap） | ⚠️ 已知 ⇒ 等价性验证的 DUT 集合 MUST **排除**这类设计 |
 | 10 | 层次化产物的**综合 / 布局效果评估** | 不做 ⇒ 需真实综合工具，超出本仓范围 |
 | 14 | **下游装配形态与本方案的第二格冲突** —— `make_unique + build(ctx)` 不 `add_child` ⇒ 被拒绝；下游 MUST 补 `add_child` 或改用 `ch_layer`（后者以 U-4 为前置） | ⚠️ 已登记（ADR-062 决策⑤）⇒ 需下游同步 |
-| 12 | **结构同构的 RTL 树提取工具未验证** —— `--xml-only` 在仓内 verilator **5.048** 已被删除（`Changes:228`）⇒ 只能走 `--json-only` + `.tree.meta.json` 指针 join | ⚠️ **P0 之前的阻塞 spike**（见 change 的 `design.md` §6.2）⇒ 提不出 ⇒ 判据重设计 |
+| 12 | ~~**结构同构的 RTL 树提取工具未验证**~~ | ✅ **已解决**（2026-11-02 · C0-0 spike）：`verilator --json-only` 的 `.tree.json` 里 `modulesp` 是**模块列表**、CELL 的 `modp` 可**一次查表** ⇒ ⇒ 提取器 `scripts/lib/verilog_tree_extract.py` + 护栏（含负向对照）+ CI 挂载已落地 |
 | 13 | **Verilator backend 的「只增不改入口」远不止加一个函数** —— 端口表 / `emit_sim_main_postlude` / 单文件编译 + 缓存 key 都按「ctx 全量 = 顶层端口」写死 | ⚠️ 工作量重估 ~4 天 → **~7–9 天**（ADR-058 §2.3 / design §6） |
 | 11 | **用户看不到自己的设计是否「层次友好」**（诊断 API）· **用户拿不到自己 DUT 的等价性反馈**（公共 helper） | ⚠️ 用户视角审查提出 ⇒ **待用户拍板**（路径图「用户视角审查新增的两个产品缺口」） |
 

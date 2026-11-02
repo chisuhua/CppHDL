@@ -259,12 +259,16 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
       **节点数、父子关系、实例名** MUST **一一对应** ⇒ ⇒ （计数对但树形错 ⇒ **不通过**）
       ⚠️ **「RTL module 树」MUST 从产物本身独立提取** ⇒ ⇒ MUST NOT 复用分析层的
       `ModuleDef` / `InstanceDef`（⇒ 否则判据**自证**，「计数对但树形错」**永远不可触发**）
-      ⇒ ⇒ 提取工具 MUST 用 `verilator --json-only`（`.tree.json` + `.tree.meta.json`）
-      或 `--dump-tree` ⇒ ⇒ ⚠️ **`--xml-only` 已作废**：仓内钉的 verilator 是 **5.048**
+      ⇒ ⇒ 提取工具 **MUST 用 `verilator --json-only`**（`.tree.json`）
+      ⇒ ⇒ ⚠️ **`--xml-only` 已作废**：仓内钉的 verilator 是 **5.048**
       （`third_party/verilator/configure.ac:15`），其 `Changes:228` 明写「Remove deprecated
       `--xml-only`」⇒ ⇒ **该选项在本仓不可用**（oracle R1 实测）
-      ⇒ ⇒ ⚠️ **P0 之前 MUST 先做 spike**：拿一个 3 层产物提一份
-      `(parent_module, inst_name, module_name)` 列表；**提不出** ⇒ ⇒ 本判据 MUST 重新设计
+      ⇒ ⇒ ✅ **提取机制已实测可行**（2026-11-02 · C0-0 spike）：`.tree.json` 的 `modulesp`
+      是**模块列表**（每项带 `addr` 与 `name`），每个模块的 `stmtsp` 里 `type == 'CELL'`
+      的项带 `name`（实例名）与 `modp`（指向被实例化模块的 `addr`）
+      ⇒ ⇒ **一次查表**即得 `(parent_module, inst_name, module_name)`
+      ⇒ ⇒ 提取器已固化为 `scripts/lib/verilog_tree_extract.py` + 护栏
+      `scripts/verify_hierarchical_tree_extract.sh`（含负向对照 ⇒ 非恒绿）
 - [ ] **效果判据**：**映射表** MUST 被产出，且 MUST 覆盖被观测的全部信号
 - [ ] **效果判据**：对显式声明的观测集合 `O`（**非空**且**至少一个随激励变化**）⇒
       `flat[O] ≡ hier[O]` **逐拍全等**（≥ 5 个 DUT：两层 / 三层+兄弟连线 /
@@ -325,3 +329,4 @@ output**（`src/codegen_verilog.cpp:333-362`）⇒ ⇒ 顶层 module 端口表 M
 | 2026-11-02 | **v2.3**：① 裁决 **`owner(n) == nullptr` ⇒ 归顶层 module（+ `CHWARN`）**，**MUST NOT** 拒绝（理由：clock/reset 是 context 级基础设施 · 与扁平行为一致 · 语义上确是顶层胶合逻辑）⇒ 阻塞 P1 的未决项清零；② 订正 §2.2 的映射表理由（原先写「层次化侧靠 per-module 计数」，与 ADR-061 决策 ④ 的 ctx 级全局命名冲突）；③ `VerilogHierOptions` 补 `granularity` 字段 |
 | 2026-11-02 | **v2.4**（据 critic 第 1 轮 2 BLOCKER）：① **新增 `owner(n) != nullptr` 但 `owner ∉ subtree(top)` 的裁决 = 响亮拒绝**（下游 `make_unique`+`build(ctx)` 形态的组件不在树里 ⇒ emitter 找不到 ⇒ **整块逻辑静默消失**，且三条判据**结构性失明**）；② **`CHWARN` 排除 clock/reset**（否则每个含寄存器的设计恒响）；③ **「允许差异」定为空集**（可执行：`cmp` 退出码 0）+ 端口顺序 MUST 复刻扁平；④ **结构同构的 RTL 树 MUST 从产物独立提取**（`verilator --xml-only` 或独立的文本解析）⇒ 否则判据自证；⑤ 订正映射表理由（权威两侧相同，要映射的是「一个信号出现在哪些位置」）；⑥ 「零回归」与「inline ≡ 成层」两条判据措辞拆开 |
 | 2026-11-02 | **v2.5**（据 oracle 实测，6 条）：① 结构同构的提取工具**作废重定** —— `--xml-only` 在仓内 verilator **5.048** 已被删除（`Changes:228`）⇒ 改 `--json-only` / `--dump-tree`，并**新增 P0 前置 spike**（提不出 ⇒ 判据重设计）；② **`⊆` 单独不作判据**（丢端口正是子集方向）⇒ 改「输入集合**相等** + 输出集合**等于精确期望集**」；③ `has_seq` **补 `ch_mem` 写端口**（`codegen_verilog.cpp:1310` 发 `always_ff`）· **根 module 无条件发 clock/reset**（扁平就是无条件）；④ 映射表补 **`node_id` + `hier_top_port_name`**（否则 backend 用不了）；⑤ 返回类型改 `std::expected` + **错误模型**（校验先于 I/O · 临时目录 + rename · 不得落在 `catch(...)` 内） |
+| 2026-11-02 | **v2.6**（C0-0 spike 完成）：「结构同构」的提取机制**实测可行** ⇒ `verilator --json-only` 的 `.tree.json` 里 `modulesp` 是**模块列表**、CELL 的 `modp` 可直接查表 ⇒ ⇒ 「P0 之前 MUST 先做 spike」这条**前置已消解** ⇒ 提取器 + fixture + 护栏（含负向对照）已固化并挂 CI |

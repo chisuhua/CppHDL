@@ -97,6 +97,9 @@ verilator-prefix/
 # 这些 .v 文件是 Verilator 编译中间产物，每次跑测试都重新生成
 /tests/*.v
 /tests/**/*.v
+# ⚠️ 但 `tests/fixtures/**` 下的 .v 是**手写源文件**（护栏的固定输入）⇒ MUST 入库
+#    （否则护栏在干净 checkout 上 fail-closed 失败 ⇒ CI 假红）
+!tests/fixtures/**/*.v
 
 # rdd-workflow runtime state (per rdd-workflow reference .gitignore):
 # .rddf/state/ and .rddf/wt/ are ephemeral per-session artifacts
