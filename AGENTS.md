@@ -5,6 +5,7 @@
 | `feat-cache-rewrite` | completed | phase-4, phase-5 | cache 子系统从 C-style 数组重写为 ch_mem（ADR-039）+ Sync/Async 双变体（ADR-041）+ stub 物理退役（ADR-037） |
 | `feat-dual-backend-coverage` | active | phase-4, phase-5 | 单元测试统一跑 interpreter + verilator 双后端（5 阶段推进） |
 | `feat-hdl-logical-deprecation` | active | phase-4, phase-5 | ADR-036 逻辑算子 deprecation 标记 → 全量迁移 → 移除（removal gate） |
+| `feat-hierarchical-rtl-output` | active | phase-5 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致） |
 | `feat-platform-matrix` | active | phase-3, phase-5 | CI 平台矩阵扩展（macOS-14 已启用 → Windows-2022） |
 | `feat-riscv-mini-convergence` | completed | phase-5 | 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 |
 | `feat-riscv-mini-rtl-debt` | active | phase-5 | riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增） |
@@ -61,6 +62,8 @@ CppHDL/
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
 | State machine DSL | `include/chlib/state_machine.h` |
 | If/else statement DSL | `include/chlib/if_stmt.h` |
+| 多层模块装配 / 跨层连线 / 成员接口 / RTL 输出形态 | `docs/usage_guide/05-component-design.md` |
+| 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
@@ -271,6 +274,12 @@ bash scripts/verify_roadmap_fragments.sh --self-test
 bash scripts/verify_assertion_quality_fixtures.sh
 
 # Run Catch2 tests
+# ⚠️⚠️ 改了 `src/**` / `include/**` 之后，跑 ctest 前 MUST 先**全量重建**：
+#     cmake --build build -j$(nproc)
+# `ctest` **不会**自动重新构建 ⇒ 只重建了被点名的 target 时，其余 target 跑的是
+# **旧二进制** ⇒ 假绿（实测：`sread` 禁读拍语义改动后「213/213 全绿」是假的，
+# 全量重建后 `test_mem_timing` 立刻转红）。与「还原源码 ≠ 复原（二进制也是状态）」
+# 同型。
 ctest --output-on-failure
 
 # Run specific example
