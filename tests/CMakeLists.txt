@@ -507,6 +507,27 @@ add_dual_backend_test(test_mem_multiplex_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（新文件）—— `chlib/arithmetic_advance.h` 首次进双后端 parity**（2026-11-02）
+#    ⇒ 实测「含 `DUAL_BACKEND_TEST_PAIR(` 调用」的源文件全集里**无任何一个**
+#      include 它 ⇒ ⇒ **零双后端覆盖**（CLA / CSA / Wallace / Booth / 非恢复除法 / 定点四则
+#      —— 全是**进位/移位链**，正是 interpreter 与 Verilog 最易分叉处）。
+#    ⇒ ⚠️ **不是转换**：`tests/chlib/test_arithmetic_advance.cpp` 用**裸 context**
+#      （ctx_swap、零 ch_device、无顶层端口）⇒ 命中 R6 排除项 ⇒ 结构上不可转换。
+#    ⇒ ⚠️ **且不在任何既有批次清单里**（计划漏项）⇒ 「新写」路线不受批次表约束。
+#    ⇒ 🔴 读实现时发现**三处既有缺陷 / 名不副实**（本批**不修**，独立立项）：
+#      ① `wallace_tree_multiplier` 与 `booth_multiplier` **函数体逐字相同**
+#         （都是 `a*b`）⇒ 既不是 Wallace 树也不是 Booth 编码 ⇒ 与 `fwft_fifo` /
+#         `stream_arbiter_sequence` 同型的「名字 over-promise」；
+#      ② `carry_save_adder` 的 `carry` 声明 N 位而内部 `temp` 是 N+1 位
+#         ⇒ `temp << 1` **最高位（真正的 carry-out）被静默截断**；
+#      ③ `fixed_point_divider` 的 `if (b == 0_d)` 是 **C++ 控制流作用于硬件值**
+#         ⇒ `ch_bool::operator uint64_t()` 对非 const 节点恒返 0 ⇒ 建图期恒假
+#         ⇒ **除零保护是死代码**（故本文件**不喂** b==0 —— interpreter 侧会 SIGFPE）。
+add_dual_backend_test(test_arithmetic_advance_dual
+    SOURCES chlib/test_arithmetic_advance_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

@@ -11,12 +11,13 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **53**（目标 60，差 **7**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **251** | 同上 |
-| `CTEST_TOTAL` | **230** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **62** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **219** | `ctest -N -LE perf \| tail -1` |
+| **parity 源文件数** | **54**（目标 60，差 **6**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **254** | 同上 |
+| `CTEST_TOTAL` | **231** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **63** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **220** | `ctest -N -LE perf \| tail -1` |
 | `tests/test_*.cpp` | **130** | `ls tests/test_*.cpp \| wc -l` |
+| `tests/chlib/test_*.cpp` | **45** | `ls tests/chlib/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
 ⚠️ 工作区里有一批**并发会话**的文件（`hierarchical-rtl-output`：`docs/adr/ADR-058..062`、
@@ -29,9 +30,9 @@
 |---|---|
 | 第 1 会话（11 commit） | 路线 B 第 6 批 · `sread` 禁读拍修复与归档 · 路线 A **D 批第 1 个**（`test_mem_connection_dual`，4 pair） |
 | 第 2 会话（2 commit） | 路线 A **D 批第 2 个**（`test_mem_comb_read_dual`，2 pair / 14 断言）+ 归档 + 台账 47 → **49** |
-| 本会话（4 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53** |
+| 本会话（6 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54** |
 
-parity 轨迹：**37 → 49 → 52 → 53**。
+parity 轨迹：**37 → 49 → 52 → 53 → 54**。
 
 ## 3. 🔴 每个批次的**前置条件**：可转性 4 问（已固化进 plan §4）
 
@@ -61,7 +62,7 @@ D 批第 3 个文件里，我按 T2 边界**预测** N4（`aread` → `always_ff
 | `chlib/bitwise.h` | ✅ 本批 | 9 条 select 链 / 移位 / 掩码 |
 | `chlib/onehot.h` | ✅ 本批 | 译码/编码 select 链 |
 | `chlib/forwarding.h`（`ForwardingMux`） | ✅ 本批 | ADR-047 D4 的 `is_jump` 返回地址 |
-| `chlib/arithmetic_advance.h` | ⬜ **下一批建议做** | CLA / CSA / Wallace / Booth / 非恢复除法 / 定点 ⇒ **多级进位链** ⇒ 手推期望最重 ⇒ 也最可能挖出真分歧 |
+| `chlib/arithmetic_advance.h` | ✅ 本会话 | CLA / CSA / Wallace / Booth / 非恢复除法 / 定点；**挖出 3 个既有缺陷**（见 §5.A） |
 | `chlib/selector_arbiter.h` | ⬜ | `tests/chlib/test_selector_arbiter.cpp` |
 | `chlib/stream_arbiter.h` | ⬜ | 3 个 arbiter（priority / round_robin） |
 | `chlib/stream_pipeline.h` | ⬜ | 3 个 pipe（ADR-055 刚修过 ⇒ **回归价值高**） |
@@ -72,10 +73,26 @@ D 批第 3 个文件里，我按 T2 边界**预测** N4（`aread` → `always_ff
 
 ## 5. 下一步（按优先级）
 
-### A. `chlib/arithmetic_advance.h`（路线 B 新文件，**下一批建议做**）
-CLA / CSA / Wallace 乘法器 / Booth 乘法器 / 非恢复余数除法 / 定点加减乘除 ⇒
-**零 dual 覆盖** ⇒ 且**多级进位链** = interpreter（逐节点求值）与 Verilog（连续赋值）
-最易分叉的地方。⚠️ 期望值必须**逐位手推**（本批已在 bitwise 上踩过一次笔误）。
+### A. ~~`chlib/arithmetic_advance.h`~~ ✅ **已完成**（`test_arithmetic_advance_dual`，3 pair / 104）
+**变异 12/12 全抓**（每个断言组都有专属变异）。🔴 **挖出三个既有缺陷 / 名不副实（未修，需独立立项）**：
+1. **`wallace_tree_multiplier` 与 `booth_multiplier` 函数体逐字相同**（都是 `a*b`）
+   ⇒ 既不是 Wallace 树、也不是 Booth 编码 ⇒ 与 `fwft_fifo` / `stream_arbiter_sequence`
+   同型。⚠️ 处置提醒：**它们不是「同一个函数」而是两个模板**（各自的硬件实例都能被观测）
+   ⇒ 故本批用「两者逐位相同」把它**钉住**；改名/重写会改 RTL 结构 ⇒ 需 **ADR**。
+2. **`carry_save_adder` 的 `carry` 静默截断**：签名 `ch_uint<N>`，内部 `ch_uint<N+1> temp`
+   ⇒ `temp << 1` 的**最高位（真 carry-out）被丢**。本批**按签名行为**断言并在向量表里
+   刻意放 `(0x80,0x80,0x00)`（只有 carry-out 置位）⇒ 截断被显式钉住。
+3. **`fixed_point_divider` 的除零保护是死代码**：`if (b == 0_d)` 是 **C++ 控制流作用于
+   硬件值** ⇒ `ch_bool::operator uint64_t()` 对非 const 恒返 0（`src/lnode/bool.cpp:44-49`）
+   ⇒ 建图期恒假 ⇒ 硬件是裸 `(a<<Q)/b`。⚠️ **本批故意不喂 b==0**（interpreter 是原生
+   整数除法 ⇒ **SIGFPE**）⇒ 谁要修它，MUST 同时把该守卫改成**真 `select`**
+   （参照 `non_restoring_divider` 的写法）。
+
+### A'. 路线 B 剩余候选（**剩 3 个**，各自先过 4 问）
+`chlib/selector_arbiter.h` · `chlib/stream_arbiter.h` · `chlib/stream_pipeline.h` ·
+`chlib/stream_width_adapter.h`（⚠️ 后两个与 ADR-054/055 刚修过的 ready 语义重叠 ⇒
+**回归价值高**，但也最可能与既有 dual 文件（`test_stream_demux_fork_dual` /
+`test_stream_builder_backpressure_dual`）语义重复 ⇒ 必须逐条过 4 问 ①）。
 
 ### B. `tests/chlib/test_cache_complete.cpp`（E 批）—— **能解一个 spec 矛盾**
 ⚠️ `openspec/specs/dual-backend-test-coverage/spec.md` **自相矛盾**：

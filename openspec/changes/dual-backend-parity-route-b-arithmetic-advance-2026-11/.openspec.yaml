@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-02
+# 本 change **无 spec 变更**：只新增一个双后端 parity 测试文件（路线 B · 新文件），
+# 不新增也不修改任何 Requirement。`objective-test-coverage-100pct` §2 的
+# 「parity 源文件数」是**度量**，不是契约条款。
+# ⚠️ 本批挖出的三个既有缺陷（wallace≡booth 名不副实 / CSA 的 carry 截断 /
+#    fixed_point_divider 的除零守卫是死代码）**都没有** capability 载体，且修复
+#    （改名、改位宽、改守卫形态）都会改变生成的 RTL 或公开行为 ⇒ 需 ADR / 独立立项
+#    ⇒ ⇒ 本 change 只在测试与注释里把它们**钉住**，不修。
+# ⇒ 归档用 `openspec archive ... --skip-specs`（显式声明见本文件）。
+skip_specs: true
