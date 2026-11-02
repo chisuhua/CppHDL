@@ -499,11 +499,16 @@ TEST_CASE("Memory Timing - Sequential Writes and Reads",
 // Enable-gated sync read port.
 //
 // The read port writes its own data_map slot and the data proxy copies it
-// (see the `read_port -> data_proxy` edge). When the enable is low the port
-// does NOT update its slot, so the observable value must HOLD — the same
-// semantics as the generated Verilog `always_ff` (the inner `if (enable)`
-// has no else branch). This path is the one that would silently read 0 if
-// only the async port were switched to writing its own slot.
+// (see the `read_port -> data_proxy` edge).
+//
+// ⚠️ 订正（change `sread-disable-cycle-divergence-2026-11`）：此前的注释写
+// 「enable 为低时该端口**不更新**其槽位 ⇒ 观测值 MUST **保持** —— 与生成的
+// Verilog `always_ff` 一致（内层 `if (enable)` **没有 else 分支**）」。
+// ⇒ ⇒ **两处都错**：生成的 Verilog **有** else 分支，且按 Verilog 的
+// **dangling-else** 规则它与内层 `if (enable)` 配对 ⇒ **`enable == 0` 清零**；
+// 而 `default_reset` 为高时整个外层体被跳过（那才是「保持」）。
+// ⇒ ⇒ 本 capability 的裁决 = **对齐 Verilog（清零）**（`mem-read-timing` 的
+// 「sread 的禁读拍 MUST 清零输出」）⇒ ⇒ 下面的断言因此是 **0**。
 // --------------------------------------------------------------------------
 class EnabledSReadMem : public ch::Component {
 public:
@@ -527,7 +532,7 @@ public:
     }
 };
 
-TEST_CASE("Memory Timing - sread holds its value while the enable is low",
+TEST_CASE("Memory Timing - sread clears its value while the enable is low",
           "[mem][timing][sread-enable]") {
     ch_device<EnabledSReadMem> device;
     Simulator simulator(device.context());
@@ -544,14 +549,15 @@ TEST_CASE("Memory Timing - sread holds its value while the enable is low",
     REQUIRE(static_cast<uint64_t>(simulator.get_port_value(data_out)) ==
             static_cast<uint64_t>(0xB2));
 
-    // Enable low: the port must HOLD its last value — not read 0, and not
-    // read the new address. (Verilog `always_ff` hold semantics.)
+    // Enable low: the port MUST output 0 — it does not sample the new address
+    // and it does NOT hold the previous value. (Matches the generated Verilog:
+    // the dangling `else` belongs to the inner `if (enable)` ⇒ clears.)
     simulator.set_input_value(addr_in, static_cast<uint64_t>(3));
     simulator.set_input_value(en_in, static_cast<uint64_t>(0));
     simulator.tick();
     simulator.tick();
     REQUIRE(static_cast<uint64_t>(simulator.get_port_value(data_out)) ==
-            static_cast<uint64_t>(0xB2));
+            static_cast<uint64_t>(0x0));
 
     // Enable high again: the port samples mem[3] = 0xD4.
     simulator.set_input_value(en_in, static_cast<uint64_t>(1));
