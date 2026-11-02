@@ -34,7 +34,7 @@
 
 - [x] capability `mem-read-timing` **ADDED ×1**（3 个 Scenario：清零且一致 /
       裁决可追溯 / `chlib::memory` RAM 族被覆盖）⇒ 归档 **MUST NOT** `--skip-specs`
-- [ ] 锚点：`CTEST_TOTAL` **224** · `VERILATOR_E2E_TOTAL` **56** ·
+- [x] 锚点：`CTEST_TOTAL` **224** · `VERILATOR_E2E_TOTAL` **56** ·
       `DUAL_BACKEND_PARITY_TOTAL` **47** · `PAIRS` **237** · non-perf **213** ·
       `tests/test_*.cpp` **127** · `tests/chlib/test_*.cpp` **41**
 - [x] `ctest -LE perf` **213/213** 零回归
