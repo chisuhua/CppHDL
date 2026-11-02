@@ -26,8 +26,8 @@
 - [x] 实测：`ctest -N` **225** · `-L verilator_e2e` **57** · `-LE perf` **214** ·
       `verify_dual_backend_parity.sh` **PARITY_COUNT=48 / PAIRS=241** ·
       `tests/test_*.cpp` **128**
-- [ ] AGENTS.md 锚点同步（4 个 anchor + 2 条源文件计数 + NOTES 条目）
-- [ ] ⚠️ **全量重建后**跑 `ctest -LE perf`（AGENTS.md COMMANDS 段的强制要求：
+- [x] AGENTS.md 锚点同步（4 个 anchor + 2 条源文件计数 + NOTES 条目）
+- [x] ⚠️ **全量重建后**跑 `ctest -LE perf` **214/214**（AGENTS.md COMMANDS 段的强制要求：
       `ctest` 不会自动重建 ⇒ 只重建被点名的 target 会跑**旧二进制** ⇒ 假绿）
-- [ ] 全部 `scripts/verify_*.sh` exit 0
-- [ ] 归档：`--skip-specs`（`.openspec.yaml` 已显式声明）
+- [x] 全部 `scripts/verify_*.sh` exit 0
+- [x] 归档：`--skip-specs`（`.openspec.yaml` 已显式声明）
