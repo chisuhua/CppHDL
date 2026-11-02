@@ -350,6 +350,18 @@ add_dual_backend_test(test_sync_fifo_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 4 批**（2026-11-02 · change
+#    `dual-backend-parity-route-b-arithmetic-encoding-2026-11`）
+#    ⇒ `chlib` 的**编码器/译码器/BCD/格雷码**在 41 个 dual 文件里**零覆盖**
+#    ⇒ ⇒ 它们的 Verilog codegen 路径从未被验证。
+#    ⇒ 而它们全由 **`select` 链**实现 ⇒ ⇒ **链的方向**决定语义 ⇒ ⇒ 而方向在
+#    interpreter 侧【几乎不可观测】（既有测试只覆盖单 bit ⇒ 分不出方向）
+#    ⇒ ⇒ 「多 bit 同时置位选哪个」这条真正的语义，两条后端都没被钉过。
+add_dual_backend_test(test_arithmetic_encoding_dual
+    SOURCES chlib/test_arithmetic_encoding_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
