@@ -24,7 +24,8 @@ rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MU
 |---|---|---|---|
 | `stream_demux` | 把一个上游流按 `select` **分流**到 N 路中的**一路**；上游 ready 由**被选中**输出的消费端驱动 | `tests/test_stream_demux_fork_dual.cpp` · `DUAL_BACKEND_TEST_PAIR` | 2026-11-02 方向修正（ADR-056）：修复前输出的 ready 由**输入**驱动（颠倒） |
 | `stream_fork` | 把一个上游流**广播**到 N 路；同步模式下**全部**输出就绪才推进 | `tests/test_stream_demux_fork_dual.cpp` · `DUAL_BACKEND_TEST_PAIR` | 2026-11-02 同步语义落地（ADR-057）：修复前 `synchronous` 参数**不改变任何真实语义** |
-| `stream_arbiter_round_robin` | **轮转**仲裁（持续有效的通道 MUST NOT 饿死） | `tests/chlib/test_stream.cpp` · `[stream][arbiter][round_robin][rotation]` | 2026-10-31 真轮转修复（修复前恒传 `last_grant = 0_d` ⇒ 低位通道饿死） |
+| `stream_arbiter_round_robin` | **轮转**仲裁（持续有效的通道 MUST NOT 饿死） | `tests/chlib/test_stream_arbiter_dual.cpp` · `[chlib][stream][arbiter][round_robin][grant][ready][dual]` | 2026-10-31 真轮转修复（修复前恒传 `last_grant = 0_d` ⇒ 低位通道饿死）⇒ 2026-11-03 首次双后端验证（判别性用例从 `tests/chlib/test_stream.cpp` · `[stream][arbiter][round_robin][rotation]` 换成双后端版）|
+| `stream_arbiter_priority` | 固定优先级仲裁（**高位优先**：`priority_encoder` 的语义） | `tests/chlib/test_stream_arbiter_dual.cpp` · `[chlib][stream][arbiter][priority][grant][ready][dual]` | 2026-11-03 首次双后端验证 ⇒ 登记（⚠️ 方向 = **高位优先**，与 `priority_selector` 的低位优先**相反** ⇒ 名字里的「优先级」在本仓含义不唯一）|
 | `sync_fifo` | 同步 FIFO；`q_async` = **FWFT / show-ahead**（0 拍队首视图） | `tests/test_stream_fifo_dual.cpp` · `DUAL_BACKEND_TEST_PAIR` | 2026-10-22 FWFT 语义确立（0 拍 `aread`） |
 | `stream_fifo` | stream 包装的 FIFO；`pop_stream.payload` = **FWFT（0 拍）** | `tests/test_stream_fifo_dual.cpp` · `DUAL_BACKEND_TEST_PAIR` | 2026-10-22 同上 |
 | `stream_m2s_pipe` | master→slave 管道；`valid`/`payload` 各延迟 **1 拍**；下游停顿时 MUST **保持**数据 | `tests/chlib/test_stream_pipeline_dual.cpp` · `[chlib][stream][pipeline][m2s][ready][dual]` | 2026-11-01 ADR-055 重写（修掉「下游一停顿就丢数据」）⇒ 2026-11-03 首次双后端验证 ⇒ 登记 |
@@ -38,4 +39,4 @@ rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MU
 | 日期 | 变更 |
 |---|---|
 | 2026-11-02 | **创建**（B8 落地：5 条登记 ⇒ `stream_demux` / `stream_fork` / `stream_arbiter_round_robin` / `sync_fifo` / `stream_fifo`）⇒ 护栏 R14 守「登记不漂移 + 判别性用例不消失」 |
-| 2026-11-03 | **+5 条**（路线 B G/H 批触达的组件）⇒ `stream_m2s_pipe` / `stream_s2m_pipe` / `stream_half_pipe`（ADR-055 重写过的三个 pipe）· `priority_selector` / `round_robin_selector`（首次双后端验证）⇒ ⇒ 触发护栏 **R3**（最近的 chlib change MUST 声明 `touched-components`） |
+| 2026-11-03 | **+6 条**（路线 B G/H/I 批触达的组件）⇒ `stream_m2s_pipe` / `stream_s2m_pipe` / `stream_half_pipe`（ADR-055 重写过的三个 pipe）· `priority_selector` / `round_robin_selector`（首次双后端验证）· `stream_arbiter_priority`（首次双后端验证）⇒ ⇒ 触发护栏 **R3**（最近的 chlib change MUST 声明 `touched-components`） |

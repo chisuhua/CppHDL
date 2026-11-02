@@ -600,6 +600,25 @@ add_dual_backend_test(test_selector_arbiter_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 B（I 批）—— `stream_arbiter_priority` / `stream_arbiter_round_robin`
+#    进双后端 parity**（2026-11-03）
+#    ⇒ `stream_arbiter_round_robin` 含 `ch_reg`（`last_grant_reg`）⇒ 走 `always_ff`
+#      codegen 路径 ⇒ 两后端最易分叉处；且它的**轮转反馈**是 ADR-055（2026-11-01）
+#      **刚修好的**（修前恒传 `last_grant = 0_d` ⇒ 扫描起点恒为 1 ⇒ 低位通道饿死）
+#      ⇒ ⇒ **修复后的语义从未被双后端验证过**。
+#    ⇒ 🔴 钉住两条**反直觉**语义：① 优先级方向 = **高位优先**
+#      （`priority_encoder` 的注释「优先处理低位」与实现相反 ⇒ 已独立立项
+#      `priority-encoder-doc-contradicts-implementation-2026-11.md`）；
+#      ② 两个仲裁器的 ready 门控**不同**：priority **不被** valid 门控（无请求时通道 0
+#      仍拿到 ready）而 round_robin **被**门控（无请求时全部 ready=0）。
+#    ⇒ ⚠️ **刻意避开** `stream_arbiter_lock`（C++ `if` 建图期求值 ⇒ 恒选通道 0 ⇒
+#      **输出别的通道的数据** ⇒ 静默数据损坏 ⇒ 已独立立项
+#      `stream-arbiter-lock-selects-channel-zero-2026-11.md` ⇒ ⇒ 先修缺陷再覆盖）。
+add_dual_backend_test(test_stream_arbiter_dual
+    SOURCES chlib/test_stream_arbiter_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

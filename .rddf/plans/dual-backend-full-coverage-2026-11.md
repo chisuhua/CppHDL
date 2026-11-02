@@ -280,6 +280,7 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 | **F · hazard_complete**（✅ 已实施 · `riscv::HazardUnitComplete` 纯组合） | **24.1 s**（`test_hazard_complete_dual` **1 pair**；假 HOME 冷缓存；热缓存 0.38 s）⚠️ **高于** 10.6–11.6 s/pair 模型 —— 该文件**只有 1 个 pair** ⇒ verilator 工具链**固定开销无法摊薄**（对比：3 pair 的 cache Async 是 10.9 s/pair）⇒ ⇒ **成本模型 MUST 按 pair 数摊薄**，单 pair 文件由固定开销主导 | **348.5 s**（+24.1） | 39.4 min |
 | **G · stream pipeline**（✅ 已实施 · m2s/s2m/half 三个 pipe） | **32.2 s**（`test_stream_pipeline_dual` **3 pair**；假 HOME 冷缓存 ⇒ **10.7 s/pair**，与模型一致；热缓存 0.46 s） | **380.7 s**（+32.2） | 39.2 min |
 | **H · selector arbiter**（✅ 已实施 · `priority_selector`/`round_robin_selector`） | **21.5 s**（`test_selector_arbiter_dual` **2 pair**；假 HOME 冷缓存 ⇒ **10.75 s/pair**，与模型一致；热缓存 0.37 s） | **402.2 s**（+21.5） | 39.0 min |
+| **I · stream arbiter**（✅ 已实施 · `stream_arbiter_priority`/`_round_robin`） | **21.4 s**（`test_stream_arbiter_dual` **2 pair**；假 HOME 冷缓存 ⇒ **10.7 s/pair**，与模型一致；热缓存 0.41 s） | **423.6 s**（+21.4） | 38.8 min |
 | E | 待测 | | |
 | F | 待测 | | |
 | G | 待测 | | |
