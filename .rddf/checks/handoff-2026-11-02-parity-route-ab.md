@@ -1,6 +1,6 @@
 # 交接快照：objective-test-coverage-100pct（路线 A/B 推进）
 
-- **时间**：2026-11-02（builder，第 2 次交接）
+- **时间**：2026-11-02（builder，第 3 次交接 · 同一会话的第 2 批）
 - **objective**：`.rddf/roadmap/objectives/objective-test-coverage-100pct.md`
 - **plan**：`.rddf/plans/dual-backend-full-coverage-2026-11.md`
 - **用途**：下一次会话**直接从这里继续**，不需要重新盘点。
@@ -11,123 +11,144 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **49**（目标 60，差 **11**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **243** | 同上 |
-| `CTEST_TOTAL` | **226** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **58** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **215** | `ctest -N -LE perf \| tail -1` |
+| **parity 源文件数** | **52**（目标 60，差 **8**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **249** | 同上 |
+| `CTEST_TOTAL` | **229** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **61** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **218** | `ctest -N -LE perf \| tail -1` |
 | `tests/test_*.cpp` | **129** | `ls tests/test_*.cpp \| wc -l` |
-| `tests/chlib/test_*.cpp` | **41** | `ls tests/chlib/test_*.cpp \| wc -l` |
-| 全量测试 | **215/215 绿**（**全量重建后**） | `cmake --build build -j$(nproc) && cd build && ctest -LE perf -j4` |
+| `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
 ⚠️ 工作区里有一批**并发会话**的文件（`hierarchical-rtl-output`：`docs/adr/ADR-058..062`、
-`docs/usage_guide/05-component-design.md`、`HIERARCHICAL-RTL-AUTHORING-GUIDE.md`、
-`openspec/changes/hierarchical-rtl-output-2026-11/` 等）
+`docs/usage_guide/05-component-design.md`、`openspec/changes/hierarchical-rtl-output-2026-11/` 等）
 ⇒ ⇒ **提交时 MUST 按路径显式 `git add`，MUST NOT 用 `git add -A`**。
 
-## 2. 已完成批次（累计 13 个 commit，全部未 push）
+## 2. 已完成批次
 
-第 1 会话（`0cd957a` … `2fe6b69`，11 个）：路线 B 第 6 批 · `sread` 禁读拍修复与归档 ·
-路线 A D 批第 1 个（`test_mem_connection_dual`，4 pair）。
+| 会话 | 内容 |
+|---|---|
+| 第 1 会话（11 commit） | 路线 B 第 6 批 · `sread` 禁读拍修复与归档 · 路线 A **D 批第 1 个**（`test_mem_connection_dual`，4 pair） |
+| 第 2 会话（2 commit） | 路线 A **D 批第 2 个**（`test_mem_comb_read_dual`，2 pair / 14 断言）+ 归档 + 台账 47 → **49** |
+| 本会话（2 commit） | 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52** |
 
-第 2 会话（本会话）：路线 A **D 批第 2 个** = `test_mem_comb_read_dual`
-（**2 pair / 14 断言**：`ch_mem` 写口 × `aread` 交互）+ 归档 + 台账 47 → **49**.
+parity 轨迹：**37 → 49 → 52**。
 
-parity 轨迹：**37 → 49**。
+## 3. 🔴 每个批次的**前置条件**：可转性 4 问（已固化进 plan §4）
 
-## 3. 🔴 本会话最重要的产出：一次**「可转性」否定**（下次必须复用这个判据）
+**写代码之前**必须先答完 4 问；任一为「否」⇒ 不转（只转通过的部分）：
 
-交接文档第 1 版判 `test_mem_comb_read.cpp`「6 可转」，**逐个读断言实现后实际只有 2 个**
-有增量。⇒ ⇒ **后续每一批的第一件事都必须是「这条用例转 dual 后是否真有增量」**，
-判据三条（本次实测得出）：
-
-| 判据 | 怎么查 | 结论 |
+| # | 判据 | 反例（实测） |
 |---|---|---|
-| **① 是否已被别的 dual 文件覆盖？** | 按**语义 + 判别形态**（不是按文件名）在 `tests/**/*dual*.cpp` 里搜 | `test_mem_comb_read` 的 aread/sread 时序对 **已被** `test_mem_read_timing_dual.cpp` 覆盖，连**初值/期望值**都一样 ⇒ 重复转换 = 零增量 |
-| **② 断言形态是否对目标维度有判别力？** | 见下方 **T2** | `:203` / `:247`（输入地址 + `tick()` 后读）**对 0/1-cycle 零判别力** |
-| **③ 是否与后端无关？** | 读的是**生成的 Verilog 文本** / 纯编译期 | `:368` / `:439` 是 codegen 文本断言 ⇒ 转 dual 零增量 |
+| ① | 语义**是否已被别的 dual 文件覆盖**？（按语义 + 判别形态搜，**不是**按文件名） | `test_mem_comb_read` 的时序对已被 `test_mem_read_timing_dual` 以**同一形态 + 同一组期望值**覆盖 ⇒ 重复 ⇒ **初稿 5 pair 砍到 2** |
+| ② | 断言形态**对目标维度有判别力**吗？（变异实测） | 「输入地址 + `tick()` 后读」对 0/1-cycle **零判别力**（T2） |
+| ③ | **与后端无关**吗？（编译期 / codegen 文本断言 / 构图期拒绝） | `aread Verilog codegen emits assign` ⇒ 零增量 |
+| ④ | **形态上不可转换** ⇒ 是否值得**新写**？ | 本批 3 个目标**全部**不可转换（裸 context / SECTION / 函数式接口）⇒ ⇒ **必须允许新写路线** ⇒ ⇒ 期望值**手推** ⇒ ⇒ 笔误风险 ↑（本批实测到 1 次，被双后端一致地证伪） |
 
-⇒ ⇒ **后果**：`objective-test-coverage-100pct` §2 的「路线 A 剩余 **12**，逐个复核
-全部成立」里**至少有 2 个是重复计数** ⇒ ⇒ 我已在 objective 台账里登记
-「算术不自洽（49 + 12 + 1~3 = 62~64 vs 上限 58~60）⇒ 需 planner 重算上限」
-（**只交数字 + 证据，未改判据**）。
+## 4. 📊 实测覆盖矩阵（路线 B 的"新文件"池 = **7** 个，原估 1–3 **被低估**）
 
-⇒ ⇒ ⚠️ **下一批（`test_mem_timing.cpp`，「7 可转」）MUST 先做同样的三问** ——
-它大概率也有重复（`test_mem_read_timing_dual` / `test_mem_sread_disable_dual` /
-本批的 `test_mem_comb_read_dual` 已覆盖了 mem 读侧的大部分语义面）。
+「含 `DUAL_BACKEND_TEST_PAIR(` 调用」的源文件全集 × `include/chlib/*.h` 求交 ⇒
+**零 dual 覆盖**的 chlib 组件：
 
-## 4. 下一步（明确的第一个动作）
-
-### D 批剩 1：`tests/test_mem_timing.cpp`
-
-**第一个动作不是写代码**，而是：把该文件每个 TEST_CASE 与
-`test_mem_read_timing_dual.cpp` / `test_mem_sread_disable_dual.cpp` /
-`test_mem_comb_read_dual.cpp` / `test_mem_connection_dual.cpp` 的**语义面**逐条对照
-⇒ 把「重复 / 无判别力 / 与后端无关」三类先剔掉 ⇒ 只转剩下的。
-⚠️ 已知：该文件的 `sread holds its value...` 已被订正为 **clears**（`sread` 禁读拍清零）。
-
-### 之后
-
-| 批 | 文件 | 备注 |
+| 组件 | 状态 | 备注 |
 |---|---|---|
-| E（3） | `test_bundle_connection`(20) · `test_bundle_master_slave`(9) · `chlib/test_cache_complete`(14) | cache 可能触发 ADR-041 的 Async golden-value 分类 |
-| F（6） | `chlib/test_onehot` · `test_operation_results` · `test_rv32i_pipeline` · `test_module_advanced` · `chlib/test_forwarding` · `chlib/test_hazard_complete` | 多 DUT；CI 墙钟风险最大 ⇒ **先实测再决定拆分** |
-| B（剩 1–3） | 路线 B 剩余新文件 | |
+| `chlib/bitwise.h` | ✅ 本批 | 9 条 select 链 / 移位 / 掩码 |
+| `chlib/onehot.h` | ✅ 本批 | 译码/编码 select 链 |
+| `chlib/forwarding.h`（`ForwardingMux`） | ✅ 本批 | ADR-047 D4 的 `is_jump` 返回地址 |
+| `chlib/arithmetic_advance.h` | ⬜ **下一批建议做** | CLA / CSA / Wallace / Booth / 非恢复除法 / 定点 ⇒ **多级进位链** ⇒ 手推期望最重 ⇒ 也最可能挖出真分歧 |
+| `chlib/selector_arbiter.h` | ⬜ | `tests/chlib/test_selector_arbiter.cpp` |
+| `chlib/stream_arbiter.h` | ⬜ | 3 个 arbiter（priority / round_robin） |
+| `chlib/stream_pipeline.h` | ⬜ | 3 个 pipe（ADR-055 刚修过 ⇒ **回归价值高**） |
+| `chlib/stream_width_adapter.h` | ⬜ | 位宽适配 |
 
-## 5. 陷阱清单（**T2 本会话被实测强化，务必先读**）
+⚠️ **计划漏项**：`tests/chlib/test_bitwise.cpp` 与 `tests/chlib/test_arithmetic_advance.cpp`
+**不在**任何既有批次清单里 ⇒ ⇒ 「新写」路线**不受批次表约束**（组件零覆盖即可立项）。
+
+## 5. 下一步（按优先级）
+
+### A. `chlib/arithmetic_advance.h`（路线 B 新文件，**下一批建议做**）
+CLA / CSA / Wallace 乘法器 / Booth 乘法器 / 非恢复余数除法 / 定点加减乘除 ⇒
+**零 dual 覆盖** ⇒ 且**多级进位链** = interpreter（逐节点求值）与 Verilog（连续赋值）
+最易分叉的地方。⚠️ 期望值必须**逐位手推**（本批已在 bitwise 上踩过一次笔误）。
+
+### B. `tests/chlib/test_cache_complete.cpp`（E 批）—— **能解一个 spec 矛盾**
+⚠️ `openspec/specs/dual-backend-test-coverage/spec.md` **自相矛盾**：
+- Requirement「cache 双后端 MUST 按 Sync/Async 分类」明写：Async dual-run **可以**走
+  parity，「『Async 强制 parity 会永远红』这一前提**已不成立**，禁令解除」；
+- 但另一个 Requirement 的 Scenario「spec R6 排除清单遵守」仍写：runtime test 涉及
+  `ICacheAsync`/`DCacheAsync` ⇒ **MUST NOT** 用 `DUAL_BACKEND_TEST_PAIR`（理由还是
+  那条**已消除**的 skew）。
+⇒ ⇒ **用事实裁决**：把 `test_cache_complete.cpp` 的 **4 个 Async 用例**转成 parity
+⇒ 若**真的绿** ⇒ 矛盾按事实消解（并把该 Scenario **原地订正**，标题 MUST NOT 改 ——
+CLI 按标题匹配 Scenario）；若红 ⇒ 说明前提并未消除 ⇒ 保留禁令。
+⚠️ `test_cache_sync.cpp` 已是 dual（10 pair）⇒ Sync 用例大概率重复 ⇒ 只转 Async 那批。
+
+### C. D 批剩 1：`tests/test_mem_timing.cpp`（**先过 4 问**）
+7 个用例里：`sread clears its value while the enable is low` ⇒ **已被**
+`test_mem_sread_disable_dual` 覆盖（重复）· 写后读类 ⇒ **已被**本会话的
+`test_mem_comb_read_dual` 覆盖（重复）⇒ ⇒ **可转的大概率只剩**「`select()` 的操作数
+里嵌读端口」那个形态（codegen 的 mux-over-read-port 路径）。
+
+### D. E/F 批剩余（**逐个先过 4 问**）
+`test_bundle_connection` · `test_bundle_master_slave` · `test_operation_results`
+· `test_module_advanced`（one-hot 译码 ⇒ **已被**本批 `test_onehot_dual` 覆盖 ⇒ 重复）·
+`test_rv32i_pipeline`（**已被** `test_rv32i_pipeline_behavior` 的 16 pair 逐位覆盖 ⇒ 重复）·
+`chlib/test_forwarding`（**已被**本批覆盖）· `chlib/test_hazard_complete`
+（`HazardUnitComplete` 有 7 个顶层端口 ⇒ 可转；但**生产消费者 = 0** ⇒ 价值中）·
+`chlib/test_onehot`（**已被**本批覆盖）⇒ ⇒ **F 批 62 个用例里，实际可转的可能只有个位数**。
+
+### E. planner 裁决（**build 只交数字，不改判据**）
+- 现状 **52** · 路线 A 剩余 **10**（已证 2 个重复）· 路线 B 候选 **7**
+- ⇒ 上限算术：**乐观 69** / 按实测命中率 ~50% 折算 ≈ **60** ⇒ ⇒ 阈值 60
+  **从「不可达」变成「贴边可达」** ⇒ **需 planner 重算**（台账已更新 + 标注）。
+
+## 6. 陷阱清单（**T1–T3 仍有效；T2 已强化**）
 
 ### 🔴 T1：`ctest` **不会**自动重新构建
-
-改了 `src/**` / `include/**` 后只重建被点名的 target 就跑 ctest ⇒ **假绿**（第 1 会话真实踩过）。
-⇒ ⇒ 跑 ctest 前 MUST `cmake --build build -j$(nproc)`（已写入 AGENTS.md COMMANDS 段）。
-⚠️ 本会话补充：**变异测试**只需重建被观测的 target（`libcpphdl.a` 是**静态库** ⇒
-替换归档不影响已在跑的其他进程）⇒ 但**最终验收**仍须全量重建。
+改了 `src/**` / `include/**` 后只重建被点名的 target 就跑 ctest ⇒ **假绿**。
+⇒ 跑 ctest 前 MUST `cmake --build build -j$(nproc)`（已写入 AGENTS.md COMMANDS 段）。
+⚠️ 变异测试只需重建**被观测的** target（`libcpphdl.a` 是**静态库** ⇒ 替换归档不影响
+已在跑的其他进程）⇒ 但**最终验收**仍须全量重建。
 
 ### 🔴 T2：靠「`tick()` 后读」**无法**区分 0-cycle 与 1-cycle
-
-本会话把机制彻底查清（不是猜）：
-- 地址是**输入端口**时，TB 在 `tick()` **之前**就写入 `data_map_` ⇒ 沿上采样到的是
-  **新**地址 ⇒ 「0-cycle 读新地址」与「1-cycle 沿上采样新地址」**观测值相同**；
-- 「tick 之间观测」也救不了：`get_port_value` 在两后端**都只读 `data_map_`**
-  （`include/simulator.h:113-140`），而 `set_input_value` 不触发组合求值 ⇒ 两侧都读到
-  **上一拍**的值。
-
-⇒ ⇒ **唯一可判别的形态 = 地址由「同一条沿提交的 `ch_reg`」驱动**（沿前值 ≠ 沿后值）。
-⇒ ⇒ 看到「时序」类用例先问：**它有没有同沿提交的寄存器？** 没有 ⇒ 这条断言**不可能**
-判别时序 ⇒ 如实登记为「数据通路断言」，MUST NOT 当作时序证据（更不要为它造一个
-「非时序 pair」来充数 —— 本会话初稿干过，变异实测**没有任何变异能抓它**，已删除）。
+机制（已查清）：地址是输入端口时，TB 在 `tick()` **之前**就写入 `data_map_` ⇒ 沿上
+采样到的已是新地址 ⇒ 两种时序**观测值相同**；「tick 之间观测」也无效
+（`get_port_value` 只读 `data_map_`，`set_input_value` 不触发组合求值）。
+⇒ ⇒ **唯一可判别的形态 = 地址由「同一条沿提交的 `ch_reg`」驱动**。
 
 ### 🔴 T3：`DUAL_BACKEND_TEST_PAIR` 的 body 参数里**花括号内的逗号**会被当参数分隔
-
 用例表 MUST 放**文件作用域**（只有圆括号保护）。
 
+### 🔴 T4（本会话新增）：**变异注入器必须 fail-closed**
+同一段源码文本在头文件里常出现**多次**（例：`onehot.h` 的 `one_hot_val` 计算在函数式
+与模块式两处逐字相同）⇒ ⇒ 注入器的模式若**不唯一命中**必须**拒绝执行**
+（本会话实测：O2 首次被 `MUTATE_FAIL` 拒绝 ⇒ 补足上下文后重跑才命中）⇒ ⇒
+否则「变异没注入 ⇒ 跑旧二进制 ⇒ 假绿」。
+
 ### 既有陷阱（仍有效）
-
-- **子组件 MUST 用 `ch::ch_module<T>`**：裸 `PipelineStage stage(this, "x")` 的
-  `describe()` **不会被框架调用** ⇒ `ch_reg` 从未创建 ⇒ **SIGSEGV**。
-- **端口连线 MUST 用 `<<=`**（`operator=` 是 deleted；`io().x = value` 对输出端口是
-  **重绑定**，容易写出「看起来连上了」的假连接）。
-- **`ch_in<ch_bool>` 不能绑 `const ch_bool&`** ⇒ 用 `port<ch_uint<1>> == ch_uint<1>(1_d)`。
-- **变异 MUST 先确认仍可编译**（否则跑旧二进制 = 假绿）；**还原用 `cp`**（刷新 mtime）。
-- **注入器 MUST fail-closed**：模式必须**唯一命中**，否则 `MUTATE_FAIL` + 非零退出
-  （`/tmp/opencode/mutate_mem_comb.py` 可作模板）。
-- **无效变异要如实登记**（第 1 会话登记了 2 条：`<=`→`=`、pipeline 的 rst）。
-- **N2′ 判据**：断言数(with verilator) == **2 ×** 断言数(interpreter-only)
+- **子组件 MUST 用 `ch::ch_module<T>`**（裸构造的 `describe()` 不会被调用 ⇒ SIGSEGV）。
+- **端口连线 MUST 用 `<<=`**；⚠️ 但 **`ch_out` 的 `operator=` 是真数据流边**
+  （`ch_logic_out::operator=` → `set_src`，`include/core/io.h:113-123`）⇒ ⇒
+  库组件里的 `io().out = expr` **是正确接线** ⇒ ⇒ **库组件可直接当 dual 的 DUT**
+  （零 DUT 复制，先例：`tests/test_blt_debug_behavior.cpp`）。
+- **`ch_in<ch_bool>` 不能绑 `const ch_bool&`**。
+- **变异 MUST 先确认仍可编译**；**还原用 `cp`**（刷新 mtime）。
+- **无效变异 / 判别力边界 MUST 如实登记**（本会话已登记 2 条边界 + 1 条期望值笔误）。
+- **N2′**：断言数(with verilator) == **2 ×** 断言数(interpreter-only)
   （`./build/tests/<t> "*\[interpreter\]"` 可直接取单后端数）。
-- **AGENTS.md 的 hunk 级隔离**：并发会话也在改它 ⇒ 先用 `git status` 确认它是否 dirty；
-  若 clean 则直接编辑并在提交前**逐 hunk 复核** `git diff --cached AGENTS.md`
-  （本会话就是 clean ⇒ 直接编辑 + 提交前复核）。
+- **AGENTS.md 的 hunk 级隔离**：并发会话也在改它 ⇒ 提交前**逐 hunk 复核**
+  `git diff --cached AGENTS.md`。
 
-## 6. 关键文件索引
+## 7. 关键文件索引
 
 | 路径 | 说明 |
 |---|---|
-| `tests/dual_backend_fixture.h` | `DUAL_BACKEND_TEST_PAIR` 宏 + R1..R6 |
-| `tests/test_mem_comb_read_dual.cpp` | **本会话新增**（mem 写口 × aread，2 pair） |
-| `tests/test_mem_connection_dual.cpp` | 第 1 会话新增（4 连接形态） |
+| `tests/chlib/test_bitwise_dual.cpp` | 本会话新增（bitwise 6 检测器 + 3 位操作） |
+| `tests/chlib/test_onehot_dual.cpp` | 本会话新增（one-hot 译码/编码，零 DUT 复制） |
+| `tests/chlib/test_forwarding_dual.cpp` | 本会话新增（ForwardingMux 三档位 + `is_jump`） |
+| `tests/test_mem_comb_read_dual.cpp` | 第 2 会话新增（mem 写口 × aread） |
 | `tests/test_mem_read_timing_dual.cpp` | ⚠️ **已覆盖 aread/sread 时序**（别重复转换） |
-| `tests/test_mem_sread_disable_dual.cpp` | 禁读拍清零 |
-| `tests/chlib/test_memory_dual.cpp` | `chlib::memory` RAM 族写拍 = 0 |
-| `.rddf/roadmap/objectives/objective-test-coverage-100pct.md` | §2 判据 + 台账（现状 **49** + 不自洽登记） |
-| `.rddf/plans/dual-backend-full-coverage-2026-11.md` | 批次清单 + §5 墙钟账本 |
-| `/tmp/opencode/mutate_mem_comb.py` | fail-closed 变异注入器模板（**会话级，不在仓内**） |
+| `tests/chlib/test_cache_sync.cpp` | ⚠️ **已是 dual**（10 pair）· Async 的 spec 矛盾见 §5.B |
+| `openspec/specs/dual-backend-test-coverage/spec.md` | ⚠️ **Async 那条自相矛盾**（见 §5.B） |
+| `.rddf/roadmap/objectives/objective-test-coverage-100pct.md` | §2 判据 + 台账（现状 **52**） |
+| `.rddf/plans/dual-backend-full-coverage-2026-11.md` | §4 批次 + **4 问前置条件** + **覆盖矩阵** · §5 墙钟账本 |
+| `/tmp/opencode/mutate_*.py` | fail-closed 变异注入器模板（**会话级，不在仓内**） |

@@ -443,6 +443,54 @@ add_dual_backend_test(test_mem_comb_read_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（新文件）—— `chlib/bitwise.h` 首次进双后端 parity**（2026-11-02）
+#    ⇒ 实测「含 `DUAL_BACKEND_TEST_PAIR(` 调用」的源文件全集里**无任何一个**
+#      include `chlib/bitwise.h` ⇒ ⇒ 该组件**零双后端覆盖**。
+#    ⇒ ⚠️ **不是转换，是新写**：既有单后端测试 `tests/chlib/test_bitwise.cpp`
+#      的 9 个用例**全是裸 context**（无 ch_device / 无顶层端口）⇒ ⇒ 按
+#      `dual-backend-test-coverage` 的 R6 排除清单**结构上不可转换**
+#      （Verilator 后端只能观测顶层端口）。
+#    ⇒ ⇒ 真正的增量：原测试把输入写成**编译期常量** ⇒ 那条 select 链在
+#      **建图期**就定型 ⇒ ⇒ **运行期求值路径从未被验证**；本文件把输入改成
+#      **端口** ⇒ ⇒ select 链在运行期求值（interpreter 的逐节点求值 vs
+#      Verilog 的嵌套三元 = 真正可能分叉的地方）。
+#    ⇒ 危险点：6 个检测器都是 **select 链**（方向敏感 + 运行期反馈）·
+#      `bit_reversal` 的移位/截断 · `bit_swap` 的 `~mask & zext << |` 组合。
+add_dual_backend_test(test_bitwise_dual
+    SOURCES chlib/test_bitwise_dual.cpp
+    TIMEOUT 300
+)
+
+# ⚠️⚠️ **路线 B（新文件）—— `chlib/onehot.h` 首次进双后端 parity**（2026-11-02）
+#    ⇒ 实测「含 `DUAL_BACKEND_TEST_PAIR(` 调用」的源文件全集里**无任何一个**
+#      include `chlib/onehot.h` ⇒ ⇒ **零覆盖**。
+#    ⇒ ⚠️ **不是转换**：`tests/chlib/test_onehot.cpp` 的 7 个用例用了 **21 个
+#      Catch2 SECTION** ⇒ 命中 R6 排除项 "SECTION re-entry" ⇒ 不可转换。
+#    ⇒ 与 `test_arithmetic_encoding_dual.cpp`（`chlib/converter.h` 的 binary_*）
+#      **正交** —— 那是另一个组件。
+#    ⇒ 危险点：`onehot_dec` 的 select 链从 i=0 迭代 ⇒ **最高**置位胜出，
+#      而 `bitwise.h` 的 `first_set_bit_detector` ⇒ **最低**置位胜出 ⇒
+#      **两个组件的"谁胜出"约定相反** ⇒ 链方向 = codegen 最易分叉处。
+#    ⇒ ⚠️ **只断言合法单置位输入**（文档：多位置位/全 0 ⇒ 输出**未定义**
+#      ⇒ 不把未定义行为冻结成断言）。
+add_dual_backend_test(test_onehot_dual
+    SOURCES chlib/test_onehot_dual.cpp
+    TIMEOUT 300
+)
+
+# ⚠️⚠️ **路线 B（新文件）—— `chlib::ForwardingMux` 的组件级语义进双后端 parity**
+#    ⇒ 组件级 dual 覆盖 = **0**（`chlib/forwarding.h` 只在 SoC 级组合 DUT 里出现）。
+#    ⇒ ⚠️ **不是转换**：`tests/chlib/test_forwarding.cpp` 的 8 个用例中 **6 个**用
+#      **函数式**接口（裸 context、无顶层端口）⇒ 命中 R6 排除项 ⇒ 不可转换。
+#    ⇒ **零 DUT 复制**：直接用库组件 `chlib::ForwardingMux<32>` 当 DUT（先例：
+#      `tests/test_blt_debug_behavior.cpp`）⇒ 测的就是**生产代码本身**。
+#    ⇒ 危险点：档位 1 的**跳转返回地址**判定**故意**放在组件内部（ADR-047 D4）——
+#      头注释明写：内联到流水线里 ⇒ **测试台无法驱动** ⇒ 只能测**副本** ⇒ 假绿。
+add_dual_backend_test(test_forwarding_dual
+    SOURCES chlib/test_forwarding_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

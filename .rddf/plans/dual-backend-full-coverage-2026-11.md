@@ -166,6 +166,29 @@ per-TEST_CASE 对比」的判据**（见 §4 验收模板）⇒ ⇒ ⇒ ⇒ ⇒ 
 | **G**（⚠️ **移出转换序列**） | `test_lnode_entry_set` · `test_axi_i2c` · `chlib/test_phase4_integration` · `test_multithread` | 4 | — | — | ⚠️ **oracle 裁决（2026-11-01）**：这 4 个**无 runtime 语义** ⇒ ⇒ 「先补 runtime 断言」**是路线 B 的新测试工作** ⇒ ⇒ ⇒ **伪装成转换会混淆两类产物的验收标准**（转换要求与原文**逐位等价**；新测试要求**手推期望**）⇒ ⇒ ⇒ **⇒ 移出转换序列** ⇒ ⇒ ⇒ ⇒ ⇒ 归入 **H 批**（路线 B）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 另**：`test_multithread` 的**并发**语义在「双跑」下需专门确认 |
 | **H** | **路线 B：新增有意义的 dual 文件** | ≥ 2 | ≈ 1 min | 中 | ⚠️ **立项理由 = 这些语义【值得】双后端覆盖**（`chlib` 的 `state_machine` / `guard_contribution` / `conditional` / **builder 反压** / **pipe 透传** ⇒ ⇒ **目前零 dual 覆盖** ⇒ ⇒ 价值高）⇒ ⇒ ⇒ **计数达标是其【副作用】，不是立项理由** ⇒ ⇒ ⇒ ⇒ ⇒ **（critic SHOULD_FIX #2 · 2026-11-01：「补足到 60」的动机表述本身有【诱导凑数】的嫌疑 ⇒ ⇒ MUST 改写）** ⇒ ⇒ ⇒ ⇒ 每个文件 MUST 是**有独立价值的新测试**（⇒ ⇒ **不是**转换的复刻） |
 
+#### 🔴 每批的**前置条件**：「可转性三问」+ 第 4 问（2026-11-02 实测后固化）
+
+> **每个候选文件在写代码之前**必须先答完 4 问；任一为「否」⇒ **不转**（或只转其中
+> 通过的部分）。⚠️ 本会话实测：按此判据，原估「路线 A 剩余 12」里**至少 2 个是重复
+> 计数**，初稿的 5 个 pair 被砍到 2 个 ⇒ ⇒ **判据先于代码**，否则会写出零增量。
+
+| # | 判据 | 怎么查 | 反例（实测） |
+|---|---|---|---|
+| ① | 语义**是否已被别的 dual 文件覆盖**？ | 按**语义 + 判别形态**在既有 dual 文件里搜（**不是**按文件名） | `test_mem_comb_read` 的 aread/sread 时序对**已被** `test_mem_read_timing_dual` 以**同一判别形态 + 同一组期望值**覆盖 ⇒ 重复 |
+| ② | 断言形态**对目标维度有判别力**吗？ | 读断言实现 + **变异实测** | 「输入地址 + `tick()` 后读」对 0/1-cycle **零判别力**（地址在 tick 前已进 `data_map_`） |
+| ③ | **与后端无关**吗？（纯编译期 / codegen 文本断言 / 构图期拒绝） | 读实现 | `aread Verilog codegen emits assign` 是**读生成文本** ⇒ 转 dual 零增量 |
+| ④ | **形态上不可转换** ⇒ 是否值得**新写**？ | 看组件是否**零 dual 覆盖** + 语义是否值得覆盖 | 本批 3 个目标**全部**不可转换（裸 context / SECTION / 函数式接口）⇒ ⇒ **必须允许新写路线**（自带 DUT + 手推期望）⇒ ⇒ 手算笔误风险上升 ⇒ 本批实测到 1 次（被双后端一致地证伪） |
+
+#### 📊 **实测覆盖矩阵**（2026-11-02 · 「含 `DUAL_BACKEND_TEST_PAIR(` 调用」的源文件全集 × `include/chlib/*.h`）
+
+**零 dual 覆盖**的 chlib 组件（= 路线 B "新文件"池，**7** 个 ⇒ 原估 1–3 **被低估**）：
+`arithmetic_advance.h`（CLA/CSA/Wallace/Booth/非恢复除法/定点）· `bitwise.h` ✅本批 ·
+`onehot.h` ✅本批 · `selector_arbiter.h` · `stream_arbiter.h` · `stream_pipeline.h` ·
+`stream_width_adapter.h`
+⚠️ **且发现计划漏项**：`tests/chlib/test_bitwise.cpp` 与
+`tests/chlib/test_arithmetic_advance.cpp` **不在**任何既有批次清单里
+⇒ ⇒ 「新写」路线**不受批次表约束**（组件零覆盖即可立项）。
+
 ⇒ ⇒⇒ **Σ 冷编译预估 ≈ 14 s + 5.3 + 3 + 13 + 8 + 11 + 1 ≈ 41 min**
 ⇒ ⇒⇒ **⚠️⚠️ 已超 CI 的 45 min** ⇒ ⇒⇒ ⇒ ⇒ **⇒ 必须实测 + 报告**
 ⇒ ⇒⇒ ⇒ ⇒ **⇒ 这是 objective 的 No-Go 判据所覆盖的情形**
@@ -250,6 +273,7 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 | B（其余：pwm / jit_concat / interpreter_jit_compat） | ⛔ **不转**（理由见 change 的 proposal「被刻意排除的」表：pwm 唯一可转用例**零判别力**且**已被** `test_axi_pwm_behavior` 覆盖；两个 JIT 文件的身份是 **JIT-vs-interpreter** parity ⇒ 与本主题**正交** ⇒ ⇒ **不为了计数而转换**） | — | — |
 | C | 待测 | | |
 | **D**（✅ 已实施 2/3 · 实测） | **64.3 s**（`test_mem_connection_dual` **4 pair / 42.8 s** · `test_mem_comb_read_dual` **2 pair / 21.5 s**；均用**假 HOME** 实测**冷缓存** ⇒ **≈10.7 s/pair**，与 §3.0 模型一致；热缓存 **0.28 s**） | **168.3 s**（A 13.5 + B1 57.5 + B2 33 + D 64.3） | 42.2 min |
+| **B-新文件批**（✅ 已实施 · 3 个 chlib 零覆盖组件） | **69.9 s**（`test_bitwise_dual` **2 pair / 23.7 s** · `test_onehot_dual` **3 pair / 34.8 s** · `test_forwarding_dual` **1 pair / 11.4 s**；均用**假 HOME** 实测**冷缓存** ⇒ **≈11.6 s/pair** ⇒ 与 §3.0 模型（10.66 s/pair）一致；热缓存 0.17–0.88 s） | **238.2 s**（A 13.5 + B1 57.5 + B2 33 + D 64.3 + B-新 69.9） | 41.3 min |
 | E | 待测 | | |
 | F | 待测 | | |
 | G | 待测 | | |
