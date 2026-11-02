@@ -112,6 +112,36 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
   - [x] 判据修订已落**机械锚点**（根 `AGENTS.md` 的 `DUAL_BACKEND_PARITY_TOTAL` 行
         + `scripts/verify_test_counts.sh` 的对应检查）⇒ 防止「静默缩面」
 
+### 2.1bis ⭐ **第二版「诚实上限」实测台账**（2026-11-02 · 路线 B 第 1–5 批之后）
+
+⚠️ **重述之后仍有一个更根本的问题没被回答**：「新增有意义的 dual 文件」在本仓
+**实际语料**里到底还有多少？⇒ ⇒ **实测**回答它 ⇒ ⇒ **完整台账**见
+`.rddf/checks/p1-honest-ceiling-restatement-2026-11.md`（**owner = planner**，
+build 只交数字 + 交证据）。
+
+实测结论（摘要）：
+
+| 量 | 值 |
+|---|---|
+| 现状（2026-11-02 实测） | **44** |
+| 路线 A 剩余（**12**，逐个复核全部成立） | +12 |
+| 路线 B 剩余（**2–4**；第一版估 8 ⇒ ⇒ **实测偏低 4–6**） | +2~4 |
+| **实测可达上限** | **58 ~ 60**（阈值 60 ⇒ **落在边缘**） |
+
+⚠️ **第一版估算为什么乐观**：路线 B 的「既有文件」池**已见底**
+（`test_stream_operators` 全结构性 · `test_lnode_entry_set` / `test_multithread` /
+`test_phase4_integration` 无顶层端口 · `test_axi_i2c` 已有 `_behavior` 兄弟）
+⇒ ⇒ 真正的新写目标（`combinational` / `converter` / `arithmetic` / `logic` /
+`sequential`）**恰好只有 5 个** ⇒ ⇒ 本会话已清掉 4 个。
+⚠️ **hand-crafted 白名单已穷尽**（`examples/riscv-mini/tests/` 的 17 个文件逐个查
+⇒ ⇒ 只有 1 个真 dual + 1 个 macro ⇒ ⇒ **「扩白名单」机械上不可行**）。
+
+⚠️ **「双后端覆盖的边际价值已被实证」**：路线 B 第 1–5 批共挖出 **4 个真缺陷**
+（`priority_encoder` 注释与实现相反 · `add_with_carry`/`sub_with_borrow` 的 `cin`
+被忽略 · `edge_detector` 的 `pos`/`neg` 恒 0 · `johnson_counter` 恒 0）⇒ ⇒
+⇒ **全部是「既有测试恰好用建图期常量 ⇒ 从未暴露」型** ⇒ ⇒ ⇒ **dual 覆盖不只是
+「一致性检查」，而是【缺陷发现机制】** ⇒ ⇒ **这个价值不取决于计数**。
+
 ## 3. 架构依据
 
 - **ADR-035** — Verilator 后端（64-bit cap / clock toggle / reset pulse 差异点）
