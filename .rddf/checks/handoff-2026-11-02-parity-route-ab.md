@@ -71,6 +71,33 @@ D 批第 3 个文件里，我按 T2 边界**预测** N4（`aread` → `always_ff
 ⚠️ **计划漏项**：`tests/chlib/test_bitwise.cpp` 与 `tests/chlib/test_arithmetic_advance.cpp`
 **不在**任何既有批次清单里 ⇒ ⇒ 「新写」路线**不受批次表约束**（组件零覆盖即可立项）。
 
+## 4.5 🔴🔴 **实测订正：「路线 A 剩余 9」里真正可转的只有 3 个**
+
+objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐个复核实测后
+（2026-11-02 · build 交付，判据仍归 planner）：
+
+| 文件 | 台账批 | 实测 | 判定 |
+|---|---|---|---|
+| `tests/test_bundle_connection.cpp` | E | 17 TC / **0 个 `ch_out`** / 16 个纯结构（0 tick） | ❌ **不可转**（无顶层输出端口 ⇒ Verilator 无法观测；断言与后端无关） |
+| `tests/test_bundle_master_slave.cpp` | E | 9 TC / **0 个 `ch_out`**（bundle 字段是 `proxyimpl`，不是端口） | ❌ **不可转**（TB 走 `set_bundle_value` 直写 `data_map_`） |
+| `tests/chlib/test_cache_complete.cpp` | E | 13 TC / 45 tick；Sync 6 个 vs Async 4 个 + 3 个对比 | ✅ **部分可转**（Async 4 个是**新覆盖**；Sync 大半与 `test_cache_sync.cpp`（10 pair）重复） |
+| `tests/test_operation_results.cpp` | F | 9 TC / 9 个 `ch_out`；其中 2 个裸 context + 1 个纯 C++ | ⚠️ **部分可转**（需逐案查重：算术/位运算/比较/移位多已被 `test_arithmetic_carry_dual` / `test_arithmetic_encoding_dual` / `test_sequential_counters_dual` 覆盖） |
+| `tests/chlib/test_hazard_complete.cpp` | F | 8 TC；DUT `riscv::HazardUnitComplete` 头里有 **7 个 `ch_out`**（≤32b）且**纯组合** | ✅ **可转**（**零 DUT 复制**，与 `test_forwarding_dual` 同型）⚠️ 生产消费者 = 0 |
+| `tests/test_stream_builder.cpp` | — | 7 TC；**已存在 `test_stream_builder_backpressure_dual.cpp`** | ❌ **重复计数**（4 问 ①） |
+| `tests/chlib/test_onehot.cpp` | F | 21 SECTION；**已被本会话 `test_onehot_dual.cpp` 覆盖** | ❌ **重复**（4 问 ①） |
+| `tests/chlib/test_forwarding.cpp` | F | **已被本会话 `test_forwarding_dual.cpp` 覆盖** | ❌ **重复**（4 问 ①） |
+| `tests/test_module_advanced.cpp` | F | one-hot 译码 ⇒ **已被 `test_onehot_dual.cpp` 覆盖** | ❌ **重复**（4 问 ①） |
+
+⇒ ⇒ **路线 A 真正剩 3 个**（cache_complete 的 Async · operation_results 的部分 · hazard_complete），
+不是 9 ⇒ ⇒ ⇒ **阈值 60 的差额（54 → 60 = 6）必须由「路线 B 剩 4」+「路线 A 剩 3」共同补足**
+= 最多 7 个候选 ⇒ ⇒ **margin 仅 1** ⇒ ⇒ **任何一个被 4 问否决，就补不满** ⇒ ⇒
+**这条必须上报 planner**（build 不擅自改判据）。
+
+⚠️ **另登记一个口径盲区（给 planner）**：现行口径数**源文件数** ⇒ ⇒
+**在既有 dual 文件里加 pair 对闸门零贡献**（但边际价值可能很高，例如
+`test_mem_read_timing_dual` 只有 1 pair）⇒ ⇒ 口径**奖励「开新文件」而非「加深既有文件」**
+⇒ ⇒ 与 objective §2 的三条防凑数机制**方向相反**（那三条要求「有独立价值」）。
+
 ## 5. 下一步（按优先级）
 
 ### A. ~~`chlib/arithmetic_advance.h`~~ ✅ **已完成**（`test_arithmetic_advance_dual`，3 pair / 104）
