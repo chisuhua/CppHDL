@@ -123,7 +123,7 @@ build 只交数字 + 交证据）。
 
 | 量 | 值 |
 |---|---|
-| 现状（2026-11-02 实测，post 路线 B 第 6 批） | **45** |
+| 现状（2026-11-02 实测，post `sread-disable-cycle-divergence`） | **47** |
 | 路线 A 剩余（**12**，逐个复核全部成立） | +12 |
 | 路线 B 剩余（**1–3**；第 6 批已清掉 `pipeline` 1 个 ⇒ 第 5 批记录的 2–4 减 1） | +1~3 |
 | **实测可达上限** | **58 ~ 60**（阈值 60 ⇒ **落在边缘**） |
@@ -143,7 +143,7 @@ build 只交数字 + 交证据）。
 （`priority_encoder` 注释与实现相反 · `add_with_carry`/`sub_with_borrow` 的 `cin`
 被忽略 · `edge_detector` 的 `pos`/`neg` 恒 0 · `johnson_counter` 恒 0 ·
 **`sread` 的禁读拍两后端语义分歧**〔第 6 批，已独立立项
-`sread-disable-cycle-divergence-2026-11`〕）⇒ ⇒
+`sread-disable-cycle-divergence-2026-11`〔**已修**〕）⇒ ⇒
 ⇒ **全部是「既有测试恰好用建图期常量 ⇒ 从未暴露」型** ⇒ ⇒ ⇒ **dual 覆盖不只是
 「一致性检查」，而是【缺陷发现机制】** ⇒ ⇒ **这个价值不取决于计数**。
 
