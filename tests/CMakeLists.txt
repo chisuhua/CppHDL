@@ -563,6 +563,25 @@ add_dual_backend_test(test_hazard_complete_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 B（G 批）—— `chlib` 三个 stream pipe 进双后端 parity**（2026-11-03）
+#    ⇒ **价值最高的理由**：`stream_pipeline.h` 的三个 pipe 在 ADR-055（2026-11-01）
+#      **刚被重写**，且重写**修掉了三个真缺陷**（m2s 丢数据 · s2m 方向反了的
+#      自环 · half 的 toggle 死锁）⇒ ⇒ **重写后的语义从未被双后端验证过**。
+#    ⇒ 含 `ch_reg` ⇒ 走 `always_ff` codegen 路径 ⇒ 两后端最易分叉处。
+#    ⇒ 有生产消费者（`include/bundle/stream_bundle_member_inlines.h` 的
+#      `m2sPipe()` / `s2mPipe()` / `halfPipe()`）。
+#    ⇒ 4 问 ①：全仓 54 个 dual 文件里三个符号各出现 **0** 次 ⇒ 无重复。
+#    ⇒ ⚠️ 既有 `tests/test_stream_pipeline.cpp`（12 用例 / 68 断言）**全是裸 context**
+#      （`ch_device=0`、无顶层端口）⇒ 命中 **R6 排除项** ⇒ **不可转换** ⇒ 新写。
+#      原文件 **MUST NOT 修改**。
+#    ⇒ DUT 是**端口 wrapper**（三个 pipe 是函数式组合子，不是 Component）
+#      ⇒ 语义全在库组件里 ⇒ **不是「DUT 复制」**（先例：
+#      `tests/chlib/test_stream_builder_backpressure_dual.cpp`）。
+add_dual_backend_test(test_stream_pipeline_dual
+    SOURCES chlib/test_stream_pipeline_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

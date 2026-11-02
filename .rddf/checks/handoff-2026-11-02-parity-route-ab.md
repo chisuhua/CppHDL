@@ -11,13 +11,13 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **56**（目标 60，差 **4**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **258** | 同上 |
-| `CTEST_TOTAL` | **233** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **65** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **222** | `ctest -N -LE perf \| tail -1` |
+| **parity 源文件数** | **57**（目标 60，差 **3**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **261** | 同上 |
+| `CTEST_TOTAL` | **234** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **66** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **223** | `ctest -N -LE perf \| tail -1` |
 | `tests/test_*.cpp` | **130** | `ls tests/test_*.cpp \| wc -l` |
-| `tests/chlib/test_*.cpp` | **47** | `ls tests/chlib/test_*.cpp \| wc -l` |
+| `tests/chlib/test_*.cpp` | **48** | `ls tests/chlib/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
 ⚠️ 工作区里有一批**并发会话**的文件（`hierarchical-rtl-output`：`docs/adr/ADR-058..062`、
@@ -30,9 +30,9 @@
 |---|---|
 | 第 1 会话（11 commit） | 路线 B 第 6 批 · `sread` 禁读拍修复与归档 · 路线 A **D 批第 1 个**（`test_mem_connection_dual`，4 pair） |
 | 第 2 会话（2 commit） | 路线 A **D 批第 2 个**（`test_mem_comb_read_dual`，2 pair / 14 断言）+ 归档 + 台账 47 → **49** |
-| 本会话（10 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54**；④ 路线 A **E 批**：`test_cache_async_dual`（3 pair / 73）⇒ 54 → **55**（**含 spec 订正**：用事实裁决 Async 禁令）；⑤ 路线 A **F 批**：`test_hazard_complete_dual`（1 pair / 112，零 DUT 复制）⇒ 55 → **56** |
+| 本会话（12 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54**；④ 路线 A **E 批**：`test_cache_async_dual`（3 pair / 73）⇒ 54 → **55**（**含 spec 订正**：用事实裁决 Async 禁令）；⑤ 路线 A **F 批**：`test_hazard_complete_dual`（1 pair / 112，零 DUT 复制）⇒ 55 → **56**；⑥ 路线 B **G 批**：`test_stream_pipeline_dual`（3 pair / 72，m2s/s2m/half）⇒ 56 → **57** |
 
-parity 轨迹：**37 → 49 → 52 → 53 → 54 → 55 → 56**。
+parity 轨迹：**37 → 49 → 52 → 53 → 54 → 55 → 56 → 57**。
 
 ## 3. 🔴 每个批次的**前置条件**：可转性 4 问（已固化进 plan §4）
 
@@ -98,6 +98,43 @@ objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐
 `test_mem_read_timing_dual` 只有 1 pair）⇒ ⇒ 口径**奖励「开新文件」而非「加深既有文件」**
 ⇒ ⇒ 与 objective §2 的三条防凑数机制**方向相反**（那三条要求「有独立价值」）。
 
+## 4.6 🔴🔴 路线 B 的**只读查重**结论（2026-11-03 · 建议 3 的交付物）
+
+查重对象 = 路线 B 剩余 4 个候选（`selector_arbiter` · `stream_arbiter` · `stream_pipeline` ·
+`stream_width_adapter`）⇒ 三条结论：
+
+### ① 无重复（4 问① 通过）
+
+13 个候选符号（`stream_m2s_pipe` / `stream_s2m_pipe` / `stream_half_pipe` /
+`stream_arbiter_lock` / `stream_arbiter_priority` / `stream_arbiter_round_robin` /
+`stream_narrow_to_wide` / `stream_wide_to_narrow` / `stream_width_adapter` /
+`stream_extend` / `stream_truncate` / `priority_selector` / `round_robin_arbiter` /
+`round_robin_selector`）在**全部 54 个 dual 文件**里**各出现 0 次**。
+
+### ② 四个候选**全部不可转换**（4 问① 的另一半）
+
+7 个既有测试文件（`test_stream_pipeline.cpp` · `test_stream_arbiter.cpp` ·
+`test_stream_width_adapter.cpp` · `test_selector_priority.cpp` ·
+`test_selector_arbiter.cpp` · `test_selector_round_robin.cpp` · `test_stream_operators.cpp`）
+**全部是裸 context**（`ch_device=0`、无顶层端口）⇒ ⇒ 命中 **R6 排除项**
+⇒ ⇒ **没有一条**能走「转换」路线 ⇒ ⇒ 只能**新写**（自带 wrapper DUT + 手推期望）。
+
+### ③ 🔴🔴 挖出**两个真缺陷**（已实测确认 + 独立立项）
+
+| # | 组件 | 缺陷 | 实测证据 | 既有测试为何零判别力 |
+|---|---|---|---|---|
+| 1 | `chlib::stream_arbiter_lock`（`stream_arbiter.h:62-68`） | C++ `if/else if/else` 做硬件选择 ⇒ 建图期求值 ⇒ 恒走 `else` ⇒ **恒选通道 0** | 唯一有效输入 = 通道 1 ⇒ `selected=0` 且 **`out.payload=0x11`（通道 0 的数据！）** ⇒ **静默数据损坏** | 只断宽度 + `valid==true`；`selected` / `payload` **从未被断言** |
+| 2 | `chlib::round_robin_arbiter`（`selector_arbiter.h:94-115`） | `UpdatePriority` 的 `if (result.valid)` 建图期求值 ⇒ 恒假 ⇒ `next_priority` 永不更新 ⇒ `ptr_reg` 恒 0 ⇒ **不轮转** | `next_ptr` 连续 3 拍恒 0（期望每拍 +1） | 5 用例 / 几十 SECTION，但**只断 `grant`/`valid`**；`next_ptr` **从未被断言** |
+
+⇒ **立项**：`.rddf/improvements/stream-arbiter-lock-selects-channel-zero-2026-11.md` ·
+`.rddf/improvements/selector-round-robin-not-rotating-2026-11.md`
+⇒ ⚠️ **对执行顺序的影响**：带**已知缺陷**的组件**不做** dual parity
+（否则 parity 会给缺陷**盖章** ⇒ 两后端一致地错 ⇒ parity 看不见）
+⇒ ⇒ **先修缺陷、再做覆盖** ⇒ ⇒ 本轮**避开**这两个，做干净的 `stream_pipeline`（已落地）。
+⇒ ⚠️ **全 `include/chlib/*.h` 已扫**（剥注释后逐行找 C++ `if`）⇒ 同家族其余命中点
+均为 **C++ 侧判断**（容器 `size()` / 模板常量 / 节点守卫）⇒ **无第二处同型缺陷**；
+唯一边缘项 = `arithmetic.h:190` 的 `if (sign_bit)`（**仅**当移位量 ≥ 位宽时命中）。
+
 ## 5. 下一步（按优先级）
 
 ### A. ~~`chlib/arithmetic_advance.h`~~ ✅ **已完成**（`test_arithmetic_advance_dual`，3 pair / 104）
@@ -115,11 +152,16 @@ objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐
    整数除法 ⇒ **SIGFPE**）⇒ 谁要修它，MUST 同时把该守卫改成**真 `select`**
    （参照 `non_restoring_divider` 的写法）。
 
-### A'. 路线 B 剩余候选（**剩 3 个**，各自先过 4 问）
-`chlib/selector_arbiter.h` · `chlib/stream_arbiter.h` · `chlib/stream_pipeline.h` ·
-`chlib/stream_width_adapter.h`（⚠️ 后两个与 ADR-054/055 刚修过的 ready 语义重叠 ⇒
-**回归价值高**，但也最可能与既有 dual 文件（`test_stream_demux_fork_dual` /
-`test_stream_builder_backpressure_dual`）语义重复 ⇒ 必须逐条过 4 问 ①）。
+### A'. 路线 B 剩余候选（**剩 3 个**；`stream_pipeline` ✅ 已落地）
+
+| 候选 | 状态 | 备注 |
+|---|---|---|
+| `chlib/stream_pipeline.h` | ✅ **已落地**（G 批 · 3 pair / 72） | ADR-055 刚重写 ⇒ 回归价值最高 |
+| `chlib/selector_arbiter.h` | 🟡 **部分可做** | `priority_selector` + `round_robin_selector` **无 C++ `if`** ⇒ 干净；`round_robin_arbiter` **带缺陷** ⇒ 须先修 |
+| `chlib/stream_arbiter.h` | 🔴 **暂缓** | `stream_arbiter_lock` **带缺陷**（恒选通道 0 + 输出错误数据）⇒ 须先修 |
+| `chlib/stream_width_adapter.h` | 🟡 **部分可做** | `narrow_to_wide` / `wide_to_narrow` / `stream_width_adapter` 可做；`stream_extend` / `stream_truncate` **零消费者** ⇒ 按 Zero-Debt 应删、不测 |
+
+⇒ 详见 §4.6（只读查重的完整结论 + 两个新缺陷的证据）。
 
 ### B. `tests/chlib/test_cache_complete.cpp`（E 批）—— **能解一个 spec 矛盾**
 ⚠️ `openspec/specs/dual-backend-test-coverage/spec.md` **自相矛盾**：
