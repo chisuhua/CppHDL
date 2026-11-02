@@ -545,6 +545,24 @@ add_dual_backend_test(test_cache_async_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 A（F 批）—— `riscv::HazardUnitComplete` 进双后端 parity**（2026-11-02）
+#    ⇒ **零 DUT 复制**：该组件**本身**就是带顶层端口的 `Component`
+#      （18 个 `ch_in` + 7 个 `ch_out`，全部 ≤32 bit）⇒ 直接用库组件当 DUT
+#      （先例：`tests/chlib/test_forwarding_dual.cpp` / `test_blt_debug_behavior.cpp`）
+#      ⇒ **测的就是生产代码本身**。
+#    ⇒ 4 问：① 无 dual 兄弟（`tests/chlib/test_hazard_complete.cpp` 是 interpreter-only，
+#      且只断 1–2 个输出）；② 判别力见 5 条变异；③ 真跑仿真读顶层端口；④ 纯组合
+#      （**无 `ch_reg`**）⇒ 1 拍即可。
+#    ⇒ ⚠️ **生产消费者 = 0**（真实流水线用的是 `riscv::HazardUnit`）⇒ 本文件的价值在
+#      「前推档位 × 优先级 × 停顿 × 冲刷」这套**组合语义契约**，**不是**关键路径回归
+#      —— 如实登记，不包装。
+#    ⇒ ⚠️ 读实现时发现 `id_is_load` / `id_is_branch` 两个**死端口**（`describe()` 从不读）
+#      ⇒ 本批**不修**（删端口 = 改公开 API ⇒ 独立立项），但本文件**仍然驱动**它们。
+add_dual_backend_test(test_hazard_complete_dual
+    SOURCES chlib/test_hazard_complete_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

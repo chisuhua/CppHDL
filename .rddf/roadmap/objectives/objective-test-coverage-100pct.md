@@ -123,10 +123,10 @@ build 只交数字 + 交证据）。
 
 | 量 | 值 |
 |---|---|
-| 现状（2026-11-02 实测，post `dual-backend-parity-route-a-cache-async`） | **55** |
-| 路线 A 剩余（**12** − **4** 已落地 = 8 ⇒ ⇒ ⚠️ **实测逐条复核后只有 3 个真可转**（另 6 个是重复/无端口/纯结构 ⇒ 其中 cache Async 已落地） | **+2**（`hazard_complete` · `operation_results` 的部分） |
+| 现状（2026-11-02 实测，post `dual-backend-parity-route-a-hazard-complete`） | **56** |
+| 路线 A 剩余（**12** − **5** 已落地 = 7 ⇒ ⇒ ⚠️ **实测逐条复核后只有 3 个真可转**（另 6 个是重复/无端口/纯结构 ⇒ cache Async 与 hazard_complete **均已落地**） | **+1**（`operation_results` 的部分） |
 | 路线 B 剩余（**7** 个**实测零覆盖** chlib 组件，已落地 3 个（`bitwise`/`onehot`/`arithmetic_advance`）⇒ ⇒ **剩 4**：`selector_arbiter` · `stream_arbiter` · `stream_pipeline` · `stream_width_adapter`；每个仍需过 4 问，⚠️ 后三者的既有测试**存在但零 dual**，故是「新写」而非「转换」） | **+0~4** |
-| **实测可达上限** | **≈ 61**（乐观 55 + 2（路线 A 真可转剩）+ 4（路线 B 剩）= **61**；⇒ ⇒ **阈值 60 的余量仍是 1** ⇒ ⇒ 任一候选被 4 问否决即补不满 ⇒ **需 planner 裁决**） |
+| **实测可达上限** | **≈ 61**（乐观 56 + 1（路线 A 真可转剩）+ 4（路线 B 剩）= **61**；⇒ ⇒ **阈值 60 的余量仍是 1** ⇒ ⇒ 任一候选被 4 问否决即补不满 ⇒ **需 planner 裁决**） |
 
 > ⚠️ 上表是**实测台账**（owner = planner 的判据 + build 交的数字），
 > 每次路线 A/B 批次归档后**只更新「现状」与由它推出的算术**，不动判据条款。

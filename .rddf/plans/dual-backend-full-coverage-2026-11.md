@@ -277,6 +277,7 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 | **D-批第 3 个**（✅ 已实施 · `ch_mem` 两个新 codegen 形态） | **21.6 s**（`test_mem_multiplex_dual` **2 pair**；假 HOME 冷缓存 ⇒ **≈10.8 s/pair**，与模型一致；热缓存 0.29 s） | **259.8 s**（+21.6） | 40.9 min |
 | **B-arithmetic_advance**（✅ 已实施 · CLA/CSA/Wallace/Booth/除法/定点） | **31.8 s**（`test_arithmetic_advance_dual` **3 pair**；假 HOME 冷缓存 ⇒ **≈10.6 s/pair**，与模型一致；热缓存 0.48 s） | **291.6 s**（+31.8） | 40.4 min |
 | **E · cache Async**（✅ 已实施 · `ICacheAsync`/`DCacheAsync` 0-cycle） | **32.8 s**（`test_cache_async_dual` **3 pair**；假 HOME 冷缓存 ⇒ **≈10.9 s/pair**，与模型一致；热缓存 0.43 s） | **324.4 s**（+32.8） | 39.8 min |
+| **F · hazard_complete**（✅ 已实施 · `riscv::HazardUnitComplete` 纯组合） | **24.1 s**（`test_hazard_complete_dual` **1 pair**；假 HOME 冷缓存；热缓存 0.38 s）⚠️ **高于** 10.6–11.6 s/pair 模型 —— 该文件**只有 1 个 pair** ⇒ verilator 工具链**固定开销无法摊薄**（对比：3 pair 的 cache Async 是 10.9 s/pair）⇒ ⇒ **成本模型 MUST 按 pair 数摊薄**，单 pair 文件由固定开销主导 | **348.5 s**（+24.1） | 39.4 min |
 | E | 待测 | | |
 | F | 待测 | | |
 | G | 待测 | | |
