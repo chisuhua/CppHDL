@@ -123,13 +123,22 @@ build 只交数字 + 交证据）。
 
 | 量 | 值 |
 |---|---|
-| 现状（2026-11-02 实测，post `sread-disable-cycle-divergence`） | **47** |
+| 现状（2026-11-02 实测，post `dual-backend-parity-route-a-mem-comb-read`） | **49** |
 | 路线 A 剩余（**12**，逐个复核全部成立） | +12 |
 | 路线 B 剩余（**1–3**；第 6 批已清掉 `pipeline` 1 个 ⇒ 第 5 批记录的 2–4 减 1） | +1~3 |
 | **实测可达上限** | **58 ~ 60**（阈值 60 ⇒ **落在边缘**） |
 
 > ⚠️ 上表是**实测台账**（owner = planner 的判据 + build 交的数字），
 > 每次路线 A/B 批次归档后**只更新「现状」与由它推出的算术**，不动判据条款。
+
+> 🔴 **2026-11-02（build 交付的实测发现，判据仍归 planner）**：D 批第 2 个文件
+> （`test_mem_comb_read`）逐条核对后**只有 2 个用例**带来新覆盖 —— 其 aread/sread
+> **时序对已被** `tests/test_mem_read_timing_dual.cpp` 以**同一判别形态**（寄存器驱动
+> 地址）+ 同一组期望值覆盖 ⇒ ⇒ 「路线 A 剩余 **12**」里**至少有 2 个是重复计数**
+> ⇒ ⇒ 上表算术已**不自洽**（49 + 12 + 1~3 = 62~64，而上限写 **58~60**）⇒
+> ⇒ **需要 planner 重算可达上限**（build 不擅自改判据，只交数字与证据：
+> `.rddf/checks/handoff-2026-11-02-parity-route-ab.md` + 本批次 change 的 proposal
+> 「可转性」表）。
 
 ⚠️ **第一版估算为什么乐观**：路线 B 的「既有文件」池**已见底**
 （`test_stream_operators` 全结构性 · `test_lnode_entry_set` / `test_multithread` /

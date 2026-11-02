@@ -424,6 +424,25 @@ add_dual_backend_test(test_mem_connection_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 A（D 批）第 2 个文件**（2026-11-02）
+#    ⇒ `tests/test_mem_comb_read.cpp` 的 8 个用例逐个核对**双后端增量**后，只有
+#    **2 个**需要新增文件（跨拍写后读 · 同拍写+aread 的写后值）：
+#    · `:289` / `:323`（aread 0-cycle / sread 1-cycle）**已被**
+#      `test_mem_read_timing_dual.cpp` 以**同一判别形态**（寄存器驱动地址）覆盖
+#      ⇒ 重复转换 = 零增量；
+#    · `:203` / `:247`（输入地址 + tick 后读）**对 0/1-cycle 零判别力**
+#      （T2，见文件头）且数据通路已被 `test_mem_connection_dual` 覆盖；
+#    · `:368` / `:439` 是 **codegen 文本断言**，与后端无关。
+#    ⇒ 真实空缺 = 裸 `ch_mem` 的**写口 × aread 交互**（实测：三个 mem dual 文件的
+#    `.write(` 计数全为 0；`chlib/test_memory_dual` 的写口属 RAM 族）。
+#    ⇒ 危险点：写口的 `if (we)` 与读侧的 `assign proxy = mem[addr]` 的**相对时序**
+#    由 codegen + VerilatorBackend 决定，interpreter 另有一套分类 ⇒ 只有双后端能对齐。
+#    ⇒ 与原文件**正交**：`test_mem_comb_read.cpp` MUST NOT 修改。
+add_dual_backend_test(test_mem_comb_read_dual
+    SOURCES test_mem_comb_read_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
