@@ -391,6 +391,26 @@ add_dual_backend_test(test_pipeline_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **`sread` 禁读拍语义的双后端判据**（change
+#    `sread-disable-cycle-divergence-2026-11`）
+#    ⇒ 禁读拍（`enable == 0`）曾经两后端分歧：Simulator **保持上一拍值**、
+#    生成的 Verilog **清零** ⇒ ⇒ 既有测试零覆盖（唯一用可变 enable 的
+#    `test_mem_connection.cpp:43` 恒为 1）⇒ ⇒ 这条路径从未被验证。
+add_dual_backend_test(test_mem_sread_disable_dual
+    SOURCES test_mem_sread_disable_dual.cpp
+    TIMEOUT 300
+)
+
+# ⚠️⚠️ **`chlib::memory` 的 RAM 族**（同一 change
+#    `sread-disable-cycle-divergence-2026-11`）
+#    ⇒ `single_port_ram` / `dual_port_ram` 用 `mem.sread(addr, !we)` ⇒
+#    **写的那一拍就是禁读拍** ⇒ 是唯一会踩中该语义的生产组件。
+#    ⇒ 写拍的输出 = `0`（清零，非保持）⇒ 同时是本分歧的**回归探针**。
+add_dual_backend_test(test_memory_dual
+    SOURCES chlib/test_memory_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

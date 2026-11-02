@@ -1250,8 +1250,25 @@ void verilogwriter::print_mem_read_port(
         // All sync mem read ports emit always_ff, giving 1-cycle read
         // latency. The CPU's pc_lag / FLUSH mechanism depends on this for
         // imem — keep as-is.
-        // Reset branch clears the read proxy (matches the CppHDL Simulator
-        // data_map default-zero), preventing X from reaching the datapath.
+        //
+        // ⚠️ Emitted shape (mind the dangling-else!):
+        //
+        //     if (!default_reset)
+        //         if (en) proxy <= mem[addr];
+        //     else
+        //         proxy <= 1'b0;
+        //
+        // Per Verilog's dangling-else rule the `else` binds to the INNER
+        // `if (en)` — so this is **`enable == 0` clears the proxy**. It is
+        // NOT a reset branch: when `default_reset` is high the whole outer
+        // body is skipped and the proxy holds.
+        // (An earlier comment here said "Reset branch clears the read proxy"
+        // — that wording was backwards. Corrected by change
+        // `sread-disable-cycle-divergence-2026-11`.)
+        //
+        // The Simulator matches this via
+        // `instr_mem_sync_read_port::eval` (`src/ast/instr_mem.cpp`), which
+        // writes zero on the disabled cycle.
         out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
             << "Read port " << proxy_name << "\n";
         out << "        if (!default_reset)\n";

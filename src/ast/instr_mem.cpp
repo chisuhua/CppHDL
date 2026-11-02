@@ -164,6 +164,11 @@ void instr_mem_async_read_port::eval() {
         enabled = !enable_data_ptr_->is_zero();
     }
 
+    // ⚠️ 当前**不可达**：`ch_mem::aread` 给 enable 传的是 `nullptr`
+    // （`include/core/mem.h`）⇒ `enable_data_ptr_` 恒为空 ⇒ `enabled` 恒 true。
+    // 若将来让 aread 支持 enable，这里 MUST 与 sync 侧一致（禁读拍**清零**，
+    // 见 `instr_mem_sync_read_port::eval`）—— 否则会重新制造
+    // `sread-disable-cycle-divergence-2026-11` 同型的两后端分歧。
     if (!enabled)
         return;
 
@@ -255,8 +260,33 @@ void instr_mem_sync_read_port::eval() {
         enabled = !enable_data_ptr_->is_zero();
     }
 
-    if (!enabled)
+    if (!enabled) {
+        // 禁读拍（`enable == 0`）MUST 把输出**清零**。
+        //
+        // 此前是 `return;`（⇒ 输出**保持上一拍的值**），而生成的 Verilog 是
+        // 清零 —— `print_mem_read_port`（`src/codegen_verilog.cpp`）输出的是：
+        //
+        //     if (!default_reset)
+        //         if (en) proxy <= mem[addr];
+        //     else
+        //         proxy <= 1'b0;
+        //
+        // ⚠️ 按 Verilog 的 **dangling-else** 规则，那个 `else` 属于内层
+        // `if (en)`（**不是** `if (!default_reset)`）⇒ ⇒ `en == 0` 时清零。
+        //
+        // ⚠️ 注意该处的源码注释写的是「Reset branch clears the read proxy」
+        // ⇒ ⇒ **措辞与实际行为相反**：reset 时 `if (!default_reset)` 为假 ⇒
+        // 什么都不做（保持）；真正清零的是 **`enable == 0`** 分支。
+        //
+        // 分歧登记：`openspec/changes/sread-disable-cycle-divergence-2026-11/`
+        // 裁决 = **对齐 Verilog（清零）**。理由：只改 Simulator 一侧 ⇒ 既有用户
+        // 生成的 Verilog **零变化**；且「不读就没有数据」比「读到上一拍的陈旧值」
+        // 更不易被下游误用。
+        //
+        // ⚠️ `aread` 不受影响：它没有 enable（`ch_mem::aread` 传 `nullptr`）。
+        *output_data_ptr_ = sdata_type(0, output_data_ptr_->bitwidth());
         return;
+    }
 
     // 执行读取
     sdata_type read_data = mem_ptr_->read_memory(addr);
