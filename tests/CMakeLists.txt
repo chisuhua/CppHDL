@@ -411,6 +411,19 @@ add_dual_backend_test(test_memory_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 A（D 批）第 1 个文件**（2026-11-02）
+#    ⇒ `tests/test_mem_connection.cpp` 的 4 种 `ch_mem` 读端口**连接形态**全部是
+#    裸 `ch_device` 单后端 ⇒ ⇒ 在 verilator codegen 上从未被验证。
+#    ⇒ 危险点：读端口是**虚构节点**，其数据靠 `data_proxy` 承载 ⇒ codegen 必须
+#    ① 跳过「src(0) 是 mem read port」的 proxy 赋值 · ② 代理链遍历不得越过
+#    read port（否则 `assign out = <read_port>` 引用未声明信号）· ③ 不把
+#    `type_mem_read_port` 放进 wire 声明 ⇒ 三处任一错都**只有双后端能抓**。
+#    ⇒ 与 `test_mem_sread_disable_dual`（禁读拍语义）**正交**：本文件 enable 恒 1。
+add_dual_backend_test(test_mem_connection_dual
+    SOURCES test_mem_connection_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
