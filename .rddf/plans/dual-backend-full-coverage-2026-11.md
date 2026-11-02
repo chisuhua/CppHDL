@@ -276,6 +276,7 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 | **B-新文件批**（✅ 已实施 · 3 个 chlib 零覆盖组件） | **69.9 s**（`test_bitwise_dual` **2 pair / 23.7 s** · `test_onehot_dual` **3 pair / 34.8 s** · `test_forwarding_dual` **1 pair / 11.4 s**；均用**假 HOME** 实测**冷缓存** ⇒ **≈11.6 s/pair** ⇒ 与 §3.0 模型（10.66 s/pair）一致；热缓存 0.17–0.88 s） | **238.2 s**（A 13.5 + B1 57.5 + B2 33 + D 64.3 + B-新 69.9） | 41.3 min |
 | **D-批第 3 个**（✅ 已实施 · `ch_mem` 两个新 codegen 形态） | **21.6 s**（`test_mem_multiplex_dual` **2 pair**；假 HOME 冷缓存 ⇒ **≈10.8 s/pair**，与模型一致；热缓存 0.29 s） | **259.8 s**（+21.6） | 40.9 min |
 | **B-arithmetic_advance**（✅ 已实施 · CLA/CSA/Wallace/Booth/除法/定点） | **31.8 s**（`test_arithmetic_advance_dual` **3 pair**；假 HOME 冷缓存 ⇒ **≈10.6 s/pair**，与模型一致；热缓存 0.48 s） | **291.6 s**（+31.8） | 40.4 min |
+| **E · cache Async**（✅ 已实施 · `ICacheAsync`/`DCacheAsync` 0-cycle） | **32.8 s**（`test_cache_async_dual` **3 pair**；假 HOME 冷缓存 ⇒ **≈10.9 s/pair**，与模型一致；热缓存 0.43 s） | **324.4 s**（+32.8） | 39.8 min |
 | E | 待测 | | |
 | F | 待测 | | |
 | G | 待测 | | |

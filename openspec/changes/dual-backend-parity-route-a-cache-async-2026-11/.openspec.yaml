@@ -1,0 +1,7 @@
+schema: spec-driven
+created: 2026-11-02
+# ⚠️ 本 change **有** spec 变更（因此归档 **不得** 用 --skip-specs）：
+# capability `dual-backend-test-coverage` **MODIFIED ×1** —— 订正一个**已被实测证伪**
+# 的 Scenario（"spec R6 排除清单遵守" 里「Async MUST NOT 用 DUAL_BACKEND_TEST_PAIR」）。
+# ⚠️ Scenario 标题 MUST NOT 改（CLI 按标题匹配；ADR-052 / ADR-053 已两次踩过）。
+skip_specs: false

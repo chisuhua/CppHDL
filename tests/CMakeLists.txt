@@ -528,6 +528,23 @@ add_dual_backend_test(test_arithmetic_advance_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 A（E 批）—— `ICacheAsync` / `DCacheAsync` 的 0-cycle 语义进双后端 parity**
+#    （2026-11-02）⇒ 本文件**同时是契约矛盾的裁决装置**：
+#    capability `dual-backend-test-coverage` 里一个 Requirement 写「Async 禁令已解除、
+#    MUST 逐周期一致」，另一个 Requirement 的 Scenario 仍写 `ICacheAsync` **MUST NOT**
+#    用 macro ⇒ ⇒ **本文件真绿 ⇒ 矛盾按事实消解；真红 ⇒ 禁令保留 + 发现真分歧**。
+#    ⇒ ⚠️ **只取 Async 3 个用例**：Sync 6 个已被 `tests/chlib/test_cache_sync.cpp`
+#      （10 pair）覆盖 ⇒ 转 Sync = 重复计数（4 问 ①）。
+#    ⇒ 激励与原用例（`test_cache_complete.cpp` 的 `:303` / `:332` / `:611`）**逐位相同**，
+#      但期望值来源升级为**手推**：把中间拍的 `axi_valid` / `axi_addr` / `axi_wdata` /
+#      `axi_we` 全部钉住，并新增 `cyc4 的 rdata == 0xCAFEBABE`（写直达真的落进 cache）
+#      —— ⚠️ 原用例**从未**断言写入的数据 ⇒ 若 `do_write & hit_way0` 被写成
+#      `& hit_way1`（way0 永不写），原用例**仍然全绿**。
+add_dual_backend_test(test_cache_async_dual
+    SOURCES chlib/test_cache_async_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
