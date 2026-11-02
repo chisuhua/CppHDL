@@ -582,6 +582,24 @@ add_dual_backend_test(test_stream_pipeline_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 B（H 批）—— `priority_selector` / `round_robin_selector` 进双后端 parity**
+#    （2026-11-03）
+#    ⇒ ⚠️ **刻意只取同文件里两个「干净」的组合子**：`round_robin_arbiter` 的
+#      `UpdatePriority` 用 `if (result.valid)` 做硬件判断 ⇒ **建图期求值** ⇒ 恒假 ⇒
+#      **`next_ptr` 恒 0 ⇒ 不轮转**（实测）⇒ **带真缺陷** ⇒ ⇒ dual parity 会给缺陷
+#      **盖章**（两后端一致地错 ⇒ parity 看不见）⇒ ⇒ **先修缺陷再覆盖**
+#      （独立立项 `.rddf/improvements/selector-round-robin-not-rotating-2026-11.md`）。
+#    ⇒ `round_robin_selector` **有生产消费者**（`include/chlib/stream.h` 的
+#      `stream_arbiter_round_robin` 调它）。
+#    ⇒ 4 问 ①：两个符号在 54 个 dual 文件里各出现 **0** 次 ⇒ 无重复。
+#    ⇒ ⚠️ 既有 `tests/chlib/test_selector_priority.cpp` 与
+#      `tests/chlib/test_selector_round_robin.cpp` **全是裸 context**（`ch_device=0`）
+#      ⇒ 命中 **R6 排除项** ⇒ **不可转换** ⇒ 新写；两个原文件 **MUST NOT 修改**。
+add_dual_backend_test(test_selector_arbiter_dual
+    SOURCES chlib/test_selector_arbiter_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

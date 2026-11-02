@@ -231,11 +231,34 @@ def r3() -> None:
 
 # ── 投毒（自检用）──────────────────────────────────────────────────────────
 def _poison_drop_row(lines: list[str]) -> list[str]:
+    """删掉**最近 change 触及**的那条登记 ⇒ ⇒ R3 MUST 转红。
+
+    ⚠️ **为什么必须定位到「被触及」的那一行**（2026-11-03 实测踩到）：
+    R1 只查「登记 ⊆ 组件全集」、R2 只查「判别性用例仍存在」
+    ⇒ ⇒ 删掉一条**与最近 change 无关**的登记时，R1/R2 **仍绿**、R3 **也不红**
+    ⇒ ⇒ 投毒**没有效果** ⇒ ⇒ 自检会误报「判别力为零」。
+    ⇒ ⇒ 本函数按最近 change 的 `touched-components` 标记定位目标行
+    ⇒ ⇒ 删掉它 ⇒ ⇒ R3（该组件未登记）**必红**。
+    ⚠️ **fail-closed**：找不到最近的 change / 找不到标记 / 找不到对应行
+    ⇒ ⇒ 抛异常 ⇒ ⇒ 自检报「投毒失败（fail-closed）」而不是「判别力为零」。
+    """
+    proposal = latest_chlib_change()
+    if proposal is None:
+        raise RuntimeError("找不到最近归档的 chlib change ⇒ ⇒ 无法定位投毒目标")
+    m = MARKER_RE.search(proposal.read_text(encoding="utf-8"))
+    if not m:
+        raise RuntimeError(
+            f"{proposal.parent.name} 的 proposal 没有 touched-components 标记"
+            " ⇒ ⇒ 无法定位投毒目标")
+    touched = {t.strip().strip("`") for t in m.group(1).split(",") if t.strip()}
     for i, l in enumerate(lines):
-        if ROW_RE.match(l.strip()):
+        mm = ROW_RE.match(l.strip())
+        if mm and mm.group(1) in touched:
             del lines[i]
             return lines
-    raise RuntimeError("登记表里没有可删的行")
+    raise RuntimeError(
+        "登记表里找不到最近 change 触及的组件行（"
+        + " / ".join(sorted(touched)) + "）")
 
 
 def _poison_bogus_component(lines: list[str]) -> list[str]:

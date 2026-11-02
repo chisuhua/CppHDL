@@ -5,6 +5,7 @@
 - **规模**：1 个新测试文件（3 个 `DUAL_BACKEND_TEST_PAIR` / 72 断言每后端）+ 1 条 CMake 注册 + 计数锚点
   + **2 个新缺陷的独立立项**（只读查重的副产品）
 - **关联**：`objective-test-coverage-100pct` · capability `dual-backend-test-coverage` ·
+<!-- touched-components: stream_m2s_pipe, stream_s2m_pipe, stream_half_pipe -->
   ADR-055（stream 链内闭包不变式 · 三个 pipe 的重写）
 
 ## Why

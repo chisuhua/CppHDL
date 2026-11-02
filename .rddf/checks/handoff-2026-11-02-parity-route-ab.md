@@ -11,13 +11,13 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **57**（目标 60，差 **3**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **261** | 同上 |
-| `CTEST_TOTAL` | **234** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **66** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **223** | `ctest -N -LE perf \| tail -1` |
+| **parity 源文件数** | **58**（目标 60，差 **2**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **263** | 同上 |
+| `CTEST_TOTAL` | **235** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **67** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **224** | `ctest -N -LE perf \| tail -1` |
 | `tests/test_*.cpp` | **130** | `ls tests/test_*.cpp \| wc -l` |
-| `tests/chlib/test_*.cpp` | **48** | `ls tests/chlib/test_*.cpp \| wc -l` |
+| `tests/chlib/test_*.cpp` | **49** | `ls tests/chlib/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
 ⚠️ 工作区里有一批**并发会话**的文件（`hierarchical-rtl-output`：`docs/adr/ADR-058..062`、
@@ -30,9 +30,9 @@
 |---|---|
 | 第 1 会话（11 commit） | 路线 B 第 6 批 · `sread` 禁读拍修复与归档 · 路线 A **D 批第 1 个**（`test_mem_connection_dual`，4 pair） |
 | 第 2 会话（2 commit） | 路线 A **D 批第 2 个**（`test_mem_comb_read_dual`，2 pair / 14 断言）+ 归档 + 台账 47 → **49** |
-| 本会话（12 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54**；④ 路线 A **E 批**：`test_cache_async_dual`（3 pair / 73）⇒ 54 → **55**（**含 spec 订正**：用事实裁决 Async 禁令）；⑤ 路线 A **F 批**：`test_hazard_complete_dual`（1 pair / 112，零 DUT 复制）⇒ 55 → **56**；⑥ 路线 B **G 批**：`test_stream_pipeline_dual`（3 pair / 72，m2s/s2m/half）⇒ 56 → **57** |
+| 本会话（14 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54**；④ 路线 A **E 批**：`test_cache_async_dual`（3 pair / 73）⇒ 54 → **55**（**含 spec 订正**：用事实裁决 Async 禁令）；⑤ 路线 A **F 批**：`test_hazard_complete_dual`（1 pair / 112，零 DUT 复制）⇒ 55 → **56**；⑥ 路线 B **G 批**：`test_stream_pipeline_dual`（3 pair / 72，m2s/s2m/half）⇒ 56 → **57**；⑦ 路线 B **H 批**：`test_selector_arbiter_dual`（2 pair / 34，priority + round_robin selector）⇒ 57 → **58** |
 
-parity 轨迹：**37 → 49 → 52 → 53 → 54 → 55 → 56 → 57**。
+parity 轨迹：**37 → 49 → 52 → 53 → 54 → 55 → 56 → 57 → 58**。
 
 ## 3. 🔴 每个批次的**前置条件**：可转性 4 问（已固化进 plan §4）
 
@@ -157,7 +157,7 @@ objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐
 | 候选 | 状态 | 备注 |
 |---|---|---|
 | `chlib/stream_pipeline.h` | ✅ **已落地**（G 批 · 3 pair / 72） | ADR-055 刚重写 ⇒ 回归价值最高 |
-| `chlib/selector_arbiter.h` | 🟡 **部分可做** | `priority_selector` + `round_robin_selector` **无 C++ `if`** ⇒ 干净；`round_robin_arbiter` **带缺陷** ⇒ 须先修 |
+| `chlib/selector_arbiter.h` | ✅ **已落地**（H 批 · 2 pair / 34） | `priority_selector` + `round_robin_selector` **无 C++ `if`** ⇒ 干净 ⇒ **已做**；`round_robin_arbiter` **带缺陷** ⇒ 须先修 |
 | `chlib/stream_arbiter.h` | 🔴 **暂缓** | `stream_arbiter_lock` **带缺陷**（恒选通道 0 + 输出错误数据）⇒ 须先修 |
 | `chlib/stream_width_adapter.h` | 🟡 **部分可做** | `narrow_to_wide` / `wide_to_narrow` / `stream_width_adapter` 可做；`stream_extend` / `stream_truncate` **零消费者** ⇒ 按 Zero-Debt 应删、不测 |
 

@@ -123,10 +123,10 @@ build 只交数字 + 交证据）。
 
 | 量 | 值 |
 |---|---|
-| 现状（2026-11-03 实测，post `dual-backend-parity-route-b-stream-pipeline`） | **57** |
+| 现状（2026-11-03 实测，post `dual-backend-parity-route-b-selector-arbiter`） | **58** |
 | 路线 A 剩余（**12** − **5** 已落地 = 7 ⇒ ⇒ ⚠️ **实测逐条复核后只有 3 个真可转**（另 6 个是重复/无端口/纯结构 ⇒ cache Async 与 hazard_complete **均已落地**） | **+1**（`operation_results` 的部分） |
-| 路线 B 剩余（**7** 个**实测零覆盖** chlib 组件，已落地 **4** 个（`bitwise`/`onehot`/`arithmetic_advance`/**`stream_pipeline`**）⇒ ⇒ **剩 3**：`selector_arbiter` · `stream_arbiter` · `stream_width_adapter`；⚠️ **2026-11-03 只读查重结论**：三者**全部**「既有测试是裸 context ⇒ R6 排除项 ⇒ **不可转换**」⇒ ⇒ 只能新写；且 `stream_arbiter`（`stream_arbiter_lock` 恒选通道 0）与 `selector_arbiter`（`round_robin_arbiter` 不轮转）**带已实测的真缺陷** ⇒ ⇒ **先修缺陷再覆盖**，否则 dual parity 会给缺陷盖章 ⇒ ⇒ `selector_arbiter` 只剩干净的 `priority_selector` + `round_robin_selector` 可做；`stream_width_adapter` 的 `stream_extend`/`stream_truncate` **零消费者** ⇒ 按 Zero-Debt 应删、不测） | **+0~3** |
-| **实测可达上限** | **≈ 61**（乐观 57 + 1（路线 A 真可转剩）+ 3（路线 B 剩）= **61**；⇒ ⇒ **阈值 60 的余量仍是 1** ⇒ ⇒ 任一候选被 4 问否决即补不满 ⇒ **需 planner 裁决**） |
+| 路线 B 剩余（**7** 个**实测零覆盖** chlib 组件，已落地 **5** 个（`bitwise`/`onehot`/`arithmetic_advance`/**`stream_pipeline`**/**`selector_arbiter`**）⇒ ⇒ **剩 2**：`stream_arbiter` · `stream_width_adapter`；⚠️ **2026-11-03 只读查重结论**：三者**全部**「既有测试是裸 context ⇒ R6 排除项 ⇒ **不可转换**」⇒ ⇒ 只能新写；且 `stream_arbiter`（`stream_arbiter_lock` 恒选通道 0）与 `selector_arbiter`（`round_robin_arbiter` 不轮转）**带已实测的真缺陷** ⇒ ⇒ **先修缺陷再覆盖**，否则 dual parity 会给缺陷盖章 ⇒ ⇒ `selector_arbiter` 只剩干净的 `priority_selector` + `round_robin_selector` 可做（✅ **已落地** ⇒ 只剩带缺陷的 `round_robin_arbiter` 待修缺陷后再做）；`stream_width_adapter` 的 `stream_extend`/`stream_truncate` **零消费者** ⇒ 按 Zero-Debt 应删、不测） | **+0~3** |
+| **实测可达上限** | **≈ 61**（乐观 58 + 1（路线 A 真可转剩）+ 2（路线 B 剩）= **61**；⇒ ⇒ **阈值 60 的余量仍是 1** ⇒ ⇒ 任一候选被 4 问否决即补不满 ⇒ **需 planner 裁决**） |
 
 > ⚠️ 上表是**实测台账**（owner = planner 的判据 + build 交的数字），
 > 每次路线 A/B 批次归档后**只更新「现状」与由它推出的算术**，不动判据条款。
