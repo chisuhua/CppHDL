@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-02
+# 本 change **有 spec 变更**：`sread` 的禁读拍（`enable == 0`）语义目前
+# **两个后端不一致**，修好之后 MUST 把「选定的那一侧」写进
+# capability `mem-read-timing` ⇒ 归档时 **MUST NOT** 用 `--skip-specs`。
+skip_specs: false
