@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-02
+# 本 change **无 spec 变更**：它只**新增**一个双后端 parity 测试文件
+# （路线 B · H 批），**不新增也不修改任何 Requirement**。
+# `objective-test-coverage-100pct` §2 的「parity 源文件数」是**度量**，
+# 不是契约条款；capability `dual-backend-test-coverage` 治的是 macro / CMake /
+# 排除清单 ⇒ 新增一个使用既有 macro 的文件**不触碰**它的任何 Requirement。
+# ⇒ 归档时用 `openspec archive dual-backend-parity-route-b-fsm-2026-11
+#   --skip-specs`（`AGENTS.md` 的规则：只有**显式声明 no spec changes** 的
+#   change 才可用该标志 —— 本文件即该显式声明）。
+skip_specs: true

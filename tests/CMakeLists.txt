@@ -300,6 +300,18 @@ add_dual_backend_test(test_multi_if_acceptance_behavior
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 1 批**（2026-11-02 · change
+#    `dual-backend-parity-route-b-fsm-2026-11`）
+#    ⇒ `ch_state_machine` 的**运行期转移**此前在 codegen 路径上**零验证**
+#    ⇒ 同一缺陷类已在 uart_tx（状态寄存器 `q <= q` 自环）与 SPI fixture
+#    （状态卡死在 TRANSFER）**两次真实发生**，且两次都被弱断言掩盖。
+#    ⇒ ⇒ **新增**文件（**不是**转换 `tests/test_state_machine.cpp`：
+#    ⇒ 那个文件 6/8 用例是编译期/构图期判据 ⇒ dual 化零增量价值）。
+add_dual_backend_test(test_state_machine_dual
+    SOURCES test_state_machine_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
