@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-02
+# 本 change **无 spec 变更**：只新增一个双后端 parity 测试文件（路线 A · D 批第 3 个），
+# 不新增也不修改任何 Requirement。`objective-test-coverage-100pct` §2 的
+# 「parity 源文件数」是**度量**，不是契约条款。
+# ⚠️ N4 挖出的「codegen 发射 always_ff ⟺ Simulator 时序表非空」这条**不变量**
+#    目前**没有** capability 载体，且它需要一次全仓交叉审计才能写成可执行条款
+#    ⇒ ⇒ 独立立项（本 change 只在测试文件头把它钉成回归判据）。
+# ⇒ 归档用 `openspec archive ... --skip-specs`（显式声明见本文件）。
+skip_specs: true

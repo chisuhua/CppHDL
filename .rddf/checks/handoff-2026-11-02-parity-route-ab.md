@@ -11,12 +11,12 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **52**（目标 60，差 **8**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **249** | 同上 |
-| `CTEST_TOTAL` | **229** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **61** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **218** | `ctest -N -LE perf \| tail -1` |
-| `tests/test_*.cpp` | **129** | `ls tests/test_*.cpp \| wc -l` |
+| **parity 源文件数** | **53**（目标 60，差 **7**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **251** | 同上 |
+| `CTEST_TOTAL` | **230** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **62** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **219** | `ctest -N -LE perf \| tail -1` |
+| `tests/test_*.cpp` | **130** | `ls tests/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
 ⚠️ 工作区里有一批**并发会话**的文件（`hierarchical-rtl-output`：`docs/adr/ADR-058..062`、
@@ -29,9 +29,9 @@
 |---|---|
 | 第 1 会话（11 commit） | 路线 B 第 6 批 · `sread` 禁读拍修复与归档 · 路线 A **D 批第 1 个**（`test_mem_connection_dual`，4 pair） |
 | 第 2 会话（2 commit） | 路线 A **D 批第 2 个**（`test_mem_comb_read_dual`，2 pair / 14 断言）+ 归档 + 台账 47 → **49** |
-| 本会话（2 commit） | 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52** |
+| 本会话（4 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53** |
 
-parity 轨迹：**37 → 49 → 52**。
+parity 轨迹：**37 → 49 → 52 → 53**。
 
 ## 3. 🔴 每个批次的**前置条件**：可转性 4 问（已固化进 plan §4）
 
@@ -43,6 +43,13 @@ parity 轨迹：**37 → 49 → 52**。
 | ② | 断言形态**对目标维度有判别力**吗？（变异实测） | 「输入地址 + `tick()` 后读」对 0/1-cycle **零判别力**（T2） |
 | ③ | **与后端无关**吗？（编译期 / codegen 文本断言 / 构图期拒绝） | `aread Verilog codegen emits assign` ⇒ 零增量 |
 | ④ | **形态上不可转换** ⇒ 是否值得**新写**？ | 本批 3 个目标**全部**不可转换（裸 context / SECTION / 函数式接口）⇒ ⇒ **必须允许新写路线** ⇒ ⇒ 期望值**手推** ⇒ ⇒ 笔误风险 ↑（本批实测到 1 次，被双后端一致地证伪） |
+
+### 🔴 4 问之外的**第 5 条纪律**：**「预测无效的变异」也必须真跑**
+
+D 批第 3 个文件里，我按 T2 边界**预测** N4（`aread` → `always_ff`）是**无效变异（恒绿）**
+⇒ 若只跑「预期会红」的变异，就**漏掉**了一条**框架层不变量**（见 §6 T5）。
+⇒ ⇒ **纪律**：变异清单里**允许且应当**包含「我认为不会红」的条目，跑完**如实记录**
+（红 ⇒ 追机制；绿 ⇒ 才算证明边界）。**预测 ≠ 事实**。
 
 ## 4. 📊 实测覆盖矩阵（路线 B 的"新文件"池 = **7** 个，原估 1–3 **被低估**）
 
@@ -82,11 +89,10 @@ CLA / CSA / Wallace 乘法器 / Booth 乘法器 / 非恢复余数除法 / 定点
 CLI 按标题匹配 Scenario）；若红 ⇒ 说明前提并未消除 ⇒ 保留禁令。
 ⚠️ `test_cache_sync.cpp` 已是 dual（10 pair）⇒ Sync 用例大概率重复 ⇒ 只转 Async 那批。
 
-### C. D 批剩 1：`tests/test_mem_timing.cpp`（**先过 4 问**）
-7 个用例里：`sread clears its value while the enable is low` ⇒ **已被**
-`test_mem_sread_disable_dual` 覆盖（重复）· 写后读类 ⇒ **已被**本会话的
-`test_mem_comb_read_dual` 覆盖（重复）⇒ ⇒ **可转的大概率只剩**「`select()` 的操作数
-里嵌读端口」那个形态（codegen 的 mux-over-read-port 路径）。
+### C. ~~D 批剩 1：`tests/test_mem_timing.cpp`~~ ✅ **已完成**（`test_mem_multiplex_dual`）
+7 个用例逐条过 4 问后只有 2 个形态有增量（mux 嵌读端口 / 同一 mem 两个读端口），
+其余 5 个**已被** `test_mem_sread_disable_dual` / `test_mem_comb_read_dual` /
+`test_mem_connection_dual` 覆盖 ⇒ ⇒ **D 批已清空**。
 
 ### D. E/F 批剩余（**逐个先过 4 问**）
 `test_bundle_connection` · `test_bundle_master_slave` · `test_operation_results`
@@ -97,11 +103,14 @@ CLI 按标题匹配 Scenario）；若红 ⇒ 说明前提并未消除 ⇒ 保留
 `chlib/test_onehot`（**已被**本批覆盖）⇒ ⇒ **F 批 62 个用例里，实际可转的可能只有个位数**。
 
 ### E. planner 裁决（**build 只交数字，不改判据**）
-- 现状 **52** · 路线 A 剩余 **10**（已证 2 个重复）· 路线 B 候选 **7**
-- ⇒ 上限算术：**乐观 69** / 按实测命中率 ~50% 折算 ≈ **60** ⇒ ⇒ 阈值 60
+- 现状 **53** · 路线 A 剩余 **9**（12 − 3：2 个已证重复 + 1 个已落地）· 路线 B 候选**剩 4**（7 − 3 已落地）
+- ⇒ 上限算术：**乐观 66** / 按实测命中率 ~50% 折算 ≈ **60~62** ⇒ ⇒ 阈值 60
   **从「不可达」变成「贴边可达」** ⇒ **需 planner 重算**（台账已更新 + 标注）。
+- 🔴 **另请 planner/oracle 看待办**：T5 那条**框架层不变量**（codegen `always_ff`
+  ⟺ Simulator 时序表非空）需要**独立立项**做全仓交叉审计 —— 它与覆盖无关，
+  但会**静默**吞掉生成的时序逻辑。
 
-## 6. 陷阱清单（**T1–T3 仍有效；T2 已强化**）
+## 6. 陷阱清单（**T1–T5**；T2 已收窄表述，T5 是本会话挖出的框架层缺口）
 
 ### 🔴 T1：`ctest` **不会**自动重新构建
 改了 `src/**` / `include/**` 后只重建被点名的 target 就跑 ctest ⇒ **假绿**。
@@ -123,6 +132,21 @@ CLI 按标题匹配 Scenario）；若红 ⇒ 说明前提并未消除 ⇒ 保留
 与模块式两处逐字相同）⇒ ⇒ 注入器的模式若**不唯一命中**必须**拒绝执行**
 （本会话实测：O2 首次被 `MUTATE_FAIL` 拒绝 ⇒ 补足上下文后重跑才命中）⇒ ⇒
 否则「变异没注入 ⇒ 跑旧二进制 ⇒ 假绿」。
+
+### 🔴🔴 T5（本会话新增，**框架层**）：无时序节点的设计 ⇒ 时钟从不翻转
+
+`src/simulator_init.cpp:153` 有 `if (sequential_instr_list_.empty()) default_clock_instr_ = nullptr;`
+⇒ ⇒ `Simulator::tick()` 里 `eval()`（进而 `eval_sequential()` ⇒ Vtop 时钟 0→1→0）
+**只在 `default_clock_instr_` 存在时**才调用 ⇒ ⇒ **整个设计没有任何时序节点**
+（无 `ch_reg` / 无 `sread` / 无 mem 写口）⇒ **时钟从不翻转** ⇒ 生成的 Verilog 里
+**任何 `always_ff` 永不触发** ⇒ 读到 **0**，**无任何报错**。
+
+⇒ **不变量**：「codegen 发射了任一 `always_ff`」 ⟺ 「Simulator 时序表非空」。
+⇒ 实测证据：`tests/test_mem_multiplex_dual.cpp` 的 N4 变异（`aread` → `always_ff`）
+让 pair 2（只有 `aread` + `ch_out`）**全部读 0**，而同文件的 pair 1（用 `sread`
+⇒ 时序表非空）**完好**；把变异生成的 `top.v` 拿**独立 harness** 驱动 ⇒ **正确**
+⇒ ⇒ 错在**驱动路径**，不在 Verilog 语义。
+⇒ ⚠️ 是否还有**其它**构造在漂移**未审计** ⇒ **独立立项**（全仓 codegen × instr 分类交叉审计）。
 
 ### 既有陷阱（仍有效）
 - **子组件 MUST 用 `ch::ch_module<T>`**（裸构造的 `describe()` 不会被调用 ⇒ SIGSEGV）。
@@ -146,6 +170,7 @@ CLI 按标题匹配 Scenario）；若红 ⇒ 说明前提并未消除 ⇒ 保留
 | `tests/chlib/test_onehot_dual.cpp` | 本会话新增（one-hot 译码/编码，零 DUT 复制） |
 | `tests/chlib/test_forwarding_dual.cpp` | 本会话新增（ForwardingMux 三档位 + `is_jump`） |
 | `tests/test_mem_comb_read_dual.cpp` | 第 2 会话新增（mem 写口 × aread） |
+| `tests/test_mem_multiplex_dual.cpp` | 本会话新增（mux 嵌读端口 + 同一 mem 两个读端口；**N4 钉住 T5 不变量**） |
 | `tests/test_mem_read_timing_dual.cpp` | ⚠️ **已覆盖 aread/sread 时序**（别重复转换） |
 | `tests/chlib/test_cache_sync.cpp` | ⚠️ **已是 dual**（10 pair）· Async 的 spec 矛盾见 §5.B |
 | `openspec/specs/dual-backend-test-coverage/spec.md` | ⚠️ **Async 那条自相矛盾**（见 §5.B） |

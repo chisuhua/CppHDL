@@ -491,6 +491,22 @@ add_dual_backend_test(test_forwarding_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 A（D 批）第 3 个文件**（2026-11-02）—— `tests/test_mem_timing.cpp`
+#    的 7 个用例逐条过「可转性 4 问」后**只剩 2 个形态**有增量：
+#    · `:535`（sread 禁读拍清零）⇒ **已被** `test_mem_sread_disable_dual` 覆盖
+#    · `:389` / `:435`（写后读 / 顺序写读）⇒ **已被** `test_mem_comb_read_dual` 覆盖
+#    · `:306`（aread + init）⇒ **已被** `test_mem_connection_dual` 的 pair 2 覆盖
+#    ⇒ ⇒ 剩下的新形态 = ① **`:182` 的 `select()` 里嵌读端口**（mux 的操作数是读端口的
+#      data proxy ⇒ codegen 必须引用**已声明**的 proxy，不能引用那个**虚构**的
+#      read_port 节点 ⇒ 否则生成**未声明信号**）
+#      ② **`:358` 的同一 mem 上两个读端口**（既有 dual 文件每个 DUT 只有一个读端口）
+#    ⇒ ⚠️ **这两个 DUT 对 0/1-cycle 零判别力**（T2：地址来自 TB 驱动的输入端口）
+#      ⇒ ⇒ 时序维度由 `test_mem_read_timing_dual`（寄存器驱动形态）负责 ⇒ 不重复。
+add_dual_backend_test(test_mem_multiplex_dual
+    SOURCES test_mem_multiplex_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
