@@ -32,7 +32,7 @@
 
 ## 验收
 
-- [ ] `ctest -LE perf` 零回归
-- [ ] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过
-- [ ] `verify_stream_ready_ownership.sh` 等护栏全绿
-- [ ] 归档：**用** `--skip-specs`（`.openspec.yaml` 已显式声明 no spec changes）
+- [x] `ctest -LE perf` **203/203**（零回归）
+- [x] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过
+- [x] 护栏全绿（`verify_stream_ready_ownership.sh` / `verify_stream_domain_closure.sh` / `verify_chlib_naming_honesty.sh` 等）
+- [x] 归档：**用** `--skip-specs`（`.openspec.yaml` 已显式声明 no spec changes）
