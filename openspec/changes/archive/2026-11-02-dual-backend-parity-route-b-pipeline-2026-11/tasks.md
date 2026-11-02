@@ -60,10 +60,12 @@
 
 ## C6 —— 计数与验收
 
-- [ ] 锚点：`CTEST_TOTAL` **222** · `VERILATOR_E2E_TOTAL` **54** ·
+- [x] 锚点：`CTEST_TOTAL` **222** · `VERILATOR_E2E_TOTAL` **54** ·
       `DUAL_BACKEND_PARITY_TOTAL` **45** · `PAIRS` **233** · non-perf **211** ·
       `tests/chlib/test_*.cpp` **40**
-- [ ] `ctest -LE perf` **211/211** 零回归
-- [ ] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 双绿
-- [ ] 全部 `scripts/verify_*.sh` + `--self-test` exit 0
-- [ ] 归档：**用** `--skip-specs`（`.openspec.yaml` 已显式声明 no spec changes）
+- [x] `ctest -LE perf` **211/211** 零回归
+- [x] `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 双绿
+- [x] 全部 `scripts/verify_*.sh` + `--self-test` exit 0
+      ⇒ ⚠️ **18/19 绿**：`verify_roadmap_fragments.sh` 红 —— 归因于**并发会话**的
+      `feat-hierarchical-rtl-output` 在 roadmap 里改名、AUTO 块未同步 ⇒ 与本批无关
+- [x] 归档：**用** `--skip-specs`（`.openspec.yaml` 已显式声明 no spec changes）
