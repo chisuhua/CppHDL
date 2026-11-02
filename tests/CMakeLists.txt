@@ -362,6 +362,22 @@ add_dual_backend_test(test_arithmetic_encoding_dual
     TIMEOUT 300
 )
 
+# ⚠️⚠️ **路线 B（A5 的 H 批）第 5 批**（2026-11-02 · change
+#    `dual-backend-parity-route-b-arithmetic-2026-11`）
+#    ⇒ `chlib::arithmetic` 的**带进位/带借位**算术 + `chlib::logic`/`chlib::sequential`
+#    的**门/寄存器/计数器/边沿检测** ⇒ ⇒ 盘点实测这些在 42 个 dual 文件里
+#    **零覆盖** ⇒ ⇒ 它们的 Verilog codegen 路径**从未被验证**。
+#    ⇒ 危险点：前者的「**扩位 + 截断**」与后者的「**寄存器 + 条件组合**（保持语义）」
+#    ⇒ ⇒ 都是两后端最容易分叉的地方。
+add_dual_backend_test(test_arithmetic_carry_dual
+    SOURCES chlib/test_arithmetic_carry_dual.cpp
+    TIMEOUT 300
+)
+add_dual_backend_test(test_sequential_counters_dual
+    SOURCES chlib/test_sequential_counters_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
