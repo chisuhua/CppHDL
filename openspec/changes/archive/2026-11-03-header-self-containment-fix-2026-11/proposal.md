@@ -1,3 +1,5 @@
+<!-- touched-components: priority_encoder -->
+
 # 提案：头文件自包含性 —— 修 4 个公共头的编译失败 + 新增机械护栏
 
 - **主题**：根 AGENTS.md CONVENTIONS「**Headers self-contained**」的**首次机械核验**

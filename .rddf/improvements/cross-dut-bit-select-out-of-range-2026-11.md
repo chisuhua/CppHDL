@@ -12,7 +12,14 @@ created_at: 2026-11-03
 
 - **Date drafted**: 2026-11-03
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待实施**（**框架层**问题；本批的测试**全绿**，断言值未受影响 ⇒ 见 §3）
+- **Status**: ✅ **已修复**（2026-11-03 · change
+  `mux-slot-width-preservation-2026-11`）⇒ ⇒ **根因已定位**（见 §6）：
+  **不是**跨 DUT 状态污染，而是 `include/ast/instr_mux.h` 的
+  `eval()` 用 **拷贝赋值** `*dst_ = *分支` ⇒ ⇒ `bitvector::operator=`
+  会 **RESIZE dst** ⇒ ⇒ 较窄的分支被选中时整个 `mux` 槽位被**压窄**
+  ⇒ ⇒ 下游 `bit_select(mux, 2)` 的 `operand_width` 变成 1 ⇒ ⇒ **越界**。
+  ⇒ ⇒ 修法 = `assign_truncate`（与 `instr_output` / `instr_proxy` /
+  `instr_reg` 的**既有惯例**一致）⇒ ⇒ 越界日志 **6 → 0**，全量零回归。
 - **来源**: 路线 B（I 批）`tests/chlib/test_stream_arbiter_dual.cpp` 实施期的 stderr 噪声。
 
 ## 1. Why (背景与动机)
@@ -107,3 +114,54 @@ created_at: 2026-11-03
 - ⚠️ **与 K1 的关系**：`tests/AGENTS.md` 记录的 K1（ORC JIT 跨 DUT 污染）
   ⇒ ⇒ 本条是**同一族**的**第二个实例**，且**不涉及 JIT**
   （dual fixture 已 `set_jit_enabled(false)`）⇒ ⇒ ⇒ **污染源不限于 JIT 状态**。
+
+## 6. ✅ 根因定位与修复（2026-11-03）
+
+### 6.1 定位过程（实测，非推断）
+
+| 步 | 手段 | 结果 |
+|---|---|---|
+| 1 | 复现 | 完整跑 `test_stream_arbiter_dual` ⇒ **6** 条越界；单独跑任一 DUT ⇒ **0** 条 ⇒ 确认「多 DUT」是**触发条件** |
+| 2 | 临时插桩（打印 `node_id` + `operand_width` + `src1_width`） | 越界点：`node 379/383`，`src0_width=1`，`src1_width=32`（⇒ **编译期索引**变体，不是运行期 `pos`） |
+| 3 | 打印节点身份（`ctx->get_node_by_id()`） | `node 383 name='top.bit_select' size=1 src0=(367,'top.mux_select',**w3**) src1=(382,'top.bit_select_idx',w32)` ⇒ ⇒ **图里明明是正确的 3 位！** |
+| 4 | 检测「槽位宽度被 eval 改变」 | `[DBG-WIDTH-CHANGE] node 367 name='top.mux_select' **3 -> 1** (node size=3)` ⇒ ⇒ **定位到 `mux` 的 eval** |
+| 5 | 读实现 | `include/ast/instr_mux.h`：`*dst_ = *true_val_` / `*dst_ = *false_val_` |
+
+### 6.2 根因
+
+`bitvector::operator=` **会 RESIZE dst**（把宽度改成源的宽度），而 `assign_truncate`
+保持 dst 的声明宽度（源被截断 / 零扩展）。
+
+⇒ ⇒ `mux` 节点的宽度 = `max(真分支宽, 假分支宽)`（`build_mux`）⇒ ⇒
+**较窄的分支被选中**时，`*dst_ = <窄分支>` 把整个 mux 槽位**压窄**
+⇒ ⇒ 下游按**声明宽度**取位（`bit_select(m, 2)`）⇒ ⇒ `operand_width=1`
+⇒ ⇒ **比特索引越界**，错误分支**写 0**。
+
+### 6.3 为什么表现为「跨 DUT 才出现」/「只在 interpreter 侧」
+
+| 观察 | 解释 |
+|---|---|
+| 只在 **interpreter** 侧 | Verilog 的 `assign d = c ? t : f;` 天然保持声明宽度 ⇒ ⇒ **这是两后端分歧** |
+| 只在 **多 DUT** 时出现 | node id 是**进程级全局唯一**（`g_next_node_id`）⇒ ⇒ 同一 DUT 在不同运行下 id 不同 ⇒ ⇒ 拓扑序的 tie-break 变 ⇒ ⇒ `mux` 与消费它的 `bit_select` **谁先求值**变 ⇒ ⇒ **时好时坏** |
+| 断言值**未受影响** | 越界分支写 0，而被选中的**窄分支**其高位本来就是 0 ⇒ ⇒ **值逐位等价** ⇒ ⇒ **良性但产生噪声** |
+
+⚠️ **「良性」的边界（如实登记）**：目前只确认「值为 0 的高位被丢」是可观测的唯一后果
+⇒ ⇒ 若将来出现「同一拍内读 mux 的**中间态**」的消费方 ⇒ ⇒ 就会读到**错误的宽度**
+⇒ ⇒ 但那一刻的错误值仍是「该位为 0」⇒ ⇒ 除非消费方依赖**宽度本身**（如 `bits<>` 的
+范围检查、`+` 的宽度推导）。
+
+### 6.4 修复与判据
+
+- **修法**：`include/ast/instr_mux.h` 的两处 `*dst_ = *分支` ⇒ ⇒
+  `dst_->assign_truncate(*分支)`（与 `instr_output::eval` 的**既有惯例**一致，
+  该处注释早已把同一个坑写明）。
+- **判据**（`tests/test_mux_width_dual.cpp`，**1** pair / **42 == 2 × 21** 断言）：
+  - 「宽分支 → 窄分支」后 `mux_out` 的**高位 MUST 归零**（抓「不清高位」，例如
+    `assign_truncate` 的零扩展路径若不生效 ⇒ ⇒ 会残留 `0b110`）；
+  - `bit2` / `bit1` 在窄分支被选中时**不越界**且为 0。
+- ⚠️⚠️ **M1（把修法改回 `*dst_ = *分支`）在【值层面不可判别】** —— 已实测恒绿
+  ⇒ ⇒ 压窄只丢「已经为 0」的高位 ⇒ ⇒ `REQUIRE` 抓不到
+  ⇒ ⇒ ⇒ **唯一可观测量 = 越界错误日志** ⇒ ⇒ 用 ctest 的
+  `FAIL_REGULAR_EXPRESSION "Bit index out of range"` 判红（**已验证**：
+  注入 M1 ⇒ 该测试 Failed；还原 ⇒ 通过）。
+  ⇒ ⇒ **删掉那条 `FAIL_REGULAR_EXPRESSION` 就等于删掉这一类回归的唯一护栏**。

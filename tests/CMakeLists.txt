@@ -642,6 +642,24 @@ add_dual_backend_test(test_rv32i_arch_dual
     TIMEOUT 300
 )
 
+# ⚠️ **B2 根因判据**（2026-11-03）：`mux` 的槽位宽度 MUST NOT 被 `eval` 改变。
+#    `instr_mux::eval` 曾用 `*dst_ = *分支`（拷贝赋值 ⇒ **RESIZE**）⇒ ⇒
+#    「较窄的分支被选中」时整个 mux 槽位被压窄 ⇒ ⇒ 下游按声明宽度取位**越界**。
+#    ⇒ ⇒ 只在 interpreter 侧（Verilog 的 assign 不会改宽度）⇒ ⇒ 两后端分歧。
+add_dual_backend_test(test_mux_width_dual
+    SOURCES test_mux_width_dual.cpp
+    TIMEOUT 180
+)
+
+# ⚠️⚠️ **M1（把 `assign_truncate` 改回 `*dst_ = *分支`）在【值层面不可判别】** ——
+#    已实测：压窄只丢掉**已经为 0** 的高位 ⇒ ⇒ 下游读到的值**逐位等价**
+#    ⇒ ⇒ `REQUIRE` 抓不到。⇒ ⇒ 它**唯一**的可观测量 = `bit_select` 的**越界错误日志**。
+#    ⇒ ⇒ 用 ctest 的输出判据直接把「有这条日志」判成红。
+#    ⚠️ 这条 `FAIL_REGULAR_EXPRESSION` 是**必需的**，不是装饰：删掉它 ⇒ ⇒
+#    M1 这一类回归就**完全没有护栏**（本仓「护栏自身有盲区」病症的一格）。
+set_tests_properties(test_mux_width_dual PROPERTIES
+    FAIL_REGULAR_EXPRESSION "Bit index out of range")
+
 # ⚠️ **路线 C 第一批 —— RV32I 微架构组件进双后端 parity**（2026-11-03）
 #    ⇒ **零 DUT 复制**：`MemStage` / `ExStage` / `Rv32iDecoder` **本身带顶层端口**
 #      ⇒ 直接当 DUT（与 `test_hazard_complete_dual.cpp` 同型）⇒ 成本最低。
