@@ -8,7 +8,7 @@
 | `feat-hierarchical-rtl-output` | active | phase-5 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致） |
 | `feat-platform-matrix` | completed | phase-3, phase-5 | CI 平台矩阵 = 仅 Ubuntu（macOS/Windows 明确不做 · 2026-11-03 裁决） |
 | `feat-riscv-mini-convergence` | completed | phase-5 | 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 |
-| `feat-riscv-mini-rtl-debt` | active | phase-5 | riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增） |
+| `feat-riscv-mini-rtl-debt` | completed | phase-5 | riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增）—— 两项均已收口 |
 | `feat-rv32i-integration` | completed | phase-5 | RV32I 5-stage 流水线 + riscv-mini SOC 端到端集成（双路 parity + JIT 回落断言） |
 | `feat-rv32i-isa-completeness` | active | phase-5 | RV32I 语义边界收口（SB/SH 写字节道 · LB/LH 读字节道 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装） |
 

@@ -1,9 +1,9 @@
 ---
 id: feat-riscv-mini-rtl-debt
 kind: feature
-status: active
+status: completed
 phase_refs: [phase-5]
-主题: riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增）
+主题: riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增）—— 两项均已收口
 ---
 
 ## 概述
@@ -60,11 +60,13 @@ phase_refs: [phase-5]
       （**不是**改成 `== true`——后者只证明「有驱动」）
       ⇒ 现为 **8 个用例 / 58 断言**、**双后端**（interpreter + verilator）、
       含**内层 cache 的 fill → hit** 路径 ⇒ **变异 5/5 全转红**
-- [ ] CLINT `mtime` 随时间递增且写端口语义明确
-      —— ⛔ **仍未立项** —— **ADR-049 前置**（`mtime` 从静态比较器变自由运行
-      计数器 = **契约变更**，而 **CLINT 不在任何 capability 覆盖内** ⇒ 归属本身
-      待裁决 ⇒ delta 写不出 ⇒ **不得**先登记 change 再标 `skip_specs`
-      ⇒ 决策门 D1–D5 已写入 `.rddf/improvements/clint-mtime-autoincrement-2026-10.md` §6
+- [x] CLINT `mtime` 随时间递增且写端口语义明确
+      —— ✅ **2026-10-30 已归档**（ADR-049 + change `clint-mtime-autoincrement-2026-10`
+      ⇒ 归档目录 `openspec/changes/archive/2026-10-30-clint-mtime-autoincrement-2026-10/`）：
+      `mtime` = **64 位自由运行计数器**（形态 B）+ **编译期** `TIMER_DIVIDER`
+      + **写优先**（写的那一拍取写值 · 另一半保持 · 本拍不递增）+ 复位值 0
+      ⇒ ⇒ **新建** capability `cpu-clint-timer`（ADDED ×6）⇒ ⇒ 归属问题一并解决
+      （「CLINT 不在任何 capability 覆盖内」⇒ 现在有了）
 
 > **① 的实施结果（2026-10-28）**：change `riscv-mini-cache-wrapper-live-logic-2026-10`
 > 已实施并归档。要点：
