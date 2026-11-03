@@ -39,7 +39,7 @@ capability spec 已建：`openspec/specs/dual-backend-test-coverage/spec.md`（1
 - [x] Phase 2 ship（commit aed33be, archive 2026-10-19）
 - [x] Phase 3 partial ship（axi-spi-behavior 7 dual pairs, archive 2026-10-19）
 - [x] Phase 4 partial ship（rv32i-pipeline-behavior 13 dual pairs, commit bbf536d, archive 2026-10-19）
-- [ ] ⭐ **双后端 parity 源文件数 ≥ 60**（**2026-10-30 实测 29** ⇒ 未达成）
+- [x] ⭐ **双后端 parity 源文件数 ≥ 60**（**2026-11-03 实测 60** ⇒ ✅ **达成**；历史：2026-10-30 实测 29 ⇒ 2026-11-03 路线 C 第 1 批（`test_rv32i_stage_dual`）⇒ 59 → 60）
       —— ⭐ **2026-10-30 planner 修订**：取代旧的「`ctest -L verilator_e2e` ≥ 100」
       （旧口径数的是**标签**⇒ 把 9 个**单后端**契约锁定参考实现算成「双后端覆盖」；
       且其诚实上限 [71, 96] ⇒ **现有语料内不可达** ⇒ 必然到不了）

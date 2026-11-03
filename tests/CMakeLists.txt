@@ -619,6 +619,24 @@ add_dual_backend_test(test_stream_arbiter_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 C 第一批 —— RV32I 微架构组件进双后端 parity**（2026-11-03）
+#    ⇒ **零 DUT 复制**：`MemStage` / `ExStage` / `Rv32iDecoder` **本身带顶层端口**
+#      ⇒ 直接当 DUT（与 `test_hazard_complete_dual.cpp` 同型）⇒ 成本最低。
+#    ⇒ 三个组件**纯组合**（`ch_reg` 计数 = 0）⇒ 不发射 `always_ff`
+#      ⇒ **陷阱 T5 不适用**（无「codegen 有时序逻辑但时序表为空」的漂移）。
+#    ⇒ 4 问 ①：三个符号在 58 个 dual 文件里各出现 **0** 次 ⇒ 无重复；
+#      唯一既有覆盖是 **SoC 级** hand-crafted dual ⇒ **判别形态不同** ⇒ 逐案裁决通过。
+#    ⇒ 价值：这些组件是 RV32I 微架构的**单一权威**（ADR-046），最近 3 个真缺陷
+#      （MemStage 的 LB 掩码 · IdStage 的 U 型立即数 · DataTCM 的 strbe）全在这一层。
+#    ⇒ 🔴 本批**第二个产出**：挖出 `Rv32iDecoder` 的 **B 型立即数 bit 11 被放在 bit 0**
+#      （同一笔误也在生产路径 `id_stage.h:140-145`）⇒ |偏移| >= 2048 的条件分支跳错地址
+#      ⇒ 独立立项 `.rddf/improvements/rv32i-b-type-immediate-bit11-misplaced-2026-11.md`
+#      ⇒ ⇒ 本批**刻意不修**（行为变更 ⇒ 需 ADR）⇒ 钉住**当前行为**（修复时转红 = 有意的变更信号）。
+add_dual_backend_test(test_rv32i_stage_dual
+    SOURCES test_rv32i_stage_dual.cpp
+    TIMEOUT 300
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.

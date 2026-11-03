@@ -281,6 +281,7 @@ Catch2 listener + sidecar 把比对放进测试内部**（⇒ ⇒ ⇒ ⇒ **零�
 | **G · stream pipeline**（✅ 已实施 · m2s/s2m/half 三个 pipe） | **32.2 s**（`test_stream_pipeline_dual` **3 pair**；假 HOME 冷缓存 ⇒ **10.7 s/pair**，与模型一致；热缓存 0.46 s） | **380.7 s**（+32.2） | 39.2 min |
 | **H · selector arbiter**（✅ 已实施 · `priority_selector`/`round_robin_selector`） | **21.5 s**（`test_selector_arbiter_dual` **2 pair**；假 HOME 冷缓存 ⇒ **10.75 s/pair**，与模型一致；热缓存 0.37 s） | **402.2 s**（+21.5） | 39.0 min |
 | **I · stream arbiter**（✅ 已实施 · `stream_arbiter_priority`/`_round_robin`） | **21.4 s**（`test_stream_arbiter_dual` **2 pair**；假 HOME 冷缓存 ⇒ **10.7 s/pair**，与模型一致；热缓存 0.41 s） | **423.6 s**（+21.4） | 38.8 min |
+| **C1 · RV32I 组件**（✅ 已实施 · `MemStage`/`ExStage`/`Rv32iDecoder`，**零 DUT 复制**） | **37.9 s**（`test_rv32i_stage_dual` **3 pair**；假 HOME 冷缓存 ⇒ **12.6 s/pair** ⇒ ⇒ **高于**模型的 10.6–11.6 ⇒ ⇒ 三个 DUT 的 `select` 链比 chlib 组合子长 ⇒ ⇒ **成本模型 MUST 按 DUT 复杂度分档**；热缓存 1.80 s） | **461.5 s**（+37.9） | 38.1 min |
 | E | 待测 | | |
 | F | 待测 | | |
 | G | 待测 | | |

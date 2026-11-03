@@ -123,10 +123,10 @@ build 只交数字 + 交证据）。
 
 | 量 | 值 |
 |---|---|
-| 现状（2026-11-03 实测，post `dual-backend-parity-route-b-stream-arbiter`） | **59** |
+| 现状（2026-11-03 实测，post `dual-backend-parity-route-c-rv32i-stage`） | **60** ⭐ |
 | 路线 A 剩余（**12** − **5** 已落地 = 7 ⇒ ⇒ ⚠️ **实测逐条复核后只有 3 个真可转**（另 6 个是重复/无端口/纯结构 ⇒ cache Async 与 hazard_complete **均已落地**） | **+1**（`operation_results` 的部分） |
 | 路线 B 剩余（**7** 个**实测零覆盖** chlib 组件，已落地 **6** 个（`bitwise`/`onehot`/`arithmetic_advance`/**`stream_pipeline`**/**`selector_arbiter`**/**`stream_arbiter`**）⇒ ⇒ **剩 1**：`stream_width_adapter`；⚠️ **2026-11-03 只读查重结论**：三者**全部**「既有测试是裸 context ⇒ R6 排除项 ⇒ **不可转换**」⇒ ⇒ 只能新写；且 `stream_arbiter`（`stream_arbiter_lock` 恒选通道 0）与 `selector_arbiter`（`round_robin_arbiter` 不轮转）**带已实测的真缺陷** ⇒ ⇒ **先修缺陷再覆盖**，否则 dual parity 会给缺陷盖章 ⇒ ⇒ `selector_arbiter` 只剩干净的 `priority_selector` + `round_robin_selector` 可做（✅ **已落地** ⇒ 只剩带缺陷的 `round_robin_arbiter` 待修缺陷后再做）；`stream_width_adapter` 的 `stream_extend`/`stream_truncate` **零消费者** ⇒ 按 Zero-Debt 应删、不测） | **+0~3** |
-| **实测可达上限** | **🔴 实测收敛到 60**（乐观 59 + 1（路线 A 真可转剩）= **60**）⇒ ⇒ ⚠️ **但那 +1 已于 2026-11-03 被 4 问① 证伪**（`operation_results` 的算术/位运算/比较维度**已被** `test_arithmetic_carry_dual`（含 `compare<8>` 的 gt/eq）/ `test_bitwise_dual` 覆盖，`ne`/`lt` 仅为取反 ⇒ **零增量**）⇒ ⇒ **实测可达上限 = 59** ⇒ ⇒ **阈值 60 在「不修缺陷、不写零增量文件」的前提下不可达** ⇒ ⇒ **需 planner 裁决**：① 先修 3 个**已实测的真缺陷**（`stream_arbiter_lock` 恒选通道 0 · `round_robin_arbiter` 不轮转 · 三个 stream 宽度适配器**一仿真就 SIGSEGV**）再补覆盖（各 +1 ⇒ ⇒ 62）；或 ② 下调阈值 / ③ 改口径（见下方「实测发现」第 5 条）
+| **实测可达上限** | ✅ **已达成 60**（2026-11-03 · 路线 C 第 1 批：`test_rv32i_stage_dual` ⇒ parity 59 → **60**）⇒ ⇒ ⇒ **「阈值 60 不可达」的结论已被推翻**（它的适用范围是「chlib 语料 + 路线 A 候选清单」，不是全仓 ⇒ ⇒ 详见「第五条实测发现」）⇒ ⇒ ⚠️ **历史记录**：曾测得「乐观 59 + 1（路线 A 真可转剩）= 60」⇒ ⇒ ⚠️ **但那 +1 已于 2026-11-03 被 4 问① 证伪**（`operation_results` 的算术/位运算/比较维度**已被** `test_arithmetic_carry_dual`（含 `compare<8>` 的 gt/eq）/ `test_bitwise_dual` 覆盖，`ne`/`lt` 仅为取反 ⇒ **零增量**）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **planner 的三个选项（修缺陷 / 下调阈值 / 改口径）均不再需要动** ⇒ ⇒ ⇒ 后续批次（路线 C 第 2 批起）转为「**按价值推进**」而非「为凑数」 |
 | ⚠️ **2026-11-03 订正（本行的「不可达」结论已由下一条实测发现推翻）**：**「59 = 上限」是在「chlib 语料 + 路线 A 候选清单」这个**封闭语料**内测得的** ⇒ ⇒ ⇒ ⇒ **全仓 `include/**` 的只读盘点（2026-11-03）发现**第 6 类候选**（**路线 C**）⇒ ⇒ ⇒ **⇒ 「阈值 60 不可达」的结论**不再成立** ⇒ ⇒ ⇒ **⇒ 但每个候选仍 MUST 逐个过 4 问**（4 问① 的「SoC 级 hand-crafted dual 已覆盖」这一格**逐案裁决**）⇒ ⇒ ⇒ **⇒ 上限重新开放** |
 
 > ⚠️ 上表是**实测台账**（owner = planner 的判据 + build 交的数字），
@@ -236,8 +236,12 @@ build 只交数字 + 交证据）。
 > ⇒ ⇒ ⇒ **⇒ 结论**：**「阈值 60 在『不修缺陷、不写零增量文件』的前提下不可达」这个
 > 2026-11-03 的实测结论，其适用范围是「chlib 语料 + 路线 A 清单」，不是全仓**
 > ⇒ ⇒ ⇒ **⇒ 路线 C 给出了第 60 个（及更多）的**干净**候选** ⇒ ⇒ ⇒
-> ⇒ ⇒ **⇒ planner 的三个选项（修缺陷 / 下调阈值 / 改口径）中，选项 ① 与 ③ 都不必立刻动**
-> ⇒ ⇒ ⇒ ⇒ **⇒ 建议改为「先做路线 C 第一批」**（详见 `.rddf/checks/handoff-2026-11-02-parity-route-ab.md` §4.7）。
+> ⇒ ⇒ ⇒ **⇒ ✅ 2026-11-03 已落地路线 C 第 1 批**（`tests/test_rv32i_stage_dual.cpp`：
+> `MemStage` + `ExStage` + `Rv32iDecoder`，**3** pair / **460** 断言每后端，**零 DUT 复制**）
+> ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ parity 59 → 60 ⇒ ⇒ ⇒ ⇒ 「阈值 60」达成** ⇒ ⇒ ⇒
+> ⇒ ⇒ ⇒ **⇒ ⇒ ⇒ planner 的三个选项（修缺陷 / 下调阈值 / 改口径）均不再需要动**
+> ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ ⇒ ⇒ ⇒ 后续批次（路线 C 第 2 批起）转为「**按价值推进**」而非「为凑数」**
+> ⇒ ⇒ ⇒ ⇒ **⇒ ⇒ ⇒ ⇒ ⇒ 详见 `.rddf/checks/handoff-2026-11-02-parity-route-ab.md` §4.7**。
 
 ⚠️ **第一版估算为什么乐观**：路线 B 的「既有文件」池**已见底**
 （`test_stream_operators` 全结构性 · `test_lnode_entry_set` / `test_multithread` /

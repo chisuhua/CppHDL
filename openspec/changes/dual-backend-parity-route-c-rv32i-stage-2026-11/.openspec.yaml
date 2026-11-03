@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-11-03
+# ⚠️ 本 change **无** spec 变更：
+#   ① 本批是**纯测试覆盖增量**（不新增/修改任何 capability 的 Requirement 或 Scenario）；
+#   ② 本批挖出的 2 个缺陷的**修复**属**独立 change**（行为变更 ⇒ 需 ADR）
+#      ⇒ ⇒ 其对应的 capability delta MUST 与**修复**同批落地
+#      ⇒ ⇒ **不在本批写**（否则主 spec 会与当前实现矛盾 ⇒ ⇒ 那是「冻错主 spec」）。
+skip_specs: true

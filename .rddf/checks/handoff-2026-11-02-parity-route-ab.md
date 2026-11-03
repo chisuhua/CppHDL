@@ -11,12 +11,12 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **59**（目标 60，差 **1**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **265** | 同上 |
-| `CTEST_TOTAL` | **236** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **68** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **225** | `ctest -N -LE perf \| tail -1` |
-| `tests/test_*.cpp` | **130** | `ls tests/test_*.cpp \| wc -l` |
+| **parity 源文件数** | **60** ⭐（目标 60，**已达成**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **268** | 同上 |
+| `CTEST_TOTAL` | **237** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **69** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **226** | `ctest -N -LE perf \| tail -1` |
+| `tests/test_*.cpp` | **131** | `ls tests/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **50** | `ls tests/chlib/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
@@ -30,9 +30,9 @@
 |---|---|
 | 第 1 会话（11 commit） | 路线 B 第 6 批 · `sread` 禁读拍修复与归档 · 路线 A **D 批第 1 个**（`test_mem_connection_dual`，4 pair） |
 | 第 2 会话（2 commit） | 路线 A **D 批第 2 个**（`test_mem_comb_read_dual`，2 pair / 14 断言）+ 归档 + 台账 47 → **49** |
-| 本会话（16 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54**；④ 路线 A **E 批**：`test_cache_async_dual`（3 pair / 73）⇒ 54 → **55**（**含 spec 订正**：用事实裁决 Async 禁令）；⑤ 路线 A **F 批**：`test_hazard_complete_dual`（1 pair / 112，零 DUT 复制）⇒ 55 → **56**；⑥ 路线 B **G 批**：`test_stream_pipeline_dual`（3 pair / 72，m2s/s2m/half）⇒ 56 → **57**；⑦ 路线 B **H 批**：`test_selector_arbiter_dual`（2 pair / 34，priority + round_robin selector）⇒ 57 → **58**；⑧ 路线 B **I 批**：`test_stream_arbiter_dual`（2 pair / 96，stream 仲裁器族）⇒ 58 → **59** |
+| 本会话（18 commit） | ① 路线 B **新文件批**：`test_bitwise_dual`（2 pair / 100 断言）· `test_onehot_dual`（3 pair / 16）· `test_forwarding_dual`（1 pair / 10）⇒ 49 → **52**；② 路线 A **D 批第 3 个**：`test_mem_multiplex_dual`（2 pair / 14）⇒ 52 → **53**；③ 路线 B：`test_arithmetic_advance_dual`（3 pair / 104）⇒ 53 → **54**；④ 路线 A **E 批**：`test_cache_async_dual`（3 pair / 73）⇒ 54 → **55**（**含 spec 订正**：用事实裁决 Async 禁令）；⑤ 路线 A **F 批**：`test_hazard_complete_dual`（1 pair / 112，零 DUT 复制）⇒ 55 → **56**；⑥ 路线 B **G 批**：`test_stream_pipeline_dual`（3 pair / 72，m2s/s2m/half）⇒ 56 → **57**；⑦ 路线 B **H 批**：`test_selector_arbiter_dual`（2 pair / 34，priority + round_robin selector）⇒ 57 → **58**；⑧ 路线 B **I 批**：`test_stream_arbiter_dual`（2 pair / 96，stream 仲裁器族）⇒ 58 → **59**；⑨ 路线 C **第 1 批**：`test_rv32i_stage_dual`（3 pair / 460，`MemStage`/`ExStage`/`Rv32iDecoder`，**零 DUT 复制**）⇒ 59 → **60** ⭐ |
 
-parity 轨迹：**37 → 49 → 52 → 53 → 54 → 55 → 56 → 57 → 58 → 59**。
+parity 轨迹：**37 → 49 → 52 → 53 → 54 → 55 → 56 → 57 → 58 → 59 → 60** ⭐（阈值达成）。
 
 ## 3. 🔴 每个批次的**前置条件**：可转性 4 问（已固化进 plan §4）
 
@@ -228,7 +228,7 @@ objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐
 | `chlib/stream_pipeline.h` | ✅ **已落地**（G 批 · 3 pair / 72） | ADR-055 刚重写 ⇒ 回归价值最高 |
 | `chlib/selector_arbiter.h` | ✅ **已落地**（H 批 · 2 pair / 34） | `priority_selector` + `round_robin_selector` **无 C++ `if`** ⇒ 干净 ⇒ **已做**；`round_robin_arbiter` **带缺陷** ⇒ 须先修 |
 | `chlib/stream_arbiter.h` | ✅ **已落地**（I 批 · 2 pair / 96） | `stream_arbiter_priority` + `stream_arbiter_round_robin` **无缺陷** ⇒ **已做**；`stream_arbiter_lock` **带缺陷**（恒选通道 0 + 输出错误数据）⇒ 须先修 |
-| **路线 C · `include/cpu/**` 的 RV32I 组件（13 个）** | 🟢 **候选池（新发现）** | 端口全 ≤64bit · 零内部 `ch_module` ⇒ **零 DUT 复制** · 组件层零 dual 覆盖 · 含 `ch_reg` ⇒ 走 `always_ff` 路径 ⇒ **推荐第一批：`MemStage` + `ExStage` + `Rv32iDecoder`（⇒ 60）** ⇒ 详见 §4.7 |
+| **路线 C · `include/cpu/**` 的 RV32I 组件（13 个）** | ✅ **第 1 批已落地**（⇒ **60** ⭐） | 第 1 批 = `MemStage` + `ExStage` + `Rv32iDecoder`（3 pair / 460，**零 DUT 复制**，纯组合 ⇒ 陷阱 T5 不适用）⇒ ⇒ **挖出 2 个新缺陷**（B 型立即数 bit 11 misplaced · `BRANCH_*` 常量与实现相反）⇒ ⇒ 第 2 批候选：`IdStage`（16 个 `ch_reg`）· `Rv32iRegFile`（32 个 `ch_reg`）· `DataTCM`/`InstrTCM`（两种读口时序）· `Clint` · `CsrBank` ⇒ 详见 §4.7 |
 | `chlib/stream_width_adapter.h` | 🔴 **暂缓** | 🔴 **实测：三个真实适配器「构建能过、一仿真就 SIGSEGV」**（空操作数的 mux ⇒ `Simulator::initialize()` 崩溃）⇒ ⇒ 既有的 8 个用例**从不构造 Simulator** ⇒ **零行为覆盖**⇒ 须先修 |
 
 ⇒ 详见 §4.6（只读查重的完整结论 + 两个新缺陷的证据）。
