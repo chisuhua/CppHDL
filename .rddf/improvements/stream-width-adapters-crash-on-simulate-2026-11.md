@@ -12,7 +12,7 @@ created_at: 2026-11-03
 
 - **Date drafted**: 2026-11-03
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待实施**（本 change 只做 parity 覆盖，**刻意避开**本组件 ⇒ 见 §5）
+- **Status**: ✅ **已修复**（2026-11-03，ADR-064 + change `chlib-stream-width-adapter-rewrite-2026-11` ⇒ 已归档 `openspec/changes/archive/2026-11-03-chlib-stream-width-adapter-rewrite-2026-11/`，commit `30b1c95`）
 - **来源**: 路线 B 的 4 问① **只读查重** ⇒ 逐个读 `include/chlib/stream_width_adapter.h`
   的实现时**发现**，并用**独立探针实测确认**。
 
