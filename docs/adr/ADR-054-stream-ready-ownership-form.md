@@ -262,6 +262,13 @@ ADR-045 决策 0-B 裁决了 ready 所有权**归属**（组合子不拥有入�
     ⇒ ⇒ ⇒ ⇒ **MUST 在契约里明写**；
   - ⚠️ **`demux` / `fork` 尚未收口**（⇒ ⇒ P1-b / P1-c）⇒ ⇒ ⇒ ⇒
     ⇒ ⇒ **护栏显式豁免 + `::notice` 点名**（豁免**非静默**）。
+    ⚠️ **2026-11-04 状态订正（**只订正状态，不改本 ADR 的决策**）**：本行写于
+    2026-11-01（当时属实）⇒ ⇒ **2026-11-02 起 demux / fork 已收口**
+    （**ADR-056** = demux ready 方向 · **ADR-057** = fork 同步语义；
+    归档 change `2026-11-02-stream-demux-fork-ready-semantics-2026-11`）⇒ ⇒
+    ⇒ ⇒ ⇒ ⇒ **护栏不再是「豁免」而是 R13**（`scripts/lib/stream_ready_ownership.py`
+    ⇒ 2 种原地投毒 `demux-fork-master-ready-operator-assign` / `demux-fork-drop-drive`）
+    ⇒ ⇒ ⇒ ⇒ ⇒ **「显式豁免 + `::notice` 点名」那一格对它们已不成立**。
 
 ### 风险
 
