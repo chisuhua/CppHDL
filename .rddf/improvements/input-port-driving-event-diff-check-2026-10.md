@@ -6,18 +6,19 @@ phase: phase-5
 category: testing
 type: chore
 created_at: 2026-10-28
-evidence: unmeasured
+evidence: probe:scripts/measure_new_input_ports.sh
 ---
 
 # Improvement: 新增输入端口 MUST 被显式驱动 ⇒ 用**事件驱动（git diff）增量检查**守
 
-> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: unmeasured`
+> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: probe:scripts/measure_new_input_ports.sh`
 > （不是「已实测但忘了填」，而是「还没有可测的东西」）。
 
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**决策权归 planner**（build 只登记，不定方案）
+- **Status**: 📋 **待裁决**（**决策单已就绪**：`.rddf/checks/decision-request-input-port-guards-2026-11.md` §2 ⇒ ⇒ **D1-A / D1-B / D1-C / D1-D** 四个选项 + 代价 + 建议 ⇒ ⇒ owner = planner/architect）
+  ✅ **2026-11-03 已把「成本论证」依赖的数字变成仓内可复算证据**：`scripts/measure_new_input_ports.sh`（⇒ 本文件 `evidence:` 指向它）⇒ ⇒ 实测见该决策单 §1.2（**口径 B：仅生产代码 ⇒ 99×0 / 1×1** ⇒ ⇒ 义务的触发面 ≈ 0 ⇒ ⇒ 「运行成本趋零」的论证**第一次有可复算依据**）
 - **来源**：`input-port-driving-guard-2026-10` 的 spike 结论
   ⇒ 交付物 = `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md`
   §2 / §3.4 / §4.1
@@ -40,6 +41,21 @@ MUST 显式驱动」⇒ 未驱动端口读到**未定义值**（实测 `strbe` �
 ⇒ ⇒ 实测负载：近 **100** 个 commit 的新增 `ch_in` 分布 =
 **92×0 / 5×1 / 1×2 / 1×4 / 1×85**（唯一的大额是 `e015c027` 的一次性单源化重构）
 ⇒ ⇒ 典型增量负载 = **0–2 个新端口/commit** ⇒ ⇒ **成本趋零、误报趋零**。
+
+🔴 **2026-11-03 订正（口径此前未记录 ⇒ 那个数字不可复算）** —— 现已由
+`scripts/measure_new_input_ports.sh` 变成**仓内可复算**的证据：
+
+| 口径 | 实测（最近 100 个非 merge commit）|
+|---|---|
+| A：全部文件 | 75×0 / 3×1 / 1×2 / 5×3 / 3×4 / 3×5 / 2×6 / 1×8 / 2×9 / 1×10 / 1×11 / 1×13 / 2×14 |
+| B：**仅生产代码**（include + src）| **99×0 / 1×1** |
+
+⇒ ⇒ **差异来源 = 新增端口绝大多数落在**测试 DUT**里**（双后端 parity 批次每新增一个
+测试文件就新增若干 DUT 端口）⇒ ⇒ 而**生产代码侧几乎不新增** ⇒ ⇒
+
+⭐ **对裁决直接生效的两条**：① 义务的**触发面 ≈ 0**（生产代码口径）⇒ ⇒ 运行成本趋零；
+② 「测试 DUT 的端口」**不属于这条义务的风险面**（由同一测试文件驱动 ⇒ 自包含）⇒ ⇒
+⇒ **护栏的扫描面应当只含生产代码**（否则 25% 的 commit 命中 ⇒ 噪声 ⇒ 「没人看」）。
 
 ## 2. What Changes (变更范围)
 

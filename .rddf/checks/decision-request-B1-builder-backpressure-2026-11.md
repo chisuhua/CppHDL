@@ -1,8 +1,32 @@
 ---
-evidence: unmeasured
+evidence: probe:docs/adr/ADR-055-chain-intermediate-ready-ownership.md
 ---
 
-# 裁决请求单 B1：`StreamBuilder` 链内**中间级**的 ready 归属
+# 裁决请求单 B1：`StreamBuilder` 链内**中间级**的 ready 归属 ⇒ ✅ **已裁决并落地**
+
+## ✅ 裁决结果（2026-11-01 · 用户拍板）
+
+> ✅ **裁决 = 「链内闭包不变式 + 不对外暴露」** ⇒ ⇒ **不立「第三类」**（分类轴开放式
+> ⇒ ⇒ 会被误用到对外组件）⇒ ⇒ **不修订已签批的 ADR-054** ⇒ ⇒ **主文本落 capability**
+> （`chlib-stream-ready-ownership` 的 MODIFIED delta），**ADR-055 只承载推导**。
+>
+> ⚠️ **同时裁掉的耦合项 C3**（链的表示形式）：实现改为「只保存**下一级要驱动的那一个
+> 节点**」（`pending_ready_` + `pending_is_source_`）⇒ ⇒ **语义等价**（决策未变，仅实现更省）。
+>
+> ✅ **落地（2026-11-01）**：**ADR-055**（`docs/adr/ADR-055-chain-intermediate-ready-ownership.md`）
+> + change `stream-builder-and-pipe-ready-ownership-2026-10`（归档 2026-11-01）
+> ⇒ ⇒ capability `chlib-stream-ready-ownership` ADDED ×8
+> ⇒ ⇒ 护栏 `scripts/verify_stream_ready_ownership.sh`（R1 效果判据 + R2–R6 静态判据
+> + R8 扫描面 + R9/R10/R11）+ 判别性用例
+> `tests/test_stream_builder_backpressure_dual.cpp`（2 个 dual pair / 54 断言）
+> ⇒ ⇒ 实施形态与 ADR §2.3 的偏离（私有成员只存「下一级的 ready 节点」而非整条链）
+> **已如实登记**（决策未变）。
+
+⇒ ⇒ **本请求单自此归档为决策史**（下方正文保留原文）。
+
+---
+
+## （以下为 2026-11-01 的原始请求单 · 保留作决策史）
 
 > **文档性质**：**决策前材料**（architect 起草 ⇒ ⇒ 供裁决会使用）⇒ ⇒ 裁决一旦
 > 做出，**正本**落在 ADR（见 §5 的落点建议）⇒ ⇒ 本文件只承载「事实 / 选项 /

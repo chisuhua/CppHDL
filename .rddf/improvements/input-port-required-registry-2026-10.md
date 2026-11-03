@@ -6,18 +6,19 @@ phase: phase-5
 category: testing
 type: chore
 created_at: 2026-10-28
-evidence: unmeasured
+evidence: test:tests/test_axi_rst_n_guard.cpp
 ---
 
 # Improvement: 「必需端口注册表」—— 未驱动读值风险 MUST 逐端口登记
 
-> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: unmeasured`
+> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: test:tests/test_axi_rst_n_guard.cpp`
 > （不是「已实测但忘了填」，而是「还没有可测的东西」）。
 
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**决策权归 planner**（build 只登记，不定方案）
+- **Status**: 📋 **待裁决**（**决策单已就绪**：`.rddf/checks/decision-request-input-port-guards-2026-11.md` §3 ⇒ ⇒ **D2-A / D2-B / D2-C / D2-D** 四个选项 + 代价 + 建议 ⇒ ⇒ owner = planner/architect）
+  ✅ **实测证据已有承重件**：「永久复位」类（`rst_n` 未驱动 ⇒ 恒复位 ⇒ 测试空洞）由 `tests/test_axi_rst_n_guard.cpp` 钉住（双后端）⇒ ⇒ 「写入放大」类（`strbe` 未驱动 ⇒ 读全 1）由 `include/cpu/pipeline/rv32i_tcm.h` 的 `strbe` 端口 + `rv32i-isa-semantics` capability 记载⇒ ⇒ 本条的 `evidence:` 指向该运行期护栏测试
 - **来源**：`input-port-driving-guard-2026-10` 的 spike
   ⇒ 交付物 = `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md`
   §1.2 / §2 候选 A / §5.2

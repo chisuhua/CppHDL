@@ -172,7 +172,7 @@ per-TEST_CASE 对比」的判据**（见 §4 验收模板）⇒ ⇒ ⇒ ⇒ ⇒ 
 - [ ] 全部护栏 exit 0
 - [ ] **本批冷缓存墙钟实测**（假 HOME）⇒ ⇒ 累计墙钟记入 §5
 
-| 批 | 文件 | DUT 数 | 冷编译预估 | 风险 | 备注 |
+| 批 | 文件 | **pair 数**（成本单位，见 §3.0）| 冷编译预估 | 风险 | 备注 |
 |---|---|---|---|---|---|
 | **A**（✅ 已完成） | `test_blt_debug_behavior.cpp` | 1 | 13.5 s | 低 | 试点；**2 断言 / 2 用例** ⇒ ⇒ verilator 半边真跑 ✔（⚠️ **零 DUT 复制** —— DUT 是库头里的既有类型 `riscv::BranchConditionUnit` ⇒ ⇒ 宏第一个参数是**类型名**）|
 | **B** | `test_axi_pwm_simple` · `test_bool_connection` · `test_operator_connection` · `test_jit_concat` · `test_interpreter_jit_compat` · `chlib/test_assert` · `test_wires_connection` · `chlib/test_multi_if_acceptance` | **23** | ≈ 5 min | 低 | 纯组合逻辑；⚠️ **剔除 / 降级清单（oracle · 2026-11-01）**：① `test_jit_concat` / `test_interpreter_jit_compat` ⇒ ⇒ ⚠️ **JIT 混淆的担忧在机制上【不成立】**（macro 的解释器半边 `set_jit_enabled(false)` ⇒ ⇒ **两半边都不走 JIT** ⇒ ⇒ 归因不会混）⇒ ⇒ **真正问题是价值低**（身份是 JIT-vs-interpreter parity）⇒ ⇒ **降到批次末尾** + 先做 13.5 s 探针；② `chlib/test_multi_if_acceptance` 的 **3 个 `REQUIRE_THROWS_AS` 用例结构性不可转**（**构图期**拒绝 ⇒ 宏在函数体内自己构造 DUT ⇒ BODY 拿不到「构造失败」事件 ⇒ 且构图期异常对两后端是**同一段 C++ 代码** ⇒ ⇒ **dual 化零增量价值**）⇒ ⇒ **只转 3 个运行期用例**；③ `chlib/test_assert` ⇒ ⇒ 先探针「report」是可观测端口还是解释器侧打印；④ `test_axi_pwm_simple` 的 `VerilogGeneration` 用例是 **codegen 测试**（dual 无增量）⇒ ⇒ 只转 `Simulation` 用例；⑤ `test_wires_connection:274` 的「Empty constructed ch_uint」是**空节点语义**（解释器专属）⇒ ⇒ 剔除 |

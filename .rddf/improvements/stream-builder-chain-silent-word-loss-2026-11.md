@@ -8,7 +8,7 @@ type: bugfix
 created_at: 2026-11-01
 evidence: test:tests/test_stream_builder_backpressure_dual.cpp---
 
-# Improvement: `StreamBuilder` 的链式 `queue<>()` **静默丢字** + **上游反压丢失**
+# Improvement: `StreamBuilder` 的链式 `queue<>()` **上游反压丢失**（⚠️ 原标题的「**静默丢字**」已被实测**推翻** ⇒ ⇒ 正确接线下 10 个 word 全部无损通过 ⇒ ⇒ 「丢字」是观测解读错误造成的假症状 ⇒ ⇒ 真缺陷 = **上游反压从未建立**）
 
 - **Date drafted**: 2026-11-01
 - **Drafted by**: build-agent (builder role)
@@ -22,6 +22,7 @@ evidence: test:tests/test_stream_builder_backpressure_dual.cpp---
   （含 `source.ready.impl() != nullptr` 断言）+ `tests/test_stream_builder_backpressure_dual.cpp`
   （**双后端** parity）⇒ ⇒ ⚠️ 本文件原先的「静默丢字」标题本身**已被实测推翻**
   （真缺陷只是「上游反压从未建立」）⇒ ⇒ 标题保留为历史线索。
+- ⚠️ **文件名保留 `silent-word-loss`（历史名）**：改名会破坏既有链接（台账/计划/裁决单多处引用） ⇒ ⇒ **内容以标题为准**（标题已订正为「上游反压丢失」）⇒ ⇒ 本条是「**标题曾经说谎**」的实例 ⇒ ⇒ 与 `interpreter-eq-wide-operand-miscompare-2026-11.md` 同一处置（订正标题 + 保留文件名）。
 - **来源**：change `stream-forward-ready-closure-p1a-2026-11` 的实施期探针
   ⇒ ⇒ 该 change 的 builder 子项**已移出**（本项独立立项）
 - ⚠️ **关联**：capability `chlib-stream-ready-ownership` · ADR-054 §3.2 第 1 条

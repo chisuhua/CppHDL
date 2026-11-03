@@ -1,8 +1,34 @@
 ---
-evidence: unmeasured
+evidence: probe:.rddf/checks/objective-test-coverage-status-2026-11.md
 ---
 
-# 下一步执行说明（供 oracle / critic 审查 · 2026-11-01）
+# 下一步执行说明（供 oracle / critic 审查 · 2026-11-01）⇒ ✅ **已结案（2026-11-03 核对）**
+
+## ✅ 结案核对（2026-11-03 · build 侧逐项核对）
+
+⚠️ **本 brief 是 2026-11-01 的历史快照** ⇒ ⇒ 它列的「下一步」**全部已执行或已改判** ⇒ ⇒
+下表是逐项的**最终归宿**：
+
+| brief 项 | 最终归宿 |
+|---|---|
+| **N1**（批次 C 修正：补齐既有 `_behavior` 未覆盖的用例）| ✅ **已被更强的路线取代**：路线 A/B/C 的双后端 parity 批次（2026-11-02/03）⇒ parity 文件数 33 → **66** · pair 194 → **289** ⇒ ⇒ `AXI peripheral` 的用例已被覆盖 |
+| **N2 / N2′**（判据松绑 = 「断言数(with verilator) == 2 × 断言数(interpreter-only)」）| ✅ **已落地**（`tests/dual_backend_fixture.h` + 全部 dual 文件遵循该判据）⇒ ⇒ 本仓通用的判据代号即 **N2′** |
+| **N3**（B1/B6 落地）| ✅ ADR-055 + change `stream-builder-and-pipe-ready-ownership-2026-10`（2026-11-01 归档）|
+| **N4**（共享 fixture）| ✅ **不再需要**：批次 B2 的 4 个 `_behavior` 文件的 DUT 复用**仓内既有**组件（`test_bool_connection_behavior` 等）⇒ ⇒ 局部类提升为共享 fixture 的必要性消失 |
+| **N5**（A4 普查的待实测项：transpose / 4 个 filters / join / combine_with）| ⏳ **仍未做**（低优先；A4 审计表本身已归档 ⇒ ⇒ 可随时按该表续做）|
+| **§5.3 B2**（in-force spec 的 `Purpose` 仍写已被推翻的症状）| ✅ 已处置（`chlib-stream-ready-ownership/spec.md:69` 明写「已被实测推翻」）|
+| **§5.3 B5 / B6**（N2′ 与排除项冲突 / B1 与 B6 的 delta 撞同一条）| ✅ 已绕开（N2′ 采纳）· ✅ 已合并成一个 change（B1+B6 同 change 落地）|
+| **§5.3 SHOULD_FIX**（A4 的 N5 范围 / plan 的「DUT 数」列名 / 台账文件名 / B7·B8 的可机械核验定义 / B4 的悬空引用面）| ✅ **本轮批量订正**（2026-11-03）：plan 的成本单位已改为 **pair 数**（§3.0）⇒ **列名同步订正**；台账 `stream-builder-chain-silent-word-loss-2026-11.md` 的**标题**已订正为「上游反压丢失」并注明文件名保留原因；B7/B8 已落地为可机械核验的判据；B4 的悬空引用面已在 `fwft-fifo-physical-removal` 归档时订正 |
+| **§5.3 oracle §5**（纪律机制 M：台账 `evidence:` + 护栏 + 自检）| ✅ **已实施**：`scripts/verify_ledger_evidence.sh`（fail-closed + 自检）⇒ ⇒ **2026-11-03 已把 50 个台账的 `evidence:` 补齐（缺失 50 → 0）** |
+| **§5.3 oracle §4**（暂停 A5，转预算给 B1/B6）| ✅ 已被取代：objective `objective-test-coverage-100pct` **已关闭**（`status: completed`，commit `491d537`）|
+| **§5.3 oracle §3**（B1 的「第三类」表述 ⇒ 改为「链内闭包 + 不对外暴露」）| ✅ 已写入 ADR-055 的裁决表述 |
+
+⇒ ⇒ **本 brief 自此归档为决策史**；当前待裁决项集中在
+`.rddf/checks/decision-request-input-port-guards-2026-11.md`（D1 / D2 两条）。
+
+---
+
+## （以下为 2026-11-01 的原始 brief · 保留作决策史）
 
 ## 1. 已完成（本轮，可审查）
 

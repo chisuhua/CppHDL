@@ -1,6 +1,7 @@
 ---
 kind: registry
 subject: hdl-logical-deprecation
+evidence: probe:scripts/verify_deprecation_callsites.sh
 ---
 
 # 登记表：HDL 逻辑算子（`&&` / `||`）的弃用状态

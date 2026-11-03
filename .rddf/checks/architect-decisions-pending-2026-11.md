@@ -1,8 +1,38 @@
 ---
-evidence: unmeasured
+evidence: probe:docs/adr/ADR-055-chain-intermediate-ready-ownership.md
 ---
 
-# 待 architect 裁决清单（2026-11-01）
+# 待 architect 裁决清单（2026-11-01）⇒ ✅ **已全部结案（2026-11-03 核对）**
+
+## ✅ 结案核对（2026-11-03 · build 侧逐项核对）
+
+⚠️ **本清单已不是「待裁决」** —— 2026-11-01 的裁决（用户拍板）**全部落地** ⇒ ⇒
+下表是**逐项的最终归宿**（⇒ ⇒ 也回答了「本文件会不会过期」这个问题：**它已被结案标注**）：
+
+| # | 项 | 裁决 | **落地位置（2026-11-03 实测）** |
+|---|---|---|---|
+| **B1** | builder 链内中间级的 ready 归属 | 「链内闭包不变式 + 不对外暴露」⇒ 不立「第三类」| ✅ **ADR-055**（`docs/adr/ADR-055-chain-intermediate-ready-ownership.md`）+ change `stream-builder-and-pipe-ready-ownership-2026-10`（归档 2026-11-01）⇒ capability `chlib-stream-ready-ownership` |
+| **B6** | `stream_pipeline.h` 的 pipe 族 | 纳入同一 capability（与 B1 合并成一个 change ⇒ 规避 MODIFIED 静默覆盖）| ✅ 同上 change（三个 pipe 重写）|
+| **B4** | `chlib::fwft_fifo` 去留 | 物理删除（+ 订正 ADR-008 §4 的悬空引用）| ✅ change `fwft-fifo-physical-removal-2026-11`（归档 2026-11-01）|
+| **B5** | `sequence` ↔ `priority` 重复 | 删 `sequence` | ✅ change `stream-arbiter-sequence-removal-2026-11`（归档 2026-11-02）|
+| **B2** | `demux` 的 ready 方向 | 改成「消费端 ⇒ 上游」 | ✅ **ADR-056** + change `stream-demux-fork-ready-semantics-2026-10`（归档 2026-11-02）|
+| **B3** | `fork` 的同步语义 | 实现真同步语义 | ✅ **ADR-057** + 同一 change（归档 2026-11-02）|
+| **B7** | 未驱动字段诊断的形态 | 只读诊断 API（不改既有语义）| ✅ change `node-driver-diagnosis-2026-11`（归档 2026-11-02）⇒ capability `core-node-driver-visibility` |
+| **B8** | 命名诚实性「审计制」条款 | 收窄为「本次 change 引入或改动的组件 MUST 有一条行为用例锁定其声称语义」| ✅ capability `chlib-stream-arbitration` MODIFIED + 登记表 `.rddf/checks/chlib-naming-honesty-registry.md` + 护栏 `scripts/verify_chlib_naming_honesty.sh`（2026-11-02）|
+| **P1** | 阈值 60 vs objective 的「诚实上限」自订不变量 | —— | ✅ **objective 已关闭**（`status: completed`，commit `491d537`）⇒ 判据③口径重述 + 计数订正 ⇒ 裁决包 `.rddf/checks/objective-test-coverage-status-2026-11.md` |
+| **P2** | CI 墙钟 45 min | —— | ✅ **实测 + 定档**（2026-11-03）：warm 464 s / cold 4301 s ⇒ ⇒ **分片并行本来就存在**（`matrix.shard: [1,2]` ⇒ 45 min 是**每 job** 预算 ⇒ cold 每 job ≈ 38 min）⇒ ⇒ 真正的风险是 **per-test `TIMEOUT 60` 在 cold 下必然红** ⇒ ⇒ 已按「≥ 2× 冷实测」定档（默认 60 → 180 + 4 处上调）⇒ 台账 `.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md` |
+
+⚠️ **「B2 的 in-force spec `Purpose` 仍写着已被推翻的症状」**（§5.3 的待处理项）⇒ ⇒
+**已处置**：`openspec/specs/chlib-stream-ready-ownership/spec.md:69` 现在明写
+「该描述**已被实测推翻**」⇒ ⇒ 不是「假绿固化在契约面」。
+
+⇒ ⇒ **本清单自此归档为决策史**；后续若要开新的裁决项 ⇒ ⇒ 用新的
+`.rddf/checks/decision-request-*.md`（体例见
+`.rddf/checks/decision-request-input-port-guards-2026-11.md`）。
+
+---
+
+## （以下为 2026-11-01 的原始清单 · 保留作决策史）
 
 > ⚠️ **本清单的定位**：builder 侧**已把每项的实测证据做齐**（探针 + 判别力
 > 用例 + 护栏），但**裁决权在 architect** ⇒ ⇒ ⇒ **本清单只列「事实 / 选项 /
