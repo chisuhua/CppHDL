@@ -1,9 +1,9 @@
 ---
 id: feat-rv32i-isa-completeness
 kind: feature
-status: active
+status: completed
 phase_refs: [phase-5]
-主题: RV32I 语义边界收口（SB/SH 写字节道 · LB/LH 读字节道 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装）
+主题: RV32I 语义边界收口（SB/SH 写字节道 · LB/LH 读字节道 · JAL/JALR 重定向 · SRA）+ 流水线健壮性（skid buffer · 取指双装）—— 五项 change 全部归档
 ---
 
 ## 概述
