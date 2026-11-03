@@ -12,7 +12,12 @@ created_at: 2026-11-03
 
 - **Date drafted**: 2026-11-03
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待实施**（**零行为影响**（只改 include 路径）⇒ ⇒ 不需 ADR）
+- **Status**: ✅ **已修复**（2026-11-03 · change
+  `header-self-containment-fix-2026-11`）⇒ ⇒ `id_stage.h` 的 include 改成
+  `include/` 相对路径（`cpu/pipeline/rv32i_decoder.h`）⇒ ⇒ **单独 include 可编译**。
+  ⇒ 判据不再是「靠构建脚本打补丁」而是**常驻护栏**：
+  `scripts/verify_header_self_contained.sh`（R1 逐个单独编译 `include/**` 的全部头
+  + R2a/R2b/R2c 豁免判据）⇒ ⇒ 该头的**任何**自包含回归都会在护栏里转红。
 - **来源**：路线 C 第 2 批把 `riscv::IdStage` **直接当 dual DUT** ⇒ ⇒ 首次以
   「外部使用者」的视角 include 它 ⇒ ⇒ **编译失败**。
 
@@ -85,3 +90,15 @@ ${PROJECT_SOURCE_DIR}/include/cpu/pipeline)` ⇒ ⇒ **同一个补丁要打两�
 - ⇒ ⇒ **爆炸半径为零** ⇒ ⇒ 可以独立修。
 - ⚠️ **本批（parity 批）不改它**：本批用**构建脚本补丁**绕过（沿用既有先例）
   ⇒ ⇒ 缺陷登记 + 独立修。
+
+## 5. ✅ 修复记录（2026-11-03）
+
+- **修法**：`#include "rv32i_decoder.h"` ⇒ `#include "cpu/pipeline/rv32i_decoder.h"`
+  （**只改 include 路径** ⇒ 零行为变更）。根因是该头在**上一级**目录，写裸文件名
+  只能靠「`-I include/cpu/pipeline`」才找得到 ⇒ ⇒ 外部使用者单独 include 必然失败。
+- **连带的更大收口**：本项只是 A 类「**全部头文件自包含性**」普查（162 个头逐个
+  单独编译）里的 1/7 ⇒ ⇒ 同一批还修了 `if_stage.h` / `ex_stage.h` /
+  `rv32i_pipeline.h` / 两个 `*_cache_async.h` / **公共入口 `chlib.h`**（`::chlib::`
+  显式全限定）⇒ ⇒ 并新增常驻护栏（见上）。
+- **验证**：`bash scripts/verify_header_self_contained.sh` 绿（self-test 3/3）；
+  全量重建 0 error；`ctest -LE perf` 零回归。

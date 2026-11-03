@@ -12,7 +12,12 @@ created_at: 2026-11-03
 
 - **Date drafted**: 2026-11-03
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待实施**（**文档订正**为主；行为是否要改见 §2）
+- **Status**: ✅ **已修复（文档订正部分）**（2026-11-03 · change
+  `header-self-containment-fix-2026-11` 的 A2 类）⇒ ⇒ `combinational.h` 的头注释
+  已订正为「**编号最大者胜（高位优先）**」，并加了「本仓『优先级』有两个方向」的
+  交叉说明（`priority_selector` 是**低位**优先 ⇒ 与本组件**相反**）。
+  ⇒ ⚠️ **行为未改**（只改注释）—— 是否把实现改成低位优先 = **另一决策**
+  （会改变所有消费者的语义）⇒ ⇒ 仍待裁决；本条只关闭「名字/注释说谎」这一半。
 - **来源**: 路线 B 的 4 问① **只读查重** ⇒ 读 `include/chlib/combinational.h` 时**发现**，
   并用**独立探针实测确认**。
 
@@ -111,3 +116,15 @@ ch_uint<compute_idx_width(N)> priority_encoder(ch_uint<N> input) {
   `tests/test_stream_arbiter.cpp`）⇒ ⇒ **爆炸半径小**。
 - ⚠️ **本批（路线 B 的 `stream_arbiter` dual 覆盖）按「当前实现」断言**（高位优先）
   ⇒ ⇒ 与本 draft 的选项 A 一致 ⇒ ⇒ **两者不冲突** ⇒ ⇒ 修注释不需要改测试期望。
+
+## 6. ✅ 修复记录（2026-11-03）
+
+- **改动**：`include/chlib/combinational.h` 的 `priority_encoder` 头注释 ——
+  「优先处理低位」⇒ 「**编号最大者胜（高位优先）**」，并写明与 `priority_selector`
+  的方向**相反**（后者是低位优先）。
+- **行为未动**：这是 `type: docfix` ⇒ ⇒ 只消除「注释与实现相反」这一点
+  （它曾让 `stream_arbiter_sequence` 的注释也照抄同一句错误表述）。
+- **交叉登记**：`.rddf/checks/chlib-naming-honesty-registry.md` 新增
+  `priority_encoder` 一行（判别性用例 = `tests/chlib/test_stream_arbiter_dual.cpp`
+  的 `[chlib][stream][arbiter][priority][grant][ready][dual]`）⇒ ⇒ 登记表 **16 → 17**。
+- **验证**：`bash scripts/verify_chlib_naming_honesty.sh` 绿（R1/R2/R3）。

@@ -8,6 +8,23 @@
 
 ---
 
+> ⚠️ **2026-11-03：本计划已随 objective 关闭而收口（`status: completed`）**
+>
+> `objective-test-coverage-100pct` 的三条 Go 判据**全部达成**（parity 源文件数
+> **66 ≥ 60**；`ctest -LE perf` **232/232**；`CTEST_TOTAL` **243**）⇒ ⇒
+> 裁决依据 = `.rddf/checks/objective-test-coverage-status-2026-11.md`。
+>
+> ⇒ ⇒ **本文件里的「批次清单」不再作为待执行工作项**（按数字推进的边际收益已低）。
+> 后续 dual 判据改按**缺陷驱动**推进 —— 判据 = 「这个语义有没有**可能两后端分歧**、
+> 且当前**没有**判据」⇒ 实例：`mux-slot-width-preservation-2026-11`（槽位压窄）与
+> `wide-shl-truncate-word-carry-2026-11`（多 word 左移进位）—— 两者都是在
+> **232 个测试全绿**时挖出的真 bug。
+>
+> ⚠️ **保留原因**：批次清单 + 墙钟账本 + 4 问判据仍是后续同类工作的**方法论素材**
+> ⇒ ⇒ 只作**历史记录**，不作**任务清单**。
+
+---
+
 ## 1. 目标与口径（**逐字引用 objective，避免口径漂移**）
 
 - objective：`objective-test-coverage-100pct`（**planner 职责**）
