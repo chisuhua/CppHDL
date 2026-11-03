@@ -104,6 +104,18 @@ vs CI runner 2 核 ⇒ 生产只会更长）⇒ ⇒ **余量偏薄，但未越�
 
 ## 4. 复现命令
 
+⚠️ **已提交的可复算脚本**（护栏的 `evidence: probe:` 指向它）：
+
+```bash
+scripts/measure_verilator_e2e_wallclock.sh --warm   # 用真实缓存跑两片
+scripts/measure_verilator_e2e_wallclock.sh --cold   # 空 HOME ⇒ 全量重编 Verilog
+scripts/measure_verilator_e2e_wallclock.sh --both   # 两轮 + 「cold 耗时 / TIMEOUT」占比表
+```
+
+⚠️ **测量纪律**：测量期间**不得**有其它构建 / 测试在跑（否则数字是上界，不是真值）。
+
+等价的裸命令（脚本内部用的就是它们）：
+
 ```bash
 # warm（必须独占机器，否则数字无意义）
 cd build && ctest --output-on-failure --no-tests=error -L verilator_e2e -LE perf -I 1,,2
