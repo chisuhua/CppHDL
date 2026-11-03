@@ -138,11 +138,14 @@ public:
         ch_uint<32> imm_s = sext<32>(imm_s_base);
 
         // B-type 立即数：instr[31|30:25|11:8|7], 符号扩展
+        // ⚠️ **ADR-063 D3**：`instr[7]` 承载 **imm[11]** ⇒ MUST 左移 11。
+        //    此前漏移位 ⇒ 落在 bit 0 ⇒ `|偏移| >= 2048` 的条件分支目标错 2047
+        //    （实测 `beq x1,x2,-8` 得 0xFFFFF7F9，规范应为 0xFFFFFFF8）。
         ch_uint<13> imm_b_base =
             (bits<31, 31>(io().instruction) << ch_uint<5>(12_d)) |  // 5 bits can hold 0-31
             (bits<30, 25>(io().instruction) << ch_uint<3>(5_d)) |   // 3 bits can hold 0-7
             (bits<11, 8>(io().instruction) << ch_uint<1>(1_d)) |    // 1 bit can hold 0-1
-            bits<7, 7>(io().instruction);
+            (bits<7, 7>(io().instruction) << ch_uint<4>(11_d));     // imm[11]
         ch_uint<32> imm_b = sext<32>(imm_b_base);
 
         // U-type 立即数：imm[31:12] = instr[31:12]（**低 12 位 MUST 清零**）

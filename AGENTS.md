@@ -326,7 +326,7 @@ ctest --output-on-failure
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 271
+- DUAL_BACKEND_PARITY_PAIRS: 272
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——
@@ -800,6 +800,35 @@ ctest --output-on-failure
   ⚠️ **冷缓存墙钟 32.6 s / 3 pair**（假 HOME；热缓存 1.01 s）⇒ ⇒ **10.9 s/pair**
   ⇒ ⇒ **回到**模型的 10.6–11.6 s/pair 区间（比第 1 批的 12.6 s/pair **低**
   ⇒ ⇒ 印证「成本 MUST 按 DUT 复杂度分档」：第 1 批的三个 DUT 的 `select` 链更长）。
+- **2026-11-03 ADR-063 落地 —— RV32I **B 型立即数 bit 11** 修复（生产路径真 bug，误差恒 2047）**
+  → 2 处各 1 行（`rv32i_decoder.h:113` + **生产路径** `stages/id_stage.h:145`）+
+  3 处 golden 翻转 + **1 个新 dual pair**（D4 等价性判据）；capability `rv32i-isa-semantics`
+  **ADDED ×1**（1 Requirement + 4 Scenario）⇒ 归档**未**用 `--skip-specs`。
+  🔴 **缺陷**：RISC-V 的 `imm[12|10:5|4:1|11] = instr[31|30:25|11:8|7]` ⇒ `instr[7]` 承载
+  **`imm[11]`**；两处实现都**未移位**就 OR 到 bit 0（**注释都写着 `imm[11]`** ⇒ 笔误）⇒
+  `|偏移| ≥ 2048` 的条件分支目标错 **2047**（`beq x1,x2,-8` 得 `0xFFFFF7F9`，规范
+  `0xFFFFFFF8`；`+2048` 得 `1`，规范 `0x800`）。
+  ⚠️ **为何从未暴露**：所有固件的分支偏移都是 `+8` ⇒ `imm[11]=0` ⇒ 误置的 bit 0 也是 0
+  ⇒ **无误差** ⇒ 历史 golden 全部不受影响（实测确认）。
+  ⚠️ **为何 parity 看不见**：两个组件纯组合 ⇒ 同一份 C++ 生成两套后端 ⇒ **一致地错**
+  ⇒ 恒绿（同型先例 ADR-047 的「距离 3 读旧值」）⇒ 只有**手推期望值**能抓（= 路线 C 的产物）。
+  ✅ **D4 补偿判据**：两份实现是**重复代码**（B 型笔误同时在两处）⇒ 新增 `ImmConsistencyDut`
+  把 `Rv32iDecoder` 与 `IdStage` **并排实例化**、断言 `dec_imm == id_imm`。
+  ⚠️ **如实登记的判别力边界**：该判据只能抓「**不一致**」；**两份一起错**时恒绿（M-c 实测）
+  ⇒ 「一起错」由各自的**绝对期望值表**抓 ⇒ 两者互补。
+  ✅ **变异 5/5 全抓**：M-a 只回退 decoder（⇒ C1 4 failed，C2 绿）· M-b 只回退 id_stage
+  （⇒ C1 2 + C2 2）· M-c 两处都回退（⇒ 各 2；**D4 pair 绿** = 已登记边界）· M-d `<<11`→`<<12`
+  · M-e `sext`→零扩展。⚠️ M-d 首版注入器**吞掉了行尾分号**（注释覆盖 `;`）⇒ 编译失败
+  ⇒ 注入器正确报 "not judged"（**未**声称抓到）⇒ 修正后重跑才转红 —— T4「fail-closed」
+  的另一面：**正则命中 ≠ 语法有效**。
+  ⚠️ **计数**：`CTEST_TOTAL` **238 不变** · `verilator_e2e` **70 不变** ·
+  `DUAL_BACKEND_PARITY_TOTAL` **61 不变** · `DUAL_BACKEND_PARITY_PAIRS` **271 → 272** ·
+  non-perf **227 不变**。⇒ **正是 objective §2 已登记的「口径盲区」实例**：在既有 dual
+  文件里加 pair 对**源文件数**零贡献（但边际价值高）⇒ 归 planner（T-10）。
+  ⚠️ **不在本次范围（ADR-063 D8）**：立即数提取「两份 → 单一实现」的**代码级去重**
+  （= 选项 F，需新增共享头 + Verilog diff 验证门）· 移位量容器宽度统一 ·
+  `id_stage.h` 非自包含 · `ex_stage.h` 的 `BRANCH_*` 常量 —— 后两者已独立立项。
+  ⇒ 顺带：`include/cpu/AGENTS.md` 的**行数锚点** 6459 → **6464**（护栏自动抓到）。
   🔴 **连带触发命名诚实性护栏（B8 的 R3）**：本批与 G 批**改动过** chlib 组件 ⇒ ⇒
   护栏 `scripts/verify_chlib_naming_honesty.sh` 的 **R3**（per-change 义务）要求
   「最近的 chlib change MUST 在 proposal 里用 `<!-- touched-components: ... -->`

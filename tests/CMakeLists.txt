@@ -637,6 +637,13 @@ add_dual_backend_test(test_rv32i_stage_dual
     TIMEOUT 300
 )
 
+# ⚠️ ADR-063 D4 的等价性判据在 `test_rv32i_stage_dual.cpp` 里新增了一个 wrapper
+#    （并排实例化 `Rv32iDecoder` + `IdStage`）⇒ 需要 include `stages/id_stage.h`
+#    ⇒ 该头**非自包含**（`#include "rv32i_decoder.h"` 在上一级目录）⇒ 补 include 路径。
+target_include_directories(test_rv32i_stage_dual PRIVATE
+    ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
+)
+
 # ⚠️ **路线 C 第 2 批 —— RV32I 的「时序侧」组件进双后端 parity**（2026-11-03）
 #    ⇒ `IdStage`（**16** 个 ch_reg = ID/EX 流水线寄存器）· `Rv32iRegFile`（**32** 个
 #      ch_reg = 仓内最大的 always_ff 面）· `DataTCM<8,32>`（ch_mem **aread** 0-cycle

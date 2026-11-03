@@ -79,6 +79,7 @@
 #include "core/context.h"
 #include "cpu/pipeline/rv32i_decoder.h"
 #include "cpu/pipeline/stages/ex_stage.h"
+#include "cpu/pipeline/stages/id_stage.h"
 #include "cpu/pipeline/stages/mem_stage.h"
 #include "simulator.h"
 
@@ -201,8 +202,8 @@ const DecCase kDecCases[] = {
     {0x0021A223ULL, 46, 35, 4, 2, 3, 2, 0, 0x00000004ULL, 2},  // sw x2,4(x3)
     {0xFE21AE23ULL, 46, 35, 28, 2, 3, 2, 127, 0xFFFFFFFCULL, 2},  // sw x2,-4(x3)
     {0x00208463ULL, 46, 99, 8, 0, 1, 2, 0, 0x00000008ULL, 3},  // beq x1,x2,8
-    {0xFE208CE3ULL, 46, 99, 25, 0, 1, 2, 127, 0xFFFFF7F9ULL, 3},  // beq x1,x2,-8
-    {0x002080E3ULL, 46, 99, 1, 0, 1, 2, 0, 0x00000001ULL, 3},  // beq x1,x2,2048
+    {0xFE208CE3ULL, 46, 99, 25, 0, 1, 2, 127, 0xFFFFFFF8ULL, 3},  // beq x1,x2,-8（ADR-063 D5）
+    {0x002080E3ULL, 46, 99, 1, 0, 1, 2, 0, 0x00000800ULL, 3},  // beq x1,x2,2048（ADR-063 D5，imm[11]=1）
     {0x123451B7ULL, 47, 55, 3, 5, 8, 3, 9, 0x12345000ULL, 4},  // lui x3,0x12345
     {0x12345197ULL, 47, 23, 3, 5, 8, 3, 9, 0x12345000ULL, 4},  // auipc x3,0x12345
     {0x010000EFULL, 47, 111, 1, 0, 0, 16, 0, 0x00000010ULL, 5},  // jal x1,16
@@ -210,6 +211,66 @@ const DecCase kDecCases[] = {
     {0x004100E7ULL, 47, 103, 1, 0, 2, 4, 0, 0x00000004ULL, 1},  // jalr x1,4(x2)
     {0x003100B3ULL, 63, 51, 1, 0, 2, 3, 0, 0x00000000ULL, 0},  // add x1,x2,x3
     {0x803100B3ULL, 63, 51, 1, 0, 2, 3, 64, 0x00000000ULL, 0},  // sub x1,x2,x3
+};
+
+
+// ===========================================================================
+// D4 判据：`Rv32iDecoder::imm` 与 `IdStage::imm` 的**等价性**
+// ===========================================================================
+// ⚠️ **为什么要有这一条**（ADR-063 D4）：立即数提取在仓内有**两份重复实现**
+//    （`rv32i_decoder.h` 与 `stages/id_stage.h`）⇒ B 型 bit 11 的笔误**同时**存在于
+//    两处 ⇒ 若无此判据，「只改一处」的复发**无法被发现**（两份各自有测试也可能各自对）。
+// ⇒ 本 wrapper 把两者并排实例化、喂同一条指令 ⇒ 差异立刻显形。
+// ⚠️ `IdStage` 的 `imm` 是**寄存输出**（`idex_imm->next = select(update_en, ...)`）
+//    ⇒ MUST 驱动 `valid=1`（update_en = valid）且 `flush=stall=0`，否则它**保持**上一拍。
+class ImmConsistencyDut : public ch::Component {
+public:
+    __io(
+        ch_in<ch_uint<32>>  instruction;
+        ch_out<ch_uint<32>> dec_imm;
+        ch_out<ch_uint<32>> id_imm;
+        ch_out<ch_bool>     equal;
+    )
+
+    ImmConsistencyDut(ch::Component* parent = nullptr,
+                      const std::string& name = "imm_consistency")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        ch::ch_module<riscv::Rv32iDecoder> dec{"dec"};
+        ch::ch_module<riscv::IdStage>      ids{"ids"};
+
+        dec.io().instruction <<= io().instruction;
+        ids.io().instruction <<= io().instruction;
+        // ⚠️ 这些是 **IdStage 的输入**（不是本 wrapper 的输入）⇒ 用 `<<=` 内部驱动
+        ids.io().pc           <<= ch_uint<32>(0_d);
+        ids.io().valid        <<= ch_bool(true);   // ⇒ idex_update_en = 1
+        ids.io().flush        <<= ch_bool(false);
+        ids.io().stall        <<= ch_bool(false);
+        ids.io().reg_rs1_data <<= ch_uint<32>(0_d);
+        ids.io().reg_rs2_data <<= ch_uint<32>(0_d);
+
+        io().dec_imm <<= dec.io().imm;
+        io().id_imm  <<= ids.io().imm;
+        io().equal   <<= (dec.io().imm == ids.io().imm);
+    }
+};
+
+// 指令集（ADR-063 D4 要求的最低覆盖）：
+//   B 型 `imm[11]=1` 正/负各一 · I/S/U/J 各 >=1 · `|imm|<2048` 的 B 型（负向对照）
+constexpr uint32_t kImmConsistencyInstrs[] = {
+    0xFE208CE3u,  // beq x1,x2,-8        ⇒ imm[11]=1，负数
+    0x002080E3u,  // beq x1,x2,+2048     ⇒ imm[11]=1，正数
+    0x00208463u,  // beq x1,x2,+8        ⇒ imm[11]=0（负向对照）
+    0x00500093u,  // addi x1,x0,5        ⇒ I 型
+    0xFFF00093u,  // addi x1,x0,-1       ⇒ I 型负数
+    0x0021A223u,  // sw x2,4(x3)         ⇒ S 型
+    0xFE21AE23u,  // sw x2,-4(x3)        ⇒ S 型负数
+    0x123451B7u,  // lui x3,0x12345      ⇒ U 型
+    0x010000EFu,  // jal x1,16           ⇒ J 型
+    0xFF1FF0EFu,  // jal x1,-16          ⇒ J 型负数
 };
 
 }  // namespace
@@ -340,5 +401,29 @@ DUAL_BACKEND_TEST_PAIR(
                 REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.imm)) ==
                         tc.imm);
             }
+        }
+    });
+
+// ===========================================================================
+// pair 4（ADR-063 D4）：两份立即数实现的**等价性**
+// ===========================================================================
+DUAL_BACKEND_TEST_PAIR(
+    ImmConsistencyDut,
+    "Rv32iDecoder::imm 与 IdStage::imm 逐位相等（ADR-063 D4：防两份重复实现只改一处）",
+    "[cpu][rv32i][immediate][consistency][dual][adr063]",
+    [&]() {
+        auto &io = dev.instance().io();
+        for (uint32_t instr : kImmConsistencyInstrs) {
+            sim.set_input_value(io.instruction, static_cast<uint64_t>(instr));
+            sim.tick();
+            const uint64_t dec_imm =
+                static_cast<uint64_t>(sim.get_port_value(io.dec_imm));
+            const uint64_t id_imm =
+                static_cast<uint64_t>(sim.get_port_value(io.id_imm));
+            INFO("instruction=0x" << std::hex << instr << std::dec
+                                  << " dec_imm=0x" << std::hex << dec_imm
+                                  << " id_imm=0x" << id_imm);
+            REQUIRE(dec_imm == id_imm);
+            REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.equal)) == 1u);
         }
     });

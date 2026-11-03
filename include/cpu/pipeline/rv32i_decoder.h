@@ -110,7 +110,9 @@ public:
             (bits<31, 31>(io().instruction) << ch_uint<12>(12_d)) |  // imm[12]
             (bits<30, 25>(io().instruction) << ch_uint<6>(5_d)) |    // imm[10:5]
             (bits<11, 8>(io().instruction) << ch_uint<4>(1_d)) |     // imm[4:1]
-            bits<7, 7>(io().instruction);                            // imm[11]
+            // imm[11]：instr[7] 承载 **imm[11]**（ADR-063 D3）⇒ MUST 左移 11
+            // ⚠️ 此前漏移位 ⇒ 落在 bit 0 ⇒ |偏移| >= 2048 的条件分支目标错 2047。
+            (bits<7, 7>(io().instruction) << ch_uint<4>(11_d));
         ch_uint<32> imm_b = sext<32>(imm_b_base);
         
         // U-type: imm[31:12] = instr[31:12]
