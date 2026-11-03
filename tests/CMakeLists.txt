@@ -637,6 +637,29 @@ add_dual_backend_test(test_rv32i_stage_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 C 第 2 批 —— RV32I 的「时序侧」组件进双后端 parity**（2026-11-03）
+#    ⇒ `IdStage`（**16** 个 ch_reg = ID/EX 流水线寄存器）· `Rv32iRegFile`（**32** 个
+#      ch_reg = 仓内最大的 always_ff 面）· `DataTCM<8,32>`（ch_mem **aread** 0-cycle
+#      + 读-改-写的字节合并）⇒ ⇒ 三个组件**都走 always_ff / mem 写口**
+#      ⇒ ⇒ 正是两后端最易分叉的路径（与第 1 批的纯组合组件互补）。
+#    ⇒ **零 DUT 复制**：三个组件本身带顶层端口 ⇒ 直接当 DUT。
+#    ⇒ ⚠️ **刻意不做 `InstrTCM`**：它的 `sread` 时序在「地址是顶层输入端口」时
+#      **不可判别**（陷阱 T2 ⇒ 0-cycle 与 1-cycle 观测值相同）⇒ ⇒ 唯一可判别的形态
+#      需要「地址由同一条沿提交的 ch_reg 驱动」⇒ ⇒ 需要一层 wrapper ⇒ 不是零 DUT 复制。
+#    ⇒ 4 问 ①：三个符号在 60 个 dual 文件里各出现 **0** 次 ⇒ 无重复。
+add_dual_backend_test(test_rv32i_timing_dual
+    SOURCES test_rv32i_timing_dual.cpp
+    TIMEOUT 300
+)
+
+# ⚠️ `id_stage.h` **非自包含**（`#include "rv32i_decoder.h"` 在**上一级**目录
+#    ⇒ 单独 include 会失败）⇒ ⇒ 需要 `include/cpu/pipeline` 在 include 路径上
+#    ⇒ ⇒ 与既有 `test_rv32i_pipeline_behavior` **同款**处理
+#    ⇒ ⇒ 该头文件的自包含缺陷已独立登记（不在本批修）。
+target_include_directories(test_rv32i_timing_dual PRIVATE
+    ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
+)
+
 # axi-spi-behavior-tests: AxiLiteSpi behavior parity runtime test
 # (Phase 3 partial of dual-backend-test-coverage). New file using DUAL_BACKEND_TEST_PAIR
 # macro. Original tests/test_axi_spi.cpp (interface-structure) untouched.
