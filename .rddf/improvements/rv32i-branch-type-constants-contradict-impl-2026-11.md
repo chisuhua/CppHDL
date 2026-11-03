@@ -12,7 +12,7 @@ created_at: 2026-11-03
 
 - **Date drafted**: 2026-11-03
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待实施**（**零行为影响**（常量无消费者）⇒ ⇒ 纯订正 ⇒ 不需 ADR）
+- **Status**: ✅ **已修复**（2026-11-03 · change `header-self-containment-fix-2026-11`，commit `8e7367f`、归档 `0bb1fb4`）⇒ ⇒ **处置 = 物理删除**（不是订正数值）：该常量块**零消费者**（`grep -rn "BRANCH_BEQ\|BRANCH_BNE\|BRANCH_BLT\|BRANCH_BAU" include/ src/ tests/` **无输出**），而留着它会持续诱导后人用它去比较 RISC-V 的 `funct3`（`BLT=4` 恰好等于错的 `BRANCH_LTU=4` ⇒ 「看起来能用」）。`ex_stage.h:48-53` 现只留一段注释记录「曾有过、为何删」。⇒ 判据 = 上述 grep 零输出（无同名符号残留）。
 - **来源**：路线 C 第一批的**手推期望表**与实现不符 ⇒ ⇒ 追查后定位。
 
 ## 1. Why (背景与动机)
