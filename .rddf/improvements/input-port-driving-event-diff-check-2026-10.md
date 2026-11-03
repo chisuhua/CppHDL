@@ -11,14 +11,24 @@ evidence: probe:scripts/measure_new_input_ports.sh
 
 # Improvement: 新增输入端口 MUST 被显式驱动 ⇒ 用**事件驱动（git diff）增量检查**守
 
-> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: probe:scripts/measure_new_input_ports.sh`
-> （不是「已实测但忘了填」，而是「还没有可测的东西」）。
+> ✅ **本条已实施**（2026-11-03 · 用户裁决 **D1-A**）。
+> `evidence: probe:scripts/measure_new_input_ports.sh` 指向**成本测量脚本**（口径可复算）；
+> 实现判据的判别力由 `scripts/verify_input_port_additions.sh --self-test`（**6** 个合成
+> fixture）承担 ⇒ ⇒ 那是「实施了」的证据，不再是「提案」。
 
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待裁决**（**决策单已就绪**：`.rddf/checks/decision-request-input-port-guards-2026-11.md` §2 ⇒ ⇒ **D1-A / D1-B / D1-C / D1-D** 四个选项 + 代价 + 建议 ⇒ ⇒ owner = planner/architect）
-  ✅ **2026-11-03 已把「成本论证」依赖的数字变成仓内可复算证据**：`scripts/measure_new_input_ports.sh`（⇒ 本文件 `evidence:` 指向它）⇒ ⇒ 实测见该决策单 §1.2（**口径 B：仅生产代码 ⇒ 99×0 / 1×1** ⇒ ⇒ 义务的触发面 ≈ 0 ⇒ ⇒ 「运行成本趋零」的论证**第一次有可复算依据**）
+- **Status**: ✅ **已实施**（2026-11-03 · 用户裁决 **D1-A**：实施 · **只扫生产代码** · 半自动 · CI PR 事件）
+  - 实现 = `scripts/verify_input_port_additions.sh` + `scripts/lib/input_port_additions.py`
+  - 判据 = **只列不判**（退出码只取决于基础设施；基线 ref 拿不到 ⇒ **硬失败**，不得静默跳过）
+  - 判别力 = `--self-test` **6 个合成 fixture**（wired / unwired / none / helper / silent / bulk），
+    每个断言**具体子串**（不是「退出码 0 就算过」）
+  - 真实数据验证 = `8e7367f`（近 100 个 commit 里唯一新增生产端口的那个）⇒ 正确列出
+    `ExStage.branch_type` + **3** 个实例化点 + 各自的驱动形态
+  - CI = `build-and-test` 挂 2 个 step；**PR 事件**用 `origin/${{ github.base_ref}}`，
+    push/schedule 打 `::notice` 跳过（既不红也不假装通过）
+  - 成本证据 = `scripts/measure_new_input_ports.sh`（**口径 B：仅生产代码 ⇒ 99×0 / 1×1**）
 - **来源**：`input-port-driving-guard-2026-10` 的 spike 结论
   ⇒ 交付物 = `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md`
   §2 / §3.4 / §4.1

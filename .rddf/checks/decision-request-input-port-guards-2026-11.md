@@ -2,7 +2,25 @@
 evidence: probe:scripts/measure_new_input_ports.sh
 ---
 
-# 决策请求单：输入端口的两条「自动化护栏」路线（2026-11-03 · planner/architect 裁决）
+# 决策请求单：输入端口的两条「自动化护栏」路线（2026-11-03）⇒ ✅ **两条均已裁决并落地**
+
+## ✅ 裁决结果（2026-11-03 · 用户拍板）
+
+| 决策 | 裁决 | 落地 |
+|---|---|---|
+| **D1**「新增端口事件驱动增量检查」| ✅ **D1-A**：实施 · **只扫生产代码** · **半自动（只列不判）** · CI **PR 事件** | `scripts/verify_input_port_additions.sh` + `scripts/lib/input_port_additions.py` ⇒ `--self-test` **6/6**（合成 fixture）⇒ CI 2 个 step（PR 用 `origin/$base_ref`，push/schedule 打 `::notice` 跳过）⇒ 真实数据验证 `8e7367f`（近 100 commit 里唯一新增生产端口）正确列出 `ExStage.branch_type` + 3 个实例化点 |
+| **D2**「必需端口注册表」| ✅ **D2-A**：分级表 · **只覆盖两类**已实测风险 · 双向交叉校验 · 通用窄豁免 | `.rddf/checks/input-port-required-registry.md`（13 行）+ `scripts/verify_input_port_required_registry.sh` + `scripts/lib/input_port_registry.py` ⇒ R1–R6 ⇒ `--self-test` **5/5**（原地投毒）⇒ **`verify_rst_n_wiring.sh` 的组件清单已参数化**（从本表读 ⇒ 消除双源） |
+
+⚠️ **实施期实测订正了决策单里两处「未记录的口径/假设」**（⇒ 如实登记）：
+
+1. **§1.3 的口径差异已定位** —— 台账 §1 的历史数字（92×0 / 5×1 / 1×2 / 1×4 / 1×85）
+   **没有记录口径** ⇒ ⇒ 用同一脚本复算后：**口径 A（全部文件）** 75×0… / **口径 B（仅生产代码）99×0 / 1×1**
+   ⇒ ⇒ 差异来源 = 新增端口**绝大多数落在测试 DUT 里**（双后端 parity 批次每个新测试文件就带若干 DUT 端口）。
+2. **D2-A 的登记表** ⇒ **`AxiDma.rst_n` 是零行为覆盖**（`tests/test_axi_dma.cpp` 只有构造 +
+   端口存在性，无 `Simulator`、无 `rst_n` 驱动）⇒ ⇒ 表里标「**已知缺口**」并 `::notice` 点名，
+   **不**拿那个文件冒充判别性用例；⇒ 一旦补上覆盖，R3 会因「表已过时」而**转红**（双向）。
+
+---
 
 > ⚠️ **本单的定位**：builder 侧把**实测证据做齐了**（可复算脚本 + 口径对比 + 代价核算）
 > ⇒ ⇒ **裁决权在 planner/architect** ⇒ ⇒ ⇒ **本单只列「事实 / 选项 / 代价 / 建议」，

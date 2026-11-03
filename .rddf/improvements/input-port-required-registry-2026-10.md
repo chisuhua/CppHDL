@@ -11,14 +11,24 @@ evidence: test:tests/test_axi_rst_n_guard.cpp
 
 # Improvement: 「必需端口注册表」—— 未驱动读值风险 MUST 逐端口登记
 
-> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: test:tests/test_axi_rst_n_guard.cpp`
-> （不是「已实测但忘了填」，而是「还没有可测的东西」）。
+> ✅ **本条已实施**（2026-11-03 · 用户裁决 **D2-A**：分级表 · 只覆盖两类已实测风险）。
+> `evidence: test:tests/test_axi_rst_n_guard.cpp` 指向「永久复位」类的**运行期**
+> 判别性用例（双后端）；实现判据的判别力由 `scripts/verify_input_port_required_registry.sh
+> --self-test`（**5** 种原地投毒）承担。
 
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待裁决**（**决策单已就绪**：`.rddf/checks/decision-request-input-port-guards-2026-11.md` §3 ⇒ ⇒ **D2-A / D2-B / D2-C / D2-D** 四个选项 + 代价 + 建议 ⇒ ⇒ owner = planner/architect）
-  ✅ **实测证据已有承重件**：「永久复位」类（`rst_n` 未驱动 ⇒ 恒复位 ⇒ 测试空洞）由 `tests/test_axi_rst_n_guard.cpp` 钉住（双后端）⇒ ⇒ 「写入放大」类（`strbe` 未驱动 ⇒ 读全 1）由 `include/cpu/pipeline/rv32i_tcm.h` 的 `strbe` 端口 + `rv32i-isa-semantics` capability 记载⇒ ⇒ 本条的 `evidence:` 指向该运行期护栏测试
+- **Status**: ✅ **已实施**（2026-11-03 · 用户裁决 **D2-A**：分级表 · **只覆盖两类**已实测风险 · 双向校验）
+  - 登记表 = `.rddf/checks/input-port-required-registry.md`（**13** 行：12 个 `rst_n` + `DataTCM.strbe`）
+  - 实现 = `scripts/verify_input_port_required_registry.sh` + `scripts/lib/input_port_registry.py`
+  - 判据 = R1 登记 ⊆ 实际端口（**按类体**认领）/ R2 实际 ⊆ 登记（反向）/ R3 判别性用例存在**且实例化** /
+    R4 写入放大类的 file 级驱动网 / R5 **单一实现点**（rst_n 护栏的清单从本表读）/
+    R6 参数化后的 rst_n 护栏 MUST 仍通过
+  - 判别力 = `--self-test` **5** 种原地投毒（stale-port / drop-row / wrong-case / fake-gap / hardcode-back）全抓
+  - **如实登记的缺口**：`AxiDma.rst_n` **零行为覆盖**（`tests/test_axi_dma.cpp` 只有构造 +
+    端口存在性 ⇒ 无 `Simulator`、无 `rst_n` 驱动）⇒ ⇒ 表里标「已知缺口」而不是拿那个文件冒充
+    判别性用例（否则 R3 假绿）；一旦补上覆盖，R3 会因「表已过时」而**转红**
 - **来源**：`input-port-driving-guard-2026-10` 的 spike
   ⇒ 交付物 = `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md`
   §1.2 / §2 候选 A / §5.2

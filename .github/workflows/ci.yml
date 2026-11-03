@@ -288,6 +288,81 @@ jobs:
       shell: bash
       run: scripts/verify_rst_n_wiring.sh
 
+    - name: Verify input-port required registry (D2-A)
+      # AGENTS.md ANTI-PATTERNS owns the obligation "a NEW component input port
+      # MUST be driven at EVERY instantiation site" -- but that only covers NEW
+      # ports. EXISTING ports that fail silently when unwired had no guard at
+      # all, and the 2026-10-28 spike CLOSED the "generic stateful guard"
+      # route (the runtime cannot identify a port: every node is named
+      # `dut.unnamed_input`). The remaining feasible route is TRIAGE FIRST,
+      # then guard the known-mandatory ports -- that is this registry.
+      #
+      # Only the two risk classes with MEASURED evidence are registered
+      # (permanent reset `rst_n` / write amplification `strbe`); a full sweep
+      # is unreachable (the B8 lesson: an obligation that cannot be met lands
+      # red and gets abandoned).
+      #
+      # R1 registry subset of actual ports (and the port MUST be declared by
+      #    THAT component's own class body -- one header often holds several
+      #    classes, matching per file produced real false positives)
+      # R2 actual ports subset of registry (REVERSE: a new component with a
+      #    mandatory port that never enters the table)
+      # R3 the discriminating case exists AND instantiates the component;
+      #    a gap row MUST still be a gap (once coverage lands the table is stale)
+      # R4 file-level driving net for the write-amplification class
+      # R5 SINGLE SOURCE OF TRUTH: verify_rst_n_wiring.sh MUST read its
+      #    component list from this registry (a hardcoded list in the script is
+      #    detected mechanically -- a mere comment mentioning the registry is
+      #    not enough)
+      # R6 the parameterised rst_n guard MUST still pass
+      shell: bash
+      run: scripts/verify_input_port_required_registry.sh
+
+    - name: Verify input-port required registry (self-test)
+      # WHY a self-test: a criterion is only as good as its ability to FAIL.
+      # Five in-place poisons, each MUST turn the check red, then restore and
+      # prove green again AND byte-identical to the pre-self-test state:
+      #   stale-port     (wrong port name      -> R1 + R2)
+      #   drop-row       (missing rst_n row    -> R2)
+      #   wrong-case     (case does not instantiate the component -> R3)
+      #   fake-gap       (a covered component marked as a gap  -> R3)
+      #   hardcode-back  (component list hardcoded again       -> R5)
+      shell: bash
+      run: scripts/verify_input_port_required_registry.sh --self-test
+
+    - name: Verify input-port additions (event-driven, PR only)
+      # D1-A: the SAME obligation ("a new input port MUST be driven at every
+      # instantiation site") is unenforceable as a flat rule -- the spike showed
+      # it necessarily misfires at the required per-TEST-CASE granularity. So
+      # this one is EVENT DRIVEN and SEMI-AUTOMATIC: it only LISTS the ports
+      # added by this change (production code only: include/ + src/) plus every
+      # instantiation site and the driving shape seen there, and a HUMAN
+      # decides. It NEVER fails because a port looks undriven -- its exit code
+      # depends on infrastructure only (a missing base ref is a HARD failure so
+      # the gate cannot silently no-op).
+      #
+      # Scan surface is production code only, measured: over the last 100
+      # non-merge commits, new `ch_in` declarations were 99x0 / 1x1 there.
+      # Test DUT ports are self-contained (the same test file drives them).
+      #
+      # push/schedule have no base ref -> skip with an explicit notice rather
+      # than either failing or silently passing.
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" != "pull_request" ]; then
+          echo "::notice input_port_additions: skipped (not a pull_request event; needs a base ref)"
+          exit 0
+        fi
+        scripts/verify_input_port_additions.sh "origin/${{ github.base_ref }}"
+
+    - name: Verify input-port additions (self-test)
+      # Synthetic fixture git repos in a temp dir (never touches the real tree).
+      # Six cases, each asserting a SPECIFIC substring so every branch of the
+      # analyser has demonstrable discriminating power: wired / unwired / none /
+      # helper / silent (io().x = value on a ch_in) / bulk (12 ports).
+      shell: bash
+      run: scripts/verify_input_port_additions.sh HEAD~1 --self-test
+
     - name: Verify FSM next-state wiring
       # ch_state_machine::build() executes EVERY state's `on_active` closure
       # once, at describe time (so that the transition_when() calls inside can

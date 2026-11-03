@@ -46,21 +46,55 @@
 #
 # Usage: scripts/verify_rst_n_wiring.sh
 #
-# Maintenance: COMPONENTS_W_RST_N below MUST stay in sync with the set of
-# components that expose a mandatory `ch_in<ch_bool> rst_n` port
-# (grep -rln "ch_in<ch_bool> rst_n" include/).
+# Maintenance: COMPONENTS_W_RST_N is read from the registry
+# `.rddf/checks/input-port-required-registry.md` (D2-A, 2026-11-03).
 #
-# Only bash + awk are used (portable across the ubuntu-22.04 / macos-14
-# CI matrix; no python dependency).
+# WHY it is read and not hardcoded: the list used to live here AND in the
+# registry => two sources that inevitably drift. The registry is the single
+# source of truth; `scripts/verify_input_port_required_registry.sh` R5
+# fails the build if this file goes back to a hardcoded list.
+#
+# Only bash + awk are used (portable across the ubuntu-22.04 CI matrix;
+# no python dependency - the registry is plain markdown).
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+REGISTRY_PATH=".rddf/checks/input-port-required-registry.md"
+if [ ! -f "$REGISTRY_PATH" ]; then
+  echo "::error $REGISTRY_PATH is missing - cannot determine the mandatory rst_n set"
+  echo "        (FAIL-CLOSED: a missing registry must not silently skip the guard)"
+  exit 1
+fi
+
 # Components exposing a MANDATORY rst_n port (low active, effective on the
 # clock edge). An unwired instance is permanently in reset.
-COMPONENTS_W_RST_N="AxiLiteSlave Axi4Slave AxiToAxiLiteConverter AxiLiteGpio AxiLiteUart AxiLiteTimer AxiLitePwm AxiLiteI2c AxiLiteSpi AxiDma AxiInterconnect4x4 AxiLiteMatrix2x2"
+#
+# Extraction: every 4-column registry row whose PORT cell is exactly `rst_n`
+# (covers both the main table and the known-gap table). The risk-level
+# summary table is excluded because its cells are not backticked.
+COMPONENTS_W_RST_N="$(
+  grep -E '^\|[[:space:]]*`[A-Za-z_][A-Za-z0-9_]*`[[:space:]]*\|[[:space:]]*`rst_n`[[:space:]]*\|' \
+    "$REGISTRY_PATH" \
+  | sed -E 's/^\|[[:space:]]*`([^`]+)`.*/\1/' \
+  | sort -u | tr '\n' ' ' | sed -E 's/[[:space:]]+$//'
+)"
+if [ -z "$COMPONENTS_W_RST_N" ]; then
+  echo "::error no 'rst_n' rows parsed from $REGISTRY_PATH (FAIL-CLOSED)"
+  echo "        The registry must list every component that exposes a mandatory rst_n."
+  exit 1
+fi
+
+# True if the component set is mentioned anywhere in the file.
+comp_mentioned() {
+  awk -v comps="$COMPONENTS_W_RST_N" '
+    BEGIN { n = split(comps, a, " "); for (i = 1; i <= n; i++) pat = pat (i > 1 ? "|" : "") a[i] }
+    $0 ~ pat { found = 1 }
+    END { exit(found ? 0 : 1) }
+  ' "$1"
+}
 
 # Component definitions and non-product trees are excluded from the scan.
 scan_files() {
@@ -215,8 +249,7 @@ for f in $(scan_files); do
   fi
 
   # ---- R2: per file, wrapper forwarding ---------------------------------
-  if grep -qE "ch_module" "$f" && \
-     grep -qE "AxiLiteSlave|Axi4Slave|AxiToAxiLiteConverter|AxiLiteGpio|AxiLiteUart|AxiLiteTimer|AxiLitePwm|AxiLiteI2c|AxiLiteSpi|AxiDma|AxiInterconnect4x4|AxiLiteMatrix2x2" "$f" && \
+  if grep -qE "ch_module" "$f" && comp_mentioned "$f" && \
      ! grep -qE "rst_n[ \t]*<<" "$f"; then
     echo "::error file=$f"
     echo "        This file wraps a component with a mandatory 'rst_n' port but never forwards"
