@@ -27,15 +27,22 @@ ctest --output-on-failure --no-tests=error -L verilator_e2e -LE perf -I <shard>,
 
 ## 2. 两个**实测确认**的 CI 风险
 
-### 风险 ①：cold 会**超过** `pr-verilator-fast` 的 `timeout-minutes: 45`
+### 风险 ①（**已撤回**）：cold「合计 71.7 min > 45 min」—— **我先前算错了**
 
-cold 合计 **71.7 min**（≈ 1.6 × 预算）。触发条件 = GitHub Actions 缓存**未命中**
-（key 是 `cpphdl-verilator-${os}-${sha}` + `restore-keys` 前缀 ⇒ 只有「一个缓存都没有」时才
-cold：首次运行 / 缓存被驱逐（7 天未写、10 GB 上限））。
+🔴 **订正（2026-11-03，写这份文档的同一人）**：`pr-verilator-fast` **已经是两分片并行**
+（`.github/workflows/ci.yml` 的 `strategy.matrix.shard: [1,2]` + `fail-fast: false` ⇒ 两个
+runner 各跑一片）⇒ ⇒ **`timeout-minutes: 45` 是每个 job 的预算，不是两片之和**。
+
+⇒ cold 的**每 job** 墙钟 = max(2267, 2034) ≈ **37.8 min < 45 min** ⇒ ⇒ **不构成超预算**
+（余量 ~7 min）。本文初稿把两片**串行相加**再比 45 min ⇒ **口径错误**。
+
+⚠️ 仍然成立的部分：cold 的触发条件 = GitHub Actions 缓存**未命中**（key 是
+`cpphdl-verilator-${os}-${sha}` + `restore-keys` 前缀 ⇒ 只有「一个缓存都没有」时才 cold：
+首次运行 / 缓存被驱逐（7 天未写、10 GB 上限））⇒ ⇒ 那一刻的余量只有 ~7 min（且本机 4 核
+vs CI runner 2 核 ⇒ 生产只会更长）⇒ ⇒ **余量偏薄，但未越线**。
 
 ⚠️ **shard 1 的 2267 s 含测量期并发负载**（同机在跑全量重建 / `ctest` / samples 护栏 + 另一个
-仓库的 build）⇒ 其中 2 个 timeout（`test_cache_sync` 60 s、`test_rv32i_pipeline_behavior` 300 s）
-**是负载造成的**；扣掉这部分后 cold 合计仍 ≈ **66–70 min** ⇒ 结论不变。
+仓库的 build）⇒ 其中 2 个 timeout 是负载造成的 ⇒ 该片是**上界**。
 
 ### 风险 ②：`add_dual_backend_test` 的默认 `TIMEOUT 60` 在 cold 缓存下**必然**失败
 
@@ -50,9 +57,35 @@ cold：首次运行 / 缓存被驱逐（7 天未写、10 GB 上限））。
 （`test_cache_async_dual` 53.8 s、`test_stream_pipeline_dual` 54.0 s、
 `test_axi_slave_byte_lane` 47.1 s）⇒ 在**更慢的 CI runner**（2 核）上同样会翻红。
 
-⇒ ⇒ 即：**cold 缓存下不只是整个 job 超时被杀，还会先有一批测试「超时失败」**。
+⇒ ⇒ 即：**cold 缓存下会先有一批测试「超时失败」**（不是整个 job 被杀 —— 见风险 ① 的订正）。
 
-## 3. 可选项（**交 planner 裁决**，build 未擅自改）
+### 风险 ② 的处置：✅ **已修**（2026-11-03，用户裁决「B + C 都做」）
+
+**规则**：`add_dual_backend_test` 的 `TIMEOUT` MUST **≥ 2 × 该测试的冷缓存实测**（30 s 的倍数）。
+
+| 改动 | 值 | 依据 |
+|---|---|---|
+| `add_dual_backend_test` **默认** | 60 → **180** | 冷实测最慢的「默认超时」用例只需 ≤ 60 s；180 覆盖实测最慢 96 s 的 1.9× |
+| `test_cache_sync` | 60 → **210** | 冷实测 **96 s**（2× ⇒ 192 ⇒ 取 210）|
+| `test_axi_lite_slave_conformance` | 300 → **450** | 冷实测 **224.4 s** |
+| `test_rv32i_pipeline_behavior` | 300 → **420** | 冷实测 **204 s** |
+| `test_axi_interconnect_4x4` | 600 → **930** | 冷实测 **453.1 s**（CI runner 更慢 ⇒ 原来只剩 1.3×）|
+
+其余 54 个 dual 测试的冷实测占比都 **< 48%** ⇒ 现有 300 s 足够 ⇒ **不动**（改动最小化）。
+
+**代价（如实登记）**：「挂死」的检测变慢（默认 60 s → 180 s）⇒ 判据强度**不降**（仍是超时即失败），
+只是**发现得更晚**。
+
+## 3. 选项与裁决结果（用户裁决「B + C 都做」，2026-11-03）
+
+| 选项 | 状态 |
+|---|---|
+| **A. 提高 job 超时预算**（45 → 90）| ❌ **不需要** —— 风险 ① 是我算错了（分片本来就并行 ⇒ 每 job ~38 min < 45）|
+| **B. 两分片并行 job** | ✅ **早已存在**（`strategy.matrix.shard: [1,2]`，2026-11-02 的 P2 lever ②）⇒ ⇒ 本次**无需改动**，只补了本文的订正 |
+| **C. 放宽 per-test TIMEOUT** | ✅ **已实施**（规则见风险 ② 的处置表）|
+| **D. 只保 cache 热** | ❌ **不选** —— C 已让 cold 不再假红，D 只是放弃鲁棒性 |
+
+## 3.1 原可选项（保留作决策史）
 
 | 选项 | 动作 | 代价 |
 |---|---|---|

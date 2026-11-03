@@ -31,7 +31,18 @@ function(add_dual_backend_test TEST_NAME)
         message(FATAL_ERROR "add_dual_backend_test(${TEST_NAME}): SOURCES missing")
     endif()
     if(NOT DBT_TIMEOUT)
-        set(DBT_TIMEOUT 60)
+        # ⚠️ **默认超时 180 s**（2026-11-03 实测订正，原为 60 s）：
+        #   dual-backend 测试在**冷 verilator 缓存**下要为每个 DUT 现场编译
+        #   一份 `libVtop.so` ⇒ 单测试冷启动实测 **21–130 s**
+        #   （`test_cache_sync` 隔离复测 = **96 s**；warm = 1 s）
+        #   ⇒ ⇒ 60 s 在冷缓存下**必然**超时失败（CI 的
+        #   `cpphdl-verilator-${os}-${sha}` 缓存一旦未命中就会翻红）。
+        #   ⇒ 180 s ≈ 实测最慢值（96 s）的 **1.9×** 余量。
+        #   ⚠️ 代价：「挂死」的检测变慢 3×（判据强度不降 —— 仍是超时即失败）。
+        #   ⚠️ 更重的测试显式给更大的值（`test_axi_interconnect_4x4` = 600 s，
+        #   cold 实测 453 s）。数据与复现命令见
+        #   `.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md`。
+        set(DBT_TIMEOUT 180)
     endif()
 
     add_catch_test(${TEST_NAME} ${DBT_SOURCES})
@@ -206,7 +217,11 @@ add_catch_test(test_cache_pipeline chlib/test_cache_pipeline_integration.cpp)
 # DUAL_BACKEND_TEST_PAIR macro. See openspec/changes/dual-backend-cache-tests/.
 add_dual_backend_test(test_cache_sync
     SOURCES chlib/test_cache_sync.cpp
-    TIMEOUT 60
+    # ⚠️ 显式 210（原 60）：冷 verilator 缓存下本测试实测 **96 s**
+    #    （隔离复测，直接跑二进制，无并发负载）⇒ ⇒ 60 s 必然超时失败。
+    #    210 = 2× 冷实测（30 s 的倍数）。
+    #    依据：`.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md`
+    TIMEOUT 210
 )
 
 # bundle master/slave connection regression fence (capability
@@ -968,7 +983,9 @@ add_dual_backend_test(test_axi_slave_byte_lane
 # 响应保持 / 未映射 DECERR / 别名禁止）——双后端。
 add_dual_backend_test(test_axi_lite_slave_conformance
     SOURCES test_axi_lite_slave_conformance.cpp
-    TIMEOUT 300
+    # ⚠️ 450（原 300）：冷缓存实测 **224.4 s** ⇒ 300 只剩 1.34× 余量
+    #    ⇒ 按「TIMEOUT ≥ 2× 冷实测」定档（30 s 的倍数）。
+    TIMEOUT 450
 )
 # 通用 AXI4 Full slave 的多 beat burst 语义回归（INCR / FIXED / WRAP→SLVERR /
 # 逐 beat wstrb / 越界 DECERR / 超 MAX_BURST_LEN→SLVERR / rst_n 复位）——双后端。
@@ -985,7 +1002,11 @@ add_dual_backend_test(test_axi_rst_n_guard
 # ——双后端。TB 同时扮演 master 与 slave（MUST NOT 实例化 Axi4Slave 当 fixture）。
 add_dual_backend_test(test_axi_interconnect_4x4
     SOURCES test_axi_interconnect_4x4.cpp
-    TIMEOUT 600
+    # ⚠️ 930（原 600）：冷 verilator 缓存下实测 **453.1 s**（warm 281–284 s）
+    #    ⇒ 600 只剩 1.3× 余量，而 CI runner（2 核）比本机（4 核）慢
+    #    ⇒ 按「TIMEOUT ≥ 2× 冷实测」定档（30 s 的倍数）。
+    #    数据：.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md
+    TIMEOUT 930
 )
 # 2x2 AXI-Lite 矩阵的活地址解码修正（读侧 ar_route 锁存 / s*_rready 用读路由 /
 # awready 在途门控 / 独立仲裁 / rst_n / DECERR）——双后端。
@@ -1061,7 +1082,9 @@ add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
 # SECTION 排除 + R7 "原文件不动"). 原文件 MUST NOT 改动.
 add_dual_backend_test(test_rv32i_pipeline_behavior
     SOURCES test_rv32i_pipeline_behavior.cpp
-    TIMEOUT 300
+    # ⚠️ 420（原 300）：冷缓存隔离复测 **204 s**（warm 远小于此）
+    #    ⇒ 300 只剩 1.47× 余量 ⇒ 按「TIMEOUT ≥ 2× 冷实测」定档。
+    TIMEOUT 420
 )
 # `stages/if_stage.h`（Batch 4 的 DUT）用**相对**路径 include 兄弟头
 # (`#include "rv32i_tcm.h"`) ⇒ 该测试必须把 include/cpu/pipeline/ 放进
