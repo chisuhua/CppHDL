@@ -12,7 +12,7 @@ created_at: 2026-11-03
 
 - **Date drafted**: 2026-11-03
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 **待实施**（**行为变更 ⇒ 需 ADR** ⇒ ⇒ **不在 parity 批里修**）
+- **Status**: ✅ **已修复**（2026-11-03，ADR-063 + change `rv32i-b-type-immediate-fix-2026-11` ⇒ 已归档 `openspec/changes/archive/2026-11-03-rv32i-b-type-immediate-fix-2026-11/`，commit `3986d99`）
 - **来源**：路线 C 第一批的**手推期望表**（独立 Python 模型按 RISC-V 规范推导）
   ⇒ ⇒ 与实现不符 ⇒ ⇒ 用**独立探针**实测确认。
 

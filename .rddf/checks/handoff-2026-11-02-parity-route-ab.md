@@ -12,7 +12,7 @@
 | 量 | 值 | 命令 |
 |---|---|---|
 | **parity 源文件数** | **61** ⭐（目标 60，**已达成**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **271** | 同上 |
+| parity macro 调用数（PAIRS） | **272** | 同上（ADR-063 的 D4 判据在 C1 新增 1 pair） |
 | `CTEST_TOTAL` | **238** | `cd build && ctest -N \| tail -1` |
 | `VERILATOR_E2E_TOTAL` | **70** | `ctest -N -L verilator_e2e \| tail -1` |
 | non-perf | **227** | `ctest -N -LE perf \| tail -1` |
