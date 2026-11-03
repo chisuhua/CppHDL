@@ -76,7 +76,9 @@ public:
         Result result;
 
         // 使用stream_fork工具
-        auto fork_result = stream_fork<ch_uint<8>, 2>(input_stream, false);
+        // ⚠️ 只用 `synchronous=true`：`false`（真异步）尚未实现 ⇒ ADR-057 D2
+        //    规定建图期**响亮拒绝** ⇒ 传 false 会抛异常。
+        auto fork_result = stream_fork<ch_uint<8>, 2>(input_stream, true);
 
         result.input = fork_result.input_stream;
         result.output_streams[0] = fork_result.output_streams[0];
@@ -218,9 +220,11 @@ int main() {
     fifo_input.ready = ch_bool(true);
 
     ch_stream<ch_uint<8>> fork_input;
+    // ⚠️ MUST 先 `as_master()`；`ready` 由 `stream_fork()` 驱动（ADR-057 D1）
+    //    ⇒ 调用方 MUST NOT 喂常量（会被多驱动守卫拒绝）。
+    fork_input.as_master();
     fork_input.payload = make_uint<8>(0x22);
     fork_input.valid = ch_bool(true);
-    fork_input.ready = ch_bool(true);
 
     std::array<ch_stream<ch_uint<8>>, 2> join_inputs;
     join_inputs[0].payload = make_uint<8>(0x33);

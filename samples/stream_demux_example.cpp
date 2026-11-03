@@ -2,9 +2,11 @@
  * @file stream_demux_example.cpp
  * @brief Stream Demux 演示 —— 按 select 信号把一个输入路由到多个输出之一
  *
- * ⚠️ **为什么本 sample 不读 `output_streams[i].ready`**（2026-10-22 实测）：
- * `stream_demux()` 只驱动输出的 payload / valid，不驱动输出的 ready
- * ⇒ 该节点为 null ⇒ 读它会 CHABORT（"ch_bool implementation is null"）。
+ * ⚠️ **接线纪律（ADR-056）**：`input_stream` MUST 先 `as_master()`，
+ *    `input_stream.ready` **由 `stream_demux()` 自己驱动**
+ *    （`= in_range & OR_i((select==i) & out_i.ready)`）⇒ 调用方 MUST NOT 自行
+ *    给它喂常量 —— 否则 literal 不随 src 变化 ⇒ 反压被静默丢弃 ⇒ 组件会
+ *    **建图期响亮拒绝**（`CHFATAL_EXCEPTION`）。
  *
  * ⚠️ select 信号用 `ch_uint<1> select_signal(0_d);` + `sim.set_input_value()`
  * 驱动 —— 与 `examples/stream/stream_demux_demo.cpp` 同款：
@@ -30,9 +32,13 @@ int main() {
 
     // 创建输入 Stream
     ch_stream<ch_uint<8>> input_stream;
+    // ⚠️ MUST 先 `as_master()`：字段才有可被组合子驱动的节点
+    //    （缺它 ⇒ `input_stream.ready` 是 nullptr ⇒ 组合子的驱动**只绑本地副本**）。
+    input_stream.as_master();
     input_stream.payload = make_uint<8>(0xAB);
     input_stream.valid = ch_bool(true);
-    input_stream.ready = ch_bool(true);
+    // ⚠️ **不要**驱动 `input_stream.ready` —— 那是 `stream_demux()` 的职责
+    //    （ADR-056 D5 的多驱动守卫会拒绝字面量驱动）。
 
     // 选择信号（由 TB 驱动）
     ch_uint<1> select_signal(0_d);
