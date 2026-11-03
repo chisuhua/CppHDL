@@ -687,7 +687,11 @@ public:
             // 如果位移量大于等于大小，结果应为 0
             this->reset();
         } else {
-            bv_shl<false>(words_, size_, words_, size_, dist);
+            // ⚠️ `bv_shl` 的多 word 路径（`bv_shl_vector`）会先 `fill_n` 清空 out
+            // 再读 in —— **同址调用（out == in）会把输入清成 0**（2026-11-03 实测：
+            // 128 位 `bitvector(0x1_0000_0003) <<= 1` 得到 0）。⇒ ⇒ 先拷一份输入。
+            bitvector src_copy(*this);
+            bv_shl<false>(words_, size_, src_copy.words(), src_copy.size(), dist);
         }
         // bv_shl 应该已经处理了 extra bits
         // bv_clear_extra_bits(words_, size_); // 通常不需要，bv_shl 应该已处理

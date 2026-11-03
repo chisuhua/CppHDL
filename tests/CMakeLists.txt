@@ -660,6 +660,17 @@ add_dual_backend_test(test_mux_width_dual
 set_tests_properties(test_mux_width_dual PROPERTIES
     FAIL_REGULAR_EXPRESSION "Bit index out of range")
 
+# ⚠️ **B1 根因判据**（2026-11-03）：**多 word 左移 MUST 与 Verilog 的 `<<` 一致**。
+#    `include/bv/bv_shift.h` 的 `bv_shl_vector` 曾把跨 word 进位写成
+#    `in[..] << (64 - d)`（方向反了）且漏了 `in[i-s] << d` ⇒ ⇒
+#    ① 产生**虚假高位** · ② **丢失跨 word 进位** · ③ 还可能**越界读** `in[]`。
+#    ⇒ ⇒ 只在 interpreter 侧（Verilog 的 `<<` 天然正确）⇒ ⇒ 两后端分歧；
+#    最初被误登记为「`eq` 在宽操作数下判错」（`eq` 本身是对的）。
+add_dual_backend_test(test_wide_shl_dual
+    SOURCES test_wide_shl_dual.cpp
+    TIMEOUT 300
+)
+
 # ⚠️ **路线 C 第一批 —— RV32I 微架构组件进双后端 parity**（2026-11-03）
 #    ⇒ **零 DUT 复制**：`MemStage` / `ExStage` / `Rv32iDecoder` **本身带顶层端口**
 #      ⇒ 直接当 DUT（与 `test_hazard_complete_dual.cpp` 同型）⇒ 成本最低。

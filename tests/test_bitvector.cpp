@@ -1,6 +1,7 @@
 #include "catch_amalgamated.hpp"
 
 #include "bv/bitvector.h"
+#include <array>
 #include <cstdint>
 
 using namespace ch::internal;
@@ -397,3 +398,102 @@ TEST_CASE("bitvector: Addition with Different Widths", "[arithmetic][width]") {
     // --- END DEMONSTRATE BUG ---
 }
 // --- END KEEP TEST CASE ---
+
+// ===========================================================================
+// 多 word 左移（2026-11-03 · B1 根因修复的判据）
+//
+// `bv_shl_vector` 曾把跨 word 进位写成 `in[..] << (64 - d)`（方向反了），且
+// 漏了 `in[i - shift_words] << d` ⇒ ⇒ ① **虚假高位** · ② **丢失跨 word 进位** ·
+// ③ 当 `out_num_words > in_num_words + shift_words` 时**越界读** `in[]`。
+//
+// ⇒ ⇒ 这里用**独立模型**（逐位置位 = 左移的定义式，与 `bv_shl_vector` 的
+// 「循环 + word 进位」实现无共同代码路径）逐位比对。
+// ⚠️ 本 TEST_CASE 是**单后端**的（bv 层没有后端概念）—— 图层的
+// interpreter ↔ Verilog parity 判据在 `tests/test_wide_shl_dual.cpp`。
+// ===========================================================================
+namespace {
+
+// 256 位容器 + 逐位左移（定义式）
+struct RefWide {
+    std::array<uint64_t, 4> w{};
+    void set_bit(unsigned b) {
+        if (b < 256) {
+            w[b / 64] |= (1ULL << (b % 64));
+        }
+    }
+};
+
+RefWide ref_shift_left(const RefWide &in, unsigned dist) {
+    RefWide out{};
+    for (unsigned b = 0; b < 256; ++b) {
+        if (((in.w[b / 64] >> (b % 64)) & 1ULL) != 0) {
+            out.set_bit(b + dist);
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("bitvector: Multi-word left shift", "[bitvector][shift][multiword]") {
+    struct Case {
+        uint32_t in_bits, out_bits;
+        uint64_t lo, hi;
+        unsigned dist;
+    };
+    // 覆盖三种形态：
+    //  - in 1 word / out 2..3 words（旧实现 ① 虚假高位 + ③ 越界读都在这里）
+    //  - in 2 words / out 2..4 words（旧实现 ② 丢失跨 word 进位）
+    //  - dist = 0 / < 64 / = 64 / > 64
+    const Case cases[] = {
+        {64, 127, 0x0000000000000001ULL, 0, 0},
+        {64, 127, 0x0000000000000001ULL, 0, 1},
+        {64, 127, 0x0000000000000001ULL, 0, 2},
+        {64, 127, 0x8000000000000000ULL, 0, 1},
+        {64, 191, 0x8000000000000000ULL, 0, 63},
+        {64, 191, 0x8000000000000000ULL, 0, 64},
+        {64, 191, 0x8000000000000000ULL, 0, 65},
+        {128, 128, 0x8000000000000000ULL, 0, 1},
+        {128, 191, 0x123456789ABCDEF0ULL, 0xFEDCBA9876543210ULL, 17},
+        {128, 191, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 63},
+        {192, 192, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 64},
+    };
+
+    for (const auto &c : cases) {
+        INFO("in_bits=" << c.in_bits << " out_bits=" << c.out_bits
+                        << " dist=" << c.dist);
+        // 源（按 word 装填）
+        bitvector<uint64_t> src(c.in_bits);
+        src.words()[0] = c.lo;
+        if (c.in_bits > 64) {
+            src.words()[1] = c.hi;
+        }
+        if (c.in_bits > 128) {
+            src.words()[2] = 0;
+        }
+
+        // ---- ① 非别名：bitvector::operator<<（内部会拷贝一份）----
+        bitvector<uint64_t> shifted = src << c.dist;
+        REQUIRE(shifted.size() == c.in_bits); // operator<< 不改宽度
+
+        RefWide in_ref{};
+        in_ref.w[0] = c.lo;
+        if (c.in_bits > 64) in_ref.w[1] = c.hi;
+        const RefWide exp = ref_shift_left(in_ref, c.dist);
+
+        const uint32_t out_words = (c.in_bits + 63) / 64;
+        for (uint32_t i = 0; i < out_words; ++i) {
+            INFO("word " << i);
+            REQUIRE(shifted.words()[i] == exp.w[i]);
+        }
+
+        // ---- ② 别名：bitvector::operator<<=（out == in）----
+        //    多 word 路径会先 fill_n 清空 out 再读 in ⇒ ⇒ 不拷输入就全 0。
+        bitvector<uint64_t> inplace = src;
+        inplace <<= c.dist;
+        for (uint32_t i = 0; i < out_words; ++i) {
+            INFO("in-place word " << i);
+            REQUIRE(inplace.words()[i] == exp.w[i]);
+        }
+    }
+}

@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-03
+# ⚠️ 本 change **有** spec 变更：`dual-backend-test-coverage` **ADDED ×1**
+#    （「多 word 左移 MUST 与 Verilog 的 `<<` 逐位一致」—— 两后端语义一致的一个**具体必要条件**）
+#    ⇒ 归档 **MUST NOT** 用 `--skip-specs`。

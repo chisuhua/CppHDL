@@ -32,6 +32,9 @@ void bv_shl_vector(T *out, uint32_t out_size, const T *in, uint32_t in_size,
     int32_t shift_words = dist / WORD_SIZE;
     uint32_t shift_bits = dist % WORD_SIZE;
 
+    // ⚠️ **`out` 与 `in` MUST NOT 别名** —— 下面第一件事就是 `std::fill_n(out, ..)`，
+    //    而后面的循环仍要读 `in`。`bitvector::operator<<=` 是同址调用，所以它在
+    //    调用前自己拷了一份（见 `include/bv/bitvector.h`）。
     std::fill_n(out, out_num_words, T(0));
 
     if (shift_words >= out_num_words) {
@@ -46,12 +49,27 @@ void bv_shl_vector(T *out, uint32_t out_size, const T *in, uint32_t in_size,
                 (i - shift_words < in_num_words) ? in[i - shift_words] : T(0);
         }
     } else {
+        // 目标 word i 的取值（左移 dist = shift_words * WORD_SIZE + shift_bits）：
+        //
+        //   out[i] = (in[i - shift_words]     << shift_bits)
+        //          | (in[i - shift_words - 1] >> (WORD_SIZE - shift_bits))
+        //
+        // ⚠️⚠️ **第二项是右移**（把**低一个 word** 的顶部位挤进当前 word 的
+        // 低端）。2026-11-03 之前这里写的是 `<< (WORD_SIZE - shift_bits)`
+        // ⇒ ⇒ **方向反了**，并且**完全丢掉了**跨 word 进位的那些位
+        // ⇒ ⇒ 多 word 左移的结果带上**虚假高位**（实测 `1 << 2` 在 127 位槽位里
+        // 得到 `0x4000...0004`）。⇒ ⇒ Verilog 的 `<<` 是对的
+        // ⇒ ⇒ 这是 **interpreter ↔ Verilog 的分歧**（`eq` 之类因此判错）。
+        // 详见 `.rddf/improvements/interpreter-eq-wide-operand-miscompare-2026-11.md`。
         for (int32_t i = out_num_words - 1; i > shift_words; --i) {
-            out[i] =
-                (i - shift_words < in_num_words) ? in[i - shift_words] : T(0);
-            if (i - shift_words - 1 >= 0) {
-                out[i] |= in[i - shift_words - 1] << (WORD_SIZE - shift_bits);
+            int32_t src_idx = i - shift_words;
+            T value = (src_idx < in_num_words) ? (in[src_idx] << shift_bits)
+                                               : T(0);
+            int32_t carry_idx = src_idx - 1;
+            if (carry_idx >= 0 && carry_idx < in_num_words) {
+                value |= in[carry_idx] >> (WORD_SIZE - shift_bits);
             }
+            out[i] = value;
         }
         if (shift_words < out_num_words) {
             out[shift_words] =
