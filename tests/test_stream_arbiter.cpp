@@ -37,6 +37,16 @@ TEST_CASE("Stream Arbiter: Locking arbiter basic operation", "[stream][arbiter][
     REQUIRE(arb_result.output_stream.payload.width == 8);
     REQUIRE(arb_result.output_stream.valid.width == 1);
     REQUIRE(arb_result.selected.width == compute_idx_width(2));
+
+    // ⚠️⚠️ **ADR-065 D5：行为断言（修复前这里是零判别力）**
+    //   修复前选择逻辑用普通 C++ `if/else`（条件量是硬件值 ⇒ 建图期恒假）
+    //   ⇒ 恒选通道 0 ⇒ 本用例（**唯一有效就是 ch0**）**碰巧**通过
+    //   ⇒ 所以必须靠下面的「唯一有效 = ch1」用例才能判别。
+    ch::Simulator sim(ctx.get());
+    sim.tick();
+    REQUIRE(sim.get_value(arb_result.selected) == 0);
+    REQUIRE(sim.get_value(arb_result.output_stream.payload) == 0x11);
+    REQUIRE(sim.get_value(arb_result.output_stream.valid) == true);
 }
 
 // Test: Stream Arbiter Locking - locks on first valid and stays
@@ -61,6 +71,15 @@ TEST_CASE("Stream Arbiter: Locking arbiter holds lock until transaction", "[stre
     // When both 0 and 1 are valid, locking arbiter should pick one and stay with it
     // Output should be valid
     REQUIRE(sim.get_value(arb_result.output_stream.valid) == true);
+
+    // ⚠️⚠️ **ADR-065 D5：判别性断言** —— 修复前 `selected` 恒 0、
+    //   `payload` 恒为**通道 0 的数据**（`0xAA`）⇒ ⇒ 「选错通道」+
+    //   「输出别的通道的数据」两件事同时发生 ⇒ 只用 `valid==true` 抓不到。
+    //   `priority_encoder` 是**高位优先** ⇒ ch0/ch1 同时有效 ⇒ 选 1。
+    REQUIRE(sim.get_value(arb_result.selected) == 1);
+    REQUIRE(sim.get_value(arb_result.output_stream.payload) == 0xBB);
+    REQUIRE(sim.get_value(arb_result.input_streams[1].ready) == true);
+    REQUIRE(sim.get_value(arb_result.input_streams[0].ready) == false);
 }
 
 // Test: Stream Arbiter Priority - basic operation（原 sequence 用例的移植）

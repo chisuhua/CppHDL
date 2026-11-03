@@ -95,23 +95,44 @@ template <unsigned N> struct ProcessRequests<N, N> {
 };
 
 // 辅助结构体用于更新优先级指针
+//
+// ⚠️⚠️ **ADR-065 D2**：此处**原来**有一个外层 `if (result.valid)`：
+//
+//     if (result.valid) { ...更新...; 递归; }
+//
+//   `result.valid` 是 `select(...)` 产出的**非 const 组合节点** ⇒
+//   `ch_bool::operator uint64_t()`（`src/lnode/bool.cpp:43-49`）**只对 const 节点
+//   返回真值** ⇒ ⇒ 该 `if` **在建图期恒假** ⇒ ⇒ **整个 if 体（含递归）从不执行**
+//   ⇒ ⇒ `next_priority` 永不更新 ⇒ ⇒ `ptr_reg->next` 恒写回原值
+//   ⇒ ⇒ **`next_ptr` 恒 0 ⇒ 不是轮转而是「固定从最低位开始」的优先级仲裁**
+//   ⇒ ⇒ **持续有效的低位通道会饿死高位通道**（实测 3 拍 `next_ptr` 恒 0）。
+//
+// ⇒ 修法 = **去掉运行期 `if`，让 select 链无条件执行**（`select` 自带条件语义）。
+//   ⚠️ `if constexpr` 是**编译期**展开（合法且必需）⇒ MUST 保留；
+//      两者不可混为一谈：前者条件量是**硬件值**（建图期求值），后者是**常量**。
 template <unsigned N, unsigned Iter = 0> struct UpdatePriority {
     static void process(const RoundRobinArbiterResult<N> &result,
                         ch_uint<N> &next_priority, ch_uint<N> request,
                         ch_uint<N> priority_ptr) {
-        if (result.valid) {
-            ch_uint<compute_idx_width(N)> pos = (priority_ptr + Iter) % N;
-            ch_bool req_at_pos = bit_select(request, pos);
-            ch_uint<compute_idx_width(N)> next_pos = ((pos + 1) % N);
-            next_priority =
-                select(req_at_pos & (result.grant == (ch_uint<N>(1_d) << pos)),
-                       next_pos, next_priority);
+        ch_uint<compute_idx_width(N)> pos = (priority_ptr + Iter) % N;
+        ch_bool req_at_pos = bit_select(request, pos);
+        ch_uint<compute_idx_width(N)> next_pos = ((pos + 1) % N);
+        // ⚠️ **判据 MUST 用 `bit_select(grant, pos)`，MUST NOT 用
+        //    `grant == (ch_uint<N>(1_d) << pos)`**：
+        //    `grant` 是 **one-hot** ⇒ 两者语义等价；但后者的 `<<` 会生成
+        //    **N + (N-1) 位**的中间节点（N=64 ⇒ **127 位**），而本仓 interpreter
+        //    的 `eq` 在「64 位 vs 127 位」且 **移位量 ≥ 2** 时**判错**
+        //    （独立最小复现：`a=0x4, shl=0x4` 而 `eq` 返回 0；
+        //     移位量 0/1 时正确）⇒ ⇒ 表现为 `next_ptr` 对 N=64 的
+        //    pos ≥ 2 **恒 0**（轮转在 64 位下不工作）。
+        //    ⚠️ 该框架缺陷已**独立立项**，不在本 change 修。
+        next_priority = select(req_at_pos & bit_select(result.grant, pos),
+                               next_pos, next_priority);
 
-            // 递归处理下一个迭代
-            if constexpr (Iter + 1 < N) {
-                UpdatePriority<N, Iter + 1>::process(result, next_priority,
-                                                     request, priority_ptr);
-            }
+        // 递归处理下一个迭代（编译期展开，MUST 保留）
+        if constexpr (Iter + 1 < N) {
+            UpdatePriority<N, Iter + 1>::process(result, next_priority,
+                                                 request, priority_ptr);
         }
     }
 };

@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-03
+# ⚠️ 本 change **有** spec 变更（`chlib-stream-arbitration` ADDED ×1）
+#    ⇒ 归档 **MUST NOT** 用 `--skip-specs`。

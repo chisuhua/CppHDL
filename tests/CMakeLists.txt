@@ -627,6 +627,13 @@ add_dual_backend_test(test_stream_width_adapter_dual
     TIMEOUT 300
 )
 
+# ⚠️ **ADR-065 的行为判据**：chlib 仲裁器族的两处「建图期求值」缺陷
+#    （`stream_arbiter_lock` 恒选通道 0 且输出错数据 · `round_robin_arbiter` 不轮转）
+add_dual_backend_test(test_stream_arbiter_lock_dual
+    SOURCES chlib/test_stream_arbiter_lock_dual.cpp
+    TIMEOUT 300
+)
+
 # ⚠️ **路线 C 第一批 —— RV32I 微架构组件进双后端 parity**（2026-11-03）
 #    ⇒ **零 DUT 复制**：`MemStage` / `ExStage` / `Rv32iDecoder` **本身带顶层端口**
 #      ⇒ 直接当 DUT（与 `test_hazard_complete_dual.cpp` 同型）⇒ 成本最低。

@@ -9,12 +9,55 @@
 using namespace ch::core;
 using namespace chlib;
 
+// ⚠️⚠️ **ADR-065 D2 落地后本文件期望值全部重推**（2026-11-03）
+//
+// 修复前 `round_robin_arbiter` 的 `UpdatePriority::process` 有一个外层
+// `if (result.valid)` —— 条件是**硬件组合值**，而 `ch_bool::operator uint64_t()`
+// 只对 **const 节点**返回真值（`src/lnode/bool.cpp:43-49`）⇒ ⇒ 该 `if` 在**建图期
+// 恒假** ⇒ ⇒ 整个 `if` 体（含递归展开）**从不执行** ⇒ ⇒ `next_priority` 永不更新
+// ⇒ ⇒ `ptr_reg->next` 恒写回原值 ⇒ ⇒ **`next_ptr` 恒 0**。
+//
+// ⇒ 那意味着本文件**此前全部通过**的期望值都是「指针永远停在 0」的语义。
+//   修复后指针真的推进，**8 处期望值随之转红** —— 它们是**钉住了缺陷**，不是
+//   发现了新缺陷（ADR-065 §5.4 已预判这一格）。
+//
+// ⚠️ **读模型**（决定了「tick 后该看到什么」）：
+//   `Simulator::tick()` = 沿前组合求值 → 寄存器提交 → **沿后**组合求值
+//   ⇒ `get_value()` 在 `tick()` 之后读到的是**指针已前进之后**的组合值。
+//
+// ⇒ 因此 1 次 `tick()` 后的正确期望 = **从 `(g0 + 1) % N` 开始**循环扫描的
+//   首个置位请求（`g0` = 从 0 开始的首个置位请求）。单置位请求时两者相同
+//   （所以那些用例的期望值不变）。
+//
+// ⚠️ **手推，不是抄仿真输出**：模型 = `pos = (ptr + k) % N, k = 0..N-1`，
+//   取首个 `request[pos]` 为真的位；`next_ptr = (该位 + 1) % N`。
+
 // Helper function to convert uint value to binary string representation
 template <typename T> std::string to_binary_string(T value, size_t width) {
     std::bitset<64> bs(static_cast<uint64_t>(value));
     std::string result = bs.to_string();
     // Return only the requested width bits
     return result.substr(64 - width, width);
+}
+
+// 规格模型：从 `start` 开始循环扫描，返回首个置位请求（one-hot）；无请求 ⇒ 0
+template <unsigned N>
+uint64_t rr_grant_from(uint64_t request, unsigned start) {
+    for (unsigned k = 0; k < N; ++k) {
+        unsigned pos = (start + k) % N;
+        if (request & (1ull << pos)) return (1ull << pos);
+    }
+    return 0;
+}
+
+// 规格模型：`next_ptr` = 被授予位 + 1（环绕）；无授予 ⇒ 保持 `start`
+template <unsigned N>
+uint64_t rr_next_ptr(uint64_t request, unsigned start) {
+    uint64_t g = rr_grant_from<N>(request, start);
+    if (g == 0) return start;
+    unsigned pos = 0;
+    while (((g >> pos) & 1ull) == 0) ++pos;
+    return (pos + 1) % N;
 }
 
 TEST_CASE("SelectorArbiter: round robin arbiter basic tests",
@@ -29,10 +72,14 @@ TEST_CASE("SelectorArbiter: round robin arbiter basic tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // First time: should grant position 0 (as internal ptr_reg starts with
-        // 0)
-        REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
+        // 第 1 拍：ptr=0 授予 bit0 ⇒ ptr 前进到 1 ⇒ 沿后扫描从 1 开始 ⇒ bit2
+        REQUIRE(sim.get_value(result.grant) == rr_grant_from<4>(0b0101, 1));
+        REQUIRE(sim.get_value(result.grant) == 0b0100); // Bit 2 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == rr_next_ptr<4>(0b0101, 0));
+        // ⚠️ `next_ptr` = **沿上提交的** `ptr_reg`（= 被授予位 + 1），
+        //    不是沿后 grant 的后继
+        REQUIRE(sim.get_value(result.next_ptr) == 0b0001); // 授予 bit0 ⇒ 1
     }
 
     SECTION("Round robin arbiter with different request pattern") {
@@ -42,9 +89,12 @@ TEST_CASE("SelectorArbiter: round robin arbiter basic tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // Should grant position 2 (as internal ptr_reg starts with 0)
-        REQUIRE(sim.get_value(result.grant) == 0b0100); // Bit 2 set
+        // 第 1 拍：ptr=0 授予 bit2 ⇒ ptr 前进到 3 ⇒ 沿后扫描从 3 开始 ⇒ bit3
+        REQUIRE(sim.get_value(result.grant) == rr_grant_from<4>(0b1100, 3));
+        REQUIRE(sim.get_value(result.grant) == 0b1000); // Bit 3 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == rr_next_ptr<4>(0b1100, 0));
+        REQUIRE(sim.get_value(result.next_ptr) == 0b0011); // 授予 bit2 ⇒ 3
     }
 
     SECTION("Round robin arbiter with no requests") {
@@ -65,9 +115,11 @@ TEST_CASE("SelectorArbiter: round robin arbiter basic tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // Should grant position 0 (as internal ptr_reg starts with 0)
-        REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
+        // 第 1 拍：ptr=0 授予 bit0 ⇒ ptr 前进到 1 ⇒ 沿后扫描从 1 开始 ⇒ bit1
+        REQUIRE(sim.get_value(result.grant) == rr_grant_from<4>(0b1111, 1));
+        REQUIRE(sim.get_value(result.grant) == 0b0010); // Bit 1 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == 0b0001); // 授予 bit0 ⇒ 1
     }
 
     SECTION("Round robin arbiter sequential behavior") {
@@ -77,10 +129,11 @@ TEST_CASE("SelectorArbiter: round robin arbiter basic tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // First time: should grant position 0 (as internal ptr_reg starts with
-        // 0)
-        REQUIRE(sim.get_value(result.grant) == 0b0001); // Bit 0 set
+        // 第 1 拍：ptr=0 授予 bit0 ⇒ ptr 前进到 1 ⇒ 沿后扫描从 1 开始 ⇒ bit2
+        REQUIRE(sim.get_value(result.grant) == rr_grant_from<4>(0b1101, 1));
+        REQUIRE(sim.get_value(result.grant) == 0b0100); // Bit 2 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == 0b0001); // 授予 bit0 ⇒ 1
     }
 }
 
@@ -97,9 +150,11 @@ TEST_CASE("SelectorArbiter: round robin arbiter extended tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        // Should grant position 0 (lowest set bit initially)
-        REQUIRE(sim.get_value(result.grant) == 0b00000001); // Bit 0 set
+        // 第 1 拍 ptr=0 授予 bit0 ⇒ ptr 前进到 1 ⇒ 沿后首匹配 = bit2
+        REQUIRE(sim.get_value(result.grant) == rr_grant_from<8>(0x55, 1));
+        REQUIRE(sim.get_value(result.grant) == 0b00000100); // Bit 2 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == 0b00000001); // 授予 bit0 ⇒ 1
     }
 
     SECTION("Round robin arbiter with high bit requests") {
@@ -120,8 +175,11 @@ TEST_CASE("SelectorArbiter: round robin arbiter extended tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        REQUIRE(sim.get_value(result.grant) == 0b00010000); // Bit 4 set
+        // 第 1 拍 ptr=0 授予 bit4 ⇒ ptr 前进到 5 ⇒ 沿后首匹配 = bit5
+        REQUIRE(sim.get_value(result.grant) == rr_grant_from<8>(0x30, 5));
+        REQUIRE(sim.get_value(result.grant) == 0b00100000); // Bit 5 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == 0b00000101); // 授予 bit4 ⇒ 5
     }
 
     SECTION("Round robin arbiter with single bit at various positions") {
@@ -162,9 +220,10 @@ TEST_CASE("SelectorArbiter: round robin arbiter boundary tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        REQUIRE(sim.get_value(result.grant) ==
-                0b01); // Bit 0 set (first available)
+        // 第 1 拍 ptr=0 授予 bit0 ⇒ ptr 前进到 1 ⇒ 沿后首匹配 = bit1
+        REQUIRE(sim.get_value(result.grant) == 0b10); // Bit 1 set
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == 0b01); // 授予 bit0 ⇒ 1
     }
 
     SECTION("Round robin arbiter with all possible 3-bit patterns") {
@@ -175,14 +234,15 @@ TEST_CASE("SelectorArbiter: round robin arbiter boundary tests",
             ch::Simulator sim(ctx.get());
             sim.tick();
 
-            // First available bit should be granted
-            bool found = false;
-            for (int i = 0; i < 3; i++) {
-                if ((pattern & (1 << i)) && !found) {
-                    REQUIRE(sim.get_value(result.grant) == (1 << i));
-                    found = true;
-                }
-            }
+            // 第 1 拍从 ptr=0 授予首个置位位 g0 ⇒ ptr 前进到 (g0+1)%3
+            // ⇒ 沿后从该位置循环扫描
+            unsigned g0 = 0;
+            while (((pattern >> g0) & 1u) == 0) ++g0;
+            unsigned ptr_after = (g0 + 1) % 3;
+            REQUIRE(sim.get_value(result.grant) ==
+                    rr_grant_from<3>(static_cast<uint64_t>(pattern),
+                                     ptr_after));
+            REQUIRE(sim.get_value(result.next_ptr) == ptr_after);
             REQUIRE(sim.get_value(result.valid) == true);
         }
     }
@@ -221,9 +281,12 @@ TEST_CASE("SelectorArbiter: round robin arbiter stress tests",
             grants.push_back(grant);
         }
 
-        // Check that the first few grants follow round-robin pattern
-        REQUIRE(grants[0] == 0x01); // First grant is bit 0
-        // Subsequent grants will depend on the internal pointer logic
+        // ⚠️ **真正的轮转**（ADR-065 D2）：request 全 1 ⇒ 指针每拍 +1
+        //   ⇒ 沿后读到的 grant 序列 = bit1, bit2 … bit7, bit0, bit1, bit2
+        //   （第 1 拍授予 bit0 后指针已前进到 1 ⇒ 沿后从 1 开始扫描）
+        const uint8_t kRoundRobin[10] = {0x02, 0x04, 0x08, 0x10, 0x20,
+                                         0x40, 0x80, 0x01, 0x02, 0x04};
+        for (int i = 0; i < 10; i++) REQUIRE(grants[i] == kRoundRobin[i]);
         REQUIRE(sim.get_value(result.valid) == true);
     }
 
@@ -239,9 +302,10 @@ TEST_CASE("SelectorArbiter: round robin arbiter stress tests",
         ch::Simulator sim(ctx.get());
         sim.tick();
 
-        REQUIRE(sim.get_value(result.grant) ==
-                0x0000000000000001UL); // Bit 0 set initially
+        // 第 1 拍 ptr=0 授予 bit0 ⇒ ptr 前进到 1 ⇒ 沿后首匹配 = bit1
+        REQUIRE(sim.get_value(result.grant) == 0x0000000000000002UL);
         REQUIRE(sim.get_value(result.valid) == true);
+        REQUIRE(sim.get_value(result.next_ptr) == 0x0000000000000001UL);
     }
 
     SECTION("Round robin arbiter with various large widths") {
@@ -269,7 +333,8 @@ TEST_CASE("SelectorArbiter: round robin arbiter stress tests",
                       << std::endl;
             std::cout << "  valid:   " << valid_val << std::endl;
 
-            REQUIRE(grant_val == 0x40000000UL); // Bit 30 set (first in pattern)
+            // 第 1 拍 ptr=0 授予 bit30 ⇒ ptr 前进到 31 ⇒ 沿后首匹配 = bit31
+            REQUIRE(grant_val == 0x80000000UL);
             REQUIRE(valid_val == true);
         }
 
@@ -295,20 +360,21 @@ TEST_CASE("SelectorArbiter: round robin arbiter stress tests",
                       << std::endl;
             std::cout << "  valid:   " << valid_val << std::endl;
 
-            REQUIRE(grant_val == 0x0002); // Bit 1 set (first 1 in pattern)
+            // 第 1 拍 ptr=0 授予 bit1 ⇒ ptr 前进到 2 ⇒ 沿后首匹配 = bit3
+            REQUIRE(grant_val == 0x0008);
             REQUIRE(valid_val == true);
         }
     }
 
     SECTION("Round robin arbiter stress: multiple different patterns") {
         std::vector<std::pair<uint64_t, uint64_t>> test_cases = {
-            {0x0F0F0F0F0F0F0F0F, 0x0000000000000001}, // Pattern 1: lowest bit
-            {0xF0F0F0F0F0F0F0F0, 0x0000000000000010}, // Pattern 2: bit 4
-            {0x5555555555555555,
-             0x0000000000000001}, // Alternating 1: lowest bit
-            {0xAAAAAAAAAAAAAAAA, 0x0000000000000002}, // Alternating 2: bit 1
-            {0x00000000FFFFFFFF, 0x0000000000000001}, // Lower half: lowest bit
-            {0xFFFFFFFF00000000, 0x0000000100000000}  // Upper half: bit 32
+            // ⚠️ 每组期望 = 「从 (g0+1)%64 起的首个置位位」（g0 = 最低置位位）
+            {0x0F0F0F0F0F0F0F0F, 0x0000000000000002}, // g0=0  ⇒ ptr=1  ⇒ bit1
+            {0xF0F0F0F0F0F0F0F0, 0x0000000000000020}, // g0=4  ⇒ ptr=5  ⇒ bit5
+            {0x5555555555555555, 0x0000000000000004}, // g0=0  ⇒ ptr=1  ⇒ bit2
+            {0xAAAAAAAAAAAAAAAA, 0x0000000000000008}, // g0=1  ⇒ ptr=2  ⇒ bit3
+            {0x00000000FFFFFFFF, 0x0000000000000002}, // g0=0  ⇒ ptr=1  ⇒ bit1
+            {0xFFFFFFFF00000000, 0x0000000200000000}  // g0=32 ⇒ ptr=33 ⇒ bit33
         };
 
         for (size_t i = 0; i < test_cases.size(); ++i) {
@@ -351,12 +417,13 @@ TEST_CASE("SelectorArbiter: round robin arbiter consistency tests",
         // Run multiple ticks and verify consistent starting behavior
         for (int i = 0; i < 5; ++i) {
             sim.tick();
-            // First tick should always grant the first available bit (bit 0)
-            // For subsequent ticks, the behavior depends on internal state
-            if (i == 0) {
-                REQUIRE(sim.get_value(result.grant) ==
-                        0x01); // Bit 0 set initially
-            }
+            // ⚠️ **真正的轮转**（ADR-065 D2 修复后）：request=0b01010101
+            //   ⇒ 指针每拍前进到「被授予位 + 1」⇒ 沿后读到的是从新指针
+            //   起的首个置位位 ⇒ 序列（g0 = 最低置位位）：
+            //   i=0: ptr0→1 ⇒ bit2；i=1: ptr 2→3 ⇒ bit4；i=2: 4→5 ⇒ bit6；
+            //   i=3: 6→0 ⇒ bit0；i=4: 0→1 ⇒ bit2
+            const uint64_t kExpected[5] = {0x04, 0x10, 0x40, 0x01, 0x04};
+            REQUIRE(sim.get_value(result.grant) == kExpected[i]);
             REQUIRE(sim.get_value(result.valid) == true);
         }
     }
@@ -368,21 +435,21 @@ TEST_CASE("SelectorArbiter: round robin arbiter consistency tests",
 
         ch::Simulator sim(ctx.get());
 
-        // Test with all bits set
+        // 第 1 拍：ptr=0 授予 bit0 ⇒ ptr→1 ⇒ 沿后从 1 起首匹配 = bit1
         sim.tick();
-        REQUIRE(sim.get_value(result.grant) == 0x01); // Bit 0 set
+        REQUIRE(sim.get_value(result.grant) == 0x02); // Bit 1
         REQUIRE(sim.get_value(result.valid) == true);
 
-        // Update request to have only high bit set
+        // 只有 bit7 ⇒ ptr=1 起扫到 bit7 ⇒ ptr→0 ⇒ 沿后仍 bit7
         sim.set_value(request, 0x80);
         sim.tick();
         REQUIRE(sim.get_value(result.grant) == 0x80); // Bit 7 set
         REQUIRE(sim.get_value(result.valid) == true);
 
-        // Update request to have middle bits set
-        sim.set_value(request, 0x3C); // Bits 2,3,4,5 set
+        // bits 2..5 ⇒ ptr=0 起授予 bit2 ⇒ ptr→3 ⇒ 沿后从 3 起 = bit3
+        sim.set_value(request, 0x3C);
         sim.tick();
-        REQUIRE(sim.get_value(result.grant) == 0x04); // Bit 2 set
+        REQUIRE(sim.get_value(result.grant) == 0x08); // Bit 3
         REQUIRE(sim.get_value(result.valid) == true);
     }
 }
