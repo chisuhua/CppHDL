@@ -22,6 +22,13 @@
 
 ## 快速开始
 
+> ⚠️ **平台支持（2026-11-03）**：Verilator 后端**只支持 Linux**。
+> macOS / Windows 上 `-DBUILD_VERILATOR=ON` 会在 **configure 期**直接失败
+> （显式排除，刻意的 —— 后端假定 POSIX `dlopen`/`libVtop.so`，且公开头用 C++23
+> `std::expected`）。那两类平台请用 `-DBUILD_VERILATOR=OFF` 构建库与全部非
+> Verilator 测试；解释器 / JIT 后端不受影响。
+> 完整说明见 `docs/developer_guide/verilator-integration.md` §Supported platforms。
+
 ### 启用 Verilator（git submodule）
 
 > **不要 `apt install verilator`** —— CppHDL 通过 `third_party/verilator` 子模块

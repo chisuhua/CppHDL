@@ -16,6 +16,13 @@ CppHDL 的 CI 平台覆盖从 Linux-only 扩展为多平台。macOS-14（clang/a
 | macOS-14（clang/arm64） | ✅ 已启用（compile errors 已修） |
 | Windows-2022（MSVC） | ⏳ 延后（C++20 module 边界） |
 
+⚠️ **本 feature 只覆盖「默认构建（`BUILD_VERILATOR=OFF`）」的平台矩阵** ——
+**Verilator 后端是显式 Linux-only**（2026-11-03 裁决：`BUILD_VERILATOR=ON` 在
+macOS/Windows 上 configure 期 `FATAL_ERROR`；理由 = POSIX `dlopen`/`libVtop.so`
+假设 + C++23 `std::expected` 的工具链可用性）⇒ ⇒ **Windows 启用不包含 verilator
+后端**，也不得把该 guard 当成待修的缺陷（详见根 `AGENTS.md` KNOWN LIMITATIONS
+与 `.rddf/improvements/stdlib-expected-missing-in-libcxx-2026-11.md` §7）。
+
 ## 跨阶段拆分
 
 ### phase-3

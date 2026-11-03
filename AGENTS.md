@@ -161,6 +161,23 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 - **Hierarchical input driver MUST be emitted by codegen**. A submodule `ch_in` with an internal driver (`sub.io().x <<= some_wire` invokes `inputimpl::set_driver`, equivalent to `num_srcs() > 0`) MUST NOT be emitted as a top-level Verilog `input` port — it becomes an internal `logic` wire (`src/codegen_verilog.cpp::print_header` filters these out), declared by `print_decl`, and assigned from its driver in `print_logic` (walks the unnamed-proxy chain, mirroring `type_output`). The matching backend code MUST also skip them: `emit_sim_main_postlude` skips the `set_input_Vtop` / `get_field_ptr_Vtop` case (the Vtop field does not exist), and `build_port_access_table` does not add the port to `port_access_` (`sync_inputs_to_vtop` won't try to write it). Skipping any of the four sites makes verilator either reference a non-existent Vtop field (compile/link error) or keep the port at X (=0 after `initialize()`'s reset pulse), silently disabling every `ch_in` below the top component — RV32I `instr_data` becomes NOP (commit_count=0), AXI4-Lite `slave.awvalid` triggers handshake deadlock (rvalid=0). This was originally misdiagnosed as issue #25 register propagation. JIT already follows the same rule (`src/jit/jit_ir_gen_lnode_io.cpp:31-46`); the verilog codegen path is now in parity.
 
 ## KNOWN LIMITATIONS
+> 🔴 **Verilator 后端 = 显式 Linux-only**（2026-11-03 裁决）：`-DBUILD_VERILATOR=ON`
+> 在 **macOS / Windows** 上会在 **configure 期 `FATAL_ERROR`**（刻意的，不是缺陷）。
+> 理由：① 后端假定 POSIX 语义（`dlopen` / `libVtop.so` / fork-exec）；② 公开头
+> `include/core/verilator_backend.h` 用 C++23 `std::expected`，而它**不是**
+> 「声称 C++23 就有」—— 实测 `clang++ 18 + libstdc++ 13` 下 `<expected>` 被预处理器
+> **整个跳过**（libstdc++ 要求 `__cpp_concepts >= 202002L`，clang 18 报 `201907L`）
+> ⇒ ⇒ 该头现在是**显式 `#error`**（带可行方向），而不是
+> `use of undeclared identifier 'std'`。
+> ⚠️ 该头 **MUST 在 macOS/Windows 上仍可 `#include`**（`tests/dual_backend_fixture.h`
+> 无条件 include 它 ⇒ 加了平台 `#error` 会打断那两类平台的**整个测试构建**）
+> ⇒ ⇒ 「显式排除」只落在 **CMake 层**。
+> ⇒ 那两类平台请用 `-DBUILD_VERILATOR=OFF`；解释器 / JIT 不受影响。
+> 想让后端支持新平台 = **独立 work item**（先解决 ① 与 ②，并清掉
+> `scripts/lib/header_self_contained_exempt.txt` 的 `stdlib:expected` 豁免 ——
+> 它在能力可用时会**自动过期转红**，那就是「真的修好了」的机械信号）。
+> 详见 `docs/developer_guide/verilator-integration.md` §Supported platforms。
+
 > ⚠️ **2026-10-24 护栏拆分**：examples 的测试护栏分两个独立脚本 ——
 > `scripts/verify_example_test_wiring.sh` 管「**归属守恒**」（测试源有没有被执行到），
 > `scripts/verify_example_assertion_quality.sh` 管「**断言质量**」（被执行的测试有没有

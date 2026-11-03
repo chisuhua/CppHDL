@@ -34,7 +34,7 @@ core/bundle/bundle_layout.h	fragment	bundle 家族分片：依赖 ch_width_v（�
 core/bundle/bundle_serialization.h	fragment	bundle 家族分片：依赖 bundle_layout.h 的模板定义先后次序
 core/bundle/bundle_utils.h	fragment	bundle 家族分片：依赖 bundle_base.h（它 include 了本头，形成互依）
 core/operators_width.h	fragment	C-class refactor 分片（由 core/operators.h 聚合）—— 依赖 get_binary_result_width 的前置声明
-core/verilator_backend.h	stdlib:expected	本头用 `std::expected<void, VerilatorError>`（C++23）⇒ ⇒ **libc++ 不提供 `<expected>`**（AppleClang 15/16 = LLVM 16/17 ⇒ 无）⇒ ⇒ 在 macOS/clang 上**单独编译失败** ⇒ ⇒ 该缺陷已**独立立项**（`.rddf/improvements/stdlib-expected-missing-in-libcxx-2026-11.md`）⇒ ⇒ 本次**只绕开**（按能力豁免），**不**在本 change 里改公开 API
+core/verilator_backend.h	stdlib:expected	本头用 `std::expected<void, VerilatorError>`。**真实机制**（2026-11-03 实测订正，旧表述「libc++ 不提供」是错的 —— libc++ 在 LLVM 16 就有）：`clang++ 18` 报 `__cpp_concepts = 201907L`，而 libstdc++ 13 的 `<expected>` 大门是 `#if __cplusplus > 202002L && __cpp_concepts >= 202002L` ⇒ **整个头被预处理器跳过** ⇒ TU 里连 `std` 都未声明 ⇒ 报 `use of undeclared identifier 'std'` ⇒ ⇒ 缺陷面 = **「clang + libstdc++ 13」这一组合**。**裁决**（`.rddf/improvements/stdlib-expected-missing-in-libcxx-2026-11.md` §7）= **显式排除 macOS/Windows**（后端有 POSIX `dlopen`/`libVtop.so` 假设 ⇒ 换掉 `std::expected` 换不来真实能力；且会改公开类型 `VerilatorResult` ⇒ 需 ADR）⇒ ⇒ 本豁免**保留**（能力缺失时生效）；该头现在另有**显式 `#error`** 指向可行方向。能力可用时本豁免**自动过期转红** ⇒ 那就是「真的修好了」的机械信号
 lnode/literal_ext.h	fragment	C-class refactor 分片（由 core/literal.h include）—— 依赖 <cstddef> 上下文
 lnode/node_builder_ext.h	fragment	C-class refactor 分片（由 core/node_builder.h include）—— 依赖 <cstdint> 上下文
 lnode/operators_ext.h	fragment	C-class refactor 分片（由 core/operators.h include）—— 依赖 compute_bit_width 的前置声明

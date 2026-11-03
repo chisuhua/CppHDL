@@ -273,6 +273,27 @@ endif()
 option(BUILD_VERILATOR "Build Verilator from git submodule" ON)
 
 if(BUILD_VERILATOR)
+    # ⚠️⚠️ **Verilator 后端显式限制为 Linux**（2026-11-03 裁决，理由与备选方案见
+    # `.rddf/improvements/stdlib-expected-missing-in-libcxx-2026-11.md` §7）：macOS /
+    # Windows 上**显式排除**，在 configure 期给出**可行动**的报错，而不是让它在编译期
+    # 以 `no template named 'expected'`（或更晚的 `dlopen` / `libVtop.so` 语义差异）
+    # 的形式炸掉。
+    #   ⇒ 判据是**平台**而不是「标准库能力」：后端还有 POSIX 假设
+    #     （`dlopen` / `libVtop.so` / fork-exec），超出「有没有 std::expected」。
+    #   ⇒ 想在这些平台上**编译库本身**（不含后端）⇒ 用 `-DBUILD_VERILATOR=OFF`
+    #     （CI 的 macos-14 leg 就是这么跑的）。
+    if(APPLE OR WIN32)
+        message(FATAL_ERROR
+            "BUILD_VERILATOR=ON is not supported on ${CMAKE_SYSTEM_NAME}.\n"
+            "  The Verilator backend is explicitly Linux-only:\n"
+            "    - it assumes POSIX dlopen()/libVtop.so semantics;\n"
+            "    - its public header uses C++23 std::expected, which is not\n"
+            "      available on every toolchain/stdlib combination.\n"
+            "  Configure with -DBUILD_VERILATOR=OFF to build the library and all\n"
+            "  non-Verilator tests on this platform.\n"
+            "  See docs/developer_guide/verilator-integration.md §Supported platforms.")
+    endif()
+
     # REQUIRED so the developer gets a clear error at configure time,
     # not a cryptic failure in the middle of Verilator's own build.
     # Upstream's CMakeLists.txt uses find_package(BISON/FLEX) WITHOUT

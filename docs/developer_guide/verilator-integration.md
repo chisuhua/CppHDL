@@ -23,6 +23,30 @@ The Verilator column in the resulting `perf_results.json` will show
 If you cloned without submodules, `./scripts/init-submodules.sh` is
 a convenience wrapper that runs the init + a sanity check.
 
+## Supported platforms
+
+| Platform | `BUILD_VERILATOR=OFF` | `BUILD_VERILATOR=ON` |
+|---|---|---|
+| Linux | ✅ | ✅ **verified**（CI `pr-verilator-fast` / `nightly-verilator`）|
+| macOS | ✅（CI `build-and-test` 的 macos-14 leg 就是这么跑）| ❌ **explicitly excluded** |
+| Windows | ✅（未验证）| ❌ **explicitly excluded** |
+
+⚠️ **显式排除是刻意的**（2026-11-03 裁决）：`BUILD_VERILATOR=ON` 在 macOS / Windows
+上会在 **configure 期** `FATAL_ERROR`，给出可行动的报错，而不是在编译期或运行期以
+难以归属的形式失败。判据是**平台**而不是「有没有 `std::expected`」：
+
+1. 后端假定 POSIX 语义（`dlopen` / `libVtop.so` / fork-exec / `dlsym`）；
+2. 公开头 `include/core/verilator_backend.h` 用 C++23 `std::expected`，而它**不是**
+   「声称 C++23 就有」—— 例如 `clang++ 18 + libstdc++ 13` 下 `<expected>` 会被
+   预处理器**整个跳过**（libstdc++ 的大门是 `__cpp_concepts >= 202002L`，clang 18
+   报 `201907L`）。该头现在是**显式** `#error`（带可行方向），而不是
+   `use of undeclared identifier 'std'`。
+
+⇒ ⇒ 在 macOS / Windows 上请用 `-DBUILD_VERILATOR=OFF` 构建库与全部非 Verilator
+测试。想让 Verilator 后端支持新平台 = **独立 work item**（需先解决 ① 与 ②，并把
+`scripts/verify_header_self_contained.sh` 里 `stdlib:expected` 的豁免清掉 —— 那条
+豁免在能力可用时会**自动过期转红**，这就是「真的修好了」的机械信号）。
+
 ## Host build dependencies
 
 Verilator's build requires the following on the host system:
@@ -55,11 +79,22 @@ sudo apt install flex bison build-essential python3 perl git \
 
 ### macOS
 
-**Status: Untested on macOS as of this PR.**
+**Status: explicitly excluded**（2026-11-03 裁决 —— 见本文件 §Supported platforms）。
+
+macOS 上 **`BUILD_VERILATOR=ON` 会在 configure 期 `FATAL_ERROR`**，这是刻意的：
+后端假定 POSIX `dlopen` / `libVtop.so` 语义，且公开头用 C++23 `std::expected`
+（并非所有工具链组合都提供）。
+
+⇒ ⇒ macOS 上请用 `-DBUILD_VERILATOR=OFF`（CI 的 macos-14 leg 就是这么跑的），
+库与全部非 Verilator 测试照常构建与运行。
+
+<details>
+<summary>历史记录（2026-11 之前）：尝试过的 brew 依赖清单</summary>
 
 ```bash
 brew install flex bison python3 gmp readline ccache help2man
 ```
+</details>
 
 ## Build recipe
 
