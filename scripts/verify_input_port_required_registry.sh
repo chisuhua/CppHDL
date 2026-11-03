@@ -74,6 +74,11 @@ fi
 # ⚠️ 投毒数 MUST 动态取（list-poisons）⇒ 硬编码会漂移
 if [ "${1:-}" = "--self-test" ]; then
     echo "── 自检：原地投毒"
+    # 🔴 **必须是原地投毒**（判据读的是真实文件），⇒ ⇒ 所以 MUST 有 trap：
+    #    自检失败会 exit、CI 会超时打断、Ctrl-C 更常见 —— 任一中断都会把
+    #    真实登记表 / rst_n 护栏**留在投毒态**（`hardcode-back` 那一态甚至
+    #    会让下游护栏**静默通过**）⇒ ⇒ AGENTS.md 的「trap 保证异常路径也还原」。
+    trap 'python3 "$ANALYZER" restore >/dev/null 2>&1 || true' EXIT INT TERM
     mapfile -t cases < <(python3 "$ANALYZER" list-poisons | cut -f1)
     if [ "${#cases[@]}" -eq 0 ]; then
         fail "自检：投毒清单为空 ⇒ 无法自检（fail-closed）"
@@ -109,11 +114,24 @@ if [ "${1:-}" = "--self-test" ]; then
         fi
     done
     rm -rf "$PRE"
+    trap - EXIT INT TERM
+
+    # ── 纯函数级自检：钉住「两个输入口径相反」（= 豁免机制曾经恒不生效）──
+    # 投毒只能证明判据会**红**；这里写错的形态是「判据永远绿」⇒ ⇒ 必须用
+    # 期望为真的断言钉住（该自检在修复前会红 ⇒ 判别力已实测）。
+    echo "── 自检：豁免机制的输入口径（纯函数级）"
+    if python3 "$ANALYZER" selftest-exemption >/tmp/opencode/ipr_exemption.out 2>&1; then
+        ok "自检：豁免机制 7 条口径全部正确（注释里的标记命中 / 注释里的驱动不算）"
+    else
+        fail "自检：豁免机制输入口径有误（标记写在注释里 ⇒ MUST 用未剥注释的原文匹配）"
+        sed 's/^/      /' /tmp/opencode/ipr_exemption.out | tail -6
+    fi
+
     if [ "$FAILS" -ne 0 ]; then
         fail "自检未全部通过（${FAILS} 项）"
         exit 1
     fi
-    ok "自检全部通过（${#cases[@]} 种投毒）"
+    ok "自检全部通过（${#cases[@]} 种投毒 + 豁免口径 7 条）"
 fi
 
 if [ "$FAILS" -ne 0 ]; then

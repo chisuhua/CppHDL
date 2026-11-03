@@ -56,6 +56,17 @@
 #
 # Only bash + awk are used (portable across the ubuntu-22.04 CI matrix;
 # no python dependency - the registry is plain markdown).
+#
+# KNOWN BOUNDARY (decision-request-input-port-guards-2026-11.md §6 item 3
+# requires this to be RECORDED, not fixed, when the component list became
+# parameterised): the helper detection is PURE TEXT heuristics and does
+# NOT inspect arguments. A file-scope helper counts as "drives rst_n" for
+# every test case that CALLS it, regardless of WHICH simulator/port it
+# drives. Consequence: a single helper that drives two DUTs masks a test
+# case that forgets the second one. Upgrading to symbol-level analysis is
+# a separate item; this boundary is accepted deliberately (the alternative
+# is per-file false positives, which get suppressed wholesale and lose
+# more coverage than they gain).
 
 set -euo pipefail
 

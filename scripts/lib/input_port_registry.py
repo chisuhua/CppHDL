@@ -238,14 +238,38 @@ def r2(rows: list[dict]) -> None:
     ok("R2 检查完毕（实际端口 ⊆ 登记）")
 
 
+def tb_drives_port(code: str, port: str) -> bool:
+    """**测试台级**驱动（`set_input_value(...<port>...)`）。`code` 须已剥注释。"""
+    return bool(re.search(r"set_input_value\s*\([^;]*?\b" + re.escape(port) + r"\b", code))
+
+
+def mentions_component(code: str, component: str) -> bool:
+    """`code`（已剥注释）里是否提到该组件（不要求经 `ch_device` 实例化）。
+
+    ⚠️ 缺口判定 MUST 用它而不是 `instantiation_names()/instantiates()`：仓内存在
+    **直接构造**形态（`AxiDma<32,32,4,16> dma(nullptr, "dma");`，实测
+    `tests/test_axi_dma.cpp` 里 `ch_device`/`ch_module` 出现 **0** 次）⇒ ⇒ 用
+    「实例化」判据会让「补上覆盖」这件事**永远看不见** ⇒ ⇒ 缺口行永久过时。
+    """
+    return bool(re.search(r"(?<![A-Za-z0-9_])" + re.escape(component) + r"(?![A-Za-z0-9_])", code))
+
+
 def r3(rows: list[dict]) -> None:
     for r in rows:
         if GAP_MARKER in r["case"]:
             # 缺口行：断言「缺口**仍然**存在」⇒ ⇒ 一旦有人补上覆盖，表就过时 ⇒ 红
+            #
+            # 判据口径（两个条件都要，且都**保守**）：
+            #   ① 该文件提到这个组件（**不**要求经 `ch_device` 实例化 —— 见
+            #      `mentions_component()` 的注释）
+            #   ② 该文件有**测试台级**驱动 `set_input_value(...<port>...)`
+            #      ⇒ ⇒ wrapper 的 `io().<port> <<= ` **不**算关闭缺口（转发不等于
+            #      「有行为覆盖」）⇒ ⇒ 宁可漏报「缺口已被补上」，不误报。
             still_open = [str(f.relative_to(ROOT)) for f in source_files()
-                          if instantiates(f, r["component"])
-                          and re.search(r"set_input_value\s*\([^;]*?\b" + re.escape(r["port"]) + r"\b",
-                                        strip_comments(f.read_text(errors="replace")))]
+                          if mentions_component(strip_comments(f.read_text(errors="replace")),
+                                                r["component"])
+                          and tb_drives_port(strip_comments(f.read_text(errors="replace")),
+                                             r["port"])]
             if still_open:
                 fail(f"R3 「{r['component']}.{r['port']}」已登记为缺口，但 {still_open} "
                      "已经在驱动它 ⇒ ⇒ **表已过时**（把它改成真实指针，并复核缺口段）")
@@ -263,21 +287,44 @@ def r3(rows: list[dict]) -> None:
     ok(f"R3 检查完毕（{len(rows)} 条：真实指针存在 ⇒ 实例化；缺口标记 ⇒ 缺口仍在）")
 
 
+def drives_port(code: str, port: str) -> bool:
+    """`code`（**已剥注释**）里是否驱动了 `port`。
+
+    ⚠️ MUST 传**剥注释后**的文本 —— 注释里写 `set_input_value(...strbe...)`
+    不是驱动（否则一条说明性注释就能让判据假绿）。
+    """
+    tb_pat = re.compile(r"set_input_value\s*\([^;]*?\b" + re.escape(port) + r"\b")
+    inner_pat = re.compile(r"io\(\)\s*\.\s*" + re.escape(port) + r"\s*<<=")
+    return bool(tb_pat.search(code) or inner_pat.search(code))
+
+
+def has_exemption(raw_text: str, filename: str, port: str) -> bool:
+    """`raw_text`（**未剥注释**）是否带豁免标记 ⇒ ⇒ 豁免 MUST 可见且窄。
+
+    🔴 **MUST 传未剥注释的原文** —— 标记本身就写在注释里（`// input_port_guard: ...`）
+    ⇒ ⇒ 拿 `strip_comments()` 的结果去匹配**恒不命中**（实测踩过：机制实现后
+    从未生效，且**无任何用例**能发现 ⇒ 与 `fwft_fifo` 的「名字 over-promise」同型）。
+    ⇒ ⇒ 本函数与 `drives_port()` 的**输入口径相反**，`selftest_exemption()` 钉住这一点。
+
+    窄：文件名 MUST 含 `guard`（往普通测试文件塞标记**不豁免**）。
+    """
+    if "guard" not in filename:
+        return False
+    pat = re.compile(r"input_port_guard:\s*intentionally-undriven\s*" + re.escape(port))
+    return bool(pat.search(raw_text))
+
+
 def r4(rows: list[dict]) -> None:
     for r in rows:
         if r["kind"] != "写入放大":
             continue
-        port_pat = re.compile(r"set_input_value\s*\([^;]*?\b" + re.escape(r["port"]) + r"\b")
-        inner_pat = re.compile(r"io\(\)\s*\.\s*" + re.escape(r["port"]) + r"\s*<<=")
-        exempt_pat = re.compile(r"input_port_guard:\s*intentionally-undriven\s*"
-                                + re.escape(r["port"]))
         for f in source_files():
             if not instantiates(f, r["component"]):
                 continue
-            text = strip_comments(f.read_text(errors="replace"))
-            if port_pat.search(text) or inner_pat.search(text):
+            raw = f.read_text(errors="replace")
+            if drives_port(strip_comments(raw), r["port"]):
                 continue
-            if exempt_pat.search(text) and "guard" in f.name:
+            if has_exemption(raw, f.name, r["port"]):
                 note(f"file={f.relative_to(ROOT)} 豁免"
                      f"（input_port_guard: intentionally-undriven {r['port']}）")
                 continue
@@ -315,6 +362,63 @@ def r5(rows: list[dict]) -> None:
                  " ⇒ 与本表构成双源 ⇒ 必然漂移")
         return
     ok(f"R5 rst_n 护栏从本表读（{len(names)} 个组件，脚本内无硬编码清单）")
+
+
+def selftest_exemption() -> int:
+    """**纯函数级**自检：钉住「两个输入口径相反」这条最容易写反的地方。
+
+    🔴 为什么需要它（而不是靠投毒）：投毒只能证明「判据会**红**」；而在这里
+    写错的形态是「判据**永远绿**」（豁免机制失效 ⇒ 看起来正常工作）⇒ ⇒ 必须
+    用**期望为真**的断言钉住，且它 MUST 在修复前**失败**（否则无判别力）。
+
+    覆盖 7 条：
+      ① `//` 注释里的豁免标记  ⇒ 命中（**修复前恒不命中** = 本自检的判别点）
+      ② `/* */` 注释里的豁免标记 ⇒ 命中
+      ③ 文件名不含 `guard` ⇒ **不**豁免（窄）
+      ④ 注释里的 `set_input_value(...strbe...)` **不**算驱动
+      ⑤ `io().strbe <<= ...`（内部驱动）算驱动
+      ⑥ `mentions_component` 认得直接构造形态 `AxiDma<32,32,4,16>`
+      ⑦ `tb_drives_port` **不**把 wrapper 的 `io().rst_n <<=` 当测试台驱动
+    """
+    global FAILS
+    FAILS = 0
+    cases: list[tuple[str, bool, bool]] = []
+
+    raw_line = "// input_port_guard: intentionally-undriven strbe\nio.x = 1;\n"
+    cases.append(("① 行注释里的豁免标记命中", has_exemption(raw_line, "foo_guard.cpp", "strbe"), True))
+
+    raw_block = "/* input_port_guard: intentionally-undriven strbe */\nio.x = 1;\n"
+    cases.append(("② 块注释里的豁免标记命中", has_exemption(raw_block, "foo_guard.cpp", "strbe"), True))
+
+    cases.append(("③ 文件名不含 guard ⇒ 不豁免（窄）",
+                  has_exemption(raw_line, "test_foo.cpp", "strbe"), False))
+
+    commented_drive = "// sim.set_input_value(io.strbe, 0xF);\n"
+    cases.append(("④ 注释里的驱动不算驱动",
+                  drives_port(strip_comments(commented_drive), "strbe"), False))
+
+    inner_drive = "sub.io().strbe <<= pipeline.io().data_strbe;\n"
+    cases.append(("⑤ io().<port> <<= 算驱动",
+                  drives_port(strip_comments(inner_drive), "strbe"), True))
+
+    direct_ctor = "AxiDma<32, 32, 4, 16> dma(nullptr, \"dma\");\n"
+    cases.append(("⑥ 直接构造形态被 mentions_component 认出",
+                  mentions_component(strip_comments(direct_ctor), "AxiDma"), True))
+
+    wrapper_fwd = "slave.io().rst_n <<= io().rst_n;\n"
+    cases.append(("⑦ wrapper 转发不算测试台驱动",
+                  tb_drives_port(strip_comments(wrapper_fwd), "rst_n"), False))
+
+    for name, got, want in cases:
+        if got == want:
+            ok(f"自检 {name}")
+        else:
+            fail(f"自检 {name} —— 实测 {got}，应为 {want}")
+    if FAILS:
+        print(f"{RED}❌ 豁免机制自检 FAIL（{FAILS} 项）{RESET}")
+        return 1
+    print(f"{GREEN}✅ 豁免机制自检通过（{len(cases)} 条）{RESET}")
+    return 0
 
 
 def check() -> int:
@@ -498,6 +602,8 @@ def main(argv: list[str]) -> int:
         return poison(argv[1] if len(argv) > 1 else "")
     if argv[0] == "restore":
         return restore()
+    if argv[0] == "selftest-exemption":
+        return selftest_exemption()
     print(f"未知命令：{argv[0]}", file=sys.stderr)
     return 2
 

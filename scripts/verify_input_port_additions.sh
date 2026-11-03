@@ -25,7 +25,10 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANALYZER="$REPO_ROOT/scripts/lib/input_port_additions.py"
-FIXROOT="/tmp/opencode/input_port_fixtures"
+# ⚠️ 自检的 fixture 仓库目录：MUST 是**唯一**的（固定路径 ⇒ 两个并发自检会
+#    互相踩对方的 fixture ⇒ ⇒ 自检结果随机漂移）⇒ ⇒ 用 mktemp 生成。
+#    （自检块里创建，trap 负责清理）
+FIXROOT=""
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; RESET='\033[0m'
 FAILS=0
@@ -85,7 +88,13 @@ ok "R2 增量检查完成（未因「端口没被驱动」而失败 ⇒ 半自�
 #   每个 case 断言**具体子串** ⇒ 每条判据各自有判别力
 if [ "$SELF_TEST" -eq 1 ]; then
     echo "── 自检：合成 fixture（每个 case 断言具体子串）"
-    rm -rf "$FIXROOT"; mkdir -p "$FIXROOT"
+    # ⚠️ 异常路径也必须清理（判据失败会 exit / CI 会超时打断）⇒ 否则临时
+    #    fixture 仓库会留在 /tmp/opencode 里（**不碰真实工作树**，但仍是垃圾）。
+    trap 'rm -rf "$FIXROOT"' EXIT INT TERM
+    FIXROOT="$(mktemp -d "${TMPDIR:-/tmp/opencode}/input_port_fixtures.XXXXXX" 2>/dev/null)" || {
+        echo "::error cannot create a temp fixture dir (mktemp failed)"
+        exit 1
+    }
 
     mk_fixture() {           # $1 = case 名
         local d="$FIXROOT/$1"
@@ -239,6 +248,7 @@ PY
     fi
 
     rm -rf "$FIXROOT"
+    trap - EXIT INT TERM
     if [ "$FAILS" -ne 0 ]; then
         fail "自检未全部通过（${FAILS} 项）"
         exit 1

@@ -22,6 +22,13 @@ evidence: test:tests/test_stream_builder_backpressure_dual.cpp---
   （含 `source.ready.impl() != nullptr` 断言）+ `tests/test_stream_builder_backpressure_dual.cpp`
   （**双后端** parity）⇒ ⇒ ⚠️ 本文件原先的「静默丢字」标题本身**已被实测推翻**
   （真缺陷只是「上游反压从未建立」）⇒ ⇒ 标题保留为历史线索。
+  ⚠️ **遗留一项（如实登记，2026-11-04 清理时发现）**：判据 #7「穷举 builder 的
+  **全部**链式方法」**仍未达成** —— `haltWhen` / `continueWhen` / `map` /
+  `throwWhen` / `takeWhen` 在 builder 链里**零行为用例**（`grep` 实测 0 命中）。
+  过滤类**自己**驱动入参 ready（`input_stream.ready <<= result.ready | cond`）
+  ⇒ 结构上闭包由过滤类内部维持，但**没有用例证明**。⇒ ⇒ 见 §3 该条目的展开；
+  **本次不做**（需先定 `haltWhen` 期间「上游 ready=1 而 valid=0」到底是
+  **丢弃**还是**保持** ⇒ 属 planner/architect 面）。
 - ⚠️ **文件名保留 `silent-word-loss`（历史名）**：改名会破坏既有链接（台账/计划/裁决单多处引用） ⇒ ⇒ **内容以标题为准**（标题已订正为「上游反压丢失」）⇒ ⇒ 本条是「**标题曾经说谎**」的实例 ⇒ ⇒ 与 `interpreter-eq-wide-operand-miscompare-2026-11.md` 同一处置（订正标题 + 保留文件名）。
 - **来源**：change `stream-forward-ready-closure-p1a-2026-11` 的实施期探针
   ⇒ ⇒ 该 change 的 builder 子项**已移出**（本项独立立项）
@@ -151,37 +158,62 @@ E11 手写 2 级 + **显式** `source.ready <<= f1.push_stream.ready`：
 > 推翻「丢字」这个症状 ⇒ ⇒ ⇒ **判据 MUST 改为「上游反压」**（唯一真缺陷）
 > ⇒ ⇒ ⇒ **⇒ 「零丢字」降级为「回归锁」**（防未来引入真丢字），**不是**缺陷判据。
 
-- [ ] **效果判据（唯一的缺陷判据）**：调用方的 `source.ready`
+- [x] **效果判据（唯一的缺陷判据）**：调用方的 `source.ready`
       （`as_master()` 后）⇒ ⇒ **MUST 有驱动**（`num_srcs() > 0`）
       ⇒ ⇒ 且其**值 MUST 随 FIFO 占用变化**（FIFO 满 ⇒ ⇒ 落 0
       ⇒ ⇒ ⇒ **⇒ 当前实测恒 0 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 修复后 MUST ≠ 恒 0**）
       ⇒ ⇒ ⚠️ **判据 MUST 是「随容量变化」而非「某个字面量」**
       （消费速率影响占用 ⇒ ⇒ 锁死字面量会冻错主 spec）
-- [ ] **效果判据**：**回接修法**（中间级 `pop_stream.ready` ← 下一级
+      ⇒ ⇒ ✅ **已达成**（ADR-055）：`tests/test_stream_builder_backpressure_dual.cpp`
+      （**2** 个 dual pair）断言 `in_ready` **1（空）→ 0（满）→ 1（排空）**
+      ⇒ ⇒ 正是「随容量变化」而非字面量。
+- [x] **效果判据**：**回接修法**（中间级 `pop_stream.ready` ← 下一级
       `push_stream.ready`）⇒ ⇒ **零丢字** ⇒ ⇒ 且 `source.ready` **落 0**
       ⇒ ⇒ （**手写 2 级已实测**：零丢字 + 守卫不误炸 ⇒ ⇒ ⇒ **修法 A 的技术
       可行性已确认** ⇒ ⇒ ⇒ 剩下的**只有契约语义裁决**）
-- [ ] **回归锁（非缺陷判据）**：`queue<4>()` 推入 4 个可区分 word ⇒ ⇒
+      ⇒ ⇒ ✅ **已达成**：同一双后端文件的两级链 DUT（总容量 8）⇒ 8 个 word
+      全部到达（`seen.size() == 8`）且满时 `in_ready == 0`。
+- [x] **回归锁（非缺陷判据）**：`queue<4>()` 推入 4 个可区分 word ⇒ ⇒
       **10 拍内** `out.payload` 序列 MUST 含全部 4 个（实测 `0x10..0x13`
       各**恰好一次**）⇒ ⇒ ⇒ 防未来引入**真**丢字
-- [ ] **接线纪律**：既有测试 `tests/test_stream_builder.cpp:116-117` 用
+      ⇒ ⇒ ✅ **已达成**：断言按**顺序**逐项比对（`seen[i] == 0x10u + i`），
+      比「含全部 4 个」更强。
+- [x] **接线纪律**：既有测试 `tests/test_stream_builder.cpp:116-117` 用
       `operator=` 接线且**无** `as_master()` ⇒ ⇒ ⇒ **MUST 改成**
       `as_master()` + `<<=` ⇒ ⇒ ⇒ 否则它**结构上无法**观测上游反压
       （⇒ ⇒ 读 `source.ready` 会 💥 **ABORT**：空节点）
-- [ ] **变异**：把 `build()` 的延迟连接去掉 ⇒ ⇒ 上游反压判据 MUST **转红**
+      ⇒ ⇒ ✅ **已达成**：`tests/test_stream_builder.cpp` 现为 `as_master()` +
+      数据 / valid 用 `<<=`；三个负例覆盖「缺 `as_master()` / literal / 链首多驱动」。
+- [x] **变异**：把 `build()` 的延迟连接去掉 ⇒ ⇒ 上游反压判据 MUST **转红**
       （⇒ ⇒ ⚠️ **先确认编译成功**）
-- [ ] **变异**：把中间级连接从 `<<=` 改 `operator=` ⇒ ⇒ MUST **转红**
+      ⇒ ⇒ ✅ **已由投毒承载**：`builder-drop-chain-closure`
+      （`scripts/verify_stream_ready_ownership.sh --self-test`）。
+- [x] **变异**：把中间级连接从 `<<=` 改 `operator=` ⇒ ⇒ MUST **转红**
+      ⇒ ⇒ ✅ **已由投毒承载**：`builder-upstream-operator-assign`。
 - [ ] ⚠️ **穷举**：builder 的**全部**链式方法（`queue` / `haltWhen` /
       `continueWhen` / `map` / `throwWhen` / `takeWhen`）⇒ ⇒ 每个都 MUST
       参与「零丢字」判据（⚠️ 「只查已知符号 ⇒ 漏掉同族入口」是本仓登记的
       护栏盲区）
+      ⇒ ⇒ ❌ **仍未达成（如实登记，不勾）**：`grep -nE "haltWhen|continueWhen|throwWhen|takeWhen"`
+      + `grep -n "\.map("` 对 `tests/test_stream_builder*.cpp` = **0 命中**
+      ⇒ ⇒ 5 个过滤类在 builder 链里**零行为用例**。
+      ⇒ ⇒ **结构上为什么不至于失去闭包**：过滤类**自己**驱动入参 ready
+      （`input_stream.ready <<= result.ready | cond`）⇒ builder 按 ADR-055
+      **MUST NOT** 再动它（否则抹掉 `| cond`）⇒ ⇒ 闭包由**过滤类内部**维持。
+      ⇒ ⇒ **为什么仍然不勾**：没有用例证明「过滤类在 builder 链里确实维持了闭包」
+      ⇒ ⇒ 这是**判据缺口**，不是已证事实。
+      ⇒ ⇒ **本次不做**（先要定过滤类的**正确语义**：`haltWhen` 期间上游 ready=1
+      而 `valid=0` ⇒ 数据是**丢弃**还是**保持**？`stream_halt_when` 注释说
+      「data preserved」⇒ 与 `ready | halt` 的组合语义需评审）
+      ⇒ ⇒ ⇒ 属 planner/architect 面，**不在**本轮清理范围。
 - [x] ✅ **已落地（A3 · 2026-11-01）**：`connect_ready` 的**多驱动守卫**在
       **串联场景 MUST NOT 误抛** ⇒ ⇒ 已加行为用例
       （`tests/chlib/test_stream.cpp` 的 `[stream][ready][series]` · 3 断言）
       ⇒ ⇒ + 新静态判据 **R9**（守卫的比较式 + `CHFATAL_EXCEPTION`）
       ⇒ ⇒ + 新投毒 `connect-ready-guard-removed`（**双判据**红）
       ⇒ ⇒ ⇒ **护栏自检 10 种投毒全抓**
-- [ ] `ctest -LE perf` 零回归 · **计数锚点不变**
+- [x] `ctest -LE perf` 零回归 · **计数锚点不变**
+      ⇒ ⇒ ✅ 每次归档均跑（`verify_test_counts.sh` + `verify_dual_backend_parity.sh` 守锚点）。
 ## 4. Capabilities (契约影响)
 
 - **可能** MODIFIED `chlib-stream-ready-ownership`（若「中间级」属该能力

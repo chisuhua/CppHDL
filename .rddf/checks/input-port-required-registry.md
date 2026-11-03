@@ -52,6 +52,14 @@ evidence: probe:scripts/verify_input_port_required_registry.sh
 ⚠️ **本表拒绝「编造指针」**：把 `tests/test_axi_dma.cpp` 写成 `AxiDma` 的判别性用例会让 R3 **假绿**
 （该文件确实提到组件名）⇒ ⇒ 那正是本表要治的病（`chlib` 的 `fwft_fifo` / `sequence` 同型）。
 
+⚠️ **缺口「被补上」的判据口径**（2026-11-03 收窄后放宽，实测过）：R3 判「缺口是否仍然存在」用
+**「文件提到该组件 + 有测试台级 `set_input_value(...<port>...)`」**，**不**要求经 `ch_device`
+实例化 —— 因为 `AxiDma` 的用法是**直接构造**（`AxiDma<32,32,4,16> dma(nullptr,"dma");`，
+实测 `tests/test_axi_dma.cpp` 里 `ch_device`/`ch_module` 出现 **0** 次）⇒ ⇒ 用「实例化」判据会让
+「补上覆盖」这件事**永远看不见** ⇒ ⇒ 缺口行永久过时。
+⇒ 反向仍**保守**：wrapper 的 `io().<port> <<=` **不**算关闭缺口（转发 ≠ 行为覆盖）⇒ 宁可漏报。
+
+
 ## 通用豁免机制（**窄 + 可见**）
 
 形如：
@@ -64,6 +72,20 @@ evidence: probe:scripts/verify_input_port_required_registry.sh
   ⇒ ⇒ 往普通测试文件塞标记**不豁免**）；
 - **可见**：CI MUST 打印 `::notice` 点名被豁免的文件（豁免**不是**静默的）；
 - **旧标记兼容**：`rst_n_guard: intentionally-unwired` 继续有效（既有护栏在用）。
+
+### ⚠️ 两个**输入口径相反**（已于 2026-11-03 实测修复）
+
+| 判断 | 用哪份文本 | 为什么 |
+|---|---|---|
+| 「这个端口被驱动了吗」 | **剥注释后**的代码 | 注释里写 `set_input_value(...strbe...)` **不是**驱动 ⇒ 一段说明性注释就能让判据假绿 |
+| 「这个文件豁免了吗」 | **未剥注释**的原文 | 标记**本身写在注释里** ⇒ 拿剥注释后的文本匹配**恒不命中** |
+
+🔴 **这条曾经是坏的**：初版两处都用剥注释后的文本 ⇒ ⇒ 豁免机制**从未生效过**，
+而**没有任何用例**能发现（无文件用它 ⇒ 无红无绿）⇒ 与 `fwft_fifo` / `stream_arbiter_sequence`
+的「名字 over-promise」同型。现由 `scripts/lib/input_port_registry.py selftest-exemption`
+（**7** 条纯函数级断言）钉住：该自检在修复前**会红**（已实测），并由 wrapper 的
+`--self-test` 调用。
+
 
 ## 两条护栏的分工（**单一实现点**）
 

@@ -13,14 +13,19 @@ evidence: test:tests/chlib/test_stream.cpp#[ready]
 
 - **Date drafted**: 2026-10-31
 - **Drafted by**: build-agent (builder role)
-- **Status**: 🟡 **P1-a 已实施并归档**（2026-11-01）· **P1-b / P1-c 未收口**
+- **Status**: ✅ **P1-a / P1-b / P1-c 全部收口**（P1-a 2026-11-01 · P1-b/P1-c 2026-11-01 裁决 + 2026-11-02 归档）
   ⇒ ⇒ **已收口**（形态 E · 单阶段）：`mux` · `arbiter×4`（`priority` /
   `round_robin` / `lock` / `sequence`）· `join` · `filters×6` · `combine_with`
-  ⇒ ⇒ **未收口**：**`demux`**（P1-b · 方向修正是**行为变更** ⇒ ⇒ 需独立 ADR）·
-  **`fork`**（P1-c · 同步语义**从未工作过** ⇒ ⇒ 等于新功能）
-  ⇒ ⇒ **builder 子项已移出**（⇒ 「静默丢字」⇒ ⇒ 另立台账
+  ⇒ ⇒ **P1-b（`demux` ready 方向）已收口**：**ADR-056**（Accepted 2026-11-01）
+  ⇒ 实现 `include/chlib/stream.h:1024` 的 `upstream_ready = in_range & selected_ready`
+  ⇒ ⇒ 与 `stream_mux` **双向对称**；越界时 `in_range == 0` ⇒ 上游停顿（**可观测**，不是静默丢数据）
+  ⇒ ⇒ 归档 `openspec/changes/archive/2026-11-02-stream-demux-fork-ready-semantics-2026-11/`
+  ⇒ ⇒ **P1-c（`fork` 同步语义）已收口**：**ADR-057**（Accepted 2026-11-01）
+  ⇒ 实现 `input_stream.ready = AND(各输出 ready)` + `synchronous=false` **建图期响亮拒绝**
+  ⇒ 附带项（fork 注释 MUST 重写）**已兑现**（现注释解释「先建默认驱动再读」而非记录规避写法）
+  ⇒ ⇒ **builder 子项已移出**（⇒ 「上游反压丢失」⇒ ⇒ 另立台账
   `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`
-  ⇒ ⇒ **需 architect 裁决**）
+  ⇒ ⇒ **已由 ADR-055 裁决并落地**，2026-11-01）
   ⇒ ⇒ 归档工件：`openspec/changes/archive/2026-11-01-stream-forward-ready-closure-p1a-2026-11/`
   ⇒ ⇒ ⚠️ **相关但独立**：`stream_arbiter_round_robin` 的「真轮转」缺陷
   ⇒ ⇒ ⇒ 另立台账 `stream-arbiter-rr-rotation-2026-10.md`（**已归档**）
@@ -326,14 +331,21 @@ filters×6 / combine_with）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ builder �
       `connect_ready` —— 调用方直接 `<<=` 覆盖 `result.output_stream.ready`
       ⇒ ⇒ ⇒ 判据**等效且更强** ⇒ ⇒ 变异 `<<=` → `operator=` MUST 转红
       ⇒ ⇒ 已由护栏 R7（**行为**判据）承载）
-- [ ] **效果判据**：fork 单个消费者不就绪 ⇒ ⇒ **上游 stall**（不推进）
-      ⇒ ⇒ ❌ **未做**（**P1-c**）⇒ ⇒ `fork` 的同步语义**从未工作过**
-      ⇒ ⇒ ⇒ 等于**新功能** ⇒ ⇒ 判据**从零建** ⇒ ⇒ 需独立 ADR
-- [ ] **效果判据**：demux 按 `select` 路由 ready ⇒ ⇒ 选中输出的消费端
+- [x] **效果判据**：fork 单个消费者不就绪 ⇒ ⇒ **上游 stall**（不推进）
+      ⇒ ⇒ ✅ **P1-c 已收口**（**ADR-057**，Accepted 2026-11-01）⇒ 实现
+      `input_stream.ready = AND(各输出 ready)`；`synchronous=false` 建图期**响亮拒绝**
+      ⇒ 判据 = `tests/test_stream_demux_fork_dual.cpp` 的 fork 半边（**有 verilator 44 断言 /
+      无 22** ⇒ `44 == 2 × 22` 证明 verilator 半边真的跑过）
+      ⇒ 归档 `openspec/changes/archive/2026-11-02-stream-demux-fork-ready-semantics-2026-11/`
+- [x] **效果判据**：demux 按 `select` 路由 ready ⇒ ⇒ 选中输出的消费端
       不就绪 ⇒ ⇒ **上游** stall
-      ⇒ ⇒ ❌ **未做**（**P1-b**）⇒ ⇒ `demux` 现状 = **方向颠倒**
-      （`output_streams[i].ready = is_selected & input_stream.ready`
-      ⇒ ⇒ 消费端 ready **未**反馈给上游）⇒ ⇒ ⇒ **行为变更** ⇒ ⇒ 需独立 ADR
+      ⇒ ⇒ ✅ **P1-b 已收口**（**ADR-056**，Accepted 2026-11-01）⇒ 实现
+      `include/chlib/stream.h:1024` 的 `upstream_ready = in_range & selected_ready`
+      ⇒ ⇒ 与 `stream_mux` **双向对称**；**越界** ⇒ `in_range == 0` ⇒ 上游停顿
+      （⇒ 是**可观测**的「不吞数据」，而非「ready=1 并丢弃」）
+      ⇒ 判据 = 同一 dual 文件的 demux 半边（默认 1 → 被选中拉低 0 → **非选中隔离**
+      → 切换 → 越界 —— ⚠️ **必须断言默认态 `in_ready == 1`**：修复前它读到 0 而
+      「被挡住」时**也**是 0 ⇒ 只断「为 0」不可区分 = 假绿）
 - [x] **效果判据**：filters 透传反压 ⇒ ⇒ 调用方 ready 跟随下游
       ⇒ ⇒ ✅ **P1-a 已达成**（`filters×6` + `combine_with` 全部改 `<<=`
       ⇒ ⇒ + 建「默认恒就绪」源 ⇒ ⇒ 零破坏）

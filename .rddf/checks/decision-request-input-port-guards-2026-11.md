@@ -153,10 +153,35 @@ D1-A 只列不判 ⇒ 不需要分诊依据）。
 | 2 | `.rddf/checks/input-port-required-registry.md`（分级表）| `(组件, 端口) → 风险等级`；**只两类**（永久复位 / 写入放大）；每条带**判别性用例**指针 |
 | 3 | 登记表的双向校验（可**参数化** `verify_rst_n_wiring.sh`）| 登记表 ⊆ 实际端口（过时 ⇒ 红）**且** 组件加了必需端口但未登记 ⇒ 红；通用豁免 `input_port_guard: intentionally-undriven <port>`（**必须可见、必须窄**）|
 | 4 | 两条护栏的 `--self-test` | 每条判据**单独**变异即转红（合成 fixture ≥ 5 种形态：新增 1 端口 / 新增 0 端口 / 驱动在 helper 内 / 只有 `io().X = value` / 批量重构）|
-| 5 | capability delta | `dual-backend-test-coverage` **可能 MODIFIED**（把「新增端口 MUST 显式驱动」的**核验方式**写进契约）⇒ ⇒ **待实施时判定**（台账 §4 已登记）|
+| 5 | capability delta | ✅ **已判定 = 不写 delta**（2026-11-03，理由见下）|
+
+### 5.1 为什么**不**写 capability delta（判定留痕）
+
+四条理由，任一成立就不该写：
+
+1. **义务本体已有归属** ⇒ 「新增端口 MUST 显式驱动」在 `AGENTS.md §ANTI-PATTERNS`
+   （**约定层**，全仓通用）；`DataTCM.strbe` 这个**具体实例**在
+   `openspec/specs/rv32i-isa-semantics/spec.md` 的专项 Requirement。⇒ ⇒ 再加一条
+   capability Requirement 只会**第三份**重复同一义务 ⇒ 三源必漂移。
+2. **spec 不该绑定实现细节** ⇒ 本次交付物是**脚本 + 登记表**（执行机制）。把
+   「核验方式」写进 capability = 让 spec 引用脚本路径与判据形态 ⇒ 脚本改名/换实现就
+   产生 spec drift（本仓已有 spec 引用 change 名/行号而被迫订正的先例）。
+3. **B8 的教训** ⇒ 不可达的全仓义务写进 spec ⇒ 落地即全红 ⇒ 必被放弃。D2-A 刻意
+   只覆盖**两类已实测风险**；若写成 capability 级 MUST（「所有必需端口 MUST 登记」），
+   它当场就不可达成。
+4. **没有行为面的变化** ⇒ 本 change **零** `src/**` / `include/**` / `tests/**` 改动
+   ⇒ 没有任何可观测行为被新增或修改 ⇒ capability（描述**行为契约**）无可写内容。
+
+⇒ ⇒ **writes-delta 的触发条件**（留给 planner）：只有当下面任一件事发生时才有 delta 可写
+① 把「全仓必需端口登记」升级为契约（= 本单的 D2-B，已否决）；
+② 把「PR MUST 阻断」写成 CI 契约（当前 D1-A 是**只列不判** ⇒ 不构成阻断义务）。
+
+⇒ **复核 owner = planner**（判据/契约归属）；若 planner 认为仍需 delta ⇒ 走独立 change
+（`openspec/changes/<name>/specs/dual-backend-test-coverage/spec.md`），**不**在本轮补。
+
+---
 
 ## 6. 如实登记的边界
-
 - ⚠️ **D1-A 只能「列出」** ⇒ ⇒ 「列出来了但没人看」是**残余风险** ⇒ ⇒ 缓解 = CI 日志用
   `::warning`（显眼）⇒ ⇒ 但**不判违规** ⇒ ⇒ 它**不是**「端口都驱动了」的证明。
 - ⚠️ **存量端口**（D2 未覆盖的类别）**仍然无护栏** ⇒ ⇒ D1 只管**新增**。
