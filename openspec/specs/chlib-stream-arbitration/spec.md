@@ -27,6 +27,17 @@
 回归禁令 = 结构护栏 R12）⇒ ⇒ 本 capability 的仲裁器清单收敛为 **3 个**。
 ⇒ ⇒ 来源：`openspec/changes/archive/2026-11-01-stream-arbiter-rr-rotation-2026-11/`。
 
+⇒ ⇒ ⇒ **当前状态（2026-11-03 · ADR-065）**：`stream_arbiter_lock` 与
+`round_robin_arbiter` 的**两处「建图期求值」缺陷**已修 —— ① 锁定仲裁器的选择
+逻辑原写成**普通 C++ `if/else`** ⇒ 恒选通道 0 且**输出别的通道的 payload**
+（**静默数据损坏**）；② 轮转仲裁器的 `next_ptr` 原**恒 0**（实为「固定最低位
+优先」⇒ 低位通道饿死高位通道）⇒ ⇒ 新增第 3 条 Requirement（选择与锁存 MUST
+用硬件原语表达）⇒ 来源：
+`openspec/changes/archive/2026-11-03-chlib-arbiter-buildtime-eval-fix-2026-11/`。
+⚠️ **实施期另挖出一个框架层缺陷**：interpreter 的 `eq` 在「宽操作数 vs 窄操作数」
+且**移位量 ≥ 2** 时判错 ⇒ ⇒ 轮转判定 MUST 用 `bit_select` 而非「与宽移位结果
+比较」⇒ 该框架缺陷已**独立立项**。
+
 ⚠️ **命名诚实性的**持续**机制**（2026-11-02 · B8）：本仓已发生**三次**「名字/注释
 承诺了不存在的行为」（`fwft_fifo` · `stream_arbiter_sequence` ·
 `stream_arbiter_round_robin`）⇒ ⇒ 三次都是**临时普查**发现的 ⇒ ⇒ 需要一条
