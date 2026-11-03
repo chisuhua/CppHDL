@@ -3,7 +3,7 @@
 | id | status | phase_refs | theme |
 |---|---|---|---|
 | `feat-cache-rewrite` | completed | phase-4, phase-5 | cache 子系统从 C-style 数组重写为 ch_mem（ADR-039）+ Sync/Async 双变体（ADR-041）+ stub 物理退役（ADR-037） |
-| `feat-dual-backend-coverage` | active | phase-4, phase-5 | 单元测试统一跑 interpreter + verilator 双后端（5 阶段推进） |
+| `feat-dual-backend-coverage` | completed | phase-4, phase-5 | 单元测试统一跑 interpreter + verilator 双后端（5 阶段推进） |
 | `feat-hdl-logical-deprecation` | active | phase-4, phase-5 | ADR-036 逻辑算子 deprecation 标记 → 全量迁移 → 移除（removal gate） |
 | `feat-hierarchical-rtl-output` | active | phase-5 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致） |
 | `feat-platform-matrix` | active | phase-3, phase-5 | CI 平台矩阵扩展（macOS-14 已启用 → Windows-2022） |

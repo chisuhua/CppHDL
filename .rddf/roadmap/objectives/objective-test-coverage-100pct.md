@@ -1,8 +1,8 @@
 ---
 id: objective-test-coverage-100pct
-status: active
+status: completed
 created: 2026-10-19
-last_revised: 2026-10-30
+last_revised: 2026-11-03
 review_by: 2027-01-17
 owner: rdd-planner
 priority: P1
@@ -105,10 +105,16 @@ CppHDL 的 ~150 个 `add_catch_test` 单元测试仅走 interpreter 路径，而
   本行保留仅作**愿景**陈述，**不**作闸门。
 - 完成判据（done-when）：
   - [x] `dual-backend-test-coverage` capability spec 落地 ✅（已达成）
-  - [ ] Phase 1-5 of `verilator-parity-all-tests` 全部 ship（**Phase 1–3 已 ship；4–5 未完成**）
-  - [ ] ⭐ **双后端 parity 源文件数 ≥ 60**（**2026-11-02 实测 37** ⇒ 未达成；
-        口径定义见上 ⇒ 取代旧的「`ctest -L verilator_e2e` ≥ 100」）
-  - [x] `ctest -LE perf` 零回归（**2026-10-26 实测 191/191**）+ CTEST_TOTAL 同步（**202**）
+  - [x] Phase 1-4 of `verilator-parity-all-tests` 全部 ship + archived ✅
+        （**2026-11-03 订正**：原措辞写「Phase 1-5」⇒ ⇒ Phase 5 **从未以 change 形式存在**；
+        Phase 5 的两半分别收口 —— 「64-bit / clock / reset 专项」= 4 个已注册 target
+        （`test_dual_backend_{64_bit,clock,reset,template}`）；「全量 100%」已被本节的
+        parity 口径**取代** ⇒ ⇒ 详见 `.rddf/checks/objective-test-coverage-status-2026-11.md` §2）
+  - [x] ⭐ **双后端 parity 源文件数 ≥ 60**（**2026-11-03 实测 66** ⇒ ✅ 达成，margin 10%；
+        历史链：37 @ 2026-11-02 → 60 @ 路线 C 第 1 批 → 65 @ `mux-slot-width-preservation`
+        → **66** @ `wide-shl-truncate-word-carry`；口径定义见上 ⇒ 取代旧的
+        「`ctest -L verilator_e2e` ≥ 100」）
+  - [x] `ctest -LE perf` 零回归（**2026-11-03 实测 232/232**）+ CTEST_TOTAL 同步（**243**）
   - [x] 判据修订已落**机械锚点**（根 `AGENTS.md` 的 `DUAL_BACKEND_PARITY_TOTAL` 行
         + `scripts/verify_test_counts.sh` 的对应检查）⇒ 防止「静默缩面」
 
@@ -286,19 +292,30 @@ build 只交数字 + 交证据）。
 
 ### 9.2 Go / No-Go Decision Gate
 - **Go 判据**（满足全部 3 条 → 转 completed）：
-  - [ ] Phase 1-5 全部 ship + archived（**Phase 1–3 已 ship；4–5 未完成**）
-  - [ ] ⭐ **双后端 parity 源文件数 ≥ 60**（**2026-11-02 实测 37**；⚠️ 取代旧判据
-        「`ctest -L verilator_e2e` ≥ 100」—— 后者的诚实上限 [71, 96] < 100 ⇒
-        **现有语料内不可达**；新口径的定义、现状、上限与 margin 理由见 §2
+  - [x] Phase 1-4 全部 ship + archived（**2026-11-03 订正措辞**：原写「Phase 1-5」，
+        但 Phase 5 **从未以 change 形式存在** ⇒ 它的两半分别收口 ——
+        「64-bit / clock / reset 专项」= 4 个已注册 dual target；
+        「全量 100%」已被 §2 的 parity 口径取代 ⇒ 见
+        `.rddf/checks/objective-test-coverage-status-2026-11.md` §2）
+  - [x] ⭐ **双后端 parity 源文件数 ≥ 60**（**2026-11-03 实测 66** ⇒ ✅ 达成；
+        ⚠️ 取代旧判据「`ctest -L verilator_e2e` ≥ 100」—— 后者的诚实上限 [71, 96] < 100
+        ⇒ **现有语料内不可达**；新口径的定义、现状、上限与 margin 理由见 §2
         ⇒ ⇒ **2026-11-02 P1 裁决**：「诚实上限」的构成**重述**为
         「既有可转 + **新增有意义 dual 文件**」⇒ ⇒ 不变量**未被违反**
         ⇒ ⇒ 阈值 **60 保持不变** ⇒ ⇒ 路线 A 终点 49 ⇒ ⇒ **差额 11 MUST 由
         路线 B（新增有意义 dual 文件）补足** ⇒ ⇒ ⇒ ⇒ **⇒ 阈值从「可达性
         赌注」变成「工作量目标」⇒ ⇒ 防硬凑的责任转移（见 §2 的三条机制）**)
-  - [x] CTEST_TOTAL 同步（**202**）+ `verify_test_counts.sh` 绿
+  - [x] CTEST_TOTAL 同步（**243**）+ `verify_test_counts.sh` 绿
 - **No-Go 判据**（任一成立 → defer）：
   - PR feedback 墙钟持续 > 45 min（需降级 Phase 2-5）
   - verilator codegen 暴露无法在合理工期内修复的系统性 bug
+
+> ✅ **2026-11-03 裁决：转 `completed`**（planner 采纳 build 交付的选项 A）。
+> 依据 = `.rddf/checks/objective-test-coverage-status-2026-11.md`（三条 Go 判据逐条
+> 证据 + Phase 映射 + 三个选项的代价分析）⇒ 台账见 §11 最后一行。
+> ⚠️ **关闭 ≠ 「双后端覆盖到此为止」**：后续 dual 判据按**缺陷驱动**推进
+> （本轮 `mux-slot-width-preservation` / `wide-shl-truncate-word-carry` 两个 change
+> 都是在 232 个测试**全绿**时挖出的真 bug ⇒ ⇒ 那才是 parity 的边际价值所在）。
 
 ### 9.3 跨 objective 影响
 - 受此 objective 影响的下游：`objective-rv32i-e2e`（macro 基础设施）+ `objective-cache-stub-retired`（Phase 2 cache 迁移）
@@ -322,3 +339,4 @@ build 只交数字 + 交证据）。
 | sprint-2026-11 | defect-fix | 🟢 **ADR-064 落地：chlib stream 宽度适配器重写**（路线 B 4 问① 的只读查重挖出） | **重写**（三个 API 修前**一仿真就 SIGSEGV**）；**核心裁决 = 输出改寄存器（+1 拍）**，理由是**可测试性**（组合输出在本仓读模型下**不可观测** ⇒ 写不出 parity 判据）；删 `stream_extend`/`truncate` ⇒ parity 源文件数 61 → **62** · PAIRS 272 → **276** | 该组件的既有 8 个 TEST_CASE **零 Simulator** ⇒ 图从不被实例化 ⇒ 「一仿真就崩」**完全不可见** ⇒ 又一次印证「绿 ≠ 对」；且它是路线 B **仅剩**的 parity 候选 |
 | sprint-2026-11 | defect-fix | 🟢 **ADR-065 落地：chlib 仲裁器族两处「建图期求值」缺陷**（`stream_arbiter_lock` + `round_robin_arbiter`） | **两处都修**（不删除：无替代能力）；A-3 新增 `locked` 寄存器让「锁到事务完成」**首次兑现** + `out.valid` 改为**选中通道**的 valid；A-4 删外层 `if` ⇒ select 链无条件执行 ⇒ parity 源文件数 62 → **63** · PAIRS 276 → **283** | A-3 修前**输出别的通道的 payload**（静默数据损坏，`out.valid` 仍对 ⇒ 更难发现）⇒ 又一次「绿 ≠ 对」；⚠️ 实施期又挖出**框架层** `eq` 宽操作数误判（独立立项）|
 | sprint-2026-11 | coverage | 🟢 **路线 C 第 3 批：RV32I 体系结构层三组件进双后端 parity**（`Rv32iPc` · `Clint` · `CsrBank`） | **纯覆盖增量**（三者 dual 覆盖均为 0 且都含 `ch_reg` ⇒ 走 `always_ff` 路径 ⇒ 两后端最易分叉处）⇒ parity 源文件数 63 → **64** · PAIRS 283 → **287** | 与路线 C 第 1/2 批（流水线核心）**互补** —— 本批覆盖**体系结构层**；⚠️ M8 首轮恒绿暴露**激励的判别力缺口**（`mstatus.MIE` 恒 1 ⇒ 全局门控从未起作用）|
+| sprint-2026-11 | close | ✅ **objective 关闭（`status: completed`）** —— 三条 Go 判据全部达成 | planner 采纳 build 交付的**选项 A（直接关闭）**：① parity 源文件数 **66 ≥ 60**（margin 10%，历史链 37 → 60 → 65 → **66**）；② Phase 1–4 全部 archived，Phase 5 **两半分别收口**（64-bit/clock/reset 专项 = 4 个已注册 dual target；「全量 100%」已被 §2 的 parity 口径取代）；③ `CTEST_TOTAL` **243** + `verify_test_counts.sh` 绿 + `ctest -LE perf` **232/232**。⇒ 同批订正 Go 判据 ① 的措辞（原写「Phase 1-5」⇒ Phase 5 从未以 change 存在）与判据 ③ 的旧计数（202 → **243**）⇒ 依据 = `.rddf/checks/objective-test-coverage-status-2026-11.md`（三条判据逐条证据 + Phase 映射 + 三选项代价分析）⇒ ⚠️ **关闭 ≠ 终止**：后续 dual 判据按**缺陷驱动**推进（`mux-slot-width-preservation` / `wide-shl-truncate-word-carry` 都是在 232 个测试全绿时挖出的真 bug）⇒ 那才是 parity 的边际价值 |
