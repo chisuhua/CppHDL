@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-11-03
+# ⚠️ 本 change **无** spec 变更：
+#   ① 本批是**纯测试覆盖增量**（不新增/修改任何 capability 的 Requirement 或 Scenario）——
+#      三个组件的契约**早已存在**（`rv32i-pipeline-commit-path` / `cpu-clint-timer` /
+#      `rv32i-isa-semantics`），本批只是把「零 dual 覆盖」补成「有双后端判据」；
+#   ② 本批**未挖出**需要修复的缺陷 ⇒ ⇒ 无行为变更 ⇒ ⇒ 无需 delta。
+skip_specs: true

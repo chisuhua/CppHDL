@@ -634,6 +634,14 @@ add_dual_backend_test(test_stream_arbiter_lock_dual
     TIMEOUT 300
 )
 
+# ⚠️ **路线 C 第 3 批**：RV32I 的三个「含时序状态」组件进双后端 parity
+#    （`riscv::Rv32iPc` · `ch::chlib::Clint<1>` · `riscv::CsrBank`）
+#    ⇒ 三者 dual 覆盖均为 0 ⇒ 且都走 `always_ff` codegen 路径（两后端最易分叉处）。
+add_dual_backend_test(test_rv32i_arch_dual
+    SOURCES test_rv32i_arch_dual.cpp
+    TIMEOUT 300
+)
+
 # ⚠️ **路线 C 第一批 —— RV32I 微架构组件进双后端 parity**（2026-11-03）
 #    ⇒ **零 DUT 复制**：`MemStage` / `ExStage` / `Rv32iDecoder` **本身带顶层端口**
 #      ⇒ 直接当 DUT（与 `test_hazard_complete_dual.cpp` 同型）⇒ 成本最低。
