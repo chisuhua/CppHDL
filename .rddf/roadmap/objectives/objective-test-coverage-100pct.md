@@ -126,7 +126,8 @@ build 只交数字 + 交证据）。
 | 现状（2026-11-03 实测，post `dual-backend-parity-route-b-stream-arbiter`） | **59** |
 | 路线 A 剩余（**12** − **5** 已落地 = 7 ⇒ ⇒ ⚠️ **实测逐条复核后只有 3 个真可转**（另 6 个是重复/无端口/纯结构 ⇒ cache Async 与 hazard_complete **均已落地**） | **+1**（`operation_results` 的部分） |
 | 路线 B 剩余（**7** 个**实测零覆盖** chlib 组件，已落地 **6** 个（`bitwise`/`onehot`/`arithmetic_advance`/**`stream_pipeline`**/**`selector_arbiter`**/**`stream_arbiter`**）⇒ ⇒ **剩 1**：`stream_width_adapter`；⚠️ **2026-11-03 只读查重结论**：三者**全部**「既有测试是裸 context ⇒ R6 排除项 ⇒ **不可转换**」⇒ ⇒ 只能新写；且 `stream_arbiter`（`stream_arbiter_lock` 恒选通道 0）与 `selector_arbiter`（`round_robin_arbiter` 不轮转）**带已实测的真缺陷** ⇒ ⇒ **先修缺陷再覆盖**，否则 dual parity 会给缺陷盖章 ⇒ ⇒ `selector_arbiter` 只剩干净的 `priority_selector` + `round_robin_selector` 可做（✅ **已落地** ⇒ 只剩带缺陷的 `round_robin_arbiter` 待修缺陷后再做）；`stream_width_adapter` 的 `stream_extend`/`stream_truncate` **零消费者** ⇒ 按 Zero-Debt 应删、不测） | **+0~3** |
-| **实测可达上限** | **🔴 实测收敛到 60**（乐观 59 + 1（路线 A 真可转剩）= **60**）⇒ ⇒ ⚠️ **但那 +1 已于 2026-11-03 被 4 问① 证伪**（`operation_results` 的算术/位运算/比较维度**已被** `test_arithmetic_carry_dual`（含 `compare<8>` 的 gt/eq）/ `test_bitwise_dual` 覆盖，`ne`/`lt` 仅为取反 ⇒ **零增量**）⇒ ⇒ **实测可达上限 = 59** ⇒ ⇒ **阈值 60 在「不修缺陷、不写零增量文件」的前提下不可达** ⇒ ⇒ **需 planner 裁决**：① 先修 3 个**已实测的真缺陷**（`stream_arbiter_lock` 恒选通道 0 · `round_robin_arbiter` 不轮转 · 三个 stream 宽度适配器**一仿真就 SIGSEGV**）再补覆盖（各 +1 ⇒ ⇒ 62）；或 ② 下调阈值 / ③ 改口径（见下方「实测发现」第 5 条） |
+| **实测可达上限** | **🔴 实测收敛到 60**（乐观 59 + 1（路线 A 真可转剩）= **60**）⇒ ⇒ ⚠️ **但那 +1 已于 2026-11-03 被 4 问① 证伪**（`operation_results` 的算术/位运算/比较维度**已被** `test_arithmetic_carry_dual`（含 `compare<8>` 的 gt/eq）/ `test_bitwise_dual` 覆盖，`ne`/`lt` 仅为取反 ⇒ **零增量**）⇒ ⇒ **实测可达上限 = 59** ⇒ ⇒ **阈值 60 在「不修缺陷、不写零增量文件」的前提下不可达** ⇒ ⇒ **需 planner 裁决**：① 先修 3 个**已实测的真缺陷**（`stream_arbiter_lock` 恒选通道 0 · `round_robin_arbiter` 不轮转 · 三个 stream 宽度适配器**一仿真就 SIGSEGV**）再补覆盖（各 +1 ⇒ ⇒ 62）；或 ② 下调阈值 / ③ 改口径（见下方「实测发现」第 5 条）
+| ⚠️ **2026-11-03 订正（本行的「不可达」结论已由下一条实测发现推翻）**：**「59 = 上限」是在「chlib 语料 + 路线 A 候选清单」这个**封闭语料**内测得的** ⇒ ⇒ ⇒ ⇒ **全仓 `include/**` 的只读盘点（2026-11-03）发现**第 6 类候选**（**路线 C**）⇒ ⇒ ⇒ **⇒ 「阈值 60 不可达」的结论**不再成立** ⇒ ⇒ ⇒ **⇒ 但每个候选仍 MUST 逐个过 4 问**（4 问① 的「SoC 级 hand-crafted dual 已覆盖」这一格**逐案裁决**）⇒ ⇒ ⇒ **⇒ 上限重新开放** |
 
 > ⚠️ 上表是**实测台账**（owner = planner 的判据 + build 交的数字），
 > 每次路线 A/B 批次归档后**只更新「现状」与由它推出的算术**，不动判据条款。
@@ -180,6 +181,63 @@ build 只交数字 + 交证据）。
 > ③ 下调阈值到实测上限）。
 > ⚠️ **同时登记一个口径盲区**：现行口径数**源文件数** ⇒ ⇒ **在既有 dual 文件里加 pair
 > 对闸门零贡献**（但边际价值可能很高）⇒ ⇒ 口径**奖励「开新文件」而非「加深既有文件」**。
+
+> 🔴🔴🔴🔴 **2026-11-03 第五条实测发现（**第 6 类候选 = 路线 C** ⇒ ⇒ "
+> **推翻「阈值 60 不可达」的结论**）**：build 侧做了一次**全仓 `include/**` 的只读盘点**
+> （不限于 `include/chlib/**`）⇒ ⇒ 查出 **13 个「组件层零 dual 覆盖」的 RV32I 组件**：
+>
+> | 组件 | 头文件 | 顶层端口 | >64bit | `ch_reg` | `ch_mem` | 内部 `ch_module` |
+> |---|---|---|---|---|---|---|
+> | `ExStage` | `include/cpu/pipeline/stages/ex_stage.h` | 12 | **无** | 0 | 0 | **0** |
+> | `IdStage` | `include/cpu/pipeline/stages/id_stage.h` | 16 | **无** | **16** | 0 | **0** |
+> | `MemStage` | `include/cpu/pipeline/stages/mem_stage.h` | 9 | **无** | 0 | 0 | **0** |
+> | `WbStage` | `include/cpu/pipeline/stages/wb_stage.h` | 6 | **无** | 0 | 0 | **0** |
+> | `Rv32iDecoder` | `include/cpu/pipeline/rv32i_decoder.h` | 9 | **无** | 0 | 0 | **0** |
+> | `Rv32iRegFile` | `include/cpu/pipeline/rv32i_regfile.h` | 6 | **无** | **32** | 0 | **0** |
+> | `Rv32iAlu` | `include/cpu/pipeline/rv32i_alu.h` | 6 | **无** | 0 | 0 | **0** |
+> | `Rv32iPc` | `include/cpu/pipeline/rv32i_pc.h` | 2 | **无** | 1 | 0 | **0** |
+> | `DataTCM` / `InstrTCM` | `include/cpu/pipeline/rv32i_tcm.h` | 1+ | **无** | 0 | **2** | **0** |
+> | `Clint` | `include/cpu/riscv/clint.h` | 3 | **无** | **4** | 0 | **0** |
+> | `CsrBank` | `include/cpu/riscv/rv32i_csr.h` | 9 | **无** | **9** | 0 | **0** |
+> | `ExceptionUnit` | `include/cpu/riscv/rv32i_exception.h` | 11 | **无** | 0 | 0 | **0** |
+> | `AddressDecoder` | `include/cpu/riscv/address_decoder.h` | 2 | **无** | 0 | 0 | **0** |
+>
+> ⇒ ⇒ **四条实测结论**（每条都可机械复核）：
+> ① **全部**组件的顶层端口 **≤ 64 bit** ⇒ ⇒ **不触发** ADR-035 的 verilator 端口宽度上限
+>    ⇒ ⇒ ⇒ 可作 dual DUT；
+> ② **全部**组件 `describe()` 内**零 `ch_module`** ⇒ ⇒ ⇒ **可 `ch_device<T>` 单独实例化**
+>    ⇒ ⇒ ⇒ ⇒ **零 DUT 复制**（与 `HazardUnitComplete` / `IfStage` 同型 ⇒ ⇒ 成本最低）；
+> ③ 这些符号在**全部 58 个 macro dual 文件**里**各出现 0 次** ⇒ ⇒ ⇒ **组件层零 dual 覆盖**
+>    ⇒ ⇒ ⇒ ⇒ ⚠️ 唯一的既有覆盖是 **SoC 级**（`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp`
+>    的 hand-crafted dual）⇒ ⇒ **判别形态不同**（整 SoC 的固件轨迹 vs 单个 stage 的契约）
+>    ⇒ ⇒ ⇒ ⇒ ⇒ 4 问① **需逐案裁决**，但**不是**「已被覆盖 ⇒ 零增量」；
+> ④ 多个组件含 `ch_reg` ⇒ ⇒ **走 `always_ff` codegen 路径** ⇒ ⇒ ⇒ 两后端最易分叉处
+>    （`IdStage` 16 个 · `Rv32iRegFile` 32 个 · `CsrBank` 9 个 · `Clint` 4 个），
+>    且 `DataTCM` 用 `aread`（0-cycle）· `InstrTCM` 用 `sread`（1-cycle）⇒ ⇒ ⇒ **两种读口时序都有**。
+>
+> ⇒ ⇒ ⇒ **⇒ 为什么这批价值高（不只是补数字）**：这些组件是 **RV32I 微架构的单一权威**
+> （ADR-046 把 `examples/riscv-mini/src/` 收敛成 `include/cpu/`）⇒ ⇒ ⇒ **最近的 3 个真缺陷
+> 全部落在这一层**（`MemStage` 的 `LB` 符号扩展用错掩码〔`rv32i-load-byte-lane-2026-10`〕
+> · `IdStage` 的 U 型立即数用 20 位掩码 + `alu_op` 的 SUB/SRA 误判〔同上 change 连带修复〕
+> · `DataTCM` 的 `strbe` 字节使能〔`rv32i-store-byte-enable-2026-10`〕）⇒ ⇒ ⇒
+> ⇒ ⇒ **这 3 个缺陷当初都只被「SoC 级固件」抓到** ⇒ ⇒ ⇒ **组件级覆盖能把它前置**
+> ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 这正是 objective §2「dual 覆盖是缺陷发现机制」的延伸**。
+>
+> ⚠️ **如实登记的边界（build 交的是**候选池**，不是「已验证可行」**）**：
+> ① 4 问**尚未逐个跑完** ⇒ ⇒ ⇒ **13 个 ≠ 13 个都能做**（历史命中率约 50–60%）；
+> ② `Rv32iRegFile` 的 `clk` / `rst` 是**死端口**（`describe()` 从不读 ⇒ 与
+>    `rv32i_pipeline_regs.h:190` 的 `clk` 同型）⇒ ⇒ ⇒ **必须显式驱动**（未驱动 = 未定义值）
+>    ⇒ ⇒ ⇒ 否则会「碰巧通过」；
+> ③ 组件级 `ch_reg` 数量大 ⇒ ⇒ ⇒ 生成的 Verilog 更大 ⇒ ⇒ ⇒ **每 pair 编译单价可能 > 10.6 s**
+>    ⇒ ⇒ ⇒ **墙钟 MUST 实测回填**（不得照搬模型）；
+> ④ `DataTCM` 的 `aread` + `ch_mem::write` ⇒ ⇒ ⇒ 命中**陷阱 T6**（填充在同一 `tick()`
+>    的收尾求值里可见 ⇒ ⇒ 「填充拍之后」的 `miss` / 数据**不可观测**）⇒ ⇒ ⇒ 期望值表 MUST 按此建模。
+>
+> ⇒ ⇒ ⇒ **⇒ 结论**：**「阈值 60 在『不修缺陷、不写零增量文件』的前提下不可达」这个
+> 2026-11-03 的实测结论，其适用范围是「chlib 语料 + 路线 A 清单」，不是全仓**
+> ⇒ ⇒ ⇒ **⇒ 路线 C 给出了第 60 个（及更多）的**干净**候选** ⇒ ⇒ ⇒
+> ⇒ ⇒ **⇒ planner 的三个选项（修缺陷 / 下调阈值 / 改口径）中，选项 ① 与 ③ 都不必立刻动**
+> ⇒ ⇒ ⇒ ⇒ **⇒ 建议改为「先做路线 C 第一批」**（详见 `.rddf/checks/handoff-2026-11-02-parity-route-ab.md` §4.7）。
 
 ⚠️ **第一版估算为什么乐观**：路线 B 的「既有文件」池**已见底**
 （`test_stream_operators` 全结构性 · `test_lnode_entry_set` / `test_multithread` /

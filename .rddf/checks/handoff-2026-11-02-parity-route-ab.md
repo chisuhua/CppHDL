@@ -135,6 +135,75 @@ objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐
 均为 **C++ 侧判断**（容器 `size()` / 模板常量 / 节点守卫）⇒ **无第二处同型缺陷**；
 唯一边缘项 = `arithmetic.h:190` 的 `if (sign_bit)`（**仅**当移位量 ≥ 位宽时命中）。
 
+## 4.7 🔴🔴🔴 路线 C：**全仓 `include/**` 只读盘点 ⇒ 第 6 类候选（推翻「60 不可达」）**
+
+盘点范围**不再限于** `include/chlib/**` ⇒ ⇒ 而是**全仓** `include/**` 的每个头文件
+⇒ ⇒ 判据 = 「该头文件里的公开符号，在**全部 58 个** macro dual 文件里是否出现」
+⇒ ⇒ ⚠️ **零出现** ⇒ ⇒ ⇒ ⇒ **组件层零 dual 覆盖**。
+
+### ① 候选池（13 个 RV32I 组件；四条实测结论）
+
+| 组件 | 顶层端口 | >64bit | `ch_reg` | `ch_mem` | 内部 `ch_module` | 读口 |
+|---|---|---|---|---|---|---|
+| `ExStage` | 12 | 无 | 0 | 0 | 0 | — |
+| `IdStage` | 16 | 无 | **16** | 0 | 0 | — |
+| `MemStage` | 9 | 无 | 0 | 0 | 0 | — |
+| `WbStage` | 6 | 无 | 0 | 0 | 0 | — |
+| `Rv32iDecoder` | 9 | 无 | 0 | 0 | 0 | — |
+| `Rv32iRegFile` | 6 | 无 | **32** | 0 | 0 | — |
+| `Rv32iAlu` | 6 | 无 | 0 | 0 | 0 | — |
+| `Rv32iPc` | 2 | 无 | 1 | 0 | 0 | — |
+| `DataTCM` / `InstrTCM` | 1+ | 无 | 0 | **2** | 0 | `aread` / `sread` |
+| `Clint` | 3 | 无 | **4** | 0 | 0 | — |
+| `CsrBank` | 9 | 无 | **9** | 0 | 0 | — |
+| `ExceptionUnit` | 11 | 无 | 0 | 0 | 0 | — |
+| `AddressDecoder` | 2 | 无 | 0 | 0 | 0 | — |
+
+1. **端口全部 ≤ 64 bit** ⇒ ⇒ 不触发 ADR-035 的 verilator 端口上限 ⇒ ⇒ 可作 dual DUT；
+2. **`describe()` 内零 `ch_module`** ⇒ ⇒ 可 `ch_device<T>` 单独实例化 ⇒ ⇒ **零 DUT 复制**
+   （与 `HazardUnitComplete` / `IfStage` 同型 ⇒ 成本最低）；
+3. **组件层零 dual 覆盖**（58 个 macro 文件里各出现 0 次）
+   ⇒ ⇒ 唯一既有覆盖是 **SoC 级**（`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp`
+   的 hand-crafted dual）⇒ ⇒ **判别形态不同**（整 SoC 固件轨迹 vs 单 stage 契约）
+   ⇒ ⇒ 4 问① **逐案裁决**（**不是**「已被覆盖 ⇒ 零增量」）；
+4. 多个组件含 `ch_reg` ⇒ ⇒ 走 `always_ff` codegen 路径 ⇒ ⇒ 两后端最易分叉处；
+   `DataTCM`（`aread`）/ `InstrTCM`（`sread`）⇒ ⇒ **两种读口时序都有**。
+
+### ② 为什么价值高（不只是补数字）
+
+这些组件是 **RV32I 微架构的单一权威**（ADR-046 把 `examples/riscv-mini/src/` 收敛进
+`include/cpu/`）⇒ ⇒ ⇒ **最近 3 个真缺陷全部落在这一层**：
+
+| 缺陷 | 组件 | 修复 change | 当初怎么抓到的 |
+|---|---|---|---|
+| `LB` 符号扩展用 `0xFF000000`（只填 bit31..24） | `MemStage` | `rv32i-load-byte-lane-2026-10` | **SoC 级固件**（仓内 riscv-tests 依赖 ⇒ CI 全 SKIP ⇒ 有效覆盖 0） |
+| U 型立即数用 20 位掩码 + `alu_op` 的 SUB/SRA 误判 | `IdStage` | 同上 change 连带修复 | **SoC 级固件** |
+| `strbe` 字节使能（新增输入端口 ⇒ 未驱动 = 全 1） | `DataTCM` | `rv32i-store-byte-enable-2026-10` | **SoC 级** |
+
+⇒ ⇒ ⇒ **这 3 个缺陷当初都只被「SoC 级固件」抓到** ⇒ ⇒ ⇒ **组件级覆盖能把它前置**
+⇒ ⇒ ⇒ ⇒ ⇒ 这正是 objective §2「dual 覆盖是**缺陷发现机制**」的延伸。
+
+### ③ ⚠️ 如实登记的边界（**候选池 ≠ 已验证可行**）
+
+- 4 问**尚未逐个跑完** ⇒ ⇒ **13 个 ≠ 13 个都能做**（历史命中率约 50–60%）；
+- `Rv32iRegFile` 的 `clk` / `rst` 是**死端口**（`describe()` 从不读 ⇒ 与
+  `rv32i_pipeline_regs.h:190` 的 `clk` 同型）⇒ ⇒ **必须显式驱动**（未驱动 = 未定义值）
+  ⇒ ⇒ 否则「碰巧通过」；
+- 组件级 `ch_reg` 数量大 ⇒ ⇒ 生成的 Verilog 更大 ⇒ ⇒ **每 pair 编译单价可能 > 10.6 s**
+  ⇒ ⇒ ⇒ **墙钟 MUST 实测回填**（不得照搬模型）；
+- `DataTCM` 的 `aread` + `ch_mem::write` ⇒ ⇒ 命中**陷阱 T6**（填充在同一 `tick()` 的收尾
+  求值里可见 ⇒ ⇒ 「填充拍之后」的数据**不可观测**）⇒ ⇒ ⇒ 期望值表 MUST 按此建模。
+
+### ④ 建议的**路线 C 第一批**（**最省**、判别力最强）
+
+| 目标 | 为什么第一批 | 判别维度 |
+|---|---|---|
+| `MemStage` | 2026-10-26 的 `LB` 掩码缺陷就在这里 ⇒ **组件级能前置抓到**；`funct3` 驱动的字节道选择有 4 种形态 | `LB/LBU/LH/LHU` 的符号扩展 + 字节道选择 |
+| `ExStage` | ALU 操作码覆盖面大（`alu_op` 4 bit）⇒ 判别维度最多；**纯组合** ⇒ 编译便宜 | ALU 运算族 + 分支/跳转的 `branch_taken` 语义 |
+| `Rv32iDecoder` | 纯组合；立即数提取的符号扩展是**历史缺陷高发区** | I/S/B/U/J 型立即数提取 |
+
+⇒ ⇒ 三者**合计 1 个新 dual 文件**（3 个 pair）⇒ ⇒ ⇒ **parity 59 → 60 ⇒ ⇒ 阈值达成**。
+
 ## 5. 下一步（按优先级）
 
 ### A. ~~`chlib/arithmetic_advance.h`~~ ✅ **已完成**（`test_arithmetic_advance_dual`，3 pair / 104）
@@ -159,6 +228,7 @@ objective §2 的台账写「路线 A 剩余 12 − 3 已落地 = **9**」。逐
 | `chlib/stream_pipeline.h` | ✅ **已落地**（G 批 · 3 pair / 72） | ADR-055 刚重写 ⇒ 回归价值最高 |
 | `chlib/selector_arbiter.h` | ✅ **已落地**（H 批 · 2 pair / 34） | `priority_selector` + `round_robin_selector` **无 C++ `if`** ⇒ 干净 ⇒ **已做**；`round_robin_arbiter` **带缺陷** ⇒ 须先修 |
 | `chlib/stream_arbiter.h` | ✅ **已落地**（I 批 · 2 pair / 96） | `stream_arbiter_priority` + `stream_arbiter_round_robin` **无缺陷** ⇒ **已做**；`stream_arbiter_lock` **带缺陷**（恒选通道 0 + 输出错误数据）⇒ 须先修 |
+| **路线 C · `include/cpu/**` 的 RV32I 组件（13 个）** | 🟢 **候选池（新发现）** | 端口全 ≤64bit · 零内部 `ch_module` ⇒ **零 DUT 复制** · 组件层零 dual 覆盖 · 含 `ch_reg` ⇒ 走 `always_ff` 路径 ⇒ **推荐第一批：`MemStage` + `ExStage` + `Rv32iDecoder`（⇒ 60）** ⇒ 详见 §4.7 |
 | `chlib/stream_width_adapter.h` | 🔴 **暂缓** | 🔴 **实测：三个真实适配器「构建能过、一仿真就 SIGSEGV」**（空操作数的 mux ⇒ `Simulator::initialize()` 崩溃）⇒ ⇒ 既有的 8 个用例**从不构造 Simulator** ⇒ **零行为覆盖**⇒ 须先修 |
 
 ⇒ 详见 §4.6（只读查重的完整结论 + 两个新缺陷的证据）。
