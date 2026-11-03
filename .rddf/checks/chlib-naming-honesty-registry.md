@@ -36,6 +36,8 @@ rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MU
 | `stream_narrow_to_wide` | 累积 `RATIO` 个窄字为**一个**宽字（第 k 个落在 `[k*NB,(k+1)*NB)`），宽字**含最后一个窄字**且**组间隔离**；输出 `valid`/`payload` **寄存器化**（+1 拍） | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][narrow_to_wide][dual][adr064]` | 2026-11-03 ADR-064 重写：修复前**一仿真就 SIGSEGV**、且宽字**缺最后一个字** + 累积器不清零（跨组污染）|
 | `stream_wide_to_narrow` | 把宽字拆成 `RATIO` 个窄字，**低字节优先**；输出满时上游 `ready=0` | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][wide_to_narrow][dual][adr064]` | 同上（修复前 `initialize()` SIGSEGV + `input.ready` 用 `operator=` ⇒ 上游收不到反压）|
 | `stream_width_adapter` | 按位宽**自动择向**的泛型入口；同宽 ⇒ 零状态直通 | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][passthrough][dual][adr064]` | 同上（修复前同宽分支同样 SIGSEGV）|
+| `stream_arbiter_lock` | **租借式**仲裁：一旦授予某通道，**保持选中直到事务完成**（`valid & ready`）；输出 `valid` = **选中通道**的 valid；输出 payload = **选中通道**的 payload | `tests/chlib/test_stream_arbiter_lock_dual.cpp` · `[chlib][stream][arbiter][lock][select][dual][adr065]` | 2026-11-03 ADR-065 修复：修复前选择由**建图期求值**的 C++ `if` 决定 ⇒ **恒选通道 0 且输出别的通道的 payload**（静默数据损坏）；且锁存**从未实现**（`ch_reg` 的 C++ 赋值）；`out.valid` 用「任一通道 valid」 |
+| `round_robin_arbiter` | selector 层的**轮转**原语：自持 `ptr_reg`，`next_ptr` = 被授予位 + 1（环绕）⇒ **每拍推进**、无饿死 | `tests/chlib/test_stream_arbiter_lock_dual.cpp` · `[chlib][selector][round_robin_arbiter][rotation][dual][adr065]` | 2026-11-03 ADR-065 修复：修复前 `UpdatePriority` 的外层 `if (result.valid)` **建图期恒假** ⇒ `next_ptr` **恒 0** ⇒ 实为「固定最低位优先」⇒ 低位通道饿死高位通道 |
 
 ## 变更记录
 
@@ -44,3 +46,4 @@ rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MU
 | 2026-11-02 | **创建**（B8 落地：5 条登记 ⇒ `stream_demux` / `stream_fork` / `stream_arbiter_round_robin` / `sync_fifo` / `stream_fifo`）⇒ 护栏 R14 守「登记不漂移 + 判别性用例不消失」 |
 | 2026-11-03 | **+6 条**（路线 B G/H/I 批触达的组件）⇒ `stream_m2s_pipe` / `stream_s2m_pipe` / `stream_half_pipe`（ADR-055 重写过的三个 pipe）· `priority_selector` / `round_robin_selector`（首次双后端验证）· `stream_arbiter_priority`（首次双后端验证）⇒ ⇒ 触发护栏 **R3**（最近的 chlib change MUST 声明 `touched-components`） |
 | 2026-11-03 | **+3**：`stream_narrow_to_wide` · `stream_wide_to_narrow` · `stream_width_adapter`（ADR-064 重写）⇒ 登记 **11 → 14**；⚠️ 同时**删除** `stream_extend` / `stream_truncate`（零消费者 + 零测试 + 静默失效）⇒ **MUST NOT** 登记它们（R1 会检「登记 ⊆ 组件全集」）|
+| 2026-11-03 | **+2**：`stream_arbiter_lock` · `round_robin_arbiter`（ADR-065 修复两处「建图期求值」缺陷）⇒ 登记 **14 → 16** |

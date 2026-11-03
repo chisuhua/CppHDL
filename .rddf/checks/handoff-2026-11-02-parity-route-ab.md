@@ -11,13 +11,13 @@
 
 | 量 | 值 | 命令 |
 |---|---|---|
-| **parity 源文件数** | **62** ⭐（目标 60，**已达成**） | `bash scripts/verify_dual_backend_parity.sh` |
-| parity macro 调用数（PAIRS） | **276** | 同上（ADR-063 的 D4 判据 +1；ADR-064 的宽度适配器 +4） |
-| `CTEST_TOTAL` | **239** | `cd build && ctest -N \| tail -1` |
-| `VERILATOR_E2E_TOTAL` | **71** | `ctest -N -L verilator_e2e \| tail -1` |
-| non-perf | **228** | `ctest -N -LE perf \| tail -1` |
+| **parity 源文件数** | **63** ⭐（目标 60，**已达成**） | `bash scripts/verify_dual_backend_parity.sh` |
+| parity macro 调用数（PAIRS） | **283** | 同上（ADR-063 +1；ADR-064 +4；ADR-065 +7） |
+| `CTEST_TOTAL` | **240** | `cd build && ctest -N \| tail -1` |
+| `VERILATOR_E2E_TOTAL` | **72** | `ctest -N -L verilator_e2e \| tail -1` |
+| non-perf | **229** | `ctest -N -LE perf \| tail -1` |
 | `tests/test_*.cpp` | **132** | `ls tests/test_*.cpp \| wc -l` |
-| `tests/chlib/test_*.cpp` | **51** | `ls tests/chlib/test_*.cpp \| wc -l` |
+| `tests/chlib/test_*.cpp` | **52** | `ls tests/chlib/test_*.cpp \| wc -l` |
 | `tests/chlib/test_*.cpp` | **44** | `ls tests/chlib/test_*.cpp \| wc -l` |
 
 ⚠️ 工作区里有一批**并发会话**的文件（`hierarchical-rtl-output`：`docs/adr/ADR-058..062`、
