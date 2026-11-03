@@ -33,6 +33,9 @@ rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MU
 | `stream_half_pipe` | 半带宽管道；**全信号寄存**且**隔拍**才接收 | `tests/chlib/test_stream_pipeline_dual.cpp` · `[chlib][stream][pipeline][half][ready][dual]` | 2026-11-01 ADR-055 重写（修掉「toggle 由传输驱动 ⇒ 无数据时死锁」）⇒ 2026-11-03 首次双后端验证 ⇒ 登记 |
 | `priority_selector` | 优先级选择器；**最低**置位优先（低位优先级更高） | `tests/chlib/test_selector_arbiter_dual.cpp` · `[chlib][selector][priority][grant][dual]` | 2026-11-03 首次双后端验证（方向只有多位同时置位时才可观测）⇒ 登记 |
 | `round_robin_selector` | 轮转选择器；扫描起点 = **上次授予位置 + 1**（环绕） | `tests/chlib/test_selector_arbiter_dual.cpp` · `[chlib][selector][round_robin][grant][dual]` | 2026-11-03 首次双后端验证（**有生产消费者**：`include/chlib/stream.h` 的 `stream_arbiter_round_robin`）⇒ 登记 |
+| `stream_narrow_to_wide` | 累积 `RATIO` 个窄字为**一个**宽字（第 k 个落在 `[k*NB,(k+1)*NB)`），宽字**含最后一个窄字**且**组间隔离**；输出 `valid`/`payload` **寄存器化**（+1 拍） | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][narrow_to_wide][dual][adr064]` | 2026-11-03 ADR-064 重写：修复前**一仿真就 SIGSEGV**、且宽字**缺最后一个字** + 累积器不清零（跨组污染）|
+| `stream_wide_to_narrow` | 把宽字拆成 `RATIO` 个窄字，**低字节优先**；输出满时上游 `ready=0` | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][wide_to_narrow][dual][adr064]` | 同上（修复前 `initialize()` SIGSEGV + `input.ready` 用 `operator=` ⇒ 上游收不到反压）|
+| `stream_width_adapter` | 按位宽**自动择向**的泛型入口；同宽 ⇒ 零状态直通 | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][passthrough][dual][adr064]` | 同上（修复前同宽分支同样 SIGSEGV）|
 
 ## 变更记录
 
@@ -40,3 +43,4 @@ rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MU
 |---|---|
 | 2026-11-02 | **创建**（B8 落地：5 条登记 ⇒ `stream_demux` / `stream_fork` / `stream_arbiter_round_robin` / `sync_fifo` / `stream_fifo`）⇒ 护栏 R14 守「登记不漂移 + 判别性用例不消失」 |
 | 2026-11-03 | **+6 条**（路线 B G/H/I 批触达的组件）⇒ `stream_m2s_pipe` / `stream_s2m_pipe` / `stream_half_pipe`（ADR-055 重写过的三个 pipe）· `priority_selector` / `round_robin_selector`（首次双后端验证）· `stream_arbiter_priority`（首次双后端验证）⇒ ⇒ 触发护栏 **R3**（最近的 chlib change MUST 声明 `touched-components`） |
+| 2026-11-03 | **+3**：`stream_narrow_to_wide` · `stream_wide_to_narrow` · `stream_width_adapter`（ADR-064 重写）⇒ 登记 **11 → 14**；⚠️ 同时**删除** `stream_extend` / `stream_truncate`（零消费者 + 零测试 + 静默失效）⇒ **MUST NOT** 登记它们（R1 会检「登记 ⊆ 组件全集」）|

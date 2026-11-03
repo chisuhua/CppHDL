@@ -619,6 +619,14 @@ add_dual_backend_test(test_stream_arbiter_dual
     TIMEOUT 300
 )
 
+# ⚠️ **ADR-064 的行为判据**：chlib stream 宽度适配器（修前三个 API 一仿真就 SIGSEGV）
+#    ⇒ 既有 `test_stream_width_adapter.cpp` 的 8 个用例**全裸 context、零 Simulator**
+#      ⇒ 图从不被实例化 ⇒ 缺陷完全不可见（保留它们锁宽度/类型，本文件补真跑仿真）。
+add_dual_backend_test(test_stream_width_adapter_dual
+    SOURCES chlib/test_stream_width_adapter_dual.cpp
+    TIMEOUT 300
+)
+
 # ⚠️ **路线 C 第一批 —— RV32I 微架构组件进双后端 parity**（2026-11-03）
 #    ⇒ **零 DUT 复制**：`MemStage` / `ExStage` / `Rv32iDecoder` **本身带顶层端口**
 #      ⇒ 直接当 DUT（与 `test_hazard_complete_dual.cpp` 同型）⇒ 成本最低。
