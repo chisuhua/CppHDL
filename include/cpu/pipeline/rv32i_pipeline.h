@@ -21,13 +21,18 @@
 
 #include "ch.hpp"
 #include "component.h"
-#include "stages/if_stage.h"
-#include "stages/id_stage.h"
-#include "stages/ex_stage.h"
-#include "stages/mem_stage.h"
-#include "stages/wb_stage.h"
-#include "hazard_unit.h"
-#include "rv32i_pipeline_regs.h"
+// ⚠️ **include 路径 MUST 是 `include/` 相对的**（2026-11-03 修「头文件自包含」）
+//    —— 下面 7 个头都在**上一级**目录（`include/cpu/pipeline/`）⇒ ⇒
+//    写 `"stages/if_stage.h"` 只能靠「`-I include/cpu/pipeline`」才找得到
+//    ⇒ ⇒ **单独 include 本头会编译失败**（违反根 AGENTS.md 的
+//    「Headers self-contained」）⇒ ⇒ 改成 `include/` 相对路径。
+#include "cpu/pipeline/stages/if_stage.h"
+#include "cpu/pipeline/stages/id_stage.h"
+#include "cpu/pipeline/stages/ex_stage.h"
+#include "cpu/pipeline/stages/mem_stage.h"
+#include "cpu/pipeline/stages/wb_stage.h"
+#include "cpu/pipeline/hazard_unit.h"
+#include "cpu/pipeline/rv32i_pipeline_regs.h"
 // ⚠️ 数据 mux（ADR-046 D3 #14 / ADR-047 D2）：**既有**的 `chlib::ForwardingMux`
 //    —— MUST NOT 新建组件，也 MUST NOT 把 mux 放回 `HazardUnit`
 //    （放进 `HazardUnit` 并接进真实流水线装配会成**组合环**，

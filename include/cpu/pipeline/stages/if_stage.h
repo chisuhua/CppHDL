@@ -17,7 +17,12 @@
 
 #include "ch.hpp"
 #include "component.h"
-#include "rv32i_tcm.h"
+// ⚠️ **include 路径 MUST 是 `include/` 相对的**（2026-11-03 修「头文件自包含」）
+//    —— `rv32i_tcm.h` 在**上一级**目录（`include/cpu/pipeline/`）⇒ ⇒
+//    写 `"rv32i_tcm.h"` 只能靠「`-I include/cpu/pipeline`」才找得到
+//    ⇒ ⇒ **单独 include 本头会编译失败**（违反根 AGENTS.md 的
+//    「Headers self-contained」）⇒ ⇒ 改成 `include/` 相对路径。
+#include "cpu/pipeline/rv32i_tcm.h"
 
 namespace riscv {
 

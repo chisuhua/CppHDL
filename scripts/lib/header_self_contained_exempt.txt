@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 头文件「自包含性」豁免名单（护栏 scripts/verify_header_self_contained.sh）
+#
+# ⚠️ **本文件是纯数据** ⇒ ⇒ 护栏的 R2 会做**双向**核对：
+#    ① 名单里的每个头 MUST **确实**不能自包含（否则豁免已过时 ⇒ 红）；
+#    ② 名单 MUST 与「实际不能自包含的集合」**完全一致**（否则漏登记 ⇒ 红）。
+#    ⇒ ⇒ **豁免不得成为万能借口**（本仓「护栏自身有盲区」病症的防线）。
+#
+# ⚠️ **两种豁免**（kind 不同 ⇒ 判据不同）：
+#    `fragment` —— **分片头**：被某个聚合头 include 后才有意义（设计意图）
+#                  ⇒ ⇒ **无条件豁免**（与编译器无关）。
+#    `stdlib:<能力>` —— **标准库可用性**问题：该头需要 `<能力>`，而**当前编译器
+#                  的标准库不提供它** ⇒ ⇒ 豁免**仅在「能力探测失败」时生效**
+#                  ⇒ ⇒ 换到提供该能力的编译器（libstdc++）⇒ ⇒ **豁免自动失效**
+#                  ⇒ ⇒ 该头若此时能编译 ⇒ ⇒ R2a 报「豁免已过时」⇒ ⇒ 红。
+#                  ⇒ ⇒ 这样「能力」而不是「编译器名字」成为判据 ⇒ ⇒ 可移植。
+#
+# ⚠️ **本名单只收「设计使然」的头** ⇒ ⇒ **公共入口头**（用户会直接
+#    `#include` 的）MUST NOT 在本名单里。
+#
+# 格式：<相对 include/ 的路径>\t<kind>\t<理由>
+#       （kind = `fragment` 时第三列是理由；
+#         kind = `stdlib:<能力>` 时第三列是理由，能力写在第二列里）
+# ─────────────────────────────────────────────────────────────────────────────
+
+ast/instr_op.h	fragment	C-class refactor 的聚合头：它 include 同目录的 4 个分片，而分片反过来依赖本聚合头先建立的上下文
+ast/instr_op_arith.h	fragment	C-class refactor 分片（由 ast/instr_op.h 聚合）—— 依赖 core/operators.h 先建立算术宽度上下文的先例
+ast/instr_op_compare.h	fragment	C-class refactor 分片（由 ast/instr_op.h 聚合）—— 依赖 sdata_type 的完整定义
+ast/instr_op_logic.h	fragment	C-class refactor 分片（由 ast/instr_op.h 聚合）—— 依赖 sdata_type 的完整定义
+ast/instr_op_shift.h	fragment	C-class refactor 分片（由 ast/instr_op.h 聚合）—— 依赖 ch::internal 命名空间先被声明
+bundle/stream_bundle_member_inlines.h	fragment	成员函数实现分片：文件头明写「必须在 bundle/stream_bundle.h 与 chlib/stream_pipeline.h 之后 include」
+core/bundle/bundle_base.h	fragment	bundle 家族分片：依赖同目录 bundle_layout.h / bundle_traits.h 的模板定义先后次序
+core/bundle/bundle_layout.h	fragment	bundle 家族分片：依赖 ch_width_v（由 core/operators.h 提供）
+core/bundle/bundle_serialization.h	fragment	bundle 家族分片：依赖 bundle_layout.h 的模板定义先后次序
+core/bundle/bundle_utils.h	fragment	bundle 家族分片：依赖 bundle_base.h（它 include 了本头，形成互依）
+core/operators_width.h	fragment	C-class refactor 分片（由 core/operators.h 聚合）—— 依赖 get_binary_result_width 的前置声明
+core/verilator_backend.h	stdlib:expected	本头用 `std::expected<void, VerilatorError>`（C++23）⇒ ⇒ **libc++ 不提供 `<expected>`**（AppleClang 15/16 = LLVM 16/17 ⇒ 无）⇒ ⇒ 在 macOS/clang 上**单独编译失败** ⇒ ⇒ 该缺陷已**独立立项**（`.rddf/improvements/stdlib-expected-missing-in-libcxx-2026-11.md`）⇒ ⇒ 本次**只绕开**（按能力豁免），**不**在本 change 里改公开 API
+lnode/literal_ext.h	fragment	C-class refactor 分片（由 core/literal.h include）—— 依赖 <cstddef> 上下文
+lnode/node_builder_ext.h	fragment	C-class refactor 分片（由 core/node_builder.h include）—— 依赖 <cstdint> 上下文
+lnode/operators_ext.h	fragment	C-class refactor 分片（由 core/operators.h include）—— 依赖 compute_bit_width 的前置声明

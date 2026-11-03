@@ -13,8 +13,16 @@ evidence: unmeasured
 
 - **Date drafted**: 2026-11-01
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**决策权归 planner / architect**
-  （⚠️ 本草案**只登记实测事实 + 范围界定**，**不**替 architect 裁决）
+- **Status**: ✅ **已修复**（2026-11-01 · ADR-055 + change
+  `stream-builder-and-pipe-ready-ownership-2026-11` ⇒ 已归档
+  `openspec/changes/archive/2026-11-01-stream-builder-and-pipe-ready-ownership-2026-11/`）
+  ⇒ ⇒ **上游反压**已落地（`include/chlib/stream_builder.h` 的
+  `drive_pending_ready(result.push_stream.ready)` + `adopt_stage_output(...)`
+  ⇒ ⇒ 链内闭包不变式成立）⇒ ⇒ 判据 =
+  `tests/test_stream_builder.cpp` 的「queue() 的反压 MUST 能传过 builder 链」
+  （含 `source.ready.impl() != nullptr` 断言）+ `tests/test_stream_builder_backpressure_dual.cpp`
+  （**双后端** parity）⇒ ⇒ ⚠️ 本文件原先的「静默丢字」标题本身**已被实测推翻**
+  （真缺陷只是「上游反压从未建立」）⇒ ⇒ 标题保留为历史线索。
 - **来源**：change `stream-forward-ready-closure-p1a-2026-11` 的实施期探针
   ⇒ ⇒ 该 change 的 builder 子项**已移出**（本项独立立项）
 - ⚠️ **关联**：capability `chlib-stream-ready-ownership` · ADR-054 §3.2 第 1 条

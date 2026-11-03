@@ -514,6 +514,26 @@ jobs:
       shell: bash
       run: scripts/verify_chlib_naming_honesty.sh --self-test
 
+    - name: Verify header self-containment
+      # WHY: the root AGENTS.md says "Headers self-contained", but that rule
+      # was NEVER mechanically checked => headers that only compile thanks to
+      # a lucky -I path survived for months. Measured 2026-11-03: 4 public
+      # headers could not be compiled standalone, INCLUDING the public entry
+      # point `#include "chlib.h"` (documented in include/AGENTS.md) — which
+      # has ZERO in-repo consumers, i.e. it was never compiled at all.
+      # This guard compiles every header on its own and fails if one cannot
+      # (fragment headers are exempt via an explicit, two-way-checked list).
+      shell: bash
+      run: scripts/verify_header_self_contained.sh
+
+    - name: Verify header self-containment (self-test)
+      # WHY a self-test: a criterion is only as good as its ability to FAIL.
+      # This self-test POISONS IN PLACE (one include path + two exemption-list
+      # edits) and proves the verification turns red for 3 independent
+      # regressions, then restores and re-verifies green.
+      shell: bash
+      run: scripts/verify_header_self_contained.sh --self-test
+
     - name: Verify stream domain closure checklist
       # The checklist (.rddf/checks/stream-domain-closure.md) is the SINGLE
       # place that says "what is still owed" for the chlib stream domain.

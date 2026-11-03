@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6464 lines**（2026-11-03 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变）。
+**30 headers, 6506 lines**（2026-11-03 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变）。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6464 lines（2026-11-03 实测）
+include/cpu/                             # 30 headers, 6506 lines（2026-11-03 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选

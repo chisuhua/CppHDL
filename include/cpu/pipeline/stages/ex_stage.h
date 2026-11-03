@@ -18,6 +18,11 @@
 #include "component.h"
 #include "chlib/arithmetic.h"
 #include "chlib/logic.h"
+// ⚠️ 本头**使用** `rv32i_decoder.h` 的 opcode 常量（`OP_OPIMM` / `OP_LOAD` /
+//    `OP_STORE` / `OP_JALR` / `OP_LUI` / `OP_AUIPC`）但此前**没有 include 它**
+//    ⇒ ⇒ **单独 include 本头会编译失败**（未声明标识符）⇒ ⇒ 违反根 AGENTS.md
+//    的「Headers self-contained」（2026-11-03 修复）。
+#include "cpu/pipeline/rv32i_decoder.h"
 
 namespace riscv {
 
@@ -38,18 +43,28 @@ constexpr unsigned ALU_OP_SLT  = 8;   // 有符号小于比较
 constexpr unsigned ALU_OP_SLTU = 9;   // 无符号小于比较
 
 /**
- * 分支类型编码
+ * ⚠️⚠️ **原「分支类型编码」常量块已删除（2026-11-03）**
+ *
+ * 此前本文件定义过 `BRANCH_EQ=0 / BRANCH_NE=1 / BRANCH_LT=2 / BRANCH_GE=3 /
+ * BRANCH_LTU=4 / BRANCH_GEU=5`，但：
+ *   ① 那套编码与**实现**用的 **RISC-V funct3**（BEQ=0 · BNE=1 · **BLT=4** ·
+ *      BGE=5 · BLTU=6 · BGEU=7）**完全不同**；
+ *   ② 更糟的是 `BRANCH_LTU=4` **恰好等于**正确的 `BLT=4` ⇒ ⇒ 「看起来能用」
+ *      ⇒ ⇒ 反而更可能误导；
+ *   ③ 那 6 个常量**全仓零消费者**（实现里一律用字面量 `0_d`…`7_d`）⇒ ⇒
+ *      属于 ZERO-DEBT 政策要删的**死代码**。
+ *
+ * ⇒ ⇒ ⇒ **删除**（而不是订正数值）：留着一套「与规范编码不同」的常量，
+ *      就是留一个陷阱 ⇒ ⇒ 分支类型**只有一个**权威来源 = **RISC-V funct3**。
+ *
+ * ⚠️ **新增分支类型时的纪律**：MUST 直接用 funct3 编码（`0/1/4/5/6/7`），
+ *    **MUST NOT** 另起一套编号 ⇒ ⇒ 判据见
+ *    `openspec/specs/rv32i-isa-semantics/spec.md`。
  */
-constexpr unsigned BRANCH_EQ   = 0;   // BEQ
-constexpr unsigned BRANCH_NE   = 1;   // BNE
-constexpr unsigned BRANCH_LT   = 2;   // BLT
-constexpr unsigned BRANCH_GE   = 3;   // BGE
-constexpr unsigned BRANCH_LTU  = 4;   // BLTU
-constexpr unsigned BRANCH_GEU  = 5;   // BGEU
 
 /**
  * EX 级 (执行级) 组件
- * 
+ *
  * 包含:
  * - 32 位 ALU，支持 RISC-V RV32I 所有算术逻辑运算
  * - 分支条件判断逻辑
@@ -79,7 +94,11 @@ public:
         //    ⇒ **静默劫持 PC**（实测：错误路径放 `JALR x27, 100(x0)` ⇒
         //    PC 被拽到 100 ⇒ 程序重启 ⇒ `store_cycles` 断言转红）。
         ch_in<ch_bool>     is_jump;    // 跳转指令（JAL/JALR）—— **气泡时已被清零**
-        ch_in<ch_uint<3>>  branch_type; // 分支类型 (funct3)
+        ch_in<ch_uint<3>>  branch_type; // 分支类型 —— **编码 = RISC-V funct3**
+                                      //   （BEQ=0 · BNE=1 · BLT=4 · BGE=5 ·
+                                      //    BLTU=6 · BGEU=7）⇒ ⇒ **无**「分支类型
+                                      //   常量块」（见文件头的删除说明）⇒ ⇒
+                                      //   实现侧一律用字面量 `0_d`…`7_d`。
         ch_in<ch_bool>     is_store;   // 存储指令 (传递到输出)
         
         // ====================================================================

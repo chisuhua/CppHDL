@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-03
+# ⚠️ 本 change **无** spec 变更：
+#   ① 根 AGENTS.md 的 CONVENTIONS **早已**明写「Headers self-contained」
+#      ⇒ ⇒ 本 change 是**向既有约定收敛**（不是新增契约）⇒ ⇒ 无 delta；
+#   ② 其余改动全是**零行为变更**（include 路径 / 注释 / 删除零消费者的死常量）；
+#   ③ 「`priority_encoder` 的优先级方向」在 capability 里**没有**条款
+#      （`chlib-stream-arbitration` 只说 `stream_arbiter_sequence` 的实现
+#      是 `priority_encoder`，**未**规定方向）⇒ ⇒ 无 MODIFIED 需求。
+skip_specs: true

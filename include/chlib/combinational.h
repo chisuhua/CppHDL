@@ -17,7 +17,24 @@ using namespace ch::core;
 /**
  * 优先级编码器 - 函数式接口
  *
- * 将输入的one-hot编码转换为二进制索引，优先处理低位
+ * 将输入的one-hot编码转换为二进制索引。
+ *
+ * ⚠️⚠️ **优先级方向 = 「编号最大者胜」（高位优先）**（2026-11-03 订正）
+ *
+ * 此前本注释写的是「**优先处理低位**」⇒ ⇒ **与实现相反** ⇒ ⇒ 名字/注释
+ * 说谎（又是本仓「命名诚实性」的一例）。
+ *
+ * **实现**：`for (i = 0; i < N; ++i) { result = select(bit_at_i, i, result); }`
+ * ⇒ ⇒ 每次迭代都**覆盖** `result` ⇒ ⇒ **后写的在外层** ⇒ ⇒ 最后一个
+ * （= **编号最大**的）置位**胜出**。
+ *
+ * **实测**：`priority_encoder<4>(0b1010) == 3`（bit3 胜，不是 bit1）。
+ *
+ * ⚠️ **注意本仓的「优先级」有两个方向**：
+ *   - `chlib::priority_encoder`（本函数）= **高位**优先（编号大者胜）；
+ *   - `chlib::priority_selector` / `chlib::round_robin_selector`
+ *     = **低位**优先（编号小者胜）。
+ * ⇒ ⇒ 二者**方向相反** ⇒ ⇒ 使用时 MUST 明确是哪一种。
  */
 template <unsigned N>
 ch_uint<compute_idx_width(N)> priority_encoder(ch_uint<N> input) {

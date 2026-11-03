@@ -18,6 +18,10 @@
 #include "ch.hpp"
 #include "component.h"
 #include "chlib/stream.h"
+// ⚠️ **必须 include 本头**（2026-11-03 修「头文件自包含」）：本头使用
+//    `DCacheConfig`（定义在同目录的 `d_cache_sync.h`）却**没有** include 它
+//    ⇒ ⇒ **单独 include 本头会编译失败**（`DCacheConfig` 未声明）。
+#include "d_cache_sync.h"
 
 namespace chlib {
 
