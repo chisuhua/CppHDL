@@ -6,6 +6,7 @@ phase: phase-5
 category: cache
 type: feature
 created_at: 2026-10-18
+evidence: test:tests/chlib/test_cache_pipeline_integration.cpp
 ---
 
 # Improvement: cache-stub 物理删除 (ADR-037 落地)

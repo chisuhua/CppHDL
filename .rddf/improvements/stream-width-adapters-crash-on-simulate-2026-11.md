@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-11-03
+evidence: test:tests/chlib/test_stream_width_adapter_dual.cpp
 ---
 
 # Improvement: `chlib` 的三个 stream 宽度适配器**构建能过、一仿真就 SIGSEGV**

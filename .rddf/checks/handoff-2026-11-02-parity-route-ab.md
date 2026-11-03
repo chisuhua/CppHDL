@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_dual_backend_parity.sh
+---
+
 # 交接快照：objective-test-coverage-100pct（路线 A/B 推进）
 
 - **时间**：2026-11-02（builder，第 3 次交接 · 同一会话的第 2 批）

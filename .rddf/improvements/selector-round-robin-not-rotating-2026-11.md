@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-11-03
+evidence: test:tests/chlib/test_selector_arbiter_dual.cpp
 ---
 
 # Improvement: `chlib::round_robin_arbiter` **不轮转**（`next_ptr` 恒为 0）

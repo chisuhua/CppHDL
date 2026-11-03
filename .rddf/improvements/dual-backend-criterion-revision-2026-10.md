@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: chore
 created_at: 2026-10-28
+evidence: probe:scripts/verify_dual_backend_parity.sh
 ---
 
 # Improvement: dual 覆盖率判据 MUST 与实测语料一致（单位 / 阈值 / 取舍）

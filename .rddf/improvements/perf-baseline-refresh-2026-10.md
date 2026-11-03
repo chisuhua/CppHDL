@@ -6,6 +6,7 @@ phase: phase-5
 category: tooling
 type: chore
 created_at: 2026-10-27
+evidence: probe:scripts/verify_perf_baseline_anchors.sh
 ---
 
 # Improvement: perf baseline MUST 与当前机器状态同步（重采集 + 守恒流程）

@@ -6,6 +6,7 @@ phase: phase-5
 category: core
 type: bugfix
 created_at: 2026-10-30
+evidence: test:tests/test_lnode_entry_set.cpp
 ---
 
 # Improvement: 删除无约束的 `get_lnode` 入口

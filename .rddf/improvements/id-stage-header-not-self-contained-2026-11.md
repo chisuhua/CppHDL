@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-11-03
+evidence: probe:scripts/verify_header_self_contained.sh
 ---
 
 # Improvement: `include/cpu/pipeline/stages/id_stage.h` **非自包含**（单独 include 会编译失败）

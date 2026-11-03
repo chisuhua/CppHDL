@@ -6,6 +6,7 @@ phase: phase-5
 category: tooling
 type: chore
 created_at: 2026-10-28
+evidence: probe:tests/benchmark/perf_baseline.json
 ---
 
 # Improvement: perf 回归阈值 MUST 与实测噪声模型一致（verilator 噪声 ≠ JIT 噪声）

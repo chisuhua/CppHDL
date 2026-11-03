@@ -6,8 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-11-01
-evidence: unmeasured
----
+evidence: test:tests/test_stream_builder_backpressure_dual.cpp---
 
 # Improvement: `StreamBuilder` 的链式 `queue<>()` **静默丢字** + **上游反压丢失**
 

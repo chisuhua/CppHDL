@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-10-30
+evidence: test:tests/chlib/test_guard_contribution.cpp
 ---
 
 # Improvement: 共享守卫贡献的**优先级** MUST 有契约 + 有结构级断言

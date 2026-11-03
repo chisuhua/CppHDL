@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: feature
 created_at: 2026-10-30
+evidence: test:tests/chlib/test_if_stmt.cpp
 ---
 
 # Improvement: `_if` 语句块 DSL MUST 兑现它的名字（条件被彻底忽略 ⇒ 守卫贡献）

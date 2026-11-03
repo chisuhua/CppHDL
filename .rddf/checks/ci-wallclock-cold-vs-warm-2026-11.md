@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/measure_verilator_e2e_wallclock.sh
+---
+
 # CI 墙钟实测：`pr-verilator-fast` 的 verilator 缓存 warm vs cold（2026-11-03）
 
 - **测的人**：build agent（builder role）

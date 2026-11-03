@@ -6,6 +6,7 @@ phase: phase-5
 category: refactor
 type: feature
 created_at: 2026-10-23
+evidence: probe:scripts/verify_no_duplicate_rv32i_headers.sh
 ---
 
 # Improvement: RV32I 单源化收敛 —— include/cpu 为唯一权威，example 只留 SoC 顶层

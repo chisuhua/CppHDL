@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: bugfix
 created_at: 2026-10-28
+evidence: probe:run_all_ported_tests.sh
 ---
 
 # Improvement: `io().X = value` 落在 `ch_in` 上 ⇒ 10 处**静默失效**的存量缺陷

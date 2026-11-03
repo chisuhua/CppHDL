@@ -6,6 +6,7 @@ phase: phase-5
 category: bugfix
 type: feature
 created_at: 2026-10-25
+evidence: test:tests/test_verilator_complex_e2e.cpp
 ---
 
 # Improvement: RV32I 流水线 commit / valid 通路修复（C3 的前置）

@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-10-24
+evidence: probe:examples/riscv-mini/tests/test_cache_smoke.cpp
 ---
 
 # Improvement: riscv-mini 的两个 cache wrapper 必须真正发射分支逻辑

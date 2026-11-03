@@ -6,6 +6,7 @@ phase: phase-5
 category: framework
 type: bugfix
 created_at: 2026-11-03
+evidence: probe:scripts/verify_header_self_contained.sh
 ---
 
 # Improvement: `verilator_backend.h` 依赖的 `std::expected` 在部分工具链组合下**不存在**

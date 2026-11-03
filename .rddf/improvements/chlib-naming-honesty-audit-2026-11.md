@@ -6,8 +6,7 @@ phase: phase-5
 category: chlib
 type: audit
 created_at: 2026-11-01
-evidence: unmeasured
----
+evidence: probe:scripts/verify_chlib_naming_honesty.sh---
 
 # Improvement: `chlib` 的**命名诚实性**审计（+ 顺带挖出 `stream_pipeline.h` 的**未收口面**）
 

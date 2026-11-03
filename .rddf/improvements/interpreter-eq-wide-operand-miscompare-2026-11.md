@@ -6,6 +6,7 @@ phase: phase-5
 category: framework
 type: bugfix
 created_at: 2026-11-03
+evidence: test:tests/test_wide_shl_dual.cpp
 ---
 
 # Improvement: 多 word 左移（`bv_shl_vector`）产生虚假高位 / 丢失跨 word 进位

@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_dual_backend_parity.sh
+---
+
 # 状态裁决包：`objective-test-coverage-100pct`
 
 - **Date**: 2026-11-03

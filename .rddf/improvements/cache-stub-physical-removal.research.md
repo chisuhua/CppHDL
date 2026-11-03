@@ -6,6 +6,7 @@ phase: phase-5
 category: cache
 type: research
 created_at: 2026-10-18
+evidence: test:tests/chlib/test_cache_pipeline_integration.cpp
 ---
 
 # Cache Stub 物理删除 — 调研备忘录

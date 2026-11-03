@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: feature
 created_at: 2026-10-27
+evidence: probe:examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp
 ---
 
 # Improvement: RV32I 的 LB / LH / LBU / LHU MUST 有固件验证（load 字节道）

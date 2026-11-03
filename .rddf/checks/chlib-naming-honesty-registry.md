@@ -1,6 +1,7 @@
 ---
 scope: chlib 的**对外暴露**组合子（stream / fifo / selector 族）
 rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MUST 与实现行为一致」
+evidence: probe:scripts/verify_chlib_naming_honesty.sh
 ---
 
 # chlib 命名诚实性**登记表**（B8）

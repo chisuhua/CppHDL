@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: capability-gap
 created_at: 2026-10-29
+evidence: probe:scripts/verify_fsm_next_wiring.sh
 ---
 
 # Improvement: FSM 的「正确形态」是**隐性陷阱** ⇒ 需写进契约 + 加护栏

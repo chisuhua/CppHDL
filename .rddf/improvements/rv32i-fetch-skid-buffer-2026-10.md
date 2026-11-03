@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-10-27
+evidence: test:tests/test_rv32i_pipeline_behavior.cpp
 ---
 
 # Improvement: RV32I 取指 MUST 有 skid buffer（停顿不丢指令）+ 填充期 MUST NOT 双装

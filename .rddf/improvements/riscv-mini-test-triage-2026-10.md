@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: feature
 created_at: 2026-10-23
+evidence: probe:scripts/verify_example_test_wiring.sh
 ---
 
 # Improvement: riscv-mini 19 个「编译但从不执行」target 清零 + 7 orphan 测试定性

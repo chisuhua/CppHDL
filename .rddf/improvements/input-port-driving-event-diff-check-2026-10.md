@@ -6,9 +6,14 @@ phase: phase-5
 category: testing
 type: chore
 created_at: 2026-10-28
+evidence: unmeasured
 ---
 
 # Improvement: 新增输入端口 MUST 被显式驱动 ⇒ 用**事件驱动（git diff）增量检查**守
+
+> ℹ️ **本条是「提案型台账」**：**尚未实施** ⇒ ⇒ `evidence: unmeasured`
+> （不是「已实测但忘了填」，而是「还没有可测的东西」）。
+
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)

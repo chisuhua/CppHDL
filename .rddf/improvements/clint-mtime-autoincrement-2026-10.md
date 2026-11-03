@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-10-24
+evidence: test:tests/test_rv32i_arch_dual.cpp
 ---
 
 # Improvement: CLINT 的 `mtime` 必须自动递增

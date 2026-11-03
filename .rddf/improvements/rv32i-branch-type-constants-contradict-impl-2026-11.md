@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: docfix
 created_at: 2026-11-03
+evidence: probe:include/cpu/pipeline/stages/ex_stage.h
 ---
 
 # Improvement: `ex_stage.h` 的 `BRANCH_*` 常量与**实现**（及 RISC-V 规范）**相反**

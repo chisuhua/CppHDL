@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-11-03
+evidence: test:tests/test_rv32i_stage_dual.cpp
 ---
 
 # Improvement: RV32I **B 型立即数的 bit 11 被放在 bit 0**（分支目标错 2047）

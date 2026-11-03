@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: bugfix
 created_at: 2026-10-29
+evidence: test:tests/test_verilator_complex_e2e.cpp
 ---
 
 # Improvement: `test_verilator_complex_e2e.cpp` 的 SPI fixture 从未真正工作过

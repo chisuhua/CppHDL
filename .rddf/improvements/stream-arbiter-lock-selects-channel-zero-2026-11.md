@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-11-03
+evidence: test:tests/chlib/test_stream_arbiter_lock_dual.cpp
 ---
 
 # Improvement: `chlib::stream_arbiter_lock` 恒选通道 0（且输出**错误的数据**）

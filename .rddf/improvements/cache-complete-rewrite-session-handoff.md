@@ -6,6 +6,7 @@ phase: phase-4
 category: cache
 type: handoff
 created_at: 2026-10-19
+evidence: test:tests/chlib/test_cache_complete.cpp
 ---
 
 # Improvement: cache complete rewrite — Session B 启动包

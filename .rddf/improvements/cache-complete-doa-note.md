@@ -6,6 +6,7 @@ phase: phase-4
 category: cache
 type: incident-note
 created_at: 2026-10-18
+evidence: test:tests/chlib/test_cache_complete.cpp
 ---
 
 # Improvement: cache complete rewrite via ch_mem (dead-on-arrival recovery)

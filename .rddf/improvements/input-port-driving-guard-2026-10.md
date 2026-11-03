@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: research
 created_at: 2026-10-27
+evidence: probe:openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md
 ---
 
 # Improvement: 「新增输入端口 MUST 被显式驱动」MUST 有自动化护栏（**先做可行性 spike**）

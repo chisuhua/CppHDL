@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: feature
 created_at: 2026-10-27
+evidence: test:tests/test_rv32i_pipeline_behavior.cpp
 ---
 
 # Improvement: RV32I 子组件的 dual-backend 覆盖 MUST 补齐 Batch 2/3

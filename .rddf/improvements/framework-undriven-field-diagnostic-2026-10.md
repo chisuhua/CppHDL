@@ -6,6 +6,7 @@ phase: phase-5
 category: core
 type: feature
 created_at: 2026-10-31
+evidence: test:tests/test_node_driver_diagnosis.cpp
 ---
 
 # Improvement: 框架层「**读未驱动字段**」的**诊断**能力

@@ -6,6 +6,7 @@ phase: phase-5
 category: tooling
 type: tooling
 created_at: 2026-10-27
+evidence: probe:scripts/verify_roadmap_fragments.sh
 ---
 
 # Improvement: roadmap 簿记 MUST 有自动一致性护栏（AUTO 块 + feature 状态）

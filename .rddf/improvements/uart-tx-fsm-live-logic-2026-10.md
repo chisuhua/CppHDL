@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: bugfix
 created_at: 2026-10-28
+evidence: probe:examples/spinalhdl-ported/uart/uart_tx.cpp
 ---
 
 # Improvement: `uart_tx_example` 的状态机从未工作过（C++ `if` 恒走 else）

@@ -6,6 +6,7 @@ phase: phase-5
 category: framework
 type: bugfix
 created_at: 2026-11-03
+evidence: test:tests/chlib/test_stream_arbiter_dual.cpp
 ---
 
 # Improvement: 同一进程内**多个 DUT** ⇒ 出现 `bit_select` **越界**（跨 DUT 状态污染）

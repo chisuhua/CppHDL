@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_dual_backend_parity.sh
+---
+
 # P1 决策材料：「诚实上限」的构成 —— 第二版（2026-11-02 实测）
 
 > ⚠️ **本文档性质**：**客观台账 + 决策选项**。**owner = rdd-planner**（`objective` 的

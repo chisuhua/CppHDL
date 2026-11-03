@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: bugfix
 created_at: 2026-10-30
+evidence: probe:scripts/verify_multi_if_width.sh
 ---
 
 # Improvement: `multi_if` 的接受面 —— 五种形态逐一处置

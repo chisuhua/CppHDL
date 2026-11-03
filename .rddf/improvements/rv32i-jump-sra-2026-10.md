@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-10-26
+evidence: test:tests/test_rv32i_stage_dual.cpp
 ---
 
 # Improvement: RV32I 的 `JAL`/`JALR` MUST 重定向 PC 并写回返回地址；`SRA` MUST 是算术右移

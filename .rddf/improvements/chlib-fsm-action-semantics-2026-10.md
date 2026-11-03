@@ -6,6 +6,7 @@ phase: phase-5
 category: framework
 type: capability-change
 created_at: 2026-10-29
+evidence: test:tests/test_state_machine.cpp
 ---
 
 # Improvement: 实施 ADR-050 —— `ch_state_machine` 的状态动作语义 + 死/误导 API 的物理移除

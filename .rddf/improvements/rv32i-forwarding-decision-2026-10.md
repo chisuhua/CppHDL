@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: feature
 created_at: 2026-10-27
+evidence: test:tests/chlib/test_forwarding.cpp
 ---
 
 # Improvement: RV32I 流水线 MUST 接数据前推（ADR-046 §D5 的落地裁决）

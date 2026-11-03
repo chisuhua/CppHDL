@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: research
 created_at: 2026-10-27
+evidence: probe:openspec/changes/archive/2026-10-28-dual-backend-full-coverage-inventory-2026-10/design.md
 ---
 
 # Improvement: T7（Phase 5 全量 dual）必须先交「可 dual 上限盘点」

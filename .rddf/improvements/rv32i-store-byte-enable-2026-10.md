@@ -6,6 +6,7 @@ phase: phase-5
 category: cpu
 type: bugfix
 created_at: 2026-10-26
+evidence: test:tests/test_rv32i_timing_dual.cpp
 ---
 
 # Improvement: RV32I 的 `sb` / `sh` MUST 只写选中的字节道

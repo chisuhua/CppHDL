@@ -6,6 +6,7 @@ phase: phase-5
 category: chlib
 type: docfix
 created_at: 2026-11-03
+evidence: test:tests/chlib/test_arithmetic_encoding_dual.cpp
 ---
 
 # Improvement: `priority_encoder` 的注释「优先处理低位」与实现**相反**（实测）

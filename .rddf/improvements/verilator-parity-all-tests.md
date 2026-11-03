@@ -6,6 +6,7 @@ phase: phase-4
 category: testing
 type: feature
 created_at: 2026-10-19
+evidence: probe:scripts/verify_dual_backend_parity.sh
 ---
 
 # Improvement: 所有单元测试都需走 interpreter + verilator 双后端路径

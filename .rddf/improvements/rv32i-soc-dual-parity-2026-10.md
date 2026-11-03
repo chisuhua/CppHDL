@@ -6,6 +6,7 @@ phase: phase-5
 category: testing
 type: feature
 created_at: 2026-10-23
+evidence: probe:examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp
 ---
 
 # Improvement: riscv-mini SoC 双路 parity（interpreter + verilator）+ JIT 回落行为显式断言
