@@ -12,7 +12,15 @@ created_at: 2026-10-28
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**独立可做**（**不需要**任何通用护栏）
+- **Status**: ✅ **已修复**（10 处全部收敛）⇒ ⇒ 判据（2026-11-03 复跑）：
+  `grep -nE "io\(\)\.[a-z_]+ *= *[^=]" examples/spinalhdl-ported/uart/uart_tx.cpp
+  samples/stream_component_example.cpp samples/stream_handshake_example.cpp` **零输出**。
+  落地来自两个 change（都不是为本项立的）：① `uart_tx.cpp` 的 4 处 —— 2026-10-28
+  `input-port-assignment-antipattern-fix-2026-10` 本身（改 `sim.set_input_value`）+ 2026-10-29
+  `uart-tx-fsm-live-logic-2026-10`（FSM 重写）；② 两个 sample 的 6 处 —— 2026-10-31
+  `chlib-stream-ready-ownership-2026-10`（两 sample 重写归位）。
+  ⚠️ **本条不需要独立 change**：修复已随上述 change 落地并有护栏（`verify_rst_n_wiring.sh`
+  覆盖 `rst_n`；其余端口仍**无**自动化护栏 ⇒ 该缺口归 `input-port-required-registry-2026-10`）。
 - **来源**：`input-port-driving-guard-2026-10` 的 spike 实测
   ⇒ 交付物 = `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md`
   §3.3
