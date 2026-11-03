@@ -559,6 +559,46 @@ jobs:
       shell: bash
       run: scripts/verify_ledger_evidence.sh --self-test
 
+    - name: Verify deprecation callsites (0 new call sites)
+      # ADR-036 marked 8 `ch_bool` / `port<ch_bool>` `&&` / `||` overloads as
+      # [[deprecated]] and set "0 new call sites" as the phase-5 completion
+      # condition -- but NOTHING enforced it => the condition was a one-off
+      # manual check => a new misuse today would NOT turn CI red (only a
+      # deprecation warning in the build log, and the build is not -Werror).
+      # R1 = the 8 markers are still in place (and the total is exactly 8);
+      # R2 = every detected deprecated call site is on the exemption list;
+      # R3 = every exemption still exists (bidirectional, no silent drift).
+      shell: bash
+      run: scripts/verify_deprecation_callsites.sh
+
+    - name: Verify deprecation callsites (self-test)
+      # WHY a self-test: the criterion is only as good as its ability to FAIL.
+      # It POISONS IN PLACE (injects a new call site / removes a marker /
+      # drops or mis-numbers a registration) and proves each turns the check
+      # red, then restores and proves green again (and byte-identical to HEAD).
+      shell: bash
+      run: scripts/verify_deprecation_callsites.sh --self-test
+
+    - name: Verify deprecation calendar gate
+      # ADR-036 §8.1: "reject any removal commit before 2027-04-17" -- but that
+      # calendar lock was enforced by good intentions only. If the 8 markers
+      # disappear, this computes the removal date (uncommitted => today, else
+      # the commit that flipped them) and compares it against the effective
+      # deadline (2027-04-17, rolled forward to 2027-07-17 by the §8.2
+      # low-activity clause: < 5 commits in the window).
+      # FAIL-CLOSED: markers gone but the date cannot be proven => FAIL.
+      shell: bash
+      run: scripts/verify_deprecation_calendar_gate.sh
+
+    - name: Verify deprecation calendar gate (self-test)
+      # Two cases with opposite expectations: removing the markers MUST turn
+      # the gate RED (today < deadline), while widening the deadline to the
+      # past MUST turn it GREEN -- the latter is the NEGATIVE CONTROL that
+      # proves the red verdict comes from the DATE, not from the mere absence
+      # of the markers.
+      shell: bash
+      run: scripts/verify_deprecation_calendar_gate.sh --self-test
+
     - name: Verify example test wiring
       # Every example-local test source MUST have a home: either registered
       # into CTest (`add_test`) or explicitly listed in

@@ -190,6 +190,21 @@ A pre-removal commit opening PRs against main **before**
 2027-04-17 is rejected; the deprecation period is not
 shortenable.
 
+⚠️ **2026-11-03 落地：这条日历锁现在有机械信号**
+（`scripts/verify_deprecation_calendar_gate.sh`）—— 此前它**纯靠自觉**：
+
+- 8 个 `[[deprecated]]` 标记**仍在位** ⇒ 绿（并打印最早允许移除日）；
+- 标记**全部消失** ⇒ 判定**移除日期**（工作树已删而 HEAD 仍有 ⇒ **今天**；
+  否则在 git 历史里找「标记由在位变为消失」的那个 commit ⇒ 用它的日期）⇒
+  与**生效期限**比较（2027-04-17；§8.2 低活动条款：窗口内 < 5 commits ⇒ 顺延 3 个月
+  ⇒ 2027-07-17）⇒ 早于期限 ⇒ **红**；
+- **只删了一部分**（0 < 标记数 < 8）⇒ **红**（8 个 overload MUST 一起移除，ADR §6）；
+- **fail-closed**：标记已消失但**判定不出移除日期**（git 历史不足 / 浅克隆）⇒ **红**
+  （无法证明合规 ⇒ 不得静默通过）。
+
+配套：`scripts/verify_deprecation_callsites.sh` 守「**0 新增调用点**」
+（§4 的 7 处豁免登记在 `.rddf/checks/hdl-logical-deprecation-registry.md`）。
+
 ### 8.2 Low-activity extension
 
 If `git log --since=2026-10-16 --until=$(date +%Y-%m-%d) | wc -l`

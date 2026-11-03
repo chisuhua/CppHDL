@@ -74,6 +74,12 @@ CppHDL/
 
 ## CONVENTIONS
 - **IO assignment**: Use `select(condition, val1, val0)` NOT `&&` on IO ports
+- **逻辑算子已弃用（ADR-036）**：`ch_bool` / `port<ch_bool>` 上的 `&&` / `||` 带
+  `[[deprecated]]` ⇒ ⇒ **用 `&` / `|`**（mixed 语义 MUST 写成显式 nonzero-test
+  形式 `(lhs != 0_d) & rhs` ⇒ ⇒ 因为 `&&` 走的是 **nonzero-test 归约**）
+  ⇒ ⇒ 「0 新增调用点」由 `scripts/verify_deprecation_callsites.sh` 守；
+  物理移除受日历锁约束（最早 **2027-04-17**）⇒ 由
+  `scripts/verify_deprecation_calendar_gate.sh` 守
 - **Module instantiation**: Use `ch::ch_module<T>` NOT `CH_MODULE` macro for templates
 - **Testbench input**: Use `sim.set_input_value(port, value)` NOT `device.io().port = value`
 - **Test context**: Always `ch::core::context ctx("name")` + `ch::core::ctx_swap swap(&ctx)`
