@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 feature `feat-dual-backend-coverage`（Phase 5）
+- **Status**: ✅ **只读盘点已交付 + 已归档**（2026-10-28 · 归档目录 `openspec/changes/archive/2026-10-28-dual-backend-full-coverage-inventory-2026-10/`）⇒ ⇒ 交付物 = 166 个测试源的逐个判定表 + 可达上限估算 + 判据结论（「上限 < 100 ⇒ 产出**判据修订请求**交 planner」）。
   + objective `objective-test-coverage-100pct`（Go 判据第 2 条）
 - **来源**: `.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` §T7 与 gap C ——
   「T7 的『`ctest -L verilator_e2e` ≥ 100』**可能不可达** ⇒ 开工前先交『可 dual 上限盘点』」

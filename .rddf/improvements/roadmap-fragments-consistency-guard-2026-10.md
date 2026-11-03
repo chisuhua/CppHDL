@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 `feat-dual-backend-coverage` 的**工程纪律**项
+- **Status**: ✅ **已实施 + 已归档**（2026-10-28 · 归档目录 `openspec/changes/archive/2026-10-28-roadmap-fragments-consistency-guard-2026-10/`）⇒ ⇒ 护栏 `scripts/verify_roadmap_fragments.sh`（C1 AUTO 块守恒 + C2/C3 内部完成度一致性 + `--self-test`）+ CI 两处挂载。
   （或独立 tooling 归口，取决于 roadmap 的 feature 划分）
 - **来源**: 2026-10-27 实施 ISA ④ 期间**实测到的簿记漂移**（两处）：
   ① `feat-dual-backend-coverage.md` 的 phase-5 bullet 仍写「🟡 Phase 4 partial

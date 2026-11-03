@@ -13,7 +13,7 @@ evidence: test:tests/chlib/test_stream.cpp#[ready]
 
 - **Date drafted**: 2026-10-31
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**决策权归 planner / architect**
+- **Status**: ✅ **已实施 + 已归档**（2026-10-31 · ADR-054 形态 E · 归档目录 `openspec/changes/archive/2026-10-31-chlib-stream-ready-ownership-2026-10/`）⇒ ⇒ ⚠️ **落地形态与本草案不同**：草案写的是 ADR-045 裁决 1 的「`<组合子>_connect_ready(result)` 由调用方在设置好输出 ready **之后**再调用」；实测该形态**不可行**（结果对象尚未返回 ⇒ 读输出 ready 得到空 proxy ⇒ 空操作数 ⇒ 组合子不可用）⇒ ⇒ 改为 **形态 E**（默认驱动 + 消费端 `<<=` 覆盖），`connect_ready` 形态**作废**。⇒ capability `chlib-stream-ready-ownership`（ADDED ×5）。
   （⚠️ 本草案**只登记实施期实测约束 + 范围界定**，**不**替 architect 裁决）
 - **来源**：ADR-045 §1（决策 0-B）**已裁决**「两阶段 ready 所有权」，但明写
   「⏸ **本决策本次不生效** ⇒ 由 follow-up change `chlib-stream-ready-ownership-2026-10`

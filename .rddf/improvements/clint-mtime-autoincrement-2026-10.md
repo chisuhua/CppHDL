@@ -12,7 +12,7 @@ created_at: 2026-10-24
 
 - **Date drafted**: 2026-10-24
 - **Drafted by**: build-agent (builder role)
-- **Status**: ✅ **已实施**（2026-10-30）⇒ change `clint-mtime-autoincrement-2026-10`
+- **Status**: ✅ **已实施 + 已归档**（2026-10-30 · ADR-049 · 归档目录 `openspec/changes/archive/2026-10-30-clint-mtime-autoincrement-2026-10/`）⇒ ⇒ `mtime` = 64 位自由运行计数器（写优先校时）+ capability `cpu-clint-timer`（ADDED ×6）。
   （**新建** capability `cpu-clint-timer`，ADDED ×6 ⇒ 归档**禁** `--skip-specs`）
   ⇒ ⚠️ **实施期实测新发现第 3 条陷阱**（ADR-049 §1.4 未载）：
   `bits_update<32>` 在 **64 位 target** 上**返回 64 位值** ⇒ 用 32 位接收 ⇒

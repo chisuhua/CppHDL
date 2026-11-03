@@ -12,7 +12,7 @@ created_at: 2026-10-19
 
 - **Date drafted**: 2026-10-19
 - **Drafted by**: build-agent (cache-complete-rewrite Session B 收尾)
-- **Status**: 📋 Handoff document — 5-segment draft, 等待 rdd-planner / rdd-builder 启动
+- **Status**: ✅ **已实施 + 已归档**（2026-10-19 · 归档目录 `openspec/changes/archive/2026-10-19-verilator-parity-all-tests/`）⇒ ⇒ 21 个 dual-backend 测试文件落地（此后 `DUAL_BACKEND_PARITY_TOTAL` 逐批增长）。
 - **Source**: 用户在 cache-complete-rewrite 合并后提出"所有单元测试除了 interpreter 路径外，都要有 verilator 后端的路径"
 
 ## 1. Context

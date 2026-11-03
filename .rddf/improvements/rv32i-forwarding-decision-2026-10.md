@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (planner role)
-- **Status**: 📋 5-segment draft；change `rv32i-forwarding-decision-2026-10` 待实施
+- **Status**: ✅ **已实施 + 已归档**（2026-10-27 · ADR-047 · 归档目录 `openspec/changes/archive/2026-10-27-rv32i-forwarding-decision-2026-10/`）⇒ ⇒ capability `rv32i-data-forwarding`（5 条 Requirement，唯一权威的距离矩阵）+ 4 个 capability 同步 MODIFIED。
   （✅ **阻塞已解除**：ADR-047 已按缺口分析修订 ⇒ 见 §6）
 - **架构依据**: `docs/adr/ADR-047-rv32i-data-forwarding.md`（Accepted，**2 轮 critic 对抗审稿**
   ⇒ 第 1 轮 APPROVE_WITH_CONDITIONS（7 SHOULD_FIX + 3 NITS，**全部 CLOSED**）

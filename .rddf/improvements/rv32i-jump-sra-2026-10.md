@@ -12,7 +12,7 @@ created_at: 2026-10-26
 
 - **Date drafted**: 2026-10-26
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft；change `rv32i-jump-sra-2026-10` 实施中
+- **Status**: ✅ **已实施 + 已归档**（2026-10-27 · 归档目录 `openspec/changes/archive/2026-10-27-rv32i-jump-sra-2026-10/`）⇒ ⇒ `JAL`/`JALR` 无条件重定向 + `link_value` 通路 + `SRA` 合成实现 ⇒ 连带修掉 U 型立即数掩码与 `alu_op` 的 SUB/SRA 误判。
 - **来源**: 2026-10-26 的 roadmap 对齐审计（实测挖出）—— 此前只登记在根
   `AGENTS.md §KNOWN LIMITATIONS` 的「RV32I 的 ISA 覆盖边界」条目里。
 

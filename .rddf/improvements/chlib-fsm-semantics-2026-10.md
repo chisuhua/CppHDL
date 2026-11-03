@@ -12,7 +12,7 @@ created_at: 2026-10-29
 
 - **Date drafted**: 2026-10-29
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 `feat-dual-backend-coverage` 的「**覆盖质量**」缺口
+- **Status**: ✅ **已实施 + 已归档**（2026-10-29 · 归档目录 `openspec/changes/archive/2026-10-29-chlib-fsm-semantics-2026-10/`）⇒ ⇒ 交付物齐：框架头注释的「5 条纪律 / 2 条陷阱 / 现状契约」+ capability `chlib-state-machine-semantics`（ADDED ×6）+ 静态护栏 `scripts/verify_fsm_next_wiring.sh`（含 `--self-test`）+ CI 两处挂载。
 - **来源**：**两次**实施期实测（`uart-tx-fsm-live-logic-2026-10` 与
   `spi-fsm-fixture-live-logic-2026-10`）⇒ **同一缺陷在仓内两次真实发生**，
   且两次都被「**只有 parity**」的断言掩盖 ⇒ 长期「假绿」。

@@ -12,7 +12,7 @@ created_at: 2026-10-23
 
 - **Date drafted**: 2026-10-23
 - **Drafted by**: build-agent (planner role)
-- **Status**: 📋 Handoff document — 5-segment draft，等待 rdd-builder 启动
+- **Status**: ✅ **已实施 + 已归档**（2026-10-25 · ADR-046 · 归档目录 `openspec/changes/archive/2026-10-25-rv32i-canonical-convergence-2026-10/`）⇒ ⇒ `include/cpu/` 成为 RV32I 微架构唯一权威（examples 侧 32 个头收敛到 1 个）+ 护栏 `verify_no_duplicate_rv32i_headers.sh`。
 - **Objective**: `objective-riscv-mini-convergence`（C2）
 - **强前置**：ADR-046 `rv32i-canonical-home`（rdd-arch 职责）+ C1 `riscv-mini-test-triage-2026-10` archive
 

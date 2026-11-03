@@ -12,7 +12,7 @@ created_at: 2026-10-23
 
 - **Date drafted**: 2026-10-23
 - **Drafted by**: build-agent (planner role)
-- **Status**: 📋 Handoff document — 5-segment draft，等待 rdd-builder 启动
+- **Status**: ✅ **已实施 + 已归档**（2026-10-26 · 归档目录 `openspec/changes/archive/2026-10-26-rv32i-soc-dual-parity-2026-10/`）⇒ ⇒ SoC 级双后端 parity 测试（`test_rv32i_soc_dual_parity`）。
 - **Objective**: `objective-rv32i-e2e`（C3）
 - **强前置**：C1 `riscv-mini-test-triage-2026-10` + C2 `rv32i-canonical-convergence-2026-10` archive
 

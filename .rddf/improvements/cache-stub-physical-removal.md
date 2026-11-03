@@ -13,7 +13,7 @@ created_at: 2026-10-18
 - **Date drafted**: 2026-10-18
 - **Drafted by**: build-agent (architect role)
 - **Source**: 用户 "选择 2"（ADR-037 cache stub 物理删除 6-month plan 提前落地）
-- **Status**: 🔄 **Active — 重启流程** (2026-10-19 cache-complete-rewrite Session B 结束)
+- **Status**: ✅ **已实施 + 已归档**（2026-10-20 · 归档目录 `openspec/changes/archive/2026-10-20-cache-stub-physical-removal-2026-10/`）⇒ ⇒ 处置 = **物理删除** `include/cpu/cache/{i_cache_stub.h,d_cache_stub.h}`（ADR-037）+ 迁移 3 个消费方测试 ⇒ ⇒ 「🔄 Active — 重启流程」是**立项当时的**状态。
   - **cache-complete-rewrite 已完成** (commit 91a0833 + 1221819 + 49902b2 + bb286a2; openspec change 'cache-complete-rewrite' 已归档)
   - ADR-039 §2 R2 spike 闭环 → cache_complete.h 重写为 ch_mem-based (commit 91a0833)
   - ADR-041 Sync/Async variant split (commit 49902b2): `ICacheComplete` / `DCacheComplete` 改为兼容 shim (alias `ICacheSync` / `DCacheSync`)

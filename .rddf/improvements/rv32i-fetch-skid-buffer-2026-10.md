@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (planner role)
-- **Status**: 📋 5-segment draft；change 目录**待建**
+- **Status**: ✅ **已实施 + 已归档**（2026-10-27 · ADR-048 · 归档目录 `openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`）⇒ ⇒ 1 级 skid buffer + `primed` 门控 ⇒ 退休数 188 → **178**。
   （本草案是 `feat-rv32i-isa-completeness` ④ 的**载体** —— 此前只有
   feature ④ 的条目 + plan T5 的范围定义，**无 improvement** ⇒ 与
   `dual-backend-rv32i-integration` 同型的「载体缺失」）

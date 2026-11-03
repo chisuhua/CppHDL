@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 `feat-dual-backend-coverage` 的**工程纪律**项
+- **Status**: 🔴 **已结案 = 关闭**（2026-10-28 spike 已归档：`openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`）⇒ ⇒ 结论 = **通用状态型护栏不做**（① 运行期无法识别端口身份 ⇒ 诊断不可行动；② 「从未被驱动」≠「应该被驱动」⇒ 缺「必需端口注册表」；③ 平规则在必需的 per-TEST-CASE 粒度上必然误报 ⇒ 死结）⇒ ⇒ **本条不是「待实施」，是「已裁决不做」** ⇒ 替代路线另立项：`input-port-driving-event-diff-check-2026-10.md`（事件驱动增量检查）+ `input-port-required-registry-2026-10.md`（必需端口注册表）。
 - **来源**：2026-10-27 两轮审稿的反复指向 ——
   ① Batch 2/3 的第 1 轮 BLOCKER = 「第 1 拍前只驱动了 6/7 个输入端口」；
   ② M3' 实测**零判别力**（删掉那行驱动仍全绿）⇒ 如实记录「**未驱动端口没有通用的

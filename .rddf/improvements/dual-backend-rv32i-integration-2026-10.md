@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (planner role)
-- **Status**: 📋 5-segment draft；change 目录**待建**（本草案是为 `objective-rv32i-e2e` 的
+- **Status**: ✅ **已实施 + 已归档**（2026-10-27 · 归档目录 `openspec/changes/archive/2026-10-27-dual-backend-rv32i-integration-2026-10/`）⇒ ⇒ 3 个 `DUAL_BACKEND_TEST_PAIR` 落在**既有** target `test_rv32i_pipeline_behavior.cpp`（未新建文件）⇒ ⇒ `tests/test_rv32i_pipeline.cpp` 未被修改 ✓。
   Go 判据第 5 条补上「可执行载体」）
 - **依据**：
   - `tests/test_rv32i_pipeline_behavior.cpp` **文件头**的 Batch 划分（唯一的原始定义）

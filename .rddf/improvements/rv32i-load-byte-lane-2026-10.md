@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 feature `feat-rv32i-isa-completeness`（ISA 语义边界收口）
+- **Status**: ✅ **已实施 + 已归档**（2026-10-28 · 归档目录 `openspec/changes/archive/2026-10-28-rv32i-load-byte-lane-2026-10/`）⇒ ⇒ `LB`/`LH` 改用框架 `sext<32>` 原语（消除手写掩码）+ 20 字固件的 12 项手推金标 + 编译期判别力护栏。
 - **来源**: ④（取指 skid buffer）收口后的 roadmap 盘点 —— `feat-rv32i-isa-completeness` 的
   验收项「SB/SH/LB/LH/LBU/LHU 的字节/半字语义在双后端一致且符合 ISA（含非零 offset）」
   仍未勾选

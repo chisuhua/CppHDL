@@ -12,7 +12,7 @@ created_at: 2026-10-27
 
 - **Date drafted**: 2026-10-27
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 `feat-dual-backend-coverage` 的**工程纪律**项
+- **Status**: ✅ **已实施 + 已归档**（2026-10-28 · 归档目录 `openspec/changes/archive/2026-10-28-perf-baseline-refresh-2026-10/`）⇒ ⇒ 重采集 `tests/benchmark/perf_baseline.json`（`git_sha=0758fa0`）+ C3 变松披露（TC-11|regs=10|jit 2.012×）+ 护栏 `verify_perf_baseline_anchors.sh` 的锚点存活机制。
 - **来源**: 2026-10-27 实测 —— `ctest -L perf` 10/11，`perf_regression` 报
   TC-08 **regs=10** 两处回归（jit 1.89× / verilator 1.31×）
 

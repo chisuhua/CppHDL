@@ -12,7 +12,7 @@ created_at: 2026-10-28
 
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 feature 的「examples 真实性」缺口
+- **Status**: ✅ **已实施 + 已归档**（2026-10-29 · 归档目录 `openspec/changes/archive/2026-10-29-uart-tx-fsm-live-logic-2026-10/`）⇒ ⇒ FSM 首次真正工作（5 条纪律）+ `busy` 高电平总拍数断言（3906）⇒ ⇒ 变异 7/7 全抓（含「采样网格对位段长度零判别力」那条）。
 - **来源**：`input-port-assignment-antipattern-fix-2026-10` 的 `design.md` §4
   （该 change 只修 4 处失效赋值，**不**修本缺陷）
 

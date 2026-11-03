@@ -12,7 +12,7 @@ created_at: 2026-10-29
 
 - **Date drafted**: 2026-10-29
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，归属 `feat-dual-backend-coverage` 的「**覆盖质量**」缺口
+- **Status**: ✅ **已实施 + 已归档**（2026-10-29 · 归档目录 `openspec/changes/archive/2026-10-29-spi-fsm-fixture-live-logic-2026-10/`）⇒ ⇒ fixture 首次真正工作 + **手推**语义金标（非回文字节 `0x96` + ≥2 次传输）⇒ ⇒ 打破「只有 parity ⇒ 缺陷同构 ⇒ 假绿」。
 - **来源**：`uart-tx-fsm-live-logic-2026-10` 的 NOTES 顺带订正
   （该 change 的 commit message 明确登记：`test_verilator_complex_e2e.cpp`
   的 SPI fixture **自身也有** last-wins 多驱动问题 ⇒ 「正确形态范例」**不准确**）

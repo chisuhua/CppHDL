@@ -12,7 +12,7 @@ created_at: 2026-10-30
 
 - **Date drafted**: 2026-10-30
 - **Drafted by**: build-agent（planner role）
-- **Status**: ✅ **已立项**（2026-10-30）⇒ change
+- **Status**: ✅ **已实施 + 已归档**（2026-10-30 · 归档目录 `openspec/changes/archive/2026-10-30-chlib-guard-contribution-priority-2026-10/`）⇒ ⇒ capability `chlib-state-machine-semantics` 新增「状态守卫贡献的优先级 = 先匹配者胜」+ 结构级断言（最外层 mux 的守卫 = 第一个贡献的守卫）。
   `openspec/changes/chlib-guard-contribution-priority-2026-10/`
 - **归属 feature**：**待裁决** —— `feat-dual-backend-coverage` 的主题是「双后端
   覆盖」，与本项**不**直接相关 ⇒ ⇒ 本项暂挂 phase-5（归属待 planner 裁决）

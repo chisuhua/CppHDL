@@ -13,7 +13,7 @@ evidence: unmeasured
 
 - **Date drafted**: 2026-11-01
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft，**只登记事实 + 范围界定**，**不**替 architect 裁决
+- **Status**: ✅ **已实施**（2026-11-02 · B8 落地）⇒ ⇒ 交付 = 命名诚实性登记表 `.rddf/checks/chlib-naming-honesty-registry.md` + 护栏 `scripts/verify_chlib_naming_honesty.sh`（R1 登记 ⊆ 组件全集 / R2 判别性用例仍在 / R3 per-change 义务 + `--self-test` 3/3）⇒ ⇒ ⚠️ **登记范围只覆盖「被改动过 / 名字说过谎」的组件**，不是全仓普查（漏报方向）。
 - **来源**：P2（`stream-arbiter-rr-rotation`）发现「`stream_arbiter_sequence` 的
   注释谎称 round-robin」⇒ ⇒ **该类缺陷（名字/注释 over-promise）此前只修了
   1 个组件** ⇒ ⇒ ⇒ **⇒ 本项做一次普查**

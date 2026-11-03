@@ -12,7 +12,7 @@ created_at: 2026-10-31
 
 - **Date drafted**: 2026-10-31
 - **Drafted by**: build-agent（builder role）
-- **Status**: 📋 5-segment draft，**决策权归 planner / architect**
+- **Status**: ✅ **已实施（选项 2「标注式」）**（2026-11-02 · 归档目录 `openspec/changes/archive/2026-11-02-node-driver-diagnosis-2026-11/`）⇒ ⇒ 交付 = `ch::core::drive_state`（五态枚举）+ `diagnose_drive()`（唯一判定实现）+ capability `core-node-driver-visibility`（ADDED ×1）⇒ ⇒ **只读**、不改任何读取语义 ⇒ 爆炸半径最小的那条路线。
   （⚠️ 本草案**只登记实测事实与范围界定**，**不**替 architect 裁决方案）
 - **来源**：change `chlib-stream-ready-ownership-2026-10` 实施期**证伪**
   （`design.md` §9.1）⇒ ⇒ critic 判 **REJECT** 时明确建议「**独立立项**」

@@ -12,7 +12,7 @@ created_at: 2026-10-26
 
 - **Date drafted**: 2026-10-26
 - **Drafted by**: build-agent (builder role)
-- **Status**: 📋 5-segment draft；change `rv32i-store-byte-enable-2026-10` 已实施（待对抗审稿 + 归档）
+- **Status**: ✅ **已实施 + 已归档**（2026-10-26 · 归档目录 `openspec/changes/archive/2026-10-26-rv32i-store-byte-enable-2026-10/`）⇒ ⇒ `DataTCM` 新增 `strbe` 端口 + 读-改-写合并 + 流水线侧 lane 对齐（只对 SB/SH）。
 - **来源**: 2026-10-26 的 roadmap 对齐审计（实测挖出）—— 此前只登记在根
   `AGENTS.md §KNOWN LIMITATIONS` 的「RV32I 的 ISA 覆盖边界」条目里。
 

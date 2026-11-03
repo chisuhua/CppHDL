@@ -12,7 +12,7 @@ created_at: 2026-10-29
 
 - **Date drafted**: 2026-10-29
 - **Drafted by**: build-agent（builder role；决策由 architect 落 ADR-050）
-- **Status**: 📋 5-segment draft，**已立项**（change `chlib-fsm-action-semantics-2026-10`）
+- **Status**: ✅ **已实施 + 已归档**（2026-10-30 · ADR-050 · 归档目录 `openspec/changes/archive/2026-10-30-chlib-fsm-action-semantics-2026-10/`）⇒ ⇒ 两个 commit 落地：① 移除 15 个死/误导符号 + 3 项硬化（`entry_state` 初始化 / `set_entry` 越界抛 / 枚举越界抛）② `sm.contrib()` + `resolve_hold/resolve_or` 状态守卫贡献 API + 两个 dogfood 迁移。
 - **来源**：ADR-050（`docs/adr/ADR-050-chlib-state-machine-semantics.md`）
 
 ## 1. Why (背景与动机)

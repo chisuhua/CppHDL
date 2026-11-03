@@ -12,7 +12,7 @@ created_at: 2026-10-23
 
 - **Date drafted**: 2026-10-23
 - **Drafted by**: build-agent (planner role)
-- **Status**: 📋 Handoff document — 5-segment draft，等待 rdd-builder 启动
+- **Status**: ✅ **已实施 + 已归档**（2026-10-24 · 归档目录 `openspec/changes/archive/2026-10-24-riscv-mini-test-triage-2026-10/`）⇒ ⇒ 14 个 examples Catch2 target 进 CTest + 6 个 target 删除（留痕 `examples/removed_examples.txt`）。
 - **Objective**: `objective-riscv-mini-convergence`（C1，无依赖，可立即启动）
 
 ## 1. Why (背景与动机)
