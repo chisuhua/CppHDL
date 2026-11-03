@@ -28,8 +28,14 @@ a convenience wrapper that runs the init + a sanity check.
 | Platform | `BUILD_VERILATOR=OFF` | `BUILD_VERILATOR=ON` |
 |---|---|---|
 | Linux | ✅ | ✅ **verified**（CI `pr-verilator-fast` / `nightly-verilator`）|
-| macOS | ✅（CI `build-and-test` 的 macos-14 leg 就是这么跑）| ❌ **explicitly excluded** |
-| Windows | ✅（未验证）| ❌ **explicitly excluded** |
+| macOS | ⚠️ 可编译，**CI 不覆盖** | ❌ **explicitly excluded** |
+| Windows | ⚠️ 可编译，**CI 不覆盖** | ❌ **explicitly excluded** |
+
+⚠️ **CI 的平台范围 = 仅 Ubuntu**（2026-11-03 用户裁决：「CI只做ubuntu系统,
+macos/windows不做」）⇒ ⇒ macOS-14 的 leg **已从 `build-and-test` 矩阵移除**，
+Windows-2022 不排期 ⇒ ⇒ 上表的 macOS / Windows 两行**没有 CI 证据**，
+只是「本仓代码在这些平台上仍可编译（`BUILD_VERILATOR=OFF`）」的陈述。
+⇒ ⇒ 想让 CI 覆盖多平台 = **独立立项**。
 
 ⚠️ **显式排除是刻意的**（2026-11-03 裁决）：`BUILD_VERILATOR=ON` 在 macOS / Windows
 上会在 **configure 期** `FATAL_ERROR`，给出可行动的报错，而不是在编译期或运行期以
@@ -85,8 +91,8 @@ macOS 上 **`BUILD_VERILATOR=ON` 会在 configure 期 `FATAL_ERROR`**，这是�
 后端假定 POSIX `dlopen` / `libVtop.so` 语义，且公开头用 C++23 `std::expected`
 （并非所有工具链组合都提供）。
 
-⇒ ⇒ macOS 上请用 `-DBUILD_VERILATOR=OFF`（CI 的 macos-14 leg 就是这么跑的），
-库与全部非 Verilator 测试照常构建与运行。
+⇒ ⇒ macOS 上请用 `-DBUILD_VERILATOR=OFF`，库与全部非 Verilator 测试照常构建与运行。
+⚠️ **CI 不覆盖 macOS**（2026-11-03 裁决：CI 只跑 Ubuntu）⇒ ⇒ 这条路径**没有 CI 证据**。
 
 <details>
 <summary>历史记录（2026-11 之前）：尝试过的 brew 依赖清单</summary>

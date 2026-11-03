@@ -74,7 +74,7 @@ $ sed -n '34p' /usr/include/c++/13/expected
 | CI job | 平台 | 编译器 | 编译该头？ | 结果 |
 |---|---|---|---|---|
 | `build-and-test` | ubuntu-22.04 | **g++**（libstdc++） | **是**（dual 测试） | ✅ |
-| `build-and-test` | **macos-14** | AppleClang（**libc++**） | **是**（dual 测试） | ✅ ⇒ ⇒ **macOS 其实是好的** |
+| `build-and-test` | **macos-14**（**历史**：该 leg 已于 2026-11-03 随「CI 只跑 Ubuntu」裁决移除）| AppleClang（**libc++**） | **是**（dual 测试） | ✅ ⇒ ⇒ **macOS 其实是好的**（历史事实；现在没有 CI 证据）|
 | `pr-verilator-fast` / `nightly-verilator` | Linux | g++ | 是 | ✅ |
 
 ⇒ ⇒ **CI 里没有任何一处用 `clang++ + libstdc++ 13`** ⇒ ⇒ 真正的缺陷面

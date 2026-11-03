@@ -6,7 +6,7 @@
 | `feat-dual-backend-coverage` | completed | phase-4, phase-5 | 单元测试统一跑 interpreter + verilator 双后端（5 阶段推进） |
 | `feat-hdl-logical-deprecation` | active | phase-4, phase-5 | ADR-036 逻辑算子 deprecation 标记 → 全量迁移 → 移除（removal gate） |
 | `feat-hierarchical-rtl-output` | active | phase-5 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致） |
-| `feat-platform-matrix` | active | phase-3, phase-5 | CI 平台矩阵扩展（macOS-14 已启用 → Windows-2022） |
+| `feat-platform-matrix` | completed | phase-3, phase-5 | CI 平台矩阵 = 仅 Ubuntu（macOS/Windows 明确不做 · 2026-11-03 裁决） |
 | `feat-riscv-mini-convergence` | completed | phase-5 | 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 |
 | `feat-riscv-mini-rtl-debt` | active | phase-5 | riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增） |
 | `feat-rv32i-integration` | completed | phase-5 | RV32I 5-stage 流水线 + riscv-mini SOC 端到端集成（双路 parity + JIT 回落断言） |
@@ -173,6 +173,9 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 > 无条件 include 它 ⇒ 加了平台 `#error` 会打断那两类平台的**整个测试构建**）
 > ⇒ ⇒ 「显式排除」只落在 **CMake 层**。
 > ⇒ 那两类平台请用 `-DBUILD_VERILATOR=OFF`；解释器 / JIT 不受影响。
+> ⚠️ **CI 平台范围 = 仅 Ubuntu**（2026-11-03 用户裁决）⇒ ⇒ 那两类平台**没有 CI 证据**
+> （macOS-14 的 leg 已从 `build-and-test` 矩阵移除）⇒ ⇒ 上面「在 macOS/Windows 上仍可
+> `#include`」是**代码事实**，不是 CI 保证。
 > 想让后端支持新平台 = **独立 work item**（先解决 ① 与 ②，并清掉
 > `scripts/lib/header_self_contained_exempt.txt` 的 `stdlib:expected` 豁免 ——
 > 它在能力可用时会**自动过期转红**，那就是「真的修好了」的机械信号）。
@@ -1389,7 +1392,7 @@ The refactor introduces a standard **aggregator pattern** for hot headers: a sli
 
 Use `git checkout <tag>` to roll back to any phase boundary.
 
-- **macOS CI status (post PR-16 followup)**: macOS-14 enabled (clang/arm64 compile errors fixed). Windows-2022 still deferred (one-line matrix change when MSVC C++20 module edge cases are addressed). JIT path validated nightly (CH_JIT_ENABLE=ON default, -DCH_JIT_ENABLE=OFF only applies to PR-feedback matrix per design notes in .github/workflows/ci.yml).
+- **CI 平台范围 = 仅 Ubuntu**（2026-11-03 用户裁决：「CI只做ubuntu系统, macos/windows不做」）⇒ macOS-14 leg **已从 `build-and-test` 矩阵移除**（此前它提供 clang/arm64 编译覆盖 ⇒ ⇒ 现在**没有**多平台编译覆盖）；Windows-2022 **不排期**。恢复多平台覆盖 = **独立立项**（不是把 matrix 行加回来）。 JIT path validated nightly (CH_JIT_ENABLE=ON default, -DCH_JIT_ENABLE=OFF only applies to PR-feedback matrix per design notes in .github/workflows/ci.yml).
 
 ## 已消除的过时信息
 - "7 个禁用测试" → fix-test-completeness 计划将 4 个被注释的 `add_catch_test` 重新启用（`test_branch_predictor`、`test_cache_pipeline`、`test_phase4_chlib`、`test_rv32i_pipeline`），目标 0 禁用

@@ -1,10 +1,14 @@
 # CppHDL CI/CD Pipeline
+# ⚠️ **平台范围 = 仅 Ubuntu**（2026-11-03 用户裁决：「CI只做ubuntu系统,
+# macos/windows不做」）⇒ ⇒ 本工作流的**所有** job 都跑在 ubuntu-22.04 上。
+#   · macOS-14 的 leg **已从矩阵中移除**（它此前提供 clang/arm64 的编译覆盖）；
+#   · Windows-2022 **不排期**；
+#   · 「Verilator 后端 = Linux-only」这条契约（`BUILD_VERILATOR=ON` 在
+#     APPLE/WIN32 上 configure 期 FATAL_ERROR）因此与 CI 范围**一致**。
+#   ⇒ ⇒ 想恢复多平台覆盖 = **独立立项**（不是把 matrix 行加回来那么简单）。
+#
 # Fast PR feedback: Linux only (Release + Debug). Nightly job
-# builds the full Verilator stack on Linux too. macOS and Windows
-# are intentionally NOT in the PR-feedback matrix; the codebase
-# has pre-existing source bugs that only surface on clang/arm64
-# (see known-issues below). Tracking those fixes is out of scope
-# for this CI PR.
+# builds the full Verilator stack on Linux too.
 #
 # Design notes (2026-06 fix v2 + v3 scope-down, post-review):
 # 1. Ubuntu 22.04 ships g++-11/12 in main repos; g++-13 needs the
@@ -18,7 +22,8 @@
 #    enabled by default) needs LLVM dev headers. We pin
 #    LLVM 22 on Linux (modern, matches local dev machines); install via
 #    LLVM official APT repo (apt.llvm.org) since Ubuntu 22.04 jammy only
-#    ships llvm-14 in main. On macOS: brew install llvm@22.
+#    ships llvm-14 in main. (The macOS `brew install llvm@22` variant was
+#    removed together with the macOS matrix leg on 2026-11-03.)
 # 3. BUILD_VERILATOR defaults to ON in CMakeLists.txt; the full
 #    Verilator build is 10-30 min cold and only runs in the
 #    separate `nightly-verilator` job (cron + manual dispatch).
@@ -81,10 +86,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux + macOS by design (see header). Windows-2022 remains
-        # deferred (MSVC C++20 module edge cases). The OS-specific
-        # install steps below cover both ubuntu-22.04 and macos-14.
-        os: [ubuntu-22.04, macos-14]
+        # ⚠️ **仅 Ubuntu**（2026-11-03 用户裁决：CI 只做 ubuntu，macos/windows 不做）
+        #    ⇒ macOS-14 / Windows-2022 **都不在矩阵里**。
+        #    ⇒ 意味着**没有** clang / arm64 / MSVC 的编译覆盖 ⇒ 想要多平台覆盖
+        #    MUST 走**独立立项**（含各自的已知问题清单）。
+        os: [ubuntu-22.04]
         build_type: [Release, Debug]
         include:
           - os: ubuntu-22.04
@@ -94,14 +100,6 @@ jobs:
           - os: ubuntu-22.04
             build_type: Debug
             compiler: g++
-            cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
-          - os: macos-14
-            build_type: Release
-            compiler: clang
-            cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
-          - os: macos-14
-            build_type: Debug
-            compiler: clang
             cxx_flags: "-Wall -Wextra -Wpedantic -Wshift-overflow=2"
 
     steps:
@@ -184,30 +182,13 @@ jobs:
         echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
         echo "Discovered LLVM_DIR=$LLVM_DIR"
 
-    # ---- macOS: clang + brew llvm -------------------------------
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      shell: bash
-      run: |
-        set -e
-        brew install ccache llvm@${{ env.LLVM_VERSION }}
-        LLVM_PREFIX=$(brew --prefix llvm@${{ env.LLVM_VERSION }})
-        LLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm"
-        if [ ! -f "$LLVM_DIR/LLVMConfig.cmake" ]; then
-          echo "::error::LLVMConfig.cmake not found at $LLVM_DIR"
-          exit 1
-        fi
-        echo "LLVM_DIR=$LLVM_DIR" >> "$GITHUB_ENV"
-        echo "Discovered LLVM_DIR=$LLVM_DIR"
-        clang --version
-
     # ---- CMake configure (BUILD_VERILATOR=OFF) ------------------
     # BUILD_VERILATOR=OFF keeps PR feedback fast (no 10-30 min
     # Verilator cold build; that moves to nightly-verilator below).
     # The JIT path is the CMakeLists default and is exercised on
     # every PR-feedback run, with the full perf suite validated
-    # nightly. macOS clang warnings are silenced via cxx_flags;
-    # only true errors fail the build (cmake's default policy).
+    # nightly. (macOS was removed from the matrix on 2026-11-03 =>
+    # the clang-specific flags are gone with it.)
     - name: Configure CMake
       shell: bash
       run: >
@@ -272,8 +253,9 @@ jobs:
       # generator is unreachable => the AUTO block is hand-maintained.
       # ⚠️ PORTABILITY: the script MUST avoid GNU-only forms (e.g. `sed -i`
       # without a suffix) => its --self-test fixtures mutate files with
-      # `python3` heredocs only => BSD sed (macos-14) behaves identically.
-      # Portable bash + python3 (runs on every OS in the matrix).
+      # `python3` heredocs only => BSD sed behaves identically.
+      # Portable bash + python3 (also keeps the scripts usable on a
+      # developer's macOS laptop, even though CI is Ubuntu-only).
       shell: bash
       run: scripts/verify_roadmap_fragments.sh
 
@@ -289,8 +271,8 @@ jobs:
       # be fully closed") => every criterion needs a fixture proving it has
       # discriminating power.
       # ⚠️ The fixtures must stay portable (no `sed -i`): a GNU-only fixture
-      # mutation silently does nothing on BSD sed => the self-test turns RED
-      # on the macos-14 leg instead of testing anything.
+      # mutation silently does nothing on BSD sed => the self-test would
+      # turn RED on a macOS laptop instead of testing anything.
       shell: bash
       run: scripts/verify_roadmap_fragments.sh --self-test
 
