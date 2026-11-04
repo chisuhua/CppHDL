@@ -79,6 +79,29 @@ struct HierarchyModule {
     std::vector<HierarchyInstance> instances;
 };
 
+/// 分析层对「**需要隐式端口合成**」的跨 module 边的**响应方式**。
+///
+/// ⚠️ **默认 `Reject`** ⇒ ⇒ 「分析层 fail-closed」这条既有契约**一字不改**仍然成立
+/// （T3-② 的判据继续有效）⇒ ⇒ 发射器改用 `Record`（把这类边**记录**下来，
+/// 由发射器按 `PortPolicy` 决定「合成 + 告警 / 失败 / 首错即返」）。
+///
+/// ⚠️ **同一分类 · 两种响应**（不是两套判定标准）：边**怎么分类**始终一样，
+/// 变的只是「遇到它怎么办」。
+enum class ImplicitPortHandling {
+    Reject,   ///< 响亮拒绝（**默认** · 分析层阶段就抛）
+    Record,   ///< 记录到 `pending_implicit_edges`（⇒ 交给发射器处置）
+};
+
+/// 一条「需要隐式端口合成」的跨 module 边（ADR-060 §2.1）。
+struct PendingImplicitEdge {
+    std::string from_node;     ///< 驱动端节点名
+    std::string from_module;   ///< 驱动端所属 module key
+    std::string to_node;       ///< 被驱动端节点名
+    std::string to_module;     ///< 被驱动端所属 module key
+    /// 人类可读的成因（`sibling / non-adjacent modules` / `child side is not a port` / …）
+    std::string reason;
+};
+
 /// 连接表的一行（**只记录跨 module 的边**）。
 struct HierarchyEdge {
     std::string from_node;     ///< 驱动端（源）节点名
@@ -96,6 +119,10 @@ struct HierarchyAnalysis {
     /// 节点 → 折叠后的 module key（`owner == nullptr` ⇒ 根 module 的 key）
     /// ⇒ ⇒ 发射器据此判断「某条驱动边是否跨 module」（跨了就 MUST 由实例端口映射接管）
     std::unordered_map<const ch::core::lnodeimpl *, std::string> module_of_node;
+    /// 需要**隐式端口合成**的跨 module 边（ADR-060 §2.1）⇒ ⇒ **仅在
+    /// `ImplicitPortHandling::Record` 下填充**。
+    /// ⚠️ **MUST NOT 进 `to_text()`** ⇒ ⇒ T3-② 的 4 份 golden 逐字节不变。
+    std::vector<PendingImplicitEdge> pending_implicit_edges;
 
     /// 结构化文本快照（golden 形态 ⇒ 可逐字节比对）。
     /// ⚠️ 确定性：模块按拓扑序；端口按节点 id 升序；体内节点按 id 升序；
@@ -111,8 +138,13 @@ struct HierarchyAnalysis {
 ///   ③ **成层**组件自己驱动自己的 `ch_in` ⇒ 抛（子 module 内对 `input` 赋值非法）。
 ///
 /// 另外两条**响亮拒绝**：
-///   ④ 跨 module 的 `ch_mem` ⇒ 抛（ADR-060：mem MUST 与使用者同层）；
-///   ⑤ 需要**隐式端口合成**的跨 module 边 ⇒ 抛（T3-④ 的义务，本阶段不静默产出半成品）。
-HierarchyAnalysis analyze_hierarchy(Component& root);
+///   ④ 跨 module 的 `ch_mem` ⇒ **永远**抛（ADR-060：mem MUST 与使用者同层；该裁决是
+///      「拒绝」⇒ ⇒ **不参与** `PortPolicy` 的 collect 语义）；
+///   ⑤ 需要**隐式端口合成**的跨 module 边 ⇒ 由 `handling` 决定：**抛**（默认）或**记录**
+///      （发射器按策略处置）。
+///
+/// ⚠️ **默认参数 = `Reject`** ⇒ ⇒ 「分析层 fail-closed」这条既有契约不变。
+HierarchyAnalysis analyze_hierarchy(Component& root,
+                                     ImplicitPortHandling handling = ImplicitPortHandling::Reject);
 
 }   // namespace ch

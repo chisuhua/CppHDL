@@ -168,6 +168,36 @@ public:
     }
 };
 
+// ── DUT ④：**两条**兄弟边（⇒ ⇒ 两条「需要隐式端口合成」的边）────────────
+//    ⇒ ⇒ 用例 MUST 有**两条** ⇒ ⇒ 否则「报全部」与「报第一条」不可区分
+class SibLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("sib_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    SibLeaf(ch::Component *p = nullptr, const std::string &n = "leaf") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class TwoSiblingTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("two_sibling_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<SibLeaf> a{"a"};
+    ch::ch_module<SibLeaf> b{"b"};
+    ch::ch_module<SibLeaf> c{"c"};
+    ch::ch_module<SibLeaf> d{"d"};
+    TwoSiblingTop(ch::Component *p = nullptr, const std::string &n = "top") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= a.io().dout;    // ⚠️ 兄弟边 ①
+        c.io().din <<= io().din;
+        d.io().din <<= c.io().dout;    // ⚠️ 兄弟边 ②
+        io().dout <<= b.io().dout;
+    }
+};
+
 // ── DUT ③：已 build 但未 add_child（错误模型）────────────────────────────
 class Stray : public ch::Component {
 public:
@@ -261,6 +291,50 @@ TEST_CASE("hierarchical emission: granularity scope covers construction and emis
 // ═════════════════════════════════════════════════════════════════════════
 // 三层：3 个 module + 2 条实例化语句 · 顶层端口 = 扁平端口
 // ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
+          "[hierarchy][emit][policy]") {
+    ch::ch_device<TwoSiblingTop> dev;
+
+    // ① `Reject` ⇒ 只报**第一条**（ADR-060 §2.4.1）
+    {
+        HierarchyEmitOptions opts;
+        opts.port_policy = PortPolicy::Reject;
+        const std::string path = std::string(kOutDir) + "/policy_reject.v";
+        auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("[1]") != std::string::npos);
+        REQUIRE(r.error.find("[2]") == std::string::npos);
+        REQUIRE_FALSE(file_exists(path));   // ⇒ fail-closed：不留产物
+    }
+
+    // ② `SynthesizeFatal` ⇒ 报**全部**（⇒ ⇒ 诊断 MUST 含每一条被合成的边）
+    {
+        HierarchyEmitOptions opts;
+        opts.port_policy = PortPolicy::SynthesizeFatal;
+        const std::string path = std::string(kOutDir) + "/policy_fatal.v";
+        auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("[1]") != std::string::npos);
+        REQUIRE(r.error.find("[2]") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+
+    // ③ `SynthesizeWarn`（**默认**）⇒ 同样报全部
+    //    ⚠️ **中间态**：隐式端口**合成本身**属 B2b ⇒ ⇒ 本批一律 fail-closed
+    //    ⇒ ⇒ 差异**只在诊断广度**（B2b 之后 `SynthesizeWarn` 才会真的「合成 + 产出」）。
+    {
+        const std::string path = std::string(kOutDir) + "/policy_warn.v";
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("[1]") != std::string::npos);
+        REQUIRE(r.error.find("[2]") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+}
+
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
     ch::ch_device<T3> dev;
     const std::string path = std::string(kOutDir) + "/three_layers.v";

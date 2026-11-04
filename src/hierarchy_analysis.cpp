@@ -92,7 +92,7 @@ Component* nearest_layer(Component* c, const Tree& t) {
 
 }   // namespace
 
-HierarchyAnalysis analyze_hierarchy(Component& root) {
+HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handling) {
     auto* ctx = root.context();
     CHREQUIRE(ctx != nullptr,
               "hierarchical analysis: root component has no context (not built?)");
@@ -346,13 +346,20 @@ HierarchyAnalysis analyze_hierarchy(Component& root) {
 
             if (!parent_drives_child && !child_drives_parent) {
                 // 兄弟边 / 跨层 pass-through ⇒ 需要父层 wire 中转（T3-④）
-                CHFATAL_EXCEPTION(
-                    "hierarchical analysis: unsupported cross-module edge between "
-                    "sibling / non-adjacent modules ('%s'@'%s' -> '%s'@'%s'). "
-                    "A parent-module wire (or a pass-through port) is needed; that is "
-                    "T3-④'s obligation.",
-                    u->name().c_str(), module_key(um_c).c_str(), v->name().c_str(),
-                    module_key(vm_c).c_str());
+                if (handling == ImplicitPortHandling::Reject) {
+                    CHFATAL_EXCEPTION(
+                        "hierarchical analysis: unsupported cross-module edge between "
+                        "sibling / non-adjacent modules ('%s'@'%s' -> '%s'@'%s'). "
+                        "A parent-module wire (or a pass-through port) is needed; that is "
+                        "T3-④'s obligation.",
+                        u->name().c_str(), module_key(um_c).c_str(), v->name().c_str(),
+                        module_key(vm_c).c_str());
+                }
+                // `Record` ⇒ 记录（⇒ 发射器按 `PortPolicy` 处置）
+                out.pending_implicit_edges.push_back(PendingImplicitEdge{
+                    vname(u), module_key(um_c), vname(v), module_key(vm_c),
+                    "sibling / non-adjacent modules"});
+                continue;
             }
 
             // ⚠️ 只有**子侧**端点必须是端口：
@@ -368,9 +375,18 @@ HierarchyAnalysis analyze_hierarchy(Component& root) {
             const bool child_side_ready =
                 parent_drives_child ? (v_is_port && v_is_input) : (u_is_port && !u_is_input);
             if (!child_side_ready) {
-                CHFATAL_EXCEPTION("%s (edge: '%s'@'%s' -> '%s'@'%s')", kImplicitPortUnsupported,
-                                  u->name().c_str(), module_key(um_c).c_str(),
-                                  v->name().c_str(), module_key(vm_c).c_str());
+                if (handling == ImplicitPortHandling::Reject) {
+                    CHFATAL_EXCEPTION("%s (edge: '%s'@'%s' -> '%s'@'%s')",
+                                      kImplicitPortUnsupported, u->name().c_str(),
+                                      module_key(um_c).c_str(), v->name().c_str(),
+                                      module_key(vm_c).c_str());
+                }
+                // `Record` ⇒ 记录（⇒ 发射器按 `PortPolicy` 处置）
+                out.pending_implicit_edges.push_back(PendingImplicitEdge{
+                    vname(u), module_key(um_c), vname(v), module_key(vm_c),
+                    parent_drives_child ? "child side is not an input port"
+                                        : "child side is not an output port"});
+                continue;
             }
 
             HierarchyEdge e;

@@ -107,7 +107,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     // ── ① 校验（**全部**在第一次 I/O 之前；本段不接受任何「写了一半」的状态）
     HierarchyAnalysis analysis;
     try {
-        analysis = analyze_hierarchy(root);
+        // ⚠️ `Record` ⇒ 「需要隐式端口合成」的边**不抛** ⇒ ⇒ 交给下面的 collect
+        //    （`Reject` 模式仍是分析层的**默认**行为 ⇒ ⇒ T3-② 的 fail-closed 契约不变）
+        analysis = analyze_hierarchy(root, ImplicitPortHandling::Record);
     } catch (const std::exception &e) {
         // ⚠️ 这里是**转换**成可观测错误，不是吞掉（既有的 `toVerilog` 才是吞掉）
         result.error = e.what();
@@ -118,6 +120,67 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     if (analysis.modules.empty()) {
         result.error = "hierarchical emission: analysis produced no modules";
         return result;
+    }
+
+    // ── 合成类诊断的 **collect**（ADR-060 §2.4.1）────────────────────────
+    //    ① 分析层记录的「需要隐式端口合成」的边
+    //    ② 发射器自己的检查：子 → 父 的**父侧端点** MUST 是父 module 的 output 端口
+    //       （否则父层需要一根「连接网」⇒ ⇒ 同样是隐式端口合成的义务）
+    //    ⇒ ⇒ **全部**收集 ⇒ ⇒ 再按 `PortPolicy` 决定诊断广度（不是「首错即返」）
+    {
+        std::vector<std::string> synth_diags;
+        for (const auto &e : analysis.pending_implicit_edges) {
+            synth_diags.push_back("'" + e.from_node + "'@'" + e.from_module + "' -> '" +
+                                   e.to_node + "'@'" + e.to_module + "' (" + e.reason + ")");
+        }
+        for (const auto &m : analysis.modules) {
+            for (const auto &inst : m.instances) {
+                for (const auto &conn : inst.connections) {
+                    if (conn.into_child) {
+                        continue;
+                    }
+                    bool is_parent_output_port = false;
+                    for (const auto &pp : m.ports) {
+                        if (pp.name == conn.parent_side && !pp.is_input) {
+                            is_parent_output_port = true;
+                            break;
+                        }
+                    }
+                    if (!is_parent_output_port) {
+                        synth_diags.push_back(
+                            "child module '" + inst.module_key + "' drives '" +
+                            conn.parent_side + "' in module '" + m.key +
+                            "', which is not an output port of that module");
+                    }
+                }
+            }
+        }
+        if (!synth_diags.empty()) {
+            // ⚠️ **中间态**：隐式端口**合成**属 B2b ⇒ ⇒ 本批一律 fail-closed
+            //    ⇒ ⇒ 差异**只在诊断广度**（`Reject` 只报第一条 · 其余报全部）
+            const bool all = (options.port_policy != PortPolicy::Reject);
+            std::ostringstream msg;
+            msg << "hierarchical emission: ";
+            if (all) {
+                msg << synth_diags.size() << " cross-module edge(s) require implicit-port "
+                    << "synthesis (ADR-060 §2.1), which is not implemented yet:";
+                for (std::size_t i = 0; i < synth_diags.size(); ++i) {
+                    msg << "\n  [" << (i + 1) << "] " << synth_diags[i];
+                }
+            } else {
+                msg << "a cross-module edge requires implicit-port synthesis (ADR-060 "
+                    << "§2.1), which is not implemented yet:\n  [1] " << synth_diags.front();
+            }
+            result.error = msg.str();
+            if (all) {
+                // `SynthesizeWarn` ⇒ 每一条一条 `CHWARN`（诊断 MUST 逐条点名）
+                for (const auto &d : synth_diags) {
+                    CHWARN("hierarchical emission: implicit-port synthesis needed for %s",
+                           d.c_str());
+                }
+            }
+            return result;
+        }
     }
 
     // module 类型名（`<module_type_name>_<序号>`；同类型多实例各发一份）
@@ -289,31 +352,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             view.suppress_driver_assign = std::move(suppress);
         }
 
-        // ── 子 → 父：父侧端点 MUST 是父 module 的 **output 端口**
-        //    （否则父层需要一根「连接网」或隐式端口 ⇒ 属 T3-④ 的隐式端口合成）
-        for (const auto &inst : m.instances) {
-            for (const auto &conn : inst.connections) {
-                if (conn.into_child) {
-                    continue;
-                }
-                bool is_parent_output_port = false;
-                for (const auto &pp : m.ports) {
-                    if (pp.name == conn.parent_side && !pp.is_input) {
-                        is_parent_output_port = true;
-                        break;
-                    }
-                }
-                if (!is_parent_output_port) {
-                    result.error =
-                        "hierarchical emission: child module '" + inst.module_key +
-                        "' drives '" + conn.parent_side + "' in module '" + m.key +
-                        "', which is not an output port of that module. This needs an "
-                        "implicit port (ADR-060 §2.1) or a parent-side net; implicit "
-                        "port synthesis is not implemented yet.";
-                    return result;
-                }
-            }
-        }
+        // ⚠️ 「子 → 父的父侧端点 MUST 是父 module 的 output 端口」这条检查
+        //    **已上移**到发射前的 collect 预检（⇒ ⇒ 全部合成类问题**一起**报告，
+        //    而不是「首错即返」；⇒ ⇒ 也避免两份判定漂移）。
 
         // 实例化语句
         for (const auto &inst : m.instances) {

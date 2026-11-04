@@ -24,6 +24,28 @@
       ⇒ 单 module · 正向 `ForceLayer` ⇒ 3 module）+ 既有 4 用例绿 +
       扁平外部基线 3 设计 `cmp` 全 0 + `ctest -LE perf` **238/238**
 
+## T0b 批次 B2a（发射循环 collect 化 · ✅ 2026-11-05）
+
+> 判据来源：ADR-060 §2.4.1（`PortPolicy` 三取值的确切失败语义 + **执行时机承重**）
+> + 台账 §11.5 **O3**（collect 化与 F2/F3 改**同一个发射循环** ⇒ ⇒ 必须先行）。
+
+- [x] 0.6 分析层**降级为记录**：新增 `ImplicitPortHandling{Reject, Record}` +
+      `HierarchyAnalysis::pending_implicit_edges`
+      ⇒ ⇒ ⚠️ **默认仍是 `Reject`** ⇒ ⇒ **T3-② 的 fail-closed 断言一字不改仍成立**
+      ⇒ ⇒ ⚠️ 新字段 **MUST NOT 进 `to_text()`** ⇒ ⇒ **T3-② 的 4 份 golden 逐字节不变**
+- [x] 0.7 跨模块 `ch_mem` **仍然抛**（ADR-060 §2.1 的裁决就是「响亮拒绝」⇒ ⇒ 不参与 collect）
+- [x] 0.8 发射层 **collect**：合成类问题（分析层记录的边 + 发射器自己的「父侧端点非端口」
+      检查）**全部收集** ⇒ ⇒ 上移到发射前的**预检**（⇒ ⇒ 失败时**尚未**产生任何输出）
+      ⇒ ⇒ 并删除发射循环内的旧检查（⇒ ⇒ 两份判定必然漂移）
+- [x] 0.9 **策略驱动的诊断广度**：`Reject` 只报**第一条** · `SynthesizeWarn` /
+      `SynthesizeFatal` 报**全部**（+ `CHWARN` 每一条一条）
+      ⇒ ⇒ ⚠️ **中间态**：合成本身属 B2b ⇒ ⇒ 本批三档**一律 fail-closed**（差异只在诊断广度）
+- [x] 0.10 **判据**：`SynthesizeFatal` / `SynthesizeWarn` ⇒ 诊断含**两条**边 ·
+      `Reject` ⇒ 只含**第一条** · 失败**不留产物** · DUT 用例 MUST 有**两条**边
+      （⇒ ⇒ 否则「报全部」与「报第一条」不可区分）
+      ⇒ ⇒ **变异验证**：把 `all` 恒置 false（退回首错即返）⇒ **转红**（1 failed）· 还原复绿
+      ⇒ ⇒ `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 · 6 个护栏全 PASS
+
 ## T1 module 主体与实例化
 
 - [x] 1.1 每个成层组件产出一个 `module`（`<module_type_name>_<序号>`）

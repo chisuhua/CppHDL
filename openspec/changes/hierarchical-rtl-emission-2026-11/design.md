@@ -109,10 +109,15 @@
 | 批 | 状态 | 关键证据 |
 |---|---|---|
 | **B1** 策略枚举收敛 | ✅ **已落地** | 删两份重复枚举 + 删 `Component::set_granularity()` · 编译期 `static_assert` · **粒度作用域三格判据**（半生效 / 正向 ForceInline / 正向 ForceLayer）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 |
-| **B2a** collect 化 | ⏳ | — |
+| **B2a** collect 化 | ✅ **已落地** | 分析层 `ImplicitPortHandling{Reject, Record}`（**默认 Reject** ⇒ ⇒ T3-② 判据零削弱 · 新字段不进 `to_text()` ⇒ ⇒ 4 份 golden 逐字节不变）· 发射层**预检 collect**（合成类问题**全部**收集 ⇒ ⇒ 上移到发射前）· 策略驱动的诊断广度（`Reject` 只报第一条 · 其余报全部）· **变异验证**：退回首错即返 ⇒ 转红 · `ctest -LE perf` **238/238** · 扁平基线 `cmp` 全 0 |
 | **B2b** 隐式端口合成 | ⏳ | — |
 | **B3** 冒泡 + 端口完整性 + 拒绝类 + 白名单 | ⏳ | — |
 | **B4** 护栏 + CI + 归档 | ⏳ | — |
+
+⚠️ **B2a 的「中间态」登记（必读 · 否则会误读 ADR）**：隐式端口**合成本身**属 **B2b** ⇒ ⇒
+本批三档策略**一律 fail-closed**（不产出产物）⇒ ⇒ **差异只在诊断广度**
+⇒ ⇒ **B2b 落地后，`SynthesizeWarn` 才会真正「合成 + `CHWARN` + 产出产物」**
+⇒ ⇒ ⇒ 在 B2b 之前**不得**声称「默认策略能产出产物」。
 
 ⚠️ **B1 的两处「偏离 / 处置」登记**：
 ① **返回类型偏离**：ADR-058 §2.3 写 `std::expected<HierManifest, HierError>`，
