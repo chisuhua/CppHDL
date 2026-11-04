@@ -86,3 +86,91 @@
 - **接口白名单**（ADR-062 §2.6）。
 - 护栏脚本 `scripts/verify_hierarchical_rtl.sh` + CI 两处。
 - 等价性验证（**T3-⑤**，另一个 change）。
+
+---
+
+## 7. 后续实施路径（T3-④ 剩余 + 后续段）
+
+> ⚠️ 本节是**实施期整理**（2026-11-04）⇒ 只承载**排期与判据映射**，不新增裁决。
+
+### 7.0 实施期新查明的 6 个事实（决定批次顺序与工作量）
+
+| # | 事实 | 影响 |
+|---|---|---|
+| **F1** | 发射器把每个 `type_op` 节点都**物化成命名 wire**（`print_binary_op` ⇒ `assign <name> = lhs op rhs;`）⇒ ⇒ 父层驱动**总是**有一根可引用的 net | ADR-060 §2.1 第三行「子端口由父层节点驱动」**不需要内联表达式渲染** ⇒ ⇒ 「发射期虚拟重定向」降级为「实例端口映射指向父层 wire」⇒ ⇒ **该格实现量远小于设计稿暗示** |
+| **F2** | 分析层的冒泡分支（`src/hierarchy_analysis.cpp:247-270`）**只覆盖 inline 组件**的悬空 `ch_in`；**成层**组件自己的悬空 `ch_in` 走 `:249` 的 `Self` 分支 ⇒ **不向上冒泡** | ⇒ 层次化产物里它只在子 module 上 ⇒ **顶层无法驱动** ⇒ ⇒ 与扁平行为分叉（扁平：`make_flat_module_view` 对**任何**无 driver 的 `input` 都发顶层端口）⇒ ⇒ **B3 必修** |
+| **F3** | 分析层把「owner ≠ 本 module」的 `type_output` 一律上端口表（`InlineFolded`）⇒ ⇒ 对**非顶层**成层 module 违反 ADR-061 决策②（inline 后代的 `ch_out` 在非顶层 module 里是**体内普通信号**）⇒ ⇒ 且 `print_decl` **没有** `type_output`-as-wire 分支（`type_output` 只进 `outputs` ⇒ 无 `logic` 声明 ⇒ 体内输出 = **未声明信号**） | ⇒ ⇒ **分析层 + 发射层双重缺口** ⇒ ⇒ **B2/B3 必修** |
+| **F4** | `include/hierarchy_verilog.h` 另写了一份 `HierarchyPortPolicy` / `HierarchyUndrivenPolicy` ⇒ ⇒ 与 `include/component.h:52-55` 的 `ch::PortPolicy` / `ch::UndrivenPolicy` **重复**（ADR-060 §2.4 明文警告「三份副本必然漂移」）⇒ ⇒ 且 `ch::PortPolicy` 目前**零生产使用** | ⇒ ⇒ **B1 收敛为单一权威** |
+| **F5** | ADR-061 §2.5 的选项结构含 `Granularity`；仓内 `Granularity` 是**全局**（`Component::set_granularity` + RAII `GranularityScope`） | ⇒ ⇒ 两个机制并存 ⇒ ⇒ 建议**沿用全局 + RAII**（T3-⑤ 的 ForceInline/ForceLayer 直接用 `GranularityScope`）⇒ ⇒ 选项结构**不加**该字段 ⇒ ⇒ 记为**与 ADR-061 §2.5 的偏差** |
+| **F6** | ADR-061 §2.5 的 `out_dir` + `one_file_per_module = true` 暗示**一 module 一文件**；T3-④ 实现的是**一个文件多 module** | ⇒ ⇒ 偏差 ⇒ ⇒ 但对 T3-⑤ 有利（Verilator backend 编译**单文件**）⇒ ⇒ 建议**保留单文件** + 登记偏差（待 architect 补一格 ADR） |
+
+### 7.1 T3-④ 剩余：4 个批次（每批一个 commit）
+
+#### B1 策略枚举收敛（**无行为变化** · 最小）
+
+- 删 `HierarchyPortPolicy` / `HierarchyUndrivenPolicy` ⇒ 改用 `ch::PortPolicy` / `ch::UndrivenPolicy`（F4）。
+- `HierarchyEmitOptions` 的字段类型随之改。
+- **判据**：编译期 `static_assert`（枚举值逐个相等）+ 现有 4 用例仍绿 + **扁平外部基线 3 个设计 `cmp` 全 0**。
+- **产出**：`refactor(hierarchy): 策略枚举收敛到 ADR-060 的单一权威`。
+
+#### B2 隐式端口合成 + 兄弟边 + 第三轴（ADR-060 §2.1 · **最大**）
+
+| 步 | 内容 | 落点 |
+|---|---|---|
+| 2.1 | 分析层**降级两处 fail-closed 抛**（兄弟/非相邻边 `:349` · 隐式端口 `:371`）⇒ 改为**结构化记录**；**保留**跨模块 `ch_mem` 的拒绝（`:328`，ADR-060 的裁决就是拒绝） | `src/hierarchy_analysis.cpp` |
+| 2.2 | 发射层按方向矩阵合成：行 1 父→子（子侧端点非子端口）⇒ 子侧 **input** 隐式端口 · 行 2 子→父（父层读子内部节点）⇒ 子侧 **output** 隐式端口 · 行 3 子端口由父层节点驱动 ⇒ **不合成**，复用子端口 + 实例映射指向父层 wire（F1）· 行 4 跨模块 `ch_mem` ⇒ 保持拒绝 + 两条替代路径 | `src/hierarchy_verilog.cpp` |
+| 2.3 | 第三轴（driver 的 `owner` 在更上层 / `nullptr`）⇒ 沿祖先链**逐级同名 pass-through input 端口**（每级一个） | 同上 |
+| 2.4 | 兄弟边 ⇒ 共同祖先 module 内 wire + 两条实例映射（兄弟间**不能**直连） | 同上 |
+| 2.5 | `print_decl` 增 `type_output`-as-wire 分支（ADR-061 决策② 角色 ③）+ 分析层按**作用域**区分 inline 后代输出的落点（F3） | `src/codegen_verilog.cpp` + `src/hierarchy_analysis.cpp` |
+| 2.6 | 策略：`SynthesizeWarn`（默认：合成 + `CHWARN` + 文件内注释）/ `Reject`（抛） | — |
+
+⚠️ **B2.1 的硬约束**：分析层新增字段 **MUST NOT 进 `to_text()`** ⇒ ⇒ **T3-② 的 4 份 golden 逐字节不变** ⇒ ⇒ 归档 change 的判据不被削弱（新增信息由 T3-④ 的测试覆盖）。
+⚠️ **合成端口名**：`__if_<field>` / `__x_<n>` **只允许出现在非顶层 module**（ADR-060 §2.2）⇒ 顶层端口名 MUST NOT 带任何框架前缀。
+
+- **判据**：方向矩阵**四行各一**用例 + 第三轴一用例 + 兄弟边一用例；每个用例 = 端口表断言 + `verilator --lint-only` **exit 0** + **零跨 module assign** + 「inline 不产生隐式端口」的负向对照。
+
+#### B3 冒泡 + 端口完整性 + 拒绝类 + 接口白名单
+
+| 步 | 内容 |
+|---|---|
+| 3.1 | **冒泡**（F2 缺口）：成层组件的悬空 `ch_in` 逐级冒泡到顶层（名字 = ctx 级全局名，**逐字相同**）+ 端口旁注释 + `CHWARN` + `UndrivenPolicy::Reject` ⇒ 抛 |
+| 3.2 | **端口完整性**：成层且非根 module 的端口集合 **⊇** 自身 `ch_in`/`ch_out`（**driven 与否不影响**）+ 每个端口可追溯到五类来源之一 + `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）+ **空端口 module 合法** |
+| 3.3 | **拒绝类**：跨模块 `ch_mem`（已有 · 给两条替代路径）· 自驱动 `ch_in`（分析层前置校验 ③）· 子 module 内 MUST NOT `assign <ch_in> = ...` · **同名不同类型 ⇒ `CHFATAL_EXCEPTION`** · **同类型多实例 MUST NOT 复用**（名 `<module_type_name>_<按实例路径排序的序号>`） |
+| 3.4 | **接口白名单**（ADR-062 §2.6）：`ch_mem` / `ch_reg` / bundle / `ch_stream` / 显式 clock-reset 声明 / `inout` ⇒ **拒绝 + 点名端口** |
+
+- **判据**：每条一用例（含负向对照 + **错误消息点名断言**）+ 「inline 不产生隐式端口」的负向对照。
+
+#### B4 护栏 + CI + 归档
+
+- 4.1 `scripts/verify_hierarchical_rtl.sh`：**R1** 零未声明引用 · **R2** 实例端口名 ∈ 目标 module 端口集 · **R3** 端口宽度一致 · **R4** 产物确定性 · **R5** 跨模块 `ch_mem` 被拒 · **R6** module 树结构同构（**从产物独立提取** ⇒ MUST NOT 复用分析层 `ModuleDef`）。
+- 4.2 `--self-test`（**原地投毒** ⇒ 每条判据必红 ⇒ 还原复绿）。
+- 4.3 CI 挂 **两处**（`build-and-test` job：主路径 + self-test）。
+- 4.4 **归档**：8 条 delta（**禁** `--skip-specs`）+ 补写主 spec `## Purpose` + 更新 feature 进度表 + 根 `AGENTS.md` NOTES + 计数锚点同步。
+
+### 7.2 后续段
+
+| 段 | change | 关键前置 | 备注 |
+|---|---|---|---|
+| **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | T3-④ 归档 | 「backend 只增不改入口」**远不止加一个函数**（`build_port_access_table` / `emit_sim_main_postlude` 从 ctx 全量推 · `invoke_verilator` 编译单文件且缓存 key 只哈希一份 source）⇒ ⇒ 预估 **~7–9 天** ⇒ ⇒ ⚠️ **建议在 T3-④ 归档后单独走一次 planner 修订**（观测面的实现路径有多个候选） |
+| **T3-⑥** | `hierarchical-rtl-docs-2026-11` | T3-⑤ | 纯文档 ⇒ `skip_specs: true` |
+| **T2b** | `component-io-const-and-node-name-policy-2026-11` | **无** | 与主线**并行**（U-1 + U-2）⇒ ⚠️ 其 anchor（节点名 policy）**不得**被主线当作前置 |
+
+### 7.3 全程固定动作（每批都要做）
+
+1. `cmake --build build -j$(nproc)` ⇒ **零 warning**（`-Wall -Wextra -Wpedantic`）。
+2. `ctest -LE perf`（**全量重建后**跑 ⇒ `ctest` 不会自动重建 ⇒ 假绿）。
+3. **扁平外部基线**：3 个设计 `cmp` 全 0（单测只能证明两条路径互相一致 ⇒ 不能证明与拆分前一致）。
+4. `bash scripts/run_all_samples.sh` + `./run_all_ported_tests.sh`。
+5. 护栏：`verify_component_naming` / `verify_header_odr` / `verify_test_counts` / `verify_dual_backend_parity` / `verify_openspec_delta` / `verify_roadmap_fragments`（+ 各自的 `--self-test`）。
+6. `openspec validate <change> --type change --strict` + `bash scripts/verify_openspec_delta.sh`。
+7. 计数锚点同步（`CTEST_TOTAL` / non-perf / `tests/test_*.cpp`）。
+8. **提交按路径显式 `git add`**（MUST NOT `git add -A` ⇒ 本仓有多会话并行写入）。
+
+### 7.4 待用户 / architect 拍板（**MUST NOT 静默即兴**）
+
+| # | 事项 | 建议默认 |
+|---|---|---|
+| 1 | `PortPolicy::SynthesizeFatal` 的确切语义（ADR-060 §2.4 未写死） | = 「**合成但抛**」（与 `Reject` 的区别：合成动作先做完再抛 ⇒ 便于诊断） |
+| 2 | 单文件 vs 一 module 一文件（F6） | **保留单文件** + 登记偏差（待 architect 补一格 ADR） |
+| 3 | `Granularity` 放全局还是选项字段（F5） | **沿用全局 + RAII** + 登记偏差 |
+| 4 | **P6**（层次友好度诊断 API）/ **P8**（等价性 harness 公共 helper） | 维持**默认不做**（用户尚未拍板 ⇒ MUST NOT 静默塞进 T3-④ / T3-⑤） |
