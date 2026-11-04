@@ -6,19 +6,24 @@
 
 ## T1 拆分
 
-- [ ] 1.1 `ModuleEmitter`（接收节点子集 + 端口表 + 名字表）
-- [ ] 1.2 `verilogwriter` 委托给它；扁平路径行为**一字不改**
+- [x] 1.1 `ModuleEmitter(ctx, ModuleView)` —— `ModuleView{nodes, ports, names, module_name,
+      clock_name, reset_name}`（`include/codegen_verilog.h`）
+- [x] 1.2 `verilogwriter` 变成薄适配器（`unique_ptr<ModuleEmitter>` + `make_flat_module_view`）
+      ⇒ 端口选择/排序/过滤逻辑**逐字搬进** `make_flat_module_view`
 
 ## T2 时钟名参数化
 
-- [ ] 2.1 `print_reg` / `emit_always_ff` 的 `default_clock` / `default_reset` 改为入参
-- [ ] 2.2 扁平路径传原值 ⇒ 产物逐字节不变
+- [x] 2.1 四处参数化：`emit_always_ff` · `print_reg`（无 next 分支）· `print_mem_read_port` ·
+      `print_mem_write_port`
+- [x] 2.2 `make_flat_module_view` 传 `default_clock` / `default_reset` ⇒ 产物逐字节不变（见 3.1）
 
 ## T3 判据
 
-- [ ] 3.1 **基线脚本**：相对 T3-①b 之后的基线 `cmp` 退出码 **0**
-- [ ] 3.2 **mutation**：去掉参数传递 ⇒ `verilator --lint-only` 必报错（未声明信号）
-- [ ] 3.3 `ctest -LE perf` 全绿 · 计数锚点同步
+- [x] 3.1 外部基线比对（3 个设计：RegChain / MemTop / Rv32iPipeline 145 KB）⇒ `cmp` **全 0**
+- [x] 3.2 **M1 实测**：单测 RED + lint **exit 1**（`Can't find definition of variable:
+      'default_clock'`）；对照组 lint **exit 0**
+- [x] 3.3 `ctest -LE perf` **237/237** · samples 39/39 · examples 28/28 ·
+      计数锚点同步（247 → 248 / non-perf 236 → 237 / `tests/test_*.cpp` 139 → 140）
 
 ## 验证命令
 

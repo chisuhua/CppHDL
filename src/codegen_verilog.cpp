@@ -48,35 +48,79 @@ void toVerilog(const std::string &filename, ch::core::context *ctx) {
         // }
     }
 }
-verilogwriter::verilogwriter(ch::core::context *ctx) : ctx_(ctx) {
-    try {
-        // Build the 'uses' map: for each node, find which other nodes use it as
-        // a source.
-        for (auto &node_ptr : ctx_->get_nodes()) {
-            auto *node = node_ptr.get();
-            for (uint32_t i = 0; i < node->num_srcs(); ++i) {
-                auto *src = node->src(i);
-                if (src) { // Ensure source is not null
-                    node_uses_[src].insert(node);
-                }
-            }
-        }
-
-        // Build the initial name map based on node names and ensure uniqueness.
-        // Also build the sorted_nodes_ list.
-        // ⚠️ 去重算法是**共用**的（`include/codegen_naming.h`）⇒ 层次化分析层
-        //    拿到的是**同一张表** ⇒ 顶层端口名与扁平产物逐字相同（ADR-061 决策④）。
-        auto eval_list = ctx_->get_eval_list(); // topologically sorted
-        node_names_ = ch::build_verilog_name_table(eval_list);
-
-        // Store the sorted list for use later
-        sorted_nodes_ = eval_list;
-    } catch (...) {
-        // Silently ignore exceptions
-    }
+ModuleEmitter::ModuleEmitter(ch::core::context *ctx, ModuleView view)
+    : ctx_(ctx), view_(std::move(view)) {
+    node_names_ = view_.names;
+    nodes_ = view_.nodes;
 }
 
-void verilogwriter::print(std::ostream &out) {
+/// 扁平路径的 `ModuleView`：整个 ctx ⇒ 一个 `module top`。
+///
+/// ⚠️ 端口选择 / 排序 / 过滤规则**逐字保留**拆分前 `print_header` 的实现
+/// ⇒ ⇒ 扁平产物 MUST 逐字节不变（本 change 的唯一验收面）。
+ModuleView make_flat_module_view(ch::core::context *ctx) {
+    ModuleView view;
+    view.module_name = "top";
+    view.clock_name = "default_clock";
+    view.reset_name = "default_reset";
+
+    // 名称表（与层次化分析层**共用**同一份实现）
+    view.names = ch::build_verilog_name_table(ctx->get_eval_list());
+    view.nodes = ctx->get_eval_list();
+
+    // 端口：input / output / clock / reset，按 id 升序
+    std::vector<ch::core::lnodeimpl *> ports;
+    for (auto &node_ptr : ctx->get_nodes()) {
+        auto *node = node_ptr.get();
+        if (node->type() == ch::core::lnodetype::type_input ||
+            node->type() == ch::core::lnodetype::type_output ||
+            node->type() == ch::core::lnodetype::type_clock ||
+            node->type() == ch::core::lnodetype::type_reset) {
+            ports.push_back(node);
+        }
+    }
+    std::sort(ports.begin(), ports.end(),
+              [](ch::core::lnodeimpl *a, ch::core::lnodeimpl *b) {
+                  return a->id() < b->id();
+              });
+
+    // ⚠️ 时钟 / 复位**先行**（跨设计位置稳定 ⇒ Verilator dlopen / SHA-1 缓存 key 稳定）
+    auto push_of_type = [&view, &ports](ch::core::lnodetype ty) {
+        for (auto *port_node : ports) {
+            if (port_node->type() != ty) {
+                continue;
+            }
+            if (ty == ch::core::lnodetype::type_input) {
+                // 有内部 driver 的子模块 `ch_in`（`sub.io().x <<= ...`）MUST NOT
+                // 成为顶层端口：它在 print_decl / print_logic 里是**内部 wire**
+                // 并从 driver 赋值。否则 Verilator 会看到没人驱动的顶层输入
+                // （= X，reset 脉冲后为 0）⇒ 静默废掉顶层以下的所有 `ch_in`。
+                auto *in = static_cast<ch::core::inputimpl *>(port_node);
+                if (in->driver() != nullptr) {
+                    continue;
+                }
+            }
+            view.ports.push_back(port_node);
+        }
+    };
+    push_of_type(ch::core::lnodetype::type_clock);
+    push_of_type(ch::core::lnodetype::type_reset);
+    push_of_type(ch::core::lnodetype::type_input);
+    push_of_type(ch::core::lnodetype::type_output);
+    return view;
+}
+
+// 扁平发射入口（对外的 `verilogwriter` 只是把整颗 ctx 交给 `ModuleEmitter`）
+verilogwriter::verilogwriter(ch::core::context *ctx)
+    : emitter_(std::make_unique<ModuleEmitter>(ctx, make_flat_module_view(ctx))) {}
+
+void verilogwriter::print(std::ostream &out) { emitter_->print(out); }
+
+std::string verilogwriter::get_verilog_name(ch::core::lnodeimpl *node) const {
+    return emitter_->get_verilog_name(node);
+}
+
+void ModuleEmitter::print(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
 
@@ -88,17 +132,17 @@ void verilogwriter::print(std::ostream &out) {
     }
 }
 
-std::string verilogwriter::get_verilog_name(ch::core::lnodeimpl *node) const {
+std::string ModuleEmitter::get_verilog_name(ch::core::lnodeimpl *node) const {
     auto it = node_names_.find(node);
     return it == node_names_.end() ? std::string() : it->second;
 }
 
-std::string verilogwriter::sanitize_name(const std::string &name) const {
+std::string ModuleEmitter::sanitize_name(const std::string &name) const {
     // 唯一实现见 `include/codegen_naming.h`（层次化分析层用的是同一份 ⇒ 名字不会漂移）
     return ch::sanitize_verilog_name(name);
 }
 
-std::string verilogwriter::get_width_str(uint32_t size) const {
+std::string ModuleEmitter::get_width_str(uint32_t size) const {
     try {
         if (size <= 1) {
             return ""; // No width specification needed for 1-bit signals
@@ -113,7 +157,7 @@ std::string verilogwriter::get_width_str(uint32_t size) const {
 }
 
 std::string
-verilogwriter::get_literal_str(const ch::core::sdata_type &val) const {
+ModuleEmitter::get_literal_str(const ch::core::sdata_type &val) const {
     try {
         uint64_t value = static_cast<uint64_t>(val);
         uint32_t width = val.bv_.size();
@@ -142,7 +186,7 @@ verilogwriter::get_literal_str(const ch::core::sdata_type &val) const {
     }
 }
 
-std::string verilogwriter::get_op_str(ch::core::ch_op op) const {
+std::string ModuleEmitter::get_op_str(ch::core::ch_op op) const {
     try {
         switch (op) {
         case ch::core::ch_op::add:
@@ -222,7 +266,7 @@ std::string verilogwriter::get_op_str(ch::core::ch_op op) const {
     }
 }
 
-void verilogwriter::emit_signal_decl(std::ostream &out,
+void ModuleEmitter::emit_signal_decl(std::ostream &out,
                                      ch::core::lnodeimpl *node) {
     try {
         if (!node || !node_names_.count(node)) {
@@ -235,7 +279,7 @@ void verilogwriter::emit_signal_decl(std::ostream &out,
     }
 }
 
-void verilogwriter::emit_always_ff(std::ostream &out,
+void ModuleEmitter::emit_always_ff(std::ostream &out,
                                    const std::string &reg_name,
                                    const std::string &next_name,
                                    const std::string &reset_value) {
@@ -243,9 +287,10 @@ void verilogwriter::emit_always_ff(std::ostream &out,
         if (reg_name.empty() || next_name.empty()) {
             return;
         }
-        out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
+        out << "    always_ff @(posedge " << view_.clock_name << " or posedge "
+            << view_.reset_name << ") begin // "
             << "Register update for " << reg_name << "\n";
-        out << "        if (!default_reset)\n";
+        out << "        if (!" << view_.reset_name << ")\n";
         out << "            " << reg_name << " <= " << next_name << ";\n";
         out << "        else\n";
         out << "            " << reg_name << " <= " << reset_value << ";\n";
@@ -255,9 +300,8 @@ void verilogwriter::emit_always_ff(std::ostream &out,
     }
 }
 
-void verilogwriter::print_header(std::ostream &out) {
+void ModuleEmitter::print_header(std::ostream &out) {
     try {
-        // Check if we're in static destruction phase
         // Verilator lint pragmas (must be outside module declaration):
         //   WIDTHEXPAND/WIDTHTRUNC arise from CH_MEM select tree mux widths
         //   (e.g. 5-bit shift amount mux_select_71 << 5'h1f producing 32-bit
@@ -266,72 +310,13 @@ void verilogwriter::print_header(std::ostream &out) {
         //   warnings. Disable globally for the generated module.
         out << "/* verilator lint_off WIDTHEXPAND */\n";
         out << "/* verilator lint_off WIDTHTRUNC */\n";
-        out << "module top (\n";
+        out << "module " << view_.module_name << " (\n";
 
-        // ADR-035: include type_clock and type_reset lnodes so Verilator
-        // and iverilog accept the generated module (the always blocks
-        // reference default_clock / default_reset which must be declared
-        // as input ports).
-        std::vector<ch::core::lnodeimpl *> ports;
-        for (auto &node_ptr : ctx_->get_nodes()) {
-            auto *node = node_ptr.get();
-            if (node->type() == ch::core::lnodetype::type_input ||
-                node->type() == ch::core::lnodetype::type_output ||
-                node->type() == ch::core::lnodetype::type_clock ||
-                node->type() == ch::core::lnodetype::type_reset) {
-                ports.push_back(node);
-            }
-        }
-
-        std::sort(ports.begin(), ports.end(),
-                  [](ch::core::lnodeimpl *a, ch::core::lnodeimpl *b) {
-                      return a->id() < b->id();
-                  });
-
-        // Emit default clock/reset FIRST so they occupy stable positions
-        // across designs (Verilator dlopen / SHA-1 cache key stability).
-        // verilator-hier-input-flattening-fix: filter out `type_input`
-        // nodes whose `inputimpl::driver() != nullptr` (equivalently
-        // `num_srcs() > 0`) — these are driven submodule inputs and MUST
-        // NOT appear as top-level ports. They are emitted as internal
-        // `logic` wires in print_decl() and assigned from their driver
-        // in print_logic(). Without this filter, verilator sees
-        // top-level input ports that nothing drives, so they stay X
-        // (=0 after the initialize() reset pulse), silently disabling
-        // every `ch_in` that lives below the top component (e.g. RV32I's
-        // `if_stage.io().instr_data`, AXI4-Lite slave inputs). JIT
-        // already handles this correctly (src/jit/jit_ir_gen_lnode_io.cpp:
-        // 31-46); this brings the Verilog codegen path into parity with
-        // JIT semantics.
-        std::vector<ch::core::lnodeimpl *> filtered_ports;
-        for (auto *port_node : ports) {
-            if (port_node->type() == ch::core::lnodetype::type_clock) {
-                filtered_ports.push_back(port_node);
-            }
-        }
-        for (auto *port_node : ports) {
-            if (port_node->type() == ch::core::lnodetype::type_reset) {
-                filtered_ports.push_back(port_node);
-            }
-        }
-        for (auto *port_node : ports) {
-            if (port_node->type() == ch::core::lnodetype::type_input) {
-                // Driven submodule inputs become internal logic in
-                // print_decl() / print_logic(); skip top-port emit.
-                auto *in = static_cast<ch::core::inputimpl *>(port_node);
-                if (in->driver() == nullptr) {
-                    filtered_ports.push_back(port_node);
-                }
-            }
-        }
-        for (auto *port_node : ports) {
-            if (port_node->type() == ch::core::lnodetype::type_output) {
-                filtered_ports.push_back(port_node);
-            }
-        }
-
-        for (size_t i = 0; i < filtered_ports.size(); ++i) {
-            auto *port_node = filtered_ports[i];
+        // 端口清单由 `ModuleView` 提供（**已排序 / 已过滤**）
+        // ⇒ ⇒ 发射器不再自己扫一遍 ctx（那是单体 writer 的写法）
+        const auto &ports = view_.ports;
+        for (size_t i = 0; i < ports.size(); ++i) {
+            auto *port_node = ports[i];
             switch (port_node->type()) {
             case ch::core::lnodetype::type_input:
                 print_input(out,
@@ -348,7 +333,7 @@ void verilogwriter::print_header(std::ostream &out) {
             default:
                 break;
             }
-            if (i < filtered_ports.size() - 1) {
+            if (i < ports.size() - 1) {
                 out << ",\n";
             }
         }
@@ -359,7 +344,7 @@ void verilogwriter::print_header(std::ostream &out) {
     }
 }
 
-void verilogwriter::print_body(std::ostream &out) {
+void ModuleEmitter::print_body(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
 
@@ -372,7 +357,7 @@ void verilogwriter::print_body(std::ostream &out) {
     }
 }
 
-void verilogwriter::print_footer(std::ostream &out) {
+void ModuleEmitter::print_footer(std::ostream &out) {
     try {
         out << "endmodule\n";
     } catch (...) {
@@ -380,7 +365,7 @@ void verilogwriter::print_footer(std::ostream &out) {
     }
 }
 
-void verilogwriter::print_decl(std::ostream &out) {
+void ModuleEmitter::print_decl(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
 
@@ -390,7 +375,7 @@ void verilogwriter::print_decl(std::ostream &out) {
         std::vector<ch::core::lnodeimpl *> inputs, outputs, wires, regs;
         std::vector<ch::core::memimpl *> mems;
 
-        for (auto *node : sorted_nodes_) {
+        for (auto *node : nodes_) {
             if (declared_nodes_.count(node))
                 continue; // Skip if already processed
 
@@ -478,14 +463,14 @@ void verilogwriter::print_decl(std::ostream &out) {
     }
 }
 
-void verilogwriter::print_logic(std::ostream &out) {
+void ModuleEmitter::print_logic(std::ostream &out) {
     try {
         // Check if we're in static destruction phase
 
         // Iterate through the sorted list and print logic for each node type
         // This assumes the sorted list correctly orders combinational logic
         // before sequential.
-        for (auto *node : sorted_nodes_) {
+        for (auto *node : nodes_) {
             if (printed_logic_nodes_.count(node))
                 continue; // Skip if already processed
 
@@ -632,7 +617,7 @@ void verilogwriter::print_logic(std::ostream &out) {
     }
 }
 
-void verilogwriter::print_input(std::ostream &out, ch::core::inputimpl *node) {
+void ModuleEmitter::print_input(std::ostream &out, ch::core::inputimpl *node) {
     try {
         out << "    input " << get_width_str(node->size()) << " "
             << node_names_[node];
@@ -641,7 +626,7 @@ void verilogwriter::print_input(std::ostream &out, ch::core::inputimpl *node) {
     }
 }
 
-void verilogwriter::print_output(std::ostream &out,
+void ModuleEmitter::print_output(std::ostream &out,
                                  ch::core::outputimpl *node) {
     try {
         out << "    output " << get_width_str(node->size()) << " "
@@ -651,17 +636,13 @@ void verilogwriter::print_output(std::ostream &out,
     }
 }
 
-void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
+void ModuleEmitter::print_reg(std::ostream &out, ch::core::regimpl *node) {
     try {
         // Declare the register
         emit_signal_decl(out, node);
 
         // Find the 'next' source node for this register
         auto *next_node = node->get_next();
-
-        // Default clock name (kept for future reset-support; unused at present)
-        std::string clock_name = "default_clock";
-        (void)clock_name;
 
         // The ch_reg init value becomes the synchronous reset value so the
         // Verilator model starts from the same state as the CppHDL Simulator
@@ -720,9 +701,10 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
             // at the reset pulse (otherwise uart_tx etc. never see
             // their declared init value).
             std::string reg_name = node_names_[node];
-            out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
+            out << "    always_ff @(posedge " << view_.clock_name << " or posedge "
+            << view_.reset_name << ") begin // "
                 << "Register update (no next) for " << reg_name << "\n";
-            out << "        if (!default_reset)\n";
+            out << "        if (!" << view_.reset_name << ")\n";
             out << "            " << reg_name << " <= " << reg_name << ";\n";
             out << "        else\n";
             out << "            " << reg_name << " <= " << reset_value << ";\n";
@@ -733,7 +715,7 @@ void verilogwriter::print_reg(std::ostream &out, ch::core::regimpl *node) {
     }
 }
 
-void verilogwriter::print_op(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_op(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (!node) {
             return;
@@ -793,7 +775,7 @@ void verilogwriter::print_op(std::ostream &out, ch::core::opimpl *node) {
     }
 }
 
-void verilogwriter::print_unary_op(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_unary_op(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 1 || !node_names_.count(node)) {
             return;
@@ -845,7 +827,7 @@ void verilogwriter::print_unary_op(std::ostream &out, ch::core::opimpl *node) {
     }
 }
 
-void verilogwriter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 2 || !node_names_.count(node)) {
             return;
@@ -878,7 +860,7 @@ void verilogwriter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
     }
 }
 
-void verilogwriter::print_bit_select(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_bit_select(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 2 || !node_names_.count(node)) {
             return;
@@ -901,7 +883,7 @@ void verilogwriter::print_bit_select(std::ostream &out, ch::core::opimpl *node) 
     }
 }
 
-void verilogwriter::print_bits_extract(std::ostream &out,
+void ModuleEmitter::print_bits_extract(std::ostream &out,
                                        ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 2 || !node_names_.count(node)) {
@@ -926,7 +908,7 @@ void verilogwriter::print_bits_extract(std::ostream &out,
     }
 }
 
-void verilogwriter::print_rotate_l(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_rotate_l(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 2 || !node_names_.count(node)) {
             return;
@@ -957,7 +939,7 @@ void verilogwriter::print_rotate_l(std::ostream &out, ch::core::opimpl *node) {
     }
 }
 
-void verilogwriter::print_rotate_r(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_rotate_r(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 2 || !node_names_.count(node)) {
             return;
@@ -988,7 +970,7 @@ void verilogwriter::print_rotate_r(std::ostream &out, ch::core::opimpl *node) {
     }
 }
 
-void verilogwriter::print_concat(std::ostream &out, ch::core::opimpl *node) {
+void ModuleEmitter::print_concat(std::ostream &out, ch::core::opimpl *node) {
     try {
         if (node->num_srcs() < 2 || !node_names_.count(node)) {
             return;
@@ -1016,7 +998,7 @@ void verilogwriter::print_concat(std::ostream &out, ch::core::opimpl *node) {
     }
 }
 
-void verilogwriter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
+void ModuleEmitter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
     try {
         // Proxy nodes act as intermediates, usually just assign their source to
         // themselves
@@ -1046,7 +1028,7 @@ void verilogwriter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
     }
 }
 
-void verilogwriter::print_mux(std::ostream &out, ch::core::muximpl *node) {
+void ModuleEmitter::print_mux(std::ostream &out, ch::core::muximpl *node) {
     try {
         if (node->num_srcs() >= 3 && node_names_.count(node)) {
             auto *cond_node = node->condition();
@@ -1085,7 +1067,7 @@ void verilogwriter::print_mux(std::ostream &out, ch::core::muximpl *node) {
     }
 }
 
-void verilogwriter::print_bitsupdate(std::ostream &out,
+void ModuleEmitter::print_bitsupdate(std::ostream &out,
                                      ch::core::bitsupdateimpl *node) {
     try {
         // Emit {target[N-1:msb+1], source, target[lsb-1:0]}; omit slices that
@@ -1116,7 +1098,7 @@ void verilogwriter::print_bitsupdate(std::ostream &out,
     }
 }
 
-void verilogwriter::print_mem_decl(std::ostream &out,
+void ModuleEmitter::print_mem_decl(std::ostream &out,
                                    ch::core::memimpl *node) {
     try {
         if (!node || !node_names_.count(node)) {
@@ -1130,7 +1112,7 @@ void verilogwriter::print_mem_decl(std::ostream &out,
     }
 }
 
-void verilogwriter::print_mem_init(std::ostream &out,
+void ModuleEmitter::print_mem_init(std::ostream &out,
                                    ch::core::memimpl *node) {
     try {
         if (!node || !node_names_.count(node)) {
@@ -1158,7 +1140,7 @@ void verilogwriter::print_mem_init(std::ostream &out,
     }
 }
 
-void verilogwriter::print_mem_read_port(
+void ModuleEmitter::print_mem_read_port(
     std::ostream &out, ch::core::mem_read_port_impl *node) {
     try {
         if (!node || !node_names_.count(node)) {
@@ -1237,9 +1219,10 @@ void verilogwriter::print_mem_read_port(
         // The Simulator matches this via
         // `instr_mem_sync_read_port::eval` (`src/ast/instr_mem.cpp`), which
         // writes zero on the disabled cycle.
-        out << "    always_ff @(posedge default_clock or posedge default_reset) begin // "
+        out << "    always_ff @(posedge " << view_.clock_name << " or posedge "
+            << view_.reset_name << ") begin // "
             << "Read port " << proxy_name << "\n";
-        out << "        if (!default_reset)\n";
+        out << "        if (!" << view_.reset_name << ")\n";
         out << "            if (" << en_str << ")\n";
         out << "                " << proxy_name << " <= " << mem_name << "["
             << addr_name << "];\n";
@@ -1251,7 +1234,7 @@ void verilogwriter::print_mem_read_port(
     }
 }
 
-void verilogwriter::print_mem_write_port(
+void ModuleEmitter::print_mem_write_port(
     std::ostream &out, ch::core::mem_write_port_impl *node) {
     try {
         if (!node || !node_names_.count(node)) {
@@ -1275,7 +1258,7 @@ void verilogwriter::print_mem_write_port(
         }
         // No reset branch: simulator reset() never clears memory contents
         // (preloaded ELF must survive; only ch_reg cells are reset).
-        out << "    always_ff @(posedge default_clock) begin // "
+        out << "    always_ff @(posedge " << view_.clock_name << ") begin // "
             << "Write port for " << mem_name << "\n";
         out << "        if (" << en_str << ")\n";
         out << "            " << mem_name << "[" << addr_name

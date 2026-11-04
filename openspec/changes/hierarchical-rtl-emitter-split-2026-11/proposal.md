@@ -28,14 +28,27 @@
 
 ## Acceptance
 
-- [ ] `toVerilog()` 的扁平产物相对 **T3-①b 之后**的基线**逐字节不变**
+- [x] `toVerilog()` 的扁平产物相对 **T3-①b 之后**的基线**逐字节不变**
       （`cmp` 退出码 **0** ⇒ ⇒ **不是**「差异逐条列明」）
-- [ ] 时钟/复位名已参数化 ⇒ **mutation**：**去掉参数传递**（让子模块仍用硬编码
+- [x] 时钟/复位名已参数化 ⇒ **mutation**：**去掉参数传递**（让子模块仍用硬编码
       `default_clock`）⇒ 生成物引用**未声明信号** ⇒ `verilator --lint-only` **必报错**
-- [ ] `ctest -LE perf` 全绿 · 计数锚点同步
+- [x] `ctest -LE perf` 全绿 · 计数锚点同步
 
 ## Capabilities
 
 **无 delta** —— 本 change 是**纯重构**（对外行为逐字节不变）
 ⇒ ⇒ `.openspec.yaml` 显式 `skip_specs: true`（**唯一**允许该标志的情形：本 change
 显式声明「no spec changes」）。
+
+---
+
+## 实施记录（**判据 → 证据**）
+
+| Acceptance | 证据 |
+|---|---|
+| 扁平产物相对 T3-①b 之后**逐字节不变**（`cmp` 退出码 **0**） | 外部基线：3 个设计（`RegChain` / `MemTop` / `riscv::Rv32iPipeline` 145 KB）拆分前 vs 拆分后 ⇒ **全 0**；另单测证明 `verilogwriter` == `ModuleEmitter(make_flat_module_view)` |
+| 时钟/复位名已参数化 + mutation（去掉参数传递 ⇒ lint 必报错） | 四处参数化（`emit_always_ff` / `print_reg` 无-next 分支 / `print_mem_read_port` / `print_mem_write_port`）；**M1 实测**：单测 RED + `verilator --lint-only` **exit 1**（`Can't find definition of variable: 'default_clock'`）；对照组 lint **exit 0** |
+| `ctest -LE perf` 全绿 · 计数锚点同步 | **237/237** · samples 39/39 · examples 28/28 · `248 / 237 / 140` 三个锚点同步 |
+
+⚠️ **顺带清掉死代码**（Zero-Debt）：`verilogwriter::node_uses_`（建表但从不读）与
+`print_reg` 里 `(void)clock_name;` 的未用变量。

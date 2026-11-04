@@ -1081,6 +1081,10 @@ add_catch_test(test_component_granularity test_component_granularity.cpp)
 add_catch_test(test_hierarchy_analysis test_hierarchy_analysis.cpp)
 target_compile_definitions(test_hierarchy_analysis PRIVATE
     CPPHDL_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden/hierarchy")
+# module emitter split (hierarchical RTL T3-③): verilogwriter delegates to
+# ModuleEmitter + make_flat_module_view (byte-identical), and clock/reset names
+# are parameterized so sub-modules never reference the RTL-top default clocks.
+add_catch_test(test_verilog_module_emitter test_verilog_module_emitter.cpp)
 add_catch_test(test_module test_module.cpp)
 # dual-backend-test-coverage (Phase 1): 3 CH_MODULE timing tests
 # migrated to DUAL_BACKEND_TEST_PAIR.
