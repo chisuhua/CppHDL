@@ -12,8 +12,33 @@ namespace ch { namespace core { class context; } }
 
 namespace ch {
 
+class Component;
+
+/// 拼接子组件的**全路径**：父的全路径 + "." + 局部名。
+///
+/// ⚠️ MUST 用 `parent->name()`（**不是** `hierarchical_name()`）—— 后者会把
+/// 「**已经是全路径**的 `name_`」再拼一次父路径 ⇒ ⇒ 深度 ≥3 出现
+/// `top.top.m.lf` 这类重复前缀（ADR-059 D3）。
+/// ⚠️ 这是**唯一**的全路径拼接点 ⇒ ⇒ 第二个拼接点 = 两个真源 = 前缀重复会复发。
+std::string build_hierarchical_name(const Component* parent, const std::string& local_name);
+
+/// 声明「**我是一个层**」**并**给出模块类型名 —— 二者一体。
+///
+/// ⚠️ 写这个宏就**必须**给名字 ⇒ ⇒ 「成层却忘了命名」这个组合**编译期即不可表示**
+/// （ADR-059 §2.2.1 第 ① 档 · ADR-061 决策①）。
+/// ⚠️ 宏体 MUST NOT 触碰 `this` ⇒ ⇒ 它是**类级**声明 ⇒ ⇒ 实例级的名字
+/// （`ch_layer<Helper>` 的档 ③）**不能**用它。
+/// ⚠️ `kChHierarchyLayerName` MUST 是**编译期可见**的（`static constexpr`）
+/// ⇒ ⇒ `ch_layer<T>` 才能据此在「② 继承」与「③ 必须另给」之间**编译期**分派。
+#define CH_HIERARCHY_LAYER(name_literal)                                       \
+    static constexpr const char* kChHierarchyLayerName = name_literal;         \
+    static constexpr bool kChIsLayer = true;                                   \
+    const char* layer_name_literal() const override { return kChHierarchyLayerName; }
+
 class Component : public std::enable_shared_from_this<Component> {
 public:
+    /// ⚠️ `name` 是**局部名**（实例在父下的名字）⇒ ⇒ 全路径由本构造函数计算
+    /// （`build_hierarchical_name(parent, local_name_)`）⇒ ⇒ `name()` 恒为全路径。
     explicit Component(Component* parent = nullptr, const std::string& name = "");
     virtual ~Component();
 
@@ -33,7 +58,21 @@ public:
     // 访问器
     ch::core::context* context() const { return ctx_; }
     std::shared_ptr<Component> parent() const { return parent_.lock(); }
+
+    /// **全路径**（父路径 + "." + 局部名）—— 命名的**唯一真源**。
     const std::string& name() const { return name_; }
+
+    /// **局部名**（实例在父下的名字，**不含**父路径）—— 与 `name()` 互不替代。
+    const std::string& local_name() const { return local_name_; }
+
+    /// **模块类型名**：类级 `CH_HIERARCHY_LAYER("...")` 给的名字；未声明成层时
+    /// 回落 `typeid(*this).name()`。
+    /// ⇒ ⇒ **同一类型的多实例返回相同值**（⇒ module 名由 `<module_type_name>_<序号>`
+    /// 派生，序号 = 该组内实例**按实例路径排序**的次序 ⇒ ⇒ 确定性）。
+    /// ⚠️ 返回**未 sanitize** 的字面量 ⇒ ⇒ **发射侧**（Verilog 模块名）负责 sanitize。
+    /// ⚠️ `typeid` 的拼写是**实现相关**的 ⇒ ⇒ 跨编译器/跨平台**不可复算**
+    /// ⇒ ⇒ 跨平台 golden 的比较范围 MUST 限定「**同一编译器 / 同一 ABI 内**」。
+    std::string module_type_name() const;
 
     static Component* current() { return current_; }
     static void set_current(Component* comp) { current_ = comp; }
@@ -58,19 +97,11 @@ public:
         }
     }
 
-    std::string hierarchical_name() const {
-        auto p = parent_.lock();
-        if (!p) {
-            return name_;
-        }
-        
-        std::string parent_path = p->hierarchical_name();
-        if (parent_path.empty() || parent_path == "unnamed") {
-            return name_;
-        }
-        
-        return parent_path + "." + name_;
-    }
+    // ⚠️ `hierarchical_name()` 已**删除**（ADR-059 D3 / R2）：
+    //   它把「**已经是全路径**的 `name_`」再拼一次父路径 ⇒ ⇒ 深度 ≥3 出现
+    //   `top.top.m.lf`；且它的唯一消费者（`build_hierarchical_name`）已改用
+    //   `parent->name()` ⇒ ⇒ 留着 = **第二个全路径拼接点** = 两个真源
+    //   ⇒ ⇒ 前缀重复会**再回来**。替代物：`name()`（全路径）+ `local_name()`（局部名）。
 
     // 修改返回类型为 shared_ptr
     std::shared_ptr<Component> add_child(std::unique_ptr<Component> child);
@@ -84,9 +115,17 @@ protected:
     // solely by its owner (e.g. ch_device or children_shared_ of the
     // grandparent), not by its children.
     std::weak_ptr<Component> parent_;
-    std::string name_;
+    std::string local_name_;   // 局部名（实例在父下的名字）· **先于** name_ 声明
+    std::string name_;         // 全路径（父路径 + "." + 局部名）
     std::vector<std::shared_ptr<Component>> children_shared_;
     bool ctx_owner_ = false;
+
+protected:
+    /// 类级模块类型名（由 `CH_HIERARCHY_LAYER` 覆写）⇒ 默认 `nullptr`
+    /// ⇒ ⇒ 调用方回落到 `typeid(*this).name()`。
+    /// ⚠️ MUST 是 **virtual** ⇒ ⇒ 派生类的覆写在**运行期**才被取到
+    /// （⚠️ 构造函数里调虚函数会取到**基类**版本 ⇒ ⇒ 故本函数**不在**构造函数里调）。
+    virtual const char* layer_name_literal() const { return nullptr; }
 
 private:
     static thread_local Component* current_;
@@ -98,5 +137,21 @@ private:
     Component(const Component&) = delete;
     Component& operator=(const Component&) = delete;
 };
+
+/// 拼接子组件的**全路径**（定义在类之后 —— 需要 `Component` 的完整类型）。
+inline std::string build_hierarchical_name(const Component* parent, const std::string& local_name) {
+    if (!parent) {
+        return local_name;
+    }
+
+    // ⚠️ MUST 用 `name()`（父的**全路径**）—— **不是** `hierarchical_name()`
+    // （后者会把「已是全路径的 name_」再拼一次父路径 ⇒ 深度 ≥3 重复前缀）。
+    const std::string& parent_path = parent->name();
+    if (parent_path.empty() || parent_path == "unnamed") {
+        return local_name;
+    }
+
+    return parent_path + "." + local_name;
+}
 
 } // namespace ch

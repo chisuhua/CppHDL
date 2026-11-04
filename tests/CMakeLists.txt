@@ -1063,6 +1063,8 @@ add_dual_backend_test(test_blt_debug_behavior
 add_catch_test(test_bv_cmp test_bv_cmp.cpp)
 add_catch_test(test_bv_truncate test_bv_truncate.cpp)
 add_catch_test(test_ch_reg_bitwise test_ch_reg_bitwise.cpp)
+# component naming (hierarchical RTL T3-①a): path uniqueness + two naming dimensions
+add_catch_test(test_component_naming test_component_naming.cpp)
 add_catch_test(test_module test_module.cpp)
 # dual-backend-test-coverage (Phase 1): 3 CH_MODULE timing tests
 # migrated to DUAL_BACKEND_TEST_PAIR.

@@ -522,6 +522,26 @@ jobs:
       shell: bash
       run: scripts/verify_header_odr.sh --self-test
 
+    - name: Verify component naming model (path uniqueness + two dimensions)
+      # WHY: the hierarchical RTL output (ADR-059 D3/D4) needs TWO naming
+      # dimensions - `name()` (full path) and `local_name()` (local) - and the
+      # full path MUST NOT repeat the parent path at depth >= 3 (it used to be
+      # "top.top.m.lf" because two functions each prepended the parent path).
+      # R2/R3 are COMPILE-TIME criteria (the fixtures MUST fail to compile):
+      # "a layer without a module type name" MUST be inexpressible, and
+      # `hierarchical_name()` MUST NOT exist (it would be a second source of
+      # truth for the full path).
+      shell: bash
+      run: scripts/verify_component_naming.sh
+
+    - name: Verify component naming model (self-test)
+      # WHY a self-test: neutralises the two negative fixtures in place. If a
+      # neutralised fixture still fails to compile, the criterion was a FALSE
+      # GREEN (it failed for an unrelated reason - e.g. an abstract base class
+      # that cannot be instantiated).
+      shell: bash
+      run: scripts/verify_component_naming.sh --self-test
+
     - name: Verify multi_if output assignability (E1) and condition (E3)
       # Contract: capability `chlib-conditional-semantics`.
       # E1: a `multi_if` MUST be directly assignable to a `ch_out` (it did

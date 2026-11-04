@@ -9,33 +9,11 @@
 
 namespace ch {
 
-// Helper function to construct the hierarchical path name
-//
-// ⚠️ MUST be `inline`: this header is reachable from the aggregate header
-// `ch.hpp` ⇒ without `inline` every TU that includes it emits an external
-// definition ⇒ any project with 2+ such TUs fails to link with
-// "multiple definition of ch::build_hierarchical_name".
-// Guarded by scripts/verify_header_odr.sh (link-time criterion, not a text scan).
-inline std::string build_hierarchical_name(Component* parent, const std::string& local_name) {
-    CHDBG_FUNC();
-    
-    if (!parent) {
-        CHDBG("No parent, returning local name: %s", local_name.c_str());
-        return local_name;
-    }
-    
-    std::string parent_path = parent->hierarchical_name();
-    CHDBG("Parent path: '%s', local name: '%s'", parent_path.c_str(), local_name.c_str());
-    
-    if (parent_path.empty() || parent_path == "unnamed") {
-        CHDBG("Parent path empty or unnamed, returning local name: %s", local_name.c_str());
-        return local_name;
-    }
-    
-    std::string result = parent_path + "." + local_name;
-    CHDBG("Built hierarchical name: %s", result.c_str());
-    return result;
-}
+// ⚠️ `build_hierarchical_name()` 已**移到** `include/component.h`
+// （那里是**唯一**的全路径拼接点 —— 留在本头会与 `Component` 的构造函数
+// 构成**两个真源** ⇒ 前缀重复会复发）。
+// ⇒ ⇒ 本头经 `#include "component.h"` 继续**对外可见**该函数（签名与语义不变）。
+// ⇒ ⇒ 它 MUST 用 `parent->name()`（**不是** `hierarchical_name()`）—— ADR-059 D3。
 
 template <typename T, typename... Args>
 class ch_module {
@@ -58,12 +36,11 @@ public:
             return;
         }
 
-        // 3. Construct the hierarchical path name
-        std::string child_path_name = build_hierarchical_name(parent_component, instance_name);
-        CHDBG("Child path name: %s", child_path_name.c_str());
-
-        // 4. Create the child component instance
-        auto local_child_ptr = std::make_unique<T>(parent_component, child_path_name, std::forward<Args>(args)...);
+        // 3. Create the child component instance
+        //    ⚠️ 传**局部名**（不是全路径）—— 全路径由 `Component` 的构造函数计算
+        //    （**唯一**拼接点）⇒ ⇒ 深度 ≥3 不再出现 `top.top.m.lf`（ADR-059 D3）。
+        auto local_child_ptr = std::make_unique<T>(parent_component, instance_name, std::forward<Args>(args)...);
+        CHDBG("Child path name: %s", local_child_ptr->name().c_str());
 
         // 5. Transfer ownership of the child component to the parent.
         // Get shared_ptr from parent's add_child method

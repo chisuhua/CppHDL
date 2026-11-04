@@ -48,39 +48,49 @@ ch_module::ctor(instance_name)
 ⇒ ⇒ **不变量**：`name() == 父的 name() + "." + local_name()`（根除外）
 ⇒ ⇒ ⇒ **MUST NOT** 存在第二个「拼全路径」的地方（⇒ `hierarchical_name()` 删除）。
 
-### 2.1 `local_name_` 怎么来（**三种来源形态**）
+### 2.1 `local_name_` 怎么来（**实施期定稿**）
 
-| 来源 | 传入的 `name` 形态 | `local_name_` |
-|---|---|---|
-| `ch_module<T> s{"s"}` | **全路径**（`ch_module` 算好后传入） | 由 `ch_module` **显式**设置（它才知道局部名） |
-| `create_child<T>("c")` | **局部名** | = 传入值 |
-| 根组件（`ch_device<T>`） | 局部名 | = 传入值 |
+⚠️ **初稿的方案（`ch_module` 构造后调 `set_local_name`）在实施期被推翻** ——
+理由见 §2.1.1。
 
-⚠️ ⇒ 构造函数**无法**从入参区分「全路径」与「局部名」⇒ ⇒ **不能**靠字符串切分猜
-（那会让「名字里含 `.`」的实例名被误切 ⇒ 静默错名 ⇒ 本仓反复吃过的亏）。
+| 来源 | 传入的 `name` 形态 | `local_name_` | `name_`（全路径） |
+|---|---|---|---|
+| `ch_module<T> s{"s"}` | **局部名** | = 传入值 | 由**构造函数**计算 |
+| `create_child<T>("c")` | **局部名** | = 传入值 | 由**构造函数**计算 |
+| 根组件（`ch_device<T>`） | 局部名 | = 传入值 | = 传入值（无父） |
 
-⇒ ⇒ **裁决**：`local_name_` 由**唯一知道局部名的那一方**显式给出：
+⇒ ⇒ **裁决（定稿）**：**构造函数的 `name` 参数恒为「局部名」**，
+**全路径由构造函数自己算**（`build_hierarchical_name(parent, local_name_)`）
+⇒ ⇒ ⇒ 由此：
+① `local_name_` **天然**正确（不需要任何 setter、不需要字符串切分）；
+② `name()` **恒为全路径**（R3 的要求，对**所有**组件成立）；
+③ **派生组件的 ctor 签名零变更**（⇒ 不触发 ADR-061 决策① 的「tag 参数会要求每个组件
+   的 ctor 都接受它 ⇒ 破坏现有组件」的同型问题）。
 
 ```cpp
 // include/component.h
 class Component {
 public:
-    Component(Component* parent, const std::string& name);   // ← 签名不变（零 API 破坏）
-    const std::string& name() const { return name_; }        // ← 语义不变（全路径）
-    const std::string& local_name() const { return local_name_; }      // 新增
-    const std::string& module_type_name() const { return module_type_name_; } // 新增
-protected:
-    void set_local_name(std::string v) { local_name_ = std::move(v); }   // ← ch_module 用
+    Component(Component* parent = nullptr, const std::string& name = "");
+    const std::string& name() const { return name_; }              // 全路径
+    const std::string& local_name() const { return local_name_; }   // 局部名（新增）
+    std::string module_type_name() const;                           // 模块类型名（新增）
 private:
-    std::string name_;             // 全路径（既有）
-    std::string local_name_;       // 局部名（新增）
-    std::string module_type_name_; // 模块类型名（新增）
+    std::string local_name_;   // 局部名（**先于** name_ 声明 ⇒ 初始化顺序正确）
+    std::string name_;         // 全路径
 };
 ```
 
-⇒ ⇒ `ch_module` 的 ctor 在构造完子组件后调一次 `set_local_name(instance_name)`
-⇒ ⇒ **派生组件的 ctor 签名零变更**（⇒ 不触发 ADR-061 决策① 里「tag 参数会要求每个组件
-的 ctor 都接受它 ⇒ 破坏现有组件」的同型问题）。
+### 2.1.1 为什么初稿方案被推翻（**实施期记录**）
+
+初稿让 `ch_module` 传**全路径**给构造函数、再用 `set_local_name` 补局部名。
+实测推演发现它**必然留下一个不一致**：`create_child` 的子组件走的是**同一个构造函数**
+⇒ ⇒ 构造函数收到的是**局部名** ⇒ ⇒ 「`name_` 有时是全路径、有时是局部名」
+⇒ ⇒ `name()` 的语义**仍然不一致** ⇒ ⇒ 而 R3 要求 `name()` **恒为全路径**
+⇒ ⇒ 且「深度 ≥3 无重复前缀」只有在**全路径恒定成立**时才成立。
+
+⇒ ⇒ ⇒ **一条更一般的教训**：当「同一个构造函数」被**两种语义**的调用方使用时，
+**必须**在**构造函数内部**统一语义 ⇒ ⇒ 而不是靠调用方约定 + setter 补洞。
 
 ### 2.2 `module_type_name_` 怎么来（**四档的第 ① 档 + 回落**）
 
@@ -149,3 +159,19 @@ ADR-059 §2.2.1 的四档里，本 change 只落地**第 ① 档**与**回落**�
 | 3 | 局部名靠字符串切分猜 ⇒ 名字含 `.` 时静默错名 | ⇒ **禁止**切分：局部名由**知道它的那一方**显式给出（§2.1） |
 | 4 | 合并宏引入「有声明无消费者」的半截状态 | ⇒ 宏的运行期读取（`is_layer()`）归 ①c ⇒ ⇒ 本 change 只提供**存储 + 编译期可见名** |
 | 5 | 跨平台 golden 因 `typeid` 拼写不可复算 | ⇒ 契约限定「**同编译器 / 同 ABI 内**」（§2.2） |
+
+---
+
+## 5. 实施期偏离记录（**文档 MUST 与代码一致**）
+
+| # | 初稿 | 定稿 | 原因 |
+|---|---|---|---|
+| 1 | `build_hierarchical_name` 留在 `include/module.h` | **移到 `include/component.h`** | 全路径拼接的**唯一**真源 MUST 与「计算它的那一处」同文件 ⇒ ⇒ 构造函数（`component.h`）能直接用 ⇒ ⇒ `module.h` 经 `#include "component.h"` 继续**对外可见**（签名与语义不变）⇒ ⇒ ADR-059 D3 的判据（用 `parent->name()`）**仍然成立** |
+| 2 | `ch_module` 传全路径 + `set_local_name` 补局部名 | **构造函数收局部名并自算全路径** | 见 §2.1.1（「同一构造函数被两种语义调用 ⇒ 必须在内部统一」） |
+| 3 | `module_type_name()` 返回 `sanitize(typeid(...))` | 返回**未 sanitize** 的 `typeid(...)` 字面量 | `sanitize_name` 是 **writer 的成员函数**（`codegen_verilog.h:52` / `codegen_dag.h:55`）⇒ ⇒ `component.h` **用不了** ⇒ ⇒ 且在头里**复制**一份实现 = 第二个实现 = 会漂移 ⇒ ⇒ **sanitize 归发射侧**（T3-④）⇒ ⇒ 本 change 返回**原始**字面量，语义等价（同一个字面量 ⇒ 同一个字符串） |
+| 4 | `module_type_name()` 存成员、ctor 里填 | **运行期由 `layer_name_literal()` 虚函数**解析 | 构造函数里调虚函数会取到**基类**版本（vtable 尚未切换到派生类）⇒ ⇒ 派生类的类级名字**取不到** ⇒ ⇒ 改为**运行期**解析（此时 vtable 已正确）⇒ ⇒ 类级宏仍提供**编译期可见**的 `kChHierarchyLayerName`（供 T3-①c 的 ②/③ 编译期分派） |
+
+⚠️ **偏离 3 的契约影响**：`module_type_name()` 返回**未 sanitize** 的字面量
+⇒ ⇒ 「模块类型名」在 Verilog 产物里的形态由**发射侧**决定（sanitize 后）
+⇒ ⇒ 契约的「同类型 ⇒ 同值」**不受影响**（同一个字面量 ⇒ 同一个字符串）✔
+⇒ ⇒ 「跨平台不可复算」也不受影响（`typeid` 拼写实现相关）✔

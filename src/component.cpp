@@ -4,13 +4,17 @@
 #include "logger.h"
 #include "utils/destruction_manager.h"
 #include <set>
+#include <typeinfo>
 
 namespace ch {
 
 thread_local Component *Component::current_ = nullptr;
 
 Component::Component(Component *parent, const std::string &name)
-    : ctx_(nullptr), name_(name.empty() ? "unnamed" : name) {
+    : ctx_(nullptr),
+      local_name_(name.empty() ? "unnamed" : name),
+      // ⚠️ 全路径由本构造函数计算（**唯一**拼接点）⇒ ⇒ `name()` 恒为全路径
+      name_(build_hierarchical_name(parent, local_name_)) {
     CHDBG_FUNC();
 
     if (parent != nullptr) {
@@ -35,6 +39,7 @@ Component::Component(Component *parent, const std::string &name)
 Component::Component(Component&& other) noexcept
     : ctx_(other.ctx_)
     , parent_(std::move(other.parent_))
+    , local_name_(std::move(other.local_name_))
     , name_(std::move(other.name_))
     , children_shared_(std::move(other.children_shared_))
     , ctx_owner_(other.ctx_owner_)
@@ -55,6 +60,18 @@ Component::Component(Component&& other) noexcept
     other.destructing_ = false;
 }
 
+std::string Component::module_type_name() const {
+    // ⚠️ 虚调用 ⇒ MUST 在**运行期**（构造完成后）才取得到派生类的覆写
+    // （构造函数里调虚函数会取到**基类**版本 ⇒ ⇒ 故不在构造函数里调用）。
+    if (const char* literal = layer_name_literal()) {
+        return std::string(literal);
+    }
+    // ⚠️ 回落：同类型 ⇒ 同值 ✔；但 `typeid` 拼写**实现相关** ⇒ 跨平台不可复算
+    // ⇒ ⇒ 契约限定「同一编译器 / 同一 ABI 内」。
+    // ⚠️ 返回**未 sanitize** 的字面量 ⇒ 发射侧（Verilog 模块名）负责 sanitize。
+    return std::string(typeid(*this).name());
+}
+
 Component& Component::operator=(Component&& other) noexcept {
     CHDBG_FUNC();
     if (this != &other) {
@@ -73,6 +90,7 @@ Component& Component::operator=(Component&& other) noexcept {
 
         ctx_ = other.ctx_;
         parent_ = std::move(other.parent_);
+        local_name_ = std::move(other.local_name_);
         name_ = std::move(other.name_);
         children_shared_ = std::move(other.children_shared_);
         ctx_owner_ = other.ctx_owner_;

@@ -26,6 +26,9 @@
 7. **接口白名单**（ADR-062 §2.6）：成层单元接口 MUST 限于 `ch_uint<N>` / `ch_bool`
    ⇒ ⇒ 违反 ⇒ `CHFATAL_EXCEPTION` + 点名端口。
 8. **跨模块 `ch_mem`** ⇒ **响亮拒绝**（判定口径 = **inline 折叠后**的 module 归属）。
+9. **独立公开入口** `toVerilogHierarchical(...)`（既有 `toVerilog()` 路径**逐字节不变**）。
+10. **命名权威 = ctx 级全局表**：MUST NOT 发明 per-module 局部命名 ⇒ ⇒ 顶层端口名
+    MUST 与扁平产物**逐字相同**。
 
 ## 不做（Non-Goals）
 
@@ -70,6 +73,6 @@
 
 | capability | delta |
 |---|---|
-| `rtl-hierarchical-output` | **ADDED ×7**（R2 成层组件形成独立 module · R5 隐式端口按方向 · R6 悬空子输入冒泡 · R10 时序模块 clock/reset · R11 端口覆盖 + 可追溯 · R12 体内不引用非自己/非祖先端口节点 · R14 接口类型白名单） |
+| `rtl-hierarchical-output` | **ADDED ×8**（成层组件形成独立 module · **命名权威 = ctx 级全局表** · 隐式端口按方向 · 悬空子输入冒泡 · 时序模块 clock/reset · 端口覆盖 + 可追溯 · 体内不引用非自己/非祖先端口节点 · **独立公开入口 + 既有路径逐字节不变** · 接口类型白名单） |
 
 ⇒ 归档**禁** `--skip-specs`。

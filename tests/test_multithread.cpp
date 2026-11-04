@@ -252,8 +252,15 @@ TEST_CASE("Component hierarchy in multithreaded environment", "[multithread][com
         REQUIRE(children.size() == 2);
         
         // 验证子模块名称
-        REQUIRE(children[0]->name() == "child1");
-        REQUIRE(children[1]->name() == "child2");
+        // ⚠️ 2026-11-04（层次化 RTL T3-①a · ADR-059 D4 / R3）：`name()` 现在恒为
+        // **全路径**（「父路径 + 局部名」）⇒ ⇒ `create_child` 的子组件由「局部名」
+        // 变为「全路径」⇒ ⇒ 旧期望值钉的是**不一致的旧语义**（ch_module 子组件是
+        // 全路径、create_child 子组件是局部名）⇒ ⇒ 按**正确语义**更新。
+        // ⇒ 局部名改由 `local_name()` 断言（两个命名维度互不替代）。
+        REQUIRE(children[0]->name() == "top.child1");
+        REQUIRE(children[1]->name() == "top.child2");
+        REQUIRE(children[0]->local_name() == "child1");
+        REQUIRE(children[1]->local_name() == "child2");
         
         return true;
     };

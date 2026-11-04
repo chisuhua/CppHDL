@@ -55,6 +55,6 @@ parity **盖章**（两后端一致地错）⇒ ⇒ 只有「手推期望值 + �
 
 | capability | delta |
 |---|---|
-| `rtl-hierarchical-output` | **ADDED ×3**（R4 默认全 inline 逐字节一致 · R9 层次化与扁平等价（可机械判定）· R13 独立公开入口 + 既有路径逐字节不变） |
+| `rtl-hierarchical-output` | **ADDED ×2**（默认（全 inline）产物 MUST 与扁平产物逐字节一致 · 层次化产物 MUST 与扁平产物等价（可机械判定）） |
 
 ⇒ 归档**禁** `--skip-specs`。
