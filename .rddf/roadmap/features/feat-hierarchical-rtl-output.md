@@ -91,8 +91,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | ✅ **已归档**（2026-11-04） | `tests/test_component_ownership.cpp`（8 用例 / 76 断言）· **`ch_device<Rv32iPipeline>` 不 SIGSEGV** · 变异 6/6 全抓 · 3 处实施期订正见 `design.md` §4 |
 | **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | ✅ **已归档**（2026-11-04） | `tests/test_component_granularity.cpp`（5 用例 + 7 条 `static_assert`）· 四档来源 + `Granularity` 总开关 + 无 parent 装配 |
 | **T3-②** | `hierarchical-rtl-analysis-2026-11` | ✅ **已归档**（2026-11-04） | `tests/test_hierarchy_analysis.cpp`（11 用例 / 87 断言 + **4 份 golden**，其中 `three_layers.txt` 为**手推**）· 变异 **12/12** · 隐式端口合成**显式分派给 T3-④**（本层 fail-closed） |
-| **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | ✅ **已实施**（2026-11-04） | `ModuleEmitter` + `ModuleView` + 薄适配器 `verilogwriter` · 3 个设计 `cmp` 逐字节相同（含 145 KB RV32iPipeline）· 时钟名参数化 4 处 · **M1 ⇒ lint exit 1 / 对照 exit 0** |
-| T3-④ | `hierarchical-rtl-emission-2026-11` | ⏳ | — |
+| **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | ✅ **已归档**（2026-11-04） | `ModuleEmitter` + `ModuleView` + 薄适配器 `verilogwriter` · 3 个设计 `cmp` 逐字节相同（含 145 KB RV32iPipeline）· 时钟名参数化 4 处 · **M1 ⇒ lint exit 1 / 对照 exit 0** |
+| **T3-④** | `hierarchical-rtl-emission-2026-11` | 🚧 进行中 | — |
 | T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ⏳ | — |
 | T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ | — |
 | T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
