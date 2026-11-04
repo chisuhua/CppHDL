@@ -97,6 +97,25 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ | — |
 | T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
 
+### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **4 个批次 · 逐个 commit**）
+
+> ⚠️ **一个批次 = 一个 commit** ⇒ ⇒ 「回归变红」**可归因**（沿用本 feature「①a/①b/①c MUST 拆开」的裁决）。
+> ⚠️ **排期顺序由 oracle 实测决定**（台账 §11.5 **O3**）：**先 collect 化、再做 F2/F3**
+> ⇒ ⇒ 否则 `SynthesizeFatal` 的诊断收集与 F2/F3 改**同一个发射循环** ⇒ ⇒ 二次返工。
+
+| 批 | 内容 | 依赖 | 关键判据 |
+|---|---|---|---|
+| **B1** | **策略枚举收敛**（零行为变化）：删 `HierarchyPortPolicy` / `HierarchyUndrivenPolicy` ⇒ 用 `ch::PortPolicy` / `ch::UndrivenPolicy`（ADR-060 §2.4 的**唯一权威**）· **删 `Component::set_granularity()`**（零调用点 ⇒ 绕过 RAII 的泄漏通道）· `HierarchyEmitOptions` 加 `top_module_name`、**不加** `granularity`（全局权威） ⇒ ⇒ ⚠️ **C1 未答 ⇒ 本批只加不删**（`out_dir` 暂留 ⇒ 标「未实现即 `CHFATAL`」）· ⚠️ **返回类型偏离登记**（ADR-058 §2.3 写 `std::expected<HierManifest, HierError>` ⇒ 已落地的是同构 struct `HierarchyEmitResult` ⇒ ⇒ 本批登记为「实现取同构 struct · 语义等价」） | —（**C1 的答案**为软前置） | 编译期 `static_assert`（枚举逐个相等）+ 既有 4 用例绿 + 扁平外部基线 3 设计 `cmp` 全 0 |
+| **B2a** | **发射循环 collect 化**（**零行为重构** ⇒ ⇒ 单独成 commit ⇒ ⇒ 兑现「一个批次 = 一组回归判据 ⇒ 可归因」）：把「合成类」边的诊断从「首错即返」改为 **collect**（`SynthesizeFatal` 的诊断载体）⇒ ⇒ **前置校验类**错误**保持首错即返**（对齐 `Reject` 语义） | B1 | 既有用例全绿 + 3 设计 `cmp` 全 0 + **`SynthesizeFatal` 多越界边 ⇒ 诊断含全部边与端口名**（对照：只报第一条 ⇒ 转红）|
+| **B2b** | **隐式端口合成**（ADR-060 §2.1 四行矩阵 + 第三轴 pass-through + 兄弟边父层中转）+ `type_output`-as-wire（ADR-061 决策② 角色 ③） | B2a | 方向矩阵**四行各一**用例 + 第三轴 + 兄弟边（专属用例：A.out → B.in ⇒ 父层**一根**连接网 + 两实例化各连一次 + 零隐式端口）；每例 = 端口表断言 + `verilator --lint-only` exit 0 + **零跨 module assign** + **发生合成时逐边 `CHWARN` + 产物内注释** + **未发生合成时产物无注释** |
+| **B3** | **冒泡**（成层组件的悬空 `ch_in` 逐级冒泡）+ **端口完整性**（⊇ 自身 `ch_in`/`ch_out` + 五类来源可追溯 + `type_output` 三角色 + 空端口 module 合法）+ **拒绝类**（跨模块 `ch_mem` / 自驱动 `ch_in` / 同名不同类型 / 同类型多实例**不复用**）+ **接口白名单**（ADR-062 §2.6） ⇒ ⇒ ⚠️ **三个机制 MUST 写死**：① **可追溯的载体 = `HierarchyEmitResult`**（随返回结构体带出端口来源；分析层 `to_text()` 与**既有字段的顺序/命名 MUST NOT 动** ⇒ ⇒ T3-② 的 4 份 golden + 87 条断言零改动）；② **白名单的检查点 = 发射期端口表定稿后**；可违反形态 = **隐式端口 / mem 读端口被抬成端口**时其类型 ∈ {`ch_mem` · `ch_reg` · bundle 切片（非 uint/bool）· `ch_stream`} ⇒ ⇒ 负向对照 MUST 构造该形态；③ **错误消息点名 = `HierarchyEmitResult.error` 的子串比对**（MUST NOT 只抓 stderr） | B2b | 每条一用例 + 负向对照 + **错误消息子串断言**（点名端口 / 名字）|
+| **B4** | **护栏** `scripts/verify_hierarchical_rtl.sh`（R1 零未声明引用 · R2 实例端口名 ∈ 目标端口集 · R3 端口宽度一致 · R4 确定性 · R5 跨模块 `ch_mem` 被拒 · R6 module 树结构同构〔从产物独立提取〕· **R7 层次化产物路径 ≠ 既有扁平产物路径**〔⚠️ **适用面 = 仓内调用点**：对每个 `toVerilogHierarchical(` 的 path 实参，断言其 ≠ 同目录任何 `toVerilog(` 实参 ⇒ ⇒ **不是**「扫描工作目录所有 `.v`」⇒ ⇒ 否则成误报机器〕）+ `--self-test` + **CI 两处** + **归档**（**11 条 delta** · **禁** `--skip-specs`） | B3 | 每条护栏判据**原地投毒必红** ⇒ 还原复绿（⚠️ **7 条判据 ⇒ ≥7 个投毒 fixture** ⇒ ⇒ 工作量**中偏大**，不是「中」）|
+
+> ⚠️ **B2 的硬约束**：分析层新增字段 **MUST NOT** 进 `to_text()` ⇒ ⇒ **T3-② 的 4 份 golden 逐字节不变**
+> ⇒ ⇒ 归档 change 的判据**不被削弱**（新增信息由 T3-④ 自己的测试覆盖）。
+> ⚠️ **B1 顺带落地 ADR-061 v1.6.3 的判别性判据**：「scope **只**包构造 ⇒ 产物 MUST = `RespectDeclarations` 形态」
+> ⇒ ⇒ 该判据**仅在设计含类级/实例级声明时**才有判别力 ⇒ ⇒ 用例 MUST 含声明，否则退化为恒真。
+
 > ⚠️ **①b 带来的两条待跟踪事项**（后续段 MUST 携带）：
 > ① **直接构造**（不经 `ch_device` / `ch_module` / `create_child`）的组件，其构造作用域帧保留到析构
 >    ⇒ 该对象存活期间「组件外建的节点」会归属它（`design.md` §4 偏离 1 的已知限制）。
@@ -117,8 +136,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-①c** ✅ | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**：`CH_HIERARCHY_LAYER("name")` 落地 · `ch_layer<T>` / `ch_inline<T>`（**不动 `ch_module` 签名**）· `is_layer()` · **无 active parent 处的装配点** | T3-①b | 粒度可声明 · 装配点不受限 | ADR-061 §5 全部判据（类级 × 实例级三组合 + 无 parent 装配仍成层） | 中（~1.5 天） |
 | **T3-②** | `hierarchical-rtl-analysis-2026-11` | **分析层**：`ModuleDef` / `InstanceDef` / 端口表 / 隐式端口识别 / 冒泡识别 / 无主节点归顶层 | T3-①c | 模块清单 + 端口表 + 连接表（**golden**，结构化形态） | **手推** golden（≥1 个 DUT 的三层端口表 MUST 人手推导，MUST NOT 全部由实现生成）+ 其余快照逐字节零差异 | 中（~2 天） |
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | **emitter 拆分**：`verilogwriter` → `ModuleEmitter`（接收节点子集 + 端口表 + 名字表）· **时钟/复位名参数化** | T3-①b | 可复用的单 module 发射器 | 扁平产物相对 **T3-①b 之后**的基线**逐字节不变** · `ctest -LE perf` 全绿 | 中（~3 天） |
-| **T3-④** | `hierarchical-rtl-emission-2026-11` | **层次发射**：module 主体 + 实例化 + **隐式端口按方向** + 悬空冒泡 + clock/reset 贯通 + **同类型多实例不复用** + **跨模块 `ch_mem` / 非白名单接口响亮拒绝** | T3-② + T3-③ | 完整层次化 RTL | ADR-058 §5 结构判据 + ADR-060 §5 + ADR-062 §5 白名单 | 大（~3 天） |
-| **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的**映射表**与逐拍等价 + 确定性 + lint | T3-④ | 等价性测试套件 + 公共 helper | ADR-058 §5 效果判据**全通过**（见下方验收段） | **~7–9 天**（oracle R13：远不止加一个函数） |
+| **T3-④** | `hierarchical-rtl-emission-2026-11` | **层次发射**：module 主体 + 实例化 + **隐式端口按方向** + 悬空冒泡 + clock/reset 贯通 + **同类型多实例不复用** + **跨模块 `ch_mem` / 非白名单接口响亮拒绝** ⇒ ⇒ **4 个批次 B1–B4**（见「T3-④ 的批次拆分」） | T3-② + T3-③ | 完整层次化 RTL | ADR-058 §5 结构判据 + ADR-060 §5 + ADR-062 §5 白名单 + **ADR-058 v2.9 / 060 v1.7 / 061 v1.6.3 的新增判据** | 大（~3 天 ⇒ **B1 小 · B2 大 · B3 中 · B4 中**）|
+| **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的**映射表**与逐拍等价 + 确定性 + lint ⇒ ⇒ ⚠️ **观测面实现路径须先经 planner 修订**（台账 §11.4 行 2）⇒ ⇒ **harness MUST 写成「可公共化」形态但不暴露 API**（P8 形态约束） | T3-④ 归档 + **C1/C2 的答案** | 等价性测试套件 | ADR-058 §5 效果判据**全通过**（见下方验收段） | **~7–9 天**（oracle R13：远不止加一个函数）|
 | **T3-⑥** | `hierarchical-rtl-docs-2026-11` | **文档同步**：`docs/usage_guide/05-component-design.md` §5 · API 参考 · 架构主题文档转正 | T3-⑤ | 文档与实现一致 | 零漂移（含用户面指南**不含** `CH_MODULE_NAME`——该宏**不存在**） | 小（~1 天） |
 
 ```
@@ -157,6 +176,27 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 ---
 
+## 架构裁决（2026-11-05 · architect · 台账 §11）—— 对本路径的影响
+
+> ⚠️ 完整理由与处置见 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` **§11**
+> ⇒ ⇒ 与 `docs/adr/ADR-058*.md`（v2.9）· `ADR-059*.md`（v2.3.2）· `ADR-060*.md`（v1.7）·
+> `ADR-061*.md`（v1.6.3）**同步**。
+
+| 裁决 | 内容 | 对本路径的影响 |
+|---|---|---|
+| **A1** | `PortPolicy` 三取值的确切语义（ADR-060 §2.4.1）⇒ `SynthesizeFatal` = **先合成完再失败**（诊断含全部被合成的边与端口名）；**「合成」MUST 是纯内存 phase · 先于任何文件 I/O** | ⇒ ⇒ **B2 必须先 collect 化**（O3）⇒ ⇒ ⚠️ **collect 的口径 MUST 写死**（ADR-060 §2.4.1 的
+`Reject` = 「只报第一条」⇒ ⇒ **前置校验类**错误（跨模块 `ch_mem` / 自驱动 `ch_in` / 白名单违反 /
+已 build 未 `add_child`）**首错即返**；**仅「合成类」边**（隐式端口 / 冒泡）走 collect ⇒ ⇒
+⇒ ⇒ **MUST NOT** 把它扩写成「所有错误统一 collect」（那会与 `Reject` 的语义冲突） |
+| **A2** | 产物形态 = **单文件多 module**（撤销目录模式 ⇒ 撤销 `out_dir` / `one_file_per_module`） | ⇒ ⇒ 本路径**不再**有多文件变体 ⇒ ⇒ T3-⑤ 的 backend 假设「编译单文件」**与当前实现一致**（但**依赖 C1**）⇒ ⇒ 「同名不同物」由「文件名显式指定」消解 ⇒ ⇒ **B4 护栏 MUST 含 R7**（路径 ≠ 扁平产物路径）⇒ ⇒ ⚠️ **C1 是显式前提**（见下） |
+| **A3** | `Granularity` 权威 = **全局**（唯一入口 = RAII `Component::GranularityScope`）⇒ 选项结构**无** `granularity` 字段 ⇒ **`Component::set_granularity()` MUST 删除** ⇒ ⚠️ 理由经 oracle 实测订正（原「装配期烘焙 ⇒ 无法生效」**证伪**） | ⇒ ⇒ **B1 删 setter** + 删重复枚举 ⇒ ⇒ 补**判别性判据**「scope 只包构造 ⇒ `RespectDeclarations` 形态」⇒ ⇒ `ForceInline`/`ForceLayer` MUST 用 `GranularityScope` 且**覆盖构造 + 发射两段** |
+| **A4** | **P6 / P8 均独立立项** + 各带形态约束 | ⇒ ⇒ 本路径**不含**二者 ⇒ ⇒ 但 **T3-⑤ 的 harness MUST 写成「可公共化」形态**（**不暴露** API）⇒ ⇒ 记入 T3-⑤ 的 tasks |
+| **B1 / B4** | 根组件的 `CH_HIERARCHY_LAYER` = **no-op**；ADR-059 §5 措辞漂移**已订正** | ⇒ ⇒ 本文件的边界表 **B1 / B4 已闭环** |
+| **O1–O5** | oracle 的 5 条发现（理由订正 / setter 零调用点 / collect 化先行 / 同名覆盖 footgun / N1 的两条命名代价） | ⇒ ⇒ 全部已落到 B1–B4 与台账 |
+| **C1 / C2** | **下游确认项**（**C1 是 B1 的前置检查点** ⇒ ⇒ 若 B1 实施时 C1 仍未答 ⇒ ⇒ B1 的选项结构调整**只加不删**（`out_dir` 字段暂留 ⇒ ⇒ 标「未实现即 `CHFATAL`」）⇒ ⇒ 待 C1 答案后处置 ⇒ ⇒ 避免「不可逆动作早于确认项」）：C1 = 交付管线是否接受**单文件多 module**（否则 A2 按条件条款重开）· C2 = 是否**拼接多份产物**（则顶层名 `top` 会撞名） | ⇒ ⇒ ⚠️ **C1 MUST 在本 feature 归档前给出答案**（否则 T3-④ 已实施的 emitter + T3-⑤ 的 backend 假设都要返工）⇒ ⇒ **不 backlog 化** ⇒ ⇒ 归 **架构评审 / 下游** |
+
+---
+
 ## 候选 change 分解（⇒ ⇒ commit 序列 · **与 §10.4 逐项对齐**）
 
 | # | change | 范围 | 前置 | capability delta（**= 该 change 自己的 delta 文件里的 Requirement**，带标题） | 护栏交付物 | 验收 |
@@ -172,7 +212,7 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 | **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的映射表与逐拍等价 | T3-④ | `rtl-hierarchical-output` **ADDED ×2**（默认（全 inline）产物 MUST 与扁平产物逐字节一致 · 层次化产物 MUST 与扁平产物等价（可机械判定）） | 等价性 harness 的**判别力自证**（故意破坏 ⇒ 必须转红）+ **公共 helper** | ADR-058 §5 效果判据全通过 |
 | **T3-⑥** | `hierarchical-rtl-docs-2026-11` | **文档同步** | T3-⑤ | **无 delta**（`skip_specs: true`） | — | 文档零漂移 |
 
-> **delta 覆盖校验**（✅ **已执行 · 2026-11-04**）：`rtl-hierarchical-output` = ①c 2 + ② 1 + ④ 8 + ⑤ 2 = **14** ✔ ·
+> **delta 覆盖校验**（✅ **已执行 · 2026-11-04**；⚠️ **2026-11-05 更新**：④ 由 8 → **11**（metis blocker ⇒ delta MUST 跟 Acceptance）⇒ ⇒ 合计 14 → **17**））：`rtl-hierarchical-output` = ①c 2 + ② 1 + ④ **11** + ⑤ 2 = **17** ✔ ·
 > `component-ownership-and-naming` = ①a 2 + ①b 5 + ①c 1 = **8** ✔ ⇒ ⇒ **无一条 Requirement 落在多个 change**。
 >
 > ⚠️ **「模块类型名四档」归 ①c 而非 ①a**：档 ②③④ 需要 `ch_layer<T>` / `ForceLayer`，而它们由 ①c 引入
@@ -216,10 +256,17 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 | # | 缺口 | 症状 | 建议 | 归属 |
 |---|---|---|---|---|
-| **P6** | **用户看不到自己的设计是否「层次友好」** | 无法预判会不会冒出一堆 `__undriven_*` / `__if_*` 端口 | ⭐ 「**层次友好度诊断** API」（形态照搬 `ch::core::diagnose_drive`：**单枚举 + 单一判定实现 + 护栏**）⇒ 报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / **各层规模** | 并入 **T3-④**，或**独立 change** |
-| **P8** | **用户拿不到「层次化后行为不变」的反馈** | 等价性验证只是框架自测 | ⭐ 等价性 harness 做成**公共 helper** ⇒ 用户可在自己的 `TEST_CASE` 里逐拍比对扁平 vs 层次 | 并入 **T3-⑤** |
+| **P6** | **用户看不到自己的设计是否「层次友好」** | 无法预判会不会冒出一堆 `__undriven_*` / `__if_*` 端口 | ⭐ 「**层次友好度诊断** API」（形态照搬 `ch::core::diagnose_drive`：**单枚举 + 单一判定实现 + 护栏**）⇒ 报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / **各层规模** | ✅ **独立 change**（2026-11-05 · A4）⇒ ⇒ 形态约束见下 |
+| **P8** | **用户拿不到「层次化后行为不变」的反馈** | 等价性验证只是框架自测 | ⭐ 等价性 harness 做成**公共 helper** ⇒ 用户可在自己的 `TEST_CASE` 里逐拍比对扁平 vs 层次 | ✅ **独立 change**（2026-11-05 · A4）⇒ ⇒ T3-⑤ 只做「可公共化」形态，**不暴露** API |
 
-⚠️ 两条都**未裁决** ⇒ ⇒ 默认**不做**（**MUST NOT** 静默塞进 T3-④ / T3-⑤ 的实施范围）。
+✅ **已裁决**（2026-11-05 · architect · 台账 §11.1 **A4** / §11.2）：**二者均「独立立项」**
+⇒ ⇒ **不进** T3-④ / T3-⑤ 的实施范围（**MUST NOT** 静默塞入）⇒ ⇒ 但**各带一条形态约束**：
+① **P6** MUST 照搬 `ch::core::diagnose_drive` 的形态（**单枚举 + 单一判定实现 + 护栏**），
+   报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / **各层规模**；
+② **P8** ⇒ T3-⑤ 的 harness MUST 写成「**可公共化**」形态（内部实现与公共包装**分离**），
+   但 T3-⑤ **MUST NOT** 暴露公共 API（⇒ ⇒ 公共化 = 独立 change）。
+⇒ ⇒ **不为此二项立新 ADR**（API 尚未设计 ⇒ 为未设计的 API 写 ADR = 过早固化）。
+⇒ ⇒ 归位条件：**P6** 待 T3-④ 归档后由 planner 单独立项；**P8** 待 T3-⑤ 的 harness 落地后立项。
 
 ---
 
@@ -481,8 +528,8 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 | # | 情形 | 本文件的立场 | 归属 |
 |---|---|---|---|
-| B1 | **根组件自己写 `CH_HIERARCHY_LAYER("x")`** | 根永远走扁平规则 ⇒ 该声明应为 **no-op**；但五份 ADR **均未裁决** ⇒ ⇒ **MUST NOT** 由 builder 即兴决定 | ⚠️ **architect**（ADR-061 补一格） |
+| B1 | **根组件自己写 `CH_HIERARCHY_LAYER("x")`** | ✅ **已裁决**（2026-11-05 · ADR-061 v1.6.2 §2.5.2）= **no-op**（根永远是 RTL 顶层 module）⇒ ⇒ 顶层名**只**由 `top_module_name` 决定 ⇒ ⇒ **不告警**（避免恒响）⇒ ⇒ 档 ④（typeid 回退）**不适用于根** | ✅ 闭环 |
 | B2 | **层次深度 > 3** | 命名/归属/冒泡都机械可推广 ⇒ 但「逐级 pass-through 端口」**恰好是深度 ≥3 才触发** ⇒ ⇒ 5 个 DUT 里 MUST 至少一个是 **3 层以上** | T3-⑤ |
 | B3 | **多 context 共存**（两个独立 `ch_device` 接错线） | **不在本 feature 范围**（①b 只覆盖「同一组件换 ctx ⇒ 抛」） | 明确排除 |
-| B4 | **ADR-059 §5 仍写「触发面 MUST 不变」** | 与 D7 **v2.2** 的裁决（「改前改后均无触发」）**不一致** ⇒ ⇒ 本文件取 **v2.2**；ADR §5 的残留漂移 MUST 订正 | ⚠️ **architect** |
+| B4 | **ADR-059 §5 仍写「触发面 MUST 不变」** | ✅ **已订正**（2026-11-05 · ADR-059 v2.3.2）= 按 D7 **v2.2**（「改前改后均无触发」）⇒ ⇒ **执行既有裁决，非新增决策** | ✅ 闭环 |
 

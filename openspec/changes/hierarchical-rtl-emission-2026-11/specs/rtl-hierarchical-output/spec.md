@@ -172,6 +172,92 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 - **THEN** emitter MUST **响亮拒绝**并点名该端口
 - **AND** MUST NOT 静默产出（⇒ ⇒ 「数组无端口形态」⇒ ⇒ 发射器**无法**表达它）
 
+### Requirement: 层次化产物 MUST 是单文件多 module，且顶层 module 名可配置
+
+层次化产物 MUST 是**一个文件**、内含**多个 module**（子在前、根在后）
+⇒ ⇒ `verilator --top-module <root_module>` MUST 能直接吃
+⇒ ⇒ 顶层 module 名 MUST 由选项 `top_module_name` 决定（默认 `top`）
+⇒ ⇒ 层次化产物的**路径** MUST NOT 与扁平产物同名（同名不同物 ⇒ ⇒ 消解手段 = 路径由调用方显式指定）。
+
+#### Scenario: 单文件承载全部 module
+
+- **WHEN** 一个三层设计被发射
+- **THEN** 产物 MUST 是**一个**文件
+- **AND** 该文件 MUST 含 **3 个 module** 定义
+- **AND** MUST NOT 产生按 module 拆分的多个文件
+
+#### Scenario: 顶层 module 名可配置
+
+- **WHEN** 调用方把 `top_module_name` 设为 `my_top`
+- **THEN** 顶层 module MUST 名为 `my_top`
+- **AND** 其余 module 名 MUST NOT 受影响
+
+#### Scenario: 层次化产物路径 MUST NOT 与扁平产物同名
+
+- **WHEN** 层次化产物的路径与某个既有扁平产物的路径相同
+- **THEN** 该情形 MUST 被**护栏**判为违规（护栏承担此约束 ⇒ ⇒ API 侧无自卫）
+
+### Requirement: 跨层端口策略 MUST 是单一权威的线性枚举，且各取值的失败语义 MUST 明确
+
+跨层非端口边的处理策略 MUST 由**唯一**的线性枚举 `PortPolicy` 承载
+（`SynthesizeWarn` / `SynthesizeFatal` / `Reject`）
+⇒ ⇒ MUST NOT 存在第二份同义枚举副本
+⇒ ⇒ 「合成」MUST 是**纯内存 phase**、**先于任何文件 I/O**
+⇒ ⇒ 悬空输入的策略 MUST 由 `UndrivenPolicy`（`Bubble` / `Reject`）承载。
+
+#### Scenario: SynthesizeWarn 是默认策略
+
+- **WHEN** 未显式指定策略
+- **THEN** 隐式端口 MUST 被**合成**并产出产物
+- **AND** MUST 对**每一条**被合成的边打 `CHWARN`（点名该边与合成出的端口名）
+- **AND** MUST 在产物内为**发生合成**的端口写注释
+
+#### Scenario: 未发生合成时产物 MUST 不含合成注释
+
+- **WHEN** 设计内**没有**任何跨 module 边被合成
+- **THEN** 产物 MUST NOT 含任何合成端口注释
+- **AND** 「默认（全 inline）产物与扁平产物逐字节一致」这条判据 MUST 仍然成立
+
+#### Scenario: SynthesizeFatal 先合成完再失败
+
+- **WHEN** 策略为 `SynthesizeFatal` 且设计含**至少两条**越界边
+- **THEN** 发射 MUST **失败**且 MUST NOT 产出产物文件
+- **AND** 失败诊断 MUST 列出**全部**被合成的边与合成端口名（不止第一条）
+- **AND** MUST NOT 留下临时文件
+- **AND** MUST NOT 触碰既有同名文件
+
+#### Scenario: Reject 只报第一条
+
+- **WHEN** 策略为 `Reject` 且设计含越界边
+- **THEN** 发射 MUST 失败且 MUST NOT 产出产物文件
+- **AND** 诊断 MUST 报出**第一条**越界边
+
+### Requirement: 层级粒度 MUST 由全局唯一权威决定，且作用域 MUST 覆盖构造与发射
+
+层级粒度（`RespectDeclarations` / `ForceInline` / `ForceLayer`）的**唯一权威** MUST 是**全局**开关
+⇒ ⇒ 选项结构 MUST NOT 携带 `granularity` 字段
+⇒ ⇒ 粒度的**唯一入口** MUST 是 RAII 作用域（`Component::GranularityScope`）
+⇒ ⇒ 非作用域的裸设置入口 MUST NOT 存在
+⇒ ⇒ 粒度的判定优先级 MUST 是「全局 > 实例级 > 类级声明」
+⇒ ⇒ 作用域 MUST **同时覆盖**组件**构造**与**发射**两段。
+
+#### Scenario: 粒度只包构造时 MUST 回退到 RespectDeclarations
+
+- **WHEN** 作用域只覆盖组件构造、而发射发生在作用域之外
+- **THEN** 产物 MUST 等于 `RespectDeclarations` 形态
+- **AND** MUST NOT 等于 `ForceInline` 形态
+
+#### Scenario: 作用域覆盖两段时 ForceLayer MUST 成层
+
+- **WHEN** 作用域同时覆盖构造与发射、且粒度为 `ForceLayer`
+- **THEN** 产物 MUST 把每个组件都发射成独立 module
+
+#### Scenario: 选项结构 MUST NOT 携带粒度字段
+
+- **WHEN** 检查层次化发射的选项结构
+- **THEN** 它 MUST NOT 含 `granularity` 字段
+- **AND** 粒度 MUST 只能经 RAII 作用域设置
+
 ### Requirement: 层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变
 
 层次化输出 MUST 走**独立的新入口**（新函数 + 新选项结构 + 新错误类型）⇒ ⇒
