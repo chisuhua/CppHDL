@@ -3,16 +3,17 @@
 > 本文件 = **架构主题文档**：只承载**当前态快照**·**下游需求**·**目标形态的结构事实**
 > （模块关系、数据结构、命名规则、已知残留）。
 > **决策**在 ADR-058（边界与等价性）· ADR-059（归属与命名）· ADR-060（端口策略与复用）·
-> **ADR-061（层级粒度由用户显式控制）**。
+> **ADR-061（层级粒度由用户显式控制）**· **ADR-062（单元接口类型）**。
 > **算法伪码 / 发射流程 / 边界情形矩阵 / 验证策略** ⇒ ⇒ 归**未来 change 的
 > `design.md` / `tasks.md`**（见 §7 的落点表）⇒ ⇒ ⇒ **本文件不重复承载**。
 
-- Date: 2026-11-02
-- Status: **Draft**（随 ADR-058 / 059 / 060 / 061 拍板后转正）
+- Date: 2026-11-02（**2026-11-04 架构评审修订** ⇒ 见 §10）
+- Status: **Draft**（随 ADR-058 / 059 / 060 / 061 / 062 拍板后转正）
 - 关联决策: `docs/adr/ADR-058-hierarchical-rtl-output.md` ·
   `docs/adr/ADR-059-node-ownership-and-component-naming.md` ·
   `docs/adr/ADR-060-hierarchical-port-policy-and-module-reuse.md` ·
-  `docs/adr/ADR-061-hierarchical-granularity-user-control.md`
+  `docs/adr/ADR-061-hierarchical-granularity-user-control.md` ·
+  `docs/adr/ADR-062-hierarchical-unit-interface-typing.md`
 - 关联台账: `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`（实施路径）·
   `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md`（用户写法）
 
@@ -233,7 +234,7 @@ struct ModuleDef {
 
 | 对象 | 规则 | 例 |
 |---|---|---|
-| module 名 | `comp->module_type_name()`（默认 sanitize(`typeid(*this).name()`)，可由 `CH_MODULE_NAME("...")` 覆盖） | `rv32i_pipeline` |
+| module 名 | `comp->module_type_name()` —— **成层**者按 ADR-059 §2.2.1 **四档**取（① 类级 `CH_HIERARCHY_LAYER("name")` · ② `ch_layer<T>` 继承 · ③ `ch_layer<Helper>` 实例处给名 ⇒ ⇒ **①②③ 缺名编译期不可表达** · ④ `ForceLayer` 回退 `sanitize(typeid)` + `CHWARN`）；**非成层**者不参与 module 命名 | `rv32i_pipeline` |
 | 实例名 | `comp->local_name()`（**新增字段**，ADR-059 D4） | `u_pipeline` |
 | 模块内信号 | **ctx 级全局名**（去掉 owner 前缀会丢信息 ⇒ ⇒ **保留完整路径**） | `top_p_c_r` |
 | 隐式端口（**只出现在非顶层 module**） | `__if_<field>`（bundle 字段）/ `__x_<n>`（其它跨层边） | `__if_payload` |
@@ -375,3 +376,193 @@ int main(){
 **context 级节点不归属任何组件**（ADR-059 §2.3）⇒ ⇒ emitter 必须对它们**单独处理**。
 
 ⇒ ⇒ ⇒ **P0 落地后的期望**：`r` 的 parent = `top.m.lf`；`lf` 的路径 = `top.m.lf`（无重复）。
+
+---
+
+## 10. 架构评审结论（2026-11-04 · architect 角色）
+
+> ⚠️ **本节是评审产物**，记录**事实**（drift / 缺口）与**重整后的落点** ⇒ ⇒ ⇒
+> **决策**仍在 ADR；**实现步骤与验收**仍在各 change 的 `design.md` / `tasks.md`。
+> ⚠️ 本节**不新增**任何裁决 ⇒ ⇒ 凡涉及**取舍**的项一律列进 §10.5「待拍板」，由用户裁决。
+
+### 10.1 治理状态（**开工前的前置**）
+
+| # | 事实 | 证据 | 现状（2026-11-04 评审后） |
+|---|---|---|---|
+| ① | **5 份 ADR 原为 Status = `Proposed`**（2026-11-02 · 「待用户拍板」）⇒ ⇒ 而 `hierarchical-rtl-output-2026-11` 已按它们起草完毕 | `docs/adr/ADR-058..062` 的 Status 行 | ✅ **已转正为 `Accepted`**（用户拍板 · 各 ADR §6 已记版本号） |
+| ② | 本仓惯例是「**先立 ADR（Accepted）⇒ 再立 change**」⇒ ⇒ 原状是「**ADR 未 Accepted ⇒ change 已就绪**」 | 先例 `get-lnode-entry-set-2026-10` 引用 ADR-053 | ✅ 已消解 |
+| ③ | 其中**部分**条目已由用户**局部拍板**（ADR-058 v2.1「backend 只增不改例外」· ADR-060 v2.1「跨模块 `ch_mem` 拒绝 + 默认策略」· ADR-061 v1.2「装配点任意但 MUST 登记」）⇒ ⇒ 但**整体 Status 未转正** ⇒ ⇒ 「局部拍板」与「ADR 生效」在文档上**不可区分** | 各 ADR §6 变更记录 | ✅ 整体转正后不再有「局部 vs 整体」的歧义 |
+| ④ | `component-framework-hardening-2026-10` **无 ADR**（proposal 自陈「本 proposal 即决策输入」）⇒ ⇒ 它**新建 3 个 capability** ⇒ ⇒ 一个**无 ADR 背书**的 change 却是大工程的**硬前置** | 该 change 的 `.openspec.yaml` + proposal §Why | ⚠️ **仍开放** ⇒ ⇒ 见 §10.4：拆成 **T2a**（U-4 = 1 词）与 **T2b**（U-1 + U-2）⇒ ⇒ **T2a 的决策面小到不需要独立 ADR** ⇒ ⇒ **T2b 才需要**（它新建 2 个 capability） |
+
+### 10.2 跨 ADR 矛盾（**本轮已消解 5 处**）
+
+| # | 矛盾 | 处置 |
+|---|---|---|
+| ① | **ADR-058 §4 风险 5 / §5 护栏**（「`CH_MODULE_NAME` 缺失 ⇒ MUST 回退、MUST NOT 编译失败」）**与 ADR-059 D4 v2.2**（「成层组件 MUST 显式声明、缺省**硬错**」）**互斥** ⇒ ⇒ 两条 Verification 判据**不可同时满足** ⇒ ⇒ ⚠️ **进一步**：裁决 B（合并宏）后，「运行期硬错」这条兜底**本身也不需要了**，但「合并宏」只封**类级**路径 ⇒ ⇒ 成层还可由 `ch_layer<T>` / `ForceLayer` 产生 ⇒ ⇒ 原「回退无害」的论证**被证伪** | ✅ **已消解**（ADR-058 v2.8 · ADR-059 D4 v2.3 + **§2.2.1 四档来源** · ADR-061 v1.6/v1.6.1）⇒ ①–③ 用户显式给名（缺名**编译期**不可表达）· ④ `ForceLayer` 回退 + `CHWARN`（仅「同 ABI」可复算）⇒ ⇒ 两份 capability delta 已同步（critic B1 收口） |
+| ② | ADR-059 D4 已确立「两次生成字节相同」**只在同一编译器/ABI 内**成立 ⇒ ⇒ ADR-058 §5 确定性判据**未带该限定** | ✅ **已消解**（ADR-058 v2.7）⇒ 补「同 ABI」限定 + 注明 2026-11-03「CI 只做 Ubuntu」后**仓内无跨平台对照证据** |
+| ③ | ADR-058 §5 的效果判据列表里**仍留着** `hier.top_ports ⊆ flat.top_ports` ⇒ ⇒ 该形态**已被 v2.5 撤销** ⇒ ⇒ 与本 ADR 自己的 §2.2 ③ **互斥** | ✅ **已消解**（ADR-058 v2.8）⇒ 改为引用 §2.2 ③ 的两条精确判据（输入**相等** + 输出**等于精确期望集**） |
+| ④ | **ADR-061 §5 的一条 Verification 未限定作用域**（「被 inline 的组件…任意 `output` ⇒ 顶层 `output`」）⇒ ⇒ 与决策② 的**两作用域表**冲突 ⇒ ⇒ ⚠️ **决策段一直是自洽的**（v1.2 已定两作用域表）⇒ ⇒ **只有 Verification 段漏了限定** ⇒ ⇒ change 侧（delta / design / tasks）**全部按正确读法落地** ⇒ ⇒ 漂移**只在 ADR** | ✅ **已消解**（ADR-061 v1.6）⇒ 补作用域限定 |
+| ⑤ | ADR-062 §5 的「观测/跨层读取（情形①②③）」**未标注适用范围** ⇒ ⇒ 而 change 的 tasks C2.8 **单方面豁免**了②③ ⇒ ⇒ 「任务层豁免一条 ADR MUST」 | ✅ **已消解**（ADR-062 v1.4）⇒ 明示「**① 在本仓可测**；**②③ 的判据落在下游** ⇒ **本仓不适用**」⇒ ⇒ tasks 的豁免表述随之与 ADR 对齐 |
+
+### 10.3 契约载体映射（**ADR 裁决 ⇒ capability Requirement**）
+
+⚠️ **判据**：ADR 里每一条**规范性义务**（MUST / MUST NOT）⇒ ⇒ MUST 有**契约载体**
+（capability 的 Requirement / Scenario）⇒ ⇒ 否则归档后**该义务即消失** ⇒ ⇒ 后人可重新引入静默失效。
+
+| ADR | 裁决 | 契约载体（**编号 = 该 capability delta 文件内 Requirement 的出现顺序**） | 状态（评审后） |
+|---|---|---|---|
+| ADR-058 §2.1 | 模块边界 = 所有权边界 · `owner==nullptr` 归顶层 | `rtl-hierarchical-output` R2 / R7 | ✅ |
+| ADR-058 §2.2 | 等价性四条（映射表四元组 · 输入相等 · 输出=精确期望集 · 观测逐拍全等） | R9 | ✅ |
+| ADR-058 §2.3 | 独立公开入口 + 错误模型（校验先于 I/O · 临时目录+rename · 不落 `catch(...)` · 返回码兜底）+ 多文件布局 | **R13**（评审新增） | ✅ **已补** |
+| ADR-058 §5 | **零**跨 module 边界的 `assign` | R2 的 Scenario | ✅ |
+| ADR-059 D1 / D3 | 构造作用域定归属 · `name()` 拼路径 | `component-ownership-and-naming` R1 / R2 | ✅ |
+| ADR-059 **D2′ / D2″** | build context 取**显式来源** · env ctx 空时 MUST NOT 硬失败 · **跨 ctx 守卫（基准分两支）** | **R5 + R6**（评审新增） | ✅ **已补** |
+| ADR-059 **D4** | `local_name_` / `module_type_name()` · **模块类型名的四档来源** · 「同 ABI」限定 | **R3 + R4**（评审新增并改写） | ✅ **已补** |
+| ADR-059 **D7** | 归属 ↔ 语义分流（`io.h` 四处守卫改用 `node_owner()`）· 判据改「改前改后均无触发」 | — | 🔴 **仍无载体**（内部约束 · §10.6 ⑨） |
+| ADR-059 **D8** | `ch_module` 无 active parent ⇒ `CHFATAL_EXCEPTION`（非 `CHERROR`）；根组件/手工装配 **不适用** | **R7**（评审新增） | ✅ **已补** |
+| ADR-059 **D9** | `add_child` MUST 补绑 `parent_` · 归属判定 MUST NOT 误杀成员子组件（策略属 ADR） | **R8**（评审新增） | ✅ **已补** |
+| ADR-059 **D10** | context 级 clock/reset MUST 用「无归属」哨兵 | — | 🔴 **仍无载体**（内部义务 · §10.6 ⑨） |
+| ADR-060 §2.1 | 隐式端口**按方向**分列 · 跨模块 `ch_mem` 响亮拒绝 · **MUST NOT 改写 IR** · 第三轴（driver 的 owner 在更上层 ⇒ 逐级 pass-through） | R5 / R6（**第三轴的 Scenario 为评审新增**） | ✅ **已补第三轴** |
+| ADR-060 §2.2 | 悬空输入**冒泡**（复用 ctx 级名） | R6 | ✅ |
+| ADR-060 §2.3 | **MUST NOT 复用** module（每实例一份 · `<type>_<序号>`） | R3 的 Scenario | ✅ |
+| ADR-060 §2.4 | 两个**线性枚举**（`PortPolicy` / `UndrivenPolicy`）+ 默认值（`SynthesizeWarn` / `Bubble`）· MUST NOT 布尔 | R13（**只覆盖「用线性枚举」这一条**） | 🟡 **枚举名与默认值仍无载体**（§10.6 ⑫） |
+| ADR-061 决策① / ⑤ | 显式声明（含**模块类型名**）· 默认 inline · `Granularity` 三档 | R1 | ✅ |
+| ADR-061 决策② | **四角色**端口表（自身端口 / 隐式输出端口 / 体内 wire / 子端口连接网） | R11（隐含） | 🟡 **无独立 Requirement**（§10.6 ⑬） |
+| ADR-061 决策④ | 命名权威 = ctx 级全局表 | R3 | ✅ |
+| ADR-061 §5 | inline **不产生隐式端口** | — | 🔴 **无载体**（§10.6 ⑭） |
+| ADR-062 §2.1 | 层次化单元接口 MUST 是**结构化端口** · 成层组件全部端口成端口（不论是否被驱动） | R11 / R12 | ✅ |
+| ADR-062 §2.6 | **接口白名单** + 数组字段命名 `x_<i>` | **R14**（评审新增 · 用户拍板） | ✅ **已补** |
+| ADR-062 §2.6 | 观测/跨层读取**三段裁决** | R5 的 Scenario（情形①） | ✅ ②③ = **下游义务** ⇒ ADR-062 v1.4 已明示「本仓不适用」 |
+| ADR-062 决策⑤ | 下游装配 MUST 补 `add_child`（或改 `ch_layer`）· MUST 自算全路径名 | R8 | ✅ |
+| ADR-062 规范段 N-3 | 接口字段名与顺序 MUST 稳定（义务方 = **上游**） | — | 🔴 **无载体**（§10.6 ⑮） |
+
+⇒ ⇒ **统计（评审后）**：契约载体 **2 → 8 条 Requirement / 3 → 16 Scenario**（`component-ownership-and-naming`）
+· **12 → 14 条 / 23 → 30**（`rtl-hierarchical-output`）⇒ ⇒ **原 7 条「无载体」已补 5 条**
+⇒ ⇒ **余 4 条**（ADR-059 D7 / D10 · ADR-060 枚举名与默认值 · ADR-061 四角色 / inline 不产生隐式端口 · ADR-062 N-3）
+⇒ ⇒ ⇒ 这 4 条的性质 = **内部实现约束** 或 **下游义务** ⇒ ⇒ **不是「响亮失败」类** ⇒ ⇒ 优先级低于已补的 5 条
+⇒ ⇒ ⇒ **最集中的一条已解**：`component-ownership-and-naming` 原只有 **2 条 Requirement** 覆盖 ADR-059 的 **D1–D10**
+⇒ ⇒ ⇒ 归属决策的「失败模式」面（D2′/D2″/D4/D8/D9）**已全部有载体**。
+⇒ ⇒ **4 条 🟡 部分/隐含**（ADR-058 错误模型 · ADR-060 第三轴 · ADR-060 复用 · ADR-061 四角色）
+⇒ ⇒ ⇒ **最集中的一条**：`component-ownership-and-naming` 只有 **2 条 Requirement**，
+而 ADR-059 有 **D1–D10**（10 条裁决）⇒ ⇒ ⇒ **归属决策的「失败模式」面几乎裸奔**
+（响亮失败 / 跨 ctx 守卫 / 组件树登记 / 命名确定性）⇒ ⇒ 这些恰恰是**静默失效**的高发区。
+
+### 10.4 重整后的落点（**3 个 change ⇒ 10 个**）
+
+⚠️ **重整的判据**（沿用 feature 文件的既有裁决：「①a/①b/①c MUST 拆开 ⇒ 捆在一起 ⇒ 回归变红**无法归因**」）：
+**一个 change = 一组回归判据** ⇒ ⇒ 判据不同的裁决 MUST 分开 ⇒ ⇒ 且**前置依赖**要显式化。
+
+| # | change | 内容 | 前置 | 契约载体 | 规模 |
+|---|---|---|---|---|---|
+| **T2a** | `header-odr-inline-fix-2026-11` | **U-4 only**：`module.h:13` 加 `inline` + multi-source 链接 fixture | 无 | `core-header-odr-safety` | **1 词 + 1 fixture** |
+| **T2b** | `component-io-const-and-node-name-policy-2026-11` | **U-2**（const `io()`）+ **U-1**（opt-in 节点名唯一性） | 无 | `component-io-const-access` · `core-ctx-node-name-uniqueness` | 小 |
+| **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | **D3**（`build_hierarchical_name` 用 `name()`）+ **D4**（`local_name_` / `module_type_name()` · **成层声明与模块命名合并为一个宏** `CH_HIERARCHY_LAYER("name")`） | T2a | `component-ownership-and-naming` | 小 · **零语义变更** |
+| **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | **D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10**（归属真源） | T3-①a | `component-ownership-and-naming` | 中 · **耦合 simulator 分流 + `io.h` 守卫** |
+| **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | ADR-061 决策①⑤⑥（`CH_HIERARCHY_LAYER` / `ch_layer` / `ch_inline` / `is_layer()` / 无 parent 装配点） | T3-①b | `rtl-hierarchical-output` | 中 |
+| **T3-②** | `hierarchical-rtl-analysis-2026-11` | 分析层 + golden 文本 | T3-①c | `rtl-hierarchical-output` | 中 |
+| **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | emitter 拆分（**含时钟名参数化**） | T3-①b | `rtl-hierarchical-output` | 中 |
+| **T3-④** | `hierarchical-rtl-emission-2026-11` | 层次发射 · 隐式端口 · 冒泡 · 拒绝 | T3-② + T3-③ | `rtl-hierarchical-output` | 大 |
+| **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | backend 只增不改入口 + ≥5 DUT 等价 | T3-④ | `rtl-hierarchical-output` | **~7–9 天** |
+| **T3-⑥** | `hierarchical-rtl-docs-2026-11` | 文档同步 | T3-⑤ | — | 小 |
+
+```
+T2a（1 词 · 硬前置）
+  └─▶ T3-①a（纯命名 · 零语义变更）
+        └─▶ T3-①b（归属真源 · 耦合仿真分流 ⇒ 独立回归面）
+              ├─▶ T3-①c（粒度声明）
+              │     └─▶ T3-②（分析层 + golden）
+              └─▶ T3-③（emitter 拆分）───┐
+                                          └─▶ T3-④（层次发射）
+                                                └─▶ T3-⑤（等价性）
+                                                      └─▶ T3-⑥（文档）
+
+T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
+```
+
+⚠️ **与现状的差异（3 处，都是「把隐含的依赖显式化」）**：
+① **T2 拆成 T2a / T2b** ⇒ ⇒ **只有 U-4 是硬前置**（ADR-062 决策⑤ 只点名 U-4）
+⇒ ⇒ U-1 / U-2 与层次化**无依赖** ⇒ ⇒ 不该挂在主线前面；
+② **C1 拆成 T3-①a / T3-①b** ⇒ ⇒ 依据 = feature 的既有裁决「①a/①b/①c MUST 拆开」
+⇒ ⇒ 而现状 change 把 ADR-059 的 **D1–D10 全揉进 C1** ⇒ ⇒ **违反 feature 自己的裁决**；
+③ **T3-①c（粒度）与 T3-②（分析）之间**插入依赖 `T3-①c`（现状 change 的 C2 → C3 已有此依赖 ✓）。
+
+### 10.5 裁决（**2026-11-04 · 用户已拍板**）
+
+| # | 裁决点 | 裁决 | 落地 |
+|---|---|---|---|
+| **A** | 5 份 ADR 的 Status | ✅ **全部转正为 `Accepted`** | ADR-058 v2.8 · 059 v2.3 · 060 v1.6 · 061 v1.6 · 062 v1.4（各 §6 已记） |
+| **B** | 「成层声明」与「模块命名」是否合并为一个宏 | ✅ **合并为 `CH_HIERARCHY_LAYER("name")`** ⇒ ⇒ 「成层但无模块名」**编译期即不可表示** ⇒ ⇒ `CH_MODULE_NAME` **不单独存在** | ADR-059 D4 v2.3 · ADR-061 决策① v1.6 · capability `component-ownership-and-naming` R3/R4（已改写） |
+| **C** | 缺名的硬错**触发时机** | ✅ **随 B 落在声明时（编译期）** ⇒ ⇒ 「写这个宏就必须给名字」⇒ ⇒ `ForceInline` 模式**不误伤** | 同上 |
+| **D** | 「不复制每个 `ch_out`」的范围 | ✅ **维持现状 = 仅成层子树**（ADR-061 决策②）⇒ ⇒ ⚠️ 但契约面 MUST **显式写明**（否则「顶层端口表 = 扁平端口表」与「成层子树不复制」两条会打架） | capability `rtl-hierarchical-output` R11 + R2（顶层单列的 Scenario）已写明 |
+| **E** | ADR-062 §2.6 **接口白名单**是否进 capability | ✅ **进**（新增 Requirement）⇒ ⇒ 否则 tasks C2.7 的交付物**归档即消失** | capability `rtl-hierarchical-output` **R14**（已加） |
+
+### 10.6 change 文档修订清单（**builder 执行**）
+
+⚠️ **本清单是 architect 对 change 的评审产出** ⇒ ⇒ **不是** architect 自己的待办
+⇒ ⇒ ⇒ 落笔在 `openspec/changes/hierarchical-rtl-output-2026-11/{proposal,design,tasks}.md`
+⇒ ⇒ ⇒ **MUST NOT** 与 §10.7 的结构问题混为一谈。
+
+#### A. 口径统一（**同一 change 内三份文件口径不一**）
+
+| # | 位置 | 现状 | 应为 |
+|---|---|---|---|
+| ① | `proposal.md` §3 | 「子端口由父层表达式驱动 ⇒ **图重写**」 | 「⇒ **发射期虚拟重定向**（**MUST NOT** 改 IR · ADR-060 §2.1）」 |
+| ② | `proposal.md` §4 | 「`hier.top_ports ⊆ flat.top_ports`」 | ADR-058 v2.8 的**四条**口径（输入**相等** · 输出**= 精确期望集** · 映射表 · 观测逐拍全等）⇒ ⇒ `⊆` **单独不是有效判据** |
+| ③ | `design.md` §3 伪码 ④ / §5 矩阵 #16 / `tasks.md` C5.3 | 「**图重写**」 | 同 ① |
+| ④ | `design.md` §6 验证策略表 | 「`hier.top_ports ⊆ flat.top_ports`」 | 同 ② |
+| ⑤ | `proposal.md` Acceptance「归属 ↔ 语义分流」 | 「触发面与变更前**逐项一致**」 | 「**改前改后均无触发**」（ADR-059 D7 v2.2 已改判 ⇒ ⇒ proposal 用的是**改判前**的措辞 ⇒ ⇒ 实施者会为「触发面相同」而被新误报卡死） |
+| ⑥ | `tasks.md` C1.4 | 「默认 sanitize(`typeid(*this).name()`)」 | 按 **裁决 B/C**：模块类型名的**四档来源**（ADR-059 §2.2.1）⇒ ⇒ 成层者缺名**编译期**不可表达 |
+| ⑥b | **合并宏的签名面**（critic SF3 · 共 **5 处**仍是无参 / 旧形态） | `design.md:56`（`CH_HIERARCHY_LAYER;` 无参）· `design.md:59`（`ch_layer<Sub> s{"s"}` 未体现 ③）· `tasks.md:54-55` · `proposal.md:59-60` · `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md:236`（仍写「只能靠 `CH_MODULE_NAME` 宏」） | 全部改为 `CH_HIERARCHY_LAYER("name")` 形态；helper 提升写 `ch_layer<Helper> h{"h","helper_layer"}`；用户面指南删掉 `CH_MODULE_NAME`（该宏**不存在**） |
+
+#### B. 判据落地缺口（**ADR 有判据 · tasks 无验收项**）
+
+⚠️ oracle 全量核对：5 份 ADR 共 **22 条** Verification 判据在 `tasks.md` **无对应验收项**
+⇒ ⇒ 下列为**最关键**的 9 条（其余按 §10.3 映射处理）：
+
+| # | 缺失的验收项 | ADR 出处 | 为什么要紧 |
+|---|---|---|---|
+| ⑦ | **输入端口集合 MUST 相等** + **输出端口集合 MUST 等于精确期望集**（逐项配对） | ADR-058 §2.2 ③ | ⭐ 这是 ADR-058 v2.5 用来替换空洞 `⊆` 的**核心裁决** ⇒ ⇒ 现在只活在 design 与 spec 里 ⇒ ⇒ **tasks 零命中** ⇒ ⇒ 漏发一半端口**无人抓** |
+| ⑧ | **零**跨 module 边界的 `assign`（所有形态） | ADR-058 §5 | 「结构正确」的**唯一**可判定形式 ⇒ ⇒ 无它 ⇒ module 边界失守也可通过 |
+| ⑨ | **顶层 `ch_device<Pipeline>` 可实例化且不 SIGSEGV**（= `examples/removed_examples.txt:26` 归位条件） | ADR-059 §5 | 旗舰判据 ⇒ ⇒ proposal / feature **都有** ⇒ ⇒ **tasks C1.5 的探针清单里没有** |
+| ⑭ | **inline 组件 MUST 不产生隐式端口** | ADR-061 §5 | 「inline 对产物不可见」的另一半 ⇒ ⇒ 漏了 ⇒ ⇒ inline 组件被误判为跨模块时**无探针** |
+| ⑮ | **ForceInline vs ForceLayer 逐拍全等** | ADR-061 §5 / ADR-058 §5 | 「inline ≡ 成层语义等价」⇒ ⇒ 这条**只在** ADR 与 design 里 ⇒ ⇒ tasks 无 |
+| ⑯ | **接口白名单的判据**（违反 ⇒ `CHFATAL_EXCEPTION` + 点名端口） | ADR-062 §2.6 | tasks C2.7 有交付物但**无判据** ⇒ ⇒ 违约不转红 |
+| ⑰ | **映射表 MUST 覆盖被观测的全部信号** | ADR-058 §5 | 「映射表被产出」≠「映射表够用」⇒ ⇒ 缺覆盖子句 ⇒ ⇒ 等价性测试可能只映射了一半 |
+| ⑱ | **实例端口名的宽度 MUST 一致** | ADR-058 §5 | 现只判「名字 ∈ 端口集」⇒ ⇒ 宽度错配不被抓 |
+| ⑲ | **`node_names_` 一致性**：两份产物的**信号名集合交集 MUST 完全一致** | ADR-061 §5 | C4.3 只有**机制**要求（ctx 级只读快照）⇒ ⇒ 缺**可判定**的验收 |
+
+#### C. 任务粒度与精度（**tasks 内部**）
+
+| # | 位置 | 问题 | 修法 |
+|---|---|---|---|
+| ⑳ | `tasks.md` C1.2 | 把 **D2′**（ctx 来源）与 **D8**（无 active parent ⇒ 抛）**合并成一条** ⇒ ⇒ 两者触发条件不同（**无 ctx** vs **无 parent 组件**）⇒ ⇒ 实施者可能把 D2′ 的「MUST NOT 硬失败」读成覆盖 D8 | 拆成 1.2（D2′：ctx 来源）与 1.2a（D8：无 active parent ⇒ 抛） |
+| ㉑ | `tasks.md` C1.2b | D2″ 以「构造期 env ctx」为基准 ⇒ ⇒ 但 **D2′ 允许 env ctx 为空** ⇒ ⇒ 「MUST == 构造期 env ctx」在 env ctx == null 时**无定义** | 补「env ctx 为 null ⇒ 记为无约束；**首次** `build(ctx)` 绑定的 ctx 即基准」 |
+| ㉒ | `tasks.md` C1.7 | 「文本变化面登记」把 ①a 的**信号名变化**与 ①b 的**归属变化**混在同一份 ⇒ ⇒ **归因链断裂**（ADR-058 §5 的零回归基准 = ADR-059 落地后的产物） | 随 C1 拆分，两份登记各归其 change |
+| ㉓ | `tasks.md` C5.7 | 只定义 `Granularity` ⇒ ⇒ **两个线性枚举**（`PortPolicy` / `UndrivenPolicy`）与**默认值**未创建 ⇒ ⇒ 且 C5.3/C5.4 沿用 **boolean 味的 `strict` 措辞** ⇒ ⇒ ADR-060 §2.4「MUST NOT 留给实现者自行发明」被绕过 | 扩为定义三个枚举 + 默认值（`SynthesizeWarn` / `Bubble`）⇒ ⇒ `strict` 措辞改成枚举值 |
+| ㉔ | `tasks.md` 计数 | proposal / tasks 自称 `ADDED ×1` ⇒ ⇒ delta 实为 **×7**（ownership）与 **×14**（hierarchical） | 同步 proposal §Capabilities 与 tasks 的计数 |
+| ㉕ | `tasks.md` C3 | **ADR-059 D7**（归属 ↔ 语义分流：`io.h` 四处守卫改用 `node_owner()` · 判据「改前改后均无触发」）与 **D10**（context 级 clock/reset 用「无归属」哨兵）**无任务** ⇒ ⇒ 这两条是「归属真源变更 ⇒ 仿真分流可能变」的**兜底** | 补入 C1（①b）的验收项 |
+
+---
+
+### 10.7 change 层结构问题（**与 §10.6 分开**）
+
+| # | 问题 | 证据 | 处置 |
+|---|---|---|---|
+| ① | **C2.5（接口与端口完整性）排在 emitter 之前 ⇒ 顺序倒置**：C2.6 要求「成层且非根 module 的端口 ⊇ 自身 `ch_in`∪`ch_out`」⇒ ⇒ **需要 emitter 产出的端口表**才能判；C2.9 要求「把某单元输入改成只从 host 侧通道读 ⇒ 判据 MUST 转红」⇒ ⇒ **需要 emitter**才能观察 | `tasks.md` C2.5 · feature 把「端口完整性判据」放在 **④** | **拆**：C2.5a（接口类型约定 + 白名单 ⇒ 留在 C2 后）· **C2.5b（端口完整性判据 ⇒ 移入 C5）** |
+| ② | **依赖图缺节点**：`tasks.md` 的依赖图只有 C0–C4 / C5–C8 ⇒ ⇒ **C2.5 无人负责** | `tasks.md` 依赖图 | 随 ① 一并补节点 |
+| ③ | **C1 把 ①a（纯命名）与 ①b（归属真源）合并** ⇒ ⇒ **违反 feature 自身的裁决**（「①a/①b/①c MUST 拆开 ⇒ 捆在一起 ⇒『回归变红』无法归因」）⇒ ⇒ 连带 ⇒ capability delta **无法表达**「①a ADDED ×N → ①b MODIFIED ×M」⇒ ⇒ **①a 的增量不可单独归档 / 单独回退** | `tasks.md` C1 · feature 的候选 change 表 | ✅ **已裁决**（§10.5）⇒ 按 §10.4 拆成 **T3-①a / T3-①b** |
+| ④ | **feature 文件残留旧措辞**：「允许的差异 **MUST 逐条列明**」⇒ ⇒ 与 ADR-058 v2.4「**允许差异 = 空集**（`cmp` 退出码 0）」冲突 ⇒ ⇒ 若实施者以 feature 为准 ⇒ ⇒ 「逐字节一致」被**平凡满足** | `feat-hierarchical-rtl-output.md` 验收段 | ⚠️ **feature 不在 `arch-docs.json` 的 `arch_paths`** ⇒ ⇒ **architect 不改** ⇒ ⇒ 交 **planner / builder** 订正 |
+| ⑤ | **feature 的「候选 change」表与 §10.4 的 10 个 change 不一致** | feature 的候选 change 表（①a–⑥） | 同 ④ ⇒ ⇒ 交 planner 同步 |
+
+---
+
+### 10.8 本轮（2026-11-04 · architect）已落地的改动
+
+| 面 | 改动 | 验证 |
+|---|---|---|
+| **ADR** | 5 份 Status → `Accepted`（058 v2.8 · 059 v2.3 · 060 v1.6 · 061 v1.6 · 062 v1.4）· 消解 §10.2 的 5 处矛盾 | — |
+| **capability delta** | `component-ownership-and-naming` **2 → 8** 条 Requirement / 3 → 16 Scenario · `rtl-hierarchical-output` **12 → 14** 条 / 23 → 30 Scenario | `openspec validate --strict` **valid**（exit 0）· `verify_openspec_delta.sh` **4/4 绿** |
+| **架构主题文档** | 本 §10（评审结论 + 落点重整 + 裁决记录 + builder 修订清单）· 补 ADR-062 到「关联决策」· 订正命名规则表的模块名行 | — |
+
+⚠️ **未落地（不在 architect 权限内）**：`tasks.md` 的改写（§10.6 / §10.7）· `proposal.md` / `design.md` 的口径统一
+⇒ ⇒ **归 builder**；feature 文件的台账订正（§10.7 ④⑤）⇒ ⇒ **归 planner**。

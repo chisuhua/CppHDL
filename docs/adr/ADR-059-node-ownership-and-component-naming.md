@@ -1,6 +1,6 @@
 # ADR-059: 节点归属与组件命名 —— 用「构造作用域」修正挂错层的缺陷
 
-- Status: **Proposed**（2026-11-02 · 待用户拍板 · **v2**：据对抗审稿重写栈纪律与 context 来源）
+- Status: **Accepted**（2026-11-04 · 用户拍板 · **v2.3**：据 2026-11-04 架构评审，「成层声明」与「模块命名」合并为一个宏）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**服务于** ADR-058（层次化 RTL 输出的硬前置）
@@ -84,18 +84,56 @@ public:
 | **D1** | 新增 `Component::node_owner()`；`lnodeimpl` 的 `parent_` 改用它 |
 | **D2** | `ch_module` 的 parent 取 `Component::node_owner()`（不再取 `current()`）⇒ ⇒ ⇒ **成员 `ch_module` 挂到正确的父组件** |
 | **D2′** | **（v2 新增 · 承重）** `ch_module` 的 **build context 取「环境 context」**（`ch::core::ctx_curr_`），**不再取 `parent_component->context()`** ⇒ ⇒ ⇒ 成员形态的父组件在构造期 `ctx_ == nullptr`（事实⑤）不再导致早退。⚠️ **环境 context 为空时 MUST NOT 硬失败**（v2.2 订正，oracle R8）：下游装配形态是 `make_unique<Unit>()` **然后** `build(ctx)` ⇒ Unit 的 ctor 跑在 `build` **之前** ⇒ `ctx_curr_` 常为 **nullptr** ⇒ ⇒ 若此处硬失败，「含子模块的单元无法在无 active parent 处装配」⇒ ⇒ ⇒ **N2 只对叶子单元成立 = 「装配点任意」是空话**。⇒ ⇒ 裁决：`ch_module` / `Component` ctor **MUST 接受显式 ctx 来源**（构造实参或 `Component::build(ctx)` 前的一次绑定）；取不到**任何** ctx 时才 `CHFATAL_EXCEPTION`，且错误信息 MUST 说明两种合法投喂方式 |
-| **D2″** | **（v2.2 新增 · oracle R9）** **跨 ctx 守卫**：若子组件按 env ctx 建进 `ctx1`、宿主之后 `build(ctx2)`（`src/component.cpp:107-118` 直接用 `external_ctx`）⇒ ⇒ 子模块节点留在 `ctx1`、宿主端口在 `ctx2` ⇒ ⇒ `ctx2->get_eval_list()` **看不见子模块** ⇒ **整块逻辑静默消失**，且等价性三条判据**全看不见**（子模块不在树里）。今日不可达（成员 `ch_module` 早退），**D2′ 落地后可达** ⇒ ⇒ MUST 断言「`build(ctx)` 的 ctx == 构造期 env ctx」，不等则 `CHFATAL_EXCEPTION` |
+| **D2″** | **（v2.2 新增 · oracle R9）** **跨 ctx 守卫**：若子组件按 env ctx 建进 `ctx1`、宿主之后 `build(ctx2)`（`src/component.cpp:107-118` 直接用 `external_ctx`）⇒ ⇒ 子模块节点留在 `ctx1`、宿主端口在 `ctx2` ⇒ ⇒ `ctx2->get_eval_list()` **看不见子模块** ⇒ **整块逻辑静默消失**，且等价性三条判据**全看不见**（子模块不在树里）。今日不可达（成员 `ch_module` 早退），**D2′ 落地后可达** ⇒ ⇒ MUST 断言「`build(ctx)` 的 ctx == 构造期 env ctx」，不等则 `CHFATAL_EXCEPTION`。⚠️ **v2.3.1 补（critic B3）——基准 MUST 分两支**：① 构造期**有** env ctx ⇒ ⇒ 以它为准；② 构造期**无** env ctx（**D2′ 明确允许**，且是下游 `make_unique`+`build(ctx)` 的常态）⇒ ⇒ 以**首次** `build(ctx)` 绑定的 ctx 为基准，其后**再次**以**不同** ctx 调用 `build` ⇒ ⇒ `CHFATAL_EXCEPTION`（⇒ ⇒ 否则「MUST == 构造期 ctx」在 env ctx == null 时**无定义** ⇒ ⇒ 要么恒抛（杀掉下游形态）要么恒不抛（守卫失效 ⇒ 子模块逻辑静默消失））|
 | **D3** | `build_hierarchical_name()` 改用 `parent->name()`（**不是** `hierarchical_name()`）⇒ ⇒ ⇒ **深度 ≥3 不再重复前缀** |
-| **D4** | `Component::name()` 语义**不变**（仍是**全路径**）；**新增** `local_name_`（实例局部名）与 `module_type_name()`（模块类型名，可由 `CH_MODULE_NAME("...")` 覆盖；缺省时回退 sanitize(`typeid(*this).name()`)）⇒ ⇒ ⇒ **单一命名真源**：`name()` = 全路径；`local_name()` = 局部。⚠️ **确定性（v2.2 订正，oracle R15）**：`typeid` 的拼写**是实现相关的**（Itanium vs MSVC）⇒ ⇒ 本仓**曾**有平台矩阵（macOS-14 已启用、Windows-2022 计划中）⇒ ⇒ ⇒ 「同一设计两次生成字节相同」**只在同一编译器/ABI 内成立**。
+| **D4** | `Component::name()` 语义**不变**（仍是**全路径**）；**新增** `local_name_`（实例局部名）与 `module_type_name()`（模块类型名 · **成层者 MUST 显式给出**，见 v2.3 裁决）⇒ ⇒ ⇒ **单一命名真源**：`name()` = 全路径；`local_name()` = 局部。⚠️ **确定性（v2.2 订正，oracle R15）**：`typeid` 的拼写**是实现相关的**（Itanium vs MSVC）⇒ ⇒ 本仓**曾**有平台矩阵（macOS-14 已启用、Windows-2022 计划中）⇒ ⇒ ⇒ 「同一设计两次生成字节相同」**只在同一编译器/ABI 内成立**。
   ⚠️ **2026-11-03 平台范围收窄**（用户裁决「CI只做ubuntu系统, macos/windows不做」⇒ macOS-14 leg 已从
   `build-and-test` 矩阵移除、Windows-2022 不排期）⇒ ⇒ 这条限定**现在更重要**：仓内**没有**任何
-  跨编译器/跨平台的 golden 比较证据 ⇒ ⇒ 「同 ABI 内」从「有平台矩阵可对照」退化为「无对照可查」。⇒ ⇒ **成层组件 MUST 显式 `CH_MODULE_NAME`**（缺省 ⇒ 该组件成层时**硬错**，`CHFATAL_EXCEPTION`）⇒ ⇒ 撤销本 ADR 早期「退化可用、MUST NOT 编译失败」的措辞；跨平台 golden 的比较范围 MUST 在契约里写明「同 ABI」 |
+  跨编译器/跨平台的 golden 比较证据 ⇒ ⇒ 「同 ABI 内」从「有平台矩阵可对照」退化为「无对照可查」。
+  ⚠️⚠️ **v2.3 改判（2026-11-04 · 用户拍板 · architect 评审）——「成层声明」与「模块命名」合并为一个宏**：
+  原设计是**两个独立**声明 —— `CH_HIERARCHY_LAYER`（ADR-061 决策①）声明「我是一层」·
+  `CH_MODULE_NAME("...")` 给模块类型名 ⇒ ⇒ ⇒ 「**成层却忘了命名**」这个组合**无编译期提示**
+  ⇒ ⇒ 只会在**发射时**炸 ⇒ ⇒ ⇒ 而「发射时」= 产物已经生成到一半 ⇒ ⇒ 定位成本高。
+  ⇒ ⇒ **裁决**：合并为**一个**宏 `CH_HIERARCHY_LAYER("my_layer")` ⇒ ⇒ **声明 + 命名一体**
+  ⇒ ⇒ ⇒ 「**成层却忘了命名**」这个组合**编译期即不可表示** ⇒ ⇒ ⇒ 原来的「缺名 ⇒ 运行时硬错」
+  **退化为「写这个宏就必须给名字」**（**编译期**）⇒ ⇒ ⇒ `CH_MODULE_NAME` **不单独存在**。
+  ⚠️⚠️ **但「合并宏」只覆盖**类级声明**这一条路径（v2.3.1 订正 · critic B1）**：成层还可由
+  **实例级** `ch_layer<T>` 与 **emitter 侧** `Granularity::ForceLayer` 产生 ⇒ ⇒ 若只封类级路径
+  ⇒ ⇒ 「成层但无模块名」**仍可表示** ⇒ ⇒ ⇒ 故 MUST 补**来源优先级**（**四档，唯一允许的来源** ⇒ 见 **§2.2.1**）
+  ⇒ ⇒ ⇒ 且本 ADR 早期「非成层路径不参与 module 命名 ⇒ 回退无害」的论证**被这两条路径证伪**
+  ⇒ ⇒ ⚠️ **撤销本 ADR 早期「退化可用、MUST NOT 编译失败」的措辞**（①–③ 已显式命名）；
+  跨平台 golden 的比较范围 MUST 在契约里写明「**同 ABI**」 |
 | **D5** | **不改** `toVerilog()` 的**语义**（端口筛选、算子映射、always_ff、mem 一律不动）⇒ ⇒ ⇒ 只改信号名 ⇒ ⇒ ⇒ 扁平产物**语义等价、文本有变** |
 | **D6** | 作用域纪律：① `Component::Component()` 压入 CONSTRUCT 作用域，**构造函数出口**弹出（配对 ⇒ 无泄漏 ⇒ **无需**析构兜底）；② `build_internal()` 压入 BUILD 作用域，出口弹出；③ **`create_child` 路径不进入任何作用域** ⇒ ⇒ 三条都 MUST 有断言。⚠️ **D6③ 的原始理由已被订正**（v2.1，critic SF）：原文写「它不 build ⇒ **不产生节点**」**是错的** —— `create_child`（`include/component.h:43-59`）会 `make_shared<T>` ⇒ **T 的构造函数照常跑** ⇒ 成员 `ch_reg` / bundle 字段**照样建节点**（架构文档附录 A 的 `top.m.r` 就是 ctor 期建的）。真实情况是「**有节点、无端口**」（`create_ports()` 只在 `build_internal` 里跑，`src/component.cpp:129-140`）⇒ ⇒ ⇒ **层次化 emitter 对「未 build 的子组件」MUST 响亮拒绝**（否则会发出一个无端口 module，或把它的节点当成空气） |
 | **D8** | **`ch_module` 的「无 active parent」分支 MUST 从 `CHERROR` 升格为 `CHFATAL_EXCEPTION`**（v2.1，critic SF）：现状 `include/module.h:42-46` 只打日志后 `return`（⇒ 后续 `io()` 解引用空指针 ⇒ SIGSEGV，本仓 `AGENTS.md` 的 ANTI-PATTERNS 已登记该形态）⇒ ⇒ 与本 ADR「响亮失败 MUST 用 `CHFATAL_EXCEPTION`」的**自身原则**不一致 ⇒ ⇒ 同批升格 |
 | **D9** | **（v2.2 新增 · 承重 · oracle R7）** `Component::add_child()` MUST 补绑 `child->parent_ = this->weak_from_this()`（同类内可写 protected 成员）。**根因**：`Component` ctor 用 `parent->weak_from_this()`（`src/component.cpp:24`），而成员形态 `ch_module` 先 `make_unique<T>`（`include/module.h:60`）再 `add_child`（`:64`）才转 `shared_ptr` ⇒ ⇒ ctor 期 `weak_from_this()` **为空** ⇒ ⇒ **成员子组件的 `parent_` 永久为空**。⇒ ⇒ 后果：`Rv32iPipeline` 的 7 个成员 `ch_module`（`include/cpu/pipeline/rv32i_pipeline.h:114-123`）改好 parent 之后，`children()` 里**有**它们，但 `parent().lock()` **是 nullptr** ⇒ ⇒ 若 `subtree` / 归属判定按**向上** parent 链实现 ⇒ ⇒ **旗舰 DUT 被 `owner ∉ subtree(top)` 误杀**，且错误信息还叫人去 `add_child`（已经调过）。⇒ ⇒ **同时裁**：`subtree` / 「`owner` 是否在树里」**MUST 只向下走 `children()`** |
 | **D10** | **（v2.2 新增 · oracle R11）** `context::init()` 建 `default_clock` / `default_reset`（`src/core/context.cpp:100-116`）MUST 用「**无归属**」哨兵 ⇒ ⇒ 否则某组件在**作用域内**调 `build()`（无 external ctx，`src/component.cpp:111-118`）时，新 ctx 的 clock/reset 会拿到 `owner != nullptr` ⇒ 直接违反 §2.3「context 级节点不归属任何组件」⇒ ⇒ emitter 的 clock/reset 特判失效 |
 | **D7** | **归属 ≠ 纯命名**（事实⑦）：归属真源变更 MUST 逐条回归 `src/simulator_init.cpp:95` 的指令表分流与 `include/core/io.h` 的 4 处方向 `CHREQUIRE` ⇒ ⇒ ⇒ **「仿真逐位不变」不是可假定的结论，而是待验证的验收项**（见 §5）。⚠️ **（v2.2 补，oracle R10）** 那 4 处守卫（`include/core/io.h:360/385/410/432`）目前判的是 `lnodeimpl::current_component()`（`src/core/lnodeimpl.cpp:34-36` ⇒ `Component::current()`）⇒ ⇒ **与归属真源分叉** ⇒ 在 ctor 期接线的组件上会**误报**；而 `CHREQUIRE` **只打日志不抛** ⇒ ⇒ 判据「触发面逐项一致」**无法收敛**（新误报让 diff 永远不等）。⇒ ⇒ 裁决：4 处守卫**改用 `node_owner()`**，且判据改为「**改前改后均无触发**」（而不是「触发面相同」） |
+
+### 2.2.1 模块类型名的**来源优先级**（v2.3.1 · critic B1 收口）
+
+> 成层**可以**由三条路径产生 ⇒ ⇒ **只封住其中一条**就留下「成层但无模块名」的可表示状态
+> ⇒ ⇒ ⇒ 故模块类型名的来源 MUST 按下表**四档**确定 ⇒ ⇒ **MUST NOT** 有其它来源。
+
+| # | 来源 | 规则 | 可复算性 |
+|---|---|---|---|
+| ① | **类级** `CH_HIERARCHY_LAYER("name")` | MUST 用该名字 ⇒ ⇒ 省略**编译期不可表达** | ✅ 用户显式 |
+| ② | **实例级** `ch_layer<T>` · `T` **已**声明成层 | MUST **继承** `T` 的类级名字 ⇒ ⇒ MUST NOT 另给 | ✅ 用户显式 |
+| ③ | **实例级** `ch_layer<T>` · `T` **未**声明成层（helper 被提升） | MUST 在**实例处**给出名字 ⇒ ⇒ 省略**编译期不可表达** | ✅ 用户显式 |
+| ④ | **`Granularity::ForceLayer`** 强制成层（用户**未**声明） | 允许回退 `sanitize(typeid(*this).name())` ⇒ ⇒ **MUST 有 `CHWARN`** | ⚠️ 仅**同 ABI 内** |
+
+⇒ ⇒ ①–③ = **用户显式**给出 ⇒ ⇒ 跨编译器/跨平台**可复算** ⇒ ⇒ 与「同 ABI」限定无关。
+⇒ ⇒ ④ = **逃生门 / 极端形态**（ADR-061 决策⑤）⇒ ⇒ 用户**没有**声明粒度 ⇒ ⇒ 名字只能来自类型
+⇒ ⇒ ⇒ 而 `typeid` 的拼写**实现相关** ⇒ ⇒ **不保证**跨平台可复算 ⇒ ⇒ ⇒
+**MUST 与「同 ABI」限定一致地记录在契约里** + **MUST 告警**（平台替用户决定粒度 ⇒ 必须可观测）。
+
+⚠️ **为什么 ③ 不能回退 `typeid`**：`ch_layer<T>` 是**用户显式**的成层声明 ⇒ ⇒ 用户**能**给名字
+⇒ ⇒ ⇒ 允许回退就等于把「用户在声明处就能提供的确定性」换成了「实现相关的拼写」。
+⚠️ **为什么 ② 不能另给名字**：另给会破坏 ADR-060 §2.3 的「同类型 ⇒ 同一 `<module_type_name>` 组」
+⇒ ⇒ ⇒ 序号（按实例路径排序）失去分组依据。
+
+⚠️ **`ch_layer<T>` 的编译期可表达性**：类级宏 MUST 暴露一个**编译期可见**的名字（如 `static constexpr` 成员）
+⇒ ⇒ ⇒ `ch_layer<T>` 才能据此在「② 继承」与「③ 必须另给」之间**编译期**分派（⇒ ⇒ ③ 的缺名 MUST 是**编译期**错误，**MUST NOT** 推迟到发射时的运行期硬错）。
 
 ### 2.3 归属定义的**唯一性**
 
@@ -212,3 +250,5 @@ public:
 | 2026-11-02 | **v2**（据对抗审稿）：① 「ctor 进/build 出」改为**配对作用域**（ctor 进/ctor 出 + `build_internal` 压 BUILD 作用域）—— 原方案在 `build()` 二次调用与 `create_child` 不 build 两条路径上失衡；② **新增 D2′**：`ch_module` 的 build context 取**环境 context**（否则事实⑤会让成员形态子组件**直接消失**）⇒ 并据此保留「顶层 `ch_device<Pipeline>` 可实例化」这条承诺；③ **新增 D7**：归属真源变更**耦合**到 simulator 指令表分流与 `io.h` 方向守卫 ⇒ 「仿真逐位不变」降级为**待验证项**；④ 「仓内零处断言具体名字」的错误 grep 结论改为**4 处实测清单**；⑤ 探针证据改为指向架构主题文档**附录 A**（可复算） |
 | 2026-11-02 | **v2.1**（据 critic 第 1 轮 SF）：① **订正 D6③ 的事实错误** —— `create_child` 会构造组件 ⇒ 成员节点**照样建**（原写「不产生节点」）；真实缺陷是「有节点、无端口」⇒ ⇒ **新增：未 build 的子组件 MUST 被 emitter 响亮拒绝**；② **新增 D8** —— `ch_module` 的「无 active parent」分支 MUST 由 `CHERROR` 升格为 `CHFATAL_EXCEPTION`（与本 ADR 自身原则一致）；③ 验收判据补「异常路径的栈回退」与「未 build 子组件」 |
 | 2026-11-02 | **v2.2**（据 oracle 实测，5 条）：① **D2′ 改判** —— env ctx 为空时 **MUST NOT 硬失败**（否则「含子模块的单元」无法在无 active parent 处装配 ⇒ N2 只对叶子成立）；② **新增 D2″** 跨 ctx 守卫（`build(ctx)` 的 ctx 必须等于构造期 env ctx，否则子模块逻辑**静默消失**）；③ **新增 D9** —— `add_child` MUST 补绑 `child->parent_`，且 `subtree` 判定 MUST **只向下走 `children()`**（根因：成员 `ch_module` 在 `make_unique` 期 `weak_from_this()` 为空 ⇒ `parent_` 永久空 ⇒ 旗舰 DUT 会被误杀）；④ **新增 D10** —— context 级 clock/reset MUST 用「无归属」哨兵；⑤ **D4 加确定性约束** —— `typeid` 拼写实现相关 ⇒ 成层组件 MUST 显式 `CH_MODULE_NAME`，跨平台 golden 限定「同 ABI」；⑥ **D7 加** —— `io.h` 四处守卫改 `node_owner()`，判据改「改前改后均无触发」 |
+| 2026-11-04 | **v2.3**（2026-11-04 架构评审 · 用户拍板）：① **D4 再改判** —— 「成层声明」（`CH_HIERARCHY_LAYER`）与「模块命名」（`CH_MODULE_NAME`）**合并为一个宏** `CH_HIERARCHY_LAYER("name")` ⇒ ⇒ 「成层但无模块名」**编译期即不可表示** ⇒ ⇒ 原「缺名 ⇒ 运行时硬错」退化为「写宏就必须给名字」（**编译期**）⇒ ⇒ `CH_MODULE_NAME` **不单独存在**（**与 ADR-061 决策① 同步**）；② **Status 转正**（Proposed → Accepted） |
+| 2026-11-04 | **v2.3.1**（据 critic 第 1 轮 **B1 / B3**）：① **B1** —— v2.3 的「合并宏」只封住**类级声明**一条路径 ⇒ ⇒ 成层还可由 **实例级 `ch_layer<T>`** 与 **`Granularity::ForceLayer`** 产生 ⇒ ⇒ 「成层但无模块名」**仍可表示** ⇒ ⇒ **新增 §2.2.1「模块类型名的四档来源优先级」**（① 类级 / ② 继承 / ③ 实例处给名 / ④ ForceLayer 回退 + `CHWARN`），并明确 ③ 也不能回退 `typeid`、② 不能另给名字（否则破坏 ADR-060 §2.3 的分组）；② **B3** —— D2″ 的「MUST == 构造期 env ctx」在 **env ctx == null** 时**无定义**（而 D2′ 明确允许 env ctx 为空）⇒ ⇒ 补**基准分两支**（有 env ctx ⇒ 以它为准；无 ⇒ 以**首次** `build(ctx)` 为基准，其后换 ctx ⇒ 抛） |

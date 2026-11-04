@@ -105,6 +105,17 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 - **THEN** 层次化 MUST **拒绝**（抛异常）并给出「存储器与使用者同层」的替代路径
 - **AND** MUST NOT 静默产出跨模块的存储器引用
 
+#### Scenario: 驱动源在更上层时 MUST 逐级合成 pass-through 输入端口
+
+- **WHEN** 一个成层 module 的输入端口，其驱动节点的归属落在**更上层**的 module
+      （含「不属于任何组件」⇒ 归顶层）
+- **THEN** MUST **沿祖先链逐级**合成同名的 **input** pass-through 端口（每级一个）
+- **AND** MUST NOT 拒绝（⇒ ⇒ 否则父 module 引用不到顶层网 ⇒ ⇒ 该输入**无源**）
+- **AND** MUST NOT 把该输入直接接**表达式**（⇒ ⇒ 跨 module 的 `assign` 是非法 Verilog）
+
+> ⚠️ **本条是「按方向分列」矩阵的第三轴**（ADR-060 §2.1 v1.4）⇒ ⇒
+> **缺了它 ⇒ ⇒ 驱动源在顶层的输入会在中间层丢失 ⇒ ⇒ 行为分叉且无告警**。
+
 ### Requirement: 悬空子输入 MUST 向上冒泡为顶层输入
 
 无驱动源的子模块输入端口 MUST 逐级向上冒泡，最终成为**顶层 input**
@@ -155,6 +166,16 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
       （⇒ 它的节点 `owner` 不在 `top` 的子树里）
 - **THEN** 层次化 emitter MUST **抛异常**并给出 `add_child` 修法
 - **AND** MUST NOT 静默把它并入顶层 module（⇒ 否则整块逻辑消失）
+
+#### Scenario: 已登记但从未 build 的组件 MUST 被拒绝
+
+> ⚠️ **权威载体**：本条与 capability `component-ownership-and-naming` 的「未 build 的子组件 MUST 被识别」是同一条义务的**两侧**（那边判「框架能识别」，这边判「emitter 必须拒绝」）⇒ ⇒ 改一处 MUST 同步另一处。
+
+- **WHEN** 一个组件被登记进组件树，但**从未** `build()`
+      （⇒ ⇒ 它**有节点、无端口** ⇒ ⇒ 端口只在 build 期创建）
+- **THEN** 层次化 emitter MUST **抛异常**并点名该组件
+- **AND** MUST NOT 发出一个**无端口**的 module
+- **AND** MUST NOT 把它的节点当作空气（⇒ ⇒ 那会让它的逻辑**静默消失**）
 
 ### Requirement: 层次化产物 MUST 与扁平产物等价（可机械判定）
 
@@ -255,3 +276,61 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 - **THEN** 上述判据 MUST **转红**
 - **AND** MUST NOT 改用「module 的端口数 > 0」当判据
       （⇒ 输出方向必须先有 `ch_out` 作源 ⇒ 端口数可能 > 0 ⇒ 该判据**没有判别力**）
+
+### Requirement: 层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变
+
+层次化输出 MUST 走**独立的新入口**（新函数 + 新选项结构 + 新错误类型）⇒ ⇒
+既有 `toVerilog()` 的**签名**与**行为** MUST **逐字节不变**（⇒ ⇒ 既有调用点与 Verilator backend
+**零风险**）⇒ ⇒ Verilator backend / Simulator / JIT 的**既有入口**一律不动。
+
+⇒ ⇒ **错误模型**（MUST）：
+① 所有校验 MUST 在**第一次 I/O 之前**完成（⇒ ⇒ 否则留下**半套产物**）；
+② 写出 MUST 走「**临时目录 → 成功后 rename**」（⇒ ⇒ 失败**不留下**任何新文件）；
+③ 校验 MUST NOT 落在任何 `catch(...)` 作用域内（⇒ ⇒ 否则响亮失败会被**静默吞掉**）；
+④ 静态析构期 MUST 另有**返回码**兜底。
+
+⇒ ⇒ 选项 MUST 用**线性枚举**表达（MUST NOT 用布尔开关组合 ⇒ ⇒ 组合语义重叠 ⇒ ⇒ 未定义态留给实现者）。
+
+#### Scenario: 既有扁平入口 MUST 不受影响
+
+- **WHEN** 同一个设计用既有 `toVerilog()` 生成
+- **THEN** 产物 MUST 与引入层次化能力**之前逐字节相同**
+- **AND** 该入口的签名 MUST NOT 变化（⇒ ⇒ 既有调用点零改动）
+
+#### Scenario: 校验失败 MUST 不留下半套产物
+
+- **WHEN** 层次化生成在**写出之前**就因校验失败
+- **THEN** MUST **不产生任何**新文件
+- **AND** 错误 MUST **可被调用方观测**（⇒ ⇒ 返回错误类型，MUST NOT 只打日志）
+
+#### Scenario: 写出过程中失败 MUST 不留下半套产物
+
+- **WHEN** 层次化生成已开始写出，但在**完成之前**失败
+- **THEN** 输出路径 MUST **不留下**任何新文件（⇒ ⇒ 半套产物会让 `cmp` / lint 读到它）
+- **AND** 临时目录 MUST 被清理
+- **AND** 既有的同名文件 MUST NOT 被破坏（⇒ ⇒ 写出 MUST 走「**临时目录 → 成功后 rename**」）
+
+#### Scenario: 静态析构期的失败 MUST 以返回码呈现
+
+- **WHEN** 层次化入口在**静态析构期**被调用且校验失败
+- **THEN** 失败 MUST 以**返回码 / 错误类型**呈现
+- **AND** MUST NOT 依赖抛异常（⇒ ⇒ 该期抛异常会 `std::terminate`；既有宏在该期**不抛**）
+- **AND** 退出路径 MUST **不泄漏**资源
+
+### Requirement: 层次化单元的接口类型 MUST 限于白名单
+
+一个**成层**单元的接口端口类型 MUST 限于 `ch_uint<N>` / `ch_bool`
+⇒ ⇒ MUST NOT 出现 `ch_mem` · `ch_reg` · bundle / `ch_stream` · clock / reset · `inout`
+（⇒ ⇒ 理由分别是：数组无端口形态 · 状态不是接口 · 成员不是端口 · 由框架供给以免重复端口 · 单方向模型）。
+
+⇒ ⇒ **数组字段**（`ch_out<T> x[N]`）MUST 允许，但端口名 MUST 是**确定性派生**（`x_<i>`）
+⇒ ⇒ 否则「同一设计两次生成字节相同」不成立。
+
+⇒ ⇒ ⚠️ **义务方**：本条约束**上游**（emitter / 接口声明方）；
+「接口字段名与顺序 MUST 稳定」（ADR-062 **N-3**）**不在**本条范围 ⇒ ⇒ 但 N-3 MUST 另补载体。
+
+#### Scenario: 白名单外的接口类型 MUST 被拒绝
+
+- **WHEN** 一个成层单元的接口端口类型是 `ch_mem` / `ch_reg` / bundle / `ch_stream` / `inout`
+- **THEN** emitter MUST **响亮拒绝**并点名该端口
+- **AND** MUST NOT 静默产出（⇒ ⇒ 「数组无端口形态」⇒ ⇒ 发射器**无法**表达它）
