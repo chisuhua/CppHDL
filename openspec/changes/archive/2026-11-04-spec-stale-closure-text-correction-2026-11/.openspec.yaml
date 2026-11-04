@@ -1,0 +1,18 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 主 spec 内部**自相矛盾**的定点订正（零代码改动）。
+#
+# `chlib-stream-ready-ownership` 里：
+#   Requirement A「组合子 MUST NOT 无条件忽略消费端的 ready」的 Scenario
+#     仍写 demux / fork「仍未收口 / 仍属违规 / 两端都断」（2026-11-02 前属实）；
+#   Requirement B「分流 / 分叉类组合子的 ready 语义 MUST 是『消费端 ⇒ 上游』」
+#     已用 5 个 Scenario 规定 demux / fork 的确切行为（现行契约）。
+# ⇒ ⇒ 两条 Requirement 对同一对组合子给出**相反**的规范指令。
+#
+# `rv32i-isa-semantics` 的范围限定 NOTE 仍写「必需端口注册表 ⇒ 独立立项」
+# ⇒ ⇒ 而该表已于 2026-11-03 落地。
+#
+# ⚠️ **只订正当前态陈述** ⇒ 不新增 / 不删除规范性义务 ⇒ 不改 Scenario 标题
+#    （CLI 按标题匹配 ⇒ 改标题 = 丢弃旧 + 新增 ⇒ 拒绝归档）。
+# ⇒ **MODIFIED ×2** ⇒ 归档**禁** `--skip-specs`。

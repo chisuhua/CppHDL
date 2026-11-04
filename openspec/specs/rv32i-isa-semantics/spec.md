@@ -79,12 +79,24 @@ riscv-tests 二进制 ⇒ CI 中全部 SKIP ⇒ **有效覆盖为 0**。
 - **AND** 恒驱动全车道 MUST NOT 被当作「整字写」的实现方式
       （那会让流水线写的 `sb` / `sh` 变成「**lane 对齐数据的整字覆盖**」）
 
-> ⚠️ **范围限定（2026-10-26 critic SHOULD_FIX #3）**：本 Requirement 只约束
-> **本 capability 引入的 `DataTCM.strbe`**（全仓 3 个实例化点，grep 可证）。
-> 「**任意**新增输入端口 ⇒ 全实例化点 MUST 显式驱动」是**框架层约定**，
-> 其核验需要一个「必需端口注册表」（不同端口的未驱动读值语义不同：
-> `rst_n` 读 0 = 永久复位、`strbe` 读全 1 = 碰巧整字写）⇒ **独立立项**，
-> 不在本 capability 内（见 `AGENTS.md` 的约定层与 backlog）。
+> ⚠️ **范围限定（2026-10-26 critic SHOULD_FIX #3 · **2026-11-04 状态订正**）**：
+> 本 Requirement 只约束**本 capability 引入的 `DataTCM.strbe`**
+> （全仓 **4** 个实例化点 —— 3 处 `ch_module` / `ch_device` **构造**
+> + 1 处 `using` **类型别名**（`tests/test_rv32i_timing_dual.cpp`；该别名
+> 被当 DUT 构造 ⇒ ⇒ 计入）⇒ ⇒ ⚠️ **裸 grep `DataTCM<` 会命中 12 处**
+> （含注释与类型声明）⇒ ⇒ ⇒ ⇒ **不可作判据** ⇒ ⇒ ⇒ ⇒ 判据 MUST 按
+> 「**构造形态** + **类型别名形态**」两式匹配 ⇒ ⇒ ⇒ ⇒ 命中恰为 **4** 处）。
+> 「**任意**新增输入端口 ⇒ 全实例化点 MUST 显式驱动」是**框架层约定**
+> （`AGENTS.md §ANTI-PATTERNS`）⇒ ⇒ 其核验所需的「必需端口注册表」
+> **已于 2026-11-03 落地**（`.rddf/checks/input-port-required-registry.md`
+> ⇒ ⇒ 双向校验 `scripts/verify_input_port_required_registry.sh`（R1–R6）
+> ⇒ ⇒ ⇒ 该表登记的 `DataTCM.strbe` 一行即由它承载；另配**事件驱动**的
+> 「新增端口增量检查」`scripts/verify_input_port_additions.sh`）
+> ⇒ ⇒ ⇒ ⇒ **仍不在本 capability 内**（本 capability 只约束 `DataTCM.strbe`
+> 这一条）⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **登记表不是全仓普查**（只覆盖两类**已实测**风险：
+> 永久复位 `rst_n` / 写入放大 `strbe`）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 未登记的端口类别
+> **仍无护栏** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **义务本体仍归「人工核对 +
+> code review」**（根 `AGENTS.md` 已如此登记）。
 
 ### Requirement: `JAL` / `JALR` MUST 重定向 PC 并写回返回地址
 
