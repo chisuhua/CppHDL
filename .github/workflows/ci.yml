@@ -497,6 +497,31 @@ jobs:
       shell: bash
       run: scripts/verify_conditional_assign_integrity.sh --self-test
 
+    - name: Verify public-header ODR safety (aggregate header closure)
+      # WHY: `include/module.h` defined `ch::build_hierarchical_name` WITHOUT
+      # `inline`, and that header reaches every consumer through the single
+      # aggregate entry `include/ch.hpp` => ANY project with 2+ TUs including
+      # `ch.hpp` fails to LINK with "multiple definition". Upstream was only
+      # lucky: no `src/` TU includes `ch.hpp` (so `libcpphdl.a` carries no such
+      # symbol) and every Catch2 binary is a SINGLE TU (`add_catch_test` is
+      # per-source-file). The first multi-source target blows up.
+      # The criterion is LINK-TIME on purpose (two fixture TUs, both merely
+      # `#include "ch.hpp"`, compiled and linked together). This repo has twice
+      # proven that a home-grown C++-subset analyser "cannot be fully closed"
+      # (verify_example_assertion_quality.sh, verify_no_duplicate_rv32i_headers.sh)
+      # - the linker executes the REAL criterion and covers the WHOLE closure,
+      # not just one function.
+      shell: bash
+      run: scripts/verify_header_odr.sh
+
+    - name: Verify public-header ODR safety (self-test)
+      # WHY a self-test: poisons the real header in place (removes `inline`) and
+      # requires the failure reason to be `multiple definition` - NOT "compile
+      # failed", which is how a broken fixture would masquerade as a working
+      # criterion. It also verifies restoration is byte-identical and green again.
+      shell: bash
+      run: scripts/verify_header_odr.sh --self-test
+
     - name: Verify multi_if output assignability (E1) and condition (E3)
       # Contract: capability `chlib-conditional-semantics`.
       # E1: a `multi_if` MUST be directly assignable to a `ch_out` (it did

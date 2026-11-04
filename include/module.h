@@ -10,7 +10,13 @@
 namespace ch {
 
 // Helper function to construct the hierarchical path name
-std::string build_hierarchical_name(Component* parent, const std::string& local_name) {
+//
+// ⚠️ MUST be `inline`: this header is reachable from the aggregate header
+// `ch.hpp` ⇒ without `inline` every TU that includes it emits an external
+// definition ⇒ any project with 2+ such TUs fails to link with
+// "multiple definition of ch::build_hierarchical_name".
+// Guarded by scripts/verify_header_odr.sh (link-time criterion, not a text scan).
+inline std::string build_hierarchical_name(Component* parent, const std::string& local_name) {
     CHDBG_FUNC();
     
     if (!parent) {
