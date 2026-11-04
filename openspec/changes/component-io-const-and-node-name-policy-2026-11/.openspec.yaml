@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 公共头的两个**互不依赖**的小缺口（从 `component-framework-hardening-2026-10` 切出）
+#
+# ⚠️ **为什么从那个 change 切出来**：它原先含 3 项（U-1 / U-2 / U-4）⇒ ⇒ U-4
+#   （公共头 ODR）**已于 2026-11-04 单独实施并归档**（`header-odr-inline-fix-2026-11`）
+#   ⇒ ⇒ 剩下的 U-1 + U-2 与层次化主线**无依赖** ⇒ ⇒ 不该挂在主线前面。
+#
+# ⇒ **新建 2 个 capability** ⇒ 归档**禁** `--skip-specs`。

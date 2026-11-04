@@ -1,0 +1,14 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 层次化 RTL 输出 · 第 7 段：**等价性验证**（ADR-058 §2.2 / §5 · ADR-061 §5）
+#
+# ⚠️ **工作量 ~7–9 天**（oracle R13 实测）：backend 的「只增不改入口」**远不止**加一个函数
+#   （`build_port_access_table` / `emit_sim_main_postlude` 从 ctx 全量推端口 ⇒ 层次化下
+#   子组件输出不再是顶层端口 ⇒ 生成的 `case` 引用不存在的字段）。
+#
+# ⚠️ **不能用「parity」代替**：两后端由**同一份** C++ 生成 ⇒ 同构缺陷会被 parity **盖章**
+#   ⇒ ⇒ 只有「手推期望值 + 逐拍比对」能抓。
+#
+# ⇒ **delta**：`rtl-hierarchical-output` ADDED ×3
+# ⇒ 归档**禁** `--skip-specs`。

@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 层次化 RTL 输出 · 第 3 段：**层级粒度声明**（ADR-061 决策①⑤⑥）
+#
+# ⚠️ **第 ① 档（类级宏 `CH_HIERARCHY_LAYER("name")`）由 T3-①a 落地** ⇒ ⇒ 本段做
+#   **②③④ 三档**的分派 + `ch_layer` / `ch_inline` / `is_layer()` / 无 parent 装配点。
+#
+# ⚠️ **前置**：T3-①a（编译期可见的类级名）· T3-①b（组件树正确 ⇒ 装配点可判定）。
+#
+# ⇒ **delta**：`component-ownership-and-naming` ADDED ×1 + `rtl-hierarchical-output` ADDED ×2
+# ⇒ 归档**禁** `--skip-specs`。

@@ -1,0 +1,13 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 层次化 RTL 输出 · 第 2 段：**归属真源**（ADR-059 D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10）
+#
+# ⚠️ **为什么 MUST 单独成 change**：本段改的是**归属真源** ⇒ ⇒ 它**耦合**到
+#   simulator 的指令表分流（`src/simulator_init.cpp:95`）与 `io.h` 的四处方向守卫
+#   ⇒ ⇒ 回归面与 ①a（命名）/ ①c（粒度）**完全不同** ⇒ ⇒ 捆在一起 ⇒ 红了无法归因。
+#
+# ⚠️ **前置**：**T3-①a**（纯命名）—— `ch_module` 的 parent 修正依赖正确的 `name()`。
+#
+# ⇒ **delta**：`component-ownership-and-naming` ADDED ×5
+# ⇒ 归档**禁** `--skip-specs`。

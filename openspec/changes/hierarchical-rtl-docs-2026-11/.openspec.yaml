@@ -1,0 +1,9 @@
+schema: spec-driven
+created: 2026-11-04
+# ⚠️ **纯文档** ⇒ ⇒ **无 delta** ⇒ ⇒ MUST 显式声明 skip_specs。
+skip_specs: true
+
+# 层次化 RTL 输出 · 第 8 段：**文档同步**
+#
+# ⚠️ **前置**：T3-⑤ —— 文档 MUST 描述**已落地**的行为。
+# ⚠️ 合并宏的**签名面 5 处**仍是旧形态（架构文档 §10.6-A-⑥b）⇒ ⇒ 本段 MUST 一次改毕。

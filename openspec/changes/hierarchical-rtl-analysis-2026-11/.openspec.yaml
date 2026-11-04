@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 层次化 RTL 输出 · 第 4 段：**分析层** + golden
+#
+# ⚠️ **前置**：T3-①b（归属真源 · 分析按归属切模块）· T3-①c（成层判定）。
+# ⚠️ **golden MUST 含「手推」的一份** ⇒ ⇒ 否则分析层的 bug 会被 golden **合法化**。
+#
+# ⇒ **delta**：`rtl-hierarchical-output` ADDED ×1
+# ⇒ 归档**禁** `--skip-specs`。

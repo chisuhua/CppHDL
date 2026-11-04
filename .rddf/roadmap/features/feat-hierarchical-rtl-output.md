@@ -68,17 +68,19 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 > ⚠️ **一个 change = 一组回归判据**：判据不同的裁决 MUST 分开 ⇒ ⇒ 否则「回归变红」**无法归因**
 > （沿用本文件既有裁决「①a/①b/①c MUST 拆开」）。前置依赖**显式化**：只有 **T2a** 是硬前置。
 
-### 第 0 步：**拆分现有单人 change**（builder 开工前 MUST 完成，否则下面的表只是纸面）
+### 第 0 步：**拆分现有单人 change** —— ✅ **已完成（2026-11-04）**
 
-现存的是**一个** change —— `openspec/changes/hierarchical-rtl-output-2026-11/`
-（proposal / design / tasks + 2 份 delta）。下表 10 个 change **目前一个都不存在**。
+> 原先是**一个** change —— `openspec/changes/hierarchical-rtl-output-2026-11/`
+> （proposal / design / tasks + 2 份 delta）⇒ ⇒ 已按本表拆成 **9 个 active change**
+> （+ **T2a** 已单独实施并归档）⇒ ⇒ 下面 10 行**不再是纸面**。
 
 | # | 动作 | 落点 |
 |---|---|---|
-| 0-1 | 建 **10 个** change 目录（`T2a` / `T2b` / `T3-①a`–`T3-⑥`） | `openspec/changes/<name>/` |
-| 0-2 | **按 R 编号切开两份 delta**（见下方分布）⇒ 每条 Requirement 只落到**一个** change | `specs/<capability>/spec.md` |
-| 0-3 | 执行架构文档 **§10.6（25 项）/ §10.7（① ②）** 的 change 文档修订 | 各 change 的 `proposal` / `design` / `tasks` |
-| 0-4 | `T3-③` / `T3-⑥` 在 `.openspec.yaml` 显式 `skip_specs: true`（纯重构 / 纯文档） | 该 change |
+| 0-1 | 建 change 目录 | `openspec/changes/<name>/` —— ✅ **9 个 active**（T2a 已归档） |
+| 0-2 | **切开两份 delta** ⇒ 每条 Requirement 只落到**一个** change | ✅ **ownership 8/8 · hierarchical 14/14**（零重复 · 零遗漏） |
+| 0-3 | 执行架构文档 **§10.6（25 项）/ §10.7（① ②）** 的 change 文档修订 | ✅ §10.6-A 的 5 处口径已随 design.md 分派到对应 change · §10.6-B 的 9 条判据已进各 change 的 Acceptance |
+| 0-4 | `T3-③` / `T3-⑥` 显式 `skip_specs: true`（纯重构 / 纯文档） | ✅ 两者 `openspec validate` 均 valid |
+| 0-5 | **退役**两个被拆空的 legacy change | ✅ `hierarchical-rtl-output-2026-11`（内容全部分派到 8 个新 change）· `component-framework-hardening-2026-10`（U-4 → T2a 已归档 · U-1/U-2 → T2b，实测证据搬进 T2b 的附录） |
 
 > ⚠️ **R 编号不是稳定 ID**：本文件的 R1…R8 / R1…R14 **= 该 delta 文件内 Requirement 的**出现顺序**。
 > ⇒ ⇒ **这份映射在「第 0 步」执行时冻结** ⇒ ⇒ 之后任何 Requirement 增删 MUST **同步本文件的表**，
@@ -136,24 +138,24 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 ## 候选 change 分解（⇒ ⇒ commit 序列 · **与 §10.4 逐项对齐**）
 
-| # | change | 范围 | 前置 | capability delta（**编号 = delta 文件内 Requirement 出现顺序**） | 护栏交付物 | 验收 |
+| # | change | 范围 | 前置 | capability delta（**= 该 change 自己的 delta 文件里的 Requirement**，带标题） | 护栏交付物 | 验收 |
 |---|---|---|---|---|---|---|
 | **T2a** | `header-odr-inline-fix-2026-11` | **U-4 only**：`module.h:13` 加 `inline` | 无 | `core-header-odr-safety`（**ADDED ×1**） | **multi-source 链接 fixture**（两个 TU 同时 inclusion ⇒ 链接） | 链接成功 + 既有产物零变化 |
 | **T2b** | `component-io-const-and-node-name-policy-2026-11` | **U-2** + **U-1** | 无 | `component-io-const-access`（**ADDED ×1**）· `core-ctx-node-name-uniqueness`（**ADDED ×1**） | `io() const` 编译期 fixture · policy=off/on 双态用例 | policy=off ⇒ 逐字节不变；policy=on ⇒ 重名被拒 |
-| **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**（ADR-059 **D3 / D4 的类级部分**）：`build_hierarchical_name` 用 `name()` · `local_name_` / `module_type_name()` 两个维度 · **合并宏** `CH_HIERARCHY_LAYER("name")` 的定义 · 命名权威 = ctx 级全局表 | T2a | `component-ownership-and-naming` **ADDED ×2**（R2 / R3）+ `rtl-hierarchical-output` **ADDED ×1**（R3） | 命名回归断言（深度 ≥3 无重复前缀）· 类级缺名**编译期**拒绝对照 | 零**语义**变更（**允许文本变化** · 仿真逐位不变） |
-| **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**（ADR-059 D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10） | T3-①a | `component-ownership-and-naming` **ADDED ×5**（R1 / R5 / R6 / R7 / R8） | 归属断言（`CHFATAL_EXCEPTION`）· 作用域配平断言 · **归属↔语义分流回归** | ADR-059 §5 全部判据 |
-| **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**（ADR-061 决策①⑤⑥）+ **D4 的四档解析**（`ch_layer<T>` / `ch_inline<T>` / `ForceLayer` ⇒ 档 ②③④） | T3-①b | `component-ownership-and-naming` **ADDED ×1**（R4）+ `rtl-hierarchical-output` **ADDED ×2**（R1 / R8） | 粒度判据（类级 × 实例级三组合）· 「无 parent 处装配仍能成层」用例 · 缺名**编译期**拒绝对照 | ADR-061 §5 全部判据 |
-| **T3-②** | `hierarchical-rtl-analysis-2026-11` | **分析层** + **golden**（结构化，非自由文本） | T3-①c | `rtl-hierarchical-output` **ADDED ×1**（R7） | golden 快照比对（5 个 DUT）+ **手推 golden** 至少 1 份 | 与 `tests/golden/` 逐字节零差异 · 手推那份能抓实现错 |
+| **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**（ADR-059 **D3 / D4 的类级部分**）：`build_hierarchical_name` 用 `name()` · `local_name_` / `module_type_name()` 两个维度 · **合并宏** `CH_HIERARCHY_LAYER("name")` 的定义 · 命名权威 = ctx 级全局表 | T2a | `component-ownership-and-naming` **ADDED ×2**（组件实例路径 MUST 无重复前缀 · 组件实例 MUST 提供局部名与模块类型名两个命名维度）+ `rtl-hierarchical-output` **ADDED ×1**（命名权威 MUST 是 ctx 级全局表） | 命名回归断言（深度 ≥3 无重复前缀）· 类级缺名**编译期**拒绝对照 | 零**语义**变更（**允许文本变化** · 仿真逐位不变） |
+| **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**（ADR-059 D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10） | T3-①a | `component-ownership-and-naming` **ADDED ×5**（节点归属 MUST 由构造作用域唯一决定 · build context MUST 由显式来源确定 · 跨 context 再装配 MUST 被拒绝 · `ch_module` 无 active parent MUST 响亮失败 · 组件树登记 MUST 双向完整） | 归属断言（`CHFATAL_EXCEPTION`）· 作用域配平断言 · **归属↔语义分流回归** | ADR-059 §5 全部判据 |
+| **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**（ADR-061 决策①⑤⑥）+ **D4 的四档解析**（`ch_layer<T>` / `ch_inline<T>` / `ForceLayer` ⇒ 档 ②③④） | T3-①b | `component-ownership-and-naming` **ADDED ×1**（成层组件的模块类型名 MUST 按来源优先级确定）+ `rtl-hierarchical-output` **ADDED ×2**（层级粒度 MUST 由显式声明决定 · 成层判定 MUST 与装配点解耦） | 粒度判据（类级 × 实例级三组合）· 「无 parent 处装配仍能成层」用例 · 缺名**编译期**拒绝对照 | ADR-061 §5 全部判据 |
+| **T3-②** | `hierarchical-rtl-analysis-2026-11` | **分析层** + **golden**（结构化，非自由文本） | T3-①c | `rtl-hierarchical-output` **ADDED ×1**（不属于任何组件的节点 MUST 归顶层 module） | golden 快照比对（5 个 DUT）+ **手推 golden** 至少 1 份 | 与 `tests/golden/` 逐字节零差异 · 手推那份能抓实现错 |
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | **emitter 拆分**（**含时钟名参数化**） | T3-①b | **无 delta**（纯重构 ⇒ `.openspec.yaml` 显式 `skip_specs: true`） | 「扁平产物逐字节不变」基线脚本 | 相对 T3-①b 之后的基线逐字节不变 |
-| **T3-④** | `hierarchical-rtl-emission-2026-11` | **层次发射**（module / 实例化 / 隐式端口按方向 / 悬空冒泡 / clock-reset 贯通 / **MUST NOT 复用** / 接口白名单拒绝） | T3-② · T3-③ | `rtl-hierarchical-output` **ADDED ×7**（R2 / R5 / R6 / R10 / R11 / R12 / R14） | **新增** `scripts/verify_hierarchical_rtl.sh`（零未声明引用 · 实例端口名 ∈ 目标端口集 · **端口宽度一致** · 产物确定性 · 跨模块 `ch_mem` 被拒） | ADR-058 §5 结构判据 + ADR-060 §5 + ADR-062 §5 |
-| **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的映射表与逐拍等价 | T3-④ | `rtl-hierarchical-output` **ADDED ×3**（R4 / R9 / R13） | 等价性 harness 的**判别力自证**（故意破坏 ⇒ 必须转红）+ **公共 helper** | ADR-058 §5 效果判据全通过 |
+| **T3-④** | `hierarchical-rtl-emission-2026-11` | **层次发射**（module / 实例化 / 隐式端口按方向 / 悬空冒泡 / clock-reset 贯通 / **MUST NOT 复用** / 接口白名单拒绝） | T3-② · T3-③ | `rtl-hierarchical-output` **ADDED ×7**（成层组件 MUST 形成独立 module · 跨层非端口边 MUST 按方向合成隐式端口 · 悬空子输入 MUST 向上冒泡 · 时序模块 MUST 有 clock/reset 端口 · 成层且非根 module 端口 MUST 覆盖自身 `ch_in`/`ch_out` 且可追溯 · 单元体内 MUST NOT 引用「非自己、非祖先」的端口节点 · 层次化单元的接口类型 MUST 限于白名单） | **新增** `scripts/verify_hierarchical_rtl.sh`（零未声明引用 · 实例端口名 ∈ 目标端口集 · **端口宽度一致** · 产物确定性 · 跨模块 `ch_mem` 被拒） | ADR-058 §5 结构判据 + ADR-060 §5 + ADR-062 §5 |
+| **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的映射表与逐拍等价 | T3-④ | `rtl-hierarchical-output` **ADDED ×3**（默认（全 inline）产物 MUST 与扁平产物逐字节一致 · 层次化产物 MUST 与扁平产物等价（可机械判定）· 层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变） | 等价性 harness 的**判别力自证**（故意破坏 ⇒ 必须转红）+ **公共 helper** | ADR-058 §5 效果判据全通过 |
 | **T3-⑥** | `hierarchical-rtl-docs-2026-11` | **文档同步** | T3-⑤ | **无 delta**（`skip_specs: true`） | — | 文档零漂移 |
 
-> **delta 覆盖校验**（14 + 8 = 全部有归属）：`rtl-hierarchical-output` = ①a 1 + ①c 2 + ② 1 + ④ 7 + ⑤ 3 = **14** ✔ ·
+> **delta 覆盖校验**（✅ **已执行 · 2026-11-04**）：`rtl-hierarchical-output` = ①a 1 + ①c 2 + ② 1 + ④ 7 + ⑤ 3 = **14** ✔ ·
 > `component-ownership-and-naming` = ①a 2 + ①b 5 + ①c 1 = **8** ✔ ⇒ ⇒ **无一条 Requirement 落在多个 change**。
 >
-> ⚠️ **R4（模块类型名四档）归 ①c 而非 ①a**：档 ②③④ 需要 `ch_layer<T>` / `ForceLayer`，而它们由 ①c 引入
-> ⇒ ⇒ 若把 R4 放进 ①a，该 change **无法自证自己的判据**（档 ②–④ 届时还不可表达）。
+> ⚠️ **「模块类型名四档」归 ①c 而非 ①a**：档 ②③④ 需要 `ch_layer<T>` / `ForceLayer`，而它们由 ①c 引入
+> ⇒ ⇒ 若把该条放进 ①a，该 change **无法自证自己的判据**（档 ②–④ 届时还不可表达）。
 
 ⚠️ **①a / ①b / ①c MUST 拆开**：①a 是**纯命名**（零语义变更）；①b 动**归属真源**
 （耦合 simulator 分流与 io 方向守卫）；①c 动**装配面**（新增 API + 装配点形态）

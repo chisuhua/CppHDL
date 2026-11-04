@@ -1,0 +1,15 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 层次化 RTL 输出 · 第 1 段：**纯命名**（ADR-059 D3 / D4 的类级部分）
+#
+# 本 change 是 `hierarchical-rtl-output` 主线的**第一个实现段**（T3-①a）。
+# ⚠️ **零语义变更**：不碰归属、不碰粒度、不碰 emitter ⇒ ⇒ 只改**名字**。
+#
+# ⚠️ **为什么 MUST 单独成 change**（沿用 feature 的既有裁决）：
+#   ①a（命名）· ①b（归属真源）· ①c（粒度声明）三者的回归判据**完全不同**
+#   ⇒ ⇒ 捆在一起 ⇒ 「回归变红」**无法归因**。
+#
+# ⇒ **delta**：`component-ownership-and-naming` ADDED ×2（R2 路径无重复前缀 ·
+#   R3 两个命名维度）+ `rtl-hierarchical-output` ADDED ×1（R3 命名权威 = ctx 级全局表）
+# ⇒ 归档**禁** `--skip-specs`。

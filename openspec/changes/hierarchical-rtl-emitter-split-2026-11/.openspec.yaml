@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-11-04
+# ⚠️ **纯重构**（对外行为逐字节不变）⇒ ⇒ **无 delta** ⇒ ⇒ MUST 显式声明 skip_specs。
+skip_specs: true
+
+# 层次化 RTL 输出 · 第 5 段：**emitter 拆分**（含时钟名参数化）
+#
+# ⚠️ **不是「纯搬移」**：`print_reg` / `emit_always_ff` 硬编码 `default_clock` /
+#   `default_reset`（`src/codegen_verilog.cpp:278-283, 755-760`）⇒ ⇒ 子模块的
+#   `always_ff` 会引用**本模块内不存在**的信号名 ⇒ ⇒ ⇒ **时钟名 MUST 参数化**。
+#
+# ⚠️ **前置**：T3-①b —— ①b 之后的扁平产物是本段的**基线**（逐字节不变判据）。

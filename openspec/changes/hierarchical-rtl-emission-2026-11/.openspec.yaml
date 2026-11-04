@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-11-04
+
+# 层次化 RTL 输出 · 第 6 段：**层次发射**（ADR-058 §5 · ADR-060 §2.1 · ADR-062 §2.6）
+#
+# ⚠️ **本段的判据面最大**（端口覆盖 · clock/reset 分开判 · 四方向矩阵 · 第三轴 ·
+#   冒泡 · owner 边界 · 错误模型 · 白名单）⇒ ⇒ 建议**逐条**落地，每条带判别性对照。
+#
+# ⚠️ **前置**：T3-②（分析层）· T3-③（emitter 拆分）。
+#
+# ⇒ **delta**：`rtl-hierarchical-output` ADDED ×7
+# ⇒ 归档**禁** `--skip-specs`。
