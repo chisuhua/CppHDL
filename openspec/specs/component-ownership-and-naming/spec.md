@@ -169,3 +169,31 @@
 - **THEN** 成员形态的子组件 MUST **被正确判定为在树内**
 - **AND** MUST NOT 因「父指针为空」而被判为**不在树内**（⇒ ⇒ 那会让旗舰 DUT 被误杀
       ⇒ ⇒ 且错误信息还会叫人去 `add_child`——已经调过了）
+
+### Requirement: 成层组件的模块类型名 MUST 按来源优先级确定
+
+**成层**组件的模块类型名 MUST 按下列**优先级**确定 ⇒ ⇒ **MUST NOT** 有其它来源：
+
+1. **类级** `CH_HIERARCHY_LAYER("name")` ⇒ ⇒ MUST 用该名字（省略**编译期不可表达**）；
+2. **实例级** `ch_layer<T>` · `T` **已**声明成层 ⇒ ⇒ MUST **继承** `T` 的类级名字；
+3. **实例级** `ch_layer<T>` · `T` **未**声明成层 ⇒ ⇒ MUST 在**实例处**给名（省略**编译期不可表达**）；
+4. **`Granularity::ForceLayer`** 强制成层（用户**未**声明）⇒ ⇒ MAY 回退
+   `sanitize(typeid(*this).name())` ⇒ ⇒ **MUST 有 `CHWARN`**。
+
+#### Scenario: 类级声明 MUST 给出模块类型名
+
+- **WHEN** 一个组件声明为「成层」
+- **THEN** 该声明 MUST **同时**给出模块类型名（⇒ ⇒ 缺名**编译期即不可表达**）
+- **AND** 该名字 MUST 在**同一编译器 / ABI 内**可复算
+
+#### Scenario: 实例级提升 helper 时 MUST 在实例处给出模块类型名
+
+- **WHEN** 一个**未**声明成层的组件被**实例级**提升为成层
+- **THEN** 该实例 MUST 携带模块类型名（⇒ ⇒ 缺名**编译期即不可表达**）
+- **AND** 若该组件类型**已**声明成层 ⇒ ⇒ 该实例 MUST **继承**类型的类级名字
+
+#### Scenario: emitter 强制成层时 MUST 告警
+
+- **WHEN** emitter 以 `Granularity::ForceLayer` 把一个**用户未声明成层**的组件强制成层
+- **THEN** 其模块类型名 MAY 回退到 `sanitize(typeid(*this).name())`
+- **AND** MUST 有 `CHWARN` 点名该组件（⇒ ⇒ 平台替用户决定粒度 ⇒ ⇒ MUST 可观测）
