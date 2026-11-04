@@ -115,6 +115,10 @@ public:
     /// ⇒ ⇒ 成层判定与装配点**解耦**（ADR-061 决策⑥）。
     bool is_layer() const;
 
+    /// 是否已经 `build()` 过（端口只在 build 期创建 ⇒ 「有节点、无端口」的组件
+    /// MUST 被层次化工具**响亮拒绝**，不能当成空 module 发射）。
+    bool is_built() const { return built_; }
+
     /// 粒度总开关（默认 `RespectDeclarations`）。
     static Granularity granularity();
     static void set_granularity(Granularity g);

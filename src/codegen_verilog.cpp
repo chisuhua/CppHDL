@@ -1,5 +1,6 @@
 // src/codegen_verilog.cpp
 #include "codegen_verilog.h"
+#include "codegen_naming.h"
 #include "ast/ast_nodes.h"
 #include "lnodeimpl.h"
 #include "memimpl.h"
@@ -63,20 +64,12 @@ verilogwriter::verilogwriter(ch::core::context *ctx) : ctx_(ctx) {
 
         // Build the initial name map based on node names and ensure uniqueness.
         // Also build the sorted_nodes_ list.
-        std::unordered_map<std::string, int> name_counts;
-        auto eval_list = ctx_->get_eval_list(); // Use the topologically sorted
-                                                // list from context
-        for (auto *node : eval_list) {
-            std::string base_name = sanitize_name(node->name());
-            std::string unique_name = base_name;
-            int counter = name_counts[base_name]++;
-            if (counter > 0) {
-                unique_name = base_name + "_" + std::to_string(counter);
-            }
-            node_names_[node] = unique_name;
-        }
+        // ⚠️ 去重算法是**共用**的（`include/codegen_naming.h`）⇒ 层次化分析层
+        //    拿到的是**同一张表** ⇒ 顶层端口名与扁平产物逐字相同（ADR-061 决策④）。
+        auto eval_list = ctx_->get_eval_list(); // topologically sorted
+        node_names_ = ch::build_verilog_name_table(eval_list);
 
-        // Store the sorted list for later use
+        // Store the sorted list for use later
         sorted_nodes_ = eval_list;
     } catch (...) {
         // Silently ignore exceptions
@@ -101,33 +94,8 @@ std::string verilogwriter::get_verilog_name(ch::core::lnodeimpl *node) const {
 }
 
 std::string verilogwriter::sanitize_name(const std::string &name) const {
-    std::string sanitized = name;
-    // Replace illegal characters with underscores
-    std::replace_if(
-        sanitized.begin(), sanitized.end(),
-        [](char c) { return !std::isalnum(c) && c != '_'; }, '_');
-
-    // Ensure it doesn't start with a digit
-    if (!sanitized.empty() && std::isdigit(sanitized[0])) {
-        sanitized = "_" + sanitized;
-    }
-
-    // Escape Verilog/SystemVerilog reserved keywords by appending "_r" suffix.
-    // Pragmatic subset of IEEE 1800-2017 reserved words covering real
-    // collisions (e.g., ch_reg's default name "reg" would otherwise emit an
-    // illegal "logic [7:0] reg;" declaration).
-    static const std::unordered_set<std::string> keywords = {
-        "reg", "wire", "logic", "assign", "module", "endmodule",
-        "input", "output", "inout", "always", "always_ff", "always_comb",
-        "initial", "begin", "end", "if", "else", "case", "endcase",
-        "parameter", "localparam", "signed", "unsigned", "genvar",
-        "generate", "endgenerate", "tri", "wand", "wor", "supply0",
-        "supply1"};
-    if (keywords.find(sanitized) != keywords.end()) {
-        sanitized += "_r";
-    }
-
-    return sanitized;
+    // 唯一实现见 `include/codegen_naming.h`（层次化分析层用的是同一份 ⇒ 名字不会漂移）
+    return ch::sanitize_verilog_name(name);
 }
 
 std::string verilogwriter::get_width_str(uint32_t size) const {

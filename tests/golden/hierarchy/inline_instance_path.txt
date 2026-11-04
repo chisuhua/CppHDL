@@ -1,0 +1,22 @@
+# ch-hierarchy-analysis v1
+[module] key=top.wrap.deep type=deep_layer root=0 ports=2 body=2 insts=0
+  port in  top_wrap_deep_unnamed_input w=8 origin=self
+  port out top_wrap_deep_unnamed_output w=8 origin=self
+  body proxy top_wrap_deep__unnamed_input w=8
+  body proxy top_wrap_deep__unnamed_output w=8
+[module] key=top type=wrap_top root=1 ports=5 body=5 insts=1
+  port in  default_clock w=1 origin=clock_reset
+  port in  default_reset w=1 origin=clock_reset
+  port out top_wrap_unnamed_output w=8 origin=inline_folded
+  port in  top_unnamed_input w=8 origin=self
+  port out top_unnamed_output w=8 origin=self
+  body input top_wrap_unnamed_input w=8
+  body proxy top_wrap__unnamed_input w=8
+  body proxy top_wrap__unnamed_output w=8
+  body proxy top__unnamed_input w=8
+  body proxy top__unnamed_output w=8
+  inst wrap_deep -> top.wrap.deep
+    conn top_wrap_deep_unnamed_input <- top_wrap_unnamed_input
+    conn top_wrap_deep_unnamed_output -> top_wrap_unnamed_output
+[edge] top.top_wrap_unnamed_input -> top.wrap.deep.top_wrap_deep_unnamed_input
+[edge] top.wrap.deep.top_wrap_deep_unnamed_output -> top.top_wrap_unnamed_output

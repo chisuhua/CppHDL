@@ -161,6 +161,7 @@ set(CH_SOURCES
     ${CORE_SOURCES}
     ${AST_SOURCES}
     src/component.cpp
+    src/hierarchy_analysis.cpp
     src/simulator.cpp
     src/simulator_trace.cpp
     src/simulator_init.cpp

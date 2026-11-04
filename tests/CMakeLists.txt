@@ -1074,6 +1074,13 @@ add_catch_test(test_component_ownership test_component_ownership.cpp)
 # instance-level ch_layer / ch_inline, four-tier module type name, assembly without an
 # active parent (declaration decoupled from assembly point)
 add_catch_test(test_component_granularity test_component_granularity.cpp)
+
+# hierarchy analysis (hierarchical RTL T3-②): module list / port table / connection
+# table + three pre-checks. Golden files live in tests/golden/hierarchy/ and are
+# compared byte-for-byte (set UPDATE_GOLDEN=1 to regenerate, then verify by hand).
+add_catch_test(test_hierarchy_analysis test_hierarchy_analysis.cpp)
+target_compile_definitions(test_hierarchy_analysis PRIVATE
+    CPPHDL_GOLDEN_DIR="${PROJECT_SOURCE_DIR}/tests/golden/hierarchy")
 add_catch_test(test_module test_module.cpp)
 # dual-backend-test-coverage (Phase 1): 3 CH_MODULE timing tests
 # migrated to DUAL_BACKEND_TEST_PAIR.

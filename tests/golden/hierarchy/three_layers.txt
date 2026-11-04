@@ -1,0 +1,28 @@
+# ch-hierarchy-analysis v1
+[module] key=top.mid.leaf type=leaf3_unit root=0 ports=2 body=2 insts=0
+  port in  top_mid_leaf_unnamed_input w=8 origin=self
+  port out top_mid_leaf_unnamed_output w=8 origin=self
+  body proxy top_mid_leaf__unnamed_input w=8
+  body proxy top_mid_leaf__unnamed_output w=8
+[module] key=top.mid type=mid3_unit root=0 ports=2 body=2 insts=1
+  port in  top_mid_unnamed_input w=8 origin=self
+  port out top_mid_unnamed_output w=8 origin=self
+  body proxy top_mid__unnamed_input w=8
+  body proxy top_mid__unnamed_output w=8
+  inst leaf -> top.mid.leaf
+    conn top_mid_leaf_unnamed_input <- top_mid_unnamed_input
+    conn top_mid_leaf_unnamed_output -> top_mid_unnamed_output
+[module] key=top type=top3_unit root=1 ports=4 body=2 insts=1
+  port in  default_clock w=1 origin=clock_reset
+  port in  default_reset w=1 origin=clock_reset
+  port in  top_unnamed_input w=8 origin=self
+  port out top_unnamed_output w=8 origin=self
+  body proxy top__unnamed_input w=8
+  body proxy top__unnamed_output w=8
+  inst mid -> top.mid
+    conn top_mid_unnamed_input <- top_unnamed_input
+    conn top_mid_unnamed_output -> top_unnamed_output
+[edge] top.top_unnamed_input -> top.mid.top_mid_unnamed_input
+[edge] top.mid.top_mid_unnamed_input -> top.mid.leaf.top_mid_leaf_unnamed_input
+[edge] top.mid.top_mid_unnamed_output -> top.top_unnamed_output
+[edge] top.mid.leaf.top_mid_leaf_unnamed_output -> top.mid.top_mid_unnamed_output

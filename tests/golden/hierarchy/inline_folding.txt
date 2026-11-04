@@ -1,0 +1,14 @@
+# ch-hierarchy-analysis v1
+[module] key=top type=top_inline_unit root=1 ports=6 body=6 insts=0
+  port in  default_clock w=1 origin=clock_reset
+  port in  default_reset w=1 origin=clock_reset
+  port in  top_helper_unnamed_input_1 w=8 origin=bubbled
+  port out top_helper_unnamed_output w=8 origin=inline_folded
+  port in  top_unnamed_input w=8 origin=self
+  port out top_unnamed_output w=8 origin=self
+  body input top_helper_unnamed_input w=8
+  body proxy top_helper__unnamed_input w=8
+  body proxy top_helper__unnamed_input_1 w=8
+  body proxy top_helper__unnamed_output w=8
+  body proxy top__unnamed_input w=8
+  body proxy top__unnamed_output w=8

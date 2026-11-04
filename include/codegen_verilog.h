@@ -101,7 +101,7 @@ private:
     // --- Data members ---
     ch::core::context *ctx_;
     // Map to store the generated Verilog name for each node
-    std::unordered_map<ch::core::lnodeimpl *, std::string> node_names_;
+    std::unordered_map<const ch::core::lnodeimpl *, std::string> node_names_;
     // Map to store which nodes *use* a given node (reverse dependencies)
     std::unordered_map<ch::core::lnodeimpl *,
                        std::unordered_set<ch::core::lnodeimpl *>>

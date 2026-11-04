@@ -1,0 +1,18 @@
+# ch-hierarchy-analysis v1
+[module] key=top.sub type=sub_unit root=0 ports=2 body=2 insts=0
+  port in  top_sub_unnamed_input w=8 origin=self
+  port out top_sub_unnamed_output w=8 origin=self
+  body proxy top_sub__unnamed_input w=8
+  body proxy top_sub__unnamed_output w=8
+[module] key=top type=top2_unit root=1 ports=4 body=2 insts=1
+  port in  default_clock w=1 origin=clock_reset
+  port in  default_reset w=1 origin=clock_reset
+  port in  top_unnamed_input w=8 origin=self
+  port out top_unnamed_output w=8 origin=self
+  body proxy top__unnamed_input w=8
+  body proxy top__unnamed_output w=8
+  inst sub -> top.sub
+    conn top_sub_unnamed_input <- top_unnamed_input
+    conn top_sub_unnamed_output -> top_unnamed_output
+[edge] top.top_unnamed_input -> top.sub.top_sub_unnamed_input
+[edge] top.sub.top_sub_unnamed_output -> top.top_unnamed_output
