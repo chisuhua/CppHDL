@@ -6,6 +6,7 @@
 #include "logger.h"
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <typeinfo>
 
 namespace ch {
@@ -16,10 +17,29 @@ namespace ch {
 // ⇒ ⇒ 本头经 `#include "component.h"` 继续**对外可见**该函数（签名与语义不变）。
 // ⇒ ⇒ 它 MUST 用 `parent->name()`（**不是** `hierarchical_name()`）—— ADR-059 D3。
 
+/// 实例级粒度声明（`ch_layer<T>` / `ch_inline<T>` 用的**唯一**载体）。
+///
+/// ⚠️ 为什么不用「给 `ch_module` 加一个 tag 参数」：`ch_module` 的构造参数是
+/// **转发给组件的构造函数**的 ⇒ tag 参数会要求**每个**组件的 ctor 都接受它
+/// ⇒ ⇒ 破坏现有组件。⇒ ⇒ 改为**受保护的第二个 ctor**（公开签名**零变更**）。
+struct InstanceDecl {
+    /// `ch_layer` 的实例级模块类型名（档 ③）；`nullptr` ⇒ 继承类级名（档 ②）
+    const char* module_type_name = nullptr;
+    /// 显式 inline（`ch_inline`）
+    bool force_inline = false;
+};
+
 template <typename T, typename... Args>
 class ch_module {
 public:
-    explicit ch_module(const std::string& instance_name, Args&&... args) {
+    explicit ch_module(const std::string& instance_name, Args&&... args)
+        : ch_module(InstanceDecl{}, instance_name, std::forward<Args>(args)...) {
+    }
+
+protected:
+    /// 受保护入口（公开面只有 `ch_module` 的原 ctor + `ch_layer` / `ch_inline`）。
+    ch_module(const InstanceDecl& decl, const std::string& instance_name,
+              Args&&... args) {
         CHDBG_FUNC();
         CHINFO("[ch_module::ctor] Creating module for component %s", typeid(T).name());
 
@@ -63,6 +83,15 @@ public:
         }
         CHDBG("Child path name: %s", local_child_ptr->name().c_str());
 
+        // 3.5 实例级粒度声明（`ch_layer` / `ch_inline`）—— MUST 在 `build()` **之前**
+        //     写入（否则组件在自己的 `describe()` 里读到的 `is_layer()` 是错的）。
+        if (decl.force_inline) {
+            local_child_ptr->set_instance_layer(false);
+        } else if (decl.module_type_name != nullptr) {
+            local_child_ptr->set_instance_layer(true);
+            local_child_ptr->set_instance_module_type_name(decl.module_type_name);
+        }
+
         // 4. Transfer ownership of the child component to the parent.
         auto shared_child = parent_component->add_child(std::move(local_child_ptr));
         child_component_sptr_ = std::static_pointer_cast<T>(shared_child);
@@ -90,6 +119,7 @@ public:
         CHINFO("[ch_module::ctor] Finished creating module");
     }
 
+public:
     // Provide access to the child component's I/O and instance
     auto& io() {
         CHDBG_FUNC();
@@ -110,4 +140,48 @@ public:
 private:
     std::shared_ptr<T> child_component_sptr_; // 使用 shared_ptr 保持组件生命周期
 };
+
+namespace detail {
+/// `T` 是否**类级**声明成层（`CH_HIERARCHY_LAYER`）—— **编译期**可判定
+/// ⇒ ⇒ `ch_layer<T>` 才能在「② 继承」与「③ 必须另给」之间**编译期**分派。
+template <typename T, typename = void>
+struct has_class_layer_name : std::false_type {};
+
+template <typename T>
+struct has_class_layer_name<T, std::void_t<decltype(T::kChIsLayer)>>
+    : std::bool_constant<T::kChIsLayer> {};
+} // namespace detail
+
+/// **显式成层**（实例级，ADR-061 决策①）。
+///
+/// ⚠️ 模块类型名的来源按 ADR-059 §2.2.1 的四档：
+///   · `T` **已**类级声明 ⇒ **继承**类级名字（⇒ MUST NOT 另给 ⇒ 单参形态）
+///   · `T` **未**声明（helper 被提升）⇒ MUST **在实例处**给名
+///     ⇒ ⇒ **缺名是编译期错误**（没有可用重载 ⇒ 不会推迟到发射时的运行期硬错）
+template <typename T, typename... Args>
+class ch_layer : public ch_module<T, Args...> {
+public:
+    /// 档 ②：`T` 已声明成层 ⇒ 继承其类级名字
+    explicit ch_layer(const std::string& instance_name, Args&&... args)
+        requires detail::has_class_layer_name<T>::value
+        : ch_module<T, Args...>(InstanceDecl{}, instance_name,
+                                std::forward<Args>(args)...) {}
+
+    /// 档 ③：`T` 未声明成层 ⇒ MUST 在实例处给模块类型名
+    ch_layer(const std::string& instance_name, const std::string& module_type_name,
+             Args&&... args)
+        requires(!detail::has_class_layer_name<T>::value)
+        : ch_module<T, Args...>(InstanceDecl{module_type_name.c_str()}, instance_name,
+                                std::forward<Args>(args)...) {}
+};
+
+/// **显式 inline**（实例级覆盖，即使 `T` 类级声明成层）。
+template <typename T, typename... Args>
+class ch_inline : public ch_module<T, Args...> {
+public:
+    explicit ch_inline(const std::string& instance_name, Args&&... args)
+        : ch_module<T, Args...>(InstanceDecl{nullptr, /*force_inline=*/true},
+                                instance_name, std::forward<Args>(args)...) {}
+};
+
 } // namespace ch

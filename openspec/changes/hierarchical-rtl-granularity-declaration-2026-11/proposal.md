@@ -40,14 +40,14 @@
 
 ## Acceptance
 
-- [ ] 类级 / 实例级**三组合**的成层结果 MUST 与声明一致
-- [ ] **无 active parent** 处装配的组件 MUST 仍能按声明成层
-- [ ] `ch_module` 签名**零变更**
-- [ ] **模块类型名的四档来源**可判定：① 类级（**①a** 落地）· ② 继承 · ③ 实例处给名
+- [x] 类级 / 实例级**三组合**的成层结果 MUST 与声明一致
+- [x] **无 active parent** 处装配的组件 MUST 仍能按声明成层
+- [x] `ch_module` 签名**零变更**
+- [x] **模块类型名的四档来源**可判定：① 类级（**①a** 落地）· ② 继承 · ③ 实例处给名
       （缺名**编译期**不可表达）· ④ `ForceLayer` 回退 + **`CHWARN`**
       ⇒ **判别性对照**：把 ③ 的缺名改成运行期抛 ⇒ **编译期 fixture 必转红**
-- [ ] ② MUST NOT 另给名字（否则同类型分组失效）
-- [ ] `Granularity::ForceInline` ⇒ 全部组件 inline；`ForceLayer` ⇒ 全部成层
+- [x] ② MUST NOT 另给名字（否则同类型分组失效）
+- [x] `Granularity::ForceInline` ⇒ 全部组件 inline；`ForceLayer` ⇒ 全部成层
 
 ## Capabilities
 
@@ -57,3 +57,22 @@
 | `rtl-hierarchical-output` | **ADDED ×2**（R1 层级粒度由显式声明决定 · R8 成层判定与装配点解耦） |
 
 ⇒ 归档**禁** `--skip-specs`。
+
+---
+
+## 实施记录（**判据 → 证据**）
+
+| Acceptance | 证据 |
+|---|---|
+| 类级 / 实例级**三组合**与声明一致 | `tests/test_component_granularity.cpp` 的 `[granularity][component]`（5 个 SECTION：类级 / `ch_inline` 覆盖 / 未声明⇒inline / `ch_layer<Helper>` 提升 / `ch_layer<Layered>` 继承） |
+| **无 active parent** 处装配仍成层 | 同上 `[granularity][component][assembly]`（`make_unique` + `add_child` + `build(ctx)`） |
+| `ch_module` 签名零变更 | 同上 `static_assert(std::is_constructible_v<ch::ch_module<LayeredUnit>, const std::string&>)` |
+| 四档来源可判定 + 缺名**编译期**不可表达 | 同上 7 条 `static_assert`（档 ② **不准另给** / 档 ③ **缺名不可构造**） |
+| ② MUST NOT 另给名字 | 同上 `static_assert(!is_constructible<ch_layer<LayeredUnit>, string, string>)` |
+| `ForceInline` / `ForceLayer` 生效 | 同上 `[granularity][component]` 的总开关 SECTION（含 RAII 复原） |
+
+**变异 6/7 抓 + 1 条等价变异**：① 忽略实例级覆盖 ② 忽略类级声明 ③ 档②也写实例名
+④ 忽略 `Granularity` ⑤ `ForceLayer` 不回落 `typeid` ⑦ 档③去掉「未声明」约束
+（⇒ `static_assert` 直接编译失败 = 编译期判据生效）⇒ 全部 `RED`，还原后复绿。
+⚠️ ⑥「实例名优先改成类级优先」**恒绿 = 等价变异**（② 永不写实例名、③ 只作用于无类级名的类型
+⇒ 两条分支互斥 ⇒ 顺序不可观测）⇒ 不是测试缺口。

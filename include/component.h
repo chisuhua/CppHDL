@@ -15,6 +15,7 @@ namespace ch { namespace core { class context; } }
 namespace ch {
 
 class Component;
+template <typename T, typename... Args> class ch_module;
 
 /// 拼接子组件的**全路径**：父的全路径 + "." + 局部名。
 ///
@@ -36,6 +37,22 @@ std::string build_hierarchical_name(const Component* parent, const std::string& 
     static constexpr const char* kChHierarchyLayerName = name_literal;         \
     static constexpr bool kChIsLayer = true;                                   \
     const char* layer_name_literal() const override { return kChHierarchyLayerName; }
+
+// ── 层级粒度 / 端口策略 / 悬空输入策略（ADR-061 决策⑤ · ADR-060 §2.4）─────────
+//
+// ⚠️ 这三个枚举 MUST 在**框架层**定义（MUST NOT 留给实现者自行发明）：
+//    ⇒ 否则「默认值」会被各实现各自解释 ⇒ 产物不可预测。
+
+/// 粒度总开关（**逃生门 + 对比测试用**）：
+/// `ForceInline` ⇒ 全部组件 inline（⇒ 用于「与扁平逐字节对照」）；
+/// `ForceLayer` ⇒ 全部成层（⇒ 极端形态 ⇒ 未声明者回退 `typeid` + `CHWARN`）。
+enum class Granularity { RespectDeclarations, ForceInline, ForceLayer };
+
+/// 跨层非端口边的处理策略（ADR-060）：默认**合成隐式端口 + 告警**。
+enum class PortPolicy { SynthesizeWarn, SynthesizeFatal, Reject };
+
+/// 悬空子输入的策略（ADR-060）：默认**向上冒泡**。
+enum class UndrivenPolicy { Bubble, Reject };
 
 class Component : public std::enable_shared_from_this<Component> {
 public:
@@ -87,6 +104,30 @@ public:
     /// ⚠️ `lnodeimpl` 的 `parent_`、`ch_module` 的 parent、`io.h` 的 4 处方向守卫
     /// MUST 全部用它 ⇒ ⇒ 归属只有**一处**判定实现。
     static Component* node_owner();
+
+    // ── 层级粒度（ADR-061 决策①⑤ · ADR-059 §2.2.1 四档）──────────────────
+    //
+    // 判定优先级：`Granularity` 总开关 > 实例级覆盖 > 类级声明（`CH_HIERARCHY_LAYER`）
+    // ⇒ ⇒ **默认 inline**（未声明者不产生 module）。
+
+    /// 本组件是否成为**独立 Verilog module**。
+    /// ⚠️ MUST NOT 依赖装配点（「有父组件」/「无 active parent」都不影响判定）
+    /// ⇒ ⇒ 成层判定与装配点**解耦**（ADR-061 决策⑥）。
+    bool is_layer() const;
+
+    /// 粒度总开关（默认 `RespectDeclarations`）。
+    static Granularity granularity();
+    static void set_granularity(Granularity g);
+
+    /// RAII：在作用域内临时切粒度总开关（**异常安全** ⇒ 嵌套亦可）。
+    struct GranularityScope {
+        explicit GranularityScope(Granularity g);
+        ~GranularityScope();
+        GranularityScope(const GranularityScope&) = delete;
+        GranularityScope& operator=(const GranularityScope&) = delete;
+    private:
+        Granularity saved_;
+    };
 
     /// 当前作用域栈深度（**只用于判据 / 诊断**）。
     /// ⚠️ 作用域 MUST 配对 ⇒ 组件外的深度 MUST 回到 0。
@@ -179,6 +220,12 @@ private:
     /// ⇒ ⇒ 无泄漏（⇒ 不需要析构兜底 —— 但**直接构造**的组件由析构兜底移除）。
     static thread_local std::vector<Component*> scope_;
 
+    /// 实例级声明（**唯一**写入者是 `ch_module` 的受保护构造路径）
+    /// ⇒ ⇒ 公开面只有 `ch_layer<T>` / `ch_inline<T>`（MUST NOT 暴露 setter）。
+    void set_instance_layer(bool is_layer);
+    void set_instance_module_type_name(std::string name);
+    template <typename T, typename... Args> friend class ch_module;
+
     bool built_ = false;
     bool destructing_ = false;  // 标记是否正在析构
 
@@ -186,6 +233,14 @@ private:
     ch::core::context* construction_ctx_ = nullptr;
     /// 首次 `build()` 绑定的 ctx（D2″ 分支 ② 的基准）。
     ch::core::context* build_ctx_ = nullptr;
+    /// 实例级粒度覆盖是否已设置（`ch_layer` / `ch_inline` 写入）
+    bool has_instance_layer_ = false;
+    /// 实例级粒度值（`ch_inline` ⇒ false；`ch_layer` ⇒ true）
+    bool instance_layer_ = false;
+    /// 实例级模块类型名（空 ⇒ 未给 ⇒ 回落到类级字面量 / `typeid`）
+    std::string instance_module_type_name_;
+    /// `ForceLayer` 回退 `typeid` 的告警只发一次（`module_type_name()` 是 const）
+    mutable bool force_layer_warned_ = false;
     /// 待执行（等 ctx）的子组件 build（D2′）。
     std::vector<std::function<void(ch::core::context*)>> deferred_builds_;
 

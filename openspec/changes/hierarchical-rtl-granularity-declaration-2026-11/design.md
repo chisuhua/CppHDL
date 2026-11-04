@@ -58,3 +58,27 @@ enum class Granularity { RespectDeclarations, ForceInline, ForceLayer };
 | # | 风险 | 对策 |
 |---|---|---|
 | 3 | 隐式端口方向搞反 ⇒ 错 RTL | 方向矩阵 4 行各一用例（边界 #14/#15/#16） |
+
+---
+
+## 4. 实施期记录（**文档 MUST 与代码一致**）
+
+| # | 设计稿 | 定稿 | 原因 |
+|---|---|---|---|
+| 1 | 「两个新 API 名，内部薄封装 `ch_module`」（未说怎么把实例级声明传进去） | `ch_module` 加**受保护**的第二个 ctor（接收 `InstanceDecl`）；`ch_layer` / `ch_inline` 派生自 `ch_module<T, Args...>` 并调它 | 公开 ctor **签名零变更**（`ch_module(name, args...)` 仍转发给组件 ctor）；实例级声明 MUST 在 `build()` **之前**写入（否则组件在自己的 `describe()` 里读到错的 `is_layer()`） |
+| 2 | 实例级 setter（`set_instance_layer` / `set_instance_module_type_name`） | **private** + `friend ch_module`（模板 friend） | 公开面 MUST 只有 `CH_HIERARCHY_LAYER` / `ch_layer` / `ch_inline` 三个声明入口 ⇒ 少一个「绕过声明直接改成层」的面 |
+| 3 | 四档的可判定性 | **编译期**：`requires detail::has_class_layer_name<T>` 分派 + 测试里的 7 条 `static_assert` | 档 ② 的「MUST NOT 另给名字」与档 ③ 的「缺名 MUST 不可表达」都是**语法层**约束 ⇒ 用 `requires` 表达是**编译期**拒绝，MUST NOT 推迟到运行期 |
+| 4 | ④ 回退 `sanitize(typeid)` | 回退 `typeid(...)`（**未 sanitize**）+ `CHWARN`（每组件一次） | `sanitize_name` 是 writer 成员函数（`codegen_verilog.h:52`）⇒ `component.h` 用不了；sanitize 归发射侧（T3-④）⇒ 与 ①a 的处理一致 |
+
+### 4.1 本段**不产生产物**（范围界定）
+
+`is_layer()` 的消费者是 **T3-② 分析层**与 **T3-④ 发射器** ⇒ ⇒ 「成层 ⇒ 真的多一个
+Verilog module」在本段**尚不可观测**（那是 T3-④ 的判据）。本段的判据面 = 「声明 → 判定 →
+模块类型名」这条链。
+
+### 4.2 一条如实登记的**等价变异**
+
+把 `module_type_name()` 的「实例名优先」改成「类级优先」⇒ 测试**恒绿**。
+原因：档 ② 永不写实例名（档 ② 的 `ch_layer` 单参形态）、档 ③ 只作用于**无**类级名的类型
+⇒ ⇒ 两条分支**互斥** ⇒ ⇒ 优先级顺序**不可观测**（⇒ 不是测试缺口；契约只钉「档 ② MUST
+继承类级名」，已由判据覆盖）。

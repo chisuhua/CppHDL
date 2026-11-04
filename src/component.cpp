@@ -105,6 +105,10 @@ Component::Component(Component&& other) noexcept
     , ctx_owner_(other.ctx_owner_)
     , construction_ctx_(other.construction_ctx_)
     , build_ctx_(other.build_ctx_)
+    , has_instance_layer_(other.has_instance_layer_)
+    , instance_layer_(other.instance_layer_)
+    , instance_module_type_name_(std::move(other.instance_module_type_name_))
+    , force_layer_warned_(other.force_layer_warned_)
     , deferred_builds_(std::move(other.deferred_builds_))
     , built_(other.built_)
     , destructing_(other.destructing_) {
@@ -125,11 +129,65 @@ Component::Component(Component&& other) noexcept
     other.destructing_ = false;
 }
 
+bool Component::is_layer() const {
+    // ① 总开关优先（逃生门 / 对比测试）
+    switch (granularity()) {
+    case Granularity::ForceInline:
+        return false;
+    case Granularity::ForceLayer:
+        return true;
+    case Granularity::RespectDeclarations:
+        break;
+    }
+    // ② 实例级覆盖（`ch_inline` / `ch_layer`）
+    if (has_instance_layer_) {
+        return instance_layer_;
+    }
+    // ③ 类级声明（`CH_HIERARCHY_LAYER`）
+    // ⚠️ 虚调用 ⇒ MUST 在运行期（构造完成后）取
+    return layer_name_literal() != nullptr;
+}
+
+void Component::set_instance_layer(bool is_layer) {
+    has_instance_layer_ = true;
+    instance_layer_ = is_layer;
+}
+
+void Component::set_instance_module_type_name(std::string name) {
+    instance_module_type_name_ = std::move(name);
+}
+
+thread_local Granularity g_granularity = Granularity::RespectDeclarations;
+
+Granularity Component::granularity() { return g_granularity; }
+void Component::set_granularity(Granularity g) { g_granularity = g; }
+
+Component::GranularityScope::GranularityScope(Granularity g) : saved_(g_granularity) {
+    g_granularity = g;
+}
+
+Component::GranularityScope::~GranularityScope() { g_granularity = saved_; }
+
 std::string Component::module_type_name() const {
-    // ⚠️ 虚调用 ⇒ MUST 在**运行期**（构造完成后）才取得到派生类的覆写
-    // （构造函数里调虚函数会取到**基类**版本 ⇒ ⇒ 故不在构造函数里调用）。
+    // 模块类型名的**四档来源**（ADR-059 §2.2.1）：
+    //   ③ 实例级给名（`ch_layer<Helper>` 的档 ③）⇒ 优先
+    //   ①/② 类级字面量（② 是「继承类级名字」⇒ 不设实例名即可）
+    //   ④ `Granularity::ForceLayer` 强制成层且用户未声明 ⇒ 回落 `typeid` + `CHWARN`
+    if (!instance_module_type_name_.empty()) {
+        return instance_module_type_name_;
+    }
     if (const char* literal = layer_name_literal()) {
         return std::string(literal);
+    }
+    if (!force_layer_warned_) {
+        force_layer_warned_ = true;
+        if (granularity() == Granularity::ForceLayer) {
+            // 平台替用户决定粒度 ⇒ ⇒ MUST 可观测（ADR-059 §2.2.1 ④）
+            CHWARN("Granularity::ForceLayer forces component '%s' to be a layer but it "
+                   "declares no module type name => falling back to typeid '%s' "
+                   "(implementation-defined => only comparable within the same ABI)",
+                   name_.c_str(), typeid(*this).name());
+        }
     }
     // ⚠️ 回落：同类型 ⇒ 同值 ✔；但 `typeid` 拼写**实现相关** ⇒ 跨平台不可复算
     // ⇒ ⇒ 契约限定「同一编译器 / 同一 ABI 内」。
@@ -161,6 +219,10 @@ Component& Component::operator=(Component&& other) noexcept {
         ctx_owner_ = other.ctx_owner_;
         construction_ctx_ = other.construction_ctx_;
         build_ctx_ = other.build_ctx_;
+        has_instance_layer_ = other.has_instance_layer_;
+        instance_layer_ = other.instance_layer_;
+        instance_module_type_name_ = std::move(other.instance_module_type_name_);
+        force_layer_warned_ = other.force_layer_warned_;
         deferred_builds_ = std::move(other.deferred_builds_);
         built_ = other.built_;
         destructing_ = other.destructing_;
