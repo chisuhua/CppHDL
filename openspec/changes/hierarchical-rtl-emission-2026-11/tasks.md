@@ -4,6 +4,26 @@
 > ⚠️ **前置**：**T3-②**（分析层）· **T3-③**（emitter 拆分）。
 > ⚠️ **本 change 的判据面最大** ⇒ ⇒ 建议**逐条**落地，每条都要有判别性对照。
 
+## T0 批次 B1（策略枚举收敛 · 零行为变化 · ✅ 2026-11-05）
+
+> 判据来源：ADR-060 §2.4（`PortPolicy` / `UndrivenPolicy` 的**唯一定义**在 `include/component.h`）
+> + ADR-061 v1.6.3 §2.5.1（粒度的**唯一入口** = RAII `Component::GranularityScope`）。
+
+- [x] 0.1 删 `HierarchyPortPolicy` / `HierarchyUndrivenPolicy`（`include/hierarchy_verilog.h`）
+      ⇒ ⇒ `HierarchyEmitOptions` 改用 `ch::PortPolicy` / `ch::UndrivenPolicy`
+      ⇒ ⇒ **唯一权威** = `include/component.h`（ADR-060 §2.4）
+- [x] 0.2 删 `Component::set_granularity()`（声明 + 定义）
+      ⇒ ⇒ 实测**零调用点** ⇒ ⇒ 绕过 RAII 的永久泄漏通道 ⇒ ⇒ 粒度只能经作用域设置
+- [x] 0.3 `HierarchyEmitOptions`：`top_module_name` 已有（默认 `top`）·
+      **无** `granularity` 字段（全局权威）⇒ ⇒ 与 ADR-061 v1.6.3 §2.5 一致
+- [x] 0.4 ⚠️ **C1 未答 ⇒「只加不删」的处置**：代码里**从未实现** `out_dir` /
+      `one_file_per_module` ⇒ ⇒ **无需保留任何字段** ⇒ ⇒ C1 的答案只影响
+      「是否需要新增多文件模式」（⇒ ⇒ 若 C1 答「必须」，则是**新增**而非**恢复**）
+- [x] 0.5 **判据**：编译期 `static_assert`（选项字段类型 == 权威枚举 + 默认值）+
+      **粒度作用域的三格判据**（半生效 ⇒ `RespectDeclarations` 形态 · 正向 `ForceInline`
+      ⇒ 单 module · 正向 `ForceLayer` ⇒ 3 module）+ 既有 4 用例绿 +
+      扁平外部基线 3 设计 `cmp` 全 0 + `ctest -LE perf` **238/238**
+
 ## T1 module 主体与实例化
 
 - [x] 1.1 每个成层组件产出一个 `module`（`<module_type_name>_<序号>`）

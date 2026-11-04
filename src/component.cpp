@@ -160,7 +160,6 @@ void Component::set_instance_module_type_name(std::string name) {
 thread_local Granularity g_granularity = Granularity::RespectDeclarations;
 
 Granularity Component::granularity() { return g_granularity; }
-void Component::set_granularity(Granularity g) { g_granularity = g; }
 
 Component::GranularityScope::GranularityScope(Granularity g) : saved_(g_granularity) {
     g_granularity = g;

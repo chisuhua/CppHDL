@@ -19,28 +19,15 @@
 
 namespace ch {
 
-/// 跨层非端口边的处理策略（ADR-060 §2.1 / §2.2）。
-enum class HierarchyPortPolicy {
-    /// 合成隐式端口 + `CHWARN`（默认）
-    SynthesizeWarn,
-    /// 合成隐式端口 + `CHWARN`，但**已列为拒绝**（保留枚举值 ⇒ 与 ADR-060 的线性枚举一致）
-    SynthesizeFatal,
-    /// 拒绝（抛）
-    Reject,
-};
-
-/// 悬空子输入的处理策略（ADR-060 §2.2）。
-enum class HierarchyUndrivenPolicy {
-    /// 逐级冒泡成顶层 input + `CHWARN`（默认）
-    Bubble,
-    /// 拒绝
-    Reject,
-};
-
 struct HierarchyEmitOptions {
-    HierarchyPortPolicy port_policy = HierarchyPortPolicy::SynthesizeWarn;
-    HierarchyUndrivenPolicy undriven_policy = HierarchyUndrivenPolicy::Bubble;
+    /// ⚠️ **策略枚举的**唯一权威**是 `ch::PortPolicy` / `ch::UndrivenPolicy`**
+    /// （`include/component.h` · ADR-060 §2.4）⇒ ⇒ 本文件 MUST NOT 再定义第二份副本
+    /// ⇒ ⇒ 否则「两份枚举必然漂移」（ADR-060 §2.4 的原话）。
+    PortPolicy port_policy = PortPolicy::SynthesizeWarn;
+    UndrivenPolicy undriven_policy = UndrivenPolicy::Bubble;
     /// 根 module 的名字（默认 `top`，与扁平产物同名 ⇒ 便于 A/B 比对）
+    /// ⇒ ⇒ 只由本选项决定（根组件自己写 `CH_HIERARCHY_LAYER("x")` MUST 是 no-op ·
+    /// ADR-061 v1.6.2 §2.5.2）。
     std::string top_module_name = "top";
 };
 

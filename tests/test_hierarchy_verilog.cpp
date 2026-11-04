@@ -24,6 +24,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace ch;
@@ -185,6 +186,77 @@ public:
 };
 
 }   // namespace
+
+// ═════════════════════════════════════════════════════════════════════════
+// 策略枚举的**单一权威**（ADR-060 §2.4）+ 粒度作用域（ADR-061 v1.6.3）
+// ═════════════════════════════════════════════════════════════════════════
+
+// ⚠️ 编译期判据：层次化发射的选项结构 MUST 用 `ch::PortPolicy` / `ch::UndrivenPolicy`
+//    （`include/component.h` 的**唯一定义**）⇒ ⇒ **不存在第二份副本**。
+static_assert(std::is_same_v<decltype(HierarchyEmitOptions{}.port_policy), ch::PortPolicy>,
+              "port_policy MUST use the single authoritative ch::PortPolicy");
+static_assert(std::is_same_v<decltype(HierarchyEmitOptions{}.undriven_policy), ch::UndrivenPolicy>,
+              "undriven_policy MUST use the single authoritative ch::UndrivenPolicy");
+static_assert(HierarchyEmitOptions{}.port_policy == ch::PortPolicy::SynthesizeWarn,
+              "default port policy MUST be SynthesizeWarn (ADR-060 §2.4)");
+static_assert(HierarchyEmitOptions{}.undriven_policy == ch::UndrivenPolicy::Bubble,
+              "default undriven policy MUST be Bubble (ADR-060 §2.4)");
+
+TEST_CASE("hierarchical emission: granularity scope covers construction and emission",
+          "[hierarchy][emit][granularity]") {
+    // ① **半生效**（负向）：scope **只**包构造、发射在 scope 之外
+    //    ⇒ ⇒ 发射时全局粒度已复原 ⇒ ⇒ 产物 MUST = `RespectDeclarations` 形态。
+    //    ⚠️ T3 的三个组件都**有**类级声明 ⇒ ⇒ `ForceInline` 与 `RespectDeclarations`
+    //    **可区分**（否则判据退化为恒真 —— metis 的要求）。
+    {
+        std::unique_ptr<ch::ch_device<T3>> dev;
+        {
+            ch::Component::GranularityScope scope(ch::Granularity::ForceInline);
+            dev = std::make_unique<ch::ch_device<T3>>();   // 构造在 scope 内
+        }   // scope 析构 ⇒ 粒度复原 ⇒ **发射在 scope 之外**
+        const std::string path = std::string(kOutDir) + "/gran_half_applied.v";
+        auto r = ch::toVerilogHierarchical(path, dev->instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        REQUIRE(count_occurrences(all, "module ") == 3);          // ⇒ RespectDeclarations
+        REQUIRE(all.find("module m3_unit (") != std::string::npos);
+        REQUIRE(all.find("module l3_unit (") != std::string::npos);
+    }
+
+    // ② **正向**：scope **同时覆盖构造与发射** + `ForceInline`
+    //    ⇒ ⇒ 产物 MUST 是**单 module**（全部 inline）。
+    {
+        const std::string path = std::string(kOutDir) + "/gran_force_inline.v";
+        std::string all;
+        {
+            ch::Component::GranularityScope scope(ch::Granularity::ForceInline);
+            ch::ch_device<T3> dev;
+            auto r = ch::toVerilogHierarchical(path, dev.instance());
+            INFO("error: " << r.error);
+            REQUIRE(r.ok);
+            all = read_file(path);
+        }
+        REQUIRE(count_occurrences(all, "module ") == 1);
+        REQUIRE(all.find("module m3_unit (") == std::string::npos);
+    }
+
+    // ③ **正向**：`ForceLayer` 覆盖构造与发射 ⇒ ⇒ 每个组件都成层
+    //    （DUT 用**全 inline** 的 `IInline` ⇒ 否则与 `RespectDeclarations` 恒等 ⇒ 判据空转）。
+    {
+        const std::string path = std::string(kOutDir) + "/gran_force_layer.v";
+        std::string all;
+        {
+            ch::Component::GranularityScope scope(ch::Granularity::ForceLayer);
+            ch::ch_device<IInline> dev;
+            auto r = ch::toVerilogHierarchical(path, dev.instance());
+            INFO("error: " << r.error);
+            REQUIRE(r.ok);
+            all = read_file(path);
+        }
+        REQUIRE(count_occurrences(all, "module ") == 3);
+    }
+}
 
 // ═════════════════════════════════════════════════════════════════════════
 // 三层：3 个 module + 2 条实例化语句 · 顶层端口 = 扁平端口

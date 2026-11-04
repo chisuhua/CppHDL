@@ -104,6 +104,24 @@
 | **F5** | ADR-061 §2.5 的选项结构含 `Granularity`；仓内 `Granularity` 是**全局**（`Component::set_granularity` + RAII `GranularityScope`） | ⇒ ⇒ 两个机制并存 ⇒ ⇒ 建议**沿用全局 + RAII**（T3-⑤ 的 ForceInline/ForceLayer 直接用 `GranularityScope`）⇒ ⇒ 选项结构**不加**该字段 ⇒ ⇒ 记为**与 ADR-061 §2.5 的偏差** |
 | **F6** | ADR-061 §2.5 的 `out_dir` + `one_file_per_module = true` 暗示**一 module 一文件**；T3-④ 实现的是**一个文件多 module** | ⇒ ⇒ 偏差 ⇒ ⇒ 但对 T3-⑤ 有利（Verilator backend 编译**单文件**）⇒ ⇒ 建议**保留单文件** + 登记偏差（待 architect 补一格 ADR） |
 
+### 7.0.1 批次进度（2026-11-05 起）
+
+| 批 | 状态 | 关键证据 |
+|---|---|---|
+| **B1** 策略枚举收敛 | ✅ **已落地** | 删两份重复枚举 + 删 `Component::set_granularity()` · 编译期 `static_assert` · **粒度作用域三格判据**（半生效 / 正向 ForceInline / 正向 ForceLayer）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 |
+| **B2a** collect 化 | ⏳ | — |
+| **B2b** 隐式端口合成 | ⏳ | — |
+| **B3** 冒泡 + 端口完整性 + 拒绝类 + 白名单 | ⏳ | — |
+| **B4** 护栏 + CI + 归档 | ⏳ | — |
+
+⚠️ **B1 的两处「偏离 / 处置」登记**：
+① **返回类型偏离**：ADR-058 §2.3 写 `std::expected<HierManifest, HierError>`，
+   而已落地的是**同构 struct** `HierarchyEmitResult{ok, error, files, warnings}`
+   ⇒ ⇒ 语义等价（失败可被调用方观测 + 诊断可承载）⇒ ⇒ **登记为实现取舍**（不改 ADR）。
+② **C1 的处置**：代码里**从未**实现 `out_dir` / `one_file_per_module`
+   ⇒ ⇒ 「C1 未答 ⇒ 只加不删」**无对象** ⇒ ⇒ 若 C1 答「必须文件级切分」⇒ ⇒ 是**新增**模式，
+   **不是恢复** ⇒ ⇒ 届时 backend 的文件列表 + 缓存 key 改造成本依旧。
+
 ### 7.1 T3-④ 剩余：4 个批次（每批一个 commit）
 
 #### B1 策略枚举收敛（**无行为变化** · 最小）

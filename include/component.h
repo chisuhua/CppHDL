@@ -121,7 +121,6 @@ public:
 
     /// 粒度总开关（默认 `RespectDeclarations`）。
     static Granularity granularity();
-    static void set_granularity(Granularity g);
 
     /// RAII：在作用域内临时切粒度总开关（**异常安全** ⇒ 嵌套亦可）。
     struct GranularityScope {
