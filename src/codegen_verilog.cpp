@@ -346,12 +346,17 @@ void ModuleEmitter::print_header(std::ostream &out) {
 
 void ModuleEmitter::print_body(std::ostream &out) {
     try {
-        // Check if we're in static destruction phase
-
         print_decl(out);
         out << "\n";
         print_logic(out);
         out << "\n";
+        // 层次化发射的实例化语句（扁平路径的 `body_epilogue` 恒为空）
+        for (const auto &line : view_.body_epilogue) {
+            out << line << "\n";
+        }
+        if (!view_.body_epilogue.empty()) {
+            out << "\n";
+        }
     } catch (...) {
         // Silently ignore exceptions
     }
@@ -378,6 +383,18 @@ void ModuleEmitter::print_decl(std::ostream &out) {
         for (auto *node : nodes_) {
             if (declared_nodes_.count(node))
                 continue; // Skip if already processed
+            // ⚠️ **module 端口节点 MUST NOT 再声明成内部 wire**（否则同名重复声明）
+            //    （扁平路径：端口 = 无 driver 的 input + output + clock/reset ⇒ 本分支不触发）
+            bool is_module_port = false;
+            for (auto *port_node : view_.ports) {
+                if (port_node == node) {
+                    is_module_port = true;
+                    break;
+                }
+            }
+            if (is_module_port) {
+                continue;
+            }
 
             switch (node->type()) {
             case ch::core::lnodetype::type_input: {
@@ -529,6 +546,11 @@ void ModuleEmitter::print_logic(std::ostream &out) {
                 {
                     auto *output_node =
                         static_cast<ch::core::outputimpl *>(node);
+                    // ⚠️ 层次化：驱动在**别的 module**（e.g. 子 module 的输出）
+                    //    ⇒ 本 module 不发这条 assign ⇒ 值由**实例端口映射**提供
+                    if (view_.suppress_driver_assign.count(node) != 0) {
+                        break;
+                    }
                     if (output_node->num_srcs() > 0) {
                         ch::core::lnodeimpl *driver = output_node->src(0);
                         while (driver &&
@@ -576,6 +598,10 @@ void ModuleEmitter::print_logic(std::ostream &out) {
                     auto *input_node =
                         static_cast<ch::core::inputimpl *>(node);
                     ch::core::lnodeimpl *driver = input_node->driver();
+                    // ⚠️ 层次化：驱动在别的 module ⇒ 由实例端口映射驱动本输入
+                    if (view_.suppress_driver_assign.count(node) != 0) {
+                        break;
+                    }
                     if (driver != nullptr) {
                         // Walk only UNNAMED proxies; named wires
                         // already have their own declaration +
@@ -1013,6 +1039,11 @@ void ModuleEmitter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
             if (src_node &&
                 src_node->type() ==
                     ch::core::lnodetype::type_mem_read_port) {
+                return;
+            }
+            // ⚠️ 层次化：驱动在**别的 module** ⇒ 该值由实例端口映射提供
+            //    ⇒ 本 module MUST NOT 发这条 assign（否则引用未声明信号）
+            if (view_.suppress_driver_assign.count(node) != 0) {
                 return;
             }
             if (src_node && node_names_.count(src_node) &&

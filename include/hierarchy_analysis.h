@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ch {
@@ -92,6 +93,9 @@ struct HierarchyAnalysis {
     std::vector<HierarchyEdge> edges;
     /// 分析期告警（**可审计**：既打 `CHWARN` 也留在这里 ⇒ 判据可断言）
     std::vector<std::string> warnings;
+    /// 节点 → 折叠后的 module key（`owner == nullptr` ⇒ 根 module 的 key）
+    /// ⇒ ⇒ 发射器据此判断「某条驱动边是否跨 module」（跨了就 MUST 由实例端口映射接管）
+    std::unordered_map<const ch::core::lnodeimpl *, std::string> module_of_node;
 
     /// 结构化文本快照（golden 形态 ⇒ 可逐字节比对）。
     /// ⚠️ 确定性：模块按拓扑序；端口按节点 id 升序；体内节点按 id 升序；

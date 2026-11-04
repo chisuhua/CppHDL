@@ -1085,6 +1085,9 @@ target_compile_definitions(test_hierarchy_analysis PRIVATE
 # ModuleEmitter + make_flat_module_view (byte-identical), and clock/reset names
 # are parameterized so sub-modules never reference the RTL-top default clocks.
 add_catch_test(test_verilog_module_emitter test_verilog_module_emitter.cpp)
+# hierarchical emission (hierarchical RTL T3-④): 3 modules + 2 instances, top ports
+# == flat ports, per-module clock/reset decision, determinism, error model.
+add_catch_test(test_hierarchy_verilog test_hierarchy_verilog.cpp)
 add_catch_test(test_module test_module.cpp)
 # dual-backend-test-coverage (Phase 1): 3 CH_MODULE timing tests
 # migrated to DUAL_BACKEND_TEST_PAIR.

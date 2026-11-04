@@ -72,6 +72,9 @@ void collect(Component* c, Tree& t) {
 }
 
 /// 最近的**成层**祖先（含自己）⇒ inline 折叠（ADR-061 决策②）。
+///
+/// ⚠️ **根组件永远是 RTL 顶层 module** ⇒ 即使它自己**没**声明成层（= 全 inline 设计），
+///    走到根时 MUST 返回根（`nullptr` 会让根的节点**全部丢失** ⇒ 产物只剩空壳）。
 Component* nearest_layer(Component* c, const Tree& t) {
     while (c != nullptr) {
         auto it = t.layered.find(c);
@@ -79,7 +82,10 @@ Component* nearest_layer(Component* c, const Tree& t) {
             return c;
         }
         auto pit = t.parent.find(c);
-        c = (pit == t.parent.end()) ? nullptr : pit->second;
+        if (pit == t.parent.end()) {
+            return (c == t.root) ? c : nullptr;   // 根 = RTL 顶层
+        }
+        c = pit->second;
     }
     return nullptr;
 }
@@ -181,6 +187,15 @@ HierarchyAnalysis analyze_hierarchy(Component& root) {
     }
 
     auto module_key = [](const Component* c) { return c->name(); };
+
+    // ── 节点 → module key（发射器用：判断驱动边是否跨 module）
+    for (const auto& owned : ctx->get_nodes()) {
+        auto* owner = owned->get_parent();
+        Component* mc = (owner == nullptr) ? &root : nearest_layer(owner, tree);
+        if (mc != nullptr) {
+            out.module_of_node[owned.get()] = mc->name();
+        }
+    }
 
     // ── 模块清单（拓扑序：post-order 里成层的 + 根）
     std::unordered_map<const Component*, std::size_t> module_index;

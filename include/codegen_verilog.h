@@ -53,6 +53,16 @@ struct ModuleView {
     std::vector<ch::core::lnodeimpl *> ports;
     /// 节点的 Verilog 名（**全局**唯一表 ⇒ 端口名与扁平产物逐字相同）
     std::unordered_map<const ch::core::lnodeimpl *, std::string> names;
+    /// body 尾部追加的原文（层次化发射用它写**实例化语句**与实例连接网）。
+    /// ⚠️ 扁平路径恒为空 ⇒ ⇒ 产物逐字节不变。
+    std::vector<std::string> body_epilogue;
+    /// **本 module 内 MUST NOT 发驱动赋值的节点**。
+    ///
+    /// ⚠️ 层次化：一个节点的驱动若在**别的 module** ⇒ 那个信号在本 module 里
+    ///    **不存在** ⇒ 发 `assign <node> = <别 module 的信号>` = 引用未声明标识符
+    ///    ⇒ ⇒ 该值 MUST 由**实例端口映射**（`.port(net)`）提供 ⇒ 本 module 不发这条 assign。
+    /// ⚠️ 扁平路径恒为空 ⇒ ⇒ 产物逐字节不变。
+    std::unordered_set<const ch::core::lnodeimpl *> suppress_driver_assign;
 };
 
 /// 扁平产物的 `ModuleView`（= 拆分前的行为：整个 ctx 一个 `module top`）。

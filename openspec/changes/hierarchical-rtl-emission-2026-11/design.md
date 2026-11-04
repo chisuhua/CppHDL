@@ -43,3 +43,46 @@
 |---|---|---|
 | 3 | 隐式端口方向搞反 ⇒ 错 RTL | 方向矩阵 4 行各一用例（边界 #14/#15/#16） |
 | 5 | 用户把所有组件都声明成层 ⇒ 回到碎片化 | 诊断 API（feature 的 **P6** · 待用户拍板）报告每层规模；**MUST NOT** 用启发式替用户裁剪 |
+
+---
+
+## 6. 实施进度（**第一部分**：核心形态已落地；隐式端口等仍待做）
+
+落点：`include/hierarchy_verilog.h` + `src/hierarchy_verilog.cpp`
+（`toVerilogHierarchical(path, root, options)` ⇒ **一个文件、多个 module**，子在前、根在后）
++ `include/codegen_verilog.h`（`ModuleView::body_epilogue` / `::suppress_driver_assign`）
++ `include/hierarchy_analysis.h`（`HierarchyAnalysis::module_of_node`）。
+
+### 6.1 已落地（逐条对应 Acceptance）
+
+| Acceptance 项 | 状态 | 证据 |
+|---|---|---|
+| 三层设计 ⇒ 3 个 module + 2 条实例化语句 | ✅ | `tests/test_hierarchy_verilog.cpp` 的 `[hierarchy][emit]` |
+| RTL 顶层端口表 = 扁平端口表（逐字逐序） | ✅ | 同上；**全 inline 时整份产物与扁平逐字节相同**（实测） |
+| 零跨 module `assign` | ✅ | 跨 module 的驱动边 ⇒ 值由**实例端口映射**提供（`suppress_driver_assign`） |
+| clock / reset **分开判** | ✅ | 纯 RAM 写 module **只有 clock**（`[hierarchy][emit][clock]`） |
+| 确定性 | ✅ | 两次生成逐字节相同 |
+| 错误模型（校验先于 I/O · 临时文件→rename · 不留半套产物 · 可观测） | ✅ | `[hierarchy][emit][error]`：失败 ⇒ `ok=false` + 无文件、无 `.tmp` |
+| 顶层 module 名 | ✅ | 默认 `top`（与扁平同名 ⇒ 便于 A/B 比对） |
+
+### 6.2 实施期挖出并修掉的三个真问题
+
+1. **跨 module 的驱动边**在子 module 内仍发 `assign <子输入> = <父层信号>` ⇒ 引用**本模块里不存在**
+   的信号 ⇒ ⇒ 新增 `ModuleView::suppress_driver_assign`（跨 module ⇒ 本 module 不发这条 assign）。
+   ⚠️ 扁平路径该集合**恒空** ⇒ 扁平产物逐字节不变（外部基线 3 个设计 `cmp` 全 0）。
+2. **module 端口节点被重复声明**（既是端口又是内部 `logic`）⇒ Verilator 报
+   `Duplicate declaration of signal` ⇒ ⇒ `print_decl` MUST 跳过 module 端口节点。
+3. **实例化缺 clock/reset pin** ⇒ `PINMISSING` ⇒ ⇒ **时钟需求向上传导**（子要 clock ⇒ 父也要）
+   + 实例化补连 `.default_clock(...)` / `.default_reset(...)`。
+
+⚠️ **顺带修掉一个分析层缺陷**：`nearest_layer()` 在**根组件未声明成层**时返回 `nullptr`
+⇒ 全 inline 设计的根节点**全部丢失**（产物只剩空壳）⇒ ⇒ 根组件**永远**是 RTL 顶层 module。
+
+### 6.3 尚未落地（仍在本 change 内）
+
+- **隐式端口合成**（ADR-060 §2.1 方向矩阵四行 + 第三轴 pass-through）⇒ 当前**响亮拒绝**
+  （fail-closed：MUST NOT 产出非法 Verilog）。
+- **悬空冒泡**的 `strict` 抛（`Bubble` 已由分析层提供）。
+- **接口白名单**（ADR-062 §2.6）。
+- 护栏脚本 `scripts/verify_hierarchical_rtl.sh` + CI 两处。
+- 等价性验证（**T3-⑤**，另一个 change）。
