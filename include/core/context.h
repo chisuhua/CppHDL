@@ -31,6 +31,19 @@ namespace ch::core {
 
 extern thread_local context *ctx_curr_;
 
+/// ADR-059 D10：节点归属抑制。
+/// `context::init()` 建 `default_clock` / `default_reset` 期间 MUST 开启
+/// ⇒ ⇒ 「context 级节点不归属任何组件」这条契约才成立。
+/// ⇒ 由 `Component::node_owner()` 查询。
+bool node_ownership_suppressed();
+
+struct NodeOwnershipSuppression {
+    NodeOwnershipSuppression();
+    ~NodeOwnershipSuppression();
+    NodeOwnershipSuppression(const NodeOwnershipSuppression &) = delete;
+    NodeOwnershipSuppression &operator=(const NodeOwnershipSuppression &) = delete;
+};
+
 class ctx_swap {
 public:
     explicit ctx_swap(context *new_ctx);

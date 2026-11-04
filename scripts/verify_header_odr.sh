@@ -43,8 +43,19 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="$REPO/tests/fixtures/header_odr_link"
 TU_A="$FIXTURE_DIR/tu_a.cpp"
 TU_B="$FIXTURE_DIR/tu_b.cpp"
-MODULE_H="$REPO/include/module.h"
+# ⚠️ 被测定义**住哪个头**会随重构变化（T3-①a 把它从 `include/module.h`
+#    移到了 `include/component.h` —— 全路径拼接的唯一真源 MUST 与「计算它的那一处」
+#    同文件）⇒ ⇒ 锚点 MUST **动态定位**，MUST NOT 硬编码单个文件名
+#    （硬编码的后果实测过：`--self-test` 报「锚点不存在 ⇒ 判定作废」，
+#    而主路径仍 PASS ⇒ 判别力**静默失效**）。
 ANCHOR_RE='^inline std::string build_hierarchical_name'
+TARGET_H=""
+for _cand in "$REPO/include/component.h" "$REPO/include/module.h" "$REPO/include/ch.hpp"; do
+    if [ -f "$_cand" ] && grep -q "$ANCHOR_RE" "$_cand"; then
+        TARGET_H="$_cand"; break
+    fi
+done
+MODULE_H="$TARGET_H"          # 保留旧变量名（下面的引用全部改指 TARGET_H）
 
 INCLUDES=(-I "$REPO/include" -I "$REPO/include/core" -I "$REPO/include/ast"
           -I "$REPO/include/abstract" -I "$REPO/include/utils"
@@ -161,16 +172,16 @@ if [ "${1:-}" = "--self-test" ]; then
     echo "── R2 判别力自证（原地去掉 inline ⇒ R1 必须转红） ──"
 
     if [ ! -f "$MODULE_H" ]; then
-        fail "R2：缺 $MODULE_H"
+        fail "R2：找不到含投毒锚点的公共头（component.h / module.h / ch.hpp）"
     elif ! grep -q "$ANCHOR_RE" "$MODULE_H"; then
         # fail-closed：锚点不存在 ⇒ 报告「无法投毒」，MUST NOT 报成「判别力为零」
-        fail "R2：投毒锚点不存在（module.h 里找不到 '$ANCHOR_RE'）"
-        note "⇒ 若实现已改用别的 inline 形态，MUST 同步更新本脚本的锚点"
+        fail "R2：投毒锚点不存在（component.h / module.h / ch.hpp 里都找不到 '$ANCHOR_RE'）"
+        note "⇒ 若实现已改用别的 inline 形态，MUST 同步更新本脚本的候选头清单"
     elif [ "$V" != "OK" ]; then
         # R1 本来就不绿 ⇒ 投毒对比无意义（不谎报判别力）
         fail "R2：R1 已失败 ⇒ 无法判定判别力（先让 R1 变绿）"
     else
-        BACKUP="$WORK/module.h.bak"
+        BACKUP="$WORK/$(basename "$MODULE_H").bak"
         cp "$MODULE_H" "$BACKUP"
 
         # 原地投毒：普通 s///（⚠️ MUST NOT 把 ANCHOR_RE 当 sed **地址**用 ——

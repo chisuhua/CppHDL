@@ -19,7 +19,14 @@ public:
         // .omo/evidence/task-6-debug-notes.md for the full analysis.
         ctx_ = std::make_unique<ch::core::context>("top_ctx");
         ch::core::ctx_swap ctx_guard(ctx_.get());
-        top_ = std::make_shared<T>(nullptr, "top", std::forward<Args>(args)...);
+        {
+            // ADR-059 §2.1 / D6①：顶层组件的 CONSTRUCT 作用域帧在这里截断
+            // （基类构造无法感知「派生类成员造完」，唯一知道的那一方是这里）⇒
+            // 顶层的成员节点（`ch_reg` / `ch_mem` / bundle 字段）归属**顶层组件**，
+            // 而不是「无归属」。
+            ch::Component::ConstructionFrame frame;
+            top_ = std::make_shared<T>(nullptr, "top", std::forward<Args>(args)...);
+        }
         top_->build(ctx_.get());
     }
 

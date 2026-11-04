@@ -3,6 +3,8 @@
 
 #include "io.h"
 #include "logger.h"
+#include <cstddef>
+#include <functional>
 #include <string>
 #include <memory>
 #include <vector>
@@ -77,13 +79,56 @@ public:
     static Component* current() { return current_; }
     static void set_current(Component* comp) { current_ = comp; }
 
+    /// **节点归属的唯一真源**（ADR-059 §2.1 / D1）：
+    /// 最内层「构造 / build 作用域」的组件；作用域为空时回落到 `current()`。
+    ///
+    /// ⚠️ MUST NOT 另立归属规则（「`parent_ == nullptr` ⇒ 归顶层」是**事后**规则
+    /// ⇒ 归错层的节点会被"修好" ⇒ 掩盖真正的缺陷）。
+    /// ⚠️ `lnodeimpl` 的 `parent_`、`ch_module` 的 parent、`io.h` 的 4 处方向守卫
+    /// MUST 全部用它 ⇒ ⇒ 归属只有**一处**判定实现。
+    static Component* node_owner();
+
+    /// 当前作用域栈深度（**只用于判据 / 诊断**）。
+    /// ⚠️ 作用域 MUST 配对 ⇒ 组件外的深度 MUST 回到 0。
+    static std::size_t scope_depth() { return scope_.size(); }
+
+    /// RAII：把作用域栈截断回**构造本对象时的深度**。
+    ///
+    /// ⚠️ 为什么需要它：`Component` 的**基类构造先于派生类的成员构造**
+    /// ⇒ 基类里压入的作用域帧必须活到「派生类成员构造完毕」才有意义，
+    /// 而基类构造**无法**感知那一刻 ⇒ ⇒ 由**唯一知道「构件造完」的那一方**
+    /// （`ch_device` / `ch_module` / `create_child`）在 `make_shared` /
+    /// `make_unique` **返回后**截断。
+    /// ⇒ ⇒ 直接构造（不经上述三者）的组件，其帧保留到**析构**（析构里兜底移除）
+    /// ⇒ ⇒ 已知限制：该对象存活期间「组件外建的节点」会归属到它。
+    struct ConstructionFrame {
+        ConstructionFrame();
+        ~ConstructionFrame();
+        ConstructionFrame(const ConstructionFrame&) = delete;
+        ConstructionFrame& operator=(const ConstructionFrame&) = delete;
+
+    private:
+        std::size_t depth_;
+    };
+
+    /// 登记一个「等拿到 ctx 再执行」的子组件 build（ADR-059 D2′）。
+    ///
+    /// ⚠️ 用途：`ch_module` 在**环境 ctx 为空**时（下游 `make_unique<Unit>()`
+    /// 然后 `build(ctx)` 的常态 —— Unit 的 ctor 跑在 `build` 之前）MUST NOT
+    /// 硬失败 ⇒ ⇒ 把子组件的 build 推迟到宿主 `build(ctx)` 时执行。
+    void defer_build(std::function<void(ch::core::context*)> fn);
+
     // 统一的子组件管理方法 - 返回 shared_ptr
     template<typename T, typename... Args>
     std::shared_ptr<T> create_child(const std::string& name, Args&&... args) {
         CHDBG_FUNC();
         CHREQUIRE(!name.empty(), "Child component name cannot be empty");
-        
+
         try {
+            // ⚠️ D6③：create_child **不压任何作用域**（子组件的 ctor 自己压）
+            // ⇒ ⇒ 这里只需要「构造完就截断」⇒ 否则子组件的作用域帧会残留
+            // ⇒ 之后**每一个**节点归属被污染。
+            ConstructionFrame frame;
             auto child = std::make_shared<T>(this, name, std::forward<Args>(args)...);
             children_shared_.push_back(std::static_pointer_cast<Component>(child));
             CHDBG("Created child component: %s", name.c_str());
@@ -129,10 +174,31 @@ protected:
 
 private:
     static thread_local Component* current_;
+    /// 作用域栈（ADR-059 §2.1）：`Component` 构造期 / `build_internal()` 期进入。
+    /// ⚠️ **配对**：构造期由 `ConstructionFrame` 截断，build 期由 RAII 弹出
+    /// ⇒ ⇒ 无泄漏（⇒ 不需要析构兜底 —— 但**直接构造**的组件由析构兜底移除）。
+    static thread_local std::vector<Component*> scope_;
+
     bool built_ = false;
     bool destructing_ = false;  // 标记是否正在析构
-    
+
+    /// 构造期的**环境 ctx**（D2″ 分支 ① 的基准；可能为 `nullptr`）。
+    ch::core::context* construction_ctx_ = nullptr;
+    /// 首次 `build()` 绑定的 ctx（D2″ 分支 ② 的基准）。
+    ch::core::context* build_ctx_ = nullptr;
+    /// 待执行（等 ctx）的子组件 build（D2′）。
+    std::vector<std::function<void(ch::core::context*)>> deferred_builds_;
+
     void build_internal(ch::core::context* target_ctx);
+
+    /// 从作用域栈移除本组件（**兜底**：直接构造的组件析构时清掉残留帧）。
+    void erase_scope_frame();
+
+    /// 把子组件的 `parent_` 补绑到本组件（ADR-059 D9）。
+    /// ⚠️ 为什么不在 `add_child` 里一次做完：成员形态的 `ch_module` 在**宿主
+    /// 构造期**创建子组件，而宿主那时**还没被 `shared_ptr` 接管**
+    /// ⇒ `weak_from_this()` 为空 ⇒ ⇒ 补绑 MUST 推迟到 `build()`（那时已接管）。
+    void rebind_children_parents();
 
     Component(const Component&) = delete;
     Component& operator=(const Component&) = delete;

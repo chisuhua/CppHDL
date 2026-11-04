@@ -51,3 +51,28 @@
 |---|---|---|
 | 1 | 归属修错方向 ⇒ 整棵子树归错父（**比现状更难定位**） | 本 change 的判据（归属↔语义分流回归）+ 架构文档附录 A 的探针入仓为断言 |
 | 6 | 下游 ODR 缺陷未修 ⇒ 多 TU 项目链接失败 | ✅ **已解决** —— `header-odr-inline-fix-2026-11`（公共头 ODR）**已于 2026-11-04 归档** |
+
+---
+
+## 4. 实施期偏离记录（**文档 MUST 与代码一致**）
+
+| # | ADR 的推导 | 实施期实测 | 处置（决策未变） |
+|---|---|---|---|
+| 1 | D6①「`Component::Component()` 压入 CONSTRUCT 作用域，**构造函数出口**弹出（配对）」 | **基类构造先于派生类成员构造** ⇒ 基类里的局部守卫会在**成员构造之前**析构 ⇒ 作用域帧根本盖不到成员 | 新增 `Component::ConstructionFrame`（RAII **截断**）⇒ 由**唯一知道「构件造完」**的三方（`ch_device` / `ch_module` / `create_child`）在 `make_shared`/`make_unique` **返回后**截断。⇒ 直接构造（三者之外）的帧保留到析构（`~Component` 兜底 `erase_scope_frame()`）⇒ **已知限制**：该对象存活期间「组件外建的节点」归它 |
+| 2 | D9「`add_child()` MUST 补绑 `child->parent_ = this->weak_from_this()`」 | 成员形态 `ch_module` 调用 `add_child` 时**宿主自己还在构造中** ⇒ 宿主的 `weak_from_this()` 为空 ⇒ 补绑**不生效** | `add_child` 仍补绑（覆盖 `create_child` 等宿主已托管的路径）**且**在宿主 `build()` 里再补一次（`rebind_children_parents()` —— 那时 `shared_ptr` 已接管）⇒ 两处合起来覆盖全部路径 |
+| 3 | D10「`context::init()` 建 clock/reset MUST 用『无归属』哨兵」（未指定落点） | 把哨兵做成 `Component` 的嵌套类型 ⇒ `src/core/context.cpp` 需 include `component.h` ⇒ 带入 `core/io.h` 的 `ch::core::core` 别名 ⇒ **破坏该 TU 既有的 `core::clockimpl` 限定名**（编译失败） | 提到 core 侧：`core::NodeOwnershipSuppression` + `node_ownership_suppressed()`（`include/core/context.h`，定义在 `src/core/context.cpp`）；`Component::node_owner()` 查询它 |
+
+### 4.1 实施期确认的两条边界（不是偏离，是**范围界定**）
+
+1. **环境 ctx 为空时，子组件的「成员节点」建不出来** —— 节点创建需要 active ctx
+   ⇒ ⇒ D2′ 的推迟机制只保证「子组件的 **build**（端口 / describe）不丢」，
+   不保证「无 ctx 时也能构造含 `ch_reg` 的组件」。⇒ 判据用**无成员节点**的子组件。
+2. **in-tree 无「构造在 ctx 内却用 `build()`（无 external ctx）自建 ctx」的调用**
+   ⇒ ⇒ D2″ 分支 ① 的守卫不会误伤现存代码；该形态从「静默丢子模块」变成**响亮拒绝**。
+
+### 4.2 文本变化面（ADR-059 D5 允许：语义等价、文本有变）
+
+**构造期**建的成员节点名现在带组件全路径（`_reg` → `top.mid.leaf._reg`，
+`reg_3` → `top.mid.leaf.reg_3`）⇒ ⇒ Verilator 的 SHA-1 缓存 key 全失效
+⇒ 首次 `ctest -LE perf` 的墙钟从 **357 → 714 sec*proc**（**冷编译**，非性能回归；
+零测试失败）。

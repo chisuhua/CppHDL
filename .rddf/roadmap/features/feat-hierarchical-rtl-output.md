@@ -82,6 +82,27 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | 0-4 | `T3-③` / `T3-⑥` 显式 `skip_specs: true`（纯重构 / 纯文档） | ✅ 两者 `openspec validate` 均 valid |
 | 0-5 | **退役**两个被拆空的 legacy change | ✅ `hierarchical-rtl-output-2026-11`（内容全部分派到 8 个新 change）· `component-framework-hardening-2026-10`（U-4 → T2a 已归档 · U-1/U-2 → T2b，实测证据搬进 T2b 的附录） |
 
+### 实施进度（**每段一个 change，逐个验收/归档**）
+
+| 段 | change | 状态 | 关键证据 |
+|---|---|---|---|
+| **T2a** | `header-odr-inline-fix-2026-11` | ✅ **已归档**（2026-11-04） | 链接期判据 `scripts/verify_header_odr.sh`（含 `--self-test`）· capability `core-header-odr-safety` |
+| **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | ✅ **已归档**（2026-11-04） | `tests/test_component_naming.cpp` + 3 个编译期 fixture + `scripts/verify_component_naming.sh`（R0–R4 + `--self-test`）· 深度 ≥3 = `top.m.lf` |
+| **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | ✅ **已实施**（2026-11-04） | `tests/test_component_ownership.cpp`（8 用例 / 76 断言）· **`ch_device<Rv32iPipeline>` 不 SIGSEGV** · 变异 6/6 全抓 · 3 处实施期订正见 `design.md` §4 |
+| T3-①c | `hierarchical-rtl-granularity-declaration-2026-11` | ⏳ 待实施（前置 ①a/①b 已就绪） | — |
+| T3-② | `hierarchical-rtl-analysis-2026-11` | ⏳ | — |
+| T3-③ | `hierarchical-rtl-emitter-split-2026-11` | ⏳ | — |
+| T3-④ | `hierarchical-rtl-emission-2026-11` | ⏳ | — |
+| T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ⏳ | — |
+| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ | — |
+| T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
+
+> ⚠️ **①b 带来的两条待跟踪事项**（后续段 MUST 携带）：
+> ① **直接构造**（不经 `ch_device` / `ch_module` / `create_child`）的组件，其构造作用域帧保留到析构
+>    ⇒ 该对象存活期间「组件外建的节点」会归属它（`design.md` §4 偏离 1 的已知限制）。
+> ② **构造期建的成员节点名**现在带组件全路径 ⇒ Verilator 缓存 key 全失效
+>    （首轮 `ctest -LE perf` 墙钟 357 → 714 sec*proc，**冷编译**，非性能回归）。
+
 > ⚠️ **R 编号不是稳定 ID**：本文件的 R1…R8 / R1…R14 **= 该 delta 文件内 Requirement 的**出现顺序**。
 > ⇒ ⇒ **这份映射在「第 0 步」执行时冻结** ⇒ ⇒ 之后任何 Requirement 增删 MUST **同步本文件的表**，
 > 否则「哪条归哪个 change」会静默漂移。
@@ -91,8 +112,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **S0** | ✅ **spike（已完成 2026-11-02）** | `verilator --json-only` 能否提 `(parent_module, inst_name, module_name)` ⇒ **能**（`modulesp` 列表 + CELL 的 `modp` 查表）⇒ 已固化 `scripts/lib/verilog_tree_extract.py` + `tests/fixtures/hierarchical_tree_extract/` + `scripts/verify_hierarchical_tree_extract.sh`（含负向对照）+ CI 挂载 | 无 | 可机械比对的 module 树提取器 | 3 层**手写** SV 上提取成功 ✅ | ~0.5 天（已耗） |
 | **T2a** | `header-odr-inline-fix-2026-11` | `include/module.h:13` 的 `build_hierarchical_name` 加 `inline`（⇒ 它是 `ch.hpp` 闭包内**唯一**非 inline 自由函数） | 无 | ODR 安全的公共头 + **multi-source 链接 fixture** | 两个 TU 同时 inclusion 后**链接成功**（无重复定义）· 既有单 TU 产物**零变化** | **1 词 + 1 fixture** |
 | **T2b** | `component-io-const-and-node-name-policy-2026-11` | **U-2**（`io() const`）+ **U-1**（opt-in 节点名唯一性） | **无（与主线并行）** | `io() const` · `context::node_name_policy` | `const` 成员函数可读 `io()`；policy=**off**（默认）时产物**逐字节不变**；policy=on 时重名**被拒** | 小 |
-| **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**：`build_hierarchical_name` 改用 `name()` · `local_name_` / `module_type_name()` · **合并宏** `CH_HIERARCHY_LAYER("name")`（= 声明 + 命名一体）· 命名权威仍是 ctx 级全局表 | **T2a** | 归属**命名**正确（无重复前缀）· 类级缺名**编译期不可表达** | 深度 ≥3 实例路径**无重复前缀**；**零语义变更**（文本**会变** ⇒ 变化面逐条登记） | 小 |
-| **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**：`node_owner()` + 构造作用域栈（RAII 配对）· `ch_module` parent · **build ctx 显式来源 + 跨 ctx 守卫** · 组件树登记双向完整 | **T3-①a** | 归属正确 · 组件树完整 | ADR-059 §5 全部判据 + **归属↔语义分流回归**（`simulator_init.cpp:95` 的指令表归属逐项一致 · `io.h` 4 处方向守卫**改前改后均无触发**） | 中（~1.5 天） |
+| **T3-①a** ✅ | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**：`build_hierarchical_name` 改用 `name()` · `local_name_` / `module_type_name()` · **合并宏** `CH_HIERARCHY_LAYER("name")`（= 声明 + 命名一体）· 命名权威仍是 ctx 级全局表 | **T2a** | 归属**命名**正确（无重复前缀）· 类级缺名**编译期不可表达** | 深度 ≥3 实例路径**无重复前缀**；**零语义变更**（文本**会变** ⇒ 变化面逐条登记） | 小 |
+| **T3-①b** ✅ | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**：`node_owner()` + 构造作用域栈（RAII 配对）· `ch_module` parent · **build ctx 显式来源 + 跨 ctx 守卫** · 组件树登记双向完整 | **T3-①a** | 归属正确 · 组件树完整 | ADR-059 §5 全部判据 + **归属↔语义分流回归**（`simulator_init.cpp:95` 的指令表归属逐项一致 · `io.h` 4 处方向守卫**改前改后均无触发**） | 中（~1.5 天） |
 | **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**：`CH_HIERARCHY_LAYER("name")` 落地 · `ch_layer<T>` / `ch_inline<T>`（**不动 `ch_module` 签名**）· `is_layer()` · **无 active parent 处的装配点** | T3-①b | 粒度可声明 · 装配点不受限 | ADR-061 §5 全部判据（类级 × 实例级三组合 + 无 parent 装配仍成层） | 中（~1.5 天） |
 | **T3-②** | `hierarchical-rtl-analysis-2026-11` | **分析层**：`ModuleDef` / `InstanceDef` / 端口表 / 隐式端口识别 / 冒泡识别 / 无主节点归顶层 | T3-①c | 模块清单 + 端口表 + 连接表（**golden**，结构化形态） | **手推** golden（≥1 个 DUT 的三层端口表 MUST 人手推导，MUST NOT 全部由实现生成）+ 其余快照逐字节零差异 | 中（~2 天） |
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | **emitter 拆分**：`verilogwriter` → `ModuleEmitter`（接收节点子集 + 端口表 + 名字表）· **时钟/复位名参数化** | T3-①b | 可复用的单 module 发射器 | 扁平产物相对 **T3-①b 之后**的基线**逐字节不变** · `ctest -LE perf` 全绿 | 中（~3 天） |
@@ -143,7 +164,7 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 | **T2a** | `header-odr-inline-fix-2026-11` | **U-4 only**：`module.h:13` 加 `inline` | 无 | `core-header-odr-safety`（**ADDED ×1**） | **multi-source 链接 fixture**（两个 TU 同时 inclusion ⇒ 链接） | 链接成功 + 既有产物零变化 |
 | **T2b** | `component-io-const-and-node-name-policy-2026-11` | **U-2** + **U-1** | 无 | `component-io-const-access`（**ADDED ×1**）· `core-ctx-node-name-uniqueness`（**ADDED ×1**） | `io() const` 编译期 fixture · policy=off/on 双态用例 | policy=off ⇒ 逐字节不变；policy=on ⇒ 重名被拒 |
 | **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**（ADR-059 **D3 / D4 的类级部分**）：`build_hierarchical_name` 用 `name()` · `local_name_` / `module_type_name()` 两个维度 · **合并宏** `CH_HIERARCHY_LAYER("name")` 的定义 · 命名权威 = ctx 级全局表 | T2a | `component-ownership-and-naming` **ADDED ×2**（组件实例路径 MUST 无重复前缀 · 组件实例 MUST 提供局部名与模块类型名两个命名维度）· `rtl-hierarchical-output` **无**（命名权威是 emitter 级属性 ⇒ 归 ④） | 命名回归断言（深度 ≥3 无重复前缀）· 类级缺名**编译期**拒绝对照 | 零**语义**变更（**允许文本变化** · 仿真逐位不变） |
-| **T3-①b** | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**（ADR-059 D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10） | T3-①a | `component-ownership-and-naming` **ADDED ×5**（节点归属 MUST 由构造作用域唯一决定 · build context MUST 由显式来源确定 · 跨 context 再装配 MUST 被拒绝 · `ch_module` 无 active parent MUST 响亮失败 · 组件树登记 MUST 双向完整） | 归属断言（`CHFATAL_EXCEPTION`）· 作用域配平断言 · **归属↔语义分流回归** | ADR-059 §5 全部判据 |
+| **T3-①b** ✅ | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**（ADR-059 D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10） | T3-①a | `component-ownership-and-naming` **ADDED ×5**（节点归属 MUST 由构造作用域唯一决定 · build context MUST 由显式来源确定 · 跨 context 再装配 MUST 被拒绝 · `ch_module` 无 active parent MUST 响亮失败 · 组件树登记 MUST 双向完整） | 归属断言（`CHFATAL_EXCEPTION`）· 作用域配平断言 · **归属↔语义分流回归** | ADR-059 §5 全部判据 |
 | **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**（ADR-061 决策①⑤⑥）+ **D4 的四档解析**（`ch_layer<T>` / `ch_inline<T>` / `ForceLayer` ⇒ 档 ②③④） | T3-①b | `component-ownership-and-naming` **ADDED ×1**（成层组件的模块类型名 MUST 按来源优先级确定）+ `rtl-hierarchical-output` **ADDED ×2**（层级粒度 MUST 由显式声明决定 · 成层判定 MUST 与装配点解耦） | 粒度判据（类级 × 实例级三组合）· 「无 parent 处装配仍能成层」用例 · 缺名**编译期**拒绝对照 | ADR-061 §5 全部判据 |
 | **T3-②** | `hierarchical-rtl-analysis-2026-11` | **分析层** + **golden**（结构化，非自由文本） | T3-①c | `rtl-hierarchical-output` **ADDED ×1**（不属于任何组件的节点 MUST 归顶层 module） | golden 快照比对（5 个 DUT）+ **手推 golden** 至少 1 份 | 与 `tests/golden/` 逐字节零差异 · 手推那份能抓实现错 |
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | **emitter 拆分**（**含时钟名参数化**） | T3-①b | **无 delta**（纯重构 ⇒ `.openspec.yaml` 显式 `skip_specs: true`） | 「扁平产物逐字节不变」基线脚本 | 相对 T3-①b 之后的基线逐字节不变 |

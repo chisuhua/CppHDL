@@ -3,12 +3,63 @@
 #include "core/context.h"
 #include "logger.h"
 #include "utils/destruction_manager.h"
+#include <algorithm>
+#include <iterator>
 #include <set>
 #include <typeinfo>
 
 namespace ch {
 
 thread_local Component *Component::current_ = nullptr;
+thread_local std::vector<Component *> Component::scope_;
+
+Component *Component::node_owner() {
+    // D10：context::init() 期间（建 default_clock / default_reset）不归属任何组件
+    if (ch::core::node_ownership_suppressed()) {
+        return nullptr;
+    }
+    // 最内层「构造 / build 作用域」优先；空则回落 current_（与变更前一致）
+    if (!scope_.empty()) {
+        return scope_.back();
+    }
+    return current_;
+}
+
+Component::ConstructionFrame::ConstructionFrame() : depth_(scope_.size()) {}
+
+Component::ConstructionFrame::~ConstructionFrame() {
+    // 只截断到构造时的深度（栈比它短 ⇒ 已有人正确弹出 ⇒ 不动）
+    if (scope_.size() > depth_) {
+        scope_.resize(depth_);
+    }
+}
+
+void Component::defer_build(std::function<void(ch::core::context *)> fn) {
+    deferred_builds_.push_back(std::move(fn));
+}
+
+void Component::erase_scope_frame() {
+    // 移除**最后一次**出现（一个组件最多一帧；用 rbegin 找最后一个更稳）
+    auto it = std::find(scope_.rbegin(), scope_.rend(), this);
+    if (it != scope_.rend()) {
+        scope_.erase(std::next(it).base());
+    }
+}
+
+void Component::rebind_children_parents() {
+    // ADR-059 D9：成员形态的 `ch_module` 在**宿主构造期**创建子组件
+    // ⇒ 那时宿主还没被 shared_ptr 接管 ⇒ `weak_from_this()` 为空
+    // ⇒ ⇒ 子组件的 `parent_` 必须在这里（宿主 `build()` 时）补绑。
+    auto self = weak_from_this();
+    if (self.expired()) {
+        return;  // 宿主本身不是 shared_ptr 管理的（栈上对象）⇒ 无从绑定
+    }
+    for (auto &child : children_shared_) {
+        if (child) {
+            child->parent_ = self;
+        }
+    }
+}
 
 Component::Component(Component *parent, const std::string &name)
     : ctx_(nullptr),
@@ -16,6 +67,15 @@ Component::Component(Component *parent, const std::string &name)
       // ⚠️ 全路径由本构造函数计算（**唯一**拼接点）⇒ ⇒ `name()` 恒为全路径
       name_(build_hierarchical_name(parent, local_name_)) {
     CHDBG_FUNC();
+
+    // ADR-059 D2″ 分支 ① 的基准：构造期的环境 ctx（可能为 nullptr）
+    construction_ctx_ = ch::core::ctx_curr_;
+
+    // ADR-059 §2.1 / D6①：进入 CONSTRUCT 作用域。
+    // ⚠️ 基类构造**先于**派生类成员构造（C++ 保证）⇒ 压栈后，本组件的成员
+    // 建的节点归属**本组件**（而不是构造中的祖先 / nullptr）。
+    // ⚠️ 弹出由 `ConstructionFrame` 完成（基类无法感知「派生类成员造完」）。
+    scope_.push_back(this);
 
     if (parent != nullptr) {
         // Attempt to obtain a weak_ptr to parent via enable_shared_from_this.
@@ -43,6 +103,9 @@ Component::Component(Component&& other) noexcept
     , name_(std::move(other.name_))
     , children_shared_(std::move(other.children_shared_))
     , ctx_owner_(other.ctx_owner_)
+    , construction_ctx_(other.construction_ctx_)
+    , build_ctx_(other.build_ctx_)
+    , deferred_builds_(std::move(other.deferred_builds_))
     , built_(other.built_)
     , destructing_(other.destructing_) {
     CHDBG_FUNC();
@@ -56,6 +119,8 @@ Component::Component(Component&& other) noexcept
     // a shared_ptr (i.e. before add_child / create_child).
     other.ctx_ = nullptr;
     other.ctx_owner_ = false;
+    other.construction_ctx_ = nullptr;
+    other.build_ctx_ = nullptr;
     other.built_ = false;
     other.destructing_ = false;
 }
@@ -94,6 +159,9 @@ Component& Component::operator=(Component&& other) noexcept {
         name_ = std::move(other.name_);
         children_shared_ = std::move(other.children_shared_);
         ctx_owner_ = other.ctx_owner_;
+        construction_ctx_ = other.construction_ctx_;
+        build_ctx_ = other.build_ctx_;
+        deferred_builds_ = std::move(other.deferred_builds_);
         built_ = other.built_;
         destructing_ = other.destructing_;
 
@@ -105,6 +173,8 @@ Component& Component::operator=(Component&& other) noexcept {
 
         other.ctx_ = nullptr;
         other.ctx_owner_ = false;
+        other.construction_ctx_ = nullptr;
+        other.build_ctx_ = nullptr;
         other.built_ = false;
         other.destructing_ = false;
     }
@@ -115,6 +185,21 @@ void Component::build(ch::core::context *external_ctx) {
     CHDBG_FUNC();
 
     if (built_) {
+        // ADR-059 D2″ 分支 ②：**再次**以不同 ctx 调用 build MUST 被拒绝。
+        // ⚠️ 守卫 MUST 在 `built_` 早退**之前** —— 否则重复 build 直接返回，
+        //    守卫永远不生效（子模块节点留在旧 ctx ⇒ 新 ctx 的 eval list
+        //    看不见整块子模块 ⇒ **静默消失**）。
+        if (external_ctx != nullptr && build_ctx_ != nullptr &&
+            external_ctx != build_ctx_) {
+            CHFATAL_EXCEPTION(
+                "Component '%s' was already built into context '%s' but build() "
+                "was called again with a different context '%s' "
+                "(cross-context re-assembly is rejected: the sub-tree's nodes "
+                "would stay in the old context and silently disappear from the "
+                "new one)",
+                name_.c_str(), build_ctx_->name().c_str(),
+                external_ctx->name().c_str());
+        }
         CHDBG("Component already built: %s", name_.c_str());
         return;
     }
@@ -135,6 +220,36 @@ void Component::build(ch::core::context *external_ctx) {
         ctx_owner_ = true;
     }
 
+    // ADR-059 D2″：跨 ctx 守卫 —— 归属只在**一个** ctx 里成立。
+    // 分支 ①：构造期**有**环境 ctx ⇒ 它就是基准（MUST 相等）。
+    // ⚠️ 不等时的后果是**静默**的：子模块节点在 ctx1、宿主端口在 ctx2
+    // ⇒ `ctx2->get_eval_list()` 看不见子模块 ⇒ 整块逻辑消失，且等价性判据
+    // 也看不见（子模块不在树里）。⇒ ⇒ MUST 响亮拒绝。
+    if (construction_ctx_ != nullptr && target_ctx != construction_ctx_) {
+        CHFATAL_EXCEPTION(
+            "Component '%s' was constructed inside context '%s' but build() was "
+            "called with a different context '%s' "
+            "(cross-context re-assembly is rejected: nodes created during "
+            "construction stay in the construction context)",
+            name_.c_str(), construction_ctx_->name().c_str(),
+            target_ctx->name().c_str());
+    }
+    build_ctx_ = target_ctx;
+
+    // ADR-059 D9：宿主已被 shared_ptr 接管 ⇒ 现在才可能把子组件的 parent_ 绑上
+    rebind_children_parents();
+
+    // ADR-059 D2′：把「构造期拿不到 ctx」的子组件 build 补齐。
+    // ⚠️ MUST 在 `build_internal()` **之前** —— 宿主的 `describe()` 会用到
+    // 子组件端口（`sub.io().x <<= ...`）⇒ 端口 MUST 已存在。
+    if (!deferred_builds_.empty()) {
+        auto pending = std::move(deferred_builds_);
+        deferred_builds_.clear();
+        for (auto &fn : pending) {
+            fn(target_ctx);
+        }
+    }
+
     build_internal(target_ctx);
     CHDBG("Component build completed: %s", name_.c_str());
 }
@@ -147,7 +262,13 @@ void Component::build_internal(ch::core::context *target_ctx) {
     Component *old_comp = current_;
     current_ = this;
 
-    CHSCOPE_EXIT({ current_ = old_comp; });
+    // ADR-059 D6②：BUILD 作用域（RAII 弹出 ⇒ 与压入配对）
+    scope_.push_back(this);
+
+    CHSCOPE_EXIT({
+        scope_.pop_back();
+        current_ = old_comp;
+    });
 
     CHDBG("Creating ports for component: %s", name_.c_str());
     create_ports();
@@ -160,6 +281,10 @@ Component::~Component() {
     CHDBG_FUNC();
 
     destructing_ = true;
+
+    // 作用域兜底：**直接构造**的组件（未经 ConstructionFrame 包裹）会残留
+    // 一个作用域帧 ⇒ 析构时移除（否则之后所有"组件外"建的节点都归错它）。
+    erase_scope_frame();
 
     CHDBG("Component destructor normal cleanup: %s", name_.c_str());
 
@@ -182,6 +307,14 @@ Component::add_child(std::unique_ptr<Component> child) {
 
     auto shared_child = std::shared_ptr<Component>(std::move(child));
     children_shared_.push_back(shared_child);
+    // ADR-059 D9：补绑 parent_。
+    // ⚠️ 成员形态的 `ch_module` 调用本函数时，**本组件还在构造中**
+    // ⇒ `weak_from_this()` 为空 ⇒ 这次绑定不生效 ⇒ ⇒ `build()` 里会再绑一次
+    // （`rebind_children_parents()`）⇒ ⇒ 两处合起来才覆盖全部路径。
+    auto self = weak_from_this();
+    if (!self.expired()) {
+        shared_child->parent_ = self;
+    }
     CHDBG("Added child component: %s", shared_child->name().c_str());
     return shared_child;
 }

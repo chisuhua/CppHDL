@@ -103,6 +103,12 @@ void context::init() {
         node_storage_.reserve(100);
         CHDBG("Reserved capacity for context containers");
 
+        // ADR-059 D10：context 级节点（clock / reset）**MUST 无归属**
+        // ⇒ ⇒ 否则「组件在作用域内 `build()`（无 external ctx）」时，新 ctx 的
+        // clock/reset 会拿到 `owner != nullptr` ⇒ 层次化 emitter 的 clock/reset
+        // 特判失效（它们会被当成那个组件的内部信号）。
+        NodeOwnershipSuppression owner_suppression;
+
         // 创建默认时钟
         default_clock_ =
             this->create_clock(sdata_type(0, 1), true, false, "default_clock");
@@ -433,6 +439,24 @@ void context::set_default_clock(core::clockimpl *clk) { default_clock_ = clk; }
 core::clockimpl *context::get_default_clock() const { return default_clock_; }
 
 core::resetimpl *context::get_default_reset() const { return default_reset_; }
+
+// ADR-059 D10：节点归属抑制 —— `context::init()` 建 clock/reset 期间 MUST 无归属。
+// ⚠️ 实现放在 core 侧（而不是 `Component` 的嵌套类型）⇒ `src/core/context.cpp`
+// 不需要 include `component.h`（那会把 `core/io.h` 的 `ch::core::core` 别名
+// 带进本 TU ⇒ 破坏既有的 `core::clockimpl` 限定名 ⇒ 编译失败）。
+namespace {
+thread_local int g_node_ownership_suppress_depth = 0;
+} // namespace
+
+bool node_ownership_suppressed() { return g_node_ownership_suppress_depth > 0; }
+
+NodeOwnershipSuppression::NodeOwnershipSuppression() {
+    ++g_node_ownership_suppress_depth;
+}
+
+NodeOwnershipSuppression::~NodeOwnershipSuppression() {
+    --g_node_ownership_suppress_depth;
+}
 
 } // namespace core
 } // namespace ch
