@@ -1,6 +1,7 @@
 # ADR-061: 层级粒度由**用户显式**控制 —— 默认 inline，成层须声明
 
-- Status: **Accepted**（2026-11-04 · 用户拍板 · **v1.6**：据 2026-11-04 架构评审合并成层声明与模块命名 + 订正 §5 的作用域限定）
+- Status: **Accepted**（2026-11-04 · 用户拍板 · **v1.6.3**：据 oracle 实测订正 §2.5.1 的**理由**，
+  并补**优先级**与**作用域覆盖范围**（裁决结论不变））
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**修订** ADR-058 §2.1（模块边界的措辞）与 ADR-060（端口策略的作用面）
@@ -182,16 +183,79 @@ writer 的**其余**成员状态 MUST **每 module 显式重置**（或改成无
 ### 2.5 决策 ⑤ —— emitter 侧总开关（逃生门 + 对比测试用）
 
 ```cpp
-enum class Granularity { RespectDeclarations, ForceInline, ForceLayer };
+enum class Granularity { RespectDeclarations, ForceInline, ForceLayer };   // ADR-061 决策⑤
+
+// ⚠️ v1.6.2 修订：**`Granularity` 不在这个结构里**（权威位置见 §2.5.1），
+//    且 `out_dir` / `one_file_per_module` 已随「单文件唯一模式」撤销（ADR-058 v2.9）。
 struct VerilogHierOptions {
-    std::string out_dir;
-    bool          one_file_per_module = true;
-    Granularity   granularity = Granularity::RespectDeclarations;
+    std::string   top_module_name = "top";                          // 顶层 module 名（§2.5.2）
     PortPolicy    port_policy     = PortPolicy::SynthesizeWarn;      // ADR-060
     UndrivenPolicy undriven_policy = UndrivenPolicy::Bubble;          // ADR-060
 };
 ```
-⇒ ⇒ `ForceInline` 用于「与扁平逐字节对照」；`ForceLayer` 用于「全成层的极端形态」。
+⇒ ⇒ `ForceInline` 用于「与扁平逐字节对照」；`ForceLayer` 用于「全成层的极端形态」
+⇒ ⇒ ⚠️ **两者都通过**全局粒度**设置**（§2.5.1）⇒ ⇒ **不是**通过上面的选项结构。
+
+### 2.5.1 粒度的**权威位置** = **全局**（v1.6.2 裁决 · **v1.6.3 订正理由 + 补优先级与覆盖范围**）
+
+⚠️ **决策**：`Granularity` 的**唯一权威**是**全局**开关 `Component::granularity()`，
+**唯一入口**是 RAII 的 `Component::GranularityScope`
+⇒ ⇒ **选项结构 MUST NOT** 再放 `granularity` 字段
+⇒ ⇒ 且 **`Component::set_granularity()` MUST 被删除**（实测**零调用点** ⇒ ⇒ 它是「**绕过 RAII 的
+永久泄漏通道**」⇒ ⇒ Zero-Debt ⇒ ⇒ 粒度只能经作用域设置 ⇒ ⇒ 作用域退出即复原 ⇒ ⇒ 无残留状态）。
+⚠️ **兼容性结论（API 收缩登记）**：`Component::set_granularity()` 是**本 feature 线**（T3-①c）
+**数日前才引入**的公开 static 方法 ⇒ ⇒ 仓内**零调用点** ⇒ ⇒ **尚无仓外消费者**
+⇒ ⇒ ⇒ 收缩**无兼容负担** ⇒ ⇒ ⇒ 删除不构成破坏性变更。
+
+⚠️ **为什么是全局唯一权威（v1.6.3 订正 —— 原写的「语义必然」经 oracle 实测**证伪**）**：
+⚠️ **原写法**「成层判定发生在装配期 ⇒ per-emit 字段**无法生效**」⇒ ⇒ **实测不成立**：
+`Component::is_layer()` 是**调用时**读当前全局值（`src/component.cpp:132-141`），
+而分析层在**发射时**才逐组件调它（`src/hierarchy_analysis.cpp:56`）⇒ ⇒ per-emit 字段
+**技术上会生效**。
+⇒ ⇒ **保留「全局唯一权威」的结论，但换成正确的理由**：**避免「双权威的优先级歧义」**
+—— 与 ADR-060 §2.4 否决布尔开关是**同一病因**（两个真相源 ⇒ 组合出未定义态）。
+⇒ ⇒ 未来若确需 per-emit 粒度，正确形态是「`analyze_hierarchy` 显式 `Granularity` **参数**」
+⇒ ⇒ 仍**不是**选项结构字段 ⇒ ⇒ 与本裁决不冲突。
+
+⚠️ **粒度的**读取时刻有**两处**（⇒ ⇒ 作用域 MUST 覆盖**两处**）：
+① **构造期** —— 用户代码在自己的 `describe()` 里读 `is_layer()`
+（⇒ ⇒ 实例级声明 MUST 在 `build()` **之前**写入 —— `include/module.h` 的 `ch_module` 第 3.5 步即为此）；
+② **发射期** —— 分析层逐组件调 `is_layer()` 决定模块边界。
+⇒ ⇒ ⇒ `GranularityScope` MUST **同时覆盖构造与发射** ⇒ ⇒ 只覆盖其中一段 ⇒ ⇒
+**半生效**的粒度 ⇒ ⇒ **静默**产出与意图相反的层级（**零告警** ⇒ 最坏的一类）。
+
+⚠️ **优先级（承重 · 实测固化）**：`is_layer()` 的判定顺序 =
+**① 全局 `ForceInline` / `ForceLayer`（最高，覆盖一切）→ ② 实例级 `ch_layer` / `ch_inline`
+→ ③ 类级 `CH_HIERARCHY_LAYER`**
+⇒ ⇒ ⇒ **全局逃生门 MUST 覆盖实例级声明**（否则「逃生门」名不副实）。
+
+⚠️ **判别性判据（把「半生效」钉成可观测契约）**：scope **只**包构造、发射在 scope 之外
+⇒ ⇒ 产物 MUST 等于 `RespectDeclarations` 形态（**不是** `ForceInline` 形态）
+⇒ ⇒ 这条「静默反转」由此**可观测**，而不是靠自觉。
+
+⚠️ **规范用法（scope MUST 覆盖构造 + 发射两段）**：
+
+```cpp
+{
+    ch::Component::GranularityScope scope(ch::Granularity::ForceInline);
+    ch::ch_device<Top> dev;                                                  // ① 构造（scope 内）
+    auto r = ch::toVerilogHierarchical("top_hier.v", dev.instance());       // ② 发射（scope 内）
+}   // scope 析构 ⇒ 粒度复原（RAII ⇒ 无残留）
+```
+⚠️ **跨线程无污染**：`g_granularity` 是 `thread_local`（`src/component.cpp:158`）⇒ ⇒ 每线程独立
+⇒ ⇒ 但**同一线程内**的嵌套 scope MUST 严格配对（RAII 已保证 ⇒ ⇒ 无需手工配对）。
+
+### 2.5.2 顶层 module 名 与 根组件的成层声明（v1.6.2 裁决）
+
+⚠️ **顶层 module 名** = 选项 `top_module_name`，默认 `top`（⇒ ⇒ 便于与扁平产物 A/B 比对）。
+
+⚠️ **根组件自己写 `CH_HIERARCHY_LAYER("x")` ⇒ MUST 是 no-op**：根**永远**是 RTL 顶层 module
+（分析层 `nearest_layer()` 对根直接返回根）⇒ ⇒ 根的宏**既不改模块边界、也不改顶层名**
+⇒ ⇒ 顶层名**只**由 `top_module_name` 决定 ⇒ ⇒ 根的宏名与顶层名**可以不同**（不构成冲突）。
+⇒ ⇒ 用户**不需要**为顶层写宏 ⇒ ⇒ 写了也只是 no-op（**不告警** —— 避免恒响）。
+⚠️ **与 ADR-059 §2.2.1 档 ④ 的关系**：档 ④（`ForceLayer` 且无名 ⇒ 回落 `typeid` + `CHWARN`）
+**MUST NOT 适用于根** ⇒ ⇒ 根的顶层 module 名恒由 `top_module_name` 决定 ⇒ ⇒ **无回落、无告警**。
+⇒ ⇒ 这条**取代**了 feature 边界表 B1（「五份 ADR 均未裁决」⇒ 现已裁决）。
 
 ### 2.6 决策 ⑥ —— 成层判定与**装配点解耦**
 
@@ -250,7 +314,9 @@ struct VerilogHierOptions {
   ⇒ ADR-059 从「层次化的前置」升级为「**下游 Plugin 框架的前置**」；
 - **inline 不吃端口表收缩这条好处**（决策②）⇒ ⇒ 想让顶层接口干净，MUST 显式声明成层
   ⇒ ⇒ ⇒ 这是「零回归」的**代价**（持平：换来默认路径逐字节不变 + 好处归属清晰）；
-- 模块内信号名带**完整路径前缀** ⇒ ⇒ 名字偏长（决策④的代价，已被接受）。
+- 模块内信号名带**完整路径前缀** ⇒ ⇒ 名字偏长（决策④的代价，已被接受）；
+- 粒度是**全局** ⇒ ⇒ ⇒ **作用域必须同时覆盖构造与发射**（§2.5.1）⇒ ⇒ 只覆盖一段 ⇒ ⇒
+  **半生效** ⇒ ⇒ 静默产出与意图相反的层级 ⇒ ⇒ 代价 = 用户必须理解「两个读取时刻」。
 
 ### 风险
 
@@ -317,4 +383,6 @@ struct VerilogHierOptions {
 | 2026-11-02 | **v1.5**（据 oracle 第 2 轮）：`type_output` 的三角色表补**第四角色** —— 「子端口的连接网」（父 module 内 `logic` + 实例 `.port(net)`，**不是** `assign`）⇒ 否则父层消费子输出会引用未声明标识符 |
 | 2026-11-02 | **v1.1**（自审揪出的矛盾修正）：原决策②写「inline 的输出降成父内 wire」，但扁平产物里**任意层** `ch_out` 都是顶层 `output`（`codegen_verilog.cpp:363-370`）⇒ ⇒ ⇒ 「全 inline 逐字节一致」**当场不成立**，且「inline 对产物不可见」与「inline 改变端口表」互斥 ⇒ ⇒ **改裁**：inline **完全照扁平规则**；**端口表收缩是「成层子树」独有的回报**（⇒ 想顶层接口干净 MUST 显式声明成层）⇒ 两条判据从「并列要求」变成「互为推论」（选项表新增 #11 记录被否决的形态） |
 | 2026-11-04 | **v1.6**（2026-11-04 架构评审 · 用户拍板）：① **决策① 改判** —— 「成层声明」与「模块命名」**合并为一个宏** `CH_HIERARCHY_LAYER("name")` ⇒ ⇒ 「成层但无模块名」**编译期即不可表示** ⇒ ⇒ 原「缺名 ⇒ 运行时硬错」退化为「写宏就必须给名字」（**编译期**）⇒ ⇒ `CH_MODULE_NAME` **不单独存在**（与 ADR-059 D4 v2.3 同步）⇒ ⇒ **决策② / 决策⑤ / 选项表 1 / 选项 4 不变**；② **§5 订正** —— 「被 inline 的组件…任意 `output` ⇒ 顶层 `output`」一条**未限定作用域**⇒ ⇒ 与决策② 的两作用域表**不自洽** ⇒ ⇒ 补作用域限定（**顶层**祖先 ⇒ 顶层 `output`；**非顶层成层祖先** ⇒ 体内普通信号）⇒ ⇒ ⚠️ **决策段一直是自洽的**（v1.2 已定两作用域表）⇒ ⇒ **只有 Verification 段漏了限定**；③ **Status 转正**（Proposed → Accepted） |
+| 2026-11-04 | **v1.6.3**（2026-11-04 · architect 角色 · 据 **oracle 实测**订正）：① **§2.5.1 的理由证伪并更换** —— 原写「成层判定在装配期 ⇒ per-emit 字段**无法生效**」⇒ ⇒ 实测 `is_layer()` 是**调用时**读全局（`src/component.cpp:132-141`）+ 分析层**发射时**才调（`src/hierarchy_analysis.cpp:56`）⇒ ⇒ per-emit 字段技术上**会生效**⇒ ⇒ **裁决结论不变**（全局唯一权威），理由换成「**避免双权威的优先级歧义**」（与 ADR-060 §2.4 否决布尔开关同病因）⇒ ⇒ 并注明未来正确形态是「`analyze_hierarchy` 显式参数」；② **补粒度的优先级**（全局 > 实例级 > 类级）与**读取时刻有两处**（构造期 `describe()` 读 + 发射期分析读）⇒ ⇒ **`GranularityScope` MUST 覆盖两段**，只覆盖一段 ⇒ ⇒ **半生效** ⇒ ⇒ 静默反转（零告警）⇒ ⇒ 补**判别性判据**（scope 只包构造 ⇒ 产物 MUST = `RespectDeclarations` 形态）；③ **`Component::set_granularity()` MUST 删除**（实测零调用点 ⇒ ⇒ 绕过 RAII 的永久泄漏通道 ⇒ ⇒ Zero-Debt ⇒ ⇒ 唯一入口 = `GranularityScope`）；④ §4 负面补「作用域必须覆盖两段」的代价 |
+| 2026-11-04 | **v1.6.2**（2026-11-04 · architect 角色 · 实施期缺口复核）：① **§2.5 的选项结构修订** —— 撤销 `out_dir` / `one_file_per_module`（随 ADR-058 v2.9 的「单文件唯一模式」）· 撤销 `granularity` 字段（见 §2.5.1）· 新增 `top_module_name`（见 §2.5.2）⇒ ⇒ **选项结构与实现的漂移收口**；② **新增 §2.5.1「粒度的权威位置 = 全局」** —— 理由是**语义必然**（成层判定在装配期 ⇒ per-emit 字段**无法生效**）⇒ ⇒ `ForceInline` / `ForceLayer` MUST 用 `Component::GranularityScope` 且 MUST 在**装配前**设定；③ **新增 §2.5.2** —— 顶层 module 名只由 `top_module_name` 决定 · **根组件自己写 `CH_HIERARCHY_LAYER("x")` MUST 是 no-op**（不告警）⇒ ⇒ 取代 feature 边界表 B1 的「未裁决」状态；④ 本次**未**改决策①～④ 与决策⑥ ⇒ ⇒ 粒度语义**零变化** |
 | 2026-11-04 | **v1.6.1**（据 critic 第 1 轮 **B1**）：① 决策① 的 `ch_layer<T>` 示例补**两种形态** —— ② `T` 已声明成层 ⇒ 继承其名；③ `T` 未声明成层（helper 被提升）⇒ **MUST 在实例处给名**（`ch_layer<Helper> h{"h","helper_layer"}`）；② **撤销** v1.6 里「实例名派生成模块类型名」的措辞（那会破坏 ADR-060 §2.3 的「同类型同组」⇒ 序号失去分组依据）；③ 明确 `ForceLayer` 强制的组件允许回退 `sanitize(typeid)` + `CHWARN`（ADR-059 §2.2.1 ④） |

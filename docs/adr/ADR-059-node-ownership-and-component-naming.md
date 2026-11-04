@@ -1,6 +1,7 @@
 # ADR-059: 节点归属与组件命名 —— 用「构造作用域」修正挂错层的缺陷
 
-- Status: **Accepted**（2026-11-04 · 用户拍板 · **v2.3**：据 2026-11-04 架构评审，「成层声明」与「模块命名」合并为一个宏）
+- Status: **Accepted**（2026-11-04 · 用户拍板 · **v2.3.2**：据 2026-11-04 实施期缺口复核，
+  订正 §5 的「触发面」残留漂移 —— **执行既有 D7 v2.2，不新增决策**）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**服务于** ADR-058（层次化 RTL 输出的硬前置）
@@ -204,7 +205,11 @@ public:
 - [ ] **效果判据**：**深度 ≥3** 的实例路径 MUST **无重复前缀**（`top.m.lf` 形态）
 - [ ] **效果判据**：**归属 ⇒ 语义分流**（事实⑦）⇒ `type_input` 节点在
       `input_instr_list_` / `combinational_instr_list_` 的归属 MUST 与变更前**逐项一致**
-      ⇒ ⇒ 且 `include/core/io.h` 的 4 处方向 `CHREQUIRE` 的**触发面** MUST 不变
+      ⇒ ⇒ 且 `include/core/io.h` 的 4 处方向 `CHREQUIRE` MUST **改前改后均无触发**
+      （⚠️ **v2.3.2 订正**：本行原写「触发面 MUST 不变」⇒ ⇒ 与 D7 v2.2 的裁决
+      「改前改后均无触发」**互斥** —— 那 4 处判的是 `lnodeimpl::current_component()`
+      （与归属真源**分叉**）且 `CHREQUIRE` **只打日志不抛** ⇒ ⇒ 「触发面相同」永远收敛不了
+      ⇒ ⇒ 本行是**执行既有裁决 D7 v2.2** 的措辞订正，**不是**新增决策）
       （⇒ 以「变更前后各跑一次并 diff 触发日志」为判据）
 - [ ] **结构判据**：作用域 MUST **配平** ⇒ ⇒ 任意构造/析构序列后作用域栈 MUST 为空
       ⇒ ⇒ MUST 有「故意 `create_child` 不 build」的用例（栈不得被污染）
@@ -251,4 +256,5 @@ public:
 | 2026-11-02 | **v2.1**（据 critic 第 1 轮 SF）：① **订正 D6③ 的事实错误** —— `create_child` 会构造组件 ⇒ 成员节点**照样建**（原写「不产生节点」）；真实缺陷是「有节点、无端口」⇒ ⇒ **新增：未 build 的子组件 MUST 被 emitter 响亮拒绝**；② **新增 D8** —— `ch_module` 的「无 active parent」分支 MUST 由 `CHERROR` 升格为 `CHFATAL_EXCEPTION`（与本 ADR 自身原则一致）；③ 验收判据补「异常路径的栈回退」与「未 build 子组件」 |
 | 2026-11-02 | **v2.2**（据 oracle 实测，5 条）：① **D2′ 改判** —— env ctx 为空时 **MUST NOT 硬失败**（否则「含子模块的单元」无法在无 active parent 处装配 ⇒ N2 只对叶子成立）；② **新增 D2″** 跨 ctx 守卫（`build(ctx)` 的 ctx 必须等于构造期 env ctx，否则子模块逻辑**静默消失**）；③ **新增 D9** —— `add_child` MUST 补绑 `child->parent_`，且 `subtree` 判定 MUST **只向下走 `children()`**（根因：成员 `ch_module` 在 `make_unique` 期 `weak_from_this()` 为空 ⇒ `parent_` 永久空 ⇒ 旗舰 DUT 会被误杀）；④ **新增 D10** —— context 级 clock/reset MUST 用「无归属」哨兵；⑤ **D4 加确定性约束** —— `typeid` 拼写实现相关 ⇒ 成层组件 MUST 显式 `CH_MODULE_NAME`，跨平台 golden 限定「同 ABI」；⑥ **D7 加** —— `io.h` 四处守卫改 `node_owner()`，判据改「改前改后均无触发」 |
 | 2026-11-04 | **v2.3**（2026-11-04 架构评审 · 用户拍板）：① **D4 再改判** —— 「成层声明」（`CH_HIERARCHY_LAYER`）与「模块命名」（`CH_MODULE_NAME`）**合并为一个宏** `CH_HIERARCHY_LAYER("name")` ⇒ ⇒ 「成层但无模块名」**编译期即不可表示** ⇒ ⇒ 原「缺名 ⇒ 运行时硬错」退化为「写宏就必须给名字」（**编译期**）⇒ ⇒ `CH_MODULE_NAME` **不单独存在**（**与 ADR-061 决策① 同步**）；② **Status 转正**（Proposed → Accepted） |
+| 2026-11-04 | **v2.3.2**（2026-11-04 · architect 角色 · 实施期缺口复核）：**§5 的一处措辞漂移订正** —— 原写「`io.h` 4 处方向 `CHREQUIRE` 的**触发面** MUST 不变」⇒ ⇒ 与 D7 **v2.2** 的裁决（「改前改后均无触发」）**互斥**（那 4 处判的是 `current_component()` ⇒ 与归属真源**分叉**；且 `CHREQUIRE` **只打日志不抛** ⇒ ⇒ 「触发面相同」永远收敛不了）⇒ ⇒ 现按 D7 v2.2 订正 ⇒ ⇒ ⚠️ **本版是执行既有裁决的措辞订正，不是新增决策** ⇒ ⇒ D1–D10 与 §2.2.1 **零变化** |
 | 2026-11-04 | **v2.3.1**（据 critic 第 1 轮 **B1 / B3**）：① **B1** —— v2.3 的「合并宏」只封住**类级声明**一条路径 ⇒ ⇒ 成层还可由 **实例级 `ch_layer<T>`** 与 **`Granularity::ForceLayer`** 产生 ⇒ ⇒ 「成层但无模块名」**仍可表示** ⇒ ⇒ **新增 §2.2.1「模块类型名的四档来源优先级」**（① 类级 / ② 继承 / ③ 实例处给名 / ④ ForceLayer 回退 + `CHWARN`），并明确 ③ 也不能回退 `typeid`、② 不能另给名字（否则破坏 ADR-060 §2.3 的分组）；② **B3** —— D2″ 的「MUST == 构造期 env ctx」在 **env ctx == null** 时**无定义**（而 D2′ 明确允许 env ctx 为空）⇒ ⇒ 补**基准分两支**（有 env ctx ⇒ 以它为准；无 ⇒ 以**首次** `build(ctx)` 为基准，其后换 ctx ⇒ 抛） |

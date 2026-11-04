@@ -163,8 +163,8 @@ output（事实④）⇒ ⇒ 层次化的顶层输出集合是扁平的**子集*
 > Verilator backend / Simulator / JIT **既有入口**一律不动。
 
 ```cpp
-// ⚠️ 选项结构的**唯一权威定义**在 ADR-061 §2.5（含 granularity / port_policy /
-//    undriven_policy）。本 ADR 不重复列出全部字段（⇒ 三份副本必然漂移 —— critic NIT）。
+// ⚠️ 选项结构的**唯一权威定义**在 ADR-061 §2.5（含 port_policy / undriven_policy /
+//    top_module_name）。本 ADR 不重复列出全部字段（⇒ 三份副本必然漂移 —— critic NIT）。
 // ⚠️ 返回类型不是 void（oracle R14）：三条「响亮拒绝」必须能被调用方观测。
 std::expected<HierManifest, HierError>
 toVerilogHierarchical(const std::string& path, ch::Component& top,
@@ -172,9 +172,9 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
 ```
 
 ⚠️ **错误模型（oracle R14，承重）**：
-① **所有校验 MUST 在第一次 I/O 之前完成** ⇒ ⇒ 否则留下**半套产物**（多文件模式下
-`cmp` / lint 会读到它）；
-② 写出 MUST 走「**临时目录 → 成功后 rename**」⇒ ⇒ 失败**不留下**任何新文件；
+① **所有校验 MUST 在第一次 I/O 之前完成** ⇒ ⇒ 否则留下**半套产物**（`cmp` / lint 会读到它）；
+② 写出 MUST 走「**临时文件 → 成功后 rename**」⇒ ⇒ 失败**不留下**任何新文件，
+   且失败路径 MUST NOT 触碰既有同名文件（rename 只在成功后发生 ⇒ ⇒ 旧产物不被破坏）；
 ③ 校验 MUST NOT 落在任何 `catch(...)` 作用域内 —— 现状 `print()` header/body/footer 各自
 `catch(...)`（`src/codegen_verilog.cpp:389-410`）、`toVerilog` 自己也 catch（`:39-45`）
 ⇒ ⇒ **三条 `CHFATAL_EXCEPTION` 会被静默吞掉**；
@@ -184,15 +184,34 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
 ⚠️ **受限例外（为使等价性可执行）**：允许给 `VerilatorBackend` 增加一个**只增不改**的入口
 `initialize_with_verilog(path, data_map)`（既有 `initialize(ctx, …)` 行为**逐字节不变**）
 ⇒ ⇒ 理由：事实⑧ ⇒ 框架里**没有任何**入口能仿真「外部生成的层次化 Verilog」
-⇒ ⇒ 若不允许该例外，等价性测试必须**自建**一套「多文件 RTL 编译 + 双模型对拍」harness
+⇒ ⇒ 若不允许该例外，等价性测试必须**自建**一套「**外部 RTL 编译 + 双模型对拍**」harness
 ⇒ ⇒ ⇒ 成本远超预估 ⇒ ⇒ ⇒ **该例外是 P4 可执行性的前提**。
 ⇒ ⇒ ✅ **已裁决（2026-11-02 · 用户拍板）**：**允许**该只增不改入口。
 
 ⚠️ **为什么不给 `toVerilog()` 加参数**：既有调用点与 Verilator backend 全部承担新分支风险
 ⇒ ⇒ 且「默认扁平」会退化成**隐式行为**，回归时无法区分「走扁平」与「走层次化」。
 
-⚠️ **单文件 vs 多文件的顶层命名**：层次化产物顶层 module 默认名 `top` ⇒ ⇒ 与扁平产物的
-`top.v` **同名不同物** ⇒ ⇒ MUST 有显式区分（目录模式下文件名为 `<module_name>.sv`）。
+⚠️ **产物形态 = 单文件多 module（v2.9 裁决，取代此前的「目录模式」措辞）**：
+层次化产物是**一个文件**、内含**多个 module**（子在前、根在后）⇒ ⇒
+`verilator --top-module <root_module>` 可直接吃 ⇒ ⇒ **不实现**「一 module 一文件」
+（`out_dir` / `one_file_per_module` 两个选项一并**撤销** ⇒ 见 ADR-061 v1.6.2）。
+⇒ ⇒ **为什么撤销目录模式（逐条理由）**：① 下游需求 **N1**（层 2 IP 单元可单独复用 / 交付 / 综合）
+由「**module 独立**」满足 ⇒ ⇒ **不要求文件独立** ⇒ ⇒ 目录模式**无承重需求**
+⇒ ⇒ ⚠️ **本理由是一个显式前提，不是已证事实**：下游交付管线是否接受「单文件多 module」
+**尚未确认**（⇒ 台账 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §11.6 **C1**）
+⇒ ⇒ ⇒ **若交付管线要求文件级切分 ⇒ ⇒ 本裁决按条件条款重开**（⇒ 代价 = backend 的文件列表 +
+缓存 key 改造 ⇒ ⇒ T3-⑤ 成本再翻倍）⇒ ⇒ ⇒ **C1 MUST 在本 feature 归档前给出答案**；
+② 等价性（T3-⑤）的 Verilator backend 编译**单文件**（`invoke_verilator` 只哈希一份 source）
+⇒ ⇒ 多文件要**再改一次**backend 的编译与缓存 key ⇒ ⇒ 成本**翻倍**；
+③ Zero-Debt ⇒ ⇒ **MUST NOT** 留下「有字段但不实现」的选项；
+④ 错误模型随之简化（**一个**临时文件 → rename ⇒ ⇒ 原子性天然成立）。
+
+⚠️ **同名不同物的消解**：层次化产物的顶层 module 默认名仍为 `top`（⇒ ⇒ 便于与扁平产物 A/B 比对）
+⇒ ⇒ 与扁平产物的 `top.v` **同名不同物** ⇒ ⇒ 消解手段 = **文件名由调用方显式指定**（入口收 `path`）
+⇒ ⇒ **约束**：层次化产物的路径 MUST NOT 与扁平产物同名（⇒ 由用法指南 + 护栏守）。
+⚠️ **API 侧没有自卫**（实测）：`toVerilogHierarchical("top.v", …)` 会经 rename **静默覆盖**
+既有的扁平基线文件 ⇒ ⇒ ⇒ 该约束**只能**由「护栏 + 用法指南」承担 ⇒ ⇒ **护栏 MUST 包含**
+「层次化产物路径 ≠ 既有扁平产物路径」这条检查（⇒ 归 T3-④ 的 `verify_hierarchical_rtl.sh`）。
 
 ### 2.4 边界情形与端口策略 → **ADR-060**
 
@@ -346,4 +365,5 @@ output**（`src/codegen_verilog.cpp:333-362`）⇒ ⇒ 顶层 module 端口表 M
 | 2026-11-02 | **v2.5**（据 oracle 实测，6 条）：① 结构同构的提取工具**作废重定** —— `--xml-only` 在仓内 verilator **5.048** 已被删除（`Changes:228`）⇒ 改 `--json-only` / `--dump-tree`，并**新增 P0 前置 spike**（提不出 ⇒ 判据重设计）；② **`⊆` 单独不作判据**（丢端口正是子集方向）⇒ 改「输入集合**相等** + 输出集合**等于精确期望集**」；③ `has_seq` **补 `ch_mem` 写端口**（`codegen_verilog.cpp:1310` 发 `always_ff`）· **根 module 无条件发 clock/reset**（扁平就是无条件）；④ 映射表补 **`node_id` + `hier_top_port_name`**（否则 backend 用不了）；⑤ 返回类型改 `std::expected` + **错误模型**（校验先于 I/O · 临时目录 + rename · 不得落在 `catch(...)` 内） |
 | 2026-11-02 | **v2.6**（C0-0 spike 完成）：「结构同构」的提取机制**实测可行** ⇒ `verilator --json-only` 的 `.tree.json` 里 `modulesp` 是**模块列表**、CELL 的 `modp` 可直接查表 ⇒ ⇒ 「P0 之前 MUST 先做 spike」这条**前置已消解** ⇒ 提取器 + fixture + 护栏（含负向对照）已固化并挂 CI |
 | 2026-11-04 | **v2.7**（据 2026-11-04 架构评审 · **消解跨 ADR 矛盾**，非新增决策）：① **§4 风险 5 + §5 护栏**的 `CH_MODULE_NAME` 口径**与 ADR-059 D4（v2.2 · 2026-11-03）对齐** —— 原措辞（「回退 ⇒ 退化可用、MUST NOT 编译失败」）**已被 ADR-059 明文撤销** ⇒ ⇒ **两条 Verification 判据原本互斥**（一条要求 MUST 回退、一条要求 MUST 硬错）⇒ ⇒ 现按**粒度**分述（成层 ⇒ 硬错 / 非成层 ⇒ 回退）⇒ ⇒ ⚠️ ADR-059 D4 明确写「撤销本 ADR 早期措辞」⇒ ⇒ 本次是**执行既有裁决**，不是新决策 ⇒ ⇒ ⚠️ **本行的措辞是中间态**：成层内部还分「用户显式给名」与「`ForceLayer` 回退」两格 ⇒ ⇒ **已被 v2.8 + ADR-059 §2.2.1 的四档来源取代**（本行保留作历史）；② **§5 确定性判据**补「**同一编译器 / ABI 内**」限定（ADR-059 D4 v2.2 已确立 `typeid` 拼写实现相关 ⇒ 该限定此前只存在于 ADR-059，本 ADR 未同步 ⇒ ⇒ 跨 ADR 漂移） |
+| 2026-11-04 | **v2.9**（2026-11-04 · architect 角色 · 实施期缺口复核）：① **§2.3 的产物形态改判 = 单文件唯一模式** —— 撤销「目录模式 / 一 module 一文件」⇒ ⇒ 相应撤销 ADR-061 §2.5 的 `out_dir` / `one_file_per_module` 两个选项（Zero-Debt ⇒ 不留未实现字段）⇒ ⇒ 理由：N1 由「module 独立」满足（不要求文件独立）· T3-⑤ 的 backend 编译**单文件** ⇒ 多文件要**再翻倍**成本 · 错误模型简化；② **错误模型措辞改单文件**（临时**文件** → rename；失败路径 MUST NOT 触碰既有同名文件）；③ **「同名不同物」的消解手段明确** = 文件名由调用方显式指定 ⇒ 层次化产物路径 MUST NOT 与扁平产物同名（用法指南 + 护栏守）；④ 本次**未**改等价性判据（§2.2）与结构同构判据（§5）⇒ ⇒ T3-⑤ 的判据口径**零变化** |
 | 2026-11-04 | **v2.8**（2026-11-04 架构评审 · 用户拍板）：① **§5 的「`⊆` 独立判据」撤销** —— 该形态**已被 v2.5 撤销**（「丢端口正是子集方向 ⇒ `⊆` 单独不是有效判据」）⇒ ⇒ 但 §5 的效果判据列表里**仍留着它** ⇒ ⇒ 与本 ADR 自己的 §2.2 ③ **互斥** ⇒ ⇒ 现改为引用 §2.2 ③ 的两条精确判据（输入集合**相等** + 输出集合**等于精确期望集**）；② **Status 转正**（Proposed → Accepted） |
