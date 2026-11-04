@@ -191,6 +191,13 @@ ADR-045 决策 0-B 裁决了 ready 所有权**归属**（组合子不拥有入�
      是死路）⇒ ⇒ ⇒ ⇒ ⇒ 它们分别属独立 change（P1-b / P1-c）
      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **落地时 MUST 经 `MODIFIED` delta 加回**
      （⇒ ⇒ MUST NOT 删 Requirement）；
+     ⚠️ **2026-11-04 状态订正（**只订正状态，不改本 ADR 的决策**）**：本行写于
+     2026-11-01（当时属实）⇒ ⇒ **2026-11-02 起 demux / fork 已收口**
+     （**ADR-056** / **ADR-057**）⇒ ⇒ ⇒ ⇒ 「落地时 MUST 经 `MODIFIED` delta
+     加回」**已执行**（change `stream-demux-fork-ready-semantics-2026-11`
+     ⇒ ⇒ delta 落在 capability `chlib-stream-ready-ownership`）
+     ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **本行保留**（它是本决策
+     **当时**的适用范围记录 ⇒ ⇒ 删掉会丢掉「为何它们不在本决策内」的依据）。
    - ⇒ ⇒ ⚠️ **决策 0-B 的第 2 条（「连接手段 MUST 为 `<<=`」）对转发类
      **保持有效** ⇒ ⇒ ⇒ **本条只修订「两阶段形态」那部分**。
 3. ⏸ **「未调用 `connect_ready` 就读取结果」MUST 是可诊断失败** ⇒ ⇒ **降级为长期方向**

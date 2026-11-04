@@ -16,7 +16,7 @@ evidence: probe:.rddf/checks/objective-test-coverage-status-2026-11.md
 | **N3**（B1/B6 落地）| ✅ ADR-055 + change `stream-builder-and-pipe-ready-ownership-2026-10`（2026-11-01 归档）|
 | **N4**（共享 fixture）| ✅ **不再需要**：批次 B2 的 4 个 `_behavior` 文件的 DUT 复用**仓内既有**组件（`test_bool_connection_behavior` 等）⇒ ⇒ 局部类提升为共享 fixture 的必要性消失 |
 | **N5**（A4 普查的待实测项：transpose / 4 个 filters / join / combine_with）| ⏳ **仍未做**（低优先；A4 审计表本身已归档 ⇒ ⇒ 可随时按该表续做）|
-| **§5.3 B2**（in-force spec 的 `Purpose` 仍写已被推翻的症状）| ✅ 已处置（`chlib-stream-ready-ownership/spec.md:69` 明写「已被实测推翻」）|
+| **§5.3 B2**（in-force spec 的 `Purpose` 仍写已被推翻的症状）| ✅ 已处置（`chlib-stream-ready-ownership/spec.md` 的 `## Purpose` 段明写「已被实测推翻」⇒ ⇒ **段落引用**，不用行号 ⇒ ⇒ 归档后不漂）|
 | **§5.3 B5 / B6**（N2′ 与排除项冲突 / B1 与 B6 的 delta 撞同一条）| ✅ 已绕开（N2′ 采纳）· ✅ 已合并成一个 change（B1+B6 同 change 落地）|
 | **§5.3 SHOULD_FIX**（A4 的 N5 范围 / plan 的「DUT 数」列名 / 台账文件名 / B7·B8 的可机械核验定义 / B4 的悬空引用面）| ✅ **本轮批量订正**（2026-11-03）：plan 的成本单位已改为 **pair 数**（§3.0）⇒ **列名同步订正**；台账 `stream-builder-chain-silent-word-loss-2026-11.md` 的**标题**已订正为「上游反压丢失」并注明文件名保留原因；B7/B8 已落地为可机械核验的判据；B4 的悬空引用面已在 `fwft-fifo-physical-removal` 归档时订正 |
 | **§5.3 oracle §5**（纪律机制 M：台账 `evidence:` + 护栏 + 自检）| ✅ **已实施**：`scripts/verify_ledger_evidence.sh`（fail-closed + 自检）⇒ ⇒ **2026-11-03 已把 50 个台账的 `evidence:` 补齐（缺失 50 → 0）** |
@@ -96,7 +96,7 @@ P2 **CI 墙钟 45 min**（增量 ≈ 41 min，但 45 min 覆盖全部构建 + �
 
 | # | 项 | 归属 | 处置 |
 |---|---|---|---|
-| **B2** | **in-force 主 spec 的 Purpose 仍写着已被推翻的症状**（`chlib-stream-ready-ownership/spec.md:64-66` 的「静默丢字」）⇒ ⇒ **假绿固化在契约面** | architect（Purpose 订正路径：归档后手工补写，仓内先例存在） | 需专 change |
+| **B2** | **in-force 主 spec 的 Purpose 仍写着已被推翻的症状**（`chlib-stream-ready-ownership/spec.md:64-66` 的「静默丢字」）⇒ ⇒ **假绿固化在契约面** | architect（Purpose 订正路径：归档后手工补写，仓内先例存在） | 需专 change ⇒ ⇒ ⚠️ **2026-11-04 状态订正**：已由 change `spec-stale-closure-text-correction-2026-11` 处置（结论见本文 §5.3 表上方的 B2 行）· 本行里的 `spec.md:64-66` **行号引用作废**（主 spec 已整条替换 + 手改 Purpose） |
 | **B5** | N2 的 per-Section 机制与 **in-force 契约 R6 排除项第 4 条 + fixture 的 SECTION 禁令**冲突 ⇒ ⇒ N2′（判据松绑）**绕开了它** | architect | N2′ 已绕开 ⇒ 排除项保持不动 |
 | **B6** | **B1 与 B6 的 spec delta 会落在同一条 Requirement** ⇒ ⇒ MODIFIED 是整条替换 ⇒ ⇒ 后合并者**静默覆盖**前一个 ⇒ ⇒ 议程的执行顺序不可行 | architect | ⇒ ⇒ 建议**合并成一个 change**，或 B1 写成 `ADDED` 新条款 |
 | SHOULD_FIX | A4 的 N5 范围缺 `stream_half_pipe` / `mux` / `demux`；plan 批次表列名仍写「DUT 数」；台账文件名仍带 `silent-word-loss`；B7/B8 选项缺可机械核验定义；B4 的悬空引用面（`ADR-008:105` + `chlib-stream-semantics` Scenario） | builder | 下一轮批量订正 |

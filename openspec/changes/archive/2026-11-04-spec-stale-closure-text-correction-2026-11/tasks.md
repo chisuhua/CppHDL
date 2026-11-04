@@ -54,7 +54,7 @@
 - [x] `openspec/specs/chlib-stream-ready-ownership/spec.md` 的 `## Purpose`
       **五处**（精确文本见 `design.md` §4.1 / §4.2 / §4.3 / §4.4 / §4.5）
 - [x] §4.2 的新文本 MUST **保留**「判据 #7 仍未达成」的登记（缺陷已修 ≠ 判据已补）
-- [ ] **与 C3a 分成两个 commit** ⇒ ⇒ 避免「漏改则除一条 grep 外全绿」
+- [x] **与 C3a 分成两个 commit** ⇒ ⇒ 避免「漏改则除一条 grep 外全绿」
 
 ## C4 —— 归档后的核对（**可判定**形式，见 `design.md` §8）
 

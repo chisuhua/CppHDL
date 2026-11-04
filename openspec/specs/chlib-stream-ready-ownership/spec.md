@@ -11,6 +11,11 @@ ready 字段。
 ⇒ ⇒ 「FIFO 满 ⇒ 上游暂停」这个反压场景**在当前 API 下无法演示** ⇒ ⇒
 2 个 disabled sample 的**全部价值**依赖它 ⇒ ⇒ 连带 **6 处 `ch_in` 静默失效**。
 ⇒ ⇒ 且 ADR-045:160 **明文禁止**「组合子硬编码常量 ready」⇒ ⇒ 现状**违反**已签批 ADR。
+⚠️ **2026-11-04 原地订正（**只订正状态，不改任何历史叙述**）**：本段记录的是
+**收口前**的现状 ⇒ ⇒ 「在当前 API 下无法演示」「现状**违反**已签批 ADR」两句
+均为**当时**的陈述 ⇒ ⇒ 收口后（fifo 类 **2026-10-31** · 转发类 **2026-11-01/02**
+· 链内中间级 **2026-11-01**）⇒ ⇒ **现状已符合** ADR-045:160
+（⇒ ⇒ 本段其余文字保留作**决策史** ⇒ ⇒ 「由来」不因「已修」而失去依据）。
 
 ⚠️ **形态说明**（ADR-054 §3，**2026-10-31 修订**）：本 capability 采用**形态 E
 （默认值 + 可覆盖）**—— 组合子**立即**建立内部逻辑（行为**逐位不变** ⇒ ⇒ 存量
@@ -51,27 +56,43 @@ ready 字段。
 `stream-forward-ready-closure-p1a-2026-11`）**：上条的「实施完成且已验证」
 **仅覆盖 fifo 类**（`stream_fifo` / `stream_queue`）⇒ ⇒ ⇒
 ⚠️ **转发类的收口进度（2026-11-01）**：
-- ✅ **已收口**（形态 E · 单阶段）：`mux` · `arbiter×4`（`priority` /
-  `round_robin` / `lock` / `sequence`）· `join` · `filters×6` ·
-  `combine_with` ⇒ ⇒ ⇒ 判别力用例（**调用方持有的** ready 节点**真有驱动**
+- ✅ **已收口**（形态 E · 单阶段）：`mux` · `arbiter` 族（`priority` /
+  `round_robin` / `lock`）· `join` · `filters` 族 · `combine_with`
+  ⇒ ⇒ ⇒ 判别力用例（**调用方持有的** ready 节点**真有驱动**
   且**值跟随**）⇒ ⇒ ⇒ 护栏 R8（**穷举** + **存在性判据**）⇒ ⇒ ⇒
-  ⇒ ⇒ ⇒ **8 种原地投毒全部被抓住**（行为 + 静态**双判据**）；
-- ❌ **仍未收口**：`demux`（方向修正是**行为变更** ⇒ ⇒ 独立 ADR）·
-  `fork`（同步语义**从未工作过** ⇒ ⇒ 等于**新功能**）⇒ ⇒ ⇒ 其义务**显式移交**
-  `.rddf/improvements/stream-forward-ready-closure-2026-10.md`（P1 台账）
-  ⇒ ⇒ ⇒ 待其落地时经 delta **加回**；
-- ⚠️ **另有一项独立的真实缺陷**（⇒ ⇒ **不属于**本 capability）：builder 的
-  链式 `queue<>()` **上游反压从未建立**（实测 `source.ready` **恒 0** ⇒ ⇒ ⇒
+  ⇒ ⇒ ⇒ **全部原地投毒都被抓住**（护栏的**行为 + 静态**判据组合
+  ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **部分投毒**（如 `drop-multidrive-guard` / `rr-feedback-const`）
+  ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **仅行为判据**可抓 ⇒ ⇒ **静态判据仍绿是【正确】的**
+  ⚠️ ⚠️ **2026-11-04 订正**：`stream_arbiter_sequence` 已于 **2026-11-02**
+  **物理删除**（`chlib-stream-arbitration` 明文要求它 MUST 不存在）
+  ⇒ ⇒ ⇒ ⇒ 故清单里**不再**有它；`filters` 族**不写死个数**（计数会漂）；
+- ✅ **已收口**：`demux`（**ADR-056** · 消费端 ⇒ 上游 · 越界 ⇒ 挡住上游）·
+  `fork`（**ADR-057** · 同步语义 `input.ready = AND(各输出 ready)` +
+  `synchronous=false` 建图期响亮拒绝）⇒ ⇒ ⇒ 2026-11-01 裁决、
+  **2026-11-02 落地**（change `stream-demux-fork-ready-semantics-2026-11`
+  ⇒ ⇒ 判据 = `tests/test_stream_demux_fork_dual.cpp`（双后端）
+  ⇒ ⇒ ⇒ 护栏 = **R13** + 2 种原地投毒）⇒ ⇒ ⇒ ⇒ ⇒ **「未收口者」集合为空**；
+- ✅ **另有一项独立的真实缺陷已修复**（⇒ ⇒ **不属于**本 capability）：builder 的
+  链式 `queue<>()` **上游反压从未建立**（曾实测 `source.ready` **恒 0** ⇒ ⇒ ⇒
   上游若遵守 ready 协议 ⇒ ⇒ ⇒ **永远推不动 = 死路**）⇒ ⇒ ⇒
-  `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`。
+  **已由 ADR-055 修复**（2026-11-01 · change
+  `stream-builder-and-pipe-ready-ownership-2026-11` ⇒ ⇒ 链内闭包不变式
+  ⇒ ⇒ ⇒ 判据 = `tests/test_stream_builder_backpressure_dual.cpp`（双后端）
+  ⇒ ⇒ ⇒ ⇒ 台账 `.rddf/improvements/stream-builder-chain-silent-word-loss-2026-11.md`
+  ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ **但该台账的判据 #7（穷举 builder 的**全部**链式方法）
+  **仍未达成** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 过滤类
+  （`haltWhen` / `continueWhen` / `map` / `throwWhen` / `takeWhen`）在 builder
+  链里**零行为用例** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **缺陷本体已修**
+  ≠ **判据缺口已补**。
   ⚠️ **2026-11-01 事实订正**（change
   `chlib-stream-ready-ownership-purpose-correction-2026-11`）：本段原写
   「**静默丢字**」⇒ ⇒ ⇒ **该描述已被实测推翻**（⇒ ⇒ 「弹光后为空」被误读为
   「丢字」）⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 上面的「上游反压」才是真缺陷**（⇒ ⇒ 两者**不是**
   ⇒ ⇒ ⇒ 同一件事 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒）。
 
-⇒ ⇒ ⇒ **转发类 MUST NOT** 被本 capability 声称「**全部**已兑现」
-⇒ ⇒ ⇒ ⇒ 未收口者仍属「硬编码常量 ready ⇒ ⇒ **仍属违规**」。
+⇒ ⇒ ⇒ **转发类已全部兑现**（2026-11-02 起）⇒ ⇒ ⇒ ⇒ **但「硬编码常量 ready」
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **对所有转发类仍属违规**（⇒ ⇒ 无例外集合
+⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **「全部收口」≠「可以恒就绪」**）。
 
 ⚠️ **覆盖生效的四个必要条件**（2026-10-31 机制级订正，实测）：① **目标** MUST
 是**已存在**的**非 literal** 节点（⇒ ⇒ `<<=` 在**空**目标上会**另建**节点

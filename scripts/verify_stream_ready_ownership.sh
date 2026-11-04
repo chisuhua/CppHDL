@@ -21,10 +21,14 @@
 #   · **`R8`（结构判据）** ⇒ ⇒ **穷举** `stream.h` + `stream_arbiter.h` 内
 #     **所有**接受 `ch_stream` 形参的组合子（⇒ ⇒ **不是**符号清单）
 #     ⇒ ⇒ 判定其上游 ready 是否全用 `<<=`；
-#   · ⚠️ **仍未收口** ⇒ ⇒ `stream_fork`（P1-c）· `stream_demux`（P1-b）
-#     ⇒ ⇒ ⇒ **显式豁免 + `::notice` 点名**（⇒ ⇒ 豁免**非静默**）
-#     ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 主 spec 的 R1「转发类 MUST NOT 被读作『已合规』」
-#     Scenario 继续在约**（⚠️ 标题 MUST NOT 改 ⇒ ⇒ 只能原地订正正文）。
+#   · ⚠️ **2026-11-04 状态订正（**只订正状态**）**：`stream_fork`（ADR-057）与
+#     `stream_demux`（ADR-056）**已于 2026-11-02 收口** ⇒ ⇒ ⇒ ⇒ 它们**不再**是
+#     「显式豁免 + `::notice` 点名」的对象 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 它们**在** R13 的
+#     覆盖范围内（`scripts/lib/stream_ready_ownership.py` ⇒ 2 种原地投毒
+#     `demux-fork-master-ready-operator-assign` / `demux-fork-drop-drive`）
+#     ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **主 spec 的 R1「转发类 MUST NOT 被读作
+#     『已合规』」Scenario 继续在约**（⚠️ 标题 MUST NOT 改 ⇒ ⇒ 只能原地订正正文；
+#     订正见 change `spec-stale-closure-text-correction-2026-11`）。
 #   ② **静态判据**（结构）⇒ ⇒ `R2`~`R6` ⇒ ⇒ 走
 #      `scripts/lib/stream_ready_ownership.py`（**剥注释**后匹配 ⇒ ⇒ 注释里的
 #      字面量不会误判）⇒ ⇒ 这几条**明文**是结构性的（capability delta

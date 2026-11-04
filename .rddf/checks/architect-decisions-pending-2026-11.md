@@ -23,8 +23,10 @@ evidence: probe:docs/adr/ADR-055-chain-intermediate-ready-ownership.md
 | **P2** | CI 墙钟 45 min | —— | ✅ **实测 + 定档**（2026-11-03）：warm 464 s / cold 4301 s ⇒ ⇒ **分片并行本来就存在**（`matrix.shard: [1,2]` ⇒ 45 min 是**每 job** 预算 ⇒ cold 每 job ≈ 38 min）⇒ ⇒ 真正的风险是 **per-test `TIMEOUT 60` 在 cold 下必然红** ⇒ ⇒ 已按「≥ 2× 冷实测」定档（默认 60 → 180 + 4 处上调）⇒ 台账 `.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md` |
 
 ⚠️ **「B2 的 in-force spec `Purpose` 仍写着已被推翻的症状」**（§5.3 的待处理项）⇒ ⇒
-**已处置**：`openspec/specs/chlib-stream-ready-ownership/spec.md:69` 现在明写
-「该描述**已被实测推翻**」⇒ ⇒ 不是「假绿固化在契约面」。
+**已处置**：`openspec/specs/chlib-stream-ready-ownership/spec.md` 的
+`## Purpose` 段现在明写「该描述**已被实测推翻**」⇒ ⇒ 不是「假绿固化在契约面」。
+⚠️ **2026-11-04 引用形式订正**：原写的是**行号** `:69` ⇒ ⇒ 主 spec 在归档后
+会被**整条替换 + 手改 Purpose** ⇒ ⇒ 行号必漂 ⇒ ⇒ 改为**段落引用**（本仓惯例）。
 
 ⇒ ⇒ **本清单自此归档为决策史**；后续若要开新的裁决项 ⇒ ⇒ 用新的
 `.rddf/checks/decision-request-*.md`（体例见

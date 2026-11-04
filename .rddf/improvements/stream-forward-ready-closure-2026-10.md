@@ -14,8 +14,11 @@ evidence: test:tests/chlib/test_stream.cpp#[ready]
 - **Date drafted**: 2026-10-31
 - **Drafted by**: build-agent (builder role)
 - **Status**: ✅ **P1-a / P1-b / P1-c 全部收口**（P1-a 2026-11-01 · P1-b/P1-c 2026-11-01 裁决 + 2026-11-02 归档）
-  ⇒ ⇒ **已收口**（形态 E · 单阶段）：`mux` · `arbiter×4`（`priority` /
-  `round_robin` / `lock` / `sequence`）· `join` · `filters×6` · `combine_with`
+  ⇒ ⇒ **已收口**（形态 E · 单阶段）：`mux` · `arbiter` 族（`priority` /
+  `round_robin` / `lock`）· `join` · `filters` 族 · `combine_with`
+  ⚠️ **2026-11-04 状态订正**：原清单写的是 `arbiter×4`（含 `sequence`）
+  ⇒ ⇒ `stream_arbiter_sequence` 已于 **2026-11-02 物理删除**
+  ⇒ ⇒ ⇒ ⇒ ⇒ 故清单里**不再**有它；`filters` 族**不写死个数**（计数会漂）
   ⇒ ⇒ **P1-b（`demux` ready 方向）已收口**：**ADR-056**（Accepted 2026-11-01）
   ⇒ 实现 `include/chlib/stream.h:1024` 的 `upstream_ready = in_range & selected_ready`
   ⇒ ⇒ 与 `stream_mux` **双向对称**；越界时 `in_range == 0` ⇒ 上游停顿（**可观测**，不是静默丢数据）
@@ -366,6 +369,15 @@ filters×6 / combine_with）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ builder �
       ⇒ ⇒ ✅ **P1-a 已达成**（护栏 **R8** 穷举 + **存在性判据**
       ⇒ ⇒ ⇒ ⇒ ⚠️ `demux` / `fork` **显式豁免** + `::notice` 点名
       ⇒ ⇒ ⇒ ⇒ ⇒ **⇒ 豁免非静默**）
+      ⚠️ **2026-11-04 状态订正（**只订正状态，不改本条的达成判定**）**：
+      上面的组件清单是 **2026-11-01 当时**的（R8 的**穷举**判据 ⇒ 清单随实现变）
+      ⇒ ⇒ `stream_arbiter_sequence` 已于 **2026-11-02 物理删除**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 「`stream_arbiter.h` 内 `lock` / `sequence`」中的
+      `sequence` **已不存在**（`chlib-stream-arbitration` 明文要求它 MUST NOT 存在）
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 且 `demux` / `fork` 已于 **2026-11-02 收口**
+      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **不再**是「显式豁免」对象 ⇒ ⇒ **在** R13
+      覆盖范围内 ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **护栏头注释已同步订正**
+      （`scripts/verify_stream_ready_ownership.sh`）。
 - [x] 变异：每条**先确认编译成功**
       ⇒ ⇒ ✅ 已达成（自检框架**强制**「编译失败 ⇒ 变异无效 ⇒ 失败」）
 - [x] 护栏：**扩展** `scripts/verify_stream_ready_ownership.sh`（同一契约 ⇒ 同一
