@@ -718,3 +718,20 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 | **G1-3** | **同 base 不同类型 MUST 在编号前判身份** —— 现状只查**生成后**重名 ⇒ ⇒ 两个不同类型若 sanitized 后 base 相同 ⇒ ⇒ 会被**静默**编成 `_0`/`_1` ⇒ ⇒ 违反 §2.3「同名不同类型 ⇒ 响亮拒绝」 | ADR-060 v1.12 · tasks 0.31 |
 | **G2-1** | **注入的 clock/reset 不在分析层端口表**（非 root module 的 clock/reset 是**发射期补的**）⇒ ⇒ 只查分析层**必然漏** | ADR-060 v1.12 |
 | **G2-2** | **只加 enum 或只查分析层都会漏** ⇒ ⇒ MUST 在**发射期**（`HierarchyEmitResult.port_provenance`，value-only，含注入 clock/reset）做完整性校验（expected = 分析层端口 ∪ 合成端口 ∪ 注入 clock/reset ⇒ actual = `ModuleView.ports` ∪ `synthesized_ports`），失败 ⇒ `ok=false` | ADR-060 v1.12 · tasks T0h/B3 |
+
+### 11.10 B3 开工前的两处契约缺口（2026-11-05 · architect 角色 · ADR-060 v1.13 + ADR-058 v2.12）
+
+> 触发：B2b-5 落地后，B3（冒泡 + 端口完整性 + 拒绝类 + 白名单）开工前复核实现，查出
+> **两个契约缺口 + 一个纯实现缺口** ⇒ ⇒ 前两项需要 ADR 裁决（缺了 ⇒ 实施者只能即兴）。
+
+| # | 缺口 | 裁决 | 落点 |
+|---|---|---|---|
+| **G3** | **F2**：成层组件的悬空 `ch_in` 归 `Self` 而不冒泡（`src/hierarchy_analysis.cpp:247-253`）⇒ 顶层无法驱动。修法落点未定 | 冒泡端口 **MUST 在分析层登记**（否则顶层端口序与扁平发散）；**连接也由分析层生成**（现状连接表只从有 driver 的边生成 ⇒ 中间祖先会空连接 ⇒ 值中途断线且零报错）；顶层 `synthesized_ports` **MUST 恒空**；第三轴仍在发射期但**链条 MUST 同一份实现** | ADR-060 §2.2 G3-1..G3-6 |
+| **§2.4.2** | `UndrivenPolicy` **只有枚举、零实现读取**（Zero-Debt） | 定义 `Bubble` / `Reject` 两格语义；**收窄 `Reject` 适用范围** = 只对 inline 折叠后 module 归属为**非根成层 module** 的悬空 `ch_in`（根自己的 / inline 折叠进根的悬空 `ch_in` 在扁平里本就是顶层 input ⇒ 拒绝它们 = 拒绝合法设计） | ADR-060 §2.4.2 |
+| **⑤** | 错误载体两套（ADR-062 §2.6 说 `CHFATAL_EXCEPTION`，发射器返 `HierarchyEmitResult`）+ ADR-058 §2.3 签名与实现漂移 | 对外唯一载体 = `HierarchyEmitResult`；**发射器内 MUST 不依赖异常**（异常会落进 `print()` 的 `catch(...)` ⇒ 静默失败）；分析层抛 ⇒ 入口**转换**；各 ADR 的 `CHFATAL_EXCEPTION` 按本口径解释 | ADR-058 §2.3 ⑤ + 签名订正 |
+| （不修 ADR） | 直接行 1 / 行 2 **缺宽度校验**（产物关掉 `WIDTHEXPAND`/`WIDTHTRUNC` ⇒ 静默扩展/截断） | v1.10 **W1 的通用措辞已覆盖** ⇒ 判定为**纯实现追赶** ⇒ 归 B3 前的小批（含负向用例） | tasks / B3 |
+
+⚠️ **审稿**：oracle 1 轮 + critic 1 轮（arch 档）⇒ critic `APPROVE_WITH_CONDITIONS`（无 BLOCKER）。
+oracle 的**唯一高影响发现**（连接生成的层位歧义）已按原句修进 G3-2；critic 的 SF-1（第三轴层位未明示）
+已补 G3-6；SF-2（proposal Acceptance 的「抛」是旧载体措辞）登记为 **B3 的 tasks 待办**。
+⇒ ⇒ 完整记录：`.rddf/reviews/ADR-060-v1.13-ADR-058-v2.12.md`。

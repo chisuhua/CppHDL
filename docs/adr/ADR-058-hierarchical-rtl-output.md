@@ -1,10 +1,6 @@
 # ADR-058: 真层次化 RTL 输出 —— 语义边界与等价性
 
-- Status: **Accepted**（2026-11-05 · 用户拍板 · **v2.11**：消解 §5 lint 门与 ADR-060 §2.5 的
-  **跨 ADR 互斥**（critic BLOCKER）—— §5 的 `-Wall` 措辞**已被 ADR-060 §2.5 取代**并加指针；
-  **v2.10**：据 2026-11-05 用户拍板 **C1 闭合** ⇒
-  「单文件唯一模式」由条件条款转为**无条件裁决**；v2.8 据 2026-11-04 架构评审消解跨 ADR 矛盾 +
-  撤销 §5 遗留的 `⊆` 判据 + 补「同 ABI」限定）
+- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.12** · 版本史见 §6）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**前置** = ADR-059（节点归属与组件命名）·
@@ -13,6 +9,7 @@
 - 关联 change: 待建（见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
 - 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md`（详细规格）·
   `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`（实施路径）
+- 审稿报告: `.rddf/reviews/ADR-060-v1.13-ADR-058-v2.12.md`（oracle 1 + critic 1 · 无 BLOCKER）
 - ⚠️ **配套决策**：**ADR-060**（层次化输出的**端口策略**与 **module 复用**）——
   本 ADR 只承载「**边界是什么 / 等价性怎么定义 / API 边界在哪**」三件事。
 
@@ -170,10 +167,28 @@ output（事实④）⇒ ⇒ 层次化的顶层输出集合是扁平的**子集*
 // ⚠️ 选项结构的**唯一权威定义**在 ADR-061 §2.5（含 port_policy / undriven_policy /
 //    top_module_name）。本 ADR 不重复列出全部字段（⇒ 三份副本必然漂移 —— critic NIT）。
 // ⚠️ 返回类型不是 void（oracle R14）：三条「响亮拒绝」必须能被调用方观测。
-std::expected<HierManifest, HierError>
+// ⚠️ v2.12 订正：签名按**已落地形态**写（原文 `std::expected<HierManifest, HierError>`
+//    与 `VerilogHierOptions` 与实现漂移 ⇒ 按实现订正，**语义契约不变**）。
+struct HierarchyEmitOptions {
+    PortPolicy port_policy;            // 默认 SynthesizeWarn
+    UndrivenPolicy undriven_policy;    // 默认 Bubble
+    std::string top_module_name = "top";
+};
+struct HierarchyEmitResult {
+    bool ok;
+    std::string error;                 // ok == false 时非空
+    std::vector<std::string> files;    // ok == true 时恰一个
+    std::vector<std::string> warnings;
+};
+HierarchyEmitResult
 toVerilogHierarchical(const std::string& path, ch::Component& top,
-                      const VerilogHierOptions& opts = {});
+                      const HierarchyEmitOptions& opts = {});
 ```
+
+⚠️ **T3-④ 的 G2 追加字段**（**尚未落地** ⇒ ⇒ 不并入上面的「已落地形态」块）：
+`HierarchyEmitResult.port_provenance`（**value-only**；含**注入的 clock/reset**）
+⇒ ⇒ 用途 = 端口完整性校验（`expected ⊆ actual`）与端口清单
+⇒ ⇒ 它**不改变**本节的语义契约（失败可观测 · 诊断可承载 · 单文件产物）。
 
 ⚠️ **错误模型（oracle R14，承重）**：
 ① **所有校验 MUST 在第一次 I/O 之前完成** ⇒ ⇒ 否则留下**半套产物**（`cmp` / lint 会读到它）；
@@ -184,6 +199,20 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
 ⇒ ⇒ **三条 `CHFATAL_EXCEPTION` 会被静默吞掉**；
 ④ `CHFATAL_EXCEPTION` 在 static destruction 期**不抛**（`include/utils/logger.h:235-244`）
 ⇒ ⇒ 该路径 MUST 另有返回码兜底（`HierError`）。
+
+⑤ **错误载体统一口径（v2.12 · 承重）**：对外**唯一**载体 = `HierarchyEmitResult`
+（`ok=false` + `error` 点名；`files` 为空）。
+- **发射器内**的校验失败（端口策略 / 跨层宽度 / 接口白名单 / 端口完整性 / module 命名冲突）
+  MUST 走**错误结果** ⇒ MUST NOT 依赖异常 —— 异常会落进 `print()` 的 `catch(...)`（③）
+  ⇒ ⇒ 变成「静默失败 + 看起来成功」；
+- **分析层前置校验**（跨模块 `ch_mem` · 成层组件自驱动 `ch_in` · 已 build 未 `add_child`）
+  允许 `CHFATAL_EXCEPTION` ⇒ 但入口 MUST 在**第一次 I/O 之前**用
+  `catch (const std::exception&)` **转换**成 `error` ⇒ ⇒ 这是**转换**，不是吞掉
+  （对比 `toVerilog()` 的 `catch(...)` 静默）；
+- **各 ADR 中出现的 `CHFATAL_EXCEPTION` 字样**（ADR-060 §2.1 / §2.2 / §2.4.2、ADR-062 §2.6 等）
+  MUST 按本口径解释为「**响亮拒绝**」，可观测形态由**所在层**决定：
+  发射器路径 ⇒ 错误结果 + 点名；分析层前置校验 ⇒ 抛 + 入口转换
+  ⇒ ⇒ **MUST NOT** 为同一判据引入第二套错误通道。
 
 ⚠️ **受限例外（为使等价性可执行）**：允许给 `VerilatorBackend` 增加一个**只增不改**的入口
 `initialize_with_verilog(path, data_map)`（既有 `initialize(ctx, …)` 行为**逐字节不变**）
@@ -246,6 +275,8 @@ Verilog 里，**文件级切分是纯下游工具链动作** —— 按 module �
 | 4 | **每层一个 `ch_device` + 跨 device 连线** | ❌ 否决 | ① 跨 context 连线**不受支持**：仿真偶然能算但 `toVerilog` 产出**非法 Verilog**（事实⑦）；② 两个 context 各有 `default_clock`/`default_reset` ⇒ 时钟语义分裂 |
 | 5 | **每层一个 `ch_device` 单独出文件 + 手写顶层例化** | 🟡 **仅作过渡手段** | ① 零框架改动 ⇒ 短期可用；② 但 `ch_device<Sub>` 把整棵子树 build 进同一 ctx ⇒ 子模块体内含孙逻辑 ⇒ **不能**与层次化并存；③ 对「成员 `ch_module`」的组件直接崩；④ **归位条件**：层次化 API 落地 ⇒ **本条作废**（否则它会像 `fwft_fifo` 一样长期以「临时手段」身份留在文档里） |
 | 6 | **用「图割」定义模块边界** | ❌ 否决 | ① 对**死逻辑**与**归属错误**都判不准 ⇒ 需两套规则并存 ⇒ 不可预测；② 归属修好后所有权规则**更简单且全覆盖** ⇒ ⇒ 图割是「缺陷未修时的权宜」，不是终态 |
+| 7 | **错误载体：两套并存**（分析层抛异常 + 发射器返结构体） | ❌ 否决（v2.12 · §2.3 ⑤） | ① ADR-062 §2.6 字面写 `CHFATAL_EXCEPTION`、发射器却返 `HierarchyEmitResult` ⇒ ⇒ 实施者被迫二选一 ⇒ ⇒ 要么违反字面、要么让异常落进 `print()` 的 `catch(...)` ⇒ ⇒ **静默失败 + 看起来成功**；② 统一为「对外 = 错误结果」后，各层的**可观测形态**由所在层决定（分析层抛 ⇒ 入口转换）⇒ 只有一条通道 |
+| 8 | **统一为异常**（`toVerilogHierarchical` 抛 `HierError`） | ❌ 否决（v2.12） | ① 与 §2.3 ③ 的「校验 MUST NOT 落在 `catch(...)` 内」张力最大（既有 writer 三处 `catch(...)`）；② 静态析构期 `CHFATAL_EXCEPTION` **不抛** ⇒ 必须有返回码兜底 ⇒ ⇒ 等于又要两套；③ 调用方（含测试）无法用返回值表达「失败但不中断」 |
 
 ---
 
@@ -373,6 +404,7 @@ output**（`src/codegen_verilog.cpp:333-362`）⇒ ⇒ 顶层 module 端口表 M
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-05 | **v2.12**（B3 开工前 · architect 角色 · 据实施期查明的**两处契约缺口**）：① **§2.3 的签名按已落地形态订正** —— 原文 `std::expected<HierManifest, HierError>` / `VerilogHierOptions` 与实现（`HierarchyEmitResult` / `HierarchyEmitOptions`）**漂移** ⇒ ⇒ 按实现订正（**语义契约不变**：失败可观测 + 诊断可承载 + 单文件产物）；② **§2.3 新增错误模型 ⑤「错误载体统一口径」** —— 对外唯一载体 = `HierarchyEmitResult`；**发射器内**校验失败（端口策略 / 跨层宽度 / 白名单 / 端口完整性 / 命名冲突）MUST 走 `ok=false` + `error`，**MUST NOT** 依赖异常（异常会落进 `print()` 的 `catch(...)` ⇒ 静默失败）；**分析层前置校验**允许 `CHFATAL_EXCEPTION`，入口 MUST 在第一次 I/O 前**转换**（不是吞掉）；并声明**各 ADR 中 `CHFATAL_EXCEPTION` 字样按本口径解释**（可观测形态由所在层决定）⇒ ⇒ 目的是消除 B3 的「白名单说抛异常、发射器返回结构体」两套错误通道 |
 | 2026-11-02 | **创建**（裁决：新增独立 API · 语义边界 = 所有权边界 · 与扁平逐拍等价 · 隐式端口合成+告警 · 悬空输入冒泡 · module 复用 · ADR-059 为硬前置） |
 | 2026-11-02 | **v2**（据对抗审稿）：① **范围收窄** ⇒ 端口策略与 module 复用**拆出到 ADR-060**（一决策一文档）；② **等价性判据重写**为「映射表 + 显式观测集合 `O`（非空且含变化信号）+ 顶层端口集合包含关系」⇒ 修掉「全部顶层输出全等」与「子输出不冒泡」的自相矛盾；③ **新增「结构同构」承重不变式**（module 树 ≡ Component 树）；④ **新增 backend 只增不改例外**（否则 P4 等价性**不可执行**）；⑤ 补「过渡手段的归位条件」；⑥ 删掉未复算的调用点数量表述 |
 | 2026-11-02 | **v2.1**（用户拍板）：**backend 只增不改例外 ⇒ 允许**（§2.3 末尾已标注「已裁决」）⇒ ⇒ ⇒ P4 的「多文件 harness」退化为「backend 加一个只增入口」⇒ ⇒ ⇒ 预估按 ADR-058 §2.3 的例外路径执行 |
