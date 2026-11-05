@@ -7,6 +7,9 @@
 ## T1 用户面文档
 
 - [ ] 1.1 `docs/usage_guide/05-component-design.md` §5 改写
+      ⇒ ⇒ **MUST 含 ADR-058 §4 风险 6 的观测盲区边界段**（等价性只覆盖顶层可见行为 ·
+      被移出顶层的 `ch_out` 顶层不可观测 · 输入方向无盲区）—— 这是「三处同步登记」的第三处
+      （ADR · capability spec 由 T3-⑤ 的 delta 负责 · 用法指南由本任务负责）
 - [ ] 1.2 `HIERARCHICAL-RTL-AUTHORING-GUIDE.md`：删 `CH_MODULE_NAME` ·
       改 `CH_HIERARCHY_LAYER("name")` · 补档 ③ 形态
 - [ ] 1.3 合并宏的**签名面 5 处**全部改毕

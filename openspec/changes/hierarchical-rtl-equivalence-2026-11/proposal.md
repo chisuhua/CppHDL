@@ -47,14 +47,16 @@ parity **盖章**（两后端一致地错）⇒ ⇒ 只有「手推期望值 + �
 - [ ] **同一 `node_id` 在两条路径的名字 MUST 逐字相同**（用映射表的 `node_id` 索引逐项比对；
       MUST NOT 只比「名字集合交集」）
 - [ ] **判别力自证 ≥2 形态**（删一条连线 · 改一个隐式端口方向）⇒ 两红 ⇒ 还原复绿
-- [ ] 确定性（同 ABI 内两次生成字节相同）；`verilator --lint-only -Wall` **零 error**
+- [ ] 确定性（同 ABI 内两次生成字节相同）；产物通过 **ADR-060 §2.5 的 lint 门**
+      （⚠️ **不加 `-Wall`**、**禁 `-Wno-fatal`** · 退出码 + 无 `%Error` + `lint_off` 白名单）
 - [ ] **既有 `initialize(ctx, …)` 行为逐字节不变**
-- [ ] **零回归**：`ctest -LE perf` / samples / examples 全绿 · 计数锚点同步
+- [ ] **零回归**：`ctest -LE perf` / samples / examples 全绿 · 计数锚点按新增用例**同步更新**
+      （⚠️ 等价性用例带 `verilator_e2e` 标签 ⇒ `VERILATOR_E2E_TOTAL` 必变；parity 两锚点不变）
 
 ## Capabilities
 
 | capability | delta |
 |---|---|
-| `rtl-hierarchical-output` | **ADDED ×2**（默认（全 inline）产物 MUST 与扁平产物逐字节一致 · 层次化产物 MUST 与扁平产物等价（可机械判定）） |
+| `rtl-hierarchical-output` | **ADDED ×2**（默认（全 inline）产物 MUST 与扁平产物逐字节一致 · 层次化产物 MUST 与扁平产物等价（可机械判定））+ **MODIFIED ×5**（`-Wall` · 「抛异常」×4 · `strict` ×2 的措辞与实现对齐，见 delta 文件） |
 
 ⇒ 归档**禁** `--skip-specs`。
