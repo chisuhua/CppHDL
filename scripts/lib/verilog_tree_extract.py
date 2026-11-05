@@ -19,6 +19,12 @@
 用法：
     verilog_tree_extract.py <path/to/Vxxx.tree.json> [--json]
 输出（默认 TSV，每行一条）：`<parent_module>\t<inst_name>\t<module_name>`
+
+    verilog_tree_extract.py <path/to/Vxxx.tree.json> --ports [--json]
+输出：`<module>\t<port_name>\t<INPUT|OUTPUT>\t<width>`（**只含真端口**）
+
+⚠️ **端口提取同样是结构化提取**（`isPrimaryIO` + dtype 的 `range`）⇒ ⇒ 端口集合的
+   判据 MUST 走这条路 ⇒ ⇒ **MUST NOT** 自研 Verilog 文本解析器。
 """
 
 from __future__ import annotations
@@ -80,15 +86,75 @@ def extract(tree: dict) -> list[tuple[str, str, str]]:
     return rows
 
 
+def _find_by_addr(tree: dict, addr: str) -> dict | None:
+    """按 `addr` 找节点（深度优先）。"""
+    if not addr or addr in UNLINKED:
+        return None
+    for node in _walk(tree):
+        if node.get("addr") == addr:
+            return node
+    return None
+
+
+def _width_of(tree: dict, dtypep: str) -> int:
+    """从 dtype 节点的 `range`（如 `7:0`）算位宽；无 range ⇒ 1 位。"""
+    dtype = _find_by_addr(tree, dtypep)
+    if not isinstance(dtype, dict):
+        return 1
+    rng = dtype.get("range")
+    if not isinstance(rng, str) or ":" not in rng:
+        return 1
+    msb_text, _, lsb_text = rng.partition(":")
+    try:
+        return int(msb_text) - int(lsb_text) + 1
+    except ValueError:
+        return 1
+
+
+def extract_ports(tree: dict) -> list[tuple[str, str, str, int]]:
+    """产出 `(module, port_name, direction, width)` 四元组（按 module 声明序）。
+
+    ⚠️ **只取真端口**（`isPrimaryIO`）⇒ 体内线网（`direction == 'NONE'`）不算。
+    ⚠️ 宽度取自 dtype 节点的 `range`（结构化提取 ⇒ MUST NOT 自研文本解析器）。
+    """
+    rows: list[tuple[str, str, str, int]] = []
+    for module in tree.get("modulesp") or []:
+        if not isinstance(module, dict):
+            continue
+        mod_name = module.get("name") or module.get("verilogName") or ""
+        for node in _walk(module.get("stmtsp") or []):
+            if node.get("type") != "VAR" or not node.get("isPrimaryIO"):
+                continue
+            port = node.get("name") or node.get("verilogName") or ""
+            if not port:
+                continue
+            direction = node.get("direction") or ""
+            rows.append((mod_name, port, direction, _width_of(tree, node.get("dtypep") or "")))
+    return rows
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(__doc__)
         return 2
     path = argv[1]
     as_json = "--json" in argv[2:]
+    as_ports = "--ports" in argv[2:]
 
     with open(path, "r", encoding="utf-8") as handle:
         tree = json.load(handle)
+
+    if as_ports:
+        rows = extract_ports(tree)
+        if as_json:
+            print(json.dumps(
+                [{"module": m, "port": p, "direction": d, "width": w}
+                 for m, p, d, w in rows],
+                ensure_ascii=False, indent=2))
+        else:
+            for mod_name, port, direction, width in rows:
+                print(f"{mod_name}\t{port}\t{direction}\t{width}")
+        return 0
 
     rows = extract(tree)
     if as_json:

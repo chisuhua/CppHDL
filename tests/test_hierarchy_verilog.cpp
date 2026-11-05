@@ -31,6 +31,9 @@
 //    ⇒ ⇒ 发射器与单测**共用同一份**检查器（否则单测只能证明「自己和自己一致」）
 #include "../src/hierarchy_signal_map_check.h"
 
+// ⚠️ **内部**判据（顶层端口集合的两条精确判据 · ADR-058 §2.2 ②③ · B2）
+#include "../src/hierarchy_port_set_check.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -2740,5 +2743,195 @@ TEST_CASE("hierarchical emission: signal map check rejects broken tables",
         }
         REQUIRE(hit);
         REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// T3-⑤ · B2：**顶层端口集合**的两条精确判据（ADR-058 §2.2 ②③）
+//
+//   ② 输入端口集合 MUST **相等**（名字 + 宽度逐项配对 · 双向）
+//   ③ 输出端口集合 MUST **等于**「扁平输出集 − 被移出顶层的那批」
+//
+// ⚠️ **为什么期望集必须手推**：`moved_out` 若从层次化产物反推 ⇒ 变成
+//    「实际集 − 实际集」的**循环定义** ⇒ 恒真 ⇒ 「不减法」这类缺陷抓不住。
+// ⚠️ **扁平侧取自扁平发射器自己的视图**（`make_flat_module_view`）⇒ 与层次化侧
+//    是**不同代码路径** ⇒ ⇒ 「归属 / 层判定」类缺陷对它**盲**（= 有判别力）。
+// ─────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+/// 扁平产物的顶层端口表（**扁平发射器自己的视图**）。
+/// ⚠️ 扁平侧**全部** `ch_out` 都是顶层端口（全部 inline ⇒ 没有成层子树）
+///    ⇒ ⇒ 这正是 ADR-058 §2.2 ③ 里「扁平输出集」的含义。
+std::vector<ch::detail::PortSetEntry> flat_top_ports(ch::core::context *ctx) {
+    const auto view = ch::make_flat_module_view(ctx);
+    std::vector<ch::detail::PortSetEntry> out;
+    for (auto *n : view.ports) {
+        const auto nit = view.names.find(n);
+        if (nit == view.names.end()) {
+            continue;
+        }
+        const auto ty = n->type();
+        ch::detail::PortSetEntry e;
+        e.name = nit->second;
+        e.is_input = ty == ch::core::lnodetype::type_input ||
+                     ty == ch::core::lnodetype::type_clock ||
+                     ty == ch::core::lnodetype::type_reset;
+        e.width = n->size();
+        out.push_back(e);
+    }
+    return out;
+}
+
+/// 层次化**顶层** module 的端口表（来自 emitter 的 `port_provenance`）。
+std::vector<ch::detail::PortSetEntry> hier_top_ports(const ch::HierarchyEmitResult &r,
+                                                      const std::string &root_module) {
+    std::vector<ch::detail::PortSetEntry> out;
+    for (const auto &p : r.port_provenance) {
+        if (p.module != root_module) {
+            continue;
+        }
+        out.push_back(ch::detail::PortSetEntry{p.port, p.is_input, p.width});
+    }
+    return out;
+}
+
+/// 按名字取一条（找不到 ⇒ 返回 nullptr）
+const ch::detail::PortSetEntry *find_port(const std::vector<ch::detail::PortSetEntry> &v,
+                                          const std::string &name) {
+    for (const auto &e : v) {
+        if (e.name == name) {
+            return &e;
+        }
+    }
+    return nullptr;
+}
+
+}   // namespace
+
+TEST_CASE("hierarchical emission: top-level port sets equal the flat ones exactly",
+          "[hierarchy][emit][portset]") {
+    ch::ch_device<T3> dev;
+    const std::string path = std::string(kOutDir) + "/portset_l3.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const auto flat = flat_top_ports(dev.context());
+    const auto hier = hier_top_ports(r, "top");
+    REQUIRE_FALSE(flat.empty());
+    REQUIRE_FALSE(hier.empty());
+
+    // ⚠️ **手推**的「被移出顶层」期望集（T3 = 三层：T3 → M3 → L3，全部成层）
+    //    · `T3.dout`  归**根**自己        ⇒ ⇒ 留在顶层
+    //    · `M3.dout`  最近成层祖先 ≠ 根 ⇒ ⇒ **移出**顶层（降级为 m3_unit 的 output 端口）
+    //    · `L3.dout`  最近成层祖先 ≠ 根 ⇒ ⇒ **移出**顶层（降级为 l3_unit 的 output 端口）
+    //    ⚠️ 名字 = ctx 级全局名（`sanitize` 后）⇒ 与产物逐字相同
+    const std::vector<ch::detail::PortSetEntry> moved_out = {
+        ch::detail::PortSetEntry{"top_mid_unnamed_output", false, 8},
+        ch::detail::PortSetEntry{"top_mid_leaf_unnamed_output", false, 8},
+    };
+
+    // 判据 ②：输入端口集合**相等**（双向）
+    REQUIRE(ch::detail::check_input_port_sets(flat, hier).empty());
+
+    // 判据 ③：输出端口集合 == 精确期望集（双向）
+    REQUIRE(ch::detail::check_output_port_set(flat, hier, moved_out).empty());
+
+    // ⚠️ 期望集必须是「减过」的 ⇒ 否则「不减法」的缺陷会蒙混过关
+    //    （这里显式断言期望集确实比扁平输出集少两个）
+    std::size_t flat_outputs = 0;
+    for (const auto &e : flat) {
+        if (!e.is_input) {
+            ++flat_outputs;
+        }
+    }
+    REQUIRE(flat_outputs == 3);   // T3.dout + M3.dout + L3.dout
+    std::size_t hier_outputs = 0;
+    for (const auto &e : hier) {
+        if (!e.is_input) {
+            ++hier_outputs;
+        }
+    }
+    REQUIRE(hier_outputs == 1);   // 只剩 T3.dout
+}
+
+TEST_CASE("hierarchical emission: port set checks reject a broken port table",
+          "[hierarchy][emit][portset][negative]") {
+    ch::ch_device<T3> dev;
+    const std::string path = std::string(kOutDir) + "/portset_neg.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const auto flat = flat_top_ports(dev.context());
+    const auto hier = hier_top_ports(r, "top");
+    const std::vector<ch::detail::PortSetEntry> moved_out = {
+        ch::detail::PortSetEntry{"top_mid_unnamed_output", false, 8},
+        ch::detail::PortSetEntry{"top_mid_leaf_unnamed_output", false, 8},
+    };
+    // 正向：真实端口表 MUST 通过（否则下面的负向对照毫无意义）
+    REQUIRE(ch::detail::check_input_port_sets(flat, hier).empty());
+    REQUIRE(ch::detail::check_output_port_set(flat, hier, moved_out).empty());
+
+    // 负向 ①：**漏发一个输入端口** ⇒ MUST 被抓到（`⊆` 方向的老陷阱）
+    {
+        auto broken = hier;
+        for (std::size_t i = 0; i < broken.size(); ++i) {
+            if (broken[i].is_input && broken[i].name != "default_clock" &&
+                broken[i].name != "default_reset") {
+                broken.erase(broken.begin() + static_cast<std::ptrdiff_t>(i));
+                break;
+            }
+        }
+        REQUIRE(broken.size() < hier.size());
+        REQUIRE_FALSE(ch::detail::check_input_port_sets(flat, broken).empty());
+    }
+    // 负向 ②：**不减法**（把被移出顶层的那批输出留在顶层）⇒ MUST 被抓到
+    {
+        auto broken = hier;
+        broken.push_back(ch::detail::PortSetEntry{"top_mid_unnamed_output", false, 8});
+        REQUIRE_FALSE(ch::detail::check_output_port_set(flat, broken, moved_out).empty());
+    }
+    // 负向 ③：**漏减期望集**（`moved_out` 少给一个）⇒ 期望集变大 ⇒ 正确实现必红
+    //        （这正是 ADR-058 §2.2 ③ 的「漏减 ⇒ 正确实现必红」）
+    {
+        std::vector<ch::detail::PortSetEntry> partial = {
+            ch::detail::PortSetEntry{"top_mid_unnamed_output", false, 8},
+        };
+        REQUIRE_FALSE(ch::detail::check_output_port_set(flat, hier, partial).empty());
+    }
+    // 负向 ④：**对调两个端口的名字** ⇒ MUST 被抓到（MUST NOT 只比集合交集）
+    {
+        auto broken = hier;
+        const auto *a = find_port(broken, "top_unnamed_input");
+        const auto *b = find_port(broken, "top_unnamed_output");
+        REQUIRE(a != nullptr);
+        REQUIRE(b != nullptr);
+        const std::string a_name = a->name;
+        const std::string b_name = b->name;
+        for (auto &e : broken) {
+            if (e.name == a_name) {
+                e.name = b_name;
+            } else if (e.name == b_name) {
+                e.name = a_name;
+            }
+        }
+        REQUIRE_FALSE(ch::detail::check_input_port_sets(flat, broken).empty());
+    }
+    // 负向 ⑤：**宽度对不上** ⇒ MUST 被抓到
+    {
+        auto broken = hier;
+        for (auto &e : broken) {
+            if (e.name == "top_unnamed_input") {
+                e.width = 16;
+                break;
+            }
+        }
+        REQUIRE_FALSE(ch::detail::check_input_port_sets(flat, broken).empty());
     }
 }

@@ -2,7 +2,7 @@
 # ============================================================================
 # verify_hierarchical_rtl.sh
 #
-# 护栏：**层次化 RTL 发射的产物级判据**（R1–R7）。
+# 护栏：**层次化 RTL 发射的产物级判据**（R1–R8）。
 #
 # ⚠️ **为什么需要它**：`tests/test_hierarchy_verilog.cpp` 的断言只能看见
 #    「发射器自己认为产出了什么」（文本子串 + 返回值）。它**看不见** Verilog
@@ -30,9 +30,13 @@
 #        结构不变量（唯一根 / 每 module 恰被实例化一次 / 全部可达 / 无环）。
 #   R7 层次化产物路径 ≠ 扁平产物路径 —— **静态扫描仓内调用点**（适用面 = 仓内
 #        调用点，不是「扫描所有 .v」⇒ 那样是误报机器）。
+#   R8 顶层端口表 == **手推期望集** —— 从 `verilator --json-only` 结构化提取
+#        （`isPrimaryIO` + dtype 的 `range` ⇒ 复用提取器的 `--ports` 模式）
+#        ⇒ ⇒ 名字 + 方向 + 宽度**逐项**比对 ⇒ ⇒ 同时判掉「成层子树的 `ch_out`
+#        跑到顶层」（期望集里没有它们 ⇒ 出现即红）。
 #
 # 用法：
-#   bash scripts/verify_hierarchical_rtl.sh              # 主路径（R1–R7）
+#   bash scripts/verify_hierarchical_rtl.sh              # 主路径（R1–R8）
 #   bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条投毒 ⇒ 必红 ⇒ 还原复绿
 #
 # 前置：`build/tests/hier_rtl_products`（生成器）+ 仓内 verilator
@@ -457,6 +461,94 @@ PY
     return "$rc"
 }
 
+# ── R8：顶层端口表 == 手推期望集（产物级 · 结构化提取）────────────────────────
+#    ⚠️ **为什么是「手推」而不是「从实现导出」**：期望集若抄实现输出 ⇒ 判据自证
+#       （实现错 ⇒ 期望跟着错 ⇒ 恒绿）⇒ ⇒ 期望集 MUST 由**设计意图**逐条推导。
+#    ⚠️ **提取方式** = `verilator --json-only` 的 `isPrimaryIO` + dtype 的 `range`
+#       （复用 `scripts/lib/verilog_tree_extract.py --ports`）⇒ ⇒ 结构化提取
+#       ⇒ ⇒ **MUST NOT** 自研 Verilog 文本解析器。
+#    ⚠️ **它同时判掉「移出顶层」**：成层子树里的 `ch_out` MUST NOT 出现在顶层端口表
+#       （期望集里没有它们 ⇒ 出现了就红）。
+r8_port_set() {  # $1 = products dir
+    local dir="$1" f name json bad=0
+    for f in "$dir"/*.v; do
+        [ -f "$f" ] || continue
+        name="$(basename "$f" .v)"
+        rm -rf "$WORK/json8/$name"
+        mkdir -p "$WORK/json8/$name"
+        "$VERILATOR" --json-only --Mdir "$WORK/json8/$name" "$f" \
+            >"$WORK/logs/$name-r8.json.log" 2>&1
+        if [ $? -ne 0 ]; then
+            fail "R8 verilator --json-only 失败：$name"
+            sed -n '1,20p' "$WORK/logs/$name-r8.json.log" >&2
+            bad=1
+            continue
+        fi
+        json="$(find "$WORK/json8/$name" -name '*.tree.json' ! -name '*.meta.json' | head -1)"
+        if [ -z "$json" ]; then
+            fail "R8 未产出 .tree.json：$name"
+            bad=1
+            continue
+        fi
+        python3 "$EXTRACTOR" "$json" --ports | awk -F'\t' '$1 == "top"' \
+            >"$WORK/logs/$name-ports.tsv"
+        if ! python3 - "$name" "$WORK/logs/$name-ports.tsv" <<'PY'
+import sys
+
+# 顶层端口表 —— **由设计意图手推**（不是抄实现输出 ⇒ 否则判据自证）：
+#   顶层端口 = clock → reset → 无 driver 的 input → **根自己**的 ch_out
+#   （成层子树里的 `ch_out` MUST NOT 上顶层 —— ADR-061 决策② 的两作用域表）
+EXPECTED = {
+    "three_layers": [
+        ("default_clock", "INPUT", 1),
+        ("default_reset", "INPUT", 1),
+        ("top_unnamed_input", "INPUT", 8),
+        ("top_unnamed_output", "OUTPUT", 8),
+    ],
+    "row1_implicit": [
+        ("default_clock", "INPUT", 1),
+        ("default_reset", "INPUT", 1),
+        ("top_unnamed_input", "INPUT", 8),
+        ("top_unnamed_output", "OUTPUT", 8),
+    ],
+    "bubble": [
+        ("default_clock", "INPUT", 1),
+        ("default_reset", "INPUT", 1),
+        # ⚠️ 冒泡上来的悬空输入（ADR-060 §2.2）⇒ 顶层**可驱动** ⇒ 名字 = ctx 级全局名
+        ("top_mid_leaf_unnamed_input", "INPUT", 8),
+        ("top_unnamed_input", "INPUT", 8),
+        ("top_unnamed_output", "OUTPUT", 8),
+    ],
+}
+
+name = sys.argv[1]
+rows = [
+    (parts[1], parts[2], int(parts[3]))
+    for parts in (line.split("\t") for line in
+                  open(sys.argv[2], encoding="utf-8").read().splitlines() if line.strip())
+    if len(parts) == 4
+]
+expected = EXPECTED.get(name)
+if expected is None:
+    print(f"R8 未知产物 '{name}' ⇒ 期望端口表 MUST 同步更新（fail-closed）", file=sys.stderr)
+    sys.exit(1)
+
+if rows != expected:
+    print(f"R8 '{name}' 的顶层端口表与手推期望不一致", file=sys.stderr)
+    print(f"  期望: {expected}", file=sys.stderr)
+    print(f"  实际: {rows}", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+        then
+            fail "R8 顶层端口表判据失败：$name"
+            bad=1
+        fi
+    done
+    [ "$bad" -eq 0 ] && ok "R8 顶层端口表 == 手推期望集（产物级 · verilator --json-only 结构化提取）"
+    return "$bad"
+}
+
 # ── 主路径 ──────────────────────────────────────────────────────────────────
 run_all() {
     require_tools || return 1
@@ -474,6 +566,7 @@ run_all() {
     r5_reject_mem "$GENERATOR" "$WORK/reject" || return 1
     r6_tree "$products" || return 1
     r7_path_separation "$REPO_ROOT" || return 1
+    r8_port_set "$products" || return 1
     return 0
 }
 
@@ -511,7 +604,7 @@ self_test() {
     }
 
     # ---- 投毒 1：R1 —— 未声明标识符 -------------------------------------
-    echo "[self-test] 1/8 R1：未声明标识符"
+    echo "[self-test] 1/9 R1：未声明标识符"
     reset_products
     python3 - "$products/three_layers.v" <<'PY'
 import sys
@@ -524,7 +617,7 @@ PY
     expect_red "R1 未声明标识符" r1_lint_gate "$products"
 
     # ---- 投毒 2：R2 —— 改 pin 名 ---------------------------------------
-    echo "[self-test] 2/8 R2：实例 pin 名不在目标端口集"
+    echo "[self-test] 2/9 R2：实例 pin 名不在目标端口集"
     reset_products
     python3 - "$products/row1_implicit.v" <<'PY'
 import sys
@@ -536,7 +629,7 @@ PY
     expect_red "R2 pin 名不存在" r2_pin_names "$products"
 
     # ---- 投毒 3：R3 —— 改端口宽度（R1 必须仍绿 ⇒ 证明 R3 不是 R1 的重复）----
-    echo "[self-test] 3/8 R3：端口宽度不一致（lint_off 生效 ⇒ R1 看不见）"
+    echo "[self-test] 3/9 R3：端口宽度不一致（lint_off 生效 ⇒ R1 看不见）"
     reset_products
     python3 - "$products/row1_implicit.v" <<'PY'
 import sys
@@ -549,13 +642,13 @@ PY
     expect_red "R3 剥掉 lint_off 后转红" r3_widths "$products"
 
     # ---- 投毒 4：R4 —— 改一份产物（确定性）-----------------------------
-    echo "[self-test] 4/8 R4：产物被外部篡改"
+    echo "[self-test] 4/9 R4：产物被外部篡改"
     reset_products
     printf '\n// tampered\n' >>"$products/bubble.v"
     expect_red "R4 产物不一致" r4_determinism "$GENERATOR" "$products"
 
     # ---- 投毒 5：R5 —— 假工具输出错消息 --------------------------------
-    echo "[self-test] 5/8 R5：生成器假成功（不拒绝跨模块 mem）"
+    echo "[self-test] 5/9 R5：生成器假成功（不拒绝跨模块 mem）"
     cat >"$WORK/fake_gen" <<'SH'
 #!/usr/bin/env bash
 echo "products-ok: pretend"
@@ -565,7 +658,7 @@ SH
     expect_red "R5 假成功" r5_reject_mem "$WORK/fake_gen" "$WORK/reject_fake"
 
     # ---- 投毒 6：R6 —— 删一条实例化语句 --------------------------------
-    echo "[self-test] 6/8 R6：删掉一条实例化语句（Verilog 仍合法）"
+    echo "[self-test] 6/9 R6：删掉一条实例化语句（Verilog 仍合法）"
     reset_products
     python3 - "$products/three_layers.v" <<'PY'
 import sys
@@ -585,7 +678,7 @@ PY
     expect_red "R6 树形同构（少一条边）" r6_tree "$products"
 
     # ---- 投毒 7：R7 —— 造同路径调用点 ----------------------------------
-    echo "[self-test] 7/8 R7：同一文件里层次化产物与扁平产物同路径"
+    echo "[self-test] 7/9 R7：同一文件里层次化产物与扁平产物同路径"
     rm -rf "$WORK/fake_repo"
     mkdir -p "$WORK/fake_repo/tests"
     cat >"$WORK/fake_repo/tests/poison.cpp" <<'CPP'
@@ -597,7 +690,7 @@ CPP
     expect_red "R7 同路径调用点" r7_path_separation "$WORK/fake_repo"
 
     # ---- 投毒 8：R1a —— 在 lint 调用里塞 -Wno-fatal ---------------------
-    echo "[self-test] 8/8 R1a：lint 调用含 -Wno-fatal"
+    echo "[self-test] 8/9 R1a：lint 调用含 -Wno-fatal"
     cp "${BASH_SOURCE[0]}" "$WORK/poisoned_guard.sh"
     python3 - "$WORK/poisoned_guard.sh" <<'PY'
 import sys
@@ -608,6 +701,20 @@ s = s.replace('--lint-only --top-module top "$1"',
 open(p, "w").write(s)
 PY
     expect_red "R1a -Wno-fatal 被拒" check_lint_flags "$WORK/poisoned_guard.sh"
+
+    # ---- 投毒 9：R8 —— 改顶层端口的宽度（Verilog 仍合法 · R1 仍绿）--------
+    echo "[self-test] 9/9 R8：顶层端口宽度被改（lint_off 消音 ⇒ R1 看不见）"
+    reset_products
+    python3 - "$products/three_layers.v" <<'PYX'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace("    output [7:0] top_unnamed_output",
+              "    output [3:0] top_unnamed_output", 1)
+open(p, "w").write(s)
+PYX
+    expect_green "R8 投毒后 R1 仍绿（宽度告警被 lint_off 消音）" r1_lint_gate "$products"
+    expect_red "R8 顶层端口宽度与手推期望不符" r8_port_set "$products"
 
     echo
     if [ "$pass" -ne "$total" ]; then
@@ -620,7 +727,7 @@ PY
 
 case "${1:-}" in
 "")
-    run_all && echo "✅ verify_hierarchical_rtl: PASS（R1–R7）"
+    run_all && echo "✅ verify_hierarchical_rtl: PASS（R1–R8）"
     exit $?
     ;;
 --self-test)
