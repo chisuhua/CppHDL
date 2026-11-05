@@ -1,6 +1,6 @@
 # 任务清单：`hierarchical-rtl-emission-2026-11`
 
-> 判据来源：proposal.md §Acceptance · capability delta（hierarchical ADDED ×7）。
+> 判据来源：proposal.md §Acceptance · capability delta（hierarchical **ADDED ×11**）。
 > ⚠️ **前置**：**T3-②**（分析层）· **T3-③**（emitter 拆分）。
 > ⚠️ **本 change 的判据面最大** ⇒ ⇒ 建议**逐条**落地，每条都要有判别性对照。
 
@@ -120,14 +120,20 @@
       （且该信号在子 module 内**未声明** ⇒ 非法 Verilog）
       ⇒ ⇒ 被重定向的 proxy 是**子 module 内的本地 wire**（`print_proxy` 发的
       `assign <proxy> = __if_<n>;`）⇒ ⇒ 穿透停在它自己 = 正确
-- [ ] 0.24b **R2 的四条路径逐条变异**（critic 建议 · ADR-060 v1.10 R2）：
+- [x] 0.24b **R2 的四条路径逐条变异**（critic 建议 · ADR-060 v1.10 R2）⇒ **✅ B2b-6 收口**：
+      `print_input` driver walk 的变异原先**恒绿**（无判据）⇒ 新增 `[walk]` 用例
+      （被重定向的命名 proxy 驱动 inline 子组件 `ch_in`）⇒ 去掉「只穿透未命名 proxy」守卫 ⇒ 转红；
+      `print_proxy` 的 `src(0)`（early-return）变异 ⇒ 既有 row-1 proxy 用例转红。
       把 B2b-3 的 M3 变异**套用到另两条路径** —— `print_input` 的 driver walk
       （当前守卫 = 只穿透未命名 proxy）· `print_proxy` 的 `src(0)`（当前守卫 = early-return）
       ⇒ ⇒ 确认**各有专属判据** ⇒ ⇒ ⚠️ 目的 = 证明「每条 `src(0)` 解析路径都独立受约束」
       （ADR-060 v1.10 R2 的契约字面覆盖**所有**这类路径 ⇒ ⇒ 未来新增第五条时不被漏掉）
-- [ ] 0.24c **W1 的负向用例**（ADR-060 v1.10 §5 的宽度判据）：父侧 **9-bit** 节点驱动
+- [x] 0.24c **W1 的负向用例**（ADR-060 v1.10 §5 的宽度判据）：父侧 **9-bit** 节点驱动
       子侧 **8-bit** 端点（`ch_reg` next 与 proxy 各一）⇒ ⇒ MUST 在**合成之前**拒绝
       ⇒ ⇒ 诊断 MUST 点名两端 + 两个宽度值 ⇒ ⇒ MUST NOT 产出文件
+      ⇒ ⇒ **✅ B2b-6 收口**：**四条**（双向 9→8 / 8→9 × {reg next, proxy}）· 单一 `width_check`
+      helper 覆盖**全部**合成 site（含直接行 1 / 行 2）· 诊断含 `Remedy:`（可行动修法）
+      ⇒ ⇒ 守卫变异（恒返回 true）⇒ 该用例转红
 - [x] 0.24 **判据**：① proxy 跨层 ⇒ 子侧 `input __if_<n>` + 子内 `assign <proxy> = __if_<n>;`
       ② ⭐ **值判据**（逐拍值，不靠 lint/结构断言）③ op ⇒ 响亮拒绝 ④ 父驱动子 `ch_out`
       ⇒ 响亮拒绝 ⑤ 撞名 ⇒ 顺延 ⑥ `verilator --lint-only`（**ADR-060 §2.5 的门**）零告警
@@ -226,33 +232,56 @@
       **链**与**叶策略**分离，`ports_are_input` 只决定端口方向（**不**是「起点节点 + 方向」
       那种把叶策略也压扁的形态）⇒ ⇒ B3 的冒泡直接调用同一条链
 
+## T0i 批次 B2b-6（宽度守卫 + 两条变异欠账 · ✅ 2026-11-05）
+
+> 判据来源：**ADR-060 v1.10 W1**（跨层边两端宽度 MUST 一致、合成前拒绝）—— 通用措辞
+> **早已覆盖全部合成 site**，只是实现只在第三轴 / 兄弟边判了宽度 ⇒ 直接行 1 / 行 2 **静默扩展/截断**
+> ⇒ ⇒ 本批是**实现追赶**，不是新裁决。
+
+- [x] 0.34 **单一 `width_check` helper**（`src/hierarchy_verilog.cpp`）⇒ **全部**合成 site 同一调用点：
+      直接行 1 / 行 2 / 第三轴 / 兄弟边 ⇒ ⇒ ⚠️ MUST NOT 每个分支各写一份（漏一处 = 静默截断且 lint 看不见）
+      ⇒ ⇒ 诊断 = 点名两端方向与两个宽度值 + `Remedy:`（显式切片/扩展，或改驱动子模块显式端口）
+- [x] 0.35 直接行 1 / 行 2 的合成连接改走 `add_conn`（与 B2b-5 同一幂等 + 双驱动 fail-closed 通道）
+- [x] 0.36 **判据**（`[width]` 一个用例 / 4 组断言链）：双向（9→8 截断 / 8→9 扩展）×
+      {`ch_reg` next, proxy} ⇒ ⇒ `ok=false` + **不留文件** + 诊断含 `width mismatch` /
+      `9-bit driver -> 8-bit target`（或 8→9）/ `Remedy:`
+      ⇒ ⇒ **守卫自身变异**（恒返回 true）⇒ 用例转红 · 0.24b 两条路径变异见上
+
 ## T1 module 主体与实例化
+
+> ⚠️ **B3 的三批映射（2026-11-05 第二次重排）**：`[B3a]` 冒泡（G3）+ `UndrivenPolicy`
+> （含**存量 inline 冒泡缺连接**与**有 driver 的向上 pass-through**）；`[B3b]` 端口完整性（G2）
+> + 拒绝类**点名断言**（实现已在 0.7 / 前置校验③ / T0h 落地，**不重写**）；
+> `[B3c]` 白名单（**先证可达性**；只查 `Self` origin 声明式端口，合成端口不在其列）。
+> ⚠️ **错误载体措辞待同步（critic SF-2）**：本文件与 proposal 里的「抛」「`CHFATAL_EXCEPTION`」
+> 是 ADR-058 v2.12 ⑤ 之前的旧载体措辞 ⇒ 对外可观测形态 = `ok=false` + `error` 点名
+> ⇒ ⇒ 在 B3b/B3c 落地时**一并订正**（MUST NOT 写 `REQUIRE_THROWS`）。
 
 - [x] 1.1 每个成层组件产出一个 `module`（`<module_type_name>_<序号>`）
 - [x] 1.2 父 module 内例化子 module + **实例端口映射** ⇒ ⇒ **零跨 module `assign`**
       （跨 module 的驱动边 ⇒ `suppress_driver_assign` ⇒ 值由实例端口映射提供）
-- [ ] 1.3 **[B3]** **MUST NOT 复用** module 定义；同名不同类型 ⇒ `CHFATAL_EXCEPTION`
+- [ ] 1.3 **[B3b]** **MUST NOT 复用** module 定义；同名不同类型 ⇒ 响亮拒绝（**点名断言测试** —— 实现已在 T0h / B2b-1 落地，不重写）
 - [x] 1.4 顶层 module 端口表 **逐字逐序**等于扁平端口表（clock → reset → input → output；
       **全 inline 时整份产物与扁平逐字节相同** —— 实测）
 
 ## T2 端口
 
-- [ ] 2.1 **[B3]** 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
+- [ ] 2.1 **[B3b]** 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
 - [ ] 2.2 隐式端口 ⇒ **[B2b-3 行 1 proxy / B2b-1 行 2 / B2b-5 第三轴 + 兄弟边]**
       （ADR-060 §2.1 矩阵 + **v1.9 第七/八格拒绝**）
-- [ ] 2.3 **[B3]** 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `strict` 抛）
+- [ ] 2.3 **[B3a]** 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `UndrivenPolicy::Reject` ⇒ 不产出）
 - [x] 2.4 clock / reset：根**无条件**发；非根**分开判**（clock ⇒ reg ∨ 写端口 ∨ sread；
       reset ⇒ reg ∨ sread）+ **需求向上传导**（子要 clock ⇒ 父也要 ⇒ 实例化不缺 pin）
-- [ ] 2.5 **[B2b-4 体内 wire / B3 三角色总和]** `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）
+- [ ] 2.5 **[B2b-4 体内 wire ✅ / B3b 三角色总和]** `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）
 
 ## T3 拒绝与错误模型
 
-- [ ] 3.1 **[B3]** 跨模块 `ch_mem` ⇒ 响亮拒绝（判定 = **inline 折叠后**归属）
-- [ ] 3.2 **[B3]** 自驱动 `ch_in` ⇒ 抛；子 module 内 MUST NOT `assign <ch_in> = ...`
+- [ ] 3.1 **[B3b]** 跨模块 `ch_mem` ⇒ 响亮拒绝（实现已在 B2a · 本批补**点名断言**：两条替代路径 + 两端 module）
+- [ ] 3.2 **[B3b]** 自驱动 `ch_in` ⇒ 响亮拒绝（实现已在前置校验③ · 本批补点名断言）；子 module 内 MUST NOT `assign <ch_in> = ...`
       ⇒ ⚠️ **v1.9 第八格**：父层驱动子 `ch_out` 同型拒绝（**MUST NOT** 依赖白名单偶然形状）
 - [x] 3.3 已 build 未 `add_child` ⇒ 抛 + `add_child` 修法（由分析层前置校验给出）+ 负向对照
       （`[hierarchy][emit][error]`：失败 ⇒ `ok=false` + **不留任何文件**）
-- [ ] 3.4 **[B3]** 接口白名单违反 ⇒ `CHFATAL_EXCEPTION` + 点名端口
+- [ ] 3.4 **[B3c]** 接口白名单违反 ⇒ **响亮拒绝**（对外 = `ok=false` + 点名端口；ADR-058 v2.12 ⑤）⇒ ⚠️ **先证可达性**
 - [x] 3.5 错误模型：校验先于 I/O · 临时文件→rename · 失败**可被调用方观测**（返回结构体）·
       静态析构期用**返回码**兜底（不抛不写盘）
 

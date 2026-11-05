@@ -24,6 +24,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -584,6 +585,137 @@ public:
     }
 };
 
+// ── DUT ⑬：**行 1 · 宽度不匹配（9 → 8 截断）· 寄存器 next** ──────────────
+//    ⚠️ ADR-060 W1：合成端口宽度只能取子侧 ⇒ 父侧更宽 ⇒ Verilog 静默截断
+//    ⇒ ⇒ MUST 在**合成之前**拒绝（产物关掉了 WIDTHTRUNC ⇒ lint 也看不见）
+class WidthRegInner : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("width_reg_inner");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};
+    WidthRegInner(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= acc; }
+};
+
+class WidthRegTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("width_row1_reg");
+    __io(ch_in<ch_uint<9>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<WidthRegInner> inner{"inner"};
+    WidthRegTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.instance().acc->next = io().din;   // ⚠️ 9-bit ⇒ 8-bit
+        io().dout <<= inner.io().dout;
+    }
+};
+
+// ── DUT ⑭：**行 1 · 宽度不匹配 · proxy（bundle 字段）** ─────────────────
+class WidthProxyInner : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("width_proxy_inner");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_stream<ch_uint<8>> strm;
+    WidthProxyInner(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        strm.as_master();
+        io().dout <<= strm.payload;
+    }
+};
+
+class WidthProxyTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("width_row1_proxy");
+    __io(ch_in<ch_uint<9>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<WidthProxyInner> inner{"inner"};
+    WidthProxyTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.instance().strm.payload <<= io().din;   // ⚠️ 9-bit ⇒ 8-bit
+        io().dout <<= inner.io().dout;
+    }
+};
+
+// ── DUT ⑮：**行 2 · 宽度不匹配（8 → 9 扩展）· 子寄存器** ────────────────
+class WidthRow2Top : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("width_row2_reg");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<9>> dout;)
+    ch::ch_module<InnerRow2> inner{"inner"};
+    WidthRow2Top(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        io().dout <<= inner.instance().acc;   // ⚠️ 8-bit ⇒ 9-bit
+    }
+};
+
+// ── DUT ⑯：**行 2 · 宽度不匹配 · 子 proxy（bundle 字段）** ───────────────
+class WidthProxyRow2Top : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("width_row2_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<9>> dout;)
+    ch::ch_module<WidthProxyInner> inner{"inner"};
+    WidthProxyRow2Top(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.instance().strm.payload <<= io().din;
+        io().dout <<= inner.instance().strm.payload;   // ⚠️ 8-bit ⇒ 9-bit
+    }
+};
+
+// ── DUT ⑰：**被重定向的命名 proxy 驱动 inline 子组件的 `ch_in`** ────────
+//    ⚠️ 专门为 `print_input` 的 driver walk 而造（R2 的第二条路径）：
+//    该 proxy **有名字**（`top_mid_payload`）且**被重定向**（`assign proxy = __if_0;`）
+//    ⇒ ⇒ walk MUST **停在它自己**（读本地 wire 名）；若继续穿透到 `src(0)`
+//    ⇒ ⇒ 会引用**父层**的 `top_unnamed_input`（本 module 内未声明）⇒ 非法 Verilog 且零告警。
+class ProxyDinLeaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ProxyDinLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class ProxyDinMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("proxy_din_mid");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_stream<ch_uint<8>> strm;
+    ch::ch_module<ProxyDinLeaf> leaf{"leaf"};
+    ProxyDinMid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        strm.as_master();
+        leaf.io().din <<= strm.payload;   // ⚠️ 命名 proxy 驱动 inline 子组件的输入
+        io().dout <<= leaf.io().dout;
+    }
+};
+
+class ProxyDinTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("proxy_din_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<ProxyDinMid> mid{"mid"};
+    ProxyDinTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.instance().strm.payload <<= io().din;   // 父层驱动子 bundle 字段 ⇒ 重定向
+        io().dout <<= mid.io().dout;
+    }
+};
+
 }   // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -809,6 +941,76 @@ TEST_CASE("hierarchical emission: third-axis pass-through uses node adapter",
     REQUIRE(mid.find(".top_unnamed_input(top_unnamed_input)") != std::string::npos);
     // ④ 顶层接自己的同名端口
     REQUIRE(top.find(".top_unnamed_input(top_unnamed_input)") != std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: driver walk stops at the redirected named proxy",
+          "[hierarchy][emit][implicit][walk]") {
+    // ⚠️ R2 的第二条 `src(0)` 路径（`print_input` 的 driver walk）：
+    //    守卫 = 「只穿透**未命名** proxy」⇒ 被重定向的 proxy **有名字** ⇒ 天然停下。
+    //    ⚠️ 若不守：穿透到 `src(0)` ⇒ 父层信号名 ⇒ 本 module 内**未声明** ⇒ 非法 Verilog。
+    ch::ch_device<ProxyDinTop> dev;
+    const std::string path = std::string(kOutDir) + "/walk_named_proxy.v";
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string mid = module_text(all, "proxy_din_mid");
+    REQUIRE_FALSE(mid.empty());
+
+    // ① 重定向本身生效：命名 proxy 由合成端口驱动（本地 wire）
+    REQUIRE(mid.find("assign top_mid_payload = __if_0;") != std::string::npos);
+    // ② ⭐ inline 子组件的输入**读该 proxy 的本地 wire 名**
+    REQUIRE(mid.find("assign top_mid_leaf_unnamed_input = top_mid_payload;") !=
+            std::string::npos);
+    // ③ 负向：MUST NOT 穿透到父层节点（`top_unnamed_input` 在本 module 内未声明）
+    REQUIRE(mid.find("top_unnamed_input") == std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: cross-module width mismatch is rejected before synthesis",
+          "[hierarchy][emit][width]") {
+    // ⚠️ **W1**（ADR-060 v1.10 · v1.13 覆盖**全部**合成 site）：
+    //    合成端口宽度只能取**子侧** ⇒ 两端不一致 ⇒ Verilog 静默扩展/截断
+    //    ⇒ ⇒ MUST 在**合成之前**拒绝，且诊断点名两端与两个宽度 + 给出可行动修法。
+    //    ⚠️ 四条路径**各一**：行 1 / 行 2 × {寄存器, proxy}，双向（截断 9→8 / 扩展 8→9）。
+    struct Case {
+        const char *name;
+        const char *expect;
+        std::function<ch::HierarchyEmitResult(const std::string &)> run;
+    };
+    const std::vector<Case> cases = {
+        {"width_row1_reg", "9-bit driver -> 8-bit target",
+         [](const std::string &p) {
+             ch::ch_device<WidthRegTop> d;
+             return ch::toVerilogHierarchical(p, d.instance());
+         }},
+        {"width_row1_proxy", "9-bit driver -> 8-bit target",
+         [](const std::string &p) {
+             ch::ch_device<WidthProxyTop> d;
+             return ch::toVerilogHierarchical(p, d.instance());
+         }},
+        {"width_row2_reg", "8-bit driver -> 9-bit target",
+         [](const std::string &p) {
+             ch::ch_device<WidthRow2Top> d;
+             return ch::toVerilogHierarchical(p, d.instance());
+         }},
+        {"width_row2_proxy", "8-bit driver -> 9-bit target",
+         [](const std::string &p) {
+             ch::ch_device<WidthProxyRow2Top> d;
+             return ch::toVerilogHierarchical(p, d.instance());
+         }},
+    };
+    for (const auto &c : cases) {
+        const std::string path = std::string(kOutDir) + "/" + c.name + ".v";
+        std::remove(path.c_str());   // ⚠️ 判据依赖「失败不留文件」⇒ 先清掉上一轮（含变异轮）的残留
+        auto r = c.run(path);
+        INFO("case: " << c.name << " · error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE_FALSE(file_exists(path));   // ⇒ fail-closed：不留产物
+        REQUIRE(r.error.find("width mismatch") != std::string::npos);
+        REQUIRE(r.error.find(c.expect) != std::string::npos);
+        REQUIRE(r.error.find("Remedy:") != std::string::npos);
+    }
 }
 
 TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",

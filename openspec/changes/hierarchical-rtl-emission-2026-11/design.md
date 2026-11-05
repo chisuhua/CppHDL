@@ -80,12 +80,15 @@
 
 ### 6.3 尚未落地（仍在本 change 内）
 
-- **隐式端口合成**（ADR-060 §2.1 方向矩阵四行 + 第三轴 pass-through）⇒ 当前**响亮拒绝**
-  （fail-closed：MUST NOT 产出非法 Verilog）。
-- **悬空冒泡**的 `strict` 抛（`Bubble` 已由分析层提供）。
-- **接口白名单**（ADR-062 §2.6）。
-- 护栏脚本 `scripts/verify_hierarchical_rtl.sh` + CI 两处。
+- **白名单**（ADR-062 §2.6）⇒ **B3c**（先证可达性；合成端口不在其列）。
+- **端口完整性校验**（G2 · `port_provenance` + `expected ⊆ actual`）⇒ **B3b**。
+- **冒泡的 F2 缺口 + `UndrivenPolicy`**（G3）⇒ **B3a**。
+- **跨层宽度校验对直接行 1 / 行 2 的覆盖**（W1 的实现追赶）⇒ **B2b-6**。
+- 护栏脚本 `scripts/verify_hierarchical_rtl.sh` + CI 两处 + 归档 ⇒ **B4**。
 - 等价性验证（**T3-⑤**，另一个 change）。
+
+> ⚠️ **本节在 B2b-5 之后订正**（原文仍称「隐式端口合成尚未落地」⇒ 已过时；方向矩阵四行、
+> 第三轴、兄弟边、F3 均已落地）。
 
 ---
 
@@ -111,7 +114,11 @@
 | **B1** 策略枚举收敛 | ✅ **已落地** | 删两份重复枚举 + 删 `Component::set_granularity()` · 编译期 `static_assert` · **粒度作用域三格判据**（半生效 / 正向 ForceInline / 正向 ForceLayer）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 |
 | **B2a** collect 化 | ✅ **已落地** | 分析层 `ImplicitPortHandling{Reject, Record}`（**默认 Reject** ⇒ ⇒ T3-② 判据零削弱 · 新字段不进 `to_text()` ⇒ ⇒ 4 份 golden 逐字节不变）· 发射层**预检 collect**（合成类问题**全部**收集 ⇒ ⇒ 上移到发射前）· 策略驱动的诊断广度（`Reject` 只报第一条 · 其余报全部）· **变异验证**：退回首错即返 ⇒ 转红 · `ctest -LE perf` **238/238** · 扁平基线 `cmp` 全 0 |
 | **B2b** 隐式端口合成 | 🚧 **拆成五批**（2026-11-05 重排）⇒ **B2b-1 ✅**（行 2「子→父」）· **B2b-2 ✅**（行 1 · 寄存器 next + 驱动重定向）· **B2b-3**（proxy 子形态 + 合成名去重 + 探针矩阵骨架）· **B2b-4 ✅**（F3：inline 后代 `ch_out` 作用域 + `type_output`-as-wire）· **B2b-5**（第三轴 + 兄弟边） | ⚠️ 形态边界由 **ADR-060 v1.9** 定死：reg next ✅ / proxy ✅ / **op 操作数 ❌ 拒绝** / **父驱动子 `ch_out` ❌ 拒绝** / `operator=` 无处理 | **B2b-2**：`ModuleView::port_drives_node`（**发射期**重定向表 · **MUST NOT** 写回 IR）· `print_reg` 命中重定向 ⇒ ⇒ 寄存器 next 改由合成 input 端口驱动（⚠️ 不重定向 ⇒ ⇒ 退化成「保持」⇒ ⇒ **静默丢驱动**）· 行 1 合成（子侧 `input __if_<n>` + 父侧 `. __if_<n>(<父层驱动>)`）· 变异 M1/M2 全抓 · lint exit 0 | **B2b-1**：分析层 `PendingImplicitEdge` 增节点指针 + 方向 + 子实例名（⚠️ 实例名**按方向**取）· 发射器 `ModuleView::synthesized_ports`（合成端口**不是 IR 节点**）· 行 2 合成（子侧 `output __x_<n>` + 体内 assign + 父侧实例映射）· **未消费的子 output 以空连接 `.port()` 出现**（⇒ 否则 `PINMISSING`）· 变异 M1/M2 全抓 · lint exit 0 |
-| **B3** 冒泡 + 端口完整性 + 拒绝类 + 白名单 | ⏳ | — |
+| **B2b-5** ✅ 第三轴 + 兄弟边 | ✅ **已落地** | `[third_axis]` ×2 + `[sibling]` ×1 · 变异 **3/4 抓**（M4 = 等价变异，已登记）· 全部层次化产物 lint exit 0 |
+| **B2b-6** 宽度守卫 + 两条变异欠账 | ✅ **已落地** | 单一 `width_check` helper 覆盖**全部**合成 site（直接行 1/行 2 + 第三轴 + 兄弟边）· 合成连接改走 `add_conn` · `[width]` 四组（双向 × {reg next, proxy}，含 `Remedy:` 与「不留文件」）· `[walk]` 一组（被重定向的命名 proxy 驱动 inline 子输入 ⇒ MUST 停在该 proxy）· 变异 **3/3 抓**（守卫恒真 / print_proxy early-return / print_input 只穿透未命名 proxy）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 · 24 份层次化产物 lint exit 0 |
+| **B3a** 冒泡（G3）+ `UndrivenPolicy` | ⏳ | — |
+| **B3b** 端口完整性（G2）+ 拒绝类点名断言 | ⏳ | — |
+| **B3c** 白名单（先证可达性） | ⏳ | — |
 | **B4** 护栏 + CI + 归档 | ⏳ | — |
 
 ⚠️ **B2a 的「中间态」登记（必读 · 否则会误读 ADR）**：隐式端口**合成本身**属 **B2b** ⇒ ⇒
@@ -127,7 +134,17 @@
    ⇒ ⇒ 「C1 未答 ⇒ 只加不删」**无对象** ⇒ ⇒ ✅ **2026-11-05 更新：C1 已答 = 接受单文件多
    module**（ADR-058 **v2.10**）⇒ ⇒ ⇒ 「多文件模式」**不重开** ⇒ ⇒ 本段仅作**历史记录**。
 
-### 7.1 T3-④ 剩余：**6 个批次**（每批一个 commit · 2026-11-05 重排）
+### 7.1 T3-④ 剩余：**5 个批次**（每批一个 commit · 2026-11-05 第二次重排）
+
+> ⚠️ **为什么从「B3 / B4 两批」变 5 批**（planner · 2026-11-05 · 据 ADR-060 v1.13 /
+> ADR-058 v2.12 + metis gap 分析）：
+> ① **B2b-6**：W1 的通用措辞早已覆盖**全部**合成 site，但实现只在第三轴/兄弟边判了宽度
+>    ⇒ 直接行 1 / 行 2 **静默扩展/截断** ⇒ 这是**行为变化**（从「合法截断」变「硬错」）
+>    ⇒ 必须独立 commit 才能归因；
+> ② **B3a / B3b / B3c**：冒泡（行为）· 完整性（校验）· 白名单（拒绝）三组判据互不相同；
+>    原 B3 的「拒绝类」四项里**三项已落地**（0.7 / 前置校验③ / T0h）⇒ 只保留点名断言测试
+>    并归入 B3b ⇒ ⇒ **原 B3c「拒绝类」取消**。
+> ⚠️ **顺序不可换**：B2b-6 → B3a（端口登记）→ B3b（完整性校验依赖它）→ B3c → B4。
 
 > ⚠️ **为什么从 4 批变 6 批**（planner · 2026-11-05）：ADR-060 **v1.9** 把 B2 的形态边界
 > 定死（op 操作数 ⇒ 拒绝 · 父驱动子 `ch_out` ⇒ 拒绝 · proxy ⇒ 合成）之后，原 B2 剩余的
@@ -230,7 +247,7 @@
 - 4.1 `scripts/verify_hierarchical_rtl.sh`：**R1** 零未声明引用 · **R2** 实例端口名 ∈ 目标 module 端口集 · **R3** 端口宽度一致 · **R4** 产物确定性 · **R5** 跨模块 `ch_mem` 被拒 · **R6** module 树结构同构（**从产物独立提取** ⇒ MUST NOT 复用分析层 `ModuleDef`）。
 - 4.2 `--self-test`（**原地投毒** ⇒ 每条判据必红 ⇒ 还原复绿）。
 - 4.3 CI 挂 **两处**（`build-and-test` job：主路径 + self-test）。
-- 4.4 **归档**：8 条 delta（**禁** `--skip-specs`）+ 补写主 spec `## Purpose` + 更新 feature 进度表 + 根 `AGENTS.md` NOTES + 计数锚点同步。
+- 4.4 **归档**：**11 条 delta**（**禁** `--skip-specs`）+ 补写主 spec `## Purpose` + 更新 feature 进度表 + 根 `AGENTS.md` NOTES + 计数锚点同步 + 订正本文件与 `tasks.md` 的陈旧计数。
 
 ### 7.1.1 B2b-1 的两条**新增口径**（实施期定 ⇒ ⇒ 契约级）
 

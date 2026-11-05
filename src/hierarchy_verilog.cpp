@@ -211,6 +211,22 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         }
         return false;
     };
+    /// **W1**（ADR-060 v1.10 · v1.13 明确覆盖**全部**合成 site）：
+    /// 跨层边两端宽度 MUST 一致；不一致 ⇒ **合成之前**响亮拒绝。
+    /// ⚠️ 只此**一个** helper ⇒ ⇒ MUST NOT 每个分支各写一份
+    ///    （漏一处 = 静默扩展/截断，且产物关掉了 `WIDTHEXPAND` / `WIDTHTRUNC` ⇒ lint 也看不见）。
+    auto width_check = [](const std::string &desc, const lnodeimpl *from, const lnodeimpl *to,
+                          std::string &err) -> bool {
+        if (from->size() == to->size()) {
+            return true;
+        }
+        err = desc + ": cross-module edge width mismatch (" + std::to_string(from->size()) +
+              "-bit driver -> " + std::to_string(to->size()) +
+              "-bit target). ADR-060 W1 forbids implicit extension/truncation (the output "
+              "disables WIDTHEXPAND/WIDTHTRUNC). Remedy: slice or extend explicitly on the "
+              "parent side, or drive an explicit port of the child instead.";
+        return false;
+    };
 
     // ── **chain builder**（ADR-060 v1.12 §2.3 的 G0）──────────────────────
     //    冒泡（向上 · B3）与第三轴（向下 · 本批）**共用**这一条链：沿祖先链
@@ -356,20 +372,18 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
         // ── **非直接父子**的三种形态（ADR-060 §2.1 第三轴 · §2.2 冒泡 · 兄弟边）
         if (!direct_row1 && !direct_row2) {
-            // ⚠️ **W1**（ADR-060 §1.1）：合成端口宽度只能取**子侧** ⇒ 两端宽度不同 ⇒
-            //    Verilog **静默**扩展/截断（产物关掉了 `WIDTHTRUNC`）⇒ ⇒ MUST 响亮拒绝
-            const bool width_ok = (e.from_ptr->size() == e.to_ptr->size());
-            const std::string width_note =
-                width_ok ? std::string()
-                         : (": width mismatch (" + std::to_string(e.from_ptr->size()) + " vs " +
-                            std::to_string(e.to_ptr->size()) + ")");
+            // ⚠️ **W1**：合成端口宽度只能取**子侧** ⇒ 两端宽度不同 ⇒
+            //    Verilog **静默**扩展/截断 ⇒ ⇒ MUST 响亮拒绝（单一 helper，见上）
+            {
+                std::string werr;
+                if (!width_check(desc, e.from_ptr, e.to_ptr, werr)) {
+                    remaining.push_back(werr);
+                    continue;
+                }
+            }
 
             if (driver_is_anc) {
                 // ── **第三轴**（driver 的 owner 在更上层）⇒ ⇒ 沿祖先链逐级同名 **input** 端口
-                if (!width_ok) {
-                    remaining.push_back(desc + width_note);
-                    continue;
-                }
                 bool leaf_port_is_input = false;
                 const bool leaf_is_port =
                     module_port_of(e.to_module, e.to_ptr, leaf_port_is_input);
@@ -423,11 +437,7 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             //    支持的形态（其余 ⇒ fail-closed；跨层的向上/向下链与 B3 同批）：
             //      · 两端是**同一个**父 module 的直接子（表亲边 ⇒ 需要两条链 ⇒ 本批不做）；
             //      · 驱动端是**子 module 的 output 端口**、被驱动端是**子 module 的 input 端口**；
-            //      · 宽度一致。
-            if (!width_ok) {
-                remaining.push_back(desc + width_note);
-                continue;
-            }
+            //      · 宽度一致（⇒ ⇒ 已在块首由 `width_check` 统一判过）。
             std::set<std::string> anc_of_driver;
             for (std::string cur = e.from_module;;) {
                 anc_of_driver.insert(cur);
@@ -515,6 +525,14 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         }
         if (e.child_drives_parent) {
             // ── 行 2：子侧合成 **output** 端口 `__x_<n>`（父层取它的值）──
+            // ⚠️ **W1**：宽度 MUST 在**合成之前**一致（单一 helper）
+            {
+                std::string werr;
+                if (!width_check(desc, e.from_ptr, e.to_ptr, werr)) {
+                    remaining.push_back(werr);
+                    continue;
+                }
+            }
             const std::string &child_key = e.from_module;
             const std::string &parent_key = e.to_module;
             auto &port_map = synth_port_of[child_key];
@@ -528,8 +546,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                     /*is_input=*/false, /*redirect=*/nullptr});
                 it = port_map.find(e.from_ptr);
             }
-            synth_conns[parent_key + "\x1f" + e.child_instance_name].push_back(
-                HierarchyConnection{it->second, names.at(e.to_ptr), /*into_child=*/false});
+            {
+                std::string err;
+                if (!add_conn(parent_key, e.child_instance_name, it->second,
+                              names.at(e.to_ptr), /*into_child=*/false, err)) {
+                    remaining.push_back(desc + " (" + err + ")");
+                }
+            }
         } else {
             // ── 行 1：子侧合成 **input** 端口 `__if_<n>`（父层驱动它）──
             //    ⚠️ 本批**只**覆盖「子侧端点是**寄存器**」+「父侧驱动节点在父 module 内」
@@ -550,6 +573,14 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 remaining.push_back(desc);
                 continue;
             }
+            // ⚠️ **W1**：宽度 MUST 在**合成之前**一致（单一 helper）
+            {
+                std::string werr;
+                if (!width_check(desc, e.from_ptr, e.to_ptr, werr)) {
+                    remaining.push_back(werr);
+                    continue;
+                }
+            }
             const std::string &child_key = e.to_module;    // 子侧 = 被驱动端所在 module
             const std::string &parent_key = e.from_module;  // 父侧 = 驱动端所在 module
             auto &port_map = synth_port_of[child_key];
@@ -563,8 +594,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                     /*is_input=*/true, /*redirect=*/e.to_ptr});
                 it = port_map.find(e.to_ptr);
             }
-            synth_conns[parent_key + "\x1f" + e.child_instance_name].push_back(
-                HierarchyConnection{it->second, names.at(e.from_ptr), /*into_child=*/true});
+            {
+                std::string err;
+                if (!add_conn(parent_key, e.child_instance_name, it->second,
+                              names.at(e.from_ptr), /*into_child=*/true, err)) {
+                    remaining.push_back(desc + " (" + err + ")");
+                }
+            }
         }
     }
 
