@@ -60,7 +60,7 @@ ModuleEmitter::ModuleEmitter(ch::core::context *ctx, ModuleView view)
 /// ⇒ ⇒ 扁平产物 MUST 逐字节不变（本 change 的唯一验收面）。
 ModuleView make_flat_module_view(ch::core::context *ctx) {
     ModuleView view;
-    view.module_name = "top";
+    view.module_name = ch::kFlatModuleName;
     view.clock_name = "default_clock";
     view.reset_name = "default_reset";
 

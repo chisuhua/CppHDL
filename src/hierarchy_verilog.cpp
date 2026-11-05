@@ -17,6 +17,7 @@
 #include "hierarchy_analysis.h"
 #include "hierarchy_chain.h"
 #include "hierarchy_port_check.h"
+#include "hierarchy_signal_map_check.h"
 #include "logger.h"
 
 #include <cstdio>
@@ -878,6 +879,49 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     // ── ② 发射（纯内存 ⇒ 任何异常都不会留下半套文件）
     std::ostringstream all;
 
+    // ── **信号映射表**（ADR-058 §2.2 · T3-⑤ B1）────────────────────────────
+    //    四元组：「`node_id` → 设计级信号名 → 扁平位置 → 层次化位置集合」。
+    //    ⚠️ MUST 由**本次发射**产出（MUST NOT 由测试自建 ⇒ 否则与 emitter 真相脱钩
+    //       ⇒ 表错则两错相抵 —— 正是本仓「parity 盖章同构缺陷」的翻版）。
+    //    ⚠️ `node_id` 是 **ctx 私有**编号 ⇒ 两次 emit MUST 共享同一 ctx。
+    std::map<std::uint32_t, SignalMapEntry> signal_map_by_id;
+    /// 名字 → 节点（ctx 级全局名**全局唯一** ⇒ 合成端口的「承载信号」可反查）
+    std::unordered_map<std::string, const lnodeimpl *> node_by_name;
+    for (const auto &kv : names) {
+        node_by_name.emplace(kv.second, kv.first);
+    }
+    auto resolve_by_name = [&node_by_name](const std::string &n) -> const lnodeimpl * {
+        const auto it = node_by_name.find(n);
+        return it == node_by_name.end() ? nullptr : it->second;
+    };
+    /// 根 module 的端口名（node id → 端口名）⇒ ⇒ 「该信号在不在层次化顶层」的判据
+    std::map<std::uint32_t, std::string> root_port_name;
+    /// 根 module 的端口名（**有序** ⇒ 顶层端口表的权威视图）
+    std::vector<std::string> top_port_names;
+    /// 根 module 的生成名（= 顶层端口所在的 module · 映射表校验要用）
+    std::string root_module_name;
+    /// 行 1 / 向上 pass-through 的 **input** 合成端口：它承载的是**父侧驱动节点**的值
+    /// ⇒ ⇒ 由「绑定这条端口的实例连接」的父侧实参反查（父侧实参 = 驱动节点的 ctx 级名）。
+    auto input_synth_carrier = [&](const std::string &child_key,
+                                   const std::string &port_name) -> const lnodeimpl * {
+        const auto pit = parent_of.find(child_key);
+        if (pit != parent_of.end()) {
+            const auto cit = synth_conns.find(pit->second.first + "\x1f" + pit->second.second);
+            if (cit != synth_conns.end()) {
+                for (const auto &c : cit->second) {
+                    if (c.child_port != port_name) {
+                        continue;
+                    }
+                    if (const lnodeimpl *n = resolve_by_name(c.parent_side); n != nullptr) {
+                        return n;
+                    }
+                }
+            }
+        }
+        // ⚠️ 兜底：向上 pass-through 的端口**按源节点命名** ⇒ 端口名本身就是信号名
+        return resolve_by_name(port_name);
+    };
+
     for (std::size_t mi = 0; mi < analysis.modules.size(); ++mi) {
         const auto &m = analysis.modules[mi];
 
@@ -1150,6 +1194,63 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                                           expected.end());
         }
 
+        // ── **映射表：本 module 内的位置**（ADR-058 §2.2 · B1）────────────
+        //    「扁平位置」与「顶层端口名」需要根 module ⇒ ⇒ 在**循环之后**统一补。
+        {
+            auto entry_of = [&](const lnodeimpl *n, const std::string &nm) -> SignalMapEntry & {
+                auto it = signal_map_by_id.find(n->id());
+                if (it == signal_map_by_id.end()) {
+                    SignalMapEntry e;
+                    e.node_id = n->id();
+                    e.signal = nm;
+                    it = signal_map_by_id.emplace(n->id(), std::move(e)).first;
+                }
+                return it->second;
+            };
+            for (auto *n : view.ports) {
+                const auto nit = names.find(n);
+                if (nit == names.end()) {
+                    continue;   // ⚠️ 不在命名表里 ⇒ 不是产物里的信号 ⇒ **不编造**条目
+                }
+                if (m.is_root) {
+                    root_module_name = view.module_name;
+                    root_port_name[n->id()] = nit->second;
+                    top_port_names.push_back(nit->second);
+                }
+                entry_of(n, nit->second).hier.push_back(
+                    SignalLocation{view.module_name, nit->second, true});
+            }
+            for (auto *n : view.nodes) {
+                if (std::find(view.ports.begin(), view.ports.end(), n) != view.ports.end()) {
+                    continue;   // 端口已记（身份不同：端口 vs 体内线网）
+                }
+                const auto nit = names.find(n);
+                if (nit == names.end()) {
+                    continue;
+                }
+                entry_of(n, nit->second).hier.push_back(
+                    SignalLocation{view.module_name, nit->second, false});
+            }
+            // ⚠️ **合成端口**（`__if_` / `__x_` / `__up_`）承载的信号 ⇒ 该端口也是它的位置
+            const auto sit = synth_by_child.find(m.key);
+            if (sit != synth_by_child.end()) {
+                for (const auto &sp : sit->second) {
+                    const lnodeimpl *carrier =
+                        sp.is_input ? input_synth_carrier(m.key, sp.port)
+                                    : resolve_by_name(sp.node);
+                    if (carrier == nullptr) {
+                        continue;   // ⚠️ 解析不出承载信号 ⇒ **不编造**位置
+                    }
+                    const auto nit = names.find(carrier);
+                    if (nit == names.end()) {
+                        continue;
+                    }
+                    entry_of(carrier, nit->second).hier.push_back(
+                        SignalLocation{view.module_name, sp.port, true});
+                }
+            }
+        }
+
         // ── **接口白名单**（ADR-062 §2.6 · 检查点 = 端口表定稿后）──────────
         //    ⚠️ 只查**声明式端口节点**（`ModuleView.ports`）；合成端口是数据 wire
         //       （只有宽度，没有「接口类型」）⇒ ⇒ 不在其列（否则与 B2b-3 的 proxy 形态冲突）
@@ -1235,6 +1336,32 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     }
 
     const std::string text = all.str();
+
+    // ── 映射表收口：补「扁平位置」与「顶层端口名」
+    //    ⚠️ **扁平端口表 = 根 module 端口表**（T3-④ 已判据化：逐字逐序相同）⇒ ⇒
+    //    「在根端口表里」⇔「在扁平产物里是顶层端口」。
+    for (auto &kv : signal_map_by_id) {
+        auto &e = kv.second;
+        const auto rit = root_port_name.find(e.node_id);
+        const bool is_root_port = rit != root_port_name.end();
+        e.flat = SignalLocation{kFlatModuleName, e.signal, is_root_port};
+        if (is_root_port) {
+            e.hier_top_port_name = rit->second;
+        }
+    }
+    result.signal_map.reserve(signal_map_by_id.size());
+    for (const auto &kv : signal_map_by_id) {
+        result.signal_map.push_back(kv.second);
+    }
+    // ⚠️ **表不可信 ⇒ 不产出文件**（fail-closed）：校验 MUST 在**第一次 I/O 之前**
+    {
+        const std::string serr = ch::detail::check_signal_map(result.signal_map, top_port_names, root_module_name);
+        if (!serr.empty()) {
+            result.error = "hierarchical emission: signal map check failed: " + serr;
+            result.signal_map.clear();
+            return result;
+        }
+    }
 
     // ── ③ 落盘：临时文件 → 成功后 rename（失败不留半套产物）
     const std::string tmp_path = out_path + ".tmp";

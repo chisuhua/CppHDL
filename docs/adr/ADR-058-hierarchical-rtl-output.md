@@ -203,6 +203,10 @@ struct HierarchyEmitResult {
     std::string error;                 // ok == false 时非空
     std::vector<std::string> files;    // ok == true 时恰一个
     std::vector<std::string> warnings;
+    // ⚠️ v2.14：G2 端口清单（§2.3 的「G2 端口清单字段」段）与 §2.2 的**四元组映射表**
+    //    **两个字段并存**（前者不含 `node_id` ⇒ 不能顶替后者）
+    std::vector<PortProvenance> port_provenance;
+    std::vector<SignalMapEntry> signal_map;
 };
 HierarchyEmitResult
 toVerilogHierarchical(const std::string& path, ch::Component& top,
@@ -217,6 +221,16 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
 ⇒ ⇒ 它**不改变**本节的语义契约（失败可观测 · 诊断可承载 · 单文件产物）。
 ⚠️ **它不含 `node_id`** ⇒ ⇒ §2.2 的四元组映射表**不能**由它顶替 ⇒ ⇒ `node_id` 列 MUST 由
 §2.2 要求的新增字段承担（§2.3 E1 消费）—— 两者**并存**，不是同一件东西。
+
+⚠️ **§2.2 的四元组映射表字段**（**已落地** · `include/hierarchy_verilog.h` ·
+`SignalMapEntry` / `SignalLocation` · **value-only**）：
+`HierarchyEmitResult::signal_map` = 「`node_id` → 设计级信号名 → **扁平位置** →
+**层次化位置集合**」⇒ ⇒ `hier_top_port_name` **允许为空**（= 该信号不在层次化顶层）
+⇒ ⇒ 载体与 `port_provenance` **并存**（前者带 `node_id` · 后者不带）。
+⚠️ **发射器自校验**：表 MUST 在**第一次 I/O 之前**通过 `check_signal_map`
+（`src/hierarchy_signal_map_check.h`）—— 顶层端口全覆盖 · `flat.is_port` ⇔ 顶层端口名非空 ·
+「声称在顶层 ⇒ MUST 真的有那个位置」· 「顶层端口名为空 ⇒ MUST 真的不在顶层」
+⇒ ⇒ 不满足 ⇒ `ok=false` + 点名 ⇒ **不产出文件**（fail-closed）。
 
 ⚠️ **错误模型（oracle R14，承重）**：
 ① **所有校验 MUST 在第一次 I/O 之前完成** ⇒ ⇒ 否则留下**半套产物**（`cmp` / lint 会读到它）；

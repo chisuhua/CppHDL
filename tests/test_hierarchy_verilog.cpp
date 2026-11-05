@@ -17,6 +17,7 @@
 
 #include "ch.hpp"
 #include "bundle/stream_bundle.h"
+#include "codegen_naming.h"
 #include "codegen_verilog.h"
 #include "device.h"
 #include "hierarchy_verilog.h"
@@ -26,10 +27,17 @@
 //    ⇒ ⇒ 单测**直接**喂构造好的端口表（否则「缺端口」这条路径在正确实现下不可达）
 #include "../src/hierarchy_port_check.h"
 
+// ⚠️ **内部**判据（映射表的内在一致性 · ADR-058 §2.2 · B1）
+//    ⇒ ⇒ 发射器与单测**共用同一份**检查器（否则单测只能证明「自己和自己一致」）
+#include "../src/hierarchy_signal_map_check.h"
+
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -2488,4 +2496,249 @@ TEST_CASE("hierarchical emission: same-base different-type modules are rejected 
     // 校验先于 I/O ⇒ 不留文件
     REQUIRE_FALSE(file_exists(path));
     REQUIRE_FALSE(file_exists(path + ".tmp"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// T3-⑤ · B1：**信号映射表**（ADR-058 §2.2 的四元组）
+//   「node_id → 设计级信号名 → 扁平位置 → 层次化位置集合」
+//
+// ⚠️ 本组的三条判据：
+//   ① 表 MUST 覆盖**顶层可观测**的每个信号，且每个位置在产物里**真的存在**；
+//   ② 两次 emit（**同一 ctx**）⇒ 表**逐项相同**（顺序也相同）；
+//   ③ **负向对照**：破坏表 ⇒ 内置检查器 MUST 转红（否则判据空转）。
+// ─────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+/// 根 module 的端口名（= 扁平产物的顶层端口表 · 权威视图 = `port_provenance`）
+std::vector<std::string> top_ports_of(const ch::HierarchyEmitResult &r,
+                                       const std::string &root_module) {
+    std::vector<std::string> ports;
+    for (const auto &p : r.port_provenance) {
+        if (p.module == root_module) {
+            ports.push_back(p.port);
+        }
+    }
+    return ports;
+}
+
+}   // namespace
+
+TEST_CASE("hierarchical emission: signal map locates every observable signal",
+          "[hierarchy][emit][map]") {
+    ch::ch_device<T3> dev;
+    const std::string path = std::string(kOutDir) + "/map_l3.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE_FALSE(r.signal_map.empty());
+
+    const std::string all = read_file(path);
+    REQUIRE_FALSE(all.empty());
+
+    // ⚠️ ctx 级命名表（**与发射器同一份实现** ⇒ 名字可逐字核对）
+    const auto name_table = ch::build_verilog_name_table(dev.context()->get_eval_list());
+    std::map<std::uint32_t, const ch::core::lnodeimpl *> node_by_id;
+    for (const auto &kv : name_table) {
+        node_by_id[kv.first->id()] = kv.first;
+    }
+
+    const auto top_ports = top_ports_of(r, "top");
+    REQUIRE_FALSE(top_ports.empty());
+
+    std::set<std::uint32_t> seen_ids;
+    bool saw_moved_out_of_top = false;
+    for (const auto &e : r.signal_map) {
+        INFO("signal: " << e.signal << " (id " << e.node_id << ")");
+        // ① `node_id` 可反查 ⇒ 且「设计级信号名」与命名表**逐字相同**
+        const auto it = node_by_id.find(e.node_id);
+        REQUIRE(it != node_by_id.end());
+        REQUIRE(e.signal == name_table.at(it->second));
+        REQUIRE(seen_ids.insert(e.node_id).second);
+        // ② 扁平位置：module = 扁平产物的真名，名字 = 设计级信号名
+        REQUIRE(e.flat.module == "top");
+        REQUIRE(e.flat.name == e.signal);
+        // ③ 「扁平侧是顶层端口」⇔「层次化顶层可见」
+        REQUIRE(e.flat.is_port == !e.hier_top_port_name.empty());
+        if (!e.hier_top_port_name.empty()) {
+            REQUIRE(std::find(top_ports.begin(), top_ports.end(), e.hier_top_port_name) !=
+                    top_ports.end());
+        } else {
+            // ⚠️ 被移出顶层的那批 `ch_out` ⇒ 顶层**观测不到**（ADR-058 §4 风险 6）
+            saw_moved_out_of_top = true;
+        }
+        // ④ 层次化位置非空，且每个位置在**产物里真的存在**
+        REQUIRE_FALSE(e.hier.empty());
+        for (const auto &loc : e.hier) {
+            INFO("location: " << loc.module << "." << loc.name);
+            const std::string mod = module_text(all, loc.module);
+            REQUIRE_FALSE(mod.empty());
+            REQUIRE(mod.find(loc.name) != std::string::npos);
+        }
+    }
+
+    // ⑤ **顶层端口全覆盖**：顶层可观测的信号一个都不能漏
+    for (const auto &p : top_ports) {
+        INFO("top port: " << p);
+        bool covered = false;
+        for (const auto &e : r.signal_map) {
+            if (e.hier_top_port_name == p) {
+                covered = true;
+                break;
+            }
+        }
+        REQUIRE(covered);
+    }
+    // ⚠️ 本 DUT MUST 真的出现「被移出顶层」的信号 ⇒ 否则「空顶层端口名」这条分支
+    //    在本用例里是**不可达**的（⇒ 判据空转）
+    REQUIRE(saw_moved_out_of_top);
+}
+
+TEST_CASE("hierarchical emission: signal map is deterministic within one ctx",
+          "[hierarchy][emit][map]") {
+    ch::ch_device<T3> dev;
+    const std::string p1 = std::string(kOutDir) + "/map_det_1.v";
+    const std::string p2 = std::string(kOutDir) + "/map_det_2.v";
+    std::remove(p1.c_str());
+    std::remove(p2.c_str());
+
+    auto r1 = ch::toVerilogHierarchical(p1, dev.instance());
+    auto r2 = ch::toVerilogHierarchical(p2, dev.instance());
+    INFO("error: " << r1.error << " / " << r2.error);
+    REQUIRE(r1.ok);
+    REQUIRE(r2.ok);
+
+    // ⚠️ **逐项**比对（不是「集合相等」⇒ 顺序漂移也会被抓）
+    REQUIRE(r1.signal_map.size() == r2.signal_map.size());
+    for (std::size_t i = 0; i < r1.signal_map.size(); ++i) {
+        const auto &a = r1.signal_map[i];
+        const auto &b = r2.signal_map[i];
+        INFO("entry " << i << ": " << a.signal);
+        REQUIRE(a.node_id == b.node_id);
+        REQUIRE(a.signal == b.signal);
+        REQUIRE(a.flat.module == b.flat.module);
+        REQUIRE(a.flat.name == b.flat.name);
+        REQUIRE(a.flat.is_port == b.flat.is_port);
+        REQUIRE(a.hier_top_port_name == b.hier_top_port_name);
+        REQUIRE(a.hier.size() == b.hier.size());
+        for (std::size_t k = 0; k < a.hier.size(); ++k) {
+            REQUIRE(a.hier[k].module == b.hier[k].module);
+            REQUIRE(a.hier[k].name == b.hier[k].name);
+            REQUIRE(a.hier[k].is_port == b.hier[k].is_port);
+        }
+    }
+}
+
+TEST_CASE("hierarchical emission: signal map check rejects broken tables",
+          "[hierarchy][emit][map][negative]") {
+    ch::ch_device<T3> dev;
+    const std::string path = std::string(kOutDir) + "/map_neg.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    const auto top_ports = top_ports_of(r, "top");
+    REQUIRE_FALSE(top_ports.empty());
+
+    // 正向：真实表 MUST 通过（否则下面的负向对照毫无意义）
+    REQUIRE(ch::detail::check_signal_map(r.signal_map, top_ports, "top").empty());
+
+    // 负向 ①：**删掉一个顶层端口的条目** ⇒ MUST 被抓到
+    //        （这正是「映射表缺一项 ⇒ 转红」这条判据的可执行形态）
+    {
+        auto broken = r.signal_map;
+        bool removed = false;
+        for (std::size_t i = 0; i < broken.size(); ++i) {
+            if (broken[i].hier_top_port_name == top_ports.front()) {
+                broken.erase(broken.begin() + static_cast<std::ptrdiff_t>(i));
+                removed = true;
+                break;
+            }
+        }
+        REQUIRE(removed);
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+    // 负向 ②：把一个顶层端口的 `hier_top_port_name` 清空 ⇒ MUST 被抓到
+    {
+        auto broken = r.signal_map;
+        bool hit = false;
+        for (auto &e : broken) {
+            if (e.hier_top_port_name == top_ports.front()) {
+                e.hier_top_port_name.clear();
+                hit = true;
+                break;
+            }
+        }
+        REQUIRE(hit);
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+    // 负向 ③：给一个**非顶层端口**的条目编一个顶层端口名 ⇒ MUST 被抓到
+    {
+        auto broken = r.signal_map;
+        bool hit = false;
+        for (auto &e : broken) {
+            if (e.hier_top_port_name.empty()) {
+                e.hier_top_port_name = "not_a_real_port";
+                hit = true;
+                break;
+            }
+        }
+        REQUIRE(hit);
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+    // 负向 ④：重复 `node_id` ⇒ MUST 被抓到
+    {
+        auto broken = r.signal_map;
+        REQUIRE(broken.size() >= 2);
+        broken[1].node_id = broken[0].node_id;
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+    // 负向 ⑤：清空某个条目的层次化位置 ⇒ MUST 被抓到
+    {
+        auto broken = r.signal_map;
+        broken[0].hier.clear();
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+    // 负向 ⑥：**声称在顶层却查不到那个位置** ⇒ MUST 被抓到
+    //        （这正是实现侧变异「漏记某个顶层端口的位置」被抓到的那条判据）
+    {
+        auto broken = r.signal_map;
+        bool hit = false;
+        for (auto &e : broken) {
+            if (e.hier_top_port_name.empty()) {
+                continue;
+            }
+            for (auto it = e.hier.begin(); it != e.hier.end(); ++it) {
+                if (it->module == "top" && it->name == e.hier_top_port_name && it->is_port) {
+                    e.hier.erase(it);
+                    hit = true;
+                    break;
+                }
+            }
+            if (hit) {
+                break;
+            }
+        }
+        REQUIRE(hit);
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
+    // 负向 ⑦：**实际在顶层却把顶层端口名写成空** ⇒ MUST 被抓到
+    //        （区分「合法空」与「意外空」）
+    {
+        auto broken = r.signal_map;
+        bool hit = false;
+        for (auto &e : broken) {
+            if (!e.hier_top_port_name.empty()) {
+                continue;
+            }
+            e.hier.push_back(ch::SignalLocation{"top", "some_top_port", true});
+            hit = true;
+            break;
+        }
+        REQUIRE(hit);
+        REQUIRE_FALSE(ch::detail::check_signal_map(broken, top_ports, "top").empty());
+    }
 }

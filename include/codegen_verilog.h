@@ -34,6 +34,12 @@ enum class ch_op;
 
 namespace ch {
 
+/// 扁平产物的 module 名（**唯一真源**）。
+///
+/// ⚠️ 扁平发射（`make_flat_module_view`）与层次化发射的**映射表**（「扁平位置」那一列）
+///    MUST 共用这一份 ⇒ ⇒ 否则「映射表说的扁平位置」与「扁平产物真实的 module 名」会漂移。
+inline constexpr const char *kFlatModuleName = "top";
+
 void toVerilog(const std::string &filename, ch::core::context *ctx);
 
 /// 一个 module 的**发射输入**（层次化 T3-③）。

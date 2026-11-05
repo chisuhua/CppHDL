@@ -14,6 +14,7 @@
 
 #include "component.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,37 @@ struct PortProvenance {
     PortProvenanceOrigin origin = PortProvenanceOrigin::Self;
 };
 
+/// 映射表里的**一个位置**（**value-only** ⇒ 不带节点指针 / 连接关系）。
+///
+/// ⚠️ 位置 = 「这个信号在产物里的哪个 module、以什么身份出现」：
+///    · `is_port == true`  ⇒ 它是那个 module 的**端口**（可从顶层驱动 / 读出）；
+///    · `is_port == false` ⇒ 它是那个 module 体内的**线网**（只能在该 module 内引用）。
+struct SignalLocation {
+    std::string module;    ///< 产物里的 module 名（层次化侧 = 生成的 module 名；扁平侧 = `top`）
+    std::string name;      ///< 该 module 内的**端口名**或**线网名**
+    bool is_port = false;  ///< `true` = 端口；`false` = 体内线网
+};
+
+/// 映射表的**一行**（ADR-058 §2.2 的四元组 · **value-only**）。
+///
+/// ⚠️ **为什么要这张表**（ADR-058 §2.2）：命名权威两侧相同 ⇒ **名字不需要翻译**；
+///    需要映射的是「**一个信号在层次化产物里的位置集合**」（扁平 1 处 ⇒ 层次化可能多处：
+///    实例端口连接 + 子 module 端口 + 体内线网）⇒ ⇒ 否则等价性测试无法确定
+///    「扁平的那个端口该读层次化产物的哪个 `(module, port)`」。
+struct SignalMapEntry {
+    /// ctx **私有**编号（⇒ 有效性域 = 同一 ctx；两次 emit MUST 共享同一 ctx）
+    std::uint32_t node_id = 0;
+    /// **设计级信号名**（ctx 级全局名 ⇒ 扁平侧与层次化侧**逐字相同**）
+    std::string signal;
+    /// 该信号在**扁平产物**里的位置（扁平 = 整个 ctx 一个 `module top`）
+    SignalLocation flat;
+    /// 该信号在**层次化顶层**的端口名 ⇒ **允许为空** = 该信号**不在**层次化顶层
+    /// （= 被移出顶层的那批 `ch_out` ⇒ 顶层观测不到 ⇒ ADR-058 §4 风险 6 的盲区）。
+    std::string hier_top_port_name;
+    /// 该信号在**层次化产物**里的**全部**位置（含顶层端口 · 子 module 端口 · 体内线网）
+    std::vector<SignalLocation> hier;
+};
+
 struct HierarchyEmitResult {
     bool ok = false;
     /// 失败原因（`ok == false` 时非空；MUST NOT 只打日志）
@@ -66,6 +98,15 @@ struct HierarchyEmitResult {
     /// 顺序 = module 发射序 → 端口发射序（**确定性**）。
     /// ⚠️ **value-only**：MUST NOT 带 `lnodeimpl*` / 连接关系（否则调用方会耦合 IR 生命周期）。
     std::vector<PortProvenance> port_provenance;
+    /// **信号映射表**（ADR-058 §2.2 · T3-⑤ B1）：四元组
+    /// 「`node_id` → 设计级信号名 → 扁平位置 → 层次化位置集合」。
+    ///
+    /// ⚠️ **MUST 由 emitter 在同一次调用内产出**（MUST NOT 由测试自建 ——
+    ///    自建表与 emitter 真相脱钩 ⇒ 表错则两错相抵）。
+    /// ⚠️ `node_id` 是 **ctx 私有**编号 ⇒ ⇒ **两次 emit MUST 共享同一 ctx**
+    ///    （跨 ctx 无可比性契约）。
+    /// ⚠️ **value-only**：MUST NOT 带 `lnodeimpl*` / 连接关系。
+    std::vector<SignalMapEntry> signal_map;
 };
 
 /// 把 `root` 所在的层次发射成 Verilog（多 module）。

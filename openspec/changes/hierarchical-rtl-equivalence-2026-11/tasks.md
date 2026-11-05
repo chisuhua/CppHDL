@@ -20,8 +20,14 @@
 
 ## T2 映射表与观测集
 
-- [ ] 2.1 emitter 产出**四元组**映射表（`node_id` → 名 → 扁平位置 → 层次位置集合），
+- [x] 2.1 emitter 产出**四元组**映射表（`node_id` → 名 → 扁平位置 → 层次位置集合），
       载体 = `HierarchyEmitResult` 的**新增公开字段**（value-only · `hier_top_port_name` 允许为空）
+      ⇒ ⇒ **B1 已落地**（`SignalMapEntry` / `SignalLocation` · `include/hierarchy_verilog.h`）：
+      发射器**在同一次调用内**产出（不另开 manifest 入口）· 顺序 = `node_id` 升序（确定性）·
+      发射前过 `check_signal_map`（`src/hierarchy_signal_map_check.h`）⇒ 不满足 ⇒ `ok=false`
+      且**不产出文件**；判据 = 顶层端口全覆盖 · `flat.is_port` ⇔ 顶层端口名非空 ·
+      「声称在顶层 ⇒ MUST 真的有那个位置」· 「顶层端口名为空 ⇒ MUST 真的不在顶层」
+      （变异 M-B1：漏记一个顶层端口的位置 ⇒ 转红 ✓）
 - [ ] 2.2 `O` 由测试**手写声明**；MUST ⊇ DUT 全部 `ch_out`；MUST 非空
 - [ ] 2.3 **「随激励变化」的机械判据**（两组激励 ⇒ 取值集合不同）
 
