@@ -317,6 +317,17 @@ void ModuleEmitter::print_header(std::ostream &out) {
         const auto &ports = view_.ports;
         for (size_t i = 0; i < ports.size(); ++i) {
             auto *port_node = ports[i];
+            // ⚠️ **端口旁注释**（冒泡端口 · ADR-060 §2.2）：单独一行输出
+            //    （行尾 `//` 会吞掉后面的逗号 ⇒ 端口表语法会坏）
+            if (!view_.port_notes.empty()) {
+                const auto name_it = node_names_.find(port_node);
+                if (name_it != node_names_.end()) {
+                    const auto note_it = view_.port_notes.find(name_it->second);
+                    if (note_it != view_.port_notes.end()) {
+                        out << "    // " << note_it->second << "\n";
+                    }
+                }
+            }
             switch (port_node->type()) {
             case ch::core::lnodetype::type_input:
                 print_input(out,

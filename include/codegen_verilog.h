@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -90,6 +91,12 @@ struct ModuleView {
     ///    ⇒ ⇒ 该值 MUST 由**实例端口映射**（`.port(net)`）提供 ⇒ 本 module 不发这条 assign。
     /// ⚠️ 扁平路径恒为空 ⇒ ⇒ 产物逐字节不变。
     std::unordered_set<const ch::core::lnodeimpl *> suppress_driver_assign;
+    /// **端口旁注释**（端口名 → 注释文本）：在端口声明**之前**单独一行输出
+    /// （`// <note>`）⇒ Verilog 合法，且**不用行尾注释**（避免吞掉逗号）。
+    ///
+    /// ⚠️ 只用于「冒泡端口」这类**来源不可见**的端口（ADR-060 §2.2）。
+    /// ⚠️ 扁平路径恒为空 ⇒ ⇒ 产物逐字节不变。
+    std::map<std::string, std::string> port_notes;
 };
 
 /// 扁平产物的 `ModuleView`（= 拆分前的行为：整个 ctx 一个 `module top`）。

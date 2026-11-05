@@ -13,6 +13,7 @@
 #include "codegen_naming.h"
 #include "core/context.h"
 #include "core/lnodeimpl.h"
+#include "hierarchy_chain.h"
 #include "logger.h"
 
 #include <algorithm>
@@ -199,6 +200,7 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
 
     // ── 模块清单（拓扑序：post-order 里成层的 + 根）
     std::unordered_map<const Component*, std::size_t> module_index;
+    std::unordered_map<std::string, std::size_t> module_index_by_key;
     for (auto* c : tree.postorder) {
         if (!tree.layered[c] && c != &root) {
             continue;
@@ -208,11 +210,14 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
         m.module_type_name = c->module_type_name();
         m.is_root = (c == &root);
         module_index[c] = out.modules.size();
+        module_index_by_key[m.key] = out.modules.size();
         out.modules.push_back(std::move(m));
     }
 
     // ── 端口表 + 体内节点
     //    ⚠️ 遍历顺序 = ctx 节点创建序（确定性）
+    //    ⚠️ **冒泡**（端口 + 逐跳连接）在实例建好之后统一生成（G3-2）⇒ 先记录节点
+    std::vector<lnodeimpl *> pending_bubbles;
     auto find_port = [&out](std::size_t mi, const lnodeimpl* n, bool& is_input)
         -> HierarchyPort* {
         for (auto& p : out.modules[mi].ports) {
@@ -251,22 +256,18 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
                 // （⚠️ emitter MUST 忽略 driver() —— ADR-062 决策①）
                 mod.ports.push_back(HierarchyPort{vname(n), /*is_input=*/true, n->size(),
                                                   HierarchyPortOrigin::Self, n});
+                if (n->num_srcs() == 0) {
+                    // ⚠️ **F2**（ADR-060 v1.13 G3）：成层组件的**悬空** `ch_in`
+                    //    也 MUST 逐级冒泡（否则它只在子 module 上 ⇒ 顶层驱动不到）
+                    pending_bubbles.push_back(n);
+                }
             } else if (n->num_srcs() > 0) {
                 // inline 组件的有 driver 的 `ch_in` ⇒ 体内 wire（扁平规则）
                 mod.body.push_back(HierarchyBodyNode{n, vname(n)});
             } else {
                 // 无 driver ⇒ **逐级向上冒泡**（ADR-060 §2.2）⇒ 顶层可驱动
-                Component* cur = mod_c;
-                while (cur != nullptr) {
-                    const auto idx = module_index.at(cur);
-                    out.modules[idx].ports.push_back(HierarchyPort{
-                        vname(n), /*is_input=*/true, n->size(),
-                        HierarchyPortOrigin::Bubbled, n});
-                    if (cur == &root) {
-                        break;
-                    }
-                    cur = nearest_layer(tree.parent.at(cur), tree);
-                }
+                // ⚠️ 端口 + **逐跳连接**统一在实例建好之后生成（G3-2 ⇒ 见下）
+                pending_bubbles.push_back(n);
             }
         } else if (ty == lnodetype::type_output) {
             // ⚠️ **ADR-061 决策② 的两作用域表**（F3 · 2026-11-05）：
@@ -316,6 +317,127 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
         inst.module_key = module_key(c);
         instance_index[c] = out.modules[mi].instances.size();
         out.modules[mi].instances.push_back(std::move(inst));
+    }
+
+    // ── **冒泡**（ADR-060 v1.13 G3）：端口 + **逐跳 pass-through 连接** ──────────
+    //    ⚠️ **F2**：成层组件的悬空 `ch_in` 也要冒泡（原先只登记 `Self` 端口）。
+    //    ⚠️ **存量 inline 缺口**：原实现只登记端口、**不生成连接** ⇒ 折进非根成层
+    //       module 时中间层空连接 ⇒ 值传到中途**断线且零报错**（结构/lint 都看不见）。
+    //    ⚠️ 连接生成在**本层**（G3-2）：发射器 MUST NOT 自行推导冒泡连接。
+    {
+        // module key → (父 module key, 父 module 内的实例名)
+        std::map<std::string, std::pair<std::string, std::string>> parent_of_key;
+        for (const auto &m : out.modules) {
+            for (const auto &inst : m.instances) {
+                parent_of_key[inst.module_key] = {m.key, inst.instance_name};
+            }
+        }
+        auto module_index_or_throw = [&](const std::string &mk) -> std::size_t {
+            const auto it = module_index_by_key.find(mk);
+            if (it == module_index_by_key.end()) {
+                CHFATAL_EXCEPTION("hierarchical analysis: module '%s' not found while bubbling",
+                                  mk.c_str());
+            }
+            return it->second;
+        };
+        // G3-3：同名 + 同向 + 同宽 ⇒ **幂等复用**；否则响亮拒绝（不静默择一）
+        auto ensure_bubbled_port = [&](const std::string &mk, const lnodeimpl *n) {
+            auto &ports = out.modules[module_index_or_throw(mk)].ports;
+            for (const auto &p : ports) {
+                if (p.name != vname(n)) {
+                    continue;
+                }
+                if (p.is_input && p.width == n->size()) {
+                    return;   // owner 的 Self 端口 / 既有 Bubbled 端口
+                }
+                CHFATAL_EXCEPTION(
+                    "hierarchical analysis: bubbled input '%s' collides with an existing port "
+                    "of module '%s' (direction/width mismatch)",
+                    vname(n).c_str(), mk.c_str());
+            }
+            ports.push_back(HierarchyPort{vname(n), /*is_input=*/true, n->size(),
+                                          HierarchyPortOrigin::Bubbled, n});
+        };
+        for (auto *n : pending_bubbles) {
+            Component *mod_c = mod_of[n];
+            if (mod_c == nullptr) {
+                continue;
+            }
+            // 链 = [owner module … root]
+            std::vector<Component *> chain;
+            for (Component *c = mod_c;;) {
+                chain.push_back(c);
+                if (c == &root) {
+                    break;
+                }
+                c = nearest_layer(tree.parent.at(c), tree);
+            }
+            BubbledInput bi;
+            bi.node = n;
+            bi.module = module_key(mod_c);
+            for (auto *c : chain) {
+                bi.chain.push_back(module_key(c));
+            }
+            out.bubbled_inputs.push_back(std::move(bi));
+
+            // 端口：链上每一级（owner 的 `Self` 端口 / 已有的 `Bubbled` 端口 ⇒ 幂等跳过）
+            for (auto *c : chain) {
+                ensure_bubbled_port(module_key(c), n);
+            }
+
+            // 连接：顶端 = root（不属 `path`），底端 = owner module（其端口名 = 全局名）
+            std::vector<std::string> path;
+            for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+                if (*it == &root) {
+                    continue;
+                }
+                path.push_back(module_key(*it));
+            }
+            if (path.empty()) {
+                continue;   // owner 就是 root ⇒ 不跨 module 边界
+            }
+            const auto hops = ch::detail::plan_pass_chain(
+                path, vname(n), vname(n), /*leaf_is_port=*/true, vname(n), parent_of_key);
+            if (hops.empty()) {
+                CHFATAL_EXCEPTION(
+                    "hierarchical analysis: broken ancestor chain while bubbling '%s'",
+                    vname(n).c_str());
+            }
+            for (const auto &hop : hops) {
+                bool linked = false;
+                for (auto &inst : out.modules[module_index_or_throw(hop.parent_module)].instances) {
+                    if (inst.instance_name != hop.instance_name ||
+                        inst.module_key != hop.child_module) {
+                        continue;
+                    }
+                    bool exists = false;
+                    for (const auto &c : inst.connections) {
+                        if (c.child_port == hop.child_port) {
+                            if (c.parent_side != hop.parent_arg) {
+                                CHFATAL_EXCEPTION(
+                                    "hierarchical analysis: bubbled port '%s' is already "
+                                    "connected to a different signal in module '%s'",
+                                    hop.child_port.c_str(), hop.parent_module.c_str());
+                            }
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        inst.connections.push_back(
+                            HierarchyConnection{hop.child_port, hop.parent_arg, /*into_child=*/true});
+                    }
+                    linked = true;
+                    break;
+                }
+                if (!linked) {
+                    CHFATAL_EXCEPTION(
+                        "hierarchical analysis: instance '%s' of module '%s' not found while "
+                        "bubbling '%s'",
+                        hop.instance_name.c_str(), hop.parent_module.c_str(), vname(n).c_str());
+                }
+            }
+        }
     }
 
     // ── 连接表（只记跨 module 的边）+ 实例端口映射

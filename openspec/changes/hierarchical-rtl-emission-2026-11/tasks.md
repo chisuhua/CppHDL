@@ -247,6 +247,34 @@
       `9-bit driver -> 8-bit target`（或 8→9）/ `Remedy:`
       ⇒ ⇒ **守卫自身变异**（恒返回 true）⇒ 用例转红 · 0.24b 两条路径变异见上
 
+## T0j 批次 B3a（冒泡 G3 + `UndrivenPolicy` + 向上 pass-through · ✅ 2026-11-05）
+
+> 判据来源：**ADR-060 v1.13** §2.2 的 G3-1..G3-6 + §2.4.2；**ADR-058 v2.12** §2.3 ⑤。
+
+- [x] 0.37 **冒泡端口在分析层登记**（G3-1）—— 成层组件的**悬空** `ch_in`（F2 缺口）与
+      inline 折叠的悬空 `ch_in` 走**同一条**路径；顶层端口顺序由节点 id 决定（不因插入时机改变）
+- [x] 0.38 **逐跳 pass-through 连接由分析层生成**（G3-2）—— ⚠️ 修掉**存量缺口**：
+      原 inline 冒泡只登记端口、不生成连接 ⇒ 折进非根成层 module 时中间层空连接
+      ⇒ 值传到中途断线且零报错；幂等 = 同名 + 同向 + 同宽（G3-3），否则响亮拒绝
+- [x] 0.39 **链条机制抽成 `src/hierarchy_chain.h`**（G3-6）：分析层冒泡与发射层第三轴/
+      向上 pass-through **共用** `plan_pass_chain`（端口名 + 逐跳实参规则单实现）
+- [x] 0.40 **`UndrivenPolicy` 两格语义**（§2.4.2）：`Reject` ⇒ 不产出 + 列出**全部** +
+      适用面收窄（只对 inline 折叠后 module 归属为**非根成层 module** 的悬空 `ch_in`）；
+      `Bubble` ⇒ 逐条 `CHWARN` + 端口旁注释 + 产出；顶层 `synthesized_ports` 恒空（G3-5）
+- [x] 0.41 **有 driver 的向上 pass-through**：每级合成 **output** 端口；底端是 node ⇒
+      体内 `assign <port> = <node>;`；顶端是 reg/proxy ⇒ 合成**体内 wire** + **驱动重定向**
+      （顶端是 input 端口 / op 等 ⇒ 拒绝）；⚠️ 端口名 MUST 用**合成名** `__up_<n>`
+      （驱动节点名会在它自己的 module 内**重复声明**）；⚠️ 中间层 output 端口 MUST NOT 发
+      `assign`（原先会发出 `assign X = ;`）
+- [x] 0.42 **判据**：`[bubble]` ×3（三层冒泡 / inline 折叠 / `Reject` 双实例 + 防误拒）+
+      `[upward]` ×1 ⇒ ⇒ 顶层端口顺序（bubbled input 在 `ch_out` **之前**）· **逐跳实连**
+      （`.X(X)`，且全产物无 `.X()`）· 零父层引用 · 端口旁注释 · 每条悬空输入**恰好一条**告警 ·
+      `Reject` 列出两个实例与各自层级链 · `Reject` 下根/inline 折叠的悬空 `ch_in` **仍产出**
+      ⇒ ⇒ **变异 5/5 抓**：不生成冒泡连接 / 退回 F2 缺口 / 不加端口注释 / 只报首条 /
+      关掉向上 pass-through
+      ⇒ ⇒ ⚠️ **诚实边界**：本批判据是**连通性 + 零父层引用**的结构形态；**逐拍值判据**归
+      **T3-⑤**（design §7.1.3 已登记的缺口）—— 不以结构断言冒充值正确性
+
 ## T1 module 主体与实例化
 
 > ⚠️ **B3 的三批映射（2026-11-05 第二次重排）**：`[B3a]` 冒泡（G3）+ `UndrivenPolicy`
@@ -269,7 +297,10 @@
 - [ ] 2.1 **[B3b]** 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
 - [ ] 2.2 隐式端口 ⇒ **[B2b-3 行 1 proxy / B2b-1 行 2 / B2b-5 第三轴 + 兄弟边]**
       （ADR-060 §2.1 矩阵 + **v1.9 第七/八格拒绝**）
-- [ ] 2.3 **[B3a]** 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `UndrivenPolicy::Reject` ⇒ 不产出）
+- [x] 2.3 **[B3a]** 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `UndrivenPolicy::Reject` ⇒ 不产出）
+      ⇒ ⇒ **✅ 2026-11-05**：端口与**逐跳连接**都在分析层生成（G3-2）· 成层组件（F2）与
+      inline 折叠两条路径**同一套** · 端口旁注释 = `// implicit: undriven input of <组件路径>`
+      · `Reject` 列出**全部**悬空输入 + 冒泡层级链（双实例用例）
 - [x] 2.4 clock / reset：根**无条件**发；非根**分开判**（clock ⇒ reg ∨ 写端口 ∨ sread；
       reset ⇒ reg ∨ sread）+ **需求向上传导**（子要 clock ⇒ 父也要 ⇒ 实例化不缺 pin）
 - [ ] 2.5 **[B2b-4 体内 wire ✅ / B3b 三角色总和]** `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）

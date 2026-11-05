@@ -112,6 +112,18 @@ struct PendingImplicitEdge {
     std::string child_instance_name;
 };
 
+/// 一条「需要跨 module 边界的**冒泡**」（ADR-060 v1.13 §2.2 G3）。
+///
+/// ⚠️ 用途只有两个：`UndrivenPolicy::Reject` 的诊断、`Bubble` 的 `CHWARN` / 产物注释
+/// ⇒ ⇒ **MUST NOT 进 `to_text()`**（T3-② 的 4 份 golden 不受影响）。
+struct BubbledInput {
+    const ch::core::lnodeimpl* node = nullptr;
+    /// **inline 折叠后**的 owner module key（`== root` ⇒ 不跨 module 边界 ⇒ 不属「隐式悬空」）
+    std::string module;
+    /// 冒泡层级链（owner module → … → root），用于诊断点名「冒泡到哪几层」
+    std::vector<std::string> chain;
+};
+
 /// 连接表的一行（**只记录跨 module 的边**）。
 struct HierarchyEdge {
     std::string from_node;     ///< 驱动端（源）节点名
@@ -133,6 +145,9 @@ struct HierarchyAnalysis {
     /// `ImplicitPortHandling::Record` 下填充**。
     /// ⚠️ **MUST NOT 进 `to_text()`** ⇒ ⇒ T3-② 的 4 份 golden 逐字节不变。
     std::vector<PendingImplicitEdge> pending_implicit_edges;
+    /// **需要冒泡**的悬空 `ch_in`（ADR-060 v1.13 G3）—— 端口与**逐跳连接**都在本层生成。
+    /// ⚠️ **MUST NOT 进 `to_text()`**（同上）。
+    std::vector<BubbledInput> bubbled_inputs;
 
     /// 结构化文本快照（golden 形态 ⇒ 可逐字节比对）。
     /// ⚠️ 确定性：模块按拓扑序；端口按节点 id 升序；体内节点按 id 升序；

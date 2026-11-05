@@ -716,6 +716,155 @@ public:
     }
 };
 
+// ── DUT ⑱：**三层 · 叶层的 `ch_in` 悬空**（F2 · 冒泡）────────────────────
+//    ⚠️ 中间层**没有** din 端口 ⇒ 叶的 `ch_in` 必须逐级冒泡到顶层
+//    ⇒ ⇒ 顶层可驱动 + 每层同名 + **逐跳实连**（G3-2：连接也由分析层生成）
+class BubbleLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("bubble_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    BubbleLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class BubbleMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("bubble_mid");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<BubbleLeaf> leaf{"leaf"};
+    BubbleMid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= leaf.io().dout; }   // leaf.din 悬空
+};
+
+class BubbleTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("bubble_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<BubbleMid> mid{"mid"};
+    BubbleTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= mid.io().dout; }
+};
+
+// ── DUT ⑲：**两个实例各有一个悬空 `ch_in`**（诊断广度「全部」vs「首条」）──
+class BubbleTwoTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("bubble_two_top");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<BubbleLeaf> a{"a"};
+    ch::ch_module<BubbleLeaf> b{"b"};
+    BubbleTwoTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= a.io().dout; }   // a/b 的 din 都悬空
+};
+
+// ── DUT ⑳：**不属「隐式悬空」的两类**（`Reject` 下 MUST 仍产出）────────────
+//    ① 根自己的 `ch_in`；② inline 折叠进根的悬空 `ch_in`
+class InlineUndriven : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    InlineUndriven(ch::Component *p = nullptr, const std::string &n = "u")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class RootUndrivenTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("root_undriven_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InlineUndriven> u{"u"};
+    RootUndrivenTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= u.io().dout; }
+};
+
+// ── DUT ㉑：**inline 子组件的悬空 `ch_in` 折进非根成层 module** ────────────
+//    ⚠️ 这是**存量缺口**（metis 指出）：原实现只给祖先登记端口，**不生成连接**
+//    ⇒ ⇒ 中间层空连接 ⇒ 值传到中途断线且零报错。F2 修复 MUST 一并覆盖它。
+class InlineBubbleLeaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    InlineBubbleLeaf(ch::Component *p = nullptr, const std::string &n = "u")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class InlineBubbleMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inline_bubble_mid");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InlineBubbleLeaf> u{"u"};
+    InlineBubbleMid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= u.io().dout; }   // u.din 悬空（inline 折叠）
+};
+
+class InlineBubbleTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inline_bubble_top");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InlineBubbleMid> mid{"mid"};
+    InlineBubbleTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= mid.io().dout; }
+};
+
+// ── DUT ㉒：**向上 pass-through**（顶层读**孙层**的内部寄存器 ⇒ 非直接父子）──
+//    ⚠️ 每级合成 **output** 端口（值向上传）· 底端是 node ⇒ 体内 `assign`
+//    ⚠️ 端口名 MUST 是**合成名**（用驱动节点名 ⇒ 在驱动端 module 内重复声明）
+class UpLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("up_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};
+    UpLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = io().din;
+        io().dout <<= acc;
+    }
+};
+
+class UpMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("up_mid");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<UpLeaf> leaf{"leaf"};
+    UpMid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= ch_uint<8>(1_d);
+        io().dout <<= leaf.io().dout;
+    }
+};
+
+class UpTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("up_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<UpMid> mid{"mid"};
+    UpTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        // ⚠️⚠️ 顶层读**孙层**的内部寄存器 ⇒ ⇒ 向上 pass-through（非直接父子）
+        io().dout <<= mid.instance().leaf.instance().acc;
+    }
+};
+
 }   // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1010,6 +1159,157 @@ TEST_CASE("hierarchical emission: cross-module width mismatch is rejected before
         REQUIRE(r.error.find("width mismatch") != std::string::npos);
         REQUIRE(r.error.find(c.expect) != std::string::npos);
         REQUIRE(r.error.find("Remedy:") != std::string::npos);
+    }
+}
+
+TEST_CASE("hierarchical emission: dangling layered input bubbles to the top with real links",
+          "[hierarchy][emit][bubble]") {
+    // ⚠️ **F2**（ADR-060 v1.13 G3）：成层组件的悬空 `ch_in` MUST 逐级冒泡
+    //    ⇒ ⇒ ① 顶层可驱动 · ② 每级同名 · ③ **逐跳实连**（G3-2，连接也由分析层生成）
+    //       · ④ 端口名字 = ctx 级全局名（与扁平逐字相同）· ⑤ 端口旁注释 · ⑥ 每条一条 CHWARN
+    ch::ch_device<BubbleTop> dev;
+    const std::string path = std::string(kOutDir) + "/bubble.v";
+    std::remove(path.c_str());
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string top = module_text(all, "top");
+    const std::string mid = module_text(all, "bubble_mid");
+    const std::string leaf = module_text(all, "bubble_leaf");
+    REQUIRE_FALSE(top.empty());
+    REQUIRE_FALSE(mid.empty());
+    REQUIRE_FALSE(leaf.empty());
+
+    // ① 顶层有**同名 input**（名字 = ctx 级全局名 ⇒ 与扁平逐字相同）
+    const std::string name = "top_mid_leaf_unnamed_input";
+    REQUIRE(top.find("input [7:0] " + name) != std::string::npos);
+    // ② 中间层也有（逐级同名）
+    REQUIRE(mid.find("input [7:0] " + name) != std::string::npos);
+    // ③ ⭐ **逐跳实连**：两处实例映射都接上（`.X(X)` 而不是空连接）
+    REQUIRE(mid.find("." + name + "(" + name + ")") != std::string::npos);
+    REQUIRE(top.find("." + name + "(" + name + ")") != std::string::npos);
+    REQUIRE(all.find("." + name + "()") == std::string::npos);
+    // ④ 叶 module 体内**不引用**父层信号（值只经实例端口传入）
+    REQUIRE(leaf.find("top_unnamed_input") == std::string::npos);
+    // ⑤ 端口旁注释（来源可追溯）
+    //    ⚠️ 注释里的路径 = **组件全路径**（module key），不是 module_type_name
+    REQUIRE(top.find("// implicit: undriven input of top.mid.leaf") != std::string::npos);
+    REQUIRE(mid.find("// implicit: undriven input of top.mid.leaf") != std::string::npos);
+    // ⑥ 顶层端口顺序：bubbled input MUST 排在 `ch_out` **之前**
+    const auto in_pos = top.find("input [7:0] " + name);
+    const auto out_pos = top.find("output [7:0] top_unnamed_output");
+    REQUIRE(in_pos != std::string::npos);
+    REQUIRE(out_pos != std::string::npos);
+    REQUIRE(in_pos < out_pos);
+    // ⑦ 每条悬空输入**恰好一条**告警（分析层不重复打）
+    std::size_t bubble_warnings = 0;
+    for (const auto &w : r.warnings) {
+        if (w.find(name) != std::string::npos) {
+            ++bubble_warnings;
+        }
+    }
+    REQUIRE(bubble_warnings == 1);
+}
+
+TEST_CASE("hierarchical emission: inline descendant's dangling input also gets real links",
+          "[hierarchy][emit][bubble][inline]") {
+    // ⚠️ **存量缺口**（metis · ADR-060 v1.13 G3-2）：inline 组件的悬空 `ch_in`
+    //    折进**非根**成层 module 时，原实现只登记端口、**不生成连接**
+    //    ⇒ ⇒ 中间层空连接 ⇒ 值传到中途断线，且结构 / lint 都看不见。
+    ch::ch_device<InlineBubbleTop> dev;
+    const std::string path = std::string(kOutDir) + "/bubble_inline.v";
+    std::remove(path.c_str());
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string top = module_text(all, "top");
+    const std::string mid = module_text(all, "inline_bubble_mid");
+    REQUIRE_FALSE(top.empty());
+    REQUIRE_FALSE(mid.empty());
+
+    const std::string name = "top_mid_u_unnamed_input";
+    REQUIRE(mid.find("input [7:0] " + name) != std::string::npos);
+    REQUIRE(top.find("input [7:0] " + name) != std::string::npos);
+    // ⭐ 逐跳实连（这条正是原实现缺失的）
+    REQUIRE(top.find("." + name + "(" + name + ")") != std::string::npos);
+    REQUIRE(all.find("." + name + "()") == std::string::npos);
+    // 告警恰好一条（inline 折叠后的 owner = inline_bubble_mid ⇒ 跨边界 ⇒ 属悬空）
+    std::size_t n = 0;
+    for (const auto &w : r.warnings) {
+        if (w.find(name) != std::string::npos) {
+            ++n;
+        }
+    }
+    REQUIRE(n == 1);
+}
+
+TEST_CASE("hierarchical emission: upward pass-through synthesizes output ports on each level",
+          "[hierarchy][emit][upward]") {
+    // ⚠️ ADR-060 v1.13 G3 / G0：有 driver 的**向上** pass-through（子 → 祖先，非直接父子）
+    //    ⇒ ⇒ 每级合成 **output** 端口（值向上传），与冒泡**同一套链**（方向相反）。
+    ch::ch_device<UpTop> dev;
+    const std::string path = std::string(kOutDir) + "/upward.v";
+    std::remove(path.c_str());
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string top = module_text(all, "top");
+    const std::string mid = module_text(all, "up_mid");
+    const std::string leaf = module_text(all, "up_leaf");
+    REQUIRE_FALSE(top.empty());
+    REQUIRE_FALSE(mid.empty());
+    REQUIRE_FALSE(leaf.empty());
+
+    // ① 叶层：合成 **output** 端口 `__up_0` + 体内由驱动节点赋值
+    REQUIRE(leaf.find("output [7:0] __up_0") != std::string::npos);
+    REQUIRE(leaf.find("assign __up_0 = top_mid_leaf__reg;") != std::string::npos);
+    // ② 中间层：同名 output 端口，由**子实例**驱动（⚠️ MUST NOT 出现 `assign X = ;`）
+    REQUIRE(mid.find("output [7:0] __up_0") != std::string::npos);
+    REQUIRE(mid.find(".__up_0(__up_0)") != std::string::npos);
+    REQUIRE(all.find("assign __up_0 = ;") == std::string::npos);
+    // ③ 顶层：孙层寄存器**直连**顶层 output（值向上贯通，零跨 module assign）
+    REQUIRE(top.find(".__up_0(top_unnamed_output)") != std::string::npos);
+    // ④ 叶 module 体内 MUST NOT 引用顶层信号名
+    REQUIRE(leaf.find("top_unnamed_output") == std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: UndrivenPolicy::Reject lists every dangling input",
+          "[hierarchy][emit][bubble][policy]") {
+    // ⚠️ ADR-060 v1.13 §2.4.2：`Reject` ⇒ **不产出** + 列出**全部**悬空输入（不是首条）
+    //    ⇒ ⇒ 诊断广度用例 MUST 含**两个**实例（否则「全部」与「首条」不可区分）
+    {
+        ch::ch_device<BubbleTwoTop> dev;
+        const std::string path = std::string(kOutDir) + "/bubble_reject_two.v";
+        std::remove(path.c_str());
+        HierarchyEmitOptions opts;
+        opts.undriven_policy = UndrivenPolicy::Reject;
+        auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("top_a_unnamed_input") != std::string::npos);
+        REQUIRE(r.error.find("top_b_unnamed_input") != std::string::npos);
+        // 冒泡层级链（点名「冒泡到哪几层」）
+        REQUIRE(r.error.find("bubbles: top.a -> top") != std::string::npos);
+        REQUIRE(r.error.find("bubbles: top.b -> top") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));   // fail-closed：不留产物
+    }
+    // 防误拒：根自己的 `ch_in` + inline 折叠进根的悬空 `ch_in` ⇒ **不是**隐式悬空端口
+    {
+        ch::ch_device<RootUndrivenTop> dev;
+        const std::string path = std::string(kOutDir) + "/bubble_reject_root.v";
+        std::remove(path.c_str());
+        HierarchyEmitOptions opts;
+        opts.undriven_policy = UndrivenPolicy::Reject;
+        auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);   // ⚠️ 拒绝它们 = 拒绝合法设计（扁平里它们本就是顶层 input）
+        REQUIRE(file_exists(path));
     }
 }
 

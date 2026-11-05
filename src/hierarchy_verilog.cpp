@@ -15,6 +15,7 @@
 #include "codegen_verilog.h"
 #include "ast/mem_port_impl.h"
 #include "hierarchy_analysis.h"
+#include "hierarchy_chain.h"
 #include "logger.h"
 
 #include <cstdio>
@@ -127,6 +128,52 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     //    （纯读 ⇒ ⇒ 无副作用 ⇒ ⇒ 提前不影响任何既有行为）
     const auto names = build_verilog_name_table(root.context()->get_eval_list());
 
+    // ── **UndrivenPolicy**（ADR-060 v1.13 §2.4.2）────────────────────────
+    //    ⚠️ 只对「inline 折叠后 module 归属是**非根成层 module**」的悬空 `ch_in` 生效
+    //       （根自己的 / inline 折叠进根的悬空 `ch_in` 在扁平产物里**本就是**顶层 input
+    //        ⇒ 拒绝它们等于拒绝合法设计）。
+    std::string root_key;
+    for (const auto &m : analysis.modules) {
+        if (m.is_root) {
+            root_key = m.key;
+        }
+    }
+    std::vector<const BubbledInput *> dangling;
+    std::map<const lnodeimpl *, std::string> dangling_owner;
+    for (const auto &b : analysis.bubbled_inputs) {
+        if (b.module == root_key) {
+            continue;   // 不跨 module 边界 ⇒ 不属「隐式悬空端口」
+        }
+        dangling.push_back(&b);
+        dangling_owner[b.node] = b.module;
+    }
+    if (options.undriven_policy == UndrivenPolicy::Reject && !dangling.empty()) {
+        std::ostringstream oss;
+        oss << "hierarchical emission: " << dangling.size()
+            << " dangling input(s) require bubbling across module boundaries "
+               "(ADR-060 §2.2), which UndrivenPolicy::Reject forbids:";
+        for (std::size_t i = 0; i < dangling.size(); ++i) {
+            const auto *b = dangling[i];
+            oss << "\n  [" << (i + 1) << "] '" << names.at(b->node) << "' in module '"
+                << b->module << "' bubbles:";
+            for (std::size_t k = 0; k < b->chain.size(); ++k) {
+                oss << (k == 0 ? " " : " -> ") << b->chain[k];
+            }
+        }
+        result.error = oss.str();   // ⚠️ 不抛异常（ADR-058 v2.12 §2.3 ⑤）
+        return result;
+    }
+    for (const auto *b : dangling) {
+        // ⚠️ 变量 MUST NOT 命名为 `msg`（CHWARN 宏内部声明了同名变量 ⇒ SIGSEGV）
+        std::string text = "undriven input '" + names.at(b->node) + "' in module '" + b->module +
+                           "' bubbles up:";
+        for (std::size_t k = 0; k < b->chain.size(); ++k) {
+            text += (k == 0 ? " " : " -> ") + b->chain[k];
+        }
+        result.warnings.push_back(text);
+        CHWARN("hierarchical emission: %s", text.c_str());
+    }
+
     // ── **行 2（子 → 父）的隐式端口合成**（ADR-060 §2.1 行 2）────────────
     //    子侧端点**不是**子端口 ⇒ ⇒ 在**子侧**合成 **output** 端口 `__x_<n>`
     //    ⇒ ⇒ 子体内 `assign __x_<n> = <子侧节点>;`
@@ -145,6 +192,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     std::map<std::string, std::vector<HierarchyConnection>> synth_conns;
     /// 子 module key → 端口序号（确定性 ⇒ ⇒ 同名不同义）
     std::map<std::string, int> synth_seq;
+    /// 向上 pass-through 的端口序号（⚠️ MUST 用**合成名**：链上端口名若取驱动节点名
+    /// ⇒ 会在**驱动端 module** 内与节点自身撞名 ⇒ 重复声明）
+    int up_seq = 0;
     /// 子 module key → (子侧节点 → 端口名)（**去重**：同一节点只合成一个端口）
     std::map<std::string, std::map<const lnodeimpl *, std::string>> synth_port_of;
     /// 已被用户节点占用的名字（⚠️ 合成名 MUST NOT 与之撞名 —— 否则**重复声明**；
@@ -167,6 +217,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     std::vector<std::string> remaining;
     /// 共同祖先 module 内的**中转线**（兄弟边 · design §7.2.3）
     std::map<std::string, std::vector<SynthesizedPort>> synth_wires;
+    /// module key → (被重定向的节点 → 本地 wire 名)（向上 pass-through 的
+    /// reg/proxy 顶端适配器 ⇒ ⇒ 发射期虚拟重定向 · **MUST NOT** 写回 IR）
+    std::map<std::string, std::map<const lnodeimpl *, std::string>> synth_redirect;
 
     // ── module 树 + 端口表索引（合成**之前**要建的只读索引）
     std::map<std::string, const HierarchyModule *> module_by_key;
@@ -237,7 +290,7 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     //    ⚠️ **幂等**：同 (module, 端口名) 重复请求 ⇒ ⇒ 复用；**撞名 / 方向或宽度不一致 ⇒ fail-closed**。
     auto add_pass_port = [&](const std::string &module_key, const std::string &name,
                              std::uint32_t width, bool is_input, const lnodeimpl *redirect,
-                             std::string &err) -> bool {
+                             const std::string &driver_node, std::string &err) -> bool {
         if (name.empty()) {
             err = "pass-through port with an empty name";
             return false;
@@ -267,9 +320,12 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             if (redirect != nullptr) {
                 sp.redirect = redirect;
             }
+            if (!driver_node.empty()) {
+                sp.node = driver_node;
+            }
             return true;
         }
-        ports.push_back(SynthPortInfo{name, /*node=*/std::string(), width, is_input, redirect});
+        ports.push_back(SynthPortInfo{name, driver_node, width, is_input, redirect});
         taken_names.insert(name);
         return true;
     };
@@ -308,37 +364,40 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         return true;
     };
     /// 链走一遍：`path` = 驱动端 module **之下**的 module 链（末项 = 叶 module）。
+    /// ⚠️ **逐跳映射由 `ch::detail::plan_pass_chain` 算**（ADR-060 v1.13 G3-6：
+    ///    与**分析层的冒泡**共用同一份实现 ⇒ ⇒ 两份实现必然漂移）。
     /// 返回 `ok == false` ⇒ ⇒ 该边**不可合成**（由调用方放进 `remaining`）。
+    /// `leaf_driver_node`：叶端点是**输出**端口时，体内 `assign <port> = <driver_node>;` 的 RHS。
     auto build_chain = [&](const std::vector<std::string> &path, const std::string &port_name,
                            std::uint32_t width, bool ports_are_input, bool leaf_is_port,
                            const std::string &leaf_port_name, const lnodeimpl *leaf_redirect,
-                           const std::string &driver_arg, std::string &err) -> bool {
+                           const std::string &leaf_driver_node, const std::string &top_arg,
+                           std::string &err) -> bool {
         if (path.empty()) {
             err = "empty pass-through chain";
             return false;
         }
-        for (std::size_t i = 0; i < path.size(); ++i) {
-            const std::string &child_mod = path[i];
-            const auto pit = parent_of.find(child_mod);
-            if (pit == parent_of.end()) {
-                err = "module '" + child_mod + "' has no parent instance";
-                return false;
-            }
-            const std::string &parent_mod = pit->second.first;
-            const std::string &inst_name = pit->second.second;
-            const bool is_leaf = (i + 1 == path.size());
+        const auto hops = ch::detail::plan_pass_chain(path, port_name, top_arg, leaf_is_port,
+                                                      leaf_port_name, parent_of);
+        if (hops.empty()) {
+            err = "module chain for '" + port_name + "' has a missing parent instance";
+            return false;
+        }
+        for (const auto &hop : hops) {
+            const bool is_leaf = (&hop == &hops.back());
             // ① 逐级同名端口（叶端点本身是端口时不合成）
             if (!is_leaf || !leaf_is_port) {
-                if (!add_pass_port(child_mod, port_name, width, ports_are_input,
-                                   is_leaf ? leaf_redirect : nullptr, err)) {
+                if (!add_pass_port(hop.child_module, port_name, width, ports_are_input,
+                                   is_leaf ? leaf_redirect : nullptr,
+                                   (is_leaf && !leaf_driver_node.empty()) ? leaf_driver_node
+                                                                          : std::string(),
+                                   err)) {
                     return false;
                 }
             }
-            // ② 该跳的实参：第一跳用驱动端 module 内的信号名，其后用上一级同名端口
-            const std::string arg = (i == 0) ? driver_arg : port_name;
-            const std::string child_port =
-                (is_leaf && leaf_is_port) ? leaf_port_name : port_name;
-            if (!add_conn(parent_mod, inst_name, child_port, arg, ports_are_input, err)) {
+            // ② 逐跳实例映射（实参规则由 `plan_pass_chain` 决定）
+            if (!add_conn(hop.parent_module, hop.instance_name, hop.child_port, hop.parent_arg,
+                          ports_are_input, err)) {
                 return false;
             }
         }
@@ -419,17 +478,101 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 if (!build_chain(path, names.at(e.from_ptr), e.from_ptr->size(),
                                  /*ports_are_input=*/true, leaf_is_port,
                                  leaf_is_port ? names.at(e.to_ptr) : std::string(),
-                                 leaf_is_port ? nullptr : e.to_ptr, names.at(e.from_ptr), err)) {
+                                 leaf_is_port ? nullptr : e.to_ptr,
+                                 /*leaf_driver_node=*/std::string(), names.at(e.from_ptr), err)) {
                     remaining.push_back(desc + " (" + err + ")");
                 }
                 continue;
             }
 
             if (target_is_anc) {
-                // ── **向上 pass-through**（子 → 父但非直接父子）⇒ ⇒ 与冒泡**同一套链**
-                //    ⇒ ⇒ 属 **B3**（本批 fail-closed）
-                remaining.push_back(desc +
-                                    " (upward pass-through is part of bubbling synthesis, B3)");
+                // ── **向上 pass-through**（子 → 父，但非直接父子）⇒ ⇒ 与冒泡**同一套链**
+                //    （G0：方向相反、机制同构）。每级合成 **output** 端口（值向上传）。
+                //
+                //    ⚠️ 两端各自的适配器：
+                //      · **底端（驱动端）**：本身是 `ch_out` 端口 ⇒ 直接映射；
+                //        否则合成 output 端口 + 体内 `assign <port> = <driver>;`
+                //      · **顶端（目标节点，在祖先 module 内）**：
+                //        - 普通 wire / output 端口 ⇒ 实例映射直接驱动它；
+                //        - reg / proxy（有独立 driver 槽位）⇒ 合成**体内 wire** +
+                //          **驱动重定向**（否则 `print_reg` / `print_proxy` 会引用父层/深层信号）；
+                //        - 其它（op / mux 等）⇒ 已有自己的 `assign` ⇒ 双驱动 ⇒ **拒绝**。
+                bool v_is_input_port = false;
+                const bool v_is_port = module_port_of(e.to_module, e.to_ptr, v_is_input_port);
+                if (v_is_port && v_is_input_port) {
+                    remaining.push_back(
+                        desc + " (upward pass-through would drive an input port of the target "
+                               "module; assigning to ch_in is illegal)");
+                    continue;
+                }
+                bool u_is_input = false;
+                const bool u_is_port = module_port_of(e.from_module, e.from_ptr, u_is_input);
+                const bool leaf_is_port = u_is_port && !u_is_input;   // 只有 ch_out 可直接映射
+                // ⚠️ 链上端口名 MUST 是**合成名**：驱动节点在它自己的 module 里已有声明
+                //    ⇒ 用它的名字当端口名会**重复声明**（第三轴不存在这个问题 —— 驱动端在
+                //    更上层，不在被合成端口的 module 内）
+                const std::string port_name = make_synth_name("__up_", up_seq);
+                std::string top_arg = names.at(e.to_ptr);
+                bool need_body_wire = false;
+                if (!v_is_port) {
+                    const auto tty = e.to_ptr->type();
+                    if (tty == lnodetype::type_reg || tty == lnodetype::type_proxy) {
+                        need_body_wire = true;
+                    } else if (tty != lnodetype::type_input &&
+                               tty != lnodetype::type_output) {
+                        remaining.push_back(
+                            desc + " (upward pass-through target is neither a plain wire / "
+                                   "output port nor a redirectable reg/proxy node)");
+                        continue;
+                    }
+                }
+                if (need_body_wire) {
+                    top_arg = port_name;   // 体内 wire 用链上的同名端口名
+                    auto &redirects = synth_redirect[e.to_module];
+                    const auto prior = redirects.find(e.to_ptr);
+                    if (prior != redirects.end() && prior->second != top_arg) {
+                        remaining.push_back(desc + " (target node is already redirected to '" +
+                                            prior->second + "')");
+                        continue;
+                    }
+                    redirects[e.to_ptr] = top_arg;
+                    auto &wires = synth_wires[e.to_module];
+                    bool wire_exists = false;
+                    for (const auto &w : wires) {
+                        if (w.name == top_arg) {
+                            wire_exists = true;
+                            break;
+                        }
+                    }
+                    if (!wire_exists) {
+                        wires.push_back(SynthesizedPort{top_arg, /*is_input=*/false,
+                                                        e.from_ptr->size()});
+                        taken_names.insert(top_arg);
+                    }
+                }
+                // 路径 = 目标 module 的**直接子** … 驱动端 module
+                std::vector<std::string> upath;
+                for (std::string cur = e.from_module;;) {
+                    upath.push_back(cur);
+                    const auto it = parent_of.find(cur);
+                    if (it == parent_of.end()) {
+                        break;
+                    }
+                    if (it->second.first == e.to_module) {
+                        break;
+                    }
+                    cur = it->second.first;
+                }
+                std::reverse(upath.begin(), upath.end());
+                std::string err;
+                if (!build_chain(upath, port_name, e.from_ptr->size(),
+                                 /*ports_are_input=*/false, leaf_is_port,
+                                 leaf_is_port ? names.at(e.from_ptr) : std::string(),
+                                 /*leaf_redirect=*/nullptr,
+                                 leaf_is_port ? std::string() : names.at(e.from_ptr), top_arg,
+                                 err)) {
+                    remaining.push_back(desc + " (" + err + ")");
+                }
                 continue;
             }
 
@@ -634,20 +777,21 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             }
         }
         if (!synth_diags.empty()) {
-            // ⚠️ **中间态**：隐式端口**合成**属 B2b ⇒ ⇒ 本批一律 fail-closed
-            //    ⇒ ⇒ 差异**只在诊断广度**（`Reject` 只报第一条 · 其余报全部）
+            // ⚠️ 这些是**本发射路径无法合成**的跨 module 形态（矩阵外形态 / 表亲边 /
+            //    宽度不一致 …）⇒ ⇒ 一律 fail-closed；差异**只在诊断广度**
+            //    （`Reject` 只报第一条 · 其余报全部 —— ADR-060 §2.4.1）
             const bool all = (options.port_policy != PortPolicy::Reject);
             std::ostringstream msg;
             msg << "hierarchical emission: ";
             if (all) {
                 msg << synth_diags.size() << " cross-module edge(s) require implicit-port "
-                    << "synthesis (ADR-060 §2.1), which is not implemented yet:";
+                    << "synthesis (ADR-060 §2.1), which this emitter cannot synthesize:";
                 for (std::size_t i = 0; i < synth_diags.size(); ++i) {
                     msg << "\n  [" << (i + 1) << "] " << synth_diags[i];
                 }
             } else {
                 msg << "a cross-module edge requires implicit-port synthesis (ADR-060 "
-                    << "§2.1), which is not implemented yet:\n  [1] " << synth_diags.front();
+                    << "§2.1), which this emitter cannot synthesize:\n  [1] " << synth_diags.front();
             }
             result.error = msg.str();
             if (all) {
@@ -792,6 +936,14 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 continue;   // 已在上面 push
             }
             view.ports.push_back(node);
+            // ⚠️ 冒泡端口旁**注释**（ADR-060 §2.2）：只对**跨 module 边界**的悬空输入加
+            //    ⇒ ⇒ 全 inline 设计无此类 ⇒ 「与扁平逐字节一致」判据不受影响
+            if (p.origin == HierarchyPortOrigin::Bubbled) {
+                const auto nit = dangling_owner.find(p.node);
+                if (nit != dangling_owner.end()) {
+                    view.port_notes[p.name] = "implicit: undriven input of " + nit->second;
+                }
+            }
         }
 
         // 端口排序：clock → reset → input → output
@@ -883,7 +1035,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                         if (sp.redirect != nullptr) {
                             view.port_drives_node[sp.redirect] = sp.port;
                         }
-                    } else {
+                    } else if (!sp.node.empty()) {
+                        // ⚠️ **中间层的 output 端口**没有体内驱动源（值由**子实例的输出端口**
+                        //    经实例映射提供）⇒ ⇒ MUST NOT 发 `assign`（否则发出 `assign X = ;`）
                         view.body_epilogue.push_back("    assign " + sp.port + " = " +
                                                       sp.node + ";");
                     }
@@ -897,6 +1051,23 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 view.synthesized_wires.insert(view.synthesized_wires.end(), it->second.begin(),
                                               it->second.end());
             }
+        }
+        // ⚠️ **向上 pass-through 的重定向**（reg/proxy 顶端适配器 · 发射期虚拟重定向）
+        {
+            const auto it = synth_redirect.find(m.key);
+            if (it != synth_redirect.end()) {
+                for (const auto &kv : it->second) {
+                    view.port_drives_node[kv.first] = kv.second;
+                }
+            }
+        }
+        // ⚠️ **G3-5**（ADR-060 v1.13）：顶层 module MUST NOT 有合成端口
+        //    （`print_header` 对 `synthesized_ports` 无条件追加在节点端口之后 ⇒ 会破坏
+        //     顶层端口表与扁平的「逐字逐序」一致）
+        if (m.is_root && !view.synthesized_ports.empty()) {
+            result.error = "hierarchical emission: root module '" + m.key +
+                           "' must not have synthesized ports (ADR-060 §2.2 G3-5)";
+            return result;
         }
 
         // 实例化语句
