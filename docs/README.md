@@ -94,6 +94,8 @@ docs/
 │   └── PERFORMANCE_TESTS.md       # 性能测试计划 (TC-01~TC-06)
 │
 ├── archive/                        # 🗄️ 归档文档
+│   └── agents-notes/                # 🧾 根 AGENTS.md 的历史变更流水（2026-11-05 起归档）
+│       └── AGENTS-NOTES-2026-11.md  # 76 条历史条目 + 已解决的 KNOWN LIMITATIONS 条目（逐字）
 │
 └── learning/                       # 学习资料
 └── problem-reports/                # 问题报告
@@ -137,6 +139,10 @@ docs/
 1. **新增文档**: 根据类型选择正确目录
 2. **更新文档**: 在文件头更新"最后更新"日期
 3. **归档文档**: 过时文档移至 `archive/`
+4. **变更流水**: 根 `AGENTS.md` 是**每次 agent 会话都注入上下文**的文件 ⇒
+   它只承载**当前态约束**；按 change 累积的历史流水 MUST 归档到
+   `archive/agents-notes/` ⇒ **MUST NOT** 往根 `AGENTS.md` 追加流水条目
+   （护栏 `scripts/verify_agents_size.sh`，FAIL 阈值 72 KiB）
 
 ### 文档审查
 

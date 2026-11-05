@@ -220,6 +220,32 @@ jobs:
       shell: bash
       run: scripts/verify_test_counts.sh
 
+    - name: Verify root AGENTS.md size cap
+      # Root AGENTS.md is injected into EVERY agent session's context =>
+      # its byte size IS the resident token cost. It once grew to 393,052 B /
+      # 150,663 tokens, of which 88.9% was a per-change changelog
+      # (`## NOTES` 88 entries + `## 已消除的过时信息`) => archived verbatim to
+      # docs/archive/agents-notes/AGENTS-NOTES-2026-11.md on 2026-11-05.
+      # This guard stops the changelog from flowing back:
+      #   baseline 46,193 B (2026-11-05) / WARN 56 KiB / FAIL 72 KiB.
+      # ⚠️ The thresholds are derived from the CURRENT-STATE content only.
+      #   Lowering FAIL below ~48 KiB would be RED on day one (a broken guard):
+      #   every remaining byte is a live constraint (CONVENTIONS /
+      #   ANTI-PATTERNS / KNOWN LIMITATIONS / VERILATOR BACKEND RULES /
+      #   the 5 CI anchors + their counting rules).
+      shell: bash
+      run: scripts/verify_agents_size.sh
+
+    - name: Verify root AGENTS.md size cap guard self-test
+      # The fixtures ARE the spec of the guardrail: each pins one mechanism
+      # (over-FAIL => red / over-WARN => warn only / missing file =>
+      # fail-closed / baseline + one historical changelog entry => red).
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects => every criterion needs a fixture
+      # proving it has discriminating power.
+      shell: bash
+      run: scripts/verify_agents_size.sh --self-test
+
     - name: Verify dual-backend parity coverage count
       # Guards the **parity** count (not the label count): the 9 contract-locked
       # SINGLE-backend verilator reference implementations also carry the
@@ -1403,6 +1429,32 @@ jobs:
     - name: Verify AGENTS.md test counts
       shell: bash
       run: scripts/verify_test_counts.sh
+
+    - name: Verify root AGENTS.md size cap
+      # Root AGENTS.md is injected into EVERY agent session's context =>
+      # its byte size IS the resident token cost. It once grew to 393,052 B /
+      # 150,663 tokens, of which 88.9% was a per-change changelog
+      # (`## NOTES` 88 entries + `## 已消除的过时信息`) => archived verbatim to
+      # docs/archive/agents-notes/AGENTS-NOTES-2026-11.md on 2026-11-05.
+      # This guard stops the changelog from flowing back:
+      #   baseline 46,193 B (2026-11-05) / WARN 56 KiB / FAIL 72 KiB.
+      # ⚠️ The thresholds are derived from the CURRENT-STATE content only.
+      #   Lowering FAIL below ~48 KiB would be RED on day one (a broken guard):
+      #   every remaining byte is a live constraint (CONVENTIONS /
+      #   ANTI-PATTERNS / KNOWN LIMITATIONS / VERILATOR BACKEND RULES /
+      #   the 5 CI anchors + their counting rules).
+      shell: bash
+      run: scripts/verify_agents_size.sh
+
+    - name: Verify root AGENTS.md size cap guard self-test
+      # The fixtures ARE the spec of the guardrail: each pins one mechanism
+      # (over-FAIL => red / over-WARN => warn only / missing file =>
+      # fail-closed / baseline + one historical changelog entry => red).
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects => every criterion needs a fixture
+      # proving it has discriminating power.
+      shell: bash
+      run: scripts/verify_agents_size.sh --self-test
 
     - name: Verify dual-backend parity coverage count
       shell: bash
