@@ -165,22 +165,354 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     };
     /// **不可合成**的合成类问题（⇒ ⇒ 交给下面的 collect ⇒ ⇒ 按策略处置）
     std::vector<std::string> remaining;
+    /// 共同祖先 module 内的**中转线**（兄弟边 · design §7.2.3）
+    std::map<std::string, std::vector<SynthesizedPort>> synth_wires;
+
+    // ── module 树 + 端口表索引（合成**之前**要建的只读索引）
+    std::map<std::string, const HierarchyModule *> module_by_key;
+    for (const auto &m : analysis.modules) {
+        module_by_key[m.key] = &m;
+    }
+    /// 子 module key → (父 module key, 父 module 内的实例名)
+    std::map<std::string, std::pair<std::string, std::string>> parent_of;
+    /// `"<parent>\x1f<inst>"` → 该实例（⇒ ⇒ 查**已有**连接，防双驱动）
+    std::map<std::string, const HierarchyInstance *> inst_of;
+    for (const auto &m : analysis.modules) {
+        for (const auto &inst : m.instances) {
+            parent_of[inst.module_key] = {m.key, inst.instance_name};
+            inst_of[m.key + "\x1f" + inst.instance_name] = &inst;
+        }
+    }
+    /// `anc` 是 `desc` 的**严格**祖先（沿 module 树向上走）
+    auto is_strict_ancestor = [&parent_of](const std::string &anc, const std::string &desc) {
+        for (std::string cur = desc;;) {
+            const auto it = parent_of.find(cur);
+            if (it == parent_of.end()) {
+                return false;
+            }
+            if (it->second.first == anc) {
+                return true;
+            }
+            cur = it->second.first;
+        }
+    };
+    /// 该节点是否是 module 的端口（`is_input` 带出方向）
+    auto module_port_of = [&module_by_key](const std::string &mk, const lnodeimpl *n,
+                                           bool &is_input) -> bool {
+        const auto it = module_by_key.find(mk);
+        if (it == module_by_key.end()) {
+            return false;
+        }
+        for (const auto &p : it->second->ports) {
+            if (p.node == n) {
+                is_input = p.is_input;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // ── **chain builder**（ADR-060 v1.12 §2.3 的 G0）──────────────────────
+    //    冒泡（向上 · B3）与第三轴（向下 · 本批）**共用**这一条链：沿祖先链
+    //    **每级一个同名端口**（名字 = 源节点的 ctx 级全局名 ⇒ 顶层与扁平产物逐字相同）。
+    //    叶端点由**两种 leaf adapter** 决定（⇒ ⇒ 这正是「起点节点 + 方向」抽象不够用的地方）：
+    //      · **port adapter**：叶端点本身是 module 的端口 ⇒ ⇒ 叶上**不**合成端口，直接接它；
+    //      · **node adapter**：叶端点不是端口（reg / proxy）⇒ ⇒ 叶上合成端口 + **驱动重定向**。
+    //    ⚠️ **幂等**：同 (module, 端口名) 重复请求 ⇒ ⇒ 复用；**撞名 / 方向或宽度不一致 ⇒ fail-closed**。
+    auto add_pass_port = [&](const std::string &module_key, const std::string &name,
+                             std::uint32_t width, bool is_input, const lnodeimpl *redirect,
+                             std::string &err) -> bool {
+        if (name.empty()) {
+            err = "pass-through port with an empty name";
+            return false;
+        }
+        // ① 撞**真实**端口名 ⇒ 失败（ADR-060 §2.3 的 fail-closed）
+        const auto mod_it = module_by_key.find(module_key);
+        if (mod_it != module_by_key.end()) {
+            for (const auto &p : mod_it->second->ports) {
+                if (p.name == name) {
+                    err = "pass-through port '" + name + "' collides with an existing port of "
+                          "module '" + module_key + "'";
+                    return false;
+                }
+            }
+        }
+        // ② 幂等复用 / 冲突检测
+        auto &ports = synth_by_child[module_key];
+        for (auto &sp : ports) {
+            if (sp.port != name) {
+                continue;
+            }
+            if (sp.is_input != is_input || sp.width != width) {
+                err = "pass-through port '" + name + "' on module '" + module_key +
+                      "' already exists with a different direction/width";
+                return false;
+            }
+            if (redirect != nullptr) {
+                sp.redirect = redirect;
+            }
+            return true;
+        }
+        ports.push_back(SynthPortInfo{name, /*node=*/std::string(), width, is_input, redirect});
+        taken_names.insert(name);
+        return true;
+    };
+    /// 追加一条**合成连接**（幂等 + 双驱动 fail-closed）。
+    /// ⚠️ 同一子端口出现两次映射 ⇒ Verilog `Duplicate pin connection` ⇒ ⇒ 必须在这里拦住；
+    ///    与**已有**的分析层连接指向不同实参 ⇒ ⇒ 是**双驱动**（IR 里 `set_src` 是 last-wins
+    ///    ⇒ ⇒ 语义只会丢掉一个驱动）⇒ ⇒ 响亮拒绝，不静默择一。
+    auto add_conn = [&](const std::string &parent_mod, const std::string &inst_name,
+                        const std::string &child_port, const std::string &arg, bool into_child,
+                        std::string &err) -> bool {
+        const std::string key = parent_mod + "\x1f" + inst_name;
+        const auto iit = inst_of.find(key);
+        if (iit != inst_of.end()) {
+            for (const auto &c : iit->second->connections) {
+                if (c.child_port == child_port && c.parent_side != arg) {
+                    err = "child port '" + child_port + "' is already driven by '" +
+                          c.parent_side + "' in module '" + parent_mod +
+                          "' (the synthesized chain would drive it from '" + arg + "')";
+                    return false;
+                }
+            }
+        }
+        auto &conns = synth_conns[key];
+        for (auto &c : conns) {
+            if (c.child_port != child_port) {
+                continue;
+            }
+            if (c.parent_side != arg) {
+                err = "child port '" + child_port + "' on instance '" + inst_name +
+                      "' of module '" + parent_mod + "' is synthesized twice with different drivers";
+                return false;
+            }
+            return true;   // 幂等
+        }
+        conns.push_back(HierarchyConnection{child_port, arg, into_child});
+        return true;
+    };
+    /// 链走一遍：`path` = 驱动端 module **之下**的 module 链（末项 = 叶 module）。
+    /// 返回 `ok == false` ⇒ ⇒ 该边**不可合成**（由调用方放进 `remaining`）。
+    auto build_chain = [&](const std::vector<std::string> &path, const std::string &port_name,
+                           std::uint32_t width, bool ports_are_input, bool leaf_is_port,
+                           const std::string &leaf_port_name, const lnodeimpl *leaf_redirect,
+                           const std::string &driver_arg, std::string &err) -> bool {
+        if (path.empty()) {
+            err = "empty pass-through chain";
+            return false;
+        }
+        for (std::size_t i = 0; i < path.size(); ++i) {
+            const std::string &child_mod = path[i];
+            const auto pit = parent_of.find(child_mod);
+            if (pit == parent_of.end()) {
+                err = "module '" + child_mod + "' has no parent instance";
+                return false;
+            }
+            const std::string &parent_mod = pit->second.first;
+            const std::string &inst_name = pit->second.second;
+            const bool is_leaf = (i + 1 == path.size());
+            // ① 逐级同名端口（叶端点本身是端口时不合成）
+            if (!is_leaf || !leaf_is_port) {
+                if (!add_pass_port(child_mod, port_name, width, ports_are_input,
+                                   is_leaf ? leaf_redirect : nullptr, err)) {
+                    return false;
+                }
+            }
+            // ② 该跳的实参：第一跳用驱动端 module 内的信号名，其后用上一级同名端口
+            const std::string arg = (i == 0) ? driver_arg : port_name;
+            const std::string child_port =
+                (is_leaf && leaf_is_port) ? leaf_port_name : port_name;
+            if (!add_conn(parent_mod, inst_name, child_port, arg, ports_are_input, err)) {
+                return false;
+            }
+        }
+        return true;
+    };
 
     for (const auto &e : analysis.pending_implicit_edges) {
         const std::string desc =
             "'" + e.from_node + "'@'" + e.from_module + "' -> '" + e.to_node + "'@'" +
             e.to_module + "' (" + e.reason + ")";
+        // ⚠️ **节点**是合成的必要条件；`child_instance_name` 只在**直接父子**边上有意义
+        //    （非相邻边恒为空 ⇒ ⇒ MUST NOT 拿它当通用前置 ⇒ ⇒ 否则第三轴/兄弟边会被误判）
         const bool has_nodes = (e.from_ptr != nullptr && e.to_ptr != nullptr &&
-                                !e.child_instance_name.empty() &&
                                 names.count(e.from_ptr) != 0 &&
                                 names.count(e.to_ptr) != 0);
         if (!has_nodes) {
             remaining.push_back(desc);
             continue;
         }
+        // ⚠️ **方向由 module 树判定**（MUST NOT 只靠 `child_drives_parent` ——
+        //    该标志只在**直接父子**关系下有意义，非相邻边恒为 false ⇒ ⇒
+        //    无法区分「第三轴」与「兄弟边」）
+        const bool driver_is_anc = is_strict_ancestor(e.from_module, e.to_module);
+        const bool target_is_anc = is_strict_ancestor(e.to_module, e.from_module);
+        const auto p_to = parent_of.find(e.to_module);
+        const auto p_from = parent_of.find(e.from_module);
+        const bool direct_row1 =
+            driver_is_anc && p_to != parent_of.end() && p_to->second.first == e.from_module;
+        const bool direct_row2 =
+            target_is_anc && p_from != parent_of.end() && p_from->second.first == e.to_module;
+
+        // ── **非直接父子**的三种形态（ADR-060 §2.1 第三轴 · §2.2 冒泡 · 兄弟边）
+        if (!direct_row1 && !direct_row2) {
+            // ⚠️ **W1**（ADR-060 §1.1）：合成端口宽度只能取**子侧** ⇒ 两端宽度不同 ⇒
+            //    Verilog **静默**扩展/截断（产物关掉了 `WIDTHTRUNC`）⇒ ⇒ MUST 响亮拒绝
+            const bool width_ok = (e.from_ptr->size() == e.to_ptr->size());
+            const std::string width_note =
+                width_ok ? std::string()
+                         : (": width mismatch (" + std::to_string(e.from_ptr->size()) + " vs " +
+                            std::to_string(e.to_ptr->size()) + ")");
+
+            if (driver_is_anc) {
+                // ── **第三轴**（driver 的 owner 在更上层）⇒ ⇒ 沿祖先链逐级同名 **input** 端口
+                if (!width_ok) {
+                    remaining.push_back(desc + width_note);
+                    continue;
+                }
+                bool leaf_port_is_input = false;
+                const bool leaf_is_port =
+                    module_port_of(e.to_module, e.to_ptr, leaf_port_is_input);
+                if (leaf_is_port && !leaf_port_is_input) {
+                    // 叶端点是**输出**端口 ⇒ 父层驱动子 `ch_out` ⇒ 第八格 ⇒ 拒绝
+                    remaining.push_back(desc +
+                                        " (third-axis leaf is an output port; ADR-060 §2.1 forbids "
+                                        "driving a child's ch_out)");
+                    continue;
+                }
+                if (!leaf_is_port) {
+                    // node adapter：只接受有**独立 driver 槽位**的节点（reg / proxy）
+                    const auto ty = e.to_ptr->type();
+                    if (ty != lnodetype::type_reg && ty != lnodetype::type_proxy) {
+                        remaining.push_back(
+                            desc + " (third-axis leaf is neither a port nor a redirectable "
+                                   "reg/proxy node)");
+                        continue;
+                    }
+                }
+                // 路径 = 从被驱动端 module 向上走到驱动端 module 的**直接子**
+                std::vector<std::string> path;
+                for (std::string cur = e.to_module;;) {
+                    path.push_back(cur);
+                    const auto it = parent_of.find(cur);
+                    if (it == parent_of.end() || it->second.first == e.from_module) {
+                        break;
+                    }
+                    cur = it->second.first;
+                }
+                std::reverse(path.begin(), path.end());
+                std::string err;
+                if (!build_chain(path, names.at(e.from_ptr), e.from_ptr->size(),
+                                 /*ports_are_input=*/true, leaf_is_port,
+                                 leaf_is_port ? names.at(e.to_ptr) : std::string(),
+                                 leaf_is_port ? nullptr : e.to_ptr, names.at(e.from_ptr), err)) {
+                    remaining.push_back(desc + " (" + err + ")");
+                }
+                continue;
+            }
+
+            if (target_is_anc) {
+                // ── **向上 pass-through**（子 → 父但非直接父子）⇒ ⇒ 与冒泡**同一套链**
+                //    ⇒ ⇒ 属 **B3**（本批 fail-closed）
+                remaining.push_back(desc +
+                                    " (upward pass-through is part of bubbling synthesis, B3)");
+                continue;
+            }
+
+            // ── **兄弟边**（design §7.2.3）：共同祖先 module 内一根**中转线**
+            //    支持的形态（其余 ⇒ fail-closed；跨层的向上/向下链与 B3 同批）：
+            //      · 两端是**同一个**父 module 的直接子（表亲边 ⇒ 需要两条链 ⇒ 本批不做）；
+            //      · 驱动端是**子 module 的 output 端口**、被驱动端是**子 module 的 input 端口**；
+            //      · 宽度一致。
+            if (!width_ok) {
+                remaining.push_back(desc + width_note);
+                continue;
+            }
+            std::set<std::string> anc_of_driver;
+            for (std::string cur = e.from_module;;) {
+                anc_of_driver.insert(cur);
+                const auto it = parent_of.find(cur);
+                if (it == parent_of.end()) {
+                    break;
+                }
+                cur = it->second.first;
+            }
+            std::string lca;
+            for (std::string cur = e.to_module;;) {
+                if (anc_of_driver.count(cur) != 0) {
+                    lca = cur;
+                    break;
+                }
+                const auto it = parent_of.find(cur);
+                if (it == parent_of.end()) {
+                    break;
+                }
+                cur = it->second.first;
+            }
+            bool drv_is_input = false;
+            bool tgt_is_input = false;
+            const bool drv_is_port = module_port_of(e.from_module, e.from_ptr, drv_is_input);
+            const bool tgt_is_port = module_port_of(e.to_module, e.to_ptr, tgt_is_input);
+            const bool both_direct_children =
+                !lca.empty() && p_from != parent_of.end() && p_to != parent_of.end() &&
+                p_from->second.first == lca && p_to->second.first == lca;
+            if (!both_direct_children || !drv_is_port || drv_is_input || !tgt_is_port ||
+                !tgt_is_input) {
+                remaining.push_back(
+                    desc + " (sibling edge requires two direct children of the same module, a "
+                           "child output port on the driver side and a child input port on the "
+                           "target side)");
+                continue;
+            }
+            const std::string &wire = names.at(e.from_ptr);
+            // 幂等：同一根线可能被多条边复用；与既有端口撞名 ⇒ 失败（否则重复声明）
+            auto &wires = synth_wires[lca];
+            bool wire_exists = false;
+            for (const auto &w : wires) {
+                if (w.name == wire) {
+                    wire_exists = true;
+                    break;
+                }
+            }
+            const auto lca_mod = module_by_key.find(lca);
+            bool clashes_with_port = false;
+            if (lca_mod != module_by_key.end()) {
+                for (const auto &pp : lca_mod->second->ports) {
+                    if (pp.name == wire) {
+                        clashes_with_port = true;
+                        break;
+                    }
+                }
+            }
+            if (clashes_with_port) {
+                remaining.push_back(desc + " (sibling wire '" + wire +
+                                    "' collides with an existing port of module '" + lca + "')");
+                continue;
+            }
+            if (!wire_exists) {
+                wires.push_back(SynthesizedPort{wire, /*is_input=*/false, e.from_ptr->size()});
+                taken_names.insert(wire);
+            }
+            {
+                std::string err;
+                if (!add_conn(lca, p_from->second.second, names.at(e.from_ptr), wire,
+                              /*into_child=*/false, err) ||
+                    !add_conn(lca, p_to->second.second, names.at(e.to_ptr), wire,
+                              /*into_child=*/true, err)) {
+                    remaining.push_back(desc + " (" + err + ")");
+                    continue;
+                }
+            }
+            continue;
+        }
+
         // ⚠️ **两个方向的合成条件不同**：
         //    · 行 2（子 → 父）⇒ ⇒ 子侧 = **驱动端**所在 module · 父侧 = 被驱动端所在 module
         //    · 行 1（父 → 子）⇒ ⇒ 子侧 = **被驱动端**所在 module · 父侧 = 驱动端所在 module
+        if (e.child_instance_name.empty()) {
+            remaining.push_back(desc + " (direct parent/child edge without an instance name)");
+            continue;
+        }
         if (e.child_drives_parent) {
             // ── 行 2：子侧合成 **output** 端口 `__x_<n>`（父层取它的值）──
             const std::string &child_key = e.from_module;
@@ -347,13 +679,11 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
     // module key → 生成名（实例化语句用）
     std::map<std::string, std::string> name_of_key;
-    // module key → 该 module 的端口表（实例化时要知道子 module 有哪些 output 端口）
-    std::map<std::string, const HierarchyModule *> module_by_key;
+    // ⚠️ `module_by_key` 已在**合成阶段之前**建好（见上）⇒ ⇒ 这里不再重复声明
     // module key → 时钟/复位需求（自底向上累积 ⇒ 需求**向上传导**）
     std::map<std::string, SeqNeeds> needs_of;
     for (std::size_t i = 0; i < analysis.modules.size(); ++i) {
         name_of_key[analysis.modules[i].key] = module_names[i];
-        module_by_key[analysis.modules[i].key] = &analysis.modules[i];
     }
 
     // 根 module 用 options.top_module_name（与扁平产物同名 ⇒ 便于 A/B 比对）
@@ -524,6 +854,14 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 }
             }
         }
+        // ⚠️ **合成连接网**（兄弟边在共同祖先内的中转线 · design §7.2.3）
+        {
+            const auto it = synth_wires.find(m.key);
+            if (it != synth_wires.end()) {
+                view.synthesized_wires.insert(view.synthesized_wires.end(), it->second.begin(),
+                                              it->second.end());
+            }
+        }
 
         // 实例化语句
         for (const auto &inst : m.instances) {
@@ -544,6 +882,16 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 if (child_needs->second.reset) {
                     conns.push_back(HierarchyConnection{"default_reset",
                                                         view.reset_name, true});
+                }
+            }
+            // ⚠️ **合成连接**（行 2 的子 output → 父侧端点 · 第三轴的逐级同名端口 ·
+            //    兄弟边的两端）MUST 在「未消费 output ⇒ 空连接」**之前**并入
+            //    ⇒ ⇒ 否则同一端口会同时出现 `.p()` 与 `.p(x)` ⇒ Verilator 报
+            //    `Duplicate pin connection`。
+            {
+                const auto sc = synth_conns.find(m.key + "\x1f" + inst.instance_name);
+                if (sc != synth_conns.end()) {
+                    conns.insert(conns.end(), sc->second.begin(), sc->second.end());
                 }
             }
             // ⚠️ **未被子层消费的 output 端口 MUST 以空连接出现**（`.port()`）
@@ -567,13 +915,6 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                             conns.push_back(HierarchyConnection{cp.name, "", false});
                         }
                     }
-                }
-            }
-            // ⚠️ **合成端口的连接**（行 2：子 output → 父侧端点）
-            {
-                const auto sc = synth_conns.find(m.key + "\x1f" + inst.instance_name);
-                if (sc != synth_conns.end()) {
-                    conns.insert(conns.end(), sc->second.begin(), sc->second.end());
                 }
             }
             view.body_epilogue.push_back(

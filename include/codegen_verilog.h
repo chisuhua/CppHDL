@@ -76,6 +76,13 @@ struct ModuleView {
     /// （隐式端口是**发射期**造出来的 ⇒ ⇒ 不是 `lnodeimpl`）⇒ ⇒ 故与 `ports` 分开。
     /// ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
     std::vector<SynthesizedPort> synthesized_ports;
+    /// **合成连接网**（层次化专用 · 兄弟边在共同祖先 module 内的中转线 ·
+    /// ADR-060 §2.1 / design §7.2.3）。
+    ///
+    /// 与 `synthesized_ports` 同族：**不是 IR 节点** ⇒ ⇒ 只带名字与宽度 ⇒ ⇒
+    /// 由 `print_decl` 发 `logic [W] name;`。
+    /// ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
+    std::vector<SynthesizedPort> synthesized_wires;
     /// **本 module 内 MUST NOT 发驱动赋值的节点**。
     ///
     /// ⚠️ 层次化：一个节点的驱动若在**别的 module** ⇒ 那个信号在本 module 里

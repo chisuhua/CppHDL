@@ -493,6 +493,97 @@ public:
     }
 };
 
+// ── DUT ⑩：**两条第七格边**（父层改写子内部运算操作数 ⇒ 不可合成）
+//    ⇒ ⇒ 用途：诊断**广度**的判据（`Reject` 只报第一条 / 其余报全部）
+//    ⚠️ 兄弟边在 B2b-5 之后**可合成** ⇒ 不能再用它当「不可合成」的样本
+class TwoOpTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("two_op_top");
+    __io(ch_in<ch_uint<8>> din;)
+    ch::ch_module<InnerOp> a{"a"};
+    ch::ch_module<InnerOp> b{"b"};
+    TwoOpTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        a.instance().sum <<= io().din;   // 第七格 ①
+        b.io().din <<= io().din;
+        b.instance().sum <<= io().din;   // 第七格 ②
+    }
+};
+
+// ── DUT ⑪：**第三轴 · 端口适配器**（driver 在更上层 ⇒ 逐级同名 input 端口）──
+//    ⚠️ mid **没有** din 端口：leaf 的 `ch_in` 由**顶层**直接驱动（跳过 mid）
+class AxLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ax_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    AxLeaf(ch::Component *p = nullptr, const std::string &n = "leaf") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class AxMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ax_mid");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<AxLeaf> leaf{"leaf"};
+    AxMid(ch::Component *p = nullptr, const std::string &n = "mid") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= leaf.io().dout; }
+};
+
+class AxTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ax_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<AxMid> mid{"mid"};
+    AxTop(ch::Component *p = nullptr, const std::string &n = "top") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        // ⚠️⚠️ **第三轴**：顶层直接驱动**孙层**的 `ch_in`
+        mid.instance().leaf.io().din <<= io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
+// ── DUT ⑫：**第三轴 · 节点适配器**（叶端点不是端口 ⇒ 合成端口 + 驱动重定向）──
+class AxRegLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ax_reg_leaf");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};
+    AxRegLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= acc; }
+};
+
+class AxRegMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ax_reg_mid");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch::ch_module<AxRegLeaf> leaf{"leaf"};
+    AxRegMid(ch::Component *p = nullptr, const std::string &n = "mid") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= leaf.io().dout; }
+};
+
+class AxRegTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ax_reg_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<AxRegMid> mid{"mid"};
+    AxRegTop(ch::Component *p = nullptr, const std::string &n = "top") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        // ⚠️⚠️ **第三轴 + reg 叶端点**：顶层直接改**孙层寄存器**的 next
+        mid.instance().leaf.instance().acc->next = io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
 }   // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -571,7 +662,9 @@ TEST_CASE("hierarchical emission: granularity scope covers construction and emis
 // ═════════════════════════════════════════════════════════════════════════
 TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
           "[hierarchy][emit][policy]") {
-    ch::ch_device<TwoSiblingTop> dev;
+    // ⚠️ 样本 = **两条第七格边**（父层改写子内部运算操作数 ⇒ **不可合成**）
+    //    （兄弟边在 B2b-5 之后可合成 ⇒ 不能再用它当「不可合成」的样本）
+    ch::ch_device<TwoOpTop> dev;
 
     // ① `Reject` ⇒ 只报**第一条**（ADR-060 §2.4.1）
     {
@@ -611,6 +704,111 @@ TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
         REQUIRE(r.error.find("[2]") != std::string::npos);
         REQUIRE_FALSE(file_exists(path));
     }
+}
+
+TEST_CASE("hierarchical emission: sibling edges go through a parent-module wire",
+          "[hierarchy][emit][implicit][sibling]") {
+    // ⚠️ 兄弟边（design §7.2.3）：共同祖先内一根**中转线** + 两处实例端口映射
+    //    ⇒ ⇒ **零**隐式端口（兄弟之间本来就不该有端口）
+    ch::ch_device<TwoSiblingTop> dev;
+    const std::string path = std::string(kOutDir) + "/sibling_wire.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    // ⚠️ **本批之前**：这是 fail-closed ⇒ ⇒ 「能产出」本身就是判别力
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string top = module_text(all, "top");
+    REQUIRE_FALSE(top.empty());
+
+    // ① 两条兄弟边 ⇒ **恰好两根**中转线（每根**只声明一次**）
+    REQUIRE(count_occurrences(top, "logic [7:0] top_a_unnamed_output;") == 1);
+    REQUIRE(count_occurrences(top, "logic [7:0] top_c_unnamed_output;") == 1);
+    // ② 驱动端（子 **output** 端口）接上该线
+    REQUIRE(top.find(".top_a_unnamed_output(top_a_unnamed_output)") != std::string::npos);
+    REQUIRE(top.find(".top_c_unnamed_output(top_c_unnamed_output)") != std::string::npos);
+    // ③ 被驱动端（子 **input** 端口）从该线取
+    REQUIRE(top.find(".top_b_unnamed_input(top_a_unnamed_output)") != std::string::npos);
+    REQUIRE(top.find(".top_d_unnamed_input(top_c_unnamed_output)") != std::string::npos);
+    // ④ 兄弟边**不**合成隐式端口（`__if_` / `__x_` 一个都不该出现）
+    REQUIRE(top.find("__if_") == std::string::npos);
+    REQUIRE(top.find("__x_") == std::string::npos);
+    // ⑤ 顶层端口表不变（不因兄弟边多出任何端口）
+    const std::string top_header = top.substr(0, top.find(");"));
+    REQUIRE(top_header.find("__if_") == std::string::npos);
+    REQUIRE(top_header.find("__x_") == std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: third-axis pass-through uses port adapter",
+          "[hierarchy][emit][implicit][third_axis]") {
+    // ⚠️ 第三轴（ADR-060 §2.1）：driver 在**更上层** ⇒ 沿祖先链**逐级同名** input 端口
+    //    ⇒ ⇒ 每一级的端口名 = 驱动节点的 **ctx 级全局名**（⇒ 顶层与扁平产物**逐字相同**）
+    ch::ch_device<AxTop> dev;
+    const std::string path = std::string(kOutDir) + "/third_axis_port.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    // ⚠️ **本批之前**：fail-closed ⇒ ⇒ 「能产出」本身就是判别力
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string mid = module_text(all, "ax_mid");
+    const std::string leaf = module_text(all, "ax_leaf");
+    const std::string top = module_text(all, "top");
+    REQUIRE_FALSE(mid.empty());
+    REQUIRE_FALSE(leaf.empty());
+    REQUIRE_FALSE(top.empty());
+
+    // ① 中间层有**同名** pass-through input 端口（名字 = 驱动节点的 ctx 级全局名）
+    REQUIRE(mid.find("input [7:0] top_unnamed_input") != std::string::npos);
+    // ② 顶层把自己的**同名端口**接进去（⇒ 顶层端口表 = 扁平 ⇒ 外部在同一处驱动）
+    REQUIRE(top.find(".top_unnamed_input(top_unnamed_input)") != std::string::npos);
+    // ③ 叶层：**port adapter** ⇒ mid 用同名端口驱动 leaf **自己的** input 端口
+    REQUIRE(mid.find(".top_mid_leaf_unnamed_input(top_unnamed_input)") != std::string::npos);
+    // ④ 叶 module 体内**不**引用父层信号（零跨 module 引用）
+    REQUIRE(leaf.find("top_unnamed_input") == std::string::npos);
+    // ⑤ 顶层端口表**不**多出框架端口
+    const std::string top_header = top.substr(0, top.find(");"));
+    REQUIRE(top_header.find("__if_") == std::string::npos);
+    REQUIRE(top_header.find("__x_") == std::string::npos);
+
+    // ⑥ **确定性**（同一设计两次生成逐字节相同）
+    const std::string path2 = std::string(kOutDir) + "/third_axis_port_2.v";
+    auto r2 = ch::toVerilogHierarchical(path2, dev.instance());
+    REQUIRE(r2.ok);
+    REQUIRE(read_file(path2) == all);
+}
+
+TEST_CASE("hierarchical emission: third-axis pass-through uses node adapter",
+          "[hierarchy][emit][implicit][third_axis]") {
+    // ⚠️ 第三轴 + **reg 叶端点**（叶端点不是端口 ⇒ 合成端口 + **驱动重定向**）
+    //    ⇒ ⇒ 不重定向 ⇒ 该寄存器退化成「保持」⇒ ⇒ **静默丢驱动**
+    ch::ch_device<AxRegTop> dev;
+    const std::string path = std::string(kOutDir) + "/third_axis_reg.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string mid = module_text(all, "ax_reg_mid");
+    const std::string leaf = module_text(all, "ax_reg_leaf");
+    const std::string top = module_text(all, "top");
+    REQUIRE_FALSE(mid.empty());
+    REQUIRE_FALSE(leaf.empty());
+    REQUIRE_FALSE(top.empty());
+
+    // ① 叶层有**同名** input 端口（node adapter 在叶层合成）
+    REQUIRE(leaf.find("input [7:0] top_unnamed_input") != std::string::npos);
+    // ② ⭐ **驱动重定向**：寄存器 next 改由该合成端口提供
+    REQUIRE(leaf.find("top_mid_leaf_reg <= top_unnamed_input;") != std::string::npos);
+    REQUIRE(leaf.find("Register update (no next)") == std::string::npos);
+    // ③ 中间层同样有同名端口，并由上一层驱动
+    REQUIRE(mid.find("input [7:0] top_unnamed_input") != std::string::npos);
+    REQUIRE(mid.find(".top_unnamed_input(top_unnamed_input)") != std::string::npos);
+    // ④ 顶层接自己的同名端口
+    REQUIRE(top.find(".top_unnamed_input(top_unnamed_input)") != std::string::npos);
 }
 
 TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",

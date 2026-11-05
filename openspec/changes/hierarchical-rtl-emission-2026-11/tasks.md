@@ -144,14 +144,44 @@
       ⇒ ⇒ **变异 M1**（关掉 as-wire 分支 ⇒ 转红 · 且产物缺 `logic` 声明 ⇒ lint 会抓）
       ⇒ ⚠️ **若不修**：体内输出是 `assign` 的目标却**无声明** ⇒ Verilator 报 undeclared
 
-## T0g 批次 B2b-5（第三轴 pass-through + 兄弟边 · 待实施）
+## T0g 批次 B2b-5（第三轴 pass-through + 兄弟边 · ✅ 已落地）
 
-- [ ] 0.28 **第三轴**：driver 的 `owner` 在更上层（含 `nullptr`）⇒ 沿祖先链逐级**
+- [x] 0.28 **第三轴**：driver 的 `owner` 在更上层（含 `nullptr`）⇒ 沿祖先链逐级**
       同名** `input` 端口（每级一个）
-- [ ] 0.29 **兄弟边**：子 A 输出 → 子 B 输入 ⇒ 共同祖先内**一根** wire + 两处实例映射
+      ⇒ ⇒ **落地形态 = G0 的 chain builder**（`src/hierarchy_verilog.cpp` 的 `build_chain`：
+      逐级同名端口 + 逐跳实例映射 · **幂等** · 撞名/宽度/双驱动 **fail-closed**）
+      + **两种 leaf adapter**：
+      · **port adapter** —— 叶端点本身是叶 module 的 `ch_in` ⇒ 叶上**不**合成端口，
+        最后一跳直接接它；
+      · **node adapter** —— 叶端点是 reg/proxy ⇒ 叶上合成端口 + **驱动重定向**
+        （`port_drives_node`）。
+      ⇒ ⇒ **W1 宽度一致性**在合成之前判（不一致 ⇒ 拒绝，点名两个宽度）；
+      叶端点是**输出**端口 ⇒ 拒绝（第八格）；非 reg/proxy 的非端口节点 ⇒ 拒绝（第七格）。
+      ⚠️ **向上 pass-through（子 → 父但非直接父子）仍 fail-closed** ⇒ 属 **B3**（冒泡），
+      但 MUST 复用同一个 `build_chain`（`ports_are_input=false`）。
+- [x] 0.29 **兄弟边**：子 A 输出 → 子 B 输入 ⇒ 共同祖先内**一根** wire + 两处实例映射
       （**MUST NOT** 兄弟直连）
-- [ ] 0.30 **判据**：第三轴每级一个同名端口 + 顶层可驱动（值判据）；兄弟边恰好一根连接网 +
+      ⇒ ⇒ 落点：`ModuleView::synthesized_wires`（**新增** · 与 `synthesized_ports` 同族 ——
+      不是 IR 节点 ⇒ `print_decl` 发 `logic [W] name;`）+ 两端实例端口映射
+      （`.out(wire)` / `.in(wire)`）
+      ⇒ ⇒ **本批支持的形态**：两端是**同一 module 的直接子** + 驱动端是**子 output 端口** +
+      被驱动端是**子 input 端口** + 宽度一致；其余（表亲边 / 非端口端点）⇒ **fail-closed**
+- [x] 0.30 **判据**：第三轴每级一个同名端口 + 顶层可驱动（值判据）；兄弟边恰好一根连接网 +
       **零**隐式端口；两者均过 §2.5 的 lint 门
+      ⇒ ⇒ 三个用例（`[third_axis]` ×2 + `[sibling]` ×1）· 全部产物
+      `verilator --lint-only` **exit 0**
+      ⇒ ⇒ **变异 3/4 抓 + 1 条等价变异**：M1 关掉第三轴 ⇒ 2 个用例红 · M2 关掉兄弟边 ⇒ 该用例红 ·
+      M3 端口名不用 ctx 级全局名（改 `__pass_<n>`）⇒ 同名端口断言红 ·
+      ⚠️ **M4（去掉 leaf 的驱动重定向）恒绿 = 等价变异**：第三轴的合成端口名**恒等于**驱动
+      节点的全局名 ⇒ 寄存器 `next` 走既有路径时解析出的名字**逐字相同**
+      ⇒ ⇒ 不是判别力缺口；⚠️ 但 `port_drives_node` **仍然保留**（`__if_<n>` 那条路径依赖它，
+      且第三轴一旦改名它就承重）
+      ⇒ ⇒ ⚠️ **实施期修掉的两个真缺陷（都属本批）**：
+      ① `has_nodes` 曾要求 `child_instance_name` 非空 ⇒ ⇒ 非相邻边恒空 ⇒ **第三轴/兄弟边
+      永远进不到合成分支**（一律 fail-closed）；
+      ② 同一子端口既有分析层连接、又有合成映射 ⇒ ⇒ `Duplicate pin connection`
+      ⇒ ⇒ 新增 `add_conn`：**幂等** + 同端口不同驱动 ⇒ **fail-closed**（不静默择一）
+      ⇒ ⇒ 并把手里的合成连接在「未消费 output ⇒ 空连接」**之前**并入（否则同端口两个映射）
 
 ## T0h 批次 B2b-4b（G1 · 同类型多实例的序号按**实例路径字典序** · ✅ 已落地）
 
@@ -183,7 +213,7 @@
       + 不留文件
       ⇒ ⇒ **变异 2/2 全抓**：M1 退回「按遍历序」⇒ `top_ba.find("seq_leaf a (")` 转红 ·
       M2 去掉编号前身份判定 ⇒ `REQUIRE_FALSE(r.ok)` 转红；还原后 130 断言全绿
-- [ ] 0.33 ⚠️ **G0 的实现约束**（B2b-5 遵守；**以 design.md §7.1.4 v2 与
+- [x] 0.33 ⚠️ **G0 的实现约束**（B2b-5 遵守；**以 design.md §7.1.4 v2 与
       ADR-060 v1.12 为准**）：**一个** chain builder（沿祖先链收集 → **返回六元组**
       · 幂等 · fail-closed）+ **两种 leaf adapter** —— 冒泡叶 = 无 driver 的
       `type_input`；第三轴叶 = reg/proxy（**需驱动重定向**）
@@ -191,6 +221,10 @@
       「同一条机制」的判据抓住
       ⇒ ⇒ ⚠️ MUST NOT 实现成「一个函数 · 参数 = 起点节点 + 方向」的单函数形态
       （该形态是 2026-11-05 oracle 修正前的表述，已被 §7.1.4 v2 取代）
+      ⇒ ⇒ **落地核对**：`build_chain(path, port_name, width, ports_are_input, leaf_is_port,
+      leaf_port_name, leaf_redirect, driver_arg)` + `add_pass_port` / `add_conn` ——
+      **链**与**叶策略**分离，`ports_are_input` 只决定端口方向（**不**是「起点节点 + 方向」
+      那种把叶策略也压扁的形态）⇒ ⇒ B3 的冒泡直接调用同一条链
 
 ## T1 module 主体与实例化
 

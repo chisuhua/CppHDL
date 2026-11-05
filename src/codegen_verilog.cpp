@@ -498,6 +498,14 @@ void ModuleEmitter::print_decl(std::ostream &out) {
                 print_mem_decl(out, mem);
             }
         }
+        // ⚠️ **合成连接网**（兄弟边的中转线 · 层次化专用）：它们**不是 IR 节点**
+        //    ⇒ ⇒ 与 `synthesized_ports` 同族 ⇒ ⇒ 在这里发声明（必须先于
+        //    `body_epilogue` 的实例化语句使用它）。
+        //    ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
+        for (const auto &sw : view_.synthesized_wires) {
+            const std::string w = get_width_str(sw.width);
+            out << "    logic " << (w.empty() ? "" : w + " ") << sw.name << ";\n";
+        }
     } catch (...) {
         // Silently ignore exceptions
     }
