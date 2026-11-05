@@ -1,15 +1,18 @@
 # ADR-058: 真层次化 RTL 输出 —— 语义边界与等价性
 
-- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.12** · 版本史见 §6）
+- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.14** · 版本史见 §6）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**前置** = ADR-059（节点归属与组件命名）·
   **配套** = ADR-061（层级粒度由用户显式控制）
-- 关联 capability: 待建 `rtl-hierarchical-output`
-- 关联 change: 待建（见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
+- 关联 capability: `rtl-hierarchical-output`
+- 关联 change: 已归档 `hierarchical-rtl-emission-2026-11`（T3-④）·
+  在建 `hierarchical-rtl-equivalence-2026-11`（T3-005）· `hierarchical-rtl-docs-2026-11`（T3-006）
+  （见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
 - 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md`（详细规格）·
   `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`（实施路径）
-- 审稿报告: `.rddf/reviews/ADR-060-v1.13-ADR-058-v2.12.md`（oracle 1 + critic 1 · 无 BLOCKER）
+- 审稿报告: `.rddf/reviews/ADR-058-v2.13-ADR-060-v1.14.md`（oracle 1 + critic 1；
+  其 2 SHOULD_FIX + 2 NIT 已在 **v2.14** 落实 ⇒ 决策内容零变更）
 - ⚠️ **配套决策**：**ADR-060**（层次化输出的**端口策略**与 **module 复用**）——
   本 ADR 只承载「**边界是什么 / 等价性怎么定义 / API 边界在哪**」三件事。
 
@@ -154,6 +157,27 @@ output（事实④）⇒ ⇒ 层次化的顶层输出集合是扁平的**子集*
 取 `data_map_` 槽位、按 **Vtop 字段名**取端口（`src/core/verilator_backend.cpp:594-660`）
 ⇒ ⇒ 只有名字对照表它**用不了**。
 
+⚠️ **映射表的载体（v2.13 · 承重）**：映射表 MUST 由 **emitter 产出**（不得由测试自建
+⇒ ⇒ 自建表与 emitter 真相脱钩 ⇒ ⇒ 表错则两错相抵 ⇒ 正是本仓「parity 盖章同构缺陷」的翻版）
+⇒ ⇒ 载体 = **`HierarchyEmitResult` 的新增公开字段**（value-only：`uint32_t node_id` +
+`std::string`；**MUST NOT** 带 `lnodeimpl*` ⇒ 同 `port_provenance` 的 value-only 纪律）
+⇒ ⇒ **不另开 `toVerilogHierarchicalManifest()` 入口**（两次调用之间存在非确定性窗口
+⇒ ⇒ 违背「映射表由 emitter 产出」⇒ ⇒ 第二个调用点必然漂移）。
+⇒ ⇒ **同一份产物 = 同一个真相源** ⇒ ⇒ §2.3 **E1 的显式端口集合 MUST 同样由它派生**
+（映射表 ∪ `port_provenance`）⇒ ⇒ **MUST NOT** 由 harness / backend 独立撰写或手工列举
+（独立撰写 ⇒ ⇒ 与 emitter 真相脱钩 ⇒ ⇒ 表错则两错相抵 ⇒ ⇒ 与本条同一条纪律）。
+⚠️ **schema MUST 允许「该信号不在层次化顶层」**：此时 `hier_top_port_name` 允许为空
+⇒ ⇒ 「层次化位置集合」= 该信号在层次化产物里出现的全部位置（含**子 module 端口**与
+**体内线网**）⇒ ⇒ 否则「被移出顶层的那批 `ch_out`」在表里无处落账 ⇒ ⇒ §4 风险 6 的
+盲区**没有机械载体**。
+
+⚠️ **`node_id` 的有效性域（v2.13 · 承重）**：`node_id` 是 **ctx 私有**的自增编号
+⇒ ⇒ **两个独立 build 的 ctx 之间无可比性契约**（同一设计 build 两次 ⇒ id 分配受建图顺序
+影响 ⇒ 相同纯属巧合）⇒ ⇒ 「同一 `node_id`」这个前提**只在「同一个 ctx 上做两次 emit」时成立**
+⇒ ⇒ 即：扁平产物与层次化产物 MUST 由**同一个 `ch_device`（同一 ctx）**产生
+⇒ ⇒ 跨 ctx 比对 MUST 退化到「设计级信号名」维度（命名权威两侧相同 ⇒ 名字可比
+⇒ ⇒ ADR-061 决策④）⇒ ⇒ 等价性 harness MUST 显式断言「两次 emit 共享同一 ctx」。
+
 ⚠️ **判别力自证（必须）**：故意破坏层次化产物（删一条连线 / 改一个隐式端口方向）⇒ ⇒
 等价性测试 MUST **转红** ⇒ ⇒ （仓内既有惯例：mutation + self-test）。
 
@@ -185,10 +209,14 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
                       const HierarchyEmitOptions& opts = {});
 ```
 
-⚠️ **T3-④ 的 G2 追加字段**（**尚未落地** ⇒ ⇒ 不并入上面的「已落地形态」块）：
-`HierarchyEmitResult.port_provenance`（**value-only**；含**注入的 clock/reset**）
+⚠️ **G2 端口清单字段**（v2.14 订正：**已落地** · `include/hierarchy_verilog.h:48-69`）：
+`HierarchyEmitResult::port_provenance`（`std::vector<PortProvenance>` · **value-only** ·
+覆盖**全部** module 的端口，含合成端口与**注入的 clock/reset** ⇒ ⇒ 顺序 = module 发射序 →
+端口发射序 ⇒ **确定性**）
 ⇒ ⇒ 用途 = 端口完整性校验（`expected ⊆ actual`）与端口清单
 ⇒ ⇒ 它**不改变**本节的语义契约（失败可观测 · 诊断可承载 · 单文件产物）。
+⚠️ **它不含 `node_id`** ⇒ ⇒ §2.2 的四元组映射表**不能**由它顶替 ⇒ ⇒ `node_id` 列 MUST 由
+§2.2 要求的新增字段承担（§2.3 E1 消费）—— 两者**并存**，不是同一件东西。
 
 ⚠️ **错误模型（oracle R14，承重）**：
 ① **所有校验 MUST 在第一次 I/O 之前完成** ⇒ ⇒ 否则留下**半套产物**（`cmp` / lint 会读到它）；
@@ -220,6 +248,27 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
 ⇒ ⇒ 若不允许该例外，等价性测试必须**自建**一套「**外部 RTL 编译 + 双模型对拍**」harness
 ⇒ ⇒ ⇒ 成本远超预估 ⇒ ⇒ ⇒ **该例外是 P4 可执行性的前提**。
 ⇒ ⇒ ✅ **已裁决（2026-11-02 · 用户拍板）**：**允许**该只增不改入口。
+
+⚠️ **该入口的三条硬约束（v2.13 · 据 T3-④ 归档后的实施期实测补齐）** ——
+上面的裁决给了「允许加口」，但**未给**「口长什么样」⇒ ⇒ 实施者只能即兴 ⇒ ⇒ 写死：
+
+| # | 约束 | 为什么（**实测**） |
+|---|---|---|
+| **E1** | 该入口 MUST 接收**显式端口集合**（`node_id` + 顶层端口名 + 宽度 + 方向）⇒ ⇒ MUST **⊇ {clock, reset}**；`build_port_access_table` / `emit_sim_main_postlude` MUST 走该集合，**MUST NOT** 再从 ctx 全量推 ⇒ ⇒ 且该集合 MUST 由 **emitter 产物**（§2.2 映射表 ∪ `port_provenance`）**派生** —— **MUST NOT** 由 harness / backend 独立撰写 / 手工列举（独立撰写 ⇒ 与 emitter 真相脱钩 ⇒ 表错则两错相抵） | 层次化产物的顶层端口集合是 ctx 全量的**真子集**（成层子树的 `ch_out` 留在子 module 端口上）⇒ ⇒ 从 ctx 全量生成的 `case` 会引用**不存在的 Vtop 字段** ⇒ ⇒ 编译/链接失败（`src/core/verilator_backend.cpp:594-680`）⇒ ⇒ 且集合漏 clock/reset ⇒ `pulse_reset()` 与 `clock_field_ptr_` 空转 ⇒ ⇒ 寄存器永不更新 ⇒ ⇒ **逐拍全等恒绿**（最危险的假绿） |
+| **E2** | 该入口 MUST **物理隔离**于既有 `initialize(ctx, …)` 路径（后者行为**逐字节不变**）⇒ ⇒ 等价性 harness MUST 用**两个独立 work_dir** | 两条路径共享 `verilator_work_dir_` ⇒ ⇒ `top.v` / `sim_main.cpp` / `obj_dir` 互踩（`:419,:436,:504,:530`）⇒ ⇒ 任何「重新 initialize」的顺序假设都会错 |
+| **E3** | 该入口的**失败语义 MUST 是致命错误**（返回 `VerilatorError`）⇒ ⇒ **MUST NOT** 沿用 `try_initialize` 的 best-effort 惯例（编译失败仅 `CHWARN` 后继续 · `:342-344`；dlopen 失败仅 `CHWARN` 后继续 · `:368-370`）⇒ ⇒ harness MUST 断言 backend **真初始化成功**（非 SKIP 即过） | best-effort ⇒ backend **静默不可用** ⇒ ⇒ 等价性套件若按 dual-backend fixture 惯例把「verilator 不可用」当 SKIP ⇒ ⇒ **整个套件静默跳过 = 恒绿假绿**（本仓反复出现的失败模式） |
+
+⚠️ **顶层 module 名的约束（v2.13 · 实测订正措辞）**：backend 生成的 `sim_main.cpp`
+模板硬编码 `#include "Vtop.h"` 与 `new Vtop{…}`（`src/core/verilator_backend.cpp:446,:456`）
+⇒ ⇒ 而 Verilator 生成的顶层类名由 **`--top-module` 或输入文件名**决定
+（`third_party/verilator/src/V3Options.cpp:1161-1165`；实测：`--prefix` 亦可覆盖）
+⇒ ⇒ 层次化产物若**顶层 module 名 ≠ `top`** ⇒ ⇒ **编译期**失败（`VerilatorCompile`），
+不是运行期 ⇒ ⇒ 该入口 MUST **显式校验**顶层名并在不符时**致命拒绝 + 点名**
+⇒ ⇒ 把编译期失败**提前到入口**（fail-early）。
+⚠️ **为什么保留 `top_module_name` 可配置**（不删选项）：它已是**已落地公开契约**
+（capability `rtl-hierarchical-output` 的 Scenario「顶层 module 名可配置」）⇒ ⇒ 删 = breaking
+⇒ ⇒ 本期裁决 = **保留选项 + 约束消费路径**（backend 只消费默认名 `top` 的产物）⇒ ⇒
+「backend 消费非默认名产物」记为**已知边界**（本期不做，见 §4 风险 7）。
 
 ⚠️ **为什么不给 `toVerilog()` 加参数**：既有调用点与 Verilator backend 全部承担新分支风险
 ⇒ ⇒ 且「默认扁平」会退化成**隐式行为**，回归时无法区分「走扁平」与「走层次化」。
@@ -304,6 +353,8 @@ Verilog 里，**文件级切分是纯下游工具链动作** —— 按 module �
 | 3 | 层次化产物**不被 Verilator backend 消费** ⇒ 框架的「双后端 parity」能力对它**不可用** | §2.3 的**只增不改**例外；并在「已知残留」里登记「扁平仍是 backend 的唯一输入 ⇒ 两套真值长期存在」 |
 | 4 | 顶层端口集合**比扁平少** ⇒ 外部工具看到的接口不同 | 等价性以**显式观测集合**为准；并产出**端口清单**供外部评审 |
 | 5 | **`CH_MODULE_NAME` 忘写** ⇒ 模块类型名不可确定 ⇒ ⇒ 而 `typeid` 的拼写**是实现相关的**（Itanium vs MSVC）⇒ ⇒ 跨编译器/跨平台**不可复算** | ⚠️ **以 ADR-059 D4 v2.3 + §2.2.1 的四档来源**为准：① 类级 `CH_HIERARCHY_LAYER("name")` / ② `ch_layer<T>` 继承 `T` 的类级名 / ③ `ch_layer<Helper>` 在实例处给名 ⇒ ⇒ **①②③ 缺名编译期即不可表达**（⇒ ⇒ 原「运行期硬错」的兜底**不再需要**）⇒ ⇒ ④ `Granularity::ForceLayer` 强制的组件（用户**未**声明）⇒ ⇒ 允许回退 `sanitize(typeid)` **+ MUST 有 `CHWARN`**（⇒ ⇒ 名字仅「同 ABI 内」可复算） |
+| 6 | **等价性判据只覆盖「顶层可见行为」** —— 层次化顶层输出集 = 扁平顶层输出集 − {`ch_out` 的最近成层祖先 ≠ 根} ⇒ ⇒ 被移出顶层的那批 `ch_out` 在层次化产物里**降级为子 module 端口**（或空连接 `.port()`）⇒ ⇒ 顶层**观测不到** ⇒ ⇒ 「子树内部算错但顶层输出恰好相同」这一类缺陷**结构性测不出** | ⚠️ **如实登记**（不是缺陷 ⇒ 是契约边界）⇒ ⇒ **输入方向无盲区**（顶层 input 集合两侧 MUST 相等 ⇒ 激励可完整施加）⇒ ⇒ MUST 在 **capability spec + 用法指南** 同步登记 ⇒ ⇒ **MUST NOT** 假装全覆盖 |
+| 7 | **backend 只消费默认顶层名 `top`** 的产物（§2.3 E3 附近的顶层名约束）⇒ ⇒ 调用方若设 `top_module_name = "my_top"` ⇒ ⇒ 该产物**无法**被 backend 仿真 ⇒ ⇒ 「层次化产物不被 backend 消费」的已知残留**只对非默认名成立** | 保留选项（已落地公开契约）⇒ ⇒ 本期**不做**「backend 支持任意顶层名」（模板参数化 + 缓存 key 加顶层名 + 测试矩阵扩张 ⇒ ⇒ 属能力扩张 ⇒ ⇒ 须先回 ADR 重开）⇒ ⇒ 入口**显式校验 + 致命拒绝 + 点名**（fail-early）⇒ ⇒ 记为已知边界 |
 
 ---
 
@@ -331,6 +382,25 @@ Verilog 里，**文件级切分是纯下游工具链动作** —— 按 module �
       ⇒ ⇒ 提取器已固化为 `scripts/lib/verilog_tree_extract.py` + 护栏
       `scripts/verify_hierarchical_tree_extract.sh`（含负向对照 ⇒ 非恒绿）
 - [ ] **效果判据**：**映射表** MUST 被产出，且 MUST 覆盖被观测的全部信号
+      ⇒ ⇒ **载体** = `HierarchyEmitResult` 的新增公开字段（value-only · 带 `node_id` ·
+      `hier_top_port_name` 允许为空以表达「不在层次化顶层」⇒ ⇒ 见 §2.2 的 v2.13 增补）
+      ⇒ ⇒ **两次 emit MUST 共享同一 ctx**（`node_id` 有效性域）⇒ ⇒ harness MUST 断言之
+      ⇒ ⇒ **变异**：映射表缺一项 ⇒ ⇒ MUST 转红
+- [ ] **效果判据（backend 消费路径 · v2.13）**：`initialize_with_verilog` MUST 接收
+      **显式端口集合**（⊇ {clock, reset}）⇒ ⇒ MUST 走该集合而非 ctx 全量
+      ⇒ ⇒ 且该集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）**派生**，
+      **MUST NOT** 由 harness / backend 独立撰写 / 手工列举（§2.2 末段 + §2.3 E1）
+      ⇒ ⇒ 失败 MUST **致命**（非 best-effort `CHWARN`）⇒ ⇒ harness MUST 断言 backend
+      真初始化成功（**非 SKIP 即过**）⇒ ⇒ 既有 `initialize(ctx, …)` 行为逐字节不变
+      ⇒ ⇒ **变异**：集合漏 clock/reset ⇒ ⇒ 寄存器永不更新 ⇒ ⇒ 逐拍全等**恒绿**
+      ⇒ ⇒ **MUST 转红**（这是本判据的判别力自证）
+- [ ] **效果判据（顶层名 · v2.13）**：层次化产物顶层 module 名 ≠ `top` ⇒ ⇒ 入口
+      MUST **致命拒绝 + 点名**（fail-early）⇒ ⇒ **MUST NOT** 落到编译期才发现
+- [ ] **效果判据（观测盲区登记 · v2.13 · 承重）**：等价性判据 MUST 显式声明其
+      **只覆盖顶层可见行为**（被移出顶层的那批 `ch_out` 顶层不可观测 ⇒ ⇒
+      「子树内部算错但顶层输出相同」**测不出**）⇒ ⇒ 且 MUST 在 capability spec +
+      用法指南**同步登记**（只登记 ADR 一处 = 漂移）
+      ⇒ ⇒ ⚠️ **输入方向无盲区**（顶层 input 集合两侧 MUST 相等）
 - [ ] **效果判据**：对显式声明的观测集合 `O`（**非空**且**至少一个随激励变化**）⇒
       `flat[O] ≡ hier[O]` **逐拍全等**（≥ 5 个 DUT：两层 / 三层+兄弟连线 /
       bundle 成员跨层 / 含 `ch_mem` / 真实最深设计）
@@ -404,6 +474,8 @@ output**（`src/codegen_verilog.cpp:333-362`）⇒ ⇒ 顶层 module 端口表 M
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-05 | **v2.14**（落实 critic 对本轮审稿的 **2 SHOULD_FIX + 2 NIT** ⇒ ⇒ 决策内容**零变更**，只补可判定性）：① **§2.2 映射表载体 + §2.3 E1 补同一条纪律** —— 显式端口集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）**派生**，**MUST NOT** 由 harness / backend 独立撰写（否则与 emitter 真相脱钩 ⇒ 表错则两错相抵）；② **§2.3 的 `port_provenance` 块订正为「已落地」**（`include/hierarchy_verilog.h:48-69`；原文写「尚未落地」）并明示它**不含 `node_id`** ⇒ 不能顶替 §2.2 的四元组映射表（两者并存） |
+| 2026-11-05 | **v2.13**（T3-④ 归档后 · architect 角色 · 据 **oracle** 对实施期缺口的对抗复核）：**补齐 T3-005 的四处「契约缺口」** —— ① **§2.2 加映射表载体**：MUST 由 emitter 产出（禁测试自建）· 载体 = `HierarchyEmitResult` 新增**公开字段**（value-only · 带 `node_id` · `hier_top_port_name` 允许为空以表达「不在层次化顶层」）· **不**另开 manifest 入口；并加 **`node_id` 有效性域**（ctx 私有 ⇒ 两次 emit MUST 共享同一 ctx ⇒ 跨 ctx 退化为「设计级信号名」维度）；② **§2.3 加该只增不改入口的三条硬约束 E1/E2/E3**（**显式端口集合** ⊇ {clock, reset} · **物理隔离**既有路径 + 双 work_dir · 失败**致命**非 best-effort ⇒ 否则 backend 静默不可用 ⇒ 套件 SKIP = 恒绿假绿）**+ 顶层 module 名约束**（实测：Verilator 顶层类名由 `--top-module` 或**输入文件名**决定 ⇒ 非 `top` ⇒ **编译期**失败 ⇒ 入口 MUST 显式校验并**致命拒绝**；**保留** `top_module_name` 选项（已落地公开契约）⇒ 「backend 只消费默认名」记为已知边界）；③ **§4 加风险 6（观测盲区：等价性只覆盖顶层可见行为 · 输入方向无盲区）+ 风险 7（backend 只消费默认顶层名）**；④ **§5 加三条对应判据**（映射表载体 + backend 消费路径 + 盲区登记），并把映射表判据补上「缺一项 ⇒ 转红」的判别力自证。⚠️ 决策内容**零变更** —— 本版是把**已裁决但未写死的实施约束**补成可机械判定的条款（oracle 实测缺口） |
 | 2026-11-05 | **v2.12**（B3 开工前 · architect 角色 · 据实施期查明的**两处契约缺口**）：① **§2.3 的签名按已落地形态订正** —— 原文 `std::expected<HierManifest, HierError>` / `VerilogHierOptions` 与实现（`HierarchyEmitResult` / `HierarchyEmitOptions`）**漂移** ⇒ ⇒ 按实现订正（**语义契约不变**：失败可观测 + 诊断可承载 + 单文件产物）；② **§2.3 新增错误模型 ⑤「错误载体统一口径」** —— 对外唯一载体 = `HierarchyEmitResult`；**发射器内**校验失败（端口策略 / 跨层宽度 / 白名单 / 端口完整性 / 命名冲突）MUST 走 `ok=false` + `error`，**MUST NOT** 依赖异常（异常会落进 `print()` 的 `catch(...)` ⇒ 静默失败）；**分析层前置校验**允许 `CHFATAL_EXCEPTION`，入口 MUST 在第一次 I/O 前**转换**（不是吞掉）；并声明**各 ADR 中 `CHFATAL_EXCEPTION` 字样按本口径解释**（可观测形态由所在层决定）⇒ ⇒ 目的是消除 B3 的「白名单说抛异常、发射器返回结构体」两套错误通道 |
 | 2026-11-02 | **创建**（裁决：新增独立 API · 语义边界 = 所有权边界 · 与扁平逐拍等价 · 隐式端口合成+告警 · 悬空输入冒泡 · module 复用 · ADR-059 为硬前置） |
 | 2026-11-02 | **v2**（据对抗审稿）：① **范围收窄** ⇒ 端口策略与 module 复用**拆出到 ADR-060**（一决策一文档）；② **等价性判据重写**为「映射表 + 显式观测集合 `O`（非空且含变化信号）+ 顶层端口集合包含关系」⇒ 修掉「全部顶层输出全等」与「子输出不冒泡」的自相矛盾；③ **新增「结构同构」承重不变式**（module 树 ≡ Component 树）；④ **新增 backend 只增不改例外**（否则 P4 等价性**不可执行**）；⑤ 补「过渡手段的归位条件」；⑥ 删掉未复算的调用点数量表述 |

@@ -735,3 +735,72 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 oracle 的**唯一高影响发现**（连接生成的层位歧义）已按原句修进 G3-2；critic 的 SF-1（第三轴层位未明示）
 已补 G3-6；SF-2（proposal Acceptance 的「抛」是旧载体措辞）登记为 **B3 的 tasks 待办**。
 ⇒ ⇒ 完整记录：`.rddf/reviews/ADR-060-v1.13-ADR-058-v2.12.md`。
+
+### 11.11 T3-④ 归档后的全局复核（2026-11-05 · architect 角色）
+
+> 触发：T3-④（层次发射）归档后，对「**已完成的部分**」与「**后续段**」做一次全局复核
+> ⇒ ⇒ 目标链是否仍然成立 / 决策与实现是否仍然一致 / 下一段的第一块砖是否踩在实处。
+> ⚠️ 本节只承载**复核结论 + 裁决指针**（推导在 ADR-058 v2.13 / ADR-060 v1.14 的版本史）。
+
+#### 11.11.1 目标链复核（结论：**目标未变，链条已闭合到 T3-④**）
+
+| # | 目标（为什么做） | 手段（怎么做） | 为什么这样做 | 当前态 |
+|---|---|---|---|---|
+| **N1** | 下游 ChipForge 的层 2 IP 单元 MUST 能成为**独立 Verilog module**（可单独复用 / 交付 / 综合）—— 手工 wrapper 的工作量随层次深度**线性增长** | `toVerilogHierarchical()` 独立入口 + `CH_HIERARCHY_LAYER("name")` 显式成层 | **默认 inline** ⇒ 「先写代码、零风险，将来要交付再加一行声明」⇒ 粒度是**用户的领域决策**，框架 MUST NOT 猜 | ✅ 发射侧已落地（T3-④）· ⏳ **等价性证据缺失**（T3-005） |
+| **N2** | 下游装配点**可能没有 active parent** | 成层判定与装配点**解耦**（`ch_layer<T>` / `ch_inline<T>`） | 装配形态是下游的自由 ⇒ 不该被框架的 `ch_module` 约束 | ✅ T3-①c |
+| **N3 / N4 / N7** | 单 ctx（防 node-id aliasing）· 顶层端口名不与内部节点同名 · 下游按 ctx 级名解析观测点 | 归属由**构造作用域**唯一决定 + 命名权威 = **ctx 级全局表** | 端口名带实例路径前缀 ⇒ 顶层名与扁平**逐字相同** ⇒ 下游按名解析不失效 | ✅ T3-①a/b |
+| **N8** | 层 2 接口 MUST 是「结构化端口」 | `ch_uint` / `ch_bool` 白名单（`Payload<T>` **不可**作接口） | `Payload<T>` **不产生 port 节点** ⇒ 端口集合由实现细节偶然决定 ⇒ 不可交付 | ✅ T3-②/④ |
+| **N5 / N6** | 节点名唯一性（opt-in）· 公共头 ODR 安全 | `context::node_name_policy`（默认宽松）· `inline` 自由函数 | 与层次化**无依赖** ⇒ 不该挂在主线前面 | ⏳ **T2b**（与主线并行）· N6 已由 T2a 归档 |
+
+⇒ ⇒ **结论**：目标链**未变**，且 T3-④ 把「发射侧」整段闭合 ⇒ ⇒ **剩余唯一承重缺口 =
+「等价性证据」**（T3-005）⇒ ⇒ 它是下一段的**第一块砖**，且它的**前置契约**在本节被发现**有洞**
+⇒ ⇒ 见 §11.11.2。
+
+#### 11.11.2 复核查出：六处漂移 + 一处契约缺口（⇒ ⇒ 全部已裁决并落档）
+
+| # | 漂移 / 缺口 | 证据 | 裁决 | 落点 |
+|---|---|---|---|---|
+| **D1** | T3-005 的 `tasks.md` 1.4 要求 backend 支持**多文件** + 缓存 key 纳入全部 source ⇒ ⇒ **已被 ADR-058 v2.10 撤销**（单文件 ⇒ 成本不翻倍）⇒ ⇒ 照做 = 无背书的 backend 改造 | `openspec/changes/hierarchical-rtl-equivalence-2026-11/tasks.md:13` vs ADR-058 v2.10 | **删该任务**（v2.10 已封死多文件模式） | T3-005 的 tasks（**builder** 落地） |
+| **D2** | T3-005 `tasks.md:3` 写「ADDED ×3」，实际 delta 只有 **2** 条 Requirement | 该 change 的 `specs/rtl-hierarchical-output/spec.md` + `proposal.md:58` | 计数订正为 **×2** | T3-005（builder） |
+| **D3** | T3-005 三处写「`verilator --lint-only -Wall` 零 error」⇒ ⇒ 与 **ADR-060 §2.5**（唯一权威 · **不加** `-Wall`）冲突 | `tasks.md:34` / `proposal.md:50` / `design.md:11` | 改按 ADR-060 §2.5 执行（**ADR-061 §5 / ADR-062 §5 的同款残留已在本轮一并订正**） | T3-005（builder）· ADR-061 v1.6.5 · ADR-062 v1.5 |
+| **D4** | **已归档主 spec** 三处与实现/已签批 ADR 冲突：(a) `:190` 的 `-Wall`；(b) `:78/:87/:144/:219` 的「MUST **抛异常**」（实现是 `ok=false`，且与**本 spec 自己的 Purpose** `:18-19` 互斥）；(c) `:126/:161` 的 `strict` 死引用（代码里无此策略） | `openspec/specs/rtl-hierarchical-output/spec.md` | 由 **T3-005 的 delta 以 MODIFIED 顺带修订**（同 capability 连续变更 ⇒ 不新开 change）⇒ ⇒ **MUST 任务化**（5 个 Requirement 标题 ⇒ 漏一处 = 复发）⇒ ⇒ **闭环判据见下（V1 · 可机械执行）** | T3-005（builder）· **architect 已把裁决写进 ADR-058 v2.13 / ADR-060 v1.14** |
+| **D5** | ADR-058 §2.3 授权的 `initialize_with_verilog(path, data_map)` **不足以**支撑等价性：backend 的 `sim_main.cpp` 模板硬编码 `#include "Vtop.h"` + `new Vtop{…}` ⇒ ⇒ 而 Verilator 的顶层类名由 **`--top-module` 或输入文件名**决定（`V3Options.cpp:1161-1165`，实测）⇒ ⇒ 顶层名 ≠ `top` ⇒ ⇒ **编译期**失败 | `src/core/verilator_backend.cpp:446,:456` + 实测 | 入口 MUST **显式校验顶层名并致命拒绝**（fail-early）；**保留** `top_module_name`（已落地公开契约）⇒ ⇒ 「backend 只消费默认名」= 已知边界 | **ADR-058 v2.13 §2.3 + 风险 7** |
+| **D6** | `build_port_access_table` 从 **ctx 全量**推端口 ⇒ ⇒ 层次化顶层端口是**真子集** ⇒ ⇒ 生成的 `case` 引用**不存在的 Vtop 字段** ⇒ ⇒ 编译失败；而 ADR-058 §2.2① 的四元组映射表**无任何实现载体**（`port_provenance` 无 `node_id`） | `src/core/verilator_backend.cpp:594-680` · `include/hierarchy_verilog.h` | 入口 MUST 收**显式端口集合**（⊇ {clock, reset}）· 映射表 MUST 进 `HierarchyEmitResult` 新增**公开字段**（value-only）· `node_id` 有效性域 = 同一 ctx | **ADR-058 v2.13 §2.2 + §2.3 E1/E2/E3** |
+| **（oracle 补）** | ① 双 backend 共享 `verilator_work_dir_` ⇒ 互踩；② `initialize_with_verilog` 若沿用 best-effort `CHWARN` ⇒ **backend 静默不可用** ⇒ 套件 SKIP = **恒绿假绿**；③ 端口集合漏 clock/reset ⇒ 寄存器永不更新 ⇒ **逐拍全等恒绿** | `:419,:436,:504,:530` · `:342-344,:368-370` | 全部写进 **ADR-058 v2.13 §2.3 E1/E2/E3**（含「失败 MUST 致命」+「harness MUST 断言真初始化」） | ADR-058 v2.13 |
+
+⚠️ **V1 · D4 的闭环判据（v2.14 补 · 可机械执行 · 正反两面）**：
+
+```bash
+S=openspec/specs/rtl-hierarchical-output/spec.md
+# 正面：断言面的 7 行必须清零（当前 = 7）
+grep -cE -- '-Wall|`strict`|MUST \*\*(抛异常|拒绝)|MUST 改为抛异常' "$S"   # 归档时 MUST = 0
+# 反面：合法的「MUST NOT 依赖抛异常」必须仍在（防「为清零而误删」）
+grep -c '抛异常' "$S"                                                      # 归档时 MUST = 1（仅 :398）
+```
+
+⇒ ⇒ 正面当前命中 `:78 :87 :126 :144 :161 :190 :219` 七行 ⇒ ⇒ 逐行对应 MODIFIED 的 Requirement 标题；
+⇒ ⇒ 反面是**反向判据**：`grep` 计数清零这个目标**可以**被「删掉整条禁令」达成 ⇒ ⇒ 第二条堵这一格。
+⇒ ⇒ **两条 MUST 进 T3-005 的 tasks 末项（verify 块）** ⇒ ⇒ 不满足 ⇒ **不得归档**。
+
+#### 11.11.3 一个**如实登记**的边界：等价性只覆盖「顶层可见行为」
+
+层次化顶层输出集 = 扁平顶层输出集 − {`ch_out` 的最近成层祖先 ≠ 根}
+⇒ ⇒ 被移出顶层的那批 `ch_out` 在层次化产物里**降级为子 module 端口**（或空连接 `.port()`）
+⇒ ⇒ 顶层**观测不到** ⇒ ⇒ 「子树内部算错但顶层输出恰好相同」这一类缺陷
+**结构性测不出**（lint 也看不见：`UNUSEDSIGNAL` 仅 `-Wall` 才报）⇒ ⇒
+⚠️ **不是缺陷 ⇒ 是契约边界** ⇒ ⇒ **MUST 三处同步登记**（ADR-058 §4 风险 6 · capability spec · 用法指南）
+⇒ ⇒ **MUST NOT** 假装全覆盖。
+⇒ ⇒ ⚠️ **输入方向无盲区**（顶层 input 集合两侧 MUST 相等 ⇒ 激励可完整施加）。
+
+#### 11.11.4 本轮未裁决、明确留待后续
+
+| # | 事项 | 归属 |
+|---|---|---|
+| 1 | 「backend 支持任意顶层 module 名」（模板参数化 + 缓存 key 加顶层名 + 测试矩阵扩张）⇒ ⇒ 属**能力扩张** ⇒ ⇒ 须先回 ADR 重开 | 本期**不做**（ADR-058 v2.13 §4 风险 7 已登记） |
+| 2 | **C2**（下游是否拼接多份层次化产物）⇒ ⇒ 预裁 = 产物级 module 名前缀选项（默认空 · 纯增量）⇒ ⇒ 仍未答 | 下游确认（不阻塞主线） |
+| 3 | **P6 / P8** 两个用户面产品缺口 | 已裁决独立立项（P6 待 planner 立项 · P8 待 T3-005 harness 落地） |
+| 4 | 「端口命名契约」（顶层无框架前缀 · `__if_`/`__x_` 只在非顶层 module）的**静态护栏** | 独立判据（台账 §7 残留 5）—— **不在** T3-005 范围 |
+
+⚠️ **审稿**：oracle 1 轮（对抗复核：六处漂移的成立性 + 五条裁决的失败模式 + 四条 architect 漏掉的边界）
+⇒ ⇒ oracle 修正了 architect 的**一处机制描述**（Verilator 顶层类名的决定因素）⇒ 已按其实测改写。
+⇒ ⇒ 完整记录：`.rddf/reviews/ADR-058-v2.13-ADR-060-v1.14.md`。

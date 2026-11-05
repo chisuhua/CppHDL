@@ -5,9 +5,10 @@
 - Author: build-agent（architect role）
 - Parent: 无（新增决策）；**约束** ADR-060 §2.1（成层组件的端口角色）·
   **补强** ADR-061 决策②（inline 与成层的端口规则分界）
-- 关联 capability: `rtl-hierarchical-output`（本 ADR 的主张会作为其 Requirement 落地）
-- 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §2（需求 N1–N8）·
-  `openspec/changes/hierarchical-rtl-output-2026-11/`
+- 关联 capability: `rtl-hierarchical-output`（本 ADR 的主张作为其 Requirement 落地）
+- 关联 change: 已归档 `hierarchical-rtl-emission-2026-11`（T3-④）·
+  在建 `hierarchical-rtl-equivalence-2026-11`（T3-005）
+- 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §2（需求 N1–N8）
 - 下游依据: ChipForge `docs/architecture/adr/ADR-091-chmem-open-core-port-architecture.md`
   §D3a.7（两层范式）· 硬约束 **G-1q**（层 2 输入 MUST NOT 走 `Payload<T>`）·
   `include/cf/plugin/payload.h` · `ip/cpu/core/regfile_bridge_chmem.h`
@@ -318,7 +319,9 @@ CH_INTERFACE(RegFileIface,
 - [ ] **非根 module MUST NOT 把 inline 后代的 `ch_out` 上端口表**（⇒ 它们是体内普通信号，
       ADR-061 决策② 行 2）⇒ ⇒ 判据：任一行 2 形态的 module 端口表里**不含**这些信号
 - [ ] **子 module 内 MUST NOT 出现 `assign <ch_in> = ...`**（⇒ 对 `input` 赋值非法）
-      ⇒ ⇒ 判据：`verilator --lint-only -Wall` 零 error（现有 `print_logic` 会发它，oracle R2）
+      ⇒ ⇒ 判据：**ADR-060 §2.5 的 lint 门**（⚠️ **不加 `-Wall`**）零 error
+      （实测：`assign` 到 input 端口在**默认 warning 集**下即报 `%Error-ASSIGNIN` ⇒ exit≠0
+      ⇒ ⇒ 该判据**不需要** `-Wall`；现有 `print_logic` 会发它，oracle R2）
 - [ ] **父 module MUST 为子 `ch_out` 声明连接网** ⇒ ⇒ 判据：**接 output 的那个**
       `.port(...)` 实参 MUST 是该 module 内**已声明**的 `logic`
       （⚠️ **接 input 的实参可以是表达式** ⇒ MUST NOT 强制造网，critic SF）
@@ -356,6 +359,7 @@ CH_INTERFACE(RegFileIface,
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-05 | **v1.5**（T3-④ 归档后 · architect 角色 · 据 **oracle** 复核）：**§5 的 `-Wall` 措辞订正 + 补实测依据** —— 改为指向 **ADR-060 §2.5 的 lint 门**（⚠️ **不加 `-Wall`**）；并补「`assign` 到 input 端口在**默认 warning 集**下即报 `%Error-ASSIGNIN` ⇒ exit≠0 ⇒ 该判据**不需要** `-Wall`」的实测背书 ⇒ ⇒ 决策内容**零变更** |
 | 2026-11-02 | **创建**（调研产出：下游 ADR-091 §D3a.7 + G-1q + `payload.h` + 桥接 plugin 实测。裁决：① 层次化单元接口 = **结构化端口**，且**成层组件的全部 `ch_in`/`ch_out` 都成端口**（不论是否被驱动）② `Payload<T>` **不可**作接口（4 条理由，其中 R1「codegen 不可见」不依赖时序）③ 层 2 输入 MUST 走组合端口（采纳 G-1q 并给出**结构性**理由）④ 建议「单一声明派生」消除四处手写 ⑤ 下游装配 MUST 补 `add_child` 或改用 `ch_layer`） |
 | 2026-11-02 | **v1.1**（据 oracle 第 2 轮 11 条）：① **端口判据从「等于」改「⊇ + 四类来源可追溯」**（⇒ 「四类」已在 v1.2 扩为**五类**） —— 「等于」被 ADR-060 的隐式端口 / 冒泡端口 / 根 module 的 inline 后代 output **三条既有裁决直接证伪**；② **新增「三处发射点 × module 角色」表** —— 子 module 的 `ch_in` MUST **不**声明 wire、**不**发 `assign`（现有 `print_decl` / `print_logic` 都按 `driver()` 判 ⇒ 会双声明 + 非法赋值）；③ **根 module 单列**（= 扁平规则本身）；④ **父侧落点**：子 `ch_out` 在父 module MUST 有 `logic` 连接网；⑤ **R1 重写** —— `Payload` 的 cell **可以**装 `ch_out` 节点 ⇒ 不能说「用 Payload 就 0 端口」；正确理由 = **不构成接口声明**；⑥ **决策④ 拆归属**（派生③ 归下游，否则分层倒置）+ 端口名实例前缀 + per-instance key；⑦ **决策⑤ 补顺序**（`add_child` MUST 先于 `build`，否则 `name_` 永久缺父路径）；⑧ **`ch_stream` 否决理由改正**（bundle ⇒ 成员不是端口；ADR-092 §D4 无「核内部件」一档）；⑨ **新增 §2.6 接口白名单**（禁 `ch_mem`/`ch_reg`/bundle/clock-reset/inout）+ **观测端口归创建它的 module** + **放弃 module 复用**（端口名含实例路径 ⇒ 签名恒不同） ⚠️ **其中「观测端口归创建它的 module」已于 v1.3 撤回**（见 §2.6） |
 | 2026-11-02 | **v1.2**（据 critic 第 3/4 轮）：① **`⊇` 限定为「成层且非根」**（⇒ 对根套用会与「全 inline ⇒ `cmp` 0」**互斥**），根 module 单列走扁平规则；② **五类来源**（补**时序基础设施** clock/reset）；③ **自驱动 `ch_in` 的拒绝限定为非根**（根上被驱动的 `ch_in` 就是体内 wire）；④ **决策⑤ 机制订正** —— `add_child` **不补名字前缀**（`name_` 由 ctor 实参逐字决定）⇒ 无 parent 装配点 MUST **自己算全路径名**；⑤ **决策④ 拆规范段/可选段**（并明确 **MUST NOT** 要求端口名带字段名）；⑥ **复用改判为 MUST NOT**；⑦ `ch_stream` 否决理由改为「bundle ⇒ 成员不是端口」 |

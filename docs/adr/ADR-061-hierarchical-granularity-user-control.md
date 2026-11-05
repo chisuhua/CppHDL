@@ -6,8 +6,10 @@
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**修订** ADR-058 §2.1（模块边界的措辞）与 ADR-060（端口策略的作用面）
-- 关联 capability: 待建 `rtl-hierarchical-output`（与 ADR-058 共用）
-- 关联 change: 待建 `hierarchical-rtl-output-2026-11`（见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
+- 关联 capability: `rtl-hierarchical-output`（与 ADR-058 共用）
+- 关联 change: 已归档 `hierarchical-rtl-emission-2026-11`（T3-④）·
+  在建 `hierarchical-rtl-equivalence-2026-11`（T3-005）· `hierarchical-rtl-docs-2026-11`（T3-006）
+  （见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
 - 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md`（需求清单 N1–N7）·
   `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md`（用户写法）
 
@@ -370,7 +372,8 @@ struct VerilogHierOptions {
       扁平产物**逐字相同**（⇒ ⇒ 下游按名解析不受影响）
 - [ ] **结构判据（`type_output` 三角色 · oracle R5）**：① 自身端口 ⇒ 在端口表；
       ② 隐式输出端口 ⇒ 在端口表且名字是合成名；③ **体内 wire** ⇒ **有 `logic` 声明**
-      且**不在**端口表 ⇒ ⇒ 缺声明 MUST 被 `verilator --lint-only -Wall` 抓到
+      且**不在**端口表 ⇒ ⇒ 缺声明 MUST 被 lint 门抓到
+      （⚠️ 门 = **ADR-060 §2.5 的可执行定义** · **不加 `-Wall`**）
 - [ ] **结构判据（`node_names_` · oracle R6）**：全 inline（单 module）与层次化（多 module）
       两条路径产出的**同一节点名 MUST 逐字相同** ⇒ ⇒ 判据 = 两份产物的信号名集合交集
       MUST 完全一致
@@ -385,6 +388,7 @@ struct VerilogHierOptions {
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-05 | **v1.6.5**（T3-④ 归档后 · architect 角色 · 据 **oracle** 复核）：**§5 的 `-Wall` 措辞订正** —— 改为指向 **ADR-060 §2.5 的 lint 门唯一权威**（⚠️ **不加 `-Wall`**：实测 `-Wall` 会对 ADR-061 v1.6.4 下的**合法**空连接报 `PINCONNECTEMPTY` ⇒ warning-fatal ⇒ exit≠0）⇒ ⇒ 决策内容**零变更** |
 | 2026-11-02 | **创建**（用户诉求 + 下游 ChipForge 实证驱动；裁决：层级判定**显式** · 默认 inline · 类级默认 + 实例级覆盖（`ch_layer` / `ch_inline` 两个新 API 名）· **inline 的端口完全按扁平规则**（悬空 input ⇒ 顶层 input；任意 output ⇒ 顶层 output）· 命名沿用 ctx 级全局表（⇒ 默认全 inline 与扁平逐字节一致）· `Granularity` 枚举逃生门 · 成层判定与装配点解耦 · 「结构同构」改写为「成层组件子树」） |
 | 2026-11-02 | **v1.2**（据 critic 第 1 轮 1 BLOCKER + 1 SF）：① 决策⑥ 精确化为「**装配点任意，但 MUST 登记进组件树**」⇒ 未登记 ⇒ 响亮拒绝（ADR-058 §2.1 第二格）；② 决策② 的「父 module / 顶层」**二义**消解 ⇒ 明确「最近成层祖先」的**两个作用域**（RTL 顶层 vs 非顶层成层 module）各自落点与判据 |
 | 2026-11-02 | **v1.3**（据 oracle 实测）：① **`type_output` 在 module 内有三种角色**（自身端口 / 隐式输出端口 / **体内 wire**），而现状 `print_decl` **只实现第一种** ⇒ 「`print_*` 原样复用」**不成立** ⇒ 新增角色判定表 + `type_output`-as-wire 声明分支；② **`node_names_` MUST 是 ctx 级只读快照**（逐 module 新建 writer 会毁掉 `_N` 一致性 ⇒ 「逐字节一致」红 + 下游按名解析断；复用同一 writer 则成员状态未重置 ⇒ 漏/重声明） |

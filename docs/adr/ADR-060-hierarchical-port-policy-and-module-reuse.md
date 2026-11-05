@@ -1,13 +1,15 @@
 # ADR-060: 层次化输出的**端口策略**与 **module 复用**
 
-- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v1.13** · 版本史见 §6）
+- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v1.15** · 版本史见 §6）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**服务于** ADR-058（层次化 RTL 输出的语义边界与等价性）
-- 关联 capability: 待建 `rtl-hierarchical-output`（与 ADR-058 共用）
-- 关联 change: 待建（见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
+- 关联 capability: `rtl-hierarchical-output`（与 ADR-058 共用）
+- 关联 change: 已归档 `hierarchical-rtl-emission-2026-11`（T3-④）·
+  在建 `hierarchical-rtl-equivalence-2026-11`（T3-005）（见 `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`）
 - 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md`（详细规格）
-- 审稿报告: `.rddf/reviews/ADR-060-v1.13-ADR-058-v2.12.md`（oracle 1 + critic 1 · 无 BLOCKER）
+- 审稿报告: `.rddf/reviews/ADR-058-v2.13-ADR-060-v1.14.md`（oracle 1 + critic 1；
+  其 NIT 已在 **v1.15** 落实）
 
 ---
 
@@ -481,7 +483,11 @@ enum class UndrivenPolicy { Bubble, Reject };
       （子侧合成 input + 内部 assign ⇒ 子输出**不是**恒 0）
 - [ ] **效果判据**：**跨模块 `ch_mem`** MUST 按拍板结论处理（合成接口 or 响亮拒绝）⇒ ⇒ **MUST NOT** 静默
 - [ ] **效果判据**：跨层非端口边 MUST 触发 `CHWARN` + 生成文件内注释；
-      `strict` 策略下 MUST `CHFATAL_EXCEPTION`
+      **`PortPolicy::SynthesizeFatal` / `PortPolicy::Reject`** 下 MUST **失败**
+      （⚠️ `strict` 布尔策略已被 §2.4 的**线性枚举**取代 ⇒ 此处口径随之订正；
+      ⚠️ v1.15 订正措辞：原文裸写 `Reject` ⇒ 会被读成 **`UndrivenPolicy::Reject`**（它管**悬空
+      `ch_in`**、不是「跨层非端口边」）⇒ ⇒ 两个枚举的 `Reject` **MUST 写全限定名**；
+      本条只涉及 `PortPolicy`，`UndrivenPolicy::Reject` 见下一条冒泡判据）
 - [ ] **效果判据**：**悬空子输入**在层次化产物中 MUST 表现为**顶层可驱动输入**
       ⇒ ⇒ 名字 MUST **与扁平产物逐字相同**（= ctx 级全局名，**无**框架前缀）
       ⇒ ⇒ 且 MUST 有注释标明来源组件 ⇒ ⇒ 与扁平产物**行为一致**（外部可驱动同一处）
@@ -522,6 +528,8 @@ enum class UndrivenPolicy { Bubble, Reject };
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-05 | **v1.15**（落实 critic NIT ⇒ 决策内容**零变更**）：**§5 的 `Reject` 写全限定名** —— `PortPolicy` 与 `UndrivenPolicy` **都**有 `Reject`（`include/component.h:52,55`）⇒ ⇒ 原文裸写「`PortPolicy::SynthesizeFatal` / `Reject`」会被读成 `UndrivenPolicy::Reject`（它管**悬空 `ch_in`**、不是「跨层非端口边」）⇒ ⇒ 改为点名 **`PortPolicy::SynthesizeFatal` / `PortPolicy::Reject`** 并注明另一枚举的 `Reject` 见冒泡判据 |
+| 2026-11-05 | **v1.14**（T3-④ 归档后 · architect 角色 · 据 **oracle** 复核）：**清理 §5 的 `strict` 死引用** —— `strict` 布尔策略已被 §2.4 的**线性枚举**（`PortPolicy` / `UndrivenPolicy`）取代 ⇒ ⇒ §5 该判据改为按 `PortPolicy::SynthesizeFatal` / `Reject` 表述 ⇒ ⇒ 决策内容**零变更**（只是把判据的措辞缝合到 §2.4 的单一权威） |
 | 2026-11-05 | **v1.13**（B3 开工前 · architect 角色 · 据实施期查明的**两处契约缺口**）：① **§2.2 新增 G3「冒泡的注册层位与端口顺序」** —— 冒泡端口 MUST 在**分析层**登记（`Bubbled`）**而非**发射期就地合成 ⇒ 理由：顶层端口表 MUST 与扁平**逐字逐序**一致，而发射期合成端口**恒追加在节点端口之后** ⇒ bubbled input 会排到 `ch_out` 之后；**G3-2**（据 oracle 修正）明确**连接也由分析层生成** —— 现状连接表只从「有 driver 的边」生成 ⇒ 无 driver 的 `ch_in` 不产生条目 ⇒ 中间祖先的端口会**空连接** ⇒ 值传到中途断线且零报错；**G3-3** 与既有分析层端口**幂等**；**G3-4** 不引入新端口名；**G3-5** 顶层 `synthesized_ports` MUST 恒空（把禁令变成可判定判据）；② **新增 §2.4.2 `UndrivenPolicy` 两格的确切语义** —— 此前只定义枚举、**实现零读取**（Zero-Debt）⇒ 现定义 `Bubble`（冒泡 + 逐条 `CHWARN` + 产物注释 + 产出）/ `Reject`（不冒泡 + **不产出** + 列出**全部**悬空输入及其冒泡层级）；并**收窄 `Reject` 的适用范围** = 只对「inline 折叠后 owner 是**非根成层 module**」的悬空 `ch_in` ⇒ **根自己的 `ch_in`** 与 **inline 折叠进根**的悬空 `ch_in` **不触发**（扁平里它们本就是顶层 input ⇒ 拒绝它们 = 拒绝合法设计）；③ **§2.4.1 同步收窄** `SynthesizeFatal` 的诊断义务（删「/ 异常」，按 ADR-058 §2.3 ⑤） |
 | 2026-11-02 | **创建**（自 ADR-058 v2 拆出；裁决：隐式端口按**方向分列** + 合成告警 + `strict` 可选 · 悬空输入**冒泡**（复刻扁平）· module 复用需**三要素全等** · 旋钮改**线性枚举**） |
 | 2026-11-02 | **v2.1**（用户拍板三项）：① **跨模块 `ch_mem` ⇒ 响亮拒绝**（不合成隐式端口）+ 给出两条「mem 与使用者同层」的替代路径；② 默认 `port_policy = SynthesizeWarn` / `undriven_policy = Bubble`（与扁平行为最接近 ⇒ 等价性判据最简）；③ 隐式端口的**默认策略 = 合成 + 告警** |
