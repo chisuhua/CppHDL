@@ -14,6 +14,7 @@
 #include "catch_amalgamated.hpp"
 
 #include "ch.hpp"
+#include "bundle/stream_bundle.h"
 #include "codegen_verilog.h"
 #include "device.h"
 #include "hierarchy_verilog.h"
@@ -258,6 +259,98 @@ public:
     }
 };
 
+// ── DUT ⑦：**父层驱动子模块的 bundle 字段**（proxy 子形态 · ADR-060 v1.9 行 1）──
+//    ⚠️ 字段节点必须先 `as_master()` 创建，否则 `<<=` 落到「另建 assign 节点」的路径
+class InnerProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inner_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_stream<ch_uint<8>> strm;
+    InnerProxy(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        strm.as_master();
+        strm.payload <<= io().din;
+        io().dout <<= strm.payload;
+    }
+};
+
+class OuterProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("outer_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InnerProxy> inner{"inner"};
+    OuterProxy(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        // ⚠️⚠️ 父层驱动**子模块的 bundle 字段** ⇒ ⇒ proxy 子形态
+        inner.instance().strm.payload <<= io().din;
+        io().dout <<= inner.io().dout;
+    }
+};
+
+// ── DUT ⑧：**父层改写子模块内部运算节点的操作数**（第七格 ⇒ MUST 拒绝）────
+class InnerOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inner_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_uint<8> sum;
+    InnerOp(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        sum = io().din + ch_uint<8>(1_d);
+        io().dout <<= sum;
+    }
+};
+
+class OuterOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("outer_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InnerOp> inner{"inner"};
+    OuterOp(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        // ⚠️⚠️ 父层改写**子模块内部运算节点的操作数** ⇒ ⇒ 第七格 ⇒ MUST 拒绝
+        inner.instance().sum <<= io().din;
+        io().dout <<= inner.io().dout;
+    }
+};
+
+// ── DUT ⑨：**父层驱动子模块的 `ch_out` 端口**（第八格 ⇒ MUST 拒绝）────────
+class InnerOutDrv : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inner_outdrv");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    InnerOutDrv(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class OuterOutDrv : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("outer_outdrv");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InnerOutDrv> inner{"inner"};
+    OuterOutDrv(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        // ⚠️⚠️ 父层驱动**子模块的 output 端口** ⇒ ⇒ 第八格 ⇒ MUST 拒绝
+        //    （合法 Verilog 里实例的 output 只能由实例内部驱动）
+        inner.io().dout <<= io().din;
+        io().dout <<= inner.io().dout;
+    }
+};
+
 // ── DUT ③：已 build 但未 add_child（错误模型）────────────────────────────
 class Stray : public ch::Component {
 public:
@@ -465,6 +558,83 @@ TEST_CASE("hierarchical emission: row-1 implicit input port is synthesized",
     const std::string parent_header = parent.substr(0, parent.find(");"));
     REQUIRE(parent_header.find("__if_") == std::string::npos);
     REQUIRE(parent_header.find("__x_") == std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: row-1 proxy sub-form is synthesized",
+          "[hierarchy][emit][implicit]") {
+    ch::ch_device<OuterProxy> dev;
+    const std::string path = std::string(kOutDir) + "/proxy_implicit.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    // ⚠️ **本批之前**：proxy 子形态是 fail-closed ⇒ ⇒ 「能产出」本身就是判别力
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string child = module_text(all, "inner_proxy");
+    const std::string parent = module_text(all, "top");
+    REQUIRE_FALSE(child.empty());
+    REQUIRE_FALSE(parent.empty());
+
+    // ① 子 module 有**合成 input 端口**（值由父层提供）
+    REQUIRE(child.find("input [7:0] __if_0") != std::string::npos);
+    // ② ⭐ **proxy 的驱动改由合成端口提供** —— 这是 oracle 指出的「漏接 ⇒ 静默读 X」
+    //    的失败模式：默认 warning 集**不查** `UNDRIVEN` ⇒ lint **看不见**漏接
+    //    ⇒ ⇒ 这条结构断言是本形态的**唯一**本地判别力
+    REQUIRE(child.find("= __if_0;") != std::string::npos);
+    // ③ 该 proxy **有 `logic` 声明**（否则 `assign` 引用未声明信号 ⇒ 非法的 Verilog）
+    REQUIRE(child.find("logic [7:0] top_inner_payload") != std::string::npos);
+    // ④ 父 module 的实例端口映射接上它
+    REQUIRE(parent.find(".__if_0(") != std::string::npos);
+    // ⑤ 子 module 内**不**出现父层的驱动信号（零跨 module 引用）
+    REQUIRE(child.find("top_unnamed_input") == std::string::npos);
+    // ⑥ 合成名只在非顶层 module 的**端口声明**里
+    const std::string parent_header = parent.substr(0, parent.find(");"));
+    REQUIRE(parent_header.find("__if_") == std::string::npos);
+    REQUIRE(parent_header.find("__x_") == std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: matrix-out forms are rejected loudly",
+          "[hierarchy][emit][implicit][reject]") {
+    // ⚠️ **第七格**（父层改写子内部运算操作数）⇒ ⇒ **MUST 拒绝**（不是静默产出错产物）
+    {
+        ch::ch_device<OuterOp> dev;
+        auto r = ch::toVerilogHierarchical(std::string(kOutDir) + "/op_implicit.v",
+                                           dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        // 诊断 MUST 点名该形态（否则用户无法定位）
+        REQUIRE(r.error.find("implicit-port") != std::string::npos);
+    }
+    // ⚠️ **第八格**（父层驱动子 `ch_out`）⇒ ⇒ **MUST 拒绝**
+    //    （合法 Verilog 里实例的 output 只能由实例内部驱动）
+    {
+        ch::ch_device<OuterOutDrv> dev;
+        auto r = ch::toVerilogHierarchical(std::string(kOutDir) + "/outdrv_implicit.v",
+                                           dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("implicit-port") != std::string::npos);
+    }
+}
+
+TEST_CASE("hierarchical emission: synthesized names never collide with user nodes",
+          "[hierarchy][emit][implicit][naming]") {
+    // ⚠️ 合成名 `__if_<n>` / `__x_<n>` **不经过**全局命名表的去重
+    //    ⇒ ⇒ 用户节点恰好同名 ⇒ **重复声明** ⇒ ⇒ 发射前 MUST 顺延
+    //    （本判据用「产物里没有重复声明」+「端口名唯一」来观测）
+    ch::ch_device<OuterProxy> dev;
+    const std::string path = std::string(kOutDir) + "/proxy_implicit.v";
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    REQUIRE(r.ok);
+    const std::string all = read_file(path);
+    const std::string child = module_text(all, "inner_proxy");
+    // 端口声明里的合成名**只出现一次**（不重复声明）
+    const std::string child_header = child.substr(0, child.find(");"));
+    REQUIRE(count_occurrences(child_header, "__if_0") == 1);
+    // 且产物里没有「同名两次声明」的迹象：端口表里每个 `__if_` 名字唯一
+    REQUIRE(count_occurrences(child_header, "__if_") ==
+            count_occurrences(child_header, "input [7:0] __if_"));
 }
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {

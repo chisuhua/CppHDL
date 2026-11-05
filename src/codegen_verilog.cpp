@@ -569,6 +569,16 @@ void ModuleEmitter::print_logic(std::ostream &out) {
                                driver->type() ==
                                    ch::core::lnodetype::type_proxy &&
                                driver->num_srcs() > 0) {
+                            // ⚠️ **驱动重定向**（层次化 · proxy 子形态 · ADR-060 v1.9）：
+                            //    该 proxy 改由**合成 input 端口**驱动 ⇒ ⇒ 它是**本 module
+                            //    内的本地 wire**（`assign <proxy> = __if_<n>;` 由
+                            //    `print_proxy` 发）⇒ ⇒ 穿透 MUST **停在它自己**。
+                            //    ⇒ ⇒ 否则会取到它的 `src(0)` —— 而那已被**父层**驱动覆盖
+                            //    ⇒ ⇒ 引用**父层信号** ⇒ ⇒ 跨 module 引用（且该信号在
+                            //    本 module 内未声明 ⇒ 非法 Verilog）。
+                            if (view_.port_drives_node.count(driver) != 0) {
+                                break;
+                            }
                             // A mem read port's data proxy is the real Verilog
                             // driver (`assign proxy = mem[addr];`), while the
                             // read port itself is a fictional node with no
@@ -1050,6 +1060,24 @@ void ModuleEmitter::print_concat(std::ostream &out, ch::core::opimpl *node) {
 
 void ModuleEmitter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
     try {
+        // ⚠️ **驱动重定向**（发射期虚拟重定向 · ADR-060 v1.9 §2.1 行 1 · proxy 子形态）
+        //    「父层驱动子模块的 bundle 字段」⇒ ⇒ 子侧端点**不是**子端口 ⇒ ⇒ 在子侧合成
+        //    **input** 端口 ⇒ ⇒ 本 proxy 的 driver **改由该端口提供**。
+        //    ⚠️ MUST 在 `suppress_driver_assign` **之前**拦截 —— 否则这里会 early-return
+        //    （父层那条 assign 被抑制），而合成端口**没有**任何 `assign` 目标
+        //    ⇒ ⇒ proxy 变成无驱动 `logic` ⇒ ⇒ **静默读 X**：默认 warning 集**不查**
+        //    `UNDRIVEN` ⇒ lint 零告警通过（⇒ 只有值判据能抓，见测试）。
+        //    ⚠️ 重定向只改**发射期**取值 ⇒ ⇒ **MUST NOT** 写回 `lnodeimpl`。
+        {
+            const auto redirected = view_.port_drives_node.find(node);
+            if (redirected != view_.port_drives_node.end() &&
+                node_names_.count(node)) {
+                out << "    assign " << node_names_[node] << " = "
+                    << redirected->second << ";\n";
+                return;
+            }
+        }
+
         // Proxy nodes act as intermediates, usually just assign their source to
         // themselves
         if (node->num_srcs() > 0) {

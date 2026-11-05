@@ -21,6 +21,7 @@
 #include <fstream>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <sstream>
@@ -146,6 +147,22 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     std::map<std::string, int> synth_seq;
     /// 子 module key → (子侧节点 → 端口名)（**去重**：同一节点只合成一个端口）
     std::map<std::string, std::map<const lnodeimpl *, std::string>> synth_port_of;
+    /// 已被用户节点占用的名字（⚠️ 合成名 MUST NOT 与之撞名 —— 否则**重复声明**；
+    /// 默认 warning 集下只是响亮失败，但属**可预防**缺陷 · ADR-060 v1.9 §2.2）
+    std::set<std::string> taken_names;
+    for (const auto &[nptr, nname] : names) {
+        (void)nptr;
+        taken_names.insert(nname);
+    }
+    /// 生成一个**未占用**的合成名：`<prefix><seq>`；冲突则顺延 `_N`
+    auto make_synth_name = [&taken_names](const std::string &prefix, int &seq) {
+        std::string candidate;
+        do {
+            candidate = prefix + std::to_string(seq++);
+        } while (taken_names.count(candidate) != 0);
+        taken_names.insert(candidate);
+        return candidate;
+    };
     /// **不可合成**的合成类问题（⇒ ⇒ 交给下面的 collect ⇒ ⇒ 按策略处置）
     std::vector<std::string> remaining;
 
@@ -172,7 +189,7 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             auto it = port_map.find(e.from_ptr);
             if (it == port_map.end()) {
                 const std::string port =
-                    "__x_" + std::to_string(synth_seq[child_key]++);
+                    make_synth_name("__x_", synth_seq[child_key]);
                 port_map[e.from_ptr] = port;
                 synth_by_child[child_key].push_back(SynthPortInfo{
                     port, names.at(e.from_ptr), e.from_ptr->size(),
@@ -185,12 +202,19 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             // ── 行 1：子侧合成 **input** 端口 `__if_<n>`（父层驱动它）──
             //    ⚠️ 本批**只**覆盖「子侧端点是**寄存器**」+「父侧驱动节点在父 module 内」
             //    ⇒ ⇒ 其余（proxy/op 源 · 第三轴）⇒ ⇒ 仍 fail-closed（**B2b-3**）
-            const bool child_is_reg =
-                (e.to_ptr->type() == lnodetype::type_reg);
+            // ⚠️ **可合成的子侧端点 = 有独立 driver 槽位的节点**（ADR-060 v1.9 §2.1 行 1）：
+            //    ① `type_reg`（`next` 槽位 · `print_reg` 重定向 · B2b-2）
+            //    ② `type_proxy`（bundle 字段 · `print_proxy` 重定向 · 本批）
+            //    ⚠️ **MUST NOT** 收 `type_output`（第八格：父驱动子 `ch_out` ⇒ 拒绝）
+            //    ⚠️ **MUST NOT** 收 `type_op` / 其它（第七格：改写运算操作数 ⇒ 拒绝）
+            const auto child_type = e.to_ptr->type();
+            const bool child_is_redirectable =
+                (child_type == lnodetype::type_reg ||
+                 child_type == lnodetype::type_proxy);
             const auto drv_mod = analysis.module_of_node.find(e.from_ptr);
             const bool driver_in_parent =
                 drv_mod != analysis.module_of_node.end() && drv_mod->second == e.from_module;
-            if (!child_is_reg || !driver_in_parent) {
+            if (!child_is_redirectable || !driver_in_parent) {
                 remaining.push_back(desc);
                 continue;
             }
@@ -200,7 +224,7 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             auto it = port_map.find(e.to_ptr);
             if (it == port_map.end()) {
                 const std::string port =
-                    "__if_" + std::to_string(synth_seq[child_key]++);
+                    make_synth_name("__if_", synth_seq[child_key]);
                 port_map[e.to_ptr] = port;
                 synth_by_child[child_key].push_back(SynthPortInfo{
                     port, /*node=*/std::string(), e.to_ptr->size(),

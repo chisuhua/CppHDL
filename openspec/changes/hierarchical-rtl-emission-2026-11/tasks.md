@@ -105,13 +105,22 @@
 > 判据来源：ADR-060 **v1.9** §2.1 行 1（proxy ⇒ 合成 · op ⇒ 第七格拒绝 ·
 > 父驱动子 `ch_out` ⇒ 第八格拒绝）+ §2.2 去重接缝。
 
-- [ ] 0.20 `print_proxy` 增 `port_drives_node` 分支（在 `suppress_driver_assign` **之前**拦截）
+- [x] 0.20 `print_proxy` 增 `port_drives_node` 分支（在 `suppress_driver_assign` **之前**拦截）
       ⇒ ⇒ ⚠️ **漏做的失败模式是静默读 X**：proxy 会被声明成无驱动 `logic`，
       而**默认 warning 集不查 `UNDRIVEN`** ⇒ lint **零告警**通过
-- [ ] 0.21 行 1 白名单加 `type_proxy`（⚠️ **MUST NOT** 加 `type_output`）
-- [ ] 0.22 合成名去重：发射前断言 `__if_<n>` / `__x_<n>` 不在 `names` 表内 ⇒ 冲突顺延 `_N`
-- [ ] 0.23 **探针矩阵骨架**：`成员类型 × 操作 × 方向` 机械组合，每格断言三态之一
-- [ ] 0.24 **判据**：① proxy 跨层 ⇒ 子侧 `input __if_<n>` + 子内 `assign <proxy> = __if_<n>;`
+- [x] 0.21 行 1 白名单加 `type_proxy`（⚠️ **MUST NOT** 加 `type_output`）
+- [x] 0.22 合成名去重：发射前断言 `__if_<n>` / `__x_<n>` 不在 `names` 表内 ⇒ 冲突顺延 `_N`
+- [x] 0.23 **探针矩阵骨架**：`成员类型 × 操作 × 方向` 机械组合，每格断言三态之一
+      ⇒ ⇒ 本批覆盖 **5 格**：reg next ✅（B2b-2）· proxy ✅（本批）· op 操作数 ❌ 拒绝 ·
+      父驱动子 `ch_out` ❌ 拒绝 · `operator=` 无处理（不产生边）
+      ⇒ ⇒ **B4 补全**为完整矩阵（每格都要有断言且三态明确）
+- [x] 0.20b ⚠️ **实施期补项**：**代理链穿透 MUST 在「被重定向的 proxy」处停下**
+      （`print_output` 的 proxy-chain walk）⇒ ⇒ 否则它会取到 proxy 的 `src(0)` ——
+      而那已被**父层**驱动覆盖 ⇒ ⇒ 子 module 内引用**父层信号** ⇒ ⇒ 跨 module 引用
+      （且该信号在子 module 内**未声明** ⇒ 非法 Verilog）
+      ⇒ ⇒ 被重定向的 proxy 是**子 module 内的本地 wire**（`print_proxy` 发的
+      `assign <proxy> = __if_<n>;`）⇒ ⇒ 穿透停在它自己 = 正确
+- [x] 0.24 **判据**：① proxy 跨层 ⇒ 子侧 `input __if_<n>` + 子内 `assign <proxy> = __if_<n>;`
       ② ⭐ **值判据**（逐拍值，不靠 lint/结构断言）③ op ⇒ 响亮拒绝 ④ 父驱动子 `ch_out`
       ⇒ 响亮拒绝 ⑤ 撞名 ⇒ 顺延 ⑥ `verilator --lint-only`（**ADR-060 §2.5 的门**）零告警
 
