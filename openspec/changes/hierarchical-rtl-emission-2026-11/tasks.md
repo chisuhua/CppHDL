@@ -120,6 +120,14 @@
       （且该信号在子 module 内**未声明** ⇒ 非法 Verilog）
       ⇒ ⇒ 被重定向的 proxy 是**子 module 内的本地 wire**（`print_proxy` 发的
       `assign <proxy> = __if_<n>;`）⇒ ⇒ 穿透停在它自己 = 正确
+- [ ] 0.24b **R2 的四条路径逐条变异**（critic 建议 · ADR-060 v1.10 R2）：
+      把 B2b-3 的 M3 变异**套用到另两条路径** —— `print_input` 的 driver walk
+      （当前守卫 = 只穿透未命名 proxy）· `print_proxy` 的 `src(0)`（当前守卫 = early-return）
+      ⇒ ⇒ 确认**各有专属判据** ⇒ ⇒ ⚠️ 目的 = 证明「每条 `src(0)` 解析路径都独立受约束」
+      （ADR-060 v1.10 R2 的契约字面覆盖**所有**这类路径 ⇒ ⇒ 未来新增第五条时不被漏掉）
+- [ ] 0.24c **W1 的负向用例**（ADR-060 v1.10 §5 的宽度判据）：父侧 **9-bit** 节点驱动
+      子侧 **8-bit** 端点（`ch_reg` next 与 proxy 各一）⇒ ⇒ MUST 在**合成之前**拒绝
+      ⇒ ⇒ 诊断 MUST 点名两端 + 两个宽度值 ⇒ ⇒ MUST NOT 产出文件
 - [x] 0.24 **判据**：① proxy 跨层 ⇒ 子侧 `input __if_<n>` + 子内 `assign <proxy> = __if_<n>;`
       ② ⭐ **值判据**（逐拍值，不靠 lint/结构断言）③ op ⇒ 响亮拒绝 ④ 父驱动子 `ch_out`
       ⇒ 响亮拒绝 ⑤ 撞名 ⇒ 顺延 ⑥ `verilator --lint-only`（**ADR-060 §2.5 的门**）零告警
