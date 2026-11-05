@@ -10,10 +10,12 @@
 
 #pragma once
 
+#include "core/lnodeimpl.h"
 #include "hierarchy_verilog.h"
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ch {
@@ -46,6 +48,46 @@ inline std::string check_port_table(const std::vector<PortProvenance> &expected,
                 return "duplicate port '" + actual[i].port + "' in module '" +
                        actual[i].module + "'";
             }
+        }
+    }
+    return {};
+}
+
+/// **接口白名单**（ADR-062 §2.6）的可判定形态：端口节点 MUST 是
+/// **数据端口**（`ch_uint` / `ch_bool` ⇒ `type_input` / `type_output`）或
+/// **时序基础设施**（`type_clock` / `type_reset`）。
+///
+/// ⚠️ 其余节点类型若出现在端口表 ⇒ 拒绝并点名：
+/// `type_mem` / `type_mem_read_port` / `type_mem_write_port`（数组无端口形态）·
+/// `type_reg`（状态不是接口）· `type_proxy`（bundle 成员不是端口）·
+/// `type_op` / `type_mux` / `type_bitsupdate` / `type_lit`（体内逻辑）。
+///
+/// ⚠️ **可达性现状（2026-11-05 · B3c spike）**：分析层的端口循环只从
+/// `type_input` / `type_output` / `clock` / `reset` 构造端口表 ⇒ ⇒ 上面这些类型
+/// **当前没有一条公开 API 路径**能进端口表（详见 change 的 tasks T0l）。
+/// 本守卫是**防御性**的：它保证「将来有人把 mem 读端口 / 寄存器 / bundle 切片
+/// 抬成端口」时**立刻响亮失败**，而不是静默产出非法接口。
+inline bool is_whitelisted_port_node(core::lnodetype ty) {
+    switch (ty) {
+    case core::lnodetype::type_input:
+    case core::lnodetype::type_output:
+    case core::lnodetype::type_clock:
+    case core::lnodetype::type_reset:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/// 返回空串 = 通过；否则点名 `module` + `port`（ADR-062 §2.6 的「点名端口」）。
+inline std::string
+check_interface_whitelist(const std::string &module,
+                          const std::vector<std::pair<std::string, core::lnodetype>> &ports) {
+    for (const auto &p : ports) {
+        if (!is_whitelisted_port_node(p.second)) {
+            return "port '" + p.first + "' of module '" + module +
+                   "' has a non-whitelisted interface type (ADR-062 §2.6: only "
+                   "ch_uint/ch_bool data ports plus clock/reset are allowed)";
         }
     }
     return {};

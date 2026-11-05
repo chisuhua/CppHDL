@@ -118,7 +118,7 @@
 | **B2b-6** 宽度守卫 + 两条变异欠账 | ✅ **已落地** | 单一 `width_check` helper 覆盖**全部**合成 site（直接行 1/行 2 + 第三轴 + 兄弟边）· 合成连接改走 `add_conn` · `[width]` 四组（双向 × {reg next, proxy}，含 `Remedy:` 与「不留文件」）· `[walk]` 一组（被重定向的命名 proxy 驱动 inline 子输入 ⇒ MUST 停在该 proxy）· 变异 **3/3 抓**（守卫恒真 / print_proxy early-return / print_input 只穿透未命名 proxy）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 · 24 份层次化产物 lint exit 0 |
 | **B3a** 冒泡（G3）+ `UndrivenPolicy` + 向上 pass-through | ✅ **已落地** | 冒泡端口与**逐跳连接**均在分析层生成（含**存量 inline 缺口**与 **F2**）· 链条抽成 `src/hierarchy_chain.h`（与第三轴共用）· `UndrivenPolicy` 两格 + 端口旁注释 + 顶层 `synthesized_ports` 恒空 · 向上 pass-through 每级 output 端口（底端体内 assign / 顶端 wire+重定向；端口名 `__up_<n>`；中间层不发空 `assign`）· `[bubble]`×3 + `[upward]`×1（**23 用例 / 232 断言**）· 变异 **5/5** · `ctest -LE perf` **238/238** · 29 份层次化产物 lint exit 0 · 扁平基线 `cmp` 全 0 |
 | **B3b** 端口完整性（G2）+ 拒绝类点名断言 | ✅ **已落地** | `HierarchyEmitResult.port_provenance`（value-only · 五类来源 · 含注入 clock/reset）· 发射期 `expected ⊆ actual` + 名字唯一 + 方向/宽度一致（`src/hierarchy_port_check.h` 纯函数）· 拒绝类点名断言（mem 两端 module + 两条替代路径 / 自驱动端口名 / 同 base 两个 key / 各发一份 / 第八格端口名 + key / 第七格节点名）· `[provenance]`×2 + `[reject][naming]`×1（**26 用例 / 360 断言**）· 变异 **4/4** · 4 份分析层 golden 逐字节不变 |
-| **B3c** 白名单（先证可达性） | ⏳ | — |
+| **B3c** 白名单（先证可达性） | ✅ **已落地** | 可达性 spike：四类违规（mem / reg / bundle 切片 / inout·显式 clock-reset）**当前均不可达**（端口表只从 input/output/clock/reset 构造）· 守卫 `is_whitelisted_port_node` + `check_interface_whitelist`（点名 module + port + ADR-062）· 检查点 = 端口表定稿后、只查声明式端口 · `[whitelist]` 决策表逐枚举值（**27 用例 / 378 断言**）· 变异 2/2 · ⚠️ 接入点的「删调用」变异无判据（不可达）已如实登记 |
 | **B4** 护栏 + CI + 归档 | ⏳ | — |
 
 ⚠️ **B2a 的「中间态」登记（必读 · 否则会误读 ADR）**：隐式端口**合成本身**属 **B2b** ⇒ ⇒

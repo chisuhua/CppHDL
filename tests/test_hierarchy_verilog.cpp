@@ -1495,6 +1495,31 @@ TEST_CASE("hierarchical emission: port table guard rejects missing/duplicate/mis
     REQUIRE(ch::detail::check_port_table({a, a}, {a, a}).find("duplicate") != std::string::npos);
 }
 
+TEST_CASE("hierarchical emission: interface whitelist decision table",
+          "[hierarchy][emit][whitelist]") {
+    // ⚠️ ADR-062 §2.6：接口 MUST 限于 `ch_uint` / `ch_bool`（+ 框架供给的 clock/reset）
+    //    ⇒ ⇒ 端口节点类型 MUST ∈ {input, output, clock, reset}，其余一律拒绝。
+    using ch::core::lnodetype;
+    for (auto ty : {lnodetype::type_input, lnodetype::type_output, lnodetype::type_clock,
+                    lnodetype::type_reset}) {
+        REQUIRE(ch::detail::is_whitelisted_port_node(ty));
+    }
+    for (auto ty : {lnodetype::type_none, lnodetype::type_lit, lnodetype::type_proxy,
+                    lnodetype::type_op, lnodetype::type_reg, lnodetype::type_mem,
+                    lnodetype::type_mux, lnodetype::type_mem_read_port,
+                    lnodetype::type_mem_write_port, lnodetype::type_bitsupdate}) {
+        INFO("type: " << static_cast<int>(ty));
+        REQUIRE_FALSE(ch::detail::is_whitelisted_port_node(ty));
+    }
+    // 拒绝 MUST 点名 module + 端口（ADR-062 §2.6）
+    const auto err = ch::detail::check_interface_whitelist(
+        "m", {{"bad", lnodetype::type_mem_read_port}});
+    REQUIRE_FALSE(err.empty());
+    REQUIRE(err.find("'bad'") != std::string::npos);
+    REQUIRE(err.find("'m'") != std::string::npos);
+    REQUIRE(err.find("ADR-062") != std::string::npos);
+}
+
 TEST_CASE("hierarchical emission: rejection diagnostics name the offending module and port",
           "[hierarchy][emit][reject][naming]") {
     // ⚠️ B3b：每条拒绝 MUST 在 `HierarchyEmitResult.error` 里**点名**（不是只打 stderr）

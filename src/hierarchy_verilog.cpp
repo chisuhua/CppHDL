@@ -1150,6 +1150,22 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                                           expected.end());
         }
 
+        // ── **接口白名单**（ADR-062 §2.6 · 检查点 = 端口表定稿后）──────────
+        //    ⚠️ 只查**声明式端口节点**（`ModuleView.ports`）；合成端口是数据 wire
+        //       （只有宽度，没有「接口类型」）⇒ ⇒ 不在其列（否则与 B2b-3 的 proxy 形态冲突）
+        {
+            std::vector<std::pair<std::string, lnodetype>> kinds;
+            kinds.reserve(view.ports.size());
+            for (auto *n : view.ports) {
+                kinds.emplace_back(names.at(n), n->type());
+            }
+            const std::string werr = ch::detail::check_interface_whitelist(view.module_name, kinds);
+            if (!werr.empty()) {
+                result.error = "hierarchical emission: interface whitelist violation: " + werr;
+                return result;
+            }
+        }
+
         // 实例化语句
         for (const auto &inst : m.instances) {
             const auto it = name_of_key.find(inst.module_key);
