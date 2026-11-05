@@ -9,7 +9,9 @@
 //   · 零跨 module `assign`（父层只用实例端口映射）；
 //   · clock / reset **分开判**（纯 RAM 写 module 只要 clock）；
 //   · 产物**确定性**（两次生成逐字节相同）；
-//   · 错误模型：校验失败 ⇒ `ok == false` + 无新文件。
+//   · 错误模型：校验失败 ⇒ `ok == false` + 无新文件；
+//   · **G1 命名序号**（ADR-060 v1.12 §2.3）：同类型多实例的 module 名按**实例路径的
+//     字节字典序**编号（与组件创建顺序无关）· 同 base **不同类型** ⇒ 编号前拒绝。
 
 #include "catch_amalgamated.hpp"
 
@@ -406,6 +408,89 @@ public:
     Lonely(ch::Component *p = nullptr, const std::string &n = "top") : ch::Component(p, n) {}
     void create_ports() override { new (io_storage_) io_type; }
     void describe() override { io().dout <<= io().din; }
+};
+
+// ── DUT ⑦：**同类型多实例**（ADR-060 v1.12 §2.3 的 G1）─────────────────────
+//    ⚠️ 两个实例的 module 名 MUST 按**实例路径的字典序**编号（`top.a` ⇒ 首名 ·
+//       `top.b` ⇒ `_1`）⇒ ⇒ 与**组件创建顺序无关** ⇒ ⇒ 下面 A 版 / B 版的成员
+//       声明顺序**相反**（C++ 按声明顺序构造成员）⇒ ⇒ 产出的（module 名 ↔ 实例名）
+//       配对 MUST **逐字相同**。
+class SeqLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("seq_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    SeqLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class SeqTopAB : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("seq_top");
+    __io(ch_in<ch_uint<8>> din;)
+    ch::ch_module<SeqLeaf> a{"a"};   // 创建顺序 a → b
+    ch::ch_module<SeqLeaf> b{"b"};
+    SeqTopAB(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= io().din;
+    }
+};
+
+class SeqTopBA : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("seq_top");
+    __io(ch_in<ch_uint<8>> din;)
+    ch::ch_module<SeqLeaf> b{"b"};   // 创建顺序 b → a（**相反**）
+    ch::ch_module<SeqLeaf> a{"a"};
+    SeqTopBA(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= io().din;
+    }
+};
+
+// ── DUT ⑧：**同 base 不同类型**（G1 的「编号前判身份」）───────────────────
+//    两个**不同**类型声明了**不同**的层名，但 sanitize 后落到**同一个** base
+//    （`-` ⇒ `_`）⇒ ⇒ MUST 响亮拒绝（MUST NOT 静默编成 `x` / `x_1`）。
+class DashLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("dash-leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    DashLeaf(ch::Component *p = nullptr, const std::string &n = "dash")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class UnderscoreLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("dash_leaf");   // ⚠️ 与 `dash-leaf` sanitize 后**同 base**
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    UnderscoreLeaf(ch::Component *p = nullptr, const std::string &n = "score")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class CollideTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("collide_top");
+    __io(ch_in<ch_uint<8>> din;)
+    ch::ch_module<DashLeaf> a{"a"};
+    ch::ch_module<UnderscoreLeaf> b{"b"};
+    CollideTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= io().din;
+    }
 };
 
 }   // namespace
@@ -857,4 +942,81 @@ TEST_CASE("hierarchical emission: all-inline design equals the flat output",
     const auto at = hier.find("/* verilator lint_off WIDTHEXPAND */");
     REQUIRE(at != std::string::npos);
     REQUIRE(hier.substr(at) == flat.str());
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// G1（ADR-060 v1.12 §2.3）：同类型多实例的序号按**实例路径的字典序**
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical emission: same-type multi-instance numbering follows instance path order",
+          "[hierarchy][emit][naming][g1]") {
+    // ⚠️ 编号约定（既有 · 与 G1 正交）：组内**首份**用 `<type>`、其后 `<type>_<k>`
+    //    （见 `src/hierarchy_verilog.cpp` 的 `numbered_name`）
+    const std::string path_ab = std::string(kOutDir) + "/seq_ab.v";
+    const std::string path_ba = std::string(kOutDir) + "/seq_ba.v";
+
+    ch::ch_device<SeqTopAB> ab;
+    auto r_ab = ch::toVerilogHierarchical(path_ab, ab.instance());
+    INFO("error (a→b): " << r_ab.error);
+    REQUIRE(r_ab.ok);
+
+    ch::ch_device<SeqTopBA> ba;
+    auto r_ba = ch::toVerilogHierarchical(path_ba, ba.instance());
+    INFO("error (b→a): " << r_ba.error);
+    REQUIRE(r_ba.ok);
+
+    const std::string all_ab = read_file(path_ab);
+    const std::string all_ba = read_file(path_ba);
+
+    // ① 两个同类型实例**各发一份** module（2 个 leaf + root）
+    REQUIRE(count_occurrences(all_ab, "module ") == 3);
+    REQUIRE_FALSE(module_text(all_ab, "seq_leaf").empty());
+    REQUIRE_FALSE(module_text(all_ab, "seq_leaf_1").empty());
+
+    // ② 名字 ↔ 实例的绑定按**实例路径**：`top.a` ⇒ `seq_leaf` · `top.b` ⇒ `seq_leaf_1`
+    const std::string top_ab = module_text(all_ab, "top");
+    REQUIRE(top_ab.find("seq_leaf a (") != std::string::npos);
+    REQUIRE(top_ab.find("seq_leaf_1 b (") != std::string::npos);
+
+    // ③ ⭐ **交换组件创建顺序 MUST NOT 改变这两个名字**
+    //    （⚠️ 判据要害：按「analysis.modules 的遍历序 = 创建顺序」编号的实现
+    //      ⇒ ⇒ B 版会把 `seq_leaf` 给 b ⇒ ⇒ 这两条转红）
+    const std::string top_ba = module_text(all_ba, "top");
+    REQUIRE(top_ba.find("seq_leaf a (") != std::string::npos);
+    REQUIRE(top_ba.find("seq_leaf_1 b (") != std::string::npos);
+    REQUIRE(top_ba.find("seq_leaf b (") == std::string::npos);
+
+    // ④ 两份产物的**实例化语句**（module 名 ↔ 实例名）逐字相同 ⇒ ⇒ 名字只由**路径**决定
+    auto inst_line = [](const std::string &all, const std::string &inst) {
+        const auto at = all.find(inst);
+        if (at == std::string::npos) {
+            return std::string("<missing>");
+        }
+        const auto nl = all.rfind('\n', at);
+        const std::size_t from = (nl == std::string::npos) ? 0 : nl + 1;
+        const auto end = all.find('\n', at);
+        return all.substr(from, end - from);
+    };
+    REQUIRE(inst_line(all_ab, " a (") == inst_line(all_ba, " a ("));
+    REQUIRE(inst_line(all_ab, " b (") == inst_line(all_ba, " b ("));
+}
+
+TEST_CASE("hierarchical emission: same-base different-type modules are rejected before numbering",
+          "[hierarchy][emit][naming][g1][error]") {
+    // ⚠️ 两个**不同类型**的层名分别是 `dash-leaf` / `dash_leaf` ⇒ ⇒ sanitize 后**同 base**
+    //    ⇒ ⇒ 现状（只查**生成后**重名）会静默编成 `dash_leaf` / `dash_leaf_1`
+    //    ⇒ ⇒ 本判据要求**编号前**判身份 ⇒ ⇒ 响亮拒绝并点名两端
+    ch::ch_device<CollideTop> dev;
+    const std::string path = std::string(kOutDir) + "/collide.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE_FALSE(r.ok);
+    REQUIRE(r.error.find("dash_leaf") != std::string::npos);
+    // 诊断 MUST 点名**两个** module key（否则用户无法定位是哪两个实例）
+    REQUIRE(r.error.find("top.a") != std::string::npos);
+    REQUIRE(r.error.find("top.b") != std::string::npos);
+    // 校验先于 I/O ⇒ 不留文件
+    REQUIRE_FALSE(file_exists(path));
+    REQUIRE_FALSE(file_exists(path + ".tmp"));
 }

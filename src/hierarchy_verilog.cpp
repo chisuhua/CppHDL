@@ -293,15 +293,48 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         }
     }
 
-    // module 类型名（`<module_type_name>_<序号>`；同类型多实例各发一份）
-    std::map<std::string, int> type_seq;
-    std::vector<std::string> module_names;
-    module_names.reserve(analysis.modules.size());
-    for (const auto &m : analysis.modules) {
-        const std::string base = sanitize_verilog_name(m.module_type_name);
-        module_names.push_back(numbered_name(base, type_seq[base]++));
+    // module 类型名（`<module_type_name>` / `<module_type_name>_<序号>`；同类型多实例各发一份）
+    //
+    // ⚠️ **序号顺序 MUST 是「实例路径的字典序」**（ADR-060 **v1.12** §2.3 的 G1）：
+    //    · 分组键 = **sanitized** `module_type_name`（同类型多实例 ⇒ 同组）
+    //    · 组内排序键 = **`HierarchyModule.key` 的字节序**（`std::string` 的比较，
+    //      **MUST NOT** 用「逐段比较路径」—— `Component` 的 name 不做字符集校验，
+    //      含 `< '.'`（0x2E）的字符时两序会发散）
+    //    · **编号前**按 `(sanitized base, 类型身份)` 判身份 ⇒ ⇒ 同组内出现**不同**的
+    //      `module_type_name` ⇒ ⇒ 两个**不同类型**撞成同一个 base ⇒ ⇒ 响亮拒绝
+    //      （现状只查**生成后**重名 ⇒ 会被静默编成 `x` / `x_1`）
+    //    · ⚠️ **MUST NOT 重排 `analysis.modules` 的 post-order 发射序** —— 序号只影响**名字**
+    std::map<std::string, std::vector<std::size_t>> type_groups;
+    for (std::size_t i = 0; i < analysis.modules.size(); ++i) {
+        type_groups[sanitize_verilog_name(analysis.modules[i].module_type_name)].push_back(i);
     }
-    // 同名不同类型 ⇒ 响亮拒绝（MUST NOT 静默合并）
+    std::vector<std::string> module_names(analysis.modules.size());
+    for (const auto &group : type_groups) {
+        const std::string &base = group.first;
+        const std::vector<std::size_t> &members = group.second;
+        // ① 编号**之前**判身份（同 base 不同类型 ⇒ 响亮拒绝）
+        const std::string &identity = analysis.modules[members.front()].module_type_name;
+        for (const std::size_t idx : members) {
+            if (analysis.modules[idx].module_type_name != identity) {
+                result.error =
+                    "hierarchical emission: modules '" + analysis.modules[members.front()].key +
+                    "' and '" + analysis.modules[idx].key +
+                    "' are different types but sanitize to the same module name base '" + base +
+                    "' ('" + identity + "' vs '" + analysis.modules[idx].module_type_name +
+                    "'); refusing to number them silently";
+                return result;
+            }
+        }
+        // ② 组内按 `key` 的**字节字典序**编号（确定性 · 与 ctx 节点 ID / 组件创建顺序无关）
+        std::vector<std::size_t> order = members;
+        std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+            return analysis.modules[a].key < analysis.modules[b].key;
+        });
+        for (std::size_t k = 0; k < order.size(); ++k) {
+            module_names[order[k]] = numbered_name(base, static_cast<int>(k));
+        }
+    }
+    // 兜底：生成名 MUST 唯一（上面的分组已保证 ⇒ ⇒ 留着防后续改动破掉它）
     for (std::size_t i = 0; i < module_names.size(); ++i) {
         for (std::size_t j = i + 1; j < module_names.size(); ++j) {
             if (module_names[i] == module_names[j]) {
