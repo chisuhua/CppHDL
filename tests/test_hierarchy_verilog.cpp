@@ -2935,3 +2935,90 @@ TEST_CASE("hierarchical emission: port set checks reject a broken port table",
         REQUIRE_FALSE(ch::detail::check_input_port_sets(flat, broken).empty());
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// T3-⑤ · B3：**显式端口集合**（ADR-058 §2.3 E1）
+//
+//   后端消费「外部生成的层次化 Verilog」时，端口集合 MUST 由 **emitter 产物派生**
+//   （`ch::backend_port_set`）⇒ ⇒ 调用方**无从手写**（E1 的「单一真相源」）。
+//   ⚠️ 缺 clock/reset ⇒ 寄存器永不更新 ⇒ 「逐拍全等」会**恒绿**（最危险的假绿）
+//      ⇒ ⇒ 本判据把「⊇ {clock, reset}」钉成**恰一个**。
+// ─────────────────────────────────────────────────────────────────────────
+TEST_CASE("hierarchical emission: backend port set is derived from the emitter product",
+          "[hierarchy][emit][portset]") {
+    ch::ch_device<T3> dev;
+    const std::string path = std::string(kOutDir) + "/b3_portset.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const auto ports = ch::backend_port_set(r, "top");
+    REQUIRE_FALSE(ports.empty());
+
+    // ① ⊇ {clock, reset} ⇒ **恰一个**（分不开 ⇒ 后端无法做 2-step toggle / pulse_reset）
+    int clocks = 0;
+    int resets = 0;
+    for (const auto &p : ports) {
+        if (p.is_clock) {
+            ++clocks;
+        }
+        if (p.is_reset) {
+            ++resets;
+        }
+        if (p.is_clock || p.is_reset) {
+            // 时序基础设施位宽恒 1（`node->size()` 对它们不可靠 —— AGENTS.md）
+            REQUIRE(p.bitwidth == 1);
+        }
+    }
+    REQUIRE(clocks == 1);
+    REQUIRE(resets == 1);
+
+    // ② 覆盖根 module 的**全部**顶层端口（名字 / 方向 / 宽度）
+    const auto top = hier_top_ports(r, "top");
+    REQUIRE(ports.size() == top.size());
+    for (const auto &t : top) {
+        bool found = false;
+        for (const auto &p : ports) {
+            if (p.port_name != t.name) {
+                continue;
+            }
+            REQUIRE(p.is_input == t.is_input);
+            const bool infra = (t.name == "default_clock" || t.name == "default_reset");
+            if (!infra) {
+                REQUIRE(p.bitwidth == t.width);
+            }
+            found = true;
+            break;
+        }
+        INFO("top port: " << t.name);
+        REQUIRE(found);
+    }
+
+    // ③ `node_id` 可反查 ⇒ 且与端口名**逐字**相同（同改名 ⇒ 后端会写到错的槽位）
+    const auto name_table = ch::build_verilog_name_table(dev.context()->get_eval_list());
+    std::map<std::uint32_t, std::string> name_by_id;
+    for (const auto &kv : name_table) {
+        name_by_id[kv.first->id()] = kv.second;
+    }
+    for (const auto &p : ports) {
+        INFO("port: " << p.port_name << " (id " << p.node_id << ")");
+        REQUIRE(name_by_id.count(p.node_id) == 1);
+        REQUIRE(name_by_id[p.node_id] == p.port_name);
+    }
+
+    // ④ **负向对照**：把某个顶层端口从映射表里抹掉 ⇒ 派生的集合 MUST 少一个
+    //    （⇒ 「集合由产物派生」不是装饰：表缺项时集合**跟着缺**）
+    {
+        auto broken = r;
+        for (auto &e : broken.signal_map) {
+            if (!e.hier_top_port_name.empty()) {
+                e.hier_top_port_name.clear();
+                break;
+            }
+        }
+        const auto fewer = ch::backend_port_set(broken, "top");
+        REQUIRE(fewer.size() == ports.size() - 1);
+    }
+}

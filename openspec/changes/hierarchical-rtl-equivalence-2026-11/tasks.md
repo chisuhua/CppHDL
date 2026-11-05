@@ -6,17 +6,37 @@
 
 ## T1 backend 只增不改入口
 
-- [ ] 1.1 `initialize_with_verilog(path, port_set, data_map, work_dir)`：接收**显式端口集合**
-      （`node_id` + 顶层端口名 + 宽度 + 方向）⇒ ⇒ 集合 MUST **⊇ {clock, reset}**
-- [ ] 1.2 `build_port_access_table` 改造：从 ctx 全量推 ⇒ 改为**显式集合**
-- [ ] 1.3 `emit_sim_main_postlude` 同上
-- [ ] 1.4 **既有 `initialize(ctx, …)` 行为逐字节不变**
-- [ ] 1.5 **E1 来源约束**：上述集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）派生
+- [x] 1.1 入口接收**显式端口集合**（`node_id` + 顶层端口名 + 宽度 + 方向）⇒ ⇒
+      集合 MUST **⊇ {clock, reset}**
+      ⇒ ⇒ **B3 已落地**：实际签名 `try_initialize_with_verilog(verilog_path, ports, data_map)`
+      （`include/core/verilator_backend.h`）——**无 `work_dir` 形参**：work dir 来自构造器
+      （`VerilatorBackend(verilog_path)` 的实参即 work dir）⇒ 两条路径的物理隔离由调用方
+      **各构造一个实例**承担（见 1.6）；端口值类型 = `ch::VerilatorPortSpec`
+      （`include/core/verilator_port_set.h`，value-only 中立头）· `⊇ {clock, reset}`
+      在**碰 I/O 之前**校验（`[hier][negative]` 用例）
+- [x] 1.2 `build_port_access_table` 改造：从 ctx 全量推 ⇒ 改为**显式集合**
+      ⇒ ⇒ **B3 已落地**：新增 `build_port_access_table_from_specs()`
+      （`port_access_.size() == ports.size()` 在 `[hier]` 用例断言）；
+      既有 `build_port_access_table()` 保留且**未被替换**
+- [x] 1.3 `emit_sim_main_postlude` 同上
+      ⇒ ⇒ **B3 已落地**：新增 `emit_sim_main_postlude_for_ports(path, ports)`（**不读 ctx**）；
+      固定前导抽成 `kSimMainPrelude`，两条路径共用（文本与既有逐字节**相同** —— 缓存 key 的输入）
+- [x] 1.4 **既有 `initialize(ctx, …)` 行为逐字节不变**
+      ⇒ ⇒ **B3 已验收**：`sim_main.cpp` 生成文本与原实现 **IDENTICAL**
+      （`/tmp/opencode/cmp_prelude5.py` 的字面量级比对）+ `ctest -LE perf` 238/238 ·
+      总时长 363s（与 B2 基线一致 ⇒ cache key 未漂 ⇒ 无冷编译）
+- [x] 1.5 **E1 来源约束**：上述集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）派生
       ⇒ ⇒ **MUST NOT** 由 harness / backend 独立撰写或手工列举（ADR-058 v2.14 §2.3 E1）
-- [ ] 1.6 **E2 物理隔离**：与既有路径 **两个独立 work_dir**（共享 `verilator_work_dir_` ⇒ 互踩）
-- [ ] 1.7 **E3 + 顶层名**：失败 MUST **致命**（返回 `VerilatorError`，**MUST NOT** 沿用
-      `CHWARN` best-effort）；harness MUST 断言 backend **真初始化成功**（非 SKIP 即过）；
-      顶层 module 名 ≠ `top` ⇒ 入口**致命拒绝 + 点名**且**不留文件**（fail-early）
+      ⇒ ⇒ **B3 已落地**：`ch::backend_port_set(emitted, root_module)`（`src/hierarchy_verilog.cpp`）；
+      负向对照 = 抹掉映射表里一个顶层端口名 ⇒ 派生集合**跟着少一个**
+- [x] 1.6 **E2 物理隔离**：与既有路径 **两个独立 work_dir**（共享 `verilator_work_dir_` ⇒ 互踩）
+      ⇒ ⇒ **B3 已落地**：`[hier]` 用例用 `make_temp_dir("_hier_v")`（Verilog 产物）
+      与 `make_temp_dir("_hier_b")`（backend work dir）两个目录，且与既有路径的实例**不同**
+- [x] 1.7 **E3**：失败 MUST **致命**（返回 `VerilatorError`，**MUST NOT** 沿用
+      `CHWARN` best-effort）；harness MUST 断言 backend **真初始化成功**（非 SKIP 即过）
+      ⇒ ⇒ **B3 已落地**：`compile_and_load(/*fatal=*/true)` 路径；`[hier]` 用例 `REQUIRE(init.has_value())`
+      （**不 SKIP**）+ 值判据 0x2A / 0x5C（手推：若 clock/reset 未接 ⇒ 寄存器冻结 ⇒ 恒 0 ⇒ 转红）
+      ⏳ **顶层名 fail-early 归 B4**（本批未做：`root_module != "top"` ⇒ 入口致命拒绝 + 点名 + 不留文件）
 
 ## T2 映射表与观测集
 

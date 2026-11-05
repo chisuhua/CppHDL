@@ -13,6 +13,7 @@
 #pragma once
 
 #include "component.h"
+#include "core/verilator_port_set.h"
 
 #include <cstdint>
 #include <string>
@@ -116,5 +117,15 @@ struct HierarchyEmitResult {
 /// 且**不产生任何文件**。
 HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component &root,
                                           const HierarchyEmitOptions &options = {});
+
+/// 从**发射产物**派生 Verilator backend 的显式端口集合（ADR-058 §2.3 E1）。
+///
+/// ⚠️ **唯一支持的来源**：端口集合 MUST 由 `signal_map` + `port_provenance` **派生**
+///    ⇒ ⇒ 调用方 MUST NOT 手写 / 手工列举（否则与 emitter 真相脱钩）。
+/// ⚠️ 只取**根 module**（`root_module`）的端口 ⇒ ⇒ 必须**包含** clock 与 reset
+///    （根 module 无条件发射这两个端口 —— ADR-060 §2.1）。
+/// ⚠️ clock / reset 的位宽恒为 1（它们是时序基础设施；`node->size()` 对它们不可靠）。
+std::vector<VerilatorPortSpec> backend_port_set(const HierarchyEmitResult &emitted,
+                                                const std::string &root_module);
 
 }   // namespace ch

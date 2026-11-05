@@ -1392,4 +1392,43 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     return result;
 }
 
+std::vector<VerilatorPortSpec> backend_port_set(const HierarchyEmitResult &emitted,
+                                                const std::string &root_module) {
+    std::vector<VerilatorPortSpec> out;
+    if (!emitted.ok) {
+        return out;   // 失败结果没有产物 ⇒ 没有端口集合（调用方 MUST 先判 ok）
+    }
+    // 名字 → node_id（**只**来自映射表的「层次化顶层端口」那一列 ⇒ 单一真相源）
+    std::map<std::string, std::uint32_t> id_of_top_port;
+    for (const auto &e : emitted.signal_map) {
+        if (!e.hier_top_port_name.empty()) {
+            id_of_top_port[e.hier_top_port_name] = e.node_id;
+        }
+    }
+    for (const auto &p : emitted.port_provenance) {
+        if (p.module != root_module) {
+            continue;   // 只取根 module 的端口（E1：那是外部可驱动/可观测的那一层）
+        }
+        const auto it = id_of_top_port.find(p.port);
+        if (it == id_of_top_port.end()) {
+            continue;   // ⚠️ 不该发生（映射表 MUST 覆盖顶层端口）⇒ 宁可少一个也不编造
+        }
+        VerilatorPortSpec s;
+        s.node_id = it->second;
+        s.port_name = p.port;
+        s.bitwidth = p.width;
+        s.is_input = p.is_input;
+        if (p.origin == PortProvenanceOrigin::ClockReset) {
+            // ⚠️ clock / reset **必须分开**（eval_sequential 的 2-step toggle 与 pulse_reset
+            //    各用各的字段指针）⇒ ⇒ 名字是框架的固定基础设施名（`ModuleView` 的
+            //    `clock_name` / `reset_name` 默认值，ADR-058 §2.1）。
+            s.is_clock = (p.port == "default_clock");
+            s.is_reset = !s.is_clock;
+            s.bitwidth = 1;
+        }
+        out.push_back(std::move(s));
+    }
+    return out;
+}
+
 }   // namespace ch

@@ -21,6 +21,7 @@
 #include "core/eval_backend.h"
 #include "core/interpreter_backend.h"
 #include "core/verilator_backend.h"
+#include "hierarchy_verilog.h"
 #include "simulator.h"
 #include <cstdlib>
 #include <cerrno>
@@ -756,4 +757,129 @@ TEST_CASE("VerilatorBackend - E2E CacheRoundTrip",
     }
     CHECK(b2.invoke_verilator_call_count() == 0);
     INFO("cache miss path was taken — writeback is broken");
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// ADR-058 §2.3 E1：**只增不改**入口 —— 消费「外部生成的层次化 Verilog」
+// ═════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+// 两层 DUT（叶子含寄存器 ⇒ clock / reset 真的被用到：漏一个就会「寄存器冻结」）
+class BeLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("be_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> r{0_d};
+    BeLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        r->next = io().din;
+        io().dout <<= r;
+    }
+};
+
+class BeTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("be_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<BeLeaf> leaf{"leaf"};
+    BeTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.io().dout;
+    }
+};
+
+}   // namespace
+
+TEST_CASE("VerilatorBackend - explicit port set without clock/reset is rejected",
+          "[verilator][backend][hier][negative]") {
+    // ⚠️ 本判据**不需要真 verilator**：前置校验 MUST 在**碰 I/O 之前**
+    //    （缺 clock/reset ⇒ 寄存器冻结 ⇒ 「逐拍全等」恒绿 —— E1 明写的失败模式）
+    VerilatorBackend backend(make_temp_dir("_hier_neg"));
+    ch::data_map_t data_map;
+    std::vector<ch::VerilatorPortSpec> ports;   // 空集合
+
+    auto r = backend.try_initialize_with_verilog("/nonexistent/hier.v", ports, data_map);
+    INFO("error: " << r.error().message);
+    REQUIRE_FALSE(r.has_value());
+    REQUIRE(r.error().message.find("clock") != std::string::npos);
+
+    // 只给 clock 也不行
+    ch::VerilatorPortSpec clk;
+    clk.node_id = 1;
+    clk.port_name = "default_clock";
+    clk.bitwidth = 1;
+    clk.is_input = true;
+    clk.is_clock = true;
+    ports.push_back(clk);
+    auto r2 = backend.try_initialize_with_verilog("/nonexistent/hier.v", ports, data_map);
+    REQUIRE_FALSE(r2.has_value());
+    REQUIRE(r2.error().message.find("reset") != std::string::npos);
+}
+
+TEST_CASE("VerilatorBackend - external hierarchical Verilog via explicit port set",
+          "[verilator][backend][hier]") {
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH; hierarchical-backend test skipped");
+        return;
+    }
+    const std::string vdir = make_temp_dir("_hier_v");
+    // ⚠️ **独立** work_dir（ADR-058 §2.3 E2：两条路径 MUST 物理隔离）
+    const std::string wdir = make_temp_dir("_hier_b");
+    REQUIRE_FALSE(vdir.empty());
+    REQUIRE_FALSE(wdir.empty());
+
+    ch::ch_device<BeTop> dev;
+    const std::string vpath = vdir + "/hier.v";
+    {
+        std::remove(vpath.c_str());
+        auto emitted = ch::toVerilogHierarchical(vpath, dev.instance());
+        INFO("emit error: " << emitted.error);
+        REQUIRE(emitted.ok);
+
+        // ① 端口集合**由 emitter 产物派生**（E1：调用方无从手写）
+        const auto ports = ch::backend_port_set(emitted, "top");
+        REQUIRE_FALSE(ports.empty());
+
+        // ② 后端：新入口是**致命**语义（E3）—— 失败即返回错误，不 WARN 后继续
+        auto backend = std::make_unique<VerilatorBackend>(wdir);
+        ch::data_map_t scratch;
+        auto init = backend->try_initialize_with_verilog(vpath, ports, scratch);
+        if (!init.has_value()) {
+            INFO("init error: " << init.error().message);
+        }
+        REQUIRE(init.has_value());
+        // 端口表 MUST **恰等于**显式集合（MUST NOT 从 ctx 全量推）
+        const auto snapshot = backend->port_access_snapshot();
+        REQUIRE(snapshot.size() == ports.size());
+        for (const auto &p : ports) {
+            REQUIRE(snapshot.count(p.node_id) == 1);
+        }
+        REQUIRE(backend->clock_node_id() != UINT32_MAX);
+
+        // ③ 接进 Simulator：`set_backend` 会再调 `initialize(ctx, …)`
+        //    ⇒ MUST **只重绑 data_map**（不得从 ctx 重推端口表）
+        ch::Simulator sim(dev.context());
+        sim.set_backend(std::move(backend));
+
+        // ④ **值判据（手推）**：din → reg → dout（1 拍）
+        //    ⇒ 若 clock/reset 没接上，寄存器冻结 ⇒ dout 恒为 0 ⇒ 本断言转红
+        auto &io = dev.instance().io();
+        sim.set_input_value(io.din, 0x2Au);
+        sim.tick();
+        sim.tick();
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.dout)) == 0x2Au);
+
+        // ⑤ 换值再确认一次（⇒ 「恒 0 也能过」的假绿被排除）
+        sim.set_input_value(io.din, 0x5Cu);
+        sim.tick();
+        sim.tick();
+        REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.dout)) == 0x5Cu);
+    }
 }

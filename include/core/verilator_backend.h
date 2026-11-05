@@ -13,6 +13,7 @@
 
 #include "core/eval_backend.h"
 #include "core/context.h"
+#include "core/verilator_port_set.h"
 #include <cstdint>
 #include <expected>
 #include <fstream>
@@ -104,9 +105,25 @@ public:
     VerilatorResult try_initialize(ch::core::context *ctx,
                                    ch::data_map_t &data_map);
 
+    // ── ADR-058 §2.3 E1：**只增不改**入口 —— 消费**外部生成**的层次化 Verilog ──
+    //
+    // 为什么需要它（事实⑧）：框架里**没有任何**入口能仿真「外部生成的层次化 Verilog」
+    // （既有路径只会 `toVerilog()` 整个 ctx ⇒ 一个 `module top`）。
+    //
+    // ⚠️ `ports` MUST 由 **emitter 产物派生**（`ch::backend_port_set(emitted, root_module)`）
+    //    ⇒ ⇒ 调用方**无从手写**；且 MUST **⊇ {clock, reset}**（否则寄存器永不更新 ⇒
+    //    「逐拍全等」会**恒绿** —— 最危险的假绿）。
+    // ⚠️ 既有 `try_initialize(ctx, …)` 的行为**逐字节不变**；已用本入口初始化的后端，
+    //    后续 `try_initialize(ctx, …)` **只重绑 `data_map`**（MUST NOT 从 ctx 重推端口表
+    //    —— 那会引用不存在的 Vtop 字段）。
+    // ⚠️ 本入口的失败语义 = **致命**（返回 `VerilatorError`），MUST NOT 沿用既有路径的
+    //    best-effort `CHWARN`（否则后端**静默不可用** ⇒ 上层 SKIP ⇒ 恒绿假绿）。
+    VerilatorResult try_initialize_with_verilog(
+        const std::string &verilog_path,
+        const std::vector<ch::VerilatorPortSpec> &ports,
+        ch::data_map_t &data_map);
+
     // Backward-compat thin wrapper preserving the IEvalBackend::initialize()
-    // contract. Discards the VerilatorError (callers wanting rich info
-    // should call try_initialize() directly).
     bool initialize(ch::core::context *ctx,
                     ch::data_map_t &data_map) override {
         return try_initialize(ctx, data_map).has_value();
@@ -190,6 +207,15 @@ public:
 
 private:
     VerilatorResult generate_verilog(ch::core::context *ctx);
+
+    /// 编译 + 缓存 + dlopen 的**共用**序列（既有路径与新入口共用 ⇒ 防两份副本漂移）。
+    /// `fatal == false` ⇒ 既有语义（编译/dlopen 失败仅 `CHWARN` 后继续）；
+    /// `fatal == true`  ⇒ E3 语义（失败即返回错误）。
+    VerilatorResult compile_and_load(bool fatal);
+
+    /// E1：按**显式端口集合**建端口表（MUST NOT 从 ctx 全量推）。
+    VerilatorResult build_port_access_table_from_specs();
+
     VerilatorResult invoke_verilator(const std::string &verilog_path);
     VerilatorResult dlopen_top(const std::string &so_path);
     void close_top();
@@ -240,6 +266,12 @@ private:
 
     // Port access table (node_id -> Vtop field pointer + metadata)
     std::unordered_map<uint32_t, VerilatorPortAccess> port_access_;
+
+    // ── ADR-058 §2.3 E1：外部层次化 Verilog 的**显式端口集合** ──────────────
+    //    ⚠️ 非空 = 后端由 `try_initialize_with_verilog` 驱动 ⇒ ⇒
+    //       `try_initialize(ctx, …)` MUST 只重绑 `data_map`（不得从 ctx 重推）。
+    std::vector<ch::VerilatorPortSpec> explicit_ports_;
+    bool external_initialized_ = false;
 
     // Phase 3.4: id of the type_clock lnode (or UINT32_MAX if none).
     uint32_t clock_node_id_ = UINT32_MAX;

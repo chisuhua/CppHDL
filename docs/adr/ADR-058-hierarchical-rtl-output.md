@@ -1,6 +1,6 @@
 # ADR-058: 真层次化 RTL 输出 —— 语义边界与等价性
 
-- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.14** · 版本史见 §6）
+- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.15** · 版本史见 §6）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**前置** = ADR-059（节点归属与组件命名）·
@@ -272,6 +272,24 @@ toVerilogHierarchical(const std::string& path, ch::Component& top,
 | **E2** | 该入口 MUST **物理隔离**于既有 `initialize(ctx, …)` 路径（后者行为**逐字节不变**）⇒ ⇒ 等价性 harness MUST 用**两个独立 work_dir** | 两条路径共享 `verilator_work_dir_` ⇒ ⇒ `top.v` / `sim_main.cpp` / `obj_dir` 互踩（`:419,:436,:504,:530`）⇒ ⇒ 任何「重新 initialize」的顺序假设都会错 |
 | **E3** | 该入口的**失败语义 MUST 是致命错误**（返回 `VerilatorError`）⇒ ⇒ **MUST NOT** 沿用 `try_initialize` 的 best-effort 惯例（编译失败仅 `CHWARN` 后继续 · `:342-344`；dlopen 失败仅 `CHWARN` 后继续 · `:368-370`）⇒ ⇒ harness MUST 断言 backend **真初始化成功**（非 SKIP 即过） | best-effort ⇒ backend **静默不可用** ⇒ ⇒ 等价性套件若按 dual-backend fixture 惯例把「verilator 不可用」当 SKIP ⇒ ⇒ **整个套件静默跳过 = 恒绿假绿**（本仓反复出现的失败模式） |
 
+⚠️ **已落地形态（2026-11-06 · T3-⑤/B3 · `hierarchical-rtl-equivalence-2026-11`）** ——
+E1/E2/E3 的抽象要求已落成具体 API（**决策零变更**，此处只登记实现指针）：
+
+- **入口** = `VerilatorBackend::try_initialize_with_verilog(verilog_path, ports, data_map)`
+  （`include/core/verilator_backend.h`）—— ⚠️ 上方形态示意 `initialize_with_verilog(path, data_map)`
+  **未含端口集合**、与 E1 自相矛盾 ⇒ **实际签名以本行为准**。
+- **端口值类型** = `ch::VerilatorPortSpec`（`include/core/verilator_port_set.h`，value-only 中立头；
+  不 include `<expected>` / `component.h` ⇒ 不扩大平台面）。
+- **集合派生** = `ch::backend_port_set(const HierarchyEmitResult &, const std::string &root_module)`
+  （`include/hierarchy_verilog.h`）—— 消费 §2.2 映射表 × `port_provenance`，clock / reset
+  **分开标记**且位宽恒 1（`node->size()` 对二者不可靠）。
+- **E2 的双 `work_dir`** 由**构造器实参**承担（该入口**无** `work_dir` 形参 ⇒ 两条路径
+  **各构造一个实例**）；已用本入口初始化的后端再走 `try_initialize(ctx, …)` **只重绑
+  `data_map`**（MUST NOT 从 ctx 重推端口表）。
+- **E3 的致命语义** = `compile_and_load(/*fatal=*/true)`；`fatal=false` 分支 = 既有路径
+  **逐字节不变**（含 `sim_main.cpp` 的 prelude 文本 —— 它是缓存 key 的输入）。
+- ⚠️ **顶层名 fail-early 尚未落地**（归 T3-⑤/B4）⇒ §4 风险 7 仍然有效。
+
 ⚠️ **顶层 module 名的约束（v2.13 · 实测订正措辞）**：backend 生成的 `sim_main.cpp`
 模板硬编码 `#include "Vtop.h"` 与 `new Vtop{…}`（`src/core/verilator_backend.cpp:446,:456`）
 ⇒ ⇒ 而 Verilator 生成的顶层类名由 **`--top-module` 或输入文件名**决定
@@ -488,6 +506,7 @@ output**（`src/codegen_verilog.cpp:333-362`）⇒ ⇒ 顶层 module 端口表 M
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-06 | **v2.15**（T3-⑤/B3 落地后 · builder 角色 · **决策内容零变更**）：§2.3 补「**已落地形态**」段 —— 登记 `try_initialize_with_verilog(verilog_path, ports, data_map)` / `ch::VerilatorPortSpec`（中立头 `include/core/verilator_port_set.h`）/ `ch::backend_port_set(emitted, root_module)` / `compile_and_load(bool fatal)` 四个实现指针，并**订正**原形态示意 `initialize_with_verilog(path, data_map)` 缺端口集合（与 E1 自相矛盾）；明示 E2 的双 `work_dir` 由构造器实参承担（入口无该形参）、外部初始化后的重绑语义、以及**顶层名 fail-early 仍未落地**（归 B4 ⇒ §4 风险 7 继续有效） |
 | 2026-11-05 | **v2.14**（落实 critic 对本轮审稿的 **2 SHOULD_FIX + 2 NIT** ⇒ ⇒ 决策内容**零变更**，只补可判定性）：① **§2.2 映射表载体 + §2.3 E1 补同一条纪律** —— 显式端口集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）**派生**，**MUST NOT** 由 harness / backend 独立撰写（否则与 emitter 真相脱钩 ⇒ 表错则两错相抵）；② **§2.3 的 `port_provenance` 块订正为「已落地」**（`include/hierarchy_verilog.h:48-69`；原文写「尚未落地」）并明示它**不含 `node_id`** ⇒ 不能顶替 §2.2 的四元组映射表（两者并存） |
 | 2026-11-05 | **v2.13**（T3-④ 归档后 · architect 角色 · 据 **oracle** 对实施期缺口的对抗复核）：**补齐 T3-005 的四处「契约缺口」** —— ① **§2.2 加映射表载体**：MUST 由 emitter 产出（禁测试自建）· 载体 = `HierarchyEmitResult` 新增**公开字段**（value-only · 带 `node_id` · `hier_top_port_name` 允许为空以表达「不在层次化顶层」）· **不**另开 manifest 入口；并加 **`node_id` 有效性域**（ctx 私有 ⇒ 两次 emit MUST 共享同一 ctx ⇒ 跨 ctx 退化为「设计级信号名」维度）；② **§2.3 加该只增不改入口的三条硬约束 E1/E2/E3**（**显式端口集合** ⊇ {clock, reset} · **物理隔离**既有路径 + 双 work_dir · 失败**致命**非 best-effort ⇒ 否则 backend 静默不可用 ⇒ 套件 SKIP = 恒绿假绿）**+ 顶层 module 名约束**（实测：Verilator 顶层类名由 `--top-module` 或**输入文件名**决定 ⇒ 非 `top` ⇒ **编译期**失败 ⇒ 入口 MUST 显式校验并**致命拒绝**；**保留** `top_module_name` 选项（已落地公开契约）⇒ 「backend 只消费默认名」记为已知边界）；③ **§4 加风险 6（观测盲区：等价性只覆盖顶层可见行为 · 输入方向无盲区）+ 风险 7（backend 只消费默认顶层名）**；④ **§5 加三条对应判据**（映射表载体 + backend 消费路径 + 盲区登记），并把映射表判据补上「缺一项 ⇒ 转红」的判别力自证。⚠️ 决策内容**零变更** —— 本版是把**已裁决但未写死的实施约束**补成可机械判定的条款（oracle 实测缺口） |
 | 2026-11-05 | **v2.12**（B3 开工前 · architect 角色 · 据实施期查明的**两处契约缺口**）：① **§2.3 的签名按已落地形态订正** —— 原文 `std::expected<HierManifest, HierError>` / `VerilogHierOptions` 与实现（`HierarchyEmitResult` / `HierarchyEmitOptions`）**漂移** ⇒ ⇒ 按实现订正（**语义契约不变**：失败可观测 + 诊断可承载 + 单文件产物）；② **§2.3 新增错误模型 ⑤「错误载体统一口径」** —— 对外唯一载体 = `HierarchyEmitResult`；**发射器内**校验失败（端口策略 / 跨层宽度 / 白名单 / 端口完整性 / 命名冲突）MUST 走 `ok=false` + `error`，**MUST NOT** 依赖异常（异常会落进 `print()` 的 `catch(...)` ⇒ 静默失败）；**分析层前置校验**允许 `CHFATAL_EXCEPTION`，入口 MUST 在第一次 I/O 前**转换**（不是吞掉）；并声明**各 ADR 中 `CHFATAL_EXCEPTION` 字样按本口径解释**（可观测形态由所在层决定）⇒ ⇒ 目的是消除 B3 的「白名单说抛异常、发射器返回结构体」两套错误通道 |
