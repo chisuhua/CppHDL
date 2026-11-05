@@ -1,6 +1,7 @@
 # ADR-061: 层级粒度由**用户显式**控制 —— 默认 inline，成层须声明
 
-- Status: **Accepted**（2026-11-04 · 用户拍板 · **v1.6.3**：据 oracle 实测订正 §2.5.1 的**理由**，
+- Status: **Accepted**（2026-11-05 · 用户拍板 · **v1.6.4**：补决策② 的**工程后果** ——
+  未消费的子 `ch_out` MUST 以**空连接**出现在父层实例化语句中；订正：v1.6.3：据 oracle 实测订正 §2.5.1 的**理由**，
   并补**优先级**与**作用域覆盖范围**（裁决结论不变））
 - Date: 2026-11-02
 - Author: build-agent（architect role）
@@ -91,6 +92,14 @@ ch::ch_inline<Sub>  t{"t"};             // 显式 inline（即使 Sub 是 layer�
 ⓘ **`c` 的输入端口**同样**按扁平规则**：有 driver ⇒ 该 module 内 `wire` + `assign`
 （沿用 `src/codegen_verilog.cpp:333-360` 的既有机制）；无 driver ⇒ **该 module 的 `input` 端口**
 （见决策 ③）。
+
+ⓘ **父层实例化语句 MUST 接上子 module 的**全部** `output` 端口**（v1.6.4 · 2026-11-05 实测）：
+本决策 ② 的「**即使无人消费**也是端口」有一个**工程后果** —— 父 module 的实例化语句若
+**不接**无人消费的子 `ch_out` ⇒ ⇒ Verilator 报 `PINMISSING`（⇒ 且 warning 即 error
+⇒ ⇒ `--lint-only` 失败）⇒ ⇒ ⇒ 故 **未消费的子 output MUST 以空连接 `.port()` 出现**。
+⚠️ **子 `input` 端口 MUST NOT 用空连接糊过去**：未驱动的子 input 值是**未定义值 X**
+⇒ ⇒ 它 MUST **冒泡**成顶层 input 并由父层接上（ADR-060 §2.2）⇒ ⇒ 空连接**只**适用于 output。
+⇒ ⇒ 实测：空连接 ⇒ `verilator --lint-only` **exit 0**；不接 ⇒ exit 1（`PINMISSING`）。
 
 ⚠️⚠️ **`type_output` 在同一个 module 内有三种角色**（v1.3，oracle R5）⇒ ⇒
 现有的 `print_decl`（`src/codegen_verilog.cpp:432-499`）**只有「端口」一种**：
@@ -383,6 +392,7 @@ struct VerilogHierOptions {
 | 2026-11-02 | **v1.5**（据 oracle 第 2 轮）：`type_output` 的三角色表补**第四角色** —— 「子端口的连接网」（父 module 内 `logic` + 实例 `.port(net)`，**不是** `assign`）⇒ 否则父层消费子输出会引用未声明标识符 |
 | 2026-11-02 | **v1.1**（自审揪出的矛盾修正）：原决策②写「inline 的输出降成父内 wire」，但扁平产物里**任意层** `ch_out` 都是顶层 `output`（`codegen_verilog.cpp:363-370`）⇒ ⇒ ⇒ 「全 inline 逐字节一致」**当场不成立**，且「inline 对产物不可见」与「inline 改变端口表」互斥 ⇒ ⇒ **改裁**：inline **完全照扁平规则**；**端口表收缩是「成层子树」独有的回报**（⇒ 想顶层接口干净 MUST 显式声明成层）⇒ 两条判据从「并列要求」变成「互为推论」（选项表新增 #11 记录被否决的形态） |
 | 2026-11-04 | **v1.6**（2026-11-04 架构评审 · 用户拍板）：① **决策① 改判** —— 「成层声明」与「模块命名」**合并为一个宏** `CH_HIERARCHY_LAYER("name")` ⇒ ⇒ 「成层但无模块名」**编译期即不可表示** ⇒ ⇒ 原「缺名 ⇒ 运行时硬错」退化为「写宏就必须给名字」（**编译期**）⇒ ⇒ `CH_MODULE_NAME` **不单独存在**（与 ADR-059 D4 v2.3 同步）⇒ ⇒ **决策② / 决策⑤ / 选项表 1 / 选项 4 不变**；② **§5 订正** —— 「被 inline 的组件…任意 `output` ⇒ 顶层 `output`」一条**未限定作用域**⇒ ⇒ 与决策② 的两作用域表**不自洽** ⇒ ⇒ 补作用域限定（**顶层**祖先 ⇒ 顶层 `output`；**非顶层成层祖先** ⇒ 体内普通信号）⇒ ⇒ ⚠️ **决策段一直是自洽的**（v1.2 已定两作用域表）⇒ ⇒ **只有 Verification 段漏了限定**；③ **Status 转正**（Proposed → Accepted） |
+| 2026-11-05 | **v1.6.4**（T3-④ 实施期实测 · architect 角色）：**决策② 补工程后果** —— 「未被消费的 `ch_out` 仍是端口」⇒ ⇒ 父层实例化语句 MUST 以**空连接** `.port()` 接上它（否则 Verilator `PINMISSING` ⇒ `--lint-only` 失败；实测空连接 exit 0）；并明确**子 input MUST NOT** 用空连接糊过去（未驱动的子 input 必须冒泡，空连接会让它静默变 X）。决策内容**零变更** |
 | 2026-11-04 | **v1.6.3**（2026-11-04 · architect 角色 · 据 **oracle 实测**订正）：① **§2.5.1 的理由证伪并更换** —— 原写「成层判定在装配期 ⇒ per-emit 字段**无法生效**」⇒ ⇒ 实测 `is_layer()` 是**调用时**读全局（`src/component.cpp:132-141`）+ 分析层**发射时**才调（`src/hierarchy_analysis.cpp:56`）⇒ ⇒ per-emit 字段技术上**会生效**⇒ ⇒ **裁决结论不变**（全局唯一权威），理由换成「**避免双权威的优先级歧义**」（与 ADR-060 §2.4 否决布尔开关同病因）⇒ ⇒ 并注明未来正确形态是「`analyze_hierarchy` 显式参数」；② **补粒度的优先级**（全局 > 实例级 > 类级）与**读取时刻有两处**（构造期 `describe()` 读 + 发射期分析读）⇒ ⇒ **`GranularityScope` MUST 覆盖两段**，只覆盖一段 ⇒ ⇒ **半生效** ⇒ ⇒ 静默反转（零告警）⇒ ⇒ 补**判别性判据**（scope 只包构造 ⇒ 产物 MUST = `RespectDeclarations` 形态）；③ **`Component::set_granularity()` MUST 删除**（实测零调用点 ⇒ ⇒ 绕过 RAII 的永久泄漏通道 ⇒ ⇒ Zero-Debt ⇒ ⇒ 唯一入口 = `GranularityScope`）；④ §4 负面补「作用域必须覆盖两段」的代价 |
 | 2026-11-04 | **v1.6.2**（2026-11-04 · architect 角色 · 实施期缺口复核）：① **§2.5 的选项结构修订** —— 撤销 `out_dir` / `one_file_per_module`（随 ADR-058 v2.9 的「单文件唯一模式」）· 撤销 `granularity` 字段（见 §2.5.1）· 新增 `top_module_name`（见 §2.5.2）⇒ ⇒ **选项结构与实现的漂移收口**；② **新增 §2.5.1「粒度的权威位置 = 全局」** —— 理由是**语义必然**（成层判定在装配期 ⇒ per-emit 字段**无法生效**）⇒ ⇒ `ForceInline` / `ForceLayer` MUST 用 `Component::GranularityScope` 且 MUST 在**装配前**设定；③ **新增 §2.5.2** —— 顶层 module 名只由 `top_module_name` 决定 · **根组件自己写 `CH_HIERARCHY_LAYER("x")` MUST 是 no-op**（不告警）⇒ ⇒ 取代 feature 边界表 B1 的「未裁决」状态；④ 本次**未**改决策①～④ 与决策⑥ ⇒ ⇒ 粒度语义**零变化** |
 | 2026-11-04 | **v1.6.1**（据 critic 第 1 轮 **B1**）：① 决策① 的 `ch_layer<T>` 示例补**两种形态** —— ② `T` 已声明成层 ⇒ 继承其名；③ `T` 未声明成层（helper 被提升）⇒ **MUST 在实例处给名**（`ch_layer<Helper> h{"h","helper_layer"}`）；② **撤销** v1.6 里「实例名派生成模块类型名」的措辞（那会破坏 ADR-060 §2.3 的「同类型同组」⇒ 序号失去分组依据）；③ 明确 `ForceLayer` 强制的组件允许回退 `sanitize(typeid)` + `CHWARN`（ADR-059 §2.2.1 ④） |
