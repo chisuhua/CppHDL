@@ -269,10 +269,23 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
                 }
             }
         } else if (ty == lnodetype::type_output) {
-            const auto origin = (owner == mod_c) ? HierarchyPortOrigin::Self
-                                                  : HierarchyPortOrigin::InlineFolded;
-            mod.ports.push_back(
-                HierarchyPort{vname(n), /*is_input=*/false, n->size(), origin, n});
+            // ⚠️ **ADR-061 决策② 的两作用域表**（F3 · 2026-11-05）：
+            //    · `owner == 本 module` ⇒ **自身端口**（角色①）
+            //    · `owner` 是**被 inline 的**子组件 + 本 module 是 **RTL 顶层**
+            //      ⇒ ⇒ **顶层 output 端口**（角色②的上格 —— 与扁平规则一致 ⇒ ⇒
+            //      ⇒ 「全 inline ⇒ 与扁平逐字节一致」判据不受影响）
+            //    · 同上但本 module 是**非顶层成层** ⇒ ⇒ **体内普通信号**（角色③）
+            //      ⇒ ⇒ **不上该 module 的端口表** ⇒ ⇒ 由发射层发 `logic` 声明
+            //      （⚠️ 缺声明 ⇒ `assign` 引用未声明信号 ⇒ Verilator 报 undeclared）
+            if (owner == mod_c) {
+                mod.ports.push_back(HierarchyPort{vname(n), /*is_input=*/false, n->size(),
+                                                  HierarchyPortOrigin::Self, n});
+            } else if (mod.is_root) {
+                mod.ports.push_back(HierarchyPort{vname(n), /*is_input=*/false, n->size(),
+                                                  HierarchyPortOrigin::InlineFolded, n});
+            } else {
+                mod.body.push_back(HierarchyBodyNode{n, vname(n)});
+            }
         } else {
             mod.body.push_back(HierarchyBodyNode{n, vname(n)});
         }

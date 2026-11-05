@@ -427,7 +427,18 @@ void ModuleEmitter::print_decl(std::ostream &out) {
                 break;
             }
             case ch::core::lnodetype::type_output:
-                outputs.push_back(node);
+                // ⚠️ **角色③**（ADR-061 决策② 下格 · F3）：`type_output` 若是**体内**
+                //    普通信号（inline 后代的 `ch_out` 落在**非顶层**成层 module）
+                //    ⇒ ⇒ 它**不在** `view_.ports` 里 ⇒ ⇒ MUST 发 `logic` 声明
+                //    （否则它是 `assign` 的目标却**无声明** ⇒ ⇒ Verilator 报 undeclared
+                //      identifier ⇒ ⇒ lint 失败）
+                //    ⚠️ 在端口表里的 ⇒ 走**端口声明**路径（`print_output`）⇒ 不变。
+                if (std::find(view_.ports.begin(), view_.ports.end(), node) ==
+                    view_.ports.end()) {
+                    wires.push_back(node);
+                } else {
+                    outputs.push_back(node);
+                }
                 declared_nodes_.insert(node);
                 break;
             case ch::core::lnodetype::type_reg:

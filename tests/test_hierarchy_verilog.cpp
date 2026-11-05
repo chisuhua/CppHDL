@@ -351,6 +351,46 @@ public:
     }
 };
 
+// ── DUT ⑩：**inline 后代**的 `ch_out` 落在**非顶层**成层 module（F3）────────
+//    ⚠️ `F3Leaf` **不**声明 `CH_HIERARCHY_LAYER` ⇒ ⇒ 默认 inline（无 module）
+class F3Leaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    F3Leaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class F3Mid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("f3_mid");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<F3Leaf> leaf{"leaf"};
+    F3Mid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        // ⚠️ **消费 inline 后代的 `ch_out`** ⇒ ⇒ 它落在 **mid**（非顶层成层）
+        io().dout <<= leaf.io().dout;
+    }
+};
+
+class F3Top : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("f3_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<F3Mid> mid{"mid"};
+    F3Top(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
 // ── DUT ③：已 build 但未 add_child（错误模型）────────────────────────────
 class Stray : public ch::Component {
 public:
@@ -635,6 +675,49 @@ TEST_CASE("hierarchical emission: synthesized names never collide with user node
     // 且产物里没有「同名两次声明」的迹象：端口表里每个 `__if_` 名字唯一
     REQUIRE(count_occurrences(child_header, "__if_") ==
             count_occurrences(child_header, "input [7:0] __if_"));
+}
+
+TEST_CASE("hierarchical emission: inline descendant output is a body wire "
+          "in a non-top module", "[hierarchy][emit][scope]") {
+    ch::ch_device<F3Top> dev;
+    const std::string path = std::string(kOutDir) + "/f3_scope.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string mid = module_text(all, "f3_mid");
+    const std::string top = module_text(all, "top");
+    REQUIRE_FALSE(mid.empty());
+    REQUIRE_FALSE(top.empty());
+    const std::string mid_header = mid.substr(0, mid.find(");"));
+
+    // ① ⚭� **mid（非顶层成层 module）的端口表 MUST NOT 含 inline 后代的 `ch_out`**
+    //    （ADR-061 决策② 两作用域表 · 下格 ⇒ 它是**体内普通信号**）
+    REQUIRE(mid_header.find("_leaf_unnamed_output") == std::string::npos);
+    // ② 但它**在 mid 体内** ⇒ 有 `logic` 声明 + `assign`
+    //    （⚠️ 缺声明 ⇒ `assign` 引用未声明信号 ⇒ Verilator 报 undeclared ⇒ lint 失败）
+    REQUIRE(mid.find("logic [7:0] top_mid_leaf_unnamed_output;") != std::string::npos);
+    // ⚠️ **必须断具体的 assign 行**（断「体内出现该名字」**太弱** ⇒ ⇒ 缺 assign 也不会红）
+    REQUIRE(mid.find("assign top_mid_leaf_unnamed_output = ") != std::string::npos);
+    // ③ mid **自身**的 `ch_out` 仍是端口（角色① 不受影响）
+    REQUIRE(mid_header.find("output [7:0] top_mid_unnamed_output") != std::string::npos);
+    // ⑤ ⭐ **产物确定性**（同一设计两次生成**逐字节相同**）
+    //    ⚠️ 这是**常驻防线**：实施期曾观察到一次「同源码、跨 build 的两次运行产物不同」
+    //    （缺 `assign top_mid_leaf_unnamed_output = …`）⇒ ⇒ **未能复现**
+    //    ⇒ ⇒ 根因未定位 ⇒ ⇒ 故 MUST 有这条判据盯着（若它再出现 ⇒ ⇒ 转红）
+    {
+        const std::string path2 = std::string(kOutDir) + "/f3_scope_2.v";
+        auto r2 = ch::toVerilogHierarchical(path2, dev.instance());
+        REQUIRE(r2.ok);
+        REQUIRE(read_file(path2) == all);
+    }
+    // ④ 顶层端口表含 **top 自身**的 `ch_out`（顶层作用域不受影响）
+    //    （⚠️ mid 的 `ch_out` 是 **mid 的**端口 ⇒ 经实例端口映射接到顶层信号
+    //      ⇒ ⇒ **不在**顶层端口表里）
+    REQUIRE(top.find("output [7:0] top_unnamed_output") != std::string::npos);
+    REQUIRE(top.find(".top_mid_unnamed_output(top_unnamed_output)") != std::string::npos);
 }
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {

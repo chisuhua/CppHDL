@@ -134,9 +134,14 @@
 
 ## T0f 批次 B2b-4（F3：inline 后代 `ch_out` 作用域 + `type_output`-as-wire · 待实施）
 
-- [ ] 0.25 分析层按作用域区分：顶层 ⇒ output 端口；非顶层成层 ⇒ **体内普通信号**
-- [ ] 0.26 `print_decl` 增 `type_output`-as-wire 分支；`print_header` 不把它当端口
-- [ ] 0.27 **判据**：非顶层 ⇒ `logic` 声明 + `assign` 且**不**进端口表；顶层 ⇒ 仍是 output（负向对照）
+- [x] 0.25 分析层按作用域区分：顶层 ⇒ output 端口；非顶层成层 ⇒ **体内普通信号**
+      ⇒ ⇒ ⚠️ **前置核实**：4 份 golden 的两处 `inline_folded` **都在 root module**
+      ⇒ ⇒ 本改动**不动 golden** ⇒ ⇒ T3-② 的零差异判据保持（实测 87 断言全绿）
+- [x] 0.26 `print_decl` 增 `type_output`-as-wire 分支（**不在** `view_.ports` 里 ⇒ ⇒ 进
+      `wires` ⇒ ⇒ `emit_signal_decl` 发 `logic [W] name;`）；`print_header` 不把它当端口
+- [x] 0.27 **判据**：非顶层 ⇒ `logic` 声明 + **具体的 `assign` 行** + **不**进端口表；
+      顶层 ⇒ 仍是 output（负向对照）· ⭐ **产物确定性**（两次生成逐字节相同）
+      ⇒ ⇒ **变异 M1**（关掉 as-wire 分支 ⇒ 转红 · 且产物缺 `logic` 声明 ⇒ lint 会抓）
       ⇒ ⚠️ **若不修**：体内输出是 `assign` 的目标却**无声明** ⇒ Verilator 报 undeclared
 
 ## T0g 批次 B2b-5（第三轴 pass-through + 兄弟边 · 待实施）
