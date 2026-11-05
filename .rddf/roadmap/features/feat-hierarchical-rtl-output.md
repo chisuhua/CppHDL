@@ -148,6 +148,65 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 > ⇒ ⇒ **这份映射在「第 0 步」执行时冻结** ⇒ ⇒ 之后任何 Requirement 增删 MUST **同步本文件的表**，
 > 否则「哪条归哪个 change」会静默漂移。
 
+---
+
+### T3-⑤ 的 P0 文档修订（**归档阻断项** · builder 执行 · 无代码）
+
+> ⚠️ **为什么单列成 P0**：这四项不改，T3-⑤ **归档必然被卡**（`verify_openspec_delta.sh` / V1 两条
+> grep / delta 计数校验）⇒ ⇒ 它们与 B1–B7 的代码批次**同权重**，MUST NOT 当成「builder 顺手做掉」。
+
+| # | 修订 | 判据 |
+|---|---|---|
+| **P0-1** | `tasks.md:3` 的「ADDED ×3」⇒ **×2**（delta 实际只有 2 条）；**删** `tasks.md:13` 的 1.4「`invoke_verilator` 支持多文件 + 缓存 key 纳入全部 source」（ADR-058 v2.10 单文件模式已封死）；`design.md` 的「含多文件编译 + 缓存 key 改造」措辞同步删除。⚠️ **工期估算：维持 ~7–9 天，不回缩** —— 删 1.4 省下多文件编译 + 缓存 key（−1~2 天），但 ADR-058 v2.13 的 **E1–E3 + 顶层名 fail-early + 映射表字段**是**新加的**工作量（+1~2 天）⇒ ⇒ 净变化 ≈ 0；**不得**因为删了一个任务就把缓冲清零 | 与 `proposal.md:58` 的「ADDED ×2」一致；`grep -n 多文件` 在该 change 内**零命中**（除「不另起自建多文件 harness」的理由句） |
+| **P0-2** | `tasks.md:34` / `proposal.md:50` / `design.md:11` 三处 `-Wall` ⇒ 改按 **ADR-060 §2.5**（唯一权威：不加 `-Wall` · 捕获退出码 · stderr 无 `%Error` · `lint_off` 白名单 · 禁 `-Wno-fatal`） | 该 change 内 `grep -c -- '-Wall'` = **0** |
+| **P0-3** | delta 加 **MODIFIED ×5**（对应主 spec 的 5 条 Requirement：`-Wall` 1 · 「MUST 抛异常」4 · `strict` 死引用 2，共 7 行）⇒ ⚠️ **标题 MUST 从主 spec 现有 Requirement 标题逐字复制**（否则 `verify_openspec_delta.sh` 的 R3 必红）；并补两句正文：① 观测盲区（ADR-058 §4 风险 6）→ 写进**等价性 Requirement 正文**；② **V1 两条 grep 进 tasks 的 verify 块**（正向 7 行→0 · 反向 `抛异常` 行数→1） | 落地后重跑 `bash scripts/verify_openspec_delta.sh`（4 条全绿）+ V1 两条实测为 0 / 1 |
+| **P0-4** | **观测盲区三处登记的第三处（用法指南）点名到 T3-006 的 D1**（ADR-058 §4 风险 6 写的是「ADR · capability spec · 用法指南」三处同步）⇒ ⇒ 只在 P0-3 补 spec 那一处 ⇒ 归档时与 ADR 的登记义务**对不上账** | T3-006 的 D1 任务行**显式含**「风险 6 边界段」；归档前人工核对三处齐 |
+
+### T3-⑤ 的批次拆分（2026-11-05 · planner · 据 metis gap 分析 · **7 批 + P0**）
+
+> ⚠️ **一个批次 = 一个 commit = 一组回归判据**（沿用 T3-④ 的裁决）⇒ ⇒ 「回归变红」可归因。
+> ⚠️ **顺序不可换**：B2（结构面）在 B3 之前 —— 端口集合判据**不需要 backend 仿真**就能跑，
+> 早跑早抓漂移；B3 之后 B4–B6 才有可编译的产物可比。
+
+| 批 | 内容 | 依赖 | 判据（**每条含负向对照**） | 快速门 |
+|---|---|---|---|---|
+| **B1** | **映射表字段（emitter 产出）**：`HierarchyEmitResult` 新增公开字段（value-only）= `node_id` + 设计级信号名 + 扁平位置 + 层次化位置集合（含 `hier_top_port_name`，**允许为空** = 该信号不在层次化顶层） | — | ① 同**一次** emit 内产出（结构上无法自建）；② harness 断言**两次 emit 共享同一 ctx**（`context::get_eval_list()` 按 `node_id` 反查 ⇒ 不许发明更弱的比对）；③ **删一项 ⇒ 转红**（变异点 = 填充处少写一行）；④ 两次生成顺序确定（逐字段比对 `vector` 顺序，不是「集合相等」）；⑤ `hier_top_port_name` 为空 ⇒ **合法**；**意外为空**（该信号其实在顶层）⇒ **必红** | `bash scripts/verify_hierarchical_rtl.sh`（R1–R7 + `--self-test`） |
+| **B2** | **端口集合两条精确判据（结构面，零仿真）**：① 输入集合**相等**（名字 + 宽度逐项配对）；② 输出集合 = **精确期望集**（扁平输出集 − {`ch_out` 的**最近成层祖先 ≠ 根**}）⇒ ⇒ ⚠️ **扁平输出集的来源 MUST 是解析扁平 `.v` 的端口表**（独立载体），**MUST NOT** 从 ctx 第二次推导（否则与层次化侧同构缺陷双盲） | B1 | ① 漏发一个**输入**端口 ⇒ 红；② **不减法**（把成层祖先的 `ch_out` 留在顶层）⇒ 判据②红 ⇒ ⇒ **正反两面**缺一不可（只验「漏发」会放过「减法写错成恒等」）；③ `node_id` 索引逐项比名字 ⇒ **对调两个名字**必红（**MUST NOT** 只比集合交集） | B1 的门 |
+| **B3** | **backend 显式端口集合（E1）**：新入口收显式集合 ⇒ 集合由 **B1 产物派生**（**MUST NOT** 手写/手工列举）；`build_port_access_table` / `emit_sim_main_postlude` 走该集合；**既有 `initialize(ctx,…)` 逐字节不变** | B2 | ① 集合漏 **clock/reset** ⇒ 寄存器冻结 ⇒ B5 的「随激励变化」判据**必红**（这是等价性最大恒绿源的检测器）；② 既有路径零变化 ⇒ 75 个 `verilator_e2e` 全绿 + 扁平外部基线 3 设计 `cmp` 全 0；③ 手写集合（绕过 emitter 产物）⇒ **评审项**（结构上无法机械判 ⇒ 记入 diff review checklist） | `ctest -L verilator_e2e` + 扁平冒烟 |
+| **B4** | **隔离与失败语义（E2/E3）+ 顶层名 fail-early**：双 `work_dir`；失败 MUST 返回 `VerilatorError`；顶层名 ≠ `top` ⇒ 入口拒绝且**不留文件** | B3 | ① **模拟一次 Verilator 编译失败 ⇒ harness MUST 红**（**MUST NOT** SKIP）—— 这是 E3 的投毒形态，缺它则「失败静默 ⇒ 套件恒绿」无判据；② 两个 backend 共用 work_dir ⇒ 产物互踩（不是静默通过）；③ 顶层名 ≠ `top` ⇒ `ok=false` + 点名 + **零新文件** | B3 的门 + E3 用例 |
+| **B5** | **等价性骨架 + 字节一致性 + P8 两层结构（前移）**：两层 DUT；`O` 手写声明（⊇ 全部 `ch_out`）；**默认全 inline ⇒ `cmp` flat.v 与 hier.v 退出码 0**；harness **当场**落成「`tests/` 内部实现 + 同文件薄包装」两层（**不暴露**公共 API） | B4 | ① `cmp` 退出码 0；**负向对照** = 在 hier 产物加一行注释 ⇒ 红；② 「随激励变化」机械判据（两组激励取值集合不同）；③ 判别力自证 ≥2 形态：**删一条连线** / **改一个隐式端口方向** ⇒ 两红 ⇒ 还原复绿；④ 激励施加 MUST 用 `set_input_value(port, <纯整数>)`（`<<=` 会把顶层端口变成内部驱动 ⇒ 观测面不一致 ⇒ 假分歧） | B4 的门 + 新用例 |
+| **B6** | **DUT 矩阵补齐（其余 4 个）+ 粒度矩阵**：三层+兄弟连线 / bundle 成员跨层 / 含 `ch_mem` / **真实最深设计** | B5 | ⚠️ **粒度矩阵的裁决（不许 builder 临场发明）**：**含 `ch_mem` 的 DUT 与深设计用 `RespectDeclarations`**（ForceLayer 会把 mem 持有者成层 ⇒ 跨模块 `ch_mem` 被**合法拒绝** ⇒ 该变体**无可执行对象**）；`ForceInline` vs `ForceLayer` 的逐拍对照**只用于不含跨模块 mem 读的小 DUT**；**深设计** = 裁剪版 RV32I 核（reg + imem/dmem + 2–3 个**声明成层**的流水级），**逐顶层端口核宽度 ≤ 64**（>64 ⇒ backend 合法拒绝 ⇒ 判据空转） | `ctest -LE perf` 全量 |
+| **B7** | **确定性 + 零回归 + P8 机械守卫**：同 ABI 两次生成字节相同；**计数锚点按新增用例同步**；P8 守卫 = 本 change 在 `include/` 只动 `hierarchy_verilog.h` 且**无新公共头** | B6 | ① 确定性：引入一处顺序依赖 ⇒ 红；② 锚点：`CTEST_TOTAL` / non-perf / **`VERILATOR_E2E_TOTAL`** 三处按实际增量更新（⇒ ⚠️ **本文件的验收段原写「锚点不变」是错的** —— 新增 `verilator_e2e` 用例必然改数）；parity 两锚点（66 / 289）**不变**（等价性用例不是 `DUAL_BACKEND_TEST_PAIR`）；③ P8：`git diff --name-only` 断言 | 全量 |
+
+**三个横切投毒（缺一条就是恒绿源）**：
+
+1. **删 reset 端口** ⇒ B5 的「随激励变化」判据**必红**（否则「寄存器冻结 ⇒ 逐拍全等恒绿」无判据）。
+2. **输出集合不减法** ⇒ B2 判据②红（正反两面）。
+3. **模拟 Verilator 编译失败** ⇒ harness 红（**非 SKIP**）（E3 的投毒形态）。
+
+⚠️ **等价性用例的标签口径（裁决）**：等价性用例依赖 Verilator backend ⇒ **MUST 打 `verilator_e2e`**
+（`BUILD_VERILATOR=OFF` 时随标签排除，与既有 75 个同构）⇒ ⇒ 于是 `VERILATOR_E2E_TOTAL` **必变**。
+
+### T3-⑥ 的批次（3 批 · 前置 T3-⑤）
+
+| 批 | 内容 | 判据 |
+|---|---|---|
+| **D1** | 用户面文档：`docs/usage_guide/05-component-design.md` §5 改写 · `HIERARCHICAL-RTL-AUTHORING-GUIDE.md`（删 `CH_MODULE_NAME` · 改 `CH_HIERARCHY_LAYER("name")` · 补档 ③ · **补 ADR-058 §4 风险 6 的观测盲区边界段**〔P0-4 的第三处登记〕）· 合并宏**签名面 5 处** | 示例**照抄即可编译**；指南内 `CH_MODULE_NAME` 零命中 |
+| **D2** | 架构主题文档转正 + 根 `AGENTS.md`「WHERE TO LOOK」补层次化入口 | `verify_agents_size.sh` 通过（≤ 72 KiB）；入口路径可解析到实际文件 |
+| **D3** | 零漂移 | `ctest -LE perf` / samples / examples 全绿（文档 change ⇒ 理论零代码影响） |
+
+### T2b 的批次（3 批 · 与主线无依赖 · 可并行）
+
+| 批 | 内容 | 判据（含负向对照） |
+|---|---|---|
+| **U1** | `io() const`（`const io_type& io() const`） | 编译期探针：`const` 成员函数内可读 `impl()` / `name()` / `is_valid()`；**破坏性对照** = 移除 const 重载 ⇒ 探针**编译失败** |
+| **U2** | `context` 策略枚举（`kAllowDuplicates` 默认 / `kRejectDuplicates`）+ 建点检测 + 两层护栏 | ① on ⇒ **抛**（不静默加后缀）+ 错误信息含**冲突的节点名**；② 默认 off ⇒ 不抛 **且产物 `cmp` 0**；③ **判据 MUST 用专门构造的重名 DUT**（仓内 `include/` 641 个 `ch_in` 零显式名字 ⇒ 拿现有设计当 DUT，全仓转红是规格预期）；④ ⚠️ **诊断变量禁名 `msg`**（`CHERROR`/`CHREQUIRE`/`CHFATAL_*` 宏内部声明 `std::string msg` ⇒ 会绑定到未初始化变量 ⇒ 实测 SIGSEGV / 乱码）；⑤ 「on 抛」在**静态析构期**结构上失效（所有宏都有 `in_static_destruction()` 守卫）⇒ MUST 明确定义降级行为（记录 + 失败结果），否则「off 不抛」与「on 抛」之间有未定义带 |
+| **R** | 零回归 + 锚点 | `ctest -LE perf` / samples / examples 全绿 · `verify_test_counts.sh` 两条锚点同步 |
+
+⚠️ **U2 的错误模型分层（写在 proposal 里，别留给实施者即兴）**：建图期 fail-fast（抛）与
+**发射期**错误模型（`HierarchyEmitResult` 结构体承载、发射器内 MUST NOT 抛）是**两层**
+⇒ ⇒ 若混写，会被 ADR-058 §2.3 ⑤ 的「发射器内不依赖异常」读成「T2b 不许抛」。
+
 | 阶段 | change | 内容 | 前置 | 产出 | 验收 | 预估 |
 |---|---|---|---|---|---|---|
 | **S0** | ✅ **spike（已完成 2026-11-02）** | `verilator --json-only` 能否提 `(parent_module, inst_name, module_name)` ⇒ **能**（`modulesp` 列表 + CELL 的 `modp` 查表）⇒ 已固化 `scripts/lib/verilog_tree_extract.py` + `tests/fixtures/hierarchical_tree_extract/` + `scripts/verify_hierarchical_tree_extract.sh`（含负向对照）+ CI 挂载 | 无 | 可机械比对的 module 树提取器 | 3 层**手写** SV 上提取成功 ✅ | ~0.5 天（已耗） |
@@ -418,7 +477,8 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
       ADR-061 决策② 行 2）
 - [ ] **`type_output` 三角色**：① 自身端口 ⇒ 在端口表；② 隐式输出端口 ⇒ 在端口表且名字是
       合成名；③ **体内 wire** ⇒ **有 `logic` 声明**且**不在**端口表
-      （⇒ 缺声明 MUST 被 `verilator --lint-only -Wall` 抓到）
+      （⇒ 缺声明由 **ADR-060 §2.5 的 lint 门**负责 —— ⚠️ 该门**不加 `-Wall`**；
+      本仓的合法产物会触发 `DECLFILENAME` / `PINCONNECTEMPTY` / `UNUSEDSIGNAL`）
 
 **clock / reset 发射规则**
 
@@ -523,7 +583,8 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
       方向** ⇒ ⇒ 两种都要转红，还原后复绿（只验一种 ⇒ harness 可能对方向路径**失明**）
 - [ ] **确定性**：同一设计连续生成两次**字节相同** ⇒ ⚠️ 限定「**同编译器 / 同 ABI 内**」
       （`typeid` 拼写实现相关 · ADR-059 §2.2.1 ④）
-- [ ] 所有产物 `verilator --lint-only -Wall` **零 error**
+- [ ] 所有产物通过 **ADR-060 §2.5 的 lint 门**（退出码 + 无 `%Error` + `lint_off` 白名单；
+      ⚠️ **不加 `-Wall`**、**禁 `-Wno-fatal`**）
 - [ ] **既有 backend 入口逐字节不变**：`initialize(ctx, …)` 的既有行为 MUST 不变
       （⇒ T3-⑤「只增不改」的**另一半**：新增 `initialize_with_verilog` 不得改动既有路径）
 
@@ -536,8 +597,10 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 - [ ] **全程**：capability delta 齐备（归档**禁** `--skip-specs`，除 T3-③ / T3-⑥ 显式
       `skip_specs: true`）· `openspec validate --strict` 通过 · `ctest -LE perf` /
       `run_all_samples.sh` / `run_all_ported_tests.sh` 全绿 ·
-      `scripts/verify_test_counts.sh` 三锚点同步 ·
-      `scripts/verify_dual_backend_parity.sh` 通过 ·
+      `scripts/verify_test_counts.sh` **两条**锚点同步（`CTEST_TOTAL` + `VERILATOR_E2E_TOTAL`
+      —— ⚠️ 新增用例必然改数，**不是**「保持不变」）·
+      `scripts/verify_dual_backend_parity.sh` 通过（**仅当**新增了 `DUAL_BACKEND_TEST_PAIR`
+      时其两锚点才变；等价性用例**不是** parity pair ⇒ 66 / 289 不变）·
       新增护栏 `scripts/verify_hierarchical_rtl.sh` 挂 CI **两处**
 - [ ] **护栏实现约束**：`verify_hierarchical_rtl.sh` 的判据 MUST 基于
       `verilator --json-only` 的结构化提取（复用 `scripts/lib/verilog_tree_extract.py`）
