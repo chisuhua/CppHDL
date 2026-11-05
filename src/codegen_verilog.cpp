@@ -717,6 +717,18 @@ void ModuleEmitter::print_reg(std::ostream &out, ch::core::regimpl *node) {
                    node->name().c_str());
         }
 
+        // ⚠️ **驱动重定向**（发射期虚拟重定向 · ADR-060 §2.1 行 1）
+        //    「父层驱动子层寄存器」⇒ ⇒ 子侧端点**不是**子端口 ⇒ ⇒ 在子侧合成
+        //    **input** 端口 ⇒ ⇒ 本寄存器的 next **改由该端口驱动**
+        //    ⇒ ⇒ ⚠️ 原 next 节点**在父 module 里** ⇒ ⇒ 子 module **引用不到**
+        //    ⇒ ⇒ 不重定向 ⇒ ⇒ 该寄存器会退化成「保持」（**静默丢驱动**）。
+        //    ⚠️ 重定向只改**发射期**的取值 ⇒ ⇒ **MUST NOT** 写回 `lnodeimpl`。
+        const auto redirected = view_.port_drives_node.find(node);
+        if (redirected != view_.port_drives_node.end()) {
+            emit_always_ff(out, node_names_[node], redirected->second, reset_value);
+            return;
+        }
+
         if (next_node && node_names_.count(next_node)) {
             // For register updates, assign to the register itself
             std::string reg_name = node_names_[node];

@@ -132,8 +132,11 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     //    ⇒ ⇒ 父侧实例端口映射 `. __x_<n>(<父侧端点>)`
     struct SynthPortInfo {
         std::string port;
-        std::string node;
+        std::string node;        ///< output 端口：子侧节点名（体内 `assign` 的 RHS）
         std::uint32_t width = 0;
+        bool is_input = false;   ///< `true` = 行 1（input 端口 · 值由父层提供）
+        /// 行 1：被重定向的节点（**寄存器**）⇒ ⇒ 发射期改由合成端口驱动
+        const lnodeimpl *redirect = nullptr;
     };
     /// 子 module key → 它要发的合成端口（⇒ ⇒ 端口声明 + 体内 assign）
     std::map<std::string, std::vector<SynthPortInfo>> synth_by_child;
@@ -150,30 +153,63 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         const std::string desc =
             "'" + e.from_node + "'@'" + e.from_module + "' -> '" + e.to_node + "'@'" +
             e.to_module + "' (" + e.reason + ")";
-        // ⚠️ **只处理「直接父子 + 子→父 + 子侧端点不是端口」这一格**
-        const bool can_synthesize =
-            e.child_drives_parent && e.from_ptr != nullptr && e.to_ptr != nullptr &&
-            !e.child_instance_name.empty() && names.count(e.from_ptr) != 0 &&
-            names.count(e.to_ptr) != 0;
-        if (!can_synthesize) {
+        const bool has_nodes = (e.from_ptr != nullptr && e.to_ptr != nullptr &&
+                                !e.child_instance_name.empty() &&
+                                names.count(e.from_ptr) != 0 &&
+                                names.count(e.to_ptr) != 0);
+        if (!has_nodes) {
             remaining.push_back(desc);
             continue;
         }
-        const std::string &child_key = e.from_module;   // 子侧 module（驱动端所在）
-        const std::string &parent_key = e.to_module;   // 父侧 module（被驱动端所在）
-        auto &port_map = synth_port_of[child_key];
-        auto it = port_map.find(e.from_ptr);
-        if (it == port_map.end()) {
-            const std::string port =
-                "__x_" + std::to_string(synth_seq[child_key]++);
-            port_map[e.from_ptr] = port;
-            synth_by_child[child_key].push_back(
-                SynthPortInfo{port, names.at(e.from_ptr), e.from_ptr->size()});
-            it = port_map.find(e.from_ptr);
+        // ⚠️ **两个方向的合成条件不同**：
+        //    · 行 2（子 → 父）⇒ ⇒ 子侧 = **驱动端**所在 module · 父侧 = 被驱动端所在 module
+        //    · 行 1（父 → 子）⇒ ⇒ 子侧 = **被驱动端**所在 module · 父侧 = 驱动端所在 module
+        if (e.child_drives_parent) {
+            // ── 行 2：子侧合成 **output** 端口 `__x_<n>`（父层取它的值）──
+            const std::string &child_key = e.from_module;
+            const std::string &parent_key = e.to_module;
+            auto &port_map = synth_port_of[child_key];
+            auto it = port_map.find(e.from_ptr);
+            if (it == port_map.end()) {
+                const std::string port =
+                    "__x_" + std::to_string(synth_seq[child_key]++);
+                port_map[e.from_ptr] = port;
+                synth_by_child[child_key].push_back(SynthPortInfo{
+                    port, names.at(e.from_ptr), e.from_ptr->size(),
+                    /*is_input=*/false, /*redirect=*/nullptr});
+                it = port_map.find(e.from_ptr);
+            }
+            synth_conns[parent_key + "\x1f" + e.child_instance_name].push_back(
+                HierarchyConnection{it->second, names.at(e.to_ptr), /*into_child=*/false});
+        } else {
+            // ── 行 1：子侧合成 **input** 端口 `__if_<n>`（父层驱动它）──
+            //    ⚠️ 本批**只**覆盖「子侧端点是**寄存器**」+「父侧驱动节点在父 module 内」
+            //    ⇒ ⇒ 其余（proxy/op 源 · 第三轴）⇒ ⇒ 仍 fail-closed（**B2b-3**）
+            const bool child_is_reg =
+                (e.to_ptr->type() == lnodetype::type_reg);
+            const auto drv_mod = analysis.module_of_node.find(e.from_ptr);
+            const bool driver_in_parent =
+                drv_mod != analysis.module_of_node.end() && drv_mod->second == e.from_module;
+            if (!child_is_reg || !driver_in_parent) {
+                remaining.push_back(desc);
+                continue;
+            }
+            const std::string &child_key = e.to_module;    // 子侧 = 被驱动端所在 module
+            const std::string &parent_key = e.from_module;  // 父侧 = 驱动端所在 module
+            auto &port_map = synth_port_of[child_key];
+            auto it = port_map.find(e.to_ptr);
+            if (it == port_map.end()) {
+                const std::string port =
+                    "__if_" + std::to_string(synth_seq[child_key]++);
+                port_map[e.to_ptr] = port;
+                synth_by_child[child_key].push_back(SynthPortInfo{
+                    port, /*node=*/std::string(), e.to_ptr->size(),
+                    /*is_input=*/true, /*redirect=*/e.to_ptr});
+                it = port_map.find(e.to_ptr);
+            }
+            synth_conns[parent_key + "\x1f" + e.child_instance_name].push_back(
+                HierarchyConnection{it->second, names.at(e.from_ptr), /*into_child=*/true});
         }
-        const std::string &port = it->second;
-        synth_conns[parent_key + "\x1f" + e.child_instance_name].push_back(
-            HierarchyConnection{port, names.at(e.to_ptr), /*into_child=*/false});
     }
 
     // ── 合成类诊断的 **collect**（ADR-060 §2.4.1）────────────────────────
@@ -416,9 +452,18 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             if (it != synth_by_child.end()) {
                 for (const auto &sp : it->second) {
                     view.synthesized_ports.push_back(
-                        SynthesizedPort{sp.port, /*is_input=*/false, sp.width});
-                    view.body_epilogue.push_back("    assign " + sp.port + " = " +
-                                                  sp.node + ";");
+                        SynthesizedPort{sp.port, sp.is_input, sp.width});
+                    if (sp.is_input) {
+                        // ⚠️ input 端口：值由**父层**提供 ⇒ ⇒ 本 module 内**不**发 assign
+                        //    ⇒ ⇒ 改由**驱动重定向**把被驱动的节点接到该端口
+                        //    （⇒ ⇒ 发射期虚拟重定向 ⇒ ⇒ MUST NOT 写回 IR）
+                        if (sp.redirect != nullptr) {
+                            view.port_drives_node[sp.redirect] = sp.port;
+                        }
+                    } else {
+                        view.body_epilogue.push_back("    assign " + sp.port + " = " +
+                                                      sp.node + ";");
+                    }
                 }
             }
         }

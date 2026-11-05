@@ -65,6 +65,13 @@ struct ModuleView {
     /// body 尾部追加的原文（层次化发射用它写**实例化语句**与实例连接网）。
     /// ⚠️ 扁平路径恒为空 ⇒ ⇒ 产物逐字节不变。
     std::vector<std::string> body_epilogue;
+    /// **驱动重定向表**（发射期虚拟重定向 · ADR-060 §2.1）⇒ ⇒
+    /// 「本 module 内这个节点**改由**哪个**合成端口**驱动」。
+    ///
+    /// ⚠️ **MUST NOT** 写回 `lnodeimpl`（`set_src` 会污染 `users_` ⇒ ⇒ 既有
+    /// `toVerilog()` 产物 / 解释器行为 / 两次生成的确定性**全部会变**）⇒ ⇒
+    /// 只在**发射期**生效 ⇒ ⇒ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
+    std::unordered_map<const ch::core::lnodeimpl *, std::string> port_drives_node;
     /// **合成端口**（隐式端口 · ADR-060 §2.1）⇒ ⇒ **没有对应的 IR 节点**
     /// （隐式端口是**发射期**造出来的 ⇒ ⇒ 不是 `lnodeimpl`）⇒ ⇒ 故与 `ports` 分开。
     /// ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。

@@ -229,6 +229,35 @@ public:
     }
 };
 
+// ── DUT ⑥：**父层直接改子层寄存器的 next** ⇒ ⇒ ADR-060 §2.1 **行 1** ─────
+//    （子侧端点**不是**子端口 ⇒ ⇒ 必须合成**子侧 input** 端口 + 驱动重定向）
+class InnerRow1 : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inner_row1");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};    // ⚠️ 内部寄存器（父层直接改它的 next）
+    InnerRow1(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= acc; }
+};
+
+class OuterRow1 : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("outer_row1");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InnerRow1> inner{"inner"};
+    OuterRow1(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        // ⚠️⚠️ 父层直接改**子层寄存器的 next** ⇒ ⇒ 行 1 的典型形态
+        inner.instance().acc->next = io().din;
+        io().dout <<= inner.io().dout;
+    }
+};
+
 // ── DUT ③：已 build 但未 add_child（错误模型）────────────────────────────
 class Stray : public ch::Component {
 public:
@@ -404,6 +433,38 @@ TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",
     // ⑥ 未被子层消费的 output 端口 MUST 以**空连接**出现（`.port()`）
     //    （否则 Verilator 报 PINMISSING ⇒ ⇒ lint 失败）
     REQUIRE(parent.find(".top_inner_unnamed_output()") != std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: row-1 implicit input port is synthesized",
+          "[hierarchy][emit][implicit]") {
+    ch::ch_device<OuterRow1> dev;
+    const std::string path = std::string(kOutDir) + "/row1_implicit.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    // ⚠️ **本批之前**：这类形态是 fail-closed ⇒ ⇒ 「能产出」本身就是判别力
+    REQUIRE(r.ok);
+
+    const std::string all = read_file(path);
+    const std::string child = module_text(all, "inner_row1");
+    const std::string parent = module_text(all, "top");
+    REQUIRE_FALSE(child.empty());
+    REQUIRE_FALSE(parent.empty());
+
+    // ① 子 module 有一个**合成 input 端口** `__if_0`（值由父层提供）
+    REQUIRE(child.find("input [7:0] __if_0") != std::string::npos);
+    // ② ⭐ **驱动重定向**：子内的寄存器 next **改由该端口驱动**
+    //    （⚠️ 不重定向 ⇒ ⇒ 该寄存器退化成「保持」⇒ ⇒ **静默丢驱动**）
+    REQUIRE(child.find("__if_0;") != std::string::npos);
+    REQUIRE(child.find("Register update (no next)") == std::string::npos);
+    // ③ 父 module 的实例端口映射把**父层驱动**接到它
+    REQUIRE(parent.find(".__if_0(") != std::string::npos);
+    // ④ 子 module 内**不**出现父层的驱动信号（零跨 module 引用）
+    REQUIRE(child.find("top_unnamed_input") == std::string::npos);
+    // ⑤ 合成名**只**出现在非顶层 module 的**端口声明**里
+    const std::string parent_header = parent.substr(0, parent.find(");"));
+    REQUIRE(parent_header.find("__if_") == std::string::npos);
+    REQUIRE(parent_header.find("__x_") == std::string::npos);
 }
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
