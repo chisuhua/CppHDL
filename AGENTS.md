@@ -453,41 +453,39 @@ ctest --output-on-failure
   `CONVENTIONS` / `ANTI-PATTERNS` / `KNOWN LIMITATIONS` / `VERILATOR BACKEND RULES`，
   **MUST NOT** 再往本文件追加流水条目 —— 本文件是**每次会话都注入上下文**的文件。
 
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+<!-- codebase-memory-mcp 图谱工具 -->
+## 图谱工具：codebase-memory-mcp
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+> ⚠️ **旧的 `code-review-graph` 工具名一律作废** —— MCP server 已换成
+> `codebase-memory-mcp`（`~/.config/opencode/opencode.jsonc` 的 `mcp` 段）。
+> 旧名 `semantic_search_nodes` / `get_impact_radius` / `get_review_context` /
+> `get_affected_flows` / `get_architecture_overview` / `list_communities` /
+> `refactor_tool` **全部不存在**；`query_graph` 虽同名，但它是 **Cypher**
+> （不是 `pattern="tests_for"`）。
+> ⚠️ **`code-review-graph` 这个 CLI 仍在用** —— 它是 Python 包
+> `code_review_graph`（v2.3.3），是 `.git/hooks/pre-commit` 的实现
+> （`update` + `detect-changes --brief`）⇒ 与本 MCP 是**两个东西**，别一起删。
 
-### When to use graph tools FIRST
+**优先查图谱，再退 Grep/Glob/Read** —— 图谱更快更省 token，且直接给出
+调用链 / 依赖 / 测试覆盖这类结构化上下文。
 
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
+| 想知道 | 用这个 |
+|--------|--------|
+| 「X 在哪定义 / 有哪些同名符号」 | `search_graph`（BM25 + camelCase 拆分 + 结构加权；`name_pattern` / `qn_pattern` / `file_pattern` / `label` / `include_connected` 过滤；`offset`+`limit` 翻页）|
+| 「含某段文本的代码在哪」 | `search_code`（grep 后用图增强：命中归并到所在函数，按定义/被调用/测试排序；`regex` / `path_filter` / `file_pattern`）|
+| 「谁调用了 X / X 调用了谁 / 影响面」 | `trace_path`（`direction=inbound\|outbound\|both`、`mode=calls\|data_flow\|cross_service`、`depth`、`risk_labels`、`include_tests`）|
+| 「读 X 的源码」 | `get_code_snippet`（传 `search_graph` 返回的 `qualified_name`；**短名也可**（歧义时返回候选）；`include_neighbors` 带邻居上下文）|
+| 「整体结构 / 热点 / 入口点 / 模块聚类」 | `get_architecture`（`aspects=[structure, dependencies, entry_points, hotspots, clusters, layers, boundaries, packages]`；`clusters` = Leiden 社区检测）|
+| 「多跳 / 聚合 / 跨层查询」 | `query_graph`（**Cypher**；节点标签 `Function`/`Class`/`Method`/`Field`/`Section`/`File`/`Module`/`Variable`，边 `CALLS`/`USAGE`/`DEFINES`/`TESTS`/`IMPORTS`/`INHERITS`/`WRITES`）⚠️ **必须显式写节点 label 且显式写边类型** —— 不写 label 只采样 30 个节点（`MATCH (n)` ⇒ 30，`MATCH (n:Function)` ⇒ 1003），不写边类型 ⇒ **0 行**（静默空结果）。可用 `get_graph_schema` 查标签/边清单 |
+| 「这次改动的影响面」 | `detect_changes`（`project` 必填 + `since=<ref>` 或 `base_branch`、`scope`、`depth`）|
+| 「图谱新不新鲜 / 有哪些项目」 | `index_status` / `list_projects` |
 
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+⚠️ **权限**：全局配置 `codebase-memory-mcp_*` 默认 **deny**，仅 10 个工具 allow
+（`search_graph` / `search_code` / `get_code_snippet` / `trace_path` /
+`query_graph` / `get_architecture` / `get_graph_schema` / `detect_changes` /
+`list_projects` / `index_status`）⇒ **`index_repository` / `delete_project` /
+`manage_adr` / `ingest_traces` 调不到**（需要时请用户执行）。
 
-### Key Tools
-
-| Tool | Use when |
-| ------ | ---------- |
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
+⚠️ **新鲜度**：索引跟随 git 提交自动更新（实测 `index_status` 的 `head_sha`
+= 当前 HEAD）⇒ 若 `head_sha` 落后于 HEAD，图谱偏旧 ⇒ 此时以 Grep/Glob/Read 为准，
+并**如实告知用户**图谱未跟上。
