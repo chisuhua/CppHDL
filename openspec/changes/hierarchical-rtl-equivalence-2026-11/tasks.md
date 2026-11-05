@@ -32,11 +32,22 @@
 - [x] 1.6 **E2 物理隔离**：与既有路径 **两个独立 work_dir**（共享 `verilator_work_dir_` ⇒ 互踩）
       ⇒ ⇒ **B3 已落地**：`[hier]` 用例用 `make_temp_dir("_hier_v")`（Verilog 产物）
       与 `make_temp_dir("_hier_b")`（backend work dir）两个目录，且与既有路径的实例**不同**
+      ⇒ ⇒ **B4a 加固**：`[hier]`（E2 隔离）用例 = 两个**不同设计** × 两个 work_dir ⇒
+      ① 每个 work_dir 的 `top.v` == **它自己**的产物（且两者内容**不同** ⇒ 共用 dir 时必然相同
+      ⇒ 本判据对「实现忽略构造器实参」有判别力）；② 两个实例各自驱动自己的设计（0x2A→0x2A 寄存器通路 /
+      0x2A→0x2B 组合通路）；③ 交叉再驱动一次（0x5C）确认无串味
 - [x] 1.7 **E3**：失败 MUST **致命**（返回 `VerilatorError`，**MUST NOT** 沿用
       `CHWARN` best-effort）；harness MUST 断言 backend **真初始化成功**（非 SKIP 即过）
       ⇒ ⇒ **B3 已落地**：`compile_and_load(/*fatal=*/true)` 路径；`[hier]` 用例 `REQUIRE(init.has_value())`
       （**不 SKIP**）+ 值判据 0x2A / 0x5C（手推：若 clock/reset 未接 ⇒ 寄存器冻结 ⇒ 恒 0 ⇒ 转红）
-      ⏳ **顶层名 fail-early 归 B4**（本批未做：`root_module != "top"` ⇒ 入口致命拒绝 + 点名 + 不留文件）
+      ⇒ ⇒ **B4a 加固**：`[hier][negative]`（编译失败投毒）= 端口集合取自**真实产物**（前置校验必过）
+      + 产物换成**语法错误**的 Verilog ⇒ MUST 返回 `VerilatorError` 且 `code == VerilatorCompile`
+      + 端口表**不得半初始化**（`port_access_snapshot()` 空 · `clock_node_id() == UINT32_MAX`）
+      ⏳ **顶层名 fail-early：前提不可复现 ⇒ 待 architect 裁决**（**不做**实现）——
+      见 `.rddf/reviews/hierarchical-rtl-equivalence-2026-11-discovery.md`：实测根 module 名 ≠ `top`
+      也能被本入口正常仿真（值判据 0x2A 通过），编译期失败的真因是**输入文件名**
+      （Verilator prefix = 文件名主干 ⇒ 入口复制成 `top.v` 已天然满足）⇒ ⇒
+      按现文实现会**拒绝本可工作的产物**且判据无失败模式支撑（`design_drift`，路由 architect）
 
 ## T2 映射表与观测集
 

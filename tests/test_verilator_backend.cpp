@@ -795,6 +795,17 @@ public:
     }
 };
 
+// 第二个**不同**设计（纯组合 ⇒ 与 BeTop 的产物逐字节不同）⇒ 供 E2 隔离判据比对
+class BeCombo : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("be_combo");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    BeCombo(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din + 1_d; }
+};
+
 }   // namespace
 
 TEST_CASE("VerilatorBackend - explicit port set without clock/reset is rejected",
@@ -882,4 +893,126 @@ TEST_CASE("VerilatorBackend - external hierarchical Verilog via explicit port se
         sim.tick();
         REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.dout)) == 0x5Cu);
     }
+}
+
+TEST_CASE("VerilatorBackend - external Verilog compile failure is fatal, not a WARN",
+          "[verilator][backend][hier][negative]") {
+    // ADR-058 §2.3 E3：本入口的失败 MUST **致命**（返回 VerilatorError）
+    //   ⇒ ⇒ 投毒形态 = 喂一个**语法错误**的产物（端口集合仍取自**真实产物** ⇒
+    //   前置校验通过 ⇒ 失败只能来自编译 ⇒ 恰好落在 E3 的判据上）
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH; fatal-failure test skipped");
+        return;
+    }
+    const std::string vdir = make_temp_dir("_hier_bad_v");
+    const std::string wdir = make_temp_dir("_hier_bad_b");
+    REQUIRE_FALSE(vdir.empty());
+    REQUIRE_FALSE(wdir.empty());
+
+    ch::ch_device<BeTop> dev;
+    const std::string good = vdir + "/good.v";
+    std::remove(good.c_str());
+    auto emitted = ch::toVerilogHierarchical(good, dev.instance());
+    INFO("emit error: " << emitted.error);
+    REQUIRE(emitted.ok);
+    const auto ports = ch::backend_port_set(emitted, "top");
+    REQUIRE_FALSE(ports.empty());
+
+    const std::string broken = vdir + "/broken.v";
+    {
+        std::ofstream out(broken);
+        REQUIRE(out.is_open());
+        out << "module top(output wire y);\n  assign y = ;\nendmodule\n";
+    }
+
+    auto backend = std::make_unique<VerilatorBackend>(wdir);
+    ch::data_map_t scratch;
+    auto init = backend->try_initialize_with_verilog(broken, ports, scratch);
+    INFO("init error: " << (init.has_value() ? std::string("(none)") : init.error().message));
+    // ① MUST 返回错误（**不是**「CHWARN 后继续」的半初始化状态）
+    REQUIRE_FALSE(init.has_value());
+    // ② 且失败点 MUST 是**编译**（证明前置校验（⊇ {clock, reset}）已通过）
+    REQUIRE(init.error().code == VerilatorErrorCode::VerilatorCompile);
+    // ③ 不得留下半套端口表（后续 tick 也不该读到 0 当作「正常」）
+    REQUIRE(backend->port_access_snapshot().empty());
+    REQUIRE(backend->clock_node_id() == UINT32_MAX);
+    // ④ 失败后仍可被 `clear()` 正常回收
+    backend->clear();
+    REQUIRE(backend->port_access_snapshot().empty());
+}
+
+TEST_CASE("VerilatorBackend - two backends use separate work dirs (E2 isolation)",
+          "[verilator][backend][hier]") {
+    // ADR-058 §2.3 E2：两条路径 / 两个实例 MUST **物理隔离**（`top.v`、`sim_main.cpp`、
+    //   `obj_dir` 都在 work_dir 下 ⇒ 共用即互踩）。判据 = 每个 work_dir 里**只有**
+    //   自己的产物、且两个目录的产物**不同**（实现若忽略构造器实参 ⇒ 两目录内容相同或缺失）
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH; isolation test skipped");
+        return;
+    }
+    const std::string va = make_temp_dir("_hier_iso_va");
+    const std::string vb = make_temp_dir("_hier_iso_vb");
+    const std::string wa = make_temp_dir("_hier_iso_wa");
+    const std::string wb = make_temp_dir("_hier_iso_wb");
+
+    ch::ch_device<BeTop> dev_a;
+    const std::string pa = va + "/hier_a.v";
+    std::remove(pa.c_str());
+    auto ea = ch::toVerilogHierarchical(pa, dev_a.instance());
+    REQUIRE(ea.ok);
+
+    ch::ch_device<BeCombo> dev_b;
+    const std::string pb = vb + "/hier_b.v";
+    std::remove(pb.c_str());
+    auto eb = ch::toVerilogHierarchical(pb, dev_b.instance());
+    REQUIRE(eb.ok);
+
+    auto read_text = [](const std::string &path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    };
+
+    auto backend_a = std::make_unique<VerilatorBackend>(wa);
+    ch::data_map_t dm_a;
+    auto ia = backend_a->try_initialize_with_verilog(pa, ch::backend_port_set(ea, "top"), dm_a);
+    INFO("A init error: " << (ia.has_value() ? std::string("(none)") : ia.error().message));
+    REQUIRE(ia.has_value());
+
+    auto backend_b = std::make_unique<VerilatorBackend>(wb);
+    ch::data_map_t dm_b;
+    auto ib = backend_b->try_initialize_with_verilog(pb, ch::backend_port_set(eb, "top"), dm_b);
+    INFO("B init error: " << (ib.has_value() ? std::string("(none)") : ib.error().message));
+    REQUIRE(ib.has_value());
+
+    // ① 每个 work_dir 的 top.v == 该实例自己的产物（**装饰性对调**：谁也没覆盖谁）
+    const std::string ta = read_text(wa + "/top.v");
+    const std::string tb = read_text(wb + "/top.v");
+    REQUIRE_FALSE(ta.empty());
+    REQUIRE_FALSE(tb.empty());
+    REQUIRE(ta == read_text(pa));
+    REQUIRE(tb == read_text(pb));
+    REQUIRE(ta != tb);   // 共用 work_dir ⇒ 两者必然相同（本判据的判别力）
+
+    // ② 两个实例各自驱动自己的设计（互不串味）
+    ch::Simulator sim_a(dev_a.context());
+    sim_a.set_backend(std::move(backend_a));
+    auto &io_a = dev_a.instance().io();
+    sim_a.set_input_value(io_a.din, 0x2Au);
+    sim_a.tick();
+    sim_a.tick();
+    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(io_a.dout)) == 0x2Au);
+
+    ch::Simulator sim_b(dev_b.context());
+    sim_b.set_backend(std::move(backend_b));
+    auto &io_b = dev_b.instance().io();
+    sim_b.set_input_value(io_b.din, 0x2Au);
+    sim_b.tick();
+    REQUIRE(static_cast<uint64_t>(sim_b.get_port_value(io_b.dout)) == 0x2Bu);
+
+    // ③ 交叉再确认一次（A 的寄存器通路仍然只跟 A 的输入走）
+    sim_a.set_input_value(io_a.din, 0x5Cu);
+    sim_a.tick();
+    sim_a.tick();
+    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(io_a.dout)) == 0x5Cu);
 }
