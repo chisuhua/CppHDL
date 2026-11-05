@@ -22,6 +22,10 @@
 #include "hierarchy_verilog.h"
 #include "module.h"
 
+// ⚠️ **内部**判据（G2 的机械形态）：`expected ⊆ actual` + 名字唯一
+//    ⇒ ⇒ 单测**直接**喂构造好的端口表（否则「缺端口」这条路径在正确实现下不可达）
+#include "../src/hierarchy_port_check.h"
+
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -865,6 +869,72 @@ public:
     }
 };
 
+// ── DUT ㉓：**端口来源五类**（provenance）──────────────────────────────────
+//    ① Self（kid 的 din / dout）· ② ClockReset（根无条件）· ③ InlineFolded（根读 inline 后代 out）
+class InlineOutKid : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    InlineOutKid(ch::Component *p = nullptr, const std::string &n = "kid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class InlineOutTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inline_out_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InlineOutKid> kid{"kid"};
+    InlineOutTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        kid.io().din <<= io().din;
+        io().dout <<= kid.io().dout;   // ⚠️ 根读 **inline 后代**的 ch_out ⇒ InlineFolded
+    }
+};
+
+// ── DUT ㉔：**跨模块 `ch_mem`**（父层读子层持有的 mem）⇒ 拒绝 + 两条替代路径 ──
+class MemChild : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mem_child");
+    __io(ch_in<ch_uint<4>> addr; ch_out<ch_uint<8>> rdata;)
+    ch_mem<ch_uint<8>, 16> mem{"mem"};
+    MemChild(ch::Component *p = nullptr, const std::string &n = "child")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().rdata <<= mem.aread(io().addr); }
+};
+
+class MemParent : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mem_parent");
+    __io(ch_in<ch_uint<4>> addr; ch_out<ch_uint<8>> rdata;)
+    ch::ch_module<MemChild> child{"child"};
+    MemParent(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        child.io().addr <<= io().addr;
+        // ⚠️⚠️ 父层读**子层的 ch_mem** ⇒ ⇒ 跨模块 mem ⇒ MUST 拒绝
+        io().rdata <<= child.instance().mem.aread(io().addr);
+    }
+};
+
+// ── DUT ㉕：**成层组件自己驱动自己的 `ch_in`** ⇒ 拒绝（点名端口）──
+class SelfDrivenLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("self_driven_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    SelfDrivenLeaf(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        io().din <<= ch_uint<8>(0x11_h);   // ⚠️ 子 module 内对 input 赋值 = 非法
+        io().dout <<= io().din;
+    }
+};
+
 }   // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1313,6 +1383,151 @@ TEST_CASE("hierarchical emission: UndrivenPolicy::Reject lists every dangling in
     }
 }
 
+TEST_CASE("hierarchical emission: port provenance covers all five origins",
+          "[hierarchy][emit][provenance]") {
+    // ⚠️ G2（ADR-058 v1.12 §2.3）：端口清单 = **value-only**，覆盖五类来源，
+    //    且每个条目 MUST 能在产物里找到（expected ⊆ actual 的外部可观测形态）。
+    auto width_text = [](std::uint32_t w) {
+        return w <= 1 ? std::string() : ("[" + std::to_string(w - 1) + ":0] ");
+    };
+    auto check_entries = [&](const ch::HierarchyEmitResult &r, const std::string &path) {
+        const std::string all = read_file(path);
+        REQUIRE_FALSE(all.empty());
+        for (const auto &p : r.port_provenance) {
+            const std::string mod = module_text(all, p.module);
+            INFO("entry: " << p.module << " / " << p.port << " / " << p.width);
+            REQUIRE_FALSE(mod.empty());
+            const std::string decl =
+                std::string(p.is_input ? "input " : "output ") + width_text(p.width) + p.port;
+            REQUIRE(mod.find(decl) != std::string::npos);
+        }
+    };
+    auto origins_of = [](const ch::HierarchyEmitResult &r) {
+        std::set<ch::PortProvenanceOrigin> s;
+        for (const auto &p : r.port_provenance) {
+            s.insert(p.origin);
+        }
+        return s;
+    };
+
+    // ① 自身 + clock/reset + inline 折叠
+    {
+        ch::ch_device<InlineOutTop> dev;
+        const std::string path = std::string(kOutDir) + "/prov_inline.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const auto o = origins_of(r);
+        REQUIRE(o.count(ch::PortProvenanceOrigin::Self) == 1);
+        REQUIRE(o.count(ch::PortProvenanceOrigin::ClockReset) == 1);
+        REQUIRE(o.count(ch::PortProvenanceOrigin::InlineFolded) == 1);
+        check_entries(r, path);
+    }
+
+    // ② 冒泡（跨 module 边界）+ 确定性
+    {
+        ch::ch_device<BubbleTop> dev;
+        const std::string path = std::string(kOutDir) + "/prov_bubble.v";
+        const std::string path2 = std::string(kOutDir) + "/prov_bubble_2.v";
+        std::remove(path.c_str());
+        std::remove(path2.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        auto r2 = ch::toVerilogHierarchical(path2, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        REQUIRE(r2.ok);
+        REQUIRE(origins_of(r).count(ch::PortProvenanceOrigin::Bubbled) == 1);
+        // 确定性：两次生成的清单逐项相同（顺序也相同）
+        REQUIRE(r.port_provenance.size() == r2.port_provenance.size());
+        for (std::size_t i = 0; i < r.port_provenance.size(); ++i) {
+            REQUIRE(r.port_provenance[i].module == r2.port_provenance[i].module);
+            REQUIRE(r.port_provenance[i].port == r2.port_provenance[i].port);
+            REQUIRE(r.port_provenance[i].is_input == r2.port_provenance[i].is_input);
+            REQUIRE(r.port_provenance[i].width == r2.port_provenance[i].width);
+            REQUIRE(r.port_provenance[i].origin == r2.port_provenance[i].origin);
+        }
+        check_entries(r, path);
+    }
+
+    // ③ 合成端口（行 1 的 `__if_<n>`）
+    {
+        ch::ch_device<OuterRow1> dev;
+        const std::string path = std::string(kOutDir) + "/prov_synth.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        REQUIRE(origins_of(r).count(ch::PortProvenanceOrigin::Synthesized) == 1);
+        bool named = false;
+        for (const auto &p : r.port_provenance) {
+            if (p.origin == ch::PortProvenanceOrigin::Synthesized) {
+                REQUIRE(p.port.rfind("__if_", 0) == 0);
+                named = true;
+            }
+        }
+        REQUIRE(named);
+        check_entries(r, path);
+    }
+}
+
+TEST_CASE("hierarchical emission: port table guard rejects missing/duplicate/mismatched ports",
+          "[hierarchy][emit][provenance][guard]") {
+    // ⚠️ G2 的**机械判据**单测：正确实现下「缺端口」这条路径从公开 API 不可达
+    //    ⇒ ⇒ 直接喂构造好的端口表（否则判据无法证明守卫本身有判别力）
+    using ch::PortProvenance;
+    using ch::PortProvenanceOrigin;
+    const PortProvenance a{"m", "a", true, 8, PortProvenanceOrigin::Self};
+    REQUIRE(ch::detail::check_port_table({a}, {a}).empty());
+    // ① 缺端口 ⇒ 点名 module + 端口
+    const auto missing = ch::detail::check_port_table({a}, {});
+    REQUIRE(missing.find("'a'") != std::string::npos);
+    REQUIRE(missing.find("'m'") != std::string::npos);
+    REQUIRE(missing.find("missing") != std::string::npos);
+    // ② 方向 / 宽度不一致 ⇒ 不是「名字对上就算」
+    REQUIRE(ch::detail::check_port_table(
+                {a}, {PortProvenance{"m", "a", false, 8, PortProvenanceOrigin::Self}})
+                .find("inconsistent") != std::string::npos);
+    REQUIRE(ch::detail::check_port_table(
+                {a}, {PortProvenance{"m", "a", true, 9, PortProvenanceOrigin::Self}})
+                .find("inconsistent") != std::string::npos);
+    // ③ 同 module 内重名 ⇒ 拒绝
+    REQUIRE(ch::detail::check_port_table({a, a}, {a, a}).find("duplicate") != std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: rejection diagnostics name the offending module and port",
+          "[hierarchy][emit][reject][naming]") {
+    // ⚠️ B3b：每条拒绝 MUST 在 `HierarchyEmitResult.error` 里**点名**（不是只打 stderr）
+    //    ① 跨模块 `ch_mem` ⇒ 点名两端 module + 给出两条「mem 与使用者同层」的替代路径
+    {
+        ch::ch_device<MemParent> dev;
+        const std::string path = std::string(kOutDir) + "/reject_mem.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("cross-module ch_mem") != std::string::npos);
+        // 诊断点名两端 **module key**（= 组件路径；不是 module_type_name）
+        REQUIRE(r.error.find("'top.child'") != std::string::npos);
+        REQUIRE(r.error.find("'top'") != std::string::npos);
+        REQUIRE(r.error.find("(1)") != std::string::npos);
+        REQUIRE(r.error.find("(2)") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+    // ② 成层组件自驱动 `ch_in` ⇒ 点名端口
+    {
+        ch::ch_device<SelfDrivenLeaf> dev;
+        const std::string path = std::string(kOutDir) + "/reject_selfdrv.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("drives its own") != std::string::npos);
+        REQUIRE(r.error.find("unnamed_input") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+}
+
 TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",
           "[hierarchy][emit][implicit]") {
     ch::ch_device<OuterRow2> dev;
@@ -1430,6 +1645,9 @@ TEST_CASE("hierarchical emission: matrix-out forms are rejected loudly",
         REQUIRE_FALSE(r.ok);
         // 诊断 MUST 点名该形态（否则用户无法定位）
         REQUIRE(r.error.find("implicit-port") != std::string::npos);
+        // ⚠️ B3b：点名**节点 + module key**（MUST NOT 只抓 stderr）
+        REQUIRE(r.error.find("top_inner_bits") != std::string::npos);
+        REQUIRE(r.error.find("'top.inner'") != std::string::npos);
     }
     // ⚠️ **第八格**（父层驱动子 `ch_out`）⇒ ⇒ **MUST 拒绝**
     //    （合法 Verilog 里实例的 output 只能由实例内部驱动）
@@ -1440,6 +1658,9 @@ TEST_CASE("hierarchical emission: matrix-out forms are rejected loudly",
         INFO("error: " << r.error);
         REQUIRE_FALSE(r.ok);
         REQUIRE(r.error.find("implicit-port") != std::string::npos);
+        // ⚠️ B3b：点名**子侧 output 端口 + module key**
+        REQUIRE(r.error.find("top_inner_unnamed_output") != std::string::npos);
+        REQUIRE(r.error.find("'top.inner'") != std::string::npos);
     }
 }
 

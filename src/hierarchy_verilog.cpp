@@ -16,6 +16,7 @@
 #include "ast/mem_port_impl.h"
 #include "hierarchy_analysis.h"
 #include "hierarchy_chain.h"
+#include "hierarchy_port_check.h"
 #include "logger.h"
 
 #include <cstdio>
@@ -897,6 +898,8 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             needs.reset = needs.reset || it->second.reset;
         }
         needs_of[m.key] = needs;
+        const lnodeimpl *clock_port_node = nullptr;
+        const lnodeimpl *reset_port_node = nullptr;
         auto push_clock_reset = [&](lnodetype ty) {
             for (const auto &kv : names) {
                 if (kv.first->type() != ty) {
@@ -905,8 +908,10 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 view.ports.push_back(const_cast<lnodeimpl *>(kv.first));
                 if (ty == lnodetype::type_clock) {
                     view.clock_name = kv.second;
+                    clock_port_node = kv.first;
                 } else {
                     view.reset_name = kv.second;
+                    reset_port_node = kv.first;
                 }
                 return true;
             }
@@ -1068,6 +1073,81 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             result.error = "hierarchical emission: root module '" + m.key +
                            "' must not have synthesized ports (ADR-060 §2.2 G3-5)";
             return result;
+        }
+
+        // ── **端口完整性（G2 · ADR-058 v1.12 §2.3）**：expected ⊆ actual + 名字唯一性 ──
+        //    ⚠️ 在**第一次 I/O 之前**跑（本段仍是纯内存）⇒ ⇒ 失败 ⇒ `ok=false` + 无文件
+        //    `expected` = 分析层端口 ∪ 合成端口 ∪ 注入 clock/reset
+        //    `actual`   = `ModuleView.ports` ∪ `ModuleView.synthesized_ports`
+        {
+            std::vector<PortProvenance> expected;
+            auto push_expected = [&](const std::string &name, bool is_input,
+                                     std::uint32_t width, PortProvenanceOrigin origin) {
+                expected.push_back(
+                    PortProvenance{view.module_name, name, is_input, width, origin});
+            };
+            for (const auto &p : m.ports) {
+                if (p.node == nullptr) {
+                    result.error = "hierarchical emission: module '" + m.key + "' has port '" +
+                                   p.name + "' without a node (cannot trace its origin)";
+                    return result;
+                }
+                const auto ty = p.node->type();
+                if (ty == lnodetype::type_clock || ty == lnodetype::type_reset) {
+                    continue;   // 由 `push_clock_reset` 注入（下面按 has_* 补）
+                }
+                switch (p.origin) {
+                case HierarchyPortOrigin::Self:
+                    push_expected(p.name, p.is_input, p.width, PortProvenanceOrigin::Self);
+                    break;
+                case HierarchyPortOrigin::ClockReset:
+                    push_expected(p.name, p.is_input, p.width,
+                                  PortProvenanceOrigin::ClockReset);
+                    break;
+                case HierarchyPortOrigin::InlineFolded:
+                    push_expected(p.name, p.is_input, p.width,
+                                  PortProvenanceOrigin::InlineFolded);
+                    break;
+                case HierarchyPortOrigin::Bubbled:
+                    push_expected(p.name, p.is_input, p.width, PortProvenanceOrigin::Bubbled);
+                    break;
+                }
+            }
+            if (has_clock) {
+                push_expected(view.clock_name, true, clock_port_node->size(),
+                              PortProvenanceOrigin::ClockReset);
+            }
+            if (has_reset) {
+                push_expected(view.reset_name, true, reset_port_node->size(),
+                              PortProvenanceOrigin::ClockReset);
+            }
+            if (const auto it = synth_by_child.find(m.key); it != synth_by_child.end()) {
+                for (const auto &sp : it->second) {
+                    push_expected(sp.port, sp.is_input, sp.width,
+                                  PortProvenanceOrigin::Synthesized);
+                }
+            }
+            std::vector<PortProvenance> actual;
+            for (auto *n : view.ports) {
+                const auto ty = n->type();
+                actual.push_back(PortProvenance{
+                    view.module_name, names.at(n),
+                    ty == lnodetype::type_input || ty == lnodetype::type_clock ||
+                        ty == lnodetype::type_reset,
+                    n->size(), PortProvenanceOrigin::Self});
+            }
+            for (const auto &sp : view.synthesized_ports) {
+                actual.push_back(PortProvenance{view.module_name, sp.name, sp.is_input,
+                                                sp.width, PortProvenanceOrigin::Synthesized});
+            }
+            const std::string perr = ch::detail::check_port_table(expected, actual);
+            if (!perr.empty()) {
+                result.error = "hierarchical emission: port table completeness check failed "
+                               "for module '" + m.key + "': " + perr;
+                return result;
+            }
+            result.port_provenance.insert(result.port_provenance.end(), expected.begin(),
+                                          expected.end());
         }
 
         // 实例化语句

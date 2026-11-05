@@ -275,6 +275,28 @@
       ⇒ ⇒ ⚠️ **诚实边界**：本批判据是**连通性 + 零父层引用**的结构形态；**逐拍值判据**归
       **T3-⑤**（design §7.1.3 已登记的缺口）—— 不以结构断言冒充值正确性
 
+## T0k 批次 B3b（端口完整性 G2 + 拒绝类点名断言 · ✅ 2026-11-05）
+
+> 判据来源：**ADR-058 v1.12 §2.3** 的 **G2** + **ADR-062 §5** 端口完整性。
+
+- [x] 0.43 **`HierarchyEmitResult.port_provenance`**（**value-only**）：`module` / `port` /
+      方向 / 宽度 / `origin`（五类：Self · ClockReset · InlineFolded · Bubbled · Synthesized）
+      ⇒ ⇒ **含注入的 clock/reset**（非根 module 的它们不在分析层端口表里）·
+      **MUST NOT** 带 `lnodeimpl*` / 连接关系
+- [x] 0.44 **完整性校验在发射期、第一次 I/O 之前**：`expected :=` 分析层端口 ∪ 合成端口 ∪
+      注入 clock/reset · `actual :=` `ModuleView.ports` ∪ `synthesized_ports`
+      ⇒ ⇒ 判据 = **`expected ⊆ actual`**（子集）+ 同 module **名字唯一** + 方向/宽度一致
+      ⇒ ⇒ 机械形态抽成 `src/hierarchy_port_check.h`（纯函数 ⇒ 可单测）；失败 ⇒ `ok=false` + 点名
+- [x] 0.45 **拒绝类点名断言**（实现已存在，**不重写**）：跨模块 `ch_mem`（两端 module key +
+      两条替代路径）· 自驱动 `ch_in`（端口名）· 同 base 不同类型（两个 module key）·
+      同类型多实例各发一份 · 父驱动子 `ch_out`（子侧端口名 + module key）·
+      第七格（节点名 + module key）
+- [x] 0.46 **判据**：`[provenance]`（五类来源 + 每个条目在产物里可找到 + 两次生成逐项相同）·
+      `[provenance][guard]`（缺端口 / 方向或宽度不一致 / 重名 —— 直接喂端口表，正确实现下
+      这些路径从公开 API 不可达）· `[reject][naming]`（mem + 自驱动）
+      ⇒ ⇒ **变异 4/4 抓**：守卫恒通过 / 不填端口清单 / 清单漏合成端口 / 不查重名
+      ⇒ ⇒ ⚠️ 分析层 `to_text()` 与既有字段顺序/命名**零改动**（4 份 golden 逐字节不变）
+
 ## T1 module 主体与实例化
 
 > ⚠️ **B3 的三批映射（2026-11-05 第二次重排）**：`[B3a]` 冒泡（G3）+ `UndrivenPolicy`
@@ -288,13 +310,17 @@
 - [x] 1.1 每个成层组件产出一个 `module`（`<module_type_name>_<序号>`）
 - [x] 1.2 父 module 内例化子 module + **实例端口映射** ⇒ ⇒ **零跨 module `assign`**
       （跨 module 的驱动边 ⇒ `suppress_driver_assign` ⇒ 值由实例端口映射提供）
-- [ ] 1.3 **[B3b]** **MUST NOT 复用** module 定义；同名不同类型 ⇒ 响亮拒绝（**点名断言测试** —— 实现已在 T0h / B2b-1 落地，不重写）
+- [x] 1.3 **[B3b]** **MUST NOT 复用** module 定义；同名不同类型 ⇒ 响亮拒绝（**点名断言测试** —— 实现已在 T0h / B2b-1 落地，不重写）
+      ⇒ ⇒ **✅ B3b**：`[g1]` 断言「每个实例各发一份」（`module ` 计数 = 3）· 同 base 不同类型
+      ⇒ 错误结果点名**两个 module key**（`top.a` / `top.b`）
 - [x] 1.4 顶层 module 端口表 **逐字逐序**等于扁平端口表（clock → reset → input → output；
       **全 inline 时整份产物与扁平逐字节相同** —— 实测）
 
 ## T2 端口
 
-- [ ] 2.1 **[B3b]** 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
+- [x] 2.1 **[B3b]** 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
+      ⇒ ⇒ **✅ B3b**：发射期 `expected ⊆ actual` + 名字唯一性（`src/hierarchy_port_check.h`）·
+      `port_provenance` 五类来源可审计
 - [ ] 2.2 隐式端口 ⇒ **[B2b-3 行 1 proxy / B2b-1 行 2 / B2b-5 第三轴 + 兄弟边]**
       （ADR-060 §2.1 矩阵 + **v1.9 第七/八格拒绝**）
 - [x] 2.3 **[B3a]** 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `UndrivenPolicy::Reject` ⇒ 不产出）
@@ -303,12 +329,16 @@
       · `Reject` 列出**全部**悬空输入 + 冒泡层级链（双实例用例）
 - [x] 2.4 clock / reset：根**无条件**发；非根**分开判**（clock ⇒ reg ∨ 写端口 ∨ sread；
       reset ⇒ reg ∨ sread）+ **需求向上传导**（子要 clock ⇒ 父也要 ⇒ 实例化不缺 pin）
-- [ ] 2.5 **[B2b-4 体内 wire ✅ / B3b 三角色总和]** `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）
+- [x] 2.5 **[B2b-4 体内 wire ✅ / B3b 三角色总和]** `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）
+      ⇒ ⇒ **✅ B3b**：三角色各自的端口/体内落点由 `port_provenance`（Self / Synthesized）+
+      「非根 module 端口表不含 inline 后代 ch_out」判据覆盖
 
 ## T3 拒绝与错误模型
 
-- [ ] 3.1 **[B3b]** 跨模块 `ch_mem` ⇒ 响亮拒绝（实现已在 B2a · 本批补**点名断言**：两条替代路径 + 两端 module）
-- [ ] 3.2 **[B3b]** 自驱动 `ch_in` ⇒ 响亮拒绝（实现已在前置校验③ · 本批补点名断言）；子 module 内 MUST NOT `assign <ch_in> = ...`
+- [x] 3.1 **[B3b]** 跨模块 `ch_mem` ⇒ 响亮拒绝（实现已在 B2a · 本批补**点名断言**：两条替代路径 + 两端 module）
+      ⇒ ⇒ **✅ B3b**：`[reject][naming]` 断言 `cross-module ch_mem` + `'top.child'` / `'top'` + `(1)` / `(2)`
+- [x] 3.2 **[B3b]** 自驱动 `ch_in` ⇒ 响亮拒绝（实现已在前置校验③ · 本批补点名断言）；子 module 内 MUST NOT `assign <ch_in> = ...`
+      ⇒ ⇒ **✅ B3b**：`[reject][naming]` 断言 `drives its own` + 端口名 `unnamed_input` + 不留文件
       ⇒ ⚠️ **v1.9 第八格**：父层驱动子 `ch_out` 同型拒绝（**MUST NOT** 依赖白名单偶然形状）
 - [x] 3.3 已 build 未 `add_child` ⇒ 抛 + `add_child` 修法（由分析层前置校验给出）+ 负向对照
       （`[hierarchy][emit][error]`：失败 ⇒ `ok=false` + **不留任何文件**）
