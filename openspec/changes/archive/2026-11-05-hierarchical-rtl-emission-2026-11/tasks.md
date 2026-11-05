@@ -366,9 +366,9 @@
 > （含**存量 inline 冒泡缺连接**与**有 driver 的向上 pass-through**）；`[B3b]` 端口完整性（G2）
 > + 拒绝类**点名断言**（实现已在 0.7 / 前置校验③ / T0h 落地，**不重写**）；
 > `[B3c]` 白名单（**先证可达性**；只查 `Self` origin 声明式端口，合成端口不在其列）。
-> ⚠️ **错误载体措辞待同步（critic SF-2）**：本文件与 proposal 里的「抛」「`CHFATAL_EXCEPTION`」
-> 是 ADR-058 v2.12 ⑤ 之前的旧载体措辞 ⇒ 对外可观测形态 = `ok=false` + `error` 点名
-> ⇒ ⇒ 在 B3b/B3c 落地时**一并订正**（MUST NOT 写 `REQUIRE_THROWS`）。
+> ✅ **错误载体措辞已在 B4 订正（critic SF-2 收口）**：ADR-058 v2.12 ⑤ 的对外可观测形态 =
+> `ok=false` + `error` 点名（**结果结构体是唯一载体**）⇒ 本文件 3.3 与 `proposal.md` §Acceptance
+> 的「抛」字样已改；测试**不得**写 `REQUIRE_THROWS`（现有用例一律断言返回值）。
 
 - [x] 1.1 每个成层组件产出一个 `module`（`<module_type_name>_<序号>`）
 - [x] 1.2 父 module 内例化子 module + **实例端口映射** ⇒ ⇒ **零跨 module `assign`**
@@ -406,7 +406,8 @@
 - [x] 3.2 **[B3b]** 自驱动 `ch_in` ⇒ 响亮拒绝（实现已在前置校验③ · 本批补点名断言）；子 module 内 MUST NOT `assign <ch_in> = ...`
       ⇒ ⇒ **✅ B3b**：`[reject][naming]` 断言 `drives its own` + 端口名 `unnamed_input` + 不留文件
       ⇒ ⚠️ **v1.9 第八格**：父层驱动子 `ch_out` 同型拒绝（**MUST NOT** 依赖白名单偶然形状）
-- [x] 3.3 已 build 未 `add_child` ⇒ 抛 + `add_child` 修法（由分析层前置校验给出）+ 负向对照
+- [x] 3.3 已 build 未 `add_child` ⇒ **校验失败**（对外 = `ok=false` + `error`；分析层内部抛，
+      入口统一转换）+ `add_child` 修法（由分析层前置校验给出）+ 负向对照
       （`[hierarchy][emit][error]`：失败 ⇒ `ok=false` + **不留任何文件**）
 - [x] 3.4 **[B3c]** 接口白名单违反 ⇒ **响亮拒绝**（对外 = `ok=false` + 点名端口；ADR-058 v2.12 ⑤）⇒ ⚠️ **先证可达性**
       ⇒ ⇒ **✅ 2026-11-05**：可达性 spike 结论 = 四类违规**当前均不可达**（详见 T0l）；
