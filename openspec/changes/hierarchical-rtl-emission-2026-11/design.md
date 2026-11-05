@@ -113,13 +113,13 @@
 |---|---|---|
 | **B1** 策略枚举收敛 | ✅ **已落地** | 删两份重复枚举 + 删 `Component::set_granularity()` · 编译期 `static_assert` · **粒度作用域三格判据**（半生效 / 正向 ForceInline / 正向 ForceLayer）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 |
 | **B2a** collect 化 | ✅ **已落地** | 分析层 `ImplicitPortHandling{Reject, Record}`（**默认 Reject** ⇒ ⇒ T3-② 判据零削弱 · 新字段不进 `to_text()` ⇒ ⇒ 4 份 golden 逐字节不变）· 发射层**预检 collect**（合成类问题**全部**收集 ⇒ ⇒ 上移到发射前）· 策略驱动的诊断广度（`Reject` 只报第一条 · 其余报全部）· **变异验证**：退回首错即返 ⇒ 转红 · `ctest -LE perf` **238/238** · 扁平基线 `cmp` 全 0 |
-| **B2b** 隐式端口合成 | 🚧 **拆成五批**（2026-11-05 重排）⇒ **B2b-1 ✅**（行 2「子→父」）· **B2b-2 ✅**（行 1 · 寄存器 next + 驱动重定向）· **B2b-3**（proxy 子形态 + 合成名去重 + 探针矩阵骨架）· **B2b-4 ✅**（F3：inline 后代 `ch_out` 作用域 + `type_output`-as-wire）· **B2b-5**（第三轴 + 兄弟边） | ⚠️ 形态边界由 **ADR-060 v1.9** 定死：reg next ✅ / proxy ✅ / **op 操作数 ❌ 拒绝** / **父驱动子 `ch_out` ❌ 拒绝** / `operator=` 无处理 | **B2b-2**：`ModuleView::port_drives_node`（**发射期**重定向表 · **MUST NOT** 写回 IR）· `print_reg` 命中重定向 ⇒ ⇒ 寄存器 next 改由合成 input 端口驱动（⚠️ 不重定向 ⇒ ⇒ 退化成「保持」⇒ ⇒ **静默丢驱动**）· 行 1 合成（子侧 `input __if_<n>` + 父侧 `. __if_<n>(<父层驱动>)`）· 变异 M1/M2 全抓 · lint exit 0 | **B2b-1**：分析层 `PendingImplicitEdge` 增节点指针 + 方向 + 子实例名（⚠️ 实例名**按方向**取）· 发射器 `ModuleView::synthesized_ports`（合成端口**不是 IR 节点**）· 行 2 合成（子侧 `output __x_<n>` + 体内 assign + 父侧实例映射）· **未消费的子 output 以空连接 `.port()` 出现**（⇒ 否则 `PINMISSING`）· 变异 M1/M2 全抓 · lint exit 0 |
+| **B2b** 隐式端口合成 | ✅ **五批全部落地**（2026-11-05 重排）⇒ **B2b-1 ✅**（行 2「子→父」）· **B2b-2 ✅**（行 1 · 寄存器 next + 驱动重定向）· **B2b-3 ✅**（proxy 子形态 + 合成名去重 + 探针矩阵骨架）· **B2b-4 ✅**（F3：inline 后代 `ch_out` 作用域 + `type_output`-as-wire）· **B2b-5 ✅**（第三轴 + 兄弟边） | ⚠️ 形态边界由 **ADR-060 v1.9** 定死：reg next ✅ / proxy ✅ / **op 操作数 ❌ 拒绝** / **父驱动子 `ch_out` ❌ 拒绝** / `operator=` 无处理 | **B2b-2**：`ModuleView::port_drives_node`（**发射期**重定向表 · **MUST NOT** 写回 IR）· `print_reg` 命中重定向 ⇒ ⇒ 寄存器 next 改由合成 input 端口驱动（⚠️ 不重定向 ⇒ ⇒ 退化成「保持」⇒ ⇒ **静默丢驱动**）· 行 1 合成（子侧 `input __if_<n>` + 父侧 `. __if_<n>(<父层驱动>)`）· 变异 M1/M2 全抓 · lint exit 0 | **B2b-1**：分析层 `PendingImplicitEdge` 增节点指针 + 方向 + 子实例名（⚠️ 实例名**按方向**取）· 发射器 `ModuleView::synthesized_ports`（合成端口**不是 IR 节点**）· 行 2 合成（子侧 `output __x_<n>` + 体内 assign + 父侧实例映射）· **未消费的子 output 以空连接 `.port()` 出现**（⇒ 否则 `PINMISSING`）· 变异 M1/M2 全抓 · lint exit 0 |
 | **B2b-5** ✅ 第三轴 + 兄弟边 | ✅ **已落地** | `[third_axis]` ×2 + `[sibling]` ×1 · 变异 **3/4 抓**（M4 = 等价变异，已登记）· 全部层次化产物 lint exit 0 |
 | **B2b-6** 宽度守卫 + 两条变异欠账 | ✅ **已落地** | 单一 `width_check` helper 覆盖**全部**合成 site（直接行 1/行 2 + 第三轴 + 兄弟边）· 合成连接改走 `add_conn` · `[width]` 四组（双向 × {reg next, proxy}，含 `Remedy:` 与「不留文件」）· `[walk]` 一组（被重定向的命名 proxy 驱动 inline 子输入 ⇒ MUST 停在该 proxy）· 变异 **3/3 抓**（守卫恒真 / print_proxy early-return / print_input 只穿透未命名 proxy）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 · 24 份层次化产物 lint exit 0 |
 | **B3a** 冒泡（G3）+ `UndrivenPolicy` + 向上 pass-through | ✅ **已落地** | 冒泡端口与**逐跳连接**均在分析层生成（含**存量 inline 缺口**与 **F2**）· 链条抽成 `src/hierarchy_chain.h`（与第三轴共用）· `UndrivenPolicy` 两格 + 端口旁注释 + 顶层 `synthesized_ports` 恒空 · 向上 pass-through 每级 output 端口（底端体内 assign / 顶端 wire+重定向；端口名 `__up_<n>`；中间层不发空 `assign`）· `[bubble]`×3 + `[upward]`×1（**23 用例 / 232 断言**）· 变异 **5/5** · `ctest -LE perf` **238/238** · 29 份层次化产物 lint exit 0 · 扁平基线 `cmp` 全 0 |
 | **B3b** 端口完整性（G2）+ 拒绝类点名断言 | ✅ **已落地** | `HierarchyEmitResult.port_provenance`（value-only · 五类来源 · 含注入 clock/reset）· 发射期 `expected ⊆ actual` + 名字唯一 + 方向/宽度一致（`src/hierarchy_port_check.h` 纯函数）· 拒绝类点名断言（mem 两端 module + 两条替代路径 / 自驱动端口名 / 同 base 两个 key / 各发一份 / 第八格端口名 + key / 第七格节点名）· `[provenance]`×2 + `[reject][naming]`×1（**26 用例 / 360 断言**）· 变异 **4/4** · 4 份分析层 golden 逐字节不变 |
 | **B3c** 白名单（先证可达性） | ✅ **已落地** | 可达性 spike：四类违规（mem / reg / bundle 切片 / inout·显式 clock-reset）**当前均不可达**（端口表只从 input/output/clock/reset 构造）· 守卫 `is_whitelisted_port_node` + `check_interface_whitelist`（点名 module + port + ADR-062）· 检查点 = 端口表定稿后、只查声明式端口 · `[whitelist]` 决策表逐枚举值（**27 用例 / 378 断言**）· 变异 2/2 · ⚠️ 接入点的「删调用」变异无判据（不可达）已如实登记 |
-| **B4** 护栏 + CI + 归档 | ⏳ | — |
+| **B4** 护栏 + CI + 归档 | ✅ **已落地** | `scripts/verify_hierarchical_rtl.sh` R1–R7（lint 门按 ADR-060 §2.5：不加 `-Wall` / 捕获退出码 / 无 `%Error` / `lint_off` 白名单 / 禁 `-Wno-fatal`；R2 pin 名；**R3 = 剥掉 `lint_off` 后重新 lint**（宽度一致）；R4 确定性；R5 跨模块 `ch_mem` 被拒；R6 module 树同构（复用 `scripts/lib/verilog_tree_extract.py`，**不自研解析器**）；R7 路径分离静态扫描）· `tests/hier_rtl_products.cpp` 产物生成器（**非 ctest** ⇒ 计数锚点不变）· `--self-test` **8 个原地投毒 fixture（9 条对照）**（R3 的投毒额外证明「R1 绿而 R3 红」）· CI 挂 `pr-verilator-fast` **两处**（主路径 + self-test，`if: matrix.shard == 1` · fail-closed）· 探针矩阵 **36 格**（16 Ok / 15 Reject / 5 Na）· **28 用例 / 495 断言** |
 
 ⚠️ **B2a 的「中间态」登记（必读 · 否则会误读 ADR）**：隐式端口**合成本身**属 **B2b** ⇒ ⇒
 本批三档策略**一律 fail-closed**（不产出产物）⇒ ⇒ **差异只在诊断广度**
@@ -134,7 +134,7 @@
    ⇒ ⇒ 「C1 未答 ⇒ 只加不删」**无对象** ⇒ ⇒ ✅ **2026-11-05 更新：C1 已答 = 接受单文件多
    module**（ADR-058 **v2.10**）⇒ ⇒ ⇒ 「多文件模式」**不重开** ⇒ ⇒ 本段仅作**历史记录**。
 
-### 7.1 T3-④ 剩余：**5 个批次**（每批一个 commit · 2026-11-05 第二次重排）
+### 7.1 T3-④ 的 **13 个批次**（每批一个 commit · 2026-11-05 重排 · **全部落地**）
 
 > ⚠️ **为什么从「B3 / B4 两批」变 5 批**（planner · 2026-11-05 · 据 ADR-060 v1.13 /
 > ADR-058 v2.12 + metis gap 分析）：
@@ -244,10 +244,77 @@
 > ② **探针矩阵补全**（B2b-3 搭骨架）⇒ 归档判据 = 矩阵每一格都有断言且三态明确
 >    （正确处理 / 响亮拒绝 / 无处理）。
 
-- 4.1 `scripts/verify_hierarchical_rtl.sh`：**R1** 零未声明引用 · **R2** 实例端口名 ∈ 目标 module 端口集 · **R3** 端口宽度一致 · **R4** 产物确定性 · **R5** 跨模块 `ch_mem` 被拒 · **R6** module 树结构同构（**从产物独立提取** ⇒ MUST NOT 复用分析层 `ModuleDef`）。
+- 4.1 `scripts/verify_hierarchical_rtl.sh`：**R1** lint 门（ADR-060 §2.5 的可执行定义）·
+      **R2** 实例端口名 ∈ 目标 module 端口集 · **R3** 端口宽度一致 ·
+      **R4** 产物确定性 · **R5** 跨模块 `ch_mem` 被拒 ·
+      **R6** module 树结构同构（**从产物独立提取** ⇒ MUST NOT 复用分析层 `ModuleDef`）·
+      **R7** 层次化产物路径 ≠ 扁平产物路径（**适用面 = 仓内调用点**）。
 - 4.2 `--self-test`（**原地投毒** ⇒ 每条判据必红 ⇒ 还原复绿）。
-- 4.3 CI 挂 **两处**（`build-and-test` job：主路径 + self-test）。
-- 4.4 **归档**：**11 条 delta**（**禁** `--skip-specs`）+ 补写主 spec `## Purpose` + 更新 feature 进度表 + 根 `AGENTS.md` NOTES + 计数锚点同步 + 订正本文件与 `tasks.md` 的陈旧计数。
+- 4.3 CI 挂 **两处**（**`pr-verilator-fast` job**：主路径 + self-test。
+      ⚠️ **不是 `build-and-test`** —— 那个 job 的 `BUILD_VERILATOR=OFF`，没有真 verilator ⇒
+      R1/R2/R3/R6 会**跳过或空转**；本 job 与既有的 `verify_hierarchical_tree_extract.sh`
+      同址（同一个 `if: matrix.shard == 1`）。
+- 4.4 **归档**：**11 条 delta**（**禁** `--skip-specs`）+ 补写主 spec `## Purpose` +
+      更新 feature 进度表 + 根 `AGENTS.md`（**当前态**约束，不是流水）+ 计数锚点同步。
+
+#### 4.4.1 B4 落地证据（2026-11-05）
+
+| 项 | 结果 |
+|---|---|
+| 产物生成器 | `tests/hier_rtl_products.cpp` —— **非 ctest target**（`CTEST_TOTAL` 不变）；3 个设计 + `--check-reject mem` |
+| 判据 R1–R7 | 主路径全绿；`--self-test` **9/9 条投毒对照**（8 个 fixture + 1 条「R3 投毒后 R1 仍绿」的配对断言） |
+| R3 的独立性 | 投毒（端口宽度 8→9）后 **R1 仍绿**（`lint_off` 生效）而 **R3 转红**（剥掉 `lint_off`）⇒ 两条判据不重复 |
+| R6 的独立性 | 删掉一条实例化语句后 **R1 仍绿**（Verilog 合法）而 **R6 转红**（树少一条边）⇒ 结构判据不被 lint 覆盖 |
+| 变异/投毒 | R1 未声明标识符 · R2 改 pin 名 · R3 改宽度 · R4 篡改产物 · R5 假工具输出 · R6 删实例 · R7 同路径调用点 · R1a 给 lint 加 `-Wno-fatal` |
+| 探针矩阵 | **36 格**（16 Ok / 15 Reject / 5 Na）见 §4.4.2 |
+
+#### 4.4.2 探针矩阵（B4 补全 · **有上界** ⇒ 「补全」可判定）
+
+> ⚠️ **两个轴各 6 个取值 ⇒ 恰好 36 格**。`[matrix]` 用例把这张表**逐格枚举**并断言：
+> ① 格子总数 = 36；② **三态计数** = 16/15/5；③ 每个 `Ok`/`Reject` 格的证据 tag
+> **在本文件里真实存在**（删掉对应测试 ⇒ 该用例转红 ⇒ 矩阵不会静默缩水）；
+> ④ 每个 `Na` 格**必须写理由**；⑤ 证据为 `[matrix]` 的 11 格**在本用例里另有行为断言**。
+
+**轴 A（合成 site，6）**：`row1` 父→子直接 · `row2` 子→父直接 · `third_axis` 父→非直接子 ·
+`upward` 子→非直接父 · `sibling` 共同祖先 · `bubble` 无跨层边（悬空 `ch_in`）
+**轴 B（端点节点类型，6）**：`ch_in` · `ch_out` · `ch_reg` · `ch_proxy`（bundle 字段）·
+`op`（运算节点）· `mem`（含 read/write 端口）
+
+| site \ type | ch_in | ch_out | ch_reg | ch_proxy | op | mem |
+|---|---|---|---|---|---|---|
+| **row1** | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| **row2** | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **third_axis** | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| **upward** | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **sibling** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **bubble** | ✅ | ⚪ | ⚪ | ⚪ | ⚪ | ⚪ |
+
+✅ = 正确处理（合成 / 常规映射）· ❌ = 响亮拒绝 · ⚪ = 结构性无此形态。
+计数：✅ **16** · ❌ **15** · ⚪ **5** ⇒ 合计 **36**。
+
+| 格 | 三态 | 证据 |
+|---|---|---|
+| row1 × ch_in / ch_reg / ch_proxy | ✅ | `[hierarchy][emit]` · `[hierarchy][emit][implicit]` |
+| row1 × ch_out / op | ❌ | `[hierarchy][emit][implicit][reject]`（第八格 / 第七格） |
+| row1 × mem | ❌ | `[hierarchy][emit][reject][naming]`（跨模块 mem 更早拒绝） |
+| row2 × ch_in | ❌ | `[hierarchy][emit][reject][naming]`（对 `ch_in` 赋值 = 自驱动 ⇒ 前置校验③） |
+| row2 × ch_out | ✅ | `[hierarchy][emit]`（普通端口映射，不合成） |
+| row2 × ch_reg | ✅ | `[hierarchy][emit][implicit]`（`__x_<n>`） |
+| row2 × ch_proxy / op | ✅ | `[hierarchy][emit][matrix]`（**B4 补**：`__x_<n>` + 体内 assign） |
+| row2 × mem | ❌ | `[hierarchy][emit][reject][naming]` |
+| third_axis × ch_in / ch_reg | ✅ | `[hierarchy][emit][implicit][third_axis]` |
+| third_axis × ch_out / op | ❌ | `[hierarchy][emit][matrix]`（**B4 补**：叶端点是输出端口 / 不可重定向节点） |
+| third_axis × ch_proxy | ✅ | `[hierarchy][emit][matrix]`（**B4 补**：逐级同名 input + 体内 assign） |
+| third_axis × mem | ❌ | `[hierarchy][emit][reject][naming]` |
+| upward × ch_in / op | ❌ | `[hierarchy][emit][matrix]`（**B4 补**：驱动输入非法 / 目标已有 assign） |
+| upward × ch_out | ✅ | `[hierarchy][emit][upward]` |
+| upward × ch_reg / ch_proxy | ✅ | `[hierarchy][emit][matrix]`（**B4 补**：体内 wire `__up_<n>` + 驱动重定向） |
+| upward × mem | ❌ | `[hierarchy][emit][reject][naming]` |
+| sibling × ch_in / ch_out | ✅ | `[hierarchy][emit][implicit][sibling]` |
+| sibling × ch_reg / ch_proxy / op | ❌ | `[hierarchy][emit][matrix]`（**B4 补**：驱动端 MUST 是 `ch_out` 端口） |
+| sibling × mem | ❌ | `[hierarchy][emit][reject][naming]` |
+| bubble × ch_in | ✅ | `[hierarchy][emit][bubble]` |
+| bubble × 其余 5 类 | ⚪ | 见 `[matrix]` 用例里的逐格理由（输出无人消费 = 空连接；寄存器/运算/内存没有「悬空端口」形态） |
 
 ### 7.1.1 B2b-1 的两条**新增口径**（实施期定 ⇒ ⇒ 契约级）
 

@@ -1380,6 +1380,26 @@ jobs:
       shell: bash
       run: bash scripts/verify_hierarchical_tree_extract.sh
 
+    # ---- 层次化 RTL 发射的**产物级**判据（R1–R7）-------------------------
+    # ⚠️ 为什么挂在这个 job：R1/R2/R3/R6 都调用**真实的 verilator**
+    #    （`--lint-only` / `--json-only`）⇒ 而 verilator 只在
+    #    `pr-verilator-fast` / `nightly-verilator` 里构建。
+    # ⚠️ 为什么 `if: matrix.shard == 1`：与本 job 的分片无关 ⇒ 只跑一次。
+    # ⚠️ fail-closed：verilator 或产物生成器不可用 ⇒ 护栏**失败**（MUST NOT 跳过）。
+    - name: Verify hierarchical RTL products (R1–R7)
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_hierarchical_rtl.sh
+
+    # 自检：逐条**原地投毒** ⇒ 每条判据必须变红 ⇒ 还原复绿。
+    # WHY：本仓反复出现「看起来在守、其实恒绿」的护栏（`-Wno-fatal` 让 warning
+    #      不影响退出码就是一种）⇒ 每条判据都要证明自己有判别力。
+    #      R3 的投毒还额外证明「R1 绿而 R3 红」⇒ 两条判据不是重复。
+    - name: Verify hierarchical RTL guard self-test
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_hierarchical_rtl.sh --self-test
+
     # ---- P2 lever ② 的护栏：分片 MUST 覆盖全集 ------------------------
     # ⚠️ 为什么必需：`-I` 是在 **`-L` 过滤之后**的列表上做区间/步长选择
     # （实测：`-I 1,12,2`→6 · `-I 1,24,2`→12 · `-I 1,46,2`→23 ⇒ 与过滤后

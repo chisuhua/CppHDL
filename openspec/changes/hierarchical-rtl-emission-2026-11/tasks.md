@@ -333,6 +333,33 @@
       ⇒ ⇒ 覆盖 = 决策表单测 + 与 G2 同段的代码位置审查；**MUST NOT** 为了「让判据红」
       而伪造一个走私路径（那会把非法形态合法化）
 
+## T0m 批次 B4（护栏 R1–R7 + 自检投毒 + 探针矩阵 + CI · ✅ 2026-11-05）
+
+> 判据来源：**ADR-060 §2.5**（lint 门的可执行定义）· ADR-058 §5（结构判据）·
+> proposal Acceptance 的「护栏 R7」与「零回归」。
+
+- [x] 0.51 **产物生成器** `tests/hier_rtl_products.cpp`：3 个设计（三层 / 行 1 / 冒泡）+
+      `--check-reject mem` 模式 ⇒ ⇒ 在**真实进程**里产出，产物交给 verilator 判
+      ⇒ ⇒ ⚠️ **MUST NOT** 注册成 ctest 用例（否则 `CTEST_TOTAL` 锚点会因一个非判据程序漂移）
+- [x] 0.52 **R1 lint 门** = ADR-060 §2.5 的**唯一**可执行定义：`--lint-only --top-module <top>`
+      ⇒ 不许 `-Wall`（合法产物会触发 `DECLFILENAME` / `PINCONNECTEMPTY` / `UNUSEDSIGNAL`）·
+      不许 `-Wno-fatal`（会让 warning 不影响退出码 ⇒ 门失效）· 捕获退出码 · 额外交付
+      「stderr 不含 `%Error`」· `lint_off` 白名单（仅 `WIDTHEXPAND` / `WIDTHTRUNC`）
+      ⇒ ⇒ 开关纪律由 `check_lint_flags` 扫**唯一**的 `lint_file` 函数体（注释里提到它们不算）
+- [x] 0.53 **R2** pin 名 ∈ 目标端口集 · **R3** 宽度一致（**剥掉 `lint_off` 后重新 lint**）·
+      **R4** 两次生成 `diff -r` · **R5** 拒绝 + 消息子串 · **R6** 树同构 · **R7** 路径分离
+- [x] 0.54 **`--self-test` ≥7 投毒** ⇒ 实落 **8 个 fixture / 9 条对照**：
+      R1 未声明标识符 · R2 改 pin 名 · R3 改端口宽度（**配对断言：投毒后 R1 仍绿**）·
+      R4 篡改产物 · R5 假工具输出 · R6 删实例化语句（**R1 仍绿**）· R7 同路径调用点 ·
+      R1a 给 lint 调用塞 `-Wno-fatal` ⇒ ⇒ 每条「必红 ⇒ 还原复绿」，映射表见脚本头注释
+- [x] 0.55 **探针矩阵补全**：轴 A（6 个合成 site）× 轴 B（6 类端点）= **36 格**，
+      **16 Ok / 15 Reject / 5 Na**；`[matrix]` 用例逐格枚举 + 三态计数断言 +
+      **证据 tag 真实存在**（删测试 ⇒ 转红）+ `Na` 必须有理由 + 11 格另有行为断言
+- [x] 0.56 **如实登记的判别力边界**：① R7 只解析**字面量实参**（`path` 变量实参静态不可判
+      ⇒ 由「层次化产物走独立输出目录」的约定承担）；② R2/R3 的判别力**依赖 verilator**
+      （不是自研分析器 ⇒ 这是**有意**选择：MUST NOT 自研 Verilog 解析器）；
+      ③ 本 change **不做值等价性** ⇒ 逐拍等价归 **T3-⑤**（R1–R7 全绿 ≠ 行为正确）
+
 ## T1 module 主体与实例化
 
 > ⚠️ **B3 的三批映射（2026-11-05 第二次重排）**：`[B3a]` 冒泡（G3）+ `UndrivenPolicy`
@@ -386,12 +413,18 @@
 
 ## T4 护栏
 
-- [ ] 4.1 **[B4]** `scripts/verify_hierarchical_rtl.sh`（lint 门 = **ADR-060 §2.5**：
+- [x] 4.1 **[B4]** `scripts/verify_hierarchical_rtl.sh`（lint 门 = **ADR-060 §2.5**：
       不加 `-Wall` · 捕获退出码 · stderr 不含 `%Error` · `lint_off` 白名单 · 禁用 `-Wno-fatal`）（零未声明引用 · 实例端口名 ∈ 端口集 ·
       **端口宽度一致** · 产物确定性 · 跨模块 `ch_mem` 被拒）
-- [ ] 4.2 **[B4]** 判据 MUST 基于 `verilator --json-only` 的结构化提取（复用
+      ⇒ ⇒ **✅** R1–R7 全部落地（**R7** = 层次化产物路径 ≠ 扁平产物路径 · **适用面 = 仓内调用点**）
+      ⇒ ⇒ **R3 的机制 = 剥掉 `lint_off` 后重新 lint**（那两条正是宽度告警的全局消音器）
+- [x] 4.2 **[B4]** 判据 MUST 基于 `verilator --json-only` 的结构化提取（复用
       `scripts/lib/verilog_tree_extract.py`）⇒ ⇒ **MUST NOT** 自研 Verilog 文本解析器
-- [ ] 4.3 **[B4]** CI 挂 **两处**（主路径 + `--self-test`）
+      ⇒ ⇒ **✅** R6 的三元组由提取器给出；结构不变量（唯一根 / 每 module 恰实例化一次 /
+      全可达 / 无环）在守卫脚本内对**提取结果**求值（不解析 Verilog 文本）
+- [x] 4.3 **[B4]** CI 挂 **两处**（主路径 + `--self-test`）
+      ⇒ ⇒ **✅** 挂在 **`pr-verilator-fast`**（⚠️ **不是** `build-and-test` —— 后者
+      `BUILD_VERILATOR=OFF`，没有真 verilator ⇒ R1/R2/R3/R6 会空转）；`if: matrix.shard == 1`
 
 ## 验证命令
 

@@ -290,6 +290,17 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   **不是**「只能由软件写」的静态比较器 ⇒ 递增频率 = **编译期**常量 `TIMER_DIVIDER`
   （默认 1）· **写优先** · 复位值 0。⚠️ 64 位读**允许撕裂**（已知边界）。
   ⇒ 权威 = `include/cpu/AGENTS.md` §「CLINT 的 `mtime` 契约」。
+- **层次化 RTL 输出（`toVerilogHierarchical`）的当前边界**（2026-11-05 · T3-④ 归档）：
+  产物级判据 = `scripts/verify_hierarchical_rtl.sh` **R1–R7**（R1 = ADR-060 §2.5 的 lint 门：
+  **不加 `-Wall`**〔本设计的合法产物会触发 `DECLFILENAME` / `PINCONNECTEMPTY` /
+  `UNUSEDSIGNAL`〕· **禁 `-Wno-fatal`**〔它让 warning 不影响退出码 ⇒ 门失效〕· 退出码 +
+  无 `%Error` + `lint_off` 白名单；**R3 = 剥掉 `lint_off` 后重新 lint** ⇒ 宽度一致
+  〔对 R1 不可判：`lint_off` 生效时 R1 恒绿〕）。⚠️ **R1–R7 全绿 ≠ 行为正确** ——
+  **逐拍等价性归 T3-⑤**（本 change 未做）；R7 只解析**字面量路径实参**（`path` 变量
+  实参静态不可判 ⇒ 由「层次化产物走独立输出目录」的约定承担）。拒绝类形态（跨模块
+  `ch_mem` · 自驱动 `ch_in` · 父驱动子 `ch_out` · 改写子运算节点操作数 · 接口白名单）
+  一律 `ok=false` + **点名 module/端口**（对外唯一载体 = `HierarchyEmitResult`；
+  发射器内**不抛**，分析层的前置校验抛由入口统一转换）。
 - **`Simulator::set_ab_verification()` is a no-op stub** (ADR-035 R9, `docs/usage_guide/10-verilator-backend.md:133`). After the dual-function JIT refactor (`tick_comb` + `tick_seq`), the A/B comparison logic was not redesigned — enabling the flag only emits a `CHWARN` per `tick()` (`src/simulator.cpp:332-338`) but does not actually diff interpreter vs JIT `data_map_`. Re-enabling dual-backend comparison requires saving snapshots around the JIT `eval_fn_` call and reconciling per-instruction. Do NOT depend on `is_ab_verification()` returning meaningful parity status. The whole `set_ab_verification` block is guarded by `#if __has_include("jit/jit_compiler.h")` (`include/simulator.h:90-97`); with `CH_JIT_ENABLE=OFF` the symbol is absent.
 - **Cache 变体选择（ADR-039 ch_mem 重写 + ADR-041 Sync/Async 拆分）**：完整实现位于 `include/cpu/cache/{i,d}_cache_{sync,async}.h`；`*_complete.h` 是兼容 shim 别名指向 `*_sync.h`. RV32I L1 默认用 `ICacheSync` / `DCacheSync` (1-cycle sread)；TCM-style 用 `ICacheAsync` / `DCacheAsync` (0-cycle aread). 新代码用 `_sync` / `_async` 变体直接引用（`_complete` 仅作 legacy alias）. The wrappers `include/cpu/cache/{i_cache_prefetch.h,d_cache_write_buffer.h}`（2026-10-24 C2 从 `examples/riscv-mini/src/` 提升到此，ADR-046 D3 #9/#10）实例化 `ICacheSync` / `DCacheSync` (2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复 ch_reg array → ch_mem + ch_module 替换 `Component ctor + parent`, instantiation 0 SIGSEGV). 见 `include/cpu/AGENTS.md` STRUCTURE 表. **历史 pass-through stub 头文件（`include/cpu/cache/*_stub.h`）已于 2026-10-20 物理删除**（ADR-037，change `cache-stub-physical-removal-2026-10`）—— 其语义（`ready := req, miss := false, data := axi_data`、未 block 对齐的 `axi_addr`）不构成合法 cache 行为，不再保留，也没有替代的 BYPASS 模式.
 - **`*_cache_complete.h` 是兼容 shim** (2026-10-19 cache-complete-rewrite 完成, ADR-041). 原"dead-on-arrival"已修复 (commit 91a0833 ch_mem-based rewrite + 1221819 test coverage + ADR-041 Sync/Async variant split). `ICacheComplete` / `DCacheComplete` 现在是 `using ICacheComplete = ICacheSync;` 别名, 指向 **1-cycle sread 版本** (`include/cpu/cache/{i,d}_cache_sync.h`). 0-cycle TCM-style 用户可用 `include/cpu/cache/{i,d}_cache_async.h`. 见 `include/cpu/AGENTS.md` STRUCTURE 表.
@@ -341,6 +352,13 @@ cmake --build build --target all-examples -j$(nproc)
 
 # Run all samples (regression guard for samples/ — Linux: `timeout`, macOS: `gtimeout`)
 bash scripts/run_all_samples.sh
+
+# 层次化 RTL 产物护栏（R1 lint 门 = ADR-060 §2.5 · R2 pin 名 ∈ 目标端口集 · R3 宽度一致
+# 〔= 剥掉 lint_off 后重新 lint〕· R4 确定性 · R5 跨模块 ch_mem 被拒 · R6 module 树同构
+# 〔复用 scripts/lib/verilog_tree_extract.py〕· R7 层次化产物路径 ≠ 扁平产物路径）
+# ⚠️ 需要 build/tests/hier_rtl_products（产物生成器 · **不是** ctest 用例）
+bash scripts/verify_hierarchical_rtl.sh
+bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条原地投毒 ⇒ 必红 ⇒ 还原复绿
 
 # OpenSpec 提案阶段的 delta 自检（4 条：delta 无 change 名 / 无占位符路径 /
 # MODIFIED 标题逐字匹配主 spec / tasks 的 verify 块语法可达）

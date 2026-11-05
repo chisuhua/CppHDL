@@ -35,6 +35,12 @@
 #include <type_traits>
 #include <vector>
 
+// 探针矩阵的「证据 tag 真实存在」校验需要本文件路径（CMake 注入；
+// 未注入时为空字符串 ⇒ 该判据 fail-closed 转红，而不是静默跳过）。
+#ifndef HIER_TEST_SOURCE
+#define HIER_TEST_SOURCE ""
+#endif
+
 using namespace ch;
 using namespace ch::core;
 
@@ -935,6 +941,287 @@ public:
     }
 };
 
+// ── DUT ㉖–㉟：**探针矩阵补全**（B4 · design.md §「探针矩阵」）──────────────
+//    每个 DUT 对应矩阵里的一格；格子清单与三态在 `[matrix]` 用例里枚举
+//    （⇒ 表是索引：每格的 `evidence` MUST 是本文件里真实存在的 tag）。
+class MatLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};         // reg 端点
+    ch_stream<ch_uint<8>> strm;          // proxy 端点（bundle 字段）
+    ch_uint<8> sum;                      // op 端点（运算节点）
+    MatLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = io().din;
+        strm.as_master();
+        strm.payload <<= io().din;
+        sum = io().din + ch_uint<8>(1_d);
+        io().dout <<= acc;
+    }
+};
+
+// 行 2 × proxy：父层读子层的 bundle 字段
+class MatRow2Proxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_row2_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatRow2Proxy(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().strm.payload;
+    }
+};
+
+// 行 2 × op：父层读子层的运算节点
+class MatRow2Op : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_row2_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatRow2Op(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().sum;
+    }
+};
+
+// 第三轴夹具（Top → Mid → Leaf，驱动端在 Top）
+class MatMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_mid");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatMid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.io().dout;
+    }
+};
+
+// 第三轴 × ch_out：顶层驱动孙层的 **output 端口** ⇒ 拒绝（第八格）
+class MatThirdOut : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_third_out");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    MatThirdOut(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        mid.instance().leaf.io().dout <<= io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
+// 第三轴 × proxy：顶层驱动孙层的 bundle 字段 ⇒ 合成
+class MatThirdProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_third_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    MatThirdProxy(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        mid.instance().leaf.instance().strm.payload <<= io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
+// 第三轴 × op：顶层驱动孙层的运算节点 ⇒ 拒绝
+class MatThirdOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_third_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    MatThirdOp(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        mid.instance().leaf.instance().sum <<= io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
+// 向上 pass-through × reg 目标（顶层寄存器被孙层节点驱动）
+class MatUpReg : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_up_reg");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    ch_reg<ch_uint<8>> acc{0_d};
+    MatUpReg(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        acc->next = mid.instance().leaf.instance().acc;
+        io().dout <<= acc;
+    }
+};
+
+// 向上 pass-through × proxy 目标
+class MatUpProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_up_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    ch_stream<ch_uint<8>> strm;
+    MatUpProxy(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        strm.as_master();
+        mid.io().din <<= io().din;
+        strm.payload <<= mid.instance().leaf.instance().acc;
+        io().dout <<= strm.payload;
+    }
+};
+
+// 向上 pass-through × op 目标（目标已有自己的 assign ⇒ 双驱动 ⇒ 拒绝）
+class MatUpOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_up_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    ch_uint<8> acc;
+    MatUpOp(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        acc = ch_uint<8>(1_d) + ch_uint<8>(2_d);
+        acc <<= mid.instance().leaf.instance().acc;
+        io().dout <<= acc;
+    }
+};
+
+// 向上 pass-through × ch_in 目标（驱动输入的 assign 非法 ⇒ 拒绝）
+class MatUpIn : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_up_in");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatMid> mid{"mid"};
+    MatUpIn(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        io().din <<= mid.instance().leaf.instance().acc;
+        io().dout <<= mid.io().dout;
+    }
+};
+
+// 兄弟边夹具：驱动端是**非端口**节点 ⇒ 拒绝
+class MatSibAProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_a_proxy");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_stream<ch_uint<8>> strm;
+    MatSibAProxy(ch::Component *p = nullptr, const std::string &n = "a")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        strm.as_master();
+        strm.payload <<= ch_uint<8>(1_d);
+        io().dout <<= strm.payload;
+    }
+};
+
+class MatSibAOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_a_op");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_uint<8> sum;
+    MatSibAOp(ch::Component *p = nullptr, const std::string &n = "a")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        sum = ch_uint<8>(1_d) + ch_uint<8>(2_d);
+        io().dout <<= sum;
+    }
+};
+
+class MatSibB : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_b");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    MatSibB(ch::Component *p = nullptr, const std::string &n = "b") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class MatSibAReg : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_a_reg");
+    __io(ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};
+    MatSibAReg(ch::Component *p = nullptr, const std::string &n = "a") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = ch_uint<8>(1_d);
+        io().dout <<= acc;
+    }
+};
+
+class MatSibRegTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_reg_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatSibAReg> a{"a"};
+    ch::ch_module<MatSibB> b{"b"};
+    MatSibRegTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        b.io().din <<= a.instance().acc;   // 兄弟边 × reg
+        io().dout <<= b.io().dout;
+    }
+};
+
+class MatSibProxyTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_proxy_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatSibAProxy> a{"a"};
+    ch::ch_module<MatSibB> b{"b"};
+    MatSibProxyTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        b.io().din <<= a.instance().strm.payload;   // 兄弟边 × proxy
+        io().dout <<= b.io().dout;
+    }
+};
+
+class MatSibOpTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_sib_op_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatSibAOp> a{"a"};
+    ch::ch_module<MatSibB> b{"b"};
+    MatSibOpTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        b.io().din <<= a.instance().sum;   // 兄弟边 × op
+        io().dout <<= b.io().dout;
+    }
+};
+
 }   // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1749,6 +2036,242 @@ TEST_CASE("hierarchical emission: inline descendant output is a body wire "
     //      ⇒ ⇒ **不在**顶层端口表里）
     REQUIRE(top.find("output [7:0] top_unnamed_output") != std::string::npos);
     REQUIRE(top.find(".top_mid_unnamed_output(top_unnamed_output)") != std::string::npos);
+}
+
+TEST_CASE("hierarchical emission: probe matrix is complete and every cell is decided",
+          "[hierarchy][emit][matrix]") {
+    // ── 探针矩阵（B4 补全 · design.md §「探针矩阵」）──────────────────────
+    //   **有上界** ⇒ 「补全」可判定：两个轴各 6 个取值 ⇒ **36 格**。
+    //     轴 A（site）：行1 父→子 · 行2 子→父 · 第三轴 · 向上 pass-through ·
+    //                   兄弟边 · 冒泡（无跨层边 = 悬空输入）
+    //     轴 B（端点节点类型）：ch_in · ch_out · ch_reg · ch_proxy（bundle 字段）·
+    //                   op/mux（运算节点）· ch_mem（含 read/write 端口）
+    //   三态：`Ok` 正确处理 · `Reject` 响亮拒绝 · `Na` 结构性无此形态（⇒ 必须写理由）
+    // ⚠️ 表是**索引**：`Ok` / `Reject` 格的 `evidence` MUST 是本文件里**真实存在**的
+    //    tag ⇒ 删掉对应测试会在这里转红（矩阵不会静默缩水）。
+    enum class State { Ok, Reject, Na };
+    struct Cell {
+        const char *site;
+        const char *type;
+        State state;
+        const char *evidence;   // Ok/Reject ⇒ tag（含引号）；Na ⇒ 理由
+    };
+    const std::vector<Cell> cells = {
+        // ── 行 1（父 → 子 · 直接）──
+        {"row1", "ch_in", State::Ok, "\"[hierarchy][emit]\""},
+        {"row1", "ch_out", State::Reject, "\"[hierarchy][emit][implicit][reject]\""},
+        {"row1", "ch_reg", State::Ok, "\"[hierarchy][emit][implicit]\""},
+        {"row1", "ch_proxy", State::Ok, "\"[hierarchy][emit][implicit]\""},
+        {"row1", "op", State::Reject, "\"[hierarchy][emit][implicit][reject]\""},
+        {"row1", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
+        // ── 行 2（子 → 父 · 直接）──
+        {"row2", "ch_in", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
+        {"row2", "ch_out", State::Ok, "\"[hierarchy][emit]\""},
+        {"row2", "ch_reg", State::Ok, "\"[hierarchy][emit][implicit]\""},
+        {"row2", "ch_proxy", State::Ok, "\"[hierarchy][emit][matrix]\""},
+        {"row2", "op", State::Ok, "\"[hierarchy][emit][matrix]\""},
+        {"row2", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
+        // ── 第三轴（父 → 非直接子）──
+        {"third_axis", "ch_in", State::Ok, "\"[hierarchy][emit][implicit][third_axis]\""},
+        {"third_axis", "ch_out", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"third_axis", "ch_reg", State::Ok, "\"[hierarchy][emit][implicit][third_axis]\""},
+        {"third_axis", "ch_proxy", State::Ok, "\"[hierarchy][emit][matrix]\""},
+        {"third_axis", "op", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"third_axis", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
+        // ── 向上 pass-through（子 → 非直接父）──
+        {"upward", "ch_in", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"upward", "ch_out", State::Ok, "\"[hierarchy][emit][upward]\""},
+        {"upward", "ch_reg", State::Ok, "\"[hierarchy][emit][matrix]\""},
+        {"upward", "ch_proxy", State::Ok, "\"[hierarchy][emit][matrix]\""},
+        {"upward", "op", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"upward", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
+        // ── 兄弟边（共同祖先内一根中转线）──
+        {"sibling", "ch_in", State::Ok, "\"[hierarchy][emit][implicit][sibling]\""},
+        {"sibling", "ch_out", State::Ok, "\"[hierarchy][emit][implicit][sibling]\""},
+        {"sibling", "ch_reg", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"sibling", "ch_proxy", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"sibling", "op", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"sibling", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
+        // ── 冒泡（无跨层边：悬空 ch_in 逐级上提）──
+        {"bubble", "ch_in", State::Ok, "\"[hierarchy][emit][bubble]\""},
+        {"bubble", "ch_out", State::Na,
+         "ch_out 不存在「悬空」形态：无人消费时以空连接 .port() 出现（ADR-061 决策②）"},
+        {"bubble", "ch_reg", State::Na, "寄存器没有「悬空」形态：next 恒有驱动或保持"},
+        {"bubble", "ch_proxy", State::Na, "bundle 字段不是端口 ⇒ 不参与冒泡（合成端口由跨层边触发）"},
+        {"bubble", "op", State::Na, "运算节点是体内逻辑 ⇒ 没有端口身份"},
+        {"bubble", "mem", State::Na, "跨模块 mem 更早被拒 ⇒ 到不了冒泡路径"},
+    };
+
+    // 规模 MUST 显式（否则「补全」不可判定）
+    REQUIRE(cells.size() == 36);
+    std::size_t n_ok = 0, n_reject = 0, n_na = 0;
+    for (const auto &c : cells) {
+        switch (c.state) {
+        case State::Ok: ++n_ok; break;
+        case State::Reject: ++n_reject; break;
+        case State::Na: ++n_na; break;
+        }
+    }
+    INFO("ok=" << n_ok << " reject=" << n_reject << " na=" << n_na);
+    REQUIRE(n_ok == 16);
+    REQUIRE(n_reject == 15);
+    REQUIRE(n_na == 5);
+
+    // 每一格的证据/理由 MUST 成立：Ok/Reject ⇒ tag 真实存在；Na ⇒ 有理由且不是 tag
+    const std::string src = read_file(HIER_TEST_SOURCE);
+    REQUIRE_FALSE(src.empty());
+    for (const auto &c : cells) {
+        INFO("cell: " << c.site << " x " << c.type);
+        if (c.state == State::Na) {
+            REQUIRE(c.evidence[0] != '"');
+            REQUIRE(std::string(c.evidence).size() > 10);
+        } else {
+            REQUIRE(c.evidence[0] == '"');
+            REQUIRE(src.find(c.evidence) != std::string::npos);
+        }
+    }
+
+    // ── 行为断言：证据 = `[matrix]` 的格子（其余格的断言在各自用例里）──────
+    // ① 行 2 × proxy ⇒ 子侧合成 output `__x_0` + 体内 assign
+    {
+        ch::ch_device<MatRow2Proxy> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_row2_proxy.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        const std::string leaf = module_text(all, "mat_leaf");
+        REQUIRE(leaf.find("output [7:0] __x_0") != std::string::npos);
+        REQUIRE(leaf.find("assign __x_0 = top_leaf_payload;") != std::string::npos);
+        REQUIRE(all.find(".__x_0(") != std::string::npos);
+    }
+    // ② 行 2 × op ⇒ 同上（端点是运算节点 ⇒ 体内 assign 发它的名字）
+    {
+        ch::ch_device<MatRow2Op> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_row2_op.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        const std::string leaf = module_text(all, "mat_leaf");
+        REQUIRE(leaf.find("output [7:0] __x_0") != std::string::npos);
+        REQUIRE(leaf.find("assign __x_0 = top_leaf_") != std::string::npos);
+        REQUIRE(all.find(".__x_0(") != std::string::npos);
+    }
+    // ③ 第三轴 × proxy ⇒ 逐级同名 input + 体内 assign 到该 proxy
+    {
+        ch::ch_device<MatThirdProxy> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_third_proxy.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        const std::string leaf = module_text(all, "mat_leaf");
+        REQUIRE(leaf.find("input [7:0] top_unnamed_input") != std::string::npos);
+        REQUIRE(leaf.find("assign top_mid_leaf_payload = top_unnamed_input;") !=
+                std::string::npos);
+    }
+    // ④ 第三轴 × ch_out ⇒ 拒绝（第八格的第三轴变体）
+    {
+        ch::ch_device<MatThirdOut> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_third_out.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("third-axis leaf is an output port") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+    // ⑤ 第三轴 × op ⇒ 拒绝（叶端点既非端口也非可重定向节点）
+    {
+        ch::ch_device<MatThirdOp> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_third_op.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("neither a port nor a redirectable reg/proxy") !=
+                std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+    // ⑥ 向上 × reg ⇒ 体内 wire + 驱动重定向（MUST NOT 引用深层信号名）
+    {
+        ch::ch_device<MatUpReg> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_up_reg.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        const std::string leaf = module_text(all, "mat_leaf");
+        const std::string top = module_text(all, "top");
+        REQUIRE(leaf.find("output [7:0] __up_0") != std::string::npos);
+        REQUIRE(top.find("logic [7:0] __up_0;") != std::string::npos);
+        REQUIRE(top.find("top_reg <= __up_0;") != std::string::npos);   // 驱动重定向
+        REQUIRE(top.find("top_mid_leaf__reg") == std::string::npos);    // 零深层引用
+    }
+    // ⑦ 向上 × proxy ⇒ 同上（redirect 到体内 wire，不是 proxy 自己的 src）
+    {
+        ch::ch_device<MatUpProxy> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_up_proxy.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        const std::string top = module_text(all, "top");
+        REQUIRE(top.find("assign top_payload = __up_0;") != std::string::npos);
+        REQUIRE(top.find("top_mid_leaf__reg") == std::string::npos);
+    }
+    // ⑧ 向上 × op ⇒ 拒绝（目标已有自己的 assign ⇒ 双驱动）
+    {
+        ch::ch_device<MatUpOp> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_up_op.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("upward pass-through target is neither a plain wire / output "
+                             "port nor a redirectable reg/proxy") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+    // ⑨ 向上 × ch_in ⇒ 拒绝（对 ch_in 赋值非法）
+    {
+        ch::ch_device<MatUpIn> dev;
+        const std::string path = std::string(kOutDir) + "/matrix_up_in.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("would drive an input port of the target module") !=
+                std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    }
+    // ⑩ 兄弟边 × {reg, proxy, op} ⇒ 拒绝（驱动端 MUST 是 ch_out 端口）
+    auto sibling_rejects = [&](auto &dev, const std::string &name) {
+        const std::string path = std::string(kOutDir) + "/" + name;
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO(name << " error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE(r.error.find("sibling edge requires") != std::string::npos);
+        REQUIRE_FALSE(file_exists(path));
+    };
+    {
+        ch::ch_device<MatSibRegTop> dev;
+        sibling_rejects(dev, "matrix_sib_reg.v");
+    }
+    {
+        ch::ch_device<MatSibProxyTop> dev;
+        sibling_rejects(dev, "matrix_sib_proxy.v");
+    }
+    {
+        ch::ch_device<MatSibOpTop> dev;
+        sibling_rejects(dev, "matrix_sib_op.v");
+    }
 }
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {

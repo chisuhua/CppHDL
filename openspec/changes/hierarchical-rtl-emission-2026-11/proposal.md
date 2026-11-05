@@ -39,6 +39,11 @@
 
 ## Acceptance
 
+> ⚠️ **错误载体口径（ADR-058 v2.12 ⑤）**：本 change 的**全部**失败路径对外只有一个载体 ——
+> `ch::HierarchyEmitResult{ok=false, error=...}`（**发射器内不抛**；分析层的前置校验若抛，
+> 由 `toVerilogHierarchical` 入口**统一转换**成结果结构体）。下文遗留的 `抛` /
+> `CHFATAL_EXCEPTION` 字样一律按此口径理解。
+
 > ⚠️ 判据两条纪律：① 「逐字节一致」MUST 是**可机械判定**的（`cmp` 退出码）；
 > ② 每条判据 MUST 有**判别性对照**（mutation ⇒ 必须转红）。
 
@@ -58,12 +63,12 @@
       ⇒ ⇒ ⚠️ **成层组件自己的悬空 `ch_in` 也 MUST 冒泡**（不只 inline 组件的）
       ⇒ ⇒ 否则层次化产物里它只在子 module 上 ⇒ ⇒ **顶层无法驱动** ⇒ ⇒ 与扁平行为分叉
 - [ ] `owner == nullptr` 归顶层 + `CHWARN`（clock/reset **不告警**）
-- [ ] 已 build 未 `add_child` ⇒ 抛 + `add_child` 修法 + **负向对照**
-- [ ] 自驱动 `ch_in` ⇒ 抛；子 module 内 MUST NOT `assign <ch_in> = ...`
+- [ ] 已 build 未 `add_child` ⇒ **校验失败**（对外 = `ok == false` + `error`；ADR-058 v2.12 ⑤：**结果结构体是唯一对外载体**）+ `add_child` 修法 + **负向对照**
+- [ ] 自驱动 `ch_in` ⇒ **校验失败**（对外 = `ok == false` + 点名端口；子 module 内 MUST NOT `assign <ch_in> = ...`）
 - [ ] 父 module 为子 `ch_out` 声明连接网（接 output 的实参 MUST 是已声明 `logic`；
       接 input 可表达式 ⇒ MUST NOT 强制造网）
 - [ ] **MUST NOT 复用** module；同名不同类型**响亮拒绝**
-- [ ] **接口白名单**违反 ⇒ `CHFATAL_EXCEPTION` + 点名端口
+- [ ] **接口白名单**违反 ⇒ **校验失败** + 点名端口（对外 = `ok == false` + `error`；`CHFATAL_EXCEPTION` 只作**分析层内部**表述，入口统一转成结果结构体）
 - [ ] 三层设计产出 **3 个 module + 2 条实例化语句**；结构同构（**独立提取**，
       MUST NOT 复用分析层的 `ModuleDef`）
 - [ ] 错误模型：校验先于 I/O · 临时**文件** → rename（失败路径 MUST NOT 触碰既有同名文件）·
@@ -79,7 +84,7 @@
       ⇒ ⇒ ⚠️ 用例 MUST **含类级/实例级声明**（否则两形态恒等 ⇒ 判据退化为恒真）
 - [ ] **粒度的正向判据**（与上一条成对）：scope **同时覆盖构造与发射** + 粒度 = `ForceLayer`
       ⇒ ⇒ 产物 MUST 把每个组件都发射成独立 module（⇒ ⇒ 「作用域必须覆盖两段」的**正向**证据）
-- [ ] **`SynthesizeFatal` 的语义**（ADR-060 §2.4.1）：先合成完再失败 · 不产出文件 ·
+- [ ] **`SynthesizeFatal` 的语义**（ADR-060 §2.4.1）：先合成完再**失败**（对外 = `ok == false`，不是抛）· 不产出文件 ·
       诊断 MUST 含**全部**被合成的边与合成端口名 ⇒ ⇒ **「合成」MUST 是纯内存 phase ·
       先于任何文件 I/O** ⇒ ⇒ 失败时无临时文件、不触碰既有文件
 - [ ] **分析层新增字段 MUST NOT 进 `to_text()`** ⇒ ⇒ T3-② 的 4 份 golden **逐字节不变**

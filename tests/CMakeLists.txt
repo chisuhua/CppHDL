@@ -1088,6 +1088,18 @@ add_catch_test(test_verilog_module_emitter test_verilog_module_emitter.cpp)
 # hierarchical emission (hierarchical RTL T3-④): 3 modules + 2 instances, top ports
 # == flat ports, per-module clock/reset decision, determinism, error model.
 add_catch_test(test_hierarchy_verilog test_hierarchy_verilog.cpp)
+# 探针矩阵（B4）的「每格都有断言」判据需要**本文件自身**的源码来做 tag 索引校验
+target_compile_definitions(test_hierarchy_verilog PRIVATE
+    HIER_TEST_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/test_hierarchy_verilog.cpp")
+
+# 层次化 RTL 产物生成器 —— **不是 ctest 用例**（`CTEST_TOTAL` 锚点 MUST NOT 变）。
+# 供 `scripts/verify_hierarchical_rtl.sh` 在真实进程里生成产物后交给 verilator 判。
+add_executable(hier_rtl_products hier_rtl_products.cpp)
+target_include_directories(hier_rtl_products PRIVATE ${PROJECT_SOURCE_DIR}/include)
+if(TARGET cpphdl)
+    target_link_libraries(hier_rtl_products cpphdl)
+endif()
+
 add_catch_test(test_module test_module.cpp)
 # dual-backend-test-coverage (Phase 1): 3 CH_MODULE timing tests
 # migrated to DUAL_BACKEND_TEST_PAIR.
