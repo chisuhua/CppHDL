@@ -333,6 +333,32 @@
 
 ⚠️ **每条 MUST 有变异对照**（⇒ ⇒ 否则「判据空转」不可区分）。
 
+### 7.1.4 B2b-5 / B3 实施前的**三条裁决**（architect · 2026-11-05 · **v2 据 oracle 修正**）
+
+> ⚠️ **为什么必须在 B3 之前定**：① **G1 的改动会改变同类型多实例的 module 名** ⇒ ⇒
+> 若等 B3 加了「同类型多实例」的判据再改 ⇒ ⇒ 就要动既有判据 ⇒ ⇒ **现在改最便宜**；
+> ② **G2 决定 B3 的「可追溯」判据怎么写** ⇒ ⇒ 不定 ⇒ ⇒ B3 会被迫自行发明。
+
+| # | 裁决 | 理由 | 落点 |
+|---|---|---|---|
+| **G0** | **冒泡与第三轴 MUST 共用同一个 chain builder**（返回 `(module, port, dir, width, origin, target)` · **幂等** · 撞名/宽度错 **fail-closed**）⇒ ⇒ 但**叶端点策略 MUST 是两种 adapter**（**不可**只靠「起点节点 + 方向」区分） | 两者**方向相反但机制同构**：冒泡 = 无 driver 的 `ch_in` **自下而上**逐级冒泡（ADR-060 §2.2）；第三轴 = driver 在更上层 **自上而下**逐级传递（§2.1）⇒ ⇒ 每级都是「一个同名 `input` 端口」+ 名字 = **该节点的 ctx 级全局名** ⇒ ⇒ **两套实现必然漂移** ⇒ ⇒ MUST 是一套。⚠️ **但**（oracle 修正）：**链是同一条**（叶 → 祖先），而**叶端点策略不同** —— 冒泡的叶端点是**无 driver 的 `type_input`**（origin = `Bubbled`）；第三轴的叶端点可能是 **reg / proxy**（需**重定向**）⇒ ⇒ ⇒ **只用「起点节点 + 方向」当共同抽象会误标 origin 或漏 `port_drives_node`** ⇒ ⇒ MUST = **一个 chain builder + 两种 leaf adapter** | `src/hierarchy_verilog.cpp`（B2b-5 的实现约束）· 本节 |
+| **G1** | **同类型多实例的序号 MUST 按「`HierarchyModule.key` 的字节字典序」分配**（**组内**；先按 sanitized `module_type_name` 分组）⇒ ⇒ **MUST NOT 重排 `analysis.modules` 的 post-order 发射序** | 现状是按 `analysis.modules` 的**遍历序**（post-order ⇒ 依赖**组件创建顺序**）⇒ ⇒ 与 ADR-060 §2.3「按**实例路径**排序」不符。⇒ ⇒ 裁决 = **字典序**（`key` 的**字节**序 —— `std::map<std::string>` 天然序；⚠️ **MUST NOT** 用「逐段比较」：名字字符集**不受限**（`Component` 不校验），含 `< 0x2E` 的字符时两序**发散** ⇒ ⇒ 见 ADR-060 §2.3 v1.12）⇒ ⇒ 理由：① 确定性且**与 ctx 的节点 ID 分配顺序无关**（⇒ 不受「谁先创建」影响 ⇒ 跨重构稳定）② 实现最简 ③ 与「路径」这个键的自然读法一致。⚠️ **oracle 修正的两个口径**：(a) **key vs 相对路径** ⇒ 取 **`key`**（它是 `HierarchyModule` 的既有字段 ⇒ 零新增；相对路径需另算 ⇒ 且 `.`/`_` 分隔符要另定 ⇒ ⇒ 收益不抵成本）；(b) **MUST NOT 重排 post-order 发射序** —— 序号分配只影响**名字**，**不**改变 module 的发射顺序（post-order 是既有零回归判据的一部分） | `src/hierarchy_verilog.cpp`（序号分配）· **必须在 B3 之前落地** |
+| **G2** | **「端口来源可追溯」的第五类 = 合成端口**（隐式端口）⇒ ⇒ 其来源信息 MUST 由 **`HierarchyEmitResult.port_provenance`**（**value-only**）承载 ⇒ ⇒ 且**含注入的 clock/reset** ⇒ ⇒ 发射前 MUST 校验 **expected ⊆ actual**（⚠️ 是**子集**不是判等，与 ADR-060 §6 v1.12 统一：**多余**端口不由此判据管 —— 由**名字唯一性** + **构造不变量**（`ModuleView` 只由发射循环构造 ⇒ 不会出现凭空多出的端口）覆盖）与**名字唯一性**，失败 ⇒ `ok=false` | 分析层 `HierarchyPortOrigin` 只有 **4 类**（`Self` / `ClockReset` / `InlineFolded` / `Bubbled`）⇒ ⇒ 合成端口（`__if_<n>` / `__x_<n>`）**不在分析层**（它们是**发射期**造的 ⇒ ⇒ 不是 IR 节点）⇒ ⇒ ⇒ 「五类」的第五类只能是它。⚠️ **oracle 修正的两个层位**：(a) **注入的 clock/reset 不在分析层端口表**（非 root module 的 clock/reset 是**发射期补的** ⇒ ⇒ 只查分析层**必然漏**）；(b) **只加一个 enum 或只查分析层都会漏** ⇒ ⇒ MUST 在**发射期**（`HierarchyEmitResult`）做**完整性校验**（expected = 分析层端口 ∪ 合成端口 ∪ 注入 clock/reset ⇒ actual = `ModuleView.ports` ∪ `synthesized_ports`） | `include/hierarchy_verilog.h` + `src/hierarchy_verilog.cpp`（**B3** 的活） |
+
+⚠️ **G1 的落地时机**：MUST 在 **B3 加「同类型多实例」判据之前** ⇒ ⇒ 建议作为
+**B2b-5 之前的一个独立小批次**（零行为变化的产物影响：现状**无**同类型多实例用例 ⇒ ⇒
+改动对现有产物**逐字节无影响**）⇒ ⇒ ⚠️ **先落地再让 B3 加判据** ⇒ ⇒ 避免返工。
+
+⚠️ **G1 的另一条 oracle 修正**：**同 base 不同类型** MUST 在**编号之前**判身份
+（现状只查**生成后**重名 ⇒ ⇒ 两个不同类型的组件若 sanitized 后 base 相同 ⇒ ⇒
+会被**静默**编成 `_0` / `_1` ⇒ ⇒ 与 ADR-060 §2.3「同名不同类型 ⇒ 响亮拒绝」不符）
+⇒ ⇒ MUST 改成：**编号前**按 `(sanitized base, 类型身份)` 二元组判 ⇒ ⇒ 撞 ⇒ `CHFATAL_EXCEPTION`。
+
+⚠️ **G0 的另一半 = F2**（oracle 修正：G0 漏了它）：**成层组件**的无 driver `ch_in`
+现状归 `Self` 而**不是**冒泡（`src/hierarchy_analysis.cpp:247-253`）⇒ ⇒ 与 ADR-060 §2.2
+「无 driver 的子 `ch_in` ⇒ 逐级向上冒泡」**不符** ⇒ ⇒ 属 **B3** 的活（F2），但 MUST 用
+G0 的 chain builder（⇒ 与第三轴**同一套**机制）⇒ ⇒ 不得另写。
+
 ### 7.1.3 B2b-3 的**值判据归属**（oracle 指出的缺口 · 显式登记，不假装有）
 
 ⚠️ **oracle 的核心担心**：proxy 子形态若**漏接**（合成端口没有真正驱动 proxy）⇒ ⇒
