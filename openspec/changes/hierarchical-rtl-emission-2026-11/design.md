@@ -110,7 +110,7 @@
 |---|---|---|
 | **B1** 策略枚举收敛 | ✅ **已落地** | 删两份重复枚举 + 删 `Component::set_granularity()` · 编译期 `static_assert` · **粒度作用域三格判据**（半生效 / 正向 ForceInline / 正向 ForceLayer）· `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 |
 | **B2a** collect 化 | ✅ **已落地** | 分析层 `ImplicitPortHandling{Reject, Record}`（**默认 Reject** ⇒ ⇒ T3-② 判据零削弱 · 新字段不进 `to_text()` ⇒ ⇒ 4 份 golden 逐字节不变）· 发射层**预检 collect**（合成类问题**全部**收集 ⇒ ⇒ 上移到发射前）· 策略驱动的诊断广度（`Reject` 只报第一条 · 其余报全部）· **变异验证**：退回首错即返 ⇒ 转红 · `ctest -LE perf` **238/238** · 扁平基线 `cmp` 全 0 |
-| **B2b** 隐式端口合成 | 🚧 **拆成三批**（据实施期发现）⇒ **B2b-1 ✅**（行 2「子→父」）· **B2b-2 ✅**（行 1「父→子」· 寄存器 next 子形态 + 驱动重定向）· B2b-3 = 行 1 的其余子形态（proxy/op 源）+ 第三轴 + 兄弟边 + F3 | **B2b-2**：`ModuleView::port_drives_node`（**发射期**重定向表 · **MUST NOT** 写回 IR）· `print_reg` 命中重定向 ⇒ ⇒ 寄存器 next 改由合成 input 端口驱动（⚠️ 不重定向 ⇒ ⇒ 退化成「保持」⇒ ⇒ **静默丢驱动**）· 行 1 合成（子侧 `input __if_<n>` + 父侧 `. __if_<n>(<父层驱动>)`）· 变异 M1/M2 全抓 · lint exit 0 | **B2b-1**：分析层 `PendingImplicitEdge` 增节点指针 + 方向 + 子实例名（⚠️ 实例名**按方向**取）· 发射器 `ModuleView::synthesized_ports`（合成端口**不是 IR 节点**）· 行 2 合成（子侧 `output __x_<n>` + 体内 assign + 父侧实例映射）· **未消费的子 output 以空连接 `.port()` 出现**（⇒ 否则 `PINMISSING`）· 变异 M1/M2 全抓 · lint exit 0 |
+| **B2b** 隐式端口合成 | 🚧 **拆成五批**（2026-11-05 重排）⇒ **B2b-1 ✅**（行 2「子→父」）· **B2b-2 ✅**（行 1 · 寄存器 next + 驱动重定向）· **B2b-3**（proxy 子形态 + 合成名去重 + 探针矩阵骨架）· **B2b-4**（F3：inline 后代 `ch_out` 作用域 + `type_output`-as-wire）· **B2b-5**（第三轴 + 兄弟边） | ⚠️ 形态边界由 **ADR-060 v1.9** 定死：reg next ✅ / proxy ✅ / **op 操作数 ❌ 拒绝** / **父驱动子 `ch_out` ❌ 拒绝** / `operator=` 无处理 | **B2b-2**：`ModuleView::port_drives_node`（**发射期**重定向表 · **MUST NOT** 写回 IR）· `print_reg` 命中重定向 ⇒ ⇒ 寄存器 next 改由合成 input 端口驱动（⚠️ 不重定向 ⇒ ⇒ 退化成「保持」⇒ ⇒ **静默丢驱动**）· 行 1 合成（子侧 `input __if_<n>` + 父侧 `. __if_<n>(<父层驱动>)`）· 变异 M1/M2 全抓 · lint exit 0 | **B2b-1**：分析层 `PendingImplicitEdge` 增节点指针 + 方向 + 子实例名（⚠️ 实例名**按方向**取）· 发射器 `ModuleView::synthesized_ports`（合成端口**不是 IR 节点**）· 行 2 合成（子侧 `output __x_<n>` + 体内 assign + 父侧实例映射）· **未消费的子 output 以空连接 `.port()` 出现**（⇒ 否则 `PINMISSING`）· 变异 M1/M2 全抓 · lint exit 0 |
 | **B3** 冒泡 + 端口完整性 + 拒绝类 + 白名单 | ⏳ | — |
 | **B4** 护栏 + CI + 归档 | ⏳ | — |
 
@@ -127,7 +127,15 @@
    ⇒ ⇒ 「C1 未答 ⇒ 只加不删」**无对象** ⇒ ⇒ ✅ **2026-11-05 更新：C1 已答 = 接受单文件多
    module**（ADR-058 **v2.10**）⇒ ⇒ ⇒ 「多文件模式」**不重开** ⇒ ⇒ 本段仅作**历史记录**。
 
-### 7.1 T3-④ 剩余：4 个批次（每批一个 commit）
+### 7.1 T3-④ 剩余：**6 个批次**（每批一个 commit · 2026-11-05 重排）
+
+> ⚠️ **为什么从 4 批变 6 批**（planner · 2026-11-05）：ADR-060 **v1.9** 把 B2 的形态边界
+> 定死（op 操作数 ⇒ 拒绝 · 父驱动子 `ch_out` ⇒ 拒绝 · proxy ⇒ 合成）之后，原 B2 剩余的
+> 5 个子项**机制彼此独立**（proxy 复用 B2b-2 的重定向 · F3 要动分析层 + `print_decl` ·
+> 第三轴要遍历祖先链 · 兄弟边要共同祖先中转）⇒ ⇒ 按本 feature「一批次 = 一组回归判据
+> ⇒ 可归因」的纪律**再拆 3 批**（B2b-3 / B2b-4 / B2b-5）。
+> ⚠️ **顺序不可换**：B2b-3（proxy）→ B2b-4（F3）→ **B3（端口完整性依赖 F3）**；
+> B2b-5（第三轴 / 兄弟边）与 B2b-4 **可并行**但要先于 B3（B3 的冒泡要走祖先链，与第三轴同构）。
 
 #### B1 策略枚举收敛（**无行为变化** · 最小）
 
@@ -136,7 +144,53 @@
 - **判据**：编译期 `static_assert`（枚举值逐个相等）+ 现有 4 用例仍绿 + **扁平外部基线 3 个设计 `cmp` 全 0**。
 - **产出**：`refactor(hierarchy): 策略枚举收敛到 ADR-060 的单一权威`。
 
-#### B2 隐式端口合成 + 兄弟边 + 第三轴（ADR-060 §2.1 · **最大**）
+#### B2b-3 proxy 子形态 + 合成名去重 + 探针矩阵骨架（**复用 B2b-2 机制** · 小）
+
+| 步 | 内容 | 落点 |
+|---|---|---|
+| 3.1 | `ModuleEmitter::print_proxy` 增 `port_drives_node` 分支：proxy 被合成 input 端口驱动时，在 suppress 检查**之前**发 `assign <proxy 全局名> = __if_<n>;` | `src/codegen_verilog.cpp` |
+| 3.2 | 发射层行 1 白名单加 `type_proxy`（⚠️ **MUST NOT** 加 `type_output` —— ADR-060 v1.9 第八格：拒绝） | `src/hierarchy_verilog.cpp` |
+| 3.3 | **合成名去重接缝**：发射前断言 `__if_<n>` / `__x_<n>` 不在 `names` 表内；冲突顺延 `_N` | `src/hierarchy_verilog.cpp` |
+| 3.4 | **探针矩阵骨架**（oracle 建议 #5）：`成员类型 × 操作 × 方向` 的机械组合，每格断言落入 {正确处理, 响亮拒绝} 之一 | `tests/test_hierarchy_verilog.cpp` |
+
+- **判据**：① proxy 跨层驱动 ⇒ 子侧 `input __if_<n>` + 子内 `assign <proxy> = __if_<n>;` +
+  父侧映射；② ⭐ **值判据**（oracle：lint 与结构断言**都看不见** proxy 漏接 ——
+  默认 warning 集不查 `UNDRIVEN`）⇒ 子树输出**逐拍**等于期望值（用 `ch_device` + `Simulator`
+  或在派生 DUT 上断言子输出）；③ op 操作数形态 ⇒ **响亮拒绝**（负向）；④ 父驱动子 `ch_out`
+  ⇒ **响亮拒绝**（负向，第八格）；⑤ 合成名与用户节点撞名 ⇒ 顺延（构造一个叫 `__if_0` 的节点）
+
+#### B2b-4 F3：inline 后代 `ch_out` 的作用域 + `type_output`-as-wire（**独立机制** · 中）
+
+| 步 | 内容 | 落点 |
+|---|---|---|
+| 4.1 | 分析层按**作用域**区分 inline 后代的 `ch_out`：本 module 是**顶层** ⇒ output 端口；**非顶层成层** ⇒ 体内普通信号（ADR-061 决策② 两作用域表） | `src/hierarchy_analysis.cpp` |
+| 4.2 | `print_decl` 增 `type_output`-**as-wire** 分支（角色③）· `print_header` 不把它当端口 | `src/codegen_verilog.cpp` |
+
+- **判据**：① 非顶层 module 内 inline 子组件的 `ch_out` ⇒ **有 `logic` 声明 + `assign`**，
+  且**不**出现在该 module 的端口表；② 顶层 module 的同形态 ⇒ **仍是 output 端口**（负向对照）；
+  ③ `verilator --lint-only`（**ADR-060 §2.5 的门**）零 Error / 零 Warning
+
+#### B2b-5 第三轴（pass-through）+ 兄弟边（**祖先链与共同祖先** · 中）
+
+| 步 | 内容 | 落点 |
+|---|---|---|
+| 5.1 | **第三轴**：driver 的 `owner` 在更上层（含 `nullptr`）⇒ 沿祖先链**逐级同名** `input` 端口（每级一个） | `src/hierarchy_verilog.cpp` |
+| 5.2 | **兄弟边**：子 A 的输出 → 子 B 的输入 ⇒ 共同祖先 module 内**一根 wire** + 两处实例映射（**MUST NOT** 兄弟直连） | 同上 |
+
+- **判据**：① 第三轴 ⇒ 每级一个同名端口 + 顶层可驱动（值判据）；② 兄弟边 ⇒ 共同祖先内
+  **恰好一根**连接网 + 两实例各连一次 + **零**隐式端口；③ 两者均过 §2.5 的 lint 门
+
+#### B2 的**裁决结论**（ADR-060 v1.9 —— 实施时 MUST 照此，不得自行发明）
+
+| 形态 | 处置 | 判据 |
+|---|---|---|
+| 子成员 `reg` 的 `next` | ✅ 合成（B2b-2 已落地） | 驱动重定向 + **不得**出现「Register update (no next)」 |
+| **proxy**（bundle 字段） | ✅ 合成（B2b-3） | ⭐ **值判据**（lint 抓不到漏接） |
+| **op 操作数**（`ch_uint <<=`） | ❌ **拒绝**（第七格） | 响亮拒绝 + 替代路径 |
+| **父驱动子 `ch_out`** | ❌ **拒绝**（第八格） | 响亮拒绝（**MUST NOT** 依赖白名单偶然形状） |
+| `operator=` | 无处理（不产生边） | 产物与不写它**逐字节相同** |
+
+#### B2 的历史设计稿（保留作对照 · 已被 ADR-060 v1.9 收窄）
 
 | 步 | 内容 | 落点 |
 |---|---|---|
@@ -164,6 +218,14 @@
 - **判据**：每条一用例（含负向对照 + **错误消息点名断言**）+ 「inline 不产生隐式端口」的负向对照。
 
 #### B4 护栏 + CI + 归档
+
+> ⚠️ **B4 新增两项义务**（2026-11-05 · ADR-060 v1.9 / oracle）：
+> ① **lint 门 MUST 按 ADR-060 §2.5 的可执行定义**（不加 `-Wall` · 捕获退出码 ·
+>    stderr 不含 `%Error` · `lint_off` 白名单 · **禁用 `-Wno-fatal`**）—— 实测 `-Wall`
+>    对本设计**合法产物**报 4 类 warning（`DECLFILENAME` / `PINCONNECTEMPTY` /
+>    `UNUSEDSIGNAL`×2）⇒ 不是「warning 被忽略」，是结构性不相容；
+> ② **探针矩阵补全**（B2b-3 搭骨架）⇒ 归档判据 = 矩阵每一格都有断言且三态明确
+>    （正确处理 / 响亮拒绝 / 无处理）。
 
 - 4.1 `scripts/verify_hierarchical_rtl.sh`：**R1** 零未声明引用 · **R2** 实例端口名 ∈ 目标 module 端口集 · **R3** 端口宽度一致 · **R4** 产物确定性 · **R5** 跨模块 `ch_mem` 被拒 · **R6** module 树结构同构（**从产物独立提取** ⇒ MUST NOT 复用分析层 `ModuleDef`）。
 - 4.2 `--self-test`（**原地投毒** ⇒ 每条判据必红 ⇒ 还原复绿）。

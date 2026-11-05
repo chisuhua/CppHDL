@@ -97,9 +97,12 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ | — |
 | T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
 
-### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **4 个批次 · 逐个 commit**）
+### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **8 个批次 · 逐个 commit**）
 
 > ⚠️ **一个批次 = 一个 commit** ⇒ ⇒ 「回归变红」**可归因**（沿用本 feature「①a/①b/①c MUST 拆开」的裁决）。
+> ⚠️ **B2b 已拆 5 批**（2026-11-05 · ADR-060 v1.9 定死形态边界后重排）：B2b-1 行 2 ✅ ·
+> B2b-2 行 1 寄存器 ✅ · B2b-3 proxy + 去重 + 探针骨架 · B2b-4 F3 · B2b-5 第三轴 + 兄弟边
+> ⇒ ⇒ **顺序不可换**（B3 的端口完整性与冒泡**依赖 F3**）。
 > ⚠️ **排期顺序由 oracle 实测决定**（台账 §11.5 **O3**）：**先 collect 化、再做 F2/F3**
 > ⇒ ⇒ 否则 `SynthesizeFatal` 的诊断收集与 F2/F3 改**同一个发射循环** ⇒ ⇒ 二次返工。
 
@@ -107,9 +110,13 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 |---|---|---|---|
 | **B1** | **策略枚举收敛**（零行为变化）：删 `HierarchyPortPolicy` / `HierarchyUndrivenPolicy` ⇒ 用 `ch::PortPolicy` / `ch::UndrivenPolicy`（ADR-060 §2.4 的**唯一权威**）· **删 `Component::set_granularity()`**（零调用点 ⇒ 绕过 RAII 的泄漏通道）· `HierarchyEmitOptions` 加 `top_module_name`、**不加** `granularity`（全局权威） ⇒ ⇒ ✅ **C1 已答（2026-11-05 · ADR-058 v2.10）= 接受单文件多 module** ⇒ ⇒ 本批「只加不删」的兜底**未触发**（代码里**从未**实现 `out_dir` / `one_file_per_module` ⇒ ⇒ 无对象）· ⚠️ **返回类型偏离登记**（ADR-058 §2.3 写 `std::expected<HierManifest, HierError>` ⇒ 已落地的是同构 struct `HierarchyEmitResult` ⇒ ⇒ 本批登记为「实现取同构 struct · 语义等价」） | — | 编译期 `static_assert`（枚举逐个相等）+ 既有 4 用例绿 + 扁平外部基线 3 设计 `cmp` 全 0 |
 | **B2a** | **发射循环 collect 化**（**零行为重构** ⇒ ⇒ 单独成 commit ⇒ ⇒ 兑现「一个批次 = 一组回归判据 ⇒ 可归因」）：把「合成类」边的诊断从「首错即返」改为 **collect**（`SynthesizeFatal` 的诊断载体）⇒ ⇒ **前置校验类**错误**保持首错即返**（对齐 `Reject` 语义） | B1 | 既有用例全绿 + 3 设计 `cmp` 全 0 + **`SynthesizeFatal` 多越界边 ⇒ 诊断含全部边与端口名**（对照：只报第一条 ⇒ 转红）|
-| **B2b** | **隐式端口合成**（ADR-060 §2.1 四行矩阵 + 第三轴 pass-through + 兄弟边父层中转）+ `type_output`-as-wire（ADR-061 决策② 角色 ③） | B2a | 方向矩阵**四行各一**用例 + 第三轴 + 兄弟边（专属用例：A.out → B.in ⇒ 父层**一根**连接网 + 两实例化各连一次 + 零隐式端口）；每例 = 端口表断言 + `verilator --lint-only` exit 0 + **零跨 module assign** + **发生合成时逐边 `CHWARN` + 产物内注释** + **未发生合成时产物无注释** |
+| **B2b-1** ✅ | **行 2（子 → 父）**：子侧 `output __x_<n>` + 体内 `assign` + 父侧实例映射 · **未消费的子 output 以空连接 `.port()` 出现** | B2a | 变异 M1/M2 全抓 · lint（§2.5 门）exit 0 |
+| **B2b-2** ✅ | **行 1（父 → 子）寄存器形态**：子侧 `input __if_<n>` + `print_reg` **发射期**驱动重定向（**MUST NOT** 写回 IR） | B2b-1 | 变异 M1/M2 全抓 · 判据含「**不得**出现 `Register update (no next)`」 |
+| **B2b-3** | **proxy 子形态**（ADR-060 v1.9 行 1：**仅** reg/proxy 在矩阵内）+ 合成名去重接缝 + **探针矩阵骨架**（`成员类型 × 操作 × 方向`，每格三态之一） | B2b-2 | ⭐ **值判据**（proxy 漏接时 lint **看不见** —— 默认集不查 `UNDRIVEN`）· op 操作数 ⇒ **响亮拒绝**（第七格）· 父驱动子 `ch_out` ⇒ **响亮拒绝**（第八格） |
+| **B2b-4** | **F3**：inline 后代 `ch_out` 按**作用域**落点（顶层 ⇒ output / 非顶层成层 ⇒ 体内 wire）+ `print_decl` 的 `type_output`-as-wire | B2b-3 | 非顶层 ⇒ `logic` 声明 + `assign` 且**不**进端口表 · 顶层 ⇒ 仍是 output（负向对照） |
+| **B2b-5** | **第三轴**（driver 的 `owner` 在更上层 ⇒ 沿祖先链**逐级同名** input 端口）+ **兄弟边**（共同祖先内一根 wire + 两处实例映射，**MUST NOT** 兄弟直连） | B2b-4 | 第三轴：每级一个同名端口 + 顶层可驱动（值判据）· 兄弟边：恰好一根连接网 + **零**隐式端口 |
 | **B3** | **冒泡**（成层组件的悬空 `ch_in` 逐级冒泡）+ **端口完整性**（⊇ 自身 `ch_in`/`ch_out` + 五类来源可追溯 + `type_output` 三角色 + 空端口 module 合法）+ **拒绝类**（跨模块 `ch_mem` / 自驱动 `ch_in` / 同名不同类型 / 同类型多实例**不复用**）+ **接口白名单**（ADR-062 §2.6） ⇒ ⇒ ⚠️ **三个机制 MUST 写死**：① **可追溯的载体 = `HierarchyEmitResult`**（随返回结构体带出端口来源；分析层 `to_text()` 与**既有字段的顺序/命名 MUST NOT 动** ⇒ ⇒ T3-② 的 4 份 golden + 87 条断言零改动）；② **白名单的检查点 = 发射期端口表定稿后**；可违反形态 = **隐式端口 / mem 读端口被抬成端口**时其类型 ∈ {`ch_mem` · `ch_reg` · bundle 切片（非 uint/bool）· `ch_stream`} ⇒ ⇒ 负向对照 MUST 构造该形态；③ **错误消息点名 = `HierarchyEmitResult.error` 的子串比对**（MUST NOT 只抓 stderr） | B2b | 每条一用例 + 负向对照 + **错误消息子串断言**（点名端口 / 名字）|
-| **B4** | **护栏** `scripts/verify_hierarchical_rtl.sh`（R1 零未声明引用 · R2 实例端口名 ∈ 目标端口集 · R3 端口宽度一致 · R4 确定性 · R5 跨模块 `ch_mem` 被拒 · R6 module 树结构同构〔从产物独立提取〕· **R7 层次化产物路径 ≠ 既有扁平产物路径**〔⚠️ **适用面 = 仓内调用点**：对每个 `toVerilogHierarchical(` 的 path 实参，断言其 ≠ 同目录任何 `toVerilog(` 实参 ⇒ ⇒ **不是**「扫描工作目录所有 `.v`」⇒ ⇒ 否则成误报机器〕）+ `--self-test` + **CI 两处** + **归档**（**11 条 delta** · **禁** `--skip-specs`） | B3 | 每条护栏判据**原地投毒必红** ⇒ 还原复绿（⚠️ **7 条判据 ⇒ ≥7 个投毒 fixture** ⇒ ⇒ 工作量**中偏大**，不是「中」）|
+| **B4** | **护栏** `scripts/verify_hierarchical_rtl.sh`（R1 零未声明引用 · R2 实例端口名 ∈ 目标端口集 · R3 端口宽度一致 · R4 确定性 · R5 跨模块 `ch_mem` 被拒 · R6 module 树结构同构〔从产物独立提取〕· **R7 层次化产物路径 ≠ 既有扁平产物路径**〔⚠️ **适用面 = 仓内调用点**〕）+ **探针矩阵补全** + `--self-test` + **CI 两处** + **归档**（**11 条 delta** · **禁** `--skip-specs`） | B3 | 每条护栏判据**原地投毒必红** ⇒ 还原复绿（⚠️ **7 条判据 ⇒ ≥7 个投毒 fixture**）· ⚠️ **lint 门 MUST 按 ADR-060 §2.5 的可执行定义**（不加 `-Wall` · 捕获退出码 · stderr 不含 `%Error` · `lint_off` 白名单 · **禁用 `-Wno-fatal`**）—— 实测 `-Wall` 对本设计的**合法**产物报 4 类 warning（`DECLFILENAME` / `PINCONNECTEMPTY` / `UNUSEDSIGNAL`×2）|
 
 > ⚠️ **B2 的硬约束**：分析层新增字段 **MUST NOT** 进 `to_text()` ⇒ ⇒ **T3-② 的 4 份 golden 逐字节不变**
 > ⇒ ⇒ 归档 change 的判据**不被削弱**（新增信息由 T3-④ 自己的测试覆盖）。

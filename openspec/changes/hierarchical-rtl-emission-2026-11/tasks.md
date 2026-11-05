@@ -100,41 +100,75 @@
       ⇒ ⇒ **变异 M1**（关掉行 1 合成 ⇒ 转红）· **M2**（不做驱动重定向 ⇒ 转红）· 还原复绿
       ⇒ ⇒ `verilator --lint-only` 对四个产物 **exit 0** · `ctest -LE perf` **238/238**
 
+## T0e 批次 B2b-3（proxy 子形态 + 合成名去重 + 探针矩阵骨架 · 待实施）
+
+> 判据来源：ADR-060 **v1.9** §2.1 行 1（proxy ⇒ 合成 · op ⇒ 第七格拒绝 ·
+> 父驱动子 `ch_out` ⇒ 第八格拒绝）+ §2.2 去重接缝。
+
+- [ ] 0.20 `print_proxy` 增 `port_drives_node` 分支（在 `suppress_driver_assign` **之前**拦截）
+      ⇒ ⇒ ⚠️ **漏做的失败模式是静默读 X**：proxy 会被声明成无驱动 `logic`，
+      而**默认 warning 集不查 `UNDRIVEN`** ⇒ lint **零告警**通过
+- [ ] 0.21 行 1 白名单加 `type_proxy`（⚠️ **MUST NOT** 加 `type_output`）
+- [ ] 0.22 合成名去重：发射前断言 `__if_<n>` / `__x_<n>` 不在 `names` 表内 ⇒ 冲突顺延 `_N`
+- [ ] 0.23 **探针矩阵骨架**：`成员类型 × 操作 × 方向` 机械组合，每格断言三态之一
+- [ ] 0.24 **判据**：① proxy 跨层 ⇒ 子侧 `input __if_<n>` + 子内 `assign <proxy> = __if_<n>;`
+      ② ⭐ **值判据**（逐拍值，不靠 lint/结构断言）③ op ⇒ 响亮拒绝 ④ 父驱动子 `ch_out`
+      ⇒ 响亮拒绝 ⑤ 撞名 ⇒ 顺延 ⑥ `verilator --lint-only`（**ADR-060 §2.5 的门**）零告警
+
+## T0f 批次 B2b-4（F3：inline 后代 `ch_out` 作用域 + `type_output`-as-wire · 待实施）
+
+- [ ] 0.25 分析层按作用域区分：顶层 ⇒ output 端口；非顶层成层 ⇒ **体内普通信号**
+- [ ] 0.26 `print_decl` 增 `type_output`-as-wire 分支；`print_header` 不把它当端口
+- [ ] 0.27 **判据**：非顶层 ⇒ `logic` 声明 + `assign` 且**不**进端口表；顶层 ⇒ 仍是 output（负向对照）
+      ⇒ ⚠️ **若不修**：体内输出是 `assign` 的目标却**无声明** ⇒ Verilator 报 undeclared
+
+## T0g 批次 B2b-5（第三轴 pass-through + 兄弟边 · 待实施）
+
+- [ ] 0.28 **第三轴**：driver 的 `owner` 在更上层（含 `nullptr`）⇒ 沿祖先链逐级**
+      同名** `input` 端口（每级一个）
+- [ ] 0.29 **兄弟边**：子 A 输出 → 子 B 输入 ⇒ 共同祖先内**一根** wire + 两处实例映射
+      （**MUST NOT** 兄弟直连）
+- [ ] 0.30 **判据**：第三轴每级一个同名端口 + 顶层可驱动（值判据）；兄弟边恰好一根连接网 +
+      **零**隐式端口；两者均过 §2.5 的 lint 门
+
 ## T1 module 主体与实例化
 
 - [x] 1.1 每个成层组件产出一个 `module`（`<module_type_name>_<序号>`）
 - [x] 1.2 父 module 内例化子 module + **实例端口映射** ⇒ ⇒ **零跨 module `assign`**
       （跨 module 的驱动边 ⇒ `suppress_driver_assign` ⇒ 值由实例端口映射提供）
-- [ ] 1.3 **MUST NOT 复用** module 定义；同名不同类型 ⇒ `CHFATAL_EXCEPTION`
+- [ ] 1.3 **[B3]** **MUST NOT 复用** module 定义；同名不同类型 ⇒ `CHFATAL_EXCEPTION`
 - [x] 1.4 顶层 module 端口表 **逐字逐序**等于扁平端口表（clock → reset → input → output；
       **全 inline 时整份产物与扁平逐字节相同** —— 实测）
 
 ## T2 端口
 
-- [ ] 2.1 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
-- [ ] 2.2 隐式端口（ADR-060 §2.1 四行方向矩阵 + 第三轴 pass-through）
-- [ ] 2.3 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `strict` 抛）
+- [ ] 2.1 **[B3]** 自身 `ch_in` / `ch_out` ⇒ 成层且非根 module 的端口集合 **⊇**
+- [ ] 2.2 隐式端口 ⇒ **[B2b-3 行 1 proxy / B2b-1 行 2 / B2b-5 第三轴 + 兄弟边]**
+      （ADR-060 §2.1 矩阵 + **v1.9 第七/八格拒绝**）
+- [ ] 2.3 **[B3]** 悬空冒泡（逐字同名 + 注释 + `CHWARN` + `strict` 抛）
 - [x] 2.4 clock / reset：根**无条件**发；非根**分开判**（clock ⇒ reg ∨ 写端口 ∨ sread；
       reset ⇒ reg ∨ sread）+ **需求向上传导**（子要 clock ⇒ 父也要 ⇒ 实例化不缺 pin）
-- [ ] 2.5 `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）
+- [ ] 2.5 **[B2b-4 体内 wire / B3 三角色总和]** `type_output` 三角色（自身端口 / 隐式输出 / **体内 wire**）
 
 ## T3 拒绝与错误模型
 
-- [ ] 3.1 跨模块 `ch_mem` ⇒ 响亮拒绝（判定 = **inline 折叠后**归属）
-- [ ] 3.2 自驱动 `ch_in` ⇒ 抛；子 module 内 MUST NOT `assign <ch_in> = ...`
+- [ ] 3.1 **[B3]** 跨模块 `ch_mem` ⇒ 响亮拒绝（判定 = **inline 折叠后**归属）
+- [ ] 3.2 **[B3]** 自驱动 `ch_in` ⇒ 抛；子 module 内 MUST NOT `assign <ch_in> = ...`
+      ⇒ ⚠️ **v1.9 第八格**：父层驱动子 `ch_out` 同型拒绝（**MUST NOT** 依赖白名单偶然形状）
 - [x] 3.3 已 build 未 `add_child` ⇒ 抛 + `add_child` 修法（由分析层前置校验给出）+ 负向对照
       （`[hierarchy][emit][error]`：失败 ⇒ `ok=false` + **不留任何文件**）
-- [ ] 3.4 接口白名单违反 ⇒ `CHFATAL_EXCEPTION` + 点名端口
+- [ ] 3.4 **[B3]** 接口白名单违反 ⇒ `CHFATAL_EXCEPTION` + 点名端口
 - [x] 3.5 错误模型：校验先于 I/O · 临时文件→rename · 失败**可被调用方观测**（返回结构体）·
       静态析构期用**返回码**兜底（不抛不写盘）
 
 ## T4 护栏
 
-- [ ] 4.1 `scripts/verify_hierarchical_rtl.sh`（零未声明引用 · 实例端口名 ∈ 端口集 ·
+- [ ] 4.1 **[B4]** `scripts/verify_hierarchical_rtl.sh`（lint 门 = **ADR-060 §2.5**：
+      不加 `-Wall` · 捕获退出码 · stderr 不含 `%Error` · `lint_off` 白名单 · 禁用 `-Wno-fatal`）（零未声明引用 · 实例端口名 ∈ 端口集 ·
       **端口宽度一致** · 产物确定性 · 跨模块 `ch_mem` 被拒）
-- [ ] 4.2 判据 MUST 基于 `verilator --json-only` 的结构化提取（复用
+- [ ] 4.2 **[B4]** 判据 MUST 基于 `verilator --json-only` 的结构化提取（复用
       `scripts/lib/verilog_tree_extract.py`）⇒ ⇒ **MUST NOT** 自研 Verilog 文本解析器
-- [ ] 4.3 CI 挂 **两处**（主路径 + `--self-test`）
+- [ ] 4.3 **[B4]** CI 挂 **两处**（主路径 + `--self-test`）
 
 ## 验证命令
 
