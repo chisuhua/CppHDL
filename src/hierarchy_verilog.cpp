@@ -122,17 +122,67 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         return result;
     }
 
+    // ── 命名表（**提前**建：合成端口的 `assign` 与父侧实参都要用它）
+    //    （纯读 ⇒ ⇒ 无副作用 ⇒ ⇒ 提前不影响任何既有行为）
+    const auto names = build_verilog_name_table(root.context()->get_eval_list());
+
+    // ── **行 2（子 → 父）的隐式端口合成**（ADR-060 §2.1 行 2）────────────
+    //    子侧端点**不是**子端口 ⇒ ⇒ 在**子侧**合成 **output** 端口 `__x_<n>`
+    //    ⇒ ⇒ 子体内 `assign __x_<n> = <子侧节点>;`
+    //    ⇒ ⇒ 父侧实例端口映射 `. __x_<n>(<父侧端点>)`
+    struct SynthPortInfo {
+        std::string port;
+        std::string node;
+        std::uint32_t width = 0;
+    };
+    /// 子 module key → 它要发的合成端口（⇒ ⇒ 端口声明 + 体内 assign）
+    std::map<std::string, std::vector<SynthPortInfo>> synth_by_child;
+    /// (父 module key, 子实例名) → 追加到该实例的连接
+    std::map<std::string, std::vector<HierarchyConnection>> synth_conns;
+    /// 子 module key → 端口序号（确定性 ⇒ ⇒ 同名不同义）
+    std::map<std::string, int> synth_seq;
+    /// 子 module key → (子侧节点 → 端口名)（**去重**：同一节点只合成一个端口）
+    std::map<std::string, std::map<const lnodeimpl *, std::string>> synth_port_of;
+    /// **不可合成**的合成类问题（⇒ ⇒ 交给下面的 collect ⇒ ⇒ 按策略处置）
+    std::vector<std::string> remaining;
+
+    for (const auto &e : analysis.pending_implicit_edges) {
+        const std::string desc =
+            "'" + e.from_node + "'@'" + e.from_module + "' -> '" + e.to_node + "'@'" +
+            e.to_module + "' (" + e.reason + ")";
+        // ⚠️ **只处理「直接父子 + 子→父 + 子侧端点不是端口」这一格**
+        const bool can_synthesize =
+            e.child_drives_parent && e.from_ptr != nullptr && e.to_ptr != nullptr &&
+            !e.child_instance_name.empty() && names.count(e.from_ptr) != 0 &&
+            names.count(e.to_ptr) != 0;
+        if (!can_synthesize) {
+            remaining.push_back(desc);
+            continue;
+        }
+        const std::string &child_key = e.from_module;   // 子侧 module（驱动端所在）
+        const std::string &parent_key = e.to_module;   // 父侧 module（被驱动端所在）
+        auto &port_map = synth_port_of[child_key];
+        auto it = port_map.find(e.from_ptr);
+        if (it == port_map.end()) {
+            const std::string port =
+                "__x_" + std::to_string(synth_seq[child_key]++);
+            port_map[e.from_ptr] = port;
+            synth_by_child[child_key].push_back(
+                SynthPortInfo{port, names.at(e.from_ptr), e.from_ptr->size()});
+            it = port_map.find(e.from_ptr);
+        }
+        const std::string &port = it->second;
+        synth_conns[parent_key + "\x1f" + e.child_instance_name].push_back(
+            HierarchyConnection{port, names.at(e.to_ptr), /*into_child=*/false});
+    }
+
     // ── 合成类诊断的 **collect**（ADR-060 §2.4.1）────────────────────────
     //    ① 分析层记录的「需要隐式端口合成」的边
     //    ② 发射器自己的检查：子 → 父 的**父侧端点** MUST 是父 module 的 output 端口
     //       （否则父层需要一根「连接网」⇒ ⇒ 同样是隐式端口合成的义务）
     //    ⇒ ⇒ **全部**收集 ⇒ ⇒ 再按 `PortPolicy` 决定诊断广度（不是「首错即返」）
     {
-        std::vector<std::string> synth_diags;
-        for (const auto &e : analysis.pending_implicit_edges) {
-            synth_diags.push_back("'" + e.from_node + "'@'" + e.from_module + "' -> '" +
-                                   e.to_node + "'@'" + e.to_module + "' (" + e.reason + ")");
-        }
+        std::vector<std::string> synth_diags = remaining;
         for (const auto &m : analysis.modules) {
             for (const auto &inst : m.instances) {
                 for (const auto &conn : inst.connections) {
@@ -204,10 +254,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
     // module key → 生成名（实例化语句用）
     std::map<std::string, std::string> name_of_key;
+    // module key → 该 module 的端口表（实例化时要知道子 module 有哪些 output 端口）
+    std::map<std::string, const HierarchyModule *> module_by_key;
     // module key → 时钟/复位需求（自底向上累积 ⇒ 需求**向上传导**）
     std::map<std::string, SeqNeeds> needs_of;
     for (std::size_t i = 0; i < analysis.modules.size(); ++i) {
         name_of_key[analysis.modules[i].key] = module_names[i];
+        module_by_key[analysis.modules[i].key] = &analysis.modules[i];
     }
 
     // 根 module 用 options.top_module_name（与扁平产物同名 ⇒ 便于 A/B 比对）
@@ -220,7 +273,6 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
     // ── ② 发射（纯内存 ⇒ 任何异常都不会留下半套文件）
     std::ostringstream all;
-    const auto names = build_verilog_name_table(root.context()->get_eval_list());
 
     for (std::size_t mi = 0; mi < analysis.modules.size(); ++mi) {
         const auto &m = analysis.modules[mi];
@@ -356,6 +408,21 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         //    **已上移**到发射前的 collect 预检（⇒ ⇒ 全部合成类问题**一起**报告，
         //    而不是「首错即返」；⇒ ⇒ 也避免两份判定漂移）。
 
+        // ── **合成端口**（隐式端口 · ADR-060 §2.1 行 2）────────────────
+        //    端口声明走 `synthesized_ports`（**不是 IR 节点** ⇒ ⇒ 单列）
+        //    体内的 `assign __x_<n> = <子侧节点>;` 走 `body_epilogue`
+        {
+            const auto it = synth_by_child.find(m.key);
+            if (it != synth_by_child.end()) {
+                for (const auto &sp : it->second) {
+                    view.synthesized_ports.push_back(
+                        SynthesizedPort{sp.port, /*is_input=*/false, sp.width});
+                    view.body_epilogue.push_back("    assign " + sp.port + " = " +
+                                                  sp.node + ";");
+                }
+            }
+        }
+
         // 实例化语句
         for (const auto &inst : m.instances) {
             const auto it = name_of_key.find(inst.module_key);
@@ -375,6 +442,36 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 if (child_needs->second.reset) {
                     conns.push_back(HierarchyConnection{"default_reset",
                                                         view.reset_name, true});
+                }
+            }
+            // ⚠️ **未被子层消费的 output 端口 MUST 以空连接出现**（`.port()`）
+            //    （ADR-061 决策② ②：成层组件的 `ch_out` **即使无人消费**也是端口
+            //      ⇒ ⇒ 父层若不接 ⇒ ⇒ Verilator 报 `PINMISSING` ⇒ ⇒ lint 失败）
+            {
+                const auto child_mod = module_by_key.find(inst.module_key);
+                if (child_mod != module_by_key.end()) {
+                    for (const auto &cp : child_mod->second->ports) {
+                        if (cp.is_input) {
+                            continue;   // 子 input：未驱动者 MUST 冒泡（B3）⇒ ⇒ 这里不接
+                        }
+                        bool already = false;
+                        for (const auto &c : conns) {
+                            if (c.child_port == cp.name) {
+                                already = true;
+                                break;
+                            }
+                        }
+                        if (!already) {
+                            conns.push_back(HierarchyConnection{cp.name, "", false});
+                        }
+                    }
+                }
+            }
+            // ⚠️ **合成端口的连接**（行 2：子 output → 父侧端点）
+            {
+                const auto sc = synth_conns.find(m.key + "\x1f" + inst.instance_name);
+                if (sc != synth_conns.end()) {
+                    conns.insert(conns.end(), sc->second.begin(), sc->second.end());
                 }
             }
             view.body_epilogue.push_back(

@@ -40,6 +40,15 @@ void toVerilog(const std::string &filename, ch::core::context *ctx);
 /// ⚠️ 这个结构就是「模块边界」的全部信息 —— 发射器 MUST NOT 自己再去看
 /// `ctx_->get_nodes()` 猜边界（那正是单体 writer 的写法）。扁平路径由
 /// `make_flat_module_view(ctx)` 算出一份 ⇒ ⇒ 产物 MUST 与拆分前逐字节相同。
+/// 一个**合成端口**（隐式端口 · ADR-060 §2.1）。
+///
+/// ⚠️ 合成端口**不是 IR 节点** ⇒ ⇒ 没有 `lnodeimpl` ⇒ ⇒ 只带「名字 / 方向 / 宽度」。
+struct SynthesizedPort {
+    std::string name;
+    bool is_input = false;
+    std::uint32_t width = 0;
+};
+
 struct ModuleView {
     /// module 名（扁平 = `top`；层次化 = 该成层 module 的名字）
     std::string module_name = "top";
@@ -56,6 +65,10 @@ struct ModuleView {
     /// body 尾部追加的原文（层次化发射用它写**实例化语句**与实例连接网）。
     /// ⚠️ 扁平路径恒为空 ⇒ ⇒ 产物逐字节不变。
     std::vector<std::string> body_epilogue;
+    /// **合成端口**（隐式端口 · ADR-060 §2.1）⇒ ⇒ **没有对应的 IR 节点**
+    /// （隐式端口是**发射期**造出来的 ⇒ ⇒ 不是 `lnodeimpl`）⇒ ⇒ 故与 `ports` 分开。
+    /// ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
+    std::vector<SynthesizedPort> synthesized_ports;
     /// **本 module 内 MUST NOT 发驱动赋值的节点**。
     ///
     /// ⚠️ 层次化：一个节点的驱动若在**别的 module** ⇒ 那个信号在本 module 里

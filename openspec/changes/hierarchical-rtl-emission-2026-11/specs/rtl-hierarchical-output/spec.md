@@ -141,6 +141,15 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 - **THEN** 该子组件的 `ch_out` MUST 是该 module 体内的普通信号
 - **AND** MUST NOT 出现在该 module 的端口表里
 
+#### Scenario: 未被消费的子 output 端口 MUST 以空连接出现
+
+- **WHEN** 一个成层子 module 的某个 `ch_out` 端口**未被父层消费**
+- **THEN** 该端口 MUST 仍然是该子 module 的 `output` 端口（⇒ 端口表**不收缩**）
+- **AND** 父 module 的实例化语句 MUST 以**空连接**（`.port()`）接上它
+- **AND** 该产物 MUST 能通过 `verilator --lint-only`（**零 Error / 零 Warning**）
+- **AND** ⚠️ **子 input 端口 MUST NOT** 用空连接糊过去 ⇒ ⇒ 未驱动的子 input MUST
+  **冒泡**成顶层 input 并由父层接上（⇒ ⇒ 否则其值是未定义值 X）
+
 ### Requirement: 单元体内 MUST NOT 引用「非自己、非祖先」的端口节点
 
 一个组件的体内节点 MUST NOT 以某个端口节点为源，而该端口节点的 `owner`

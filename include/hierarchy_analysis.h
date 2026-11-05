@@ -100,6 +100,16 @@ struct PendingImplicitEdge {
     std::string to_module;     ///< 被驱动端所属 module key
     /// 人类可读的成因（`sibling / non-adjacent modules` / `child side is not a port` / …）
     std::string reason;
+    // ⚠️ 以下四个字段是 **B2b-1 合成**所需（发射器要拿到**节点**与**实例**）
+    /// 驱动端节点（⇒ ⇒ 合成端口时要用它的**名字**做 `assign` 的 RHS）
+    const ch::core::lnodeimpl *from_ptr = nullptr;
+    /// 被驱动端节点（⇒ ⇒ 父侧实例映射的实参）
+    const ch::core::lnodeimpl *to_ptr = nullptr;
+    /// `true` = **子 → 父**（ADR-060 §2.1 行 2：父层读子内部节点 ⇒ 合成**子侧 output** 端口）
+    /// `false` = **父 → 子**（行 1：父层驱动子内部节点 ⇒ 合成**子侧 input** 端口）
+    bool child_drives_parent = false;
+    /// 子实例在父 module 内的名字（**仅直接父子关系**下有意义 ⇒ ⇒ 非相邻边留空）
+    std::string child_instance_name;
 };
 
 /// 连接表的一行（**只记录跨 module 的边**）。

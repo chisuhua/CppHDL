@@ -356,9 +356,16 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
                         module_key(vm_c).c_str());
                 }
                 // `Record` ⇒ 记录（⇒ 发射器按 `PortPolicy` 处置）
-                out.pending_implicit_edges.push_back(PendingImplicitEdge{
-                    vname(u), module_key(um_c), vname(v), module_key(vm_c),
-                    "sibling / non-adjacent modules"});
+                PendingImplicitEdge pe;
+                pe.from_node = vname(u);
+                pe.from_module = module_key(um_c);
+                pe.to_node = vname(v);
+                pe.to_module = module_key(vm_c);
+                pe.reason = "sibling / non-adjacent modules";
+                pe.from_ptr = u;
+                pe.to_ptr = v;
+                pe.child_drives_parent = child_drives_parent;
+                out.pending_implicit_edges.push_back(std::move(pe));
                 continue;
             }
 
@@ -382,10 +389,32 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
                                       module_key(vm_c).c_str());
                 }
                 // `Record` ⇒ 记录（⇒ 发射器按 `PortPolicy` 处置）
-                out.pending_implicit_edges.push_back(PendingImplicitEdge{
-                    vname(u), module_key(um_c), vname(v), module_key(vm_c),
-                    parent_drives_child ? "child side is not an input port"
-                                        : "child side is not an output port"});
+                PendingImplicitEdge pe;
+                pe.from_node = vname(u);
+                pe.from_module = module_key(um_c);
+                pe.to_node = vname(v);
+                pe.to_module = module_key(vm_c);
+                pe.reason = parent_drives_child ? "child side is not an input port"
+                                                : "child side is not an output port";
+                pe.from_ptr = u;
+                pe.to_ptr = v;
+                pe.child_drives_parent = child_drives_parent;
+                // ⚠️ 实例名**仅在直接父子关系下**有定义（⇒ 非相邻边留空 ⇒ ⇒ 仍是 fail-closed）
+                // ⚠️ **方向决定谁是「子」**：
+                //    · 行 2（子 → 父）⇒ ⇒ 子 = 驱动端所在 module（`um_c`）· 父 = `vm_c`
+                //    · 行 1（父 → 子）⇒ ⇒ 子 = 被驱动端所在 module（`vm_c`）· 父 = `um_c`
+                if (parent_drives_child || child_drives_parent) {
+                    Component *child_c = child_drives_parent ? um_c : vm_c;
+                    Component *parent_c = child_drives_parent ? vm_c : um_c;
+                    const auto inst_it = instance_index.find(child_c);
+                    if (inst_it != instance_index.end()) {
+                        const auto &insts = out.modules[module_index.at(parent_c)].instances;
+                        if (inst_it->second < insts.size()) {
+                            pe.child_instance_name = insts[inst_it->second].instance_name;
+                        }
+                    }
+                }
+                out.pending_implicit_edges.push_back(std::move(pe));
                 continue;
             }
 

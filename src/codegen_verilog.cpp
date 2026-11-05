@@ -338,6 +338,18 @@ void ModuleEmitter::print_header(std::ostream &out) {
             }
         }
 
+        // ⚠️ **合成端口**（隐式端口 · ADR-060 §2.1）⇒ ⇒ 追加在节点端口之后
+        //    （⚠️ 合成端口**不是 IR 节点** ⇒ ⇒ 不能走上面的 `print_input`/`print_output`）
+        //    ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
+        for (std::size_t i = 0; i < view_.synthesized_ports.size(); ++i) {
+            const auto &sp = view_.synthesized_ports[i];
+            if (!ports.empty() || i > 0) {
+                out << ",\n";
+            }
+            out << "    " << (sp.is_input ? "input" : "output") << " "
+                << get_width_str(sp.width) << " " << sp.name;
+        }
+
         out << "\n);\n\n";
     } catch (...) {
         // Silently ignore exceptions

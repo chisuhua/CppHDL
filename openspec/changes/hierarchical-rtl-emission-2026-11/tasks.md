@@ -16,9 +16,10 @@
       ⇒ ⇒ 实测**零调用点** ⇒ ⇒ 绕过 RAII 的永久泄漏通道 ⇒ ⇒ 粒度只能经作用域设置
 - [x] 0.3 `HierarchyEmitOptions`：`top_module_name` 已有（默认 `top`）·
       **无** `granularity` 字段（全局权威）⇒ ⇒ 与 ADR-061 v1.6.3 §2.5 一致
-- [x] 0.4 ⚠️ **C1 未答 ⇒「只加不删」的处置**：代码里**从未实现** `out_dir` /
-      `one_file_per_module` ⇒ ⇒ **无需保留任何字段** ⇒ ⇒ C1 的答案只影响
-      「是否需要新增多文件模式」（⇒ ⇒ 若 C1 答「必须」，则是**新增**而非**恢复**）
+- [x] 0.4 ⚠️ **C1 的处置**：代码里**从未实现** `out_dir` / `one_file_per_module`
+      ⇒ ⇒ **无需保留任何字段** ⇒ ⇒ ✅ **2026-11-05 更新：C1 已答 = 接受单文件多 module**
+      （ADR-058 **v2.10**）⇒ ⇒ 与本任务结论**一致** ⇒ ⇒ **无追加工作**
+      （⇒ ⇒ 「多文件模式」**不重开** ⇒ ⇒ backend **不需要**文件列表 + 缓存 key 改造）
 - [x] 0.5 **判据**：编译期 `static_assert`（选项字段类型 == 权威枚举 + 默认值）+
       **粒度作用域的三格判据**（半生效 ⇒ `RespectDeclarations` 形态 · 正向 `ForceInline`
       ⇒ 单 module · 正向 `ForceLayer` ⇒ 3 module）+ 既有 4 用例绿 +
@@ -45,6 +46,34 @@
       （⇒ ⇒ 否则「报全部」与「报第一条」不可区分）
       ⇒ ⇒ **变异验证**：把 `all` 恒置 false（退回首错即返）⇒ **转红**（1 failed）· 还原复绿
       ⇒ ⇒ `ctest -LE perf` **238/238** · 扁平外部基线 3 设计 `cmp` 全 0 · 6 个护栏全 PASS
+
+## T0c 批次 B2b-1（行 2「子 → 父」的隐式端口合成 · ✅ 2026-11-05）
+
+> 判据来源：ADR-060 §2.1 **行 2**（子侧端点**不是**子端口 ⇒ ⇒ 合成**子侧 output** 端口）
+> + ADR-061 决策② ②（成层组件的 `ch_out` **即使无人消费**也是端口 ⇒ ⇒ 父层**必须接**它）。
+> ⚠️ **批次拆分**（据实施期发现）：行 1（父→子）要动 `ModuleEmitter` 的**驱动重定向**
+> ⇒ ⇒ 风险最高 ⇒ ⇒ **独立成 B2b-2**；F3（inline 后代 `ch_out` 的作用域落点）**依赖**行 2
+> ⇒ ⇒ ⇒ 独立成 B2b-3。
+
+- [x] 0.11 分析层：`PendingImplicitEdge` 增 **节点指针 + 方向 + 子实例名**
+      ⇒ ⇒ ⚠️ 实例名**必须按方向**取（行 2 的子是**驱动端**所在 module ⇒ ⇒ 实施期踩过一次坑）
+      ⇒ ⇒ ⚠️ 新字段 **MUST NOT** 进 `to_text()` ⇒ ⇒ **T3-② 的 4 份 golden 逐字节不变**
+- [x] 0.12 发射器：`ModuleView::synthesized_ports`（**合成端口不是 IR 节点** ⇒ ⇒ 单列）
+      + `print_header` 追加 ⇒ ⇒ ⚠️ **扁平路径恒空** ⇒ ⇒ 产物逐字节不变
+- [x] 0.13 **行 2 的合成**：子侧合成 output 端口 `__x_<n>` + 子体内
+      `assign __x_<n> = <子侧节点>;` + 父侧实例端口映射 `. __x_<n>(<父侧端点>)`
+      ⇒ ⇒ 父侧那条跨 module `assign` 由既有 `suppress_driver_assign` 抑制
+- [x] 0.14 **未被消费的子 output 端口 MUST 以空连接出现**（`.port()`）
+      ⇒ ⇒ 否则 Verilator 报 `PINMISSING`（且 warning 即 error ⇒ ⇒ lint 失败）
+      ⇒ ⇒ ⚠️ **子 input 不在此列**：未驱动的子 input MUST **冒泡**（B3）⇒ ⇒ 现在**故意不接**
+      ⇒ ⇒ ⇒ 让 `PINMISSING` 把这类形态**响亮暴露**（而不是静默产生 X）
+- [x] 0.15 **判据**：DUT = `OuterRow2` 读 `InnerRow2` 的**内部寄存器**
+      （`io().dout <<= inner.instance().acc`）⇒ ⇒ ① 能产出（此前是 fail-closed）·
+      ② 子 module 有 `output [7:0] __x_0` ③ 子体内 `assign __x_0 = …`
+      ④ 父层实例接上 `.__x_0(` ⑤ 父层**零**跨 module assign ⑥ 合成名只在非顶层
+      ⑦ 未消费的子 output 空连接
+      ⇒ ⇒ **变异 M1**（关掉行 2 合成 ⇒ 转红）· **M2**（去掉空连接 ⇒ 转红）· 还原复绿
+      ⇒ ⇒ `verilator --lint-only` 对三个产物 **exit 0** · `ctest -LE perf` **238/238**
 
 ## T1 module 主体与实例化
 

@@ -198,6 +198,37 @@ public:
     }
 };
 
+// ── DUT ⑤：**父层读子成员的内部寄存器** ⇒ ⇒ ADR-060 §2.1 **行 2** ───────
+//    （子侧端点**不是**子端口 ⇒ ⇒ 必须合成**子侧 output** 端口）
+class InnerRow2 : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("inner_row2");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};    // ⚠️ 内部寄存器（**不是**端口）
+    InnerRow2(ch::Component *p = nullptr, const std::string &n = "inner")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = io().din;
+        io().dout <<= acc;
+    }
+};
+
+class OuterRow2 : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("outer_row2");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InnerRow2> inner{"inner"};
+    OuterRow2(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        // ⚠️⚠️ 父层读**子成员的内部寄存器** ⇒ ⇒ 行 2 的典型形态
+        io().dout <<= inner.instance().acc;
+    }
+};
+
 // ── DUT ③：已 build 但未 add_child（错误模型）────────────────────────────
 class Stray : public ch::Component {
 public:
@@ -333,6 +364,46 @@ TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
         REQUIRE(r.error.find("[2]") != std::string::npos);
         REQUIRE_FALSE(file_exists(path));
     }
+}
+
+TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",
+          "[hierarchy][emit][implicit]") {
+    ch::ch_device<OuterRow2> dev;
+    const std::string path = std::string(kOutDir) + "/row2_implicit.v";
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    // ⚠️ **本批之前**：这类形态是 fail-closed（响亮拒绝）⇒ ⇒ 「能产出」本身就是判别力
+    REQUIRE(r.ok);
+    REQUIRE(r.files.size() == 1);
+
+    const std::string all = read_file(path);
+    REQUIRE_FALSE(all.empty());
+
+    const std::string child = module_text(all, "inner_row2");
+    const std::string parent = module_text(all, "top");
+    REQUIRE_FALSE(child.empty());
+    REQUIRE_FALSE(parent.empty());
+
+    // ① 子 module 有一个**合成 output 端口** `__x_0`（ADR-060 §2.2：合成名只在非顶层）
+    REQUIRE(child.find("output [7:0] __x_0") != std::string::npos);
+    // ② 子 module 体内：合成端口由**子侧节点**驱动
+    REQUIRE(child.find("assign __x_0 = ") != std::string::npos);
+    // ③ 父 module 的实例端口映射接上它（值由实例端口映射提供 ⇒ 不是跨 module assign）
+    REQUIRE(parent.find(".__x_0(") != std::string::npos);
+    // ④ **零跨 module assign**：父层不得引用子 module 的**内部信号**
+    //    （⚠️ 端口名 `top_inner_unnamed_input` 出现在实例映射里是**合法**的 ⇒ ⇒ 只查内部信号）
+    REQUIRE(parent.find("top_inner_reg") == std::string::npos);
+    REQUIRE(parent.find("top_inner__reg") == std::string::npos);
+    // ⑤ 合成名**只**出现在非顶层 module（顶层端口名 MUST NOT 带框架前缀）
+    //    ⚠️ 合成名**合法地**出现在父层的**实例映射**里（`. __x_0(...)` ⇒ ⇒ 那是子端口名）
+    //    ⇒ ⇒ 判据 MUST 只查父层的**端口声明**（module 头）⇒ ⇒ 不查 body
+    const std::string parent_header = parent.substr(0, parent.find(");"));
+    REQUIRE(parent_header.find("__x_") == std::string::npos);
+    REQUIRE(parent_header.find("__if_") == std::string::npos);
+    // ⑥ 未被子层消费的 output 端口 MUST 以**空连接**出现（`.port()`）
+    //    （否则 Verilator 报 PINMISSING ⇒ ⇒ lint 失败）
+    REQUIRE(parent.find(".top_inner_unnamed_output()") != std::string::npos);
 }
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
