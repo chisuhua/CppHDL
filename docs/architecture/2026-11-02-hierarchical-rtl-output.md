@@ -1,4 +1,4 @@
-# 层次化 RTL 输出 —— 目标架构（需求 · 模块关系 · 结构事实）
+# 层次化 RTL 输出 —— 架构主题文档（当前态 · 需求 · 模块关系 · 结构事实）
 
 > 本文件 = **架构主题文档**：只承载**当前态快照**·**下游需求**·**目标形态的结构事实**
 > （模块关系、数据结构、命名规则、已知残留）。
@@ -7,8 +7,11 @@
 > **算法伪码 / 发射流程 / 边界情形矩阵 / 验证策略** ⇒ ⇒ 归**未来 change 的
 > `design.md` / `tasks.md`**（见 §7 的落点表）⇒ ⇒ ⇒ **本文件不重复承载**。
 
-- Date: 2026-11-02（**2026-11-04 架构评审修订** ⇒ 见 §10）
-- Status: **Draft**（随 ADR-058 / 059 / 060 / 061 / 062 拍板后转正）
+- Date: 2026-11-02（**2026-11-04 架构评审修订** ⇒ 见 §10 · **2026-11-06 转正**：
+  实现已全部落地并归档 ⇒ ⇒ 本文件从「**目标**架构」转为「**当前态**架构主题文档」）
+- Status: **Accepted**（2026-11-06 · ADR-058 / 059 / 060 / 061 / 062 全部 **Accepted**
+  且 T3-①a ~ T3-⑤ **全部归档** ⇒ ⇒ §1「当前态快照」已按 2026-11-06 实测重写
+  ⇒ ⇒ 决策内容**零变更**（决策在 ADR；本文件只承载当前态与结构事实））
 - 关联决策: `docs/adr/ADR-058-hierarchical-rtl-output.md` ·
   `docs/adr/ADR-059-node-ownership-and-component-naming.md` ·
   `docs/adr/ADR-060-hierarchical-port-policy-and-module-reuse.md` ·
@@ -19,37 +22,38 @@
 
 ---
 
-## 1. 当前态快照（2026-11-02 实测）
+## 1. 当前态快照（**2026-11-06 实测** · 实现已全部落地并归档）
 
-### 1.1 扁平输出的形态
+> ⚠️ **本节在 2026-11-06 重写**：原 §1 描述的是「层次化**尚未实现**」的现状
+> ⇒ ⇒ T3-①a ~ T3-⑤ 已全部落地并归档 ⇒ ⇒ ⇒ 下面保留**仍然成立**的部分，
+> 并把**已消解**的部分逐条点名**消解方式**（⇒ ⇒ 决策在 ADR；此处只记**当前态**）。
 
-`ch::toVerilog(filename, context*)`（`include/codegen_verilog.h:36`）**只接收 context**，
-固定输出一个 `module top (`（`src/codegen_verilog.cpp:301`）到 `endmodule`（`:409`）。
-writer 内**没有任何** `children()` / `child_count()` 遍历，也不发射实例化语句。
+### 1.1 两条 RTL 出口（今天）
 
-⚠️ **Verilator backend 不走 `toVerilog()`**：它直接构造 `verilogwriter(ctx)` 并写死
-单个 `top.v` + `module top`（`src/core/verilator_backend.cpp:417, 416-489`）
-⇒ ⇒ **框架里没有任何入口能仿真「外部生成的层次化 Verilog」**
-⇒ ⇒ 这是 ADR-058 §2.3「backend 只增不改例外」的由来。
+| 入口 | 产物 | 状态 |
+|---|---|---|
+| `ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:36`） | **单个** `module top`（`src/codegen_verilog.cpp:301` / `:409`） | ✅ **逐字节未变**（ADR-058 §2.3 的硬约束） |
+| `ch::toVerilogHierarchical(out_path, root, options)`（`include/hierarchy_verilog.h:129`） | **单文件多 module**（默认全 inline ⇒ 与扁平**逐字节一致**） | ✅ 已落地（T3-④） |
 
-### 1.2 归属与命名的**四个**缺陷（**层次化的前置阻塞**）
+⇒ ⇒ 失败一律走 `HierarchyEmitResult`（`ok = false` + `error` 点名 + `files` 为空）
+⇒ ⇒ **发射器内不抛异常**（异常会落进 `print()` 的 `catch(...)` ⇒ 静默失败）。
 
-实测（附录 A 的探针）：
+⚠️ **Verilator backend 现在可以仿真层次化产物** ⇒ ⇒ 入口 =
+`try_initialize_with_verilog(verilog_path, ports, data_map)`
+（`include/core/verilator_backend.h`）⇒ ⇒ `ports` MUST 由 **emitter 产物派生**
+（`ch::backend_port_set(emitted, root_module)`）⇒ ⇒ 既有 `try_initialize(ctx, …)`
+的行为**逐字节不变**（T3-005 落地）。
 
-```
-top.m.unnamed_input   <- parent=top.m      ✅ 端口归属正确
-top.m.r               <- parent=top.m      ❌ 但 r 是 Leaf 的 ch_reg 成员
-top.top.m.lf.*                             ❌ 深度 ≥3 前缀重复
-```
+### 1.2 归属与命名的四个缺陷 ⇒ **已消解**（ADR-059 · T3-①a / ①b 已归档）
 
-| # | 缺陷 | 根因 | 位置 |
-|---|---|---|---|
-| ① | **成员节点归到父组件** | 建节点时用 `Component::current()`，而**成员构造早于 `build()`** | `src/core/lnodeimpl.cpp:25-31` |
-| ② | **成员 `ch_module` 挂祖父** | 同上 ⇒ 组件树失真 | `include/module.h:42` |
-| ③ | **深度 ≥3 前缀重复** | `build_hierarchical_name()` 用 `hierarchical_name()`，后者又拼一次已是全路径的 `name_` | `include/module.h:21` + `include/component.h:61-73` |
-| ④ | **成员 `ch_module` 因 `context()==nullptr` 早退** | `Component::ctx_` 在 ctor 期为 `nullptr`，只在 `build()` 赋值 ⇒ 今日靠「挂祖父」恰好掩盖 | `src/component.cpp:13, 105-118` + `include/module.h:49-53` |
+原 2026-11-02 实测的四个缺陷（附录 A 的探针）与**消解方式**：
 
-⇒ ⇒ **修法与取舍见 ADR-059**；本文件 §3 之后的一切都**假设** ADR-059 已落地。
+| # | 原缺陷 | 消解方式（**当前态**） |
+|---|---|---|
+| ① | **成员节点归到父组件** | 归属判定的**唯一实现** = `Component::node_owner()`（`src/component.cpp:16`）= **最内层「构造 / build 作用域」**的组件（空则回落 `current()`）⇒ ⇒ `lnodeimpl::parent_` / `ch_module` 的 parent / `io.h` 的方向守卫**全部**用它 |
+| ② | **成员 `ch_module` 挂祖父** | 同上 ⇒ 组件树登记与 build 解耦（`add_child` MUST 先于 `build(ctx)`） |
+| ③ | **深度 ≥3 前缀重复** | 全路径拼接点收敛为**一处** = `build_hierarchical_name(parent, local_name)`（`include/component.h:266`）⇒ ⇒ MUST 用 `parent->name()`（**不是** `hierarchical_name()`）⇒ ⇒ 实测 3 层（Top → Mid → Leaf）节点名 = `top_m_lf_unnamed_output`（**不再**是 `top_top_m_lf_*`） |
+| ④ | **成员 `ch_module` 因 `context()==nullptr` 早退** | `Component` 的构造期 ctx 与 build 期 ctx 分离（`construction_ctx_`）⇒ ⇒ 无 active parent 处的装配**合法**（ADR-059 D2′） |
 
 ### 1.3 已排除的岔路
 
@@ -749,7 +753,7 @@ oracle 的**唯一高影响发现**（连接生成的层位歧义）已按原句
 
 | # | 目标（为什么做） | 手段（怎么做） | 为什么这样做 | 当前态 |
 |---|---|---|---|---|
-| **N1** | 下游 ChipForge 的层 2 IP 单元 MUST 能成为**独立 Verilog module**（可单独复用 / 交付 / 综合）—— 手工 wrapper 的工作量随层次深度**线性增长** | `toVerilogHierarchical()` 独立入口 + `CH_HIERARCHY_LAYER("name")` 显式成层 | **默认 inline** ⇒ 「先写代码、零风险，将来要交付再加一行声明」⇒ 粒度是**用户的领域决策**，框架 MUST NOT 猜 | ✅ 发射侧已落地（T3-④）· ⏳ **等价性证据缺失**（T3-005） |
+| **N1** | 下游 ChipForge 的层 2 IP 单元 MUST 能成为**独立 Verilog module**（可单独复用 / 交付 / 综合）—— 手工 wrapper 的工作量随层次深度**线性增长** | `toVerilogHierarchical()` 独立入口 + `CH_HIERARCHY_LAYER("name")` 显式成层 | **默认 inline** ⇒ 「先写代码、零风险，将来要交付再加一行声明」⇒ 粒度是**用户的领域决策**，框架 MUST NOT 猜 | ✅ **已落地**（发射侧 T3-④ · 等价性证据 T3-005，均 2026-11-06 归档）⇒ ⇒ ⚠️ **判别力边界**：逐拍等价比较**两份 Verilog 产物**（同源 ⇒ 共享发射底座 ⇒ 底座算错 ⇒ 两边一起错 ⇒ 照样全绿）⇒ ⇒ 后者仍归**既有** parity + 手推期望值义务 |
 | **N2** | 下游装配点**可能没有 active parent** | 成层判定与装配点**解耦**（`ch_layer<T>` / `ch_inline<T>`） | 装配形态是下游的自由 ⇒ 不该被框架的 `ch_module` 约束 | ✅ T3-①c |
 | **N3 / N4 / N7** | 单 ctx（防 node-id aliasing）· 顶层端口名不与内部节点同名 · 下游按 ctx 级名解析观测点 | 归属由**构造作用域**唯一决定 + 命名权威 = **ctx 级全局表** | 端口名带实例路径前缀 ⇒ 顶层名与扁平**逐字相同** ⇒ 下游按名解析不失效 | ✅ T3-①a/b |
 | **N8** | 层 2 接口 MUST 是「结构化端口」 | `ch_uint` / `ch_bool` 白名单（`Payload<T>` **不可**作接口） | `Payload<T>` **不产生 port 节点** ⇒ 端口集合由实现细节偶然决定 ⇒ 不可交付 | ✅ T3-②/④ |

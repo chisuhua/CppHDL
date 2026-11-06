@@ -72,6 +72,7 @@ CppHDL/
 | 多层模块装配 / 跨层连线 / 成员接口 / RTL 输出形态 | `docs/usage_guide/05-component-design.md` |
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
+| 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | `tests/test_hierarchy_equivalence.cpp` + `tests/hier_equivalence.h`（harness 在 `tests/` 内 ⇒ **不暴露**公共 API）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
@@ -290,17 +291,24 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   **不是**「只能由软件写」的静态比较器 ⇒ 递增频率 = **编译期**常量 `TIMER_DIVIDER`
   （默认 1）· **写优先** · 复位值 0。⚠️ 64 位读**允许撕裂**（已知边界）。
   ⇒ 权威 = `include/cpu/AGENTS.md` §「CLINT 的 `mtime` 契约」。
-- **层次化 RTL 输出（`toVerilogHierarchical`）的当前边界**（2026-11-05 · T3-④ 归档）：
-  产物级判据 = `scripts/verify_hierarchical_rtl.sh` **R1–R7**（R1 = ADR-060 §2.5 的 lint 门：
+- **层次化 RTL 输出（`toVerilogHierarchical`）的当前边界**（2026-11-06 · T3-⑤ 归档后）：
+  产物级判据 = `scripts/verify_hierarchical_rtl.sh` **R1–R8**（R1 = ADR-060 §2.5 的 lint 门：
   **不加 `-Wall`**〔本设计的合法产物会触发 `DECLFILENAME` / `PINCONNECTEMPTY` /
   `UNUSEDSIGNAL`〕· **禁 `-Wno-fatal`**〔它让 warning 不影响退出码 ⇒ 门失效〕· 退出码 +
   无 `%Error` + `lint_off` 白名单；**R3 = 剥掉 `lint_off` 后重新 lint** ⇒ 宽度一致
-  〔对 R1 不可判：`lint_off` 生效时 R1 恒绿〕）。⚠️ **R1–R7 全绿 ≠ 行为正确** ——
-  **逐拍等价性归 T3-⑤**（本 change 未做）；R7 只解析**字面量路径实参**（`path` 变量
-  实参静态不可判 ⇒ 由「层次化产物走独立输出目录」的约定承担）。拒绝类形态（跨模块
-  `ch_mem` · 自驱动 `ch_in` · 父驱动子 `ch_out` · 改写子运算节点操作数 · 接口白名单）
-  一律 `ok=false` + **点名 module/端口**（对外唯一载体 = `HierarchyEmitResult`；
-  发射器内**不抛**，分析层的前置校验抛由入口统一转换）。
+  〔对 R1 不可判：`lint_off` 生效时 R1 恒绿〕；**R8** = 顶层端口表 == 手推期望集）。
+  ⚠️ **R1–R8 全绿 ≠ 行为正确** ⇒ ⇒ 行为面判据 = **逐拍等价性**（T3-⑤ 已落地：
+  `tests/test_hierarchy_equivalence.cpp` · 9 用例 / 414 断言）⇒ ⇒ ⚠️ **但逐拍等价只覆盖
+  **顶层可见行为**（**观测盲区**：成层子树的 `ch_out` 被移出顶层 ⇒ 顶层读不到 ⇒ 「子树
+  内部算错但顶层输出恰好相同」这类缺陷**结构性测不出**；⚠️ **输入方向无盲区** —— 顶层
+  input 集合两侧相等 ⇒ 激励可完整施加）⇒ ⇒ 权威 = capability `rtl-hierarchical-output`。
+  ⚠️ 逐拍等价比较的是**两份 Verilog 产物**（同源 ⇒ 共享发射底座 ⇒ 底座算错 ⇒ 两边
+  一起错 ⇒ 照样全绿）⇒ ⇒ 后者仍归**既有** parity + 手推期望值义务（parity 对该族缺陷
+  **结构性失明**）。R7 只解析**字面量路径实参**（`path` 变量实参静态不可判 ⇒ 由
+  「层次化产物走独立输出目录」的约定承担）。拒绝类形态（跨模块 `ch_mem` · 自驱动
+  `ch_in` · 父驱动子 `ch_out` · 改写子运算节点操作数 · 接口白名单）一律 `ok=false` +
+  **点名 module/端口**（对外唯一载体 = `HierarchyEmitResult`；发射器内**不抛**，分析层的
+  前置校验抛由入口统一转换）。
 - **`Simulator::set_ab_verification()` is a no-op stub** (ADR-035 R9, `docs/usage_guide/10-verilator-backend.md:133`). After the dual-function JIT refactor (`tick_comb` + `tick_seq`), the A/B comparison logic was not redesigned — enabling the flag only emits a `CHWARN` per `tick()` (`src/simulator.cpp:332-338`) but does not actually diff interpreter vs JIT `data_map_`. Re-enabling dual-backend comparison requires saving snapshots around the JIT `eval_fn_` call and reconciling per-instruction. Do NOT depend on `is_ab_verification()` returning meaningful parity status. The whole `set_ab_verification` block is guarded by `#if __has_include("jit/jit_compiler.h")` (`include/simulator.h:90-97`); with `CH_JIT_ENABLE=OFF` the symbol is absent.
 - **Cache 变体选择（ADR-039 ch_mem 重写 + ADR-041 Sync/Async 拆分）**：完整实现位于 `include/cpu/cache/{i,d}_cache_{sync,async}.h`；`*_complete.h` 是兼容 shim 别名指向 `*_sync.h`. RV32I L1 默认用 `ICacheSync` / `DCacheSync` (1-cycle sread)；TCM-style 用 `ICacheAsync` / `DCacheAsync` (0-cycle aread). 新代码用 `_sync` / `_async` 变体直接引用（`_complete` 仅作 legacy alias）. The wrappers `include/cpu/cache/{i_cache_prefetch.h,d_cache_write_buffer.h}`（2026-10-24 C2 从 `examples/riscv-mini/src/` 提升到此，ADR-046 D3 #9/#10）实例化 `ICacheSync` / `DCacheSync` (2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复 ch_reg array → ch_mem + ch_module 替换 `Component ctor + parent`, instantiation 0 SIGSEGV). 见 `include/cpu/AGENTS.md` STRUCTURE 表. **历史 pass-through stub 头文件（`include/cpu/cache/*_stub.h`）已于 2026-10-20 物理删除**（ADR-037，change `cache-stub-physical-removal-2026-10`）—— 其语义（`ready := req, miss := false, data := axi_data`、未 block 对齐的 `axi_addr`）不构成合法 cache 行为，不再保留，也没有替代的 BYPASS 模式.
 - **`*_cache_complete.h` 是兼容 shim** (2026-10-19 cache-complete-rewrite 完成, ADR-041). 原"dead-on-arrival"已修复 (commit 91a0833 ch_mem-based rewrite + 1221819 test coverage + ADR-041 Sync/Async variant split). `ICacheComplete` / `DCacheComplete` 现在是 `using ICacheComplete = ICacheSync;` 别名, 指向 **1-cycle sread 版本** (`include/cpu/cache/{i,d}_cache_sync.h`). 0-cycle TCM-style 用户可用 `include/cpu/cache/{i,d}_cache_async.h`. 见 `include/cpu/AGENTS.md` STRUCTURE 表.
