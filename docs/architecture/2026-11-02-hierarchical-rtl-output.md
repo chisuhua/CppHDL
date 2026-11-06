@@ -32,7 +32,7 @@
 
 | 入口 | 产物 | 状态 |
 |---|---|---|
-| `ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:36`） | **单个** `module top`（`src/codegen_verilog.cpp:301` / `:409`） | ✅ **逐字节未变**（ADR-058 §2.3 的硬约束） |
+| `ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:43`） | **单个** `module top`（`src/codegen_verilog.cpp:313` / `:390`） | ✅ **逐字节未变**（ADR-058 §2.3 的硬约束） |
 | `ch::toVerilogHierarchical(out_path, root, options)`（`include/hierarchy_verilog.h:129`） | **单文件多 module**（默认全 inline ⇒ 与扁平**逐字节一致**） | ✅ 已落地（T3-④） |
 
 ⇒ ⇒ 失败一律走 `HierarchyEmitResult`（`ok = false` + `error` 点名 + `files` 为空）
@@ -50,7 +50,7 @@
 
 | # | 原缺陷 | 消解方式（**当前态**） |
 |---|---|---|
-| ① | **成员节点归到父组件** | 归属判定的**唯一实现** = `Component::node_owner()`（`src/component.cpp:16`）= **最内层「构造 / build 作用域」**的组件（空则回落 `current()`）⇒ ⇒ `lnodeimpl::parent_` / `ch_module` 的 parent / `io.h` 的方向守卫**全部**用它 |
+| ① | **成员节点归到父组件** | 归属判定的**唯一实现** = `Component::node_owner()`（`src/component.cpp:16`）= **最内层「构造 / build 作用域」**的组件（空则回落 `current()`）⇒ ⇒ `lnodeimpl::parent_` / `ch_module` 的 parent / `include/core/io.h` 的方向守卫**全部**用它 |
 | ② | **成员 `ch_module` 挂祖父** | 同上 ⇒ 组件树登记与 build 解耦（`add_child` MUST 先于 `build(ctx)`） |
 | ③ | **深度 ≥3 前缀重复** | 全路径拼接点收敛为**一处** = `build_hierarchical_name(parent, local_name)`（`include/component.h:266`）⇒ ⇒ MUST 用 `parent->name()`（**不是** `hierarchical_name()`）⇒ ⇒ 实测 3 层（Top → Mid → Leaf）节点名 = `top_m_lf_unnamed_output`（**不再**是 `top_top_m_lf_*`） |
 | ④ | **成员 `ch_module` 因 `context()==nullptr` 早退** | `Component` 的构造期 ctx 与 build 期 ctx 分离（`construction_ctx_`）⇒ ⇒ 无 active parent 处的装配**合法**（ADR-059 D2′） |

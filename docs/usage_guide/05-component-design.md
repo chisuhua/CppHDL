@@ -472,9 +472,9 @@ class Bad {
 
 ### 5.1 扁平产物（默认）
 
-`ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:36`）**只接收 context**，
-固定输出一个 `module top (`（`src/codegen_verilog.cpp:301`）到 `endmodule`
-（`:409`）。整个 writer 里**没有任何** `children()` / `child_count()` 遍历，
+`ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:43`）**只接收 context**，
+固定输出一个 `module top (`（`src/codegen_verilog.cpp:313`）到 `endmodule`
+（`:390`）。整个 writer 里**没有任何** `children()` / `child_count()` 遍历，
 也不发射实例化语句。
 
 三层设计（Top → Mid → Leaf，**均未**声明成层）实测输出：
@@ -511,8 +511,8 @@ endmodule
 | 节点 | 在生成的 Verilog 里 |
 |---|---|
 | 顶层 `ch_in`（无驱动） | `input` 端口 |
-| **任意层**被驱动的 `ch_in` | 内部 `logic` + `assign`（`codegen_verilog.cpp:333-360`） |
-| **任意层**的 `ch_out` | `output` 端口（**只过滤 input，不过滤 output**，`:363-370`） |
+| **任意层**被驱动的 `ch_in` | 内部 `logic` + `assign`（`ModuleEmitter::print_decl` · `src/codegen_verilog.cpp:396` + `print_logic` · `:525`） |
+| **任意层**的 `ch_out` | `output` 端口（**只过滤 input，不过滤 output** ⇒ `ModuleEmitter::print_output` · `src/codegen_verilog.cpp:707`） |
 
 推论：多层设计里「某个层的输入忘了驱动」在 Verilog 里表现为**顶层凭空多出一个
 input 端口**；而子模块输出会全部暴露在顶层端口列表里（端口表随层次变长）。
