@@ -94,7 +94,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | ✅ **已归档**（2026-11-04） | `ModuleEmitter` + `ModuleView` + 薄适配器 `verilogwriter` · 3 个设计 `cmp` 逐字节相同（含 145 KB RV32iPipeline）· 时钟名参数化 4 处 · **M1 ⇒ lint exit 1 / 对照 exit 0** |
 | **T3-④** | `hierarchical-rtl-emission-2026-11` | ✅ **已归档**（2026-11-05 · **13/13 批**：B1 · B2a · B2b-1..6 · T0h · B3a · B3b · B3c · B4 ⇒ 多 module + 实例化 + 顶层端口=扁平 + clock/reset 分开判 + 隐式端口行 1/行 2 + F3 + 第三轴 + 兄弟边 + 宽度守卫 + 冒泡（G3）/`UndrivenPolicy` + 向上 pass-through + 产物级护栏 R1–R7 + 探针矩阵 36 格） | `toVerilogHierarchical` · `tests/test_hierarchy_verilog.cpp`（**28 用例 / 495 断言**）· `scripts/verify_hierarchical_rtl.sh`（R1–R7 + `--self-test` 9/9）· 全 inline ⇒ 与扁平逐字节相同 · 全部层次化产物 `verilator --lint-only` exit 0 · 扁平外部基线 3 设计 `cmp` 全 0 |
 | T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ✅ **已归档**（2026-11-06 · 归档名 `2026-11-06-hierarchical-rtl-equivalence-2026-11`）⇒ ⇒ 14 项待办（F1–F13 已收口 · **F14 台账已代记账**） | 9 用例 / **414 断言** · 映射表 + `try_initialize_with_verilog` · 护栏 R1–R8 + P8 守卫 · 锚点 250/76/66/289 · 变异对照 4 转红 + 1 无效（已登记） |
-| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ **待启动**（0/7）⇒ 前置 = **T3-⑤ 归档**（✅ 已越过 2026-11-06）⇒ ⇒ **D1 吸收 F8**（用法指南 P7 痛点行 + 盲区边界段 ⇒ 验收 = grep 清单清零） | — |
+| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ✅ **已归档**（2026-11-06 · 归档名 `2026-11-06-hierarchical-rtl-docs-2026-11`）⇒ ⇒ **7/7 + F8** | 判据**常驻**（5 个 bash 块 · 归档后照跑即可复算）· 变异对照 M1–M3 + grep 类负向对照 ①/②/④ · 文档示例**抽取即编译** · 用法指南 §5 全文改写 + 台账转正 + `AGENTS.md` 补入口 |
 | T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
 
 ### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **13 个批次 · 逐个 commit**）
@@ -252,7 +252,9 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
    front-matter 后跑 `rddf roadmap --update-agent-md`）
    ⇒ ⇒ ✅ **已落**：归档名 `2026-11-06-hierarchical-rtl-equivalence-2026-11` · V1 两条 grep 归档后
    = **0 / 1** · 主 spec 已合并 **ADDED ×2 + MODIFIED ×5**
-3. **T3-⑥**（3 批 D1/D2/D3）⇒ ⇒ **D1 吸收 F8**（P7 痛点行 + 盲区边界段 ⇒ 验收 = grep 清单清零）
+3. ✅ **T3-⑥**（3 批 D1/D2/D3）⇒ ⇒ **D1 吸收 F8**（P7 痛点行 + 盲区边界段 ⇒ 验收 = grep 清单清零）
+   ⇒ ⇒ ✅ **已落**：`53e7de2`（D1 用户面文档）· `b5c1044`（D2 台账转正 + AGENTS.md）
+   · D3（判据常驻化 + 判别力自证 + 记账）⇒ ⇒ 归档名 `2026-11-06-hierarchical-rtl-docs-2026-11`
 4. **T2b**（3 批 U1/U2/R）⇒ ⇒ 与主线**零文件冲突**（T3-⑤ 动 `src/core/verilator_backend.cpp` /
    `src/hierarchy_verilog.cpp` / `include/core/verilator_port_set.h` / `include/hierarchy_verilog.h`；
    T2b 动 `include/core/io.h` / `src/core/context.cpp` ⇒ **零交集**）⇒ ⇒ 可并行 ⇒ ⚠️ 但**锚点 bump
@@ -265,9 +267,9 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 
 | 批 | 内容 | 判据 |
 |---|---|---|
-| **D1** | 用户面文档：`docs/usage_guide/05-component-design.md` §5 改写 · `HIERARCHICAL-RTL-AUTHORING-GUIDE.md`（删 `CH_MODULE_NAME` · 改 `CH_HIERARCHY_LAYER("name")` · 补档 ③ · **补 ADR-058 §4 风险 6 的观测盲区边界段**〔P0-4 的第三处登记〕）· 合并宏**签名面 5 处** | 示例**照抄即可编译**；指南内 `CH_MODULE_NAME` 零命中 |
-| **D2** | 架构主题文档转正 + 根 `AGENTS.md`「WHERE TO LOOK」补层次化入口 | `verify_agents_size.sh` 通过（≤ 72 KiB）；入口路径可解析到实际文件 |
-| **D3** | 零漂移 | `ctest -LE perf` / samples / examples 全绿（文档 change ⇒ 理论零代码影响） |
+| **D1** ✅ | 用户面文档：`docs/usage_guide/05-component-design.md` §5 改写 · `HIERARCHICAL-RTL-AUTHORING-GUIDE.md`（删 `CH_MODULE_NAME` · 改 `CH_HIERARCHY_LAYER("name")` · 补档 ③ · **补 ADR-058 §4 风险 6 的观测盲区边界段**〔P0-4 的第三处登记〕）· 合并宏**签名面 5 处** | 示例**照抄即可编译**（判据 ③：抽取 §5.3.2 的 ```cpp 块 ⇒ `g++ -fsyntax-only` ⇒ 零错误）；指南内 `CH_MODULE_NAME` 零命中（判据 ①） |
+| **D2** ✅ | 架构主题文档转正 + 根 `AGENTS.md`「WHERE TO LOOK」补层次化入口 | `verify_agents_size.sh` 通过（≤ 72 KiB · 实测 50 599 B）；入口路径可解析到实际文件 |
+| **D3** ✅ | 零漂移 | `ctest -LE perf` **239/239** · samples **39/39** · examples **28/28** · `openspec validate --type change --strict` valid · delta 自检 4 条 · **判据常驻化**（5 个 bash 块 ⇒ 归档后照跑即可复算）· **判别力自证**（变异 M1–M3 + grep 类负向对照 ①/②/④ ⇒ 命中即红） |
 
 ### T2b 的批次（3 批 · 与主线无依赖 · 可并行）
 
@@ -293,7 +295,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | **emitter 拆分**：`verilogwriter` → `ModuleEmitter`（接收节点子集 + 端口表 + 名字表）· **时钟/复位名参数化** | T3-①b | 可复用的单 module 发射器 | 扁平产物相对 **T3-①b 之后**的基线**逐字节不变** · `ctest -LE perf` 全绿 | 中（~3 天） |
 | **T3-④** | `hierarchical-rtl-emission-2026-11` | **层次发射**：module 主体 + 实例化 + **隐式端口按方向** + 悬空冒泡 + clock/reset 贯通 + **同类型多实例不复用** + **跨模块 `ch_mem` / 非白名单接口响亮拒绝** ⇒ ⇒ **13 个批次（全部 ✅）**：B1 / B2a / B2b-1..6 / **T0h** / B3a / B3b / B3c / B4（见「T3-④ 的批次拆分」） | T3-② + T3-③ | 完整层次化 RTL | ADR-058 §5 结构判据 + ADR-060 §5（**v1.13**：G0 chain builder · G1 命名序号 · G2 端口来源 · G3 冒泡层位 · §2.4.2 `UndrivenPolicy`） + ADR-062 §5 白名单 + **ADR-061 v1.6.3 的新增判据** | 大（~3 天 ⇒ **B1 小 · B2 大 · B3a 大 · B3b 中 · B3c 小/中 · B4 中**；T0h / B2b-6 小）|
 | **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的**映射表**与逐拍等价 + 确定性 + lint ⇒ ⇒ ⚠️ **观测面实现路径须先经 planner 修订**（台账 §11.4 行 2）⇒ ⇒ **harness MUST 写成「可公共化」形态但不暴露 API**（P8 形态约束） | T3-④ 归档（**C1 已闭合 ⇒ 「编译单文件」的 backend 假设确定** · ⚠️ **C2 与该假设无关** ⇒ ⇒ MUST NOT 再列为前置）| 等价性测试套件 | ADR-058 §5 效果判据**全通过**（见下方验收段） | **~7–9 天**（oracle R13：远不止加一个函数）|
-| **T3-⑥** | `hierarchical-rtl-docs-2026-11` | **文档同步**：`docs/usage_guide/05-component-design.md` §5 · API 参考 · 架构主题文档转正 | T3-⑤ | 文档与实现一致 | 零漂移（含用户面指南**不含** `CH_MODULE_NAME`——该宏**不存在**） | 小（~1 天） |
+| **T3-⑥** ✅ | `hierarchical-rtl-docs-2026-11` | **文档同步**：`docs/usage_guide/05-component-design.md` §5 · API 参考 · 架构主题文档转正 | T3-⑤ | 文档与实现一致 | 零漂移（含用户面指南**不含** `CH_MODULE_NAME`——该宏**不存在**） | 小（~1 天） |
 
 ```
 T2a（1 词 · 硬前置）
@@ -365,7 +367,7 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | **emitter 拆分**（**含时钟名参数化**） | T3-①b | **无 delta**（纯重构 ⇒ `.openspec.yaml` 显式 `skip_specs: true`） | 「扁平产物逐字节不变」基线脚本 | 相对 T3-①b 之后的基线逐字节不变 |
 | **T3-④** | `hierarchical-rtl-emission-2026-11` | **层次发射**（module / 实例化 / 隐式端口按方向 / 悬空冒泡 / clock-reset 贯通 / **MUST NOT 复用** / 接口白名单拒绝） | T3-② · T3-③ | `rtl-hierarchical-output` **ADDED ×11**（成层组件 MUST 形成独立 module · **命名权威 MUST 是 ctx 级全局表** · 跨层非端口边 MUST 按方向合成隐式端口 · 悬空子输入 MUST 向上冒泡 · 时序模块 MUST 有 clock/reset 端口 · 成层且非根 module 端口 MUST 覆盖自身 `ch_in`/`ch_out` 且可追溯 · 单元体内 MUST NOT 引用「非自己、非祖先」的端口节点 · **层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变** · 层次化单元的接口类型 MUST 限于白名单 · **单文件多 module + 顶层名可配置 + 路径不得与扁平同名** · **跨层端口策略 MUST 是单一权威的线性枚举** · **层级粒度 MUST 由全局唯一权威决定且作用域覆盖构造与发射**） | **新增** `scripts/verify_hierarchical_rtl.sh`（R1 lint 门 = ADR-060 §2.5 · R2 pin 名 · R3 宽度 · R4 确定性 · R5 跨模块 `ch_mem` 被拒 · R6 树同构 · R7 路径分离 + `--self-test` 8 fixture） | ADR-058 §5 结构判据 + ADR-060 §5 + ADR-062 §5 |
 | **T3-⑤** | `hierarchical-rtl-equivalence-2026-11` | **backend 只增不改入口** + ≥5 DUT 的映射表与逐拍等价 | T3-④ | `rtl-hierarchical-output` **ADDED ×2**（默认（全 inline）产物 MUST 与扁平产物逐字节一致 · 层次化产物 MUST 与扁平产物等价（可机械判定）） | 等价性 harness 的**判别力自证**（故意破坏 ⇒ 必须转红）+ **公共 helper** | ADR-058 §5 效果判据全通过 |
-| **T3-⑥** | `hierarchical-rtl-docs-2026-11` | **文档同步** | T3-⑤ | **无 delta**（`skip_specs: true`） | — | 文档零漂移 |
+| **T3-⑥** ✅ | `hierarchical-rtl-docs-2026-11` | **文档同步** | T3-⑤ | **无 delta**（`skip_specs: true`） | — | 文档零漂移 |
 
 > **delta 覆盖校验**（✅ **已执行 · 2026-11-04**；⚠️ **2026-11-05 更新**：④ 由 8 → **11**（metis blocker ⇒ delta MUST 跟 Acceptance）⇒ ⇒ 合计 14 → **17**））：`rtl-hierarchical-output` = ①c 2 + ② 1 + ④ **11** + ⑤ 2 = **17** ✔ ·
 > `component-ownership-and-naming` = ①a 2 + ①b 5 + ①c 1 = **8** ✔ ⇒ ⇒ **无一条 Requirement 落在多个 change**。
@@ -391,7 +393,7 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 - ⏳ **T3-③** `hierarchical-rtl-emitter-split-2026-11`（emitter 拆分 + 时钟名参数化）
 - ⏳ **T3-④** `hierarchical-rtl-emission-2026-11`（层次发射 · 隐式端口 · 冒泡 · 不复用）
 - ⏳ **T3-⑤** `hierarchical-rtl-equivalence-2026-11`（backend 只增不改入口 + 等价性）
-- ⏳ **T3-⑥** `hierarchical-rtl-docs-2026-11`（文档同步）
+- ✅ **T3-⑥** `hierarchical-rtl-docs-2026-11`（文档同步）
 
 > ⚠️ **本 feature 不阻塞其它 feature**：它是**新增能力**，不改既有 RTL 产物语义
 > ⇒ ⇒ 现有 dual-backend / RV32I / AXI 线路**零依赖**。
@@ -672,10 +674,15 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 ### 全阶段
 
-- [ ] **T3-⑥**：`docs/usage_guide/05-component-design.md` §5 与
+- [x] **T3-⑥**：`docs/usage_guide/05-component-design.md` §5 与
       `docs/architecture/2026-11-02-hierarchical-rtl-output.md` 与实现一致（零漂移）；
       用户面指南**不含** `CH_MODULE_NAME`（该宏**不存在**）；`CH_HIERARCHY_LAYER` MUST
       写**带名字**的形态
+      ⇒ ⇒ ✅ **2026-11-06 达成**（归档名 `2026-11-06-hierarchical-rtl-docs-2026-11`）
+      ⇒ ⇒ 判据**常驻**在归档件的 `tasks.md`（5 个判据块 + 判别力自证 ⇒ 照跑即可复算）
+      ⇒ ⇒ ⚠️ 同段的「**全程**」条目**不勾**：其 `openspec validate --strict` 一条在
+      **仓级**为红（**存量** CLI 1.14.x 漂移：15 passed / 22 failed ⇒ 与本仓改动无关）
+      ⇒ ⇒ 且「全程」属**feature 级**验收，不是本 change 的交付物
 - [ ] **全程**：capability delta 齐备（归档**禁** `--skip-specs`，除 T3-③ / T3-⑥ 显式
       `skip_specs: true`）· `openspec validate --strict` 通过 · `ctest -LE perf` /
       `run_all_samples.sh` / `run_all_ported_tests.sh` 全绿 ·
