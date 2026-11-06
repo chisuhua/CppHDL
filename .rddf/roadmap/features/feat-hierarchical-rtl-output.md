@@ -233,8 +233,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | # | 项 | 来源 | 归位条件 | 形态约束 |
 |---|---|---|---|---|
 | **P6** | **层次友好度诊断 API** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已收口**（2026-11-07 · 归档名 `2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11`）⇒ ⇒ `ch::diagnose_hierarchy`（只读）⇒ ⇒ 新建 capability `hierarchy-friendliness-diagnosis`（ADDED ×3 · strict valid） | **权威 = 台账 §11.2**（不复制全文）<br>✅ **已立项**（2026-11-06 · planner）⇒ `.rddf/improvements/p6-hierarchy-friendliness-diagnosis-2026-11.md`（5 段草稿 v3 · metis 1 轮已过 · 拍板：项 4 走 `std::optional` + 独立预扫描 · 3 档 = `kClean`/`kNeedsWork`/`kNotAnalyzable`）<br>✅ **已实施 + 归档**（builder）⇒ 5 项可判定事实（**全 `std::optional`** ⇒ 「未测得」≠「0」）· 3 档 · **与发射器同源是共享代码**（`src/hierarchy_synth_count.h` 3 个原语 ⇒ 既有 3 产物**逐字节不变**）· **13 用例 / 58 断言** · 变异 **6 条（5 转红 + 1 如实登记为无效）** · ctest **241/241** · samples 39/39 · examples 28/28 · 锚点 252/241/144 · critic **2 轮**（第 1 轮 REJECT ⇒ **2 BLOCKER**（端口数多算非相邻边 / 预扫描空指针）⇒ 返工 ⇒ 第 2 轮 APPROVE） |
-| **P8** | **等价性 harness 公共 helper** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已达成**（T3-005 已归档 · harness 两层形态） | **权威 = 台账 §11.2**（不复制全文） |
-| **残留 1b** | **语料级回归缺口**：层次化路径在全仓既有语料上**零覆盖**（`DUAL_BACKEND_TEST_PAIR` **不参数化粒度**） | 台账 §7（2026-11-06 由 oracle 从残留 1 拆出） | ⚠️ **独立立项** ⇒ **MUST NOT 并入 P8**（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**） | 判据 MUST 能覆盖**组合逻辑 DUT**（无 clock/reset ⇒ 计数校验 MUST 动态减 0）· 恒相关信号（兄弟串联的 `a`/`b` 逐拍同值）⇒ 「逐拍全等」的判别力上限 MUST 登记 |
+| **P8** | **等价性 harness 公共 helper** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已达成**（T3-005 已归档 · harness 两层形态） | **权威 = 台账 §11.2**（不复制全文）<br>✅ **已立项**（2026-11-07 · planner）⇒ `.rddf/improvements/p8-hierarchical-equivalence-public-helper-2026-11.md`（**v2** · metis 1 轮已过 · 吸收 12 条 finding）⇒ ⇒ **公共面 = 闭合集合**（2 入口 + 2 结果结构 + 2 输入类型 ⇒ **不按「符号总数」核** ⇒ 另设**能力判据**防「砍功能凑数」）⇒ ⇒ **护栏改口径**（R1 全称否定 + 单一字面豁免 + **R2' 内容维度** + R4 拆「历史窗口 + 活账」⇒ ⇒ 新旧判据成**超集**）⇒ ⇒ ⚠️ **实测：`verify_hierarchical_p8.sh` 当前零执行**（不在 CI）⇒ ⇒ 本 change MUST 接线<br>⚠️ **实测：`Result::trace` 只存扁平侧** ⇒ ⇒ 改名 `flat_trace` + 取消 `Trace` 别名 |
+| **残留 1b** | **语料级回归缺口**：层次化路径在全仓既有语料上**零覆盖**（`DUAL_BACKEND_TEST_PAIR` **不参数化粒度**） | 台账 §7（2026-11-06 由 oracle 从残留 1 拆出） | ⚠️ **独立立项** ⇒ **MUST NOT 并入 P8**（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**） | 判据 MUST 能覆盖**组合逻辑 DUT**（无 clock/reset ⇒ 计数校验 MUST 动态减 0）· 恒相关信号（兄弟串联的 `a`/`b` 逐拍同值）⇒ 「逐拍全等」的判别力上限 MUST 登记<br>✅ **已立项**（2026-11-07 · planner）⇒ `.rddf/improvements/hierarchical-corpus-regression-2026-11.md`（**v2** · metis 1 轮已过 · 吸收 33 条 finding）⇒ ⇒ ⚠️ **实测普查改变了方案**：**132 个 DUT 里只有 10 个有子组件** ⇒ ⇒ 122 个叶子 DUT 在 `ForceLayer` 下**仍只有 1 个 module** ⇒ ⇒ **逐拍**等价上**结构性零判别力** ⇒ ⇒ ⇒ **naive 的「289 处全铺」被证伪**<br>⇒ ⇒ **v2 方案 = 两层**：**T0 产物级**（10 个复合 DUT · emit + lint + 端口集自洽 + 确定性 ⇒ **不需** verilator 编译）+ **T1 行为级**（**3 个结构类各 1 个**：双子组件各自带 reg / 兄弟跨模块边 + 同类型多实例编号 / root 持 `ch_mem` ⇒ ⇒ 这 3 类 T3-005 **结构上未覆盖**）<br>⇒ ⇒ ⚠️ **栅栏 ≠ 固定清单** ⇒ ⇒ 登记表 MUST **三向双向核对**（含「**语料 → 登记表**」⇒ ⇒ 栅栏不随语料增长而退化）<br>⇒ ⇒ ⚠️ **实测**：`compare_products` **不校验观测集** ⇒ 空/恒定 ⇒ `equal=true` ⇒ **恒绿** ⇒ ⇒ 「至少一个随激励变化」是**新增能力**（现有 `any_varies` 只在测试体内）⇒ ⇒ 登记表 + 观测集覆盖 MUST 写进 capability |
 | **残留 5** | **端口命名契约**（顶层无框架前缀 · `__if_`/`__x_` **`__up_`** 只出现在非顶层 module）**无静态护栏** | 台账 §7（⚠️ 台账漏记 `__up_` ⇒ 2026-11-06 planner 按 `include/hierarchy_verilog.h:46` 补全） | ✅ **已收口**（2026-11-06 · 归档名 `2026-11-06-port-naming-contract-guard-2026-11`）⇒ ⇒ `scripts/verify_hierarchical_port_naming.sh`（N0–N3）⇒ ⇒ 新建 capability `hierarchical-port-naming-guard`（ADDED ×4 · strict valid） | MUST 复用结构化提取（`verilator --json-only`）⇒ **MUST NOT** 自研文本解析器<br>✅ **已立项**（2026-11-06 · planner）⇒ `.rddf/improvements/port-naming-contract-guard-2026-11.md`（5 段草稿 v3 · metis 1 轮已过 · 拍板：N2b 补 `__x_`/`__up_` 真实产物 fixture ⇒ 夹具所有权收敛为「生成器独立子命令」）<br>✅ **已实施 + 归档**（builder）⇒ 护栏 N0–N3 + `--self-test`（**6 条投毒**全部符合期望 · 无效变异 0 条 · 还原复绿）· 提取器加 `--modules` / `--module-ports`（**既有 `--ports` 逐字未改**）· 生成器加 `--prefix-fixtures`（2 个 fixture ⇒ `__x_` / `__up_` 真实覆盖）· **默认路径 3 产物逐字节不变** · ctest **240/240** · samples **39/39** · examples **28/28** · 计数锚点不变 · critic **APPROVE**（0 BLOCKER）<br>⚠️ **如实登记**：发射器已有 **G3-5 硬拒绝**（根有合成端口 ⇒ `ok=false`）⇒ ⇒ N1 在现有 3 个产物上**结构性恒绿** ⇒ ⇒ 护栏的真实价值 = **对 G3-5 被移除/被绕过与未来新形态的回归栅栏**（不是「关闭正在发生的缺口」）⇒ `__up_` 纳入 = **契约补全**（当前零判别力） |
 | **C2** | **下游拼接产物 · 内部 module 名撞名**（轴②：`module_type_name` + 按设计编号 ⇒ 两份产物各含名为 `alu` 的 layer 时**照撞** ⇒ **当前无机制**） | 台账 §11.6（**下游确认项** · 非残留表） | ⏠ 待**下游**确认是否「拼接」⇒ ⇒ 预裁口径已定：**产物级 module 名前缀选项**（默认**空**前缀 · 纯增量 · 非格式变更 ⇒ 任何时点可加）⇒ ⇒ **现在不实现**（不为未证实需求付成本） | 该前缀作用面 MUST 是「**非根 module**」（根由 `top_module_name` 管辖）⇒ 否则两个旋钮管同一个根名 ⇒ 优先级歧义 |
 
@@ -263,9 +263,15 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 5. **后续立项**（下一轮）：P6 · P8 · 残留 1b ⇒ 各走 `add-improve`（**5 段草稿** ⇒
    ⚠️ HARD-GATE brainstorm ⇒ 需用户逐项批准）⇒ ⇒ C2 **待下游确认** ⇒ 不立项
    ⇒ ⇒ **残留 5 已收口**（2026-11-06）· **P6 已收口**（2026-11-07）⇒ ⇒ 剩
-   **P8 · 残留 1b** 两项 ⇒ ⇒ ⚠️ 二者**尚无 5 段草稿** ⇒ ⇒ MUST 先转 **planner** 立项
-   （各走 `add-improve` + HARD-GATE brainstorm）· ⚠️ **残留 1b MUST NOT 并入 P8**
-   （P8 的 done 判据**不含**语料覆盖）
+   **P8 · 残留 1b** 两项 ⇒ ⇒ ✅ **两项均已立项**（2026-11-07 · planner）⇒ ⇒
+   **P8** ⇒ `.rddf/improvements/p8-hierarchical-equivalence-public-helper-2026-11.md`
+   （**v2** · metis 1 轮已过）· **残留 1b** ⇒
+   `.rddf/improvements/hierarchical-corpus-regression-2026-11.md`（**v2** · metis 1 轮已过）
+   ⇒ ⇒ ⚠️ **两项各自待用户拍板**（P8：公共面 6 项 / 护栏改口径 / CI 接线 ·
+   残留 1b：**口径 X1/X3**（台账「行为覆盖」原文 vs 双层方案）⇒ ⇒ 拍板后转 builder）
+   ⇒ ⇒ ⚠️ **残留 1b MUST NOT 并入 P8**（P8 的 done 判据**不含**语料覆盖）
+   ⇒ ⇒ ⚠️ **建议 P8 先做**（残留 1b 若在 P8 之后落地 ⇒ ⇒ 可改用**公共 API**
+   ⇒ ⇒ 顺带成为「公共面够用」的额外验证）
 
 ### T3-⑥ 的批次（3 批 · 前置 T3-⑤）
 
