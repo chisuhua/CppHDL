@@ -151,6 +151,18 @@ Capability MUST 明确划分"不可 dual"测试类别，避免迁移工作浪费
 2. `verilator-e2e-coverage` / `verilator-backend-e2e` / `verilator-rv32i-e2e` 等既有 spec 已锁定其 file-level / count-level requirements
 3. 这些测试已配置 `CATCH_AMALGAMATED_CUSTOM_MAIN` 与个性化 `main()`（verilator 缺失时 return 0），迁移会导致既有 TIMEOUT 与 exit-code 契约二次破坏
 
+**新增登记（2026-11-06 · `hierarchical-rtl-equivalence-2026-11` 引入）**：
+`tests/test_hierarchy_equivalence.cpp` 是**层次化 ≡ 扁平** 的**逐拍等价**套件
+⇒ ⇒ 它比较的是**两份 Verilog 产物**（扁平 vs 层次化）⇒ ⇒ **不**属于 `DUAL_BACKEND_TEST`
+的 parity 形态 ⇒ ⇒ 属**单后端（verilator-only）**条目 ⇒ ⇒ MUST **保留原状**
+（MUST NOT 迁移到 macro）⇒ ⇒ 它同样带 `verilator_e2e` 标签 ⇒ ⇒ 计入
+`VERILATOR_E2E_TOTAL` 锚点。
+⚠️ **本 Requirement 的标题（「9 个」）指的是 macro 的 reference implementation 数量**
+（那 9 个文件）⇒ ⇒ **不变**；本段登记的是**另一个**单后端条目。
+⚠️ **它 MUST 带 `verilator_e2e` 标签**：CI 的 `pr-verilator-fast` job 用
+`ctest -L verilator_e2e -LE perf` 跑**真 verilator**；不带标签 ⇒ 该套件只在
+`BUILD_VERILATOR=OFF` 的通用 job 里跑 ⇒ ⇒ 那里 verilator 不存在 ⇒ ⇒ **恒跳过**
+⇒ ⇒ 等价性证据将永远不被真正执行。
 **例外（`axi4-lite-generic-slave-conformance-2026-10` 引入）**：
 `tests/test_verilator_trace_parity.cpp` 与 `tests/test_axi_lite_verilator_e2e.cpp`
 的 fixture 内嵌 `AxiLiteSlave`，而 `rst_n` 是该 slave 的**必需端口**

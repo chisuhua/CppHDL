@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-06
+
+# 双后端覆盖口径：**契约锁定清单**追加登记「层次化逐拍等价」套件
+#
+# ⚠️ 起因：T3-005 新增 `tests/test_hierarchy_equivalence.cpp`（带 `verilator_e2e` 标签）⇒ ⇒
+#   护栏 `verify_dual_backend_parity.sh` 的交叉核验要求「带标签条目 MUST 背后有 parity
+#   **或** 属契约锁定清单」⇒ ⇒ 该套件比较的是**两份 Verilog** ⇒ ⇒ 属**单后端** ⇒ ⇒ 必须登记。
+#
+# ⇒ **delta**：`dual-backend-test-coverage` MODIFIED ×1（正文追加登记段；标题不动）
+# ⇒ 归档**禁** `--skip-specs`。
