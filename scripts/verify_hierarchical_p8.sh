@@ -14,8 +14,10 @@
 #   R4 本 change 的**公开 API 面** MUST ⊆ 已裁决的 4 个公共头
 #      （`codegen_verilog.h` · `hierarchy_verilog.h` · `core/verilator_backend.h` ·
 #        `core/verilator_port_set.h`）⇒ ⇒ 公开面**不得**继续扩张
-#      ⇒ ⚠️ 需要 git 历史（`git diff <base>..HEAD -- include/`）
-#      ⇒ ⇒ **base 不可解析时明确 NOTE 跳过**（CI 的浅克隆跑不了这一条 ⇒ 不静默假装绿）
+#      ⇒ ⚠️ 需要 git 历史 ⇒ 窗口 = `BASE..HEAD_REF`，**两端都钉死**到 T3-005 那一段
+#        （⚠️ **MUST NOT** 用移动的 `HEAD` —— 否则之后任何合法修改 `include/` 的
+#         change 都会误伤本判据 ⇒ 判据与「**本 change** 的公开面」这一契约漂移）
+#      ⇒ ⇒ **任一端不可解析时明确 NOTE 跳过**（CI 的浅克隆跑不了这一条 ⇒ 不静默假装绿）
 #
 # 用法：
 #   bash scripts/verify_hierarchical_p8.sh              # 主路径（R1–R4）
@@ -38,6 +40,17 @@ ALLOWED_INCLUDE=(
 # ⚠️ 可用 `RDDF_CHANGE_BASE` 覆盖（例如在别的 checkout 里跑）
 DEFAULT_BASE="1453a8f92bb31d16b3e1d7594bd385f7ea835f55"
 BASE="${RDDF_CHANGE_BASE:-$DEFAULT_BASE}"
+
+# ── 本 change 的 **head**（= T3-005 的归档 commit）───────────────────────────
+# ⚠️ **MUST 钉死，MUST NOT 用移动的 `HEAD`**：
+#    R4 的契约是「**本 change**（T3-005）的公开 API 面 MUST ⊆ 4 个已裁决公共头」
+#    ⇒ ⇒ 用 `HEAD` 会让窗口随仓库前进而**无限延长** ⇒ 之后**任何**合法修改 `include/`
+#    的 change（实证：T2b 改 `core/io.h` / `core/context.h` / `lnode/context.tpp`）
+#    都会让它转红 ⇒ ⇒ 判据与自身契约**漂移**（把「本 change 的历史属性」误当
+#    「永久的封禁」）⇒ ⇒ 故 head MUST 钉在 T3-005 归档的那个 commit 上。
+# ⚠️ 可用 `RDDF_CHANGE_HEAD` 覆盖（**仅**用于验证本判据仍具判别力，见下）。
+DEFAULT_HEAD="5f8f35702066e98495927b2952a922532c8ca59c"
+HEAD_REF="${RDDF_CHANGE_HEAD:-$DEFAULT_HEAD}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cpphdl_p8.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -95,11 +108,16 @@ run_main() {
     fi
 
     # R4：公开 API 面（需要 git 历史）
+    # ⚠️ 窗口 = `BASE..HEAD_REF`（**两者都钉死**）⇒ 判据度量的是 T3-005 **那一段**的
+    #    公开面 ⇒ ⇒ 后续 change 合法修改 `include/` 不会误伤本判据。
     if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
         note "R4 跳过：base '$BASE' 不可解析（CI 的浅克隆没有这段历史）"
         note "     ⇒ 在有完整历史的环境用 RDDF_CHANGE_BASE=<ref> 重跑"
+    elif ! git rev-parse --verify "$HEAD_REF" >/dev/null 2>&1; then
+        note "R4 跳过：head '$HEAD_REF' 不可解析（CI 的浅克隆没有这段历史）"
+        note "     ⇒ 在有完整历史的环境用 RDDF_CHANGE_HEAD=<ref> 重跑"
     else
-        git diff --name-only "$BASE"..HEAD -- include/ | sort > "$WORK/include_files.txt"
+        git diff --name-only "$BASE".."$HEAD_REF" -- include/ | sort > "$WORK/include_files.txt"
         check_include_set "$WORK/include_files.txt"
     fi
 }
