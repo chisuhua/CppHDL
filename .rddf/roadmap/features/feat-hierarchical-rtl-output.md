@@ -232,7 +232,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 
 | # | 项 | 来源 | 归位条件 | 形态约束 |
 |---|---|---|---|---|
-| **P6** | **层次友好度诊断 API** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已达成**（T3-④ 已归档） | **权威 = 台账 §11.2**（不复制全文）<br>✅ **已立项**（2026-11-06 · planner）⇒ `.rddf/improvements/p6-hierarchy-friendliness-diagnosis-2026-11.md`（5 段草稿 v3 · metis 1 轮已过 · 拍板：项 4 走 `std::optional` + 独立预扫描 · 3 档 = `kClean`/`kNeedsWork`/`kNotAnalyzable`） |
+| **P6** | **层次友好度诊断 API** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已收口**（2026-11-07 · 归档名 `2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11`）⇒ ⇒ `ch::diagnose_hierarchy`（只读）⇒ ⇒ 新建 capability `hierarchy-friendliness-diagnosis`（ADDED ×3 · strict valid） | **权威 = 台账 §11.2**（不复制全文）<br>✅ **已立项**（2026-11-06 · planner）⇒ `.rddf/improvements/p6-hierarchy-friendliness-diagnosis-2026-11.md`（5 段草稿 v3 · metis 1 轮已过 · 拍板：项 4 走 `std::optional` + 独立预扫描 · 3 档 = `kClean`/`kNeedsWork`/`kNotAnalyzable`）<br>✅ **已实施 + 归档**（builder）⇒ 5 项可判定事实（**全 `std::optional`** ⇒ 「未测得」≠「0」）· 3 档 · **与发射器同源是共享代码**（`src/hierarchy_synth_count.h` 3 个原语 ⇒ 既有 3 产物**逐字节不变**）· **13 用例 / 58 断言** · 变异 **6 条（5 转红 + 1 如实登记为无效）** · ctest **241/241** · samples 39/39 · examples 28/28 · 锚点 252/241/144 · critic **2 轮**（第 1 轮 REJECT ⇒ **2 BLOCKER**（端口数多算非相邻边 / 预扫描空指针）⇒ 返工 ⇒ 第 2 轮 APPROVE） |
 | **P8** | **等价性 harness 公共 helper** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已达成**（T3-005 已归档 · harness 两层形态） | **权威 = 台账 §11.2**（不复制全文） |
 | **残留 1b** | **语料级回归缺口**：层次化路径在全仓既有语料上**零覆盖**（`DUAL_BACKEND_TEST_PAIR` **不参数化粒度**） | 台账 §7（2026-11-06 由 oracle 从残留 1 拆出） | ⚠️ **独立立项** ⇒ **MUST NOT 并入 P8**（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**） | 判据 MUST 能覆盖**组合逻辑 DUT**（无 clock/reset ⇒ 计数校验 MUST 动态减 0）· 恒相关信号（兄弟串联的 `a`/`b` 逐拍同值）⇒ 「逐拍全等」的判别力上限 MUST 登记 |
 | **残留 5** | **端口命名契约**（顶层无框架前缀 · `__if_`/`__x_` **`__up_`** 只出现在非顶层 module）**无静态护栏** | 台账 §7（⚠️ 台账漏记 `__up_` ⇒ 2026-11-06 planner 按 `include/hierarchy_verilog.h:46` 补全） | ✅ **已收口**（2026-11-06 · 归档名 `2026-11-06-port-naming-contract-guard-2026-11`）⇒ ⇒ `scripts/verify_hierarchical_port_naming.sh`（N0–N3）⇒ ⇒ 新建 capability `hierarchical-port-naming-guard`（ADDED ×4 · strict valid） | MUST 复用结构化提取（`verilator --json-only`）⇒ **MUST NOT** 自研文本解析器<br>✅ **已立项**（2026-11-06 · planner）⇒ `.rddf/improvements/port-naming-contract-guard-2026-11.md`（5 段草稿 v3 · metis 1 轮已过 · 拍板：N2b 补 `__x_`/`__up_` 真实产物 fixture ⇒ 夹具所有权收敛为「生成器独立子命令」）<br>✅ **已实施 + 归档**（builder）⇒ 护栏 N0–N3 + `--self-test`（**6 条投毒**全部符合期望 · 无效变异 0 条 · 还原复绿）· 提取器加 `--modules` / `--module-ports`（**既有 `--ports` 逐字未改**）· 生成器加 `--prefix-fixtures`（2 个 fixture ⇒ `__x_` / `__up_` 真实覆盖）· **默认路径 3 产物逐字节不变** · ctest **240/240** · samples **39/39** · examples **28/28** · 计数锚点不变 · critic **APPROVE**（0 BLOCKER）<br>⚠️ **如实登记**：发射器已有 **G3-5 硬拒绝**（根有合成端口 ⇒ `ok=false`）⇒ ⇒ N1 在现有 3 个产物上**结构性恒绿** ⇒ ⇒ 护栏的真实价值 = **对 G3-5 被移除/被绕过与未来新形态的回归栅栏**（不是「关闭正在发生的缺口」）⇒ `__up_` 纳入 = **契约补全**（当前零判别力） |
@@ -262,9 +262,10 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
    各自跑全量门）
 5. **后续立项**（下一轮）：P6 · P8 · 残留 1b ⇒ 各走 `add-improve`（**5 段草稿** ⇒
    ⚠️ HARD-GATE brainstorm ⇒ 需用户逐项批准）⇒ ⇒ C2 **待下游确认** ⇒ 不立项
-   ⇒ ⇒ **残留 5 已收口**（2026-11-06 · 见 §③ 清单行）⇒ ⇒ 剩 **P6 · P8 · 残留 1b** 三项
-   ⇒ ⇒ ⚠️ **P6 的 5 段草稿已备**（`.rddf/improvements/p6-hierarchy-friendliness-diagnosis-2026-11.md`
-   v3 · metis 1 轮已过 · 3 项拍板已落）⇒ ⇒ 可直接进 builder 流程
+   ⇒ ⇒ **残留 5 已收口**（2026-11-06）· **P6 已收口**（2026-11-07）⇒ ⇒ 剩
+   **P8 · 残留 1b** 两项 ⇒ ⇒ ⚠️ 二者**尚无 5 段草稿** ⇒ ⇒ MUST 先转 **planner** 立项
+   （各走 `add-improve` + HARD-GATE brainstorm）· ⚠️ **残留 1b MUST NOT 并入 P8**
+   （P8 的 done 判据**不含**语料覆盖）
 
 ### T3-⑥ 的批次（3 批 · 前置 T3-⑤）
 
