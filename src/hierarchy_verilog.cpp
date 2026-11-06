@@ -18,6 +18,7 @@
 #include "hierarchy_chain.h"
 #include "hierarchy_port_check.h"
 #include "hierarchy_signal_map_check.h"
+#include "hierarchy_synth_count.h"
 #include "logger.h"
 
 #include <cstdio>
@@ -270,17 +271,12 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     /// 跨层边两端宽度 MUST 一致；不一致 ⇒ **合成之前**响亮拒绝。
     /// ⚠️ 只此**一个** helper ⇒ ⇒ MUST NOT 每个分支各写一份
     ///    （漏一处 = 静默扩展/截断，且产物关掉了 `WIDTHEXPAND` / `WIDTHTRUNC` ⇒ lint 也看不见）。
+    /// ⚠️ **实现走共享头**（`src/hierarchy_synth_count.h`）⇒ ⇒ 与诊断**同一份**
+    ///    判定 ⇒ ⇒ 诊断报出的「需合成端口数」与本发射器**必然相等**
+    ///    （★ 消息措辞逐字保留 ⇒ 行为不变）。
     auto width_check = [](const std::string &desc, const lnodeimpl *from, const lnodeimpl *to,
                           std::string &err) -> bool {
-        if (from->size() == to->size()) {
-            return true;
-        }
-        err = desc + ": cross-module edge width mismatch (" + std::to_string(from->size()) +
-              "-bit driver -> " + std::to_string(to->size()) +
-              "-bit target). ADR-060 W1 forbids implicit extension/truncation (the output "
-              "disables WIDTHEXPAND/WIDTHTRUNC). Remedy: slice or extend explicitly on the "
-              "parent side, or drive an explicit port of the child instead.";
-        return false;
+        return ch::detail::synth_width_ok(desc, from, to, err);
     };
 
     // ── **chain builder**（ADR-060 v1.12 §2.3 的 G0）──────────────────────
@@ -680,12 +676,17 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             }
             const std::string &child_key = e.from_module;
             const std::string &parent_key = e.to_module;
-            auto &port_map = synth_port_of[child_key];
-            auto it = port_map.find(e.from_ptr);
+            // ⚠️ **去重 key 走共享实现**（`src/hierarchy_synth_count.h`）⇒ ⇒ 与诊断
+            //    **同一份**口径 ⇒ ⇒ 诊断报出的「需合成端口数」与本发射器**必然相等**
+            //    ⇒ ⇒ 满足 capability `hierarchy-friendliness-diagnosis` 的
+            //    Requirement 3「与发射器同源」⇒ ⇒ **行为不变**（key 的值与改前一致）
+            const auto synth_key = ch::detail::synth_port_key(e);
+            auto &port_map = synth_port_of[synth_key.first];
+            auto it = port_map.find(synth_key.second);
             if (it == port_map.end()) {
                 const std::string port =
                     make_synth_name("__x_", synth_seq[child_key]);
-                port_map[e.from_ptr] = port;
+                port_map[synth_key.second] = port;
                 synth_by_child[child_key].push_back(SynthPortInfo{
                     port, names.at(e.from_ptr), e.from_ptr->size(),
                     /*is_input=*/false, /*redirect=*/nullptr});
@@ -707,14 +708,10 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             //    ② `type_proxy`（bundle 字段 · `print_proxy` 重定向 · 本批）
             //    ⚠️ **MUST NOT** 收 `type_output`（第八格：父驱动子 `ch_out` ⇒ 拒绝）
             //    ⚠️ **MUST NOT** 收 `type_op` / 其它（第七格：改写运算操作数 ⇒ 拒绝）
-            const auto child_type = e.to_ptr->type();
-            const bool child_is_redirectable =
-                (child_type == lnodetype::type_reg ||
-                 child_type == lnodetype::type_proxy);
-            const auto drv_mod = analysis.module_of_node.find(e.from_ptr);
-            const bool driver_in_parent =
-                drv_mod != analysis.module_of_node.end() && drv_mod->second == e.from_module;
-            if (!child_is_redirectable || !driver_in_parent) {
+            // ⚠️ **可合成性判定走共享实现**（`src/hierarchy_synth_count.h`）⇒ ⇒ 与诊断
+            //    **同一份**判定 ⇒ ⇒ 诊断的端口数与本发射器**必然相等**
+            //    （★ 行为不变：判定内容与改前逐条等价）
+            if (!ch::detail::implicit_input_synthesizable(e, analysis)) {
                 remaining.push_back(desc);
                 continue;
             }
@@ -728,12 +725,14 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             }
             const std::string &child_key = e.to_module;    // 子侧 = 被驱动端所在 module
             const std::string &parent_key = e.from_module;  // 父侧 = 驱动端所在 module
-            auto &port_map = synth_port_of[child_key];
-            auto it = port_map.find(e.to_ptr);
+            // ⚠️ **去重 key 走共享实现**（与行 2 同款 ⇒ ⇒ 诊断与发射器同源）
+            const auto synth_key = ch::detail::synth_port_key(e);
+            auto &port_map = synth_port_of[synth_key.first];
+            auto it = port_map.find(synth_key.second);
             if (it == port_map.end()) {
                 const std::string port =
                     make_synth_name("__if_", synth_seq[child_key]);
-                port_map[e.to_ptr] = port;
+                port_map[synth_key.second] = port;
                 synth_by_child[child_key].push_back(SynthPortInfo{
                     port, /*node=*/std::string(), e.to_ptr->size(),
                     /*is_input=*/true, /*redirect=*/e.to_ptr});

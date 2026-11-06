@@ -715,6 +715,76 @@ ch::HierarchyEmitResult r = ch::toVerilogHierarchical("out.v", dev.instance(), o
 §1 的 **D1 / D4 / D5**（bundle 成员跨层 · 悬空子输入 · 父层直接改子层 `reg->next`）
 ⇒ ⇒ 这三类写法会在产物里留下 `__if_` / `__x_` 端口或凭空多出的顶层 `input`。
 
+### 5.4-bis 层次友好度**诊断 API**（`ch::diagnose_hierarchy`）
+
+> 权威 = capability `hierarchy-friendliness-diagnosis`。
+> ⚠️ **头文件不在 `ch.hpp` 聚合器里** ⇒ ⇒ 必须**显式** include：
+
+**为什么需要**：层次化分析的默认入口 `ch::analyze_hierarchy` 是 **fail-closed**
+（`ImplicitPortHandling::Reject`）⇒ ⇒ 遇到第一条「不友好」就**抛** ⇒ ⇒ 用户只看到
+「被拒」，看不到「**几处**不友好、要改哪里」。诊断 API 把这些**一次报全**。
+
+```cpp
+#include "ch.hpp"
+#include "hierarchy_analysis.h"    // ★ 不是 ch.hpp（该头不在聚合器里）
+#include <cstdio>
+
+using namespace ch::core;         // ★ ch_in / ch_out / ch_uint 在这里
+
+class MyTop : public ch::Component {
+public:
+    __io(ch_in<ch::core::ch_uint<8>> din; ch_out<ch::core::ch_uint<8>> dout;)
+    MyTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+int main() {
+    ch::ch_device<MyTop> dev;
+    const ch::HierarchyDiagnosis d = ch::diagnose_hierarchy(dev.instance());
+
+if (d.verdict == ch::HierarchyFriendliness::kNeedsWork) {
+    for (const auto &det : d.details) {
+        // det.category ∈ {implicit_edge, dangling_input,
+        //                 unconsumed_child_output, cross_module_mem}
+        // det.node = **Verilog 名**（⇒ 可直接在产物里搜到）
+        printf("%s | %s | %s\n", det.category.c_str(), det.module.c_str(),
+               det.node.c_str());
+    }
+}
+    std::printf("%s", d.to_text().c_str());  // ★ 确定性快照（两次调用逐字节相同）
+}
+```
+
+**报告的 5 项**（全部是 `std::optional` ⇒ 「**未测得**」与「**实测为 0**」
+**结构上可区分** ⇒ ⇒ 不可分析时不会交出一份「全是 0」的误导报告）：
+
+| 项 | 含义 | 怎么读 |
+|---|---|---|
+| `implicit_edge_count` | 隐式**边**数 | 单位 = **边**（⇒ ≠ 端口数） |
+| `synthesized_port_count` | 需合成的**端口**数 | ≈ **代价**（同类隐式边可能是 1 个端口，也可能是 N 跳端口链）⇒ ⚠️ **本数只覆盖「直接父子」隐式边**（`__if_` / `__x_`）⇒ ⇒ **不含**向上 pass-through（`__up_`）与第三轴链 ⇒ ⇒ **链长不可由本报告推导** ⇒ 别把「端口数小」读成「成本低」 |
+| `dangling_input_count` | **跨层**悬空输入数 | 根自己的 / inline 折叠进根的**不计**（与发射器同款口径） |
+| `unconsumed_child_output_count` | 未被子层消费的输出数 | 按**实例**判（多实例里只有一个消费 ⇒ 仍算未消费） |
+| `cross_module_mem_count` | 跨模块 `ch_mem` 访问数 | 正常路径必为 **0**（分析层对它**永远抛**）⇒ ⇒ 不可分析时由**独立预扫描**报出计数 ⇒ ⚠️ **该数是「尽力而为」的**（归属不明的边会被跳过 ⇒ 可能偏小）⇒ ⇒ MUST NOT 当成精确值 |
+
+**3 档**（`kClean` / `kNeedsWork` / `kNotAnalyzable`）⇒ ⇒ **不是 5 档**：
+5 大项里有 4 项是**正交事实**（隐式边 / 悬空输入 / 未消费输出 / 跨模块 mem），
+谁更糟**没有客观依据**（默认策略下隐式边与悬空输入**都是可发射的告警**）⇒ ⇒
+5 档是**伪全序** ⇒ ⇒ 严重度信息放在**明细**里。
+
+⚠️ **四个必须知道的边界**：
+
+| # | 边界 | 后果 |
+|---|---|---|
+| 1 | **结果依赖当前 `GranularityScope`** | inline 折叠会改变 module 归属 ⇒ ⇒ 同一设计在不同粒度下**结果可能不同**（如跨模块 `ch_mem` 在 `ForceInline` 下折进同层 ⇒ 0） |
+| 2 | 诊断路径**必然**在 stderr 出现 `FATAL:` | 分析层的拒绝宏是「**先 log 再 throw**」⇒ ⇒ 用户设计有问题时会先看到 FATAL 日志 |
+| 3 | **静态析构期**该宏**一律不抛** | ⇒ ⇒ 该期可能得到**部分结果** |
+| 4 | **不覆盖**「子 `ch_out` 有端口但体内无驱动」 | 该形态**不在** 5 项里 ⇒ ⇒ 别把报告当成「全部问题清单」 |
+
+⚠️ **边界**：诊断**不**解决「前置校验首错即抛」⇒ ⇒ 15 个拒绝点里**命中第一条就抛**
+⇒ ⇒ 迭代次数仍与 precheck 缺陷数成正比 ⇒ ⇒ 本 API 解决的是**「隐式边家族」的完整性**。
+
 ### 5.5 ⚠️ 观测盲区（等价性只覆盖**顶层可见行为**）
 
 > **契约边界**（ADR-058 §4 风险 6）· 权威 = capability `rtl-hierarchical-output`。

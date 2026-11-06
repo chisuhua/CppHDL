@@ -1075,6 +1075,13 @@ add_catch_test(test_component_ownership test_component_ownership.cpp)
 # active parent (declaration decoupled from assembly point)
 add_catch_test(test_component_granularity test_component_granularity.cpp)
 
+# hierarchy friendliness diagnosis (p6-hierarchy-friendliness-diagnosis-2026-11):
+# read-only diagnosis entry point; 5 machine-decidable report items; "unmeasured" vs
+# "measured zero" must be structurally distinguishable; synthesized-port count must
+# equal the emitter's implicit-synthesized port count; deterministic snapshot.
+add_catch_test(test_hierarchy_friendliness_diagnosis
+    test_hierarchy_friendliness_diagnosis.cpp)
+
 # io() const + opt-in node-name uniqueness (component-io-const-and-node-name-policy-2026-11):
 # const contexts can read impl()/name()/is_valid(); ctx node-name policy defaults to
 # kAllowDuplicates (zero behaviour change) and kRejectDuplicates fails fast at the

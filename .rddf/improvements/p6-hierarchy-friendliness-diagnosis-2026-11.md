@@ -227,6 +227,27 @@ v1 想给 5 档（显式 / 需隐式端口 / 有悬空输入 / 有未消费输�
 | 风险 | ① **项 3 口径**若定错（例如把「父侧不读但传给孙子」误判未消费）⇒ 误导性计数 ⇒ MUST 配四条排除规则的反向 DUT<br>② **`kNotAnalyzable` + 全 0** 是本 change 最容易写出的假绿<br>③ 项 4 的粒度相关性若不在文档写明 ⇒ 用户会以为两次结果不同是 bug |
 | 依赖 | `analyze_hierarchy` / `HierarchyAnalysis` · `diagnose_drive`（形态范式）· `build_verilog_name_table()`（`src/hierarchy_verilog.cpp:112`，明细取名） |
 
+## 5-bis. ⚠️ 实施期事实订正（builder 追加 · 2026-11-06）
+
+> ⚠️ **只增订正，不改 planner 原意**（★ `.rddf/improvements/**` 是 planner 域文件
+> ⇒ ⇒ builder 不改其决策内容 ⇒ ⇒ 这里只**追加**一条实测事实订正）。
+
+**订正**：§2.3 ⑤ 写「`details` MUST 用 Verilog 名（★ NOT `node->name()` ⇒ 那个恒为
+`unnamed_input` ⇒ 明细会是一串同名条目）」—— ⚠️ **前半句对、后半句错**：
+
+| 符号 | 实测行为 | 出处 |
+|---|---|---|
+| `port::name()`（**IO 访问器**） | 对**所有** `ch_in` 恒为 `"unnamed_input"` | `include/core/io.h:48-68, 141-158` |
+| `lnodeimpl::name()`（**IR 节点**） | **父组件名 + "." + 创建时的名字**（⇒ 例 `top.m1.leaf.unnamed_input`）⇒ ⇒ **两个不同组件的 input 本就不同名** | `src/core/lnodeimpl.cpp:32` |
+
+⇒ ⇒ 「明细**不可区分**」的担忧**不成立**；但「用 Verilog 名」这条要求**仍成立**
+（★ 理由改为：Verilog 名与**产物同一套** ⇒ 用户能在产物里定位；`lnodeimpl::name()`
+的 `.` 路径**搜不到**产物）。
+⇒ ⇒ 变异 **M5** 的正确形态 = 「**只取局部名**」（⇒ 两个组件的 input 局部名相同 ⇒
+明细不可区分 ⇒ 2 条断言转红 ✓）；用 `node->name()` **整体**当变异是**无效变异**。
+
+---
+
 ## 6. metis 第 1 轮 gap 分析的处置（逐条）
 
 | # | metis finding | 处置 |

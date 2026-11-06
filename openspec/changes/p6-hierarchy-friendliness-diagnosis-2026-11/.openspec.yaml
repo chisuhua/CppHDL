@@ -1,0 +1,16 @@
+schema: spec-driven
+created: 2026-11-06
+
+# 层次友好度诊断 API（P6）
+#
+# ⚠️ **规范所有者**：本 capability 管的是**用户面诊断 API 的契约**
+#   （入口 · 只读 · 报告内容 · 不可分析时的行为），**不是**产物契约
+#   （产物契约归 `rtl-hierarchical-output`）。
+#
+# ⇒ **新建 1 个 capability** ⇒ 归档**禁** `--skip-specs`。
+#
+# ⚠️ **口径订正**（实施期实测）：台账 §11.2 的 5 项报告面里，
+#   「跨模块 `mem` 访问数」在**只从 `HierarchyAnalysis` 读**的前提下恒为 0 ——
+#   而那是**设计选择**（非结构事实）⇒ ⇒ 用户已拍板走 **A1**：
+#   `std::optional` + **一次独立预扫描**（`mem_port_impl::parent()` + `module_of_node`）
+#   ⇒ ⇒ 不可分析时也能报出**真实**计数。
