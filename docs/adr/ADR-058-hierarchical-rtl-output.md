@@ -1,6 +1,6 @@
 # ADR-058: 真层次化 RTL 输出 —— 语义边界与等价性
 
-- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.15** · 版本史见 §6）
+- Status: **Accepted**（2026-11-05 · 用户拍板 · **当前 v2.16** · 版本史见 §6）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: **无**（新增决策）；**前置** = ADR-059（节点归属与组件命名）·
@@ -13,6 +13,9 @@
   `.rddf/roadmap/features/feat-hierarchical-rtl-output.md`（实施路径）
 - 审稿报告: `.rddf/reviews/ADR-058-v2.13-ADR-060-v1.14.md`（oracle 1 + critic 1；
   其 2 SHOULD_FIX + 2 NIT 已在 **v2.14** 落实 ⇒ 决策内容零变更）
+- 审稿报告: `.rddf/reviews/ADR-058-v2.16.md`（v2.16「顶层名 → 编译输入文件名」订正：
+  oracle 1 + critic 1（APPROVE_WITH_CONDITIONS · 无 BLOCKER）⇒ 3 SHOULD_FIX + 3 NIT 的
+  逐条处置见该报告）
 - ⚠️ **配套决策**：**ADR-060**（层次化输出的**端口策略**与 **module 复用**）——
   本 ADR 只承载「**边界是什么 / 等价性怎么定义 / API 边界在哪**」三件事。
 
@@ -288,19 +291,35 @@ E1/E2/E3 的抽象要求已落成具体 API（**决策零变更**，此处只登
   `data_map`**（MUST NOT 从 ctx 重推端口表）。
 - **E3 的致命语义** = `compile_and_load(/*fatal=*/true)`；`fatal=false` 分支 = 既有路径
   **逐字节不变**（含 `sim_main.cpp` 的 prelude 文本 —— 它是缓存 key 的输入）。
-- ⚠️ **顶层名 fail-early 尚未落地**（归 T3-⑤/B4）⇒ §4 风险 7 仍然有效。
+- **顶层名条款已按 v2.16 订正**：约束对象 = **编译输入文件名**（不是顶层 module 名）
+  ⇒ ⇒ 落地形态 = 入口把外部产物**复制到 `<work_dir>/top.v`** 再编译（见下条）。
 
-⚠️ **顶层 module 名的约束（v2.13 · 实测订正措辞）**：backend 生成的 `sim_main.cpp`
-模板硬编码 `#include "Vtop.h"` 与 `new Vtop{…}`（`src/core/verilator_backend.cpp:446,:456`）
-⇒ ⇒ 而 Verilator 生成的顶层类名由 **`--top-module` 或输入文件名**决定
-（`third_party/verilator/src/V3Options.cpp:1161-1165`；实测：`--prefix` 亦可覆盖）
-⇒ ⇒ 层次化产物若**顶层 module 名 ≠ `top`** ⇒ ⇒ **编译期**失败（`VerilatorCompile`），
-不是运行期 ⇒ ⇒ 该入口 MUST **显式校验**顶层名并在不符时**致命拒绝 + 点名**
-⇒ ⇒ 把编译期失败**提前到入口**（fail-early）。
-⚠️ **为什么保留 `top_module_name` 可配置**（不删选项）：它已是**已落地公开契约**
-（capability `rtl-hierarchical-output` 的 Scenario「顶层 module 名可配置」）⇒ ⇒ 删 = breaking
-⇒ ⇒ 本期裁决 = **保留选项 + 约束消费路径**（backend 只消费默认名 `top` 的产物）⇒ ⇒
-「backend 消费非默认名产物」记为**已知边界**（本期不做，见 §4 风险 7）。
+⚠️ **编译输入文件名的约束（v2.16 订正 · 取代 v2.13 的「顶层 module 名」条款）**：
+backend 的 `sim_main.cpp` 模板硬编码 `#include "Vtop.h"` 与 `new Vtop{…}`
+（`src/core/verilator_backend.cpp` 的 `kSimMainPrelude`）⇒ ⇒ 而 Verilator 的**顶层类名 /
+头文件名**由 **`--prefix` → `--top-module` → 首个输入文件名主干** 决定
+（`third_party/verilator/src/V3Options.cpp:1161-1165`）⇒ ⇒ **约束对象 = 编译输入
+文件名 MUST 是 `top.v`** —— 与**顶层 module 叫什么无关**。
+⇒ ⇒ **实测推翻 v2.13 的前提**（证据见 `.rddf/reviews/hierarchical-rtl-equivalence-2026-11-discovery.md`
++ 台账 D5）：顶层 module 名 ≠ `top`（如 `my_top`）的产物**照常可编译可仿真**（Verilator 自行
+选取「未被实例化」的 module 为顶层）；反而是**文件名**主干 ≠ `top`（如 `hier.v`）⇒ 生成
+`Vhier.h` ⇒ `#include "Vtop.h"` 找不到 ⇒ **编译期**失败。
+⇒ ⇒ **裁决**：该入口 MUST 以 **`top.v`** 为编译输入（外部产物路径可任意）⇒ ⇒ **MUST NOT**
+落到编译期才发现 ⇒ ⇒ 落地形态 = **把外部产物复制到 `<work_dir>/top.v`** 再编译。
+⇒ ⇒ **防未来回归**：编译命令 MUST NOT 向 Verilator 传 `--prefix` / `--top-module`
+（两者都会改写 prefix ⇒ `Vtop.h` 再次消失，而「文件名 = `top.v`」这一条**照样满足** ⇒
+⇒ 约束失效而无告警；实测：`verilator --cc top.v --top-module my_top` ⇒ 生成 `Vmy_top.h`、
+**没有** `Vtop.h`）。
+⇒ ⇒ **缓存 key 与复制无关**：`compute_cache_key` 只哈希**内容**（verilog 源码 + `sim_main`
+模板 + flags + verilator 版本，`src/core/verilator_backend.cpp`）⇒ ⇒ 复制到 `<work_dir>/top.v`
+**不改变** key ⇒ ⇒ 缓存 key MUST NOT 引入**路径**（否则同一产物因路径不同而各编一遍）。
+⇒ ⇒ **顶层 module 名 MUST NOT 影响可消费性**：`top_module_name` 取任意值的产物 MUST 能被
+backend 消费 ⇒ ⇒ 「backend 只消费默认顶层名」**不再是已知边界**（v2.13 的 §4 风险 7 与
+台账 D5 / 残留 1 已按此订正）。
+⚠️ **保留 `top_module_name` 可配置**（不删选项）：它已是**已落地公开契约**
+（capability `rtl-hierarchical-output` 的 Scenario「顶层 module 名可配置」）⇒ ⇒ 删 = breaking。
+⚠️ **多顶层**（产物里有 >1 个未被实例化的 module）⇒ Verilator 自己 `%Warning-MULTITOP` +
+`%Error`（**响亮**失败，默认 fatal）⇒ ⇒ 入口 MUST NOT 把它降级（E3 的致命语义已覆盖）。
 
 ⚠️ **为什么不给 `toVerilog()` 加参数**：既有调用点与 Verilator backend 全部承担新分支风险
 ⇒ ⇒ 且「默认扁平」会退化成**隐式行为**，回归时无法区分「走扁平」与「走层次化」。
@@ -386,7 +405,6 @@ Verilog 里，**文件级切分是纯下游工具链动作** —— 按 module �
 | 4 | 顶层端口集合**比扁平少** ⇒ 外部工具看到的接口不同 | 等价性以**显式观测集合**为准；并产出**端口清单**供外部评审 |
 | 5 | **`CH_MODULE_NAME` 忘写** ⇒ 模块类型名不可确定 ⇒ ⇒ 而 `typeid` 的拼写**是实现相关的**（Itanium vs MSVC）⇒ ⇒ 跨编译器/跨平台**不可复算** | ⚠️ **以 ADR-059 D4 v2.3 + §2.2.1 的四档来源**为准：① 类级 `CH_HIERARCHY_LAYER("name")` / ② `ch_layer<T>` 继承 `T` 的类级名 / ③ `ch_layer<Helper>` 在实例处给名 ⇒ ⇒ **①②③ 缺名编译期即不可表达**（⇒ ⇒ 原「运行期硬错」的兜底**不再需要**）⇒ ⇒ ④ `Granularity::ForceLayer` 强制的组件（用户**未**声明）⇒ ⇒ 允许回退 `sanitize(typeid)` **+ MUST 有 `CHWARN`**（⇒ ⇒ 名字仅「同 ABI 内」可复算） |
 | 6 | **等价性判据只覆盖「顶层可见行为」** —— 层次化顶层输出集 = 扁平顶层输出集 − {`ch_out` 的最近成层祖先 ≠ 根} ⇒ ⇒ 被移出顶层的那批 `ch_out` 在层次化产物里**降级为子 module 端口**（或空连接 `.port()`）⇒ ⇒ 顶层**观测不到** ⇒ ⇒ 「子树内部算错但顶层输出恰好相同」这一类缺陷**结构性测不出** | ⚠️ **如实登记**（不是缺陷 ⇒ 是契约边界）⇒ ⇒ **输入方向无盲区**（顶层 input 集合两侧 MUST 相等 ⇒ 激励可完整施加）⇒ ⇒ MUST 在 **capability spec + 用法指南** 同步登记 ⇒ ⇒ **MUST NOT** 假装全覆盖 |
-| 7 | **backend 只消费默认顶层名 `top`** 的产物（§2.3 E3 附近的顶层名约束）⇒ ⇒ 调用方若设 `top_module_name = "my_top"` ⇒ ⇒ 该产物**无法**被 backend 仿真 ⇒ ⇒ 「层次化产物不被 backend 消费」的已知残留**只对非默认名成立** | 保留选项（已落地公开契约）⇒ ⇒ 本期**不做**「backend 支持任意顶层名」（模板参数化 + 缓存 key 加顶层名 + 测试矩阵扩张 ⇒ ⇒ 属能力扩张 ⇒ ⇒ 须先回 ADR 重开）⇒ ⇒ 入口**显式校验 + 致命拒绝 + 点名**（fail-early）⇒ ⇒ 记为已知边界 |
 
 ---
 
@@ -426,8 +444,15 @@ Verilog 里，**文件级切分是纯下游工具链动作** —— 按 module �
       真初始化成功（**非 SKIP 即过**）⇒ ⇒ 既有 `initialize(ctx, …)` 行为逐字节不变
       ⇒ ⇒ **变异**：集合漏 clock/reset ⇒ ⇒ 寄存器永不更新 ⇒ ⇒ 逐拍全等**恒绿**
       ⇒ ⇒ **MUST 转红**（这是本判据的判别力自证）
-- [ ] **效果判据（顶层名 · v2.13）**：层次化产物顶层 module 名 ≠ `top` ⇒ ⇒ 入口
-      MUST **致命拒绝 + 点名**（fail-early）⇒ ⇒ **MUST NOT** 落到编译期才发现
+- [ ] **效果判据（编译输入文件名 · v2.16 · 取代 v2.13 的「顶层名」判据）**：该入口 MUST 以
+      **`top.v`** 为编译输入（外部产物路径**任意**）⇒ ⇒ **MUST NOT** 落到编译期才发现
+      「找不到 `Vtop.h`」⇒ ⇒ **变异**：改成直接用调用方给的路径 ⇒ ⇒ 生成 `Vhier.h` ⇒ ⇒ 编译失败
+      ⇒ ⇒ **MUST 转红**
+      ⇒ ⇒ ⚠️ **变异夹具的两个前置**（否则该变异**恒绿**）：① 调用方路径的**主干名 MUST ≠ `top`**
+      （否则「绕过复制」是 no-op）；② 编译失败 MUST **传播为用例失败**（**非 SKIP**）⇒ 依赖 E3 的
+      致命语义（§2.3 E3 + B4a 判据）
+      ⇒ ⇒ 且**顶层 module 名 MUST NOT 影响可消费性**：`top_module_name = "my_top"` 的产物
+      MUST 能被消费（值判据 MUST 通过）⇒ ⇒ **反例** = 入口按 module 名拒绝 ⇒ ⇒ 转红
 - [ ] **效果判据（观测盲区登记 · v2.13 · 承重）**：等价性判据 MUST 显式声明其
       **只覆盖顶层可见行为**（被移出顶层的那批 `ch_out` 顶层不可观测 ⇒ ⇒
       「子树内部算错但顶层输出相同」**测不出**）⇒ ⇒ 且 MUST 在 capability spec +
@@ -506,6 +531,20 @@ output**（`src/codegen_verilog.cpp:333-362`）⇒ ⇒ 顶层 module 端口表 M
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-06 | **v2.16**（T3-⑤/B3 实施期实测推翻 v2.13 前提 · **architect** 角色 ·
+  用户 2026-11-06 拍板「订正为文件名」）：**「顶层 module 名」约束 → 「编译输入文件名」约束** ——
+  ① 事实订正：Verilator 的**顶层类名 / 头文件名**由 `--prefix` → `--top-module` → **首个
+  输入文件名主干**决定（`V3Options.cpp:1161-1165`）⇒ ⇒ 真正的约束 = 编译输入**文件名**
+  MUST 是 `top.v`；顶层 **module 名**与该类名**无关**（实测：根名 `my_top` 的产物照常
+  编译可仿真 ⇒ v2.13 写的「顶层名 ≠ `top` ⇒ 编译期失败」**不成立**；反过来文件名主干
+  ≠ `top`（`hier.v`）⇒ `Vhier.h` 缺 ⇒ 编译期失败）⇒ ⇒ 证据 =
+  `.rddf/reviews/hierarchical-rtl-equivalence-2026-11-discovery.md`；② 裁决：入口 MUST 以
+  **`top.v`** 为编译输入（落地形态 = **复制**外部产物到 `<work_dir>/top.v`）+ MUST NOT
+  传 `--prefix` / `--top-module`（实测 `--top-module my_top` ⇒ 生成 `Vmy_top.h` ⇒
+  `Vtop.h` 消失）+ 缓存 key 只哈希**内容** ⇒ 复制不改变 key；③ **顶层 module 名 MUST NOT
+  影响可消费性** ⇒ 删除 §4 风险 7（其核心断言已被实测推翻）+ 台账 D5 / 残留 1 同步订正；
+  ④ §5 判据改为「编译输入文件名」（变异夹具两个前置：调用方路径主干 ≠ `top` + 失败非 SKIP）
+  ⇒ ⇒ **决策内容的实质变更**（放宽约束 + 删除一条风险登记），其余条款零变更 |
 | 2026-11-06 | **v2.15**（T3-⑤/B3 落地后 · builder 角色 · **决策内容零变更**）：§2.3 补「**已落地形态**」段 —— 登记 `try_initialize_with_verilog(verilog_path, ports, data_map)` / `ch::VerilatorPortSpec`（中立头 `include/core/verilator_port_set.h`）/ `ch::backend_port_set(emitted, root_module)` / `compile_and_load(bool fatal)` 四个实现指针，并**订正**原形态示意 `initialize_with_verilog(path, data_map)` 缺端口集合（与 E1 自相矛盾）；明示 E2 的双 `work_dir` 由构造器实参承担（入口无该形参）、外部初始化后的重绑语义、以及**顶层名 fail-early 仍未落地**（归 B4 ⇒ §4 风险 7 继续有效） |
 | 2026-11-05 | **v2.14**（落实 critic 对本轮审稿的 **2 SHOULD_FIX + 2 NIT** ⇒ ⇒ 决策内容**零变更**，只补可判定性）：① **§2.2 映射表载体 + §2.3 E1 补同一条纪律** —— 显式端口集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）**派生**，**MUST NOT** 由 harness / backend 独立撰写（否则与 emitter 真相脱钩 ⇒ 表错则两错相抵）；② **§2.3 的 `port_provenance` 块订正为「已落地」**（`include/hierarchy_verilog.h:48-69`；原文写「尚未落地」）并明示它**不含 `node_id`** ⇒ 不能顶替 §2.2 的四元组映射表（两者并存） |
 | 2026-11-05 | **v2.13**（T3-④ 归档后 · architect 角色 · 据 **oracle** 对实施期缺口的对抗复核）：**补齐 T3-005 的四处「契约缺口」** —— ① **§2.2 加映射表载体**：MUST 由 emitter 产出（禁测试自建）· 载体 = `HierarchyEmitResult` 新增**公开字段**（value-only · 带 `node_id` · `hier_top_port_name` 允许为空以表达「不在层次化顶层」）· **不**另开 manifest 入口；并加 **`node_id` 有效性域**（ctx 私有 ⇒ 两次 emit MUST 共享同一 ctx ⇒ 跨 ctx 退化为「设计级信号名」维度）；② **§2.3 加该只增不改入口的三条硬约束 E1/E2/E3**（**显式端口集合** ⊇ {clock, reset} · **物理隔离**既有路径 + 双 work_dir · 失败**致命**非 best-effort ⇒ 否则 backend 静默不可用 ⇒ 套件 SKIP = 恒绿假绿）**+ 顶层 module 名约束**（实测：Verilator 顶层类名由 `--top-module` 或**输入文件名**决定 ⇒ 非 `top` ⇒ **编译期**失败 ⇒ 入口 MUST 显式校验并**致命拒绝**；**保留** `top_module_name` 选项（已落地公开契约）⇒ 「backend 只消费默认名」记为已知边界）；③ **§4 加风险 6（观测盲区：等价性只覆盖顶层可见行为 · 输入方向无盲区）+ 风险 7（backend 只消费默认顶层名）**；④ **§5 加三条对应判据**（映射表载体 + backend 消费路径 + 盲区登记），并把映射表判据补上「缺一项 ⇒ 转红」的判别力自证。⚠️ 决策内容**零变更** —— 本版是把**已裁决但未写死的实施约束**补成可机械判定的条款（oracle 实测缺口） |
