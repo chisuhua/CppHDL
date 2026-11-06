@@ -410,7 +410,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 249
+- CTEST_TOTAL: 250
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -421,7 +421,7 @@ ctest --output-on-failure
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
-- VERILATOR_E2E_TOTAL: 75
+- VERILATOR_E2E_TOTAL: 76
 <!-- CI anchor: 「**双后端 parity 源文件数**」（2026-10-30，planner 判据修订配套）。
      scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
      口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
@@ -454,12 +454,12 @@ ctest --output-on-failure
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | CTest 条目总数 | 249 | `cd build && ctest -N \| tail -1` |
-  | 其中 non-perf | 238 | `cd build && ctest -N -LE perf \| tail -1` |
-  | `verilator_e2e` 标签数 | 75 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
+  | CTest 条目总数 | 250 | `cd build && ctest -N \| tail -1` |
+  | 其中 non-perf | 239 | `cd build && ctest -N -LE perf \| tail -1` |
+  | `verilator_e2e` 标签数 | 76 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
   | 双后端 parity 源文件数 | 66 | `bash scripts/verify_dual_backend_parity.sh` |
   | 双后端 parity macro 调用数 | 289 | 同上 |
-  | `tests/test_*.cpp` | 141 | `ls tests/test_*.cpp \| wc -l` |
+  | `tests/test_*.cpp` | 142 | `ls tests/test_*.cpp \| wc -l` |
   | `tests/chlib/test_*.cpp` | 52 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|

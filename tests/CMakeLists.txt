@@ -1088,6 +1088,16 @@ add_catch_test(test_verilog_module_emitter test_verilog_module_emitter.cpp)
 # hierarchical emission (hierarchical RTL T3-④): 3 modules + 2 instances, top ports
 # == flat ports, per-module clock/reset decision, determinism, error model.
 add_catch_test(test_hierarchy_verilog test_hierarchy_verilog.cpp)
+
+# 层次化 ≡ 扁平 的**逐拍等价** harness（T3-⑤ · ADR-058 §2.2）
+# ⚠️ 依赖真 verilator ⇒ 与既有 e2e 套件同构：BUILD_VERILATOR=OFF 时随标签排除。
+# ⚠️ harness 本体在 tests/hier_equivalence.h（**不暴露公共 API** · P8 独立立项）。
+add_catch_test(test_hierarchy_equivalence test_hierarchy_equivalence.cpp)
+set_tests_properties(test_hierarchy_equivalence PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+)
 # 探针矩阵（B4）的「每格都有断言」判据需要**本文件自身**的源码来做 tag 索引校验
 target_compile_definitions(test_hierarchy_verilog PRIVATE
     HIER_TEST_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/test_hierarchy_verilog.cpp")

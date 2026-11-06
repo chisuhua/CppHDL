@@ -1331,7 +1331,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         if (!all.str().empty()) {
             all << "\n";
         }
-        all << "// ---- module: " << m.key << " (" << view.module_name << ") ----\n";
+        // ⚠️ **单 module（= 全 inline）⇒ MUST NOT 加模块归属注释** ——
+        //    「默认（全 inline）产物 MUST 与扁平产物**逐字节一致**」⇒ 允许差异 = **空集**
+        //    （capability `rtl-hierarchical-output` 的 ADDED Requirement ①）⇒ ⇒ 这行注释
+        //    曾经是**唯一**的差异 ⇒ ⇒ 多 module 时才需要它（用来分隔 module 块）。
+        if (analysis.modules.size() > 1) {
+            all << "// ---- module: " << m.key << " (" << view.module_name << ") ----\n";
+        }
         all << one.str();
     }
 
