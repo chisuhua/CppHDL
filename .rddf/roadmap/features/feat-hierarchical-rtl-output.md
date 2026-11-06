@@ -93,8 +93,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-②** | `hierarchical-rtl-analysis-2026-11` | ✅ **已归档**（2026-11-04） | `tests/test_hierarchy_analysis.cpp`（11 用例 / 87 断言 + **4 份 golden**，其中 `three_layers.txt` 为**手推**）· 变异 **12/12** · 隐式端口合成**显式分派给 T3-④**（本层 fail-closed） |
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | ✅ **已归档**（2026-11-04） | `ModuleEmitter` + `ModuleView` + 薄适配器 `verilogwriter` · 3 个设计 `cmp` 逐字节相同（含 145 KB RV32iPipeline）· 时钟名参数化 4 处 · **M1 ⇒ lint exit 1 / 对照 exit 0** |
 | **T3-④** | `hierarchical-rtl-emission-2026-11` | ✅ **已归档**（2026-11-05 · **13/13 批**：B1 · B2a · B2b-1..6 · T0h · B3a · B3b · B3c · B4 ⇒ 多 module + 实例化 + 顶层端口=扁平 + clock/reset 分开判 + 隐式端口行 1/行 2 + F3 + 第三轴 + 兄弟边 + 宽度守卫 + 冒泡（G3）/`UndrivenPolicy` + 向上 pass-through + 产物级护栏 R1–R7 + 探针矩阵 36 格） | `toVerilogHierarchical` · `tests/test_hierarchy_verilog.cpp`（**28 用例 / 495 断言**）· `scripts/verify_hierarchical_rtl.sh`（R1–R7 + `--self-test` 9/9）· 全 inline ⇒ 与扁平逐字节相同 · 全部层次化产物 `verilator --lint-only` exit 0 · 扁平外部基线 3 设计 `cmp` 全 0 |
-| T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ⏳ | — |
-| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ | — |
+| T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ⏳ **实施完（20/20）· 收口中**（2026-11-06 实施后架构审查 ⇒ 14 项待办 ⇒ 见「T3-⑤ 收口与后续规划」）；未归档 | 9 用例 / 268 断言 · 映射表 + `try_initialize_with_verilog` · 护栏 R1–R8 + P8 守卫 · 锚点 250/76/66/289 |
+| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ **待启动**（0/7）⇒ 前置 = **T3-⑤ 收口 commit**（非「归档」—— D1 可并行起草 · 收口后验证） | — |
 | T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
 
 ### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **13 个批次 · 逐个 commit**）
@@ -160,7 +160,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **P0-1** | `tasks.md:3` 的「ADDED ×3」⇒ **×2**（delta 实际只有 2 条）；**删** `tasks.md:13` 的 1.4「`invoke_verilator` 支持多文件 + 缓存 key 纳入全部 source」（ADR-058 v2.10 单文件模式已封死）；`design.md` 的对应表述改为「不含多文件编译（单文件多 module）」并补 E1–E3 的工作量来源。⚠️ **工期估算：维持 ~7–9 天，不回缩** —— 删 1.4 省下多文件编译 + 缓存 key（−1~2 天），但 ADR-058 v2.13 的 **E1–E3 + 顶层名 fail-early + 映射表字段**是**新加的**工作量（+1~2 天）⇒ ⇒ 净变化 ≈ 0；**不得**因为删了一个任务就把缓冲清零（⚠️ 2026-11-06：**顶层名 fail-early 的前提不可复现** ⇒ 已按 **ADR-058 v2.16** 订正为「编译输入文件名」⇒ 该部分工作量**下调**为「判据 + 注释订正」（**不需要** module 名解析）⇒ 详见 B4b 行 + `.rddf/reviews/hierarchical-rtl-equivalence-2026-11-discovery.md`） | 与 `proposal.md` 的「ADDED ×2」一致；**可执行判据**：`grep -rn "缓存 key 纳入\|invoke_verilator.*多文件"` = **0** 且 `grep -n "^- \[ \].*多文件" tasks.md` = **0**（⇒ 允许保留「不另起自建多文件 harness」「不含多文件编译」这类**理由句**） |
 | **P0-2** | `tasks.md:34` / `proposal.md:50` / `design.md:11` 三处 `-Wall` ⇒ 改按 **ADR-060 §2.5**（唯一权威：不加 `-Wall` · 捕获退出码 · stderr 无 `%Error` · `lint_off` 白名单 · 禁 `-Wno-fatal`） | **可执行判据**：`grep -rn -- '--lint-only -Wall'` 在该 change 内 **0** 命中（**除** V1 检查脚本自身那一行）—— ⚠️ 不是「`-Wall` 字面量零命中」：改后的正文必然出现「**不加** `-Wall`」这类否定句 |
 | **P0-3** | delta 加 **MODIFIED ×5**（对应主 spec 的 5 条 Requirement：`-Wall` 1 · 「MUST 抛异常」4 · `strict` 死引用 2，共 7 行）⇒ ⚠️ **标题 MUST 从主 spec 现有 Requirement 标题逐字复制**（否则 `verify_openspec_delta.sh` 的 R3 必红）；并补两句正文：① 观测盲区（ADR-058 §4 风险 6）→ 写进**等价性 Requirement 正文**；② **V1 两条 grep 进 tasks 的 verify 块**（正向 7 行→0 · 反向 `抛异常` 行数→1） | 落地后重跑 `bash scripts/verify_openspec_delta.sh`（4 条全绿）+ V1 两条实测为 0 / 1 |
-| **P0-4** | **观测盲区三处登记的第三处（用法指南）点名到 T3-006 的 D1**（ADR-058 §4 风险 6 写的是「ADR · capability spec · 用法指南」三处同步）⇒ ⇒ 只在 P0-3 补 spec 那一处 ⇒ 归档时与 ADR 的登记义务**对不上账** | T3-006 的 D1 任务行**显式含**「风险 6 边界段」；归档前人工核对三处齐 |
+| **P0-4** | ⚠️ **2026-11-06 口径改读**〔代记账 · 来源 = `.rddf/reviews/T3-005-equivalence-debt-review.md` §F5 · architect 裁决〕：**「三处登记」的时序** = 「**ADR + capability spec 两处随 T3-005 归档**；**用法指南那处随 T3-⑥ 的 D1**」⇒ ⇒ 理由：两份用户面文档**不得被两个 change 同时改**（冲突面）⇒ ⇒ **原「归档前人工核对三处齐」按字面本 change 不可能满足**（自相矛盾）⇒ ⇒ **改读为**：归档前核对「ADR + capability spec **两处已齐**，并确认用法指南那处**已登记在 T3-006 的 D1** 且未被遗漏」 | ① T3-⑥ 的 D1 任务行**显式含**「风险 6 边界段」（已在 `tasks.md` 1.1 ✓）· ② **新增 F8**：用法指南 `HIERARCHICAL-RTL-AUTHORING-GUIDE.md` 的 **P7 痛点行**（「层次化产物**不被** Verilator backend 消费 ⇒ 用户**不能**直接对自己的设计跑双后端」）**已陈旧**（技术入口 T3-005 已具备）⇒ ⇒ **归 T3-006 的 D1** ⇒ ⇒ ⚠️ **MUST NOT** 在 T3-005 里改该文档（避免两 change 同改一份用户面文档）· ③ **D1 的验收写死** = 该 grep 清单清零：「不被 Verilator backend 消费」/「两套真值」/「待 T3-005」/「待 T3-⑤」在 `docs/usage_guide/**` + `docs/developer_guide/**` 内 **0** 命中 |
 
 ### T3-⑤ 的批次拆分（2026-11-05 · planner · 据 metis gap 分析 · **7 批 + P0**）
 
@@ -175,7 +175,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **B3** ✅ | **backend 显式端口集合（E1）**：新入口收显式集合 ⇒ 集合由 **B1 产物派生**（**MUST NOT** 手写/手工列举）；`build_port_access_table` / `emit_sim_main_postlude` 走该集合；**既有 `initialize(ctx,…)` 逐字节不变** | B2 | ① 集合漏 **clock/reset** ⇒ 寄存器冻结 ⇒ B5 的「随激励变化」判据**必红**（这是等价性最大恒绿源的检测器）；② 既有路径零变化 ⇒ 75 个 `verilator_e2e` 全绿 + 扁平外部基线 3 设计 `cmp` 全 0；③ 手写集合（绕过 emitter 产物）⇒ **评审项**（结构上无法机械判 ⇒ 记入 diff review checklist） ⇒ ⇒ ✅ **B3 已落地**：新入口 `try_initialize_with_verilog(verilog_path, ports, data_map)`（**无 `work_dir` 形参** ⇒ work dir 来自构造器 ⇒ 两条路径**各构造一个实例** = E2 的物理隔离）· 端口值类型 `ch::VerilatorPortSpec`（新中立头 `include/core/verilator_port_set.h`，不 include `<expected>` / `component.h` ⇒ 平台面轻）· `ch::backend_port_set(emitted, root_module)` 派生（只取根 module 的 `port_provenance` 行 × 映射表的 `hier_top_port_name` ⇒ clock/reset 位宽恒 1 且**分开**）· `compile_and_load(bool fatal)` 为两条路径**共用**（既有 `fatal=false` 逐字节不变，新入口 `fatal=true` = E3）· 重绑语义：已外部初始化的后端再走 `try_initialize(ctx,…)` **只重绑 `data_map`**（MUST NOT 从 ctx 重推端口表 ⇒ 会引用不存在的 Vtop 字段）· `build_port_access_table_from_specs()` 按集合建表（`field_ptr == nullptr` ⇒ **响亮失败**，不静默读 0）⇒ ⇒ 判据：`[hier]` 端到端 17 断言（含**手推值判据 0x2A / 0x5C**：clock/reset 未接 ⇒ 寄存器冻结 ⇒ 恒 0 ⇒ 必红）· `[hier][negative]` 空集合 / 只给 clock ⇒ 均在**碰 I/O 之前**拒绝 · `[portset]` 派生 + 4 条负向（含「抹掉映射表一个顶层端口名 ⇒ 集合跟着少一个」）⇒ ⇒ 既有路径零变化实测：`ctest -LE perf` **238/238** · 总时 **363s**（= B2 基线 ⇒ **cache key 未漂** ⇒ 无冷编译）· 扁平外部基线 3 设计 `cmp` **全 0** · 护栏 R1–R8 + `--self-test` **11/11** ⚠️ **本批踩过的坑（判据口径）**：`sim_main.cpp` 的 **prelude 文本是缓存 key 的输入** ⇒ 注释里改一个词就让 75 个 e2e **全部冷编译**（实测 ctest 由 363s 涨到 >1800s 超时）⇒ ⇒ 抽公共前导时 MUST 做**字面量级**逐字比对（`/tmp/opencode/cmp_prelude5.py`），MUST NOT 只看「语义等价」 | `ctest -L verilator_e2e` + 扁平冒烟 ⇒ 实测改跑 `ctest -LE perf` 全量 |
 | **B4a** ✅ | **隔离与失败语义（E2/E3）**：双 `work_dir`；失败 MUST 返回 `VerilatorError` | B3 | ① **模拟一次 Verilator 编译失败 ⇒ harness MUST 红**（**MUST NOT** SKIP）—— 这是 E3 的投毒形态，缺它则「失败静默 ⇒ 套件恒绿」无判据；② 两个 backend 共用 work_dir ⇒ 产物互踩（不是静默通过） ⇒ ⇒ ✅ **B4a 已落地**：`[hier][negative]`（编译失败投毒）= 端口集合取自**真实产物**（前置校验必过）+ 产物换**语法错误** ⇒ MUST 返回 `VerilatorCompile` + 端口表**不半初始化**（`port_access_snapshot()` 空 / `clock_node_id()==UINT32_MAX`）+ `clear()` 可回收；`[hier]`（隔离）= 两个**不同设计** × 两个 `work_dir` ⇒ 每个 `top.v` == **自己的**产物且两者**不同**（共用 dir 时必然相同 ⇒ 有判别力）+ 各自值判据（0x2A→0x2A 寄存器 / 0x2A→0x2B 组合）+ 交叉再驱动 0x5C ⇒ ⇒ ② 的可执行形态 = 「两 dir 的产物不同」——⚠️ **实测补充**：按当前实现，**共用** work_dir 在「写→编译→dlopen」顺序下**未必**立刻坏事（残留 `.so`/缓存是后续隐患）⇒ ⇒ 该判据断言的是**实现确实尊重构造器实参**，不是「共用必然崩」 | B3 的门 + E3 用例 |
 | **B4b** ✅ | **顶层名条款已订正（ADR-058 v2.16 · 用户 2026-11-06 拍板「订正为文件名」）** ⇒ **不再做**「按 module 名 fail-early」：实测根 module 名 ≠ `top` 也能被本入口正常仿真（`my_top` + 值判据 0x2A 通过）⇒ ⇒ 真约束 = **编译输入文件名 MUST 是 `top.v`**（Verilator prefix = 首个输入文件名主干 ⇒ `hier.v` 生成 `Vhier.h` ⇒ `#include "Vtop.h"` 缺）⇒ 新入口**复制成 `top.v`** 已天然满足 ⇒ 剩下的是**判据 + 注释订正** | B4a | ① **变异用例**（绕过复制 ⇒ 直接用调用方路径，主干 MUST ≠ `top` ⇒ `Vhier.h` 缺 ⇒ 编译失败 ⇒ **MUST 转红**）⚠️ 夹具前置：调用方路径主干 ≠ `top`（否则变异是 no-op ⇒ 恒绿）+ 失败 MUST 传播为用例失败（**非 SKIP** ⇒ 依赖 E3）；② `top_module_name = "my_top"` 的产物 MUST **可被消费**（值判据 0x2A→0x2A ⇒ 反例 = 入口按 module 名拒绝 ⇒ 转红）；③ 变异还原 MUST 复绿；④ **代码注释订正**：`src/core/verilator_backend.cpp` 的 `kSimMainPrelude` 注释仍写旧前提「产物顶层 module 名 MUST 是 `top`」⇒ 改为「编译输入文件名主干 MUST 是 `top`」⇒ grep「MUST 是 `top`」零命中（⚠️ 该注释在 **C++ 侧**、**不在**生成的 prelude 文本里 ⇒ **不改变缓存 key** ⇒ 无冷编译） ⇒ ⇒ ✅ **B4b 已落地**：新增 `[hier][filename]`（调用方路径主干 = `hier` ⇒ 仍 MUST 能编译 + work_dir 的编译输入名 MUST 是 `top.v`）+ `[hier][topname]`（`top_module_name = "my_top"` ⇒ MUST 可消费 · 值判据 0x2A / 0x5C）⇒ `[hier]` 共 **6 用例 / 57 断言**；**变异 M-B4b-1 实测转红**（去掉复制 ⇒ ① 编译输入缺失 ⇒ dlopen 失败；② 缓存命中 ⇒ 「编译输入名 = top.v」断言失败 ⇒ **两条路径都红**）⇒ 还原复绿；⚠️ 「`hier.v` ⇒ `Vhier.h` ⇒ `#include "Vtop.h"` 缺」的**冷编译机理**用 verilator CLI 直接实测（缓存命中会跳过编译 ⇒ 冷/热路径的失败形态不同）| B4a 的门 + E3 用例 |
-| **B5** ✅ | **等价性骨架 + 字节一致性 + P8 两层结构（前移）**：两层 DUT；`O` 手写声明（⊇ 全部 `ch_out`）；**默认全 inline ⇒ `cmp` flat.v 与 hier.v 退出码 0**；harness **当场**落成「`tests/` 内部实现 + 同文件薄包装」两层（**不暴露**公共 API） | B4 | ① `cmp` 退出码 0；**负向对照** = 在 hier 产物加一行注释 ⇒ 红；② 「随激励变化」机械判据（两组激励取值集合不同）；③ 判别力自证 ≥2 形态：**删一条连线** / **改一个隐式端口方向** ⇒ 两红 ⇒ 还原复绿；④ 激励施加 MUST 用 `set_input_value(port, <纯整数>)`（`<<=` 会把顶层端口变成内部驱动 ⇒ 观测面不一致 ⇒ 假分歧） ⇒ ⇒ ✅ **B5 已落地**：`tests/hier_equivalence.h`（**两层**：`ch_test::hier::impl` 内部实现 + `ch_test::hier` 薄包装 ⇒ **不暴露公共 API** · P8 独立立项）+ `tests/test_hierarchy_equivalence.cpp`（**3 用例 / 65 断言** · 新 ctest 条目 ⇒ 锚点 249→**250** · `verilator_e2e` 75→**76**）：① **字节一致性** = 层次化产物 vs **既有 backend 自己生成**的扁平产物（不是另生成一份 ⇒ 杜绝「两份不一致」）⇒ 逐字节相同（= `cmp` 退出码 0）⇒ ⇒ **发射器改动**：单 module（= 全 inline）时**不再输出**「module 归属注释」那一行（它曾是**唯一**差异 ⇒ 与 delta「允许差异 = 空集」对齐）⇒ 负向对照 = 加一行注释 ⇒ 检出差异；② **逐拍等价**（成层 DUT · 3 拍激励 · 含 `ch_reg`）⇒ `flat[O] ≡ hier[O]` 全等 + 「随激励变化」机械判据（两组激励 ⇒ 取值集合不同）；③ **判别力自证 3 形态** ⇒ 删连线（编译期红）/ 改隐式端口方向（编译期红）/ **改连线表达式（值分歧红** ⇒ 证明「逐拍全等」本身有判别力）⇒ 还原复绿；④ 激励走 `set_input_value`（纯整数）⇒ ⇒ ⚠️ **口径订正**：任务 2.2 的「`O` ⊇ 全部 `ch_out`」MUST 读作「**两侧顶层都可见**的 `ch_out`」（成层子树的 `ch_out` 在层次化顶层不可观测 ⇒ ADR-058 §4 风险 6 的盲区）⇒ 已登记 | B4 的门 + 新用例 |
+| **B5** ✅ | **等价性骨架 + 字节一致性 + P8 两层结构（前移）**：两层 DUT；`O` 手写声明（⚠️ **2026-11-06 口径订正**：`O` MUST ⊆ **该次运行粒度下可见**的 `ch_out` 集 ⇒ ⇒ 「⊇ 全部 `ch_out`」按字面不可能成立 —— 成层子树的 `ch_out` 顶层不可观测；**单粒度**⇒ 覆盖全部可见者 · **跨粒度**⇒ 取公共子集 + 显式豁免清单 ⇒ 权威 = delta Requirement ④/⑤）；**默认全 inline ⇒ `cmp` flat.v 与 hier.v 退出码 0**；harness **当场**落成「`tests/` 内部实现 + 同文件薄包装」两层（**不暴露**公共 API） | B4 | ① `cmp` 退出码 0；**负向对照** = 在 hier 产物加一行注释 ⇒ 红；② 「随激励变化」机械判据（两组激励取值集合不同）；③ 判别力自证 ≥2 形态：**删一条连线** / **改一个隐式端口方向** ⇒ 两红 ⇒ 还原复绿；④ 激励施加 MUST 用 `set_input_value(port, <纯整数>)`（`<<=` 会把顶层端口变成内部驱动 ⇒ 观测面不一致 ⇒ 假分歧） ⇒ ⇒ ✅ **B5 已落地**：`tests/hier_equivalence.h`（**两层**：`ch_test::hier::impl` 内部实现 + `ch_test::hier` 薄包装 ⇒ **不暴露公共 API** · P8 独立立项）+ `tests/test_hierarchy_equivalence.cpp`（**3 用例 / 65 断言** · 新 ctest 条目 ⇒ 锚点 249→**250** · `verilator_e2e` 75→**76**）：① **字节一致性** = 层次化产物 vs **既有 backend 自己生成**的扁平产物（不是另生成一份 ⇒ 杜绝「两份不一致」）⇒ 逐字节相同（= `cmp` 退出码 0）⇒ ⇒ **发射器改动**：单 module（= 全 inline）时**不再输出**「module 归属注释」那一行（它曾是**唯一**差异 ⇒ 与 delta「允许差异 = 空集」对齐）⇒ 负向对照 = 加一行注释 ⇒ 检出差异；② **逐拍等价**（成层 DUT · 3 拍激励 · 含 `ch_reg`）⇒ `flat[O] ≡ hier[O]` 全等 + 「随激励变化」机械判据（两组激励 ⇒ 取值集合不同）；③ **判别力自证 3 形态** ⇒ 删连线（编译期红）/ 改隐式端口方向（编译期红）/ **改连线表达式（值分歧红** ⇒ 证明「逐拍全等」本身有判别力）⇒ 还原复绿；④ 激励走 `set_input_value`（纯整数）⇒ ⇒ ⚠️ **口径订正**：任务 2.2 的「`O` ⊇ 全部 `ch_out`」MUST 读作「**两侧顶层都可见**的 `ch_out`」（成层子树的 `ch_out` 在层次化顶层不可观测 ⇒ ADR-058 §4 风险 6 的盲区）⇒ 已登记 | B4 的门 + 新用例 |
 | **B6** ✅ | **DUT 矩阵补齐（其余 4 个）+ 粒度矩阵**：三层+兄弟连线 / bundle 成员跨层 / 含 `ch_mem` / **真实最深设计** | B5 | ⚠️ **粒度矩阵的裁决（不许 builder 临场发明）**：**含 `ch_mem` 的 DUT 与深设计用 `RespectDeclarations`**（ForceLayer 会把 mem 持有者成层 ⇒ 跨模块 `ch_mem` 被**合法拒绝** ⇒ 该变体**无可执行对象**）；`ForceInline` vs `ForceLayer` 的逐拍对照**只用于不含跨模块 mem 读的小 DUT**；**深设计** = 裁剪版 RV32I 核（reg + imem/dmem + 2–3 个**声明成层**的流水级），**逐顶层端口核宽度 ≤ 64**（>64 ⇒ backend 合法拒绝 ⇒ 判据空转） ⇒ ⇒ ✅ **B6 已落地**：`tests/test_hierarchy_equivalence.cpp` 新增 **5 用例**（`[deep]` 三层+兄弟连线 · `[bundle]` bundle 成员跨层 · `[mem]` 含 `ch_mem` · `[deepcore]` 真实最深设计 · `[granularity]` 粒度矩阵）⇒ 累计 **8 用例 / 145 断言**；① **三层 + 兄弟连线**（`a`→`b` 兄弟边）；② **bundle 成员跨层**（proxy 子形态 ⇒ 隐式端口）；③ **含 `ch_mem`**（mem 在**成层子 module 内**自用 ⇒ 父层只读子**端口** ⇒ **不是**跨模块 mem 读 ⇒ 合法）⇒ 只跑 `RespectDeclarations`（design §6.2 的裁决）；④ **真实最深设计** = 裁剪版流水线（`ch_reg` + **dmem** + **2 个声明成层的流水级** · 顶层端口 8 bit ≤ 64）⚠️ **不含 imem**（无取指级）⇒ 与裁决文字的差距**如实登记**；⑤ **粒度矩阵**（3 个 DUT × {`ForceInline`,`ForceLayer`} ⇒ 逐拍全等）⇒ harness 的 `emit` 加 `Granularity` 形参（`GranularityScope` 是**静态**开关 ⇒ 只包住发射）⇒ ⇒ ⚠️ **实测修正**：深设计的「alu → memstage」是**兄弟边** ⇒ 根若同时读 `alu.y` ⇒ 「同一子端口两个驱动」⇒ 发射器**合法拒绝** ⇒ 改成根回读**另一个**端口（`alu.state`）⇒ 该拒绝形态**已登记**（不是绕过） | `ctest -LE perf` 全量 |
 | **B7** ✅ | **确定性 + 零回归 + P8 机械守卫**：同 ABI 两次生成字节相同；**计数锚点按新增用例同步**；P8 守卫 = 「**harness MUST NOT 进 `include/`**」+ 公开 API 面 ⊆ **已裁决的 4 个公共头** | B6 | ① 确定性：引入一处顺序依赖 ⇒ 红 ⇒ ⇒ ✅ **B7 已落地**：`[equivalence][determinism]`（同一 ctx 两次发射 ⇒ 产物**逐字节**相同 + 映射表**逐项**相同 + 顺序 MUST `node_id` 升序）⇒ ⇒ ⚠️ **变异 M-B7-1 实测 3 次（如实登记）**：① **按地址排序** ⇒ **恒绿**（分配器单调 ⇒ 相对序不变）⇒ **无效变异**（不是判别力缺口）；② **进程级随机种子**打乱 module 顺序 ⇒ 被 **R1 lint 门**抓住（产物非法 ⇒ module 顺序**受依赖顺序约束**：子先于父 ⇒ ⇒「顺序依赖」的可注入空间很小）；③ **进程内静态计数器**反转**映射表顺序** ⇒ ⇒ **判据转红** ✓ ⇒ 还原复绿；② 锚点：`CTEST_TOTAL` 249→**250** · non-perf 238→**239** · **`VERILATOR_E2E_TOTAL`** 75→**76**；parity 两锚点（66 / 289）**不变**（等价性用例不是 `DUAL_BACKEND_TEST_PAIR`）；③ P8：`scripts/verify_hierarchical_p8.sh`（R1 `include/` 无 harness 头 · R2 `include/` 无 harness 符号 · R3 harness 在 `tests/` · R4 公开 API 面 ⊆ `codegen_verilog.h` · `hierarchy_verilog.h` · `core/verilator_backend.h` · `core/verilator_port_set.h`）⇒ ⚠️ R4 需 git 历史 ⇒ 浅克隆环境**明确 NOTE 跳过**（不静默假装绿）+ `--self-test`（合法清单 ⇒ 绿 · 越界清单 ⇒ 红） ⇒ ⇒ ⚠️ **口径订正（2026-11-06 · 第二次）**：原判据「只动 `hierarchy_verilog.h` 且**无新公共头**」**与事实不符** —— T3-005 的**公开 API 面就是 4 个头**（含 B3 的 backend 新入口与 `core/verilator_port_set.h`）⇒ ⇒ 真实口径 = 「公开面 ⊆ 这 4 个」+「harness 不得进 `include/`」 | 全量 |
 
@@ -187,6 +187,76 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 
 ⚠️ **等价性用例的标签口径（裁决）**：等价性用例依赖 Verilator backend ⇒ **MUST 打 `verilator_e2e`**
 （`BUILD_VERILATOR=OFF` 时随标签排除，与既有 75 个同构）⇒ ⇒ 于是 `VERILATOR_E2E_TOTAL` **必变**。
+
+### T3-⑤ 收口与后续规划（2026-11-06 · planner · 据 architect 实施后审查 + metis gap 分析）
+
+> **状态**：T3-⑤ 实施**已完成**（20/20 任务）⇒ ⇒ 但被 2026-11-06 的**实施后架构审查**
+> （`.rddf/reviews/T3-005-equivalence-debt-review.md`）卡住 ⇒ ⇒ **2 个用例红** + **14 项待办**
+> ⇒ ⇒ **未归档**。
+> ⚠️ **本段的权威分工**：**判据口径**（`O` 的定义）⇒ 归 **delta**（归档后进主 spec · 唯一权威）
+> ⇒ ⇒ 本段只承载**排期与记账** ⇒ ⇒ 两者的措辞 MUST 一致（以 delta 为准）。
+
+#### ① 判据口径裁决（已落 delta · planner 已改）
+
+| 项 | 裁决 | 载体 |
+|---|---|---|
+| `O` 的下限 | `O` MUST ⊆ **该次运行粒度下可见**的 `ch_out` 集（可见 = 映射表 `hier_top_port_name` **非空**） | delta Requirement ④ ✅ |
+| 单粒度覆盖 | `O` MUST 覆盖该粒度下**全部可见**的 `ch_out`；盲区 = 不可见者 ⇒ MUST 以**对偶断言**机械登记 | delta Scenario「单粒度比较时 `O` MUST 覆盖全部可见输出」✅ |
+| 跨粒度子集 | `O` MUST 取**两种粒度下都可见**的公共子集 ⇒ 「可见但未观测」者 MUST 进**显式豁免清单**（机械载体 · MUST NOT 仅注释）⇒ MUST NOT 声称「全部可见输出已比对」 | delta Scenario「跨粒度比较时 `O` MUST 取公共子集并显式登记豁免」✅ |
+| 「共享同一 ctx」断言 | MUST **可失败** ⇒ MUST 比较**两次发射各自记录的来源 ctx**（MUST NOT「同一对象与自身比较」） | delta Scenario「映射表 MUST 由 emitter 同次产出」✅ |
+
+⇒ ⇒ **为何 MUST 落 delta 而不是 proposal/tasks**：归档后**主 spec 是唯一权威**（proposal / tasks 进
+`archive/` ⇒ 不再被引用）⇒ ⇒ 口径写在 proposal/tasks ⇒ **随归档死亡** ⇒ ⇒ T3-⑥ 的 D1
+（观测盲区边界段）将**无权威可引** ⇒ ⇒ 这是本轮**唯一的 blocker 级**规划动作。
+
+#### ② T3-⑤ 收口待办（**14 项** · builder 执行 · 归 `openspec/changes/hierarchical-rtl-equivalence-2026-11/tasks.md`）
+
+| # | 动作 | 域 | 状态 |
+|---|---|---|---|
+| **F1** | `proposal.md` 的 `O` 下限措辞 ⇒ 引用 delta 的两阶段口径 | planner | ✅ **已改**（本轮） |
+| **F2** | 盲区断言做成**对偶**（被观测侧 + 盲区侧，均绑到映射表） | builder | ⏳ |
+| **F3** | 「每个被观测信号 ∈ 映射表 ∧ `hier_top_port_name` 非空」 | builder | ⏳ |
+| **F4** | 「两次 emit 共享同一 ctx」的**显式**断言 ⇒ ⚠️ **现有实现是恒真重言式**（`REQUIRE(dev.context() == dev.context())`）⇒ MUST 改成**可失败**形态（`HierarchyEmitResult` 记 `source_ctx` + 比较两次发射的来源 ctx） | builder | ⏳ |
+| **F5** | roadmap **P0-4** 的「三处齐」口径改读 + **F8** 登记 | planner | ✅ **已改**（本轮 · P0-4 行） |
+| **F6** | **修 `deep_obs` 的死重观测**（第二条 ⇒ 兄弟叶真实输出 `a.dout`/`b.dout`）+ `obs.size()` 断言 | builder | ⏳ |
+| **F7** | `tasks.md` 的 prelude 证据引用改为**可复算**形态（去掉 `/tmp` 引用作判据） | builder | ⏳ |
+| **F8** | 用法指南 **P7 痛点行**的同步 ⇒ **交 T3-006 D1**（本 change **不改**该文档） | T3-⑥ | ⏳ 登记于 P0-4 |
+| **F9** | feature 文件：① `O` 下限措辞**全量**订正（**3 处**：B5 行 / 验收标准行 / P0-4）② 残留 1b 指针 ③ P8 归位条件已达成 | planner | ✅ **已改**（本轮 · 3 处措辞 + ① ③ 见下） |
+| **F10** | **修 2 个红灯**：① 口径落地（豁免清单机制）② **反向对照**：把豁免模式拨错 ⇒ MUST 转红 ⇒ 还原复绿（防「删掉盲区断言」式为绿而绿） | builder | ⏳ |
+| **F11** | **`[deep]` 诚实性缺口 ⇒ 用 DUT 改造解决**（不只订正注释）：给 `EqDeepMid` 加 `CH_HIERARCHY_LAYER("eq_deep_mid")` ⇒ ⇒ `RespectDeclarations` 成为**唯一未覆盖的「中间拓扑」**（实测：`EqDeepTop`/`EqDeepMid`/`EqDeepLeaf` **均无**声明 ⇒ RespectDeclarations ≡ ForceInline ⇒ 该变体**零增量**）⇒ ⇒ 连带使「第三粒度」对深 DUT 有意义 | builder | ⏳ |
+| **F12** | **断言③的独立锚**（打破「`O` 清单与 DUT 清单同时漏项 ⇒ 恒绿」）：单粒度运行 MUST 断言「映射表可见集计数 == DUT `ch_out` 清单数 + 该产物**实际存在**的 clock/reset 条目数」（clock/reset MUST 从 map 动态派生 ⇒ 组合逻辑设计减 0） | builder | ⏳ |
+| **F13** | **`[granularity]` 的第三粒度**：`RespectDeclarations` 格 MUST 补上（**先做 F11** 才有意义）⇒ ⇒ 三粒度矩阵 | builder | ⏳ |
+| **F14** | **台账**（architect 域）：残留 **13**（backend 改造工作量重估 ~7–9 天）已随 T3-005 实施完成而**失效** ⇒ MUST 标 ✅ 关闭；残留 **11** 与 feature §334 的 P6/P8 表**重复** ⇒ 去重（权威归台账） | architect | ⏳ |
+
+#### ③ 后续立项清单（**本轮不实施** ⇒ 下一轮逐项走 `add-improve` ⇒ ⇒ 5 段草稿 ⇒ 待用户拍板）
+
+| # | 项 | 来源 | 归位条件 | 形态约束 |
+|---|---|---|---|---|
+| **P6** | **层次友好度诊断 API** | feature §334 · 台账 §7 残留 11 | ✅ **已达成**（T3-④ 已归档） | MUST 照搬 `ch::core::diagnose_drive` 形态（单枚举 + 单一判定实现 + 护栏）· 报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / 各层规模 |
+| **P8** | **等价性 harness 公共 helper** | feature §334 · 台账 §7 残留 1 | ✅ **已达成**（T3-005 的 harness 已落地 · 两层形态） | 公共包装与内部实现**分离** ⇒ **不**进 `include/`（本期）⇒ ⇒ T3-005 的形态已满足 |
+| **残留 1b** | **语料级回归缺口**：层次化路径在全仓既有语料上**零覆盖**（`DUAL_BACKEND_TEST_PAIR` **不参数化粒度**） | 台账 §7（2026-11-06 由 oracle 从残留 1 拆出） | ⚠️ **独立立项** ⇒ **MUST NOT 并入 P8**（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**） | 判据 MUST 能覆盖**组合逻辑 DUT**（无 clock/reset ⇒ 计数校验 MUST 动态减 0）· 恒相关信号（兄弟串联的 `a`/`b` 逐拍同值）⇒ 「逐拍全等」的判别力上限 MUST 登记 |
+| **残留 5** | **端口命名契约**（顶层无框架前缀 · `__if_`/`__x_` 只出现在非顶层 module）**无静态护栏** | 台账 §7 | 独立 change（`scripts/verify_*.sh`） | MUST 复用结构化提取（`verilator --json-only`）⇒ **MUST NOT** 自研文本解析器 |
+| **C2** | **下游拼接产物 · 内部 module 名撞名**（轴②：`module_type_name` + 按设计编号 ⇒ 两份产物各含名为 `alu` 的 layer 时**照撞** ⇒ **当前无机制**） | 台账 §11.6（**下游确认项** · 非残留表） | ⏠ 待**下游**确认是否「拼接」⇒ ⇒ 预裁口径已定：**产物级 module 名前缀选项**（默认**空**前缀 · 纯增量 · 非格式变更 ⇒ 任何时点可加）⇒ ⇒ **现在不实现**（不为未证实需求付成本） | 该前缀作用面 MUST 是「**非根 module**」（根由 `top_module_name` 管辖）⇒ 否则两个旋钮管同一个根名 ⇒ 优先级歧义 |
+
+#### ④ 执行顺序（2026-11-06 · planner）
+
+1. **T3-⑤ 收口**（builder）：F2/F3/F4/F6/F7/F10/F11/F12/F13 + 已由 planner 落的 F1/F5/F9 ⇒
+   ⇒ 跑完整验证门（重建 · `ctest -LE perf` 239/239 · 护栏 R1–R8 + `--self-test` · P8 + `--self-test`
+   · parity · 锚点 250/76/66/289 · 扁平基线 `cmp` · samples · examples · `openspec validate` ·
+   `verify_openspec_delta.sh` · `verify_roadmap_fragments.sh`）⇒ ⇒ **按路径显式 `git add`**
+   （MUST NOT `git add -A`）⇒ ⇒ **一个收口 commit**
+2. **T3-⑤ V1 归档门** ⇒ `openspec archive hierarchical-rtl-equivalence-2026-11`（**禁** `--skip-specs`）
+   ⇒ ⇒ 归档后同步：roadmap 进度表 T3-⑤ 行 ✅ + 根 `AGENTS.md` 的 AUTO feature 块
+   （`verify_roadmap_fragments.sh` C1 逐字守恒 ⇒ **MUST NOT** 手改 ⇒ 改 `.rddf/roadmap/**` 的
+   front-matter 后跑 `rddf roadmap --update-agent-md`）
+3. **T3-⑥**（3 批 D1/D2/D3）⇒ ⇒ **D1 吸收 F8**（P7 痛点行 + 盲区边界段 ⇒ 验收 = grep 清单清零）
+4. **T2b**（3 批 U1/U2/R）⇒ ⇒ 与主线**零文件冲突**（T3-⑤ 动 `src/core/verilator_backend.cpp` /
+   `src/hierarchy_verilog.cpp` / `include/core/verilator_port_set.h` / `include/hierarchy_verilog.h`；
+   T2b 动 `include/core/io.h` / `src/core/context.cpp` ⇒ **零交集**）⇒ ⇒ 可并行 ⇒ ⚠️ 但**锚点 bump
+   顺序 MUST 约定**（两者都改 `CTEST_TOTAL` ⇒ 后落地者 merge 冲突 ⇒ ⇒ **同一 worktree 内串行落地**，
+   各自跑全量门）
+5. **后续立项**（下一轮）：P6 · P8 · 残留 1b · 残留 5 ⇒ 各走 `add-improve`（**5 段草稿** ⇒
+   ⚠️ HARD-GATE brainstorm ⇒ 需用户逐项批准）⇒ ⇒ C2 **待下游确认** ⇒ 不立项
 
 ### T3-⑥ 的批次（3 批 · 前置 T3-⑤）
 
@@ -349,6 +419,13 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
    但 T3-⑤ **MUST NOT** 暴露公共 API（⇒ ⇒ 公共化 = 独立 change）。
 ⇒ ⇒ **不为此二项立新 ADR**（API 尚未设计 ⇒ 为未设计的 API 写 ADR = 过早固化）。
 ⇒ ⇒ 归位条件：**P6** 待 T3-④ 归档后由 planner 单独立项；**P8** 待 T3-⑤ 的 harness 落地后立项。
+⇒ ⇒ ⚠️ **2026-11-06 更新（planner）**：**两个归位条件均已达成**
+（P6：T3-④ 已归档 2026-11-05 · P8：T3-005 的 harness 已落地 2026-11-06）⇒ ⇒ **二者已进本文件的
+「后续立项清单」（见「T3-⑤ 收口与后续规划 ③」）** ⇒ ⇒ 下一轮各走 `add-improve`。
+⇒ ⇒ ⚠️ **第三项（不在本表 · 2026-11-06 由 oracle 从台账 §7 残留 1 拆出）**：
+**语料级回归缺口**（层次化路径在既有语料上零覆盖）⇒ ⇒ **独立立项** ⇒ ⚠️ **MUST NOT 并入 P8**
+（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**）
+⇒ ⇒ 权威 = 台账 §7 残留 **1b**。
 
 ---
 
@@ -568,8 +645,16 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 - [ ] **5 个 DUT 的清单 MUST 锁定** = ADR-058 §5 的那 5 个：两层 / 三层+兄弟连线 /
       **bundle 成员跨层** / **含 `ch_mem`** / 真实最深设计 ⇒ ⇒ **MUST NOT** 用 5 个 trivial
       两层组合凑数（否则 bundle 跨层 / mem / 深层场景全被绕开）
-- [ ] **观测集合 `O` 的下限**：`O` MUST ⊇ DUT 的**全部** `ch_out`（⇒ 只观测 1 个信号
-      会让映射表判据与等价性判据同时空转）
+- [ ] **观测集合 `O` 的下限**（⚠️ **2026-11-06 口径订正** · planner · 据 T3-005 实施后审查
+      + metis gap 分析；**权威 = delta 的 Requirement ④/⑤**）：
+      `O` MUST ⊆ **该次运行粒度下可见**的 `ch_out` 集（可见 = 映射表里
+      `hier_top_port_name` **非空**）⇒ ⇒ 不可观测者 MUST NOT 被选入 `O`（⇒ ⇒ 否则读不到的
+      一侧被误判成分歧）；**单粒度**比较 ⇒ `O` MUST 覆盖该粒度下**全部可见**的 `ch_out`
+      （盲区 = 不可见者 ⇒ MUST 以**对偶断言**机械登记）；**跨粒度**比较 ⇒ `O` MUST 取
+      **公共子集** ⇒ ⇒ 「可见但未观测」者 MUST 进**显式豁免清单**（机械载体）
+      ⇒ ⇒ 该次比较 MUST NOT 声称「全部可见输出已比对」
+      （⚠️ 原措辞「`O` MUST ⊇ DUT 的**全部** `ch_out`」按字面**不可能成立** ——
+      成层子树的 `ch_out` 在层次化顶层**不可观测** ⇒ ⇒ 已订正）
 - [ ] **映射表覆盖被观测的全部信号**：声明的观测集合 MUST 覆盖 harness 实际读取的
       **每一个**信号（缺失一项 = 静默漏测）；映射表 MUST 是**四元组**
       （`node_id` → 设计级名 → 扁平位置 → 层次位置）
