@@ -368,6 +368,13 @@ bash scripts/run_all_samples.sh
 bash scripts/verify_hierarchical_rtl.sh
 bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条原地投毒 ⇒ 必红 ⇒ 还原复绿
 
+# 端口命名契约护栏（残留 5 · N0–N3 · 顶层 MUST 无框架合成端口 `__if_`/`__x_`/`__up_`）
+# N0 = fail-closed（缺工具 ⇒ 退出码 2）· N1 = 根 module 无合成端口
+# N2a = 语料确有可判对象（防恒绿）· N2b = 三前缀覆盖矩阵 · N3 = 根由**结构**判定
+# ⚠️ 需要 verilator（Ubuntu-only CI）· 同样需要 build/tests/hier_rtl_products
+bash scripts/verify_hierarchical_port_naming.sh
+bash scripts/verify_hierarchical_port_naming.sh --self-test
+
 # OpenSpec 提案阶段的 delta 自检（4 条：delta 无 change 名 / 无占位符路径 /
 # MODIFIED 标题逐字匹配主 spec / tasks 的 verify 块语法可达）
 bash scripts/verify_openspec_delta.sh

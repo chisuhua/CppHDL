@@ -60,6 +60,70 @@ def _module_addr_table(tree: dict) -> dict[str, str]:
     return table
 
 
+def extract_module_ports(tree: dict) -> list[tuple[str, str, str, int]]:
+    """产出 `(module, port_name, direction, width)` —— **每个 module 自己的端口声明**。
+
+    ⚠️⚠️ **为什么不能只靠 `extract_ports()`（`isPrimaryIO`）**：
+    verilator 的 `isPrimaryIO` 语义 = **顶层 primary IO** ⇒ ⇒ **非顶层 module 的
+    端口 `isPrimaryIO` 是 `None`** ⇒ ⇒ 只用 `extract_ports()` **抓不到**非根 module
+    的端口（实测：`synth_x_child` 的合成端口 `__x_0` 的 `isPrimaryIO=None`）
+    ⇒ ⇒ 任何「非根 module 有没有合成端口」的判据若走 `--ports`，都会**恒绿**
+    ⇒ ⇒ 那是**假绿**，不是「没发现问题」。
+
+    ⇒ ⇒ 本函数改用 Verilog 语义的判据：**module 的一级 `stmtsp` 里 `type == 'VAR'`
+    且 `direction ∈ {INPUT, OUTPUT}`** ⇒ ⇒ 精确对应 module 头的 `input`/`output`
+    声明行 ⇒ ⇒ 体内 `wire` 的 `direction` 恒为 `'NONE'`（Verilog 里 wire 无方向）
+    ⇒ ⇒ **不**会误抓体内线网。
+
+    ⚠️ **只看一级 `stmtsp`（不递归）** ⇒ ⇒ CELL 的 `pinsp`（**实例端口映射**）里的
+    端口名**不**在此列 ⇒ ⇒ 「根的实例映射里合法地出现 `.__x_0(...)`」不会被误判。
+
+    ⚠️ 宽度取自 dtype 节点的 `range`（与 `extract_ports()` 同源 ⇒ ⇒ 同值）。
+    """
+    rows: list[tuple[str, str, str, int]] = []
+    for module in tree.get("modulesp") or []:
+        if not isinstance(module, dict):
+            continue
+        mod_name = module.get("name") or module.get("verilogName") or ""
+        for node in module.get("stmtsp") or []:      # ⚠️ **一级**（不递归）
+            if not isinstance(node, dict):
+                continue
+            if node.get("type") != "VAR":
+                continue
+            direction = node.get("direction") or ""
+            if direction not in ("INPUT", "OUTPUT"):
+                continue                              # 体内 wire = 'NONE'
+            port = node.get("name") or node.get("verilogName") or ""
+            if not port:
+                continue
+            rows.append((mod_name, port, direction,
+                         _width_of(tree, node.get("dtypep") or "")))
+    return rows
+
+
+def extract_modules(tree: dict) -> list[str]:
+    """产出**全部声明**的 module 名（按 `modulesp` 声明序）。
+
+    ⚠️ **与 `extract_ports()` 的关键差别**：本函数**包含零端口 module**
+    （`extract_ports()` 只返回带 `isPrimaryIO` 端口的 module ⇒ 对零端口 module
+    有盲区）⇒ ⇒ 「哪个 module 是根」必须用本函数算声明集，
+    否则「声明了但没端口」的 module 会从声明集里消失 ⇒ ⇒ 判根出错。
+
+    ⚠️ **只取 `modulesp` 的一级项**（不递归）⇒ ⇒ 内联/嵌套 module 不在此列
+    （它们不是独立的顶层声明）。
+    """
+    names: list[str] = []
+    seen: set[str] = set()
+    for module in tree.get("modulesp") or []:
+        if not isinstance(module, dict):
+            continue
+        name = module.get("name") or module.get("verilogName") or ""
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
+
+
 def extract(tree: dict) -> list[tuple[str, str, str]]:
     """产出 `(parent_module, inst_name, module_name)` 三元组（按父模块名排序）。"""
     addr_to_name = _module_addr_table(tree)
@@ -140,9 +204,35 @@ def main(argv: list[str]) -> int:
     path = argv[1]
     as_json = "--json" in argv[2:]
     as_ports = "--ports" in argv[2:]
+    as_modules = "--modules" in argv[2:]
+    as_module_ports = "--module-ports" in argv[2:]
 
     with open(path, "r", encoding="utf-8") as handle:
         tree = json.load(handle)
+
+    if as_module_ports:
+        # ⚠️ 每个 module **自己的**端口声明（含非根）⇒ 「合成前缀只出现在非根」
+        #    这类判据**必须**用它（`--ports` 的 `isPrimaryIO` 只标顶层 ⇒ 会恒绿）
+        rows = extract_module_ports(tree)
+        if as_json:
+            print(json.dumps(
+                [{"module": m, "port": p, "direction": d, "width": w}
+                 for m, p, d, w in rows],
+                ensure_ascii=False, indent=2))
+        else:
+            for mod_name, port, direction, width in rows:
+                print(f"{mod_name}\t{port}\t{direction}\t{width}")
+        return 0
+
+    if as_modules:
+        # ⚠️ **声明集**（含零端口 module）⇒ 「谁是根」的输入
+        names = extract_modules(tree)
+        if as_json:
+            print(json.dumps({"modules": names}, ensure_ascii=False, indent=2))
+        else:
+            for mod_name in names:
+                print(mod_name)
+        return 0
 
     if as_ports:
         rows = extract_ports(tree)

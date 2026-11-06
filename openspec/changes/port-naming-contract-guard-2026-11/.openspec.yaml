@@ -1,0 +1,14 @@
+schema: spec-driven
+created: 2026-11-06
+
+# 端口命名契约的静态护栏（残留 5）
+#
+# ⚠️ **本 change 只补「护栏机制」**，命名规则**本身**归 `rtl-hierarchical-output`
+#   （主 spec 的 Purpose + 「悬空子输入 MUST 向上冒泡」Scenario）⇒ ⇒ 本 change
+#   **MUST NOT** 复述命名规则成第二份真相。
+#
+# ⇒ **新建 1 个 capability** ⇒ 归档**禁** `--skip-specs`。
+#
+# ⚠️ **台账漏记一种前缀**：台账 §7 残留 5 只写 `__if_` / `__x_`，而代码事实是**三种**
+#   （`include/hierarchy_verilog.h:46` 的 `Synthesized` 注释含 `__up_`）⇒ 本 change 按
+#   **代码事实**补全。

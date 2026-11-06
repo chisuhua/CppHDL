@@ -1400,6 +1400,26 @@ jobs:
       shell: bash
       run: bash scripts/verify_hierarchical_rtl.sh --self-test
 
+    # ---- 端口命名契约的静态护栏（残留 5 · N0–N3）------------------------
+    # ⚠️ 为什么挂在这个 job：它需要**真实的 verilator**（`--json-only`）⇒
+    #    而 verilator 只在 `pr-verilator-fast` / `nightly-verilator` 里构建。
+    # ⚠️ 为什么 `if: matrix.shard == 1`：与本 job 的分片无关 ⇒ 只跑一次。
+    # ⚠️ fail-closed：verilator / 产物生成器 / 提取器任一不可用 ⇒ 护栏**失败**
+    #    （退出码 2 = 前置失败，MUST NOT 静默跳过）。
+    - name: Verify hierarchical port-naming contract (N0–N3)
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_hierarchical_port_naming.sh
+
+    # 自检：逐条**原地投毒** ⇒ 每条判据必须变红 ⇒ 还原复绿。
+    # WHY：本仓反复出现「看起来在守、其实恒绿」的护栏 ⇒ 每条判据都要证明
+    #      自己有判别力。⚠️ 本护栏的 N2a/N2b 就是**为防恒绿而存在**（语料里
+    #      必须真的有可被判的合成端口 + 三前缀覆盖矩阵）。
+    - name: Verify hierarchical port-naming guard self-test
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_hierarchical_port_naming.sh --self-test
+
     # ---- P2 lever ② 的护栏：分片 MUST 覆盖全集 ------------------------
     # ⚠️ 为什么必需：`-I` 是在 **`-L` 过滤之后**的列表上做区间/步长选择
     # （实测：`-I 1,12,2`→6 · `-I 1,24,2`→12 · `-I 1,46,2`→23 ⇒ 与过滤后
