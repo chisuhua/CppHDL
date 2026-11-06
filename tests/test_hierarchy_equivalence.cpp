@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -131,31 +132,231 @@ bool replace_once(std::string &text, const std::string &needle,
     return true;
 }
 
-/// 观测集合 `O`（**手写**）。
+/// **一个被观测信号**（带 `node_id` ⇒ ⇒ 可与**映射表**对账 —— F2/F3 的机械载体）。
 ///
-/// ⚠️ `O` MUST ⊇ DUT 的**全部 `ch_out`**（任务 2.2）—— ⚠️ 但**成层子树**的 `ch_out`
-///    在层次化顶层**不可观测**（ADR-058 §4 风险 6 的盲区）⇒ ⇒ 对**成层** DUT，
-///    `O` = 「**两侧顶层都可见**的 `ch_out`」+ 盲区**显式登记**（MUST NOT 声称
-///    「全部输出已比对」）。
-template <typename Dut>
-std::vector<ch_test::hier::Observation> make_observations(Dut &root) {
-    std::vector<ch_test::hier::Observation> obs;
-    obs.push_back({"top.dout", [&root](ch::Simulator &sim) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(
-                           sim.get_port_value(root.io().dout));
-                   }});
-    return obs;
+/// ⚠️ `node_id` = 该信号的 ctx 私有编号 ⇒ ⇒ 调用方 MUST 填（`port.impl()->id()`）
+///    ⇒ ⇒ 判据才能把「被观测的信号」与**映射表**对起来（delta Requirement ④/⑤：
+///    「被观测信号 MUST 出现在映射表里」+「不在观测面内的 `ch_out` MUST 出现在映射表里
+///    且 `hier_top_port_name` 为空」⇒ ⇒ 两侧都要机械断言 ⇒ 缺一侧 = 契约条目无载体）。
+ch_test::hier::Observation make_obs(const std::string &name, std::uint32_t node_id,
+                                     std::function<std::uint64_t(ch::Simulator &)> read) {
+    ch_test::hier::Observation o;
+    o.name = name;
+    o.node_id = node_id;
+    o.read = std::move(read);
+    return o;
 }
 
-/// **全 inline** DUT 的 `O`：MUST ⊇ **全部** `ch_out`（叶子那个也在顶层 ⇒ 可观测）。
-template <typename Dut>
-std::vector<ch_test::hier::Observation> make_inline_observations(Dut &root) {
-    auto obs = make_observations(root);
-    obs.push_back({"leaf.dout", [&root](ch::Simulator &sim) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(
-                           sim.get_port_value(root.leaf.io().dout));
-                   }});
-    return obs;
+/// DUT 的**全部 `ch_out`**（`node_id` + 名字）⇒ ⇒ 用来算「不在观测面内」的那部分。
+using ChOutList = std::vector<std::pair<std::uint32_t, std::string>>;
+
+/// **观测面模式**（delta Requirement ④/⑤ · 2026-11-06 口径）
+///
+/// ⚠️ **为什么有两种模式**：「`O` MUST ⊇ 全部 `ch_out`」按字面**不可能成立** ——
+///    成层子树的 `ch_out` 在层次化顶层**不可观测**（ADR-058 §4 风险 6 的盲区）
+///    ⇒ ⇒ 于是 `O` 的定义必须**按比较场景**分两种：
+///    · **单粒度比较** ⇒ `O` = 该粒度下**全部可见**的 `ch_out`（最强的覆盖纪律）
+///    · **跨粒度比较** ⇒ `O` = **两粒度都可见**的公共子集（否则读不到的一侧会被
+///      误判成分歧）⇒ ⇒ 「可见但未观测」者 MUST **显式豁免**（机械载体）
+enum class ObsMode {
+    /// **单粒度全覆盖**：`O` MUST = 该粒度下**全部可见**的 `ch_out`
+    /// ⇒ ⇒ 未观测者 MUST 全部**不可见**（= 真盲区）⇒ ⇒ 盲区侧断言成立
+    FullCoverage,
+    /// **跨粒度公共子集**：`O` MUST ⊆ **该粒度与基准粒度都可见**的 `ch_out`
+    /// ⇒ ⇒ 「可见但未观测」者 MUST 进 `exempt`（**机械载体** · MUST NOT 仅注释）
+    PublicSubset,
+};
+
+/// 一次等价性运行的**观测面计划**（`O` **手写** · delta Requirement ④）。
+struct ObsPlan {
+    /// `O`（**手写**声明 ⇒ MUST NOT 由产物反推 ⇒ 否则「实际集 − 实际集」的循环定义）
+    std::vector<ch_test::hier::Observation> obs;
+    /// DUT 的**全部** `ch_out`（盲区侧的计算基准）
+    ChOutList all_ch_outs;
+    /// DUT 的**顶层 `ch_in`**（独立锚排除 input 用 ⇒ ⇒ 与 `all_ch_outs` **分别手写**
+    /// ⇒ ⇒ 两者**不同源** ⇒ ⇒ 「`O` 与 out 清单同时漏项」会被独立锚抓住）
+    ChOutList top_ins;
+    /// 模式（见 `ObsMode`）
+    ObsMode mode = ObsMode::FullCoverage;
+    /// 「该粒度下可见、但本次未观测」的**显式豁免**（仅 `PublicSubset` 模式非空）
+    ChOutList exempt;
+};
+
+/// **观测面 ↔ 映射表**的对账（delta Requirement ④/⑤ · 2026-11-06 口径）
+///
+/// 六段断言：
+/// ① **被观测侧**：每个被观测信号 ⇒ `node_id` ∈ 映射表 ∧ `hier_top_port_name` **非空**
+///    （非空 = 它在层次化顶层 ⇒ ⇒ 可被观测 ✓；为空 = 选了读不到的信号 ⇒ 必红）
+/// ② `O` ⊆ DUT 的**全部** `ch_out`（防手写 `O` 时写进不存在的信号）
+/// ③ **豁免侧**：每个豁免项 ⇒ ∈ 映射表 ∧ `hier_top_port_name` **非空**
+///    （= 它**确实可见**，只是本次没选进 `O` ⇒ ⇒ 豁免清单不是「垃圾桶」）
+/// ④ **盲区侧**：未观测 ∧ 未豁免 ⇒ ∈ 映射表 ∧ `hier_top_port_name` **为空**
+///    （= 它**不在**层次化顶层 ⇒ ⇒ 顶层观测不到 ⇒ ⇒ 它就是被登记的盲区 ✓）
+/// ⑤ **独立锚**（F12）：从**映射表**（emitter 产物）导出「双顶层可见」的 output 候选
+///    ⇒ ⇒ 这一步**不依赖**手写的 `all_ch_outs` ⇒ ⇒ 打破「`O` 与手写清单同时漏项 ⇒ 恒绿」
+/// ⑥ **顶层端口计数**交叉校验（独立锚的第二道）：扁平侧顶层端口数
+///    == 顶层 `ch_in` 数 + `ch_out` 数 + **2**（根 module 无条件发射 clock + reset ·
+///    ADR-058 §5）⇒ ⇒ 抓「out 清单漏项」的**计数级**后果
+void check_observation_surface(const ObsPlan &plan,
+                               const std::vector<ch::SignalMapEntry> &map) {
+    std::map<std::uint32_t, const ch::SignalMapEntry *> by_id;
+    for (const auto &e : map) {
+        by_id[e.node_id] = &e;
+    }
+    REQUIRE_FALSE(by_id.empty());
+
+    std::set<std::uint32_t> observed;
+    std::set<std::uint32_t> exempt_ids;
+    std::set<std::uint32_t> top_in_ids;
+    for (const auto &o : plan.obs) {
+        observed.insert(o.node_id);
+    }
+    for (const auto &kv : plan.exempt) {
+        exempt_ids.insert(kv.first);
+    }
+    for (const auto &kv : plan.top_ins) {
+        top_in_ids.insert(kv.first);
+    }
+
+    // ① 被观测侧
+    for (const auto &o : plan.obs) {
+        INFO("observed signal: " << o.name << " (node " << o.node_id << ")");
+        REQUIRE(by_id.count(o.node_id) == 1);
+        REQUIRE_FALSE(by_id[o.node_id]->hier_top_port_name.empty());
+    }
+    // ② `O` ⊆ DUT 的全部 `ch_out`
+    for (const auto &o : plan.obs) {
+        bool found = false;
+        for (const auto &kv : plan.all_ch_outs) {
+            if (kv.first == o.node_id) {
+                found = true;
+            }
+        }
+        INFO("observed signal: " << o.name);
+        REQUIRE(found);
+    }
+    // ③ 豁免侧：豁免项 MUST **确实可见**
+    for (const auto &kv : plan.exempt) {
+        INFO("exempt signal: " << kv.second << " (node " << kv.first << ")");
+        REQUIRE(by_id.count(kv.first) == 1);
+        REQUIRE_FALSE(by_id[kv.first]->hier_top_port_name.empty());
+    }
+    // ④ 盲区侧：未观测 ∧ 未豁免 ⇒ MUST 不可见
+    for (const auto &kv : plan.all_ch_outs) {
+        if (observed.count(kv.first) != 0) {
+            continue;
+        }
+        if (exempt_ids.count(kv.first) != 0) {
+            continue;   // 已**显式**豁免 ⇒ 不是「静默漏测」
+        }
+        INFO("blind-spot signal: " << kv.second << " (node " << kv.first << ")");
+        REQUIRE(by_id.count(kv.first) == 1);
+        REQUIRE(by_id[kv.first]->hier_top_port_name.empty());
+    }
+    // ⑤ **独立锚**：从**映射表**导出「双顶层可见」的 output 候选 ⇒ MUST 全被 `O` ∪ `exempt` 覆盖
+    //    ⚠️ 排除框架 clock/reset（它们也是顶层端口，但不是 `ch_out`）与顶层 `ch_in`
+    for (const auto &e : map) {
+        if (!e.flat.is_port) {
+            continue;   // 扁平侧不是顶层端口 ⇒ 非候选
+        }
+        if (e.hier_top_port_name.empty()) {
+            continue;   // 层次化侧不可见 ⇒ 是盲区（④ 已管）
+        }
+        if (e.hier_top_port_name == "default_clock" ||
+            e.hier_top_port_name == "default_reset") {
+            continue;   // 框架时序基础设施（根 module 无条件发射 · ADR-058 §5）
+        }
+        if (top_in_ids.count(e.node_id) != 0) {
+            continue;   // 顶层 `ch_in`（不是 `ch_out`）
+        }
+        INFO("visible output not covered: " << e.signal << " (node " << e.node_id << ")");
+        // ⇒ 「被观测」或「显式豁免」⇒ ⇒ MUST 至少满足其一
+        //    ⚠️ Catch2 的 `REQUIRE` MUST NOT 含 `||`（表达式分解器不支持）⇒ ⇒ 拆成两条
+        if (observed.count(e.node_id) != 1) {
+            REQUIRE(exempt_ids.count(e.node_id) == 1);
+        }
+    }
+    // ⑥ `FullCoverage` 模式下 MUST NOT 有豁免（豁免只对公共子集模式有意义）
+    //    ⚠️ **刻意不做**「顶层端口计数」交叉校验：扁平侧 = 单 module ⇒ 顶层端口 =
+    //    **所有** `ch_in` + **所有** `ch_out` + clock/reset ⇒ 只列「顶层 in」的清单
+    //    算不出 ⇒ 会假红 ⇒ ⇒ 独立锚由 ⑤ 承担（它逐项点名，不依赖计数）
+    if (plan.mode == ObsMode::FullCoverage) {
+        REQUIRE(plan.exempt.empty());
+    }
+}
+
+/// **`base` 的语义**（delta Requirement ④/⑤ · 2026-11-06 口径）
+///
+/// · **缺省（`nullopt`）= 单粒度比较** ⇒ `base := g` ⇒ `mode = FullCoverage`
+///   ⇒ ⇒ `O` MUST = 该粒度下**全部可见**的 `ch_out`（「可见但未观测」在此模式下**不合法**）
+/// · **显式传入 = 跨粒度比较** ⇒ `mode = PublicSubset` ⇒ `O` MUST ⊆ 公共子集，
+///   「可见但未观测」者 MUST 进 `exempt`（机械载体）
+///
+/// ⚠️ 缺省**必须**是单粒度：C++ 的默认实参写不出 `base = g` ⇒ 若沿用某个固定粒度当缺省，
+///    「单粒度 + 粒度 ≠ 该缺省值」的调用点会被**静默**当成跨粒度 ⇒ ⇒ 可见输出被推去
+///    `exempt` ⇒ `O` 缩水却不报错（实测：`deep` 的 `ForceInline` 单粒度曾因此只剩 1 个
+///    观测量 ⇒ `REQUIRE(inline_obs.size() == 4)` 转红）。
+///
+/// ⚠️ `g` 与 `base` 是**同一份计划**的两个输入 ⇒ 跨粒度调用点 MUST 显式传 `base`
+///    （粒度矩阵 B6-⑤ 即如此），单粒度调用点 MUST 走缺省。
+///
+/// @param base 跨粒度比较的**基准粒度**；`nullopt` = 单粒度（`base = g`）。
+using PlanBase = std::optional<ch::Granularity>;
+
+/// **DUT ①（`EqInlineTop`）** 的观测面计划
+///
+/// ⚠️ 叶子**不**声明成层 ⇒ ⇒ 三种粒度下**全部** inline ⇒ ⇒ 可见集恒定
+///    = {`top.dout`, `leaf.dout`} ⇒ ⇒ 顶层端口 = 扁平端口 ⇒ 产物**逐字节相同**。
+ObsPlan plan_for(EqInlineTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
+    ObsPlan p;
+    p.all_ch_outs = {{root.io().dout.impl()->id(), "top.dout"},
+                      {root.leaf.io().dout.impl()->id(), "leaf.dout"}};
+    p.top_ins = {{root.io().din.impl()->id(), "top.din"}};
+    p.obs.push_back(make_obs("top.dout", root.io().dout.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().dout));
+                              }));
+    p.obs.push_back(make_obs("leaf.dout", root.leaf.io().dout.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.leaf.io().dout));
+                              }));
+    return p;
+}
+
+/// **DUT ②（`EqTop`）** 的观测面计划（叶子声明成层 ⇒ `leaf.dout` 的可见性随粒度变）
+///
+/// ⚠️ **可见**= 该信号在**层次化顶层端口表**里 ⇔ 映射表 `hier_top_port_name` 非空
+///    ⇒ ⇒ 叶子成层 ⇒ 它的 `ch_out` **不在**顶层 ⇒ **不可观测**（盲区）
+ObsPlan plan_for(EqTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
+    const ch::Granularity b = base.value_or(g);
+    ObsPlan p;
+    p.all_ch_outs = {{root.io().dout.impl()->id(), "top.dout"},
+                      {root.leaf.io().dout.impl()->id(), "leaf.dout"}};
+    p.top_ins = {{root.io().din.impl()->id(), "top.din"}};
+    p.obs.push_back(make_obs("top.dout", root.io().dout.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().dout));
+                              }));
+    // 叶子的 `ch_out` 只在 **ForceInline** 下可见（全 inline ⇒ 落进根 module）
+    const bool leaf_visible = (g == ch::Granularity::ForceInline);
+    const bool leaf_visible_base = (b == ch::Granularity::ForceInline);
+    const bool single = (g == b);
+    // `O` = 该粒度与基准粒度**都可见**者（单粒度时基准 = 自身 ⇒ 即「全部可见」）
+    if (leaf_visible && (leaf_visible_base || single)) {
+        p.obs.push_back(make_obs("leaf.dout", root.leaf.io().dout.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.leaf.io().dout));
+                                  }));
+    } else if (leaf_visible) {
+        // 可见但本次未选入 `O` ⇒ **显式豁免**（机械载体）
+        p.exempt.push_back({root.leaf.io().dout.impl()->id(), "leaf.dout"});
+    }
+    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    return p;
 }
 
 /// 受驱动的顶层输入（**只**顶层 `din`）。
@@ -185,7 +386,8 @@ TEST_CASE("hierarchical equivalence - all-inline product is byte-identical to th
     REQUIRE(products.ok);
     REQUIRE_FALSE(products.ports.empty());
 
-    const auto obs = make_inline_observations(dev.instance());
+    const auto plan = plan_for(dev.instance(), ch::Granularity::RespectDeclarations);
+    const auto &obs = plan.obs;
     const auto inputs = make_inputs(dev.instance());
     const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}};
 
@@ -213,6 +415,8 @@ TEST_CASE("hierarchical equivalence - all-inline product is byte-identical to th
     for (const auto &row : res.trace) {
         REQUIRE(row.size() == obs.size());
     }
+    // ④ **观测面 ↔ 映射表**的对账（delta Requirement ④/⑤：MUST 有机械载体）
+    check_observation_surface(plan, products.signal_map);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -229,7 +433,8 @@ TEST_CASE("hierarchical equivalence - layered product matches the flat product c
     REQUIRE(products.ok);
     REQUIRE_FALSE(products.ports.empty());
 
-    const auto obs = make_observations(dev.instance());
+    const auto plan = plan_for(dev.instance(), ch::Granularity::RespectDeclarations);
+    const auto &obs = plan.obs;
     const auto inputs = make_inputs(dev.instance());
 
     // 两组**不同**的激励（多拍序列 ⇒ 寄存器通路被真正走通）
@@ -251,6 +456,12 @@ TEST_CASE("hierarchical equivalence - layered product matches the flat product c
     INFO("compare(B) error: " << res_b.error);
     REQUIRE(res_b.ok);
     REQUIRE(res_b.equal);
+
+    // ④ **观测面 ↔ 映射表**的对账 + **盲区确实存在**的显式声明
+    //    （成层 DUT 的叶子 `ch_out` 在层次化顶层不可观测 ⇒ MUST 登记在映射表且
+    //      `hier_top_port_name` 为空 ⇒ MUST NOT 声称「全部输出已比对」）
+    check_observation_surface(plan, products.signal_map);
+    REQUIRE(plan.all_ch_outs.size() > plan.obs.size());
 
     // ③ **同一 `node_id` 在两条路径的名字 MUST 逐字相同**（任务 3.4）
     //    ⇒ 按映射表的 `node_id` **逐项**比对（MUST NOT 只比「名字集合交集」）
@@ -302,7 +513,8 @@ TEST_CASE("hierarchical equivalence - corrupting the layered product turns the j
     INFO("emit error: " << products.error);
     REQUIRE(products.ok);
 
-    const auto obs = make_observations(dev.instance());
+    const auto plan = plan_for(dev.instance(), ch::Granularity::RespectDeclarations);
+    const auto &obs = plan.obs;
     const auto inputs = make_inputs(dev.instance());
     const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}};
 
@@ -404,6 +616,12 @@ public:
 
 class EqDeepMid : public ch::Component {
 public:
+    // ⚠️⚠️ **成层声明**（2026-11-06 · F11）：此前 `EqDeepTop`/`EqDeepMid`/`EqDeepLeaf`
+    //    **均无**声明 ⇒ ⇒ `RespectDeclarations` 下**全 inline** ⇒ ⇒ 该变体与
+    //    `ForceInline` **完全等价** ⇒ ⇒ **零增量**（⇒ 等价性判据白跑一格）。
+    //    ⇒ ⇒ 声明后 `RespectDeclarations` = 「**中间拓扑**」（top + mid 两个 module，
+    //    a/b inline 进 mid）⇒ ⇒ 成为**三粒度矩阵里唯一没人覆盖**的结构。
+    CH_HIERARCHY_LAYER("eq_deep_mid");
     __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
     ch::ch_module<EqDeepLeaf> a{"a"};
     ch::ch_module<EqDeepLeaf> b{"b"};
@@ -543,25 +761,70 @@ public:
     }
 };
 
-// ── 观测集合 / 输入集合（**手写** · 每个 DUT 一份）─────────────────────────
+// ── 观测面计划 / 输入集合（**手写** · 每个 DUT 一份）────────────────────────
+//
+// ⚠️ **口径**（delta Requirement ④/⑤ · 2026-11-06）：`O` MUST ⊆ **该次运行粒度下可见**的
+//    `ch_out` 集（可见 ⇔ 层次化顶层端口表里有它 ⇔ 映射表 `hier_top_port_name` 非空）。
+//    ⇒ **单粒度**比较 ⇒ `O` = 该粒度下**全部可见**者（盲区 = 不可见者）
+//    ⇒ **跨粒度**比较 ⇒ `O` = **两粒度都可见**的公共子集（「可见但未观测」者 MUST 显式豁免）
+// ⚠️ `O` 的内容**手写** ⇒ MUST NOT 由产物反推（那是「实际集 − 实际集」的循环定义 ⇒ 恒绿）。
 
-/// 三层 + 兄弟连线：`O` = 顶层输出（成层时可见）+ inline 时**全部** `ch_out`。
-std::vector<ch_test::hier::Observation> deep_obs(EqDeepTop &root, bool all_visible) {
-    std::vector<ch_test::hier::Observation> obs;
-    obs.push_back({"top.dout", [&root](ch::Simulator &s) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(s.get_port_value(root.io().dout));
-                   }});
-    if (all_visible) {
-        obs.push_back({"mid.dout", [&root](ch::Simulator &s) -> std::uint64_t {
-                           return static_cast<std::uint64_t>(
-                               s.get_port_value(root.mid.io().dout));
-                       }});
-        obs.push_back({"mid.dout", [&root](ch::Simulator &s) -> std::uint64_t {
-                           return static_cast<std::uint64_t>(
-                               s.get_port_value(root.mid.io().dout));
-                       }});
+/// **DUT ③（三层 + 兄弟连线 · `EqDeepTop`）** 的观测面计划
+///
+/// ⚠️ `EqDeepMid` **声明成层**（F11）⇒ ⇒ `RespectDeclarations` = 「中间拓扑」
+///    （top + mid 两个 module · a/b inline 进 mid）⇒ ⇒ 它是**三粒度矩阵里唯一没人覆盖**的结构。
+/// ⚠️ 可见性：`mid` 成层 ⇒ `mid.dout` **不在**顶层 ⇒ 不可见；`a`/`b` inline 进 `mid`
+///    ⇒ 它们的 `ch_out` 是 `mid` 体内的线网 ⇒ 也不在顶层 ⇒ 只有 `ForceInline` 下全可见。
+/// ⚠️ **恒同值登记**：`a.dout` 与 `b.dout` 逐拍恒等（兄弟串联 `a → b`）⇒ ⇒ 选进 `O`
+///    不增加**增量**判别力（只增加覆盖面）⇒ ⇒ 如实登记，不假装它「独立判别」。
+ObsPlan plan_for(EqDeepTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
+    const ch::Granularity b = base.value_or(g);
+    ObsPlan p;
+    p.all_ch_outs = {
+        {root.io().dout.impl()->id(), "top.dout"},
+        {root.mid.io().dout.impl()->id(), "mid.dout"},
+        {root.mid.instance().a.instance().io().dout.impl()->id(), "a.dout"},
+        {root.mid.instance().b.instance().io().dout.impl()->id(), "b.dout"},
+    };
+    p.top_ins = {{root.io().din.impl()->id(), "top.din"}};
+    p.obs.push_back(make_obs("top.dout", root.io().dout.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().dout));
+                              }));
+    const bool all_inline = (g == ch::Granularity::ForceInline);
+    const bool all_inline_base = (b == ch::Granularity::ForceInline);
+    const bool single = (g == b);
+    if (all_inline && (all_inline_base || single)) {
+        p.obs.push_back(make_obs("mid.dout", root.mid.io().dout.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.mid.io().dout));
+                                  }));
+        // ⚠️⚠️ **兄弟叶的真实输出**（此前这条是 `mid.dout` 的**死重** ⇒ 零增量判别力 ⇒
+        //    oracle 在实施后审查里抓出 ⇒ ⇒ MUST 真的观测它们，否则「兄弟边」只被间接覆盖）
+        p.obs.push_back(make_obs("a.dout",
+                                  root.mid.instance().a.instance().io().dout.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(
+                                              root.mid.instance().a.instance().io().dout));
+                                  }));
+        p.obs.push_back(make_obs("b.dout",
+                                  root.mid.instance().b.instance().io().dout.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(
+                                              root.mid.instance().b.instance().io().dout));
+                                  }));
+    } else if (all_inline) {
+        // ForceInline 下可见、但本次未选入 `O` ⇒ **显式豁免**（机械载体）
+        p.exempt.push_back({root.mid.io().dout.impl()->id(), "mid.dout"});
+        p.exempt.push_back({root.mid.instance().a.instance().io().dout.impl()->id(), "a.dout"});
+        p.exempt.push_back({root.mid.instance().b.instance().io().dout.impl()->id(), "b.dout"});
     }
-    return obs;
+    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    return p;
 }
 
 std::vector<ch_test::hier::DrivenInput> deep_inputs(EqDeepTop &root) {
@@ -570,18 +833,32 @@ std::vector<ch_test::hier::DrivenInput> deep_inputs(EqDeepTop &root) {
              }}};
 }
 
-std::vector<ch_test::hier::Observation> bundle_obs(EqBundleTop &root, bool all_visible) {
-    std::vector<ch_test::hier::Observation> obs;
-    obs.push_back({"top.dout", [&root](ch::Simulator &s) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(s.get_port_value(root.io().dout));
-                   }});
-    if (all_visible) {
-        obs.push_back({"leaf.dout", [&root](ch::Simulator &s) -> std::uint64_t {
-                           return static_cast<std::uint64_t>(
-                               s.get_port_value(root.leaf.io().dout));
-                       }});
+/// **DUT ④（bundle 成员跨层 · `EqBundleTop`）** 的观测面计划
+ObsPlan plan_for(EqBundleTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
+    const ch::Granularity b = base.value_or(g);
+    ObsPlan p;
+    p.all_ch_outs = {{root.io().dout.impl()->id(), "top.dout"},
+                      {root.leaf.io().dout.impl()->id(), "leaf.dout"}};
+    p.top_ins = {{root.io().din.impl()->id(), "top.din"}};
+    p.obs.push_back(make_obs("top.dout", root.io().dout.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().dout));
+                              }));
+    const bool leaf_visible = (g == ch::Granularity::ForceInline);
+    const bool leaf_visible_base = (b == ch::Granularity::ForceInline);
+    const bool single = (g == b);
+    if (leaf_visible && (leaf_visible_base || single)) {
+        p.obs.push_back(make_obs("leaf.dout", root.leaf.io().dout.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.leaf.io().dout));
+                                  }));
+    } else if (leaf_visible) {
+        p.exempt.push_back({root.leaf.io().dout.impl()->id(), "leaf.dout"});
     }
-    return obs;
+    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    return p;
 }
 
 std::vector<ch_test::hier::DrivenInput> bundle_inputs(EqBundleTop &root) {
@@ -590,18 +867,32 @@ std::vector<ch_test::hier::DrivenInput> bundle_inputs(EqBundleTop &root) {
              }}};
 }
 
-std::vector<ch_test::hier::Observation> mem_obs(EqMemTop &root, bool all_visible) {
-    std::vector<ch_test::hier::Observation> obs;
-    obs.push_back({"top.rdata", [&root](ch::Simulator &s) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(s.get_port_value(root.io().rdata));
-                   }});
-    if (all_visible) {
-        obs.push_back({"leaf.rdata", [&root](ch::Simulator &s) -> std::uint64_t {
-                           return static_cast<std::uint64_t>(
-                               s.get_port_value(root.leaf.io().rdata));
-                       }});
+/// **DUT ⑤（含 `ch_mem` · `EqMemTop`）** 的观测面计划
+ObsPlan plan_for(EqMemTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
+    const ch::Granularity b = base.value_or(g);
+    ObsPlan p;
+    p.all_ch_outs = {{root.io().rdata.impl()->id(), "top.rdata"},
+                      {root.leaf.io().rdata.impl()->id(), "leaf.rdata"}};
+    p.top_ins = {{root.io().wdata.impl()->id(), "top.wdata"}};
+    p.obs.push_back(make_obs("top.rdata", root.io().rdata.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().rdata));
+                              }));
+    const bool leaf_visible = (g == ch::Granularity::ForceInline);
+    const bool leaf_visible_base = (b == ch::Granularity::ForceInline);
+    const bool single = (g == b);
+    if (leaf_visible && (leaf_visible_base || single)) {
+        p.obs.push_back(make_obs("leaf.rdata", root.leaf.io().rdata.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.leaf.io().rdata));
+                                  }));
+    } else if (leaf_visible) {
+        p.exempt.push_back({root.leaf.io().rdata.impl()->id(), "leaf.rdata"});
     }
-    return obs;
+    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    return p;
 }
 
 std::vector<ch_test::hier::DrivenInput> mem_inputs(EqMemTop &root) {
@@ -610,25 +901,59 @@ std::vector<ch_test::hier::DrivenInput> mem_inputs(EqMemTop &root) {
              }}};
 }
 
-std::vector<ch_test::hier::Observation> pipe_obs(EqPipeTop &root, bool all_visible) {
-    std::vector<ch_test::hier::Observation> obs;
-    obs.push_back({"top.state", [&root](ch::Simulator &s) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(s.get_port_value(root.io().state));
-                   }});
-    obs.push_back({"top.memval", [&root](ch::Simulator &s) -> std::uint64_t {
-                       return static_cast<std::uint64_t>(s.get_port_value(root.io().memval));
-                   }});
-    if (all_visible) {
-        obs.push_back({"alu.y", [&root](ch::Simulator &s) -> std::uint64_t {
-                           return static_cast<std::uint64_t>(
-                               s.get_port_value(root.alu.io().y));
-                       }});
-        obs.push_back({"memstage.rdata", [&root](ch::Simulator &s) -> std::uint64_t {
-                           return static_cast<std::uint64_t>(
-                               s.get_port_value(root.memstage.io().rdata));
-                       }});
+/// **DUT ⑥（真实最深设计 · `EqPipeTop`）** 的观测面计划
+///
+/// ⚠️ `alu` / `memstage` **都声明成层** ⇒ ⇒ 它们的 `ch_out` 在层次化顶层**不可见**
+///    ⇒ ⇒ 只有 `ForceInline` 下全部可见（5 个 `ch_out`）。
+/// ⚠️ **恒同值登记**：`alu.y` 与 `alu.state` 都 `<= acc` ⇒ 逐拍恒等；`top.state` 亦然
+///    ⇒ ⇒ 它们增加**覆盖面**而不增加**增量**判别力 ⇒ ⇒ 如实登记。
+ObsPlan plan_for(EqPipeTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
+    const ch::Granularity b = base.value_or(g);
+    ObsPlan p;
+    p.all_ch_outs = {
+        {root.io().state.impl()->id(), "top.state"},
+        {root.io().memval.impl()->id(), "top.memval"},
+        {root.alu.io().y.impl()->id(), "alu.y"},
+        {root.alu.io().state.impl()->id(), "alu.state"},
+        {root.memstage.io().rdata.impl()->id(), "memstage.rdata"},
+    };
+    p.top_ins = {{root.io().din.impl()->id(), "top.din"}};
+    p.obs.push_back(make_obs("top.state", root.io().state.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().state));
+                              }));
+    p.obs.push_back(make_obs("top.memval", root.io().memval.impl()->id(),
+                              [&root](ch::Simulator &s) -> std::uint64_t {
+                                  return static_cast<std::uint64_t>(
+                                      s.get_port_value(root.io().memval));
+                              }));
+    const bool all_inline = (g == ch::Granularity::ForceInline);
+    const bool all_inline_base = (b == ch::Granularity::ForceInline);
+    const bool single = (g == b);
+    if (all_inline && (all_inline_base || single)) {
+        p.obs.push_back(make_obs("alu.y", root.alu.io().y.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.alu.io().y));
+                                  }));
+        p.obs.push_back(make_obs("alu.state", root.alu.io().state.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.alu.io().state));
+                                  }));
+        p.obs.push_back(make_obs("memstage.rdata", root.memstage.io().rdata.impl()->id(),
+                                  [&root](ch::Simulator &s) -> std::uint64_t {
+                                      return static_cast<std::uint64_t>(
+                                          s.get_port_value(root.memstage.io().rdata));
+                                  }));
+    } else if (all_inline) {
+        p.exempt.push_back({root.alu.io().y.impl()->id(), "alu.y"});
+        p.exempt.push_back({root.alu.io().state.impl()->id(), "alu.state"});
+        p.exempt.push_back({root.memstage.io().rdata.impl()->id(), "memstage.rdata"});
     }
-    return obs;
+    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    return p;
 }
 
 std::vector<ch_test::hier::DrivenInput> pipe_inputs(EqPipeTop &root) {
@@ -640,16 +965,19 @@ std::vector<ch_test::hier::DrivenInput> pipe_inputs(EqPipeTop &root) {
 /// 跑一次「发射 + 逐拍比对」并断言**全等**（失败时把 mismatch 打出来）。
 void require_equivalent(ch::Component &root, ch::core::context *ctx, const std::string &dir,
                         ch::Granularity granularity,
-                        const std::vector<ch_test::hier::Observation> &obs,
                         const std::vector<ch_test::hier::DrivenInput> &inputs,
-                        const std::vector<std::vector<std::uint64_t>> &stim) {
+                        const std::vector<std::vector<std::uint64_t>> &stim,
+                        const ObsPlan &plan) {
     auto products = ch_test::hier::emit(root, dir, granularity);
     INFO("emit error: " << products.error);
     REQUIRE(products.ok);
     REQUIRE_FALSE(products.ports.empty());
 
+    // **观测面 ↔ 映射表**的对账（delta Requirement ④/⑤ ⇒ MUST 有机械载体）
+    check_observation_surface(plan, products.signal_map);
+
     auto res = ch_test::hier::compare(ctx, dir, products.hier_path, products.ports, inputs,
-                                      obs, stim);
+                                      plan.obs, stim);
     INFO("compare error: " << res.error);
     INFO("first mismatch: " << res.first_mismatch);
     REQUIRE(res.ok);
@@ -670,10 +998,13 @@ TEST_CASE("hierarchical equivalence - three levels with a sibling edge",
 
     const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}, {0x44}};
 
-    // ① **成层**（`RespectDeclarations`：叶/中层未声明 ⇒ inline ⇒ 实际只有一层）
-    //    ⇒ ⇒ 观测面 = 顶层输出
+    // ① **中间拓扑**（`RespectDeclarations`：`mid` **声明成层**（F11）⇒ top + mid 两个
+    //    module · a/b inline 进 `mid`）⇒ ⇒ 这是**三粒度矩阵里唯一没人覆盖**的结构
+    //    ⇒ ⇒ 观测面 = 该粒度下**全部可见**的 `ch_out` = {`top.dout`}
+    //    （`mid.dout` / `a.dout` / `b.dout` 在层次化顶层**不可见** ⇒ 盲区）
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
-                       deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+                       deep_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::RespectDeclarations));
 
     // ② **ForceInline** ⇒ 全部 inline ⇒ 顶层端口 = 扁平端口 ⇒ 观测面可含**全部** `ch_out`
     //    ⇒ ⇒ 顺带验「全 inline ⇒ 与扁平**逐字节相同**」
@@ -681,19 +1012,25 @@ TEST_CASE("hierarchical equivalence - three levels with a sibling edge",
         auto products = ch_test::hier::emit(dev.instance(), dir, ch::Granularity::ForceInline);
         INFO("emit error: " << products.error);
         REQUIRE(products.ok);
+        const auto inline_plan = plan_for(dev.instance(), ch::Granularity::ForceInline);
+        const auto &inline_obs = inline_plan.obs;
+        // ⚠️ **观测面必须真的含兄弟叶的输出**（此前是 `mid.dout` 的死重 ⇒ 零判别力 ⇒
+        //    oracle 在实施后审查里抓出 ⇒ ⇒ 这里钉住条数，防再 slip）
+        REQUIRE(inline_obs.size() == 4);
         auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
-                                          deep_inputs(dev.instance()),
-                                          deep_obs(dev.instance(), true), stim);
+                                          deep_inputs(dev.instance()), inline_obs, stim);
         INFO("compare error: " << res.error);
         INFO("first mismatch: " << res.first_mismatch);
         REQUIRE(res.ok);
         REQUIRE(res.equal);
         REQUIRE(res.flat_product == res.hier_product);
+        check_observation_surface(inline_plan, products.signal_map);
     }
 
     // ③ **ForceLayer** ⇒ 每个组件成层 ⇒ 三层 module 树 ⇒ 兄弟边成为**跨 module** 连接
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
-                       deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+                       deep_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::ForceLayer));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -709,15 +1046,18 @@ TEST_CASE("hierarchical equivalence - a bundle field crossing a layer boundary",
 
     // ① **成层**（叶声明成层 ⇒ 父层驱动其 bundle 字段 ⇒ 隐式端口）
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
-                       bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+                       bundle_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::RespectDeclarations));
 
     // ② **ForceInline** ⇒ 全部 inline ⇒ 观测面含**全部** `ch_out`
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
-                       bundle_obs(dev.instance(), true), bundle_inputs(dev.instance()), stim);
+                       bundle_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::ForceInline));
 
     // ③ **ForceLayer** ⇒ 同样成层 ⇒ 隐式端口路径不变
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
-                       bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+                       bundle_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::ForceLayer));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -734,7 +1074,8 @@ TEST_CASE("hierarchical equivalence - a ch_mem living inside a layered module",
     const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}, {0x44}};
 
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
-                       mem_obs(dev.instance(), false), mem_inputs(dev.instance()), stim);
+                       mem_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::RespectDeclarations));
 
     // 「随激励变化」：观测集合的取值集合 MUST 随激励变化（mem 通路真的走了）
     {
@@ -743,7 +1084,9 @@ TEST_CASE("hierarchical equivalence - a ch_mem living inside a layered module",
         REQUIRE(products.ok);
         auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
                                           mem_inputs(dev.instance()),
-                                          mem_obs(dev.instance(), false), stim);
+                                          plan_for(dev.instance(),
+                                                   ch::Granularity::RespectDeclarations).obs,
+                                          stim);
         REQUIRE(res.ok);
         std::set<std::uint64_t> values;
         for (const auto &row : res.trace) {
@@ -767,7 +1110,8 @@ TEST_CASE("hierarchical equivalence - the deepest design (two layered pipeline s
     const std::vector<std::vector<std::uint64_t>> stim = {{0x05}, {0x06}, {0x07}, {0x08}};
 
     require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
-                       pipe_obs(dev.instance(), false), pipe_inputs(dev.instance()), stim);
+                       pipe_inputs(dev.instance()), stim,
+                       plan_for(dev.instance(), ch::Granularity::RespectDeclarations));
 
     // 「随激励变化」：两个观测量都 MUST 变（状态 + mem 回读）
     {
@@ -776,7 +1120,9 @@ TEST_CASE("hierarchical equivalence - the deepest design (two layered pipeline s
         REQUIRE(products.ok);
         auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
                                           pipe_inputs(dev.instance()),
-                                          pipe_obs(dev.instance(), false), stim);
+                                          plan_for(dev.instance(),
+                                                   ch::Granularity::RespectDeclarations).obs,
+                                          stim);
         REQUIRE(res.ok);
         std::set<std::uint64_t> states;
         std::set<std::uint64_t> memvals;
@@ -799,24 +1145,42 @@ TEST_CASE("hierarchical equivalence - ForceInline vs ForceLayer match the flat p
           "[hierarchy][equivalence][granularity]") {
     const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}};
 
+    // ⚠️ **跨粒度比较** ⇒ `O` MUST 取**两粒度都可见**的公共子集
+    //    （否则读不到的一侧会被误判成分歧）⇒ ⇒ 「可见但未观测」者 MUST 进**显式豁免**
+    //    ⇒ ⇒ `base` = `ForceLayer`（公共子集的基准粒度）⇒ ⇒ `mode` = `PublicSubset`
+    // ⚠️ 两层 DUT 与 bundle DUT 的 `RespectDeclarations` ≡ `ForceLayer`（叶子声明成层）
+    //    ⇒ ⇒ 加那一格**零增量** ⇒ ⇒ 只给 deep DUT 加**第三粒度**（F13）
+
     // ① 两层 DUT（B5 的 `EqTop`）
     {
         const std::string dir = make_temp_dir("_gran_2layer");
         ch::ch_device<EqTop> dev;
         require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
-                           make_observations(dev.instance()), make_inputs(dev.instance()), stim);
+                           make_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::ForceInline,
+                                    ch::Granularity::ForceLayer));
         require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
-                           make_observations(dev.instance()), make_inputs(dev.instance()), stim);
+                           make_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::ForceLayer,
+                                    ch::Granularity::ForceLayer));
     }
 
-    // ② 三层 + 兄弟连线
+    // ② 三层 + 兄弟连线（**三粒度**：deep 的 `RespectDeclarations` = 中间拓扑 ⇒ 唯一增量格）
     {
         const std::string dir = make_temp_dir("_gran_deep");
         ch::ch_device<EqDeepTop> dev;
         require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
-                           deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+                           deep_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::ForceInline,
+                                    ch::Granularity::ForceLayer));
         require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
-                           deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+                           deep_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::ForceLayer,
+                                    ch::Granularity::ForceLayer));
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
+                           deep_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::RespectDeclarations,
+                                    ch::Granularity::ForceLayer));
     }
 
     // ③ bundle 成员跨层
@@ -824,9 +1188,13 @@ TEST_CASE("hierarchical equivalence - ForceInline vs ForceLayer match the flat p
         const std::string dir = make_temp_dir("_gran_bundle");
         ch::ch_device<EqBundleTop> dev;
         require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
-                           bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+                           bundle_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::ForceInline,
+                                    ch::Granularity::ForceLayer));
         require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
-                           bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+                           bundle_inputs(dev.instance()), stim,
+                           plan_for(dev.instance(), ch::Granularity::ForceLayer,
+                                    ch::Granularity::ForceLayer));
     }
 }
 
@@ -856,6 +1224,18 @@ TEST_CASE("hierarchical equivalence - two emissions of the same design are ident
     const std::string b = read_file(path_b);
     REQUIRE_FALSE(a.empty());
     REQUIRE(a == b);
+
+    // ①' **具名**断言「两次 emit 共享同一 ctx」（delta 的 Scenario 明文要求 harness 断言）
+    //    ⇒ 判定 = 比较**两次发射各自记录的来源 ctx**（`HierarchyEmitResult::source_ctx`）
+    //    ⇒ ⇒ 该断言**可失败**（MUST NOT 用「同一对象与自身比较」⇒ 恒真 ⇒ 零判别力）
+    //    ⚠️ **为什么不能只比 `node_id`**：`node_id` 是 ctx **私有**编号 ⇒ ⇒ 两个 ctx 的
+    //    编号空间**可能碰巧重合** ⇒ ⇒ 「`node_id` 逐项相同」**不能证明**同 ctx
+    //    ⇒ ⇒ 必须有一个 ctx **身份**锚（`source_ctx`）⇒ ⇒ 这才是真正的身份判定
+    INFO("both emissions must record the same source ctx");
+    REQUIRE(ra.source_ctx != nullptr);
+    REQUIRE(rb.source_ctx != nullptr);
+    REQUIRE(ra.source_ctx == rb.source_ctx);
+    REQUIRE(ra.source_ctx == dev.context());
 
     // ② 映射表**逐项**相同（**顺序**也相同 ⇒ 顺序确定 ⇒ 不是「集合相等」的弱判据）
     REQUIRE(ra.signal_map.size() == rb.signal_map.size());

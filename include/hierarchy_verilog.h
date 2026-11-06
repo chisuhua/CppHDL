@@ -108,6 +108,17 @@ struct HierarchyEmitResult {
     ///    （跨 ctx 无可比性契约）。
     /// ⚠️ **value-only**：MUST NOT 带 `lnodeimpl*` / 连接关系。
     std::vector<SignalMapEntry> signal_map;
+    /// **本次发射的来源 ctx**（ADR-058 §2.2 · T3-⑤ B7）
+    ///
+    /// 用途 = 给「两次 emit MUST 共享同一 ctx」这条契约提供**可机械判定**的**身份**锚：
+    /// `node_id` 是 **ctx 私有**编号 ⇒ ⇒ 不同 ctx 的编号空间**可能碰巧重合**
+    /// ⇒ ⇒ 仅凭「两次的 `node_id` 逐项相同」**不能证明**同 ctx ⇒ ⇒ 需要一个 ctx 身份锚。
+    ///
+    /// ⚠️ 本字段是本结构里**唯一**的非 value 成员（ctx 身份指针）⇒ ⇒
+    ///    调用方 MUST NOT 长期持有它（ctx 生命周期归调用方）⇒ ⇒ 判定 MUST 只做**同一性比较**
+    ///    （MUST NOT 解引用）。
+    /// ⚠️ 该字段**不违反**本结构的 value-only 纪律（那条禁的是 `lnodeimpl*` 与连接关系）。
+    const ch::core::context *source_ctx = nullptr;
 };
 
 /// 把 `root` 所在的层次发射成 Verilog（多 module）。

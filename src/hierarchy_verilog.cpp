@@ -1395,6 +1395,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
     result.ok = true;
     result.files.push_back(out_path);
+    // ── 来源 ctx（ADR-058 §2.2 · T3-005 B7）：「两次 emit 共享同一 ctx」的**身份**锚
+    //    ⚠️ 只在**成功**路径填（失败时保持 `nullptr` ⇒ 调用方 MUST 先看 `ok`）
+    result.source_ctx = root.context();
     return result;
 }
 

@@ -23,8 +23,19 @@
       固定前导抽成 `kSimMainPrelude`，两条路径共用（文本与既有逐字节**相同** —— 缓存 key 的输入）
 - [x] 1.4 **既有 `initialize(ctx, …)` 行为逐字节不变**
       ⇒ ⇒ **B3 已验收**：`sim_main.cpp` 生成文本与原实现 **IDENTICAL**
-      （`/tmp/opencode/cmp_prelude5.py` 的字面量级比对）+ `ctest -LE perf` 238/238 ·
-      总时长 363s（与 B2 基线一致 ⇒ cache key 未漂 ⇒ 无冷编译）
+      ⇒ ⇒ ⚠️ **证据 MUST 可复算**（F7）：**不**引用 `/tmp` 下的一次性比对脚本作判据
+      （临时脚本随会话消失 ⇒ 归档后无人能复算 ⇒ 「证据」退化成**断言**）⇒ ⇒
+      可复算形态 = **单一来源的结构性判据**：
+      ① `src/core/verilator_backend.cpp` 里**两条路径**（`try_initialize_with_verilog` 的
+      `:659` 与既有 `initialize` 的 `:733`）**都** `out << kSimMainPrelude`（同一个常量
+      ⇒ 结构上**不可能**各写一份 ⇒ 漂移无处发生）⇒ 复算命令：
+      `grep -c 'out << kSimMainPrelude' src/core/verilator_backend.cpp` ⇒ **MUST = 2**；
+      ② `kSimMainPrelude` **仅有一处定义** ⇒ `grep -c '^static const char \*kSimMainPrelude'`
+      ⇒ **MUST = 1**；
+      ③ 行为面：`ctest -LE perf` 238/238 · 总时长 363s（与 B2 基线一致 ⇒ cache key 未漂
+      ⇒ 无冷编译）
+      ⇒ ⇒ 原 `/tmp/opencode/cmp_prelude5.py` 的字面量级比对（B3 当时的**辅助**手段）**降级为
+      历史记述**，不作判据
 - [x] 1.5 **E1 来源约束**：上述集合 MUST 由 **emitter 产物**（映射表 ∪ `port_provenance`）派生
       ⇒ ⇒ **MUST NOT** 由 harness / backend 独立撰写或手工列举（ADR-058 v2.14 §2.3 E1）
       ⇒ ⇒ **B3 已落地**：`ch::backend_port_set(emitted, root_module)`（`src/hierarchy_verilog.cpp`）；
@@ -153,6 +164,57 @@
       （`codegen_verilog.h` · `hierarchy_verilog.h` · `core/verilator_backend.h` ·
       `core/verilator_port_set.h`）⇒ ⚠️ R4 需 git 历史 ⇒ 浅克隆环境**明确 NOTE 跳过**（不静默假装绿））
       + `--self-test`（合法清单 ⇒ 绿 · 越界清单 ⇒ 红）
+## T3-⑤ 收口（14 项 · 2026-11-06 实施后架构审查的待办）
+
+> 权威来源：`.rddf/reviews/T3-005-equivalence-debt-review.md`（9 项 F1–F9）+
+> planner 落档的 F10–F14（`.rddf/roadmap/features/feat-hierarchical-rtl-output.md` §「T3-⑤ 收口与后续规划」②）。
+> ⚠️ **口径类裁决（F1/F5/F9）归 delta / proposal / roadmap**（归档后主 spec 是唯一权威）⇒ 本节只记**动作与证据**。
+
+- [x] F1 `proposal.md` 的 `O` 下限措辞 ⇒ 引用 delta 的两阶段口径 —— **planner 已改**（本 change 不动）
+- [x] F2 盲区断言做成**对偶**（被观测侧 + 盲区侧，均绑到映射表）
+      ⇒ ⇒ `check_observation_surface` 的断言 **①**（被观测侧）与 **④**（盲区侧）成对
+- [x] F3 「每个被观测信号 ∈ 映射表 ∧ `hier_top_port_name` 非空」⇒ ⇒ 断言 **①**
+- [x] F4 「两次 emit 共享同一 ctx」改成**可失败**形态
+      ⇒ ⇒ `HierarchyEmitResult::source_ctx`（`include/hierarchy_verilog.h:121` ·
+      赋值 `src/hierarchy_verilog.cpp:1400`）+ 四条断言（`tests/test_hierarchy_equivalence.cpp:1235-1238`）
+      ⇒ ⇒ ⚠️ **不违反 value-only 纪律**（那条只禁 `lnodeimpl*` / 连接关系；ctx 指针是**身份锚**）
+      ⇒ ⇒ **理由登记**：只比 `node_id` **不能**证明同 ctx（两个 ctx 的编号空间可能碰巧重合）
+- [x] F5 roadmap **P0-4** 的「三处齐」口径改读 —— **planner 已改**（本 change 不动）
+- [x] F6 修 `deep_obs` 的**死重观测** ⇒ 兄弟叶真实输出 `a.dout` / `b.dout`
+      + `REQUIRE(inline_obs.size() == 4)` 钉条数（防再 slip）
+- [x] F7 `tasks.md` 的 prelude 证据引用改为**可复算**形态（见 §T1 1.4）
+- [x] F8 用法指南 **P7 痛点行**同步 ⇒ **交 T3-⑥ D1**（本 change **不改**该文档）—— 已登记
+- [x] F9 feature 文件的 `O` 措辞 3 处订正 + 残留 1b 指针 + P8 归位条件 —— **planner 已改**（本 change 不动）
+- [x] F10 **修 2 个红灯** + **反向对照**：
+      ① 口径落地 = `ObsMode`（`FullCoverage` / `PublicSubset`）+ `ObsPlan.exempt` 显式豁免清单
+      （机械载体 · MUST NOT 仅注释）+ 六段断言 `check_observation_surface`
+      ⇒ ⇒ **红灯消解**：9 用例 / **414 断言**全绿（原 2 红 = `deep` 的 `inline_obs.size()` 1≠4 ·
+      `mid` 未声明成层导致 `RespectDeclarations` 零增量）
+      ② **反向变异对照**（防「删掉盲区断言」式为绿而绿 · 每条均**先确认能编译** · 还原后重建复绿）：
+      | 变异 | 形态 | 结果 |
+      |---|---|---|
+      | **M-F10-2a** | `plan_for(EqDeepTop)` 的 `b` 拨回固定 `ForceLayer`（= 单粒度被当成跨粒度） | ✅ **转红**（`inline_obs.size()` 1≠4） |
+      | **M-F10-2b** | 删掉 `exempt` 登记（可见但未观测者不再进豁免清单） | ✅ **转红**（断言 ④ 盲区侧：`mid.dout` 可见却既未观测也未豁免） |
+      | **M-F10-2c** | 跨粒度下 `mode` 谎报 `FullCoverage` | ✅ **转红**（断言 ⑥：`exempt` 非空） |
+      | **M-F10-2d** | 手写 `all_ch_outs` 漏掉 `leaf.dout`（同时不进 `O`、不进 `exempt`） | ✅ **转红**（断言 ⑤ **独立锚**：`top_leaf_unnamed_output` 未被 `O ∪ exempt` 覆盖） |
+      | **M-F10-2e** | **叠加**：删掉 `REQUIRE(inline_obs.size() == 4)` + 2a | ⚠️ **恒绿** ⇒ **如实登记为无效变异**：它证明的是「钉条数的断言本身承重」（删了它 2a 就逃逸）⇒ 不是判别力缺口 |
+      ⇒ ⇒ 还原后 `All tests passed (414 assertions in 9 test cases)`
+- [x] F11 **`[deep]` 诚实性缺口 ⇒ 用 DUT 改造解决**（不只订正注释）
+      ⇒ ⇒ `EqDeepMid` 加 `CH_HIERARCHY_LAYER("eq_deep_mid")` ⇒ `RespectDeclarations` 成为
+      **唯一未覆盖的「中间拓扑」**（原三者均无声明 ⇒ `RespectDeclarations` ≡ `ForceInline` ⇒ 零增量）
+- [x] F12 **断言 ⑤ 的独立锚**（打破「`O` 清单与 DUT 清单同时漏项 ⇒ 恒绿」）
+      ⇒ ⇒ 从**映射表**（emitter 产物）导出「双顶层可见」的 output 候选
+      （排除 `default_clock` / `default_reset` 与顶层 `ch_in`）⇒ MUST 被 `O ∪ exempt` 覆盖
+      ⇒ ⇒ ⚠️ **不做顶层端口计数校验**（planner 裁决）：扁平侧顶层端口 = **所有** `ch_in` +
+      **所有** `ch_out` + clk/rst ⇒ 只列顶层 `in` 的清单**算不出** ⇒ 会**假红**
+      ⇒ ⇒ 独立锚由**逐项点名**承担（不依赖计数）
+- [x] F13 **`[granularity]` 的第三粒度** ⇒ 三粒度矩阵
+      ⇒ ⇒ deep DUT 补 `RespectDeclarations` 格（**F11 先行**才有意义）· 两层/bundle 的
+      `RespectDeclarations` ≡ `ForceLayer` ⇒ **零增量** ⇒ 刻意不加（不是遗漏）
+- [ ] F14 **台账**（architect 域）：残留 **13**（backend 改造工作量重估 ~7–9 天）已随 T3-005 实施完成
+      而**失效** ⇒ MUST 标 ✅ 关闭；残留 **11** 与 feature §334 的 P6/P8 表**重复** ⇒ 去重（权威归台账）
+      ⇒ ⚠️ **本 change 不动**（architect 域 · 须切 architect 或代记账 · planner 已在 roadmap 登记）
+
 ## 验证命令
 
 ```bash

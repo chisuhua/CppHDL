@@ -44,9 +44,15 @@ struct DrivenInput {
 };
 
 /// 一个**被观测**的信号（观测集合 `O` 的元素）。
+///
+/// ⚠️ `node_id` = 该信号的 ctx 私有编号 ⇒ ⇒ 调用方 MUST 填（`port.impl()->id()`）
+///    ⇒ ⇒ 判据才能把「被观测的信号」与**映射表**对起来（delta 的 Scenario：
+///    「被观测信号 MUST 出现在映射表里」+「不在观测面内的 `ch_out` MUST 出现在映射表里
+///    且 `hier_top_port_name` 为空」⇒ ⇒ 两侧都要机械断言 ⇒ 缺一侧 = 契约条目无载体）。
 struct Observation {
     std::string name;
     std::function<std::uint64_t(ch::Simulator &)> read;
+    std::uint32_t node_id = 0;
 };
 
 /// 逐拍观测轨迹：`trace[cycle][observation_index]`。
