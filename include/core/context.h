@@ -37,6 +37,24 @@ extern thread_local context *ctx_curr_;
 /// ⇒ 由 `Component::node_owner()` 查询。
 bool node_ownership_suppressed();
 
+/// **节点名唯一性策略**（**opt-in** · 默认宽松 · `core-ctx-node-name-uniqueness`）。
+///
+/// 为什么需要它：解释器侧**不改名**（同名节点共存），而 Verilog codegen 会**自动加
+/// `_N` 后缀** ⇒ ⇒ 两后端看到**不同的节点名** ⇒ ⇒ 「按名匹配观测点」的契约在两后端
+/// **不等价** ⇒ ⇒ 解释器侧会**静默采到错的那个节点**（读到貌似合理的错值 ⇒ 假绿）。
+///
+/// ⚠️ **默认 MUST 是宽松**（`kAllowDuplicates`）：仓内 `include/` 有 **641** 个 `ch_in`
+///    声明**零**显式名字（`.rddf/roadmap` 的实测）⇒ ⇒ 默认开启会让全仓大面积报错
+///    ⇒ ⇒ 那是**规格预期**，不是缺陷 ⇒ ⇒ 检测 MUST 是 opt-in。
+/// ⚠️ ctx MUST **不改名**：冲突只由「放行」或「报错」两种方式处理（自动改名会让不同
+///    后端看到不同名字 ⇒ 契约按名匹配失效）。
+enum class NodeNamePolicy {
+    /// 默认：同名节点可共存 ⇒ **既有行为零变化**
+    kAllowDuplicates = 0,
+    /// 严格：同名节点 MUST 在**创建点** fail-fast（抛异常中止）
+    kRejectDuplicates = 1,
+};
+
 struct NodeOwnershipSuppression {
     NodeOwnershipSuppression();
     ~NodeOwnershipSuppression();
@@ -136,6 +154,49 @@ public:
     const std::string &name() const { return name_; }
     context *parent() const { return parent_; }
 
+    // ── 节点名唯一性策略（**opt-in** · `core-ctx-node-name-uniqueness`）──────────
+    //
+    // ⚠️ **唯一判定实现**在本类的 `check_node_name_unique()` ⇒ ⇒ `create_node` 只调用它
+    //    （MUST NOT 另立第二份判定）。
+    // ⚠️ 默认 = `kAllowDuplicates` ⇒ ⇒ 既有代码行为**零变化**（含产物逐字节不变）。
+
+    /// 当前策略（默认 `kAllowDuplicates`）
+    NodeNamePolicy node_name_policy() const { return node_name_policy_; }
+
+    /// 切策略（同 ctx 上可随时切换；重复调用幂等）。
+    ///
+    /// ⚠️ **切到 `kRejectDuplicates` 时 MUST 先把既有节点的名字「播种」进登记表**
+    ///    （见 `context.cpp`）—— 否则「先宽松建 DUT、后开严格保护观测点」这个用法下，
+    ///    对**已存在**的名字**零判别力** ⇒ 保护是**幻觉** ⇒ 恰好回到本 feature 要治的
+    ///    「按名采到错的节点 ⇒ 假绿」。
+    /// ⚠️ **适用边界**（用户面须知道）：严格模式判的是 **ctx 内全部节点**（含框架内部
+    ///    派生节点）⇒ ⇒ ① `_` 前缀是**框架保留**命名空间（`create_input` / `create_output`
+    ///    会额外建 `"_" + name` 的 proxy）⇒ 用户自己的 `"a"` 与 `"_a"` 会被判重；
+    ///    ② 内部默认名（`ch_reg` 的 `reg` / `mux` 的默认名等）会让「未经显式命名」的
+    ///    普通设计必然报错 ⇒ 该模式适用于**全部节点都显式命名**的设计与框架自测。
+    void set_node_name_policy(NodeNamePolicy policy);
+
+    /// 静态析构期**降级路径**的违规记录（正常路径**抛异常** ⇒ 不写这里）。
+    ///
+    /// 为什么需要：所有 `CHFATAL_EXCEPTION` 一类宏都有 `in_static_destruction()` 守卫
+    /// ⇒ ⇒ 静态析构期**抛异常**会 `std::terminate` ⇒ ⇒ 必须降级为「记录 + 失败结果」
+    /// （否则「off 不抛」与「on 抛」之间存在**未定义带**）。
+    const std::vector<std::string> &duplicate_name_violations() const {
+        return duplicate_name_violations_;
+    }
+
+    /// **节点名唯一性检查**（唯一判定实现 · 由 `create_node` 在构造**成功之后**调用）。
+    ///
+    /// 返回 `true` = 通过（名字已登记）；`false` = **降级失败**
+    /// （仅静态析构期：记录到 `duplicate_name_violations()` 且**不**登记 ⇒ 调用方 MUST
+    /// **放弃**该节点）。
+    ///
+    /// ⚠️ **非**静态析构期命中冲突 ⇒ **抛 `std::runtime_error`**（fail-fast）
+    ///    ⇒ ⇒ 调用方（`create_node`）MUST 把本调用放在自己的 `try` **之外** ——
+    ///    否则它的 `catch (const std::exception &)` 会**吞掉**本异常 ⇒ 退化成静默 `nullptr`。
+    bool check_node_name_unique(const std::string &name,
+                               const std::source_location &sloc);
+
     // 默认时钟相关方法
     void set_default_clock(core::clockimpl *clk);
     core::clockimpl *get_default_clock() const;
@@ -166,6 +227,13 @@ private:
     std::string name_;
     context *parent_ = nullptr;
     bool destructing_ = false; // 标记是否正在析构
+
+    // 节点名唯一性（**仅在 `kRejectDuplicates` 下维护** ⇒ 默认路径**零开销**）
+    NodeNamePolicy node_name_policy_ = NodeNamePolicy::kAllowDuplicates;
+    /// 已登记的名字（值 = 出现次数；`> 1` 在 strict 下不可能出现 —— 冲突当场失败）
+    std::unordered_map<std::string, uint32_t> node_name_counts_;
+    /// 静态析构期降级路径的违规记录（正常路径为空）
+    std::vector<std::string> duplicate_name_violations_;
 
     // ID溢出保护
     static constexpr uint32_t MAX_NODE_ID = UINT32_MAX - 1000;

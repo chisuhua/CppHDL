@@ -309,6 +309,13 @@ template <typename T, typename Dir> struct ch_width_impl<port<T, Dir>, void> {
 };
 
 // --- 宏定义 ---
+//
+// ⚠️ `io()` MUST 同时有**非 const** 与 **const** 两个重载：
+//    · 非 const 对象 ⇒ 仍解析到**非 const** 重载（返回可变引用 ⇒ 既有代码零变化）；
+//    · const 对象 / const 引用 ⇒ 解析到 **const** 重载 ⇒ 只读访问
+//      （`impl()` / `name()` / `is_valid()` 全部可读）⇒ ⇒ 下游不必为「在 const 接口里
+//      读 IO」而放弃 const 正确性。
+//    · `io_storage_` 是 `char[]` ⇒ 加 const 重载是**纯新增**（零破坏）。
 #define __io(...)                                                              \
     struct io_type {                                                           \
         __VA_ARGS__;                                                           \
@@ -316,6 +323,9 @@ template <typename T, typename Dir> struct ch_width_impl<port<T, Dir>, void> {
     alignas(io_type) char io_storage_[sizeof(io_type)];                        \
     [[nodiscard]] io_type &io() {                                              \
         return *reinterpret_cast<io_type *>(io_storage_);                      \
+    }                                                                          \
+    [[nodiscard]] const io_type &io() const {                                  \
+        return *reinterpret_cast<const io_type *>(io_storage_);                \
     }
 
 namespace core {

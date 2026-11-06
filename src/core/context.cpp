@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stack>
+#include <stdexcept>
 #include <unordered_set>
 
 namespace ch {
@@ -190,6 +191,62 @@ lnodeimpl *context::get_node_by_id(uint32_t id) const {
     return nullptr;
 }
 
+void context::set_node_name_policy(NodeNamePolicy policy) {
+    if (policy == node_name_policy_) {
+        return;
+    }
+    node_name_policy_ = policy;
+
+    if (policy != NodeNamePolicy::kRejectDuplicates) {
+        // 切回宽松 ⇒ 清空登记表（下次开启时重新播种）
+        // ⚠️ 同时清空降级期记录 ⇒ 语义 =「记录的生命周期 = 一次严格期」
+        //    （用户面文档 MUST NOT 承诺「记录跨策略切换持久」）
+        node_name_counts_.clear();
+        duplicate_name_violations_.clear();
+        return;
+    }
+
+    // **播种**：把**既有**节点的名字纳入登记表 ⇒ ⇒ 否则「先宽松建 DUT、后开严格」这个
+    // 用法下，对**已存在**的名字零判别力 ⇒ 保护是幻觉（恰是本 feature 要治的假绿）。
+    // ⇒ 已重名者计数 > 1 ⇒ 后续任何**新的**同名创建都会命中。
+    for (const auto &holder : node_storage_) {
+        if (holder) {
+            ++node_name_counts_[holder->name()];
+        }
+    }
+}
+
+bool context::check_node_name_unique(const std::string &name,
+                                     const std::source_location &sloc) {
+    if (node_name_policy_ != NodeNamePolicy::kRejectDuplicates) {
+        return true; // 宽松：零开销直接放行（登记表只在严格期有效）
+    }
+
+    if (node_name_counts_.find(name) == node_name_counts_.end()) {
+        node_name_counts_.emplace(name, 1u);
+        return true;
+    }
+
+    // ⚠️ 局部变量 MUST NOT 命名为 `msg` —— `CHWARN` / `CHFATAL_EXCEPTION` 等宏内部
+    //    声明了 `std::string msg` ⇒ 同名会绑定到那个**尚未初始化**的变量
+    //    ⇒ 实测 SIGSEGV / 打印 `(null)` / 乱码。
+    const std::string violation_text = ch::detail::printf_format(
+        "duplicate node name '%s' in context '%s' "
+        "(node-name uniqueness policy = kRejectDuplicates) at %s:%u",
+        name.c_str(), name_.c_str(), sloc.file_name(),
+        static_cast<unsigned>(sloc.line()));
+
+    if (ch::detail::in_static_destruction()) {
+        // **降级路径**（已定义行为）：静态析构期抛异常会 std::terminate
+        // （既有 `CHFATAL_*` 宏在该期一律不抛）⇒ ⇒ 记录 violation + 让**创建失败**
+        // ⇒ ⇒ 调用方（`create_node`）据此放弃该节点 ⇒ 不会出现「既没抛也没拒」的未定义带。
+        duplicate_name_violations_.push_back(name);
+        return false;
+    }
+
+    throw std::runtime_error(violation_text);
+}
+
 litimpl *context::create_literal(const sdata_type &value,
                                  const std::string &name,
                                  const std::source_location &sloc) {
@@ -233,6 +290,11 @@ outputimpl *context::create_output(uint32_t size, const std::string &name,
 
     sdata_type init_val(0, size);
     auto *proxy = this->create_node<proxyimpl>(size, "_" + name, sloc);
+    // ⚠️ **已接受的边界**（不是缺陷 · MUST NOT 当成 bug「修」出回归）：静态析构期的
+    //    降级路径上，若 `outputimpl` 因重名被拒（返回 nullptr），而上面那条 proxy 已
+    //    成功入表 ⇒ ctx 里会留下一个**无消费者的 stray proxy**。与 `create_input` 的
+    //    「input 失败则根本不建 proxy」**不对称**，但该场景极窄（静态析构期建输出端口）
+    //    ⇒ 如实登记，不在本处引入清理逻辑（清理会引入「半删节点」的新失败面）。
     auto *output_node =
         this->create_node<outputimpl>(size, proxy, init_val, name, sloc);
 

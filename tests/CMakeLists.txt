@@ -1075,6 +1075,14 @@ add_catch_test(test_component_ownership test_component_ownership.cpp)
 # active parent (declaration decoupled from assembly point)
 add_catch_test(test_component_granularity test_component_granularity.cpp)
 
+# io() const + opt-in node-name uniqueness (component-io-const-and-node-name-policy-2026-11):
+# const contexts can read impl()/name()/is_valid(); ctx node-name policy defaults to
+# kAllowDuplicates (zero behaviour change) and kRejectDuplicates fails fast at the
+# creation point (with a dedicated duplicate-name DUT, plus the static-destruction
+# degradation path).
+add_catch_test(test_component_io_const_and_node_name_policy
+    test_component_io_const_and_node_name_policy.cpp)
+
 # hierarchy analysis (hierarchical RTL T3-②): module list / port table / connection
 # table + three pre-checks. Golden files live in tests/golden/hierarchy/ and are
 # compared byte-for-byte (set UPDATE_GOLDEN=1 to regenerate, then verify by hand).

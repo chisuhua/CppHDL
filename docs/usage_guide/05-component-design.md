@@ -48,7 +48,7 @@ public:
 
 ### 1.2 `__io` 与 `create_ports()` 是配套的
 
-`__io(...)`（`include/core/io.h:312`）只做两件事：
+`__io(...)`（`include/core/io.h:319`）只做两件事：
 
 1. 生成内嵌 `struct io_type { ... };`
 2. 生成 `io()` 访问器，返回 `io_storage_` 上的对象
@@ -58,11 +58,45 @@ public:
 
 > 组件没有端口时，`create_ports()` 写成空函数体即可（成员变量做接口的场景，见 §4）。
 
+**`io()` 有两个重载**（非 const / const）：
+
+```cpp
+[[nodiscard]] io_type &io();                  // 非 const 对象 → 可变引用（既有行为）
+[[nodiscard]] const io_type &io() const;      // const 对象 → 只读引用
+```
+
+⇒ ⇒ **const 上下文可以读 IO**：在 `const` 成员函数 / `const` 引用上，
+`io().port.impl()` / `.name()` / `.is_valid()` 全部可读
+（⇒ 不必为了「在 const 接口里读 IO」而放弃 const 正确性）。
+
+⚠️ 两个重载**不改变**非 const 代码的行为（重载决议仍选非 const 版本）⇒ 纯新增。
+
 ### 1.3 端口节点的名字
 
 `__io` 里的字段是**默认构造**的 `ch_in/ch_out`，因此节点名恒为
 `unnamed_input` / `unnamed_output`（`include/core/io.h:48-68, 141-158`）。
 这也是为什么生成的 Verilog 端口名像 `top_unnamed_input_3` —— 见 §5。
+
+⚠️ **同名节点默认是合法的**（解释器侧**不改名**，而 Verilog codegen 会**自动加 `_N` 后缀**
+⇒ ⇒ 两后端看到的节点名**可能不同**）。要让「同名」在**创建点**就报错，**显式开启**策略：
+
+```cpp
+ctx.set_node_name_policy(ch::core::NodeNamePolicy::kRejectDuplicates);  // 默认 kAllowDuplicates
+```
+
+⇒ ⇒ 开启后同名节点在创建点**抛异常**（错误信息含冲突的节点名）；**默认宽松**
+⇒ ⇒ 既有代码与产物**零变化**。⚠️ 策略是**每 ctx** 的，且 ctx MUST **不改名**
+（冲突只由「放行」或「报错」两种方式处理）。
+
+⚠️ **开启时机**：切到严格的那一刻，ctx MUST 把**既有**节点的名字一并纳入登记
+⇒ ⇒ 「先宽松建完 DUT、再开严格」也**同样受保护**（不是只保护开启之后新建的）
+
+⚠️ **适用边界**（严格模式判的是 **ctx 内全部节点**，含框架内部派生节点）：
+
+- `_` 前缀是**框架保留**命名空间 —— `create_input` / `create_output` 会额外建
+  `"_" + name` 的 proxy ⇒ 你自己的 `"a"` 与 `"_a"` **会被判重**；
+- 内部默认名会让「**未经显式命名**」的普通设计必然报错（`ch_reg` 默认名 `reg`、
+  mux 的默认名等）⇒ ⇒ 严格模式适用于**全部节点都显式命名**的设计与框架自测。
 
 ---
 
