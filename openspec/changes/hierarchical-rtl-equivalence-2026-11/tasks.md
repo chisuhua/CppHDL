@@ -43,11 +43,18 @@
       ⇒ ⇒ **B4a 加固**：`[hier][negative]`（编译失败投毒）= 端口集合取自**真实产物**（前置校验必过）
       + 产物换成**语法错误**的 Verilog ⇒ MUST 返回 `VerilatorError` 且 `code == VerilatorCompile`
       + 端口表**不得半初始化**（`port_access_snapshot()` 空 · `clock_node_id() == UINT32_MAX`）
-      ⏳ **顶层名 fail-early：前提不可复现 ⇒ 待 architect 裁决**（**不做**实现）——
-      见 `.rddf/reviews/hierarchical-rtl-equivalence-2026-11-discovery.md`：实测根 module 名 ≠ `top`
-      也能被本入口正常仿真（值判据 0x2A 通过），编译期失败的真因是**输入文件名**
-      （Verilator prefix = 文件名主干 ⇒ 入口复制成 `top.v` 已天然满足）⇒ ⇒
-      按现文实现会**拒绝本可工作的产物**且判据无失败模式支撑（`design_drift`，路由 architect）
+      ✅ **顶层名条款已按 ADR-058 v2.16 订正**（用户 2026-11-06 拍板「订正为文件名」）：约束对象 =
+      **编译输入文件名**（主干 MUST 是 `top.v`），**不是**顶层 module 名 ⇒ ⇒
+      「顶层 module 名 MUST NOT 影响可消费性」（`top_module_name = "my_top"` 照常可仿真）⇒ ⇒
+      **不再做**「按 module 名 fail-early」（该判据无失败模式支撑 · 会拒绝本可工作的产物）⇒ ⇒
+      落地形态 = 入口**复制**外部产物到 `<work_dir>/top.v` 再编译（**已落地**）+ 编译命令
+      MUST NOT 传 `--prefix` / `--top-module`（实测 `--top-module my_top` ⇒ `Vmy_top.h` ⇒
+      `Vtop.h` 消失）+ 缓存 key 只哈希**内容** ⇒ 复制不改变 key ⇒ ⇒
+      判据：`[hier][filename]`（调用方路径主干 ≠ `top` ⇒ 仍 MUST 能编译 + work_dir 里的编译输入名
+      MUST 是 `top.v` ⇒ **变异**：去掉复制 ⇒ 转红）+ `[hier][topname]`（`my_top` 产物 MUST 可消费，
+      值判据 0x2A / 0x5C ⇒ **反例**：按 module 名拒绝 ⇒ 转红）⇒ ⇒
+      证据与裁决：`.rddf/reviews/hierarchical-rtl-equivalence-2026-11-discovery.md` ·
+      `.rddf/reviews/ADR-058-v2.16.md`
 
 ## T2 映射表与观测集
 

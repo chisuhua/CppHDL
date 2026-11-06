@@ -1016,3 +1016,118 @@ TEST_CASE("VerilatorBackend - two backends use separate work dirs (E2 isolation)
     sim_a.tick();
     REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(io_a.dout)) == 0x5Cu);
 }
+
+TEST_CASE("VerilatorBackend - external Verilog is compiled as top.v whatever the caller's file name",
+          "[verilator][backend][hier][filename]") {
+    // ADR-058 **v2.16** §2.3：约束对象 = **编译输入文件名**（主干 MUST 是 `top`），
+    //   **不是**「顶层 module 名」⇒ ⇒ 入口 MUST 把外部产物**复制成 `<work_dir>/top.v`**。
+    // ⚠️ **变异判据**：把「复制」去掉（直接用调用方给的路径编译）⇒ ⇒ 生成 `Vhier.h`
+    //   ⇒ `#include "Vtop.h"` 缺 ⇒ 编译失败 ⇒ **本用例转红**。
+    //   ⇒ ⇒ 夹具前置：调用方路径的**主干名 MUST ≠ `top`**（否则「绕过复制」是 no-op ⇒ 恒绿）。
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH; filename-invariant test skipped");
+        return;
+    }
+    const std::string vdir = make_temp_dir("_hier_fn_v");
+    const std::string wdir = make_temp_dir("_hier_fn_b");
+    REQUIRE_FALSE(vdir.empty());
+    REQUIRE_FALSE(wdir.empty());
+
+    ch::ch_device<BeTop> dev;
+    // ⚠️ 主干名 = `hier`（≠ `top`）—— 变异的前置条件
+    const std::string vpath = vdir + "/hier.v";
+    std::remove(vpath.c_str());
+    auto emitted = ch::toVerilogHierarchical(vpath, dev.instance());
+    INFO("emit error: " << emitted.error);
+    REQUIRE(emitted.ok);
+
+    const auto ports = ch::backend_port_set(emitted, "top");
+    REQUIRE_FALSE(ports.empty());
+
+    auto backend = std::make_unique<VerilatorBackend>(wdir);
+    ch::data_map_t scratch;
+    auto init = backend->try_initialize_with_verilog(vpath, ports, scratch);
+    INFO("init error: " << (init.has_value() ? std::string("(none)") : init.error().message));
+    // ① MUST 成功（复制成 `top.v` ⇒ 编译输入名对了 ⇒ `Vtop.h` 存在）
+    REQUIRE(init.has_value());
+
+    // ② 「复制成 top.v」的可观测证据（变异点就在这里 ⇒ 直接盯住它）
+    auto read_text = [](const std::string &path) {
+        std::ifstream in(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    };
+    REQUIRE_FALSE(read_text(wdir + "/top.v").empty());
+    REQUIRE(read_text(wdir + "/top.v") == read_text(vpath));
+
+    // ③ 值判据（手推）：din → reg → dout（1 拍）
+    ch::Simulator sim(dev.context());
+    sim.set_backend(std::move(backend));
+    auto &io = dev.instance().io();
+    sim.set_input_value(io.din, 0x2Au);
+    sim.tick();
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.dout)) == 0x2Au);
+}
+
+TEST_CASE("VerilatorBackend - a product with a non-default top module name is still consumable",
+          "[verilator][backend][hier][topname]") {
+    // ADR-058 **v2.16** §2.3：「**顶层 module 名 MUST NOT 影响可消费性**」——
+    //   `top_module_name = "my_top"` 的产物 MUST 能被 backend 消费（值判据 MUST 通过）。
+    // ⚠️ **反例判据**：若入口按 module 名拒绝（v2.13 的 fail-early 形态复活）⇒ ⇒ 本用例转红。
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH; top-name test skipped");
+        return;
+    }
+    const std::string vdir = make_temp_dir("_hier_tn_v");
+    const std::string wdir = make_temp_dir("_hier_tn_b");
+    REQUIRE_FALSE(vdir.empty());
+    REQUIRE_FALSE(wdir.empty());
+
+    ch::ch_device<BeTop> dev;
+    const std::string vpath = vdir + "/hier.v";
+    std::remove(vpath.c_str());
+
+    ch::HierarchyEmitOptions opts;
+    opts.top_module_name = "my_top";
+    auto emitted = ch::toVerilogHierarchical(vpath, dev.instance(), opts);
+    INFO("emit error: " << emitted.error);
+    REQUIRE(emitted.ok);
+    {
+        std::ifstream in(vpath, std::ios::binary);
+        std::string source((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+        REQUIRE(source.find("module my_top") != std::string::npos);
+    }
+
+    // 端口集合按**实际的根 module 名**派生（`my_top`）
+    const auto ports = ch::backend_port_set(emitted, "my_top");
+    REQUIRE_FALSE(ports.empty());
+    int clocks = 0;
+    int resets = 0;
+    for (const auto &p : ports) {
+        clocks += p.is_clock ? 1 : 0;
+        resets += p.is_reset ? 1 : 0;
+    }
+    REQUIRE(clocks == 1);
+    REQUIRE(resets == 1);
+
+    auto backend = std::make_unique<VerilatorBackend>(wdir);
+    ch::data_map_t scratch;
+    auto init = backend->try_initialize_with_verilog(vpath, ports, scratch);
+    INFO("init error: " << (init.has_value() ? std::string("(none)") : init.error().message));
+    REQUIRE(init.has_value());
+
+    ch::Simulator sim(dev.context());
+    sim.set_backend(std::move(backend));
+    auto &io = dev.instance().io();
+    sim.set_input_value(io.din, 0x2Au);
+    sim.tick();
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.dout)) == 0x2Au);
+    // 换值再确认一次（排除「恒 0 也能过」的假绿）
+    sim.set_input_value(io.din, 0x5Cu);
+    sim.tick();
+    sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.dout)) == 0x5Cu);
+}
