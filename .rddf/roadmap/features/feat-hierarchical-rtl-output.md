@@ -95,7 +95,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-④** | `hierarchical-rtl-emission-2026-11` | ✅ **已归档**（2026-11-05 · **13/13 批**：B1 · B2a · B2b-1..6 · T0h · B3a · B3b · B3c · B4 ⇒ 多 module + 实例化 + 顶层端口=扁平 + clock/reset 分开判 + 隐式端口行 1/行 2 + F3 + 第三轴 + 兄弟边 + 宽度守卫 + 冒泡（G3）/`UndrivenPolicy` + 向上 pass-through + 产物级护栏 R1–R7 + 探针矩阵 36 格） | `toVerilogHierarchical` · `tests/test_hierarchy_verilog.cpp`（**28 用例 / 495 断言**）· `scripts/verify_hierarchical_rtl.sh`（R1–R7 + `--self-test` 9/9）· 全 inline ⇒ 与扁平逐字节相同 · 全部层次化产物 `verilator --lint-only` exit 0 · 扁平外部基线 3 设计 `cmp` 全 0 |
 | T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ✅ **已归档**（2026-11-06 · 归档名 `2026-11-06-hierarchical-rtl-equivalence-2026-11`）⇒ ⇒ 14 项待办（F1–F13 已收口 · **F14 台账已代记账**） | 9 用例 / **414 断言** · 映射表 + `try_initialize_with_verilog` · 护栏 R1–R8 + P8 守卫 · 锚点 250/76/66/289 · 变异对照 4 转红 + 1 无效（已登记） |
 | T3-⑥ | `hierarchical-rtl-docs-2026-11` | ✅ **已归档**（2026-11-06 · 归档名 `2026-11-06-hierarchical-rtl-docs-2026-11`）⇒ ⇒ **7/7 + F8** | 判据**常驻**（5 个 bash 块 · 归档后照跑即可复算）· 变异对照 M1–M3 + grep 类负向对照 ①/②/④ · 文档示例**抽取即编译** · 用法指南 §5 全文改写 + 台账转正 + `AGENTS.md` 补入口 |
-| T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
+| T2b | `component-io-const-and-node-name-policy-2026-11` | ✅ **已归档**（2026-11-06 · 归档名 `2026-11-06-component-io-const-and-node-name-policy-2026-11`）⇒ ⇒ 9/9 | `io() const`（2 条 `static_assert`）· `NodeNamePolicy` 双态 · **11 用例 / 41 断言** · 变异 **7/7 全红** · 默认策略下 3 个产物 `cmp` **逐字节相同** · 新建 2 个主 spec（均 strict valid） |
 
 ### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **13 个批次 · 逐个 commit**）
 
@@ -275,8 +275,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 
 | 批 | 内容 | 判据（含负向对照） |
 |---|---|---|
-| **U1** | `io() const`（`const io_type& io() const`） | 编译期探针：`const` 成员函数内可读 `impl()` / `name()` / `is_valid()`；**破坏性对照** = 移除 const 重载 ⇒ 探针**编译失败** |
-| **U2** | `context` 策略枚举（`kAllowDuplicates` 默认 / `kRejectDuplicates`）+ 建点检测 + 两层护栏 | ① on ⇒ **抛**（不静默加后缀）+ 错误信息含**冲突的节点名**；② 默认 off ⇒ 不抛 **且产物 `cmp` 0**；③ **判据 MUST 用专门构造的重名 DUT**（仓内 `include/` 641 个 `ch_in` 零显式名字 ⇒ 拿现有设计当 DUT，全仓转红是规格预期）；④ ⚠️ **诊断变量禁名 `msg`**（`CHERROR`/`CHREQUIRE`/`CHFATAL_*` 宏内部声明 `std::string msg` ⇒ 会绑定到未初始化变量 ⇒ 实测 SIGSEGV / 乱码）；⑤ 「on 抛」在**静态析构期**结构上失效（所有宏都有 `in_static_destruction()` 守卫）⇒ MUST 明确定义降级行为（记录 + 失败结果），否则「off 不抛」与「on 抛」之间有未定义带 |
+| **U1** ✅ | `io() const`（`const io_type& io() const`） | 编译期探针：`const` 成员函数内可读 `impl()` / `name()` / `is_valid()`；**破坏性对照** = 移除 const 重载 ⇒ 探针**编译失败** ⇒ ⇒ ✅ 实测：2 条 `static_assert` + 变异 **M-1**（删重载 ⇒ 目标编译失败） |
+| **U2** ✅ | `context` 策略枚举（`kAllowDuplicates` 默认 / `kRejectDuplicates`）+ 建点检测 + 两层护栏 ⇒ ⇒ ✅ 实测：检查挂在**节点创建漏斗** `create_node<T>`（**try 外**）· **切严格时播种既有节点**（否则「先宽松建后开严格」是幻觉）| ① on ⇒ **抛**（不静默加后缀）+ 错误信息含**冲突的节点名**；② 默认 off ⇒ 不抛 **且产物 `cmp` 0**；③ **判据 MUST 用专门构造的重名 DUT**（仓内 `include/` 641 个 `ch_in` 零显式名字 ⇒ 拿现有设计当 DUT，全仓转红是规格预期）；④ ⚠️ **诊断变量禁名 `msg`**（`CHERROR`/`CHREQUIRE`/`CHFATAL_*` 宏内部声明 `std::string msg` ⇒ 会绑定到未初始化变量 ⇒ 实测 SIGSEGV / 乱码）；⑤ 「on 抛」在**静态析构期**结构上失效（所有宏都有 `in_static_destruction()` 守卫）⇒ MUST 明确定义降级行为（记录 + 失败结果），否则「off 不抛」与「on 抛」之间有未定义带 |
 | **R** | 零回归 + 锚点 | `ctest -LE perf` / samples / examples 全绿 · `verify_test_counts.sh` 两条锚点同步 |
 
 ⚠️ **U2 的错误模型分层（写在 proposal 里，别留给实施者即兴）**：建图期 fail-fast（抛）与
@@ -287,7 +287,7 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 |---|---|---|---|---|---|---|
 | **S0** | ✅ **spike（已完成 2026-11-02）** | `verilator --json-only` 能否提 `(parent_module, inst_name, module_name)` ⇒ **能**（`modulesp` 列表 + CELL 的 `modp` 查表）⇒ 已固化 `scripts/lib/verilog_tree_extract.py` + `tests/fixtures/hierarchical_tree_extract/` + `scripts/verify_hierarchical_tree_extract.sh`（含负向对照）+ CI 挂载 | 无 | 可机械比对的 module 树提取器 | 3 层**手写** SV 上提取成功 ✅ | ~0.5 天（已耗） |
 | **T2a** | `header-odr-inline-fix-2026-11` | `include/module.h:13` 的 `build_hierarchical_name` 加 `inline`（⇒ 它是 `ch.hpp` 闭包内**唯一**非 inline 自由函数） | 无 | ODR 安全的公共头 + **multi-source 链接 fixture** | 两个 TU 同时 inclusion 后**链接成功**（无重复定义）· 既有单 TU 产物**零变化** | **1 词 + 1 fixture** |
-| **T2b** | `component-io-const-and-node-name-policy-2026-11` | **U-2**（`io() const`）+ **U-1**（opt-in 节点名唯一性） | **无（与主线并行）** | `io() const` · `context::node_name_policy` | `const` 成员函数可读 `io()`；policy=**off**（默认）时产物**逐字节不变**；policy=on 时重名**被拒** | 小 |
+| **T2b** ✅ | `component-io-const-and-node-name-policy-2026-11` | **U-2**（`io() const`）+ **U-1**（opt-in 节点名唯一性） | **无（与主线并行）** | `io() const` · `context::node_name_policy` | `const` 成员函数可读 `io()`；policy=**off**（默认）时产物**逐字节不变**；policy=on 时重名**被拒** | 小 |
 | **T3-①a** ✅ | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**：`build_hierarchical_name` 改用 `name()` · `local_name_` / `module_type_name()` · **合并宏** `CH_HIERARCHY_LAYER("name")`（= 声明 + 命名一体）· 命名权威仍是 ctx 级全局表 | **T2a** | 归属**命名**正确（无重复前缀）· 类级缺名**编译期不可表达** | 深度 ≥3 实例路径**无重复前缀**；**零语义变更**（文本**会变** ⇒ 变化面逐条登记） | 小 |
 | **T3-①b** ✅ | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**：`node_owner()` + 构造作用域栈（RAII 配对）· `ch_module` parent · **build ctx 显式来源 + 跨 ctx 守卫** · 组件树登记双向完整 | **T3-①a** | 归属正确 · 组件树完整 | ADR-059 §5 全部判据 + **归属↔语义分流回归**（`simulator_init.cpp:95` 的指令表归属逐项一致 · `io.h` 4 处方向守卫**改前改后均无触发**） | 中（~1.5 天） |
 | **T3-①c** ✅ | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**：`CH_HIERARCHY_LAYER("name")` 落地 · `ch_layer<T>` / `ch_inline<T>`（**不动 `ch_module` 签名**）· `is_layer()` · **无 active parent 处的装配点** | T3-①b | 粒度可声明 · 装配点不受限 | ADR-061 §5 全部判据（类级 × 实例级三组合 + 无 parent 装配仍成层） | 中（~1.5 天） |
@@ -359,7 +359,7 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 | # | change | 范围 | 前置 | capability delta（**= 该 change 自己的 delta 文件里的 Requirement**，带标题） | 护栏交付物 | 验收 |
 |---|---|---|---|---|---|---|
 | **T2a** | `header-odr-inline-fix-2026-11` | **U-4 only**：`module.h:13` 加 `inline` | 无 | `core-header-odr-safety`（**ADDED ×1**） | **multi-source 链接 fixture**（两个 TU 同时 inclusion ⇒ 链接） | 链接成功 + 既有产物零变化 |
-| **T2b** | `component-io-const-and-node-name-policy-2026-11` | **U-2** + **U-1** | 无 | `component-io-const-access`（**ADDED ×1**）· `core-ctx-node-name-uniqueness`（**ADDED ×1**） | `io() const` 编译期 fixture · policy=off/on 双态用例 | policy=off ⇒ 逐字节不变；policy=on ⇒ 重名被拒 |
+| **T2b** ✅ | `component-io-const-and-node-name-policy-2026-11` | **U-2** + **U-1** | 无 | `component-io-const-access`（**ADDED ×1**）· `core-ctx-node-name-uniqueness`（**ADDED ×1**） | `io() const` 编译期 fixture · policy=off/on 双态用例 | policy=off ⇒ 逐字节不变；policy=on ⇒ 重名被拒 |
 | **T3-①a** | `hierarchical-rtl-naming-fix-2026-11` | **纯命名**（ADR-059 **D3 / D4 的类级部分**）：`build_hierarchical_name` 用 `name()` · `local_name_` / `module_type_name()` 两个维度 · **合并宏** `CH_HIERARCHY_LAYER("name")` 的定义 · 命名权威 = ctx 级全局表 | T2a | `component-ownership-and-naming` **ADDED ×2**（组件实例路径 MUST 无重复前缀 · 组件实例 MUST 提供局部名与模块类型名两个命名维度）· `rtl-hierarchical-output` **无**（命名权威是 emitter 级属性 ⇒ 归 ④） | 命名回归断言（深度 ≥3 无重复前缀）· 类级缺名**编译期**拒绝对照 | 零**语义**变更（**允许文本变化** · 仿真逐位不变） |
 | **T3-①b** ✅ | `hierarchical-rtl-ownership-fix-2026-11` | **归属真源**（ADR-059 D1 / D2′ / D2″ / D6 / D7 / D8 / D9 / D10） | T3-①a | `component-ownership-and-naming` **ADDED ×5**（节点归属 MUST 由构造作用域唯一决定 · build context MUST 由显式来源确定 · 跨 context 再装配 MUST 被拒绝 · `ch_module` 无 active parent MUST 响亮失败 · 组件树登记 MUST 双向完整） | 归属断言（`CHFATAL_EXCEPTION`）· 作用域配平断言 · **归属↔语义分流回归** | ADR-059 §5 全部判据 |
 | **T3-①c** | `hierarchical-rtl-granularity-declaration-2026-11` | **粒度声明**（ADR-061 决策①⑤⑥）+ **D4 的四档解析**（`ch_layer<T>` / `ch_inline<T>` / `ForceLayer` ⇒ 档 ②③④） | T3-①b | `component-ownership-and-naming` **ADDED ×1**（成层组件的模块类型名 MUST 按来源优先级确定）+ `rtl-hierarchical-output` **ADDED ×2**（层级粒度 MUST 由显式声明决定 · 成层判定 MUST 与装配点解耦） | 粒度判据（类级 × 实例级三组合）· 「无 parent 处装配仍能成层」用例 · 缺名**编译期**拒绝对照 | ADR-061 §5 全部判据 |
@@ -385,7 +385,7 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 ### phase-5
 - ⏳ **T2a** `header-odr-inline-fix-2026-11`（**唯一硬前置** · 1 词 + 1 fixture）
-- ⏳ **T2b** `component-io-const-and-node-name-policy-2026-11`（**与主线并行** · U-1 + U-2）
+- ✅ **T2b** `component-io-const-and-node-name-policy-2026-11`（**与主线并行** · U-1 + U-2）
 - ⏳ **T3-①a** `hierarchical-rtl-naming-fix-2026-11`（**纯命名** · 零语义变更）
 - ⏳ **T3-①b** `hierarchical-rtl-ownership-fix-2026-11`（**归属真源** · 耦合仿真分流）
 - ⏳ **T3-①c** `hierarchical-rtl-granularity-declaration-2026-11`（粒度声明 · 默认 inline）
@@ -475,10 +475,12 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 - [ ] **T2a**：fixture MUST **fail-closed** —— fixture 文件**缺失**时判据 MUST 报「缺 fixture」，
       **MUST NOT** 报成「链接失败」（⇒ 先例：`verify_conditional_assign_integrity.sh` 的 R0
       踩过「fixture 缺失被当成编译失败」⇒ 两条判据同时假绿）
-- [ ] **T2b**：`io() const` 可在 `const` 成员函数中读取
-- [ ] **T2b**：`node_name_policy == off`（**默认**）时产物**逐字节不变**（`cmp` 0）
+- [x] **T2b**：`io() const` 可在 `const` 成员函数中读取
+- [x] **T2b**：`node_name_policy == off`（**默认**）时产物**逐字节不变**（`cmp` 0）
+      ⇒ ⇒ ✅ 实测 3 个产物（`bubble.v` / `row1_implicit.v` / `three_layers.v`）对照 HEAD **逐字节相同**
       ⇒ ⇒ **mutation**：把 off 误实现为 on ⇒ 该判据**必转红**（否则「零调用点改动 ⇒ 恒绿」）
-- [ ] **T2b**：policy=on 时重名**被拒**（**不是**静默加后缀）
+- [x] **T2b**：policy=on 时重名**被拒**（**不是**静默加后缀）
+      ⇒ ⇒ ✅ 实测：抛 `std::runtime_error`（消息含冲突名）· 变异 **M-4**（自动改名）⇒ 转红
       ⇒ ⚠️ 判据 MUST 用**专门构造的重名 DUT** —— 仓内 `include/` 的 **641** 个 `ch_in`
       声明**零**显式名字 ⇒ 拿现有设计当 DUT ⇒ 全仓转红是**规格预期**，不是缺陷
 
