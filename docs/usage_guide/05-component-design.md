@@ -1,8 +1,8 @@
 # Component 设计指南（多层模块 / 跨层连线 / 成员接口 / RTL 输出）
 
 **文档编号**: USAGE-05
-**版本**: v1.0
-**最后更新**: 2026-11-01
+**版本**: v1.1
+**最后更新**: 2026-11-06
 **目标读者**: 使用 CppHDL 设计硬件的工程师
 **前置知识**: [Simulator API 使用指南](04-simulator-api.md)、[Bundle 使用模式](06-bundle-patterns.md)
 
@@ -15,10 +15,10 @@
 1. 用 `ch_device<T>` / `ch::ch_module<T>` 搭出任意深度的组件树
 2. 在层与层之间正确连线（4 种端口方向 + 表达式 + 寄存器/存储 + bundle）
 3. 判断什么时候该用 `io()` 端口、什么时候该用成员变量做接口
-4. 知道生成的 Verilog 是**扁平**的，以及要怎么应对
+4. 知道生成的 Verilog 有**扁平 / 层次化**两种形态，各自的端口规则与**观测盲区**边界
 5. 避开常见反模式（§6 列了 10 条「编译通过、运行不报错、结果静默错」的坑）
 
-> ⚠️ 本文所有行为都经过实测（2026-11-01，`g++ 14 / -std=c++23`，interpreter 后端）。
+> ⚠️ 本文所有行为都经过实测（§5 于 2026-11-06 重新实测：`g++ 14 / -std=c++23`）。
 > 与代码实现冲突时以代码为准，并请顺手更新本文。
 
 ---
@@ -463,51 +463,50 @@ class Bad {
 
 ## 5. RTL 输出形态
 
-### 5.1 当前：单一扁平 module
+框架有**两条** RTL 出口 ⇒ ⇒ ⇒ 同一份 ctx、同一套发射底座 ⇒ ⇒ ⇒ **默认参数下逐字节一致**：
+
+| 入口 | 产物 | 何时用 |
+|---|---|---|
+| `ch::toVerilog(filename, ctx)` | **单个** `module top` | **默认**；既有全部交付物走这条 |
+| `ch::toVerilogHierarchical(out_path, root, options)` | **多个** module（**单文件**） | 需要**可读的层级 RTL**（IP 单独交付 / 逐级看 RTL / 外部评审） |
+
+### 5.1 扁平产物（默认）
 
 `ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:36`）**只接收 context**，
 固定输出一个 `module top (`（`src/codegen_verilog.cpp:301`）到 `endmodule`
 （`:409`）。整个 writer 里**没有任何** `children()` / `child_count()` 遍历，
 也不发射实例化语句。
 
-三层设计实测输出（Top → Mid → Leaf，节选）：
+三层设计（Top → Mid → Leaf，**均未**声明成层）实测输出：
 
 ```verilog
 module top (
-    input default_clock, input default_reset,
-    input  [7:0] top_unnamed_input,
+    input default_clock,
+    input default_reset,
+    input [7:0] top_unnamed_input,
     output [7:0] top_unnamed_output,
     output [7:0] top_m_unnamed_output,           // 子模块的 ch_out 也在端口列表里
-    output [7:0] top_top_m_lf_unnamed_output     // 孙模块的 ch_out 也在
+    output [7:0] top_m_lf_unnamed_output         // 孙模块的 ch_out 也在
 );
-    logic [7:0] top_m_unnamed_input;             // 被驱动的子 ch_in → 内部 wire
-    assign top_m_unnamed_input = top_unnamed_input;
-    assign top_m_unnamed_output = top_top_m_lf_unnamed_output;
+
+    logic [7:0] top__unnamed_input;
+    logic [7:0] top_m_unnamed_input;
+    logic [7:0] top_m_lf_unnamed_input;
+    /* … 体内线网与 assign 省略 … */
+
+    assign top_m_unnamed_input  = top_unnamed_input;
+    assign top_m_lf_unnamed_input = top_m_unnamed_input;
+    assign top_m_lf_unnamed_output = top_m_lf_unnamed_input;
+    assign top_m_unnamed_output = top_m_lf_unnamed_output;
     assign top_unnamed_output  = top_m_unnamed_output;
 endmodule
 ```
 
-### 5.2 层级只体现在信号名里
+⚠️ **归属已修正**（ADR-059 · T3-①a/①b，已归档）⇒ ⇒ 节点归属 = **构造它的组件**
+⇒ ⇒ 名字**不再**重复父前缀（早先的 `top_top_m_lf_*` 形态**已消解**）⇒ ⇒ 上面的
+`top_m_lf_unnamed_output` 就是修正后的形态。
 
-- 节点名 = `组件路径 + "." + 局部名`（`src/core/lnodeimpl.cpp:25-31`），
-  生成 Verilog 时 `.` 被替换成 `_`（`sanitize_name`，`codegen_verilog.cpp:59-88`）
-- 端口节点默认名 `unnamed_input` / `unnamed_output`，同名再补 `_N`
-- ⚠️ **子模块里以「成员变量」形式声明的节点（`ch_reg` / `ch_mem` / bundle 字段）
-  会挂在父组件前缀下**（它们在子组件构造期创建，那时 `Component::current()`
-  还是父组件）⇒ 出现 `top_m_r` 这种「名字像父层、实际属于子层」的信号
-- ⚠️ **深度 ≥ 3 的组件名会重复前缀**：`build_hierarchical_name()`
-  （`include/module.h:21`）用的是 `parent->hierarchical_name()`，而后者又会把
-  `name_`（**已经是全路径**）再拼一次父路径（`include/component.h:61-73`）
-  ⇒ 实测出现 `top_top_m_lf_*`
-
-> 上面两条**已立项修复**（ADR-059：节点归属与组件命名）⇒ 它们是层次化输出的**硬前置**，
-> 修完之前任何「按 `get_parent()` 分组」的工具都会把子模块状态划进父模块。
-
-### 5.3 端口规则
-
-> ⚠️ 本表描述的是**当前扁平产物**的规则。**层次化产物**的端口策略（隐式端口按方向合成 /
-> 悬空输入冒泡 / 跨模块 `ch_mem` 拒绝）见 **ADR-060**；本节的「子输出全部进顶层端口表」
-> 那条在层次化产物里**不再成立**（无人消费的子输出留在实例端口上，不上顶层）。
+### 5.2 扁平产物的端口规则
 
 | 节点 | 在生成的 Verilog 里 |
 |---|---|
@@ -518,36 +517,211 @@ endmodule
 推论：多层设计里「某个层的输入忘了驱动」在 Verilog 里表现为**顶层凭空多出一个
 input 端口**；而子模块输出会全部暴露在顶层端口列表里（端口表随层次变长）。
 
-### 5.4 需要层次化 Verilog 时：今天怎么做
+⚠️ 这条「**子输出全部进顶层端口表**」在**层次化**产物里**不再成立**（见 §5.5）。
 
-框架**今天仍只输出扁平 RTL**（目标形态已立项，见 §5.5）。在那之前只有手工折中：
+### 5.3 层次化产物
 
-| 方案 | 做法 | 代价 |
-|---|---|---|
-| **A · 逐层单独生成 + 手写顶层例化** | 为每个组件写「只含它自己」的 wrapper，`ch_device` 生成它的扁平文件 ⇒ `sed` 改 `module top` 的名字 ⇒ 手写顶层 module 例化各子模块 | 子模块会带一堆多余 `output`（孙辈 `ch_out`）；端口名全是 `top_unnamed_input_N`，要人工对齐；`ch_device<Sub>` **不能**用于「把 `ch_module` 当成员变量」的组件 |
-| **B · 自己写层次化 writer** | 遍历 `Component::children()` 分组发射 | ⚠️ **今天做不了**：节点归属对成员节点是**错的**、深度 ≥3 名字**重复前缀**（§5.2）⇒ 分组边界本身就错 |
-| **C · 接受扁平输出，只加注释分节** | 用 `children()` 导出「实例名 → 信号前缀」清单，后处理扁平文件插 `// ---- top.m (Mid) ----` | 无层次语义；只解决可读性 |
+#### 5.3.1 怎么声明成层
 
-> 综合工具本来就会展平层次，功能上无损；层次化的价值在**可读性**与后端布局控制粒度。
+**默认不成层**（inline）⇒ ⇒ 组件默认**不**产生独立 module ⇒ ⇒ 它的逻辑留在**最近的
+成层祖先** module 体内 ⇒ ⇒ 谁都不声明时，层次化产物与扁平产物**逐字节一致**。
 
-### 5.5 目标形态（**已立项，未实现**）
+三种声明方式（**成层判定与装配点解耦** ⇒ 没有 active parent 的装配点也一样成立）：
 
-决策正本：**ADR-058**（边界与等价性）· **ADR-059**（归属与命名）·
-**ADR-060**（端口策略与复用）· **ADR-061**（层级粒度由用户显式控制）。
-实施载体：`openspec/changes/hierarchical-rtl-output-2026-11/`。
+```cpp
+// ① 类级：组件作者声明「我是一层」—— MUST 给名字（宏体 = 声明 + 命名一体）
+class Mid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("my_mid");           // ← module 名 = "my_mid"
+    ...
+};
 
-对**写代码的你**只有三条要记住：
+// ② 实例级 · 档 ②：T 已类级声明成层 ⇒ 继承 T 的类级名（单参形态）
+ch::ch_layer<Mid>  m{"m"};
+
+// ③ 实例级 · 档 ③：T **未**声明（helper 被提升）⇒ MUST 在实例处给名（双参形态）
+ch::ch_layer<Helper> h{"h", "helper_layer"};
+
+// ④ 实例级：显式 inline（覆盖类级声明）
+ch::ch_inline<Mid> i{"i"};
+```
+
+⚠️ `CH_HIERARCHY_LAYER` **必须带名字**（括号里给一个**字符串字面量**）⇒ ⇒
+**不带名字的写法编译不过** ⇒ ⇒ 「成层却忘了命名」这个组合**在编译期就不可表达** ⇒ ⇒
+不存在「运行期才发现名字不对」。
+
+#### 5.3.2 完整可编译示例
+
+```cpp
+#include "ch.hpp"
+#include "hierarchy_verilog.h"
+
+using namespace ch;
+using namespace ch::core;
+
+class Leaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> a; ch_out<ch_uint<8>> y;)
+
+    Leaf(ch::Component *parent = nullptr, const std::string &name = "leaf")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().y <<= io().a; }
+};
+
+class Mid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("my_mid");          // ← 成层，并给出 module 名
+
+    __io(ch_in<ch_uint<8>> in; ch_out<ch_uint<8>> out;)
+
+    Mid(ch::Component *parent = nullptr, const std::string &name = "mid")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch::ch_module<Leaf> lf{"lf"};       // ← helper：未声明成层 ⇒ 默认 inline
+        lf.io().a <<= io().in;
+        io().out <<= lf.io().y;
+    }
+};
+
+int main() {
+    ch::ch_device<Mid> dev;
+    ch::HierarchyEmitResult r = ch::toVerilogHierarchical("mid.v", dev.instance());
+    if (!r.ok) {
+        return 1;                            // r.error 点名失败原因
+    }
+    return 0;
+}
+```
+
+⚠️ 组件**必须**提供 `(parent, name)` 构造器（`ch_device<T>` 与 `ch_module<T>` 都按
+`T(parent, name)` 构造）⇒ ⇒ 见 §1.1「三件套」。
+
+#### 5.3.3 产物长什么样
+
+同一棵设计，把 `Mid` 声明成层后，实测产物（**单文件多 module**）：
+
+```verilog
+// ---- module: top.m (my_mid) ----
+module my_mid (
+    input  [7:0] top_m_unnamed_input,
+    output [7:0] top_m_unnamed_output
+);
+    logic [7:0] top_m_lf_unnamed_input;
+    logic [7:0] top_m_lf_unnamed_output;
+    /* … 体内线网与 assign 省略 … */
+endmodule
+
+// ---- module: top (top) ----
+module top (
+    input default_clock,
+    input default_reset,
+    input  [7:0] top_unnamed_input,
+    output [7:0] top_unnamed_output
+);
+    my_mid m (
+        .top_m_unnamed_input(top_unnamed_input),
+        .top_m_unnamed_output(top_unnamed_output)
+    );
+endmodule
+```
+
+⇒ ⇒ 三条**看得见**的事实：
+
+1. **module 名** = `CH_HIERARCHY_LAYER("...")` 给的名字；**实例名** = `ch_module` 的
+   第一个参数（局部名）⇒ ⇒ 两者都会出现在外部评审看到的 RTL 里；
+2. **端口名仍是设计级全局名**（`top_m_unnamed_input` 带全路径前缀）⇒ ⇒ 这是**故意**的
+   —— 顶层端口名 MUST 与扁平产物**逐字相同**（下游按名解析不受影响）；
+3. ⚠️ **顶层端口比扁平**少了 `top_m_unnamed_output` / `top_m_lf_unnamed_output`
+   ⇒ ⇒ 这不是「丢了」，是**契约**（成层子树的 `ch_out` 不再被抬到顶层）⇒ ⇒
+   **观测盲区**见 §5.5。
+
+#### 5.3.4 层次化产物的端口规则
+
+| module | 端口集合 |
+|---|---|
+| **根** module | 走**扁平规则**（clock → reset → 无 driver 的 `input` → **全部** `ch_out`（含 inline 后代））⇒ ⇒ 顶层端口表与扁平产物**逐字逐序相同** |
+| **非根**成层 module | 自身 `ch_in` ∪ 自身 `ch_out` ∪ **隐式端口** ∪ **冒泡端口** ∪ 时序基础设施（clock / reset，**分开判**） |
+
+- **隐式端口**：跨层**非端口边**按方向合成（父→子 = 子侧 `input`；子→父 = 子侧 `output`）
+  ⇒ ⇒ 端口名带框架前缀 `__if_` / `__x_`（`__up_` = 向上 pass-through）⇒ ⇒
+  **这正是 §1 的 D1 / D5 要避免的写法**；
+- **冒泡端口**：**无驱动源**的子 `ch_in` 逐级向上冒泡成顶层 `input`（名字与扁平**逐字相同**）
+  ⇒ ⇒ 这是 §1 的 D4 要避免的写法；
+- **跨模块 `ch_mem`**（父层直接读 `child.mem.aread()`）⇒ ⇒ **响亮拒绝**（`ok = false`
+  + `error` 点名 + **不产生任何文件**）⇒ ⇒ 改用「mem 与使用者同层」；
+- **成层组件自驱动自己的 `ch_in`** ⇒ ⇒ 同样**响亮拒绝**；
+- ⚠️ 失败一律走 `HierarchyEmitResult`：`ok = false` + `error` 点名 + `files` 为空
+  ⇒ ⇒ **发射器内不抛异常**（异常会落进 `print()` 的 `catch(...)` ⇒ 变成「静默失败 +
+  看起来成功」）⇒ ⇒ **调用方 MUST 检查 `ok`**。
+
+#### 5.3.5 选项
+
+```cpp
+ch::HierarchyEmitOptions opts;
+opts.port_policy    = ch::PortPolicy::SynthesizeWarn;   // 默认：隐式端口 + 告警
+opts.undriven_policy = ch::UndrivenPolicy::Bubble;      // 默认：悬空输入向上冒泡
+opts.top_module_name = "top";                            // 根 module 名
+ch::HierarchyEmitResult r = ch::toVerilogHierarchical("out.v", dev.instance(), opts);
+```
+
+⚠️ `port_policy` / `undriven_policy` 的**唯一权威**是 `ch::PortPolicy` /
+`ch::UndrivenPolicy`（`include/component.h`）⇒ ⇒ 不要自己再定义一份枚举。
+⚠️ 根 module 名**只**由 `top_module_name` 决定 ⇒ ⇒ 根组件自己写
+`CH_HIERARCHY_LAYER("x")` 是 **no-op**（不告警）。
+⚠️ 层次化产物**文件名 MUST NOT** 与扁平产物同名（同名 ⇒ 「同名不同物」）⇒ ⇒
+仓内护栏 `scripts/verify_hierarchical_rtl.sh` 的 **R7** 静态扫描调用点。
+
+### 5.4 层级友好度：三类「贵」的写法
+
+见 [层次化 RTL 写作指南](../developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md)
+§1 的 **D1 / D4 / D5**（bundle 成员跨层 · 悬空子输入 · 父层直接改子层 `reg->next`）
+⇒ ⇒ 这三类写法会在产物里留下 `__if_` / `__x_` 端口或凭空多出的顶层 `input`。
+
+### 5.5 ⚠️ 观测盲区（等价性只覆盖**顶层可见行为**）
+
+> **契约边界**（ADR-058 §4 风险 6）· 权威 = capability `rtl-hierarchical-output`。
+
+层次化的**顶层输出集** = 扁平顶层输出集 **−** {`ch_out` 的最近成层祖先 ≠ 根 的全部节点}
+⇒ ⇒ 被移出顶层的那批 `ch_out` 在层次化产物里**降级为子 module 端口**（或空连接
+`.port()`）⇒ ⇒ **顶层观测不到** ⇒ ⇒ 「子树内部算错、但顶层输出恰好相同」这一类缺陷
+**结构性测不出**。
+
+⚠️ **这不是缺陷，是契约边界** ⇒ ⇒ MUST 如实登记，MUST NOT 假装全覆盖：
+
+- **输出方向有盲区**：成层子树的 `ch_out` 顶层读不到 ⇒ ⇒ 等价性判据只覆盖
+  **顶层可见行为**；
+- **输入方向无盲区**：顶层 `input` 集合**两侧相等** ⇒ ⇒ 激励可完整施加。
+
+⇒ ⇒ 等价性怎么判（可机械判定）：层次化产物 MUST 与扁平产物**逐拍等价** ——
+判据由 capability `rtl-hierarchical-output` 的 Requirement
+「层次化产物 MUST 与扁平产物等价（可机械判定）」给出（映射表 + 输入端口集合相等 +
+输出端口集合等于精确期望集 + 显式观测集合上的逐拍全等 + 盲区以**对偶断言**登记），
+仓内实现见 `tests/test_hierarchy_equivalence.cpp`。
+
+⇒ ⇒ 想让**自己**的设计也被这样判一遍 ⇒ ⇒ 用 `HierarchyEmitResult::signal_map`
+（= 四元组：`node_id` → 设计级信号名 → 扁平位置 → 层次化位置集合）定位信号 ⇒ ⇒
+`signal_map` MUST 由 emitter **同次产出**（MUST NOT 自建 ⇒ 否则表错则两错相抵）。
+
+### 5.6 写代码要记住的三条
 
 1. **默认不成层**：组件默认不产生 module（逻辑留在父 module 里）⇒ 小组件不需要任何声明；
-2. **成层要声明**：`CH_HIERARCHY_LAYER`（类级）或 `ch_layer<T>` / `ch_inline<T>`（实例级覆盖）；
-3. **默认路径零变化**：谁都不声明时，产物与今天的扁平产物**逐字节一致** ⇒
+2. **成层要声明**：`CH_HIERARCHY_LAYER("name")`（类级，**必须带名**）或
+   `ch_layer<T>` / `ch_inline<T>`（实例级覆盖）；
+3. **默认路径零变化**：谁都不声明时，层次化产物与扁平产物**逐字节一致** ⇒
    可以**先写代码、零风险**，将来要交付某个 IP 单元时再加一行声明。
 
-⚠️ 该能力依赖**归属修正**（ADR-059）先行 —— 归属错会让 emitter 把子模块状态划进父模块，
-产出「看起来对、实际错」的 RTL ⇒ 故 §5.2 的两个缺陷是**硬前置**。
+### 5.7 护栏与范例
 
-写法指南（含「什么时候该成层」的判据）：
-`docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md`。
+| 用途 | 位置 |
+|---|---|
+| 产物级护栏（lint 门 / pin 名 / 宽度 / 确定性 / 拒绝 / 树同构 / 路径分离） | `scripts/verify_hierarchical_rtl.sh`（R1–R8 + `--self-test`） |
+| 公共 API 面守卫（harness MUST NOT 进 `include/`） | `scripts/verify_hierarchical_p8.sh` |
+| 完整可编译范例 | `tests/test_hierarchy_equivalence.cpp`（等价性）/ `tests/test_hierarchy_verilog.cpp`（发射） |
+| 写法指南（**什么时候该成层**的判据） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 
 > 架构主题文档：`docs/architecture/2026-11-02-hierarchical-rtl-output.md`
 > （取代 `docs/developer_guide/architecture/verilog-codegen-architecture.md` §7.1）。
