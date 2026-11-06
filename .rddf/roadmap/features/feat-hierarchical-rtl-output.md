@@ -93,8 +93,8 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | **T3-②** | `hierarchical-rtl-analysis-2026-11` | ✅ **已归档**（2026-11-04） | `tests/test_hierarchy_analysis.cpp`（11 用例 / 87 断言 + **4 份 golden**，其中 `three_layers.txt` 为**手推**）· 变异 **12/12** · 隐式端口合成**显式分派给 T3-④**（本层 fail-closed） |
 | **T3-③** | `hierarchical-rtl-emitter-split-2026-11` | ✅ **已归档**（2026-11-04） | `ModuleEmitter` + `ModuleView` + 薄适配器 `verilogwriter` · 3 个设计 `cmp` 逐字节相同（含 145 KB RV32iPipeline）· 时钟名参数化 4 处 · **M1 ⇒ lint exit 1 / 对照 exit 0** |
 | **T3-④** | `hierarchical-rtl-emission-2026-11` | ✅ **已归档**（2026-11-05 · **13/13 批**：B1 · B2a · B2b-1..6 · T0h · B3a · B3b · B3c · B4 ⇒ 多 module + 实例化 + 顶层端口=扁平 + clock/reset 分开判 + 隐式端口行 1/行 2 + F3 + 第三轴 + 兄弟边 + 宽度守卫 + 冒泡（G3）/`UndrivenPolicy` + 向上 pass-through + 产物级护栏 R1–R7 + 探针矩阵 36 格） | `toVerilogHierarchical` · `tests/test_hierarchy_verilog.cpp`（**28 用例 / 495 断言**）· `scripts/verify_hierarchical_rtl.sh`（R1–R7 + `--self-test` 9/9）· 全 inline ⇒ 与扁平逐字节相同 · 全部层次化产物 `verilator --lint-only` exit 0 · 扁平外部基线 3 设计 `cmp` 全 0 |
-| T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ⏳ **实施完（20/20）· 收口中**（2026-11-06 实施后架构审查 ⇒ 14 项待办 ⇒ 见「T3-⑤ 收口与后续规划」）；未归档 | 9 用例 / 268 断言 · 映射表 + `try_initialize_with_verilog` · 护栏 R1–R8 + P8 守卫 · 锚点 250/76/66/289 |
-| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ **待启动**（0/7）⇒ 前置 = **T3-⑤ 收口 commit**（非「归档」—— D1 可并行起草 · 收口后验证） | — |
+| T3-⑤ | `hierarchical-rtl-equivalence-2026-11` | ✅ **已归档**（2026-11-06 · 归档名 `2026-11-06-hierarchical-rtl-equivalence-2026-11`）⇒ ⇒ 14 项待办（F1–F13 已收口 · **F14 台账已代记账**） | 9 用例 / **414 断言** · 映射表 + `try_initialize_with_verilog` · 护栏 R1–R8 + P8 守卫 · 锚点 250/76/66/289 · 变异对照 4 转红 + 1 无效（已登记） |
+| T3-⑥ | `hierarchical-rtl-docs-2026-11` | ⏳ **待启动**（0/7）⇒ 前置 = **T3-⑤ 归档**（✅ 已越过 2026-11-06）⇒ ⇒ **D1 吸收 F8**（用法指南 P7 痛点行 + 盲区边界段 ⇒ 验收 = grep 清单清零） | — |
 | T2b | `component-io-const-and-node-name-policy-2026-11` | ⏳（与主线并行，无依赖） | — |
 
 ### T3-④ 的批次拆分（2026-11-05 · 据架构裁决重排 · **13 个批次 · 逐个 commit**）
@@ -214,41 +214,44 @@ writer 内**零** `children()` 遍历、**零**实例化语句发射。
 | # | 动作 | 域 | 状态 |
 |---|---|---|---|
 | **F1** | `proposal.md` 的 `O` 下限措辞 ⇒ 引用 delta 的两阶段口径 | planner | ✅ **已改**（本轮） |
-| **F2** | 盲区断言做成**对偶**（被观测侧 + 盲区侧，均绑到映射表） | builder | ⏳ |
-| **F3** | 「每个被观测信号 ∈ 映射表 ∧ `hier_top_port_name` 非空」 | builder | ⏳ |
-| **F4** | 「两次 emit 共享同一 ctx」的**显式**断言 ⇒ ⚠️ **现有实现是恒真重言式**（`REQUIRE(dev.context() == dev.context())`）⇒ MUST 改成**可失败**形态（`HierarchyEmitResult` 记 `source_ctx` + 比较两次发射的来源 ctx） | builder | ⏳ |
+| **F2** | 盲区断言做成**对偶**（被观测侧 + 盲区侧，均绑到映射表） | builder | ✅ **已收口**（builder） |
+| **F3** | 「每个被观测信号 ∈ 映射表 ∧ `hier_top_port_name` 非空」 | builder | ✅ **已收口**（builder） |
+| **F4** | 「两次 emit 共享同一 ctx」的**显式**断言 ⇒ ⚠️ **现有实现是恒真重言式**（`REQUIRE(dev.context() == dev.context())`）⇒ MUST 改成**可失败**形态（`HierarchyEmitResult` 记 `source_ctx` + 比较两次发射的来源 ctx） | builder | ✅ **已收口**（builder · `source_ctx` + 四条断言） |
 | **F5** | roadmap **P0-4** 的「三处齐」口径改读 + **F8** 登记 | planner | ✅ **已改**（本轮 · P0-4 行） |
-| **F6** | **修 `deep_obs` 的死重观测**（第二条 ⇒ 兄弟叶真实输出 `a.dout`/`b.dout`）+ `obs.size()` 断言 | builder | ⏳ |
-| **F7** | `tasks.md` 的 prelude 证据引用改为**可复算**形态（去掉 `/tmp` 引用作判据） | builder | ⏳ |
-| **F8** | 用法指南 **P7 痛点行**的同步 ⇒ **交 T3-006 D1**（本 change **不改**该文档） | T3-⑥ | ⏳ 登记于 P0-4 |
+| **F6** | **修 `deep_obs` 的死重观测**（第二条 ⇒ 兄弟叶真实输出 `a.dout`/`b.dout`）+ `obs.size()` 断言 | builder | ✅ **已收口**（builder · `inline_obs.size() == 4`） |
+| **F7** | `tasks.md` 的 prelude 证据引用改为**可复算**形态（去掉 `/tmp` 引用作判据） | builder | ✅ **已收口**（builder · 两条 grep = 2 / 1） |
+| **F8** | 用法指南 **P7 痛点行**的同步 ⇒ **交 T3-006 D1**（本 change **不改**该文档） | T3-⑥ | ✅ **已登记**（P0-4 行 · 归 T3-⑥ D1） |
 | **F9** | feature 文件：① `O` 下限措辞**全量**订正（**3 处**：B5 行 / 验收标准行 / P0-4）② 残留 1b 指针 ③ P8 归位条件已达成 | planner | ✅ **已改**（本轮 · 3 处措辞 + ① ③ 见下） |
-| **F10** | **修 2 个红灯**：① 口径落地（豁免清单机制）② **反向对照**：把豁免模式拨错 ⇒ MUST 转红 ⇒ 还原复绿（防「删掉盲区断言」式为绿而绿） | builder | ⏳ |
-| **F11** | **`[deep]` 诚实性缺口 ⇒ 用 DUT 改造解决**（不只订正注释）：给 `EqDeepMid` 加 `CH_HIERARCHY_LAYER("eq_deep_mid")` ⇒ ⇒ `RespectDeclarations` 成为**唯一未覆盖的「中间拓扑」**（实测：`EqDeepTop`/`EqDeepMid`/`EqDeepLeaf` **均无**声明 ⇒ RespectDeclarations ≡ ForceInline ⇒ 该变体**零增量**）⇒ ⇒ 连带使「第三粒度」对深 DUT 有意义 | builder | ⏳ |
-| **F12** | **断言③的独立锚**（打破「`O` 清单与 DUT 清单同时漏项 ⇒ 恒绿」）：单粒度运行 MUST 断言「映射表可见集计数 == DUT `ch_out` 清单数 + 该产物**实际存在**的 clock/reset 条目数」（clock/reset MUST 从 map 动态派生 ⇒ 组合逻辑设计减 0） | builder | ⏳ |
-| **F13** | **`[granularity]` 的第三粒度**：`RespectDeclarations` 格 MUST 补上（**先做 F11** 才有意义）⇒ ⇒ 三粒度矩阵 | builder | ⏳ |
-| **F14** | **台账**（architect 域）：残留 **13**（backend 改造工作量重估 ~7–9 天）已随 T3-005 实施完成而**失效** ⇒ MUST 标 ✅ 关闭；残留 **11** 与 feature §334 的 P6/P8 表**重复** ⇒ 去重（权威归台账） | architect | ⏳ |
+| **F10** | **修 2 个红灯**：① 口径落地（豁免清单机制）② **反向对照**：把豁免模式拨错 ⇒ MUST 转红 ⇒ 还原复绿（防「删掉盲区断言」式为绿而绿） | builder | ✅ **已收口**（builder · 4 转红 + 1 无效变异已登记） |
+| **F11** | **`[deep]` 诚实性缺口 ⇒ 用 DUT 改造解决**（不只订正注释）：给 `EqDeepMid` 加 `CH_HIERARCHY_LAYER("eq_deep_mid")` ⇒ ⇒ `RespectDeclarations` 成为**唯一未覆盖的「中间拓扑」**（实测：`EqDeepTop`/`EqDeepMid`/`EqDeepLeaf` **均无**声明 ⇒ RespectDeclarations ≡ ForceInline ⇒ 该变体**零增量**）⇒ ⇒ 连带使「第三粒度」对深 DUT 有意义 | builder | ✅ **已收口**（builder · `EqDeepMid` 加声明） |
+| **F12** | **断言③的独立锚**（打破「`O` 清单与 DUT 清单同时漏项 ⇒ 恒绿」）：单粒度运行 MUST 断言「映射表可见集计数 == DUT `ch_out` 清单数 + 该产物**实际存在**的 clock/reset 条目数」（clock/reset MUST 从 map 动态派生 ⇒ 组合逻辑设计减 0） | builder | ✅ **已收口**（builder · 逐项点名独立锚 · **不做**端口计数校验） |
+| **F13** | **`[granularity]` 的第三粒度**：`RespectDeclarations` 格 MUST 补上（**先做 F11** 才有意义）⇒ ⇒ 三粒度矩阵 | builder | ✅ **已收口**（builder · deep 补第三粒度） |
+| **F14** | **台账**（architect 域）：残留 **13**（backend 改造工作量重估 ~7–9 天）已随 T3-005 实施完成而**失效** ⇒ MUST 标 ✅ 关闭；残留 **11** 与 feature §334 的 P6/P8 表**重复** ⇒ 去重（权威归台账） | architect | ✅ **已记账**（2026-11-06 · builder **代记账** · 决策内容零变更） |
 
 #### ③ 后续立项清单（**本轮不实施** ⇒ 下一轮逐项走 `add-improve` ⇒ ⇒ 5 段草稿 ⇒ 待用户拍板）
 
 | # | 项 | 来源 | 归位条件 | 形态约束 |
 |---|---|---|---|---|
-| **P6** | **层次友好度诊断 API** | feature §334 · 台账 §7 残留 11 | ✅ **已达成**（T3-④ 已归档） | MUST 照搬 `ch::core::diagnose_drive` 形态（单枚举 + 单一判定实现 + 护栏）· 报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / 各层规模 |
-| **P8** | **等价性 harness 公共 helper** | feature §334 · 台账 §7 残留 1 | ✅ **已达成**（T3-005 的 harness 已落地 · 两层形态） | 公共包装与内部实现**分离** ⇒ **不**进 `include/`（本期）⇒ ⇒ T3-005 的形态已满足 |
+| **P6** | **层次友好度诊断 API** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已达成**（T3-④ 已归档） | **权威 = 台账 §11.2**（不复制全文） |
+| **P8** | **等价性 harness 公共 helper** | **台账 §7 残留 11**（权威登记）· 裁决 §11.1 A4 | ✅ **已达成**（T3-005 已归档 · harness 两层形态） | **权威 = 台账 §11.2**（不复制全文） |
 | **残留 1b** | **语料级回归缺口**：层次化路径在全仓既有语料上**零覆盖**（`DUAL_BACKEND_TEST_PAIR` **不参数化粒度**） | 台账 §7（2026-11-06 由 oracle 从残留 1 拆出） | ⚠️ **独立立项** ⇒ **MUST NOT 并入 P8**（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**） | 判据 MUST 能覆盖**组合逻辑 DUT**（无 clock/reset ⇒ 计数校验 MUST 动态减 0）· 恒相关信号（兄弟串联的 `a`/`b` 逐拍同值）⇒ 「逐拍全等」的判别力上限 MUST 登记 |
 | **残留 5** | **端口命名契约**（顶层无框架前缀 · `__if_`/`__x_` 只出现在非顶层 module）**无静态护栏** | 台账 §7 | 独立 change（`scripts/verify_*.sh`） | MUST 复用结构化提取（`verilator --json-only`）⇒ **MUST NOT** 自研文本解析器 |
 | **C2** | **下游拼接产物 · 内部 module 名撞名**（轴②：`module_type_name` + 按设计编号 ⇒ 两份产物各含名为 `alu` 的 layer 时**照撞** ⇒ **当前无机制**） | 台账 §11.6（**下游确认项** · 非残留表） | ⏠ 待**下游**确认是否「拼接」⇒ ⇒ 预裁口径已定：**产物级 module 名前缀选项**（默认**空**前缀 · 纯增量 · 非格式变更 ⇒ 任何时点可加）⇒ ⇒ **现在不实现**（不为未证实需求付成本） | 该前缀作用面 MUST 是「**非根 module**」（根由 `top_module_name` 管辖）⇒ 否则两个旋钮管同一个根名 ⇒ 优先级歧义 |
 
-#### ④ 执行顺序（2026-11-06 · planner）
+#### ④ 执行顺序（2026-11-06 · planner · **1 / 2 已完成 2026-11-06**）
 
-1. **T3-⑤ 收口**（builder）：F2/F3/F4/F6/F7/F10/F11/F12/F13 + 已由 planner 落的 F1/F5/F9 ⇒
+1. ✅ **T3-⑤ 收口**（builder）：F2/F3/F4/F6/F7/F10/F11/F12/F13 + 已由 planner 落的 F1/F5/F9 ⇒
    ⇒ 跑完整验证门（重建 · `ctest -LE perf` 239/239 · 护栏 R1–R8 + `--self-test` · P8 + `--self-test`
    · parity · 锚点 250/76/66/289 · 扁平基线 `cmp` · samples · examples · `openspec validate` ·
    `verify_openspec_delta.sh` · `verify_roadmap_fragments.sh`）⇒ ⇒ **按路径显式 `git add`**
    （MUST NOT `git add -A`）⇒ ⇒ **一个收口 commit**
-2. **T3-⑤ V1 归档门** ⇒ `openspec archive hierarchical-rtl-equivalence-2026-11`（**禁** `--skip-specs`）
+   ⇒ ⇒ ✅ **已落**：`d695ce9`（planner 的口径裁决）+ `8f7278f`（builder 的实现与测试）
+2. ✅ **T3-⑤ V1 归档门** ⇒ `openspec archive hierarchical-rtl-equivalence-2026-11`（**禁** `--skip-specs`）
    ⇒ ⇒ 归档后同步：roadmap 进度表 T3-⑤ 行 ✅ + 根 `AGENTS.md` 的 AUTO feature 块
    （`verify_roadmap_fragments.sh` C1 逐字守恒 ⇒ **MUST NOT** 手改 ⇒ 改 `.rddf/roadmap/**` 的
    front-matter 后跑 `rddf roadmap --update-agent-md`）
+   ⇒ ⇒ ✅ **已落**：归档名 `2026-11-06-hierarchical-rtl-equivalence-2026-11` · V1 两条 grep 归档后
+   = **0 / 1** · 主 spec 已合并 **ADDED ×2 + MODIFIED ×5**
 3. **T3-⑥**（3 批 D1/D2/D3）⇒ ⇒ **D1 吸收 F8**（P7 痛点行 + 盲区边界段 ⇒ 验收 = grep 清单清零）
 4. **T2b**（3 批 U1/U2/R）⇒ ⇒ 与主线**零文件冲突**（T3-⑤ 动 `src/core/verilator_backend.cpp` /
    `src/hierarchy_verilog.cpp` / `include/core/verilator_port_set.h` / `include/hierarchy_verilog.h`；
@@ -401,31 +404,24 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 
 ---
 
-## 用户视角审查新增的两个产品缺口（⚠️ **仍待用户拍板 · 不阻断主线**）
+## 用户视角审查新增的两个产品缺口（⚠️ **已裁决独立立项 · 不阻断主线**）
 
 > 来源：`docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` §3
-> ⇒ ⇒ ⇒ 方案的**语义**自洽可实现，但**用户面**有两条真空缺：
+> ⇒ ⇒ ⇒ 方案的**语义**自洽可实现，但**用户面**有两条真空缺：**P6**（层次友好度诊断 API）·
+> **P8**（等价性 harness 公共 helper）。
 
-| # | 缺口 | 症状 | 建议 | 归属 |
-|---|---|---|---|---|
-| **P6** | **用户看不到自己的设计是否「层次友好」** | 无法预判会不会冒出一堆 `__undriven_*` / `__if_*` 端口 | ⭐ 「**层次友好度诊断** API」（形态照搬 `ch::core::diagnose_drive`：**单枚举 + 单一判定实现 + 护栏**）⇒ 报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / **各层规模** | ✅ **独立 change**（2026-11-05 · A4）⇒ ⇒ 形态约束见下 |
-| **P8** | **用户拿不到「层次化后行为不变」的反馈** | 等价性验证只是框架自测 | ⭐ 等价性 harness 做成**公共 helper** ⇒ 用户可在自己的 `TEST_CASE` 里逐拍比对扁平 vs 层次 | ✅ **独立 change**（2026-11-05 · A4）⇒ ⇒ T3-⑤ 只做「可公共化」形态，**不暴露** API |
-
-✅ **已裁决**（2026-11-05 · architect · 台账 §11.1 **A4** / §11.2）：**二者均「独立立项」**
-⇒ ⇒ **不进** T3-④ / T3-⑤ 的实施范围（**MUST NOT** 静默塞入）⇒ ⇒ 但**各带一条形态约束**：
-① **P6** MUST 照搬 `ch::core::diagnose_drive` 的形态（**单枚举 + 单一判定实现 + 护栏**），
-   报告隐式端口数 / 悬空输入数 / 未消费子输出数 / 跨模块 `mem` 访问数 / **各层规模**；
-② **P8** ⇒ T3-⑤ 的 harness MUST 写成「**可公共化**」形态（内部实现与公共包装**分离**），
-   但 T3-⑤ **MUST NOT** 暴露公共 API（⇒ ⇒ 公共化 = 独立 change）。
-⇒ ⇒ **不为此二项立新 ADR**（API 尚未设计 ⇒ 为未设计的 API 写 ADR = 过早固化）。
-⇒ ⇒ 归位条件：**P6** 待 T3-④ 归档后由 planner 单独立项；**P8** 待 T3-⑤ 的 harness 落地后立项。
-⇒ ⇒ ⚠️ **2026-11-06 更新（planner）**：**两个归位条件均已达成**
-（P6：T3-④ 已归档 2026-11-05 · P8：T3-005 的 harness 已落地 2026-11-06）⇒ ⇒ **二者已进本文件的
-「后续立项清单」（见「T3-⑤ 收口与后续规划 ③」）** ⇒ ⇒ 下一轮各走 `add-improve`。
-⇒ ⇒ ⚠️ **第三项（不在本表 · 2026-11-06 由 oracle 从台账 §7 残留 1 拆出）**：
-**语料级回归缺口**（层次化路径在既有语料上零覆盖）⇒ ⇒ **独立立项** ⇒ ⚠️ **MUST NOT 并入 P8**
-（P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**）
-⇒ ⇒ 权威 = 台账 §7 残留 **1b**。
+> ⚠️ **2026-11-06 去重（F14 · 权威归台账）**：本节原有一张 P6/P8 详表 ⇒ ⇒ 与
+> **台账 §7 残留 11**（同两项）**重复** ⇒ ⇒ **台账是唯一权威**（登记 + 形态约束）⇒ ⇒
+> **本节只留指针**（避免两份全文并存 ⇒ 下一轮只改一边 = 新漂移源）：
+> · 登记与状态 = **台账 §7 残留 11**（`docs/architecture/2026-11-02-hierarchical-rtl-output.md`）
+> · 裁决 = 台账 §11.1 **A4**（2026-11-05 · 二者均「独立立项」· **不为此二项立新 ADR**）
+> · 形态约束 = 台账 **§11.2**（唯一权威）
+> · 归位条件 = 均已达成（P6：T3-④ 已归档 2026-11-05 · P8：T3-005 已归档 2026-11-06）
+>   ⇒ ⇒ **下一轮各走 `add-improve`**（清单见本文件「T3-⑤ 收口与后续规划 ③」）
+> · ⚠️ **第三项（不在本表 · 2026-11-06 由 oracle 从台账 §7 残留 1 拆出）**：
+>   **语料级回归缺口**（层次化路径在既有语料上零覆盖）⇒ ⇒ **独立立项** ⇒ ⚠️ **MUST NOT 并入 P8**
+>   （P8 的 done 判据**不含**语料覆盖 ⇒ 并进去 ⇒ 按 P8 的判据交付后该缺口**静默留存**）
+>   ⇒ ⇒ 权威 = 台账 §7 残留 **1b**。
 
 ---
 

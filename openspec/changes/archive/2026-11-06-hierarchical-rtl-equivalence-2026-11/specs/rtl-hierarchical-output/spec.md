@@ -91,11 +91,10 @@
 
 ### Requirement: 成层判定 MUST 与装配点解耦，但组件 MUST 登记进组件树
 
-- **MODIFIED**：把「响亮拒绝」的可观测形态按 ADR-058 §2.3 ⑤ 写死 —— 对外唯一载体是
-  `HierarchyEmitResult`（`ok = false` + `error` 点名 + `files` 为空）⇒ ⇒
-  **发射器内 MUST NOT 依赖异常**（异常会落进 `print()` 的 `catch(...)` ⇒ 变成「静默失败 +
-  看起来成功」）。因此本条的拒绝判据 MUST 表述为**错误结果**，MUST NOT 表述为「向调用方
-  抛出」（后者与实现不符，也与本 capability 的 Purpose 互斥）。
+- **MODIFIED**：拒绝的可观测形态 = **错误结果**（ADR-058 §2.3 ⑤ ⇒ 对外唯一载体是
+  `HierarchyEmitResult`）⇒ ⇒ 发射器内 MUST NOT 依赖异常（会落进 `print()` 的
+  `catch(...)` ⇒ 静默失败）⇒ ⇒ 本条的拒绝判据 MUST NOT 表述为「向调用方抛出」
+  （与实现及本 capability 的 Purpose 不符）。
 
 「是否成层」MUST 由**声明**决定，MUST NOT 依赖装配点的位置（⇒ 允许在**无 active parent**
 的位置装配）；但被装配的组件 MUST **登记进组件树**（`ch_device` / `ch_module` / `add_child`）
@@ -132,11 +131,8 @@ MUST NOT 静默并入顶层 module）。
 
 ### Requirement: 跨层非端口边 MUST 按方向合成隐式端口（默认告警）
 
-- **MODIFIED**：旧的布尔策略字段**已不存在**（被 ADR-060 §2.4 的线性枚举取代）⇒ ⇒
-  本条的失败判据改为点名 **`PortPolicy::SynthesizeFatal` / `PortPolicy::Reject`**；
-  拒绝的可观测形态按 ADR-058 §2.3 ⑤ = **错误结果**（`ok = false` + `error`）。
-  ⚠️ 两个枚举**都有** `Reject` ⇒ ⇒ 引用时 MUST 写**全限定名**（裸写 `Reject` 会被读成
-  `UndrivenPolicy::Reject`，而那个管的是**悬空 `ch_in`**、不是跨层非端口边）。
+- **MODIFIED**：⚠️ `PortPolicy::Reject` 与 `UndrivenPolicy::Reject` **同名** ⇒ ⇒ 本条
+  引用时 MUST 写**全限定名**（`UndrivenPolicy::Reject` 管的是**悬空 `ch_in`**）。
 
 跨模块但**不落在端口上**的边（bundle 成员跨层 / 父层改子层状态 / 子端口由父层表达式驱动）
 MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 = 子侧 output）⇒ ⇒
@@ -177,12 +173,9 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 ### Requirement: 悬空子输入 MUST 向上冒泡为顶层输入
 
-- **MODIFIED**：旧的布尔策略字段**已不存在** ⇒ ⇒ 失败判据改为
-  **`UndrivenPolicy::Reject`**（默认是 `UndrivenPolicy::Bubble`）；拒绝的可观测形态按
-  ADR-058 §2.3 ⑤ = **错误结果**。⚠️ `Reject` 的适用范围**已收窄**（ADR-060 §2.4.2）：
-  只对「inline 折叠后 module 归属为**非根成层 module**」的悬空 `ch_in` 生效 ——
-  **根自己的** `ch_in` 与 **inline 折叠进根**的悬空 `ch_in` 在扁平里本就是顶层 input
-  ⇒ ⇒ `Reject` 下**仍 MUST 产出**（拒绝它们 = 拒绝合法设计）。
+- **MODIFIED**：`UndrivenPolicy::Reject` 的适用范围**已收窄**（ADR-060 §2.4.2）：只对
+  「inline 折叠后 module 归属为**非根成层 module**」的悬空 `ch_in` 生效 ⇒ ⇒ **根自己的**
+  与**折叠进根**的悬空 `ch_in` 在扁平里本就是顶层 input ⇒ ⇒ **仍 MUST 产出**。
 
 无驱动源的子模块输入端口 MUST 逐级向上冒泡，最终成为**顶层 input**
 （与扁平产物行为一致）⇒ ⇒ 默认（`UndrivenPolicy::Bubble`）MUST 有 `CHWARN` 点名路径
@@ -206,10 +199,8 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 ### Requirement: 时序模块 MUST 有 clock/reset 端口
 
-- **MODIFIED**：lint 门的口径订正 —— 唯一的权威是 **ADR-060 §2.5** 的可执行定义：
-  **不启用全量告警开关**（本设计的合法产物会触发 `DECLFILENAME` / `PINCONNECTEMPTY` /
-  `UNUSEDSIGNAL`）、**捕获退出码**、**stderr 不含 `%Error`**、`lint_off` 白名单、
-  **禁用 `-Wno-fatal`**（它让 warning 不影响退出码 ⇒ 门失效）。
+- **MODIFIED**：lint 门 = **ADR-060 §2.5**（不启用全量告警开关 · 捕获退出码 · stderr 无
+  `%Error` · `lint_off` 白名单 · **禁 `-Wno-fatal`** ⇒ 它让 warning 不影响退出码 ⇒ 门失效）。
 
 **根 module** MUST **无条件**发射 `default_clock` / `default_reset`
 （⇒ 与扁平产物一致：`context::init()` 恒定创建这对节点，扁平 `print_header` 无条件发射）。
@@ -232,8 +223,8 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 ### Requirement: 成层且非根的 module 端口 MUST 覆盖自身 `ch_in` / `ch_out`，且每个端口可追溯
 
-- **MODIFIED**：拒绝的可观测形态按 ADR-058 §2.3 ⑤ 改判为**错误结果**（`ok = false` +
-  `error` 点名 + `files` 为空），与「发射器内 MUST NOT 依赖异常」的口径一致。
+- **MODIFIED**：拒绝的可观测形态按 ADR-058 §2.3 ⑤ = **错误结果**（`ok = false` +
+  `error` 点名 + `files` 为空），与「发射器内 MUST NOT 依赖异常」口径一致。
 
 **成层且非根**的 module，其端口集合 MUST **⊇** 它自己的 `ch_in` ∪ `ch_out`
 ⇒ ⇒ **是否已被父层驱动不影响它是否成为端口**（emitter MUST 忽略 `inputimpl::driver()`）。
