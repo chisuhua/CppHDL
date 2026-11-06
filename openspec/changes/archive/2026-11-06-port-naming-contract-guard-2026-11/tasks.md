@@ -154,15 +154,19 @@
 - [x] 6.2 根 `AGENTS.md` COMMANDS 段增行（与 `verify_hierarchical_rtl.sh` 并列，
       注明「需要 verilator · Ubuntu-only CI」）
       ⇒ ⇒ **已落** ⇒ ⇒ `verify_agents_size.sh` PASS（51104 B ≤ 72 KiB）
-- [ ] 6.3 roadmap `feat-hierarchical-rtl-output` 的残留 5 行打勾 + 归档名
-      ⇒ ⇒ **待归档后**（归档名此时才确定）
-- [ ] 6.4 **归档后手工替换 `## Purpose` 骨架**（openspec 生成的是
-      `TBD - created by archiving change <change-name>`，**含 change 名**
-      ⇒ ⇒ 不替换即违反 delta 规则 1，见
-      `docs/developer_guide/openspec-specs-guide.md:76-87`）
-      ⇒ ⇒ **待归档后**
-- [ ] 6.5 `openspec validate hierarchical-port-naming-guard --type spec --strict` 通过
-      ⇒ ⇒ **待归档后**（主 spec 归档时才生成）
+- [x] 6.3 roadmap `feat-hierarchical-rtl-output` 的残留 5 行打勾 + 归档名
+      ⇒ ⇒ **已落**（归档名 `2026-11-06-port-naming-contract-guard-2026-11` · 含
+      实测证据 + ⚠️ **如实登记**「G3-5 已硬拒绝 ⇒ N1 在现有 3 个产物上结构性恒绿 ⇒
+      护栏的真实价值 = 回归栅栏」）
+- [x] 6.4 **归档后手工替换 `## Purpose` 骨架**
+      ⇒ ⇒ ⚠️ **无需动作**：delta 里**已带** `## Purpose` 段 ⇒ ⇒ 归档时 CLI 直接带入
+      ⇒ ⇒ **实测**主 spec 无 `TBD`、无 `created by archiving change <name>` 残留
+      （grep 0 命中）⇒ ⇒ **未**违反 delta 规则 1
+- [x] 6.5 `openspec validate hierarchical-port-naming-guard --type spec --strict` 通过
+      ⇒ ⇒ **实测**：`Specification 'hierarchical-port-naming-guard' is valid`
+      ⇒ ⇒ 全局 `openspec validate --specs --strict`：**17 passed → 18 passed**
+      （failed 仍 **22** ⇒ 余量为存量 CLI 1.14.x 漂移 ⇒ ⇒ **无新增 warning**）
+      ⇒ ⇒ 4 条 Requirement 正文 223 / 238 / 247 / 210 字符 ⇒ 全 ≤ 500
 
 ## 审查（critic · `build` 档 · 归档前增量审）
 
