@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "bundle/stream_bundle.h"
 #include "codegen_naming.h"
 #include "hierarchy_verilog.h"
 #include "hier_equivalence.h"
@@ -376,5 +377,455 @@ TEST_CASE("hierarchical equivalence - corrupting the layered product turns the j
         INFO("restored error: " << res.error);
         REQUIRE(res.ok);
         REQUIRE(res.equal);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// B6 · DUT 矩阵（其余 4 个）+ 粒度矩阵
+// ⚠️ 粒度裁决见 design.md §6.2：**含 `ch_mem` 的 DUT 与深设计只跑 `RespectDeclarations`**
+//    （ForceLayer 会把 mem 持有者成层 ⇒ 跨模块 `ch_mem` 被合法拒绝 ⇒ 该变体无可执行对象）。
+// ═════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+// ── DUT ③：**三层 + 兄弟连线**（`a` 的输出驱动兄弟 `b` 的输入）─────────────
+class EqDeepLeaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};
+    EqDeepLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = io().din;
+        io().dout <<= acc;
+    }
+};
+
+class EqDeepMid : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<EqDeepLeaf> a{"a"};
+    ch::ch_module<EqDeepLeaf> b{"b"};
+    EqDeepMid(ch::Component *p = nullptr, const std::string &n = "mid")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= a.io().dout;   // ⚠️ **兄弟边**（a → b）
+        io().dout <<= b.io().dout;
+    }
+};
+
+class EqDeepTop : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<EqDeepMid> mid{"mid"};
+    EqDeepTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        io().dout <<= mid.io().dout;
+    }
+};
+
+// ── DUT ④：**bundle 成员跨层**（父层驱动子层的 bundle 字段 ⇒ proxy 子形态）──
+//    ⚠️ 字段节点必须先 `as_master()`（否则 `<<=` 落到「另建 assign 节点」的路径）
+class EqBundleLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_bundle_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_stream<ch_uint<8>> strm;
+    EqBundleLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        strm.as_master();
+        strm.payload <<= io().din;
+        io().dout <<= strm.payload;
+    }
+};
+
+class EqBundleTop : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<EqBundleLeaf> leaf{"leaf"};
+    EqBundleTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        // ⚠️⚠️ 父层驱动**子层的 bundle 字段** ⇒ ⇒ 合成隐式端口（proxy 子形态）
+        leaf.instance().strm.payload <<= io().din;
+        io().dout <<= leaf.io().dout;
+    }
+};
+
+// ── DUT ⑤：**含 `ch_mem`**（mem 在**成层子 module 内**自用 ⇒ 合法）──────────
+//    ⚠️ 父层只读子**端口**（`dout`）⇒ ⇒ **不是**跨模块 mem 读 ⇒ ⇒ 合法
+class EqMemLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_mem_leaf");
+    __io(ch_in<ch_uint<4>> waddr; ch_in<ch_uint<8>> wdata; ch_out<ch_uint<8>> rdata;)
+    ch_mem<ch_uint<8>, 16> mem{"mem"};
+    EqMemLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mem.write(io().waddr, io().wdata);        // 每拍写（enable 默认 true）
+        io().rdata <<= mem.aread(io().waddr);     // 0-cycle 读 ⇒ 读到**上一拍**写进去的值
+    }
+};
+
+class EqMemTop : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> wdata; ch_out<ch_uint<8>> rdata;)
+    ch::ch_module<EqMemLeaf> leaf{"leaf"};
+    EqMemTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().waddr <<= ch_uint<4>(0_d);
+        leaf.io().wdata <<= io().wdata;
+        io().rdata <<= leaf.io().rdata;
+    }
+};
+
+// ── DUT ⑥：**真实最深设计**（裁剪版流水线：reg + dmem + **2 个声明成层的流水级**）
+//    ⚠️ 顶层端口宽度 **≤ 64**（>64 ⇒ backend 合法拒绝 ⇒ 判据空转）
+class EqPipeAlu : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_pipe_alu");
+    // ⚠️ **两个**输出端口：`y` 喂给兄弟级（memstage）· `state` 回读给根
+    //    ⇒ ⇒ `y` **不得**同时被根驱动（否则「同一子端口两个驱动」⇒ 发射器**合法拒绝**）
+    __io(ch_in<ch_uint<8>> a; ch_in<ch_uint<8>> b; ch_out<ch_uint<8>> y; ch_out<ch_uint<8>> state;)
+    ch_reg<ch_uint<8>> acc{0_d};
+    EqPipeAlu(ch::Component *p = nullptr, const std::string &n = "alu")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = io().a + io().b;
+        io().y <<= acc;
+        io().state <<= acc;
+    }
+};
+
+class EqPipeMem : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_pipe_mem");
+    __io(ch_in<ch_uint<4>> waddr; ch_in<ch_uint<8>> wdata; ch_out<ch_uint<8>> rdata;)
+    ch_mem<ch_uint<8>, 16> mem{"mem"};
+    EqPipeMem(ch::Component *p = nullptr, const std::string &n = "memstage")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mem.write(io().waddr, io().wdata);
+        io().rdata <<= mem.aread(io().waddr);
+    }
+};
+
+class EqPipeTop : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> state; ch_out<ch_uint<8>> memval;)
+    ch::ch_module<EqPipeAlu> alu{"alu"};
+    ch::ch_module<EqPipeMem> memstage{"memstage"};
+    EqPipeTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        alu.io().a <<= io().din;
+        alu.io().b <<= ch_uint<8>(1_d);
+        memstage.io().waddr <<= ch_uint<4>(0_d);
+        memstage.io().wdata <<= alu.io().y;   // ⚠️ **兄弟边**（alu → memstage）
+        io().state <<= alu.io().state;       // ⚠️ 回读走**另一个**端口（`y` 已被兄弟边占用）
+        io().memval <<= memstage.io().rdata;
+    }
+};
+
+// ── 观测集合 / 输入集合（**手写** · 每个 DUT 一份）─────────────────────────
+
+/// 三层 + 兄弟连线：`O` = 顶层输出（成层时可见）+ inline 时**全部** `ch_out`。
+std::vector<ch_test::hier::Observation> deep_obs(EqDeepTop &root, bool all_visible) {
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back({"top.dout", [&root](ch::Simulator &s) -> std::uint64_t {
+                       return static_cast<std::uint64_t>(s.get_port_value(root.io().dout));
+                   }});
+    if (all_visible) {
+        obs.push_back({"mid.dout", [&root](ch::Simulator &s) -> std::uint64_t {
+                           return static_cast<std::uint64_t>(
+                               s.get_port_value(root.mid.io().dout));
+                       }});
+        obs.push_back({"mid.dout", [&root](ch::Simulator &s) -> std::uint64_t {
+                           return static_cast<std::uint64_t>(
+                               s.get_port_value(root.mid.io().dout));
+                       }});
+    }
+    return obs;
+}
+
+std::vector<ch_test::hier::DrivenInput> deep_inputs(EqDeepTop &root) {
+    return {{"top.din", [&root](ch::Simulator &s, std::uint64_t v) {
+                 s.set_input_value(root.io().din, v);
+             }}};
+}
+
+std::vector<ch_test::hier::Observation> bundle_obs(EqBundleTop &root, bool all_visible) {
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back({"top.dout", [&root](ch::Simulator &s) -> std::uint64_t {
+                       return static_cast<std::uint64_t>(s.get_port_value(root.io().dout));
+                   }});
+    if (all_visible) {
+        obs.push_back({"leaf.dout", [&root](ch::Simulator &s) -> std::uint64_t {
+                           return static_cast<std::uint64_t>(
+                               s.get_port_value(root.leaf.io().dout));
+                       }});
+    }
+    return obs;
+}
+
+std::vector<ch_test::hier::DrivenInput> bundle_inputs(EqBundleTop &root) {
+    return {{"top.din", [&root](ch::Simulator &s, std::uint64_t v) {
+                 s.set_input_value(root.io().din, v);
+             }}};
+}
+
+std::vector<ch_test::hier::Observation> mem_obs(EqMemTop &root, bool all_visible) {
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back({"top.rdata", [&root](ch::Simulator &s) -> std::uint64_t {
+                       return static_cast<std::uint64_t>(s.get_port_value(root.io().rdata));
+                   }});
+    if (all_visible) {
+        obs.push_back({"leaf.rdata", [&root](ch::Simulator &s) -> std::uint64_t {
+                           return static_cast<std::uint64_t>(
+                               s.get_port_value(root.leaf.io().rdata));
+                       }});
+    }
+    return obs;
+}
+
+std::vector<ch_test::hier::DrivenInput> mem_inputs(EqMemTop &root) {
+    return {{"top.wdata", [&root](ch::Simulator &s, std::uint64_t v) {
+                 s.set_input_value(root.io().wdata, v);
+             }}};
+}
+
+std::vector<ch_test::hier::Observation> pipe_obs(EqPipeTop &root, bool all_visible) {
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back({"top.state", [&root](ch::Simulator &s) -> std::uint64_t {
+                       return static_cast<std::uint64_t>(s.get_port_value(root.io().state));
+                   }});
+    obs.push_back({"top.memval", [&root](ch::Simulator &s) -> std::uint64_t {
+                       return static_cast<std::uint64_t>(s.get_port_value(root.io().memval));
+                   }});
+    if (all_visible) {
+        obs.push_back({"alu.y", [&root](ch::Simulator &s) -> std::uint64_t {
+                           return static_cast<std::uint64_t>(
+                               s.get_port_value(root.alu.io().y));
+                       }});
+        obs.push_back({"memstage.rdata", [&root](ch::Simulator &s) -> std::uint64_t {
+                           return static_cast<std::uint64_t>(
+                               s.get_port_value(root.memstage.io().rdata));
+                       }});
+    }
+    return obs;
+}
+
+std::vector<ch_test::hier::DrivenInput> pipe_inputs(EqPipeTop &root) {
+    return {{"top.din", [&root](ch::Simulator &s, std::uint64_t v) {
+                 s.set_input_value(root.io().din, v);
+             }}};
+}
+
+/// 跑一次「发射 + 逐拍比对」并断言**全等**（失败时把 mismatch 打出来）。
+void require_equivalent(ch::Component &root, ch::core::context *ctx, const std::string &dir,
+                        ch::Granularity granularity,
+                        const std::vector<ch_test::hier::Observation> &obs,
+                        const std::vector<ch_test::hier::DrivenInput> &inputs,
+                        const std::vector<std::vector<std::uint64_t>> &stim) {
+    auto products = ch_test::hier::emit(root, dir, granularity);
+    INFO("emit error: " << products.error);
+    REQUIRE(products.ok);
+    REQUIRE_FALSE(products.ports.empty());
+
+    auto res = ch_test::hier::compare(ctx, dir, products.hier_path, products.ports, inputs,
+                                      obs, stim);
+    INFO("compare error: " << res.error);
+    INFO("first mismatch: " << res.first_mismatch);
+    REQUIRE(res.ok);
+    REQUIRE(res.equal);
+    REQUIRE(res.mismatch_count == 0);
+}
+
+}   // namespace
+
+// ═════════════════════════════════════════════════════════════════════════
+// B6-① 三层 + 兄弟连线
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical equivalence - three levels with a sibling edge",
+          "[hierarchy][equivalence][deep]") {
+    const std::string dir = make_temp_dir("_deep");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<EqDeepTop> dev;
+
+    const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}, {0x44}};
+
+    // ① **成层**（`RespectDeclarations`：叶/中层未声明 ⇒ inline ⇒ 实际只有一层）
+    //    ⇒ ⇒ 观测面 = 顶层输出
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
+                       deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+
+    // ② **ForceInline** ⇒ 全部 inline ⇒ 顶层端口 = 扁平端口 ⇒ 观测面可含**全部** `ch_out`
+    //    ⇒ ⇒ 顺带验「全 inline ⇒ 与扁平**逐字节相同**」
+    {
+        auto products = ch_test::hier::emit(dev.instance(), dir, ch::Granularity::ForceInline);
+        INFO("emit error: " << products.error);
+        REQUIRE(products.ok);
+        auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
+                                          deep_inputs(dev.instance()),
+                                          deep_obs(dev.instance(), true), stim);
+        INFO("compare error: " << res.error);
+        INFO("first mismatch: " << res.first_mismatch);
+        REQUIRE(res.ok);
+        REQUIRE(res.equal);
+        REQUIRE(res.flat_product == res.hier_product);
+    }
+
+    // ③ **ForceLayer** ⇒ 每个组件成层 ⇒ 三层 module 树 ⇒ 兄弟边成为**跨 module** 连接
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
+                       deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// B6-② bundle 成员跨层（proxy 子形态 ⇒ 合成隐式端口）
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical equivalence - a bundle field crossing a layer boundary",
+          "[hierarchy][equivalence][bundle]") {
+    const std::string dir = make_temp_dir("_bundle");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<EqBundleTop> dev;
+
+    const std::vector<std::vector<std::uint64_t>> stim = {{0x0A}, {0x1B}, {0x2C}};
+
+    // ① **成层**（叶声明成层 ⇒ 父层驱动其 bundle 字段 ⇒ 隐式端口）
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
+                       bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+
+    // ② **ForceInline** ⇒ 全部 inline ⇒ 观测面含**全部** `ch_out`
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
+                       bundle_obs(dev.instance(), true), bundle_inputs(dev.instance()), stim);
+
+    // ③ **ForceLayer** ⇒ 同样成层 ⇒ 隐式端口路径不变
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
+                       bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// B6-③ 含 `ch_mem`（mem 在**成层子 module 内**自用 ⇒ 合法）
+// ⚠️ 只跑 `RespectDeclarations`（design §6.2 的裁决）
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical equivalence - a ch_mem living inside a layered module",
+          "[hierarchy][equivalence][mem]") {
+    const std::string dir = make_temp_dir("_mem");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<EqMemTop> dev;
+
+    // ⚠️ 观测值 = **上一拍**写进 mem 的值（0-cycle 读）⇒ ⇒ 激励逐拍变化 ⇒ 观测值逐拍变化
+    const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}, {0x44}};
+
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
+                       mem_obs(dev.instance(), false), mem_inputs(dev.instance()), stim);
+
+    // 「随激励变化」：观测集合的取值集合 MUST 随激励变化（mem 通路真的走了）
+    {
+        auto products = ch_test::hier::emit(dev.instance(), dir,
+                                            ch::Granularity::RespectDeclarations);
+        REQUIRE(products.ok);
+        auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
+                                          mem_inputs(dev.instance()),
+                                          mem_obs(dev.instance(), false), stim);
+        REQUIRE(res.ok);
+        std::set<std::uint64_t> values;
+        for (const auto &row : res.trace) {
+            values.insert(row[0]);
+        }
+        INFO("distinct observed values = " << values.size());
+        REQUIRE(values.size() >= 2);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// B6-④ **真实最深设计**（裁剪版流水线：reg + dmem + 2 个**声明成层**的流水级）
+// ⚠️ 只跑 `RespectDeclarations`（design §6.2 的裁决）
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical equivalence - the deepest design (two layered pipeline stages)",
+          "[hierarchy][equivalence][deepcore]") {
+    const std::string dir = make_temp_dir("_deepcore");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<EqPipeTop> dev;
+
+    const std::vector<std::vector<std::uint64_t>> stim = {{0x05}, {0x06}, {0x07}, {0x08}};
+
+    require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::RespectDeclarations,
+                       pipe_obs(dev.instance(), false), pipe_inputs(dev.instance()), stim);
+
+    // 「随激励变化」：两个观测量都 MUST 变（状态 + mem 回读）
+    {
+        auto products = ch_test::hier::emit(dev.instance(), dir,
+                                            ch::Granularity::RespectDeclarations);
+        REQUIRE(products.ok);
+        auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
+                                          pipe_inputs(dev.instance()),
+                                          pipe_obs(dev.instance(), false), stim);
+        REQUIRE(res.ok);
+        std::set<std::uint64_t> states;
+        std::set<std::uint64_t> memvals;
+        for (const auto &row : res.trace) {
+            states.insert(row[0]);
+            memvals.insert(row[1]);
+        }
+        INFO("distinct states = " << states.size() << ", distinct memvals = " << memvals.size());
+        REQUIRE(states.size() >= 2);
+        REQUIRE(memvals.size() >= 2);
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// B6-⑤ **粒度矩阵**：`ForceInline` vs `ForceLayer` 的逐拍全等
+// ⚠️ 只覆盖**不含跨模块 mem 读**的 DUT（design §6.2）
+// ⚠️ 观测面 = **两种粒度下都可见**的那些信号（否则读不到的一侧会被误判为分歧）
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical equivalence - ForceInline vs ForceLayer match the flat product",
+          "[hierarchy][equivalence][granularity]") {
+    const std::vector<std::vector<std::uint64_t>> stim = {{0x11}, {0x22}, {0x33}};
+
+    // ① 两层 DUT（B5 的 `EqTop`）
+    {
+        const std::string dir = make_temp_dir("_gran_2layer");
+        ch::ch_device<EqTop> dev;
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
+                           make_observations(dev.instance()), make_inputs(dev.instance()), stim);
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
+                           make_observations(dev.instance()), make_inputs(dev.instance()), stim);
+    }
+
+    // ② 三层 + 兄弟连线
+    {
+        const std::string dir = make_temp_dir("_gran_deep");
+        ch::ch_device<EqDeepTop> dev;
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
+                           deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
+                           deep_obs(dev.instance(), false), deep_inputs(dev.instance()), stim);
+    }
+
+    // ③ bundle 成员跨层
+    {
+        const std::string dir = make_temp_dir("_gran_bundle");
+        ch::ch_device<EqBundleTop> dev;
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceInline,
+                           bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
+        require_equivalent(dev.instance(), dev.context(), dir, ch::Granularity::ForceLayer,
+                           bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
     }
 }

@@ -95,9 +95,14 @@ inline std::string read_whole_file(const std::string &path) {
 ///
 /// ⚠️ 与「比对」**分成两步**是刻意的：调用方要能在比对之前**篡改**产物
 ///    （判别力自证：「故意破坏层次化产物 ⇒ 等价性判据 MUST 转红」）。
-inline Products emit_products(ch::Component &root, const std::string &work_dir) {
+///
+/// @param granularity 层级粒度（`ch::Granularity` · ADR-061 决策⑤）⇒ ⇒ **发射期**生效
+///        （`GranularityScope` 是**静态**开关 ⇒ MUST 只包住发射 ⇒ 不得泄漏到别的阶段）
+inline Products emit_products(ch::Component &root, const std::string &work_dir,
+                              ch::Granularity granularity = ch::Granularity::RespectDeclarations) {
     Products p;
     p.hier_path = work_dir + "/hier_src.v";
+    ch::Component::GranularityScope scope(granularity);
     auto emitted = ch::toVerilogHierarchical(p.hier_path, root);
     if (!emitted.ok) {
         p.error = "hierarchical emission failed: " + emitted.error;
@@ -219,8 +224,9 @@ struct ProductSet {
     std::vector<ch::SignalMapEntry> signal_map;
 };
 
-inline ProductSet emit(ch::Component &root, const std::string &work_dir) {
-    impl::Products p = impl::emit_products(root, work_dir);
+inline ProductSet emit(ch::Component &root, const std::string &work_dir,
+                        ch::Granularity granularity = ch::Granularity::RespectDeclarations) {
+    impl::Products p = impl::emit_products(root, work_dir, granularity);
     ProductSet out;
     out.ok = p.ok;
     out.error = p.error;
