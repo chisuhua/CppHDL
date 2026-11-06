@@ -829,3 +829,45 @@ TEST_CASE("hierarchical equivalence - ForceInline vs ForceLayer match the flat p
                            bundle_obs(dev.instance(), false), bundle_inputs(dev.instance()), stim);
     }
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// B7-① **确定性**：同一设计两次发射 ⇒ 产物**逐字节相同** + 映射表**逐项**相同
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical equivalence - two emissions of the same design are identical",
+          "[hierarchy][equivalence][determinism]") {
+    const std::string dir = make_temp_dir("_det");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<EqDeepTop> dev;
+
+    const std::string path_a = dir + "/det_a.v";
+    const std::string path_b = dir + "/det_b.v";
+    std::remove(path_a.c_str());
+    std::remove(path_b.c_str());
+
+    auto ra = toVerilogHierarchical(path_a, dev.instance());
+    INFO("emit(a) error: " << ra.error);
+    REQUIRE(ra.ok);
+    auto rb = toVerilogHierarchical(path_b, dev.instance());
+    INFO("emit(b) error: " << rb.error);
+    REQUIRE(rb.ok);
+
+    // ① 产物**逐字节**相同（同 ABI 内）
+    const std::string a = read_file(path_a);
+    const std::string b = read_file(path_b);
+    REQUIRE_FALSE(a.empty());
+    REQUIRE(a == b);
+
+    // ② 映射表**逐项**相同（**顺序**也相同 ⇒ 顺序确定 ⇒ 不是「集合相等」的弱判据）
+    REQUIRE(ra.signal_map.size() == rb.signal_map.size());
+    REQUIRE_FALSE(ra.signal_map.empty());
+    for (std::size_t i = 0; i < ra.signal_map.size(); ++i) {
+        INFO("index " << i);
+        REQUIRE(ra.signal_map[i].node_id == rb.signal_map[i].node_id);
+        REQUIRE(ra.signal_map[i].signal == rb.signal_map[i].signal);
+        REQUIRE(ra.signal_map[i].hier_top_port_name == rb.signal_map[i].hier_top_port_name);
+    }
+    // ③ 顺序 MUST 是 `node_id` 升序（确定性的一**可机械判定**的形态）
+    for (std::size_t i = 1; i < ra.signal_map.size(); ++i) {
+        REQUIRE(ra.signal_map[i - 1].node_id < ra.signal_map[i].node_id);
+    }
+}

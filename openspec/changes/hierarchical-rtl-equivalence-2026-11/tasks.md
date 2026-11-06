@@ -128,13 +128,31 @@
 
 ## T4 确定性与零回归
 
-- [ ] 4.1 同一设计两次生成**字节相同**（同 ABI 内）
-- [ ] 4.2 产物通过 **ADR-060 §2.5 的 lint 门**（退出码 + 无 `%Error` + `lint_off` 白名单；
-      ⚠️ **不加 `-Wall`**、**禁 `-Wno-fatal`**）
-- [ ] 4.3 `ctest -LE perf` / samples / examples 全绿 · 计数锚点**按新增用例同步更新**
+- [x] 4.1 同一设计两次生成**字节相同**（同 ABI 内）
+      ⇒ ⇒ **B7 已落地**：`[equivalence][determinism]`（同一 ctx 两次发射）⇒ ① 产物**逐字节**相同
+      + ② 映射表**逐项**相同（**顺序**也相同 ⇒ 不是「集合相等」的弱判据）+ ③ 顺序 MUST 是
+      `node_id` **升序**（确定性的一**可机械判定**的形态）
+      ⇒ ⇒ **跨进程**那一侧由护栏 **R4** 覆盖（两次生成 `diff -r`）
+      ⇒ ⇒ ⚠️ **变异 M-B7-1（实测 3 次，如实登记）**：① **按地址排序**（`key.c_str()` 比较）
+      ⇒ **恒绿**（分配器的单调性 ⇒ 相对序不变）⇒ **无效变异**（不是判别力缺口）；
+      ② **进程级随机种子**打乱 module 顺序 ⇒ 被 **R1 lint 门**抓住（产物非法 ⇒ 证明 module 顺序
+      **受依赖顺序约束**：子先于父 ⇒ ⇒「顺序依赖」的可注入空间很小）；③ **进程内静态计数器**
+      反转**映射表顺序** ⇒ ⇒ **本判据转红** ✓（⇒ ⇒ 「顺序」确实是契约的一部分）⇒ 还原复绿
+- [x] 4.2 产物通过 **ADR-060 §2.5 的 lint 门**（退出码 + 无 `%Error` + `lint_off` 白名单；
+      ⚠️ **不加** `-Wall`**、**禁** `-Wno-fatal`）
+      ⇒ ⇒ **已由护栏 R1 覆盖**（`scripts/verify_hierarchical_rtl.sh` · 3 个产物 · exit 0）
+- [x] 4.3 `ctest -LE perf` / samples / examples 全绿 · 计数锚点**按新增用例同步更新**
       （⚠️ 等价性用例带 `verilator_e2e` 标签 ⇒ `VERILATOR_E2E_TOTAL` 必变；
       parity 两锚点（66 / 289）**不变** —— 等价性用例不是 `DUAL_BACKEND_TEST_PAIR`）
-
+      ⇒ ⇒ **B5 已同步**：`CTEST_TOTAL` 249 → **250**（新 ctest 条目）·
+      `VERILATOR_E2E_TOTAL` 75 → **76**（新条目带 `verilator_e2e` 标签 ⇒ 且 MUST 登记进
+      capability 的**契约锁定清单** ⇒ 已由独立小 change `dual-backend-lock-register-hier-equivalence-2026-11`
+      落地并归档）· parity 两锚点（66 / 289）**不变** ✓
+      ⇒ ⇒ **B7 已加 P8 守卫**：`scripts/verify_hierarchical_p8.sh`（R1 `include/` 无 harness 头 ·
+      R2 `include/` 无 harness 符号 · R3 harness 在 `tests/` · R4 公开 API 面 ⊆ **已裁决的 4 个公共头**
+      （`codegen_verilog.h` · `hierarchy_verilog.h` · `core/verilator_backend.h` ·
+      `core/verilator_port_set.h`）⇒ ⚠️ R4 需 git 历史 ⇒ 浅克隆环境**明确 NOTE 跳过**（不静默假装绿））
+      + `--self-test`（合法清单 ⇒ 绿 · 越界清单 ⇒ 红）
 ## 验证命令
 
 ```bash
