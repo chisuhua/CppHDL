@@ -162,6 +162,7 @@ set(CH_SOURCES
     ${AST_SOURCES}
     src/component.cpp
     src/hierarchy_analysis.cpp
+    src/hierarchy_equivalence.cpp
     src/hierarchy_verilog.cpp
     src/simulator.cpp
     src/simulator_trace.cpp

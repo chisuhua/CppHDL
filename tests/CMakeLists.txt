@@ -1075,6 +1075,17 @@ add_catch_test(test_component_ownership test_component_ownership.cpp)
 # active parent (declaration decoupled from assembly point)
 add_catch_test(test_component_granularity test_component_granularity.cpp)
 
+# public equivalence helper (p8-hierarchical-equivalence-public-helper-2026-11):
+# out-of-tree consumer of the PUBLIC header only (proves the public surface is
+# self-sufficient: compiles + links + runs, not just -fsyntax-only).
+# ⚠️ 它跑**真 verilator**（编译扁平产物 + 层次化产物两份）⇒ ⇒ MUST 带
+#    `verilator_e2e` 标签 + `RESOURCE_LOCK` ⇒ ⇒ **MUST NOT** 用 `add_catch_test`
+#    （那样它会落进「非 verilator」分片 ⇒ ⇒ CI 的 verilator 腿跑不到它）。
+add_dual_backend_test(test_public_equivalence_api
+    SOURCES test_public_equivalence_api.cpp
+    TIMEOUT 600
+)
+
 # hierarchy friendliness diagnosis (p6-hierarchy-friendliness-diagnosis-2026-11):
 # read-only diagnosis entry point; 5 machine-decidable report items; "unmeasured" vs
 # "measured zero" must be structurally distinguishable; synthesized-port count must

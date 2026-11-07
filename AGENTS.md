@@ -72,7 +72,8 @@ CppHDL/
 | 多层模块装配 / 跨层连线 / 成员接口 / RTL 输出形态 | `docs/usage_guide/05-component-design.md` |
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
-| 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | `tests/test_hierarchy_equivalence.cpp` + `tests/hier_equivalence.h`（harness 在 `tests/` 内 ⇒ **不暴露**公共 API）|
+| 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|
+| 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | 公共 API = `include/hierarchy_equivalence.h`（`ch::hier_eq`）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
@@ -425,7 +426,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 252
+- CTEST_TOTAL: 253
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -436,7 +437,7 @@ ctest --output-on-failure
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
-- VERILATOR_E2E_TOTAL: 76
+- VERILATOR_E2E_TOTAL: 77
 <!-- CI anchor: 「**双后端 parity 源文件数**」（2026-10-30，planner 判据修订配套）。
      scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
      口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
@@ -469,12 +470,12 @@ ctest --output-on-failure
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | CTest 条目总数 | 252 | `cd build && ctest -N \| tail -1` |
-  | 其中 non-perf | 241 | `cd build && ctest -N -LE perf \| tail -1` |
-  | `verilator_e2e` 标签数 | 76 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
+  | CTest 条目总数 | 253 | `cd build && ctest -N \| tail -1` |
+  | 其中 non-perf | 242 | `cd build && ctest -N -LE perf \| tail -1` |
+  | `verilator_e2e` 标签数 | 77 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
   | 双后端 parity 源文件数 | 66 | `bash scripts/verify_dual_backend_parity.sh` |
   | 双后端 parity macro 调用数 | 289 | 同上 |
-  | `tests/test_*.cpp` | 144 | `ls tests/test_*.cpp \| wc -l` |
+  | `tests/test_*.cpp` | 145 | `ls tests/test_*.cpp \| wc -l` |
   | `tests/chlib/test_*.cpp` | 52 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|

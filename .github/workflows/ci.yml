@@ -548,6 +548,25 @@ jobs:
       shell: bash
       run: scripts/verify_header_odr.sh --self-test
 
+    # ---- P8 公共 API 面守卫（R1–R4）--------------------------------------
+    # WHY here: the P8 guard is **pure static** (headers + symbols + a registry)
+    #   ⇒ it needs **no** verilator ⇒ it belongs with the other header checks
+    #   (⇒ ⇒ runs in every shard ⇒ no `matrix.shard == 1` gate needed).
+    # ⚠️ **实测**：本护栏此前**根本不在 CI 里**（⇒ 零执行 ⇒ 「强度不减」只是一次性
+    #    本地证据）⇒ ⇒ 本次 change MUST 接线。
+    - name: Verify public API surface (P8 guard, R1–R4)
+      shell: bash
+      run: bash scripts/verify_hierarchical_p8.sh
+
+    # 自检：逐条投毒 ⇒ 每条判据必须变红 ⇒ 还原复绿。
+    # WHY: this repo repeatedly produced guards that "looked like they were
+    #   guarding but were permanently green" ⇒ every criterion must prove it
+    #   has discriminating power. The poisons operate on a **copy** of
+    #   `include/` ⇒ the repository is never modified.
+    - name: Verify public API surface guard self-test
+      shell: bash
+      run: bash scripts/verify_hierarchical_p8.sh --self-test
+
     - name: Verify component naming model (path uniqueness + two dimensions)
       # WHY: the hierarchical RTL output (ADR-059 D3/D4) needs TWO naming
       # dimensions - `name()` (full path) and `local_name()` (local) - and the

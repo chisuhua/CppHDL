@@ -13,6 +13,7 @@
 // ⚠️ harness 放在 `tests/`（`tests/hier_equivalence.h`）⇒ **不暴露公共 API**
 //    （P8 独立立项；本 change 的 `include/` 只动 `hierarchy_verilog.h`）。
 
+#include <sys/stat.h>
 #include <unistd.h>
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
@@ -411,8 +412,8 @@ TEST_CASE("hierarchical equivalence - all-inline product is byte-identical to th
     // ③ 观测面**手写**且 ⊇ 全部 `ch_out`（任务 2.2）：全 inline ⇒ 叶子的 `ch_out`
     //    也在顶层 ⇒ MUST 可观测（两侧都读得到）
     REQUIRE(obs.size() == 2);
-    REQUIRE(res.trace.size() == stim.size());
-    for (const auto &row : res.trace) {
+    REQUIRE(res.flat_trace.size() == stim.size());
+    for (const auto &row : res.flat_trace) {
         REQUIRE(row.size() == obs.size());
     }
     // ④ **观测面 ↔ 映射表**的对账（delta Requirement ④/⑤：MUST 有机械载体）
@@ -449,7 +450,7 @@ TEST_CASE("hierarchical equivalence - layered product matches the flat product c
     INFO("first mismatch: " << res_a.first_mismatch);
     REQUIRE(res_a.equal);
     REQUIRE(res_a.mismatch_count == 0);
-    REQUIRE(res_a.trace.size() == stim_a.size());
+    REQUIRE(res_a.flat_trace.size() == stim_a.size());
 
     auto res_b = ch_test::hier::compare(dev.context(), dir, products.hier_path,
                                          products.ports, inputs, obs, stim_b);
@@ -487,10 +488,10 @@ TEST_CASE("hierarchical equivalence - layered product matches the flat product c
     for (std::size_t o = 0; o < obs.size() && !any_varies; ++o) {
         std::set<std::uint64_t> set_a;
         std::set<std::uint64_t> set_b;
-        for (const auto &row : res_a.trace) {
+        for (const auto &row : res_a.flat_trace) {
             set_a.insert(row[o]);
         }
-        for (const auto &row : res_b.trace) {
+        for (const auto &row : res_b.flat_trace) {
             set_b.insert(row[o]);
         }
         if (set_a != set_b) {
@@ -1089,7 +1090,7 @@ TEST_CASE("hierarchical equivalence - a ch_mem living inside a layered module",
                                           stim);
         REQUIRE(res.ok);
         std::set<std::uint64_t> values;
-        for (const auto &row : res.trace) {
+        for (const auto &row : res.flat_trace) {
             values.insert(row[0]);
         }
         INFO("distinct observed values = " << values.size());
@@ -1126,7 +1127,7 @@ TEST_CASE("hierarchical equivalence - the deepest design (two layered pipeline s
         REQUIRE(res.ok);
         std::set<std::uint64_t> states;
         std::set<std::uint64_t> memvals;
-        for (const auto &row : res.trace) {
+        for (const auto &row : res.flat_trace) {
             states.insert(row[0]);
             memvals.insert(row[1]);
         }

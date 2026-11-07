@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <sys/stat.h>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -57,7 +58,27 @@ using namespace ch::core;
 
 namespace {
 
-const char *kOutDir = "/tmp/opencode/hieremit";
+/// 层次化产物的输出目录。
+///
+/// ⚠️ **本目录 MUST 由测试自己创建**（既有缺陷的修复 · 2026-11-07 · P8 实施期发现）：
+///    原实现是 `const char *kOutDir = "/tmp/opencode/hieremit";` ⇒ ⇒ **从不创建**
+///    ⇒ ⇒ 干净机器上 `toVerilogHierarchical` 打不开 `<path>.tmp` ⇒ ⇒
+///    **26 条断言全红**（实测：`git stash` 到 HEAD 后**同样复现** ⇒ ⇒ 证实是
+///    **既有缺陷**，**不是** P8 引入的）⇒ ⇒ 而 CI **不创建**该目录（`ci.yml` 零命中）
+///    ⇒ ⇒ 即「全新 runner 上本 target 必然红」⇒ ⇒ 本 fix 让判据**自足**。
+std::string kOutDir() {
+    static const std::string dir = [] {
+        const std::string d = "/tmp/opencode/hieremit";
+        // ⚠️ **MUST 逐级建**（★ critic SHOULD_FIX-1）：`mkdir` 是**单层**的 ⇒
+        //    ⇒ 全新 runner 上 `/tmp/opencode` **不存在** ⇒ ⇒ 单层 mkdir **仍失败**
+        //    ⇒ ⇒ 「判据自足」就成了空话。逐段建 ⇒ ⇒ 每一级已存在时 EEXIST 无害。
+        ::mkdir("/tmp", 0755);
+        ::mkdir("/tmp/opencode", 0755);
+        ::mkdir(d.c_str(), 0755);
+        return d;
+    }();
+    return dir;
+}
 
 std::string read_file(const std::string &path) {
     std::ifstream in(path, std::ios::binary);
@@ -1262,7 +1283,7 @@ TEST_CASE("hierarchical emission: granularity scope covers construction and emis
             ch::Component::GranularityScope scope(ch::Granularity::ForceInline);
             dev = std::make_unique<ch::ch_device<T3>>();   // 构造在 scope 内
         }   // scope 析构 ⇒ 粒度复原 ⇒ **发射在 scope 之外**
-        const std::string path = std::string(kOutDir) + "/gran_half_applied.v";
+        const std::string path = kOutDir() + "/gran_half_applied.v";
         auto r = ch::toVerilogHierarchical(path, dev->instance());
         INFO("error: " << r.error);
         REQUIRE(r.ok);
@@ -1275,7 +1296,7 @@ TEST_CASE("hierarchical emission: granularity scope covers construction and emis
     // ② **正向**：scope **同时覆盖构造与发射** + `ForceInline`
     //    ⇒ ⇒ 产物 MUST 是**单 module**（全部 inline）。
     {
-        const std::string path = std::string(kOutDir) + "/gran_force_inline.v";
+        const std::string path = kOutDir() + "/gran_force_inline.v";
         std::string all;
         {
             ch::Component::GranularityScope scope(ch::Granularity::ForceInline);
@@ -1292,7 +1313,7 @@ TEST_CASE("hierarchical emission: granularity scope covers construction and emis
     // ③ **正向**：`ForceLayer` 覆盖构造与发射 ⇒ ⇒ 每个组件都成层
     //    （DUT 用**全 inline** 的 `IInline` ⇒ 否则与 `RespectDeclarations` 恒等 ⇒ 判据空转）。
     {
-        const std::string path = std::string(kOutDir) + "/gran_force_layer.v";
+        const std::string path = kOutDir() + "/gran_force_layer.v";
         std::string all;
         {
             ch::Component::GranularityScope scope(ch::Granularity::ForceLayer);
@@ -1319,7 +1340,7 @@ TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
     {
         HierarchyEmitOptions opts;
         opts.port_policy = PortPolicy::Reject;
-        const std::string path = std::string(kOutDir) + "/policy_reject.v";
+        const std::string path = kOutDir() + "/policy_reject.v";
         auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
         INFO("error: " << r.error);
         REQUIRE_FALSE(r.ok);
@@ -1332,7 +1353,7 @@ TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
     {
         HierarchyEmitOptions opts;
         opts.port_policy = PortPolicy::SynthesizeFatal;
-        const std::string path = std::string(kOutDir) + "/policy_fatal.v";
+        const std::string path = kOutDir() + "/policy_fatal.v";
         auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
         INFO("error: " << r.error);
         REQUIRE_FALSE(r.ok);
@@ -1345,7 +1366,7 @@ TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
     //    ⚠️ **中间态**：隐式端口**合成本身**属 B2b ⇒ ⇒ 本批一律 fail-closed
     //    ⇒ ⇒ 差异**只在诊断广度**（B2b 之后 `SynthesizeWarn` 才会真的「合成 + 产出」）。
     {
-        const std::string path = std::string(kOutDir) + "/policy_warn.v";
+        const std::string path = kOutDir() + "/policy_warn.v";
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
         REQUIRE_FALSE(r.ok);
@@ -1360,7 +1381,7 @@ TEST_CASE("hierarchical emission: sibling edges go through a parent-module wire"
     // ⚠️ 兄弟边（design §7.2.3）：共同祖先内一根**中转线** + 两处实例端口映射
     //    ⇒ ⇒ **零**隐式端口（兄弟之间本来就不该有端口）
     ch::ch_device<TwoSiblingTop> dev;
-    const std::string path = std::string(kOutDir) + "/sibling_wire.v";
+    const std::string path = kOutDir() + "/sibling_wire.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1394,7 +1415,7 @@ TEST_CASE("hierarchical emission: third-axis pass-through uses port adapter",
     // ⚠️ 第三轴（ADR-060 §2.1）：driver 在**更上层** ⇒ 沿祖先链**逐级同名** input 端口
     //    ⇒ ⇒ 每一级的端口名 = 驱动节点的 **ctx 级全局名**（⇒ 顶层与扁平产物**逐字相同**）
     ch::ch_device<AxTop> dev;
-    const std::string path = std::string(kOutDir) + "/third_axis_port.v";
+    const std::string path = kOutDir() + "/third_axis_port.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1423,7 +1444,7 @@ TEST_CASE("hierarchical emission: third-axis pass-through uses port adapter",
     REQUIRE(top_header.find("__x_") == std::string::npos);
 
     // ⑥ **确定性**（同一设计两次生成逐字节相同）
-    const std::string path2 = std::string(kOutDir) + "/third_axis_port_2.v";
+    const std::string path2 = kOutDir() + "/third_axis_port_2.v";
     auto r2 = ch::toVerilogHierarchical(path2, dev.instance());
     REQUIRE(r2.ok);
     REQUIRE(read_file(path2) == all);
@@ -1434,7 +1455,7 @@ TEST_CASE("hierarchical emission: third-axis pass-through uses node adapter",
     // ⚠️ 第三轴 + **reg 叶端点**（叶端点不是端口 ⇒ 合成端口 + **驱动重定向**）
     //    ⇒ ⇒ 不重定向 ⇒ 该寄存器退化成「保持」⇒ ⇒ **静默丢驱动**
     ch::ch_device<AxRegTop> dev;
-    const std::string path = std::string(kOutDir) + "/third_axis_reg.v";
+    const std::string path = kOutDir() + "/third_axis_reg.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1466,7 +1487,7 @@ TEST_CASE("hierarchical emission: driver walk stops at the redirected named prox
     //    守卫 = 「只穿透**未命名** proxy」⇒ 被重定向的 proxy **有名字** ⇒ 天然停下。
     //    ⚠️ 若不守：穿透到 `src(0)` ⇒ 父层信号名 ⇒ 本 module 内**未声明** ⇒ 非法 Verilog。
     ch::ch_device<ProxyDinTop> dev;
-    const std::string path = std::string(kOutDir) + "/walk_named_proxy.v";
+    const std::string path = kOutDir() + "/walk_named_proxy.v";
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
     REQUIRE(r.ok);
@@ -1518,7 +1539,7 @@ TEST_CASE("hierarchical emission: cross-module width mismatch is rejected before
          }},
     };
     for (const auto &c : cases) {
-        const std::string path = std::string(kOutDir) + "/" + c.name + ".v";
+        const std::string path = kOutDir() + "/" + c.name + ".v";
         std::remove(path.c_str());   // ⚠️ 判据依赖「失败不留文件」⇒ 先清掉上一轮（含变异轮）的残留
         auto r = c.run(path);
         INFO("case: " << c.name << " · error: " << r.error);
@@ -1536,7 +1557,7 @@ TEST_CASE("hierarchical emission: dangling layered input bubbles to the top with
     //    ⇒ ⇒ ① 顶层可驱动 · ② 每级同名 · ③ **逐跳实连**（G3-2，连接也由分析层生成）
     //       · ④ 端口名字 = ctx 级全局名（与扁平逐字相同）· ⑤ 端口旁注释 · ⑥ 每条一条 CHWARN
     ch::ch_device<BubbleTop> dev;
-    const std::string path = std::string(kOutDir) + "/bubble.v";
+    const std::string path = kOutDir() + "/bubble.v";
     std::remove(path.c_str());
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1587,7 +1608,7 @@ TEST_CASE("hierarchical emission: inline descendant's dangling input also gets r
     //    折进**非根**成层 module 时，原实现只登记端口、**不生成连接**
     //    ⇒ ⇒ 中间层空连接 ⇒ 值传到中途断线，且结构 / lint 都看不见。
     ch::ch_device<InlineBubbleTop> dev;
-    const std::string path = std::string(kOutDir) + "/bubble_inline.v";
+    const std::string path = kOutDir() + "/bubble_inline.v";
     std::remove(path.c_str());
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1620,7 +1641,7 @@ TEST_CASE("hierarchical emission: upward pass-through synthesizes output ports o
     // ⚠️ ADR-060 v1.13 G3 / G0：有 driver 的**向上** pass-through（子 → 祖先，非直接父子）
     //    ⇒ ⇒ 每级合成 **output** 端口（值向上传），与冒泡**同一套链**（方向相反）。
     ch::ch_device<UpTop> dev;
-    const std::string path = std::string(kOutDir) + "/upward.v";
+    const std::string path = kOutDir() + "/upward.v";
     std::remove(path.c_str());
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1653,7 +1674,7 @@ TEST_CASE("hierarchical emission: UndrivenPolicy::Reject lists every dangling in
     //    ⇒ ⇒ 诊断广度用例 MUST 含**两个**实例（否则「全部」与「首条」不可区分）
     {
         ch::ch_device<BubbleTwoTop> dev;
-        const std::string path = std::string(kOutDir) + "/bubble_reject_two.v";
+        const std::string path = kOutDir() + "/bubble_reject_two.v";
         std::remove(path.c_str());
         HierarchyEmitOptions opts;
         opts.undriven_policy = UndrivenPolicy::Reject;
@@ -1670,7 +1691,7 @@ TEST_CASE("hierarchical emission: UndrivenPolicy::Reject lists every dangling in
     // 防误拒：根自己的 `ch_in` + inline 折叠进根的悬空 `ch_in` ⇒ **不是**隐式悬空端口
     {
         ch::ch_device<RootUndrivenTop> dev;
-        const std::string path = std::string(kOutDir) + "/bubble_reject_root.v";
+        const std::string path = kOutDir() + "/bubble_reject_root.v";
         std::remove(path.c_str());
         HierarchyEmitOptions opts;
         opts.undriven_policy = UndrivenPolicy::Reject;
@@ -1711,7 +1732,7 @@ TEST_CASE("hierarchical emission: port provenance covers all five origins",
     // ① 自身 + clock/reset + inline 折叠
     {
         ch::ch_device<InlineOutTop> dev;
-        const std::string path = std::string(kOutDir) + "/prov_inline.v";
+        const std::string path = kOutDir() + "/prov_inline.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -1726,8 +1747,8 @@ TEST_CASE("hierarchical emission: port provenance covers all five origins",
     // ② 冒泡（跨 module 边界）+ 确定性
     {
         ch::ch_device<BubbleTop> dev;
-        const std::string path = std::string(kOutDir) + "/prov_bubble.v";
-        const std::string path2 = std::string(kOutDir) + "/prov_bubble_2.v";
+        const std::string path = kOutDir() + "/prov_bubble.v";
+        const std::string path2 = kOutDir() + "/prov_bubble_2.v";
         std::remove(path.c_str());
         std::remove(path2.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -1751,7 +1772,7 @@ TEST_CASE("hierarchical emission: port provenance covers all five origins",
     // ③ 合成端口（行 1 的 `__if_<n>`）
     {
         ch::ch_device<OuterRow1> dev;
-        const std::string path = std::string(kOutDir) + "/prov_synth.v";
+        const std::string path = kOutDir() + "/prov_synth.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -1824,7 +1845,7 @@ TEST_CASE("hierarchical emission: rejection diagnostics name the offending modul
     //    ① 跨模块 `ch_mem` ⇒ 点名两端 module + 给出两条「mem 与使用者同层」的替代路径
     {
         ch::ch_device<MemParent> dev;
-        const std::string path = std::string(kOutDir) + "/reject_mem.v";
+        const std::string path = kOutDir() + "/reject_mem.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -1840,7 +1861,7 @@ TEST_CASE("hierarchical emission: rejection diagnostics name the offending modul
     // ② 成层组件自驱动 `ch_in` ⇒ 点名端口
     {
         ch::ch_device<SelfDrivenLeaf> dev;
-        const std::string path = std::string(kOutDir) + "/reject_selfdrv.v";
+        const std::string path = kOutDir() + "/reject_selfdrv.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -1854,7 +1875,7 @@ TEST_CASE("hierarchical emission: rejection diagnostics name the offending modul
 TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",
           "[hierarchy][emit][implicit]") {
     ch::ch_device<OuterRow2> dev;
-    const std::string path = std::string(kOutDir) + "/row2_implicit.v";
+    const std::string path = kOutDir() + "/row2_implicit.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1894,7 +1915,7 @@ TEST_CASE("hierarchical emission: row-2 implicit output port is synthesized",
 TEST_CASE("hierarchical emission: row-1 implicit input port is synthesized",
           "[hierarchy][emit][implicit]") {
     ch::ch_device<OuterRow1> dev;
-    const std::string path = std::string(kOutDir) + "/row1_implicit.v";
+    const std::string path = kOutDir() + "/row1_implicit.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1926,7 +1947,7 @@ TEST_CASE("hierarchical emission: row-1 implicit input port is synthesized",
 TEST_CASE("hierarchical emission: row-1 proxy sub-form is synthesized",
           "[hierarchy][emit][implicit]") {
     ch::ch_device<OuterProxy> dev;
-    const std::string path = std::string(kOutDir) + "/proxy_implicit.v";
+    const std::string path = kOutDir() + "/proxy_implicit.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -1962,7 +1983,7 @@ TEST_CASE("hierarchical emission: matrix-out forms are rejected loudly",
     // ⚠️ **第七格**（父层改写子内部运算操作数）⇒ ⇒ **MUST 拒绝**（不是静默产出错产物）
     {
         ch::ch_device<OuterOp> dev;
-        auto r = ch::toVerilogHierarchical(std::string(kOutDir) + "/op_implicit.v",
+        auto r = ch::toVerilogHierarchical(kOutDir() + "/op_implicit.v",
                                            dev.instance());
         INFO("error: " << r.error);
         REQUIRE_FALSE(r.ok);
@@ -1976,7 +1997,7 @@ TEST_CASE("hierarchical emission: matrix-out forms are rejected loudly",
     //    （合法 Verilog 里实例的 output 只能由实例内部驱动）
     {
         ch::ch_device<OuterOutDrv> dev;
-        auto r = ch::toVerilogHierarchical(std::string(kOutDir) + "/outdrv_implicit.v",
+        auto r = ch::toVerilogHierarchical(kOutDir() + "/outdrv_implicit.v",
                                            dev.instance());
         INFO("error: " << r.error);
         REQUIRE_FALSE(r.ok);
@@ -1993,7 +2014,7 @@ TEST_CASE("hierarchical emission: synthesized names never collide with user node
     //    ⇒ ⇒ 用户节点恰好同名 ⇒ **重复声明** ⇒ ⇒ 发射前 MUST 顺延
     //    （本判据用「产物里没有重复声明」+「端口名唯一」来观测）
     ch::ch_device<OuterProxy> dev;
-    const std::string path = std::string(kOutDir) + "/proxy_implicit.v";
+    const std::string path = kOutDir() + "/proxy_implicit.v";
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     REQUIRE(r.ok);
     const std::string all = read_file(path);
@@ -2009,7 +2030,7 @@ TEST_CASE("hierarchical emission: synthesized names never collide with user node
 TEST_CASE("hierarchical emission: inline descendant output is a body wire "
           "in a non-top module", "[hierarchy][emit][scope]") {
     ch::ch_device<F3Top> dev;
-    const std::string path = std::string(kOutDir) + "/f3_scope.v";
+    const std::string path = kOutDir() + "/f3_scope.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -2037,7 +2058,7 @@ TEST_CASE("hierarchical emission: inline descendant output is a body wire "
     //    （缺 `assign top_mid_leaf_unnamed_output = …`）⇒ ⇒ **未能复现**
     //    ⇒ ⇒ 根因未定位 ⇒ ⇒ 故 MUST 有这条判据盯着（若它再出现 ⇒ ⇒ 转红）
     {
-        const std::string path2 = std::string(kOutDir) + "/f3_scope_2.v";
+        const std::string path2 = kOutDir() + "/f3_scope_2.v";
         auto r2 = ch::toVerilogHierarchical(path2, dev.instance());
         REQUIRE(r2.ok);
         REQUIRE(read_file(path2) == all);
@@ -2146,7 +2167,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ① 行 2 × proxy ⇒ 子侧合成 output `__x_0` + 体内 assign
     {
         ch::ch_device<MatRow2Proxy> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_row2_proxy.v";
+        const std::string path = kOutDir() + "/matrix_row2_proxy.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2160,7 +2181,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ② 行 2 × op ⇒ 同上（端点是运算节点 ⇒ 体内 assign 发它的名字）
     {
         ch::ch_device<MatRow2Op> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_row2_op.v";
+        const std::string path = kOutDir() + "/matrix_row2_op.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2174,7 +2195,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ③ 第三轴 × proxy ⇒ 逐级同名 input + 体内 assign 到该 proxy
     {
         ch::ch_device<MatThirdProxy> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_third_proxy.v";
+        const std::string path = kOutDir() + "/matrix_third_proxy.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2188,7 +2209,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ④ 第三轴 × ch_out ⇒ 拒绝（第八格的第三轴变体）
     {
         ch::ch_device<MatThirdOut> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_third_out.v";
+        const std::string path = kOutDir() + "/matrix_third_out.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2199,7 +2220,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ⑤ 第三轴 × op ⇒ 拒绝（叶端点既非端口也非可重定向节点）
     {
         ch::ch_device<MatThirdOp> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_third_op.v";
+        const std::string path = kOutDir() + "/matrix_third_op.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2211,7 +2232,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ⑥ 向上 × reg ⇒ 体内 wire + 驱动重定向（MUST NOT 引用深层信号名）
     {
         ch::ch_device<MatUpReg> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_up_reg.v";
+        const std::string path = kOutDir() + "/matrix_up_reg.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2227,7 +2248,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ⑦ 向上 × proxy ⇒ 同上（redirect 到体内 wire，不是 proxy 自己的 src）
     {
         ch::ch_device<MatUpProxy> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_up_proxy.v";
+        const std::string path = kOutDir() + "/matrix_up_proxy.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2240,7 +2261,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ⑧ 向上 × op ⇒ 拒绝（目标已有自己的 assign ⇒ 双驱动）
     {
         ch::ch_device<MatUpOp> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_up_op.v";
+        const std::string path = kOutDir() + "/matrix_up_op.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2252,7 +2273,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     // ⑨ 向上 × ch_in ⇒ 拒绝（对 ch_in 赋值非法）
     {
         ch::ch_device<MatUpIn> dev;
-        const std::string path = std::string(kOutDir) + "/matrix_up_in.v";
+        const std::string path = kOutDir() + "/matrix_up_in.v";
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO("error: " << r.error);
@@ -2263,7 +2284,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
     }
     // ⑩ 兄弟边 × {reg, proxy, op} ⇒ 拒绝（驱动端 MUST 是 ch_out 端口）
     auto sibling_rejects = [&](auto &dev, const std::string &name) {
-        const std::string path = std::string(kOutDir) + "/" + name;
+        const std::string path = kOutDir() + "/" + name;
         std::remove(path.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
         INFO(name << " error: " << r.error);
@@ -2287,7 +2308,7 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
     ch::ch_device<T3> dev;
-    const std::string path = std::string(kOutDir) + "/three_layers.v";
+    const std::string path = kOutDir() + "/three_layers.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -2333,10 +2354,10 @@ TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
     REQUIRE(top_mod.find("top_mid_unnamed_output =") == std::string::npos);
 
     // ⭐ 确定性：再生成一次 ⇒ 逐字节相同
-    auto r2 = ch::toVerilogHierarchical(std::string(kOutDir) + "/three_layers_2.v",
+    auto r2 = ch::toVerilogHierarchical(kOutDir() + "/three_layers_2.v",
                                         dev.instance());
     REQUIRE(r2.ok);
-    REQUIRE(read_file(std::string(kOutDir) + "/three_layers_2.v") == all);
+    REQUIRE(read_file(kOutDir() + "/three_layers_2.v") == all);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -2345,7 +2366,7 @@ TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
 TEST_CASE("hierarchical emission: ram-only module gets clock but no reset",
           "[hierarchy][emit][clock]") {
     ch::ch_device<RamTop> dev;
-    const std::string path = std::string(kOutDir) + "/ram_write.v";
+    const std::string path = kOutDir() + "/ram_write.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -2370,7 +2391,7 @@ TEST_CASE("hierarchical emission: ram-only module gets clock but no reset",
 // ═════════════════════════════════════════════════════════════════════════
 TEST_CASE("hierarchical emission: validation failure leaves no file",
           "[hierarchy][emit][error]") {
-    const std::string path = std::string(kOutDir) + "/should_not_exist.v";
+    const std::string path = kOutDir() + "/should_not_exist.v";
     std::remove(path.c_str());
     REQUIRE_FALSE(file_exists(path));
 
@@ -2403,7 +2424,7 @@ TEST_CASE("hierarchical emission: validation failure leaves no file",
 TEST_CASE("hierarchical emission: all-inline design equals the flat output",
           "[hierarchy][emit][inline]") {
     ch::ch_device<IInline> dev;
-    const std::string path = std::string(kOutDir) + "/all_inline.v";
+    const std::string path = kOutDir() + "/all_inline.v";
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
@@ -2431,8 +2452,8 @@ TEST_CASE("hierarchical emission: same-type multi-instance numbering follows ins
           "[hierarchy][emit][naming][g1]") {
     // ⚠️ 编号约定（既有 · 与 G1 正交）：组内**首份**用 `<type>`、其后 `<type>_<k>`
     //    （见 `src/hierarchy_verilog.cpp` 的 `numbered_name`）
-    const std::string path_ab = std::string(kOutDir) + "/seq_ab.v";
-    const std::string path_ba = std::string(kOutDir) + "/seq_ba.v";
+    const std::string path_ab = kOutDir() + "/seq_ab.v";
+    const std::string path_ba = kOutDir() + "/seq_ba.v";
 
     ch::ch_device<SeqTopAB> ab;
     auto r_ab = ch::toVerilogHierarchical(path_ab, ab.instance());
@@ -2486,7 +2507,7 @@ TEST_CASE("hierarchical emission: same-base different-type modules are rejected 
     //    ⇒ ⇒ 现状（只查**生成后**重名）会静默编成 `dash_leaf` / `dash_leaf_1`
     //    ⇒ ⇒ 本判据要求**编号前**判身份 ⇒ ⇒ 响亮拒绝并点名两端
     ch::ch_device<CollideTop> dev;
-    const std::string path = std::string(kOutDir) + "/collide.v";
+    const std::string path = kOutDir() + "/collide.v";
     std::remove(path.c_str());
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -2530,7 +2551,7 @@ std::vector<std::string> top_ports_of(const ch::HierarchyEmitResult &r,
 TEST_CASE("hierarchical emission: signal map locates every observable signal",
           "[hierarchy][emit][map]") {
     ch::ch_device<T3> dev;
-    const std::string path = std::string(kOutDir) + "/map_l3.v";
+    const std::string path = kOutDir() + "/map_l3.v";
     std::remove(path.c_str());
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -2602,8 +2623,8 @@ TEST_CASE("hierarchical emission: signal map locates every observable signal",
 TEST_CASE("hierarchical emission: signal map is deterministic within one ctx",
           "[hierarchy][emit][map]") {
     ch::ch_device<T3> dev;
-    const std::string p1 = std::string(kOutDir) + "/map_det_1.v";
-    const std::string p2 = std::string(kOutDir) + "/map_det_2.v";
+    const std::string p1 = kOutDir() + "/map_det_1.v";
+    const std::string p2 = kOutDir() + "/map_det_2.v";
     std::remove(p1.c_str());
     std::remove(p2.c_str());
 
@@ -2637,7 +2658,7 @@ TEST_CASE("hierarchical emission: signal map is deterministic within one ctx",
 TEST_CASE("hierarchical emission: signal map check rejects broken tables",
           "[hierarchy][emit][map][negative]") {
     ch::ch_device<T3> dev;
-    const std::string path = std::string(kOutDir) + "/map_neg.v";
+    const std::string path = kOutDir() + "/map_neg.v";
     std::remove(path.c_str());
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -2812,7 +2833,7 @@ const ch::detail::PortSetEntry *find_port(const std::vector<ch::detail::PortSetE
 TEST_CASE("hierarchical emission: top-level port sets equal the flat ones exactly",
           "[hierarchy][emit][portset]") {
     ch::ch_device<T3> dev;
-    const std::string path = std::string(kOutDir) + "/portset_l3.v";
+    const std::string path = kOutDir() + "/portset_l3.v";
     std::remove(path.c_str());
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -2861,7 +2882,7 @@ TEST_CASE("hierarchical emission: top-level port sets equal the flat ones exactl
 TEST_CASE("hierarchical emission: port set checks reject a broken port table",
           "[hierarchy][emit][portset][negative]") {
     ch::ch_device<T3> dev;
-    const std::string path = std::string(kOutDir) + "/portset_neg.v";
+    const std::string path = kOutDir() + "/portset_neg.v";
     std::remove(path.c_str());
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -2947,7 +2968,7 @@ TEST_CASE("hierarchical emission: port set checks reject a broken port table",
 TEST_CASE("hierarchical emission: backend port set is derived from the emitter product",
           "[hierarchy][emit][portset]") {
     ch::ch_device<T3> dev;
-    const std::string path = std::string(kOutDir) + "/b3_portset.v";
+    const std::string path = kOutDir() + "/b3_portset.v";
     std::remove(path.c_str());
 
     auto r = ch::toVerilogHierarchical(path, dev.instance());

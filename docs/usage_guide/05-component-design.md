@@ -785,6 +785,126 @@ if (d.verdict == ch::HierarchyFriendliness::kNeedsWork) {
 ⚠️ **边界**：诊断**不**解决「前置校验首错即抛」⇒ ⇒ 15 个拒绝点里**命中第一条就抛**
 ⇒ ⇒ 迭代次数仍与 precheck 缺陷数成正比 ⇒ ⇒ 本 API 解决的是**「隐式边家族」的完整性**。
 
+### 5.4-ter 层次化**等价性 helper**（公共 API · `ch::hier_eq`）
+
+> 权威 = capability `hierarchical-equivalence-public-helper`。
+> ⚠️ **头名 ≠ 命名空间**：头是 `hierarchy_equivalence.h`，命名空间是 `ch::hier_eq`
+> ⇒ ⇒ 两处都要写（用户 `grep` 头名时找不到符号名）。
+
+**它回答什么**：用户自己的设计**改成层之后，行为变了吗**。
+⇒ ⇒ 这是「值不值得成层」的判据之一（ADR-058 决策的落点）。
+
+#### 怎么用
+
+```cpp
+#include "ch.hpp"
+#include "hierarchy_equivalence.h"    // ★ 显式 include（**不在** ch.hpp 聚合器里）
+// ⚠️ 命名空间：ch::hier_eq（★ **不是** ch::hierarchy_equivalence）
+
+#include <cstdio>
+#include <string>
+#include <sys/stat.h>
+#include <vector>
+
+using namespace ch::core;   // ★ ch_in / ch_out / ch_uint 在这里
+
+class MyTop : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    MyTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+int main() {
+    ch::ch_device<MyTop> dev;
+    const std::string work_dir = "/tmp/my_hier_eq";   // ★ 调用方给的临时目录
+    // ⚠️ **work_dir MUST 由调用方创建** ⇒ ⇒ `emit` 只在它**之下**建 `flat/` `hier/`
+    //    ⇒ ⇒ 不建它本身（⇒ 不建 ⇒ `emit` 返回 `emit-failed`）。
+    ::mkdir(work_dir.c_str(), 0755);                  // 已存在 ⇒ EEXIST（无害）
+
+    // ① 生成层次化产物 + **由产物派生**端口集合 + 映射表
+    auto products = ch::hier_eq::emit(dev.instance(), work_dir,
+                                       ch::Granularity::RespectDeclarations);
+    if (!products.ok) {
+        std::printf("emit failed: %s\n", products.error.c_str());
+        return 1;
+    }
+
+    // ② 声明受驱动的输入（★ MUST 用 set_input_value，**MUST NOT** 用 <<=）
+    std::vector<ch::hier_eq::DrivenInput> inputs;
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "top.din", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().din, v);
+        }});
+
+    // ③ 声明被观测的输出（★ 用工厂 ⇒ node_id 由 helper 填 ⇒ **不**接触 impl()）
+    std::vector<ch::hier_eq::Observation> observations;
+    observations.push_back(ch::hier_eq::make_observation(
+        "top.dout", dev.instance().io().dout,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().dout));
+        }));
+
+    // ④ 逐拍比对「扁平产物」与「层次化产物」
+    auto result = ch::hier_eq::compare(dev.context(), work_dir, products.hier_path,
+                                        products.ports, inputs, observations,
+                                        {{0x11}, {0x22}, {0x33}});
+    if (!result.ok) {
+        std::printf("compare failed: %s\n", result.error.c_str());
+        return 1;
+    }
+    std::printf("equal = %s\n", result.equal ? "true" : "false");
+    return result.equal ? 0 : 1;
+}
+```
+
+> ⚠️ **示例的权威来源**：`tests/test_public_equivalence_api.cpp`（★ **仓外视角**的
+> 真实消费方：它**只** include 公共头 ⇒ ⇒ 真编译 + 真链接 + 真运行 ⇒ ⇒ 证明公共面
+> 自足）⇒ ⇒ 文档只**引用**它 ⇒ ⇒ 杜绝文档腐烂。
+
+#### 端口口径（★ 选错端口 = 假绿）
+
+| 端口 | 扁平侧 | 层次化侧 | 规则 |
+|---|---|---|---|
+| 根 `io()` 的 `ch_in` / `ch_out` | 顶层端口 | **恒为**顶层端口 | ⇒ `DrivenInput` / `Observation` **只能**取**根**的 |
+| **子组件**的 `ch_out` | **多出**为顶层端口 | **不在**顶层（ADR-058 §4 风险 6 的盲区） | ⇒ **MUST NOT** 观测 ⇒ ⇒ 观测了 ⇒ ⇒ helper **机械拒绝**（前缀 `observation-not-visible`） |
+
+#### fail-closed：错误前缀是**稳定契约**（可机械分类）
+
+| 前缀 | 触发 | 用户下一步 |
+|---|---|---|
+| `empty-observations` | 观测集合为空 | 声明至少一个被观测信号 |
+| `empty-stimulus` | 激励为空 | 给至少一拍激励 |
+| `no-varying-signal` | 没有任何被观测信号随激励变化 | 换一个**随激励变化**的信号来观测 |
+| `emit-failed` | 层次化发射失败 | 看 `error` 里的发射原因 |
+| `port-set-empty` | 派生端口集为空 | 检查 DUT 是否有顶层端口 |
+| `port-width-64-exceeded` | 端口 >64 bit | 缩小该端口位宽（**点名了端口与位宽**） |
+| `no-top-level-output` | DUT 没有顶层 `ch_out` | 给 DUT 加一个顶层 `ch_out` |
+| `backend-init-failed` | backend 初始化失败 | 看 backend 的原文 |
+| `verilator-unavailable` | verilator 不可用 | ⚠️ **正确**的路是 `cmake --build build --target verilator`（★ **不是** `apt install verilator`） |
+| `observation-not-visible` | 观测了层次化顶层**不可见**的信号 | 只观测根 `ch_out` |
+
+#### 判别力边界（★ **必读**，否则会误用）
+
+| | 本 helper | 既有双后端 parity |
+|---|---|---|
+| 比较什么 | **两份 Verilog 产物**（扁平 vs 层次化） | **C++ 解释器 vs Verilog 编译产物** |
+| 判别什么 | 「**产物变换**是否引入行为分叉」 | 「**两套执行后端**是否行为一致」 |
+| 对「共享发射底座算错」 | **结构性失明**（两产物同源 ⇒ 同构缺陷一起错） | **能抓** |
+| 对「层次化变换算错」 | **能抓** | **结构性失明** |
+
+⇒ ⇒ 两者**互补**，**MUST NOT** 互相替代 ⇒ ⇒ 本 helper **不**证明产物语义正确。
+
+#### 其余边界
+
+- ⚠️ **A 侧固定是「扁平产物」** ⇒ ⇒ 「两个层次化粒度互比」**不**直接支持 ⇒ ⇒ 走
+  **传递性**（A ≡ 扁平 ∧ B ≡ 扁平 ⇒ A ≡ B）
+- ⚠️ **`ProductSet` 与其 `ctx` 绑定**（`node_id` 是 **ctx 私有**编号 ⇒ ⇒ 不可跨 ctx 传递）
+- ⚠️ **Linux-only**（Verilator backend 的既成限制）
+- ⚠️ **不**提供 verilator 编译的**超时控制**（调用方自管）· **不**承诺在**已仿真过**的 ctx 上可重入
+
 ### 5.5 ⚠️ 观测盲区（等价性只覆盖**顶层可见行为**）
 
 > **契约边界**（ADR-058 §4 风险 6）· 权威 = capability `rtl-hierarchical-output`。
