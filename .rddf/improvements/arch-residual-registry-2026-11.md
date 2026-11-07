@@ -1,19 +1,24 @@
 ---
 name: arch-residual-registry-2026-11
 priority: P2
-source: 裁决请求单 `.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md`（用户 2026-11-07 拍板「选项 B 立项（治本）」）+ 台账 §7 行 11 的探针覆盖缺口（oracle 2026-11-07 审稿发现）
+source: 裁决请求单 `.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md`（用户
+  2026-11-07 拍板「选项 B 立项（治本）」）+ 台账 §7 行 11 的探针覆盖缺口（oracle 2026-11-07 审稿发现）
 phase: phase-5
 category: infra-setup
 type: functional
 created_at: 2026-11-07
 evidence: probe:.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md
+roadmap_ref:
+  project_id: riscv-mini 收敛 + SoC 双路 parity + RV32I ISA 语义边界 + 平台矩阵
+  phase: phase-5
+  theme: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）
 ---
 
 # Improvement: 架构台账「已知残留」的**唯一真相登记表** + 派生护栏（治本路线）
 
 - **Date drafted**：2026-11-07（**v4** —— v4 吸收 **critic 第 1 轮**的 **4 条 SHOULD_FIX**（0 BLOCKER · `APPROVE_WITH_CONDITIONS`）+ 3 条 NITS；v3 吸收 **oracle 第 1 轮**的 9 条 finding + 3 条替代方案裁决；v2 已吸收 **metis 第 1 轮**的 33 条）
 - **Drafted by**：build-agent（planner 角色 · 用户口令「选项 B 立项」）
-- **Status**：📝 草稿 v3（**待 oracle + critic 审查后由用户批准** ⇒ 批准后转 builder 流程）
+- **Status**：✅ **已批准**（2026-11-07 · 用户在 **oracle 第 1 轮 + critic 第 1 轮**审查通过后批准 ⇒ critic = `APPROVE_WITH_CONDITIONS` · **0 BLOCKER** · 4 条 SHOULD_FIX 已在 v4 全修）⇒ ⇒ 登记于 `improvement-approved.md` ⇒ ⇒ 下一步 = 创建 openspec change（★ 按增强层工件归属 ⇒ `proposal.md` 由 `rdd-builder` **P0** 从本草稿生成 ⇒ **不手写**）
 - **权威来源**：裁决请求单 `.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md` §2 **选项 B**（用户 2026-11-07 拍板「立项（治本）」）⇒ ⇒ 其 §3 建议 2 的**关键约束** = 「**登记表是唯一真相，台账是它的渲染**」
 - **首期对象**：台账 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7「已知残留」（**15 行**）
 - **设计批准**：用户 2026-11-07 批准（方案 B + 3 个默认：派生语义 = 「规范句 + 散文追加」· 首期只迁本台账 · capability 归属待裁定）
