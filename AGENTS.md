@@ -369,6 +369,15 @@ bash scripts/run_all_samples.sh
 bash scripts/verify_hierarchical_rtl.sh
 bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条原地投毒 ⇒ 必红 ⇒ 还原复绿
 
+# 残留登记表护栏（架构台账 §7「已知残留」的状态 MUST 有**唯一真相** ⇒ 台账是它的派生）
+# ⚠️ 判据：① 双向 + 1:1（键 = 台账+section+id）· ② 闭口证据 MUST 存在 · ②' 未决行的候选证据已存在
+#   ⇒ 红 · ③ 台账状态格 MUST 以**生成句**开头（逐字节前缀）· ④ 结算 fail-closed（0 行 ⇒ exit 2）
+#   · ⑤ 退出码 1/2（★ 禁恒 exit 0）· ⑥ 合成 fixture 自检（11 投毒 · 不碰 architect 域文件）
+#   · ⑦ --render（打印期望规范句）· ⑦' --check-normalization（归一化是否丢信息）
+# ⚠️ ★ 本护栏**尚未接 CI**（⇒ 台账归一化落地后才接 ⇒ 否则 CI 恒红）
+bash scripts/verify_arch_ledger_residuals.sh
+bash scripts/verify_arch_ledger_residuals.sh --self-test
+
 # 端口命名契约护栏（残留 5 · N0–N3 · 顶层 MUST 无框架合成端口 `__if_`/`__x_`/`__up_`）
 # N0 = fail-closed（缺工具 ⇒ 退出码 2）· N1 = 根 module 无合成端口
 # N2a = 语料确有可判对象（防恒绿）· N2b = 三前缀覆盖矩阵 · N3 = 根由**结构**判定
