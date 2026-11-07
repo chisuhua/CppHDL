@@ -48,6 +48,14 @@ oracle 1 轮（`ses_e4be1ad2fffeyCPzn8qxEjYKR8`）· **每条 finding 逐条应�
 | **流程约束** | MUST 走**正常 change 流程**（`.rddf/improvements/` → planner → builder）⇒ ⇒ **NOT** 凭台账一格散文直接改 `scripts/` |
 | **归域** | **builder**（护栏脚本域）· architect 已在本台账行 11 状态格登记该指派 |
 
+> ✅ **本工作项已收口（2026-11-07 · architect）**：change `arch-residual-registry-2026-11` 把
+> `scripts/probe_arch_ledger_residuals.sh` 改成**护栏 wrapper**（判定改由**登记表**
+> `.rddf/checks/arch-residual-registry.md` 派生）⇒ ⇒ ⇒ **全部 15 行**（含行 11）都在登记表内
+> ⇒ ⇒ ⇒ ⇒ 「行 11 不在探针登记内 ⇒ 陈旧不会被检出」的缺口**已消除**
+> ⇒ ⇒ ⇒ ⇒ 本台账行 11 的对应散文已删除（★ 逐条登记见
+> `.rddf/reviews/arch-residual-registry-normalization-2026-11.md` §4）
+> ⇒ ⇒ ⇒ ⇒ ⚠️ **不再**需要「往 `RESIDUAL_EVIDENCE` 手工登记」⇒ ⇒ ★ 手工清单已退役。
+
 ## 5. 范围外遗留（**只记录，本次不清理**）
 
 | # | 位置 | 事实 | 归域 |

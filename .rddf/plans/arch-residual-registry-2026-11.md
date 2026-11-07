@@ -890,7 +890,12 @@ git status --porcelain docs/architecture .rddf/checks           # ⇒ ★ 空（
 
 ---
 
-## 交接给 architect 的事项（★ S2 —— **本计划不执行**）
+## 交接给 architect 的事项（★ S2 —— **已由 architect 完成（2026-11-07）**）
+
+> ✅ **S2 已完成**：台账 §7 15 行归一化 + §7 前言去副本化 + 行 14 裁定 + 登记表日期/后缀/证据更正
+> ⇒ ⇒ 审稿记录 = `.rddf/reviews/arch-residual-registry-normalization-2026-11.md`
+> ⇒ ⇒ oracle 1 轮审稿：8 问全过 · 5 条建议全部采纳
+> ⇒ ⇒ 护栏对真实台账 = **exit 0**（★ 归一化前是 exit 1）
 
 | # | 事项 | 说明 |
 |---|---|---|
