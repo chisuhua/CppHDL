@@ -47,5 +47,5 @@
 ## S4（★ builder · 归档）
 
 - [x] **S4-1** verifier 验收（20 条 AC 逐条取证 ⇒ 全 PASS ⇒ verdict = `.rddf/state/.ac-verdict-arch-residual-registry-2026-11.json`；报告 = `.rddf/reviews/arch-residual-registry-2026-11-verify.md`）
-- [ ] **S4-2** `openspec archive arch-residual-registry-2026-11`（★ **禁** `--skip-specs` ⇒ capability `ledger-residual-registry` 的 delta MUST 合入主 spec）
-- [ ] **S4-3** worktree 分支合回 main（★ `check_worktree_commits` 要求该分支有新提交 ⇒ 已有 3 个）
+- [x] **S4-2** `openspec archive arch-residual-registry-2026-11`（★ **禁** `--skip-specs` ⇒ capability `ledger-residual-registry` 的 delta MUST 合入主 spec）
+- [x] **S4-3** worktree 分支合回 main（★ `check_worktree_commits` 要求该分支有新提交 ⇒ 已有 5 个）
