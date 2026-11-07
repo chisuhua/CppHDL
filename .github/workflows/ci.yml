@@ -302,6 +302,36 @@ jobs:
       shell: bash
       run: scripts/verify_roadmap_fragments.sh --self-test
 
+    - name: Verify arch ledger residual registry
+      # The architecture ledger's section 7 "known residuals" statuses MUST have
+      # a SINGLE source of truth (the registry .rddf/checks/arch-residual-registry.md)
+      # -> the ledger rows are DERIVED: each status cell MUST start with the
+      # registry-generated canonical sentence, compared BYTE-FOR-BYTE (no
+      # normalisation) => the prose after it stays free-form.
+      # WHY a guardrail: the status used to be prose duplicated in FOUR places
+      # (status cell / the section 7 preamble revision note / the probe's
+      # hand-written RESIDUAL_EVIDENCE list / decision & review records) =>
+      # drift was SILENT (the probe used to exit 0 unconditionally => even a
+      # detected stale entry did not block CI).
+      # Exit codes: 0 = consistent / 1 = drift / 2 = fail-closed (missing tool,
+      # missing file, 0 rows parsed, malformed registry) => the guard MUST NOT
+      # inherit the probe's "always exit 0" semantics.
+      # TIMING: this step MUST NOT be wired before the ledger normalisation is
+      # merged (until then the canonical-sentence prefix check is RED on the
+      # whole repo) => the normalisation landed first (commit 75ae567).
+      shell: bash
+      run: scripts/verify_arch_ledger_residuals.sh
+
+    - name: Verify arch ledger residual registry (self-test)
+      # The self-test runs on a SYNTHETIC fixture (it never touches the real
+      # ledger nor the architect's documents) and poisons it 11 ways: every
+      # criterion MUST have discriminating power, including the INVERSE one
+      # (editing ONE character of the prose MUST stay GREEN => guards against
+      # "making the criterion green by deleting real capability").
+      shell: bash
+      run: scripts/verify_arch_ledger_residuals.sh --self-test
+
+
     - name: Verify rst_n wiring
       # An unwired `ch_in<ch_bool> rst_n` reads back as 0 = PERMANENTLY IN RESET:
       # the component compiles, the test builds, the simulation reports no error,

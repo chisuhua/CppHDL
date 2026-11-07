@@ -277,7 +277,7 @@ def cmd_check(root: pathlib.Path) -> int:
         if row is None:
             continue
         s = gen_sentence(r["状态"], r["日期"], r["后缀"])
-        hit = row["status"].startswith(s)
+        hit = sentence_matches(row["status"], s)
         if not hit:
             problems.append(f"id={r['id']} 台账状态格未以生成句开头：期望 {s!r}")
         print(f"  id={r['id']:<3} 状态={r['状态']:<4} 证据数={len(_split_evidence(r.get('闭口证据', '')))} "

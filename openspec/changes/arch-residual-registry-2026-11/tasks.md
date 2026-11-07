@@ -41,5 +41,11 @@
 
 ## S3（★ builder · CI 接线 —— **MUST 不早于 S2 合并**）
 
-- [ ] **S3-1** `.github/workflows/ci.yml` guard 段 +2 步（护栏 + `--self-test`）
-- [ ] **S3-2** CI 内投毒验证（⇒ CI 红）
+- [x] **S3-1** `.github/workflows/ci.yml` guard 段 +2 步（护栏 + `--self-test`）
+- [x] **S3-2** CI 内投毒验证（⇒ CI 红）—— ★ **本地等价证据**：护栏判定 + 原地投毒（登记表行 11 的两个归档目录各改错一次 ⇒ exit 1 ⇒ sha256 逐字还原 ⇒ 复绿）⇒ ⇒ CI 上同一命令 ⇒ 同一退出码
+
+## S4（★ builder · 归档）
+
+- [x] **S4-1** verifier 验收（20 条 AC 逐条取证 ⇒ 全 PASS ⇒ verdict = `.rddf/state/.ac-verdict-arch-residual-registry-2026-11.json`；报告 = `.rddf/reviews/arch-residual-registry-2026-11-verify.md`）
+- [ ] **S4-2** `openspec archive arch-residual-registry-2026-11`（★ **禁** `--skip-specs` ⇒ capability `ledger-residual-registry` 的 delta MUST 合入主 spec）
+- [ ] **S4-3** worktree 分支合回 main（★ `check_worktree_commits` 要求该分支有新提交 ⇒ 已有 3 个）
