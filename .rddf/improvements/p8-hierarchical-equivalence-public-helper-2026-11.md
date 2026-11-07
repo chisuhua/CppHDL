@@ -6,7 +6,7 @@ phase: phase-5
 category: api
 type: feature
 created_at: 2026-11-07
-evidence: doc:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
+evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
 ---
 
 # Improvement: 层次化等价性 harness 公共化（P8）

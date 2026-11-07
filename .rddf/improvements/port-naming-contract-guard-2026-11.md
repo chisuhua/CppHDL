@@ -6,7 +6,7 @@ phase: phase-5
 category: guard
 type: chore
 created_at: 2026-11-06
-evidence: doc:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
+evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
 ---
 
 # Improvement: 端口命名契约的静态护栏（残留 5）

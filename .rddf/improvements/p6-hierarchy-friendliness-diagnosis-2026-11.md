@@ -6,7 +6,7 @@ phase: phase-5
 category: api
 type: feature
 created_at: 2026-11-06
-evidence: doc:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
+evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
 ---
 
 # Improvement: 层次友好度诊断 API（P6）

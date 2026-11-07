@@ -1,3 +1,9 @@
+---
+# ⚠️ 本文件是**活账**（★ 每次新增公开头 MUST 同步登记）⇒ ⇒ ⇒ 护栏
+#    `scripts/verify_hierarchical_p8.sh` 的 **R4②** 对它做**双向核对**。
+evidence: probe:scripts/verify_hierarchical_p8.sh
+---
+
 # 公共 API 面活账（`scripts/verify_hierarchical_p8.sh` 的 R4②）
 
 > **权威**：本文件是「**哪些头文件构成公开 API 面**」的**唯一登记处** ⇒ ⇒

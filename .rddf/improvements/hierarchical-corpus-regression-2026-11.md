@@ -6,7 +6,7 @@ phase: phase-5
 category: test
 type: chore
 created_at: 2026-11-07
-evidence: doc:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
+evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
 ---
 
 # Improvement: 层次化路径的语料级回归（残留 1b）

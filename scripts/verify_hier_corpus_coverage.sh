@@ -33,6 +33,11 @@
 #      `include/` ⇒ ⇒ 只扫 `tests/` + `examples/` 会**漏判** ⇒ ⇒ ⇒ 第 ③ 个方向就**有洞**。
 #   ② DUT 名**可能带命名空间限定**（★ `chlib::ICacheAsync`）⇒ ⇒ 正则 MUST 允许 `::`
 #      ⇒ ⇒ 否则会只截到 `chlib` ⇒ ⇒ **误判**。
+#   ③ 登记表里的**围栏代码块**（``` … ```）⇒ ⇒ MUST **跳过** ⇒ ⇒ ⇒ 否则文档里的
+#      **反例表**会被当成**真实数据行** ⇒ ⇒ ⇒ ⇒ 凭空产生「该 DUT 不在语料里」的误报
+#      ⇒ ⇒ ⇒ ⇒ （★ 围栏里的内容**永远不是**登记项 ⇒ ⇒ ⇒ ⇒ 跳过是唯一正确的口径）
+#      ⇒ ⇒ ⇒ ⇒ 本仓的 `tests/hier_corpus_registry.md` 里就有一段**活的**反例块
+#      ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 它**顺带**是这条口径的常驻回归（⇒ ⇒ ⇒ ⇒ 口径一坏 ⇒ ⇒ 主路径立刻红）。
 #
 # 用法：
 #   bash scripts/verify_hier_corpus_coverage.sh              # 主路径
@@ -53,6 +58,22 @@ fail() { printf '\033[0;31m❌ %s\033[0m\n' "$*"; fails=$((fails + 1)); }
 
 REGISTRY="tests/hier_corpus_registry.md"
 EXTRA_CORPUS_ROOT=""
+
+# ⚠️ **豁免原因的占位符集合**（★ 主 spec 的「豁免不是垃圾桶」scenario **已经**要求
+#   「MUST 附**具体**原因」⇒ ⇒ ⇒ 但此前**没有机器判据**⇒ ⇒ ⇒ ⇒ 写「—」「N/A」「TODO」
+#   照样通过 ⇒ ⇒ ⇒ ⇒ **假绿契约** ⇒ ⇒ ⇒ ⇒ 这里把「具体」钉成可判定形式）
+# ⇒ ⇒ ★ **整串精确匹配**（★ **不**用长度 / 标点启发式 ⇒ ⇒ ⇒ ⇒ 启发式会**误杀**
+#   「N/A：发射器不支持该形态」这类**含占位符但有实质原因**的合法写法 ⇒ ⇒ ⇒ ⇒
+#   ⇒ ⇒ 宁可漏判那种 ⇒ ⇒ ⇒ ⇒ **不误杀**）
+PLACEHOLDERS='—
+-
+N/A
+NA
+TODO
+TBD
+无
+?
+待定'
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 分析器（python3 ⇒ ⇒ 免去 bash 正则的脆弱性）
@@ -152,23 +173,39 @@ if os.path.isfile(registry_path):
     #    ⇒ ⇒ ⇒ 而 delta Requirement ① 明文承诺「覆盖**或**显式豁免」两条出路
     #    ⇒ ⇒ ⇒ ⇒ 只剩一条 ⇒ ⇒ ⇒ 契约被冻成「无解的红」。
     section = ''
+    in_fence = False
     for line in text.splitlines():
+        # ⚠️ **MUST 跳过围栏代码块**（★ ``` … ```）⇒ ⇒ ⇒ 否则登记表的**文档示例**
+        #    （★ 例如「豁免行的写法要求」里的**反例**表）⇒ ⇒ ⇒ 会被当成**真实数据行**
+        #    ⇒ ⇒ ⇒ ⇒ 「`Foo` 不在语料里」这类**误报**会凭空出现 ⇒ ⇒ ⇒ ⇒ ⇒ 而围栏里的
+        #    ⇒ ⇒ ⇒ ⇒ 内容**永远不是**登记项 ⇒ ⇒ ⇒ ⇒ ⇒ 跳过是**唯一**正确的口径。
+        if line.strip().startswith('```'):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         if line.startswith('#'):
             section = line.lstrip('#').strip()
             continue
         if not line.strip().startswith('|'):
             continue
         cells = [c.strip() for c in line.strip().strip('|').split('|')]
-        if len(cells) < 2:
+        if not cells:
             continue
         first = cells[0].strip('`')
-        second = cells[1].strip('`') if len(cells) > 1 else ''
         if not re.fullmatch(r'(?:[A-Za-z_]\w*::)*[A-Za-z_]\w*', first):
             continue
         simple = first.rsplit('::', 1)[-1]
+        second = cells[1].strip('`') if len(cells) > 1 else ''
         if '豁免' in section:
+            # ⚠️ **原因列整列缺失** ⇒ ⇒ ⇒ 原先的 `len(cells) < 2 ⇒ 整行跳过` ⇒ ⇒ ⇒
+            #    ⇒ ⇒ 那一行**根本不会进入 exempt** ⇒ ⇒ ⇒ ⇒ 「原因缺失」会退化成「不在
+            #    ⇒ ⇒ ⇒ 语料里」的**误导性**报错 ⇒ ⇒ ⇒ ⇒ 故豁免 section 里原因列缺失
+            #    ⇒ ⇒ ⇒ 记为空串 ⇒ ⇒ ⇒ ⇒ 由方向 ③'' 精确点名「原因为空」。
             exempt[simple] = second
         else:
+            if len(cells) < 2:
+                continue
             # ⚠️ **默认 = 登记**（★ 只有「豁免」section 是特殊的）⇒ ⇒ ⇒ 一个写在
             #    **别的** section 里的 DUT 名行**仍被当成登记** ⇒ ⇒ ⇒ 不会因为
             #    「放错 section」而**静默消失**（★ 静默消失 = 判据空转）
@@ -247,12 +284,45 @@ run_main() {
     done
     # ③' **豁免项 MUST 确实存在于语料里**（★ 登记表自称有这条核对 ⇒ ⇒ 这里补上：
     #     ⇒ ⇒ 「为一个早已不存在的 DUT 豁免」会被抓住）
-    local all_duts
+    local all_duts all_duts_simple
     all_duts="$(printf '%s\n' "$out" | awk -F'\t' '$1=="COMPOSITE"{print $2}')"
+    # ⚠️ **键控统一到简单名**（★ 修复 · critic 第 2 轮 NIT）：豁免项按**简单名**键控
+    #    ⇒ ⇒ ⇒ 而语料侧可能是**限定名**（★ `ns::Foo`）⇒ ⇒ ⇒ ⇒ 原先拿简单名去比
+    #    **全行** ⇒ ⇒ ⇒ ⇒ 合法豁免被**误杀** ⇒ ⇒ ⇒ ⇒ 两侧统一取简单名 ⇒ ⇒ ⇒ ⇒
+    #    ⇒ ⇒ 与方向 ③ 的既有口径一致（③ 已经用 `${d##*::}`）⇒ ⇒ ⇒ ⇒ 不引入新概念。
+    all_duts_simple="$(printf '%s\n' "$all_duts" | sed 's/.*:://')"
     for d in $exempt; do
         simple="${d##*::}"
-        if ! printf '%s\n' "$all_duts" | grep -qx -- "$simple"; then
+        if ! printf '%s\n' "$all_duts_simple" | grep -qx -- "$simple"; then
             fail "③' 豁免的 DUT '$d' **不在语料的复合 DUT 集合里** ⇒ 豁免表成了垃圾桶"
+            bad=1
+        fi
+    done
+    # ③'' **豁免原因 MUST 具体**（★ 主 spec 的「豁免不是垃圾桶」scenario **已经**要求
+    #      「MUST 附**具体**原因」⇒ ⇒ ⇒ 但此前**没有机器判据**⇒ ⇒ ⇒ ⇒ 写「—」「N/A」
+    #      「TODO」照样通过 ⇒ ⇒ ⇒ ⇒ **假绿契约** ⇒ ⇒ ⇒ ⇒ 这里补上）
+    local exempt_pairs name reason
+    exempt_pairs="$(printf '%s\n' "$out" | awk -F'\t' '$1=="EXEMPT"{print $2"\t"$3}')"
+    while IFS=$'\t' read -r name reason; do
+        [ -z "$name" ] && continue
+        if [ -z "$reason" ]; then
+            fail "③'' 豁免的 DUT '$name' **没有写原因** ⇒ ⇒ 「豁免表不是垃圾桶」MUST 是机器执行的"
+            bad=1
+            continue
+        fi
+        if printf '%s\n' "$PLACEHOLDERS" | grep -Fxq -- "$reason"; then
+            fail "③'' 豁免的 DUT '$name' 的原因是**占位符**（'$reason'）⇒ ⇒ MUST 写具体原因"
+            bad=1
+        fi
+    done <<< "$exempt_pairs"
+    # ③''' **豁免与已覆盖互斥**（★ 「豁免」= 「**不覆盖**」⇒ ⇒ ⇒ 与「已覆盖」**矛盾**
+    #       ⇒ ⇒ ⇒ ⇒ 同时登记 = 语义自相矛盾 ⇒ ⇒ ⇒ ⇒ 「用豁免表给已覆盖的 DUT 打掩护」
+    #       这条路会被抓住 ⇒ ⇒ ⇒ ⇒ 未来有人为了「让某条方向别红」而挪进豁免表 ⇒ ⇒ ⇒
+    #       ⇒ ⇒ ⇒ 没人会发现 ⇒ ⇒ ⇒ ⇒ ⇒ 这正是本仓反复登记的「静默失效」形态）
+    for d in $exempt; do
+        simple="${d##*::}"
+        if printf '%s\n' "$registered" | grep -qx -- "$simple"; then
+            fail "③''' DUT '$d' **既在登记清单又在豁免清单** ⇒ ⇒ 「豁免」=「不覆盖」⇒ ⇒ ⇒ 两者互斥"
             bad=1
         fi
     done
@@ -267,6 +337,51 @@ run_self_test() {
     local rc=0
     local reg_backup="$WORK/registry.bak"
     [ -f "$REGISTRY" ] && cp "$REGISTRY" "$reg_backup"
+
+    # ── 登记表行注入（自检用）──────────────────────────────────────────
+    # $1 = section 关键字（如「豁免」/「登记清单」）· $2 = 要插入的整行
+    # ⚠️ **MUST 按 section 定位** ⇒ ⇒ ⇒ 插到该 section 的**第一张表**里
+    registry_insert() {
+        python3 - "$REGISTRY" "$1" "$2" <<'PYEOF_INS'
+import sys
+path, key, row = sys.argv[1], sys.argv[2], sys.argv[3]
+lines = open(path, encoding='utf-8').read().split('\n')
+out = []
+in_section = False
+inserted = False
+for l in lines:
+    out.append(l)
+    if l.startswith('#') and key in l:
+        in_section = True
+        continue
+    if in_section and not inserted and l.strip().startswith('|'):
+        out.append(row)
+        inserted = True
+if not inserted:
+    out.append(row)
+open(path, 'w', encoding='utf-8').write('\n'.join(out))
+PYEOF_INS
+    }
+
+    # ── 合成语料：一个**未登记、无用例**的复合 DUT ─────────────────────
+    # ⚠️ 复用**同一份**合成语料 ⇒ ⇒ ⇒ 投毒 ③④⑥⑦⑧ 都基于它 ⇒ ⇒ ⇒ ⇒ 「无判别力」的
+    #    形态**只有一个变量**（登记表的差异）⇒ ⇒ ⇒ ⇒ 差异归因干净。
+    local extra="$WORK/extra_corpus"
+    rm -rf "$extra"; mkdir -p "$extra"
+    cat > "$extra/synthetic_composite_dut.cpp" <<'POOF'
+#include "catch_amalgamated.hpp"
+class SyntheticCompositeDut : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch::ch_module<SyntheticCompositeDut> child{"child"};
+        child.io().din <<= io().din;
+        io().dout <<= child.io().dout;
+    }
+};
+DUAL_BACKEND_TEST_PAIR(SyntheticCompositeDut, "synthetic", "[synthetic]", [&]() {});
+POOF
 
     # ① 投毒：登记表**删一行** ⇒ ⇒ ①（登记→用例）+ ②（用例→登记）MUST 红
     if [ -f "$REGISTRY" ]; then
@@ -297,22 +412,9 @@ run_self_test() {
     #    ② 要「有用例但没登记」）⇒ ⇒ ⇒ **只有** ③ 能抓 ⇒ ⇒ ⇒ 这条是「③ 方向
     #    **不是**摆设」的**唯一**证据。
     #    ⚠️ 手法：造一个**合成语料文件**（★ **不**污染仓库）。
-    local extra="$WORK/extra_corpus"
-    rm -rf "$extra"; mkdir -p "$extra"
-    cat > "$extra/synthetic_composite_dut.cpp" <<'POOF'
-#include "catch_amalgamated.hpp"
-class SyntheticCompositeDut : public ch::Component {
-public:
-    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
-    void create_ports() override { new (io_storage_) io_type; }
-    void describe() override {
-        ch::ch_module<SyntheticCompositeDut> child{"child"};
-        child.io().din <<= io().din;
-        io().dout <<= child.io().dout;
-    }
-};
-DUAL_BACKEND_TEST_PAIR(SyntheticCompositeDut, "synthetic", "[synthetic]", [&]() {});
-POOF
+    #    ⚠️ 手法：造一个**合成语料文件**（★ **不**污染仓库 · 已在 helper 段建好）。
+    EXTRA_CORPUS_ROOT="$extra"
+
     EXTRA_CORPUS_ROOT="$extra"
     if run_main >/dev/null 2>&1; then
         fail "self-test[③ 新增未登记的复合 DUT]：竟被判绿 ⇒ 第 ③ 个方向是摆设"
@@ -410,7 +512,94 @@ PYEOF3
         cp "$reg_backup" "$REGISTRY"
     fi
 
-    # ⑥ 反向对照：还原 ⇒ MUST 复绿
+    # ⑥ 投毒：**豁免原因为空** ⇒ ⇒ ③'' MUST 红（★ 「豁免表不是垃圾桶」这**半句**
+    #    此前**没有机器判据**⇒ ⇒ ⇒ ⇒ 写空原因照样通过 ⇒ ⇒ ⇒ ⇒ 假绿契约 ⇒ ⇒ ⇒ ⇒ 补上）
+    if [ -f "$REGISTRY" ]; then
+        registry_insert "豁免" '| `SyntheticCompositeDut` |  |'
+        EXTRA_CORPUS_ROOT="$extra"
+        poison_out="$(run_main 2>&1)"
+        if printf '%s' "$poison_out" | grep -q "③''"; then
+            ok "self-test[⑥ 豁免原因为空] ⇒ 红（③''）"
+        else
+            fail "self-test[⑥ 豁免原因为空]：竟未被 ③'' 抓住 ⇒ ⇒ 「豁免表不是垃圾桶」仍是散文"
+            rc=1
+        fi
+        EXTRA_CORPUS_ROOT=""
+        cp "$reg_backup" "$REGISTRY"
+    fi
+
+    # ⑦ 投毒：**豁免原因是占位符**（`—`）⇒ ⇒ ③'' MUST 红
+    if [ -f "$REGISTRY" ]; then
+        registry_insert "豁免" '| `SyntheticCompositeDut` | `—` |'
+        EXTRA_CORPUS_ROOT="$extra"
+        poison_out="$(run_main 2>&1)"
+        if printf '%s' "$poison_out" | grep -q "③''"; then
+            ok "self-test[⑦ 豁免原因为占位符] ⇒ 红（③''）"
+        else
+            fail "self-test[⑦ 豁免原因为占位符]：竟未被 ③'' 抓住"
+            rc=1
+        fi
+        EXTRA_CORPUS_ROOT=""
+        cp "$reg_backup" "$REGISTRY"
+    fi
+
+    # ⑧ 投毒：**既在登记清单又在豁免清单** ⇒ ⇒ ③''' MUST 红（★ 「豁免」=「不覆盖」
+    #    ⇒ ⇒ ⇒ ⇒ 与「已覆盖」互斥 ⇒ ⇒ ⇒ ⇒ 同时登记 = 语义自相矛盾）
+    if [ -f "$REGISTRY" ]; then
+        registry_insert "登记清单" '| `SyntheticCompositeDut` | `tests/synthetic.cpp` | T0 | — | — |'
+        registry_insert "豁免" '| `SyntheticCompositeDut` | 临时豁免（自检：既登记又豁免） |'
+        EXTRA_CORPUS_ROOT="$extra"
+        poison_out="$(run_main 2>&1)"
+        if printf '%s' "$poison_out" | grep -q "③'''"; then
+            ok "self-test[⑧ 既登记又豁免] ⇒ 红（③'''）"
+        else
+            fail "self-test[⑧ 既登记又豁免]：竟未被 ③''' 抓住 ⇒ ⇒ 豁免表能给已覆盖的 DUT 打掩护"
+            rc=1
+        fi
+        EXTRA_CORPUS_ROOT=""
+        cp "$reg_backup" "$REGISTRY"
+    fi
+
+    # ⑨ ★ **负向对照**：**限定名**的复合 DUT（`ns::QualifiedDut`）+ 豁免它 ⇒ ⇒ **绿**
+    #    ⇒ ⇒ ⇒ 证明方向 ③' 的**键控修复**不误杀（★ 修复前 ⇒ ⇒ ③' 拿**简单名**去比
+    #    ⇒ ⇒ **全行**（限定名）⇒ ⇒ ⇒ 合法豁免被**误杀**⇒ ⇒ ⇒ ⇒ 本条是那条修复的
+    #    ⇒ ⇒ ⇒ **唯一**判别证据 ⇒ ⇒ ⇒ ⇒ 且它同时证明 ③' **仍在工作**（豁免项**确实**
+    #    ⇒ ⇒ ⇒ 在语料里）⇒ ⇒ ⇒ ⇒ 配投毒 ⑤（豁免不存在的 DUT ⇒ ⇒ ③' 红）⇒ ⇒ ⇒ ⇒
+    #    ⇒ ⇒ ⇒ 两者合起来才证明「③' 既在、又不误杀」）
+    local extra3="$WORK/extra_corpus_qualified"
+    rm -rf "$extra3"; mkdir -p "$extra3"
+    cat > "$extra3/synthetic_qualified_dut.cpp" <<'POOF'
+#include "catch_amalgamated.hpp"
+namespace ns {
+class QualifiedDut : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch::ch_module<QualifiedDut> child{"child"};
+        child.io().din <<= io().din;
+        io().dout <<= child.io().dout;
+    }
+};
+}
+DUAL_BACKEND_TEST_PAIR(ns::QualifiedDut, "synthetic", "[synthetic]", [&]() {});
+POOF
+    if [ -f "$REGISTRY" ]; then
+        registry_insert "豁免" '| `ns::QualifiedDut` | 合法豁免（自检：限定名不得被误杀） |'
+        EXTRA_CORPUS_ROOT="$extra3"
+        poison_out="$(run_main 2>&1)"
+        if printf '%s' "$poison_out" | grep -q "③'"; then
+            fail "self-test[⑨ 限定名 DUT 的豁免]：竟被判红 ⇒ ⇒ 方向 ③' 的键控修复**误杀**合法豁免"
+            rc=1
+        else
+            ok "self-test[⑨ 限定名 DUT 的豁免] ⇒ 绿（★ ③' 不误杀）"
+        fi
+        EXTRA_CORPUS_ROOT=""
+        cp "$reg_backup" "$REGISTRY"
+    fi
+    rm -rf "$extra3"
+
+    # ⑩ 反向对照：还原 ⇒ MUST 复绿
     if run_main >/dev/null 2>&1; then
         ok "self-test：还原后复绿"
     else
