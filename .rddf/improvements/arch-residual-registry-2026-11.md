@@ -404,6 +404,7 @@ git show HEAD:docs/architecture/2026-11-02-hierarchical-rtl-output.md | grep -c 
 | 8 | ★ **§7 前言注记是状态的第 4 份副本** | 本 change 把它去副本化（§What Changes §5）⇒ ⇒ **改造后**注记只列「同步了哪些行 id」+「状态以登记表为准」⇒ ⇒ 不再复述状态 ⇒ ⇒ 副本数 4 → 3（台账状态格 / 探针清单 / 裁决记录）⇒ ⇒ 其中**探针清单**将由护栏**派生**（判据 ①）⇒ ⇒ 实际只剩**台账状态格 + 登记表**两处 |
 | 9 | **§11.11.4 行 3 的陈旧** | 见 #7 ⇒ 交 architect 另行处理 ⇒ **本 change 不动**（★ 避免 scope 蔓延） |
 | 10 | ★ **feature fragment 的「残留 1b」描述列仍带「零覆盖」** | `.rddf/roadmap/features/feat-hierarchical-rtl-output.md` 的**状态列**已是 ✅ 已收口，但**描述列**仍写「零覆盖」⇒ ⇒ 那是**gap 的历史名称 / 描述**，**不是**状态漂移 ⇒ ⇒ **不构成** plan 档 BLOCKER ③ 的「范围与 roadmap 冲突」（critic 判定）⇒ ⇒ 但措辞应刷新 ⇒ ⇒ **归 planner 域**（★ 本 change 不改 `.rddf/roadmap/**`）⇒ ⇒ **登记为 backlog** |
+| 11 | ★ **rdd-builder P0 的 spec-delta 落点与本仓 OpenSpec 1.4.0 布局冲突** | `skills/rdd-builder/scripts/phase0_approval.sh` 的 approve 分支把 delta 写到 **`openspec/specs/$CHANGE_NAME/spec.md`** ⇒ ⇒ 那是**主 spec 路径** ⇒ ⇒ 在本仓会**绕过 change 流程**（违反仓内 OpenSpec 规则：delta MUST 在 `openspec/changes/<name>/specs/<capability>/spec.md` ⇒ 归档时由 CLI 合并）⇒ ⇒ 且它只写**占位 stub**（★ 不调用同目录 `generate_full_proposal.py::generate_spec_delta()` 的 D3 映射）⇒ ⇒ ⇒ 且 capability 名取**change 名**（★ 本仓 capability 名是**稳定名**（如 `hierarchical-corpus-regression`）⇒ ⇒ ⇒ ⇒ 不是 change 名）⇒ ⇒ ⇒ **本次处置**：用 P0 生成 `proposal.md` + builder handoff ⇒ delta 由 planner 按仓内既有 delta 的质量标准（具名 Requirement + GIVEN/WHEN/THEN Scenario）**重写**并落**仓库正确路径**（`openspec/changes/arch-residual-registry-2026-11/specs/ledger-residual-registry/spec.md`）⇒ ⇒ ★ **工具侧 backlog**（★ 修 `phase0_approval.sh` 的落点 + 改调 `generate_spec_delta` + capability 名可传参） |
 
 ## metis 第 1 轮 gap 分析的处置（逐条）
 
@@ -515,3 +516,4 @@ git show HEAD:docs/architecture/2026-11-02-hierarchical-rtl-output.md | grep -c 
 | 5 | 登记表**首期内容**（15 行 × 8 列） | builder（按 architect 给的生成句模板） |
 | 6 | capability 归属的**最终裁定**（★ 默认建议 = 新建独立 `ledger-residual-registry`） | openspec change 阶段（architect + planner） |
 | 7 | §11.11.4 行 3 的陈旧（★ 范围外） | ★ **architect**（另行处理） |
+| 8 | ★ **工具侧**：`phase0_approval.sh` 的 delta 落点（主 spec 路径）+ 占位 stub + capability 名取 change 名（★ 见 §已知边界 #11） | **rdd-workflow 维护方**（★ 不在本仓 ⇒ 登记为 upstream backlog） |
