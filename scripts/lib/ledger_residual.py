@@ -8,7 +8,6 @@
 退出码：0 绿 · 1 不一致 · 2 fail-closed（缺工具 · 缺文件 · 解析 0 行 · 登记表格式非法）
 """
 from __future__ import annotations
-import os
 import pathlib
 import re
 import sys
@@ -464,8 +463,9 @@ def selftest() -> int:
     import shutil
     import tempfile
     failures = 0
-    tmpdir = "/tmp/opencode"
-    os.makedirs(tmpdir, exist_ok=True)
+    # ★ 临时目录用 `tempfile.gettempdir()`（尊重 TMPDIR）⇒ 对齐仓内护栏的 `mktemp -d` 惯例
+    #   （★ 早期实现硬编码 `/tmp/opencode` ⇒ 那是**agent 环境**的习惯 ⇒ 仓内脚本不该带）
+    tmpdir = tempfile.gettempdir()
     with tempfile.TemporaryDirectory(prefix="lr-selftest-", dir=tmpdir) as td:
         tmp = pathlib.Path(td)
         pristine = _synthetic_root(tmp / "pristine")
