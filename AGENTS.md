@@ -374,7 +374,8 @@ bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条原地投毒 ⇒ �
 #   ⇒ 红 · ③ 台账状态格 MUST 以**生成句**开头（逐字节前缀）· ④ 结算 fail-closed（0 行 ⇒ exit 2）
 #   · ⑤ 退出码 1/2（★ 禁恒 exit 0）· ⑥ 合成 fixture 自检（11 投毒 · 不碰 architect 域文件）
 #   · ⑦ --render（打印期望规范句）· ⑦' --check-normalization（归一化是否丢信息）
-# ⚠️ ★ 本护栏**尚未接 CI**（⇒ 台账归一化落地后才接 ⇒ 否则 CI 恒红）
+# ⚠️ ★ 本护栏**已进 CI**（`build-and-test` 的 guard 段 · 护栏 + `--self-test` 两步 ⇒ push/PR 都跑）
+#   ⇒ ⇒ ⇒ 接线的时序前提 = 台账归一化**先于**它落库（★ 否则规范句前缀判定必然全仓恒红）
 bash scripts/verify_arch_ledger_residuals.sh
 bash scripts/verify_arch_ledger_residuals.sh --self-test
 
