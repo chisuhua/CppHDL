@@ -255,6 +255,20 @@ DUT（实测：移位寄存器恒 `0x00`、FSM 状态卡死在 `TRANSFER`、`STO
 - **AND** ⚠️ **parity 断言 MUST 保留**（它是**必要**条件）⇒ 但 MUST NOT 被当作
   **充分**条件（同构缺陷恒被 parity 掩盖 ⇒ MUST 另有**绝对**语义金标）
 
+**新增登记（2026-11-07 · `p8-hierarchical-equivalence-public-helper-2026-11` 引入）**：
+`tests/test_public_equivalence_api.cpp` 是**公共 helper 的仓外视角消费者**
+⇒ ⇒ 它比较的是**两份 Verilog 产物**（扁平 vs 层次化），且**两侧都只走一个 backend**
+⇒ ⇒ **不**属于 `DUAL_BACKEND_TEST` 的 parity 形态 ⇒ ⇒ 属**单后端（verilator-only）**
+条目 ⇒ ⇒ MUST **保留原状**（MUST NOT 迁移到 macro）⇒ ⇒ 它同样带 `verilator_e2e` 标签
+⇒ ⇒ 计入 `VERILATOR_E2E_TOTAL` 锚点。
+⚠️ **本 Requirement 的标题（「9 个」）仍不变**（它指 macro 的 reference implementation
+数量）⇒ ⇒ 本段登记的是**又一个**单后端条目（与上一条 `test_hierarchy_equivalence.cpp` 同型）。
+⚠️ **它 MUST 带 `verilator_e2e` 标签**：它**真的**要编译两份产物 ⇒ ⇒ 不带标签 ⇒
+只在 `BUILD_VERILATOR=OFF` 的 job 里跑 ⇒ ⇒ 那里 verilator 不存在 ⇒ ⇒ **恒跳过**
+⇒ ⇒ 「公共面真的可用」这条证据将永远不被真正执行。
+⚠️ 它**不**增加 parity 的两个锚点（`DUAL_BACKEND_PARITY_TOTAL` / `_PAIRS`）
+⇒ ⇒ 因为它**不写** `DUAL_BACKEND_TEST_PAIR` 调用。
+
 ### Requirement: CTEST_TOTAL 同步 MUST 在 phase 边界更新根 AGENTS.md
 
 每次新测试 target 通过 `add_dual_backend_test` 注册，MUST 按根 `AGENTS.md §NOTES` 的 `CTEST_TOTAL: <N>` 行更新计数（与 `scripts/verify_test_counts.sh` 同步）。Phase 1 边界 `CTEST_TOTAL` 数字 MUST 由实测 `ctest -N | tail -1` 回填（禁止拍脑袋）。
