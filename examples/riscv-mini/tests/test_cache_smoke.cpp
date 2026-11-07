@@ -43,6 +43,7 @@
 #include "simulator.h"
 
 #include "dual_backend_fixture.h"
+#include "hier_corpus_fixture.h"
 
 #include "cpu/cache/i_cache_prefetch.h"
 #include "cpu/cache/d_cache_write_buffer.h"
@@ -311,3 +312,123 @@ DUAL_BACKEND_TEST_PAIR(DCacheWriteBuffer,
     REQUIRE(sim.get_port_value(io.axi_addr) == 0x3005u);
     REQUIRE(sim.get_port_value(io.axi_wdata) == 0xBEEFu);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **产物级**（残留 1b · T0）
+//
+// ⚠️ **为什么这个 DUT 需要它**：`ICachePrefetch` 是**真实语料**里**唯一**「子组件 +
+//   自带 `ch_mem`」的 DUT ⇒ ⇒ 它覆盖「mem 在模块内自用、跨层只走端口」的**合法**
+//   形态（★ 对照 `src/hierarchy_analysis.cpp` 的「跨模块 mem」硬拒绝）
+//   ⇒ ⇒ ⇒ 它是 10 个复合 DUT 里**结构最特别**的一个。
+//
+// ⚠️ **判据在共享 fixture 里**（`tests/hier_corpus_fixture.h`）⇒ ⇒ 这里只负责
+//    「**用哪些真实 DUT**」这个事实。
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("corpus hierarchy regression (product level): ICachePrefetch",
+          "[hierarchy][corpus][t0][riscv-mini][cache]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_i_cache_prefetch");
+    REQUIRE_FALSE(dir.empty());
+    const auto r =
+        ch_test::hier_corpus::check_product_level<ICachePrefetch>("i_cache_prefetch", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **行为级**（残留 1b · T1）
+//
+// ⚠️ **结构类 C3**：「root 持 `ch_mem` + 子组件带 AXI 端口」⇒ ⇒ `ICachePrefetch`
+//   是**既有语料**里**唯一**这个形态的 DUT ⇒ ⇒ ⇒ 它覆盖「mem 在模块内自用、
+//   跨层只走端口」的**合法**形态（★ 对照 `src/hierarchy_analysis.cpp` 的
+//   「跨模块 mem」硬拒绝 ⇒ ⇒ 本形态证明「mem 不必跨层」也可行）。
+//
+// ⚠️ **已知观测偏差（★ 登记在 `tests/hier_corpus_registry.md`）**：内层 `miss`(1 拍
+//   `sread`) 与 `axi_addr`(当拍地址) 存在 1 拍错位 ⇒ ⇒ ⇒ **比对时 MUST NOT 把它当
+//   缺陷** ⇒ ⇒ 但它**不影响**本次比对（★ 比的是 flat ≡ hier ⇒ ⇒ 两侧**同样**错位）。
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("corpus hierarchy regression (behaviour level): ICachePrefetch - root mem + child AXI ports",
+          "[hierarchy][corpus][t1][riscv-mini][cache][mem-in-module]") {
+    // ⚠️ **verilator 不可用 ⇒ WARN-skip**（★ 与 `DUAL_BACKEND_TEST_PAIR` 的既有约定
+    //    同款 ⇒ ⇒ 否则 macOS/Windows 的 `-DBUILD_VERILATOR=OFF` 本地开发会**新增硬
+    //    失败**；⇒ ⇒ ★ 与本 change 的 T0（`lint_skipped` 显式分支）**自洽**）
+    if (!ch_test::tool_available("verilator")) {
+        WARN("verilator not on PATH; corpus hierarchy regression (behaviour level) skipped");
+        return;
+    }
+    const std::string dir = ch_test::make_temp_dir("_corpus_t1_icache");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<ICachePrefetch> dev;
+
+    const auto products =
+        ch::hier_eq::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    REQUIRE(products.ok);
+
+    std::vector<ch::hier_eq::DrivenInput> inputs;
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "addr", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().addr, v);
+        }});
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "req", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().req, v);
+        }});
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "axi_ready", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().axi_ready, v);
+        }});
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "axi_resp_valid", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().axi_resp_valid, v);
+        }});
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "axi_data", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().axi_data, v);
+        }});
+
+    // ⚠️ 观测**只**取**顶层**的 `ch_out`（★ 子组件的 `ch_out` 在层次化顶层**不可观测**
+    //    ⇒ ⇒ 观测它 ⇒ ⇒ helper 会**机械拒绝**（前缀 `observation-not-visible`））
+    std::vector<ch::hier_eq::Observation> observations;
+    observations.push_back(ch::hier_eq::make_observation(
+        "axi_addr", dev.instance().io().axi_addr,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().axi_addr));
+        }));
+    observations.push_back(ch::hier_eq::make_observation(
+        "axi_valid", dev.instance().io().axi_valid,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().axi_valid));
+        }));
+    observations.push_back(ch::hier_eq::make_observation(
+        "miss", dev.instance().io().miss,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().miss));
+        }));
+
+    // ⚠️ 激励逐拍变化（★ 地址变化 ⇒ ⇒ `axi_addr` 变化 ⇒ ⇒ 观测**携带信息**
+    //    ⇒ ⇒ 否则被 `no-varying-signal` 拒绝）
+    const std::vector<std::vector<std::uint64_t>> stim = {
+        {0x80000000u, 1u, 1u, 0u, 0u},
+        {0x80000004u, 1u, 1u, 0u, 0u},
+        {0x80000008u, 1u, 1u, 0u, 0u},
+        {0x8000000Cu, 1u, 1u, 0u, 0u},
+        {0x80000010u, 0u, 1u, 0u, 0u},
+        {0x80000014u, 1u, 1u, 0u, 0u},
+    };
+    const auto r = ch::hier_eq::compare(dev.context(), dir, products.hier_path, products.ports,
+                                        inputs, observations, stim);
+    INFO("error: " << r.error);
+    INFO("first mismatch: " << r.first_mismatch);
+    REQUIRE(r.ok);
+    REQUIRE(r.equal);
+    REQUIRE(r.mismatch_count == 0u);
+}
+

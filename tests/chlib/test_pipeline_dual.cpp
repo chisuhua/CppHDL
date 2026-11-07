@@ -79,6 +79,7 @@
 #include "core/uint.h"
 #include "device.h"
 #include "dual_backend_fixture.h"
+#include "hier_corpus_fixture.h"
 #include "simulator.h"
 
 using namespace ch;
@@ -241,6 +242,50 @@ const uint64_t kChainOut[6] = {0x00, 0x00, 0x11, 0x22, 0x33, 0x44};
 }  // namespace
 
 // ───────────────────── pair 1：PipelineStage ─────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **产物级**（残留 1b · T0）
+//
+// ⚠️ **为什么这些 DUT 需要它**：本文件的 DUT 是**真实语料** ⇒ ⇒ 它们带**真实拓扑**
+//    （子组件 + 真实端口 + 真实位宽）⇒ ⇒ 层次化路径在它们身上**结构上**与 T3-005 的
+//    5 个**专用** DUT 不同 ⇒ ⇒ ⇒ 「层次化路径只被专用 DUT 覆盖」的缺口**正是**这里。
+//
+// ⚠️ **判据在共享 fixture 里**（`tests/hier_corpus_fixture.h`）⇒ ⇒ 这里只负责
+//    「**用哪些真实 DUT**」这个事实（★ 它们的类在本文件的匿名命名空间内 ⇒ ⇒ 外部
+//    引用不到）。
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("corpus hierarchy regression (product level): StageDut",
+          "[hierarchy][corpus][t0][chlib][pipeline]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_stage_dut");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<StageDut>("stage_dut", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
+TEST_CASE("corpus hierarchy regression (product level): ChainDut",
+          "[hierarchy][corpus][t0][chlib][pipeline]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_chain_dut");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<ChainDut>("chain_dut", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
 DUAL_BACKEND_TEST_PAIR(
     StageDut,
     "PipelineStage - stall 保持 / flush 组合清零（两后端逐拍一致）",

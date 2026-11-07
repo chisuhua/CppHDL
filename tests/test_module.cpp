@@ -3,6 +3,7 @@
 #include "codegen_dag.h"
 #include "codegen_verilog.h"
 #include "dual_backend_fixture.h"
+#include "hier_corpus_fixture.h"
 #include "module.h"
 #include "simulator.h"
 #include <cstdint>
@@ -99,6 +100,7 @@ public:
         io().out_data <<= mod.io().out_port;
     }
 };
+
 
 DUAL_BACKEND_TEST_PAIR(
     ModuleValueTransferTop,
@@ -214,3 +216,175 @@ DUAL_BACKEND_TEST_PAIR(
         sim.tick();
         REQUIRE(sim.get_value(dev.instance().io().out_data) == 0);
     });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **产物级**（残留 1b · T0）
+//
+// ⚠️ **为什么这些 DUT 需要它**：本文件的 DUT 是**真实语料** ⇒ ⇒ 它们带**真实拓扑**
+//    （子组件 + 真实端口 + 真实位宽）⇒ ⇒ 层次化路径在它们身上**结构上**与 T3-005 的
+//    5 个**专用** DUT 不同 ⇒ ⇒ ⇒ 「层次化路径只被专用 DUT 覆盖」的缺口**正是**这里。
+//
+// ⚠️ **判据在共享 fixture 里**（`tests/hier_corpus_fixture.h`）⇒ ⇒ 这里只负责
+//    「**用哪些真实 DUT**」这个事实（★ 它们的类在本文件的匿名命名空间内 ⇒ ⇒ 外部
+//    引用不到）。
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("corpus hierarchy regression (product level): ModuleValueTransferTop",
+          "[hierarchy][corpus][t0][module]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_module_value_transfer_top");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<ModuleValueTransferTop>("module_value_transfer_top", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
+TEST_CASE("corpus hierarchy regression (product level): ModuleChainTop",
+          "[hierarchy][corpus][t0][module]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_module_chain_top");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<ModuleChainTop>("module_chain_top", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
+TEST_CASE("corpus hierarchy regression (product level): ModuleIoDirectionTop",
+          "[hierarchy][corpus][t0][module]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_module_io_direction_top");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<ModuleIoDirectionTop>("module_io_direction_top", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **行为级**（残留 1b · T1）
+//
+// ⚠️ **T1 的选样依据 = 「结构类」而非「个数」**：每类取**一个**能代表该结构的 DUT
+//    ⇒ ⇒ 类之间**互不重复** ⇒ ⇒ 覆盖面按**结构**计（★ 数值计会诱导「凑数」）。
+//    ⚠️ **可用的结构类**（★ planner 普查 ⇒ 实施期实测**订正**过）：
+//    · C1'「双子组件」⇒ `ModuleIoDirectionTop`（两个 `ModuleDataProcessor`）
+//    · C2 「兄弟跨模块边 + **同类型多实例**」⇒ `ModuleChainTop`
+//      （★ 发射器按 `sanitize(module_type_name)` 分组并编号 ⇒ ⇒ 产出 `<Type>` /
+//       `<Type>_1` **两份同体 module** ⇒ ⇒ 这是 C2 的真正判别点）
+//    · C3「root 持 `ch_mem` + 子组件带 AXI 端口」⇒ `ICachePrefetch`（在 examples 侧）
+//    ⚠️ **「双子组件**各自带寄存器**」这一类在既有语料里**没有可用样本** ⇒ ⇒
+//    ⇒ 唯一候选 `ImmConsistencyDut` **不可**层次化（★ 它的 `equal` 输出依赖两个子
+//    组件的**非端口**内部线网 ⇒ ⇒ 需隐式端口合成 ⇒ ⇒ 发射器不支持）⇒ ⇒ 记 backlog。
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("corpus hierarchy regression (behaviour level): ModuleChainTop - sibling edge + same-type multi-instance",
+          "[hierarchy][corpus][t1][module][sibling-edge][multi-instance]") {
+    // ⚠️ **verilator 不可用 ⇒ WARN-skip**（★ 与 `DUAL_BACKEND_TEST_PAIR` 的既有约定
+    //    同款 ⇒ ⇒ 否则 macOS/Windows 的 `-DBUILD_VERILATOR=OFF` 本地开发会**新增硬
+    //    失败**；⇒ ⇒ ★ 与本 change 的 T0（`lint_skipped` 显式分支）**自洽**）
+    if (!ch_test::tool_available("verilator")) {
+        WARN("verilator not on PATH; corpus hierarchy regression (behaviour level) skipped");
+        return;
+    }
+    const std::string dir = ch_test::make_temp_dir("_corpus_t1_chain");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<ModuleChainTop> dev;
+
+    const auto products =
+        ch::hier_eq::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    REQUIRE(products.ok);
+
+    std::vector<ch::hier_eq::DrivenInput> inputs;
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "in_data", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().in_data, v);
+        }});
+
+    std::vector<ch::hier_eq::Observation> observations;
+    observations.push_back(ch::hier_eq::make_observation(
+        "out_data", dev.instance().io().out_data,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().out_data));
+        }));
+
+    // ⚠️ 激励 MUST **逐拍变化** ⇒ ⇒ 否则观测恒定 ⇒ ⇒ 被 `no-varying-signal` 拒绝
+    const std::vector<std::vector<std::uint64_t>> stim = {{0}, {1}, {2}, {3}, {4}, {5},
+                                                             {6}, {7}, {8}, {9}, {10}, {11},
+                                                             {12}, {13}, {14}, {15}};
+    const auto r = ch::hier_eq::compare(dev.context(), dir, products.hier_path, products.ports,
+                                        inputs, observations, stim);
+    INFO("error: " << r.error);
+    INFO("first mismatch: " << r.first_mismatch);
+    REQUIRE(r.ok);
+    REQUIRE(r.equal);
+    REQUIRE(r.mismatch_count == 0u);
+}
+
+TEST_CASE("corpus hierarchy regression (behaviour level): ModuleIoDirectionTop - two child modules",
+          "[hierarchy][corpus][t1][module][two-children]") {
+    // ⚠️ **verilator 不可用 ⇒ WARN-skip**（★ 与 `DUAL_BACKEND_TEST_PAIR` 的既有约定
+    //    同款 ⇒ ⇒ 否则 macOS/Windows 的 `-DBUILD_VERILATOR=OFF` 本地开发会**新增硬
+    //    失败**；⇒ ⇒ ★ 与本 change 的 T0（`lint_skipped` 显式分支）**自洽**）
+    if (!ch_test::tool_available("verilator")) {
+        WARN("verilator not on PATH; corpus hierarchy regression (behaviour level) skipped");
+        return;
+    }
+    const std::string dir = ch_test::make_temp_dir("_corpus_t1_io_dir");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<ModuleIoDirectionTop> dev;
+
+    const auto products =
+        ch::hier_eq::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    REQUIRE(products.ok);
+
+    std::vector<ch::hier_eq::DrivenInput> inputs;
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "in_data", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().in_data, v);
+        }});
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "enable1", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().enable1, v);
+        }});
+    inputs.push_back(ch::hier_eq::DrivenInput{
+        "enable2", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().enable2, v);
+        }});
+
+    std::vector<ch::hier_eq::Observation> observations;
+    observations.push_back(ch::hier_eq::make_observation(
+        "out_data", dev.instance().io().out_data,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().out_data));
+        }));
+
+    // ⚠️ 激励逐拍变化（★ 且**跨两个子组件的使能** ⇒ ⇒ 覆盖「select 的两路」）
+    const std::vector<std::vector<std::uint64_t>> stim = {{0, 1, 0}, {1, 1, 0}, {2, 0, 1},
+                                                            {3, 0, 1}, {4, 1, 1}, {5, 0, 0},
+                                                            {6, 1, 0}, {7, 0, 1}, {8, 1, 1},
+                                                            {9, 0, 0}, {10, 1, 0}, {11, 0, 1}};
+    const auto r = ch::hier_eq::compare(dev.context(), dir, products.hier_path, products.ports,
+                                        inputs, observations, stim);
+    INFO("error: " << r.error);
+    INFO("first mismatch: " << r.first_mismatch);
+    REQUIRE(r.ok);
+    REQUIRE(r.equal);
+    REQUIRE(r.mismatch_count == 0u);
+}
+

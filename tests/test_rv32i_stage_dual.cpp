@@ -73,6 +73,7 @@
 // ⚠️ **判据（N2′）**：断言数(with verilator) == **2 ×** 断言数(interpreter-only)。
 #include "catch_amalgamated.hpp"
 #include "dual_backend_fixture.h"
+#include "hier_corpus_fixture.h"
 
 #include "ch.hpp"
 #include "component.h"
@@ -407,6 +408,38 @@ DUAL_BACKEND_TEST_PAIR(
 // ===========================================================================
 // pair 4（ADR-063 D4）：两份立即数实现的**等价性**
 // ===========================================================================
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **产物级**（残留 1b · T0）
+//
+// ⚠️ **为什么这些 DUT 需要它**：本文件的 DUT 是**真实语料** ⇒ ⇒ 它们带**真实拓扑**
+//    （子组件 + 真实端口 + 真实位宽）⇒ ⇒ 层次化路径在它们身上**结构上**与 T3-005 的
+//    5 个**专用** DUT 不同 ⇒ ⇒ ⇒ 「层次化路径只被专用 DUT 覆盖」的缺口**正是**这里。
+//
+// ⚠️ **判据在共享 fixture 里**（`tests/hier_corpus_fixture.h`）⇒ ⇒ 这里只负责
+//    「**用哪些真实 DUT**」这个事实（★ 它们的类在本文件的匿名命名空间内 ⇒ ⇒ 外部
+//    引用不到）。
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ⚠️⚠️ **实测发现（语料普查 ⇒ planner 的 T0 清单订正）**：本 DUT **不可**层次化！
+//   `io().equal <<= (dec.io().imm == ids.io().imm);` ⇒ ⇒ 根的 `equal` 输出由**两个子
+//   组件的内部线网**驱动 ⇒ ⇒ 那两条边**需要隐式端口合成**（ADR-060 §2.1）⇒ ⇒ 发射器
+//   **不支持** ⇒ ⇒ `ok=false`。
+//   ⇒ ⇒ 它**不是** T0 候选 ⇒ ⇒ 而是「**拒绝边界**」的**真实样本** ⇒ ⇒ 本用例把
+//   **拒绝原因**钉住 ⇒ ⇒ ⇒ 将来发射器**长出**隐式端口合成时 ⇒ ⇒ 本用例会红 ⇒ ⇒
+//   ⇒ ⇒ 那正是「能力边界前移」的**正确信号**（⇒ ⇒ 登记表 MUST 同步更新）。
+TEST_CASE("corpus hierarchy regression (rejection boundary): ImmConsistencyDut",
+          "[hierarchy][corpus][t0][reject-boundary][rv32i][immediate]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_imm_consistency_dut");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<ImmConsistencyDut> dev;
+    const auto products =
+        ch::hier_eq::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    // ⚠️ **MUST 被拒**（★ 不是「发射成功」）
+    REQUIRE_FALSE(products.ok);
+    // ⚠️ 拒绝原因 MUST **点名**「需要隐式端口合成」（★ 否则用户不知道该改哪）
+    REQUIRE(products.error.find("implicit-port synthesis") != std::string::npos);
+}
+
 DUAL_BACKEND_TEST_PAIR(
     ImmConsistencyDut,
     "Rv32iDecoder::imm 与 IdStage::imm 逐位相等（ADR-063 D4：防两份重复实现只改一处）",

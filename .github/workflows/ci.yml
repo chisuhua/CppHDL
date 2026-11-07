@@ -1388,6 +1388,20 @@ jobs:
       shell: bash
       run: cmake --build build -j$(nproc)
 
+    # ---- 层次化路径的语料级回归 · 覆盖栅栏（残留 1b）--------------------
+    # ⚠️ 为什么是**纯静态**：它只核对「登记表 ⇔ 用例 ⇔ 语料里的复合 DUT」三者的
+    #    **一致性** ⇒ ⇒ 不需要 verilator ⇒ ⇒ 与分片无关 ⇒ ⇒ 每个分片都跑。
+    - name: Verify hierarchical corpus coverage (three-way cross-check)
+      shell: bash
+      run: bash scripts/verify_hier_corpus_coverage.sh
+
+    # 自检：逐条投毒 ⇒ 必红 ⇒ 还原复绿。
+    # WHY: 固定清单是 snapshot 不是 fence ⇒ ⇒ 「登记表删一行 / 加一个不存在的 DUT」
+    #   MUST 都能被抓 ⇒ ⇒ ⇒ 否则这张表会与实现**静默**脱节。
+    - name: Verify hierarchical corpus coverage guard self-test
+      shell: bash
+      run: bash scripts/verify_hier_corpus_coverage.sh --self-test
+
     # ---- 层次化 RTL 输出方案 · C0-0 spike 的固化护栏 ---------------------
     # ⚠️ 为什么挂在这个 job：它需要**真实的 verilator**（`--json-only`）⇒
     #    而 verilator 只在 `pr-verilator-fast` / `nightly-verilator` 里构建。

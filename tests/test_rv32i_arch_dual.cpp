@@ -62,6 +62,7 @@
 // ⚠️ **判据（N2′）**：断言数(with verilator) == **2 ×** 断言数(interpreter-only)。
 #include "catch_amalgamated.hpp"
 #include "dual_backend_fixture.h"
+#include "hier_corpus_fixture.h"
 
 #include "ch.hpp"
 #include "component.h"
@@ -243,6 +244,67 @@ public:
 // ===========================================================================
 // pair 1：Rv32iPc —— 顺序 +4 / 跳转 / 复位 / **32 位回绕**
 // ===========================================================================
+// ═══════════════════════════════════════════════════════════════════════════
+// 语料级层次化回归 · **产物级**（残留 1b · T0）
+//
+// ⚠️ **为什么这些 DUT 需要它**：本文件的 DUT 是**真实语料**（RV32I 的 PC / CLINT /
+//    CSR bank）⇒ ⇒ 它们带**真实拓扑**（子组件 + 真实端口 + 真实位宽）⇒ ⇒ 层次化
+//    路径在它们身上**结构上**与 T3-005 的 5 个**专用** DUT 不同 ⇒ ⇒ ⇒ 「层次化路径
+//    只被专用 DUT 覆盖」的缺口**正是**这里。
+//
+// ⚠️ **判据在共享 fixture 里**（`tests/hier_corpus_fixture.h`）⇒ ⇒ 这里只负责
+//    「**用哪些真实 DUT**」这个事实（★ 它们的类在本文件的匿名命名空间内 ⇒ ⇒ 外部
+//    引用不到）。
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("corpus hierarchy regression (product level): Rv32iPcDut",
+          "[hierarchy][corpus][t0][rv32i][pc]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_pc");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<Rv32iPcDut>("rv32i_pc_dut", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);       // ★ ForceLayer 下真的分层了
+    REQUIRE(r.output_port_count >= 1u);   // ★ 顶层有可观测的 output
+    REQUIRE(r.deterministic);             // ★ 两次发射逐字节相同
+    REQUIRE(r.differs_from_flat);         // ★ 分层真的改变了产物
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);  // ★ verilator 不可用 ⇒ 显式 skip
+}
+
+TEST_CASE("corpus hierarchy regression (product level): ClintDut",
+          "[hierarchy][corpus][t0][rv32i][clint]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_clint");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<ClintDut>("clint_dut", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);
+    REQUIRE(r.output_port_count >= 1u);
+    REQUIRE(r.deterministic);
+    REQUIRE(r.differs_from_flat);
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);
+}
+
+TEST_CASE("corpus hierarchy regression (product level): CsrBankDut",
+          "[hierarchy][corpus][t0][rv32i][csr]") {
+    const std::string dir = ch_test::make_temp_dir("_corpus_csr");
+    REQUIRE_FALSE(dir.empty());
+    const auto r = ch_test::hier_corpus::check_product_level<CsrBankDut>("csr_bank_dut", dir);
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.module_count >= 2u);
+    REQUIRE(r.output_port_count >= 1u);
+    REQUIRE(r.deterministic);
+    REQUIRE(r.differs_from_flat);
+    // ⚠️ Catch2 的 `REQUIRE` **不支持** `||` ⇒ ⇒ 先算布尔再断言（★ 仓内已登记的坑）
+    const bool lint_accounted = r.lint_skipped || r.lint_ok;
+    REQUIRE(lint_accounted);
+}
+
 DUAL_BACKEND_TEST_PAIR(
     Rv32iPcDut,
     "Rv32iPc：顺序 +4 / 跳转 / 复位 / 32 位回绕（0xFFFFFFFC + 4 ⇒ 0）",

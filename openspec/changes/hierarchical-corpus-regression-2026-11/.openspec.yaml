@@ -1,0 +1,16 @@
+schema: spec-driven
+created: 2026-11-07
+
+# 层次化路径的语料级回归（残留 1b）
+#
+# ⚠️ **规范所有者**：本 capability 管的是「**既有语料上的覆盖与判别力边界**」
+#   （覆盖 MUST · 登记表 MUST · 三向双向核对 MUST · 判别力上限 MUST 登记），
+#   **不是**产物契约（★ 归 `rtl-hierarchical-output`）⇒ ★ **不是**等价性判据本体
+#   （★ 同上）⇒ ★ **不是**公共 API 契约（★ 归 `hierarchical-equivalence-public-helper`）。
+#
+# ⇒ **新建 1 个 capability** ⇒ 归档**禁** `--skip-specs`。
+#
+# ⚠️ **口径**（用户 2026-11-07 拍板 = **X1**）：台账 §7 残留 1b 的原文是「**行为**覆盖」
+#   ⇒ ⇒ 本 change 的**双层方案**（T0 产物级 + T1 行为级）⇒ ⇒ **T0 本身不满足「行为覆盖」**
+#   ⇒ ⇒ ⇒ **口径差 MUST 显式登记**（★ 台账措辞归 architect ⇒ ⇒ 本 change **MUST NOT**
+#   单方面改台账 ⇒ ⇒ 归 architect backlog）。
