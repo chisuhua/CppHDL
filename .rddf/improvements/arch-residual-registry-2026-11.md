@@ -112,6 +112,35 @@ roadmap_ref:
 
 ⇒ ⇒ 本 improvement 的**判别力**指标不是「台账正确率」（不可测），而是「**漂移能否被自动检出**」（可测 ⇒ 见 §Acceptance）。
 
+## 关键场景
+
+> ★ proposal 生成器会把本段并入生成稿的 `## What Changes` ⇒ ⇒ 故写成**可判定的场景**（GIVEN / WHEN / THEN）。
+
+- **S1 · 台账状态与现实脱节**
+  - GIVEN 台账 §7 某行写着「⚠️ 未决」而对应 change **已归档**
+  - WHEN 开发者 / 评审者读台账
+  - THEN 他会以为该工作仍待做 ⇒ ⇒ **本 change 之后**：登记表该行 `状态` = `已收口` + `闭口证据` 指向归档目录 ⇒ ⇒ 证据路径不存在 ⇒ 判据 ② 红 ⇒ ⇒ 台账与登记表**不可能长期不一致**
+- **S2 · 状态格漏更新（本轮的原始形态）**
+  - GIVEN 行 11 的状态格仍写「待 planner 立项」而 **P6 / P8 均已归档**
+  - WHEN 护栏运行
+  - THEN 登记表（`已收口` + 两个归档目录）生成的生成句与台账前缀不符 ⇒ 判据 ③ 红 ⇒ ⇒ **漂移在 CI 里可见**
+- **S3 · 登记表加了行但旧的探针清单没覆盖**
+  - GIVEN 登记表新增一行 `未决`，并登记一个**已存在**的候选闭口证据
+  - WHEN 护栏运行
+  - THEN 判据 ②' 红（「该行应转 `已收口`」）⇒ ⇒ 即使这条行**不在**旧 `RESIDUAL_EVIDENCE` 清单里，也**不会漏**
+- **S4 · 散文被误伤**
+  - GIVEN architect 在状态格的**散文**里改 1 个字
+  - WHEN 护栏运行
+  - THEN **必须仍绿**（判据 ③ 只比前缀）⇒ ⇒ 「散文可自由改」的设计意图成立
+- **S5 · 归一化丢了信息**
+  - GIVEN architect 归一化时误删了状态格散文里的一整段
+  - WHEN 跑 `--check-normalization`
+  - THEN 该段落在 `S_old \ S_new` 里 ⇒ 若**未**在 architect review 记录逐条登记 ⇒ 护栏红 ⇒ ⇒ 「只增不删」由机器守
+- **S6 · 工具缺失**
+  - GIVEN 缺 `python3` 或缺分析器
+  - WHEN 护栏运行
+  - THEN **exit 2**（fail-closed）⇒ ⇒ 绝不「静默全绿」
+
 ## What Changes
 
 ### 1. 登记表（唯一真相）
@@ -284,6 +313,38 @@ roadmap_ref:
 | **责任矩阵（各护栏互不覆盖）** | `verify_ledger_evidence.sh` = **只**查 front-matter 的 `evidence:` ⇒ 本护栏 = **只**查行级状态 / 证据 / 派生 ⇒ `verify_hier_corpus_coverage.sh` / `verify_hierarchical_p8.sh` R4② / `verify_input_port_required_registry.sh` = 各自域 ⇒ **互不覆盖** |
 | **与既有 capability 的关系** | 与 `rtl-hierarchical-output`（产物结构）、`hierarchical-corpus-regression`（语料回归）**正交** ⇒ 不重复其职责 |
 
+## 技术约束
+
+> ★ proposal 生成器取段顺序 = [`技术约束`, `Capabilities`, `Constraints`]（**精确匹配**）⇒ ⇒ 本段**优先**命中 ⇒ ⇒
+> 生成稿的 `## Capabilities` = 下面的 **MUST** 列表 · `## Impact` = 下面的 **MUST NOT** 列表（生成器按 `MUST NOT` 前缀拆分）⇒ ⇒
+> ⇒ 故：契约义务写 MUST，**边界禁令**写 MUST NOT（★ 这两条恰好是本 change 最容易踩的坑）。
+
+**MUST**
+
+- MUST 存在一份**唯一真相**登记表 `.rddf/checks/arch-residual-registry.md`，列 = `台账 / section / id / 状态 / 日期 / 后缀 / 闭口证据 / 复核条件 / 归属`
+- MUST 台账 §7 每行状态格以登记表**确定性生成的生成句**开头（★ **逐字节前缀**比较 · 无任何归一化）
+- MUST 护栏做**双向 + 多重性敏感 1:1** 核对（键 = 台账 + section + id）
+- MUST 护栏在**证据路径不存在**时红（★ 仅对「需证据的态」）
+- MUST 护栏在**未决行登记的候选闭口证据已存在**时红
+- MUST 护栏 **fail-closed**：缺文件 / 解析 0 行 / 登记表格式非法 ⇒ **exit 2**
+- MUST 护栏提供 `--render`（期望前缀）与 `--check-normalization`（归一化判据）两个**只读**子命令
+- MUST `--self-test` 用**合成 fixture**（★ 不碰 architect 域文件）⇒ 11 条投毒全红 + 还原后**逐字相同**
+- MUST 护栏**进 CI**（guard 段 +2 步）⇒ 且**不早于**台账归一化合并
+- MUST 探针 `scripts/probe_arch_ledger_residuals.sh` **路径保留**（★ 它是裁决请求单的 `evidence:` 指针）
+- MUST 台账归一化**只增不删**；删除**只允许**「因本 change 而变假」的散文 ⇒ 且**逐条登记**在 architect review 记录
+- MUST §7 前言注记**不含任何生成句**且**指向登记表**
+
+**MUST NOT**
+
+- MUST NOT 继承探针的 `exit 0` 语义（★ 否则 CI 永远不红）
+- MUST NOT 依赖**散文词表**做状态判定（★ 探针词表已证会误报 `已裁决 / 不做 / 已知 / 已登记`）
+- MUST NOT 对台账 §7 全文做「生成句唯一命中」子串断言（★ 生成句碰撞 ⇒ 首日必误报）
+- MUST NOT 在台账归一化合并**之前**把护栏接进 CI（★ 否则 architect 落笔前全仓恒红）
+- MUST NOT 在 `--self-test` 里**原地**投毒 `docs/architecture/**`（★ 会污染 architect 域文件）
+- MUST NOT 用 shell 做表格解析（★ fail-closed 语义 MUST 统一 ⇒ 走 `scripts/lib/` 独立分析器）
+- MUST NOT 由 builder 单方面改台账措辞（★ 归 architect）
+- MUST NOT 把「未登记候选闭口证据的未决行其实已完成」算进本契约的判别力（★ §已知边界 #6）
+
 ## Impact
 
 | 维度 | 影响 |
@@ -299,7 +360,13 @@ roadmap_ref:
 | **风险 6** | ★ **CI 时序**：护栏先于台账归一化进 CI ⇒ 全仓恒红 ⇒ ⇒ 缓解：**实施顺序 S1–S4**（§What Changes §7）⇒ ★ S1 **明令不接 CI** |
 | **不可逆性** | 低（新增文件 + 脚本 + 台账散文前缀；⇒ 任一步都可回滚） |
 
-## 验收标准
+## 复核命令
+
+> ⚠️ ★ **本段不是「验收标准」** ⇒ ⇒ 刻意**不叫** `## 验收标准`：proposal 生成器
+> `generate_full_proposal.py` 的 acceptance 取段顺序 = [`验收`, `验收标准`, `Acceptance`]（**精确匹配**）
+> ⇒ ⇒ 若本段叫「验收标准」⇒ ⇒ 它会**抢先**命中 ⇒ ⇒ 生成的 proposal 的 `## Acceptance`
+> 会拿到**命令清单**而不是 20 条 checkbox ⇒ ⇒ ⇒ **spec delta 会生成 0 条 Requirement**
+> ⇒ ⇒ ⇒ 故：checkbox 留在 `## Acceptance`，命令清单放本段。
 
 （复核命令清单 —— **每条 MUST 可复算**；与 `## Acceptance` 的 checkbox 一一对应）
 
@@ -428,6 +495,14 @@ git show HEAD:docs/architecture/2026-11-02-hierarchical-rtl-output.md | grep -c 
 |---|---|
 | critic 的 `scope_exceeded: true` 条目 | ★ **不进入返工队列** ⇒ 已按治理记为 **backlog**（§已知边界 #10 · planner 域） |
 | 其余 16 条 AC | critic 判定「均可机械判定 · **未发现恒绿型 AC**」⇒ 未重开 |
+
+## 参考
+
+- **裁决请求单**（选项 B 的来源）：`.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md`
+- **审稿记录**（台账收口 + 行 11 缺口登记）：`.rddf/reviews/hierarchical-ledger-residuals-sync-2026-11.md`
+- **台账**：`docs/architecture/2026-11-02-hierarchical-rtl-output.md`（§7 残留表 · §11.1 **A4** · §11.2 形态约束 · §11.11.4 行 3 = 已知陈旧 · 范围外）
+- **仓内先例**：`scripts/verify_input_port_required_registry.sh`（登记表双向校验 + 副本投毒自检）· `scripts/verify_hierarchical_p8.sh` **R4②**（活账双向核对）· `scripts/verify_hier_corpus_coverage.sh`（三向双向核对 + 投毒自检）· `scripts/verify_roadmap_fragments.sh`（**render + 整段逐字比对** + **合成仓库 fixture 自检**）· `.github/workflows/ci.yml` guard 段（`:229-303`「跑护栏 + 跑 `--self-test`」两步形态）
+- **相关 ADR**：ADR-058（边界与等价性）· ADR-059（归属与命名）· ADR-060（端口策略与复用）· ADR-061（层级粒度）· ADR-062（单元接口类型）
 
 ## 待办（实施期 MUST 逐条处置）
 
