@@ -1,12 +1,16 @@
 ---
 id: phase-5
 kind: phase
-status: active
+status: done
 phase_refs: []
 主题: [riscv-mini 单源化收敛与 RV32I 双路 parity, RV32I ISA 语义边界收口, riscv-mini RTL 缺陷收口, riscv-mini 技术债清零, dual-backend 全量覆盖残余, 平台矩阵扩展]
 ---
 
 ## phase-5 概览
+
+> ✅ **2026-11-09 收口**（`status: active → done`）：9 条完成条件**全部有结论**
+> —— 8 条 ✅ 达成 + 1 条（Windows-2022 CI）⛔ 不做（2026-11-03 用户裁决）。
+> 核对依据见 `.rddf/reviews/phase-6-p2-roadmap-audit-2026-11.md`（phase-6 **P2 / P2b**）。
 
 Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是把 riscv-mini 从"两套并行 RV32I 实现"
 收敛成"一套"，并在此之上跑到端到端 parity。2026-10-23 的实测审计改变了本 phase 的性质（见
@@ -23,11 +27,11 @@ Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是�
 | riscv-mini 技术债清零 | 19 个「编译但从不执行」的 Catch2 target + 7 个 orphan 测试文件 | ✅ 完成（C1，2026-10-24 归档） |
 | RV32I 单源化收敛 | 17 个死头删除 + 10 组同名头裁决 + 根 tests/ 反向 include 消除 | ✅ 完成（C2，2026-10-25 归档；ADR-046 已落盘） |
 | SoC 双路 parity | `Rv32iPipelineTop` interpreter + verilator 逐周期 parity + JIT 回落断言 | ✅ 完成（C3，2026-10-26 归档；前置 `rv32i-pipeline-commit-path-2026-10` 同日归档） |
-| **RV32I ISA 语义边界**（`feat-rv32i-isa-completeness`） | SB/SH 字节使能 · JAL/JALR 重定向 · SRA · **数据前推**（①②③ 已归档）+ skid buffer / 取指双装（④ 剩余） | 🟡 进行中（① 2026-10-26 · ②③ 2026-10-27 已归档；④ 前置已解锁） |
-| **riscv-mini RTL 缺陷收口**（`feat-riscv-mini-rtl-debt`） | cache wrapper 分支从不发射 · CLINT mtime 不自增 | ⏳ 计划中（P2，两个 improvement 草案已有） |
-| dual-backend 全量覆盖 | `feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量（跨阶段残余） | 🟡 进行中（`ctest -L verilator_e2e` = 37，目标 ≥ 100） |
+| **RV32I ISA 语义边界**（`feat-rv32i-isa-completeness`） | SB/SH 字节使能 · LB/LH/LBU/LHU 读字节道 · JAL/JALR 重定向 · SRA · **数据前推** + skid buffer / 取指双装 | ✅ 完成（**①–⑤ 全部归档**：① 2026-10-26 · ②③④ 2026-10-27 · ⑤ 2026-10-28 ⇒ feature `completed`；架构依据 ADR-046/047/048） |
+| **riscv-mini RTL 缺陷收口**（`feat-riscv-mini-rtl-debt`） | cache wrapper 分支从不发射 · CLINT mtime 不自增 | ✅ 完成（① 2026-10-28 · ② 2026-10-30 归档 ⇒ feature `completed`；② 新建 capability `cpu-clint-timer`） |
+| dual-backend 全量覆盖 | `feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量（跨阶段残余） | ✅ 完成（**2026-11-03**：objective `objective-test-coverage-100pct` = `completed` · **parity 源文件 66 ≥ 60** ⚠️ 旧「`ctest -L verilator_e2e` ≥ 100」口径已于 **2026-10-30 修订**为「parity 源文件数 ≥ 60」⇒ 见 objective §2） |
 | cache-stub 退役 | `include/cpu/cache/{i,d}_cache_stub.h` 物理删除 | ✅ 完成（2026-10-20，提前 6 个月，variant b） |
-| 平台矩阵 | Windows-2022 CI 启用 | ⏳ 计划中（⚠️ 见完成条件里的 No-Go 判据） |
+| 平台矩阵 | Windows-2022 CI 启用 | ⛔ **不做**（**2026-11-03 用户裁决**：CI 平台范围 = **仅 Ubuntu**；macOS / Windows 明确不做）⇒ feature `feat-platform-matrix` 据此 `completed` |
 
 ## 计划能力（change 序列 C1 → C2 → C3 → ISA 收口线）
 
@@ -43,7 +47,7 @@ Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是�
 3. **C3 `rv32i-soc-dual-parity-2026-10`** — SoC 级 parity：interpreter + verilator 逐周期 trace parity
    （≥20 指令序列含 load/store/branch）+ **JIT 回落行为显式断言**（`type_mem_read_port` →
    `UNSUPPORTED_OP` → 回落 interpreter 且结果一致）。依赖 C1 + C2。
-4. **`feat-rv32i-isa-completeness`**（2026-10-26 审计新登记，4 个独立 change，顺序 ①→②→③→④）：
+4. **`feat-rv32i-isa-completeness`**（2026-10-26 审计新登记，**5 个独立 change**，顺序 ①→②→③→④→⑤）：
    ① `rv32i-store-byte-enable-2026-10`（DataTCM `strbe` + **wdata lane 对齐** + SB/SH 固件用例）
    —— ✅ 2026-10-26 归档；
    ② `rv32i-jump-sra-2026-10`（JAL/JALR 重定向 + JAL 写回 pc+4 + SRA 真算术右移）
@@ -51,11 +55,16 @@ Phase 5（**2026-10-23 激活，承接自已归档的 phase-4**）的核心是�
    ③ `rv32i-forwarding-decision-2026-10`（**ADR-046 D5 裁决** + HazardUnit 5 个预留输入端口清理）
    —— ✅ 2026-10-27 归档（ADR-047 裁决「接」⇒ 新 capability `rv32i-data-forwarding`；
    顺带修掉**距离 3 读旧值**的既有缺陷 —— 两后端同构地错 ⇒ parity 抓不到）；
-   ④ `rv32i-fetch-skid-buffer-2026-10`（取指 skid buffer + 取指填充期双装）—— ⏳ 唯一剩余项。
+   ④ `rv32i-fetch-skid-buffer-2026-10`（取指 skid buffer + 取指填充期 `primed` 门控）
+   —— ✅ 2026-10-27 归档（ADR-048）；
+   ⑤ `rv32i-load-byte-lane-2026-10`（**load 侧**字节道：`LB`/`LH`/`LBU`/`LHU` 车道选择 +
+   符号/零扩展）—— ✅ **2026-10-28 归档**（★ 原计划只有 ①–④ ⇒ ⑤ 是审计后再拆出的独立 change；
+   实施中修掉 `LB` 的符号扩展掩码笔误 `0xFF000000`）。
    **目的：把「parity 通」升级为「符合 ISA」** —— C3 只证明两后端彼此一致，不证明实现正确。
-   ⚠️ ①–③ 完成后**仍不覆盖**：CSR / ECALL / EBREAK / FENCE / LB·LH·LBU·LHU 的固件验证
-   （既有固件只覆盖 ALU + LW/SW + BEQ/BNE）⇒ 「ISA 语义边界」在本 phase 的口径 = **上述三项 + 前推**，
-   不是「RV32I 完整」。
+   ⚠️ ①–⑤ 完成后**仍不覆盖**：CSR / ECALL / EBREAK / FENCE
+   （`LB`/`LH`/`LBU`/`LHU` **已由 ⑤ 覆盖**）
+   ⇒ 「ISA 语义边界」在本 phase 的口径 = **字节道两侧 + JAL/JALR + SRA + 前推 + 取指健壮性**
+   —— 不是「RV32I 完整」（剩余三项由 phase-6 **P6** 独立立项）。
 5. **`feat-riscv-mini-rtl-debt`**（P2）：`riscv-mini-cache-wrapper-live-logic-2026-10` +
    `clint-mtime-autoincrement-2026-10`（两个既有 improvement 草案的归属地）。
 6. **（独立 backlog，非本 sprint、未立项）** `jit-mem-read-port-support` — JIT 对 `ch_mem` 读端口的 lowering，
@@ -82,7 +91,8 @@ feat-rv32i-isa-completeness：
     ① store-byte-enable ──┐
     ② jump-sra ───────────┤ 全部依赖 C3 的 32 端口观测面 + 48 字固件金标
     ③ forwarding-decision ┘（需 ADR-046 D5 裁决）→ ④ fetch-skid-buffer（依赖 ③）
-    ✅ ①②③ 已归档（2026-10-26 / 2026-10-27）⇒ **只剩 ④**（前置已解锁）
+    ⑤ load-byte-lane（无依赖）
+    ✅ ①–⑤ 全部已归档（2026-10-26 / 10-27 ×3 / **10-28**）
 
 feat-riscv-mini-rtl-debt（独立，P2）：cache-wrapper-live-logic 依赖 C2 已迁移路径；
                                     clint-mtime 无依赖
@@ -120,14 +130,25 @@ follow-up）与 `feat-riscv-mini-rtl-debt` 可与 ISA 线并行（互不触碰�
 - [x] **前置** `rv32i-pipeline-commit-path-2026-10` archive（SoC 观测面 **32 端口** + **17 个流水线缺陷**）— 2026-10-26
 - [x] C3 `rv32i-soc-dual-parity-2026-10` archive（双路 parity + JIT 回落断言）— 2026-10-26
 - [x] cache-stub 物理删除（ADR-037）— 2026-10-20 落地（variant b，change `cache-stub-physical-removal-2026-10` 已 archive）
-- [ ] dual-backend 全量覆盖（`feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量）
-- [ ] RV32I ISA 语义边界闭合（`feat-rv32i-isa-completeness` ①–④）
-- [ ] riscv-mini RTL 缺陷收口（`feat-riscv-mini-rtl-debt` ①–②，P2）
+- [x] dual-backend 全量覆盖（`feat-dual-backend-coverage` Phase 4 RV32I / Phase 5 全量）
+      — **2026-11-03 达成**：objective `objective-test-coverage-100pct` 转 `completed`
+      · **双后端 parity 源文件数 = 66 ≥ 60**（`scripts/verify_dual_backend_parity.sh` 实测）
+      ⚠️ 完成判据已于 **2026-10-30 修订**（旧口径「`ctest -L verilator_e2e` ≥ 100」在现有语料内
+      **不可达**：诚实上限 [71, 96]）⇒ 现口径见 objective §2
+- [x] RV32I ISA 语义边界闭合（`feat-rv32i-isa-completeness` **①–⑤**）
+      — ① 2026-10-26 · ②③④ 2026-10-27 · **⑤ 2026-10-28**（原写 ①–④ ⇒ ⑤ 是拆出的
+      独立 change `rv32i-load-byte-lane-2026-10`）⇒ feature `completed`
+      ⚠️ 本项口径**不含** CSR / `ECALL` / `EBREAK` / `FENCE`（⇒ phase-6 的 **P6** 独立立项）
+- [x] riscv-mini RTL 缺陷收口（`feat-riscv-mini-rtl-debt` ①–②，P2）
+      — ① `riscv-mini-cache-wrapper-live-logic-2026-10` 2026-10-28 归档 ·
+      ② `clint-mtime-autoincrement-2026-10` 2026-10-30 归档（ADR-049）⇒ feature `completed`
 - [x] 逻辑算子 `[[deprecated]]` **标记在位** + 0 新增调用点（8 个 overload 仍在
       `include/core/operators_logic.h` / `io_logical.h`）
       ⚠️ **其「移除」不是本 phase 的完成条件**：ADR-036 §8.1 规定 **2027-04-17 前拒绝任何移除 commit**
       （日历锁）⇒ 原先把「移除」列为 phase-5 完成条件会使 phase-5 最早 2027-04-17 才能收口。
       移除改归 **phase-6 的 calendar-gated 清单**（2026-10-26 修订）
-- [ ] Windows-2022 CI 启用
-      ⚠️ **No-Go 判据（2026-10-26 新增）**：phase-5 收口时仍未启用 ⇒ 转 phase-6 并记录理由，
-      不得无限期占用本 phase 完成条件（该项已跨 phase-3/4/5 三阶段挂 ⏳）
+- [x] ~~Windows-2022 CI 启用~~ ⇒ ⛔ **不做**（**2026-11-03 用户裁决**：CI 平台范围 = **仅 Ubuntu**）
+      ⚠️ 原 **No-Go 判据（2026-10-26）** 的处置 = 「转 phase-6 并记录理由」⇒ 已执行：
+      phase-6 **P2b** 只登记理由 + 关闭本条件，**不动 CI**（`.github/workflows/ci.yml` 全部
+      `runs-on: ubuntu-22.04`，唯一矩阵 `${{ matrix.os }}` 的取值 = `['ubuntu-22.04']`）
+      ⇒ 该项已跨 phase-3/4/5 三阶段挂 ⏳，**在此终止**

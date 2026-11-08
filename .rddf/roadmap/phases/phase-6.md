@@ -34,8 +34,8 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 | 步 | 任务 | 归属 | 前置 | 出口判据（**机械可判**） | 状态 |
 |---|---|---|---|---|---|
 | **P1** | 补 **A8 面 ①** 的机械证据：「`node_names_[` 的 **62 行 / 64 次**无需改动」⇒ ⇒ **grep 清单 + 一次负向注入**（把某处名称换成**未在父作用域声明**的名字 ⇒ lint 必红） | builder | — | 证据脚本**可复跑**；负向注入使 **R9 lint 必红**、还原后复绿 | ✅ **2026-11-09** ⇒ 证据脚本 = `scripts/verify_node_names_single_source.sh`（R1 清单 62 行/64 次 · R2 单写入点 · R3 命名真源同源 · R4 **源码级**注入 ⇒ R9 必红 ⇒ 还原复绿 · `--self-test` **5/5**）· 记录 = `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md` §A–§H · CI = `build-and-test` guard 段（只读 + `--self-test`；`--inject` 不上 CI） |
-| **P2** | ★ **roadmap 事实核对**（★ 范围比预期更广，见下） | planner | — | ① feature 与 phase 的状态**逐条**与 `AGENTS.md`/capability/归档件一致；② `verify_roadmap_fragments.sh` 绿；③ **phase-5 的 `status` 可据实转 `done`** | ⬜ |
-| **P2b** | ⚠️ **Windows-2022 CI**（phase-5 于 2026-10-26 转交）⇒ ⇒ **2026-11-03 用户裁决：CI 平台范围 = 仅 Ubuntu** ⇒ ⇒ **不做** ⇒ ⇒ 只**登记理由 + 关闭该完成条件**（不动 CI） | planner | — | phase-5 完成条件里该项标为「不做（附裁决日期）」 | ⬜ |
+| **P2** | ★ **roadmap 事实核对**（★ 范围比预期更广，见下） | planner | — | ① feature 与 phase 的状态**逐条**与 `AGENTS.md`/capability/归档件一致；② `verify_roadmap_fragments.sh` 绿；③ **phase-5 的 `status` 可据实转 `done`** | ✅ **2026-11-09** ⇒ 核对记录 = `.rddf/reviews/phase-6-p2-roadmap-audit-2026-11.md`（逐条工具证据 · 9 feature + 6 phase + 4 objective）· 改动 = `phases/phase-5.md`（**转 `done`** + 概览表 4 行 + 完成条件 3 勾 1 不做）+ `features/feat-rv32i-isa-completeness.md`（审计快照注记）+ 本文件漂移清单订正（**① / ② 实测已不成立** · 新增 **⑥**）· 护栏 `verify_roadmap_fragments.sh`（+`--self-test`）/ `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 全绿 · ⚠️ **AUTO 块本轮无需改**（未动任何 feature 的 `status`/`phase_refs`/`主题` ⇒ 该义务是**条件触发**） |
+| **P2b** | ⚠️ **Windows-2022 CI**（phase-5 于 2026-10-26 转交）⇒ ⇒ **2026-11-03 用户裁决：CI 平台范围 = 仅 Ubuntu** ⇒ ⇒ **不做** ⇒ ⇒ 只**登记理由 + 关闭该完成条件**（不动 CI） | planner | — | phase-5 完成条件里该项标为「不做（附裁决日期）」 | ✅ **2026-11-09** ⇒ `phases/phase-5.md` 的完成条件已改为 `- [x] **不做**（2026-11-03 用户裁决）` + No-Go 判据的处置说明 · **CI 文件零改动**（实测 `runs-on` = 5×`ubuntu-22.04` + 1×`${{ matrix.os }}`，其取值 `['ubuntu-22.04']`） |
 | **P3** | **mem 端口实参跨层**（台账行 20 的下游）：起草 improvement（5 段 · Why / What Changes / Acceptance / Capabilities / Impact）⇒ ⇒ 过 `pre_create_brainstorm_check.sh` HARD-GATE | planner | — | improvement 文件存在且过 HARD-GATE（exit 0） | ⬜ |
 | **P4** | 同上：**architect 范围裁定** ⇒ ⇒ ★ **边界句 MUST 写死** ——「mem 持有 module **==** 使用 module、仅**实参视线**跨层」⇒ ⇒ 否则 ADR-066 决策 ⑥「跨模块 `ch_mem` 仍拒」会被逐案重解释 | architect | P3 | ADR 修订落地 · **oracle → critic** 双审 **0 BLOCKER** | ⬜ |
 | **P5** | 同上：**实施** —— 分析层 `:543` 的**粒度拆分**（mem 端口**实参**跨层 vs 真跨模块访问）+ 归因订正（诊断 MUST 给出**正确**改法）+ mem 端口**正确支持** + **A15**（端口**读值非 0**，不是只 lint） | builder | P4 | ① mem 端口读值**非 0**；② 跨模块 mem 访问**仍被拒**；③ 台账行 **20** 闭口（登记表 + 台账派生 + 护栏绿） | ⬜ |
@@ -55,11 +55,12 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 
 | # | 位置 | 陈旧描述 | 实际（依据） |
 |---|---|---|---|
-| ① | `features/feat-rv32i-isa-completeness.md` | ④ 取指 skid buffer / 双装、⑤ load 侧字节道「待做」 | `AGENTS.md` KNOWN LIMITATIONS：skid buffer + 双装**已消除**（ADR-048）· LB/LH/LBU/LHU **已覆盖** |
-| ② | `phases/phase-5.md` 完成条件 | 「dual-backend 全量覆盖」未勾 | objective `objective-test-coverage-100pct` **2026-11-03 已 `completed`**（parity 源文件 66 ≥ 60）⇒ ⇒ 该条**可勾**（⚠️ objective 文件正文仍有旧的「≥ 100」口径 ⇒ 一并核对） |
-| ③ | `phases/phase-5.md` 完成条件 | 「RV32I ISA 语义边界闭合 ①–④」未勾 | ①–③ 已归档 + ④ 已由 ADR-048 消除 ⇒ ⇒ 可勾 |
-| ④ | `phases/phase-5.md` 完成条件 | 「riscv-mini RTL 缺陷收口 ①②」未勾 | feature `feat-riscv-mini-rtl-debt` 已 `completed`（两项均已收口）⇒ ⇒ 可勾 |
+| ① | `features/feat-rv32i-isa-completeness.md` | ④ 取指 skid buffer / 双装、⑤ load 侧字节道「待做」 | `AGENTS.md` KNOWN LIMITATIONS：skid buffer + 双装**已消除**（ADR-048）· LB/LH/LBU/LHU **已覆盖** ⇒ ⇒ **2026-11-09 复核：已无漂移**（`ce683e2` 已把 ④⑤ 改为 ✅ 归档 · feature `completed`；该文件内零「待做 / ⏳ / 🟡」） |
+| ② | `phases/phase-5.md` 完成条件 | 「dual-backend 全量覆盖」未勾 | objective `objective-test-coverage-100pct` **2026-11-03 已 `completed`**（parity 源文件 66 ≥ 60）⇒ ⇒ 该条**可勾** ⇒ ⇒ **2026-11-09 复核：「objective 正文仍有旧的 ≥ 100」不是漂移**（§2 已标「**取代**」；§1 那段是**带日期的历史快照**，按仓内惯例原样保留） |
+| ③ | `phases/phase-5.md` 完成条件 | 「RV32I ISA 语义边界闭合 ①–④」未勾 | ①–③ 已归档 + ④ 已由 ADR-048 消除 ⇒ ⇒ 可勾（⚠️ 实为 **①–⑤**：⑤ `rv32i-load-byte-lane-2026-10` 2026-10-28 归档） |
+| ④ | `phases/phase-5.md` 完成条件 | 「riscv-mini RTL 缺陷收口 ①②」未勾 | feature `feat-riscv-mini-rtl-debt` 已 `completed`（两项均已收口：2026-10-28 / 2026-10-30 归档）⇒ ⇒ 可勾 |
 | ⑤ | `phases/phase-5.md` 完成条件 | 「Windows-2022 CI 启用」未勾 | ⇒ ⇒ 转 **P2b**（不做 · 附裁决） |
+| ⑥ | `phases/phase-5.md` **概览表**（★ 原清单**漏列**，P2 实读补上） | 4 行状态陈旧：RV32I ISA / RTL 债 / dual-backend 仍 🟡⏳；平台矩阵仍「⏳ 计划中」 | 四者均已终结 ⇒ ⇒ 已改 **✅×3 + ⛔×1**（见该表） |
 
 ⇒ ⇒ **P2 的真正价值**：phase-5 的 3 条完成条件 + 2 条 feature 描述**都停在「实际已完成但账面未勾」**
 ⇒ ⇒ 核对后 **phase-5 可转 `done`** ⇒ ⇒ 本窗口（phase-6）成为**唯一** active 窗口 ⇒ ⇒
@@ -74,7 +75,8 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 | 步 | 证据落点 |
 |---|---|
 | P1 | `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md`（追加段）· 变异/注入记录 |
-| P2 | `.rddf/roadmap/features/feat-rv32i-isa-completeness.md`（改写后） |
+| P2 | `.rddf/reviews/phase-6-p2-roadmap-audit-2026-11.md`（核对记录）+ `phases/phase-5.md`（**转 `done`**）+ `features/feat-rv32i-isa-completeness.md`（审计快照注记） |
+| P2b | `phases/phase-5.md` 的完成条件（该项标「不做（附裁决日期）」）+ 本文件的结论行 |
 | P3 | `.rddf/improvements/<mem-port-实参>.md` |
 | P4 | `docs/adr/ADR-066-...md`（修订）+ `.rddf/reviews/ADR-066-parent-side-landing.md`（追加段） |
 | P5 | `openspec/changes/archive/<mem-port-实参>-<日期>/` + `.rddf/checks/arch-residual-registry.md`（行 20）+ 台账 §7 |
@@ -119,7 +121,7 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 | P1 | — | `feat-hierarchical-rtl-output` | ADR-066 §5 **V8 面 ①** |
 | P2 | — | `feat-rv32i-isa-completeness` · `feat-hierarchical-rtl-output` | ADR-048（skid buffer） |
 | P3–P5 | **行 20**（已裁决 · 归下游） | `feat-hierarchical-rtl-output` | ADR-066 **决策 ⑦** |
-| P6 | — | `feat-rv32i-isa-completeness` | （新 ADR 或 spec 新增） |
+| P6 | — | `feat-rv32i-isa-completeness`（**仅「ISA 领域」归属**；CSR / `ECALL` / `FENCE` **MUST 独立立项** ⇒ 新 capability + 新 change） | （新 ADR 或 spec 新增） |
 | P7 | **行 15**（已知 · 归属 builder） | `feat-hierarchical-rtl-output` | ADR-060 §2.4.1 |
 | P8 | — | `feat-dual-backend-coverage` | ADR-035 R9 |
 | P9 | — | `feat-riscv-mini-rtl-debt` · `feat-cache-rewrite` | — |
