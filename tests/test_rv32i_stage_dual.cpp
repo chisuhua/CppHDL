@@ -420,24 +420,39 @@ DUAL_BACKEND_TEST_PAIR(
 //    引用不到）。
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ⚠️⚠️ **实测发现（语料普查 ⇒ planner 的 T0 清单订正）**：本 DUT **不可**层次化！
+// ⚠️⚠️ **本 DUT 的形态 = 族 ①/③（父侧带运算消费两个子 `ch_out`）**
 //   `io().equal <<= (dec.io().imm == ids.io().imm);` ⇒ ⇒ 根的 `equal` 输出由**两个子
-//   组件的内部线网**驱动 ⇒ ⇒ 那两条边**需要隐式端口合成**（ADR-060 §2.1）⇒ ⇒ 发射器
-//   **不支持** ⇒ ⇒ `ok=false`。
-//   ⇒ ⇒ 它**不是** T0 候选 ⇒ ⇒ 而是「**拒绝边界**」的**真实样本** ⇒ ⇒ 本用例把
-//   **拒绝原因**钉住 ⇒ ⇒ ⇒ 将来发射器**长出**隐式端口合成时 ⇒ ⇒ 本用例会红 ⇒ ⇒
-//   ⇒ ⇒ 那正是「能力边界前移」的**正确信号**（⇒ ⇒ 登记表 MUST 同步更新）。
-TEST_CASE("corpus hierarchy regression (rejection boundary): ImmConsistencyDut",
-          "[hierarchy][corpus][t0][reject-boundary][rv32i][immediate]") {
+//   组件的 output 端口**驱动 ⇒ ⇒ **ADR-066 决策 ① 落地后不再被拒** ⇒ ⇒ 发射器为
+//   两个子输出各合成一根**父侧落点网**（网名 = 驱动端点的 ctx 全局名）⇒ ⇒ 父侧比较
+//   读那两根网 ⇒ ⇒ 且同一子输出**既**直通父 `output` 端口、**又**参与父侧运算 ⇒ ⇒
+//   MUST 扇出**同一根**网（决策 ⑤）⇒ ⇒ 父 `output` 端口改由显式 `assign` 取网的值。
+//   ⚠️ **归因订正（ADR-066 落地 · 台账行 17 闭口）**：旧注释写「需要隐式端口合成 ⇒
+//   发射器不支持」⇒ ⇒ **两处都错**：① `dec.io().imm` / `ids.io().imm` 是子组件的
+//   **output 端口**（不是「内部线网」）；② 「发射器不支持隐式端口合成」**早已过时**
+//   （B2b 五批 2026-11-05 全部落地）⇒ ⇒ 真实形态是「**父侧带运算**」（= 台账行 16）。
+TEST_CASE("corpus hierarchy regression (supported boundary): ImmConsistencyDut",
+          "[hierarchy][corpus][t0][supported-boundary][rv32i][immediate]") {
     const std::string dir = ch_test::make_temp_dir("_corpus_imm_consistency_dut");
     REQUIRE_FALSE(dir.empty());
     ch::ch_device<ImmConsistencyDut> dev;
     const auto products =
         ch::hier_eq::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
-    // ⚠️ **MUST 被拒**（★ 不是「发射成功」）
-    REQUIRE_FALSE(products.ok);
-    // ⚠️ 拒绝原因 MUST **点名**「需要隐式端口合成」（★ 否则用户不知道该改哪）
-    REQUIRE(products.error.find("implicit-port synthesis") != std::string::npos);
+    INFO("error: " << products.error);
+    // ⚠️ **ADR-066 决策 ① 落地后**：本 DUT **不再被拒** ⇒ ⇒ 本用例从「拒绝边界」
+    //   改为「**支持边界**」的钉桩（台账行 17 闭口条件之一）。
+    REQUIRE(products.ok);
+    REQUIRE(products.error.empty());
+    const std::string hier = ch_test::hier_corpus::read_whole_file(products.hier_path);
+    REQUIRE_FALSE(hier.empty());
+    // ⇒ ⇒ 父 module MUST 为**两个**子输出各声明一根**父侧落点网**
+    //   （网名 = 驱动端点的 ctx 全局名 ⇒ = 子 output 端口名）
+    REQUIRE(hier.find("logic [31:0] top_dec_unnamed_output;") != std::string::npos);
+    REQUIRE(hier.find("logic [31:0] top_ids_unnamed_output;") != std::string::npos);
+    // ⇒ ⇒ 实例 MUST 以 `.port(net)` 把子输出接到那根网（**单连接不变式** ⇒ 只一次）
+    REQUIRE(hier.find(".top_dec_unnamed_output(top_dec_unnamed_output)") !=
+            std::string::npos);
+    REQUIRE(hier.find(".top_ids_unnamed_output(top_ids_unnamed_output)") !=
+            std::string::npos);
 }
 
 DUAL_BACKEND_TEST_PAIR(

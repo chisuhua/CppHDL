@@ -25,6 +25,9 @@ evidence: probe:scripts/probe_arch_ledger_residuals.sh
 / `不做 ⇒ <后缀>` / `⚠️ 已知 ⇒ <后缀>` / `⚠️ 未决 ⇒ <后缀>` ⇒ ★ **行 14 = `已裁决`**（架构问题已由
 ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = 下游` ⇒ ★ 这是「终态行 `归属` 填 `—`」的
 **唯一例外**，已登记以免被当成格式错误改回）。
+★ **行 20 同款例外（2026-11-08 · ADR-066 决策 ⑦）**：`已裁决`（本 ADR **不**纳入 mem 端口实参
+⇒ ⇒ 归因订正 + 分析层 `:543` 粒度拆分**归下游独立立项**）⇒ 故 `归属 = 下游` ⇒ ★ **第二例外**，
+同样登记以免被当成格式错误改回。
 
 | 台账 | section | id | 状态 | 日期 | 后缀 | 闭口证据 | 复核条件 | 归属 |
 |---|---|---|---|---|---|---|---|---|
@@ -44,7 +47,7 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 13 | 已收口 | 2026-11-06 | 随 T3-005 关闭 | openspec/changes/archive/2026-11-06-hierarchical-rtl-equivalence-2026-11 | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 11 | 已收口 | 2026-11-07 | P6 + P8 双立项归档 | openspec/changes/archive/2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11,openspec/changes/archive/2026-11-07-p8-hierarchical-equivalence-public-helper-2026-11 | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 15 | 已知 | 2026-11-08 | 三档 PortPolicy 在可合成形态上语义未分化 | — | 三档差异化处置（Reject 拒可合成形态 / SynthesizeFatal 先合成后失败）且默认档 SynthesizeWarn 的 CHWARN + 产物注释义务分别落地后复核 | builder |
-| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 16 | 未决 | 2026-11-08 | 父层运算消费子 ch_out 被拒且诊断不可行动 | — | 父侧落点语义裁定后复核 | architect |
-| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 17 | 未决 | 2026-11-08 | 语料拒绝原因沿用已过时的归因 | — | 行 16 的语义裁定落地后一并修订 | builder |
-| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 19 | 未决 | 2026-11-08 | 父侧运算消费子非端口端点的产物不可编译 | — | ADR-066 决策 ② 落地后复核（产物 MUST 可编译，或该形态 MUST 响亮拒绝） | architect |
-| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 20 | 未决 | 2026-11-08 | 父层 ch_mem 端口地址取自子 ch_out 时静默不发射 | — | ADR-066 决策 ② 的消费者范围扩展裁定落地后复核（mem 端口 MUST 发射且读值非 0） | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 16 | 已裁决 | 2026-11-08 | ADR-066 决策 ① 落点语义裁定 | docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md | — | — |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 17 | 已收口 | 2026-11-08 | 语料登记归因与 tripwire 同批修订 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 19 | 已收口 | 2026-11-08 | 路径 B 父侧落点网 + 产物可编译 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 20 | 已裁决 | 2026-11-08 | 本 ADR 不纳入 · 归下游独立立项 | docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md | — | 下游 |

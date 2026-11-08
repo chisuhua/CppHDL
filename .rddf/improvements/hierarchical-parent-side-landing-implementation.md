@@ -4,7 +4,7 @@ priority: P1
 phase: phase-5
 category: core-impl
 type: feature
-状态: draft
+状态: implemented
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）
 依赖: ADR-066, ADR-060, ADR-062
 来源: ADR-066（Accepted 2026-11-08）· 台账 §7 行 16 + 行 19 · 裁定输入文档 docs/architecture/2026-11-08-hierarchical-parent-side-landing.md
@@ -16,7 +16,12 @@ evidence: adr:docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md
 
 - **Date drafted**: 2026-11-08
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 草稿 v1 ⇒ 待 `metis` gap 分析 ⇒ 待 `rdd-builder` P0 批准门
+- **Status**: ✅ **已实施并归档**（2026-11-09）⇒ change =
+  `openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation/`
+  ⇒ ⇒ **A1–A24 的落点**：A1–A14 = 本 change 的 T0–T6；A15–A24 = metis 第 1 轮补充
+  （其中 **A15 随台账行 20 的下游立项** · **A8 面 ① 因「命名真源唯一」改为零变异**
+  ⇒ 「无需改动」的机械证据待补 ⇒ **登记为待办**）⇒ ⇒ 审稿记录 =
+  `.rddf/reviews/ADR-066-parent-side-landing.md` §7（v1.1 修订轮 · oracle + critic）
 - **权威决策**：`docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md`（**Accepted** · 用户拍板 Q1=B）
   ⇒ ⇒ 本 improvement **MUST NOT** 重述或改写 ADR 的决策内容（**契约唯一权威 = ADR-066**）
 

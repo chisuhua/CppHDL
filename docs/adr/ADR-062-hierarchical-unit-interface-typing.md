@@ -75,7 +75,7 @@ ADR-091 的 §D3a.7 表格同一节里有两句互相收紧的话：
 |---|---|---|---|---|
 | **RTL 顶层 module**（根，**永远按扁平规则**） | 体内 **wire**（`codegen_verilog.cpp:349-358`） | 顶层 `input` | 顶层 `output`（**含全部 inline 后代的 `ch_out`**） | —（无父） |
 | **inline**（在非根 module 内） | 该 module 内 **wire** | 该 module 的 `input`（无人驱动 ⇒ 冒泡） | 该 module 体内的**普通信号**（**不**上端口表） | —（同 module 内） |
-| **成层**（非根） | **该 module 的 `input` 端口** | 该 module 的 `input` 端口（⇒ 向上冒泡） | 该 module 的 `output` 端口 | `ch_out` ⇒ **父 module MUST 声明一根 `logic` 网**并写 `.port(net)`（Verilog 不允许把实例输出直接接表达式）；`ch_in` ⇒ **父侧可直接接表达式**（⇒ MUST NOT 强制造网，critic SF） |
+| **成层**（非根） | **该 module 的 `input` 端口** | 该 module 的 `input` 端口（⇒ 向上冒泡） | 该 module 的 `output` 端口 | `ch_out` ⇒ **消费点不是父 `output` 端口时**，父 module MUST 声明一根 `logic` 网并写 `.port(net)`（Verilog 不允许把实例输出直接接表达式）⇒ ⇒ **消费点就是父 `output` 端口（直通）时 MUST NOT 强制造网** ⇒ ⇒ ★ **→ ADR-066 决策 ③ 为唯一权威**（本行的无条件表述**已被取代**）；`ch_in` ⇒ **父侧可直接接表达式**（⇒ MUST NOT 强制造网，critic SF） |
 
 ⚠️ **根 module 必须单列**（oracle R1/R9）：它是唯一「MUST 与扁平逐字节一致」的那个
 ⇒ ⇒ 它的端口规则**就是扁平规则本身**（clock → reset → 无 driver 的 `input` → **全部** `ch_out`，
@@ -325,6 +325,10 @@ CH_INTERFACE(RegFileIface,
 - [ ] **父 module MUST 为子 `ch_out` 声明连接网** ⇒ ⇒ 判据：**接 output 的那个**
       `.port(...)` 实参 MUST 是该 module 内**已声明**的 `logic`
       （⚠️ **接 input 的实参可以是表达式** ⇒ MUST NOT 强制造网，critic SF）
+      ⇒ ⇒ ★ **v1.6 收窄（2026-11-08 · ADR-066 决策 ③）**：本条**仅在「父侧消费点不是父
+      `output` 端口」时**成立 ⇒ ⇒ 消费点**就是**父 `output` 端口（直通）时 MUST NOT
+      强制造网（子 output MAY 直接作为该 `.port(...)` 的实参 ⇒ 逐拍等价实测全等）
+      ⇒ ⇒ ★ **→ ADR-066 决策 ③ 为唯一权威**（本条的无条件表述**已被取代**）
 - [ ] **观测/跨层读取（情形①②③）**：父层读**子内部节点** ⇒ 子 module MUST 有对应的
       **output** 端口（⇒ 隐式端口 + `CHWARN`）；而**稳定的交付观测面** MUST 由单元自己
       声明成 `ch_out`（⇒ 判据：交付用的观测信号 MUST 出现在单元的 `ch_out` 集合里，
@@ -359,6 +363,7 @@ CH_INTERFACE(RegFileIface,
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-08 | **v1.6**（architect 角色 · 据 oracle 复核 · 配套 **ADR-066 v1.1**）：① **§2.6 落点表「父侧落点」列收窄** —— 「`ch_out` ⇒ 父 module MUST 声明一根 `logic` 网」**仅在「消费点不是父 `output` 端口」时**成立 ⇒ ⇒ 直通形态 MUST NOT 强制造网 ⇒ ⇒ 加反向指针 `→ ADR-066 决策 ③ 为唯一权威`；② **§5 同一条判据同步收窄**（否则 §2.6 已收窄而 §5 仍无条件 ⇒ ⇒ 同一 ADR 内部出现**活矛盾**）⇒ ⇒ 决策内容**由 ADR-066 承载**，本 ADR 只做**指向** |
 | 2026-11-05 | **v1.5**（T3-④ 归档后 · architect 角色 · 据 **oracle** 复核）：**§5 的 `-Wall` 措辞订正 + 补实测依据** —— 改为指向 **ADR-060 §2.5 的 lint 门**（⚠️ **不加 `-Wall`**）；并补「`assign` 到 input 端口在**默认 warning 集**下即报 `%Error-ASSIGNIN` ⇒ exit≠0 ⇒ 该判据**不需要** `-Wall`」的实测背书 ⇒ ⇒ 决策内容**零变更** |
 | 2026-11-02 | **创建**（调研产出：下游 ADR-091 §D3a.7 + G-1q + `payload.h` + 桥接 plugin 实测。裁决：① 层次化单元接口 = **结构化端口**，且**成层组件的全部 `ch_in`/`ch_out` 都成端口**（不论是否被驱动）② `Payload<T>` **不可**作接口（4 条理由，其中 R1「codegen 不可见」不依赖时序）③ 层 2 输入 MUST 走组合端口（采纳 G-1q 并给出**结构性**理由）④ 建议「单一声明派生」消除四处手写 ⑤ 下游装配 MUST 补 `add_child` 或改用 `ch_layer`） |
 | 2026-11-02 | **v1.1**（据 oracle 第 2 轮 11 条）：① **端口判据从「等于」改「⊇ + 四类来源可追溯」**（⇒ 「四类」已在 v1.2 扩为**五类**） —— 「等于」被 ADR-060 的隐式端口 / 冒泡端口 / 根 module 的 inline 后代 output **三条既有裁决直接证伪**；② **新增「三处发射点 × module 角色」表** —— 子 module 的 `ch_in` MUST **不**声明 wire、**不**发 `assign`（现有 `print_decl` / `print_logic` 都按 `driver()` 判 ⇒ 会双声明 + 非法赋值）；③ **根 module 单列**（= 扁平规则本身）；④ **父侧落点**：子 `ch_out` 在父 module MUST 有 `logic` 连接网；⑤ **R1 重写** —— `Payload` 的 cell **可以**装 `ch_out` 节点 ⇒ 不能说「用 Payload 就 0 端口」；正确理由 = **不构成接口声明**；⑥ **决策④ 拆归属**（派生③ 归下游，否则分层倒置）+ 端口名实例前缀 + per-instance key；⑦ **决策⑤ 补顺序**（`add_child` MUST 先于 `build`，否则 `name_` 永久缺父路径）；⑧ **`ch_stream` 否决理由改正**（bundle ⇒ 成员不是端口；ADR-092 §D4 无「核内部件」一档）；⑨ **新增 §2.6 接口白名单**（禁 `ch_mem`/`ch_reg`/bundle/clock-reset/inout）+ **观测端口归创建它的 module** + **放弃 module 复用**（端口名含实例路径 ⇒ 签名恒不同） ⚠️ **其中「观测端口归创建它的 module」已于 v1.3 撤回**（见 §2.6） |

@@ -220,6 +220,11 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     std::vector<std::string> remaining;
     /// 共同祖先 module 内的**中转线**（兄弟边 · design §7.2.3）
     std::map<std::string, std::vector<SynthesizedPort>> synth_wires;
+    // ★ ADR-066 决策 ①：**父侧落点网**（族 ①/③：父侧消费点不是父 `output` 端口）
+    //   · key   = `<父 module>\x1f<子实例名>\x1f<子侧 pin>` ⇒ ⇒ **按 pin 归并**
+    //     （同一 pin 的多个父侧消费者 ⇒ 扇出**同一根**网 ⇒ 决策 ⑤）
+    //   · value = 网名（= **驱动端点的 ctx 全局名**）
+    std::map<std::string, std::string> parent_landing_wire;
     /// module key → (被重定向的节点 → 本地 wire 名)（向上 pass-through 的
     /// reg/proxy 顶端适配器 ⇒ ⇒ 发射期虚拟重定向 · **MUST NOT** 写回 IR）
     std::map<std::string, std::map<const lnodeimpl *, std::string>> synth_redirect;
@@ -333,10 +338,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     ///    ⇒ ⇒ 语义只会丢掉一个驱动）⇒ ⇒ 响亮拒绝，不静默择一。
     auto add_conn = [&](const std::string &parent_mod, const std::string &inst_name,
                         const std::string &child_port, const std::string &arg, bool into_child,
-                        std::string &err) -> bool {
+                        std::string &err, bool replace_existing = false) -> bool {
         const std::string key = parent_mod + "\x1f" + inst_name;
         const auto iit = inst_of.find(key);
-        if (iit != inst_of.end()) {
+        // ⚠️ `replace_existing` = 该 pin 的既有分析连接将被**改接**到父侧落点网
+        //    （族 ①/③：分析层为「子端口 → 父体内节点」也记了一行 ⇒ 那不是一根网
+        //      ⇒ MUST 丢弃 ⇒ ⇒ 这里跳过冲突检查）
+        if (!replace_existing && iit != inst_of.end()) {
             for (const auto &c : iit->second->connections) {
                 if (c.child_port == child_port && c.parent_side != arg) {
                     err = "child port '" + child_port + "' is already driven by '" +
@@ -359,6 +367,41 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             return true;   // 幂等
         }
         conns.push_back(HierarchyConnection{child_port, arg, into_child});
+        return true;
+    };
+    /// ★ ADR-066 决策 ①/②：**父侧落点网**的登记
+    ///   · 网名 = **驱动端点的 ctx 全局名**（MUST NOT 用被驱动节点自体名 ⇒ 那会
+    ///     自指 + 双驱动）
+    ///   · 幂等：同名同宽 ⇒ 复用；同名不同宽 ⇒ 响亮拒绝
+    ///   · ⚠️ A24：撞名 MUST 报**自己的**诊断（MUST NOT 复用 sibling wire 文案
+    ///     ⇒ 否则会**指错来源**）
+    auto register_parent_wire = [&](const std::string &parent_mod, const std::string &wire,
+                                    std::uint32_t width, std::string &err) -> bool {
+        auto &wires = synth_wires[parent_mod];
+        for (const auto &w : wires) {
+            if (w.name != wire) {
+                continue;
+            }
+            if (w.width != width) {
+                err = "parent-side wire '" + wire + "' in module '" + parent_mod +
+                      "' already exists with width " + std::to_string(w.width) +
+                      " but the new edge needs width " + std::to_string(width);
+                return false;
+            }
+            return true;   // 幂等
+        }
+        const auto mit = module_by_key.find(parent_mod);
+        if (mit != module_by_key.end()) {
+            for (const auto &p : mit->second->ports) {
+                if (p.name == wire) {
+                    err = "parent-side wire '" + wire + "' in module '" + parent_mod +
+                          "' collides with an existing port of that module";
+                    return false;
+                }
+            }
+        }
+        wires.push_back(SynthesizedPort{wire, /*is_input=*/false, width});
+        taken_names.insert(wire);
         return true;
     };
     /// 链走一遍：`path` = 驱动端 module **之下**的 module 链（末项 = 叶 module）。
@@ -693,11 +736,50 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 it = port_map.find(e.from_ptr);
             }
             {
+                // ★ ADR-066 决策 ①/②：按**父侧端点的性质**分派
+                //   (a) 父 `output` 端口 ⇒ **不造网**（直通 · 决策 ③ · 逐拍实测全等）
+                //   (b) 父 `input` 端口 ⇒ **物理不可行** ⇒ 响亮拒绝（决策 ① 排除项）
+                //   (c) 父**体内节点** ⇒ 合成**父侧落点网**（决策 ①/②）
+                //       网名 = **驱动端点的 ctx 全局名**
+                //       ⚠️ MUST NOT 用被驱动节点自体名（`names.at(e.to_ptr)`）⇒ 那是
+                //          **父侧消费者**的名字 ⇒ 会把子侧合成端口接到一个**已有自己
+                //          assign** 的父侧节点上 ⇒ **双驱动**（B2）；而父侧表达式的
+                //          RHS 本来就是**驱动端点**的名字 ⇒ 父侧声明同名网后
+                //          **自动可解析**（B1）。
+                bool ep_is_input = false;
+                const bool ep_is_port = module_port_of(parent_key, e.to_ptr, ep_is_input);
                 std::string err;
-                if (!add_conn(parent_key, e.child_instance_name, it->second,
-                              names.at(e.to_ptr), /*into_child=*/false, err)) {
-                    remaining.push_back(desc + " (" + err + ")");
+                if (ep_is_port && ep_is_input) {
+                    remaining.push_back(
+                        "child module '" + child_key + "' drives '" + names.at(e.to_ptr) +
+                        "' in module '" + parent_key +
+                        "', but that is an input port of the parent module; a child "
+                        "output MUST NOT drive a parent input port (ADR-066 decision 1 "
+                        "exclusion)");
+                    continue;
                 }
+                if (ep_is_port) {
+                    // (a) 直通 ⇒ 不造网（决策 ③）
+                    if (!add_conn(parent_key, e.child_instance_name, it->second,
+                                  names.at(e.to_ptr), /*into_child=*/false, err)) {
+                        remaining.push_back(desc + " (" + err + ")");
+                    }
+                    continue;
+                }
+                // (c) 父体内节点 ⇒ 造网
+                const std::string wire = names.at(e.from_ptr);
+                std::string werr;
+                if (!register_parent_wire(parent_key, wire, e.from_ptr->size(), werr)) {
+                    remaining.push_back(werr);
+                    continue;
+                }
+                if (!add_conn(parent_key, e.child_instance_name, it->second, wire,
+                              /*into_child=*/false, err)) {
+                    remaining.push_back(desc + " (" + err + ")");
+                    continue;
+                }
+                parent_landing_wire[parent_key + "\x1f" + e.child_instance_name + "\x1f" +
+                                    it->second] = wire;
             }
         } else {
             // ── 行 1：子侧合成 **input** 端口 `__if_<n>`（父层驱动它）──
@@ -748,6 +830,89 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         }
     }
 
+    // ── ★ ADR-066 决策 ①：**父侧落点网**（族 ①/③：父侧消费点不是父 `output` 端口）──
+    //    ⚠️ **这类边不在 `pending_implicit_edges` 里**（子侧端点**是**端口 ⇒ 「子侧
+    //       已就绪」）⇒ ⇒ 它们落在 `analysis.edges` ⇒ ⇒ **发射器此前完全看不到它们**
+    //       ⇒ ⇒ 「被拒」只是**诊断 pass 的缺省**，不是裁决（ADR-066 事实 ⑪）。
+    //    ⇒ ⇒ 本 pass 补上合成通路：父 module 声明一根 `logic` 网（网名 = **驱动端点
+    //       的 ctx 全局名**）⇒ 子 output 以 `.port(net)` 连它 ⇒ 父侧运算读该网。
+    //    ⚠️ 决策 ③：消费点是父 `output` 端口 ⇒ **不造网**（直通，行为已实测全等）。
+    //    ⚠️ 决策 ① 排除项：消费点是父 `input` 端口 ⇒ **物理不可行** ⇒ 响亮拒绝。
+    for (const auto &e : analysis.edges) {
+        if (e.from_module == e.to_module) {
+            continue;
+        }
+        const auto pit = module_by_key.find(e.to_module);
+        const auto cit = module_by_key.find(e.from_module);
+        if (pit == module_by_key.end() || cit == module_by_key.end()) {
+            continue;
+        }
+        // ⚠️ 只处理**直接父子**（父 module 里有该子 module 的实例）
+        //    ⇒ ⇒ 向上 pass-through / 兄弟边由既有路径处置（决策 ⑥ 边界）
+        const HierarchyInstance *child_inst = nullptr;
+        for (const auto &inst : pit->second->instances) {
+            if (inst.module_key == e.from_module) {
+                child_inst = &inst;
+                break;
+            }
+        }
+        if (child_inst == nullptr) {
+            continue;
+        }
+        // 驱动端 MUST 是子 module 的 **output 端口**
+        //    ⇒ ⇒ 非端口驱动端 = 路径 B（决策 ②）⇒ 走行 2 分支（上面已处理）
+        const HierarchyPort *drv = nullptr;
+        for (const auto &pp : cit->second->ports) {
+            if (pp.name == e.from_node && !pp.is_input) {
+                drv = &pp;
+                break;
+            }
+        }
+        if (drv == nullptr) {
+            continue;
+        }
+        // 父侧消费点的性质（决策 ① / ③ / 排除项）
+        bool parent_out_port = false;
+        bool parent_in_port = false;
+        for (const auto &pp : pit->second->ports) {
+            if (pp.name != e.to_node) {
+                continue;
+            }
+            if (pp.is_input) {
+                parent_in_port = true;
+            } else {
+                parent_out_port = true;
+            }
+            break;
+        }
+        if (parent_out_port) {
+            continue;   // 直通 ⇒ 不造网（决策 ③）
+        }
+        if (parent_in_port) {
+            remaining.push_back(
+                "child module '" + e.from_module + "' drives '" + e.to_node +
+                "' in module '" + e.to_module +
+                "', but that is an input port of the parent module; a child output "
+                "MUST NOT drive a parent input port (ADR-066 decision 1 exclusion)");
+            continue;
+        }
+        // ★ 合成父侧落点网（网名 = 驱动端点的 ctx 全局名）
+        const std::string wire = names.at(drv->node);
+        std::string werr;
+        if (!register_parent_wire(e.to_module, wire, drv->node->size(), werr)) {
+            remaining.push_back(werr);
+            continue;
+        }
+        std::string err;
+        if (!add_conn(e.to_module, child_inst->instance_name, drv->name, wire,
+                      /*into_child=*/false, err, /*replace_existing=*/true)) {
+            remaining.push_back(err);
+            continue;
+        }
+        parent_landing_wire[e.to_module + "\x1f" + child_inst->instance_name + "\x1f" +
+                            drv->name] = wire;
+    }
+
     // ── 合成类诊断的 **collect**（ADR-060 §2.4.1）────────────────────────
     //    ① 分析层记录的「需要隐式端口合成」的边
     //    ② 发射器自己的检查：子 → 父 的**父侧端点** MUST 是父 module 的 output 端口
@@ -769,6 +934,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                         }
                     }
                     if (!is_parent_output_port) {
+                        // ★ ADR-066 决策 ①：已合成**父侧落点网**的 pin MUST 跳过
+                        //   ⇒ ⇒ 否则「放行了却仍报错」⇒ 拒绝面判据（A17）失真
+                        const std::string skip_key = m.key + "\x1f" + inst.instance_name +
+                                                    "\x1f" + conn.child_port;
+                        if (parent_landing_wire.count(skip_key) != 0) {
+                            continue;
+                        }
                         synth_diags.push_back(
                             "child module '" + inst.module_key + "' drives '" +
                             conn.parent_side + "' in module '" + m.key +
@@ -785,20 +957,33 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             std::ostringstream msg;
             msg << "hierarchical emission: ";
             if (all) {
-                msg << synth_diags.size() << " cross-module edge(s) require implicit-port "
-                    << "synthesis (ADR-060 §2.1), which this emitter cannot synthesize:";
+                // ⚠️ **归因订正（ADR-066 决策 ④）**：旧文案写「require implicit-port
+                //   synthesis … which this emitter cannot synthesize」⇒ ⇒ 那是**假**
+                //   归因（隐式端口合成 B2b 五批 2026-11-05 已全部落地）⇒ ⇒ 用户会
+                //   误判「能力不存在」⇒ ⇒ MUST 改成「**该形态需要什么**」。
+                msg << synth_diags.size()
+                    << " cross-module edge(s) cannot be mapped onto module ports "
+                    << "(ADR-060 §2.1):";
                 for (std::size_t i = 0; i < synth_diags.size(); ++i) {
                     msg << "\n  [" << (i + 1) << "] " << synth_diags[i];
                 }
+                msg << "\n  hint: a parent-side expression MUST read a parent-side landing "
+                       "net (ADR-066 decision 1); an edge across two layers MUST use "
+                       "pass-through ports, and a sibling edge MUST use a transit wire in "
+                       "the common ancestor (ADR-060 §2.1).";
             } else {
-                msg << "a cross-module edge requires implicit-port synthesis (ADR-060 "
-                    << "§2.1), which this emitter cannot synthesize:\n  [1] " << synth_diags.front();
+                msg << "a cross-module edge cannot be mapped onto module ports "
+                    << "(ADR-060 §2.1):\n  [1] " << synth_diags.front()
+                    << "\n  hint: a parent-side expression MUST read a parent-side landing "
+                       "net (ADR-066 decision 1); an edge across two layers MUST use "
+                       "pass-through ports, and a sibling edge MUST use a transit wire in "
+                       "the common ancestor (ADR-060 §2.1).";
             }
             result.error = msg.str();
             if (all) {
                 // `SynthesizeWarn` ⇒ 每一条一条 `CHWARN`（诊断 MUST 逐条点名）
                 for (const auto &d : synth_diags) {
-                    CHWARN("hierarchical emission: implicit-port synthesis needed for %s",
+                    CHWARN("hierarchical emission: cross-module edge needs a port mapping: %s",
                            d.c_str());
                 }
             }
@@ -1276,6 +1461,37 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             }
             // ⚠️ 子 module 若有 clock/reset 端口 ⇒ 实例化 MUST 连上（否则 PINMISSING）
             auto conns = inst.connections;
+            // ⚠️ ★ ADR-066 决策 ①/⑤：**已改接父侧落点网**的 pin ⇒ 分析层记的那些行
+            //    （「子端口 → 父体内节点」/「子端口 → 父 output 端口」）**不是一根网**
+            //    ⇒ MUST 丢弃（否则同一 pin 出现两次连接 ⇒ Verilator 报
+            //    `Duplicate pin connection`）⇒ ⇒ 只保留「pin → 父侧网」这一条。
+            //    ⇒ ⇒ 若被丢弃的行连的是父 `output` 端口 ⇒ 该端口改由显式 `assign`
+            //      取父侧网的值（决策 ⑤：同一输出 MUST 扇出**同一根**网）。
+            {
+                std::vector<HierarchyConnection> kept;
+                kept.reserve(conns.size());
+                for (const auto &c : conns) {
+                    const std::string rewired_key = m.key + "\x1f" + inst.instance_name +
+                                                   "\x1f" + c.child_port;
+                    const auto wit = parent_landing_wire.find(rewired_key);
+                    if (wit == parent_landing_wire.end() || c.into_child) {
+                        kept.push_back(c);
+                        continue;
+                    }
+                    bool is_parent_out = false;
+                    for (const auto &pp : m.ports) {
+                        if (pp.name == c.parent_side && !pp.is_input) {
+                            is_parent_out = true;
+                            break;
+                        }
+                    }
+                    if (is_parent_out) {
+                        view.body_epilogue.push_back("    assign " + c.parent_side + " = " +
+                                                      wit->second + ";");
+                    }
+                }
+                conns = kept;
+            }
             const auto child_needs = needs_of.find(inst.module_key);
             if (child_needs != needs_of.end()) {
                 if (child_needs->second.clock) {

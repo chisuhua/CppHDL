@@ -222,6 +222,10 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 - **MODIFIED**：拒绝的可观测形态按 ADR-058 §2.3 ⑤ = **错误结果**（`ok = false` +
   `error` 点名 + `files` 为空），与「发射器内 MUST NOT 依赖异常」口径一致。
+- **MODIFIED（ADR-066 决策 ③ · 2026-11-08）**：「造网」义务**收窄**为
+  「父侧消费点**不是**父 `output` 端口」时 ⇒ ⇒ 消费点**就是**父 `output` 端口时
+  MUST NOT 强制造网 ⇒ ⇒ 唯一权威 = `docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md`
+  决策 ③。
 
 **成层且非根**的 module，其端口集合 MUST **⊇** 它自己的 `ch_in` ∪ `ch_out`
 ⇒ ⇒ **是否已被父层驱动不影响它是否成为端口**（emitter MUST 忽略 `inputimpl::driver()`）。
@@ -240,10 +244,41 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 #### Scenario: 父层消费子输出 MUST 有连接网
 
+- ⚠️ **收窄（ADR-066 决策 ③ · 2026-11-08）**：本条的「必须造网」义务**仅在「消费点不是父
+  `output` 端口」时**成立 ⇒ ⇒ 消费点**就是**父 `output` 端口（直通）时 MUST NOT 强制造网
+  ⇒ ⇒ **唯一权威 = `docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md` 决策 ③**
 - **WHEN** 父 module 消费一个成层子组件的 `ch_out`
-- **THEN** 父 module MUST 为该端口声明一根 `logic` 网
-- **AND** 由实例化语句的 `.port(net)` 驱动（MUST NOT 用 `assign` 接表达式）
+- **THEN** 若**消费点不是**父 module 的 `output` 端口（父内运算 / 父内 reg / 子 input 的表达式）
+      ⇒ 父 module MUST 为该端口声明一根 `logic` 网 · MUST 由 `.port(net)` 驱动
+      · MUST NOT 用 `assign` 接表达式
+- **AND** 若**消费点就是**父 module 的 `output` 端口（直通）
+      ⇒ MUST NOT 强制造网（子 output MAY 直接作为该 `.port(...)` 的实参）
 - **AND** ⚠️ 该「必须造网」的要求 MUST NOT 施加到**接 input 的** `.port(...)`（可为表达式）
+
+#### Scenario: 父侧带运算 MUST 合成父侧网且操作数 MUST 读该网（新增 · ADR-066 决策 ①）
+
+- **WHEN** 父层对成层子组件的 `ch_out` 的使用**带运算 / 表达式**（消费点不是父 `output` 端口）
+- **THEN** 发射 MUST 成功（`ok = true`）且 MUST 产出产物
+- **AND** 父 module **作用域内** MUST 声明一根 `logic` 网，子 output MUST 以 `.port(net)` 连接该网
+- **AND** 父侧运算的操作数 MUST 读**该网**（⇒ 网名 MUST = **驱动端点的 ctx 全局名**；
+      MUST NOT 用被驱动节点自体名 ⇒ 否则自指 + 双驱动）
+- **AND** 消费点是父 module 的 **`input` 端口**时 MUST **被拒绝**（物理不可行）
+      ⇒ ⇒ **ADR-066 决策 ① 排除项**
+- **AND** 该形态 MUST 与扁平产物**逐拍等价**
+
+#### Scenario: 父侧运算消费子非端口端点 MUST 读父侧落点网名（新增 · ADR-066 决策 ②）
+
+- **WHEN** 父层对子组件的**非端口端点**（`ch_reg` / bundle 字段 / op 节点）的使用带运算
+- **THEN** 父侧表达式的标识符 MUST 是**父 module 作用域内可解析**的名字
+      （= 父侧落点网名）
+- **AND** MUST NOT 引用**仅在子 module 内声明**的名字（判据 = 该标识符在**父 module
+      作用域内不可解析**），也 MUST NOT 直接引用子 module 的**端口名**
+      （⚠️ 子侧合成端口名 = `__x_<n>`（ADR-060 §2.2 v1.8）⇒ ⇒ **端口名 ≠ 网名**）
+      ⇒ ⇒ ⚠️ **措辞订正（Q6 · 2026-11-08）**：旧措辞「MUST NOT 引用子 module 的
+      **内部信号名**」与「落点网名 = 驱动端点的 ctx 全局名」**自相矛盾**（两者是**同一串**
+      ⇒ ⇒ 逐字执行会把**正确实现**判成违规）⇒ ⇒ 判据 MUST 用「**仅在**子 module 内声明」
+      （= 父作用域可解析）
+- **AND** 产物 MUST 通过 ADR-060 §2.5 的 lint 门（零 `%Error`）
 
 #### Scenario: 自驱动 ch_in MUST 被拒绝
 

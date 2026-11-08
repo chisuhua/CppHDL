@@ -549,6 +549,50 @@ PY
     return "$bad"
 }
 
+# ── R9：父侧落点产物（族 ①/③ + 路径 B）过 lint 门 ───────────────────────────
+#    ⚠️ **为什么需要这条**：第四态 `Broken`（「`ok=true` 但产物不可编译」）被
+#    ADR-066 决策 ①/② 删除后，MUST 有**机械**判据证明「`ok=true` ⇒ 产物可编译」
+#    ⇒ ⇒ 这 4 个 fixture 的产物 MUST 过 lint 门（**不是**只断言 `ok`）。
+#    ⚠️ 判据强度：lint 门**同时**覆盖「父作用域不可解析」（verilator 报未声明标识符）
+#    ⇒ ⇒ 这正是旧 `Broken` 形态的失败方式 ⇒ ⇒ 判据有判别力。
+r9_parent_side_lint() {  # $1 = fixture dir
+    local dir="$1" f name log bad=0
+    local n
+    n="$(find "$dir" -maxdepth 1 -name '*.v' | wc -l)"
+    if [ "$n" -ne 4 ]; then
+        fail "R9 父侧落点 fixture 应为 4 个 .v，实际 $n（目录：$dir）"
+        return 1
+    fi
+    for f in "$dir"/*.v; do
+        [ -f "$f" ] || continue
+        name="$(basename "$f" .v)"
+        log="$WORK/logs/$name-r9.lint.log"
+        lint_file "$f" "$log"
+        if [ "$LINT_RC" -ne 0 ]; then
+            fail "R9 lint 失败（rc=$LINT_RC）：$name"
+            sed -n '1,20p' "$log" >&2
+            bad=1
+            continue
+        fi
+        if grep -q '%Error' "$log"; then
+            fail "R9 lint 退出码 0 但输出含 %Error：$name"
+            grep '%Error' "$log" >&2
+            bad=1
+            continue
+        fi
+        # ⚠️ **落点网 MUST 真的存在**（防「判据空转」：若 fixture 退化成直通形态，
+        #    lint 恒绿 ⇒ ⇒ 判据无效）⇒ ⇒ 父 module (`top`) MUST 声明一根
+        #    **以 `top_leaf` 开头**的 `logic` 网（= 驱动端点的 ctx 全局名）。
+        if ! awk '/^module top \(/,/^endmodule/' "$f" |
+            grep -qE '^    logic .*top_leaf'; then
+            fail "R9 产物缺父侧落点网声明（父 module 内无 top_leaf* 的 logic 声明）：$name"
+            bad=1
+        fi
+    done
+    [ "$bad" -eq 0 ] && ok "R9 父侧落点产物过 lint 门（族 ①/③ + 路径 B · 零 %Error · 落点网存在）"
+    return "$bad"
+}
+
 # ── 主路径 ──────────────────────────────────────────────────────────────────
 run_all() {
     require_tools || return 1
@@ -567,6 +611,17 @@ run_all() {
     r6_tree "$products" || return 1
     r7_path_separation "$REPO_ROOT" || return 1
     r8_port_set "$products" || return 1
+
+    # ⚠️ R9：父侧落点 fixture 走**独立目录**（主产物目录 MUST 保持「恰好 3 个 .v」）
+    local psdir="$WORK/parent_side"
+    rm -rf "$psdir" && mkdir -p "$psdir"
+    if ! "$GENERATOR" "$psdir" --parent-side-fixtures "$psdir" \
+        >"$WORK/logs/r9-gen.log" 2>&1; then
+        fail "R9 父侧落点 fixture 生成失败"
+        sed -n '1,20p' "$WORK/logs/r9-gen.log" >&2
+        return 1
+    fi
+    r9_parent_side_lint "$psdir" || return 1
     return 0
 }
 
@@ -576,8 +631,15 @@ self_test() {
     require_tools || return 1
     local pass=0 total=0
     local products="$WORK/products"
+    local psdir="$WORK/parent_side"
 
     reset_products() { gen_products "$GENERATOR" "$products" "$WORK/logs/gen.log" >/dev/null 2>&1; }
+    # ⚠️ 父侧落点 fixture 的**独立目录**（主产物目录 MUST 保持「恰好 3 个 .v」）
+    reset_parent_side() {
+        rm -rf "$psdir" && mkdir -p "$psdir"
+        "$GENERATOR" "$psdir" --parent-side-fixtures "$psdir" \
+            >"$WORK/logs/r9-gen.log" 2>&1
+    }
 
     expect_green() {  # $1 = label, $2 = function, rest = args
         total=$((total + 1))
@@ -604,7 +666,7 @@ self_test() {
     }
 
     # ---- 投毒 1：R1 —— 未声明标识符 -------------------------------------
-    echo "[self-test] 1/9 R1：未声明标识符"
+    echo "[self-test] 1/10 R1：未声明标识符"
     reset_products
     python3 - "$products/three_layers.v" <<'PY'
 import sys
@@ -617,7 +679,7 @@ PY
     expect_red "R1 未声明标识符" r1_lint_gate "$products"
 
     # ---- 投毒 2：R2 —— 改 pin 名 ---------------------------------------
-    echo "[self-test] 2/9 R2：实例 pin 名不在目标端口集"
+    echo "[self-test] 2/10 R2：实例 pin 名不在目标端口集"
     reset_products
     python3 - "$products/row1_implicit.v" <<'PY'
 import sys
@@ -629,7 +691,7 @@ PY
     expect_red "R2 pin 名不存在" r2_pin_names "$products"
 
     # ---- 投毒 3：R3 —— 改端口宽度（R1 必须仍绿 ⇒ 证明 R3 不是 R1 的重复）----
-    echo "[self-test] 3/9 R3：端口宽度不一致（lint_off 生效 ⇒ R1 看不见）"
+    echo "[self-test] 3/10 R3：端口宽度不一致（lint_off 生效 ⇒ R1 看不见）"
     reset_products
     python3 - "$products/row1_implicit.v" <<'PY'
 import sys
@@ -642,13 +704,13 @@ PY
     expect_red "R3 剥掉 lint_off 后转红" r3_widths "$products"
 
     # ---- 投毒 4：R4 —— 改一份产物（确定性）-----------------------------
-    echo "[self-test] 4/9 R4：产物被外部篡改"
+    echo "[self-test] 4/10 R4：产物被外部篡改"
     reset_products
     printf '\n// tampered\n' >>"$products/bubble.v"
     expect_red "R4 产物不一致" r4_determinism "$GENERATOR" "$products"
 
     # ---- 投毒 5：R5 —— 假工具输出错消息 --------------------------------
-    echo "[self-test] 5/9 R5：生成器假成功（不拒绝跨模块 mem）"
+    echo "[self-test] 5/10 R5：生成器假成功（不拒绝跨模块 mem）"
     cat >"$WORK/fake_gen" <<'SH'
 #!/usr/bin/env bash
 echo "products-ok: pretend"
@@ -658,7 +720,7 @@ SH
     expect_red "R5 假成功" r5_reject_mem "$WORK/fake_gen" "$WORK/reject_fake"
 
     # ---- 投毒 6：R6 —— 删一条实例化语句 --------------------------------
-    echo "[self-test] 6/9 R6：删掉一条实例化语句（Verilog 仍合法）"
+    echo "[self-test] 6/10 R6：删掉一条实例化语句（Verilog 仍合法）"
     reset_products
     python3 - "$products/three_layers.v" <<'PY'
 import sys
@@ -678,7 +740,7 @@ PY
     expect_red "R6 树形同构（少一条边）" r6_tree "$products"
 
     # ---- 投毒 7：R7 —— 造同路径调用点 ----------------------------------
-    echo "[self-test] 7/9 R7：同一文件里层次化产物与扁平产物同路径"
+    echo "[self-test] 7/10 R7：同一文件里层次化产物与扁平产物同路径"
     rm -rf "$WORK/fake_repo"
     mkdir -p "$WORK/fake_repo/tests"
     cat >"$WORK/fake_repo/tests/poison.cpp" <<'CPP'
@@ -690,7 +752,7 @@ CPP
     expect_red "R7 同路径调用点" r7_path_separation "$WORK/fake_repo"
 
     # ---- 投毒 8：R1a —— 在 lint 调用里塞 -Wno-fatal ---------------------
-    echo "[self-test] 8/9 R1a：lint 调用含 -Wno-fatal"
+    echo "[self-test] 8/10 R1a：lint 调用含 -Wno-fatal"
     cp "${BASH_SOURCE[0]}" "$WORK/poisoned_guard.sh"
     python3 - "$WORK/poisoned_guard.sh" <<'PY'
 import sys
@@ -703,7 +765,7 @@ PY
     expect_red "R1a -Wno-fatal 被拒" check_lint_flags "$WORK/poisoned_guard.sh"
 
     # ---- 投毒 9：R8 —— 改顶层端口的宽度（Verilog 仍合法 · R1 仍绿）--------
-    echo "[self-test] 9/9 R8：顶层端口宽度被改（lint_off 消音 ⇒ R1 看不见）"
+    echo "[self-test] 9/10 R8：顶层端口宽度被改（lint_off 消音 ⇒ R1 看不见）"
     reset_products
     python3 - "$products/three_layers.v" <<'PYX'
 import sys
@@ -715,6 +777,22 @@ open(p, "w").write(s)
 PYX
     expect_green "R8 投毒后 R1 仍绿（宽度告警被 lint_off 消音）" r1_lint_gate "$products"
     expect_red "R8 顶层端口宽度与手推期望不符" r8_port_set "$products"
+
+    # ---- 投毒 10：R9 —— 改掉父侧落点网的**声明名** ⇒ 父作用域不可解析 ⇒ lint 必红
+    echo "[self-test] 10/10 R9：父侧落点网被改名（父作用域不可解析）"
+    reset_parent_side
+    python3 - "$psdir/ps_expr_reg.v" <<'PYX'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+# 只改**父 module** 里的那根落点网声明（子 module 里的同名声明不动）
+head, sep, tail = s.partition("module top (")
+assert sep, "no top module"
+tail = tail.replace("    logic [7:0] top_leaf__reg;",
+                    "    logic [7:0] top_leaf__reg_renamed;", 1)
+open(p, "w").write(head + sep + tail)
+PYX
+    expect_red "R9 落点网改名后 lint 必红（父作用域不可解析）" r9_parent_side_lint "$psdir"
 
     echo
     if [ "$pass" -ne "$total" ]; then

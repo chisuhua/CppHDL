@@ -29,6 +29,7 @@
 #include "codegen_verilog.h"
 #include "device.h"
 #include "hierarchy_verilog.h"
+#include "chlib/stream.h"
 #include "module.h"
 
 #include <cstdio>
@@ -261,6 +262,90 @@ bool ensure_dir(const std::string &dir) {
     return true;
 }
 
+// ── 「父侧落点」fixture 家族（ADR-066 决策 ①/②）────────────────────────────
+//    ⚠️ **为什么独立目录**：主产物目录被护栏强制「恰好 3 个 `.v`」⇒ ⇒ 这 4 个
+//    fixture MUST NOT 写进那个目录（R7 路径分离同理）。
+//    ⚠️ **它们是第四态 `Broken` 的永久替代**（A19）：旧矩阵用第四态表达「`ok=true`
+//    但产物不可编译」⇒ ⇒ 删掉该态后 MUST 有**机械**判据证明产物**可编译**
+//    ⇒ ⇒ 这 4 个产物 MUST 过 verilator lint 门（护栏 R9）。
+class PsLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ps_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_reg<ch_uint<8>> acc{0_d};         // reg 端点
+    ch_stream<ch_uint<8>> strm;          // proxy 端点（bundle 字段）
+    ch_uint<8> sum;                      // op 端点（运算节点）
+    PsLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        acc->next = io().din;
+        strm.as_master();
+        strm.payload <<= io().din;
+        sum = io().din + ch_uint<8>(1_d);
+        io().dout <<= acc;
+    }
+};
+
+// 族 ①/③：父侧**带运算**消费子 `ch_out` 端口 ⇒ ⇒ 决策 ①
+class PsExprOut : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ps_expr_out");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<PsLeaf> leaf{"leaf"};
+    PsExprOut(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= select(leaf.io().dout > ch_uint<8>(3_d), leaf.io().dout,
+                             ch_uint<8>(0_d));
+    }
+};
+
+// 路径 B：父侧带运算消费子**非端口端点**（reg / bundle 字段 / op）⇒ ⇒ 决策 ②
+class PsExprReg : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ps_expr_reg");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<PsLeaf> leaf{"leaf"};
+    PsExprReg(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().acc | ch_uint<8>(1_d);
+    }
+};
+
+class PsExprProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ps_expr_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<PsLeaf> leaf{"leaf"};
+    PsExprProxy(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().strm.payload | ch_uint<8>(1_d);
+    }
+};
+
+class PsExprOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("ps_expr_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<PsLeaf> leaf{"leaf"};
+    PsExprOp(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().sum | ch_uint<8>(1_d);
+    }
+};
+
 // 生成一个设计；失败 ⇒ 打印原因并返回 false
 template <typename T>
 bool emit_one(const std::string &dir, const std::string &name) {
@@ -287,6 +372,19 @@ bool emit_one(const std::string &dir, const std::string &name) {
 //    MUST NOT 写进那个目录。
 // ⚠️ **G3-5 合规**：两个 fixture 的合成端口 MUST 只出现在**非根** module
 //    （否则根有合成端口 ⇒ 发射器直接 `ok=false` ⇒ 产物根本生成不出来）。
+// 生成「父侧落点」的 4 个 fixture（**独立目录** ⇒ 不污染主产物目录）
+bool emit_parent_side_fixtures(const std::string &dir) {
+    if (!ensure_dir(dir)) {
+        return false;
+    }
+    bool ok = true;
+    ok = emit_one<PsExprOut>(dir, "ps_expr_out.v") && ok;
+    ok = emit_one<PsExprReg>(dir, "ps_expr_reg.v") && ok;
+    ok = emit_one<PsExprProxy>(dir, "ps_expr_proxy.v") && ok;
+    ok = emit_one<PsExprOp>(dir, "ps_expr_op.v") && ok;
+    return ok;
+}
+
 bool emit_prefix_fixtures(const std::string &dir) {
     // ⚠️ 目标目录**自建**（幂等）⇒ ⇒ 调用方不必记得先 mkdir
     //    （缺目录时发射器会报 `cannot open ... .tmp` ⇒ 错误信息指向"路径"而非"根因"）
@@ -326,7 +424,8 @@ bool check_reject_mem(const std::string &dir) {
 int main(int argc, char **argv) {
     if (argc < 2) {
         std::cerr << "usage: " << argv[0]
-                  << " <out_dir> [--check-reject mem | --prefix-fixtures <dir>]\n";
+                  << " <out_dir> [--check-reject mem | --prefix-fixtures <dir>"
+                  << " | --parent-side-fixtures <dir>]\n";
         return 2;
     }
     const std::string dir = argv[1];
@@ -337,6 +436,19 @@ int main(int argc, char **argv) {
             return 2;
         }
         return check_reject_mem(dir) ? 0 : 1;
+    }
+
+    // ⚠️ **独立子命令**：只产出「父侧落点」fixture（ADR-066 决策 ①/②）⇒ ⇒ **不**产出
+    //    主产物 ⇒ ⇒ 主产物目录的「恰好 3 个 `.v`」不变（`verify_hierarchical_rtl.sh`
+    //    依赖它）⇒ ⇒ 这 4 个产物由护栏 **R9** 单独 lint。
+    if (argc >= 4 && std::string(argv[2]) == "--parent-side-fixtures") {
+        const std::string fixture_dir = argv[3];
+        if (!emit_parent_side_fixtures(fixture_dir)) {
+            return 1;
+        }
+        std::cout << "parent-side-fixtures-ok: ps_expr_out.v ps_expr_reg.v "
+                     "ps_expr_proxy.v ps_expr_op.v\n";
+        return 0;
     }
 
     // ⚠️ **独立子命令**：只产出「框架合成前缀覆盖」用的 fixture ⇒ ⇒ **不**产出主产物

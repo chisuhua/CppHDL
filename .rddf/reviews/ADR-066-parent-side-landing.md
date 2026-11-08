@@ -114,3 +114,65 @@
 | `backlog:` → 实际 change 指针 + AC 映射 | ⏸ planner 立项后回填 |
 | 实施 change（`hierarchical-parent-side-landing-implementation`） | ⏸ planner 域 |
 | T3 / T4-M1,M2（T8 的遗留） | ⏸ builder 域 |
+
+---
+
+## 7. v1.1 修订轮（2026-11-08 · 实施期裁定 · oracle 1 轮 + critic 1 轮）
+
+### 7.1 触发（四类**实施期新事实** ⇒ 需修订已签批 ADR）
+
+| # | 事实 | 证据 | ⇒ ⇒ 触发 |
+|---|---|---|---|
+| ① | 分析层把跨 module 边分**两桶**（`pending_implicit_edges` vs `analysis.edges`）⇒ ⇒ 「决策 ① 的实现面覆盖两条路径」**不成立** | `hierarchy_analysis.cpp:528-660` · `hierarchy_verilog.cpp:405` | **Q2**（拆批口径） |
+| ② | 命名真源**唯一**（`node_names_ = view_.names`）⇒ ⇒ codegen 侧**无需改动** ⇒ ⇒ V8 面 ① 的「变异点数 == grep 命中数」会制造 **62 条无效变异**且对重构脆弱 | `codegen_verilog.cpp:53`（62 **行** / 64 **次**） | **Q3**（判据重述） |
+| ③ | 「静默不发射」被**运行期实测证伪** ⇒ 真实 = 分析层**响亮拒绝 + 归因错误** | 见 §7.3 的探针输出 | **Q4 / Q5**（mem 范围 + 归类边界） |
+| ④ | 「MUST NOT 引用子 module 的**内部信号名**」与「落点网名 = 驱动端点的 ctx 全局名」**自相矛盾**（同一串） | ADR-066 §2.2 vs §2.1 决策 ① | **Q6**（措辞订正） |
+
+⇒ ⇒ 裁定输入 = `openspec/changes/hierarchical-parent-side-landing-implementation/decision-requests.md`（Q2–Q6）
+⇒ ⇒ **oracle + metis 双审**（裁定输入层）⇒ ⇒ 结论与 disposition 逐条记录在该文件 §9。
+
+### 7.2 审稿结论（**契约层**）
+
+| 轮 | 审查者 | 结论 | 处置 |
+|---|---|---|---|
+| 1 | **oracle**（arch） | 四类修订的**决策本身全部成立**；但指出 **2 处执行面缺陷** + **2 处 NIT** | ✅ 全处置：① ADR-062 **§5:325-327** 的无条件判据原句未收窄（⇒ 与 §2.6 形成**同一 ADR 内的活矛盾**）⇒ 已收窄 + 指针；② ADR-060 §6 缺 2026-11-08 变更记录 + 行标签 **v1.14 撞号** ⇒ 已改 **v1.16** + 补条目（ADR-062 同 ⇒ **v1.6**）；③ 3 处 stale 「ADR-060 `:69` 矩阵第四行」⇒ `:70` 第五行；④ ADR-060 新格 / spec delta 的谓词宽狭与 ADR-066 决策 ① 不一致 ⇒ 补「父 `input` 排除项」半句 + 交叉引用 |
+| 1 | **critic**（arch） | **APPROVE_WITH_CONDITIONS** · `mergeable: yes` · `scope_exceeded: false` · **0 BLOCKER** | 3 条 SHOULD_FIX 全处置：① 「第四态 `Broken`」的时间线在 ADR 内**互相矛盾**（元数据/§4 当作现状 vs V1 当作前瞻 vs V8① 说已替代）⇒ 对齐为「**已在本 change 内移除** + 永久替代 = R9」；② Parent 元数据漏列 ADR-062 **§2.6**（被修订点清单不完整）⇒ 已补；③ V12 内嵌过程日志（指针已落地）⇒ 移出，只留判据 |
+| — | **verifier**（builder 域） | 本 change 的验收（`tasks.md` T0–T6）由 builder 自查 + 全量回归承担 | 见 §7.4 |
+
+⇒ ⇒ **审查预算**：本 change 的 critic 共 **1 轮**（限额 2）⇒ oracle 1 轮 ⇒ **无 BLOCKER ⇒ 无需复审**。
+
+### 7.3 P0 运行期复现（**Q4 的判据** · oracle 要求转贴）
+
+```
+DUT：父组件 CH_HIERARCHY_LAYER + ch_mem 成员 + 成层子组件的 ch_out 驱动 mem.aread 地址
+命令：g++ -std=c++23 -I include … probe.cpp build/libcpphdl.a && ./probe
+输出：
+[FATAL] hierarchical analysis: cross-module ch_mem access
+         ('top.mem_aread' in 'top' <- 'top.leaf.unnamed_output' in 'top.leaf').
+         ADR-060 requires the memory and its user to be in the same module. …
+ok=0
+error=FATAL: hierarchical analysis: cross-module ch_mem access …
+```
+
+⇒ ⇒ **F4 成立**：「静默不发射」**不可达** ⇒ ⇒ 现状 = **响亮拒绝 + 归因错误**
+⇒ ⇒ **决策 ⑦**（本形态不属父侧落点消费点）+ **台账行 20 改记「已裁决（不纳入）」并归下游**。
+
+### 7.4 实施与闭口（builder 域 · 2026-11-09）
+
+| 项 | 结果 |
+|---|---|
+| 实施 | `src/hierarchy_verilog.cpp`（父侧落点网合成 + 诊断跳过 + 诊断文案重写）· `tests/*` · `scripts/verify_hierarchical_rtl.sh`（**R9** + 投毒 10）· `tests/hier_rtl_products.cpp`（4 个父侧落点 fixture） |
+| 全量回归 | `ctest -LE perf` = **242/242 通过**（含 77 个 `verilator_e2e`） |
+| 护栏 | 5 个 **全绿**（`verify_test_counts` · `verify_hierarchical_rtl` · `verify_hierarchical_port_naming` · `verify_hier_corpus_coverage` · `verify_arch_ledger_residuals`）+ 4 个 `--self-test` **全绿** |
+| 契约 | ADR-066 **v1.1** · ADR-060 **v1.16**（§2.1 补格）· ADR-062 **v1.6**（§2.6 + §5 收窄 + 双向指针）· spec MODIFIED 已合并 |
+| 归档 | `openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation/`（**无** `--skip-specs`） |
+| 台账 | 行 **16** 已裁决 · 行 **17** 已收口 · 行 **19** 已收口 · 行 **20** 已裁决（不纳入 · 归下游）⇒ 登记表 20 行 + 台账派生 ⇒ 护栏 **PASS** |
+
+### 7.5 遗留（**如实登记**）
+
+| 项 | 状态 |
+|---|---|
+| **A8 面 ① 的 62 处** | **零变异**（命名真源唯一 ⇒ 无需改）⇒ 「无需改动」的机械证据（grep 清单 + 负向注入）**待补**（`tasks.md` T4.4）⇒ ★ **登记为待办**，非已闭口 |
+| **mem 端口实参跨层**（台账行 20 的下游立项） | ⏠ **未立项** ⇒ 分析层 `:543` 的粒度拆分 + 归因订正仍待做 |
+| ADR-066 正文 306 行 | ⚠️ > 250 自检阈值；决策+后果+选项占比 ≈ 53% ⇒ **未触发**「决策被稀释」判据 ⇒ 备案 |
+| `A15`（mem 读值非 0） | ⏸ **随行 20 的下游立项**（本 change 不含） |

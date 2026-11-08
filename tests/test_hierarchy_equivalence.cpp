@@ -1335,3 +1335,107 @@ TEST_CASE("hierarchical equivalence - sibling edge (row 4) is cycle-accurate",
         REQUIRE(res.flat_trace[i][0] == expected[i]);
     }
 }
+
+// ── ★ ADR-066 决策 ①/② 的**逐拍等价**（族 ①/③ + 路径 B）──────────────────────
+//    ⚠️ **为什么必须逐拍验证**：「产物能编译 + lint 绿」**不等于**「行为正确」
+//       ⇒ ⇒ 落点网接错一根 ⇒ 产物照样编译通过、lint 照样绿 ⇒ ⇒ 只有逐拍可比。
+//    ⚠️ **期望值手推**（禁抄 `flat_trace`）⇒ ⇒ 期望表在用例里是**字面量**。
+class EqPsLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_ps_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch_uint<8> sum;                 // op 端点（组合 · 路径 B 的消费者）
+    ch_stream<ch_uint<8>> strm;     // proxy 端点（bundle 字段 · 路径 B 的消费者）
+    EqPsLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        sum = io().din ^ ch_uint<8>(1_d);
+        strm.as_master();
+        strm.payload <<= io().din;
+        io().dout <<= io().din;
+    }
+};
+
+class EqPsTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_ps_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> d_out; ch_out<ch_uint<8>> d_op;
+         ch_out<ch_uint<8>> d_proxy;)
+    ch::ch_module<EqPsLeaf> leaf{"leaf"};
+    EqPsTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        // ★ 族 ①/③：父侧**带运算**消费子 `ch_out` 端口（决策 ①）
+        io().d_out <<= select(leaf.io().dout > ch_uint<8>(3_d), leaf.io().dout,
+                              ch_uint<8>(0_d));
+        // ★ 路径 B：父侧带运算消费子**非端口端点**（op 节点 / bundle 字段 · 决策 ②）
+        io().d_op <<= leaf.instance().sum | ch_uint<8>(1_d);
+        io().d_proxy <<= leaf.instance().strm.payload | ch_uint<8>(1_d);
+    }
+};
+
+TEST_CASE("hierarchical equivalence - parent-side landing (ADR-066 decisions 1 and 2)",
+          "[hierarchy][equivalence][parent-side]") {
+    const std::string dir = make_temp_dir("_parent_side_landing");
+    REQUIRE_FALSE(dir.empty());
+
+    ch::ch_device<EqPsTop> dev;
+    // ⚠️ 粒度 MUST 是 `ForceLayer`（否则全 inline ⇒ 跨层形态**根本不出现**）
+    auto products = ch_test::hier::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    INFO("emit error: " << products.error);
+    REQUIRE(products.ok);
+    REQUIRE_FALSE(products.ports.empty());
+
+    EqPsTop &root = dev.instance();
+    std::vector<ch_test::hier::DrivenInput> inputs;
+    inputs.push_back({"top.din", [&root](ch::Simulator &sim, std::uint64_t v) {
+                          sim.set_input_value(root.io().din, v);
+                      }});
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back(make_obs("top.d_out", root.io().d_out.impl()->id(),
+                           [&root](ch::Simulator &s) -> std::uint64_t {
+                               return static_cast<std::uint64_t>(
+                                   s.get_port_value(root.io().d_out));
+                           }));
+    obs.push_back(make_obs("top.d_op", root.io().d_op.impl()->id(),
+                           [&root](ch::Simulator &s) -> std::uint64_t {
+                               return static_cast<std::uint64_t>(
+                                   s.get_port_value(root.io().d_op));
+                           }));
+    obs.push_back(make_obs("top.d_proxy", root.io().d_proxy.impl()->id(),
+                           [&root](ch::Simulator &s) -> std::uint64_t {
+                               return static_cast<std::uint64_t>(
+                                   s.get_port_value(root.io().d_proxy));
+                           }));
+
+    // ★ 期望值 **手推**（禁抄 flat_trace）：
+    //   d_out   = (din > 3) ? din : 0          （族 ①/③）
+    //   d_op    = (din ^ 1) | 1                （路径 B · op 端点）
+    //   d_proxy = din | 1                      （路径 B · bundle 字段）
+    const std::vector<std::uint64_t> stim_vals = {0x00, 0x02, 0x05, 0xFF};
+    std::vector<std::vector<std::uint64_t>> stim;
+    std::vector<std::vector<std::uint64_t>> expected;
+    for (auto v : stim_vals) {
+        stim.push_back({v});
+        expected.push_back({v > 3 ? v : 0ull, (v ^ 1ull) | 1ull, v | 1ull});
+    }
+
+    auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path,
+                                      products.ports, inputs, obs, stim);
+    INFO("compare error: " << res.error);
+    REQUIRE(res.ok);
+    REQUIRE(res.equal);
+    REQUIRE(res.mismatch_count == 0);
+
+    // ★ 与**手推字面量表**逐拍逐项对照（⇒ 不是「与 flat_trace 自证」）
+    REQUIRE(res.flat_trace.size() == expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        REQUIRE(res.flat_trace[i].size() == expected[i].size());
+        for (std::size_t k = 0; k < expected[i].size(); ++k) {
+            REQUIRE(res.flat_trace[i][k] == expected[i][k]);
+        }
+    }
+}
