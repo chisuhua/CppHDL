@@ -36,7 +36,7 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 | **P1** | 补 **A8 面 ①** 的机械证据：「`node_names_[` 的 **62 行 / 64 次**无需改动」⇒ ⇒ **grep 清单 + 一次负向注入**（把某处名称换成**未在父作用域声明**的名字 ⇒ lint 必红） | builder | — | 证据脚本**可复跑**；负向注入使 **R9 lint 必红**、还原后复绿 | ✅ **2026-11-09** ⇒ 证据脚本 = `scripts/verify_node_names_single_source.sh`（R1 清单 62 行/64 次 · R2 单写入点 · R3 命名真源同源 · R4 **源码级**注入 ⇒ R9 必红 ⇒ 还原复绿 · `--self-test` **5/5**）· 记录 = `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md` §A–§H · CI = `build-and-test` guard 段（只读 + `--self-test`；`--inject` 不上 CI） |
 | **P2** | ★ **roadmap 事实核对**（★ 范围比预期更广，见下） | planner | — | ① feature 与 phase 的状态**逐条**与 `AGENTS.md`/capability/归档件一致；② `verify_roadmap_fragments.sh` 绿；③ **phase-5 的 `status` 可据实转 `done`** | ✅ **2026-11-09** ⇒ 核对记录 = `.rddf/reviews/phase-6-p2-roadmap-audit-2026-11.md`（逐条工具证据 · 9 feature + 6 phase + 4 objective）· 改动 = `phases/phase-5.md`（**转 `done`** + 概览表 4 行 + 完成条件 3 勾 1 不做）+ `features/feat-rv32i-isa-completeness.md`（审计快照注记）+ 本文件漂移清单订正（**① / ② 实测已不成立** · 新增 **⑥**）· 护栏 `verify_roadmap_fragments.sh`（+`--self-test`）/ `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 全绿 · ⚠️ **AUTO 块本轮无需改**（未动任何 feature 的 `status`/`phase_refs`/`主题` ⇒ 该义务是**条件触发**） |
 | **P2b** | ⚠️ **Windows-2022 CI**（phase-5 于 2026-10-26 转交）⇒ ⇒ **2026-11-03 用户裁决：CI 平台范围 = 仅 Ubuntu** ⇒ ⇒ **不做** ⇒ ⇒ 只**登记理由 + 关闭该完成条件**（不动 CI） | planner | — | phase-5 完成条件里该项标为「不做（附裁决日期）」 | ✅ **2026-11-09** ⇒ `phases/phase-5.md` 的完成条件已改为 `- [x] **不做**（2026-11-03 用户裁决）` + No-Go 判据的处置说明 · **CI 文件零改动**（实测 `runs-on` = 5×`ubuntu-22.04` + 1×`${{ matrix.os }}`，其取值 `['ubuntu-22.04']`） |
-| **P3** | **mem 端口实参跨层**（台账行 20 的下游）：起草 improvement（5 段 · Why / What Changes / Acceptance / Capabilities / Impact）⇒ ⇒ 过 `pre_create_brainstorm_check.sh` HARD-GATE | planner | — | improvement 文件存在且过 HARD-GATE（exit 0） | ⬜ |
+| **P3** | **mem 端口实参跨层**（台账行 20 的下游）：起草 improvement（5 段 · Why / What Changes / Acceptance / Capabilities / Impact）⇒ ⇒ 过 `pre_create_brainstorm_check.sh` HARD-GATE | planner | — | improvement 文件存在且过 HARD-GATE（exit 0） | ✅ **2026-11-09** ⇒ 草案 = `.rddf/improvements/mem-port-arg-cross-layer-2026-11.md`（**7 段**（架构依据 / 范围 / Why / What Changes / Acceptance / Capabilities / Impact）+ YAML frontmatter · **HARD-GATE exit 0**）· 已注册进 `improvement-suggestions.md` · ⚠️ 状态 = `draft` ⇒ ⇒ **待 P4 的 architect 范围裁定**落地后才可转 `approved` ⇒ 才可立项为 change · ★ **口径（用户 2026-11-09 裁决）**：「粒度拆分 + 归因订正」= **无条件必做**；「正确支持」这一支 = **条件化**于 P4 的边界句（⇒ ⇒ 本 improvement **不替 architect 拍板**） |
 | **P4** | 同上：**architect 范围裁定** ⇒ ⇒ ★ **边界句 MUST 写死** ——「mem 持有 module **==** 使用 module、仅**实参视线**跨层」⇒ ⇒ 否则 ADR-066 决策 ⑥「跨模块 `ch_mem` 仍拒」会被逐案重解释 | architect | P3 | ADR 修订落地 · **oracle → critic** 双审 **0 BLOCKER** | ⬜ |
 | **P5** | 同上：**实施** —— 分析层 `:543` 的**粒度拆分**（mem 端口**实参**跨层 vs 真跨模块访问）+ 归因订正（诊断 MUST 给出**正确**改法）+ mem 端口**正确支持** + **A15**（端口**读值非 0**，不是只 lint） | builder | P4 | ① mem 端口读值**非 0**；② 跨模块 mem 访问**仍被拒**；③ 台账行 **20** 闭口（登记表 + 台账派生 + 护栏绿） | ⬜ |
 | **P6** | ★ **RV32I ISA 缺口**：**CSR**（`csrrw`/`csrrs`/`csrrc`）+ **`ECALL`/`EBREAK`** + **`FENCE`**（不含预测取指）⇒ ⇒ **独立立项**（`AGENTS.md` KNOWN LIMITATIONS 明写「不在任何仓内 capability 覆盖内 ⇒ 不可顺手塞进本条」） | planner → builder | — | 固件覆盖三类语义 + 双后端 parity + capability 新增 | ⬜ |
@@ -77,7 +77,7 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 | P1 | `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md`（追加段）· 变异/注入记录 |
 | P2 | `.rddf/reviews/phase-6-p2-roadmap-audit-2026-11.md`（核对记录）+ `phases/phase-5.md`（**转 `done`**）+ `features/feat-rv32i-isa-completeness.md`（审计快照注记） |
 | P2b | `phases/phase-5.md` 的完成条件（该项标「不做（附裁决日期）」）+ 本文件的结论行 |
-| P3 | `.rddf/improvements/<mem-port-实参>.md` |
+| P3 | `.rddf/improvements/mem-port-arg-cross-layer-2026-11.md`（草案 · HARD-GATE exit 0）+ `improvement-suggestions.md` 的索引行 |
 | P4 | `docs/adr/ADR-066-...md`（修订）+ `.rddf/reviews/ADR-066-parent-side-landing.md`（追加段） |
 | P5 | `openspec/changes/archive/<mem-port-实参>-<日期>/` + `.rddf/checks/arch-residual-registry.md`（行 20）+ 台账 §7 |
 | P6 | `openspec/changes/archive/<isa-缺口>-<日期>/` + 新 capability spec |
@@ -97,8 +97,11 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 4. **涉架构残留的步骤** ⇒ MUST 同步 `.rddf/checks/arch-residual-registry.md`（唯一真相）+ 台账 §7（派生）
    ⇒ ⇒ 护栏 `scripts/verify_arch_ledger_residuals.sh` + `--self-test` 必须绿。
 5. **每完成一步** ⇒ 回填本文件 + 更新对应 feature 的完成度（★ `feat-*.md` 的 front-matter 是
-   **两份**真相 ⇒ 改动 MUST 同步根 `AGENTS.md` 的 AUTO 块 ⇒ ⇒ **需 `rddf roadmap --update-agent-md`
-   或等价工具** ⇒ ⇒ ⚠️ 该 CLI dispatch 在本仓**缺失** ⇒ ⇒ 见 §「本窗口自身的两个已知缺口」的 **G1**）。
+   **两份**真相 ⇒ 改动 MUST 同步根 `AGENTS.md` 的 AUTO 块 ⇒ ⇒ **同步手段**：
+   `bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_refresh_fragments.sh`
+   （**同时**刷新 `.rddf/roadmap.md` 的 AUTO-INDEX 段 + `AGENTS.md` 的 AUTO 块）
+   ⇒ ⇒ ⚠️ `rddf roadmap --update-agent-md` 的 dispatch 按**项目根**找 `skills/` ⇒ 本仓未 vendor
+   ⇒ ⇒ **直接调用全局 payload**（2026-11-09 实测 ⇒ 详见 §「本窗口自身的两个已知缺口」的 **G1**）。
 
 ---
 
@@ -134,11 +137,24 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 
 | # | 缺口 | 影响 | 处置 |
 |---|---|---|---|
-| **G1** | 本文件与既有簿记（台账 §7 / feature / objective / improvement / ADR）的**关联没有机械载体**；其中 **feature 的 `status` 变更**还牵动根 `AGENTS.md` 的 AUTO 块，而生成器（`rddf roadmap --update-agent-md`）的 CLI dispatch 在本仓**缺失**（工具链 payload 存在但**不可达**） | 关联**漂移无声** —— 改了台账 / feature 后本文件的映射表**不会**跟着变；AUTO 块只能**手工**维护（历史上两次由人工发现） | ⇒ ⇒ 关联改用本文件 §「与既有簿记的映射」承担 ⇒ ⇒ ⚠️ 但 **P2 收尾时 feature 的 `status` 变更会牵动 AUTO 块** ⇒ ⇒ 那一处**必须**同步 ⇒ ⇒ 同步手段（`rddf roadmap --update-agent-md` 的 CLI dispatch 在本仓**缺失**）本身是**独立待办** ⇒ ⇒ 列入 P2 的收尾清单 |
+| **G1** | 本文件与既有簿记（台账 §7 / feature / objective / improvement / ADR）的**关联没有机械载体**；其中 **feature 的 `status` 变更**还牵动根 `AGENTS.md` 的 AUTO 块（+ `.rddf/roadmap.md` 的 AUTO-INDEX） | 关联**漂移无声** —— 改了台账 / feature 后本文件的映射表**不会**跟着变；AUTO 块若**手工**维护 ⇒ 手工 = 会漂（历史上两次由人工发现） | ⇒ ⇒ 关联改用本文件 §「与既有簿记的映射」承担 ⇒ ⇒ ⚠️ 但 **P2 收尾时 feature 的 `status` 变更会牵动 AUTO 块** ⇒ ⇒ 那一处**必须**同步 ⇒ ⇒ **同步手段已存在**（2026-11-09 实测 ⇒ 见下方修复注记）⇒ ⇒ ⇒ **不再需要手工维护** ⇒ ⇒ ⇒ 本条已由「独立待办」**降级为「有工具，但需知道怎么调」** |
 | **G2** | 本文件的**步状态**（⬜/✅）**无机械判据** | 与「护栏 = 机械可判」的仓内主流做法不一致 | 本文件是**规划**工件（不是验收判据）⇒ ⇒ 真正的判据在各自 change 的 `tasks.md` + 护栏 ⇒ ⇒ 本文件的 ✅ MUST 与那些判据同源（不新增判据面）⇒ ⇒ **不新建护栏**（避免又多一处需自证的活件） |
 
-> ⚠️ **2026-11-09 修复（G1 行曾残缺）**：该行在 `e03dbb9` 引入时只剩**处置列的尾段**
-> （表格首三格丢失 ⇒ 渲染出无 `|` 起始的悬空行）。缺口 / 影响两列按本文件 §推进机制
-> 第 5 条（`:97-99`）与 `scripts/verify_roadmap_fragments.sh` 的前言**重建**；
-> **处置列逐字保留**（未改一字）。同步修：§推进机制 第 5 条的 `见 P12` 改为指向本表 G1
-> （P12 不存在 —— 步号只有 P1–P11 + P2b）。
+> ⚠️ **2026-11-09 修复（G1 行曾残缺 + 「CLI dispatch 缺失」结论已过时）**：
+> ① 该行在 `e03dbb9` 引入时只剩**处置列的尾段**（表格首三格丢失 ⇒ 渲染出无 `|` 起始的悬空行）。
+>    缺口 / 影响两列按本文件 §推进机制 第 5 条（`:97-99`）与 `scripts/verify_roadmap_fragments.sh`
+>    的前言**重建**；**处置列逐字保留**（未改一字）。同步修：§推进机制 第 5 条的 `见 P12`
+>    改为指向本表 G1（P12 不存在 —— 步号只有 P1–P11 + P2b）。
+> ② ⚠️ **「`rddf roadmap --update-agent-md` 的 CLI dispatch 在本仓缺失」这条结论已过时**
+>    （2026-11-09 实测）：dispatch **存在**（工具链 **rdd-workflow v4.0.0** @
+>    `d5376087`）⇒ 但它按**项目根**解析 `skills/roadmap/scripts/…` ⇒ 本仓**未 vendor** `skills/`
+>    ⇒ ⇒ 报「script not found」⇒ ⇒ **直接调用全局 payload 即可**：
+>    `bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_update_agent_md.sh`
+>    （⇒ 重写根 `AGENTS.md` 的 AUTO 块）
+>    `bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_refresh_fragments.sh`
+>    （⇒ **同时**重写 `.rddf/roadmap.md` 的 AUTO-INDEX 段 + `AGENTS.md` 的 AUTO 块）
+>    ⇒ ⇒ **实测**：两者产出的 AUTO 块与已提交块**逐字节一致** ⇒ ⇒ ⇒ 护栏
+>    `scripts/verify_roadmap_fragments.sh` 的 **vendored 渲染规则仍然等价**
+>    （其「rdd-workflow 升级 ⇒ MUST 重跑 oracle」的**再验证触发条件已满足并已复跑**）
+>    ⇒ ⇒ ⇒ 「AUTO 块只能手工维护」的**必要性已消除**（护栏仍保留 ⇒ 它判的是
+>    「front-matter ↔ AUTO 块是否一致」，与生成器**互补**）。

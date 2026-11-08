@@ -7,9 +7,17 @@
 # `.rddf/roadmap/features/*.md` 的 front-matter 是**两份**真相 ⇒ 漂移**无声**。
 # ⚠️ 漂移的**根因**不是「脚本缺失」—— 工具链
 # `skills/roadmap/scripts/roadmap_update_agent_md.sh`（在 **rdd-workflow** 仓内）
-# **存在且可用**；缺的是 **CLI dispatch**（`rddf roadmap` 只暴露
-# `init / status / edit / validate / advance`，没有 `--update-agent-md`）
-# ⇒ 工具**不可达** ⇒ AUTO 块只能**手工**维护 ⇒ 手工 = 会漂。
+# **存在且可用**。
+# ⚠️ **2026-11-09 订正（原注释说「CLI dispatch 不存在」⇒ 已过时）**：dispatch **存在**
+#   （`rddf roadmap --update-agent-md` / `rddf roadmap update-agent-md`）⇒ 但它按
+#   **项目根**解析 `skills/roadmap/scripts/…` ⇒ 本仓**未 vendor** `skills/` ⇒ ⇒ 报
+#   「script not found」⇒ ⇒ **直接调用全局 payload 即可**（实测 · 产出与已提交块
+#   **逐字节一致**）：
+#     bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_update_agent_md.sh
+#     bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_refresh_fragments.sh
+#   （后者**同时**刷新 `.rddf/roadmap.md` 的 AUTO-INDEX 段）⇒ ⇒ AUTO 块**不再必须手工维护**
+#   ⇒ ⇒ 但**本护栏仍保留**：它判的是「front-matter ↔ AUTO 块是否一致」，
+#   与生成器**互补**（生成器只负责写，不负责判「该不该写」）。
 #
 # ⚠️ **vendored 渲染规则的出处与再验证条件**：
 #   本脚本内嵌的渲染规则 **vendored 自**
@@ -19,9 +27,13 @@
 #   ⇒ **再验证触发条件**：① `rdd-workflow` 升级 ⇒ MUST 重跑 oracle
 #     （命令见 `openspec/changes/roadmap-fragments-consistency-guard-2026-10/design.md` §3）；
 #     ② 本脚本的渲染规则有任何改动 ⇒ MUST 重跑 oracle。
-#   ⇒ ⚠️ **C1 报「AUTO 块不一致」时的正确动作**：**同步本脚本的 vendored 规则**
-#     （若工具链确实变了）或修 front-matter ⇒ **不要**手工改 `AGENTS.md` 的 AUTO 块
-#     —— 那正是本护栏要治的根因。
+#   ⇒ ⚠️ **再验证记录（2026-11-09）**：工具链已升级到 **rdd-workflow v4.0.0** @
+#     `d5376087ea2892b5a3ba517ff3cbb94654663da9` ⇒ 触发条件 ① **已满足并已复跑**
+#     ⇒ 结论 = **vendored 规则与当前官方生成器仍逐字节等价** ⇒ ⇒ **本脚本的渲染规则
+#     无需改动**（若日后工具链再动 ⇒ MUST 重跑）。
+#   ⇒ ⚠️ **C1 报「AUTO 块不一致」时的正确动作**：**先跑上面的全局 payload 刷新**
+#     （若工具链确实变了 ⇒ **同步本脚本的 vendored 规则**）**或**修 front-matter
+#     ⇒ **不要**手工改 `AGENTS.md` 的 AUTO 块 —— 那正是本护栏要治的根因。
 #
 # 本护栏（**fail-closed**，环境性缺失除外）：
 #   C1 **AUTO 块守恒**：按工具链生成器的**同一套渲染规则**从 front-matter

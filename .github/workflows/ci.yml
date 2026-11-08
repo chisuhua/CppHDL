@@ -273,10 +273,17 @@ jobs:
       # C2/C3: a feature file's `### phase-N` bullets and its `## 验收标准`
       # checkboxes MUST agree on the completion symbol of the same phase
       # label / known change name (line-start mentions only).
-      # ⚠️ ROOT CAUSE (corrected 2026-10-28): the toolchain payload EXISTS
-      # (rdd-workflow's skills/roadmap/scripts/roadmap_update_agent_md.sh)
-      # but the CLI dispatch does not expose --update-agent-md => the
-      # generator is unreachable => the AUTO block is hand-maintained.
+      # ⚠️ ROOT CAUSE (corrected 2026-10-28, re-corrected 2026-11-09): the
+      # toolchain payload EXISTS (rdd-workflow's
+      # skills/roadmap/scripts/roadmap_update_agent_md.sh) and the CLI
+      # dispatch ALSO exists (`rddf roadmap --update-agent-md`) => but the
+      # dispatch resolves the script PROJECT-RELATIVE and this repo does not
+      # vendor `skills/` => it reports "script not found" => call the GLOBAL
+      # payload directly instead (verified: byte-identical output):
+      #   bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_update_agent_md.sh
+      #   bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_refresh_fragments.sh
+      # The guard below is KEPT: it judges "front-matter <-> AUTO block agree",
+      # which is complementary to the generator (the generator only writes).
       # ⚠️ PORTABILITY: the script MUST avoid GNU-only forms (e.g. `sed -i`
       # without a suffix) => its --self-test fixtures mutate files with
       # `python3` heredocs only => BSD sed behaves identically.
@@ -1599,10 +1606,17 @@ jobs:
       # C2/C3: a feature file's `### phase-N` bullets and its `## 验收标准`
       # checkboxes MUST agree on the completion symbol of the same phase
       # label / known change name (line-start mentions only).
-      # ⚠️ ROOT CAUSE (corrected 2026-10-28): the toolchain payload EXISTS
-      # (rdd-workflow's skills/roadmap/scripts/roadmap_update_agent_md.sh)
-      # but the CLI dispatch does not expose --update-agent-md => the
-      # generator is unreachable => the AUTO block is hand-maintained.
+      # ⚠️ ROOT CAUSE (corrected 2026-10-28, re-corrected 2026-11-09): the
+      # toolchain payload EXISTS (rdd-workflow's
+      # skills/roadmap/scripts/roadmap_update_agent_md.sh) and the CLI
+      # dispatch ALSO exists (`rddf roadmap --update-agent-md`) => but the
+      # dispatch resolves the script PROJECT-RELATIVE and this repo does not
+      # vendor `skills/` => it reports "script not found" => call the GLOBAL
+      # payload directly instead (verified: byte-identical output):
+      #   bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_update_agent_md.sh
+      #   bash ~/.agents/skills/rdd-workflow/skills/roadmap/scripts/roadmap_refresh_fragments.sh
+      # The guard below is KEPT: it judges "front-matter <-> AUTO block agree",
+      # which is complementary to the generator (the generator only writes).
       # Portable bash + python3 (runs on every OS in the matrix).
       shell: bash
       run: scripts/verify_roadmap_fragments.sh

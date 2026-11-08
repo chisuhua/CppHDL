@@ -9,3 +9,4 @@
 
 | 提案 | 优先级 | 来源 | 添加时间 | 状态 |
 |---|---|---|---|---|
+| [mem-port-arg-cross-layer-2026-11](.rddf/improvements/mem-port-arg-cross-layer-2026-11.md) | P1 | ADR-066 §2.7 决策 ⑦（归下游独立立项）· 台账 §7 行 20 | 2026-11-09 | 📝 draft（**待 P4 的 architect 范围裁定**落地后才可转 approved ⇒ 才可立项为 change） |
