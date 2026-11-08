@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-11-08
+
+# ⚠️ **本 change 是纯测试/判别力补齐** ⇒ ⇒ **无 capability 变更**（36 → 42 格 probe matrix
+#   是 `tests/` 内的现状快照，不是规范条款）⇒ ⇒ 故显式声明 `skip_specs: true`
+#   ⇒ ⇒ 归档 `openspec archive` 会因「无 delta」而报错 ⇒ ⇒ 必须靠本声明放行。
+#
+# ⚠️ **规范所有者**：矩阵格值与三态/四态语义**不是**规范 ⇒ ⇒ 它们只表达「今天发射器怎么判」。
+#   真正被本 change **间接**服务的规范是 `rtl-hierarchical-output` 的
+#   「父层消费子输出 MUST 有连接网」Scenario ⇒ ⇒ 该 Scenario 的收窄归 **ADR-066 决策 ③**
+#   + change `hierarchical-parent-side-landing-implementation`（MODIFIED ×1）
+#   ⇒ ⇒ **本 change MUST NOT** 改任何 spec。
