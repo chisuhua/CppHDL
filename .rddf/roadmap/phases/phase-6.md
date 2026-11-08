@@ -44,7 +44,7 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 | **P8** | **`Simulator::set_ab_verification()` 是 no-op stub**（ADR-035 R9）⇒ ⇒ A/B（interpreter vs JIT）比对**从未真正实现** ⇒ ⇒ 重设计（快照 + 逐指令对账 + 归因） | planner → architect → builder | — | A/B 比对**真的**逐指令对账 + 断言；stub 文案删除 | ⬜ |
 | **P9** | **cache wrapper 三项已知债务**：`DCacheWriteBuffer` **不真缓冲**（名字 over-promise ⇒ `ready` 无背压语义）· `ICachePrefetch` 预取缓冲是**死数据** · 内层 cache `miss` 与 `axi_addr` **1 拍错位** ⇒ ⇒ 各自闭口**或**降级为「已知」并登记理由 | planner → builder | — | 三项各自有裁决 + 证据 | ⬜ |
 | **P10** | **环境**：openspec CLI **钉回 1.4.1**（仓库按 1.4.1 写就；本机 1.14.x ⇒ 15/17 主 spec 红 ⇒ **与本仓改动无关**）⇒ ⇒ 解 `feat-hierarchical-rtl-output`「全程」条目的唯一红项 | 环境（非代码） | — | 仓级 `openspec validate --specs --strict` 绿 | ⬜ |
-| **P11** | **ADR-036 逻辑算子物理移除**（`&&`/`||` ⇒ `&`/`|`） | builder | 🔒 **日历锁：最早 2027-04-17**（`verify_deprecation_calendar_gate.sh` 守） | 移除完成 + `verify_deprecation_callsites.sh` 绿 | 🔒 |
+| **P11** | **ADR-036 逻辑算子物理移除**（`&&` / `\|\|` ⇒ `&` / `\|`） | builder | 🔒 **日历锁：最早 2027-04-17**（`verify_deprecation_calendar_gate.sh` 守） | 移除完成 + `verify_deprecation_callsites.sh` 绿 | 🔒 |
 
 ---
 
@@ -96,7 +96,7 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
    ⇒ ⇒ 护栏 `scripts/verify_arch_ledger_residuals.sh` + `--self-test` 必须绿。
 5. **每完成一步** ⇒ 回填本文件 + 更新对应 feature 的完成度（★ `feat-*.md` 的 front-matter 是
    **两份**真相 ⇒ 改动 MUST 同步根 `AGENTS.md` 的 AUTO 块 ⇒ ⇒ **需 `rddf roadmap --update-agent-md`
-   或等价工具** ⇒ ⇒ ⚠️ 该 CLI dispatch 在本仓**缺失** ⇒ ⇒ 见 P12）。
+   或等价工具** ⇒ ⇒ ⚠️ 该 CLI dispatch 在本仓**缺失** ⇒ ⇒ 见 §「本窗口自身的两个已知缺口」的 **G1**）。
 
 ---
 
@@ -107,7 +107,6 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 | 跨多层（孙组件）的父侧落点 | ADR-066 决策 ⑥（**另立裁定**） |
 | **支持**跨模块 `ch_mem` | ADR-066 决策 ⑥ + 决策 ⑦（P4/P5 只做**粒度拆分 + 归因订正**） |
 | macOS / Windows CI | 2026-11-03 用户裁决：CI 平台范围 = **仅 Ubuntu** |
-| 「双后端覆盖」的**批量扩张** | objective 已 `completed` ⇒ ⇒ 后续**按缺陷驱动**推进（历史三例真 bug 都是**全绿时**挖出的）⇒ ⇒ **不排期** |
 | ADR-036 的物理移除 | **日历锁**（最早 2027-04-17）⇒ ⇒ P11 只登记，不提前 |
 | 「双后端覆盖」的**批量扩张** | objective `objective-test-coverage-100pct` 已 **completed** ⇒ ⇒ 后续**按缺陷驱动**推进（历史三例真 bug 都是**全绿时**挖出的）⇒ ⇒ **不排期** |
 
@@ -133,5 +132,11 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 
 | # | 缺口 | 影响 | 处置 |
 |---|---|---|---|
-⇒ ⇒ 关联改用本文件 §「与既有簿记的映射」承担 ⇒ ⇒ ⚠️ 但 **P2 收尾时 feature 的 `status` 变更会牵动 AUTO 块** ⇒ ⇒ 那一处**必须**同步 ⇒ ⇒ 同步手段（`rddf roadmap --update-agent-md` 的 CLI dispatch 在本仓**缺失**）本身是**独立待办** ⇒ ⇒ 列入 P2 的收尾清单 |
+| **G1** | 本文件与既有簿记（台账 §7 / feature / objective / improvement / ADR）的**关联没有机械载体**；其中 **feature 的 `status` 变更**还牵动根 `AGENTS.md` 的 AUTO 块，而生成器（`rddf roadmap --update-agent-md`）的 CLI dispatch 在本仓**缺失**（工具链 payload 存在但**不可达**） | 关联**漂移无声** —— 改了台账 / feature 后本文件的映射表**不会**跟着变；AUTO 块只能**手工**维护（历史上两次由人工发现） | ⇒ ⇒ 关联改用本文件 §「与既有簿记的映射」承担 ⇒ ⇒ ⚠️ 但 **P2 收尾时 feature 的 `status` 变更会牵动 AUTO 块** ⇒ ⇒ 那一处**必须**同步 ⇒ ⇒ 同步手段（`rddf roadmap --update-agent-md` 的 CLI dispatch 在本仓**缺失**）本身是**独立待办** ⇒ ⇒ 列入 P2 的收尾清单 |
 | **G2** | 本文件的**步状态**（⬜/✅）**无机械判据** | 与「护栏 = 机械可判」的仓内主流做法不一致 | 本文件是**规划**工件（不是验收判据）⇒ ⇒ 真正的判据在各自 change 的 `tasks.md` + 护栏 ⇒ ⇒ 本文件的 ✅ MUST 与那些判据同源（不新增判据面）⇒ ⇒ **不新建护栏**（避免又多一处需自证的活件） |
+
+> ⚠️ **2026-11-09 修复（G1 行曾残缺）**：该行在 `e03dbb9` 引入时只剩**处置列的尾段**
+> （表格首三格丢失 ⇒ 渲染出无 `|` 起始的悬空行）。缺口 / 影响两列按本文件 §推进机制
+> 第 5 条（`:97-99`）与 `scripts/verify_roadmap_fragments.sh` 的前言**重建**；
+> **处置列逐字保留**（未改一字）。同步修：§推进机制 第 5 条的 `见 P12` 改为指向本表 G1
+> （P12 不存在 —— 步号只有 P1–P11 + P2b）。
