@@ -2,7 +2,7 @@
 id: feat-hierarchical-rtl-output
 kind: feature
 status: active
-phase_refs: [phase-5]
+phase_refs: [phase-5, phase-6]
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）
 ---
 
@@ -416,6 +416,17 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
 > ⇒ ⇒ ⇒ **MUST NOT** 用「仓内零处断言具体名字」这种未复算的结论豁免。
 > ⚠️ **T2b 与主线无依赖** ⇒ ⇒ 它的 anchor（节点名 policy）**不得**被主线当作前置引用。
 
+### phase-6
+- ✅ **P1** 父侧落点语义的机械证据（`node_names_[` 的 **62 行 / 64 次无需改动**）
+      ⇒ 证据 = `scripts/verify_node_names_single_source.sh`（R1 grep 清单 + 分母钉死 ·
+      R2 `node_names_` 单写入点 · R3 命名真源同源 · R4 **源码级**负向注入 ⇒
+      `verify_hierarchical_rtl.sh` 的 **R9 必红** ⇒ 还原后复绿 · `--self-test` **5/5**）
+      ⇒ 记录 = `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md` §A–§H
+
+> ⚠️ 本 feature 在 phase-6 的其余步（**P5** / **P7** / **P10**）及其顺序 / 门槛
+> ⇒ **唯一真相 = `.rddf/roadmap/phases/phase-6.md`**（本文件**不复制** ⇒ 避免两份并存
+> ⇒ 下一轮只改一边 = 新漂移源）。
+
 ---
 
 ## 用户视角审查新增的两个产品缺口（⚠️ **已裁决独立立项 · 不阻断主线**）
@@ -649,6 +660,14 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
       各自 catch ⇒ 三条 `CHFATAL_EXCEPTION` 会被**静默吞掉**）
 - [ ] **静态析构期**的失败 MUST 以**返回码 / 错误类型**呈现（MUST NOT 依赖抛异常 ⇒ 会
       `std::terminate`）⇒ ⇒ `toVerilogHierarchical` 的 `std::expected` 返回形态 MUST 有判据
+
+**父侧落点语义的机械证据**（phase-6 **P1** · ADR-066 决策 ①）
+
+- [x] **A8 面 ①**：`src/codegen_verilog.cpp` 的 `node_names_[`（**62 行 / 64 次**）
+      **无需改动** ⇒ ⇒ 机械证据 = `scripts/verify_node_names_single_source.sh`
+      （R1 grep 清单 + 分母钉死 · R2 单写入点 · R3 命名真源同源 · R4 **源码级**负向注入
+      ⇒ `verify_hierarchical_rtl.sh` 的 **R9 必红** ⇒ 还原后复绿 · `--self-test` **5/5**）
+      ⇒ ⇒ ✅ **2026-11-09 达成**（记录 = `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md` §A–§H）
 
 ### 等价性与确定性（T3-⑤）
 

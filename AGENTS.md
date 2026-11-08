@@ -5,7 +5,7 @@
 | `feat-cache-rewrite` | completed | phase-4, phase-5 | cache 子系统从 C-style 数组重写为 ch_mem（ADR-039）+ Sync/Async 双变体（ADR-041）+ stub 物理退役（ADR-037） |
 | `feat-dual-backend-coverage` | completed | phase-4, phase-5 | 单元测试统一跑 interpreter + verilator 双后端（5 阶段推进） |
 | `feat-hdl-logical-deprecation` | active | phase-4, phase-5 | ADR-036 逻辑算子 deprecation 标记 → 全量迁移 → 移除（removal gate） |
-| `feat-hierarchical-rtl-output` | active | phase-5 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致） |
+| `feat-hierarchical-rtl-output` | active | phase-5, phase-6 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致） |
 | `feat-platform-matrix` | completed | phase-3, phase-5 | CI 平台矩阵 = 仅 Ubuntu（macOS/Windows 明确不做 · 2026-11-03 裁决） |
 | `feat-riscv-mini-convergence` | completed | phase-5 | 消除 riscv-mini 技术债 + 把 include/cpu 与 examples/riscv-mini 收敛成单一 RV32I 实现 |
 | `feat-riscv-mini-rtl-debt` | completed | phase-5 | riscv-mini 实测挖出的两个 RTL 缺陷收口（cache wrapper 分支从不发射 · CLINT mtime 不自增）—— 两项均已收口 |

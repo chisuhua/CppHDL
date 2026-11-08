@@ -331,6 +331,27 @@ jobs:
       shell: bash
       run: scripts/verify_arch_ledger_residuals.sh --self-test
 
+    # ---- 「`node_names_[` 的 62 行 / 64 次无需改动」的机械证据（phase-6 P1）----
+    # WHY: ADR-066 决策 ① 让「父侧落点网名 = 驱动端点的 ctx 全局名」⇒ 父侧表达式的
+    #      RHS 名**本来就是**那个名字 ⇒ 发射器在父 module 声明同名 `logic` 网 ⇒
+    #      RHS 自动可解析 ⇒ **codegen 侧零改动**。但「零改动」是**断言**，不是
+    #      **证据** ⇒ 本护栏把它拆成可复跑的判据：R1 grep 清单 + 分母钉死 ·
+    #      R2 `node_names_` 的单写入点 · R3 命名真源同源（发射器 ↔ codegen 共用
+    #      `ch::build_verilog_name_table(ctx->get_eval_list())`）。
+    # WHY 只有只读模式入 CI: R1–R3 是纯 grep（不需要 verilator / 构建产物）⇒ CI
+    #      安全；R4（**源码级**负向注入 ⇒ 会改源码并重建）**故意不进 CI** ⇒ 只在
+    #      本地跑：`bash scripts/verify_node_names_single_source.sh --inject`。
+    # ⚠️ 「分母漂移即红」是**故意的**：62 行 / 64 次是 A8 面 ① 的分母 ⇒ 变了就必须
+    #      重新审视「无需改动」的论证（⇒ 不是「顺手更新基线」）。
+    - name: Verify node-names single source (R1–R3)
+      shell: bash
+      run: scripts/verify_node_names_single_source.sh
+
+    - name: Verify node-names single source guard self-test
+      # 逐条投毒（**只动副本**，绝不碰仓内源码）⇒ 每条判据 MUST 有判别力。
+      shell: bash
+      run: scripts/verify_node_names_single_source.sh --self-test
+
 
     - name: Verify rst_n wiring
       # An unwired `ch_in<ch_bool> rst_n` reads back as 0 = PERMANENTLY IN RESET:

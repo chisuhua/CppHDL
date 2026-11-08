@@ -33,7 +33,7 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 
 | 步 | 任务 | 归属 | 前置 | 出口判据（**机械可判**） | 状态 |
 |---|---|---|---|---|---|
-| **P1** | 补 **A8 面 ①** 的机械证据：「`node_names_[` 的 **62 行 / 64 次**无需改动」⇒ ⇒ **grep 清单 + 一次负向注入**（把某处名称换成**未在父作用域声明**的名字 ⇒ lint 必红） | builder | — | 证据脚本**可复跑**；负向注入使 **R9 lint 必红**、还原后复绿 | ⬜ |
+| **P1** | 补 **A8 面 ①** 的机械证据：「`node_names_[` 的 **62 行 / 64 次**无需改动」⇒ ⇒ **grep 清单 + 一次负向注入**（把某处名称换成**未在父作用域声明**的名字 ⇒ lint 必红） | builder | — | 证据脚本**可复跑**；负向注入使 **R9 lint 必红**、还原后复绿 | ✅ **2026-11-09** ⇒ 证据脚本 = `scripts/verify_node_names_single_source.sh`（R1 清单 62 行/64 次 · R2 单写入点 · R3 命名真源同源 · R4 **源码级**注入 ⇒ R9 必红 ⇒ 还原复绿 · `--self-test` **5/5**）· 记录 = `.rddf/reviews/hierarchical-parent-side-landing-implementation-2026-11.md` §A–§H · CI = `build-and-test` guard 段（只读 + `--self-test`；`--inject` 不上 CI） |
 | **P2** | ★ **roadmap 事实核对**（★ 范围比预期更广，见下） | planner | — | ① feature 与 phase 的状态**逐条**与 `AGENTS.md`/capability/归档件一致；② `verify_roadmap_fragments.sh` 绿；③ **phase-5 的 `status` 可据实转 `done`** | ⬜ |
 | **P2b** | ⚠️ **Windows-2022 CI**（phase-5 于 2026-10-26 转交）⇒ ⇒ **2026-11-03 用户裁决：CI 平台范围 = 仅 Ubuntu** ⇒ ⇒ **不做** ⇒ ⇒ 只**登记理由 + 关闭该完成条件**（不动 CI） | planner | — | phase-5 完成条件里该项标为「不做（附裁决日期）」 | ⬜ |
 | **P3** | **mem 端口实参跨层**（台账行 20 的下游）：起草 improvement（5 段 · Why / What Changes / Acceptance / Capabilities / Impact）⇒ ⇒ 过 `pre_create_brainstorm_check.sh` HARD-GATE | planner | — | improvement 文件存在且过 HARD-GATE（exit 0） | ⬜ |

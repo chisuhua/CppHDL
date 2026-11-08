@@ -101,3 +101,204 @@ TEST_CASE("corpus hierarchy regression (rejection boundary): ImmConsistencyDut",
 | `verify_openspec_delta.sh`（两个 change） | **4 条全绿** ✅（R1 无 change 名 · R2 无占位路径 · R3 MODIFIED 标题逐字一致 · R4 tasks bash 块可达） |
 | 产品代码 | `src/` `include/` = **0** 改动 ✅ |
 | spec delta 结构 | MODIFIED ×1（**逐字**匹配主 spec 标题）+ **2 个新增 Scenario**（决策 ① / 决策 ②）✅ |
+
+---
+
+# 附录：phase-6 **P1** —— 「`node_names_[` 的 62 行 / 64 次无需改动」的机械证据
+
+- **执行**：builder · 2026-11-09 · **T4.4 的闭口**（`tasks.md` T4 唯一未勾项）
+- **权威**：ADR-066 决策 ①（Accepted）· `design.md` §6.2「修复不需要改 62 个取数点」
+- **护栏**：`scripts/verify_node_names_single_source.sh`（**新增** · R1–R4 + `--self-test`）
+  · 只读模式 + `--self-test` 已进 CI（`build-and-test` 的 guard 段）
+  · `--inject`（源码级注入）**故意不进 CI**
+
+## A. 待证的断言（原文）
+
+> `src/codegen_verilog.cpp` 的 `node_names_[`（**62 行 / 64 次**）**无需改动**。
+> 依据（`design.md` §6.2）：网名 = **驱动端点的 ctx 全局名** ⇒ 父侧表达式的 RHS
+> **本来就是**那个名字 ⇒ 只要在父 module 声明同名 `logic` 网，RHS 就自动可解析。
+
+⚠️ **「零改动」不能靠 `git diff` 证明** —— 没改 ≠ 不需要改。必须把断言拆成
+**结构事实**（R1/R2/R3）+ **承重性事实**（R4）。
+
+## B. R1 —— grep 清单 + 分母钉死
+
+```bash
+bash scripts/verify_node_names_single_source.sh      # R1
+grep -c 'node_names_\[' src/codegen_verilog.cpp                 # = 62   （行）
+grep -o 'node_names_\[' src/codegen_verilog.cpp | wc -l         # = 64   （出现次）
+```
+
+⚠️ **计数单位 MUST 同时钉两个**：62 行里有 **2 行各出现 2 次**
+（`:963` `print_bit_select` · `:994` `print_bits_extract`）⇒ 只钉一个数必然口径不一。
+**分母漂移即红**（不是「顺手更新基线」）：62/64 变了 ⇒ 「无需改动」的论证必须重做。
+
+逐函数分布（**62 行 / 64 次** · 合计对得上）：
+
+| 函数 | 行 | 次 | | 函数 | 行 | 次 |
+|---|---:|---:|---|---|---:|---:|
+| `emit_signal_decl` | 1 | 1 | | `print_rotate_r` | 5 | 5 |
+| `print_header` | 1 | 1 | | `print_concat` | 3 | 3 |
+| `print_logic` | 5 | 5 | | `print_proxy` | 3 | 3 |
+| `print_input` | 1 | 1 | | `print_mux` | 4 | 4 |
+| `print_output` | 1 | 1 | | `print_bitsupdate` | 4 | 4 |
+| `print_reg` | 4 | 4 | | `print_mem_decl` | 1 | 1 |
+| `print_unary_op` | 9 | 9 | | `print_mem_init` | 1 | 1 |
+| `print_binary_op` | 3 | 3 | | `print_mem_read_port` | 4 | 4 |
+| `print_bit_select` | 2 | **3** | | `print_mem_write_port` | 4 | 4 |
+| `print_bits_extract` | 1 | **2** | | **合计** | **62** | **64** |
+
+完整清单（可复跑：`grep -n 'node_names_\[' src/codegen_verilog.cpp`）：
+
+```
+276  342  575  628  631  684  685  701  711  768  774  781  793
+877  882  884  885  890  892  895  897  912  931  932  946
+963  968  994  1012 1017 1019 1020 1024 1043 1048 1050 1051 1055
+1074 1075 1084 1105 1133 1134 1154 1155 1156 1174
+1201 1203 1205 1207 1221 1235 1271 1272 1273 1296 1365 1366 1367 1370
+```
+
+## C. R2 —— `node_names_` 的**单写入点**
+
+```bash
+grep -nE 'node_names_[[:space:]]*=[^=]' src/codegen_verilog.cpp
+# 53:    node_names_ = view_.names;          ← 恰 1 处
+grep -nE 'node_names_\.(insert|emplace|erase|clear|reserve|swap)\b' src/codegen_verilog.cpp
+# （零命中）
+```
+
+⇒ ⇒ **64 次读全部取自同一次赋值的那张表**，且赋值之后**没有任何容器级 mutator**
+⇒ ⇒ 结构上**不存在**「某个取址点用了另一套命名」的可能。
+⇒ ⇒ 这就是「逐点变异」被降级为**零变异**（`.rddf/improvements/...implementation.md:22`）的
+真正依据 —— **命名真源唯一**，逐点变异只能得到同一条变异。
+
+## D. R3 —— 命名真源同源（发射器 ↔ codegen）
+
+```bash
+grep -n 'build_verilog_name_table(' src/codegen_verilog.cpp src/hierarchy_verilog.cpp
+#  src/codegen_verilog.cpp:68   view.names = ch::build_verilog_name_table(ctx->get_eval_list());
+#  src/hierarchy_verilog.cpp:132 const auto names = build_verilog_name_table(root.context()->get_eval_list());
+```
+
+两者**同一函数 + 同一实参形态**（`<ctx>->get_eval_list()`，见 `include/codegen_naming.h:71`
+的「唯一真源」）⇒ ⇒ **落点网名 ≡ 父侧 RHS 名**（同一张表对同一节点的同一次查询）
+⇒ ⇒ RHS 自动可解析，**不需要**任何一个取址点做「解析到父侧落点网」的本地 fix-up。
+
+## E. R4 —— 负向注入（**源码级**）⇒ R9 必红 ⇒ 还原后复绿
+
+**注入点 = 62 处之一**：`src/codegen_verilog.cpp:931`（`print_binary_op` 的 `lhs_name`）
+
+```diff
+         std::string lhs_name = node_names_[lhs_node];
++                            ... + "__p1_injected";
+```
+
+**为什么选它**：4 个父侧落点 fixture 的父 module 里都有一条
+`assign <父侧运算> = <落点网> <op> <lit>` ⇒ 全部由 `print_binary_op` 发射
+⇒ 一次注入同时命中 **族 ① + 路径 B 的全部 4 个产物**。
+
+**过程（`bash scripts/verify_node_names_single_source.sh --inject`）**：
+
+| 步 | 动作 | 结果 |
+|---|---|---|
+| 1 | **基线**：跑既有护栏 `scripts/verify_hierarchical_rtl.sh`（含 R9） | ✅ 全绿 |
+| 2 | 注入 `+ "__p1_injected"` | — |
+| 3 | **确认仍能编译**（`cmake --build build --target hier_rtl_products`） | ✅ 编译成功（⚠️ 编译失败 ⇒ 跑的是旧二进制 ⇒ 假红） |
+| 4 | 重跑既有护栏 | ❌ **R9 必红** |
+| 5 | 注入标记 MUST 出现在产物 + 父 module MUST **未**声明它 | ✅ 两条都成立 |
+| 6 | 还原（`cp` 备份）+ **重建** | ✅ `cmp` 字节级一致 |
+| 7 | 重跑既有护栏 | ✅ **复绿** |
+
+**第 4 步的实测输出**（**摘录** · 4 个 fixture 各 2 条 = 子 module 一条 + 父 module 一条；
+路径已缩写，父 module 那条即本判据）：
+
+```
+%Error: ps_expr_op.v:40:31:    Can't find definition of variable: 'top_leaf_unnamed_input__p1_injected'   ← 子 module
+%Error: ps_expr_op.v:68:24:    Can't find definition of variable: 'top_leaf_bits__p1_injected'           ← **父 module**
+%Error: ps_expr_out.v:67:24:   Can't find definition of variable: 'top_leaf_unnamed_output__p1_injected' ← **父 module**
+%Error: ps_expr_proxy.v:68:24: Can't find definition of variable: 'top_leaf_payload__p1_injected'         ← **父 module**
+%Error: ps_expr_reg.v:68:24:   Can't find definition of variable: 'top_leaf__reg__p1_injected'            ← **父 module**
+```
+
+父 module 声明的是**不带后缀**的落点网（如 `logic [7:0] top_leaf_unnamed_output;`）
+⇒ 带后缀的那个**只在 RHS 出现** ⇒ ⇒ 正是「**把某处名称换成未在父作用域声明的名字**」。
+
+⇒ ⇒ **结论**：`node_names_[...]` 的取值与发射器声明的落点网名**必须一致**，
+且该一致性**承重**（不一致 ⇒ 产物非法）⇒ ⇒ 62 处**保持现状**即为正确实现，
+**无需改动**（改动反而会破坏一致性）。
+
+## F. 护栏自身的判别力（`--self-test` · 5/5）
+
+`bash scripts/verify_node_names_single_source.sh --self-test`（**只动副本**，绝不碰仓内源码）：
+
+| # | 形态 | 期望 |
+|---|---|---|
+| ① | 未改动的副本 | **绿**（对照：证明下面的红不是「本来就红」） |
+| ② | 多一处 `node_names_[`（63 行） | R1 **红** |
+| ③ | 第二个赋值点 | R2 **红** |
+| ④ | 赋值后的 `node_names_.clear()` | R2 **红**（容器级 mutator 维度） |
+| ⑤ | 发射器改用私有命名表 | R3 **红** |
+
+实测：**5/5 全部生效** ✅
+
+## G. 为什么「一次注入」足以覆盖 64 处（归纳论证 · 如实登记）
+
+R4 只注入 **1 处**，**没有**逐点变异 64 次。覆盖 64 处的是**结构**，不是 64 条变异：
+
+1. R2 ⇒ **所有** 64 次读都返回 `table[node]`（同一张表、无 mutator）；
+2. R3 ⇒ `table` ≡ 发射器的命名表 ⇒ 返回的名字**就是**落点网名；
+3. R4 ⇒ 两者一旦分歧，产物**必然**非法（lint 响亮失败）。
+
+⇒ ⇒ 任一取址点若改成「自己另算一个名字」⇒ 落入第 3 条 ⇒ 红。
+⇒ ⇒ **逐点变异在这里是无效变异**（每次都会得到同一条结论），
+故按 A8 的口径登记为「**零变异 + 结构证据**」，而非「64 条变异」。
+
+⚠️ **诚实边界**：上述归纳依赖「**同一个 `ModuleEmitter` 实例内** `node_names_` 不被改写」。
+若将来出现「按 module 切换命名表」的形态，R2 的「单写入点」会**先**变红
+⇒ ⇒ 该断言届时必须重审。
+
+## H. 落地清单
+
+| 工件 | 路径 |
+|---|---|
+| 证据脚本 | `scripts/verify_node_names_single_source.sh`（R1–R4 + `--self-test`） |
+| CI 接线 | `.github/workflows/ci.yml` 的 `build-and-test` guard 段（只读模式 + `--self-test`；`--inject` 不上 CI） |
+| 本记录 | 本文件（§A–§H） |
+| phase-6 回填 | `.rddf/roadmap/phases/phase-6.md` 的 P1 行 |
+
+## I. 验收（builder 内建 verifier 环节 · 2026-11-09 · 轮次 1/3）
+
+**判据来源**（按优先级）：① 用户指令「读 phase-6，按 P1 推进」⇒ ② `phase-6.md` P1 的
+**出口判据**（「证据脚本**可复跑**；负向注入使 **R9 lint 必红**、还原后复绿」）⇒
+③ 本 change 自身声明的形态（A8 面 ① = grep 清单 + 负向注入）。
+
+| # | 判据 | 证据（工具调用） | 结果 |
+|---|---|---|---|
+| 1 | 证据脚本**可复跑** | `bash scripts/verify_node_names_single_source.sh` ⇒ `PASS（R1–R3）` · `--inject` ⇒ `PASS（R1–R4）`（**多次重跑结果一致**） | ✅ PASS |
+| 2 | grep 清单 = **62 行 / 64 次**，且**逐个**与源码一致 | `grep -c` / `grep -o \| wc -l` + 清单逐行比对（62 个行号与源码**完全相同**） | ✅ PASS |
+| 3 | 负向注入使 **R9 必红** | `--inject`：注入 `src/codegen_verilog.cpp:931` ⇒ 重建 ⇒ `verify_hierarchical_rtl.sh` 输出 `❌ R9 lint 失败`（4/4 fixture） | ✅ PASS |
+| 4 | **还原后复绿** | `--inject` 末段：`cmp` 字节级一致 + 重建 + 既有护栏全绿 | ✅ PASS |
+| 5 | 「父作用域不可解析」**确为**转红原因 | 父 module 内**无** `__p1_injected` 的 `logic` 声明（`awk` 提取父 module 判定）；且注入标记确实出现在产物里 | ✅ PASS |
+| 6 | 护栏自身有判别力 | `--self-test` **5/5**（对照 + 4 条投毒：分母 / 双赋值 / mutator / 私有命名表） | ✅ PASS |
+| 7 | 编译 / 静态检查 | `cmake --build build -j` ⇒ 0 error；改动面 **不含** `src/**` `include/**`（`git diff --stat -- src/ include/` = 空） | ✅ PASS |
+| 8 | 单元 / 集成测试 | `ctest -LE perf --output-on-failure` ⇒ **242/242 passed**（`verilator_e2e` 77 条含在内） | ✅ PASS |
+| 9 | 既有护栏不回归 | `verify_hierarchical_rtl` / `verify_roadmap_fragments` / `verify_arch_ledger_residuals` / `verify_test_counts` / `verify_dual_backend_parity` / `verify_openspec_delta` / `verify_hierarchical_port_naming` / `verify_hier_corpus_coverage` ⇒ **全 PASS**（4 个 `--self-test` 亦 PASS） | ✅ PASS |
+| 10 | 簿记回填 | `phase-6.md` P1 = ✅ + 证据路径 · `feat-hierarchical-rtl-output` 的 `### phase-6` + 验收标准 checkbox + `phase_refs` ⇒ `verify_roadmap_fragments.sh`（含 C1 AUTO 块守恒）**PASS** | ✅ PASS |
+
+**边界与错误路径**（逐条已测）：
+- **中断安全**：`trap cleanup EXIT / INT / TERM` ⇒ 任何退出路径都还原源码；实测三次完整
+  `--inject` 后 `git diff -- src/ include/` **恒为空**，且 `/tmp` 无残留目录。
+- **旧二进制假红**：注入后**强制重建**并检查 `cmake --build` 返回码；编译失败即判「判据
+  不成立」而不是「红」。
+- **注入未生效**：三重校验（源码里 MUST 无标记 · 注入锚点计数 == 1 · 产物里 MUST 有标记）。
+- **基线本就不绿**：注入前先跑一次既有护栏，不绿则判「判据不成立」。
+
+**失败项**：无。
+
+**遗留清扫**：本次范围内 **无** TODO / 半截实现 / 注释掉的代码 / 临时调试日志 / 被 skip 的
+测试 / 未替换的 mock / 临时 fallback。范围外的历史遗留（如 `phase-6.md` §「本窗口自身的两个
+已知缺口」的行 136 悬空行与「见 P12」指向不存在的步）**只记录、不清理** ⇒ 交用户决定。
+⚠️ 另：`src/codegen_verilog.cpp:536` 的 `-Wswitch`（`type_reset` 未处理）是**存量** warning，
+不在本次范围。
+
+**已用轮次**：**1 / 3**。
