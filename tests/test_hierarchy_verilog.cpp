@@ -1025,6 +1025,107 @@ public:
     }
 };
 
+// ── 新 site `row2_expr`：父读子端点 **且父侧带运算** ───────────────────────
+//    ⚠️ 与 `row2`（子→父·直接）的区别：`row2` 的父侧使用是**直通**；本组父侧
+//       对子端点的使用**带运算 / 表达式** ⇒ ⇒ 「父侧带运算」这一维在原矩阵里
+//       **不可表达**（⇒ 矩阵缺一轴）。
+//    ⚠️ 现状实测（2026-11-08 · probe_row2expr）：**只有子侧端点是 `ch_out` 端口
+//       的那一格被拒**（父侧端点不是父 output 端口）⇒ ⇒ reg/proxy/op 三格**合法**
+//       （子侧非端口端点 ⇒ 走「合成子侧 output 隐式端口」路径）⇒ ⇒ 这就是
+//       台账行 16「族 ①/③」的**精确边界**。
+//    ⚠️ **同宽运算**：父侧运算 MUST 与子端点**同宽**（`|` 是同宽按位或；`+` 会
+//       进位成 9-bit ⇒ ⇒ 撞上 ADR-060 W1 的宽度检查 ⇒ ⇒ 测的就不是「父侧带运算」了）。
+class MatRow2ExprOut : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_row2_expr_out");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatRow2ExprOut(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        // ★ 复刻真实站点写法（`include/cpu/pipeline/rv32i_pipeline.h:398`
+        //   `exmem_valid <<= select(exmem_en, id_stage.io().valid_out, …)`）
+        io().dout <<= select(leaf.io().dout > ch_uint<8>(3_d), leaf.io().dout,
+                             ch_uint<8>(0_d));
+    }
+};
+
+// `row2_expr` × ch_reg：父读子成员的 `ch_reg` + 父侧**同宽**运算
+//   ⚠️ 父侧运算 MUST 与子端点**同宽**（`|` 是同宽按位或；`+` 会进位成 9-bit ⇒ ⇒ 撞上
+//   ADR-060 W1 的宽度检查 ⇒ ⇒ 测的就不是「父侧带运算」了）。
+class MatRow2ExprReg : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_row2_expr_reg");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatRow2ExprReg(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().acc | ch_uint<8>(1_d);
+    }
+};
+
+// `row2_expr` × ch_proxy：父读子成员的 bundle 字段（proxy）+ 父侧同宽运算
+class MatRow2ExprProxy : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_row2_expr_proxy");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatRow2ExprProxy(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().strm.payload | ch_uint<8>(1_d);
+    }
+};
+
+// `row2_expr` × op：父读子成员的运算节点 + 父侧同宽运算
+class MatRow2ExprOp : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mat_row2_expr_op");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatLeaf> leaf{"leaf"};
+    MatRow2ExprOp(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= leaf.instance().sum | ch_uint<8>(1_d);
+    }
+};
+
+// ── 粒度**负向对照**：父子**都不**声明成层 ⇒ ⇒ 默认粒度（`RespectDeclarations`）
+//    ⇒ ⇒ 全 inline ⇒ ⇒ 产出**单 module** ⇒ ⇒ 跨层形态**根本不出现**。
+//    ⇒ ⇒ 这条把「`row2_expr` 的用例到底在测什么」钉死（否则默认粒度下
+//       「全 inline ⇒ 与扁平逐字节一致」会让这些用例**恒绿**）。
+class MatInlineLeaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    MatInlineLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class MatInlineCtl : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MatInlineLeaf> leaf{"leaf"};
+    MatInlineCtl(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        leaf.io().din <<= io().din;
+        io().dout <<= select(leaf.io().dout > ch_uint<8>(3_d), leaf.io().dout,
+                             ch_uint<8>(0_d));
+    }
+};
+
 // 第三轴夹具（Top → Mid → Leaf，驱动端在 Top）
 class MatMid : public ch::Component {
 public:
@@ -2073,20 +2174,33 @@ TEST_CASE("hierarchical emission: inline descendant output is a body wire "
 TEST_CASE("hierarchical emission: probe matrix is complete and every cell is decided",
           "[hierarchy][emit][matrix]") {
     // ── 探针矩阵（B4 补全 · design.md §「探针矩阵」）──────────────────────
-    //   **有上界** ⇒ 「补全」可判定：两个轴各 6 个取值 ⇒ **36 格**。
+    //   **有上界** ⇒ 「补全」可判定：两个轴各 6 个取值 + 新增 `row2_expr` ⇒ **42 格**。
     //     轴 A（site）：行1 父→子 · 行2 子→父 · 第三轴 · 向上 pass-through ·
-    //                   兄弟边 · 冒泡（无跨层边 = 悬空输入）
+    //                   兄弟边 · 冒泡（无跨层边 = 悬空输入）· **row2_expr（父侧带运算）**
     //     轴 B（端点节点类型）：ch_in · ch_out · ch_reg · ch_proxy（bundle 字段）·
     //                   op/mux（运算节点）· ch_mem（含 read/write 端口）
     //   三态：`Ok` 正确处理 · `Reject` 响亮拒绝 · `Na` 结构性无此形态（⇒ 必须写理由）
-    // ⚠️ 表是**索引**：`Ok` / `Reject` 格的 `evidence` MUST 是本文件里**真实存在**的
+    //   ⚠️ **第四态 `Broken`（2026-11-08 新增）**：发射器**放行**（`ok=true`）⇒ ⇒ 但
+    //      **产物不可编译**（父 module 引用了子 module 的**内部信号名** ⇒ ⇒ Verilator 报
+    //      `Can't find definition of variable`）⇒ ⇒ 「放行了但产物坏」**既不是** `Ok`
+    //      （不是「正确处理」）**也不是** `Reject`（发射器没拒绝）⇒ ⇒ 必须单列一态
+    //      ⇒ ⇒ 否则矩阵会把坏产物**记成 Ok** ⇒ ⇒ 静默放过。
+    //   ⚠️ 触发条件（实测 · 2026-11-08）：**父侧对子成员非端口端点（reg/proxy/op）的
+    //      运算消费** ⇒ ⇒ 父侧引用了子内部信号名 ⇒ ⇒ 同一形态**无**父侧运算时
+    //      （`row2` 行）**产物干净** ⇒ ⇒ ⇒ 「父侧带运算」是唯一触发条件
+    //      ⇒ ⇒ 既有 `row2` 行的三个 `Ok` 格（**直通**读子非端口端点）**无误**。
+    //   ⚠️ 而「父侧带运算」+ **子侧端点是端口**（`ch_out`）⇒ ⇒ **被拒**（父侧端点不是
+    //      父 output 端口）⇒ ⇒ **台账行 16 的「族 ①/③」** ⇒ ⇒ 本轴唯一「Reject」格。
+    //   ⚠️ `Broken` 格 = **现状快照**（缺陷尚未修）⇒ ⇒ 断言 MUST 是「现状锁定」形式
+    //      ⇒ ⇒ 缺陷修复后该断言**预期转红** ⇒ ⇒ 届时 MUST 改写为「产物不含子内部信号名」。
+    // ⚠️ 表是**索引**：`Ok` / `Reject` / `Broken` 格的 `evidence` MUST 是本文件里**真实存在**的
     //    tag ⇒ 删掉对应测试会在这里转红（矩阵不会静默缩水）。
-    enum class State { Ok, Reject, Na };
+    enum class State { Ok, Reject, Na, Broken };
     struct Cell {
         const char *site;
         const char *type;
         State state;
-        const char *evidence;   // Ok/Reject ⇒ tag（含引号）；Na ⇒ 理由
+        const char *evidence;   // Ok/Reject/Broken ⇒ tag（含引号）；Na ⇒ 理由
     };
     const std::vector<Cell> cells = {
         // ── 行 1（父 → 子 · 直接）──
@@ -2132,24 +2246,40 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
         {"bubble", "ch_proxy", State::Na, "bundle 字段不是端口 ⇒ 不参与冒泡（合成端口由跨层边触发）"},
         {"bubble", "op", State::Na, "运算节点是体内逻辑 ⇒ 没有端口身份"},
         {"bubble", "mem", State::Na, "跨模块 mem 更早被拒 ⇒ 到不了冒泡路径"},
+        // ── `row2_expr`（父读子端点 **且父侧带运算**）──
+        //   ⚠️ **本矩阵是活的现状快照**：它记的是「**今天**发射器怎么判」。
+        //   ⚠️ `row2_expr × ch_out` = 台账行 16 的「族 ①/③」（父侧端点不是父 output
+        //      端口 ⇒ 拒绝）⇒ ⇒ **行 16 若实施（Q1 裁 B），该格 MUST 从 Reject 改成 Ok**
+        //      ⇒ ⇒ 那时的转红是**预期的可见变更**（不是静默语义漂移）。
+        {"row2_expr", "ch_out", State::Reject, "\"[hierarchy][emit][matrix]\""},
+        {"row2_expr", "ch_reg", State::Broken, "\"[hierarchy][emit][matrix]\""},
+        {"row2_expr", "ch_proxy", State::Broken, "\"[hierarchy][emit][matrix]\""},
+        {"row2_expr", "op", State::Broken, "\"[hierarchy][emit][matrix]\""},
+        {"row2_expr", "ch_in", State::Na,
+         "ch_in 是输入方向：父层不能「读」子成员的输入端口 ⇒ 结构性无此形态"},
+        {"row2_expr", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
     };
 
     // 规模 MUST 显式（否则「补全」不可判定）
-    REQUIRE(cells.size() == 36);
-    std::size_t n_ok = 0, n_reject = 0, n_na = 0;
+    REQUIRE(cells.size() == 42);
+    std::size_t n_ok = 0, n_reject = 0, n_na = 0, n_broken = 0;
     for (const auto &c : cells) {
         switch (c.state) {
         case State::Ok: ++n_ok; break;
         case State::Reject: ++n_reject; break;
         case State::Na: ++n_na; break;
+        case State::Broken: ++n_broken; break;
         }
     }
-    INFO("ok=" << n_ok << " reject=" << n_reject << " na=" << n_na);
+    INFO("ok=" << n_ok << " reject=" << n_reject << " na=" << n_na
+              << " broken=" << n_broken);
     REQUIRE(n_ok == 16);
-    REQUIRE(n_reject == 15);
-    REQUIRE(n_na == 5);
+    REQUIRE(n_reject == 17);
+    REQUIRE(n_na == 6);
+    // ⚠️ `Broken` = 放行但产物坏（**已知缺陷**的现状快照）⇒ ⇒ 修复后此数 MUST 归零
+    REQUIRE(n_broken == 3);
 
-    // 每一格的证据/理由 MUST 成立：Ok/Reject ⇒ tag 真实存在；Na ⇒ 有理由且不是 tag
+    // 每一格的证据/理由 MUST 成立：Ok/Reject/Broken ⇒ tag 真实存在；Na ⇒ 有理由且不是 tag
     const std::string src = read_file(HIER_TEST_SOURCE);
     REQUIRE_FALSE(src.empty());
     for (const auto &c : cells) {
@@ -2304,6 +2434,72 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
         ch::ch_device<MatSibOpTop> dev;
         sibling_rejects(dev, "matrix_sib_op.v");
     }
+
+    // ── ⑪ `row2_expr`（父读子端点 **且父侧带运算**）────────────────────────
+    //   ⚠️ 这一组是「父侧带运算」这一维的**唯一落点** ⇒ ⇒ 它把「族 ①/③ 的边界」
+    //   精确刻画出来：**子侧端点是 `ch_out` 端口** ⇒ ⇒ 被拒（父侧端点不是父 output
+    //   端口 ⇒ 行 16 的缺口）；**子侧端点是非端口端点**（reg/proxy/op）⇒ ⇒ 放行
+    //   ⇒ ⇒ 但产物**坏**（见 ⑫）。
+    // ⑪-a `row2_expr × ch_out` ⇒ 拒绝（★ 族 ①/③：台账行 16 的对象）
+    {
+        ch::ch_device<MatRow2ExprOut> dev;
+        const std::string path = kOutDir() + "/matrix_row2_expr_out.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE_FALSE(file_exists(path));       // ⇒ fail-closed：不落产物
+        REQUIRE_FALSE(r.error.empty());
+        // ⚠️ 只断言**点名子 module**（**MUST NOT** 断言整串 ⇒ 行 17 的过时刻固化教训）
+        REQUIRE(r.error.find("top.leaf") != std::string::npos);
+    }
+    // ⑫ `row2_expr × {ch_reg, ch_proxy, op}` ⇒ **Broken**：放行但产物坏
+    //   ⚠️ **现状锁定**（已知缺陷 · 2026-11-08 实测）⇒ ⇒ 断言「产物**确实**引用了
+    //   子 module 的**内部信号名**」⇒ ⇒ Verilator 报 `Can't find definition of
+    //   variable` ⇒ ⇒ 缺陷修复后该断言**预期转红** ⇒ ⇒ 届时 MUST 改写为
+    //   「产物**不含**子内部信号名」。
+    auto broken_refs_child_internal = [&](auto &dev, const std::string &name,
+                                           const std::string &child_internal) {
+        const std::string path = kOutDir() + "/" + name;
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO(name << " error: " << r.error);
+        REQUIRE(r.ok);                          // ⚠️ 发射器**放行**（= 缺陷本体）
+        REQUIRE(file_exists(path));
+        const std::string all = read_file(path);
+        const std::string top = module_text(all, "top");
+        REQUIRE_FALSE(top.empty());
+        // ⚠️ 父 module 引用了**子 module 内部的信号名** ⇒ ⇒ 父作用域无此标识符
+        //    ⇒ ⇒ 产物**不可编译**（⇒ ⇒ 这就是「放行了但产物坏」）
+        REQUIRE(top.find(child_internal) != std::string::npos);
+    };
+    {
+        ch::ch_device<MatRow2ExprReg> dev;
+        broken_refs_child_internal(dev, "matrix_row2_expr_reg.v", "top_leaf__reg");
+    }
+    {
+        ch::ch_device<MatRow2ExprProxy> dev;
+        broken_refs_child_internal(dev, "matrix_row2_expr_proxy.v", "top_leaf_payload");
+    }
+    {
+        ch::ch_device<MatRow2ExprOp> dev;
+        broken_refs_child_internal(dev, "matrix_row2_expr_op.v", "top_leaf_bits");
+    }
+    // ⑬ 粒度**负向对照**：父子**都不**成层 ⇒ ⇒ 默认粒度（`RespectDeclarations`）下
+    //     全 inline ⇒ ⇒ 产出**单 module** ⇒ ⇒ 跨层形态**根本不出现**
+    //     ⇒ ⇒ 这条把「`row2_expr` 的用例到底在测什么」钉死（否则默认粒度下
+    //     「全 inline ⇒ 与扁平逐字节一致」会让这些用例**恒绿** ⇒ 零判别力）。
+    {
+        ch::ch_device<MatInlineCtl> dev;
+        const std::string path = kOutDir() + "/matrix_inline_ctl.v";
+        std::remove(path.c_str());
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        const std::string all = read_file(path);
+        REQUIRE(count_occurrences(all, "module ") == 1);   // ⇒ 单 module
+        REQUIRE(all.find("module mat_inline_leaf") == std::string::npos);
+    }
 }
 
 TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
@@ -2348,6 +2544,11 @@ TEST_CASE("hierarchical emission: three layers", "[hierarchy][emit]") {
 
     // ⭐ 零跨 module assign：父层只用**实例端口映射**（`.port(net)`）
     REQUIRE(top_mod.find(".top_mid_unnamed_input(top_unnamed_input)") != std::string::npos);
+    // ⚠️ 「**不造网**」（子 output 直接接父 output 端口）在此处是**合法形态**
+    //    （Verilog 的隐式连续赋值 ⇒ 逐拍等价实测全等）⇒ ⇒ capability
+    //    `rtl-hierarchical-output` 的「父层消费子输出 MUST 有连接网」Scenario 将按
+    //    **Q2** 收窄为「消费点**不是**父 output 端口时才 MUST 造网」
+    //    ⇒ ⇒ 本断言**钉住该形态**（⇒ 收窄后它是契约目标，不是缺陷）。
     REQUIRE(top_mod.find(".top_mid_unnamed_output(top_unnamed_output)") != std::string::npos);
     // ⚠️ 子 module 的信号名 MUST NOT 出现在父 module 的 body 里（= 未声明信号）
     REQUIRE(top_mod.find("top_mid_unnamed_input =") == std::string::npos);

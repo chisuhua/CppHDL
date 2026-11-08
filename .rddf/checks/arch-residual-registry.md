@@ -43,3 +43,7 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 12 | 已收口 | 2026-11-02 | C0-0 spike 提取器 | scripts/lib/verilog_tree_extract.py | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 13 | 已收口 | 2026-11-06 | 随 T3-005 关闭 | openspec/changes/archive/2026-11-06-hierarchical-rtl-equivalence-2026-11 | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 11 | 已收口 | 2026-11-07 | P6 + P8 双立项归档 | openspec/changes/archive/2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11,openspec/changes/archive/2026-11-07-p8-hierarchical-equivalence-public-helper-2026-11 | — | — |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 15 | 已知 | 2026-11-08 | 三档 PortPolicy 在可合成形态上语义未分化 | — | 三档差异化处置（Reject 拒可合成形态 / SynthesizeFatal 先合成后失败）且默认档 SynthesizeWarn 的 CHWARN + 产物注释义务分别落地后复核 | builder |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 16 | 未决 | 2026-11-08 | 父层运算消费子 ch_out 被拒且诊断不可行动 | — | 父侧落点语义裁定后复核 | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 17 | 未决 | 2026-11-08 | 语料拒绝原因沿用已过时的归因 | — | 行 16 的语义裁定落地后一并修订 | builder |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 19 | 未决 | 2026-11-08 | 父侧运算消费子非端口端点的产物不可编译 | — | ADR-066 决策 ② 落地后复核（产物 MUST 可编译，或该形态 MUST 响亮拒绝） | architect |

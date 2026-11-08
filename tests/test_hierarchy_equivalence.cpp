@@ -1252,3 +1252,86 @@ TEST_CASE("hierarchical equivalence - two emissions of the same design are ident
         REQUIRE(ra.signal_map[i - 1].node_id < ra.signal_map[i].node_id);
     }
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// ★ 族 ④（兄弟边）：子 A 的 `ch_out` → 子 B 的 `ch_in`（经父侧网中转）
+//   ⛔ 本用例补的是 **T8 的 T3 遗留**：族 ④ 的**产物形态**已有逐条断言
+//      （`tests/test_hierarchy_verilog.cpp` 的「sibling edges go through a
+//      parent-module wire」），但缺**逐拍等价**证据。
+//   ⚠️ 判别力边界：`ch::hier_eq` 只比**顶层可见行为** ⇒ ⇒ 必须把被消费值
+//      **引到顶层可观测**（本 DUT 的 `dout` 即直通链的末端）⇒ ⇒ 否则
+//      `observation-not-visible` 机械拒绝。
+// ═════════════════════════════════════════════════════════════════════════
+class EqSiblingLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_sib_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    EqSiblingLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class EqSiblingTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("eq_sib_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<EqSiblingLeaf> a{"a"};
+    ch::ch_module<EqSiblingLeaf> b{"b"};
+    EqSiblingTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= a.io().dout;      // ★ 族 ④：兄弟边（父侧一根网中转）
+        io().dout <<= b.io().dout;       // ★ S1 直通（引到顶层可观测）
+    }
+};
+
+TEST_CASE("hierarchical equivalence - sibling edge (row 4) is cycle-accurate",
+          "[hierarchy][equivalence][sibling]") {
+    const std::string dir = make_temp_dir("_sibling_row4");
+    REQUIRE_FALSE(dir.empty());
+
+    ch::ch_device<EqSiblingTop> dev;
+    // ⚠️ 粒度 MUST 是 `ForceLayer`（否则全 inline ⇒ 兄弟边形态**根本不出现**）
+    auto products = ch_test::hier::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    INFO("emit error: " << products.error);
+    REQUIRE(products.ok);
+    REQUIRE_FALSE(products.ports.empty());
+
+    EqSiblingTop &root = dev.instance();
+    std::vector<ch_test::hier::DrivenInput> inputs;
+    inputs.push_back({"top.din", [&root](ch::Simulator &sim, std::uint64_t v) {
+                          sim.set_input_value(root.io().din, v);
+                      }});
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back(make_obs("top.dout", root.io().dout.impl()->id(),
+                           [&root](ch::Simulator &s) -> std::uint64_t {
+                               return static_cast<std::uint64_t>(
+                                   s.get_port_value(root.io().dout));
+                           }));
+
+    // ★ 期望值 **手推**（禁抄 flat_trace）：链 = din → a → b → dout ⇒ dout == din
+    const std::vector<std::uint64_t> stim_vals = {0x11, 0x5A, 0xA5, 0xFF};
+    std::vector<std::vector<std::uint64_t>> stim;
+    std::vector<std::uint64_t> expected;
+    for (auto v : stim_vals) {
+        stim.push_back({v});
+        expected.push_back(v);           // 直通链 ⇒ 逐拍 == 输入
+    }
+
+    auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path,
+                                      products.ports, inputs, obs, stim);
+    INFO("compare error: " << res.error);
+    REQUIRE(res.ok);
+    REQUIRE(res.equal);
+    REQUIRE(res.mismatch_count == 0);
+
+    // ★ 与**手推字面量表**逐拍对照（⇒ 不是「与 flat_trace 自证」）
+    REQUIRE(res.flat_trace.size() == expected.size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        REQUIRE(res.flat_trace[i].size() == 1);
+        REQUIRE(res.flat_trace[i][0] == expected[i]);
+    }
+}
