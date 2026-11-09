@@ -59,3 +59,4 @@ grep -c '失败集\*\*的诊断广度规则' docs/adr/ADR-060-hierarchical-port-
 | 「成功路径每条被合成的边一条 `CHWARN`」的**实现** | **P7（builder）** | ⏳ 待做（契约已写死） |
 | 「端口表内、该条目正上方单独成行」的**发射点**（`port_notes` 同类） | **P7（builder）** | ⏳ 待做（实现先例已钉：`src/codegen_verilog.cpp` 的 `port_notes` 发射段） |
 | 三档**可合成**样本（矩阵内 · N ≥ 2 · 含端口+网 · 无悬空 `ch_in`） | **P7（builder）** | ⏳ 待做（现样本 `TwoOpTop` 是**矩阵外** ⇒ 三档恒失败 ⇒ 判不了分化） |
+| openspec change **立项**（AC 映射回填 ADR-060 v1.18 的 `backlog:` 指针） | **planner** | ⏳ 待办（`backlog: phase-6 P7`） |

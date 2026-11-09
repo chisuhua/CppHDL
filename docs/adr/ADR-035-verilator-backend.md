@@ -546,4 +546,5 @@ VlThreadPool 是 Verilator 5.x 的全局线程池单例。正确关机顺序：`
 
 ### 审稿记录
 
-`.rddf/reviews/ADR-035-verilator-backend-v2.2.md`（oracle 1 + critic 1）
+`.rddf/reviews/ADR-035-verilator-backend-v2.2.md`（oracle 1 + critic **3 轮** · 第 2 / 3 轮为**复审** · 最终 **APPROVE** / 0 BLOCKER）
+⇒ ⇒ **关联 change = `backlog: phase-6 P8`**（openspec change **未立项** ⇒ ⇒ **AC 映射暂缺** · 立项后回填）

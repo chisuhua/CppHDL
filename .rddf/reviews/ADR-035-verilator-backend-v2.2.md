@@ -46,10 +46,20 @@
 | **N-B1** | 判据③ 的**分母正则字面必红**：`grep -cE '^  [A-Z_0-9]+,' include/jit/jit_ir.h` 只数**带逗号**的项 = **38**，而末项 `NOP` **无尾逗号** ⇒ ⇒ 期望 `39` **永不成立** | ✅ **已修** ⇒ 正则改 `'^  [A-Z_0-9]+,?$'` ⇒ ⇒ **实测 38 → 39** ✔；并在 ADR 内注明「旧正则数到 38 ⇒ 判据会恒红」 |
 | **N-B2** | ②(a) 要求 `AGENTS.md` **零命中**，而 N1 的**建议逐字文本**必含 `set_ab_verification` ⇒ ⇒ 两处指令**不可同时满足**（「替换 ≠ 纯删」的既定决策与新判据冲突） | ✅ **已修** ⇒ ②(a) 收窄为 **`include/ src/` == 0**（`AGENTS.md` **移出**零命中面 + 明写理由）；`AGENTS.md` 并入 **(b) 文档面**（排除本 ADR 审计轨迹 ⇒ 其余命中 MUST 同段含「**已移除**」或「**已删除**」） |
 
-⇒ ⇒ ⚠️ **评审预算**：本 ADR 的 critic 评审已用 **2/2**（第 1 轮 REJECT + 第 2 轮复审）
-⇒ ⇒ 上述 2 个新 BLOCKER 的**闭合确认**需 **第 3 轮**（复审）⇒ ⇒ **按预算规则需用户明确批准**
-⇒ ⇒ ⇒ **本轮停手**：2 个 BLOCKER 已按 critic 给出的**逐字修法**落地 + 自证实测（38 → 39 · 范围口径改写）；
-⇒ ⇒ ⇒ 未获批准前**不得**声称「0 BLOCKER」。
+⇒ ⇒ ⚠️ **评审预算**：critic 已用 **2/2** ⇒ ⇒ 第 3 轮**经用户明确批准**（用户口令「批准 ADR-035 的第 3 轮复审」）。
+
+### 2.2 critic 第 3 轮（**复审** · 只验 2 个新 BLOCKER 闭合）
+
+⇒ ⇒ ✅ **APPROVE**（`mergeable: yes` · `scope_exceeded: false`）· **N-B1 `CLOSED`** · **N-B2 `CLOSED`** · **无新 BLOCKER**
+⇒ ⇒ 复核依据（critic 独立复跑，与本记录逐字一致）：
+- **N-B1**：新正则 `grep -cE '^  [A-Z_0-9]+,?$' include/jit/jit_ir.h` = **39** · 旧正则 = **38** ·
+  分子 `grep -oE "JitOp::[A-Z_0-9]+" tests/jit/test_jit_golden.cpp | sort -u | wc -l` = **5**
+  ⇒ ⇒ 判据字面**可执行**，「判据会恒红」的警示注释**保留在位**；
+- **N-B2**：② 已拆为 (a) 代码面（`include/ src/` == 0 · **`AGENTS.md` 不在此列** + 理由）与
+  (b) 文档面（`AGENTS.md` + `docs/` · 排除本 ADR 审计轨迹 · 其余命中 MUST 同段含「已移除 / 已删除」）
+  ⇒ ⇒ 交叉核对：v2.2 建议的 AGENTS.md 替换文本**本身含「已删除」** ⇒ 满足 (b) 过滤器
+  ⇒ ⇒ 两条判据与「替换 ≠ 纯删」的既定决策**可同时满足** ⇒ ⇒ 矛盾**消除**。
+⇒ ⇒ ⇒ ★ **本 architect 步至此 0 BLOCKER 闭合**（critic 总轮次 = 3 · 其中 2 轮为复审）。
 
 ## 3. 判据自检（**当前实测**）
 
@@ -68,4 +78,5 @@ grep -c '__has_include' docs/adr/ADR-035-verilator-backend.md                   
 | P14 移除登记（登记表 +1 行 · tsv +2 探针 · 锚点 15→16 / 24→26 · CHANGELOG 一行） | **P8（builder）** | ⏳ 待做 |
 | 根 `AGENTS.md` KNOWN LIMITATIONS 那条：**替换**为残余风险 + 订正「`CH_JIT_ENABLE=OFF` 时符号不存在」的**事实错误** | **P8（builder）** | ⏳ 待做（**不是**纯删） |
 | `docs/usage_guide/10-verilator-backend.md:141` + `docs/simulation/JIT_ROADMAP.md:216` + `docs/adr/ADR-005-dual-mode-simulation.md:313` 的 A/B 表述 | **P8（builder）** | ⏳ 待做（MUST NOT 留「可用但占位」表述） |
-| golden 覆盖**下限 5 / 39** 的守护（新增 JitOp MUST 附 golden 或登记理由） | **P8（builder）** | ⏳ 待做（防回退） |
+| golden 覆盖**下限 5 / 39** 的守护（新增 JitOp MUST 附 golden 或登记理由） | **P8（builder）** | ⏳ 待做（防回退 · 机械核法已实测可行） |
+| openspec change **立项**（AC 映射回填 ADR-035 v2.2 的 `backlog:` 指针） | **planner** | ⏳ 待办（`backlog: phase-6 P8`） |

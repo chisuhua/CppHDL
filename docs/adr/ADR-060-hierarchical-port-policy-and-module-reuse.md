@@ -27,6 +27,8 @@
   ⇒ ⇒ v1.7 `Reject` 行的「越界边」**就地消歧** = **可合成集**的第一条
   ⇒ ⇒ §5 加「产物注释判据（v1.18）」（含**样本四约束** + 两类**分别**计数）
   ⇒ ⇒ **下游实施** = phase-6 **P7**（builder）· 审稿记录 = `.rddf/reviews/ADR-060-port-policy-v1.18.md`
+  （oracle 1 + critic **2 轮** · 第 2 轮为**复审** · 最终 **APPROVE** / 0 BLOCKER）
+  ⇒ ⇒ **关联 change = `backlog: phase-6 P7`**（openspec change **未立项** ⇒ ⇒ **AC 映射暂缺** · 立项后回填）
 - **修订 v1.17（2026-11-09 · architect · 配套 **ADR-066 v1.2**）**：§2.1 矩阵**补一格**
   「子 → 父 · mem 端口实参跨层」⇒ ⇒ 该行**逐字**含边界句 「mem 持有 module == 使用 module、仅`实参视线`跨层」 ⇒ ⇒ 与既有
   「跨模块 `ch_mem`」行**并列存在**（MUST NOT 合并：前者 = mem **本体**与使用者同 module、
