@@ -36,3 +36,9 @@ get_lnode	re	include/core/bundle/bundle_base.h	get_lnode\s*\(\s*const\s+\w+\s*&	
 bundle_concat	removed	include	-	ADR-043
 bundle_slice_view	removed	include	-	ADR-043
 conditional_reg_assign	renamed	include/chlib	conditional_assign	ADR-051
+WriteBufferEntry	removed	include/cpu/cache/d_cache_write_buffer.h	-	ZERO-DEBT-P9
+WriteBufferConfig	removed	include/cpu/cache/d_cache_write_buffer.h	-	ZERO-DEBT-P9
+PrefetchConfig	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
+prefetch_data	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
+prefetch_addr	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
+prefetch_valid	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9

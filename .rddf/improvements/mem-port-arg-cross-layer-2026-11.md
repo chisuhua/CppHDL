@@ -65,9 +65,11 @@ evidence: unmeasured
      MUST NOT 再出现「把 mem 与使用者放同层」（当 mem 本体**已经在**同层时）；
   3. **条件化的正确支持**（★ **仅当 P4 裁定为「支持」时**才实施）：mem 端口实参走**父侧落点网**
      （网名 = 驱动端点的 ctx 全局名 ⇒ 与 ADR-066 决策 ① 的命名规则同源）⇒ ⇒ 端口**读值非 0**；
-  4. **契约同步**：`openspec/specs/rtl-hierarchical-output/spec.md` 的 Requirement
-     （MODIFIED 或 ADDED · 取决于 P4 的边界句是否足够独立）+ `docs/adr/ADR-060-*.md` §2.1
-     矩阵**补格**（**逐字**含 P4 的边界句）；
+  4. **契约同步**：**spec 侧**（归 **P5 / builder**）—— `openspec/specs/rtl-hierarchical-output/spec.md`
+     的 Requirement（MODIFIED 或 ADDED · 取决于 P4 的边界句是否足够独立）· 归档**禁** `--skip-specs`；
+     ⚠️ **ADR 侧**（归 **P4 / architect**）—— `docs/adr/ADR-060-*.md` §2.1 矩阵**补格**
+     （**逐字**含 P4 的边界句）⇒ ⇒ **builder MUST NOT** 改已签批 ADR 的决策内容（ADR-060 已 Accepted）
+     ⇒ ⇒ 判据 = P4 的**双向 grep**（见 A8）；
   5. **测试 + 护栏**：正/负向用例 + **值判据**（读值非 0，不是只 lint）+ 产物级护栏与 `--self-test`。
 
 - **Out Scope**（**MUST NOT** 静默即兴）：
@@ -121,16 +123,31 @@ evidence: unmeasured
       **0 BLOCKER**），其中**逐字**写死边界句：「**mem 持有 module == 使用 module**、
       仅**实参视线**跨层」⇒ ⇒ 实施 MUST 逐字遵守 ⇒ ⇒ MUST NOT 顺带放宽 ADR-066 决策 ⑥。
 - [ ] **A4（支持态的值判据）** **若** P4 裁定为「支持」：mem 端口 MUST 走父侧落点网 ⇒ ⇒
-      **端口读值 MUST 非 0**（**不是**只 lint 绿 —— 事实 ④ 的同型陷阱）⇒ ⇒ 反向：真跨模块访问
-      MUST **仍被拒**（A1 的负向用例同时守住）。
-- [ ] **A5（契约同步）** capability spec（`rtl-hierarchical-output`）MUST 有对应 Requirement
-      （MODIFIED 或 ADDED）· `ADR-060 §2.1` 矩阵 MUST **补格**且**逐字**含 A3 的边界句
-      ⇒ ⇒ 判据 = **grep**（两条独立可 grep 的证据）。
+      **端口值 MUST == 手推期望值**（读 `addr` 与写 `wdata`/`en` **两侧**）—— ⚠️ 「非 0」只是**下界**
+      ⇒ ⇒ 错值只要非 0 即过 ⇒ ⇒ MUST 断言**确定值**（**不是**只 lint 绿 —— 事实 ④ 的同型陷阱）
+      ⇒ ⇒ 反向：真跨模块访问 MUST **仍被拒**（A1 的负向用例同时守住）。
+- [ ] **A5（契约同步 · spec 侧 · P5 归属）** capability spec（`rtl-hierarchical-output`）MUST 有对应
+      Requirement（MODIFIED 或 ADDED）⇒ ⇒ 判据 = **grep**（独立可 grep 的证据）· 归档**禁** `--skip-specs`
+      （除非本 change 显式声明无 spec 变更）。
 - [ ] **A6（判别力自证）** A1/A2/A4 各 MUST 有**至少一条变异**（改坏即转红）⇒ ⇒ 且每条变异
       MUST **先确认仍能编译**（编译失败 ⇒ 跑的是**旧二进制** ⇒ 假绿）⇒ ⇒ 无效变异 MUST 如实登记。
 - [ ] **A7（零回归 + 锚点同步）** `ctest -LE perf` 全绿 · `scripts/verify_test_counts.sh` 绿
       （若新增 ctest 条目 ⇒ MUST 同步 `CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` 等锚点）·
       `scripts/verify_hierarchical_rtl.sh`（含 `--self-test`）绿。
+- [ ] **A8（ADR 矩阵补格 · P4 归属）** `ADR-060 §2.1` 矩阵的**补格**（**逐字**含 A3 的边界句）
+      ⇒ ⇒ **归属 P4（architect）** ⇒ ⇒ 本 improvement 后续的 **builder 实施 MUST NOT** 改 ADR-060
+      ⇒ ⇒ 判据 = A3 的**双向 grep**（**markdown 不敏感 + 限定 §2.7 区间**）：
+      正 `awk '/^### 2.7/,/^---/' ADR-066 | grep -c '实参视线'` ≥ 1；
+      负 `awk '/^### 2.7/,/^---/' ADR-066 | grep -c '维持.*响亮拒绝'` == 0
+      ⇒ ⇒ ⚠️ **裸 `grep 'MUST 维持响亮拒绝'` 恒为 0**（旧句带 `**` 强调符）⇒ ⇒ 会**恒真**（判据失效）。
+- [ ] **A9（边界清单 · MUST 覆盖）** 实施 MUST 覆盖以下边界（缺一 ⇒ ⇒ 该形态仍属「未测」）：
+      ① **孙组件**（跨两层）MUST **仍被拒**（拆分 MUST NOT 顺带放宽 ADR-066 决策 ⑥）；
+      ② mem **本体**与使用者同 module、但 `addr` 取自**父层自身**节点（非跨层）⇒ MUST **不误报**；
+      ③ 读端口跨层 + 写端口**不**跨层的混合形态；
+      ④ 多个 `ch_mem` 实例共存；
+      ⑤ `aread`（0-cycle）与 `sread`（1-cycle）**两类**端口都要覆盖
+      （⚠️ 二者在 TB 驱动下**不可判别** ⇒ ⇒ 判据 MUST 落在**值**上，不是「tick 之间观测」）；
+      ⑥ **lint 绿 ≠ 值对** ⇒ ⇒ 值判据不可省（A4）。
 
 ## Capabilities
 

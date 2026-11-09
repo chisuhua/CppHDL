@@ -190,7 +190,7 @@ The project is `schema: spec-driven` (see `openspec/config.yaml`). `openspec/spe
 - **Archive must merge specs**: `openspec archive <name>` 默认会合并 `openspec/changes/<name>/specs/<capability>/spec.md` 的 `## ADDED Requirements` 到 `openspec/specs/<capability>/spec.md`。**禁止**使用 `--skip-specs` 标志，除非该 change 显式声明 "no spec changes"（参见 `fix-ns-pollution` 模式）。
 - **Spec 变更必须走 change 流程**：直接修改 `openspec/specs/<capability>/spec.md` 是禁止的；先创建 change 提案，archive 时由 CLI 自动合并。
 - **Spec 内容规范**：每条 requirement 描述**必须**含 `SHALL` 或 `MUST` 关键字（RFC 2119）；`## Purpose` 与 `## Requirements` 必须是 heading 而非引用块。
-- **CI 校验**：`openspec validate --specs --strict` 必须在 archive 前通过。当前 `openspec/specs/` 包含 `chlib-aggregator/`（2 requirements，来自 `2026-06-17-fix-include-aggregation`）。
+- **CI 校验（★ 2026-11-09 订正）**：`openspec validate --specs --strict` **当前仓级为红**（CLI **1.14.x** 新增的两条 strict 规则 ⇒ ⇒ **与本仓改动无关** ⇒ ⇒ 成因与快照见 COMMANDS 段的「openspec CLI 版本漂移」条）⇒ ⇒ **archive 前的实际门 = `scripts/verify_openspec_delta.sh`**（绿即可）⇒ ⇒ `validate --specs` **仅作参考，不作为门** ⇒ ⇒ 证据：2026-11-09 的 P15 归档（`2026-11-09-chlib-dtor-composability-2026-11`）在仓级红的情况下**归档成功**。当前 `openspec/specs/` 已含 **44** 个 capability（含 `chlib-aggregator/` · 2 requirements · 来自 `2026-06-17-fix-include-aggregation`）。
 - **See**: `docs/developer_guide/openspec-specs-guide.md`（完整格式规范与迁移历史）
 
 ## JIT COMPILER RULES (CRITICAL)
@@ -287,7 +287,13 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   （直通式 ⇒ 名字 over-promise ⇒ `ready` 无背压语义）；`ICachePrefetch` 的**预取缓冲**
   是死数据（真预取未实现）；内层 cache 的 `miss`(1 拍 `sread`) 与 `axi_addr`(当拍地址)
   存在 **1 拍错位**（属 cache 本体）。⇒ 判别力见
-  `examples/riscv-mini/tests/test_cache_smoke.cpp`（**8 个用例 / 58 断言**，双后端）。
+  `examples/riscv-mini/tests/test_cache_smoke.cpp`（**12 个用例 / 78 断言**，双后端）。
+  ⚠️ **2026-11-09（phase-6 **P9**）**：① ② 两项的**死数据 / 死配置面已删除**
+  （`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲
+  ⇒ 零消费者 ⇒ Zero-Debt；删除走 **P14 登记**）⇒ ⇒ **真 FIFO 写缓冲 / 真预取 = 独立立项**；
+  ③ 新增**契约**「调用方 MUST 在 `miss` 期间保持 `addr` 不变」（否则 AXI 请求跟**新地址**
+  发出 ⇒ 取回的是**新块**数据）⇒ ⇒ 载体 = capability `cpu-cache-subsystem` 的
+  「`miss` 期间的地址稳定性」Requirement ⇒ ⇒ 判别力 = 新增的**错位探针**用例。
 - **CLINT 的 `mtime` 是 64 位自由运行计数器**（ADR-049，2026-10-30 落地）——
   **不是**「只能由软件写」的静态比较器 ⇒ 递增频率 = **编译期**常量 `TIMER_DIVIDER`
   （默认 1）· **写优先** · 复位值 0。⚠️ 64 位读**允许撕裂**（已知边界）。
@@ -425,12 +431,15 @@ ctest --output-on-failure
 ./build/examples/stream/stream_mux_demo
 ```
 
-> ⚠️ **openspec CLI 版本钉在 1.4.1**（`pnpm add -g @fission-ai/openspec@1.4.1`）。
-> 仓库的 `openspec/specs/**` 是按 **1.4.1** 的校验规则写就的；CLI **1.14.x** 新增了两条
-> strict 规则（「Requirement 正文 > 500 字符」「Purpose 仍是占位符」）⇒ 现有 **15/17** 个主
-> spec 会变红（**与本仓库改动无关**，纯净 HEAD 同样红）⇒ 看到 `openspec validate` 报这
-> 两类 warning 时，**先确认 CLI 版本**，不要误判为自己改坏了 spec。
+> ⚠️ **openspec CLI 版本漂移（实测 2026-11-09：CLI = `1.14.3`）** —— 本仓 `openspec/specs/**` 是按
+> **1.4.1** 的校验规则写就的；CLI **1.14.x** 新增了两条 strict 规则（「Requirement 正文 > 500 字符」
+> 「Purpose 仍是占位符」）⇒ ⇒ **快照（2026-11-09 实测 · 不承诺长期有效）**：
+> `openspec validate --specs --strict` **exit 1** · `Totals: 21 passed, 23 failed (44 items)`
+> ⇒ ⇒ **红项与本仓改动无关**（纯净 HEAD 同样红）⇒ ⇒ 本仓**只登记、不消除**（phase-6 **P10** 的处置
+> ⇒ ⇒ 环境级「钉回 1.4.1」不可复现且不落仓 ⇒ ⇒ **未采用**）。
+> ⇒ ⇒ 看到 `openspec validate` 报这两类 warning 时，**先确认 CLI 版本**，不要误判为自己改坏了 spec。
 > ⚠️ CI **不跑** `openspec validate`（`.github/workflows/ci.yml` 无此步骤）⇒ 该漂移不阻断合并。
+> ⚠️ **archive 前的实际门** = `scripts/verify_openspec_delta.sh`（见 OPENSPEC WORKFLOW 段）。
 
 ## NOTES
 <!-- CI anchor: the next line is the single-source-of-truth CTest total.

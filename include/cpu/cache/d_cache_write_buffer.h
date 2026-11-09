@@ -22,8 +22,10 @@
  *   （**不**做块对齐、**不**缓冲）。
  *
  * ⚠️ **名字 over-promise（如实登记；backlog 见该 change 的 design.md §7）**：
- *   本组件**不缓冲**、**不合并**、**不仲裁**（`WriteBufferEntry buffer[4]`
- *   目前**无消费者**）⇒ 真 FIFO 写缓冲 = **独立立项**；
+ *   本组件**不缓冲**、**不合并**、**不仲裁** ⇒ ⚠️ **2026-11-09（phase-6 **P9** ·
+ *   Zero-Debt）**：原 `WriteBufferEntry buffer[4]` 死数组（**零消费者**）**已删除**
+ *   （删除登记见 `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」章）
+ *   ⇒ ⇒ **本组件现在不含任何缓冲状态** ⇒ 真 FIFO 写缓冲 = **独立立项**；
  *   届时 `ready` 才有「buffer 有空位」的**背压**语义。
  * ⚠️ **本组件没有内层 cache、也没有读通路** —— 它是一个**纯 AXI 写直通 shim**
  *   （`__io` 里**没有** `rdata` / `axi_rdata`）⇒ 读请求**不经**它。
@@ -41,29 +43,6 @@
 namespace chlib {
 
 using namespace ch::core;
-
-/**
- * @brief Write Buffer 配置
- *
- * ⚠️ 2026-10-28：**只有尺寸常量** —— 缓冲功能本身**尚未实现**（直通式）
- *    ⇒ 真 FIFO = 独立立项。
- */
-struct WriteBufferConfig {
-    static constexpr unsigned BUFFER_ENTRIES = 4;        // 缓冲条目数
-    static constexpr unsigned MAX_PENDING = 2;           // 最大未响应写请求
-};
-
-/**
- * @brief Write Buffer 条目
- *
- * ⚠️ 2026-10-28：**预留类型**（直通式下**无消费者**）⇒ 真 FIFO 时才被使用。
- */
-struct WriteBufferEntry {
-    ch_uint<32> addr;       // 写地址
-    ch_uint<32> data;       // 写数据
-    ch_bool valid;          // 条目有效
-    ch_bool pending;        // 等待 AXI 响应
-};
 
 /**
  * @brief D-Cache Write Buffer 控制器
@@ -97,13 +76,11 @@ public:
 
     void describe() override {
         // =====================================================================
-        // Write Buffer 队列
+        // Write Buffer 队列：**已删除**（2026-11-09 · phase-6 P9 · Zero-Debt）
         // =====================================================================
-        // ⚠️ 2026-10-28：**直通式** ⇒ 本组件**不缓冲** ⇒ 下面的条目数组目前
-        //    **无消费者**（死数据）⇒ 真 FIFO 写缓冲 = 独立立项
-        //    （见该 change 的 design.md §7 的 backlog）。
-        WriteBufferEntry buffer[WriteBufferConfig::BUFFER_ENTRIES];
-        (void)buffer;
+        // 原先的 `WriteBufferEntry buffer[4]` 是**零消费者**的死数据 ⇒ 已删
+        // （删除登记见 `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的
+        // 公开符号」章）⇒ ⇒ 真 FIFO 写缓冲 = **独立立项**。
 
         // =====================================================================
         // 写请求 → AXI 总线（**直通**）

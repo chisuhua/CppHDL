@@ -9,6 +9,8 @@
  *
  * d_cache_write_buffer.h review (2026-10-20): buffer 用普通 struct 数组
  * (WriteBufferEntry buffer[4]), 不是 ch_reg 数组, **未发现 SIGSEGV bug**.
+ * ⚠️ 2026-11-09 (phase-6 P9 · Zero-Debt): 该 struct 数组是**零消费者的死数据**
+ *    ⇒ **已删除** ⇒ 本条仅存历史; wrapper 的 __io 签名与可观测行为**未变**.
  *
  * ⚠️ 2026-10-23（change `riscv-mini-test-triage-2026-10`，第四轮对抗审稿
  *    SHOULD_FIX #1）：原实现只有 `REQUIRE(dev.context() != nullptr)` ——
@@ -234,6 +236,56 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
     }
     // ⚠️ 反向期望：恒 `false`（`miss` 粘在 0）
     REQUIRE(back_to_miss == true);
+});
+
+// ===========================================================================
+// ③' `miss` 期间的地址稳定性（phase-6 **P9 ③** · 判别性探针）
+//
+// ⚠️ **要测的是什么**：内层 cache 的 `miss` 由 **1 拍 `sread`** 推导（对应**上一拍**
+//    采样的地址），而 `axi_addr` 取**当拍**地址（`addr & 0xFFFFFFF0`）
+//    ⇒ ⇒ 二者**错位 1 拍**（属**内层 cache 本体**）⇒ ⇒ **后果** =
+//    调用方若在 `miss` 期间改变 `addr` ⇒ AXI 请求会跟**新地址**发出
+//    ⇒ ⇒ 取回的是**新块**的数据。
+//
+// ⚠️ **判别力**（不是「看起来对」而是「可判定的错位」）：本用例**显式断言**
+//    「`axi_addr` 跟随**当拍**地址」⇒ ⇒ 若内层 cache 改成「跟随 `miss` 所指地址」
+//    ⇒ ⇒ 第 2 段**转红** ⇒ ⇒ 它是「错位确实存在」的**可执行**证据。
+//    ⇒ ⇒ 由此确立契约：**调用方 MUST 在 `miss` 期间保持 `addr` 不变**
+//    （契约载体 = capability `cpu-cache-subsystem` 的「`miss` 期间的地址稳定性」
+//    Requirement + `include/cpu/AGENTS.md` 债务段）。
+// ===========================================================================
+DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
+                        "ICachePrefetch: changing addr during miss makes axi_addr follow the current addr (1-cycle skew)",
+                        "[riscv-mini][cache][wrapper][probe][miss-addr][dual][verilator][e2e]",
+                        [&]() {
+    CACHE_SMOKE_BACKEND_INFO();
+    auto &io = dev.instance().io();
+    // ⚠️ 块地址 = `addr & 0xFFFFFFF0`（16 字节对齐）⇒ 两个地址都**已对齐**
+    //    ⇒ 期望值可直接手推（不必再取掩码）
+    const uint64_t kBlockA = 0x80000040u;
+    const uint64_t kBlockB = 0x80000180u;
+
+    sim.set_input_value(io.req, 1u);
+    sim.set_input_value(io.axi_ready, 1u);
+    sim.set_input_value(io.axi_resp_valid, 0u);
+    sim.set_input_value(io.axi_data, 0u);
+
+    // ---- ① 冷地址 A ⇒ miss（`sread` 尚未命中 ⇒ 必然 miss）----
+    sim.set_input_value(io.addr, kBlockA);
+    sim.tick();
+    REQUIRE(to_bool(sim.get_port_value(io.miss)) == true);
+    // 遵守契约（`addr` 不变）⇒ `axi_addr` = A 的块地址
+    REQUIRE(sim.get_port_value(io.axi_addr) == kBlockA);
+
+    // ---- ② `miss` 期间把 `addr` 改到 B ⇒ 错位显现 ----
+    sim.set_input_value(io.addr, kBlockB);
+    sim.tick();
+    // `miss` 仍来自上一拍的采样 ⇒ 仍为 true
+    REQUIRE(to_bool(sim.get_port_value(io.miss)) == true);
+    // ⇒ 但 AXI 请求地址已跟到**当拍**地址（B）⇒ 不再是 A ⇒ **错位可观测**
+    REQUIRE(sim.get_port_value(io.axi_addr) == kBlockB);
+    // ⇒ ⇒ 契约的后果 = 取回的是 **B 块**的数据（而调用方要的是 A 块）
+    //    ⇒ ⇒ 这就是「调用方 MUST 在 `miss` 期间保持 `addr`」的**原因**
 });
 
 // ===========================================================================

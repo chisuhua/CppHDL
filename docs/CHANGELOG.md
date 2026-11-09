@@ -217,6 +217,12 @@ specifications.
   （ADR-042 之后字段是一等节点）。迁移指引见 `.rddf/checks/public-api-surface.md`。
 - **`conditional_reg_assign`** → **改名** `conditional_assign`（ADR-051 · 2026-10-30）：
   旧名暗示「只对寄存器」，而输出端口同样需要条件化。
+- **cache wrapper 的死数据 / 死配置面**（ZERO-DEBT · phase-6 **P9** · 2026-11-09）：
+  `include/cpu/cache/d_cache_write_buffer.h` 的 `WriteBufferEntry` / `WriteBufferConfig`，
+  `include/cpu/cache/i_cache_prefetch.h` 的 `prefetch_data` / `prefetch_addr` /
+  `prefetch_valid` / `PrefetchConfig` ⇒ ⇒ **零消费者**的死数据 ⇒ ⇒ 下游若引用 MUST **自建**；
+  ⇒ ⇒ 两个 wrapper 的 `__io` 签名与**可观测行为不变** ⇒ ⇒ **真 FIFO 写缓冲 / 真预取 = 独立立项**。
+  迁移指引见 `.rddf/checks/public-api-surface.md`。
 
 ### Added
 

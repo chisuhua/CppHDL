@@ -30,11 +30,17 @@
  *   ⇒ hit / miss **不可区分**）。
  *
  * ⚠️ **未实现 / 已知边界（如实登记；backlog 见该 change 的 design.md §7）**：
- * - **预取尚未实现**：`prefetch_data` / `prefetch_addr` / `prefetch_valid`
- *   三个缓冲区目前是**死数据**（`PrefetchConfig` 只描述尺寸）⇒ 真预取 = 独立立项；
+ * - **预取尚未实现** ⇒ ⚠️ **2026-11-09（phase-6 **P9** · Zero-Debt）**：原三个预取缓冲
+ *   （`prefetch_data` / `prefetch_addr` / `prefetch_valid`）与 `PrefetchConfig`
+ *   **已删除**（**零消费者**的死数据 ⇒ Zero-Debt「No dead code」）⇒ ⇒
+ *   **本组件现在不含任何预取状态** ⇒ 真预取 = **独立立项**（届时重新引入配置面）。
  * - 内层的 `miss` 来自 `sread`（**1 拍**注册读）而 `axi_addr` 取**当拍**地址
  *   ⇒ 二者存在 **1 拍错位**（属**内层 cache 自身**的问题
- *   ⇒ 转发**不**加剧、也**不**修它）。
+ *   ⇒ 转发**不**加剧、也**不**修它）
+ *   ⇒ ⇒ **调用方 MUST 在 `miss` 期间保持 `addr` 不变**（契约见 capability
+ *   `cpu-cache-subsystem` 的「`miss` 期间的地址稳定性」Requirement）
+ *   ⇒ ⇒ 违反该约束 ⇒ 取回的是**新块**的数据（判别性证据见
+ *   `examples/riscv-mini/tests/test_cache_smoke.cpp` 的 miss/addr 探针用例）。
  *
  * 作者：DevMate
  * 日期：2026-04-10（2026-10-28 行为订正）
@@ -49,17 +55,6 @@
 namespace chlib {
 
 using namespace ch::core;
-
-/**
- * @brief I-Cache 预取配置
- *
- * ⚠️ 2026-10-28：**只有尺寸常量** —— 预取功能本身**尚未实现**
- *    （缓冲区目前是死数据）⇒ 真预取 = 独立立项。
- */
-struct PrefetchConfig {
-    static constexpr unsigned PREFETCH_BUFFER_SIZE = 2;  // 预取缓冲条目数
-    static constexpr unsigned MAX_PENDING_REQUESTS = 2;  // 最大未响应请求数
-};
 
 /**
  * @brief I-Cache 预取控制器
@@ -113,19 +108,14 @@ public:
         icache.io().axi_resp_valid <<= io().axi_resp_valid;
 
         // =====================================================================
-        // 预取缓冲 (ch_mem-based per ADR-039 + cache-complete-doa-note §6.1 R1)
+        // 预取缓冲：**已删除**（2026-11-09 · phase-6 P9 · Zero-Debt）
         // =====================================================================
-        // C-style ch_reg<T>[N] 数组在 runtime init 时触发 SIGSEGV (Context 还未就绪)。
-        // ch_mem<T, N> 默认值 0, sread/write 接口兼容, 不会 SIGSEGV。
-        //
-        // ⚠️ 2026-10-28：**预取功能尚未实现** ⇒ 这三个缓冲区目前是**死数据**
-        //    （既无读端口也无写端口）⇒ 真预取 = 独立立项
-        //    （见该 change 的 design.md §7 的 backlog）。
-        ch_mem<ch_uint<32>, PrefetchConfig::PREFETCH_BUFFER_SIZE> prefetch_data;
-        ch_mem<ch_uint<32>, PrefetchConfig::PREFETCH_BUFFER_SIZE> prefetch_addr;
-        ch_mem<ch_uint<1>,   PrefetchConfig::PREFETCH_BUFFER_SIZE> prefetch_valid;
-        // ch_mem 默认 0, 无需 runtime init loop
-        (void)prefetch_data; (void)prefetch_addr; (void)prefetch_valid;
+        // 原先的 `prefetch_data` / `prefetch_addr` / `prefetch_valid` 三个
+        // `ch_mem` 缓冲**既无读端口也无写端口** ⇒ 零消费者的死数据 ⇒ 已删
+        // （删除登记见 `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的
+        // 公开符号」章）⇒ ⇒ 真预取 = **独立立项**（届时重新引入缓冲与配置面）。
+        // ⚠️ 本组件**不得**再挂 C-style `ch_reg<T>[N]` 数组
+        //    （runtime init 触发 SIGSEGV ⇒ ADR-039 + cache-complete-doa-note §6.1 R1）。
 
         // =====================================================================
         // 数据输出（**无条件**驱动）

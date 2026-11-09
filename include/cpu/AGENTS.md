@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6506 lines**（2026-11-03 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变）。
+**30 headers, 6473 lines**（2026-11-09 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变；6506 → **6473** 因 phase-6 **P9**（Zero-Debt）删除 cache wrapper 的**死数据 / 死配置面**（`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲）⇒ ⇒ **头文件数不变**（30））。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6506 lines（2026-11-03 实测）
+include/cpu/                             # 30 headers, 6473 lines（2026-11-09 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -165,12 +165,21 @@ include/cpu/                             # 30 headers, 6506 lines（2026-11-03 �
     **未定义值**）⇒ 否则内层永远停在「冷 miss」⇒ hit / miss **不可区分**。
     ⚠️ 本条**仅适用于 `i_cache_prefetch.h`**（`d_cache_write_buffer.h` 没有内层 cache）。
   - ⚠️ **已知债务（如实登记）**：`DCacheWriteBuffer` **并不真缓冲**（直通式 ⇒
-    名字 over-promise ⇒ `ready` 无背压语义）；`ICachePrefetch` 的**预取缓冲**
-    是死数据（真预取未实现）；内层 cache 的 `miss`(1 拍 `sread`) 与
-    `axi_addr`(当拍地址) 存在 **1 拍错位**（属 cache 本体 ⇒ wrapper 转发
-    **不**加剧、也**不**修它）。
-    ⇒ 判别力证据：`examples/riscv-mini/tests/test_cache_smoke.cpp`
-    （**8 用例 / 58 断言**，**双后端**，含内层 **fill → hit** 路径）。
+    名字 over-promise ⇒ `ready` 无背压语义）—— ⚠️ **2026-11-09（phase-6 **P9** ·
+    Zero-Debt）**：原 `WriteBufferEntry buffer[4]` 死数组**已删除**（零消费者）
+    ⇒ ⇒ **本组件现在不含任何缓冲状态** ⇒ 真 FIFO 写缓冲 = **独立立项**；
+    `ICachePrefetch` 的**预取缓冲** —— ⚠️ **2026-11-09（phase-6 **P9** · Zero-Debt）**：
+    三个 `prefetch_*` 缓冲 + `PrefetchConfig` **已删除**（零消费者）
+    ⇒ ⇒ **本组件现在不含任何预取状态** ⇒ 真预取 = **独立立项**；
+    内层 cache 的 `miss`(1 拍 `sread`) 与 `axi_addr`(当拍地址) 存在 **1 拍错位**
+    （属 cache 本体 ⇒ wrapper 转发**不**加剧、也**不**修它）
+    ⇒ ⇒ **契约：调用方 MUST 在 `miss` 期间保持 `addr` 不变** —— 否则 AXI 请求
+    跟**新地址**发出 ⇒ ⇒ 取回的是**新块**的数据
+    ⇒ ⇒ **契约载体** = capability `cpu-cache-subsystem` 的「`miss` 期间的地址稳定性」
+    Requirement + **本段**（双载体：机器判 + 人读）
+    ⇒ ⇒ 判别力证据：`examples/riscv-mini/tests/test_cache_smoke.cpp`
+    （**双后端**：内层 **fill → hit** 路径 + **miss 期间改 `addr` ⇒ `axi_addr`
+    跟随当拍地址**的错位探针 —— 若内层改成跟随 `miss` 所指地址 ⇒ 该探针**转红**）。
 
 ## CLINT 的 `mtime` 契约（2026-10-30，ADR-049）
 

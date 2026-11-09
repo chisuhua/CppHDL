@@ -714,7 +714,8 @@ T2b（U-1 + U-2）—— **与主线无依赖** ⇒ 可全程并行
       ⇒ ⇒ ✅ **2026-11-06 达成**（归档名 `2026-11-06-hierarchical-rtl-docs-2026-11`）
       ⇒ ⇒ 判据**常驻**在归档件的 `tasks.md`（5 个判据块 + 判别力自证 ⇒ 照跑即可复算）
       ⇒ ⇒ ⚠️ 同段的「**全程**」条目**不勾**：其 `openspec validate --strict` 一条在
-      **仓级**为红（**存量** CLI 1.14.x 漂移：15 passed / 22 failed ⇒ 与本仓改动无关）
+      **仓级**为红（**存量** CLI 1.14.x 漂移：**21 passed / 23 failed（44 项 · 2026-11-09 实测快照）**
+      ⇒ 与本仓改动无关 ⇒ ⇒ 只登记不消除 · 见 phase-6 **P10**）
       ⇒ ⇒ 且「全程」属**feature 级**验收，不是本 change 的交付物
 - [ ] **全程**：capability delta 齐备（归档**禁** `--skip-specs`，除 T3-③ / T3-⑥ 显式
       `skip_specs: true`）· `openspec validate --strict` 通过 · `ctest -LE perf` /

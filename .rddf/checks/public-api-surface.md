@@ -76,6 +76,8 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | `bundle_concat` / `bundle_slice_view` | **移除** | 2026-10-22 | ADR-043 | 改用 bundle 的**字段直连**（ADR-042 把字段改成一等节点 ⇒ 拼接/切片不再需要）；两者当时均为**静默失效**（`bundle_concat` 字段不在位布局里 · `bundle_slice_view` 根本不切片） |
 | `conditional_reg_assign` | **改名** → `conditional_assign` | 2026-10-30 | ADR-051 | 旧名暗示「只对寄存器」⇒ 而**输出端口同样**需要条件化 ⇒ 改用 `conditional_assign(target).next() = v` |
 | `include/cpu/cache/*_stub.h`（pass-through stub 族） | **物理删除** | 2026-10-20 | ADR-037 | 语义不构成合法 cache 行为 ⇒ ⇒ 改用 `i_cache_{sync,async}.h` / `d_cache_{sync,async}.h` |
+| `WriteBufferEntry` / `WriteBufferConfig`（`include/cpu/cache/d_cache_write_buffer.h`） | **移除** | 2026-11-09 | ZERO-DEBT（phase-6 **P9** · 死数据：`buffer[4]` 零消费者） | 下游若引用 ⇒ ⇒ **自建**等价类型；wrapper 的 `__io` 签名与可观测行为**不变**；**真 FIFO 写缓冲 = 独立立项** |
+| `prefetch_data` / `prefetch_addr` / `prefetch_valid` / `PrefetchConfig`（`include/cpu/cache/i_cache_prefetch.h`） | **移除** | 2026-11-09 | ZERO-DEBT（phase-6 **P9** · 死数据：预取缓冲零消费者） | 下游若引用 ⇒ ⇒ **自建**；**本组件现在不含任何预取状态** ⇒ **真预取 = 独立立项**；wrapper 的 `__io` 签名与可观测行为**不变** |
 
 ### **已弃用（尚未移除）** —— 下游现在就该迁移
 
