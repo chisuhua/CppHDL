@@ -35,6 +35,9 @@
       - [x] **T3.4** 运行期：默认形态析构**仍抛可捕获异常**（ADR-050 D5 未被削弱）
       - [x] **T3.5** 运行期：**展开期不终止**（不新增「双异常 ⇒ terminate」路径）
       - [x] **T3.6** 子进程：析构兜底 ⇒ **SIGABRT**（父进程 `readlink` 解析 exe 路径 ⇒ 两种 wait status 形态都判）
+      - [x] **T3.7**（**遗留清扫时补** · metis 第 1 轮 finding #7）`tests/chlib/test_if_stmt.cpp` 的
+            「忘记 `.end()`」基线两条：负例（输出缺 `else_` ⇒ **析构兜底** `end()` ⇒ 拒绝**可捕获**）·
+            正例（各目标都有 `else_` ⇒ 兜底**不**抛 ⇒ 行为不变）⇒ 变异（删析构兜底）**两条都转红**
 - [x] **T4** `tests/CMakeLists.txt`：注册 `add_catch_test(test_chlib_composability_api ...)` ⇒ **新增 1 个 ctest target**
 
 ## 3. 静态护栏

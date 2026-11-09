@@ -171,6 +171,43 @@ public:
     }
 };
 
+/// 输出端口**缺** `else_` **且忘记 `.end()`** ⇒ 析构**兜底** `end()` ⇒ 拒绝 MUST 可捕获
+/// （ADR-067 决策 ③ 的「析构兜底是**功能**」这一条的**基线用例**）
+class CondOutNoElseNoEndDut : public ch::Component {
+public:
+    __io(ch_in<ch_bool> en; ch_out<ch_uint<8>> q;);
+
+    CondOutNoElseNoEndDut(ch::Component *parent = nullptr,
+                          const std::string &name = "cond_out_no_else_no_end_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        // ⚠️ 刻意**不**调用 `.end()` ⇒ 由析构兜底 ⇒ 仍 MUST 响亮拒绝
+        _if(io().en).then(
+            [&] { conditional_assign(io().q).next() = ch_uint<8>(7_d); });
+    }
+};
+
+/// 输出端口**有** `else_` 且**忘记** `.end()` ⇒ 析构兜底 MUST **不**抛（正向对照）
+class CondOutWithElseNoEndDut : public ch::Component {
+public:
+    __io(ch_in<ch_bool> en; ch_out<ch_uint<8>> q;);
+
+    CondOutWithElseNoEndDut(ch::Component *parent = nullptr,
+                            const std::string &name = "cond_out_with_else_no_end_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        // ⚠️ 刻意**不**调用 `.end()`
+        _if(io().en)
+            .then([&] { conditional_assign(io().q).next() = ch_uint<8>(7_d); })
+            .else_()
+            .then([&] { conditional_assign(io().q).next() = ch_uint<8>(9_d); });
+    }
+};
+
 // ===========================================================================
 // 编译期断言：被移除 / 被改名的 API MUST NOT 再存在
 // ===========================================================================
@@ -357,6 +394,41 @@ TEST_CASE("if_stmt: an output without else_ MUST be rejected at build time",
             sim.tick(1);
         }(),
         std::runtime_error);
+}
+
+// ===========================================================================
+// 析构兜底（`forgot end()`）—— ADR-051 的「析构 MUST 兼容抛出路径」的**基线用例**
+// ⚠️ metis 第 1 轮 finding #7：该 Scenario **此前零测试背书**（`.end()` 在
+//    本文件出现 21 次，**0** 次走析构路径）⇒ ⇒ 这组用例把「兜底 `end()`」从
+//    「implementation detail」变成「被钉住的行为」。
+// ===========================================================================
+
+TEST_CASE("if_stmt: forgetting end() MUST still reject catchably (dtor backstop)",
+          "[chlib][if_stmt][adr051][adr067][negative]") {
+    // ⚠️ 触发点在**析构**（`_if(...)` 返回临时对象 ⇒ 全表达式结束时析构 ⇒
+    //    兜底 `end()`）⇒ ⇒ 异常 MUST **可捕获**（⇒ 析构若为 noexcept ⇒ abort）
+    REQUIRE_THROWS_AS(
+        [] {
+            ch::ch_device<CondOutNoElseNoEndDut> dev;
+            ch::Simulator sim(dev.context());
+            sim.tick(1);
+        }(),
+        std::runtime_error);
+}
+
+TEST_CASE("if_stmt: forgetting end() is harmless when every target has a default",
+          "[chlib][if_stmt][adr051][adr067]") {
+    ch::ch_device<CondOutWithElseNoEndDut> dev;
+    ch::Simulator sim(dev.context());
+    auto *q = dev.instance().io().q.impl();
+
+    sim.set_input_value(dev.instance().io().en, 1u);
+    sim.tick(1);
+    REQUIRE(read_port(sim, q) == 7u);
+
+    sim.set_input_value(dev.instance().io().en, 0u);
+    sim.tick(1);
+    REQUIRE(read_port(sim, q) == 9u);
 }
 
 // ===========================================================================
