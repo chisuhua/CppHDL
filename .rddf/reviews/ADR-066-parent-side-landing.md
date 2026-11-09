@@ -253,3 +253,72 @@ grep -c 'mem 持有 module == 使用 module、仅`实参视线`跨层' docs/adr/
 | improvement 草案 `:66` / `:125` 的「走父侧落点网」降级为**候选形态** | **planner** | ⏳ 待办（architect 域**未**改） |
 | phase-6 `P4` 行回填 ✅ + 证据路径 | **planner** | ⏳ 待办（`.rddf/roadmap/**` 属 planner 域） |
 | **分析层 `:542` 的代码注释**（权威链的**首环**）MUST 随 P5 的判定拆分同步（分 (i)/(ii)） | **P5（builder）** | ⏳ 待办（现状写「跨 module 的 ch_mem ⇒ 响亮拒绝（ADR-060 §2.1：mem MUST 与使用者同层）」⇒ ⇒ 未区分两分句 ⇒ ⇒ 属**代码**改动 ⇒ architect **未**改） |
+
+---
+
+## 9. **修订 v1.3 轮**（第二次裁定 = `(ii)` 的产物形态 · 2026-11-09 · architect 域）
+
+> **触发**：用户口令「同时开第二次 architect 裁定（产物形态 ⇒ 才能开『正确支持』）」。
+> **上游**：ADR-066 **v1.2** 决策 ⑦ 明写「产物形态 MUST 走**独立修订**」⇒ ⇒ 本轮 = 该修订。
+> **产物**：ADR-066 **v1.3**（§2.8 决策 ⑧ · §2.9 选项 A–G · §2.10 后果 / 代价 · §5 **V21/V22/V23** ·
+> 元数据）· ADR-060 **v1.20**（§2.1 行 96 改指决策 ⑧ · **R2 表 +1 行 = 登记义务** ·
+> **`en` 槽 fail-closed** · **R1 防御性注记** · §6 · 元数据）。
+
+### 9.1 裁定内容
+
+**`(ii)` 的产物形态 = 复用决策 ① 的父侧落点网（由**登记**触发）** ⇒ ⇒ 六条规定：
+① **网合成（承重）**：mem 实参槽的跨层边 MUST **登记为父侧消费边** ⇒ 合成一根父侧 `logic` 网
+（复用 `register_parent_wire` / `parent_landing_wire` / `add_conn`）；
+② **命名恒等**：网名 = 驱动端点的 ctx 全局名，而 `node_names_` = **同一份**全局名表
+⇒ ⇒ **codegen MUST NOT 新增「查重定向表」**（恒等映射 = 死代码）；**不登记**的后果 =
+父 module **无声明** ⇒ Verilog **implicit wire（1-bit）⇒ 宽度截断 ⇒ 值错**（lint 可能仍绿）；
+③ **R2 表 +1 行** = 「mem 实参槽的跨层边 MUST 登记落点网」（**登记义务**，不是 codegen 查表）；
+④ MUST NOT 合成 mem 专用端口 / 第二套命名；
+⑤ 落点网**只**承载实参值 ⇒ **`rdata` / `data_proxy` 跨层 ⇒ 不属 (ii)** ⇒ 仍按「mem 本体跨 module」拒；
+⑥ **`en` 槽**：`nullptr` ⇒ `1'b1`（合法缺省）· 非 `nullptr` 且**无名** ⇒ **fail-closed**（MUST NOT 回退）。
+
+### 9.2 oracle 第 1 轮（10 条 · 逐条应答）
+
+| # | finding | 处置 |
+|---|---|---|
+| 1 | **重定向表的写入位置坑**：既有两处写入都是写进**子** module 的 view，而 mem 端口在**父** view 打印 ⇒ 照抄会查表落空 | ✅ 采纳（该条的**前提**后被 critic 证明不成立 —— 见 §9.3 B1）；「写入父 view」的结论**在 α 形态下不再需要**（改为**无 foreign 键**） |
+| 2 | ⚠️ **事实订正**：`node_names_ = view_.names` 是**全局名表整份拷贝** ⇒ `!node_names_.count(addr)` **不会** early-return；真实失败 = 打印 `mem[<子侧全局名>]` ⇒ 父作用域不可解析 ⇒ **lint 响**（非静默）；**真正静默的是 `en` 槽**（缺名 ⇒ 回退 `1'b1`） | ✅ **采纳** ⇒ ⑧② 的失败模式**重写** + ⑧⑥ 新增 `en` fail-closed（★ 这条直接引出 critic 的 B1） |
+| 3 | `print_mem_write_port` **存在且同型** ⇒ ② 必须点名 | ✅ 采纳（α 形态下改为「两者都**无需**查表」+ `en` 义务**对两者都适用**） |
+| 4 | R2 粒度**按函数** ⇒ mem 侧不能写「第 5 条」单数 | ✅ 采纳（后经 B1 修正为 **+1 行 = 登记义务**，不再是按函数的查表行） |
+| 5 | **R1 与 foreign 键字面冲突** ⇒ 需 carve-out | ✅ 采纳 ⇒ 最终形态 = **无 foreign 键** ⇒ carve-out 降级为**防御性注记**（将来若要写 MUST 先开显式 carve-out） |
+| 6 | §2.9 补 **E（IR 别名）/ F（只支持读侧）/ G（穿透）** | ✅ 采纳（E 被 ADR-060 的「MUST NOT 改写 IR」+ 三条承重危害禁止） |
+| 7 | ⑤ 补 `rdata` 边界句 | ✅ 采纳 |
+| 8 | V22 措辞（变异对象）+ V21「两处」 | ✅ 采纳（后经 B1 改为「变异对象 = **网合成 / 登记侧**」） |
+| 9 | 元数据登记配套修订 | ✅ 采纳（ADR-060 v1.20 + capability Requirement 走 change 流程） |
+| 10 | ① 指名复用函数 | ✅ 采纳 |
+
+### 9.3 critic 第 1 轮 ⇒ **REJECT**（1 BLOCKER）· 第 2 轮 ⇒ **APPROVE**
+
+| # | finding | 处置 |
+|---|---|---|
+| **B1** | **§2.8 自相矛盾**：⑧① 的网名规则（= ctx 全局名）与 ⑧② 的失败模式（「不查表 ⇒ 父作用域不可解析 ⇒ lint 红」）**不可能同真** —— `node_names_` 是同一份全局名表 ⇒ 查表 = **恒等映射**（死代码）⇒ **V22 的变异会恒绿** | ✅ **采纳（选项 α）** ⇒ ⑧① 改「**登记 / 网合成**」为承重；⑧② 改「**命名恒等** ⇒ codegen **不查表**」+ 不登记的后果 = **implicit wire（1-bit）⇒ 宽度截断 ⇒ 值错**；⑧③ R2 **+2 → +1 行**（登记义务）；新增 ⑧⑥ `en` fail-closed；R1 carve-out 降级为防御性注记；**V22 变异对象改指登记侧** |
+| S1 | improvement 草案的「待独立裁定」表述已被决策 ⑧ 取代 ⇒ planner MUST 更新（否则 P5 重开裁决 / 照字面执行已消失的分支） | ✅ **采纳** ⇒ ADR-066 元数据登记 **planner 待办** |
+| S2 | ⑧② 未写「查不到怎么办」（`en`） | ✅ **采纳** ⇒ ⑧⑥ 写死（`nullptr` 合法缺省 / 有名则用 / **无名 ⇒ fail-closed**） |
+| N1 / N2 | 矩阵行的 forward-facing 措辞 / R1 carve-out 加「当前无 foreign 键」 | ✅ 采纳（N2 已在 v1.20 写为**防御性注记**） |
+
+**复审结论**：✅ **APPROVE**（`mergeable: yes` · `scope_exceeded: false`）· **B1 `CLOSED`** · 无新 BLOCKER
+⇒ ⇒ 复核：① 矛盾本体已消除（新失败模式与 ⑧① 逻辑自洽：名字语法可解析为 implicit wire ⇒ 失败在**宽度**而非不可解析）；② ⑧① 的复用符号（`register_parent_wire` / `parent_landing_wire` / `add_conn`）**已 grep 核实**；③ R2 第 5 行两侧一致；④ `en` 静默缺省的**事实前提已核实**（`en_str` 初始化）；⑤ R1 降级为防御性注记；⑥ V22 变异对象已改（原恒绿变异废弃）；⑦ 配套三处互指无冲突。
+⇒ ⇒ 另 2 条 NIT 已处置：① 旧措辞「纳入重定向表」在三处加**括注**（≠ 写重定向项）；② ADR-066 的 Status 行加注「其评审轮次 = **v1.0 轮**的记录」（防误读为本轮）。
+
+### 9.4 判据自检（当前实测）
+
+```bash
+grep -c '命名恒等' docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md            # 3
+grep -c 'implicit wire' docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md        # ≥1
+grep -c '命名恒等' docs/adr/ADR-060-hierarchical-port-policy-and-module-reuse.md             # ≥1
+grep -c 'v1.19' docs/adr/ADR-060-hierarchical-port-policy-and-module-reuse.md                # 0（全升 v1.20）
+```
+
+### 9.5 遗留（**如实登记**）
+
+| 项 | 归属 | 状态 |
+|---|---|---|
+| **improvement 草案的条件化表述更新**（Status / In Scope 3 / A4 的「待独立裁定」） | **planner** | ⏳ 待办（本轮 architect **未**改 planner 域文件） |
+| **ADR-060 R2 表第 5 行的实现**（登记义务）+ **`en` 槽 fail-closed** | **P5（builder）** | ⏳ 待做 |
+| **V22 的变异**（不登记落点网 ⇒ 值判据转红）· **V21 值判据**（读 `addr` / 写 `wdata`·`en` 两侧） | **P5（builder）** | ⏳ 待做 |
+| capability `rtl-hierarchical-output` 新增 Requirement | **P5（builder · change 流程）** | ⏳ 待做 |
