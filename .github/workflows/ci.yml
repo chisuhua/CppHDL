@@ -508,6 +508,54 @@ jobs:
       shell: bash
       run: scripts/verify_chlib_dtor_composability.sh --self-test
 
+    - name: Verify public API removal visibility (issue #28)
+      # The Zero-Debt rule "zero consumers => delete immediately" has a
+      # REPO-LOCAL evidence source (a grep) => it is structurally blind to
+      # downstream consumers => a public API can disappear with every upstream
+      # test still green (real: ch_state_machine::is_built(), downstream
+      # ChipForge, 2026-11-08 => issue #28).
+      # This guard keeps the carrier honest:
+      #   R1 archived changes (mechanism date onward) carry a non-empty
+      #      `## 用户可见变更` section
+      #   R2 the symbol-level removal registry stays non-empty and its ADR
+      #      citations exist
+      #   R3 root AGENTS.md carries the dead-code verdict boundary (and the
+      #      roadmap guard still passes => the AUTO block was not disturbed)
+      #   R4 docs/CHANGELOG.md carries the carrier entry, judged by a TOKEN
+      #      LIST (a new date alone must not turn it green)
+      #   R5 machine probes: a recorded removal must really be gone from the
+      #      source (judged after stripping comments/strings)
+      #   R6 shrinkage anchors: probe count + probe id <-> registry table
+      shell: bash
+      run: scripts/verify_public_api_visibility.sh
+
+    - name: Verify public API removal visibility (self-test)
+      # M1 drops the AGENTS boundary sentence / M2 drops a CHANGELOG token /
+      # M3 reintroduces a removed symbol as REAL CODE / M4 deletes a probe row
+      # => each MUST turn the guard RED => then restore.
+      shell: bash
+      run: scripts/verify_public_api_visibility.sh --self-test
+
+    - name: Verify downstream consumer (installed artifact)
+      # Every upstream test compiles against the SOURCE TREE include set.
+      # A downstream project compiles `cmake --install` output in its own build
+      # system => different world (different include prefix, own CMake project,
+      # real link). ADR-067 broke the downstream shape while upstream stayed
+      # green; this fixture is the missing signal path.
+      # Installs into a TEMPORARY prefix, builds an INDEPENDENT CMake project
+      # and RUNS it (three holding shapes: local / unique_ptr / by-value member
+      # of a virtual-dtor base).
+      shell: bash
+      run: scripts/verify_downstream_consumer.sh
+
+    - name: Verify downstream consumer (self-test)
+      # M1 poisons the INSTALLED copy (reverts the composable destructor) =>
+      # the consumer build MUST fail (exactly the issue #28 breakage,
+      # reproduced from the installed artifact). M2 => empty fixture is a
+      # failure, never a skip (fail-closed).
+      shell: bash
+      run: scripts/verify_downstream_consumer.sh --self-test
+
     - name: Verify conditional-block assignment wiring
       # `_if` statement blocks MUST route every register / IO assignment
       # through `conditional_assign(target).next() = value`. A bare

@@ -958,6 +958,15 @@ add_catch_test(test_state_machine test_state_machine.cpp)
 # ADR-067 决策 ⑤：「chlib」析构异常规格 vs 类型可组合性的**机械判据**
 # （仓外视角 · 只 include 公共头 · 真编译 + 真链接 + 真运行）
 add_catch_test(test_chlib_composability_api test_chlib_composability_api.cpp)
+
+# 下游视角的**安装产物**消费者（issue #28 第 ① 半 · P14）：
+# 把上游装到临时 prefix ⇒ 用**独立 CMake 工程**编译 + **运行**一个下游视角 TU
+# （三种持有形态 · 含「按值成员 + 虚析构基类」）。
+# ⚠️ 它**不是** Catch2 用例（没有 catch_amalgamated 依赖）⇒ 故直接 add_test；
+#   LABELS "base" 与其余用例同段 ⇒ 计入 CTEST_TOTAL（缩面 ⇒ 锚点红）。
+add_test(NAME downstream_consumer
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/verify_downstream_consumer.sh)
+set_tests_properties(downstream_consumer PROPERTIES LABELS "base" TIMEOUT 300)
 # test_pipeline_regs.cpp deleted in cleanup-orphan-code (commit B)
 # The PipelineReg Component coverage lives in:
 #   - tests/chlib/test_forwarding.cpp  (chlib::ForwardingMux + IfIdRegs struct field access)

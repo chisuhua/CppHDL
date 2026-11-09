@@ -317,6 +317,7 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
 ## ZERO-DEBT POLICY
 Every Phase must exit with **zero technical debt** before marking complete:
 - **No dead code**: Delete stubs, skeleton files, and unused includes immediately. Never "leave for later".
+  ⚠️ **判决边界（2026-11-09 · issue #28）**：本条的「消费者」证据源**只有仓内 `grep`** ⇒ ⇒ 对**跨仓下游**结构性失明 ⇒ ⇒ **零「仓内」消费者的「公开」符号不算 dead code** ⇒ ⇒ 删它 MUST 走「**移除 / 改名登记**」（`.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」节 + `docs/CHANGELOG.md` 的一行）⇒ ⇒ 护栏 `scripts/verify_public_api_visibility.sh`。
 - **No compile warnings**: Treat warnings as errors. `-Wall -Wextra -Wpedantic` clean on all changed files.
 - **No failing tests**: Red → fix immediately. Green is the only acceptable state.
 - **No undocumented changes**: API additions/modifications require updated docs + inline comments.
@@ -436,7 +437,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 254
+- CTEST_TOTAL: 255
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -480,8 +481,8 @@ ctest --output-on-failure
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | CTest 条目总数 | 254 | `cd build && ctest -N \| tail -1` |
-  | 其中 non-perf | 243 | `cd build && ctest -N -LE perf \| tail -1` |
+  | CTest 条目总数 | 255 | `cd build && ctest -N \| tail -1` |
+  | 其中 non-perf | 244 | `cd build && ctest -N -LE perf \| tail -1` |
   | `verilator_e2e` 标签数 | 77 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
   | 双后端 parity 源文件数 | 66 | `bash scripts/verify_dual_backend_parity.sh` |
   | 双后端 parity macro 调用数 | 289 | 同上 |

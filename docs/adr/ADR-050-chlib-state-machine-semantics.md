@@ -5,6 +5,12 @@
 - Author: build-agent（architect role）
 - Parent: ADR-016（`ch_reg<T>` 继承设计 —— `next` 单源的由来）、ADR-045（`chlib` stream 语义契约 —— 「自保护优于纪律」的先例）、ADR-043（bundle 设施物理移除 —— 死 API 直接删、无别名期的先例）、ADR-033（命名空间污染）
 - 关联 OpenSpec change：**待立项**（实施本 ADR）
+- ⚠️ **反向指针（2026-11-09 · issue #28）**：本 ADR 的 **D2 移除集**与 **D3 改名**
+  ⇒ ⇒ 已登记进 `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」节
+  ⇒ ⇒ **跨仓下游的迁移指引**在那一节（⇒ ⇒ 「零仓内消费者 ⇒ 直接删」这条判决规则的
+  **适用范围**已由根 `AGENTS.md` 的 ZERO-DEBT 段**收窄**：零「仓内」消费者的「公开」符号
+  **不算 dead code** ⇒ ⇒ 删公开符号 MUST 走「移除 / 改名登记」⇒ ⇒ **本 ADR 的决策内容未变**
+  （⇒ ⇒ 只是把「它已经被登记了」这件事写回指针）。
 - 关联 capability：`chlib-state-machine-semantics`（**MODIFIED ×1**：第 ⑥ 条）
 - 前置审查：本 ADR 的分析经 **oracle 独立复核（两轮）+ metis 缺口分析**（5 处判断被修正、2 个 BLOCKER 被采纳；见 §7）
 - 编号：⚠️ **ADR-049 已被 CLINT `mtime` 决策预留**（`.rddf/improvements/clint-mtime-autoincrement-2026-10.md:74,84`）⇒ 本 ADR 取 **050**（编号连续性缺口是**有意**的，不是缺卷）

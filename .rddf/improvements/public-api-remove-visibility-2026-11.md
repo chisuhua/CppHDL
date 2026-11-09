@@ -18,7 +18,9 @@ evidence: adr:docs/adr/ADR-050-chlib-state-machine-semantics.md
 
 - **Date drafted**: 2026-11-09
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **草案**（**不需架构裁定** ⇒ 可直接立项为 change；⚠️ 唯一待用户拍板项 = §What Changes 的 **CHANGELOG 载体命运**）
+- **Status**: ✅ **approved（用户拍板 R1 + R2）+ 已实施并归档**（2026-11-09 · change =
+  `openspec/changes/archive/2026-11-09-public-api-remove-visibility/` ⇒ 无 spec 变更 ⇒ `--skip-specs`
+  ⇒ ⇒ 实施 = phase-6 **P14**（✅ 已闭口 · 证据路径见 phase-6 该行））
 - **上游 issue**：`https://github.com/chisuhua/CppHDL/issues/28`（2026-11-08 · 下游 ChipForge 反馈 · 原文见附录）
 - **与姊妹项的关系**：本项承接 issue #28 的**第 ① 半**（「`is_built()` 移除对跨仓下游不可见」）；
   **第 ② 半**（「析构 `noexcept(false)` ⇒ 类型不可组合」）已拆为

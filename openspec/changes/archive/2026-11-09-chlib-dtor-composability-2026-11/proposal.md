@@ -76,3 +76,20 @@ ADR-050 **D5** 让 `~ch_state_machine()` 成为 `noexcept(false)`（为了让「
 - [ ] **使用契约已固化**：2 份头注释 + 2 份 capability spec 含精确措辞 ⇒ `grep` 可判；
 - [ ] **capability delta 合入主 spec**：`verify_openspec_delta.sh` + `openspec validate --specs --strict` 绿；
 - [ ] **计数锚点同步**：`CTEST_TOTAL` **254** ⇒ `verify_test_counts.sh` 绿。
+
+## 用户可见变更
+
+（本段按 `.rddf/checks/public-api-surface.md` 的载体机制填写 —— 每个归档 change
+MUST 一行以上，**下游可发现性**是唯一目的；护栏 = `scripts/verify_public_api_visibility.sh` R1。）
+
+- **新增（不破坏）**：`chlib::dtor_detection`（`automatic` / `explicit_only`）与
+  `chlib::ch_state_machine` 的**第三模板实参** `Detection`（默认 `automatic`
+  ⇒ 既有代码**零改动**；类型身份不变）。下游若需按值持有 FSM，改用
+  `chlib::ch_state_machine<S, N, chlib::dtor_detection::explicit_only>`。
+- **新增（不破坏）**：`chlib::ch_state_machine::check_unresolved()`
+  （只读检查 ⇒ 抛**可捕获**异常；检出**非幂等** ⇒ `catch` 后请继续 `resolve_*`）。
+- **行为变化（仅 `explicit_only`）**：该形态的析构为 `noexcept` ⇒ 未 resolve 的贡献
+  在析构期**终止**（fail-closed，`std::terminate`）而不是抛异常。
+- **契约（不破坏）**：默认形态的析构**仍**为 `noexcept(false)`（ADR-050 D5 逐字保留）
+  ⇒ ⇒ 「析构非 `noexcept` 的类型」MUST NOT 作为「有虚析构的类」的按值成员或基类
+  （ADR-067 决策 ④ —— 该契约同时适用于 `chlib::conditional_block`）。

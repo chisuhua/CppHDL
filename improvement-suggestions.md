@@ -11,4 +11,4 @@
 |---|---|---|---|---|
 | [mem-port-arg-cross-layer-2026-11](.rddf/improvements/mem-port-arg-cross-layer-2026-11.md) | P1 | ADR-066 §2.7 决策 ⑦（归下游独立立项）· 台账 §7 行 20 | 2026-11-09 | 📝 draft（**待 P4 的 architect 范围裁定**落地后才可转 approved ⇒ 才可立项为 change） |
 | [chlib-dtor-noexcept-composability-2026-11](.rddf/improvements/chlib-dtor-noexcept-composability-2026-11.md) | P1 | 上游 issue #28 **第 ② 半**（析构 `noexcept(false)` ⇒ 类型不可组合）· **ADR-067（Accepted 2026-11-09 · 用户拍板）** | 2026-11-09 | ✅ **approved**（架构阻塞已解除 ⇒ **可立项为 change** ⇒ 实施 = phase-6 **P15**） |
-| [public-api-remove-visibility-2026-11](.rddf/improvements/public-api-remove-visibility-2026-11.md) | P1 | 上游 issue #28 **第 ① 半**（公开 API 移除的跨仓可见性 · CHANGELOG 载体 · 判决规则边界）· phase-6 P12 | 2026-11-09 | 📝 draft（**不需架构裁定** ⇒ 可直接立项为 change；★ 唯一待用户拍板项 = CHANGELOG 载体命运 R1/R2/R3） |
+| [public-api-remove-visibility-2026-11](.rddf/improvements/public-api-remove-visibility-2026-11.md) | P1 | 上游 issue #28 **第 ① 半**（公开 API 移除的跨仓可见性 · CHANGELOG 载体 · 判决规则边界）· phase-6 P12 | 2026-11-09 | ✅ **approved（用户拍板 R1 + R2）+ 已实施并归档**（change = `openspec/changes/archive/2026-11-09-public-api-remove-visibility/` · 实施 = phase-6 **P14**） |

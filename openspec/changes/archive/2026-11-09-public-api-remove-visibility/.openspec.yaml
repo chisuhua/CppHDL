@@ -1,0 +1,9 @@
+schema: spec-driven
+created: 2026-11-09
+# 本 change **无 spec 变更**（improvement §Capabilities 的显式声明）：它是**流程 / 台账**
+# 类改动（CHANGELOG 载体 · 判决规则边界 · 符号级活账 · 下游编译面）⇒
+# **不新增**、**不 MODIFIED** 任何 capability 的 Requirement。
+# ⇒ 归档时用 `openspec archive 2026-11-09-public-api-remove-visibility --yes --skip-specs`
+#   （`AGENTS.md` 的规则：只有**显式声明 no spec changes** 的 change 才可用该标志
+#   —— 本文件即该显式声明）。
+skip_specs: true

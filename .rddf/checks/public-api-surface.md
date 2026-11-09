@@ -52,6 +52,43 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | `include/core/verilator_backend.h` | Verilator backend（T3-005 已裁决） | 2026-11-07 |
 | `include/core/verilator_port_set.h` | Verilator 端口集（T3-005 已裁决） | 2026-11-07 |
 
+## ⚠️ **已移除 / 已改名的公开符号**（**跨仓迁移指引** · 2026-11-09 起登记）
+
+> **为什么需要这一节**（issue #28 的根因）：「零消费者 ⇒ 直接删」这条判决规则的
+> **证据源只有仓内 `grep`** ⇒ ⇒ 对**跨仓下游**结构性失明 ⇒ ⇒ 下游**编译失败**
+> 才第一次知道某个公开符号没了（真实发生：下游 ChipForge，2026-11-08）。
+> ⇒ ⇒ 本节把「**哪些公开符号在什么时候没了 / 改名成什么了**」变成**可查的活账** ⇒ ⇒
+> ⇒ 与 `docs/CHANGELOG.md` 的「用户可见变更」条目**互补**（本节 = **符号级** ·
+> CHANGELOG = **变更级**）。
+
+| 符号 / 头 | 移除或改名 | 日期 | 依据 | 迁移指引 |
+|---|---|---|---|---|
+| `chlib::ch_state_machine::is_built()` | **移除** | 2026-10-30 | ADR-050 D2（`c7b0b28`） | 改断言**可观测产物**：`entry_state()` + 状态寄存器节点已发射 |
+| `chlib::ch_state_machine::on_exit` / `exit_action` | **移除** | 2026-10-30 | ADR-050 D2 | 改用 `on_active` 闭包 + `transition_when` |
+| `chlib::ch_state_machine::on_entry` / `entry_action` | **移除** | 2026-10-30 | ADR-050 D2 | 运行时 entry 语义**未实现** ⇒ ⇒ 移出状态动作（独立立项） |
+| `chlib::ch_state_machine::then()` / `next_state_on_exit()` / `has_exit_transition()` | **移除** | 2026-10-30 | ADR-050 D2 | 改用 `transition_when(cond, target)` |
+| `chlib::ch_state_machine::state_changed` | **移除** | 2026-10-30 | ADR-050 D2 | 该字段**从不赋值** ⇒ ⇒ 改用 `is_in(state)` |
+| `chlib::ch_state_machine::tick_state()` | **移除** | 2026-10-30 | ADR-050 D2 | **说谎**的 API（重复发射节点）⇒ ⇒ 改用 `is_in()` / `current_state_uint()` |
+| `chlib::ch_state_machine::current_state()` | **改名** → `entry_state()` | 2026-10-30 | ADR-050 D3 | ⚠️ 旧名返回**编译期** entry ⇒ ⇒ 运行时状态用 `current_state_uint()` / `is_in()` |
+| `CH_STATE_MACHINE` / `CH_STATE` / `CH_STATE_MACHINE_BUILD` 宏 | **移除** | 2026-10-30 | ADR-050 D2 | 改用 `chlib::ch_state_machine<State, N>` 类模板 |
+| `chlib::ch_state_machine::state_def::parent`（+ `friend`） | **移除** | 2026-10-30 | ADR-050 D2 | 只服务 `then()` ⇒ ⇒ 随 `then()` 一并移除 |
+| `get_lnode` 的「无约束通用入口」②（`include/core/bundle/bundle_base.h`） | **移除** | 2026-10-30 | ADR-053 决策 C | 改用 bundle 自带的 `impl()`（约束偏序下**恒胜** ⇒ ⇒ 爆炸半径 0） |
+| `include/cpu/cache/*_stub.h`（pass-through stub 族） | **物理删除** | 2026-10-20 | ADR-037 | 语义不构成合法 cache 行为 ⇒ ⇒ 改用 `i_cache_{sync,async}.h` / `d_cache_{sync,async}.h` |
+
+### **已弃用（尚未移除）** —— 下游现在就该迁移
+
+| 符号 | 弃用日 | 依据 | 移除窗口 | 迁移指引 |
+|---|---|---|---|---|
+| `ch_bool` / `port<ch_bool>` 上的 `&&` / `\|\|` | 2026-10-19 | ADR-036 | ⚠️ **日历锁：最早 2027-04-17** | 改用 `&` / `\|`；mixed 语义 MUST 写成显式 nonzero-test（`(lhs != 0_d) & rhs`） |
+| `ICacheComplete` / `DCacheComplete` | 2026-10-20 | ADR-039 / ADR-041 | （尚无窗口） | 改用 `ICacheSync` / `DCacheSync`（或 `_async` 变体） |
+
+> ⚠️ **本节的规则**：
+> - **移除 / 改名**任何**公开符号** ⇒ ⇒ MUST 在本节加一行（符号 · 日期 · 依据 · 迁移指引）
+>   ⇒ ⇒ 否则护栏 `scripts/verify_public_api_visibility.sh`（R2）**红**。
+> - 本节登记的符号 MUST **确实不存在**于当前源码（⇒ ⇒ R2 的「登记了仍存在的符号 ⇒ 红」）
+>   ⇒ ⇒ ⇒ 「删了又加回来」必须同步删登记行。
+> - 本节 MUST **非空**（⇒ ⇒ 防「登记表被清空 ⇒ 静默缩面」）⇒ ⇒ R2。
+
 ## 维护规则
 
 - **新增**顶层公共头 ⇒ ⇒ **MUST** 在上表加一行（否则护栏 R4② **红**）。

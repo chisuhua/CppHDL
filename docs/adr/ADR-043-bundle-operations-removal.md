@@ -4,6 +4,10 @@
 - Date: 2026-10-22
 - Author: build-agent
 - Parent: ADR-002（bundle 连接设计缺陷修复）、ADR-014（bundle 反射系统）、ADR-042（bundle 字段改为一等节点）
+- ⚠️ **反向指针（2026-11-09 · issue #28）**：本 ADR 的「零消费者 ⇒ 直接删、无别名期」先例
+  ⇒ ⇒ **适用范围已收窄**：零「**仓内**」消费者的「**公开**」符号**不算 dead code**
+  ⇒ ⇒ 删公开符号 MUST 走「移除 / 改名登记」（`.rddf/checks/public-api-surface.md`）
+  ⇒ ⇒ **本 ADR 的决策内容未变**（⇒ ⇒ 仓内私有设施的「直接删」仍然成立）。
 - OpenSpec change: `bundle-ecosystem-hardening-2026-10`（capability `bundle-master-slave-io`）
 
 ## Context

@@ -186,6 +186,57 @@ specifications.
 
 ---
 
+## 2026-11-09 — `chlib-dtor-composability-2026-11`（+ 2026-10-15 以来的一次性回填）
+
+> ⚠️ **本条是「载体机制」上线**（issue #28 的处置）：本仓的用户可见变更此前**只**
+> 记录到 **2026-10-15** ⇒ ⇒ 而此后 **121** 个 change 已归档 ⇒ ⇒ **破坏性变更对
+> 下游不可见**（真实后果：下游 ChipForge 在 2026-11-08 才发现
+> `ch_state_machine::is_built()` 已被移除 ⇒ ⇒ 编译失败 ⇒ ⇒ 上游 issue #28）。
+> ⇒ ⇒ **机制**（R1）：**每个归档 change MUST 携带一行「用户可见变更」**
+> ⇒ ⇒ 载体 = 归档件的 `## 用户可见变更` 段 + 本文件（变更级摘要）
+> ⇒ ⇒ **符号级**明细 = `.rddf/checks/public-api-surface.md` 的
+> 「已移除 / 已改名的公开符号」一节。
+
+### Removed（**破坏性** · 跨仓下游 MUST 迁移）
+
+- **`chlib::ch_state_machine` 的 15 个死 / 误导 API**（ADR-050 D2/D3 · `c7b0b28`）：
+  `is_built()` · `on_exit` / `exit_action` · `on_entry` / `entry_action` ·
+  `then()` / `next_state_on_exit()` / `has_exit_transition()` · `state_changed` ·
+  `tick_state()` · `CH_STATE_MACHINE` / `CH_STATE` / `CH_STATE_MACHINE_BUILD` 宏 ·
+  `state_def::parent`（+ `friend`）。
+  ⇒ ⇒ **改名**：`current_state()` → **`entry_state()`**（旧名返回**编译期** entry
+  ⇒ ⇒ 运行时状态用 `current_state_uint()` / `is_in()`）。
+  ⇒ ⇒ **符号级迁移指引** = `.rddf/checks/public-api-surface.md` 的移除登记表。
+- **`get_lnode` 的「无约束通用入口」②**（ADR-053 决策 C）：改用 bundle 自带的
+  `impl()`（约束偏序下**恒胜** ⇒ ⇒ 爆炸半径 0）。
+- **`include/cpu/cache/*_stub.h`**（pass-through stub 族 · ADR-037 · 2026-10-20）：
+  改用 `i_cache_{sync,async}.h` / `d_cache_{sync,async}.h`。
+
+### Added
+
+- **`chlib::ch_state_machine` 的「可组合形态」**（ADR-067 · `chlib-dtor-composability-2026-11`）：
+  新增第三模板实参 `chlib::dtor_detection`（默认 `automatic` ⇒ **既有用户零改动**）
+  ⇒ ⇒ `dtor_detection::explicit_only` 的析构为 `noexcept` ⇒ ⇒ **该类型可作
+  「有虚析构的类」的按值成员**（修掉下游的编译失败）⇒ ⇒ 检出改走
+  **显式 `check_unresolved()`（可捕获）+ 析构期终止兜底（fail-closed）**。
+- **`chlib::ch_state_machine::contrib()` / `resolve_hold()` / `resolve_or()`**
+  （ADR-050 D4）：状态守卫贡献 API（`include/chlib/state_machine.h`）。
+
+### Deprecated（**尚未移除**）
+
+- `ch_bool` / `port<ch_bool>` 上的 `&&` / `||`（ADR-036）⇒ ⇒ 改用 `&` / `|`；
+  ⚠️ **移除窗口 = 日历锁：最早 2027-04-17**。
+
+### Changed（契约层）
+
+- `chlib::conditional_block` 的析构 MUST 为 `noexcept(false)`
+  （ADR-051 · `chlib-conditional-semantics`）⇒ ⇒ **「析构非 `noexcept` 的类型」
+  MUST NOT 作为「有虚析构的类」的按值成员或基类**（ADR-067 决策 ④）。
+- `chlib::ch_state_machine` 的析构期检出 MUST 可捕获（ADR-050 D5）⇒ ⇒ **默认形态
+  逐字保留**；「可组合形态」的检出 MUST 是 **fail-closed** 的（ADR-067 决策 ②）。
+
+---
+
 ## Format
 
 Entries are reverse-chronological. Each entry may have sections:

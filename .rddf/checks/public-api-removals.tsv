@@ -1,0 +1,35 @@
+# 公开 API 移除记录的**机械探针**（由 scripts/verify_public_api_visibility.sh 的 R5 读取）
+#
+# ⚠️ 为什么单独一个文件（而不是直接解析 Markdown 表格）：
+#   表格是**人读**的（迁移指引是散文）⇒ 探针是**机器读**的（scope 决定搜索面）⇒
+#   混在一张表里 ⇒ 要么散文被机器误读，要么探针被人误删。
+# ⇒ ⇒ 本文件与 `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」章
+#   是**双向**绑定的（R6：每条探针的 id MUST 出现在那张表里；R6 另有**数量锚点**
+#   `EXPECTED_PROBES`，防「表行与探针一起删」的静默缩面）。
+#
+# 列（TAB 分隔）：
+#   id          探针名 —— MUST 逐字出现在 public-api-surface.md 的该章里
+#   kind        removed（字面不存在）| renamed（旧名不存在 + 新名存在）
+#               | re（正则不匹配）| nofile（glob 无匹配文件）
+#   scope       搜索面：目录（递归 *.h/*.hpp/*.tpp/*.inc）| 单个文件 | nofile 的 glob
+#   extra       renamed 的新名 / re 的正则 / 其余填 `-`
+#   evidence    依据 ADR（文件 MUST 存在）
+#
+# ⚠️ 判定在**剥掉注释与字符串字面量之后**进行（否则「注释里记着这个名字」会假红）。
+# ⚠️ 已知限制：`then()` 这类**泛名**不设探针（在任意头里都可能有别的含义）⇒
+#   该行只由人读 + 评审覆盖；`state_def::parent` 同理（成员名 `parent` 过于泛化）。
+is_built	removed	include/chlib	-	ADR-050
+on_exit	removed	include/chlib	-	ADR-050
+exit_action	removed	include/chlib	-	ADR-050
+on_entry	removed	include/chlib	-	ADR-050
+entry_action	removed	include/chlib	-	ADR-050
+next_state_on_exit	removed	include/chlib	-	ADR-050
+has_exit_transition	removed	include/chlib	-	ADR-050
+state_changed	removed	include/chlib	-	ADR-050
+tick_state	removed	include/chlib	-	ADR-050
+current_state	renamed	include/chlib	entry_state	ADR-050
+CH_STATE_MACHINE	removed	include/chlib	-	ADR-050
+CH_STATE	removed	include/chlib	-	ADR-050
+CH_STATE_MACHINE_BUILD	removed	include/chlib	-	ADR-050
+get_lnode	re	include/core/bundle/bundle_base.h	get_lnode\s*\(\s*const\s+\w+\s*&	ADR-053
+*_stub.h	nofile	include/cpu/cache/*_stub.h	-	ADR-037
