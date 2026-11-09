@@ -3,7 +3,7 @@
 **状态**: 🟢 采纳 + Phase 1-4.1 GA + v2.1 e2e 验证通过
 **日期**: 2026-06-07（提议）→ 2026-09-21（v2.1 e2e 验证）
 **决策人**: Sisyphus + 用户（参考 3 份专项调研 + AGENTS.md `using-superpowers` 工作流）
-**修正审计**: v2.0（2026-09-21）→ v2.1（2026-09-21 补丁）— 见末尾 §v2.0 修正审计章节
+**修正审计**: v2.0（2026-09-21）→ v2.1（2026-09-21 补丁）→ **v2.2（2026-11-09 · architect · phase-6 P8）** — 见末尾 §v2.0 修正审计章节与 **§v2.2 补丁**（R9 决策行修订 + 「删除 vs 实现」的取舍记录 + 下游判据）
 
 ---
 
@@ -91,7 +91,7 @@ CppHDL 当前的仿真后端是**解释器 + LLVM JIT**（`src/simulator.cpp` + 
 |------|------|--------|------|----------|
 | **Phase 1** | 修 codegen 5 个 Verilator 阻塞 | +300/-50 LoC | 🟢 低 | 132 ctest 全绿 + 10 个代表设计 `iverilog -g2012` + `verilator --lint-only` 通过 |
 | **Phase 2** | 引入 `IEvalBackend` 抽象 + 3 个实现 | -109 +650 LoC | 🟡 中 | 132 ctest 全绿 + 28/28 ported tests 全绿 + 行为零变化 |
-| **Phase 3** | `VerilatorBackend` 实现 (dlopen + ISignalAccess*[] + SHA-1 缓存) | +800 LoC | 🔴 高 | end-to-end `samples/counter.cpp` 跑通 + A/B 对比解释器一致 |
+| **Phase 3** | `VerilatorBackend` 实现 (dlopen + ISignalAccess*[] + SHA-1 缓存) | +800 LoC | 🔴 高 | end-to-end `samples/counter.cpp` 跑通 + A/B 对比解释器一致（⚠️ **v2.2**：当时的 A/B 载体 = `set_ab_verification` ⇒ ⇒ **裁定移除**（⏳ 实施 = phase-6 P8）⇒ ⇒ 该验收改由 **golden 测试**承担） |
 | **Phase 4** | 测试、文档、性能基准、AGENTS.md 增补 | +400 LoC | 🟢 低 | docs/usage_guide/10-verilator-backend.md + 28 个 examples 全 Verilator 跑通 |
 
 **Release 目标**: v1.5（Verilator 后端 GA）
@@ -231,8 +231,16 @@ std::vector<PortAccessor> accessors_;   // node_id → accessor, O(1) 查表
 | R6 | `disconnect()` 顺序错误 | 🟡 中 | 偶发 crash | `disconnect()` 显式重排：先 `backend_->clear()` 再清 `data_map_` |
 | R7 | 内存端口 (mem_read_port / mem_write_port) Verilator 不识别 | 🟡 中 | CppHDL `instr_mem*` 链接无意义 | Verilator 后端**不实现** mem port，依赖 Verilator 内置 VL_MEM_IF |
 | R8 | Phase 1 codegen 修复引入回归 | 🟡 中 | 132 ctest 部分失败 | 一次只改一个 issue；每个 sub-phase 都跑 ctest |
-| R9 | A/B 验证从占位 WARN 升级为实际比对引入性能开销 | 🟢 低 | 每 tick 复制 `data_map_` | A/B 默认关闭；显式 `set_ab_verification(true)` 才启用 |
+| R9 | **已裁定（2026-11-09 · v2.2 · ⏳ 待实施）**：A/B 验证从占位 WARN 升级为实际比对引入性能开销 | 🟢 低 → **不适用**（裁定后） | 每 tick 复制 `data_map_` ⇒ ⇒ **载体将于 phase-6 **P8** 移除** ⇒ ⇒ 该触发条件**随之不再存在** | **载体移除**（**裁定**，⏳ **实施 = phase-6 P8**）：`set_ab_verification` / `is_ab_verification` ⇒ ⇒ 公开 API 移除**必须**走 **P14 登记机制**（登记表 + tsv 探针 + CHANGELOG + `verify_public_api_visibility.sh`）⇒ ⇒ 替代 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · interpreter vs JIT 逐值 **byte-identical**）⇒ ⇒ 详见末尾 **§v2.2** |
 | R10 | dlopen 多个 `.so` 时 Verilated 符号冲突 | 🟡 中 | 多设计并行测试 crash | `RTLD_LOCAL` + `--output-split-cfuncs 500` 匿名函数 |
+
+⚠️ **本 ADR 内**风险行的**关闭惯例**（v2.2 澄清 · 局部约定 · critic SHOULD_FIX 修正）：
+**风险关闭方式 = 载体移除裁定**（**不是**「缓解措施已实现」）⇒ ⇒ 关闭行 MUST 以
+「**已裁定 / 已关闭** · 日期 · 指向补丁章」标注 ⇒ ⇒ ★ **MUST NOT 删行**（删行 = 丢审计轨迹
+⇒ ⇒ 下一个读者会以为该风险从未存在）⇒ ⇒ ⇒ 适用例 = **R9**（v2.2 · phase-6 P8）。
+⇒ ⇒ ⚠️ **本约定仅约束本 ADR**（仓内多张 ADR 各自有风险表 ⇒ ⇒ 单张 ADR **无**仓级约束力）
+⇒ ⇒ ⇒ 仓级化的通用约定 = **独立 work item**（落仓级治理文档）⇒ ⇒ 本轮**不**做
+⇒ ⇒ ⇒ 之所以仍写在此：让**本表**的关闭写法**可追溯**（而不是让读者以为 R9 从未存在）。
 
 ---
 
@@ -266,7 +274,7 @@ std::vector<PortAccessor> accessors_;   // node_id → accessor, O(1) 查表
 - [ ] AGENTS.md 增补"仿真后端"段落
 
 ### 7.3 Phase 3 验收
-- [ ] `samples/counter.cpp` 在 Verilator 后端跑出与解释器/JIT 一致结果（A/B 验证）
+- [ ] `samples/counter.cpp` 在 Verilator 后端跑出与解释器/JIT 一致结果（A/B 验证 · ⚠️ **v2.2**：A/B 载体 `set_ab_verification` ⇒ ⇒ **裁定移除**（⏳ 实施 = phase-6 P8）⇒ ⇒ 由 `tests/jit/test_jit_golden.cpp` 的 interpreter-vs-JIT 逐值比对承担）
 - [ ] 10 个代表 sample 在 Verilator 后端跑通
 - [ ] SHA-1 缓存命中时启动 < 100ms
 - [ ] trace 正确生成 FST 文件
@@ -449,3 +457,93 @@ assertions: 76 | 76 passed
 
 VlThreadPool 是 Verilator 5.x 的全局线程池单例。正确关机顺序：`final_fn_()` → `delete_fn_()`（Vtop 析构函数停了线程池）→ `dlclose()`（.so 卸载安全）。错误顺序（v2.0 行为）：`final_fn_()` → `dlclose()` 跳过 delete → 线程跑在已卸载的代码上 → SIGSEGV。
 
+
+---
+
+## v2.2 补丁（2026-11-09 · architect · phase-6 **P8**）
+
+### 修正摘要
+
+| # | 问题 | 修复 | 提交 |
+|---|------|------|------|
+| **R9** | §5 风险登记的 **R9 行**把「A/B 验证从占位 WARN 升级为实际比对」列为**待实现的风险**，其缓解措施写「显式 `set_ab_verification(true)` 才启用」⇒ ⇒ 该行把一个**即将被移除**的 API 呈现为**现行决策** ⇒ ⇒ 归档后 ADR-035 会继续呈现一条**不存在的 API** 的启用契约（= 契约冻结错误） | **R9 改记为「已裁定（v2.2）· ⏳ 待实施」**：载体**将于** phase-6 **P8** 移除（`set_ab_verification` / `is_ab_verification` / `ab_verification_` / 每 tick WARN）⇒ ⇒ 风险随之**不成立**（无「升级为实际比对」这件事 ⇒ 无「每 tick 复制 `data_map_`」开销）⇒ ⇒ 替代机制 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · interpreter vs JIT 逐值 **byte-identical**）⇒ ⇒ 公开 API 移除**必须**走 **P14 登记机制** | （实施 = phase-6 **P8** · builder） |
+
+### 为什么是「**删除**」而不是「**实现**」（路线取舍 · **有记录**）
+
+| 选项 | 结论 | 理由 |
+|---|---|---|
+| **A. 删除载体 + 由 golden 测试承担** | ✅ **选中** | ① **现状 stub = 零保护**：它只置位 + 每 tick 打一条 `CHWARN`（**从未比对**）⇒ ⇒ 删除**不降低安全水位**（这是最强的一条 ⇒ ⇒ 比「golden 已覆盖」更诚实）；② golden 提供**同型**校验（interpreter vs JIT 逐值 diff）于**测试期**；③ JIT **默认 ON** ⇒ ⇒ ctest 中所有 ≥`JIT_MIN_NODES` 的用例**本就在 JIT 路径上**以**手推期望值**断言 ⇒ ⇒ runtime A/B 的增量价值 = 仅覆盖「未断言内部节点的运行期场景」，不足以抵其成本；④ 每 tick 复制 `data_map_` 的成本**已在根 `AGENTS.md` KNOWN LIMITATIONS 载明**；⑤ Zero-Debt「No dead code」⇒ 一个**不比对**的开关是**死代码** ⇒ ⇒ 删除 = 契约与实现**同时**收口 |
+| **B. 实现 runtime A/B**（tick 级快照 diff + 逐指令对账） | ❌ 未选 | ① 价值见 A③（增量价值低）；② 成本高（每 tick 快照 ⇒ 内存与耗时）⇒ ⇒ 且**默认关闭**的开关**长期无人打开** ⇒ ⇒ 仓内实测 **0 个调用点**（`.cpp` 里唯一出现 = 定义本身；`ADR-005:313` 是注释里的示例）⚠️ 该证据是**仓内**证据 ⇒ ⇒ 下游可见性由 **P14 登记**承担；③ 又一个「有 API 无用户」的形态；④ ⇒ 「删 vs 实现」是**有记录的取舍**，**不是**未完成义务 ⇒ ⇒ 下个窗口**不得**把 B 当遗留重启 |
+| **C. 保留 API + 进「已弃用（尚未移除）」表**（`.rddf/checks/public-api-surface.md`） | ❌ 未选 | ① 更省事（R9 行**不用**改）⇒ ⇒ 但该表既有两条（`&&`/`\|\|`、`ICacheComplete`）都是**语义正确、仅不鼓励**的兼容面 ⇒ ⇒ 而 `set_ab_verification` 是**从未工作的 no-op** ⇒ ⇒ 按 ADR-050 D2 先例（`is_built` / `tick_state` 这类「**说谎的 API**」= **移除 + 登记**，不是弃用）；② Zero-Debt「No dead code」—— 给死代码贴弃用标签**仍是**死代码；③ phase-6 **P8** 行已裁定 A 并记录 B 的拒绝理由 ⇒ ⇒ 此刻改 C = 重开已定路由（churn > 补完 v2.2）⇒ ⇒ 故**不选**，但在此**留档**（= 取舍的完整形态） |
+
+### 范围（承重 · 下游实施 MUST 逐字遵守）
+
+- ⚠️ **本补丁记录的是「裁定」** ⇒ ⇒ 实施（**phase-6 P8** · builder）**尚未发生** ⇒ ⇒ 本节 MUST NOT 被读成「已删除」的既成事实；
+- ⚠️ **事实订正（v2.2 · oracle 复核 · 承重）**：`set_ab_verification` 那一块虽写在
+  `#if __has_include("jit/jit_compiler.h")` 之下，但 `include/jit/jit_compiler.h` 是**源树物理头**
+  ⇒ ⇒ `__has_include` **恒真** ⇒ ⇒ 该 API 在**两种构建中都存在**（`CH_JIT_ENABLE=OFF` 只让
+  `CH_JIT_ENABLED` 宏未定义 ⇒ ⇒ 只影响 `jit_enabled_` 的初值）⇒ ⇒ 删除是**无条件**的
+  ⇒ ⇒ 两种构建 MUST 各自编译通过（**不是**「OFF 时本就没有该符号」）。
+  ⚠️ ⇒ ⇒ 根 `AGENTS.md` KNOWN LIMITATIONS 那条的「with `CH_JIT_ENABLE=OFF` the symbol is absent」
+  是**事实错误** ⇒ ⇒ MUST 在实施时**一并订正**（不是纯删 ⇒ ⇒ 见下方「文档同步」条）。
+- **只删**：`Simulator::set_ab_verification(bool)` / `Simulator::is_ab_verification()` /
+  `Simulator::ab_verification_` / `Simulator::tick()` 里那段「A/B 验证仅作为启用标记」的 `CHWARN`
+  **与两个局部量**（`ab_result_a` —— 今天起就是**零使用的死声明**；`run_ab_verify` —— 仅服务那段 WARN）
+  ⇒ ⇒ Zero-Debt「No dead code」⇒ ⇒ 删 WARN 块后它们**必须**同删，否则变成新的死变量；
+- **MUST NOT** 顺带改 JIT 的其余行为（`set_jit_enabled` / `try_jit_compile` / `tick_comb` + `tick_seq`
+  的时序**逐字不变**）⇒ ⇒ 现有 `tests/jit/*` 三个 target 的行为**不受影响**；
+- **两种构建都要能编过**：该块本就受 `#if __has_include("jit/jit_compiler.h")` 保护 ⇒ ⇒
+  `CH_JIT_ENABLE=OFF` 的构建**本来就**不含该符号 ⇒ ⇒ 删除后**两种**构建均通过（**MUST** 验证）；
+- **公开 API 移除 MUST 走 P14 登记机制**：`.rddf/checks/public-api-surface.md` 的移除章 +
+  `.rddf/checks/public-api-removals.tsv` 的机器探针 + `docs/CHANGELOG.md` 一行 +
+  `scripts/verify_public_api_visibility.sh`（含 `--self-test`）**绿**；
+- **文档同步**：根 `AGENTS.md` KNOWN LIMITATIONS 的该条 + `docs/usage_guide/10-verilator-backend.md`
+  的 A/B 行 + `docs/simulation/JIT_ROADMAP.md` 的 API 清单 ⇒ ⇒ **MUST NOT** 留「可用但占位」的表述。
+  ⇒ ⇒ ⚠️ 根 `AGENTS.md` 那条 = **替换**（**不是**纯删）⇒ ⇒ 建议逐字文本（供 builder 直接采用）：
+  `- **A/B（interpreter vs JIT）运行期双跑校验已移除**（2026-11-09 · ADR-035 v2.2）：`
+  `  `set_ab_verification` / `is_ab_verification` 是**从未比对**的 no-op ⇒ ⇒ 已删除（Zero-Debt）`
+  `  ⇒ ⇒ 残余风险 = 运行期**无**双跑校验 ⇒ ⇒ 缓解 = golden 测试（`tests/jit/test_jit_golden.cpp`）`
+  `  + JIT 默认 ON ⇒ ctest 以**手推期望值**断言 ⇒ ⇒ ⚠️ 「`CH_JIT_ENABLE=OFF` 时该符号不存在」`
+  `  是**事实错误**（`__has_include` 对源树头恒真）⇒ ⇒ 一并订正。`
+
+### 残余风险（**如实登记** · 不掩盖）
+
+| 风险 | 缓解 |
+|---|---|
+| 删除后**运行期**的 interpreter-vs-JIT 双跑校验 = **无** ⇒ ⇒ 未被 golden 覆盖的 JitOp 的**误编译**只在「断言未达处」暴露 | ① golden 覆盖**下限 = 5 / 39** + 增长规则（新增 JitOp MUST 附 golden **或** 登记未覆盖理由）⇒ ⇒ ② JIT **默认 ON** ⇒ ⇒ ctest 的用例本就在 JIT 路径上以**手推期望值**断言（**不是**抄仿真输出）⇒ ⇒ ③ ⇒ ⚠️ 根 `AGENTS.md` KNOWN LIMITATIONS 的那一条 MUST **替换**为这一行残余风险（**不是**纯删 ⇒ ⇒ 否则 KNOWN LIMITATIONS 的读者会失去这条信息 ⇒ ⇒ 删掉之后「运行期没有双跑校验」这件事就**无人知道** ⇒ ⇒ = 典型的「删干净了但信息也丢了」） |
+
+### 下游判据（phase-6 **P8** · builder）
+
+- **①** 移除登记四件套（见上）⇒ ⇒ `verify_public_api_visibility.sh` **绿**
+  ⇒ ⇒ ⚠️ **锚点 MUST 同步 bump**（否则护栏恒红）：`EXPECTED_REMOVAL_ROWS` **15 → 16**
+  （登记表 +1 行）· `EXPECTED_PROBES` **24 → 26**（tsv +2 条探针）
+  ⇒ ⇒ 建议的 2 条探针（`kind=removed`）：`set_ab_verification` · `ab_verification_`
+  （后者同时覆盖内联 getter 的函数体引用 ⇒ ⇒ 2 条即闭合 3 个符号）；
+- **②** 拆成**两条可 grep**的判据（v2.2 · critic BLOCKER 修正 —— 原写法「docs/ 命中 == 0
+  且允许 1 处」与「R9 行 MUST NOT 删行」+「v2.2 补丁章 MUST 保留」**自相矛盾** ⇒ ⇒ 字面执行必红）：
+  - **(a) 代码面**：`grep -rn "set_ab_verification\|is_ab_verification\|ab_verification_" include/ src/`
+    ⇒ 命中数 == **0**（⚠️ **`AGENTS.md` 不在此列** —— 它的 KNOWN LIMITATIONS 那条 MUST 被**替换**为
+    「已移除 + 残余风险」的说明 ⇒ ⇒ 必然**含**符号名 ⇒ ⇒ 把它放进零命中面会与「替换 ≠ 纯删」**直接矛盾**）；
+  - **(b) 文档面**（`AGENTS.md` + `docs/`）：`grep -rn "set_ab_verification\|is_ab_verification\|ab_verification_" AGENTS.md docs/`
+    ⇒ **排除** `docs/adr/ADR-035-verilator-backend.md`（本 ADR 的 R9 行 + v2.2 补丁章 = **审计轨迹**
+    ⇒ ⇒ 不计入命中）⇒ ⇒ 其余每条命中 MUST 在**同一段**内含「**已移除**」或「**已删除**」字样
+    ⇒ ⇒ 判据 = 过滤掉含该字样的段之后 **剩余 == 0**；
+- **③** golden 覆盖**下限 = 5 / 39**（分母 = `include/jit/jit_ir.h` 的 JitOp 总数）⇒ ⇒ **防回退**
+  ⇒ ⇒ ⚠️ **该下限当前**无**现成护栏**（`scripts/verify_test_counts.sh` 不数 golden 覆盖 ⇒ ⇒
+  「今天就已满足」⇒ ⇒ 判据**不可执行**）⇒ ⇒ **builder MUST 新增护栏锚点**并让本判据以该锚点为准
+  ⇒ ⇒ 建议的机械核法（**builder 可直接落地**）：
+  - 覆盖分子：`grep -oE "JitOp::[A-Z_0-9]+" tests/jit/test_jit_golden.cpp | sort -u | wc -l` ≥ **5**；
+  - 分母：`grep -cE '^  [A-Z_0-9]+,?$' include/jit/jit_ir.h`（枚举项行 · **含末项**）== **39**
+    （⚠️ **正则 MUST 带 `,?`** —— 末项 `NOP` **无尾逗号** ⇒ ⇒ 用 `'^  [A-Z_0-9]+,'` 只数到 **38**
+    ⇒ ⇒ 判据会**恒红** ⇒ ⇒ 这是「判据字面必红」的同型病 ⇒ ⇒ 已实测：`38`（旧）vs `39`（新））；
+  - ⇒ ⇒ 两条 MUST 落进 `scripts/verify_test_counts.sh`（或新护栏）⇒ ⇒ 否则「防回退」是**空判据**；
+- **④** **两种构建都要能编过**（⚠️ 该 API 在**两种**构建中**都存在** ⇒ ⇒ 不是「OFF 时不存在」）：
+  - 主构建：`cmake --build build -j$(nproc)` ⇒ ⇒ 成功；
+  - OFF 构建：**降级为库目标**（`cmake -B build-nojit -DCH_JIT_ENABLE=OFF` ⇒ ⇒
+    `cmake --build build-nojit --target cpphdl` ⇒ ⇒ 成功）⇒ ⇒ ★ 理由：库目标编译**足以**暴露
+    成员 / 引用不匹配 ⇒ ⇒ 全量 255 个 ctest target 的冷构建**成本过高** ⇒ ⇒
+    全量 OFF 构建**另立 work item**（本仓 CI 当前**无** OFF matrix leg）。
+
+### 审稿记录
+
+`.rddf/reviews/ADR-035-verilator-backend-v2.2.md`（oracle 1 + critic 1）
