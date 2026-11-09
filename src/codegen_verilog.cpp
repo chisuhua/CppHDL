@@ -5,6 +5,7 @@
 #include "lnodeimpl.h"
 #include "memimpl.h"
 #include "mem_port_impl.h"
+#include "logger.h"
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -1253,6 +1254,33 @@ void ModuleEmitter::print_mem_init(std::ostream &out,
     }
 }
 
+// ── **mem 端口的 `en` 槽解析**（ADR-066 决策 ⑧ ⑥）────────────────────────
+// ⚠️ **读 / 写两侧共用**（⇒ ⇒ 一处改动 ⇒ ⇒ 两侧同时生效 ⇒ ⇒ 免漂移）。
+// ⚠️ **两种情形 MUST 分开**（⇒ ⇒ 否则「禁止回退」会把**合法缺省**也判红）：
+//   · `enable == nullptr` ⇒ ⇒ `1'b1`（合法缺省 · 语义 = 恒使能）
+//   · `enable != nullptr` 且**取不到名字** ⇒ ⇒ **fail-closed**（诊断点名）
+//     ⇒ ⇒ MUST NOT 回退 `1'b1`（⇒ 读侧恒使能 / 写侧恒写 ⇒ ⇒ **值错且 lint 绿**）
+bool ModuleEmitter::resolve_mem_enable(const ch::core::lnodeimpl *enable,
+                                        const std::string &mem_name,
+                                        std::string &out_enable) {
+    if (enable == nullptr) {
+        out_enable = "1'b1";       // ⚠️ **合法缺省**（`ch_mem::aread` 恒传 nullptr）
+        return true;
+    }
+    const auto it = node_names_.find(enable);
+    if (it == node_names_.end()) {
+        // ⚠️ **fail-closed**（ADR-066 决策 ⑧ ⑥）⇒ ⇒ 诊断点名（可行动）
+        CHERROR("hierarchical emission: mem port '%s' has an enable operand that has "
+                "no name in this module's scope. Refusing to fall back to '1'b1' "
+                "(that would silently make the port always enabled and produce a "
+                "wrong value). ADR-066 decision 8 clause 6.",
+                mem_name.c_str());
+        return false;
+    }
+    out_enable = it->second;
+    return true;
+}
+
 void ModuleEmitter::print_mem_read_port(
     std::ostream &out, ch::core::mem_read_port_impl *node) {
     try {
@@ -1291,9 +1319,10 @@ void ModuleEmitter::print_mem_read_port(
         // which is what the CPU's pc_lag / FLUSH mechanism depends on for
         // imem. DO NOT use aread for imem — that would misalign fetch with
         // pc_lag.
-        std::string en_str = "1'b1";
-        if (enable && node_names_.count(enable)) {
-            en_str = node_names_[enable];
+        // ⚠️ **fail-closed**（ADR-066 决策 ⑧ ⑥）⇒ ⇒ 缺名 ⇒ ⇒ **不**回退 `1'b1`
+        std::string en_str;
+        if (!resolve_mem_enable(enable, mem_name, en_str)) {
+            return;
         }
 
         if (node->port_type() == ch::core::mem_port_type::async_read) {
@@ -1365,9 +1394,10 @@ void ModuleEmitter::print_mem_write_port(
         std::string mem_name = node_names_[parent];
         std::string addr_name = node_names_[addr];
         std::string wdata_name = node_names_[wdata];
-        std::string en_str = "1'b1";
-        if (enable && node_names_.count(enable)) {
-            en_str = node_names_[enable];
+        // ⚠️ **fail-closed**（ADR-066 决策 ⑧ ⑥）⇒ ⇒ 缺名 ⇒ ⇒ **不**回退 `1'b1`
+        std::string en_str;
+        if (!resolve_mem_enable(enable, mem_name, en_str)) {
+            return;
         }
         // No reset branch: simulator reset() never clears memory contents
         // (preloaded ELF must survive; only ch_reg cells are reset).

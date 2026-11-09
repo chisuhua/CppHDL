@@ -274,9 +274,15 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
 
     auto module_key = [](const Component* c) { return c->name(); };
     // ── (i) **mem 本体跨 module** ⇒ 响亮拒绝（ADR-066 决策 ⑦ v1.2 · 判别程序 ①②③）
-    //    ⚠️ **为什么必须独立扫描**：mem 本体（`memimpl`）**零 `add_src`**，端口的 addr/en 也
-    //    可能是**父层**节点 ⇒ ⇒ 字面 (i) **不产生任何跨 module 边** ⇒ ⇒ 下面的边闸门对它
-    //    **不可达**（实测：分析放行 + 发射期 `mem[<子内名>]` ⇒ implicit wire ⇒ 宽度截断）。
+    //    ⚠️ **2026-11-09 实测订正（ADR-066 v1.4）**：原稿称「字面 (i) **不产生任何跨 module
+    //    边** ⇒ ⇒ 下面的边闸门对它**不可达**」= **事实错误** —— mem **端口**节点的 src
+    //    列表**含 mem 本体**（`include/ast/mem_port_impl.h:107` 读端口 / `:145` 写端口 的
+    //    `add_src(parent)`）⇒ ⇒ 该边**跨 module** ⇒ ⇒ 边闸门**可达**
+    //    ⇒ ⇒ 改前实测 = **已响亮拒绝**（抛点 `:544`）⇒ ⇒ **无**契约-实现缺口。
+    //    ⇒ ⇒ **那为什么仍要独立扫描**：该判定的价值 = ① **独立于边结构**（不依赖
+    //    「mem 本体 → 端口」这条边继续存在）② **归因精确**（点名持有 / 使用 module）
+    //    ③ **三桶可判** ⇒ ⇒ **不是**「补一条缺失的拒绝」⇒ ⇒ MUST 保留
+    //    （否则 ADR-066 判别程序 ①②③ 的**字面**要求落空）。
     //    ⇒ ⇒ 判据 = **节点级归属比对**：持有 module（`port->parent()` 的折叠后归属）
     //    ≠ 使用 module（端口节点自身的折叠后归属）。
     for (const auto& owned : ctx->get_nodes()) {
@@ -586,17 +592,46 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
             //          （决策 ① 的父侧落点网 ⇒ 决策 ⑧ 的「登记义务」天然满足）
             //    (iii) 非相邻实参（孙 / 兄弟）⇒ **仍拒**（由下面的相邻性规则）
             if (is_mem_node(u) || is_mem_node(v)) {
-                bool allow_ii = false;
-                if (auto* port = dynamic_cast<mem_port_impl*>(v)) {
-                    const bool is_arg_slot =
-                        (u == port->addr()) || (u == port->enable()) ||
-                        (port->port_type() == mem_port_type::write &&
-                         u == static_cast<mem_write_port_impl*>(port)->wdata());
-                    // ⚠️ 只放行**实参槽** ⇒ `data_output()`（rdata）/ cd 槽跨层 **不属** (ii)
-                    //    （ADR-066 决策 ⑧ ⑤：rdata 跨层 ⇒ 仍按 (i) 拒）
-                    allow_ii = is_arg_slot && (parent_drives_child || child_drives_parent);
+                auto* port = dynamic_cast<mem_port_impl*>(v);
+                bool is_arg_slot = false;
+                if (port != nullptr) {
+                    is_arg_slot = (u == port->addr()) || (u == port->enable()) ||
+                                  (port->port_type() == mem_port_type::write &&
+                                   u == static_cast<mem_write_port_impl*>(port)->wdata());
                 }
+                // ⚠️ 只放行**实参槽** ⇒ `data_output()`（rdata）/ cd 槽跨层 **不属** (ii)
+                //    （ADR-066 决策 ⑧ ⑤：rdata 跨层 ⇒ 仍按 (i) 拒）
+                const bool allow_ii =
+                    is_arg_slot && (parent_drives_child || child_drives_parent);
                 if (!allow_ii) {
+                    // ⚠️ **AC6 归因订正**：诊断 MUST 按**桶**给**正确**改法 ⇒ ⇒
+                    //   · **(i) 支**（mem 本体跨 module · 或 rdata/cd 槽跨层）⇒ ⇒ 说
+                    //     「mem 本体与使用者 MUST 同 module」
+                    //   · **(iii) 支**（mem 本体**已在**同层 · 只是实参**非相邻**）⇒ ⇒
+                    //     **MUST NOT** 说那句（否则把用户引向**错误**的改法 ⇒ ⇒ 改不动）
+                    // ⇒ ⇒ **判据** = 「(iii) 支的诊断 MUST NOT 含
+                    // `memory and its user to be in the same module`」
+                    //   （(i) 支的诊断 MUST 含它 ⇒ ⇒ 两者**分开**判 ⇒ ⇒ 禁一刀切删除）
+                    bool body_same_module = false;
+                    if (port != nullptr) {
+                        const auto it_hold = mod_of.find(port->parent());
+                        const auto it_use = mod_of.find(port);
+                        body_same_module = (it_hold != mod_of.end() &&
+                                            it_use != mod_of.end() &&
+                                            it_hold->second == it_use->second);
+                    }
+                    if (body_same_module && is_arg_slot) {
+                        CHFATAL_EXCEPTION(
+                            "hierarchical analysis: cross-module ch_mem operand ('%s' in "
+                            "'%s' <-'%s' in '%s'). The ch_mem body and its user are ALREADY "
+                            "in the same module ('%s') — only the OPERAND crosses a module "
+                            "boundary. ADR-066 decision 7 (iii): a non-adjacent operand "
+                            "(grandchild / sibling) is not supported. Legal remedy: route the "
+                            "operand through a transit wire in the common ancestor, or move "
+                            "the operand's producer next to the ch_mem's user.",
+                            v->name().c_str(), module_key(vm_c).c_str(), u->name().c_str(),
+                            module_key(um_c).c_str(), module_key(vm_c).c_str());
+                    }
                     CHFATAL_EXCEPTION(
                         "hierarchical analysis: cross-module ch_mem access ('%s' in '%s' "
                         "<-'%s' in '%s'). ADR-060 §2.1 / ADR-066 decision 7 requires the "

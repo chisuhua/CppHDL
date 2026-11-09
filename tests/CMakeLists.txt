@@ -1140,6 +1140,28 @@ set_tests_properties(test_hierarchy_equivalence PROPERTIES
 target_compile_definitions(test_hierarchy_verilog PRIVATE
     HIER_TEST_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/test_hierarchy_verilog.cpp")
 
+# `ch_mem` 端口实参跨层（ADR-066 决策 ⑦/⑧）· (ii) 形态的**产物形态 + 值判据**
+# ⚠️ **纯产物级 + 解释器级**（**不需要** verilator）⇒ ⇒ 不进 `verilator_e2e` 标签。
+# ⚠️ AC4 的判据 = 父 module body 内 MUST 有**显式 `logic` 声明**（⇒ 非 implicit wire）。
+add_catch_test(test_mem_port_arg_cross_layer test_mem_port_arg_cross_layer.cpp)
+
+# `ch_mem` 端口实参跨层（ADR-066 决策 ⑧）· **(ii) 形态的产物级值判据**
+# ⚠️ **需真 verilator**（跑**层次化产物**）⇒ ⇒ 与既有 e2e 套件同构：BUILD_VERILATOR=OFF
+#    时随标签排除。
+# ⚠️ **为什么必须有它**：`test_mem_port_arg_cross_layer` 的值判据跑在**解释器**上
+#    ⇒ ⇒ 抓不到「父侧落点网未登记 ⇒ implicit wire（1-bit）⇒ 宽度截断 ⇒ 值错」这一族
+#    ⇒ ⇒ 本 target 才是那一族的判据面（逐拍比对 + 手推绝对基准）。
+add_catch_test(test_mem_port_arg_cross_layer_values test_mem_port_arg_cross_layer_values.cpp)
+# ⚠️ **不带 `verilator_e2e` 标签**（**刻意**）：该标签的口径 = 「**双后端 parity** 覆盖」
+#    （`scripts/verify_dual_backend_parity.sh` 的 `unclassified-labeled-entry` 判据）
+#    ⇒ ⇒ 本 target 是**单后端**（层次化产物 vs 扁平产物 ⇒ ⇒ 不是 interpreter vs verilator）
+#    ⇒ ⇒ 带该标签会被误算成「双后端覆盖」⇒ ⇒ **污染口径**。
+# ⚠️ verilator 缺席时用例**自行 SKIP**（⇒ ⇒ 仍在 `base` 里 ⇒ ⇒ `BUILD_VERILATOR=OFF` 也绿）。
+set_tests_properties(test_mem_port_arg_cross_layer_values PROPERTIES
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_vl_path_env}"
+)
+
 # 层次化 RTL 产物生成器 —— **不是 ctest 用例**（`CTEST_TOTAL` 锚点 MUST NOT 变）。
 # 供 `scripts/verify_hierarchical_rtl.sh` 在真实进程里生成产物后交给 verilator 判。
 add_executable(hier_rtl_products hier_rtl_products.cpp)

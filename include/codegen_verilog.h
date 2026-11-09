@@ -162,6 +162,17 @@ private:
     void print_mem_read_port(std::ostream &out, ch::core::mem_read_port_impl *node);
     void print_mem_write_port(std::ostream &out, ch::core::mem_write_port_impl *node);
 
+    /// **mem 端口的 `en` 槽解析**（ADR-066 决策 ⑧ ⑥ · **读 / 写两侧共用** ⇒ ⇒ 免漂移）。
+    ///
+    /// ⚠️ **两种情形 MUST 分开**（否则「禁止回退」会把**合法缺省**也判红）：
+    ///   · `enable == nullptr` ⇒ ⇒ `1'b1`（**合法缺省** · 语义 = 恒使能）
+    ///   · `enable != nullptr` **且取不到名字** ⇒ ⇒ **fail-closed**（诊断点名）
+    ///     ⇒ ⇒ **MUST NOT** 回退 `1'b1`（⇒ 读侧恒使能 / 写侧恒写 ⇒ ⇒ **值错且 lint 绿**）
+    ///
+    /// @return `true` = 解析成功（`out_enable` 被填）· `false` = fail-closed（**已诊断**）
+    bool resolve_mem_enable(const ch::core::lnodeimpl *enable,
+                            const std::string &mem_name, std::string &out_enable);
+
     // --- Specialized op printers (Wave 2) ---
     void print_unary_op(std::ostream &out, ch::core::opimpl *node);
     void print_binary_op(std::ostream &out, ch::core::opimpl *node);

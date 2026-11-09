@@ -676,8 +676,20 @@ TEST_CASE("hierarchy analysis: cross-module ch_mem is rejected", "[hierarchy][an
         ch::analyze_hierarchy(*top);
         FAIL("cross-module ch_mem MUST be rejected");
     } catch (const std::runtime_error& e) {
-        INFO("message: " << e.what());
-        REQUIRE(std::string(e.what()).find("cross-module ch_mem") != std::string::npos);
+        const std::string msg(e.what());
+        INFO("message: " << msg);
+        REQUIRE(msg.find("cross-module ch_mem") != std::string::npos);
+        // ⚠️ **2026-11-09 metis 订正（判别力）**：上面那条**只断言子串** ⇒ ⇒
+        //   pre-scan 消息与边闸门消息**都含**该子串 ⇒ ⇒ **改前改后都绿** ⇒ ⇒
+        //   **零判别力** ⇒ ⇒ MUST 断言**归因的实质内容**：
+        //   ① **持有 module 名**（mem 本体归属）· ② **使用 module 名**（端口节点归属）
+        //   ③ **(i) 支** MUST 含「mem 本体与使用者 MUST 同 module」的语义
+        //   ⇒ ⇒ 否则「归因改错」（比如把 (i) 说成 (ii)）也绿 ⇒ ⇒ 检不出
+        REQUIRE(msg.find("owned by module 'top'") != std::string::npos);
+        REQUIRE(msg.find("used by a port in module 'top.user'") != std::string::npos);
+        // ③ (i) 支的**合法**归因（⇒ ⇒ 与 (iii) 支**分开** ⇒ ⇒ 禁一刀切删除）
+        REQUIRE(msg.find("the ch_mem body and its user MUST live in the same module") !=
+                std::string::npos);
     }
 }
 
