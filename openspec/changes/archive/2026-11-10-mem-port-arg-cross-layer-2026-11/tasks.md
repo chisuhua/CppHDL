@@ -4,7 +4,7 @@
 
 ## S0 基线
 
-- [ ] 记录锚点：`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `ctest -LE perf` 全绿
+- [x] 记录锚点：`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `ctest -LE perf` 全绿
 
 ```bash
 cd build && ctest -LE perf --output-on-failure
@@ -19,9 +19,9 @@ cd .. && bash scripts/verify_test_counts.sh
       ⇒ ⇒ ⚠️ **2026-11-09 实测订正**（ADR-066 **v1.4**）：**预期 = 分析层已响亮拒绝**
       （**不是**「分析放行 + 发射期静默丢端口」⇒ ⇒ **无**契约-实现缺口）⇒ ⇒ ⚠️ **禁止**把
       「现状 = 已拒绝」表述为「新增了拒绝能力」
-- [ ] ★ 探针的**实质交付物** = **(i) 与 (ii) 的归因分开**：(i) 说「mem 本体跨 module」·
+- [x] ★ 探针的**实质交付物** = **(i) 与 (ii) 的归因分开**：(i) 说「mem 本体跨 module」·
       (ii) 说「仅实参视线跨层」⇒ ⇒ ⚠️ 探针**仍必要**（删掉会失去归因登记载体 + 不放松护栏）
-- [ ] 结果登记进 `.rddf/checks/arch-residual-registry.md` 行 20 的**归因描述** + 台账 §7
+- [x] 结果登记进 `.rddf/checks/arch-residual-registry.md` 行 20 的**归因描述** + 台账 §7
       （★ 该归因描述 MUST 含 **上条**的 (i)/(ii) 区分）
 
 ```bash
@@ -45,7 +45,7 @@ git grep -n "mem_port_impl" -- src/hierarchy_analysis.cpp
       `find("cross-module ch_mem")` ⇒ ⇒ **pre-scan 消息与边闸门消息都含该子串**
       ⇒ ⇒ **改前改后都绿 · 归因改错也绿** ⇒ ⇒ **零判别力** ⇒ ⇒ MUST **强化**
       （断言持有 module 名 + 使用 module 名 + 不含同层提示）
-- [ ] ⚠️ **修正 `364e213` 引入的错误注释**（`src/hierarchy_analysis.cpp:277-279` 声称
+- [x] ⚠️ **修正 `364e213` 引入的错误注释**（`src/hierarchy_analysis.cpp:277-279` 声称
       「字面 (i) **不产生任何跨 module 边** ⇒ ⇒ 闸门**不可达**」）⇒ ⇒ 与 ADR-066 **v1.4** **直接矛盾**
       ⇒ ⇒ **MUST** 改（本 change 自己的 commit 引入的缺陷 ⇒ ⇒ 写进本 change 才会在归档前被勾）
 
@@ -58,10 +58,10 @@ cd build && ctest -R hierarchy --output-on-failure
 - [x] **放行已生效**（S2 的三桶闸门）⇒ ⇒ ⚠️ **2026-11-09 实测**：父侧落点网**由既有机制自动合成**
       （产物内已有 `logic [3:0] <驱动端点全局名>;` 声明 + 子 output `.port(net)` + mem 端口读该名
       ⇒ ⇒ **命名恒等**）⇒ ⇒ ★ **本步**不需要写产品代码 ⇒ ⇒ 交付物 = **产物级断言**
-- [ ] **AC4 声明断言**：产物内 mem 实参引用的名字 MUST 在父 module **有 `logic` 声明**
+- [x] **AC4 声明断言**：产物内 mem 实参引用的名字 MUST 在父 module **有 `logic` 声明**
       （⇒ 否则 = implicit wire 1-bit ⇒ 宽度截断 ⇒ 值错）
-- [ ] **正/负向用例**（(ii) ⇒ 发射成功）⚠️ **尚未写**
-- [ ] **值判据（V21）**：读 `addr` 与写 `wdata`/`en` **两侧**断言**精确期望值**（**手推** ⇒ 非 0 只是下界）
+- [x] **正/负向用例**（(ii) ⇒ 发射成功）⚠️ **尚未写**
+- [x] **值判据（V21）**：读 `addr` 与写 `wdata`/`en` **两侧**断言**精确期望值**（**手推** ⇒ 非 0 只是下界）
 
 ```bash
 cd build && ctest -R hier --output-on-failure
@@ -85,8 +85,8 @@ git grep -n "memory and its user to be in the same module" -- src   # 定位点�
 
 ## S5 变异自证（V22）+ V18 复算
 
-- [ ] 变异：**不登记落点网** ⇒ 产物转红（值判据 / lint）⇒ 先编译确认 ⇒ **还原后重建**
-- [ ] `awk '/^### 2.7/,/^---/' docs/adr/ADR-066-*.md | grep -c '维持.*响亮拒绝'` == 0
+- [x] 变异：**不登记落点网** ⇒ 产物转红（值判据 / lint）⇒ 先编译确认 ⇒ **还原后重建**
+- [x] `awk '/^### 2.7/,/^---/' docs/adr/ADR-066-*.md | grep -c '维持.*响亮拒绝'` == 0  ⇒ ⇒ **实测 = 0**（旧措辞计数）· `实参视线` = **5**（≥ 1）
 
 ```bash
 awk '/^### 2.7/,/^---/' docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md | grep -c '维持.*响亮拒绝' || true
@@ -94,9 +94,9 @@ awk '/^### 2.7/,/^---/' docs/adr/ADR-066-hierarchical-parent-side-landing-semant
 
 ## S6 spec delta + 归档 + 台账闭口
 
-- [ ] `specs/rtl-hierarchical-output/spec.md`（MODIFIED / ADDED）
-- [ ] 归档 **禁** `--skip-specs`
-- [ ] 台账行 20：`已裁决 → 已收口` · `归属` → `—` · `闭口证据` = archive 路径
+- [x] `specs/rtl-hierarchical-output/spec.md`（MODIFIED / ADDED）
+- [x] 归档 **禁** `--skip-specs`
+- [x] 台账行 20：`已裁决 → 已收口` · `归属` → `—` · `闭口证据` = archive 路径
 
 ```bash
 bash scripts/verify_openspec_delta.sh
@@ -150,6 +150,13 @@ V22 原文预期「不登记落点网 ⇒ 读侧 = `mem[<子侧全局名>]` ⇒ 
 | **AC5** | ✅ | `ModuleEmitter::resolve_mem_enable`（合法缺省 / fail-closed 两分支分开） |
 | **AC6** | ✅ | (i) 支保留 same-module 句 · (iii) 支改用「operand crosses a module boundary」措辞 |
 | **AC7** | ✅ | S5 变异登记（M1 / M3 / M6 / M7 有效 · **M4 无效已如实登记**） |
-| **AC8** | 🟡 **部分** | 已覆盖：孙组件仍拒（(iii)）· 父层自身节点不误报（既有用例）· 读写不同侧（读/写两个 DUT）⇒ ⇒ **未覆盖**：多 `ch_mem` · `sread` 类 · **语料登记**（`hier_corpus_registry.md`）· **决策 ⑤ 共网用例** |
-| **AC9** | ⬜ **未做** | spec delta + 归档（禁 `--skip-specs`） |
-| **AC10** | 🟡 **部分** | `ctest -LE perf` **246/246 绿** · 4 锚点已同步（257 / 77 / 66 / 290）· 护栏全绿 ⇒ ⇒ **未做**：台账行 20 闭口（依赖 AC9 的 archive 路径） |
+| **AC8** | ✅ | 已覆盖：孙组件仍拒（(iii)）· 父层自身节点不误报（既有用例）· 读写不同侧（读/写两个 DUT）· **多 `ch_mem`**（两个初值表**可区分** ⇒ 「读串了」也能抓）· **`sread` 类**（1 拍读 ⇒ 时序面与 `aread` 不同）· **决策 ⑤ 共网**（同一子 `ch_out` 既直通父 output 又作实参 ⇒ **恰好一根** `logic` 声明 + pin 只出现一次）· **语料登记**（`hier_corpus_registry.md` **结构类 C4 / C4'** 新增 ⇒ 三向核对 登记 **12** / 用例 **12**） |
+| **AC9** | ✅ | spec delta = `rtl-hierarchical-output`（**ADDED ×1** + **MODIFIED ×1**）⇒ ⇒ 归档 = `openspec/changes/archive/2026-11-10-mem-port-arg-cross-layer-2026-11/`（**未用** `--skip-specs`）⇒ ⇒ ⚠️ CLI 要求 MODIFIED 的 scenario 集合**逐字等于**原集合（不能增删）⇒ ⇒ (iii) 桶的 scenario 改放 **ADDED** |
+| **AC10** | ✅ | `ctest -LE perf` **246/246 绿** · 4 锚点已同步（**257 / 77 / 66 / 290**）· 7 条护栏全绿 · **台账行 20 闭口**（`已裁决 → 已收口` · `归属 → —` · 闭口证据 = archive 路径 · 台账状态格按**逐字节**生成句 ⇒ markdown 星号会导致护栏 MISS）· 登记表行 20 的「第二例外」登记**改写为历史留痕** |
+
+### ★ 归档时的两处**实测订正**（供后续复用）
+
+| # | 发现 | 影响 |
+|---|---|---|
+| 1 | **产物级判据是必需的**（解释器级**不够**）：变异 M8（把「实参槽」判定收窄为「只有 `addr`」）⇒ ⇒ **解释器级全绿** · **产物级转红** ⇒ ⇒ 「分析层放行判定」这一族缺陷**只有产物级判据抓得住** | ⇒ ⇒ `test_mem_port_arg_cross_layer_values.cpp`（产物级）**不可省** |
+| 2 | **写侧值判据的三个坑**：① `stim` **必须含 `en` 列**（漏了 ⇒ `en` 恒 0 ⇒ 写恒不发生 ⇒ 观测值恒定 ⇒ harness 报 `no-varying-signal` ⇒ ★ 这本身就是「`en` 没接上」的**天然探针**）② **addr 必须固定**（每拍换 addr ⇒ 每个地址只写一次 ⇒ 组合读永远看到**初值** ⇒ 判别力 = 0）③ **拍对齐 = 沿后**（组合读看到**本拍**写入值 ⇒ 期望 = **本拍** `wdata`；⚠️ 原按「沿前 ⇒ 上一拍」手推**不符** ⇒ 已按实测订正） | ⇒ ⇒ 写侧判据的三条前提 |

@@ -25,9 +25,11 @@ evidence: probe:scripts/probe_arch_ledger_residuals.sh
 / `不做 ⇒ <后缀>` / `⚠️ 已知 ⇒ <后缀>` / `⚠️ 未决 ⇒ <后缀>` ⇒ ★ **行 14 = `已裁决`**（架构问题已由
 ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = 下游` ⇒ ★ 这是「终态行 `归属` 填 `—`」的
 **唯一例外**，已登记以免被当成格式错误改回）。
-★ **行 20 同款例外（2026-11-08 · ADR-066 决策 ⑦）**：`已裁决`（本 ADR **不**纳入 mem 端口实参
-⇒ ⇒ 归因订正 + 分析层 `:543` 粒度拆分**归下游独立立项**）⇒ 故 `归属 = 下游` ⇒ ★ **第二例外**，
-同样登记以免被当成格式错误改回。
+★ **行 20 的例外已消解（2026-11-10 · P5 归档）**：行 20 曾因「ADR-066 决策 ⑦ 不纳入 mem 端口
+实参 ⇒ 归下游独立立项」而带 `归属 = 下游`（第二例外）⇒ ⇒ **P5 已实施并归档**
+（`openspec/changes/archive/2026-11-10-mem-port-arg-cross-layer-2026-11`）⇒ ⇒ 行 20 改记
+`已收口` · `归属 = —` ⇒ ⇒ ★ 本段（第二例外的登记）**仅作历史留痕** ⇒ ⇒ **行 20 已不再是例外**
+⇒ ⇒ 若有工具按「行 20」判定例外 ⇒ ⇒ **该判定 MUST 一并订正**。
 
 | 台账 | section | id | 状态 | 日期 | 后缀 | 闭口证据 | 复核条件 | 归属 |
 |---|---|---|---|---|---|---|---|---|
@@ -50,4 +52,4 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 16 | 已裁决 | 2026-11-08 | ADR-066 决策 ① 落点语义裁定 | docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 17 | 已收口 | 2026-11-08 | 语料登记归因与 tripwire 同批修订 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 19 | 已收口 | 2026-11-08 | 路径 B 父侧落点网 + 产物可编译 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
-| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 20 | 已裁决 | 2026-11-08 | 本 ADR 不纳入 · 归下游独立立项 | docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md | — | 下游 |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 20 | 已收口 | 2026-11-10 | P5 实施归档（三桶判定 + (ii) 支持 + en fail-closed + 归因分桶） | openspec/changes/archive/2026-11-10-mem-port-arg-cross-layer-2026-11 | — | — |

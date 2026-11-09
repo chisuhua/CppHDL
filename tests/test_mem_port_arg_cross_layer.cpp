@@ -170,6 +170,88 @@ public:
     }
 };
 
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// DUT 组 ③：**边界清单**（AC8）—— 多 `ch_mem` · `sread` 类 · 决策 ⑤ 共网
+// ═════════════════════════════════════════════════════════════════════════
+
+/// **多 `ch_mem`**：顶层持**两个** mem（不同初值表）⇒ ⇒ 两个端口的实参**都**跨层
+/// ⇒ ⇒ 判别力 = 「其中一个漏登记」⇒ ⇒ 另一个的值仍对 ⇒ ⇒ 必须**两个都断言**。
+class MemTwoTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mem_two_top");
+    __io(ch_in<ch_uint<4>> addr_in; ch_out<ch_uint<8>> rdata_a; ch_out<ch_uint<8>> rdata_b;)
+    /// ⚠️ 初值表 A（手推）：地址 k ⇒ `0xE0 + k`
+    ch_mem<ch_uint<8>, 16> mem_a{std::vector<std::uint64_t>{
+        0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+        0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF}, "mem_a"};
+    /// ⚠️ 初值表 B（手推）：地址 k ⇒ `0xF0 + k`（⇒ ⇒ 与 A **可区分** ⇒ ⇒
+    ///   「两个 mem 读串了」也能被抓）
+    ch_mem<ch_uint<8>, 16> mem_b{std::vector<std::uint64_t>{
+        0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
+        0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF}, "mem_b"};
+    ch::ch_module<ArgSrc> src{"src"};
+    MemTwoTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        src.io().addr_in <<= io().addr_in;
+        src.io().wdata_in <<= ch_uint<8>(0_d);
+        src.io().en_in <<= ch_bool(false);
+        io().rdata_a <<= mem_a.aread(src.io().addr);
+        io().rdata_b <<= mem_b.aread(src.io().addr);
+    }
+};
+
+/// **`sread` 类**（1 拍读）· mem 本体在顶层 · 实参跨层。
+///
+/// ⚠️ **为什么单独覆盖**：`sread` 走 `always_ff`（1 拍）⇒ ⇒ 与 `aread`（0 拍组合）
+/// 的**时序**完全不同 ⇒ ⇒ 若某条实现路径只处理了 `aread` ⇒ ⇒ `sread` 的实参槽会漏。
+class MemSyncTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mem_sync_top");
+    __io(ch_in<ch_uint<4>> addr_in; ch_out<ch_uint<8>> rdata;)
+    /// ⚠️ 初值表（手推）：地址 k ⇒ `0xC0 + k`
+    ch_mem<ch_uint<8>, 16> mem{std::vector<std::uint64_t>{
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
+        0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF}, "mem"};
+    ch::ch_module<ArgSrc> src{"src"};
+    MemSyncTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        src.io().addr_in <<= io().addr_in;
+        src.io().wdata_in <<= ch_uint<8>(0_d);
+        src.io().en_in <<= ch_bool(false);
+        // ★ `sread`（1 拍读）⇒ ⇒ 与 `aread`（0 拍）的时序面**不同**
+        io().rdata <<= mem.sread(src.io().addr);
+    }
+};
+
+/// **决策 ⑤ 共网**：同一子 `ch_out` **既**直通父 `output` 端口 **又**作 `(ii)` 实参
+/// ⇒ ⇒ MUST 扇出**同一根**父侧网（⇒ ⇒ 否则「两根网」⇒ ⇒ `Duplicate pin connection`）。
+class MemSharedOutTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mem_shared_out_top");
+    __io(ch_in<ch_uint<4>> addr_in; ch_out<ch_uint<8>> rdata; ch_out<ch_uint<4>> addr_out;)
+    ch_mem<ch_uint<8>, 16> mem{std::vector<std::uint64_t>{
+        0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7,
+        0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF}, "mem"};
+    ch::ch_module<ArgSrc> src{"src"};
+    MemSharedOutTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        src.io().addr_in <<= io().addr_in;
+        src.io().wdata_in <<= ch_uint<8>(0_d);
+        src.io().en_in <<= ch_bool(false);
+        // ★ 同一子 `ch_out` **既**直通父 output 端口 **又**作 mem 实参
+        io().addr_out <<= src.io().addr;
+        io().rdata <<= mem.aread(src.io().addr);
+    }
+};
+
 // ═════════════════════════════════════════════════════════════════════════
 // 工具
 // ═════════════════════════════════════════════════════════════════════════
@@ -408,4 +490,140 @@ TEST_CASE("mem port arg cross layer - a non-adjacent operand (grandchild) is sti
     //   ⇒ ⇒ 诊断 **MUST NOT** 说「mem 与使用者 MUST 同 module」（那是 (i) 支的话）
     REQUIRE(r.error.find("memory and its user to be in the same module") ==
             std::string::npos);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// AC8-①：多 `ch_mem` —— 两个 mem 的实参**都**跨层 ⇒ ⇒ 两个值 MUST **各自**等于手推值
+//
+// ⚠️ **判别力**：若只有一个 mem 的实参被正确登记 ⇒ ⇒ 另一个读到**别的** mem 的值
+// ⇒ ⇒ 「两个都断言」才能抓到（只断言一个 ⇒ ⇒ 漏检）。
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("mem port arg cross layer - two ch_mem instances both take cross-layer operands",
+          "[hierarchy][mem][cross-layer][multi]") {
+    ch::ch_device<MemTwoTop> dev;
+    ch::Simulator sim(dev.context());
+
+    const std::uint64_t k_addr = 4;
+    sim.set_input_value(dev.instance().io().addr_in, k_addr);
+    sim.tick();
+
+    const std::uint64_t got_a =
+        static_cast<std::uint64_t>(sim.get_port_value(dev.instance().io().rdata_a));
+    const std::uint64_t got_b =
+        static_cast<std::uint64_t>(sim.get_port_value(dev.instance().io().rdata_b));
+    INFO("addr = " << k_addr << " · A expected = 0x" << std::hex << (0xE0 + k_addr)
+         << " · got = 0x" << got_a << " · B expected = 0x" << (0xF0 + k_addr)
+         << " · got = 0x" << got_b);
+    // ⚠️ 手推：初值表 A ⇒ `0xE0 + k` · 初值表 B ⇒ `0xF0 + k`
+    REQUIRE(got_a == (0xE0 + k_addr));
+    REQUIRE(got_b == (0xF0 + k_addr));
+    // ★ **反向判据**：两个 mem 的值 MUST **不同**（⇒ ⇒ 「读串了」也能被抓）
+    REQUIRE(got_a != got_b);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// AC8-②：`sread` 类（1 拍读）· 实参跨层 ⇒ ⇒ 产物形态 MUST 与 `aread` **同样**成立
+//
+// ⚠️ **为什么必须单独覆盖**：`sread` 走 `always_ff`（1 拍）⇒ ⇒ 与 `aread`（0 拍组合）
+// 的**时序**面完全不同 ⇒ ⇒ 若某条实现路径只处理了 `aread` ⇒ ⇒ `sread` 的实参槽会漏。
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("mem port arg cross layer - a sync-read (sread) port also takes a cross-layer operand",
+          "[hierarchy][mem][cross-layer][sread]") {
+    ch::ch_device<MemSyncTop> dev;
+    const std::string path = "/tmp/cpphdl_mem_arg_sread.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string product = read_file(path);
+    REQUIRE_FALSE(product.empty());
+    const std::string body = module_body(product, "top");
+    REQUIRE_FALSE(body.empty());
+
+    // ★ 父侧 MUST 有落点网的**显式 `logic` 声明**（⇒ 非 implicit wire ⇒ 非宽度截断）
+    //   ⇒ 名字 = 驱动端点（子 `ch_out`）的 ctx 全局名
+    const std::string child_body = module_body(product, "arg_src");
+    REQUIRE_FALSE(child_body.empty());
+    std::string wire_name;
+    {
+        const std::size_t hpos = product.find("module arg_src (");
+        REQUIRE(hpos != std::string::npos);
+        const std::size_t pos = product.find("output [3:0] ", hpos);
+        REQUIRE(pos != std::string::npos);
+        const std::size_t nl = product.find('\n', pos);
+        const std::string line = product.substr(pos, nl - pos);
+        const std::size_t last = line.find_last_of(' ');
+        REQUIRE(last != std::string::npos);
+        wire_name = line.substr(last + 1);
+        if (!wire_name.empty() && wire_name.back() == ',') {
+            wire_name.pop_back();
+        }
+    }
+    REQUIRE_FALSE(wire_name.empty());
+    INFO("wire name = " << wire_name);
+    REQUIRE(declares_logic(body, wire_name));
+    // ★ **反向判据**
+    REQUIRE_FALSE(declares_logic(body, wire_name + "_not_declared"));
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// AC8-③：决策 ⑤ 共网 —— 同一子 `ch_out` **既**直通父 output **又**作 mem 实参
+// ⇒ ⇒ MUST 扇出**同一根**父侧网（⇒ ⇒ 两根网 ⇒ ⇒ `Duplicate pin connection`）
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("mem port arg cross layer - a shared child output fans out to ONE parent-side net",
+          "[hierarchy][mem][cross-layer][single-net]") {
+    ch::ch_device<MemSharedOutTop> dev;
+    const std::string path = "/tmp/cpphdl_mem_arg_shared.v";
+    std::remove(path.c_str());
+
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string product = read_file(path);
+    const std::string body = module_body(product, "top");
+    REQUIRE_FALSE(body.empty());
+
+    // 落点网的名字 = 驱动端点（子 `ch_out`）的 ctx 全局名
+    std::string wire_name;
+    {
+        const std::size_t hpos = product.find("module arg_src (");
+        REQUIRE(hpos != std::string::npos);
+        const std::size_t pos = product.find("output [3:0] ", hpos);
+        REQUIRE(pos != std::string::npos);
+        const std::size_t nl = product.find('\n', pos);
+        const std::string line = product.substr(pos, nl - pos);
+        const std::size_t last = line.find_last_of(' ');
+        REQUIRE(last != std::string::npos);
+        wire_name = line.substr(last + 1);
+        if (!wire_name.empty() && wire_name.back() == ',') {
+            wire_name.pop_back();
+        }
+    }
+    REQUIRE_FALSE(wire_name.empty());
+    INFO("wire name = " << wire_name);
+
+    // ★ **恰好一根** `logic` 声明（⇒ ⇒ 决策 ⑤ 的单连接不变式）
+    std::size_t decl_count = 0;
+    for (std::size_t pos = body.find("logic"); pos != std::string::npos;
+         pos = body.find("logic", pos + 1)) {
+        if (declares_logic(body.substr(pos, body.find(';', pos) - pos + 1), wire_name)) {
+            ++decl_count;
+        }
+    }
+    INFO("declaration count = " << decl_count);
+    REQUIRE(decl_count == 1);
+
+    // ★ **反向判据**（防恒真）：产物里 MUST **没有** `Duplicate pin connection` 迹象
+    //   ⇒ ⇒ 且实例化语句里该 pin 只出现**一次**
+    REQUIRE(product.find("Duplicate pin connection") == std::string::npos);
+    std::size_t pin_occurrences = 0;
+    for (std::size_t pos = product.find("." + wire_name + "("); pos != std::string::npos;
+         pos = product.find("." + wire_name + "(", pos + 1)) {
+        ++pin_occurrences;
+    }
+    INFO("pin connection occurrences = " << pin_occurrences);
+    REQUIRE(pin_occurrences == 1);
 }

@@ -28,6 +28,8 @@
 | `ModuleChainTop` | `tests/test_module.cpp` | **T0 + T1** | ★ **C2**：兄弟跨模块边 + **同类型多实例** | ⚠️ 纯组合（子组件 **0 reg**）⇒ **时序判别力 = 0** ⇒ ★ T1 只覆盖**连线语义**；★ 发射器按 `sanitize(module_type_name)` 分组并编号 ⇒ 产出 `<Type>` / `<Type>_1` **两份同体 module** ⇒ ⇒ 这是 C2 的**真正**判别点 |
 | `ModuleIoDirectionTop` | `tests/test_module.cpp` | **T0 + T1** | ★ **C1'**：**双子组件**（两个 `ModuleDataProcessor`） | ⚠️ 纯组合 ⇒ **时序判别力 = 0** ⇒ T1 只覆盖**连线语义**（两个子组件的 `select` 两路） |
 | `ICachePrefetch` | `examples/riscv-mini/tests/test_cache_smoke.cpp` | **T0 + T1** | ★ **C3**：root 持 `ch_mem` + 子组件带 AXI 端口 | ⚠️ **已知观测偏差**：内层 `miss`(1 拍 `sread`) 与 `axi_addr`(当拍地址) 存在 **1 拍错位** ⇒ ⇒ 比对时 **MUST NOT** 把它当缺陷（★ 但它**不影响**逐拍等价：比的是 flat ≡ hier ⇒ ⇒ 两侧**同样**错位） |
+| `VMemArgTop` | `tests/test_mem_port_arg_cross_layer_values.cpp` | **T1** | ★ **C4**：root 持 `ch_mem` + **mem 端口实参跨层**（`(ii)` 形态） | ⚠️ **判别力的真实来源**：① **手推绝对基准**（`0xD0 + addr`）—— ⚠️ 「层次化 ≡ 扁平」**抓不到**「两侧同错」（实测：地址偏移 1 ⇒ `res.equal` 仍 `true` ⇒ ⇒ 同构缺陷 ⇒ ⇒ 只有手推基准能抓）；② **产物级声明断言**（父 body 内 MUST 有显式 `logic` 声明 ⇒ ⇒ 非 implicit wire）。★ **形态** = ADR-066 决策 ⑦ 的 `(ii)`（mem 本体与使用者同 module · 仅 `addr`/`en`/`wdata` 实参视线跨层 · 且相邻）⇒ ⇒ 产物形态 = 决策 ⑧（复用决策 ① 的父侧落点网）⇒ ⇒ 对应的负向桶 `(iii)`（非相邻实参）见 `tests/test_mem_port_arg_cross_layer.cpp` |
+| `VMemArgWriteTop` | `tests/test_mem_port_arg_cross_layer_values.cpp` | **T1** | ★ **C4'**：**写侧**的 mem 端口实参**三槽全部**跨层（`addr` / `wdata` / `en`） | ⚠️ **判别力的真实来源**：① **手推绝对基准**（写侧期望 = **本拍** `wdata` —— ⚠️ 实测拍对齐 = **沿后**看到本拍写入值 ⇒ ⇒ 原按「沿前 ⇒ 上一拍」手推**不符** ⇒ ⇒ 已按实测订正并登记）；② ⚠️ **产物级是必需的** —— 实测：**解释器级判据对「分析层放行判定被收窄」零判别力**（变异 M8：实参槽判定收窄为「只有 `addr`」⇒ ⇒ 解释器级**全绿** ⇒ ⇒ **产物级**才转红）；③ ★ **`en` 未接上 ⇒ 写恒不发生** ⇒ ⇒ 观测值恒定 ⇒ ⇒ harness 的 `no-varying-signal` 判据**天然**抓住它（⚠️ 这也是「stim 必须含 `en` 列」的由来） |
 | `ImmConsistencyDut` | `tests/test_rv32i_stage_dual.cpp` | **T0（支持边界）** | ✅ **可层次化**（ADR-066 决策 ① 落地后） | ★ `io().equal <<= (dec.io().imm == ids.io().imm);` ⇒ 根的 `equal` 由**两个子组件的 output 端口**驱动 ⇒ ⇒ 形态 = **族 ①/③**（父侧带运算消费子 `ch_out`）⇒ ⇒ 发射器为两个子输出各合成一根**父侧落点网**（网名 = 驱动端点的 ctx 全局名）⇒ ⇒ 父侧比较读那两根网 ⇒ ⇒ 同一子输出**既**直通父 `output` 端口、**又**参与运算 ⇒ ⇒ MUST 扇出**同一根**网（决策 ⑤）⇒ ⇒ 本行的用例从「拒绝边界」改为「**支持边界**」的钉桩。⚠️ **归因订正**：旧条目写「内部线网」+「需要隐式端口合成 ⇒ 发射器不支持」⇒ ⇒ 前者不准（是 **output 端口**）· 后者**已过时**（隐式端口合成 B2b 五批 2026-11-05 已全部落地）⇒ ⇒ 真实形态 = 「父侧带运算」= 台账行 16 |
 
 ## 结构类的覆盖情况（T1）
@@ -37,6 +39,7 @@
 | **C1'** | **双子组件**（各自独立） | `ModuleIoDirectionTop` | ✅ |
 | **C2** | **兄弟跨模块边** + **同类型多实例** | `ModuleChainTop` | ✅ |
 | **C3** | **root 持 `ch_mem`** + 子组件带 AXI 端口 | `ICachePrefetch` | ✅ |
+| **C4** | **root 持 `ch_mem`** + **mem 端口实参跨层**（`(ii)` 形态 · ADR-066 决策 ⑦/⑧） | `VMemArgTop`（读侧）· `VMemArgWriteTop`（**写侧** · 三槽全跨层） | ✅ |
 | **C1**（原计划） | **双子组件**且**各自带寄存器** | — | ⏠ **仍记 backlog**：唯一候选 `ImmConsistencyDut` **现已可**层次化（见上表 · ADR-066 决策 ① 落地后）⇒ ⇒ 但本轮**未**据此改判 C1（判据 = 双子组件**各自带寄存器** ⇒ 需单独复核）⇒ ⇒ 状态不变 |
 
 ## 豁免表（**每个 MUST 有原因**）

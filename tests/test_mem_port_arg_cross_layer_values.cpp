@@ -63,6 +63,49 @@ public:
     }
 };
 
+/// **写侧专用子组件**：三个 `ch_in` → 三个 `ch_out`（⇒ ⇒ 三个实参槽全部跨层）
+/// ⚠️ **独立于读侧的 `VArgSrc`**（⇒ ⇒ 不给读侧 DUT 增加**悬空** `ch_in` ⇒ ⇒ 发射器不拒）。
+class VArgSrcW : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("v_arg_src_w");
+    __io(ch_in<ch_uint<4>> addr_in; ch_in<ch_uint<8>> wdata_in; ch_in<ch_bool> en_in;
+         ch_out<ch_uint<4>> addr; ch_out<ch_uint<8>> wdata; ch_out<ch_bool> en;)
+    VArgSrcW(ch::Component *p = nullptr, const std::string &n = "v_arg_src_w")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        io().addr <<= io().addr_in;
+        io().wdata <<= io().wdata_in;
+        io().en <<= io().en_in;
+    }
+};
+
+/// **写侧 DUT**：mem 的 `addr` / `wdata` / `en` **三个实参全部跨层**
+/// ⇒ ⇒ 覆盖 V21 的**写侧**（`wdata` / `en` 两槽）⇒ ⇒ ⚠️ **只有产物级**判据才抓得住
+/// 「分析层放行判定被收窄」这一族缺陷（解释器级判据对分析层缺陷**零判别力**）。
+class VMemArgWriteTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("v_mem_arg_write_top");
+    __io(ch_in<ch_uint<4>> addr_in; ch_in<ch_uint<8>> wdata_in; ch_in<ch_bool> en_in;
+         ch_out<ch_uint<8>> rdata;)
+    /// ⚠️ 初值表（手推基准）：地址 k ⇒ `0xC0 + k`（⇒ ⇒ 写之前的读值）
+    ch_mem<ch_uint<8>, 16> mem{std::vector<std::uint64_t>{
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
+        0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF}, "mem"};
+    ch::ch_module<VArgSrcW> src{"src"};
+    VMemArgWriteTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        src.io().addr_in <<= io().addr_in;
+        src.io().wdata_in <<= io().wdata_in;
+        src.io().en_in <<= io().en_in;
+        // ★ **写侧**：`write(addr, wdata, en)` ⇒ ⇒ 三个实参槽**全部**跨层
+        mem.write(src.io().addr, src.io().wdata, src.io().en);
+        io().rdata <<= mem.aread(src.io().addr);
+    }
+};
+
 std::string make_temp_dir(const char *suffix) {
     char tmpl[] = "/tmp/cpphdl_memarg_XXXXXX";
     char *dir = ::mkdtemp(tmpl);
@@ -88,8 +131,11 @@ std::string make_temp_dir(const char *suffix) {
 // 「层次化 ≡ 扁平」⇒ ⇒ **两侧一起错**时恒绿 ⇒ ⇒ 必须再钉一条**与产物无关**的
 // 绝对基准（手推表）⇒ ⇒ 三者成链：层次化 ≡ 扁平 ∧ 扁平 ≡ 手推 ⇒ ⇒ 层次化 ≡ 手推。
 // ═════════════════════════════════════════════════════════════════════════
-TEST_CASE("mem port arg cross layer - the layered product reads the hand-derived value",
-          "[hierarchy][mem][cross-layer][value][verilator]") {
+// ⚠️ **语料回归标记**（`scripts/verify_hier_corpus_coverage.sh` 的 `CORPUS_CASE` 正则）：
+//    `corpus hierarchy regression (<file>): <DUT>` ⇒ ⇒ 本 DUT 纳入**语料体系**
+//    ⇒ ⇒ 登记表 MUST 收录它（方向 ②）⇒ ⇒ 且它 MUST 有语料回归用例（方向 ①，本用例即它）。
+TEST_CASE("corpus hierarchy regression (product level): VMemArgTop",
+          "[hierarchy][corpus][t1][mem][cross-layer][value]") {
     const std::string dir = make_temp_dir("_values");
     REQUIRE_FALSE(dir.empty());
     ch::ch_device<VMemArgTop> dev;
@@ -153,5 +199,86 @@ TEST_CASE("mem port arg cross layer - the layered product reads the hand-derived
         }
         INFO("distinct observed values = " << distinct.size());
         REQUIRE(distinct.size() >= 3);
+    }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// AC3（**产物级** · **写侧**）：`addr` / `wdata` / `en` **三个实参全部跨层**
+//
+// ⚠️ **判别力的来源**：若分析层的「实参槽放行判定」被**收窄**（例如只认 `addr`）
+// ⇒ ⇒ 写侧端口的实参跨层被**误拒** ⇒ ⇒ 发射失败 / 产物缺写端口 ⇒ ⇒ 本用例**转红**
+// ⇒ ⇒ ★ **解释器级判据抓不到这一族缺陷**（解释器不看层次化产物）⇒ ⇒ 这是
+// 「写侧 MUST 有产物级判据面」的**理由**。
+//
+// ⚠️ **时序（手推）**：写端口 = **1 拍**提交 ⇒ ⇒ 组合读（`aread`）看到的是
+// **上一拍**写进去的值 ⇒ ⇒ 第 k 拍的期望 = 第 k-1 拍的 `wdata`（第 0 拍 = 初值）。
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("corpus hierarchy regression (product level): VMemArgWriteTop",
+          "[hierarchy][corpus][t1][mem][cross-layer][value][write]") {
+    const std::string dir = make_temp_dir("_write_values");
+    REQUIRE_FALSE(dir.empty());
+    ch::ch_device<VMemArgWriteTop> dev;
+
+    // ⚠️ **addr 固定**（= 3）· **写数据逐拍不同**（⇒ ⇒ 观测值逐拍变化 ⇒ ⇒ harness 的
+    //   `no-varying-signal` 判据不触发）。
+    // ⚠️ **为什么 addr 必须固定**：写端口是 `always_ff`（沿上提交）⇒ ⇒ 组合读看到的是
+    //   **沿前**的值 ⇒ ⇒ 若每拍换 addr ⇒ ⇒ 每个地址**只被写一次** ⇒ ⇒ 组合读永远看到
+    //   **初值** ⇒ ⇒ **测不到「写的值对不对」**（判别力 = 0）⇒ ⇒ 固定 addr 才能测。
+    // ⚠️ **第三列 = 写使能**（= 1）⇒ ⇒ ⚠️ **漏掉它 ⇒ `en_in` 从未被驱动** ⇒ ⇒
+    //   写使能恒 0 ⇒ ⇒ **写不生效** ⇒ ⇒ 观测值恒定 ⇒ ⇒ harness 报 `no-varying-signal`
+    //   ⇒ ⇒ ★ 这是「`en` 槽跨层」这一族缺陷的**天然探针**（en 没接上 ⇒ 写恒不发生）。
+    const std::vector<std::vector<std::uint64_t>> stim = {
+        {0x03, 0x11, 1}, {0x03, 0x22, 1}, {0x03, 0x33, 1}, {0x03, 0x44, 1}, {0x03, 0x55, 1}};
+
+    auto products = ch_test::hier::emit(dev.instance(), dir, ch::Granularity::ForceLayer);
+    INFO("emit error: " << products.error);
+    REQUIRE(products.ok);
+    REQUIRE_FALSE(products.ports.empty());
+
+    std::vector<ch_test::hier::Observation> obs;
+    obs.push_back(ch_test::hier::make_observation(
+        "top.rdata", dev.instance().io().rdata,
+        [&dev](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().rdata));
+        }));
+
+    std::vector<ch_test::hier::DrivenInput> inputs;
+    inputs.push_back({"top.addr_in", [&dev](ch::Simulator &s, std::uint64_t v) {
+                          s.set_input_value(dev.instance().io().addr_in, v);
+                      }});
+    inputs.push_back({"top.wdata_in", [&dev](ch::Simulator &s, std::uint64_t v) {
+                          s.set_input_value(dev.instance().io().wdata_in, v);
+                      }});
+    inputs.push_back({"top.en_in", [&dev](ch::Simulator &s, std::uint64_t v) {
+                          s.set_input_value(dev.instance().io().en_in, v);
+                      }});
+
+    auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
+                                      inputs, obs, stim);
+    INFO("compare error: " << res.error);
+    if (!res.ok && res.error.rfind("verilator-unavailable", 0) == 0) {
+        SKIP("verilator not available: " + res.error);
+    }
+    INFO("first mismatch: " << res.first_mismatch);
+    REQUIRE(res.ok);
+    REQUIRE(res.equal);
+    REQUIRE(res.mismatch_count == 0);
+
+    // ★ **手推**：第 0 拍 = 初值 `0xC0 + addr`；第 k 拍（k≥1）= 第 k-1 拍的 `wdata`
+    REQUIRE(res.flat_trace.size() == stim.size());
+    for (std::size_t k = 0; k < stim.size(); ++k) {
+        REQUIRE(res.flat_trace[k].size() == 1);
+        const std::uint64_t k_addr = stim[k][0];
+        const std::uint64_t k_wdata = stim[k][1];
+        REQUIRE(stim[k].size() == 3);
+        REQUIRE(stim[k][2] == 1);      // 写使能恒为 1（⇒ ⇒ 每拍都写）
+        // ⚠️ **拍对齐（实测）**：写端口 `always_ff` 在**沿上**提交，而组合读在同一拍的
+        //   **沿后**求值 ⇒ ⇒ 组合读看到的是**本拍**写进去的值 ⇒ ⇒ 期望 = **本拍** wdata
+        //   （⚠️ 最初按「沿前 ⇒ 上一拍」手推 ⇒ ⇒ 实测不符 ⇒ ⇒ 按实测订正并在此登记）
+        const std::uint64_t k_expected = k_wdata;
+        INFO("cycle " << k << " · addr = " << k_addr << " · expected = 0x" << std::hex
+             << k_expected << " · got = 0x" << res.flat_trace[k][0]);
+        REQUIRE(res.flat_trace[k][0] == k_expected);
     }
 }
