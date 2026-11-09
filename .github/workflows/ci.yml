@@ -481,6 +481,33 @@ jobs:
       shell: bash
       run: scripts/verify_fsm_next_wiring.sh --self-test
 
+    - name: Verify chlib dtor composability (ADR-067)
+      # `ch_state_machine`'s destructor is `noexcept(false)` in the DEFAULT
+      # form (ADR-050 D5: unresolved contributions MUST be detected *catchably*
+      # at destruction) => a member with a potentially-throwing destructor
+      # makes the enclosing class's implicit destructor `noexcept(false)` too
+      # => with a virtual destructor in the base (the normal abstract-plugin
+      # shape) the derived destructor overrides a `noexcept` virtual
+      # destructor with a LOOSER exception specification => HARD COMPILE ERROR.
+      # => The error surfaces in the DOWNSTREAM project, never here => this
+      #    repo's own suite stays GREEN => zero upstream signal.
+      #    (Real occurrence: downstream ChipForge, issue #28, 2026-11-08.)
+      # ADR-067: the default form stays byte-identical; an explicit
+      # `dtor_detection::explicit_only` form is composable (noexcept dtor).
+      # Contract: capability `chlib-state-machine-semantics`.
+      shell: bash
+      run: scripts/verify_chlib_dtor_composability.sh
+
+    - name: Verify chlib dtor composability (self-test)
+      # WHY a self-test: this repo's guardrails repeatedly shipped
+      # "looks like it works" defects => every criterion needs a fixture
+      # proving it has discriminating power.
+      # The self-test poisons the source IN PLACE (M1: break the composable
+      # form / M2: drop the contract from if_stmt.h / M3: rename
+      # check_unresolved) => each MUST turn the guard RED => then restore.
+      shell: bash
+      run: scripts/verify_chlib_dtor_composability.sh --self-test
+
     - name: Verify conditional-block assignment wiring
       # `_if` statement blocks MUST route every register / IO assignment
       # through `conditional_assign(target).next() = value`. A bare

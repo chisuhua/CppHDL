@@ -15,6 +15,11 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 （唯一例外 = **P4** 的一次**范围**裁定）⇒ ⇒ 本窗口的工作是
 「把**已签批**的决策落地」+「把**已登记**的缺口变成可执行的 change」。
 
+⚠️ **2026-11-09 订正**：本窗口**新开**了一条架构裁定线 = **P13**（上游 issue #28 的
+「析构异常规格 vs 可组合性」⇒ ADR-067）⇒ ⇒ 上句的「不再需要新的架构裁定」**已被证伪**
+⇒ ⇒ 但**新增的裁定是「新缺口引入的」**（不是台账 §7 那 20 行的延续）⇒ ⇒ 台账 §7 的 20 行**不受影响**
+⇒ ⇒ **P4**（mem 端口范围裁定）仍是台账侧唯一的例外。
+
 **承接**：
 ① `2026-11-09-hierarchical-parent-side-landing-implementation`（父侧落点语义落地 · 已归档）
 —— 它的 **3 项直接遗留** = 本窗口的 **P1 / P3–P5**；
@@ -45,6 +50,10 @@ Phase 6（**2026-11-09 激活**）是**「收口 + 新缺口」窗口**。
 | **P9** | **cache wrapper 三项已知债务**：`DCacheWriteBuffer` **不真缓冲**（名字 over-promise ⇒ `ready` 无背压语义）· `ICachePrefetch` 预取缓冲是**死数据** · 内层 cache `miss` 与 `axi_addr` **1 拍错位** ⇒ ⇒ 各自闭口**或**降级为「已知」并登记理由 | planner → builder | — | 三项各自有裁决 + 证据 | ⬜ |
 | **P10** | **环境**：openspec CLI **钉回 1.4.1**（仓库按 1.4.1 写就；本机 1.14.x ⇒ 15/17 主 spec 红 ⇒ **与本仓改动无关**）⇒ ⇒ 解 `feat-hierarchical-rtl-output`「全程」条目的唯一红项 | 环境（非代码） | — | 仓级 `openspec validate --specs --strict` 绿 | ⬜ |
 | **P11** | **ADR-036 逻辑算子物理移除**（`&&` / `\|\|` ⇒ `&` / `\|`） | builder | 🔒 **日历锁：最早 2027-04-17**（`verify_deprecation_calendar_gate.sh` 守） | 移除完成 + `verify_deprecation_callsites.sh` 绿 | 🔒 |
+| **P12** | **上游 issue #28**（下游 ChipForge 反馈 · **新缺口**）：起草**两项** improvement（**拆项** —— ② 需架构裁定 / ① 不需 ⇒ 不被审稿门卡住）⇒ ⇒ 过 `pre_create_brainstorm_check.sh` HARD-GATE | planner | — | 两个 improvement 文件存在且各过 HARD-GATE（exit 0） | ✅ **2026-11-09** ⇒ ② = `.rddf/improvements/chlib-dtor-noexcept-composability-2026-11.md`（**析构异常规格 vs 可组合性**）· ① = `.rddf/improvements/public-api-remove-visibility-2026-11.md`（**API 移除的跨仓可见性**）⇒ 两者均 **7 段** + YAML frontmatter · **HARD-GATE exit 0** ⇒ 已注册进 `improvement-suggestions.md` · ⚠️ 两者状态 = `draft` ⇒ ⇒ **② 待 P13 的 architect 裁定**后才可转 `approved`；**① 不需裁定**（★ 唯一待用户拍板项 = CHANGELOG 载体命运 R1/R2/R3）· ★ **metis 第 1 轮**（12 条 finding · 4 blocker）已逐条处置 ⇒ 处置记录 = 本文件 §「本窗口自身的两个已知缺口」后的 **P12 订正段** |
+| **P13** | ② 的 **architect 架构裁定** ⇒ ⇒ ADR-067：析构**异常规格** × 检出**触发点** 的取舍（选项 A / A′ / B / C / D / E —— **两处分别裁定**：FSM 析构**只检查** vs `conditional_block` 析构**做事** ⇒ **不同构** ⇒ 不可一把钥匙） | architect | P12 | ADR-067 落库 · **oracle → critic** 双审 **0 BLOCKER** · 审稿记录落 `.rddf/reviews/` | ✅ **2026-11-09** ⇒ ADR = `docs/adr/ADR-067-dtor-exception-spec-composability.md`（**Accepted** · **用户拍板**）⇒ ⇒ **裁决**：① 两处分别裁定 ② FSM 默认形态**逐字不变** + **显式**提供「可组合形态」（noexcept 析构 + 显式 `check_unresolved()` + 非展开期 terminate 兜底 fail-closed）③ `conditional_block` **维持** `noexcept(false)`（**可行但当前不做** · 无需求 + 固定成本 + 基线缺失）④ 使用契约（精确措辞）⑤ 机械判据（`is_nothrow_destructible_v` 三连 + 变异自检）⑥ 展开期门复制 ⑦⑧⑨ 不做项（elaboration 扫描 / 恢复 `is_built()` / 删拷贝）⇒ 审稿 = `.rddf/reviews/ADR-067-dtor-composability.md`（oracle 6 条 + critic 9 条 **逐条应答** · 第 1 轮 1 BLOCKER ⇒ 复审 `CLOSED` / `mergeable: yes`）⇒ ★ 评审推翻了我方两处错误（「5 处」→「**8 处**」· `static_assert(!is_nothrow_destructible_v<std::optional<Sm>>)` **恒假** ⇒ 改**合取**形态 ⇒ 编译实锤） |
+| **P14** | ① 的**实施**：CHANGELOG 载体（按裁定 R1/R2/R3）· Zero-Debt **判决规则边界**（根 `AGENTS.md` ZERO-DEBT 段 +1 句 · **AUTO 块不动**）· 活账 `.rddf/checks/public-api-surface.md` 扩到**符号级**（含**移除记录**字段 + R4② 双向核对）· **消费者 fixture 进上游 CI**（install 到临时 prefix ⇒ 独立 CMake 工程编译下游视角 TU · **fail-closed**） | builder | P12 | ① CHANGELOG 判据（token 清单 / 计数守恒）绿；② 判决规则句 `grep` 可判；③ R4② 符号级**原地投毒**必红；④ 消费者 fixture **缺 = 失败** + 计数锚点（`verify_test_counts.sh` 绿） | ⬜ |
+| **P15** | ② 的**实施**：按 ADR-067 裁定改析构异常规格 / 加 API（复制**展开期门**）· 2 份 capability delta（**禁** `--skip-specs`）· **可组合性的机械判据**（`tests/test_chlib_composability_api.cpp` · 用仓内 `ch::Component` 作基类 ⇒ 与下游同形）+ **变异自检** · 补「忘记 `.end()` ⇒ 析构期可捕获」基线用例 | builder | P13 | ① `static_assert(std::is_nothrow_destructible_v<Dut>>` 绿 + 变异投毒必红；② `verify_openspec_delta.sh` + `openspec validate --specs --strict` 绿；③ `CTEST_TOTAL` 锚点同步 | ✅ **2026-11-09** ⇒ change = `openspec/changes/archive/2026-11-09-chlib-dtor-composability-2026-11/`（**已归档** · spec delta 已合入主 spec：2 份 capability **ADDED ×1**）⇒ ⇒ 实现 = `include/chlib/state_machine.h`（新增 `dtor_detection` 枚举 + 第三模板实参 + `check_unresolved()` + 终止兜底 + 头注释「③ 析构形态与可组合性」段）· `include/chlib/if_stmt.h`（**仅注释**：使用契约）⇒ **`core/` 零改动** ⇒ 判据 = `tests/test_chlib_composability_api.cpp`（**新增 1 个 ctest target** ⇒ `CTEST_TOTAL` 253→**254**）· 护栏 = `scripts/verify_chlib_dtor_composability.sh`（R1 fixture 编译 / R2 API 面 / R3 两份头注释的契约 / R4 capability 契约）+ `--self-test`（M1/M2/M3 **原地投毒** ⇒ 必红）⇒ CI 已挂 `build-and-test` 的 guard 段 ⇒ ⇒ **验证**：`ctest -LE perf` **243/243 全绿**（基线 242 + 新增 1）· `verify_test_counts.sh` / `verify_openspec_delta.sh` / `verify_fsm_next_wiring.sh` / `verify_if_stmt_wiring.sh` / `verify_roadmap_fragments.sh` 全绿 · **M1 变异实测必红**（3 处：2 × `static_assert` + 1 × 真实「looser exception specification」编译错误）⇒ ⇒ 还原复绿 |
 
 ---
 
@@ -85,6 +94,40 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 | P8 | 同上 + `include/simulator.h` / `src/simulator.cpp` 的文档同步 |
 | P9 | 同上 + `include/cpu/AGENTS.md` 的债务段更新 |
 | P10 | （环境项）⇒ 证据 = `openspec validate --specs --strict` 的输出 |
+| P12 | `.rddf/improvements/chlib-dtor-noexcept-composability-2026-11.md` + `.rddf/improvements/public-api-remove-visibility-2026-11.md`（两份草案 · 各 HARD-GATE exit 0）+ `improvement-suggestions.md` 的两行索引 |
+| P13 | `docs/adr/ADR-067-*.md`（新 ADR）+ `.rddf/reviews/ADR-067-*.md`（审稿记录） |
+| P14 | `docs/CHANGELOG.md`（按载体裁定落地）+ 根 `AGENTS.md` ZERO-DEBT 段（+1 句）+ `.rddf/checks/public-api-surface.md`（符号级）+ `scripts/verify_hierarchical_p8.sh`（R4② 符号级 + `--self-test`）+ 新增消费者 fixture + CI 挂载 + NOTES 锚点 |
+| P15 | `openspec/changes/archive/<析构异常规格>-<日期>/` + 2 份 capability spec + `tests/test_chlib_composability_api.cpp`（新）+ `tests/chlib/test_if_stmt.cpp`（基线用例） |
+
+---
+
+## P12 的 **metis 第 1 轮**处置记录（12 条 finding · 4 blocker）
+
+> ⚠️ **planner 的固定审查者** = `metis`（新建 improvement ⇒ 1 轮）⇒ ⇒ 逐条处置如下
+> ⇒ ⇒ **无一条「只列不改」** ⇒ ⇒ 每条要么已落进两份草案，要么写明「不采纳 + 理由」。
+
+| # | finding（metis） | 处置 |
+|---|---|---|
+| 1 | **[blocker]** 范围错：① 与 ② 应**拆成两个** improvement（① 不需裁定 ⇒ 不被审稿门卡住） | ✅ **采纳** ⇒ 拆为 `public-api-remove-visibility-2026-11`（①）与 `chlib-dtor-noexcept-composability-2026-11`（②） |
+| 2 | **[blocker]** A–D 既不互斥也不穷举；D 的「自动」是**事实错误**；漏 **E**（elaboration 扫描）与 **A′** | ✅ **采纳** ⇒ ② 的 §What Changes 改为**两轴**（触发点 × 析构规格）+ 六项（A / A′ / B / C / D / E）+ 删掉全部 ✅/❌ 评价与 planner 倾向 |
+| 3 | **[blocker]** D 会把缺陷复制到新类型（守卫析构自身 `noexcept(false)` ⇒ 违反本项自己的约束） | ✅ **采纳** ⇒ D 降级为「守卫须为**作用域内临时对象** + 显式豁免 + 写明理由」，并记入改名建议（`scope_check()` / `lifecycle_scope()`） |
+| 4 | **[blocker]** 「可组合性」必须写成**一行可判** | ✅ **采纳** ⇒ ② 的 Acceptance 用 `static_assert(std::is_nothrow_destructible_v<Dut>)`（`Dut : ch::Component`）+ **反向**断言（`std::optional<Sm>` 陷阱）+ 变异自检 ⇒ 并删掉「可行动地失败」这类散文 |
+| 5 | **[blocker]** CHANGELOG 判据从「日期 ≥」换成 **token 清单**；且载体命运需先裁定（**6** 条 vs **145** 个归档 change ⇒ 整体停更） | ✅ **采纳** ⇒ 移入 ① 的 §What Changes（**R1 / R2 / R3** 三选一 · ★ 待用户拍板）+ Acceptance 用 token 清单 / 计数守恒 |
+| 6 | **[quality]** 出口判据补 `verify_openspec_delta.sh` + capability **符号级不变量** + `CTEST_TOTAL` 同步 | ✅ **采纳** ⇒ 进 ② 的 Acceptance（P15 出口判据） |
+| 7 | **[quality]** 「忘记 `.end()` ⇒ 析构期可捕获」**今天零测试** ⇒ `spec.md:223` Scenario 无背书 | ✅ **采纳** ⇒ 进 ② 的 Acceptance（基线用例）⇒ 另核实：`.end()` 在 `tests/chlib/test_if_stmt.cpp` 出现 **14** 次 · **0** 处走析构路径 |
+| 8 | **[quality]** 约束句三处同改 + 删「编译器会说人话」的 over-promise | ✅ **采纳** ⇒ ② 的 §What Changes 给出精确措辞（**含「作为基类」**）⇒ 三处（② 的范围 / ② 的 Acceptance / 本文件 P13 行）同改 |
+| 9 | **[quality]** 用**仓内**证据补强 Why | ✅ **采纳** ⇒ ★ **新增实测**：`include/component.h:62` 的 `virtual ~Component();`（隐式 noexcept）作基类 + 按值持有 FSM ⇒ **同样的编译错误** ⇒ ⇒ 「把 describe() 里的局部 FSM 提为成员」这个**标准重构**今天不可用（`uart_tx.cpp:71` 就是局部对象）⇒ ⇒ 比引用下游 issue 更有力 |
+| 10 | **[quality]** 本文件「不再需要新的架构裁定」被 P13 证伪 ⇒ 必须订正 | ✅ **采纳** ⇒ 概览段已加 **2026-11-09 订正**（并说明台账 §7 的 20 行**不受影响**） |
+| 11 | **[nice]** 删 planner 倾向与 ✅/❌ 评价符号 | ✅ **采纳** ⇒ ② 全文无倾向、无评价符号 |
+| 12 | **[nice]** `guard` 术语撞车（`chlib/guard_contribution.h` 已占用） | ✅ **采纳** ⇒ 记入 ② 的选项 D 说明（改名建议） |
+
+★ **metis 之外、由本轮复核新增的三条事实**（已实测，进 ② 的正文）：
+
+| # | 事实 | 证据 |
+|---|---|---|
+| a | **`conditional_block` 与 `ch_state_machine` 的析构不同构** ⇒ 前者析构**做事**（兜底 `end()` 合成）⇒ 后者只**检查** ⇒ ⇒ **必须分别裁定**（改 `noexcept` 对条件块 = **静默丢功能**） | `include/chlib/if_stmt.h:133-139` vs `include/chlib/state_machine.h:506-517` |
+| b | **`std::optional<Sm>` 是静默降级陷阱**（比「编译期撞墙」更危险） | `static_assert(std::is_nothrow_destructible_v<std::optional<Sm>>)` **成立**（libstdc++ 把 `T` 放 union ⇒ union 析构 noexcept ⇒ `~optional()` 推导 noexcept） |
+| c | **展开期门 / 静态析构期门**：`std::uncaught_exceptions() == 0` 两处都在 ⇒ 新形态 MUST 复制；`in_static_destruction()` 门**当前永不生效**（ADR-050:166 自陈 3 个调用点全被注释）⇒ 「保持既有守卫」**行为不可测** ⇒ 须手工置位测或明写 dormant | `state_machine.h:509` · `if_stmt.h:135` · `ADR-050:166` |
 
 ---
 
@@ -130,6 +173,7 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 | P9 | — | `feat-riscv-mini-rtl-debt` · `feat-cache-rewrite` | — |
 | P10 | — | `feat-hierarchical-rtl-output`（「全程」条目） | — |
 | P11 | — | `feat-hdl-logical-deprecation` | ADR-036 |
+| P12–P15 | — | —（**框架级**缺口 ⇒ 暂不挂 feature） | 上游 issue #28 ⇒ ② 待 ADR-067（**P13**）· ① 无需 ADR（**P14**） |
 
 ---
 
@@ -142,9 +186,10 @@ dispatch 在本仓**缺失**）本身是**独立待办**）。
 
 > ⚠️ **2026-11-09 修复（G1 行曾残缺 + 「CLI dispatch 缺失」结论已过时）**：
 > ① 该行在 `e03dbb9` 引入时只剩**处置列的尾段**（表格首三格丢失 ⇒ 渲染出无 `|` 起始的悬空行）。
->    缺口 / 影响两列按本文件 §推进机制 第 5 条（`:97-99`）与 `scripts/verify_roadmap_fragments.sh`
+>    缺口 / 影响两列按本文件 §推进机制 第 5 条（`:142-146`）与 `scripts/verify_roadmap_fragments.sh`
 >    的前言**重建**；**处置列逐字保留**（未改一字）。同步修：§推进机制 第 5 条的 `见 P12`
->    改为指向本表 G1（P12 不存在 —— 步号只有 P1–P11 + P2b）。
+>    改为指向本表 G1（P12 **当时**不存在 —— 步号只有 P1–P11 + P2b；**2026-11-09 追加 P12–P14** ⇒
+>    但该行的悬空引用**仍然**指向 G1 —— P12 是**另一件事**（下游编译破坏的框架级缺口 · issue #28））。
 > ② ⚠️ **「`rddf roadmap --update-agent-md` 的 CLI dispatch 在本仓缺失」这条结论已过时**
 >    （2026-11-09 实测）：dispatch **存在**（工具链 **rdd-workflow v4.0.0** @
 >    `d5376087`）⇒ 但它按**项目根**解析 `skills/roadmap/scripts/…` ⇒ 本仓**未 vendor** `skills/`

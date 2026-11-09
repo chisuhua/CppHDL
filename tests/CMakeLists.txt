@@ -955,6 +955,9 @@ add_catch_test(test_mem_comb_read test_mem_comb_read.cpp)
 
 # 组件测试
 add_catch_test(test_state_machine test_state_machine.cpp)
+# ADR-067 决策 ⑤：「chlib」析构异常规格 vs 类型可组合性的**机械判据**
+# （仓外视角 · 只 include 公共头 · 真编译 + 真链接 + 真运行）
+add_catch_test(test_chlib_composability_api test_chlib_composability_api.cpp)
 # test_pipeline_regs.cpp deleted in cleanup-orphan-code (commit B)
 # The PipelineReg Component coverage lives in:
 #   - tests/chlib/test_forwarding.cpp  (chlib::ForwardingMux + IfIdRegs struct field access)

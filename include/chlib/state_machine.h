@@ -87,6 +87,42 @@
  *    ⇒ 正确形态：拆成**多条** `transition_when`（条件**互斥**）。
  *
  * ===========================================================================
+ * ⚠️ ③ **析构形态与可组合性**（ADR-067 决策 ② · 读这段再决定怎么持有 FSM）
+ * ===========================================================================
+ *
+ * C++17 下，「**析构期可捕获**检出」与「该类型**可作按值成员**」在**同一个析构函数**上
+ * **互斥** —— `noexcept` 析构 ⇒ 析构期抛 ⇒ `std::terminate` ⇒ **不可捕获**；
+ * 而 `noexcept(false)` 析构 ⇒ 派生类的隐式析构被推成 `noexcept(false)`
+ * ⇒ override 一个 `noexcept` 虚析构 ⇒ **编译错误**
+ * （`looser exception specification on overriding virtual function`）。
+ *
+ * ⇒ ⇒ **两种形态**（第三模板实参 `Detection`）：
+ *
+ * | 形态 | 析构 | 检出 | 可作按值成员 |
+ * |---|---|---|---|
+ * | `dtor_detection::automatic`（**默认**） | `noexcept(false)` | 析构期**自动**、**可捕获** | ❌ |
+ * | `dtor_detection::explicit_only` | `noexcept` | ① **显式** `check_unresolved()`（可捕获）② 析构期**终止兜底**（不可捕获 · fail-closed） | ✅ |
+ *
+ * **选择指引**：
+ *
+ * - **describe() 内的局部 FSM** ⇒ 用**默认形态**（自动 + 可捕获检出 ⇒ 无需任何额外动作）；
+ * - **组件的按值成员** ⇒ 用 `dtor_detection::explicit_only`
+ *   ⇒ ⇒ ⚠️ 此时**必须**自行安排 `check_unresolved()`（否则析构期只会**终止**，不可捕获）。
+ *
+ * ⚠️ **使用契约**（ADR-067 决策 ④ · 两处共用）：
+ *
+ * > **析构非 `noexcept` 的类型** MUST NOT 作为「**有虚析构**的类」的**按值成员**或**基类**
+ * > —— 派生类的隐式析构异常规格由子对象推导 ⇒ `noexcept(false)` 子对象 ⇒ 派生类析构
+ * > `noexcept(false)` ⇒ ⇒ override 一个 `noexcept` 虚析构 ⇒ **编译错误**。
+ *
+ * ⚠️ 本契约**不承诺**「编译器会说人话」—— 类型系统无法在成员声明处产出**可行动**诊断
+ * ⇒ ⇒ 契约的价值在**文档 + capability + 评审**，**不是**编译期提示。
+ *
+ * ⚠️ **拷贝语义**（ADR-067 决策 ⑨）：本类型**有用户声明的析构** ⇒ ⇒ **无隐式移动构造**
+ * ⇒ ⇒ 拷贝仍在 ⇒ ⇒ 拷贝会**浅拷贝** `contributions_` / `resolved_targets_` 里的节点句柄
+ * ⇒ ⇒ **两个对象指向同一批节点** ⇒ ⇒ **MUST NOT** 按值传参 / 放进容器 / 显式拷贝。
+ *
+ * ===========================================================================
  * 现状契约（把实现语义写死 ⇒ 将来若要改，MUST 走 OpenSpec MODIFIED delta）
  * ===========================================================================
  *
@@ -129,12 +165,39 @@ constexpr unsigned compute_state_bits(unsigned n) {
 }
 
 /**
+ * @brief 析构期检出策略（ADR-067 决策 ②）
+ *
+ * ⚠️ **为什么需要它**：C++17 下，「**析构期可捕获**检出」与「该类型**可作按值成员**」
+ * 在**同一个析构函数**上**互斥** —— `noexcept` 析构 ⇒ 析构期抛 ⇒ `std::terminate`
+ * ⇒ **不可捕获**；而 `noexcept(false)` 析构 ⇒ 派生类的隐式析构被推成 `noexcept(false)`
+ * ⇒ override 一个 `noexcept` 虚析构 ⇒ **编译错误**
+ * ⇒ ⇒ 「把 describe() 里的**局部** FSM 提为**组件成员**」这个标准重构今天不可用。
+ *
+ * | 策略 | 析构 | 检出 | 可作按值成员 |
+ * |---|---|---|---|
+ * | `automatic`（**默认**） | `noexcept(false)` | 析构期**自动**、**可捕获** | ❌ |
+ * | `explicit_only` | `noexcept` | ① **显式** `check_unresolved()`（可捕获）② 析构期**终止兜底**（不可捕获 · fail-closed） | ✅ |
+ *
+ * ⚠️ **默认形态逐字保留 ADR-050 D5**（「未 resolve 的贡献 MUST 在析构期**可捕获**检出」）
+ * ⇒ ⇒ 既有用户**零改动**。
+ */
+enum class dtor_detection {
+    /// 析构期**自动**检出（抛**可捕获**异常）—— 默认形态（ADR-050 D5）
+    automatic,
+    /// 析构 `noexcept`（⇒ 类型可作按值成员 / 基类）⇒ 检出走显式
+    /// `check_unresolved()` + 析构期**终止兜底**（fail-closed · **绝不静默**）
+    explicit_only
+};
+
+/**
  * @brief State Machine DSL for CppHDL
- * 
+ *
  * @tparam StateEnum Enum type defining the states
  * @tparam N Number of states
+ * @tparam Detection 析构期检出策略（ADR-067 决策 ②）—— 默认 `automatic`（逐字保留 ADR-050 D5）
  */
-template <typename StateEnum, size_t N>
+template <typename StateEnum, size_t N,
+          dtor_detection Detection = dtor_detection::automatic>
 class ch_state_machine {
 public:
     using state_type = StateEnum;
@@ -143,6 +206,10 @@ public:
     
     static constexpr unsigned STATE_BITS = compute_state_bits(N);
     static constexpr size_t NUM_STATES = N;
+
+    /// ⚠️ **类型级开关**（ADR-067 决策 ②）：`true` ⇒ 析构期自动检出（抛**可捕获**异常）
+    /// ⇒ ⇒ `false` ⇒ 析构 `noexcept` ⇒ **类型可作按值成员 / 基类**
+    static constexpr bool kDetectAtDtor = (Detection == dtor_detection::automatic);
     
     /**
      * @brief State definition
@@ -278,6 +345,14 @@ private:
     bool is_resolved(lnodeimpl *target) const {
         for (auto *t : resolved_targets_) {
             if (t == target) return true;
+        }
+        return false;
+    }
+
+    /// ⚠️ 「存在未 resolve 的贡献」？（**只读** ⇒ **不消解**任何状态 ⇒ ⇒ 检出**非幂等**）
+    bool has_unresolved_contributions() const {
+        for (const auto &c : contributions_) {
+            if (!is_resolved(c.target)) return true;
         }
         return false;
     }
@@ -499,21 +574,52 @@ public:
      * ⚠️ 析构期抛异常 ⇒ 若正在**展开**中 ⇒ std::terminate ⇒ 故只在
      *    「无待处理异常」且「非静态析构期」时抛。
      */
-    // ⚠️ `noexcept(false)`：析构函数默认是 noexcept ⇒ 析构期抛异常会
-    //    `std::terminate` ⇒ 必须显式关闭 ⇒ 否则「未 resolve」的检出变成 abort
-    //    （不可捕获 ⇒ 不可测）。⚠️ 展开期（`uncaught_exceptions() > 0`）**不抛**
-    //    ⇒ 避免 terminate。
-    ~ch_state_machine() noexcept(false) {
-        for (const auto &c : contributions_) {
-            if (is_resolved(c.target)) continue;
-            if (std::uncaught_exceptions() == 0 &&
-                !ch::detail::in_static_destruction()) {
-                CHFATAL_EXCEPTION(
-                    "ch_state_machine: contributions were registered but never "
-                    "resolved (call resolve_hold / resolve_or for every target)");
-            }
+    // ⚠️ **析构期检出**（ADR-067 决策 ②）：
+    //    - `automatic`（**默认**）：`noexcept(false)` ⇒ 析构期抛**可捕获**异常
+    //      ⇒ ⇒ **逐字保留 ADR-050 D5**（「未 resolve 的贡献 MUST 在析构期**可捕获**检出」）；
+    //    - `explicit_only`：`noexcept` ⇒ ⇒ **类型可作按值成员 / 基类**
+    //      ⇒ 检出改走「**显式** `check_unresolved()`（可捕获）+ 析构期**终止兜底**」
+    //      ⇒ ⇒ **绝不静默**（与「静默丢弃贡献」明确对立）。
+    // ⚠️ 展开期（`uncaught_exceptions() > 0`）**不抛 / 不终止**
+    //    ⇒ 避免在异常展开中二次 terminate。
+    // ⚠️ 静态析构期（`in_static_destruction()`）同样**不抛 / 不终止**
+    //    （⚠️ 该守卫当前**从不生效** ⇒ 见 ADR-050 §4「析构检出的静默降级窗口」）。
+    ~ch_state_machine() noexcept(kDetectAtDtor ? false : true) {
+        if (!has_unresolved_contributions()) return;
+        if (std::uncaught_exceptions() > 0 ||
+            ch::detail::in_static_destruction()) {
             return;
         }
+        if constexpr (kDetectAtDtor) {
+            CHFATAL_EXCEPTION(
+                "ch_state_machine: contributions were registered but never "
+                "resolved (call resolve_hold / resolve_or for every target)");
+        } else {
+            CHERROR(
+                "ch_state_machine: contributions were registered but never "
+                "resolved (call resolve_hold / resolve_or for every target) "
+                "=> terminating: this instantiation uses "
+                "dtor_detection::explicit_only, whose destructor MUST NOT throw "
+                "(call check_unresolved() explicitly to catch it earlier)");
+            std::terminate();
+        }
+    }
+
+    /**
+     * @brief 显式检查「未 resolve 的贡献」⇒ 有则抛**可捕获**异常
+     *
+     * ⚠️ 这是 `dtor_detection::explicit_only` 形态的**可捕获**检出路径
+     *   （其析构 `noexcept` ⇒ 析构期抛 ⇒ `std::terminate` ⇒ **不可捕获**）。
+     *
+     * ⚠️ **检出非幂等**（fail-closed 的必然结果 · ADR-067 决策 ② 语义 4）：
+     *   本检查是**只读**的 ⇒ `catch` 后**不 resolve** ⇒ 析构期兜底**照常终止**
+     *   ⇒ ⇒ `catch` 之后请**继续 resolve**（⇒ 兜底自然不触发 ⇒ 这是推荐的恢复路径）。
+     */
+    void check_unresolved() const {
+        if (!has_unresolved_contributions()) return;
+        CHFATAL_EXCEPTION(
+            "ch_state_machine: contributions were registered but never "
+            "resolved (call resolve_hold / resolve_or for every target)");
     }
     
     /**
