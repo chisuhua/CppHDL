@@ -10,6 +10,7 @@
 
 #include "hierarchy_analysis.h"
 
+#include "ast/mem_port_impl.h"
 #include "codegen_naming.h"
 #include "core/context.h"
 #include "core/lnodeimpl.h"
@@ -33,6 +34,9 @@ namespace ch {
 namespace {
 
 using ch::core::lnodeimpl;
+using ch::core::mem_port_impl;
+using ch::core::mem_port_type;
+using ch::core::mem_write_port_impl;
 using ch::core::lnodetype;
 
 constexpr const char* kImplicitPortUnsupported =
@@ -269,6 +273,34 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
     }
 
     auto module_key = [](const Component* c) { return c->name(); };
+    // ── (i) **mem 本体跨 module** ⇒ 响亮拒绝（ADR-066 决策 ⑦ v1.2 · 判别程序 ①②③）
+    //    ⚠️ **为什么必须独立扫描**：mem 本体（`memimpl`）**零 `add_src`**，端口的 addr/en 也
+    //    可能是**父层**节点 ⇒ ⇒ 字面 (i) **不产生任何跨 module 边** ⇒ ⇒ 下面的边闸门对它
+    //    **不可达**（实测：分析放行 + 发射期 `mem[<子内名>]` ⇒ implicit wire ⇒ 宽度截断）。
+    //    ⇒ ⇒ 判据 = **节点级归属比对**：持有 module（`port->parent()` 的折叠后归属）
+    //    ≠ 使用 module（端口节点自身的折叠后归属）。
+    for (const auto& owned : ctx->get_nodes()) {
+        auto* port = dynamic_cast<mem_port_impl*>(owned.get());
+        if (port == nullptr || port->parent() == nullptr) {
+            continue;
+        }
+        const auto it_hold = mod_of.find(port->parent());
+        const auto it_use = mod_of.find(port);
+        if (it_hold == mod_of.end() || it_use == mod_of.end()) {
+            continue;   // 防御：未登记归属 ⇒ 不误拒
+        }
+        if (it_hold->second != it_use->second) {
+            CHFATAL_EXCEPTION(
+                "hierarchical analysis: cross-module ch_mem access (ch_mem '%s' owned by "
+                "module '%s', used by a port in module '%s' for node '%s'). "
+                "ADR-066 decision 7 (i): the ch_mem body and its user MUST live in the same "
+                "module. Legal remedies: (1) move the read/write ports into the module that "
+                "owns the ch_mem; (2) keep the ch_mem in the user's module and pass "
+                "address/wdata down and rdata up through ports.",
+                port->parent()->name().c_str(), it_hold->second->name().c_str(),
+                it_use->second->name().c_str(), port->name().c_str());
+        }
+    }
 
     // ── 节点 → module key（发射器用：判断驱动边是否跨 module）
     for (const auto& owned : ctx->get_nodes()) {
@@ -539,19 +571,6 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
             if (um_c == vm_c) {
                 continue;
             }
-            // 跨 module 的 ch_mem ⇒ 响亮拒绝（ADR-060 §2.1：mem MUST 与使用者同层）
-            if (is_mem_node(u) || is_mem_node(v)) {
-                CHFATAL_EXCEPTION(
-                    "hierarchical analysis: cross-module ch_mem access ('%s' in '%s' "
-                    "<- '%s' in '%s'). ADR-060 requires the memory and its user to be "
-                    "in the same module. Two legal remedies: (1) the parent holds the "
-                    "ch_mem and passes address/wdata down and rdata up through ports; "
-                    "(2) the child holds the ch_mem and exposes the read result as its "
-                    "own ch_out.",
-                    v->name().c_str(), module_key(vm_c).c_str(), u->name().c_str(),
-                    module_key(um_c).c_str());
-            }
-
             // 只支持**直接父子**（含 inline 链折叠）⇒ 否则需要 pass-through（T3-④）
             Component* direct_parent_of_vm =
                 (vm_c == &root) ? nullptr : nearest_layer(tree.parent.at(vm_c), tree);
@@ -559,6 +578,38 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
             Component* direct_parent_of_um =
                 (um_c == &root) ? nullptr : nearest_layer(tree.parent.at(um_c), tree);
             const bool child_drives_parent = (vm_c == direct_parent_of_um);
+
+            // ── 跨 module 的 ch_mem ⇒ **三桶**（ADR-066 决策 ⑦ v1.2 / 决策 ⑧ v1.3）
+            //    (i)   mem 本体跨 module ⇒ 已由上方**独立扫描**拒绝（此处兜底）
+            //    (ii)  mem 本体与使用者同 module、仅 addr/en/wdata **实参视线**跨层
+            //          （且实参来源**相邻**）⇒ **放行** ⇒ 走下面的常规跨 module 边路径
+            //          （决策 ① 的父侧落点网 ⇒ 决策 ⑧ 的「登记义务」天然满足）
+            //    (iii) 非相邻实参（孙 / 兄弟）⇒ **仍拒**（由下面的相邻性规则）
+            if (is_mem_node(u) || is_mem_node(v)) {
+                bool allow_ii = false;
+                if (auto* port = dynamic_cast<mem_port_impl*>(v)) {
+                    const bool is_arg_slot =
+                        (u == port->addr()) || (u == port->enable()) ||
+                        (port->port_type() == mem_port_type::write &&
+                         u == static_cast<mem_write_port_impl*>(port)->wdata());
+                    // ⚠️ 只放行**实参槽** ⇒ `data_output()`（rdata）/ cd 槽跨层 **不属** (ii)
+                    //    （ADR-066 决策 ⑧ ⑤：rdata 跨层 ⇒ 仍按 (i) 拒）
+                    allow_ii = is_arg_slot && (parent_drives_child || child_drives_parent);
+                }
+                if (!allow_ii) {
+                    CHFATAL_EXCEPTION(
+                        "hierarchical analysis: cross-module ch_mem access ('%s' in '%s' "
+                        "<-'%s' in '%s'). ADR-060 §2.1 / ADR-066 decision 7 requires the "
+                        "ch_mem BODY and its user to be in the same module. Legal remedies: "
+                        "(1) keep the ch_mem in the user's module and pass address/wdata down "
+                        "and rdata up through ports; (2) move the read/write ports into the "
+                        "module that owns the ch_mem; (3) if the operand comes from a "
+                        "grandchild or a sibling module, route it through a transit wire in "
+                        "the common ancestor (decision 7 (iii)).",
+                        v->name().c_str(), module_key(vm_c).c_str(), u->name().c_str(),
+                        module_key(um_c).c_str());
+                }
+            }
 
             if (!parent_drives_child && !child_drives_parent) {
                 // 兄弟边 / 跨层 pass-through ⇒ 需要父层 wire 中转（T3-④）
