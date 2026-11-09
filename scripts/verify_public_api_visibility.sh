@@ -63,7 +63,11 @@ MECHANISM_DATE="2026-11-09"
 # 条目不存在 ⇒ 红（否则它会变成「静默豁免池」））。不追溯的理由 = 存量回填的
 # 工作量不可控（145 个历史 change），而「从现在起的每一个」才是可执行的义务。
 GRANDFATHERED=("2026-11-09-hierarchical-parent-side-landing-implementation")
-EXPECTED_PROBES=15
+# 缩面锚点（精确计数 ⇒ 增删 MUST 同步 ⇒ 机制同 CTEST_TOTAL）：
+#   EXPECTED_REMOVAL_ROWS = 登记表「已移除 / 已改名」表的**行数**（分组行，一个符号族一行）
+#   EXPECTED_PROBES       = 机器探针的行数（逐符号 / 逐文件族）
+EXPECTED_REMOVAL_ROWS=13
+EXPECTED_PROBES=18
 AGENTS_TOKEN="零「仓内」消费者的「公开」符号不算 dead code"
 CHANGELOG_TOKENS=(is_built current_state resolve_hold "noexcept(false)")
 
@@ -248,12 +252,14 @@ check_r2_registry() {
         fail "R2 登记表缺「已移除 / 已改名的公开符号」章"
         bad=1
     fi
-    # the removal table MUST carry at least one removal row
+    # the removal table MUST carry exactly EXPECTED_REMOVAL_ROWS removal rows
+    # ⚠️ 行首格可能含**多个** backtick（`a` / `b`）⇒ 不能要求「首格 = 单个符号」
+    #    （实测：用 `^\| \`[^\`]+\` \|` 判 ⇒ 11 行只数到 **4** 行 ⇒ 判据弱化）
     local rows
     rows="$(awk '/已移除 \/ 已改名的公开符号/,/^## 维护规则/' "$REGISTRY" |
-        grep -cE '^\| `[^`]+` \| \*\*(移除|改名|物理删除)\*\*')"
-    if [ "${rows:-0}" -lt 1 ]; then
-        fail "R2 移除记录表为空（至少 1 行）"
+        grep -cE '^\|.*\|[[:space:]]*\*\*(移除|改名|物理删除)\*\*')"
+    if [ "${rows:-0}" -ne "$EXPECTED_REMOVAL_ROWS" ]; then
+        fail "R2 移除记录表行数 = ${rows:-0}，锚点 EXPECTED_REMOVAL_ROWS = $EXPECTED_REMOVAL_ROWS（增删记录 MUST 同步锚点）"
         bad=1
     fi
     local adr n f found
@@ -375,6 +381,7 @@ self_test() {
             cp "$backup/CHANGELOG.md" "$CHANGELOG" 2>/dev/null
             cp "$backup/state_machine.h" "$HEADER" 2>/dev/null
             cp "$backup/removals.tsv" "$PROBES" 2>/dev/null
+            cp "$backup/registry.md" "$REGISTRY" 2>/dev/null
             poisoned=0
         fi
         return 0
@@ -386,6 +393,7 @@ self_test() {
     cp "$CHANGELOG" "$backup/CHANGELOG.md"
     cp "$HEADER" "$backup/state_machine.h"
     cp "$PROBES" "$backup/removals.tsv"
+    cp "$REGISTRY" "$backup/registry.md"
 
     # M1: drop the verdict boundary sentence => R3 MUST go red
     poisoned=1
@@ -458,8 +466,21 @@ PY
     fi
     cp "$backup/removals.tsv" "$PROBES"
 
+    # M5: delete a row from the human removal table => R2 anchor MUST go red
+    poisoned=1
+    grep -v 'tick_state()' "$backup/registry.md" > "$REGISTRY"
+    if cmp -s "$backup/registry.md" "$REGISTRY"; then
+        echo "❌ self-test: M5 poisoning did not apply (tick_state row missing?)" >&2
+        return 1
+    fi
+    if run_rules_quietly; then
+        echo "❌ self-test: M5 (delete a removal-table row) MUST make R2 red" >&2
+        return 1
+    fi
+    cp "$backup/registry.md" "$REGISTRY"
+
     poisoned=0
-    echo "✅ self-test: every rule has discriminating power (M1/M2/M3/M4 each turned the guard RED)"
+    echo "✅ self-test: every rule has discriminating power (M1–M5 each turned the guard RED)"
     return 0
 }
 

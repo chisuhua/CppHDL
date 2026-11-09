@@ -9,7 +9,7 @@ type: feature
 依赖: ADR-066, ADR-060, ADR-062
 来源: ADR-066（Accepted 2026-11-08）· 台账 §7 行 16 + 行 19 · 裁定输入文档 docs/architecture/2026-11-08-hierarchical-parent-side-landing.md
 生成时间: 2026-11-08
-evidence: adr:docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md
+evidence: test:tests/test_hierarchy_verilog.cpp
 ---
 
 # Improvement: 父侧落点语义落地（ADR-066 决策 ①–⑥）

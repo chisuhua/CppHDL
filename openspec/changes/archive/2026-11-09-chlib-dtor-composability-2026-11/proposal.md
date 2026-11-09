@@ -1,3 +1,5 @@
+<!-- touched-components: ch_state_machine -->
+
 # Proposal: `chlib` 析构异常规格 vs 类型可组合性（ADR-067 落地）
 
 > **权威决策**：`docs/adr/ADR-067-dtor-exception-spec-composability.md`（**Accepted** · 用户拍板）

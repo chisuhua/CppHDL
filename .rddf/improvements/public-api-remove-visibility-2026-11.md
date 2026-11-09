@@ -11,7 +11,7 @@ type: process
 依赖: ADR-050, ADR-043
 来源: 上游 issue #28（下游 ChipForge 反馈 · 2026-11-08）· phase-6 P12（起草）/ P14（实施）
 生成时间: 2026-11-09
-evidence: adr:docs/adr/ADR-050-chlib-state-machine-semantics.md
+evidence: probe:scripts/verify_public_api_visibility.sh
 ---
 
 # Improvement: 公开 API 移除的**跨仓可见性** —— 用户可见 CHANGELOG 载体 + 判决规则边界 + 下游编译面

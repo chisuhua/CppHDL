@@ -1,5 +1,5 @@
 ---
-scope: chlib 的**对外暴露**组合子（stream / fifo / selector 族）
+scope: chlib 的**对外暴露**组合子（stream / fifo / selector 族 / FSM 族）
 rule: capability `chlib-stream-arbitration` 的「仲裁器的命名与文档 MUST 与实现行为一致」
 evidence: probe:scripts/verify_chlib_naming_honesty.sh
 ---
@@ -33,6 +33,7 @@ evidence: probe:scripts/verify_chlib_naming_honesty.sh
 | `stream_s2m_pipe` | slave→master 管道；`payload`/`valid` **0 拍**直通，`ready` 延迟 **1 拍** | `tests/chlib/test_stream_pipeline_dual.cpp` · `[chlib][stream][pipeline][s2m][ready][dual]` | 2026-11-01 ADR-055 重写（修掉「寄存上游自己的 ready ⇒ 方向反了的自环」）⇒ 2026-11-03 首次双后端验证 ⇒ 登记 |
 | `stream_half_pipe` | 半带宽管道；**全信号寄存**且**隔拍**才接收 | `tests/chlib/test_stream_pipeline_dual.cpp` · `[chlib][stream][pipeline][half][ready][dual]` | 2026-11-01 ADR-055 重写（修掉「toggle 由传输驱动 ⇒ 无数据时死锁」）⇒ 2026-11-03 首次双后端验证 ⇒ 登记 |
 | `priority_encoder` | 优先级编码器：**编号最大**的置位优先（**高位优先**） | `tests/chlib/test_stream_arbiter_dual.cpp` · `[chlib][stream][arbiter][priority][grant][ready][dual]` | 2026-11-03 `header-self-containment-fix-2026-11` 订正了它的**头注释**（原文写「优先处理低位」⇒ 与实现**相反**；实测 `priority_encoder<4>(0b1010) == 3`）⇒ ⇒ 该方向由 `stream_arbiter_priority` 的 `[priority][grant]` 用例锁定 ⇒ 登记 |
+| `ch_state_machine` | 「`tick_state()` 能推进状态」「`is_built()` 表示 DSL 已 build」「`current_state()` 返回运行时状态」—— 三条**均不成立**（前者重复发射节点、中者只看状态定义是否注册、后者返回**编译期** entry）⇒ ⇒ 三者已按 ADR-050 移除 / 改名 | `tests/test_chlib_composability_api.cpp` · `[dtor][composability]` | 2026-11-09（ADR-067 / P15）：该类型被改动（新增 `dtor_detection` 第三模板实参 + `check_unresolved()`），且历史上是**名字说谎**最集中的组件 ⇒ 按本表自身的范围定义（「被改动过 / 名字说过谎」）登记；判别性用例 = 可组合性契约（析构异常规格 / 拾取落差 / 子进程兜底） |
 | `priority_selector` | 优先级选择器；**最低**置位优先（低位优先级更高） | `tests/chlib/test_selector_arbiter_dual.cpp` · `[chlib][selector][priority][grant][dual]` | 2026-11-03 首次双后端验证（方向只有多位同时置位时才可观测）⇒ 登记 |
 | `round_robin_selector` | 轮转选择器；扫描起点 = **上次授予位置 + 1**（环绕） | `tests/chlib/test_selector_arbiter_dual.cpp` · `[chlib][selector][round_robin][grant][dual]` | 2026-11-03 首次双后端验证（**有生产消费者**：`include/chlib/stream.h` 的 `stream_arbiter_round_robin`）⇒ 登记 |
 | `stream_narrow_to_wide` | 累积 `RATIO` 个窄字为**一个**宽字（第 k 个落在 `[k*NB,(k+1)*NB)`），宽字**含最后一个窄字**且**组间隔离**；输出 `valid`/`payload` **寄存器化**（+1 拍） | `tests/chlib/test_stream_width_adapter_dual.cpp` · `[chlib][stream][width_adapter][narrow_to_wide][dual][adr064]` | 2026-11-03 ADR-064 重写：修复前**一仿真就 SIGSEGV**、且宽字**缺最后一个字** + 累积器不清零（跨组污染）|
@@ -50,3 +51,4 @@ evidence: probe:scripts/verify_chlib_naming_honesty.sh
 | 2026-11-03 | **+3**：`stream_narrow_to_wide` · `stream_wide_to_narrow` · `stream_width_adapter`（ADR-064 重写）⇒ 登记 **11 → 14**；⚠️ 同时**删除** `stream_extend` / `stream_truncate`（零消费者 + 零测试 + 静默失效）⇒ **MUST NOT** 登记它们（R1 会检「登记 ⊆ 组件全集」）|
 | 2026-11-03 | **+2**：`stream_arbiter_lock` · `round_robin_arbiter`（ADR-065 修复两处「建图期求值」缺陷）⇒ 登记 **14 → 16** |
 | 2026-11-03 | **+1**：`priority_encoder`（`header-self-containment-fix-2026-11` 订正其头注释「优先处理低位」⇒ 实为**高位优先**）⇒ 登记 **16 → 17** |
+| 2026-11-09 | **+1**：`ch_state_machine`（ADR-067 / P15：析构异常规格 ⇒ 第三模板实参）⇒ 登记 **17 → 18** ⇒ ⚠️ 该行是 R3 首次触发的直接后果：P15 的 change 触及 chlib 组件，但该组件此前**不在**登记表里 ⇒ 护栏转红 ⇒ 补登记（不是把标记写成空） |

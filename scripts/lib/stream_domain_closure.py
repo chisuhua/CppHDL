@@ -309,14 +309,42 @@ def _poison_flip_done_to_unpaid(lines: list[str]) -> list[str]:
 
 
 def _poison_stale_row_claims_covered(lines: list[str]) -> list[str]:
-    i = _find_row(lines, "stream_demux")
-    if i < 0:
-        raise RuntimeError("找不到 `stream_demux` 行")
-    cells = lines[i].strip().strip("|").split("|")
-    cells[COL["判据"]] = " `test:tests/chlib/test_stream.cpp#[stream][demux]` "
-    cells[COL["护栏"]] = " `guard:scripts/verify_stream_ready_ownership.sh#R8` "
-    lines[i] = "|" + "|".join(cells) + "|"
-    return lines
+    """构造「**状态过时**」行：标 ❌ 但**保留**可执行判据 + 护栏 ⇒ ⇒ R2 MUST 转红。
+
+    ⚠️⚠️ **本投毒曾**空转**（2026-11-09 实测 5/6）**：旧实现把 `stream_demux` 行的
+    判据 / 护栏两格**改写成别的合法指针**，而该行当时已是 ✅ ⇒ ⇒ 改写后**仍是
+    合法的 ✅** ⇒ ⇒ R2 照常通过 ⇒ ⇒ 自检报「判据无判别力」。
+    ⇒ ⇒ 根因 = **投毒假设「存在 ❌ 行」**（收口清单 2026-11-01 之后**全 ✅**）
+    ⇒ ⇒ 该假设失效后投毒变成 no-op。
+
+    ⇒ ⇒ 修法（**不依赖清单当前状态**）：
+      ① 取一行**当前**为 ✅ 的行（存在性由 fail-closed 保证：找不到 ⇒ 抛异常）
+      ② 把**状态**格改成 ❌（**保留**其判据 + 护栏 ⇒ ⇒ 这正是「状态过时」形态）
+      ③ 填一个**可解析**的 `debt:` 指针（⇒ ⇒ 否则 R2 命中的是「❌ 无欠账」分支，
+         测不到「❌ 却同时具备判据 + 护栏」这条判据）
+      ④ **同步 `UNPAID_ROWS` 锚点**（⇒ ⇒ 否则 R0 先红 ⇒ ⇒ 测不到 R2 的分支）
+    """
+    for i, ln in enumerate(lines):
+        if not ln.strip().startswith("|"):
+            continue
+        cells = ln.strip().strip("|").split("|")
+        if len(cells) != len(HEADER) or cells[COL["状态"]].strip() != "✅":
+            continue
+        if not cells[COL["判据"]].strip() or not cells[COL["护栏"]].strip():
+            continue
+        cells[COL["状态"]] = " ❌ "
+        cells[COL["欠账"]] = " `debt:.rddf/checks/stream-domain-closure.md#TOTAL_ROWS` "
+        lines[i] = "|" + "|".join(cells) + "|"
+        # 同步锚点：未兑现行数 +1（否则 R0 的行数/欠账校验先拦住）
+        for j, aj in enumerate(lines):
+            m = re.match(r"^(UNPAID_ROWS):\s*(\d+)\s*$", aj.strip())
+            if m:
+                lines[j] = f"UNPAID_ROWS: {int(m.group(2)) + 1}\n"
+                break
+        else:
+            raise RuntimeError("找不到 UNPAID_ROWS 锚点 ⇒ ⇒ 无法构造状态过时投毒")
+        return lines
+    raise RuntimeError("找不到可投毒的 ✅ 行（清单状态异常）⇒ ⇒ fail-closed")
 
 
 def _poison_truncate_rows(lines: list[str]) -> list[str]:

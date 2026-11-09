@@ -9,7 +9,7 @@ type: feature
 依赖: ADR-066, ADR-060
 来源: ADR-066 §2.7 决策 ⑦（已裁决 · 归下游独立立项）· 台账 §7 行 20（已裁决 · 归属=下游）· phase-6 P3（起草）/ P4（architect 范围裁定 · 前置）/ P5（实施）
 生成时间: 2026-11-09
-evidence: adr:docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md
+evidence: unmeasured
 ---
 
 # Improvement: `ch_mem` 端口实参跨层 —— 分析层粒度拆分 + 归因订正（+ 条件化的正确支持）

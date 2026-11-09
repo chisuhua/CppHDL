@@ -189,7 +189,8 @@ specifications.
 ## 2026-11-09 — `chlib-dtor-composability-2026-11`（+ 2026-10-15 以来的一次性回填）
 
 > ⚠️ **本条是「载体机制」上线**（issue #28 的处置）：本仓的用户可见变更此前**只**
-> 记录到 **2026-10-15** ⇒ ⇒ 而此后 **121** 个 change 已归档 ⇒ ⇒ **破坏性变更对
+> 记录到 **2026-10-15** ⇒ ⇒ 而此后 **122** 个 change 已归档（截至 2026-11-09 实测 ⇒
+> `ls openspec/changes/archive | awk 'substr($0,1,10)>="2026-10-16"' | wc -l`）⇒ ⇒ **破坏性变更对
 > 下游不可见**（真实后果：下游 ChipForge 在 2026-11-08 才发现
 > `ch_state_machine::is_built()` 已被移除 ⇒ ⇒ 编译失败 ⇒ ⇒ 上游 issue #28）。
 > ⇒ ⇒ **机制**（R1）：**每个归档 change MUST 携带一行「用户可见变更」**
@@ -211,6 +212,11 @@ specifications.
   `impl()`（约束偏序下**恒胜** ⇒ ⇒ 爆炸半径 0）。
 - **`include/cpu/cache/*_stub.h`**（pass-through stub 族 · ADR-037 · 2026-10-20）：
   改用 `i_cache_{sync,async}.h` / `d_cache_{sync,async}.h`。
+- **`bundle_concat` / `bundle_slice_view`**（ADR-043 · 2026-10-22）：两者当时均为
+  **静默失效**（前者字段不在位布局里、后者根本不切片）⇒ 改用 bundle **字段直连**
+  （ADR-042 之后字段是一等节点）。迁移指引见 `.rddf/checks/public-api-surface.md`。
+- **`conditional_reg_assign`** → **改名** `conditional_assign`（ADR-051 · 2026-10-30）：
+  旧名暗示「只对寄存器」，而输出端口同样需要条件化。
 
 ### Added
 
@@ -234,6 +240,14 @@ specifications.
   MUST NOT 作为「有虚析构的类」的按值成员或基类**（ADR-067 决策 ④）。
 - `chlib::ch_state_machine` 的析构期检出 MUST 可捕获（ADR-050 D5）⇒ ⇒ **默认形态
   逐字保留**；「可组合形态」的检出 MUST 是 **fail-closed** 的（ADR-067 决策 ②）。
+- **stream 组合子的 ready 语义**（下游若依赖旧行为 MUST 复核）：`stream_demux` 的 ready
+  方向改为**消费端 ⇒ 上游**（ADR-056 · 2026-11-01，与 `stream_mux` 对称）· `stream_fork`
+  同步语义为 `input.ready = AND(各输出 ready)`，`synchronous=false` **响亮拒绝**
+  （ADR-057 · 2026-11-01）· 组合子的 ready **所有权**形态 = ADR-054（2026-10-31 修订）。
+- **`stream_width_adapter` 重写**（ADR-064 · 2026-11-03）：三族 adapter 的语义与
+  命名对齐（详见 `.rddf/checks/chlib-naming-honesty-registry.md`）。
+- **节点命名 / 归属策略**（ADR-059 · 2026-11-02）：生成的 Verilog 中**子模块端口名**
+  与节点归属按「构造作用域」修正 ⇒ ⇒ 依赖**旧生成名**的下游脚本需要复核。
 
 ---
 

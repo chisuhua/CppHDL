@@ -11,7 +11,7 @@ type: feature
 依赖: ADR-050, ADR-051, ADR-067
 来源: 上游 issue #28（下游 ChipForge 反馈 · 2026-11-08）· **ADR-067（Accepted 2026-11-09 · 用户拍板）** · phase-6 P12（起草）/ P13（architect 裁定 · 已闭口）/ P15（实施）
 生成时间: 2026-11-09
-evidence: adr:docs/adr/ADR-050-chlib-state-machine-semantics.md
+evidence: test:tests/test_chlib_composability_api.cpp
 ---
 
 # Improvement: `chlib` 析构异常规格 vs 可组合性 —— 类型「不能当成员」的框架级缺口

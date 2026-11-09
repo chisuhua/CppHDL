@@ -73,6 +73,8 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | `CH_STATE_MACHINE` / `CH_STATE` / `CH_STATE_MACHINE_BUILD` 宏 | **移除** | 2026-10-30 | ADR-050 D2 | 改用 `chlib::ch_state_machine<State, N>` 类模板 |
 | `chlib::ch_state_machine::state_def::parent`（+ `friend`） | **移除** | 2026-10-30 | ADR-050 D2 | 只服务 `then()` ⇒ ⇒ 随 `then()` 一并移除 |
 | `get_lnode` 的「无约束通用入口」②（`include/core/bundle/bundle_base.h`） | **移除** | 2026-10-30 | ADR-053 决策 C | 改用 bundle 自带的 `impl()`（约束偏序下**恒胜** ⇒ ⇒ 爆炸半径 0） |
+| `bundle_concat` / `bundle_slice_view` | **移除** | 2026-10-22 | ADR-043 | 改用 bundle 的**字段直连**（ADR-042 把字段改成一等节点 ⇒ 拼接/切片不再需要）；两者当时均为**静默失效**（`bundle_concat` 字段不在位布局里 · `bundle_slice_view` 根本不切片） |
+| `conditional_reg_assign` | **改名** → `conditional_assign` | 2026-10-30 | ADR-051 | 旧名暗示「只对寄存器」⇒ 而**输出端口同样**需要条件化 ⇒ 改用 `conditional_assign(target).next() = v` |
 | `include/cpu/cache/*_stub.h`（pass-through stub 族） | **物理删除** | 2026-10-20 | ADR-037 | 语义不构成合法 cache 行为 ⇒ ⇒ 改用 `i_cache_{sync,async}.h` / `d_cache_{sync,async}.h` |
 
 ### **已弃用（尚未移除）** —— 下游现在就该迁移
@@ -88,6 +90,9 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 > - 本节登记的符号 MUST **确实不存在**于当前源码（⇒ ⇒ R2 的「登记了仍存在的符号 ⇒ 红」）
 >   ⇒ ⇒ ⇒ 「删了又加回来」必须同步删登记行。
 > - 本节 MUST **非空**（⇒ ⇒ 防「登记表被清空 ⇒ 静默缩面」）⇒ ⇒ R2。
+> - **机器探针**在 `.rddf/checks/public-api-removals.tsv`（逐符号 / 逐文件族 · 四种 kind ·
+>   判定在**剥掉注释与字符串字面量之后**进行）⇒ ⇒ 本节是**人读**的（含迁移指引），
+>   tsv 是**机器读**的 ⇒ 两者由护栏 **R5/R6** 双向绑定（探针 id MUST 出现在本节）。
 
 ## 维护规则
 

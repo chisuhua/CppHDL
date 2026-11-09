@@ -33,3 +33,6 @@ CH_STATE	removed	include/chlib	-	ADR-050
 CH_STATE_MACHINE_BUILD	removed	include/chlib	-	ADR-050
 get_lnode	re	include/core/bundle/bundle_base.h	get_lnode\s*\(\s*const\s+\w+\s*&	ADR-053
 *_stub.h	nofile	include/cpu/cache/*_stub.h	-	ADR-037
+bundle_concat	removed	include	-	ADR-043
+bundle_slice_view	removed	include	-	ADR-043
+conditional_reg_assign	renamed	include/chlib	conditional_assign	ADR-051
