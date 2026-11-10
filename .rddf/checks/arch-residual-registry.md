@@ -53,3 +53,5 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 17 | 已收口 | 2026-11-08 | 语料登记归因与 tripwire 同批修订 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 19 | 已收口 | 2026-11-08 | 路径 B 父侧落点网 + 产物可编译 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 20 | 已收口 | 2026-11-10 | P5 实施归档（三桶判定 + (ii) 支持 + en fail-closed + 归因分桶） | openspec/changes/archive/2026-11-10-mem-port-arg-cross-layer-2026-11 | — | — |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 21 | 未决 | 2026-11-10 | route (c) 字面同名当前不做 · 触发条件 = 用户在看到 manifest 产物后仍要求人眼可读 | — | 用户在看到 manifest 产物后仍要求人眼可读 ⇒ ⇒ 重开 route (c) 裁定 | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 21b | 未决 | 2026-11-10 | 根端口裸名目标钉 · 随 route (c) 一并处置 | — | route (c) 重开时一并处置 | architect |

@@ -78,10 +78,20 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 
 #### Scenario: 有父的组件实例路径由父路径与局部名构成
 
-- **WHEN** 一个组件实例的父组件路径为 `<P>`（非空）、其局部名为 `<L>`
+- **WHEN** 一个组件实例的**有父**、且其父组件的 `name()` 为 `<P>`（非空）、其局部名为 `<L>`
 - **THEN** 该实例的 `name()` MUST 等于 `<P> + "." + <L>`
 - **AND** MUST NOT 因 `<P>` 的字面值而剥离该路径段
+
+#### Scenario: 无父的组件实例路径等于其局部名
+
+- **WHEN** 一个组件实例**没有父组件**（`parent == nullptr`）
+- **THEN** 该实例的 `name()` MUST 等于其 `local_name()`
+- **AND** 该实例的**子**节点 MUST 以 `<local_name> + "."` 为前缀（与上一条同口径）
 ```
+
+> ⚠️ **architect 复核订正（2026-11-10 · 见 `.rddf/reviews/port-naming-parity-spec-delta-review-2026-11.md`）**：
+> 原 R1-b **漏了「无父」的情形**（根组件的 `name()` == `local_name()`）⇒ ⇒ 契约不完整
+> ⇒ ⇒ 已补 **Scenario「无父的组件实例路径等于其局部名」** ⇒ ⇒ ⇒ 该 Scenario 同时钉住「根组件的子节点也走同一口径」
 
 > ⚠️ **⚠️ `:62` 的既有 Requirement MUST NOT 动**（「其 Verilog 名 MUST 含该组件的路径段」）
 > ⇒ ⇒ 方向 (i)（让 `lnodeimpl` 也剥哨兵 ⇒ ⇒ 根的成员节点变裸 ⇒ ⇒ **违反** `:62`）
