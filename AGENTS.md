@@ -190,7 +190,9 @@ The project is `schema: spec-driven` (see `openspec/config.yaml`). `openspec/spe
 - **Archive must merge specs**: `openspec archive <name>` 默认会合并 `openspec/changes/<name>/specs/<capability>/spec.md` 的 `## ADDED Requirements` 到 `openspec/specs/<capability>/spec.md`。**禁止**使用 `--skip-specs` 标志，除非该 change 显式声明 "no spec changes"（参见 `fix-ns-pollution` 模式）。
 - **Spec 变更必须走 change 流程**：直接修改 `openspec/specs/<capability>/spec.md` 是禁止的；先创建 change 提案，archive 时由 CLI 自动合并。
 - **Spec 内容规范**：每条 requirement 描述**必须**含 `SHALL` 或 `MUST` 关键字（RFC 2119）；`## Purpose` 与 `## Requirements` 必须是 heading 而非引用块。
-- **CI 校验（★ 2026-11-09 订正）**：`openspec validate --specs --strict` **当前仓级为红**（CLI **1.14.x** 新增的两条 strict 规则 ⇒ ⇒ **与本仓改动无关** ⇒ ⇒ 成因与快照见 COMMANDS 段的「openspec CLI 版本漂移」条）⇒ ⇒ **archive 前的实际门 = `scripts/verify_openspec_delta.sh`**（绿即可）⇒ ⇒ `validate --specs` **仅作参考，不作为门** ⇒ ⇒ 证据：2026-11-09 的 P15 归档（`2026-11-09-chlib-dtor-composability-2026-11`）在仓级红的情况下**归档成功**。当前 `openspec/specs/` 已含 **44** 个 capability（含 `chlib-aggregator/` · 2 requirements · 来自 `2026-06-17-fix-include-aggregation`）。
+- ⚠️ **口径分层（★ 2026-11-10 补 · 对齐 ADR 判据面）**：**非 strict** 的 `openspec validate --specs` 作为 **ADR 判据面**的 MUST（**人工执行** · 实测 `44 passed / 0 failed` ⇒ ⇒ **可满足且有判别力**）⇒ ⇒ 但 **CI 不跑** `openspec validate` ⇒ ⇒ **不在 CI 门内** ⇒ ⇒ 与下面的「archive 前的实际门」**不是同一件事**
+- **CI 校验（★ 2026-11-09 订正）**：`openspec validate --specs --strict` **当前仓级为红**（CLI **1.14.x** 新增的两条 strict 规则 ⇒ ⇒ **与本仓改动无关** ⇒ ⇒ 成因与快照见 COMMANDS 段的「openspec CLI 版本漂移」条）⇒ ⇒ **archive 前的实际门 = `scripts/verify_openspec_delta.sh`**（绿即可）⇒ ⇒ `validate --specs`（**strict**）在 **CI / archive 门内仅作参考，不作为门**（⚠️ **非 strict**
+  的 `validate --specs` 作为 **ADR 判据面**的 MUST，见上一条 ⇒ ⇒ 两者**不是同一件事**） ⇒ ⇒ 证据：2026-11-09 的 P15 归档（`2026-11-09-chlib-dtor-composability-2026-11`）在仓级红的情况下**归档成功**。当前 `openspec/specs/` 已含 **44** 个 capability（含 `chlib-aggregator/` · 2 requirements · 来自 `2026-06-17-fix-include-aggregation`）。
 - **See**: `docs/developer_guide/openspec-specs-guide.md`（完整格式规范与迁移历史）
 
 ## JIT COMPILER RULES (CRITICAL)

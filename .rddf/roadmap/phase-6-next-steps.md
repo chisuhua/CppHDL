@@ -29,7 +29,7 @@ T1 **归档后**接手 ⇒ ⇒ ⇒ T5（P6-0 只读侦察）**可全程并行**�
 | **T3** | **P7 builder 步**（三档 `PortPolicy` 语义分化） | builder | — | 与 T1 **可并行**（写点函数级不重叠） |
 | **T4** | **P8 builder 步**（删 `set_ab_verification` stub + golden 覆盖下限） | builder | — | 与 T1 / T3 **可并行**（写点不重叠） |
 | **T5** | **P6 侦察 + 立项**（RV32I ISA 缺口：CSR / `ECALL`·`EBREAK` / `FENCE`） | planner → builder | — | 与 T1–T4 **可并行**（P6-0 是**只读侦察**） |
-| **T6** | **P10 的 ADR 判据订正**（ADR-052 / ADR-063 / ADR-067 的 CLI 版本判据） | architect | — | 独立 · ⚠️ **须新评审预算**（见 §5） |
+| **T6** | **P10 的 ADR 判据订正**（ADR-052 / ADR-063 / ADR-067 的 CLI 版本判据） | architect | 独立 | ✅ **2026-11-10 已做**（**ADR-052 v2 / ADR-063 v2 / ADR-067 v2** + **ADR-066 v1.5**）⇒ ⇒ 剩余待办 = **improvement 草案同步**（planner 域） |
 | **T7** | **P11**（ADR-036 逻辑算子物理移除） | builder | — | 🔒 **日历锁**（最早 **2027-04-17**）⇒ 本窗口**不做** |
 | **T8** | **P9 遗留**（真 FIFO 写缓冲 / 真预取 / `miss` 期间 `pc` 稳定性核对） | 独立立项 | — | 明确**不在**本窗口 ⇒ ⇒ 需**新 improvement** |
 

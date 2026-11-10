@@ -2,6 +2,17 @@
 
 - Status: **Accepted**（2026-11-09 · **用户拍板采纳本裁决** · oracle 1 轮 + critic **2 轮**（第 1 轮 `REJECT` · **1 BLOCKER** ⇒ 第 2 轮复审 `CLOSED` / 新 BLOCKER `NONE` / `mergeable: yes`）⇒ ⇒ 双审已过 · 审稿记录 = `.rddf/reviews/ADR-067-dtor-composability.md`）
 - Date: 2026-11-09
+- **修订 v2（2026-11-10 · architect · phase-6 **T6** · **判据可满足性订正**）**：
+  验收清单的「⚠️ CLI 须 **1.4.1**」= **全局 CLI、仓外 ⇒ 钉版本不落仓** ⇒ ⇒ 经 phase-6 **P10**
+  裁定**不实施** ⇒ ⇒ 门本身**保留**（**非 strict** 门 ⇒ 实测 `44 passed / 0 failed`）+ 仓级
+  `--strict` 现为**红**（CLI **1.14.3** ⇒ `21 passed / 23 failed / 44 items`）⇒ ⇒
+  **只登记、不消除** ⇒ ⇒ **决策内容零变更**
+  ⇒ ⇒ ⚠️ **定性澄清（critic 第 1 轮）**：**决策内容零变更**（决策条目 / 边界句 / 矩阵不变）
+  ⇒ ⇒ **判据面 = 替换**（原判据「CLI 钉 1.4.1」不可满足 ⇒ ⇒ 换成可满足且有判别力的形态）
+  ⇒ ⇒ **改动面 = 3 处**：① 验收清单的 CLI 判据（**门保留**：非 strict 门 + 仓级 `--strict` 漂移
+  **只登记、不消除**）；② 该条的 **② 判据改为双形态**（实施期 / 已归档后 ⇒ ⇒ 解除「已归档 change
+  上**假红** ⇒ ⇒ 永久阻塞」）+ **残余边界**句（④ 机械合入断言**本轮前已有**）+ 计数锚点项补
+  **实测证据**（`ctest -N | tail -1` = `Total Tests: 257`）；③ 元数据（本行）
 - Author: build-agent（architect role）
 - Parent: ADR-050（D2 移除集 · **D5 析构期可捕获检出**）· ADR-051（条件块析构契约「析构 MUST `noexcept(false)`」）
 - 关联 capability: `chlib-state-machine-semantics`（**ADDED**：析构检出契约 + 可组合形态 + 使用约束
@@ -267,6 +278,34 @@
       MUST **未被改写**（⇒ 「显式处置 = 维持 + 理由」，而**非** MODIFIED）
       ⇒ ⇒ 理由记录在 ADR-067 决策 ③ + change 的 `design.md` ⇒ ⇒ `grep` 可判；
 - [ ] **capability delta 合入主 spec**：`bash scripts/verify_openspec_delta.sh` 绿
-      + `openspec validate --specs --strict` 绿（⚠️ CLI 须 **1.4.1**）
+      + ⚠️ **v2 订正（2026-11-10 · architect）**：仓级 `openspec validate --specs --strict`
+      **现为红**（CLI **1.14.3** ⇒ `21 passed / 23 failed / 44 items`）⇒ ⇒ 原判据「绿（⚠️ CLI 须
+      **1.4.1**）」= **全局 CLI、仓外 ⇒ 钉版本不落仓** ⇒ ⇒ 经 phase-6 **P10** 裁定**不实施**⇒ ⇒ **只登记、不消除**（漂移登记处 = 根 `AGENTS.md` 的 CLI 版本条 + phase-6 **P10**）
+      ⇒ ⇒ **判据的可满足性以「`verify_openspec_delta.sh` 绿」为准**
       + `chlib-conditional-semantics` 的 `noexcept(false)` MUST 被**显式处置**（维持 + 理由）；
-- [ ] **计数锚点同步**：`AGENTS.md` 的 `CTEST_TOTAL`（**253**）同步 ⇒ `scripts/verify_test_counts.sh` 绿。
+      + ⚠️ **合入的机械断言（审阅修订）**：`grep -c '^### Requirement: `ch_state_machine` MUST 提供两种析构形态'
+        openspec/specs/chlib-state-machine-semantics/spec.md` **≥ 1**（⇒ ⇒ 原写的「capability delta 合入主 spec」
+        在**已归档**后**无证据载体** ⇒ ⇒ 那个半句此前**恒真**）；
+      ⚠️ **判据的「可满足 + 可判别」形态（2026-11-10 实测 · 审阅修订）**：
+      ① `openspec validate --specs`（**非 strict**）MUST exit 0 —— 实测 `Totals: 44 passed, 0 failed`
+         ⇒ ⇒ 1.14.x 新增的两条 strict 规则**只在 `--strict` 下生效** ⇒ ⇒ **非 strict 门恰好只抓
+         「本仓把 spec 写坏」**（缺 `SHALL`/`MUST` 关键字 · `## Purpose` 结构）⇒ ⇒ 这就是
+         「**CLI 版本漂移** vs **本仓自伤**」的**机械分界线**；
+      ② **双形态**（★ **critic 第 1 轮 BLOCKER 2 修订** —— 原形态在**已归档** change 上**不可满足**
+         ⇒ ⇒ **永久阻塞** ⇒ ⇒ MUST 写清作用域）：
+         **(a) 实施期**（该 change **仍 active**）⇒ ⇒ `bash scripts/verify_openspec_delta.sh` MUST 对
+         **该 change** 有**实际检查输出** —— ⚠️ 零 active change 时它输出
+         `no active OpenSpec change to check ✓` 并**恒绿** ⇒ ⇒ 那个 `✓` **不构成证据**；
+         **(b) 已归档后** ⇒ ⇒ MUST 以**主 spec 的机械合入断言**为等价证据（见本条 ④）
+         —— ⚠️ **带归档 change 名**调用该脚本会走 `openspec/changes/<name>`（**不存在**）⇒ ⇒
+         `::error::change ... not found` ⇒ ⇒ exit 1 ⇒ ⇒ **假红** ⇒ ⇒ **MUST NOT** 用它做归档后证据；
+      ③ 仓级 `--strict` = **红**（CLI **1.14.3** ⇒ `21 passed / 23 failed / 44 items`）⇒ ⇒ **只登记、不消除**
+      ⇒ ⇒ ⚠️ **残余边界（如实登记）**：`verify_openspec_delta.sh` **不检查** 1.14.x 新增的两条
+      strict 规则（Requirement 正文 >500 字符 / Purpose 占位符）⇒ ⇒ **change / capability 级绿
+      ≠ 仓级红项数不变** ⇒ ⇒ 本 change 的 delta 若自身触发这两条规则 ⇒ ⇒ 仓级红项 +1 而本门仍绿
+      ⇒ ⇒ 该项**只登记、不消除**
+         （登记处 = 根 `AGENTS.md` 的 CLI 版本条 + phase-6 **P10**）。
+
+- [ ] **计数锚点同步**：`AGENTS.md` 的 `CTEST_TOTAL` 与 `ctest -N` 一致 ⇒ `scripts/verify_test_counts.sh` 绿
+      （⚠️ **2026-11-10 实测 257**；本 ADR 写作时的预估值 253 已随仓演进 ⇒ ⇒ **判据 = 锚点 == `ctest -N`**，
+      不是某个历史常数）。

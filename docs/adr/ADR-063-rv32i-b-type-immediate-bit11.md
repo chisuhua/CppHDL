@@ -1,6 +1,21 @@
 # ADR-063: RV32I B 型立即数的 bit 11 —— 裁决修复范围、重复实现的处理与 golden 翻转策略
 
 - Status: **Accepted**（2026-11-03，用户授权「切 architect 裁 ADR → 回到 builder 修」）· Date: 2026-11-03 · Author: build-agent（architect role）
+- **修订 v2（2026-11-10 · architect · phase-6 **T6** · **判据可满足性订正**）**：
+  §5.3 的原判据「`openspec validate --strict` 通过（**CLI 钉 1.4.1**）」= **不可保证可达**
+  —— ⚠️ 该原判据是 **change 级**（**不是**仓级）⇒ ⇒ 它在 CLI 1.14.3 下是否红**取决于该 change 的
+  delta 内容**（1.14.x 的两条新 strict 规则对 change 级**同样生效**）⇒ ⇒ **该 change 尚未立项
+  ⇒ ⇒ 无法在当前证据内判定它当前是否已红** ⇒ ⇒ 而「钉回 1.4.1」= **全局 CLI、仓外 ⇒ 钉版本
+  不落仓** ⇒ ⇒ 经 phase-6 **P10** 裁定**不实施** ⇒ ⇒ 故门本身**保留**（**非 strict** 门 ⇒ 实测
+  `44 passed / 0 failed`）+ 仓级 `--strict` 的漂移**只登记、不消除**（CLI **1.14.3** ⇒
+  `21 passed / 23 failed / 44 items`）⇒ ⇒ **决策内容零变更**
+  ⇒ ⇒ **决策内容零变更**（决策条目 / 边界句不变）⇒ ⇒ **判据面 = 替换**（原判据**不可保证可达**
+  ⇒ ⇒ 换成可满足且有判别力的形态）⇒ ⇒ **改动面 = 3 处**：① §5.3 的 CLI 判据（同上 + 「change 级
+  ⇒ ⇒ 是否红取决于 delta 内容 ⇒ ⇒ 尚未立项 ⇒ ⇒ 无法判定」的理由校正）；② 该条的 **② 判据改为双形态**
+  （实施期 / 已归档后 ⇒ ⇒ 解除「已归档 change 上**假红** ⇒ ⇒ 永久阻塞」）+ **④ 机械合入断言**
+  + **残余边界**句；③ 元数据（本行）
+  ⇒ ⇒ ⚠️ **定性澄清（critic 第 1 轮）**：**决策内容零变更**（决策条目 / 边界句 / 矩阵不变）
+  ⇒ ⇒ **判据面 = 替换**（原判据「CLI 钉 1.4.1」不可满足 ⇒ ⇒ 换成可满足且有判别力的形态）
 - Parent: **ADR-046**（RV32I 单源化 —— `include/cpu/` 是微架构唯一权威）· **ADR-035**
   （Verilator 后端 —— 本缺陷在**两后端同构**，故 parity 结构性失明）
 - 关联 improvement: `.rddf/improvements/rv32i-b-type-immediate-bit11-misplaced-2026-11.md`
@@ -232,8 +247,36 @@ capability。⚠️ 归档**禁** `--skip-specs`。
 
 ### 5.3 契约与计数
 
-- [ ] `rv32i-isa-semantics` 的 ADDED Requirement 已合并（禁 `--skip-specs`）· `openspec
-      validate --strict` 通过（CLI 钉 1.4.1）
+- [ ] `rv32i-isa-semantics` 的 ADDED Requirement 已合并（禁 `--skip-specs`）·
+      `bash scripts/verify_openspec_delta.sh` 绿（**change / capability 级**的实际门）·
+      ⚠️ **合入的机械断言（★ critic 第 1 轮 BLOCKER 2 修订 · 归档后**唯一**可执行的证据载体）**：
+      `grep -c '^### Requirement: B 型立即数 MUST 按 `imm\[12|10:5|4:1|11\]` 提取'
+      openspec/specs/rv32i-isa-semantics/spec.md` **≥ 1**（⇒ ⇒ 原写的「ADDED Requirement 已合并」
+      在**已归档**后**无证据载体** ⇒ ⇒ 那个半句此前**恒真**）；·
+      ⚠️ **v2 订正（2026-11-10 · architect）**：原判据「`openspec validate --strict` 通过
+      （**CLI 钉 1.4.1**）」= **全局 CLI、仓外 ⇒ 钉版本不落仓** ⇒ ⇒ 经 phase-6 **P10** 裁定**不实施**⇒ ⇒ 仓级 `openspec validate --specs --strict` 现为**红**
+      （CLI **1.14.3** ⇒ `21 passed / 23 failed / 44 items`）⇒ ⇒ **只登记、不消除**
+      （漂移登记处 = 根 `AGENTS.md` 的 CLI 版本条 + phase-6 **P10**）
+      ⚠️ **判据的「可满足 + 可判别」形态（2026-11-10 实测 · 审阅修订）**：
+      ① `openspec validate --specs`（**非 strict**）MUST exit 0 —— 实测 `Totals: 44 passed, 0 failed`
+         ⇒ ⇒ 1.14.x 新增的两条 strict 规则**只在 `--strict` 下生效** ⇒ ⇒ **非 strict 门恰好只抓
+         「本仓把 spec 写坏」**（缺 `SHALL`/`MUST` 关键字 · `## Purpose` 结构）⇒ ⇒ 这就是
+         「**CLI 版本漂移** vs **本仓自伤**」的**机械分界线**；
+      ② **双形态**（★ **critic 第 1 轮 BLOCKER 2 修订** —— 原形态在**已归档** change 上**不可满足**
+         ⇒ ⇒ **永久阻塞** ⇒ ⇒ MUST 写清作用域）：
+         **(a) 实施期**（该 change **仍 active**）⇒ ⇒ `bash scripts/verify_openspec_delta.sh` MUST 对
+         **该 change** 有**实际检查输出** —— ⚠️ 零 active change 时它输出
+         `no active OpenSpec change to check ✓` 并**恒绿** ⇒ ⇒ 那个 `✓` **不构成证据**；
+         **(b) 已归档后** ⇒ ⇒ MUST 以**主 spec 的机械合入断言**为等价证据（见本条 ④）
+         —— ⚠️ **带归档 change 名**调用该脚本会走 `openspec/changes/<name>`（**不存在**）⇒ ⇒
+         `::error::change ... not found` ⇒ ⇒ exit 1 ⇒ ⇒ **假红** ⇒ ⇒ **MUST NOT** 用它做归档后证据；
+      ③ 仓级 `--strict` = **红**（CLI **1.14.3** ⇒ `21 passed / 23 failed / 44 items`）⇒ ⇒ **只登记、不消除**
+      ⇒ ⇒ ⚠️ **残余边界（如实登记）**：`verify_openspec_delta.sh` **不检查** 1.14.x 新增的两条
+      strict 规则（Requirement 正文 >500 字符 / Purpose 占位符）⇒ ⇒ **change / capability 级绿
+      ≠ 仓级红项数不变** ⇒ ⇒ 本 change 的 delta 若自身触发这两条规则 ⇒ ⇒ 仓级红项 +1 而本门仍绿
+      ⇒ ⇒ 该项**只登记、不消除**
+         （登记处 = 根 `AGENTS.md` 的 CLI 版本条 + phase-6 **P10**）
+      ⇒ ⇒ **本条的判据 = ① + ② 绿**（不是「仓级 strict 绿」）
 - [ ] 计数锚点同步（预期 `CTEST_TOTAL` **不变**：无新 ctest 条目）
 
 ---
