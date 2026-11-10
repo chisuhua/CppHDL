@@ -284,8 +284,8 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 
 ### ⚠️ 待用户裁决（metis 提出，本项不自行决定）
 
-1. **C2 与既有契约的冲突面**：`ADR-060 §2.2` 明确「**冒泡上来的悬空输入 ⇒ 顶层可驱动**」（层次化 R8 的 `bubble` 期望表钉住了它）⇒ ⇒ C3「悬空输入 MUST NOT 成为顶层端口」在**层次化侧**与之**正面冲突**⇒ ⇒ 两条路线：(a) 不动冒泡契约 + 加 `flat.inputs ⊆ hier.inputs` 判据；(b) 改冒泡契约 ⇒ ⇒ `rtl-hierarchical-output` MUST 标 MODIFIED + R8 期望表同步 + `hier_eq` 前提重证 ⇒ ⇒ **需 architect 裁决**。
-2. **`C1` 的形态**：本仓 `cpphdl-emit-rtl` 是「工具」还是「库 + 薄 CLI」？（影响「对任意合法设计可用」的兑现方式）。
+1. ✅ **已裁决（2026-11-10 · 用户拍板 = B1）**：**C2 与既有契约的冲突面** ⇒ ⇒ **撤回 C2 · 保留已签批契约** ⇒ ⇒ `ADR-060 §2.2` 的「冒泡上来的悬空输入 ⇒ 顶层可驱动」与 `rtl-hierarchical-output/spec.md:309-316` 的「顶层端口表 MUST 是 … **全部** `ch_out`」**都成立** ⇒ ⇒ ⇒ 那 80 个 inline 后代输出**不是泄漏** ⇒ ⇒ ⇒ 替代手段 = manifest 的 `owner` / `is_top_io`（**不动端口面**）⇒ ⇒ ⇒ 详见 §C2 行的「已撤回」说明 |C3「悬空输入 MUST NOT 成为顶层端口」在**层次化侧**与之**正面冲突**⇒ ⇒ 两条路线：(a) 不动冒泡契约 + 加 `flat.inputs ⊆ hier.inputs` 判据；(b) 改冒泡契约 ⇒ ⇒ `rtl-hierarchical-output` MUST 标 MODIFIED + R8 期望表同步 + `hier_eq` 前提重证 ⇒ ⇒ **需 architect 裁决**。
+2. ✅ **已定（metis 订正 · 2026-11-10 · 随 B1 一并落地）**：**`C1` 的形态** ⇒ ⇒ **工具 = 库 + 薄 CLI**（用户在**自己的可执行文件**里用 `CH_EMITTABLE_COMPONENT(...)` 登记）⇒ ⇒ ⇒ 本仓的 `cpphdl-emit-rtl` **MUST NOT** 链接 `examples/**`（否则装出来的是「链了示例代码的二进制」）⇒ ⇒ ⇒ 护栏须**静态扫描**该禁令 ⇒ ⇒ ⇒ 详见 §C1 行的 metis 订正 |
 
 ## critic 第 1 轮（plan, build）—— **REJECT** · mergeable: no · scope_exceeded: false
 

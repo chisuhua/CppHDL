@@ -304,8 +304,8 @@ scripts/update_test_count_anchors.sh --check    # 只检查是否需要更新（
 
 ### ⚠️ 待用户裁决
 
-1. **main 分支是否接受「无 RTL 仿真证据」**（PR-only 的直接后果）—— 若不接受 ⇒ ⇒ 须独立 job 且墙钟另算。
-2. **首批名单**：metis 的准则会把 9/10 候选排除 ⇒ ⇒ 实际可入选的可能只有 `riscv-mini` + 需要**先补 C++ 断言**的少数几个 ⇒ ⇒ 「10 个」这个数本身可能是**过度承诺**。
+1. ✅ **已裁决（2026-11-10 · 用户拍板 = ⑨）**：**main 分支是否接受「无 RTL 仿真证据」** ⇒ ⇒ **CI 形态 = 挂 `pr-verilator-fast` 的一个 step**（**不**新建 job ⇒ ⇒ 无第二次完整 build · **不**注册 CTest 条目 · **不**加 `rtl_sim` label）⇒ ⇒ ⇒ ⇒ 后果 = main 分支**确实**无 RTL 仿真证据 ⇒ ⇒ ⇒ ⚠️ 该缺口 MUST 登记进 `.rddf/checks/arch-residual-registry.md`（⇒ ⇒ **ledger 侧属 architect 域** ⇒ ⇒ ⇒ 落点见 §E6 行） |
+2. ✅ **已裁决（2026-11-10 · 用户拍板）**：**首批名单** ⇒ ⇒ **target set 仍为 10 个**（按 `examples/CMakeLists.txt:34-76` 的 `CH_TRACKED_EXAMPLE_TARGETS` 取**确切 target 名**）⇒ ⇒ 但**收窄声明而非收窄目标**：**已验证 = 1**（`riscv-mini` 的 RV32I SoC）· **待补期望源 = 9** ⇒ ⇒ ⇒ **每一项 MUST 列出「缺什么」**（见 §E4′ 表）⇒ ⇒ ⇒ 缺项补齐前**不得**计入「已验证」⇒ ⇒ ⇒ 详见 §E4 行的「已裁决」说明 |这个数本身可能是**过度承诺**。
 
 ## critic 第 1 轮（plan, build）—— **REJECT**（随整体）· mergeable: no · scope_expeded: false
 

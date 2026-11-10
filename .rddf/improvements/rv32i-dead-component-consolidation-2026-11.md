@@ -281,8 +281,8 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 
 ### ⚠️ 待用户裁决
 
-1. **C3/C4（ALU / Decoder 接入）是否本轮做**：metis 建议**拆成独立 change**（本轮只做 C5 + C7）—— 理由：零行为风险、唯一消费者是测试；且「接入」与 `memory-timing-contract` / `port-naming-ratchet` 有顺序耦合。⇒ ⇒ **建议**：本轮只做 C5（退役）+ C7（文档标记），C1–C4 另立项。
-2. **C4 的 `instr_type` 二选一**：删端口（改 2 处测试）or 并入 ISA 项由 `instr_type` 派生 flags（⚠️ 后者会让 `OP_SYSTEM` 变成「像 R 型」⇒ ⇒ **会写 rd** ⇒ ⇒ 行为变更 ⇒ 须显式断言「`0x00000073` / `0x00001073` 在接入前后寄存器堆写使能逐拍相同」）。⇒ ⇒ **禁**「显式标注不使用」（`instr_type` 不是文档能救的死代码）。
+1. ✅ **已裁决（2026-11-10 · 用户拍板 = ⑧）**：**C3/C4（ALU / Decoder 接入）本轮不做** ⇒ ⇒ 本轮做 = **⑧ SLTU 修缺陷 + C5+C6 退役（**同批** · B3）+ C7 标记**（+ C8 `mem_is_load` tie-off · planner 复核补入）⇒ ⇒ ⇒ C1–C4（接入）**另立项** ⇒ ⇒ ⇒ 理由（metis）：零行为风险 · 唯一消费者是测试 · 且与 `memory-timing-contract` / `port-naming-ratchet` 有顺序耦合 ⇒ ⇒ ⇒ **C1 差分仍 MUST 在接入之前做**（否则接入无判据） |且「接入」与 `memory-timing-contract` / `port-naming-ratchet` 有顺序耦合。⇒ ⇒ **建议**：本轮只做 C5（退役）+ C7（文档标记），C1–C4 另立项。
+2. ⏸ **随 C4 一并延后**（2026-11-10 · 用户拍板 ⑧ ⇒ C3/C4 本轮不做 ⇒ ⇒ 本项依附于 C4 ⇒ ⇒ **不是独立的开放裁决**）：**C4 的 `instr_type` 二选一** —— 删端口（改 2 处测试）or 并入 ISA 项由 `instr_type` 派生 flags（⚠️ 后者会让 `OP_SYSTEM` 变成「像 R 型」⇒ ⇒ **会写 rd** ⇒ ⇒ 行为变更 ⇒ ⇒ 须显式断言「`0x00000073` / `0x00001073` 在接入前后寄存器堆写使能逐拍相同」）⇒ ⇒ ⇒ ⇒ **⚠️ 禁「显式标注不使用」**（`instr_type` 不是文档能救的死代码）⇒ ⇒ ⇒ 裁定时点 = C3/C4 真正立项之时 | **会写 rd** ⇒ ⇒ 行为变更 ⇒ 须显式断言「`0x00000073` / `0x00001073` 在接入前后寄存器堆写使能逐拍相同」）。⇒ ⇒ **禁**「显式标注不使用」（`instr_type` 不是文档能救的死代码）。
 
 ## critic 第 1 轮（plan, build）—— **REJECT**（随整体）· mergeable: no · scope_exceeded: false
 
