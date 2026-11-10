@@ -1,0 +1,19 @@
+schema: spec-driven
+created: 2026-11-11
+
+# 组件路径与节点名的前缀拼接口径（`component-ownership-and-naming` ADDED ×1）
+#
+# 本 change 是 `node-name-prefix-consistency` 的 **P3「契约化」** ⇒ ⇒ **该 Requirement 的唯一承载**
+# （`.rddf/roadmap/phase-6-rtl-productization.md:88`）⇒ ⇒ ⇒
+# `port-name-literal-parity` 的 R1-b **只是契约化提案** ⇒ ⇒ ⇒
+# **MUST NOT 另立一个 change 承载同一条 Requirement** ⇒ ⇒ ⇒ 否则归档后主 spec 会出现两条同名 Requirement。
+#
+# ⇒ **delta**：`component-ownership-and-naming` ADDED ×1（子路径拼接口径 + 无父情形）
+# ⇒ 归档**禁** `--skip-specs`。
+#
+# ⚠️ **delta 正文 = `.rddf/checks/decision-request-port-naming-parity-2026-11.md` §2 R1-b 的围栏内容**
+# ⇒ ⇒ **逐字复制**（该处围栏已按 critic 第 5 轮 SHOULD_FIX-3 纯化 ⇒ ⇒ 内含**零条**审稿日志）
+#
+# ⚠️ **实施侧在本 change 内**：P1 = `include/component.h:274` 删掉 `|| parent_path == "unnamed"`
+#   （F-A）⇒ ⇒ 与 `src/core/lnodeimpl.cpp:30-35` 同口径 ⇒ ⇒ **仓内零影响 + 下游可见行为变更**
+#   ⇒ ⇒ ⇒ 公开面登记走 `docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 的「行为变更（非符号移除）」节。
