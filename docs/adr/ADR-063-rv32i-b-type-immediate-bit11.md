@@ -266,7 +266,8 @@ capability。⚠️ 归档**禁** `--skip-specs`。
          ⇒ ⇒ **永久阻塞** ⇒ ⇒ MUST 写清作用域）：
          **(a) 实施期**（该 change **仍 active**）⇒ ⇒ `bash scripts/verify_openspec_delta.sh` MUST 对
          **该 change** 有**实际检查输出** —— ⚠️ 零 active change 时它输出
-         `no active OpenSpec change to check ✓` 并**恒绿** ⇒ ⇒ 那个 `✓` **不构成证据**；
+         零 active change 时它**只**打印 `::warning:: … this gate has ZERO signal` 并 exit 0
+         （2026-11-10 起**不再**打 `✓`）⇒ ⇒ 那个 exit 0 **不构成证据**；
          **(b) 已归档后** ⇒ ⇒ MUST 以**主 spec 的机械合入断言**为等价证据（见本条 ④）
          —— ⚠️ **带归档 change 名**调用该脚本会走 `openspec/changes/<name>`（**不存在**）⇒ ⇒
          `::error::change ... not found` ⇒ ⇒ exit 1 ⇒ ⇒ **假红** ⇒ ⇒ **MUST NOT** 用它做归档后证据；

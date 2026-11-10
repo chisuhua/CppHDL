@@ -108,6 +108,20 @@ bash scripts/verify_openspec_delta.sh            # 检查全部 active change
 bash scripts/verify_openspec_delta.sh <change>   # 只检查一个
 ```
 
+### ⚠️ 口径分层（★ 2026-11-10 · 与根 `AGENTS.md` 同步）
+
+三者**不是同一件事**，不要互相替代：
+
+| 命令 | 作用面 | 当前状态（实测 2026-11-10） | 地位 |
+|---|---|---|---|
+| `openspec validate --specs`（**非 strict**） | `openspec/specs/` 主 spec 的**结构 / 关键字**（`SHALL`/`MUST` · `## Purpose`） | **exit 0** · `Totals: 44 passed, 0 failed` | **ADR 判据面的人工 MUST**（`ADR-052 V8` / `ADR-063 §5.3` / `ADR-066 V12` / `ADR-067` 验收清单）· ⚠️ **CI 不跑** |
+| `openspec validate --specs --strict` | 上面 + 1.14.x 新增的两条 strict 规则（Requirement 正文 > 500 字符 · Purpose 占位符） | **exit 1** · `21 passed / 23 failed (44 items)` ⇒ **红项与本仓改动无关**（纯净 HEAD 同样红） | **只登记、不消除**（根 `AGENTS.md` 的「openspec CLI 版本漂移」条 · phase-6 **P10**）⇒ 「钉回 CLI 1.4.1」= 环境级、不可复现、不落仓 ⇒ **不实施** |
+| `bash scripts/verify_openspec_delta.sh` | **active change** 的 delta（R1–R4） | 零 active change 时 **零信号**（只打 `::warning::`，**不是** pass） | **CI / archive 前的实际门** |
+
+⇒ ⇒ 实践口径：**提 PR / 归档前跑 delta 门**（有 active change 时它才有判别力）；
+**改完主 spec 后跑一次非 strict 的 `validate --specs`**（它只抓「本仓把 spec 写坏」，
+不抓 CLI 规则差异）；**strict 的红当作背景噪声**，先确认 CLI 版本再判断。
+
 ## 未来规则
 
 参见 `AGENTS.md` → "OPENSPEC WORKFLOW" 节。简要：

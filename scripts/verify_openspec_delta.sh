@@ -29,6 +29,8 @@
 #
 # Usage: scripts/verify_openspec_delta.sh [change-name ...]
 #        （不给参数 ⇒ 检查 openspec/changes/ 下的**全部** active change）
+#
+# ⚠️ **零 active change ⇒ 本门零信号**（exit 0 但只打 warning）—— 见下方实现处的说明。
 
 set -euo pipefail
 
@@ -71,7 +73,17 @@ else
 fi
 
 if [ "${#CHANGES[@]}" -eq 0 ]; then
-    echo "no active OpenSpec change to check ✓"
+    # ⚠️⚠️ **本门此刻是「零信号」**（2026-11-10 · oracle 审阅项 3）：
+    #   零 active change ⇒ R1–R4 **一条都没跑** ⇒ ⇒ 这个 exit 0 **不构成**「spec 没问题」的
+    #   证据。此前这里打一个 `✓` 会被读成「全部通过」⇒ ⇒ 于是把「**不可满足的绿**」换成了
+    #   「**可满足但零判别力的绿**」⇒ 判据可满足性问题没解决、判别力问题原地复发。
+    #   ⇒ ⇒ 唯一允许的语义 = **明确告知「本门无对象」**（CI 里以 warning 呈现）。
+    #   ⚠️ **不得**改成非零退出：归档后的干净树**天然**没有 active change ⇒ 那样 CI 恒红。
+    #   ⇒ ⇒ 「门真的检查过」这一义务由**调用点**承担（ADR 判据面：见 ADR-052 V8 /
+    #   ADR-063 §5.3 / ADR-066 V12 / ADR-067 验收清单 —— 已归档 change 以**主 spec 的
+    #   grep 合入断言**为等价证据）。
+    echo "::warning:: no active OpenSpec change to check — this gate has ZERO signal (R1–R4 did not run); it does NOT mean the specs are OK"
+    echo "no active OpenSpec change to check (zero signal, NOT a pass)"
     exit 0
 fi
 
