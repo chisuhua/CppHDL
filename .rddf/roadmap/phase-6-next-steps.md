@@ -26,7 +26,7 @@ T1 **归档后**接手 ⇒ ⇒ ⇒ T5（P6-0 只读侦察）**可全程并行**�
 |---|---|---|---|---|
 | **T1** | **P5 收尾**（change `mem-port-arg-cross-layer-2026-11` · AC1–AC10） | builder | — | ★ **主线**（唯一在途 change） |
 | **T2** | **P5 文档订正的同步**（phase-6 P5 行 + change 文档） | planner | — | ⚠️ **部分完成**（见 §4 的「本轮**未做完**」清单） |
-| **T3** | **P7 builder 步**（三档 `PortPolicy` 语义分化） | builder | — | 与 T1 **可并行**（写点函数级不重叠） |
+| **T3** | **P7 builder 步**（三档 `PortPolicy` 语义分化） | builder | — | ⚠️ **2026-11-10 取证完成 · 未开工**（详见下方 §「T3 的承重发现」）|
 | **T4** | **P8 builder 步**（删 `set_ab_verification` stub + golden 覆盖下限） | builder | — | 与 T1 / T3 **可并行**（写点不重叠） |
 | **T5** | **P6 侦察 + 立项**（RV32I ISA 缺口：CSR / `ECALL`·`EBREAK` / `FENCE`） | planner → builder | — | 与 T1–T4 **可并行**（P6-0 是**只读侦察**） |
 | **T6** | **P10 的 ADR 判据订正**（ADR-052 / ADR-063 / ADR-067 的 CLI 版本判据） | architect | 独立 | ✅ **2026-11-10 已做**（**ADR-052 v2 / ADR-063 v2 / ADR-067 v2** + **ADR-066 v1.5**）⇒ ⇒ 剩余待办 = **improvement 草案同步**（planner 域） |
@@ -168,3 +168,48 @@ bash scripts/verify_roadmap_fragments.sh
 ⇒ 因为 `scripts/verify_roadmap_fragments.sh` 的 `parse_front_matter` 对「不以 `---` 开头」
 **直接 raise** ⇒ ⇒ 任何人把它移进 `phases/` ⇒ ⇒ 护栏**立刻 fail-closed** ⇒ ⇒
 ⚠️ **MUST NOT** 移入 `.rddf/roadmap/phases/`。
+
+
+---
+
+## T3 的承重发现（2026-11-10 · builder 取证）
+
+### ① 三档的**契约**（ADR-060 §2.4.1 · 权威）
+
+| 取值 | 是否合成 | 是否产出文件 | 诊断 |
+|---|---|---|---|
+| `SynthesizeWarn`（默认） | ✅ 合成 | ✅ **产出** | `CHWARN` 点名**每一条**被合成的边 + 合成端口名；产物内写注释（§2.4.1.1 四件事） |
+| `SynthesizeFatal` | ✅ 合成（**先合成完**） | ❌ **不产出** | 错误结果列出**全部**被合成的边 + 端口名 |
+| `Reject` | ❌ 不合成 | ❌ 不产出 | 只报**第一条需合成的边** |
+
+### ② 现状（实测 · `src/hierarchy_verilog.cpp:956` 唯一读取点）
+
+| 路径 | 现状 | 差距 |
+|---|---|---|
+| **成功路径**（可合成的形态） | 三档**全部产出文件**；**零** `CHWARN`（`src/hierarchy_verilog.cpp:1274-1280` 只在**失败**分支发）· **零**产物注释（`CppHDL-synth` 全仓 **0** 命中） | ⚠️ **`Warn` 缺它应做的两件事**（CHWARN + 注释）⇒ ⇒ `Warn ≡ 现状`；⚠️ **`Fatal` 与 `Reject` 在成功路径上完全相同**（都成功）⇒ ⇒ **三档未分化** |
+| **失败路径**（不可合成的形态） | `all = (policy != PortPolicy::Reject)` ⇒ ⇒ `Warn ≡ Fatal`（都报**全部** + 都发 CHWARN）；`Reject` 只报第一条 | ✔ **符合契约**（该形态「合成」根本没发生 ⇒ ⇒ 三档都该失败）⇒ ⇒ **差异不在失败路径** |
+
+⇒ ⇒ **三档的差异只在成功路径** ⇒ ⇒ **判据元组** `(产物是否存在, 诊断列出的边数, 产物注释是否存在)`
+对**可合成样本**才有区分力 ⇒ ⇒ ⚠️ **样本约束**：必须用**可合成**形态（族 ①/③ · 父侧消费子 `ch_out`
+的运算）⇒ ⇒ **字面 (i) 的 mem 跨 module 形态不能用**（实测：三档都在**分析层**就拒 ⇒ ⇒ 与
+`PortPolicy` 无关 ⇒ ⇒ 三档元组恒为 `(false, ·, ·)` ⇒ ⇒ **零判别力**）。
+
+### ③ ⚠️ **必须用户确认的语义变更**（`Fatal` 档）
+
+按契约，`SynthesizeFatal` 在**成功路径**上 MUST「**先合成完再失败**」⇒ ⇒ **今天能跑通的 `Fatal`
+档用法将改为失败**（`ok = false`）⇒ ⇒ **这是用户可见行为变更** ⇒ ⇒ MUST 由**用户拍板**
+（⇒ ⇒ 与 `Reject` 的区别 = **失败的诊断质量**：Fatal 列出全部被合成的边 + 端口名 · Reject 只报第一条）。
+
+### ④ 剩余实施面（未开工）
+
+① **change 立项**（ADR-060 v1.18 记「关联 change = `backlog: phase-6 P7`」· **未立项**）
+② **成功路径分档**：`hierarchy_verilog.cpp` 的成功路径 ⇒ ⇒ `Warn` 合成 + 每条合成边一条 `CHWARN`
++ 产物注释 · `Fatal` 合成 + **不写文件** + error 列全部 · `Reject` **不合成** + 只报第一条
+③ **产物注释**（§2.4.1.1 四件事）：触发 = `synthesized_ports` ∪ `synthesized_wires` 的**全体成员**
+（**结构化**）· 文本 `// CppHDL-synth: implicit port <name> (ADR-060 2.4.1)` /
+`// CppHDL-synth: net <name> (ADR-060 2.4.1)`（**4 空格**）· 位置 = 端口表内该条目**正上方单独成行**
+/ `logic` 声明行正上方 · **每个合成物恰好一处** + 只含名字 ⇒ ⇒ ⚠️ **策略读取只能留在
+`hierarchy_verilog.cpp`**（`options.port_policy` 只在那里可见 ⇒ ⇒ codegen 拿不到 ⇒ ⇒ **MUST NOT**
+给 `ModuleEmitter` 加 `HierarchyEmitOptions` 依赖 ⇒ ⇒ 注释文本随 `ModuleView` 传给 codegen）
+④ **判据用例**（可合成样本 · **N ≥ 2** 条可合成边 · 含端口 + 网 · 无悬空 `ch_in`）⇒ ⇒ 三档**两两可区分**
+⑤ **台账行 15 闭口**（`已知 → 已收口` · `归属 → —` · 闭口证据 = archive 路径 · `复核条件` 清空）
