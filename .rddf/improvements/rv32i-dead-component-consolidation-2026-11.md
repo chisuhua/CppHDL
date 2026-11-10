@@ -30,8 +30,8 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 
 | 组件 | 头文件行数 | **真实流水线**消费者 | **测试**消费者 | 判定 |
 |---|---|---|---|---|
-| `Rv32iDecoder` | 161 | **0** | `rv32i_phase{1,2,3}_test.cpp` · `test_pipeline_exec.cpp` · `tests/test_rv32i_arch_dual.cpp` · `tests/test_rv32i_stage_dual.cpp`<br>⚠️ **metis 订正**：`rv32i_phase{1,2,3}_test` 是 `riscv_mini_unit_test`（`examples/riscv-mini/CMakeLists.txt:8-15`）⇒ ⇒ **无 `add_test`** ⇒ ⇒ **不在 CTest 的 257 里**；⚠️ **critic 第 2 轮订正**：但它们**在** `CH_TRACKED_EXAMPLE_TARGETS`（`examples/CMakeLists.txt:34-76`）里 ⇒ ⇒ **`run_all_ported_tests.sh` 会跑**（`main()` 退出码即判据，无断言）⇒ ⇒ 准确表述 = 「**进 CTest 之外、有运行无断言**」⇒ 仍**不是**回归证据 |
-| `Rv32iAlu` | 172 | **0** | `rv32i_phase1_test.cpp` · `rv32i_phase2_test.cpp` · `test_pipeline_exec.cpp`（⚠️ 同上：phase 测试**从不执行**）<br>⚠️ **metis 追加**：交付路径**已有独立 oracle** —— `tests/test_rv32i_stage_dual.cpp:320-362` 用 **27 条手推期望**逐项断言 `ExStage` 的 `alu_result`/`branch_taken`/`branch_target`/`link_value`/`zero`/`less_than`/`less_than_u`/`is_store_alu` ⇒ ⇒ 「交付路径对 ALU 零覆盖」**不成立** ⇒ ⇒ 真正的缺口是「**组件版**未被交付」+「**组件版**有 SLTU 缺陷」 |
+| `Rv32iDecoder` | **163** | **0** | `rv32i_phase{1,2,3}_test.cpp` · `test_pipeline_exec.cpp` · `tests/test_rv32i_arch_dual.cpp` · `tests/test_rv32i_stage_dual.cpp`<br>⚠️ **metis 订正**：`rv32i_phase{1,2,3}_test` 是 `riscv_mini_unit_test`（`examples/riscv-mini/CMakeLists.txt:8-15`）⇒ ⇒ **无 `add_test`** ⇒ ⇒ **不在 CTest 的 257 里**；⚠️ **critic 第 2 轮订正**：但它们**在** `CH_TRACKED_EXAMPLE_TARGETS`（`examples/CMakeLists.txt:34-76`）里 ⇒ ⇒ **`run_all_ported_tests.sh` 会跑**（`main()` 退出码即判据，无断言）⇒ ⇒ 准确表述 = 「**进 CTest 之外、有运行无断言**」⇒ 仍**不是**回归证据<br>⚠️ **planner 复核订正（2026-11-10）**：行数 161 → **163**（`wc -l` 实测） |
+| `Rv32iAlu` | **183** | **0** | `rv32i_phase1_test.cpp` · `rv32i_phase2_test.cpp` · `test_pipeline_exec.cpp`（⚠️ 同上：phase 测试**从不执行**）<br>⚠️ **metis 追加**：交付路径**已有独立 oracle** —— `tests/test_rv32i_stage_dual.cpp:320-362` 用 **28 条手推期望**逐项断言 `ExStage` 的 `alu_result`/`branch_taken`/`branch_target`/`link_value`/`zero`/`less_than`/`less_than_u`/`is_store_alu` ⇒ ⇒ 「交付路径对 ALU 零覆盖」**不成立** ⇒ ⇒ 真正的缺口是「**组件版**未被交付」+「**组件版**有 SLTU 缺陷」<br>⚠️ **planner 复核订正（2026-11-10）**：行数 172 → **183**（`wc -l` 实测）· 手推期望条数 27 → **28**（`kExCases` 数组 `tests/test_rv32i_stage_dual.cpp:149-178`，条目 150-177 共 **28** 行；`kDecCases` **17** 条 ✓ 不变） |
 | `riscv::ForwardingUnit`<br>(`rv32i_forwarding.h`) | 174 | **0** | `tests/test_rv32i_pipeline.cpp` · `tests/test_rv32i_pipeline_behavior.cpp`（⚠️ **metis 订正**：`tests/chlib/test_forwarding.cpp` **不**消费它 —— 该文件只 include `chlib/forwarding.h`，测 `forward_detect` / `ForwardingMux`）| ⚠️ **被测但未被交付**（与已交付的 `chlib::ForwardingMux` **时序口径不同**，见 A.2 ③）<br>⚠️ **metis 追加**：该组件「独有且被覆盖」的语义 = **空集**（WB 档**无任何用例覆盖** · `id_reg_read` 死输入）⇒ ⇒ 退役时**删除**而非迁移 |
 | `HazardDetectionUnit`<br>(`hazard_detection_unit.h`) | 65 | **0** | `tests/test_rv32i_pipeline.cpp` · `tests/test_rv32i_pipeline_behavior.cpp` | ⚠️ 同上 |
 | `rv32i_hazard_complete.h` | 195 | **0** | `tests/chlib/test_hazard_complete.cpp` · `test_hazard_complete_dual.cpp` · `test_phase4_integration.cpp` | ⚠️ 同上 |
@@ -71,6 +71,7 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 | **C5** | 🔴 **B3 修复（critic 第 1 轮 BLOCKER）：C5 MUST 与 C6 同批** —— 因为 `include/cpu/pipeline/hazard_detection_unit.h:19` **include 了** `rv32i_forwarding.h`（另有 2 个测试 TU 经它间接受影响：`tests/test_rv32i_pipeline.cpp:28`、`tests/test_rv32i_pipeline_behavior.cpp:69`）⇒ ⇒ **单独删头文件 ⇒ `cmake --build` 必红**。<br>⇒ ⇒ **批次写成「C5 + C6 同一 commit」**（退役 + 同族处置 + 死 include 清理），并**在 C6 里先断 include 再删头**。<br>原 C5 内容：**`riscv::ForwardingUnit` 退役**
 | **C6** | **同族处置**：⚠️ **metis 要求给出可判定准则**（三级）：① 有交付路径消费者 ⇒ **接入**；② 无消费者 **且** 其独有语义**未被任何 capability 明文要求** ⇒ **退役**；③ 无消费者 **但**独有语义被 capability 要求 ⇒ **保留** + `include/cpu/AGENTS.md` 写「⚠️ 非流水线路径」+ 必须有**非测试**的第二个消费者，否则仍退役。<br>⇒ 按此表：`HazardDetectionUnit` ⇒ 退役（其 MEM 级 load-use 检测点在 `hazard_unit.h:229-233` 已注明「流水线里永不触发」）· `rv32i_hazard_complete.h` ⇒ 退役（2 个死输入 + 3 档语义 + 唯一存在理由是 parity 夹具，可换 `HazardUnit` 做 DUT）<br>⚠️ **顺序约束**：`hazard_detection_unit.h` **include 了** forwarding + branch_predict + regfile + alu + decoder + pcu + pipeline_regs ⇒ ⇒ **C5（删 forwarding）MUST 先于/伴随 C6**，否则中间态编译不过 |
 | **C7** | **交接登记**：若某组件**保留**但**不接入**流水线，MUST 在 `include/cpu/AGENTS.md` 的「WHERE TO LOOK」里**明写**「⚠️ 非流水线路径 · 仅独立使用场景」⇒ ⇒ 消除「看起来是流水线的一部分」的误导 |
+| **C8** | 🔴 **`HazardUnit::mem_is_load` 的装配点 tie-off**（**planner 复核补入 2026-11-10** —— 原 7 份草案**无任何一条承接它**，而它是唯一会让 4 态仿真器「整个核变 X」的缺陷）：<br>**现状**：`rv32i_pipeline.h:511-515` **故意不连接** `hazard.io().mem_is_load` ⇒ ⇒ 该 `ch_in` **无 driver** ⇒ ⇒ 按**已签批契约**（`openspec/specs/rtl-hierarchical-output/spec.md:309-316`「顶层端口表 MUST 是 … **无 driver 的** `input` → …」）它**必须**出现在顶层端口面 ⇒ ⇒ 产物里是 `top_pipeline_hazard_unit_unnamed_input_4`（**活跃**端口 · 变异 tie 1 ⇒ **9 项 golden 转红**、只退休 **21** 条指令（正常 **178**）⇒ ⇒ **4 态仿真器里不接 ⇒ X ⇒ `stall` 变 X ⇒ 整个核变 X**）。<br>**处置**：在**装配点**显式 tie-off —— `hazard.io().mem_is_load <<= ch_bool(false);` ⇒ ⇒ 该 `ch_in` **有 driver** ⇒ ⇒ 按契约它**不再是顶层端口**（有 driver ⇒ 内部 wire）⇒ ⇒ **端口面少 1 个 input**。<br>⚠️ **契约相容性（关键）**：契约说的是「**无 driver 的** input」⇒ ⇒ 给一个 input **补上 driver** = **修缺陷**，**不是**改契约 ⇒ ⇒ 与 C2 撤回**不冲突**（C2 动的是「inline 后代 `ch_out` 是否上顶层」，本条动的是「一个 input 有没有 driver」）⇒ ⇒ **MUST NOT** 被误判成「又在改端口面」。<br>⚠️ **行为等价性**：现状未驱动 ⇒ 两后端实测**均读 0**（双后端 parity 绿 + 独立 Verilog TB 把该口 tie 0 后退休数仍为 **178**）⇒ ⇒ tie-off **行为零变化**。<br>⚠️ **MUST NOT** 删 `mem_is_load` 端口本身 —— 它有**内部消费者**（`hazard_unit.h:241` `load_use_hazard = ex_load_use \| mem_load_use`）且被 **2 个测试**直接驱动（`tests/test_rv32i_pipeline.cpp:84,192` · `examples/riscv-mini/tests/test_pipeline_exec.cpp:607,632`）⇒ ⇒ **只动装配点**，不动组件公开面 ⇒ ⇒ **不得**套用 ADR-047 D7「删零消费者预留端口」的先例（该先例的前提是「零内部消费者」，此处**不成立**）。<br>⚠️ **与 `rtl-emit-product-tooling` 的关系**：那里的 C3（悬空输入诊断）是**兜底**（对**其它**设计的悬空输入仍需要）⇒ ⇒ 本条是**上游修** ⇒ ⇒ 两者互补，不是重复。 |
 
 ### ❌ 不在本项
 
@@ -99,7 +100,8 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 
 ### W.4 「保留但不接入」必须**说清楚**
 
-`rv32i_branch_predict.h`（475 行）· `rv32i_hazard_complete.h`（195 行）· `rv32i_forwarding.h`（174 行）· `rv32i_decoder.h`（161 行）· `rv32i_alu.h`（172 行）· `hazard_detection_unit.h`（65 行）⇒ ⇒ 合计 **1242 行**，占 `include/cpu/` 的 **~19%**（6473 行）⇒ ⇒ 在一个"5 级流水线 CPU"的头目录里，这个比例**会误导读者**（以为流水线由这些组件组成）⇒ ⇒ C7 的登记是**低成本、高收益**的诚实化动作。
+`rv32i_branch_predict.h`（475 行）· `rv32i_hazard_complete.h`（195 行）· `rv32i_forwarding.h`（174 行）· `rv32i_decoder.h`（163 行）· `rv32i_alu.h`（183 行）· `hazard_detection_unit.h`（65 行）· `branch_predictor_v2.h`（151 行）⇒ ⇒ 合计 **1406 行**，占 `include/cpu/` 的 **~21.7%**（6473 行）⇒ ⇒ 在一个"5 级流水线 CPU"的头目录里，这个比例**会误导读者**（以为流水线由这些组件组成）⇒ ⇒ C7 的登记是**低成本、高收益**的诚实化动作。
+> ⚠️ **planner 复核订正（2026-11-10）**：原稿写「合计 **1242 行** · ~19%」且**漏列** `branch_predictor_v2.h`（151 行）⇒ ⇒ 实测 7 个组件合计 **1406 行** / `include/cpu/` 6473 行 ⇒ ⇒ **21.7%** ⇒ ⇒ 原数字作废。
 
 ---
 
@@ -140,6 +142,15 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 - `rv32i_hazard_complete.h`（195 行）：组合式 hazard 单元 ⇒ ⇒ **裁决**：退役或明确降级为「独立示例组件」并在 AGENTS.md 标注。
 - `rv32i_branch_predict.h` / `branch_predictor_v2.h`：**不属本项** ⇒ ⇒ 但 MUST 在 AGENTS.md **标注「未接入流水线」**（否则读者会以为有预测）⇒ ⇒ **接入**属独立立项。
 
+### C8 — `HazardUnit::mem_is_load` 装配点 tie-off
+
+- 在 `include/cpu/pipeline/rv32i_pipeline.h` 的装配段加一行：`hazard.io().mem_is_load <<= ch_bool(false);`
+  - ⚠️ 位置：与既有的 `hazard.io().ex_is_load <<= id_stage.io().is_load;`（`rv32i_pipeline.h:516`）**相邻**，并保留原注释「`mem_is_load` 这一路**故意不连接**（MEM 级 load 到达时消费者早已进 EX ⇒ 该路永不触发）」—— ⇒ ⇒ **注释 MUST 改成**「**已显式 tie-off 为 0**：该路永不触发；显式 tie-off 的目的是**不让它成为顶层端口**（契约：无 driver 的 input 必须上顶层 ⇒ ⇒ 未 tie-off 时它是**活跃**顶层口 ⇒ 4 态仿真器里不接 ⇒ X ⇒ 整个核变 X）」
+  - ⚠️ **MUST NOT** 改 `include/cpu/pipeline/hazard_unit.h` 的 `__io` ⇒ ⇒ 组件公开面零变更（内部消费者 `hazard_unit.h:241` + 2 个测试直接驱动）
+- ⇒ ⇒ **端口面效果**：顶层 input 由 **8 → 7**（该口不再出现）⇒ ⇒ **契约相容**（契约说的是「**无 driver 的** input」）⇒ ⇒ 与 C2 撤回不冲突
+- ⇒ ⇒ **行为等价**：现状两后端实测均读 0 ⇒ ⇒ tie-off 后 golden（178 / 6 / 4 / store 5）**零变化**
+- ⇒ ⇒ 与 `rtl-emit-product-tooling-2026-11` 的 **C3** 互补：那处的诊断是**兜底**（其它设计的悬空输入仍需要），本条是**上游修**（本设计的这一处）
+
 ---
 
 ## Acceptance
@@ -147,7 +158,7 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 ### 差分（前置于接入）
 
 - [ ] 🔴 **SLTU 修复 MUST 自带判据**（critic 第 1 轮：原稿「修 SLTU」是**无判据变更**）⇒ 新增 ctest 断言 `execute_alu(0, 0xFFFFFFFF, SLTU) == 1`（现 `grep SLTU test_pipeline_exec.cpp` **只命中常量定义**，零断言）
-- [ ] 🔴 **静默地雷 MUST 同批修**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu`（老编码）⇒ ⇒ 归一后 `3` 变 **XOR** ⇒ ⇒ MUST 改为**符号常量**，并全仓扫「以字面量驱动 `alu_op`」的调用点
+- [ ] 🔴 **静默地雷 MUST 同批修**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu` ⇒ ⇒ 归一到 `ex_stage.h` 的编码后 `3` 变 **XOR** ⇒ ⇒ MUST 改为**符号常量**，并全仓扫「以字面量驱动 `alu_op`」的调用点<br>⚠️ **planner 复核订正（2026-11-10）**：原稿把 `0x3` 称作「**老编码**」**不准确** —— `rv32i_alu.h:28` 的 `ALU_SLTU = 3` **正好就是 3**（该测试用的正是 `ch::ch_device<Rv32iAlu>` ⇒ 编码一致）⇒ ⇒ 该字面量**今天是对的** ⇒ ⇒ 真实缺陷是「**字面量复制常量而非引用符号常量**」（漂移风险）+「**SLTU 路径零断言覆盖**」（`grep SLTU test_pipeline_exec.cpp` 只命中定义行）⇒ ⇒ **结论不变**（必须改符号常量），但**风险机理** MUST 写成「归一后编码语义漂移」而非「本来就是老编码」 |
 - [ ] ⚠️ **metis 订正 —— 主判据换掉**
 - [ ] **差异清单**（人工读码产出）与差分结果**逐条对应**；清单外差异 = 0；清单 MUST 至少含 **SLTU 借位**（真缺陷）· **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · `mem_size`/`mem_signed` 死输出 · `funct7` 双方都不消费 —— **缺 SLTU 视为清单不合格**
 - [ ] 差分用例有**变异自证**（改内联一处 ⇒ 差分必红）
@@ -172,6 +183,14 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 
 - [ ] `include/cpu/AGENTS.md` 的「WHERE TO LOOK」对每个**保留但不接入**的组件**明写**「⚠️ 非流水线路径」；分支预测器**明写**「未接入 ⇒ 每个 taken 分支付 3 拍冲刷」
 - [ ] 根 `AGENTS.md` 的 KNOWN LIMITATIONS **MUST NOT** 声称流水线由这些组件构成
+
+### 悬空输入 tie-off（C8）
+
+- [ ] `include/cpu/pipeline/rv32i_pipeline.h` 的装配点 MUST 显式 `hazard.io().mem_is_load <<= ch_bool(false);`（⇒ ⇒ 该 `ch_in` 有 driver ⇒ ⇒ 不再是顶层端口）
+- [ ] ⚠️ **组件公开面零变更**：`HazardUnit::mem_is_load` 端口**保留**（内部消费者 `hazard_unit.h:241` + 2 个测试直接驱动）⇒ ⇒ 断言 `hazard_unit.h` 的 `__io` 与改前**逐字相同**
+- [ ] **产物判据**：生成的 `.v` 顶层端口表 MUST **不再**出现 `owner = …hazard_unit` 的 input ⇒ ⇒ 顶层 input 数由 **8 → 7**
+- [ ] **行为等价**：20 项 golden 全绿（退休数 **178** / `load_use_stalls` **6** / `control_stalls` **4** / store **5** 全部不变）⇒ ⇒ 证明 tie-off **零行为变化**
+- [ ] ⚠️ **4 态证据**：MUST 有**独立于 Verilator**的证据表明该口不再是「未接 = X」的活跃顶层输入（⇒ 静态判据「端口表里没有它」**已足够**；若引入 4 态仿真器则再加运行时判据）⇒ ⇒ 判据 MUST **可判别**（禁「看起来没问题」）
 
 ### 不回归
 
@@ -226,6 +245,19 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 | `rtl-emit-product-tooling-2026-11` | 产物节点数变化 ⇒ ⇒ manifest 快照同步 |
 | `rv32i-isa-gap-closure-2026-11` | 无耦合 ⇒ ⇒ 可并行；但 ISA 项若改了 ID 级 ⇒ ⇒ 建议 ISA 项在本项**之后**（避免 ID 级改两遍） |
 
+## 事实订正（planner 复核 · 2026-11-10）
+
+> **触发**：planner 复核 commit `1dc1d98` 时逐条复现本文档的每个数值锚点 ⇒ 发现 **2 处数值偏差 + 1 处机理误述 + 1 处漏项** ⇒ ⇒ 纯文本订正，**未动任何决策**（C5+C6 同批 / C1–C4 裁决 / 退役清单**全部不动**）。
+
+| # | 原值 | 实测值 | 复现方式 | 影响 |
+|---|---|---|---|---|
+| **F1** | `rv32i_alu.h` **172** 行 · `rv32i_decoder.h` **161** 行 | **183** 行 · **163** 行 | `wc -l include/cpu/pipeline/{rv32i_alu,rv32i_decoder}.h` | ⚠️ 影响 W.4 的占比论证 ⇒ ⇒ 7 个组件合计 **1406**（原 1242，且原稿**漏列** `branch_predictor_v2.h` 151 行）⇒ ⇒ 占 `include/cpu/`（6473）的 **~21.7%**（原 ~19%）⇒ ⇒ **结论方向不变**（比例仍足以误导读者） |
+| **F2** | 手推期望 `kExCases` **27** 条 | **28** 条 | `kExCases` 数组 `tests/test_rv32i_stage_dual.cpp:149-178`，条目 150-177 共 28 行（`kDecCases` **17** 条 ✓ 不变） | ⚠️ C1 的「复用既有表」**引用数**须订正（否则实施期找不到 27 条） |
+| **F3** | 「`test_pipeline_exec.cpp:124` 用字面量 `SLTU = 0x3`（**老编码**）」 | `rv32i_alu.h:28` 的 `ALU_SLTU = 3` **正好是 3**（该测试用 `ch::ch_device<Rv32iAlu>` ⇒ 编码本就一致） | `grep -n "ALU_SLTU" include/cpu/pipeline/rv32i_alu.h` | ⚠️ **机理误述**：该字面量**今天是对的** ⇒ ⇒ 真实缺陷 = 「**字面量复制常量而非引用符号常量**」+「**SLTU 路径零断言覆盖**」⇒ ⇒ **处置不变**（改符号常量），但风险机理 MUST 写成「归一后编码语义漂移」 |
+| **F4** | —（新增） | — | — | ⚠️ **`mem_is_load` 的修正原本 7 份草案无任何一条承接** ⇒ ⇒ 新增 **C8**（装配点 tie-off ⇒ ⇒ 顶层 input 8 → 7 ⇒ ⇒ 契约相容 ⇒ ⇒ 行为零变化）⇒ ⇒ 并与 `rtl-emit-product-tooling-2026-11` 的 C3 双向指名 |
+
+**未变**：C1–C7 的**范围**、C5+C6 同批约束、退役清单、能力表、metis 的 12 条 finding **全部不动**（F4 是**新增**一条，原有条目一字未改）。
+
 ## metis 第 1 轮 gap 分析与处置（2026-11-10）
 
 > **轮次**：1（该 improvement 总计 1 轮）· **审查者**：metis（预规划 gap 分析）
@@ -238,8 +270,8 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 | 2 | 🔴 **`Rv32iAlu` 的 SLTU 是真缺陷**（不是「编码差异」）：`rv32i_alu.h:93` 的 `lt_unsigned_sig = bits<31,31>(sub_result)` ⇒ ⇒ `0 < 0xFFFFFFFF` 得 **0**（期望 **1**）⇒ ⇒ 且组件内部 `result`(SLTU) 与 `less_than_u` **自相矛盾** | A.2⑤ 追加；C1 的差异清单**必须含 SLTU**（缺 ⇒ 清单不合格） |
 | 3 | 🔴 **原稿事实错**：`tests/chlib/test_forwarding.cpp` **不**消费 `riscv::ForwardingUnit` | A.1 表订正；C5 的「迁移该文件测试」**作废**（是空操作） |
 | 4 | `rv32i_phase{1,2,3}_test` 是 `riscv_mini_unit_test` ⇒ **从不执行** | A.1 表订正 |
-| 5 | 🔴 **「交付路径对 ALU 零覆盖」不成立**：`tests/test_rv32i_stage_dual.cpp:320-362` 用 **27 条手推期望**逐项断言 `ExStage` | A.1 表追加；W.1 相应收窄 |
-| 6 | 仓内**已有**差分基础设施（`kExCases`(27) / `kDecCases`(17) / `ImmConsistencyDut`）⇒ ⇒ 本项若重造 = **第二份同型实现**（恰违反它想立的契约） | C1 改为「**复用**既有表 + 「等价物 MUST 逐行照抄 `ex_stage.h:136-208`」+ 差异清单必含 SLTU / ADD 33 位宽度 / `less_than_u` 内部矛盾 / 死输出 / `funct7` 双方都不消费」 |
+| 5 | 🔴 **「交付路径对 ALU 零覆盖」不成立**：`tests/test_rv32i_stage_dual.cpp:320-362` 用 **28 条手推期望**逐项断言 `ExStage`（⚠️ **planner 复核订正**：条数 27 → **28**） | A.1 表追加；W.1 相应收窄 |
+| 6 | 仓内**已有**差分基础设施（`kExCases`(28) / `kDecCases`(17) / `ImmConsistencyDut`）⇒ ⇒ 本项若重造 = **第二份同型实现**（恰违反它想立的契约） | C1 改为「**复用**既有表 + 「等价物 MUST 逐行照抄 `ex_stage.h:136-208`」+ 差异清单必含 SLTU / ADD 33 位宽度 / `less_than_u` 内部矛盾 / 死输出 / `funct7` 双方都不消费」<br>⚠️ **planner 复核订正**：`kExCases` 条数 27 → **28**（`tests/test_rv32i_stage_dual.cpp:149-178` 实测） |
 | 7 | 新 capability 的「同一语义 MUST NOT 有两份实现」**永远为红**（Simulator/codegen 同源 · `chlib::ForwardingUnit` 与 `riscv::ForwardingUnit` 双份 · 立即数三处）⇒ ⇒ 立一条不可满足的契约 = 制造永久技术债 | Capabilities **收窄为两条**（独立 oracle 断言 / 无消费者组件须标明定位） |
 | 8 | `riscv::ForwardingUnit` 「独有且被覆盖」的语义 = **空集**（WB 档无覆盖 · `id_reg_read` 死输入）⇒ ⇒ 迁移会把「EX 档前推 load 的访存地址」这一**已知错误模型**固化进新断言 | C5 改为**删除**（不是迁移）；组合时序覆盖改由「`HazardUnit` + `ForwardingMux` 组成 DUT」承担（该形态已有先例） |
 | 9 | 退役会**减少** `DUAL_BACKEND_PARITY_PAIRS`(290) / `VERILATOR_E2E_TOTAL`(77) ⇒ ⇒ 缩面须**显式批准** | C5 加**缩面条款**（change 里明写「这是缩面」+ reviewer 签字）；验收从「257 全绿」改为「`CTEST_TOTAL` + 新增 − 删除 == `ctest -N`」 |
@@ -280,6 +312,6 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 ### ⚠️ SHOULD_FIX（已采纳）：⑧「共用 ALU 操作码常量（零行为变更）」对 `Rv32iAlu` **不是零变更**，且 SLTU 修复**无断言覆盖**
 
 - `rv32i_alu.h:25-34`（SUB=10、SRA=11）vs `ex_stage.h:34-43`（SUB=1、SRA=7）⇒ 归一后组件版改值 ⇒ **破坏** `rv32i_phase{1,2}_test` 的手写常量 ⇒ 「零行为变更」仅对**交付路径**成立。
-- 🔴 **静默地雷**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu`（老编码）⇒ 归一后 `3` 变 **XOR**。
+- 🔴 **静默地雷**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu` ⇒ 归一后 `3` 变 **XOR**。<br>⚠️ **planner 复核订正（2026-11-10）**：原稿「（老编码）」**不准确** —— `rv32i_alu.h:28` 的 `ALU_SLTU = 3` **正好是 3**（该测试用 `ch::ch_device<Rv32iAlu>` ⇒ 编码本就一致）⇒ ⇒ 风险机理是「**归一时编码语义漂移**」+「**字面量复制而非引用符号常量**」⇒ ⇒ **处置不变**（改符号常量）。
 - SLTU 修复（`rv32i_alu.h:93`）**无任何 ctest 断言 SLTU 结果**（`grep SLTU test_pipeline_exec.cpp` 只命中常量定义）⇒ 属「**无判据变更**」。
 **处置**：MUST 加 `ctest` 断言 `execute_alu(0, 0xFFFFFFFF, SLTU) == 1`；并把 `test_pipeline_exec.cpp:124` 的字面量改为符号常量。

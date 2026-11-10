@@ -9,10 +9,10 @@ type: feature
 依赖: rtl-emit-product-tooling-2026-11（manifest）· public-api-remove-visibility-2026-11（公开面登记机制）· rtl-hierarchical-output（命名规则规范所有者）
 来源: 用户 2026-11-10 拍板「⑤ 生成的 RTL 顶层端口，希望保持和 C++ 侧一样的命名」+ planner 实测规模盘点
 生成时间: 2026-11-10
-evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 1420/1349 端口声明计数
+evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 3103（1577 ch_in + 1526 ch_out）端口声明计数
 ---
 
-# Improvement: 端口**显式命名**（框架先行 + 基线棘轮 · 不做一次性 2769 处 codemod）
+# Improvement: 端口**显式命名**（框架先行 + 基线棘轮 · 不做一次性 3103 处 codemod）
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
@@ -31,17 +31,17 @@ evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 1420/13
 | # | 事实 | 证据 |
 |---|---|---|
 | ① | `ch_in` / `ch_out` 的**端口名**（`port::name()`）**硬编码**为 `"unnamed_input"` / `"unnamed_output"` ⇒ ⇒ 产物端口名只可能是 `unnamed_input` + 去重序号<br>⚠️ **metis 订正**：产物里的 `top_` 是 **IR 节点名的路径前缀**（组件全路径 + `.` + 创建名），**不是**端口名的一部分 ⇒ ⇒ 「C++ 名 == RTL 名」到底指哪一级名字，**必须先裁决**（见 N5） | `include/core/io.h:143` · `src/core/lnodeimpl.cpp:30-35` |
-| ② | ⚠️ **metis 订正**：`port` / `ch_logic_in` **已有具名构造**（`explicit port(const std::string&, sloc)`，`include/core/io.h:221,266`；`ch_logic_in` 同型 `:180-198`），仓内已有 20+ 调用点 ⇒ ⇒ 缺的**不是**「构造」，而是「**`__io` 内的默认成员声明怎么带名**」这一**用法约定 + 护栏**<br>⇒ ⇒ 原稿 N1「新增带名构造」**作废** | `include/core/io.h:221,266,319-330` |
+| ② | ⚠️ **metis 订正**：`port` / `ch_logic_in` **已有具名构造**（`explicit port(const std::string&, sloc)`，`include/core/io.h:221,266`；`ch_logic_in` 同型 `:180-198`）⇒ ⇒ 缺的**不是**「构造」，而是「**`__io` 内的默认成员声明怎么带名**」这一**用法约定 + 护栏**<br>⇒ ⇒ 原稿 N1「新增带名构造」**作废**<br>⚠️ **planner 复核订正（2026-11-10）**：原稿称「仓内已有 **20+ 调用点**」⇒ ⇒ **实测为 0**（全仓扫 `.h/.cpp`，正则 `(ch_in\|ch_out\|port\|ch_logic_in\|ch_logic_out)\s*<…>\s*\{?\s*"` ⇒ 0 个真调用点）⇒ ⇒ **构造存在但从未被任何代码走过** ⇒ ⇒ 正确的事实**更强**：本项缺的不只是「用法约定 + 护栏」，还缺「**这条路径的第一份可运行样例**」⇒ ⇒ N1② 的「最小可运行探针」**从「建议」升格为 MUST**（否则「显式名 → 产物端口名」这条链**从未被端到端验证过**） | `include/core/io.h:221,266,319-330` · 调用点计数见 §事实订正 F2 |
 | ③ | `name()` **只读** ⇒ ⇒ 没有事后改名的 API | `include/core/io.h:250` / `:289` |
 | ④ | 去重计数器按 **eval-list 顺序** ⇒ ⇒ **图的任何无关改动都会改名**（`_3` → `_4`）⇒ ⇒ 端口名**不可依赖** | `include/codegen_naming.h::build_verilog_name_table`（`counts[base]++` 按 `ctx->get_eval_list()` 拓扑序） |
-| ⑤ | **规模**：端口声明 **2769** 处（`ch_in<` **1420** + `ch_out<` **1349**）· 含 `__io(` 的文件 **168** 个 ⇒ ⇒ 一次性 codemod = 全仓级改动 | `grep -rhoE '\bch_in<\|ch_out<' include/ examples/ tests/ \| wc -l`（2026-11-10 实测） |
+| ⑤ | **规模**：端口声明 **3103** 处（`ch_in<` **1577** + `ch_out<` **1526**）· 含 `__io(` 的文件 **168** 个 ⇒ ⇒ 一次性 codemod = 全仓级改动<br>⚠️ **planner 复核订正（2026-11-10）**：原稿写 **2769**（1420 + 1349）⇒ ⇒ **该数字不可复现**：按本行给出的命令实测得 **3103**（1577 + 1526）⇒ ⇒ 各种路径组合都到不了 2769（`include/` 1215 · `+examples/` 1593 · `+scripts/` 3208 · `+src/` 3104）⇒ ⇒ 即使按「声明形态」（`ch_in<T> ident;`）重数也是 **2888**（183 文件）⇒ ⇒ **原数字作废**，本行数字为唯一权威 | `grep -rhoE '\bch_in<\|ch_out<' include/ examples/ tests/ \| wc -l`（2026-11-10 实测 = **3103**） |
 | ⑥ | 框架**已有**「节点名唯一性 opt-in 策略」⇒ ⇒ 「重名直接报错」**表面上**可复用<br>⚠️ **metis 订正**：`kRejectDuplicates` 判的是 **ctx 内全部节点**，且 `ch_reg` 的默认名（`reg`）会让**普通设计必然报错**（`include/core/context.h:168-176` 文档自陈）⇒ ⇒ 它**不可能**用于产品设计 ⇒ ⇒ 端口重名 MUST 用**端口作用域**的判定（「同一组件内已存在同名显式名」）⇒ ⇒ 这是**新增**的局部判定，**不是**复用 ⇒ ⇒ 原稿「MUST NOT 另造重名机制」**作废** | capability `core-ctx-node-name-uniqueness` · `include/core/context.h:168-176` |
 | ⑦ | 命名规则的**规范所有者 = `rtl-hierarchical-output`**；guard capability MUST NOT 复述规则 | capability `hierarchical-port-naming-guard`（Purpose 段明文裁定） |
 | ⑧ | 扁平与层次化**共用**同一份命名实现 ⇒ ⇒ 改一处即改两处（**不会漂**） | `include/codegen_naming.h` 被 `src/codegen_verilog.cpp:69` 与 `include/hierarchy_analysis.cpp` 共用 |
 
 ### A.2 为什么不做一次性全量 codemod
 
-- **爆炸半径**：2769 处声明 / 168 文件 ⇒ ⇒ 一次 commit 改完 ⇒ review 不可行 ⇒ ⇒ 缺陷必然漏。
+- **爆炸半径**：3103 处声明 / 168 文件 ⇒ ⇒ 一次 commit 改完 ⇒ review 不可行 ⇒ ⇒ 缺陷必然漏。
 - **回归风险集中**：任何一处漏改 ⇒ 端口名静默变化 ⇒ ⇒ 而端口名变化会让**跨仓下游**的 TB 静默接错（不是编译错，是行为错）。
 - **收益不需要等**：用户的目标是「RTL 侧端口名 = C++ 侧成员名」⇒ ⇒ **新写/改动**的组件带名即可 ⇒ ⇒ 存量可**增量**消化 ⇒ ⇒ 棘轮是正解。
 
@@ -62,10 +62,10 @@ evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 1420/13
 
 | 编号 | 内容 |
 |---|---|
-| **N1** | ⚠️ **metis 订正后的收缩**：**具名构造已存在**（`include/core/io.h:221,266`）⇒ ⇒ 本项的交付物**不是**「新增构造」，而是：① **用法约定**（`__io` 内的成员如何带名 —— 形如 `ch_in<ch_bool> prog_we{"prog_we"};`）② **最小可运行探针**（`__io` 内 NSDMI 经 `new (io_storage_) io_type` 是否生效 —— **本轮静态推断，未运行验证**）③ **一条 ctest** 钉住该用法 ④ **文档**（用法 + 已知限制） |
-| **N2** | **基线棘轮**：登记表 `.rddf/checks/port-naming-registry.md` + 护栏 `scripts/verify_port_naming.sh`：① 扫描面限定 **product 侧**（`include/**` + `examples/**`）⇒ ⇒ `tests/**` **默认排除**（沿用既有裁决 `scripts/verify_input_port_additions.sh`「测试 DUT 端口自包含 ⇒ 不属风险面」）② 判定粒度 = **端口级增量**（`git diff <base>...HEAD` 只看**新增的端口声明**）③ 登记表条目身份 = `<文件>\t<__io 块序号>\t<声明文本>`（**不是文件哈希** —— 哈希对任何注释改动都失效）④ 计数锚点 `EXPECTED_EXEMPT_PORTS=<n>` **钉在护栏脚本里**（照 `scripts/verify_public_api_visibility.sh` 的 `EXPECTED_PROBES=24`），**不**钉在可编辑的登记表里 ⑤ 双向 + **逐端口**（豁免文件里**新增**未命名端口 MUST 红 —— 文件级集合比对堵不住）⑥ `--self-test` 至少投毒 **2 类**（已命名组件里加未命名端口 / 豁免文件里加未命名端口） |
+| **N1** | ⚠️ **metis 订正后的收缩**：**具名构造已存在**（`include/core/io.h:221,266`）⇒ ⇒ 本项的交付物**不是**「新增构造」，而是：① **用法约定**（`__io` 内的成员如何带名 —— 形如 `ch_in<ch_bool> prog_we{"prog_we"};`）② **最小可运行探针**（`__io` 内 NSDMI 经 `new (io_storage_) io_type` 是否生效 —— **本轮静态推断，未运行验证**）③ **一条 ctest** 钉住该用法 ④ **文档**（用法 + 已知限制）<br>⚠️ **planner 复核订正（2026-11-10）**：具名构造的**调用点实测为 0** ⇒ ⇒ 这条路径**从未被端到端跑过** ⇒ ⇒ ② **从「探针」升格为 MUST**（MUST 实跑一次并把产物端口名钉进断言）⇒ ⇒ ② 的失败形态（构造在 `__io` 内不生效 / 生效但名字没进图）**必须先被排除**，否则后面 ③④ 全是空中楼阁 |
+| **N2** | **基线棘轮**：登记表 `.rddf/checks/port-naming-registry.md` + 护栏 `scripts/verify_port_naming.sh`：① 扫描面限定 **product 侧**（`include/**` + `examples/**`）⇒ ⇒ `tests/**` **默认排除**（沿用既有裁决 `scripts/verify_input_port_additions.sh`「测试 DUT 端口自包含 ⇒ 不属风险面」）② 判定粒度 = **端口级增量**（`git diff <base>...HEAD` 只看**新增的端口声明**）③ 登记表条目身份 = `<文件>\t<__io 块序号>\t<声明文本>`（**不是文件哈希** —— 哈希对任何注释改动都失效）④ 计数锚点 `EXPECTED_EXEMPT_PORTS=<n>` **钉在护栏脚本里**（照 `scripts/verify_public_api_visibility.sh` 的 `EXPECTED_PROBES=24`），**不**钉在可编辑的登记表里 ⑤ 双向 + **逐端口**（豁免文件里**新增**未命名端口 MUST 红 —— 文件级集合比对堵不住）⑥ `--self-test` 至少投毒 **2 类**（已命名组件里加未命名端口 / 豁免文件里加未命名端口）<br>⑦ 🔴 **oracle 加固 ①（2026-11-10 · 用户已点头）**：护栏 P1 MUST **额外**判「**标识符 == 显式名字符串**」⇒ ⇒ 即 `ch_in<ch_uint<32>> prog_addr{"prog_addr"};` **通过**（标识符 `prog_addr` == 名字串 `"prog_addr"`）⇒ ⇒ 而 `ch_in<ch_uint<32>> prog_addr{"port_addr"};` **MUST 红**（标识符 ≠ 名字串）⇒ ⇒ ⇒ **理由（oracle 根因 F-C）**：框架**无反射** ⇒ ⇒ 运行期唯一存活的是**显式命名串** ⇒ ⇒ manifest 的 `cpp_member` **只能是它** ⇒ ⇒ ⇒ 「可解析到 C++ 成员名」**必须**由这条静态护栏兜住 ⇒ ⇒ ⇒ 否则 AC 是**不可验证的 MUST** ⇒ ⇒ ⇒ **零新增成本**（护栏 P1 的扫描面**已经**拿到声明文本 ⇒ ⇒ 加一条 `ident == "ident"` 的比对即可） |
 | **N3** | **名字稳定性**：显式名路径 MUST **绕开** eval-list 序计数器（否则显式名也会被追加序号）⇒ ⇒ 端口名对图的无关改动**稳定**。<br>⚠️ **metis 订正**：① 「重名 MUST 报错」**不能**复用 `kRejectDuplicates`（见 A.1⑥）⇒ ⇒ MUST 是**端口作用域**的局部判定 ② 「零序号」**不是**靠「名字不含 `_N`」判定（合法成员名本身可以以 `_2` 结尾 ⇒ 不可判）⇒ ⇒ 只能用**期望字符串比对**（如 `find("input ... top_prog_we")` 命中 且 `find("top_unnamed_input") == npos`） |
-| **N4** | **命名规则进规范**：端口命名规则 MUST 写进 `rtl-hierarchical-output`（**规范所有者**）⇒ ⇒ 本项 MUST NOT 在别处另写一份 |
+| **N4** | **命名规则进规范**：端口命名规则 MUST 写进 `rtl-hierarchical-output`（**规范所有者**）⇒ ⇒ 本项 MUST NOT 在别处另写一份<br>✅ **2026-11-10 · oracle 建议 1 裁决 = 方案 A（用户已点头）· 本行已回填**：Requirement 收紧为「**RTL 端口名 MUST 可机器解析到 C++ 成员名**（manifest `cpp_member`）· **MUST NOT** 依赖「RTL 名 == C++ 名」这一未成立的假设」⇒ ⇒ ⚠️ **删除**原措辞「顶层端口名 MUST 与 C++ 侧显式命名**逐字相同**」⇒ ⇒ 理由（oracle）：① 「逐字相同」对 T1⊖T2 的多数端口**结构上不可满足**（唯一性要求 + `sanitize` 非单射）② 扁平产物是**单 module 全局命名空间** ⇒ ⇒ 前缀/路径是**唯一消歧手段**③ 用户诉求的**真实缺陷是「名字无语义且不稳定」** ⇒ ⇒ 「显式命名 + 零序号 + manifest 可解析」已对**所有组件**解决它 ⇒ ⇒ 剩下的只是**人眼友好**<br>⇒ ⇒ ⚠️ **「字面同名」的正确归宿** = `rtl-hierarchical-output` 内一条**带前提的 SHOULD**（限定 `is_top_io == true` 视图）+ 一条「**不可能条件** MUST NOT 被承诺」⇒ ⇒ ⇒ **用户诉求不丢**（写进规范）⇒ ⇒ **不制造一条常态违约的 MUST**<br>⇒ ⇒ ⚠️ **集合口径（oracle 建议 2）**：**MUST 覆盖 T1**（顶层 module 端口表**全体**）· **SHOULD 限定 T2**（`is_top_io == true`）⇒ ⇒ 理由：`is_top_io` 的价值恰在区分 T1 的两半；若 MUST 只覆盖 T2 ⇒ ⇒ T1 里那 80 个 inline 后代输出**落到无命名义务的缝里** ⇒ ⇒ 覆盖面漏洞<br>⇒ ⇒ ⚠️ **字段语义只引用** `rtl-emit-portability`（manifest schema 所有者）⇒ ⇒ 本项 MUST NOT 重定义 |
 | **N5** | 🔵 **已裁决（2026-11-10 用户）＝ 两步走**：<br>**第 1 步（立刻做）(a)** —— **只做 manifest 双字段**：`name`（RTL 全名，保持 `top_prog_we`）+ `cpp_member`（C++ 成员路径 `prog_we`）+ 复用 I1 的 `owner` / `is_top_io`。⇒ **零产物变更 · 零 ADR 变更 · 零快照漂移** ⇒ 工具链**立刻可用**（下游生成 TB 时能查到 C++ 侧名字）。<br>**第 2 步（独立立项）(c)** —— 兑现**字面同名**：只验**一件事** —— 把 `ch_device` 的根实例名清空（`include/device.h:28` 的 `"top"` → 空）后，`lnodeimpl` 的 `parent == nullptr` 分支（`src/core/lnodeimpl.cpp:33-35`）是否产出**裸 `prog_addr`**；<br>⇒ ⇒ **若产出的是 `.prog_addr` → `_prog_addr`（前导点被 sanitize 成下划线）⇒ (c) 也不成立** ⇒ 退回 ADR 讨论（`ADR-061:32` 的「下游按 `node->name()` 精确匹配」需一并修订）。<br>⚠️ **第 2 步 MUST NOT** 直接改 `build_verilog_name_table`（其签名 `(eval_order)` **无 root 入参** ⇒ 只能硬编码 `"top_"` ⇒ 对 `ch_module` 作顶层静默失效；且「先计数再剥」**不保证唯一**：`top_prog_we`→`prog_we` 与一个 `parent==nullptr` 的 `prog_we` 剥后同名而计数器不补） |
 | **N6** | **公开面登记**：第 1 步**零公开 API 变更**（只加 manifest 字段）⇒ 无需登记；第 2 步若成立 ⇒ `Component::name()` 语义变更 ⇒ MUST 走 `.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md` + ADR 修订 |
 
@@ -73,7 +73,7 @@ evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 1420/13
 
 - **端口选择语义**（哪些端口算顶层）⇒ 归 `rtl-emit-product-tooling-2026-11`
 - **`ch_reg` / `ch_mem` 等其它节点类型的命名** ⇒ 本项只管 `ch_in` / `ch_out` ⇒ ⇒ `ch_reg` 已有名字参数，不动
-- **存量 2769 处的一次性消化** ⇒ ⇒ 靠 N2 棘轮**渐进**完成 ⇒ ⇒ 每批消化 MUST 有独立记录
+- **存量 3103 处的一次性消化** ⇒ ⇒ 靠 N2 棘轮**渐进**完成 ⇒ ⇒ 每批消化 MUST 有独立记录
 - **`sanitize_verilog_name` 的规则**（关键字表等）⇒ 不动 ⇒ ⇒ 只加"显式名优先"路径
 
 ---
@@ -90,7 +90,7 @@ evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 1420/13
 
 ### W.3 一次性 codemod 是**风险换时间**的错配
 
-2769 处 ⇒ 一次提交 ⇒ ⇒ reviewer 只能"看个大概" ⇒ ⇒ 漏改不可见 ⇒ ⇒ 而漏改的后果是**静默**的（端口名变 ⇒ 行为错）。⇒ ⇒ **棘轮**把风险摊薄到每一小批，每批可被独立 review + 独立回归。
+3103 处 ⇒ 一次提交 ⇒ ⇒ reviewer 只能"看个大概" ⇒ ⇒ 漏改不可见 ⇒ ⇒ 而漏改的后果是**静默**的（端口名变 ⇒ 行为错）。⇒ ⇒ **棘轮**把风险摊薄到每一小批，每批可被独立 review + 独立回归。
 
 ### W.4 复用既有机制 > 新造
 
@@ -132,11 +132,12 @@ ch_in<ch_bool> prog_we{"prog_we"};
 
 - 显式名进入图后，顶层端口的最终名 MUST **按名去重** ⇒ ⇒ 同名 ⇒ **报错**（复用 `kRejectDuplicates`；默认策略仍是 `kAllowDuplicates` ⇒ ⇒ **既有行为不变**）。
 - ⚠️ **顺序敏感消解**：现在 `_N` 后缀来自 eval-list 序 ⇒ ⇒ 显式名路径 MUST **绕开**该计数器（否则显式名也会被追加序号）⇒ ⇒ **判据**：一个组件加了显式名 ⇒ 该端口名 MUST **逐字**等于显式名 ⇒ ⇒ **零序号**。
-- ⚠️ **存量兜底**：未显式命名的端口 **仍**走旧的去重路径（否则 2769 处端口名**全体变** ⇒ ⇒ 大爆炸）⇒ ⇒ 旧路径 MUST 保留为**兼容模式** ⇒ ⇒ 由棘轮逐步收敛。
+- ⚠️ **存量兜底**：未显式命名的端口 **仍**走旧的去重路径（否则 3103 处端口名**全体变** ⇒ ⇒ 大爆炸）⇒ ⇒ 旧路径 MUST 保留为**兼容模式** ⇒ ⇒ 由棘轮逐步收敛。
 
 ### N4 — 规范落点
 
-- `rtl-hierarchical-output` 追加 Requirement：「顶层端口名 MUST 与 C++ 侧**显式命名**逐字相同；未显式命名者 MUST 走**兼容去重路径**（且 MUST 被登记在棘轮豁免表）」⇒ ⇒ **规则只此一份**。
+- `rtl-hierarchical-output` 追加 Requirement：「RTL 端口名 MUST **可机器解析**到 C++ 成员名（manifest `cpp_member`）· **MUST NOT** 依赖「RTL 名 == C++ 名」；未显式命名者 MUST 走**兼容去重路径**（且 MUST 被登记在棘轮豁免表）」⇒ ⇒ **规则只此一份**。
+  - ✅ **2026-11-10 · oracle 建议 1 裁决 = 方案 A（用户已点头）**：原措辞「顶层端口名 MUST 与 C++ 侧显式命名**逐字相同**」**已删除** ⇒ ⇒ 改为「**可机器解析**」+ 「字面同名」下沉为一条**带前提的 SHOULD**（限定 `is_top_io == true` 视图）+ 一条「**不可能条件** MUST NOT 被承诺」⇒ ⇒ **规则仍只此一份**（SHOULD 与 MUST NOT 都落在同一 capability 内）。
 - `hierarchical-port-naming-guard` **MUST NOT** 复述（沿用既有裁定）。
 
 ### N5 — 同名的传递路径
@@ -156,7 +157,7 @@ ch_in<ch_bool> prog_we{"prog_we"};
 ### 框架层
 
 - [ ] `ch_in<T>` / `ch_out<T>` 支持带名构造；**既有全部构造形态**行为与产物**逐字节不变**（257 个 ctest 全绿 + `verify_hierarchical_rtl.sh` R1–R8 全绿且产物逐字节不变）
-- [ ] 显式名的端口，其 Verilog 顶层端口名**逐字**等于 C++ 成员名（`prog_we` ⇒ `prog_we`，**非** `top_unnamed_input_2`）
+- [ ] 显式名的端口，其 Verilog 顶层端口名**可机器解析**到 C++ 成员名（manifest 的 `cpp_member` 字段）⇒ ⇒ **在 `is_top_io == true` 视图下**，`prog_we` 的 `cpp_member` == `prog_we`（**非** `unnamed_input`）⇒ ⇒ ⚠️ **2026-11-10 · oracle 建议 1 裁决 = 方案 A（用户已点头）· 本行已回填**：原「**逐字**等于」**已删除** ⇒ ⇒ 理由（oracle）：该 MUST 对多数端口**当前不可满足**（同名兄弟**必然**吃 `_N` · 子组件端口**永远**带前缀 · 关键字 / 数字开头被 `sanitize` 改写）⇒ ⇒ 写成 MUST = **常态违约的 AC** ⇒ ⇒ 仓内既有反例形态（`rv32i-dead-component-consolidation` W.1「虚假信心」/ 恒绿判据）⇒ ⇒ **「字面同名」改为 `rtl-hierarchical-output` 内一条带前提的 SHOULD + 一条「不可能条件」MUST NOT**<br>⇒ ⇒ ⚠️ **「可机器解析」的**可验证性**要求（oracle 根因 F-C · 加固 ①）**：框架**无反射**（`__io` 生成匿名 struct · `include/core/io.h:319-329`）⇒ ⇒ 运行期唯一存活的是**显式命名串** ⇒ ⇒ ⇒ `cpp_member` **只能是「显式命名串」** ⇒ ⇒ ⇒ 「可解析到 C++ 成员名」**必须**由**静态护栏**强制「**标识符 == 名字串**」⇒ ⇒ ⇒ 否则本条只是**不可验证的 MUST** ⇒ ⇒ ⇒ 该判据见 N2 的护栏 P1 |
 - [ ] 显式名路径**不追加去重序号**（N3 的「零序号」判据）
 - [ ] 同名端口在 `kRejectDuplicates` 策略下**创建点抛异常**（复用 `core-ctx-node-name-uniqueness`；默认策略仍宽松 ⇒ 既有代码零影响）
 
@@ -188,7 +189,7 @@ ch_in<ch_bool> prog_we{"prog_we"};
 
 | capability | 动作 | 说明 |
 |---|---|---|
-| `rtl-hierarchical-output` | MODIFIED | 追加「端口命名 MUST 与 C++ 侧显式命名逐字相同；未显式命名者走兼容去重路径且 MUST 被登记」的 Requirement（**规则只此一份**） |
+| `rtl-hierarchical-output` | MODIFIED | 追加「RTL 端口名 MUST **可机器解析**到 C++ 成员名（manifest `cpp_member`）· MUST NOT 依赖「RTL 名 == C++ 名」；未显式命名者走兼容去重路径且 MUST 被登记」的 Requirement<br>⚠️ **2026-11-10 · oracle 建议 1 裁决 = 方案 A（用户已点头）**：原「端口命名 MUST 与 C++ 侧显式命名**逐字相同**」**已删除** ⇒ ⇒ 「字面同名」改为**带前提的 SHOULD**（限定 `is_top_io == true` 视图）+ 一条「**不可能条件** MUST NOT 被承诺」⇒ ⇒ **MUST 集合覆盖 T1**（顶层 module 端口表全体）· **SHOULD 集合限定 T2**（oracle 建议 2）⇒ ⇒ ⚠️ 「层次化产物的顶层端口名与扁平产物**逐字相同**」是**另一条**契约（hier vs flat）⇒ ⇒ **本行不动它** |
 | `core-ctx-node-name-uniqueness` | **不动**（复用） | 本项 MUST **复用**其 `kRejectDuplicates` 策略 ⇒ ⇒ MUST NOT 另造重名机制 |
 | `hierarchical-port-naming-guard` | **不动** | 沿用既有裁定：guard capability MUST NOT 复述命名规则 |
 | `port-naming-ratchet`**（新**） | ADDED | 棘轮契约：登记表 + 双向校验 + 只许减不许增 + fail-closed + `--self-test` ⇒ ⇒ **机制义务**，不承载命名规则本身 |
@@ -226,6 +227,18 @@ ch_in<ch_bool> prog_we{"prog_we"};
 | `memory-timing-contract-2026-11` | 无耦合 |
 | `rv32i-dead-component-consolidation-2026-11` | ⚠️ **有耦合**：I5 会改 `Rv32iDecoder` / `Rv32iAlu` / `HazardUnit` 的 `__io` ⇒ ⇒ 那些组件**被改动** ⇒ ⇒ 触发本项 P1 ⇒ ⇒ **必须带名** ⇒ ⇒ 顺序：I5 的每个组件改动 MUST 顺带带名（成本低，因为本来就在改）⇒ ⇒ **建议 I5 与本项首批合并** |
 
+## 事实订正（planner 复核 · 2026-11-10）
+
+> **触发**：planner 复核 commit `1dc1d98` 时逐条复现本文档的每个数值锚点 ⇒ 发现 **2 处不可复现** ⇒ ⇒ 纯文本订正，**未动任何决策**。
+
+| # | 原值 | 实测值 | 复现命令 | 影响 |
+|---|---|---|---|---|
+| **F1** | 端口声明 **2769** 处（1420 + 1349） | **3103**（1577 + 1526） | `grep -rhoE '\bch_in<\|\bch_out<' include/ examples/ tests/ \| wc -l` | ⚠️ 原稿给出的**命令本身**产出 3103 ⇒ **数字与证据自相矛盾** ⇒ 各种路径组合都到不了 2769（`include/` 1215 · `+examples/` 1593 · `+scripts/` 3208 · `+src/` 3104）；即使按「声明形态」重数也是 **2888**（183 文件）⇒ ⇒ 原数字作废 |
+| **F2** | 具名构造「仓内已有 **20+ 调用点**」 | **0** | 全仓 `.h/.cpp` 正则 `(ch_in\|ch_out\|port\|ch_logic_in\|ch_logic_out)\s*<…>\s*\{?\s*"` | ⚠️ **构造确实存在**（`io.h:180-182` / `:221` / `:266`）⇒ ⇒ metis 的**结论**（缺的**不是**构造）**仍然成立**；但正确的事实**更强**：这条路径**从未被任何代码走过** ⇒ ⇒ N1② 的探针**升格为 MUST** |
+
+**处置**：F1 ⇒ 全文 7 处 + `improvement-suggestions.md` 索引 1 处同步订正；F2 ⇒ A.1② / N1 / metis finding 1 三处同步订正。
+**未变**：方案 A′（框架先行 + 基线棘轮）**不受影响** —— 两个数字都指向「规模大到不能一次性 codemod」，且 F2 的修正**加强**了「必须先有可运行探针」的结论。
+
 ## metis 第 1 轮 gap 分析与处置（2026-11-10）
 
 > **轮次**：1（该 improvement 总计 1 轮）· **审查者**：metis（预规划 gap 分析）
@@ -234,7 +247,7 @@ ch_in<ch_bool> prog_we{"prog_we"};
 
 | # | metis finding | 处置 |
 |---|---|---|
-| 1 | 🔴 **具名构造早已存在**（`include/core/io.h:221,266`；仓内已有 20+ 调用点）⇒ 原稿 N1「新增带名构造」是把已有能力当待建 | N1 **收缩**为「用法约定 + 最小可运行探针 + 一条 ctest + 文档」；并在 A.1② 记录订正 |
+| 1 | 🔴 **具名构造早已存在**（`include/core/io.h:221,266`）⇒ 原稿 N1「新增带名构造」是把已有能力当待建 | N1 **收缩**为「用法约定 + 最小可运行探针 + 一条 ctest + 文档」；并在 A.1② 记录订正<br>⚠️ **planner 复核订正**：原稿附的「仓内已有 20+ 调用点」**实测为 0** ⇒ ⇒ 该路径**从未被任何代码走过** ⇒ ⇒ N1② 的探针**升格为 MUST**（见 §事实订正 F2） |
 | 2 | 🔴 产物里的 `top_` 是 **IR 节点名的路径前缀**，不是端口名 ⇒ 「C++ 名 == RTL 名」指哪一级**未定义** | A.1① 补记；N5 改为「**先裁决语义**（三选一，推荐 manifest 双字段）」 |
 | 3 | `kRejectDuplicates` 会被 `ch_reg` 默认名触发 ⇒ **不可能**用于产品设计 | A.1⑥ 补记；N3 改为**端口作用域**的局部判定；**删除**「MUST NOT 另造重名机制」这条自相矛盾的约束 |
 | 4 | 棘轮若按**文件** ⇒ 一次要改 94 个组件（`tests/test_hierarchy_verilog.cpp` 实测 94 个 `__io`）⇒ ⇒ 爆炸半径没被摊薄，只是换了方向 | N2 改为**端口级增量** + 扫描面限定 product 侧（`tests/**` 排除，沿用 `verify_input_port_additions.sh` 的既有裁决） |

@@ -38,7 +38,7 @@ evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h + /tmp/opencode/rv3
 | ④″ | ⚠️ **metis 订正**：框架**无反射** ⇒ 「根组件的 `io_type` 成员」**不可枚举**（`__io` 宏只生成匿名 struct）⇒ ⇒ 可实现的唯一口径是「**owner 为根组件**的端口节点」（`lnodeimpl::get_parent()`；`src/hierarchy_analysis.cpp:272` 的 `mod_of` 即此法） | `include/core/io.h:319-330` · `include/core/lnodeimpl.h:201` |
 | ⑤ | ⚠️ **无 driver 的 `ch_in` 一律被当成顶层端口** ⇒ 内部缺陷泄漏到产品接口面 | 同上（`push_of_type` 的 filter 只有「有 driver ⇒ 内部线」/「无 driver ⇒ 顶层端口」两桶）· 实测：`hazard_unit.mem_is_load` 泄漏成 `top_pipeline_hazard_unit_unnamed_input_4` |
 | ⑥ | ⚠️ 该泄漏端口是**活的**（变异 tie 1 ⇒ 9 项 golden 转红、只退休 21 条指令）⇒ 4 态仿真器里不接 ⇒ X ⇒ **整个设计变 X** | 变异实测（`mutation_memload_tied1.log`） |
-| ⑦ | ⚠️ 产物缺 `` `default_nettype none `` · 缺生成元数据 · 含**自赋值死逻辑**（`assign a = a;`）· 含声明未用的信号 | `rv32i_soc.v` 产物全文 |
+| ⑦ | ⚠️ 产物缺 `` `default_nettype none `` · 缺生成元数据 · 含**声明未用的信号**（**107** 个）· 含**proxy 恒等直通**（**43** 条 `assign X_ = X;`，其中 `X_` 无其它引用 ⇒ 整条链是死路）<br>⚠️ **planner 复核订正（2026-11-10）**：原稿写「含**自赋值死逻辑**（`assign a = a;`）」⇒ ⇒ **实测为 0**（产物 558 条 `assign` 中**字面自赋值 0 条**）⇒ ⇒ **原表述作废**；真正的死逻辑形态是上面两条（零引用信号 / proxy 恒等直通）⇒ ⇒ F5 判据 MUST 改成可判别形态（见 F5 行） | `rv32i_soc.v` 产物全文（2026-11-10 逐条扫描：558 assign · 0 字面自赋值 · 107 零引用信号 · 43 恒等直通） |
 | ⑧ | ⚠️ 产物头 blanket 关掉 `WIDTHEXPAND` / `WIDTHTRUNC` ⇒ **宽度 bug 结构性不可见** | `rv32i_soc.v:1-2`（层次化侧靠 R3「剥掉 lint_off 重 lint」补 · **扁平侧无对应护栏**） |
 | ⑨ | 复位写法反直觉：`always_ff @(posedge default_clock or posedge default_reset) begin if (!default_reset) q <= next; else q <= INIT; end` ⇒ 读起来像「复位时走 next」 | `rv32i_soc.v:1439-1444` · 语义正确（`default_reset` 高有效）但**可读性差、易误改** |
 | ⑩ | 框架**已有**驱动状态诊断原语：`ch::core::drive_state` + `diagnose_drive()`（`include/core/lnodeimpl.h:236,258`）⇒ **MUST 复用**，MUST NOT 另造 | 已实施于 `framework-undriven-field-diagnostic-2026-10`（capability `core-node-driver-visibility`） |
@@ -60,8 +60,8 @@ evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h + /tmp/opencode/rv3
 |---|---|
 | **C1** | **CLI 工具** `tools/cpphdl-emit-rtl`：参数 `--top <Component>`（必填 · 显式选择根组件）· `-o/--out <dir>` · `--module-name <name>` · `--manifest <file>`（JSON）· `--format flat\|hier`（`hier` 复用既有 `toVerilogHierarchical`）· `--strict`（诊断即失败）<br>⚠️ **metis 订正**：「对**任意**合法设计可用」与「编译期注册表」**互斥** ⇒ ⇒ MUST 明确形态：**工具 = 库 + 薄 CLI**，用户在**自己的可执行文件**里用 `CH_EMITTABLE_COMPONENT(...)` 登记 ⇒ ⇒ 本仓的 `cpphdl-emit-rtl` **MUST NOT** 链接 `examples/**`（否则装出来的是「链了示例代码的二进制」）⇒ ⇒ 护栏须静态扫描该禁令 |
 | ~~**C2**~~ | 🔴 **已撤回（2026-11-10 用户裁决 · 保留契约）** —— 原「顶层端口 = owner 为根组件的节点」**与已签批契约正面冲突**：`openspec/specs/rtl-hierarchical-output/spec.md:309-316` 明文「顶层端口表 MUST 是 clock → reset → 无 driver 的 `input` → **全部** `ch_out`（⇒ **含 inline 后代的 `ch_out`**）」，且生产代码**零** `CH_HIERARCHY_LAYER`（仅宏定义 + infra）⇒ RV32I SoC **全 inline** ⇒ **那 80 个输出按契约本就必须在顶层，不是泄漏**。<br>⇒ 替代做法（**不动端口面**）：manifest **全列**端口，并用新增字段 `owner`（所属组件路径）+ `is_top_io`（bool · 是否根组件自有 IO）**让下游自己区分**「根组件语义端口」与「inline 后代输出」。详见 C4。 |
-| **C3** | **悬空输入的诊断（只诊断 · 不动端口面）**：`owner ≠ 根组件` 且无 driver 的 `ch_in` MUST 记入 manifest 的 `diagnostics[]`（复用 `diagnose_drive()`）· `--strict` 下失败、非 strict 下 CHWARN。<br>⚠️ **端口面 MUST NOT 改变**（C2 已撤回）⇒ ⇒ 该 `ch_in` **仍会**是顶层端口（契约要求）⇒ ⇒ 本项只负责**让它可被发现**。<br>⚠️ 修正的具体形态 MUST 落在**设计侧**（装配点 tie-off 或删端口），归 `rv32i-dead-component-consolidation-2026-11` / 各设计自己的 change，**不属**本工具项。<br>⚠️ **顶层 input 无内部 driver 是常态，不是缺陷** ⇒ ⇒ 判据 MUST NOT 写成「每个 input 必须有 driver」 |
-| **C4** | **端口身份 = 名字 + 方向 + 宽度 + 归属**：manifest 记录 `name` / `dir` / `width` / `role`（`clock`/`reset`/`data`）/ `driven`（bool · 是否被消费）/ **`owner`（所属组件路径）** / **`is_top_io`（bool · 根组件自有 IO，而非 inline 后代输出）** / **`cpp_member`（C++ 成员路径 · 由 `port-naming-ratchet` 第 1 步消费，见其 N5）** / `semantic`（**可选 · v1 无生产者**）⇒ ⇒ **端口名语义**归 `port-naming-ratchet-2026-11`（本项只消费，不定义）<br>⚠️ `owner` / `is_top_io` 是 **C2 撤回后的替代手段** ⇒ ⇒ 工具**不改端口面**，只让下游**能自己筛**（例：TB 生成器可选「只连 `is_top_io == true`」）；⚠️ 该筛选是**消费方的选择**，MUST NOT 成为发射器的默认行为<br>⚠️ **metis 订正**：`role: data_unused` 无判定原语 ⇒ **v1 删掉该取值**，改用 `driven: bool`；且 **`ext_clk` 不是 unused 的例子**（`rv32i_pipeline_top.h:137` 有消费者）⇒ ⇒ 原稿举例作废 |
+| **C3** | **悬空输入的诊断（只诊断 · 不动端口面）**：`owner ≠ 根组件` 且无 driver 的 `ch_in` MUST 记入 manifest 的 `diagnostics[]`（复用 `diagnose_drive()`）· `--strict` 下失败、非 strict 下 CHWARN。<br>⚠️ **端口面 MUST NOT 改变**（C2 已撤回）⇒ ⇒ 该 `ch_in` **仍会**是顶层端口（契约要求）⇒ ⇒ 本项只负责**让它可被发现**。<br>⚠️ 修正的具体形态 MUST 落在**设计侧**，**落点已指名** ⇒ ⇒ `rv32i-dead-component-consolidation-2026-11` 的 **C8**（`hazard.io().mem_is_load <<= ch_bool(false);` 装配点 tie-off ⇒ ⇒ 该口有 driver ⇒ ⇒ 不再是顶层端口 ⇒ ⇒ 顶层 input 8 → 7）⇒ ⇒ 其它设计的悬空输入仍由本项的**诊断兜底** ⇒ ⇒ 两者**互补不重复**。<br>⚠️ **顶层 input 无内部 driver 是常态，不是缺陷** ⇒ ⇒ 判据 MUST NOT 写成「每个 input 必须有 driver」 |
+| **C4** | **端口身份 = 名字 + 方向 + 宽度 + 归属**：manifest 记录 `name` / `dir` / `width` / `role`（`clock`/`reset`/`data`）/ `driven`（bool · **节点级**：是否被消费）/ **`effective`（bool · 功能级**：驱动它是否产生可观测行为）** / **`owner`（所属组件路径）** / **`is_top_io`（bool · 根组件自有 IO，而非 inline 后代输出）** / **`cpp_member`（C++ 成员路径 · 由 `port-naming-ratchet` 第 1 步消费，见其 N5）** / `semantic`（**可选 · v1 无生产者**）⇒ ⇒ **端口名语义**归 `port-naming-ratchet-2026-11`（本项只消费，不定义）<br>⚠️ `owner` / `is_top_io` 是 **C2 撤回后的替代手段** ⇒ ⇒ 工具**不改端口面**，只让下游**能自己筛**（例：TB 生成器可选「只连 `is_top_io == true`」）；⚠️ 该筛选是**消费方的选择**，MUST NOT 成为发射器的默认行为<br>⚠️ **metis 订正**：`role: data_unused` 无判定原语 ⇒ **v1 删掉该取值**，改用 `driven: bool`<br>⚠️ **planner 复核订正（2026-11-10）**：metis 把 `ext_clk` 归为「**不是** unused 的例子」（依据 `rv32i_pipeline_top.h:137` 有连线）⇒ ⇒ **只对了一半**：`ext_clk` **节点级确有消费者**（→ `pipeline.io().clk`），但 **功能级是死路** —— `include/cpu/pipeline/**` 对 `io().clk` **零消费者**（grep 无命中）且**变异 tie 1 ⇒ 零行为影响** ⇒ ⇒ 它属于**第三类：「有连线但无功能」**（既非「活端口」也非「悬空端口」）⇒ ⇒ 单个 `driven: bool` **表达不了**这一类 ⇒ ⇒ 故拆成 `driven`（节点级）+ `effective`（功能级）两字段 ⇒ ⇒ `ext_clk` 成为 `driven=true ∧ effective=false` 的**标准样例** |
 | **C5** | **产物级护栏** `scripts/verify_flat_rtl_emit.sh`（**对标**既有 `scripts/verify_hierarchical_rtl.sh` 的 R1–R8 面）：F1 产物 lint 干净（**剥掉 blanket `lint_off` 后重 lint**）· F2 **确定性**（两次发射逐字节相同）· F3 顶层端口集 **== manifest** · F4 **无悬空顶层输入** · F5 无自赋值死逻辑 · F6 **backend 产物 == 产品产物**（`verilator_backend` 的 work_dir/top.v 与 `toVerilog()` 逐字节相同）· F7 `--self-test`（逐条原地投毒 ⇒ 必红 ⇒ 还原复绿）· 全部 fail-closed（缺工具 ⇒ exit 2） |
 | **C6** | **codegen 卫生批次**：产物头加 `` `default_nettype none ``（+ 末尾 `` `default_nettype wire ``，**每文件一次**）· 加生成元数据头（工具版本 / 根组件名 / 源文件；⚠️ **生成时间只进 manifest · 不进 `.v`** ⇒ 否则与 F2 的逐字节确定性冲突）· 剪掉自赋值死逻辑 · 复位写法规范化为 `if (reset) q <= INIT; else q <= next;`（**语义不变** · 只改写法）· `lint_off` 由 blanket 改为**按节点白名单**<br>⚠️ **metis 订正**：C6 改的是**共享发射器**（`src/hierarchy_verilog.cpp:1562` 同一 `ModuleEmitter`）⇒ ⇒ 层次化产物**字节必变** ⇒ ⇒ MUST 加 `ModuleView::emit_hygiene` 开关（**默认 off** · 仅 flat 产品路径开）⇒ ⇒ 否则「hier 产物逐字节不变」这条验收**不可满足** |
 
@@ -130,14 +130,15 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
   "module_name": "rv32i_soc",
   "ports": [
     {"name": "default_clock", "dir": "in",  "width": 1,  "role": "clock"},
-    {"name": "ext_clk",      "dir": "in",  "width": 1,  "role": "data", "semantic": "SoC 时钟输入（当前实现未使用）"},
-    {"name": "prog_addr",    "dir": "in",  "width": 32, "role": "data", "semantic": "固件写地址（字索引）"},
-    {"name": "obs_data_addr","dir": "out", "width": 32, "role": "data", "semantic": "数据地址（字节）"}
+    {"name": "ext_clk",      "dir": "in",  "width": 1,  "role": "data", "driven": true,  "effective": false, "semantic": "SoC 时钟输入（节点级接到 pipeline.io().clk，但该口功能级零消费者 ⇒ 驱动它不产生任何行为）"},
+    {"name": "prog_addr",    "dir": "in",  "width": 32, "role": "data", "driven": true,  "effective": true,  "semantic": "固件写地址（字索引）"},
+    {"name": "obs_data_addr","dir": "out", "width": 32, "role": "data", "driven": false, "effective": true,  "semantic": "数据地址（字节）"}
   ],
   "diagnostics": [ {"kind": "undriven-input", "port": "hazard.mem_is_load", "severity": "error"} ]
 }
 ```
-- `role` 枚举：`clock` / `reset` / `data`（🔴 **critic 第 2 轮：`data_unused` 已删** ⇒ F4 不得再依赖它），并以 `driven: bool` 表达「是否被消费」
+- `role` 枚举：`clock` / `reset` / `data`（🔴 **critic 第 2 轮：`data_unused` 已删** ⇒ F4 不得再依赖它）
+- `driven`（**节点级** · 是否被消费）与 `effective`（**功能级** · 驱动它是否产生可观测行为）**是两个正交字段**（⚠️ **planner 复核订正 2026-11-10**：metis 原判「`ext_clk` 不是 unused 例子」只对一半 ⇒ 它是 `driven=true ∧ effective=false` 的标准样例 ⇒ 单个 bool 表达不了 ⇒ 故拆两字段）⇒ ⇒ `driven=false` 的 input ⇒ **`diagnostics[]` MUST 有 `undriven-input` 条目**（F4 判据）⇒ ⇒ `driven=true ∧ effective=false` ⇒ **warning 级**（`kind: "wired-but-inert"`，非 error ⇒ 不阻断 `--strict`）
 - `semantic` 字段**可选**：C++ 侧显式标注时写入 ⇒ ⇒ 为 `port-naming-ratchet-2026-11` 的显式命名预留承载位。
 
 ### C5 — 产物级护栏 `scripts/verify_flat_rtl_emit.sh`
@@ -148,7 +149,7 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 | F2 | 两次发射逐字节相同（确定性） | exit 1 + unified diff |
 | F3 | **三方比对**（⚠️ **critic 第 2 轮订正判据**：C2 撤回后 manifest **全列**端口 ≈ 115 条 ⇒ **不得**再用「34」作期望集）
 | F4 | **悬空顶层输入 MUST 可被发现**（**不是**「必须消失」）：每个 `driven == false` 的 input MUST 在 `diagnostics[]` 有对应条目，`--strict` 下失败 | exit 1 + 点名端口 |
-| F5 | 无自赋值死逻辑（`assign x = x;`） | exit 1 + 行号 |
+| F5 | **死逻辑 MUST 清零**（**两段可判别**，禁写成「无 `assign x = x;`」——实测字面自赋值本就为 0 ⇒ 该写法恒绿 ⇒ 零判别力）：<br>① **零引用信号数 == 0**（声明后除自身外无任何引用的 `logic`/`wire`）⇒ 当前 **107**<br>② **proxy 恒等直通数 == 0**（`assign A_ = A;` 且 `A_` 除该 assign 外无其它引用 ⇒ 整条链是死路）⇒ 当前 **43** | exit 1 + 行号 + 数量 |
 | F6 | **backend 行为未退化**：`ctest -L verilator_e2e`（**77** 条）全绿 ＋ `build_port_access_table()` 对每个 `port_access_` 条目都能取到非空 Vtop 字段<br>⚠️ **metis 订正**：原判据「backend 产物 == 产品产物（逐字节）」**恒绿**（`VerilatorBackend::generate_verilog` 与 `toVerilog()` 是**同一个 `verilogwriter`**）⇒ ⇒ 换成**可失败**的行为判据 | exit 1 + ctest 输出 |
 | F7 | `--self-test`：逐条原地投毒 ⇒ 必红 ⇒ 还原复绿 | exit 1 |
 | — | **fail-closed**：缺 `verilator` / 缺产物 ⇒ exit **2**（禁恒 exit 0） | exit 2 |
@@ -172,13 +173,13 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 - [ ] manifest 的 `ports[]` 与 `.v` 的端口**双向一致**（F3）
 - [x] ~~顶层端口数从 115 降到 34~~ 🔴 **已撤回（保留契约）** ⇒ 改为：manifest MUST 为每个端口给出 `owner` + `is_top_io`，且 `is_top_io == true` 的条目集合 MUST **等于** RV32I SoC 的语义端口集（**7 in + 27 out**，其中 `mem_is_load` 由下游 tie-off 后仍以 `owner=…hazard_unit` / `is_top_io=false` 出现）
 - [ ] 产物含 `` `default_nettype none `` + 生成元数据头（C6）
-- [ ] 产物**无** `assign x = x;` 自赋值（F5）
+- [ ] 产物**无死逻辑**（F5 两段）：零引用信号数 == 0（当前 107）· proxy 恒等直通数 == 0（当前 43）⇒ ⇒ ⚠️ **planner 复核订正（2026-11-10）**：原判据「产物**无** `assign x = x;` 自赋值」**实测恒绿**（产物字面自赋值 = 0）⇒ ⇒ **作废**，改按 F5 两段判 |
 - [ ] 两次发射产物**逐字节相同**（F2）
 
 ### 悬空输入
 
 - [x] ~~`hazard_unit.mem_is_load` MUST NOT 出现在顶层端口面~~ 🔴 **判据已作废（critic 第 2 轮：与撤回后的 C2/C3 互斥）** ⇒ 改为：该端口 **MUST 仍是顶层端口**（契约要求 · 无 driver 的 input 一律上顶层），但 manifest MUST 标 `owner = …pipeline.hazard_unit` / `is_top_io = false` / `driven = false` ⇒ ⇒ 让消费方**看得见**；修正落在**设计侧**（`rv32i-dead-component-consolidation` 的装配点 tie-off）
-- [ ] 每个顶层 input 的 `driven` 字段 MUST 如实反映「是否有消费者」⇒ ⇒ 用户一眼能看出「这个能驱动但没被消费」<br>⚠️ **metis 订正**：`ext_clk` **有**消费者（`rv32i_pipeline_top.h:137`）⇒ ⇒ 原稿把它当 unused 例子**作废**；真正的 unused 例子须另找并登记
+- [ ] 每个顶层 input 的 `driven`（**节点级**）与 `effective`（**功能级**）字段 MUST 如实反映实况⇒ ⇒ 用户一眼能区分「**能驱动但没人消费**」（`driven=false`）/「**接了线但不产生任何行为**」（`driven=true ∧ effective=false`）/「**真活口**」<br>⚠️ **planner 复核订正（2026-11-10）**：metis 原判「`ext_clk` **有**消费者 ⇒ 原稿把它当 unused 例子作废」**只对一半** —— `ext_clk` **节点级有**消费者（`rv32i_pipeline_top.h:137`）但**功能级是死路**（`include/cpu/pipeline/**` 对 `io().clk` 零消费者 + 变异 tie 1 ⇒ 零行为影响）⇒ ⇒ **`ext_clk` 恰是第三类的标准样例**（既非活口也非悬空）⇒ ⇒ 故判据 MUST 同时覆盖两字段，且 `driven=true ∧ effective=false` MUST 记 warning 级 `wired-but-inert`
 - [ ] 护栏 F4 能抓「新增一个 **owner ≠ 根** 且无 driver 的 `ch_in`」（投毒自证）
 - [ ] ⚠️ **F1 的基线不绿也能自检**（投毒 = 手工往白名单外造一条 ⇒ 必红）⇒ ⇒ 禁「首轮只报告不失败」这种无判据状态进入验收
 - [x] ~~`set(flat.inputs) == set(hier.inputs)`~~ 🔴 **已删除** —— 对**任何带悬空子输入的设计**恒假（`hier` 按 `ADR-060 §2.2` 冒泡悬空子输入，而 flat 依契约同样保留）⇒ ⇒ 该 AC 不可满足，且 C2 已撤回后**不再需要**
@@ -245,6 +246,19 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 | `firmware-load-chain-2026-11` | 无耦合（改的是 SoC 端口契约 ⇒ ⇒ **会改 manifest 的 `semantic`** ⇒ ⇒ 需同步 manifest 快照） |
 | `hierarchical-corpus-regression-2026-11` | 本项 MUST NOT 动成层语义 ⇒ ⇒ 两者可并行；**共用** `codegen_naming.h` ⇒ ⇒ 改命名时 MUST 同批 |
 
+## 事实订正（planner 复核 · 2026-11-10）
+
+> **触发**：planner 复核 commit `1dc1d98` 时逐条复现本文档的每个数值锚点 ⇒ 发现 **2 处不可复现 / 1 处内部矛盾** ⇒ ⇒ 纯文本订正，**未动任何决策**（C2 撤回 / B1 保留契约等**全部不动**）。
+
+| # | 原值 | 实测值 | 复现方式 | 影响 |
+|---|---|---|---|---|
+| **F1** | 产物「含**自赋值死逻辑**（`assign a = a;`）」⇒ ⇒ F5 判据写成「无 `assign x = x;`」 | 产物 **558** 条 `assign` 中**字面自赋值 0 条** | 扫 `rv32i_soc.v` 的 `assign` 目标/源配对 | ⚠️ **F5 原判据恒绿 ⇒ 零判别力**（正是仓内「判别力」纪律要治的形态）⇒ ⇒ F5 改成**两段可判别**：① **零引用信号数 == 0**（当前 **107**）② **proxy 恒等直通数 == 0**（当前 **43** 条 `assign X_ = X;` 且 `X_` 无其它引用）⇒ ⇒ A.1⑦ 的表述同步改写 |
+| **F2** | metis：「**`ext_clk` 不是 unused 的例子**（`rv32i_pipeline_top.h:137` 有消费者）⇒ ⇒ 原稿举例作废」 | `ext_clk` **节点级有**消费者（→ `pipeline.io().clk`）但**功能级是死路** | `grep -rn "io().clk" include/cpu/pipeline/` ⇒ **零命中**；变异把该口 tie 1 ⇒ **零行为影响** | ⚠️ 文档内**自相矛盾**：`:133` 的 manifest 示例仍写「当前实现未使用」⇒ ⇒ 正确表述 = 「**有连线但无功能**」的**第三类** ⇒ ⇒ manifest 的 `driven: bool` **表达不了** ⇒ ⇒ 拆成 `driven`（节点级）+ **`effective`（功能级）** 两字段 ⇒ ⇒ `ext_clk` 成为 `driven=true ∧ effective=false` 的**标准样例**（warning 级 `wired-but-inert`） |
+| **F3** | —（新增） | — | — | ⚠️ **`mem_is_load` 的修正原本 7 份草案**无任何一条承接** ⇒ ⇒ 落点补入 `rv32i-dead-component-consolidation-2026-11` 的 **C8**（装配点 tie-off）⇒ ⇒ 本文档 C3 的「落在设计侧」由「泛指」改为**指名落点** |
+
+**处置**：F1 ⇒ A.1⑦ / F5 表行 / AC 三处同步改写；F2 ⇒ C4 / manifest 示例 / AC / metis finding 9 四处同步改写 + schema 加 `effective` 字段；F3 ⇒ 本文档 C3 + 姊妹文档 C8 双向指名。
+**未变**：C2 撤回、B1 保留契约、F1–F7 的**判据面**、capability 划分**全部不动**（F1 只是把一条恒绿判据换成可判别形态，F2 只是把 manifest 的**元信息**变细，不改端口面）。
+
 ## metis 第 1 轮 gap 分析与处置（2026-11-10）
 
 > **轮次**：1（该 improvement 总计 1 轮）· **审查者**：metis（预规划 gap 分析）
@@ -262,7 +276,7 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 | 6 | F2 逐字节确定性 vs C6「生成时间」**冲突** | 生成时间**只进 manifest**，不进 `.v` |
 | 7 | C6 改**共享发射器** ⇒ hier 产物**字节必变** | C6 加 `ModuleView::emit_hygiene` 开关（默认 off · 仅 flat 产品路径） |
 | 8 | 端口数**算术错**（原稿「8 in + 27 out = 35」） | 改为 **7 in + 27 out = 34**（泄漏的 `mem_is_load` MUST 消失） |
-| 9 | `role: data_unused` 无判定原语；且 **`ext_clk` 不是 unused 例子**（有消费者） | 删掉该取值 ⇒ 改 `driven: bool`；原稿举例作废 |
+| 9 | `role: data_unused` 无判定原语 ⇒ ⇒ 删掉该取值 ⇒ 改 `driven: bool` | 删掉该取值 ⇒ 改 `driven: bool`（节点级）⇒ ⇒ ⚠️ **planner 复核订正**：单一 bool 表达不了「有连线但无功能」第三类 ⇒ ⇒ 拆成 `driven`（节点级）+ `effective`（功能级）两字段 ⇒ ⇒ 原稿举例（`ext_clk` 作废）**不是作废，而是改判为第三类的标准样例**（见 A.1 / C4） |
 | 10 | `semantic` 字段**无生产者** | 降级为**可选 · v1 无生产者** ⇒ MUST NOT 出现在判据里 |
 | 11 | `--strict` 退出码**不可达**（`toVerilog` `catch(...)` 吞异常） | 新增验收：`toVerilog` MUST 有**可报告失败**的入口（`EmitResult`），旧入口保留兼容语义 |
 | 12 | 缺 `set(flat.inputs) == set(hier.inputs)`（`hier_eq` 前提） | 新增为验收项 |
