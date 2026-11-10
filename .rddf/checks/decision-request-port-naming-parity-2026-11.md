@@ -45,41 +45,56 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 ```markdown
 ### Requirement: 顶层端口名 MUST 可机器解析到 C++ 成员名
 
-顶层 module 端口表中的**每个**端口，MUST 与其 C++ 成员名**机器可解析对应**
+顶层 module 端口表中的端口，MUST 与其 C++ 成员名**机器可解析对应**
 ⇒ ⇒ 载体 = manifest 的 `cpp_member` 字段（schema 归 `rtl-emit-portability`）
 ⇒ ⇒ 下游工具 MUST NOT 依赖「Verilog 端口名 == C++ 成员名」这一**当前不成立**的假设。
 
-#### Scenario: 顶层 module 端口表的全体成员
+#### Scenario: 端口的三类互斥划分与各自的 `cpp_member` 义务
 
 - **WHEN** 一个设计发射出顶层 module 的端口表
-- **THEN** 端口表中的**每个**端口 MUST 都能被解析到一个 C++ 成员名
-- **AND** 该解析 MUST 由 manifest 的 `cpp_member` 字段承载
-- **AND** MUST NOT 依赖端口名与成员名的字面相等
+- **THEN** 端口表中的每个端口 MUST 落入下列**恰好一类**（三类互斥且穷尽）
+- **AND** 该分类 MUST 由 manifest 字段判定（MUST NOT 依赖人工判断）
 
-#### Scenario: 基础设施端口（clock / reset）不承载 C++ 成员名
+| 类 | 判定（互斥且穷尽） | `cpp_member` 义务 |
+|---|---|---|
+| **A · 基础设施** | `role` 为 `clock` 或 `reset`（⇒ ⇒ ctx 级节点 `default_clock` / `default_reset` ⇒ ⇒ **不属于任何组件** ⇒ ⇒ **无 C++ 成员**） | **MUST NOT** 被要求提供 |
+| **B · 显式命名** | 有显式 C++ 成员名（⇒ ⇒ 已由 `port-naming-ratchet` 登记） | **MUST** 提供 |
+| **C · 未显式命名** | 无显式 C++ 成员名（⇒ ⇒ 存量未消化者） | **MUST NOT** 被要求提供（⇒ ⇒ 走兼容去重路径 + 登记棘轮豁免表） |
 
-- **WHEN** 一个顶层端口的 manifest `role` 为 `clock` 或 `reset`
-  （⇒ ⇒ 它是 **ctx 级**基础设施节点 —— `default_clock` / `default_reset`，
-  ⇒ ⇒ **不属于任何组件** ⇒ ⇒ **无 C++ 成员**）
-- **THEN** 该端口 MUST NOT 被要求提供 `cpp_member`
-- **AND** 下游工具 MUST NOT 把「缺 `cpp_member`」当作该端口的**违规**
-- **AND** 其余端口（`role` 不为 `clock` / `reset`）MUST 全部提供 `cpp_member`
+- **AND** A 类与 C 类 MUST NOT 被要求提供 `cpp_member`
+- **AND** 下游工具 MUST NOT 把 A 类或 C 类「缺 `cpp_member`」当作**违规**
+- **AND** B 类之外不存在「应当提供却未提供」的端口（⇒ ⇒ **不留缝隙**）
 
-> ⚠️ **豁免判据 = `role`，不是 `owner`**（critic 第 3 轮 BLOCKER-1 的修复 · 2026-11-11）：
-> `owner == nullptr` 的节点**不止** clock/reset —— `src/hierarchy_analysis.cpp:744-753` 显示
-> 另有一类「**归属空洞**」（非 clock/reset 且无归属）⇒ ⇒ 分析层专门对它 `CHWARN`
-> ⇒ ⇒ 按 `owner == nullptr` 豁免会把**真缺陷**一并豁免 ⇒ ⇒ 豁免 MUST 按 `role` 判。
-> ⇒ ⇒ **`role` 字段已存在**于 manifest schema（C4 已定 `role`（`clock`/`reset`/`data`））
-> ⇒ ⇒ 本条**不新增字段、不改 C4** ⇒ ⇒ 判据可机械执行。
-> ⇒ ⇒ ⚠️ 「归属空洞」那一类**不在本条豁免范围内** ⇒ ⇒ 它仍 MUST 满足 `cpp_member` 义务
-> ⇒ ⇒ 或由分析层的 `CHWARN` 单独处置（**独立立项**，不在本条范围）。
+> ⚠️ **为什么用三类而不是「每个端口 MUST 提供」**（critic 第 3/4 轮 BLOCKER-1 / BLOCKER-A 的修复 · 2026-11-11）：
+> ① **A 类无解** —— clock/reset 是 ctx 级基础设施（`include/core/context.h:245-246` 的
+> `core::clockimpl *default_clock_` / `core::resetimpl *default_reset_`）⇒ ⇒ **无 C++ 成员**
+> ⇒ ⇒ 而顶层端口表**必含**它们（`rtl-hierarchical-output/spec.md:312`）⇒ ⇒ 「每个端口 MUST 提供」= **常态违约**。
+> ② **C 类无解** —— 存量未显式命名的端口（`port-naming-ratchet` 实测 **3103** 处）**本就没有** C++ 成员名
+> ⇒ ⇒ 强求提供 = 常态违约 ⇒ ⇒ 它走**兼容去重路径**（旧去重规则保留为兼容模式）⇒ ⇒ 登记在**命名棘轮的豁免表**。
+> ③ **豁免判据 = `role` / 有无显式名，不是 `owner == nullptr`** —— `src/hierarchy_analysis.cpp:744-753` 显示
+> `owner == nullptr` 的节点**不止** clock/reset，另有一类「**归属空洞**」（非 clock/reset 且无归属）
+> ⇒ ⇒ 分析层专门对它 `CHWARN` ⇒ ⇒ 按 `owner` 豁免会把**真缺陷**一并豁免。
+> ⇒ ⇒ **`role` 字段已存在**于 manifest schema（C4 已定 `role`（`clock`/`reset`/`data`））⇒ ⇒ **不新增字段、不改 C4**。
+>
+> ⚠️ **「归属空洞」类（A/B/C 三类之外）的处置**（critic 第 4 轮 SHOULD_FIX-5 · 2026-11-11）：
+> `rtl-hierarchical-output/spec.md:98-111` 允许「用户不经组件直接创建的节点」归顶层 module
+> ⇒ ⇒ 若该类节点进入顶层**端口表** ⇒ ⇒ 本 Requirement **对它无解**（它既非基础设施，也无显式名）
+> ⇒ ⇒ ⇒ 故本 Requirement **只约束端口表中的端口**（不含 body 内的节点）⇒ ⇒ ⇒
+> **归属空洞类 MUST 由分析层的 `CHWARN` 单独处置（独立立项，不在本条范围）**
+> ⇒ ⇒ ⇒ **本条不为其设第四类**（第四类会与「三类互斥且穷尽」自相矛盾）。
 
-#### Scenario: 未显式命名者走兼容去重路径
+#### Scenario: 未显式命名者（C 类）走兼容去重路径
 
-- **WHEN** 一个端口**没有**显式的 C++ 成员名（存量未消化的端口）
+- **WHEN** 一个端口属于 C 类（无显式 C++ 成员名）
 - **THEN** 它 MUST 走**兼容去重路径**（旧的去重规则保留为兼容模式）
 - **AND** 它 MUST 被登记在**命名棘轮的豁免表**中
 - **AND** 它 MUST NOT 被要求提供 `cpp_member`
+
+> ⚠️ **豁免表的可登记面**（critic 第 4 轮 SHOULD_FIX-3 · 2026-11-11）：
+> 棘轮表的扫描面 = **product 侧**（`include/**` + `examples/**`）⇒ ⇒ `tests/**` **默认排除**
+> （`port-naming-ratchet` N2①）⇒ ⇒ ⇒ 故「MUST 被登记在棘轮豁免表」**只对 product 侧成立**
+> ⇒ ⇒ ⇒ `tests/**` 侧设计的顶层端口**不适用**该 MUST ⇒ ⇒ ⇒
+> ⚠️ **本条与棘轮扫描面 MUST 对齐**（否则 `tests/**` 侧设计无解）⇒ ⇒ 落地时 MUST 在 delta 里写明该限定。
 
 #### Scenario: 字面相同的成立条件与不可能条件
 
@@ -199,4 +214,4 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 |---|---|---|
 | ① | `node-name-prefix-consistency-2026-11` 的 P1（`include/component.h:274` 删一行）⇒ ⇒ **仓内零影响 + 下游可见行为变更** ⇒ ⇒ 走 **CHANGELOG + `public-api-surface.md`「行为变更（非符号移除）」节** | builder（B0 批）+ architect 复核其 R1-b 的 delta |
 | ② | `rv32i-dead-component-consolidation` 的 **C8**（`mem_is_load` 装配点 tie-off ⇒ ⇒ 顶层 input 8→7）⇒ ⇒ **契约相容**（补 driver ≠ 改端口面） | builder（B0 批） |
-| ③ | **critic 第 3 轮** | 待用户批准 |
+| ③ | **critic 第 3 轮 + 第 4 轮** | 第 3 轮 ✅ 已跑完（REJECT · 5 条 BLOCKER）· 第 4 轮 ✅ 用户 2026-11-11 批准（scope 极窄）⇒ ⇒ 结论 = REJECT（1B-4 未闭合 + 新引入 2 条）⇒ ⇒ **修复中** ⇒ ⇒ ⇒ 第 3 轮记录 = `.rddf/reviews/port-naming-parity-critic-round3-2026-11.md` |

@@ -42,7 +42,9 @@
 
 > ✅ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-1 修复**：本表的 12 条重建依据里 **6 条 file:line 错位**
 > ⇒ ⇒ 已**逐条实测**（读该行的实际内容）后改正：④ `:79`→`:80` · ⑤ `:227`→`:246` · ⑥ tooling `:242`→`:243`
-> · ⑥ ratchet `:224`→`:225` · ⑦ `:243`→`:244` · ⑩ `:245`→`:246`
+> · ⑥ ratchet `:224`→`:227` · ⑦ `:243`→`:244` · ⑧ `:227`→`:230` · ⑩ `:245`→`:246`
+> ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 4 轮 SHOULD_FIX-2 修复**：原说明写「⑥ ratchet `:224`→`:225`」⇒ ⇒ **与表内实际值不符**（表内已是 `:227` ⇒ ⇒ `:225` 是该文件的表头行「\| 项 \| 关系 \|」）⇒ ⇒ ⇒ 已改正
+> ⇒ ⇒ ⚠️ **教训**：`file:line` 指针**会随文件编辑漂移** ⇒ ⇒ ⇒ 本表每次编辑后 MUST **重跑全量实测**（⇒ ⇒ 建议长期改为「章节名 + 锚点」，见 critic 第 4 轮 scope_exceeded ④）
 > ⇒ ⇒ **修正后的每一条都已实测其内容确为所引的那句话**（不是「行号看起来对」）⇒ ⇒ ⇒ 表格现在**可复现**。
 
 ---
@@ -81,9 +83,9 @@
 | **C6 codegen 卫生** | `rtl-emit-product-tooling` C6 | `` `default_nettype none `` + 生成元数据头（时间只进 manifest）· 剪零引用信号 + proxy 恒等直通 · 复位写法规范化 · `lint_off` 改按节点白名单 ⇒ ⇒ ⚠️ **MUST 加 `emit_hygiene` 开关（默认 off）** ⇒ ⇒ 层次化产物**字节不变**这条 AC 才成立 | C5 |
 | **N1 具名用法约定 + 探针** | `port-naming-ratchet` N1 | ① 用法约定（`ch_in<ch_bool> prog_we{"prog_we"};`）② **最小可运行探针（MUST · 原为「建议」· 理由：具名构造的调用点实测 = 0 ⇒ 这条路径从未被端到端验证过）** ③ 一条 ctest ④ 文档 | C4 |
 | **N5 第 1 步：manifest 双字段** | `port-naming-ratchet` N5(a) | manifest 加 `name`（RTL 全名）+ `cpp_member`（C++ 成员路径）⇒ ⇒ **零产物变更 · 零 ADR 变更 · 零快照漂移** ⇒ ⇒ 工具链**立刻可用** | C4 |
-| **N2 基线棘轮** | `port-naming-ratchet` N2 | `.rddf/checks/port-naming-registry.md` + `scripts/verify_port_naming.sh`（P1 端口级增量 · P2 双向 · P3 只许减不许增 · `--self-test` 2 类投毒 · fail-closed） | N1 |
 | **N3 名字稳定性** | `port-naming-ratchet` N3 | 显式名路径**绕开** eval-list 序计数器 ⇒ ⇒ 零序号 ⇒ ⇒ 存量走兼容路径（否则 3103 处端口名**全体变**） | N1 |
-| **N4 规范落点** | `port-naming-ratchet` N4 | 命名规则写进 `rtl-hierarchical-output`（规范所有者）⇒ ⇒ `hierarchical-port-naming-guard` **MUST NOT** 复述 | — |
+| **N2 基线棘轮**（**先做**） | `port-naming-ratchet` N2 | 登记表 `.rddf/checks/port-naming-registry.md` + `scripts/verify_port_naming.sh` ⇒ ⇒ **必须先于 N4**：R1-a 的「C 类 MUST 被登记在棘轮豁免表」依赖该表**已存在** ⇒ ⇒ ⇒ **否则规范 Requirement 会先于表落地 ⇒ ⇒ 条款当场不可满足** | — |
+| **N4 规范落点** | `port-naming-ratchet` N4 | 命名规则写进 `rtl-hierarchical-output`（规范所有者）⇒ ⇒ `hierarchical-port-naming-guard` **MUST NOT** 复述 ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 4 轮 SHOULD_FIX-6 修复**：**Requirement 的唯一承载 = 本行（N4）** ⇒ ⇒ sister 的 P2（`port-name-literal-parity` P2）**只是本项的契约化提案** ⇒ ⇒ ⇒ ⇒ **MUST NOT 另立一个 change 承载同一条 Requirement** ⇒ ⇒ ⇒ 否则归档后主 spec 会出现**两条同名 Requirement** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ sister 的 R1-b（`component-ownership-and-naming` 的追加）**由姊妹草案 `node-name-prefix-consistency` P3 承载** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **一份 Requirement · 一处落点** | N2（**先做** · 见上） |
 | **N6 公开面登记** | `port-naming-ratchet` N6 | 第 1 步零公开 API 变更 ⇒ 无需登记；第 2 步若成立 ⇒ MUST 走登记 + CHANGELOG + ADR 修订 | — |
 | **P1 探针固化**（**并行 · 零生产面**） | `port-name-literal-parity-2026-11` P1 | 把三探针**逐字搬进** `tests/test_port_name_parity.cpp`（5 条用例 + 退化用例）⇒ ⇒ **零生产面改动** ⇒ ⇒ 产物逐字节不变 ⇒ ⇒ **不阻塞** B1 其余项 ⇒ ⇒ ⚠️ **它是那份草案的「最低交付」**（未做 ⇒ 那份草案不算完成）⇒ ⇒ ⚠️ 探针源码目前在 `/tmp/opencode/`（scratch）⇒ ⇒ **结论随会话蒸发** ⇒ ⇒ 优先做 | 无（纯测试） |
 
@@ -111,7 +113,7 @@
 
 | work item | 来源 | 内容 | 依赖 |
 |---|---|---|---|
-| **C1 差分（先做）** | `rv32i-dead-component-consolidation` C1 | 复用既有 `kExCases`(**28**) / `kDecCases`(**17**) / `ImmConsistencyDut` ⇒ ⇒ **MUST NOT** 重造第二套 ⇒ ⇒ 「等价物」MUST **逐行照抄** `ex_stage.h:136-208` ⇒ ⇒ 差异清单 MUST 至少含 **SLTU 借位** · **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · 死输出 · `funct7` 双方都不消费 | B3（依据 ④） |
+| **C1 差分（先做）** | `rv32i-dead-component-consolidation` C1 | 复用既有 `kExCases`(**28**) / `kDecCases`(**17**) / `ImmConsistencyDut` ⇒ ⇒ **MUST NOT** 重造第二套 ⇒ ⇒ 「等价物」MUST **逐行照抄** `ex_stage.h:136-208` ⇒ ⇒ 差异清单 MUST 覆盖**修复前**的差异全集（**基准 = B0 ⑧ 之前**）且**逐项标注处置**（已修 / 待修 / 不修）—— 已知项含 **SLTU 借位**（**已在 B0 ⑧ 修** ⇒ 标「已修」）· **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · 死输出 · `funct7` 双方都不消费 ⚠️ **2026-11-11 · critic 第 4 轮 SHOULD_FIX-1**（原措辞「MUST 至少含 SLTU」**不可满足** ⇒ ⇒ B0 已修 ⇒ ⇒ 不可再作门槛）| B3（依据 ④） |
 | **C2 ALU 编码归一** | `rv32i-dead-component-consolidation` C2 | 以 `ex_stage.h::ALU_OP_*` 为唯一权威 ⇒ ⇒ `rv32i_alu.h` 改值（`ALU_SUB` 10→1 · `ALU_SRA` 11→7）⇒ ⇒ **破坏**既有手写常量 ⇒ ⇒ MUST 同步更新 + 登记 ⇒ ⇒ ⚠️ `test_pipeline_exec.cpp:124` 的**字面量 `SLTU = 0x3`** MUST 改符号常量（**今天 0x3 == `ALU_SLTU`，归一后变 XOR**） | C1 |
 | **C3 / C4 组件接入** | `rv32i-dead-component-consolidation` C3/C4 | `Rv32iAlu` 接入 EX 级（算术核心）· `Rv32iDecoder` 接入 ID 级（字段 + 立即数）⇒ ⇒ ⚠️ C4 的裁决：**标志继续由 opcode 比较**（`instr_type` 对 `OP_SYSTEM` 默认 `INSTR_R` ⇒ 若用它派生 flags ⇒ 未知指令会**写 rd** ⇒ 行为变更）⇒ ⇒ **不得**让两者并存 | C2 |
 | **G3 → G1 + G4（同批）→ 其余** | `rv32i-isa-gap-closure` | 批内顺序 MUST 为 **③ 尾部填 NOP → G1 + G4 → 其余**（依据 ③）⇒ ⇒ G3 采纳「装载器把尾部填成 NOP `0x00000013`」⇒ ⇒ 退休数 **178 不变** · `non_retired == 21` 不变 ⇒ ⇒ G1 未知 opcode 检测（**判据 MUST 含 `io().valid`**）· G2 冻结策略 · G5 `ExceptionUnit` `mcause` 修复（首选 B：跨两拍 · `CsrBank` 零改动） | C3/C4（依据 ⑤ ⇒ ISA 项在组件收口**之后**） |
@@ -177,7 +179,7 @@ bash scripts/verify_roadmap_fragments.sh --self-test
 | # | 事项 | 状态 |
 |---|---|---|
 | **⑦** | **A7 的落点**（残差登记）✅ **已落（2026-11-10 · architect 角色 · commit `ba99793`）**：登记表 `.rddf/checks/arch-residual-registry.md` 与台账 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7 是**双向 1:1** 耦合（护栏 `scripts/verify_arch_ledger_residuals.sh` · 当前 **PASS / 22 行**）⇒ ⇒ **单改一侧 ⇒ 护栏红** ⇒ ⇒ ⇒ `docs/architecture` 在 `.rddf/config/arch-docs.json` 的 `arch_paths` 内 ⇒ ⇒ **ledger 侧属 architect 域** ⇒ ⇒ ⇒ **两侧已同批落地**（台账 §7 **行 21 / 21b** + 登记表末尾 **2 行**）⇒ ⇒ ⇒ 残差 1 = route (c) 含方向 (i) · 残差 2 = ⑤ 目标钉 ⇒ ⇒ ⚠️ **`node-name-prefix-consistency` MUST NOT 新增行**（它承载方向 (ii)，方向 (i) 由残差 1 覆盖 ⇒ ⇒ 两草案共用一条） | ✅ **已落（2026-11-10 · architect 角色 · commit `ba99793`）** |
-| **⑧** | **critic 第 3 轮**：预算 2/2 已用满 ⇒ ⇒ 需用户明确批准 ⇒ ⇒ oracle 建议 6：**先修完裁决项再审**（排序 ✅ 正确）+ 三条件（书面 scope 只含「上轮 BLOCKER 闭合 + 新 diff」· 裁决结果**先落进草案文本** · 必须用户批准） | 🔴 **Blocked · 待用户批准** |
+| **⑧** | **critic 第 3 轮** ✅ **已跑完（REJECT · 上轮 7/7 闭合 + 新引入 5 条 BLOCKER）· 全部已闭合** ⇒ ⇒ **第 4 轮**（用户 2026-11-11 批准 · scope 极窄）⇒ ⇒ 结论 = REJECT（1B-4 判未闭合 + 新引入 2 条 BLOCKER）⇒ ⇒ ⇒ ⇒ **修复中**（R1-a 重写为三类互斥划分 + 3 处条款正文真正删除）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ 审查记录：第 3 轮 = `.rddf/reviews/port-naming-parity-critic-round3-2026-11.md` |
 
 ---
 
