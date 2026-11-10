@@ -42,59 +42,44 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 
 ### R1-a → `openspec/specs/rtl-hierarchical-output/spec.md`（**产物端口命名**的规范所有者）
 
-```markdown
-### Requirement: 顶层端口名 MUST 可机器解析到 C++ 成员名
+> ⚠️ **围栏内 = delta 正文（逐字复制进 change 的 `## ADDED Requirements`）**
+> ⇒ ⇒ **围栏内 MUST NOT 含审稿日志 / 自指 TODO / 批注**（`ratchet` 要求「逐字复制」⇒ ⇒ 元信息会随 delta 进主 spec）
+> ⇒ ⇒ ⇒ **本仓约定（critic 第 5 轮 SHOULD_FIX-3）**：审稿过程信息一律写在**围栏外**的 `>` 注里。
 
-顶层 module 端口表中的端口，MUST 与其 C++ 成员名**机器可解析对应**
+```markdown
+### Requirement: 顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定
+
+顶层 module 端口表中的端口，MUST 按其**所属类别**分别满足该类别的 `cpp_member` 义务
+⇒ ⇒ **B 类 MUST 提供 · A 类与 C 类 MUST NOT 被要求提供**
 ⇒ ⇒ 载体 = manifest 的 `cpp_member` 字段（schema 归 `rtl-emit-portability`）
 ⇒ ⇒ 下游工具 MUST NOT 依赖「Verilog 端口名 == C++ 成员名」这一**当前不成立**的假设。
 
 #### Scenario: 端口的三类互斥划分与各自的 `cpp_member` 义务
 
 - **WHEN** 一个设计发射出顶层 module 的端口表
-- **THEN** 端口表中的每个端口 MUST 落入下列**恰好一类**（三类互斥且穷尽）
-- **AND** 该分类 MUST 由 manifest 字段判定（MUST NOT 依赖人工判断）
+- **THEN** 端口表中的每个端口 MUST 落入下列**恰好一类**
+- **AND** 分类 MUST 按下列**判定顺序**执行（**先命中者为准** ⇒ ⇒ 顺序本身保证互斥）
+- **AND** 分类 MUST 由 manifest 字段与命名棘轮登记表判定（MUST NOT 依赖人工判断）
 
-| 类 | 判定（互斥且穷尽） | `cpp_member` 义务 |
-|---|---|---|
-| **A · 基础设施** | `role` 为 `clock` 或 `reset`（⇒ ⇒ ctx 级节点 `default_clock` / `default_reset` ⇒ ⇒ **不属于任何组件** ⇒ ⇒ **无 C++ 成员**） | **MUST NOT** 被要求提供 |
-| **B · 显式命名** | 有显式 C++ 成员名（⇒ ⇒ 已由 `port-naming-ratchet` 登记） | **MUST** 提供 |
-| **C · 未显式命名** | 无显式 C++ 成员名（⇒ ⇒ 存量未消化者） | **MUST NOT** 被要求提供（⇒ ⇒ 走兼容去重路径 + 登记棘轮豁免表） |
+| 序 | 类 | 判定（**按序判定，先命中者为准**） | `cpp_member` 义务 |
+|---|---|---|---|
+| 1 | **A · 基础设施** | `role` 为 `clock` 或 `reset` | **MUST NOT** 被要求提供 |
+| 2 | **B · 显式命名** | **非** A 类，且该端口在**命名棘轮登记表**中有条目（⇒ ⇒ 判据源 = `port-naming-ratchet` N2 的登记表 + 护栏 P1「标识符 == 显式名字符串」） | **MUST** 提供，且其值 MUST 等于登记表中的显式名 |
+| 3 | **C · 未显式命名** | **非** A 类，且**非** B 类 | **MUST NOT** 被要求提供（⇒ ⇒ 走兼容去重路径） |
 
-- **AND** A 类与 C 类 MUST NOT 被要求提供 `cpp_member`
+- **AND** A 类 MUST NOT 被登记在命名棘轮的豁免表（⇒ ⇒ 它**不是** C 类 ⇒ ⇒ 无登记义务）
+- **AND** C 类中**属于 product 侧**（`include/**` + `examples/**`）的端口 MUST 被登记在命名棘轮的豁免表
+  （⇒ ⇒ `tests/**` 侧的端口不适用本条 ⇒ ⇒ 与棘轮扫描面一致）
 - **AND** 下游工具 MUST NOT 把 A 类或 C 类「缺 `cpp_member`」当作**违规**
-- **AND** B 类之外不存在「应当提供却未提供」的端口（⇒ ⇒ **不留缝隙**）
-
-> ⚠️ **为什么用三类而不是「每个端口 MUST 提供」**（critic 第 3/4 轮 BLOCKER-1 / BLOCKER-A 的修复 · 2026-11-11）：
-> ① **A 类无解** —— clock/reset 是 ctx 级基础设施（`include/core/context.h:245-246` 的
-> `core::clockimpl *default_clock_` / `core::resetimpl *default_reset_`）⇒ ⇒ **无 C++ 成员**
-> ⇒ ⇒ 而顶层端口表**必含**它们（`rtl-hierarchical-output/spec.md:312`）⇒ ⇒ 「每个端口 MUST 提供」= **常态违约**。
-> ② **C 类无解** —— 存量未显式命名的端口（`port-naming-ratchet` 实测 **3103** 处）**本就没有** C++ 成员名
-> ⇒ ⇒ 强求提供 = 常态违约 ⇒ ⇒ 它走**兼容去重路径**（旧去重规则保留为兼容模式）⇒ ⇒ 登记在**命名棘轮的豁免表**。
-> ③ **豁免判据 = `role` / 有无显式名，不是 `owner == nullptr`** —— `src/hierarchy_analysis.cpp:744-753` 显示
-> `owner == nullptr` 的节点**不止** clock/reset，另有一类「**归属空洞**」（非 clock/reset 且无归属）
-> ⇒ ⇒ 分析层专门对它 `CHWARN` ⇒ ⇒ 按 `owner` 豁免会把**真缺陷**一并豁免。
-> ⇒ ⇒ **`role` 字段已存在**于 manifest schema（C4 已定 `role`（`clock`/`reset`/`data`））⇒ ⇒ **不新增字段、不改 C4**。
->
-> ⚠️ **「归属空洞」类（A/B/C 三类之外）的处置**（critic 第 4 轮 SHOULD_FIX-5 · 2026-11-11）：
-> `rtl-hierarchical-output/spec.md:98-111` 允许「用户不经组件直接创建的节点」归顶层 module
-> ⇒ ⇒ 若该类节点进入顶层**端口表** ⇒ ⇒ 本 Requirement **对它无解**（它既非基础设施，也无显式名）
-> ⇒ ⇒ ⇒ 故本 Requirement **只约束端口表中的端口**（不含 body 内的节点）⇒ ⇒ ⇒
-> **归属空洞类 MUST 由分析层的 `CHWARN` 单独处置（独立立项，不在本条范围）**
-> ⇒ ⇒ ⇒ **本条不为其设第四类**（第四类会与「三类互斥且穷尽」自相矛盾）。
+- **AND** 本 Requirement MUST NOT 适用于 `owner == nullptr` 且 `role` 非 `clock`/`reset` 的端口
+  （⇒ ⇒ 此类由层次化分析层的 `CHWARN` 单独处置）
+- **AND** 不存在既非 A/B/C 三类、也未被本 Requirement 显式排除的端口
 
 #### Scenario: 未显式命名者（C 类）走兼容去重路径
 
-- **WHEN** 一个端口属于 C 类（无显式 C++ 成员名）
+- **WHEN** 一个端口落入 C 类
 - **THEN** 它 MUST 走**兼容去重路径**（旧的去重规则保留为兼容模式）
-- **AND** 它 MUST 被登记在**命名棘轮的豁免表**中
 - **AND** 它 MUST NOT 被要求提供 `cpp_member`
-
-> ⚠️ **豁免表的可登记面**（critic 第 4 轮 SHOULD_FIX-3 · 2026-11-11）：
-> 棘轮表的扫描面 = **product 侧**（`include/**` + `examples/**`）⇒ ⇒ `tests/**` **默认排除**
-> （`port-naming-ratchet` N2①）⇒ ⇒ ⇒ 故「MUST 被登记在棘轮豁免表」**只对 product 侧成立**
-> ⇒ ⇒ ⇒ `tests/**` 侧设计的顶层端口**不适用**该 MUST ⇒ ⇒ ⇒
-> ⚠️ **本条与棘轮扫描面 MUST 对齐**（否则 `tests/**` 侧设计无解）⇒ ⇒ 落地时 MUST 在 delta 里写明该限定。
 
 #### Scenario: 字面相同的成立条件与不可能条件
 
@@ -105,6 +90,42 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 - **AND** 同名兄弟实例的端口、子组件的端口、Verilog 关键字与数字开头的成员名
   **MUST NOT** 被承诺逐字相同
 ```
+
+> ⚠️ **围栏外 = 审稿记录（不进 delta）** —— 以下说明**为何**这样写，供后续复核：
+>
+> ① **为什么按序判定（三类互斥的实现方式）**（critic 第 5 轮 BLOCKER-1 · 2026-11-11）：
+> A 类（`role` ∈ {clock, reset}）与 C 类（「无显式 C++ 成员名」）**谓词本身有交集** —— clock/reset 是 ctx 级节点
+> ⇒ ⇒ **无 C++ 成员** ⇒ ⇒ 同时满足 C 的谓词 ⇒ ⇒ 若两者**并列判定**则「恰好一类」对每个含 clock/reset 的设计**恒假**
+> ⇒ ⇒ ⇒ 且 clock/reset 落 C 后会触发「MUST 登记在棘轮豁免表」⇒ ⇒ 而 ctx 级节点**不存在可登记条目**
+> （登记条目身份 = 「`<文件>` + `<__io 块序号>` + `<声明文本>`」）⇒ ⇒ ⇒ 该 MUST **永不可满足**（常态违约复发）
+> ⇒ ⇒ ⇒ 故 MUST **按序判定**（先 A ⇒ ⇒ 再 B ⇒ ⇒ 剩余为 C）⇒ ⇒ ⇒ **顺序保证互斥** ⇒ ⇒ ⇒ 「恰好一类」**可判定**。
+>
+> ② **为什么不用「每个端口 MUST 提供」**（critic 第 3/4 轮 BLOCKER-1 / BLOCKER-A · 2026-11-11）：
+> **A 类无解** —— clock/reset 是 ctx 级基础设施（`include/core/context.h:245-246` 的
+> `core::clockimpl *default_clock_` / `core::resetimpl *default_reset_`）⇒ ⇒ **无 C++ 成员**
+> ⇒ ⇒ 而顶层端口表**必含**它们（`rtl-hierarchical-output/spec.md:312`）⇒ ⇒ 「每个端口 MUST 提供」= **常态违约**。
+> **C 类无解** —— 存量未显式命名的端口（`port-naming-ratchet` 实测 **3103** 处）**本就没有** C++ 成员名
+> ⇒ ⇒ 强求提供 = 常态违约 ⇒ ⇒ 它走**兼容去重路径**（旧去重规则保留为兼容模式）。
+> **豁免判据 = `role`，不是 `owner == nullptr`** —— `src/hierarchy_analysis.cpp:744-753` 显示
+> `owner == nullptr` 的节点**不止** clock/reset，另有一类「**归属空洞**」（非 clock/reset 且无归属）
+> ⇒ ⇒ 分析层专门对它 `CHWARN` ⇒ ⇒ 按 `owner` 豁免会把**真缺陷**一并豁免。
+> ⇒ ⇒ **`role` 字段已存在**于 manifest schema（C4 已定 `role`（`clock`/`reset`/`data`））⇒ ⇒ **不新增字段、不改 C4**。
+>
+> ③ **「归属空洞」类的显式排除**（critic 第 4/5 轮 SHOULD_FIX-5 + BLOCKER-1 · 2026-11-11）：
+> `rtl-hierarchical-output/spec.md:98-111` 允许「用户不经组件直接创建的节点」归顶层 module
+> ⇒ ⇒ 而 `src/hierarchy_analysis.cpp:386-389` / `:403-405` 显示这类节点**确实会进顶层端口表**
+> ⇒ ⇒ 若不作排除，它落入 C 类 ⇒ ⇒ 触发「MUST 登记在棘轮豁免表」⇒ ⇒ 而它**无 `__io` 声明位置** ⇒ ⇒ ⇒ 无登记条目 ⇒ ⇒ ⇒ 永不可满足
+> ⇒ ⇒ ⇒ 故 MUST 在**规范句**里显式排除（`owner == nullptr` 且 `role` 非 `clock`/`reset`）
+> ⇒ ⇒ ⇒ 此类由分析层的 `CHWARN` 单独处置（**独立立项，不在本条范围**）
+> ⇒ ⇒ ⇒ ⇒ **不设第四类**（第四类会与「三类互斥」自相矛盾 ⇒ ⇒ 排除语更精确）。
+>
+> ④ **B/C 判据的字段来源**（critic 第 5 轮 SHOULD_FIX-4 · 2026-11-11）：
+> B/C 的判据「有/无显式 C++ 成员名」**在 C4 的字段表里没有直接对应字段** ⇒ ⇒ 若以「`cpp_member` 是否存在」为判据
+> ⇒ ⇒ 则 B 类的「MUST 提供 `cpp_member`」成为**同义反复**（判据可被平凡满足）⇒ ⇒ ⇒
+> 故判据源 MUST 是**命名棘轮登记表**（ratchet N2）⇒ ⇒ ⇒ 与 `role`（C4 已有字段）共同构成完整判据 ⇒ ⇒ ⇒ **不新增字段**。
+>
+> ⑤ **登记义务的 product-side 限定已写进规范句**（critic 第 5 轮 SHOULD_FIX-5 · 2026-11-11）：
+> 限定 MUST 在**规范句**（AND 子句）里，**不能只靠邻接注** ⇒ ⇒ ⇒ 否则逐字复制后主 spec 的 Scenario 仍是无条件 MUST。
 
 ### R1-b → `openspec/specs/component-ownership-and-naming/spec.md`（**节点 / 实例命名**的规范所有者）
 

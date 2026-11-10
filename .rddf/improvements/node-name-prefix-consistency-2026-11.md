@@ -183,7 +183,7 @@ inline std::string build_hierarchical_name(const Component* parent, const std::s
 
 | capability | 动作 | 说明 |
 |---|---|---|
-| `component-ownership-and-naming` | **ADDED** | 追加一条 Requirement：「组件的**子**路径 MUST 由「父路径 + `.` + 局部名」构成 ⇒ ⇒ MUST NOT 因父路径的**字面值**而单方面剥离路径段 ⇒ ⇒ 节点名的前缀拼接 MUST 与组件路径拼接**同口径**」<br>⚠️ **metis 订正**：原稿写 `MODIFIED` ⇒ ⇒ **错** —— delta 里新增的 Requirement MUST 落 `## ADDED Requirements`；若放 `MODIFIED`，`verify_openspec_delta.sh` R3 要求标题与主 spec **逐字一致** ⇒ ⇒ 否则**静默不合并**（最坏的失败模式）⇒ ⇒ ⇒ **改** |
+| `component-ownership-and-naming` | **ADDED** | 追加**一条** Requirement ⇒ ⇒ ⚠️ **条款正文见唯一落地文本**（**本行不引条款原文**）⇒ ⇒ **唯一落地文本 = `.rddf/checks/decision-request-port-naming-parity-2026-11.md` §2 R1-b** ⇒ ⇒ ⇒ ⚠️ **本项即该 Requirement 的承载方**（批次表 `.rddf/roadmap/phase-6-rtl-productization.md:88`）<br>⚠️ **metis 订正**：原稿写 `MODIFIED` ⇒ ⇒ **错** —— delta 里新增的 Requirement MUST 落 `## ADDED Requirements`；若放 `MODIFIED`，`verify_openspec_delta.sh` R3 要求标题与主 spec **逐字一致** ⇒ ⇒ 否则**静默不合并**（最坏的失败模式）⇒ ⇒ ⇒ **改** |
 | `rtl-hierarchical-output` | **不动** | 产物端口命名归它，但本项改的是**节点名构造** ⇒ ⇒ 不越界 |
 | `hierarchical-port-naming-guard` | **不动** | 沿用既有裁定：guard capability MUST NOT 复述命名规则 |
 
