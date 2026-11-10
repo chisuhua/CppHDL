@@ -29,15 +29,21 @@
 | ① | 「若先在 B0 改语义、后面才改实现 ⇒ 中间态出现**声称成立但不成立**」⇒ ⇒ **T1 与 T3 必须同批**；且 **⑤ `data_ready` 语义重定义从 B0 移进该批** | `memory-timing-contract-2026-11.md:60`（T3 行）+ `:267`（critic SHOULD_FIX ⑤） |
 | ② | 「C5 MUST 与 C6 同批」⇒ ⇒ `hazard_detection_unit.h:19` include `rv32i_forwarding.h` ⇒ ⇒ 单删**必红** | `rv32i-dead-component-consolidation-2026-11.md:71`（C5 行 · B3 修复） |
 | ③ | 「批内顺序 MUST 为 **③ 尾部填 NOP → G1 + G4（同批）→ 其余**」⇒ ⇒ 反序会让 golden **改两次** | `rv32i-isa-gap-closure-2026-11.md:60`（G4 行） |
-| ④ | 「本项在 `memory-timing-contract` **之后**做（否则时序金标算两遍）」 | `rv32i-dead-component-consolidation-2026-11.md:79` |
-| ⑤ | 「若 ISA 项改了 ID 级 ⇒ ⇒ 建议 ISA 项在本项**之后**（避免 ID 级改两遍）」 | `rv32i-dead-component-consolidation-2026-11.md:227` |
-| ⑥ | 「本项依赖本项的 manifest ⇒ ⇒ **本项先做**」 | `rtl-emit-product-tooling-2026-11.md:242`（依赖 manifest）/ `port-naming-ratchet-2026-11.md:224` |
-| ⑦ | 「依赖本项的 CLI + manifest ⇒ ⇒ **本项先做**」 | `rtl-emit-product-tooling-2026-11.md:243` |
-| ⑧ | 「I5 会改 `Rv32iDecoder` / `Rv32iAlu` / `HazardUnit` 的 `__io` ⇒ ⇒ 触发命名棘轮 P1 ⇒ ⇒ **必须带名** ⇒ ⇒ **建议 I5 与本项首批合并**」 | `port-naming-ratchet-2026-11.md:227` |
+| ④ | 「本项在 `memory-timing-contract` **之后**做（否则时序金标算两遍）」 | `rv32i-dead-component-consolidation-2026-11.md:80` |
+| ⑤ | 「若 ISA 项改了 ID 级 ⇒ ⇒ 建议 ISA 项在本项**之后**（避免 ID 级改两遍）」 | `rv32i-dead-component-consolidation-2026-11.md:246` |
+| ⑥ | 「本项依赖本项的 manifest ⇒ ⇒ **本项先做**」 | `rtl-emit-product-tooling-2026-11.md:243`（依赖 manifest）/ `port-naming-ratchet-2026-11.md:227` |
+| ⑦ | 「依赖本项的 CLI + manifest ⇒ ⇒ **本项先做**」 | `rtl-emit-product-tooling-2026-11.md:244` |
+| ⑧ | 「I5 会改 `Rv32iDecoder` / `Rv32iAlu` / `HazardUnit` 的 `__io` ⇒ ⇒ 触发命名棘轮 P1 ⇒ ⇒ **必须带名** ⇒ ⇒ **建议 I5 与本项首批合并**」 | `port-naming-ratchet-2026-11.md:230` |
 | ⑨ | 「与 `memory-timing-contract` 的时序耦合 ⇒ 本项**先**做 ⇒ ⇒ 时序项 MUST **在**本项之后改 ⇒ ⇒ 或两者同批但**顺序执行**」 | `firmware-load-chain-2026-11.md:208` |
-| ⑩ | 「`firmware-load-chain` ⇒ ⇒ **会改 manifest 的 `semantic`** ⇒ ⇒ 需同步 manifest 快照」 | `rtl-emit-product-tooling-2026-11.md:245` |
+| ⑩ | 「`firmware-load-chain` ⇒ ⇒ **会改 manifest 的 `semantic`** ⇒ ⇒ 需同步 manifest 快照」 | `rtl-emit-product-tooling-2026-11.md:246` |
 | ⑪ | 「C6 改**共享发射器** ⇒ ⇒ 层次化产物**字节必变** ⇒ ⇒ MUST 加 `emit_hygiene` 开关（**默认 off**）」 | `rtl-emit-product-tooling-2026-11.md:66`（C6 行） |
 | ⑫ | 「`mem_is_load` 的修正**原本 7 份草案无任何一条承接** ⇒ ⇒ 落点补入 **C8**」 | `rv32i-dead-component-consolidation-2026-11.md`（C8 行 · planner 复核补入 2026-11-10） |
+
+
+> ✅ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-1 修复**：本表的 12 条重建依据里 **6 条 file:line 错位**
+> ⇒ ⇒ 已**逐条实测**（读该行的实际内容）后改正：④ `:79`→`:80` · ⑤ `:227`→`:246` · ⑥ tooling `:242`→`:243`
+> · ⑥ ratchet `:224`→`:225` · ⑦ `:243`→`:244` · ⑩ `:245`→`:246`
+> ⇒ ⇒ **修正后的每一条都已实测其内容确为所引的那句话**（不是「行号看起来对」）⇒ ⇒ ⇒ 表格现在**可复现**。
 
 ---
 
@@ -45,6 +51,7 @@
 
 > **选取准则**（按批次递进）：
 > **B0** = **零交付风险**（只动「无流水线消费者的组件」或「纯文档 / 纯登记」）
+> ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-6①**：**F-A（`node-name-prefix-consistency` P1）是本准则的唯一例外** ⇒ ⇒ ⇒ 它改 `include/component.h:274` 的 `Component::name()` **语义** ⇒ ⇒ **仓内零影响 + 下游可见行为变更** ⇒ ⇒ ⇒ ⇒ ⇒ 故 MUST **走公开面登记**（`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 的「行为变更（非符号移除）」节）⇒ ⇒ ⇒ ⇒ ⇒ 该登记**不因「一行改动」而豁免** ⇒ ⇒ ⇒ 「零交付风险」的准确表述 = 「**除 F-A 外**，B0 的其余 work item 零交付风险」
 > ⇒ **B1** = **地基**（manifest / CLI / 护栏 —— 下游全部依赖它）
 > ⇒ **B2** = **消费侧**（示例覆盖）
 > ⇒ **B3** = **时序契约**（动流水线时序 ⇒ ⇒ golden 可能变 ⇒ ⇒ 排在 B0 之后）
@@ -98,7 +105,7 @@
 | **T1 + T3 同批** | `memory-timing-contract` T1/T3 | D-TCM `aread` → `sread`（1 拍）⇒ ⇒ **T1 与 T3 的 `data_ready` 语义重定义同批**（依据 ① ⇒ ⇒ ⑤ 从 B0 移进本批） | — |
 | **T6 store→load 同址** | `memory-timing-contract` T6（**critic 第 1 轮 BLOCKER 新增**） | 显式定义 read-during-write 语义 ⇒ ⇒ **只能选 `read-new`**（`read-old` **违反 ISA**）⇒ ⇒ 判别性用例：**紧邻** `SW x1,0(x2)` / `LW x3,0(x2)`（同址 · 零间隔）⇒ ⇒ ⚠️ 现固件 `SW`@word16 / `LW`@word20 **隔 4 字 ⇒ 零判别力** ⇒ ⇒ MUST 补紧邻形态 | T1 |
 | **T2 / T4 / T5** | `memory-timing-contract` | T2（load 数据对齐）· T4（字节写相位 + 跨地址探针）· T5（`verify_dtcm_read_timing.sh`：**结构判据**进 CI；**yosys 判据降为本地/opt-in** ⇒ ⇒ 「真实 BRAM 可推断性未在 CI 验证」MUST 登记进 `.rddf/checks/arch-residual-registry.md`） | T1 |
-| **L1–L6 加载链路** | `firmware-load-chain` | 编码器库化 · 地址映射（`dtcm = 0x8001_0000` · size **由 TCM 容量派生** = `1 << (kTcmAddrWidth+2)`）· 统一加载口 · ELF · **截断等价的最小判据**（16 KB 对齐 ⇒ `0x80010000 % 0x4000 == 0` ✓ · `0x80005000 % 0x4000 == 4096` ✗） | ⚠️ 依据 ⑨：**本项先做** ⇒ ⇒ 或与 B3 同批但**顺序执行**（D-TCM 改 `sread` 后加载写回晚一拍） |
+| **L1–L6 加载链路** | `firmware-load-chain` | 编码器库化 · 地址映射（`dtcm = 0x8001_0000` · size **由 TCM 容量派生** = `1 << (kTcmAddrWidth+2)`）· 统一加载口 · ELF · **截断等价的最小判据**<br>⚠️ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-6③ · 本批的公开面前置门**：B3 含**公开面变更项** ⇒ ⇒ ⇒ ① `firmware-load-chain` L1–L6（**统一加载口** ⇒ 若新增/改名组件端口 ⇒ ⇒ 走 `public-api-remove-visibility-2026-11` 机制）② `memory-timing-contract` T1/T3（`data_ready` **语义重定义** ⇒ ⇒ 下游按旧语义写的 TB 会断 ⇒ ⇒ 须登记「**行为变更（非符号移除）**」）⇒ ⇒ ⇒ ⇒ **本批开工前 MUST 先登记**（`.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`）⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **登记未做 ⇒ 本批不得开工**（前置门 · 不是事后补记）（16 KB 对齐 ⇒ `0x80010000 % 0x4000 == 0` ✓ · `0x80005000 % 0x4000 == 4096` ✗） | ⚠️ 依据 ⑨：**本项先做** ⇒ ⇒ 或与 B3 同批但**顺序执行**（D-TCM 改 `sread` 后加载写回晚一拍） |
 
 ### B4 —— 核心重构批（RV32I 组件收口 + ISA 缺口闭合）
 
@@ -138,7 +145,7 @@
 
 | 项 | 出处 | 为什么独立 |
 |---|---|---|
-| **N5 第 2 步**：把 `ch_device` 的根实例名清空（`include/device.h:28` 的 `"top"` → 空）⇒ ⇒ 只验「`lnodeimpl` 的 `parent == nullptr` 分支（`src/core/lnodeimpl.cpp:33-35`）是否产出**裸** `prog_addr`」⇒ ⇒ **若产出的是 `.prog_addr` → `_prog_addr`（前导点被 sanitize 成下划线）⇒ ⇒ (c) 也不成立** ⇒ ⇒ 退回 ADR 讨论 | `port-naming-ratchet` N5(c) | ⇒ ⇒ 触及 `Component::name()` 语义 ⇒ ⇒ **公开 API 变更** ⇒ ⇒ MUST 走 `public-api-remove-visibility-2026-11` + ADR 修订 |
+| **N5 第 2 步**：把 `ch_device` 的根实例名清空（`include/device.h:28` 的 `"top"` → 空）⇒ ⇒ ⚠️ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-2 修复**：原回退条件（「若产出的是 `.prog_addr` → `_prog_addr` ⇒ ⇒ (c) 也不成立」）**已被探针实测证伪** ⇒ ⇒ **实测 = `unnamed_prog_addr`**（**第三形态**：既非裸 `prog_addr` 也非 `_prog_addr`）⇒ ⇒ ⇒ ⇒ ⇒ **route (c) 在当前命名机制下不可实现**（清空实例名**不足以**产出裸名 ⇒ ⇒ 根因是 `"unnamed"` 哨兵被拼进节点名）⇒ ⇒ ⇒ ⇒ **独立立项的前置条件 = 引入新的命名机制**（不是清空实例名）⇒ ⇒ ⇒ ⚠️ 该项**当前不做** ⇒ ⇒ ⇒ 触发条件 = 用户在看到 manifest 产物后仍要求人眼可读（与台账行 21 一致）⇒ ⇒ ⇒ 详见 `port-name-literal-parity` A.1①② | `port-naming-ratchet` N5(c) | ⇒ ⇒ 触及 `Component::name()` 语义 ⇒ ⇒ **公开 API 变更** ⇒ ⇒ MUST 走 `public-api-remove-visibility-2026-11` + ADR 修订 |
 | **分支预测器接入** | `rv32i-dead-component-consolidation`「不在本项」 | 功能增强 ≠ 重复实现 |
 | **特权级接线**（CSR 指令 / `ECALL` / `EBREAK` / `MRET` / trap 入口 / 中断） | `rv32i-isa-gap-closure`「不在本项」 | 周期长、面大 ⇒ ⇒ 与 phase-6 P6「MUST 独立立项」的裁决一致 |
 | **AXI cache 接入流水线**（MEM 级 stall 反压通路） | 本轮 planner 实测 | 流水线 MEM 级**无反压通路** ⇒ ⇒ 架构级改动 |
@@ -169,7 +176,7 @@ bash scripts/verify_roadmap_fragments.sh --self-test
 
 | # | 事项 | 状态 |
 |---|---|---|
-| **⑦** | **A7 的落点**（残差登记）：登记表 `.rddf/checks/arch-residual-registry.md` 与台账 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7 是**双向 1:1** 耦合（护栏 `scripts/verify_arch_ledger_residuals.sh` · 当前 **PASS / 20 行**）⇒ ⇒ **单改登记表 ⇒ 护栏红** ⇒ ⇒ ⇒ `docs/architecture` 在 `.rddf/config/arch-docs.json` 的 `arch_paths` 内 ⇒ ⇒ **ledger 侧属 architect 域** ⇒ ⇒ ⇒ planner **不越权**改它 ⇒ ⇒ ⇒ **需切 architect 做 ledger 侧 + planner 补登记表侧（一次同批）** ⇒ ⇒ ⇒ 两侧各加 **2 行**（残差 1 = route (c) 含方向 (i) · 残差 2 = ⑤ 目标钉）⇒ ⇒ ⚠️ **`node-name-prefix-consistency` MUST NOT 新增行**（它承载方向 (ii)，方向 (i) 由残差 1 覆盖 ⇒ ⇒ 两草案共用一条） | 🔴 **Blocked · 待切 architect** |
+| **⑦** | **A7 的落点**（残差登记）✅ **已落（2026-11-10 · architect 角色 · commit `ba99793`）**：登记表 `.rddf/checks/arch-residual-registry.md` 与台账 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7 是**双向 1:1** 耦合（护栏 `scripts/verify_arch_ledger_residuals.sh` · 当前 **PASS / 22 行**）⇒ ⇒ **单改一侧 ⇒ 护栏红** ⇒ ⇒ ⇒ `docs/architecture` 在 `.rddf/config/arch-docs.json` 的 `arch_paths` 内 ⇒ ⇒ **ledger 侧属 architect 域** ⇒ ⇒ ⇒ **两侧已同批落地**（台账 §7 **行 21 / 21b** + 登记表末尾 **2 行**）⇒ ⇒ ⇒ 残差 1 = route (c) 含方向 (i) · 残差 2 = ⑤ 目标钉 ⇒ ⇒ ⚠️ **`node-name-prefix-consistency` MUST NOT 新增行**（它承载方向 (ii)，方向 (i) 由残差 1 覆盖 ⇒ ⇒ 两草案共用一条） | ✅ **已落（2026-11-10 · architect 角色 · commit `ba99793`）** |
 | **⑧** | **critic 第 3 轮**：预算 2/2 已用满 ⇒ ⇒ 需用户明确批准 ⇒ ⇒ oracle 建议 6：**先修完裁决项再审**（排序 ✅ 正确）+ 三条件（书面 scope 只含「上轮 BLOCKER 闭合 + 新 diff」· 裁决结果**先落进草案文本** · 必须用户批准） | 🔴 **Blocked · 待用户批准** |
 
 ---

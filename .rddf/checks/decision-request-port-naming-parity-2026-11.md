@@ -8,7 +8,7 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 > ⇒ ⇒ **本单不是请 architect 重新决策** ⇒ ⇒ 而是请 architect **复核内容 + 执行两处机械落点**。
 > ⇒ ⇒ ⇒ 全部内容**已可复现**（探针 + 分析器实跑）⇒ ⇒ ⇒ **裁决点只剩「是否同意」与「由谁落」**。
 > ⇒ ⇒ ⇒ 落点涉及 `docs/architecture/**`（在 `.rddf/config/arch-docs.json` 的 `arch_paths` 内 ⇒ **architect 域**）
-> ⇒ ⇒ ⇒ **planner 未越权改动** ⇒ ⇒ ⇒ 残差登记表**未被半改**（护栏仍 PASS / 20 行 ⇒ 仓库未留红）。
+> ⇒ ⇒ ⇒ **planner 未越权改动** ⇒ ⇒ ⇒ 残差登记表**未被半改**（护栏仍 PASS / 20 行 ⇒ 仓库未留红）⇒ ⇒ ⇒ ⚠️ **时点标注（2026-11-11）**：此处的「20 行」是**本单起草时**的快照 ⇒ ⇒ ⇒ **已于 2026-11-10（commit `ba99793`）两侧同批落地 ⇒ ⇒ ⇒ 现状 = PASS / 22 行**（台账 §7 行 21/21b + 登记表 2 行）
 
 ---
 
@@ -56,6 +56,31 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 - **AND** 该解析 MUST 由 manifest 的 `cpp_member` 字段承载
 - **AND** MUST NOT 依赖端口名与成员名的字面相等
 
+#### Scenario: 基础设施端口（clock / reset）不承载 C++ 成员名
+
+- **WHEN** 一个顶层端口的 manifest `role` 为 `clock` 或 `reset`
+  （⇒ ⇒ 它是 **ctx 级**基础设施节点 —— `default_clock` / `default_reset`，
+  ⇒ ⇒ **不属于任何组件** ⇒ ⇒ **无 C++ 成员**）
+- **THEN** 该端口 MUST NOT 被要求提供 `cpp_member`
+- **AND** 下游工具 MUST NOT 把「缺 `cpp_member`」当作该端口的**违规**
+- **AND** 其余端口（`role` 不为 `clock` / `reset`）MUST 全部提供 `cpp_member`
+
+> ⚠️ **豁免判据 = `role`，不是 `owner`**（critic 第 3 轮 BLOCKER-1 的修复 · 2026-11-11）：
+> `owner == nullptr` 的节点**不止** clock/reset —— `src/hierarchy_analysis.cpp:744-753` 显示
+> 另有一类「**归属空洞**」（非 clock/reset 且无归属）⇒ ⇒ 分析层专门对它 `CHWARN`
+> ⇒ ⇒ 按 `owner == nullptr` 豁免会把**真缺陷**一并豁免 ⇒ ⇒ 豁免 MUST 按 `role` 判。
+> ⇒ ⇒ **`role` 字段已存在**于 manifest schema（C4 已定 `role`（`clock`/`reset`/`data`））
+> ⇒ ⇒ 本条**不新增字段、不改 C4** ⇒ ⇒ 判据可机械执行。
+> ⇒ ⇒ ⚠️ 「归属空洞」那一类**不在本条豁免范围内** ⇒ ⇒ 它仍 MUST 满足 `cpp_member` 义务
+> ⇒ ⇒ 或由分析层的 `CHWARN` 单独处置（**独立立项**，不在本条范围）。
+
+#### Scenario: 未显式命名者走兼容去重路径
+
+- **WHEN** 一个端口**没有**显式的 C++ 成员名（存量未消化的端口）
+- **THEN** 它 MUST 走**兼容去重路径**（旧的去重规则保留为兼容模式）
+- **AND** 它 MUST 被登记在**命名棘轮的豁免表**中
+- **AND** 它 MUST NOT 被要求提供 `cpp_member`
+
 #### Scenario: 字面相同的成立条件与不可能条件
 
 - **WHEN** 一个端口同时满足 ① 它是**根组件自有**的端口（manifest 的 `is_top_io == true`）
@@ -89,7 +114,7 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 - **AND** 该实例的**子**节点 MUST 以 `<local_name> + "."` 为前缀（与上一条同口径）
 ```
 
-> ⚠️ **architect 复核订正（2026-11-10 · 见 `.rddf/reviews/port-naming-parity-spec-delta-review-2026-11.md`）**：
+> ⚠️ **architect 复核订正（2026-11-10 · 见 `.rddf/reviews/port-naming-parity-spec-delta-review-2026-11-10.md`）**：
 > 原 R1-b **漏了「无父」的情形**（根组件的 `name()` == `local_name()`）⇒ ⇒ 契约不完整
 > ⇒ ⇒ 已补 **Scenario「无父的组件实例路径等于其局部名」** ⇒ ⇒ ⇒ 该 Scenario 同时钉住「根组件的子节点也走同一口径」
 
@@ -106,7 +131,7 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 > `scripts/verify_arch_ledger_residuals.sh` 做**双向 + 1:1** 核对 ⇒ ⇒ **单改一侧 ⇒ 护栏红**
 > ⇒ ⇒ ⇒ **两侧 MUST 同批**。
 > ✅ **planner 已在临时 root 上实跑 `scripts/lib/ledger_residual.py check` 验证**：两侧同批 ⇒ ⇒ **PASS（22 行）**
-> ⇒ ⇒ ⇒ 下列文本**逐字可执行**。
+> ⇒ ⇒ ⇒ 下列文本**曾逐字可执行**（planner 在临时 root 实跑验证）⇒ ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-4**：**已执行并落地**（commit `ba99793`）⇒ ⇒ ⇒ architect 落地时把台账行的 `:62` 措辞改写 ⇒ ⇒ ⇒ **权威文本 = 磁盘已落地行**（台账 `:299-300` + 登记表末尾 2 行）⇒ ⇒ ⇒ 下列是**留档**，不再是待执行文本。
 
 ### R2-1 → 登记表（`.rddf/checks/arch-residual-registry.md` · 追加到**表格末尾**）
 
@@ -120,7 +145,7 @@ evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.c
 > ⚠️⚠️ **必须插进 §7 表内** —— 追加到文件末尾**不会被解析**（会报「登记表有台账无」）。这是 planner 首次试错时实测到的。
 
 ```
-| 21 | **route (c)「字面同名」路线** —— 顶层端口名与 C++ 成员名逐字相同（根组件端口 + 实例名唯一 + 全设计 base name 不撞 + 成员名为合法 Verilog 标识符）⇒ ⇒ 探针实测：根实例名置空 ⇒ 得 `unnamed_prog_addr`（**不是**裸名）⇒ ⇒ N5(c) 的回退条件已被证伪；同名兄弟实例 ⇒ ⇒ 必然吃 `_N` ⇒ ⇒ 「全体组件字面同名」在当前扁平发射器下不成立；方向 (i)（让 `lnodeimpl` 也剥哨兵）⇒ ⇒ 撞本表 `:62`「Verilog 名 MUST 含该组件的路径段」⇒ ⇒ 需 architect 裁 | ⚠️ 未决 ⇒ route (c) 字面同名当前不做 · 触发条件 = 用户在看到 manifest 产物后仍要求人眼可读 |
+| 21 | **route (c)「字面同名」路线** —— 顶层端口名与 C++ 成员名逐字相同（根组件端口 + 实例名唯一 + 全设计 base name 不撞 + 成员名为合法 Verilog 标识符）⇒ ⇒ 探针实测：根实例名置空 ⇒ 得 `unnamed_prog_addr`（**不是**裸名）⇒ ⇒ N5(c) 的回退条件已被证伪；同名兄弟实例 ⇒ ⇒ 必然吃 `_N` ⇒ ⇒ 「全体组件字面同名」在当前扁平发射器下不成立；方向 (i)（让 `lnodeimpl` 也剥哨兵）⇒ ⇒ 撞 `openspec/specs/component-ownership-and-naming/spec.md:62`「Verilog 名 MUST 含该组件的路径段」⇒ ⇒ 需 architect 裁 |⚠️ **2026-11-11 · critic 第 3 轮 SHOULD_FIX-4 修复**：原文写「撞本表 `:62`」⇒ ⇒ **「本表」歧义**（本单不是 spec）⇒ ⇒ ⇒ 补全为**规范文件 + 行号** ⇒ ⇒ ⇒ 且 architect 落地时把该措辞改写为「撞本文件 `component-ownership-and-naming` 的「Verilog 名 MUST 含该组件的路径段」」⇒ ⇒ ⇒ **权威文本 = 磁盘已落地行**（台账 `:299`）⇒ ⇒ 本段是**已落地文本的留档**，不再是「逐字可执行」 ⚠️ 未决 ⇒ route (c) 字面同名当前不做 · 触发条件 = 用户在看到 manifest 产物后仍要求人眼可读 |
 | 21b | **根端口裸名的目标钉**（「根组件端口的 Verilog 名 == C++ 成员名」）⇒ ⇒ 随行 21 一并处置 ⇒ ⇒ 判据与探针见 `.rddf/improvements/port-name-literal-parity-2026-11.md` | ⚠️ 未决 ⇒ 根端口裸名目标钉 · 随 route (c) 一并处置 |
 ```
 

@@ -160,7 +160,7 @@ evidence: probe:grep 消费点普查（Rv32iDecoder / Rv32iAlu / riscv::Forwardi
 - [ ] 🔴 **SLTU 修复 MUST 自带判据**（critic 第 1 轮：原稿「修 SLTU」是**无判据变更**）⇒ 新增 ctest 断言 `execute_alu(0, 0xFFFFFFFF, SLTU) == 1`（现 `grep SLTU test_pipeline_exec.cpp` **只命中常量定义**，零断言）
 - [ ] 🔴 **静默地雷 MUST 同批修**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu` ⇒ ⇒ 归一到 `ex_stage.h` 的编码后 `3` 变 **XOR** ⇒ ⇒ MUST 改为**符号常量**，并全仓扫「以字面量驱动 `alu_op`」的调用点<br>⚠️ **planner 复核订正（2026-11-10）**：原稿把 `0x3` 称作「**老编码**」**不准确** —— `rv32i_alu.h:28` 的 `ALU_SLTU = 3` **正好就是 3**（该测试用的正是 `ch::ch_device<Rv32iAlu>` ⇒ 编码一致）⇒ ⇒ 该字面量**今天是对的** ⇒ ⇒ 真实缺陷是「**字面量复制常量而非引用符号常量**」（漂移风险）+「**SLTU 路径零断言覆盖**」（`grep SLTU test_pipeline_exec.cpp` 只命中定义行）⇒ ⇒ **结论不变**（必须改符号常量），但**风险机理** MUST 写成「归一后编码语义漂移」而非「本来就是老编码」
 - [ ] ⚠️ **metis 订正 —— 主判据换掉**
-- [ ] **差异清单**（人工读码产出）与差分结果**逐条对应**；清单外差异 = 0；清单 MUST 至少含 **SLTU 借位**（真缺陷）· **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · `mem_size`/`mem_signed` 死输出 · `funct7` 双方都不消费 —— **缺 SLTU 视为清单不合格**
+- [ ] **差异清单**（人工读码产出）与差分结果**逐条对应**；清单外差异 = 0；清单 MUST 覆盖**修复前**的差异全集（**逐项标注处置**：已修 / 待修 / 不修）—— **基准 = B0 ⑧ SLTU 修复之前的状态** ⇒ ⇒ 已知项（**SLTU 借位**（真缺陷 · 已在 B0 ⑧ 修）· **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · `mem_size`/`mem_signed` 死输出 · `funct7` 双方都不消费）**每项 MUST 有处置标注** ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 3 轮 BLOCKER-5 修复**：原门槛「清单 MUST 至少含 SLTU 借位 · **缺 SLTU 视为清单不合格**」**不可满足** —— B0 ⑧ 已修掉 `rv32i_alu.h:93` 的 SLTU ⇒ ⇒ ⇒ 到 B4 时 SLTU **已不是差异** ⇒ ⇒ ⇒ 改为「覆盖**修复前**差异全集 + 逐项标注处置」⇒ ⇒ **SLTU 仍在清单里**（作为**已修**项标注）⇒ ⇒ ⇒ ⑧ 仍在 B0（用户裁决不动）
 - [ ] 差分用例有**变异自证**（改内联一处 ⇒ 差分必红）
 
 ### 接入
