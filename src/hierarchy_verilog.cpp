@@ -220,6 +220,9 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     std::vector<std::string> remaining;
     /// 共同祖先 module 内的**中转线**（兄弟边 · design §7.2.3）
     std::map<std::string, std::vector<SynthesizedPort>> synth_wires;
+    /// ⚠️ **合成事件清单**（ADR-060 §2.4.1 ① · **结构化**：两个产物载体的**全体成员**）
+    /// ⇒ ⇒ 供 **Warn 档**的 `CHWARN` 与 **Fatal 档**的诊断（列**全部**被合成的边 + 端口名）共用
+    std::vector<std::string> synth_events;
     // ★ ADR-066 决策 ①：**父侧落点网**（族 ①/③：父侧消费点不是父 `output` 端口）
     //   · key   = `<父 module>\x1f<子实例名>\x1f<子侧 pin>` ⇒ ⇒ **按 pin 归并**
     //     （同一 pin 的多个父侧消费者 ⇒ 扇出**同一根**网 ⇒ 决策 ⑤）
@@ -1255,12 +1258,22 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         // ── **合成端口**（隐式端口 · ADR-060 §2.1 行 2）────────────────
         //    端口声明走 `synthesized_ports`（**不是 IR 节点** ⇒ ⇒ 单列）
         //    体内的 `assign __x_<n> = <子侧节点>;` 走 `body_epilogue`
+        // ⚠️ **产物注释只对 `SynthesizeWarn` 档发射**（ADR-060 §2.4.1.1 标题 ⇒ 该义务属该档）
+        //   ⇒ ⇒ ⚠️ **策略读取只能在这里**（`options.port_policy` 只在发射器可见 ⇒ ⇒ codegen
+        //   **拿不到** ⇒ ⇒ **MUST NOT** 给 `ModuleEmitter` 加 `HierarchyEmitOptions` 依赖）
+        view.emit_synth_comments = (options.port_policy == PortPolicy::SynthesizeWarn);
         {
             const auto it = synth_by_child.find(m.key);
             if (it != synth_by_child.end()) {
                 for (const auto &sp : it->second) {
                     view.synthesized_ports.push_back(
-                        SynthesizedPort{sp.port, sp.is_input, sp.width});
+                        SynthesizedPort{sp.port, sp.is_input, sp.width, /*is_wire=*/false});
+                    // ⚠️ **合成事件登记**（ADR-060 §2.4.1 ①「发生合成」= 两个产物载体的**全体
+                    //   成员** · **结构化** ⇒ ⇒ 非按机制枚举）⇒ ⇒ 供 **Warn 档的 CHWARN** 与
+                    //   **Fatal 档的诊断**（列**全部**被合成的边 + 合成端口名）共用
+                    synth_events.push_back("module '" + m.key + "': synthesized " +
+                                           (sp.is_input ? "input" : "output") + " port '" +
+                                           sp.port + "'");
                     if (sp.is_input) {
                         // ⚠️ input 端口：值由**父层**提供 ⇒ ⇒ 本 module 内**不**发 assign
                         //    ⇒ ⇒ 改由**驱动重定向**把被驱动的节点接到该端口
@@ -1281,8 +1294,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         {
             const auto it = synth_wires.find(m.key);
             if (it != synth_wires.end()) {
-                view.synthesized_wires.insert(view.synthesized_wires.end(), it->second.begin(),
-                                              it->second.end());
+                for (const auto &sw : it->second) {
+                    SynthesizedPort marked = sw;
+                    marked.is_wire = true;   // ★ 区分「合成网」⇒ ⇒ 产物注释文本分流
+                    view.synthesized_wires.push_back(marked);
+                    synth_events.push_back("module '" + m.key + "': synthesized net '" +
+                                           sw.name + "'");
+                }
             }
         }
         // ⚠️ **向上 pass-through 的重定向**（reg/proxy 顶端适配器 · 发射期虚拟重定向）
@@ -1581,6 +1599,46 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
             result.error = "hierarchical emission: signal map check failed: " + serr;
             result.signal_map.clear();
             return result;
+        }
+    }
+
+    // ── ②' **成功路径的策略分档**（ADR-060 §2.4.1 · 本轮由用户拍板 **A** = 按契约）──
+    //    ⚠️ **三档的差异只在成功路径**（不可合成的形态 ⇒ 「合成」根本没发生 ⇒ ⇒ 三档都该失败
+    //    ⇒ ⇒ 失败路径**不**分档，见上）。
+    //    · `SynthesizeWarn`（默认）= 合成 + **产出文件** + 每条合成物一条 `CHWARN` + 产物注释
+    //    · `SynthesizeFatal`         = 合成（**先合成完**）+ **不产出** + 诊断列**全部**
+    //    · `Reject`                   = **不产出** + 只报**第一条**
+    //    ⚠️ **用户可见行为变更**（用户 2026-11-10 拍板 A）：`Fatal` 档在**成功路径**上由
+    //    「成功」改为「失败」⇒ ⇒ 诊断 MUST 列**全部**被合成的边 + 端口名（⇒ ⇒ 其价值 =
+    //    **失败的诊断质量**，不是「更严格的门」）。
+    if (!synth_events.empty()) {
+        if (options.port_policy == PortPolicy::SynthesizeFatal) {
+            std::ostringstream msg;
+            msg << "hierarchical emission: " << synth_events.size()
+                << " cross-module edge(s) were synthesized, but PortPolicy::SynthesizeFatal "
+                   "requires the emission to fail after synthesis (ADR-060 §2.4.1):";
+            for (std::size_t i = 0; i < synth_events.size(); ++i) {
+                msg << "\n  [" << (i + 1) << "] " << synth_events[i];
+            }
+            result.error = msg.str();
+            result.signal_map.clear();
+            // ⚠️ **MUST NOT 落盘**（契约：**不产出**）⇒ ⇒ 也**不**触碰既有文件
+            return result;
+        }
+        if (options.port_policy == PortPolicy::Reject) {
+            std::ostringstream msg;
+            msg << "hierarchical emission: PortPolicy::Reject refuses to synthesize "
+                << synth_events.size() << " cross-module edge(s) (ADR-060 §2.4.1):\n  [1] "
+                << synth_events.front()
+                << "\n  hint: switch to PortPolicy::SynthesizeWarn to synthesize them with "
+                   "CHWARN, or to SynthesizeFatal to get the full list of synthesized edges.";
+            result.error = msg.str();
+            result.signal_map.clear();
+            return result;
+        }
+        // `SynthesizeWarn`（默认）⇒ ⇒ 合成 + 产出 + 每条合成物一条 CHWARN
+        for (const auto &e : synth_events) {
+            CHWARN("hierarchical emission: synthesized %s", e.c_str());
         }
     }
 

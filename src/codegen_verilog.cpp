@@ -358,6 +358,12 @@ void ModuleEmitter::print_header(std::ostream &out) {
             if (!ports.empty() || i > 0) {
                 out << ",\n";
             }
+            // ⚠️ **产物注释**（ADR-060 §2.4.1.1 ③）：**端口表内、该条目正上方单独成行**
+            //   ⇒ ⇒ **禁**行尾注释 ⇒ ⇒ **每个合成物恰好一处**（④）+ 只含名字（④）
+            if (view_.emit_synth_comments) {
+                out << "    // CppHDL-synth: implicit port " << sp.name
+                    << " (ADR-060 2.4.1)\n";
+            }
             out << "    " << (sp.is_input ? "input" : "output") << " "
                 << get_width_str(sp.width) << " " << sp.name;
         }
@@ -516,6 +522,10 @@ void ModuleEmitter::print_decl(std::ostream &out) {
         //    ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
         for (const auto &sw : view_.synthesized_wires) {
             const std::string w = get_width_str(sw.width);
+            // ⚠️ **产物注释**（ADR-060 §2.4.1.1 ③）：**`logic` 声明行正上方单独成行**
+            if (view_.emit_synth_comments) {
+                out << "    // CppHDL-synth: net " << sw.name << " (ADR-060 2.4.1)\n";
+            }
             out << "    logic " << (w.empty() ? "" : w + " ") << sw.name << ";\n";
         }
     } catch (...) {

@@ -103,6 +103,33 @@ std::string module_text(const std::string &all, const std::string &name) {
     return all.substr(at, next == std::string::npos ? std::string::npos : next - at);
 }
 
+/// ★ **剥掉「合成物」的产物注释行**（ADR-060 §2.4.1.1 的 `// CppHDL-synth: …`）。
+///
+/// ⚠️ **为什么需要**：产物注释**合法地含**合成物的名字 ⇒ ⇒ 「端口表内该名字出现几次」
+/// **不再**等于「声明几次」⇒ ⇒ 计数类判据 MUST 在**剥掉注释**的文本上做
+/// ⇒ ⇒ 否则会把**合规**的注释误判成「重复声明」。
+std::string strip_synth_comments(const std::string &text) {
+    std::string out;
+    out.reserve(text.size());
+    std::size_t pos = 0;
+    while (pos <= text.size()) {
+        const std::size_t nl = text.find('\n', pos);
+        const std::string line =
+            text.substr(pos, (nl == std::string::npos ? text.size() : nl) - pos);
+        if (line.find("// CppHDL-synth:") == std::string::npos) {
+            out += line;
+            if (nl != std::string::npos) {
+                out += '\n';
+            }
+        }
+        if (nl == std::string::npos) {
+            break;
+        }
+        pos = nl + 1;
+    }
+    return out;
+}
+
 std::size_t count_occurrences(const std::string &haystack, const std::string &needle) {
     std::size_t n = 0;
     for (auto at = haystack.find(needle); at != std::string::npos;
@@ -2128,8 +2155,16 @@ TEST_CASE("hierarchical emission: synthesized names never collide with user node
     const std::string all = read_file(path);
     const std::string child = module_text(all, "inner_proxy");
     // 端口声明里的合成名**只出现一次**（不重复声明）
-    const std::string child_header = child.substr(0, child.find(");"));
-    REQUIRE(count_occurrences(child_header, "__if_0") == 1);
+    const std::string child_header =
+        strip_synth_comments(child.substr(0, child.find(");")));
+    // ⚠️ **2026-11-10 口径精确化**（P7 产物注释落地后）：合成物**现在带一行注释**
+    //   （`// CppHDL-synth: implicit port <name> (ADR-060 2.4.1)` · ADR-060 §2.4.1.1 ③
+    //   要求「端口表内、该条目**正上方单独成行**」）⇒ ⇒ 注释行**含**该名字
+    //   ⇒ ⇒ 「子串出现次数」不再等于「声明次数」⇒ ⇒ **本判据的意图**（**不重复声明**）
+    //   **未变** ⇒ ⇒ 口径从「子串出现次数」精确为「**声明**次数」（与下一条**同口径**）
+    //   ⇒ ⇒ 故「**端口表内**该名字只出现 1 次」与 §2.4.1.1 ③ **冲突**（注释行合法地含该名字）
+    //   ⇒ ⇒ 本判据按**声明**口径精确化 ⇒ ⇒ **意图（不重复声明）完全不变**
+    REQUIRE(count_occurrences(child_header, "input [7:0] __if_0") == 1);
     // 且产物里没有「同名两次声明」的迹象：端口表里每个 `__if_` 名字唯一
     REQUIRE(count_occurrences(child_header, "__if_") ==
             count_occurrences(child_header, "input [7:0] __if_"));

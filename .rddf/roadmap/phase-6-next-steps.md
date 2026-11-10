@@ -26,7 +26,7 @@ T1 **归档后**接手 ⇒ ⇒ ⇒ T5（P6-0 只读侦察）**可全程并行**�
 |---|---|---|---|---|
 | **T1** | **P5 收尾**（change `mem-port-arg-cross-layer-2026-11` · AC1–AC10） | builder | — | ★ **主线**（唯一在途 change） |
 | **T2** | **P5 文档订正的同步**（phase-6 P5 行 + change 文档） | planner | — | ⚠️ **部分完成**（见 §4 的「本轮**未做完**」清单） |
-| **T3** | **P7 builder 步**（三档 `PortPolicy` 语义分化） | builder | — | ⚠️ **2026-11-10 取证完成 · 未开工**（详见下方 §「T3 的承重发现」）|
+| **T3** | **P7 builder 步**（三档 `PortPolicy` 语义分化） | builder | — | 🟡 **部分完成**（2026-11-10 · 用户拍板 **A** = 按契约）：**三档已分化**（Warn 成功+CHWARN+注释 · Fatal 失败+列全部 · Reject 失败+只报第一条）⇒ ⇒ **未做**：change **立项** · 判据用例（三档两两可区分的**元组**断言）· 台账行 15 闭口 · **Reject 诊断粒度**（见 §遗留） |
 | **T4** | **P8 builder 步**（删 `set_ab_verification` stub + golden 覆盖下限） | builder | — | 与 T1 / T3 **可并行**（写点不重叠） |
 | **T5** | **P6 侦察 + 立项**（RV32I ISA 缺口：CSR / `ECALL`·`EBREAK` / `FENCE`） | planner → builder | — | 与 T1–T4 **可并行**（P6-0 是**只读侦察**） |
 | **T6** | **P10 的 ADR 判据订正**（ADR-052 / ADR-063 / ADR-067 的 CLI 版本判据） | architect | 独立 | ✅ **2026-11-10 已做**（**ADR-052 v2 / ADR-063 v2 / ADR-067 v2** + **ADR-066 v1.5**）⇒ ⇒ 剩余待办 = **improvement 草案同步**（planner 域） |
@@ -213,3 +213,36 @@ bash scripts/verify_roadmap_fragments.sh
 给 `ModuleEmitter` 加 `HierarchyEmitOptions` 依赖 ⇒ ⇒ 注释文本随 `ModuleView` 传给 codegen）
 ④ **判据用例**（可合成样本 · **N ≥ 2** 条可合成边 · 含端口 + 网 · 无悬空 `ch_in`）⇒ ⇒ 三档**两两可区分**
 ⑤ **台账行 15 闭口**（`已知 → 已收口` · `归属 → —` · 闭口证据 = archive 路径 · `复核条件` 清空）
+
+
+---
+
+## T3 的实施进展（2026-11-10 · 用户拍板 **A** = 按契约）
+
+### ✅ 已完成（**三档已分化** · 实测元组）
+
+| 档 | 产物是否存在 | 诊断列出的边数 | 产物注释是否存在 |
+|---|---|---|---|
+| `SynthesizeWarn` | **true** | —（CHWARN **每条合成物一条**） | **有**（`// CppHDL-synth: net <name> (ADR-060 2.4.1)`） |
+| `SynthesizeFatal` | **false** | **N**（全部） | —（不产出） |
+| `Reject` | **false** | **1**（第一条） | —（不产出） |
+
+⇒ ⇒ 元组 `(产物是否存在, 诊断列出的边数, 产物注释是否存在)` **两两可区分** ✓（样本 N = 2 ⇒ ≥ 2 ✓）
+
+### 实现落点
+
+- `include/codegen_verilog.h`：`SynthesizedPort` 加 `is_wire`（区分**合成端口** / **合成网** ⇒ ⇒ 注释文本分流）
+  + `ModuleView` 加 `emit_synth_comments`（**策略读取只能留在发射器** ⇒ ⇒ codegen 只打印）
+- `src/hierarchy_verilog.cpp`：合成事件清单（**结构化** = 两个产物载体的全体成员）· 按 policy 分档 ·
+  Warn 档每条合成物一条 `CHWARN`
+- `src/codegen_verilog.cpp`：两个注释发射点（端口表内该条目**正上方单独成行** / `logic` 声明行正上方）
+
+### ⚠️ 遗留（**如实登记**）
+
+| # | 项 | 说明 |
+|---|---|---|
+| ① | **`Reject` 诊断的粒度** | 现状报「第一条**合成物**」（含合成物名）⇒ ⇒ ADR §2.4.1 的 `Reject` 行说「只报第一条**需合成的跨 module 边**」（⇒ ⇒ **不**列合成端口名）⇒ ⇒ **有出入** ⇒ ⇒ 修法 = 补**边级**收集（`synth_events` 现只记合成物）⇒ ⇒ **未做** |
+| ② | **change 未立项** | ADR-060 v1.18 记「关联 change = `backlog: phase-6 P7`」⇒ ⇒ 本轮改动**未**走 change 流程 ⇒ ⇒ 须补立项 + AC 映射 |
+| ③ | **判据用例未写** | 三档两两可区分的**元组**断言（产物级）⇒ ⇒ 现有覆盖只有既有回归（**未**含三档对比） |
+| ④ | **台账行 15 未闭口** | `已知 → 已收口` · `归属 → —` · 闭口证据 = archive 路径（依赖 ②） |
+| ⑤ | **既有判据的口径精确化** | `tests/test_hierarchy_verilog.cpp` 的「端口表内合成名只出现一次」⇒ ⇒ 与 §2.4.1.1 ③（注释**合法含名**）**冲突** ⇒ ⇒ 已按**声明**口径精确化 + 新增 `strip_synth_comments()` helper ⇒ ⇒ **意图（不重复声明）未变** |

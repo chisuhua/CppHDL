@@ -54,6 +54,11 @@ struct SynthesizedPort {
     std::string name;
     bool is_input = false;
     std::uint32_t width = 0;
+    /// ★ **是否为「合成连接网」**（= `ModuleView::synthesized_wires` 的成员）⇒ ⇒ 与
+    /// 「合成端口」（= `synthesized_ports` 的成员）**区分** ⇒ ⇒ 产物注释的文本据此分流
+    /// （ADR-060 §2.4.1.1 ②：`implicit port <name>` vs `net <name>`）⇒ ⇒ ⚠️ **默认 `false`**
+    /// ⇒ ⇒ 「合成端口」不需要额外赋值 ⇒ ⇒ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
+    bool is_wire = false;
 };
 
 struct ModuleView {
@@ -90,6 +95,11 @@ struct ModuleView {
     /// 由 `print_decl` 发 `logic [W] name;`。
     /// ⚠️ 扁平路径**恒空** ⇒ ⇒ 产物逐字节不变。
     std::vector<SynthesizedPort> synthesized_wires;
+    /// ★ **是否发射「合成物」的产物注释**（ADR-060 §2.4.1.1）⇒ ⇒ **只 `SynthesizeWarn` 档为真**
+    /// ⇒ ⇒ ⚠️ **策略读取只能留在发射器**（`options.port_policy` 只在 `hierarchy_verilog.cpp` 可见
+    /// ⇒ ⇒ codegen **拿不到** ⇒ ⇒ **MUST NOT** 给 `ModuleEmitter` 加 `HierarchyEmitOptions` 依赖
+    /// ⇒ ⇒ 注释文本随本 view 传给 codegen ⇒ ⇒ codegen **只打印**）。
+    bool emit_synth_comments = false;
     /// **本 module 内 MUST NOT 发驱动赋值的节点**。
     ///
     /// ⚠️ 层次化：一个节点的驱动若在**别的 module** ⇒ 那个信号在本 module 里
