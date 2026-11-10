@@ -239,7 +239,7 @@ auto read_data = memory.sread(io().addr, ch_bool(true));
 ### ⚠️ 待用户裁决
 
 1. **T2′（写口替身）三选一** —— 这是**决定「能否上板」的那一条**，须 architect 裁决。
-2. ✅ **已裁决（2026-11-10 · critic 第 1 轮 + oracle）**：**T3 拆出本项** ⇒ ⇒ 反压归「**接 cache**」立项 ⇒ ⇒ ⇒ 但 ⚠️ **T3 的 `data_ready` 语义重定义 MUST 随 T1 一起落**（见 §T3 行）⇒ ⇒ ⇒ 「拆出」指的是**反压实现**，**不是**语义重定义 ⇒ ⇒ ⇒ ⇒ 详见 §T3 行 |
+2. ✅ **已裁决（2026-11-10 · critic 第 1 轮 + oracle）**：**T3 拆出本项** ⇒ ⇒ 反压归「**接 cache**」立项 ⇒ ⇒ ⇒ 但 ⚠️ **T3 的 `data_ready` 语义重定义 MUST 随 T1 一起落**（见 §T3 行）⇒ ⇒ ⇒ 「拆出」指的是**反压实现**，**不是**语义重定义 ⇒ ⇒ ⇒ ⇒ 详见 §T3 行
 
 ## critic 第 1 轮（plan, build）—— **REJECT** · mergeable: no · scope_exceeded: false
 

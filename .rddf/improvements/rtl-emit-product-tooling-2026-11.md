@@ -173,7 +173,7 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 - [ ] manifest 的 `ports[]` 与 `.v` 的端口**双向一致**（F3）
 - [x] ~~顶层端口数从 115 降到 34~~ 🔴 **已撤回（保留契约）** ⇒ 改为：manifest MUST 为每个端口给出 `owner` + `is_top_io`，且 `is_top_io == true` 的条目集合 MUST **等于** RV32I SoC 的语义端口集（**7 in + 27 out**，其中 `mem_is_load` 由下游 tie-off 后仍以 `owner=…hazard_unit` / `is_top_io=false` 出现）
 - [ ] 产物含 `` `default_nettype none `` + 生成元数据头（C6）
-- [ ] 产物**无死逻辑**（F5 两段）：零引用信号数 == 0（当前 107）· proxy 恒等直通数 == 0（当前 43）⇒ ⇒ ⚠️ **planner 复核订正（2026-11-10）**：原判据「产物**无** `assign x = x;` 自赋值」**实测恒绿**（产物字面自赋值 = 0）⇒ ⇒ **作废**，改按 F5 两段判 |
+- [ ] 产物**无死逻辑**（F5 两段）：零引用信号数 == 0（当前 107）· proxy 恒等直通数 == 0（当前 43）⇒ ⇒ ⚠️ **planner 复核订正（2026-11-10）**：原判据「产物**无** `assign x = x;` 自赋值」**实测恒绿**（产物字面自赋值 = 0）⇒ ⇒ **作废**，改按 F5 两段判
 - [ ] 两次发射产物**逐字节相同**（F2）
 
 ### 悬空输入
@@ -284,8 +284,8 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 
 ### ⚠️ 待用户裁决（metis 提出，本项不自行决定）
 
-1. ✅ **已裁决（2026-11-10 · 用户拍板 = B1）**：**C2 与既有契约的冲突面** ⇒ ⇒ **撤回 C2 · 保留已签批契约** ⇒ ⇒ `ADR-060 §2.2` 的「冒泡上来的悬空输入 ⇒ 顶层可驱动」与 `rtl-hierarchical-output/spec.md:309-316` 的「顶层端口表 MUST 是 … **全部** `ch_out`」**都成立** ⇒ ⇒ ⇒ 那 80 个 inline 后代输出**不是泄漏** ⇒ ⇒ ⇒ 替代手段 = manifest 的 `owner` / `is_top_io`（**不动端口面**）⇒ ⇒ ⇒ 详见 §C2 行的「已撤回」说明 |C3「悬空输入 MUST NOT 成为顶层端口」在**层次化侧**与之**正面冲突**⇒ ⇒ 两条路线：(a) 不动冒泡契约 + 加 `flat.inputs ⊆ hier.inputs` 判据；(b) 改冒泡契约 ⇒ ⇒ `rtl-hierarchical-output` MUST 标 MODIFIED + R8 期望表同步 + `hier_eq` 前提重证 ⇒ ⇒ **需 architect 裁决**。
-2. ✅ **已定（metis 订正 · 2026-11-10 · 随 B1 一并落地）**：**`C1` 的形态** ⇒ ⇒ **工具 = 库 + 薄 CLI**（用户在**自己的可执行文件**里用 `CH_EMITTABLE_COMPONENT(...)` 登记）⇒ ⇒ ⇒ 本仓的 `cpphdl-emit-rtl` **MUST NOT** 链接 `examples/**`（否则装出来的是「链了示例代码的二进制」）⇒ ⇒ ⇒ 护栏须**静态扫描**该禁令 ⇒ ⇒ ⇒ 详见 §C1 行的 metis 订正 |
+1. ✅ **已裁决（2026-11-10 · 用户拍板 = B1）**：**C2 与既有契约的冲突面** ⇒ ⇒ **撤回 C2 · 保留已签批契约** ⇒ ⇒ `ADR-060 §2.2` 的「冒泡上来的悬空输入 ⇒ 顶层可驱动」与 `rtl-hierarchical-output/spec.md:309-316` 的「顶层端口表 MUST 是 … **全部** `ch_out`」**都成立** ⇒ ⇒ ⇒ 那 80 个 inline 后代输出**不是泄漏** ⇒ ⇒ ⇒ 替代手段 = manifest 的 `owner` / `is_top_io`（**不动端口面**）⇒ ⇒ ⇒ 详见 §C2 行的「已撤回」说明
+2. ✅ **已定（metis 订正 · 2026-11-10 · 随 B1 一并落地）**：**`C1` 的形态** ⇒ ⇒ **工具 = 库 + 薄 CLI**（用户在**自己的可执行文件**里用 `CH_EMITTABLE_COMPONENT(...)` 登记）⇒ ⇒ ⇒ 本仓的 `cpphdl-emit-rtl` **MUST NOT** 链接 `examples/**`（否则装出来的是「链了示例代码的二进制」）⇒ ⇒ ⇒ 护栏须**静态扫描**该禁令 ⇒ ⇒ ⇒ 详见 §C1 行的 metis 订正
 
 ## critic 第 1 轮（plan, build）—— **REJECT** · mergeable: no · scope_exceeded: false
 
