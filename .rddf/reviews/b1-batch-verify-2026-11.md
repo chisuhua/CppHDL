@@ -284,3 +284,43 @@ flat_hyg.v / hier_hyg.v（RV32I SoC）
   （`ch_in` 的 `num_srcs()` 恒 0 ⇒ 复用会把每个被正常驱动的子端口误报悬空），
   但**判据侧仍写着「复用」**。建议在批次表 C3 行补记偏离理由（planner 域，未越权改）。
 - **SF-9 / SF-10**（文档数字陈旧）：**未改** —— 属文档维护，不在 BLOCKER 修复范围。
+
+---
+
+## 9. 复审（verifier · 第 2 轮 · 2026-11-11）
+
+> **范围限定**（评审预算：本 change 2/3 轮）：只验「§3 的 BLOCKER-1 + §6 的 4 项 FAIL
+> 是否闭合」+「新 diff 是否引入新 BLOCKER」。**不做**全量重审、不重新评判 §4 的
+> SHOULD_FIX（除 SF-8）。
+
+### 闭合判定
+
+| 上轮项 | 判定 | 证据（本轮独立取证） |
+|---|---|---|
+| **BLOCKER-1** 剪枝误剪仍被引用的字面量 | ✅ **闭合** | RV32I 卫生产物（**扁平 + 层次化**）⇒ 未声明引用 **0** · 零引用 **0** · verilator 告警 **0** · `--lint-only` **exit=0**<br>最小复现（`select()` 选两个字面量）⇒ `exit=0` · 未声明引用 **0**<br>§3 的复现命令重跑：不再有 `Can't find definition of variable` |
+| **FAIL-2** 复位写法规范化 | ✅ **闭合** | 卫生产物 `if (default_reset) pc_reg <= 32'h80000000; else pc_reg <= <next>;`（`hier_hyg.v:1028-1031`）<br>默认产物仍是旧写法（`hier_std.v:1441`）⇒ 开关隔离正确 |
+| **FAIL-3** `lint_off` 收窄 | ✅ **闭合**（且**更强**） | 卫生产物 `grep -c "verilator lint_off"` = **0**；而宽度告警 **0 条**<br>对照：默认产物剥掉 blanket 后 **23 条**告警 ⇒ ⇒ 返工用**显式 size cast** 把 23 条全部消除，不是掩盖 |
+| **FAIL-4** `default_nettype wire` | ✅ **闭合** | `hier_hyg.v` 尾部 `endmodule` 之后有 `` `default_nettype wire ``；`default_nettype` 计数 **2**（`none` + `wire` 配对） |
+| **FAIL-5** F1 两段式 + F7 M4 | ✅ **闭合** | `F1-a 卫生产物基线 lint 干净` · `F1-b 剥掉 lint_off 后仍干净` · `自检 M4：真实宽度告警被 lint_off 盖住 ⇒ 剥掉后 F1-b 转红 ✓`（M4 不再是空操作） |
+| **SF-8** F8 判别力不足 | ✅ **闭合** | F8 新增「无未声明引用」（`--undeclared-refs`，不依赖 verilator）· 工具设计加入 **mux 选字面量**形态 ⇒ F8 成为 BLOCKER-1 常驻回归 |
+
+### 不回归（本轮实测）
+
+| 判据 | 结果 |
+|---|---|
+| 默认路径**逐字节不变** | ✅ RV32I 层次化产物与 B1 前基线 `diff` 为空 |
+| **行为等价** | ✅ 同一 TB 驱动 `flat_std.v` 与 `flat_hyg.v` ⇒ **200 拍 × 107 个输出端口逐拍一致** |
+| `ctest` | ✅ **261/261 PASS**（base 224 · verilator_e2e 76）· 1460.27 s |
+| 12 条护栏 + 2 条 self-test | ✅ 全绿（含 `verify_flat_rtl_emit --self-test` 的 M1–M4 各自转红） |
+| `run_all_ported_tests.sh` | ✅ **28/28 PASS** |
+| 新 diff 是否引入新 BLOCKER | ✅ **无** —— 剪枝的 `while(changed)` 每轮至少新增一个死节点（有限集 ⇒ 终止）· `hygiene_cast` / `print_footer` / `port_driver_endpoint` 的改动全部被 `emit_hygiene` 隔离（零 churn 实测）· `is_prunable_type(type_input)` 的放宽由 `view_.ports` 保护模块端口，且行为等价实测覆盖 |
+
+### 结论
+
+**APPROVE** —— 上轮 1 条 BLOCKER + 4 项 FAIL + SF-8 **全部闭合**，无新增 BLOCKER。
+
+**放行条件**（不影响本次放行，记入 backlog）：
+- **SF-6**（C3 偏离「复用 `diagnose_drive()`」）→ 需在批次表 C3 行补记偏离理由（**planner 域**）
+- **SF-9 / SF-10**（`PORT-NAMING-GUIDE.md` 示例输出 · `AGENTS.md` Test counts 表）→ 文档维护
+
+**已用轮次**：本 change **2 / 3**
