@@ -95,6 +95,7 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | `ch::build_hierarchical_name()` / `ch::Component::name()`（`include/component.h`） | **子组件全路径的拼接不再按父路径的「字面值」剥离路径段** | 2026-11-11 | `node-name-prefix-consistency` **P1**（F-A）· capability `component-ownership-and-naming` | ⚠️ **唯一受影响的情形**：根组件的 name 为空（`local_name_` 归一成 `"unnamed"`）⇒ ⇒ 其子组件的 `name()` 从**裸局部名**（`"kid"`）变为**带父前缀**（`"unnamed.kid"`）⇒ ⇒ **按 `name()` 精确匹配裸局部名的下游代码 MUST 更新**；常规路径（父名非空，如 `"top"`）**逐字节不变** |
 | `ch::Component::name()` 的**根组件空名**语义 | **空名与用户真名 `"unnamed"` 在 `name()` 上永久不可区分**（**已登记代价**） | 2026-11-11 | 同上（F-A 的已知代价） | 空名根组件现在与「真名 `"unnamed"`」的根组件**行为完全相同** ⇒ ⇒ 若下游需要区分 ⇒ ⇒ 须**另立 item**（引入独立的「无名」标记而非复用字面名）⇒ ⇒ **不在本项** |
 | 顶层 RTL 端口表（RV32I SoC） | `mem_is_load` 的装配点**补上 driver** ⇒ ⇒ 该 `ch_in` **不再是无 driver 的顶层 input** ⇒ ⇒ **顶层 input 少 1 个**（8 → 7） | 2026-11-11 | `rv32i-dead-component-consolidation` **C8** · 契约相容（契约说的是「**无 driver 的** input」⇒ 补 driver = 修缺陷） | 下游若按端口**数量/序号**硬编码顶层 input ⇒ ⇒ MUST 改为**按名**取；**行为零变化**（MEM 级那一路在流水线里永不触发） |
+| 端口清单（manifest）schema `rtl-emit-manifest-v1`（**新** capability `rtl-emit-portability`） | **新增**一份 manifest schema（10 个字段：`name` / `dir` / `width` / `role` / `driven` / `effective` / `owner` / `is_top_io` / `cpp_member` / `semantic`）⇒ ⇒ `driven`（节点级）与 `effective`（功能级）**拆成两个独立字段**（「有连线但无功能」这一类**单布尔表达不了**） | 2026-11-11 | `rtl-emit-product-tooling` **C4**（B1 批地基）· change `rtl-emit-manifest-schema-2026-11` | ⚠️ **无库代码变更**（纯规格）⇒ ⇒ 下游若实现 RTL / TB / 命名工具，MUST 按这 10 个字段产出 manifest；**端口面与命名规则一字未改** ⇒ ⇒ 现有产物解析不受影响 |
 
 ### **已弃用（尚未移除）** —— 下游现在就该迁移
 

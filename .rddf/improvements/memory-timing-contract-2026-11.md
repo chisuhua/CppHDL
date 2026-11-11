@@ -238,7 +238,7 @@ auto read_data = memory.sread(io().addr, ch_bool(true));
 
 ### ⚠️ 待用户裁决
 
-1. **T2′（写口替身）三选一** —— 这是**决定「能否上板」的那一条**，须 architect 裁决。
+1. ✅ **已裁决（2026-11-11 · architect · ADR-068 Accepted）**：**T2′ = (F) 字节道拆分存储** —— D-TCM 的存储体拆成 **4 个 `ch_mem<ch_uint<8>, SIZE>` 字节道数组**，各道写使能 = `write & valid & strbe[i]`、写数据 = `wdata[8i+7:8i]`，读口用 `sread`（1 拍）⇒ ⇒ **消灭 RMW ⇒ 无组合读 ⇒ BRAM 可推断**。<br>⇒ ⇒ **权威** = `docs/adr/ADR-068-dtcm-memory-timing-contract.md`（**Accepted** · oracle ×2 + critic ×2 全闭 · 审稿记录 `.rddf/reviews/ADR-068-dtcm-timing.md`）。<br>⇒ ⇒ ⚠️ **ADR-068 驳回了原先的三选一**：① (A) 现状 = 不解决目标 ② (B) `ch_mem` 加字节使能写 = 改**框架级原语**（**51 处 / 9 个头**）⇒ 独立立项 ③ (C) 保留 `aread` 写口 = 不解决目标 ④ (D) 写口复用寄存读值 = **WAW 合并冒险**（背靠背同字 store ⇒ 静默丢字节）⑤ (E) 读写分离双体 = 面积翻倍 + 第二真源。<br>⇒ ⇒ 🔴 **ADR-068 带出的联动义务**：**D4「指令级 `read-new`」的成立条件 = 「load 地址呈现拍严格晚于 store 提交沿」** ⇒ ⇒ **与 T2 的选择强耦合** ⇒ ⇒ 若 T2 选 **A1（EX 级组合出地址）** ⇒ ⇒ MUST 追加「同址提交值旁路」或「一拍停顿」⇒ ⇒ **V5 是其判别判据** ⇒ ⇒ **T2 的裁决 MUST 与 ADR-068 的 D4 一并读**。
 2. ✅ **已裁决（2026-11-10 · critic 第 1 轮 + oracle）**：**T3 拆出本项** ⇒ ⇒ 反压归「**接 cache**」立项 ⇒ ⇒ ⇒ 但 ⚠️ **T3 的 `data_ready` 语义重定义 MUST 随 T1 一起落**（见 §T3 行）⇒ ⇒ ⇒ 「拆出」指的是**反压实现**，**不是**语义重定义 ⇒ ⇒ ⇒ ⇒ 详见 §T3 行
 
 ## critic 第 1 轮（plan, build）—— **REJECT** · mergeable: no · scope_exceeded: false

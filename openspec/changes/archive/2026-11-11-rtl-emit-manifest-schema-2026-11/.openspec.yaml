@@ -1,0 +1,19 @@
+schema: spec-driven
+created: 2026-11-11
+
+# `rtl-emit-portability` 的**第一个** change：**端口清单（manifest）schema**（C4）
+#
+# ⚠️ **为什么 C4 必须先行**（批次表 §1 B1 的顺序硬约束）：
+#   C1（CLI）· C5（产物护栏）· N5(a)（manifest 双字段）· N3（名字稳定性）
+#   **全部**依赖本 change 的 schema ⇒ ⇒ 否则下游各自定义字段 ⇒ ⇒ 必然漂移。
+#
+# ⇒ **本 change 只定 schema**：不产 CLI、不产护栏、不改发射器、不改端口面。
+#
+# ⚠️ **本 change 是「纯规格」change** ⇒ ⇒ `src/**` 与 `include/**` **零改动**
+#    ⇒ ⇒ 落地方式是**归档**（delta 合并进主 spec）⇒ ⇒ **不是**代码实施。
+#
+# ⚠️ **端口选择语义不在本 capability**（`rtl-emit-product-tooling` 的 C2 已撤回）——
+#    端口面归 `rtl-hierarchical-output` 所有 ⇒ ⇒ 本 capability MUST NOT 另写端口选择规则。
+#
+# ⚠️ **命名规则的规范所有者仍是 `rtl-hierarchical-output`** ⇒ ⇒ 本 change 只**消费**
+#    `name` / `cpp_member`，MUST NOT 在此定义命名规则。

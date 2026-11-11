@@ -58,11 +58,34 @@
 
 ## 验收标准（AC）
 
-- [ ] `openspec/changes/node-name-prefix-path-contract-2026-11/specs/component-ownership-and-naming/spec.md` 的 delta 与 `.rddf/checks/decision-request-port-naming-parity-2026-11.md` §2 R1-b 围栏内容**逐字一致**
-- [ ] delta 用 `## ADDED Requirements` ⇒ ⇒ 否则 `scripts/verify_openspec_delta.sh` R3 会**静默不合并**
-- [ ] `bash scripts/verify_openspec_delta.sh node-name-prefix-path-contract-2026-11` 绿
-- [ ] `openspec validate --specs`（**非 strict**）**不新增**红项
-- [ ] `include/component.h:274` 的 `|| parent_path == "unnamed"` 已删 ⇒ ⇒ 与 `src/core/lnodeimpl.cpp:30-35` **同口径**
-- [ ] **既有** `component-ownership-and-naming/spec.md:62` 的 Requirement（「其 Verilog 名 MUST 含该组件的路径段」）**未被触碰**（本 delta 是**追加**）
-- [ ] 公开面登记已落（`docs/CHANGELOG.md` + `public-api-surface.md`），且**代价**（空名与真名 `unnamed` 永久不可区分）已明写
-- [ ] `rtl-hierarchical-output` 的那条 Requirement 由**另一个** change（`port-naming-member-parity-contract-2026-11`）承载 ⇒ ⇒ 本 change **MUST NOT** 出现它
+- [x] `openspec/changes/node-name-prefix-path-contract-2026-11/specs/component-ownership-and-naming/spec.md` 的 delta 与 `.rddf/checks/decision-request-port-naming-parity-2026-11.md` §2 R1-b 围栏内容**逐字一致**
+- [x] delta 用 `## ADDED Requirements` ⇒ ⇒ 否则 `scripts/verify_openspec_delta.sh` R3 会**静默不合并**
+- [x] `bash scripts/verify_openspec_delta.sh node-name-prefix-path-contract-2026-11` 绿
+- [x] `openspec validate --specs`（**非 strict**）**不新增**红项
+- [x] `include/component.h:274` 的 `|| parent_path == "unnamed"` 已删 ⇒ ⇒ 与 `src/core/lnodeimpl.cpp:30-35` **同口径**
+- [x] **既有** `component-ownership-and-naming/spec.md:62` 的 Requirement（「其 Verilog 名 MUST 含该组件的路径段」）**未被触碰**（本 delta 是**追加**）
+- [x] 公开面登记已落（`docs/CHANGELOG.md` + `public-api-surface.md`），且**代价**（空名与真名 `unnamed` 永久不可区分）已明写
+- [x] `rtl-hierarchical-output` 的那条 Requirement 由**另一个** change（`port-naming-member-parity-contract-2026-11`）承载 ⇒ ⇒ 本 change **MUST NOT** 出现它
+
+### ✅ 验收记录（verifier · 2026-11-11）
+
+> **验收报告**：`.rddf/reviews/b0-batch-verify-2026-11.md`（B0 批六项 · 本 change 的实施体在 B0 内完成）
+> **逐条证据**见该报告 §4（`node-name-prefix-path-contract` 8/8 · `port-naming-member-parity-contract` 7/7）
+> ⚠️ **归档注**：归档 MUST **禁** `--skip-specs` ⇒ ⇒ 本 delta 会被合并进主 spec
+> ⇒ ⇒ ⇒ B1 的 **N4「规范落点」** = **归档本 change**（不是另写一份规范）
+
+---
+
+## 用户可见变更
+
+> 本段按 `.rddf/checks/public-api-surface.md` 的载体机制填写（机制生效日 = 2026-11-09）。
+
+- ⚠️ **行为变更（非符号移除）**：`ch::Component::name()` 的**子组件全路径**不再按父路径的**字面值**剥离路径段
+  （删掉 `include/component.h` 的 `|| parent_path == "unnamed"`）⇒ ⇒ **与节点名前缀拼接（`src/core/lnodeimpl.cpp`）同口径**。
+  - **唯一受影响的情形**：**根组件**的 name 为空（`local_name_` 归一成 `"unnamed"`，`src/component.cpp`）
+    ⇒ ⇒ 其**子组件**的 `name()` 从**裸局部名**（`"kid"`）变为**带父前缀**（`"unnamed.kid"`）。
+  - ⇒ ⇒ **下游若按 `name()` 精确匹配裸局部名 ⇒ MUST 更新**。
+  - **常规路径**（父名非空，如 `"top"`）**逐字节不变** ⇒ ⇒ 仓内零影响。
+- ⚠️ **已登记代价**：空名与用户**真名** `"unnamed"` 在 `name()` 上**永久不可区分**
+  ⇒ ⇒ 这隐藏了一类配置错误 ⇒ ⇒ 彻底解决须**另立 item**（引入独立的「无名」标记）。
+- **公开 API 移除 / 改名：无**（无符号被删或改名）⇒ ⇒ **不走** P14 的移除登记（只走「行为变更」节 + CHANGELOG）。

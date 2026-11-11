@@ -63,10 +63,31 @@
 
 ## 验收标准（AC）
 
-- [ ] `openspec/changes/port-naming-member-parity-contract-2026-11/specs/rtl-hierarchical-output/spec.md` 的 delta 与 `.rddf/checks/decision-request-port-naming-parity-2026-11.md` §2 R1-a 围栏内容**逐字一致**
-- [ ] delta 用 `## ADDED Requirements`（**不是** `MODIFIED`）⇒ ⇒ 否则 `scripts/verify_openspec_delta.sh` R3 会**静默不合并**
-- [ ] `bash scripts/verify_openspec_delta.sh port-naming-member-parity-contract-2026-11` 绿
-- [ ] `openspec validate --specs`（**非 strict**）**不新增**红项
-- [ ] 本 change 的 `git diff --stat` **不含** `src/**` 与 `include/**`
-- [ ] 主 spec `rtl-hierarchical-output/spec.md:309-316` 的**既有** Scenario（顶层端口表 = clock → reset → 无 driver input → 全部 `ch_out`）**未被触碰**（本 delta 是**追加**，与它**正交**：那条定**端口集合**，本条定**元信息可解析性**）
-- [ ] `component-ownership-and-naming` 的那条 Requirement 由**另一个** change（`node-name-prefix-path-contract-2026-11`）承载 ⇒ ⇒ 本 change **MUST NOT** 出现它（**一份 Requirement · 一处落点**）
+- [x] `openspec/changes/port-naming-member-parity-contract-2026-11/specs/rtl-hierarchical-output/spec.md` 的 delta 与 `.rddf/checks/decision-request-port-naming-parity-2026-11.md` §2 R1-a 围栏内容**逐字一致**
+- [x] delta 用 `## ADDED Requirements`（**不是** `MODIFIED`）⇒ ⇒ 否则 `scripts/verify_openspec_delta.sh` R3 会**静默不合并**
+- [x] `bash scripts/verify_openspec_delta.sh port-naming-member-parity-contract-2026-11` 绿
+- [x] `openspec validate --specs`（**非 strict**）**不新增**红项
+- [x] 本 change 的 `git diff --stat` **不含** `src/**` 与 `include/**`
+- [x] 主 spec `rtl-hierarchical-output/spec.md:309-316` 的**既有** Scenario（顶层端口表 = clock → reset → 无 driver input → 全部 `ch_out`）**未被触碰**（本 delta 是**追加**，与它**正交**：那条定**端口集合**，本条定**元信息可解析性**）
+- [x] `component-ownership-and-naming` 的那条 Requirement 由**另一个** change（`node-name-prefix-path-contract-2026-11`）承载 ⇒ ⇒ 本 change **MUST NOT** 出现它（**一份 Requirement · 一处落点**）
+
+### ✅ 验收记录（verifier · 2026-11-11）
+
+> **验收报告**：`.rddf/reviews/b0-batch-verify-2026-11.md`（B0 批六项 · 本 change 的实施体在 B0 内完成）
+> **逐条证据**见该报告 §4（`node-name-prefix-path-contract` 8/8 · `port-naming-member-parity-contract` 7/7）
+> ⚠️ **归档注**：归档 MUST **禁** `--skip-specs` ⇒ ⇒ 本 delta 会被合并进主 spec
+> ⇒ ⇒ ⇒ B1 的 **N4「规范落点」** = **归档本 change**（不是另写一份规范）
+
+---
+
+## 用户可见变更
+
+> 本段按 `.rddf/checks/public-api-surface.md` 的载体机制填写（机制生效日 = 2026-11-09）。
+
+- **库代码 / 公开 API：无变更**（`include/**` 与 `src/**` **零改动** ⇒ ⇒ 无行为、无 ABI 影响）。
+- **规范（下游相关，**值得知道**）**：`openspec/specs/rtl-hierarchical-output/spec.md` 新增 **1 条 Requirement**
+  「顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定」
+  ⇒ ⇒ **下游若实现端口命名 / 端口映射工具 MUST 按该三类分别规定**（不许用一个判据套三类）。
+  ⇒ ⇒ ⇒ **这是 B1 的 N4「规范落点」** —— 命名规则的**唯一承载**就是这条 Requirement
+  （`hierarchical-port-naming-guard` **MUST NOT** 复述）。
+- **公开 API 移除 / 改名：无** ⇒ ⇒ **不走** P14 的移除登记。

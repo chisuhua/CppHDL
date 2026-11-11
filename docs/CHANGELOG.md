@@ -6,6 +6,24 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — `rtl-emit-manifest-schema-2026-11`（B1 批 · C4 · 纯规格）
+
+### Added
+- **端口清单（manifest）schema `rtl-emit-manifest-v1`** —— 新 capability `rtl-emit-portability`
+  的第一条 Requirement（change `rtl-emit-manifest-schema-2026-11`）。
+  字段（10 个，零缺失）：`name` / `dir` / `width` / `role`（`clock`·`reset`·`data`）/
+  `driven` / `effective` / `owner` / `is_top_io` / `cpp_member` / `semantic`（v1 恒 `null`）。
+  - ⚠️ **`driven`（**节点级**「是否被消费」）与 `effective`（**功能级**「是否产生可观测行为」）
+    是两个独立字段** —— 「有连线但无功能」（标准样例 = `ext_clk`：接到 `pipeline.io().clk`，
+    而流水线内对 `io().clk` 零消费者）这一类**单布尔表达不了**。
+  - ⚠️ `is_top_io` 的筛选是**消费方的选择**，MUST NOT 成为发射器的**默认行为**。
+  - **库代码零改动** ⇒ ⇒ **端口面、端口顺序、命名规则一字未改**。
+
+### Changed
+- **无**（本 change 只新增规范，不改任何既有 Requirement）。
+
+---
+
 ## 2026-11-11 — `rv32i-dead-component-consolidation`（B0 批）
 
 ### Removed

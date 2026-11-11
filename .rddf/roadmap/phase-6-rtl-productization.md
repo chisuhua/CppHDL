@@ -76,7 +76,7 @@
 
 | work item | 来源 | 内容 | 依赖 |
 |---|---|---|---|
-| **C4 manifest schema** | `rtl-emit-product-tooling` C4 | `name` / `dir` / `width` / `role` / `driven`（节点级）/ `effective`（功能级）/ `owner` / `is_top_io` / `cpp_member` / `semantic`（可选）⇒ ⇒ `rtl-emit-manifest-v1` | — |
+| **C4 manifest schema** | `rtl-emit-product-tooling` C4 | `name` / `dir` / `width` / `role` / `driven`（节点级）/ `effective`（功能级）/ `owner` / `is_top_io` / `cpp_member` / `semantic`（可选）⇒ ⇒ `rtl-emit-manifest-v1` | — | ✅ **2026-11-11 已完成**（纯规格 change `rtl-emit-manifest-schema-2026-11` **已归档** ⇒ ⇒ 新 capability `rtl-emit-portability` 已进主 spec ⇒ ⇒ `openspec validate --specs` = **45 passed / 0 failed**）|
 | **C3 悬空输入诊断** | `rtl-emit-product-tooling` C3 | 复用 `diagnose_drive()` ⇒ ⇒ `owner ≠ 根` 且无 driver ⇒ ⇒ 记入 `diagnostics[]` ⇒ ⇒ **只诊断 · 不动端口面** ⇒ ⇒ 与 **C8** 互补（一个修本设计、一个兜底其它设计） | C4 |
 | **C1 CLI** | `rtl-emit-product-tooling` C1 | `tools/cpphdl-emit-rtl`：**库 + 薄 CLI**（用户在自己的可执行文件里登记）⇒ ⇒ 本仓二进制 **MUST NOT** 链 `examples/**` ⇒ ⇒ 退出码 `0` / `1` / `2`（fail-closed） | C4 |
 | **C5 产物护栏** | `rtl-emit-product-tooling` C5 | `scripts/verify_flat_rtl_emit.sh`：F1（剥 blanket `lint_off` 后重 lint · 两段式基线）· F2（逐字节确定性）· F3（三方比对：manifest ∥ verilog 独立提取 ∥ 手推期望集）· F4（悬空顶层输入**可被发现**，非「必须消失」）· **F5 两段（零引用信号数 == 0 · proxy 恒等直通数 == 0）** · F6（`ctest -L verilator_e2e` 全绿）· F7（`--self-test` 逐条投毒） | C1 · C4 |

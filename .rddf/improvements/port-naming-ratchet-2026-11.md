@@ -261,7 +261,7 @@ ch_in<ch_bool> prog_we{"prog_we"};
 ### ⚠️ 待用户裁决
 
 1. ~~**「同名」的语义**（N5 三选一）~~ ✅ **已由用户 2026-11-10 裁决 = 两步走**（第 1 步 (a) manifest 双字段立刻做 · 第 2 步 (c) 独立立项只验根实例名清空后的 `parent==nullptr` 行为）。原三选一的表述保留在 N5 供追溯。**原始问题**：
-2. **首批消化对象**：建议 `examples/riscv-mini/src/rv32i_pipeline_top.h`（32 个端口，正是用户 ⑤ 最关心的那颗核）。
+2. ✅ **已裁决（2026-11-11 · 用户拍板）**：**首批消化对象 = `examples/riscv-mini/src/rv32i_pipeline_top.h`** —— 实测 **32 个端口**（5 个 `ch_in`：ext_clk · ext_rst · prog_we · prog_addr · prog_data；27 个 `ch_out`）⇒ ⇒ 正是用户 ⑤「端口命名」最关心的那颗核 ⇒ ⇒ 且它已是 SoC 级双后端 parity 的 DUT ⇒ ⇒ 有现成判据基础可挂。
 
 ## critic 第 1 轮（plan, build）—— **REJECT** · mergeable: no · scope_exceeded: false
 
