@@ -449,7 +449,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 261
+- CTEST_TOTAL: 262
      ⚠️ **2026-11-11 · B1 批 N1 + P1 + C4/C3（manifest）+ C6（产物卫生）**：
      `test_port_name_named_ctor` + `test_port_name_parity` + `test_rtl_manifest`
      + `test_rtl_emit_hygiene` 新增 ⇒ ⇒ **261**（+4）
@@ -460,6 +460,8 @@ ctest --output-on-failure
      ⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**（节点创建回落 `unnamed_input`）
      ⇒ ⇒ **3 个用例转红**；P1 三条 `Ratchet*` 各有**正向变异**（① 改匿名 /
      ② 空名 fallback 保空 / ③ counter 恒 0）⇒ ⇒ **三条各自转红**；还原后**复绿**
+     ⚠️ **2026-11-11 · B2 批 E2（测试台骨架）**：`test_rtl_tb_stub` 新增
+     ⇒ ⇒ **262**（+1）· 本次同步由 `scripts/update_test_count_anchors.sh` 完成（E8）
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让

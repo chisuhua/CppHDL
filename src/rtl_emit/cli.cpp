@@ -6,6 +6,7 @@
 
 #include "codegen_verilog.h"
 #include "rtl_emit/manifest.h"
+#include "rtl_emit/tb_stub.h"
 
 #include <filesystem>
 #include <fstream>
@@ -38,6 +39,36 @@ bool parse_cli_options(const std::vector<std::string> &args, CliOptions &out,
             out.emit_verilog = false;
         } else if (a == "--no-manifest") {
             out.emit_manifest = false;
+        } else if (a == "--emit-tb-stub") {
+            out.emit_tb_stub = true;
+        } else if (a == "--tb-stub-module") {
+            if (i + 1 >= args.size()) {
+                error = "选项 --tb-stub-module 需要一个值";
+                return false;
+            }
+            out.tb_stub_module = args[++i];
+        } else if (a == "--tb-stub-hint") {
+            if (i + 1 >= args.size()) {
+                error = "选项 --tb-stub-hint 需要一个值";
+                return false;
+            }
+            out.tb_stub_hint = args[++i];
+        } else if (a == "--tb-clock-half-period") {
+            if (i + 1 >= args.size()) {
+                error = "选项 --tb-clock-half-period 需要一个值";
+                return false;
+            }
+            try {
+                const int v = std::stoi(args[++i]);
+                if (v <= 0) {
+                    error = "选项 --tb-clock-half-period 必须是正整数";
+                    return false;
+                }
+                out.tb_clock_half_period_ns = static_cast<unsigned>(v);
+            } catch (...) {
+                error = "选项 --tb-clock-half-period 不是整数";
+                return false;
+            }
         } else if (a == "--emit-hygiene") {
             out.emit_hygiene = true;
         } else if (a == "--allow-diagnostics") {
@@ -70,6 +101,11 @@ void print_cli_usage(const char *program_name) {
         << "  --no-verilog           不发射 Verilog\n"
         << "  --no-manifest          不写 manifest\n"
         << "  --allow-diagnostics    有诊断时仍返回 0（默认：诊断 ⇒ 返回 1）\n"
+        << "  --emit-tb-stub         额外产出**测试台骨架** <out>/tb_top_stub.sv\n"
+        << "                         （端口连线 + 时钟/复位 + VCD 开关；激励与断言留 TODO）\n"
+        << "  --tb-stub-module <名>  骨架的 module 名（默认 tb_top_stub）\n"
+        << "  --tb-stub-hint <名>    骨架里 // TODO 的归属提示（默认 <example>）\n"
+        << "  --tb-clock-half-period <ns>  骨架的时钟半周期（默认 5 = 100 MHz）\n"
         << "  --emit-hygiene         产物卫生（default_nettype none + 元数据头 +\n"
         << "                         剪零引用信号 + proxy 恒等直通 + 不发 blanket\n"
         << "                         lint_off）—— ⚠️ **默认 off** ⇒ 默认路径产物逐字节不变\n"
@@ -148,6 +184,33 @@ int run_emit_cli(const std::vector<std::string> &args, const DesignFactory &fact
             std::cerr << "::error::产物未生成：" << options.verilog_path << "\n";
             return 1;
         }
+    }
+
+    // ── TB 骨架（`examples-rtl-sim-coverage` E2 · **默认 off**）──────────
+    if (options.emit_tb_stub) {
+        // ⚠️ 文件名 MUST 与 module 名一致（Verilator 的 `DECLFILENAME` 无关紧要，
+        //   但人眼查找方便），且**幂等覆盖**（重新生成不产生 `_1` 后缀）。
+        const std::string tb_module =
+            options.tb_stub_module.empty()
+                ? ("tb_" + std::string(ch::kFlatModuleName) + "_stub")
+                : options.tb_stub_module;
+        const std::string tb_path = options.out_dir + "/" + tb_module + ".sv";
+        std::ofstream tb_out(tb_path, std::ios::binary);
+        if (!tb_out) {
+            std::cerr << "::error::无法写 TB 骨架：" << tb_path << "\n";
+            return 2;
+        }
+        TbStubOptions tb_opts;
+        tb_opts.dut_module = ch::kFlatModuleName;
+        tb_opts.tb_module = tb_module;
+        tb_opts.example_hint = options.tb_stub_hint;
+        tb_opts.clock_half_period_ns = options.tb_clock_half_period_ns;
+        write_tb_stub(tb_out, manifest, tb_opts);
+        if (!tb_out) {
+            std::cerr << "::error::写 TB 骨架失败：" << tb_path << "\n";
+            return 1;
+        }
+        std::cout << "TB 骨架： " << tb_path << "\n";
     }
 
     // ── 诊断 ⇒ fail-closed（除非显式放行）─────────────────────────────

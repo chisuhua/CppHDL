@@ -6,6 +6,41 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B2 批（E2 测试台骨架 + E8 锚点单一更新入口）
+
+### Added
+- **`--emit-tb-stub`**（`examples-rtl-sim-coverage` **E2**）：`tools/cpphdl-emit-rtl`
+  额外产出 `<out>/tb_<module>_stub.sv` —— **只发骨架**：
+  端口清单注释块（来自 manifest）· 端口信号（输入 tie-off）· DUT 实例化 ·
+  时钟/复位驱动 · VCD 开关 · **留空的激励/断言位**（`// TODO:`）。
+  ⚠️ **为什么只发骨架**：激励与期望值是**领域知识**（UART 波特率 / AXI 握手 /
+  PWM 占空比表）⇒ ⇒ 自动生成只能产出「编译通过但什么都没验」的 TB。
+  新增 `include/rtl_emit/tb_stub.h` + `src/rtl_emit/tb_stub.cpp`（库侧，可复用）。
+- **收尾约定**：补完的 TB MUST 打印 `RESULT: checks=<N> fails=0`
+  —— 运行护栏（E5）按该行判红绿（**不靠退出码**：`$finish` 恒返回 0）。
+- `scripts/update_test_count_anchors.sh`（**E8**）：**一次命令同步 5 个计数锚点**
+  （`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `DUAL_BACKEND_PARITY_TOTAL` /
+  `DUAL_BACKEND_PARITY_PAIRS` / `EXAMPLES_TEST_SOURCES`）· `--check`（CI 用）·
+  `--dry-run`。⚠️ **只同步、不推导** —— 锚点本身是「静默缩面」的防线，必须留在
+  文件里可 review；计数一律**复用既有脚本的口径**（不重算，避免第二套实现）。
+
+### 口径（实测发现，已在代码注释登记）
+- **manifest 的 `ports[]` ⊋ 产物的顶层端口表**：manifest 收全部
+  `type_input`/`type_output`（含**子组件的有 driver input**）⇒ ⇒ 后者在扁平化后是
+  **内部 wire**。TB 骨架因此需要过滤：
+  `role ∈ {clock,reset}` ∪ `dir == output` ∪ `is_top_io`
+  （与 F3 的端口契约对齐）。⚠️ 不过滤 ⇒ Verilator 报
+  `Instance attempts to connect to 'X', but it is a variable`（实测踩中）。
+  ⚠️ `openspec/specs/rtl-emit-portability/spec.md` **未规定** `ports[]` 的范围
+  ⇒ ⇒ 「manifest == 产物端口表」这条判据**当前不成立**（B2 的 E1 需据此调整）。
+
+### 测试
+- `tests/test_rtl_tb_stub.cpp`（**22 断言 / 5 用例**）：只连顶层端口（内部 wire
+  不得连线）· 骨架不含实际断言 · 收尾 `RESULT` 行 · 时钟/VCD 骨架 · 确定性（无时间戳）
+- **判别力自证**：去掉顶层端口过滤 ⇒ 判据 1 转红 ✓（还原后重建复绿）
+
+---
+
 ## 2026-11-11 — C6 返工（B1 验收 BLOCKER-1 + 4 项判据子项）
 
 > 来源：`.rddf/reviews/b1-batch-verify-2026-11.md`（B1 验收 **不通过**）⇒ 修完再复审。

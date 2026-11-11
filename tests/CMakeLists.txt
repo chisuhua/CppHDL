@@ -1109,6 +1109,11 @@ add_catch_test(test_rtl_manifest test_rtl_manifest.cpp)
 #   + **恒等直通 0** + **跨 module 实例连接 MUST NOT 被剪断**
 add_catch_test(test_rtl_emit_hygiene test_rtl_emit_hygiene.cpp)
 
+# 测试台骨架（examples-rtl-sim-coverage E2）:
+# ⚠️ 只连**顶层端口**（子组件的有 driver input 在产物里是内部 wire）
+# ⚠️ 骨架**不含**激励/断言（只留 TODO）· 收尾 MUST 打印 `RESULT: checks=.. fails=..`
+add_catch_test(test_rtl_tb_stub test_rtl_tb_stub.cpp)
+
 # component ownership (hierarchical RTL T3-①b): construction scope stack, member
 # ch_module parent/ctx, cross-ctx guard, deferred child build, io.h direction guards
 add_catch_test(test_component_ownership test_component_ownership.cpp)

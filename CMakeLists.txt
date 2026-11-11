@@ -169,6 +169,7 @@ set(CH_SOURCES
     src/simulator_init.cpp
     src/codegen_verilog.cpp
     src/rtl_emit/manifest.cpp
+    src/rtl_emit/tb_stub.cpp
     src/rtl_emit/cli.cpp
     src/codegen_dag.cpp
     src/utils/types.cpp

@@ -47,6 +47,16 @@ struct CliOptions {
     /// ⇒ ⇒ 打开它 = **显式的**产物形态变更（批次表 ★3：层次化产物逐字节不变
     /// 那条 AC **只在该开关默认 off 时成立**）
     bool emit_hygiene = false;
+    /// ⚠️ **测试台骨架**开关（`examples-rtl-sim-coverage` **E2**）—— 默认 **off**
+    /// ⇒ ⇒ 打开后额外产出 `<out_dir>/tb_<module>_stub.sv`（**只发骨架**：
+    /// 端口连线 + 时钟/复位 + VCD 开关；激励与断言留 `// TODO:`）
+    bool emit_tb_stub = false;
+    /// TB 骨架的 module 名（空 ⇒ `tb_<dut_module>_stub`）
+    std::string tb_stub_module;
+    /// TB 骨架里 `// TODO:` 的归属提示（空 ⇒ `<example>`）
+    std::string tb_stub_hint;
+    /// TB 骨架的时钟半周期（ns，默认 5 = 100 MHz）
+    unsigned tb_clock_half_period_ns = 5;
     /// 打印用法
     bool help = false;
 };
