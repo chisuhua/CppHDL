@@ -6,6 +6,51 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B2 批 · 护栏判别力加固（metis 审查后的 P0/P2 项）
+
+> 来源：`@metis` 审查「B2 剩余 6 项该继续还是调整」⇒ 结论**先调整**（护栏目前没有判别力）。
+
+### Fixed（P0 · 护栏本身）
+- **`--self-test` 之前根本没实现**：脚本接受该参数但**没有分支** ⇒ 会静默跑完整 check
+  ⇒ ⇒ Acceptance「投毒必红」**悄悄满足不了**。现实现 **5 条投毒**，各自可判红：
+  ① 删 TB 的 `RESULT` 行 ② `checks=0` ③ `REGISTERED_TARGETS` 与实际行数不符
+  ④ `status=verified` 但 TB 缺失 ⑤ `status=pending` 未放行 ⇒ 基线绿 + 5 投毒全红 + 还原复绿。
+- **护栏从不读 `status`**（`pending` 行只要 TB 能打 `RESULT` 就转绿 = 「缺失=失败」的静默旁路）
+  ⇒ ⇒ 现在 `pending` **必红**；`--allow-pending --budget=<N>` 是**唯一**的过渡放行形态
+  （**真跳过**，标注「已放行但未验证」；预算 MUST 单调下降，缺 `--budget` 直接红）。
+- **`checks > 0` 太弱**（删到 1 条断言仍绿）⇒ ⇒ 清单新增 `min_checks`（运行时下界）
+  + `scenarios`（语义场景数，`counter_simple` 是 **1 场景 × 256 拍**，不是 256 个语义）
+  + `spec_checks`（外部规范支撑的断言数，`>=3` 才算真正 verified —— **当前全为 0，待 P1**）
+  + `kind`（`target` / `dut`）。
+- **无 TIMEOUT** ⇒ ⇒ 加 `timeout ${TB_TIMEOUT:-120}`（挂死 TB 会拖死 `pr-verilator-fast`）。
+- **登记数锚点**：清单加 `# REGISTERED_TARGETS: 10` ⇒ ⇒ 删一行即红（防静默缩面）；
+  数据行为 0 ⇒ **exit 2**（fail-closed）。
+- **`-Wno-fatal` 让宽度错位只 warning ⇒ 绿** ⇒ ⇒ 去掉它（仓内 `verify_hierarchical_rtl.sh`
+  的 R1 早有「禁 `-Wno-fatal`」纪律）。
+- **产用卫生产物**（`--emit-hygiene`）：它**不带** blanket `lint_off` ⇒ ⇒ 宽度问题真的报出来
+  （实测：**9 个 example 的卫生产物 `--lint-only` 全部零告警零错误**）。
+- **CI 缓存补 `~/.cache/cpphdl/rtl_sim`**：之前只缓存 `verilator` ⇒ ⇒ **E7 在 CI 完全失效**
+  ⇒ ⇒ 每个 PR 冷编译 10 个 TB（metis：「按本地判会悄悄满足」）。
+- **E8 的 `--check` 在 `BUILD_DIR` 缺失时静默 exit 0** ⇒ ⇒ 改为 **exit 2**（fail-closed）；
+  `apply` / `dry-run` 仍允许缺 build。
+
+### Removed（P2 · AI slop 清理）
+- **删「同线相等」断言**（`tb_counter_example` / `tb_counter_simple_example` /
+  `tb_gpio_example`）：两者在产物里是 `assign A = B;` 的**同一条线** ⇒ ⇒ 断言**恒真**
+  ⇒ 零信息量，且把「inline 后代复制出同名端口」这个**实现产物**固化成契约。
+  ⇒ ⇒ 端口存在性由「编译通过」保证。
+- **注明 `$isunknown` 的局限**：本 runner 下 Verilator 把 X 优化成已知值
+  ⇒ ⇒ 它对「未驱动」**无判别力**（真正的 X 判据在 E1 ⑤ 的内容判据）⇒
+  保留它是为对齐 E3 的「TB MUST 断言 `!==x`」约定，并在 TB 注释里写明。
+
+### 验证
+- E5：严格模式 **6 红 4 绿**（pending 必红）· `--allow-pending --budget=6` **绿** ·
+  预算收紧到 5 ⇒ 红 · 缺 `--budget` ⇒ 红
+- `--self-test`：基线绿 + **5 条投毒各自转红** + 还原复绿（仓内 TB 完好）
+- 3 个 examples 护栏全绿
+
+---
+
 ## 2026-11-11 — B2 批（E1 契约判据 + E4 名单 + E5 护栏 + E7 缓存 + 首个手写 TB）
 
 ### Added

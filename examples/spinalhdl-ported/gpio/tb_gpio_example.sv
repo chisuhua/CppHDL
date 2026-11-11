@@ -74,9 +74,12 @@ module tb_gpio_example;
             else if (gpio_out !== want_out) fails = fails + 1;
             if ($isunknown(interrupt))      fails = fails + 1;
             else if (interrupt !== want_irq) fails = fails + 1;
-            // inline 后代的输出必须与顶层一致（同一根线）
-            if (gpio_inst_out !== gpio_out) fails = fails + 1;
-            if (interrupt_inst !== interrupt) fails = fails + 1;
+            // ⚠️ **不断言** `gpio_inst_out == gpio_out` 那类「同线相等」：
+            //   它们在产物里是 `assign A = B;` 的同一条线 ⇒ ⇒ **恒真** ⇒ 零信息量
+            //   （metis 指出的 slop 形态）。端口存在性由「编译通过」保证。
+            //   ⚠️ `$isunknown` 也**保留但注明局限**：本 runner 下 Verilator 把 X
+            //   优化成已知值 ⇒ ⇒ 它对「未驱动」无判别力（真正的 X 判据在 E1 ⑤
+            //   的内容判据里）⇒ ⇒ 这里保留它是为了对齐 E3 的「TB MUST 断言 !==x」约定。
         end
     endtask
 

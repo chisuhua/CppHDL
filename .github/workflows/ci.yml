@@ -1474,7 +1474,15 @@ jobs:
     - name: Cache verilator fixture builds
       uses: actions/cache@v4
       with:
-        path: ~/.cache/cpphdl/verilator
+        # ⚠️ **必须同时缓存 `rtl_sim`**（`examples-rtl-sim-coverage` **E7**）：
+        #   护栏的 TB 编译缓存落在 `~/.cache/cpphdl/rtl_sim/<内容哈希>/`，
+        #   只缓存 `verilator` 的话 ⇒ ⇒ E7 在**唯一重要的场所（CI）失效**
+        #   ⇒ ⇒ 每个 PR 冷编译 10 个 TB（metis 指出的「按本地判会悄悄满足」）。
+        #   key 含 `github.sha` ⇒ ⇒ 每次提交冷启一轮；`restore-keys` 做前缀复用
+        #   ⇒ ⇒ TB/DUT 内容没变的项仍能命中（缓存 key 本身是**内容哈希**）。
+        path: |
+          ~/.cache/cpphdl/verilator
+          ~/.cache/cpphdl/rtl_sim
         key: cpphdl-verilator-${{ runner.os }}-${{ github.sha }}
         restore-keys: |
           cpphdl-verilator-${{ runner.os }}-

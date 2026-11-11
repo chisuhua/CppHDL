@@ -58,7 +58,11 @@ module tb_counter_example;
             checks = checks + 1;
             if ($isunknown(value))        fails = fails + 1;
             else if (value !== want)      fails = fails + 1;
-            if (counter_value !== value)  fails = fails + 1;
+            // ⚠️ **不再断言** `counter_value == value`：两者在产物里是
+            //   `assign top_unnamed_output = top_counter1_unnamed_output;` 的
+            //   同一条线 ⇒ ⇒ 断言**恒真** ⇒ 零信息量，且把「inline 后代复制出
+            //   同名端口」这个**实现产物**固化成契约（metis 指出的 slop 形态）。
+            //   ⇒ ⇒ 端口存在性由「编译通过」保证（E1 已有同类判据）。
         end
     endtask
 
@@ -107,7 +111,6 @@ module tb_counter_example;
         checks = checks + 1;
         if ($isunknown(value))   fails = fails + 1;
         else if (value !== 8'd255) fails = fails + 1;
-        if (counter_value !== value) fails = fails + 1;
         // 再一拍 ⇒ 255 + 1 = 256 ⇒ 截断到 8 位 ⇒ **0**
         check_beat(8'd0);
 

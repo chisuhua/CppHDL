@@ -52,7 +52,13 @@ if [ -f "$BUILD_DIR/CTestTestfile.cmake" ]; then
     actual_ctest="$(ctest --test-dir "$BUILD_DIR" -N 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo "")"
     actual_ve2e="$(ctest --test-dir "$BUILD_DIR" -N -L verilator_e2e 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo "")"
 else
-    echo "::warning::$BUILD_DIR 不存在 ⇒ 跳过 CTest 计数（CI 顺序保证它存在）" >&2
+    # ⚠️ **fail-closed**（旧实现静默 exit 0 ⇒ 「静默跳过」形态，与仓内
+    #   `verify_arch_ledger_residuals.sh` 的「结算 fail-closed」纪律相反）
+    if [ "$MODE" = "check" ]; then
+        echo "::error::$BUILD_DIR 不存在 ⇒ \`--check\` 无法判定 CTest 锚点 ⇒ fail-closed" >&2
+        exit 2
+    fi
+    echo "::warning::$BUILD_DIR 不存在 ⇒ 跳过 CTest 计数（apply/dry-run 模式允许）" >&2
 fi
 
 actual_parity_files=""

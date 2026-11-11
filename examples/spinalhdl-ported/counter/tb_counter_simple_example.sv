@@ -56,8 +56,9 @@ module tb_counter_simple_example;
             checks = checks + 1;
             if ($isunknown(top_value))           fails = fails + 1;
             else if (top_value !== n[7:0])        fails = fails + 1;
-            if ($isunknown(top_counter_value))    fails = fails + 1;
-            else if (top_counter_value !== n[7:0]) fails = fails + 1;
+            // ⚠️ **不断言** `top_counter_value == top_value`：两者是
+            //   `assign top_unnamed_output = top_counter1_unnamed_output;` 的同一条线
+            //   ⇒ ⇒ 恒真 ⇒ 零信息量（metis 指出的 slop 形态）
         end
     endtask
 

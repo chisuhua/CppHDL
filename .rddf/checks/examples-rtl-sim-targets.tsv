@@ -1,35 +1,34 @@
 # examples 的 RTL 仿真覆盖清单（`examples-rtl-sim-coverage` **E4**）
 #
-# ⚠️ **本表是「首批」的权威名单**（target 名取自 `examples/CMakeLists.txt` 的
-#   `CH_TRACKED_EXAMPLE_TARGETS`；源文件与顶层组件名取自各自的实现文件）。
+# ⚠️ **本表是「首批」的权威名单**（`target` 列对 `kind=target` 的行取自
+#   `examples/CMakeLists.txt` 的 `CH_TRACKED_EXAMPLE_TARGETS`；`kind=dut` 的行是 test DUT，
+#   **不是** target ⇒ ⇒ 两者不可混计）。
 #   ⇒ ⇒ 护栏 `scripts/verify_examples_rtl_sim.sh` 按**本表**逐项判定
 #   ⇒ ⇒ 「没做」必须**留在表里并标明原因**（防「先做 10 个」变成「永远只有 10 个」）。
 #
-# 列的含义：
-# · `target`     —— CMake target 名（**权威**，与 `CH_TRACKED_EXAMPLE_TARGETS` 逐字相同）
-# · `source`     —— 实现该 example 的源文件（顶层组件类**在它里面**，不是头文件）
-# · `component`  —— 顶层组件类名（`emit_rtl.cpp` 登记它 ⇒ ⇒ 产物名恒为 `top`）
-# · `emitter`    —— **RTL 发射器 target 名**（方案 3：每 example 一个独立 target）
-# · `tb`         —— 独立 Verilog TB 的路径（**约定**：`examples/<dir>/tb_<name>.sv`）
-# · `status`     —— `verified`（有 TB · 编译过 · 跑过 · `RESULT: checks>0 fails=0`）
-#                 / `pending`（**待补期望源** ⇒ ⇒ 不算已验证 ⇒ ⇒ 护栏据此判红）
-# · `note`       —— 状态说明 / 「缺什么」
+# 列：
+# · `target`      —— CMake target 名（权威；`kind=dut` 时是自定的标识）
+# · `kind`        —— `target`（在 `CH_TRACKED_EXAMPLE_TARGETS` 里）/ `dut`（test DUT）
+# · `source`/`component`/`emitter` —— 实现文件 / 顶层组件类 / RTL 发射器 target
+# · `tb`          —— 独立 Verilog TB 路径（约定 `examples/<dir>/tb_<name>.sv`）
+# · `status`      —— `verified` / `pending`
+#                    ⚠️ **`pending` 由护栏判红**（`--allow-pending` 才放行，见下）
+# · `min_checks`  —— 运行时 `RESULT: checks=<N>` 的**下界**（⚠️ 只判 `>0` 太弱：
+#                    删到 1 条断言仍绿 ⇒ 必须有下界）
+# · `scenarios`   —— **语义场景数**（不是拍数；`counter_simple` 是 1 个场景 × 256 拍）
+# · `spec_checks` —— 其中**由外部规范**支撑的断言数（协议/约定/ISA 编码）
+#                    ⇒ ⇒ `spec_checks >= 3` 才算真正 `verified`（**当前全部为 0，待 P1 升级**）
+# · `note`        —— 状态说明 / 「缺什么」（MUST 是**外部**期望源，不能是「另一个没断言的 demo」）
 #
-# ⚠️ **`status` 与「已验证」的判定 MUST 由护栏的**运行时证据**给出**
-#   （`RESULT: checks=<N> fails=0` 且 N > 0）⇒ ⇒ **禁**静态分析器判定断言非空
-#   （草案 metis 订正：自研 Verilog 静态分析器在仓内第 4/5/6 轮对抗审稿里**全部** BLOCKER）
-#
-# ⚠️ **`pending` 项 MUST 列「缺什么」**（E4′ 的要求）—— 「缺什么」MUST 是**外部**期望源
-#   （协议时序 / 手推常量 + 推导）⇒ ⇒ **不能**是「另一个同样没断言的 demo」。
-
-# target	source	component	emitter	tb	status	note
-riscv-mini-rv32i-soc	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc	examples/riscv-mini/tests/tb_rv32i_soc.sv	pending	planner 曾**临时实测**跑通（20/20 golden）⇒ 但 **TB 未入库**（实测 `examples/riscv-mini/tests/*.sv` 为空）⇒ ⇒ 补 TB 并入库后才算 verified
-counter_example	examples/spinalhdl-ported/counter/counter.cpp	Top	emit_rtl_counter	examples/spinalhdl-ported/counter/tb_counter_example.sv	verified	`next = select(clear, 0, select(enable, +1, hold))`（clear 优先）· 8 位回绕 ⇒ 手推 6 个场景（含 clear 与 enable 同时为 1、255→0 溢出）⇒ `RESULT: checks=14 fails=0`；⚠️ counter.cpp:211-214 的自认注释对 **RTL 过时**（实测 enable/clear/保持/回绕全对）⇒ ⇒ **interpreter 与 RTL 可能分叉**且 C++ 侧无断言 ⇒ 已登记为**独立待立项**
-counter_simple_example	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	examples/spinalhdl-ported/counter/tb_counter_simple_example.sv	verified	自由运行 +1 计数器（复位值 0）⇒ 逐拍手推「第 N 拍 ⇒ N mod 256」⇒ **256 拍全检查**（含 8 位回绕）· `RESULT: checks=256 fails=0`
-fifo_stream_example	examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	Top	emit_rtl_fifo_stream	examples/spinalhdl-ported/fifo/tb_fifo_stream_example.sv	pending	C++ 侧无断言 ⇒ 缺 **ready/valid 握手时序期望**（须来自 `chlib-stream-semantics` spec）
-uart_tx_example	examples/spinalhdl-ported/uart/uart_tx.cpp	UartTxTop	emit_rtl_uart_tx	examples/spinalhdl-ported/uart/tb_uart_tx_example.sv	pending	C++ 侧无断言 ⇒ 缺 **波特率/帧格式时序期望**（须手推位时间表）
-uart_rx_example	examples/spinalhdl-ported/uart_rx/uart_rx.cpp	Top	emit_rtl_uart_rx	examples/spinalhdl-ported/uart_rx/tb_uart_rx_example.sv	pending	同 uart_tx + **采样点相位**的期望
-pwm_example	examples/spinalhdl-ported/pwm/pwm.cpp	PwmTop	emit_rtl_pwm	examples/spinalhdl-ported/pwm/tb_pwm_example.sv	verified	自由运行 8 位计数器 + `pwm = enable & (counter < duty)` ⇒ 逐拍手推 4 个场景（duty=4 的 3 高 3 低 / enable=0 / duty=0 / duty=255）⇒ `RESULT: checks=12 fails=0`
-gpio_example	examples/spinalhdl-ported/gpio/gpio.cpp	GpioTop	emit_rtl_gpio	examples/spinalhdl-ported/gpio/tb_gpio_example.sv	verified	两级同步 + **逐位**边沿（`gpio_in & ~s2` / `~gpio_in & s2`）+ `gpio_out = oe ? output_reg : 0` ⇒ 逐拍手推 6 个场景（含「场景切换本身就是一次边沿」）⇒ `RESULT: checks=8 fails=0`
-quadrature_encoder_example	examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	QuadEncTop	emit_rtl_quadrature_encoder	examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example.sv	pending	C++ 侧无断言 ⇒ 缺 **正交序列 → 计数**的手推表
-axi4_lite_example	examples/axi4/axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	pending	C++ 侧无断言 ⇒ 缺 **AXI4-Lite 握手时序期望**（须来自 `axi-slave-conformance` / `axi4-*` spec）
+# ⚠️ **登记数锚点**（防「删一行 ⇒ 静默缩面」）：数据行数 MUST == `REGISTERED_TARGETS`。
+# REGISTERED_TARGETS: 10
+riscv-mini-rv32i-soc	dut	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc	examples/riscv-mini/tests/tb_rv32i_soc.sv	pending	0	0	0	**不是** `CH_TRACKED_EXAMPLE_TARGETS` 的条目（是 test DUT）⇒ 单列为 `kind=dut`；planner 曾**临时**跑通 20/20 但 **TB 未入库** ⇒ 降到 smoke 口径：复位 pc / 首条指令取到 / minitest retire 数 / `sw` 落到 tohost（未覆盖项进 exclusions）
+counter_example	target	examples/spinalhdl-ported/counter/counter.cpp	Top	emit_rtl_counter	examples/spinalhdl-ported/counter/tb_counter_example.sv	verified	14	6	0	既有 TB：clear 优先 + 8 位回绕 · 6 场景 · 期望源待升级为 spec-derived（见 P1）
+counter_simple_example	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	examples/spinalhdl-ported/counter/tb_counter_simple_example.sv	verified	256	1	0	既有 TB：自由运行 +1（**1 个场景 × 256 拍** ⇒ `scenarios=1`，不是 256 个语义）
+fifo_stream_example	target	examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	Top	emit_rtl_fifo_stream	examples/spinalhdl-ported/fifo/tb_fifo_stream_example.sv	pending	0	0	0	缺 ready/valid 握手期望（须来自 `chlib-stream-semantics` spec）· 建议 metamorphic：`occupancy == pushes - pops`
+uart_tx_example	target	examples/spinalhdl-ported/uart/uart_tx.cpp	UartTxTop	emit_rtl_uart_tx	examples/spinalhdl-ported/uart/tb_uart_tx_example.sv	pending	0	0	0	缺 **8N1 帧格式**（idle 高 / start 低 1 位 / LSB first / 1 stop / `T=clk/div`）⇒ spec-derived · metamorphic：帧内各位 `T` 恒等 + 总长 10T
+uart_rx_example	target	examples/spinalhdl-ported/uart_rx/uart_rx.cpp	Top	emit_rtl_uart_rx	examples/spinalhdl-ported/uart_rx/tb_uart_rx_example.sv	pending	0	0	0	缺 8N1 + **采样点相位** · metamorphic：与 `uart_tx` 做 loopback，字节恒等
+pwm_example	target	examples/spinalhdl-ported/pwm/pwm.cpp	PwmTop	emit_rtl_pwm	examples/spinalhdl-ported/pwm/tb_pwm_example.sv	verified	12	4	0	既有 TB：自由运行计数器 + `pwm = enable & (counter < duty)` · 4 场景
+gpio_example	target	examples/spinalhdl-ported/gpio/gpio.cpp	GpioTop	emit_rtl_gpio	examples/spinalhdl-ported/gpio/tb_gpio_example.sv	verified	8	6	0	既有 TB：两级同步 + 逐位边沿 + `gpio_out = oe ? output_reg : 0` · 6 场景
+quadrature_encoder_example	target	examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	QuadEncTop	emit_rtl_quadrature_encoder	examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example.sv	pending	0	0	0	缺 4 倍频序列（`00→10→11→01`）+ Z 清零 + direction 定义 ⇒ spec-derived · metamorphic：正转 N 再反转 N ⇒ 回原点 · ⚠️ 同步寄存器初值是 **true**（`a_sync1(true)`）⇒ 手推 MUST 从初值 true 起算
+axi4_lite_example	target	examples/axi4/axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	pending	0	0	0	缺 AXI4-Lite 从端握手期望（须来自 `axi-*` / `axi-slave-conformance` spec）：**VALID 不得等 READY** / 响应必须先有请求 / `valid&&!ready` 时 payload 稳定 / 无请求时 `*VALID` 必 0 ⇒ spec-derived · 42 端口里多数是实例化样板，语义成本约 10 条
