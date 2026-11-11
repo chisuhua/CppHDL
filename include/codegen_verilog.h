@@ -204,6 +204,52 @@ private:
     ///   `bitsupdate` / `proxy`，且排除 **mem 读口的数据代理**）。
     bool is_prunable_type(ch::core::lnodeimpl *node) const;
 
+    /// ⚠️ **这个字面量在 `user` 的发射文本里会不会按名字出现**（C6 剪枝的**唯一**
+    ///   内联判据 · 与各 `print_*` 的实际行为**逐位置**对齐）。
+    ///
+    /// **为什么 MUST 有这一层**（实测事故）：剪枝曾按「使用者**类型**」一刀切
+    /// （假设 `op` / `mux` / `bitsupdate` 都内联常量）⇒ ⇒ **错**：
+    ///   · `print_binary_op` 只内联 **RHS** 的 lit ⇒ **LHS 仍按名字引用**；
+    ///   · `print_mux` / `print_bitsupdate` / `print_bit_select` /
+    ///     `print_bits_extract` / `print_unary_op` **一律**按名字引用；
+    ///   · `print_concat` 两侧 lit 都内联；
+    ///   · `print_rotate_*` 只把**移位量**（rhs）内联。
+    /// ⇒ ⇒ 一刀切会把**仍被引用**的 lit 剪掉 ⇒ ⇒ 产物出现「引用未声明标识符」
+    /// ⇒ ⇒ 配合 `` `default_nettype none `` **直接编译失败**
+    /// （实测：RV32I SoC 扁平 + 层次化**双双** exit=1；最小复现 = 一句 `select()`）。
+    ///
+    /// ⇒ ⇒ **返回 true = 文本里出现这个名字 ⇒ MUST 保留**。
+    bool is_literal_referenced_by(ch::core::lnodeimpl *user,
+                                  ch::core::lnodeimpl *lit) const;
+
+    /// ⚠️ **端口 `assign` 的终点 driver**（`print_logic` 的 output / input 分支
+    ///   **与剪枝共用**这**同一份** walk 逻辑）。
+    ///
+    /// **为什么 MUST 共用**（实测事故 ×2）：剪枝原先自己写了一份 walk ⇒ ⇒ 与发射器
+    /// **三处不一致**（input 只穿透**未命名** proxy · output 穿透全部 ·
+    ///  重定向 proxy MUST 停在它自己）⇒ ⇒ 剪掉「端口 assign 实际引用的节点」
+    /// ⇒ ⇒ 产物 `Can't find definition of variable`（实测 RV32I 命中 6 条）。
+    ///
+    /// @param port      `type_output` / `type_input` 端口节点
+    /// @param skipped  非空时收集**被穿透的中间 proxy**（它们**不发文本**
+    ///                 ⇒ ⇒ 可剪 —— 除非还有别的活使用者）
+    /// @return 端口那条 `assign` **按名引用**的节点（nullptr = 不发 assign）
+    ch::core::lnodeimpl *port_driver_endpoint(
+        ch::core::lnodeimpl *port,
+        std::unordered_set<ch::core::lnodeimpl *> *skipped = nullptr) const;
+
+    /// ⚠️ **显式宽度转换**（C6 · 仅在 `emit_hygiene` 开启时生效）。
+    ///
+    /// **为什么 MUST 有**：产物里大量表达式的操作数位宽与运算期望位宽不等
+    /// ⇒ ⇒ Verilator 报 `WIDTHEXPAND` / `WIDTHTRUNC` ⇒ ⇒ 默认产物靠在文件顶部发
+    /// **blanket** `lint_off` 盖住（⇒ ⇒ 那 23 条告警**从未被任何人看过**）。
+    /// C6 要求「产物**自身** lint 干净」⇒ ⇒ MUST 把这些隐式转换写成**显式**
+    /// 的 SystemVerilog size cast（`N'(expr)`）⇒ ⇒ 语义不变、意图显式、零告警。
+    ///
+    /// ⚠️ `from_w == to_w` 或未开卫生模式 ⇒ ⇒ **原样返回**（默认路径逐字节不变）。
+    std::string hygiene_cast(const std::string &expr, uint32_t from_w,
+                             uint32_t to_w) const;
+
     /// ⚠️ **死节点集的不动点计算**（只在 `emit_hygiene` 开启时调用一次）。
     ///
     /// `dead(N) ⟺ 纯组合类型 ∧ N 的全部使用者也 dead`
@@ -278,6 +324,13 @@ private:
     ///      ⇒ ⇒ 那是**跨 module** 的连接 ⇒ ⇒ 图里看不到这条边 ⇒ ⇒ 剪掉它会
     ///      **静默断掉实例连接**（实测风险：层次化路径的跨层连线）。
     std::unordered_set<const ch::core::lnodeimpl *> dead_nodes_;
+    /// ⚠️ **端口 assign 的终点 driver**（C6 剪枝的**第三条保护**）
+    ///
+    /// `print_logic` 的 output / input 分支会 walk proxy 链，发
+    /// `assign <端口> = <最终 driver>;` ⇒ ⇒ 该 driver **被文本按名引用**
+    /// ⇒ ⇒ 但这条引用**不是图里的边** ⇒ ⇒ 「users 全死」规则会把它剪掉
+    /// ⇒ ⇒ 产物引用未声明标识符（实测命中：`+` 的中间 proxy 链）。
+    std::unordered_set<const ch::core::lnodeimpl *> chain_terminal_nodes_;
     // Set to track nodes already printed in the logic section to avoid
     // duplicates
     std::unordered_set<ch::core::lnodeimpl *> printed_logic_nodes_;

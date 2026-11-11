@@ -62,7 +62,16 @@ public:
 
     void describe() override {
         leaf.io().data_in <<= io().prog_data;
-        io().result <<= leaf.io().data_out;
+        // ⚠️ **BLOCKER-1 的常驻回归靶**（C6 · 见 `.rddf/reviews/b1-batch-verify-2026-11.md`）：
+        //   `select()` 的**两个臂都是字面量** ⇒ ⇒ 产物是
+        //   `assign x = cond ? lit_a : lit_b;` ⇒ ⇒ `print_mux` **不内联**字面量
+        //   （按名字引用）⇒ ⇒ 剪枝若误判「使用者是 mux ⇒ 内联」就会把这两个 lit
+        //   连同声明一起剪掉 ⇒ ⇒ 产物**引用未声明标识符** ⇒ ⇒ 在
+        //   `` `default_nettype none `` 下**直接编译失败**（实测：RV32I 扁平 +
+        //   层次化双双 exit=1）。
+        //   ⇒ ⇒ 本设计（C5 的 **F8** lint 门）由此成为该缺陷的**常驻回归**。
+        auto swapped = select(io().prog_we, ch_uint<8>(1_d), ch_uint<8>(2_d));
+        io().result <<= leaf.io().data_out + swapped;
     }
 };
 

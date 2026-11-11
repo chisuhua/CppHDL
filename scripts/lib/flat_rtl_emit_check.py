@@ -99,6 +99,7 @@ def main() -> int:
     ap.add_argument("--check-top-ports", nargs=2, metavar=("V", "MANIFEST"))
     ap.add_argument("--self-assign")
     ap.add_argument("--zero-reference", help="V 文件：列出「声明了但没人读」的信号")
+    ap.add_argument("--undeclared-refs", help="V 文件：列出「被引用但没有声明」的标识符（剪枝误伤的**唯一**直接判据）")
     ap.add_argument("--identity-proxy", help="V 文件：列出「恒等直通」（assign 的 LHS 从未被读且**不是**端口）")
     args = ap.parse_args()
 
@@ -140,6 +141,41 @@ def main() -> int:
             return 1
         print("OK：无自赋值死逻辑")
         return 0
+
+    if args.undeclared_refs:
+        path = args.undeclared_refs
+        raw = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+        # ⚠️ MUST 先剥注释：注释里的英文词（`Read` / `Register` / `by` …）
+        #   会被当成标识符 ⇒ ⇒ 假阳性（实测）。
+        text = re.sub(r"/\*.*?\*/", " ", raw, flags=re.S)
+        text = re.sub(r"//[^\n]*", " ", text)
+        # ⚠️ 剥掉三类**非标识符**来源（否则假阳性，实测）：
+        #   ① 反引号编译指令（`` `default_nettype none ``）
+        #   ② 数字字面量（`8'h1` ⇒ 会被拆出 `h1`）
+        #   ③ `module <name>` 的 module 名（它不是 signal）
+        text = re.sub(r"^\s*`[^\n]*", " ", text, flags=re.M)
+        text = re.sub(r"\d*'[sS]?[bodhBODH][0-9a-fA-F_]+", " ", text)
+        text = re.sub(r"\bmodule\s+[A-Za-z_]\w*", "module ", text)
+        ports = set(re.findall(r"^\s*(?:input|output|inout)\s*(?:\[[^\]]*\])?\s*([A-Za-z_]\w*)", text, re.M))
+        decls = set(re.findall(r"^\s*(?:logic|wire|reg)\s*(?:\[[^\]]*\])?\s+([A-Za-z_]\w*)", text, re.M))
+        declared = ports | decls
+        keywords = set("""
+            module endmodule input output inout logic wire reg assign always_ff
+            always_comb always_latch begin end if else posedge negedge or and not
+            case endcase default function endfunction task endtask generate
+            endgenerate localparam parameter integer initial final for while
+            repeat forever signed unsigned return
+        """.split())
+        # 去掉数字字面量 / size cast / 位选里的内容后剩下的标识符
+        ids = set(re.findall(r"\b([A-Za-z_][A-Za-z_0-9]*)\b", text))
+        undeclared = sorted(
+            i for i in ids - declared - keywords
+            if not re.fullmatch(r"[0-9]+", i)
+        )
+        for i in undeclared:
+            print(f"::error::被引用但未声明：{i}")
+        print(f"未声明引用数 = {len(undeclared)}")
+        return 1 if undeclared else 0
 
     if args.zero_reference or args.identity_proxy:
         path = args.zero_reference or args.identity_proxy

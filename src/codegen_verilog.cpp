@@ -69,8 +69,17 @@ void ModuleEmitter::compute_dead_nodes() {
     if (ctx_ == nullptr) {
         return;
     }
-    // ① **保护**：出现在实例连接文本里的名字（跨 module 的连接 ⇒ 图里无这条边）
+    // ① **保护**：所有「**按名引用**但**不是图里的边**」的来源
+    //   ⚠️ 这类引用是剪枝的**结构性盲区**（实测已踩两次）：
+    //   · `body_epilogue`：跨 module 的实例连接（`.port(net)`）；
+    //   · `port_drives_node` 的**值**：驱动重定向的目标名
+    //     （`print_proxy` 发 `assign <proxy> = <该名>;` ⇒ ⇒ 图里没有这条边）
+    //     ⇒ ⇒ 漏掉它 ⇒ 产物引用未声明标识符（实测 RV32I：6 条
+    //     `Can't find definition of variable: 'top_pipeline__fwd_a_d1'` 等）。
     std::unordered_set<std::string> protected_names;
+    for (const auto &kv : view_.port_drives_node) {
+        protected_names.insert(kv.second);
+    }
     for (const auto &line : view_.body_epilogue) {
         std::string cur;
         for (const char c : line) {
@@ -89,6 +98,68 @@ void ModuleEmitter::compute_dead_nodes() {
         }
     }
 
+    // ①' **发射期被跳过的中间 proxy**（实测踩坑 · 必须与 `print_logic` 的
+    //    output / input 分支**保持一致**）：
+    //    那两个分支会 **walk proxy 链**，只发 `assign <端口> = <最终 driver>;`
+    //    ⇒ ⇒ **中间 proxy 一个字的文本都不发** ⇒ ⇒ 但在**图**里它们仍有使用者
+    //    （那个端口）⇒ ⇒ 「users 全死」规则**永远剪不掉**它们
+    //    ⇒ ⇒ 产物留下 `assign top__add_add = top_add_add;` 这种**零引用**线
+    //    （实测：工具设计的 `+` 就命中，F8 报红）。
+    //    ⇒ ⇒ 判据 = 「被 walk 跳过 ∧ 它的使用者只有那个端口 / 其它被跳过的 proxy」
+    //    ⇒ ⇒ 加入 dead 种子，再由下面的不动点传播到它的源。
+    if (ctx_ != nullptr) {
+        std::unordered_set<ch::core::lnodeimpl *> chain_skipped;
+        std::unordered_set<ch::core::lnodeimpl *> chain_terminals;
+        // ⚠️ **共用 walk**（`port_driver_endpoint`）⇒ ⇒ 与发射器**逐字一致**
+        //   · 终点 = 端口那条 `assign` **按名引用**的节点 ⇒ MUST 保留；
+        //   · 被穿透的中间 proxy = **不发文本** ⇒ 若没有别的活使用者就可剪。
+        for (ch::core::lnodeimpl *node : ctx_->get_eval_list()) {
+            if (node == nullptr) {
+                continue;
+            }
+            const auto t = node->type();
+            if (t != ch::core::lnodetype::type_output &&
+                t != ch::core::lnodetype::type_input) {
+                continue;
+            }
+            if (view_.suppress_driver_assign.count(node) != 0) {
+                continue;
+            }
+            ch::core::lnodeimpl *endpoint =
+                port_driver_endpoint(node, &chain_skipped);
+            if (endpoint != nullptr) {
+                chain_terminals.insert(endpoint);
+            }
+        }
+        for (ch::core::lnodeimpl *skipped : chain_skipped) {
+            bool only_chain_users = true;
+            for (ch::core::lnodeimpl *user : skipped->get_users()) {
+                if (user == nullptr) {
+                    continue;
+                }
+                const auto ut = user->type();
+                if (ut == ch::core::lnodetype::type_output ||
+                    ut == ch::core::lnodetype::type_input) {
+                    continue; // 端口本身不发文本 ⇒ 不算「活使用者」
+                }
+                if (chain_skipped.count(user) != 0) {
+                    continue;
+                }
+                only_chain_users = false;
+                break;
+            }
+            if (only_chain_users) {
+                dead_nodes_.insert(skipped);
+            }
+        }
+        // 终点 driver 记入长期保护集（不动点循环里跳过它们，且它们的使用者
+        // 也无从把它们剪掉 —— 那条端口 assign 不是图里的边）
+        for (ch::core::lnodeimpl *terminal : chain_terminals) {
+            chain_terminal_nodes_.insert(terminal);
+            chain_skipped.erase(terminal); // 终点**有**文本引用 ⇒ 不是 skipped
+        }
+    }
+
     // ② **不动点**：dead(N) ⟺ 纯组合类型 ∧ N 的全部使用者也都 dead
     bool changed = true;
     while (changed) {
@@ -100,12 +171,15 @@ void ModuleEmitter::compute_dead_nodes() {
             if (!is_prunable_type(node)) {
                 continue;
             }
-            // ⚠️ **字面量的特例**（实测踩坑）：`print_op` / `print_mux` /
-            //   `print_bitsupdate` 把字面量的**值内联**成 `5'h0`（**不引用信号名**）
-            //   ⇒ ⇒ 图里「有使用者」但**文本里是死的** ⇒ ⇒ 用「users 全死」规则
-            //   永远剪不掉它（实测：层次化路径剩 **156** 个全是这一类）。
-            //   ⇒ ⇒ 判据改成：**全部使用者都内联常量** ⇒ ⇒ 可剪。
-            //   ⚠️ 若使用者的类型**不**内联（如 mem 写口 / 端口）⇒ ⇒ 保留。
+            // ⚠️ **字面量的特例**（C6 · 实测事故修复）：部分 `print_*` 把字面量的
+            //   **值内联**成 `5'h0`（**不引用信号名**）⇒ ⇒ 图里「有使用者」但
+            //   **文本里是死的** ⇒ ⇒ 「users 全死」规则永远剪不掉它。
+            //   ⚠️ ⚠️ 但「是否内联」**不能按使用者类型一刀切** —— 同一个 `op`
+            //   可能只内联 **RHS**（`print_binary_op`），`mux` **完全不内联**
+            //   ⇒ ⇒ 一刀切会把**仍被引用**的 lit 剪掉 ⇒ ⇒ 产物引用未声明标识符
+            //   ⇒ ⇒ 配合 `default_nettype none` **直接编译失败**（最小复现：一句 `select()`）。
+            //   ⇒ ⇒ 判据 = **逐个使用者**问「文本里会不会出现这个名字」
+            //   （`is_literal_referenced_by`，与各 `print_*` 的实现**逐位置**对齐）。
             if (node->type() == ch::core::lnodetype::type_lit) {
                 // ⚠️ 保护②对字面量同样生效（已在上面的 `protected_names` 里跳过）
                 const auto lit_it = node_names_.find(node);
@@ -113,20 +187,17 @@ void ModuleEmitter::compute_dead_nodes() {
                     protected_names.count(lit_it->second) != 0) {
                     continue;
                 }
-                bool all_inline = true;
+                bool all_inlined = true;
                 for (ch::core::lnodeimpl *user : node->get_users()) {
-                    if (user == nullptr) {
+                    if (user == nullptr || dead_nodes_.count(user) != 0) {
                         continue;
                     }
-                    const auto ut = user->type();
-                    if (ut != ch::core::lnodetype::type_op &&
-                        ut != ch::core::lnodetype::type_mux &&
-                        ut != ch::core::lnodetype::type_bitsupdate) {
-                        all_inline = false;
+                    if (is_literal_referenced_by(user, node)) {
+                        all_inlined = false;
                         break;
                     }
                 }
-                if (all_inline) {
+                if (all_inlined) {
                     dead_nodes_.insert(node);
                     changed = true;
                 }
@@ -135,6 +206,10 @@ void ModuleEmitter::compute_dead_nodes() {
             // ⚠️ 保护①：模块端口
             if (std::find(view_.ports.begin(), view_.ports.end(), node) !=
                 view_.ports.end()) {
+                continue;
+            }
+            // ⚠️ 保护③：**端口 assign 的终点 driver**（被端口文本按名引用）
+            if (chain_terminal_nodes_.count(node) != 0) {
                 continue;
             }
             // ⚠️ 保护②：实例连接端点
@@ -154,6 +229,126 @@ void ModuleEmitter::compute_dead_nodes() {
                 changed = true;
             }
         }
+    }
+}
+
+/// ⚠️ **端口 `assign` 的终点 driver** —— **唯一**的 walk 实现
+/// （`print_logic` 的两个分支与剪枝共用 ⇒ ⇒ 三处从此不会漂移）。
+ch::core::lnodeimpl *ModuleEmitter::port_driver_endpoint(
+    ch::core::lnodeimpl *port,
+    std::unordered_set<ch::core::lnodeimpl *> *skipped) const {
+    if (port == nullptr) {
+        return nullptr;
+    }
+    const auto pt = port->type();
+    ch::core::lnodeimpl *driver = nullptr;
+    bool stop_at_named = false;
+    if (pt == ch::core::lnodetype::type_output) {
+        if (port->num_srcs() == 0) {
+            return nullptr;
+        }
+        driver = port->src(0);
+    } else if (pt == ch::core::lnodetype::type_input) {
+        driver = static_cast<ch::core::inputimpl *>(port)->driver();
+        // ⚠️ **既有行为**（逐字保留）：input 只穿透**未命名** proxy
+        //   （命名 wire 有自己的声明 + assign ⇒ 端口那条 assign 引用该 wire 名）
+        stop_at_named = true;
+    } else {
+        return nullptr;
+    }
+    if (driver == nullptr) {
+        return nullptr;
+    }
+    while (driver != nullptr &&
+           driver->type() == ch::core::lnodetype::type_proxy &&
+           driver->num_srcs() > 0 &&
+           !(stop_at_named && node_names_.count(driver) != 0)) {
+        // ⚠️ **驱动重定向**（ADR-060 v1.9）：该 proxy 是**本 module 的本地 wire**
+        //   （`print_proxy` 会发 `assign <proxy> = <driver>;`）⇒ ⇒ MUST **停在它自己**
+        //   ⇒ ⇒ 否则会穿透到**父层**信号 ⇒ ⇒ 跨 module 引用（本 module 内未声明）。
+        if (!stop_at_named && view_.port_drives_node.count(driver) != 0) {
+            return driver; // 它自己发文本 ⇒ 不算 skipped
+        }
+        auto *next = driver->src(0);
+        if (next == nullptr ||
+            next->type() == ch::core::lnodetype::type_mem_read_port) {
+            return driver;
+        }
+        if (skipped != nullptr) {
+            skipped->insert(driver);
+        }
+        driver = next;
+    }
+    return driver;
+}
+
+/// ⚠️ **显式宽度转换**（C6 · 见头文件说明）。
+std::string ModuleEmitter::hygiene_cast(const std::string &expr, uint32_t from_w,
+                                        uint32_t to_w) const {
+    if (!view_.emit_hygiene || to_w == 0 || from_w == to_w) {
+        return expr;
+    }
+    return std::to_string(to_w) + "'(" + expr + ")";
+}
+
+/// ⚠️ **字面量是否被按名引用**（C6 剪枝的**唯一**内联判据 · 见头文件说明）。
+bool ModuleEmitter::is_literal_referenced_by(ch::core::lnodeimpl *user,
+                                            ch::core::lnodeimpl *lit) const {
+    if (user == nullptr || lit == nullptr) {
+        return true; // 保守：判定不了就当「被引用」⇒ 不剪
+    }
+    if (user->type() != ch::core::lnodetype::type_op) {
+        // `mux` / `bitsupdate` / `reg` / `mem` / 端口 / proxy ⇒ 一律按名字引用
+        //   （实测：`print_mux` 的三个操作数全走 `node_names_[...]`）
+        return true;
+    }
+    auto *op = static_cast<ch::core::opimpl *>(user);
+    const bool is_rhs = (op->num_srcs() >= 2 && op->src(1) == lit);
+    switch (op->op()) {
+    // ── 二元算子：`print_binary_op` **只内联 RHS** 的 lit ──────────────
+    //    ⇒ ⇒ RHS 的 lit 在文本里**不出现**（内联成字面量）
+    //    ⇒ ⇒ LHS 的 lit **仍按名字引用**（`node_names_[lhs_node]`）
+    case ch::core::ch_op::add:
+    case ch::core::ch_op::sub:
+    case ch::core::ch_op::mul:
+    case ch::core::ch_op::div:
+    case ch::core::ch_op::mod:
+    case ch::core::ch_op::and_:
+    case ch::core::ch_op::or_:
+    case ch::core::ch_op::xor_:
+    case ch::core::ch_op::eq:
+    case ch::core::ch_op::ne:
+    case ch::core::ch_op::lt:
+    case ch::core::ch_op::le:
+    case ch::core::ch_op::gt:
+    case ch::core::ch_op::ge:
+    case ch::core::ch_op::shl:
+    case ch::core::ch_op::shr:
+    case ch::core::ch_op::sshr:
+    // ── 移位量 / 位下标（rhs）内联 ────────────────────────────────────
+    //   · `print_rotate_*`：amt 直接算进位选文本；
+    //   · `print_bit_select`：`x[<字面量>]`（`rhs` 的**值**内联，**不引用名字**）；
+    //   · `print_bits_extract`：`x[msb:lsb]`（同上）。
+    //   ⇒ ⇒ 实测：RV32I 的 48 个零引用 `*_bits_range` **全是** `bit_sel` 的 rhs。
+    case ch::core::ch_op::rotate_l:
+    case ch::core::ch_op::rotate_r:
+    case ch::core::ch_op::bit_sel:
+    case ch::core::ch_op::bits_extract:
+        return !is_rhs;
+    // ── `print_concat` 两侧 lit **都**内联 ⇒ 文本里不出现 ──────────────
+    case ch::core::ch_op::concat:
+        return false;
+    // ⚠️ **不发射的 op**（`print_op` 对这两个 `ch_op` 直接 `return`：
+    //   「mux -> print_mux (lnodetype), bits_update -> print_bitsupdate
+    //     (lnodetype; opimpl path is dead)」）⇒ ⇒ 它在产物里**没有任何文本**
+    //   ⇒ ⇒ 它的 src 也**不会被它引用**（实测：RV32I 的 48 个零引用
+    //   `*_bits_range` 字面量，其唯一使用者就是这类不发射的 op）。
+    case ch::core::ch_op::mux:
+    case ch::core::ch_op::bits_update:
+        return false;
+    // 其余（unary / bit_sel / bits_extract 等）⇒ 按名字引用
+    default:
+        return true;
     }
 }
 
@@ -181,8 +376,17 @@ bool ModuleEmitter::is_prunable_type(ch::core::lnodeimpl *node) const {
         }
         return true;
     }
+    case ch::core::lnodetype::type_input: {
+        // ⚠️ **子组件的输入端口**（扁平化后是**内部 wire**）：它自己**不是**
+        //   模块端口时（`view_.ports` 已在调用方排除）⇒ ⇒ 若无人消费它
+        //   ⇒ ⇒ 它的声明与驱动 `assign` 都是死代码 ⇒ ⇒ 可剪。
+        //   实测：RV32I 扁平产物的最后 **6** 个零引用全是这一类
+        //   （`top_pipeline_ex_stage_unnamed_input_8` 等：被驱动、无人读）。
+        //   ⚠️ **有消费者时**由「users 全死」规则自动保留。
+        return true;
+    }
     default:
-        // `reg` / `mem`（有状态）· `input` / `output`（可能是端口或实例端点）⇒ ⇒ 恒保留
+        // `reg` / `mem`（有状态）· `output`（外部可观测面）⇒ ⇒ 恒保留
         return false;
     }
 }
@@ -426,10 +630,22 @@ void ModuleEmitter::emit_always_ff(std::ostream &out,
         out << "    always_ff @(posedge " << view_.clock_name << " or posedge "
             << view_.reset_name << ") begin // "
             << "Register update for " << reg_name << "\n";
-        out << "        if (!" << view_.reset_name << ")\n";
-        out << "            " << reg_name << " <= " << next_name << ";\n";
-        out << "        else\n";
-        out << "            " << reg_name << " <= " << reset_value << ";\n";
+        // ⚠️ **复位写法规范化**（C6 · 仅 `emit_hygiene` 开启时）：
+        //   旧写法 `if (!reset) q <= next; else q <= INIT;`
+        //   ⇒ ⇒ 新写法 `if (reset) q <= INIT; else q <= next;`
+        //   ⇒ ⇒ **逐拍语义等价**（纯分支互换）· 但**文本变了** ⇒ ⇒ MUST 挂开关
+        //   （批次表 ★3：默认路径产物逐字节不变）。
+        if (view_.emit_hygiene) {
+            out << "        if (" << view_.reset_name << ")\n";
+            out << "            " << reg_name << " <= " << reset_value << ";\n";
+            out << "        else\n";
+            out << "            " << reg_name << " <= " << next_name << ";\n";
+        } else {
+            out << "        if (!" << view_.reset_name << ")\n";
+            out << "            " << reg_name << " <= " << next_name << ";\n";
+            out << "        else\n";
+            out << "            " << reg_name << " <= " << reset_value << ";\n";
+        }
         out << "    end\n";
     } catch (...) {
         // Silently ignore exceptions (codebase convention for print_* methods)
@@ -549,6 +765,13 @@ void ModuleEmitter::print_body(std::ostream &out) {
 void ModuleEmitter::print_footer(std::ostream &out) {
     try {
         out << "endmodule\n";
+        // ⚠️ **恢复默认线网类型**（C6）：`` `default_nettype none `` 是**编译指令**
+        //   ⇒ ⇒ 宏状态**跨文件延续** ⇒ ⇒ 不恢复会让后续 include 的文件里所有
+        //   隐式线网声明变成错误 ⇒ ⇒ MUST 在文件末尾恢复（**每文件一次**，
+        //   与头部的 `none` 配对）。⚠️ 仅 `emit_hygiene` 开启时发。
+        if (view_.emit_hygiene) {
+            out << "`default_nettype wire\n";
+        }
     } catch (...) {
         // Silently ignore exceptions
     }
@@ -772,41 +995,20 @@ void ModuleEmitter::print_logic(std::ostream &out) {
                         break;
                     }
                     if (output_node->num_srcs() > 0) {
-                        ch::core::lnodeimpl *driver = output_node->src(0);
-                        while (driver &&
-                               driver->type() ==
-                                   ch::core::lnodetype::type_proxy &&
-                               driver->num_srcs() > 0) {
-                            // ⚠️ **驱动重定向**（层次化 · proxy 子形态 · ADR-060 v1.9）：
-                            //    该 proxy 改由**合成 input 端口**驱动 ⇒ ⇒ 它是**本 module
-                            //    内的本地 wire**（`assign <proxy> = __if_<n>;` 由
-                            //    `print_proxy` 发）⇒ ⇒ 穿透 MUST **停在它自己**。
-                            //    ⇒ ⇒ 否则会取到它的 `src(0)` —— 而那已被**父层**驱动覆盖
-                            //    ⇒ ⇒ 引用**父层信号** ⇒ ⇒ 跨 module 引用（且该信号在
-                            //    本 module 内未声明 ⇒ 非法 Verilog）。
-                            if (view_.port_drives_node.count(driver) != 0) {
-                                break;
-                            }
-                            // A mem read port's data proxy is the real Verilog
-                            // driver (`assign proxy = mem[addr];`), while the
-                            // read port itself is a fictional node with no
-                            // Verilog signal. Stop the walk at the proxy
-                            // instead of advancing to the read port, which
-                            // would emit `assign out = <read_port>;` — a
-                            // reference to an undeclared signal.
-                            ch::core::lnodeimpl *next = driver->src(0);
-                            if (next &&
-                                next->type() ==
-                                    ch::core::lnodetype::type_mem_read_port) {
-                                break;
-                            }
-                            driver = next;
-                        }
+                        // ⚠️ walk **唯一实现** = `port_driver_endpoint`
+                        //   （剪枝共用同一份 ⇒ 不会再把「端口文本引用的节点」剪掉）
+                        ch::core::lnodeimpl *driver =
+                            port_driver_endpoint(output_node);
                         if (driver && node_names_.count(driver)) {
                             std::string driver_name = node_names_[driver];
                             if (driver_name[0] != '_') {
                                 std::string output_name =
                                     node_names_[node];
+                                // ⚠️ **产物卫生**（C6）：隐式宽度截断/扩展 ⇒ 显式 cast
+                                //   （实测 RV32I 有 3 条 `ASSIGNW` 告警来自这里：
+                                //   33 位 mux/add 结果赋给 32 位 output）
+                                driver_name = hygiene_cast(
+                                    driver_name, driver->size(), node->size());
                                 out << "    assign " << output_name
                                     << " = " << driver_name << ";\n";
                             }
@@ -833,34 +1035,18 @@ void ModuleEmitter::print_logic(std::ostream &out) {
                         break;
                     }
                     if (driver != nullptr) {
-                        // Walk only UNNAMED proxies; named wires
-                        // already have their own declaration +
-                        // assign, so we want to read the value at
-                        // that wire's name.
-                        while (driver &&
-                               driver->type() ==
-                                   ch::core::lnodetype::type_proxy &&
-                               !node_names_.count(driver) &&
-                               driver->num_srcs() > 0) {
-                            // Same guard as in `print_output`: never walk
-                            // past a mem read port — it is a fictional node
-                            // with no Verilog signal. (A mem data proxy is
-                            // always *named*, so the loop normally stops
-                            // before this; the guard keeps that from being
-                            // an accident.)
-                            ch::core::lnodeimpl *next = driver->src(0);
-                            if (next &&
-                                next->type() ==
-                                    ch::core::lnodetype::type_mem_read_port) {
-                                break;
-                            }
-                            driver = next;
-                        }
+                        // ⚠️ walk **唯一实现** = `port_driver_endpoint`
+                        //   （input 只穿透**未命名** proxy —— 该差异已内置在那份实现里）
+                        driver = port_driver_endpoint(node);
                         if (driver && node_names_.count(driver) &&
                             node_names_.count(node)) {
+                            // ⚠️ **产物卫生**（C6）：隐式宽度截断 ⇒ 显式 cast
+                            //   （实测 RV32I 有 1 条：32 位输入赋给 12 位内部 input）
+                            const std::string drv = hygiene_cast(
+                                node_names_[driver], driver->size(), node->size());
                             out << "    assign "
                                 << node_names_[node] << " = "
-                                << node_names_[driver] << ";\n";
+                                << drv << ";\n";
                         }
                     }
                 }
@@ -972,10 +1158,18 @@ void ModuleEmitter::print_reg(std::ostream &out, ch::core::regimpl *node) {
             out << "    always_ff @(posedge " << view_.clock_name << " or posedge "
             << view_.reset_name << ") begin // "
                 << "Register update (no next) for " << reg_name << "\n";
-            out << "        if (!" << view_.reset_name << ")\n";
-            out << "            " << reg_name << " <= " << reg_name << ";\n";
-            out << "        else\n";
-            out << "            " << reg_name << " <= " << reset_value << ";\n";
+            // ⚠️ **复位写法规范化**（C6 · 同 `emit_always_ff`）
+            if (view_.emit_hygiene) {
+                out << "        if (" << view_.reset_name << ")\n";
+                out << "            " << reg_name << " <= " << reset_value << ";\n";
+                out << "        else\n";
+                out << "            " << reg_name << " <= " << reg_name << ";\n";
+            } else {
+                out << "        if (!" << view_.reset_name << ")\n";
+                out << "            " << reg_name << " <= " << reg_name << ";\n";
+                out << "        else\n";
+                out << "            " << reg_name << " <= " << reset_value << ";\n";
+            }
             out << "    end\n";
         }
     } catch (...) {
@@ -1118,6 +1312,29 @@ void ModuleEmitter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
                 rhs_name = "1'b1";
             } else {
                 rhs_name = get_literal_str(lit_node->value());
+            }
+        }
+
+        // ⚠️ **产物卫生**（C6）：把隐式宽度转换写成**显式** size cast
+        //   ⇒ ⇒ Verilator 不再报 `WIDTHEXPAND` / `WIDTHTRUNC`（默认产物靠
+        //   blanket `lint_off` 盖住，那 23 条告警从未被看过）。
+        //   · 移位：只有 **LHS** 参与运算宽度 ⇒ cast 到结果宽度；RHS 是移位量，不动；
+        //   · 其余：运算宽度 = max(两侧) ⇒ 两侧都对齐到 max。
+        if (view_.emit_hygiene) {
+            const uint32_t lw = lhs_node->size();
+            const uint32_t rw = rhs_node->size();
+            switch (node->op()) {
+            case ch::core::ch_op::shl:
+            case ch::core::ch_op::shr:
+            case ch::core::ch_op::sshr:
+                lhs_name = hygiene_cast(lhs_name, lw, node->size());
+                break;
+            default: {
+                const uint32_t w = (lw > rw) ? lw : rw;
+                lhs_name = hygiene_cast(lhs_name, lw, w);
+                rhs_name = hygiene_cast(rhs_name, rw, w);
+                break;
+            }
             }
         }
 
@@ -1280,8 +1497,16 @@ void ModuleEmitter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
             const auto redirected = view_.port_drives_node.find(node);
             if (redirected != view_.port_drives_node.end() &&
                 node_names_.count(node)) {
-                out << "    assign " << node_names_[node] << " = "
-                    << redirected->second << ";\n";
+                // ⚠️ **产物卫生**（C6）：重定向只带**名字串**（没有节点指针
+                //   ⇒ 拿不到源宽度）⇒ ⇒ hygiene 模式下**无条件** cast 到目标宽度
+                //   （`32'(x)` 对 32 位源是恒等 ⇒ 无害；实测 RV32I 有 4 条
+                //   `ASSIGNW` 告警来自这里：33→32 截断 ×3 · 32→12 截断 ×1）。
+                std::string driver = redirected->second;
+                if (view_.emit_hygiene) {
+                    driver = std::to_string(node->size()) + "'(" + driver + ")";
+                }
+                out << "    assign " << node_names_[node] << " = " << driver
+                    << ";\n";
                 return;
             }
         }
@@ -1310,6 +1535,9 @@ void ModuleEmitter::print_proxy(std::ostream &out, ch::core::proxyimpl *node) {
                 node_names_.count(node)) {
                 std::string src_name = node_names_[src_node];
                 std::string proxy_name = node_names_[node];
+                // ⚠️ **产物卫生**（C6）：隐式宽度转换 ⇒ 显式 size cast
+                //   （实测：RV32I 有 4 条 `ASSIGNW` 截断 / 扩展告警来自这里）
+                src_name = hygiene_cast(src_name, src_node->size(), node->size());
                 out << "    assign " << proxy_name << " = " << src_name
                     << ";\n";
             }
@@ -1546,7 +1774,18 @@ void ModuleEmitter::print_mem_read_port(
         out << "                " << proxy_name << " <= " << mem_name << "["
             << addr_name << "];\n";
         out << "        else\n";
-        out << "            " << proxy_name << " <= 1'b0;\n";
+        // ⚠️ **产物卫生**（C6）：`1'b0` 赋给更宽的 proxy ⇒ Verilator 报
+        //   `WIDTHEXPAND`（实测 RV32I 命中 1 条）⇒ ⇒ 卫生模式下写成**目标宽度**
+        //   的零字面量（`<W>'h0`），语义不变（都是零值）。
+        if (view_.emit_hygiene) {
+            // ⚠️ `get_width_str` 返回的是**声明**形态（`[31:0]`）⇒ ⇒ 这里要用
+            //   **size cast 的十进制宽度**（`32'h0`）⇒ ⇒ 两者不可混用（实测：
+            //   混用会发出 `[31:0]'h0` ⇒ ⇒ Verilator 语法错误）。
+            out << "            " << proxy_name << " <= "
+                << data_proxy->size() << "'h0;\n";
+        } else {
+            out << "            " << proxy_name << " <= 1'b0;\n";
+        }
         out << "    end\n";
     } catch (...) {
         // Silently ignore exceptions (codebase convention for print_* methods)

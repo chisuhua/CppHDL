@@ -6,6 +6,68 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — C6 返工（B1 验收 BLOCKER-1 + 4 项判据子项）
+
+> 来源：`.rddf/reviews/b1-batch-verify-2026-11.md`（B1 验收 **不通过**）⇒ 修完再复审。
+
+### Fixed
+- **BLOCKER-1：剪枝误剪「仍被引用」的字面量 ⇒ 卫生产物无法编译**
+  （实测：RV32I **扁平 + 层次化双双** `Can't find definition of variable`，exit=1；
+  最小复现 = **一句 `select()`**）。
+  **根因**：剪枝曾按「使用者**类型**」一刀切（假设 `op`/`mux`/`bitsupdate` 都内联常量）
+  ⇒ ⇒ 实际 `print_mux` **按名字引用**、`print_binary_op` **只内联 RHS**
+  ⇒ ⇒ 前提是假的。
+  **修法**：新增 `is_literal_referenced_by(user, lit)` —— **逐使用者、逐位置**
+  判定「文本里会不会出现这个名字」，与各 `print_*` 的实现对齐
+  （`binary` 的 rhs · `concat` 两侧 · `rotate`/`bit_sel`/`bits_extract` 的 rhs ·
+  `mux`/`bitsupdate` 不内联 · 不发射的 `op` 路径）。
+- **剪枝的三条「非图边引用」保护**（每一条都是实测踩出来的）：
+  ① 模块端口；② `body_epilogue`（跨 module 实例连接）+ **`port_drives_node` 的目标名**
+  （驱动重定向）；③ **端口 `assign` 的终点 driver**（`print_logic` 的 walk 终点）。
+- **walk 逻辑统一**：`print_logic` 的 output / input 分支与剪枝原先**各写一份**
+  ⇒ ⇒ 三处**不一致**（input 只穿透未命名 proxy · output 穿透全部 · 重定向 proxy 停在自身）
+  ⇒ ⇒ 抽出 `port_driver_endpoint()`，**三处共用** ⇒ 从此不会漂移。
+- **子组件输入端口可剪**：扁平化后它是**内部 wire**（不是模块端口）⇒ ⇒ 无消费者时
+  其声明与驱动 `assign` 都是死代码（实测 RV32I 最后 6 个零引用全是这一类）。
+
+### Changed（判据补齐 · 全部仅在 `emit_hygiene` 开启时生效）
+- **C6-③ 复位写法规范化**：`if (!reset) q <= next; else q <= INIT;`
+  ⇒ ⇒ `if (reset) q <= INIT; else q <= next;`（逐拍语义等价，分支互换）
+  · 两处：`emit_always_ff` 与 `print_reg` 的「无 next」分支。
+- **C6-④ `lint_off` 收窄**：卫生模式下**不发**任何 blanket `lint_off`
+  ⇒ ⇒ 用**显式 size cast**（`N'(expr)`）把隐式的宽度扩展/截断写成意图
+  （新增 `hygiene_cast()`，接入 `print_binary_op` / `print_proxy` /
+  `print_logic` 的 output+input 分支 / mem 读口复位值）
+  ⇒ ⇒ **RV32I 的 23 条宽度告警归零**（19 `WIDTHEXPAND` + 4 `WIDTHTRUNC`）。
+- **C6-① 补 `default_nettype wire`**：`` `default_nettype `` 是**编译指令**
+  ⇒ ⇒ 宏状态**跨文件延续** ⇒ ⇒ 不恢复会让后续 include 的文件里所有隐式线网报错
+  ⇒ ⇒ 文件末尾恢复（**每文件一次**，与头部 `none` 配对）。
+
+### 护栏（C5）
+- **F1 改为「两段式基线」且靶改为卫生产物**：段① 原样 lint（基线）· 段② 剥掉
+  `lint_off` 后仍绿。⚠️ 原 F1 跑**默认产物**，其隐含前提「工具设计恰好无宽度告警」
+  已破 —— 而**默认产物在真实设计上必然有 23 条宽度告警**（那正是 blanket 要盖的东西）
+  ⇒ ⇒ 「剥掉 blanket 后干净」对默认产物是**不可满足**的判据。
+- **F7 的 M4 从空操作改为真判定**（旧实现 `if 绿; then : # 只记录; fi` ⇒ 两条分支都不失败）
+  ⇒ ⇒ 投毒 = 用 `lint_off` **盖住一条真实宽度告警** ⇒ 剥掉后 F1-b **必红**。
+- **F8 新增「无未声明引用」**（`--undeclared-refs` · **不依赖 verilator**）
+  ⇒ ⇒ BLOCKER-1 的**直接**判据，与 lint 门互为兜底。
+- 工具自带设计加入 **mux 选字面量**形态 ⇒ ⇒ F8 成为 BLOCKER-1 的**常驻回归靶**。
+
+### 验证
+- **RV32I 卫生产物（扁平 + 层次化）**：零引用 **0** · 恒等直通 **0** ·
+  **未声明引用 0** · verilator 告警 **0** · `--lint-only` **exit=0**
+  （返工前：扁平/层次化均 `exit=1`，≥12 处 `Can't find definition`）
+- **默认路径逐字节不变**（扁平 + 层次化的 RV32I 产物与 B1 前基线 `diff` 为空）
+- **行为等价**：同一 testbench 驱动 `flat_std.v` 与 `flat_hyg.v`
+  ⇒ ⇒ **200 拍 × 107 个输出端口逐拍完全一致**
+- **判别力自证（3 条变异各自转红，还原后重建复绿）**：
+  M1 恢复「mux 内联」⇒ 用例 5 红 · M2 去掉链上 proxy 种子 ⇒ 用例 6 红 ·
+  M3 不发 `default_nettype wire` ⇒ 用例 7 红
+- `tests/test_rtl_emit_hygiene.cpp` **38 断言 / 7 用例**
+
+---
+
 ## 2026-11-11 — C6 产物卫生（`emit_hygiene` 开关）
 
 ### Added
@@ -31,11 +93,10 @@ the change that introduced them (see `openspec/changes/` and
 ### Changed
 - **无**（默认路径零变化 ⇒ ⇒ 既有 golden / 快照 / Verilator 缓存全部不受影响）。
 
-### 已知残留（如实登记）
-- **层次化产物**上仍可能有少量残留（实测 RV32I SoC：**12** 个）——
-  全部是 **`ch_in` 端口**（本实现**保守地永不剪** `input`/`output`：它可能是端口或
-  实例端点）⇒ ⇒ 扁平产物已 **0**（C5 的 F8 判据）⇒ ⇒ 层次化侧的「接口端口也算零引用」
-  属**独立立项**（会改变端口面 ⇒ ⇒ 不在 C6 范围）。
+### 已知残留
+- ~~层次化产物仍有 12 个零引用 `ch_in`~~ ⇒ ⇒ **已于同日返工中消除**（见上方
+  「C6 返工」条目：子组件输入端口在扁平化后是内部 wire ⇒ 无消费者即可剪；
+  模块端口由 `view_.ports` 保护，不受影响）。
 
 ---
 

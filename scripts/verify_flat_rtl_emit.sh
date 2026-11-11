@@ -93,17 +93,14 @@ if [ ! -f "$V" ] || [ ! -f "$M" ]; then
 fi
 ok "产物已发射：$(wc -l < "$V") 行 · 清单 $(wc -l < "$M") 行"
 
-# ── F1：剥掉 blanket lint_off 后重 lint ────────────────────────────
-echo "── F1：产物 lint 干净（剥掉 blanket lint_off 后重 lint）"
-python3 "$CHECKER" --strip-lint-off "$V" "$WORK/nolint.v" || {
-    fail "F1 剥 lint_off 失败"; exit 1;
-}
-if "$VERILATOR" --lint-only --top-module top "$WORK/nolint.v" >"$WORK/lint.log" 2>&1; then
-    ok "F1 剥掉 lint_off 后 lint 干净"
-else
-    fail "F1 剥掉 lint_off 后 lint **不干净** ⇒ ⇒ 产物靠注释掩盖问题"
-    grep -E "%Error|%Warning" "$WORK/lint.log" | head -8 | sed 's/^/     /'
-fi
+# ── F1（**延后到 F8 之后**）：目标从「默认产物」改为「**卫生产物**」
+#   ⚠️ **判据修正理由**（2026-11-11 · B1 验收返工）：原 F1 跑**默认产物**，
+#   其隐含前提是「工具的小设计恰好没有宽度告警」。工具设计加入
+#   **mux 选字面量**（BLOCKER-1 的回归靶）后默认产物出现真实宽度告警
+#   ⇒ ⇒ 前提破了。更本质：**默认产物在真实设计上必然有 23 条宽度告警**
+#   （那正是产物里 blanket `lint_off` 要盖住的东西）⇒ ⇒ 「剥掉 blanket 后干净」
+#   对**默认**产物是**不可满足**的判据。
+#   ⇒ ⇒ 正确靶 = **卫生产物**（C6 的交付物：它**自身**就必须干净）。
 
 # ── F2：确定性（两次发射逐字节相同）─────────────────────────────────
 echo "── F2：确定性（两次发射逐字节相同）"
@@ -193,7 +190,13 @@ else
         grep -E "%Error|%Warning" "$WORK/hyg/lint.log" | head -6 | sed 's/^/     /'
         f8_bad=1
     fi
-    # ⑥ 确定性（两次发射逐字节相同）
+    # ⑥ **无未声明引用**（**BLOCKER-1 的直接判据**：剪枝误伤 ⇒ 引用了被剪掉的信号
+    #   ⇒ `default_nettype none` 下直接编译失败。`--undeclared-refs` 不依赖
+    #   verilator ⇒ 即使 lint 因其它原因通过，这一项也独立兜底）
+    ur="$(python3 "$CHECKER" --undeclared-refs "$HV" 2>&1)"; ur_rc=$?
+    printf '%s\n' "$ur" | sed 's/^/  /'
+    [ $ur_rc -eq 0 ] || { fail "F8 产物引用了**未声明**的标识符（剪枝误伤）"; f8_bad=1; }
+    # ⑦ 确定性（两次发射逐字节相同）
     mkdir -p "$WORK/hyg2"
     if "$EMITTER" --out "$WORK/hyg2" --emit-hygiene >/dev/null 2>&1; then
         cmp -s "$HV" "$WORK/hyg2/top.v" || { fail "F8 卫生模式两次发射**不相同**"; f8_bad=1; }
@@ -203,6 +206,31 @@ else
     if [ "$f8_bad" -eq 0 ]; then
         ok "F8 卫生生效（default_nettype none · 无 blanket lint_off · 零引用 0 · 恒等 0 · lint 干净 · 确定性）"
     fi
+fi
+
+# ── F1（**两段式基线** · 靶 = 卫生产物）───────────────────────────────
+#   段 ① 原样 lint（基线）⇒ MUST 绿：卫生产物**不靠注释**就必须干净
+#   段 ② 剥掉 `lint_off` 后重 lint ⇒ MUST 仍绿（卫生产物本来就没有 blanket
+#     ⇒ ⇒ 这一段是**回归锁**：若将来有人在卫生模式里偷偷加回 blanket，段 ② 就会红）
+echo "── F1：卫生产物 lint 干净（两段式基线：① 原样 · ② 剥掉 lint_off）"
+if [ -f "$HV" ]; then
+    if "$VERILATOR" --lint-only --top-module top "$HV" >"$WORK/hyg/lint_base.log" 2>&1; then
+        ok "F1-a 卫生产物基线（原样）lint 干净"
+    else
+        fail "F1-a 卫生产物基线 lint **不干净** ⇒ ⇒ 产物自身有问题"
+        grep -E "%Error|%Warning" "$WORK/hyg/lint_base.log" | head -8 | sed 's/^/     /'
+    fi
+    python3 "$CHECKER" --strip-lint-off "$HV" "$WORK/hyg/nolint.v" || {
+        fail "F1 剥 lint_off 失败"; exit 1;
+    }
+    if "$VERILATOR" --lint-only --top-module top "$WORK/hyg/nolint.v" >"$WORK/hyg/lint.log" 2>&1; then
+        ok "F1-b 剥掉 lint_off 后仍干净（卫生模式**没有** blanket 可依赖）"
+    else
+        fail "F1-b 剥掉 lint_off 后 lint **不干净** ⇒ ⇒ 卫生产物偷偷依赖了注释"
+        grep -E "%Error|%Warning" "$WORK/hyg/lint.log" | head -8 | sed 's/^/     /'
+    fi
+else
+    fail "F1 卫生产物缺失 ⇒ ⇒ F8 未产出 $HV"
 fi
 
 # ── F7：自检（逐条原地投毒 ⇒ 必红 ⇒ 还原复绿）────────────────────
@@ -272,18 +300,44 @@ PY
     fi
     ok "自检 M3：产物里加自赋值 ⇒ F5 转红 ✓"
 
-    # M4：产物里加一个**违规**的 lint_off ⇒ F1 MUST 红（剥掉后仍不干净 ⇒ ⇒ 说明
-    #    剥掉 lint_off 之后产物本身有问题）
-    cp "$backup/top.v" "$V"
-    poisoned=1
-    printf '\nassign top_result = top_result;\n' >> "$V"
-    python3 "$CHECKER" --strip-lint-off "$V" "$WORK/nolint2.v" >/dev/null 2>&1
-    if "$VERILATOR" --lint-only --top-module top "$WORK/nolint2.v" >/dev/null 2>&1; then
-        : # 自赋值 lint 不一定报错 ⇒ ⇒ 不作为 F1 的判别力来源 ⇒ ⇒ 只记录
+    # M4：用 `lint_off` **盖住一条真实宽度告警** ⇒ 剥掉后 F1-b MUST 红
+    #   ⚠️ 旧实现这里是**空操作**（`if 绿; then : # 只记录; fi`）⇒ ⇒ 两条分支都不
+    #   失败 ⇒ ⇒ F1 **没有判别力自证**，正是草案明文禁止的「只报告不失败」。
+    if [ -f "$HV" ]; then
+        cp "$HV" "$WORK/hyg/poison_backup.v"
+        python3 - "$HV" <<'PYPOISON'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text(encoding="utf-8")
+# ⚠️ 投毒 MUST 是**真实**的宽度截断：9 位源赋给 8 位目标
+#   （`8'hFF + 8'h01` **不**告警 —— Verilog 的 `+` 结果宽度 = 操作数宽度，
+#     溢出静默截断 ⇒ 该投毒形态**恒绿**，实测踩过）
+poison = ("/* verilator lint_off WIDTHTRUNC */\n"
+          "    logic [8:0] self_check_poison_wide;\n"
+          "    logic [7:0] self_check_poison;\n"
+          "    assign self_check_poison_wide = 9'h1FF;\n"
+          "    assign self_check_poison = self_check_poison_wide;\n"
+          "/* verilator lint_on WIDTHTRUNC */\n")
+idx = t.rfind("endmodule")
+t = t[:idx] + poison + t[idx:]
+p.write_text(t, encoding="utf-8")
+PYPOISON
+        # ① 前置：投毒 MUST 有效（原样 lint **绿** = lint_off 确实盖住了它）
+        if ! "$VERILATOR" --lint-only --top-module top "$HV" >/dev/null 2>&1; then
+            cp "$WORK/hyg/poison_backup.v" "$HV"
+            fail "自检 M4：投毒后**原样** lint 仍红 ⇒ ⇒ 投毒形态无效（判据作废）"
+            exit 1
+        fi
+        # ② 剥掉 lint_off ⇒ MUST 红
+        python3 "$CHECKER" --strip-lint-off "$HV" "$WORK/hyg/nolint2.v" >/dev/null 2>&1
+        if "$VERILATOR" --lint-only --top-module top "$WORK/hyg/nolint2.v" >/dev/null 2>&1; then
+            cp "$WORK/hyg/poison_backup.v" "$HV"
+            fail "自检 M4：剥掉 lint_off 后**仍绿** ⇒ ⇒ **F1-b 无判别力**"
+            exit 1
+        fi
+        cp "$WORK/hyg/poison_backup.v" "$HV"
+        ok "自检 M4：真实宽度告警被 lint_off 盖住 ⇒ 剥掉后 F1-b 转红 ✓"
     fi
-    restore
-    cp "$backup/top.v" "$V"
-    ok "自检 M4：产物还原 ⇒ 复绿检查"
 
     restore
     if ! emit restored >/dev/null 2>&1; then
@@ -291,7 +345,7 @@ PY
         exit 1
     fi
     ok "自检：还原后复绿 ✓"
-    echo "✅ self-test: 每条规则都有判别力（M1 F3 / M2 F4 / M3 F5）"
+    echo "✅ self-test: 每条规则都有判别力（M1 F3 / M2 F4 / M3 F5 / M4 F1-b）"
 fi
 
 # ────────────────────────────────────────────────────────────────
@@ -299,5 +353,5 @@ if [ "$FAILS" -ne 0 ]; then
     echo "❌ verify_flat_rtl_emit: ${FAILS} violation(s)"
     exit 1
 fi
-echo "✅ verify_flat_rtl_emit: PASS (F1 lint · F2 确定性 · F3 端口集==清单 · F4 无悬空 · F5 无自赋值 · F6 不适用 · F8 产物卫生)"
+echo "✅ verify_flat_rtl_emit: PASS (F1 lint · F2 确定性 · F3 端口集==清单 · F4 无悬空 · F5 无自赋值 · F6 不适用 · F8 产物卫生 · F1 两段式基线)"
 exit 0
