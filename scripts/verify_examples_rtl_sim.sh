@@ -108,13 +108,16 @@ while IFS=$'\t' read -r tgt src comp emitter tb status note; do
     fi
 
     # ② 发射器存在
+    # ⚠️ emitter 的**构建输出路径**随 example 目录而变（`build/examples/<dir>/<name>`）
+    #   ⇒ ⇒ 不能假设它在 `build/examples/` 顶层 ⇒ ⇒ 按**唯一名**在 build 树里定位
+    #   （名字唯一 ⇒ 定位是**确定性**的；⚠️ 不用 `head -1` 的偶然顺序 —— 只有一个匹配）
     emitter_bin=""
-    for cand in "$BUILD_DIR/examples/$emitter" "$BUILD_DIR/$emitter" "$emitter"; do
-        if [ -x "$REPO_ROOT/$cand" ]; then
-            emitter_bin="$REPO_ROOT/$cand"
+    while IFS= read -r cand; do
+        if [ -x "$cand" ]; then
+            emitter_bin="$cand"
             break
         fi
-    done
+    done < <(find "$BUILD_DIR" -type f -name "$emitter" 2>/dev/null | sort)
     if [ -z "$emitter_bin" ]; then
         fail "② 发射器缺失：$emitter（先构建它：cmake --build $BUILD_DIR --target $emitter）"
         continue
@@ -134,19 +137,37 @@ while IFS=$'\t' read -r tgt src comp emitter tb status note; do
         continue
     fi
 
-    # ④ 编译 TB + 产物
-    mkdir -p "$work/obj"
-    if ! "$VERILATOR" --binary --timing -CFLAGS -fcoroutines -Wno-fatal \
-            --x-assign unique \
-            --top-module "$(basename "$tb" .sv)" \
-            -Mdir "$work/obj" "$REPO_ROOT/$tb" "$dut_v" -o sim \
-            >"$work/compile.log" 2>&1; then
-        fail "④ TB 编译失败（见 $work/compile.log）"
-        continue
+    # ④ 编译 TB + 产物（**缓存复用**：E7）
+    #    缓存 key = SHA-1(产物 + TB + flags + verilator 版本 + **TB 名**)
+    #    ⇒ ⇒ key 含 TB 名 ⇒ ⇒ 独立目录 ⇒ ⇒ 不与既有 verilator 后端缓存冲突
+    #    ⚠️ **命中仍 MUST 验证产物存在** ⇒ 缺失 ⇒ 重编译（防「缓存指向已删文件」）
+    tb_name="$(basename "$tb" .sv)"
+    ver_version="$("$VERILATOR" --version 2>/dev/null | head -1)"
+    flags="--binary --timing -CFLAGS -fcoroutines -Wno-fatal --x-assign unique"
+    cache_key="$(printf '%s\0%s\0%s\0%s\0%s' "$dut_v" "$REPO_ROOT/$tb" "$flags" "$ver_version" "$tb_name" | sha1sum | cut -d' ' -f1)"
+    cache_dir="$HOME/.cache/cpphdl/rtl_sim/$cache_key"
+    sim_bin="$work/obj/sim"
+    if [ -x "$cache_dir/sim" ]; then
+        # 命中 ⇒ 复用（但产物缺失 ⇒ 重编译）
+        mkdir -p "$work/obj"
+        cp "$cache_dir/sim" "$sim_bin"
+        ok "$tgt：命中缓存（$cache_key）"
+    else
+        mkdir -p "$work/obj"
+        if ! "$VERILATOR" $flags \
+                --top-module "$tb_name" \
+                -Mdir "$work/obj" "$REPO_ROOT/$tb" "$dut_v" -o sim \
+                >"$work/compile.log" 2>&1; then
+            fail "④ TB 编译失败（见 $work/compile.log）"
+            continue
+        fi
+        # 写入缓存（独立目录 ⇒ 不与既有后端缓存冲突）
+        mkdir -p "$cache_dir"
+        cp "$work/obj/sim" "$cache_dir/sim" 2>/dev/null || true
     fi
 
     # ⑤ 运行 + 断言非空（**运行时证据**）
-    if ! "$work/obj/sim" >"$work/run.log" 2>&1; then
+    if ! "$sim_bin" >"$work/run.log" 2>&1; then
         fail "⑤ 仿真退出码非 0（见 $work/run.log）"
         continue
     fi

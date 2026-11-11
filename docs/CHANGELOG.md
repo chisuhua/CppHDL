@@ -6,6 +6,47 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B2 批（E1 契约判据 + E4 名单 + E5 护栏 + E7 缓存 + 首个手写 TB）
+
+### Added
+- **`tests/test_rtl_emit_contract.cpp`**（**E1** · 28 断言 / 5 用例）：只保留 C5 的 F1–F8
+  **没有**的部分 —— 跨进程确定性 · 产物结构（`module`/`endmodule` 配平 · **端口数 ==
+  manifest 的顶层端口数**）· **「按名驱动」的机械证据**（改 manifest 端口名 ⇒ TB
+  **编译失败**）· **产物变异 ⇒ TB 必红** · **X 检查**。
+  ⚠️ **端口口径**按 2026-11-11 用户裁决 **A**（`ports[]` = 全部节点端口）⇒ 比的是
+  「顶层端口数」⇒ ⇒ 判别力**只**能来自**含子组件**的设计（单组件设计里两者恰好相等
+  ⇒ ⇒ 变异恒绿 ⇒ 实测踩中）。
+- **`.rddf/checks/examples-rtl-sim-targets.tsv`**（**E4**）：首批 10 项逐条登记
+  （target · source · component · **emitter** · tb · status · **「缺什么」**）。
+- **`scripts/verify_examples_rtl_sim.sh`**（**E5**）：TB 存在 → 编译通过 → 跑过 →
+  断言**非空**（以**运行时证据** `RESULT: checks=<N> fails=0` 且 N>0 判定 ⇒ ⇒
+  **禁**自研 Verilog 静态分析器）⇒ ⇒ **缺失 = 失败**（不跳过）。
+- **E7 缓存**：key = SHA-1(产物 + TB + flags + verilator 版本 + **TB 名**）⇒ ⇒
+  落在 `~/.cache/cpphdl/rtl_sim/<key>/`（**独立目录** ⇒ 不与既有后端缓存冲突）
+  ⇒ ⇒ 实测 **6.2s → 0.23s**（命中）⇒ ⇒ 命中仍**验证产物存在**（缺失 ⇒ 重编译）。
+- **10 个 `emit_rtl_*` target**（方案 3，用户裁决）：每 example 一个 ⇒ ⇒ 护栏有
+  「产物从哪来」的**唯一**答案 ⇒ ⇒ example 源码**零改动**。
+- **首个手写 TB** `examples/spinalhdl-ported/counter/tb_counter_simple_example.sv`
+  ⇒ ⇒ **256 拍逐拍检查**（自由运行 +1 计数器，含 8 位回绕）
+  ⇒ ⇒ `RESULT: checks=256 fails=0`。
+
+### Fixed / 口径（实测踩出来的）
+- **Verilator 把 X 优化成已知值** ⇒ 「制造 X 看断言转红」**不可能成立**
+  （`8'bx` 在 `--x-assign unique` / `--x-initial unique|fast|0` 的**全部**组合下
+  `$isunknown` 都是 false；未驱动的 output 也当 0）⇒ ⇒ E1 ⑤ 改为**内容判据**。
+- **复位释放必须避开 posedge 采样竞态**：在 `@(posedge clk)` 之后**同一时刻**拉低
+  `rst` ⇒ 该沿的 `always_ff` 看到**新值** ⇒ ⇒ 复位拍被吃掉 ⇒ ⇒ 计数从 2 开始
+  （手推 1、实测 2）⇒ ⇒ 改在 **`negedge`** 释放。
+- **「跳到第 N 拍再查一次」的 task 是错法**：期望值按「第 n 拍」写、task 内却只等
+  **1** 拍 ⇒ ⇒ 期望值与拍数**错位**（实测 `fails=6`）⇒ ⇒ 改**逐拍检查**。
+
+### 验证
+- ctest **263/263 PASS** · 12 条护栏全绿 · examples **28/28**
+- E5 护栏：首批 10 项中 **1 项 verified**（`counter_simple_example`）· 其余 9 项
+  **红**（TB 缺失 = 失败）⇒ ⇒ **因此 E6（CI 接线）还不能做**
+
+---
+
 ## 2026-11-11 — B2 批（E2 测试台骨架 + E8 锚点单一更新入口）
 
 ### Added
