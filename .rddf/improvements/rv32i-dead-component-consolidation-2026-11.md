@@ -4,7 +4,8 @@ priority: P2
 phase: phase-6
 category: cpu
 type: chore
-状态: draft
+状态: in-progress
+进度: B0 的 ⑧ SLTU 修缺陷 / C5+C6 同批退役 / C7 交接登记 / C8 `mem_is_load` tie-off 已落（B0 验收 `67926cf`+`bd21b45`）· **B4 的 C1–C4 未开工**
 主题: riscv-mini 技术债清零
 依赖: public-api-remove-visibility-2026-11（公开面移除/改名登记机制）· rv32i-commit-path（时序基线）
 来源: 用户 2026-11-10 拍板「#6 按你建议」+ planner 实测消费点普查

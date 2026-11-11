@@ -5,6 +5,7 @@ phase: phase-6
 category: cpu
 type: feature
 状态: draft
+进度: B3 未开工 · ADR-068 **Accepted**（T2′ = (F) 字节道拆分存储）· **T2（MEM 数据对齐 A/B）待 architect 裁定** ⇒ ⇒ T2 相关项不可开工
 主题: 已知功能缺口清零
 依赖: rv32i-commit-path（时序金标基线）· firmware-load-chain-2026-11（装载路径先做）
 来源: 用户 2026-11-10 拍板「#12 改成寄存器读」+ planner 实测（组合读 ⇒ 推断不出 BRAM）

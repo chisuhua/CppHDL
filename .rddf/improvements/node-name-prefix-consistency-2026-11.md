@@ -4,7 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: fix
-状态: draft
+状态: implemented
+进度: P1 口径对齐（B0 F-A）+ P2 判据（`tests/test_component_naming.cpp`）+ P3 契约化（change `node-name-prefix-path-contract-2026-11` 已归档）+ P4 行为变更登记 均已落
 主题: Verilog codegen 完整化
 依赖: component-ownership-and-naming（节点名构造的规范所有者）· port-name-literal-parity-2026-11（字面同名路线的可行边界 · 本项是其**上游前置**）
 来源: 用户 2026-11-10 拍板「按这个顺序推进」+ oracle 建议 4（把 F-A 从 route (c) 里拆出）+ planner 实测（2026-11-10）+ metis 第 1 轮（6 BLOCKER）

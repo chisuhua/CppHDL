@@ -5,6 +5,7 @@ phase: phase-6
 category: cpu
 type: feature
 状态: draft
+进度: B4 未开工 · ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ ⇒ 实施前 MUST 先确认 phase-6 P6 的侦察结论已并入
 主题: RV32I ISA 缺口
 依赖: rv32i-commit-path（时序基线）· memory-timing-contract-2026-11（建议先行，稳时序基线）
 来源: planner 实测（未识别 opcode 静默当 NOP 穿过 5 级）+ phase-6 P6 的「CSR / ECALL / FENCE MUST 独立立项」约束

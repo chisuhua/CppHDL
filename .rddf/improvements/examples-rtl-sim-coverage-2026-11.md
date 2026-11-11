@@ -4,7 +4,8 @@ priority: P2
 phase: phase-6
 category: testing
 type: feature
-状态: draft
+状态: in-progress
+进度: E1 / E2 / E4 / E5 / E7 / E8 已落 · **E3 = 5/10 verified**（counter 54 · counter_simple 768 · pwm 13 · gpio 9 · quadrature 7）· **E6 ⬜**（前置 = E3 **10/10**）· E3 余 5 项：`fifo_stream` · `uart_tx` · `uart_rx` · `axi4_lite` · `riscv-mini` smoke
 主题: dual-backend 测试完整化
 依赖: rtl-emit-product-tooling-2026-11（CLI + manifest）· port-naming-ratchet-2026-11（端口名可读）
 来源: 用户 2026-11-10 拍板「③ 对 example 下的示例添加完整的 RTL 生成和独立 Verilog 仿真能力，同时是否也需要创建单元测试覆盖生成 RTL 和独立 Verilator 测试能力」

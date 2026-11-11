@@ -4,7 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
-状态: draft
+状态: implemented
+进度: N1–N6 全部落地（B0 ⑥ + B1 · 2026-11-11 验收 APPROVE）· N5 第 2 步 = **独立立项**（不在本项）
 主题: Verilog codegen 完整化
 依赖: rtl-emit-product-tooling-2026-11（manifest）· public-api-remove-visibility-2026-11（公开面登记机制）· rtl-hierarchical-output（命名规则规范所有者）
 来源: 用户 2026-11-10 拍板「⑤ 生成的 RTL 顶层端口，希望保持和 C++ 侧一样的命名」+ planner 实测规模盘点

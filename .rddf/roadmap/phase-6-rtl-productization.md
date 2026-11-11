@@ -16,6 +16,20 @@
 
 ---
 
+## 0.0 状态词表（**improvement frontmatter 的 `状态:` 取值**）
+
+| 值 | 含义 |
+|---|---|
+| `draft` | 草案已写 · **未批准** · 未开工 |
+| `approved` | **已批准**（裁决已落定）· 未开工 |
+| `in-progress` | 部分 work item 已实施并验收 · 仍有未开工项 |
+| `implemented` | 本项全部可做 work item 已落地（**不可做的部分已显式登记为独立立项**） |
+
+> ⚠️ **2026-11-12 扩充**：此前仓内只用过 `draft` / `approved` / `implemented` 三个值 ⇒ ⇒
+> 「部分实施」的中间态**无值可用** ⇒ ⇒ 全部 9 份 RTL 轨草案长期停在 `draft` ⇒ ⇒
+> **状态与现实脱节**（architect 复盘的 finding F2）⇒ ⇒ 故新增 `in-progress`。
+> ⚠️ 本词表是**本轨的约定** ⇒ ⇒ 其它轨的 improvement 若用其它值，以各自文档为准。
+
 ## 0. ⚠️ 本表是**重建**（如实登记）
 
 原「B0–B4 批次表」**只存在于评审对话**，**未落进任何工件**（critic 第 1/2 轮已指出：
@@ -106,7 +120,7 @@
 
 | work item | 来源 | 内容 | 依赖 |
 |---|---|---|---|
-| **E1–E8** | `examples-rtl-sim-coverage` | `--emit-tb-stub`（只发骨架）· **首批 10 个 target**（确切 target 名以 `examples/CMakeLists.txt:34-76` 为准）· **E4′ 已验证 = 1 / 待补期望源 = 9**（每项 MUST 列「缺什么」）· E5 运行护栏 `verify_examples_rtl_sim.sh`（缺失 ⇒ **失败**不跳过；TB 末尾 MUST 打印 `RESULT: checks=<N> fails=0`）· **E6 CI = 挂 `pr-verilator-fast` 的一个 step**（**不**新建 job · **不**注册 CTest · **不**加 `rtl_sim` label）· 缓存 key 含 TB 名（独立目录） | B1 的 CLI + manifest |
+| **E1–E8** | `examples-rtl-sim-coverage` | `--emit-tb-stub`（只发骨架）· **首批 10 个 target**（确切 target 名以 `examples/CMakeLists.txt:34-76` 为准）· **E4′ 已验证 = 5 / 待补期望源 = 5**（每项 MUST 列「缺什么」；⚠️ **2026-11-12 订正** —— 原写「已验证 = 1 / 待补 = 9」= 事实漂移：P1 期望源独立性落地后，counter 54 · counter_simple 768 · pwm 13 · gpio 9 · quadrature 7 已 verified ⇒ ⇒ 余 5 项 = `fifo_stream` · `uart_tx` · `uart_rx` · `axi4_lite` · `riscv-mini` smoke）· E5 运行护栏 `verify_examples_rtl_sim.sh`（缺失 ⇒ **失败**不跳过；TB 末尾 MUST 打印 `RESULT: checks=<N> fails=0`）· **E6 CI = 挂 `pr-verilator-fast` 的一个 step**（**不**新建 job · **不**注册 CTest · **不**加 `rtl_sim` label）· 缓存 key 含 TB 名（独立目录） | B1 的 CLI + manifest |
 
 > ⚠️ **E6 的 CI 形态**已由用户裁决 ⇒ ⇒ 本批**不得**改成新 job（会引入第二次完整 build）。
 
@@ -199,5 +213,5 @@ bash scripts/verify_roadmap_fragments.sh --self-test
 |---|---|
 | `scripts/verify_roadmap_fragments.sh` | ✅ PASS（AUTO 块守恒 + feature 内部一致性）⇒ ⇒ 本文件**不是** feature fragment ⇒ ⇒ 不影响根 `AGENTS.md` 的 AUTO 块 |
 | `scripts/verify_roadmap_fragments.sh --self-test` | ✅ 全部通过 |
-| 8 份 improvement 草案的 `pre_create_brainstorm_check.sh` | ✅ **9/9 PASS**（2026-11-10 · 新增 `node-name-prefix-consistency-2026-11` 后） |
+| 9 份 improvement 草案的 `pre_create_brainstorm_check.sh` | ✅ **9/9 PASS**（2026-11-10 首跑 · **2026-11-12 重跑** —— R2 阶段把 9 份的 `状态:` 从 `draft` 改为 `approved` / `in-progress` / `implemented` **之后** ⇒ ⇒ **实测该脚本不校 `状态:` 字段** ⇒ ⇒ 状态改动**不触发** HARD-GATE ⇒ ⇒ 本行由「历史快照」变为**可复现**（脚本路径 = `rdd-workflow/skills/rdd-workflow-brainstorm/scripts/pre_create_brainstorm_check.sh`）|
 | 本表**不含**任何未落盘的「批次」 | ✅ B0–B4 的每个 work item 都指到**具体的 improvement 草案 + work item ID** ⇒ ⇒ 可 grep、可追 |

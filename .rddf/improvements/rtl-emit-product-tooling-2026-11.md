@@ -4,7 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
-状态: draft
+状态: implemented
+进度: C1 / C3 / C4 / C5 / C6 全部落地（B1 · 2026-11-11 验收 APPROVE · 记录 `.rddf/reviews/b1-batch-verify-2026-11.md`）· C2 已撤回（2026-11-11 用户裁决）
 主题: Verilog codegen 完整化
 依赖: core-node-driver-visibility（已实施）· rtl-hierarchical-output · hierarchical-port-naming-guard
 来源: 用户拍板 2026-11-10「生成器可以作为项目提供的能力」+ 2026-11-10 实测（`toVerilog` 产物形态）

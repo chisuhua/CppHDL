@@ -4,7 +4,8 @@ priority: P2
 phase: phase-6
 category: framework
 type: feature
-状态: draft
+状态: implemented
+进度: P1 探针固化 / P2 契约化（change `port-naming-member-parity-contract-2026-11` 已归档）/ P3 裁定包（`.rddf/checks/decision-request-port-naming-parity-2026-11.md`）均已落 · P4 **条件化未触发**（route (c) 当前不做 · 触发条件见残差登记行 21/21b）
 主题: Verilog codegen 完整化
 依赖: port-naming-ratchet-2026-11（命名规则 + N5 第 1 步 manifest 双字段）· rtl-emit-product-tooling-2026-11（manifest schema · is_top_io）· component-ownership-and-naming（节点名构造的规范所有者）· public-api-remove-visibility-2026-11（公开面登记机制）
 来源: 用户 2026-11-10 拍板「⑤ 生成的 RTL 顶层端口，希望保持和 C++ 侧一样的命名」+ planner 三探针实测（2026-11-10）+ metis 第 1 轮 gap 分析
