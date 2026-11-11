@@ -13,9 +13,9 @@
 //        enable=1 clear=1 ⇒ **0**（clear 优先于 enable）
 //        enable=0 clear=1 ⇒ **0**
 //
-// **metamorphic（相对判据）**：
-//   · **静止性**：`enable=0 ∧ clear=0` 的连续区间内值恒定（场景 1 / 3）
-//   · **clear 后重建**：clear 一拍后为 0，随后步进仍为 +1（场景 4 → 5）
+// **metamorphic（相对判据）**（⚠️ 场景 1/3 的「保持」是**绝对判据**，不算相对）：
+//   · **场景 7**：**逐拍**相对判据 —— `enable=1 ⇒ 值 +1` · `enable=0 ⇒ 值不变`
+//     （确定性伪随机 enable 序列 40 拍）⇒ ⇒ 完全不依赖基准值。
 //
 // ⚠️ **关于 `counter.cpp:211-214` 的自认注释**：
 //   那条注释（「enable/clear may not fully work yet」）出现在 example 的 **C++
@@ -41,6 +41,10 @@ module tb_counter_example;
 
     integer checks = 0;
     integer fails  = 0;
+    // ⚠️ MUST 在 **module 级**声明（`begin/end` 块里声明 ⇒ `%Warning-IMPLICITSTATIC`
+    //   ⇒ 严格 flags 下**致命** —— 实测踩过两次）
+    integer      seed = 12345;
+    logic [7:0]  prev = 8'd0;
 
     top dut (
         .default_clock(clk),
@@ -115,6 +119,29 @@ module tb_counter_example;
         else if (value !== 8'd255) fails = fails + 1;
         // 再一拍 ⇒ 255 + 1 = 256 ⇒ 截断到 8 位 ⇒ **0**
         check_beat(8'd0);
+
+        // ── 场景 7（**metamorphic**）：**逐拍相对判据** `Δ == enable` ──
+        //   ⚠️ 旧写法（**已修**）用「区间首尾之差 == enable 拍数」⇒ ⇒ **边界差 1**
+        //     （`base` 的采样时机与第一个 `posedge` 的先后无法稳定约定）
+        //     ⇒ ⇒ 改为**逐拍比较相邻值**：`enable=1 ⇒ +1` · `enable=0 ⇒ 不变`
+        //     ⇒ ⇒ 完全不依赖基准值 ⇒ ⇒ 抓「步进不是 1」「enable 失效」「保持失效」。
+        begin
+            clear = 1'b0;
+            @(posedge clk);
+            #1;
+            prev = value;
+            for (int i = 0; i < 40; i = i + 1) begin
+                seed = seed * 17 + 3;      // 确定性伪随机 ⇒ 可复现
+                enable = seed[4];
+                @(posedge clk);
+                #1;
+                checks = checks + 1;
+                if ($isunknown(value))                                 fails = fails + 1;
+                else if (enable === 1'b1 && value !== prev + 8'd1)      fails = fails + 1;
+                else if (enable === 1'b0 && value !== prev)             fails = fails + 1;
+                prev = value;
+            end
+        end
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);
         if (fails != 0) $fatal(1, "tb_counter_example failed");

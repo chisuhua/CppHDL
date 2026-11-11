@@ -28,6 +28,8 @@ module tb_counter_simple_example;
 
     integer checks = 0;
     integer fails  = 0;
+    // ⚠️ 记录第一轮的**实测值** ⇒ ⇒ 第二轮与它比较（**真** metamorphic）
+    logic [7:0] recorded [0:255];
 
     top dut (
         .default_clock(clk),
@@ -74,16 +76,26 @@ module tb_counter_simple_example;
             check_beat(n);
         end
 
-        // ── ② metamorphic 相对判据：**周期 256**（v[n] == v[n+256]）──
-        //   ⚠️ 这一组**不看绝对值** ⇒ ⇒ 即使「初值/偏移/步进常量」之一错了，
-        //     只要它不自洽就会红；反之绝对判据全对时它也必然对
-        //     ⇒ ⇒ 它抓的是「实现改成了另一个周期」这类漂移。
+        // ── ② metamorphic 相对判据：**周期 256** ────────────────────
+        //   ⚠️ 旧写法（**已修**）第二轮又断言 `top_value == n[7:0]`（绝对值）
+        //     ⇒ ⇒ 那**依赖第一轮的绝对期望**，第一轮期望若写错它也跟着错
+        //     ⇒ ⇒ 不是「相对判据」。
+        //   ⇒ ⇒ 现在：**第一轮把实测值记进数组**，第二轮与**记录的实测值**比
+        //     ⇒ ⇒ 完全独立于绝对期望 ⇒ ⇒ 抓「周期不是 256」这类漂移。
+        for (int n = 1; n <= 256; n = n + 1) begin
+            @(posedge clk);
+            #1;
+            recorded[n - 1] = top_value;   // 记录第一轮实测
+            checks = checks + 1;
+            if ($isunknown(top_value)) fails = fails + 1;
+            else if (top_value !== n[7:0]) fails = fails + 1;
+        end
         for (int n = 1; n <= 256; n = n + 1) begin
             @(posedge clk);
             #1;
             checks = checks + 1;
-            if ($isunknown(top_value)) fails = fails + 1;
-            else if (top_value !== n[7:0]) fails = fails + 1;  // 第二轮的同一拍
+            if ($isunknown(top_value))                    fails = fails + 1;
+            else if (top_value !== recorded[n - 1])        fails = fails + 1;  // **相对**
         end
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);

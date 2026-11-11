@@ -6,6 +6,45 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B2 批 · 自查纠偏：metamorphic 判据的「标注不实」
+
+> 用户要求「检查已完成的示例是否都通过测试、是否符合预期目标」⇒ 做了全量自查（清缓存强制重编译）。
+
+### 通过性（清缓存 · 全量重编译）
+
+5 个 verified **全部通过**：`counter`(54) · `counter_simple`(768) · `pwm`(13) ·
+`gpio`(9) · `quadrature`(7) ⇒ **无「命中旧缓存」的假绿**。
+
+### ❌ 自查发现的实质问题：**metamorphic 判据 3/5 标注不实**
+
+| TB | 原宣称 | 实际 | 处置 |
+|---|---|---|---|
+| `counter_simple` | 「周期 256」 | 第二轮**又断言绝对值** `== n`（依赖第一轮期望） | ✅ **改为记录第一轮实测值**再比 ⇒ 真相对（768 checks） |
+| `counter` | 「静止性 / clear 后重建」 | 两者都是**绝对判据**（期望写死） | ✅ 新增**场景 7：逐拍相对判据** `enable=1⇒+1 / =0⇒不变`（40 拍确定性伪随机）⇒ 54 checks |
+| `gpio` | （无） | **缺** | ✅ 新增**场景 G：自反性「输入恒定 8 拍 ⇒ 中断恒 0」**（无状态依赖）⇒ 9 checks |
+| `pwm` | 「256 拍高电平数 == duty」 | 真相对 | ✅ 无需改 |
+| `quadrature` | 「正转 N 后反转 N 回原点」 | 真相对 | ✅ 无需改 |
+
+### 两次「写错的判据」及其否决理由（都写进登记文档留档）
+
+1. **`counter` 的「区间 Δ == enable 拍数」**：实测 `delta=20 beats=19` ⇒ **边界差 1**
+   （`base` 采样与第一个 `posedge` 的先后无法稳定约定）⇒ 改为**逐拍比较相邻值**
+   （无基准值依赖）。
+2. **`gpio` 的「一次跳变 ⇒ 恰好 1 拍脉冲」**：实测 `pulse_count=0` ⇒
+   与本 TB 前面的场景状态**强耦合**（同步链相位不确定）⇒ 改为**自反性判据**。
+
+### 严格 flags 继续抓 TB 自身缺陷（已修）
+
+`%Warning-IMPLICITSTATIC`（`integer` / `logic` 在 `begin/end` 块里声明）·
+`%Warning-WIDTHEXPAND`（`integer` vs 8/16 位）—— 共 3 处。
+
+### 验证
+
+清缓存全量：5 verified 全绿（54 / 768 / 13 / 9 / 7）· `--self-test` 5 投毒各自红 +
+还原复绿 · 5 pending（`--budget=5`）
+
+---
+
 ## 2026-11-11 — B2 批 · 第 5 个 TB（quadrature_encoder）+ 一条期望源边界裁决
 
 ### Added

@@ -52,6 +52,7 @@ module tb_gpio_example;
 
     integer checks = 0;
     integer fails  = 0;
+    integer steady_high = 0;   // metamorphic「输入恒定 ⇒ 中断恒 0」用（module 级）
 
     top dut (
         .default_clock(clk),
@@ -76,6 +77,7 @@ module tb_gpio_example;
             else if (gpio_out !== want_out) fails = fails + 1;
             if ($isunknown(interrupt))      fails = fails + 1;
             else if (interrupt !== want_irq) fails = fails + 1;
+
             // ⚠️ **不断言** `gpio_inst_out == gpio_out` 那类「同线相等」：
             //   它们在产物里是 `assign A = B;` 的同一条线 ⇒ ⇒ **恒真** ⇒ 零信息量
             //   （metis 指出的 slop 形态）。端口存在性由「编译通过」保证。
@@ -124,6 +126,26 @@ module tb_gpio_example;
         interrupt_enable = 1'b0;
         gpio_in = 8'hFF;            // 制造一次上升
         check_beat(8'h00, 1'b0);
+
+        // ── 场景 G（**metamorphic**）：**输入恒定 ⇒ interrupt 恒 0** ──────
+        //   自反性判据（**不需要知道任何期望值**）：没有输入变化 ⇒ 没有事件
+        //   ⇒ ⇒ 抓「中断卡在 1」「边沿检测退化成电平跟随」这类缺陷。
+        //   ⚠️ 旧写法（**已删**）试图断言「一次跳变 ⇒ 恰好 1 拍脉冲」，
+        //     但它与本 TB 前面的场景状态强耦合（同步链的相位不确定）
+        //     ⇒ ⇒ 实测 `pulse_count=0` ⇒ ⇒ **不可靠** ⇒ 改用自反性（无状态依赖）。
+        interrupt_enable = 1'b1;
+        gpio_in = 8'hA5;
+        repeat (4) @(posedge clk);      // 让同步链稳定（4 拍 > 2 拍延迟）
+        begin
+            steady_high = 0;
+            for (int i = 0; i < 8; i = i + 1) begin
+                @(posedge clk);
+                #1;
+                if (interrupt === 1'b1) steady_high = steady_high + 1;
+            end
+            checks = checks + 1;
+            if (steady_high != 0) fails = fails + 1;   // 输入恒定 ⇒ 中断 MUST 恒 0
+        end
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);
         if (fails != 0) $fatal(1, "tb_gpio_example failed");
