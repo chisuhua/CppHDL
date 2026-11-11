@@ -2,13 +2,16 @@
 //
 // **独立 Verilog TB**（`examples-rtl-sim-coverage` E3）—— `pwm_example`
 //
-// ⚠️ **期望值出处（手推，禁抄仿真输出）**：
-//   被测实现 `examples/spinalhdl-ported/pwm/pwm.cpp`：
-//   · `PWM<8>` 内部 `ch_reg<ch_uint<8>> counter(0_d)`（复位值 **0**）
-//   · 每拍 `counter->next = counter + 1_d` ⇒ ⇒ **自由运行 8 位计数器**
-//   · `less_than = (counter < duty_cycle)`
-//   · `pwm_out = select(enable, less_than, false)`
-//        ⇒ ⇒ **enable 为 0 ⇒ 输出恒 0**；**enable 为 1 ⇒ 输出 = (counter < duty)**
+// EXPECT-SRC: .rddf/checks/examples-rtl-expectations.md#pwm-example
+//
+// ⚠️ **期望值出处** = 上面那份登记（**spec-derived**）：语义取自 **SpinalHDL 上游
+//   Scala 原文**（`io.pwm = (counter < io.value) & io.enable`，counter 自由运行）
+//   ⇒ ⇒ **不是**从被测 `.cpp` 的实现表达式反推。
+//   ⇒ ⇒ `pwm_out = enable ∧ (counter < duty)`；**enable=0 ⇒ 恒 0**
+//
+// **metamorphic（相对判据）**：
+//   · **占空比周期性**：连续 **256 拍**里高电平拍数 **== duty**
+//     ⇒ ⇒ 只依赖「counter 跑满 0..255」+ `pwm = en ∧ (counter < duty)`
 //   ⇒ ⇒ **手推表**（复位释放后的第 N 个 posedge 之后 ⇒ counter = N mod 256）：
 //        duty_cycle = 4, enable = 1
 //          N = 1, 2, 3   ⇒ counter < 4 ⇒ pwm = **1**
@@ -35,6 +38,9 @@ module tb_pwm_example;
 
     integer checks = 0;
     integer fails  = 0;
+    // ⚠️ MUST 在 **module 级**声明（在 begin/end 块里声明会触发
+    //   `%Warning-IMPLICITSTATIC` ⇒ ⇒ 严格 flags 下**致命** —— 实测踩过）
+    integer high_count = 0;
 
     top dut (
         .default_clock(clk),
@@ -95,6 +101,21 @@ module tb_pwm_example;
         duty_cycle = 8'd255;
         check_beat(1'b1);
         check_beat(1'b1);
+
+        // ── 场景 5（**metamorphic**）：duty=200 · **256 拍内高电平数 == 200** ──
+        //   只依赖「counter 跑满 0..255」+ `pwm = en ∧ (counter < duty)`
+        //   ⇒ ⇒ 不看任何单拍的绝对值 ⇒ ⇒ 抓「占空比关系被改坏」这类漂移。
+        duty_cycle = 8'd200;
+        begin
+            high_count = 0;
+            for (int i = 0; i < 256; i = i + 1) begin
+                @(posedge clk);
+                #1;
+                if (pwm_out === 1'b1) high_count = high_count + 1;
+            end
+            checks = checks + 1;
+            if (high_count != 200) fails = fails + 1;
+        end
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);
         if (fails != 0) $fatal(1, "tb_pwm_example failed");

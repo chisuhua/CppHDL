@@ -6,6 +6,55 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B2 批 · P1 期望源独立性（消除循环论证）
+
+> 来源：`@metis` 审查指出「**期望表用实现表达式书写 = 转录不是推导** ⇒ 循环论证」。
+
+### Added
+- **`.rddf/checks/examples-rtl-expectations.md`** —— **可审阅的期望登记**：
+  每个 DUT 一节 = 上游参考（**SpinalHDL Scala 原文**，逐字转录）· 「输入序列 → 期望输出」表 ·
+  推导前提（impl-contract）· **metamorphic 判据** · **首次跑红记录**。
+  ⇒ ⇒ TB 只写 `EXPECT-SRC: .rddf/checks/examples-rtl-expectations.md#<anchor>`，
+  **不再**把被测 `.cpp` 当出处。
+- **期望分两级**（TSV 的 `spec_checks` 列）：
+  **spec-derived（强）** = 上游 Scala / 外部规范；**impl-contract（弱）** = 延迟/拍数/tie-off。
+- **护栏新判据**（`verify_examples_rtl_sim.sh`）：
+  - `EXPECT-SRC:` 缺失 ⇒ 红
+  - `EXPECT-SRC:` **指向 `.cpp`** ⇒ 红（转录实现 = 循环论证）—— 判别力实测 ✓
+  - `status=verified` 但 `spec_checks < 3` ⇒ **软告警**（impl-contract only：只能防漂移，
+    不能证明符合规范）⇒ 不硬判是因为 `gpio_example` 的上游偏离**待裁决**。
+
+### metamorphic 判据（相对判据 · 不依赖绝对值）
+- `counter_simple`：**周期 256**（`v[n] == v[n+256]`）⇒ 512 拍（前半绝对 · 后半相对）
+- `pwm`：**256 拍内高电平数 == duty**（只依赖「counter 跑满 0..255」+ `pwm = en ∧ (counter < duty)`）
+- `counter`：**静止性**（`enable=0 ∧ clear=0` 区间内值恒定）+ **clear 后重建**
+- `gpio`：**静止性** + **屏蔽性**（`interrupt_enable=0` ⇒ 恒 0）
+
+### ⚠️ 一条实质发现（已登记，待裁决）
+**`gpio_example` 的 C++ 实现与上游 Scala 语义不同**：
+
+| 维度 | 上游 Scala | 被测 C++ |
+|---|---|---|
+| 同步级数 | **1 级** | **2 级** |
+| 边沿判定 | **单 bit**（`io.pin` 是 `Bool`） | **8 位逐位**（非零即中断） |
+| 端口 | `pin` / `interrupt` / `value` | 多出 `output_enable` / `interrupt_enable` + `output_reg` 锁存 |
+
+⇒ ⇒ 该 TB 的期望源只能标 `impl-contract`（`spec_checks=0`）⇒ ⇒
+**待裁决**：是有意扩展还是移植缺陷？在裁决前 TB 的作用是**防静默漂移**。
+
+### 严格 flags 的即时收益（实测）
+去掉 `-Wno-fatal` 后立刻抓到 TB 自己的 `%Warning-IMPLICITSTATIC`
+（`integer` 在 `begin/end` 块里声明）⇒ ⇒ 已改到 module 级。
+**这就是「无 `-Wno-fatal`」的判别力证明**。
+
+### 验证
+- E5：4 项 verified 全绿（counter 14 · counter_simple **512** · pwm **13** · gpio 8）+ 6 项 pending 放行
+- `--self-test`：基线绿 + 5 投毒各自红 + 还原复绿
+- `EXPECT-SRC → .cpp` 投毒 ⇒ 红 ✓
+- 4 条其它护栏全绿
+
+---
+
 ## 2026-11-11 — B2 批 · 护栏判别力加固（metis 审查后的 P0/P2 项）
 
 > 来源：`@metis` 审查「B2 剩余 6 项该继续还是调整」⇒ 结论**先调整**（护栏目前没有判别力）。

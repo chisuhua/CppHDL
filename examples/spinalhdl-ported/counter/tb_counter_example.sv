@@ -2,18 +2,20 @@
 //
 // **独立 Verilog TB**（`examples-rtl-sim-coverage` E3）—— `counter_example`
 //
-// ⚠️ **期望值出处（手推，禁抄仿真输出）**：
-//   被测实现 `examples/spinalhdl-ported/counter/counter.cpp` 的 `Counter<8>`：
-//   · `counter_reg` 复位值 **0**
-//   · `next = select(clear, 0, select(enable, counter_reg + 1, counter_reg))`
-//        ⇒ ⇒ **clear 优先**；否则 **enable ⇒ +1**；否则 **保持**
-//   · `counter_reg + 1` 是 **9 位**（8+1）⇒ ⇒ 写回 8 位寄存器时**截断**
-//        ⇒ ⇒ **255 + 1 ⇒ 0**（模 256 回绕）
+// EXPECT-SRC: .rddf/checks/examples-rtl-expectations.md#counter-example
+//
+// ⚠️ **期望值出处** = 上面那份登记（**spec-derived**）：语义取自 **SpinalHDL 上游
+//   Scala 原文**的 `when(io.clear) { 0 } elsewhen(io.enable) { +1 }`
+//   ⇒ ⇒ **不是**从被测 `.cpp` 的实现表达式反推。
 //   ⇒ ⇒ **手推表**（沿后读）：
 //        enable=0 clear=0 ⇒ **保持**
 //        enable=1 clear=0 ⇒ **+1**（模 256）
 //        enable=1 clear=1 ⇒ **0**（clear 优先于 enable）
 //        enable=0 clear=1 ⇒ **0**
+//
+// **metamorphic（相对判据）**：
+//   · **静止性**：`enable=0 ∧ clear=0` 的连续区间内值恒定（场景 1 / 3）
+//   · **clear 后重建**：clear 一拍后为 0，随后步进仍为 +1（场景 4 → 5）
 //
 // ⚠️ **关于 `counter.cpp:211-214` 的自认注释**：
 //   那条注释（「enable/clear may not fully work yet」）出现在 example 的 **C++

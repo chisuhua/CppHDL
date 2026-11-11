@@ -158,6 +158,25 @@ check_one() {
         return 1
     fi
 
+    # ②' **期望源出处**（P1-8）：TB 头部 MUST 有 `EXPECT-SRC:` 指向**登记文档**，
+    #    且 **MUST NOT** 指向被测 `.cpp`（那是**转录**实现、不是推导 ⇒ ⇒ 循环论证）
+    if ! grep -qE '^// EXPECT-SRC:' "$tb_path"; then
+        fail "②' TB 头部缺 \`EXPECT-SRC:\`（期望值出处 MUST 登记）"
+        return 1
+    fi
+    if grep -qE '^// EXPECT-SRC:.*\.cpp' "$tb_path"; then
+        fail "②' \`EXPECT-SRC\` 指向 \`.cpp\` ⇒ ⇒ 转录实现 = 循环论证"
+        return 1
+    fi
+
+    # ②'' **spec_checks 软检查**（不失败，只告警）：
+    #   「verified 但 spec_checks < 3」= 只有 impl-contract 断言
+    #   ⇒ ⇒ 它只能**防漂移**，不能**证明符合外部规范**
+    #   ⇒ ⇒ 不硬判是因为 `gpio_example` 的上游偏离**待裁决**（不能因裁决未定就阻塞）
+    if [ "$status" = "verified" ] && [ "$spec" -lt 3 ]; then
+        echo "  [0;33m⚠️  ②'' spec_checks=$spec < 3 ⇒ ⇒ impl-contract only（只能防漂移，不能证明符合规范）[0m"
+    fi
+
     # ③ 发射器
     local emitter_bin=""
     while IFS= read -r cand; do

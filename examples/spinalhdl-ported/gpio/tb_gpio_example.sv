@@ -2,14 +2,16 @@
 //
 // **独立 Verilog TB**（`examples-rtl-sim-coverage` E3）—— `gpio_example`
 //
-// ⚠️ **期望值出处（手推，禁抄仿真输出）**：
-//   被测实现 `examples/spinalhdl-ported/gpio/gpio.cpp` 的 `GPIO`：
-//   · 两级同步：`sync_stage1 ← gpio_in` · `sync_stage2 ← sync_stage1`
-//   · 上升沿 `rise  = gpio_in & ~sync_stage2`（**逐位**与，不是「任一位上升」）
-//   · 下降沿 `fall  = ~gpio_in & sync_stage2`
-//   · `interrupt = interrupt_enable ? (rise|fall != 0) : 0`
-//   · `output_reg ← gpio_in`（沿上采样 ⇒ 沿后 = 沿时的 gpio_in）
-//   · `gpio_out = output_enable ? output_reg : 0`
+// EXPECT-SRC: .rddf/checks/examples-rtl-expectations.md#gpio-example
+//
+// ⚠️ ⚠️ **本 TB 的期望值只能锁「当前 C++ 实现」的行为**（级别 = `impl-contract`）：
+//   上游 Scala 与 C++ 实现的语义**实质不同**（1 级 vs **2 级**同步 ·
+//   **单 bit** vs **逐位**边沿 · 多出 `output_enable` / `interrupt_enable` 与 `output_reg`）
+//   ⇒ ⇒ `spec_checks = 0` ⇒ ⇒ **待裁决**是「有意扩展」还是「移植缺陷」。
+//   ⇒ ⇒ 在裁决前，本 TB 的作用是**防行为静默漂移**（不是「证明它符合上游」）。
+//
+// 当前实现（手推依据，见登记文档的对照表）：
+//   两级同步 · 逐位边沿 · `interrupt = ie ? (edge!=0) : 0` · `gpio_out = oe ? output_reg : 0`
 //
 //   ⇒ ⇒ **手推表**（沿后读；记 `s1` = sync_stage1、`s2` = sync_stage2）
 //        场景 A：gpio_in=0x00 · 全程无变化
