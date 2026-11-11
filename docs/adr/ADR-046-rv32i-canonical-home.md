@@ -219,6 +219,18 @@ lib 版前推被禁用（注释称「会导致 IR 图循环依赖」），exampl
 ⇒ 修正 ADR-038 §2.2 的表述：example 下的组件**不再**是「无 canonical home」，
 而是**有 canonical home（`include/cpu/`）但尚未迁移**。
 
+> ⚠️ **2026-11-11 更新（B0 批 `rv32i-dead-component-consolidation` C5 同批退役）**：
+> 表格第二行 `riscv::ForwardingUnit` 已**物理删除**（`include/cpu/pipeline/rv32i_forwarding.h`
+> 不再存在）⇒ ⇒ **本 D6 描述的「两个 `ForwardingUnit` 并存，靠 namespace 区分」这一状态
+> 已不存在** ⇒ ⇒ ⇒ **本 D6 的「处置」已执行完毕**（`riscv::ForwardingUnit` 这一侧退役）
+> ⇒ ⇒ ⇒ ⚠️ **但 ADR-038 §2.3 / §5 的裁决本身仍有效**（其合并对象 =
+> `chlib::ForwardingUnit` + `riscv::HazardUnit` —— **两者都还在**）⇒ ⇒ ⇒ ⇒
+> **不得**据本次删除把 ADR-038 §2.3 判为「已废止」。
+> ⚠️ **残留（如实登记）**：`chlib::ForwardingUnit` 组件类**仓内零实例化**
+> ⇒ ⇒ 按 C6 三级准则**待裁决** ⇒ ⇒ **独立立项**（backlog）。
+> ⚠️ **权威 hazard 组件** = `include/cpu/pipeline/hazard_unit.h`（`riscv::HazardUnit`，
+> ADR-047 已接入真实流水线）⇒ ⇒ 流水线侧的数据 mux 组件 = `chlib::ForwardingMux`。
+
 ### D7. 消除 `-I` 顺序消歧
 
 1. 根 `tests/CMakeLists.txt` MUST NOT 出现 `-I <...>/examples/riscv-mini/src`；
@@ -365,6 +377,11 @@ C2 的代码改动 MUST 与 capability delta **同批落地**（新 capability `
   **唯一权威**（`rv32i-data-forwarding` capability）⇒ ⚠️ 该缺陷**今天就存在**
   （现有固件用 3 条 NOP 恰好躲开）⇒ **不接前推也得修**。
 - `chlib::ForwardingUnit` 与 `riscv::ForwardingUnit` 的合并（D6）—— ADR-038 §2.3 已留。
+  ⚠️ **2026-11-11 更新**：`riscv::ForwardingUnit` 已**物理退役**（B0 批 C5 同批退役）
+  ⇒ ⇒ 本条 forward-reference 的**合并对象之一已不存在** ⇒ ⇒ 该 forward-reference **失效**
+  ⇒ ⇒ ⚠️ **但 ADR-038 §2.3 / §5 本身仍 open**（其合并对象 =
+  `chlib::ForwardingUnit` + `riscv::HazardUnit` —— **两者都还在**）⇒ ⇒ ⇒
+  ⇒ ⇒ 剩余待办 = `chlib::ForwardingUnit` 组件类**零实例化**的处置（独立立项 · backlog）。
 - JIT 对 `ch_mem` 读端口的 lowering —— 独立 objective `jit-mem-read-port-support`。
 - e2e parity 本身 —— C3 / `objective-rv32i-e2e`。
 - `include/cpu/cache/*` 的 `namespace chlib` 整治（D8）—— 独立立项。

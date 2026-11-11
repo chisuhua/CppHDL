@@ -489,6 +489,10 @@ MUST **引用**本矩阵，**MUST NOT** 自述矩阵。
 - **`riscv::ForwardingUnit`（`rv32i_forwarding.h`）与 `chlib::ForwardingMux` 的合并**
   （ADR-038 §2.3 裁决留未来）—— ⚠️ 但必须**点名警告**：它的 `ex_alu_result` 输入语义
   就是「**活的 EX 输出**」⇒ **拿它接进流水线会成环**（环饵）
+  ⚠️ **2026-11-11 更新**：`riscv::ForwardingUnit` 已**物理退役**（B0 批 C5 同批退役）
+  ⇒ ⇒ 本条**「不在本 ADR 范围」的登记随之失效**（无对象可合并）⇒ ⇒
+  ⚠️ **ADR-038 §2.3 的合并对象**其实是 `chlib::ForwardingUnit` + `riscv::HazardUnit`
+  —— **两者都还在** ⇒ ⇒ ⇒ 该裁决**仍有效**（独立立项 · backlog）
 - 取指 skid buffer / PC 回退（= T5 `rv32i-fetch-skid-buffer-2026-10`）
 - 分支预测（`rv32i_branch_predict.h` 未接入流水线）
 
@@ -498,7 +502,7 @@ MUST **引用**本矩阵，**MUST NOT** 自述矩阵。
 |---|---|
 | **不接**（永久 V0） | 把「固件手工 NOP + 距离-2 读旧值」固化为 ISA 语义，与「5 级流水线」宣称不符；若判别性固件的回归证据做不出来，**回落到它并如实登记** |
 | **把 mux 放回 `HazardUnit`** | bf78367 的教训 + `rv32i-canonical-home` spec 禁止 |
-| **用 `riscv::ForwardingUnit`** | 其 `ex_alu_result` 输入就是「活 EX 输出」= 环饵；且 mux 归属独立组件是 spec 明文要求。它仍有消费者（`hazard_detection_unit.h` + 两个根测试）⇒ 本 ADR **不动**它 |
+| **用 `riscv::ForwardingUnit`** | 其 `ex_alu_result` 输入就是「活 EX 输出」= 环饵；且 mux 归属独立组件是 spec 明文要求。它当时仍有消费者（`hazard_detection_unit.h` + 两个根测试）⇒ 本 ADR **不动**它 ⚠️ **2026-11-11 更新**：它与那两个消费者**已随 B0 批 C5/C6 同批退役而全部消失** ⇒ ⇒ 该方案**已无对象** |
 | **前推组合 `alu_result`（「同拍 EX→EX」）** | 生产者与消费者不可能同拍同处 EX ⇒ 语义上无意义，且就是事故环 |
 | **档位 1 覆盖 load（V2 形态）** | 会消除 load-use 停顿 ⇒ 与 T5 的边界重叠 ⇒ 独立立项 |
 | **改检测点为 EX 视图**（免打拍） | `id_rs*_addr` 同时服务 load-use 检测（**MUST** 是 ID 视图）⇒ 需加端口 + 第三路比较 ⇒ 改动面更大 |
@@ -562,6 +566,8 @@ MUST **引用**本矩阵，**MUST NOT** 自述矩阵。
 ⚠️ 根 `tests/test_rv32i_pipeline.cpp` 实例化的是 `riscv::ForwardingUnit` / `ControlHazardUnit`
 （`ForwardingUnit` **3** 处：`:151` / `:188` / `:225`；`ControlHazardUnit` 1 处：`:425`）
 ⇒ **不受** `HazardUnit` 改动影响（初稿误列了它，已更正）。
+⚠️ **2026-11-11 更新**：那 **3 处 `riscv::ForwardingUnit` 实例化已随 B0 批 C5/C6 同批退役
+而删除** ⇒ ⇒ 本段是**历史爆炸半径快照**（保留作决策史）⇒ ⇒ **不**代表当前磁盘状态。
 
 ⇒ 另：`scripts/verify_example_assertion_quality.sh` 钉住断言计数 ⇒ 删驱动后
 **MUST 重跑该护栏**（删驱动语句不动断言数，但计数护栏会验证这一点）。
@@ -577,6 +583,8 @@ MUST **引用**本矩阵，**MUST NOT** 自述矩阵。
 - `include/ast/ast_nodes.h:156-159`（`set_driver` 替换 `driver_` 但 `add_src` 累积 ⇒ 双驱动）
 - `include/chlib/forwarding.h:184-243`（`ForwardingMux`：既有 mux，档位 0/1/2）
 - `include/cpu/pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`：4 档、源选择+数据选择合一、**环饵**）
+  ⚠️ **2026-11-11 更新**：该头已**物理退役**（B0 批 C5 同批退役）⇒ ⇒ 此条保留作**决策史**
+  ⇒ ⇒ 当前无该路径。
 - `openspec/specs/rv32i-isa-semantics/spec.md`（「`JALR` 的 `rs1` MUST NOT 依赖数据前推」⇒ D10 需 MODIFIED）
 - `openspec/specs/rv32i-canonical-home/spec.md`（mux 归属 + 「装配后无环」的验证要求）
 - 根 `AGENTS.md §KNOWN LIMITATIONS`（load-use 停顿的「丢指令」面 ⇒ T5 仍必需）

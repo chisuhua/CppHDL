@@ -49,6 +49,23 @@ state of CPU forwarding infrastructure:
 > ⚠️ **但必须点名警告**：`riscv::ForwardingUnit` 的 `ex_alu_result` 输入语义就是
 > 「**活的 EX 级组合输出**」⇒ **拿它直接接进流水线装配会形成组合环**
 > （= ADR-046 §1.3 的事故形态）⇒ 它是**环饵**，不得接入流水线。
+>
+> ⚠️ **2026-11-11 更新（B0 批 `rv32i-dead-component-consolidation` C5 同批退役）**：
+> `riscv::ForwardingUnit`（`include/cpu/pipeline/rv32i_forwarding.h`）已**物理删除**
+> （零交付路径消费者 + 独有语义为空集：WB 档无覆盖 · `id_reg_read` 死输入）
+> ⇒ ⇒ **上条 2026-10-27 更新注的前提已失效**（「ADR-047 **不动** `riscv::ForwardingUnit`」
+> 已不成立 —— 该组件已不存在）⇒ ⇒ ⇒ **本 ADR §2.3 与 §5 的裁决本身仍然有效**
+> （其合并对象 = `chlib::ForwardingUnit`（`include/chlib/forwarding.h:75`，**仍在**）
+> + `riscv::HazardUnit`（`include/cpu/pipeline/hazard_unit.h`，**仍在**）⇒ ⇒ **两者都没被退役**）
+> ⇒ ⇒ ⇒ 被消解的是 **ADR-046 D6**（`docs/adr/ADR-046-rv32i-canonical-home.md:210-218`
+> 「两个 `ForwardingUnit` 并存，靠 namespace 区分」）那条**处置**
+> ⇒ ⇒ ⇒ ⚠️ **不得**据本次删除把本 ADR §2.3 / §5 判为「已废止」⇒ ⇒ 那会诱导后人以为
+> `chlib::ForwardingUnit` 可自由合并 / 删除 ⇒ ⇒ 若日后要动它，**先**读 §2.3 / §5。
+> ⚠️ **附带残留（如实登记）**：`chlib::ForwardingUnit` 组件类现为**仓内零实例化**
+> （全仓 `ForwardingUnit<` 的唯一命中 = `include/chlib/forwarding.h:59` 的文档注释；
+> `tests/chlib/test_forwarding.cpp` 用的是**函数式** `forward_detect<>` / `forward_select<>`）
+> ⇒ ⇒ 按 `rv32i-dead-component-consolidation` C6 三级准则**待裁决**（接入 / 退役 / 登记定位）
+> ⇒ ⇒ ⇒ **独立立项**（backlog）—— **不在** B0 批范围。
 
 So **forwarding.h has exactly one consumer** (a smoke test) and
 is functionally distinct from `riscv::HazardUnit` (which is the
