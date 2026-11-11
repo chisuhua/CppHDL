@@ -83,7 +83,7 @@
 
 | **C5 产物护栏** | `rtl-emit-product-tooling` C5 | `scripts/verify_flat_rtl_emit.sh`：F1（剥 blanket `lint_off` 后重 lint · 两段式基线）· F2（逐字节确定性）· F3（三方比对：manifest ∥ verilog 独立提取 ∥ 手推期望集）· F4（悬空顶层输入**可被发现**，非「必须消失」）· **F5 两段（零引用信号数 == 0 · proxy 恒等直通数 == 0）** · F6（`ctest -L verilator_e2e` 全绿）· F7（`--self-test` 逐条投毒） | C1 · C4 ✅ **2026-11-11 已完成**（`scripts/verify_flat_rtl_emit.sh` · F1–F5 + F6 **不适用**（工具的设计无寄存器）· F7 自检）|
 
-| **C6 codegen 卫生** | `rtl-emit-product-tooling` C6 | `` `default_nettype none `` + 生成元数据头（时间只进 manifest）· 剪零引用信号 + proxy 恒等直通 · 复位写法规范化 · `lint_off` 改按节点白名单 ⇒ ⇒ ⚠️ **MUST 加 `emit_hygiene` 开关（默认 off）** ⇒ ⇒ 层次化产物**字节不变**这条 AC 才成立 | C5 |
+| **C6 codegen 卫生** | `rtl-emit-product-tooling` C6 | `` `default_nettype none `` + 生成元数据头（时间只进 manifest）· 剪零引用信号 + proxy 恒等直通 · 复位写法规范化 · `lint_off` 改按节点白名单 ⇒ ⇒ ⚠️ **MUST 加 `emit_hygiene` 开关（默认 off）** ⇒ ⇒ 层次化产物**字节不变**这条 AC 才成立 | C5 ✅ **2026-11-11 已完成**（`emit_hygiene` 开关 **默认 off** ⇒ ⇒ **默认路径逐字节不变**（实测）；开启后：`default_nettype none` + **确定性**元数据头（**时间只进 manifest**） + **不发** blanket `lint_off` + **不动点剪枝**（零引用信号 · 含**字面量内联**特例） + 保护「跨 module 实例连接端点」⇒ ⇒ **扁平产物零引用 0 / 恒等直通 0**（C5 的 F8 判据））|
 | **N1 具名用法约定 + 探针** | `port-naming-ratchet` N1 | ① 用法约定（`ch_in<ch_bool> prog_we{"prog_we"};`）② **最小可运行探针（MUST · 原为「建议」· 理由：具名构造的调用点实测 = 0 ⇒ 这条路径从未被端到端验证过）** ③ 一条 ctest ④ 文档 | C4 ✅ **2026-11-11 已完成**（用法约定 + **MUST 实跑**探针 + `tests/test_port_name_named_ctor.cpp` 27 断言 + `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`）|
 
 | **N5 第 1 步：manifest 双字段** | `port-naming-ratchet` N5(a) | manifest 加 `name`（RTL 全名）+ `cpp_member`（C++ 成员路径）⇒ ⇒ **零产物变更 · 零 ADR 变更 · 零快照漂移** ⇒ ⇒ 工具链**立刻可用** | C4 ✅ **2026-11-11 已完成**（`name` + `cpp_member` 已进 `rtl-emit-manifest-v1` · 随 C4 归档落地）|
