@@ -38,6 +38,8 @@ bool parse_cli_options(const std::vector<std::string> &args, CliOptions &out,
             out.emit_verilog = false;
         } else if (a == "--no-manifest") {
             out.emit_manifest = false;
+        } else if (a == "--emit-hygiene") {
+            out.emit_hygiene = true;
         } else if (a == "--allow-diagnostics") {
             out.allow_diagnostics = true;
         } else {
@@ -68,6 +70,9 @@ void print_cli_usage(const char *program_name) {
         << "  --no-verilog           不发射 Verilog\n"
         << "  --no-manifest          不写 manifest\n"
         << "  --allow-diagnostics    有诊断时仍返回 0（默认：诊断 ⇒ 返回 1）\n"
+        << "  --emit-hygiene         产物卫生（default_nettype none + 元数据头 +\n"
+        << "                         剪零引用信号 + proxy 恒等直通 + 不发 blanket\n"
+        << "                         lint_off）—— ⚠️ **默认 off** ⇒ 默认路径产物逐字节不变\n"
         << "  -h, --help             本用法\n"
         << "\n"
         << "退出码：0 成功 · 1 运行失败或有诊断 · 2 用法错误（fail-closed）\n";
@@ -134,7 +139,10 @@ int run_emit_cli(const std::vector<std::string> &args, const DesignFactory &fact
 
     // ── 产物（Verilog）────────────────────────────────────────────────
     if (options.emit_verilog) {
-        toVerilog(options.verilog_path, ctx.get());
+        // ⚠️ **产物卫生**开关（C6）—— ⚠️ **默认 off** ⇒ ⇒ 默认路径**逐字节不变**
+        ch::EmitOptions emit_opts;
+        emit_opts.emit_hygiene = options.emit_hygiene;
+        toVerilog(options.verilog_path, ctx.get(), emit_opts);
         std::error_code fec;
         if (!std::filesystem::exists(options.verilog_path, fec) || fec) {
             std::cerr << "::error::产物未生成：" << options.verilog_path << "\n";

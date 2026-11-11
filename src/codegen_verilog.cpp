@@ -20,6 +20,12 @@ namespace ch {
 
 // --- verilogwriter Class Implementation ---
 void toVerilog(const std::string &filename, ch::core::context *ctx) {
+    // ⚠️ **默认选项** ⇒ ⇒ 与旧调用**逐字节等价**（`emit_hygiene` 默认 off）
+    toVerilog(filename, ctx, EmitOptions{});
+}
+
+void toVerilog(const std::string &filename, ch::core::context *ctx,
+               const EmitOptions &options) {
     // Check if we're in static destruction phase
     // If so, skip code generation to avoid segfaults
     try {
@@ -34,7 +40,7 @@ void toVerilog(const std::string &filename, ch::core::context *ctx) {
             return;
         }
 
-        verilogwriter writer(ctx);
+        verilogwriter writer(ctx, options.emit_hygiene);
         writer.print(file);
 
         file.close();
@@ -53,17 +59,145 @@ ModuleEmitter::ModuleEmitter(ch::core::context *ctx, ModuleView view)
     : ctx_(ctx), view_(std::move(view)) {
     node_names_ = view_.names;
     nodes_ = view_.nodes;
+    if (view_.emit_hygiene) {
+        compute_dead_nodes();
+    }
+}
+
+/// ⚠️ **死节点集的不动点计算**（见头文件 `dead_nodes_` 的说明）。
+void ModuleEmitter::compute_dead_nodes() {
+    if (ctx_ == nullptr) {
+        return;
+    }
+    // ① **保护**：出现在实例连接文本里的名字（跨 module 的连接 ⇒ 图里无这条边）
+    std::unordered_set<std::string> protected_names;
+    for (const auto &line : view_.body_epilogue) {
+        std::string cur;
+        for (const char c : line) {
+            const bool ident_ch = (c == '_' || c == '$' ||
+                                   (c >= '0' && c <= '9') ||
+                                   (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
+            if (ident_ch) {
+                cur.push_back(c);
+            } else if (!cur.empty()) {
+                protected_names.insert(cur);
+                cur.clear();
+            }
+        }
+        if (!cur.empty()) {
+            protected_names.insert(cur);
+        }
+    }
+
+    // ② **不动点**：dead(N) ⟺ 纯组合类型 ∧ N 的全部使用者也都 dead
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (ch::core::lnodeimpl *node : ctx_->get_eval_list()) {
+            if (node == nullptr || dead_nodes_.count(node) != 0) {
+                continue;
+            }
+            if (!is_prunable_type(node)) {
+                continue;
+            }
+            // ⚠️ **字面量的特例**（实测踩坑）：`print_op` / `print_mux` /
+            //   `print_bitsupdate` 把字面量的**值内联**成 `5'h0`（**不引用信号名**）
+            //   ⇒ ⇒ 图里「有使用者」但**文本里是死的** ⇒ ⇒ 用「users 全死」规则
+            //   永远剪不掉它（实测：层次化路径剩 **156** 个全是这一类）。
+            //   ⇒ ⇒ 判据改成：**全部使用者都内联常量** ⇒ ⇒ 可剪。
+            //   ⚠️ 若使用者的类型**不**内联（如 mem 写口 / 端口）⇒ ⇒ 保留。
+            if (node->type() == ch::core::lnodetype::type_lit) {
+                // ⚠️ 保护②对字面量同样生效（已在上面的 `protected_names` 里跳过）
+                const auto lit_it = node_names_.find(node);
+                if (lit_it != node_names_.end() &&
+                    protected_names.count(lit_it->second) != 0) {
+                    continue;
+                }
+                bool all_inline = true;
+                for (ch::core::lnodeimpl *user : node->get_users()) {
+                    if (user == nullptr) {
+                        continue;
+                    }
+                    const auto ut = user->type();
+                    if (ut != ch::core::lnodetype::type_op &&
+                        ut != ch::core::lnodetype::type_mux &&
+                        ut != ch::core::lnodetype::type_bitsupdate) {
+                        all_inline = false;
+                        break;
+                    }
+                }
+                if (all_inline) {
+                    dead_nodes_.insert(node);
+                    changed = true;
+                }
+                continue;
+            }
+            // ⚠️ 保护①：模块端口
+            if (std::find(view_.ports.begin(), view_.ports.end(), node) !=
+                view_.ports.end()) {
+                continue;
+            }
+            // ⚠️ 保护②：实例连接端点
+            const auto nit = node_names_.find(node);
+            if (nit != node_names_.end() && protected_names.count(nit->second) != 0) {
+                continue;
+            }
+            bool all_users_dead = true;
+            for (ch::core::lnodeimpl *user : node->get_users()) {
+                if (user != nullptr && dead_nodes_.count(user) == 0) {
+                    all_users_dead = false;
+                    break;
+                }
+            }
+            if (all_users_dead) {
+                dead_nodes_.insert(node);
+                changed = true;
+            }
+        }
+    }
+}
+
+/// ⚠️ **类型过滤**（C6 剪枝的**唯一**类型白名单）
+bool ModuleEmitter::is_prunable_type(ch::core::lnodeimpl *node) const {
+    if (node == nullptr) {
+        return false;
+    }
+    switch (node->type()) {
+    case ch::core::lnodetype::type_op:
+    case ch::core::lnodetype::type_lit:
+    case ch::core::lnodetype::type_mux:
+    case ch::core::lnodetype::type_bitsupdate:
+        return true;
+    case ch::core::lnodetype::type_proxy: {
+        // ⚠️ **mem 读口的数据代理**被 `print_mem_read_port` **引用**
+        //   （`assign proxy = mem[addr];`）⇒ ⇒ 剪掉它 ⇒ 那条 assign 引用
+        //   **未声明标识符** ⇒ ⇒ MUST 排除。
+        if (node->num_srcs() > 0) {
+            const auto *src = node->src(0);
+            if (src != nullptr &&
+                src->type() == ch::core::lnodetype::type_mem_read_port) {
+                return false;
+            }
+        }
+        return true;
+    }
+    default:
+        // `reg` / `mem`（有状态）· `input` / `output`（可能是端口或实例端点）⇒ ⇒ 恒保留
+        return false;
+    }
 }
 
 /// 扁平路径的 `ModuleView`：整个 ctx ⇒ 一个 `module top`。
 ///
 /// ⚠️ 端口选择 / 排序 / 过滤规则**逐字保留**拆分前 `print_header` 的实现
 /// ⇒ ⇒ 扁平产物 MUST 逐字节不变（本 change 的唯一验收面）。
-ModuleView make_flat_module_view(ch::core::context *ctx) {
+ModuleView make_flat_module_view(ch::core::context *ctx, bool emit_hygiene) {
     ModuleView view;
     view.module_name = ch::kFlatModuleName;
     view.clock_name = "default_clock";
     view.reset_name = "default_reset";
+    // ⚠️ **产物卫生**开关（C6 · **默认 off** ⇒ ⇒ 默认路径**产物逐字节不变**）
+    view.emit_hygiene = emit_hygiene;
 
     // 名称表（与层次化分析层**共用**同一份实现）
     view.names = ch::build_verilog_name_table(ctx->get_eval_list());
@@ -112,8 +246,9 @@ ModuleView make_flat_module_view(ch::core::context *ctx) {
 }
 
 // 扁平发射入口（对外的 `verilogwriter` 只是把整颗 ctx 交给 `ModuleEmitter`）
-verilogwriter::verilogwriter(ch::core::context *ctx)
-    : emitter_(std::make_unique<ModuleEmitter>(ctx, make_flat_module_view(ctx))) {}
+verilogwriter::verilogwriter(ch::core::context *ctx, bool emit_hygiene)
+    : emitter_(std::make_unique<ModuleEmitter>(
+          ctx, make_flat_module_view(ctx, emit_hygiene))) {}
 
 void verilogwriter::print(std::ostream &out) { emitter_->print(out); }
 
@@ -301,6 +436,14 @@ void ModuleEmitter::emit_always_ff(std::ostream &out,
     }
 }
 
+bool ModuleEmitter::is_zero_reference_node(ch::core::lnodeimpl *node) const {
+    if (node == nullptr || !view_.emit_hygiene) {
+        return false;
+    }
+    // ⚠️ 判定 = 「在**死节点集**里」（不动点计算见 `compute_dead_nodes()`）
+    return dead_nodes_.count(node) != 0;
+}
+
 void ModuleEmitter::print_header(std::ostream &out) {
     try {
         // Verilator lint pragmas (must be outside module declaration):
@@ -309,8 +452,19 @@ void ModuleEmitter::print_header(std::ostream &out) {
         //   result assigned to 31-bit target). These are functionally correct
         //   (select tree outputs are zero-extended) but trigger Verilator
         //   warnings. Disable globally for the generated module.
-        out << "/* verilator lint_off WIDTHEXPAND */\n";
-        out << "/* verilator lint_off WIDTHTRUNC */\n";
+        if (view_.emit_hygiene) {
+            // ⚠️ **产物卫生**模式（C6）：**不发** blanket `lint_off`
+            //   ⇒ ⇒ 产物必须**自身** lint 干净 ⇒ ⇒ 那两条豁免必须**逐个消除**
+            //   （而不是用一条全局注释盖住）。
+            // ⚠️ **元数据头**：⚠️ **时间只进 manifest** ⇒ ⇒ 这里**绝不**写时间戳
+            //   ⇒ ⇒ 产物**仍然确定性**（两次发射逐字节相同）。
+            out << "`default_nettype none\n";
+            out << "/* generated by cpphdl rtl-emit · schema=rtl-emit-manifest-v1"
+                   " · hygiene=on */\n";
+        } else {
+            out << "/* verilator lint_off WIDTHEXPAND */\n";
+            out << "/* verilator lint_off WIDTHTRUNC */\n";
+        }
         out << "module " << view_.module_name << " (\n";
 
         // 端口清单由 `ModuleView` 提供（**已排序 / 已过滤**）
@@ -413,6 +567,12 @@ void ModuleEmitter::print_decl(std::ostream &out) {
         for (auto *node : nodes_) {
             if (declared_nodes_.count(node))
                 continue; // Skip if already processed
+            // ⚠️ **产物卫生**（C6）：**零引用信号** ⇒ ⇒ 不发声明
+            //   （它的赋值也一并不发 ⇒ ⇒ 产物里不会出现「声明了却没人读」的线）
+            if (view_.emit_hygiene && is_zero_reference_node(node)) {
+                declared_nodes_.insert(node);
+                continue;
+            }
             // ⚠️ **module 端口节点 MUST NOT 再声明成内部 wire**（否则同名重复声明）
             //    （扁平路径：端口 = 无 driver 的 input + output + clock/reset ⇒ 本分支不触发）
             bool is_module_port = false;
@@ -543,6 +703,13 @@ void ModuleEmitter::print_logic(std::ostream &out) {
         for (auto *node : nodes_) {
             if (printed_logic_nodes_.count(node))
                 continue; // Skip if already processed
+            // ⚠️ **产物卫生**（C6）：零引用节点的赋值**一并剪掉**
+            //   （否则会留下 `assign X = <被剪信号>;` ⇒ ⇒ 引用未声明标识符
+            //     ⇒ ⇒ 配合 `default_nettype none` 直接编译失败）
+            if (view_.emit_hygiene && is_zero_reference_node(node)) {
+                printed_logic_nodes_.insert(node);
+                continue;
+            }
 
             switch (node->type()) {
             case ch::core::lnodetype::type_op:

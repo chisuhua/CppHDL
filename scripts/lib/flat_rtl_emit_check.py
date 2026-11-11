@@ -98,6 +98,8 @@ def main() -> int:
     ap.add_argument("--top-ports")
     ap.add_argument("--check-top-ports", nargs=2, metavar=("V", "MANIFEST"))
     ap.add_argument("--self-assign")
+    ap.add_argument("--zero-reference", help="V 文件：列出「声明了但没人读」的信号")
+    ap.add_argument("--identity-proxy", help="V 文件：列出「恒等直通」（assign 的 LHS 从未被读且**不是**端口）")
     args = ap.parse_args()
 
     if args.strip_lint_off:
@@ -138,6 +140,33 @@ def main() -> int:
             return 1
         print("OK：无自赋值死逻辑")
         return 0
+
+    if args.zero_reference or args.identity_proxy:
+        path = args.zero_reference or args.identity_proxy
+        text = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+        decls = set(re.findall(r"^\s*logic(?:\s*\[[^\]]*\])?\s+([A-Za-z_]\w*)\s*;", text, re.M))
+        ports = set(re.findall(r"^\s*(?:input|output|inout)\s*(?:\[[^\]]*\])?\s+([A-Za-z_]\w*)", text, re.M))
+        assigns = re.findall(r"^\s*assign\s+([A-Za-z_]\w*)\s*=\s*([^;]+);", text, re.M)
+        read: set[str] = set()
+        for _lhs, rhs in assigns:
+            for m in re.findall(r"\b([A-Za-z_]\w*)\b", rhs):
+                read.add(m)
+        # always_ff 块体里出现的标识符也算被读
+        for block in re.findall(r"always_ff[^;]*?begin(.*?)end", text, re.S):
+            for m in re.findall(r"\b([A-Za-z_]\w*)\b", block):
+                read.add(m)
+        if args.zero_reference:
+            zero = sorted(decls - read - ports)
+            for z in zero:
+                print(f"::error::零引用信号（声明了但没人读）：{z}")
+            print(f"零引用信号数 = {len(zero)}")
+            return 1 if zero else 0
+        # 恒等直通：assign 的 LHS 从未被读，且**不是**端口（端口由 TB / 父层读）
+        ident = sorted({l for l, _r in assigns if l not in read and l not in ports})
+        for i in ident:
+            print(f"::error::恒等直通（assign 目标从不被读）：{i}")
+        print(f"恒等直通数 = {len(ident)}")
+        return 1 if ident else 0
 
     print("::error 需要一个模式参数", file=sys.stderr)
     return 2

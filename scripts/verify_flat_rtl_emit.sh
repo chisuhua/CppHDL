@@ -14,6 +14,8 @@
 #   F5 **无自赋值死逻辑**（`assign X = X;`）
 #   F6 backend 产物 == 产品产物
 #   F7 `--self-test`（逐条原地投毒 ⇒ 必红 ⇒ 还原复绿）
+#   F8 **产物卫生**（C6 · `--emit-hygiene`）：`default_nettype none` · 无 blanket
+#      `lint_off` · 零引用信号 0 · 恒等直通 0 · **卫生产物自身 lint 干净** · 确定性
 #
 # ⚠️ **全部 fail-closed**（缺工具 ⇒ exit 2 ⇒ ⇒ 不静默跳过）。
 #
@@ -162,6 +164,47 @@ echo "── F6：backend 产物 == 产品产物"
 note "F6 **当前不适用**（不是 pass）：本仓工具的设计**无寄存器** ⇒ ⇒ verilator backend 不产 top.v ⇒ ⇒ 无可比对象"
 note "        ⇒ ⇒ 解除条件 = 工具的设计里**加一个寄存器**（⇒ ⇒ backend 才会产 work_dir/top.v）"
 
+# ── F8：产物卫生（C6 · `--emit-hygiene`）──────────────────────────
+echo "── F8：产物卫生（C6 · --emit-hygiene）"
+HV="$WORK/hyg/top.v"
+mkdir -p "$WORK/hyg"
+if ! "$EMITTER" --out "$WORK/hyg" --emit-hygiene >/dev/null 2>"$WORK/hyg/stderr.txt"; then
+    fail "F8 卫生模式发射失败 ⇒ ⇒ 见 $WORK/hyg/stderr.txt"
+else
+    f8_bad=0
+    # ① `default_nettype none` MUST 在
+    grep -q '^`default_nettype none' "$HV" || { fail "F8 缺 default_nettype none"; f8_bad=1; }
+    # ② blanket lint_off MUST NOT 在
+    grep -q 'verilator lint_off WIDTHEXPAND' "$HV" && { fail "F8 仍有 blanket lint_off WIDTHEXPAND"; f8_bad=1; }
+    grep -q 'verilator lint_off WIDTHTRUNC' "$HV" && { fail "F8 仍有 blanket lint_off WIDTHTRUNC"; f8_bad=1; }
+    # ③ 零引用信号 == 0
+    zr="$(python3 "$CHECKER" --zero-reference "$HV" 2>&1)"; zr_rc=$?
+    printf '%s\n' "$zr" | sed 's/^/  /'
+    [ $zr_rc -eq 0 ] || { fail "F8 仍有零引用信号"; f8_bad=1; }
+    # ④ 恒等直通 == 0
+    idp="$(python3 "$CHECKER" --identity-proxy "$HV" 2>&1)"; idp_rc=$?
+    printf '%s\n' "$idp" | sed 's/^/  /'
+    [ $idp_rc -eq 0 ] || { fail "F8 仍有恒等直通"; f8_bad=1; }
+    # ⑤ 卫生产物**自身** lint 干净（`default_nettype none` ⇒ 任何未声明标识符都会炸）
+    if "$VERILATOR" --lint-only --top-module top "$HV" >"$WORK/hyg/lint.log" 2>&1; then
+        :
+    else
+        fail "F8 卫生产物 lint **不干净**"
+        grep -E "%Error|%Warning" "$WORK/hyg/lint.log" | head -6 | sed 's/^/     /'
+        f8_bad=1
+    fi
+    # ⑥ 确定性（两次发射逐字节相同）
+    mkdir -p "$WORK/hyg2"
+    if "$EMITTER" --out "$WORK/hyg2" --emit-hygiene >/dev/null 2>&1; then
+        cmp -s "$HV" "$WORK/hyg2/top.v" || { fail "F8 卫生模式两次发射**不相同**"; f8_bad=1; }
+    else
+        fail "F8 第二次卫生发射失败"; f8_bad=1
+    fi
+    if [ "$f8_bad" -eq 0 ]; then
+        ok "F8 卫生生效（default_nettype none · 无 blanket lint_off · 零引用 0 · 恒等 0 · lint 干净 · 确定性）"
+    fi
+fi
+
 # ── F7：自检（逐条原地投毒 ⇒ 必红 ⇒ 还原复绿）────────────────────
 if [ "$SELF_TEST" -eq 1 ]; then
     echo "── 自检：每条规则 MUST 有判别力（投毒 ⇒ 必红 ⇒ 还原）"
@@ -256,5 +299,5 @@ if [ "$FAILS" -ne 0 ]; then
     echo "❌ verify_flat_rtl_emit: ${FAILS} violation(s)"
     exit 1
 fi
-echo "✅ verify_flat_rtl_emit: PASS (F1 lint · F2 确定性 · F3 端口集==清单 · F4 无悬空 · F5 无自赋值 · F6 不适用)"
+echo "✅ verify_flat_rtl_emit: PASS (F1 lint · F2 确定性 · F3 端口集==清单 · F4 无悬空 · F5 无自赋值 · F6 不适用 · F8 产物卫生)"
 exit 0

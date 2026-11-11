@@ -43,6 +43,10 @@ struct CliOptions {
     bool emit_manifest = true;
     /// 有诊断时**仍然**返回 0（默认 false ⇒ ⇒ 诊断 ⇒ 退出码 1）
     bool allow_diagnostics = false;
+    /// ⚠️ **产物卫生**开关（C6 · **默认 off** ⇒ ⇒ 默认路径**产物逐字节不变**）
+    /// ⇒ ⇒ 打开它 = **显式的**产物形态变更（批次表 ★3：层次化产物逐字节不变
+    /// 那条 AC **只在该开关默认 off 时成立**）
+    bool emit_hygiene = false;
     /// 打印用法
     bool help = false;
 };

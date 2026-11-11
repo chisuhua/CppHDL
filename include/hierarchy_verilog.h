@@ -31,6 +31,10 @@ struct HierarchyEmitOptions {
     /// ⇒ ⇒ 只由本选项决定（根组件自己写 `CH_HIERARCHY_LAYER("x")` MUST 是 no-op ·
     /// ADR-061 v1.6.2 §2.5.2）。
     std::string top_module_name = "top";
+    /// ⚠️ **产物卫生**开关（`rtl-emit-product-tooling` **C6**）—— **默认 off**
+    ///   ⇒ ⇒ 默认路径**产物逐字节不变**（批次表 ★3：这条 AC **只在该开关默认 off
+    ///   时成立**）⇒ ⇒ 打开它就**必然**改变产物 ⇒ ⇒ 它是**显式的**产物形态变更。
+    bool emit_hygiene = false;
 };
 
 /// 一个端口的**来源分类**（G2 · value-only ⇒ 不带节点指针、不带连接关系）。

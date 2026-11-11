@@ -449,10 +449,10 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 260
-     ⚠️ **2026-11-11 · B1 批 N1 + P1 + C4/C3（manifest）**：
-     `test_port_name_named_ctor` + `test_port_name_parity` + `test_rtl_manifest` 新增
-     ⇒ ⇒ **260**（+3）
+- CTEST_TOTAL: 261
+     ⚠️ **2026-11-11 · B1 批 N1 + P1 + C4/C3（manifest）+ C6（产物卫生）**：
+     `test_port_name_named_ctor` + `test_port_name_parity` + `test_rtl_manifest`
+     + `test_rtl_emit_hygiene` 新增 ⇒ ⇒ **261**（+4）
      ⇒ ⇒ 判别力实测：让具名构造**忽略显式名** ⇒ ⇒ **3 个用例转红**；
      P1 三条 `Ratchet*` 各有**正向变异** ⇒ ⇒ **三条各自转红**；
      manifest 的 `driven`（有驱动源）vs `effective`（能到达 ch_out）**两字段分别验**

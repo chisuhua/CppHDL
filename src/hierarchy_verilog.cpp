@@ -1262,6 +1262,8 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         //   ⇒ ⇒ ⚠️ **策略读取只能在这里**（`options.port_policy` 只在发射器可见 ⇒ ⇒ codegen
         //   **拿不到** ⇒ ⇒ **MUST NOT** 给 `ModuleEmitter` 加 `HierarchyEmitOptions` 依赖）
         view.emit_synth_comments = (options.port_policy == PortPolicy::SynthesizeWarn);
+        // ⚠️ **产物卫生**开关（C6 · **默认 off** ⇒ ⇒ 层次化产物**逐字节不变**）
+        view.emit_hygiene = options.emit_hygiene;
         {
             const auto it = synth_by_child.find(m.key);
             if (it != synth_by_child.end()) {

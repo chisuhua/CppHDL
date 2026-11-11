@@ -1103,6 +1103,12 @@ add_catch_test(test_port_name_parity test_port_name_parity.cpp)
 #   会**恒为 true** ⇒ ⇒ 零信息量）② C3 悬空输入 MUST 被点名 ③ 清单 MUST 确定性
 add_catch_test(test_rtl_manifest test_rtl_manifest.cpp)
 
+# 产物卫生（rtl-emit-product-tooling C6）:
+# ⚠️ `emit_hygiene` **默认 off** ⇒ 默认路径**逐字节不变**（批次表 ★3 的前提）
+# ⚠️ 开关 on ⇒ `default_nettype none` + **不发** blanket lint_off + **零引用信号 0**
+#   + **恒等直通 0** + **跨 module 实例连接 MUST NOT 被剪断**
+add_catch_test(test_rtl_emit_hygiene test_rtl_emit_hygiene.cpp)
+
 # component ownership (hierarchical RTL T3-①b): construction scope stack, member
 # ch_module parent/ctx, cross-ctx guard, deferred child build, io.h direction guards
 add_catch_test(test_component_ownership test_component_ownership.cpp)

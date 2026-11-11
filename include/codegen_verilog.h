@@ -40,7 +40,33 @@ namespace ch {
 ///    MUST 共用这一份 ⇒ ⇒ 否则「映射表说的扁平位置」与「扁平产物真实的 module 名」会漂移。
 inline constexpr const char *kFlatModuleName = "top";
 
+/// 扁平发射的**选项**。
+///
+/// ⚠️ **所有开关默认 `false`** ⇒ ⇒ 默认路径**产物逐字节不变**
+///   （这是「层次化产物逐字节不变」那条 AC 的前提）。
+struct EmitOptions {
+    /// ⚠️ **产物卫生**开关（`rtl-emit-product-tooling` **C6**）—— **默认 off**。
+    ///
+    /// ⚠️ **为什么 MUST 默认 off**（批次表 ★3）：
+    ///   「层次化产物**逐字节不变**」这条 AC **只在 `emit_hygiene` 默认 off 时成立**
+    ///   ⇒ ⇒ 打开它就**必然**改变产物 ⇒ ⇒ 它是**显式的**产物形态变更。
+    ///
+    /// 打开后做四件事（全部**可判别**）：
+    ///   ① 头部发 `` `default_nettype none `` + **确定性**元数据头
+    ///      （⚠️ **时间只进 manifest** ⇒ ⇒ 产物**不含时间戳** ⇒ ⇒ 仍然确定性）；
+    ///   ② **剪零引用信号**（无人读的内部 wire / proxy / op / lit 连同其 assign 一起剪）；
+    ///   ③ **proxy 恒等直通**（只被转发的 proxy ⇒ ⇒ 不再单独发声明 + assign）；
+    ///   ④ **不发 blanket `lint_off`**（⇒ ⇒ 产物必须**自身** lint 干净
+    ///      ⇒ ⇒ 那两条 `WIDTHEXPAND` / `WIDTHTRUNC` 豁免**必须逐个消除**）。
+    bool emit_hygiene = false;
+};
+
+/// 发射扁平产物（**默认选项** ⇒ ⇒ 与旧调用**逐字节等价**）。
 void toVerilog(const std::string &filename, ch::core::context *ctx);
+
+/// 发射扁平产物（带选项）。
+void toVerilog(const std::string &filename, ch::core::context *ctx,
+               const EmitOptions &options);
 
 /// 一个 module 的**发射输入**（层次化 T3-③）。
 ///
@@ -100,6 +126,11 @@ struct ModuleView {
     /// ⇒ ⇒ codegen **拿不到** ⇒ ⇒ **MUST NOT** 给 `ModuleEmitter` 加 `HierarchyEmitOptions` 依赖
     /// ⇒ ⇒ 注释文本随本 view 传给 codegen ⇒ ⇒ codegen **只打印**）。
     bool emit_synth_comments = false;
+    /// ⚠️ **产物卫生**开关（`EmitOptions::emit_hygiene`）⇒ ⇒ **默认 off**
+    ///   ⇒ ⇒ 默认路径**产物逐字节不变**。
+    /// ⇒ ⇒ 扁平路径由 `make_flat_module_view(ctx, emit_hygiene)` 填；
+    /// ⇒ ⇒ 层次化路径由 `HierarchyEmitOptions::emit_hygiene` 填。
+    bool emit_hygiene = false;
     /// **本 module 内 MUST NOT 发驱动赋值的节点**。
     ///
     /// ⚠️ 层次化：一个节点的驱动若在**别的 module** ⇒ 那个信号在本 module 里
@@ -116,7 +147,8 @@ struct ModuleView {
 };
 
 /// 扁平产物的 `ModuleView`（= 拆分前的行为：整个 ctx 一个 `module top`）。
-ModuleView make_flat_module_view(ch::core::context *ctx);
+/// 扁平路径的 `ModuleView`（**默认** ⇒ ⇒ 产物逐字节不变）。
+ModuleView make_flat_module_view(ch::core::context *ctx, bool emit_hygiene = false);
 
 // Emits **one** module from a `ModuleView`.
 class ModuleEmitter {
@@ -149,6 +181,40 @@ private:
     // --- Core printing methods ---
     void print_header(std::ostream &out);
     void print_body(std::ostream &out);
+
+    /// ⚠️ **零引用信号**判定（C6 · 仅在 `emit_hygiene` 开启时用）。
+    ///
+    /// 判据 = **这个节点没有任何使用者**（`get_users()` 为空）
+    /// ⇒ ⇒ 没有任何表达式读它 ⇒ ⇒ 它的声明与赋值都是**死代码** ⇒ ⇒ 可剪。
+    ///
+    /// ⚠️ **保守边界**（有意不做级联剪枝）：
+    ///   剪掉一个节点会让**它的源**少一个使用者 ⇒ ⇒ 源可能也变成零引用
+    ///   ⇒ ⇒ 本实现**只做一趟**（不做不动点的迭代）⇒ ⇒ 保守 ⇒ ⇒ 不会误剪。
+    ///   ⇒ ⇒ 代价：可能留下一些「只被死节点引用」的信号 ⇒ ⇒ 但**永不误剪活信号**。
+    ///
+    /// ⚠️ **只剪「纯组合」节点**（`op` / `lit` / `mux` / `bitsupdate` / `proxy`）：
+    ///   · `reg` / `mem` 有**状态** ⇒ ⇒ 恒保留；
+    ///   · `input` / `output` 可能是**模块端口**或**实例连接**的端点 ⇒ ⇒ 恒保留；
+    ///   · `proxy` 若是 **mem 读口的数据代理** ⇒ ⇒ 它被 `print_mem_read_port`
+    ///     **引用**（`assign proxy = mem[addr];`）⇒ ⇒ 剪掉它会让那条 assign
+    ///     **引用未声明标识符** ⇒ ⇒ 必须排除。
+    bool is_zero_reference_node(ch::core::lnodeimpl *node) const;
+
+    /// ⚠️ **类型过滤**（C6 剪枝的**唯一**类型白名单：`op` / `lit` / `mux` /
+    ///   `bitsupdate` / `proxy`，且排除 **mem 读口的数据代理**）。
+    bool is_prunable_type(ch::core::lnodeimpl *node) const;
+
+    /// ⚠️ **死节点集的不动点计算**（只在 `emit_hygiene` 开启时调用一次）。
+    ///
+    /// `dead(N) ⟺ 纯组合类型 ∧ N 的全部使用者也 dead`
+    /// ⇒ ⇒ 基例 = 「没有任何使用者」⇒ ⇒ 逐轮传播（剪掉一个节点会让它的源少一个
+    /// 使用者 ⇒ ⇒ 源可能也死）⇒ ⇒ **一趟做不到**（实测：层次化路径一趟剩
+    /// **156** 个零引用信号 ⇒ ⇒ 不动点后归零）。
+    ///
+    /// ⚠️ **两条保护 MUST NOT 剪**：① 模块端口（外部可观测面）；
+    /// ② 出现在**实例连接文本**（`view_.body_epilogue`，`.port(net)`）里的名字
+    ///   —— 那是**跨 module** 的连接 ⇒ 图里**看不到这条边** ⇒ 剪掉会**静默断线**。
+    void compute_dead_nodes();
     void print_footer(std::ostream &out);
 
     // --- Declaration printing (wires, regs, assigns for literals) ---
@@ -199,6 +265,19 @@ private:
     std::unordered_map<const ch::core::lnodeimpl *, std::string> node_names_;
     // Set to track nodes already declared/printed to avoid duplicates
     std::unordered_set<ch::core::lnodeimpl *> declared_nodes_;
+    /// ⚠️ **死节点集**（C6 · 仅在 `emit_hygiene` 开启时非空）
+    ///
+    /// 判定 = **不动点**：`dead(N) ⟺ N 是纯组合类型 ∧ N 的**全部**使用者也 dead`。
+    /// ⇒ ⇒ 基例是「没有任何使用者」⇒ ⇒ 然后逐轮传播（剪掉一个节点会让它的**源**
+    /// 少一个使用者 ⇒ ⇒ 源可能也死）⇒ ⇒ ⇒ **一趟做不到**（实测：层次化路径
+    /// 一趟剩 **156** 个零引用信号 ⇒ ⇒ 不动点后归零）。
+    ///
+    /// ⚠️ **两条保护**（MUST NOT 剪）：
+    ///   ① **模块端口**（`view_.ports`）⇒ 外部可观测面；
+    ///   ② **出现在实例连接文本里的名字**（`view_.body_epilogue`，形如 `.port(net)`）
+    ///      ⇒ ⇒ 那是**跨 module** 的连接 ⇒ ⇒ 图里看不到这条边 ⇒ ⇒ 剪掉它会
+    ///      **静默断掉实例连接**（实测风险：层次化路径的跨层连线）。
+    std::unordered_set<const ch::core::lnodeimpl *> dead_nodes_;
     // Set to track nodes already printed in the logic section to avoid
     // duplicates
     std::unordered_set<ch::core::lnodeimpl *> printed_logic_nodes_;
@@ -211,7 +290,8 @@ private:
 //    本类只是**扁平路径**的薄适配器 ⇒ ⇒ 「拆分前后逐字节相同」是可判定的。
 class verilogwriter {
 public:
-    explicit verilogwriter(ch::core::context *ctx);
+    /// ⚠️ **默认** ⇒ ⇒ 产物逐字节不变（`emit_hygiene` 默认 **off**）
+    explicit verilogwriter(ch::core::context *ctx, bool emit_hygiene = false);
 
     void print(std::ostream &out);
 
