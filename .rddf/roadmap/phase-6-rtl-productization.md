@@ -77,17 +77,27 @@
 | work item | 来源 | 内容 | 依赖 |
 |---|---|---|---|
 | **C4 manifest schema** | `rtl-emit-product-tooling` C4 | `name` / `dir` / `width` / `role` / `driven`（节点级）/ `effective`（功能级）/ `owner` / `is_top_io` / `cpp_member` / `semantic`（可选）⇒ ⇒ `rtl-emit-manifest-v1` | — | ✅ **2026-11-11 已完成**（纯规格 change `rtl-emit-manifest-schema-2026-11` **已归档** ⇒ ⇒ 新 capability `rtl-emit-portability` 已进主 spec ⇒ ⇒ `openspec validate --specs` = **45 passed / 0 failed**）|
-| **C3 悬空输入诊断** | `rtl-emit-product-tooling` C3 | 复用 `diagnose_drive()` ⇒ ⇒ `owner ≠ 根` 且无 driver ⇒ ⇒ 记入 `diagnostics[]` ⇒ ⇒ **只诊断 · 不动端口面** ⇒ ⇒ 与 **C8** 互补（一个修本设计、一个兜底其它设计） | C4 |
-| **C1 CLI** | `rtl-emit-product-tooling` C1 | `tools/cpphdl-emit-rtl`：**库 + 薄 CLI**（用户在自己的可执行文件里登记）⇒ ⇒ 本仓二进制 **MUST NOT** 链 `examples/**` ⇒ ⇒ 退出码 `0` / `1` / `2`（fail-closed） | C4 |
-| **C5 产物护栏** | `rtl-emit-product-tooling` C5 | `scripts/verify_flat_rtl_emit.sh`：F1（剥 blanket `lint_off` 后重 lint · 两段式基线）· F2（逐字节确定性）· F3（三方比对：manifest ∥ verilog 独立提取 ∥ 手推期望集）· F4（悬空顶层输入**可被发现**，非「必须消失」）· **F5 两段（零引用信号数 == 0 · proxy 恒等直通数 == 0）** · F6（`ctest -L verilator_e2e` 全绿）· F7（`--self-test` 逐条投毒） | C1 · C4 |
+| **C3 悬空输入诊断** | `rtl-emit-product-tooling` C3 | 复用 `diagnose_drive()` ⇒ ⇒ `owner ≠ 根` 且无 driver ⇒ ⇒ 记入 `diagnostics[]` ⇒ ⇒ **只诊断 · 不动端口面** ⇒ ⇒ 与 **C8** 互补（一个修本设计、一个兜底其它设计） | C4 ✅ **2026-11-11 已完成**（随 C1 的 manifest 一并落地 · `diagnostics[]` · 只诊断·不动端口面）|
+
+| **C1 CLI** | `rtl-emit-product-tooling` C1 | `tools/cpphdl-emit-rtl`：**库 + 薄 CLI**（用户在自己的可执行文件里登记）⇒ ⇒ 本仓二进制 **MUST NOT** 链 `examples/**` ⇒ ⇒ 退出码 `0` / `1` / `2`（fail-closed） | C4 ✅ **2026-11-11 已完成**（`tools/cpphdl-emit-rtl` · 库+薄 CLI · 退出码 0/1/2 fail-closed · **未链** `examples/**`）|
+
+| **C5 产物护栏** | `rtl-emit-product-tooling` C5 | `scripts/verify_flat_rtl_emit.sh`：F1（剥 blanket `lint_off` 后重 lint · 两段式基线）· F2（逐字节确定性）· F3（三方比对：manifest ∥ verilog 独立提取 ∥ 手推期望集）· F4（悬空顶层输入**可被发现**，非「必须消失」）· **F5 两段（零引用信号数 == 0 · proxy 恒等直通数 == 0）** · F6（`ctest -L verilator_e2e` 全绿）· F7（`--self-test` 逐条投毒） | C1 · C4 ✅ **2026-11-11 已完成**（`scripts/verify_flat_rtl_emit.sh` · F1–F5 + F6 **不适用**（工具的设计无寄存器）· F7 自检）|
+
 | **C6 codegen 卫生** | `rtl-emit-product-tooling` C6 | `` `default_nettype none `` + 生成元数据头（时间只进 manifest）· 剪零引用信号 + proxy 恒等直通 · 复位写法规范化 · `lint_off` 改按节点白名单 ⇒ ⇒ ⚠️ **MUST 加 `emit_hygiene` 开关（默认 off）** ⇒ ⇒ 层次化产物**字节不变**这条 AC 才成立 | C5 |
-| **N1 具名用法约定 + 探针** | `port-naming-ratchet` N1 | ① 用法约定（`ch_in<ch_bool> prog_we{"prog_we"};`）② **最小可运行探针（MUST · 原为「建议」· 理由：具名构造的调用点实测 = 0 ⇒ 这条路径从未被端到端验证过）** ③ 一条 ctest ④ 文档 | C4 |
-| **N5 第 1 步：manifest 双字段** | `port-naming-ratchet` N5(a) | manifest 加 `name`（RTL 全名）+ `cpp_member`（C++ 成员路径）⇒ ⇒ **零产物变更 · 零 ADR 变更 · 零快照漂移** ⇒ ⇒ 工具链**立刻可用** | C4 |
-| **N3 名字稳定性** | `port-naming-ratchet` N3 | 显式名路径**绕开** eval-list 序计数器 ⇒ ⇒ 零序号 ⇒ ⇒ 存量走兼容路径（否则 3103 处端口名**全体变**） | N1 |
-| **N2 基线棘轮** | `port-naming-ratchet` N2 | 登记表 `.rddf/checks/port-naming-registry.md` + `scripts/verify_port_naming.sh` ⇒ ⇒ **必须先于 N4**：R1-a 的「C 类（product 侧）MUST 被登记在棘轮豁免表」依赖该表**已存在** ⇒ ⇒ ⇒ **否则规范 Requirement 会先于表落地 ⇒ ⇒ 条款当场不可满足** ⇒ ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 5 轮 SHOULD_FIX-1 修复**：本行原把「先做」写进**标题**且依赖列写成 `—` ⇒ ⇒ **已改回**：标题去掉「先做」· 依赖列恢复 **`N1`**（棘轮护栏的判据「标识符 == 显式名字符串」以 N1 的用法约定为前提）⇒ ⇒ ⇒ 「先做」的限定语**仅指「先于 N4」**（写在内容列）⇒ ⇒ ⇒ | N1 |
-| **N4 规范落点** | `port-naming-ratchet` N4 | 命名规则写进 `rtl-hierarchical-output`（规范所有者）⇒ ⇒ `hierarchical-port-naming-guard` **MUST NOT** 复述 ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 4 轮 SHOULD_FIX-6 修复**：**Requirement 的唯一承载 = 本行（N4）** ⇒ ⇒ sister 的 P2（`port-name-literal-parity` P2）**只是本项的契约化提案** ⇒ ⇒ ⇒ ⇒ **MUST NOT 另立一个 change 承载同一条 Requirement** ⇒ ⇒ ⇒ 否则归档后主 spec 会出现**两条同名 Requirement** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ sister 的 R1-b（`component-ownership-and-naming` 的追加）**由姊妹草案 `node-name-prefix-consistency` P3 承载** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **一份 Requirement · 一处落点** | N2（**先做** · 见上） |
-| **N6 公开面登记** | `port-naming-ratchet` N6 | 第 1 步零公开 API 变更 ⇒ 无需登记；第 2 步若成立 ⇒ MUST 走登记 + CHANGELOG + ADR 修订 | — |
-| **P1 探针固化**（**并行 · 零生产面**） | `port-name-literal-parity-2026-11` P1 | 把三探针**逐字搬进** `tests/test_port_name_parity.cpp`（5 条用例 + 退化用例）⇒ ⇒ **零生产面改动** ⇒ ⇒ 产物逐字节不变 ⇒ ⇒ **不阻塞** B1 其余项 ⇒ ⇒ ⚠️ **它是那份草案的「最低交付」**（未做 ⇒ 那份草案不算完成）⇒ ⇒ ⚠️ 探针源码目前在 `/tmp/opencode/`（scratch）⇒ ⇒ **结论随会话蒸发** ⇒ ⇒ 优先做 | 无（纯测试） |
+| **N1 具名用法约定 + 探针** | `port-naming-ratchet` N1 | ① 用法约定（`ch_in<ch_bool> prog_we{"prog_we"};`）② **最小可运行探针（MUST · 原为「建议」· 理由：具名构造的调用点实测 = 0 ⇒ 这条路径从未被端到端验证过）** ③ 一条 ctest ④ 文档 | C4 ✅ **2026-11-11 已完成**（用法约定 + **MUST 实跑**探针 + `tests/test_port_name_named_ctor.cpp` 27 断言 + `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`）|
+
+| **N5 第 1 步：manifest 双字段** | `port-naming-ratchet` N5(a) | manifest 加 `name`（RTL 全名）+ `cpp_member`（C++ 成员路径）⇒ ⇒ **零产物变更 · 零 ADR 变更 · 零快照漂移** ⇒ ⇒ 工具链**立刻可用** | C4 ✅ **2026-11-11 已完成**（`name` + `cpp_member` 已进 `rtl-emit-manifest-v1` · 随 C4 归档落地）|
+
+| **N3 名字稳定性** | `port-naming-ratchet` N3 | 显式名路径**绕开** eval-list 序计数器 ⇒ ⇒ 零序号 ⇒ ⇒ 存量走兼容路径（否则 3103 处端口名**全体变**） | N1 ✅ **2026-11-11 已完成**（显式命名端口绕开计数器 · **零 churn** 实测 · 判别力实测）|
+
+| **N2 基线棘轮** | `port-naming-ratchet` N2 | 登记表 `.rddf/checks/port-naming-registry.md` + `scripts/verify_port_naming.sh` ⇒ ⇒ **必须先于 N4**：R1-a 的「C 类（product 侧）MUST 被登记在棘轮豁免表」依赖该表**已存在** ⇒ ⇒ ⇒ **否则规范 Requirement 会先于表落地 ⇒ ⇒ 条款当场不可满足** ⇒ ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 5 轮 SHOULD_FIX-1 修复**：本行原把「先做」写进**标题**且依赖列写成 `—` ⇒ ⇒ **已改回**：标题去掉「先做」· 依赖列恢复 **`N1`**（棘轮护栏的判据「标识符 == 显式名字符串」以 N1 的用法约定为前提）⇒ ⇒ ⇒ 「先做」的限定语**仅指「先于 N4」**（写在内容列）⇒ ⇒ ⇒ | N1 ✅ **2026-11-11 已完成**（登记表 `.rddf/checks/port-naming-exempt.tsv` **1484** 条 + `scripts/verify_port_naming.sh` + CI 接线 + 4 类自检）|
+
+| **N4 规范落点** | `port-naming-ratchet` N4 | 命名规则写进 `rtl-hierarchical-output`（规范所有者）⇒ ⇒ `hierarchical-port-naming-guard` **MUST NOT** 复述 ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 4 轮 SHOULD_FIX-6 修复**：**Requirement 的唯一承载 = 本行（N4）** ⇒ ⇒ sister 的 P2（`port-name-literal-parity` P2）**只是本项的契约化提案** ⇒ ⇒ ⇒ ⇒ **MUST NOT 另立一个 change 承载同一条 Requirement** ⇒ ⇒ ⇒ 否则归档后主 spec 会出现**两条同名 Requirement** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ ⚠️ sister 的 R1-b（`component-ownership-and-naming` 的追加）**由姊妹草案 `node-name-prefix-consistency` P3 承载** ⇒ ⇒ ⇒ ⇒ ⇒ ⇒ **一份 Requirement · 一处落点** | N2（**先做** · 见上） ✅ **2026-11-11 已完成**（规范落点 = **归档已落地的两份命名 change** ⇒ ⇒ Requirement 已进 `rtl-hierarchical-output`）|
+
+| **N6 公开面登记** | `port-naming-ratchet` N6 | 第 1 步零公开 API 变更 ⇒ 无需登记；第 2 步若成立 ⇒ MUST 走登记 + CHANGELOG + ADR 修订 | — ✅ **2026-11-11 已完成**（第 1 步**零公开 API 移除/改名** ⇒ 走「行为变更（非符号移除）」节 + CHANGELOG）|
+
+| **P1 探针固化**（**并行 · 零生产面**） | `port-name-literal-parity-2026-11` P1 | 把三探针**逐字搬进** `tests/test_port_name_parity.cpp`（5 条用例 + 退化用例）⇒ ⇒ **零生产面改动** ⇒ ⇒ 产物逐字节不变 ⇒ ⇒ **不阻塞** B1 其余项 ⇒ ⇒ ⚠️ **它是那份草案的「最低交付」**（未做 ⇒ 那份草案不算完成）⇒ ⇒ ⚠️ 探针源码目前在 `/tmp/opencode/`（scratch）⇒ ⇒ **结论随会话蒸发** ⇒ ⇒ 优先做 | 无（纯测试） ✅ **2026-11-11 已完成**（`tests/test_port_name_parity.cpp` 5 用例 25 断言 + 3 条**正向变异**各自转红 · ⑤ 已落台账 `id=21b`）|
+
 
 > ⚠️ **N5 第 2 步（根实例名清空验 `parent==nullptr` 分支）= 独立立项** ⇒ ⇒ **不在 B1** ⇒ ⇒
 > 详见 §4 的「独立立项」清单。
