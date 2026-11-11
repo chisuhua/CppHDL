@@ -78,6 +78,23 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | `include/cpu/cache/*_stub.h`（pass-through stub 族） | **物理删除** | 2026-10-20 | ADR-037 | 语义不构成合法 cache 行为 ⇒ ⇒ 改用 `i_cache_{sync,async}.h` / `d_cache_{sync,async}.h` |
 | `WriteBufferEntry` / `WriteBufferConfig`（`include/cpu/cache/d_cache_write_buffer.h`） | **移除** | 2026-11-09 | ZERO-DEBT（phase-6 **P9** · 死数据：`buffer[4]` 零消费者） | 下游若引用 ⇒ ⇒ **自建**等价类型；wrapper 的 `__io` 签名与可观测行为**不变**；**真 FIFO 写缓冲 = 独立立项** |
 | `prefetch_data` / `prefetch_addr` / `prefetch_valid` / `PrefetchConfig`（`include/cpu/cache/i_cache_prefetch.h`） | **移除** | 2026-11-09 | ZERO-DEBT（phase-6 **P9** · 死数据：预取缓冲零消费者） | 下游若引用 ⇒ ⇒ **自建**；**本组件现在不含任何预取状态** ⇒ **真预取 = 独立立项**；wrapper 的 `__io` 签名与可观测行为**不变** |
+| `rv32i_forwarding.h` / `riscv::ForwardingUnit`（`include/cpu/pipeline/rv32i_forwarding.h`） | **物理删除** | 2026-11-11 | `rv32i-dead-component-consolidation` **C5**（零交付路径消费者 + 独有语义为空集：WB 档无覆盖 · `id_reg_read` 死输入） | 下游若引用 ⇒ ⇒ 改用仓内权威的 `riscv::HazardUnit`（**已接入真实流水线**）+ `chlib::ForwardingMux`（ADR-047 D2） |
+| `hazard_detection_unit.h` / `riscv::HazardDetectionUnit`（`include/cpu/pipeline/hazard_detection_unit.h`） | **物理删除** | 2026-11-11 | `rv32i-dead-component-consolidation` **C6**（零交付路径消费者 + 其 MEM 级检测点在流水线里**永不触发**） | 下游若引用 ⇒ ⇒ 改用 `riscv::HazardUnit`（`include/cpu/pipeline/hazard_unit.h`） |
+| `rv32i_hazard_complete.h` / `riscv::HazardUnitComplete`（`include/cpu/pipeline/rv32i_hazard_complete.h`） | **物理删除** | 2026-11-11 | `rv32i-dead-component-consolidation` **C6**（零交付路径消费者 + 2 个死输入 + 3 档语义；唯一存在理由是 parity 夹具） | 下游若引用 ⇒ ⇒ 改用 `riscv::HazardUnit`；⚠️ **这是显式批准的覆盖缩面**（`DUAL_BACKEND_PARITY_PAIRS` −6） |
+
+## ⚠️ **行为变更（非符号移除）**（2026-11-11 起登记）
+
+> **为什么需要这一节**：有些变更**不移除任何符号**，但**改变可观测行为** ⇒ ⇒
+> 只查「符号还在不在」的护栏（R2/R5）对它**结构性失明** ⇒ ⇒ 下游「编译通过但行为变了」
+> ⇒ ⇒ ⇒ 本节把这类变更也变成**可查的活账**。
+>
+> ⚠️ **与上面那节的分工**：上面 = **符号级**（没了 / 改名了）· 本节 = **行为级**（还在，但变了）。
+
+| 符号 / 头 | 行为变更 | 日期 | 依据 | 迁移指引 |
+|---|---|---|---|---|
+| `ch::build_hierarchical_name()` / `ch::Component::name()`（`include/component.h`） | **子组件全路径的拼接不再按父路径的「字面值」剥离路径段** | 2026-11-11 | `node-name-prefix-consistency` **P1**（F-A）· capability `component-ownership-and-naming` | ⚠️ **唯一受影响的情形**：根组件的 name 为空（`local_name_` 归一成 `"unnamed"`）⇒ ⇒ 其子组件的 `name()` 从**裸局部名**（`"kid"`）变为**带父前缀**（`"unnamed.kid"`）⇒ ⇒ **按 `name()` 精确匹配裸局部名的下游代码 MUST 更新**；常规路径（父名非空，如 `"top"`）**逐字节不变** |
+| `ch::Component::name()` 的**根组件空名**语义 | **空名与用户真名 `"unnamed"` 在 `name()` 上永久不可区分**（**已登记代价**） | 2026-11-11 | 同上（F-A 的已知代价） | 空名根组件现在与「真名 `"unnamed"`」的根组件**行为完全相同** ⇒ ⇒ 若下游需要区分 ⇒ ⇒ 须**另立 item**（引入独立的「无名」标记而非复用字面名）⇒ ⇒ **不在本项** |
+| 顶层 RTL 端口表（RV32I SoC） | `mem_is_load` 的装配点**补上 driver** ⇒ ⇒ 该 `ch_in` **不再是无 driver 的顶层 input** ⇒ ⇒ **顶层 input 少 1 个**（8 → 7） | 2026-11-11 | `rv32i-dead-component-consolidation` **C8** · 契约相容（契约说的是「**无 driver 的** input」⇒ 补 driver = 修缺陷） | 下游若按端口**数量/序号**硬编码顶层 input ⇒ ⇒ MUST 改为**按名**取；**行为零变化**（MEM 级那一路在流水线里永不触发） |
 
 ### **已弃用（尚未移除）** —— 下游现在就该迁移
 

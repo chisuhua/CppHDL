@@ -48,8 +48,10 @@ examples/riscv-mini/
   **2026-10-23 起以 `test_rv32i_pipeline_example` 注册进 CTest**（此前从未编译）。
   ⚠️ 它与根 `tests/test_rv32i_pipeline.cpp`（12 用例）**不是**副本关系：前者测
   **前推通路**（`HazardUnit` + `chlib::ForwardingMux` 组合 DUT，见
-  `tests/forwarding_dut_fixture.h`），后者测 `hazard_detection_unit.h` 的
-  `HazardDetectionUnit`。
+  `tests/forwarding_dut_fixture.h`），后者测**流水线各级**。
+  ⚠️ **2026-11-11（B0 批 C5+C6 同批退役）**：`riscv::ForwardingUnit` 与
+  `riscv::HazardDetectionUnit` **已退役** ⇒ ⇒ 后者原先测的 `HazardDetectionUnit`
+  相关 SECTION 已删 ⇒ ⇒ 前者的覆盖改由 `riscv::HazardUnit`（仓内权威组件）承担。
   ⚠️ 2026-10-24（ADR-046 D3 #14）：前推数据 mux 从 `HazardUnit` 拆到
   **既有的** `chlib::ForwardingMux` —— 因为 mux 留在 `HazardUnit` 里并接进真实
   流水线装配会形成**组合环**（实测 `FATAL: Cycle detected in IR graph during
@@ -66,10 +68,9 @@ examples/riscv-mini/
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Forwarding (源选择) | `include/cpu/pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）|
-| Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）|
-| Hazard detection | `include/cpu/pipeline/hazard_unit.h` + `hazard_detection_unit.h` |
-| Branch predictor | `include/cpu/pipeline/branch_predictor_v2.h` / `rv32i_branch_predict.h` |
+| Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）—— **已接入真实流水线**（ADR-047 D2）|
+| Hazard detection | `include/cpu/pipeline/hazard_unit.h`（`riscv::HazardUnit`）—— **已接入真实流水线** |
+| Branch predictor | `include/cpu/pipeline/branch_predictor_v2.h` / `rv32i_branch_predict.h` —— ⚠️ **非流水线路径**（未接入 ⇒ 每个 taken 分支付 3 拍冲刷）|
 | I-Cache wrapper | `include/cpu/cache/i_cache_prefetch.h` (✅ FIXED 2026-10-20) |
 | D-Cache wrapper | `include/cpu/cache/d_cache_write_buffer.h` (✅ review PASS 2026-10-20) |
 | Pipeline stages | `include/cpu/pipeline/stages/` |

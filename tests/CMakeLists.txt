@@ -61,7 +61,12 @@ enable_testing()
 # ============================================================================
 
 add_catch_test(test_forwarding chlib/test_forwarding.cpp)
-add_catch_test(test_hazard chlib/test_hazard_complete.cpp)
+# ⚠️ 2026-11-11：`test_hazard`（`chlib/test_hazard_complete.cpp`）**已退役**
+#   ⇒ 理由：`riscv::HazardUnitComplete` 退役（`rv32i-dead-component-consolidation` C6）
+#   ⇒ ⇒ 该组件「2 个死输入 + 3 档语义 + 唯一存在理由是 parity 夹具」⇒ ⇒ 无消费者 ⇒ ⇒ 退役
+#   ⇒ ⇒ **这是覆盖缩面**（`VERILATOR_E2E_TOTAL` 与 `CTEST_TOTAL` 各 −1 · 用户已批准）
+#   ⇒ ⇒ 保留价值的部分（多组件可同时实例化）由 `test_phase4_chlib` 继续覆盖
+#   ⇒ ⇒（DUT 已换成仓内权威的 `riscv::HazardUnit`）。
 
 
 # RV32I Pipeline integration test (from examples/riscv-mini/tests/)
@@ -560,24 +565,13 @@ add_dual_backend_test(test_cache_async_dual
     TIMEOUT 300
 )
 
-# ⚠️ **路线 A（F 批）—— `riscv::HazardUnitComplete` 进双后端 parity**（2026-11-02）
-#    ⇒ **零 DUT 复制**：该组件**本身**就是带顶层端口的 `Component`
-#      （18 个 `ch_in` + 7 个 `ch_out`，全部 ≤32 bit）⇒ 直接用库组件当 DUT
-#      （先例：`tests/chlib/test_forwarding_dual.cpp` / `test_blt_debug_behavior.cpp`）
-#      ⇒ **测的就是生产代码本身**。
-#    ⇒ 4 问：① 无 dual 兄弟（`tests/chlib/test_hazard_complete.cpp` 是 interpreter-only，
-#      且只断 1–2 个输出）；② 判别力见 5 条变异；③ 真跑仿真读顶层端口；④ 纯组合
-#      （**无 `ch_reg`**）⇒ 1 拍即可。
-#    ⇒ ⚠️ **生产消费者 = 0**（真实流水线用的是 `riscv::HazardUnit`）⇒ 本文件的价值在
-#      「前推档位 × 优先级 × 停顿 × 冲刷」这套**组合语义契约**，**不是**关键路径回归
-#      —— 如实登记，不包装。
-#    ⇒ ⚠️ 读实现时发现 `id_is_load` / `id_is_branch` 两个**死端口**（`describe()` 从不读）
-#      ⇒ 本批**不修**（删端口 = 改公开 API ⇒ 独立立项），但本文件**仍然驱动**它们。
-add_dual_backend_test(test_hazard_complete_dual
-    SOURCES chlib/test_hazard_complete_dual.cpp
-    TIMEOUT 300
-)
-
+# ⚠️ 2026-11-11：`test_hazard_complete_dual` **已退役**
+#   ⇒ 理由：`riscv::HazardUnitComplete` 退役（`rv32i-dead-component-consolidation` C6 ·
+#   无交付路径消费者 + 独有语义为空集（2 个死输入 + 3 档语义））
+#   ⇒ ⇒ **这是覆盖缩面**（`DUAL_BACKEND_PARITY_PAIRS` −1 · `DUAL_BACKEND_PARITY_TOTAL` −1
+#   ⇒ ⇒   `VERILATOR_E2E_TOTAL` −1 · `CTEST_TOTAL` −1 · **用户 2026-11-11 已批准**）
+#   ⇒ ⇒ 原「路线 A（F 批）」的立项理由（2026-11-02）随之失效：它**测的就是**
+#   ⇒ ⇒   `HazardUnitComplete` 这个**已被退役**的组件 ⇒ ⇒ 组件退役 ⇒ ⇒ 测试随之退役。
 # ⚠️ **路线 B（G 批）—— `chlib` 三个 stream pipe 进双后端 parity**（2026-11-03）
 #    ⇒ **价值最高的理由**：`stream_pipeline.h` 的三个 pipe 在 ADR-055（2026-11-01）
 #      **刚被重写**，且重写**修掉了三个真缺陷**（m2s 丢数据 · s2m 方向反了的
@@ -1078,6 +1072,14 @@ add_catch_test(test_ch_reg_bitwise test_ch_reg_bitwise.cpp)
 # component naming (hierarchical RTL T3-①a): path uniqueness + two naming dimensions
 add_catch_test(test_component_naming test_component_naming.cpp)
 
+# Verilog 标识符清洗（port-naming-ratchet N3「⑥ 关键字表补全」）:
+# 关键字转义 MUST 覆盖 IEEE 1800-2017 保留字全集（verilator 实测 245 词）
+# ⚠️ 判别力 = `bit` / `time` / `event` / `table` 修复前**不**被转义
+#   ⇒ ⇒ 合法 C++ 成员名会产出非法 Verilog（`logic bit;` ⇒ 语法错误）
+# ⚠️ 判据 MUST 是**单元判据** —— 现网产物节点名恒带 owner 路径前缀
+#   ⇒ ⇒ 「产物逐字节比对」对本题**恒绿**（零判别力）
+add_catch_test(test_verilog_name_sanitize test_verilog_name_sanitize.cpp)
+
 # component ownership (hierarchical RTL T3-①b): construction scope stack, member
 # ch_module parent/ctx, cross-ctx guard, deferred child build, io.h direction guards
 add_catch_test(test_component_ownership test_component_ownership.cpp)
@@ -1184,6 +1186,12 @@ add_catch_test(test_multithread test_multithread.cpp)
 add_catch_test(test_operation_results test_operation_results.cpp)
 add_catch_test(test_operation_widths test_operation_widths.cpp)
 add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
+# RV32I ALU 语义（rv32i-dead-component-consolidation ⑧ · B0 批）:
+# SLTU MUST 是**无符号**比较 —— 修复前 `bits<31,31>(sub_result)` 取的是**结果位**
+# 而非**借位位** ⇒ ⇒ `0 <u 0xFFFFFFFF` 得 0（期望 1）⇒ ⇒ 本文件 MUST 转红。
+# ⚠️ 期望值 MUST **手推**（禁抄仿真输出）——「两后端一致」对同构缺陷结构性失明。
+# ⚠️ MUST 用 `riscv::ALU_*` 符号常量（**禁**字面量 3 —— 那是 RISC-V funct3 编码）。
+add_catch_test(test_rv32i_alu test_rv32i_alu.cpp)
 # dual-backend-rv32i-pipeline-behavior-tests: RV32I microarchitecture 子组件
 # dual 行为 parity. _behavior suffix 区别原 test_rv32i_pipeline.cpp (per spec R6 #5
 # SECTION 排除 + R7 "原文件不动"). 原文件 MUST NOT 改动.

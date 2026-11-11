@@ -29,14 +29,11 @@ include/cpu/                             # 30 headers, 6473 lines（2026-11-09 �
 │   ├── rv32i_pipeline.h            # 5-stage top-level (247)
 │   ├── rv32i_tcm.h                # Tightly-coupled memory (ITCM/DTCM) (133)
 │   ├── hazard_unit.h               # 冒险检测 + 停顿/冲刷控制 (178)
-│   ├── hazard_detection_unit.h     # Load-Use 冒险检测（独立组件） (65)
-│   ├── rv32i_hazard_complete.h     # 组合式 hazard 单元 (195)
 │   ├── rv32i_alu.h                # ALU (172)
 │   ├── rv32i_regfile.h            # 寄存器堆 (316)
-│   ├── rv32i_pc.h                  # PC (47)
-│   ├── rv32i_forwarding.h         # riscv::ForwardingUnit（源选择） (174)
-│   ├── rv32i_branch_predict.h     # Branch/条件/预测/控制冒险 (475)
-│   ├── branch_predictor_v2.h       # 2-bit 分支预测器 (151)
+│   ├── rv32i_pc.h                  # PC (47) —— ⚠️ **非流水线路径**（见下表）
+│   ├── rv32i_branch_predict.h     # Branch/条件/预测/控制冒险 (475) —— ⚠️ **非流水线路径**
+│   ├── branch_predictor_v2.h       # 2-bit 分支预测器 (151) —— ⚠️ **非流水线路径**
 │   └── stages/{if,id,ex,mem,wb}_stage.h
 └── riscv/                            # 体系结构 / 特权级
     ├── rv32i_csr.h                 # CSR bank (9 registers, 252)
@@ -63,10 +60,8 @@ include/cpu/                             # 30 headers, 6473 lines（2026-11-09 �
 | Exception handling | `riscv/rv32i_exception.h` |
 | ALU | `pipeline/rv32i_alu.h` |
 | Register file | `pipeline/rv32i_regfile.h` |
-| Forwarding (源选择) | `pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）|
 | Forwarding (数据 mux) | `include/chlib/forwarding.h`（`chlib::ForwardingMux`）—— ADR-046 D3 #14 / ADR-047 D2（**已接入真实流水线**）|
-| Branch 预测 / 控制冒险 | `pipeline/rv32i_branch_predict.h` |
-| 冒险检测（Load-Use） | `pipeline/hazard_detection_unit.h` |
+| Branch 预测 / 控制冒险 | `pipeline/rv32i_branch_predict.h` —— ⚠️ **非流水线路径**（见下表）|
 | I-Cache (1-cycle, RV32I L1 默认) | `cache/i_cache_sync.h` (`i_cache_complete.h` 是兼容 shim 别名) |
 | I-Cache (0-cycle, TCM-style) | `cache/i_cache_async.h` |
 | D-Cache (1-cycle, RV32I L1 默认) | `cache/d_cache_sync.h` (`d_cache_complete.h` 是兼容 shim 别名) |
@@ -75,6 +70,36 @@ include/cpu/                             # 30 headers, 6473 lines（2026-11-09 �
 | D-Cache 写直通 shim | `cache/d_cache_write_buffer.h`（**无**内层 cache / **无**读通路） |
 | SoC 顶层装配 | `examples/riscv-mini/src/rv32i_pipeline_top.h`（**唯一**留在 example 侧的头；ADR-046 D3 #15）|
 | 流水线诊断观测 | `pipeline/rv32i_pipeline.h` 的 `dbg_*` 输出（ID 级指令流 / 分支判定 / 有效链 / 写回 / EX-MEM 数据通路；**SoC 顶层须逐个引出**，否则 verilator 读不到 ⇒ 2026-10-25 追出 17 个流水线缺陷）|
+
+## ⚠️ **保留但不接入流水线**的组件（2026-11-11 · B0 批 C7 交接登记）
+
+> **判据**：组件**保留**（仓内仍有价值）但**零生产消费者** ⇒ ⇒ 它**看起来像流水线的一部分**
+> ⇒ ⇒ 实则**不在真实流水线路径上** ⇒ ⇒ 本表消除该误导。
+> **依据**：`rv32i-dead-component-consolidation-2026-11.md` C7（C6 三级准则的「② 无消费者
+> **且** 独有语义**未被任何 capability 明文要求** ⇒ ⇒ 退役」是它的**对立面**：
+> 下面这些组件**有**仓内价值（独立使用场景）⇒ ⇒ **保留**，但**必须登记**）。
+
+| 组件 | 状态 | 未接入的**可观测后果** |
+|---|---|---|
+| `riscv::BranchPredictor`（`pipeline/rv32i_branch_predict.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | **每个 taken 分支（含 `JAL`/`JALR`）付 3 拍冲刷** —— 真实流水线**无分支预测** ⇒ ⇒ 控制重定向一律走完整冲刷路径（`rv32i_pipeline.h:599`：「`JAL`/`JALR` —— 它们同样让流水线空 3 拍」）⇒ ⇒ `perf_control_stalls` 统计**全部**控制重定向拍数（与 `perf_branch_mispredict` **分离**）|
+| `riscv::BranchPredictorV2`（`pipeline/branch_predictor_v2.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | 同上（2-bit 预测器未接入 ⇒ 无预测收益）|
+| `riscv::BranchDetector`（`pipeline/rv32i_branch_predict.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | 分支**探测**（`is_branch` / `is_jal` / `is_jalr`）在真实流水线里由 `stages/id_stage.h` 自行判定 ⇒ ⇒ 本组件不在真实路径上 |
+| `riscv::BranchConditionUnit`（`pipeline/rv32i_branch_predict.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | 分支**条件判定**在真实流水线里由 `stages/ex_stage.h` 自行判定 ⇒ ⇒ 本组件不在真实路径上 |
+| `riscv::ControlHazardUnit`（`pipeline/rv32i_branch_predict.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | 控制冒险冲刷在真实流水线里由 `stages/id_stage.h` 的 `flush` 端口 + `rv32i_pipeline.h` 自行编排 ⇒ ⇒ 本组件不在真实路径上 |
+| `riscv::BranchPredictorState`（`pipeline/rv32i_branch_predict.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | 预测器**状态**同上 |
+| `riscv::Rv32iPc`（`pipeline/rv32i_pc.h`） | ⚠️ **非流水线路径 · 仅独立使用场景** | PC 由 `stages/if_stage.h` 自行管理 ⇒ ⇒ 本组件不在真实路径上 |
+
+> ⚠️ **「零生产消费者」的实测口径**（2026-11-11）：上表 7 个组件的**生产引用数 = 0**
+> （口径 = `include/**` + `src/**` + `examples/**` 中排除**自身头文件**与 `tests/**` 后的
+> 符号命中数）⇒ ⇒ **测试消费者不算**（测试是「独立使用场景」的体现）⇒ ⇒ 故**保留**。
+
+> ⚠️ **退役登记（2026-11-11 · B0 批 C5 + C6 同批）** —— 已**物理删除**（不是 stub）：
+> `riscv::ForwardingUnit`（`pipeline/rv32i_forwarding.h`）· `riscv::HazardDetectionUnit`
+> （`pipeline/hazard_detection_unit.h`）· `riscv::HazardUnitComplete`（`pipeline/rv32i_hazard_complete.h`）
+> ⇒ ⇒ 理由 = **零交付路径消费者** + 独有语义为空集/死语义 + capability **不指名**它们
+> ⇒ ⇒ ⇒ 详见 `.rddf/improvements/rv32i-dead-component-consolidation-2026-11.md` C5/C6
+> ⇒ ⇒ ⇒ **这是显式批准的覆盖缩面**（用户 2026-11-11 批准 · metis finding 9 要求登记）：
+> `DUAL_BACKEND_PARITY_PAIRS` 290→284 · `DUAL_BACKEND_PARITY_TOTAL` 66→65 · `VERILATOR_E2E_TOTAL` 77→76。
 
 ## CONVENTIONS
 - **Pipeline instantiation**: `ch::ch_module<T>` inside `Component::describe()` — see root AGENTS.md
@@ -208,7 +233,7 @@ include/cpu/                             # 30 headers, 6473 lines（2026-11-09 �
 
 ## ANTI-PATTERNS
 - **Namespace inconsistency**: CPU components split across 4 namespaces (`riscv`, `chlib`, `cpu`, `ch::chlib`)
-- **Duplicate forwarding**: `include/chlib/forwarding.h`（`chlib::ForwardingUnit` + `chlib::ForwardingMux`）vs `include/cpu/pipeline/rv32i_forwarding.h`（`riscv::ForwardingUnit`）—— 并存，靠 namespace 区分（ADR-038 §2.3 已裁决「合并留给未来 change」）；`chlib::ForwardingMux` 是 ADR-046 D3 #14 指定的**唯一**数据 mux 实现
+- ~~**Duplicate forwarding**~~ ✅ **已消解（2026-11-11 · B0 批 C5 同批退役）**：`riscv::ForwardingUnit`（`include/cpu/pipeline/rv32i_forwarding.h`）**已退役** ⇒ ⇒ 「两套 ForwardingUnit 并存、靠 namespace 区分」这个反模式**不再存在** ⇒ ⇒ `chlib::ForwardingMux` 现是**唯一**的数据 mux 实现（ADR-046 D3 #14）⇒ ⇒ ⇒ ⇒ ⚠️ `chlib::ForwardingUnit`（源选择侧，`include/chlib/forwarding.h`）**仍在** ⇒ ⇒ ⇒ ⇒ 若日后要动它，**先**读 ADR-038 §2.3（「合并留给未来 change」的旧裁决）
 - **把数据 mux 放进 `HazardUnit`**：会与真实流水线装配形成**组合环**（实测 `FATAL: Cycle detected in IR graph during topological sort`；`git show bf78367` 是当年的消环事故记录）⇒ mux MUST 由独立的 `ForwardingMux` 承担
 
 ## TESTS

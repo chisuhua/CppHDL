@@ -459,7 +459,10 @@ ctest --output-on-failure
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
-- VERILATOR_E2E_TOTAL: 77
+- VERILATOR_E2E_TOTAL: 76
+     ⚠️ **2026-11-11 · B0 批（`rv32i-dead-component-consolidation` C5+C6 同批退役）**：
+     `test_hazard_complete_dual` 退役 ⇒ ⇒ **76**（−1）⇒ ⇒ **这是显式批准的缩面**
+     （`riscv::HazardUnitComplete` 无交付路径消费者 + 独有语义为空集 ⇒ ⇒ 组件随之退役）
 <!-- CI anchor: 「**双后端 parity 源文件数**」（2026-10-30，planner 判据修订配套）。
      scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
      口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
@@ -469,14 +472,19 @@ ctest --output-on-failure
      ⚠️ 计数口径 = 「剥注释与字符串后含 `DUAL_BACKEND_TEST_PAIR(` **调用**的
      测试源文件」+ 「hand-crafted 真 dual 白名单（1 个）」⇒ 现值 **33**。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_TOTAL: 66
+- DUAL_BACKEND_PARITY_TOTAL: 65
+     ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：`test_hazard_complete_dual.cpp` 整文件退役
+     ⇒ ⇒ **65**（−1）⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准）
 <!-- CI anchor: 「**双后端 parity macro 调用数**」= 上一个锚点的**深度**维度。
      ⚠️ 为什么两个锚点都要：只钉「文件数」的话，**从有多个 dual pair 的文件里
      删掉 1 个 pair** ⇒ 该文件仍被计数 ⇒ 护栏**看不见**（实测：变异 M1 恒绿）
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 290
+- DUAL_BACKEND_PARITY_PAIRS: 284
+     ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：−6
+     （`ForwardingUnit` ×3 + `HazardDetectionUnit` ×2 + `HazardUnitComplete` ×1）
+     ⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准 · metis finding 9 要求登记）
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——

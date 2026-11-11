@@ -513,6 +513,21 @@ public:
         //    ⇒ 停顿「停了个寂寞」；而且在流水线里它会**多停一拍**且是
         //    **不必要**的（消费者进 EX 时那条 load 已在 WB 写回）。
         //    `mem_is_load` 只给「独立使用 HazardUnit」的场景用。
+        // ⚠️ **2026-11-11 · B0 批 C8（装配点 tie-off）** —— 此前此处**故意不连接**
+        //    `mem_is_load` ⇒ ⇒ 该 `ch_in` **无 driver** ⇒ ⇒ 按**已签批契约**
+        //    （`openspec/specs/rtl-hierarchical-output/spec.md:309-316`
+        //    「顶层端口表 MUST 是 … **无 driver 的** `input` → …」）它**必须**出现在
+        //    顶层端口面 ⇒ ⇒ 产物里是一个**活跃**的顶层 input（实测变异 tie 1 ⇒
+        //    **9 项 golden 转红**、只退休 **21** 条指令（正常 **178**）
+        //    ⇒ ⇒ ⇒ 在**4 态仿真器**里不接 ⇒ 读 **X** ⇒ `stall` 变 **X** ⇒ **整个核变 X**）。
+        //    ⇒ ⇒ ⇒ **处置**：在**装配点**显式 tie-off ⇒ ⇒ 该 `ch_in` **有 driver**
+        //    ⇒ ⇒ 按契约它**不再是顶层端口**（有 driver ⇒ 内部 wire）⇒ ⇒ 顶层 input **少 1 个**。
+        //    ⚠️ **契约相容性**：契约说的是「**无 driver 的** input」⇒ ⇒ 给一个 input
+        //    **补上 driver** = **修缺陷**，**不是**改契约 ⇒ ⇒ ⇒ 与契约**相容**。
+        //    ⚠️ **行为零变化**：MEM 级那一路在流水线里**永不触发**
+        //    （`hazard_unit.h:236-239`：「在流水线里**永不触发**」）⇒ ⇒ tie-off `false`
+        //    与「未连接」的**可观测行为相同**（两者都读 0 ⇒ `mem_load_use` 恒假）。
+        hazard.io().mem_is_load <<= ch_bool(false);
         hazard.io().ex_is_load <<= id_stage.io().is_load;
         // ⚠️ `ex_branch` = **条件分支 + 跳转**（2026-10-26 扩展）：
         //    `JAL`/`JALR` 是**无条件**跳 ⇒ 也必须 flush 错误路径

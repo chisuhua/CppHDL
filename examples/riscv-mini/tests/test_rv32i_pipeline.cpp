@@ -15,7 +15,6 @@
 #include "ch.hpp"
 #include "simulator.h"
 #include "cpu/pipeline/rv32i_pipeline_regs.h"
-#include "cpu/pipeline/rv32i_forwarding.h"
 #include "cpu/pipeline/rv32i_branch_predict.h"
 #include "cpu/pipeline/hazard_unit.h"
 #include "forwarding_dut_fixture.h"

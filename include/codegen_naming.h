@@ -11,9 +11,15 @@
 //      ⇒ ⇒ 两处 MUST 用同一个列表、同一个算法。
 //
 // ⚠️ 本文件只做**命名**：不读 IR 结构、不改 IR。
-// ⚠️ `sanitize_verilog_name` 的规则表是从 `verilogwriter::sanitize_name`
-//    **逐字搬来**的（含关键字清单）⇒ 搬动 MUST NOT 改变输出（否则既有
-//    Verilog goldens / Verilator 缓存全部失效）。
+// ⚠️ `sanitize_verilog_name` 的**转义规则**（非法字符 / 数字开头）是从
+//    `verilogwriter::sanitize_name` **逐字搬来**的 ⇒ 搬动 MUST NOT 改变输出
+//    （否则既有 Verilog goldens / Verilator 缓存全部失效）。
+//
+// ⚠️ **2026-11-11 · 关键字表已补全**（`port-naming-ratchet` N3「⑥ 关键字表补全」）：
+//    原表是**务实子集**（31 词）⇒ ⇒ `bit` / `time` / `event` / `table` 等
+//    **合法 C++ 成员名会产出非法 Verilog**（如 `logic bit;` ⇒ 语法错误）。
+//    现表 = IEEE 1800-2017 保留字全集（**246 词 · verilator 实测**）。
+//    ⇒ ⇒ **实测对现网产物零影响**（8585 个标识符中 0 个与关键字完全相等）。
 
 #pragma once
 
@@ -50,13 +56,60 @@ inline std::string sanitize_verilog_name(const std::string &name) {
     // Pragmatic subset of IEEE 1800-2017 reserved words covering real
     // collisions (e.g., ch_reg's default name "reg" would otherwise emit an
     // illegal "logic [7:0] reg;" declaration).
+    // ⚠️ **关键字表 = IEEE 1800-2017 SystemVerilog 保留字全集**（2026-11-11 补全）。
+    //    ⚠️ **实测来源**：逐词用本仓的 verilator（`build/verilator-install/bin/verilator`）
+    //    实测「`logic <词>;` 是否报语法错误」⇒ ⇒ **245 个词被判定为保留字**
+    //    （对照词 `zzznotakeyword` / `foo` / `my_port` 均通过 ⇒ ⇒ 探针有判别力）。
+    //    ⇒ ⇒ **不是凭记忆抄的清单**，而是**本仓工具链的实际判定**。
+    //    ⚠️ **零产物影响（实测）**：现网产物中抽取到的 8585 个标识符里，
+    //    与本表**完全相等**的有 **0 个** ⇒ ⇒ 补全表**不改变任何现有端口名**。
+    //    （节点名恒带 owner 路径前缀 ⇒ `top_time` ≠ 裸 `time` ⇒ ⇒ 无碰撞。）
+    //    ⚠️ **`endcasex` / `endcasez` 不是保留字**（casex/casez 的合法变体）⇒ ⇒ 已排除。
+    // ⚠️ **关键字表 = IEEE 1800-2017 SystemVerilog 保留字全集**（2026-11-11 补全）。
+    //    ⚠️ **实测来源**：逐词用本仓的 verilator（`build/verilator-install/bin/verilator`）
+    //    实测「`logic <词>;` 是否报语法错误」⇒ ⇒ **246 个词被判定为保留字**
+    //    （对照词 `zzznotakeyword` / `foo` / `my_port` 均通过 ⇒ ⇒ 探针有判别力）。
+    //    ⇒ ⇒ **不是凭记忆抄的清单**，而是**本仓工具链的实际判定**。
+    //    ⚠️ **零产物影响（实测）**：现网产物中抽取到的 8585 个标识符里，
+    //    与本表**完全相等**的有 **0 个** ⇒ ⇒ 补全表**不改变任何现有端口名**。
+    //    （节点名恒带 owner 路径前缀 ⇒ `top_time` ≠ 裸 `time` ⇒ ⇒ 无碰撞。）
+    //    ⚠️ **`endcasex` / `endcasez` 不是保留字**（casex/casez 的合法变体）⇒ ⇒ 已排除。
     static const std::unordered_set<std::string> keywords = {
-        "reg", "wire", "logic", "assign", "module", "endmodule",
-        "input", "output", "inout", "always", "always_ff", "always_comb",
-        "initial", "begin", "end", "if", "else", "case", "endcase",
-        "parameter", "localparam", "signed", "unsigned", "genvar",
-        "generate", "endgenerate", "tri", "wand", "wor", "supply0",
-        "supply1"};
+        "accept_on", "alias", "always", "always_comb", "always_ff", "always_latch",
+        "and", "assert", "assign", "assume", "automatic", "before", "begin", "bind",
+        "bins", "binsof", "bit", "break", "buf", "bufif0", "bufif1", "byte", "case",
+        "casex", "casez", "cell", "chandle", "checker", "class", "clocking", "cmos",
+        "config", "const", "constraint", "context", "continue", "cover", "covergroup",
+        "coverpoint", "cross", "deassign", "default", "defparam", "design", "disable",
+        "dist", "do", "edge", "else", "end", "endcase", "endchecker", "endclass",
+        "endclocking", "endconfig", "endfunction", "endgenerate", "endgroup",
+        "endinterface", "endmodule", "endpackage", "endprimitive", "endprogram",
+        "endproperty", "endsequence", "endspecify", "endtable", "endtask", "enum",
+        "event", "expect", "export", "extends", "extern", "final", "first_match", "for",
+        "force", "foreach", "forever", "fork", "forkjoin", "function", "generate",
+        "genvar", "highz0", "highz1", "if", "iff", "ifnone", "ignore_bins",
+        "illegal_bins", "implements", "implies", "import", "incdir", "include",
+        "initial", "inout", "input", "inside", "instance", "int", "integer",
+        "interconnect", "interface", "intersect", "join", "join_any", "join_none",
+        "large", "let", "liblist", "library", "local", "localparam", "logic", "longint",
+        "macromodule", "matches", "medium", "modport", "module", "nand", "negedge",
+        "nettype", "new", "nexttime", "nmos", "nor", "noshowcancelled", "not", "notif0",
+        "notif1", "null", "or", "output", "package", "packed", "parameter", "pmos",
+        "posedge", "primitive", "priority", "program", "property", "protected", "pull0",
+        "pull1", "pulldown", "pullup", "pulsestyle_ondetect", "pulsestyle_onevent",
+        "pure", "rand", "randc", "randcase", "randsequence", "rcmos", "real",
+        "realtime", "ref", "reg", "reject_on", "release", "repeat", "restrict",
+        "return", "rnmos", "rpmos", "rtran", "rtranif0", "rtranif1", "s_always",
+        "s_eventually", "s_nexttime", "s_until", "s_until_with", "scalared", "sequence",
+        "shortint", "shortreal", "showcancelled", "signed", "small", "soft", "solve",
+        "specify", "specparam", "static", "string", "strong", "strong0", "strong1",
+        "struct", "super", "supply0", "supply1", "sync_accept_on", "sync_reject_on",
+        "table", "tagged", "task", "this", "throughout", "time", "timeprecision",
+        "timeunit", "tran", "tranif0", "tranif1", "tri", "tri0", "tri1", "triand",
+        "trior", "trireg", "type", "typedef", "union", "unique", "unique0", "unsigned",
+        "until", "until_with", "untyped", "use", "uwire", "var", "vectored", "virtual",
+        "void", "wait", "wait_order", "wand", "weak", "weak0", "weak1", "while",
+        "wildcard", "wire", "with", "within", "wor", "xnor", "xor"};
     if (keywords.find(sanitized) != keywords.end()) {
         sanitized += "_r";
     }

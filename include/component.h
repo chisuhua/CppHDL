@@ -270,8 +270,27 @@ inline std::string build_hierarchical_name(const Component* parent, const std::s
 
     // ⚠️ MUST 用 `name()`（父的**全路径**）—— **不是** `hierarchical_name()`
     // （后者会把「已是全路径的 name_」再拼一次父路径 ⇒ 深度 ≥3 重复前缀）。
+    // ⚠️ **2026-11-11 · B0 批 F-A（前缀口径对齐）** —— 原条件里还带
+    //    `|| parent_path == "unnamed"` ⇒ ⇒ **按父路径的「字面值」剥离路径段** ⇒ ⇒
+    //    与 `lnodeimpl` 的节点名前缀拼接（`src/core/lnodeimpl.cpp:30-35`，
+    //    **不**剥离）**口径不一致** ⇒ ⇒ 同一棵树产出两套名字：
+    //      · 根组件空名（`local_name_` 归一成 `"unnamed"`，见 `src/component.cpp:66`）
+    //        ⇒ ⇒ 子**组件**路径 = 裸 `child`（剥了 `unnamed.` 前缀）
+    //        ⇒ ⇒ 而其**节点**名 = `unnamed.prog_addr`（不剥）
+    //    ⇒ ⇒ ⇒ 任何「按节点名反查组件」的工具（层次化分析 / trace / 报告）都**找不到**。
+    //    ⚠️ **「无名」是普通名字，不是「无路径段」标记** ⇒ ⇒ 只有**空路径**才是
+    //    「没有父路径」的信号（`parent == nullptr` 已在上面 return）。
+    //    ⚠️ **影响面（实测）**：**仓内零影响 + 下游可见行为变更** ——
+    //    · 仓内：`git diff --stat` 的产物 golden **逐字节不变**（既有设计都用非空根名
+    //      ⇒ ⇒ 走的是 `parent_path.empty()` 那一支，与本改动无关）
+    //    · 下游：按 `name()` **精确匹配** `"child"` 的代码会看到 `"unnamed.child"`
+    //      ⇒ ⇒ MUST 走公开面登记（`docs/CHANGELOG.md` + `public-api-surface.md` 的
+    //      「**行为变更（非符号移除）**」节）
+    //    ⚠️ **代价（MUST 明写）**：空名与用户**真名** `"unnamed"` 在 `name()` 上
+    //    **永久不可区分** ⇒ ⇒ 这隐藏了一类配置错误 ⇒ ⇒ 彻底解决须**另立 item**
+    //    （引入独立的「无名」标记而非复用字面名）⇒ ⇒ **不在本项**。
     const std::string& parent_path = parent->name();
-    if (parent_path.empty() || parent_path == "unnamed") {
+    if (parent_path.empty()) {
         return local_name;
     }
 

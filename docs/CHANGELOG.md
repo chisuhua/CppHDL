@@ -6,6 +6,44 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — `rv32i-dead-component-consolidation`（B0 批）
+
+### Removed
+- **`riscv::ForwardingUnit`**（`include/cpu/pipeline/rv32i_forwarding.h`）——
+  零交付路径消费者 + 独有语义为空集（WB 档无覆盖 · `id_reg_read` 死输入）。
+  改用仓内权威的 `riscv::HazardUnit`（已接入真实流水线）+ `chlib::ForwardingMux`。
+- **`riscv::HazardDetectionUnit`**（`include/cpu/pipeline/hazard_detection_unit.h`）——
+  零交付路径消费者 + 其 MEM 级 load-use 检测点在流水线里**永不触发**。改用 `riscv::HazardUnit`。
+- **`riscv::HazardUnitComplete`**（`include/cpu/pipeline/rv32i_hazard_complete.h`）——
+  零交付路径消费者 + 2 个死输入 + 3 档语义；唯一存在理由是 parity 夹具。改用 `riscv::HazardUnit`。
+
+> ⚠️ **这是显式批准的覆盖缩面**（用户 2026-11-11 批准）：
+> `DUAL_BACKEND_PARITY_PAIRS` 290→284 · `DUAL_BACKEND_PARITY_TOTAL` 66→65 ·
+> `VERILATOR_E2E_TOTAL` 77→76 · `CTEST_TOTAL` 257（增删相抵）。
+
+### Changed
+- **`ch::build_hierarchical_name()` / `ch::Component::name()` 的子路径拼接不再按父路径
+  的「字面值」剥离路径段**（`node-name-prefix-consistency` P1）。唯一受影响的情形：
+  根组件的 name 为空（归一成 `"unnamed"`）⇒ ⇒ 其子组件的 `name()` 从裸局部名
+  （`"kid"`）变为带父前缀（`"unnamed.kid"`）⇒ ⇒ **按 `name()` 精确匹配裸局部名的下游
+  代码 MUST 更新**；常规路径（父名非空）**逐字节不变**。
+  ⚠️ **已登记代价**：空名与用户真名 `"unnamed"` 在 `name()` 上**永久不可区分**
+  ⇒ ⇒ 彻底解决须另立 item。
+- **顶层 RTL 端口表（RV32I SoC）：顶层 input 8 → 7**（`rv32i-dead-component-consolidation` C8）。
+  `mem_is_load` 的装配点补上 driver ⇒ ⇒ 它不再是「**无 driver 的** input」⇒ ⇒ 按契约
+  不再出现在顶层端口面。**行为零变化**（该路在流水线里永不触发）。
+  下游若按端口**数量/序号**硬编码 ⇒ ⇒ MUST 改为**按名**取。
+
+### Fixed
+- **`riscv::Rv32iAlu` 的 SLTU 是无符号比较**（此前 `bits<31,31>(sub_result)` 取的是
+  **结果位**而非**借位位**）⇒ ⇒ `0 <u 0xFFFFFFFF` 曾得 **0**（期望 1）。
+- **`sanitize_verilog_name` 的关键字表补全为 IEEE 1800-2017 保留字全集（246 词 ·
+  verilator 实测）**（`port-naming-ratchet` N3）。此前 `bit` / `time` / `event` / `table`
+  等**合法 C++ 成员名会产出非法 Verilog**（`logic bit;` ⇒ 语法错误）。
+  **实测对现网产物零影响**（8585 个标识符中 0 个与关键字完全相等）。
+
+---
+
 ## 2026-10-15 — `verilator-hier-input-flattening-fix`
 
 ### Fixed

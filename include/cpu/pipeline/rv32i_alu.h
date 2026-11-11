@@ -89,8 +89,18 @@ public:
         auto lt_signed_sig = select(diff_sign, a_neg, bits<31, 31>(sub_result));
         
         // SLTU: res = (a < b) ? 1 : 0 (无符号)
-        // 如果 a - b 借位，则 a < b
-        auto lt_unsigned_sig = bits<31, 31>(sub_result);  // 简化实现
+        //
+        // ⚠️ 2026-11-11 修复（`rv32i-dead-component-consolidation` ⑧ · B0 批）：
+        //    原实现 `lt_unsigned_sig = bits<31,31>(sub_result)`（**简化实现**）是**错的** ——
+        //    `sub_result` 是 32 位减法结果，其 bit31 是**结果位**而非**借位位**。
+        //    ⇒ ⇒ 手推反证：`0 - 0xFFFFFFFF` = `0x00000001` ⇒ bit31 = 0 ⇒ 旧实现得 **0**
+        //    ⇒ ⇒ 而 RISC-V SLTU 语义要求 `0 <u 0xFFFFFFFF` = **1** ⇒ ⇒ **缺陷成立**。
+        //    ⇒ ⇒ 且「无符号小于」在本仓**已有正确原语**：`io().less_than_u` 用的
+        //    `operand_a < operand_b` ⇒ ⇒ interpreter 侧走 `bv_lt<is_signed=false>`
+        //    （`include/bv/bitvector.h:915`）⇒ ⇒ **无符号**；Verilog 侧发射 `<`
+        //    （`src/codegen_verilog.cpp:215`）作用于 `logic [31:0]` ⇒ ⇒ **也是无符号**
+        //    ⇒ ⇒ ⇒ 两后端**同口径**，直接复用即可。
+        auto lt_unsigned_sig = (io().operand_a < io().operand_b);
         
         // XOR: res = a ^ b
         auto xor_result = io().operand_a ^ io().operand_b;

@@ -42,3 +42,13 @@ PrefetchConfig	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
 prefetch_data	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
 prefetch_addr	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
 prefetch_valid	removed	include/cpu/cache/i_cache_prefetch.h	-	ZERO-DEBT-P9
+
+# ── 2026-11-11 · B0 批（`rv32i-dead-component-consolidation` C5 + C6 同批退役）──
+# ⚠️ 三者均「零交付路径消费者 + 独有语义为空集/死语义 + capability 不指名」⇒ ⇒ 物理删除
+# ⚠️ **这是显式批准的覆盖缩面**（用户 2026-11-11 批准 · metis finding 9）
+rv32i_forwarding.h	nofile	include/cpu/pipeline/rv32i_forwarding.h	-	C5-2026-11-11
+hazard_detection_unit.h	nofile	include/cpu/pipeline/hazard_detection_unit.h	-	C6-2026-11-11
+rv32i_hazard_complete.h	nofile	include/cpu/pipeline/rv32i_hazard_complete.h	-	C6-2026-11-11
+ForwardingUnit	re	include/	\briscv::ForwardingUnit\b	C5-2026-11-11
+HazardDetectionUnit	re	include/	\briscv::HazardDetectionUnit\b	C6-2026-11-11
+HazardUnitComplete	re	include/	\briscv::HazardUnitComplete\b	C6-2026-11-11
