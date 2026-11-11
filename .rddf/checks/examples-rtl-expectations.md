@@ -233,7 +233,67 @@ io.value := io.pin ## sync ## ...
 
 ## fifo_stream_example {#fifo-stream-example}
 
-（`pending` —— 缺 ready/valid 握手期望，须引 `chlib-stream-semantics`）
+### ⚠️ 被测接口（实测 · 2026-11-12）
+
+`examples/spinalhdl-ported/fifo/stream_fifo_example.cpp:28-34` 的顶层端口是
+`din` / `push` / `pop` / `dout` / `empty` / `full` ⇒ ⇒ **没有 ready/valid**
+⇒ ⇒ 原清单「缺 ready/valid 握手期望」的口径**已订正**（R3-a）⇒ ⇒
+本项的判据对象 = **push/pop + empty/full**。
+
+### 上游参考（**spec-derived** · FIFO 的定义性语义）
+
+规格面 = `openspec/specs/chlib-stream-semantics/spec.md`（仓内唯一的 FIFO 语义 capability）
+⇒ ⚠️ **口径**：那份 spec 治理的是 `chlib::sync_fifo` / `chlib::stream_fifo`（**库组件**）
+⇒ ⇒ 本 TB 引它的**语义条款**（尤其「消费者 MUST 在 pop 沿**之前**采样才能拿到
+正在被弹出的那个元素」+「pop 沿之后 payload 指向**下一个**队首」）
+⇒ ⇒ **不引**它的**实现条款**（空/满自保护门控）—— 见下方「已知偏离」。
+
+### 判据
+
+| 判据 | 级别 | 期望 |
+|---|---|---|
+| 复位后 `empty` | spec-derived | `1`（无在途） |
+| 在途为 0 时 `full` | impl-contract | `0` |
+| push A,B,C 后依次 pop | spec-derived | 依次得到 **A,B,C**（顺序保持） |
+| 取走全部后 `empty` | spec-derived | `1` |
+| **15 个在途**（内存 16 槽 ⇒ 无混叠的安全区上界）全部取回 | spec-derived | 顺序一致、**不丢数据** |
+| `dout` 在 pop 沿**之前**采样 | spec-derived（FWFT 采样点） | 拿到的是**正在被弹出**的那个元素 |
+| inline 后代端口（`top_fifo_inst_unnamed_output*`）与顶层端口 | impl-contract | 逐拍同源 |
+
+### metamorphic（**相对判据** · 不依赖任何绝对期望值）
+
+- **R1 置换性**：push N 个 ⇒ pop 出来的序列 **逐项恒等**于写入序列
+  （TB 侧记录写入值再比较 ⇒ 不判任何绝对常量）。
+- **R2 `empty` 不变量**：每次操作后 `empty` == 「TB 侧在途计数是否为 0」
+  ⇒ ⇒ 抓「`empty` 卡住 / 乱跳」。
+
+### ⚠️ 已知偏离 **D5**（实测 · **待用户裁决** · TB **不固化**）
+
+`full` 的比较用的是**完整 5 位指针**（`ch_reg<ch_uint<addr_width+1>>` = 5 位，
+地址取低 4 位）⇒ `full = (wr+1 == rd)` ⇒ **门限 = 31 个在途**，
+而内存只有 **16 槽** ⇒ ⇒ **第 16 次写入起地址混叠**（最老的元素被覆盖丢失）。
+
+**实测证据**（用内部指针对齐时序后复跑）：
+push 20 个（`10..23`）后逐个 pop ⇒ 得到 `20 21 22 23 14 15 16 ... 1f 20 21 22 23`
+⇒ ⇒ 最老的 4 个（`10 11 12 13`）**已丢失**；且 `full` 在 20 次 push 内**从不置位**。
+
+**TB 的处置（三条，刻意）**：
+1. **不判** `full` 在 15/16 在途处的取值 —— 此处连「两种正确实现」都不一致
+   （16 槽 FIFO 的正确 `full` 语义可以是 15 或 16 在途）⇒ ⇒ 判它 = **固化某个偶然选择**。
+2. 数据完整性断言**限定在 ≤ 15 在途**（无混叠的安全区）。
+3. `full` 只在「在途 ≤ 14」时判 0（当前实现与两种正确实现**都**如此）。
+
+**变异自证**（对 DUT 变异 ⇒ TB MUST 转红）：
+
+| 变异 | 期望 | 实测 |
+|---|---|---|
+| M1：`full` 改成 **4 位地址比较**（= 更正确的实现） | **仍绿**（TB 不固化偶然门限） | ✅ `checks=58 fails=0` |
+| M2：读地址改成 `rd+1`（`dout` 指向下一个） | 转红 | ✅ `fails=23` |
+| M3：`empty` 粘住（`rd == 5'h1F`） | 转红 | ✅ `fails=6` |
+| M4：写地址改成 `wr+1`（写入偏移） | 转红 | ✅ `fails=23` |
+
+**首次跑红**：无 —— 但**首版诊断**时手推「`full` 在 15 在途置位」与实测（31 在途）不符
+⇒ ⇒ 经内部指针对齐时序后确认是**实现缺陷**（D5），不是判据写错。
 
 ## uart_tx_example {#uart-tx-example}
 

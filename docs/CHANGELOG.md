@@ -6,6 +6,40 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-12 — B2 批 · 第 6 个 TB（fifo_stream）+ **一个实测的实现缺陷**（D5 · 待裁决）
+
+### Added
+
+- **`examples/spinalhdl-ported/fifo/tb_fifo_stream_example.sv`**
+  ⇒ **4 场景 / 58 断言 / 27 条 spec-derived** · `RESULT: checks=58 fails=0`
+  ⇒ 判据：**顺序保持**（3 元素）· **容量边界**（**15 在途全取回、不丢数据**）·
+    **metamorphic R1 置换性**（逐项恒等）+ **R2 `empty` 不变量**（TB 侧在途计数）
+- **`.rddf/checks/decision-request-fifo-full-threshold-2026-11.md`**（新）
+  ⇒ D5 的**可裁决决策请求单**（三选项 + 建议 + 裁决点）
+
+### ⚠️ 一个**实测**的实现缺陷（D5 · 不在 TB 里固化）
+
+`fifo_stream_example` 的 `full` 用**完整 5 位指针**比较
+（`full = (wr+1 == rd)`）⇒ **门限 = 31 个在途**，而内存只有 **16 槽**
+⇒ ⇒ **第 16 次写入起地址混叠** —— 实测 push 20 个后 pop，
+最老的 4 个（`10 11 12 13`）**已被覆盖丢失**，`full` 从不置位。
+
+⇒ ⇒ **TB 的处置（刻意）**：**不判** `full` 在 15/16 在途处的取值
+（16 槽 FIFO 的正确语义可以是 15 或 16 在途 ⇒ **两种正确实现此处也不一致**
+⇒ ⇒ 判它 = 固化偶然选择）· 数据完整性断言**限定 ≤ 15 在途** · `full` 只判「≤ 14 在途时为 0」。
+
+⇒ ⇒ **变异自证**（对 DUT 变异）：把 `full` 改成 **4 位地址比较**（= 更正确的实现）
+⇒ ⇒ TB **仍然全绿** ⇒ ⇒ 证明 TB **不锁死**当前实现的门限；
+另 3 条变异（读地址偏移 / `empty` 粘住 / 写地址偏移）**各自转红**。
+
+### 期望源口径订正（原清单写错了接口）
+
+原清单写「缺 **ready/valid** 握手」⇒ ⇒ **实测接口是
+`din/push/pop/dout/empty/full`**（`stream_fifo_example.cpp:28-34`）⇒ ⇒ **没有 ready/valid**
+⇒ ⇒ 判据对象改为 **push/pop + empty/full**。
+
+---
+
 ## 2026-11-11 — B2 批 · 自查纠偏：metamorphic 判据的「标注不实」
 
 > 用户要求「检查已完成的示例是否都通过测试、是否符合预期目标」⇒ 做了全量自查（清缓存强制重编译）。
