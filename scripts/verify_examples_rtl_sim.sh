@@ -144,7 +144,13 @@ while IFS=$'\t' read -r tgt src comp emitter tb status note; do
     tb_name="$(basename "$tb" .sv)"
     ver_version="$("$VERILATOR" --version 2>/dev/null | head -1)"
     flags="--binary --timing -CFLAGS -fcoroutines -Wno-fatal --x-assign unique"
-    cache_key="$(printf '%s\0%s\0%s\0%s\0%s' "$dut_v" "$REPO_ROOT/$tb" "$flags" "$ver_version" "$tb_name" | sha1sum | cut -d' ' -f1)"
+    # ⚠️ ⚠️ key MUST 用**内容**哈希，**不是路径**（实测缺陷）：
+    #   用路径时，改了 TB 的**内容**但路径不变 ⇒ ⇒ key 不变 ⇒ ⇒ **命中旧缓存**
+    #   ⇒ ⇒ 跑的是**旧 TB** ⇒ ⇒ 「护栏说绿、其实验的是旧版本」
+    #   （实测：改 gpio 的手推表后仍「命中缓存」⇒ ⇒ 跑旧 TB ⇒ 红了）
+    tb_hash="$(sha1sum "$REPO_ROOT/$tb" | cut -d' ' -f1)"
+    dut_hash="$(sha1sum "$dut_v" | cut -d' ' -f1)"
+    cache_key="$(printf '%s\0%s\0%s\0%s\0%s' "$dut_hash" "$tb_hash" "$flags" "$ver_version" "$tb_name" | sha1sum | cut -d' ' -f1)"
     cache_dir="$HOME/.cache/cpphdl/rtl_sim/$cache_key"
     sim_bin="$work/obj/sim"
     if [ -x "$cache_dir/sim" ]; then

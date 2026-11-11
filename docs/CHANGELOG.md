@@ -30,6 +30,13 @@ the change that introduced them (see `openspec/changes/` and
   ⇒ ⇒ **256 拍逐拍检查**（自由运行 +1 计数器，含 8 位回绕）
   ⇒ ⇒ `RESULT: checks=256 fails=0`。
 
+### Fixed
+- **E7 的缓存 key 用错了**：key 用了**路径**而不是**内容** ⇒ ⇒ 改了 TB 的**内容**
+  但路径不变 ⇒ ⇒ key 不变 ⇒ ⇒ **命中旧缓存** ⇒ ⇒ 跑的是**旧 TB**
+  （实测：改 gpio 的手推表后仍「命中缓存」⇒ ⇒ 护栏说绿、其实验的是旧版本）
+  ⇒ ⇒ 改为**内容哈希**（产物 + TB 各自 sha1）⇒ ⇒ 判别力实测：
+  改 TB 内容 ⇒ **不**命中（重新编译）✓
+
 ### Fixed / 口径（实测踩出来的）
 - **Verilator 把 X 优化成已知值** ⇒ 「制造 X 看断言转红」**不可能成立**
   （`8'bx` 在 `--x-assign unique` / `--x-initial unique|fast|0` 的**全部**组合下
