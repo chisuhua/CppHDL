@@ -190,7 +190,40 @@ io.value := io.pin ## sync ## ...
 
 ## quadrature_encoder_example {#quadrature-encoder-example}
 
-（`pending` —— 见清单的「缺什么」；本节将在实现 TB 时补齐）
+### 上游参考（**spec-derived**）
+
+该 example 头部原文（无 Scala 源码，只有功能约定）：
+
+> · **4 倍频计数**（上升沿 + 下降沿）
+> · **A 相领先 B 相 = 顺时针 (CW)** · B 相领先 A 相 = 逆时针 (CCW)
+> · **每个周期产生 4 个计数边沿**
+> · 索引 (Z) 信号清零
+
+⇒ ⇒ 规范只保证**幅值**（一周期 = 4 计数）与**方向名**（CW/CCW）；
+**「CW 对应 +1 还是 -1」是计数器的符号约定 ⇒ 属 impl-contract**（本 TB **不硬判符号**）。
+
+### 判据（语义级，不逐拍抄中间值）
+
+| 判据 | 级别 | 期望 |
+|---|---|---|
+| 复位后 position | spec-derived | **0** |
+| 正转 **2 个完整周期** | spec-derived（幅值） | `(pos - pos0) mod 65536 ∈ {+8, -8}` |
+| 正转 2 周期后**反转 2 周期** | **metamorphic** | 回到 `pos0`（符号无关） |
+| 正转 1 周期 | spec-derived（幅值） | `∈ {+4, -4}`（确认此刻确实非 0） |
+| **Z 相上升沿** | spec-derived | `position == 0` |
+| `a_sync` / `b_sync` 静止在 A=1/B=1 | impl-contract | 均为 1 |
+
+### impl-contract 前提
+
+- **同步寄存器初值是 `true`**（`a_sync1(true)` 等）⇒ 静止初态 **A=1 · B=1**
+  ⇒ ⇒ TB 输入初值 MUST 也是 1（否则第一拍就有**启动伪边沿**）。
+- 边沿用 `sync1/sync2`（2 拍延迟）⇒ 每个相位 MUST 维持 **≥4 拍**。
+
+**首次跑红**：有 —— 首版按 `count_up/down` 的公式推出「11→10 是 +1」，
+但实测是 **-1** ⇒ ⇒ 判定：**符号属 impl-contract**（规范未规定）⇒
+改为**符号无关的幅值判据** + metamorphic（正反转回原点）。
+（另：严格 flags 下还抓到 TB 自身的 `PINMISSING`（inline 后代输出未连）与
+`WIDTHEXPAND`（`integer` vs 16 位）⇒ 均已修。）
 
 ## fifo_stream_example {#fifo-stream-example}
 

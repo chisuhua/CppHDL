@@ -6,6 +6,34 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B2 批 · 第 5 个 TB（quadrature_encoder）+ 一条期望源边界裁决
+
+### Added
+- **`examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example.sv`**
+  ⇒ **语义级**判据（不逐拍抄中间值）· `RESULT: checks=7 fails=0`
+  ⇒ 复位=0 · 正转 2 周期 ⇒ 幅值 8 · **metamorphic：反转 2 周期回原点** ·
+    正转 1 周期 ⇒ 幅值 4 · **Z 上升 ⇒ 清零** · `a_sync/b_sync` = 2 拍延迟
+
+### 一条期望源边界裁决（**重要**）
+首版按 `count_up`/`count_down` 的**公式**推出「`11→10` 是 +1」，**实测是 -1**。
+⇒ ⇒ 判定：正交编码器的规范只保证**幅值**（一周期 = 4 计数）与**方向名**（CW/CCW），
+**「CW 对应 +1 还是 -1」是计数器的符号约定 ⇒ 属 `impl-contract`**
+⇒ ⇒ TB 改为**符号无关**的判据（`(pos - base) mod 65536 ∈ {+m, -m}`）+ metamorphic
+（正转 N 后反转 N 回原点 —— 与符号无关）⇒ ⇒ **不硬判符号**，理由写进登记文档。
+⇒ ⇒ 这是「期望源分级」的一次**真实应用**：不是所有能从实现推出来的量都该硬判。
+
+### 严格 flags 再抓两条 TB 自身缺陷（已修）
+- `%Warning-PINMISSING`：**inline 后代的 4 个输出也是顶层端口** ⇒ TB 未连
+  （`top_enc_unnamed_output*`）⇒ 已补。
+- `%Warning-WIDTHEXPAND`：`integer`（32 位）与 16 位 `position` 混用
+  ⇒ task 参数改 `[15:0]`，`pos0` 改 `logic [15:0]`。
+
+### 验证
+- E5：**5 项 verified**（counter 14 · counter_simple 512 · pwm 13 · gpio 8 ·
+  quadrature 7）+ **5 项 pending**（`--budget=5`）· `--self-test` 全绿
+
+---
+
 ## 2026-11-11 — B2 批 · P1 期望源独立性（消除循环论证）
 
 > 来源：`@metis` 审查指出「**期望表用实现表达式书写 = 转录不是推导** ⇒ 循环论证」。
