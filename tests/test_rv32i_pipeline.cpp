@@ -10,11 +10,11 @@
  * 5. Stall/Flush 控制验证
  *
  * 修复说明 (fix-test-completeness Task 8):
- * - ForwardingUnit: 更新端口名匹配 rv32i_forwarding.h 当前 API
+ * - ForwardingUnit: ⚠️ 2026-11-11 已退役（C5 + C6 同批）⇒ ⇒ 相关 SECTION 已删
  *   (id_ex_rs1_addr→id_rs1_addr, ex_mem_rd→ex_rd_addr, forward_a→rs1_src 等)
  * - ForwardingMux: riscv 命名空间下不存在此非模板类, 改用 SKIP 保留测试用例
  *   (实际模板版本位于 chlib::ForwardingMux<32>, 由 tests/chlib/test_forwarding.cpp 覆盖)
- * - Rv32iCore: 原始 rv32i_core.h 仅有 HazardDetectionUnit; rv32i_core_simple.h 是
+ * - Rv32iCore: ⚠️ 2026-11-11 `HazardDetectionUnit` 已退役（C6）⇒ ⇒ 改用 `HazardUnit`; rv32i_core_simple.h 是
  *   不完整骨架 (使用 ch_var/CH_PROCESS 等未实现 API), 此处仅前向声明保留测试
  * - BranchPredictor: 修正输入顺序 (所有输入必须在 tick() 之前设置)
  */
@@ -23,9 +23,8 @@
 #include "ch.hpp"
 #include "simulator.h"
 #include "cpu/pipeline/rv32i_pipeline_regs.h"
-#include "cpu/pipeline/rv32i_forwarding.h"
 #include "cpu/pipeline/rv32i_branch_predict.h"
-#include "cpu/pipeline/hazard_detection_unit.h"
+#include "cpu/pipeline/hazard_unit.h"   // ⚠️ 2026-11-11：替换已退役的 HazardDetectionUnit
 
 // 注: rv32i_core_simple.h 是不完整的骨架实现 (使用 ch_var/CH_PROCESS 等
 // 未实现的 API), 此处仅前向声明 Rv32iCore 类用于测试用例保留.
@@ -141,117 +140,6 @@ TEST_CASE("Pipeline Registers - Flush Control", "[pipeline][flush]") {
 //   forward_a      → rs1_src (2-bit, 0=REG/1=EX/2=MEM/3=WB)
 // ============================================================================
 TEST_CASE("Forwarding Unit - Basic Functionality", "[forwarding][unit]") {
-    SECTION("ForwardingUnit compiles and instantiates") {
-        ch::Component* parent = nullptr;
-        ForwardingUnit unit(parent, "test_forward");
-        (void)unit;
-    }
-    
-    SECTION("ForwardingUnit detects EX hazard") {
-        ch::ch_device<ForwardingUnit> unit;
-        ch::Simulator sim(unit.context());
-        
-        // ID 阶段读 x1
-        sim.set_input_value(unit.instance().io().id_rs1_addr, 1);
-        sim.set_input_value(unit.instance().io().id_rs2_addr, 2);
-        sim.set_input_value(unit.instance().io().id_reg_read, true);
-        
-        // EX 阶段写 x1 (前推源)
-        sim.set_input_value(unit.instance().io().ex_rd_addr, 1);
-        sim.set_input_value(unit.instance().io().ex_reg_write, true);
-        sim.set_input_value(unit.instance().io().ex_alu_result, 42);
-        
-        // MEM 阶段不冲突
-        sim.set_input_value(unit.instance().io().mem_rd_addr, 0);
-        sim.set_input_value(unit.instance().io().mem_reg_write, false);
-        sim.set_input_value(unit.instance().io().mem_alu_result, 0);
-        
-        // WB 阶段不冲突
-        sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(unit.instance().io().wb_reg_write, false);
-        sim.set_input_value(unit.instance().io().wb_write_data, 0);
-        
-        // 原始寄存器数据
-        sim.set_input_value(unit.instance().io().rs1_data_reg, 100);
-        sim.set_input_value(unit.instance().io().rs2_data_reg, 200);
-        
-        sim.tick();  // 评估组合逻辑
-        
-        auto rs1_src = static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_src));
-        auto rs1_data = static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_data));
-        
-        REQUIRE(rs1_src == 1);     // EX 前推 (优先级最高)
-        REQUIRE(rs1_data == 42);   // 前推后的数据
-    }
-    
-    SECTION("ForwardingUnit detects MEM hazard") {
-        ch::ch_device<ForwardingUnit> unit;
-        ch::Simulator sim(unit.context());
-        
-        // ID 阶段读 x2
-        sim.set_input_value(unit.instance().io().id_rs1_addr, 2);
-        sim.set_input_value(unit.instance().io().id_rs2_addr, 3);
-        sim.set_input_value(unit.instance().io().id_reg_read, true);
-        
-        // EX 阶段不写
-        sim.set_input_value(unit.instance().io().ex_rd_addr, 5);
-        sim.set_input_value(unit.instance().io().ex_reg_write, false);
-        sim.set_input_value(unit.instance().io().ex_alu_result, 0);
-        
-        // MEM 阶段写 x2 (前推源)
-        sim.set_input_value(unit.instance().io().mem_rd_addr, 2);
-        sim.set_input_value(unit.instance().io().mem_reg_write, true);
-        sim.set_input_value(unit.instance().io().mem_alu_result, 99);
-        
-        // WB 阶段不冲突
-        sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(unit.instance().io().wb_reg_write, false);
-        sim.set_input_value(unit.instance().io().wb_write_data, 0);
-        
-        // 原始寄存器数据
-        sim.set_input_value(unit.instance().io().rs1_data_reg, 100);
-        sim.set_input_value(unit.instance().io().rs2_data_reg, 200);
-        
-        sim.tick();
-        
-        auto rs1_src = static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_src));
-        auto rs1_data = static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_data));
-        
-        REQUIRE(rs1_src == 2);     // MEM 前推
-        REQUIRE(rs1_data == 99);   // 前推后的数据
-    }
-    
-    SECTION("ForwardingUnit no hazard - use register file") {
-        ch::ch_device<ForwardingUnit> unit;
-        ch::Simulator sim(unit.context());
-        
-        sim.set_input_value(unit.instance().io().id_rs1_addr, 1);
-        sim.set_input_value(unit.instance().io().id_rs2_addr, 2);
-        sim.set_input_value(unit.instance().io().id_reg_read, true);
-        
-        sim.set_input_value(unit.instance().io().ex_rd_addr, 3);
-        sim.set_input_value(unit.instance().io().ex_reg_write, false);
-        sim.set_input_value(unit.instance().io().ex_alu_result, 0);
-        
-        sim.set_input_value(unit.instance().io().mem_rd_addr, 4);
-        sim.set_input_value(unit.instance().io().mem_reg_write, false);
-        sim.set_input_value(unit.instance().io().mem_alu_result, 0);
-        
-        sim.set_input_value(unit.instance().io().wb_rd_addr, 0);
-        sim.set_input_value(unit.instance().io().wb_reg_write, false);
-        sim.set_input_value(unit.instance().io().wb_write_data, 0);
-        
-        sim.set_input_value(unit.instance().io().rs1_data_reg, 55);
-        sim.set_input_value(unit.instance().io().rs2_data_reg, 66);
-        
-        sim.tick();
-        
-        auto rs1_src = static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_src));
-        auto rs1_data = static_cast<uint64_t>(sim.get_port_value(unit.instance().io().rs1_data));
-        
-        REQUIRE(rs1_src == 0);     // 来自寄存器文件
-        REQUIRE(rs1_data == 55);   // 原始寄存器数据
-    }
 }
 
 // ============================================================================
@@ -443,42 +331,6 @@ TEST_CASE("Branch Predictor - Integration", "[branch][predictor]") {
 // 测试用例 9: 冒险检测单元
 // ============================================================================
 TEST_CASE("Hazard Detection Unit - LOAD-USE", "[hazard][load-use]") {
-    SECTION("HazardDetectionUnit detects LOAD-USE hazard") {
-        ch::ch_device<HazardDetectionUnit> unit;
-        ch::Simulator sim(unit.context());
-        
-        sim.set_input_value(unit.instance().io().id_ex_rs1_addr, 1);
-        sim.set_input_value(unit.instance().io().id_ex_rs2_addr, 2);
-        sim.set_input_value(unit.instance().io().id_ex_reg_write, true);
-        sim.set_input_value(unit.instance().io().ex_mem_is_load, true);
-        sim.set_input_value(unit.instance().io().ex_mem_rd, 1);
-        sim.set_input_value(unit.instance().io().ex_mem_reg_write, true);
-        
-        sim.tick();
-        
-        auto stall_if = to_bool(sim.get_port_value(unit.instance().io().stall_if));
-        auto stall_id = to_bool(sim.get_port_value(unit.instance().io().stall_id));
-        auto flush_id_ex = to_bool(sim.get_port_value(unit.instance().io().flush_id_ex));
-        
-        REQUIRE(stall_if == true);
-        REQUIRE(stall_id == true);
-        REQUIRE(flush_id_ex == true);
-    }
-    
-    SECTION("HazardDetectionUnit no hazard") {
-        ch::ch_device<HazardDetectionUnit> unit;
-        ch::Simulator sim(unit.context());
-        
-        sim.set_input_value(unit.instance().io().id_ex_rs1_addr, 1);
-        sim.set_input_value(unit.instance().io().id_ex_rs2_addr, 2);
-        sim.set_input_value(unit.instance().io().id_ex_reg_write, true);
-        sim.set_input_value(unit.instance().io().ex_mem_is_load, false);
-        sim.set_input_value(unit.instance().io().ex_mem_rd, 1);
-        sim.set_input_value(unit.instance().io().ex_mem_reg_write, true);
-        
-        auto stall_if = to_bool(sim.get_port_value(unit.instance().io().stall_if));
-        REQUIRE(stall_if == false);
-    }
 }
 
 // ============================================================================
@@ -533,12 +385,15 @@ TEST_CASE("Pipeline - Full Data Path", "[pipeline][datapath]") {
         IdExPipelineReg id_ex(parent, "id_ex");
         ExMemPipelineReg ex_mem(parent, "ex_mem");
         MemWbPipelineReg mem_wb(parent, "mem_wb");
-        ForwardingUnit fwd(parent, "fwd");
         BranchPredictor bp(parent, "bp");
-        HazardDetectionUnit hazard(parent, "hazard");
+        // ⚠️ 2026-11-11：`riscv::ForwardingUnit` 与 `riscv::HazardDetectionUnit` 已退役
+        //   （`rv32i-dead-component-consolidation` C5 + C6 同批退役）⇒ ⇒ 本用例的
+        //   「流水线组件可同时实例化」覆盖改用仓内**权威**的 `riscv::HazardUnit`
+        //   （即 ADR-047 数据前推接入流水线时用的那一个）⇒ ⇒ 覆盖**保留**，不缩面。
+        HazardUnit hazard(parent, "hazard");
         
         (void)if_id; (void)id_ex; (void)ex_mem; (void)mem_wb;
-        (void)fwd; (void)bp; (void)hazard;
+        (void)bp; (void)hazard;
     }
 }
 

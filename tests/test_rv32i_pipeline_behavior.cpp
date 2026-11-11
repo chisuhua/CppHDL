@@ -15,9 +15,9 @@
  *   Batch 1（无 clk 风险）= 13 个：
  *     - BranchDetector ×3 (BEQ / BNE / non-branch)
  *     - BranchConditionUnit ×4 (BEQ equal / BEQ not equal / BLT signed / BLTU unsigned)
- *     - ForwardingUnit ×3 (EX hazard / MEM hazard / no hazard)
+ *     - ⚠️ 2026-11-11：`ForwardingUnit` ×3 已退役（C5+C6 同批）⇒ ⇒ 对应 pair 已删（**这是缩面**）
  *     - ControlHazardUnit ×1 (flush logic)
- *     - HazardDetectionUnit ×2 (LOAD-USE / LOAD-USE no stall)
+ *     - ⚠️ 2026-11-11：`HazardDetectionUnit` ×2 已退役（C5+C6 同批）⇒ ⇒ 对应 pair 已删（**这是缩面**）
  *
  *   Batch 2（含 ch_reg 的时序组件）= 1 + 1 —— ✅ 2026-10-27 实施
  *     （change dual-backend-rv32i-integration-2026-10）：
@@ -40,7 +40,7 @@
  *       「删掉 flush 清空 skid」的变异 ⇒ **组件级是唯一判别力来源**。
  * 显式不迁移清单（per oracle 调研 + R6 #1/#2/#6 排除）：
  *   - 原 test_rv32i_pipeline.cpp line 47-69 (4 个 pipeline reg 裸构造)        R6 #1/#2
- *   - 原 test_rv32i_pipeline.cpp line 144 (ForwardingUnit instantiate)        R6 #1/#2
+ *   - 原 test_rv32i_pipeline.cpp line 144 (ForwardingUnit instantiate) —— ⚠️ 已退役 ⇒ 该项随之删除
  *   - 原 test_rv32i_pipeline.cpp line 265 (ForwardingMux instantiate)        R6 #1/#2
  *   - 原 test_rv32i_pipeline.cpp line 397 (BranchPredictor instantiate)      R6 #1/#2
  *   - 原 test_rv32i_pipeline.cpp line 274 (ForwardingMux SKIP)               R6 #6
@@ -65,8 +65,6 @@
 #include "simulator.h"
 
 #include "cpu/pipeline/rv32i_branch_predict.h"
-#include "cpu/pipeline/rv32i_forwarding.h"
-#include "cpu/pipeline/hazard_detection_unit.h"
 #include "cpu/pipeline/rv32i_pipeline_regs.h"
 #include "cpu/pipeline/stages/if_stage.h"
 
@@ -217,136 +215,6 @@ DUAL_BACKEND_TEST_PAIR(
         REQUIRE(condition == 1);
     });
 
-// ----------------------------------------------------------------------------
-// ForwardingUnit ×3 (对应原 test_rv32i_pipeline.cpp line 150/187/224 SECTION)
-// ForwardingUnit 是组合逻辑: id_rs1/rs2_addr + EX/MEM/WB 写地址冲突检测 → rs1/rs2_data 前推
-// ----------------------------------------------------------------------------
-
-// ForwardingUnit - detects EX hazard (原 line 150 SECTION body)
-DUAL_BACKEND_TEST_PAIR(
-    ForwardingUnit,
-    "ForwardingUnit - detects EX hazard",
-    "[pipeline][forwarding][behavior][dual]",
-    [&]() {
-        // ID 阶段读 x1
-        sim.set_input_value(dev.instance().io().id_rs1_addr, 1_d);
-        sim.set_input_value(dev.instance().io().id_rs2_addr, 2_d);
-        sim.set_input_value(dev.instance().io().id_reg_read, true);
-
-        // EX 阶段写 x1 (前推源)
-        sim.set_input_value(dev.instance().io().ex_rd_addr, 1_d);
-        sim.set_input_value(dev.instance().io().ex_reg_write, true);
-        sim.set_input_value(dev.instance().io().ex_alu_result, 42_d);
-
-        // MEM 阶段不冲突
-        sim.set_input_value(dev.instance().io().mem_rd_addr, 0_d);
-        sim.set_input_value(dev.instance().io().mem_reg_write, false);
-        sim.set_input_value(dev.instance().io().mem_alu_result, 0_d);
-
-        // WB 阶段不冲突
-        sim.set_input_value(dev.instance().io().wb_rd_addr, 0_d);
-        sim.set_input_value(dev.instance().io().wb_reg_write, false);
-        sim.set_input_value(dev.instance().io().wb_write_data, 0_d);
-
-        // 原始寄存器数据
-        sim.set_input_value(dev.instance().io().rs1_data_reg, 100_d);
-        sim.set_input_value(dev.instance().io().rs2_data_reg, 200_d);
-
-        sim.tick();  // 评估组合逻辑
-
-        auto rs1_src = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rs1_src));
-        auto rs1_data = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rs1_data));
-
-        REQUIRE(rs1_src == 1);     // EX 前推 (优先级最高)
-        REQUIRE(rs1_data == 42);   // 前推后的数据
-    });
-
-// ForwardingUnit - detects MEM hazard (原 line 187 SECTION body)
-DUAL_BACKEND_TEST_PAIR(
-    ForwardingUnit,
-    "ForwardingUnit - detects MEM hazard",
-    "[pipeline][forwarding][behavior][dual]",
-    [&]() {
-        // ID 阶段读 x2
-        sim.set_input_value(dev.instance().io().id_rs1_addr, 2_d);
-        sim.set_input_value(dev.instance().io().id_rs2_addr, 3_d);
-        sim.set_input_value(dev.instance().io().id_reg_read, true);
-
-        // EX 阶段不写
-        sim.set_input_value(dev.instance().io().ex_rd_addr, 5_d);
-        sim.set_input_value(dev.instance().io().ex_reg_write, false);
-        sim.set_input_value(dev.instance().io().ex_alu_result, 0_d);
-
-        // MEM 阶段写 x2 (前推源)
-        sim.set_input_value(dev.instance().io().mem_rd_addr, 2_d);
-        sim.set_input_value(dev.instance().io().mem_reg_write, true);
-        sim.set_input_value(dev.instance().io().mem_alu_result, 99_d);
-
-        // WB 阶段不冲突
-        sim.set_input_value(dev.instance().io().wb_rd_addr, 0_d);
-        sim.set_input_value(dev.instance().io().wb_reg_write, false);
-        sim.set_input_value(dev.instance().io().wb_write_data, 0_d);
-
-        // 原始寄存器数据
-        sim.set_input_value(dev.instance().io().rs1_data_reg, 100_d);
-        sim.set_input_value(dev.instance().io().rs2_data_reg, 200_d);
-
-        sim.tick();
-
-        auto rs1_src = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rs1_src));
-        auto rs1_data = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rs1_data));
-
-        REQUIRE(rs1_src == 2);     // MEM 前推
-        REQUIRE(rs1_data == 99);   // 前推后的数据
-    });
-
-// ForwardingUnit - no hazard (原 line 224 SECTION body)
-DUAL_BACKEND_TEST_PAIR(
-    ForwardingUnit,
-    "ForwardingUnit - no hazard - use register file",
-    "[pipeline][forwarding][behavior][dual]",
-    [&]() {
-        sim.set_input_value(dev.instance().io().id_rs1_addr, 1_d);
-        sim.set_input_value(dev.instance().io().id_rs2_addr, 2_d);
-        sim.set_input_value(dev.instance().io().id_reg_read, true);
-
-        sim.set_input_value(dev.instance().io().ex_rd_addr, 3_d);
-        sim.set_input_value(dev.instance().io().ex_reg_write, false);
-        sim.set_input_value(dev.instance().io().ex_alu_result, 0_d);
-
-        sim.set_input_value(dev.instance().io().mem_rd_addr, 4_d);
-        sim.set_input_value(dev.instance().io().mem_reg_write, false);
-        sim.set_input_value(dev.instance().io().mem_alu_result, 0_d);
-
-        sim.set_input_value(dev.instance().io().wb_rd_addr, 0_d);
-        sim.set_input_value(dev.instance().io().wb_reg_write, false);
-        sim.set_input_value(dev.instance().io().wb_write_data, 0_d);
-
-        sim.set_input_value(dev.instance().io().rs1_data_reg, 55_d);
-        sim.set_input_value(dev.instance().io().rs2_data_reg, 66_d);
-
-        sim.tick();
-
-        auto rs1_src = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rs1_src));
-        auto rs1_data = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().rs1_data));
-
-        REQUIRE(rs1_src == 0);     // 来自寄存器文件
-        REQUIRE(rs1_data == 55);   // 原始寄存器数据
-    });
-
-// ----------------------------------------------------------------------------
-// ControlHazardUnit ×1 (对应原 test_rv32i_pipeline.cpp line 424 SECTION)
-// ControlHazardUnit 是组合逻辑: is_branch + predict_error + branch_taken + pc +
-// instr_valid + branch_target → flush_if_id / stall_if / pc_src
-// ----------------------------------------------------------------------------
-
-// ControlHazardUnit - generates flush (原 line 424 SECTION body)
 DUAL_BACKEND_TEST_PAIR(
     ControlHazardUnit,
     "ControlHazardUnit - generates flush",
@@ -366,92 +234,6 @@ DUAL_BACKEND_TEST_PAIR(
         REQUIRE(flush == 1);
     });
 
-// ----------------------------------------------------------------------------
-// HazardDetectionUnit ×2 (对应原 test_rv32i_pipeline.cpp line 446/468 SECTION)
-// HazardDetectionUnit 是组合逻辑: id_ex_rs1/rs2_addr + ex_mem 寄存器 + is_load +
-// reg_write → stall_if / stall_id / flush_id_ex
-// ----------------------------------------------------------------------------
-
-// HazardDetectionUnit - detects LOAD-USE hazard (原 line 446 SECTION body)
-DUAL_BACKEND_TEST_PAIR(
-    HazardDetectionUnit,
-    "HazardDetectionUnit - detects LOAD-USE hazard",
-    "[pipeline][hazard][load-use][behavior][dual]",
-    [&]() {
-        sim.set_input_value(dev.instance().io().id_ex_rs1_addr, 1_d);
-        sim.set_input_value(dev.instance().io().id_ex_rs2_addr, 2_d);
-        sim.set_input_value(dev.instance().io().id_ex_reg_write, true);
-        sim.set_input_value(dev.instance().io().ex_mem_is_load, true);
-        sim.set_input_value(dev.instance().io().ex_mem_rd, 1_d);
-        sim.set_input_value(dev.instance().io().ex_mem_reg_write, true);
-
-        sim.tick();
-
-        auto stall_if = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().stall_if));
-        auto stall_id = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().stall_id));
-        auto flush_id_ex = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().flush_id_ex));
-
-        REQUIRE(stall_if == 1);
-        REQUIRE(stall_id == 1);
-        REQUIRE(flush_id_ex == 1);
-    });
-
-// HazardDetectionUnit - no hazard (原 line 468 SECTION body)
-// 注：原 SECTION body 缺少 sim.tick() 调用，可能是测试 bug；本版本保留原行为
-// （仅靠初始 0 值断言）。如果验收发现不一致，可加 sim.tick() + lambda 加 comment。
-DUAL_BACKEND_TEST_PAIR(
-    HazardDetectionUnit,
-    "HazardDetectionUnit - no hazard",
-    "[pipeline][hazard][load-use][behavior][dual]",
-    [&]() {
-        sim.set_input_value(dev.instance().io().id_ex_rs1_addr, 1_d);
-        sim.set_input_value(dev.instance().io().id_ex_rs2_addr, 2_d);
-        sim.set_input_value(dev.instance().io().id_ex_reg_write, true);
-        sim.set_input_value(dev.instance().io().ex_mem_is_load, false);  // 不是 LOAD → 不构成 hazard
-        sim.set_input_value(dev.instance().io().ex_mem_rd, 1_d);
-        sim.set_input_value(dev.instance().io().ex_mem_reg_write, true);
-
-        // 注：原 test_rv32i_pipeline.cpp line 468 SECTION 无 sim.tick()，
-        // 直接读 ch_outport_value 的初始 0。这与"组合逻辑单 tick()"对齐：
-        // 组合逻辑在 tick() 内完成求值；不 tick 等价读 default 0，
-        // 仍然能满足 stall_if == false 断言（因为 ex_mem_is_load=false → load_use_hazard=0）。
-        // 但 interpreter/verilator 在 tick 缺失下行为可能不一致，
-        // 故 dual 化加 sim.tick() 同步两端 tick 模型。
-        sim.tick();
-
-        auto stall_if = static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().stall_if));
-        REQUIRE(stall_if == 0);
-    });
-// ============================================================================
-// Batch 2 — 含 ch_reg 的时序组件（2 个） + Batch 3 — 纯组合（1 个）
-// ============================================================================
-// ⚠️ **机制说明**（change `dual-backend-rv32i-integration-2026-10` 的 design.md §2）：
-//
-// ① **不存在**「含 clk 的组件能否走 dual」的风险 —— `IfIdPipelineReg` 的 `clk` 是
-//    **死端口**（`include/cpu/pipeline/rv32i_pipeline_regs.h:190` 声明了它，
-//    但 `describe()`（:203-227）**从不读** `io().clk`）；寄存器推进靠 `ch_reg::next`
-//    + Simulator/Verilog 的**隐式时钟** ⇒ 该能力已由 `tests/test_dual_backend_clock.cpp`
-//    （Phase 1，spec R10「2-step clock toggle fixture」）证明。
-//    ⇒ 隐含地推翻了「Task 3 clk spike」这一步（原文件头与 plan T6 的说法）。
-//
-// ② **唯一**实质风险 = **输入端口漏驱动读到未定义值**（`AGENTS.md §ANTI-PATTERNS`：
-//    实测 `strbe` 读全 1、`rst_n` 读 0）⇒ 未驱动的端口在两后端未必同值
-//    ⇒ **同时红或同时绿都可能是假绿** ⇒ 下文 7 个 / 4 个输入端口**逐个显式驱动**。
-//
-// ③ ⚠️ **不**照抄原 interpreter-only 用例（`tests/test_rv32i_pipeline.cpp:104-107`）
-//    的手动 clk toggle：
-//        set clk=true → tick() → set clk=false → tick()
-//    那是**死端口上的两次额外 tick** ⇒ 会把「一拍」变成三拍 ⇒ 若将来该端口被接回
-//    内部逻辑，用例会因**多打两拍**而静默改变语义。
-//    ⇒ 本实现**只显式置 `clk=1`**（满足「不读未定义值」），节拍数由 `sim.tick()` 决定
-//    （`sim.tick()` 本身已做 2-step toggle，Verilog 侧亦然）。
-
-// ----------------------------------------------------------------------------
-// Batch 2-a: IfIdPipelineReg - transfers PC and instruction（原 line 69 SECTION body）
 // ----------------------------------------------------------------------------
 DUAL_BACKEND_TEST_PAIR(
     IfIdPipelineReg,

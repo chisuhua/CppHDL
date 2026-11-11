@@ -27,7 +27,10 @@
  */
 
 #include "catch_amalgamated.hpp"
-#include "cpu/pipeline/rv32i_hazard_complete.h"   // ADR-046：已提升到 include/cpu/pipeline/
+#include "cpu/pipeline/hazard_unit.h"   // ⚠️ 2026-11-11：原 `rv32i_hazard_complete.h` 已退役
+//   （`rv32i-dead-component-consolidation` C6 · 同族处置）⇒ ⇒ DUT 换成仓内**权威**的
+//   `riscv::HazardUnit`（即 ADR-047 数据前推接入流水线时用的那一个）⇒ ⇒
+//   本文件的价值（「多组件可同时实例化」）**保留** ⇒ ⇒ **不**随头文件一起删。
 #include "cpu/cache/i_cache_sync.h"
 #include "cpu/cache/d_cache_sync.h"
 
@@ -41,8 +44,8 @@ TEST_CASE("Phase4 Integration - Basic Execution", "[phase4][basic][chlib]") {
     ch::core::context ctx("phase4_basic");
     ch::core::ctx_swap swap(&ctx);
 
-    // 验证现有组件可以同时实例化 (HazardUnitComplete + ICache + DCache)
-    ch::ch_device<HazardUnitComplete> hu_dev;
+    // 验证现有组件可以同时实例化 (HazardUnit + ICache + DCache)
+    ch::ch_device<HazardUnit> hu_dev;
     ch::ch_device<ICacheSync> icache_dev;
     ch::ch_device<DCacheSync> dcache_dev;
 
@@ -59,7 +62,7 @@ TEST_CASE("Phase4 Integration - Forwarding", "[phase4][forwarding][chlib]") {
     ch::core::context ctx("phase4_fwd");
     ch::core::ctx_swap swap(&ctx);
 
-    ch::ch_device<HazardUnitComplete> hu_dev;
+    ch::ch_device<HazardUnit> hu_dev;
 
     // 验证 Forwarding 优先级框架
     // EX(1) > MEM(2) > WB(3) > REG(0)
@@ -74,7 +77,7 @@ TEST_CASE("Phase4 Integration - Load-Use Hazard", "[phase4][load-use][chlib]") {
     ch::core::context ctx("phase4_load");
     ch::core::ctx_swap swap(&ctx);
 
-    ch::ch_device<HazardUnitComplete> hu_dev;
+    ch::ch_device<HazardUnit> hu_dev;
 
     // 验证 Load-Use 检测框架 (lnode 引用可访问，模拟见 test_hazard_complete.cpp)
     auto& hu = hu_dev.instance();
@@ -90,7 +93,7 @@ TEST_CASE("Phase4 Integration - Branch Flush", "[phase4][branch][chlib]") {
     ch::core::context ctx("phase4_branch");
     ch::core::ctx_swap swap(&ctx);
 
-    ch::ch_device<HazardUnitComplete> hu_dev;
+    ch::ch_device<HazardUnit> hu_dev;
 
     // 验证 Branch Flush 框架
     auto& hu = hu_dev.instance();
@@ -140,7 +143,7 @@ TEST_CASE("Phase4 Integration - Full Pipeline", "[phase4][full][chlib]") {
     ch::core::ctx_swap swap(&ctx);
 
     // 现有可共存组件：Hazard + ICache + DCache
-    ch::ch_device<HazardUnitComplete> hu_dev;
+    ch::ch_device<HazardUnit> hu_dev;
     ch::ch_device<ICacheSync> icache_dev;
     ch::ch_device<DCacheSync> dcache_dev;
 
@@ -158,7 +161,7 @@ TEST_CASE("Phase4 Integration - Performance Benchmark", "[phase4][benchmark][chl
     ch::core::context ctx("phase4_bench");
     ch::core::ctx_swap swap(&ctx);
 
-    ch::ch_device<HazardUnitComplete> hu_dev;
+    ch::ch_device<HazardUnit> hu_dev;
 
     // IPC 测量框架
     // TODO: 添加实际性能测量 (等待 Rv32iPipelineWithCache 重建)

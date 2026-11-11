@@ -148,3 +148,93 @@ TEST_CASE("Component naming: a layer MUST declare its module type name at compil
     REQUIRE(layered.module_type_name() == "my_layer");
     REQUIRE(layered.module_type_name() == Layered::kChHierarchyLayerName);
 }
+
+// ============================================================================
+// F-A：组件路径与节点名的**前缀拼接口径 MUST 一致**（2026-11-11 · B0 批）
+// ============================================================================
+// ⚠️ **判别力**（本用例 MUST 抓住的具体缺陷）：
+//   修复前 `include/component.h` 的 `build_hierarchical_name` 里带
+//     `|| parent_path == "unnamed"`
+//   ⇒ ⇒ **按父路径的「字面值」剥离路径段** ⇒ ⇒ 而 `lnodeimpl` 的节点名前缀拼接
+//   （`src/core/lnodeimpl.cpp:30-35`）**不**剥离 ⇒ ⇒ 同一棵树产出**两套名字**：
+//     · 根组件空名（`local_name_` 归一成 `"unnamed"`，见 `src/component.cpp:66`）
+//       ⇒ ⇒ 子**组件**路径 = 裸 `child`（剥了 `unnamed.` 前缀）
+//       ⇒ ⇒ 而其**节点**名 = `unnamed.prog_addr`（不剥）
+//   ⇒ ⇒ 「按节点名反查组件」的工具（层次化分析 / trace / 报告）**找不到**。
+//   ⇒ ⇒ 本用例 MUST 转红。
+//
+// ⚠️ **「无名」是普通名字，不是「无路径段」标记**（capability
+//   `component-ownership-and-naming` 的 Requirement）⇒ ⇒ 本用例钉住这条。
+namespace {
+
+// 根组件**空名** ⇒ `local_name_` 归一成 "unnamed"（`src/component.cpp:66`）
+// ⚠️ `describe()` 里 MUST 用 `ch_module`（需要 active parent），且子组件名取**非空**
+//   ⇒ ⇒ 便于区分「剥前缀」与「不剥前缀」两种形态。
+class UnnamedRoot : public ch::Component {
+public:
+    // ⚠️ `ch_device<T>` 会调 `T(nullptr, "top")`（`include/device.h:28`）⇒ ⇒
+    //    本类 MUST 接受该签名，但**忽略**传入的 name（我们要的是**空名**）⇒ ⇒
+    //    「空名」是本用例的**被测前提**，不能由 ch_device 的默认 "top" 覆盖。
+    UnnamedRoot(ch::Component* = nullptr, const std::string& = "")
+        : ch::Component(nullptr, "") {}
+    void describe() override {
+        ch::ch_module<Leaf> kid{"kid"};
+    }
+};
+
+// 根组件**真名就叫 "unnamed"** ⇒ 与空名归一后的字面值**相同**
+class LiterallyUnnamedRoot : public ch::Component {
+public:
+    LiterallyUnnamedRoot(ch::Component* = nullptr, const std::string& = "unnamed")
+        : ch::Component(nullptr, "unnamed") {}
+    void describe() override {
+        ch::ch_module<Leaf> kid{"kid"};
+    }
+};
+
+}   // namespace
+
+TEST_CASE("Component naming: child path MUST join the parent path regardless of its literal value",
+          "[component][naming]") {
+    // ── 判据 1：父路径是 "unnamed"（空名归一后的结果）⇒ 子路径 MUST 仍拼父前缀 ──
+    {
+        ch::ch_device<UnnamedRoot> dev;
+        auto& root = dev.instance();
+        REQUIRE(root.name() == "unnamed");
+
+        auto& kid = *root.children()[0];
+        // ⭐ 修复前是 "kid"（剥了前缀）⇒ ⇒ 这条断言就是缺陷的判别力来源
+        REQUIRE(kid.name() == "unnamed.kid");
+        REQUIRE(kid.local_name() == "kid");
+    }
+
+    // ── 判据 2：**与节点名的拼接口径一致**（这才是「同口径」的实质）──────────
+    {
+        ch::ch_device<UnnamedRoot> dev;
+        auto& root = dev.instance();
+        auto& kid = *root.children()[0];
+        // 组件子路径的前缀 MUST == 根组件名（不剥）
+        REQUIRE(kid.name().rfind("unnamed.", 0) == 0);
+        // 且 MUST NOT 出现「空段」（`..`）
+        REQUIRE(kid.name().find("..") == std::string::npos);
+    }
+
+    // ── 判据 3（**反向**）：根组件**真名** "unnamed" ⇒ 行为 MUST 与判据 1 相同 ──
+    // ⚠️ 这条同时钉住了**已知代价**：空名与真名 `"unnamed"` 在 `name()` 上
+    //   **永久不可区分** ⇒ ⇒ 这是本项**已登记**的代价（彻底解决须另立 item）
+    // ⇒ ⇒ 若两判据结果不同 ⇒ ⇒ 说明有代码在用「字面值」做特判（缺陷）
+    {
+        ch::ch_device<LiterallyUnnamedRoot> dev;
+        auto& root = dev.instance();
+        REQUIRE(root.name() == "unnamed");
+        REQUIRE((*root.children()[0]).name() == "unnamed.kid");
+    }
+
+    // ── 判据 4（**反向**）：**非空**父路径 MUST NOT 受影响（回归护栏）────────
+    {
+        ch::ch_device<Top> dev;
+        auto& top = dev.instance();
+        REQUIRE(top.name() == "top");
+        REQUIRE((*top.children()[0]).name() == "top.m");
+    }
+}
