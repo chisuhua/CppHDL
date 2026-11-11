@@ -24,7 +24,7 @@
 
 # target	source	component	emitter	tb	status	note
 riscv-mini-rv32i-soc	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc	examples/riscv-mini/tests/tb_rv32i_soc.sv	pending	planner 曾**临时实测**跑通（20/20 golden）⇒ 但 **TB 未入库**（实测 `examples/riscv-mini/tests/*.sv` 为空）⇒ ⇒ 补 TB 并入库后才算 verified
-counter_example	examples/spinalhdl-ported/counter/counter.cpp	Top	emit_rtl_counter	examples/spinalhdl-ported/counter/tb_counter_example.sv	pending	C++ 侧**无断言** ⇒ 缺「计数/溢出/使能」手推表；且 counter.cpp:211-214 自认「enable/clear may not fully work yet」⇒ MUST 先裁决该行为是否为已知缺陷
+counter_example	examples/spinalhdl-ported/counter/counter.cpp	Top	emit_rtl_counter	examples/spinalhdl-ported/counter/tb_counter_example.sv	verified	`next = select(clear, 0, select(enable, +1, hold))`（clear 优先）· 8 位回绕 ⇒ 手推 6 个场景（含 clear 与 enable 同时为 1、255→0 溢出）⇒ `RESULT: checks=14 fails=0`；⚠️ counter.cpp:211-214 的自认注释对 **RTL 过时**（实测 enable/clear/保持/回绕全对）⇒ ⇒ **interpreter 与 RTL 可能分叉**且 C++ 侧无断言 ⇒ 已登记为**独立待立项**
 counter_simple_example	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	examples/spinalhdl-ported/counter/tb_counter_simple_example.sv	verified	自由运行 +1 计数器（复位值 0）⇒ 逐拍手推「第 N 拍 ⇒ N mod 256」⇒ **256 拍全检查**（含 8 位回绕）· `RESULT: checks=256 fails=0`
 fifo_stream_example	examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	Top	emit_rtl_fifo_stream	examples/spinalhdl-ported/fifo/tb_fifo_stream_example.sv	pending	C++ 侧无断言 ⇒ 缺 **ready/valid 握手时序期望**（须来自 `chlib-stream-semantics` spec）
 uart_tx_example	examples/spinalhdl-ported/uart/uart_tx.cpp	UartTxTop	emit_rtl_uart_tx	examples/spinalhdl-ported/uart/tb_uart_tx_example.sv	pending	C++ 侧无断言 ⇒ 缺 **波特率/帧格式时序期望**（须手推位时间表）
