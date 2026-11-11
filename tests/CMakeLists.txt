@@ -1080,6 +1080,29 @@ add_catch_test(test_component_naming test_component_naming.cpp)
 #   ⇒ ⇒ 「产物逐字节比对」对本题**恒绿**（零判别力）
 add_catch_test(test_verilog_name_sanitize test_verilog_name_sanitize.cpp)
 
+# port naming · 具名构造（port-naming-ratchet N1）:
+# __io 内 NSDMI `ch_in<ch_bool> prog_we{"prog_we"};` 的**端到端探针**
+# ⚠️ 判别力 = 具名构造的**调用点实测 = 0** ⇒ ⇒ 这条路径**从未被端到端跑过**
+#   ⇒ ⇒ 「构造不生效」/「名字没进产物」两种失败形态必须先被排除
+#   ⇒ ⇒ 否则 N3（名字稳定性）建在沙上
+# ⚠️ 判据 MUST 落在**产物端口名**（不是节点名）—— manifest 的 `name` 来自产物
+# ⚠️ 含**反向判据**：标识符 ≠ 名字串时**名字串胜出**（唯一真源 ⇒ N2 的静态护栏 P1 才有依据）
+add_catch_test(test_port_name_named_ctor test_port_name_named_ctor.cpp)
+
+# port name parity probes（port-name-literal-parity P1）:
+# 「三探针」**逐字搬进仓** + 两条补充用例（ch_device 对照 ④ · 退化用例 ⑥）
+# ⚠️ 这些用例钉的是**当前行为**（现状钉）⇒ ⇒ 若 route (c) 落地 ⇒ MUST 被改写
+# ⚠️ ⑤（目标钉「根端口裸名」）**不进**测试文件 ⇒ ⇒ 落 arch-residual-registry
+# ⚠️ 断言层级 MUST 上到「发射出的 module 文本」（命名层与产物层不能分叉）
+add_catch_test(test_port_name_parity test_port_name_parity.cpp)
+
+# RTL 端口清单（manifest）—— capability `rtl-emit-portability` 的 schema
+# `rtl-emit-manifest-v1`（rtl-emit-product-tooling C4 / N5(a) / C3）
+# ⚠️ 判别力：① 10 个字段 MUST 全部在场且语义正确（尤其 `driven`（有驱动源）
+#   与 `effective`（能到达 ch_out）**不是**一回事 ⇒ 用 `get_users()` 判「被消费」
+#   会**恒为 true** ⇒ ⇒ 零信息量）② C3 悬空输入 MUST 被点名 ③ 清单 MUST 确定性
+add_catch_test(test_rtl_manifest test_rtl_manifest.cpp)
+
 # component ownership (hierarchical RTL T3-①b): construction scope stack, member
 # ch_module parent/ctx, cross-ctx guard, deferred child build, io.h direction guards
 add_catch_test(test_component_ownership test_component_ownership.cpp)

@@ -168,6 +168,8 @@ set(CH_SOURCES
     src/simulator_trace.cpp
     src/simulator_init.cpp
     src/codegen_verilog.cpp
+    src/rtl_emit/manifest.cpp
+    src/rtl_emit/cli.cpp
     src/codegen_dag.cpp
     src/utils/types.cpp
     src/lnode/bool.cpp
@@ -268,6 +270,10 @@ if(CPPHDL_BUILD_EXAMPLES)
     # （`build/examples/<相对路径>/`），因为 `add_subdirectory(examples)`
     # 的 binary dir 就是 `build/examples`。
     add_subdirectory(examples)
+
+    # ⚠️ `tools/` 的二进制 **MUST NOT** 链 `examples/**`（C1 硬要求）
+    #    ⇒ ⇒ `cpphdl-emit-rtl` 用自己的小设计 ⇒ ⇒ 工具不依赖 examples
+    add_subdirectory(tools)
 endif()
 
 # ===========================================================================

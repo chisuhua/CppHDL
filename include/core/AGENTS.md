@@ -23,6 +23,15 @@ Child of: `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GAT
 | Context impl | src/core/context.cpp |
 
 ## CONVENTIONS
+- **端口具名（`ch_in` / `ch_out` 成员）**：MUST 用**直接初始化 + 名字串**形态
+  `ch_in<ch_bool> prog_we{"prog_we"};` ⇒ ⇒ **拷贝初始化形态 `= "name"` 编译不过**
+  （`port` 的具名构造是 `explicit`）⇒ ⇒ 且**名字串 MUST 与标识符逐字相同**
+  （不一致时**名字串胜出** ⇒ ⇒ `cpp_member` 会与端口名对不上 ⇒ ⇒ 静态护栏 P1 拦）
+  ⇒ ⇒ 组件**必须** override `create_ports()` 并 `new (io_storage_) io_type;`
+  ⇒ ⇒ **完整约定 + 已知限制 + 验证命令** = `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`
+  ⇒ ⇒ 端到端探针 = `tests/test_port_name_named_ctor.cpp`
+  ⚠️ **这条路径此前零调用点**（2026-11-11 首次端到端验证）⇒ ⇒ 新增具名端口 MUST 跑该探针
+
 - Context class manages global simulation state
 - Node builders use factory pattern for lnode creation
 - Operators defined via templates in operators.h

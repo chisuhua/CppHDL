@@ -6,6 +6,42 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-11 — B1 批（端口命名地基 · N1 / N2 / N3 / P1 / C4 / C1 / C3 / C5）
+
+### Added
+- **`tools/cpphdl-emit-rtl`** —— **库 + 薄 CLI** 的 RTL 发射器（C1）。
+  ⚠️ **形态**：`ch::rtl_emit::run_emit_cli()` 是**库**（`include/rtl_emit/cli.h`）⇒ ⇒
+  用户在自己的可执行文件里**登记**自己的设计 ⇒ ⇒ 退出码 / 失败语义**全仓一致**；
+  本仓的二进制只是**一个使用者**（+ 自测载体）⇒ ⇒ **MUST NOT** 链 `examples/**`。
+  ⚠️ **退出码（fail-closed）**：**0** 成功 · **1** 运行失败或**存在诊断** · **2** 用法错误
+  ⇒ ⇒ **任何异常都不得返回 0**。
+- **`include/rtl_emit/manifest.h`** —— 端口清单（manifest）的**参考实现**
+  （capability `rtl-emit-portability` 的 schema `rtl-emit-manifest-v1`）：
+  10 个字段 + `diagnostics[]` + JSON 序列化 ⇒ ⇒ **端口按名字排序** ⇒ ⇒ **确定性**。
+- **`scripts/verify_port_naming.sh`** —— 端口命名的**棘轮**护栏（N2）：
+  product 侧（`include/**` + `examples/**`）逐端口判定 · 存量 **1484** 条登记在
+  `.rddf/checks/port-naming-exempt.tsv` ⇒ ⇒ **债只许减不许增**。
+  ⚠️ P1 额外判「**标识符 == 显式名字串**」⇒ ⇒ 框架**无反射** ⇒ ⇒ 运行期唯一存活的
+  是**显式命名串** ⇒ ⇒ manifest 的 `cpp_member` 只能是它。
+- **`scripts/verify_flat_rtl_emit.sh`** —— 扁平产物的**产物级**护栏（C5）：
+  F1 剥掉 blanket `lint_off` 后重 lint · F2 确定性 · F3 顶层端口集 == 清单 ·
+  F4 无悬空顶层输入 · F5 无自赋值死逻辑 · F6 backend 产物 == 产品产物（**当前不适用**）。
+
+### Changed
+- **显式命名的端口**的 Verilog 名**绕开** eval-list 序计数器（N3）⇒ ⇒ 端口名
+  **对图的无关改动稳定** ⇒ ⇒ 「按名引用」的外部资产（TB / wrapper / 文档）不再**静默失配**。
+  ⚠️ **零 churn**：现有端口**全部未具名** ⇒ ⇒ 产物**逐字节不变**（实测）。
+  ⚠️ 冲突判定是**端口作用域**的局部判定（点名报告 + 退回计数器拿唯一名）⇒ ⇒
+  **不**拒绝整份设计。
+
+### Fixed
+- ⚠️ **端口名冲突的误报**（N3 实施期实测）：输出端口的框架默认名是
+  **`unnamed_output`**（不是 `unnamed_input`）⇒ ⇒ 第一版判据漏了它 ⇒ ⇒ 多个
+  `unnamed_output` 被误判成「显式名」⇒ ⇒ 日志刷出假 ERROR ⇒ ⇒ 被
+  `verify_example_test_wiring.sh` 的「跑但报错 ≠ 通过」判据抓到 ⇒ ⇒ 已修。
+
+---
+
 ## 2026-11-11 — `rtl-emit-manifest-schema-2026-11`（B1 批 · C4 · 纯规格）
 
 ### Added

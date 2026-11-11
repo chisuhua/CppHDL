@@ -536,6 +536,49 @@ jobs:
       shell: bash
       run: scripts/verify_public_api_visibility.sh --self-test
 
+    - name: Verify port naming ratchet
+      # `port-naming-ratchet-2026-11` N2（基线棘轮）:
+      #   R0 分析器 + 登记表齐备（fail-closed）
+      #   R1 端口合规性 + 棘轮双向（**逐端口**）:
+      #      · 合规 = 具名 且 **标识符 == 显式名字串**（oracle 根因 F-C:
+      #        框架无反射 ⇒ 运行期唯一存活的是显式命名串 ⇒ manifest 的
+      #        `cpp_member` 只能是它 ⇒ 「可解析到 C++ 成员名」必须由这条兜住）
+      #      · 未具名端口 MUST 全部登记在 `.rddf/checks/port-naming-exempt.tsv`
+      #        ⇒ 树里有表里没有 = 债增长 = 红；表里有树里没有 = 登记表烂掉 = 红
+      #   R2 计数锚点 EXPECTED_EXEMPT_PORTS（钉在护栏脚本里）
+      shell: bash
+      run: scripts/verify_port_naming.sh
+
+    - name: Verify flat RTL emit products
+      # `rtl-emit-product-tooling` C5（产物级护栏）:
+      #   F1 剥掉 blanket lint_off 后重 lint（不能靠注释掩盖问题）
+      #   F2 确定性（两次发射逐字节相同）
+      #   F3 顶层端口集 == 清单算出的集合（集合定义 = 契约：
+      #      clock → reset → 无 driver 的 input → 全部 ch_out）
+      #   F4 无悬空顶层输入（清单 diagnostics MUST 为空）
+      #   F5 无自赋值死逻辑
+      #   F6 backend 产物 == 产品产物（当前**不适用**：工具的设计无寄存器）
+      # ⚠️ 需要 build/tools/cpphdl-emit-rtl ⇒ ⇒ 先构建它
+      shell: bash
+      run: |
+        cmake --build build --target cpphdl-emit-rtl
+        scripts/verify_flat_rtl_emit.sh
+
+    - name: Verify flat RTL emit products (self-test)
+      # M1 清单多一个产物没有的端口 ⇒ F3 MUST 转红
+      # M2 清单加一条悬空诊断 ⇒ F4 MUST 转红
+      # M3 产物里加自赋值 ⇒ F5 MUST 转红
+      shell: bash
+      run: scripts/verify_flat_rtl_emit.sh --self-test
+
+    - name: Verify port naming ratchet (self-test)
+      # M1（**正向对照**）加一个合规具名端口 ⇒ MUST 保持绿
+      # M2 名字串 ≠ 标识符 ⇒ P1 MUST 转红
+      # M3 豁免文件里新增未命名端口 ⇒ 正向 MUST 转红
+      # M4 登记表少一行 ⇒ 反向 MUST 转红
+      shell: bash
+      run: scripts/verify_port_naming.sh --self-test
+
     - name: Verify downstream consumer (installed artifact)
       # Every upstream test compiles against the SOURCE TREE include set.
       # A downstream project compiles `cmake --install` output in its own build

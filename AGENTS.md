@@ -75,6 +75,7 @@ CppHDL/
 | 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|
 | 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | 公共 API = `include/hierarchy_equivalence.h`（`ch::hier_eq`）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
+| 端口命名（具名构造写法 + 已知限制） | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`（探针 `tests/test_port_name_named_ctor.cpp`） |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
 | AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/axi4_lite_example.cpp` |
@@ -448,7 +449,17 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 257
+- CTEST_TOTAL: 260
+     ⚠️ **2026-11-11 · B1 批 N1 + P1 + C4/C3（manifest）**：
+     `test_port_name_named_ctor` + `test_port_name_parity` + `test_rtl_manifest` 新增
+     ⇒ ⇒ **260**（+3）
+     ⇒ ⇒ 判别力实测：让具名构造**忽略显式名** ⇒ ⇒ **3 个用例转红**；
+     P1 三条 `Ratchet*` 各有**正向变异** ⇒ ⇒ **三条各自转红**；
+     manifest 的 `driven`（有驱动源）vs `effective`（能到达 ch_out）**两字段分别验**
+     ⇒ ⇒ ⚠️ 实测踩坑：用 `get_users()` 判「被消费」⇒ ⇒ **恒为 true** ⇒ ⇒ 零信息量
+     ⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**（节点创建回落 `unnamed_input`）
+     ⇒ ⇒ **3 个用例转红**；P1 三条 `Ratchet*` 各有**正向变异**（① 改匿名 /
+     ② 空名 fallback 保空 / ③ counter 恒 0）⇒ ⇒ **三条各自转红**；还原后**复绿**
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
