@@ -8,7 +8,7 @@
 > **不**覆盖：SoC 之外的 AXI 互连层、bundle/stream 组件库、框架层的仿真与 codegen 语义
 > （那些见各自的主题文档 / capability）。
 >
-> **最后同步**：2026-10-27（随 ADR-048 落盘）
+> **最后同步**：2026-11-11（随 B0 批 C5+C6 退役回填 —— 三个组件物理退役 + 残留表订正）
 
 ## Primary ADRs
 
@@ -29,19 +29,16 @@
 
 ```
 include/cpu/                          # RV32I 微架构的**唯一权威**
-├── pipeline/                        # 流水线数据通路（19 个头 = 14 + stages/5）
+├── pipeline/                        # 流水线数据通路（15 个头 = 10 + stages/5）
 │   ├── rv32i_pipeline.h             # 5 级顶层（装配 + dbg_* 观测面）
-│   ├── rv32i_pipeline_regs.h        # IF/ID/EX/MEM/WB 流水线寄存器（490 行，最大）
+│   ├── rv32i_pipeline_regs.h        # IF/ID/EX/MEM/WB 流水线寄存器（490 行）
 │   ├── rv32i_decoder.h              # R/I/S/B/U/J 译码
 │   ├── hazard_unit.h                # 冒险检测 + 停顿/冲刷控制（ADR-047：删 5 个预留端口）
-│   ├── hazard_detection_unit.h      # Load-Use 冒险检测（独立组件）
-│   ├── rv32i_hazard_complete.h      # 组合式 hazard 单元
 │   ├── rv32i_alu.h / rv32i_regfile.h / rv32i_pc.h
-│   ├── rv32i_forwarding.h           # riscv::ForwardingUnit（**源选择**；不是数据 mux）
 │   ├── rv32i_branch_predict.h / branch_predictor_v2.h
 │   ├── rv32i_tcm.h                  # InstrTCM / DataTCM（ch_mem 底座）
 │   └── stages/{if,id,ex,mem,wb}_stage.h
-├── cache/                           # L1 cache（6 个头）：{i,d}_cache_{sync,async}.h + wrapper + 兼容 shim
+├── cache/                           # L1 cache（8 个头）：{i,d}_cache_{sync,async}.h（4）+ {i,d}_cache_complete.h（2 · 兼容 shim 别名）+ {i_cache_prefetch,d_cache_write_buffer}.h（2 个 wrapper）
 └── riscv/                           # 特权级（4 个头）：CSR / exception / address_decoder / clint
 
 examples/riscv-mini/src/rv32i_pipeline_top.h   # **唯一**留在 example 侧的头（SoC 顶层）
@@ -49,6 +46,22 @@ examples/riscv-mini/src/rv32i_pipeline_top.h   # **唯一**留在 example 侧的
 
 ⚠️ 收敛前 `include/cpu/pipeline/` 与 `examples/riscv-mini/src/` 是**两套不同架构**；
 ADR-046 D1–D12 把它们收敛为一套 ⇒ 护栏 `scripts/verify_no_duplicate_rv32i_headers.sh`。
+
+⚠️ **2026-11-11 · B0 批 C5 + C6 同批退役** —— 下列三个头文件已**物理删除**
+（不是 stub）：`rv32i_forwarding.h`（`riscv::ForwardingUnit`）·
+`hazard_detection_unit.h`（`riscv::HazardDetectionUnit`）·
+`rv32i_hazard_complete.h`（`riscv::HazardUnitComplete`）
+⇒ ⇒ 理由 = **零交付路径消费者** + 独有语义为空集/死语义 + capability **不指名**它们
+⇒ ⇒ ⇒ **这是显式批准的覆盖缩面**（用户 2026-11-11 批准）
+⇒ ⇒ ⇒ 权威登记 = `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」章
+⇒ ⇒ ⇒ 仓内**权威**的 hazard 组件 = `hazard_unit.h`（`riscv::HazardUnit`），
+流水线侧的数据 mux 组件 = `include/chlib/forwarding.h`（`chlib::ForwardingMux`）
+⇒ ⇒ ⚠️ 但**逻辑层**还有同头内的函数式副本 `chlib::forward_select<>`（`include/chlib/forwarding.h:353-376`）
+—— 该头 `:343-345` 自陈「本函数与组件的 `describe()` 是**同一份逻辑的两处实现**」
+⇒ ⇒ ⇒ 故本文**不说**「唯一实现」（`.rddf/improvements/rv32i-dead-component-consolidation-2026-11.md:275`
+已把「同一语义 MUST NOT 有两份实现」判为**永远为红**）⇒ ⇒ 只说「**流水线侧唯一的数据 mux 组件**」
+⇒ ⇒ ⚠️ **保留但未接入流水线**的组件（`rv32i_branch_predict.h` / `branch_predictor_v2.h`
+/ `rv32i_pc.h`）= 见 `include/cpu/AGENTS.md` 的「保留但不接入流水线」登记表。
 
 ### 2. 5 级数据通路
 
@@ -121,9 +134,10 @@ imem(sread 1拍) ──► IF/ID ──► ID/EX ──► EX/MEM ──► MEM/
 | 停顿之后的**重复装载**（同一 word 连装两拍） | ✅ **被 skid 的排空拍顶替**（既有金标零变化）⇒ 该形态已无独立项 | ✅ 已随 C1 消除（ADR-048 未记载，实施时实测发现） |
 | 寄存器堆读点的**同沿竞态**（距离 3 读旧值） | **已修**（ADR-047 D11 的读点旁路） | ✅ |
 | imem 的 1 拍 `pc_lag` | 设计前提（ADR-041 强制 `sread`） | ✅ 契约化 |
-| CLINT `mtime` 不自增 | 只构成静态比较器 | `feat-riscv-mini-rtl-debt` ②（P2） |
-| 两个 cache wrapper 的分支**从不发射** | 建图期 C++ `if` ⇒ 分支体不发射 | `feat-riscv-mini-rtl-debt` ①（P2） |
-| `riscv::ForwardingUnit` 与 `chlib::ForwardingMux` **并存** | ADR-038 §2.3 裁决「合并留未来」 | 独立立项（backlog） |
+| CLINT `mtime` 不自增 | ✅ **已修**（2026-10-30 · ADR-049 · change `clint-mtime-autoincrement-2026-10` **已归档**）⇒ `mtime` = 64 位自由运行计数器（编译期 `TIMER_DIVIDER` · 写优先 · 复位 0）⇒ ⇒ ⚠️ 64 位读**允许撕裂**（已知边界） | ✅ 已收口（`feat-riscv-mini-rtl-debt` ② · feature 已 `completed`） |
+| 两个 cache wrapper 的分支**从不发射** | ✅ **已修**（2026-10-28 · change `riscv-mini-cache-wrapper-live-logic-2026-10` **已归档**）⇒ 3 处建图期 C++ `if` 全部清除 + 10 个 `ch_out` 全部无条件驱动 | ✅ 已收口（`feat-riscv-mini-rtl-debt` ① · feature 已 `completed`） |
+| ~~**两个 `ForwardingUnit` 并存**（`riscv::ForwardingUnit` vs `chlib::ForwardingUnit`，靠 namespace 区分）~~ | ✅ **已消解**（2026-11-11 · B0 批 **C5 同批退役**）—— `riscv::ForwardingUnit`（`include/cpu/pipeline/rv32i_forwarding.h`）**物理删除**（零交付路径消费者 + 独有语义为空集：WB 档无覆盖 · `id_reg_read` 死输入）⇒ ⇒ 消解的是 **ADR-046 D6**（`docs/adr/ADR-046-rv32i-canonical-home.md:210-218`「两个 `ForwardingUnit` 并存，靠 namespace 区分」）这条**处置** ⇒ ⇒ ⚠️ **ADR-038 §2.3 / §5 的裁决本身仍有效**（其合并对象 = `chlib::ForwardingUnit` + `riscv::HazardUnit` —— **两者都还在**）⇒ ⇒ ⚠️ 失效的只是 ADR-038 的 **2026-10-27 更新注**（其前提「ADR-047 不动 `riscv::ForwardingUnit`」已不成立） | ✅ 已消解（`rv32i-dead-component-consolidation` **C5**） |
+| `chlib::ForwardingUnit`（`include/chlib/forwarding.h:75`）组件类**零实例化** | ⚠️ **仓内零消费者**（实测：全仓 `ForwardingUnit<` 的唯一命中是该头 `:59` 的**文档注释**；`tests/chlib/test_forwarding.cpp` 用的是**函数式** `forward_detect<>` / `forward_select<>`）⇒ ⇒ 其**函数式**副本仍被测试消费 ⇒ ⇒ 按 C6 三级准则**待裁决**（接入 / 退役 / 登记定位） | 独立立项（backlog）—— ⚠️ **不属本次回填范围** |
 | JIT 对 `ch_mem` 读端口 `UNSUPPORTED_OP` ⇒ RV32I 必然回落 interpreter | **有意设计**（`jit_compiler.cpp`）⇒ 回落原因**可归因**且被断言 | ✅ 已契约化（`verilator-rv32i-e2e`） |
 
 ## 决策依赖关系
@@ -153,8 +167,13 @@ ADR-037（stub 退役） ─► ADR-038（forwarding 归属） ─► ADR-047 �
 - **V2**：档位 `1` 覆盖 load ⇒ 消除 load-use 停顿（独立立项）
 - ~~**框架层加 API**（ADR-048 D7）~~：D6 的**局部修法（`primed`）已足够** ⇒ D7 **不启动**
   （`sread` 的初值语义与 `aread` 契约零改动）
-- **ISA 覆盖缺口**：CSR / ECALL / EBREAK / FENCE / LB·LH·LBU·LHU 仍无固件验证
-  （现有固件只覆盖 ALU + LW/SW + BEQ/BNE + JAL/JALR + SB/SH）
+- **ISA 覆盖缺口**：**CSR**（`csrrw`/`csrrs`/`csrrc`）+ **`ECALL`/`EBREAK`** + **`FENCE`**
+  （不含**预测取指**）仍无实现 / 无验证 ⇒ ⇒ 这三项**不在**任何仓内 capability 覆盖内
+  ⇒ ⇒ 需**独立立项**（`rv32i-isa-gap-closure-2026-11` · phase-6 P6 边界 · 不可顺手塞进本条）
+  ⇒ ⇒ ✅ **已覆盖**（不再算缺口）：ALU（ADD/SUB/ADDI）· `LUI`/`AUIPC` · `LW`/`SW`/`SB`/`SH` ·
+  `LB`/`LH`/`LBU`/`LHU`（判别性固件 `Rv32iSoc - LoadByteLaneDiscriminating`，
+  `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:1688`）· `BEQ`/`BNE` ·
+  `JAL`/`JALR` · `SRA` ⇒ ⇒ 权威 = capability `rv32i-isa-semantics`
 - **取指侧的判据边界**：`primed` 是**「靠时序假设」的正确性依赖**（依赖 imem 的 1 拍
   `sread` 延迟）⇒ 若将来换 imem 变体（`aread`）或引入预测取指，MUST 重审 ADR-048 D6 与
   D3/D4 的前提（该约束已写进 `rv32i-commit-path` 的 Scenario 与 ADR-048 §3「负面/代价」）
