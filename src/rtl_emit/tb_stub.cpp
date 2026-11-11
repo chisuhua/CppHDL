@@ -190,6 +190,10 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     out << "        // ── TODO（" << hint << "）：断言 ────────────────────────────\n";
     out << "        //   `checks = checks + 1; if (<条件>) fails = fails + 1;`\n";
     out << "        //   ⚠️ 期望值 MUST 有**外部出处**（协议规范 / 手推）—— 禁抄仿真输出。\n";
+    out << "        //   ⚠️ 每个输出 MUST 至少有一条 X 检查：\n";
+    out << "        //      `checks = checks + 1; if ($isunknown(<输出>)) fails = fails + 1;`\n";
+    out << "        //      （未驱动 / 半驱动输出在默认 Verilog 语义下是 X ⇒ 值断言可能\n";
+    out << "        //       恰好通过，只有 X 检查能抓到「信号根本没接上」。）\n";
     out << "\n";
     // ⚠️ 注释措辞注意：**不**在注释里写 "verilator" 这个词，也**不**让注释行
     //   以 `*` / `/` 结尾 —— 仿真的 pragma 扫描会把 `/*verilator ... */` 当指令

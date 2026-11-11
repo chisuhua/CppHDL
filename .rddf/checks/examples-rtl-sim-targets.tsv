@@ -1,0 +1,35 @@
+# examples 的 RTL 仿真覆盖清单（`examples-rtl-sim-coverage` **E4**）
+#
+# ⚠️ **本表是「首批」的权威名单**（target 名取自 `examples/CMakeLists.txt` 的
+#   `CH_TRACKED_EXAMPLE_TARGETS`；源文件与顶层组件名取自各自的实现文件）。
+#   ⇒ ⇒ 护栏 `scripts/verify_examples_rtl_sim.sh` 按**本表**逐项判定
+#   ⇒ ⇒ 「没做」必须**留在表里并标明原因**（防「先做 10 个」变成「永远只有 10 个」）。
+#
+# 列的含义：
+# · `target`     —— CMake target 名（**权威**，与 `CH_TRACKED_EXAMPLE_TARGETS` 逐字相同）
+# · `source`     —— 实现该 example 的源文件（顶层组件类**在它里面**，不是头文件）
+# · `component`  —— 顶层组件类名（`emit_rtl.cpp` 登记它 ⇒ ⇒ 产物名恒为 `top`）
+# · `emitter`    —— **RTL 发射器 target 名**（方案 3：每 example 一个独立 target）
+# · `tb`         —— 独立 Verilog TB 的路径（**约定**：`examples/<dir>/tb_<name>.sv`）
+# · `status`     —— `verified`（有 TB · 编译过 · 跑过 · `RESULT: checks>0 fails=0`）
+#                 / `pending`（**待补期望源** ⇒ ⇒ 不算已验证 ⇒ ⇒ 护栏据此判红）
+# · `note`       —— 状态说明 / 「缺什么」
+#
+# ⚠️ **`status` 与「已验证」的判定 MUST 由护栏的**运行时证据**给出**
+#   （`RESULT: checks=<N> fails=0` 且 N > 0）⇒ ⇒ **禁**静态分析器判定断言非空
+#   （草案 metis 订正：自研 Verilog 静态分析器在仓内第 4/5/6 轮对抗审稿里**全部** BLOCKER）
+#
+# ⚠️ **`pending` 项 MUST 列「缺什么」**（E4′ 的要求）—— 「缺什么」MUST 是**外部**期望源
+#   （协议时序 / 手推常量 + 推导）⇒ ⇒ **不能**是「另一个同样没断言的 demo」。
+
+# target	source	component	emitter	tb	status	note
+riscv-mini-rv32i-soc	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc	examples/riscv-mini/tests/tb_rv32i_soc.sv	pending	planner 曾**临时实测**跑通（20/20 golden）⇒ 但 **TB 未入库**（实测 `examples/riscv-mini/tests/*.sv` 为空）⇒ ⇒ 补 TB 并入库后才算 verified
+counter_example	examples/spinalhdl-ported/counter/counter.cpp	Top	emit_rtl_counter	examples/spinalhdl-ported/counter/tb_counter_example.sv	pending	C++ 侧**无断言** ⇒ 缺「计数/溢出/使能」手推表；且 counter.cpp:211-214 自认「enable/clear may not fully work yet」⇒ MUST 先裁决该行为是否为已知缺陷
+counter_simple_example	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	examples/spinalhdl-ported/counter/tb_counter_simple_example.sv	pending	同 counter_example（同目录姊妹 demo）
+fifo_stream_example	examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	Top	emit_rtl_fifo_stream	examples/spinalhdl-ported/fifo/tb_fifo_stream_example.sv	pending	C++ 侧无断言 ⇒ 缺 **ready/valid 握手时序期望**（须来自 `chlib-stream-semantics` spec）
+uart_tx_example	examples/spinalhdl-ported/uart/uart_tx.cpp	UartTxTop	emit_rtl_uart_tx	examples/spinalhdl-ported/uart/tb_uart_tx_example.sv	pending	C++ 侧无断言 ⇒ 缺 **波特率/帧格式时序期望**（须手推位时间表）
+uart_rx_example	examples/spinalhdl-ported/uart_rx/uart_rx.cpp	Top	emit_rtl_uart_rx	examples/spinalhdl-ported/uart_rx/tb_uart_rx_example.sv	pending	同 uart_tx + **采样点相位**的期望
+pwm_example	examples/spinalhdl-ported/pwm/pwm.cpp	PwmTop	emit_rtl_pwm	examples/spinalhdl-ported/pwm/tb_pwm_example.sv	pending	C++ 侧无断言 ⇒ 缺 **占空比/周期手推表**
+gpio_example	examples/spinalhdl-ported/gpio/gpio.cpp	GpioTop	emit_rtl_gpio	examples/spinalhdl-ported/gpio/tb_gpio_example.sv	pending	C++ 侧无断言 ⇒ 缺 **方向/读回语义手推表**
+quadrature_encoder_example	examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	QuadEncTop	emit_rtl_quadrature_encoder	examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example.sv	pending	C++ 侧无断言 ⇒ 缺 **正交序列 → 计数**的手推表
+axi4_lite_example	examples/axi4/axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	pending	C++ 侧无断言 ⇒ 缺 **AXI4-Lite 握手时序期望**（须来自 `axi-slave-conformance` / `axi4-*` spec）

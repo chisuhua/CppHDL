@@ -449,7 +449,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 262
+- CTEST_TOTAL: 263
      ⚠️ **2026-11-11 · B1 批 N1 + P1 + C4/C3（manifest）+ C6（产物卫生）**：
      `test_port_name_named_ctor` + `test_port_name_parity` + `test_rtl_manifest`
      + `test_rtl_emit_hygiene` 新增 ⇒ ⇒ **261**（+4）

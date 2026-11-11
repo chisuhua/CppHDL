@@ -280,6 +280,17 @@ echo "Timeout         : ${TIMEOUT_SECONDS}s per example"
 echo "Logs            : $LOG_DIR"
 echo ""
 
+# RTL 发射器（`examples-rtl-sim-coverage` E3/E5 · 方案 3 的 `emit_rtl_*` target）
+# ⚠️ 它们**不是** example 程序（不跑 example 语义）⇒ ⇒ 不进 PASS 计数
+#   ⇒ ⇒ 但 MUST 有**归属**（否则 C1 会报 UNTRACKED）⇒ ⇒ 归属载体 =
+#   `.rddf/checks/examples-rtl-sim-targets.tsv` 的 `emitter` 列（**登记**而非豁免
+#   ⇒ ⇒ 双向可查 ⇒ ⇒ 新增 emitter 忘了登记 ⇒ ⇒ C1 照样报 UNTRACKED）。
+rtl_emitters() {
+    local list="$REPO_ROOT/.rddf/checks/examples-rtl-sim-targets.tsv"
+    [ -f "$list" ] || return 0
+    grep -vE '^[[:space:]]*(#|$)' "$list" | awk -F'\t' 'NF>=4 {print $4}'
+}
+
 TRACKED_RAW="$(tracked_examples)"
 TRACKED_NAMES="$(printf '%s\n' "$TRACKED_RAW" | sed -n 's/^EX|//p')"
 TRACKED_COUNT="$(printf '%s\n' "$TRACKED_NAMES" | grep -c . || true)"
@@ -307,6 +318,11 @@ for prog in $(built_example_programs); do
     # ⚠️ 用 `> /dev/null` 而非 `grep -q`：`grep -q` 提前关管道 ⇒ 上游收
     #    SIGPIPE(141) ⇒ 在 `set -o pipefail` 下整条管道被判失败 ⇒ 误判。
     if ctest_registered_tests | grep -x "$prog" > /dev/null 2>&1; then
+        continue
+    fi
+    # **RTL 发射器**（`emit_rtl_*`）⇒ ⇒ 有归属（登记在 RTL-sim 清单里）
+    #   ⇒ ⇒ 但它**不是** example 程序 ⇒ ⇒ 不进 PASS 计数（见上）
+    if rtl_emitters | grep -qx "$prog" > /dev/null 2>&1; then
         continue
     fi
     # 已从 CMake 里删除的 target ⇒ 构建目录残留的陈旧二进制（非归属问题）

@@ -1114,6 +1114,12 @@ add_catch_test(test_rtl_emit_hygiene test_rtl_emit_hygiene.cpp)
 # ⚠️ 骨架**不含**激励/断言（只留 TODO）· 收尾 MUST 打印 `RESULT: checks=.. fails=..`
 add_catch_test(test_rtl_tb_stub test_rtl_tb_stub.cpp)
 
+# 生成能力的**契约判据**（examples-rtl-sim-coverage E1）:
+# ⚠️ 只保留 C5 的 F1–F8 **没有**的部分：跨进程确定性 · 产物配平 · 端口数 == manifest 顶层
+#   · **按名驱动**（改端口名 ⇒ TB 编译失败）· 产物变异 ⇒ TB 必红 · X 检测
+# ⚠️ 需要 `build/tools/cpphdl-emit-rtl` 与 verilator（缺失 ⇒ SKIP，不静默通过）
+add_catch_test(test_rtl_emit_contract test_rtl_emit_contract.cpp)
+
 # component ownership (hierarchical RTL T3-①b): construction scope stack, member
 # ch_module parent/ctx, cross-ctx guard, deferred child build, io.h direction guards
 add_catch_test(test_component_ownership test_component_ownership.cpp)
