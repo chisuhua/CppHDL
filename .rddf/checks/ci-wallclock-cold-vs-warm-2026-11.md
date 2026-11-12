@@ -140,3 +140,26 @@ HOME=/tmp/coldhome2 ./build/tests/test_cache_sync     # 实测 96 s
   不会更短 ⇒ 两个风险的**方向是安全的**（不会由「本机够快」制造假警报）。
 - **warm 的 464 s 不能直接当 CI 墙钟**：它不含 checkout / 装依赖 / 编 verilator /
   编 CppHDL 的时间（`pr-verilator-fast` 的 45 min 覆盖的是这些**全部**）。
+
+---
+
+## E6 段：`examples` 的**独立 RTL 仿真**（`examples-rtl-sim-coverage` · 2026-11-12）
+
+- **属于**：`examples-rtl-sim-coverage` **E6**（CI 形态）
+- **形态**：`pr-verilator-fast` job 的**一个 step**（`Verify examples RTL simulation
+  (independent Verilog TB)`）⇒ ⇒ **不新建 job** ⇒ ⇒ 无第二次完整 build ⇒ ⇒
+  增量成本 ≈ 「不含 build 的仿真时间」。
+- **判据来源**：`.rddf/checks/examples-rtl-sim-exclusions.md` §4（本文只交数字）。
+
+### 数字（本地实测 · 2026-11-12 · 10 个 TB）
+
+| 场景 | 墙钟 | 备注 |
+|---|---|---|
+| **warm**（`~/.cache/cpphdl/rtl_sim` 命中） | **3 s** | E7 的内容哈希缓存命中 ⇒ 10 个 TB 全部秒级 |
+| **cold**（清空缓存 ⇒ 10 个 TB 全量编译 + 跑） | **61 s** | ⇒ ⇒ CI 的 E6 step 增量 **cold ≈ 1 min / warm ≈ 3 s** |
+
+⇒ ⇒ 对照：该 job 的 `timeout-minutes: 45` ⇒ ⇒ 增量占比可忽略 ✓
+
+⚠️ **CI 侧的数字待首次运行后回填**（本机无法测 CI 的冷/暖差异：CI 的缓存是
+**内容寻址 + restore-keys 前缀复用**）⇒ ⇒ 本地数字的**判别力边界**：
+只覆盖「护栏本身的耗时」，**不覆盖** CI 的缓存命中行为。

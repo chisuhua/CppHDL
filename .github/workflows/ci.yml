@@ -1637,6 +1637,22 @@ jobs:
       shell: bash
       run: bash scripts/verify_hierarchical_port_naming.sh --self-test
 
+    # ---- E6：examples 的**独立 Verilog 仿真**覆盖 ------------------------
+    # ⚠️ 为什么挂在这个 job：它需要**真实的 verilator**（编译 RTL 产物 + 跑独立 TB）
+    #    ⇒ 而 verilator 只在 `pr-verilator-fast` / `nightly-verilator` 里构建
+    #    ⇒ ⇒ 增量成本 ≈ 0（**不新建 job** ⇒ 无第二次完整 build）。
+    # ⚠️ 为什么 `if: matrix.shard == 1`：与本 job 的分片无关 ⇒ 只跑一次。
+    # ⚠️ fail-closed：缺 verilator / 缺产物 / 缺 TB / TB 编译失败 / 断言失败
+    #    ⇒ ⇒ 护栏**失败**（MUST NOT 跳过 —— 「缺失 = 失败」是 E5 的语义）。
+    # ⚠️ **MUST NOT 注册成 CTest 条目**：默认 job 的 `Run tests` 是**无 label 的
+    #    `ctest`** ⇒ ⇒ 必被它跑到（无 verilator 环境 ⇒ 必红/必 skip）。
+    # ⚠️ **缓存**：`~/.cache/cpphdl/rtl_sim` 已在上面的 cache 步骤里 ⇒ ⇒ E7 生效
+    #    （TB 内容哈希命中 ⇒ 第二次编译秒级）。
+    - name: Verify examples RTL simulation (independent Verilog TB)
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_examples_rtl_sim.sh
+
     # ---- P2 lever ② 的护栏：分片 MUST 覆盖全集 ------------------------
     # ⚠️ 为什么必需：`-I` 是在 **`-L` 过滤之后**的列表上做区间/步长选择
     # （实测：`-I 1,12,2`→6 · `-I 1,24,2`→12 · `-I 1,46,2`→23 ⇒ 与过滤后

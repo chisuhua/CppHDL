@@ -3,6 +3,13 @@
 #
 # 护栏：**examples 内的测试 MUST 真的断言**（不得只有 `SUCCEED`）。
 #
+# ⚠️ **本护栏的域：Catch2 断言质量**（2026-11-12 登记）——
+#    ⇒ **`.sv` 的独立 Verilog TB 不在本护栏域**（`examples-rtl-sim-coverage` **E3**）
+#    ⇒ ⇒ RTL 侧的「断言质量」由 `scripts/verify_examples_rtl_sim.sh`（E5）承担
+#    ⇒ ⇒ 它的口径是**运行时证据**（TB 末尾打印 `RESULT: checks=<N> fails=0`）
+#       ⇒ ⇒ **不是**静态分析（⚠️ 仓内先例：自研 C 子集分析器的 BLOCKER 全部出在它身上
+#          ⇒ ⇒ RTL 侧**不重造**同一失败模式）。
+#
 # ⚠️ 与 `scripts/verify_example_test_wiring.sh` 的分工（2026-10-24 拆分）：
 #    后者管「**归属守恒**」（测试源有没有被执行到），本脚本管「**断言质量**」
 #    （被执行的测试有没有真的断言语义输出）。
