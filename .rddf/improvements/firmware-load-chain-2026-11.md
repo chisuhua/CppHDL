@@ -5,7 +5,7 @@ phase: phase-6
 category: cpu
 type: feature
 状态: approved
-进度: L1–L6 的 5 项裁决已落定（2026-11-11）· B3 未开工 · ⚠️ **前置门 = 公开面登记未做 ⇒ 不得开工**
+进度: L1–L6 的 5 项裁决已落定（2026-11-11）· B3 未开工 · ✅ **前置门已闭**（公开面登记 2026-11-12 = `public-api-surface.md`「行为变更」节 + `docs/CHANGELOG.md` 各一行）⇒ ⇒ ✅ **T2 已裁决**（ADR-069 Accepted · 决策 = A0）⇒ ⇒ **只差 change 立项**
 主题: 已知功能缺口清零
 依赖: rtl-emit-product-tooling-2026-11（manifest）· rv32i-canonical-home（SoC 顶层归属）
 来源: 用户 2026-11-10 拍板「② 固件转储器作为项目工具能力，并考虑添加 ELF 装载固件能力」+ planner 实测装载链路缺口

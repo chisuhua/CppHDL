@@ -327,10 +327,10 @@ id: rtl-track-followup-list-2026-11
 ### 7.5 给下一个会话的**一句话**
 
 ⇒ ⇒ 两份清单（主 + 后继）**已把 RTL 轨 9 份草案的三通道漂移闭掉** ⇒ ⇒
-**下一件事** = ① **用户裁决 ADR-069 §2.3**（候选 ① **A1 + 旁路** vs 候选 ② **A0** ⇒ ⇒
-**真权衡** ⇒ ⇒ oracle 第 1/2 轮均 REJECT ⇒ ⇒ **决策未闭**）⇒ ⇒
-② 裁决后：ADR-069 的 **critic 轮**（oracle 闭合后启动）⇒ ⇒ ③ **ADR-068 的 dated addendum**（§4 的唯一允许交互）⇒ ⇒ ④ **B3 开工**（R5 + R6 两道门）。
+**下一件事** = ① **B3 的两个 change 立项**（`memory-timing-contract` + `firmware-load-chain`）
+⇒ ⇒ ② B3 实施（T1+T3 同批 · T6 · T2/T4/T5 · L1–L6）⇒ ⇒ ③ B4 ⇒ ⇒ ④ 独立立项 8 条（含台账 **id=22**）。
 
 > ✅ **2026-11-12 已完成**：**architect 裁决**（同名兄弟机制**成立且更大** · 登记 **id=22** · 可回填载体就位）⇒ ⇒
 > **Q21 / Q22 已回填**（⬜ → ✅）⇒ ⇒ **R6 公开面前置门已登记**（`public-api-surface.md` + `CHANGELOG` 各一行 · 前置登记 = 预告 + 迁移指引）⇒ ⇒
-> ⚠️ **R5 仍未闭**（ADR-069 待用户裁决 ⇒ ⇒ **B3 不得开工**）。
+> ✅ **R5 已闭**（**ADR-069 Accepted** · 决策 = **A0** · oracle ×3 + critic ×1）⇒ ⇒ ✅ **ADR-068 §5.5** dated addendum ⇒ ⇒ ✅ **ADR-047 §5.5** dated addendum（停顿 3→4）⇒ ⇒
+> ⇒ ⇒ **B3 的两道🚪门（R5 + R6）已全闭** ⇒ ⇒ **B3 只差「立项」** ⇒ ⇒ 完整路线见 `.rddf/roadmap/phase-6-next-steps.md`（**R12–R16**）。

@@ -16,8 +16,8 @@ the change that introduced them (see `openspec/changes/` and
 - **`riscv::DataTCM` 读口 + `Rv32iPipeline::data_ready`** ⇒ ⇒ D-TCM 由**全组合读**
   （`aread` · 0 拍）改为**寄存读**（`sread` · 1 拍）⇒ ⇒ MEM 级数据采样相位整体后移
   ⇒ ⇒ `data_ready` 由「恒 `true`」重定义为**反压输入**
-  ⇒ ⇒ 依据：`memory-timing-contract` **T1 / T3**（**ADR-069**（`Draft` · **未决**）
-  · **ADR-068**（Accepted））
+  ⇒ ⇒ 依据：`memory-timing-contract` **T1 / T3**（**ADR-069**（**Accepted** · 2026-11-12 ·
+  决策 = **候选 ②（A0）**）· **ADR-068**（Accepted））
 - **`Rv32iPipelineTop` 的加载端口族** ⇒ ⇒ `prog_addr` 语义由「**字索引**」改为「**字节地址**」
   ⇒ ⇒ 且新增 D-TCM 加载通路（现 `prog_*` **只**接 I-TCM ⇒ ⇒ 有初始化 `.data` 的程序
   **装不进去**）⇒ ⇒ 依据：`firmware-load-chain` **L1–L6**（**未立项**）

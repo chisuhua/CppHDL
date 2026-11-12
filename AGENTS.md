@@ -274,6 +274,11 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   `tests/chlib/test_forwarding.cpp`（**常驻**回归）。
   ⚠️ **load-use 停顿仍在（3 拍）**：档位 1 **保守地不覆盖 load** ⇒ 停顿契约**零改动**
   （那是一个**选择**，不是无奈）⇒ 「档位 1 覆盖 load」= **V2** 独立立项。
+  ⇒ ⇒ ⚠️ **2026-11-12 dated 前向注记（ADR-069）**：**「3 拍」在 B3 实施前仍属实**
+  ⇒ ⇒ 但**「零改动」已前向为假** —— `docs/adr/ADR-069-mem-data-alignment.md`（**Accepted · 2026-11-12**
+  · 决策 = **A0**）把 **load-use 停顿修订为 4 拍**（`EX→WB` 级数 2→3 **推导**出来的结果值）
+  ⇒ ⇒ **B3 实施后 MUST 改本行为 4** ⇒ ⇒ ⚠️ **在 B3 实施前禁改**（那是**未验证的值**）
+  ⇒ ⇒ 依据：`docs/adr/ADR-047-rv32i-data-forwarding.md` **§5.5**（dated addendum）。
   ⚠️ **距离矩阵的唯一权威 = capability `rv32i-data-forwarding`** ⇒ 本文档 MUST NOT
   另写一份（两份必然漂移）。
 - **RV32I 取指侧**：imem MUST 用 `sread`（1 拍）⇒ IF/ID 的 pc MUST 同样延迟

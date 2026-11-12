@@ -151,7 +151,7 @@ evidence: probe:include/cpu/pipeline/stages/id_stage.h#L123
 - [ ] 该指令**不**计入 `perf_instructions`；且**尾部填 NOP 后整体退休数仍 == 178**、`non_retired == 21`（🔵 2026-11-10 裁决：采纳尾部填 NOP ⇒ 原「该值不是 178」**作废**） ⇒ 归属: **B4**
 - [ ] `illegal_instr` 输出**拉高**，`illegal_reason` == 「未知」 ⇒ 归属: **B4**
 - [ ] 另一用例：固件含 `ECALL`（`OP_SYSTEM`）⇒ ⇒ `illegal_instr` 拉高且 `illegal_reason` == 「已知未实现」（**与未知 opcode 可区分**） ⇒ 归属: **B4**
-- [ ] ⚠️ **变异自证**：把 `illegal_instr` 的判定改成恒假 ⇒ ⇒ 上述用例 MUST 转红（证明判据有判别力） ⇒ 归属: **B4**<br>- [ ] ⚠️ **冻结判据 MUST 防「前 N 拍本来就相等」的恒绿**：MUST 写成四段 —— ① 非法指令进入 ID **之前**某一拍 `dbg_id_pc` 曾递增 ② 进入后**连续 ≥ K 拍**（K ≥ 10，覆盖 fill + 3 拍 load-use 窗口）`dbg_id_pc` **逐拍相等**且等于非法指令地址 ③ 同期 `perf_instructions` 逐拍相等 ④ 该期间的 `dbg_wb_write_en` **序列**与「不含该指令」的期望序列**逐项**相等（序列断言，非计数断言） ⇒ 归属: **B4**
+- [ ] ⚠️ **变异自证**：把 `illegal_instr` 的判定改成恒假 ⇒ ⇒ 上述用例 MUST 转红（证明判据有判别力） ⇒ 归属: **B4**<br>- [ ] ⚠️ **冻结判据 MUST 防「前 N 拍本来就相等」的恒绿**（⚠️ **B4 实施时 N = 4** ⇒ ⇒ **3 拍 load-use 窗口** ⇒ ⇒ **B3 的 A0 落地后 load-use 停顿 3→4** ⇒ ⇒ 本判据的 N MUST 按**实施后的实测**取，**禁**沿用 3）⇒ ⇒ MUST 写成四段 —— ① 非法指令进入 ID **之前**某一拍 `dbg_id_pc` 曾递增 ② 进入后**连续 ≥ K 拍**（K ≥ 10，覆盖 fill + 3 拍 load-use 窗口）`dbg_id_pc` **逐拍相等**且等于非法指令地址 ③ 同期 `perf_instructions` 逐拍相等 ④ 该期间的 `dbg_wb_write_en` **序列**与「不含该指令」的期望序列**逐项**相等（序列断言，非计数断言） ⇒ 归属: **B4**
 
 ### FENCE
 
