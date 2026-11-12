@@ -2,10 +2,11 @@
 
 > **触发**：用户口令「切 architect 对完成和后续任务进行梳理……然后切 planner 对后续还有哪些任务内容都梳理一遍，
 > 再给出后续任务内容和实施路径」。
-> **上游**：**`docs/architecture/2026-11-12-phase-6-b2-midterm-review.md`**（architect 复盘 #2 ·
-> 目标链 + **4 条实测发现** + T0–T11 任务清单 · oracle `PASS-WITH-NOTES` 9 条建议**全落实** +
-> critic `APPROVE_WITH_CONDITIONS` **0 BLOCKER** · 1 SHOULD_FIX + 3 NITS **全修完** ·
-> 审稿记录 `.rddf/reviews/phase-6-b2-midterm-review-2026-11.md`）。
+> **上游**：**`docs/architecture/2026-11-12-phase-6-rtl-track-review.md`**（architect 复盘 #3 · **T2 裁决后**
+> · 目标链 + **8 条实测发现** + **4 条边界裁决** + T-a–T-j 任务清单 · oracle ×1（8 条建议**全落实**）+
+> critic ×1（**APPROVE_WITH_CONDITIONS** · **0 BLOCKER** · 1 SHOULD_FIX + 2 NITS **全修完**））。
+> ⚠️ **复盘 #2**（`2026-11-12-phase-6-b2-midterm-review.md`）= **B2 中期时点的上游快照** ⇒ ⇒ 它的 4 条发现
+> **已全部闭口**（R0 / R1 / R2 / R10 + R5 / R6）⇒ ⇒ **本文件以 #3 为准**。
 > **窗口唯一真相** = `.rddf/roadmap/phases/phase-6.md`（**任务状态以 phase-6 为准**；本文件是
 > **任务内容 + 实施路径**的载体，**不复制** phase-6 的状态格）。
 > **本文件不新增任何架构义务** —— 所有判据均映射**既有** AC / phase-6 出口判据 / architect 复盘结论。
@@ -16,7 +17,7 @@
 
 | 编号 | 含义 | 出处 |
 |---|---|---|
-| **R0–R11** | **本文件**（2026-11-12）的后续任务清单 | 本文件 §1–§3 |
+| **R0–R17** | **本文件**（2026-11-12）的后续任务清单 | 本文件 §1–§3 |
 | **T0–T11** | architect 复盘 #2 的任务清单（**同一批任务**） | `docs/architecture/2026-11-12-phase-6-b2-midterm-review.md` §5 |
 | **旧-T1 … 旧-T8** | **上一版**（2026-11-09）的任务清单 —— **已全部闭口或移交** | 本文件 §4 |
 
@@ -31,28 +32,34 @@
 
 | # | 任务 | 归属 | 前置 | 阻塞关系 |
 |---|---|---|---|---|
-| **R0** | 🔴 **修 `verify_ledger_evidence.sh` 的 10 项红**（10 份台账的 `evidence:` ⇒ 裸路径 / 升级形态）⇒ ⇒ **解 CI 红** | planner | — | ★ **唯一「现在就能做且解 CI 红」的项** ⇒ ⇒ **R1–R3 的前提**（状态订正也要跑护栏） |
-| **R1** | 🟡 订正 `phase-6.md` 的 **B2 行**（删「E6 ⬜ 未做」那段陈旧快照） | planner | — | 纯状态订正 ⇒ ⇒ 与 R0 同批可做 |
-| **R2** | 🟡 订正 `phase-6.md` 的 **P7 行状态格**（①③ ✅ · ②⑤ ⬜ · ④ 🟡 半闭）⇒ ⇒ 与 next-steps 的 T3 遗留段一致 | planner | — | 纯状态订正 ⇒ ⇒ **R3 的前提**（R3 的子步归属靠它） |
+| **R0** | ✅ **修 `verify_ledger_evidence.sh` 的 10 项红**（10 份台账的 `evidence:` ⇒ 裸路径 / 升级形态）⇒ ⇒ **解 CI 红** | planner | — | ✅ **2026-11-12 已闭**（PASS · 91 台账 · 6 项待补 = WARN · `--self-test` PASS）|
+| **R1** | ✅ 订正 `phase-6.md` 的 **B2 行**（删「E6 ⬜ 未做」那段陈旧快照） | planner | — | ✅ **2026-11-12 已闭**（`grep -c "E6 ⬜ 未做"` == **0**）|
+| **R2** | ✅ 订正 `phase-6.md` 的 **P7 行状态格**（①③ ✅ · ②⑤ ⬜ · ④ 🟡 半闭）⇒ 与 next-steps 的 T3 遗留段一致 | planner | — | ✅ **2026-11-12 已闭**（`grep -c "① ✅ / ② ⬜ / ③ ✅ / ④ 🟡"` == **1**）|
 | **R3** | 🟡 **P7 的 ②⑤ + Reject 粒度 → change 立项/归档 → ④ 台账行 15 闭口** | builder → architect | R2 | ⇒ ⇒ **④ 的依赖 = change 归档，不是依赖 ⑤** ⇒ ⇒ 顺序：修粒度 → 补判据 → 立项归档 → 闭口行 15 |
 | **R4** | 🟡 **P8 builder 步**（删 `set_ab_verification` stub + golden 下限派生 + 两份文案订正） | builder | — | 与 R3 **可并行**（写点不重叠：`include/simulator.h`+`src/simulator.cpp` vs `src/hierarchy_*.cpp`） |
-| **R5** | ✅ **B3 的 T2 裁决**（MEM 数据对齐）⇒ ⇒ 载体 = **ADR-069**（**Accepted · 2026-11-12**）⇒ ⇒ 决策 = **候选 ②（A0）**（地址照旧 + MEM/WB 延后 1 拍）· oracle **×3**（第 1/2 轮 REJECT ⇒ 第 3 轮 PASS-WITH-NOTES）· critic **×1**（APPROVE_WITH_CONDITIONS · **0 BLOCKER**） | architect | 用户 2026-11-12「按你建议拍板」 | ★ **B3 的🚪 门之一 ⇒ ✅ 已闭** ⇒ ⇒ ⚠️ **B3 开工前仍欠**：① **ADR-047 的 dated addendum**（3 处「3 拍」陈述陈旧 · SF-3 强制项）② `rv32i-data-forwarding` 的 MODIFIED（3→4 · `load_use_stalls` 6→8）⇒ ⇒ 审稿记录 `.rddf/reviews/ADR-069-mem-data-alignment.md` |
+| **R5** | ✅ **B3 的 T2 裁决**（MEM 数据对齐）⇒ ⇒ 载体 = **ADR-069**（**Accepted · 2026-11-12**）⇒ ⇒ 决策 = **候选 ②（A0）**（地址照旧 + MEM/WB 延后 1 拍）· oracle **×3**（第 1/2 轮 REJECT ⇒ 第 3 轮 PASS-WITH-NOTES）· critic **×1**（APPROVE_WITH_CONDITIONS · **0 BLOCKER**） | architect | 用户 2026-11-12「按你建议拍板」 | ★ **B3 的🚪 门之一 ⇒ ✅ 已闭** ⇒ ⇒ ✅ **2026-11-12 晚补齐 SF-3 强制项**：**ADR-047 §5.5 dated addendum**（3 处「3 拍」原文**逐字保留** + 三处 dated 指针）⇒ ⇒ ⚠️ **spec MODIFIED 已重分类**为 **R14 内的 change 步骤**（承载**实施后**的真实基线 ⇒ ⇒ 提前写 = 写未验证的值）⇒ ⇒ 审稿记录 `.rddf/reviews/ADR-069-mem-data-alignment.md` |
 | **R6** | ✅ **B3 的公开面前置门**（CHANGELOG + `public-api-surface.md` 各一行） | planner | — | ★ **B3 的🚪 门之二** ⇒ ⇒ ✅ **已登记**（2026-11-12 · 前置登记 = 预告 + 迁移指引 · 非「已发布」）⇒ ⇒ `firmware-load-chain` L1–L6（加载端口族语义变更）+ `memory-timing-contract` T1/T3（`data_ready` 语义重定义）⇒ ⇒ 护栏 `verify_public_api_visibility.sh` PASS |
 | **R7** | 🟡 **P6-0 侦察**（RV32I ISA 缺口：复用面清单 + `FENCE` 裁决候选） | planner → architect | — | **只读侦察** ⇒ ⇒ 可全程并行 |
 | **R8** | 🟢 **D8**（`ext_clk` 死端口）⇒ ⇒ 建议 **A2**（删端口或明确注释） | architect → 用户 | — | 需**用户裁决** ⇒ ⇒ 与所有批**无耦合**（不改任何时序金标） |
 | **R9** | 🔒 **P11**（ADR-036 物理移除） | builder | 日历锁 **2027-04-17** | 本窗口**不做** |
-| **R10** | 🟡 **第三处状态漂移**（`mem-port-arg` 草案 frontmatter） | planner | — | 与 R1/R2 同批 ⇒ ⇒ **一次扫干净**比留到下个窗口便宜 |
+| **R10** | ✅ **第三处状态漂移**（`mem-port-arg` 草案 frontmatter） | planner | — | ✅ **2026-11-12 已闭**（frontmatter = `implemented`）⇒ ⇒ ⚠️ **但索引列当时漏改** ⇒ ⇒ 已并入 **R12**（发现 6）|
 | **R11** | 🟡 **`FENCE` 语义裁决**（architect · **planner 无权拍板**） | architect | R7 | 须在 R7 侦察之后（侦察提供候选方案）⇒ ⇒ 可与 B3 并行 |
+| **R12** | ✅ **12 条漂移一次性扫干净**（architect 复盘 #3 的发现 1/2/4/5/6/7 + 发现 8 的 5 处）⇒ ⇒ 真相源 / 状态格 / 公开面载体 / 索引列 / 指针 | planner | — | ✅ **完成态 = 已提交**（metis P2-18：判据只看**工作区文本** ⇒ ⇒ 未提交时一次 `checkout` 就把它变回「未执行」而判据仍绿）⇒ ⇒ **漂移订正 = `83cdb89`** · **清单刷新 = 本 commit** ⇒ ⇒ 判据见 §2 的 **R12**（逐条可 grep）|
+| **R13** | 🔴 **B3 立项**（**两个** change：`memory-timing-contract` + `firmware-load-chain`）⇒ ⇒ 载体 = `openspec/changes/<name>/{proposal,design,tasks}.md` | planner → builder | R12 | ★ **B3 的真起点** ⇒ ⇒ 🚪 门 R5 + R6 **已闭** ⇒ ⇒ **只差立项** |
+| **R14** | 🔴 **B3 实施**（T1+T3 同批 · T6 · T2/T4/T5 · L1–L6）⇒ ⇒ 出口 = **ADR-068 的 V1–V10 + ADR-069 的 V1–V15 全绿** + 时序 golden **手推重算** | builder | R13 | ⚠️ **必须在 R15 之前**（时序金标只算一遍）⇒ ⇒ **两个 change 同批**（T1 与 T3 耦合） |
+| **R15** | 🔴 **B4 实施**（C1 差分 → C2 ALU 编码归一 → C3/C4 组件接入 → G3→G1+G4 同批 → 其余） | builder | **R14 已闭** | ⚠️ **必须等 R14 闭**（同依据） |
+| **R16** | 🟡 **独立立项 10 条**（批次表 §4 的 **9 行** + **台账 id=22**）⇒ ⇒ 含**用户 ⑤ 的端口名消化**（⇒ ⇒ 与 B3 **同区** ⇒ ⇒ **不可并行**，见 R17） | planner → architect | — | ⚠️ **逐项写点**（metis P1-14：不可笼统写「`src/hierarchy_*`」）⇒ ⇒ **大部分**与 B3/B4 零重叠 ⇒ ⇒ **但端口名消化项落在 `examples/riscv-mini/src/rv32i_pipeline_top.h` + 10 个 TB 的 tsv** ⇒ ⇒ **与 B3 的 L1–L6 同区** |
+| **R17** | 🔴 **用户 ⑤ 的原始诉求：RTL 端口名 == C++ 成员名**（32 端口 · `Rv32iPipelineTop`）⇒ ⇒ ⚠️ **触发条件已满足**（用户 2026-11-10 就提了 ⑤）⇒ ⇒ **不是**「等用户再问一次」⇒ ⇒ **需用户二选一**：「**现在做**（占 B3 末段 · 与 L1–L6 同批）」vs「**推到 phase-7**」 | architect → **用户** | — | ★ **用户诉求仍未在真实 CPU 上兑现**：`Rv32iPipelineTop` 的端口**全部未具名** · 棘轮基线 = **1484/1484** ⇒ ⇒ **零组件被消费** ⇒ ⇒ ⚠️ 做完会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 examples 的 tsv / `examples-rtl-expectations.md` 同批 |
 
-⇒ ⇒ **★ 两条 🚪 门**：**R5 + R6 之后 B3 才能开工** ⇒ ⇒ R5/R6 是 B3 的**硬前置**。
-⇒ ⇒ **★ R0 排第一**：它是唯一「现在就能做且解 CI 红」的项 ⇒ ⇒ 且 R1/R2/R10 的状态订正
-**也要跑护栏** ⇒ ⇒ 先解红再订正 ⇒ ⇒ 否则订正后的状态**无法被护栏确认**。
+⇒ ⇒ ✅ **两条 🚪 门（R5 + R6）已全闭**（2026-11-12）⇒ ⇒ **B3 只差「立项」（R13）**。
+⇒ ⇒ ✅ **R0 已闭**（CI 红已解）⇒ ⇒ **R1 / R2 / R10** 已闭 ⇒ ⇒ **当前唯一的「现在就能做且无前置」= R12**（✅ 已执行）。
+⇒ ⇒ **主线 = R13 → R14 → R15**；**旁线 = R3 / R4 / R7 → R11 / R8 / R16**（写点不重叠 ⇒ ⇒ 可并行 ⇒ ⇒ 但**收口阶段不并行**，见 §1.1）。
 
 ### 1.1 「可并行」的真实边界（metis 订正 · 只覆盖**写点** ⇒ ⇒ **收口阶段不并行**）
 
 三条轨共享**五个**单点资源 ⇒ ⇒ ① `openspec/specs/rtl-hierarchical-output/spec.md`
 （**仅 R3 动** —— B3 的 spec 面在 rv32i / dtcm / manifest `semantic`）② 根 `AGENTS.md` 的
-**4 个计数锚点**（各 **2 处** ⇒ ⇒ 文本必冲突）③ `.rddf/checks/public-api-*`（R4 与 R6 都动
+**5 个计数锚点**（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `DUAL_BACKEND_PARITY_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `EXAMPLES_TEST_SOURCES`；前 4 个各 **2 处** ⇒ ⇒ 文本必冲突）③ `.rddf/checks/public-api-*`（R4 与 R6 都动
 `EXPECTED_REMOVAL_ROWS` / `EXPECTED_PROBES`）④ **`.rddf/checks/arch-residual-registry.md`**
 ⑤ **`docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7**（④⑤ 由 **R3.5** 与 **B3** 同写 ——
 ADR-068 **V3** 明写「BRAM 可推断性未在 CI 验证 ⇒ MUST 登记残差」⇒ ⇒ B3 必然写这两处）⇒ ⇒
@@ -66,7 +73,9 @@ ADR-068 **V3** 明写「BRAM 可推断性未在 CI 验证 ⇒ MUST 登记残差�
 (a) 扩脚本一并更新派生表，或 (b) 把派生表标「**历史快照**」+ 加 grep 断言它**不参与判定**。
 ⇒ ⇒ **真相 = 锚点**（派生表自己就写「单一真相在上面的 CI 锚点」）。
 
-⇒ ⇒ **R0/R1/R2/R10 不碰这 3 个资源**（只动台账 frontmatter + 状态格）⇒ ⇒ 与任何实施批**无冲突**。
+⇒ ⇒ **R0/R1/R2/R10 不碰这 5 个资源**（只动台账 frontmatter + 状态格）⇒ ⇒ 与任何实施批**无冲突**。
+⇒ ⇒ ⚠️ **「5 个计数锚点」的清单**（metis P2-16）：`EXAMPLES_TEST_SOURCES` 也**必须**进「锚点编辑权 = 最后合入者」的清单
+⇒ ⇒ 否则 B3/B4 新增 example 测试时它会**漏改** ⇒ ⇒ ⚠️ **禁**只盯着前 4 个。
 
 ---
 
@@ -172,15 +181,90 @@ ADR-068 **V3** 明写「BRAM 可推断性未在 CI 验证 ⇒ MUST 登记残差�
 | **R11.2** | **载体** = `openspec/changes/<isa-gap>/specs/rv32i-isa-semantics/spec.md` 的 **ADDED Requirement**（`FENCE` 在「单 hart + in-order + 无写缓冲」下的语义与实现形态）⇒ ⇒ 条款 MUST 含 `SHALL`/`MUST`（RFC 2119） | `grep -c "FENCE"` 该 spec ≥ 1 + `verify_openspec_delta.sh` 绿 |
 | **R11.3** | **审稿** = oracle → critic（ⓘ 可与 **R5** 合并成**一轮** architect 预算 —— 见 §5 ③） | 审稿记录落 `.rddf/reviews/` + **0 BLOCKER** |
 
+### R12 · 12 条漂移扫干净（**architect 复盘 #3 的发现**）—— **已完成 2026-11-12 晚**
+
+> ⚠️ **本节是「真相源 + 状态格 + 公开面载体 + 索引 + 指针」的统一订正** ⇒ ⇒
+> ⚠️ **AC 计数 MUST 用「行首 + `<br>` 内联」双计**（仓内已确立 · `rtl-track-correction-list-2026-11.md:152`
+> ⇒ 明写「只按行 grep 会漏」）⇒ ⇒ **禁**按行首单计。
+
+| # | 位置 | 订正内容 | 判据（可 grep） |
+|---|---|---|---|
+| **①** | `phase-6.md:75`（B3 行） | 「② **T2 尚未裁决**」→「② **T2 已裁决**（ADR-069 · Accepted · 决策 = A0）」· 补 🚪 门 R6 已闭 + 仍欠「两个 change 立项」+ 实施期必落两份 MODIFIED | `grep -c "T2 尚未裁决" phase-6.md` == **0** |
+| **②** | `next-steps.md` §1 R 表 | R0 / R1 / R2 / R10 四行加 ✅ 完成标记 | `grep -c "^| \*\*R0\*\* | ✅" …` == 1（四行逐条） |
+| **③** | `next-steps.md` §1 R5 行 | 「仍欠 ① ADR-047 addendum ② spec MODIFIED」⇒ ⇒ ① 改为「✅ 已补齐」· ② 改为「**已重分类**为 R14 内的 change 步骤」 | ⚠️ **判据 MUST 限定 R5 行**（全文 grep 会命中本表自身）⇒ ⇒ `awk '/^\| \*\*R5\*\* \|/'` 后 `grep -c "仍欠"` == **0** |
+| **④** | `docs/CHANGELOG.md:19` | 「ADR-069（`Draft` · **未决**）」→「ADR-069（**Accepted** · 2026-11-12 · 决策 = **A0**）」 | `grep -c "ADR-069（\`Draft\`" docs/CHANGELOG.md` == **0** |
+| **⑤** | `next-steps.md` §8.3 | 补 `port-name-literal-parity`（2 条）+ `node-name-prefix-consistency`（2 条）两行；`rv32i-isa-gap-closure` 的 **22** **保留**（行 18 + 内联 4）· 合计 **70 → 74** | `grep -c "port-name-literal-parity" §8.3` ≥ 1 且合计 == **74** |
+| **⑥** | `improvement-suggestions.md` 状态列 | `mem-port-arg` draft→**implemented** · `chlib-dtor` approved→**approved**（保持）· `public-api-remove-visibility` approved→**draft** ⇒ ⇒ **12 份索引与 frontmatter 全一致** | 12 份逐条比对 = **0 不一致** |
+| **⑦** | `followup-list` §7.5 + `memory-timing-contract:8` 进度行 | 「下一件事 = 用户裁决 ADR-069」⇒ ⇒ 改为「B3 立项 → B3 实施 → B4 → 独立立项」；「T2 待 architect 裁定」⇒ ⇒ 「T2 已裁决（A0）」 | `grep -c "用户裁决 ADR-069" followup-list` == **0** |
+| **⑧** | `improvement-suggestions.md` 两行（`firmware-load-chain` / `memory-timing-contract`） | 「🚪 入口门 R5 + R6」⇒ ⇒ 「✅ 已闭 · 只差立项」·「T2 裁决待 architect」⇒ ⇒ 「已裁决」 | 两行均含「R5 + R6 已闭」 |
+| **⑨** | `firmware-load-chain:8` 进度行 | 「前置门 = 公开面登记未做 ⇒ 不得开工」⇒ ⇒ 「✅ 前置门已闭」 | `grep -c "前置门 = 公开面登记未做" …` == **0** |
+| **⑩** | 根 `AGENTS.md`（RV32I 数据前推段） | 加 **2026-11-12 dated 前向注记**：「3 拍」在 B3 实施前仍属实 · 但「零改动」已前向为假（ADR-069 → 4 拍）· **B3 实施前禁改**（那是未验证的值） | `grep -c "2026-11-12 dated 前向注记" AGENTS.md` == **1** |
+| **⑪** | `rv32i-isa-gap-closure:154` | 「3 拍 load-use 窗口」⇒ ⇒ 标注「B4 实施时 N = **4**」·「禁沿用 3」 | `grep -c "B4 实施时 N = 4" …` == **1** |
+| **⑫** | `next-steps.md` §8.4 | B3 开工门「门 1 / 门 2 = ⬜ 未做」⇒ ⇒ 「✅ 已闭」 | `grep -c "⬜ \*\*未做\*\*" §8.4` == **0** |
+
+### R13 · B3 立项（**B3 的真起点**）—— 🔴 **主线第 1 步**
+
+| 步 | 内容 | 判据 |
+|---|---|---|
+| **R13.1** | **两个 change 立项**（原子性已裁决）：`openspec/changes/memory-timing-contract-2026-11/` + `openspec/changes/firmware-load-chain-2026-11/`，各含 `proposal.md` / `design.md` / `tasks.md` / `specs/**`<br>⚠️ **原子性裁决（metis P0-1）**：**两个 change**（能力边界不同）**但 MUST 同一窗口落地** ⇒ ⇒ **归档顺序 MUST 无中间态**（先归档 `memory-timing-contract`，**后**归档 `firmware-load-chain` ⇒ ⇒ 中间态 = 「D-TCM 已改 `sread` 但加载链路未适配」⇒ ⇒ 该中间态**只允许存在在工作区**、**禁**被归档）⇒ ⇒ ⇒ **禁**「一个已归档另一个未归档」的发布态 | 两个目录存在 · 各自的 delta 齐（见 R13.2）· **归档顺序被 tasks 钉死** |
+| **R13.2** | **AC 作用域**（metis P1-7）：`memory-timing-contract` 的 proposal 映射 **ADR-068 的 V1–V10 + ADR-069 的 V1–V15**（**25 条**，V6/V7 成对 · V13–V15 与 V8 的变异叙述**不合并**）⇒ ⇒ `firmware-load-chain` 的 proposal 映射**自身 L1–L6 的 18 条 AC**（**不**映射 ADR-068/069 的判据 ⇒ ⇒ 两批判据**互不串**）⇒ ⇒ ⚠️ **反向映射**：草案里**无 ADR 判据号**的 AC MUST 登记为「**无 ADR 对应 · 自洽判据**」⇒ ⇒ ⚠️ **禁** `--skip-specs`（除非显式声明「no spec changes」且 `specs/` 为空） | 每条 AC 有 ADR 判据号**或**「自洽判据」标注 |
+| **R13.2b** | 🔴 **capability 清单**（metis P1-6）—— **delta 路径不可猜**：① `mem-read-timing`（**MODIFIED**）· ② `rv32i-commit-path`（**MODIFIED** · `spec.md:230` 的「实测 3 拍」⇒ **4 拍** + `load_use_stalls` 6→8）· ③ `rv32i-data-forwarding`（**MODIFIED** · 档位 2 / D11 的**源**）· ④ `firmware-load-chain` → ⚠️ **仓内无既有 capability** ⇒ ⇒ **MUST 裁定**：**ADDED 到新 capability**（建议名 `rv32i-firmware-load`）**或**并入既有 `rv32i-canonical-home` ⇒ ⇒ **禁**留空 | 四个落点全部指名 · `verify_openspec_delta.sh` 的 R3（MODIFIED 标题**逐字**匹配）可满足 |
+| **R13.2c** | ⚠️ **两份 MODIFIED 的 delta MUST 在**提案期**写进 `openspec/changes/<name>/specs/`**（metis P0-2）⇒ ⇒ 值用 **ADR-069 已推导的 4 拍**（**不是**未验证的实现值）⇒ ⇒ 实施期只做「核对 spec 与实现一致 + 归档合并成功」⇒ ⇒ ⚠️ **禁**把 delta 留到归档前才补 | `changes/*/specs/**` 里两份 MODIFIED 存在 |
+| **R13.3** | **design.md** MUST 钉 **6 条**：① **M2 = 完整元数据寄存器**（含 `link_value`）② **档位 2 源改指 M2** ③ **D11 源改指「下一提交者值」** ④ **停顿链加一级**（3→4）⑤ **两份 MODIFIED 的落点**（`rv32i-commit-path/spec.md:230` + `rv32i-data-forwarding`）⑥ 🔴 **`data_ready` = 固定 1 拍延迟（不是握手）**（ADR-068 V7 胜出 ⇒ ⇒ **禁**在本批实现真反压） | design 有这 6 条 |
+| **R13.4** | **tasks.md** MUST 含 **ADR-069 §5 的 V13 / V14 / V15 三条 distance 判别判据**（distance-2 ALU→消费者 · distance-3→消费者 · load-distance-2）⇒ ⇒ ⚠️ **禁**「靠现有 golden 兜底」⇒ ⇒ ⚠️ **落点**：这三条是**流水线级**（V13 的变异是「档位 2 源改回 `memwb_*`」）⇒ ⇒ **组件级骨架表达不了** ⇒ ⇒ MUST **新建 pipeline 级 fixture + 用例**（**不得**塞进 `tests/chlib/test_forwarding.cpp`）⇒ ⇒ 判别力 = 手推期望 + 变异自证 | tasks 有这 3 条**且指名新建文件** |
+| **R13.5** | 回填 **ADR-069 的「关联 change」**（`backlog:` → 指向两个 change 目录）· 回填两份草案的 frontmatter `状态:` | ADR-069 无 `backlog:` 残留 |
+| **R13.6** | ⚠️ **判据补强**（metis P1-2）：**禁**只拿 `verify_openspec_delta.sh` 当立项证据（它在**零 active change** 时 exit 0 且无信号 ⇒ ⇒ **零判别力的绿**；且其 R4 只是 `bash -n` ⇒ ⇒ stub 也全绿）⇒ ⇒ MUST 另跑 **每条 Requirement 含 `SHALL`/`MUST`** + **`## Purpose` 非占位符** | `openspec validate <change-name>` 非零错误 + Purpose/SHALL 逐条可查 |
+
+### R14 · B3 实施（**主线第 2 步**）
+
+| 步 | 内容 | 判据 |
+|---|---|---|
+| **R14.1** | **T1 + T3 同批**（D-TCM `aread`→`sread` + `data_ready` 语义重定义）⇒ ⇒ ⚠️ **不得拆批**（拆 ⇒ ⇒ 中间态出现「声称成立但不成立」） | ADR-068 V1–V10 绿 |
+| **R14.2** | **T6**（store→load 同址 `read-new`）⇒ ⇒ 判别性用例 = **紧邻** `SW x1,0(x2)` / `LW x3,0(x2)`（⚠️ 现固件 `SW`@word16 / `LW`@word20 **隔 4 字 ⇒ 零判别力** ⇒ ⇒ MUST 补紧邻形态） | 同址零间隔用例 + **变异自证** |
+| **R14.3** | **T2 / T4 / T5**（数据对齐 / 字节写相位 / `verify_dtcm_read_timing.sh`）⇒ ⇒ ⚠️ **yosys 判据降为本地/opt-in** ⇒ ⇒ 「真实 BRAM 可推断性未在 CI 验证」MUST 登记进 `.rddf/checks/arch-residual-registry.md`<br>⚠️ **禁**在本步要求「V1–V15 全绿」（metis P1-8 的**必然判红**：V8/V9 依赖**最终**停顿链与**全部** golden ⇒ ⇒ 中间态必红）⇒ ⇒ 本步只判 **V1–V7 / V10–V12 / V13–V15**（结构 + 语义 + distance 判别）⇒ ⇒ **V8 / V9 留到 R14.6** | 上述**子集**绿 + 残差登记 |
+| **R14.4** | **L1–L2 先行**（地址映射 + 统一加载口）⇒ ⇒ ⚠️ **依据已裁决**（metis P0-5：批次表 §B3「本项先做」与草案「依赖 memory-timing」**相反**⇒ ⇒ **裁决 = L1–L2 先行、L3–L6 随后** ⇒ ⇒ 且 **T1 与 L1–L2 同 commit 不可拆**）⇒ ⇒ **L3–L6**（ELF · 截断等价判据）随后 ⇒ ⇒ ⚠️ **R6 的登记内容**（「加载端口族语义变更」）与 L2 的订正推荐（「不新增端口 · 新建 `Rv32iSocTopV2` · 旧顶层冻结」）**不一致** ⇒ ⇒ **二选一**（metis P1-9）⇒ ⇒ ⇒ 若新建顶层组件 ⇒ ⇒ **三处快照**必须同步：`verify_no_duplicate_rv32i_headers.sh` 的 `SOC_TOP_PORTS` · `kObsNames` / `static_assert(kObsCount == 27)` · examples 的 tsv + `examples-rtl-expectations.md` | 三处快照同步 + `verify_public_api_visibility.sh` 绿 |
+| **R14.5** | ⚠️ **两份 MODIFIED 的 delta 已在 R13.2c 落盘** ⇒ ⇒ 本步只做「**核对 spec 与实现一致** + **归档合并成功**」⇒ ⇒ ⚠️ **禁**在归档前才补 delta | 归档后主 spec `grep -c "实测 4 拍"` == 1 + `rv32i-data-forwarding` 新条款可 grep |
+| **R14.6** | **时序 golden 手推重算**（`perf_load_use_stalls` **6 → 8** · `non_retired` · `perf_instructions` · 24 条 `(rd,data)` 写回序列带 `SHIFT`/`STALE`/`OTHER` 归因标签）⇒ ⇒ ⚠️ **禁抄仿真输出** · ⚠️ **STALE = 一票否决**<br>⚠️ **基线归属**（metis P0-4）：**「退休数 178」不变**（指令数）· ⚠️ **`non_retired == 21` 作废**（ADR-068 V8 的该半已被 **ADR-069 §3.2-②** 收窄 ⇒ ⇒ 新值由**实施后的实测**给出 ⇒ ⇒ **禁**把 21 当不变量）⇒ ⇒ ⚠️ **L1–L6 的地址改写会**独立**改动计数器**（草案 `:148`）⇒ ⇒ ⇒ **禁**把两个 delta 相加 ⇒ ⇒ 必须是**同一份手推**同时含 T1–T3 与 L1–L6 的效应 | ADR-069 V8 / V9 / V10 + 归因标签 |
+
+### R15 · B4 实施（**主线第 3 步**）—— ⚠️ **必须等 R14 闭**
+
+| 步 | 内容 | 判据 |
+|---|---|---|
+| **R15.1** | **C1 差分（先做）**：复用既有 `kExCases`/`kDecCases`/`ImmConsistencyDut` ⇒ ⇒ **MUST NOT** 重造第二套 | 差异清单覆盖**修复前**差异全集且逐项标处置 |
+| **R15.2** | **C2** ALU 编码归一（`ex_stage.h::ALU_OP_*` 为唯一权威）⇒ ⇒ MUST 同步更新 + 登记 + 改 `test_pipeline_exec.cpp:124` 的字面量 | ctest 全绿 |
+| **R15.3** | **C3 / C4** 组件接入（`Rv32iAlu`→EX · `Rv32iDecoder`→ID）⇒ ⇒ ⚠️ **标志继续由 opcode 比较**（不得用 `instr_type` 派生） | 20 项 golden 全绿 + 计数锚点重算 |
+| **R15.4** | **G3 → G1 + G4（同批）→ 其余**：尾部填 NOP ⇒ ⇒ 退休数 **178 不变**（指令数）· ⚠️ **`non_retired` MUST 引用「B3 后的基线」**（**禁**写死 21 —— metis P0-4：ADR-068 V8 的该半已被 ADR-069 收窄） | ⚠️ **判据 MUST 可判**（metis P1-10：「批内顺序被 tasks 钉死」是循环）⇒ ⇒ **G3 的实现 commit 早于 G1+G4 的实现 commit**（`git log` 可验）· 且退休数 == B3 后基线 |
+
+### R17 · 用户 ⑤ 的端口名消化（**需用户二选一**）
+
+| 步 | 内容 | 判据 |
+|---|---|---|
+| **R17.1** | 🔴 **用户裁决**：「**现在做**（占 B3 末段 · 与 L1–L6 同批）」vs「**推到 phase-7**」⇒ ⇒ ⚠️ **触发条件已满足**（用户 2026-11-10 提的 ⑤ 本身就是触发）⇒ ⇒ **不是**「等用户再问一次」 | 裁决记录落 `.rddf/roadmap/phase-6-next-steps.md` §5 + `phase-6-rtl-productization.md` §4 |
+| **R17.2** | 若「现在做」⇒ ⇒ **32 端口**（`examples/riscv-mini/src/rv32i_pipeline_top.h`）全部带**显式名** ⇒ ⇒ 棘轮豁免条目**减少**（棘轮只许减）⇒ ⇒ ⚠️ **产物端口名会变** ⇒ ⇒ MUST 与 examples 的 tsv + `examples-rtl-expectations.md` + 10 个 TB **同批** | 棘轮豁免数 **减少**（≠ 1484）· `verify_port_naming.sh` 绿 · 10 个 TB 全绿 |
+| **R17.3** | 若「推到 phase-7」⇒ ⇒ 登记为**独立立项**（载体 = 新 improvement 草案）⇒ ⇒ ⚠️ **禁**写成「触发条件 = 用户要求」（**该条件已成立** ⇒ ⇒ 等一个不会来的许可） | 草案存在 + 过 `add-improve` HARD-GATE |
+
+---
+
+### R16 · 独立立项 10 条（**旁线 · 9 条可全程并行**）
+
+⇒ ⇒ 清单 = `phase-6-rtl-productization.md` **§4** 的 **9 行** + **台账 id=22** = **10 条** ⇒ ⇒ ⚠️ 每条 MUST 写清
+「**对象 / 判据 / 触发条件 / 归属批**」（否则登记是空文）⇒ ⇒
+⇒ ⇒ **新增一条（architect 裁决 ③）**：**台账 id=22**（同名兄弟静默覆盖）⇒ ⇒
+载体 = 新 improvement 草案（走 `add-improve` HARD-GATE）· **本窗口不并入 B3/B4**。
+⇒ ⇒ ⚠️ **写点分布**（metis P1-14）：**9 条里只有端口名消化那条**落在 `examples/riscv-mini/src/rv32i_pipeline_top.h` + TB tsv
+⇒ ⇒ **与 B3 的 L1–L6 同区** ⇒ ⇒ 那一条 **MUST 与 B3 顺序执行**（⇒ ⇒ 归 **R17**）⇒ ⇒ 其余 **9 条**可全程并行。
+
+---
+
 ---
 
 ## 3. 批次层面的后续内容（**开工门 + 出口**）
 
 | 批 | 内容 | 开工门 | 出口 |
 |---|---|---|---|
-| **B2 收尾** | ① **验收报告**（**归属 = `verifier`（只验不改）** —— 判据来源按 `b1-batch-verify-2026-11.md` §首的四级优先级：用户条件 → proposal `## 验收标准` → 变更自身声明 → ADR Verification ⇒ ⇒ 出口 = 报告落 `.rddf/reviews/b2-batch-verify-2026-11.md` + 结论行（通过/不通过 + 数字））② R0 ③ R1/R2/R10 | — | `ctest -N` 全绿（⚠️ **禁写死「263/263」** ⇒ 写成「基线 + 新增 − 删除」）+ **14 护栏逐条列名**（B1 的 12 条 + `verify_ledger_evidence`(+self-test) + `verify_examples_rtl_sim`）+ examples **28/28** + samples **39/39** + 报告落盘 |
-| **B3** | T1+T3 同批（D-TCM `aread`→`sread` + `data_ready` 语义重定义）· T6（store→load 同址）· T2/T4/T5 · L1–L6（装载链路） | **R5**（T2 裁决）+ **R6**（公开面登记） | ADR-068 的 V1–V10 全绿 + 时序 golden **手推重算**（禁抄仿真输出） |
-| **B4** | C1 差分（先做）· C2 ALU 编码归一 · C3/C4 组件接入 · G3→G1+G4（同批）→ 其余 | **B3 已闭**（否则时序金标算两遍） | 组件接入后 20 项 golden + 计数锚点重算 |
+| **B2 收尾** | ① **验收报告**（**归属 = `verifier`（只验不改）** —— 判据来源按 `b1-batch-verify-2026-11.md` §首的四级优先级：用户条件 → proposal `## 验收标准` → 变更自身声明 → ADR Verification ⇒ ⇒ 出口 = 报告落 `.rddf/reviews/b2-batch-verify-2026-11.md` + 结论行（通过/不通过 + 数字））② R0 ③ R1/R2/R10 | — | **`ctest -LE perf --output-on-failure` 全绿**（⚠️ **禁写死「263/263」** ⇒ 写成「基线 + 新增 − 删除」）**且** **`CTEST_TOTAL` == `ctest -N`**（⚠️ `ctest -N` 只**列出**条目、**不执行** ⇒ ⇒ **禁**说它「全绿」· metis P1-9）+ **12 护栏逐条列名**（= §8.5 的 **11 脚本 + 1 `ctest -N`** ⇒ ⇒ **禁**把两份清单相加当「14 个」）**且** `verify_ledger_evidence`(+self-test) 绿 + examples **28/28** + samples **39/39** + 报告落盘 |
+| **B3** | T1+T3 同批（D-TCM `aread`→`sread` + `data_ready` 语义重定义）· T6（store→load 同址）· T2/T4/T5 · L1–L6（装载链路） | ✅ **R5**（T2 裁决 · ADR-069 Accepted）+ ✅ **R6**（公开面登记）⇒ ⇒ 🚪 **两门已闭** ⇒ ⇒ **只差 R13（两个 change 立项）** | ADR-068 的 V1–V10 + **ADR-069 的 V1–V15** 全绿 + 时序 golden **手推重算**（禁抄仿真输出）· `load_use_stalls` 6→8 |
+| **B4** | C1 差分（先做）· C2 ALU 编码归一 · C3/C4 组件接入 · G3→G1+G4（同批）→ 其余 | **B3 已闭**（**R14** · 否则时序金标算两遍） | 组件接入后 20 项 golden + 计数锚点重算 |
 
 ⇒ ⇒ **★ 硬约束：B3 → B4 不得乱序**（`phase-6-rtl-productization.md` 依据 ④⑤）
 ⇒ ⇒ **★ B4 的 C1 差分 MUST 在 B3 之后**（`rv32i-dead-component-consolidation` 的进度行已同步此依赖）。
@@ -224,22 +308,64 @@ phase-6 的 **P6**（RV32I ISA 缺口）与 B4 的 **G1–G5** 是**同一片区
 | # | 事项 | 说明 |
 |---|---|---|
 | ① | **R8（D8 `ext_clk` 死端口）** | 建议 **A2**（删端口或明确注释）⇒ ⇒ **A1 另独立立项** ⇒ ⇒ 需用户点头 |
-| ② | **R5（T2 裁决）的 architect 评审预算** | 属**决策内容变更** ⇒ ⇒ **oracle → critic 全审** ⇒ ⇒ 需新一轮 architect 预算（复盘 #2 的审稿预算已用于复盘本身） |
-| ③ | **R11（FENCE 裁决）的 architect 评审预算** | 同上 ⇒ ⇒ 但可与 R5 合并成**一轮** architect 预算 |
+| ② | ~~**R5（T2 裁决）的 architect 评审预算**~~ | ✅ **已用**（ADR-069 · oracle ×3 + critic ×1 · **已闭**）⇒ ⇒ **不再需要等预算** |
+| ③ | **R11（FENCE 裁决）的 architect 评审预算** | 属**ISA 语义决策** ⇒ ⇒ **oracle → critic 全审** ⇒ ⇒ 需一轮 architect 预算（**可与 R17 的裁决合并**） |
 | ④ | **T8（P9 遗留）的独立立项** | 真 FIFO 写缓冲 / 真预取 ⇒ ⇒ 需 planner 另起 improvement ⇒ ⇒ ⚠️ 可能需 architect 裁定 ⇒ ⇒ **本窗口不并入**（避免与 R3 并行制造文档债） |
 
 ---
 
-## 6. 判据自检（**可复跑**）
+## 6. 判据自检（**可复跑** · 本轮全判据）
+
+> ⚠️ **本段已重写**（metis P1-5）：旧版只列 R0/R1/R2/R10 的 **3 条弱判据**（其中 R2 用的是
+> metis 第 1 轮 P1-5 已判过的弱形态 ⇒ ⇒ builder 跑本段会拿到**假绿**）⇒ ⇒ **旧版已删**。
 
 ```bash
 cd /workspace/project/CppHDL
+# ---- R0 / R1 / R2 / R10（已闭）----
 bash scripts/verify_ledger_evidence.sh              # R0 ⇒ PASS（91 台账 · 6 项待补 = WARN）
 bash scripts/verify_ledger_evidence.sh --self-test   # R0 ⇒ PASS（投毒转红 + 还原复绿）
 grep -c "E6 ⬜ 未做" .rddf/roadmap/phases/phase-6.md                # R1 ⇒ 0
-grep -c "① ✅ / ② ⬜ / ③ ✅" .rddf/roadmap/phases/phase-6.md        # R2 ⇒ 1
+awk '/^\| \*\*P7\*\* \|/' .rddf/roadmap/phases/phase-6.md | grep -c "① ✅"  # R2① ⇒ 1
+awk '/^\| \*\*P7\*\* \|/' .rddf/roadmap/phases/phase-6.md | grep -c "② ⬜"  # R2② ⇒ 1
+awk '/^\| \*\*P7\*\* \|/' .rddf/roadmap/phases/phase-6.md | grep -c "③ ✅"  # R2③ ⇒ 1
+awk '/^\| \*\*P7\*\* \|/' .rddf/roadmap/phases/phase-6.md | grep -c "④ 🟡"  # R2④ ⇒ 1
+awk '/^\| \*\*P7\*\* \|/' .rddf/roadmap/phases/phase-6.md | grep -c "⑤ ⬜"  # R2⑤ ⇒ 1
 grep -m1 "^状态:" .rddf/improvements/mem-port-arg-cross-layer-2026-11.md   # R10 ⇒ implemented
-grep -m1 "^状态:" .rddf/improvements/examples-rtl-sim-coverage-2026-11.md # ⇒ implemented
+
+# ---- R12（12 条漂移 · 正反两面判据 · metis P1-10）----
+grep -c "T2 尚未裁决" .rddf/roadmap/phases/phase-6.md                            # ① 负 ⇒ 0
+grep -c "T2 已裁决" .rddf/roadmap/phases/phase-6.md                              # ① 正 ⇒ 1
+grep -c "ADR-069" .rddf/roadmap/phases/phase-6.md                               # ① 正 ⇒ >=1
+awk '/^\| \*\*R5\*\* \|/' .rddf/roadmap/phase-6-next-steps.md | grep -c "仍欠"    # ③ 负 ⇒ 0
+awk '/^\| \*\*R5\*\* \|/' .rddf/roadmap/phase-6-next-steps.md | grep -c "补齐 SF-3"   # ③ 正 ⇒ 1
+grep -c "ADR-069（.Draft" docs/CHANGELOG.md                                    # ④ 负 ⇒ 0
+grep -c "ADR-069.*Accepted" docs/CHANGELOG.md                                   # ④ 正 ⇒ >=1
+grep -c "用户裁决 ADR-069" .rddf/checks/rtl-track-followup-list-2026-11.md       # ⑦ 负 ⇒ 0
+grep -c "B3 的两个 change 立项" .rddf/checks/rtl-track-followup-list-2026-11.md  # ⑦ 正 ⇒ 1
+grep -c "前置门 = 公开面登记未做" .rddf/improvements/firmware-load-chain-2026-11.md  # ⑨ 负 ⇒ 0
+grep -c "前置门已闭" .rddf/improvements/firmware-load-chain-2026-11.md            # ⑨ 正 ⇒ 1
+grep -c "2026-11-12 dated 前向注记" AGENTS.md                                    # ⑩ ⇒ 1
+grep -c "ADR-069" AGENTS.md                                                      # ⑩ 内容 ⇒ >=1
+grep -c "B4 实施时 N = 4" .rddf/improvements/rv32i-isa-gap-closure-2026-11.md   # ⑪ ⇒ 1
+grep -c "沿用 3" .rddf/improvements/rv32i-isa-gap-closure-2026-11.md               # ⑪ 内容 ⇒ 1
+sed -n '/^### 8\.4 B3/,/^### 8\.5/p' .rddf/roadmap/phase-6-next-steps.md | grep -c "未做"  # ⑫ 负 ⇒ 0
+sed -n '/^### 8\.4 B3/,/^### 8\.5/p' .rddf/roadmap/phase-6-next-steps.md | grep -c "已闭"  # ⑫ 正 ⇒ 2
+awk -F'|' '/^### 8\.3/{f=1} /^### 8\.5/{f=0} f && /^\| \*\*/ {gsub(/[^0-9]/,"",$4); s+=$4} END{print "§8.3 合计 =", s, "(期望 74)"}' .rddf/roadmap/phase-6-next-steps.md
+python3 - <<'EOF'
+import pathlib, re
+rows = [l for l in pathlib.Path('improvement-suggestions.md').read_text().split('\n')
+        if re.match(r'^\|\s*\[[a-z0-9-]+-2026-11\]', l)]
+bad = 0
+for l in rows:
+    n = re.match(r'^\|\s*\[([a-z0-9-]+)-2026-11\]', l).group(1)
+    fm = pathlib.Path(f'.rddf/improvements/{n}-2026-11.md').read_text()
+    st = re.search(r'^状态:\s*(.+)$', fm, re.M).group(1).strip()
+    idx = next((s for s in ('draft','approved','in-progress','implemented') if s in l), '?')
+    bad += (idx != st)
+print(f'⑥ 索引 vs frontmatter：{len(rows)} 份 · 不一致 = {bad} (期望 0)')
+EOF
+
+# ---- 常驻护栏 ----
 bash scripts/verify_examples_rtl_sim.sh              # ⇒ PASS（10 项 · 严格模式）
 bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 ```
@@ -270,6 +396,41 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 | **P2-12** | R10 漏了正文的旧状态（`:20` 的 `**Status**: ✅ **approved**`） | ✅ **采纳** ⇒ 追加订正行（**不改写历史叙述**）+ 判据补 `grep -c "Status\*\*: ✅ \*\*approved"` == 0 |
 | **P2-13** | §3 缺**负面约束**（`emit_hygiene` 默认值 / 缩面须批准 / `git add -A` 禁令） | ✅ **采纳** ⇒ 新增 **§3.0 三条负面约束** |
 | **P2-14** | R3.4 的出口判据**用错脚本**（`verify_openspec_delta.sh` 是**提案阶段**自检，不含「归档成功」）+ R3.5 缺 3 条格式硬约束 | ✅ **采纳** ⇒ R3.4 改「archive 路径存在 + 主 spec 新增 Requirement 可 grep」+ `--skip-specs` 的合法例外判据；R3.5 补 3 条格式约束（`path1,path2` / 后缀 / `--render`） |
+
+### 7.0 🟡 **metis 第 2 轮（2026-11-12 晚 · architect 复盘 #3 后的任务清单刷新）** 的处置
+
+> **触发**：本轮 planner 刷新了 §1 的 R 表（新增 **R12–R17**）+ §2 的实施路径（+R12–R16 段）⇒ ⇒
+> ⇒ ⇒ metis **1 轮**（19 条）⇒ ⇒ **P0 5 条全处置** · **P1 9 条处置 8 条** · **P2 5 条处置 4 条**
+> ⇒ ⇒ **未处置的 2 条登记进 §7.0.1 的 backlog**（不静默丢弃）。
+
+| # | metis finding | 处置 |
+|---|---|---|
+| **P0-1** | R13.1「两个 change」与 R14.1「T1+T3 同批 ⇒ 不得拆批」**直接冲突** | ✅ **裁决（两个 change · 同一窗口 · 归档顺序无中间态）** ⇒ ⇒ R13.1 已写明「先归档 `memory-timing-contract`、后归档 `firmware-load-chain`」+「禁『一个已归档另一个未归档』的发布态」 |
+| **P0-2** | 两份 MODIFIED 的 delta 被放到**实施期** ⇒ ⇒ 但 OpenSpec delta **必须在提案期写** | ✅ **落点改回 R13.2c**（提案期写 delta · 值用 ADR-069 已推导的 4 拍）⇒ ⇒ R14.5 降为「核对 spec 与实现一致 + 归档合并成功」⇒ ⇒ 判据从 `validate --specs`（错对象）改为「归档后主 spec `grep -c "实测 4 拍"` == 1」 |
+| **P0-3** | ADR-069 **V12 指向 `tests/chlib/test_hazard_complete.cpp`** —— 该文件**不存在**（B0 C5+C6 已退役）⇒ ⇒ **判据不可满足** | ✅ **architect 域已修**（ADR-069 V12 加 **2026-11-12 订正**）：落点改为「**新建** `HazardUnit` 组件级停顿链真值表用例」+ 明确「`test_phase4_integration.cpp` 当前**只有实例化 smoke** ⇒ ⇒ 禁只断言能实例化」 |
+| **P0-4** | ADR-068 **V8**（`non_retired == 21` 不变）与 ADR-069 **§3.2-②**（`non_retired` 随之变）**互斥** | ✅ **architect 域已归一**（ADR-068 §5.5 补行）：**退休数 178 不变**（指令数）· **`non_retired` 由 ADR-069 决定**（V8 该半被收窄 · 原文逐字保留）⇒ ⇒ R14.6 / R15.4 已改为引用「B3 后的基线」· **禁**写死 21 |
+| **P0-5** | L1–L6 的位置：批次表「本项先做」vs 草案「依赖 memory-timing」**方向相反** | ✅ **裁决（L1–L2 先行 · L3–L6 随后 · T1 与 L1–L2 同 commit 不可拆）** ⇒ ⇒ R14.4 已写明依据 |
+| **P1-1 / P1-6 / P1-7** | R13 缺 capability 名 / AC 作用域混用 / 缺反向映射 | ✅ R13.2（作用域分家）+ **R13.2b**（capability 清单 4 项 · 含 `firmware-load-chain` 的 ADDED-or-并入裁定）+ **R13.2c**（delta 落点） |
+| **P1-2** | `verify_openspec_delta.sh` 在**零 active change** 时 exit 0 ⇒ ⇒ **零判别力的绿** | ✅ **R13.6**（另跑 `openspec validate <change>` + SHALL/MUST + Purpose 非占位符） |
+| **P1-3 / P1-4** | R12 的判据大面积**负向单边**（删掉整行即绿）/ 字面串存在性（写标记即绿） | ✅ **§6 已重写** ⇒ ⇒ ①③④⑦⑨⑫ 各加**正向锚** ⇒ ⇒ ⑩⑪ 各加**内容锚**（`ADR-069` / `禁沿用 3`） |
+| **P1-8** | ADR-068 **V7**（`data_ready` 恒 1 · 不是握手）与 B3 草案 T3 的三条「真反压」AC **互斥** | ✅ **architect 域已裁决（V7 胜出）**（ADR-068 §5.5 补行）⇒ ⇒ **planner 域已改草案**：T3 三条降级为**登记型**判据 + 原三条**逐字保留**为历史记录 ⇒ ⇒ R13.3 的 design pins 补第 ⑥ 条 |
+| **P1-9** | `ctest -N` 只**列出**条目 ⇒ ⇒ 「全绿」是错的 | ✅ §3 的 B2 出口改为「`ctest -LE perf --output-on-failure` 全绿 **且** `CTEST_TOTAL` == `ctest -N`」 |
+| **P1-10** | R15.4 的判据**循环**（「批内顺序被 tasks 钉死」不是判据） | ✅ 改为「**G3 的实现 commit 早于 G1+G4 的实现 commit**（`git log` 可验）」 |
+| **P1-12** | 护栏清单「12 个」含**重复**且与「14 护栏」口径打架 | ✅ §8.5 加**口径说明**（**11 脚本 + 1 `ctest -N`**）+ §3 的 B2 出口同步 |
+| **P1-13** | （与 P1-9 同源）| ✅ 同上 |
+| **P1-14** | R16「8 条」实为 **9 行 + id=22 = 10**；且写点不可笼统写「`src/hierarchy_*`」 | ✅ R16 改为 **10 条** + 逐项写点 + 明确**端口名消化项与 B3 同区 ⇒ 不可并行** |
+| **P2-15** | 用户 ⑤ 的诉求**触发条件已成立** ⇒ ⇒ 不该等一个不会来的许可 | ✅ **新增 R17**（需用户二选一：「现在做」vs「推到 phase-7」） |
+| **P2-16** | 文件内陈旧数字（§0 编号 / §1.1 资源数 / §1.1 锚点数 / §5 的 R5 预算） | ✅ 全部订正 |
+| **P2-17** | §3.0 与 §8.6 两份负面约束重叠 | ⚠️ **未处置**（见 §7.0.1 backlog-1） |
+| **P2-18** | 「R12 已执行」只存在于**未提交的 working tree** ⇒ ⇒ 判据只看工作区 ⇒ ⇒ 一次 `checkout` 就变回未执行而判据仍绿 | ✅ R12 行改为「**完成态 = 已提交**（提交后回填 `commit <sha>`）」 |
+| **P2-19** | （metis 的权限说明）部分 `shell` 被拒 ⇒ ⇒ 「`ctest -N` = 263」「12 护栏全绿」「`verify_openspec_delta.sh` 绿」**未经 metis 亲跑** | ✅ **已由本会话代跑**（12 护栏全 exit 0 · `ctest -N` = 263 · `verify_openspec_delta.sh` = 0） |
+
+#### 7.0.1 🟡 **未处置的 2 条（backlog · 不静默丢弃）**
+
+| # | finding | 为何本轮不做 | 触发条件 |
+|---|---|---|---|
+| **backlog-1** | **§3.0 与 §8.6 两份负面约束重叠**（emit_hygiene 默认 off / 禁未批缩面 / `git add -A`）⇒ ⇒ 两份载体必然漂移 | ⚠️ 合并会**改动 §8.6 的既有引用面**（多个文档引它）⇒ ⇒ 超出本轮「刷新清单」的范围 ⇒ ⇒ **本轮只登记** | 下次改动 §3.0 或 §8.6 时二选一合并（**建议** §8.6 改成 §3.0 的指针） |
+| **backlog-2** | **「禁写死数字」只对 `CTEST_TOTAL` 执行**，而文件里写死了 `178` / `21` / `6→8` / `24` / `28/28` / `39/39` / `74` | ⚠️ 全局改写会**放大本轮 diff** ⇒ ⇒ 且 `74` 是**实测快照**（§8.3 已标「真相 = 各草案的 `## Acceptance` 段」）⇒ ⇒ **本轮只登记** | 与 backlog-1 合并处理 |
 
 ### 7.1 metis 提的**顺手修**（已在同一批落地）
 
@@ -319,15 +480,20 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 | 测试**计数** | 根 `AGENTS.md` 的 CI 锚点（263 / 76 / 65 / 284 / 17） | ⚠️ 派生表是**历史快照**，不参与判定 |
 | 端口命名**规则** | capability `rtl-hierarchical-output` | guard capability **MUST NOT** 复述 |
 
-### 8.3 未完成 work item 的**逐条索引**（共 **70** 条 · 全部带 `归属`）
+### 8.3 未完成 work item 的**逐条索引**（共 **74** 条 · 全部带 `归属`）
+
+> ⚠️ **计数口径 = 「行首 + `<br>` 内联」双计**（`rtl-track-correction-list-2026-11.md:152`）⇒ ⇒ **禁**按行首单计。
+> ⚠️ **本表是快照** ⇒ ⇒ **真相 = 各草案的 `## Acceptance` 段** ⇒ ⇒ **禁**按本表数字反推勾选状态。
 
 | 批次 | 草案 | 未勾 AC 数 | AC 段位置 |
 |---|---|---:|---|
 | **B3** | `memory-timing-contract-2026-11` | **17** | `## Acceptance`（T1–T5 + T2′ + T6 + 不回归） |
 | **B3** | `firmware-load-chain-2026-11` | **18** | `## Acceptance`（L1–L6 + 不回归） |
 | **B4** | `rv32i-dead-component-consolidation-2026-11` | **10** | 差分段（4）+ 接入段（6）⇒ ⇒ **C1–C4** |
-| **B4** | `rv32i-isa-gap-closure-2026-11` | **22** | `## Acceptance`（G1–G5 + 边界 + 不回归） |
+| **B4** | `rv32i-isa-gap-closure-2026-11` | **22** | `## Acceptance`（G1–G5 + 边界 + 不回归）⚠️ **22 = 行首 18 + `<br>` 内联 4**（只按行 grep 会漏） |
 | **独立立项** | `port-naming-ratchet-2026-11` | **3** | 存量消化（2 · §4「N2 补遗」）+ `CHERROR` 判别力（1 · §4「N3 补遗」） |
+| **独立立项** | `port-name-literal-parity-2026-11` | **2** | 产物层双测试（`NamedRootArtifactsUnchanged` + `UnnamedRootArtifactPinned`）· 触发条件 = route (c) 重开 |
+| **独立立项** | `node-name-prefix-consistency-2026-11` | **2** | 产物层双测试（同上两标识符）· 触发条件 = route (c) 重开 |
 
 ⇒ ⇒ ⚠️ **B3 必须先于 B4**（否则时序金标算两遍）⇒ ⇒ 理由与依赖链见批次表 §2 的硬约束。
 
@@ -335,12 +501,14 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 
 | 门 | 任务 | 归属 | 当前态 |
 |---|---|---|---|
-| **门 1** | **R5** = T2 裁决（MEM 数据对齐 A/B）⇒ ⇒ 载体 = **新立 ADR-069** | architect | ⬜ **未做**（ADR-068 **已 Accepted** ⇒ 只差 T2 的 A/B 选型） |
-| **门 2** | **R6** = 公开面前置门（`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各一行） | planner | ⬜ **未做** ⇒ ⇒ **登记未做 ⇒ B3 不得开工** |
+| **门 1** | **R5** = T2 裁决（MEM 数据对齐）⇒ ⇒ 载体 = **ADR-069** | architect | ✅ **已闭**（**Accepted · 2026-11-12** · 决策 = **A0** · oracle ×3 + critic ×1 · 审稿记录 `.rddf/reviews/ADR-069-mem-data-alignment.md`） |
+| **门 2** | **R6** = 公开面前置门（`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各一行） | planner | ✅ **已闭**（2026-11-12 · 各一行 · **前置登记 = 预告 + 迁移指引**，非「已发布」） |
+
+⇒ ⇒ ✅ **两道门已全闭** ⇒ ⇒ **B3 的真起点 = R13（立项）** ⇒ ⇒ ⚠️ **不再欠文档门**（ADR-047 的 dated addendum 已于 2026-11-12 晚补齐 ⇒ ⇒ 两份 spec 的 MODIFIED 已重分类为 **R14 内**的 change 步骤）。
 
 ⇒ ⇒ 判据见 §2 的 **R5** / **R6** 段。
 
-### 8.5 开工前的**护栏清单**（10 个 · 全绿才算干净起点）
+### 8.5 开工前的**护栏清单**（12 个 · 全绿才算干净起点）
 
 ```bash
 bash scripts/verify_agents_size.sh            # 根 AGENTS.md 体积
@@ -353,7 +521,14 @@ bash scripts/verify_flat_rtl_emit.sh         # 扁平产物护栏 F1–F8
 bash scripts/verify_port_naming.sh           # 端口命名棘轮
 bash scripts/verify_examples_rtl_sim.sh      # examples 独立 RTL 仿真
 bash scripts/verify_hierarchical_rtl.sh      # 层次化产物 R1–R8
+bash scripts/verify_dual_backend_parity.sh   # 双后端 parity 锚点（★2 硬约束）
 (cd build && ctest -N | tail -1)             # Total Tests: 263
+
+# ⚠️ **口径（metis P1-12）**：上列 = **11 个脚本 + 1 条 `ctest -N`** ⇒ ⇒ 「12 个护栏」指这 12 条
+#    ⇒ ⇒ ⚠️ **`verify_ledger_evidence.sh` 只在 §6 列一次**（不再重复）⇒ ⇒ **禁**把两份清单相加当「14 个」
+# ⇒ ⇒ ⚠️ **B3/B4 还会动这两片** ⇒ ⇒ 实施期 MUST 一并跑：
+#      bash scripts/verify_assertion_quality_fixtures.sh
+#      bash scripts/verify_arch_ledger_residuals.sh --self-test
 ```
 
 ⇒ ⇒ **全部在 2026-11-12 实测 exit 0** ⇒ ⇒ 下一个会话**若某条转红**，先查是不是上一会话引入的。
