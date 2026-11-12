@@ -500,4 +500,60 @@ axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的�
 
 ## riscv-mini-rv32i-soc {#riscv-mini-rv32i-soc}
 
-（`pending` · `kind=dut` —— smoke 口径：复位 pc / 首条指令取到 / `minitest` retire 数 / `sw` 落到 tohost）
+> `kind=dut`（**不是** `CH_TRACKED_EXAMPLE_TARGETS` 的条目 ⇒ 单列）
+
+### ⚠️ **与原清单的口径差异（重要）**
+
+清单原写「`minitest` retire 数 / `sw` 落到 tohost」⇒ ⇒ 那要求外部 TB 装载 minitest 固件
+⇒ ⇒ 期望值将依赖**仓内那个金标**（178 条退休）⇒ ⇒ **B3 的 T5 明确要重算该金标**
+⇒ ⇒ 硬判它**必然在 B3 落地时转红**。
+
+⇒ ⇒ **本 TB 改为：TB 装载自己的小程序**（经顶层的 `prog_we`/`prog_addr`/`prog_data` 装载口）
+⇒ ⇒ 期望值**完全由 ISA 语义手推** ⇒ ⇒ **不依赖任何仓内金标** ⇒ ⇒ B3 改金标时不会红。
+⇒ ⇒ 「retire 数」因此只判「单调递增且 > 0」（impl-contract），**不锁死具体值**。
+
+### 小程序（7 个字 · 编码**手推**）
+
+| 字 | 指令 | 编码 | 编码推导 |
+|---|---|---|---|
+| 0 | `addi x1, x0, 42` | `0x02A00093` | imm[11:0]=0x02A · rs1=0 · funct3=000 · rd=1 · opcode=0010011 |
+| 1 | `nop` | `0x00000013` | 等 x1 写回（本流水线**无数据前推**） |
+| 2 | `addi x2, x0, 11` | `0x00B00113` | imm=0x00B · rs1=0 · funct3=000 · rd=2 · opcode=0010011 |
+| 3 | `nop` | `0x00000013` | 等 x2 写回 |
+| 4 | `add x3, x1, x2` | `0x002081B3` | funct7=0 · rs2=2 · rs1=1 · funct3=000 · rd=3 · opcode=0110011 ⇒ **x3 = 42+11 = 53** |
+| 5 | `sw x3, 0(x0)` | `0x00302023` | imm[11:5]=0 · rs2=3 · rs1=0 · funct3=010 · imm[4:0]=0 · opcode=0100011 ⇒ 写 **53** 到**字节地址 0** |
+| 6 | `jal x0, 0` | `0x0000006F` | 自环（停机） |
+
+⇒ ⇒ 编码口径与仓内 `rv32i-isa-semantics` capability 的样例交叉核对过
+（该 capability 给出 `addi x21, x0, -8` = `0xFF800A93` ⇒ 同一套编码规则）✓
+
+### 判据
+
+| 判据 | 级别 | 期望 |
+|---|---|---|
+| 复位后第一次取指的 `dbg_id_pc` | spec-derived | **0x80000000**（`stages/if_stage.h:71` 的 `pc_reg` 复位值；I-TCM 从**字 0** 取指） |
+| 程序里**每个**字都被取到（7 个） | spec-derived | 全部出现 |
+| 取指 pc 按 **+4** 递增（前 6 段） | spec-derived | +4（第 7 个字是 `jal` ⇒ 会跳转 ⇒ 不判） |
+| 写回 **x1 = 42** / **x2 = 11** / **x3 = 53**（rd 与数据各判） | spec-derived | ISA 语义手推 |
+| 写存储：**数据 = 53** 且**地址 = 0** | spec-derived | `sw x3, 0(x0)` ⇒ 地址 = x0+0 = 0 |
+| 退休计数单调递增 且 > 0 | **impl-contract** | **不锁死具体值**（见上「口径差异」） |
+
+### ⚠️ 发现 **D8**：`ext_clk` 是**死端口**
+
+顶层头文件写着 `pipeline.io().clk <<= io().ext_clk;` ⇒ ⇒ 但产物里
+**所有**流水线寄存器都锁在框架 `default_clock`（`always_ff @(posedge default_clock …)`），
+而流水线的 `clk` 端口**被赋值但无消费者**（产物中 `top_pipeline__unnamed_input_1` 只有赋值、无使用）
+⇒ ⇒ ⇒ **`ext_clk` 对行为零影响** ⇒ ⇒ ⇒ 用户以为「SoC 由 `ext_clk` 驱动」，实际是 `default_clock`。
+
+⇒ ⇒ 这是 E3 这类「按名字驱动外部端口」的覆盖**才能暴露**的问题
+⇒ ⇒ 已登记为发现（见 `.rddf/checks/decision-request-rv32i-ext-clock-dead-port-2026-11.md`）。
+
+### 变异自证（对 DUT 变异 ⇒ TB MUST 转红）
+
+| 变异 | 期望 | 实测 |
+|---|---|---|
+| M1：`pc_reg` 复位值 0x80000000 → 0 | 转红 | ✅ `fails=1` |
+| M2：`dbg_id_valid` 恒 0 | 转红 | ✅ `fails=8` |
+| M3：`obs_data_write_en` 恒 0 | 转红 | ✅ `fails=1` |
+| M4：退休计数恒 0 | 转红 | ✅ `fails=1` |
+| M5：**装载口数据恒 0**（程序全 0） | 转红 | ✅ `fails=14` |
