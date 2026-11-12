@@ -229,7 +229,7 @@ MEM 级 MUST 决定**何时把数据采进 MEM/WB** ⇒ ⇒ 那是 **T2（MEM �
   · ⚠️ **STALE 的操作定义**：**相对基线**的**同身份条目**数据**不同** ⇒ ⇒ 即「本项引入的陈旧」⇒ ⇒ 而非「与本项无关的既有行为」
 - [ ] **V10** ⚠️ **吞吐代价实测**：实施期 MUST 实测「load 密度 × 1 拍」的真实影响并回填 ⇒ ⇒ **禁**把**任何无源估算**当定值写进 capability（⚠️ §3.2-① 的区间已按 oracle 第 2 轮 MEDIUM-2 删除 ⇒ ⇒ 只留公式）⇒ ⇒ 且**禁**沿用第 1 版 ADR 的「所有指令 +1 拍 / −20%」（**已证伪**）
 - [ ] **V11** **ADR-047 的停顿拍数契约已 MODIFIED**（3→4 · `rv32i-data-forwarding`）⇒ ⇒ + `rv32i-commit-path` 的 `load_use_stalls` 基线已订正（6→8）⇒ ⇒ **禁**只改实现不改 spec
-- [ ] **V12** `tests/chlib/test_hazard_complete.cpp` 的真值表已复核（停顿链加一级 ⇒ 该组件内部有改动）
+- [ ] **V12** ⚠️ **2026-11-12 订正（metis 第 1 轮 · P0-3）**：**原写的 `tests/chlib/test_hazard_complete.cpp` **已不存在**（B0 批 C5+C6 退役 `test_hazard_complete_dual`）⇒ ⇒ **该判据按原文不可满足** ⇒ ⇒ **正确落点** = 「**新建** `HazardUnit` 的**组件级停顿链真值表**用例」⇒ ⇒ 载体 = **新建** `tests/chlib/test_hazard_unit_stall.cpp`（或并入现存 `tests/chlib/test_phase4_integration.cpp` —— ⚠️ **它当前只有 `ch_device<HazardUnit>` 的实例化 smoke，无停顿真值表**）⇒ ⇒ 断言 = 「停顿链加一级 ⇒ 组合置位 + **N** 级移位保持 ⇒ **停顿 = 4 拍**」⇒ ⇒ ⚠️ **禁**照抄已退役的路径 ⇒ ⇒ **禁**只断言「能实例化」（那是 smoke ⇒ ⇒ 零判别力）
 - [ ] **V13** 🔴 **distance-2 ALU/jump 生产者 → 消费者**的前推正确（候选 ② 的 A0-② 判别依据）⇒ ⇒ **手推**期望 ⇒ ⇒ 变异：档位 2 源改回 `memwb_*` ⇒ ⇒ **必红**
 - [ ] **V14** 🔴 **distance-3 → 消费者**的前推正确（候选 ② 的 A0-③ 判别依据）⇒ ⇒ 变异：D11 源改回旧 `write_data` ⇒ ⇒ **必红**
 - [ ] **V15** 🔴 **load-distance-2**（load 的数据被 distance-2 的消费者取用）正确 ⇒ ⇒ 变异：load 数据不进 MEM/WB′ 而直接落到旧拍 ⇒ ⇒ **必红**

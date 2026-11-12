@@ -87,6 +87,9 @@ imem(sread 1拍) ──► IF/ID ──► ID/EX ──► EX/MEM ──► MEM/
   档位 `1` 的源选择收在 `chlib::ForwardingMux` **组件内部**（`is_jump`/`jump_result` 端口）；
   mux = **既有组件**（零新增组件）⇒ 数据源叶子 MUST 是流水线寄存器（防组合环）。
 - **保守边界**：档位 `1` **不覆盖 load**（`& !ex_is_load`）⇒ load-use 停顿契约**零回退**。
+  ⚠️ **2026-11-12 dated 注记（ADR-069）**：**「零回退」指的仍是「档位 1 不覆盖 load」这条语义不变**
+  ⇒ ⇒ 但 **load-use 停顿的**拍数**已由 `docs/adr/ADR-069-mem-data-alignment.md` 修订（3 → 4 拍）**
+  ⇒ ⇒ 推导见 `docs/adr/ADR-047-rv32i-data-forwarding.md` §5.5 ⇒ ⇒ **原文逐字保留**（历史语境）。
 - **距离 3**（生产者与消费者相隔 2 条指令）不经前推档位 ⇒ 由**寄存器堆读点的 WB→ID 组合旁路**解决
   （ADR-047 D11）—— ⚠️ 该缺陷**两后端一致地错** ⇒ 双后端 parity **抓不到** ⇒ 靠判别性固件。
 

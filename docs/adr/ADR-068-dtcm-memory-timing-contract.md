@@ -223,6 +223,8 @@ B3 批（`memory-timing-contract`）全部依赖本决策：读口改寄存读�
 > | §D4（沿级 `read-old` / 指令级 `read-new`） | ✅ **不变**（ADR-069 §5 V6/V7 成对钉住） |
 > | §5 的 V1–V10（本 ADR 的验收判据） | ✅ **全部仍然有效**（ADR-069 未改本 ADR 的任何决策） |
 > | 本 ADR 的 **§2.2-R6**（`sread` enable 恒真） | ✅ **适用于 ADR-069 的 M2 新寄存器**（ADR-069 §5 V4 扩面） |
+> | 🔴 **本 ADR 的 V8**（「**功能结果不变**：退休数 **178** · `non_retired == 21` · `kExpectedWritebacks`（24 条）」） | ⚠️ **部分被 ADR-069 收窄** ⇒ ⇒ **「退休数 178」**（指令数）**不变** ✅ · **`non_retired == 21`** **变**（A0 ⇒ ⇒ `EX→WB` 级数 2→3 ⇒ ⇒ 在飞指令数变 ⇒ ⇒ 值由 **ADR-069 §3.2-②** 决定）⇒ ⇒ **`kExpectedWritebacks` 的 24 条**内容**逐条不变**（仅拍号平移 ⇒ ⇒ ADR-069 §5 V9 的 `SHIFT`/`STALE`/`OTHER` 归因）⇒ ⇒ ⚠️ **本 ADR 的 V8 原文逐字保留**（历史语境）⇒ ⇒ **实施期以 ADR-069 的新基线为准** |
+> | 🔴 **本 ADR 的 V7**（`data_ready`：**driver 仍恒 1** · 语义注明「固定 1 拍延迟（不是握手）」· **不测反压**） | ✅ **V7 胜出**（本 ADR Accepted 于 2026-11-11 · **明确**把「驱动 0 ⇒ MEM 冻结」判为**反压实现** ⇒ ⇒ 归「接 cache」独立立项）⇒ ⇒ ⚠️ **B3 草案 T3 的三条「真实反压」AC 是 ADR-068 之前的旧形态** ⇒ ⇒ **MUST 降级/移出本批**（planner 域 · `.rddf/improvements/memory-timing-contract-2026-11.md`）⇒ ⇒ ⚠️ **本 ADR 的 V7 原文逐字保留** |
 >
 > ⇒ ⇒ **两份 ADR 的分工**：本 ADR = **D-TCM 的存储时序契约**（读口 `sread` + 字节道拆分存储）；
 > ADR-069 = **MEM 级的数据对齐**（何时把 `sread` 的数据采进 MEM/WB）⇒ ⇒ **无重叠、无第二份真相**。
