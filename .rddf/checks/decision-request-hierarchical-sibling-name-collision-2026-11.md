@@ -2,7 +2,7 @@
 id: decision-request-hierarchical-sibling-name-collision-2026-11
 日期: 2026-11-12
 提出者: planner（`rtl-track-followup-list-2026-11.md` §2 F7 的登记请求）
-状态: **待 architect 裁决**
+状态: ✅ **已裁决**（architect 2026-11-12 · 三件请求全部裁决 · 机制成立且更大 ⇒ ⇒ 已登记 id=22）
 归属: **architect 域**（`docs/architecture/**` + 残差登记表的**双重登记**面）
 关联:
   - .rddf/checks/rtl-track-followup-list-2026-11.md（§1.3.2 的 Q21 / Q22 · §2 F7）
@@ -85,5 +85,51 @@ id: decision-request-hierarchical-sibling-name-collision-2026-11
 
 | 轮 | 审查者 | 结论 | 处置 |
 |---:|---|---|---|
-| — | **architect** | ⬜ **未跑** | — |
-| — | **总判定** | ⬜ **待裁决** | ⛔ 未裁决 ⇒ ⇒ `port-name-literal-parity` 的 **Q21 / Q22 保持未勾**（归属 = 本请求） |
+| 1 | **architect**（2026-11-12） | ✅ **三件请求全部裁决**（**机制成立** ⇒ ⇒ 比请求里写的**更大**） | 见 §5 ⇒ ⇒ **已登记**（登记表 id=22 + 台账 §7 行 22 · 双向 1:1 护栏 PASS）⇒ ⇒ Q21 / Q22 **可回填** |
+
+---
+
+## 5. architect 裁决（2026-11-12）
+
+### 5.1 请求 ① —— **机制成立**（且比怀疑**更大**）
+
+> **裁决**：**成立**。且真实缺陷面**大于**本请求 §1.2 描述的范围 ⇒ ⇒ **不只是** `inst_of` 漏检。
+
+| # | 裁决要点 | 证据 |
+|---|---|---|
+| ① | **同名实例「可表达」且仓内零机制拒绝/诊断它** | 构造期（`include/module.h:35` `ch_module(const std::string&, ...)` · `src/component.cpp:64-68`）· 装配期（`src/component.cpp:365-381` `add_child`）· 命名拼接（`include/component.h:266-297` `build_hierarchical_name`）· 组件树收集（`src/hierarchy_analysis.cpp:70-76` **只判同指针**）· 分析层索引（`:332`）· 发射层索引（`src/hierarchy_verilog.cpp:238/246/247/1050/1131`）—— **全部无查重** |
+| ② | **覆盖不是一处，而是**同 key 的**七处表**同时 last-wins | `src/hierarchy_verilog.cpp:238` `module_by_key` · `:246` `parent_of` · `:247` `inst_of` · `:1050` `name_of_key` · `:1131` `needs_of` · `src/hierarchy_analysis.cpp:332` `module_index_by_key` · `:451` `parent_of_key` ⇒ ⇒ 根因 = `module_key == Component::name()`（`src/hierarchy_analysis.cpp:275`）⇒ 同名兄弟**必然同 key** |
+| ③ | **真实后果比「漏检双驱动」更严重** | 同 key ⇒ `name_of_key` 先 last-wins ⇒ 两条实例**都指向同一个子 module 名** ⇒ 另一个 module 声明成为**不可达孤儿** ⇒ ⇒ 产物是**合法 Verilog** ⇒ ⇒ **R1 lint 抓不到**（落在 R1 盲区 · 与 `KNOWN LIMITATIONS`「R1–R8 全绿 ≠ 行为正确」同型）⇒ ⇒ `inst_of` 的双驱动漏检只是**末端症状** |
+| ④ | **零覆盖** | `tests/test_hierarchy_verilog.cpp` · `tests/hier_rtl_products.cpp` · `tests/test_hierarchy_friendliness_diagnosis.cpp` 的实例名**互异**；`scripts/verify_hierarchical_rtl.sh` 的 R6 判「module 被重复实例化」而**非**「实例名重复」，且只跑固定 3 个产物 ⇒ ⇒ **无测试 / 无护栏** |
+| ⑤ | **不是被刻意豁免，是「响亮拒绝清单」里的空白格** | `src/hierarchy_analysis.cpp:215-266` 的分析层前置校验 ①②③ 写得很细，**唯独没有**「同父重名实例」⇒ ⇒ 它**不在** `include/hierarchy_verilog.h:130-132` 的前置校验清单里 ⇒ ⇒ 是**遗漏**，不是**取舍** |
+| ⑥ | **键空间本身也未加固**（同型，触发条件更极端） | `src/hierarchy_verilog.cpp:247` / `:784` / `:915` / `:1494` 用 `\x1f` 拼键 ⇒ ⇒ 假设 key 内不含 `0x1F` ⇒ ⇒ 但组件名**不做字符集校验**（`include/hierarchy_verilog.h:1002-1003` 已自陈）⇒ ⇒ `local_name` 含 `0x1F` 也会造成键混淆 |
+
+⇒ ⇒ **裁决**：**登记为待查项**（请求 ②）。
+
+### 5.2 请求 ② —— **已登记**（双向 1:1 PASS）
+
+| 载体 | 落点 |
+|---|---|
+| **残差登记表** | `.rddf/checks/arch-residual-registry.md` **新增 id = 22**（台账 = `docs/architecture/2026-11-02-hierarchical-rtl-output.md` · section = 7 · 状态 = **未决** · 日期 = 2026-11-12 · 复核条件 = 「同父下出现同名实例 ⇒ ⇒ 重开『实例名唯一性』裁决（分析层前置校验新增一条响亮拒绝）」· 归属 = architect） |
+| **架构台账** | `docs/architecture/2026-11-02-hierarchical-rtl-output.md` **§7 新增行 22**（状态格以登记表生成的**规范句**开头：`⚠️ 未决 ⇒ …`）⇒ ⇒ 同步加了「2026-11-12 追加（architect · 缺口登记）」注记 |
+| **护栏** | `bash scripts/verify_arch_ledger_residuals.sh` ⇒ **PASS 残留登记一致性（23 行）** ⇒ ⇒ id=22「命中 = OK」⇒ ⇒ **双向 1:1 成立** |
+
+⇒ ⇒ **本次只登记缺口，零实现改动**（与台账既有惯例一致）。
+
+### 5.3 请求 ③ —— **可回填载体已就位**
+
+| 项 | 载体 |
+|---|---|
+| `port-name-literal-parity` 的 **Q21**（「层次化侧同名兄弟已**登记为待查项**」） | 登记表 **id = 22** + 台账 **§7 行 22** ⇒ ⇒ 该 AC 的要求**已满足** ⇒ ⇒ 可回填为 ✅ |
+| `port-name-literal-parity` 的 **Q22**（「同名兄弟必然 `_N`」+「层次化侧同名兄弟疑静默覆盖」登记进残差登记表） | 前半 = 登记表 **行 21 / 21b**（既有）· 后半 = **id = 22**（本次新增）⇒ ⇒ **两半均已登记** ⇒ ⇒ 可回填为 ✅ |
+
+⇒ ⇒ **回填动作归 planner 域**（`rtl-track-followup-list-2026-11.md` 的 U2 后续）⇒ ⇒ **本文件不代劳**。
+
+### 5.4 裁决**不做**的事（边界）
+
+| # | 不做 | 理由 |
+|---|---|---|
+| 1 | **不**改 `src/**`（七处索引表 / 分析层 / 发射器） | architect 不改实现 ⇒ ⇒ 修复属 builder ⇒ ⇒ **待查项**的「复核条件」已写明重开条件 |
+| 2 | **不**立 ADR 承载本项 | 本项是**实现层的键空间 / 唯一性**缺陷 ⇒ ⇒ 不是架构决策 ⇒ ⇒ **登记 + 留待独立 change** |
+| 3 | **不**新增护栏 | 护栏需要**能构造出同名实例的语料**（目前仓内零）⇒ ⇒ 先归零覆盖的缺口 |
+| 4 | **不**改 `port-name-literal-parity` 的 AC 勾选状态 | 属 planner 域（U2 后续）⇒ ⇒ 见 §5.3 |

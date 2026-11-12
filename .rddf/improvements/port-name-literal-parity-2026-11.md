@@ -195,11 +195,11 @@ A.1⑦ + §A.0 ⇒ ⇒ 「顶层端口」有 T1 / T2 两个集合 ⇒ ⇒ 而用
 - [ ] `.rddf/checks/decision-request-port-name-literal-parity-2026-11.md` 存在，且含 6 项：① 最小改动集（**精确到 file:line**）② **唯一性论证 + 碰撞检测策略**（三选一）③ 影响面**量化**（**口径 + 数字**）④ 公开面影响清单 ⑤ **「不做」选项 + 代价** ⑥ 裁决者 + 触发条件 ⇒ 🔵 裁决注记: 判据点名的 `decision-request-port-name-literal-parity-2026-11.md` **在磁盘上不存在**；实际裁定经由 oracle 建议 1/2/3 + 用户点头落地 ⇒ ⇒ **交付形态与判据字面不同** ⇒ ⇒ **MUST NOT 补造该文件**（自我盖章） ⇒ 证据: `openspec/changes/archive/2026-11-11-port-naming-member-parity-contract-2026-11/` + `.rddf/checks/arch-residual-registry.md` 行 21
 - [ ] 影响面量化的**枚举源**已写明（枚举哪些设计 / 哪些 golden 文件 · 清点命令写进 AC） ⇒ 🔵 裁决注记: 随 route (c) 判「当前不做」而**暂缓**（**不是**未开工 ⇒ ⇒ **不是**独立立项） ⇒ 证据: `.rddf/checks/arch-residual-registry.md` 行 21 / 21b（触发条件）+ `.rddf/checks/decision-request-port-naming-parity-2026-11.md:184`（枚举 / 量化的 visit 文本）
 - [x] ⚠️ **「不实施」的机械判据**：该 change 的 `git diff --stat` **不含 `src/**` 与 `include/**`** ⇒ 证据: 归档 change 目录**只含** `proposal.md` + `specs/`（零 `src/` `include/` 改动）
-- [ ] 同名兄弟在**层次化**侧的后果（A.1⑥ · `hierarchy_verilog.cpp:247` 疑似静默覆盖）已**登记为待查项** ⇒ 归属: **独立立项**（architect 登记请求 `.rddf/checks/decision-request-hierarchical-sibling-name-collision-2026-11.md`） ⇒ ⚠️ **MUST NOT 由 planner 单改残差登记表**（`scripts/verify_arch_ledger_residuals.sh` 双向 1:1 护栏 + `docs/architecture/**` 属 architect 域）
+- [x] 同名兄弟在**层次化**侧的后果（A.1⑥ · `hierarchy_verilog.cpp:247` 疑似静默覆盖）已**登记为待查项** ⇒ 证据: **architect 裁决已登记**（`.rddf/checks/arch-residual-registry.md` **id = 22** + `docs/architecture/2026-11-02-hierarchical-rtl-output.md` **§7 行 22**）⇒ ⇒ 裁决记录 `.rddf/checks/decision-request-hierarchical-sibling-name-collision-2026-11.md` §5.1（**机制成立且更大**：七处索引表 last-wins ⇒ 实例连错 module + module 不可达 ⇒ **合法 Verilog ⇒ R1 lint 盲区** + 双驱动漏检 ⇒ 零覆盖）⇒ ⇒ 护栏 `scripts/verify_arch_ledger_residuals.sh` PASS（23 行 · id=22 命中 = OK）
 
 ### 残差登记
 
-- [ ] 「同名兄弟 ⇒ 当前政策下必然 `_N`（切 `kRejectDuplicates` 后变为抛异常）」+「层次化侧同名兄弟疑静默覆盖」登记进 `.rddf/checks/arch-residual-registry.md`；`bash scripts/verify_arch_ledger_residuals.sh` 绿 ⇒ 归属: **独立立项**（architect 登记请求 `.rddf/checks/decision-request-hierarchical-sibling-name-collision-2026-11.md`） ⇒ ⚠️ **半条满足**（前半「同名兄弟 ⇒ 必然 `_N`」+ route (c) 触发条件 = `.rddf/checks/arch-residual-registry.md` 行 21 / 21b ✅ · 后半「层次化侧同名兄弟疑静默覆盖」**未登记**）
+- [x] 「同名兄弟 ⇒ 当前政策下必然 `_N`（切 `kRejectDuplicates` 后变为抛异常）」+「层次化侧同名兄弟疑静默覆盖」登记进 `.rddf/checks/arch-residual-registry.md`；`bash scripts/verify_arch_ledger_residuals.sh` 绿 ⇒ 证据: **两半均已登记** —— 前半（route (c) 当前不做 + 触发条件 + 根端口裸名目标钉）= `.rddf/checks/arch-residual-registry.md` **行 21 / 21b** ✅ · 后半（层次化侧同名兄弟疑静默覆盖）= **行 id = 22**（**2026-11-12** 新增 · architect 裁决）✅ ⇒ ⇒ 护栏 `scripts/verify_arch_ledger_residuals.sh` PASS（双向 1:1 · 23 行）
 
 ### 不回归
 
