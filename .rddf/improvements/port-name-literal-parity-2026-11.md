@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: feature
 状态: implemented
-进度: P1 探针固化 / P2 契约化（change `port-naming-member-parity-contract-2026-11` 已归档）/ P3 裁定包（`.rddf/checks/decision-request-port-naming-parity-2026-11.md`）均已落 · P4 **条件化未触发**（route (c) 当前不做 · 触发条件见残差登记行 21/21b）
+进度: P1 探针固化 / P2 契约化（change `port-naming-member-parity-contract-2026-11` 已归档）均已落 · ⚠️ **P3 裁定「已发生」但交付形态与 AC 字面不同**（实际走 oracle 建议 1/2/3 + 用户点头 · 判据点名的 `decision-request-port-name-literal-parity-2026-11.md` **未产出**）⇒ ⇒ 见本文件 `## Acceptance` 的 Q18/Q19 裁决注记 · P4 **条件化未触发**（route (c) 当前不做 · 触发条件 = `.rddf/checks/arch-residual-registry.md` 行 21/21b）
 主题: Verilog codegen 完整化
 依赖: port-naming-ratchet-2026-11（命名规则 + N5 第 1 步 manifest 双字段）· rtl-emit-product-tooling-2026-11（manifest schema · is_top_io）· component-ownership-and-naming（节点名构造的规范所有者）· public-api-remove-visibility-2026-11（公开面登记机制）
 来源: 用户 2026-11-10 拍板「⑤ 生成的 RTL 顶层端口，希望保持和 C++ 侧一样的命名」+ planner 三探针实测（2026-11-10）+ metis 第 1 轮 gap 分析
@@ -17,7 +17,7 @@ evidence: test:tests/test_port_name_parity.cpp
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: ✅ **implemented**（P1 / P2 已落地 · 2026-11-11）⇒ ⇒ ⚠️ **P3 的交付形态与 AC 字面不同**（裁定实际走 oracle 建议 1/2/3 + 用户点头 · 判据点名的文件**未产出**）⇒ ⇒ **P4 条件化未触发**（route (c) 当前不做 · 触发条件 = `.rddf/checks/arch-residual-registry.md` 行 21/21b）⇒ ⇒ 未纳入本轮的增量 = **2 条待登记**（层次化侧同名兄弟）⇒ ⇒ 已登记 `.rddf/checks/rtl-track-followup-list-2026-11.md` §1.3.2 的 Q21/Q22 + 登记请求 `.rddf/checks/decision-request-hierarchical-sibling-name-collision-2026-11.md`
 - **来源**：`port-naming-ratchet-2026-11.md` 的 **N5 第 2 步（路线 (c)）** ⇒ ⇒ 该步被明文要求「**独立立项**」⇒ ⇒ 本文件即该立项
 - ⚠️ **与 N5 第 2 步的关系**：本项**不是**「把 N5 第 2 步做完」，而是「**先测出可行边界，再决定做不做**」⇒ ⇒ 实测 + metis 复核**共同收窄**了 N5 第 2 步的收益（见 §A.3）
 - **归属**：**端口选择语义**归 `rtl-emit-product-tooling-2026-11` · **产物端口命名规则**归 `rtl-hierarchical-output` · **节点 / 实例命名的构造**归 `component-ownership-and-naming` ⇒ ⇒ 本项只管「**字面同名的成立条件**」这一条契约
@@ -169,44 +169,44 @@ A.1⑦ + §A.0 ⇒ ⇒ 「顶层端口」有 T1 / T2 两个集合 ⇒ ⇒ 而用
 
 ### 探针固化（P1）
 
-- [ ] `tests/test_port_name_parity.cpp` 存在且注册进 CTest；`bash scripts/verify_test_counts.sh` 绿
-- [ ] `Ratchet*` ①：`__io` 内具名构造 ⇒ 节点名 `top.prog_addr` 且 Verilog 名 `top_prog_addr`
-- [ ] `Ratchet*` ②：根实例名置空 ⇒ 节点名 `unnamed.prog_addr`（**不是** `prog_addr`）
-- [ ] `Ratchet*` ③：同名兄弟 ⇒ 端口名含 `top_dup_prog_addr` 与 `top_dup_prog_addr_1`
-- [ ] `Device*` ④：`ch::ch_device<T>` 路径 ⇒ 与 ① 的直接构造**等价**（覆盖 `include/device.h:28` 的**真实交付路径**）
-- [ ] 退化用例 ⑥：根无名 + 无端口 ⇒ 不崩且命名表为空
-- [ ] 🔴 **oracle 建议 3 硬要求 ①**：①④ MUST **断言发射出的 module 文本**（`ch::verilogwriter` + `print(ostream)`）⇒ ⇒ 样板见 `tests/test_verilog_arith.cpp:29-34` / `tests/test_verilog_gen.cpp:66-72` ⇒ ⇒ **命名层与产物层各有自己的变异**
-- [ ] 🔴 **oracle 建议 3 硬要求 ②**：三条 `Ratchet*` **各有正向变异**（① 改匿名 / ② 改 fallback / ③ 强制 counter 恒 0）⇒ ⇒ **必须转红** ⇒ ⇒ 还原后**重建该 target** 再跑 ⇒ ⇒ **必须复绿**（根 `AGENTS.md` COMMANDS 段「还原源码 ≠ 复原」⇒ ⇒ 禁「删断言」式假变异）
-- [ ] fixture **只含本用例所需节点**（exact-string 断言的顺序敏感性已在用例注释中登记）
-- [ ] **零产物变更**：既有 `.v` golden 与 `scripts/verify_hierarchical_rtl.sh` 全绿且产物**逐字节不变**
-- [ ] ⚠️ **⑤（目标钉）不进测试文件** ⇒ ⇒ 改登记进 `.rddf/checks/arch-residual-registry.md`（含解除条件 + 触发条件）⇒ ⇒ **登记表与台账 §7 MUST 同批**（双向 1:1）⇒ ⇒ `bash scripts/verify_arch_ledger_residuals.sh` 绿
+- [x] `tests/test_port_name_parity.cpp` 存在且注册进 CTest；`bash scripts/verify_test_counts.sh` 绿 ⇒ 证据: `tests/test_port_name_parity.cpp`（5 个 `TEST_CASE`）+ `scripts/verify_test_counts.sh` exit 0
+- [x] `Ratchet*` ①：`__io` 内具名构造 ⇒ 节点名 `top.prog_addr` 且 Verilog 名 `top_prog_addr` ⇒ 证据: `tests/test_port_name_parity.cpp`（Ratchet ①）
+- [x] `Ratchet*` ②：根实例名置空 ⇒ 节点名 `unnamed.prog_addr`（**不是** `prog_addr`） ⇒ 证据: `tests/test_port_name_parity.cpp`（Ratchet ②）
+- [x] `Ratchet*` ③：同名兄弟 ⇒ 端口名含 `top_dup_prog_addr` 与 `top_dup_prog_addr_1` ⇒ 证据: `tests/test_port_name_parity.cpp`（Ratchet ③）
+- [x] `Device*` ④：`ch::ch_device<T>` 路径 ⇒ 与 ① 的直接构造**等价**（覆盖 `include/device.h:28` 的**真实交付路径**） ⇒ 证据: `tests/test_port_name_parity.cpp`（Device ④）
+- [x] 退化用例 ⑥：根无名 + 无端口 ⇒ 不崩且命名表为空 ⇒ 证据: `tests/test_port_name_parity.cpp`（退化用例 ⑥）
+- [x] 🔴 **oracle 建议 3 硬要求 ①**：①④ MUST **断言发射出的 module 文本**（`ch::verilogwriter` + `print(ostream)`）⇒ ⇒ 样板见 `tests/test_verilog_arith.cpp:29-34` / `tests/test_verilog_gen.cpp:66-72` ⇒ ⇒ **命名层与产物层各有自己的变异** ⇒ 证据: 共享 helper `emit_module_text`（`tests/test_port_name_parity.cpp:93-98`）
+- [x] 🔴 **oracle 建议 3 硬要求 ②**：三条 `Ratchet*` **各有正向变异**（① 改匿名 / ② 改 fallback / ③ 强制 counter 恒 0）⇒ ⇒ **必须转红** ⇒ ⇒ 还原后**重建该 target** 再跑 ⇒ ⇒ **必须复绿**（根 `AGENTS.md` COMMANDS 段「还原源码 ≠ 复原」⇒ ⇒ 禁「删断言」式假变异） ⇒ 证据: `.rddf/reviews/b1-batch-verify-2026-11.md`（M1/M2/M3 变异自证）
+- [x] fixture **只含本用例所需节点**（exact-string 断言的顺序敏感性已在用例注释中登记） ⇒ 证据: `.rddf/reviews/b1-batch-verify-2026-11.md`（fixture 注释已登记顺序敏感性）
+- [x] **零产物变更**：既有 `.v` golden 与 `scripts/verify_hierarchical_rtl.sh` 全绿且产物**逐字节不变** ⇒ 证据: `scripts/verify_hierarchical_rtl.sh` exit 0 · 产物逐字节不变
+- [x] ⚠️ **⑤（目标钉）不进测试文件** ⇒ ⇒ 改登记进 `.rddf/checks/arch-residual-registry.md`（含解除条件 + 触发条件）⇒ ⇒ **登记表与台账 §7 MUST 同批**（双向 1:1）⇒ ⇒ `bash scripts/verify_arch_ledger_residuals.sh` 绿 ⇒ 证据: `.rddf/checks/arch-residual-registry.md` 行 21 / 21b（含解除条件 + 触发条件）
 
 ### 契约化（P2）
 
-- [ ] `rtl-hierarchical-output` 与 `component-ownership-and-naming` **各**追加 Requirement（**两份 · 各司其职** ⇒ ⇒ **不新立 capability**）
-- [ ] 🔴 **oracle 建议 2 的集合口径**：① `rtl-hierarchical-output` 的 **MUST 覆盖 T1**（顶层 module 端口表**全体**）· **字面同名写成 SHOULD 且限定 T2**（`is_top_io == true`）· **不可能条件写成 MUST NOT** ⇒ ⇒ **禁**写「MUST 字面相同」
-- [ ] 契约里**无**「MUST 字面相同」这类**当前不可满足**条款（自检：每条 MUST 有**可构造的违反样例**）
-- [ ] ⚠️ **只引用 `rtl-emit-portability` 的字段语义**（`cpp_member` / `is_top_io` / `owner` / `driven` / `effective`）⇒ ⇒ **MUST NOT** 在两份 spec 里重定义（否则又造一份 schema 副本）
-- [ ] `bash scripts/verify_openspec_delta.sh` 绿；`openspec validate --specs`（**非 strict**）**不新增**红项
-- [ ] `hierarchical-port-naming-guard` **MUST NOT** 复述命名规则（沿用既有裁定）
+- [x] `rtl-hierarchical-output` 与 `component-ownership-and-naming` **各**追加 Requirement（**两份 · 各司其职** ⇒ ⇒ **不新立 capability**） ⇒ 证据: `openspec/specs/rtl-hierarchical-output/spec.md:608` + `openspec/specs/component-ownership-and-naming/spec.md` + 归档 change `openspec/changes/archive/2026-11-11-port-naming-member-parity-contract-2026-11/`
+- [x] 🔴 **oracle 建议 2 的集合口径**：① `rtl-hierarchical-output` 的 **MUST 覆盖 T1**（顶层 module 端口表**全体**）· **字面同名写成 SHOULD 且限定 T2**（`is_top_io == true`）· **不可能条件写成 MUST NOT** ⇒ ⇒ **禁**写「MUST 字面相同」 ⇒ 证据: `openspec/specs/rtl-hierarchical-output/spec.md:608` + `openspec/specs/component-ownership-and-naming/spec.md`（两份主 spec 的 Requirement 条款正文）
+- [x] 契约里**无**「MUST 字面相同」这类**当前不可满足**条款（自检：每条 MUST 有**可构造的违反样例**） ⇒ 证据: `openspec/specs/rtl-hierarchical-output/spec.md:608` + `openspec/specs/component-ownership-and-naming/spec.md`（自检：每条 MUST 有可构造违反样例）
+- [x] ⚠️ **只引用 `rtl-emit-portability` 的字段语义**（`cpp_member` / `is_top_io` / `owner` / `driven` / `effective`）⇒ ⇒ **MUST NOT** 在两份 spec 里重定义（否则又造一份 schema 副本） ⇒ 证据: `openspec/specs/rtl-emit-portability`（字段语义引用 · 未重定义）
+- [x] `bash scripts/verify_openspec_delta.sh` 绿；`openspec validate --specs`（**非 strict**）**不新增**红项 ⇒ 证据: `scripts/verify_openspec_delta.sh` exit 0
+- [x] `hierarchical-port-naming-guard` **MUST NOT** 复述命名规则（沿用既有裁定） ⇒ 证据: `openspec/specs/hierarchical-port-naming-guard/spec.md`（沿用既有裁定 · 未复述规则）
 
 ### 裁定包（P3）
 
-- [ ] `.rddf/checks/decision-request-port-name-literal-parity-2026-11.md` 存在，且含 6 项：① 最小改动集（**精确到 file:line**）② **唯一性论证 + 碰撞检测策略**（三选一）③ 影响面**量化**（**口径 + 数字**）④ 公开面影响清单 ⑤ **「不做」选项 + 代价** ⑥ 裁决者 + 触发条件
-- [ ] 影响面量化的**枚举源**已写明（枚举哪些设计 / 哪些 golden 文件 · 清点命令写进 AC）
-- [ ] ⚠️ **「不实施」的机械判据**：该 change 的 `git diff --stat` **不含 `src/**` 与 `include/**`**
-- [ ] 同名兄弟在**层次化**侧的后果（A.1⑥ · `hierarchy_verilog.cpp:247` 疑似静默覆盖）已**登记为待查项**
+- [ ] `.rddf/checks/decision-request-port-name-literal-parity-2026-11.md` 存在，且含 6 项：① 最小改动集（**精确到 file:line**）② **唯一性论证 + 碰撞检测策略**（三选一）③ 影响面**量化**（**口径 + 数字**）④ 公开面影响清单 ⑤ **「不做」选项 + 代价** ⑥ 裁决者 + 触发条件 ⇒ 🔵 裁决注记: 判据点名的 `decision-request-port-name-literal-parity-2026-11.md` **在磁盘上不存在**；实际裁定经由 oracle 建议 1/2/3 + 用户点头落地 ⇒ ⇒ **交付形态与判据字面不同** ⇒ ⇒ **MUST NOT 补造该文件**（自我盖章） ⇒ 证据: `openspec/changes/archive/2026-11-11-port-naming-member-parity-contract-2026-11/` + `.rddf/checks/arch-residual-registry.md` 行 21
+- [ ] 影响面量化的**枚举源**已写明（枚举哪些设计 / 哪些 golden 文件 · 清点命令写进 AC） ⇒ 🔵 裁决注记: 随 route (c) 判「当前不做」而**暂缓**（**不是**未开工 ⇒ ⇒ **不是**独立立项） ⇒ 证据: `.rddf/checks/arch-residual-registry.md` 行 21 / 21b（触发条件）+ `.rddf/checks/decision-request-port-naming-parity-2026-11.md:184`（枚举 / 量化的 visit 文本）
+- [x] ⚠️ **「不实施」的机械判据**：该 change 的 `git diff --stat` **不含 `src/**` 与 `include/**`** ⇒ 证据: 归档 change 目录**只含** `proposal.md` + `specs/`（零 `src/` `include/` 改动）
+- [ ] 同名兄弟在**层次化**侧的后果（A.1⑥ · `hierarchy_verilog.cpp:247` 疑似静默覆盖）已**登记为待查项** ⇒ 归属: **独立立项**（architect 登记请求 `.rddf/checks/decision-request-hierarchical-sibling-name-collision-2026-11.md`） ⇒ ⚠️ **MUST NOT 由 planner 单改残差登记表**（`scripts/verify_arch_ledger_residuals.sh` 双向 1:1 护栏 + `docs/architecture/**` 属 architect 域）
 
 ### 残差登记
 
-- [ ] 「同名兄弟 ⇒ 当前政策下必然 `_N`（切 `kRejectDuplicates` 后变为抛异常）」+「层次化侧同名兄弟疑静默覆盖」登记进 `.rddf/checks/arch-residual-registry.md`；`bash scripts/verify_arch_ledger_residuals.sh` 绿
+- [ ] 「同名兄弟 ⇒ 当前政策下必然 `_N`（切 `kRejectDuplicates` 后变为抛异常）」+「层次化侧同名兄弟疑静默覆盖」登记进 `.rddf/checks/arch-residual-registry.md`；`bash scripts/verify_arch_ledger_residuals.sh` 绿 ⇒ 归属: **独立立项**（architect 登记请求 `.rddf/checks/decision-request-hierarchical-sibling-name-collision-2026-11.md`） ⇒ ⚠️ **半条满足**（前半「同名兄弟 ⇒ 必然 `_N`」+ route (c) 触发条件 = `.rddf/checks/arch-residual-registry.md` 行 21 / 21b ✅ · 后半「层次化侧同名兄弟疑静默覆盖」**未登记**）
 
 ### 不回归
 
-- [ ] 既有 ctest 全绿；`CTEST_TOTAL` 锚点同步（**+1** ⇒ **禁**写死「257」）
-- [ ] `scripts/verify_hierarchical_rtl.sh` 全绿且产物**逐字节不变**
+- [x] 既有 ctest 全绿；`CTEST_TOTAL` 锚点同步（**+1** ⇒ **禁**写死「257」） ⇒ 证据: `ctest` **263/263** + `scripts/update_test_count_anchors.sh --check` 5/5
+- [x] `scripts/verify_hierarchical_rtl.sh` 全绿且产物**逐字节不变** ⇒ 证据: `scripts/verify_hierarchical_rtl.sh` exit 0 · 产物逐字节不变
   - ⚠️ **口径登记**：该脚本的实际判据集合是 **R1–R9**（含 R1a）⇒ ⇒ 而 `openspec/specs/rtl-hierarchical-output/spec.md:20` 写 **R1–R7**、根 `AGENTS.md:304` 写 **R1–R8** ⇒ ⇒ **三处口径漂移** ⇒ ⇒ **本项不修**（超出范围）⇒ ⇒ 登记为残差
-- [ ] 既有 7 份 improvement 草案**零改动**（除 P5 的一行回填）
+- [x] 既有 7 份 improvement 草案**零改动**（除 P5 的一行回填） ⇒ 证据: 本轮（U1–U4）未改动这 7 份（`git diff --stat .rddf/improvements/` 无新增）
 
 ---
 

@@ -17,7 +17,7 @@ evidence: probe:include/cpu/pipeline/rv32i_alu.h
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: 🟡 **in-progress**（**B0 已验收 5 项**：⑧ SLTU · C5+C6 退役 · C7 交接登记 · C8 tie-off · 诚实化）⇒ ⇒ **C1–C4（差分 / 编码归一 / 组件接入）未开工 ⇒ 归 B4**
 - **用户裁决（2026-11-10）**: 「#6 按你建议」⇒ ⇒ **Decoder/Alu 接入**（先差分测试）+ **ForwardingUnit 删除** + **分支预测器单独立项**
 - **⚠️ 事实订正（相对 planner 上一轮的口头表述）**: 这批组件**不是「零消费者」** —— 它们**都有测试消费者** ⇒ ⇒ 问题不是「死代码」，而是「**被测但未被交付**」⇒ ⇒ 详见 §架构依据 A.1
 
@@ -158,46 +158,46 @@ evidence: probe:include/cpu/pipeline/rv32i_alu.h
 
 ### 差分（前置于接入）
 
-- [ ] 🔴 **SLTU 修复 MUST 自带判据**（critic 第 1 轮：原稿「修 SLTU」是**无判据变更**）⇒ 新增 ctest 断言 `execute_alu(0, 0xFFFFFFFF, SLTU) == 1`（现 `grep SLTU test_pipeline_exec.cpp` **只命中常量定义**，零断言）
-- [ ] 🔴 **静默地雷 MUST 同批修**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu` ⇒ ⇒ 归一到 `ex_stage.h` 的编码后 `3` 变 **XOR** ⇒ ⇒ MUST 改为**符号常量**，并全仓扫「以字面量驱动 `alu_op`」的调用点<br>⚠️ **planner 复核订正（2026-11-10）**：原稿把 `0x3` 称作「**老编码**」**不准确** —— `rv32i_alu.h:28` 的 `ALU_SLTU = 3` **正好就是 3**（该测试用的正是 `ch::ch_device<Rv32iAlu>` ⇒ 编码一致）⇒ ⇒ 该字面量**今天是对的** ⇒ ⇒ 真实缺陷是「**字面量复制常量而非引用符号常量**」（漂移风险）+「**SLTU 路径零断言覆盖**」（`grep SLTU test_pipeline_exec.cpp` 只命中定义行）⇒ ⇒ **结论不变**（必须改符号常量），但**风险机理** MUST 写成「归一后编码语义漂移」而非「本来就是老编码」
-- [ ] ⚠️ **metis 订正 —— 主判据换掉**
-- [ ] **差异清单**（人工读码产出）与差分结果**逐条对应**；清单外差异 = 0；清单 MUST 覆盖**修复前**的差异全集（**逐项标注处置**：已修 / 待修 / 不修）—— **基准 = B0 ⑧ SLTU 修复之前的状态** ⇒ ⇒ 已知项（**SLTU 借位**（真缺陷 · 已在 B0 ⑧ 修）· **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · `mem_size`/`mem_signed` 死输出 · `funct7` 双方都不消费）**每项 MUST 有处置标注** ⇒ ⇒ ⚠️ **2026-11-11 · critic 第 3 轮 BLOCKER-5 修复**：原门槛「清单 MUST 至少含 SLTU 借位 · **缺 SLTU 视为清单不合格**」**不可满足** —— B0 ⑧ 已修掉 `rv32i_alu.h:93` 的 SLTU ⇒ ⇒ ⇒ 到 B4 时 SLTU **已不是差异** ⇒ ⇒ ⇒ 改为「覆盖**修复前**差异全集 + 逐项标注处置」⇒ ⇒ **SLTU 仍在清单里**（作为**已修**项标注）⇒ ⇒ ⇒ ⑧ 仍在 B0（用户裁决不动）
-- [ ] 差分用例有**变异自证**（改内联一处 ⇒ 差分必红）
+- [x] 🔴 **SLTU 修复 MUST 自带判据** ⇒ 证据: `tests/test_rv32i_alu.cpp`（**4 用例 / 45 断言** · `execute_alu(0, 0xFFFFFFFF, SLTU) == 1` · 反向 SLT 有符号 · 25 组边界 · 9 项回归）· 已注册 `tests/CMakeLists.txt`
+- [ ] 🔴 **静默地雷 MUST 同批修**：`examples/riscv-mini/tests/test_pipeline_exec.cpp:124` 仍以**字面量 `SLTU = 0x3`** 驱动 `Rv32iAlu` ⇒ ⇒ 该值**今天是对的**（`rv32i_alu.h:28` 的 `ALU_SLTU = 3`）⇒ ⇒ 真实缺陷是「**字面量复制常量而非引用符号常量**」（归一后漂移风险）+「SLTU 路径零断言覆盖」⇒ ⇒ MUST 改为符号常量 + 全仓扫「以字面量驱动 `alu_op`」的调用点 ⇒ 归属: **B4**（随 C2 编码归一同批）
+- [ ] ⚠️ **metis 订正 —— 主判据换掉**：主判据 = **既有手推表**（`tests/test_rv32i_stage_dual.cpp` 的 `kExCases`(28) / `kDecCases`(17) / `ImmConsistency`）在改动后**逐条保持全绿**；新写的差分**降级**为「差异清单的可执行化」，**不得**作为通过条件 ⇒ 归属: **B4**
+- [ ] **差异清单**（人工读码产出）与差分结果**逐条对应**；清单外差异 = 0；清单 MUST 覆盖**修复前**的差异全集（**逐项标注处置**：已修 / 待修 / 不修）—— 已知项（**SLTU 借位**（真缺陷 · **已在 B0 ⑧ 修** ⇒ 标「已修」）· **ADD 33 位宽度** · **`less_than_u` 与 `result` 内部矛盾** · `mem_size`/`mem_signed` 死输出 · `funct7` 双方都不消费）**每项 MUST 有处置标注** ⇒ 归属: **B4**
+- [ ] 差分用例有**变异自证**（改内联一处 ⇒ 差分必红）⇒ 归属: **B4**
 
 ### 接入
 
-- [ ] `ex_stage.h` 的算术核心由 `Rv32iAlu` 组件承担（内联的 10 个分支**已删**）
-- [ ] `id_stage.h` 的字段与立即数由 `Rv32iDecoder` 组件承担（`selected_imm` 链**已删**，立即数**单一来源**）
-- [ ] **ALU 操作码常量全仓唯一**（`ALU_OP_*` 只剩一份定义）
-- [ ] ⚠️ 未知 opcode 的行为**零变化**（接入前后一致 ⇒ ⇒ 显式断言）
-- [ ] 接入后**无组合环**（拓扑排序不报 `Cycle detected`）
-- [ ] `Rv32iAlu::zero` 输出**不是悬空**（接上或显式标注不用）
+- [ ] `ex_stage.h` 的算术核心由 `Rv32iAlu` 组件承担（内联的 10 个分支**已删**） ⇒ 归属: **B4**
+- [ ] `id_stage.h` 的字段与立即数由 `Rv32iDecoder` 组件承担（`selected_imm` 链**已删**，立即数**单一来源**） ⇒ 归属: **B4**
+- [ ] **ALU 操作码常量全仓唯一**（`ALU_OP_*` 只剩一份定义） ⇒ 归属: **B4**
+- [ ] ⚠️ 未知 opcode 的行为**零变化**（接入前后一致 ⇒ ⇒ 显式断言） ⇒ 归属: **B4**
+- [ ] 接入后**无组合环**（拓扑排序不报 `Cycle detected`） ⇒ 归属: **B4**
+- [ ] `Rv32iAlu::zero` 输出**不是悬空**（接上或显式标注不用） ⇒ 归属: **B4**
 
 ### 退役
 
-- [ ] `include/cpu/pipeline/rv32i_forwarding.h` **已删除**；全仓 grep **零引用**
-- [ ] 其测试用例**逐条**处置（迁移 / 删除）并**登记**；迁移用例的期望值**手推**（禁抄仿真输出）
-- [ ] `.rddf/checks/public-api-surface.md` 的「已移除」节 + `docs/CHANGELOG.md` 有本项的一行；`scripts/verify_public_api_visibility.sh` 全绿
-- [ ] `HazardDetectionUnit` / `rv32i_hazard_complete.h` **逐个**有裁决记录（退役 / 保留 + 定位说明）
+- [x] `include/cpu/pipeline/rv32i_forwarding.h` **已删除**；全仓 grep **零引用** ⇒ 证据: B0 落地（`.rddf/reviews/b0-batch-verify-2026-11.md` §2.3）+ `git grep rv32i_forwarding` 空
+- [x] 其测试用例**逐条**处置（迁移 / 删除）并**登记** ⇒ 证据: 处置 = **删除**（「独有且被覆盖」语义 = 空集）⇒ `.rddf/reviews/b0-batch-verify-2026-11.md` §2.3 逐条登记；组合时序覆盖由「`HazardUnit` + `ForwardingMux` 组成 DUT」承担
+- [x] `.rddf/checks/public-api-surface.md` 的「已移除」节 + `docs/CHANGELOG.md` 有本项的一行；`scripts/verify_public_api_visibility.sh` 全绿 ⇒ 证据: 护栏实测 PASS · `public-api-surface.md` / `docs/CHANGELOG.md` 均有登记（B0）
+- [x] `HazardDetectionUnit` / `rv32i_hazard_complete.h` **逐个**有裁决记录（退役 / 保留 + 定位说明）⇒ 证据: **两者均退役**（B0 §2.3 · 三级准则 ②）；`test_hazard_complete_dual` 等一并退役且**缩面已由用户 2026-11-11 显式批准**（见根 `AGENTS.md` 的 `VERILATOR_E2E_TOTAL` / `DUAL_BACKEND_PARITY_*` 注释）
 
 ### 诚实化
 
-- [ ] `include/cpu/AGENTS.md` 的「WHERE TO LOOK」对每个**保留但不接入**的组件**明写**「⚠️ 非流水线路径」；分支预测器**明写**「未接入 ⇒ 每个 taken 分支付 3 拍冲刷」
-- [ ] 根 `AGENTS.md` 的 KNOWN LIMITATIONS **MUST NOT** 声称流水线由这些组件构成
+- [x] `include/cpu/AGENTS.md` 的「WHERE TO LOOK」对每个**保留但不接入**的组件**明写**「⚠️ 非流水线路径」；分支预测器**明写**「未接入 ⇒ 每个 taken 分支付 3 拍冲刷」⇒ 证据: B0 的 C7 落地 + `verify_ledger_evidence.sh` PASS
+- [x] 根 `AGENTS.md` 的 KNOWN LIMITATIONS **MUST NOT** 声称流水线由这些组件构成 ⇒ 证据: 已核对根 `AGENTS.md` 的相关段（不含「流水线由 Rv32iDecoder/Rv32iAlu 构成」的表述）
 
 ### 悬空输入 tie-off（C8）
 
-- [ ] `include/cpu/pipeline/rv32i_pipeline.h` 的装配点 MUST 显式 `hazard.io().mem_is_load <<= ch_bool(false);`（⇒ ⇒ 该 `ch_in` 有 driver ⇒ ⇒ 不再是顶层端口）
-- [ ] ⚠️ **组件公开面零变更**：`HazardUnit::mem_is_load` 端口**保留**（内部消费者 `hazard_unit.h:241` + 2 个测试直接驱动）⇒ ⇒ 断言 `hazard_unit.h` 的 `__io` 与改前**逐字相同**
-- [ ] **产物判据**：生成的 `.v` 顶层端口表 MUST **不再**出现 `owner = …hazard_unit` 的 input ⇒ ⇒ 顶层 input 数由 **8 → 7**
-- [ ] **行为等价**：20 项 golden 全绿（退休数 **178** / `load_use_stalls` **6** / `control_stalls` **4** / store **5** 全部不变）⇒ ⇒ 证明 tie-off **零行为变化**
-- [ ] ⚠️ **4 态证据**：MUST 有**独立于 Verilator**的证据表明该口不再是「未接 = X」的活跃顶层输入（⇒ 静态判据「端口表里没有它」**已足够**；若引入 4 态仿真器则再加运行时判据）⇒ ⇒ 判据 MUST **可判别**（禁「看起来没问题」）
+- [x] `include/cpu/pipeline/rv32i_pipeline.h` 的装配点 MUST 显式 `hazard.io().mem_is_load <<= ch_bool(false);` ⇒ 证据: `rv32i_pipeline.h:530`（B0 报告 §2.5）
+- [x] ⚠️ **组件公开面零变更**：`HazardUnit::mem_is_load` 端口**保留** ⇒ 证据: `hazard_unit.h` B0 未改动（`git diff` 空）· `ch_in<ch_bool> mem_is_load;`（`:56`）仍在
+- [x] **产物判据**：生成的 `.v` 顶层端口表 MUST **不再**出现 `owner = …hazard_unit` 的 input ⇒ 证据: `.rddf/reviews/b0-batch-verify-2026-11.md` 的**独立探针**（解析顶层 module 端口表）= `HAZARD_UNIT_UNNAMED_INPUT_IN_TOP_PORTS = 0`；⚠️ **2026-11-12 补证**：manifest 实测 20 个 `hazard_unit` 端口**全部** `is_top_io=false`
+- [x] **行为等价**：20 项 golden 全绿（退休数 **178** / `load_use_stalls` **6** / `control_stalls` **4** / store **5** 全部不变）⇒ 证据: b0 报告 §2.5（golden 断言文件 `git diff` **空** 而全部通过 ⇒ 行为零变化）+ `ctest -L verilator_e2e` **76/76**
+- [x] ⚠️ **4 态证据**：静态判据「端口表里没有它」⇒ 证据: `.rddf/reviews/b0-batch-verify-2026-11.md` §2.5 的独立探针 + M4 变异（证明该判据会转红）
 
 ### 不回归
 
-- [ ] 既有 ctest 全绿（受影响用例的期望值 MUST **手推**并留痕）—— ⚠️ 数值 MUST 引用 **`CTEST_TOTAL` 锚点**，**禁**写死「257」（退役会**减少**用例数 ⇒ ⇒ 必须写成「`CTEST_TOTAL` + 新增 − 删除 == `ctest -N`」，且**缩面须 reviewer 显式签字**）
-- [ ] `test_rv32i_soc_dual_parity` 的 **20 项 golden** 全绿（退休数 178 / load_use_stalls 6 / control_stalls 4 / store 5 全部不变 ⇒ ⇒ **证明接入是行为等价的**）
-- [ ] 计数锚点同步（`CTEST_TOTAL` / `DUAL_BACKEND_PARITY_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `VERILATOR_E2E_TOTAL`）
+- [x] 既有 ctest 全绿 ⇒ 证据: `CTEST_TOTAL` == `ctest -N`（现值 **263**）· `scripts/verify_test_counts.sh` PASS<br>⚠️ **缩面已记录**：B0 的退役使 `VERILATOR_E2E_TOTAL` 76（−1）· `DUAL_BACKEND_PARITY_TOTAL` 65（−1）· `DUAL_BACKEND_PARITY_PAIRS` 284（−6）⇒ **用户 2026-11-11 显式批准**
+- [x] `test_rv32i_soc_dual_parity` 的 **20 项 golden** 全绿（退休数 178 / load_use_stalls 6 / control_stalls 4 / store 5 全部不变 ⇒ **B0 的 tie-off 与退役是行为等价的**；B4 的接入需再证一次）⇒ 证据: `ctest -L verilator_e2e` 全绿
+- [x] 计数锚点同步（`CTEST_TOTAL` / `DUAL_BACKEND_PARITY_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `VERILATOR_E2E_TOTAL`）⇒ 证据: `scripts/update_test_count_anchors.sh --check` **5/5** 一致
 
 ---
 

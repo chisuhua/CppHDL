@@ -17,7 +17,7 @@ evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h#L112
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: 📋 **approved**（裁决已落定 · 未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：公开面登记（R6）+ T2 裁决（R5）
 - **用户裁决（2026-11-10）**: 「② 固件转储器也可以做为项目提供的工具能力，同时再考虑添加一个 ELF 装载固件的能力」
 - **依赖判定**: ⚠️ **ELF 装载当前不可行** ⇒ ⇒ 本项 MUST **先**修装载链路（地址映射 + D-TCM 加载通路），ELF 是其**下游**
 
@@ -143,36 +143,36 @@ tools/rv32i-fw-dump --in <fw.json|elf> --format vh|mem|manifest --out <path>
 
 ### 地址映射
 
-- [ ] SoC 显式声明区域 `{base, size}`，且 size **由 TCM 容量派生**（禁手写）；`dtcm.base == 0x8001_0000`（沿用 `address_decoder.h:34`）
-- [ ] ⚠️ **截断等价的最小判据**（注意：对齐要求是 **16 KB** 而非 4 KB）
-- [ ] ⚠️ **受影响地址字面量清单**（裁决①的连带面，**不许只报计数增量**）：`grep -n 'has_store(t, 0x'` 逐条登记改绝对地址后需重推的值；并**验证**新增 `LUI`→`SW(base)` 的 RAW 已被前推档位 1 覆盖（否则 `load_use_stalls`/`control_stalls` 也会变）
-- [ ] **越界访问 ⇒ 报错**（不再静默截断）⇒ ⇒ 投毒自证：把地址设到区域外 ⇒ MUST 有诊断（不是静默丢高位）<br>⚠️ **metis 订正**：错误 MUST 由 **host 侧**检查给出（`CHFATAL` + 非零退出）⇒ ⇒ **RTL 侧**若也要报错 ⇒ MUST 是**新增端口**（非 `describe()` 内的 C++ 判定）⇒ ⇒ 两件事 MUST 分开验收
-- [ ] ⚠️ **metis 订正**：原稿「`.text` 与 `.data` 不再互相覆盖」在旧实现下**也成立**（分进两块 TCM）⇒ ⇒ **恒绿 · 已删除**。改为可判别形态：**同一块**存储器内相差 `0x4000` 的两个地址 MUST **不别名**（探针：同一条加载总线写 `base+0` 与 `base+0x4000` 两个不同值 ⇒ 断言互不覆盖）+ 边界值 `base+size` MUST 报错
+- [ ] SoC 显式声明区域 `{base, size}`，且 size **由 TCM 容量派生**（禁手写）；`dtcm.base == 0x8001_0000`（沿用 `address_decoder.h:34`） ⇒ 归属: **B3**
+- [ ] ⚠️ **截断等价的最小判据**（注意：对齐要求是 **16 KB** 而非 4 KB） ⇒ 归属: **B3**
+- [ ] ⚠️ **受影响地址字面量清单**（裁决①的连带面，**不许只报计数增量**）：`grep -n 'has_store(t, 0x'` 逐条登记改绝对地址后需重推的值；并**验证**新增 `LUI`→`SW(base)` 的 RAW 已被前推档位 1 覆盖（否则 `load_use_stalls`/`control_stalls` 也会变） ⇒ 归属: **B3**
+- [ ] **越界访问 ⇒ 报错**（不再静默截断）⇒ ⇒ 投毒自证：把地址设到区域外 ⇒ MUST 有诊断（不是静默丢高位） ⇒ 归属: **B3**<br>⚠️ **metis 订正**：错误 MUST 由 **host 侧**检查给出（`CHFATAL` + 非零退出）⇒ ⇒ **RTL 侧**若也要报错 ⇒ MUST 是**新增端口**（非 `describe()` 内的 C++ 判定）⇒ ⇒ 两件事 MUST 分开验收
+- [ ] ⚠️ **metis 订正**：原稿「`.text` 与 `.data` 不再互相覆盖」在旧实现下**也成立**（分进两块 TCM）⇒ ⇒ **恒绿 · 已删除**。改为可判别形态：**同一块**存储器内相差 `0x4000` 的两个地址 MUST **不别名**（探针：同一条加载总线写 `base+0` 与 `base+0x4000` 两个不同值 ⇒ 断言互不覆盖）+ 边界值 `base+size` MUST 报错 ⇒ 归属: **B3**
 
 ### 装载
 
-- [ ] **D-TCM 有加载通路**（当前**完全没有**）⇒ ⇒ 一个带 `.data` 的固件可被装载并读回
-- [ ] 加载后读回某地址 == 期望值（走真实读通路，非 loader 返回值）
-- [ ] `prog_*` 的**地址语义变更**已在 CHANGELOG + 公开面登记；SoC 端口契约变化已由 architect 裁决（ADR 或 spec delta）
+- [ ] **D-TCM 有加载通路**（当前**完全没有**）⇒ ⇒ 一个带 `.data` 的固件可被装载并读回 ⇒ 归属: **B3**
+- [ ] 加载后读回某地址 == 期望值（走真实读通路，非 loader 返回值） ⇒ 归属: **B3**
+- [ ] `prog_*` 的**地址语义变更**已在 CHANGELOG + 公开面登记；SoC 端口契约变化已由 architect 裁决（ADR 或 spec delta） ⇒ 归属: **B3**
 
 ### 编码器
 
-- [ ] `include/cpu/riscv/rv32i_asm_encode.h` 存在；既有 3 处编码器副本**归一**为 1 份（仓内 `enc_r`/`enc_i` 等定义**唯一**）
-- [ ] ⚠️ `FirmwareEncoderCrossCheck`（手算常量交叉校验）**仍在**且通过
-- [ ] 新头文件有**仓内消费者**（既有测试 + 新工具）⇒ ⇒ 不违反 ZERO-DEBT
+- [ ] `include/cpu/riscv/rv32i_asm_encode.h` 存在；既有 3 处编码器副本**归一**为 1 份（仓内 `enc_r`/`enc_i` 等定义**唯一**） ⇒ 归属: **B3**
+- [ ] ⚠️ `FirmwareEncoderCrossCheck`（手算常量交叉校验）**仍在**且通过 ⇒ 归属: **B3**
+- [ ] 新头文件有**仓内消费者**（既有测试 + 新工具）⇒ ⇒ 不违反 ZERO-DEBT ⇒ 归属: **B3**
 
 ### 工具
 
-- [ ] `tools/rv32i-fw-dump` 可独立运行；输出 `vh` / `mem` / `manifest` 三种格式
-- [ ] ELF32 little-endian RISC-V 的 `PT_LOAD` 可装载；`.bss` 补零
-- [ ] 非零重定位 ⇒ **报错**（不静默忽略）
-- [ ] 装载 manifest 含 段地址 / 入口 / 字索引映射 ⇒ ⇒ TB 与 CI 共用同一份
+- [ ] `tools/rv32i-fw-dump` 可独立运行；输出 `vh` / `mem` / `manifest` 三种格式 ⇒ 归属: **B3**
+- [ ] ELF32 little-endian RISC-V 的 `PT_LOAD` 可装载；`.bss` 补零 ⇒ 归属: **B3**
+- [ ] 非零重定位 ⇒ **报错**（不静默忽略） ⇒ 归属: **B3**
+- [ ] 装载 manifest 含 段地址 / 入口 / 字索引映射 ⇒ ⇒ TB 与 CI 共用同一份 ⇒ 归属: **B3**
 
 ### 不回归
 
-- [ ] 既有 ctest 全绿（编码器归一 MUST NOT 改任何编码结果 ⇒ ⇒ 既有 golden 全绿）—— ⚠️ **数值 MUST 引用 `CTEST_TOTAL` 锚点**，**禁**写死「257」（本项新增测试后该数字即过期）
-- [ ] 既有 `test_rv32i_soc_dual_parity` 的 **20 项 golden** 仍全绿
-- [ ] ⚠️ **metis 订正**：原稿引用 `/tmp/opencode/rv32i_rtl/tb_rv32i.sv` 的 20/20 —— **仓外临时产物 · CI 不可复现** ⇒ ⇒ **不可验收**，**已删除**。替代：由 `examples-rtl-sim-coverage-2026-11` 把该 TB **仓库化**后再作为端到端证据
+- [ ] 既有 ctest 全绿（编码器归一 MUST NOT 改任何编码结果 ⇒ ⇒ 既有 golden 全绿）—— ⚠️ **数值 MUST 引用 `CTEST_TOTAL` 锚点**，**禁**写死「257」（本项新增测试后该数字即过期） ⇒ 归属: **B3**
+- [ ] 既有 `test_rv32i_soc_dual_parity` 的 **20 项 golden** 仍全绿 ⇒ 归属: **B3**
+- [ ] ⚠️ **metis 订正**：原稿引用 `/tmp/opencode/rv32i_rtl/tb_rv32i.sv` 的 20/20 —— **仓外临时产物 · CI 不可复现** ⇒ ⇒ **不可验收**，**已删除**。替代：由 `examples-rtl-sim-coverage-2026-11` 把该 TB **仓库化**后再作为端到端证据 ⇒ 归属: **B3**
 
 ---
 

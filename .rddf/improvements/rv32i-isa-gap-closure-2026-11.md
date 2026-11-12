@@ -17,7 +17,7 @@ evidence: probe:include/cpu/pipeline/stages/id_stage.h#L123
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: 📝 **draft**（未开工 ⇒ 归 **B4**）⇒ ⇒ ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ 实施前 MUST 先确认 `phase-6.md` 的 P6 结论
 - **⚠️ 范围边界（硬约束）**: 本项 **MUST NOT** 包含 **CSR 指令 / `ECALL` / `EBREAK` / `MRET` / 中断** ⇒ ⇒ 按 `phase-6.md` **P6** 行（「CSR / `ECALL` / `FENCE` **MUST 独立立项** ⇒ 新 capability + 新 change」）⇒ ⇒ **特权级 = 另一条独立立项**（本项末尾给出候选形态）
 
 ---
@@ -146,36 +146,36 @@ evidence: probe:include/cpu/pipeline/stages/id_stage.h#L123
 
 ### 非法指令
 
-- [ ] 存在「未知 opcode」用例：固件含一条**未知 opcode**
-- [ ] 该指令**不**写任何寄存器（写回序列无新增）
-- [ ] 该指令**不**计入 `perf_instructions`；且**尾部填 NOP 后整体退休数仍 == 178**、`non_retired == 21`（🔵 2026-11-10 裁决：采纳尾部填 NOP ⇒ 原「该值不是 178」**作废**）
-- [ ] `illegal_instr` 输出**拉高**，`illegal_reason` == 「未知」
-- [ ] 另一用例：固件含 `ECALL`（`OP_SYSTEM`）⇒ ⇒ `illegal_instr` 拉高且 `illegal_reason` == 「已知未实现」（**与未知 opcode 可区分**）
-- [ ] ⚠️ **变异自证**：把 `illegal_instr` 的判定改成恒假 ⇒ ⇒ 上述用例 MUST 转红（证明判据有判别力）<br>- [ ] ⚠️ **冻结判据 MUST 防「前 N 拍本来就相等」的恒绿**：MUST 写成四段 —— ① 非法指令进入 ID **之前**某一拍 `dbg_id_pc` 曾递增 ② 进入后**连续 ≥ K 拍**（K ≥ 10，覆盖 fill + 3 拍 load-use 窗口）`dbg_id_pc` **逐拍相等**且等于非法指令地址 ③ 同期 `perf_instructions` 逐拍相等 ④ 该期间的 `dbg_wb_write_en` **序列**与「不含该指令」的期望序列**逐项**相等（序列断言，非计数断言）
+- [ ] 存在「未知 opcode」用例：固件含一条**未知 opcode** ⇒ 归属: **B4**
+- [ ] 该指令**不**写任何寄存器（写回序列无新增） ⇒ 归属: **B4**
+- [ ] 该指令**不**计入 `perf_instructions`；且**尾部填 NOP 后整体退休数仍 == 178**、`non_retired == 21`（🔵 2026-11-10 裁决：采纳尾部填 NOP ⇒ 原「该值不是 178」**作废**） ⇒ 归属: **B4**
+- [ ] `illegal_instr` 输出**拉高**，`illegal_reason` == 「未知」 ⇒ 归属: **B4**
+- [ ] 另一用例：固件含 `ECALL`（`OP_SYSTEM`）⇒ ⇒ `illegal_instr` 拉高且 `illegal_reason` == 「已知未实现」（**与未知 opcode 可区分**） ⇒ 归属: **B4**
+- [ ] ⚠️ **变异自证**：把 `illegal_instr` 的判定改成恒假 ⇒ ⇒ 上述用例 MUST 转红（证明判据有判别力） ⇒ 归属: **B4**<br>- [ ] ⚠️ **冻结判据 MUST 防「前 N 拍本来就相等」的恒绿**：MUST 写成四段 —— ① 非法指令进入 ID **之前**某一拍 `dbg_id_pc` 曾递增 ② 进入后**连续 ≥ K 拍**（K ≥ 10，覆盖 fill + 3 拍 load-use 窗口）`dbg_id_pc` **逐拍相等**且等于非法指令地址 ③ 同期 `perf_instructions` 逐拍相等 ④ 该期间的 `dbg_wb_write_en` **序列**与「不含该指令」的期望序列**逐项**相等（序列断言，非计数断言） ⇒ 归属: **B4**
 
 ### FENCE
 
-- [ ] `FENCE` / `FENCE.I` 进入译码表 ⇒ ⇒ 行为 = NOP（不写寄存器、不访存、不分支）
-- [ ] `FENCE` **不**产生 `illegal_instr`（显式断言）
-- [ ] spec 明确记载「FENCE 在本版实现为 NOP（无 cache ⇒ 无排序语义）」
+- [ ] `FENCE` / `FENCE.I` 进入译码表 ⇒ ⇒ 行为 = NOP（不写寄存器、不访存、不分支） ⇒ 归属: **B4**
+- [ ] `FENCE` **不**产生 `illegal_instr`（显式断言） ⇒ 归属: **B4**
+- [ ] spec 明确记载「FENCE 在本版实现为 NOP（无 cache ⇒ 无排序语义）」 ⇒ 归属: **B4**
 
 ### `ExceptionUnit`
 
-- [ ] trap 后 `mcause` **可读回**为异常原因码（当前恒 0 ⇒ ⇒ 本项使其非 0）
-- [ ] `mtval` 有明确契约（写 / 不写 ⇒ ⇒ 二选一并显式化；当前是**隐式不可达**）
-- [ ] `CsrBank` 写口数量变化 ⇒ ⇒ 公开面登记 + CHANGELOG + 全部实例化点审计
+- [ ] trap 后 `mcause` **可读回**为异常原因码（当前恒 0 ⇒ ⇒ 本项使其非 0） ⇒ 归属: **B4**
+- [ ] `mtval` 有明确契约（写 / 不写 ⇒ ⇒ 二选一并显式化；当前是**隐式不可达**） ⇒ 归属: **B4**
+- [ ] `CsrBank` 写口数量变化 ⇒ ⇒ 公开面登记 + CHANGELOG + 全部实例化点审计 ⇒ 归属: **B4**
 
 ### 边界
 
-- [ ] ⚠️ 本项**零** `csr_*` 端口新增到流水线 / SoC 顶层（特权级 MUST NOT 混入）<br>- [ ] ⚠️ **metis 新增**：`phase-6.md` **P6 出口判据 ②**（「`OP_SYSTEM` 剥注释后引用数从 0 变正」）会被本项**预先点亮**而实质未做 ⇒ ⇒ MUST 同步把 P6 的判据改为「**执行语义**证据」（`csr_*` 在 pipeline 中的非零消费者 / 新 target / 固件级 CSR 读写断言）⇒ ⇒ 否则下一个窗口会拿一条**被洗白的绿灯**去闭 P6<br>- [ ] ⚠️ **metis 新增**：SoC 顶层新增输出的命名 MUST 遵循既有前缀惯例（`obs_*` / `dbg_*`）⇒ ⇒ 用 `obs_illegal_instr` / `obs_illegal_reason` / `obs_perf_illegal_count`（宽度与 `perf_instructions` 一致 = 48 bit）⇒ ⇒ 避免 `verify_no_duplicate_rv32i_headers.sh:164` 的 C6 快照读起来像特例<br>- [ ] ⚠️ **metis 新增（连带修改清单）**：`test_rv32i_soc_dual_parity.cpp` 的 `kObsNames`(`:74-93`) + `static_assert(kObsCount == 27)`(`:96`) + `obs_snapshot()`(`:167-196`) **三处须同步且顺序一致**；`verify_no_duplicate_rv32i_headers.sh:164` 的 `SOC_TOP_PORTS` 快照；`include/cpu/AGENTS.md` 的「30 headers / 6473 lines」自述（被该脚本 **C5** 机器校验）；根 `AGENTS.md` 的 ISA 覆盖边界段；4 个计数锚点
-- [ ] 本项**零** `ECALL` / `EBREAK` / `MRET` / 中断的实现（只做"可观测"）
+- [ ] ⚠️ 本项**零** `csr_*` 端口新增到流水线 / SoC 顶层（特权级 MUST NOT 混入） ⇒ 归属: **B4**<br>- [ ] ⚠️ **metis 新增**：`phase-6.md` **P6 出口判据 ②**（「`OP_SYSTEM` 剥注释后引用数从 0 变正」）会被本项**预先点亮**而实质未做 ⇒ ⇒ MUST 同步把 P6 的判据改为「**执行语义**证据」（`csr_*` 在 pipeline 中的非零消费者 / 新 target / 固件级 CSR 读写断言）⇒ ⇒ 否则下一个窗口会拿一条**被洗白的绿灯**去闭 P6 ⇒ 归属: **B4**<br>- [ ] ⚠️ **metis 新增**：SoC 顶层新增输出的命名 MUST 遵循既有前缀惯例（`obs_*` / `dbg_*`）⇒ ⇒ 用 `obs_illegal_instr` / `obs_illegal_reason` / `obs_perf_illegal_count`（宽度与 `perf_instructions` 一致 = 48 bit）⇒ ⇒ 避免 `verify_no_duplicate_rv32i_headers.sh:164` 的 C6 快照读起来像特例 ⇒ 归属: **B4**<br>- [ ] ⚠️ **metis 新增（连带修改清单）**：`test_rv32i_soc_dual_parity.cpp` 的 `kObsNames`(`:74-93`) + `static_assert(kObsCount == 27)`(`:96`) + `obs_snapshot()`(`:167-196`) **三处须同步且顺序一致**；`verify_no_duplicate_rv32i_headers.sh:164` 的 `SOC_TOP_PORTS` 快照；`include/cpu/AGENTS.md` 的「30 headers / 6473 lines」自述（被该脚本 **C5** 机器校验）；根 `AGENTS.md` 的 ISA 覆盖边界段；4 个计数锚点 ⇒ 归属: **B4**
+- [ ] 本项**零** `ECALL` / `EBREAK` / `MRET` / 中断的实现（只做"可观测"） ⇒ 归属: **B4**
 
 ### 不回归
 
-- [ ] 既有 **257** 个 ctest 全绿
-- [ ] `test_rv32i_soc_dual_parity` 的 **20 项 golden** 全绿且 `perf_instructions` 仍 = **178**（既有固件**不含**非法指令 ⇒ ⇒ 退休数**不变** ⇒ ⇒ 这是"改动零影响"的证据）
-- [ ] 既有 `test_csr_unit` / `test_interrupt_flow` 全绿（并**补** `mcause` 读回断言）<br>⚠️ **metis**：该断言 MUST 落在**复合 DUT**（`ExceptionUnit` → `CsrBank`）上 ⇒ ⇒ 断言「trap 后 `mepc == current_pc` **且** `mcause == exception_cause`」⇒ ⇒ 并附**变异记录**（把 `write_mepc = write_mcause = do_trap_entry` 改回 ⇒ 必红）⇒ ⇒ 光在 `CsrBank` 上断言**无判别力**
-- [ ] 计数锚点同步
+- [ ] 既有 ctest 全绿（`CTEST_TOTAL` == `ctest -N`）⇒ 归属: **B4**
+- [ ] `test_rv32i_soc_dual_parity` 的 **20 项 golden** 全绿且 `perf_instructions` 仍 = **178**（既有固件**不含**非法指令 ⇒ ⇒ 退休数**不变** ⇒ ⇒ 这是"改动零影响"的证据） ⇒ 归属: **B4**
+- [ ] 既有 `test_csr_unit` / `test_interrupt_flow` 全绿（并**补** `mcause` 读回断言） ⇒ 归属: **B4**<br>⚠️ **metis**：该断言 MUST 落在**复合 DUT**（`ExceptionUnit` → `CsrBank`）上 ⇒ ⇒ 断言「trap 后 `mepc == current_pc` **且** `mcause == exception_cause`」⇒ ⇒ 并附**变异记录**（把 `write_mepc = write_mcause = do_trap_entry` 改回 ⇒ 必红）⇒ ⇒ 光在 `CsrBank` 上断言**无判别力**
+- [ ] 计数锚点同步 ⇒ 归属: **B4**
 
 ---
 

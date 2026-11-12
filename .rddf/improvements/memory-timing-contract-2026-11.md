@@ -17,7 +17,7 @@ evidence: probe:include/cpu/pipeline/rv32i_tcm.h#L100
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: 📝 **draft**（未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：ADR-068 已 Accepted ✅ · **T2（MEM 数据对齐 A/B）待 architect 裁决**（R5）
 - **用户裁决（2026-11-10）**: 「#12 改成寄存器读」⇒ ⇒ D-TCM 从 `aread`（0 拍组合）改为 `sread`（1 拍寄存读）
 
 ---
@@ -142,33 +142,33 @@ auto read_data = memory.sread(io().addr, ch_bool(true));
 
 ### 产物形态
 
-- [ ] D-TCM 读为**寄存读**：产物中 D-TCM 的读端口**不是** `assign data = mem[addr];` 形态 ⇒ ⇒ **可推断 BRAM**（判据：产物中无「4096:1 组合读」）
-- [ ] I-TCM 与 D-TCM 的读时序语义**一致**（都是 1 拍寄存读）
-- [ ] `verilator --lint-only` 干净；`scripts/verify_flat_rtl_emit.sh`（若已落地）全绿
+- [ ] D-TCM 读为**寄存读**：产物中 D-TCM 的读端口**不是** `assign data = mem[addr];` 形态 ⇒ ⇒ **可推断 BRAM**（判据：产物中无「4096:1 组合读」） ⇒ 归属: **B3**
+- [ ] I-TCM 与 D-TCM 的读时序语义**一致**（都是 1 拍寄存读） ⇒ 归属: **B3**
+- [ ] `verilator --lint-only` 干净；`scripts/verify_flat_rtl_emit.sh`（若已落地）全绿 ⇒ 归属: **B3**
 
 ### 行为
 
-- [ ] 🔴 **T6 判别性判据（critic 第 2 轮：原只有「在内」没有 AC）**：**紧邻** `SW x1, 0(x2)` / `LW x3, 0(x2)`（**同址 · 零间隔**）⇒ 断言 `x3 == 写入值`（`read-new` 语义）
-- [ ] 🔴 `read-during-write` 语义 MUST 显式写进 capability（若选 `read-old` ⇒ 必须登记为**违反 ISA** 的已知限制 + 在 `arch-residual-registry.md` 留条目）
-- [ ] 🔴 现固件的「隔 4 字」形态 MUST **不能**冒充该判据（`SW`@word16 / `LW`@word20）⇒ 新用例 MUST 紧邻
+- [ ] 🔴 **T6 判别性判据（critic 第 2 轮：原只有「在内」没有 AC）**：**紧邻** `SW x1, 0(x2)` / `LW x3, 0(x2)`（**同址 · 零间隔**）⇒ 断言 `x3 == 写入值`（`read-new` 语义） ⇒ 归属: **B3**
+- [ ] 🔴 `read-during-write` 语义 MUST 显式写进 capability（若选 `read-old` ⇒ 必须登记为**违反 ISA** 的已知限制 + 在 `arch-residual-registry.md` 留条目） ⇒ 归属: **B3**
+- [ ] 🔴 现固件的「隔 4 字」形态 MUST **不能**冒充该判据（`SW`@word16 / `LW`@word20）⇒ 新用例 MUST 紧邻 ⇒ 归属: **B3**
 
-- [ ] ⚠️ **全部时序金标手推重算并登记**（退休数 / 停顿拍数 / 控制停顿 / store 拍数 / 逐拍 `dbg_id_*` / 24 条写回序列）⇒ ⇒ **禁抄仿真输出**
-- [ ] 20 项 golden（取指填充不变量 + 3 个存储 golden + sb/sh lane + 3 个「被冲刷指令未写回」+ 4 个派生计数器）在新时序下**全绿**
-- [ ] ⚠️ `sb` / `sh` 的**相位正确**：`sb` 写 4 个车道 + `sh` 写 2 个半字车道**全覆盖**（现有仅 2 个用例 ⇒ 判别力不足 ⇒ 本项 MUST 补）
-- [ ] **相位错位探针**：故意把写使能错开一拍 ⇒ ⇒ **必红**（证明该判据有判别力）
+- [ ] ⚠️ **全部时序金标手推重算并登记**（退休数 / 停顿拍数 / 控制停顿 / store 拍数 / 逐拍 `dbg_id_*` / 24 条写回序列）⇒ ⇒ **禁抄仿真输出** ⇒ 归属: **B3**
+- [ ] 20 项 golden（取指填充不变量 + 3 个存储 golden + sb/sh lane + 3 个「被冲刷指令未写回」+ 4 个派生计数器）在新时序下**全绿** ⇒ 归属: **B3**
+- [ ] ⚠️ `sb` / `sh` 的**相位正确**：`sb` 写 4 个车道 + `sh` 写 2 个半字车道**全覆盖**（现有仅 2 个用例 ⇒ 判别力不足 ⇒ 本项 MUST 补） ⇒ 归属: **B3**
+- [ ] **相位错位探针**：故意把写使能错开一拍 ⇒ ⇒ **必红**（证明该判据有判别力） ⇒ 归属: **B3**
 
 ### 反压
 
-- [ ] `data_ready` 变成**真实反压**输入（不再是死端口）；MEM 级等 `data_ready` 时有效链保持、不产生误写
-- [ ] stall 期间 `data_write_en` 的行为有明确契约并被断言（**不重复发 / 不丢**）
-- [ ] 存在**能拉低 `data_ready`** 的 DUT ⇒ ⇒ 该通路**非零覆盖**（否则判"未覆盖"）
+- [ ] `data_ready` 变成**真实反压**输入（不再是死端口）；MEM 级等 `data_ready` 时有效链保持、不产生误写 ⇒ 归属: **B3**
+- [ ] stall 期间 `data_write_en` 的行为有明确契约并被断言（**不重复发 / 不丢**） ⇒ 归属: **B3**
+- [ ] 存在**能拉低 `data_ready`** 的 DUT ⇒ ⇒ 该通路**非零覆盖**（否则判"未覆盖"） ⇒ 归属: **B3**
 
 ### 不回归
 
-- [ ] 既有 **257** 个 ctest 中**不受影响**的部分全绿；受影响部分 MUST 有**手推**的新期望值 + 变更说明
-- [ ] `openspec/specs/rv32i-commit-path/spec.md` 的基线已 MODIFIED 订正（标题逐字保留）
-- [ ] 既有 `test_rv32i_soc_dual_parity` 的**双后端 parity** 仍成立（两后端同时改 ⇒ ⇒ parity 恒绿 ⇒ ⇒ **判别力来自手推 golden**，不来自 parity）
-- [ ] 计数锚点同步（`CTEST_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `VERILATOR_E2E_TOTAL` 如有变动）
+- [ ] 既有 ctest（`CTEST_TOTAL` == `ctest -N`）中**不受影响**的部分全绿；受影响部分 MUST 有**手推**的新期望值 + 变更说明 ⇒ 归属: **B3**
+- [ ] `openspec/specs/rv32i-commit-path/spec.md` 的基线已 MODIFIED 订正（标题逐字保留） ⇒ 归属: **B3**
+- [ ] 既有 `test_rv32i_soc_dual_parity` 的**双后端 parity** 仍成立（两后端同时改 ⇒ ⇒ parity 恒绿 ⇒ ⇒ **判别力来自手推 golden**，不来自 parity） ⇒ 归属: **B3**
+- [ ] 计数锚点同步（`CTEST_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `VERILATOR_E2E_TOTAL` 如有变动） ⇒ 归属: **B3**
 
 ---
 

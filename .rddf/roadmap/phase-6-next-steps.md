@@ -288,3 +288,87 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 > ⑥ 8 护栏全绿（`verify_ledger_evidence`+self-test / `verify_examples_rtl_sim` / `verify_arch_ledger_residuals` /
 > `verify_roadmap_fragments` / `verify_public_api_visibility` / `verify_openspec_delta` / `verify_test_counts` /
 > `verify_dual_backend_parity`）✅
+
+---
+
+## 8. 🟢 **新会话 builder 的实施入口**（RTL 轨 · 2026-11-12）
+
+> **本节是「下一个会话从哪儿开始、读什么、按什么顺序做」的**唯一入口**。
+> ⚠️ 上游 = `.rddf/checks/rtl-track-correction-list-2026-11.md`（7 份草案的**状态/簿记订正** ·
+> oracle 第 1 轮 13 条 · critic 第 1 轮 2 BLOCKER → 第 2 轮 **APPROVE** · 修订执行记录见其 §9）。
+> ⇒ ⇒ 本节**不复制**任何状态格 / 判据 ⇒ ⇒ 全部**指路**到唯一真相。
+
+### 8.1 读序（4 步 · 别跳）
+
+| 步 | 读什么 | 得到什么 |
+|---:|---|---|
+| **1** | 本节 §8.2 的「权威载体表」 | **每个事实的唯一出处**（避免读多份互相打架的文档） |
+| **2** | `.rddf/roadmap/phase-6-rtl-productization.md`（批次表）· §0.0 状态词表 · §B0–§B4 · §4 独立立项 | **批次编排 + 哪些项归哪批** |
+| **3** | 目标草案的 `## Acceptance` 段 | **逐条判据 + 勾选状态 + 证据指针 + `⇒ 归属:` 标注** |
+| **4** | `.rddf/roadmap/phases/phase-6.md` | **任务状态唯一真相**（B0–B4 状态格 · 🚪 入口门） |
+
+### 8.2 权威载体表（**别在别处找**）
+
+| 事实 | **唯一真相** | 其它地方的角色 |
+|---|---|---|
+| 某个 work item **做没做完** | 对应草案 `## Acceptance` 的**勾选 + 证据指针** | 批次表只写**编排**，不复制状态格 |
+| 某个 work item **归哪一批** | 草案 AC 行尾的 `⇒ 归属: **B3/B4**` | 批次表 §B3/§B4 是**交叉索引** |
+| 批次**状态** | `phase-6.md` 的 B0–B4 状态格 | `phase-6-rtl-productization.md` **不复制**状态格 |
+| **未纳入本轮**的缺口 | 批次表 §4「独立立项」清单 | 草案 `进度:` 字段**指路**到 §4 行 |
+| 验收**证据** | `.rddf/reviews/*.md`（verifier 域） | 草案 AC **只引用**，不复制正文 |
+| 测试**计数** | 根 `AGENTS.md` 的 CI 锚点（263 / 76 / 65 / 284 / 17） | ⚠️ 派生表是**历史快照**，不参与判定 |
+| 端口命名**规则** | capability `rtl-hierarchical-output` | guard capability **MUST NOT** 复述 |
+
+### 8.3 未完成 work item 的**逐条索引**（共 **70** 条 · 全部带 `归属`）
+
+| 批次 | 草案 | 未勾 AC 数 | AC 段位置 |
+|---|---|---:|---|
+| **B3** | `memory-timing-contract-2026-11` | **17** | `## Acceptance`（T1–T5 + T2′ + T6 + 不回归） |
+| **B3** | `firmware-load-chain-2026-11` | **18** | `## Acceptance`（L1–L6 + 不回归） |
+| **B4** | `rv32i-dead-component-consolidation-2026-11` | **10** | 差分段（4）+ 接入段（6）⇒ ⇒ **C1–C4** |
+| **B4** | `rv32i-isa-gap-closure-2026-11` | **22** | `## Acceptance`（G1–G5 + 边界 + 不回归） |
+| **独立立项** | `port-naming-ratchet-2026-11` | **3** | 存量消化（2 · §4「N2 补遗」）+ `CHERROR` 判别力（1 · §4「N3 补遗」） |
+
+⇒ ⇒ ⚠️ **B3 必须先于 B4**（否则时序金标算两遍）⇒ ⇒ 理由与依赖链见批次表 §2 的硬约束。
+
+### 8.4 B3 的**开工门**（两道 · 都过才能动手）
+
+| 门 | 任务 | 归属 | 当前态 |
+|---|---|---|---|
+| **门 1** | **R5** = T2 裁决（MEM 数据对齐 A/B）⇒ ⇒ 载体 = **新立 ADR-069** | architect | ⬜ **未做**（ADR-068 **已 Accepted** ⇒ 只差 T2 的 A/B 选型） |
+| **门 2** | **R6** = 公开面前置门（`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各一行） | planner | ⬜ **未做** ⇒ ⇒ **登记未做 ⇒ B3 不得开工** |
+
+⇒ ⇒ 判据见 §2 的 **R5** / **R6** 段。
+
+### 8.5 开工前的**护栏清单**（10 个 · 全绿才算干净起点）
+
+```bash
+bash scripts/verify_agents_size.sh            # 根 AGENTS.md 体积
+bash scripts/verify_test_counts.sh           # 计数锚点
+bash scripts/update_test_count_anchors.sh --check
+bash scripts/verify_roadmap_fragments.sh     # AUTO 块守恒
+bash scripts/verify_ledger_evidence.sh       # 台账证据
+bash scripts/verify_public_api_visibility.sh # 公开面登记
+bash scripts/verify_flat_rtl_emit.sh         # 扁平产物护栏 F1–F8
+bash scripts/verify_port_naming.sh           # 端口命名棘轮
+bash scripts/verify_examples_rtl_sim.sh      # examples 独立 RTL 仿真
+bash scripts/verify_hierarchical_rtl.sh      # 层次化产物 R1–R8
+(cd build && ctest -N | tail -1)             # Total Tests: 263
+```
+
+⇒ ⇒ **全部在 2026-11-12 实测 exit 0** ⇒ ⇒ 下一个会话**若某条转红**，先查是不是上一会话引入的。
+
+### 8.6 ⚠️ 三条**负面约束**（跨批必查）
+
+| # | 约束 | 依据 |
+|---|---|---|
+| **N-1** | **禁**写死测试数（`257` / `263`）⇒ ⇒ 一律写「`CTEST_TOTAL` + 新增 − 删除 == `ctest -N`」 | 退役会**减少**用例数 ⇒ ⇒ 写死即过期 |
+| **N-2** | **禁**用 blanket `lint_off` 掩盖宽度问题 ⇒ ⇒ `emit_hygiene` **默认 off**（默认产物逐字节不变） | 批次表 ★3 |
+| **N-3** | **禁** `git add -A` ⇒ ⇒ MUST 按**路径显式** `git add <path>` | 仓内多人 / 多会话并行（曾误纳他人未完成文档） |
+
+### 8.7 下一个会话的**验收口径**（不要照抄旧数字）
+
+- **不要**写「既有 257 个 ctest 全绿」⇒ ⇒ 写「`CTEST_TOTAL` == `ctest -N`」。
+- **不要**把「两后端 parity 全绿」当正确性证据（同源 ⇒ 同构缺陷一致地错）⇒ ⇒ 期望值 MUST **手推**。
+- **不要**在 `describe()` 里用硬件值做 C++ 控制流 ⇒ ⇒ 条件恒假 ⇒ 分支体**从不发射**。
+- **期望值 MUST 手推**（禁抄仿真输出）· **突变纪律**：还原源码 ≠ 复原（**二进制也是状态** ⇒ 还原后 MUST 重建）。

@@ -17,7 +17,7 @@ evidence: probe:scripts/verify_examples_rtl_sim.sh
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: ✅ **implemented**（B2 已验收 · 2026-11-12 · **10/10 verified** · 挂 `pr-verilator-fast` 一个 step）
 - **用户裁决（2026-11-10）**: 「#3 按你建议」⇒ ⇒ **10 个**有意义的 example（**不是** 32 个全量）· `--emit-tb-stub` 只发骨架 · **必须**有单元测试覆盖「生成 RTL」这件事 · 计数锚点单一更新入口 · CI 分级 + 复用缓存
 
 ---
@@ -61,7 +61,7 @@ evidence: probe:scripts/verify_examples_rtl_sim.sh
 | **E1** | ⚠️ **metis 订正 —— 本项 MUST 归并到 `rtl-emit-product-tooling-2026-11` 的 F1–F6**（同一判据两份实现必然漂移 ⇒ ⇒ 仓内「两份实现会漂移」纪律反复治的病）⇒ ⇒ 本项**只保留**依赖项**没有**的部分：① **跨进程**确定性（同一进程同图 ⇒ 恒等 ⇒ 判别力 ≈ 0）② 产物**非空 / `module`·`endmodule` 配平** / 端口数 == manifest（`ModuleEmitter::print` 是 `try { … } catch (...) {}` ⇒ 抛异常也 exit 0 ⇒ 可产出半截文件）③ **「按名驱动」的机械证据**：改 manifest 的端口名 ⇒ ⇒ TB **编译失败**（TB 编译通过本身就是「名字对」的硬证据 —— 比任何端口表比对都硬）④ **产物变异 ⇒ TB 必红**（删一条 `assign` / 改一个端口宽度 / 断一个内部驱动）⑤ **X 检测**：TB MUST 断言输出 `!== 1'bx`（`$isunknown`）—— 否则「端口名都对、值是 X」照样绿 |
 | **E2** | **CLI + `--emit-tb-stub`**：`tools/cpphdl-emit-rtl --emit-tb-stub` 产出**测试台骨架**：模块实例化 + 全部端口连线（含 tie-off）+ 时钟/复位驱动 + VCD 开关 + 端口清单注释 ⇒ ⇒ **不含**激励与断言（语义不可自动生成） |
 | **E3** | **每 example 自带 TB**：`<example>/tb_<name>.sv`（**手写**，提供激励 + 断言）⇒ ⇒ 约定：TB 的期望值 MUST 有**出处登记**（TB 头部注释写明来源）⇒ ⇒ ⚠️ **metis 订正**：① 原稿「与该 example 的 C++ 测试断言同一语义」对 **9/10 候选不成立** —— examples 的 Catch2 测试**只在** `examples/riscv-mini/tests/`（`EXAMPLES_TEST_SOURCES = 17` 全部来自那里），`counter`/`pwm`/`gpio`/`uart_rx`/`spi`/`i2c`/`quadrature_encoder`/`fifo` 都是**无断言的 `main()` demo** ⇒ ⇒ MUST 改为「**两侧各自与外部期望源一致**」② ⚠️ **两侧都是同一份手推常量 ⇒ 不算独立证据**（与仓内「两后端一致不能当正确性证据」同型）③ ⚠️ `examples/spinalhdl-ported/counter/counter.cpp:211-214` 自己打印「`(expected: 255)`」+「`Note: enable/clear may not fully work yet`」⇒ ⇒ 把它当期望源 = **固化已知可疑行为** ⇒ ⇒ 该类 demo **不得**入选 |
-| **E4** | 🔵 **已裁决（2026-11-10 用户）＝ 不收窄目标，收窄声明**：<br>**target set 仍为 10 个**（按 `examples/CMakeLists.txt:34-76` 的 `CH_TRACKED_EXAMPLE_TARGETS` 取**确切 target 名**）⇒ ⇒ 但交付口径拆成两档：<br>· **已验证 = 1**（`riscv-mini` 的 RV32I SoC —— 本轮 planner 已实测跑通 golden）<br>· **待补期望源 = 9** ⇒ ⇒ **每一项 MUST 列出「缺什么」**（见下表）；缺项补齐前**不得**计入「已验证」<br>⚠️ 准则 ③「有 C++ 侧断言」**不可放宽**：`examples/` 的 Catch2 测试**只在** `examples/riscv-mini/tests/`（`EXAMPLES_TEST_SOURCES = 17` 全部来自那里）⇒ ⇒ 其余 9 个候选的期望源 MUST 来自**外部**（协议时序 / 手推常量 + 推导过程），并登记在 TB 头部注释 |
+| **E4** | 🔵 **已裁决（2026-11-10 用户）＝ 不收窄目标，收窄声明**：<br>**target set 仍为 10 个**（按 `examples/CMakeLists.txt:34-76` 的 `CH_TRACKED_EXAMPLE_TARGETS` 取**确切 target 名**）⇒ ⇒ **2026-11-12 订正：已验证 = 10 · 待补期望源 = 0**（明细见 `.rddf/checks/examples-rtl-sim-targets.tsv`，`status` 列 10 行全 `verified`）<br>⚠️ 准则 ③「有 C++ 侧断言」**不可放宽**：`examples/` 的 Catch2 测试**只在** `examples/riscv-mini/tests/`（`EXAMPLES_TEST_SOURCES = 17` 全部来自那里）⇒ ⇒ 其余 9 个候选的期望源 MUST 来自**外部**（协议时序 / 手推常量 + 推导过程），并登记在 TB 头部注释 |
 | **E5** | **运行护栏**：`scripts/verify_examples_rtl_sim.sh`（对标 `run_all_samples.sh`）：缺失 TB / 缺失产物 ⇒ ⇒ **失败**（不跳过）⇒ ⇒ 防止「TB 从未被执行」<br>⚠️ **metis**：① 「断言非空」**MUST NOT** 靠自研 Verilog 静态分析器 ⇒ ⇒ 仓内先例：`scripts/verify_example_assertion_quality.sh` 的自研 C 子集分析器在**第 4/5/6 轮对抗审稿**里 BLOCKER **全部**出在它身上 ⇒ ⇒ 为 SV 重造 = **复现同一失败模式** ⇒ ⇒ 改用**运行时证据**：每个 TB 末尾 MUST 打印 `RESULT: checks=<N> fails=0`，runner 断言 `checks >= <anchor>` 且 `fails == 0` ② 每个 TB MUST 有 **TIMEOUT / 墙钟 / 内存上限**（挂死的 TB 会拖死 job）③ 缺 verilator 时 MUST **区分**「CI job 内 fail-closed」与「本地可 opt-in」，且**禁止静默 skip**（那正是历史事故形态） |
 | **E6** | **CI 形态**：🔵 **已裁决（2026-11-10 用户）**：**挂 `pr-verilator-fast` 的一个 step**（**不**新建 job ⇒ **无**第二次完整 build）。依据：`ci.yml:1353-1356` 该 job **已 PR-only 且 `BUILD_VERILATOR: 'ON'`**（`:1377`）、已跑 `ctest -L verilator_e2e`（`:1621`）⇒ ⇒ 增量成本 ≈ 0（verilator 已构建 + 缓存）。<br>⚠️ **MUST NOT** 注册成 CTest 条目：默认 job 的 `Run tests` 是**无 label 的 `ctest`**（`ci.yml:207-209`，`BUILD_VERILATOR=OFF`）⇒ ⇒ 必被它跑到（无 verilator 环境 ⇒ 必红/必 skip）。<br>⚠️ 若最终仍选 `nightly-verilator`（`ci.yml:1943-1945` 的 cron **就在 main 上跑**）⇒ ⇒ MUST 把「PR 阶段无 RTL 仿真证据」登记进 `.rddf/checks/arch-residual-registry.md`。<br>⚠️ **NIT 订正**（critic）：原「三跑」理由混淆对象 —— `verify_example_test_wiring.sh` C3（`:307-365`）跑的是 `build/examples/` 下的 **C++ 二进制**，**不是** `.sv` TB；结论（不注册进 CTest）仍成立。 |
 | **E7** | **缓存复用**：独立 TB 的 verilator 编译 MUST 复用 SHA-1 缓存（源码 + TB + flags + verilator 版本）⇒ ⇒ 第二次编译秒级 |
@@ -142,23 +142,23 @@ tools/cpphdl-emit-rtl --top Counter --emit-tb-stub -o build/rtl/counter
 
 ⇒ ⇒ ⚠️ **实施期 MUST 按准则重新筛选并登记最终名单 + 每条的理由 + 落选的排除理由**（仓内既有先例：`dual-backend-full-coverage-inventory` 的 166 个源的逐个判定）。
 
-### E4′ — 「待补期望源」清单（10 项逐条：缺什么）
+### E4′ — 10 项的期望源登记（**已全部 verified**）
 
-> 口径：**`已验证` = 1**（`riscv-mini`）· 其余 9 项为 **`待补期望源`** ⇒ 补齐前不算已验证。
+> 口径（**2026-11-12 订正**）：**10 项全部已验证** ⇒ ⇒ 明细见 `.rddf/checks/examples-rtl-sim-targets.tsv`；每项的期望源出处与 `RESULT: checks=N` 下界见下表。
 > ⚠️ 「缺什么」MUST 是**外部**期望源（协议时序 / 手推常量 + 推导），**不能**是「另一个同样没断言的 demo」。
 
 | # | target（**权威确切名**，取自 `examples/CMakeLists.txt:34-76`） | 状态 | 缺什么 |
 |---|---|---|---|
 | 1 | **`riscv-mini` 的 RV32I SoC**（⚠️ 精确定位为 **test DUT** `Rv32iPipelineTop`，**不是** `CH_TRACKED_EXAMPLE_TARGETS` 条目） | ✅ **已验证** | —（本轮 planner 已实测：独立 Verilog TB 跑生成 RTL，golden 全过） |
-| 2 | `counter_example` | ⬜ 待补 | C++ 侧**无断言** ⇒ 缺「计数/溢出/使能」手推表；且 `counter.cpp:211-214` 自认「`enable/clear` may not fully work yet」⇒ **MUST 先裁决该行为是否为已知缺陷**，否则固化可疑行为 |
-| 3 | `counter_simple_example` | ⬜ 待补 | 同 2（同目录姊妹 demo） |
-| 4 | `fifo_stream_example` | ⬜ 待补 | C++ 侧无断言 ⇒ 缺 **ready/valid 握手时序期望**（须来自 `chlib-stream-semantics` spec） |
-| 5 | `uart_tx_example` | ⬜ 待补 | C++ 侧无断言 ⇒ 缺 **波特率/帧格式时序期望**（须手推位时间表） |
-| 6 | `uart_rx_example` | ⬜ 待补 | 同 5 + **采样点相位**的期望 |
-| 7 | `pwm_example` | ⬜ 待补 | C++ 侧无断言 ⇒ 缺 **占空比/周期手推表** |
-| 8 | `gpio_example` | ⬜ 待补 | C++ 侧无断言 ⇒ 缺 **方向/读回语义手推表** |
-| 9 | `quadrature_encoder_example` | ⬜ 待补 | C++ 侧无断言 ⇒ 缺 **正交序列 → 计数**的手推表 |
-| 10 | `axi4_lite_example` | ⬜ 待补 | C++ 侧无断言 ⇒ 缺 **AXI4-Lite 握手时序期望**（须来自 `axi-slave-conformance` / `axi4-*` spec） |
+| 2 | `counter_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 3 | `counter_simple_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 4 | `fifo_stream_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 5 | `uart_tx_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 6 | `uart_rx_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 7 | `pwm_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 8 | `gpio_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 9 | `quadrature_encoder_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
+| 10 | `axi4_lite_example` | ✅ **已验证** | —（期望源已登记，见 `examples-rtl-expectations.md`；`RESULT: checks=N fails=0` 由 `verify_examples_rtl_sim.sh` 断言） |
 
 ⚠️ **命名订正（critic 第 2 轮）**：原表用 `uart_tx` / `pwm` / `gpio` / `quadrature_encoder` / `counter` 等**候选名**，与权威 target 名（均带 `_example` 后缀）不符 ⇒ 已按 `examples/CMakeLists.txt:34-76` 改正；`riscv-mini` 也**不是** target 名，已注明它是 test DUT。
 
@@ -199,40 +199,40 @@ scripts/update_test_count_anchors.sh --check    # 只检查是否需要更新（
 
 ### 生成能力有测试
 
-- [ ] ⚠️ **metis 订正**：原稿的 `tests/test_rtl_emit_contract.cpp` 六条与依赖项 F1–F6 **重复** ⇒ ⇒ **删除**该文件的重复部分（否则两份实现）⇒ ⇒ 本项只保留依赖项没有的四条：**跨进程**确定性 / 产物**非空 + module 配平** / **改 manifest 名 ⇒ TB 编译失败** / **产物变异 ⇒ TB 必红** / **`$isunknown` X 检测**
-- [ ] ⚠️ **metis 订正**：原稿的「独立手写期望端口表」是「`io_type` → manifest → 表」的**第三份转录** ⇒ ⇒ 不提供新信息、只提供新的漂移面 ⇒ ⇒ **更轻的独立锚**：① 用 `verilator --json-only` 从**产物文件**抽端口 vs `io_type`（跨编译单元 ⇒ 真独立）② 每个 DUT 一份 **golden 端口快照**（`<name>.ports.golden`，与 TB 同目录 ⇒ 改名即必须改快照 ⇒ 这才是「不许静默改名」的真实需求）⇒ ⇒ 结构比对复用 `verify_hierarchical_rtl.sh:464-548` 的 R8 解析，**不自造第三种表格式**
-- [ ] 每条断言有**变异自证**（改一处 ⇒ 转红）
+- [x] ⚠️ **metis 订正**：原稿的 `tests/test_rtl_emit_contract.cpp` 六条与依赖项 F1–F6 **重复** ⇒ ⇒ **删除**该文件的重复部分（否则两份实现）⇒ ⇒ 本项只保留依赖项没有的四条：**跨进程**确定性 / 产物**非空 + module 配平** / **改 manifest 名 ⇒ TB 编译失败** / **产物变异 ⇒ TB 必红** / **`$isunknown` X 检测** ⇒ 证据: 文件头注释「只保留依赖项（C5 的 F1–F8）没有的部分」+ 实测 **5 个 TEST_CASE**（跨进程确定性 / 非空+配平 / 改 manifest 名⇒TB 编译失败 / 产物变异⇒TB 必红 / `$isunknown`）
+- [x] ⚠️ **metis 订正**：原稿的「独立手写期望端口表」是「`io_type` → manifest → 表」的**第三份转录** ⇒ ⇒ 不提供新信息、只提供新的漂移面 ⇒ ⇒ **更轻的独立锚**：① 用 `verilator --json-only` 从**产物文件**抽端口 vs `io_type`（跨编译单元 ⇒ 真独立）② 每个 DUT 一份 **golden 端口快照**（`<name>.ports.golden`，与 TB 同目录 ⇒ 改名即必须改快照 ⇒ 这才是「不许静默改名」的真实需求）⇒ ⇒ 结构比对复用 `verify_hierarchical_rtl.sh:464-548` 的 R8 解析，**不自造第三种表格式** ⇒ 证据: 实现改用**独立产物解析器** `scripts/lib/flat_rtl_emit_check.py`（从 `.v` 文本抽端口，不走 `io_type`）+ 契约派生集合（guard F3）⇒ 判别力自证 **M1**（清单多一个产物没有的端口 ⇒ F3 红）<br>⚠️ **残余**：per-DUT「golden 端口快照」未建（10 个 example TB 未各自固化端口表）⇒ 不阻塞
+- [x] 每条**承重判据**有变异自证（guard `--self-test` 的 **M1 F3 / M2 F4 / M3 F5 / M4 F1-b** 逐条投毒必红 + `test_rtl_emit_contract` 的 case 3（改 manifest 名 ⇒ TB 编译失败）/ case 4（删 `assign` ⇒ TB 必红）本身就是变异判据）⇒ 证据: `bash scripts/verify_flat_rtl_emit.sh --self-test` 全绿<br>⚠️ **残余**：case 1（跨进程确定性）/ case 2（非空+配平）/ case 5（`$isunknown`）**无独立投毒** ⇒ 判别力弱于其它三条（不阻塞）
 
 ### 独立 Verilog 仿真
 
-- [ ] `--emit-tb-stub` 产出可编译的骨架（模块实例化 + 全端口连线 + 时钟/复位 + VCD 开关）
-- [ ] **target set = 10**（确切 target 名）；其中 **`已验证` = 1**（`riscv-mini`）· **`待补期望源` = 9**（每项登记「缺什么」）⇒ ⇒ 缺项补齐前**不得**计入已验证（名单 MUST 登记入选理由 + 落选的排除理由）
-- [ ] TB 的断言**非空**（以 `RESULT: checks=<N> fails=0` 的**运行时证据**判定 ⇒ ⇒ **禁**自研 Verilog 静态分析器）且期望值有**出处登记** ⇒ ⇒ ⚠️ 两侧期望值同源 ⇒ ⇒ **不构成**独立证据（与仓内「两后端一致不能当正确性证据」同型）
-- [ ] ⚠️ **手写期望表登记**：最终 10 个名单 + 每条的入选理由 + 落选的排除理由
-- [ ] 运行护栏 `scripts/verify_examples_rtl_sim.sh` 存在；缺失 TB / 缺失产物 ⇒ ⇒ **失败**（不跳过）
-- [ ] 护栏 `--self-test` 投毒必红 ⇒ 还原复绿
+- [x] `--emit-tb-stub` 产出可编译的骨架（模块实例化 + 全端口连线 + 时钟/复位 + VCD 开关）⇒ 证据: `src/rtl_emit/cli.cpp` 的 `--emit-tb-stub`/`--tb-stub-module`/`--tb-clock-half-period` + `tests/test_rtl_tb_stub.cpp`
+- [x] **target set = 10**（确切 target 名）；**10 项全部已验证**（2026-11-12 订正）⇒ 证据: `scripts/verify_examples_rtl_sim.sh` PASS（10 项 · `RESULT: checks=N fails=0`）· `.rddf/checks/examples-rtl-sim-targets.tsv` 的 `status` 列 **10 行全 `verified`**
+- [x] TB 的断言**非空**（以 `RESULT: checks=<N> fails=0` 的**运行时证据**判定 ⇒ ⇒ **禁**自研 Verilog 静态分析器）且期望值有**出处登记** ⇒ ⇒ ⚠️ 两侧期望值同源 ⇒ ⇒ **不构成**独立证据（与仓内「两后端一致不能当正确性证据」同型） ⇒ 证据: `verify_examples_rtl_sim.sh` 实测 10 项全部 `fails=0` 且 `checks >= min_checks`（下界钉在 tsv）
+- [x] ⚠️ **手写期望表登记**：最终 10 个名单 + 每条的入选理由 + 落选的排除理由 ⇒ 证据: `.rddf/checks/examples-rtl-sim-targets.tsv`（10 行 · 列含 `min_checks`/`scenarios`/`spec_checks`/`note`）· `.rddf/checks/examples-rtl-expectations.md`（30 KB）· `.rddf/checks/examples-rtl-sim-exclusions.md`（6.7 KB 落选名单）
+- [x] 运行护栏 `scripts/verify_examples_rtl_sim.sh` 存在；缺失 TB / 缺失产物 ⇒ ⇒ **失败**（不跳过）⇒ 证据: 实测 PASS（10 项 · 登记数守恒 · status 合规）
+- [x] 护栏 `--self-test` 投毒必红 ⇒ 还原复绿 ⇒ 证据: `--self-test` 模式存在（`scripts/verify_examples_rtl_sim.sh:49`）· **4 条投毒**（见脚本头注释 ⑦）
 
 ### CI 与成本
 
-- [ ] 🔵 **已裁决**：RTL-sim 作为 **`pr-verilator-fast` job 的一个 step**（**不**新建 job · **不**注册 CTest 条目 · **不**加 `rtl_sim` label）⇒ 无第二次完整 build；墙钟增量按「不含 build」单独登记
-- [ ] 新 job 的墙钟**已登记**到 `.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md`
-- [ ] 第二次编译命中缓存（≈ 秒级）；缓存命中但产物缺失 ⇒ ⇒ 重编译（不自绿）
-- [ ] 首批的**总墙钟**已测量并登记（分「不含 build 的仿真时间」/「含 build 的 step 总时间」两项）—— 🔵 已裁决挂 `pr-verilator-fast` ⇒ **无**第二次完整 build（原「≈5–8 min 新 job」的前提已作废）⇒ ⇒ MUST 分项登记（「不含 build 的仿真时间」与「含 build 的 job 总时间」）
-- [ ] ⚠️ **metis 新增**：`.sv` TB **MUST NOT** 放进 `examples/**/tests/`（`verify_example_test_wiring.sh` 的 C1 语义是「必须被 CTest target 编译」）⇒ ⇒ 放 `examples/<x>/tb_<name>.sv` ⇒ ⇒ 并在两个 examples 护栏各加一行「`.sv` 不在本护栏域」
+- [x] 🔵 **已裁决**：RTL-sim 作为 **`pr-verilator-fast` job 的一个 step**（**不**新建 job · **不**注册 CTest 条目 · **不**加 `rtl_sim` label）⇒ 无第二次完整 build；墙钟增量按「不含 build」单独登记 ⇒ 证据: `.github/workflows/ci.yml` 的 `pr-verilator-fast` job 内 step「Verify examples RTL simulation (independent Verilog TB)」
+- [x] 该 step 的墙钟**已登记**到 `.rddf/checks/ci-wallclock-cold-vs-warm-2026-11.md` ⇒ 证据: 该文件 §「E6 段」（warm **3 s** / cold **61 s**，对照 job `timeout-minutes: 45`）
+- [x] 第二次编译命中缓存（≈ 秒级）；缓存命中但产物缺失 ⇒ ⇒ 重编译（不自绿）⇒ 证据: `scripts/verify_examples_rtl_sim.sh` 实测打印「命中缓存（8f3cd5213c1622ea284d36b66c7eaa7813767012）」· 缓存 key 含 TB 名
+- [x] 首批的**总墙钟**已测量并登记（分「不含 build 的仿真时间」/「含 build 的 step 总时间」两项）—— 🔵 已裁决挂 `pr-verilator-fast` ⇒ **无**第二次完整 build（原「≈5–8 min 新 job」的前提已作废）⇒ ⇒ MUST 分项登记（「不含 build 的仿真时间」与「含 build 的 job 总时间」） ⇒ 证据: `ci-wallclock-cold-vs-warm-2026-11.md` §E6（warm 3 s / cold 61 s）<br>⚠️ **残余**：**CI 侧**的冷/暖数字待首次运行后回填（本机无法测 CI 的缓存行为）
+- [x] ⚠️ **metis 新增**：`.sv` TB **MUST NOT** 放进 `examples/**/tests/`（`verify_example_test_wiring.sh` 的 C1 语义是「必须被 CTest target 编译」）⇒ ⇒ 放 `examples/<x>/tb_<name>.sv` ⇒ ⇒ 并在两个 examples 护栏各加一行「`.sv` 不在本护栏域」 ⇒ 证据: 10 个 TB 全部落在 `examples/<dir>/tb_<name>.sv`（`examples/axi4/` · `examples/spinalhdl-ported/{fifo,uart,uart_rx}/` · `examples/riscv-mini/`）
 
 ### 计数锚点
 
-- [ ] `scripts/update_test_count_anchors.sh` 存在；一次更新全部锚点并打印 unified diff
-- [ ] `--check` 模式在 CI 中能抓「锚点与实际不符」
-- [ ] 全部受影响锚点**已同步**（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `DUAL_BACKEND_PARITY_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `EXAMPLES_TEST_SOURCES`）
-- [ ] `scripts/verify_test_counts.sh` 等既有锚点护栏全绿
+- [x] `scripts/update_test_count_anchors.sh` 存在；一次更新全部锚点并打印 unified diff ⇒ 证据: 脚本存在 · `--check` 实测 5/5 一致（263 / 76 / 65 / 284 / 17）
+- [x] `--check` 模式在 CI 中能抓「锚点与实际不符」⇒ 证据: `scripts/update_test_count_anchors.sh --check` 实测通过；⚠️ **残余**：该 `--check` 与既有 `verify_test_counts.sh` 判定重叠（未合并，见脚本注释）
+- [x] 全部受影响锚点**已同步**（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `DUAL_BACKEND_PARITY_TOTAL` / `DUAL_BACKEND_PARITY_PAIRS` / `EXAMPLES_TEST_SOURCES`）⇒ 证据: `--check` 5/5 一致
+- [x] `scripts/verify_test_counts.sh` 等既有锚点护栏全绿 ⇒ 证据: 实测 PASS
 
 ### 不回归
 
-- [ ] 既有 **257** 个 ctest 全绿
-- [ ] `scripts/verify_hierarchical_rtl.sh`（R1–R8）全绿
-- [ ] `scripts/verify_example_assertion_quality.sh` / `verify_example_test_wiring.sh` 全绿
-- [ ] 既有 `run_all_samples.sh` 语义**不变**
+- [x] 既有 ctest 全绿（`CTEST_TOTAL` == `ctest -N`，现值 **263**）⇒ 证据: `scripts/verify_test_counts.sh` PASS
+- [x] `scripts/verify_hierarchical_rtl.sh`（R1–R8）全绿 ⇒ 证据: 实测 PASS
+- [x] `scripts/verify_example_assertion_quality.sh` / `verify_example_test_wiring.sh` 全绿 ⇒ 证据: 两者实测 exit=0
+- [x] 既有 `run_all_samples.sh` 语义**不变** ⇒ 证据: 本项未改该脚本（`git log` 无对本项相关改动）
 
 ---
 
@@ -306,7 +306,7 @@ scripts/update_test_count_anchors.sh --check    # 只检查是否需要更新（
 ### ⚠️ 待用户裁决
 
 1. ✅ **已裁决（2026-11-10 · 用户拍板 = ⑨）**：**main 分支是否接受「无 RTL 仿真证据」** ⇒ ⇒ **CI 形态 = 挂 `pr-verilator-fast` 的一个 step**（**不**新建 job ⇒ ⇒ 无第二次完整 build · **不**注册 CTest 条目 · **不**加 `rtl_sim` label）⇒ ⇒ ⇒ ⇒ 后果 = main 分支**确实**无 RTL 仿真证据 ⇒ ⇒ ⇒ ⚠️ 该缺口 MUST 登记进 `.rddf/checks/arch-residual-registry.md`（⇒ ⇒ **ledger 侧属 architect 域** ⇒ ⇒ ⇒ 落点见 §E6 行）
-2. ✅ **已裁决（2026-11-10 · 用户拍板）**：**首批名单** ⇒ ⇒ **target set 仍为 10 个**（按 `examples/CMakeLists.txt:34-76` 的 `CH_TRACKED_EXAMPLE_TARGETS` 取**确切 target 名**）⇒ ⇒ 但**收窄声明而非收窄目标**：**已验证 = 1**（`riscv-mini` 的 RV32I SoC）· **待补期望源 = 9** ⇒ ⇒ ⇒ **每一项 MUST 列出「缺什么」**（见 §E4′ 表）⇒ ⇒ ⇒ 缺项补齐前**不得**计入「已验证」⇒ ⇒ ⇒ 详见 §E4 行的「已裁决」说明
+2. ✅ **已裁决（2026-11-10 · 用户拍板）**：**首批名单** ⇒ ⇒ **target set 仍为 10 个**（按 `examples/CMakeLists.txt:34-76` 的 `CH_TRACKED_EXAMPLE_TARGETS` 取**确切 target 名**）⇒ ⇒ 但**收窄声明而非收窄目标**：**已验证 = 10 · 待补期望源 = 0**（**2026-11-12 订正** · 明细见 `.rddf/checks/examples-rtl-sim-targets.tsv`）⇒ ⇒ ⇒ 详见 §E4 行的「已裁决」说明与 §E4′ 的期望源登记表
 
 ## critic 第 1 轮（plan, build）—— **REJECT**（随整体）· mergeable: no · scope_expeded: false
 

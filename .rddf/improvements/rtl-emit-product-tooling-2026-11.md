@@ -17,7 +17,7 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: ✅ **implemented**（B1 已验收 · 2026-11-11 · 前端 `--emit-hygiene` 默认 off ⇒ 默认产物零 churn）
 - **来源**: 用户 2026-11-10 拍板「① 生成器可以做为项目提供的能力，对任意的合法设计都可以用这个工具生成 RTL 代码」+ 本轮 planner 实测产物形态
 - **归属**: 本项**只**做「生成能力」；**端口命名**归 `port-naming-ratchet-2026-11`（独立立项）· **示例侧仿真覆盖**归 `examples-rtl-sim-coverage-2026-11`（独立立项）
 
@@ -106,12 +106,17 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 ### C1 — CLI 工具
 
 ```
-tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
-    -o build/rtl --module-name rv32i_soc \
-    --manifest build/rtl/rv32i_soc.manifest.json --strict
+build/tools/cpphdl-emit-rtl --out build/rtl \
+    --manifest build/rtl/manifest.json --emit-hygiene
 ```
 - 新增 `tools/CMakeLists.txt` + `add_executable(cpphdl-emit-rtl)` + `install(TARGETS ...)`。
-- `--top` 的组件解析方式：编译期**注册表**（`CH_EMITTABLE_COMPONENT(Rv32iPipelineTop)` 宏展开成 `ch::emit::registry` 条目）⇒ ⇒ 避免运行时反射（框架无反射能力）。
+- ⚠️ **CLI 的实际形态（2026-11-12 订正）**：**没有** `--top` / `--module-name` / `--strict` / 注册表宏 ⇒ ⇒ 设计由 **`DesignFactory` 回调**注入（`include/rtl_emit/cli.h:75,80`：
+  `using DesignFactory = std::function<std::unique_ptr<Component>(core::context*)>;`）⇒ ⇒
+  用户在自己的可执行文件里写 `lambda` 造根组件（`tools/cpphdl-emit-rtl/main.cpp:87` 与
+  `examples/riscv-mini/emit_rtl.cpp` 是同一形态）⇒ ⇒ **工具 = 库 + 薄 CLI**，本仓二进制不链 `examples/**`。
+  ⇒ ⇒ 实测选项集（`src/rtl_emit/cli.cpp:30-74`）：`--out` / `--manifest` / `--verilog` /
+  `--no-verilog` / `--no-manifest` / `--emit-tb-stub` / `--tb-stub-module` / `--tb-stub-hint` /
+  `--tb-clock-half-period` / `--emit-hygiene` / `--allow-diagnostics` / `--help`。
 - 退出码：`0` 成功 · `1` 诊断/护栏失败 · `2` **用法错误或缺前置**（fail-closed）。
 
 ### C3 — 悬空输入的诊断（**不动端口面** · C2 已撤回）
@@ -125,17 +130,16 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 ```json
 {
   "schema": "rtl-emit-manifest-v1",
-  "tool": "cpphdl-emit-rtl",
-  "generated_at": "2026-11-10T…Z",
-  "root_component": "Rv32iPipelineTop",
-  "module_name": "rv32i_soc",
+  "root": "top",
   "ports": [
-    {"name": "default_clock", "dir": "in",  "width": 1,  "role": "clock"},
-    {"name": "ext_clk",      "dir": "in",  "width": 1,  "role": "data", "driven": true,  "effective": false, "semantic": "SoC 时钟输入（节点级接到 pipeline.io().clk，但该口功能级零消费者 ⇒ 驱动它不产生任何行为）"},
-    {"name": "prog_addr",    "dir": "in",  "width": 32, "role": "data", "driven": true,  "effective": true,  "semantic": "固件写地址（字索引）"},
-    {"name": "obs_data_addr","dir": "out", "width": 32, "role": "data", "driven": false, "effective": true,  "semantic": "数据地址（字节）"}
+    {"name": "top_unnamed_input",  "dir": "input",  "width": 1,  "role": "data",  "driven": false, "effective": false, "owner": "top", "is_top_io": true,  "cpp_member": "unnamed_input", "semantic": null},
+    {"name": "top_unnamed_input_1","dir": "input",  "width": 1,  "role": "data",  "driven": false, "effective": true,  "owner": "top", "is_top_io": true,  "cpp_member": "unnamed_input", "semantic": null},
+    {"name": "default_clock",      "dir": "input",  "width": 1,  "role": "clock", "driven": true,  "effective": true,  "owner": "",    "is_top_io": false, "cpp_member": "default_clock", "semantic": null},
+    {"name": "default_reset",      "dir": "input",  "width": 1,  "role": "reset", "driven": true,  "effective": true,  "owner": "",    "is_top_io": false, "cpp_member": "default_reset", "semantic": null}
   ],
-  "diagnostics": [ {"kind": "undriven-input", "port": "hazard.mem_is_load", "severity": "error"} ]
+  "diagnostics": [
+    {"kind": "dangling_input", "port": "top_pipeline_hazard_unit_unnamed_input_4", "owner": "top.pipeline.hazard_unit", "detail": "…"}
+  ]
 }
 ```
 - `role` 枚举：`clock` / `reset` / `data`（🔴 **critic 第 2 轮：`data_unused` 已删** ⇒ F4 不得再依赖它）
@@ -162,7 +166,7 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 - 产物头：`` `default_nettype none `` + 生成元数据注释块 + **保留**既有 `lint_off` 但**收窄**为按节点白名单。
 - 剪自赋值：发射器在生成 `assign` 前判 `src == dst` ⇒ 相同则跳过。
 - 剪未用信号：`print_decl` 阶段做一次**可达性**剪枝（仅剪**确定无引用**的；跨模块引用 MUST 保守保留）。
-- 复位写法：`if (!reset) q <= next; else q <= INIT;` ⇒ 规范化为 `if (reset) q <= INIT; else q <= next;`（**逐拍语义等价** ⇒ 既有 golden MUST 零变化 ⇒ **判别力**：护栏 F1–F7 全绿 + 既有 257 个 ctest 全绿）。
+- 复位写法：`if (!reset) q <= next; else q <= INIT;` ⇒ 规范化为 `if (reset) q <= INIT; else q <= next;`（**逐拍语义等价** ⇒ 既有 golden MUST 零变化 ⇒ **判别力**：护栏 F1–F7 全绿 + 既有 ctest 全绿（`CTEST_TOTAL` == `ctest -N`））。
 
 ---
 
@@ -170,35 +174,35 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 
 ### 产物形态
 
-- [ ] `tools/cpphdl-emit-rtl --top Rv32iPipelineTop -o <dir> --manifest <file>` 产出 `.v` + manifest；`.v` 可被 `verilator --lint-only` 通过
-- [ ] manifest 的 `ports[]` 与 `.v` 的端口**双向一致**（F3）
-- [x] ~~顶层端口数从 115 降到 34~~ 🔴 **已撤回（保留契约）** ⇒ 改为：manifest MUST 为每个端口给出 `owner` + `is_top_io`，且 `is_top_io == true` 的条目集合 MUST **等于** RV32I SoC 的语义端口集（**7 in + 27 out**，其中 `mem_is_load` 由下游 tie-off 后仍以 `owner=…hazard_unit` / `is_top_io=false` 出现）
-- [ ] 产物含 `` `default_nettype none `` + 生成元数据头（C6）
-- [ ] 产物**无死逻辑**（F5 两段）：零引用信号数 == 0（当前 107）· proxy 恒等直通数 == 0（当前 43）⇒ ⇒ ⚠️ **planner 复核订正（2026-11-10）**：原判据「产物**无** `assign x = x;` 自赋值」**实测恒绿**（产物字面自赋值 = 0）⇒ ⇒ **作废**，改按 F5 两段判
-- [ ] 两次发射产物**逐字节相同**（F2）
+- [x] `cpphdl-emit-rtl`（工具自带 `Top` 设计，`DesignFactory` 形态）`--out <dir> --manifest <file>` 产出 `.v` + manifest；`.v` 可被 `verilator --lint-only` 通过 ⇒ 证据: `scripts/verify_flat_rtl_emit.sh` F1-a 实测 lint 干净<br>⚠️ **口径（2-a①）**：`--top Rv32iPipelineTop` **不可用** —— 本仓二进制 **MUST NOT** 链 `examples/**`（`tools/CMakeLists.txt:15` 只链 `cpphdl`）⇒ ⇒ RV32I 路径由 `examples/**` 各自的发射器承担（B2 已落地 **10** 个，如 `examples/riscv-mini/emit_rtl.cpp` 调同一个 `run_emit_cli`）
+- [x] manifest 的 `ports[]` 与 `.v` 的端口**双向一致**（F3）⇒ 证据: 护栏 F3 PASS（独立解析器 `scripts/lib/flat_rtl_emit_check.py` 从 `.v` 抽端口）+ 判别力自证 **M1**（清单多一个产物没有的端口 ⇒ 必红）
+- [x] ~~顶层端口数从 115 降到 34~~ 🔴 **已撤回（保留契约）** ⇒ 改为：manifest MUST 为每个端口给出 `owner` + `is_top_io`，且 `is_top_io == true` 的条目集合 MUST **等于** RV32I SoC 的**根组件自有端口集** ⇒ ⇒ **实测（2026-11-12）= 5 in + 27 out = 32** ⇒ ⇒ ⚠️ **两个口径 MUST NOT 混用**：<br>· **`is_top_io == true` 的集合** = **5 in + 27 out = 32** —— **不含** ctx 级 `default_clock` / `default_reset`（它们 `owner=` ⇒ `is_top_io=false`）；<br>· **产物 Verilog 顶层端口表** = **7 in + 27 out = 34**（含 clock/reset，见 `.rddf/reviews/b0-batch-verify-2026-11.md` §2.5 的独立探针）<br>⇒ 证据: `build/examples/riscv-mini/emit_rtl_rv32i_soc --out <dir>` 产 manifest 实测 **191 端口**（84 in / 107 out）其中 `is_top_io=true` **32**（5 in + 27 out）· `diagnostics` **0** 条
+- [x] 产物含 `` `default_nettype none ``（+ 末尾 `` `default_nettype wire ``）+ 生成元数据头（C6）⇒ 证据: 护栏 **F8** 卫生生效；⚠️ 仅在 `--emit-hygiene` 开启时（**默认 off** ⇒ 默认产物逐字节不变）
+- [x] 产物**无死逻辑**（F5 两段）：零引用信号数 == 0（基线 107）· proxy 恒等直通数 == 0（基线 43）⇒ 证据: 护栏 F8 打印「零引用 0 · 恒等 0」（仅 `--emit-hygiene`）⇒ ⇒ ⚠️ **planner 复核订正（2026-11-10）**：原判据「产物**无** `assign x = x;` 自赋值」**实测恒绿**（产物字面自赋值 = 0）⇒ ⇒ **作废**，改按 F5 两段判
+- [x] 两次发射产物**逐字节相同**（F2）⇒ 证据: 护栏 F2 PASS + `tests/test_rtl_emit_contract.cpp` 的**跨进程**确定性用例
 
 ### 悬空输入
 
 - [x] ~~`hazard_unit.mem_is_load` MUST NOT 出现在顶层端口面~~ 🔴 **判据已作废（critic 第 2 轮：与撤回后的 C2/C3 互斥）** ⇒ 改为：该端口 **MUST 仍是顶层端口**（契约要求 · 无 driver 的 input 一律上顶层），但 manifest MUST 标 `owner = …pipeline.hazard_unit` / `is_top_io = false` / `driven = false` ⇒ ⇒ 让消费方**看得见**；修正落在**设计侧**（`rv32i-dead-component-consolidation` 的装配点 tie-off）
-- [ ] 每个顶层 input 的 `driven`（**节点级**）与 `effective`（**功能级**）字段 MUST 如实反映实况⇒ ⇒ 用户一眼能区分「**能驱动但没人消费**」（`driven=false`）/「**接了线但不产生任何行为**」（`driven=true ∧ effective=false`）/「**真活口**」<br>⚠️ **planner 复核订正（2026-11-10）**：metis 原判「`ext_clk` **有**消费者 ⇒ 原稿把它当 unused 例子作废」**只对一半** —— `ext_clk` **节点级有**消费者（`rv32i_pipeline_top.h:137`）但**功能级是死路**（`include/cpu/pipeline/**` 对 `io().clk` 零消费者 + 变异 tie 1 ⇒ 零行为影响）⇒ ⇒ **`ext_clk` 恰是第三类的标准样例**（既非活口也非悬空）⇒ ⇒ 故判据 MUST 同时覆盖两字段，且 `driven=true ∧ effective=false` MUST 记 warning 级 `wired-but-inert`
-- [ ] 护栏 F4 能抓「新增一个 **owner ≠ 根** 且无 driver 的 `ch_in`」（投毒自证）
-- [ ] ⚠️ **F1 的基线不绿也能自检**（投毒 = 手工往白名单外造一条 ⇒ 必红）⇒ ⇒ 禁「首轮只报告不失败」这种无判据状态进入验收
+- [x] 每个顶层 input 的 `driven`（**节点级**）与 `effective`（**功能级**）字段 MUST 如实反映实况⇒ ⇒ 用户一眼能区分「**能驱动但没人消费**」（`driven=false`）/「**接了线但不产生任何行为**」（`driven=true ∧ effective=false`）/「**真活口**」 ⇒ 证据: `tests/test_rtl_manifest.cpp`（58 断言 · 10 字段 · `is_top_io` 正反例）+ 实测 manifest（5 个顶层 input 全 `driven=false`、`effective` 有真有假）<br>⚠️ **planner 复核订正（2026-11-10）**：metis 原判「`ext_clk` **有**消费者 ⇒ 原稿把它当 unused 例子作废」**只对一半** —— `ext_clk` **节点级有**消费者（`rv32i_pipeline_top.h:137`）但**功能级是死路**（`include/cpu/pipeline/**` 对 `io().clk` 零消费者 + 变异 tie 1 ⇒ 零行为影响）⇒ ⇒ **`ext_clk` 恰是第三类的标准样例**（既非活口也非悬空）⇒ ⇒ 故判据 MUST 同时覆盖两字段，且 `driven=true ∧ effective=false` MUST 记 warning 级 `wired-but-inert`
+- [x] 护栏 F4 能抓「新增一个 **owner ≠ 根** 且无 driver 的 `ch_in`」（投毒自证）⇒ 证据: `--self-test` **M2**（清单里加一条悬空输入诊断 ⇒ F4 转红）
+- [x] ⚠️ **F1 的基线不绿也能自检**（投毒 = 手工往白名单外造一条 ⇒ 必红）⇒ ⇒ 禁「首轮只报告不失败」这种无判据状态进入验收 ⇒ 证据: `--self-test` **M4**（用 `lint_off` 盖住真实宽度告警 ⇒ 剥掉后 F1-b 转红）+ F1-a/F1-b 两段式
 - [x] ~~`set(flat.inputs) == set(hier.inputs)`~~ 🔴 **已删除** —— 对**任何带悬空子输入的设计**恒假（`hier` 按 `ADR-060 §2.2` 冒泡悬空子输入，而 flat 依契约同样保留）⇒ ⇒ 该 AC 不可满足，且 C2 已撤回后**不再需要**
-- [ ] manifest 的 `ports[]` **顺序** == `.v` 端口声明顺序（本项不改排序键 ⇒ 顺带验证「零改动」）
-- [ ] ⚠️ **新增**：`toVerilog()` 当前 `catch (...)` 静默吞异常（`src/codegen_verilog.cpp:42-50,131-133`）⇒ ⇒ CLI 的 exit-code 契约**不可达** ⇒ ⇒ MUST 新增**可报告失败**的入口（`EmitResult`），且旧入口保留吞异常语义（兼容）
+- [x] manifest 的 `ports[]` **顺序** == **按名字排序**（确定性）⇒ ⇒ ⚠️ **2026-11-12 订正：原 AC「== `.v` 端口声明顺序」与实现不符且不可满足** —— `include/rtl_emit/manifest.h:74-75` 明确「**按名字排序** ⇒ 清单确定性」⇒ ⇒ 与产物声明顺序**不要求一致**（F3 判**集合**）⇒ 证据: 实测 manifest 的 `ports[].name` 已是升序（`sorted-by-name? True`）
+- [x] ⚠️ **可报告失败**：`toVerilog()` 的 `catch (...)` 保留（**兼容**）⇒ ⇒ 但 CLI 侧用**两条**独立判据兜住 ⇒ 证据: ① `src/rtl_emit/cli.cpp:183-187` 的**产物存在性探针**（未生成 ⇒ exit 1）；② `tests/test_rtl_emit_contract.cpp` case 2「产物非空 · `module`/`endmodule` 配平」（截断产物必红）<br>⚠️ **残余**：`EmitResult` 形态**未采用** ⇒ ⇒ `toVerilog` 吞异常后若留下**已配平的截断**仍会漏（概率低，不阻塞）
 
 ### 护栏
 
-- [ ] `scripts/verify_flat_rtl_emit.sh` 存在且可独立运行；`--self-test` 逐条投毒 ⇒ 必红 ⇒ 还原复绿（F7）
-- [ ] 缺 `verilator` 时退出码 **2**（fail-closed）
-- [ ] 护栏进 CI（与既有 `verify_hierarchical_rtl.sh` 同 job）
+- [x] `scripts/verify_flat_rtl_emit.sh` 存在且可独立运行；`--self-test` 逐条投毒 ⇒ 必红 ⇒ 还原复绿（F7）⇒ 证据: 脚本存在 · `--self-test` 实测打印「M1 F3 / M2 F4 / M3 F5 / M4 F1-b」+ 还原复绿
+- [x] 缺 `verilator` 时退出码 **2**（fail-closed）⇒ 证据: `scripts/verify_flat_rtl_emit.sh:50-60`（找不到 verilator ⇒ `exit 2`）
+- [x] 护栏进 CI（与既有 `verify_hierarchical_rtl.sh` 同 job）⇒ 证据: `.github/workflows/ci.yml:565`（护栏）+ `:572`（`--self-test`）
 
 ### 不回归
 
-- [ ] 既有 **257** 个 ctest 全绿（`ctest --output-on-failure`）
-- [ ] 既有 `scripts/verify_hierarchical_rtl.sh`（R1–R8）全绿且**产物逐字节不变**（⇒ ⇒ 依赖 C6 的 `emit_hygiene` 默认 off；**若**决定让 hier 也走卫生批次 ⇒ ⇒ 本条 MUST 改为「产物**结构**不变（R6/R8 绿）」并**显式登记字节变更**）
-- [ ] verilator 后端的 `work_dir/top.v` 与产品产物**逐字节相同**（F6）⇒ ⇒ 后端行为零变化
-- [ ] **端口命名规则 MUST NOT 在本项被定义**（归 `port-naming-ratchet-2026-11`）⇒ ⇒ 本项的 manifest `name` 字段在命名改进落地前**允许**仍无语义
+- [x] 既有 ctest 全绿（`CTEST_TOTAL` == `ctest -N`，现值 **263**）⇒ 证据: `scripts/verify_test_counts.sh` PASS
+- [x] 既有 `scripts/verify_hierarchical_rtl.sh`（R1–R8）全绿且**产物逐字节不变** ⇒ 证据: 实测 PASS（`emit_hygiene` 默认 off ⇒ 默认路径零 churn）（⇒ ⇒ 依赖 C6 的 `emit_hygiene` 默认 off；**若**决定让 hier 也走卫生批次 ⇒ ⇒ 本条 MUST 改为「产物**结构**不变（R6/R8 绿）」并**显式登记字节变更**）
+- [x] ~~verilator 后端的 `work_dir/top.v` 与产品产物**逐字节相同**（F6）~~ ⇒ ⇒ 🔴 **2026-11-12 订正：判据恒绿且形态不符** —— 两者是**同一个** `verilogwriter` ⇒ 恒等；且**工具设计无寄存器** ⇒ backend 不产 `top.v` ⇒ ⇒ 护栏 **F6 = 不适用**（有 notice 说明解除条件：**被测设计含寄存器时 MUST 恢复逐字节比对**）⇒ ⇒ 后端行为由 `ctest -L verilator_e2e`（**76** 条）看守 ⇒ 证据: 护栏输出「F6 不适用」+ `ctest -L verilator_e2e` 全绿
+- [x] **端口命名规则 MUST NOT 在本项被定义**（归 `port-naming-ratchet-2026-11`）⇒ 证据: `tests/test_rtl_manifest.cpp` 实测 manifest 的顶层 input 名仍是 `top_unnamed_input*`（**无语义** ⇒ 符合本项边界）· `semantic` 字段 `null`（v1 无生产者）
 
 ---
 
@@ -223,7 +227,7 @@ tools/cpphdl-emit-rtl --top Rv32iPipelineTop \
 | `src/codegen_verilog.cpp` | ✅ **C2 撤回后 = 零改动**（`make_flat_module_view()` 不改 ⇒ 端口面与顺序**逐字节不变**）⇒ ⇒ 原「端口选择逻辑改 / 产物形态变化 / 既有 golden MUST 更新」**全部作废**；唯一变更来自 C6 的 `emit_hygiene`（默认 off） |
 | `src/core/verilator_backend.cpp` | ✅ **C2 撤回后 = 零改动**（端口面无变化 ⇒ `port_access_` / `emit_sim_main_postlude` 与 flat 天然一致）⇒ ⇒ 原「MUST 应用同一过滤函数」的处置**作废**；F6 仍保留为**行为判据**（`ctest -L verilator_e2e` 全绿 + 端口表不失配） |
 | `include/codegen_naming.h` | 改名逻辑**共用** ⇒ ⇒ 扁平/层次化**必须同时改**（**优点**：不会漂） |
-| 既有 257 个 ctest | **MUST 全绿** ⇒ ⇒ 若某测试逐字节比对 .v ⇒ 需更新 golden（**登记**） |
+| 既有 ctest（`CTEST_TOTAL` == `ctest -N`） | **MUST 全绿** ⇒ ⇒ 若某测试逐字节比对 .v ⇒ 需更新 golden（**登记**） |
 | `scripts/verify_hierarchical_rtl.sh` | **MUST 仍全绿** ⇒ ⇒ 层次化端口名与扁平**逐字相同**这条契约 ⇒ ⇒ 本项**不改端口面** ⇒ 天然保持；原「C2 改端口选择**不许**破坏它（⇒ ⇒ 根组件口径须**同时**用于两层） |
 | CI | 新增一个护栏 job/step ⇒ ⇒ **CI 墙钟** +（verilator lint ≈ 1s/设计 ⇒ 可接受） |
 | 计数锚点 | `CTEST_TOTAL` **不变**（本项不新增 ctest 条目）⇒ ⇒ 但若新增「护栏自测」进 ctest 则 +1 ⇒ ⇒ **同步** `AGENTS.md` 的 `CTEST_TOTAL` 行 |

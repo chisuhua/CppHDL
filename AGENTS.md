@@ -450,18 +450,17 @@ ctest --output-on-failure
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
 - CTEST_TOTAL: 263
-     ⚠️ **2026-11-11 · B1 批 N1 + P1 + C4/C3（manifest）+ C6（产物卫生）**：
-     `test_port_name_named_ctor` + `test_port_name_parity` + `test_rtl_manifest`
-     + `test_rtl_emit_hygiene` 新增 ⇒ ⇒ **261**（+4）
-     ⇒ ⇒ 判别力实测：让具名构造**忽略显式名** ⇒ ⇒ **3 个用例转红**；
-     P1 三条 `Ratchet*` 各有**正向变异** ⇒ ⇒ **三条各自转红**；
-     manifest 的 `driven`（有驱动源）vs `effective`（能到达 ch_out）**两字段分别验**
-     ⇒ ⇒ ⚠️ 实测踩坑：用 `get_users()` 判「被消费」⇒ ⇒ **恒为 true** ⇒ ⇒ 零信息量
-     ⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**（节点创建回落 `unnamed_input`）
-     ⇒ ⇒ **3 个用例转红**；P1 三条 `Ratchet*` 各有**正向变异**（① 改匿名 /
-     ② 空名 fallback 保空 / ③ counter 恒 0）⇒ ⇒ **三条各自转红**；还原后**复绿**
-     ⚠️ **2026-11-11 · B2 批 E2（测试台骨架）**：`test_rtl_tb_stub` 新增
-     ⇒ ⇒ **262**（+1）· 本次同步由 `scripts/update_test_count_anchors.sh` 完成（E8）
+     ⚠️ **B1 批（N1 + P1 + C4/C3 manifest + C6 产物卫生）** —— `test_port_name_named_ctor`
+     + `test_port_name_parity` + `test_rtl_manifest` + `test_rtl_emit_hygiene` 四个新增
+     ⇒ ⇒ 由 **257** 增至 **261**（+4）⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**
+     （节点创建回落 `unnamed_input`）⇒ ⇒ **3 个用例转红**；P1 三条 `Ratchet*` 各有正向变异
+     （① 改匿名 / ② 空名 fallback 保空 / ③ counter 恒 0）⇒ ⇒ **三条各自转红**；
+     `test_rtl_manifest` 的 `driven`（节点级）vs `effective`（功能级）**两字段分别验**
+     ⇒ ⇒ ⚠️ 实测踩坑：`get_users()` 判「被消费」⇒ ⇒ **恒 true** ⇒ 零信息量。
+     ⚠️ **B2 批 E2（TB 骨架）**：`test_rtl_tb_stub` 新增 ⇒ ⇒ **262**（+1）。
+     ⚠️ **B1 批 C5（产物护栏）**：`test_rtl_emit_contract` 新增 ⇒ ⇒ **263**（+1）
+     （5 个 TEST_CASE · 见 `tests/test_rtl_emit_contract.cpp`）。
+     本次同步由 `scripts/update_test_count_anchors.sh` 完成（E8）。
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让

@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: fix
 状态: implemented
-进度: P1 口径对齐（B0 F-A）+ P2 判据（`tests/test_component_naming.cpp`）+ P3 契约化（change `node-name-prefix-path-contract-2026-11` 已归档）+ P4 行为变更登记 均已落
+进度: P1 口径对齐（B0 F-A）+ P3 契约化（change `node-name-prefix-path-contract-2026-11` 已归档）+ P4 行为变更登记 均已落 · ⚠️ **P2 仅「函数级 + 不变量」已落**（`tests/test_component_naming.cpp` 4 用例 / 27 断言）⇒ ⇒ **P2 的「产物层」两条（`NamedRootArtifactsUnchanged` / `UnnamedRootArtifactPinned`）未做**⇒ ⇒ 已登记 `phase-6-rtl-productization.md` **批次表 §4「N2 补遗 · 产物层双测试」行**
 主题: Verilog codegen 完整化
 依赖: component-ownership-and-naming（节点名构造的规范所有者）· port-name-literal-parity-2026-11（字面同名路线的可行边界 · 本项是其**上游前置**）
 来源: 用户 2026-11-10 拍板「按这个顺序推进」+ oracle 建议 4（把 F-A 从 route (c) 里拆出）+ planner 实测（2026-11-10）+ metis 第 1 轮（6 BLOCKER）
@@ -17,7 +17,7 @@ evidence: test:tests/test_port_name_parity.cpp
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（待用户拍板 ⇒ 拍板后转 builder 流程）
+- **Status**: ✅ **implemented**（P1 / P3 / P4 已落地 · 2026-11-11）⇒ ⇒ ⚠️ **P2 的「产物层」两条未做**（`NamedRootArtifactsUnchanged` / `UnnamedRootArtifactPinned`）⇒ ⇒ 未纳入本轮的增量 = **该 2 条** ⇒ ⇒ 已登记 `.rddf/checks/rtl-track-followup-list-2026-11.md` §1.3.1 的 N4/N5 + `phase-6-rtl-productization.md` **批次表 §4「N2 补遗 · 产物层双测试」行**
 - **来源**：oracle 建议 4（2026-11-10）——「把 F-A 从 route (c) 里拆出来，做成 **B0 级零 churn 独立项**」⇒ ⇒ 本文件即该立项
 - ⚠️ **⚠️ metis 订正（2026-11-10 · 6 BLOCKER）**：**本项不是「B0 零风险」** ⇒ ⇒ oracle 的「零 churn」前提**只对仓内当前成立**，**对下游不成立** ⇒ ⇒ 本项含**下游可见的行为变更** ⇒ ⇒ **定位已重写**（见 §A.2 / §A.4）
 - ⚠️ **与 `port-name-literal-parity-2026-11` 的关系**：本项是「字面同名」路线的**上游前置**（把前缀口径钉死）⇒ ⇒ **本项做完不产生字面同名** ⇒ ⇒ ⇒ 进一步支撑 route (c)「当前不做」的结论
@@ -153,30 +153,30 @@ inline std::string build_hierarchical_name(const Component* parent, const std::s
 
 ### 修复（P1 / P2）
 
-- [ ] `include/component.h:274` 的 `|| parent_path == "unnamed"` 已删除 ⇒ ⇒ **一处一行**
-- [ ] 🔴 **函数级判据**：`build_hierarchical_name(&parent_named_unnamed, "x") == "unnamed.x"` ⇒ ⇒ **不依赖 ctx / 组件树 / ConstructionFrame** ⇒ ⇒ 抓 `component.h:274` 的核心语义
-- [ ] 🔴 **不变量判据**：对 fixture（无名根 + 2～3 层）⇒ ⇒ `child->name() == parent->name() + "." + child->local_name()` ⇒ ⇒ 抓**任意深度**回归 ⇒ ⇒ 断言**只钉组件路径那一段**（**禁**把端口局部名混进断言）
-- [ ] 🔴 **产物层 · 仓内**：`NamedRootArtifactsUnchanged` ⇒ ⇒ 仓内 3 份既有 `.v` 的 `git diff --stat` **== 0** ⇒ ⇒ ⚠️ **`scripts/verify_hierarchical_rtl.sh` 对本改动结构性失明**（R8 的手推期望集只覆盖仓内 3 个根名 = `top` 的产物）⇒ ⇒ ⇒ 它全绿**不构成证据** ⇒ ⇒ ⇒ 必须用 `git diff` 直证
-- [ ] 🔴 **产物层 · 无名根**：`UnnamedRootArtifactPinned` ⇒ ⇒ 以 golden **钉住新形态**（`unnamed_leaf_*`）⇒ ⇒ 用例注释 MUST 写明「**本用例的期望值因本项而变**」
-- [ ] **负向对照**：把特判加回去 ⇒ ⇒ 函数级 + 不变量级 **必红** ⇒ ⇒ 还原复绿
-- [ ] ⚠️ **变异自证 MUST 含「重建」步骤**（根 `AGENTS.md` COMMANDS 段「还原源码 ≠ 复原」）⇒ ⇒ 禁「删断言」式假变异
-- [ ] ⚠️ **用例落 `tests/test_component_naming.cpp`**（**已存在且已注册**）⇒ ⇒ `CTEST_TOTAL` **零变化** ⇒ ⇒ **禁**写死「257」⇒ ⇒ 引用锚点
-- [ ] **签名零变更**：`Component::name()` / `local_name()` 的**签名**不变 ⇒ ⇒ ⚠️ 但**返回值语义**对无名根的子组件**变了** ⇒ ⇒ ⇒ **必须**有 P4 的登记 ⇒ ⇒ ⇒ `scripts/verify_public_api_visibility.sh` 全绿
-- [ ] 既有 ctest 全绿；`bash scripts/verify_test_counts.sh` 绿
+- [x] `include/component.h:274` 的 `|| parent_path == "unnamed"` 已删除 ⇒ ⇒ **一处一行** ⇒ 证据: `include/component.h:293`（代码本体已删 · `:274` 是记录删除历史的**注释**）
+- [x] 🔴 **函数级判据**：`build_hierarchical_name(&parent_named_unnamed, "x") == "unnamed.x"` ⇒ ⇒ **不依赖 ctx / 组件树 / ConstructionFrame** ⇒ ⇒ 抓 `component.h:274` 的核心语义 ⇒ 证据: `tests/test_component_naming.cpp:197`（F-A 块 · 无名根 fixture）+ `.rddf/reviews/b0-batch-verify-2026-11.md` §2.6（4 用例 / 27 断言）—— ⚠️ **语义覆盖 · 形态偏差**：判据字面要求的「纯函数级」形态在测试文件中**不存在**（该符号仅在注释命中）
+- [x] 🔴 **不变量判据**：对 fixture（无名根 + 2～3 层）⇒ ⇒ `child->name() == parent->name() + "." + child->local_name()` ⇒ ⇒ 抓**任意深度**回归 ⇒ ⇒ 断言**只钉组件路径那一段**（**禁**把端口局部名混进断言） ⇒ 证据: `tests/test_component_naming.cpp:197` + `.rddf/reviews/b0-batch-verify-2026-11.md` §2.6
+- [ ] 🔴 **产物层 · 仓内**：`NamedRootArtifactsUnchanged` ⇒ ⇒ 仓内 3 份既有 `.v` 的 `git diff --stat` **== 0** ⇒ ⇒ ⚠️ **`scripts/verify_hierarchical_rtl.sh` 对本改动结构性失明**（R8 的手推期望集只覆盖仓内 3 个根名 = `top` 的产物）⇒ ⇒ ⇒ 它全绿**不构成证据** ⇒ ⇒ ⇒ 必须用 `git diff` 直证 ⇒ 归属: **独立立项**（`phase-6-rtl-productization.md` 批次表 §4「N2 补遗 · 产物层双测试」行）
+- [ ] 🔴 **产物层 · 无名根**：`UnnamedRootArtifactPinned` ⇒ ⇒ 以 golden **钉住新形态**（`unnamed_leaf_*`）⇒ ⇒ 用例注释 MUST 写明「**本用例的期望值因本项而变**」 ⇒ 归属: **独立立项**（`phase-6-rtl-productization.md` 批次表 §4「N2 补遗 · 产物层双测试」行）
+- [x] **负向对照**：把特判加回去 ⇒ ⇒ 函数级 + 不变量级 **必红** ⇒ ⇒ 还原复绿 ⇒ 证据: `.rddf/reviews/b0-batch-verify-2026-11.md` §2.6（M3′ 变异）
+- [x] ⚠️ **变异自证 MUST 含「重建」步骤**（根 `AGENTS.md` COMMANDS 段「还原源码 ≠ 复原」）⇒ ⇒ 禁「删断言」式假变异 ⇒ 证据: `.rddf/reviews/b0-batch-verify-2026-11.md` §2.6（变异自证含「重建」）
+- [x] ⚠️ **用例落 `tests/test_component_naming.cpp`**（**已存在且已注册**）⇒ ⇒ `CTEST_TOTAL` **零变化** ⇒ ⇒ **禁**写死「257」⇒ ⇒ 引用锚点 ⇒ 证据: `tests/test_component_naming.cpp`（已存在且已注册 · `ctest -N` = 263）+ `scripts/verify_test_counts.sh` exit 0
+- [x] **签名零变更**：`Component::name()` / `local_name()` 的**签名**不变 ⇒ ⇒ ⚠️ 但**返回值语义**对无名根的子组件**变了** ⇒ ⇒ ⇒ **必须**有 P4 的登记 ⇒ ⇒ ⇒ `scripts/verify_public_api_visibility.sh` 全绿 ⇒ 证据: `include/component.h:26`（声明未变）
+- [x] 既有 ctest 全绿；`bash scripts/verify_test_counts.sh` 绿 ⇒ 证据: `ctest` **263/263** + `scripts/verify_test_counts.sh` exit 0
 
 ### 契约化（P3）
 
-- [ ] `component-ownership-and-naming` **追加** Requirement（delta 里 MUST 落 `## ADDED Requirements` ⇒ ⇒ **禁** `MODIFIED`）⇒ ⇒ `bash scripts/verify_openspec_delta.sh` 绿；`openspec validate --specs`（**非 strict**）**不新增**红项
-- [ ] 新 Requirement **有可构造的违反样例**（把 `component.h:274` 的特判加回去 ⇒ ⇒ 违反）⇒ ⇒ ⇒ **禁**加不可违反的 MUST
+- [x] `component-ownership-and-naming` **追加** Requirement（delta 里 MUST 落 `## ADDED Requirements` ⇒ ⇒ **禁** `MODIFIED`）⇒ ⇒ `bash scripts/verify_openspec_delta.sh` 绿；`openspec validate --specs`（**非 strict**）**不新增**红项 ⇒ 证据: `openspec/specs/component-ownership-and-naming/spec.md` + 归档 change `openspec/changes/archive/2026-11-11-node-name-prefix-path-contract-2026-11/`
+- [x] 新 Requirement **有可构造的违反样例**（把 `component.h:274` 的特判加回去 ⇒ ⇒ 违反）⇒ ⇒ ⇒ **禁**加不可违反的 MUST ⇒ 证据: 同上（`openspec/specs/component-ownership-and-naming/spec.md` 的 Requirement 条款）
 
 ### 下游登记（P4）
 
-- [ ] `docs/CHANGELOG.md` 一行
-- [ ] `.rddf/checks/public-api-surface.md` 的「行为变更（非符号移除）」节有一行（**若该节不存在 ⇒ 如实登记该节缺失**）
+- [x] `docs/CHANGELOG.md` 一行 ⇒ 证据: `docs/CHANGELOG.md:513`
+- [x] `.rddf/checks/public-api-surface.md` 的「行为变更（非符号移除）」节有一行（**若该节不存在 ⇒ 如实登记该节缺失**） ⇒ 证据: `.rddf/checks/public-api-surface.md:95`
 
 ### 残差登记
 
-- [ ] 方向 (i)（`lnodeimpl` 也剥哨兵 ⇒ ⇒ 撞 `:62` ⇒ ⇒ 需 architect）**沿用** `port-name-literal-parity-2026-11` §裁决记录 ④ 的**同一条** ⇒ ⇒ ⚠️ **本项不新增行**（免得双向 1:1 护栏被双重登记打红）⇒ ⇒ ⇒ `bash scripts/verify_arch_ledger_residuals.sh` 绿
+- [x] 方向 (i)（`lnodeimpl` 也剥哨兵 ⇒ ⇒ 撞 `:62` ⇒ ⇒ 需 architect）**沿用** `port-name-literal-parity-2026-11` §裁决记录 ④ 的**同一条** ⇒ ⇒ ⚠️ **本项不新增行**（免得双向 1:1 护栏被双重登记打红）⇒ ⇒ ⇒ `bash scripts/verify_arch_ledger_residuals.sh` 绿 ⇒ 证据: `scripts/verify_arch_ledger_residuals.sh` exit 0 + `.rddf/checks/arch-residual-registry.md` 行 21（**沿用既有登记 · 本项不新增行**）
 
 ---
 

@@ -23,12 +23,18 @@
 | `draft` | 草案已写 · **未批准** · 未开工 |
 | `approved` | **已批准**（裁决已落定）· 未开工 |
 | `in-progress` | 部分 work item 已实施并验收 · 仍有未开工项 |
-| `implemented` | 本项全部可做 work item 已落地（**不可做的部分已显式登记为独立立项**） |
+| `implemented` | 本项**本轮承诺**的 work item 已全部落地 ⇒ ⇒ **未纳入本轮**的部分（**不可做** / **可做但显式移交**）MUST 已登记为独立立项（见 §4） |
 
 > ⚠️ **2026-11-12 扩充**：此前仓内只用过 `draft` / `approved` / `implemented` 三个值 ⇒ ⇒
 > 「部分实施」的中间态**无值可用** ⇒ ⇒ 全部 9 份 RTL 轨草案长期停在 `draft` ⇒ ⇒
 > **状态与现实脱节**（architect 复盘的 finding F2）⇒ ⇒ 故新增 `in-progress`。
 > ⚠️ 本词表是**本轨的约定** ⇒ ⇒ 其它轨的 improvement 若用其它值，以各自文档为准。
+> ⚠️ **2026-11-12 订正（`rtl-track-correction-list-2026-11` 项 1-b · critic SF-1）**：
+> `implemented` 的原文只覆盖「**不可做**」一种情形 ⇒ ⇒ 但 `port-naming-ratchet` 的
+> 「首批端口消化（32 端口）」是**可做但明确移交**（用户 ⑤ 的原始诉求仍在，只是不占 B1 批）
+> ⇒ ⇒ 若不扩充，修完 7 份草案后**本表自己的规则行**会与 §4 新增行构成新的自相矛盾。
+> ⇒ ⇒ 扩充后仍**不许「登记即洗白」**：§4 行 MUST 写清「对象 / 判据 / 触发条件 / 归属批」
+> （否则登记是空文，C1-b 的 `grep 首批消化` 会绿而实质未登记）。
 
 ## 0. ⚠️ 本表是**重建**（如实登记）
 
@@ -175,6 +181,10 @@
 | **分支预测器接入** | `rv32i-dead-component-consolidation`「不在本项」 | 功能增强 ≠ 重复实现 |
 | **特权级接线**（CSR 指令 / `ECALL` / `EBREAK` / `MRET` / trap 入口 / 中断） | `rv32i-isa-gap-closure`「不在本项」 | 周期长、面大 ⇒ ⇒ 与 phase-6 P6「MUST 独立立项」的裁决一致 |
 | **AXI cache 接入流水线**（MEM 级 stall 反压通路） | 本轮 planner 实测 | 流水线 MEM 级**无反压通路** ⇒ ⇒ 架构级改动 |
+| **N3 补遗 · 重复显式名的 `CHERROR` 判别力** | `port-naming-ratchet` N3（实现在 `include/codegen_naming.h:195-200,210-218`） | 现有 `tests/test_port_name_parity.cpp` 的 **Ratchet 3** 只断言**名字**（`top_dup_prog_addr` / `top_dup_prog_addr_1`）⇒ ⇒ **删掉 `CHERROR` 也全绿** ⇒ ⇒ 缺口 = 「`CHERROR` 的**触发**未被断言」。<br>立项内容：**正向**（构造重名 ⇒ 断言 `CHERROR` 触发 **且** 两名不同）∧ **反向**（不重名 ⇒ 断言**无** `CHERROR`）+ **判别力自证**（删 `CHERROR` ⇒ 正向必红）。<br>触发条件 = 本项进入任一批次时；纯测试增量（动 `CTEST_TOTAL` ⇒ 与注释块编辑同批或在其后）。 |
+| **N2 补遗 · 首批端口消化（32 端口）** | `port-naming-ratchet` N2 /「存量消化」AC | 对象 = `examples/riscv-mini/src/rv32i_pipeline_top.h`（用户 **2026-11-11** 拍板 · **32 端口**）。<br>判据 = 该文件 `__io` 全部端口带**显式名** ⇒ ⇒ `.rddf/checks/port-naming-registry.md` 的相应豁免条目**减少**（棘轮只许减）。<br>触发条件 = 用户要求 RTL 端口**人眼可读**（用户 ⑤ 的原始诉求）；⚠️ 会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 `examples-rtl-sim-coverage` 的 tsv / `examples-rtl-expectations.md` **同批**同步（否则 10 个 TB 的端口名漂移）。 |
+| **N2 补遗 · 产物层双测试**（`NamedRootArtifactsUnchanged` + `UnnamedRootArtifactPinned`） | `node-name-prefix-consistency` P2 的**产物层**两条（`## Acceptance` 的 N4 / N5）⇒ ⇒ **从未实施**（全仓 grep 两个标识符 = 0 命中） | 判别力自证要求：① `NamedRootArtifactsUnchanged` = 仓内 3 份既有 `.v` 的 `git diff --stat` **== 0**（⚠️ `scripts/verify_hierarchical_rtl.sh` 对本改动**结构性失明** ⇒ ⇒ MUST 用 `git diff` 直证）· ② `UnnamedRootArtifactPinned` = 显式生成无名根产物 + golden 钉住新形态（`unnamed_leaf_*`）· ③ 负向对照：把 `include/component.h` 的特判加回去 ⇒ ⇒ 产物层 MUST 必红 ⇒ ⇒ 还原复绿 · ④ 变异自证 MUST 含「重建」步骤（还原源码 ≠ 复原）· 触发条件 = route (c) 重开时一并处置 ⇒ ⇒ 登记人 = builder · **登记来源** = `rtl-track-followup-list-2026-11.md` §1.3.1 的 N4 / N5 |
+| **索引表状态列的自动生成**（`improvement-suggestions.md` 的状态列从 frontmatter `状态:` 生成） | 本轮 planner 实测 + `rtl-track-followup-list-2026-11.md` §2 F8 | 现状 = **人工维护** ⇒ ⇒ 9 份草案（7 份 RTL 轨 + 2 份本批）要人工同步 ⇒ ⇒ 必然漂（本轮三处漂移里 **2 处**出在索引表）⇒ ⇒ 根本修法 = **从 frontmatter `状态:` 生成** + 一致性护栏（类比 `scripts/verify_roadmap_fragments.sh` 的 vendored 渲染 + `verify_roadmap_fragments.sh`）⇒ ⇒ 归 planner（文档面）· 触发条件 = 下一轮改动 `improvement-suggestions.md` 状态列时 |
 | **「BRAM 可推断」的真实验证** | `memory-timing-contract` ④ | CI **无 yosys** ⇒ ⇒ 只能本地/opt-in ⇒ ⇒ 已登记进 `.rddf/checks/arch-residual-registry.md` |
 
 ---
