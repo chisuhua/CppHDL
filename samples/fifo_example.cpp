@@ -75,12 +75,25 @@ public:
         auto data_out = mem.aread(rd_a);
         io().dout = data_out;
 
-        // 状态信号 - 使用更标准的FIFO空/满检测
-        // 空状态：读指针等于写指针
+        // 状态信号 - FIFO 空/满检测
+        // 指针宽度 = addr_width + 1（低位 = 地址，高位 = wrap 位）
+        //
+        // 空状态：读指针 == 写指针（**全部位**相等 ⇒ 在途数为 0）
         io().empty = (rd_ptr == wr_ptr);
-        // 满状态：写指针+1等于读指针
-        auto wr_plus_one = wr_ptr + 1_b;
-        io().full = (wr_plus_one == rd_ptr);
+        //
+        // 满状态（**经典方案**）：**地址位相等 + wrap 位不同** ⇒ 容量 = N
+        //   ⇒ wr 低 addr_width 位 == rd 低 addr_width 位（同一个槽）
+        //   ⇒ 且 wrap 位不同（说明指针已绕了一圈 ⇒ 该槽是「最老的一个」且未消费）
+        //
+        // ⚠️ **旧写法是错的**（2026-11-12 修）：`full = (wr + 1 == rd)`
+        //   ⇒ 它在**完整指针**空间里比较 ⇒ 「相距 2^(addr_width+1) - 1」
+        //   ⇒ 对 N=2 门限 = 3 · 对 N=16 门限 = 31 ⇒ ⇒ **永远不置位**
+        //   ⇒ ⇒ 第 N+1 次写入起**地址混叠**（最老的元素被覆盖丢失）。
+        //   ⇒ ⇒ 判别力 = `examples/spinalhdl-ported/fifo/tb_fifo_stream_example.sv`
+        //     （变异自证：把本式改成「4 位地址比较」⇒ 该 TB 转红 ⇒ 门限可判）
+        auto wr_msb = bits<addr_width, addr_width>(wr_ptr);
+        auto rd_msb = bits<addr_width, addr_width>(rd_ptr);
+        io().full = (wr_a == rd_a) & (wr_msb != rd_msb);
     }
 };
 

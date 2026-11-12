@@ -19,16 +19,16 @@
 //   · **impl-contract** = `full` 的门限 / 在途数的安全区上界（见下）。
 //   · **metamorphic** = 相对判据（置换性 + `empty` 不变量），**不依赖任何绝对期望值**。
 //
-// ⚠️ **已知偏离 D5（已实测 · 待用户裁决 · 本 TB **不固化**）**：
-//   `full` 的比较用的是**完整 5 位指针** ⇒ `full = (wr+1 == rd)` ⇒ 门限是
-//   **31 个在途**，而内存只有 **16 槽**（地址 = 指针低 4 位）⇒ ⇒ **第 16 次写入起
+// ⚠️ **D5（已实测的缺陷 · 已于 2026-11-12 修复）**：
+//   旧实现的 `full` 用**完整 5 位指针**比较（`full = (wr+1 == rd)`）⇒ 门限是
+//   **31 个在途**，而内存只有 **16 槽**（地址 = 指针低 4 位）⇒ ⇒ **第 17 次写入起
 //   地址混叠**（最老的元素被覆盖丢失）—— 实测：push 20 个后 pop，拿到的是
 //   `20 21 22 23 14 15 ...`（最老的 4 个 `10 11 12 13` 已丢失）。
-//   ⇒ ⇒ 本 TB 的处置：**① 不判** `full` 在 15/16 在途处的取值
-//     （此处连「两种正确实现」都不一致 ⇒ 判它 = 固化某个偶然选择）；
-//     **②** 数据完整性断言**限定在 ≤ 15 在途**（无混叠的安全区）；
-//     **③** `full` 只在「在途 ≤ 14」时判 0（两种正确实现与当前实现**都**如此）。
-//   ⇒ ⇒ 缺陷本体登记在 `.rddf/checks/examples-rtl-expectations.md`（D5）⇒ **待裁决**。
+//   ⇒ ⇒ **已修为经典方案**（`full` = **地址位相等 + wrap 位不同** ⇒ 容量 = N = 16），
+//   **上游 sample `samples/fifo_example.cpp` 同型缺陷同批同改**。
+//   ⇒ ⇒ 因此本 TB 现在**正面判** `full` 的门限（**spec-derived**：FIFO 的容量 = N）：
+//        在途 ≤ 15 ⇒ `full == 0` · 在途 == 16 ⇒ `full == 1`
+//   ⇒ ⇒ 判别力由变异 **M5**（把 `full` 回退成旧公式）自证 ⇒ ⇒ **必红**。
 //
 // ⚠️ **采样时机（两处 MUST 照做）**：
 //   ① `dout` MUST 在 **pop 沿之前**采样 —— 沿后 `dout` 已指向**下一个**队首
@@ -65,7 +65,7 @@ module tb_fifo_stream_example;
     integer outstanding = 0;
 
     // TB 侧记录的写入序列（metamorphic 的**相对**比较对象）
-    logic [7:0] recorded [0:14];
+    logic [7:0] recorded [0:16];
     // ⚠️ MUST 在 **module 级**声明（块内声明 ⇒ `%Warning-IMPLICITSTATIC`
     //   ⇒ 严格 flags 下**致命** —— 实测踩过）
     logic [7:0] got;
@@ -210,24 +210,32 @@ module tb_fifo_stream_example;
             expect_empty_matches_outstanding();
         end
 
-        // ── S4：容量边界（**spec-derived** · 不丢数据 + 顺序）──────
-        //   push **15** 个（内存 16 槽 ⇒ 无混叠的安全区上界）⇒ 全部取回且顺序一致
-        for (int i = 0; i < 15; i = i + 1) begin
+        // ── S4：容量边界（**spec-derived** · 容量 = N + 不丢数据 + 顺序）──
+        //   push **16** 个（= 内存槽数 = FIFO 容量）⇒ 全部取回且顺序一致
+        for (int i = 0; i < 16; i = i + 1) begin
             recorded[i] = 8'h80 + i[7:0];
             push_one(recorded[i]);
             outstanding = outstanding + 1;
-            // impl-contract：`full` 在「在途 ≤ 14」时恒 0
-            //   ⚠️ 在途 = 15 时**不判** `full`（当前实现门限错 ⇒ 见文件头 D5）
-            if (outstanding <= 14) begin
+            // **spec-derived**：FIFO 的容量 = N = 16
+            //   ⇒ 在途 ≤ 15 ⇒ 未满（`full == 0`）· 在途 == 16 ⇒ 满（`full == 1`）
+            if (outstanding == 16) begin
+                expect_bit(full, 1'b1);
+            end else begin
                 expect_bit(full, 1'b0);
             end
         end
-        for (int i = 0; i < 15; i = i + 1) begin
+        // 满 ⇒ 再 push 一个**必须不被接受**？⇒ ⚠️ 本实现**无自保护**（空/满不门控指针）
+        //   ⇒ ⇒ 该行为属库组件 `chlib::sync_fifo` 的契约，**不适用**于本手写 demo
+        //   ⇒ ⇒ **不判**（判它 = 要求一个本 example 没有的能力）
+        for (int i = 0; i < 16; i = i + 1) begin
             pop_one(got);
             outstanding = outstanding - 1;
             expect_eq8(got, recorded[i]);           // **相对**比较
+            if (outstanding == 15) begin
+                expect_bit(full, 1'b0);             // 取出一个 ⇒ 重新有空间
+            end
         end
-        expect_bit(empty, 1'b1);                   // 15 个全部取回 ⇒ 空
+        expect_bit(empty, 1'b1);                   // 16 个全部取回 ⇒ 空
         expect_empty_matches_outstanding();
 
         expect_descendant_ports_match();

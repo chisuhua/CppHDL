@@ -288,7 +288,21 @@ echo ""
 rtl_emitters() {
     local list="$REPO_ROOT/.rddf/checks/examples-rtl-sim-targets.tsv"
     [ -f "$list" ] || return 0
-    grep -vE '^[[:space:]]*(#|$)' "$list" | awk -F'\t' 'NF>=4 {print $4}'
+    # ⚠️ **列号 MUST 从机器可读表头推导**（`#COLUMNS` 行）⇒ ⇒ TSV 增删列时
+    #   不会**静默指向别的列**。
+    #   ⚠️ 2026-11-12 实测事故：本函数曾硬编码 `$4`（当时 `emitter` 恰在第 4 列）⇒
+    #   TSV 插入 `component` 列后 ⇒ `$4` 变成 `component` ⇒ ⇒ 10 个 RTL 发射器
+    #   **静默失去归属** ⇒ C1 报「10 个 program 无归属」⇒ ⇒ 根因是**列位置漂移**。
+    #   表头形如 `#COLUMNS: target kind ... emitter ...` ⇒ **空格分隔** ⇒
+    #   第 i 个名字 = 数据的第 i 列（无偏移 ⇒ 不差列）。
+    local col
+    col="$(grep -m1 '^#COLUMNS:' "$list" 2>/dev/null |
+           awk '{for (i = 2; i <= NF; i++) if ($i == "emitter") { print i - 1; exit }}')"
+    if [ -z "$col" ]; then
+        echo "${RED}ERROR: $list 缺 \`#COLUMNS\` 机器可读表头 ⇒ 无法推导 emitter 列${NC}" >&2
+        return 1
+    fi
+    grep -vE '^[[:space:]]*(#|$)' "$list" | awk -F'\t' -v c="$col" 'NF >= c { print $c }'
 }
 
 TRACKED_RAW="$(tracked_examples)"

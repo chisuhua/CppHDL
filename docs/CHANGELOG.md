@@ -6,6 +6,34 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-12 — B2 批 · **修 FIFO demo 的 `full` 门限**（D5 · 两处同改 · 行为变更）
+
+### Fixed
+
+- **`samples/fifo_example.cpp`** + **`examples/spinalhdl-ported/fifo/stream_fifo_example.cpp`**
+  ⇒ ⇒ **同型缺陷两处同改**（Zero-Debt）
+  ⇒ ⇒ 旧写法 `full = (wr+1 == rd)` 在**完整指针**空间里比较 ⇒ 门限 = `2^(addr_width+1)-1`
+  （N=16 ⇒ **31**）⇒ ⇒ **`full` 永不置位** ⇒ ⇒ **第 N+1 次写入起地址混叠**
+  （实测：push 20 个后 pop，最老的 4 个已被覆盖丢失）
+  ⇒ ⇒ 改为经典方案：**地址位相等 + wrap 位不同** ⇒ **容量 = N**
+  ⇒ ⇒ 与 `empty`（`rd == wr`，全部位相等）自洽
+  ⚠️ **库组件 `chlib::sync_fifo` 未变**（它一直是对的 —— `tests/chlib/test_fifo.cpp` 断言满态）
+  ⇒ ⇒ 缺陷只在**手写 demo** ⇒ ⇒ **不涉及库 API 契约变更**
+
+### 行为变更（非符号移除）
+
+手写 FIFO demo 的 `full` 端口现在会在**真正满时**置位（之前恒 0）。
+若曾依赖「`full` 恒 0」，那个依赖本就不成立。
+登记：`.rddf/checks/public-api-surface.md`「行为变更」节 +
+`.rddf/checks/decision-request-fifo-full-threshold-2026-11.md`（已结案 · 选项 A 落地）。
+
+### 判别力（TB 判据随之**正面放开**）
+
+`tb_fifo_stream_example.sv` 现在正面判 `full` 门限（在途 15 ⇒ 0 · 16 ⇒ 1）
+⇒ ⇒ **变异 M5 = 把 `full` 回退成旧公式 ⇒ TB 转红** ⇒ ⇒ **修复承重**（可被判出）。
+
+---
+
 ## 2026-11-12 — B2 批 · 第 6 个 TB（fifo_stream）+ **一个实测的实现缺陷**（D5 · 待裁决）
 
 ### Added

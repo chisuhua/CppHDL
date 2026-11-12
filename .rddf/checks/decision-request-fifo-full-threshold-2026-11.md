@@ -2,7 +2,7 @@
 id: decision-request-fifo-full-threshold-2026-11
 日期: 2026-11-12
 提出者: builder（B2 / E3 · `fifo_stream_example` 的独立 RTL TB）
-状态: 待裁决
+状态: **已裁决（2026-11-12 · 选项 A 落地）**
 关联: .rddf/checks/examples-rtl-expectations.md#fifo-stream-example · .rddf/checks/examples-rtl-sim-targets.tsv
 ---
 
@@ -99,3 +99,37 @@ pop 17 -> 20   pop 18 -> 21  pop 19 -> 22  pop 20 -> 23
 - 选 **C**（只对齐口径）？⇒ ⇒ 改动落在 example 的注释与打印 ⇒ ⇒ 我可在 S 阶段顺带做。
 
 ⇒ ⇒ **未裁决前**：TB 保持现状（限定 ≤ 15 在途 + 只判 ≤ 14 处 `full==0`）⇒ ⇒ **不固化缺陷**。
+
+---
+
+## 6. ✅ 裁决结果（2026-11-12 · 用户「按建议推进」⇒ ⇒ **选项 A 落地**）
+
+**采纳 A（真修）+ C（口径对齐）**：
+
+| 项 | 处置 | 落点 |
+|---|---|---|
+| **A** 修 `full` 门限 | **已改**为经典方案（**地址位相等 + wrap 位不同** ⇒ 容量 = N） | `samples/fifo_example.cpp` + `examples/spinalhdl-ported/fifo/stream_fifo_example.cpp`（**两处同改**） |
+| **C** 口径对齐 | 源文件注释已改写为新判定 + 旧写法的**错误原因**（门限 = `2^(addr_width+1)-1`） | 同上两处 |
+| **B** 登记为已知缺陷 | **不适用**（缺陷已修 ⇒ 无需进残差登记） | — |
+
+**追加的根因发现（比原判断更强）**：该写法**不是移植引入的** ⇒ ⇒
+**上游参考 `samples/fifo_example.cpp`（`FiFo<ch_uint<2>, 2>`）用的是同一公式**
+⇒ ⇒ **同型缺陷 ⇒ 两处同改**（Zero-Debt）。
+⚠️ 库组件 `chlib::sync_fifo` **本身是对的**（`tests/chlib/test_fifo.cpp` 断言满态）
+⇒ ⇒ 缺陷只在**手写 demo** ⇒ ⇒ 不涉及库 API 契约变更。
+
+**TB 判据随之正面放开**（不再回避 `full` 门限）：
+在途 ≤ 15 ⇒ `full == 0` · 在途 == 16 ⇒ `full == 1`（= 容量 = N · spec-derived）。
+
+**判别力自证（5 条变异全部转红）**：
+
+| 变异 | 实测 |
+|---|---|
+| M1 删掉 wrap 位条件 | `fails=1` |
+| M2 读地址 `rd+1` | `fails=25` |
+| M3 `empty` 粘住 | `fails=6` |
+| M4 写地址 `wr+1` | `fails=27` |
+| **M5 `full` 回退成旧公式** | `fails=1` ⇒ ⇒ **修复前的实现正是 M5 ⇒ ⇒ 修复可被本 TB 判出（承重）** |
+
+**行为变更登记**：`.rddf/checks/public-api-surface.md` 的「行为变更（非符号移除）」节 +1 行
++ `docs/CHANGELOG.md` 一条。
