@@ -209,8 +209,16 @@ int main() {
         }
         auto val255 = simulator.get_value(device.instance().io().value);
         std::cout << "  After 255 cycles: value = " << static_cast<uint64_t>(val255) << " (expected: 255)" << std::endl;
+        // ⚠️ **2026-11-12 更正**：此处原有一句「Note: enable/clear may not fully work yet」
+        //   （怀疑 `select()` 吃 `ch_in<ch_bool>` 端口不生效）⇒ ⇒ **该怀疑是错的**：
+        //   实测（interpreter 与**独立 RTL 仿真**两侧一致）：
+        //     · `clear` 优先（clear=1 ⇒ 立即归零）· `enable=0` ⇒ 保持 · `enable=1` ⇒ +1
+        //     · 计到 255 ⇒ 255 ✓ · 再进一拍 ⇒ 溢出回 **0** ✓
+        //   ⇒ ⇒ `select(io().clear, …, select(io().enable, …))` **直接吃 `ch_in<ch_bool>` 是可行的**
+        //     （`uart_tx.cpp` 里那条「端口无 `ch_bool` 转换 ⇒ MUST 经寄存器中转」只约束
+        //      `transition_when()` 的用法，**不**约束 `select()`）⇒ ⇒ 旧注释已过时，删。
         if (static_cast<uint64_t>(val255) != 255) {
-            std::cout << "  Note: enable/clear may not fully work yet (enable logic via ch_in<ch_bool> in select())" << std::endl;
+            std::cout << "  Note: enable/clear did NOT behave as expected (unexpected value)" << std::endl;
         }
         
         // 再计数一次，应该溢出到 0

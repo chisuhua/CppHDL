@@ -52,6 +52,18 @@ class Counter extends Component {
 | N（1..255） | N |
 | 256 | **0**（回绕） |
 
+### ✅ **D4 结案（2026-11-12）**：**无 interpreter / RTL 分叉** ⇒ ⇒ **不独立立项**
+
+⇒ ⇒ 起因：`counter.cpp` 原有一句「Note: enable/clear may not fully work yet」
+（怀疑 `select()` 吃 `ch_in<ch_bool>` 端口不生效）⇒ ⇒ **该怀疑是错的**：
+实测（**interpreter 与独立 RTL 仿真两侧一致**）：
+· `clear` 优先（clear=1 ⇒ 立即归零）· `enable=0` ⇒ 保持 · `enable=1` ⇒ +1
+· 计到 255 ⇒ **255** ✓ · 再进一拍 ⇒ 溢出回 **0** ✓
+⇒ ⇒ ⇒ `select(io().clear, …, select(io().enable, …))` **直接吃 `ch_in<ch_bool>` 是可行的**
+（`uart_tx.cpp` 那条「端口无 `ch_bool` 转换 ⇒ MUST 经寄存器中转」只约束
+`transition_when()` 的用法，**不**约束 `select()`）⇒ ⇒ 旧注释已**过时** ⇒ ⇒ 已更正
+⇒ ⇒ ⇒ **结论：不是缺陷，是过时注释** ⇒ ⇒ **无需独立立项**（D4 结案）。
+
 ### metamorphic（相对判据，不依赖绝对值）
 
 - **步进恒为 1**：任意相邻两拍 `(v[n+1] - v[n]) mod 256 == 1`。
@@ -137,6 +149,13 @@ io.pwm = (counter < io.value) & io.enable
 ---
 
 ## gpio_example {#gpio-example}
+
+### ✅ **D1 裁决（2026-11-12 · 用户「按你的建议推进」）**：判为「**移植简化**」
+
+⇒ ⇒ **不追平**上游 Scala 的逐位边沿语义 ⇒ ⇒ `spec_checks` **保持 0**（只判 impl-contract）
+⇒ ⇒ ⇒ 备选（「追平 Scala」）**未采用** ⇒ ⇒ 若将来要追平 ⇒ ⇒ 需另独立项
+（它会**改产品的可观测行为** ⇒ ⇒ 属行为变更 ⇒ ⇒ 须走公开面登记）。
+⇒ ⇒ 裁决记录见本文「D1」条 + `.rddf/checks/examples-rtl-sim-targets.tsv` 的 `gpio_example` note。
 
 ### ⚠️ **上游 Scala 与被测 C++ 实现语义不同**（因此**不算** spec-derived）
 
