@@ -4,19 +4,21 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
-状态: draft
+状态: implemented
 主题: mem 端口实参跨层支持
 依赖: ADR-066, ADR-060
 来源: ADR-066 §2.7 决策 ⑦（已裁决 · 归下游独立立项）· 台账 §7 行 20（已裁决 · 归属=下游）· phase-6 P3（起草）/ P4（architect 范围裁定 · 前置）/ P5（实施）
 生成时间: 2026-11-09
-evidence: unmeasured
+进度: P3 起草 / P4 architect 裁定 / P5 实施**已归档**（change `2026-11-10-mem-port-arg-cross-layer-2026-11` · 台账行 20 **已收口**）⇒ ⇒ 本项**全部落地**
+evidence: test:tests/test_hierarchy_analysis.cpp
 ---
 
 # Improvement: `ch_mem` 端口实参跨层 —— 分析层粒度拆分 + 归因订正（+ 条件化的正确支持）
 
 - **Date drafted**: 2026-11-09
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: ✅ **approved**（**2026-11-09** · 用户拍板 ⇒ **全量立项**）
+- **Status**: ✅ **implemented**（⚠️ **2026-11-12 订正** · 原写 `approved` = **当时的快照** ⇒ ⇒ P5 已归档 + 台账行 20 已收口 ⇒ 转 `implemented`）
+  - **历史留痕（不改写）**：**2026-11-09** · 用户拍板 ⇒ **全量立项**
   ⇒ ⇒ 架构前置**全部落地**：**P4** = ADR-066 **v1.2**（边界 + 三桶 + 判别程序 + V18/V19/V20）·
   **第二次裁定** = ADR-066 **v1.3**（产物形态 = 决策 ⑧ · 命名恒等 · R2 登记义务 · `en` fail-closed ·
   V21/V22/V23）· 配套 ADR-060 **v1.17 / v1.20** ⇒ ⇒ **`(ii)` 的正确支持已可实施**

@@ -10,7 +10,7 @@ type: feature
 依赖: rtl-emit-product-tooling-2026-11（manifest）· public-api-remove-visibility-2026-11（公开面登记机制）· rtl-hierarchical-output（命名规则规范所有者）
 来源: 用户 2026-11-10 拍板「⑤ 生成的 RTL 顶层端口，希望保持和 C++ 侧一样的命名」+ planner 实测规模盘点
 生成时间: 2026-11-10
-evidence: probe:include/core/io.h:143 + src/codegen_verilog.cpp:62-112 + 3103（1577 ch_in + 1526 ch_out）端口声明计数
+evidence: test:tests/test_port_name_named_ctor.cpp
 ---
 
 # Improvement: 端口**显式命名**（框架先行 + 基线棘轮 · 不做一次性 3103 处 codemod）

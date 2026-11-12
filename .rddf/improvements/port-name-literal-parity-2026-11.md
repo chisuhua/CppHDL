@@ -10,7 +10,7 @@ type: feature
 依赖: port-naming-ratchet-2026-11（命名规则 + N5 第 1 步 manifest 双字段）· rtl-emit-product-tooling-2026-11（manifest schema · is_top_io）· component-ownership-and-naming（节点名构造的规范所有者）· public-api-remove-visibility-2026-11（公开面登记机制）
 来源: 用户 2026-11-10 拍板「⑤ 生成的 RTL 顶层端口，希望保持和 C++ 侧一样的命名」+ planner 三探针实测（2026-11-10）+ metis 第 1 轮 gap 分析
 生成时间: 2026-11-10
-evidence: probe:三探针（根名前缀 / 扁平命名空间消歧 / 同名兄弟实例）—— 源码 MUST 逐字搬进 tests/test_port_name_parity.cpp（见 P1）⇒ ⇒ 仓内可复现
+evidence: test:tests/test_port_name_parity.cpp
 ---
 
 # Improvement: 端口名与 C++ 侧**字面同名**的**可行边界**（探针固化 + 路线裁定）

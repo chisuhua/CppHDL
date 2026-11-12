@@ -1,5 +1,5 @@
 ---
-evidence: probe:三探针（/tmp/opencode/probe_bare_port_name.cpp · probe_fb.cpp · probe_member.cpp）+ scripts/lib/ledger_residual.py check（临时 root 实跑）
+evidence: test:tests/test_port_name_parity.cpp
 ---
 
 # 决策请求单：端口命名相关的**两份 spec 追加** + **残差台账两行**（2026-11-10）

@@ -10,7 +10,7 @@ type: feature
 依赖: rv32i-commit-path（时序基线）· memory-timing-contract-2026-11（建议先行，稳时序基线）
 来源: planner 实测（未识别 opcode 静默当 NOP 穿过 5 级）+ phase-6 P6 的「CSR / ECALL / FENCE MUST 独立立项」约束
 生成时间: 2026-11-10
-evidence: probe:include/cpu/pipeline/stages/id_stage.h:123-131 + include/cpu/pipeline/rv32i_decoder.h:139-147 + include/cpu/riscv/rv32i_exception.h:140-151
+evidence: probe:include/cpu/pipeline/stages/id_stage.h#L123
 ---
 
 # Improvement: RV32I ISA 缺口收口（**不含特权级**）—— 非法指令可观测 + FENCE 显式化 + `ExceptionUnit` 写缺陷修复

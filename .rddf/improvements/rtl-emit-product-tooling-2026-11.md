@@ -10,7 +10,7 @@ type: feature
 依赖: core-node-driver-visibility（已实施）· rtl-hierarchical-output · hierarchical-port-naming-guard
 来源: 用户拍板 2026-11-10「生成器可以作为项目提供的能力」+ 2026-11-10 实测（`toVerilog` 产物形态）
 生成时间: 2026-11-10
-evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h + /tmp/opencode/rv32i_rtl/rv32i_soc.v
+evidence: probe:scripts/verify_flat_rtl_emit.sh
 ---
 
 # Improvement: RTL 生成能力**产品化**（CLI + 端口清单 + 产物级护栏 + codegen 卫生）

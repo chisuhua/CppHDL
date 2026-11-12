@@ -10,7 +10,7 @@ type: fix
 依赖: component-ownership-and-naming（节点名构造的规范所有者）· port-name-literal-parity-2026-11（字面同名路线的可行边界 · 本项是其**上游前置**）
 来源: 用户 2026-11-10 拍板「按这个顺序推进」+ oracle 建议 4（把 F-A 从 route (c) 里拆出）+ planner 实测（2026-11-10）+ metis 第 1 轮（6 BLOCKER）
 生成时间: 2026-11-10
-evidence: probe:三探针（probe_bare_port_name / probe_fb / probe_member）—— 源码 MUST 逐字搬进 tests/test_port_name_parity.cpp（见 sister 草案的 P1）
+evidence: test:tests/test_port_name_parity.cpp
 ---
 
 # Improvement: 节点名拼接与组件名拼接的**前缀口径一致**（`"unnamed"` 哨兵语义收口）

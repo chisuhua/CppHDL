@@ -10,7 +10,7 @@ type: feature
 依赖: rtl-emit-product-tooling-2026-11（manifest）· rv32i-canonical-home（SoC 顶层归属）
 来源: 用户 2026-11-10 拍板「② 固件转储器作为项目工具能力，并考虑添加 ELF 装载固件能力」+ planner 实测装载链路缺口
 生成时间: 2026-11-10
-evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h:112-133 + include/cpu/pipeline/rv32i_tcm.h:53,100
+evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h#L112
 ---
 
 # Improvement: 固件**装载链路**（编码器库化 + 地址映射 + 统一加载端口 + ELF 装载）
