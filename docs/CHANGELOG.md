@@ -6,6 +6,40 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-12 — B2 批 · **修 UART RX demo 的两个缺陷**（位反转 + 采样点不缩放）
+
+### Fixed
+
+- **`examples/spinalhdl-ported/uart_rx/uart_rx.cpp`**
+  ⇒ ⇒ **D7：解出的字节被位反转**（旧：左移累加 ⇒ 首个采样位被推到 bit7）
+  ⇒ ⇒ 线上 LSB first ⇒ 线上 `0x10` ⇒ **解出 `0x08`** · `0x11` ⇒ `0x88` ⇒ ⇒ 改为
+  **右移累加 + 新位进 MSB** ⇒ ⇒ 首个采样位落在 bit0
+  ⇒ ⇒ **D6：采样点硬编码 `div == 4`**（⇒ 只对 `prescale == 9` 成立 ⇒ 别的 `prescale`
+  在**位的前沿**采样 ⇒ 抖动即采错）⇒ ⇒ 改为 `div == (prescale >> 1)`
+  ⇒ ⇒ `prescale == 9` 时**行为完全不变**（9/2 = 4）⇒ ⇒ 零回归
+
+### ⚠️ **D7 为什么藏了这么久**（值得记住的一条）
+
+example 自带的 C++ demo 用 **0x5A** 做测试值 ⇒ ⇒ **0x5A 是位回文**
+⇒ ⇒ **恰好掩盖**了位反转缺陷 ⇒ ⇒ demo 一直报 PASS。
+⇒ ⇒ demo 的测试值已改为 **0x4B**（非回文）⇒ ⇒ 实测：重新注入缺陷后 demo
+**FAILURE（Expected 0x4B, got 0xd2）** ⇒ ⇒ **C++ 侧断言现在真有判别力**。
+⇒ ⇒ **纪律**：**测试值必须避开对称值**（位回文 / 字节回文），否则实现级的
+**位序 / 端序**缺陷会被**恰好**掩盖。
+
+### 顺带修的既有告警
+
+`uart_rx.cpp` demo `main()` 里 10 处 C++ 条件把 `&&` 写成 `&` ⇒ ⇒ 本文件本次被改动
+⇒ ⇒ 按 Zero-Debt「改动文件 MUST 零告警」⇒ ⇒ 改为 `&&`（语义等价）。
+
+### 行为变更（非符号移除）
+
+`uart_rx` demo 的 `data` 输出不再位反转、采样点随 `prescale` 缩放。
+登记：`.rddf/checks/public-api-surface.md`「行为变更」节 +
+`.rddf/checks/decision-request-uart-rx-defects-2026-11.md`。
+
+---
+
 ## 2026-11-12 — B2 批 · **修 FIFO demo 的 `full` 门限**（D5 · 两处同改 · 行为变更）
 
 ### Fixed
