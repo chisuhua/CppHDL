@@ -433,8 +433,70 @@ demo 的测试值已改为 **0x4B**（非回文）⇒ ⇒ 实测：重新注入�
 
 ## axi4_lite_example {#axi4-lite-example}
 
-（`pending` —— 缺 AXI4-Lite 从端握手：**VALID 不得等 READY** / 响应必须先有请求 /
-`valid&&!ready` 时 payload 稳定 / 无请求时 `*VALID` 必 0）
+### 上游参考（**spec-derived** · capability `axi-slave-conformance` + `dual-backend-test-coverage`）
+
+| Requirement | 条款 | TB 判据 |
+|---|---|---|
+| 低有效复位 | 「MUST 提供**低有效复位**」+「复位清零全部状态寄存器」 | 运行后拉低 `rst_n` ⇒ `bvalid`/`rvalid`=0 且寄存器**清零** |
+| 锁存地址 | 「MUST **锁存地址**」（W 可延后 ⇒ 握手时采样） | AW 握手后改 `awaddr` ⇒ 写入仍落在**锁存**的地址 |
+| AW/W 相位分离 | 「MUST 支持 **AW 与 W 相位分离**」 | 只有 AW ⇒ `bvalid` MUST 仍为 0 |
+| 写响应保持到 BREADY | 「`bvalid` MUST 跨周期保持」+「MUST NOT 接受下一笔写事务（`awready` 保持 0）」 | 不拉 BREADY ⇒ `bvalid` 保持 + `awready` 保持 0 |
+| BREADY 后清除 | 「握手后 `bvalid` MUST 清除」+「MUST 能接受下一笔事务」 | 握手后 `bvalid`=0 |
+| 读响应保持到 RREADY | 同上（读侧） | 不拉 RREADY ⇒ `rvalid` 保持 + `arready` 保持 0 |
+| 未映射地址 | 「MUST 返回 **DECERR**」 | 写/读 0x10 ⇒ `bresp`/`rresp` = `2'b11` |
+| 字节写 | 「MUST 消费 `wstrb`」+「部分字节写只改选中字节」 | `wstrb`=0b0011 ⇒ 只改低 2 字节；`wstrb`=0（空写）⇒ MUST NOT 改 |
+
+### impl-contract（本实现的取值）
+
+- 寄存器窗口 = **0x00..0x0C**（4 个寄存器，步长 4 字节）⇒ 0x10 起窗口外。
+- `wstrb` bit i ⇒ 第 i 个字节道（**从 LSB 起** ⇒ `wstrb` bit 0 = 最低字节）。
+- `awready`/`arready`/`wready` 是**组合**的（= `valid & !busy`）⇒ 握手**同拍**完成。
+- 从端实现 = `include/axi4/axi4_lite_slave.h` 的 `AxiLiteSlave<32,32,4>`。
+
+### 判据
+
+| 判据 | 级别 | 期望 |
+|---|---|---|
+| 运行后拉低 `rst_n` ⇒ `bvalid`/`rvalid` | spec-derived | 均为 0 |
+| 运行后拉低 `rst_n` ⇒ 寄存器 | spec-derived | **清零** |
+| AW 握手后改 `awaddr` ⇒ 写入落点 | spec-derived | **锁存**的地址（0x00），0x08 不受影响 |
+| 只有 AW、无 W ⇒ `bvalid` | spec-derived | 0 |
+| 写 4 个寄存器后读回 | **metamorphic** | **写入什么读回什么**（相对比较） |
+| 写/读映射地址 ⇒ 响应 | spec-derived | `2'b00`（OKAY） |
+| 写/读 0x10（窗口外） | spec-derived | `2'b11`（DECERR）· 读数据 MUST NOT 呈现别的寄存器值 |
+| 不拉 BREADY ⇒ `bvalid` | spec-derived | **跨周期保持 1** |
+| `bvalid` 挂起期间拉高 `awvalid` ⇒ `awready` | spec-derived | 仍为 0（不接受下一笔写） |
+| BREADY 握手后 ⇒ `bvalid` | spec-derived | 清除 |
+| 不拉 RREADY ⇒ `rvalid` | spec-derived | **跨周期保持 1** |
+| `rvalid` 挂起期间拉高 `arvalid` ⇒ `arready` | spec-derived | 仍为 0 |
+| RREADY 握手后 ⇒ `rvalid` | spec-derived | 清除 |
+| 部分字节写（`wstrb`=0b0011） | spec-derived | 只改低 2 字节（`0x11223344` ⇒ `0x1122CCDD`） |
+| 空写（`wstrb`=0） | spec-derived | 响应仍 OKAY 且寄存器**不变** |
+
+### ⚠️ **端口映射 MUST 以产物为准**（本 TB 的第一课）
+
+axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的顺序 ⇒
+本例与 `__io` 声明顺序一致（`awaddr`=`top_unnamed_input` · `wdata`=`top_unnamed_input_3` …）
+⇒ ⇒ **但不能靠猜**：TB 首版把 `awaddr`/`wdata` **互换** ⇒ ⇒ 15 个判据全红
+⇒ ⇒ **差点误判成「实现缺陷」** ⇒ ⇒ 幸好先读了产物的寄存器/多路器链才定位到是 TB 自己写错。
+⇒ ⇒ 判据：顶层输入编号 **由 `describe()` 首次引用顺序**决定；`awvalid`/`wvalid` 的位置
+已由产物里的 `awready`/`wready` 两条链**独立印证**。
+
+### 变异自证（对 DUT 变异 ⇒ TB MUST 转红）
+
+| 变异 | 期望 | 实测 |
+|---|---|---|
+| M1：`bresp` 恒 OKAY（去掉 DECERR） | 转红 | ✅ `fails=1` |
+| M2：**地址不锁存**（地址寄存器永不装载） | 转红 | ✅ `fails=4` |
+| M3：`rst_n` 复位路径失效（寄存器不清零） | 转红 | ✅ `fails=1` |
+| M4：字节道 lane1 恒有效 | 转红 | ✅ `fails=1` |
+| M5：`bvalid` 退化为**单拍脉冲**（不保持） | 转红 | ✅ `fails=6`（**不挂死** ⇒ 等待有界） |
+
+⚠️ **等待 MUST 有界**：首版用 `do @(posedge clk); while (!bvalid);` ⇒ 坏 DUT 会**挂死**
+⇒ 只能靠护栏的 TIMEOUT（120s）抓住 ⇒ ⇒ 改为 `do … while (!x && g < 64)`
+⇒ ⇒ 坏 DUT **快速失败**。
+⚠️ **有界等待 MUST 用 do-while**（不能用 `for`）：`for` 的条件在**边沿之前**求值
+⇒ 组合 ready 时**一次边沿都不走** ⇒ 握手不会发生 ⇒ ⇒ 实测直接踩到（9 个判据误红）。
 
 ## riscv-mini-rv32i-soc {#riscv-mini-rv32i-soc}
 

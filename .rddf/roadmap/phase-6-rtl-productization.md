@@ -120,7 +120,7 @@
 
 | work item | 来源 | 内容 | 依赖 |
 |---|---|---|---|
-| **E1–E8** | `examples-rtl-sim-coverage` | `--emit-tb-stub`（只发骨架）· **首批 10 个 target**（确切 target 名以 `examples/CMakeLists.txt:34-76` 为准）· **E4′ 已验证 = 8 / 待补期望源 = 2**（每项 MUST 列「缺什么」；⚠️ **2026-11-12 订正** —— 原写「已验证 = 1 / 待补 = 9」= 事实漂移：P1 期望源独立性落地后，counter 54 · counter_simple 768 · pwm 13 · gpio 9 · quadrature 7 · **fifo_stream 62** · **uart_tx 34** · **uart_rx 22** 已 verified ⇒ ⇒ 余 2 项 = `axi4_lite` · `riscv-mini` smoke）· E5 运行护栏 `verify_examples_rtl_sim.sh`（缺失 ⇒ **失败**不跳过；TB 末尾 MUST 打印 `RESULT: checks=<N> fails=0`）· **E6 CI = 挂 `pr-verilator-fast` 的一个 step**（**不**新建 job · **不**注册 CTest · **不**加 `rtl_sim` label）· 缓存 key 含 TB 名（独立目录） | B1 的 CLI + manifest |
+| **E1–E8** | `examples-rtl-sim-coverage` | `--emit-tb-stub`（只发骨架）· **首批 10 个 target**（确切 target 名以 `examples/CMakeLists.txt:34-76` 为准）· **E4′ 已验证 = 9 / 待补期望源 = 1**（每项 MUST 列「缺什么」；⚠️ **2026-11-12 订正** —— 原写「已验证 = 1 / 待补 = 9」= 事实漂移：P1 期望源独立性落地后，counter 54 · counter_simple 768 · pwm 13 · gpio 9 · quadrature 7 · **fifo_stream 62** · **uart_tx 34** · **uart_rx 22** · **axi4_lite 45** 已 verified ⇒ ⇒ 余 1 项 = `riscv-mini` smoke）· E5 运行护栏 `verify_examples_rtl_sim.sh`（缺失 ⇒ **失败**不跳过；TB 末尾 MUST 打印 `RESULT: checks=<N> fails=0`）· **E6 CI = 挂 `pr-verilator-fast` 的一个 step**（**不**新建 job · **不**注册 CTest · **不**加 `rtl_sim` label）· 缓存 key 含 TB 名（独立目录） | B1 的 CLI + manifest |
 
 > ⚠️ **E6 的 CI 形态**已由用户裁决 ⇒ ⇒ 本批**不得**改成新 job（会引入第二次完整 build）。
 

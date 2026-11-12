@@ -5,7 +5,7 @@ phase: phase-6
 category: testing
 type: feature
 状态: in-progress
-进度: E1 / E2 / E4 / E5 / E7 / E8 已落 · **E3 = 8/10 verified**（counter 54 · counter_simple 768 · pwm 13 · gpio 9 · quadrature 7 · fifo_stream 62 · uart_tx 34 · uart_rx 22）· **E6 ⬜**（前置 = E3 **10/10**）· E3 余 2 项：`axi4_lite` · `riscv-mini` smoke · ✅ **fifo_stream 的 D5 已修复**（`full` 门限 ⇒ 两处同改 ⇒ 容量 = N ⇒ TB 判据正面放开 + 变异承重）
+进度: E1 / E2 / E4 / E5 / E7 / E8 已落 · **E3 = 9/10 verified**（counter 54 · counter_simple 768 · pwm 13 · gpio 9 · quadrature 7 · fifo_stream 62 · uart_tx 34 · uart_rx 22 · axi4_lite 45）· **E6 ⬜**（前置 = E3 **10/10**）· E3 余 1 项：`riscv-mini` smoke · ✅ **fifo_stream 的 D5 已修复**（`full` 门限 ⇒ 两处同改 ⇒ 容量 = N ⇒ TB 判据正面放开 + 变异承重）
 主题: dual-backend 测试完整化
 依赖: rtl-emit-product-tooling-2026-11（CLI + manifest）· port-naming-ratchet-2026-11（端口名可读）
 来源: 用户 2026-11-10 拍板「③ 对 example 下的示例添加完整的 RTL 生成和独立 Verilog 仿真能力，同时是否也需要创建单元测试覆盖生成 RTL 和独立 Verilator 测试能力」
