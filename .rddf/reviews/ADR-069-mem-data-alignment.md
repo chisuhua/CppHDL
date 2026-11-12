@@ -2,8 +2,8 @@
 id: ADR-069-mem-data-alignment
 日期: 2026-11-12
 对象: docs/adr/ADR-069-mem-data-alignment.md
-状态: ⛔ **未闭**（oracle 第 1/2 轮均 **REJECT** · critic **未跑** ⇒ ⇒ ADR 保持 `Draft`）
-审稿链: oracle ×2（顺序上先于 critic）⇒ ⇒ **critic 轮待 oracle 闭合后启动**
+状态: ✅ **已闭**（oracle ×3：第 1/2 轮 REJECT ⇒ **第 3 轮 PASS-WITH-NOTES** · critic ×1：**APPROVE_WITH_CONDITIONS**（0 BLOCKER））⇒ ⇒ ADR 已转 **Accepted**
+审稿链: oracle ×3（先）⇒ ⇒ critic ×1（后）⇒ ⇒ 合计 **4 轮**
 ---
 
 # 审稿记录 · ADR-069（RV32I 访存数据对齐契约 · T2 裁决）
@@ -21,7 +21,13 @@ id: ADR-069-mem-data-alignment
 |---:|---|---|---|
 | 1 | **oracle** | 🔴 **REJECT** · 8 条（**4 条必改** + 5 条其它）· 核心 = 「拍号模型错」+「选项表漏项」+「排除论证稻草人化」 | **8 条全部采纳** ⇒ ⇒ v2 |
 | 2 | **oracle** | 🔴 **REJECT** · **2 BLOCKER** + 3 MEDIUM · 核心 = 「A0 的**三个强制结构变更**被系统性低估」+「**A0 严格支配 A1**的推理坍塌」 | **2 BLOCKER + 3 MEDIUM 全部采纳** ⇒ ⇒ v3（§2.3 改**待用户裁决**） |
-| — | **critic** | ⬜ **未跑** | ⇒ ⇒ 依 ADR-069 §6 的顺序，critic 轮**待 oracle 闭合后**启动 |
+| 3 | **oracle（闭合验证）** | ✅ **PASS-WITH-NOTES** ⇒ ⇒ **2 条 BLOCKER 实质闭合** · 3 条补字 | **3 条补字全部落地**（v3.1）：① **A0-① 字段清单补 `link_value`**（M2 MUST 同拍 transit ⇒ 否则 JAL/JALR 写回后继值 · 回捕 = V9 的 3 条 jump golden）② §2.1 的「流水线内部零 churn」改为「**停顿链**零修订 + **写接口**使能源 MUST 重指」③ §2.3 理由② **降级**（flush 抖动**功能无害** ⇒ 非 🔴 原则级）+ §2.2 补「写接口全体拍前移」 |
+| 1 | **critic** | ✅ **APPROVE_WITH_CONDITIONS** · `mergeable: yes` · `scope_exceeded: false` ⇒ **0 BLOCKER** · **4 SHOULD_FIX** + 3 NITS | **4 SHOULD_FIX + 3 NITS 全部采纳**（v3.2）：SF-1 删 §3.3 的**重复表** · SF-2 AC 映射 `V1–V10` → **`V1–V15`** · SF-3 §6 ③ 的 ADR-047 addendum 由「视需要」改为**强制项**（与 acceptance 同批）· SF-4 §6 ② 的 ADR-068 addendum 改为 **acceptance 同期**（把「无桥窗口」压到零）· NIT-1 审稿轮次统一为 **oracle ×3 + critic ×1** · NIT-2 删 V10 的**幽灵数字**（−3~−8%）· NIT-3 V3 补两个限定词（**load** 的 / **同址**） |
+
+> ⚠️ **critic 对 focus 的判定（0 BLOCKER 的理由）**：
+> ① **不构成 BLOCKER 第一类**（与已签批 ADR 冲突未走流程）：ADR-069 的 header Parent 行 + §4 表 + §3.3 依据 + §6 ③ 载体**四处**显式声明「修订 ADR-047 的停顿拍数」⇒ ⇒ **已走修订流程**；且修订由**前提变更**（`aread`→`sread` 使 EX→WB 级数 2→3）驱动 ⇒ ⇒ 不是否定 ADR-047 的决策本身。
+> ② **不构成 BLOCKER 第三类**（文档内自相矛盾）：「本 ADR 不裁决 T2」是**范围弃权句** ⇒ ⇒ ADR-069 填充的是它**显式预留**的格子 ⇒ ⇒ 是「弃权 → 后续裁决」的**时间序列**，不是同一决策的两个答案 ⇒ ⇒ **dated addendum 足以消解**（对「弃权」做 supersede 反而别扭）。
+> ③ **判据不恒绿/恒红**：V13–V15 未写用例时 = 「**未验收**」（正确中间态）；V9 的 STALE 定义（**相对基线**的**同身份条目**数据不同 + 按退休序对齐）**不会**把正确实现判红（A0 下地址呈现拍不变 ⇒ 数据值逐字相同 ⇒ 全落 `SHIFT`）。
 
 ---
 
@@ -57,9 +63,10 @@ id: ADR-069-mem-data-alignment
 | # | 事项 | 状态 |
 |---|---|---|
 | ① | oracle 两轮 findings | ✅ **全部采纳并并入**（v3） |
-| ② | **决策本身** | ⛔ **待用户裁决**（§2.3 两候选并列 + 4 条判据）⇒ ⇒ ADR 保持 `Draft` |
-| ③ | **critic 轮** | ⬜ **未跑**（依 §6 顺序，待 oracle 闭合后启动）⇒ ⇒ 本 record 的 `状态` 字段据此填 `未闭` |
-| ④ | **ADR-068 的 dated addendum** | ⬜ **未做**（§4 要求**本 ADR 裁决后**才追加 ⇒ ⇒ 原承重句**逐字保留**） |
+| ② | **决策本身** | ✅ **已裁决 = 候选 ②（A0）**（用户 2026-11-12「按你建议拍板」）⇒ ⇒ ADR 已转 **Accepted** |
+| ③ | **critic 轮** | ✅ **APPROVE_WITH_CONDITIONS**（0 BLOCKER）⇒ ⇒ 本 record 的 `状态` 字段据此填 `已闭` |
+| ④ | **ADR-068 的 dated addendum** | ✅ **已落盘（acceptance 同批 · SF-4）** ⇒ ⇒ `docs/adr/ADR-068-dtcm-memory-timing-contract.md` **§5.5**（dated addendum）⇒ ⇒ 原承重句**逐字保留**（验证：`grep -c` 命中 2 = 原文 + 引用） |
+| ⑤' | **ADR-047 的 dated addendum** | ⬜ **未做**（SF-3 改为**强制项**）⇒ ⇒ 依据 = ADR-047 有 **3 处规范性「3 拍」陈述**（`:38` / `:191` / `:473`）⇒ ⇒ Accepted 后全部陈旧 ⇒ ⇒ MUST 与 B3 的 spec MODIFIED 同批 |
 | ⑤ | `memory-timing-contract` 的**立项** | ⬜ 未立项 ⇒ ⇒ 本 ADR 的「关联 change」仍是 `backlog:` |
 
 ---
