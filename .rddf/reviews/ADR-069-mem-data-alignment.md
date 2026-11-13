@@ -81,3 +81,51 @@ bash scripts/verify_roadmap_fragments.sh              # AUTO 块守恒
 # ADR 自身的形状自检：§2.3 的决策必须显式标注「待裁决」⇒ Status 不得为 Accepted
 grep -n "^- \*\*Status\*\*" docs/adr/ADR-069-mem-data-alignment.md
 ```
+
+---
+
+## 6. ⚠️ **追加节（2026-11-13）** —— §7 dated addendum 的审稿记录
+
+> ⚠️ **本节是「追加」不是「改写」** ⇒ ⇒ 上文 §1–§5（`oracle ×3` + `critic ×1` · 原始 Accepted 审稿轨迹）**逐字保留**
+> ⇒ ⇒ 本节记录的是 **§7 addendum** 的**独立审稿轨迹**。
+
+### 6.1 审稿轨迹
+
+| 轮 | 角色 | 结论 | 要点 |
+|---|---|---|---|
+| **第 4 轮** | oracle | ✅ **确认 + 纠正** | ✅ 独立重推拍级表 ⇒ 与 §2.1 一致（实施期推导无误）<br>✅ 确认「capability 距离矩阵右移一位」⇒ ⇒ `rv32i-data-forwarding` 的 MODIFIED delta 是**必须项**<br>🔴 **纠正**：「D11 源改指 M2」按字面 = **替换语义** ⇒ ⇒ 距离 4 生产者 + 4 拍停顿后的 load-use 消费者**静默读旧值**<br>⇒ ⇒ 正确形态 = **两级优先旁路**（M2 档优先 + WB 档保留）⇒ ⇒ `wb_stage` 写回 mux **MUST NOT 前移** |
+| **第 1 轮** | critic（`arch` 档） | ❌ **REJECT** | **BLOCKER-1** = `ADR-047:629`（§5.5.2 ③「mux 前移一级」）⇄ 本 ADR §7.1.2「MUST NOT 前移」= **两份 Accepted ADR 的相反处方**，且 ADR-047 侧**无反向指针**<br>SHOULD_FIX ① = §7.1.3 的矩阵表构成「第二份权威矩阵」<br>SHOULD_FIX ② = §7.5 的 critic 记录指向写死 |
+| **第 2 轮** | critic（复审 · `继承第 1 轮：arch`） | ✅ **APPROVE** | `mergeable: yes` · 0 BLOCKER · 0 新 SHOULD_FIX · 1 NIT（措辞精度 · 不阻断）⇒ ⇒ **三项闭合证据经逐一读文件核实** |
+
+### 6.2 BLOCKER-1 的闭法（三处）
+
+| # | 落点 | 内容 |
+|---|---|---|
+| ① | `ADR-047` **新增 §5.5.2.1** | dated note（**表 ③ 行逐字保留**）· 两级结构表（M2 档优先 / WB 档保留 / youngest-wins / `wb_stage` mux **MUST NOT 前移**）· 「WB 档是**承重件**，不是遗留件」的推导 · 指向本 ADR §7.1 |
+| ② | 本 ADR **§6 ③** | 范围句扩大（登记 A0-③ 的实施形态订正）+「**已闭**：ADR-047 §5.5.2.1」⇒ ⇒ 义务有**唯一落点** |
+| ③ | 本 ADR **§7.5** | 登记 critic 第 1 轮的 BLOCKER + 闭法 + 第 2 轮 APPROVE 结论 |
+
+### 6.3 SHOULD_FIX 的处置
+
+| # | 落点 | 改法 |
+|---|---|---|
+| ① | 本 ADR **§7.1.3** | 表前加「⚠️ **下表 = MODIFIED delta 的**目标内容**（**不是**第二份权威矩阵）⇒ ⇒ 权威仍是 capability `rv32i-data-forwarding` 本身 ⇒ ⇒ **delta 落地后以 capability 文本为准**」 |
+| ② | 本 ADR **§7.5** | critic 记录指向改为「复审结论见本文件（本节追加）」⇒ ⇒ 闭环后回填实际结论 |
+
+### 6.4 §7 addendum 生效后的**下游义务**
+
+| # | 义务 | 归属 |
+|---|---|---|
+| ① | 🔴 **capability `rv32i-data-forwarding` 的 MODIFIED delta**（6 处：矩阵表 / 「一一对应」句 / 档位 2 的源 / 距离 2 的 NOTE / 距离 ≥ 4 的 Scenario / 寄存器堆读点旁路 Scenario）⇒ ⇒ 载体 = change `memory-timing-contract-2026-11` 的 `specs/` | planner（起草）· builder（实施） |
+| ② | **§7.4 的 V14a–V16**（含「删 WB 档必红」变异自证）= B3 实施期的验收门 | builder · verifier |
+| ③ | **§7.2 的 A0-① 措辞订正**（M2 = 元数据 + **原始字** · 9 个成员）⇒ ⇒ 车道选择留在 M2 下游 | builder |
+| ④ | **§7.3 的单地址口零冲突**（T 拍地址 = `exmem_alu_result` ⇒ `sread` 在 T 拍发出 ⇒ T+1 拍 `rdata` = data(A_i)）⇒ ⇒ **不新增端口** ⇒ ⇒ store 侧车道移位 / `strbe` **留在 T 拍** | builder |
+
+### 6.5 复跑命令（只读）
+
+```bash
+cd /workspace/project/CppHDL
+grep -rn "前移一级" docs/adr/ | cut -c1-140   # ⇒ ADR-047:629（原文逐字）+ :631/:636/:638（订正）+ ADR-069:246/:302/:362
+grep -n "5.5.2.1" docs/adr/ADR-047-rv32i-data-forwarding.md
+grep -n "critic 第 2 轮" docs/adr/ADR-069-mem-data-alignment.md
+```

@@ -4,7 +4,7 @@
 - **Date**: 2026-11-12
 - **Author**: architect role（build agent）
 - **Parent**: **ADR-068**（D-TCM 的存储时序契约 —— 寄存读 + 字节道拆分存储）· ADR-041（cache Sync/Async 变体 —— `aread`/`sread` 的时序语义来源）· ADR-047（数据前推 · **本 ADR 修订其停顿拍数契约**，见 §3.3）· ADR-048（取指 skid buffer）
-- **关联 change**: `backlog: memory-timing-contract`（`.rddf/improvements/memory-timing-contract-2026-11.md` · **尚未立项** ⇒ B3 批 ⇒ 立项后回填）
+- **关联 change**: `openspec/changes/memory-timing-contract-2026-11/`（**已立项** · B3 批 · 草案 = `.rddf/improvements/memory-timing-contract-2026-11.md`）⇒ ⇒ ⚠️ **2026-11-13 订正**：原写 `backlog: memory-timing-contract` + 「**尚未立项** ⇒ B3 批 ⇒ 立项后回填」⇒ ⇒ 立项**已完成** ⇒ ⇒ 指针已回填（原句逐字保留于 §6 ①）
 - **AC 映射**: 本 ADR §5 的 **V1–V15** → `memory-timing-contract` 的 **T2**（MEM 数据对齐）；**T1 / T3 / T4 / T5 / T6 / T2′** 仍归 **ADR-068**（**零改动**）
 - **审稿记录**: `.rddf/reviews/ADR-069-mem-data-alignment.md`（**oracle ×3**：第 1/2 轮 REJECT ⇒ **第 3 轮 PASS-WITH-NOTES** · **critic ×1**：**APPROVE_WITH_CONDITIONS**（0 BLOCKER · 4 SHOULD_FIX + 3 NITS 全部采纳））
 
@@ -241,9 +241,9 @@ MEM 级 MUST 决定**何时把数据采进 MEM/WB** ⇒ ⇒ 那是 **T2（MEM �
 
 | # | 事项 | 归属 | 载体 |
 |---|---|---|---|
-| ① | 本 ADR 的**实施** | builder | change `memory-timing-contract`（B3 批 · **待立项** ⇒ ⇒ 立项后回填本 ADR 的「关联 change」） |
+| ① | 本 ADR 的**实施** | builder | change `memory-timing-contract`（B3 批 · ⚠️ **2026-11-13 订正**：**已立项** ⇒ ⇒ 载体 = `openspec/changes/memory-timing-contract-2026-11/` ⇒ ⇒ 本 ADR 的「关联 change」指针**已回填**）|
 | ② | **ADR-068 的 dated addendum**（§4 的唯一允许交互）⇒ ⇒ ⚠️ **MUST 与本 ADR 的 acceptance 同期**（同一 commit / 同批复批）⇒ ⇒ 否则两个 Accepted ADR 之间会开一个「068 说未裁决 / 069 说已裁决」的**无桥窗口**（§4 自己把该形态判为持久矛盾） | architect（**与 acceptance 同批**） | `docs/adr/ADR-068-dtcm-memory-timing-contract.md` **追加一段**（★ 原文承重句**逐字保留**） |
-| ③ | **ADR-047 的停顿拍数契约修订**（3→4）⇒ ⇒ 🔴 **ADR-047 追加 dated addendum**（机制同 §6 ②：追加 ≠ 改写 · 原句逐字保留）⇒ ⇒ 依据 = ADR-047 有 **3 处规范性「3 拍」陈述**（`:38` 现状表 · `:191` D6 标题 · `:473` 负面后果）⇒ ⇒ Accepted 后全部陈旧 | **architect**（**强制项** · 与 acceptance **同批**）· builder（spec delta） | `docs/adr/ADR-047*.md` 的 addendum **+** `openspec/specs/rv32i-data-forwarding/` MODIFIED |
+| ③ | **ADR-047 的停顿拍数契约修订**（3→4）**+ 🔴 A0-③ 的实施形态订正**（D11 = **两级优先旁路** · 「mux 前移一级」按字面 = 静默错值）⇒ ⇒ 🔴 **ADR-047 追加 dated addendum**（机制同 §6 ②：追加 ≠ 改写 · 原句逐字保留）⇒ ⇒ **已闭**：ADR-047 **§5.5.2.1**（2026-11-13 dated note · 逐字保留 §5.5.2 ③ 原文 + 指向本 ADR §7.1）⇒ ⇒ 依据 = ADR-047 有 **3 处规范性「3 拍」陈述**（`:38` 现状表 · `:191` D6 标题 · `:473` 负面后果）⇒ ⇒ Accepted 后全部陈旧 | **architect**（**强制项** · 与 acceptance **同批**）· builder（spec delta） | `docs/adr/ADR-047*.md` 的 addendum **+** `openspec/specs/rv32i-data-forwarding/` MODIFIED |
 | ④ | `perf_cycles` / `perf_instructions` / `load_use_stalls` 基线更新 | builder | change 内 + `rv32i-commit-path` capability 的 MODIFIED |
 | ⑤ | 「地址级裂分必须同步搬移消费地址的组合逻辑」逐条落 tasks | builder | change 的 tasks.md（V5 的 3 条） |
 
@@ -254,3 +254,114 @@ MEM 级 MUST 决定**何时把数据采进 MEM/WB** ⇒ ⇒ 那是 **T2（MEM �
 > · **第 2 轮（2 BLOCKER + 3 MEDIUM）**：**BLOCKER-1** = A0 的**三个强制结构变更**（M2 必须是**完整元数据寄存器** · 档位 2 源重指 · D11 源重指）⇒ ⇒ §3.3 已登记 + V13–V15 三条新判别判据；**BLOCKER-2** = 「A0 严格支配 A1」**推理坍塌**（A1 的 MEM/WB 装载点可「照旧」⇒ ⇒ A1 停顿 **3** 拍）⇒ ⇒ §2.3 改为**两候选并列 + 待用户裁决**；MEDIUM-1 = V9 补**对齐规则**；MEDIUM-2 = §3.2-① 删**无源估算**；MEDIUM-3 = **M2 内容钉死** + V5 分 store/load 两项
 >
 > ⚠️ **第 2 版变更摘要**（oracle 第 1 轮 REJECT 后）：① 加 §2.1 拍级推导（以「**EX→WB 级数**」为决定量）② **删除 A2**（它把地址**延后** ⇒ ⇒ 不是「保持旧时序」⇒ ⇒ 每轴不优于 A0）③ 选项表补 **A0**（草案的真 B）④ 修正 B 的排除理由（不是「改成握手式」的唯一代价，而是**可变延迟与固定链不能叠加**）⑤ 修正 A1+旁路的评估（删「与 `bf78367` 同族」的修辞）⑥ 显式登记 **ADR-047 停顿拍数 3→4** 的契约变更 ⑦ §5 补 V4/V5（装载使能 · 地址级搬移）与 V9/V10 的归因纪律 ⑧ 「吞吐 −20%」降级为估算并标「待实测」 ⑨ 「与 `pc_lag` 同构」降级为类比
+
+
+---
+
+## 7. ⚠️ **2026-11-13 追加（dated addendum · 实施期实测）** —— **A0-③ 的精确化** + **A0-① 的措辞订正**
+
+> ⚠️ **本节是「追加」不是「改写」** ⇒ ⇒ §2.3 决策（A0）/ §2.1 拍级推导（EX→WB = 3 级）/ §2.3 代价③（停顿 4 拍）/
+> §3.3 的三条强制变更**逐字保留** ⇒ ⇒ **决策本身零变更** ⇒ ⇒ 本节只**精确化实施形态**。
+> ⚠️ **触发** = change `memory-timing-contract-2026-11` 的**实施期推导**（`design.md` §9.1 / §10）+
+> **oracle 第 4 轮对抗式复核**（2026-11-13 · 独立重推拍级表 ⇒ 与实施期推导一致）。
+
+### 7.1 🔴 **A0-③ 的精确化**：D11 = **两级优先旁路**（M2 档优先 + WB 档保留），**不是**「源替换」
+
+**原句（§3.3 A0-③ · 逐字保留）**：
+「**D11（WB→ID 组合旁路）的源 MUST 改指「下一提交者值」**（= 由 M2 + 拍 T+2 的车道 mux **提前一级**算出的
+`write_data` ⇒ ⇒ `wb_stage` 的写回 mux **前移**一级）」
+
+**订正**：上句的「**改指**」与「**前移**」若按**替换语义**实施 ⇒ ⇒ **静默错值** ⇒ ⇒ **MUST 按下述两级结构实施**。
+
+#### 7.1.1 拍级依据（oracle 第 4 轮独立重推 · 与 §2.1 同源）
+
+设生产者指令 i 在拍 `N` 占 EX 级（`ID/EX` 在 posedge N 锁存 · `EX/MEM` 在 posedge N+1 锁存）：
+
+| 量 | 基线（`aread`） | **A0（`sread` + M2）** |
+|---|---|---|
+| EX/MEM 锁存 i | posedge N+1 | posedge N+1 |
+| i 的数据可用拍 | 拍 N+1（`aread` 同拍） | 拍 N+2（`sread` 晚 1 拍） |
+| 中间级 | 无 | **M2**（posedge N+2 锁存元数据 + 原始字） |
+| MEM/WB′ 锁存 i | posedge N+2 | **posedge N+3** |
+| **写回沿** | posedge N+3 | **posedge N+4** |
+| **距离 3** 消费者的 ID/EX 锁存沿 | posedge N+3（**与写回沿同沿** ⇒ 需 WB 档旁路） | posedge N+3（**比写回沿早 1 沿** ⇒ **WB 档旁路够不着** ⇒ 须 **M2 档**） |
+| **距离 4** 消费者的 ID/EX 锁存沿 | posedge N+4（晚于写回沿 ⇒ 寄存器堆路径够） | posedge N+4（**与写回沿同沿** ⇒ **WB 档旁路仍必要**） |
+
+⇒ ⇒ **关键结论**：A0 **没有消灭**同沿竞态 ⇒ ⇒ 它把它从「距离 3」**推到了「距离 4」**
+⇒ ⇒ ⇒ **WB 档 MUST 保留**（否则距离 4 与「4 拍停顿后的 load-use 消费者」静默读旧值）
+⇒ ⇒ ⇒ 而**距离 3** 的值在 A0 下**只在 M2 里**（M2 在拍 N+2 持有 i ⇒ 与消费者的 ID 读拍**同拍**）
+⇒ ⇒ ⇒ 故 MUST **新增 M2 档**。
+
+#### 7.1.2 实施形态（MUST）
+
+| 项 | 处置 |
+|---|---|
+| **M2 档（新增 · 优先）** | 判据 = `m2_valid & (m2_is_alu \| m2_is_load \| m2_is_jump) & (m2_rd_addr != 0)` ∧ `m2_rd_addr == id_stage.io().rs{1,2}_addr_id`；数据 = **M2 级同构写回 mux**（叶 = M2 寄存器 + `sread` 输出寄存器 ⇒ **不成环** ⇒ 满足 ADR-047「数据源叶子 MUST 是流水线寄存器」） |
+| **WB 档（保留 · 逐字不动）** | 判据 = `wb_write_en & (wb_stage.io().rd_addr_out == id_stage.io().rs{1,2}_addr_id)`；数据 = `wb_stage.io().write_data` |
+| **优先级** | **M2 档 > WB 档**（同拍两档命中同一 rd 时 M2 的指令**更年轻** ⇒ youngest-wins）⇒ ⇒ 实现为**嵌套 `select`** |
+| **`wb_stage` 的写回 mux** | ⚠️ **MUST NOT 前移**（原句的「前移一级」是**实施陷阱**）⇒ ⇒ 若前移 ⇒ `reg_file.write`（`rv32i_pipeline.h:200-201` 的**单写口**）在拍 N+3 采到的是 M2 里**更年轻**那条指令的 rd/data ⇒ ⇒ 真正提交的那条**永不写回** ⇒ ⇒ 真实提交 MUST 仍由 `wb_stage` 承担 |
+| **`commit_count` 语义** | **零改动**（增量源 = `mem_stage.io().mem_valid_out` = MEM 级有效 ⇒ M2 在其下游 ⇒ 退休时点不动 ⇒ capability `rv32i-commit-path` 的「退休 ≡ MEM 级持有有效指令」不破） |
+
+#### 7.1.3 连带后果（**必须同步落 spec**）
+
+⚠️ **capability `rv32i-data-forwarding` 的「距离矩阵」在 A0 下整体右移一位** ⇒ ⇒ **MUST 落 MODIFIED delta**
+（该 capability 是距离矩阵的**唯一权威** ⇒ ⇒ 不改它 = 实施与 spec 冲突）。
+**已登记的义务来源** = ADR-047 §5.5.3 ②（「两份 capability 同批」）。
+
+| 距离 | 基线所在级 · 来源 | **A0 后所在级 · 来源** |
+|---|---|---|
+| 1 | EX · 档位 1（EX/MEM） | EX · 档位 1（EX/MEM）**不变** |
+| 2 | MEM · 档位 2（MEM/WB） | **M2** · 档位 2（**M2**） |
+| 3 | WB · **WB→ID 组合旁路** | **M2** · **M2→ID 组合旁路**（新增） |
+| 4 | 已退休 · 寄存器堆路径 | **WB** · **WB→ID 组合旁路**（保留） |
+| ≥ 5 | 已退休 · 寄存器堆路径 | 已退休 · 寄存器堆路径 |
+
+⚠️ **下表 = MODIFIED delta 的**目标内容**（**不是**第二份权威矩阵）⇒ ⇒ 权威仍是 capability
+`rv32i-data-forwarding` 本身（其现行 Requirement 明文「距离矩阵 MUST NOT 在别处自述」）⇒ ⇒
+⇒ ⇒ 本表只用于**指示 delta 的改写方向**，**delta 落地后以 capability 文本为准**。
+
+⇒ ⇒ ⚠️ **「距离 ⇔ 生产者所在级一一对应」这句话在 A0 下**不再成立**（距离 2 与距离 3 **同落 M2 级**，
+靠**消费者所在级**区分）⇒ ⇒ capability 的该句 MUST 一并改写（**不是**只移表格）。
+⇒ ⇒ **判据面**：V14 MUST 拆成 **V14a**（距离 3 ⇒ M2 档）与 **V14b**（距离 4 **及** 4 拍停顿后的
+load-use 消费者 ⇒ WB 档）⇒ ⇒ **V14b 的变异 = 删掉 WB 档 ⇒ 必红**（否则该档零判别力）。
+
+### 7.2 ⚠️ **A0-① 的措辞订正**（决策不变 · 仅实施形态精确化）
+
+**原句（§3.3 A0-① 第 3 列 · 逐字保留）**：「⇒ ⇒ `sread` 的数据**不驻留 M2**，而是**组合流入 MEM/WB′**」
+
+**订正**：按 §7.1.1 的拍级表，MEM/WB′ 在 posedge N+3 装载 ⇒ ⇒ 它的数据入端 MUST 在拍 N+3 稳定
+⇒ ⇒ **原始字 MUST 寄存 1 拍** ⇒ ⇒ 那个寄存器**就是 M2 的 `m2_word`** ⇒ ⇒ ⇒ **M2 = 元数据 + 原始字**
+（**9** 个成员）⇒ ⇒ **车道选择（字节道 / 半字道 / 符号扩展）仍留在 M2 的下游**做（**组合**）⇒ ⇒
+⇒ ⇒ 与原句「组合流入」的**方向一致**，只是原句遗漏了「**数据 MUST 寄存 1 拍**」这一事实。
+⇒ ⇒ **决策（A0 / 3 级 / 4 拍 / 写侧零 churn）零变更** ⇒ ⇒ V1–V15 全部仍成立。
+
+### 7.3 ✅ **单地址口零冲突**（A0 的「写侧零 churn」成立 · 实施期验证）
+
+T 拍 TCM 地址 = `exmem_alu_result`（= A_i）⇒ ⇒ `sread` 在 T 拍发出 ⇒ ⇒ T+1 拍 `rdata` = **data(A_i)**
+⇒ ⇒ 同时 T+1 拍 TCM 地址 = A_{i+1}（EX/MEM 已前进）⇒ ⇒ 那是**下一次**读（**无害**）
+⇒ ⇒ ⇒ **单地址口即可** ⇒ ⇒ **不需要新增端口** ⇒ ⇒ ⇒ **store 侧的车道移位 / `strbe` 全部留在 T 拍**
+（与 ADR-069 V5 的「搬移了 ⇒ ⇒ 反而错」一致）。
+
+### 7.4 本 addendum 的**判据面**（追加到 §5 · 前瞻 · 未跑不勾）
+
+- [ ] **V14a** **距离 3 的生产者**（ALU / load / jump 三类）⇒ ⇒ 消费者 MUST 取到**新值** ⇒ ⇒ 判据源 = **M2 档**
+- [ ] **V14b** **距离 4 的生产者** + **4 拍停顿后的 load-use 消费者** ⇒ ⇒ MUST 取到**新值** ⇒ ⇒ 判据源 = **WB 档**
+      ⇒ ⇒ ⚠️ **变异自证**：删掉 WB 档 ⇒ ⇒ **必红**（否则该档零判别力 ⇒ ⇒ 结构性漏改不可见）
+- [ ] **V14c** **M2 档与 WB 档同时命中同一 rd** ⇒ ⇒ MUST 取 **M2 档**（youngest-wins）
+- [ ] **V15** **M2 档的数据叶 MUST 是流水线寄存器**（M2 寄存器 + `sread` 输出寄存器）⇒ ⇒ **不成环**
+      ⇒ ⇒ 变异：把 M2 档的数据叶改成 MEM 级的**组合输出** ⇒ ⇒ 必红（`bf78367` 同型）
+- [ ] **V16** `commit_count` 的退休时点 **MUST NOT 改动**（增量源仍 = `mem_stage.io().mem_valid_out`）
+      ⇒ ⇒ 变异：改增量源为 M2 的 valid ⇒ ⇒ **fill 段**从 3 变 4 ⇒ ⇒ `non_retired` 断言必红
+
+### 7.5 ⚠️ **本 addendum 的审稿状态**
+
+**oracle 第 4 轮**（2026-11-13 · 独立重推 + 对抗式复核）⇒ ⇒ 拍级表与 §2.1 一致
+⇒ ⇒ 但**指出 A0-③ 的「改指 / 前移」按字面是替换语义** ⇒ ⇒ 本节据此精确化。
+
+**critic 第 1 轮**（`arch` 档 · 2026-11-13）⇒ ⇒ **1 个 BLOCKER**（**已闭**）：
+「ADR-047 §5.5.2 ③ 的『前移一级』与本节 §7.1.2 的『MUST NOT 前移』构成**两份 Accepted ADR 的相反处方**，
+且 ADR-047 侧无反向指针」⇒ ⇒ **闭法** = ADR-047 追加 **§5.5.2.1** dated note（原文逐字保留 + 指向本节 §7.1）
+⇒ ⇒ **并把该义务登记进本 ADR §6 ③**（唯一落点）⇒ ⇒ 复审结论见
+`.rddf/reviews/ADR-069-mem-data-alignment.md`（本节追加）。
+
+**critic 第 2 轮（`arch` 档 · 2026-11-13）** ⇒ ⇒ **APPROVE**（`mergeable: yes` · 0 BLOCKER · 0 新 SHOULD_FIX · 1 NIT（措辞精度 · 不阻断））⇒ ⇒ **BLOCKER-1 已闭合**（三项闭合证据经 critic 逐一读文件核实）⇒ ⇒ ⇒ **本 addendum 生效**。
