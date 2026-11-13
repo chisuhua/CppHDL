@@ -26,13 +26,27 @@
 //   ⇒ 编码口径已与仓内 `rv32i-isa-semantics` capability 的样例交叉核对
 //     （该 capability 给出 `addi x21, x0, -8` = `0xFF800A93` ⇒ 与本表同一套编码规则）。
 //
-// ⚠️ **端口映射（实测确认，非猜）**：本顶层有 **113** 个端口（5 输入 + 108 输出）⇒
-//   输入按「组件 describe() 首次引用顺序」编号 ⇒ **1 位输入有 3 个** ⇒ 必须实证：
-//   · `top_unnamed_input_1` = `ext_rst`（实测：只有它拉低后流水线才取指）
-//   · `top_unnamed_input_2` = `prog_we`（实测：装载口生效）
-//   · `top_unnamed_input`   = `ext_clk` ⇒ ⚠️ **该端口是「死端口」** —— 产物里
+// ✅ **端口名已具名（2026-11-13 · R17.2 · 用户 ⑤ 的原始诉求）**：本顶层 **32** 个端口
+//   全部带**显式名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>` ⇒ ⇒ **本 TB 不再需要「查 port map」**。
+//   ⇒ ⇒ 根组件自有的 32 个端口：`top_ext_clk` / `top_ext_rst` / `top_prog_we` / `top_prog_addr` /
+//   `top_prog_data` / `top_obs_*`（11）/ `top_dbg_*`（16）。
+//   ⇒ ⇒ ⚠️ **仍保留未具名的是后代冒泡端口**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`）
+//   ⇒ ⇒ 它们**不在**本批范围（不是根组件自有 IO）⇒ ⇒ 归属**后续批次**。
+//
+// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **114** 个
+//   （**7** 输入 + **107** 输出 · 2026-11-13 实测）⇒ ⇒ **7** 输入 = 框架的
+//   `default_clock` / `default_reset` + 本组件自有的 **5** 个
+//   ⇒ ⇒ **5** 个自有输入里 **1 位输入有 3 个** ⇒ 必须实证：
+//   · `top_ext_rst` = `ext_rst`（实测：只有它拉低后流水线才取指）
+//   · `top_prog_we` = `prog_we`（实测：装载口生效）
+//   · `top_ext_clk` = `ext_clk` ⇒ ⚠️ **该端口是「死端口」** —— 产物里
 //     **所有**流水线寄存器都锁在框架 `default_clock`（`always_ff @(posedge default_clock …)`）
 //     ⇒ ⇒ `ext_clk` 对行为**无影响** ⇒ ⇒ 已登记为发现（见期望登记文档）。
+//   ⇒ ⇒ **107** 个输出 = 本组件自有的 **27** 个 + **后代冒泡**的 **80** 个
+//   （`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*` ⇒ ⇒ **未具名** ⇒ ⇒ 仍在 `sink*` 里）。
+//   ⚠️ **历史订正**：原文写「113 个端口（5 输入 + 108 输出）」⇒ ⇒ 该数字是
+//   **C8 tie-off 之前**的（B0 批给 `mem_is_load` 补 driver ⇒ ⇒ 顶层 input 8 → 7）
+//   ⇒ ⇒ 2026-11-13 按产物实测订正为 **114（7 + 107）**。
 //
 // ⚠️ **未用输出 MUST 被读**：本 TB 把 96 个不参与判据的输出接进 `sink*` 数组
 //   ⇒ ⇒ 严格 flags 下不读会触发 `%Warning-UNUSEDSIGNAL`（**致命** —— 实测踩过同类坑）。
@@ -170,38 +184,38 @@ module tb_rv32i_soc;
     top dut (
         .default_clock(clk),
         .default_reset(rst),
-        .top_unnamed_input(ext_clk),
-        .top_unnamed_input_1(ext_rst),
-        .top_unnamed_input_2(prog_we),
-        .top_unnamed_input_3(prog_addr),
-        .top_unnamed_input_4(prog_data),
-        .top_unnamed_output(sink32[0*32 +: 32]),
-        .top_unnamed_output_1(obs_data_addr),
-        .top_unnamed_output_2(obs_data_write_data),
-        .top_unnamed_output_3(obs_data_write_en),
-        .top_unnamed_output_4(obs_perf_cycles),
-        .top_unnamed_output_5(obs_perf_instructions),
-        .top_unnamed_output_6(sink32[1*32 +: 32]),
-        .top_unnamed_output_7(sink32[2*32 +: 32]),
-        .top_unnamed_output_8(sink32[3*32 +: 32]),
-        .top_unnamed_output_9(sink32[4*32 +: 32]),
-        .top_unnamed_output_10(dbg_id_instr),
-        .top_unnamed_output_11(dbg_id_pc),
-        .top_unnamed_output_12(dbg_id_valid),
-        .top_unnamed_output_13(sink1[0*1 +: 1]),
-        .top_unnamed_output_14(sink1[1*1 +: 1]),
-        .top_unnamed_output_15(sink1[2*1 +: 1]),
-        .top_unnamed_output_16(sink1[3*1 +: 1]),
-        .top_unnamed_output_17(dbg_wb_write_en),
-        .top_unnamed_output_18(dbg_wb_write_data),
-        .top_unnamed_output_19(dbg_wb_rd_addr),
-        .top_unnamed_output_20(sink32[5*32 +: 32]),
-        .top_unnamed_output_21(sink32[6*32 +: 32]),
-        .top_unnamed_output_22(sink32[7*32 +: 32]),
-        .top_unnamed_output_23(sink32[8*32 +: 32]),
-        .top_unnamed_output_24(sink1[4*1 +: 1]),
-        .top_unnamed_output_25(sink1[5*1 +: 1]),
-        .top_unnamed_output_26(sink1[6*1 +: 1]),
+        .top_ext_clk(ext_clk),
+        .top_ext_rst(ext_rst),
+        .top_prog_we(prog_we),
+        .top_prog_addr(prog_addr),
+        .top_prog_data(prog_data),
+        .top_obs_instr_addr(sink32[0*32 +: 32]),
+        .top_obs_data_addr(obs_data_addr),
+        .top_obs_data_write_data(obs_data_write_data),
+        .top_obs_data_write_en(obs_data_write_en),
+        .top_obs_perf_cycles(obs_perf_cycles),
+        .top_obs_perf_instructions(obs_perf_instructions),
+        .top_obs_perf_branch_count(sink32[1*32 +: 32]),
+        .top_obs_perf_branch_mispredict(sink32[2*32 +: 32]),
+        .top_obs_perf_load_use_stalls(sink32[3*32 +: 32]),
+        .top_obs_perf_control_stalls(sink32[4*32 +: 32]),
+        .top_dbg_id_instr(dbg_id_instr),
+        .top_dbg_id_pc(dbg_id_pc),
+        .top_dbg_id_valid(dbg_id_valid),
+        .top_dbg_id_is_branch(sink1[0*1 +: 1]),
+        .top_dbg_id_is_load(sink1[1*1 +: 1]),
+        .top_dbg_id_is_store(sink1[2*1 +: 1]),
+        .top_dbg_branch_taken(sink1[3*1 +: 1]),
+        .top_dbg_wb_write_en(dbg_wb_write_en),
+        .top_dbg_wb_write_data(dbg_wb_write_data),
+        .top_dbg_wb_rd_addr(dbg_wb_rd_addr),
+        .top_dbg_exmem_alu_result(sink32[5*32 +: 32]),
+        .top_dbg_exmem_imm(sink32[6*32 +: 32]),
+        .top_dbg_exmem_rs2_data(sink32[7*32 +: 32]),
+        .top_obs_data_rdata(sink32[8*32 +: 32]),
+        .top_dbg_exmem_valid(sink1[4*1 +: 1]),
+        .top_dbg_mem_valid_out(sink1[5*1 +: 1]),
+        .top_dbg_load_use_detected(sink1[6*1 +: 1]),
         .top_pipeline_if_stage_unnamed_output_2(sink32[9*32 +: 32]),
         .top_pipeline_if_stage_unnamed_output_1(sink32[10*32 +: 32]),
         .top_pipeline_if_stage_unnamed_output_3(sink1[7*1 +: 1]),

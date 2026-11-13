@@ -18,6 +18,8 @@ evidence: test:tests/test_port_name_named_ctor.cpp
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: ✅ **implemented**（B0 ⑥ + B1 已验收 · 2026-11-11）⇒ ⇒ ⚠️ **未纳入本轮**的 2 项 = **独立立项**（批次表 §4：「N2 补遗 · 首批端口消化（32 端口）」/「N3 补遗 · `CHERROR` 判别力」）
+- **审计（2026-11-13 · planner 独立复核）**: ✅ **机制与棘轮确认在位**（`verify_port_naming.sh` **PASS** · R0 fail-closed · R1 **逐端口**双向一致 · R2 计数锚点 `EXPECTED_EXEMPT_PORTS = 1484`）⇒ ⇒ **采用率实测**：全仓具名端口声明 = **5 处，全部在 `tools/cpphdl-emit-rtl/main.cpp`**（工具自测载体）⇒ ⇒ **产品组件零采用**（`rv32i_pipeline_top.h` 的 32 个端口仍全是 `unnamed_input`/`unnamed_output` ⇒ ⇒ manifest 的 `cpp_member` 亦全为 `unnamed_*`）⇒ ⇒ ⚠️ **「首批消化 32 端口」确未做** ⇒ ⇒ **已在册**（`.rddf/checks/port-naming-registry.md` §「为什么不能一次全改」+ `rtl-track-correction-list` 的 C1-b + `phase-6-rtl-productization.md` §4「N2 补遗」）⇒ ⇒ **本项不重复登记** ⇒ ⇒ ⚠️ 棘轮护栏会一直绿（1484 全豁免）⇒ ⇒ **唯一的推进力是「动手消化第一个组件」** ⇒ ⇒ 命名侧的规范追加与残差登记**已另有单**（`decision-request-port-naming-parity-2026-11.md`）⇒ ⇒ **不重复立单**
+- **实施（2026-11-13 · R17.2 · architect 裁量闭 R17.1 =「现在做」）**: ✅ **上面那条审计的「采用率 = 0 / 首批未做」已被本条 supersede** ⇒ ⇒ **产品侧首个具名实例落地**：`rv32i_pipeline_top.h` **32/32** 端口带显式名 ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>` ⇒ ⇒ **棘轮豁免 1484 → 1452**（`EXPECTED_EXEMPT_PORTS` 已改 · 护栏 R2 报 1452）⇒ ⇒ **只改名、不改序**（114 端口的方向 + 宽度逐位置一致 ⇒ 机械比对通过）⇒ ⇒ **判据面零变化**（`riscv-mini-rv32i-soc` 的 `checks=24 fails=0` 与改名前完全一致）⇒ ⇒ ⚠️ **后代冒泡端口（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`，80 个）仍未具名** ⇒ ⇒ 不在本批范围 ⇒ ⇒ **剩余未勾 AC = 1**（§4「N3 补遗 · `CHERROR` 判别力」）⇒ ⇒ 证据: `.rddf/reviews/r17-2-port-naming-first-batch-verify-2026-11.md`
 - **用户裁决（2026-11-10）**: 「#5 按你建议」⇒ ⇒ **方案 A′（框架先行 + 基线棘轮）**——**不**做一次性全量 codemod
 - **归属**: 本项只管**端口身份**（名字）；端口**选择**（哪些算顶层）归 `rtl-emit-product-tooling-2026-11`
 
@@ -176,7 +178,7 @@ ch_in<ch_bool> prog_we{"prog_we"};
 
 ### 存量消化（**可增量，不设一次性完成条件**）
 
-- [ ] 首批消化完成并登记（**至少 1 个组件**全量带名；对象已裁决 = `examples/riscv-mini/src/rv32i_pipeline_top.h` —— 32 个端口，是用户 ⑤ 最关心的那个）⇒ ⇒ **实测未做**（该文件 32 个端口**仍全无名**；豁免 1484/1484）⇒ 归属: **独立立项**（`phase-6-rtl-productization.md` §4「N2 补遗 · 首批端口消化（32 端口）」）
+- [x] 首批消化完成并登记（**至少 1 个组件**全量带名；对象已裁决 = `examples/riscv-mini/src/rv32i_pipeline_top.h` —— 32 个端口，是用户 ⑤ 最关心的那个）⇒ ⇒ ✅ **2026-11-13 落地（R17.2 · architect 裁量闭 R17.1 =「现在做」）**：该文件 **32/32** 端口已带**显式名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>` ⇒ ⇒ 棘轮豁免 **1484 → 1452**（`verify_port_naming.sh` PASS · R2 报 1452）⇒ ⇒ **判据面零变化**（期望值只依赖信号语义）⇒ ⇒ ⚠️ **后代冒泡端口（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`，共 **80** 个）仍未具名** ⇒ ⇒ 不在本批范围 ⇒ ⇒ 归属后续批次 ⇒ 证据: `examples/riscv-mini/src/rv32i_pipeline_top.h`（32/32 具名）+ `.rddf/checks/port-naming-exempt.tsv`（该文件 0 条）+ `scripts/verify_port_naming.sh`（`EXPECTED_EXEMPT_PORTS=1452`）
 - [ ] 每次消化 MUST 独立 commit + 独立回归 + 在登记表留痕（文件 + 端口数 + 日期）⇒ 归属: **独立立项**（同上 §4 行）
 - [x] ⚠️ **本项 MUST NOT** 声称「存量已全部带名」⇒ ⇒ 豁免表非空时「存量全带名」的**声称**不成立 ⇒ ⇒ 缺口 MUST 登记于批次表 §4（**已登记**：`phase-6-rtl-productization.md` §4「N2 补遗 · 首批端口消化（32 端口）」）⇒ 证据: 该 §4 行 + `.rddf/checks/port-naming-registry.md:63-64`
 

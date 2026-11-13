@@ -35,51 +35,51 @@ public:
 
     __io(
         // 时钟 / 复位
-        ch_in<ch_bool>          ext_clk;
-        ch_in<ch_bool>          ext_rst;
+        ch_in<ch_bool>          ext_clk{"ext_clk"};
+        ch_in<ch_bool>          ext_rst{"ext_rst"};
 
         // 固件加载（写 I-TCM；加载期保持 ext_rst = 1，计数器不会被污染）
-        ch_in<ch_bool>          prog_we;
+        ch_in<ch_bool>          prog_we{"prog_we"};
         // 固件写地址（**字地址**，32 位）—— 接到 12 位 TCM 时高位被截断
         // （与 pc / 数据地址同一约束：地址必须 < 0x1000）
-        ch_in<ch_uint<32>>      prog_addr;
-        ch_in<ch_uint<32>>      prog_data;
+        ch_in<ch_uint<32>>      prog_addr{"prog_addr"};
+        ch_in<ch_uint<32>>      prog_data{"prog_data"};
 
         // 观测输出（verilator 可读；ADR-035 R3：位宽 MUST <= 64）
-        ch_out<ch_uint<32>>     obs_instr_addr;
-        ch_out<ch_uint<32>>     obs_data_addr;
-        ch_out<ch_uint<32>>     obs_data_write_data;
-        ch_out<ch_bool>         obs_data_write_en;
-        ch_out<ch_uint<48>>     obs_perf_cycles;
-        ch_out<ch_uint<48>>     obs_perf_instructions;
-        ch_out<ch_uint<32>>     obs_perf_branch_count;
-        ch_out<ch_uint<32>>     obs_perf_branch_mispredict;
-        ch_out<ch_uint<32>>     obs_perf_load_use_stalls;
-        ch_out<ch_uint<32>>     obs_perf_control_stalls;
+        ch_out<ch_uint<32>>     obs_instr_addr{"obs_instr_addr"};
+        ch_out<ch_uint<32>>     obs_data_addr{"obs_data_addr"};
+        ch_out<ch_uint<32>>     obs_data_write_data{"obs_data_write_data"};
+        ch_out<ch_bool>         obs_data_write_en{"obs_data_write_en"};
+        ch_out<ch_uint<48>>     obs_perf_cycles{"obs_perf_cycles"};
+        ch_out<ch_uint<48>>     obs_perf_instructions{"obs_perf_instructions"};
+        ch_out<ch_uint<32>>     obs_perf_branch_count{"obs_perf_branch_count"};
+        ch_out<ch_uint<32>>     obs_perf_branch_mispredict{"obs_perf_branch_mispredict"};
+        ch_out<ch_uint<32>>     obs_perf_load_use_stalls{"obs_perf_load_use_stalls"};
+        ch_out<ch_uint<32>>     obs_perf_control_stalls{"obs_perf_control_stalls"};
 
         // 诊断输出（指令流 / 分支判定 / 有效链的逐级可观测性）
-        ch_out<ch_uint<32>>     dbg_id_instr;
-        ch_out<ch_uint<32>>     dbg_id_pc;
-        ch_out<ch_bool>         dbg_id_valid;
+        ch_out<ch_uint<32>>     dbg_id_instr{"dbg_id_instr"};
+        ch_out<ch_uint<32>>     dbg_id_pc{"dbg_id_pc"};
+        ch_out<ch_bool>         dbg_id_valid{"dbg_id_valid"};
         // ⚠️ 这三个是「**EX 级**那条指令」的类型（接 `id_stage` 的 **ID/EX
         //    寄存后**的输出），**不是**「ID 级正在译码的那条」——
         //    （同组的 `dbg_id_instr` / `dbg_id_pc` / `dbg_id_valid` 才是真 ID 级）
-        ch_out<ch_bool>         dbg_id_is_branch;
-        ch_out<ch_bool>         dbg_id_is_load;
-        ch_out<ch_bool>         dbg_id_is_store;
-        ch_out<ch_bool>         dbg_branch_taken;
-        ch_out<ch_bool>         dbg_wb_write_en;
-        ch_out<ch_uint<32>>     dbg_wb_write_data;
-        ch_out<ch_uint<5>>      dbg_wb_rd_addr;
-        ch_out<ch_uint<32>>     dbg_exmem_alu_result;
-        ch_out<ch_uint<32>>     dbg_exmem_imm;
-        ch_out<ch_uint<32>>     dbg_exmem_rs2_data;
-        ch_out<ch_uint<32>>     obs_data_rdata;   // D-TCM 读数据（aread，0-cycle）
+        ch_out<ch_bool>         dbg_id_is_branch{"dbg_id_is_branch"};
+        ch_out<ch_bool>         dbg_id_is_load{"dbg_id_is_load"};
+        ch_out<ch_bool>         dbg_id_is_store{"dbg_id_is_store"};
+        ch_out<ch_bool>         dbg_branch_taken{"dbg_branch_taken"};
+        ch_out<ch_bool>         dbg_wb_write_en{"dbg_wb_write_en"};
+        ch_out<ch_uint<32>>     dbg_wb_write_data{"dbg_wb_write_data"};
+        ch_out<ch_uint<5>>      dbg_wb_rd_addr{"dbg_wb_rd_addr"};
+        ch_out<ch_uint<32>>     dbg_exmem_alu_result{"dbg_exmem_alu_result"};
+        ch_out<ch_uint<32>>     dbg_exmem_imm{"dbg_exmem_imm"};
+        ch_out<ch_uint<32>>     dbg_exmem_rs2_data{"dbg_exmem_rs2_data"};
+        ch_out<ch_uint<32>>     obs_data_rdata{"obs_data_rdata"};   // D-TCM 读数据（aread，0-cycle）
         // 有效链的逐级观测（EX/MEM → MEM/WB → WB）
-        ch_out<ch_bool>         dbg_exmem_valid;
-        ch_out<ch_bool>         dbg_mem_valid_out;
+        ch_out<ch_bool>         dbg_exmem_valid{"dbg_exmem_valid"};
+        ch_out<ch_bool>         dbg_mem_valid_out{"dbg_mem_valid_out"};
         // load-use 冒险检测脉冲（与「停顿拍数」区分）
-        ch_out<ch_bool>         dbg_load_use_detected;
+        ch_out<ch_bool>         dbg_load_use_detected{"dbg_load_use_detected"};
     )
 
     Rv32iPipelineTop(ch::Component* parent = nullptr,

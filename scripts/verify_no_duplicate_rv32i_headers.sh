@@ -1716,6 +1716,13 @@ else
             typepart = substr(line, 1, k)
             namepart = substr(line, k + 1)
             gsub(/[[:space:]]/, "", namepart)
+            # ⚠️ **具名形态**（`ch_in<T> ident{"ident"}` · 2026-11-13 R17.2 起
+            #    `rv32i_pipeline_top.h` 32 个端口全部具名）⇒ ⇒ `namepart` 会带上
+            #    `{"..."}` 后缀 ⇒ ⇒ MUST 剥掉 ⇒ ⇒ 否则「端口集合」比对会把
+            #    `ext_clk{"ext_clk"}` 当成**另一个端口名** ⇒ ⇒ C6 假红。
+            #    ⇒ ⇒ 剥掉后取到的仍是 **C++ 成员名** ⇒ ⇒ ADR-046 D10 的
+            #    「名 + 方向 + 位宽」三者语义**未变** ⇒ ⇒ **快照 MUST NOT 改**。
+            sub(/\{.*\}$/, "", namepart)
             if (namepart == "") next
             d = (typepart ~ /^ch_in/) ? "ch_in" : "ch_out"
             ty = typepart

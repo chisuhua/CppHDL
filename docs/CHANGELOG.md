@@ -6,6 +6,26 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-13 — R17.2 批 · **RV32I SoC 顶层端口具名**（用户 ⑤ 的原始诉求 · 首个真实消费）
+
+### Changed
+
+- **`Rv32iPipelineTop` 的 32 个顶层端口**（`examples/riscv-mini/src/rv32i_pipeline_top.h`）⇒ ⇒
+  产物端口名由 `top_unnamed_input*` / `top_unnamed_output*` 改为 **`top_<C++ 成员名>`**
+  （例：`top_ext_clk` · `top_prog_we` · `top_obs_data_addr` · `top_dbg_id_pc`）
+  ⇒ ⇒ ⚠️ **端口数量 / 方向 / 宽度 / 顺序全部不变**（顶层 **114** 个端口一一对应）
+  ⇒ ⇒ **只改名字** ⇒ ⇒ **行为零变化**（TB 期望值只依赖信号语义）
+  ⇒ ⇒ 依据：`port-naming-ratchet` **N2 补遗「首批消化 32 端口」**（R17.2 ·
+  architect 裁量闭 R17.1 =「现在做」）
+  ⇒ ⇒ **迁移指引**：下游若按 `top_unnamed_*` **序号**硬编码顶层端口 ⇒ ⇒ **MUST 改为按名取**
+  （这正是本项的立意 —— 此前写 TB 必须查 port map）
+  ⇒ ⇒ ⚠️ **后代冒泡端口仍无名字**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`，**80** 个）
+  ⇒ ⇒ **不在本项范围** ⇒ ⇒ 归属后续批次
+- **端口命名棘轮基线** ⇒ ⇒ `scripts/verify_port_naming.sh` 的 `EXPECTED_EXEMPT_PORTS`
+  **1484 → 1452**（存量未具名端口减 32）⇒ ⇒ `.rddf/checks/port-naming-exempt.tsv` 同步减 32 行
+
+---
+
 ## 2026-11-12 — B3 批 · **公开面前置登记**（D-TCM 内存时序 + 固件加载链路 · **未实施**）
 
 ### Changed
