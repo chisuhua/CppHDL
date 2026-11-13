@@ -2,7 +2,7 @@
 id: decision-request-port-face-2026-11
 日期: 2026-11-13
 提出者: planner（2026-11-13 独立复核 · **护栏实测 + 源码 grep + 产物实测**三路交叉 · 不采信 Status 行自述）
-状态: **待裁决**
+状态: **部分已闭**（R2 已落地 2026-11-13 · R3 早已由 D1 裁决闭 · **R1 待用户裁决**）
 关联: .rddf/improvements/rtl-emit-product-tooling-2026-11.md · .rddf/improvements/examples-rtl-sim-coverage-2026-11.md · .rddf/checks/rtl-track-correction-list-2026-11.md · openspec/specs/rtl-emit-portability/spec.md
 ---
 
@@ -163,6 +163,6 @@ sed -n '/^module top (/,/^);/p' /tmp/x/top.v | grep -cE '^\s+(input|output)'   #
 | # | 建议 | 类型 | 成本 |
 |---|---|---|---|
 | **R1** | 端口面残留**登记为已知残留**（台账 + 登记表）⇒ ⇒ **不推翻任何已裁决内容** | 登记 | 极低 |
-| **R2** | 护栏实现 AC 的新 F6（**推荐②：给工具的自测设计加一个 `ch_reg`** ⇒ ⇒ 「逐字节比对」重新可判） | 实施 | 低 |
-| **R3** | `gpio_example` 补 spec 层断言；无规范依据则退「显式标注 impl-contract only」 | 实施 | 中 / 极低 |
+| **R2** | ✅ **已闭（2026-11-13）** ⇒ ⇒ 护栏的 F6 从「硬编码 `note`」改为**真检查**（**元判据**：承载判据的测试 / 它的 CTest 标签 / 跑它的 CI job 三者俱在）⇒ ⇒ **AC 的内容判据已由既有 ctest 承载**（`tests/test_verilator_backend.cpp` 的 `port_access_snapshot()` 用例）⇒ ⇒ ⚠️ **原「逐字节比对」形态恒绿**（两者出自**同一个** `verilogwriter`）⇒ ⇒ **不可用** ⇒ ⇒ 自检 M6（副本投毒 ⇒ 必红）已加 | 实施 | 低 |
+| **R3** | ✅ **早已闭（2026-11-12 · D1 裁决）** —— 期望登记的 gpio 段**已显式标注**「`spec_checks` **保持 0**（只判 impl-contract）」⇒ ⇒ **不是待裁决项** ⇒ ⇒ ⚠️ planner 本轮差点把它当新发现（同一纪律第二次生效）⇒ ⇒ 无需再改产品 | 实施 | 零 |
 | **R4** | （**无需动作**）planner 上一轮口头错误的订正已记录 | 登记 | 零 |

@@ -35,6 +35,16 @@ public:
 
     __io(
         // 时钟 / 复位
+        // ⚠️ **ext_clk 是「死端口」**（2026-11-13 · R8 裁决 **A2（明确注释半）**）：
+        //   本端口**被赋值但无消费者** —— 产物里**所有**流水线寄存器都锁在框架
+        //   `default_clock`（`always_ff @(posedge default_clock …)`）⇒ ⇒ `ext_clk`
+        //   对行为**零影响** ⇒ ⇒ 「SoC 由 ext_clk 驱动」这个直觉**是错的**
+        //   ⇒ ⇒ 真驱动源 = 框架 `default_clock`（TB 里接 `clk` 即可）。
+        //   ⚠️ **本端口保留**（不删）⇒ ⇒ 理由：删掉会改 SoC 顶层端口契约
+        //   （ADR-046 D10）⇒ ⇒ 属**公开面变更** ⇒ ⇒ 而它**不造成任何行为差异**
+        //   ⇒ ⇒ 成本收益不划算 ⇒ ⇒ 「真让 ext_clk 生效」= **另独立立项**。
+        //   ⇒ ⇒ 已登记：`.rddf/checks/decision-request-rv32i-ext-clock-dead-port-2026-11.md`
+        //   ⇒ ⇒ 期望登记：`.rddf/checks/examples-rtl-expectations.md` 的 D8 条。
         ch_in<ch_bool>          ext_clk{"ext_clk"};
         ch_in<ch_bool>          ext_rst{"ext_rst"};
 

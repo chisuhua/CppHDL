@@ -156,10 +156,54 @@ else
     fail "F5 存在自赋值死逻辑"
 fi
 
-# ── F6：backend 产物 == 产品产物 ───────────────────────────────────
-echo "── F6：backend 产物 == 产品产物"
-note "F6 **当前不适用**（不是 pass）：本仓工具的设计**无寄存器** ⇒ ⇒ verilator backend 不产 top.v ⇒ ⇒ 无可比对象"
-note "        ⇒ ⇒ 解除条件 = 工具的设计里**加一个寄存器**（⇒ ⇒ backend 才会产 work_dir/top.v）"
+# ── F6：backend 的端口面 MUST 与产品产物一致 ────────────────────────────
+# ⚠️ **判据形态变更（2026-11-13 · R2 落地）**：
+#   原 F6 = 「backend 产物 == 产品产物（**逐字节**）」⇒ ⇒ **恒绿**（两者出自**同一个**
+#   `verilogwriter`）⇒ ⇒ 已被 AC 判为作废。
+#   AC 的**替代形态** = 「`ctest -L verilator_e2e` 全绿 ＋ `port_access_` 的每个条目
+#   都能取到**非空** Vtop 字段」⇒ ⇒ **该判据已由既有 ctest 承载**
+#   （`tests/test_verilator_backend.cpp` 的 `port_access_snapshot()` 用例）。
+#   ⇒ ⇒ **本护栏的 F6 = 元判据**：检查「承载判据的测试 / 它的 CTest 标签 /
+#   跑它的 CI job」三者**俱在** ⇒ ⇒ **任一消失 ⇒ ⇒ F6 必红**。
+#   ⇒ ⇒ **全部静态 grep** ⇒ ⇒ **不需要 build / 不需要 verilator** ⇒ ⇒
+#   ⇒ ⇒ 快路径 CI（`BUILD_VERILATOR=OFF`）里**也可判** ⇒ ⇒ 而「内容为绿」由
+#   ⇒ ⇒ `pr-verilator-fast`（`BUILD_VERILATOR=ON`）+ `nightly-verilator` 承担。
+#
+# ⚠️ **路径可被覆盖**（`F6_SRC_TEST` / `F6_SRC_CMAKE` / `F6_SRC_CI`）⇒ ⇒
+#   ⇒ ⇒ 自检段可在**副本**上投毒（仓内源文件**不动**）⇒ ⇒ 见 F7 的自检 M6。
+F6_SRC_TEST="${F6_SRC_TEST:-$REPO_ROOT/tests/test_verilator_backend.cpp}"
+F6_SRC_CMAKE="${F6_SRC_CMAKE:-$REPO_ROOT/tests/CMakeLists.txt}"
+F6_SRC_CI="${F6_SRC_CI:-$REPO_ROOT/.github/workflows/ci.yml}"
+
+check_f6() { # ⇒ 0 = 承载面完整；1 = 有缺失
+    local bad=0
+    if grep -q "port_access_snapshot" "$F6_SRC_TEST" 2>/dev/null; then
+        ok "F6① 承载判据的测试存在（test_verilator_backend · port_access_snapshot）"
+    else
+        fail "F6① 承载判据的测试缺失（tests/test_verilator_backend.cpp 无 port_access_snapshot）"
+        bad=1
+    fi
+    if grep -A 3 "set_tests_properties(test_verilator_backend" "$F6_SRC_CMAKE" 2>/dev/null \
+        | grep -q "verilator_e2e"; then
+        ok "F6② 该测试的 CTest 条目带 verilator_e2e 标签"
+    else
+        fail "F6② 该测试的 CTest 条目**没有** verilator_e2e 标签 ⇒ ⇒ 判据不会被 verilator job 跑到"
+        bad=1
+    fi
+    if grep -q "BUILD_VERILATOR: 'ON'" "$F6_SRC_CI" 2>/dev/null \
+        && grep -qE '\-L +verilator_e2e' "$F6_SRC_CI" 2>/dev/null; then
+        ok "F6③ CI 有 BUILD_VERILATOR=ON 的 job 跑 -L verilator_e2e（内容判红由它承担）"
+    else
+        fail "F6③ CI 无 BUILD_VERILATOR=ON 的 job 跑 -L verilator_e2e ⇒ ⇒ 判据无人执行"
+        bad=1
+    fi
+    return $bad
+}
+
+echo "── F6：backend 端口面与产品产物一致（判据承载面 · 元判据）"
+if check_f6; then
+    ok "F6 判据承载面完整（内容判红由 verilator job 承担）"
+fi
 
 # ── F8：产物卫生（C6 · `--emit-hygiene`）──────────────────────────
 echo "── F8：产物卫生（C6 · --emit-hygiene）"
@@ -339,13 +383,36 @@ PYPOISON
         ok "自检 M4：真实宽度告警被 lint_off 盖住 ⇒ 剥掉后 F1-b 转红 ✓"
     fi
 
+    # M6：把承载判据的测试里的 `port_access_snapshot` 覆盖**在副本上**破坏
+    #     ⇒ ⇒ F6 必红 ⇒ ⇒ **仓内源文件不动**（投毒在 $WORK 的副本上做）
+    #     ⚠️ **投毒形态必须让 grep **彻底不匹配** ⇒ ⇒ 不能改成
+    #     `port_access_snapshot_TYPO`（那**仍含**原串 ⇒ ⇒ grep 照样命中
+    #     ⇒ ⇒ **投毒无效 = 判据恒绿** —— 本轮实测踩到过）
+    f6_poison_dir="$WORK/f6_poison"
+    mkdir -p "$f6_poison_dir"
+    cp "$F6_SRC_TEST" "$f6_poison_dir/test_verilator_backend.cpp"
+    sed -i 's/port_access_snapshot/PORT_ACCESS_RENAMED/g' \
+        "$f6_poison_dir/test_verilator_backend.cpp"
+    if grep -q "port_access_snapshot" "$f6_poison_dir/test_verilator_backend.cpp"; then
+        fail "自检 M6：投毒后 grep **仍匹配** ⇒ ⇒ 投毒形态无效（判据作废）"
+        exit 1
+    fi
+    if F6_SRC_TEST="$f6_poison_dir/test_verilator_backend.cpp" check_f6 >/dev/null 2>&1; then
+        fail "自检 M6：破坏承载判据的覆盖 ⇒ F6 仍绿 ⇒ ⇒ **F6 无判别力**"
+        exit 1
+    fi
+    # ⚠️ **投毒调用会累加全局 FAILS**（check_f6 内部的 fail）⇒ ⇒ MUST 复位
+    #     ⇒ 否则「投毒成功」会被记成「护栏红」⇒ ⇒ 自检自身变成恒红。
+    FAILS=0
+    ok "自检 M6：破坏承载判据的覆盖（副本投毒）⇒ F6 转红 ✓"
+
     restore
     if ! emit restored >/dev/null 2>&1; then
         fail "自检：还原后发射失败"
         exit 1
     fi
     ok "自检：还原后复绿 ✓"
-    echo "✅ self-test: 每条规则都有判别力（M1 F3 / M2 F4 / M3 F5 / M4 F1-b）"
+    echo "✅ self-test: 每条规则都有判别力（M1 F3 / M2 F4 / M3 F5 / M4 F1-b / M6 F6）"
 fi
 
 # ────────────────────────────────────────────────────────────────
@@ -353,5 +420,5 @@ if [ "$FAILS" -ne 0 ]; then
     echo "❌ verify_flat_rtl_emit: ${FAILS} violation(s)"
     exit 1
 fi
-echo "✅ verify_flat_rtl_emit: PASS (F1 lint · F2 确定性 · F3 端口集==清单 · F4 无悬空 · F5 无自赋值 · F6 不适用 · F8 产物卫生 · F1 两段式基线)"
+echo "✅ verify_flat_rtl_emit: PASS (F1 lint · F2 确定性 · F3 端口集==清单 · F4 无悬空 · F5 无自赋值 · F6 判据承载面 · F8 产物卫生 · F1 两段式基线)"
 exit 0
