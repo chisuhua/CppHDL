@@ -4,8 +4,9 @@ priority: P1
 phase: phase-6
 category: cpu
 type: feature
-状态: draft
-进度: B3 未开工 · ADR-068 **Accepted**（T2′ = (F) 字节道拆分存储）· ✅ **T2 已裁决**（**ADR-069** · **Accepted · 2026-11-12** · 决策 = **候选 ②（A0）** = 地址照旧 + MEM/WB 延后 1 拍 ⇒ ⇒ `read-new` 条件自动成立）· ✅ 公开面前置门已登记（R6 · 2026-11-12）⇒ ⇒ **只差 change 立项**（⚠️ 原载体 = 新立 ADR-069 · Parent = ADR-068 ⇒ ⇒ **禁**改写刚 Accepted 的「本 ADR 不裁决 T2」承重句 ⇒ ⇒ 裁决 MUST 与 ADR-068 的 D4 一并读：若 T2 选 A1 ⇒ MUST 追加同址处置（读数据旁路 或 一拍停顿）) ⇒ ⇒ T2 相关项不可开工
+状态: approved
+状态依据: 🚪 门 R5（T2 裁决 = **ADR-069** · **Accepted** · 决策 = 候选 ②（A0））+ R6（公开面前置登记：`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各 1 行）**均已闭**（2026-11-12）⇒ ⇒ 用户 2026-11-12/13 裁决「按推荐顺序推进」⇒ ⇒ 且 change **已立项**（`openspec/changes/memory-timing-contract-2026-11/` · `validate --strict` exit 0 + delta 4/4）⇒ ⇒ ⇒ **2026-11-13 订正**：此前停在 `draft` = **状态漂移**（architect 复盘 #5 的发现 3）
+进度: **change 已立项**（R13 闭 · 2026-11-13 · `validate --strict` exit 0 + delta 4/4）· **实施未开工** · ADR-068 **Accepted**（T2′ = (F) 字节道拆分存储）· ✅ **T2 已裁决**（**ADR-069** · **Accepted · 2026-11-12** · 决策 = **候选 ②（A0）** = 地址照旧 + MEM/WB 延后 1 拍 ⇒ ⇒ `read-new` 条件自动成立）· ✅ 公开面前置门已登记（R6 · 2026-11-12）⇒ ⇒ **只差 change 立项**（⚠️ 原载体 = 新立 ADR-069 · Parent = ADR-068 ⇒ ⇒ **禁**改写刚 Accepted 的「本 ADR 不裁决 T2」承重句 ⇒ ⇒ 裁决 MUST 与 ADR-068 的 D4 一并读：若 T2 选 A1 ⇒ MUST 追加同址处置（读数据旁路 或 一拍停顿）) ⇒ ⇒ T2 相关项不可开工
 主题: 已知功能缺口清零
 依赖: rv32i-commit-path（时序金标基线）· firmware-load-chain-2026-11（装载路径先做）
 来源: 用户 2026-11-10 拍板「#12 改成寄存器读」+ planner 实测（组合读 ⇒ 推断不出 BRAM）
@@ -17,7 +18,8 @@ evidence: probe:include/cpu/pipeline/rv32i_tcm.h#L100
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 **draft**（未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：ADR-068 已 Accepted ✅ · **T2（MEM 数据对齐 A/B）待 architect 裁决**（R5）
+- **Status**: 📝 **draft**（未开工 ⇒ 归 **B3**）
+- **Status 订正（2026-11-13 · planner）**：`draft` → **`approved`**（**不改写**上面的原始叙述）⇒ ⇒ 依据见 frontmatter 的 `状态依据:` 行 ⇒ ⇒ 🚪 门 R5 + R6 已闭 + change **已立项**（`openspec/changes/memory-timing-contract-2026-11/`）⇒ ⇒ ⚠️ **立项 ≠ 开工** ⇒ ⇒ 实施仍是 **B3 未开工**⇒ ⇒ 🚪 **入口门**：ADR-068 已 Accepted ✅ · **T2（MEM 数据对齐 A/B）待 architect 裁决**（R5）
 - **审计（2026-11-13 · planner 独立复核）**: ✅ **确认未开工**（`include/cpu/pipeline/rv32i_tcm.h:113` 仍 `memory.aread(...)` ⇒ ⇒ D-TCM **仍是 0 拍组合读** ⇒ ⇒ 产物仍是 4096:1 组合 mux ⇒ ⇒ 「可推断 BRAM」**未达成** · `rv32i_pipeline.h:61` 的 `data_ready` **仍只有声明**（流水线内部仍无消费者）⇒ ⇒ 结论与 frontmatter「`draft` / B3 未开工 / ADR-068·069 已 Accepted」**一致** ⇒ ⇒ 本轮**无需订正**
 - **用户裁决（2026-11-10）**: 「#12 改成寄存器读」⇒ ⇒ D-TCM 从 `aread`（0 拍组合）改为 `sread`（1 拍寄存读）
 

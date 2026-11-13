@@ -21,7 +21,7 @@
 | 值 | 含义 |
 |---|---|
 | `draft` | 草案已写 · **未批准** · 未开工 |
-| `approved` | **已批准**（裁决已落定）· 未开工 |
+| `approved` | **已批准**（裁决已落定）· 未开工 ⇒ ⇒ ⚠️ **「立项」不属于「开工」**（proposal / design / tasks / delta 属**提案期**）⇒ ⇒ 立项完成**仍为** `approved`⇒ ⇒ `in-progress` 的起点 = **第一条实施 commit** |
 | `in-progress` | 部分 work item 已实施并验收 · 仍有未开工项 |
 | `implemented` | 本项**本轮承诺**的 work item 已全部落地 ⇒ ⇒ **未纳入本轮**的部分（**不可做** / **可做但显式移交**）MUST 已登记为独立立项（见 §4） |
 
