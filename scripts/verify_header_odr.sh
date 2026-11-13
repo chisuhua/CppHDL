@@ -77,14 +77,11 @@ note() { printf '   %s\n' "$*"; }
 fail() { printf '❌ %s\n' "$*"; FAIL=1; }
 ok()   { printf '✅ %s\n' "$*"; }
 
-CXX_LIST=()
-for c in g++ clang++; do
-    if command -v "$c" >/dev/null 2>&1; then CXX_LIST+=("$c"); fi
-done
-if [ ${#CXX_LIST[@]} -eq 0 ]; then
-    echo "❌ 未找到任何 C++ 编译器（需要 g++ 或 clang++）"
-    exit 1
-fi
+# ⚠️ 编译器探测走**公共 helper**（C++23 能力筛选 + 版本化 clang++ 发现）
+#   ⇒ 见 scripts/lib/cxx23_compilers.sh 里记的 CI 假红根因（裸 clang++ 是 clang-14）。
+#   本护栏只用 CXX_LIST[0]（链接两个 TU 验 ODR）⇒ 但仍走同一实现，避免两套探测器漂移。
+source "$REPO/scripts/lib/cxx23_compilers.sh"
+cxx23_probe || exit 1
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
