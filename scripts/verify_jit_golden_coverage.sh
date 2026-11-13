@@ -60,10 +60,8 @@ check_baseline() {
 
 # ── R1：与基线比对 ────────────────────────────────────────────────────────
 echo "── R1：覆盖集合 vs 基线（逐元素相等）"
-set +e
 out="$(check_baseline "$BASELINE" 2>&1)"
 rc=$?
-set -e 2>/dev/null || true
 printf '%s\n' "$out" | sed 's/^/  /'
 case "$rc" in
     0) ok "R1 覆盖集合与基线一致（分母 / 已覆盖集 / 未覆盖集）" ;;
@@ -128,10 +126,8 @@ PY
     # M5：**派生面** fail-closed（不是基线投毒）——喂一个没有 TEST_CASE 的源文件
     #     ⇒ MUST exit 2（退出码 2 = 判据本身坏了），不得当成「一致」而判绿
     printf '// no test cases here\nint x;\n' > "$WORK/empty.cpp"
-    set +e
     python3 "$ANALYZER" --enum "$ENUM_HDR" --tests "$WORK/empty.cpp" --baseline "$BASELINE" >/dev/null 2>&1
     rc5=$?
-    set -e 2>/dev/null || true
     if [ "$rc5" -eq 2 ]; then
         ok "自检 M5：无 TEST_CASE 的源 ⇒ 派生 fail-closed（exit 2）✓"
     else
