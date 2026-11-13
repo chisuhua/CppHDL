@@ -4,7 +4,14 @@
 //
 // ⚠️ **为什么必须单独一个文件**（而不是并入 `test_mem_port_arg_cross_layer.cpp`）：
 //   本文件的判据 MUST 在**层次化产物**上跑（verilator 编译产物 + 逐拍仿真）⇒ ⇒ 需要
-//   verilator ⇒ ⇒ 进 `verilator_e2e` 标签 ⇒ ⇒ **不能**与纯产物级/解释器级用例同 target。
+//   verilator ⇒ ⇒ ⚠️ **但本 target NOT 带 `verilator_e2e` 标签**（见下）⇒ ⇒ 由
+//   `BUILD_VERILATOR=OFF` 的快路径 CI **按名排除**（`ctest -E`）⇒ ⇒
+//   而在 `nightly-verilator`（`BUILD_VERILATOR=ON`）里**真跑**。
+//
+//   ⚠️ **2026-11-13 订正（原注释自相矛盾）**：本文件头原来写「进 `verilator_e2e` 标签」，
+//      而下方「verilator 缺席 ⇒ SKIP」段又写「本 target **不带** 该标签」⇒ ⇒ 两处冲突。
+//      ⇒ ⇒ 以**下方那段为准**（口径理由成立：`verilator_e2e` = **双后端 parity** 覆盖
+//      ⇒ ⇒ 本用例是**单后端**层次化比对 ⇒ ⇒ 带标签会污染口径）⇒ ⇒ 头注释已改为与之一致。
 //
 // ⚠️ **判别力（核心）**：`test_mem_port_arg_cross_layer.cpp` 的值判据跑在**解释器**上
 // ⇒ ⇒ **抓不到**「产物里父侧网缺失 ⇒ Verilog 当 implicit wire（1-bit）⇒ 宽度截断 ⇒ 值错」

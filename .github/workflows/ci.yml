@@ -222,7 +222,18 @@ jobs:
       #
       # ⚠️ **不**用「让全跳过算绿」来修 ⇒ ⇒ 那是本仓最警惕的**恒绿护栏**形态
       #   （一个永远跳过的测试会永远绿）⇒ ⇒ 正解是**不跑它**，由 verilator 专用 job 跑。
-      run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4) -LE 'perf|verilator_e2e'
+      # ⚠️ **另外按名排除一个「需要真 verilator 但刻意不带该标签」的 target**
+      #   （2026-11-13 · RC-4）：
+      #   `test_mem_port_arg_cross_layer_values` 的**全部**用例都需真 verilator
+      #   ⇒ ⇒ 但它**刻意不带** `verilator_e2e` 标签（该标签口径 = **双后端 parity** 覆盖
+      #   ⇒ ⇒ 本用例是**单后端**层次化比对 ⇒ ⇒ 带标签会污染口径）
+      #   ⇒ ⇒ 它在 `BUILD_VERILATOR=OFF` 下「全部 SKIP」⇒ ⇒ Catch2 退出码 **4**
+      #   ⇒ ⇒ ctest 判 **Failed**（假红）。
+      #   ⇒ ⇒ 修法 = **本 job 按名排除**（不新增标签、不改口径、不改判据强度）
+      #   ⇒ ⇒ ⇒ 它在 `nightly-verilator`（`BUILD_VERILATOR=ON` · plain ctest）里**真跑**。
+      run: >
+        ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4)
+        -LE 'perf|verilator_e2e' -E 'test_mem_port_arg_cross_layer_values'
 
     - name: Verify AGENTS.md test counts
       # Single source of truth check: the documented CTest total in root

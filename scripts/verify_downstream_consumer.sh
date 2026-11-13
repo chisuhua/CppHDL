@@ -52,7 +52,19 @@ cd "$REPO_ROOT" || exit 2
 
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 FIXTURE_DIR="$REPO_ROOT/tests/downstream-consumer"
-CXX_BIN="${CXX:-c++}"
+# ⚠️ **编译器 MUST 与上游 build 一致**（2026-11-13 修 CI 红 · RC-3 根因）：
+#   本护栏原来用 `c++` ⇒ ⇒ 而 CI 里上游 build 用的是 `/usr/local/bin/g++`
+#   （Install g++ 步骤建的 symlink → **g++-13**）⇒ ⇒ `c++` 却是 `/usr/bin/c++`
+#   = **g++-11** ⇒ ⇒ **g++-11 不支持 C++23** ⇒ ⇒ 下游工程 configure **通过**
+#   （"Detecting CXX compiler ABI info - done"）但 **build 挂**
+#   ⇒ ⇒ 失败与被测代码**无关**（纯编译器口径不一致）。
+#   ⇒ ⇒ 正解 = **从上游的 CMakeCache 读 `CMAKE_CXX_COMPILER`** ⇒ ⇒ 恒等于上游
+#   ⇒ ⇒ （`CXX` 环境变量仍可显式覆盖 ⇒ ⇒ 便于排查）。
+CXX_BIN="${CXX:-}"
+if [ -z "$CXX_BIN" ] && [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    CXX_BIN="$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | head -1)"
+fi
+CXX_BIN="${CXX_BIN:-c++}"
 
 WORK="$(mktemp -d)"
 FAILURES=()
