@@ -206,7 +206,23 @@ jobs:
 
     - name: Run tests
       shell: bash
-      run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4)
+      # ⚠️ **必须排除需真 verilator 的那批**（2026-11-13 修 CI 红 · 根因）：
+      #   本 job 的 `BUILD_VERILATOR=OFF`（快速默认路径）⇒ ⇒ verilator 二进制**缺席**
+      #   ⇒ ⇒ 那 87 个测试（76 个 `verilator_e2e` + 11 个 `perf`）**每个 TEST_CASE 都 SKIP**
+      #   ⇒ ⇒ Catch2 对「**全部跳过**」返回 **退出码 4**
+      #   （`tests/catch_amalgamated.cpp:1481-1485` ⇒ `totals.testCases.total() ==
+      #   totals.testCases.skipped` ⇒ ⇒ `return 4`）⇒ ⇒ ctest 判 **Failed**
+      #   ⇒ ⇒ ⇒ Debug 12 个 / Release 7 个**假红**（实测 2026-11-12 的 CI run）。
+      #   ⇒ ⇒ verilator 面由 `pr-verilator-fast`（PR 事件）+ `nightly-verilator`（定时）覆盖。
+      #
+      # ⚠️ **ctest 的两个坑（实测）**：
+      #   ① **多个 `-LE` 互相覆盖** ⇒ ⇒ `-LE perf -LE verilator_e2e` ⇒ ⇒ **什么都没排除**
+      #      （仍 263 条！）⇒ ⇒ **必须用单个正则** `-LE 'perf|verilator_e2e'` ⇒ ⇒ 176 条 ✅
+      #   ② `-L` / `-LE` 的匹配对象是**标签列表的逗号连接串**上的正则 ⇒ ⇒ 不是「精确等于」。
+      #
+      # ⚠️ **不**用「让全跳过算绿」来修 ⇒ ⇒ 那是本仓最警惕的**恒绿护栏**形态
+      #   （一个永远跳过的测试会永远绿）⇒ ⇒ 正解是**不跑它**，由 verilator 专用 job 跑。
+      run: ctest --test-dir build --output-on-failure -j$(nproc 2>/dev/null || echo 4) -LE 'perf|verilator_e2e'
 
     - name: Verify AGENTS.md test counts
       # Single source of truth check: the documented CTest total in root
@@ -1247,7 +1263,7 @@ jobs:
       run: |
         set -e
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt-get update
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }}
@@ -1337,7 +1353,7 @@ jobs:
       run: |
         set -e
         wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
-        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt-get update
         sudo apt-get install -y llvm-${{ env.LLVM_VERSION }}-dev \
                                 clang-${{ env.LLVM_VERSION }}

@@ -135,7 +135,19 @@ check_all() {
 
     # R4 + R5: independent project builds and the binary runs
     if ! run_consumer "$FIXTURE_DIR" "$WORK/prefix" "$WORK/consumer"; then
+        # ⚠️ **必须把失败日志的尾部打进输出**（2026-11-13 修 CI 可诊断性）：
+        #   原来只报「见 $WORK/consumer/*.log」⇒ ⇒ 那路径在 CI runner 的
+        #   `/tmp` 里 ⇒ ⇒ **job 结束即丢** ⇒ ⇒ 失败**无法定位**（实测：
+        #   2026-11-12 的 CI run 里这条红只留了一行「见 /tmp/.../*.log」
+        #   ⇒ ⇒ 拿不到真实原因）⇒ ⇒ ⇒ 这里补上 configure / build / run
+        #   **三个日志的尾部**（各 15 行）⇒ ⇒ 下一轮 CI 就能自证根因。
         fail "R4/R5 下游视角工程 configure/build/run 失败（见 $WORK/consumer/*.log）"
+        for lg in configure build run; do
+            if [ -f "$WORK/consumer/$lg.log" ]; then
+                printf '  ── %s.log (tail 15) ──\n' "$lg" >&2
+                tail -15 "$WORK/consumer/$lg.log" | sed 's/^/    /' >&2
+            fi
+        done
         return 1
     fi
     return 0
