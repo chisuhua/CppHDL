@@ -6,8 +6,22 @@
 
 ## S0 — 开工前基线（**零改动**）
 
-- [ ] 记录基线：`ctest -N` 总数 · `perf_instructions` / `load_use_stalls` / `control_stalls` 现值 · 20 项 golden 全绿
-- [ ] 确认工作区干净（`git status --short` 为空）⇒ ⇒ **禁** `git add -A`
+- [x] 记录基线：`ctest -N` 总数 = **263**（2026-11-13 实测）
+- [x] 记录基线：**B3 会影响的 16 条 ctest 条目全绿**（2026-11-13 实测 `ctest -R "rv32i|forward|stall|memory"`
+      ⇒ ⇒ `100% tests passed, 0 tests failed out of 16`）：
+      `test_rv32i_pipeline_example` · `test_rv32i_soc_dual_parity` · `test_forwarding` · `test_memory` ·
+      `test_memory_dual` · `test_forwarding_dual` · `test_rv32i_arch_dual` · `test_rv32i_stage_dual` ·
+      `test_rv32i_timing_dual` · `test_rv32i_pipeline` · `test_rv32i_alu` · `test_rv32i_pipeline_behavior` ·
+      `test_verilator_memory_e2e` · `spinalhdl_rv32i_phase{1,2,3}`
+- [x] 确认工作区干净（`git status --short` 为空）⇒ ⇒ **禁** `git add -A`
+- [ ] ⚠️ **【新发现 · T5 的前置】时序金标的「现值」在源码里找不到硬编码常量**
+      ⇒ ⇒ 草案里的 `perf_instructions = 178` / `load_use_stalls = 6` / `control_stalls = 4`
+      **未在 `tests/` / `examples/` 中作为断言常量出现** ⇒ ⇒ 它们**可能**来自 perf report 的**观测值**
+      （⇒ ⇒ 那就**不是断言** ⇒ ⇒ 「重算金标」的对象是**断言位置**，不是报告数字）
+      ⇒ ⇒ **T5 开工前 MUST 先定位断言位置**：
+      ① `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp` 有 `kExpectedWritebacks`（24 条写回序列）
+      ② `test_riscv_tests_pipeline.cpp` / `test_rv32i_soc_dual_parity.cpp` 暴露 `obs_perf_*` 观测端口
+      ⇒ ⇒ **禁**把「观测值」当「断言值」⇒ ⇒ 二者 MUST 分开登记（否则 = 拿仿真输出当期望值 ⇒ ⇒ 违纪律）
 
 ```bash
 cd /workspace/project/CppHDL
