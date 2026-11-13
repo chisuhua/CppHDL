@@ -309,12 +309,14 @@ Simulator::tick() (JIT 模式)
 sim.set_jit_enabled(false);
 sim.tick();  // 如果结果正确，说明是 JIT 问题
 
-// 2. 启用 A/B 验证（当前已禁用，以下为原理说明）
+// 2. 启用 A/B 验证（**已移除** · 以下仅为历史原理说明，符号已不存在）
 // sim.set_ab_verification(true);
 // sim.tick();  // 对比两种模式的结果
 ```
 
-> **关于 A/B 验证**: 该功能**当前已禁用**，原因如下：
+> **关于 A/B 验证**: 该功能**已移除**（2026-11-13 · ADR-035 v2.2 R9 · phase-6 P8）——
+> `set_ab_verification` / `is_ab_verification` 从未做过实际比对 ⇒ 已按 Zero-Debt 删除
+> （原始禁用原因留档如下）：
 > 1. CALL_EXTERNAL 混合执行模式产生不一致的 data_map 状态（同一轮 tick 被两种模式修改，见 ADR-003 D5）
 > 2. 在 P0 债务（有符号算术、64 位掩码 UB、CALL_EXTERNAL 执行顺序）修复之前，A/B 验证的结果本身不可信
 > 3. 每次 tick 运行两遍仿真使性能下降 2x，与 JIT 的优化目标冲突

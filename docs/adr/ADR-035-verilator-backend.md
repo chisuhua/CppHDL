@@ -231,7 +231,7 @@ std::vector<PortAccessor> accessors_;   // node_id → accessor, O(1) 查表
 | R6 | `disconnect()` 顺序错误 | 🟡 中 | 偶发 crash | `disconnect()` 显式重排：先 `backend_->clear()` 再清 `data_map_` |
 | R7 | 内存端口 (mem_read_port / mem_write_port) Verilator 不识别 | 🟡 中 | CppHDL `instr_mem*` 链接无意义 | Verilator 后端**不实现** mem port，依赖 Verilator 内置 VL_MEM_IF |
 | R8 | Phase 1 codegen 修复引入回归 | 🟡 中 | 132 ctest 部分失败 | 一次只改一个 issue；每个 sub-phase 都跑 ctest |
-| R9 | **已裁定（2026-11-09 · v2.2 · ⏳ 待实施）**：A/B 验证从占位 WARN 升级为实际比对引入性能开销 | 🟢 低 → **不适用**（裁定后） | 每 tick 复制 `data_map_` ⇒ ⇒ **载体将于 phase-6 **P8** 移除** ⇒ ⇒ 该触发条件**随之不再存在** | **载体移除**（**裁定**，⏳ **实施 = phase-6 P8**）：`set_ab_verification` / `is_ab_verification` ⇒ ⇒ 公开 API 移除**必须**走 **P14 登记机制**（登记表 + tsv 探针 + CHANGELOG + `verify_public_api_visibility.sh`）⇒ ⇒ 替代 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · interpreter vs JIT 逐值 **byte-identical**）⇒ ⇒ 详见末尾 **§v2.2** |
+| R9 | **已裁定（2026-11-09 · v2.2）· ✅ 已实施（2026-11-13 · phase-6 P8）**：A/B 验证从占位 WARN 升级为实际比对引入性能开销 | 🟢 低 → **不适用**（裁定后） | 每 tick 复制 `data_map_` ⇒ ⇒ **载体将于 phase-6 **P8** 移除** ⇒ ⇒ 该触发条件**随之不再存在** | **载体移除**（**裁定**，⏳ **实施 = phase-6 P8**）：`set_ab_verification` / `is_ab_verification` ⇒ ⇒ 公开 API 移除**必须**走 **P14 登记机制**（登记表 + tsv 探针 + CHANGELOG + `verify_public_api_visibility.sh`）⇒ ⇒ 替代 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · interpreter vs JIT 逐值 **byte-identical**）⇒ ⇒ 详见末尾 **§v2.2** |
 | R10 | dlopen 多个 `.so` 时 Verilated 符号冲突 | 🟡 中 | 多设计并行测试 crash | `RTLD_LOCAL` + `--output-split-cfuncs 500` 匿名函数 |
 
 ⚠️ **本 ADR 内**风险行的**关闭惯例**（v2.2 澄清 · 局部约定 · critic SHOULD_FIX 修正）：
@@ -478,7 +478,11 @@ VlThreadPool 是 Verilator 5.x 的全局线程池单例。正确关机顺序：`
 
 ### 范围（承重 · 下游实施 MUST 逐字遵守）
 
-- ⚠️ **本补丁记录的是「裁定」** ⇒ ⇒ 实施（**phase-6 P8** · builder）**尚未发生** ⇒ ⇒ 本节 MUST NOT 被读成「已删除」的既成事实；
+- ⚠️ **本补丁记录的是「裁定」**。⇒ ⇒ **2026-11-13 后注：实施已完成**（phase-6 **P8** ·
+  builder）⇒ ⇒ 三个符号 + `tick()` 的 WARN 块 + 两个局部量（`ab_result_a` / `run_ab_verify`）
+  已**全部删除** ⇒ ⇒ 代码面 grep == 0 · `.rddf/checks/public-api-surface.md` 已登记 ·
+  `docs/CHANGELOG.md` 已记一行 · golden 覆盖下限由 `scripts/verify_jit_golden_coverage.sh` 守；
+  ⇒ ⇒ 下方「尚未发生」的措辞保留为**当日记录**（不改写历史）；
 - ⚠️ **事实订正（v2.2 · oracle 复核 · 承重）**：`set_ab_verification` 那一块虽写在
   `#if __has_include("jit/jit_compiler.h")` 之下，但 `include/jit/jit_compiler.h` 是**源树物理头**
   ⇒ ⇒ `__has_include` **恒真** ⇒ ⇒ 该 API 在**两种构建中都存在**（`CH_JIT_ENABLE=OFF` 只让

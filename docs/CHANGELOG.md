@@ -6,6 +6,23 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-13 — P8 批 · **运行期 A/B 验证（interpreter vs JIT）移除**
+
+### Removed
+
+- **`Simulator::set_ab_verification()` / `is_ab_verification()` / `ab_verification_`**（`include/simulator.h`）⇒ ⇒
+  自 dual-function JIT 重构（`tick_comb` + `tick_seq`）之后，A/B 比对逻辑**从未**重新设计
+  ⇒ ⇒ 开启该 flag 只会在每个 `tick()` 打一条 `CHWARN`，**不改变任何行为**
+  ⇒ ⇒ 按 Zero-Debt「No dead code」**已删除**（含 `tick()` 里那段 WARN 与两个只为它存在的局部量
+  `ab_result_a` / `run_ab_verify`）
+  ⇒ ⇒ 依据：ADR-035 **v2.2 · R9** · phase-6 **P8**
+  ⇒ ⇒ **迁移指引**：下游若调用 `set_ab_verification(true)` ⇒ ⇒ **直接删掉该调用**
+  （它本来就不做任何事）⇒ ⇒ 若依赖 `is_ab_verification()` 返回真值 ⇒ ⇒ 该真值**从来不代表任何比对结果**
+  ⇒ ⇒ **残余风险**：运行期**无** interpreter-vs-JIT 双跑校验
+  ⇒ ⇒ 缓解 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · 以**手推期望值**逐值断言）+ JIT 默认 ON
+
+---
+
 ## 2026-11-13 — R17.2 批 · **RV32I SoC 顶层端口具名**（用户 ⑤ 的原始诉求 · 首个真实消费）
 
 ### Changed

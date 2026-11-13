@@ -569,6 +569,27 @@ jobs:
       shell: bash
       run: scripts/verify_public_api_visibility.sh --self-test
 
+    - name: Verify JIT golden coverage floor
+      # phase-6 P8 / R4.3: after removing the runtime A/B comparison, JIT
+      # miscompiles can only be caught by the golden suite, so *which* JitOps
+      # are covered MUST be checkable.
+      #   R0 fail-closed (analyser + enum header + golden source + baseline)
+      #   R1 the covered set MUST equal the baseline **element-wise**
+      #      (a count judge is vacuously green: swapping SELECT -> MUL keeps
+      #       5/39 while the covered surface moved)
+      # The baseline is data in .rddf/checks/jit-golden-coverage.md; the
+      # derivation strips C++ comments first (a bare grep -c would also count
+      # the JitOp:: mentions inside comments).
+      shell: bash
+      run: scripts/verify_jit_golden_coverage.sh
+
+    - name: Verify JIT golden coverage floor (self-test)
+      # M1 drops an uncovered entry / M2 swaps a covered op while keeping every
+      # count identical / M3 claims coverage that does not exist / M4 drifts the
+      # denominator / M5 feeds a source without TEST_CASE (must be exit 2).
+      shell: bash
+      run: scripts/verify_jit_golden_coverage.sh --self-test
+
     - name: Verify port naming ratchet
       # `port-naming-ratchet-2026-11` N2（基线棘轮）:
       #   R0 分析器 + 登记表齐备（fail-closed）
@@ -583,6 +604,15 @@ jobs:
       run: scripts/verify_port_naming.sh
 
     - name: Verify flat RTL emit products
+      # ⚠️ **verilator is REQUIRED** (2026-11-13 · RC-6): F1/F2/F8 lint and emit
+      # real Verilog. This job is `BUILD_VERILATOR=OFF` (fast default path), so
+      # the guard's R0 fail-closed check (`missing verilator => exit 2`) made the
+      # whole job red -- and because earlier steps already failed, these two
+      # steps had NEVER actually run in CI.
+      # => gated here (visible as `skipped`, not silently passing) and executed
+      # in `pr-verilator-fast` (PR) + `nightly-verilator` (schedule), where
+      # BUILD_VERILATOR=ON. Do NOT relax the guard's fail-closed behaviour.
+      if: env.BUILD_VERILATOR == 'ON'
       # `rtl-emit-product-tooling` C5（产物级护栏）:
       #   F1 剥掉 blanket lint_off 后重 lint（不能靠注释掩盖问题）
       #   F2 确定性（两次发射逐字节相同）
@@ -598,6 +628,15 @@ jobs:
         scripts/verify_flat_rtl_emit.sh
 
     - name: Verify flat RTL emit products (self-test)
+      # ⚠️ **verilator is REQUIRED** (2026-11-13 · RC-6): F1/F2/F8 lint and emit
+      # real Verilog. This job is `BUILD_VERILATOR=OFF` (fast default path), so
+      # the guard's R0 fail-closed check (`missing verilator => exit 2`) made the
+      # whole job red -- and because earlier steps already failed, these two
+      # steps had NEVER actually run in CI.
+      # => gated here (visible as `skipped`, not silently passing) and executed
+      # in `pr-verilator-fast` (PR) + `nightly-verilator` (schedule), where
+      # BUILD_VERILATOR=ON. Do NOT relax the guard's fail-closed behaviour.
+      if: env.BUILD_VERILATOR == 'ON'
       # M1 清单多一个产物没有的端口 ⇒ F3 MUST 转红
       # M2 清单加一条悬空诊断 ⇒ F4 MUST 转红
       # M3 产物里加自赋值 ⇒ F5 MUST 转红
@@ -1670,6 +1709,22 @@ jobs:
       shell: bash
       run: bash scripts/verify_hierarchical_port_naming.sh --self-test
 
+    - name: Verify flat RTL emit products (verilator required)
+      # 2026-11-13 · RC-6: moved here from `build-and-test` (BUILD_VERILATOR=OFF).
+      # F1/F2/F8 lint + emit real Verilog => the guard's R0 is fail-closed on a
+      # missing verilator (exit 2). Runs on shard 1 only (same as the other
+      # one-shot verilator guards above) so the sharded job does not duplicate it.
+      if: matrix.shard == 1
+      shell: bash
+      run: |
+        cmake --build build --target cpphdl-emit-rtl
+        scripts/verify_flat_rtl_emit.sh
+
+    - name: Verify flat RTL emit products (self-test)
+      if: matrix.shard == 1
+      shell: bash
+      run: scripts/verify_flat_rtl_emit.sh --self-test
+
     # ---- E6：examples 的**独立 Verilog 仿真**覆盖 ------------------------
     # ⚠️ 为什么挂在这个 job：它需要**真实的 verilator**（编译 RTL 产物 + 跑独立 TB）
     #    ⇒ 而 verilator 只在 `pr-verilator-fast` / `nightly-verilator` 里构建
@@ -2137,6 +2192,19 @@ jobs:
     - name: Build CppHDL
       shell: bash
       run: cmake --build build -j$(nproc)
+
+    - name: Verify flat RTL emit products (verilator required)
+      # 2026-11-13 · RC-6: same guard as `pr-verilator-fast` -- duplicated here
+      # because that job is PR-only, so a push to main would otherwise never run
+      # these checks.
+      shell: bash
+      run: |
+        cmake --build build --target cpphdl-emit-rtl
+        scripts/verify_flat_rtl_emit.sh
+
+    - name: Verify flat RTL emit products (self-test)
+      shell: bash
+      run: scripts/verify_flat_rtl_emit.sh --self-test
 
     - name: Run tests (including perf/verilator)
       shell: bash

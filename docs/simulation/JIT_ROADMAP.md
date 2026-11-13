@@ -211,11 +211,12 @@ public:
 
     // 获取 JIT 状态
     bool is_jit_enabled() const;
-
-    // A/B 验证模式
-    void set_ab_verification(bool enabled);
 };
 ```
+
+> ⚠️ **A/B 验证（interpreter vs JIT 运行期双跑）已移除**（2026-11-13 · ADR-035 v2.2 R9）：
+> `set_ab_verification` / `is_ab_verification` 是**从未做过比对**的 no-op ⇒ ⇒ 已删除
+> ⇒ ⇒ 正确性由 **golden 测试**（`tests/jit/test_jit_golden.cpp` · 手推期望值）承担。
 
 ---
 

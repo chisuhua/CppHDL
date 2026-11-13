@@ -324,7 +324,13 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   `ch_in` · 父驱动子 `ch_out` · 改写子运算节点操作数 · 接口白名单）一律 `ok=false` +
   **点名 module/端口**（对外唯一载体 = `HierarchyEmitResult`；发射器内**不抛**，分析层的
   前置校验抛由入口统一转换）。
-- **`Simulator::set_ab_verification()` is a no-op stub** (ADR-035 R9, `docs/usage_guide/10-verilator-backend.md:133`). After the dual-function JIT refactor (`tick_comb` + `tick_seq`), the A/B comparison logic was not redesigned — enabling the flag only emits a `CHWARN` per `tick()` (`src/simulator.cpp:332-338`) but does not actually diff interpreter vs JIT `data_map_`. Re-enabling dual-backend comparison requires saving snapshots around the JIT `eval_fn_` call and reconciling per-instruction. Do NOT depend on `is_ab_verification()` returning meaningful parity status. The whole `set_ab_verification` block is guarded by `#if __has_include("jit/jit_compiler.h")` (`include/simulator.h:90-97`); with `CH_JIT_ENABLE=OFF` the symbol is absent.
+- **运行期 A/B（interpreter vs JIT）双跑校验已移除**（2026-11-13 · ADR-035 v2.2 **R9** · phase-6 **P8**）：
+  `Simulator::set_ab_verification()` / `is_ab_verification()` / `ab_verification_` 是**从未做过比对**的
+  no-op（开启后每 `tick()` 只打一条 `CHWARN`，**不改变任何行为**）⇒ ⇒ 已按 Zero-Debt **整体删除**
+  （含那段 WARN 与两个只为它存在的局部量）⇒ ⇒ **残余风险** = 运行期**无**双跑校验
+  ⇒ ⇒ 缓解 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · 以**手推期望值**逐值断言）+ JIT 默认 ON
+  ⇒ ⇒ ⚠️ **订正**：「`CH_JIT_ENABLE=OFF` 时该符号不存在」是**事实错误** —— `__has_include` 对**源树物理头**
+  恒真 ⇒ ⇒ 该 API 在**两种构建中都存在**，删除因此也是**无条件**的（两种构建各自编译通过已验证）。
 - **Cache 变体选择（ADR-039 ch_mem 重写 + ADR-041 Sync/Async 拆分）**：完整实现位于 `include/cpu/cache/{i,d}_cache_{sync,async}.h`；`*_complete.h` 是兼容 shim 别名指向 `*_sync.h`. RV32I L1 默认用 `ICacheSync` / `DCacheSync` (1-cycle sread)；TCM-style 用 `ICacheAsync` / `DCacheAsync` (0-cycle aread). 新代码用 `_sync` / `_async` 变体直接引用（`_complete` 仅作 legacy alias）. The wrappers `include/cpu/cache/{i_cache_prefetch.h,d_cache_write_buffer.h}`（2026-10-24 C2 从 `examples/riscv-mini/src/` 提升到此，ADR-046 D3 #9/#10）实例化 `ICacheSync` / `DCacheSync` (2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复 ch_reg array → ch_mem + ch_module 替换 `Component ctor + parent`, instantiation 0 SIGSEGV). 见 `include/cpu/AGENTS.md` STRUCTURE 表. **历史 pass-through stub 头文件（`include/cpu/cache/*_stub.h`）已于 2026-10-20 物理删除**（ADR-037，change `cache-stub-physical-removal-2026-10`）—— 其语义（`ready := req, miss := false, data := axi_data`、未 block 对齐的 `axi_addr`）不构成合法 cache 行为，不再保留，也没有替代的 BYPASS 模式.
 - **`*_cache_complete.h` 是兼容 shim** (2026-10-19 cache-complete-rewrite 完成, ADR-041). 原"dead-on-arrival"已修复 (commit 91a0833 ch_mem-based rewrite + 1221819 test coverage + ADR-041 Sync/Async variant split). `ICacheComplete` / `DCacheComplete` 现在是 `using ICacheComplete = ICacheSync;` 别名, 指向 **1-cycle sread 版本** (`include/cpu/cache/{i,d}_cache_sync.h`). 0-cycle TCM-style 用户可用 `include/cpu/cache/{i,d}_cache_async.h`. 见 `include/cpu/AGENTS.md` STRUCTURE 表.
 

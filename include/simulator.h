@@ -92,8 +92,6 @@ public:
     bool is_jit_enabled() const { return jit_enabled_; }
     void set_jit_enabled(bool enabled);
     void try_jit_compile();
-    void set_ab_verification(bool enabled);
-    bool is_ab_verification() const { return ab_verification_; }
 #endif
 
     // ADR-035 / Phase 2.3: Pluggable evaluation backend. The default
@@ -652,7 +650,6 @@ private:
         false;
 #endif
     bool jit_compiled_ = false;
-    bool ab_verification_ = false;  // A/B 验证模式
 #endif
 
     // ADR-035 / Phase 2.3: pluggable evaluation backend. nullptr

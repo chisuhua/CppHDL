@@ -52,3 +52,5 @@ rv32i_hazard_complete.h	nofile	include/cpu/pipeline/rv32i_hazard_complete.h	-	C6
 ForwardingUnit	re	include/	\briscv::ForwardingUnit\b	C5-2026-11-11
 HazardDetectionUnit	re	include/	\briscv::HazardDetectionUnit\b	C6-2026-11-11
 HazardUnitComplete	re	include/	\briscv::HazardUnitComplete\b	C6-2026-11-11
+set_ab_verification	removed	include/	-	P8-2026-11-13
+ab_verification	removed	include/	-	P8-2026-11-13

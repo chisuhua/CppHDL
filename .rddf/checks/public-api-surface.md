@@ -81,6 +81,7 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | `rv32i_forwarding.h` / `riscv::ForwardingUnit`（`include/cpu/pipeline/rv32i_forwarding.h`） | **物理删除** | 2026-11-11 | `rv32i-dead-component-consolidation` **C5**（零交付路径消费者 + 独有语义为空集：WB 档无覆盖 · `id_reg_read` 死输入） | 下游若引用 ⇒ ⇒ 改用仓内权威的 `riscv::HazardUnit`（**已接入真实流水线**）+ `chlib::ForwardingMux`（ADR-047 D2） |
 | `hazard_detection_unit.h` / `riscv::HazardDetectionUnit`（`include/cpu/pipeline/hazard_detection_unit.h`） | **物理删除** | 2026-11-11 | `rv32i-dead-component-consolidation` **C6**（零交付路径消费者 + 其 MEM 级检测点在流水线里**永不触发**） | 下游若引用 ⇒ ⇒ 改用 `riscv::HazardUnit`（`include/cpu/pipeline/hazard_unit.h`） |
 | `rv32i_hazard_complete.h` / `riscv::HazardUnitComplete`（`include/cpu/pipeline/rv32i_hazard_complete.h`） | **物理删除** | 2026-11-11 | `rv32i-dead-component-consolidation` **C6**（零交付路径消费者 + 2 个死输入 + 3 档语义；唯一存在理由是 parity 夹具） | 下游若引用 ⇒ ⇒ 改用 `riscv::HazardUnit`；⚠️ **这是显式批准的覆盖缩面**（`DUAL_BACKEND_PARITY_PAIRS` −6） |
+| `Simulator::set_ab_verification()` / `is_ab_verification()` / `ab_verification_`（`include/simulator.h`） | **移除** | 2026-11-13 | ADR-035 **v2.2 · R9**（phase-6 **P8** · no-op：开启后每 `tick()` 只打一条 `CHWARN`，**从未**做过比对） | 运行期**无** interpreter-vs-JIT 双跑校验 ⇒ ⇒ 改用 **golden 测试**（`tests/jit/test_jit_golden.cpp` · 手推期望值）；下游若调用该 API ⇒ ⇒ **直接删除该调用**（它本来不改变任何行为） |
 
 ## ⚠️ **行为变更（非符号移除）**（2026-11-11 起登记）
 

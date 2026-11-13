@@ -138,7 +138,7 @@ int main() {
 |------|------|------|
 | `riscv-mini` 端到端 | ⏳ | 需要 ChipForge 仓集成 + ELF 加载 |
 | 性能基准对比（解释器 vs JIT vs Verilator） | ⏳ | `perf_tests` 框架已支持，需在 Verilator 安装环境跑 |
-| A/B 验证 | ⏳ | `set_ab_verification(true)` 可用但比对逻辑为警告占位 |
+| A/B 验证（interpreter vs JIT 运行期双跑） | ❌ **已移除** | `set_ab_verification` / `is_ab_verification` 是**从未做过比对**的 no-op（开启只打 `CHWARN`）⇒ ⇒ 已删除（Zero-Debt · ADR-035 v2.2 R9）⇒ ⇒ 改用 golden 测试 `tests/jit/test_jit_golden.cpp` |
 
 ### 🔬 e2e 验证（v2.1 新增）
 
