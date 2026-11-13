@@ -4,9 +4,12 @@
 
 ### Requirement: 存储器的读 MUST 是**固定 1 拍的寄存读**，且 MUST NOT 是组合读
 
-RV32I SoC 的 **I-TCM** 与 **D-TCM** 的读 MUST 是**同一套时序语义**：**固定 1 拍寄存读**
-⇒ ⇒ 地址在第 N 拍给出 ⇒ ⇒ 数据在第 N+1 拍可用
+RV32I SoC 的 **I-TCM** 与 **D-TCM** 的 **load 数据通路** MUST 是**同一套时序语义**：
+**固定 1 拍寄存读** ⇒ ⇒ 地址在第 N 拍给出 ⇒ ⇒ 数据在第 N+1 拍可用
 ⇒ ⇒ **MUST NOT** 是「地址与数据同拍」的组合读。
+
+
+⇒ ⇒ ⚠️ **字节写的读-改-写是例外**（见下方 Scenario）—— 它 MUST 保持**同拍组合读**。
 
 ⇒ ⇒ 理由：组合读在产物里退化为「容量:1 组合 mux」⇒ ⇒ **无法推断 BRAM**
 ⇒ ⇒ 上板只能实现成分布式寄存器阵列 ⇒ ⇒ 面积与时序双输。
@@ -17,10 +20,21 @@ RV32I SoC 的 **I-TCM** 与 **D-TCM** 的读 MUST 是**同一套时序语义**�
 #### Scenario: D-TCM 的读产物 MUST NOT 是组合 mux
 
 - **WHEN** 一个含 D-TCM 的设计被发射成 Verilog
-- **THEN** D-TCM 的读数据 MUST 来自**寄存器**（`sread` 形态）
+- **THEN** D-TCM 的 **load 数据通路** MUST 来自**寄存器**（`sread` 形态）
 - **AND** 产物中 MUST NOT 存在「容量:1 组合读」（即 MUST NOT 出现把整个存储体
   按地址组合选通的连续赋值）
 - **AND** 该形态 MUST 是 **BRAM 可推断**的前提
+- **AND** ⚠️ **字节写的 RMW 读口** MAY 仍是组合读（**同拍**合并的必然要求）⇒ ⇒
+  ⇒ ⇒ **判据 MUST 只看 load 通路**，不得据此要求整个 D-TCM 无组合读
+
+#### Scenario: 字节写的读-改-写 MUST 保持同拍组合读
+
+- **WHEN** `sb` / `sh` 在 D-TCM 上执行
+- **THEN** 读-改-写的**读口** MUST 是 **0 拍组合读**（组合读返回**边沿前**的旧值
+  ⇒ ⇒ 合并结果正是「旧字 + 新字节」）
+- **AND** 同一个 `ch_mem` MUST **并存两个读口**（`aread` 给 RMW + `sread` 给 load 通路）
+- **AND** ⚠️ 「把 `aread` 换成 `sread`」的单行改法 MUST 被判据**抓红**
+  （⇒ ⇒ 它会**静默破坏** `sb` / `sh`：合并结果变成上一拍的值）
 
 #### Scenario: I-TCM 与 D-TCM 的读时序 MUST 一致
 
