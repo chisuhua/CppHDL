@@ -1702,10 +1702,18 @@ else
     #    的结束，否则 `[^>]*` 会在第一个 `>` 处停下 ⇒ 端口被整条漏掉。
     actual_ports2="$(awk '
         /__io\(/ { inb = 1; next }
-        inb && /\)/ { exit }
         inb {
             line = $0
             sub(/^[[:space:]]*/, "", line)
+            # ⚠️ **注释行 MUST 先跳过**（2026-11-13 修）：旧判据是
+            #    `inb && /\)/ { exit }` ⇒ ⇒ 任何**含 `)` 的行**都终止解析
+            #    ⇒ ⇒ 一旦端口块里出现注释（实测：`ext_clk` 的说明段含
+            #    `always_ff @(posedge default_clock …)`）⇒ ⇒ 解析在**第一条
+            #    注释**就退出 ⇒ ⇒ 一个端口都抽不到 ⇒ ⇒ C6 **假红**
+            #    （「未能解析出端口集合」）。⇒ ⇒ 跳过注释 + 只在**收尾行**
+            #    （行内容就是 `)`）终止。
+            if (line ~ /^\/\//) next
+            if (line ~ /^\)/) exit
             sub(/;.*$/, "", line)
             if (line !~ /^ch_(in|out)</) next
             k = 0
