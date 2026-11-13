@@ -4,8 +4,8 @@ priority: P2
 phase: phase-6
 category: framework
 type: feature
-状态: draft
-进度: 2026-11-13 立项（用户口令「R21立项」）· **未开工** ⇒ ⇒ 规模侦察 + IR 级根因已定死 ⇒ ⇒ **已过 metis 1 轮（10 条处置全采纳，含 4 条事实订正）** ⇒ ⇒ 🚪 开工前门 = **R21-B 的成层方式需 architect 裁决** + **R21-A 需先做 spike**
+状态: approved
+进度: 2026-11-13 立项（用户口令「R21立项」）· **R21-B 裁决已落**（`docs/adr/ADR-070-rv32i-hierarchical-layering-granularity.md` · **Accepted** · 选项 **①** = 7 处 `ch_layer`；「部分成层」= **条件式可接受**（三条件））· **未开工** ⇒ ⇒ 规模侦察 + IR 级根因已定死 ⇒ ⇒ **已过 metis 1 轮（10 条处置全采纳，
 主题: 层次化 RTL 输出
 依赖: ADR-060（§2.1 行 1/行 2）· ADR-061（粒度四档）· ADR-066（决策 ①/③/⑤）· ADR-046 D10（SoC 端口冻结）· 逐拍等价 helper `include/hierarchy_equivalence.h`
 来源: 用户 2026-11-13「R21立项」+ `.rddf/roadmap/phase-6-next-steps.md` 的 R21 行（诉求 ④ 未兑现）+ planner 2026-11-13 IR 级侦察
@@ -202,7 +202,10 @@ verilator --lint-only --top-module top <hier 产物，文件名 MUST == module �
 
 ### R21-B（成层）
 
-- [ ] architect 裁决落盘（选项 + 「部分成层是否可接受」两问都答）⇒ 归属: **architect**
+- [x] architect 裁决落盘（选项 + 「部分成层是否可接受」两问都答）⇒ 归属: **architect**
+      ⇒ ⇒ **2026-11-13 已闭**：ADR-070（**Accepted**）⇒ ⇒ 选项 **①**（`rv32i_pipeline.h:119-128` 的 7 处
+      `ch_module` ⇒ `ch_layer` + 显式模块类型名）⇒ ⇒ 「部分成层」= **条件式可接受**（三条件）
+      ⇒ ⇒ ⚠️ **D2 排在 B3 之后**（同文件 ⇒ 写点冲突）⇒ ⇒ ⚠️ 契约强度待用户裁决（ADR-070 §6 ⑦）
 - [ ] 若选 ⑤ ⇒ **重新跑探针**（边集合与 ForceLayer 不同）并把新清单写进 change 的 design.md ⇒ 归属: **builder**
 - [ ] **扁平产物不变**：⚠️ 它是**结构性恒真**的回归跳线（`ch_layer` 只写 `is_layer` / `module_type_name` 两个标志，扁平路径不读）⇒ ⇒ **不作为承重证据**，但 MUST 保留（证明改动确实没碰扁平路径）⇒ 归属: **builder**
 - [ ] 模块类型名**撞名**行为可诊断（`sanitize_verilog_name` 后同 base 不同类型 ⇒ `:1017-1028` 拒绝）⇒ 归属: **builder**

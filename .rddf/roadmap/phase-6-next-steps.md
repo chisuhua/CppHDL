@@ -53,7 +53,7 @@
 | **R18** | ✅ **R1 = 端口面残留登记**（扁平顶层暴露 **80** 个内部 `ch_out` · `.v` 114 端口 vs 根组件自有 32 ⇒ ⇒ **台账无行** ⇒ ⇒ 补登记为已知残留） | planner → architect | **用户裁决** | ✅ **2026-11-13 已闭**（用户授权按建议裁决 ⇒ ⇒ 选 **A** = 补登记）⇒ ⇒ 台账 **`id=23`**（`已知`）+ 登记表同批 ⇒ ⇒ 两侧双向 1:1（**25 行**）⇒ ⇒ ⚠️ **零实现改动**（只补台账行 ⇒ ⇒ 缺口可见）⇒ ⇒ 只差「补台账行」这一步 |
 | **R19** | ✅ **R2 = F6 判据缺口** ⇒ ⇒ 护栏 F6 改为**元判据**（查「承载判据的测试 / 它的 CTest 标签 / 跑它的 CI job」三者俱在）⇒ ⇒ ⚠️ 原「逐字节比对」形态**恒绿**（同一 `verilogwriter`）⇒ ⇒ **不可用** | 用户 → builder | — | ✅ **2026-11-13 已闭**（`verify_flat_rtl_emit.sh` + 自检 **M6**：副本投毒 ⇒ 必红）⇒ ⇒ 内容判红由 `pr-verilator-fast` / `nightly-verilator` 承担 |
 | **R20** | ✅ **R3 = `gpio_example` 断言强度** ⇒ ⇒ **早已由 2026-11-12 D1 裁决闭**（期望登记已显式标注「`spec_checks` 保持 0（只判 impl-contract）」）⇒ ⇒ **不是待裁决项** ⇒ ⇒ 无需再改产品 | 用户 → builder | — | ✅ **2026-11-13 确认闭**（⚠️ planner 本轮差点又把它当新发现 —— 同一纪律第二次生效）|
-| **R21** | 📝 **目标 ④（RV32I 层次化 RTL 示例）= 独立立项** ⇒ ⇒ ⚠️ **范围 MUST 先侦察**（architect 裁决 ③）：**不是**「修发射器的静默退化」（默认 inline 是**契约行为**·有测试钉着）⇒ ⇒ 而是「**诉求 ④ 未兑现**」+「**跨 module 隐式端口合成未实现 ⇒ 分析层 fail-closed 抛异常**」⇒ ⇒ ⇒ **规模大于「加一行 `CH_HIERARCHY_LAYER`」** | planner → architect | — | ✅ **2026-11-13 规模侦察已完成**（`bash scripts/probe_r21_hier_granularity.sh` · 只读探针）⇒ ⇒ **结论 = fail-closed · 23 条**跨 module 边无法映射⇒ ⇒ ⚠️ **但根因不是「合成未实现」** —— 诊断模式**统一**为「`child port X is already driven by <父侧表达式> in module 'top.pipeline'`」⇒ ⇒ 合成链**已存在** ⇒ ⇒ 真实根因 = **父侧 landing net 与子端口双驱动**（与 **ADR-066 决策 1** 同源）⇒ ⇒ 受影响（按边的**源**模块）：`pipeline.id_stage` **15** · `pipeline.ex_stage` **10** · `pipeline.hazard_unit` **9** · `pipeline.if_stage` **4** · `pipeline`（父层）**3** · `dtcm` **3** · `pipeline.wb_stage` **1** · `pipeline.forwarding_mux` **1**⇒ ⇒ ⇒ ⚠️ **2026-11-13 立项后订正（IR 级侦察 + metis 1 轮）**：**「23 处单驱动化」这个范围不对** —— 23 条**全部是兄弟边**（同一父下：子输出 → 兄弟输入），抛点 = 发射器的 pin 冲突判据（`src/hierarchy_verilog.cpp:350-359`）把「分析层记的**消费点**」当成「pin 的**实参**」⇒ ⇒ 修法 = **发射器侧 1 处判据（H-A）+ 兄弟边落点网登记（H-B）**；源码侧单驱动化只是**备选**（且与 B3/B4 写点撞车）⇒ ⇒ ✅ **已立项** = `.rddf/improvements/rv32i-hierarchical-example-2026-11.md`（`draft` · HARD-GATE ✅ · metis 1 轮 **10 条全采纳**）⇒ ⇒ 🚪 **两道开工前门**：① **R21-A 需先 spike**（H-A+H-B 是**假说** ⇒ 判据 = 23→0 **且** 产物 lint 无 `%Error`）② **R21-B 成层方式需 architect 裁决**（**6 选项** + 「部分成层是否可接受」）⇒ ⇒ 顺序：**R21-A 可立即做**（只碰 `src/hierarchy_verilog.cpp` ⇒ 与 B3 / R17.2 零交集）· **R21-B/C 排在 B3 与 R17.2 之后**（手推 golden 依赖 B3 后的时序基线；端口表依赖 R17.2）|
+| **R21** | 📝 **目标 ④（RV32I 层次化 RTL 示例）= 独立立项** ⇒ ⇒ ⚠️ **范围 MUST 先侦察**（architect 裁决 ③）：**不是**「修发射器的静默退化」（默认 inline 是**契约行为**·有测试钉着）⇒ ⇒ 而是「**诉求 ④ 未兑现**」+「**跨 module 隐式端口合成未实现 ⇒ 分析层 fail-closed 抛异常**」⇒ ⇒ ⇒ **规模大于「加一行 `CH_HIERARCHY_LAYER`」** | planner → architect | — | ✅ **2026-11-13 规模侦察已完成**（`bash scripts/probe_r21_hier_granularity.sh` · 只读探针）⇒ ⇒ **结论 = fail-closed · 23 条**跨 module 边无法映射⇒ ⇒ ⚠️ **但根因不是「合成未实现」** —— 诊断模式**统一**为「`child port X is already driven by <父侧表达式> in module 'top.pipeline'`」⇒ ⇒ 合成链**已存在** ⇒ ⇒ 真实根因 = **父侧 landing net 与子端口双驱动**（与 **ADR-066 决策 1** 同源）⇒ ⇒ 受影响（按边的**源**模块）：`pipeline.id_stage` **15** · `pipeline.ex_stage` **10** · `pipeline.hazard_unit` **9** · `pipeline.if_stage` **4** · `pipeline`（父层）**3** · `dtcm` **3** · `pipeline.wb_stage` **1** · `pipeline.forwarding_mux` **1**⇒ ⇒ ⇒ ⚠️ **2026-11-13 立项后订正（IR 级侦察 + metis 1 轮）**：**「23 处单驱动化」这个范围不对** —— 23 条**全部是兄弟边**（同一父下：子输出 → 兄弟输入），抛点 = 发射器的 pin 冲突判据（`src/hierarchy_verilog.cpp:350-359`）把「分析层记的**消费点**」当成「pin 的**实参**」⇒ ⇒ 修法 = **发射器侧 1 处判据（H-A）+ 兄弟边落点网登记（H-B）**；源码侧单驱动化只是**备选**（且与 B3/B4 写点撞车）⇒ ⇒ ✅ **已立项** = `.rddf/improvements/rv32i-hierarchical-example-2026-11.md`（**`approved`** · HARD-GATE ✅ · metis 1 轮 **10 条全采纳**）⇒ ⇒ 🚪 **两道开工前门**：① **R21-A 需先 spike**（H-A+H-B 是**假说** ⇒ 判据 = 23→0 **且** 产物 lint 无 `%Error`）② **R21-B 成层方式需 architect 裁决**（**6 选项** + 「部分成层是否可接受」）⇒ ⇒ 顺序：**R21-A 可立即做**（只碰 `src/hierarchy_verilog.cpp` ⇒ 与 B3 / R17.2 零交集）· **R21-B/C 排在 B3 与 R17.2 之后**（手推 golden 依赖 B3 后的时序基线；端口表依赖 R17.2）⇒ ⇒ ✅ **2026-11-13 architect 裁决已落**（`docs/adr/ADR-070-rv32i-hierarchical-layering-granularity.md` · **Accepted** · oracle ×1 + critic ×2 APPROVE）⇒ ⇒ **D1**（发射器）= **H-A 方向感知 + H-B 填 `parent_landing_wire`** + `rewired_pins` 结构化可观测⇒ ⇒ **D2**（成层）= **选项 ①**（`rv32i_pipeline.h:119-128` 的 7 处 `ch_module` ⇒ `ch_layer` + 显式模块类型名）⇒ ⇒ 只影响层次化产物（扁平逐字节不变）⇒ ⇒ **D3** = 7 个模块类型名 = **产物级契约名**（登记在 capability `rtl-hierarchical-output`）⇒ ⇒ 与 ADR-046 D10（冻结**端口集**）**不冲突**⇒ ⇒ **D4** = 「部分成层」= **条件式可接受**（三条件）⇒ ⇒ 保留为**退路**⇒ ⇒ ⚠️ **D1 与 D2 正交** ⇒ ⇒ D1 可先行 ⇒ ⇒ **不阻塞 B3**；⚠️ **D2 排在 B3 之后**（同文件）⇒ ⇒ ⚠️ **两个待用户裁决项**（ADR-070 §6）：⑥ 诉求 ④ 的交付形态认定 · ⑦ 7 个名字的契约强度|
 | **R22** | ✅ **C6 SoC 端口解析器回归**（`verify_no_duplicate_rv32i_headers.sh` 的 C6 判据） | builder | — | ✅ **2026-11-13 已闭** ⇒ ⇒ **现象**：C6 报「未能解析出端口集合」假红；**根因**：解析器的终止判据是 `inb && /\)/ { exit }` ⇒ ⇒ **任何含 `)` 的行**都终止解析 ⇒ ⇒ 而 R17.2 给 `ext_clk` 加的说明注释里含 `always_ff @(posedge …)` ⇒ ⇒ 解析在**第一条注释**就退出 ⇒ ⇒ 一个端口都抽不到；**为什么现在才发现**：该护栏在主 job 的**靠后**位置 ⇒ ⇒ 前半段一直红 ⇒ ⇒ 它**从未真正跑过**（同 RC-6 的盲区）⇒ ⇒ **修法** = 跳过 `//` 注释行 + 只在**收尾行**（行内容即 `)`）终止 ⇒ ⇒ 实测 32 端口与快照一致 · **--self-test 全绿**（含 C6 三条投毒） |
 | **R23-A** | ✅ **RC-8 收尾**（2 个被 CI 直接调用的脚本缺可执行位）| builder | — ⇒ ⇒ ✅ **2026-11-13 已闭**（commit `7069f44` · git index 100644 → **100755**）⇒ ⇒ ⚠️ 验收证据（executed+绿）待 CI run 落地后回填（sha + job + step + conclusion）|⇒ ⇒ 判据 = `git ls-files -s` ⇒ 两个脚本**均 100755**（⚠️ MUST 看 **git index**，不是工作区 —— `os.access` / `core.fileMode=false` ⇒ ⇒ 假绿）+ 该 step 本轮 **executed（非 skipped）且绿**（证据 = `sha` + `job` + `step name` + `conclusion`）⇒ ⇒ ⚠️ **不**绑定「N 个 job 全绿」（那是**独立**信号：37 个脚本首次真正执行，任意一条红都不该被记成「RC-8 没修干净」）|
 | **R23-B** | ✅ **护栏可达性 = 一等验收项**（architect 复盘 #5 裁决 ① · **待用户追认**）⇒ ⇒ ①-a **静态护栏** + ①-b **登记** | builder | — ⇒ ⇒ 载体 = `scripts/verify_guard_reachability.sh` + `.rddf/checks/guard-reachability.md`⇒ ⇒ ⚠️ 新台账 MUST 带 `evidence: probe:`（`ledger_evidence.py` 是**全目录 glob** ⇒ ⇒ 否则打破 ledger 的 91/6 基线）⇒ ⇒ 写点 = `scripts/**` ⇒ ⇒ 与 R14（`include/**`+`src/**`）**不重叠 ⇒ ⇒ 可并行**⇒ ⇒ ✅ **2026-11-13 已闭** = `scripts/verify_guard_reachability.sh` + `scripts/lib/guard_reachability.py` + `.rddf/checks/guard-reachability.md`（**45** 个被引用脚本 · 登记表双向 1:1 · 排除类型**逐字派生**）⇒ ⇒ **6 条自检投毒**全判别（含反向对照 ④）⇒ ⇒ 已接入 CI（主 job · 不需 verilator/网络/git 历史）|
@@ -684,3 +684,63 @@ bash scripts/verify_dual_backend_parity.sh   # 双后端 parity 锚点（★2 �
 - **不要**把「两后端 parity 全绿」当正确性证据（同源 ⇒ 同构缺陷一致地错）⇒ ⇒ 期望值 MUST **手推**。
 - **不要**在 `describe()` 里用硬件值做 C++ 控制流 ⇒ ⇒ 条件恒假 ⇒ 分支体**从不发射**。
 - **期望值 MUST 手推**（禁抄仿真输出）· **突变纪律**：还原源码 ≠ 复原（**二进制也是状态** ⇒ 还原后 MUST 重建）。
+
+---
+
+## 9. 🔴 **R14（B3 实施）的实施路径** —— **2026-11-13 architect 裁决后固化**（builder 的机械执行清单）
+
+> ⚠️ **本节只指路，不复制判据** ⇒ ⇒ **逐条判据在** `openspec/changes/memory-timing-contract-2026-11/{design,tasks}.md`
+> ⇒ ⇒ **本节的价值 = 顺序 + 同批约束 + 阻塞项**，避免下一个实施者重新探索。
+
+### 9.1 顺序（**不可乱序** · 漏一 ⇒ ⇒ 静默错值）
+
+```
+S1（T1：D-TCM 改 sread）
+  ⇒ S2（T2：A0 的三处强制结构变更 · **同批同 commit**）   ← 🔴 当前任务
+    ⇒ S3（T3：data_ready 真接线 + 反压 DUT）
+      ⇒ S4（T4：写相位契约）
+        ⇒ S5（T5：时序金标 —— **手推已落 design.md §10**）
+          ⇒ S6（收口：锚点同步 + 全护栏 + 验收报告）
+```
+
+### 9.2 🔴 **S2 的同批约束**（ADR-069 §3.3 + §7.1.2）
+
+| # | 变更 | 写点 | 漏改后果 |
+|---|---|---|---|
+| **①′** | ⚠️ **前置**：load 侧车道 mux 改用 **M2 锁存的地址 / funct3** | `stages/mem_stage.h:101-114` | M2 档按**后继指令的地址**选车道 ⇒ **静默错 lane** |
+| **①** | 前推**档位 2** 的源 → **M2** | `rv32i_pipeline.h:584-585` | **距离 2** 生产者 → 消费者读陈旧值 |
+| **②** | **D11 = 两级优先旁路**（**M2 档优先 + WB 档保留**） | `rv32i_pipeline.h:226-234` | 距离 3 / 距离 4 / 4 拍停顿后的 load-use **三条路径**读旧值 |
+| **②′** | 🔴 **`wb_stage` 的写回 mux MUST NOT 前移** | `rv32i_pipeline.h:427-437` | `reg_file.write` 单写口采到更年轻指令 ⇒ **真正提交的那条永不写回** |
+| **③** | `hazard_unit.h` 停顿链**加一级** | `hazard_unit.h:141-142` / `:253-268` | load-use 停顿仍 3 拍 ⇒ 停顿拍数**金标错** |
+| **④** | **M2 寄存器组**（元数据 + **原始字** · 9 个成员） | `rv32i_pipeline.h` 成员区（`exmem_*` 之后） | MEM/WB′ 装载源错 ⇒ 写回**垃圾**（JAL/JALR 尤甚） |
+
+⇒ ⇒ ⚠️ **①′ MUST 排在 ② 之前**（D11 的 M2 档依赖车道 mux 已搬进 M2 的时序）
+⇒ ⇒ ⚠️ **①②③④ MUST 同批同 commit**（任一单独改 ⇒ 数据落在**错误的级** ⇒ ⇒ **值错但无报错**）
+
+### 9.3 ⚠️ **实施期 MUST 守的 5 条硬约束**
+
+| # | 约束 | 出处 |
+|---|---|---|
+| ① | **M2 装载使能恒定**（**不随停顿冻结**）⇒ ⇒ 否则死锁 | ADR-069 **V4** |
+| ② | **`commit_count` 的退休时点 MUST NOT 改动**（增量源仍 = `mem_stage.io().mem_valid_out` = MEM 级有效）⇒ ⇒ 改则 `fill` 段 3→4 ⇒ ⇒ `non_retired` 必红 | ADR-069 **V16**（本轮新增） |
+| ③ | **只改 3 个数**（`6u`→`8u` · `21u`→`23u` · `kCycles-22u`→`kCycles-24u`）⇒ ⇒ **别的**断言转红 = **实现错了** ⇒ ⇒ 禁顺手改期望值 | `design.md` §10.4 |
+| ④ | **期望值 MUST 手推**（禁抄仿真输出）⇒ ⇒ 两后端同源 ⇒ **parity 对该族缺陷结构性失明** | 根 `AGENTS.md` ANTI-PATTERNS |
+| ⑤ | 🔴 **改了 `src/**` / `include/**` ⇒ ⇒ 跑 ctest 前 MUST 先全量重建** ⇒ ⇒ 否则跑的是**旧二进制** ⇒ ⇒ 假绿 | 根 `AGENTS.md` COMMANDS |
+
+### 9.4 ✅ **本轮 architect / planner 已清的前置项**
+
+| # | 项 | 状态 |
+|---|---|---|
+| ① | 🔴 **D11 源争议**（ADR-069 A0-③ vs capability 距离矩阵） | ✅ **已裁决**（ADR-069 §7）⇒ ⇒ **两级优先旁路** + **距离矩阵右移一位** |
+| ② | 🔴 **`rv32i-data-forwarding` 的 MODIFIED delta 缺失**（硬缺口） | ✅ **已补**（change 的 `specs/rv32i-data-forwarding/spec.md` · 6 处 · **既有 Scenario 零删除**已机械核验 · `verify_openspec_delta.sh` 4/4 绿） |
+| ③ | 🔴 **T5 的金标「断言位置」未知** | ✅ **已定位 + 手推**（`design.md` §10） |
+| ④ | ✅ **R21-B 成层方式裁决** | ✅ **已裁决**（ADR-070 · 选项 ①） |
+| ⑤ | ✅ **spec delta 自检** | ✅ 4/4 绿 |
+
+### 9.5 ⚠️ **仍待用户裁决**（**不自决**）
+
+| # | 项 | 归属 |
+|---|---|---|
+| ① | **ADR-070 §6 ⑥** = 诉求 ④ 的交付形态认定（若 spike 撞出第二层失败 ⇒ ⇒ 退路 ⑥ 还是 ⑤） | 用户 / architect |
+| ② | **ADR-070 §6 ⑦** = 7 个模块类型名的契约强度（产物级契约名 vs 明文非契约） | 用户 |
+| ③ | **R8**（D8 `ext_clk` 死端口）· **R11**（`FENCE` 语义裁决）· **R19**（F6 判据缺口） | 用户 |
