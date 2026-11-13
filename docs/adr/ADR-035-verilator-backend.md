@@ -3,7 +3,7 @@
 **状态**: 🟢 采纳 + Phase 1-4.1 GA + v2.1 e2e 验证通过
 **日期**: 2026-06-07（提议）→ 2026-09-21（v2.1 e2e 验证）
 **决策人**: Sisyphus + 用户（参考 3 份专项调研 + AGENTS.md `using-superpowers` 工作流）
-**修正审计**: v2.0（2026-09-21）→ v2.1（2026-09-21 补丁）→ **v2.2（2026-11-09 · architect · phase-6 P8）** — 见末尾 §v2.0 修正审计章节与 **§v2.2 补丁**（R9 决策行修订 + 「删除 vs 实现」的取舍记录 + 下游判据）
+**修正审计**: v2.0（2026-09-21）→ v2.1（2026-09-21 补丁）→ **v2.2（2026-11-09 · architect · phase-6 P8）**→ **v2.3（2026-11-13 · architect · phase-6 R23-B · 判据 (b) 排除面）** — 见末尾 §v2.0 修正审计章节与 **§v2.2 补丁**（R9 决策行修订 + 「删除 vs 实现」的取舍记录 + 下游判据）
 
 ---
 
@@ -532,6 +532,24 @@ VlThreadPool 是 Verilator 5.x 的全局线程池单例。正确关机顺序：`
     ⇒ **排除** `docs/adr/ADR-035-verilator-backend.md`（本 ADR 的 R9 行 + v2.2 补丁章 = **审计轨迹**
     ⇒ ⇒ 不计入命中）⇒ ⇒ 其余每条命中 MUST 在**同一段**内含「**已移除**」或「**已删除**」字样
     ⇒ ⇒ 判据 = 过滤掉含该字样的段之后 **剩余 == 0**；
+    - **v2.3 修订（2026-11-13 · 用户追认 · architect 复盘 #5 裁决 ③）**：判据 (b) 的排除面**再排除**
+      「**带日期的评审快照**」—— 理由 = 它们与本 ADR 的补丁章同属**当日记录**（审计轨迹）⇒ ⇒
+      改写它们 = **篡改历史** ⇒ ⇒ 而「文档面 0 命中」类判据 MUST 与「历史不改写」**共存**。
+      ⇒ ⇒ ⚠️ **排除面 MUST 按「结构特征」而非「目录名 / 日期前缀」**：文件名匹配
+      `^\d{4}-\d{2}-\d{2}-.*(review|midterm).*\.md$` 的**具名清单**
+      （**活主题文档不在其列** —— `docs/architecture/2026-11-02-hierarchical-rtl-output.md`
+      是 `verify_arch_ledger_residuals.sh` 的**消费对象** ⇒ ⇒ 裸 glob 排除会让它**永久免疫**）
+      ⇒ ⇒ 当前具名清单（**5** 个）：
+      `docs/architecture/2026-11-09-phase-6-midterm-review.md` ·
+      `docs/architecture/2026-11-12-phase-6-b2-midterm-review.md` ·
+      `docs/architecture/2026-11-12-phase-6-rtl-track-review.md` ·
+      `docs/architecture/2026-11-13-phase-6-rtl-track-review-5.md` ·
+      `docs/architecture/2026-11-13-phase-6-rtl-track-review.md`
+      ⇒ ⇒ ⚠️ **禁**按目录 / 日期**自动归类**（快照越多 ⇒ ⇒ 判据强度单调下降 ⇒ ⇒ 恒绿）
+      ⇒ ⇒ **新增排除 = 改判据 = diff 可见 + 可评审**
+      ⇒ ⇒ ⚠️ **豁免 MUST 登记代价**：残差台账 `id=24`（`已知`）登记
+      「判据 (b) 对快照面**永久失明**（快照内的过期引用不被清零要求覆盖）」
+      ⇒ ⇒ **决策内容零变更**（只改**判据面**的排除集合 ⇒ ⇒ 轻量修订）
 - **③** golden 覆盖**下限 = 5 / 39**（分母 = `include/jit/jit_ir.h` 的 JitOp 总数）⇒ ⇒ **防回退**
   ⇒ ⇒ ⚠️ **该下限当前**无**现成护栏**（`scripts/verify_test_counts.sh` 不数 golden 覆盖 ⇒ ⇒
   「今天就已满足」⇒ ⇒ 判据**不可执行**）⇒ ⇒ **builder MUST 新增护栏锚点**并让本判据以该锚点为准

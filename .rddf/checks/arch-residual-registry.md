@@ -56,3 +56,5 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 21 | 未决 | 2026-11-10 | route (c) 字面同名当前不做 · 触发条件 = 用户在看到 manifest 产物后仍要求人眼可读 | — | 用户在看到 manifest 产物后仍要求人眼可读 ⇒ ⇒ 重开 route (c) 裁定 | architect |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 21b | 未决 | 2026-11-10 | 根端口裸名目标钉 · 随 route (c) 一并处置 | — | route (c) 重开时一并处置 | architect |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 22 | 未决 | 2026-11-12 | 同父同名实例 ⇒ 七处索引表 last-wins ⇒ 实例连错 module + module 不可达（合法 Verilog ⇒ R1 lint 盲区） | — | 同父下出现同名实例 ⇒ ⇒ 重开「实例名唯一性」裁决（分析层前置校验新增一条响亮拒绝） | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 23 | 已知 | 2026-11-13 | 扁平产物顶层暴露 80 个内部 ch_out ⇒ 用户 2026-11-11 已裁决保持现状（C2 撤回）⇒ 台账补登记为已知残留 | — | 用户推翻 C2 撤回（⇒ 走 ADR 取代）⇒ ⇒ 重开端口面收敛裁决 | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 24 | 已知 | 2026-11-13 | ADR-035 判据 (b) 对带日期评审快照面永久失明 ⇒ 快照内的过期引用不被清零要求覆盖 | — | 新增评审快照 ⇒ ⇒ 或快照内出现面向读者的现行接口声明 ⇒ ⇒ 重开排除口径裁决 | architect |

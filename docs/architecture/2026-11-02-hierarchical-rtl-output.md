@@ -274,6 +274,7 @@ P1 change 的 `design.md`（先定子模块端口名 → 再由父层实例化�
 
 > **2026-11-08 追加（architect · 缺口登记）**：新增行 id = **15 · 16 · 17** ⇒ ⇒ **状态以登记表为准**（`.rddf/checks/arch-residual-registry.md`）⇒ ⇒ ★ 本次**只登记缺口**（**零实现改动**）⇒ ⇒ 行 15 = `已知`（契约已定 · 实现未达）· 行 16 / 17 = `未决`（待父侧落点语义裁定）⇒ ⇒ 记录 = `.rddf/reviews/hierarchical-rtl-gap-registration-2026-11.md`
 > **2026-11-12 追加（architect · 缺口登记）**：新增行 id = **22**（同父同名实例 ⇒ 七处索引表 last-wins ⇒ 实例连错 module + module 不可达 ⇒ R1 lint 盲区 + 双驱动漏检）⇒ ⇒ **状态以登记表为准**（`.rddf/checks/arch-residual-registry.md`）⇒ ⇒ ★ 本次**只登记缺口**（**零实现改动**）
+> **2026-11-13 追加（architect · 缺口登记 · 用户 2026-11-13 追认）**：新增行 id = **23 · 24**⇒ ⇒ **状态以登记表为准**（`.rddf/checks/arch-residual-registry.md`）⇒ ⇒ ★ 本次**只登记缺口**（**零实现改动**）⇒ ⇒ 行 23 = **端口面残留**（扁平产物顶层暴露 **80** 个内部 `ch_out` · `.v` **114** 端口 vs 根组件自有 **32**⇒ ⇒ 用户 2026-11-11 已裁决**保持现状**（C2 撤回 · 与 `rtl-emit-portability:57-62` 一致）⇒ ⇒ 本次**只补台账行**让缺口**可见**）⇒ ⇒ 行 24 = **判据 (b) 对快照面永久失明**（ADR-035 v2.3 排除面修订的**代价登记**⇒ ⇒ 带日期评审快照里的过期接口引用**不被**清零要求覆盖）
 
 | # | 残留 | 状态 / 归属 |
 |---|---|---|
@@ -300,6 +301,8 @@ P1 change 的 `design.md`（先定子模块端口名 → 再由父层实例化�
 | 21 | **route (c)「字面同名」路线** —— 顶层端口名与 C++ 成员名逐字相同（根组件端口 + 实例名唯一 + 全设计 base name 不撞 + 成员名为合法 Verilog 标识符）⇒ ⇒ 探针实测：根实例名置空 ⇒ 得 `unnamed_prog_addr`（**不是**裸名）⇒ ⇒ N5(c) 的回退条件已被证伪；同名兄弟实例 ⇒ ⇒ 必然吃 `_N` ⇒ ⇒ 「全体组件字面同名」在当前扁平发射器下不成立；方向 (i)（让 `lnodeimpl` 也剥哨兵）⇒ ⇒ 撞本文件 `component-ownership-and-naming` 的「Verilog 名 MUST 含该组件的路径段」⇒ ⇒ 需 architect 裁 | ⚠️ 未决 ⇒ route (c) 字面同名当前不做 · 触发条件 = 用户在看到 manifest 产物后仍要求人眼可读 |
 | 21b | **根端口裸名的目标钉**（「根组件端口的 Verilog 名 == C++ 成员名」）⇒ ⇒ 随行 21 一并处置 ⇒ ⇒ 判据与探针见 `.rddf/improvements/port-name-literal-parity-2026-11.md` | ⚠️ 未决 ⇒ 根端口裸名目标钉 · 随 route (c) 一并处置 |
 | 22 | **同父下同名实例 ⇒ 发射侧七处索引表全部 last-wins**（`src/hierarchy_verilog.cpp:238` `module_by_key` · `:246` `parent_of` · `:247` `inst_of` · `:1050` `name_of_key` · `:1131` `needs_of` · `src/hierarchy_analysis.cpp:332` `module_index_by_key` · `:451` `parent_of_key`）⇒ ⇒ `module_key == Component::name()` ⇒ 同名兄弟**必然同 key** ⇒ ⇒ 后果 = **实例连错 module + 另一 module 声明成为不可达孤儿**（★ **是合法 Verilog** ⇒ ⇒ R1 lint **抓不到**）⇒ ⇒ 且 `inst_of` 覆盖 ⇒ ⇒ `add_conn` 的**双驱动 fail-closed 检查**（`:342-359`）对被覆盖的前一个实例**失效** ⇒ ⇒ 真·双驱动**漏检** ⇒ ⇒ 仓内**零测试 / 零护栏**覆盖（`tests/test_hierarchy_verilog.cpp` / `tests/hier_rtl_products.cpp` / `tests/test_hierarchy_friendliness_diagnosis.cpp` 的实例名**互异**） ⇒ ⇒ **待查项** | ⚠️ 未决 ⇒ 同父同名实例 ⇒ 七处索引表 last-wins ⇒ 实例连错 module + module 不可达（合法 Verilog ⇒ R1 lint 盲区） · 归属 architect |
+| 24 | **ADR-035 判据 (b) 对带日期评审快照面永久失明** ⇒ ⇒ 快照里的**过期接口引用**不被「文档面 0 命中」清零要求覆盖⇒ ⇒ 这是 v2.3 排除面修订的**代价**（豁免 MUST 登记）⇒ ⇒ 排除面按**结构特征 + 具名清单**（禁目录 glob）⇒ ⇒ 见 `docs/adr/ADR-035-verilator-backend.md` 的 v2.3 修订行 | ⚠️ 已知 ⇒ ADR-035 判据 (b) 对带日期评审快照面永久失明 ⇒ 快照内的过期引用不被清零要求覆盖 · 归属 architect |
+| 23 | **端口面残留**：扁平产物顶层暴露 **80** 个内部 `ch_out`（`.v` **114** 端口 vs 根组件自有 **32**）⇒ ⇒ 用户 2026-11-11 已裁决**保持现状**（C2 撤回）⇒ ⇒ 本次**只补台账行**（零实现改动）⇒ ⇒ 依据 `rtl-emit-portability:57-62` | ⚠️ 已知 ⇒ 扁平产物顶层暴露 80 个内部 ch_out ⇒ 用户 2026-11-11 已裁决保持现状（C2 撤回）⇒ 台账补登记为已知残留 · 归属 architect |
 
 ---
 
