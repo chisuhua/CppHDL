@@ -54,34 +54,53 @@ for arg in "$@"; do
         *) [ -z "$BASE" ] && BASE="$arg" ;;
     esac
 done
-echo "── R1：基线 ref"
-if [ -z "$BASE" ]; then
-    if git -C "$REPO_ROOT" rev-parse --verify "origin/main^{commit}" >/dev/null 2>&1; then
-        BASE="origin/main"
-    elif git -C "$REPO_ROOT" rev-parse --verify "HEAD~1^{commit}" >/dev/null 2>&1; then
-        BASE="HEAD~1"
-        note "未找到 origin/main ⇒ 退回 HEAD~1（本地用法）"
-    else
-        fail "R1 找不到可用基线 ref（origin/main 与 HEAD~1 都不存在）⇒ ⇒ **硬失败**"
+# ── R1 / R2：真实仓增量检查（**仅非 self-test 模式**）────────────────────────
+# ⚠️ **职责分离（2026-11-13 修 RC-5）**：原实现在 `--self-test` 下**也**先解析
+#   真实仓的基线 ref ⇒ ⇒ CI 的 `actions/checkout` 默认 `fetch-depth: 1`
+#   （**浅克隆**）⇒ ⇒ `HEAD~1` 不存在 ⇒ ⇒ 在这里**硬失败** ⇒ ⇒ 自检**根本
+#   没跑到**（job 红在一个与自检无关的前置步骤上，且错误文案指向「CI 的 git
+#   fetch 失败」，是**误导性的诊断**）。
+#   ⇒ ⇒ 正解 = 职责分离：**自检只跑合成 fixture**（临时目录里的独立 git 仓
+#   ⇒ ⇒ 自带 `HEAD~1`，与真实仓历史无关）；**真实仓增量检查**由非 self-test
+#   路径承担（CI 的 PR 事件 step 传 `origin/<base_ref>`）。
+#   ⚠️ **fail-closed 不变**：非 self-test 路径拿不到基线 ref 时**仍硬失败**
+#   —— 那正是「diff 拿不到 ⇒ 不得静默跳过」的原意，MUST NOT 一起放宽。
+if [ "$SELF_TEST" -eq 1 ]; then
+    echo "── R1/R2：真实仓增量检查"
+    if [ -n "$BASE" ]; then
+        note "self-test 模式忽略位置参数基线 ref「${BASE}」（自检只跑合成 fixture）"
+    fi
+    note "self-test 模式 ⇒ 跳过真实仓增量检查 ⇒ ⇒ 真实检查由 PR 事件的 step 承担"
+else
+    echo "── R1：基线 ref"
+    if [ -z "$BASE" ]; then
+        if git -C "$REPO_ROOT" rev-parse --verify "origin/main^{commit}" >/dev/null 2>&1; then
+            BASE="origin/main"
+        elif git -C "$REPO_ROOT" rev-parse --verify "HEAD~1^{commit}" >/dev/null 2>&1; then
+            BASE="HEAD~1"
+            note "未找到 origin/main ⇒ 退回 HEAD~1（本地用法）"
+        else
+            fail "R1 找不到可用基线 ref（origin/main 与 HEAD~1 都不存在）⇒ ⇒ **硬失败**"
+            exit 1
+        fi
+    fi
+    if ! git -C "$REPO_ROOT" rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1; then
+        fail "R1 基线 ref「${BASE}」不存在 ⇒ ⇒ **硬失败**（CI 的 git fetch 失败 MUST 不得静默跳过）"
         exit 1
     fi
-fi
-if ! git -C "$REPO_ROOT" rev-parse --verify "$BASE^{commit}" >/dev/null 2>&1; then
-    fail "R1 基线 ref「${BASE}」不存在 ⇒ ⇒ **硬失败**（CI 的 git fetch 失败 MUST 不得静默跳过）"
-    exit 1
-fi
-ok "R1 基线 ref = ${BASE}"
+    ok "R1 基线 ref = ${BASE}"
 
-# ── R2：增量检查（只列不判）──────────────────────────────────────────────
-echo "── R2：新增输入端口（只列不判）"
-out="$(python3 "$ANALYZER" --base "$BASE" --root "$REPO_ROOT" 2>&1)"
-rc=$?
-printf '%s\n' "$out" | sed 's/^/  /'
-if [ $rc -ne 0 ]; then
-    fail "R2 增量检查失败（exit=$rc）⇒ ⇒ 基础设施问题（不是「端口没驱动」）"
-    exit 1
+    # ── R2：增量检查（只列不判）──────────────────────────────────────────
+    echo "── R2：新增输入端口（只列不判）"
+    out="$(python3 "$ANALYZER" --base "$BASE" --root "$REPO_ROOT" 2>&1)"
+    rc=$?
+    printf '%s\n' "$out" | sed 's/^/  /'
+    if [ $rc -ne 0 ]; then
+        fail "R2 增量检查失败（exit=$rc）⇒ ⇒ 基础设施问题（不是「端口没驱动」）"
+        exit 1
+    fi
+    ok "R2 增量检查完成（未因「端口没被驱动」而失败 ⇒ 半自动语义成立）"
 fi
-ok "R2 增量检查完成（未因「端口没被驱动」而失败 ⇒ 半自动语义成立）"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 自检：**合成 fixture 仓库**（在临时目录 ⇒ 完全不碰真实工作树）

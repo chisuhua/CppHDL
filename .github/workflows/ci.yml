@@ -471,8 +471,14 @@ jobs:
       # Six cases, each asserting a SPECIFIC substring so every branch of the
       # analyser has demonstrable discriminating power: wired / unwired / none /
       # helper / silent (io().x = value on a ch_in) / bulk (12 ports).
+      #
+      # ⚠️ NO positional base ref here (2026-11-13): the self-test runs against
+      # its own fixture repos, so it must not depend on this checkout's history
+      # (`actions/checkout` defaults to `fetch-depth: 1` -> `HEAD~1` does not
+      # exist -> the old `HEAD~1` argument made this step fail before any
+      # fixture case ever ran).
       shell: bash
-      run: scripts/verify_input_port_additions.sh HEAD~1 --self-test
+      run: scripts/verify_input_port_additions.sh --self-test
 
     - name: Verify FSM next-state wiring
       # ch_state_machine::build() executes EVERY state's `on_active` closure
