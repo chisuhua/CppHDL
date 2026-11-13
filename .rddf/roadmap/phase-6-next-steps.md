@@ -55,8 +55,8 @@
 | **R20** | ✅ **R3 = `gpio_example` 断言强度** ⇒ ⇒ **早已由 2026-11-12 D1 裁决闭**（期望登记已显式标注「`spec_checks` 保持 0（只判 impl-contract）」）⇒ ⇒ **不是待裁决项** ⇒ ⇒ 无需再改产品 | 用户 → builder | — | ✅ **2026-11-13 确认闭**（⚠️ planner 本轮差点又把它当新发现 —— 同一纪律第二次生效）|
 | **R21** | 🟡 **目标 ④（RV32I 层次化 RTL 示例）= 独立立项** ⇒ ⇒ ⚠️ **范围 MUST 先侦察**（architect 裁决 ③）：**不是**「修发射器的静默退化」（默认 inline 是**契约行为**·有测试钉着）⇒ ⇒ 而是「**诉求 ④ 未兑现**」+「**跨 module 隐式端口合成未实现 ⇒ 分析层 fail-closed 抛异常**」⇒ ⇒ ⇒ **规模大于「加一行 `CH_HIERARCHY_LAYER`」** | planner → architect | — | ⬜ **未立项** ⇒ ⇒ 载体 = 新 improvement 草案（`add-improve` HARD-GATE）⇒ ⇒ ⚠️ **立项前 MUST 先做规模侦察** ⇒ ⇒ **不并入 B3 / B4**（写点 `src/hierarchy_*` 不重叠）|
 | **R22** | ✅ **C6 SoC 端口解析器回归**（`verify_no_duplicate_rv32i_headers.sh` 的 C6 判据） | builder | — | ✅ **2026-11-13 已闭** ⇒ ⇒ **现象**：C6 报「未能解析出端口集合」假红；**根因**：解析器的终止判据是 `inb && /\)/ { exit }` ⇒ ⇒ **任何含 `)` 的行**都终止解析 ⇒ ⇒ 而 R17.2 给 `ext_clk` 加的说明注释里含 `always_ff @(posedge …)` ⇒ ⇒ 解析在**第一条注释**就退出 ⇒ ⇒ 一个端口都抽不到；**为什么现在才发现**：该护栏在主 job 的**靠后**位置 ⇒ ⇒ 前半段一直红 ⇒ ⇒ 它**从未真正跑过**（同 RC-6 的盲区）⇒ ⇒ **修法** = 跳过 `//` 注释行 + 只在**收尾行**（行内容即 `)`）终止 ⇒ ⇒ 实测 32 端口与快照一致 · **--self-test 全绿**（含 C6 三条投毒） |
-| **R23-A** | ✅ **RC-8 收尾**（2 个被 CI 直接调用的脚本缺可执行位）| builder | — ⇒ ⇒ 判据 = `git ls-files -s` ⇒ 两个脚本**均 100755**（⚠️ MUST 看 **git index**，不是工作区 —— `os.access` / `core.fileMode=false` ⇒ ⇒ 假绿）+ 该 step 本轮 **executed（非 skipped）且绿**（证据 = `sha` + `job` + `step name` + `conclusion`）⇒ ⇒ ⚠️ **不**绑定「N 个 job 全绿」（那是**独立**信号：37 个脚本首次真正执行，任意一条红都不该被记成「RC-8 没修干净」）|
-| **R23-B** | 🔴 **护栏可达性 = 一等验收项**（architect 复盘 #5 裁决 ① · **待用户追认**）⇒ ⇒ ①-a **静态护栏** + ①-b **登记** | builder | — ⇒ ⇒ 载体 = `scripts/verify_guard_reachability.sh` + `.rddf/checks/guard-reachability.md`⇒ ⇒ ⚠️ 新台账 MUST 带 `evidence: probe:`（`ledger_evidence.py` 是**全目录 glob** ⇒ ⇒ 否则打破 ledger 的 91/6 基线）⇒ ⇒ 写点 = `scripts/**` ⇒ ⇒ 与 R14（`include/**`+`src/**`）**不重叠 ⇒ ⇒ 可并行**|
+| **R23-A** | ✅ **RC-8 收尾**（2 个被 CI 直接调用的脚本缺可执行位）| builder | — ⇒ ⇒ ✅ **2026-11-13 已闭**（commit `7069f44` · git index 100644 → **100755**）⇒ ⇒ ⚠️ 验收证据（executed+绿）待 CI run 落地后回填（sha + job + step + conclusion）|⇒ ⇒ 判据 = `git ls-files -s` ⇒ 两个脚本**均 100755**（⚠️ MUST 看 **git index**，不是工作区 —— `os.access` / `core.fileMode=false` ⇒ ⇒ 假绿）+ 该 step 本轮 **executed（非 skipped）且绿**（证据 = `sha` + `job` + `step name` + `conclusion`）⇒ ⇒ ⚠️ **不**绑定「N 个 job 全绿」（那是**独立**信号：37 个脚本首次真正执行，任意一条红都不该被记成「RC-8 没修干净」）|
+| **R23-B** | ✅ **护栏可达性 = 一等验收项**（architect 复盘 #5 裁决 ① · **待用户追认**）⇒ ⇒ ①-a **静态护栏** + ①-b **登记** | builder | — ⇒ ⇒ 载体 = `scripts/verify_guard_reachability.sh` + `.rddf/checks/guard-reachability.md`⇒ ⇒ ⚠️ 新台账 MUST 带 `evidence: probe:`（`ledger_evidence.py` 是**全目录 glob** ⇒ ⇒ 否则打破 ledger 的 91/6 基线）⇒ ⇒ 写点 = `scripts/**` ⇒ ⇒ 与 R14（`include/**`+`src/**`）**不重叠 ⇒ ⇒ 可并行**⇒ ⇒ ✅ **2026-11-13 已闭** = `scripts/verify_guard_reachability.sh` + `scripts/lib/guard_reachability.py` + `.rddf/checks/guard-reachability.md`（**45** 个被引用脚本 · 登记表双向 1:1 · 排除类型**逐字派生**）⇒ ⇒ **6 条自检投毒**全判别（含反向对照 ④）⇒ ⇒ 已接入 CI（主 job · 不需 verilator/网络/git 历史）|
 
 ⇒ ⇒ ✅ **B3 的🚪 门（R5 + R6）已全闭**（2026-11-12）⇒ ⇒ ✅ **R13 已闭（2026-11-13）** = 两个 change 立项完成
 ⇒ ⇒ ✅ **R17.1 / R17.2 已闭**（2026-11-13 · 32 端口具名）· ✅ **R4 已闭**（P8 删 stub + 公开面登记 + golden 下限）
@@ -584,15 +584,15 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 > oracle 第 1 轮 13 条 · critic 第 1 轮 2 BLOCKER → 第 2 轮 **APPROVE** · 修订执行记录见其 §9）。
 > ⇒ ⇒ 本节**不复制**任何状态格 / 判据 ⇒ ⇒ 全部**指路**到唯一真相。
 
-### 8.0 🎯 **本轮入口 = R23-A（RC-8 收尾）→ R14（B3 实施）**（2026-11-13 · architect 复盘 #5 + metis gap 分析）
+### 8.0 🎯 **本轮入口 = R14（B3 实施）**（2026-11-13 · R23-A / R23-B 已闭）
 
 | 项 | 内容 |
 |---|---|
-| **第一步** | **R23-A**（RC-8 收尾）—— §2 的 **R23-A.1 / R23-A.2**（2 步）⇒ ⇒ **两个脚本 `chmod +x` + 提交 + CI 里该 step executed+绿 的证据** |
-| **为什么它是第一步** | ① R23-A 是**唯一有确定收益**的一步（两行 `chmod`）⇒ ⇒ 2 分钟换 CI 不再 exit 126；② ⚠️ **R14 期间 CI 必红** ⇒ ⇒ 「executed+绿」的证据窗口**只有 R14 开工前的那一个 sha** ⇒ ⇒ ⇒ **先取证据，再动网** |
+| **第一步** | ✅ **R23-A / R23-B 已闭**（RC-8 收尾 + 护栏可达性护栏）⇒ ⇒ 🎯 **入口 = R14** |
+| **为什么 R23 先做（已闭）** | ① R23-A 是**唯一有确定收益**的一步（两行 `chmod`）⇒ ⇒ 2 分钟换 CI 不再 exit 126；② ⚠️ **R14 期间 CI 必红** ⇒ ⇒ 「executed+绿」的证据窗口**只有 R14 开工前的那一个 sha** ⇒ ⇒ ⇒ **先取证据，再动网**（已取） |
 | **第二步** | **R14 = B3 实施**（两个 change：`memory-timing-contract` + `firmware-load-chain`）⇒ ⇒ 清单 = 两个 change 的 `tasks.md`（S0–S6）⇒ ⇒ ⚠️ **T1 + T2 同 commit**（T1 单独落地 ⇒ MEM 级采到旧值 ⇒ **中间态必红**）⇒ ⇒ ⚠️ **T2 的三处强制结构变更同批**（漏一 ⇒ ⇒ **静默错值**） |
-| **可并行** | **R23-B**（护栏可达性护栏 · 写点 `scripts/**`）· **R3**（P7 ②⑤ · 写点 `src/hierarchy_verilog.cpp`）· **R21 侦察**（**只读**探针）⇒ ⇒ 与 R14 写点不重叠 ⇒ ⇒ 可并行（**收口阶段不并行**，见 §1.1） |
-| **护栏清单** | §8.5（11 脚本 + 1 `ctest -N`）+ **R23-B 的新护栏**（合入后追加）⇒ ⇒ ⚠️ **改了 `include/**` / `src/**` ⇒ ⇒ `ctest` 前 MUST 先全量重建**（否则跑的是旧二进制 ⇒ ⇒ 假绿） |
+| **可并行** | **R3**（P7 ②⑤ · 写点 `src/hierarchy_verilog.cpp`）· **R21 侦察**（**只读**探针）⇒ ⇒ 与 R14 写点不重叠 ⇒ ⇒ 可并行（**收口阶段不并行**，见 §1.1） |
+| **护栏清单** | §8.5（11 脚本 + 1 `ctest -N`）+ **`scripts/verify_guard_reachability.sh`**（+ `--self-test`）⇒ ⇒ ⚠️ **改了 `include/**` / `src/**` ⇒ ⇒ `ctest` 前 MUST 先全量重建**（否则跑的是旧二进制 ⇒ ⇒ 假绿）⇒ ⇒ ⚠️ **改了 `scripts/**` ⇒ ⇒ MUST 重跑 `verify_guard_reachability.sh`**（新增/删除/改 mode ⇒ ⇒ 登记表与派生集合会失配 ⇒ ⇒ 护栏自会判红） |
 | **B3 的开工门** | §8.4 ⇒ ⇒ ✅ **R13 已闭**（两个 change 立项完成 · `validate --strict` exit 0 + delta 4/4）⇒ ⇒ **门已开** |
 | ⚠️ **不做的** | **R15（B4）** —— MUST 等 R14 闭（时序金标只算一遍）· **R18**（architect 域 · 等用户裁决）· **R21 立项**（侦察后）· **R16**（12 条独立立项 · 逐项写点）· **R9**（日历锁 2027-04-17）· **R23-B**（**可并行**，不是入口） |
 

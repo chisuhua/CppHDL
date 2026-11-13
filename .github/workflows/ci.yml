@@ -336,6 +336,31 @@ jobs:
       shell: bash
       run: scripts/verify_roadmap_fragments.sh --self-test
 
+    - name: Verify guard reachability
+      # phase-6 R23-B (1-a): the guards themselves must be REACHABLE.
+      #   R0 fail-closed (analyser + ci.yml + registry)
+      #   R1 three static criteria:
+      #     (1) every script referenced by a `run:` block must exist
+      #     (2) every referenced script must be executable IN THE GIT INDEX
+      #         (mode 100755; scripts that are `source`d are exempt)
+      #     (3) a step whose `if:` contradicts its job env must not be the only
+      #         way to run a guard (per-caller judgement, then aggregated)
+      #   Plus: the registry must be 1:1 with the referenced set (ratchet: the
+      #   set may only grow) and every exclusion type must be DERIVED from
+      #   ci.yml -- a hand-written extra exclusion turns the guard red.
+      # This guard needs NO verilator, NO network and NO git history (HEAD~1)
+      # => otherwise it would itself be the first unreachable guard.
+      shell: bash
+      run: scripts/verify_guard_reachability.sh
+
+    - name: Verify guard reachability (self-test)
+      # 6 named poisons: 1 demote a referenced script / 2 delete a referenced
+      # file / 3 gate contradicts job env / 4 a script becomes `source`d
+      # (REVERSE control: must stay green) / 5 a non-derived exclusion row /
+      # 6 the referenced set shrinks (ratchet).
+      shell: bash
+      run: scripts/verify_guard_reachability.sh --self-test
+
     - name: Verify arch ledger residual registry
       # The architecture ledger's section 7 "known residuals" statuses MUST have
       # a SINGLE source of truth (the registry .rddf/checks/arch-residual-registry.md)
