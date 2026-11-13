@@ -315,20 +315,35 @@ check_r4_registry() {
         return 1
     fi
     # ① 登记了不存在 ⇒ 红
+    #    ⚠️ **只查「登记清单」段**（= 登记为**存在**的公开头）⇒ ⇒
+    #    「已移除 / 已改名的公开符号」段登记的路径**按定义就不存在**
+    #    ⇒ ⇒ 查它 = **假阳性 by construction**（2026-11-13 实测：B0 批退役的
+    #    3 个头在该段有登记 ⇒ ⇒ 护栏红 ⇒ ⇒ 登记为 **F-2**）。
+    #    ⇒ ⇒ **该段的路径 MUST NOT 被删**（它是「移除 / 改名登记」的**证据**）
+    #    ⇒ ⇒ ⇒ 只是**不要求它存在** ⇒ ⇒ 判据**强度不减**（登记清单段照查）。
+    local reg_scan
+    reg_scan="$(awk '
+        /^## .*已移除/ { skip = 1; next }
+        /^## / { skip = 0 }
+        !skip { print }
+    ' "$REGISTRY" 2>/dev/null || true)"
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         if [ ! -f "$f" ]; then
             fail "R4② 活账登记的头**不存在**：$f"
             bad=1
         fi
-    done < <(grep -oE '`include/[^*`]+`' "$REGISTRY" 2>/dev/null | tr -d '`' | sort -u)
+    done < <(printf '%s\n' "$reg_scan" | grep -oE '`include/[^*`]+`' 2>/dev/null | tr -d '`' | sort -u)
     # ② 存在未登记 ⇒ 红（扫描范围 = 顶层 include/*.h + SCAN_EXTRA）
+    #    ⚠️ **登记面同样只取「登记清单」段**（`$reg_scan`）⇒ ⇒
+    #    否则「把一个**活着**的公共头塞进『已移除』段」就能冒充「已登记」
+    #    ⇒ ⇒ ⇒ 收紧后**强度不减反增**（①② 都只看登记清单段）。
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         registered=0
         while IFS= read -r registered_path; do
             [ "$registered_path" = "$f" ] && registered=1 && break
-        done < <(grep -oE '`include/[^*`]+`' "$REGISTRY" 2>/dev/null | tr -d '`' | sort -u)
+        done < <(printf '%s\n' "$reg_scan" | grep -oE '`include/[^*`]+`' 2>/dev/null | tr -d '`' | sort -u)
         if [ "$registered" -ne 1 ]; then
             fail "R4② 公共头**未登记**在活账里：$f ⇒ 扫描范围内的公开 API 面静默扩张"
             bad=1
