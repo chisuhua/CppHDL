@@ -18,6 +18,7 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: ✅ **implemented**（B1 已验收 · 2026-11-11 · 前端 `--emit-hygiene` 默认 off ⇒ 默认产物零 churn）
+- **审计（2026-11-13 · planner 独立复核 · 护栏实测 + 产物实测）**: ✅ **C1/C3/C4/C5/C6 确认落地**（`verify_flat_rtl_emit.sh` **PASS** · F1/F2/F3/F4/F5/F8 · `--emit-hygiene` 默认 off ⇒ 层次化产物字节不变）⇒ ⇒ **C3 的悬空泄漏已闭合**（RV32I 顶层 input **8 → 7** · manifest「未驱动且非 `is_top_io`」= **0** ⇒ ⇒ 我 2026-11-10 指出的那个**活的悬空顶层输入**已消失）⇒ ⇒ **C2 撤回属实**（frontmatter「**C2 已撤回（2026-11-11 用户裁决）**」+ §63「与已签批契约正面冲突」⇒ ⇒ **不是漏做**）⇒ ⇒ ⚠️ **新增 1 处缺口**：护栏的 **F6 = 「当前不适用」** ⇒ ⇒ **未实现** AC（`:204` 已改成「`ctest -L verilator_e2e` 全绿 + 端口表不失配」）⇒ ⇒ backend 端口表与产品端口面**无判据** ⇒ ⇒ 已立 `.rddf/checks/decision-request-port-face-2026-11.md` **R2**（建议：给工具的自测设计加一个 `ch_reg` ⇒ 「逐字节比对」重新可判）⇒ ⇒ ⚠️ **另**：扁平顶层端口面仍暴露 **80** 个内部 `ch_out`（`.v` 114 端口 vs 根组件自有 32）⇒ ⇒ 属**已裁决**现状（capability Scenario 明文）⇒ ⇒ **不是待裁决项** ⇒ ⇒ 但**台账无行** ⇒ ⇒ 已立 `.rddf/checks/decision-request-port-face-2026-11.md` **R1** 请求**登记为已知残留**
 - **来源**: 用户 2026-11-10 拍板「① 生成器可以做为项目提供的能力，对任意的合法设计都可以用这个工具生成 RTL 代码」+ 本轮 planner 实测产物形态
 - **归属**: 本项**只**做「生成能力」；**端口命名**归 `port-naming-ratchet-2026-11`（独立立项）· **示例侧仿真覆盖**归 `examples-rtl-sim-coverage-2026-11`（独立立项）
 

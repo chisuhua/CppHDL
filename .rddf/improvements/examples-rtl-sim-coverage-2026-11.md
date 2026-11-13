@@ -18,6 +18,7 @@ evidence: probe:scripts/verify_examples_rtl_sim.sh
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: ✅ **implemented**（B2 已验收 · 2026-11-12 · **10/10 verified** · 挂 `pr-verilator-fast` 一个 step）
+- **审计（2026-11-13 · planner 独立复核）**: ✅ **10/10 确认全绿**（`verify_examples_rtl_sim.sh` **PASS** · 10 个 TB 全部编译 + 跑通 + `RESULT: checks=<N> fails=0` · 缓存全部命中）⇒ ⇒ 结论与 frontmatter「`implemented` / E1–E8 全部落地 / 10/10 verified」**一致** ⇒ ⇒ ⚠️ **新增 1 处缺口**：`gpio_example` 的 `spec_checks = 0` ⇒ ⇒ 护栏**自标**「`impl-contract only`（只能防漂移，不能证明符合规范）」⇒ ⇒ 10 项里**唯独它**的断言强度不足 ⇒ ⇒ 已立 `.rddf/checks/decision-request-port-face-2026-11.md` **R3**（建议：补 spec 层断言；无规范依据则退「显式标注」⇒ ⇒ **不**用「移出首批」削覆盖面）
 - **用户裁决（2026-11-10）**: 「#3 按你建议」⇒ ⇒ **10 个**有意义的 example（**不是** 32 个全量）· `--emit-tb-stub` 只发骨架 · **必须**有单元测试覆盖「生成 RTL」这件事 · 计数锚点单一更新入口 · CI 分级 + 复用缓存
 
 ---

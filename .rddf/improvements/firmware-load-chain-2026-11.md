@@ -18,6 +18,7 @@ evidence: probe:examples/riscv-mini/src/rv32i_pipeline_top.h#L112
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: 📋 **approved**（裁决已落定 · 未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：公开面登记（R6）+ T2 裁决（R5）
+- **审计（2026-11-13 · planner 独立复核）**: ✅ **确认未开工**（`tools/rv32i-fw-dump` ❌ 不存在 · `include/cpu/riscv/rv32i_asm_encode.h` ❌ 不存在 · SoC 侧**无显式地址映射** · `prog_*` 仍只接 I-TCM ⇒ ⇒ **D-TCM 仍无加载通路** ⇒ ⇒ 结论与 frontmatter「`approved` / B3 未开工」**一致** ⇒ ⇒ 本轮**无需订正**（该草案的状态自述**准确**）
 - **用户裁决（2026-11-10）**: 「② 固件转储器也可以做为项目提供的工具能力，同时再考虑添加一个 ELF 装载固件的能力」
 - **依赖判定**: ⚠️ **ELF 装载当前不可行** ⇒ ⇒ 本项 MUST **先**修装载链路（地址映射 + D-TCM 加载通路），ELF 是其**下游**
 

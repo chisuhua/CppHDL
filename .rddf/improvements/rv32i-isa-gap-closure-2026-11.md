@@ -18,6 +18,7 @@ evidence: probe:include/cpu/pipeline/stages/id_stage.h#L123
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: 📝 **draft**（未开工 ⇒ 归 **B4**）⇒ ⇒ ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ 实施前 MUST 先确认 `phase-6.md` 的 P6 结论
+- **审计（2026-11-13 · planner 独立复核）**: ✅ **确认未开工**（`include/cpu/pipeline/**` 对 `illegal` / `unknown_opcode` / `FENCE` **零命中** ⇒ ⇒ 未知 opcode **仍静默当 NOP** · `rv32i_exception.h:132,136` 的 `write_mepc = write_mcause = do_trap_entry` **原样未动** ⇒ ⇒ **`mcause` 仍不可达**）⇒ ⇒ 结论与 frontmatter「`draft` / B4 未开工」**一致** ⇒ ⇒ 本轮**无需订正**（⚠️ 遗留：实施前 MUST 先确认 `phase-6.md` P6 的侦察结论已并入 —— 该项**至今未并入**）
 - **⚠️ 范围边界（硬约束）**: 本项 **MUST NOT** 包含 **CSR 指令 / `ECALL` / `EBREAK` / `MRET` / 中断** ⇒ ⇒ 按 `phase-6.md` **P6** 行（「CSR / `ECALL` / `FENCE` **MUST 独立立项** ⇒ 新 capability + 新 change」）⇒ ⇒ **特权级 = 另一条独立立项**（本项末尾给出候选形态）
 
 ---

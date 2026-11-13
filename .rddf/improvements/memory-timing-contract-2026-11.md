@@ -18,6 +18,7 @@ evidence: probe:include/cpu/pipeline/rv32i_tcm.h#L100
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: 📝 **draft**（未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：ADR-068 已 Accepted ✅ · **T2（MEM 数据对齐 A/B）待 architect 裁决**（R5）
+- **审计（2026-11-13 · planner 独立复核）**: ✅ **确认未开工**（`include/cpu/pipeline/rv32i_tcm.h:113` 仍 `memory.aread(...)` ⇒ ⇒ D-TCM **仍是 0 拍组合读** ⇒ ⇒ 产物仍是 4096:1 组合 mux ⇒ ⇒ 「可推断 BRAM」**未达成** · `rv32i_pipeline.h:61` 的 `data_ready` **仍只有声明**（流水线内部仍无消费者）⇒ ⇒ 结论与 frontmatter「`draft` / B3 未开工 / ADR-068·069 已 Accepted」**一致** ⇒ ⇒ 本轮**无需订正**
 - **用户裁决（2026-11-10）**: 「#12 改成寄存器读」⇒ ⇒ D-TCM 从 `aread`（0 拍组合）改为 `sread`（1 拍寄存读）
 
 ---

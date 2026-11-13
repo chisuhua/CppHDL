@@ -18,6 +18,7 @@ evidence: probe:include/cpu/pipeline/rv32i_alu.h
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
 - **Status**: 🟡 **in-progress**（**B0 已验收 5 项**：⑧ SLTU · C5+C6 退役 · C7 交接登记 · C8 tie-off · 诚实化）⇒ ⇒ **C1–C4（差分 / 编码归一 / 组件接入）未开工 ⇒ 归 B4**
+- **审计（2026-11-13 · planner 独立复核）**: ✅ **B0 五项确认落地**（`include/cpu/pipeline/rv32i_forwarding.h` · `hazard_detection_unit.h` · `rv32i_hazard_complete.h` **三件均已物理删除** ⇒ ⇒ 零 include 残留 · `rv32i_alu.h:103` 的 `lt_unsigned_sig` **已改为 `(operand_a < operand_b)`** ⇒ ⇒ **SLTU 缺陷已修** · `mem_is_load` 的 tie-off **已落地**（⇒ ⇒ 顶层 input 8→7）⇒ ⇒ **C1–C4（差分 / 编码归一 / 组件接入）确认未开工**（`Rv32iDecoder` / `Rv32iAlu` **仍未**在 `rv32i_pipeline.h` / `stages/*` 实例化）⇒ ⇒ 结论与 frontmatter「`in-progress` / B0 已验收 / C1–C4 归 B4」**一致** ⇒ ⇒ 本轮**无需订正**
 - **用户裁决（2026-11-10）**: 「#6 按你建议」⇒ ⇒ **Decoder/Alu 接入**（先差分测试）+ **ForwardingUnit 删除** + **分支预测器单独立项**
 - **⚠️ 事实订正（相对 planner 上一轮的口头表述）**: 这批组件**不是「零消费者」** —— 它们**都有测试消费者** ⇒ ⇒ 问题不是「死代码」，而是「**被测但未被交付**」⇒ ⇒ 详见 §架构依据 A.1
 
