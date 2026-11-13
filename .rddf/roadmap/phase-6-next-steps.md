@@ -48,12 +48,18 @@
 | **R13** | 🔴 **B3 立项**（**两个** change：`memory-timing-contract` + `firmware-load-chain`）⇒ ⇒ 载体 = `openspec/changes/<name>/{proposal,design,tasks}.md` | planner → builder | R12 | ★ **B3 的真起点** ⇒ ⇒ 🚪 门 R5 + R6 **已闭** ⇒ ⇒ **只差立项** |
 | **R14** | 🔴 **B3 实施**（T1+T3 同批 · T6 · T2/T4/T5 · L1–L6）⇒ ⇒ 出口 = **ADR-068 的 V1–V10 + ADR-069 的 V1–V15 全绿** + 时序 golden **手推重算** | builder | R13 | ⚠️ **必须在 R15 之前**（时序金标只算一遍）⇒ ⇒ **两个 change 同批**（T1 与 T3 耦合） |
 | **R15** | 🔴 **B4 实施**（C1 差分 → C2 ALU 编码归一 → C3/C4 组件接入 → G3→G1+G4 同批 → 其余） | builder | **R14 已闭** | ⚠️ **必须等 R14 闭**（同依据） |
-| **R16** | 🟡 **独立立项 10 条**（批次表 §4 的 **9 行** + **台账 id=22**）⇒ ⇒ 含**用户 ⑤ 的端口名消化**（⇒ ⇒ 与 B3 **同区** ⇒ ⇒ **不可并行**，见 R17） | planner → architect | — | ⚠️ **逐项写点**（metis P1-14：不可笼统写「`src/hierarchy_*`」）⇒ ⇒ **大部分**与 B3/B4 零重叠 ⇒ ⇒ **但端口名消化项落在 `examples/riscv-mini/src/rv32i_pipeline_top.h` + 10 个 TB 的 tsv** ⇒ ⇒ **与 B3 的 L1–L6 同区** |
-| **R17** | 🔴 **用户 ⑤ 的原始诉求：RTL 端口名 == C++ 成员名**（32 端口 · `Rv32iPipelineTop`）⇒ ⇒ ⚠️ **触发条件已满足**（用户 2026-11-10 就提了 ⑤）⇒ ⇒ **不是**「等用户再问一次」⇒ ⇒ **需用户二选一**：「**现在做**（占 B3 末段 · 与 L1–L6 同批）」vs「**推到 phase-7**」 | architect → **用户** | — | ★ **用户诉求仍未在真实 CPU 上兑现**：`Rv32iPipelineTop` 的端口**全部未具名** · 棘轮基线 = **1484/1484** ⇒ ⇒ **零组件被消费** ⇒ ⇒ ⚠️ 做完会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 examples 的 tsv / `examples-rtl-expectations.md` 同批 |
+| **R16** | 🟡 **独立立项 12 条**（批次表 §4 的 **11 行** + **台账 id=22**）⇒ ⇒ 含**用户 ⑤ 的端口名消化**（⇒ ⇒ 与 B3 **同区** ⇒ ⇒ **不可并行**，见 R17） | planner → architect | — | ⚠️ **逐项写点**（metis P1-14：不可笼统写「`src/hierarchy_*`」）⇒ ⇒ **大部分**与 B3/B4 零重叠 ⇒ ⇒ **但端口名消化项落在 `examples/riscv-mini/src/rv32i_pipeline_top.h` + 10 个 TB 的 tsv** ⇒ ⇒ **与 B3 的 L1–L6 同区** ⇒ ⇒ ⚠️ **2026-11-13 +2 条**（F-1 / F-2 · B0 批退役遗留的两条 CI 红 ⇒ ⇒ 用户 2026-11-13 裁决「**独立立项 · 本轮不做**」）⇒ ⇒ ⇒ §4 由 **9 行 → 11 行** |
+| **R17** | 🔴 **用户 ⑤ 的原始诉求：RTL 端口名 == C++ 成员名**（32 端口 · `Rv32iPipelineTop`）⇒ ⇒ ✅ **R17.1 已闭（2026-11-13 · architect 裁量）=「现在做」**，**放置 = 独立于 B3 的小批**（先于 B3 执行）⇒ ⇒ ⚠️ **与 B3 的 L1–L6 在 `rv32i_pipeline_top.h` 上同区 ⇒ MUST 顺序执行**（依据 `firmware-load-chain-2026-11.md:197` 的爆炸半径）⇒ ⇒ ⇒ **本轮交付 = R17.2** | architect（已闭）→ **builder** | — | ★ **用户诉求仍未在真实 CPU 上兑现**：`Rv32iPipelineTop` 的 32 个端口**全部未具名** · 棘轮豁免 = **1484/1484** ⇒ ⇒ **零组件被消费** ⇒ ⇒ ⚠️ 做完会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 examples 的 tsv / `examples-rtl-expectations.md` / 10 个 TB **同批** ⇒ ⇒ ✅ **回退成本 = 一次 revert**（改动自洽 ⇒ ⇒ 无沉没成本 ⇒ ⇒ 用户可随时推翻）|
+| **R18** | 🟡 **R1 = 端口面残留登记**（扁平顶层暴露 **80** 个内部 `ch_out` · `.v` 114 端口 vs 根组件自有 32 ⇒ ⇒ **台账无行** ⇒ ⇒ 请求补登记为已知残留） | planner → architect | **用户裁决** | ⏳ **已立单**（`decision-request-port-face-2026-11.md` R1）⇒ ⇒ ⚠️ **不是待裁决的现状**（C2 已于 2026-11-11 由用户撤回）⇒ ⇒ 只差「补台账行」这一步 |
+| **R19** | 🟡 **R2 = F6 判据缺口**（护栏 F6 =「当前不适用」⇒ ⇒ 而 AC 已改成可判别形态 ⇒ ⇒ **护栏未实现 AC** ⇒ ⇒ backend 端口表与产品端口面**无判据**）⇒ ⇒ **两条路径**：① `ctest -L verilator_e2e`（**不**必须动工具设计 ⇒ ⇒ 但新增 `BUILD_VERILATOR=ON` 环境依赖 ⇒ ⇒ **fail-closed 语义待定**：无 verilator 环境 exit 0 还是 2）② 给工具自测设计加一个 `ch_reg`（⇒ ⇒ 工具产物端口面变化 ⇒ ⇒ F3 / F8 期望集要同步） | 用户 → builder | **用户裁决** | ⏳ **已立单**（R2）⇒ ⇒ ⚠️ **两条各有取舍 ⇒ ⇒ 不擅自选** |
+| **R20** | 🟡 **R3 = `gpio_example` 断言强度**（`spec_checks = 0` ⇒ ⇒ 护栏**自标**「impl-contract only（只能防漂移，不能证明符合规范）」⇒ ⇒ 10 项里**唯独它**不能证明符合规范）⇒ ⇒ 建议：补 spec 层断言；**仓内若无 gpio 的规范依据 ⇒ ⇒ 退「显式标注 impl-contract only」** ⇒ ⇒ ⚠️ **禁**用「移出首批」削覆盖面 | 用户 → builder | **用户裁决** | ⏳ **已立单**（R3）|
+| **R21** | 🟡 **目标 ④（RV32I 层次化 RTL 示例）= 独立立项** ⇒ ⇒ ⚠️ **范围 MUST 先侦察**（architect 裁决 ③）：**不是**「修发射器的静默退化」（默认 inline 是**契约行为**·有测试钉着）⇒ ⇒ 而是「**诉求 ④ 未兑现**」+「**跨 module 隐式端口合成未实现 ⇒ 分析层 fail-closed 抛异常**」⇒ ⇒ ⇒ **规模大于「加一行 `CH_HIERARCHY_LAYER`」** | planner → architect | — | ⬜ **未立项** ⇒ ⇒ 载体 = 新 improvement 草案（`add-improve` HARD-GATE）⇒ ⇒ ⚠️ **立项前 MUST 先做规模侦察** ⇒ ⇒ **不并入 B3 / B4**（写点 `src/hierarchy_*` 不重叠）|
 
 ⇒ ⇒ ✅ **两条 🚪 门（R5 + R6）已全闭**（2026-11-12）⇒ ⇒ **B3 只差「立项」（R13）**。
-⇒ ⇒ ✅ **R0 已闭**（CI 红已解）⇒ ⇒ **R1 / R2 / R10** 已闭 ⇒ ⇒ **当前唯一的「现在就能做且无前置」= R12**（✅ 已执行）。
-⇒ ⇒ **主线 = R13 → R14 → R15**；**旁线 = R3 / R4 / R7 → R11 / R8 / R16**（写点不重叠 ⇒ ⇒ 可并行 ⇒ ⇒ 但**收口阶段不并行**，见 §1.1）。
+⇒ ⇒ ✅ **R0 已闭**（CI 红已解）· **R1 / R2 / R10 已闭** · **R12 已闭**（2026-11-12 晚提交 `83cdb89` / `d6c731c`）⇒ ⇒
+⇒ ⇒ 🎯 **本轮 = R17.2**（architect 裁量闭 R17.1 · 2026-11-13 · 依据见 §2 的 R17.1）⇒ ⇒ **主线 = R13 → R14 → R15**（B3 未立项 ⇒ ⇒ **本轮不动主线**）
+⇒ ⇒ **旁线 = R3 / R4 / R7 → R11 / R8 / R16**（写点不重叠 ⇒ ⇒ 可并行 ⇒ ⇒ 但**收口阶段不并行**，见 §1.1）
+⇒ ⇒ **待用户裁决 = R8 / R18 / R19 / R20**（已立单）· **待立项 = R21**（须先侦察）。
 
 ### 1.1 「可并行」的真实边界（metis 订正 · 只覆盖**写点** ⇒ ⇒ **收口阶段不并行**）
 
@@ -235,24 +241,69 @@ ADR-068 **V3** 明写「BRAM 可推断性未在 CI 验证 ⇒ MUST 登记残差�
 | **R15.3** | **C3 / C4** 组件接入（`Rv32iAlu`→EX · `Rv32iDecoder`→ID）⇒ ⇒ ⚠️ **标志继续由 opcode 比较**（不得用 `instr_type` 派生） | 20 项 golden 全绿 + 计数锚点重算 |
 | **R15.4** | **G3 → G1 + G4（同批）→ 其余**：尾部填 NOP ⇒ ⇒ 退休数 **178 不变**（指令数）· ⚠️ **`non_retired` MUST 引用「B3 后的基线」**（**禁**写死 21 —— metis P0-4：ADR-068 V8 的该半已被 ADR-069 收窄） | ⚠️ **判据 MUST 可判**（metis P1-10：「批内顺序被 tasks 钉死」是循环）⇒ ⇒ **G3 的实现 commit 早于 G1+G4 的实现 commit**（`git log` 可验）· 且退休数 == B3 后基线 |
 
-### R17 · 用户 ⑤ 的端口名消化（**需用户二选一**）
+### R17 · 用户 ⑤ 的端口名消化（✅ **R17.1 已闭 · 2026-11-13** ⇒ ⇒ 🎯 **本轮交付 = R17.2**）
 
 | 步 | 内容 | 判据 |
 |---|---|---|
-| **R17.1** | 🔴 **用户裁决**：「**现在做**（占 B3 末段 · 与 L1–L6 同批）」vs「**推到 phase-7**」⇒ ⇒ ⚠️ **触发条件已满足**（用户 2026-11-10 提的 ⑤ 本身就是触发）⇒ ⇒ **不是**「等用户再问一次」 | 裁决记录落 `.rddf/roadmap/phase-6-next-steps.md` §5 + `phase-6-rtl-productization.md` §4 |
-| **R17.2** | 若「现在做」⇒ ⇒ **32 端口**（`examples/riscv-mini/src/rv32i_pipeline_top.h`）全部带**显式名** ⇒ ⇒ 棘轮豁免条目**减少**（棘轮只许减）⇒ ⇒ ⚠️ **产物端口名会变** ⇒ ⇒ MUST 与 examples 的 tsv + `examples-rtl-expectations.md` + 10 个 TB **同批** | 棘轮豁免数 **减少**（≠ 1484）· `verify_port_naming.sh` 绿 · 10 个 TB 全绿 |
-| **R17.3** | 若「推到 phase-7」⇒ ⇒ 登记为**独立立项**（载体 = 新 improvement 草案）⇒ ⇒ ⚠️ **禁**写成「触发条件 = 用户要求」（**该条件已成立** ⇒ ⇒ 等一个不会来的许可） | 草案存在 + 过 `add-improve` HARD-GATE |
+| **R17.1** | ✅ **已闭（2026-11-13 · architect 裁量）=「现在做」**，**放置 = 独立于 B3 的小批**（先于 B3 执行）⇒ ⇒ ⚠️ **依据是 architect 裁量，不是「用户已裁决」** —— ⚠️ **首稿曾把 A′ 的定义读成「含『先消化首批』的时间义务」⇒ ⇒ 与源文件相反**（A′ 定义 = 「框架先行 + 基线棘轮 —— **不**做一次性全量 codemod」；首批消化被 `port-naming-ratchet-2026-11.md:8/:20/:180` **三处**显式逐出本项、归属独立立项）⇒ ⇒ **已订正**，详见 `docs/architecture/2026-11-13-phase-6-rtl-track-review.md` §4.1 ⇒ ⇒ **用户可随时推翻**（回退 = 一次 revert ⇒ ⇒ 改动自洽 ⇒ ⇒ 无沉没成本） | 裁决记录落 `.rddf/roadmap/phase-6-next-steps.md` §5 + `phase-6-rtl-productization.md` §4 + architect 复盘 §4.1.1（**4 条依据 + 落盘要求 + 回退路径**）|
+| **R17.2** | 🎯 **本轮交付**：**32 端口**（`examples/riscv-mini/src/rv32i_pipeline_top.h`）全部带**显式名** ⇒ ⇒ 棘轮豁免条目**减少**（棘轮只许减）⇒ ⇒ ⚠️ **产物端口名会变** ⇒ ⇒ MUST 与 examples 的 tsv + `examples-rtl-expectations.md` + 10 个 TB **同批** ⇒ ⇒ ⚠️ **与 B3 的 L1–L6 同区 ⇒ MUST 顺序执行**（本批先做）⇒ ⇒ **两批改动正交**（本批只改 `__io` 声明文本与名字串；B3 改 `prog_addr` 语义） | 棘轮豁免数 **减少**（1484 → **1452**）· `verify_port_naming.sh` 绿 · 10 个 TB 全绿 · **产物端口名逐位置比对通过**（旧 `top_unnamed_output_N` ↔ 新 `top_<name>`，**前提 = 不中插 / 不重排端口**）|
+| **R17.3** | ⚪️ **不适用**（R17.1 闭为「现在做」⇒ ⇒ 本步不触发）⇒ ⇒ **但路径仍有效**：若用户推翻 R17.1 ⇒ ⇒ 登记为**独立立项**（载体 = 新 improvement 草案）⇒ ⇒ ⚠️ **禁**写成「触发条件 = 用户要求」（**该条件已成立** ⇒ ⇒ 等一个不会来的许可） | 草案存在 + 过 `add-improve` HARD-GATE |
+
+#### R17.4 · **实施路径**（本轮 builder 的动作清单 · **每步一个可判据**）
+
+| 步 | 动作 | 写点 | 判据（可复跑） |
+|---|---|---|---|
+| **0** | ⚠️ **先提交**前一轮未提交的 **7+1 份** planner 域改动（7 份草案审计行 + `improvement-suggestions.md` + `decision-request-port-face-2026-11.md`）⇒ ⇒ 否则「会话中断」即造新漂移源（architect 复盘 §2.4 ②） | 8 个路径 | `git status --short` 只剩本批路径 |
+| **1** | 32 个端口加**显式名**（`{"name"}` 形态 ⇒ ⇒ 且**标识符 == 名字串** ⇒ ⇒ 满足护栏 P1 的合规判据） | `examples/riscv-mini/src/rv32i_pipeline_top.h` | `grep -cE 'ch_(in\|out)<[^;]*>[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\{"' examples/riscv-mini/src/rv32i_pipeline_top.h` == **32** |
+| **2** | 删 `.rddf/checks/port-naming-exempt.tsv` 里该文件的 **32 行**（条目身份 = `<文件>\t<__io 块序号>\t<声明文本>` ⇒ ⇒ **声明文本变了 ⇒ ⇒ 旧行必须删**，否则护栏**反向红**） | `.rddf/checks/port-naming-exempt.tsv` | `grep -c 'rv32i_pipeline_top' .rddf/checks/port-naming-exempt.tsv` == **0** |
+| **3** | 棘轮锚点 **1484 → 1452** | `scripts/verify_port_naming.sh:50` | `bash scripts/verify_port_naming.sh` ⇒ PASS 且 R2 报 **1452** |
+| **4** | 重发产物 ⇒ ⇒ 取新端口表 ⇒ ⇒ **逐位置比对**（旧 `top_unnamed_output_N` ↔ 新 `top_<name>`）⇒ ⇒ 证明**只改名、不改序**（机制 = node id 升序 · `src/codegen_verilog.cpp:410-448`） | 临时产物（**仓外**） | 位置对应表 **27 个 output** 全部对上（数量 == 旧 `top_unnamed_output*` 个数） |
+| **5** | 改 TB 连线：`.top_unnamed_input` → `.top_ext_clk` / `.top_unnamed_input_1` → `.top_ext_rst` / … ；`.top_unnamed_output_N` → `.top_<name>` ⇒ ⇒ ⚠️ **MUST 按第 4 步的位置对应表逐条改** ⇒ ⇒ **禁**凭印象改 | `examples/riscv-mini/tb_rv32i_soc.sv` | 编译通过 + `RESULT: checks=24 fails=0`（scenarios=6 · spec_checks=22）|
+| **6** | 同步期望登记（若登记含端口名字段 ⇒ ⇒ MUST 同步）⇒ ⇒ 护栏严格模式 | `.rddf/checks/examples-rtl-expectations.md` | `bash scripts/verify_examples_rtl_sim.sh` ⇒ PASS（**10/10**）|
+| **7** | 同步文档：端口命名指南的「现状」段（采用率不再是 0）+ `port-naming-ratchet` 草案的 AC 回填 | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md` · `.rddf/improvements/port-naming-ratchet-2026-11.md` | ⚠️ **禁**改根 `AGENTS.md`（已超 WARN 阈值 57,344 B ⇒ ⇒ 新增内容进 capability / `.rddf/checks/`）|
+| **8** | 全护栏复跑（§8.5 的 11 脚本 + 1 `ctest -N`）⇒ ⇒ ⚠️ **改了 `examples/**` ⇒ ⇒ `ctest` 前 MUST 先全量重建** | — | 全绿 + `ctest -N` == `CTEST_TOTAL` |
 
 ---
 
-### R16 · 独立立项 10 条（**旁线 · 9 条可全程并行**）
+### R16 · 独立立项 12 条（**旁线 · 11 条可全程并行**）
 
-⇒ ⇒ 清单 = `phase-6-rtl-productization.md` **§4** 的 **9 行** + **台账 id=22** = **10 条** ⇒ ⇒ ⚠️ 每条 MUST 写清
+⇒ ⇒ 清单 = `phase-6-rtl-productization.md` **§4** 的 **11 行** + **台账 id=22** = **12 条** ⇒ ⇒ ⚠️ 每条 MUST 写清
 「**对象 / 判据 / 触发条件 / 归属批**」（否则登记是空文）⇒ ⇒
 ⇒ ⇒ **新增一条（architect 裁决 ③）**：**台账 id=22**（同名兄弟静默覆盖）⇒ ⇒
 载体 = 新 improvement 草案（走 `add-improve` HARD-GATE）· **本窗口不并入 B3/B4**。
+⇒ ⇒ ⚠️ **2026-11-13 又新增 2 条**（**用户裁决「独立立项 · 本轮不做」**）：
+**F-1**（`include/cpu/AGENTS.md` 自述计数订正）· **F-2**（`public-api-surface.md` 活账清理）
+⇒ ⇒ 两者**同源** = **B0 批 C5+C6 退役后的登记未同步** ⇒ ⇒ **建议同批做**（合计约 5 行）
+⇒ ⇒ ⚠️ **两者都在 CI 门内** ⇒ ⇒ **CI 当前为红**（**与 R17.2 无关** · 已实测复现于 HEAD）
+⇒ ⇒ ⇒ 判据 / 复现命令见批次表 §4 的对应两行。
 ⇒ ⇒ ⚠️ **写点分布**（metis P1-14）：**9 条里只有端口名消化那条**落在 `examples/riscv-mini/src/rv32i_pipeline_top.h` + TB tsv
 ⇒ ⇒ **与 B3 的 L1–L6 同区** ⇒ ⇒ 那一条 **MUST 与 B3 顺序执行**（⇒ ⇒ 归 **R17**）⇒ ⇒ 其余 **9 条**可全程并行。
+
+---
+
+### R18 / R19 / R20 · **本轮新增的 3 条待裁决项**（**已立单 · 裁决前不实施**）
+
+⇒ ⇒ **载体统一** = `.rddf/checks/decision-request-port-face-2026-11.md`（2026-11-13 planner 独立复核立单）
+⇒ ⇒ ⚠️ **本单与既有 8 份 decision-request + `rtl-track-correction-list` 零重叠**（逐条核对过）
+⇒ ⇒ ⇒ **裁决权在用户 / architect** ⇒ ⇒ **planner / builder 不代拍**。
+
+| # | 事项 | 事实（实测） | 选项（决策单内详列） | 归属 |
+|---|---|---|---|---|
+| **R18** | **R1 = 端口面残留登记** | 扁平产物顶层 **114** 端口（7 in + 107 out）⇒ ⇒ 根组件自有仅 **32** ⇒ ⇒ **80 个内部 `ch_out` 暴露在顶层**；manifest `ports[]` = **191**（比 `.v` 宽 **77**）⇒ ⇒ ⚠️ **但这是用户 2026-11-11 已裁决的现状**（C2 撤回 · 与 `rtl-emit-portability:57-62` 一致）⇒ ⇒ **不是待裁决项** ⇒ ⇒ 只是**台账无行** | **A（建议）** = 补登记为已知残留（台账 + 登记表）⇒ ⇒ **零代码改动**；B = 推翻 C2 撤回（走 ADR 取代）；C = 不登记（与「台账 = 唯一真相源」纪律冲突）| planner → architect |
+| **R19** | **R2 = F6 判据缺口** | 护栏 `verify_flat_rtl_emit.sh` 的 F6 =「**当前不适用**（不是 pass）」⇒ ⇒ 而 `rtl-emit-product-tooling` 的 AC（`:204`）已改成「`ctest -L verilator_e2e`（77 条）全绿 ＋ 端口表不失配」⇒ ⇒ **护栏未实现 AC** ⇒ ⇒ **backend 端口表与产品端口面无判据** | **A①** = 护栏直接跑 `ctest -L verilator_e2e`（**不**必须动工具设计 ⇒ ⇒ 但新增 `BUILD_VERILATOR=ON` 环境依赖 ⇒ ⇒ **fail-closed 语义待定**）；**A②** = 给工具自测设计加一个 `ch_reg`（⇒ ⇒ 「逐字节比对」重新可判 ⇒ ⇒ 但**工具产物端口面变化** ⇒ ⇒ F3 / F8 期望集要同步）| 用户 → builder |
+| **R20** | **R3 = `gpio_example` 断言强度** | 护栏**自标**：`spec_checks=0 < 3 ⇒ ⇒ impl-contract only（只能防漂移，不能证明符合规范）`⇒ ⇒ 10 项里 **9 项** `spec_checks ≥ 3` ⇒ ⇒ **唯独它**不能证明符合规范 | **A** = 补 spec 层断言（需仓内有 gpio 的规范依据）；**B（建议 fallback）** = 显式标注「impl-contract only ⇒ 只防漂移」（零成本 · 缺口可见）；⚠️ **C = 移出首批 = 削覆盖面 ⇒ ⇒ 不用** | 用户 → builder |
+
+### R21 · **目标 ④（RV32I 层次化 RTL 示例）= 独立立项**（architect 裁决 ③）
+
+⇒ ⇒ ⚠️ **范围 MUST 先侦察**（architect 复盘 §3.3 / §4.3）：
+
+| 项 | 事实 | ⇒ ⇒ **不是什么** / **是什么** |
+|---|---|---|
+| 产物形态 | `toVerilogHierarchical(Rv32iPipelineTop)` ⇒ ⇒ `ok = true` · **1 module** · 与扁平产物**逐字节相同** | ⇒ ⇒ **不是**「发射器的静默退化要修」—— **默认 inline 是已签批契约行为**（`tests/test_hierarchy_equivalence.cpp:43` 有测试钉着）⇒ ⇒ **不得**改发射器 |
+| 真正的缺口 | `CH_HIERARCHY_LAYER` 在 `include/cpu/` + `examples/` = **0 处** | ⇒ ⇒ **缺口 = 用户诉求 ④ 未兑现**（RV32I 上没有成层示例）|
+| ⚠️ **规模** | `src/hierarchy_analysis.cpp:7-9` + `:42-45` ⇒ ⇒ 跨 module 边需「隐式端口合成」时 **fail-closed 抛异常**（T3-④ 义务未实现） | ⇒ ⇒ **不是**「加一行 `CH_HIERARCHY_LAYER`」⇒ ⇒ **规模大于此** ⇒ ⇒ ⚠️ **立项前 MUST 先做规模侦察**（probe：给 RV32I 声明一层 ⇒ ⇒ 看它是否撞上 fail-closed）|
+
+⇒ ⇒ **载体** = 新 improvement 草案（`add-improve` HARD-GATE）⇒ ⇒ **不并入 B3 / B4**（写点 `src/hierarchy_*` 与 `include/cpu/**` 不重叠）。
 
 ---
 
@@ -311,6 +362,10 @@ phase-6 的 **P6**（RV32I ISA 缺口）与 B4 的 **G1–G5** 是**同一片区
 | ② | ~~**R5（T2 裁决）的 architect 评审预算**~~ | ✅ **已用**（ADR-069 · oracle ×3 + critic ×1 · **已闭**）⇒ ⇒ **不再需要等预算** |
 | ③ | **R11（FENCE 裁决）的 architect 评审预算** | 属**ISA 语义决策** ⇒ ⇒ **oracle → critic 全审** ⇒ ⇒ 需一轮 architect 预算（**可与 R17 的裁决合并**） |
 | ④ | **T8（P9 遗留）的独立立项** | 真 FIFO 写缓冲 / 真预取 ⇒ ⇒ 需 planner 另起 improvement ⇒ ⇒ ⚠️ 可能需 architect 裁定 ⇒ ⇒ **本窗口不并入**（避免与 R3 并行制造文档债） |
+| ⑤ | ✅ **R17.1（端口名消化「现在做 vs 推到 phase-7」）** | ✅ **已闭（2026-11-13 · architect 裁量）=「现在做」**，放置 = 独立小批（先于 B3）⇒ ⇒ **依据 4 条落** architect 复盘 §4.1.1 ⇒ ⇒ ⚠️ **用户可随时推翻**（回退 = 一次 revert）⇒ ⇒ **本轮交付 = R17.2** |
+| ⑥ | **R18（端口面残留登记）** | **建议 A（补登记为已知残留 · 零代码改动）** ⇒ ⇒ ⚠️ 不是待裁决的现状（C2 已撤回）⇒ ⇒ 只差「补台账行」 |
+| ⑦ | **R19（F6 判据缺口）** | **两条路径 A① / A②** ⇒ ⇒ ⚠️ **各有取舍**（环境依赖 vs 工具产物端口面变化）⇒ ⇒ **不擅自选** |
+| ⑧ | **R20（gpio 断言强度）** | **建议 A（补 spec 层断言）；无规范依据则退 B（显式标注）** ⇒ ⇒ ⚠️ **禁** C（移出首批 = 削覆盖面） |
 
 ---
 
@@ -452,12 +507,24 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 
 ---
 
-## 8. 🟢 **新会话 builder 的实施入口**（RTL 轨 · 2026-11-12）
+## 8. 🟢 **新会话 builder 的实施入口**（RTL 轨 · **2026-11-13 修订**）
 
 > **本节是「下一个会话从哪儿开始、读什么、按什么顺序做」的**唯一入口**。
 > ⚠️ 上游 = `.rddf/checks/rtl-track-correction-list-2026-11.md`（7 份草案的**状态/簿记订正** ·
 > oracle 第 1 轮 13 条 · critic 第 1 轮 2 BLOCKER → 第 2 轮 **APPROVE** · 修订执行记录见其 §9）。
 > ⇒ ⇒ 本节**不复制**任何状态格 / 判据 ⇒ ⇒ 全部**指路**到唯一真相。
+
+### 8.0 🎯 **本轮入口 = R17.2**（2026-11-13 · architect 裁量闭 R17.1）
+
+| 项 | 内容 |
+|---|---|
+| **做什么** | `examples/riscv-mini/src/rv32i_pipeline_top.h` 的 **32 个端口**全部加**显式名** ⇒ ⇒ 连带：删 tsv 的 32 行 · 锚点 1484 → **1452** · 改 `tb_rv32i_soc.sv` 的连线 · 同步期望登记与文档 |
+| **执行清单** | **§2 的 R17.4**（8 步 · 每步一个可复跑判据）⇒ ⇒ **照它走，别自创顺序** |
+| **为什么** | 用户 **⑤** 的原始诉求（端口名 == C++ 成员名）**在真实 CPU 上首次兑现** ⇒ ⇒ 消掉「写 TB 必须查 port map」的痛点 ⇒ ⇒ **不依赖 B3 闭环** |
+| **必须先做** | **R17.4 的第 0 步** = 提交前一轮未提交的 **7+1 份** planner 域改动 |
+| **护栏清单** | §8.5（11 脚本 + 1 `ctest -N`）⇒ ⇒ ⚠️ **改了 `examples/**` ⇒ ⇒ `ctest` 前 MUST 先全量重建**（否则跑的是旧二进制 ⇒ ⇒ 假绿） |
+| **回退** | 改动自洽 ⇒ ⇒ 回退 = **一次 revert** ⇒ ⇒ **用户可随时推翻 R17.1** |
+| ⚠️ **不做的** | **B3（B0–B4 主线）本轮不动** —— B3 尚未立项（R13）⇒ ⇒ 且 R17 与 B3 **同区 ⇒ MUST 顺序执行**（本批先做）⇒ ⇒ **B3 实施时 MUST 复核**：R17 已把 32 端口具名 ⇒ ⇒ B3 新增加载端口 MUST 一并具名（护栏 P1 会替 B3 兜住） |
 
 ### 8.1 读序（4 步 · 别跳）
 
@@ -491,7 +558,7 @@ bash scripts/verify_arch_ledger_residuals.sh          # ⇒ PASS（双向 1:1）
 | **B3** | `firmware-load-chain-2026-11` | **18** | `## Acceptance`（L1–L6 + 不回归） |
 | **B4** | `rv32i-dead-component-consolidation-2026-11` | **10** | 差分段（4）+ 接入段（6）⇒ ⇒ **C1–C4** |
 | **B4** | `rv32i-isa-gap-closure-2026-11` | **22** | `## Acceptance`（G1–G5 + 边界 + 不回归）⚠️ **22 = 行首 18 + `<br>` 内联 4**（只按行 grep 会漏） |
-| **独立立项** | `port-naming-ratchet-2026-11` | **3** | 存量消化（2 · §4「N2 补遗」）+ `CHERROR` 判别力（1 · §4「N3 补遗」） |
+| **独立立项** | `port-naming-ratchet-2026-11` | **1** | ⚠️ **2026-11-13 更新**：原 **3** 条（存量消化 2 + `CHERROR` 判别力 1）⇒ ⇒ **R17.2 落地 ⇒ ⇒ 存量消化 2 条已闭** ⇒ ⇒ **只剩 `CHERROR` 判别力 1 条**（§4「N3 补遗」）⇒ ⇒ ⚠️ 该 1 条**不在**本批范围 |
 | **独立立项** | `port-name-literal-parity-2026-11` | **2** | 产物层双测试（`NamedRootArtifactsUnchanged` + `UnnamedRootArtifactPinned`）· 触发条件 = route (c) 重开 |
 | **独立立项** | `node-name-prefix-consistency-2026-11` | **2** | 产物层双测试（同上两标识符）· 触发条件 = route (c) 重开 |
 
