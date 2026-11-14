@@ -116,10 +116,14 @@ constexpr const char *kObsNames[] = {
     // 有效链的逐级观测（契约 R1「有效链 MUST 逐级传递」）
     "dbg_exmem_valid",        "dbg_mem_valid_out",
     // load-use 冒险检测脉冲（与「停顿拍数」区分）
-    "dbg_load_use_detected"};
+    "dbg_load_use_detected",
+    // ⚠️ **G1/G2（2026-11-15 · B4）**：未知 opcode 的可观测面
+    //   （0 = 合法 · 1 = 已知未实现 `OP_SYSTEM` · 2 = 未知 opcode）
+    //   ⇒ ⇒ 进观测向量 ⇒ ⇒ **双后端 parity 也覆盖它**
+    "dbg_illegal_reason"};
 constexpr std::size_t kObsCount = sizeof(kObsNames) / sizeof(kObsNames[0]);
-// 31 个端口里 4 个是输入（ext_rst / prog_*）⇒ 27 个输出被观测
-static_assert(kObsCount == 27, "观测向量长度必须与 SoC 顶层的**输出**端口数一致");
+// 32 个端口里 4 个是输入（ext_rst / prog_*）⇒ 28 个输出被观测
+static_assert(kObsCount == 28, "观测向量长度必须与 SoC 顶层的**输出**端口数一致");
 
 // 观测向量的**编译期**下标查找（避免手抄下标 ⇒ 下标漂移会静默读错字段；
 // 名字写错 ⇒ 编译期失败而不是读到别的字段）
@@ -149,6 +153,7 @@ constexpr std::size_t kIdxDataWriteData = obs_idx("obs_data_write_data");
 constexpr std::size_t kIdxIdPc = obs_idx("dbg_id_pc");
 constexpr std::size_t kIdxIdValid = obs_idx("dbg_id_valid");
 constexpr std::size_t kIdxIdInstr = obs_idx("dbg_id_instr");
+constexpr std::size_t kIdxIllegalReason = obs_idx("dbg_illegal_reason");
 constexpr std::size_t kIdxWbWriteEn = obs_idx("dbg_wb_write_en");
 constexpr std::size_t kIdxWbWriteData = obs_idx("dbg_wb_write_data");
 constexpr std::size_t kIdxWbRdAddr = obs_idx("dbg_wb_rd_addr");
@@ -164,6 +169,7 @@ static_assert(kIdxDataWriteData != kObsCount, "obs_data_write_data 未在 kObsNa
 static_assert(kIdxIdPc != kObsCount, "dbg_id_pc 未在 kObsNames 中");
 static_assert(kIdxIdValid != kObsCount, "dbg_id_valid 未在 kObsNames 中");
 static_assert(kIdxIdInstr != kObsCount, "dbg_id_instr 未在 kObsNames 中");
+static_assert(kIdxIllegalReason != kObsCount, "dbg_illegal_reason 未在 kObsNames 中");
 static_assert(kIdxWbWriteEn != kObsCount, "dbg_wb_write_en 未在 kObsNames 中");
 static_assert(kIdxWbWriteData != kObsCount, "dbg_wb_write_data 未在 kObsNames 中");
 static_assert(kIdxWbRdAddr != kObsCount, "dbg_wb_rd_addr 未在 kObsNames 中");
@@ -219,7 +225,8 @@ std::array<uint64_t, kObsCount> obs_snapshot(Rv32iPipelineTop &dut,
             read_port_output(sim, io.dbg_exmem_rs2_data.impl()),
             read_port_output(sim, io.dbg_exmem_valid.impl()),
             read_port_output(sim, io.dbg_mem_valid_out.impl()),
-            read_port_output(sim, io.dbg_load_use_detected.impl())};
+            read_port_output(sim, io.dbg_load_use_detected.impl()),
+            read_port_output(sim, io.dbg_illegal_reason.impl())};
 }
 
 // ---------------------------------------------------------------------------
@@ -2388,4 +2395,125 @@ TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
     REQUIRE(it->second.size() == 1u);
     INFO("x" << kT4HalfWordRd << " expected 0x" << std::hex << kT4HalfWordMerged);
     REQUIRE(*it->second.begin() == kT4HalfWordMerged);
+}
+
+// ===========================================================================
+// **G1 + G2 + G4（2026-11-15 · B4）**：未知 opcode 检测 / 冻结 / FENCE 显式化
+//
+// ## 为什么这三条必须一起测
+//
+// · **G1** 只产出「非法」这个**事实**（`illegal_reason`）
+// · **G2** 才给它**后果**（冻结）与**可观测面**（SoC 顶层端口）
+// · **G4** 是 G1 的**反向判据**：`FENCE` 看起来像非法（0x0F 不在旧译码表里）
+//   但它是**合法**指令（本版 = NOP）⇒ ⇒ 若只测「未知 ⇒ 冻结」，把 FENCE 也冻住
+//   同样能过 ⇒ ⇒ **必须**用 `FENCE` 做**负向对照**。
+//
+// ## 期望值全部**手推**（禁抄仿真输出）
+//
+// 本文件既有 golden 已建立时序模型：**无停顿 / 无冲刷**时
+//   `retire(c) = c - 4`（4 = 填充：cyc 0..3）
+// （由 `kCycles = 200 ⇒ retire = 176` 与「23 个不增长拍 = 3 fill + 8 stall + 12 flush」
+//  反推 ⇒ 200 − 1(cyc 0) − 23 + ... ⇒ 化简即 4 拍填充；与 `non_retired` 分段一致）
+//
+// 因此（固件前 8 条是 NOP，第 9 条是**被判非法/合法的目标指令**）：
+//   · 未知 opcode ⇒ 第 9 条**永不进入 EX** ⇒ 退休数**恒为 8**（20 拍时）
+//   · `OP_SYSTEM`（ECALL）⇒ 同样恒 8，但 `illegal_reason == 1`
+//   · `FENCE` ⇒ **不冻结** ⇒ retire(20) = 20 − 4 = **16**，`illegal_reason == 0`
+// 且冻结后 ID 级持有第 9 条 ⇒ `dbg_id_pc == 0x80000000 + 4*8 == 0x80000020`
+// （PC 复位值 0x80000000 见 `stages/if_stage.h`；I-TCM 截断高位 ⇒ 字索引 8）
+// ===========================================================================
+constexpr std::size_t kG1FirmwareWords = 16;
+
+/// 前 8 条 NOP + 第 9 条 = 待测指令 + 其余 NOP
+constexpr std::array<uint32_t, kG1FirmwareWords>
+g1_firmware_with(uint32_t probe) {
+    return {{riscv::NOP, riscv::NOP, riscv::NOP, riscv::NOP,
+             riscv::NOP, riscv::NOP, riscv::NOP, riscv::NOP,
+             probe,
+             riscv::NOP, riscv::NOP, riscv::NOP,
+             riscv::NOP, riscv::NOP, riscv::NOP, riscv::NOP}};
+}
+
+TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
+          "[rv32i][soc][isa][illegal][fence][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 20;
+    // 手推常量（见上方推导）
+    constexpr uint64_t kRetireBeforeProbe = 8;   // 8 条 NOP 退休；第 9 条永不退休
+    constexpr uint64_t kRetireNoFreeze   = 16;   // 20 - 4（填充）
+    constexpr uint64_t kProbeIdPc        = 0x80000020ULL;  // 0x80000000 + 4*8
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    // ---- 场景表：① 未知 opcode · ② OP_SYSTEM（已知未实现）· ③ FENCE（已知 = NOP）----
+    struct Scenario {
+        const char *name;
+        uint32_t    probe;
+        uint64_t    expect_reason;
+        uint64_t    expect_retire;   // 20 拍时的退休数（手推）
+    };
+    const Scenario scenarios[] = {
+        // 0xFFFFFFFF 的 opcode = 0x7F ⇒ **未知**
+        {"unknown opcode(0xFFFFFFFF)", 0xFFFFFFFFu, 2u, kRetireBeforeProbe},
+        // 0x00000073 = ECALL ⇒ opcode 0x73 = OP_SYSTEM ⇒ **已知未实现**
+        {"OP_SYSTEM(ecall 0x73)",      0x00000073u, 1u, kRetireBeforeProbe},
+        // 0x0FF0000F = `fence iorw,iorw` ⇒ opcode 0x0F ⇒ **已知 = NOP**
+        {"FENCE(0x0F)",                0x0FF0000Fu, 0u, kRetireNoFreeze},
+    };
+
+    for (const auto &sc : scenarios) {
+        INFO("scenario: " << sc.name);
+        auto fw = g1_firmware_with(sc.probe);
+
+        // ---- 双后端：两侧都要给出**同一**语义 ----
+        for (int backend_kind = 0; backend_kind < 2; ++backend_kind) {
+            const bool use_verilator = (backend_kind == 1);
+            auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+            auto sim = std::make_unique<Simulator>(dev->context());
+#if __has_include("jit/jit_compiler.h")
+            sim->set_jit_enabled(false);
+#endif
+            if (!use_verilator) {
+                sim->set_backend(std::make_unique<InterpreterBackend>());
+            } else {
+                ch::data_map_t data_map;
+                auto workdir = make_temp_dir("_g1");
+                REQUIRE_FALSE(workdir.empty());
+                auto backend = std::make_unique<VerilatorBackend>(workdir);
+                if (!backend->initialize(dev->context(), data_map)) {
+                    WARN("VerilatorBackend::initialize() returned false - skipped");
+                    continue;
+                }
+                if (backend->port_access_snapshot().empty()) {
+                    WARN("verilator dlopen did not populate port_access_ - skipped");
+                    continue;
+                }
+                sim->set_backend(std::move(backend));
+            }
+
+            load_firmware(*sim, dev->instance(), fw);
+            const Trace t = run_trace(*sim, dev->instance(), kCycles);
+
+            INFO("backend: " << (use_verilator ? "verilator" : "interpreter")
+                             << " cycle=" << kCycles);
+            REQUIRE(t.back()[kIdxIllegalReason] == sc.expect_reason);
+            REQUIRE(t.back()[kIdxInstructions] == sc.expect_retire);
+            // 「非法」1 bit 位 = (reason != 0) ⇒ 与 reason 自洽
+            if (sc.expect_reason != 0) {
+                // 冻结 ⇒ ID 级停在探针指令上（pc 手推）
+                REQUIRE(t.back()[kIdxIdPc] == kProbeIdPc);
+            } else {
+                // FENCE = NOP ⇒ **不**冻结 ⇒ ID 级 MUST 已越过探针
+                REQUIRE(t.back()[kIdxIdPc] != kProbeIdPc);
+            }
+            // ---- 探针指令 MUST NOT 写回（x0 之外无副作用）----
+            for (std::size_t c = 0; c < t.size(); ++c) {
+                INFO("cycle " << c);
+                REQUIRE(t[c][kIdxWbWriteEn] == 0u);
+            }
+        }
+    }
 }

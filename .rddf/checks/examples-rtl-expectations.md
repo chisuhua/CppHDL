@@ -588,6 +588,13 @@ axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的�
 rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）⇒ ⇒ **根组件自有端口仍是 31**
 ⇒ ⇒ 原 118 个端口**名一字未改** ⇒ ⇒ 本 TB 只需**新增** 8 根连接（无重映射）
 ⇒ ⇒ 行为零变化**实测**：独立 Verilog TB `checks=24 fails=0`（与 C3 后**同一组判据**）
+
+⇒ ⇒ ✅ **2026-11-15 · B4 · G1+G4 订正**：SoC 顶层新增 `dbg_illegal_reason`（2 bit）
+⇒ ⇒ **产物端口 126 → 129**（+3 = SoC 自有 `dbg_illegal_reason` + pipeline 的
+`top_pipeline_dbg_illegal_reason` + ID 级的 `top_pipeline_id_stage_illegal_reason`
+⇒ ⇒ **全部具名** ⇒ ⇒ 既有 unnamed 端口编号**零位移** ⇒ ⇒ TB 只新增 3 根连接）
+⇒ ⇒ 根组件自有端口 **31 → 32**（C6 快照 +1）
+⇒ ⇒ 独立 Verilog TB `checks=24 fails=0`（装载器同时按 G3 纪律把尾部填成 NOP）
 ⇒ ⇒ ⚠️ **环境注意**：本机 `build/verilator-install/include/verilated.mk` 的
 `CFG_CXXFLAGS_PCH_I` **为空**（verilator configure 未识别出编译器 ⇒ `CFG_CXX_VERSION = ""`）
 ⇒ ⇒ ⇒ 任何**未命中缓存**的模型编译都会以

@@ -1,3 +1,39 @@
+## 2026-11-15 — **RV32I 未知 opcode 可观测 + 冻结 · `FENCE` 显式化**（B4 · G3 → G1+G4）
+
+**问题（实测 · 2026-11-10 登记）**：未识别的 opcode 被**静默当 NOP 逐条退休**
+⇒ ⇒ 程序跑飞到非法指令时**零报错 / 零计数器 / 零波形信号**（只能二分固件定位）；
+`FENCE`（`0x0F`）根本不在译码表里 ⇒ ⇒ 与「未知」混为一谈；
+I-TCM 在程序末尾之后读到 `ch_mem` 初值 **0**（本身是未知 opcode）
+⇒ ⇒ 「跑出程序尾部」完全不可见（既有 176 条退休里约 76 条来自这些 0 字）。
+
+**顺序（critic 第 2 轮改向 · `git log` 可验）**：
+1. **G3**：装载器把程序尾部填成 **NOP**（`0x00000013`）⇒ ⇒ 尾部不再产生未知 opcode
+2. **G1 + G4**：未知 opcode 检测 + `FENCE` 显式化（同批）
+
+**新增 / 变更**：
+- `stages/id_stage.h` 新增输出 `illegal_reason`（2 bit：`0` 合法 · `1` **已知未实现**
+  = `OP_SYSTEM`（ECALL/EBREAK/CSR/MRET）· `2` **未知 opcode**）
+  ⇒ ⇒ 判据含 `io().valid`（否则 flush 后的残留旧指令会在**错误路径**上冻结流水线）
+- `rv32i_pipeline.h`：**行为策略 = 冻结** —— `if_stage.stall` 与 `id_stage.stall`
+  均 OR 上 `illegal_reason != 0`（PC 不前进 · ID/EX 装气泡 ⇒ 该指令**永不退休**）；
+  新增输出 `dbg_illegal_reason`
+- `rv32i_decoder.h`：新增 `OP_FENCE = 0x0F` ⇒ ⇒ **FENCE / FENCE.I 本版 = NOP**
+  （单核无 cache ⇒ 无排序语义）⇒ ⇒ 属**已知**指令，**不**产生 `illegal_reason`
+- SoC 顶层新增 `dbg_illegal_reason`（2 bit）⇒ ⇒ 顶层端口 **31 → 32** ·
+  产物端口 **126 → 129**
+
+**行为影响（实测支撑）**：
+- **既有 golden 退休数不变**（`non_retired == 23` · `retire == kCycles - 24`）
+  ⇒ ⇒ 因为 G3 先把尾部填成 NOP（NOP ≡ 0 字的时序/写回语义）
+- 独立 Verilog TB `checks=24 fails=0`
+- ⚠️ **G1 顺带挖出一个真缺陷**：`tests/test_verilator_complex_e2e.cpp` 的 imem 数组
+  只有 **15** 个初值（第 16 字被 value-init 成 `0` = 未知 opcode），
+  而注释一直写「6..15: NOP」⇒ ⇒ 修法 = 补第 16 个 NOP
+- spec：新增 capability delta `rv32i-isa-semantics`（2 Requirement / 7 Scenario）
+
+**不在本批**：`funct3`/`funct7` 非法组合 · G5（`mcause` 写缺陷）·
+CSR / `ECALL` / `EBREAK` / `MRET` / 中断 / trap 入口（独立立项）
+
 # CppHDL Changelog
 
 User-visible changes to the CppHDL HDL library. Entries are grouped by

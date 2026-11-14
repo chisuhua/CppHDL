@@ -99,6 +99,11 @@ public:
         ch_out<ch_bool>         dbg_mem_valid_out{"dbg_mem_valid_out"};
         // load-use 冒险检测脉冲（与「停顿拍数」区分）
         ch_out<ch_bool>         dbg_load_use_detected{"dbg_load_use_detected"};
+        // ⚠️ **G1/G2（2026-11-15 · B4）**：未知 opcode 的**可观测面**
+        //    0 = 合法 · 1 = **已知未实现**（`OP_SYSTEM` = ECALL/EBREAK/CSR/MRET）
+        //    · 2 = **未知 opcode** ⇒ ⇒ 「非法」1 bit 位 = `(值 != 0)`
+        //    ⚠️ 只留一个 2 bit 端口 ⇒ 不新增「level 位」的**冗余**端口
+        ch_out<ch_uint<2>>      dbg_illegal_reason{"dbg_illegal_reason"};
     )
 
     /// ⚠️ **`itcm_init` / `dtcm_init` = 装载链路的**路线 A**（`firmware-load-chain` L2）**
@@ -206,5 +211,6 @@ public:
         io().dbg_exmem_valid <<= pipeline.io().dbg_exmem_valid;
         io().dbg_mem_valid_out <<= pipeline.io().dbg_mem_valid_out;
         io().dbg_load_use_detected <<= pipeline.io().dbg_load_use_detected;
+        io().dbg_illegal_reason <<= pipeline.io().dbg_illegal_reason;
     }
 };

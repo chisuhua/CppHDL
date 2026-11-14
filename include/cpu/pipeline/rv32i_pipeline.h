@@ -98,6 +98,9 @@ public:
         ch_out<ch_bool>     dbg_exmem_valid;   // EX/MEM 有效寄存器
         ch_out<ch_bool>     dbg_exmem_is_store;// EX/MEM 的 store 标记
         ch_out<ch_bool>     dbg_mem_valid_out; // MEM 级输出给 WB 的有效位
+        // ⚠️ **G1/G2（2026-11-15 · B4）**：未知 opcode 的可观测面
+        //    0 = 合法 · 1 = **已知未实现**（`OP_SYSTEM`）· 2 = **未知 opcode**
+        ch_out<ch_uint<2>>  dbg_illegal_reason{"dbg_illegal_reason"};
         // ⚠️ 「**这一拍**检测到 load-use 冒险」的脉冲（2026-10-25，A1-a）：
         //    `perf_load_use_stalls` 计的是「**停顿拍数**」（保持型停顿 ⇒
         //    一个冒险持续 N 拍就 +N）；而「**冒险次数**」需要单独的单拍脉冲
@@ -401,7 +404,15 @@ public:
         //    - `flush`（taken 分支）⇒ ID/EX 清空（错误路径不进 EX）
         //    - `stall`（load-use）⇒ ID/EX 冻结（消费者留在 ID）
         id_stage.io().flush <<= hazard.io().flush;
-        id_stage.io().stall <<= hazard.io().stall;
+        // ⚠️⚠️ **G2 · 行为策略 = 冻结**（2026-11-15 · B4）：未知 opcode 进入 ID 级
+        //    ⇒ ⇒ `illegal_active` 拉高 ⇒ ⇒ **IF 与 ID 同时 stall**（PC 不前进 /
+        //    ID/EX 装**气泡**）⇒ ⇒ 该指令**永不进入 EX、永不退休**。
+        //    ⇒ ⇒ **MUST NOT** 当作 NOP 继续跑（那正是本项要改掉的旧行为）。
+        //    ⚠️ **无组合环**：`illegal_active` 的来源是 `id_stage.io().illegal_reason`
+        //      = `io().valid & f(opcode)`（ID 级的**输入**）⇒ 而 `if_stage.io().valid`
+        //      = `if_id_valid_reg`（**寄存** ⇒ `if_stage.h:329`）⇒ ⇒ 反馈环被打断。
+        auto illegal_active = (id_stage.io().illegal_reason != ch_uint<2>(0_d));
+        id_stage.io().stall <<= hazard.io().stall | illegal_active;
 
         // ID -> EX
         // ⚠️ `ex_stage.io().rs1_data` / `rs2_data` 的**驱动源**在
@@ -642,7 +653,13 @@ public:
     // Control signals: hazard unit + reset/stall/flush to all stages
     void build_control_signals() {
         // IF stage stall/flush from hazard
-        if_stage.io().stall <<= hazard.io().stall;
+        // ⚠️ **G2 冻结的 IF 侧**：与 ID 级**同一判据**（`illegal_reason != 0`）
+        //    ⇒ ⇒ PC 与 skid 一并冻结（否则 PC 会继续前进、把非法指令之后的
+        //    指令取进来）
+        //    ⚠️ 表达式在**两处各建一个比较节点**（`wire_id_ex()` 与这里）
+        //      ⇒ 值**相同**、无状态 ⇒ 不引入顺序依赖（用局部变量则依赖调用顺序）。
+        if_stage.io().stall <<= hazard.io().stall |
+            (id_stage.io().illegal_reason != ch_uint<2>(0_d));
         if_stage.io().flush <<= hazard.io().flush;
         if_stage.io().rst <<= io().rst;
 
@@ -804,6 +821,9 @@ public:
         io().dbg_exmem_alu_result <<= exmem_alu_result;
         io().dbg_exmem_imm <<= exmem_imm;
         io().dbg_exmem_rs2_data <<= exmem_rs2_data;
+        // ⚠️ **MUST 在最后**（端口节点按赋值顺序编号 ⇒ 插中间会让既有
+        //    `pipeline_unnamed_output_N` 整体位移 ⇒ 独立 TB 端口表错位）
+        io().dbg_illegal_reason <<= id_stage.io().illegal_reason;
     }
 
     void describe() override {

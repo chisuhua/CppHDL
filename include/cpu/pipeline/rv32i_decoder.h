@@ -50,6 +50,11 @@ constexpr unsigned OP_AUIPC  = 0b0010111;
 constexpr unsigned OP_OPIMM  = 0b0010011;
 constexpr unsigned OP_OP     = 0b0110011;
 constexpr unsigned OP_SYSTEM = 0b1110011;
+// ⚠️ **2026-11-15 · B4 · G4**：`FENCE` / `FENCE.I`（opcode `0x0F`）此前**完全不在**
+//    译码表里 ⇒ ⇒ 与「未知 opcode」**混为一谈**。本版把它**显式**列为已知指令
+//    （行为 = **NOP**：单核无 cache ⇒ 无排序语义；`FENCE.I` 同理，无 I-cache）
+//    ⇒ ⇒ 依据 = `rv32i-isa-gap-closure-2026-11` 的 G4。
+constexpr unsigned OP_FENCE = 0b0001111;
 
 class Rv32iDecoder : public ch::Component {
 public:
