@@ -18,8 +18,9 @@
 //   （`include/cpu/pipeline/stages/ex_stage.h:189`）用
 //     `auto sltu_result_sig = (io().rs1_data < alu_second_operand);`
 //   ⇒ ⇒ 与本文件期望的 SLTU 语义**一致** ⇒ ⇒ 两处不是「各自猜」，是**同一口径**。
-//   ⚠️ **但两者的 ALU 操作码编码不同**（`ex_stage.h` 的 `ALU_OP_SLTU = 9`
-//   vs `rv32i_alu.h` 的 `ALU_SLTU = 3`）⇒ ⇒ 本文件 MUST 用 `rv32i_alu.h` 自己的常量
+//   ⚠️ **ALU 操作码编码已归一**（2026-11-14 · B4 · C2）：`ex_stage.h` 原先自带的
+//   `ALU_OP_*`（`ALU_OP_SLTU = 9`）**已删除** ⇒ ⇒ 唯一权威 = 本文件的
+//   `riscv::ALU_*`（`ALU_SLTU = 3`）⇒ ⇒ 本文件 MUST 用 `rv32i_alu.h` 自己的常量
 //   ⇒ ⇒ **禁**用字面量 `3`（那是 RISC-V **funct3** 编码，不是 ALU op 编码 ——
 //   两者巧合相等，但**语义不同**，用字面量 = 埋雷）。
 

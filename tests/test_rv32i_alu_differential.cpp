@@ -67,18 +67,21 @@ const char *op_name(Op op) {
 }
 
 /// 内联侧（`ex_stage.h`）的 op 编码
+/// ⚠️ **2026-11-14 · B4 · C2（编码归一）**：此前本函数指向 `ex_stage.h` **自带**的
+///    `ALU_OP_*`（那套已**删除**）⇒ ⇒ 现在两侧指向**同一套** `riscv::ALU_*`
+///    ⇒ ⇒ 归一后**不再有两套编码** ⇒ ⇒ 「两侧编码是否相同」的问题**已消失**。
 constexpr unsigned ex_op(Op op) {
     switch (op) {
-        case Op::ADD: return riscv::ALU_OP_ADD;
-        case Op::SUB: return riscv::ALU_OP_SUB;
-        case Op::AND: return riscv::ALU_OP_AND;
-        case Op::OR:  return riscv::ALU_OP_OR;
-        case Op::XOR: return riscv::ALU_OP_XOR;
-        case Op::SLL: return riscv::ALU_OP_SLL;
-        case Op::SRL: return riscv::ALU_OP_SRL;
-        case Op::SRA: return riscv::ALU_OP_SRA;
-        case Op::SLT: return riscv::ALU_OP_SLT;
-        case Op::SLTU: return riscv::ALU_OP_SLTU;
+        case Op::ADD: return riscv::ALU_ADD;
+        case Op::SUB: return riscv::ALU_SUB;
+        case Op::AND: return riscv::ALU_AND;
+        case Op::OR:  return riscv::ALU_OR;
+        case Op::XOR: return riscv::ALU_XOR;
+        case Op::SLL: return riscv::ALU_SLL;
+        case Op::SRL: return riscv::ALU_SRL;
+        case Op::SRA: return riscv::ALU_SRA;
+        case Op::SLT: return riscv::ALU_SLT;
+        case Op::SLTU: return riscv::ALU_SLTU;
     }
     return 0xFF;
 }
@@ -263,29 +266,44 @@ TEST_CASE("B4 C1 - hand-derived expectations are self-consistent",
 }
 
 // ===========================================================================
-// ③ **操作码编码差异**（C1 的头号发现 ⇒ ⇒ 显式断言 ⇒ ⇒ 不是靠注释提醒）
+// ③ **操作码编码的唯一性**（C2 的棘轮）
 //
-// ⚠️ **C2 归一落地时 MUST 翻转本段**（并同步差异清单 `.rddf/checks/rv32i-alu-differential-list.md`）
-//    ⇒ ⇒ 否则本断言会红 ⇒ ⇒ 那正是「棘轮」该有的行为。
+// ⚠️ **历史（2026-11-14 · C1 当时）**：两套编码**完全不同** ——
+//    内联 `ALU_OP_*`（ADD 0 · SUB 1 · AND 2 · OR 3 · XOR 4 · SLL 5 · SRL 6 · SRA 7
+//    · SLT 8 · SLTU 9）vs 库 `ALU_*`（ADD 0 · SLL 1 · SLT 2 · SLTU 3 · XOR 4 · SRL 5
+//    · OR 6 · AND 7 · SUB 10 · SRA 11）⇒ ⇒ **8 / 10 项不同**
+//    ⇒ ⇒ `alu_op = 3` 内联 = **OR**、库 = **SLTU** ⇒ ⇒ 不归一就接入 = **零报错的行为漂移**
+//    ⇒ ⇒ C1 的断言正是「两套**必须**不同」（棘轮 = 提醒「该归一了」）。
+//
+// ✅ **C2 落地后（2026-11-14）**：`ex_stage.h` 的 `ALU_OP_*` **已删除**
+//    ⇒ ⇒ **唯一权威 = `riscv::ALU_*`** ⇒ ⇒ 本断言**已翻转**为「两侧**必须相同**」
+//    ⇒ ⇒ 依据 = `.rddf/checks/rv32i-alu-differential-list.md` 的 **Δ1（已修）**
 // ===========================================================================
-TEST_CASE("B4 C1 - the two ALU opcode encodings DIFFER (C2 precondition)",
+TEST_CASE("B4 C2 - the two ALU opcode encodings are UNIFIED",
           "[cpu][rv32i][alu][differential][b4]") {
-    // ADD / XOR 两套**恰好相同**
-    REQUIRE(ex_op(Op::ADD) == lib_op(Op::ADD));
-    REQUIRE(ex_op(Op::XOR) == lib_op(Op::XOR));
-
-    // 其余 8 种**全部不同** ⇒ ⇒ 接入时不归一 = 零报错的行为漂移
-    const Op differing[] = {Op::SUB, Op::AND, Op::OR,  Op::SLL,
-                            Op::SRL, Op::SRA, Op::SLT, Op::SLTU};
-    for (Op op : differing) {
+    // 归一后：**全部 10 种**操作的两侧编码 MUST **逐项相同**
+    const Op all[] = {Op::ADD, Op::SUB, Op::AND, Op::OR,  Op::XOR,
+                      Op::SLL, Op::SRL, Op::SRA, Op::SLT, Op::SLTU};
+    for (Op op : all) {
         INFO("op=" << op_name(op) << " inline=" << ex_op(op)
                    << " library=" << lib_op(op));
-        REQUIRE(ex_op(op) != lib_op(op));
+        REQUIRE(ex_op(op) == lib_op(op));
     }
 
-    // ⚠️ **具体的后果**（手推）：`alu_op = 3` 在内联侧 = OR，在库组件侧 = SLTU
-    //    ⇒ ⇒ 拿内联的 3 去喂库组件 ⇒ ⇒ 同一个 (a, b) 算出**两种**结果
-    //    ⇒ ⇒ 这条是「为什么必须 C2 归一」的**最小**证据
-    REQUIRE(ex_op(Op::OR) == 3u);
-    REQUIRE(lib_op(Op::SLTU) == 3u);
+    // ⚠️ **归一后的唯一编码表**（锁死 ⇒ ⇒ 任何人改动其中一个 ⇒ ⇒ 本用例转红）
+    REQUIRE(riscv::ALU_ADD  == 0u);
+    REQUIRE(riscv::ALU_SLL  == 1u);
+    REQUIRE(riscv::ALU_SLT  == 2u);
+    REQUIRE(riscv::ALU_SLTU == 3u);
+    REQUIRE(riscv::ALU_XOR  == 4u);
+    REQUIRE(riscv::ALU_SRL  == 5u);
+    REQUIRE(riscv::ALU_OR   == 6u);
+    REQUIRE(riscv::ALU_AND  == 7u);
+    REQUIRE(riscv::ALU_SUB  == 10u);
+    REQUIRE(riscv::ALU_SRA  == 11u);
+
+    // ⚠️ **旧编码必须已消失**（`ALU_OP_*` 一族从 `ex_stage.h` 删除）
+    //    ⇒ ⇒ 判据 = 全仓 grep（`scripts/verify_no_duplicate_rv32i_headers.sh` 之外的独立断言）
+    //    ⇒ ⇒ 这里用**头文件内容**判：归一后 `ex_stage.h` 里 MUST NOT 再出现 `ALU_OP_` 定义
+    //    （注释里**允许**出现，因为注释要记录历史）
 }

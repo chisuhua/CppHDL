@@ -453,28 +453,28 @@ public:
             //    「0 < 10」= 1。）
             auto alu_is_mem = (id_stage.io().opcode == ch_uint<7>(OP_LOAD)) |
                               (id_stage.io().opcode == ch_uint<7>(OP_STORE));
-            ch_uint<4> alu_op_calc = ch_uint<4>(ALU_OP_ADD);
+            ch_uint<4> alu_op_calc = ch_uint<4>(ALU_ADD);
             alu_op_calc = select(alu_f3 == ch_uint<3>(7_d),
-                                 ch_uint<4>(ALU_OP_AND), alu_op_calc);
+                                 ch_uint<4>(ALU_AND), alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(6_d),
-                                 ch_uint<4>(ALU_OP_OR), alu_op_calc);
+                                 ch_uint<4>(ALU_OR), alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(4_d),
-                                 ch_uint<4>(ALU_OP_XOR), alu_op_calc);
+                                 ch_uint<4>(ALU_XOR), alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(3_d),
-                                 ch_uint<4>(ALU_OP_SLTU), alu_op_calc);
+                                 ch_uint<4>(ALU_SLTU), alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(2_d),
-                                 ch_uint<4>(ALU_OP_SLT), alu_op_calc);
+                                 ch_uint<4>(ALU_SLT), alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(1_d),
-                                 ch_uint<4>(ALU_OP_SLL), alu_op_calc);
+                                 ch_uint<4>(ALU_SLL), alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(5_d),
-                                 select(alu_is_sub_sra, ch_uint<4>(ALU_OP_SRA),
-                                        ch_uint<4>(ALU_OP_SRL)),
+                                 select(alu_is_sub_sra, ch_uint<4>(ALU_SRA),
+                                        ch_uint<4>(ALU_SRL)),
                                  alu_op_calc);
             alu_op_calc = select(alu_f3 == ch_uint<3>(0_d),
-                                 select(alu_is_sub_sra, ch_uint<4>(ALU_OP_SUB),
-                                        ch_uint<4>(ALU_OP_ADD)),
+                                 select(alu_is_sub_sra, ch_uint<4>(ALU_SUB),
+                                        ch_uint<4>(ALU_ADD)),
                                  alu_op_calc);
-            alu_op_calc = select(alu_is_mem, ch_uint<4>(ALU_OP_ADD), alu_op_calc);
+            alu_op_calc = select(alu_is_mem, ch_uint<4>(ALU_ADD), alu_op_calc);
             ex_stage.io().alu_op <<= alu_op_calc;
         }
         ex_stage.io().opcode <<= id_stage.io().opcode;

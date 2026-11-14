@@ -6,6 +6,30 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-14 — **ALU 操作码编码归一**（B4 · C2）
+
+### Removed
+
+- **`riscv::ALU_OP_*`（10 个常量）**（`include/cpu/pipeline/stages/ex_stage.h`）
+  ⇒ ⇒ 该头原**自带**一套 ALU op 编码（ADD 0 · SUB **1** · AND **2** · OR **3** · XOR 4
+  · SLL **5** · SRL **6** · SRA **7** · SLT **8** · SLTU **9**）
+  ⇒ ⇒ 与库组件 `riscv::Rv32iAlu` 的 `riscv::ALU_*`（ADD 0 · SLL **1** · SLT **2** · SLTU **3**
+  · XOR 4 · SRL **5** · OR **6** · AND **7** · SUB **10** · SRA **11**）**8 / 10 项不同**
+  ⇒ ⇒ `alu_op = 3` 在旧侧 = **OR**、新侧 = **SLTU** ⇒ ⇒ 不归一就接入 = **零报错的行为漂移**
+  ⇒ ⇒ **唯一权威 = `riscv::ALU_*`**（`include/cpu/pipeline/rv32i_alu.h`）
+
+### Changed
+
+- ⚠️ **迁移指引**：下游若按**旧** `ALU_OP_*` 编码喂 `alu_op` ⇒ ⇒ **MUST 改用 `riscv::ALU_*`**
+  （**旧编码不是「另一个等价编码」** ⇒ ⇒ 它会**算出别的操作**）
+  ⇒ ⇒ 新编码表：`ADD 0 · SLL 1 · SLT 2 · SLTU 3 · XOR 4 · SRL 5 · OR 6 · AND 7 · SUB 10 · SRA 11`
+- **行为零变化**：归一只改**表示**，两侧的 select 链引用**同一套常量** ⇒ ⇒ 指令行为不变
+  ⇒ ⇒ 既有 golden（20 项）+ 时序金标（`load_use_stalls` 8 · `non_retired` 23 · 退休数 176）**零漂移**
+- ⚠️ **本批的「归一正确性」判据自带**：既有手推表 `kExCases` 的 `alu_op` **输入列**按新编码
+  重映射（28 行 · 9 行实际变化）⇒ ⇒ **期望值一字未动** ⇒ ⇒ 映射错一条 ⇒ ⇒ 那条**必红**
+
+---
+
 ## 2026-11-14 — **删掉 RV32I SoC 的 `ext_clk` 死端口**（R8 改判 · 用户裁决 A2）
 
 ### Removed

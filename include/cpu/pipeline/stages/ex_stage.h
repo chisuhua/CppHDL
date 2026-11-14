@@ -23,24 +23,33 @@
 //    ⇒ ⇒ **单独 include 本头会编译失败**（未声明标识符）⇒ ⇒ 违反根 AGENTS.md
 //    的「Headers self-contained」（2026-11-03 修复）。
 #include "cpu/pipeline/rv32i_decoder.h"
+// ⚠️ **2026-11-14 · B4 · C2**：ALU 操作码常量的**唯一权威**在本头
+//    （`riscv::ALU_*`）⇒ ⇒ 本文件原有的 `ALU_OP_*` 已删除（见上方说明块）。
+#include "cpu/pipeline/rv32i_alu.h"
 
 namespace riscv {
 
 using namespace ch::core;
 
 /**
- * EX 级 ALU 操作码编码
+ * ⚠️⚠️ **ALU 操作码常量已归一（2026-11-14 · B4 · C2）**
+ *
+ * 本文件此前**自带**一套 `ALU_OP_*` 编码（ADD 0 · SUB **1** · AND **2** · OR **3**
+ * · XOR 4 · SLL **5** · SRL **6** · SRA **7** · SLT **8** · SLTU **9**）
+ * ⇒ ⇒ 而库组件 `riscv::Rv32iAlu` 自带**另一套** `ALU_*` 编码
+ * （ADD 0 · SLL **1** · SLT **2** · SLTU **3** · XOR 4 · SRL **5** · OR **6**
+ *  · AND **7** · SUB **10** · SRA **11**）
+ * ⇒ ⇒ **8 / 10 项不同** ⇒ ⇒ 例：`alu_op = 3` 在本文件侧 = **OR**、在库组件侧 = **SLTU**
+ * ⇒ ⇒ ⇒ 若不归一就接入 ⇒ ⇒ **同一个数算出两种操作** ⇒ ⇒ **零报错的行为漂移**
+ *
+ * ⇒ ⇒ **归一后的唯一权威 = `rv32i_alu.h` 的 `riscv::ALU_*`**（**它**才是即将被接入流水线的那份）
+ * ⇒ ⇒ 本文件的 `ALU_OP_*` **已删除**（公开面移除 ⇒ ⇒ 登记于
+ *     `.rddf/checks/public-api-surface.md` + `public-api-removals.tsv` + `docs/CHANGELOG.md`）
+ * ⇒ ⇒ ⚠️ **迁移指引**：下游若按旧 `ALU_OP_*` 编码喂 `alu_op` ⇒ ⇒ **MUST 改用 `riscv::ALU_*`**
+ *     （**旧编码不是「另一个等价编码」** ⇒ ⇒ 它会**算出别的操作**）
+ * ⇒ ⇒ 依据 = `.rddf/checks/rv32i-alu-differential-list.md` 的 **Δ1**（差分实测）
+ * ⇒ ⇒ 判据 = `tests/test_rv32i_alu_differential.cpp`（编码**逐项相同**的棘轮断言）
  */
-constexpr unsigned ALU_OP_ADD  = 0;   // 加法
-constexpr unsigned ALU_OP_SUB  = 1;   // 减法
-constexpr unsigned ALU_OP_AND  = 2;   // 与
-constexpr unsigned ALU_OP_OR   = 3;   // 或
-constexpr unsigned ALU_OP_XOR  = 4;   // 异或
-constexpr unsigned ALU_OP_SLL  = 5;   // 逻辑左移
-constexpr unsigned ALU_OP_SRL  = 6;   // 逻辑右移
-constexpr unsigned ALU_OP_SRA  = 7;   // 算术右移
-constexpr unsigned ALU_OP_SLT  = 8;   // 有符号小于比较
-constexpr unsigned ALU_OP_SLTU = 9;   // 无符号小于比较
 
 /**
  * ⚠️⚠️ **原「分支类型编码」常量块已删除（2026-11-03）**
@@ -196,16 +205,16 @@ public:
 
         ch_uint<32> alu_out = ch_uint<32>(0_d);
         
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_ADD), add_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SUB), sub_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_AND), and_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_OR),  or_result,  alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_XOR), xor_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SLL), sll_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SRL), srl_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SRA), sra_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SLT), zext<32>(slt_result_sig), alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OP_SLTU), zext<32>(sltu_result_sig), alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_ADD), add_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_SUB), sub_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_AND), and_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_OR),  or_result,  alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_XOR), xor_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_SLL), sll_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_SRL), srl_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_SRA), sra_result, alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_SLT), zext<32>(slt_result_sig), alu_out);
+        alu_out = select(io().alu_op == ch_uint<4>(ALU_SLTU), zext<32>(sltu_result_sig), alu_out);
 
         // ====================================================================
         // 3. 重定向目标地址计算（2026-10-26 扩展：不止条件分支）

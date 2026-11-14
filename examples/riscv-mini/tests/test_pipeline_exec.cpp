@@ -319,14 +319,17 @@ TEST_CASE("Pipeline: EX stage operand selection (I-type imm)",
     };
 
     constexpr uint32_t OP_OPIMM_ = 0x13u;
-    constexpr uint32_t ALU_OP_ADD_ = 0u;
+    // ⚠️ **2026-11-14 · B4 · C2**：此前是**本地字面量副本** `ALU_ADD_ = 0u`
+    //    ⇒ ⇒ 它复制的是常量**值**而不是引用**符号** ⇒ ⇒ 归一后一旦常量值变动 ⇒ ⇒ 静默错算
+    //    ⇒ ⇒ 现在改为**引用唯一权威** `riscv::ALU_ADD`（`rv32i_alu.h`）
+    constexpr uint32_t ALU_ADD_ = riscv::ALU_ADD;
 
     SECTION("addi 正数：0 + 42 = 42") {
-        REQUIRE(exec(OP_OPIMM_, 0u, 42u, ALU_OP_ADD_) == 42u);
+        REQUIRE(exec(OP_OPIMM_, 0u, 42u, ALU_ADD_) == 42u);
     }
 
     SECTION("addi 负数：0 + (-8) = 0xFFFFFFF8（MUST 用 imm，不是 rs2）") {
-        REQUIRE(exec(OP_OPIMM_, 0u, 0xFFFFFFF8u, ALU_OP_ADD_) == 0xFFFFFFF8u);
+        REQUIRE(exec(OP_OPIMM_, 0u, 0xFFFFFFF8u, ALU_ADD_) == 0xFFFFFFF8u);
     }
 }
 

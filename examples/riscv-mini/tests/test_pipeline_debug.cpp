@@ -145,7 +145,7 @@ public:
         ex_stage.io().opcode <<= ch_uint<4>(0_d);
         ex_stage.io().funct3 <<= ch_uint<3>(0_d);      // funct3 = 0 ⇒ ADD
         ex_stage.io().funct7 <<= ch_uint<7>(0_d);
-        ex_stage.io().alu_op <<= ch_uint<4>(0_d);      // ALU_OP_ADD
+        ex_stage.io().alu_op <<= ch_uint<4>(riscv::ALU_ADD);  // ⚠️ 2026-11-14 · C2：字面量 → 符号常量
         ex_stage.io().is_branch <<= ch_bool(false);
         // ⚠️ **新增输入端口 MUST 显式驱动**（2026-10-27，`is_jump`）：
         //    未驱动的输入端口读到的是**全 1** ⇒ 该 fixture 的每条指令都会被
