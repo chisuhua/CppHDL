@@ -2,7 +2,7 @@
 id: decision-request-rv32i-ext-clock-dead-port-2026-11
 日期: 2026-11-12
 提出者: builder（B2 / E3 · `riscv-mini` 的独立 RTL TB）
-状态: **待裁决**
+状态: ✅ **已裁决并落地**（2026-11-14 · 用户裁决 **A2** = 删端口）
 关联: .rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc
 ---
 
@@ -53,3 +53,39 @@ E3 这批工作的**核心价值**就是「**按名字驱动外部端口**的独
 
 ⇒ ⇒ **未裁决前**：TB 照常把 `ext_clk` 接上（端口存在 ⇒ MUST 连接，否则 `PINMISSING` **致命**）
 ⇒ ⇒ 但**不依赖它**（⇒ ⇒ 判据与 `ext_clk` 无关 ⇒ ⇒ 无论将来 A/B/C 怎么裁，TB 都不受影响）。
+
+---
+
+## ✅ 裁决结果（2026-11-14 · 用户裁决 **A2** = 删端口）
+
+> ⚠️ **改判记录**：本单 2026-11-13 的 R8 裁决曾采纳「**A2 的注释半**」（保留端口 + 注释），
+> 理由是「删它改 SoC 顶层端口契约 ⇒ 公开面变更 ⇒ 而它不造成任何行为差异 ⇒ 成本收益不划算」。
+> ⇒ ⇒ **2026-11-14 用户改判 = A2 的「删端口半」** ⇒ ⇒ 即：用户接受公开面变更的成本，
+> 换取「端口面上不留会骗人的名字」⇒ ⇒ 本节记录**改判**而非首次裁决。
+
+### 落地内容（2026-11-14）
+
+| # | 落点 | 内容 |
+|---|---|---|
+| 1 | `examples/riscv-mini/src/rv32i_pipeline_top.h` | **删** `ch_in<ch_bool> ext_clk{"ext_clk"}` + `pipeline.io().clk <<= io().ext_clk;` |
+| 2 | `include/cpu/pipeline/rv32i_pipeline.h` | **删** `ch_in<ch_bool> clk;`（**零消费者** ⇒ ZERO-DEBT ⇒ 不删则变悬空输入 ⇒ undriven wire ⇒ verilator **UNDRIVEN 致命**） |
+| 3 | `examples/riscv-mini/tb_rv32i_soc.sv` | **删** `.top_ext_clk(ext_clk)` 连线 + 信号声明 + 端口映射注释（32 → 31 · 114 → 113） |
+| 4 | `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp` | **删** 2 处 `sim.set_input_value(io.ext_clk, 0u)` |
+| 5 | `examples/riscv-mini/tests/{test_pipeline_wrapper,test_riscv_tests_pipeline,test_wrapper_pipeline}.cpp` | **删** 3 处 `pipeline.io().clk <<= ch_bool(true);` |
+| 6 | `scripts/verify_no_duplicate_rv32i_headers.sh` | C6 端口快照 **32 → 31** |
+| 7 | `.rddf/checks/port-naming-exempt.tsv` + `scripts/verify_port_naming.sh` | 豁免表删 1 行（`rv32i_pipeline.h` 的 `clk`）+ 锚点 1450 → **1449** |
+| 8 | `.rddf/checks/public-api-surface.md` + `public-api-removals.tsv` | 公开面移除登记 **2 行** + 探针 **2 条**（34 → **36**）· 表行 20 → **22** |
+| 9 | `docs/CHANGELOG.md` | 用户可见变更 1 条 |
+
+### 判据与证据
+
+| 判据 | 证据 |
+|---|---|
+| **零行为影响**（删前） | `ext_clk` **0/1 交替翻转** ⇒ **60 拍 × 27 观测逐拍全等**（1351 断言）⇒ ⇒ 针对性实测，非推断 |
+| **删后等价** | `ctest -LE perf` **253/253**（含 SoC 双后端 golden 全绿）· `verify_examples_rtl_sim.sh` **10/10**（严格 verilator ⇒ 无 UNDRIVEN / PINMISSING） |
+| **产物面** | 顶层端口 **114 → 113**（6 输入 + 107 输出）· `ext_clk` 在产物里**零命中** |
+| **端口快照** | C6 PASS（31 个与快照一致）· 命名棘轮 PASS（1449 双向一致） |
+
+### 遗留
+
+- 「**真让 `ext_clk` 生效**」（改 codegen 时钟选择 ⇒ **全仓影响**）= **另独立立项**。

@@ -40,7 +40,7 @@
 | **R5** | ✅ **B3 的 T2 裁决**（MEM 数据对齐）⇒ ⇒ 载体 = **ADR-069**（**Accepted · 2026-11-12**）⇒ ⇒ 决策 = **候选 ②（A0）**（地址照旧 + MEM/WB 延后 1 拍）· oracle **×3**（第 1/2 轮 REJECT ⇒ 第 3 轮 PASS-WITH-NOTES）· critic **×1**（APPROVE_WITH_CONDITIONS · **0 BLOCKER**） | architect | 用户 2026-11-12「按你建议拍板」 | ★ **B3 的🚪 门之一 ⇒ ✅ 已闭** ⇒ ⇒ ✅ **2026-11-12 晚补齐 SF-3 强制项**：**ADR-047 §5.5 dated addendum**（3 处「3 拍」原文**逐字保留** + 三处 dated 指针）⇒ ⇒ ⚠️ **spec MODIFIED 已重分类**为 **R14 内的 change 步骤**（承载**实施后**的真实基线 ⇒ ⇒ 提前写 = 写未验证的值）⇒ ⇒ 审稿记录 `.rddf/reviews/ADR-069-mem-data-alignment.md` |
 | **R6** | ✅ **B3 的公开面前置门**（CHANGELOG + `public-api-surface.md` 各一行） | planner | — | ★ **B3 的🚪 门之二** ⇒ ⇒ ✅ **已登记**（2026-11-12 · 前置登记 = 预告 + 迁移指引 · 非「已发布」）⇒ ⇒ `firmware-load-chain` L1–L6（加载端口族语义变更）+ `memory-timing-contract` T1/T3（`data_ready` 语义重定义）⇒ ⇒ 护栏 `verify_public_api_visibility.sh` PASS |
 | **R7** | 🟡 **P6-0 侦察**（RV32I ISA 缺口：复用面清单 + `FENCE` 裁决候选） | planner → architect | — | **只读侦察** ⇒ ⇒ 可全程并行 |
-| **R8** | ✅ **D8**（`ext_clk` 死端口）⇒ ⇒ 采纳 **A2 的「明确注释」半** | architect → 用户 | — | ✅ **2026-11-13 已闭** ⇒ ⇒ **保留端口**（删它改 SoC 顶层端口契约 = 公开面变更，而不造成任何行为差异 ⇒ ⇒ 成本收益不划算）⇒ ⇒ `rv32i_pipeline_top.h` 端口声明处已加完整说明（真驱动源 = 框架 `default_clock`）⇒ ⇒ 「真让 `ext_clk` 生效」= **另独立立项** |
+| **R8** | ✅ **D8**（`ext_clk` 死端口）⇒ ⇒ ⚠️ **2026-11-14 改判 = A2 的「删端口」半**（原 2026-11-13 裁决是「保留端口 + 注释」） | architect → 用户 | — | ✅ **2026-11-13 首闭（保留 + 注释）** ⇒ ⇒ ⚠️ **2026-11-14 用户改判 = 删端口**（接受公开面变更的成本，换「端口面上不留会骗人的名字」）⇒ ⇒ ✅ **已落地**：`Rv32iPipelineTop::ext_clk` + `riscv::Rv32iPipeline::clk`（零消费者 ⇒ ZERO-DEBT）**双双删除** ⇒ ⇒ 顶层端口 **32 → 31**（产物 **114 → 113**）⇒ ⇒ 公开面移除登记 2 行 + 探针 2 条 ⇒ ⇒ **删前针对性实测**（`ext_clk` 0/1 交替翻转 ⇒ 60 拍 × 27 观测逐拍全等）⇒ ⇒ 「真让 `ext_clk` 生效」= **另独立立项** |
 | **R9** | 🔒 **P11**（ADR-036 物理移除） | builder | 日历锁 **2027-04-17** | 本窗口**不做** |
 | **R10** | ✅ **第三处状态漂移**（`mem-port-arg` 草案 frontmatter） | planner | — | ✅ **2026-11-12 已闭**（frontmatter = `implemented`）⇒ ⇒ ⚠️ **但索引列当时漏改** ⇒ ⇒ 已并入 **R12**（发现 6）|
 | **R11** | 🟡 **`FENCE` 语义裁决**（architect · **planner 无权拍板**） | architect | R7 | 须在 R7 侦察之后（侦察提供候选方案）⇒ ⇒ 可与 B3 并行 |
@@ -179,12 +179,12 @@ ADR-068 **V3** 明写「BRAM 可推断性未在 CI 验证 ⇒ MUST 登记残差�
 
 ⇒ ⇒ **R7 ⇒ R11**（FENCE 裁决在侦察之后）。
 
-### R8 · D8（`ext_clk` 死端口）—— **需用户裁决**
+### R8 · D8（`ext_clk` 死端口）—— ✅ **已裁决并落地**（2026-11-14 · 改判 = A2 删端口）
 
 | 步 | 内容 | 判据 |
 |---|---|---|
-| **R8.1** | 裁决 **A2**（删端口或明确注释）⇒ ⇒ ⚠️ **A1「真让它生效」另独立立项**（触 ADR-008 单时钟域 ⇒ ⇒ **不是** example 修复） | 决策请求单结案 |
-| **R8.2** | 若删端口 ⇒ ⇒ **爆炸半径 = 4 处写点**（不是 2 处）：① 声明 `rv32i_pipeline_top.h:38`（`ch_in<ch_bool> ext_clk;`）② **驱动 `:137`（`pipeline.io().clk <<= io().ext_clk;`）** ← ⚠️ 这一行与「死端口」结论**表面矛盾**（它确实把 ext_clk 接到 pipeline 的 clk 端口）⇒ MUST 给**针对性实测**支撑「零影响」③ TB `examples/riscv-mini/tb_rv32i_soc.sv:173`（`.top_unnamed_input(ext_clk)`）④ `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:535`（`sim.set_input_value(io.ext_clk, 0u)`）⇒ ⇒ ⚠️ **端口名会整体重编号**：`ext_clk` 是 `__io` 的**第一个** input（`:36-46`）⇒ 删掉后其余 4 个 `top_unnamed_input_N` **全部前移一位** ⇒ ⇒ TB 的 5 个映射 + TB 头注释（它**就是**端口映射文档）+ `.rddf/checks/examples-rtl-sim-targets.tsv` 的 riscv 行 MUST 同步重映射 | 4 处写点同步 + `RESULT: checks=24 fails=0` + `test_rv32i_soc_dual_parity` 绿 + **删前/删后同程序逐拍 trace 等价**（⚠️ 不接受「B2 已实测」作唯一证据 —— TB 恒驱 0 只能证明**值**无关，**不能**证明**删端口**无关）+ `ext_clk` 0/1 交替翻转 ⇒ 输出不变（针对性实测，支撑 `:137` 的「零影响」） |
+| **R8.1** | ✅ **已裁决**（2026-11-14 · 用户 = **A2 删端口**）⇒ ⇒ ⚠️ **A1「真让它生效」另独立立项**（触 ADR-008 单时钟域 ⇒ ⇒ **不是** example 修复） | 决策请求单结案 ✅ |
+| **R8.2** | ✅ **已落地**（实测爆炸半径 = **9 处**：4 处原写点 + `Rv32iPipeline::clk` 的**零消费者**端口（连带删，否则悬空 ⇒ undriven wire ⇒ verilator UNDRIVEN 致命）+ 3 处 example 测试的 `pipeline.io().clk <<= ch_bool(true)` + C6 端口快照 + 命名豁免表 + 公开面登记 ×2）⇒ ⇒ ⚠️ **端口名不再重编号**（R17.2 已把 32 个端口**全部具名** ⇒ ⇒ 删一个只是少一个）⇒ ⇒ 原写点：4 处写点（不是 2 处）：① 声明 `rv32i_pipeline_top.h:38`（`ch_in<ch_bool> ext_clk;`）② **驱动 `:137`（`pipeline.io().clk <<= io().ext_clk;`）** ← ⚠️ 这一行与「死端口」结论**表面矛盾**（它确实把 ext_clk 接到 pipeline 的 clk 端口）⇒ MUST 给**针对性实测**支撑「零影响」③ TB `examples/riscv-mini/tb_rv32i_soc.sv:173`（`.top_unnamed_input(ext_clk)`）④ `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:535`（`sim.set_input_value(io.ext_clk, 0u)`）⇒ ⇒ ⚠️ **端口名会整体重编号**：`ext_clk` 是 `__io` 的**第一个** input（`:36-46`）⇒ 删掉后其余 4 个 `top_unnamed_input_N` **全部前移一位** ⇒ ⇒ TB 的 5 个映射 + TB 头注释（它**就是**端口映射文档）+ `.rddf/checks/examples-rtl-sim-targets.tsv` 的 riscv 行 MUST 同步重映射 | 4 处写点同步 + `RESULT: checks=24 fails=0` + `test_rv32i_soc_dual_parity` 绿 + **删前/删后同程序逐拍 trace 等价**（⚠️ 不接受「B2 已实测」作唯一证据 —— TB 恒驱 0 只能证明**值**无关，**不能**证明**删端口**无关）+ `ext_clk` 0/1 交替翻转 ⇒ 输出不变（针对性实测，支撑 `:137` 的「零影响」） |
 
 ### R11 · `FENCE` 语义裁决（**architect 域** · 须在 R7 之后）
 

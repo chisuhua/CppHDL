@@ -2,7 +2,7 @@
 id: decision-request-port-face-2026-11
 日期: 2026-11-13
 提出者: planner（2026-11-13 独立复核 · **护栏实测 + 源码 grep + 产物实测**三路交叉 · 不采信 Status 行自述）
-状态: **部分已闭**（R2 已落地 2026-11-13 · R3 早已由 D1 裁决闭 · **R1 待用户裁决**）
+状态: ✅ **已闭**（2026-11-14 复核：R1 **已登记**（残差登记表 id=23 + 台账 §7 行 23 · 2026-11-13）· R2 已落地 2026-11-13 · R3 已闭 2026-11-12 D1 裁决 · R4 = 指针 ⇒ ⇒ **本单四条全部闭口**）
 关联: .rddf/improvements/rtl-emit-product-tooling-2026-11.md · .rddf/improvements/examples-rtl-sim-coverage-2026-11.md · .rddf/checks/rtl-track-correction-list-2026-11.md · openspec/specs/rtl-emit-portability/spec.md
 ---
 
@@ -29,6 +29,10 @@ id: decision-request-port-face-2026-11
 ## 1. R1 —— 扁平产物的顶层端口面仍暴露 **80 个内部 `ch_out`** ⇒ 请求**登记为已知残留**
 
 ### 1.1 事实（2026-11-13 实测 · 可复现）
+
+> ⚠️ **时点标注（2026-11-14）**：下表是 **2026-11-13** 的快照 ⇒ ⇒ **R8 改判删 `ext_clk` 后**：
+> `.v` 顶层端口面 **114 → 113**（输入 7 → 6）· 根组件自有 **32 → 31**
+> ⇒ ⇒ **「暴露的内部 `ch_out` = 80」不变**（输出面未动）⇒ ⇒ 本单 R1 的**结论不受影响**。
 
 ```bash
 build/examples/riscv-mini/emit_rtl_rv32i_soc --out /tmp/x

@@ -135,7 +135,6 @@ public:
 
         // Release reset
         pipeline.io().rst <<= ch_bool(false);
-        pipeline.io().clk <<= ch_bool(true);
 
         // Expose ITCM write and DTCM read to test harness
         itcm.io().write_addr <<= io().itcm_write_addr;

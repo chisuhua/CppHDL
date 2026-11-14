@@ -56,3 +56,5 @@ set_ab_verification	removed	include/	-	P8-2026-11-13
 ab_verification	removed	include/	-	P8-2026-11-13
 mem_read_data	removed	include/cpu/pipeline/stages/mem_stage.h	-	ADR-069
 mem_data	removed	include/cpu/pipeline/stages/mem_stage.h	-	ADR-069
+clk	removed	include/cpu/pipeline/rv32i_pipeline.h	-	R8-改判-2026-11-14
+ext_clk	removed	examples/riscv-mini/src/rv32i_pipeline_top.h	-	R8-改判-2026-11-14

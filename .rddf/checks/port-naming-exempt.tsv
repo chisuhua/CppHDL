@@ -1191,7 +1191,6 @@ include/cpu/pipeline/rv32i_pc.h	0	ch_in<ch_bool> jump_enable	既有债·基线�
 include/cpu/pipeline/rv32i_pc.h	0	ch_in<ch_bool> rst	既有债·基线豁免
 include/cpu/pipeline/rv32i_pc.h	0	ch_in<ch_uint<32>> jump_target	既有债·基线豁免
 include/cpu/pipeline/rv32i_pc.h	0	ch_out<ch_uint<32>> pc	既有债·基线豁免
-include/cpu/pipeline/rv32i_pipeline.h	0	ch_in<ch_bool> clk	既有债·基线豁免
 include/cpu/pipeline/rv32i_pipeline.h	0	ch_in<ch_bool> data_ready	既有债·基线豁免
 include/cpu/pipeline/rv32i_pipeline.h	0	ch_in<ch_bool> instr_ready	既有债·基线豁免
 include/cpu/pipeline/rv32i_pipeline.h	0	ch_in<ch_bool> rst	既有债·基线豁免

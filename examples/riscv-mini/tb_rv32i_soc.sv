@@ -26,27 +26,29 @@
 //   ⇒ 编码口径已与仓内 `rv32i-isa-semantics` capability 的样例交叉核对
 //     （该 capability 给出 `addi x21, x0, -8` = `0xFF800A93` ⇒ 与本表同一套编码规则）。
 //
-// ✅ **端口名已具名（2026-11-13 · R17.2 · 用户 ⑤ 的原始诉求）**：本顶层 **32** 个端口
+// ✅ **端口名已具名（2026-11-13 · R17.2 · 用户 ⑤ 的原始诉求）**：本顶层 **31** 个端口
 //   全部带**显式名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>` ⇒ ⇒ **本 TB 不再需要「查 port map」**。
-//   ⇒ ⇒ 根组件自有的 32 个端口：`top_ext_clk` / `top_ext_rst` / `top_prog_we` / `top_prog_addr` /
+//   ⇒ ⇒ 根组件自有的 31 个端口：`top_ext_rst` / `top_prog_we` / `top_prog_addr` /
 //   `top_prog_data` / `top_obs_*`（11）/ `top_dbg_*`（16）。
 //   ⇒ ⇒ ⚠️ **仍保留未具名的是后代冒泡端口**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`）
 //   ⇒ ⇒ 它们**不在**本批范围（不是根组件自有 IO）⇒ ⇒ 归属**后续批次**。
 //
-// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **114** 个
-//   （**7** 输入 + **107** 输出 · 2026-11-13 实测）⇒ ⇒ **7** 输入 = 框架的
-//   `default_clock` / `default_reset` + 本组件自有的 **5** 个
-//   ⇒ ⇒ **5** 个自有输入里 **1 位输入有 3 个** ⇒ 必须实证：
+// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **113** 个
+//   （**6** 输入 + **107** 输出 · 2026-11-14 实测）⇒ ⇒ **6** 输入 = 框架的
+//   `default_clock` / `default_reset` + 本组件自有的 **4** 个
+//   ⇒ ⇒ **4** 个自有输入里 **1 位输入有 3 个** ⇒ 必须实证：
 //   · `top_ext_rst` = `ext_rst`（实测：只有它拉低后流水线才取指）
 //   · `top_prog_we` = `prog_we`（实测：装载口生效）
-//   · `top_ext_clk` = `ext_clk` ⇒ ⚠️ **该端口是「死端口」** —— 产物里
-//     **所有**流水线寄存器都锁在框架 `default_clock`（`always_ff @(posedge default_clock …)`）
-//     ⇒ ⇒ `ext_clk` 对行为**无影响** ⇒ ⇒ 已登记为发现（见期望登记文档）。
+//   ⇒ ⇒ ⚠️ **`top_ext_clk` 已删除**（2026-11-14 · R8 改判 · 用户裁决 **A2**）
+//     —— 它是**死端口**（零消费者；产物里**所有**流水线寄存器都锁在框架 `default_clock`）
+//     ⇒ ⇒ 删前已做针对性实测（`ext_clk` 0/1 交替翻转 ⇒ 60 拍 × 27 观测**逐拍全等**）
+//     ⇒ ⇒ **真时钟源 = `default_clock`**（本 TB 的 `clk`）⇒ ⇒ **行为零变化**
 //   ⇒ ⇒ **107** 个输出 = 本组件自有的 **27** 个 + **后代冒泡**的 **80** 个
 //   （`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*` ⇒ ⇒ **未具名** ⇒ ⇒ 仍在 `sink*` 里）。
 //   ⚠️ **历史订正**：原文写「113 个端口（5 输入 + 108 输出）」⇒ ⇒ 该数字是
 //   **C8 tie-off 之前**的（B0 批给 `mem_is_load` 补 driver ⇒ ⇒ 顶层 input 8 → 7）
-//   ⇒ ⇒ 2026-11-13 按产物实测订正为 **114（7 + 107）**。
+//   ⇒ ⇒ 2026-11-13 按产物实测订正为 **114（7 + 107）**
+//   ⇒ ⇒ 2026-11-14 删 `ext_clk` ⇒ ⇒ **113（6 + 107）**。
 //
 // ⚠️ **未用输出 MUST 被读**：本 TB 把 96 个不参与判据的输出接进 `sink*` 数组
 //   ⇒ ⇒ 严格 flags 下不读会触发 `%Warning-UNUSEDSIGNAL`（**致命** —— 实测踩过同类坑）。
@@ -58,7 +60,6 @@ module tb_rv32i_soc;
     logic clk = 0;
     logic rst = 1'b1;            // 框架复位（`default_reset`，高有效）
 
-    logic        ext_clk = 1'b0;
     logic        ext_rst = 1'b0;
     logic        prog_we = 1'b0;
     logic [31:0] prog_addr = 32'h0;
@@ -184,7 +185,6 @@ module tb_rv32i_soc;
     top dut (
         .default_clock(clk),
         .default_reset(rst),
-        .top_ext_clk(ext_clk),
         .top_ext_rst(ext_rst),
         .top_prog_we(prog_we),
         .top_prog_addr(prog_addr),

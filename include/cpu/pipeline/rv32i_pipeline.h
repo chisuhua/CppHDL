@@ -50,7 +50,12 @@ class Rv32iPipeline : public ch::Component {
 public:
     __io(
         ch_in<ch_bool>      rst;
-        ch_in<ch_bool>      clk;
+        // ⚠️ **2026-11-14 · R8 改判**：`clk` 输入**已删**
+        //   ⇒ ⇒ 它**零消费者**（`include/cpu/pipeline/**` 内无任何 `io().clk` 读取）
+        //   ⇒ ⇒ 流水线寄存器全部锁在**框架 `default_clock`**（产物级实测）
+        //   ⇒ ⇒ ZERO-DEBT：零消费者端口不得留存 ⇒ ⇒ 且删掉它避免 SoC 侧留下**悬空输入**
+        //   （悬空 ⇒ ⇒ 产物里 undriven wire ⇒ ⇒ verilator 严格模式下 UNDRIVEN **致命**）
+        //   ⇒ ⇒ 公开面移除登记：`.rddf/checks/public-api-removals.tsv`
 
         ch_out<ch_uint<32>> instr_addr;
         ch_in<ch_uint<32>>  instr_data;

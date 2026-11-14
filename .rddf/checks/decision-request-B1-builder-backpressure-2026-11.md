@@ -1,5 +1,6 @@
 ---
 evidence: probe:docs/adr/ADR-055-chain-intermediate-ready-ownership.md
+状态: ✅ **已裁决并落地**（2026-11-01 · 用户拍板「链内闭包不变式 + 不对外暴露」⇒ ⇒ 落地 = ADR-055 + capability `chlib-stream-ready-ownership`）
 ---
 
 # 裁决请求单 B1：`StreamBuilder` 链内**中间级**的 ready 归属 ⇒ ✅ **已裁决并落地**

@@ -6,6 +6,32 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-14 — **删掉 RV32I SoC 的 `ext_clk` 死端口**（R8 改判 · 用户裁决 A2）
+
+### Removed
+
+- **`Rv32iPipelineTop::ext_clk`（输入）**（`examples/riscv-mini/src/rv32i_pipeline_top.h`）
+  ⇒ ⇒ 顶层端口面 **32 → 31**（产物 **114 → 113** 端口 · 6 输入 + 107 输出）
+  ⇒ ⇒ **理由**：它是**死端口** —— 被赋值但**零消费者**（产物里**所有**流水线寄存器都锁在
+  框架 `default_clock`：`always_ff @(posedge default_clock …)`）⇒ ⇒ 对行为**零影响**
+  ⇒ ⇒ 却让「SoC 由 `ext_clk` 驱动」这个**错的**直觉留在端口面上 ⇒ ⇒ 用户按名字接线时
+  踩的第一个坑，且**无任何报错**
+  ⇒ ⇒ ⚠️ **迁移指引**：TB 里**删掉** `top_ext_clk` 那根线（不删 ⇒ verilator `PINMISSING` **致命**）
+  ⇒ ⇒ **真时钟源 = 框架 `default_clock`**（TB 里接 `clk` 即可）
+- **`riscv::Rv32iPipeline::clk`（输入）**（`include/cpu/pipeline/rv32i_pipeline.h`）
+  ⇒ ⇒ **零消费者** ⇒ ⇒ ZERO-DEBT：零消费者端口不得留存
+  ⇒ ⇒ 连带删（否则它会变成**悬空输入** ⇒ ⇒ 产物里 undriven wire ⇒ ⇒ verilator 严格模式下
+  **UNDRIVEN 致命**）
+
+### 行为影响
+
+- **零行为变化**（**实测**支撑，非推断）：删前做针对性实测 ⇒ ⇒ `ext_clk` **0/1 交替翻转**
+  ⇒ ⇒ **60 拍 × 27 个输出观测逐拍全等**（1351 断言）⇒ ⇒ 零影响
+  ⇒ ⇒ 删后既有 golden（手推期望值）**全绿** ⇒ ⇒ 行为等价
+- ⚠️ 「真让 `ext_clk` 生效」（改 codegen 的时钟选择 ⇒ 全仓影响）= **另独立立项**
+
+---
+
 ## 2026-11-14 — B3 批 · **固件装载走内存初值**（`firmware-load-chain` L2 路线 A / L6）
 
 ### Added

@@ -1,5 +1,6 @@
 ---
 evidence: probe:scripts/measure_new_input_ports.sh
+状态: ✅ **已裁决并落地**（2026-11-03 · 用户拍板 D1-A + D2-A ⇒ ⇒ 落地 = `verify_input_port_additions.sh` + `input-port-required-registry.md` + `verify_input_port_required_registry.sh`）
 ---
 
 # 决策请求单：输入端口的两条「自动化护栏」路线（2026-11-03）⇒ ✅ **两条均已裁决并落地**

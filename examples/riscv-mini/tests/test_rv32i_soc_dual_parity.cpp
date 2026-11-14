@@ -118,7 +118,7 @@ constexpr const char *kObsNames[] = {
     // load-use 冒险检测脉冲（与「停顿拍数」区分）
     "dbg_load_use_detected"};
 constexpr std::size_t kObsCount = sizeof(kObsNames) / sizeof(kObsNames[0]);
-// 32 个端口里 5 个是输入（ext_clk / ext_rst / prog_*）⇒ 27 个输出被观测
+// 31 个端口里 4 个是输入（ext_rst / prog_*）⇒ 27 个输出被观测
 static_assert(kObsCount == 27, "观测向量长度必须与 SoC 顶层的**输出**端口数一致");
 
 // 观测向量的**编译期**下标查找（避免手抄下标 ⇒ 下标漂移会静默读错字段；
@@ -445,7 +445,6 @@ void load_firmware(Simulator &sim, Rv32iPipelineTop &dut,
                     const std::array<uint32_t, N> &fw) {
     auto &io = dut.io();
     sim.set_input_value(io.ext_rst, 1u);
-    sim.set_input_value(io.ext_clk, 0u);
     sim.set_input_value(io.prog_we, 1u);
     for (std::size_t i = 0; i < fw.size(); ++i) {
         sim.set_input_value(io.prog_addr, i);
@@ -2100,8 +2099,7 @@ TEST_CASE("Rv32iSoc - FirmwareInitDataLoadedFromConstruction",
     // ⚠️ 一条 `prog_*` 写都没有 ⇒ ⇒ 下面任何非零读回都**只能**来自 `init_data`
     auto release_reset = [](Simulator &sim, Rv32iPipelineTop &dut) {
         auto &io = dut.io();
-        sim.set_input_value(io.ext_clk, 0u);
-        sim.set_input_value(io.ext_rst, 1u);
+            sim.set_input_value(io.ext_rst, 1u);
         sim.set_input_value(io.prog_we, 0u);
         sim.set_input_value(io.prog_addr, 0);
         sim.set_input_value(io.prog_data, 0);

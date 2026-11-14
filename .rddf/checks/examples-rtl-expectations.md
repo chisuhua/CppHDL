@@ -568,15 +568,23 @@ axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的�
 ⇒ ⇒ ⚠️ **仍有未具名端口** = **后代冒泡到顶层**的 `top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`
 （**80** 个）⇒ ⇒ 它们**不是**根组件自有 IO ⇒ ⇒ **不在本批范围** ⇒ ⇒ 归属**后续批次**。
 
-### ⚠️ 发现 **D8**：`ext_clk` 是**死端口**
+### ✅ 发现 **D8**（**已裁决并落地** · 2026-11-14 · R8 改判 · 用户裁决 **A2**）：`ext_clk` 是**死端口** ⇒ ⇒ **已删**
 
-顶层头文件写着 `pipeline.io().clk <<= io().ext_clk;` ⇒ ⇒ 但产物里
+顶层头文件曾写着 `pipeline.io().clk <<= io().ext_clk;` ⇒ ⇒ 但产物里
 **所有**流水线寄存器都锁在框架 `default_clock`（`always_ff @(posedge default_clock …)`），
 而流水线的 `clk` 端口**被赋值但无消费者**（产物中 `top_pipeline__unnamed_input_1` 只有赋值、无使用）
 ⇒ ⇒ ⇒ **`ext_clk` 对行为零影响** ⇒ ⇒ ⇒ 用户以为「SoC 由 `ext_clk` 驱动」，实际是 `default_clock`。
 
 ⇒ ⇒ 这是 E3 这类「按名字驱动外部端口」的覆盖**才能暴露**的问题
 ⇒ ⇒ 已登记为发现（见 `.rddf/checks/decision-request-rv32i-ext-clock-dead-port-2026-11.md`）。
+
+⇒ ⇒ ✅ **2026-11-14 裁决 = A2（删端口）** ⇒ ⇒ **已落地**：
+`Rv32iPipelineTop::ext_clk` 与 `riscv::Rv32iPipeline::clk` **双双删除**
+⇒ ⇒ 顶层端口面 **32 → 31**（产物 **114 → 113** 端口 · **6** 输入 + **107** 输出）
+⇒ ⇒ ⚠️ **删前针对性实测**（R8.2 判据）：`ext_clk` **0/1 交替翻转**
+⇒ ⇒ **60 拍 × 27 观测逐拍全等**（1351 断言）⇒ ⇒ 零行为影响**实测**支撑
+⇒ ⇒ ⚠️ **TB 必须删掉 `top_ext_clk` 那根线**（不删 ⇒ verilator `PINMISSING` **致命**）
+⇒ ⇒ **真时钟源 = 框架 `default_clock`**（本 TB 的 `clk`）。
 
 ### 变异自证（对 DUT 变异 ⇒ TB MUST 转红）
 

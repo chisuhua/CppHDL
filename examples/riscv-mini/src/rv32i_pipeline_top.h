@@ -41,17 +41,20 @@ public:
 
     __io(
         // 时钟 / 复位
-        // ⚠️ **ext_clk 是「死端口」**（2026-11-13 · R8 裁决 **A2（明确注释半）**）：
-        //   本端口**被赋值但无消费者** —— 产物里**所有**流水线寄存器都锁在框架
-        //   `default_clock`（`always_ff @(posedge default_clock …)`）⇒ ⇒ `ext_clk`
-        //   对行为**零影响** ⇒ ⇒ 「SoC 由 ext_clk 驱动」这个直觉**是错的**
-        //   ⇒ ⇒ 真驱动源 = 框架 `default_clock`（TB 里接 `clk` 即可）。
-        //   ⚠️ **本端口保留**（不删）⇒ ⇒ 理由：删掉会改 SoC 顶层端口契约
-        //   （ADR-046 D10）⇒ ⇒ 属**公开面变更** ⇒ ⇒ 而它**不造成任何行为差异**
-        //   ⇒ ⇒ 成本收益不划算 ⇒ ⇒ 「真让 ext_clk 生效」= **另独立立项**。
-        //   ⇒ ⇒ 已登记：`.rddf/checks/decision-request-rv32i-ext-clock-dead-port-2026-11.md`
+        // ⚠️ **2026-11-14 · R8 改判（A2 · 用户裁决）**：**`ext_clk` 端口已删除**
+        //   ⇒ ⇒ 理由链：① 它是**死端口**（被赋值但**零消费者** —— 产物里**所有**
+        //   流水线寄存器都锁在框架 `default_clock`：`always_ff @(posedge default_clock …)`
+        //   ⇒ ⇒ 对行为**零影响**）② 「SoC 由 ext_clk 驱动」这个直觉**是错的**
+        //   ⇒ ⇒ 留着它 = 让用户按名字接线时踩第一个坑（**无任何报错**）
+        //   ⇒ ⇒ ③ 删前已做**针对性实测**（R8.2 判据）：`ext_clk` **0/1 交替翻转**
+        //   ⇒ ⇒ 60 拍 × 27 观测**逐拍全等**（1351 断言）⇒ ⇒ 零行为影响**实测**支撑
+        //   ⇒ ⇒ ④ 连带把**同样零消费者**的 `riscv::Rv32iPipeline::clk` 一并删
+        //   （否则它会变成**悬空输入** ⇒ ⇒ 产物里出现 undriven wire ⇒ ⇒ verilator
+        //   严格模式下 **UNDRIVEN 致命**；且 ZERO-DEBT 要求零消费者端口不得留存）
+        //   ⇒ ⇒ **真驱动源 = 框架 `default_clock`**（TB 里接 `clk` 即可）
+        //   ⇒ ⇒ 「真让 ext_clk 生效」= **另独立立项**（改 codegen 时钟选择 ⇒ 全仓影响）
+        //   ⇒ ⇒ 落地登记：`.rddf/checks/decision-request-rv32i-ext-clock-dead-port-2026-11.md`
         //   ⇒ ⇒ 期望登记：`.rddf/checks/examples-rtl-expectations.md` 的 D8 条。
-        ch_in<ch_bool>          ext_clk{"ext_clk"};
         ch_in<ch_bool>          ext_rst{"ext_rst"};
 
         // 固件加载（写 I-TCM；加载期保持 ext_rst = 1，计数器不会被污染）
@@ -169,7 +172,9 @@ public:
 
         // ---- 时钟 / 复位 ----
         pipeline.io().rst <<= io().ext_rst;
-        pipeline.io().clk <<= io().ext_clk;
+        // ⚠️ **2026-11-14 · R8 改判**：`pipeline.io().clk` 的赋值**已删**
+        //   （`riscv::Rv32iPipeline::clk` 本身也已删 —— 它**零消费者** ⇒ ZERO-DEBT）
+        //   ⇒ ⇒ 流水线寄存器全部锁在**框架 `default_clock`**（产物级实测）
 
         // ---- 观测输出 ----
         io().obs_instr_addr <<= pipeline.io().instr_addr;

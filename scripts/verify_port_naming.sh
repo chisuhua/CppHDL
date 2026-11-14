@@ -47,7 +47,7 @@ REGISTRY="$REPO_ROOT/.rddf/checks/port-naming-exempt.tsv"
 
 # ⚠️ **计数锚点钉在护栏脚本里**（N2 ④）—— **不**钉在可编辑的登记表里
 #    （否则「改登记表」与「改锚点」会一起动 ⇒ ⇒ 锚点失去守门作用）。
-EXPECTED_EXEMPT_PORTS=1450
+EXPECTED_EXEMPT_PORTS=1449
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; RESET='\033[0m'
 FAILS=0

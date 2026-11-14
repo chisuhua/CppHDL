@@ -56,7 +56,6 @@ public:
         pipeline.io().data_ready <<= ch_bool(true);
 
         pipeline.io().rst <<= io().rst;
-        pipeline.io().clk <<= ch_bool(true);
 
         io().instr_addr <<= pipeline.io().instr_addr;
         io().perf_cycles <<= pipeline.io().perf_cycles;

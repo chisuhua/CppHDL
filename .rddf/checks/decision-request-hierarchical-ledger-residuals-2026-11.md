@@ -1,5 +1,6 @@
 ---
 evidence: probe:scripts/probe_arch_ledger_residuals.sh
+状态: ✅ **已闭**（建议 **B** 已落地 · 2026-11-14 复核：登记表 `arch-residual-registry.md` + 护栏 `verify_arch_ledger_residuals.sh` + CI 接线 ⇒ ⇒ 本单 §1.2 的 3 行陈旧已变「已收口 / 已裁决」⇒ ⇒ 本单 §1.3 的口径差亦已随行 1b 落地）
 ---
 
 # 决策请求单：架构台账 §7 的**陈旧状态格**与**口径差**（2026-11-07）

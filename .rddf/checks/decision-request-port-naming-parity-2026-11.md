@@ -1,5 +1,6 @@
 ---
 evidence: test:tests/test_port_name_parity.cpp
+状态: ✅ **已闭**（①②③ 2026-11-10 用户拍板 ⇒ ⇒ **R1-a / R1-b 两份 spec 追加已落地**（`rtl-hierarchical-output/spec.md` + `component-ownership-and-naming/spec.md`）⇒ ⇒ **R2 残差登记两侧已落地**（登记表 21 / 21b / 22 + 台账 §7 同批）⇒ ⇒ 仅剩 planner 域的 AC 回填（U2 后续））
 ---
 
 # 决策请求单：端口命名相关的**两份 spec 追加** + **残差台账两行**（2026-11-10）

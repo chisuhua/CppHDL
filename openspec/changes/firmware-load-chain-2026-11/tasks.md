@@ -12,7 +12,8 @@
       ⇒ ⇒ **2026-11-14 实测订正**：编码器**只剩 1 处**（`examples/riscv-mini/tests/
       test_rv32i_soc_dual_parity.cpp`）⇒ ⇒ 「3 处副本」是**陈旧记录**（另两处已在先前的
       change 里删除）⇒ ⇒ L3 的真实工作 = **把它上移到库**（否则工具无法复用）
-- [ ] 确认工作区干净（`git status --short` 为空）⇒ ⇒ **禁** `git add -A`
+- [x] 确认工作区干净（`git status --short` 为空）⇒ ⇒ **禁** `git add -A`
+      ⇒ ⇒ **2026-11-14 已完成**（提交 `2e8b529` / `a2f5075` 后工作区干净）
 
 ```bash
 cd /workspace/project/CppHDL
@@ -23,7 +24,13 @@ bash scripts/verify_test_counts.sh
 
 ## S1 — L1：显式映射表 + 越界诊断（**先红后绿**）
 
-- [ ] 写**越界投毒判据**：地址设到区域外 ⇒ ⇒ **MUST 有诊断** ⇒ ⇒ **先红**
+- [ ] 🔴 **写**越界投毒判据**：地址设到区域外 ⇒ ⇒ **MUST 有诊断** ⇒ ⇒ **先红**
+      ⇒ ⇒ **2026-11-14 复核：真未做** ⇒ ⇒ **归 T4 批次**（`memory-timing-contract`）
+      ⇒ ⇒ ⚠️ **为什么必须做**：`address_decoder` 现有用例只测 `0x12345678`
+      ⇒ ⇒ **旧 64 KB 声明下也红** ⇒ ⇒ **零判别力**
+      ⇒ ⇒ **有判别力的形态**：`0x8000_4000`（**旧 64 KB ITCM 内 · 新 16 KB 外**）
+      ⇒ ⇒ ⇒ ⇒ **MUST** `error_cs == 1` **且** `i_tcm_cs == 0`（旧声明下会红 ⇒ 才算投毒有效）
+      ⇒ ⇒ 载体 = `examples/riscv-mini/tests/test_riscv_tests_soc.cpp`（既有 decoder 用例旁）
 - [x] `examples/riscv-mini/src/rv32i_pipeline_top.h`：显式 `{base, size}` 表
       ⇒ ⇒ **2026-11-14 已实施**：表**上移到库** = `include/cpu/riscv/rv32i_mem_map.h`
       （`kItcm` / `kDtcm` / `kTcmBytes` / `kPcReset`）⇒ ⇒ SoC 顶层与 `address_decoder.h`
@@ -33,8 +40,13 @@ bash scripts/verify_test_counts.sh
       ⇒ ⇒ **2026-11-14 已实施**：`if_stage.h` 的 `pc_reg` 复位值改为 `riscv::kPcReset`
       （= `kItcm.base`）⇒ ⇒ **值不变**（仍 `0x80000000`）⇒ ⇒ **既有期望值零漂移** ✓
       ⇒ ⇒ ⚠️ 按 metis 订正：**不改复位值本身**（改了只会 churn 全部 `dbg_id_pc` 期望）
-- [ ] ⚠️ **对齐要求是 16 KB 而非 4 KB** ⇒ ⇒ 「截断等价的最小判据」按 16 KB 取
-- [ ] ⚠️ **受影响地址字面量清单**逐条登记（`grep -n 'has_store(t, 0x'` ⇒ ⇒ **禁**只报计数增量）
+- [x] ⚠️ **对齐要求是 16 KB 而非 4 KB** ⇒ ⇒ 「截断等价的最小判据」按 16 KB 取
+      ⇒ ⇒ **2026-11-14 已落地**：`kTcmBytes = 1 << (kTcmAddrWidth + 2)` **派生** = 16 KB
+      ⇒ ⇒ 证据：转储器 manifest 的 `size` 断言 = **16384**（护栏 D2）
+- [x] ⚠️ **受影响地址字面量清单**逐条登记（`grep -n 'has_store(t, 0x'` ⇒ ⇒ **禁**只报计数增量）
+      ⇒ ⇒ **2026-11-14 复核：前提未触发** ⇒ ⇒ L1 **没有**改任何绝对地址
+      ⇒ ⇒ （地址仍是**区域内偏移** `0x100` / `0x104` ⇒ ⇒ golden 的地址字面量**零条目**需重推）
+      ⇒ ⇒ ⚠️ 若将来改成**绝对地址**（如 `0x8001_0100`）⇒ ⇒ 这条**重新生效** ⇒ ⇒ 必须逐条登记
 
 ```bash
 cd /workspace/project/CppHDL
@@ -73,8 +85,12 @@ bash scripts/verify_port_naming.sh
       ⇒ ⇒ **2026-11-14 已实施**（`NOP` / `enc_{r,i,s,b,j,u}` / 17 个便捷别名）
 - [x] 既有 **3 处副本**归一为 **1 份**（`enc_r` / `enc_i` 等定义**唯一**）
       ⇒ ⇒ **2026-11-14 已实施**：测试的本地副本**删除** ⇒ ⇒ 改为 `using riscv::…` 引用库
-- [ ] ⚠️ **`FirmwareEncoderCrossCheck` MUST 保留**（手算常量 vs helper）⇒ ⇒ **禁**顺手删
-- [ ] 新头文件有**仓内消费者**（既有测试 + 新工具）⇒ ⇒ 不违反 ZERO-DEBT
+- [x] ⚠️ **`FirmwareEncoderCrossCheck` MUST 保留**（手算常量 vs helper）⇒ ⇒ **禁**顺手删
+      ⇒ ⇒ **2026-11-14 复核：仍在**（`test_rv32i_soc_dual_parity.cpp` 的
+      `Rv32iSoc - FirmwareEncoderCrossCheck` ⇒ ⇒ 校验的是**库** `riscv::enc_*`）
+- [x] 新头文件有**仓内消费者**（既有测试 + 新工具）⇒ ⇒ 不违反 ZERO-DEBT
+      ⇒ ⇒ **2026-11-14 已满足**：`rv32i_asm_encode.h` ← 测试 + `tools/rv32i-fw-dump`；
+      ⇒ ⇒ `rv32i_mem_map.h` ← SoC 顶层 + `address_decoder.h` + `if_stage.h` + 转储器工具
 
 ```bash
 cd /workspace/project/CppHDL
@@ -104,7 +120,10 @@ bash scripts/verify_example_test_wiring.sh
       ⇒ ⇒ **2026-11-14 已实施**（校验 EI_CLASS/EI_DATA/e_machine=243/ET_EXEC）
 - [x] `.bss`（`memsz > filesz`）**补零** ⇒ ⇒ 旧内容不留
       ⇒ ⇒ **2026-11-14 已实施** + 判据 = 护栏 **D3**（19 字 = 3 代码 + 16 零）
-- [ ] ⚠️ **非零重定位 ⇒ 报错**（不是静默忽略）
+- [x] ⚠️ **非零重定位 ⇒ 报错**（不是静默忽略）⇒ ⇒ **改判为「已知边界 · 不做」**
+      ⇒ ⇒ **2026-11-14 复核**：本工具**不解析符号表** ⇒ ⇒ `.rela` 在 section 里
+      ⇒ ⇒ ⇒ ⇒ **program header 看不到** ⇒ ⇒ **静态检查不完整**（不是「漏做」而是「做不到」）
+      ⇒ ⇒ 已登记于 `design.md` §5 的「已知边界」⇒ ⇒ 真要闭环 = **独立立项**（解析 section）
 - [x] ⚠️ **不解析符号表** ⇒ ⇒ 符号留给未来工具
       ⇒ ⇒ **2026-11-14 已实施**（**不**读 section header）⇒ ⇒ ⚠️ 由此带来的**边界**已登记：
       「非零重定位」的静态检查**不完整**（`.rela` 在 section 里 ⇒ program header 看不到）
@@ -130,7 +149,9 @@ ctest --test-dir build --output-on-failure -R 'firmware|elf'
   （`x1 = 0` ≠ `0x5A`）⇒ ⇒ 还原 + **重建**后复绿 ✅
 - [x] 计数锚点同步（用 `scripts/update_test_count_anchors.sh` ⇒ ⇒ **禁**手写数字）
       ⇒ ⇒ **2026-11-14**：`CTEST_TOTAL` 263 → **264**（+1 = `test_hazard_unit_stall`）
-- [ ] 全护栏复跑 + 验收报告落 `.rddf/reviews/`
+- [x] 全护栏复跑 + 验收报告落 `.rddf/reviews/`
+      ⇒ ⇒ **2026-11-14 已完成**：`.rddf/reviews/memory-timing-contract-t1-t2-verify-2026-11.md`
+      ⇒ ⇒ + `.rddf/reviews/firmware-load-chain-l2-a-verify-2026-11.md`（L2 路线 A / L6）
 
 ```bash
 cd /workspace/project/CppHDL

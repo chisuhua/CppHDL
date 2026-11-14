@@ -36,7 +36,6 @@ public:
     void describe() override {
         ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};
         pipeline.io().rst <<= io().rst;
-        pipeline.io().clk <<= ch_bool(true);
         pipeline.io().instr_data <<= io().instr_data;
         pipeline.io().instr_ready <<= io().instr_ready;
         pipeline.io().data_read_data <<= io().data_read_data;
