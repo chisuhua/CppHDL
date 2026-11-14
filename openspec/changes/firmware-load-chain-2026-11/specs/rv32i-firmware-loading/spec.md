@@ -34,25 +34,46 @@ RV32I SoC MUST 以**显式映射表**声明其存储区域，每个区域 MUST �
 - **THEN** 该区 MUST **只占位**（声明 base / size）
 - **AND** MUST NOT 接入任何设备
 
-### Requirement: 顶层加载接口 MUST 用**字节地址**且 MUST 覆盖**全部**数据区
+### Requirement: 固件装载 MUST 经**内存初值**完成，MUST NOT 要求新增装载端口
 
-顶层加载接口 MUST 携带 `(we, addr[**字节**地址], data[word], size)`
-⇒ ⇒ 由映射表译码到 I-TCM 或 D-TCM ⇒ ⇒ **一次接口 MUST 能装两个区域**。
+固件（`.text` + **`.data`**）MUST 能以**内存初值**的形式进入对应 TCM
+⇒ ⇒ 载体 = `ch_mem::init_data`（构造参数）⇒ ⇒ 发射时落成 Verilog `initial` 块。
 
-⇒ ⇒ ⚠️ 加载端口的**地址语义**（字节地址）MUST 在**公开面登记**里写明
-⇒ ⇒ 旧的「字索引」语义 MUST NOT 残留。
+⇒ ⇒ 顶层**端口面 MUST 保持不变** ⇒ ⇒ **MUST NOT** 为装载新增 / 修改任何 `ch_in`
+⇒ ⇒ 理由：装载是**发射期**的事，不是运行期协议；给 RTL 加装载口会把「端口契约」
+和「固件内容」耦合在一起。
 
-#### Scenario: 一次装载 MUST 能覆盖 I-TCM 与 D-TCM
+⇒ ⇒ **运行期装载口**（不重发射即可灌固件）**不在**本 capability 内 ⇒ ⇒ 若需要 ⇒ ⇒ 独立立项。
+
+#### Scenario: `.text` 与 `.data` MUST 都能装载
 
 - **WHEN** 一个固件同时含 `.text`（I-TCM）与 `.data`（D-TCM）
-- **THEN** 同一个加载接口 MUST 能把两者分别装进对应区域
-- **AND** MUST NOT 出现「`.data` 无处可装」的情况
+- **THEN** 两段 MUST 分别落进对应 TCM 的**初值镜像**
+- **AND** MUST NOT 出现「`.data` 无处可装」的情况（⇒ ⇒ 修前 `prog_*` 只接 I-TCM）
 
-#### Scenario: 加载端口 MUST 具名
+#### Scenario: 产物 MUST 自带初值块
 
-- **WHEN** 顶层新增或修改加载端口
-- **THEN** 该端口 MUST 带**显式名**（`标识符 == 名字串`）
-- **AND** MUST NOT 新增未具名的端口（⇒ ⇒ 否则端口命名棘轮判红）
+- **WHEN** 发射一个**带初值**的 SoC
+- **THEN** 产物的对应内存 MUST 出现 `initial begin … end` 且**逐字**等于初值镜像
+- **AND** 产物**不带初值**时 MUST **一条** init 赋值都没有
+  （⇒ ⇒ 否则「初值只来自 `init_data`」不成立）
+
+#### Scenario: 顶层端口面 MUST 不变
+
+- **WHEN** 对比「带初值」与「不带初值」两次发射的产物
+- **THEN** 两者的**顶层端口表** MUST **逐字相同**
+- **AND** MUST NOT 出现装载专用端口
+
+### Requirement: 装载后的值 MUST 走**真实**读通路可读回
+
+装载完成后，判据 MUST 能断言「装进内存的值 == 经流水线读通路读回的值」
+⇒ ⇒ **不是**「装载器返回成功」。
+
+#### Scenario: `.data` 经 load 指令读回
+
+- **WHEN** `.data` 的某字经初值镜像装载进 D-TCM
+- **THEN** 一条 `lw` 从该地址读回 MUST 得到该值
+- **AND** 该值 MUST 由**寄存器写回**观测到（⇒ ⇒ 不是直接读内存模型）
 
 ### Requirement: 固件转储器 MUST 产出**可寻址**的产物
 

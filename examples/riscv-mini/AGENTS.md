@@ -13,7 +13,10 @@ examples/riscv-mini/
 ├── rv32i_phase1_test.cpp    # RegFile + ALU + Decoder
 ├── rv32i_phase2_test.cpp    # Branch + Jump (13/13)
 ├── rv32i_phase3_test.cpp    # Load/Store (13/13)
-├── src/                     # ⚠️ 只剩 **1** 个头（SoC 顶层）
+├── emit_rtl.cpp             # RTL 发射入口（基线：内存无初值）
+├── emit_rtl_fw_init.cpp     # RTL 发射入口 · **带固件初值**（`firmware-load-chain` L2 路线 A）
+├── src/                     # **2** 个头（SoC 顶层 + 带 `.data` 的示例固件）
+│   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
 │   └── rv32i_pipeline_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
 │                             #  ✅ **已有消费者**（2026-10-25）：`tests/
 │                             #  test_rv32i_soc_dual_parity.cpp`（SoC 级双路

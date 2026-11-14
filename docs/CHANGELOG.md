@@ -6,6 +6,34 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-14 — B3 批 · **固件装载走内存初值**（`firmware-load-chain` L2 路线 A / L6）
+
+### Added
+
+- **`InstrTCM` / `DataTCM` 新增**可选**构造参数 `init_words`**
+  （`include/cpu/pipeline/rv32i_tcm.h`）⇒ ⇒ 传**字镜像**（下标 = 字索引）
+  ⇒ ⇒ 内部 `ch_mem(init_words, …)` 带 `init_data`
+  ⇒ ⇒ 发射产物里自动出现 `initial begin mem[i] = … end`（既有 `print_mem_init`）
+  ⇒ ⇒ **TB 零装载动作** · **顶层端口面一字不变**
+  ⇒ ⇒ ⚠️ **默认空 ⇒ 与基线逐字节等价**（同一条 `init_memory(…, {})` 路径）
+  ⇒ ⇒ 迁移指引：无（**非破坏性**；只在显式传参时改变产物内容）
+- **`Rv32iPipelineTop` 新增 `itcm_init` / `dtcm_init` 构造参数**
+  （`examples/riscv-mini/src/rv32i_pipeline_top.h`）⇒ ⇒ 透传到 TCM 构造
+  ⇒ ⇒ 🔴 **`dtcm_init` 是 `.data` 段的落点** —— 此前 `prog_*` **只**接 I-TCM
+  ⇒ ⇒ 有初始化 `.data` 的程序**装不进去**（本项修掉这一点）
+- **`examples/riscv-mini/src/rv32i_fw_demo.h`** ⇒ ⇒ 带 `.data` 的示例固件（4 条指令，编码**手推**）
+- **`examples/riscv-mini/emit_rtl_fw_init.cpp`** ⇒ ⇒ 「带固件初值」的发射器
+  （`emit_rtl_rv32i_soc_fw_init`）⇒ ⇒ 产物自带 `initial` 初值块
+
+### Changed
+
+- **装载路线变更（方案层，非行为回退）**：原设计的「统一加载端口
+  `(we, addr[字节], data[size])`」**移出本 change** ⇒ ⇒ 装载改为**发射期**完成
+  ⇒ ⇒ 理由：路线 B 需付三项代价（D-TCM 写端口 **MULTIDRIVEN** · 装载期读地址共用 ·
+  端口契约变更）⇒ ⇒ 运行期装载口 = 「**可装载性接口**」⇒ ⇒ 独立立项
+
+---
+
 ## 2026-11-14 — B3 批 · **新增固件装载地基 + 编码器库**（`firmware-load-chain` L1/L3/L4/L5）
 
 ### Added

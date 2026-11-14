@@ -161,6 +161,18 @@ set_target_properties(emit_rtl_rv32i_soc PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
+# ⚠️ **同一设计的「带固件初值」变体**（`firmware-load-chain` L2 = 路线 A）：
+#   与上面的 target **共用全部组件**，唯一差别 = TCM 的 `init_data`
+#   ⇒ ⇒ 产物里多出 `initial begin mem[i] = … end`
+#   ⇒ ⇒ **零端口变更** ⇒ ⇒ 两条产物路径互不影响（各自的 `--out` 目录）
+add_executable(emit_rtl_rv32i_soc_fw_init emit_rtl_fw_init.cpp)
+target_link_libraries(emit_rtl_rv32i_soc_fw_init PRIVATE cpphdl)
+target_include_directories(emit_rtl_rv32i_soc_fw_init PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(emit_rtl_rv32i_soc_fw_init PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+)
+
 # === 安装 (Phase 1-3 + 5 个核心 Pipeline 测试) ===
 install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test
               test_pipeline_exec test_soc_hello_world test_riscv_tests

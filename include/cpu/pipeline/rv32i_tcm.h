@@ -7,6 +7,11 @@
  * - D-TCM: 数据存储器 (SRAM 模型)
  * - 单周期访问
  * - 可选 AXI4 接口
+ * - **可选的**初值**（`firmware-load-chain` **L2 = 路线 A**）**：
+ *   构造时传入 `std::vector<uint32_t>` ⇒ ⇒ 内部的 `ch_mem` 带 `init_data`
+ *   ⇒ ⇒ **产物里自动出现 `initial begin mem[i] = … end`**（`print_mem_init`）
+ *   ⇒ ⇒ **TB 零装载动作** · **零端口变更**（不改 SoC 的 `__io`）
+ *   ⇒ ⇒ 空 vector（默认）⇒ ⇒ 与「无初值」**逐字节等价**（同一条 `init_memory` 路径）
  */
 
 #pragma once
@@ -14,6 +19,9 @@
 #include "ch.hpp"
 #include "component.h"
 #include "axi4/byte_lane.h"
+
+#include <cstdint>
+#include <vector>
 
 namespace riscv {
 
@@ -40,17 +48,24 @@ public:
         ch_in<ch_uint<DATA_WIDTH>> write_data;
     )
     
-    InstrTCM(ch::Component* parent = nullptr, const std::string& name = "itcm")
-        : ch::Component(parent, name) {}
+    /// ⚠️ **`init_words` 是**字节对齐的字**镜像**（下标 = 字索引）**
+    ///    ⇒ ⇒ 空 vector（默认）= 无初值 ⇒ ⇒ 与基线**逐字节等价**
+    InstrTCM(ch::Component* parent = nullptr, const std::string& name = "itcm",
+             const std::vector<uint32_t>& init_words = {})
+        : ch::Component(parent, name), init_words_(init_words) {}
     
     void create_ports() override {
         new (io_storage_) io_type;
     }
+
+    /// **初值字镜像**（空 = 无初值）
+    std::vector<uint32_t> init_words_;
     
     void describe() override {
         // 简化 ROM 模型
-        // 实际实现应该使用 ch_mem
-        ch_mem<ch_uint<DATA_WIDTH>, SIZE> memory("itcm_memory");
+        // ⚠️ **L2（路线 A）**：`init_words_` 非空 ⇒ ⇒ 产物带 `initial` 初值块
+        //    ⇒ ⇒ 空 ⇒ ⇒ 与「无初值」同一条 `init_memory(…, {})` 路径 ⇒ 零变化
+        ch_mem<ch_uint<DATA_WIDTH>, SIZE> memory(init_words_, "itcm_memory");
         
         // 读端口
         auto read_data = memory.sread(io().addr, ch_bool(true));
@@ -88,16 +103,25 @@ public:
         ch_out<ch_uint<DATA_WIDTH>> rdata;
     )
     
-    DataTCM(ch::Component* parent = nullptr, const std::string& name = "dtcm")
-        : ch::Component(parent, name) {}
+    /// ⚠️ **`init_words` 是**字节对齐的字**镜像**（下标 = 字索引）**
+    ///    ⇒ ⇒ 空 vector（默认）= 无初值 ⇒ ⇒ 与基线**逐字节等价**
+    ///    ⇒ ⇒ 🔴 **这就是 `.data` 段的落点** —— 此前 `prog_*` **只**接 I-TCM
+    ///    ⇒ ⇒ 有初始化 `.data` 的程序**装不进去**（本参数修掉这一点）
+    DataTCM(ch::Component* parent = nullptr, const std::string& name = "dtcm",
+            const std::vector<uint32_t>& init_words = {})
+        : ch::Component(parent, name), init_words_(init_words) {}
     
     void create_ports() override {
         new (io_storage_) io_type;
     }
+
+    /// **初值字镜像**（空 = 无初值）
+    std::vector<uint32_t> init_words_;
     
     void describe() override {
         // SRAM 模型
-        ch_mem<ch_uint<DATA_WIDTH>, SIZE> memory("dtcm_memory");
+        // ⚠️ **L2（路线 A）**：同 `InstrTCM` —— 非空 ⇒ 产物带 `initial` 初值块
+        ch_mem<ch_uint<DATA_WIDTH>, SIZE> memory(init_words_, "dtcm_memory");
         
         // ⚠️ **字节写 MUST 是「读-改-写」**（2026-10-26 新增）：
         //    `ch_mem::write(addr, data, en)` 只写**整字**（`include/core/mem.h`）

@@ -663,6 +663,19 @@ jobs:
         cmake --build build --target rv32i-fw-dump
         scripts/verify_rv32i_fw_dump.sh
 
+    - name: Verify RV32I firmware init in emitted product (L2/L6)
+      # `firmware-load-chain` L2（路线 A）/ L6 的判据（F0–F5）:
+      #   F2 **零端口变更**（带初值产物 vs 基线产物的顶层端口表逐字相同）
+      #   F3 产物 `initial` 块携带**手推**的固件字（I-TCM[0..3] + D-TCM[64]=0x5a）
+      #   F4 基线产物**零** init 赋值（反向 ⇒ 证明初值只来自 `ch_mem::init_data`）
+      #   F5 确定性（连发两次逐字节相同）
+      # ⚠️ 不需要 verilator / 网络 ⇒ ⇒ 主 job（BUILD_VERILATOR=OFF）也能跑
+      shell: bash
+      run: |
+        cmake --build build --target emit_rtl_rv32i_soc emit_rtl_rv32i_soc_fw_init
+        scripts/verify_rv32i_fw_init_rtl.sh
+        scripts/verify_rv32i_fw_init_rtl.sh --self-test
+
     - name: Verify flat RTL emit products (self-test)
       # ⚠️ **verilator is REQUIRED** (2026-11-13 · RC-6): F1/F2/F8 lint and emit
       # real Verilog. This job is `BUILD_VERILATOR=OFF` (fast default path), so

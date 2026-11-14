@@ -63,6 +63,7 @@
 #include "cpu/pipeline/rv32i_pipeline.h"
 #include "cpu/pipeline/rv32i_tcm.h"
 #include "cpu/riscv/rv32i_asm_encode.h"
+#include "rv32i_fw_demo.h"
 #include "rv32i_pipeline_top.h"
 #include "simulator.h"
 
@@ -2035,4 +2036,121 @@ TEST_CASE("Rv32iSoc - ForwardingTierDistanceCases",
             REQUIRE(wb[i] == kFwdTierWritebacks[i]);
         }
     }
+}
+
+// ===========================================================================
+// **L2（路线 A）+ L6**：固件经 `ch_mem::init_data` 装载 ⇒ ⇒ **TB 零装载动作**
+//
+// ## 为什么这条用例必须存在
+//
+// 此前固件装载**只**走顶层 `prog_*` 端口 ⇒ ⇒ 它**只接 I-TCM**
+// ⇒ ⇒ 有初始化 `.data` 的程序**装不进去**（D-TCM 永远是零）。
+//
+// ⇒ ⇒ 路线 A 把固件灌进 `ch_mem::init_data` ⇒ ⇒ 产物里自动出现
+// `initial begin mem[i] = … end`（`print_mem_init`）⇒ ⇒ **零端口变更**。
+//
+// ⇒ ⇒ 本用例**不调用** `load_firmware()` —— 一次 `prog_*` 写都不做
+// ⇒ ⇒ 若 `.data` 没真的进 D-TCM ⇒ ⇒ `x1 = 0` ⇒ ⇒ 下方断言**两条同时红**
+// （这正是「走真实读通路读回」与「loader 说成功」的区别）。
+// ===========================================================================
+TEST_CASE("Rv32iSoc - FirmwareInitDataLoadedFromConstruction",
+          "[rv32i][soc][fwinit][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 40;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    // ⚠️ **初值经构造参数透传**（`ch_device<T, Args…>` ⇒ `T(nullptr,"top",Args…)`）
+    //    ⇒ ⇒ **不是**通过端口写进去的
+    // ⚠️ `ch_device<T, Args...>` 的 `Args...` MUST **显式**给出
+    //    （类模板参数不对构造函数实参做推导 ⇒ ⇒ 只写 `ch_device<T>` = 零参）
+    using FwDev = ch::ch_device<Rv32iPipelineTop, std::vector<uint32_t>,
+                                std::vector<uint32_t>>;
+    auto dev_a = std::make_unique<FwDev>(rv32i_fw_demo::text(),
+                                         rv32i_fw_demo::data());
+    auto dev_b = std::make_unique<FwDev>(rv32i_fw_demo::text(),
+                                         rv32i_fw_demo::data());
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_fwinit");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    // ---- **零装载**：只释放复位 ----
+    // ⚠️ 一条 `prog_*` 写都没有 ⇒ ⇒ 下面任何非零读回都**只能**来自 `init_data`
+    auto release_reset = [](Simulator &sim, Rv32iPipelineTop &dut) {
+        auto &io = dut.io();
+        sim.set_input_value(io.ext_clk, 0u);
+        sim.set_input_value(io.ext_rst, 1u);
+        sim.set_input_value(io.prog_we, 0u);
+        sim.set_input_value(io.prog_addr, 0);
+        sim.set_input_value(io.prog_data, 0);
+        sim.tick(1);
+        sim.set_input_value(io.ext_rst, 0u);
+    };
+    release_reset(*sim_a, dev_a->instance());
+    release_reset(*sim_b, dev_b->instance());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（**无掩码**）----
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② **ISA 语义手推**：`.data` 真的经 D-TCM 读通路读回 ----
+    std::map<uint64_t, std::set<uint64_t>> written;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        if (ta[c][kIdxWbWriteEn] != 1u) continue;
+        written[ta[c][kIdxWbRdAddr]].insert(ta[c][kIdxWbWriteData]);
+    }
+    {
+        INFO("x1 expected 0x" << std::hex << rv32i_fw_demo::kExpectX1);
+        const auto it = written.find(1);
+        REQUIRE(it != written.end());      // lw x1, 0x100(x0) MUST 写回
+        REQUIRE(it->second.size() == 1u);
+        REQUIRE(*it->second.begin() == rv32i_fw_demo::kExpectX1);
+    }
+    {
+        INFO("x2 expected 0x" << std::hex << rv32i_fw_demo::kExpectX2);
+        const auto it = written.find(2);
+        REQUIRE(it != written.end());      // addi x2, x1, 1
+        REQUIRE(it->second.size() == 1u);
+        REQUIRE(*it->second.begin() == rv32i_fw_demo::kExpectX2);
+    }
+
+    // ---- ③ 写存储：`sw x2, 0x104(x0)` ⇒ 数据 = 0x5B · 地址 = 0x104 ----
+    REQUIRE(has_store(ta, 0x104u,
+                      static_cast<uint32_t>(rv32i_fw_demo::kExpectX2)));
+
+    // ---- ④ 反向期望：I-TCM 里**没有**的东西不能凭空出现 ----
+    // `.data` 只在 D-TCM ⇒ ⇒ 若把 `.data` 错灌进 I-TCM，取指会读到数据字
+    // （0x5A 不是合法指令）⇒ ⇒ 本用例的 ② 会红。这里再钉一条正向：x1 的**来源字**
+    // 不是零 ⇒ ⇒ 由 ② 的值断言承担（0x5A != 0）。
 }

@@ -1,7 +1,9 @@
 # Tasks: 固件装载链路（显式映射 + 统一加载端口 + 转储器 / ELF 装载）
 
 > **实施顺序固定**（见 `design.md` §1）⇒ ⇒ MUST 按序执行。
-> ⚠️ **L1 与 L2 MUST 同批**（二者都改 SoC 顶层端口契约 ⇒ ⇒ 公开面登记只写一次）。
+> ⚠️ ~~**L1 与 L2 MUST 同批**（二者都改 SoC 顶层端口契约 ⇒ ⇒ 公开面登记只写一次）~~
+> ⇒ ⇒ **2026-11-14 用户裁决**：L2 改走 **路线 A（内存初值）** ⇒ ⇒ **零端口变更**
+> ⇒ ⇒ 该「同批」约束**随之失效**（理由成立的前提对象不存在了）。
 > ⚠️ **与 `memory-timing-contract` 同批实施** ⇒ ⇒ **先做那一个**（D-TCM 读时序先定）。
 
 ## S0 — 开工前基线（**零改动**）
@@ -40,19 +42,29 @@ cmake --build build -j$(nproc)
 bash scripts/verify_port_naming.sh
 ```
 
-## S2 — L2：统一加载端口（**与 S1 同批**）
+## S2 — L2：**内存初值装载**（路线 A · 2026-11-14 用户裁决）
 
-- [ ] 加载接口语义 = `(we, addr[字节地址], data[word], size)` ⇒ ⇒ 译码到 I-TCM / D-TCM
-- [ ] ⚠️ **新端口 MUST 具名**（R17 基线 ⇒ ⇒ 护栏 P1 会拦）
-- [ ] 公开面登记：`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各 1 行
-  （⚠️ **前置登记** ⇒ ⇒ 「字索引 → 字节地址」的迁移指引）
-- [ ] 旧「字索引」语义 MUST NOT 残留
+> 原设计（统一加载端口 `(we, addr[字节], data[size])`）**已移出** ⇒ ⇒ 见 proposal 的 Out of Scope。
+> 理由：装载是**发射期**的事 ⇒ ⇒ 产物自足 ⇒ ⇒ **零端口变更**；而路线 B 要付
+> 「D-TCM 写端口 MULTIDRIVEN」「装载期读地址共用」两项代价。
+
+- [x] `InstrTCM` / `DataTCM` 增加**可选** `init_words` 构造参数（默认空 ⇒ **零行为变化**）
+      ⇒ ⇒ **2026-11-14 已实施**（`include/cpu/pipeline/rv32i_tcm.h`）⇒ ⇒ `ch_mem(init_words_, …)`
+- [x] `Rv32iPipelineTop` 增加 `itcm_init` / `dtcm_init` 并**透传**到 TCM 构造
+      ⇒ ⇒ **2026-11-14 已实施**（`ch::ch_module<T, Args…>` 已支持参数透传 ⇒ 零新机制）
+- [x] 带 `.data` 的示例固件 + 带初值的发射器
+      ⇒ ⇒ **2026-11-14 已实施**（`examples/riscv-mini/src/rv32i_fw_demo.h` ·
+      `examples/riscv-mini/emit_rtl_fw_init.cpp`）
+- [x] ⚠️ **零端口变更**有**产物级判据**（不是口头承诺）
+      ⇒ ⇒ `scripts/verify_rv32i_fw_init_rtl.sh` **F2**（两次发射的顶层端口表逐字 diff）
+- [x] 公开面登记：`docs/CHANGELOG.md`（**新增**可选构造参数 ⇒ 非破坏性）
 
 ```bash
 cd /workspace/project/CppHDL
-cmake --build build -j$(nproc)
+cmake --build build -j$(nproc) --target emit_rtl_rv32i_soc emit_rtl_rv32i_soc_fw_init
+bash scripts/verify_rv32i_fw_init_rtl.sh
+bash scripts/verify_rv32i_fw_init_rtl.sh --self-test
 bash scripts/verify_port_naming.sh
-bash scripts/verify_public_api_visibility.sh
 ```
 
 ## S3 — L3：编码器库化
@@ -106,9 +118,16 @@ ctest --test-dir build --output-on-failure -R 'firmware|elf'
 
 ## S6 — L6：装载可观测性 + 收口
 
-- [ ] 装载后**走真实读通路**读回 ⇒ ⇒ TB 断言「装进去的值 == 期望」
+- [x] 装载后**走真实读通路**读回 ⇒ ⇒ 断言「装进去的值 == 期望」
   ⇒ ⇒ ⚠️ **不是**「loader 返回成功」
-- [ ] 一个带 `.data` 的固件可装并读回 ⇒ ⇒ **D-TCM 加载通路非零覆盖**
+  ⇒ ⇒ **2026-11-14 已实施**：`Rv32iSoc - FirmwareInitDataLoadedFromConstruction`
+  （`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp`）⇒ ⇒ **零 `prog_*` 写**
+  ⇒ ⇒ 断言来自 **WB 写回**（`dbg_wb_rd_addr` / `dbg_wb_write_data`）而不是直读内存模型
+  ⇒ ⇒ 双后端逐拍全等（interpreter + verilator ⇒ verilator 侧 = 真 Verilog 的 `initial` 生效）
+- [x] 一个带 `.data` 的固件可装并读回 ⇒ ⇒ **D-TCM 加载通路非零覆盖**
+  ⇒ ⇒ **2026-11-14 已实施**：`x1 = 0x5A`（`lw x1, 0x100(x0)` ⇒ 来自 `.data`）· `x2 = 0x5B`
+  ⇒ ⇒ **变异自证**：把 `dtcm_init_` 换成 `itcm_init_`（丢掉 `.data`）⇒ ⇒ 重建后 **红**
+  （`x1 = 0` ≠ `0x5A`）⇒ ⇒ 还原 + **重建**后复绿 ✅
 - [x] 计数锚点同步（用 `scripts/update_test_count_anchors.sh` ⇒ ⇒ **禁**手写数字）
       ⇒ ⇒ **2026-11-14**：`CTEST_TOTAL` 263 → **264**（+1 = `test_hazard_unit_stall`）
 - [ ] 全护栏复跑 + 验收报告落 `.rddf/reviews/`
@@ -121,6 +140,11 @@ bash scripts/verify_openspec_delta.sh
 ```
 
 ## Out of Scope（**本 change 不做**）
+
+- ❌ **运行期装载口**（不重发射即可灌固件）⇒ ⇒ 原 L2 的「统一加载端口」**已移出**
+  （2026-11-14 用户裁决）⇒ ⇒ 它本质是「**可装载性接口**」（真机 bring-up / 调试口）
+  ⇒ ⇒ 独立立项，且 MUST 先解决「D-TCM 不能加第二个 `ch_mem` 写端口」（Verilog **MULTIDRIVEN**）
+  与「D-TCM 的 `addr` 被读路径共用 ⇒ 装载期流水线 MUST 在复位」两条约束
 
 - ❌ 符号表解析 / 重定位实现（**非零重定位报错**即可）
 - ❌ MMIO 设备接入（**只留位**）

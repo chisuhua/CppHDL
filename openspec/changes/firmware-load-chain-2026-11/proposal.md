@@ -42,12 +42,16 @@
 - ⚠️ **越界 ⇒ 报错** ⇒ ⇒ **禁止静默截断**（投毒自证：地址设到区域外 ⇒ MUST 有诊断）。
 - ⚠️ **size 由容量派生**（`1 << (kTcmAddrWidth + 2)`）⇒ ⇒ **禁手写 16 KB 之类的字面量**。
 
-### L2 — **统一加载端口**
+### L2 — **内存初值装载**（2026-11-14 用户裁决：由「统一加载端口」改为「路线 A」）
 
-顶层加载接口语义 = `(we, addr[**字节**地址], data[word], size)`
-⇒ ⇒ 由 L1 的映射译码到 I-TCM 或 D-TCM ⇒ ⇒ **一次接口装两个区域**。
+固件（`.text` + **`.data`**）MUST 以**内存初值**进入对应 TCM：
+`ch_mem::init_data`（构造参数）⇒ ⇒ 发射时落成 Verilog `initial` 块
+⇒ ⇒ **TB 零装载动作** · **顶层端口面一字不变**。
 
-⇒ ⇒ ⚠️ **端口数量变化** ⇒ ⇒ SoC 顶层端口契约变化 ⇒ ⇒ **公开面变更** ⇒ ⇒ 与 L1 同批登记。
+⇒ ⇒ 理由：装载是**发射期**的事 ⇒ ⇒ 给 RTL 加装载口会把「端口契约」与「固件内容」耦合；
+而路线 B 还有两条硬约束（D-TCM 写端口 MULTIDRIVEN · 装载期读地址共用）。
+
+⇒ ⇒ **运行期装载口不在本 change**（= 「可装载性接口」，独立立项）。
 
 ### L3 — 编码器**库化**
 
@@ -82,7 +86,7 @@ tools/rv32i-fw-dump --in <fw.json|elf> --format vh|mem|manifest --out <path>
 
 | capability | 动作 | 说明 |
 |---|---|---|
-| **`rv32i-firmware-loading`**（**新**） | ADDED | 装载链路契约：显式地址映射（byte-addressed · 越界报错 · 禁静默截断）· 统一加载端口 · 转储器输出格式 · ELF 装载 · 装载可观测性 |
+| **`rv32i-firmware-loading`**（**新**） | ADDED | 装载链路契约：显式地址映射（byte-addressed · 越界报错 · 禁静默截断）· **内存初值装载**（零端口变更）· 转储器输出格式 · ELF 装载 · 装载可观测性 |
 | `rv32i-isa-semantics` | **ADDED**（⚠️ **不是** MODIFIED） | 追加「SoC 存储映射 MUST 显式声明 · PC 复位值 MUST 与映射 base 一致」⇒ ⇒ ⚠️ **本项是「追加新 Requirement」** ⇒ ⇒ openspec 的 `MODIFIED` 是**整体替换** ⇒ ⇒ 若用 MODIFIED 会**误替换**既有条款 ⇒ ⇒ 故用 ADDED |
 | `cpu-cache-subsystem` | **不动** | 本项不碰 cache |
 | `rtl-emit-portability` | **不动**（引用） | SoC 端口契约变化 ⇒ ⇒ manifest 快照 MUST 同步 |
@@ -97,6 +101,11 @@ tools/rv32i-fw-dump --in <fw.json|elf> --format vh|mem|manifest --out <path>
 | `tests/**` | 装载 + 读回判据 · 编码器交叉校验（保留）· 越界投毒自证 |
 
 ### 不做（**Out of Scope**）
+
+- ❌ **运行期装载口**（不重发射即可灌固件）⇒ ⇒ 原 L2 的「统一加载端口」已于 **2026-11-14 用户裁决**
+  移出 ⇒ ⇒ 它本质是「**可装载性接口**」（真机 bring-up / 调试口）⇒ ⇒ 独立立项，且 MUST 先解决
+  「D-TCM 不能加第二个 `ch_mem` 写端口（Verilog MULTIDRIVEN）」与「D-TCM 的 `addr` 被读路径共用」
+  两条约束
 
 - ❌ **符号表解析** / **重定位** —— 本项不需要 ⇒ ⇒ 留给未来工具。
 - ❌ **MMIO 设备接入** —— 本项**只留位**。

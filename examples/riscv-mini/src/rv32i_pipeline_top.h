@@ -27,6 +27,9 @@
 #include "cpu/pipeline/rv32i_tcm.h"
 #include "cpu/riscv/rv32i_mem_map.h"
 
+#include <cstdint>
+#include <vector>
+
 using namespace ch::core;
 using namespace riscv;
 
@@ -95,9 +98,24 @@ public:
         ch_out<ch_bool>         dbg_load_use_detected{"dbg_load_use_detected"};
     )
 
+    /// ⚠️ **`itcm_init` / `dtcm_init` = 装载链路的**路线 A**（`firmware-load-chain` L2）**
+    ///    ⇒ ⇒ 传**字镜像**（下标 = 字索引）⇒ ⇒ 内部 `ch_mem` 带 `init_data`
+    ///    ⇒ ⇒ **产物里自动出现 `initial begin mem[i] = … end`**（`print_mem_init`）
+    ///    ⇒ ⇒ **TB 零装载动作** · **零端口变更**（`__io` 一字未动）
+    ///    ⇒ ⇒ 空（默认）⇒ ⇒ 与基线**逐字节等价**（同一条 `init_memory(…, {})` 路径）
+    ///    ⇒ ⇒ 🔴 **`dtcm_init` 就是 `.data` 段的落点** —— `prog_*` **只**接 I-TCM
+    ///    ⇒ ⇒ 有初始化 `.data` 的程序此前**装不进去**
     Rv32iPipelineTop(ch::Component* parent = nullptr,
-                     const std::string& name = "rv32i_pipeline_top")
-        : ch::Component(parent, name) {}
+                     const std::string& name = "rv32i_pipeline_top",
+                     const std::vector<uint32_t>& itcm_init = {},
+                     const std::vector<uint32_t>& dtcm_init = {})
+        : ch::Component(parent, name),
+          itcm_init_(itcm_init),
+          dtcm_init_(dtcm_init) {}
+
+    /// 初值字镜像（**空 = 无初值** ⇒ ⇒ 零行为变化）
+    std::vector<uint32_t> itcm_init_;
+    std::vector<uint32_t> dtcm_init_;
 
     void create_ports() override {
         new (io_storage_) io_type;
@@ -105,8 +123,12 @@ public:
 
     void describe() override {
         ch::ch_module<Rv32iPipeline> pipeline{"pipeline"};
-        ch::ch_module<InstrTCM<kTcmAddrWidth, 32>> itcm{"itcm"};
-        ch::ch_module<DataTCM<kTcmAddrWidth, 32>> dtcm{"dtcm"};
+        // ⚠️ **L2（路线 A）**：把**初值字镜像**透传给 TCM 的构造
+        //    ⇒ ⇒ `ch_module<T, Args...>` 已支持参数透传 ⇒ ⇒ 零新机制
+        ch::ch_module<InstrTCM<kTcmAddrWidth, 32>, const std::vector<uint32_t> &>
+            itcm{"itcm", itcm_init_};
+        ch::ch_module<DataTCM<kTcmAddrWidth, 32>, const std::vector<uint32_t> &>
+            dtcm{"dtcm", dtcm_init_};
 
         // ---- I-TCM：取指 + 固件写 ----
         //

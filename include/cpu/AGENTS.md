@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 6582 lines**（2026-11-13 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变；6506 → 6473 因 phase-6 **P9**（Zero-Debt）删除 cache wrapper 的**死数据 / 死配置面**（`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲）⇒ ⇒ **头文件数不变**（30）；6473 → **6064** 因 phase-6 **B0 批**（`rv32i-dead-component-consolidation` **C5+C6 同批退役**）**物理删除 3 个头**（`pipeline/rv32i_forwarding.h` / `pipeline/hazard_detection_unit.h` / `pipeline/rv32i_hazard_complete.h`）⇒ ⇒ **头文件数 30 → 27** ⇒ ⇒ 行数差 409 ＝ 删 434 行 ＋ 其它头的注释修订（SLTU 修复等）⇒ ⇒ ⚠️ **该订正于 2026-11-13 补**（B0 批当时漏了 ⇒ ⇒ 护栏 `verify_no_duplicate_rv32i_headers.sh` C5 报红 ⇒ ⇒ 登记为 **F-1**）；**6064 → 6582 · 头文件数 27 → 30** 因 phase-6 **B3 批**（`memory-timing-contract-2026-11` · ADR-069 决策 **A0**）**新增** `pipeline/load_lane_selector.h`（load 的车道选择 + 符号/零扩展，**从 `MemStage` 迁出** ⇒ ⇒ 因为 `sread` 让 load 数据**晚 1 拍**可用 ⇒ ⇒ 车道选择 MUST 在 **M2 的下游**做 ⇒ ⇒ 见 ADR-069 **V5**）⇒ ⇒ **头文件数 +1 · 行数 +238**）。
+**30 headers, 6606 lines**（2026-11-13 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变；6506 → 6473 因 phase-6 **P9**（Zero-Debt）删除 cache wrapper 的**死数据 / 死配置面**（`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲）⇒ ⇒ **头文件数不变**（30）；6473 → **6064** 因 phase-6 **B0 批**（`rv32i-dead-component-consolidation` **C5+C6 同批退役**）**物理删除 3 个头**（`pipeline/rv32i_forwarding.h` / `pipeline/hazard_detection_unit.h` / `pipeline/rv32i_hazard_complete.h`）⇒ ⇒ **头文件数 30 → 27** ⇒ ⇒ 行数差 409 ＝ 删 434 行 ＋ 其它头的注释修订（SLTU 修复等）⇒ ⇒ ⚠️ **该订正于 2026-11-13 补**（B0 批当时漏了 ⇒ ⇒ 护栏 `verify_no_duplicate_rv32i_headers.sh` C5 报红 ⇒ ⇒ 登记为 **F-1**）；**6064 → 6582 · 头文件数 27 → 30** 因 phase-6 **B3 批**（`memory-timing-contract-2026-11` · ADR-069 决策 **A0**）**新增** `pipeline/load_lane_selector.h`（load 的车道选择 + 符号/零扩展，**从 `MemStage` 迁出** ⇒ ⇒ 因为 `sread` 让 load 数据**晚 1 拍**可用 ⇒ ⇒ 车道选择 MUST 在 **M2 的下游**做 ⇒ ⇒ 见 ADR-069 **V5**）⇒ ⇒ **头文件数 +1 · 行数 +238**）；**6582 → 6606 · 头文件数不变** 因 `firmware-load-chain-2026-11` **L2（路线 A）**给 `InstrTCM` / `DataTCM` 增加**可选** `init_words` 构造参数（+24 行注释与参数）⇒ ⇒ 默认空 ⇒ **零行为变化**。
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 6582 lines（2026-11-13 实测）
+include/cpu/                             # 30 headers, 6606 lines（2026-11-14 实测）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选

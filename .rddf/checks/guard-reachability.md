@@ -68,6 +68,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_examples_rtl_sim.sh` | `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB)` | `gate-event-only` | — |
 | `scripts/verify_flat_rtl_emit.sh` | `build-and-test:Verify flat RTL emit products`, `build-and-test:Verify flat RTL emit products (self-test)`, `pr-verilator-fast:Verify flat RTL emit products (verilator required)`, `pr-verilator-fast:Verify flat RTL emit products (self-test)`, `nightly-verilator:Verify flat RTL emit products (verilator required)`, `nightly-verilator:Verify flat RTL emit products (self-test)` | `gate-event-only` | — |
 | `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)` | `none` | — |
+| `scripts/verify_rv32i_fw_init_rtl.sh` | `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)` | `none` | — |
 | `scripts/verify_fsm_next_wiring.sh` | `build-and-test:Verify FSM next-state wiring`, `build-and-test:Verify FSM next-state wiring (self-test)`, `pr-verilator-fast:Verify FSM next-state wiring`, `pr-verilator-fast:Verify FSM next-state wiring (self-test)` | `none` | — |
 | `scripts/verify_get_lnode_entry_set.sh` | `build-and-test:Verify get_lnode entry set`, `build-and-test:Verify get_lnode entry set (self-test)` | `none` | — |
 | `scripts/verify_guard_reachability.sh` | `build-and-test:Verify guard reachability`, `build-and-test:Verify guard reachability (self-test)` | `none` | — |
