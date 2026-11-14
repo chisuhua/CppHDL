@@ -16,6 +16,9 @@
 
 #include "ch.hpp"
 #include "component.h"
+// ⚠️ **2026-11-15 · B4 · C4**：立即数改由**库组件** `riscv::Rv32iDecoder` 承担
+//    ⇒ ⇒ 需要 `ch_module`（组件内再挂组件）⇒ ⇒ 故引入 `module.h`。
+#include "module.h"
 // ⚠️ **include 路径 MUST 是 `include/` 相对的**（2026-11-03 修「头文件自包含」）
 //    —— `rv32i_decoder.h` 在**上一级**目录（`include/cpu/pipeline/`）⇒ ⇒
 //    写 `"rv32i_decoder.h"` 只能靠「`-I include/cpu/pipeline`」才找得到
@@ -131,62 +134,36 @@ public:
         auto is_auipc = (opcode_raw == ch_uint<7>(OP_AUIPC));
         
         // ========================================================================
-        // 立即数生成 (组合逻辑)
-        // ========================================================================
-        // I-type 立即数：instr[31:20] 符号扩展到 32 位
-        ch_uint<32> imm_i = sext<32>(bits<31, 20>(io().instruction));
-        
-        // S-type 立即数：instr[31:25] << 5 | instr[11:7], 符号扩展
-        ch_uint<12> imm_s_base =
-            (bits<31, 25>(io().instruction) << ch_uint<3>(5_d)) |
-            bits<11, 7>(io().instruction);
-        ch_uint<32> imm_s = sext<32>(imm_s_base);
-
-        // B-type 立即数：instr[31|30:25|11:8|7], 符号扩展
-        // ⚠️ **ADR-063 D3**：`instr[7]` 承载 **imm[11]** ⇒ MUST 左移 11。
-        //    此前漏移位 ⇒ 落在 bit 0 ⇒ `|偏移| >= 2048` 的条件分支目标错 2047
-        //    （实测 `beq x1,x2,-8` 得 0xFFFFF7F9，规范应为 0xFFFFFFF8）。
-        ch_uint<13> imm_b_base =
-            (bits<31, 31>(io().instruction) << ch_uint<5>(12_d)) |  // 5 bits can hold 0-31
-            (bits<30, 25>(io().instruction) << ch_uint<3>(5_d)) |   // 3 bits can hold 0-7
-            (bits<11, 8>(io().instruction) << ch_uint<1>(1_d)) |    // 1 bit can hold 0-1
-            (bits<7, 7>(io().instruction) << ch_uint<4>(11_d));     // imm[11]
-        ch_uint<32> imm_b = sext<32>(imm_b_base);
-
-        // U-type 立即数：imm[31:12] = instr[31:12]（**低 12 位 MUST 清零**）
+        // 立即数 = **库组件 `riscv::Rv32iDecoder`**（2026-11-15 · B4 · C4）
         //
-        // ⚠️ **2026-10-26 修正（既有缺陷）**：原实现是
-        //      `instr_masked = instruction & ch_uint<32>(1048575_d)`（= 0x000FFFFF，
-        //      **20 位**掩码 ⇒ 把 **rd / opcode 位也算进了立即数**）
-        //      `imm_u = instr_masked << 12`
-        //    ⇒ 实测 `auipc x18, 0`（机器码 `0x00000917`）得到 `pc + 0x917000`
-        //      （0x917 = `rd<<7 | opcode` 左移 12）——**U 型立即数一直是错的**。
-        //    此前无固件 / 无测试覆盖 LUI / AUIPC（唯二消费者是仓外的 riscv-tests
-        //    二进制，CI 全 SKIP）⇒ 缺陷从未暴露。
-        //    ⇒ 掩码 MUST 是 `instr[31:12]`（0xFFFFF000）且**不再左移**。
-        //    ⚠️ 十进制字面量（本仓惯例：`0x..._d` 会被 `lit_dec` 拒绝，见
-        //    `mem_stage.h:120/140` 的同型写法）。
-        ch_uint<32> instr_masked = io().instruction & ch_uint<32>(4294963200_d);
-        ch_uint<32> imm_u = instr_masked;
-
-        // J-type 立即数：instr[31|30:21|20|19:12], 符号扩展
-        ch_uint<21> imm_j_base =
-            (bits<31, 31>(io().instruction) << ch_uint<5>(20_d)) |  // 5 bits can hold 0-31
-            (bits<30, 21>(io().instruction) << ch_uint<1>(1_d)) |   // 1 bit can hold 0-1
-            (bits<20, 20>(io().instruction) << ch_uint<4>(11_d)) |  // 4 bits can hold 0-15
-            (bits<19, 12>(io().instruction) << ch_uint<5>(12_d));   // 5 bits can hold 0-31
-        ch_uint<32> imm_j = sext<32>(imm_j_base);
-        
-        // 根据指令类型选择立即数
-        ch_uint<32> selected_imm(0_d, "selected_imm");
-        selected_imm = select(is_opimm,   imm_i, selected_imm);
-        selected_imm = select(is_load,    imm_i, selected_imm);
-        selected_imm = select(is_jalr,    imm_i, selected_imm);
-        selected_imm = select(is_store,   imm_s, selected_imm);
-        selected_imm = select(is_branch,  imm_b, selected_imm);
-        selected_imm = select(is_lui,     imm_u, selected_imm);
-        selected_imm = select(is_auipc,   imm_u, selected_imm);
-        selected_imm = select(is_jal,     imm_j, selected_imm);
+        // ⚠️ **内联的 5 种立即数生成 + 8 级 select 链已删**
+        //    （I / S / B / U / J 型 + `selected_imm` 的逐条 select）
+        //    ⇒ ⇒ 立即数的**唯一实现** = `include/cpu/pipeline/rv32i_decoder.h`
+        //    ⇒ ⇒ 「RV32I 重复实现」收口（此前**两份**立即数语义并存 ⇒ ⇒ 漂移风险）
+        //
+        // ⚠️ **「零变化」的依据**（C4 差分实测 · `tests/test_rv32i_stage_dual.cpp`
+        //    的 `B4 C4` 两个用例）：`Rv32iDecoder`（库组件）vs `IdStage`（当时的
+        //    生产实现）逐条比 **imm / opcode / funct3** + 两侧**各自**对手推值
+        //    （期望值 MUST 手推 ⇒ 禁抄仿真输出）+ 10 条**立即数极值**边界
+        //    ⇒ ⇒ 两套实现的立即数**逐条相等** ⇒ ⇒ **指令级行为零变化**
+        //
+        // ⚠️ **两处历史缺陷已由库组件承载**（内联副本已删 ⇒ 缺陷不复存在）：
+        //    ① **B 型 `imm[11]` 漏移位**（ADR-063 D3）—— 内联曾落在 bit 0
+        //       ⇒ `|偏移| >= 2048` 的条件分支目标错 2047；库组件已 `<< 11`。
+        //    ② **U 型掩码错 20 位**（2026-10-26 修正）—— 内联曾用 `0x000FFFFF`
+        //       并左移 12 ⇒ 把 `rd` / `opcode` 位算进立即数；库组件用
+        //       `0xFFFFF000` 且**不左移**。
+        //    ⇒ ⇒ 且 LUI / AUIPC 的「无固件 / 无测试覆盖」状态**已改变**：
+        //       C4 差分的边界表含 U 型行（`enc_u` 反查 + 手推期望值）⇒ ⇒ 有覆盖了。
+        //
+        // ⚠️ **字段提取仍留在此处**（`opcode_raw` / `rd` / `funct3` / `rs1` /
+        //    `rs2` / `funct7`）⇒ ⇒ 它们是**纯 bit 提取**（恒等）⇒ ⇒ 不是
+        //    「语义重复」⇒ ⇒ 且 `rs1_addr_mux` / `rs2_addr_mux` 的口径与库组件的
+        //    **裸字段**不同（前者按指令类型做了 mux）⇒ ⇒ 改它们**不属 C4 范围**
+        // ========================================================================
+        ch::ch_module<Rv32iDecoder> decoder{"decoder"};
+        decoder.io().instruction <<= io().instruction;
+        ch_uint<32> selected_imm = decoder.io().imm;
         
         // ========================================================================
         // 寄存器地址选择 (组合逻辑)

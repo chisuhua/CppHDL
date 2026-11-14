@@ -583,6 +583,18 @@ axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的�
 ⇒ ⇒ 原 113 个端口**名一字未改** ⇒ ⇒ 本 TB 只需**新增** 5 根连接（无重映射）
 ⇒ ⇒ ⚠️ 「未知 opcode ⇒ ALU 结果 = `rs1 + rs2`」有**显式断言**（`test_rv32i_stage_dual.cpp`）
 
+⇒ ⇒ ✅ **2026-11-15 · B4 · C4 订正**：`IdStage` 的立即数改由库组件 `Rv32iDecoder` 承担
+⇒ ⇒ **产物顶层端口 118 → 126**（+8 = decoder 的 8 个输出冒泡：opcode 7 · rd 5 · funct3 3 ·
+rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）⇒ ⇒ **根组件自有端口仍是 31**
+⇒ ⇒ 原 118 个端口**名一字未改** ⇒ ⇒ 本 TB 只需**新增** 8 根连接（无重映射）
+⇒ ⇒ 行为零变化**实测**：独立 Verilog TB `checks=24 fails=0`（与 C3 后**同一组判据**）
+⇒ ⇒ ⚠️ **环境注意**：本机 `build/verilator-install/include/verilated.mk` 的
+`CFG_CXXFLAGS_PCH_I` **为空**（verilator configure 未识别出编译器 ⇒ `CFG_CXX_VERSION = ""`）
+⇒ ⇒ ⇒ 任何**未命中缓存**的模型编译都会以
+`g++: error: <prefix>__pch.h.fast: linker input file not found` 失败
+⇒ ⇒ ⇒ （与本次改动**无关**；属**环境缺陷**）⇒ ⇒ 本地修法 = 该行补 `-include`（`build/` 是
+未跟踪产物）⇒ ⇒ CI 侧是否同样缺陷**未验证**（CI 自建 verilator ⇒ 其检测路径不同）
+
 ⇒ ⇒ ✅ **2026-11-14 裁决 = A2（删端口）** ⇒ ⇒ **已落地**：
 `Rv32iPipelineTop::ext_clk` 与 `riscv::Rv32iPipeline::clk` **双双删除**
 ⇒ ⇒ 顶层端口面 **32 → 31**（产物 **114 → 113** 端口 · **6** 输入 + **107** 输出）

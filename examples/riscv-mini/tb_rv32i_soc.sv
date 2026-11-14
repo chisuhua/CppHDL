@@ -33,8 +33,8 @@
 //   ⇒ ⇒ ⚠️ **仍保留未具名的是后代冒泡端口**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`）
 //   ⇒ ⇒ 它们**不在**本批范围（不是根组件自有 IO）⇒ ⇒ 归属**后续批次**。
 //
-// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **118** 个
-//   （**6** 输入 + **112** 输出 · 2026-11-14 实测）⇒ ⇒ **6** 输入 = 框架的
+// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **126** 个
+//   （**6** 输入 + **120** 输出 · 2026-11-15 实测 · B4 · C4 后）⇒ ⇒ **6** 输入 = 框架的
 //   `default_clock` / `default_reset` + 本组件自有的 **4** 个
 //   ⇒ ⇒ **4** 个自有输入里 **1 位输入有 3 个** ⇒ 必须实证：
 //   · `top_ext_rst` = `ext_rst`（实测：只有它拉低后流水线才取指）
@@ -43,16 +43,19 @@
 //     —— 它是**死端口**（零消费者；产物里**所有**流水线寄存器都锁在框架 `default_clock`）
 //     ⇒ ⇒ 删前已做针对性实测（`ext_clk` 0/1 交替翻转 ⇒ 60 拍 × 27 观测**逐拍全等**）
 //     ⇒ ⇒ **真时钟源 = `default_clock`**（本 TB 的 `clk`）⇒ ⇒ **行为零变化**
-//   ⇒ ⇒ **112** 个输出 = 本组件自有的 **27** 个 + **后代冒泡**的 **85** 个
-//   （**85** = 80 + **5**：`Rv32iAlu` 接入后冒泡的内部节点 ⇒ ⇒ 2026-11-14 · B4 · C3）
+//   ⇒ ⇒ **120** 个输出 = 本组件自有的 **27** 个 + **后代冒泡**的 **93** 个
+//   （**93** = 80 + **5**（`Rv32iAlu` · 2026-11-14 · B4 · C3）
+//            + **8**（`Rv32iDecoder` · 2026-11-15 · B4 · C4：opcode/rd/funct3/rs1/
+//              rs2/funct7/imm/instr_type ⇒ ⇒ `id_stage_decoder_unnamed_output*`））
 //   （`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*` ⇒ ⇒ **未具名** ⇒ ⇒ 仍在 `sink*` 里）。
 //   ⚠️ **历史订正**：原文写「113 个端口（5 输入 + 108 输出）」⇒ ⇒ 该数字是
 //   **C8 tie-off 之前**的（B0 批给 `mem_is_load` 补 driver ⇒ ⇒ 顶层 input 8 → 7）
 //   ⇒ ⇒ 2026-11-13 按产物实测订正为 **114（7 + 107）**
 //   ⇒ ⇒ 2026-11-14 删 `ext_clk` ⇒ ⇒ **113（6 + 107）**
-//   ⇒ ⇒ 2026-11-14（B4 · C3）`ExStage` 接入 `Rv32iAlu` ⇒ ⇒ **118（6 + 112）**。
+//   ⇒ ⇒ 2026-11-14（B4 · C3）`ExStage` 接入 `Rv32iAlu` ⇒ ⇒ **118（6 + 112）**
+//   ⇒ ⇒ 2026-11-15（B4 · C4）`IdStage` 接入 `Rv32iDecoder` ⇒ ⇒ **126（6 + 120）**。
 //
-// ⚠️ **未用输出 MUST 被读**：本 TB 把 96 个不参与判据的输出接进 `sink*` 数组
+// ⚠️ **未用输出 MUST 被读**：本 TB 把 104 个不参与判据的输出接进 `sink*` 数组
 //   ⇒ ⇒ 严格 flags 下不读会触发 `%Warning-UNUSEDSIGNAL`（**致命** —— 实测踩过同类坑）。
 
 `timescale 1ns/1ps
@@ -80,11 +83,11 @@ module tb_rv32i_soc;
 
     logic [41:0] sink1;   // 42 个未用输出（宽度 1）
     logic [3:0] sink2;   // 2 个未用输出（宽度 2）
-    logic [2:0] sink3;   // 1 个未用输出（宽度 3）
+    logic [8:0] sink3;   // 3 个未用输出（宽度 3）
     logic [7:0] sink4;   // 2 个未用输出（宽度 4）
-    logic [39:0] sink5;   // 8 个未用输出（宽度 5）
-    logic [13:0] sink7;   // 2 个未用输出（宽度 7）
-    logic [1343:0] sink32;   // 42 个未用输出（宽度 32）
+    logic [54:0] sink5;  // 11 个未用输出（宽度 5）
+    logic [27:0] sink7;  // 4 个未用输出（宽度 7）
+    logic [1375:0] sink32;  // 43 个未用输出（宽度 32）
     logic [95:0] sink48;   // 2 个未用输出（宽度 48）
 
     integer checks = 0;
@@ -240,6 +243,18 @@ module tb_rv32i_soc;
         .top_pipeline_id_stage_unnamed_output_10(sink5[3*5 +: 5]),
         .top_pipeline_id_stage_unnamed_output_11(sink5[4*5 +: 5]),
         .top_pipeline_id_stage_unnamed_output_17(sink7[1*7 +: 7]),
+        // ⚠️ **2026-11-15 · B4 · C4**：`IdStage` 的立即数改由库组件 `Rv32iDecoder`
+        //   承担 ⇒ ⇒ 该子组件的 **8 个输出**冒泡到顶层（opcode 7 · rd 5 · funct3 3 ·
+        //   rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）
+        //   ⇒ ⇒ 全部是本 TB 的观察面之外 ⇒ ⇒ 接进 `sink*`（**未用输出 MUST 被读**）
+        .top_pipeline_id_stage_decoder_unnamed_output(sink7[2*7 +: 7]),
+        .top_pipeline_id_stage_decoder_unnamed_output_1(sink5[8*5 +: 5]),
+        .top_pipeline_id_stage_decoder_unnamed_output_2(sink3[1*3 +: 3]),
+        .top_pipeline_id_stage_decoder_unnamed_output_3(sink5[9*5 +: 5]),
+        .top_pipeline_id_stage_decoder_unnamed_output_4(sink5[10*5 +: 5]),
+        .top_pipeline_id_stage_decoder_unnamed_output_5(sink7[3*7 +: 7]),
+        .top_pipeline_id_stage_decoder_unnamed_output_6(sink32[42*32 +: 32]),
+        .top_pipeline_id_stage_decoder_unnamed_output_7(sink3[2*3 +: 3]),
         .top_pipeline_ex_stage_unnamed_output_2(sink32[16*32 +: 32]),
         .top_pipeline_ex_stage_unnamed_output(sink1[14*1 +: 1]),
         .top_pipeline_ex_stage_unnamed_output_1(sink32[17*32 +: 32]),
