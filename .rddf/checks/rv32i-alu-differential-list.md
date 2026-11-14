@@ -31,9 +31,21 @@ evidence: test:tests/test_rv32i_alu_differential.cpp
 | **Δ5** | **SLTU 无符号比较** | 两侧**都**用无符号 `<` ⇒ ⇒ **修复前**库的 `bits<31,31>(sub_result)`（取**结果位**而非**借位位**）已由 **B0 ⑧** 修 | **已修**（B0 ⑧）⇒ ⇒ 该条**不在**当前差分结果里（修前才有） | 差分用例 `SLTU(0, 0xFFFFFFFF)` = 1（旧实现给 0） |
 | **Δ6** | **第二操作数来源** | 内联按 `opcode` 选（`imm` vs `rs2_data`）· 库只接受 `operand_b` | **不修**（**结构性**）⇒ ⇒ 它**不是** ALU 语义差异，而是**接入方案**的责任：EX 级算好 `alu_second_operand` 再喂 `operand_b` | 差分只在 R 型口径下跑 ⇒ ⇒ 本条**不进**差分表 |
 | **Δ7** | **`equal` 输出** | 库组件**独有**（EX 级无对应；BEQ 走 `branch_type` 判定）⇒ ⇒ **有消费者**（`examples/riscv-mini/rv32i_phase2_test.cpp` 读 `io().equal`） | **不修**（组件自有能力 + 有测试消费者）⇒ ⇒ 接入时**不接**即可（悬空输出须显式处理） | — |
-| **Δ8** | **`mem_size` / `mem_signed` 输出** | 库组件**独有** + **零消费者**（全仓 grep 命中 0） | **待修 = ZERO-DEBT**（接入前**删除**）⇒ ⇒ ⚠️ 属**公开面移除** ⇒ ⇒ MUST 走 `public-api-removals.tsv` + `public-api-surface.md` + `CHANGELOG.md` | 全仓 grep（零命中） |
+| **Δ8** | **`mem_size` / `mem_signed` 输出** | 库组件**独有** + **零消费者**（全仓 grep 命中 0） | ✅ **已修（C3 · ZERO-DEBT）**：**已删除** ⇒ ⇒ 公开面移除登记 = `public-api-surface.md` + `public-api-removals.tsv`（2 条探针）+ `CHANGELOG.md` ⇒ ⇒ ⚠️ `funct3` 输入**保留** | 全仓 grep（零命中） |
 | **Δ9** | **`funct7`** | 两侧**都不消费** | **不修**（无差异） | — |
-| **Δ10** | **标志来源** | `zero` / `less_than` / `less_than_u` 两侧都是同口径的组合量 | **不修**（实测值等价） | 差分的 84 组比较 |
+| **Δ11** | 🆕 **接入后的产物端口面变化**（C3 新增） | `ExStage` 的算术核心改由 `Rv32iAlu` 组件承担 ⇒ ⇒ "
+        "组件的**内部节点冒泡**到顶层 ⇒ ⇒ **产物顶层端口 114 → 118**（+5）⇒ ⇒ **根组件自有端口仍是 31**（不变）"
+        "⇒ ⇒ 原 113 个端口**名一字未改**（只有新增）⇒ ⇒ TB 只需**新增** 5 根连接（**无重映射**） | "
+        "✅ **已登记**（`public-api-surface.md` 的 dated 注记 + `examples-rtl-expectations.md` + "
+        "`examples-rtl-sim-targets.tsv`）⇒ ⇒ 判据 = 独立 Verilog TB **编译通过 + `checks=24 fails=0`**"
+        "（严格 verilator ⇒ 无 UNDRIVEN / UNUSEDSIGNAL / WIDTHTRUNC） || **Δ10** | **标志来源** | `zero` / `less_than` / `less_than_u` 两侧都是同口径的组合量 | **不修**（实测值等价） | 差分的 84 组比较 |
+
+## 1b. C2 归一的**连带后果**（**如实登记**）
+
+| 项 | 内容 |
+|---|---|
+| 🔴 **「未定义 `alu_op` 值」集合变了** | 旧（`ALU_OP_*`）：已定义 0–9 · 未定义 10–15<br>新（`ALU_*`）：已定义 **0–7 · 10 · 11** · 未定义 **8 · 9** · 12–15<br>⇒ ⇒ 下游若喂 `alu_op ∈ {8, 9}`（旧 = SLT / SLTU）⇒ ⇒ 新语义 = **结果 0**<br>⇒ ⇒ ⚠️ **仓内流水线不产出 8/9**（`rv32i_pipeline.h` 的 `alu_op_calc` 按 `funct3` 派生 ⇒ 落点全在已定义域）⇒ ⇒ **行为零变化** ✓<br>⇒ ⇒ 已登记于 `docs/CHANGELOG.md` |
+| ⚠️ **「未知 opcode 行为零变化」那条 AC 的实际口径** | 它指的是**指令 opcode**（未知指令 ⇒ `alu_op` 落 `ALU_ADD` ⇒ 结果 0）⇒ ⇒ 而**不是**「喂一个越界 `alu_op` 值」⇒ ⇒ 归一后**指令级**行为零变化 ✓（golden 全绿为证）⇒ ⇒ 但**越界 `alu_op` 值**的语义确实变了（见上）⇒ ⇒ **两者必须分开说** |
 
 ## 2. 差分结论（**实测**）
 

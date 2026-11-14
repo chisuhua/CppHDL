@@ -299,6 +299,51 @@ constexpr uint32_t kImmConsistencyInstrs[] = {
     0xFF1FF0EFu,  // jal x1,-16          ⇒ J 型负数
 };
 
+
+// ===========================================================================
+// **未知 opcode 的行为 MUST 零变化**（B4 · C3 接入 AC）
+//
+// ## 为什么这条必须**显式**断言
+//
+// `ExStage` 的 ALU 路径在 `opcode` **不在** I/U/J 型列表时 ⇒ ⇒ 第二操作数 = `rs2_data`
+// ⇒ ⇒ 而 `alu_op` 由流水线按 `funct3` 派生 ⇒ ⇒ 未知 opcode 时 `alu_op = ADD`
+// ⇒ ⇒ ⇒ **未知 opcode 的 ALU 结果 = `rs1_data + rs2_data`**（**不是** 0）
+//
+// ⚠️ C3 把内联 ALU 换成 `Rv32iAlu` 组件 ⇒ ⇒ 这条**必须**被钉住
+// ⇒ ⇒ 否则「组件化」若悄悄改了未知 opcode 的语义 ⇒ ⇒ **零报错** ⇒ ⇒ 不可见。
+//
+// ## 期望值**手推**
+//
+//   opcode = 0x7F（**未定义**）⇒ ⇒ 不在 `is_i_type` 列表 ⇒ ⇒ 第二操作数 = `rs2_data`
+//   ⇒ ⇒ `alu_op = ADD` ⇒ ⇒ `alu_result = rs1_data + rs2_data = 5 + 3 = 8`
+//   ⇒ ⇒ `zero = (8 == 0) = 0` · `less_than = (5 < 3) = 0` · `less_than_u = (5 <u 3) = 0`
+// ===========================================================================
+TEST_CASE("ExStage - unknown opcode keeps its ALU semantics (zero-change)",
+          "[rv32i][ex_stage][unknown_opcode][b4]") {
+    ch::ch_device<riscv::ExStage> ex;
+    Simulator sim(ex.context());
+    auto &io = ex.instance().io();
+    sim.set_input_value(io.rs1_data, 5u);
+    sim.set_input_value(io.rs2_data, 3u);
+    sim.set_input_value(io.imm, 0u);
+    sim.set_input_value(io.pc, 0x1000u);
+    sim.set_input_value(io.opcode, 0x7Fu);   // ⚠️ **未定义**的 opcode
+    sim.set_input_value(io.funct3, 0u);
+    sim.set_input_value(io.funct7, 0u);
+    sim.set_input_value(io.alu_op, 0u);      // 流水线对未知 opcode 派生的 alu_op = ADD
+    sim.set_input_value(io.is_branch, 0u);
+    sim.set_input_value(io.is_jump, 0u);
+    sim.set_input_value(io.branch_type, 0u);
+    sim.set_input_value(io.is_store, 0u);
+    sim.tick();
+
+    // ⚠️ **手推**的期望值（不是抄仿真输出）
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.alu_result)) == 8ull);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.zero)) == 0ull);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.less_than)) == 0ull);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.less_than_u)) == 0ull);
+}
+
 }  // namespace
 
 // ===========================================================================

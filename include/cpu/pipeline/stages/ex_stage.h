@@ -16,6 +16,9 @@
 
 #include "ch.hpp"
 #include "component.h"
+// ⚠️ **2026-11-14 · B4 · C3**：算术核心改由**库组件** `Rv32iAlu` 承担
+//    ⇒ ⇒ 需要 `ch_module`（组件内再挂组件）⇒ ⇒ 故引入 `module.h`。
+#include "module.h"
 #include "chlib/arithmetic.h"
 #include "chlib/logic.h"
 // ⚠️ 本头**使用** `rv32i_decoder.h` 的 opcode 常量（`OP_OPIMM` / `OP_LOAD` /
@@ -150,71 +153,35 @@ public:
                          (io().opcode == ch_uint<7>(OP_AUIPC));
         ch_uint<32> alu_second_operand = select(is_i_type, io().imm, io().rs2_data);
 
-        // ---- 1.1 加减法 ----
-        auto add_result = chlib::add<32>(io().rs1_data, alu_second_operand);
-        auto sub_result = chlib::subtract<32>(io().rs1_data, alu_second_operand);
-
-        // ---- 1.2 逻辑运算 (AND, OR, XOR) ----
-        auto and_result = chlib::and_gate<32>(io().rs1_data, alu_second_operand);
-        auto or_result  = chlib::or_gate<32>(io().rs1_data, alu_second_operand);
-        auto xor_result = chlib::xor_gate<32>(io().rs1_data, alu_second_operand);
-
-        // ---- 1.3 移位运算 ----
-        // 提取 alu_second_operand 的低位 5bit 作为移位量 (对 I-type 和 R-type 都有效)
-        auto shift_amt = bits<4, 0>(alu_second_operand);
-        auto sll_result = io().rs1_data << shift_amt;  // 逻辑左移
-        auto srl_result = io().rs1_data >> shift_amt;  // 逻辑右移
-
-        // 1.3b 算术右移 (SRA) —— 2026-10-26 实现（此前 `sra_result = srl_result`）
+        // ====================================================================
+        // 1.5 **算术核心 = 库组件 `riscv::Rv32iAlu`**（2026-11-14 · B4 · C3）
         //
-        // ⚠️ 框架层**没有**算术右移原语：`include/core/operators_shift.h` 里
-        //    `operator>>>`（`sshr_op`）是**被注释掉**的 ⇒ 在 ALU 层合成：
-        //      sra = (a >> sh) | (sign ? (0xFFFFFFFF << (32 - sh)) : 0)
-        //    `ch_uint` 无符号 ⇒ `>>` 天然是**逻辑**右移 ⇒ 只需补**高位符号填充**。
-        // ⚠️ `sh == 0` 时 MUST NOT 填充（否则 `32 - 0 = 32` ⇒ 移位量越界）；
-        //    `sh ∈ [1,31]` ⇒ `32 - sh ∈ [1,31]` ⇒ 不触越界。
-        auto sra_sign_set = (bits<31, 31>(io().rs1_data) == ch_uint<1>(1_d));
-        auto sra_fill = select(sra_sign_set & (shift_amt != ch_uint<5>(0_d)),
-                               shl<32>(ch_uint<32>(0xFFFFFFFF_h),
-                                       ch_uint<32>(32_d) - zext<32>(shift_amt)),
-                               ch_uint<32>(0_d));
-        auto sra_result = srl_result | sra_fill;
-
-        // ---- 1.4 比较运算 ----
-        // SLT: 有符号比较 (rs1 < rs2)
-        // 通过计算 rs1 - rs2 并检查符号位来判断
-        auto sub_for_cmp = io().rs1_data - alu_second_operand;
-        auto sign_of_diff = bits<31, 31>(sub_for_cmp);
-        
-        // 处理符号溢出：如果 rs1 和 rs2 符号不同，直接根据符号判断
-        auto rs1_sign = bits<31, 31>(io().rs1_data);
-        auto rs2_sign = bits<31, 31>(alu_second_operand);
-        auto signs_differ = rs1_sign != rs2_sign;
-        // rs1 为负，rs2 为正 => rs1 < rs2 => true
-        // rs1 为正，rs2 为负 => rs1 >= rs2 => false
-        auto slt_result_sig = select(signs_differ, rs1_sign, sign_of_diff);
-        
-        // SLTU: 无符号比较 (rs1 < rs2)
-        auto sltu_result_sig = (io().rs1_data < alu_second_operand);
-
+        // ⚠️ **内联的 10 个分支已删**（ADD/SUB/AND/OR/XOR/SLL/SRL/SRA/SLT/SLTU）
+        //    ⇒ ⇒ 算术核心的**唯一实现** = `include/cpu/pipeline/rv32i_alu.h`
+        //    ⇒ ⇒ 「RV32I 重复实现」收口（此前**两份** ALU 语义并存 ⇒ ⇒ 漂移风险）
+        //
+        // ⚠️ **「第二操作数选择」仍留在 EX 级**（它**不是** ALU 的一部分）：
+        //    `alu_second_operand = select(is_i_type, imm, rs2_data)`
+        //    ⇒ ⇒ 组件只拿到**算好的** `operand_b` ⇒ ⇒ 组件的 `operand_a` = `rs1_data`
+        //    ⇒ ⇒ 依据 = `.rddf/checks/rv32i-alu-differential-list.md` 的 **Δ6**
+        //
+        // ⚠️ **「零变化」的依据**（C1 差分实测 · 84 组比较）：
+        //    · `result` ≡ 内联的 `alu_out`（含**未知 `alu_op` ⇒ 0** 的语义）
+        //    · `zero` ≡ 内联的 `(alu_out == 0)`
+        //    · `less_than` ≡ 内联的 `slt_result_sig`（**值**等价；类型 1bit↔bool 差异 = Δ4）
+        //    · `less_than_u` ≡ 内联的 `sltu_result_sig`
+        // ⇒ ⇒ ⇒ **指令级行为零变化**（既有 golden 全绿为证）
         // ====================================================================
-        // 2. ALU 结果多选器
-        // ====================================================================
-        // 使用 select() 链式选择合适的 ALU 操作结果
-        // 这是组合逻辑的关键：使用条件选择而非 && 运算符
+        ch::ch_module<Rv32iAlu> alu{"alu"};
+        alu.io().operand_a <<= io().rs1_data;
+        alu.io().operand_b <<= alu_second_operand;
+        alu.io().alu_op     <<= io().alu_op;
+        alu.io().funct3     <<= io().funct3;
 
-        ch_uint<32> alu_out = ch_uint<32>(0_d);
-        
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_ADD), add_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_SUB), sub_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_AND), and_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_OR),  or_result,  alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_XOR), xor_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_SLL), sll_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_SRL), srl_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_SRA), sra_result, alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_SLT), zext<32>(slt_result_sig), alu_out);
-        alu_out = select(io().alu_op == ch_uint<4>(ALU_SLTU), zext<32>(sltu_result_sig), alu_out);
+        auto alu_out = alu.io().result;
+        // ⚠️ **bool 输出端口不可拷贝**（`port::operator=` 被 delete ⇒ 编译期报错）
+        //    ⇒ ⇒ 三个比较/零标志**直接用端口**参与表达式，**不**做本地拷贝
+        //    ⇒ ⇒ `zero` **接上**（不是悬空）⇒ ⇒ 依据 = 接入 AC「`Rv32iAlu::zero` 输出不是悬空」
 
         // ====================================================================
         // 3. 重定向目标地址计算（2026-10-26 扩展：不止条件分支）
@@ -263,10 +230,10 @@ public:
         // 使用比较结果
         auto rs1_eq_rs2 = (io().rs1_data == io().rs2_data);
         auto rs1_ne_rs2 = (io().rs1_data != io().rs2_data);
-        auto rs1_lt_rs2_signed = slt_result_sig;
-        auto rs1_lt_rs2_unsigned = sltu_result_sig;
-        auto rs1_ge_rs2_signed = !slt_result_sig;
-        auto rs1_ge_rs2_unsigned = !sltu_result_sig;
+        auto rs1_lt_rs2_signed = alu.io().less_than;
+        auto rs1_lt_rs2_unsigned = alu.io().less_than_u;
+        auto rs1_ge_rs2_signed = !alu.io().less_than;
+        auto rs1_ge_rs2_unsigned = !alu.io().less_than_u;
 
         // 分支条件多选器
         ch_bool branch_cond = ch_bool(false);
@@ -291,7 +258,6 @@ public:
         // 零标志用于判断 ALU 结果是否为 0
         // 在某些实现中也用于分支判断
 
-        auto zero_flag = (alu_out == ch_uint<32>(0_d));
 
         // ====================================================================
         // 6. 输出端口连接
@@ -311,9 +277,9 @@ public:
         // 返回地址（JAL/JALR 的写回值）= pc + 4
         // ⚠️ `pc` 是**该指令自己的** pc（ID/EX 锁存）⇒ +4 就是「下一条指令」的地址
         io().link_value = io().pc + ch_uint<32>(4_d);
-        io().zero = zero_flag;
-        io().less_than = slt_result_sig;
-        io().less_than_u = sltu_result_sig;
+        io().zero <<= alu.io().zero;
+        io().less_than <<= alu.io().less_than;
+        io().less_than_u <<= alu.io().less_than_u;
         io().is_store_alu = io().is_store;
     }
 };

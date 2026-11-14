@@ -1142,9 +1142,7 @@ include/cpu/pipeline/rv32i_alu.h	0	ch_in<ch_uint<4>> alu_op	既有债·基线豁
 include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_bool> equal	既有债·基线豁免
 include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_bool> less_than	既有债·基线豁免
 include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_bool> less_than_u	既有债·基线豁免
-include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_bool> mem_signed	既有债·基线豁免
 include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_bool> zero	既有债·基线豁免
-include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_uint<2>> mem_size	既有债·基线豁免
 include/cpu/pipeline/rv32i_alu.h	0	ch_out<ch_uint<32>> result	既有债·基线豁免
 include/cpu/pipeline/rv32i_branch_predict.h	0	ch_in<ch_uint<32>> instruction	既有债·基线豁免
 include/cpu/pipeline/rv32i_branch_predict.h	0	ch_out<ch_bool> is_branch	既有债·基线豁免

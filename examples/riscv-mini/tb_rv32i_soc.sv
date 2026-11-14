@@ -33,8 +33,8 @@
 //   ⇒ ⇒ ⚠️ **仍保留未具名的是后代冒泡端口**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`）
 //   ⇒ ⇒ 它们**不在**本批范围（不是根组件自有 IO）⇒ ⇒ 归属**后续批次**。
 //
-// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **113** 个
-//   （**6** 输入 + **107** 输出 · 2026-11-14 实测）⇒ ⇒ **6** 输入 = 框架的
+// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **118** 个
+//   （**6** 输入 + **112** 输出 · 2026-11-14 实测）⇒ ⇒ **6** 输入 = 框架的
 //   `default_clock` / `default_reset` + 本组件自有的 **4** 个
 //   ⇒ ⇒ **4** 个自有输入里 **1 位输入有 3 个** ⇒ 必须实证：
 //   · `top_ext_rst` = `ext_rst`（实测：只有它拉低后流水线才取指）
@@ -43,12 +43,14 @@
 //     —— 它是**死端口**（零消费者；产物里**所有**流水线寄存器都锁在框架 `default_clock`）
 //     ⇒ ⇒ 删前已做针对性实测（`ext_clk` 0/1 交替翻转 ⇒ 60 拍 × 27 观测**逐拍全等**）
 //     ⇒ ⇒ **真时钟源 = `default_clock`**（本 TB 的 `clk`）⇒ ⇒ **行为零变化**
-//   ⇒ ⇒ **107** 个输出 = 本组件自有的 **27** 个 + **后代冒泡**的 **80** 个
+//   ⇒ ⇒ **112** 个输出 = 本组件自有的 **27** 个 + **后代冒泡**的 **85** 个
+//   （**85** = 80 + **5**：`Rv32iAlu` 接入后冒泡的内部节点 ⇒ ⇒ 2026-11-14 · B4 · C3）
 //   （`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*` ⇒ ⇒ **未具名** ⇒ ⇒ 仍在 `sink*` 里）。
 //   ⚠️ **历史订正**：原文写「113 个端口（5 输入 + 108 输出）」⇒ ⇒ 该数字是
 //   **C8 tie-off 之前**的（B0 批给 `mem_is_load` 补 driver ⇒ ⇒ 顶层 input 8 → 7）
 //   ⇒ ⇒ 2026-11-13 按产物实测订正为 **114（7 + 107）**
-//   ⇒ ⇒ 2026-11-14 删 `ext_clk` ⇒ ⇒ **113（6 + 107）**。
+//   ⇒ ⇒ 2026-11-14 删 `ext_clk` ⇒ ⇒ **113（6 + 107）**
+//   ⇒ ⇒ 2026-11-14（B4 · C3）`ExStage` 接入 `Rv32iAlu` ⇒ ⇒ **118（6 + 112）**。
 //
 // ⚠️ **未用输出 MUST 被读**：本 TB 把 96 个不参与判据的输出接进 `sink*` 数组
 //   ⇒ ⇒ 严格 flags 下不读会触发 `%Warning-UNUSEDSIGNAL`（**致命** —— 实测踩过同类坑）。
@@ -76,13 +78,13 @@ module tb_rv32i_soc;
     logic [31:0] dbg_wb_write_data;
     logic [4:0]  dbg_wb_rd_addr;
 
-    logic [37:0] sink1;   // 38 个未用输出（宽度 1）
+    logic [41:0] sink1;   // 42 个未用输出（宽度 1）
     logic [3:0] sink2;   // 2 个未用输出（宽度 2）
     logic [2:0] sink3;   // 1 个未用输出（宽度 3）
     logic [7:0] sink4;   // 2 个未用输出（宽度 4）
     logic [39:0] sink5;   // 8 个未用输出（宽度 5）
     logic [13:0] sink7;   // 2 个未用输出（宽度 7）
-    logic [1311:0] sink32;   // 41 个未用输出（宽度 32）
+    logic [1343:0] sink32;   // 42 个未用输出（宽度 32）
     logic [95:0] sink48;   // 2 个未用输出（宽度 48）
 
     integer checks = 0;
@@ -307,7 +309,16 @@ module tb_rv32i_soc;
         .top_itcm_unnamed_output(sink32[39*32 +: 32]),
         .top_itcm_unnamed_output_1(sink1[36*1 +: 1]),
         .top_dtcm_unnamed_output_1(sink1[37*1 +: 1]),
-        .top_dtcm_unnamed_output(sink32[40*32 +: 32])
+        .top_dtcm_unnamed_output(sink32[40*32 +: 32]),
+        // ⚠️ **2026-11-14 · B4 · C3**：`ExStage` 的算术核心改由**库组件**
+        //   `riscv::Rv32iAlu` 承担 ⇒ ⇒ 组件的**内部节点**冒泡到顶层 ⇒ ⇒ **+5** 个端口
+        //   ⇒ ⇒ 原 113 个端口**名一字未改** ⇒ ⇒ 只**新增**这 5 根（无重映射）
+        //   ⚠️ 宽度**按产物实测**（不是猜）：`_2` 是 32 位，其余 4 个是 1 位
+        .top_pipeline_ex_stage_alu_unnamed_output(sink1[38*1 +: 1]),
+        .top_pipeline_ex_stage_alu_unnamed_output_1(sink1[39*1 +: 1]),
+        .top_pipeline_ex_stage_alu_unnamed_output_2(sink32[41*32 +: 32]),
+        .top_pipeline_ex_stage_alu_unnamed_output_3(sink1[40*1 +: 1]),
+        .top_pipeline_ex_stage_alu_unnamed_output_4(sink1[41*1 +: 1])
     );
 
     always #5 clk = ~clk;

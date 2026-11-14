@@ -45,14 +45,14 @@ public:
         ch_out<ch_bool>     less_than; // 小于标志 (有符号，用于 SLT/BLT)
         ch_out<ch_bool>     equal;     // 等于标志 (用于 BEQ)
         ch_out<ch_bool>     less_than_u; // 小于标志 (无符号，用于 SLTU/BLTU)
-        // 内存操作辅助输出 (新增)
-        ch_out<ch_uint<2>>  mem_size;  // 内存访问大小
-                                       // 0 = byte (8 位)
-                                       // 1 = half (16 位)
-                                       // 2 = word (32 位)
-        ch_out<ch_bool>     mem_signed; // 是否符号扩展
-                                       // true = 符号扩展 (LB/LH)
-                                       // false = 零扩展 (LBU/LHU)
+        // ⚠️ **2026-11-14 · B4 · C3（Δ8 · ZERO-DEBT）**：`mem_size` / `mem_signed`
+        //    两个输出**已删除** ⇒ ⇒ 理由：**全仓零消费者**（grep 命中 0）
+        //    ⇒ ⇒ 且它们**只在** `funct3` 的 6 个组合下有意义 ⇒ ⇒ 而 funct3 在
+        //    流水线的 ALU 路径上**无意义**（load/store 的车道选择在别处）
+        //    ⇒ ⇒ 接入后它们会**冒泡成顶层端口**（无用的端口面）⇒ ⇒ 更该删
+        //    ⇒ ⇒ ⚠️ `funct3` 输入**保留**（组件独立使用时仍有意义）
+        //    ⇒ ⇒ 公开面移除登记 = `.rddf/checks/public-api-surface.md` +
+        //        `public-api-removals.tsv` + `docs/CHANGELOG.md`
     )
     
     Rv32iAlu(ch::Component* parent = nullptr, const std::string& name = "rv32i_alu")
@@ -159,34 +159,10 @@ public:
         
         io().result = res;
         
-        // ========================================================================
-        // 内存操作辅助输出 (新增)
-        // ========================================================================
-        
-        // 根据 funct3 确定内存访问大小
-        // funct3 encoding for load/store:
-        //   000 = LB/LBU (byte, 8 位)
-        //   001 = LH/LHU (half, 16 位)
-        //   010 = LW (word, 32 位)
-        //   100 = LBU (zero-extended byte)
-        //   101 = LHU (zero-extended half)
-        auto is_byte = (io().funct3 == ch_uint<3>(0_d)) | 
-                       (io().funct3 == ch_uint<3>(4_d));
-        auto is_half = (io().funct3 == ch_uint<3>(1_d)) | 
-                       (io().funct3 == ch_uint<3>(5_d));
-        auto is_word = (io().funct3 == ch_uint<3>(2_d));
-        
-        io().mem_size = select(is_byte, ch_uint<2>(0_d),
-                          select(is_half, ch_uint<2>(1_d),
-                          select(is_word, ch_uint<2>(2_d),
-                                 ch_uint<2>(0_d))));
-        
-        // 根据 funct3 确定是否符号扩展
-        // 符号扩展：LB (000), LH (001)
-        // 零扩展：LBU (100), LHU (101)
-        auto is_signed = (io().funct3 == ch_uint<3>(0_d)) | 
-                         (io().funct3 == ch_uint<3>(1_d));
-        io().mem_signed = is_signed;
+        // ⚠️ **2026-11-14 · B4 · C3（Δ8）**：原「内存操作辅助输出」
+        //    （`mem_size` / `mem_signed`）**已删除**（全仓零消费者 ⇒ ZERO-DEBT）
+        //    ⇒ ⇒ 组件现在**只**产出算术/比较结果（result / zero / less_than /
+        //    equal / less_than_u）
     }
 };
 

@@ -6,6 +6,34 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-14 — **EX 级的算术核心改由库组件 `Rv32iAlu` 承担**（B4 · C3）
+
+### Changed
+
+- **`riscv::ExStage` 的算术核心**（`include/cpu/pipeline/stages/ex_stage.h`）
+  ⇒ ⇒ 内联的 **10 个 ALU 分支**（ADD/SUB/AND/OR/XOR/SLL/SRL/SRA/SLT/SLTU）
+  **已删** ⇒ ⇒ 改由**库组件** `riscv::Rv32iAlu` 承担
+  ⇒ ⇒ 「RV32I 重复实现」收口（此前**两份** ALU 语义并存 ⇒ ⇒ 漂移风险）
+  ⇒ ⇒ ⚠️ **「第二操作数选择」仍留在 EX 级**（`select(is_i_type, imm, rs2_data)`）
+  —— 它**不是** ALU 的一部分 ⇒ ⇒ 组件只拿到算好的 `operand_b`
+  ⇒ ⇒ **行为零变化**（既有 golden + 时序金标全绿为证）
+  ⇒ ⇒ ⚠️ **产物顶层端口面 114 → 118**（+5 = ALU 组件内部节点冒泡）
+  ⇒ ⇒ **根组件自有端口仍是 31**（不变）⇒ ⇒ 原 113 个端口**名一字未改**（只有新增）
+
+### Removed
+
+- **`riscv::Rv32iAlu` 的 `mem_size` / `mem_signed`（输出）**
+  ⇒ ⇒ **全仓零消费者** ⇒ ⇒ ZERO-DEBT ⇒ ⇒ 且接入后会**冒泡成顶层端口**（无用端口面）
+  ⇒ ⇒ ⚠️ `funct3` 输入**保留**（组件独立使用时仍有意义）
+
+### Verification
+
+- 「**未知 opcode 行为零变化**」有**显式断言**（`ExStage - unknown opcode keeps its
+  ALU semantics`）⇒ ⇒ 未知 opcode ⇒ ⇒ 第二操作数 = `rs2_data` ⇒ ⇒ 结果 = `rs1 + rs2`
+  ⇒ ⇒ 组件化若悄悄改了它 ⇒ ⇒ 断言**转红**
+
+---
+
 ## 2026-11-14 — **ALU 操作码编码归一**（B4 · C2）
 
 ### Removed
@@ -20,6 +48,13 @@ the change that introduced them (see `openspec/changes/` and
 
 ### Changed
 
+- ⚠️ **「未定义 `alu_op` 值」集合随之变化**（C2 归一的**连带后果** ⇒ ⇒ **如实登记**）：
+  | | 已定义 | 未定义 |
+  |---|---|---|
+  | 旧（`ALU_OP_*`） | 0–9 | 10–15 |
+  | 新（`ALU_*`） | 0–7 · 10 · 11 | **8 · 9** · 12–15 |
+  ⇒ ⇒ 下游若喂 `alu_op ∈ {8, 9}`（旧 = SLT / SLTU）⇒ ⇒ 新语义 = **结果 0**
+  ⇒ ⇒ ⚠️ **仓内流水线不会产出 8/9**（`alu_op_calc` 按 `funct3` 派生 ⇒ 落点全在已定义域）⇒ ⇒ **行为零变化** ✓
 - ⚠️ **迁移指引**：下游若按**旧** `ALU_OP_*` 编码喂 `alu_op` ⇒ ⇒ **MUST 改用 `riscv::ALU_*`**
   （**旧编码不是「另一个等价编码」** ⇒ ⇒ 它会**算出别的操作**）
   ⇒ ⇒ 新编码表：`ADD 0 · SLL 1 · SLT 2 · SLTU 3 · XOR 4 · SRL 5 · OR 6 · AND 7 · SUB 10 · SRA 11`
