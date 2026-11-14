@@ -29,14 +29,23 @@ using namespace ch::core;
 
 // 地址空间基地址常量 (使用原生 uint32_t 避免 ch_uint constexpr 问题)
 // riscv-tests ELF 期望: ITCM=0x80000000, DTCM=0x80010000, peripherals above
+//
+// ⚠️ **2026-11-14 · L1**：TCM 的 **base / size** 改为**派生**自
+//    `rv32i_mem_map.h`（**单一真相**）⇒ ⇒ 修掉了「**声明 64 KB · 实现 16 KB**」
+//    ⇒ ⇒ 那段不一致会让 `[0x8000_4000, 0x8001_0000)` 的访问**静默截断**
+//    （PC 32 位 ⇒ TCM 索引 12 位 ⇒ 高位被丢）⇒ ⇒ 现在它落在**区域外** ⇒ ⇒ 可诊断。
+//    ⇒ ⇒ ⚠️ **TCM 容量 MUST 与 `kTcmAddrWidth` 同步**（改一处 ⇒ 改两处）。
+#include "cpu/riscv/rv32i_mem_map.h"
+
 constexpr uint32_t ADDR_NULL_BASE  = 0x00000000;
-constexpr uint32_t ADDR_ITCM_BASE  = 0x80000000;
-constexpr uint32_t ADDR_DTCM_BASE  = 0x80010000;
+constexpr uint32_t ADDR_ITCM_BASE  = static_cast<uint32_t>(riscv::kItcm.base);
+constexpr uint32_t ADDR_DTCM_BASE  = static_cast<uint32_t>(riscv::kDtcm.base);
 constexpr uint32_t ADDR_CLINT_BASE = 0x80100000;
 constexpr uint32_t ADDR_UART_BASE  = 0x80101000;
 constexpr uint32_t ADDR_GPIO_BASE  = 0x80102000;
-constexpr uint32_t ADDR_ITCM_SIZE  = 0x00010000;
-constexpr uint32_t ADDR_DTCM_SIZE  = 0x00010000;
+// ⚠️ **size 由容量派生**（**禁**手写 0x10000 —— 那与硬件的 16 KB 不一致）
+constexpr uint32_t ADDR_ITCM_SIZE  = static_cast<uint32_t>(riscv::kItcm.size);
+constexpr uint32_t ADDR_DTCM_SIZE  = static_cast<uint32_t>(riscv::kDtcm.size);
 constexpr uint32_t ADDR_CLINT_SIZE = 0x00001000;
 constexpr uint32_t ADDR_UART_SIZE  = 0x00001000;
 constexpr uint32_t ADDR_GPIO_SIZE  = 0x00001000;

@@ -62,10 +62,35 @@
 #include "core/verilator_backend.h"
 #include "cpu/pipeline/rv32i_pipeline.h"
 #include "cpu/pipeline/rv32i_tcm.h"
+#include "cpu/riscv/rv32i_asm_encode.h"
 #include "rv32i_pipeline_top.h"
 #include "simulator.h"
 
 namespace {
+
+// ⚠️ **2026-11-14 · L3（编码器库化）**：编码器**上移到** `cpu/riscv/rv32i_asm_encode.h`
+//    ⇒ ⇒ 本文件**不再**持有副本 ⇒ ⇒ 「**唯一**一份」且在**库**里 ⇒ ⇒
+//    固件转储器工具（L4）可**复用**同一份 ⇒ ⇒ 两份编码器漂移的风险**归零**。
+//    ⇒ ⇒ ⚠️ **手算交叉校验 MUST 保留**（`FirmwareEncoderCrossCheck`）——
+//    它拿**手算常量**对比本库的产出 ⇒ ⇒ 那才是**独立**证据（用库自证 = 零判别力）。
+using riscv::ADDI;
+using riscv::ADD;
+using riscv::AUIPC;
+using riscv::BEQ;
+using riscv::BNE;
+using riscv::JAL;
+using riscv::JALR;
+using riscv::LB;
+using riscv::LBU;
+using riscv::LH;
+using riscv::LHU;
+using riscv::LW;
+using riscv::NOP;
+using riscv::SB;
+using riscv::SH;
+using riscv::SRA;
+using riscv::SUB;
+using riscv::SW;
 
 // ---------------------------------------------------------------------------
 // 观测向量：顺序必须与 `obs_snapshot()` 一致，改动两处必须同步。
@@ -200,119 +225,6 @@ std::array<uint64_t, kObsCount> obs_snapshot(Rv32iPipelineTop &dut,
 // 最小编码器。手算常量交叉校验（见 TEST_CASE ①）—— 只用常量断言 helper 会变成
 // 自证，所以两边都写：helper 产出 vs 手算常量。
 // ---------------------------------------------------------------------------
-constexpr uint32_t NOP = 0x00000013u;  // addi x0, x0, 0
-
-constexpr uint32_t enc_r(uint32_t rd, uint32_t rs1, uint32_t rs2,
-                         uint32_t funct3, uint32_t funct7) {
-    return (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
-           (rd << 7) | 0x33u /* OP */;
-}
-
-constexpr uint32_t enc_i(uint32_t rd, uint32_t rs1, uint32_t funct3,
-                         int32_t imm, uint32_t opcode) {
-    return ((static_cast<uint32_t>(imm) & 0xFFFu) << 20) | (rs1 << 15) |
-           (funct3 << 12) | (rd << 7) | opcode;
-}
-
-constexpr uint32_t enc_s(uint32_t rs2, uint32_t rs1, uint32_t funct3,
-                         int32_t imm) {
-    uint32_t u = static_cast<uint32_t>(imm) & 0xFFFu;
-    return ((u >> 5) << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) |
-           ((u & 0x1Fu) << 7) | 0x23u /* STORE */;
-}
-
-constexpr uint32_t enc_b(uint32_t rs1, uint32_t rs2, uint32_t funct3,
-                         int32_t imm) {
-    uint32_t u = static_cast<uint32_t>(imm) & 0x1FFFu;  // 13-bit, ±4 KiB
-    uint32_t b12 = (u >> 12) & 1u;
-    uint32_t b11 = (u >> 11) & 1u;
-    uint32_t b10_5 = (u >> 5) & 0x3Fu;
-    uint32_t b4_1 = (u >> 1) & 0xFu;
-    return (b12 << 31) | (b10_5 << 25) | (rs2 << 20) | (rs1 << 15) |
-           (funct3 << 12) | (b4_1 << 8) | (b11 << 7) | 0x63u /* BRANCH */;
-}
-
-// 便捷别名（funct3/funct7 按 RV32I 规范）
-constexpr uint32_t ADDI(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x0u, imm, 0x13u);
-}
-constexpr uint32_t ADD(uint32_t rd, uint32_t rs1, uint32_t rs2) {
-    return enc_r(rd, rs1, rs2, 0x0u, 0x00u);
-}
-constexpr uint32_t SUB(uint32_t rd, uint32_t rs1, uint32_t rs2) {
-    return enc_r(rd, rs1, rs2, 0x0u, 0x20u);
-}
-constexpr uint32_t SW(uint32_t rs2, uint32_t rs1, int32_t imm) {
-    return enc_s(rs2, rs1, 0x2u, imm);
-}
-// ⚠️ **字节 / 半字写**（2026-10-26 新增）：funct3 = 000 / 001。
-//    源数据**低位对齐**，由总线按 `addr[1:0]` 选车道（RISC-V 语义）。
-constexpr uint32_t SB(uint32_t rs2, uint32_t rs1, int32_t imm) {
-    return enc_s(rs2, rs1, 0x0u, imm);
-}
-constexpr uint32_t SH(uint32_t rs2, uint32_t rs1, int32_t imm) {
-    return enc_s(rs2, rs1, 0x1u, imm);
-}
-constexpr uint32_t LW(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x2u, imm, 0x03u);
-}
-// ⚠️ **字节 / 半字读**（2026-10-28 新增，change `rv32i-load-byte-lane-2026-10`）：
-//    funct3 = 000 (LB，**符号**扩展) / 001 (LH，**符号**) / 100 (LBU，**零**)
-//    / 101 (LHU，**零**)。
-//    ⚠️ 半字道按 `addr[1]` 选 ⇒ **半字对齐**（`addr[0]` 被忽略）
-//    ⇒ 用例 MUST 用**偶地址**。
-constexpr uint32_t LB(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x0u, imm, 0x03u);
-}
-constexpr uint32_t LH(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x1u, imm, 0x03u);
-}
-constexpr uint32_t LBU(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x4u, imm, 0x03u);
-}
-constexpr uint32_t LHU(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x5u, imm, 0x03u);
-}
-constexpr uint32_t BEQ(uint32_t rs1, uint32_t rs2, int32_t imm) {
-    return enc_b(rs1, rs2, 0x0u, imm);
-}
-constexpr uint32_t BNE(uint32_t rs1, uint32_t rs2, int32_t imm) {
-    return enc_b(rs1, rs2, 0x1u, imm);
-}
-
-// ⚠️ **跳转 / U 型 / 算术右移**（2026-10-26 新增，T3 `JAL`/`JALR`/`SRA`）：
-//
-// J 型格式（RISC-V）：`imm[20|10:1|11|19:12]` 散落在
-//   instr[31] = imm[20] · instr[30:21] = imm[10:1] · instr[20] = imm[11] ·
-//   instr[19:12] = imm[19:12]
-// ⚠️ `imm` 是**字节**偏移（bit0 恒 0 ⇒ JAL 目标天然 2 字节对齐）。
-constexpr uint32_t enc_j(uint32_t rd, int32_t imm) {
-    uint32_t u = static_cast<uint32_t>(imm) & 0x1FFFFFu;  // 21-bit, ±1 MiB
-    uint32_t b20    = (u >> 20) & 1u;
-    uint32_t b10_1  = (u >> 1) & 0x3FFu;
-    uint32_t b11    = (u >> 11) & 1u;
-    uint32_t b19_12 = (u >> 12) & 0xFFu;
-    return (b20 << 31) | (b10_1 << 21) | (b11 << 20) | (b19_12 << 12) |
-           (rd << 7) | 0x6Fu /* JAL */;
-}
-constexpr uint32_t JAL(uint32_t rd, int32_t imm) { return enc_j(rd, imm); }
-
-// `JALR`：I 型格式，funct3 = 000，opcode = 0x67
-// ⚠️ 目标地址 = `(rs1 + imm) & ~1`（**MUST** 清最低位）
-constexpr uint32_t JALR(uint32_t rd, uint32_t rs1, int32_t imm) {
-    return enc_i(rd, rs1, 0x0u, imm, 0x67u);
-}
-
-// `AUIPC`：U 型格式（opcode 0x17）⇒ `rd = pc + (imm_hi20 << 12)`
-// ⚠️ U 型的立即数**只能是 4 KiB 的倍数** ⇒ 算任意目标地址 MUST 配合 `ADDI`
-constexpr uint32_t AUIPC(uint32_t rd, uint32_t imm_hi20) {
-    return ((imm_hi20 & 0xFFFFFu) << 12) | (rd << 7) | 0x17u;
-}
-
-// `SRA`：R 型格式，funct3 = 101，funct7 = 0x20（区分 SRL）
-constexpr uint32_t SRA(uint32_t rd, uint32_t rs1, uint32_t rs2) {
-    return enc_r(rd, rs1, rs2, 0x5u, 0x20u);
-}
 
 // ---------------------------------------------------------------------------
 // 固件：**48 个字**（含 NOP 填充），覆盖 ALU-only / sw→lw / **紧邻 load→use** ×2 /
@@ -852,15 +764,19 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     REQUIRE(ta.back()[kIdxBranchCount] == 2u);
     // 只有 taken 的 beq 被判为误预测（bne 不成立）⇒ mispredict == 1
     REQUIRE(ta.back()[kIdxMispredict] == 1u);
-    // ⚠️ **load-use 停顿拍数 == 6**（2026-10-25，A1-a 多拍停顿）：
+    // ⚠️ **load-use 停顿拍数 == 8**（2026-11-13 · ADR-069 决策 **A0** 落地后订正；
+    //    原值 6 是 **A0 之前**的基线）：
     //    固件里有**两处**紧邻的 load→use：
     //      ① `lw x5` 紧接着 `add x6,x5,x5`（word 20/21）
     //      ② `lw x10` 紧接着 `add x11,x10,x10`（word 43/44）
-    //    ⇒ 每处停顿 **3 拍**（load 从 EX 到 WB 是 2 级 ⇒ 数据在「检测拍 + 2」
-    //    的边沿写回 ⇒ 消费者 MUST 等到「检测拍 + 3」）⇒ 合计 **6 拍**。
+    //    ⇒ 每处停顿 **4 拍**（**A0 后**：load 从 EX 到 WB 是 **3** 级
+    //    ⇒ 数据在「检测拍 + 3」的边沿写回 ⇒ 消费者 MUST 等到「检测拍 + 4」）
+    //    ⇒ 合计 **8 拍**（A0 前是 2 级 ⇒ 3 拍/处 ⇒ 合计 6 拍）。
     //    ⚠️ 修复前这个计数器**恒为 0**（检测用的是 MEM 级 load ⇒ 晚一级
     //    ⇒ 永远对不上）⇒ 本断言是「冒险真的被检测到」的判别力来源。
-    REQUIRE(ta.back()[kIdxLoadUseStalls] == 6u);
+    //    ⚠️ **手推依据** = `openspec/changes/memory-timing-contract-2026-11/design.md`
+    //    §10.2（分段分解：fill 3 + **stall 8** + flush 12 = 23）+ §10.4。
+    REQUIRE(ta.back()[kIdxLoadUseStalls] == 8u);
     // 控制停顿 = **全部控制重定向**的**次数**（2026-10-26 起含 JAL/JALR）
     //   = 1（taken 的 beq 误预测）+ 3（JAL @word64 + JALR @word80 + JAL @word100）
     // ⚠️ 口径是「**重定向次数**」而不是「停顿拍数」—— 每次重定向实际代价是 **3 拍**
@@ -893,16 +809,30 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //      ⚠️ **2026-10-27 起是 3 拍（原 2 拍）**：`primed` 门控（ADR-048 D6）
     //      把复位后**第 0 拍**的幻影装载的 `valid` 压成 0
     //      ⇒ 第一条指令进 ID/EX 晚一拍 ⇒ **fill 段 +1**（这就是缺陷 B 的 −1）
-    //   ② 3 拍 **load-use 停顿 #1**（消费者留在 ID 级；EX/MEM 与 MEM/WB 灌气泡）
+    //   ② 4 拍 **load-use 停顿 #1**（消费者留在 ID 级；EX/MEM 与 MEM/WB 灌气泡）
+    //      ⚠️ **2026-11-13 · ADR-069 A0**：3 拍 → **4 拍**
+    //         （EX→WB 级数 2 → 3 ⇒ 数据晚 1 拍写回 ⇒ 消费者多等 1 拍）
     //   ③ 3 拍 **冲刷气泡**（taken 分支让出错误路径 + 重新取指目标）
     //      ⚠️ **3** 拍：flush MUST **多杀一拍**（imem 是 1-cycle `sread` ⇒
     //      flush 当拍提交的那条在下一拍才返回 ⇒ `flush_d1` 再门一拍）⇒
     //      代价 = 分支目标的指令晚 1 拍进 ID
-    //   ④ 3 拍 **load-use 停顿 #2**（第二处紧邻 load→use）
+    //   ④ 4 拍 **load-use 停顿 #2**（第二处紧邻 load→use）
     //   ⑤ 3 拍 **`JAL` 冲刷**（word 64；**与条件分支同构** ⇒ 同样 3 拍）
     //   ⑥ 3 拍 **`JALR` 冲刷**（word 80）
     //   ⑦ 3 拍 **`JAL` 冲刷**（word 100 —— 「错误路径上的跳转」用例）
-    //   ⇒ **填充 3 + 停顿 6 + 冲刷 12 = 21** ⇒ 199 − 21 = **178** 条指令退休
+    //   ⇒ **填充 3 + 停顿 8 + 冲刷 12 = 23** ⇒ 199 − 23 = **176** 条指令退休
+    //
+    // ⚠️ **2026-11-13 · ADR-069 A0 落地后的订正**（原值 21 / 178）：
+    //    ① **fill 段仍是 3** —— 退休计数的增量源 = `mem_stage.io().mem_valid_out`
+    //       = `exmem_valid`（**MEM 级**指令有效）⇒ ⇒ M2 在 MEM 的**下游**
+    //       ⇒ ⇒ **退休时点不动** ⇒ ⇒ fill 段**不随** MEM 区级数变化
+    //       （⚠️ **最容易搞错的一格**：若把增量源改成 M2 / MEM/WB′ 的 valid
+    //       ⇒ ⇒ fill 会变成 4 ⇒ ⇒ 而那**违反** capability `rv32i-commit-path`
+    //       的「「本拍有一条指令退休」MUST 等价于「MEM 级持有**有效**指令」」）
+    //    ② **stall 段 6 → 8**（每处 3 拍 → **4** 拍 · ADR-069 §2.1 / §2.3 代价③）
+    //    ③ **flush 段仍是 12**（重定向次数不变 ⇒ 每次仍是 3 拍 ⇒ M2 在其下游）
+    //    ⇒ ⇒ **手推依据** = `openspec/changes/memory-timing-contract-2026-11/design.md`
+    //    §10.2（分段分解）+ §10.4（**只改这 3 个数**）
     //
     // ⚠️ **分段不变式**（ADR-048 D9.2）：取指 skid buffer **不改**停顿拍数与
     //    冲刷拍数（仍各 3）⇒ ②④ 与 ③⑤⑥⑦ **逐段不变**，只有 ① 随 `primed` 变。
@@ -921,8 +851,8 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
             ++non_retired;
         }
     }
-    REQUIRE(non_retired == 21u);
-    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 22u);
+    REQUIRE(non_retired == 23u);
+    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 24u);
 
     // ---- 写回序列（ISA 语义的最强判据）----
     //
@@ -1794,5 +1724,315 @@ TEST_CASE("Rv32iSoc - LoadByteLaneDiscriminating",
         expect_written(10, 0xFFFFA1B2u, "lh  x10,0x102 (half1, 符号扩展)");
         expect_written(11, 0x0000C3D4u, "lhu x11,0x100 (half0, 零扩展)");
         expect_written(12, 0x0000A1B2u, "lhu x12,0x102 (half1, 零扩展)");
+    }
+}
+
+// ===========================================================================
+// T6 判别性固件：**零间隔**的同址 `store → load`（MUST 读到**新值**）
+// ===========================================================================
+//
+// ⚠️ **为什么既有固件的 `SW`/`LW` 对本判据**零判别力**：
+//    既有固件的 `SW(4,0,0x100)` 在 word 16、`LW(5,0,0x100)` 在 word 20
+//    ⇒ ⇒ **隔 4 个字** ⇒ ⇒ store 早已提交 ⇒ ⇒ **无论**「写」的发出相位
+//    （EX/MEM 还是 MEM/WB）**都**读得到新值 ⇒ ⇒ 判据恒绿 ⇒ ⇒ 零信息量。
+//
+// ⚠️ **本固件 MUST 把 store 与 load 放在**连续两条指令**上**
+//    ⇒ ⇒ 「写提交沿」与「读发出沿」只差 **1 拍** ⇒ ⇒ 若写的发出相位被推后
+//    （例如改成从 MEM/WB 驱动）⇒ ⇒ 读就会拿到**旧值** ⇒ ⇒ **必红**。
+//
+// ⚠️ **期望值是**手推**的（禁抄仿真输出）**：
+//    · `sw`/`lw` 的地址 = `x0 + imm`（`x0` 恒 0）⇒ ⇒ 字节地址 = imm
+//    · `sw x16` 写**整字**（funct3 = 010 ⇒ 无车道移位）⇒ ⇒ 字 = x16 = 0x5A
+//    · 紧邻的 `lw` MUST 读回**整字** 0x5A（**read-new** · ADR-069 **V6**）
+//    · 反向对照：从未被写过的地址 ⇒ 读回 **0**（dmem 零初始化）
+//
+// ⚠️ **既有固件的 golden MUST 零变化** ⇒ ⇒ 本用例用**独立固件 + 独立 TEST_CASE**
+//    （与 `skid_firmware()` / `load_byte_lane_firmware()` 同款做法）⇒ ⇒
+//    既有 `kExpectedWritebacks` / `non_retired` / `store_cycles` **一个都不动**。
+constexpr size_t kT6FirmwareWords = 12;
+
+constexpr std::array<uint32_t, kT6FirmwareWords> t6_firmware() {
+    return {{
+        ADDI(16, 0, 0x5A),   // 0   x16 = 0x5A
+        NOP, NOP, NOP,        // 1-3
+        SW(16, 0, 0x150),    // 4   [0x150] = 0x5A
+        LW(17, 0, 0x150),    // 5   **紧邻**读回 ⇒ x17 MUST = 0x5A（read-new）
+        NOP, NOP, NOP,        // 6-8
+        LW(18, 0, 0x158),    // 9   从未写过的地址 ⇒ x18 MUST = 0（反向对照）
+        NOP, NOP,             // 10-11
+    }};
+}
+
+// 期望的写回序列（**手推**）：x16 = 0x5A · x17 = 0x5A（紧邻 read-new）· x18 = 0
+constexpr std::array<std::pair<uint64_t, uint64_t>, 3> kT6Writebacks = {{
+    {16, 0x5A},
+    {17, 0x5A},
+    {18, 0x00},
+}};
+
+// ⚠️ **编译期**纪律：store 与 load MUST **紧邻**（否则本用例退化成「零判别力」）
+//    ⇒ ⇒ 用**常量**判定，不靠人眼核对。
+constexpr bool t6_store_load_is_adjacent() {
+    for (std::size_t i = 0; i + 1 < kT6FirmwareWords; ++i) {
+        const std::uint32_t w = t6_firmware()[i];
+        if ((w & 0x7Fu) != 0x23u) continue;   // 不是 STORE
+        const std::uint32_t next = t6_firmware()[i + 1];
+        if ((next & 0x7Fu) != 0x03u) continue;  // 下一条不是 LOAD ⇒ 不算
+        return true;
+    }
+    return false;
+}
+static_assert(t6_store_load_is_adjacent(),
+              "T6 判别性固件：MUST 存在**紧邻**的 store → load（否则「零间隔同址」判据零判别力）");
+
+TEST_CASE("Rv32iSoc - StoreToLoadZeroIntervalReadNew",
+          "[rv32i][soc][isa][mem][t6][dual][verilator][e2e]") {
+    // ⚠️ **ADR-069 V6**：「**零间隔**同址 `store → load` 读到**新值**（`read-new`）」
+    //    ⇒ ⇒ 判据形态 = **指令级**（连续两条）⇒ ⇒ **禁**单拍形态
+    //    （那是沿级 `read-old` ⇒ ⇒ 两者**成对**钉住 ⇒ ⇒ ADR-068 V6/V7）
+    constexpr unsigned kCycles = 60;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_t6");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), t6_firmware());
+    load_firmware(*sim_b, dev_b->instance(), t6_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（**无掩码**）----
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② 写回序列：x16 = 0x5A · **x17 = 0x5A（紧邻 read-new）** · x18 = 0 ----
+    {
+        std::vector<std::pair<uint64_t, uint64_t>> wb;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u) continue;
+            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
+        }
+        REQUIRE(wb.size() == kT6Writebacks.size());
+        for (std::size_t i = 0; i < wb.size(); ++i) {
+            INFO("writeback #" << i << " got (rd=" << wb[i].first
+                                << ", data=0x" << std::hex << wb[i].second
+                                << ")");
+            REQUIRE(wb[i] == kT6Writebacks[i]);
+        }
+    }
+
+    // ---- ③ store 侧：MUST 真的写出了这个字（否则「读到新值」是空转）----
+    REQUIRE(has_store(ta, 0x150u, 0x5Au));
+
+    // ---- ④ 逐个写回**独立**断言（反向期望显式留痕）----
+    {
+        std::map<uint64_t, std::set<uint64_t>> written;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u) continue;
+            written[ta[c][kIdxWbRdAddr]].insert(ta[c][kIdxWbWriteData]);
+        }
+        auto expect_written = [&written](uint64_t rd, uint64_t value,
+                                         const char *what) {
+            INFO(what << ": rd=" << rd << " expected=0x" << std::hex << value);
+            const auto it = written.find(rd);
+            REQUIRE(it != written.end());
+            REQUIRE(it->second.size() == 1u);
+            REQUIRE(*it->second.begin() == value);
+        };
+        expect_written(16, 0x5Au, "addi x16,x0,0x5A");
+        expect_written(17, 0x5Au, "lw x17,0x150（**紧邻** store ⇒ read-new）");
+        expect_written(18, 0x00u, "lw x18,0x158（从未写过 ⇒ 0）");
+    }
+}
+
+// ===========================================================================
+// V13 / V14a / V14b 判别性固件：**ALU 生产者**在距离 2 / 3 / 4 的消费者
+// ===========================================================================
+//
+// ⚠️ **为什么既有 `fwd_firmware()` 不够**：
+//    它的 ②（距离 2）与 ③（距离 3）用的都是 **load 生产者**
+//    ⇒ ⇒ 覆盖的是「**load** 的数据」通路 ⇒ ⇒ **钉不到**「**ALU 结果**」在
+//    距离 2 时的档位选择（V13）⇒ ⇒ 也**钉不到**距离 4（V14b ⇒ ⇒ 那正是
+//    **WB 档必须保留**的理由 ⇒ ⇒ 若把 WB 档删掉，既有固件**全绿** ⇒ ⇒ 缺口）。
+//
+// ⚠️ **期望值是**手推**的（禁抄仿真输出）**：RISC-V 的顺序语义 ⇒ ⇒
+//    「消费者读到生产者**刚写**的值」⇒ ⇒ 每个消费者 MUST = 其生产者的值。
+//    ⇒ ⇒ **距离 2 / 3 / 4 三个消费者** MUST 各自拿到**自己**那个生产者的值。
+//
+// ⚠️ **每条用例用**不同的 rd** ⇒ ⇒ 变异自证时**失败信息直接指认**是哪一档
+//    被破坏 ⇒ ⇒ 「哪条钉住了哪一档」由**实测**给出（不是手推拍级表）。
+//
+// ✅ **变异自证结果（2026-11-14 实测）**：
+//    · 突变体 **A**（档位 2 的源改回 `memwb_*`）⇒ ⇒ **rd=17（距离 2）转红**
+//      ⇒ ⇒ **V13 被本固件钉住** ✓
+//    · 突变体 **B**（删 D11 的 **M2** 档）⇒ ⇒ **rd=19（距离 3）转红**
+//      ⇒ ⇒ **V14a 被本固件钉住** ✓
+//    · 突变体 **C**（删 D11 的 **WB** 档）⇒ ⇒ 本固件**不红** ⇒ ⇒ **距离 4 不依赖 WB 档**
+//      ⇒ ⇒ 而 **WB 档的必要性由【既有固件】钉住**（`sub x4` 距 `add x3` **距离 4**
+//      ⇒ ⇒ 突变体 C ⇒ `has_store(kGoldenAddrA, kGoldenValA)` 转红）
+//      ⇒ ⇒ **V14b 已闭（既有固件）** ⇒ ⇒ 本固件的「距离 4」那条只钉**ISA 语义**
+//      （消费者 MUST 拿到生产者的值），**不**承担「WB 档必要性」的归因。
+constexpr size_t kFwdTierFirmwareWords = 17;
+
+constexpr std::array<uint32_t, kFwdTierFirmwareWords> fwd_tier_firmware() {
+    return {{
+        // ── V13：距离 **2** 的 ALU 生产者 ──
+        ADDI(16, 0, 0x11),   // 0  生产者（ALU 结果 0x11）
+        NOP,                 // 1  间隔 1 条 ⇒ 距离 2
+        ADD(17, 16, 0),      // 2  消费者 ⇒ MUST = 0x11
+        NOP, NOP, NOP,       // 3-5
+        // ── V14a：距离 **3** 的 ALU 生产者 ──
+        ADDI(18, 0, 0x2A),   // 6  生产者（ALU 结果 0x2A）
+        NOP, NOP,            // 7-8 间隔 2 条 ⇒ 距离 3
+        ADD(19, 18, 0),      // 9  消费者 ⇒ MUST = 0x2A
+        NOP, NOP, NOP,       // 10-12
+        // ── V14b：距离 **4** 的 ALU 生产者 ──
+        ADDI(20, 0, 0x37),   // 13 生产者（ALU 结果 0x37）
+        NOP,                 // 14 间隔 3 条 ⇒ 距离 4
+        NOP,                 // 15
+        ADD(21, 20, 0),      // 16 消费者 ⇒ MUST = 0x37
+    }};
+}
+
+// 期望的写回序列（**手推** · 顺序 = 程序序）
+constexpr std::array<std::pair<uint64_t, uint64_t>, 7> kFwdTierWritebacks = {{
+    {16, 0x11},   // 生产者
+    {17, 0x11},   // 距离 2 的消费者（MUST = 生产者的值）
+    {18, 0x2A},   // 生产者
+    {19, 0x2A},   // 距离 3 的消费者
+    {20, 0x37},   // 生产者
+    {21, 0x37},   // 距离 4 的消费者
+    {0, 0},       // 占位（x0 不写回 ⇒ 见下方断言：序列里**无** x0）
+}};
+
+TEST_CASE("Rv32iSoc - ForwardingTierDistanceCases",
+          "[rv32i][soc][forwarding][tier][dual][verilator][e2e]") {
+    // ⚠️ **ADR-069 V13 / V14a / V14b**：前推**档位**的距离判别
+    //    ⇒ ⇒ 「距离 2 ⇒ 档位 2（M2）」「距离 3 ⇒ M2→ID 旁路」
+    //    「距离 4 ⇒ WB→ID 旁路（**WB 档 MUST 保留**）」
+    constexpr unsigned kCycles = 70;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_fwdtier");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), fwd_tier_firmware());
+    load_firmware(*sim_b, dev_b->instance(), fwd_tier_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（**无掩码**）----
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② 逐个消费者的**独立**断言（每条失败直接指认是哪一档）----
+    //
+    // ⚠️ 用「集合」而不是「序列」⇒ 对「取指填充期同一条指令被装两次」免疫。
+    std::map<uint64_t, std::set<uint64_t>> written;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        if (ta[c][kIdxWbWriteEn] != 1u) continue;
+        written[ta[c][kIdxWbRdAddr]].insert(ta[c][kIdxWbWriteData]);
+    }
+    auto expect_written = [&written](uint64_t rd, uint64_t value,
+                                     const char *what) {
+        INFO(what << ": rd=" << rd << " expected=0x" << std::hex << value);
+        const auto it = written.find(rd);
+        REQUIRE(it != written.end());      // MUST 被写回过
+        REQUIRE(it->second.size() == 1u);  // 且**只**被写成这一个值
+        REQUIRE(*it->second.begin() == value);
+    };
+    expect_written(16, 0x11u, "addi x16,x0,0x11（生产者）");
+    expect_written(17, 0x11u, "距离 **2** 的消费者（V13：档位 2 = M2）");
+    expect_written(18, 0x2Au, "addi x18,x0,0x2A（生产者）");
+    expect_written(19, 0x2Au, "距离 **3** 的消费者（V14a：M2→ID 旁路）");
+    expect_written(20, 0x37u, "addi x20,x0,0x37（生产者）");
+    // ⚠️ 「距离 4」这条**只**钉 ISA 语义（消费者 MUST 拿到生产者的值）
+    //    ⇒ ⇒ **WB 档的必要性**由**既有固件**钉住（突变体 C ⇒ `golden A` 红）
+    expect_written(21, 0x37u, "距离 **4** 的消费者（ISA 语义）");
+
+    // ---- ③ 反向期望：x0 MUST NOT 被写回 ----
+    REQUIRE(written.find(0) == written.end());
+
+    // ---- ④ 写回**序列**（顺序 + 条数）----
+    {
+        std::vector<std::pair<uint64_t, uint64_t>> wb;
+        for (std::size_t c = 0; c < ta.size(); ++c) {
+            if (ta[c][kIdxWbWriteEn] != 1u) continue;
+            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
+        }
+        REQUIRE(wb.size() == 6u);   // 6 条（x0 不写回 ⇒ 7 个槽位里的占位**不**出现）
+        for (std::size_t i = 0; i < wb.size(); ++i) {
+            INFO("writeback #" << i << " got (rd=" << wb[i].first
+                                << ", data=0x" << std::hex << wb[i].second << ")");
+            REQUIRE(wb[i] == kFwdTierWritebacks[i]);
+        }
     }
 }

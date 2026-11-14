@@ -66,8 +66,8 @@ GRANDFATHERED=("2026-11-09-hierarchical-parent-side-landing-implementation")
 # 缩面锚点（精确计数 ⇒ 增删 MUST 同步 ⇒ 机制同 CTEST_TOTAL）：
 #   EXPECTED_REMOVAL_ROWS = 登记表「已移除 / 已改名」表的**行数**（分组行，一个符号族一行）
 #   EXPECTED_PROBES       = 机器探针的行数（逐符号 / 逐文件族）
-EXPECTED_REMOVAL_ROWS=19
-EXPECTED_PROBES=32
+EXPECTED_REMOVAL_ROWS=20
+EXPECTED_PROBES=34
 AGENTS_TOKEN="零「仓内」消费者的「公开」符号不算 dead code"
 CHANGELOG_TOKENS=(is_built current_state resolve_hold "noexcept(false)")
 

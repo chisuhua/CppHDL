@@ -30,6 +30,9 @@
 #include "cpu/pipeline/stages/id_stage.h"
 #include "cpu/pipeline/stages/ex_stage.h"
 #include "cpu/pipeline/stages/mem_stage.h"
+// ⚠️ **2026-11-13 新增**（ADR-069 A0 · V5）：load 的车道选择 / 扩展语义
+//    从 `MemStage` 迁出 ⇒ ⇒ 载体 = 本组件（M2 的下游）。
+#include "cpu/pipeline/load_lane_selector.h"
 #include "cpu/pipeline/stages/wb_stage.h"
 #include "cpu/pipeline/hazard_unit.h"
 #include "cpu/pipeline/rv32i_pipeline_regs.h"
@@ -120,6 +123,10 @@ public:
     ch::ch_module<IdStage>  id_stage{"id_stage"};
     ch::ch_module<ExStage>  ex_stage{"ex_stage"};
     ch::ch_module<MemStage> mem_stage{"mem_stage"};
+    // ⚠️ **load 车道选择器**（2026-11-13 · ADR-069 A0 · V5）⇒ ⇒ 它的
+    //    输入 MUST 是 **M2 锁存的**地址 / funct3 / 原始字 ⇒ ⇒ **不是**
+    //    `EX/MEM` 的 ⇒ ⇒ 位置 = **M2 的下游**。
+    ch::ch_module<LoadLaneSelector> load_lane{"load_lane_selector"};
     ch::ch_module<WbStage>  wb_stage{"wb_stage"};
     ch::ch_module<HazardUnit> hazard{"hazard_unit"};
     // ⚠️ **数据 mux**（ADR-047 D2）：既有组件，**零新增组件**。
@@ -156,6 +163,62 @@ public:
     //    MEM/WB 会在 T+1 装上「T 拍在 EX 级那条指令」的类型。
     ch_reg<ch_bool>     exmem_is_alu{false, "exmem_is_alu"};
     ch_reg<ch_bool>     exmem_is_jump{false, "exmem_is_jump"};
+
+    // ======================================================================
+    // ⚠️ **M2 寄存器组**（2026-11-13 · ADR-069 决策 **A0**）
+    // ======================================================================
+    // MEM 区裂为 **EX/MEM → M2 → MEM/WB**（EX→WB 级数 2 → 3）⇒ ⇒ load 的
+    // 数据晚 1 拍可用 ⇒ ⇒ **数据入端 MUST 在 MEM/WB′ 的装载沿前稳定**
+    // ⇒ ⇒ 那「1 拍」由 **MEM/WB′** 承担（它锁存**车道选择后的值**）。
+    //
+    // ⚠️ **M2 = 8 个元数据成员**（`valid` / `is_alu` / `is_jump` / `is_load` /
+    //   `rd_addr` / `link_value` / `alu_result` / `funct3`）—— ADR-069 §3.3 A0-①
+    //   的**实施形态**（**经 §7.6 订正**）：
+    //   因为**车道选择**（字节道 / 半字道 / 符号扩展）MUST 用**同一拍**的
+    //   **地址**与 **funct3** ⇒ ⇒ 而原始字只在下一拍可用 ⇒ ⇒ 地址与 funct3
+    //   MUST 先锁存 ⇒ ⇒ ⇒ 元数据 MUST 在 M2 里。
+    //
+    // ⚠️⚠️ **原始字 NOT 是 M2 的成员**（ADR-069 §7.6 · **订正 §7.2**）：
+    //   §7.2 的「原始字 MUST 寄存 1 拍 ⇒ ⇒ 那个寄存器就是 M2 的 `m2_word`」
+    //   **不可实施**（`sread` 输出寄存器在**同一条沿**上被更新 ⇒ ⇒ 在 M2 的
+    //   装载沿采它 ⇒ ⇒ 采到**上一拍**的字 ⇒ ⇒ 与元数据**错配一拍**
+    //   ⇒ ⇒ **静默错车道**）⇒ ⇒ 原始字**组合**取自 `sread` 的输出寄存器
+    //   ⇒ ⇒ 「9 个成员」**作废** ⇒ ⇒ **详见 §7.6.3**（唯一落点）。
+    //
+    // ⚠️ **装载使能恒定**（ADR-069 **V4**）：M2 **不随停顿冻结** ⇒ ⇒ 否则死锁。
+    //   ⇒ ⇒ 下面所有 `m2_*.next = ...` 都是**无条件**赋值（**零 select**）。
+    //
+    // ⚠️ **`m2_link_value` MUST 同拍 transit M2**（A0-①）：`wb_stage` 的跳转写回
+    //   支取 `link_value` ⇒ ⇒ 若 MEM/WB 在 E_{T+2} 装载时取 `exmem_link_value`
+    //   ⇒ ⇒ 那是**后继指令**的返回地址（垃圾）⇒ ⇒ JAL/JALR 写回垃圾。
+    ch_reg<ch_bool>     m2_valid{false, "m2_valid"};
+    ch_reg<ch_bool>     m2_is_alu{false, "m2_is_alu"};
+    ch_reg<ch_bool>     m2_is_jump{false, "m2_is_jump"};
+    ch_reg<ch_bool>     m2_is_load{false, "m2_is_load"};
+    ch_reg<ch_uint<5>>  m2_rd_addr{0_d, "m2_rd_addr"};
+    ch_reg<ch_uint<32>> m2_link_value{0_d, "m2_link_value"};
+    // ⚠️ `m2_alu_result` **兼**访存地址（load/store 时 = 地址）⇒ ⇒ 车道选择
+    //    用它的低 2/1 位。
+    ch_reg<ch_uint<32>> m2_alu_result{0_d, "m2_alu_result"};
+    ch_reg<ch_uint<3>>  m2_funct3{0_d, "m2_funct3"};
+    // ⚠️⚠️ **原始字（raw word）NOT 寄存进 M2** —— 它**组合**取自
+    //    `io().data_read_data`（= D-TCM 的 `sread` **输出寄存器**）。
+    //
+    //    ⚠️ **为什么不能是 M2 的第 9 个成员**（2026-11-13 实测 · 实施期发现）：
+    //      `sread` 的输出寄存器在**同一条沿**上被更新 ⇒ ⇒ 在 M2 的装载沿
+    //      （posedge N+2）采到的仍是**上一拍**的值 ⇒ ⇒ 采到的是
+    //      **data(A_{i-1})**（**前一条指令**的地址）⇒ ⇒ 与 M2 的元数据
+    //      （指令 i）**错配一拍** ⇒ ⇒ `LB`/`LH` **静默错车道**、
+    //      `LW` **静默读回别人的字** ⇒ ⇒ **零报错**。
+    //      ⇒ ⇒ 拍级事实：`sread` 在**地址呈现拍**发出 ⇒ 数据在**下一拍**可用
+    //      ⇒ ⇒ M2 的元数据（EX/MEM 在拍 N+1 持有 i ⇒ M2 在拍 N+2 持有 i）
+    //      与**原始字**（拍 N+2 = data(A_i)）**同拍**可用 ⇒ ⇒
+    //      ⇒ ⇒ 车道选择 MUST 是**组合**的（输入 = M2 元数据 + sread 输出寄存器）
+    //      ⇒ ⇒ 「原始字 MUST 寄存 1 拍」这条义务由 **MEM/WB′** 承担
+    //      （MEM/WB′ 在 posedge N+3 锁存**车道选择后的值** ⇒ 那才是「寄存 1 拍」）
+    //      ⇒ ⇒ 与 ADR-069 **V1**（地址仍取自 EX/MEM，**未**加地址寄存器）相容
+    //      ⇒ ⇒ ⚠️ 若日后有人「补上」`m2_word` 寄存器 ⇒ ⇒ **必错**（错车道）
+    //      ⇒ ⇒ 该缺陷已登记进 ADR-069 §7.6（dated addendum · 实施形态订正）。
 
     ch_reg<ch_bool>     memwb_is_alu{false, "memwb_is_alu"};
     // ⚠️ MEM/WB 补齐（2026-10-25）：WB 需要的**写回数据**与 **is_load**
@@ -200,39 +263,123 @@ public:
         auto wb_write_en = wb_stage.io().write_en & (wb_stage.io().rd_addr_out != ch_uint<5>(0_d));
         reg_file.write(wb_stage.io().rd_addr_out, wb_stage.io().write_data, wb_write_en, "reg_file_write");
 
-        // ⚠️⚠️ **D11：WB→ID 的组合旁路**（ADR-047 D11）
+        // ==================================================================
+        // ⚠️ **M2 的装载 + load 车道选择 + M2 级写回 mux**
+        // （2026-11-13 · ADR-069 决策 A0 · §7.1）
+        // ==================================================================
         //
-        // 缺陷：`idex_rs1_data` **锁存**了寄存器堆的**组合读**
+        // ⚠️ **M2 的装载使能恒定**（ADR-069 **V4**）⇒ ⇒ **无条件**赋值
+        //   （**零 select**）⇒ ⇒ 否则停顿期间 M2 冻结 ⇒ ⇒ 死锁。
+        //   拍级：EX/MEM 在 posedge N+1 锁存 i ⇒ M2 在 posedge N+2 锁存 i
+        //   ⇒ ⇒ M2 的元数据源 = `exmem_*`（**MEM 级的输入**）。
+        m2_valid->next      = exmem_valid;
+        m2_is_alu->next     = exmem_is_alu;
+        m2_is_jump->next    = exmem_is_jump;
+        m2_is_load->next    = exmem_is_load;
+        m2_rd_addr->next    = exmem_rd_addr;
+        m2_link_value->next = exmem_link_value;
+        m2_alu_result->next = exmem_alu_result;
+        m2_funct3->next     = exmem_funct3;
+        // ⚠️ **原始字 NOT 寄存**（理由见 `m2_funct3` 处的注释）：`sread` 的输出
+        //   寄存器在同一条沿上更新 ⇒ ⇒ 在本沿采到的是**上一拍**的地址的数据
+        //   ⇒ ⇒ 采进 M2 会与 M2 的元数据**错配一拍** ⇒ ⇒ 静默错车道。
+        //   ⇒ ⇒ 原始字**组合**取自 `io().data_read_data`（见下方车道选择段）。
+
+        // ---- load 的车道选择（**M2 的下游** · ADR-069 **V5**）----
+        //
+        // ⚠️ **为什么在 M2 的下游**：`sread` ⇒ 原始字在拍 N+2 才可用 ⇒ ⇒
+        //   **MEM 级（拍 N+1）已无数据可选** ⇒ ⇒ 车道选择 MUST 搬到 T+1 ⇒ ⇒
+        //   而 T+1 的 `EX/MEM` 已是**后继**指令 ⇒ ⇒ MUST 用 **M2 锁存的**
+        //   **地址** / **funct3** ⇒ ⇒ ⇒ 这正是 V5 明写的那条。
+        // ⚠️ **载体 = `riscv::LoadLaneSelector` 组件**（单一真相 + 组件级可测）
+        //   ⇒ ⇒ 语义**逐字**迁自原 `MemStage`（4 字节道 / 2 半字道 +
+        //   符号扩展 / 零扩展）⇒ ⇒ 组件级双后端覆盖**不缩面**。
+        //
+        // ⚠️⚠️ **原始字 = `io().data_read_data`（组合）· NOT `m2_word`**：
+        //   `sread` 的输出**寄存器**在拍 N+1 的沿上被更新 ⇒ ⇒ 拍 N+2 的值
+        //   = **data(A_i)** ⇒ ⇒ 与 M2 的元数据（拍 N+2 = 指令 i）**同拍**
+        //   ⇒ ⇒ 车道选择在本拍**组合**完成 ⇒ ⇒ MEM/WB′ 在 posedge N+3 锁存它。
+        //   ⚠️ **M2 档的数据叶 = M2 寄存器 + `sread` 输出寄存器**（两者都是
+        //   **寄存器**）⇒ ⇒ 不成环 ⇒ ⇒ 满足 ADR-069 **V15**。
+        load_lane.io().raw_word <<= io().data_read_data;
+        load_lane.io().addr      <<= m2_alu_result;
+        load_lane.io().funct3    <<= m2_funct3;
+        auto m2_load_data = load_lane.io().data;
+
+        // ---- M2 级的**合并写回值**（与 `wb_stage` 的 mux **同构**）----
+        //
+        // ⚠️ **优先级 = load > alu > jump**（**逐字对齐** `wb_stage.h` 的三段
+        //   `select`：后者覆盖前者 ⇒ jump 最优先）。
+        // ⚠️ **数据叶 = M2 寄存器**（+ `m2_word` 寄存器）⇒ ⇒ **不成环**
+        //   （ADR-047「数据源的叶子 MUST 是流水线寄存器」）。
+        ch_uint<32> m2_write_data = ch_uint<32>(0_d);
+        m2_write_data = select(m2_is_load, m2_load_data, m2_write_data);
+        m2_write_data = select(m2_is_alu, m2_alu_result, m2_write_data);
+        m2_write_data = select(m2_is_jump, m2_link_value, m2_write_data);
+
+        // ---- 前推**档位 2** 的数据源（**改指 M2**）----
+        // ⚠️ **2026-11-13 改指 M2**（ADR-069 A0-②）：基线是 MEM/WB 级
+        //    （`wb_stage.io().write_data`）⇒ ⇒ A0 下 MEM/WB 在 posedge N+3 才
+        //    装上 i ⇒ ⇒ **距离 2** 的消费者（在拍 N+2 进 EX）拿不到 ⇒ ⇒
+        //    **必须**改指 M2（M2 在 posedge N+2 装上 i ⇒ ⇒ 拍 N+2 起可用
+        //    ⇒ ⇒ 恰好赶上消费者的 EX 拍）⇒ ⇒ 依据 = ADR-069 §7.1.3。
+        // ⚠️ **M2 档的写回 mux 与 `wb_stage` 的 mux 同构**（load > alu > jump）
+        //    ⇒ ⇒ 档位 2 的值与 WB 级最终写回的值**一致**（同一份语义）。
+        fwd_mux.io().mem_wb_result <<= m2_write_data;
+
+        // ==================================================================
+        // ⚠️⚠️ **D11：两级优先旁路**（2026-11-13 · ADR-069 §7.1.2 修订）
+        // ==================================================================
+        //
+        // ⚠️ **为什么是「两级」而不是「源替换」**（ADR-069 §7.1.1 的拍级表）：
+        //   A0 **没有消灭**同沿竞态 ⇒ ⇒ 它把它从「**距离 3**」**推到了**
+        //   「**距离 4**」⇒ ⇒
+        //     · **距离 3** 的消费者在 ID 读拍读时，生产者**尚未写回**
+        //       ⇒ ⇒ **WB 档够不着** ⇒ ⇒ MUST 新增 **M2 档**；
+        //     · **距离 4** 的消费者与生产者的写回沿**同沿** ⇒ ⇒ **仍需 WB 档**
+        //       ⇒ ⇒ **WB 档 MUST 保留**（删掉它 ⇒ 距离 4 与「4 拍停顿后的
+        //       load-use 消费者」**静默读旧值**）。
+        // ⇒ ⇒ **WB 档是承重件，不是遗留件**（ADR-047 §5.5.2.1 dated note）。
+        //
+        // 缺陷背景：`idex_rs1_data` **锁存**了寄存器堆的**组合读**
         //      （`id_stage.h:255`）⇒ 「ID→EX 锁存沿」与「WB 写回沿」是
         //      **同一条 posedge** ⇒ 锁存到的是**写回前**的旧值。
-        //      ⇒ **距离 3** 的依赖（生产者 → 2 条无关指令 → 消费者）读**旧值**。
         //      ⚠️ Verilog 侧**同构**（两个 `always_ff` 同沿 + 非阻塞 ⇒ 都读旧值）
         //      ⇒ **两后端一致地错** ⇒ 双后端 parity **抓不到** ⇒ 只能靠
         //      **判别性固件**抓。
-        //      ⚠️ 该缺陷**今天就存在**（无前推时同样读旧值）⇒ 既有固件用
-        //      3 条 NOP（距离 4）恰好躲开 ⇒ 从未被文档化。
         //
-        // 修法：在**读点**加组合旁路 ⇒ 写回那一拍就把**新值**喂给 ID 级
-        //      ⇒ ID/EX 在同一条沿上锁存到**新值**。
-        // 不成环：旁路的**数据叶**是 `memwb_*` **流水线寄存器**
-        //      （`wb_stage.io().write_data` 是对 `memwb_alu_result` /
-        //      `memwb_mem_data` / `memwb_link_value` 的**组合 select**；
-        //      `rd_addr_out` ← `memwb_rd_addr`；`write_en` ← `memwb_valid`）
+        // 不成环：两档的**数据叶**都是**流水线寄存器**
+        //      （M2 寄存器 + `sread` 输出寄存器 / `memwb_*` 寄存器）
         //      ⇒ 叶子是**寄存器** ⇒ 环断开（`context.cpp` 的拓扑排序对
         //      `type_reg` **只遍历 `init_val`**）。
         // 与 D7 正交：**不需要** `HazardUnit` 的 WB 级端口（那 5 个已删）。
-        // `x0` 无需特判：`wb_write_en` 已含 `rd_addr_out != 0`
+        // `x0` 无需特判：两档各自的判据都含 `rd != 0`
         //      ⇒ 命中时 `rs1_addr_id` 必然非 0。
+        //
+        // ---- M2 档（新增 · **优先**）----
+        auto m2_write_en = m2_valid &
+                           (m2_is_alu | m2_is_load | m2_is_jump) &
+                           (m2_rd_addr != ch_uint<5>(0_d));
+        auto m2_bypass_hit_a = m2_write_en &
+                               (m2_rd_addr == id_stage.io().rs1_addr_id);
+        auto m2_bypass_hit_b = m2_write_en &
+                               (m2_rd_addr == id_stage.io().rs2_addr_id);
+        // ---- WB 档（**逐字保留**）----
         auto wb_bypass_hit_a = wb_write_en &
                                (wb_stage.io().rd_addr_out == id_stage.io().rs1_addr_id);
         auto wb_bypass_hit_b = wb_write_en &
                                (wb_stage.io().rd_addr_out == id_stage.io().rs2_addr_id);
-        id_stage.io().reg_rs1_data <<= select(wb_bypass_hit_a,
-                                              wb_stage.io().write_data,
-                                              rs1_data_result);
-        id_stage.io().reg_rs2_data <<= select(wb_bypass_hit_b,
-                                              wb_stage.io().write_data,
-                                              rs2_data_result);
+        // ---- 优先级 = **M2 档 > WB 档**（同拍命中同一 rd 时 M2 更年轻）----
+        id_stage.io().reg_rs1_data <<= select(m2_bypass_hit_a,
+                                              m2_write_data,
+                                              select(wb_bypass_hit_a,
+                                                     wb_stage.io().write_data,
+                                                     rs1_data_result));
+        id_stage.io().reg_rs2_data <<= select(m2_bypass_hit_b,
+                                              m2_write_data,
+                                              select(wb_bypass_hit_b,
+                                                     wb_stage.io().write_data,
+                                                     rs2_data_result));
 
         // IF stage connections
         if_stage.io().branch_target <<= ex_stage.io().branch_target;
@@ -406,35 +553,44 @@ public:
         mem_stage.io().rs2_data <<= exmem_rs2_data;
         mem_stage.io().rd_addr <<= exmem_rd_addr;
         mem_stage.io().is_store <<= exmem_is_store;
+        // ⚠️ `is_load` **保留驱动**（2026-11-13）：端口仍在（公开契约）⇒ ⇒
+        //    按「新增输入端口 MUST 显式驱动」的同款纪律**继续显式驱动**
+        //    （未驱动端口读到的是**未定义值**⇒ ⇒ 即便当前无消费者也不留隐患）。
         mem_stage.io().is_load <<= exmem_is_load;
         mem_stage.io().funct3 <<= exmem_funct3;
         mem_stage.io().mem_valid <<= exmem_valid;
-        // ⚠️ MEM 级的**读数据**必须接进来（此前 MEM 级没有这个端口 ⇒ load 恒读回 0）
-        mem_stage.io().mem_read_data <<= io().data_read_data;
+        // ⚠️ **2026-11-13（ADR-069 A0）**：`mem_stage.io().mem_read_data` 的
+        //    驱动**已删** ⇒ ⇒ 该端口**已从 `MemStage` 移除**（load 的车道选择
+        //    / 扩展语义迁到 `m2_load_data`，见上方「M2 的装载 + load 车道选择」段）。
+        //    ⚠️ **store 侧的 `alu_result` / `funct3` 接线**（字节使能）**零改动**
+        //    ⇒ ⇒ store 的地址呈现拍**不变**（ADR-069 V5）。
 
         // MEM/WB pipeline regs
         //
-        // ⚠️ 全部取自 **MEM 级**（`exmem_*` / `mem_stage.io().*`），
-        //    **不得**取自 `id_stage.io().*`（那是 EX 级的视图 ⇒ 串一级）。
-        // ⚠️ 使能 MUST 用 `exmem_valid`（EX/MEM 寄存器）而**不是**
-        //    `mem_stage.io().mem_valid`（MEM 级的**输入端口**）：
-        //    ⚠️ 框架禁止的是「**子组件的输入端口 ← 同一个子组件的输入端口**」
-        //       （`child_in <<= child_in` 的 driver 必须是**当前模块**的端口）
-        //       ⇒ 父组件**读**子组件的输入端口会触发运行时 CHERROR
-        //       （⚠️ 但「父输出 ← 子输入」是**允许**的 —— `build_debug_outputs()`
-        //       里的 `dbg_id_instr` / `dbg_id_pc` / `dbg_id_valid` 就是这种形态）。
-        //    两者是同一个值（`mem_stage.io().mem_valid <<= exmem_valid`）。
-        memwb_is_alu->next     = select(exmem_valid, exmem_is_alu, memwb_is_alu);
-        memwb_is_jump->next    = select(exmem_valid, exmem_is_jump, memwb_is_jump);
-        memwb_is_load->next    = select(exmem_valid, exmem_is_load, memwb_is_load);
-        memwb_rd_addr->next    = select(exmem_valid, mem_stage.io().rd_addr_out, memwb_rd_addr);
-        memwb_alu_result->next = select(exmem_valid, mem_stage.io().alu_result_out, memwb_alu_result);
-        // ⚠️ 返回地址**不过 MEM 级**（MEM 不碰它）⇒ 直接从 EX/MEM 寄存器抓
-        memwb_link_value->next = select(exmem_valid, exmem_link_value, memwb_link_value);
-        memwb_mem_data->next   = select(exmem_valid, mem_stage.io().mem_data, memwb_mem_data);
-        // MEM/WB 的 valid = MEM 级的 valid（气泡以 valid=0 逐级传播 ⇒
+        // ⚠️⚠️ **2026-11-13（ADR-069 A0）：装载源全部改指 M2**
+        // （`EX/MEM → M2 → MEM/WB` ⇒ MEM/WB 在 posedge N+3 装载 ⇒ 拍 N+3 起
+        //   持有 i ⇒ ⇒ WB 级在拍 N+3 写回 i ⇒ ⇒ **写回沿 = posedge N+3**）。
+        //
+        // ⚠️ **使能恒定**（ADR-069 **V4**）⇒ ⇒ **无条件**赋值（**零 select**）
+        //   ⇒ ⇒ 停顿期间 MEM/WB **照常前进** ⇒ ⇒ 否则死锁。
+        //   ⚠️ 与基线的差异：基线是 `select(exmem_valid, X, memwb_X)`（无效时
+        //   **保持**旧值）⇒ ⇒ 现在无效时 M2 的元数据本身就是「无效」⇒ ⇒
+        //   MEM/WB 装的是**零/无效**（而非陈旧数据）⇒ ⇒ **更安全**。
+        memwb_is_alu->next     = m2_is_alu;
+        memwb_is_jump->next    = m2_is_jump;
+        memwb_is_load->next    = m2_is_load;
+        memwb_rd_addr->next    = m2_rd_addr;
+        memwb_alu_result->next = m2_alu_result;
+        // ⚠️ **返回地址同拍 transit M2**（A0-①）⇒ ⇒ 否则 JAL/JALR 写回
+        //   **后继**指令的返回地址（垃圾）。
+        memwb_link_value->next = m2_link_value;
+        // ⚠️ **load 数据 = M2 下游的车道选择结果**（`m2_load_data`）⇒ ⇒
+        //   **不是** `mem_stage.io().mem_data`（该端口已删 · 语义已迁出）。
+        memwb_mem_data->next   = select(m2_valid & m2_is_load, m2_load_data,
+                                         ch_uint<32>(0_d));
+        // MEM/WB 的 valid = M2 的 valid（气泡以 valid=0 逐级传播 ⇒
         // 数据保持、valid 清零 ⇒ WB 不会把陈旧指令再写回一次）
-        memwb_valid->next      = mem_stage.io().mem_valid_out;
+        memwb_valid->next      = m2_valid;
 
         // MEM/WB -> WB stage（WB 只能看到 MEM/WB 寄存器 ⇒ 与 WB 级指令同拍）
         wb_stage.io().alu_result <<= memwb_alu_result;
@@ -581,8 +737,9 @@ public:
         //    ⇒ MUST 含 `link_value`。三个源同受 `exmem_en` 守卫 ⇒ **对齐**。
         fwd_mux.io().is_jump <<= exmem_is_jump;
         fwd_mux.io().jump_result <<= exmem_link_value;
-        // 档位 2 = MEM/WB 级的**合并写回值**（已含 load / jump / ALU 三路）
-        fwd_mux.io().mem_wb_result <<= wb_stage.io().write_data;
+        // ⚠️ 档位 2 的数据源接线见 `build_datapath()`（⚠️ **必须同函数** ——
+        //    `m2_write_data` 是该函数的**局部**组合节点 ⇒ ⇒ 跨函数不可见
+        //    ⇒ ⇒ 驱动 `fwd_mux.io().mem_wb_result` 的地方也在那里）。
 
         // 前推 mux 的输出**独占**驱动 EX 级的操作数（单一驱动 ⇒ ADR-047 D8）
         ex_stage.io().rs1_data <<= fwd_mux.io().alu_input_a;

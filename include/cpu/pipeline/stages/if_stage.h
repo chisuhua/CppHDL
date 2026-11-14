@@ -16,6 +16,7 @@
 #pragma once
 
 #include "ch.hpp"
+#include "cpu/riscv/rv32i_mem_map.h"
 #include "component.h"
 // ⚠️ **include 路径 MUST 是 `include/` 相对的**（2026-11-03 修「头文件自包含」）
 //    —— `rv32i_tcm.h` 在**上一级**目录（`include/cpu/pipeline/`）⇒ ⇒
@@ -67,8 +68,11 @@ public:
         // ========================================================================
         // PC 寄存器 (32 位)
         // PC 寄存器存储当前指令地址
-        // 复位值: 0x80000000 (ITCM 基地址, riscv-tests 入口点)
-        ch_reg<ch_uint<32>> pc_reg(ch_uint<32>(0x80000000), "pc_reg");
+        // 复位值: I-TCM 基地址（riscv-tests 入口点）
+        // ⚠️ **2026-11-14 · L1**：改为**派生**自 `rv32i_mem_map.h` 的
+        //    `riscv::kPcReset`（= `kItcm.base`）⇒ ⇒ **消掉第二个字面量**
+        //    ⇒ ⇒ **值不变**（仍是 0x80000000）⇒ ⇒ **既有期望值零漂移** ✓
+        ch_reg<ch_uint<32>> pc_reg(ch_uint<32>(riscv::kPcReset), "pc_reg");
         
         // ========================================================================
         // PC 更新逻辑

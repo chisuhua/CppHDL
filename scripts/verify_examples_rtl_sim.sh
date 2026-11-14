@@ -208,6 +208,38 @@ check_one() {
         return 1
     }
 
+    # ── ④' **产物级**结构判据（`memory-timing-contract` T1 · D-TCM 读口）─────
+    #   ⚠️ 为什么必须是**产物级**：C++ 侧的 `sread(...)` 只证明「源码这么写」
+    #   ⇒ ⇒ 产物里它到底落成了**寄存器**（1 拍）还是**组合 mux**（0 拍），
+    #   只有**产物**能回答 ⇒ ⇒ 这正是 T1「先红」的那条判据。
+    #   ⚠️ **正反两面**（根 AGENTS.md 的护栏纪律）：
+    #     · **正**：load 通路的读口 MUST 是**寄存器**（`always_ff` ⇒ 1 拍）
+    #             ⇒ ⇒ 否则 load 数据会同拍可见 ⇒ ⇒ MEM 级采样到**上一拍**的字
+    #     · **反**：RMW（字节合并）通路的读口 MUST **仍是组合**（`assign`）
+    #             ⇒ ⇒ 否则字节合并拿不到**同拍**的旧字 ⇒ ⇒ 写回的是**已合并**的字
+    #               （自我覆盖）⇒ ⇒ `sb`/`sh` 会**丢字节**
+    #   ⚠️ 适用范围 = **发射 Rv32iPipelineTop 的 target**（按 `component` 列判定，
+    #   **不是**按 target 名 ⇒ ⇒ 将来新增同组件的 target 也会被覆盖）。
+    if [ "$comp" = "Rv32iPipelineTop" ]; then
+        f9_bad=0
+        dut_v="$work/top.v"
+        if ! grep -qE 'always_ff.*Read port top_dtcm_mem_sread_data_proxy' "$dut_v"; then
+            fail "④' D-TCM 的 load 读口**不是寄存器**（无 always_ff 的 sread 读口）⇒ ⇒ 读延迟退化为 0 拍"
+            f9_bad=1
+        fi
+        if grep -qE '^ *assign top_dtcm_mem_sread_data_proxy *= *top_dtcm_dtcm_memory\[' "$dut_v"; then
+            fail "④' D-TCM 的 load 读口是**组合 mux**（assign 内存数组）⇒ ⇒ T1 的 1 拍延迟失效"
+            f9_bad=1
+        fi
+        if ! grep -qE '^ *assign top_dtcm_mem_aread_data_proxy *= *top_dtcm_dtcm_memory\[' "$dut_v"; then
+            fail "④' D-TCM 的 RMW 读口**不是组合读** ⇒ ⇒ 字节合并自我覆盖 ⇒ ⇒ sb/sh 丢字节"
+            f9_bad=1
+        fi
+        if [ "$f9_bad" -eq 0 ]; then
+            ok "④' 产物读口结构正确（load 口 = always_ff 寄存器 · RMW 口 = 组合 assign）"
+        fi
+    fi
+
     # ④⑤ 编译 + 缓存（key 用**内容**哈希；写入**原子**）
     local tb_name ver_version flags tb_hash dut_hash cache_key cache_dir sim_bin
     tb_name="$(basename "$tb" .sv)"

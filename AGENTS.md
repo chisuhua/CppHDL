@@ -460,7 +460,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 263
+- CTEST_TOTAL: 264
      ⚠️ **B1 批（N1 + P1 + C4/C3 manifest + C6 产物卫生）** —— `test_port_name_named_ctor`
      + `test_port_name_parity` + `test_rtl_manifest` + `test_rtl_emit_hygiene` 四个新增
      ⇒ ⇒ 由 **257** 增至 **261**（+4）⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**
@@ -504,7 +504,7 @@ ctest --output-on-failure
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 284
+- DUAL_BACKEND_PARITY_PAIRS: 285
      ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：−6
      （`ForwardingUnit` ×3 + `HazardDetectionUnit` ×2 + `HazardUnitComplete` ×1）
      ⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准 · metis finding 9 要求登记）

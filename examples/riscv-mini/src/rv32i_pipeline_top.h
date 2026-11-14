@@ -25,13 +25,16 @@
 #include "component.h"
 #include "cpu/pipeline/rv32i_pipeline.h"
 #include "cpu/pipeline/rv32i_tcm.h"
+#include "cpu/riscv/rv32i_mem_map.h"
 
 using namespace ch::core;
 using namespace riscv;
 
 class Rv32iPipelineTop : public ch::Component {
 public:
-    static constexpr unsigned kTcmAddrWidth = 12;
+    // ⚠️ **2026-11-14 · L1**：容量真相**上移到库**（`rv32i_mem_map.h`）
+    //    ⇒ ⇒ 本层**不再**持有第二个字面量 ⇒ ⇒ 声明与实现**不可能**不一致
+    static constexpr unsigned kTcmAddrWidth = riscv::kTcmAddrWidth;
 
     __io(
         // 时钟 / 复位

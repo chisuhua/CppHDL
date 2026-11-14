@@ -6,6 +6,74 @@ the change that introduced them (see `openspec/changes/` and
 
 ---
 
+## 2026-11-14 — B3 批 · **新增固件装载地基 + 编码器库**（`firmware-load-chain` L1/L3/L4/L5）
+
+### Added
+
+- **`include/cpu/riscv/rv32i_mem_map.h`**（**L1**）⇒ ⇒ RV32I 的**地址映射单一真相**：
+  `kTcmAddrWidth`（12 · 字索引位宽）→ `kTcmBytes = 1<<(kTcmAddrWidth+2)`（**16 KB** ·
+  **派生**）→ `kItcm{0x8000_0000, 16KB}` / `kDtcm{0x8001_0000, 16KB}` → `kPcReset = kItcm.base`
+  ⇒ ⇒ ⚠️ **修掉一处声明-实现不一致**：`address_decoder.h` 此前声明 TCM 为 **64 KB**
+  而硬件只有 **16 KB** ⇒ ⇒ `[0x8000_4000, 0x8001_0000)` 的访问会被**静默截断**
+  ⇒ ⇒ 现由同一份派生 ⇒ ⇒ 那段落进「区域外」⇒ ⇒ **可诊断**（不再静默丢高位）
+  ⇒ ⇒ 迁移指引：下游若硬编码 `ADDR_ITCM_SIZE == 0x10000` ⇒ ⇒ **MUST 改为 16384**
+- **`include/cpu/riscv/rv32i_asm_encode.h`**（**L3**）⇒ ⇒ RV32I **指令编码器**
+  （header-only · `constexpr`）：`NOP` · `enc_{r,i,s,b,j,u}` · 17 个便捷别名
+  ⇒ ⇒ 固件与转储器**共用同一份** ⇒ ⇒ 两份编码器漂移的风险归零
+  ⇒ ⇒ ⚠️ **手算交叉校验**（`FirmwareEncoderCrossCheck`）**保留**并且现在校验的是库
+- **`tools/rv32i-fw-dump`**（**L4+L5**）⇒ ⇒ RV32I 固件**转储器 / ELF 装载器**：
+  `--in <fw.elf|fw.json> --format mem|vh|manifest --out <path>`
+  ⇒ ⇒ `manifest`（schema `rv32i-fw-manifest-v1`）携带**入口** + **基址/尺寸** + 逐字的**字节地址**
+  ⇒ ⇒ ELF32 + `PT_LOAD` · `.bss`（`p_memsz > p_filesz`）**补零** · **越界 ⇒ exit 3**（禁静默截断）
+  ⇒ ⇒ ⚠️ **不解析符号表**（已知边界：`.rela` 在 section 里 ⇒ 静态重定位检查**不完整**）
+  ⇒ ⇒ ⚠️ 本二进制 **不链 `examples/**`**（沿用 `rtl-emit-product-tooling` C1 纪律）
+- **`include/cpu/pipeline/load_lane_selector.h`** ⇒ ⇒ load 的**字节道（4）/ 半字道（2）选择 +
+  符号 / 零扩展**（语义**逐字**迁自 `MemStage`）⇒ ⇒ 因为 `sread` 让 load 数据**晚 1 拍**可用
+  ⇒ ⇒ 车道选择 MUST 在 **M2 的下游**做（ADR-069 **V5**）
+- **`tests/chlib/test_hazard_unit_stall.cpp`** ⇒ ⇒ `HazardUnit` 的**组件级停顿链真值表**
+  （ADR-069 **V12** · 36 断言 / 3 用例）⇒ ⇒ 钉住「检测条件持续 N 拍 ⇒ 停顿 **N+2** 拍」
+
+---
+
+---
+
+## 2026-11-14 — B3 批 · **D-TCM 寄存读 + MEM 数据对齐（A0）**（`memory-timing-contract-2026-11`）
+
+### Changed
+
+- **`riscv::DataTCM` 的读口**（`include/cpu/pipeline/rv32i_tcm.h`）⇒ ⇒ 读口由
+  **全组合读**（`aread` · 0 拍）改为**寄存读**（`sread` · **1 拍**）
+  ⇒ ⇒ 字节写的「读-改-写」仍用 `aread`（**零改动** ⇒ ⇒ `ch_mem` 无字节使能写 API）
+  ⇒ ⇒ 依据：ADR-068（Accepted · V7）· ADR-069（Accepted · 决策 **A0**）
+  ⇒ ⇒ **迁移指引**：下游若按「**同拍**读回数据」写的 TB ⇒ ⇒ **MUST 改成「下一拍」**
+  ⇒ ⇒ ⚠️ **沿级 read-old 不变**（同址 store→load 的**指令级**语义是 **read-new** ⇒ ⇒ ISA 不变）
+- **`Rv32iPipeline` 的 `data_ready`**（`include/cpu/pipeline/rv32i_pipeline.h`）⇒ ⇒ 语义**登记**为
+  「**固定 1 拍延迟**（**不是握手**）」⇒ ⇒ **driver 仍恒 1**
+  ⇒ ⇒ ⚠️ **本批不实现真反压**（「驱动 0 ⇒ MEM 冻结」属「接 cache」独立立项 ⇒ ⇒ ADR-068 V7 胜出）
+- **RV32I 的 load-use 停顿拍数：3 → 4 拍**（每处紧邻 load→use）⇒ ⇒ 固件的
+  `load_use_stalls` 基线 **6 → 8** · `non_retired` **21 → 23** · 退休数 **178 → 176**
+  ⇒ ⇒ 依据：ADR-069 §2.1（**EX→WB 级数 2 → 3**）· §7.1.1（拍级表）
+  ⇒ ⇒ **迁移指引**：下游若锁死这三个数 ⇒ ⇒ MUST 同步更新（**手推值**，非仿真抄值）
+
+### Removed
+
+- **`riscv::MemStage` 的 `mem_read_data`（输入）/ `mem_data`（输出）**
+  （`include/cpu/pipeline/stages/mem_stage.h`）⇒ ⇒ 因为 `sread` 让 load 数据**晚 1 拍**可用
+  ⇒ ⇒ MEM 级（拍 N+1）**已无**正确数据 ⇒ ⇒ 若仍在那里做车道选择 ⇒ ⇒ 选的是**上一拍**的数据
+  ⇒ ⇒ **静默错车道** ⇒ ⇒ load 的**车道选择 / 符号扩展** MUST 迁到 **M2 的下游**
+  ⇒ ⇒ 依据：ADR-069 **A0** · §7.2 · **V5**
+  ⇒ ⇒ **迁移指引**：下游若驱动 `mem_read_data` 或消费 `mem_data` ⇒ ⇒ **改用**
+  `riscv::LoadLaneSelector`（新组件 · `include/cpu/pipeline/load_lane_selector.h` · 语义**逐字**不变）
+  ⇒ ⇒ ⚠️ **`MemStage::is_load` 保留**（公开契约，虽已无内部消费者）
+
+### Added
+
+- **`riscv::LoadLaneSelector`**（`include/cpu/pipeline/load_lane_selector.h`）⇒ ⇒ load 的
+  **字节道（4）/ 半字道（2）选择 + 符号扩展 / 零扩展**（`LB`/`LH` 符号 · `LBU`/`LHU` 零 · `LW` 整字）
+  ⇒ ⇒ 语义**逐字**迁自原 `MemStage` ⇒ ⇒ 组件级双后端覆盖**不缩面**
+
+---
+
 ## 2026-11-13 — P8 批 · **运行期 A/B 验证（interpreter vs JIT）移除**
 
 ### Removed

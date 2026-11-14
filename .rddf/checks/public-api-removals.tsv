@@ -54,3 +54,5 @@ HazardDetectionUnit	re	include/	\briscv::HazardDetectionUnit\b	C6-2026-11-11
 HazardUnitComplete	re	include/	\briscv::HazardUnitComplete\b	C6-2026-11-11
 set_ab_verification	removed	include/	-	P8-2026-11-13
 ab_verification	removed	include/	-	P8-2026-11-13
+mem_read_data	removed	include/cpu/pipeline/stages/mem_stage.h	-	ADR-069
+mem_data	removed	include/cpu/pipeline/stages/mem_stage.h	-	ADR-069

@@ -61,6 +61,10 @@ enable_testing()
 # ============================================================================
 
 add_catch_test(test_forwarding chlib/test_forwarding.cpp)
+# ⚠️ **2026-11-14 · ADR-069 V12 的正确落点**：`riscv::HazardUnit` 的**组件级
+#   停顿链真值表**（V12 原文点名的 `chlib/test_hazard_complete.cpp` 已随 B0 批
+#   **物理删除** ⇒ ⇒ 该判据按原文不可满足 ⇒ ⇒ 载体 = **新建**本文件）
+add_catch_test(test_hazard_unit_stall chlib/test_hazard_unit_stall.cpp)
 # ⚠️ 2026-11-11：`test_hazard`（`chlib/test_hazard_complete.cpp`）**已退役**
 #   ⇒ 理由：`riscv::HazardUnitComplete` 退役（`rv32i-dead-component-consolidation` C6）
 #   ⇒ ⇒ 该组件「2 个死输入 + 3 档语义 + 唯一存在理由是 parity 夹具」⇒ ⇒ 无消费者 ⇒ ⇒ 退役

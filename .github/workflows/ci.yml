@@ -652,6 +652,17 @@ jobs:
         cmake --build build --target cpphdl-emit-rtl
         scripts/verify_flat_rtl_emit.sh
 
+    - name: Verify RV32I firmware dumper / ELF loader (L4/L5)
+      # `firmware-load-chain` L4/L5 的判据（D0–D6）：
+      #   D1 mem = **手推**的 3 个字 · D2 manifest 齐（entry/base/size=16KB）
+      #   D3 .bss 补零 · D4 越界 ⇒ exit 3 · D5 三格式 · D6 不链 examples
+      # ⚠️ 不需要 verilator / 网络 ⇒ ⇒ 主 job（BUILD_VERILATOR=OFF）也能跑
+      # ⚠️ 需要 build/tools/rv32i-fw-dump ⇒ ⇒ 先构建它
+      shell: bash
+      run: |
+        cmake --build build --target rv32i-fw-dump
+        scripts/verify_rv32i_fw_dump.sh
+
     - name: Verify flat RTL emit products (self-test)
       # ⚠️ **verilator is REQUIRED** (2026-11-13 · RC-6): F1/F2/F8 lint and emit
       # real Verilog. This job is `BUILD_VERILATOR=OFF` (fast default path), so

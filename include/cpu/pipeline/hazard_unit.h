@@ -137,9 +137,18 @@ public:
     //      ① 不会被「较老指令写同一 rd」提前解除；
     //      ② **load 被冲刷时也不会永久卡死**（固定延迟天然免疫 ——
     //         而「按写回解除」在 load 被冲刷时会**永远等不到写回** ⇒ 死锁）。
+    //
+    // ⚠️⚠️ **2026-11-13 停顿链加一级（3 拍 → 4 拍）**（ADR-069 决策 A0）：
+    //    A0 让 MEM 区的级数从 2 变 3（`EX/MEM → M2 → MEM/WB`）⇒ ⇒
+    //    **EX→WB 级数 2 → 3** ⇒ ⇒ load 的数据在「检测拍 + 3」的边沿才写回
+    //    ⇒ ⇒ 消费者 MUST 等到「**检测拍 + 4**」才进 EX ⇒ ⇒ 停顿 = **4 拍**。
+    //    ⇒ ⇒ 移位链从**两级**加到**三级**（`stall_hold_d3`）。
+    //    ⚠️ **固定延迟**的性质**不变**（仍**不依赖 rd** ⇒ 仍免疫「load 被冲刷」）
+    //    ⇒ ⇒ 对外端口契约**零变更**（`stall` 仍是布尔输出）。
     // -----------------------------------------------------------------------
     ch_reg<ch_bool> stall_hold_d1{false, "stall_hold_d1"};
     ch_reg<ch_bool> stall_hold_d2{false, "stall_hold_d2"};
+    ch_reg<ch_bool> stall_hold_d3{false, "stall_hold_d3"};
 
     void describe() override {
         // 将 IO 端口赋值给 auto 变量（避免类型转换问题）
@@ -251,21 +260,26 @@ public:
         // 检测拍 T：`ex_load_use` 为真 ⇒
         //   T   ：组合置位 ⇒ 停顿当拍生效
         //   T+1 ：`stall_hold_d1` 为真
-        //   T+2 ：`stall_hold_d2` 为真（此刻那条 load 正在 WB ⇒ 边沿写回）
-        //   T+3 ：全假 ⇒ 放行（消费者在 T+3 的边沿进 ID/EX ⇒ 读到**新值**）
+        //   T+2 ：`stall_hold_d2` 为真
+        //   T+3 ：`stall_hold_d3` 为真（此刻那条 load 正在 WB ⇒ 边沿写回）
+        //   T+4 ：全假 ⇒ 放行（消费者在 T+4 的边沿进 ID/EX ⇒ 读到**新值**）
+        //
+        // ⚠️ **2026-11-13 加一级**（ADR-069 A0 · EX→WB 级数 2 → 3）
+        // ⇒ ⇒ 停顿 = **4 拍**（组合置位 + 3 级保持）⇒ ⇒ 依据 = ADR-069 §2.1。
         stall_hold_d1->next = ex_load_use;
         stall_hold_d2->next = stall_hold_d1;
+        stall_hold_d3->next = stall_hold_d2;
 
         // ========================================================================
         // 控制信号输出
         // ========================================================================
-        // ⚠️ `stall` = 「组合置位（当拍生效）+ 两级移位保持（固定 3 拍）」
+        // ⚠️ `stall` = 「组合置位（当拍生效）+ **三级**移位保持（固定 **4** 拍）」
         //    组合部分用 `load_use_hazard`（EX 级 + MEM 级两路）：
         //    流水线装配只接 EX 级那一路（`mem_is_load` 保持未连接）⇒
         //    在流水线里 `stall` 完全由 EX 级检测驱动；
         //    而「独立使用 HazardUnit」的场景可以直接驱动 `mem_is_load`
         //    得到一个单拍停顿（既有测试即此用法）。
-        io().stall = load_use_hazard | stall_hold_d1 | stall_hold_d2;
+        io().stall = load_use_hazard | stall_hold_d1 | stall_hold_d2 | stall_hold_d3;
         // 冒险脉冲（单拍）—— 与上面的「停顿拍数」区分开。
         // ⚠️ 只反映 **EX 级**那一路（流水线装配走的就是它）⇒ 「独立使用
         //    HazardUnit」并驱动 `mem_is_load` 的场景会得到 stall 但**没有脉冲**

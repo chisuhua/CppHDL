@@ -147,24 +147,40 @@ const RegCase kRegCases[] = {
 };
 
 // ===========================================================================
-// 拍表 3：`riscv::DataTCM<8, 32>`（`aread` + 读-改-写字节合并）
+// 拍表 3：`riscv::DataTCM<8, 32>`（`sread` 1-cycle + 读-改-写字节合并）
 // ===========================================================================
-// 字段顺序：addr, wdata, strbe, write, valid, rdata, ready
+// ⚠️ **2026-11-13 · ADR-068 T1 / ADR-069 A0**：D-TCM 的读口由 `aread`
+//    （**0-cycle** 组合读）改为 **`sread`（1-cycle 寄存读**）⇒ ⇒ 本拍表的
+//    **观测协议**随之改变（**两拍一用例**）：
+//
+//    · **第 1 拍**（驱动后第一次 `tick()`）：
+//      `rdata` = **本次写之前**该地址的内容
+//      （⇒ ⇒ **沿级 read-old** = ADR-068 **V7** 的契约面；也与生成的
+//      Verilog 同构：`always_ff` 的 `proxy <= mem[addr]` 读的是**旧** `mem`）
+//    · **第 2 拍**（再 `tick()` 一次）：
+//      `rdata` = **本次写已提交后**该地址的内容
+//      ⇒ ⇒ 「1 拍延迟」由此**可判别**（若实现退回 `aread` ⇒ 第 1 拍就能看到
+//      新值 ⇒ ⇒ 第 1 拍的断言**必红** ⇒ ⇒ 不是「恒绿」的装饰性断言）
+//
+// 字段顺序：addr, wdata, strbe, write, valid, rdata_prev, rdata, ready
+//   · `rdata_prev` = 第 1 拍可观测值（**本次写之前**的内容）
+//   · `rdata`      = 第 2 拍可观测值（**本次写之后**的内容）
 struct TcmCase {
-    uint64_t addr, wdata, strbe, write, valid, rdata, ready;
+    uint64_t addr, wdata, strbe, write, valid, rdata_prev, rdata, ready;
 };
 
 const TcmCase kTcmCases[] = {
-    {16, 0x00000000ULL, 0, 0, 0, 0x00000000ULL, 1},  // read empty
-    {16, 0x11223344ULL, 15, 1, 1, 0x11223344ULL, 1},  // write full word
-    {16, 0x000000ABULL, 1, 1, 1, 0x112233ABULL, 1},  // write lane0
-    {16, 0xAB000000ULL, 8, 1, 1, 0xAB2233ABULL, 1},  // write lane3
-    {16, 0x00CC00DDULL, 6, 1, 1, 0xABCC00ABULL, 1},  // write lane1+2
-    {16, 0x99999999ULL, 15, 1, 0, 0xABCC00ABULL, 1},  // valid=0 no write
-    {16, 0xFFFFFFFFULL, 0, 1, 1, 0xABCC00ABULL, 1},  // strbe=0 no byte
-    {17, 0x00000000ULL, 0, 0, 0, 0x00000000ULL, 1},  // read other addr
-    {17, 0x5A5A5A5AULL, 15, 1, 1, 0x5A5A5A5AULL, 1},  // write other addr
-    {17, 0x00000000ULL, 0, 0, 0, 0x5A5A5A5AULL, 1},  // read addr 0x11
+    // addr, wdata, strbe, write, valid, rdata_prev, rdata, ready
+    {16, 0x00000000ULL, 0, 0, 0, 0x00000000ULL, 0x00000000ULL, 1},  // read empty
+    {16, 0x11223344ULL, 15, 1, 1, 0x00000000ULL, 0x11223344ULL, 1},  // write full word
+    {16, 0x000000ABULL, 1, 1, 1, 0x11223344ULL, 0x112233ABULL, 1},  // write lane0
+    {16, 0xAB000000ULL, 8, 1, 1, 0x112233ABULL, 0xAB2233ABULL, 1},  // write lane3
+    {16, 0x00CC00DDULL, 6, 1, 1, 0xAB2233ABULL, 0xABCC00ABULL, 1},  // write lane1+2
+    {16, 0x99999999ULL, 15, 1, 0, 0xABCC00ABULL, 0xABCC00ABULL, 1},  // valid=0 no write
+    {16, 0xFFFFFFFFULL, 0, 1, 1, 0xABCC00ABULL, 0xABCC00ABULL, 1},  // strbe=0 no byte
+    {17, 0x00000000ULL, 0, 0, 0, 0x00000000ULL, 0x00000000ULL, 1},  // read other addr
+    {17, 0x5A5A5A5AULL, 15, 1, 1, 0x00000000ULL, 0x5A5A5A5AULL, 1},  // write other addr
+    {17, 0x00000000ULL, 0, 0, 0, 0x5A5A5A5AULL, 0x5A5A5A5AULL, 1},  // read addr 0x11
 };
 
 }  // namespace
@@ -257,12 +273,12 @@ DUAL_BACKEND_TEST_PAIR(
     });
 
 // ===========================================================================
-// pair 3：`riscv::DataTCM<8,32>` —— `aread` 0-cycle + 读-改-写字节合并
+// pair 3：`riscv::DataTCM<8,32>` —— `sread` 1-cycle + 读-改-写字节合并
 // ===========================================================================
 DUAL_BACKEND_TEST_PAIR(
     DataTcmDut,
-    "DataTCM：aread 0-cycle 读 + 读-改-写的字节合并（strbe）+ valid 门控",
-    "[cpu][rv32i][tcm][byte_lane][aread][dual]",
+    "DataTCM：sread 1-cycle 读 + 读-改-写的字节合并（strbe）+ valid 门控",
+    "[cpu][rv32i][tcm][byte_lane][sread][dual]",
     [&]() {
         auto &io = dev.instance().io();
         for (const auto &tc : kTcmCases) {
@@ -271,10 +287,17 @@ DUAL_BACKEND_TEST_PAIR(
             sim.set_input_value(io.strbe, tc.strbe);
             sim.set_input_value(io.write, tc.write);
             sim.set_input_value(io.valid, tc.valid);
+            // ---- 第 1 拍：写**尚未**在数据通路上可见（**沿级 read-old**）----
             sim.tick();
             INFO("addr=0x" << std::hex << tc.addr << " wdata=0x" << tc.wdata
                            << " strbe=0x" << tc.strbe << std::dec
                            << " write=" << tc.write << " valid=" << tc.valid);
+            REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.rdata)) ==
+                    tc.rdata_prev);
+            REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.ready)) ==
+                    tc.ready);
+            // ---- 第 2 拍：本次写已提交 ⇒ 数据可见（**1 拍延迟**）----
+            sim.tick();
             REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.rdata)) ==
                     tc.rdata);
             REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.ready)) ==

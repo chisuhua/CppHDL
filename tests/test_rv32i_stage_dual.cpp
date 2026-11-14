@@ -80,6 +80,8 @@
 #include "core/context.h"
 #include "cpu/pipeline/rv32i_decoder.h"
 #include "cpu/pipeline/stages/ex_stage.h"
+// ⚠️ **2026-11-13 新增**：load 车道选择器（ADR-069 A0 · V5）
+#include "cpu/pipeline/load_lane_selector.h"
 #include "cpu/pipeline/stages/id_stage.h"
 #include "cpu/pipeline/stages/mem_stage.h"
 #include "simulator.h"
@@ -106,32 +108,48 @@ struct MemCase {
     uint64_t alu_result_out, rd_addr_out, mem_data, strbe, mem_valid_out;
 };
 
+// ⚠️ **2026-11-13（ADR-069 A0）**：load 的车道选择 / 扩展语义**已从 `MemStage`
+//    迁出**到 `riscv::LoadLaneSelector` ⇒ ⇒ 本表只保留 **store 侧**（字节使能）
+//    与**元数据透传**（`alu_result_out` / `rd_addr_out` / `mem_valid_out`）。
+// ⇒ ⇒ **load 侧的等价覆盖在下方 `kLoadLaneCases` + 对应的 dual pair** ⇒ ⇒
+//    **组件级双后端覆盖不缩面**。
 const MemCase kMemCases[] = {
-    {0x1000ULL, 2, 1, 0, 1, 5, 0x00001000ULL, 5, 0x837E71C5ULL, 0xF, 1},  // LW aligned
-    {0x1000ULL, 0, 1, 0, 1, 6, 0x00001000ULL, 6, 0xFFFFFFC5ULL, 0x1, 1},  // LB lane0 (neg byte)
-    {0x1001ULL, 0, 1, 0, 1, 7, 0x00001001ULL, 7, 0x00000071ULL, 0x2, 1},  // LB lane1 (pos byte)
-    {0x1002ULL, 0, 1, 0, 1, 8, 0x00001002ULL, 8, 0x0000007EULL, 0x4, 1},  // LB lane2 (pos byte)
-    {0x1003ULL, 0, 1, 0, 1, 9, 0x00001003ULL, 9, 0xFFFFFF83ULL, 0x8, 1},  // LB lane3 (neg byte)
-    {0x1000ULL, 4, 1, 0, 1, 10, 0x00001000ULL, 10, 0x000000C5ULL, 0x0, 1},  // LBU lane0
-    {0x1003ULL, 4, 1, 0, 1, 11, 0x00001003ULL, 11, 0x00000083ULL, 0x0, 1},  // LBU lane3
-    {0x1000ULL, 1, 1, 0, 1, 12, 0x00001000ULL, 12, 0x000071C5ULL, 0x3, 1},  // LH half0 (pos half)
-    {0x1002ULL, 1, 1, 0, 1, 13, 0x00001002ULL, 13, 0xFFFF837EULL, 0xC, 1},  // LH half1 (neg half)
-    {0x1000ULL, 5, 1, 0, 1, 14, 0x00001000ULL, 14, 0x000071C5ULL, 0x0, 1},  // LHU half0
-    {0x1002ULL, 5, 1, 0, 1, 15, 0x00001002ULL, 15, 0x0000837EULL, 0x0, 1},  // LHU half1
-    {0x1000ULL, 3, 1, 0, 1, 16, 0x00001000ULL, 16, 0x00000000ULL, 0x0, 1},  // funct3=3 invalid -> 0
-    {0x1000ULL, 6, 1, 0, 1, 17, 0x00001000ULL, 17, 0x00000000ULL, 0x0, 1},  // funct3=6 invalid -> 0
-    {0x1000ULL, 2, 0, 0, 1, 18, 0x00001000ULL, 18, 0x00000000ULL, 0xF, 1},  // is_load=0 -> mem_data 0
-    {0x1000ULL, 0, 0, 1, 1, 19, 0x00001000ULL, 19, 0x00000000ULL, 0x1, 1},  // SB lane0
-    {0x1001ULL, 0, 0, 1, 1, 20, 0x00001001ULL, 20, 0x00000000ULL, 0x2, 1},  // SB lane1
-    {0x1002ULL, 0, 0, 1, 1, 21, 0x00001002ULL, 21, 0x00000000ULL, 0x4, 1},  // SB lane2
-    {0x1003ULL, 0, 0, 1, 1, 22, 0x00001003ULL, 22, 0x00000000ULL, 0x8, 1},  // SB lane3
-    {0x1000ULL, 1, 0, 1, 1, 23, 0x00001000ULL, 23, 0x00000000ULL, 0x3, 1},  // SH half0
-    {0x1002ULL, 1, 0, 1, 1, 24, 0x00001002ULL, 24, 0x00000000ULL, 0xC, 1},  // SH half1
-    {0x1000ULL, 2, 0, 1, 1, 25, 0x00001000ULL, 25, 0x00000000ULL, 0xF, 1},  // SW
-    {0x1000ULL, 7, 0, 1, 1, 26, 0x00001000ULL, 26, 0x00000000ULL, 0x0, 1},  // strbe funct3=7 -> 0
-    {0x1000ULL, 2, 1, 0, 0, 27, 0x00001000ULL, 27, 0x837E71C5ULL, 0xF, 0},  // mem_valid=0 passthrough
-    {0x1001ULL, 0, 0, 0, 1, 28, 0x00001001ULL, 28, 0x00000000ULL, 0x2, 1},  // is_store=0 strbe kept
+{0x1000ULL, 2, 0, 0, 1, 18, 0x00001000ULL, 18, 0x00000000ULL, 0xF, 1},  // is_load=0 -> passthrough
+{0x1000ULL, 0, 0, 1, 1, 19, 0x00001000ULL, 19, 0x00000000ULL, 0x1, 1},  // SB lane0
+{0x1001ULL, 0, 0, 1, 1, 20, 0x00001001ULL, 20, 0x00000000ULL, 0x2, 1},  // SB lane1
+{0x1002ULL, 0, 0, 1, 1, 21, 0x00001002ULL, 21, 0x00000000ULL, 0x4, 1},  // SB lane2
+{0x1003ULL, 0, 0, 1, 1, 22, 0x00001003ULL, 22, 0x00000000ULL, 0x8, 1},  // SB lane3
+{0x1000ULL, 1, 0, 1, 1, 23, 0x00001000ULL, 23, 0x00000000ULL, 0x3, 1},  // SH half0
+{0x1002ULL, 1, 0, 1, 1, 24, 0x00001002ULL, 24, 0x00000000ULL, 0xC, 1},  // SH half1
+{0x1000ULL, 2, 0, 1, 1, 25, 0x00001000ULL, 25, 0x00000000ULL, 0xF, 1},  // SW
+{0x1000ULL, 7, 0, 1, 1, 26, 0x00001000ULL, 26, 0x00000000ULL, 0x0, 1},  // strbe funct3=7 -> 0
+{0x1000ULL, 2, 1, 0, 0, 27, 0x00001000ULL, 27, 0x00000000ULL, 0xF, 0},  // mem_valid=0 passthrough
+{0x1001ULL, 0, 0, 0, 1, 28, 0x00001001ULL, 28, 0x00000000ULL, 0x2, 1},  // is_store=0 strbe kept
 };
+
+// ⚠️ **load 车道选择的用例表**（**逐字迁自**原 `MemStage` 的 load 侧用例
+//    ⇒ ⇒ 期望值**一字未改** ⇒ ⇒ 判别力不降）。
+//    ⚠️ `raw_word` = 原始字（未做车道选择）· `expected` = 车道选择 + 扩展后的值。
+struct LoadLaneCase {
+    uint64_t addr, funct3, raw_word, expected;
+};
+
+const LoadLaneCase kLoadLaneCases[] = {
+    {0x1000ULL, 2, 0x837E71C5ULL, 0x837E71C5ULL},  // LW aligned
+    {0x1000ULL, 0, 0x837E71C5ULL, 0xFFFFFFC5ULL},  // LB lane0 (neg byte)
+    {0x1001ULL, 0, 0x837E71C5ULL, 0x00000071ULL},  // LB lane1 (pos byte)
+    {0x1002ULL, 0, 0x837E71C5ULL, 0x0000007EULL},  // LB lane2 (pos byte)
+    {0x1003ULL, 0, 0x837E71C5ULL, 0xFFFFFF83ULL},  // LB lane3 (neg byte)
+    {0x1000ULL, 4, 0x837E71C5ULL, 0x000000C5ULL},  // LBU lane0
+    {0x1003ULL, 4, 0x837E71C5ULL, 0x00000083ULL},  // LBU lane3
+    {0x1000ULL, 1, 0x837E71C5ULL, 0x000071C5ULL},  // LH half0 (pos half)
+    {0x1002ULL, 1, 0x837E71C5ULL, 0xFFFF837EULL},  // LH half1 (neg half)
+    {0x1000ULL, 5, 0x837E71C5ULL, 0x000071C5ULL},  // LHU half0
+    {0x1002ULL, 5, 0x837E71C5ULL, 0x0000837EULL},  // LHU half1
+    {0x1000ULL, 3, 0x837E71C5ULL, 0x00000000ULL},  // funct3=3 invalid -> 0
+    {0x1000ULL, 6, 0x837E71C5ULL, 0x00000000ULL},  // funct3=6 invalid -> 0
+};
+
 
 // ===========================================================================
 // 拍表 2：`riscv::ExStage`
@@ -281,8 +299,8 @@ constexpr uint32_t kImmConsistencyInstrs[] = {
 // ===========================================================================
 DUAL_BACKEND_TEST_PAIR(
     riscv::MemStage,
-    "MemStage：LB/LBU/LH/LHU/LW 的车道选择与扩展 + SB/SH/SW 字节使能",
-    "[cpu][rv32i][mem_stage][load][store_byte_enable][dual]",
+    "MemStage：SB/SH/SW 字节使能 + 元数据透传（load 车道选择已迁出）",
+    "[cpu][rv32i][mem_stage][store_byte_enable][dual]",
     [&]() {
         auto &io = dev.instance().io();
         for (const auto &tc : kMemCases) {
@@ -294,7 +312,6 @@ DUAL_BACKEND_TEST_PAIR(
             sim.set_input_value(io.is_store, tc.is_store);
             sim.set_input_value(io.funct3, tc.funct3);
             sim.set_input_value(io.mem_valid, tc.mem_valid);
-            sim.set_input_value(io.mem_read_data, kMemWord);
             sim.tick();
             INFO("alu_result=0x" << std::hex << tc.alu_result << std::dec
                                 << " funct3=" << tc.funct3
@@ -304,13 +321,39 @@ DUAL_BACKEND_TEST_PAIR(
                     tc.alu_result_out);
             REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.rd_addr_out)) ==
                     tc.rd_addr_out);
-            REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.mem_data)) ==
-                    tc.mem_data);
+            // ⚠️ **load 侧断言已迁出**（2026-11-13 · ADR-069 A0）⇒ ⇒
+            //    `mem_data` 端口已删（语义迁到 `LoadLaneSelector`）⇒ ⇒
+            //    load 的等价覆盖见下方 `LoadLaneSelector` 的 dual pair。
             REQUIRE(static_cast<uint64_t>(
                         sim.get_port_value(io.store_byte_enable_out)) ==
                     tc.strbe);
             REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.mem_valid_out)) ==
                     tc.mem_valid_out);
+        }
+    });
+
+// ===========================================================================
+// pair 1b：`riscv::LoadLaneSelector` —— load 车道选择与扩展（**2026-11-13 迁入**）
+// ===========================================================================
+// ⚠️ **2026-11-13（ADR-069 A0 · V5）**：load 的车道选择 / 扩展语义从
+//    `MemStage` **迁出**到本组件 ⇒ ⇒ **组件级双后端覆盖不缩面**
+//    （期望值**逐字**迁自原 `MemStage` 的用例表 ⇒ ⇒ 判别力不降）。
+DUAL_BACKEND_TEST_PAIR(
+    riscv::LoadLaneSelector,
+    "LoadLaneSelector：LB/LBU/LH/LHU/LW 的车道选择与符号/零扩展",
+    "[cpu][rv32i][load_lane][load][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+        for (const auto &tc : kLoadLaneCases) {
+            sim.set_input_value(io.raw_word, tc.raw_word);
+            sim.set_input_value(io.addr, tc.addr);
+            sim.set_input_value(io.funct3, tc.funct3);
+            sim.tick();
+            INFO("addr=0x" << std::hex << tc.addr << std::dec
+                          << " funct3=" << tc.funct3
+                          << " raw_word=0x" << std::hex << tc.raw_word << std::dec);
+            REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.data)) ==
+                    tc.expected);
         }
     });
 

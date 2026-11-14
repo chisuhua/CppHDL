@@ -248,12 +248,24 @@ module tb_rv32i_soc;
         .top_pipeline_ex_stage_unnamed_output_7(sink1[18*1 +: 1]),
         .top_pipeline_mem_stage_unnamed_output_1(sink32[19*32 +: 32]),
         .top_pipeline_mem_stage_unnamed_output_2(sink5[5*5 +: 5]),
-        .top_pipeline_mem_stage_unnamed_output_3(sink32[20*32 +: 32]),
-        .top_pipeline_mem_stage_unnamed_output_4(sink4[0*4 +: 4]),
+        // ⚠️ **2026-11-13 · ADR-069 A0**：端口表随「load 车道选择迁出 `MemStage`」变化：
+        //   · `MemStage` 的 `mem_data` 输出**已删** ⇒ ⇒ 原来的
+        //     `mem_stage_unnamed_output_3`（32 位 · `mem_data`）**不再存在**
+        //     ⇒ ⇒ `store_byte_enable_out`（4 位）由 `_4` **前移为 `_3`**
+        //   · 新增 `load_lane_selector`（`riscv::LoadLaneSelector`）的输出
+        //     （32 位 · 车道选择后的 load 值）⇒ ⇒ 接进**腾出来的** `sink32[20]`
+        //     ⇒ ⇒ **端口总数不变**（107 输出）⇒ ⇒ 其它 sink 下标**不动**
+        .top_pipeline_mem_stage_unnamed_output_3(sink4[0*4 +: 4]),
+        .top_pipeline_load_lane_selector_data(sink32[20*32 +: 32]),
         .top_pipeline_mem_stage_unnamed_output(sink1[19*1 +: 1]),
         .top_pipeline_wb_stage_unnamed_output_2(sink5[6*5 +: 5]),
-        .top_pipeline_wb_stage_unnamed_output(sink32[21*32 +: 32]),
-        .top_pipeline_wb_stage_unnamed_output_1(sink1[20*1 +: 1]),
+        // ⚠️ **2026-11-13**：`wb_stage` 的**未具名输出编号**随全局节点序变化
+        //   （`unnamed_output` = `write_en`（1 位）· `_1` = `write_data`（32 位）
+        //   · `_2` = `rd_addr_out`（5 位））⇒ ⇒ 与旧产物的编号**互换了 0/1**
+        //   ⇒ ⇒ 此处按**产物实测**对齐（`sink*` 只是「必须被接住」的哑沉 ⇒
+        //   ⇒ 交换编号**不改变**本 TB 的任何判据语义）
+        .top_pipeline_wb_stage_unnamed_output_1(sink32[21*32 +: 32]),
+        .top_pipeline_wb_stage_unnamed_output(sink1[20*1 +: 1]),
         .top_pipeline_hazard_unit_unnamed_output_3(sink2[0*2 +: 2]),
         .top_pipeline_hazard_unit_unnamed_output_4(sink2[1*2 +: 2]),
         .top_pipeline_hazard_unit_unnamed_output_5(sink32[22*32 +: 32]),

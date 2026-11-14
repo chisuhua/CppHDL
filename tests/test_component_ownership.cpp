@@ -241,8 +241,12 @@ TEST_CASE("ownership: ch_device<Rv32iPipeline> instantiates without SIGSEGV",
     ch::ch_device<riscv::Rv32iPipeline> dev;
     auto& pipeline = dev.instance();
 
-    // 7 个成员 `ch_module`（if/id/ex/mem/wb/hazard/fwd_mux）
-    REQUIRE(pipeline.child_count() == 7);
+    // 8 个成员 `ch_module`（if/id/ex/mem/**load_lane**/wb/hazard/fwd_mux）
+    // ⚠️ **2026-11-13 · ADR-069 A0**：新增第 8 个成员 `load_lane`
+    //    （`riscv::LoadLaneSelector` —— load 的车道选择从 `MemStage` 迁出，
+    //    因为 `sread` 让 load 数据晚 1 拍可用 ⇒ ⇒ 车道选择 MUST 在 M2 的下游做）
+    //    ⇒ ⇒ 原值 7 → **8**
+    REQUIRE(pipeline.child_count() == 8);
 
     for (auto& child : pipeline.children()) {
         INFO("child: " << child->name());

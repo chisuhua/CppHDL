@@ -1386,13 +1386,11 @@ include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_bool> is_load	既有债·基�
 include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_bool> is_store	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_bool> mem_valid	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_uint<32>> alu_result	既有债·基线豁免
-include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_uint<32>> mem_read_data	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_uint<32>> rs2_data	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_uint<3>> funct3	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_in<ch_uint<5>> rd_addr	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_out<ch_bool> mem_valid_out	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_out<ch_uint<32>> alu_result_out	既有债·基线豁免
-include/cpu/pipeline/stages/mem_stage.h	0	ch_out<ch_uint<32>> mem_data	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_out<ch_uint<4>> store_byte_enable_out	既有债·基线豁免
 include/cpu/pipeline/stages/mem_stage.h	0	ch_out<ch_uint<5>> rd_addr_out	既有债·基线豁免
 include/cpu/pipeline/stages/wb_stage.h	0	ch_in<ch_bool> is_alu	既有债·基线豁免
