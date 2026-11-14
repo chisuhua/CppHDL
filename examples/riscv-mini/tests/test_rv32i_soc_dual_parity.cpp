@@ -2152,3 +2152,222 @@ TEST_CASE("Rv32iSoc - FirmwareInitDataLoadedFromConstruction",
     // （0x5A 不是合法指令）⇒ ⇒ 本用例的 ② 会红。这里再钉一条正向：x1 的**来源字**
     // 不是零 ⇒ ⇒ 由 ② 的值断言承担（0x5A != 0）。
 }
+
+// ===========================================================================
+// **T4（`memory-timing-contract`）**：D-TCM 的**写相位**契约 + `sh` 双半字道覆盖
+//
+// ## 写相位契约（design.md §T4）
+//
+// 写使能 MUST 与被覆盖的**地址 / 数据 / 字节使能**落在**同一拍**。
+// ⚠️ 这条**不能**靠「接线看起来同拍」来证明 —— 结构上它们都是组合 net，
+//   只有**行为**能判：每拍 `data_write_en == 1` 时，同拍观测到的
+//   `(data_addr, data_write_data)` MUST 是**同一个** store 的配对。
+//   ⇒ ⇒ 若写使能被错开一拍（相位偏移）⇒ ⇒ 该拍会配到**另一条** store 的
+//   地址/数据（或配到非 store 拍）⇒ ⇒ 下面的配对断言**转红**。
+//
+// ⇒ ⇒ **判别力来源**：3 条 store **背靠背**且地址/数据两两不同
+//   ⇒ ⇒ 任何相位错位都会产生「en=1 但 pair 不属于任何期望」的拍。
+//   ⇒ ⇒ ⚠️ 若 3 条 store 的地址/数据**相同**（或中间隔 NOP）⇒ 相位错位**不可观测**。
+// ===========================================================================
+
+// 手推（3 条背靠背 SW · 地址/数据两两不同）
+constexpr uint32_t kT4AddrA = 0x100u, kT4DataA = 0x11u;
+constexpr uint32_t kT4AddrB = 0x104u, kT4DataB = 0x22u;
+constexpr uint32_t kT4AddrC = 0x108u, kT4DataC = 0x33u;
+
+constexpr std::array<uint32_t, 12> t4_store_phase_firmware() {
+    return {{
+        ADDI(1, 0, static_cast<int32_t>(kT4DataA)),   // 0  x1 = 0x11
+        ADDI(2, 0, static_cast<int32_t>(kT4DataB)),   // 1  x2 = 0x22
+        ADDI(3, 0, static_cast<int32_t>(kT4DataC)),   // 2  x3 = 0x33
+        NOP, NOP, NOP,                                 // 3..5 等三个 ADDI 写回
+        SW(1, 0, static_cast<int32_t>(kT4AddrA)),     // 6  [0x100] = 0x11
+        SW(2, 0, static_cast<int32_t>(kT4AddrB)),     // 7  [0x104] = 0x22  ← **背靠背**
+        SW(3, 0, static_cast<int32_t>(kT4AddrC)),     // 8  [0x108] = 0x33  ← **背靠背**
+        NOP, NOP, NOP,                                 // 9..11
+    }};
+}
+
+TEST_CASE("Rv32iSoc - StorePhaseCoherence",
+          "[rv32i][soc][store][phase][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 50;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_storephase");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), t4_store_phase_firmware());
+    load_firmware(*sim_b, dev_b->instance(), t4_store_phase_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    // ---- ① 双后端逐拍全等（无掩码）----
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ---- ② **相位配对**：每拍 `write_en == 1` ⇒ 同拍 (addr, data) MUST 配对 ----
+    const auto is_expected_pair = [](uint64_t addr, uint64_t data) {
+        return (addr == kT4AddrA && data == kT4DataA) ||
+               (addr == kT4AddrB && data == kT4DataB) ||
+               (addr == kT4AddrC && data == kT4DataC);
+    };
+    std::size_t en_beats = 0;
+    std::set<std::pair<uint64_t, uint64_t>> seen;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        if (ta[c][kIdxDataWriteEn] != 1u) continue;
+        ++en_beats;
+        const uint64_t addr = ta[c][kIdxDataAddr];
+        const uint64_t data = ta[c][kIdxDataWriteData];
+        INFO("store beat " << c << ": addr=0x" << std::hex << addr << " data=0x"
+                           << data);
+        // ⚠️ 这一条是**相位判据**：en=1 的**那一拍**必须配到它自己的地址/数据。
+        REQUIRE(is_expected_pair(addr, data));
+        seen.insert({addr, data});
+    }
+
+    // ---- ③ 三条 store 各出现一次（不多不少）----
+    REQUIRE(en_beats == 3u);
+    REQUIRE(seen.size() == 3u);
+    REQUIRE(seen.count({kT4AddrA, kT4DataA}) == 1u);
+    REQUIRE(seen.count({kT4AddrB, kT4DataB}) == 1u);
+    REQUIRE(seen.count({kT4AddrC, kT4DataC}) == 1u);
+}
+
+// ===========================================================================
+// **T4**：`sh` 的 **2 个半字道**覆盖（`addr[1] = 0` 与 `1`）
+//
+// ⚠️ 修前现状：`sb` 已覆盖 4 个字节道，但 `sh` **只**覆盖了 `addr[1] = 1`
+//   （既有固件的 `SH(3, 0, 0x122)`）⇒ ⇒ `addr[1] = 0` 的半字道**零覆盖**
+//   ⇒ ⇒ 半字道的**低/高**两位置若写错（比如恒取高半字），**全仓照绿**。
+//
+// 手推（**字节地址 → 字内车道**）：
+//   `SH x1(0x0011) -> 0x120` ⇒ addr[1:0] = 0 ⇒ 落**低半字** ⇒ 字 0x120 = 0x0000_0011
+//   `SH x2(0x0022) -> 0x122` ⇒ addr[1:0] = 2 ⇒ 落**高半字** ⇒ 字 0x120 = 0x0022_0011
+//   ⇒ ⇒ 读回 `LW x3, 0x120(x0)` ⇒ **x3 = 0x00220011**
+// ⇒ ⇒ 若「半字道恒取高半字」⇒ 第二次写会把低半字也覆盖成 0x0022 ⇒ x3 = 0x00220022 ⇒ **红**
+// ===========================================================================
+
+constexpr uint32_t kT4HalfWordLow = 0x0011u;    // 落 0x120 的**低**半字
+constexpr uint32_t kT4HalfWordHigh = 0x0022u;   // 落 0x122 的**高**半字
+constexpr uint64_t kT4HalfWordMerged = 0x00220011ull;
+constexpr std::size_t kT4HalfWordRd = 3;
+
+constexpr std::array<uint32_t, 12> t4_halfword_lane_firmware() {
+    return {{
+        ADDI(1, 0, static_cast<int32_t>(kT4HalfWordLow)),   // 0  x1 = 0x0011
+        ADDI(2, 0, static_cast<int32_t>(kT4HalfWordHigh)),  // 1  x2 = 0x0022
+        NOP, NOP, NOP,                                       // 2..4 等写回
+        SH(1, 0, 0x120),   // 5  低半字 = 0x0011   ← **addr[1] = 0**
+        SH(2, 0, 0x122),   // 6  高半字 = 0x0022   ← **addr[1] = 1**
+        NOP, NOP,          // 7..8
+        LW(3, 0, 0x120),   // 9  x3 = 0x00220011  ← **两个半字道的合并结果**
+        NOP, NOP,          // 10..11
+    }};
+}
+
+TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
+          "[rv32i][soc][store][lane][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 45;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_hwlane");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("Verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), t4_halfword_lane_firmware());
+    load_firmware(*sim_b, dev_b->instance(), t4_halfword_lane_firmware());
+
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
+
+    REQUIRE(ta.size() == tb.size());
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("cycle " << c << " obs " << kObsNames[k] << " (interp="
+                          << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // ① 两个半字**各自打到自己那一半**（store 数据已 lane 对齐）
+    std::set<std::pair<uint64_t, uint64_t>> stores;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        if (ta[c][kIdxDataWriteEn] != 1u) continue;
+        stores.insert({ta[c][kIdxDataAddr], ta[c][kIdxDataWriteData]});
+    }
+    INFO("stores: " << stores.size());
+    REQUIRE(stores.count({0x120u, kT4HalfWordLow}) == 1u);
+    REQUIRE(stores.count({0x122u, kT4HalfWordHigh << 16}) == 1u);
+    // ⇒ ⚠️ **lane 对齐**口径：`DataTCM::wdata` MUST 已按 `addr[1:0]` 移位
+    //    ⇒ ⇒ 0x122 的高半字 ⇒ 数据在 bits[31:16]
+
+    // ② **读回合并结果**（4 字节道里的两个半字道各就各位）
+    std::map<uint64_t, std::set<uint64_t>> written;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        if (ta[c][kIdxWbWriteEn] != 1u) continue;
+        written[ta[c][kIdxWbRdAddr]].insert(ta[c][kIdxWbWriteData]);
+    }
+    const auto it = written.find(kT4HalfWordRd);
+    REQUIRE(it != written.end());
+    REQUIRE(it->second.size() == 1u);
+    INFO("x" << kT4HalfWordRd << " expected 0x" << std::hex << kT4HalfWordMerged);
+    REQUIRE(*it->second.begin() == kT4HalfWordMerged);
+}

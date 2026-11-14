@@ -24,13 +24,18 @@ bash scripts/verify_test_counts.sh
 
 ## S1 — L1：显式映射表 + 越界诊断（**先红后绿**）
 
-- [ ] 🔴 **写**越界投毒判据**：地址设到区域外 ⇒ ⇒ **MUST 有诊断** ⇒ ⇒ **先红**
+- [x] **写**越界投毒判据**：地址设到区域外 ⇒ ⇒ **MUST 有诊断** ⇒ ⇒ **先红**
       ⇒ ⇒ **2026-11-14 复核：真未做** ⇒ ⇒ **归 T4 批次**（`memory-timing-contract`）
       ⇒ ⇒ ⚠️ **为什么必须做**：`address_decoder` 现有用例只测 `0x12345678`
       ⇒ ⇒ **旧 64 KB 声明下也红** ⇒ ⇒ **零判别力**
       ⇒ ⇒ **有判别力的形态**：`0x8000_4000`（**旧 64 KB ITCM 内 · 新 16 KB 外**）
       ⇒ ⇒ ⇒ ⇒ **MUST** `error_cs == 1` **且** `i_tcm_cs == 0`（旧声明下会红 ⇒ 才算投毒有效）
-      ⇒ ⇒ 载体 = `examples/riscv-mini/tests/test_riscv_tests_soc.cpp`（既有 decoder 用例旁）
+      ⇒ ⇒ 载体 = `examples/riscv-mini/tests/test_riscv_tests_soc.cpp` 的
+      `address_decoder: TCM boundary MUST be diagnosed, not truncated`
+      ⇒ ⇒ **2026-11-14 已落地**：`0x8000_3FFC` ⇒ `i_tcm_cs=1 ∧ error_cs=0`（正面）；
+      `0x8000_4000` ⇒ `error_cs=1 ∧ i_tcm_cs=0`（反面 · **旧 64 KB 声明下会红**）；
+      D-TCM 同理 + 区域空洞 `0x8000_FFFC` ⇒ **全零片选 + error**
+      ⇒ ⇒ ⚠️ **判别力实测**：把 `ADDR_ITCM_SIZE` 退回 `0x10000` ⇒ ⇒ **红** ⇒ 还原后复绿 ✅
 - [x] `examples/riscv-mini/src/rv32i_pipeline_top.h`：显式 `{base, size}` 表
       ⇒ ⇒ **2026-11-14 已实施**：表**上移到库** = `include/cpu/riscv/rv32i_mem_map.h`
       （`kItcm` / `kDtcm` / `kTcmBytes` / `kPcReset`）⇒ ⇒ SoC 顶层与 `address_decoder.h`

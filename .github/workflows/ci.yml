@@ -676,6 +676,20 @@ jobs:
         scripts/verify_rv32i_fw_init_rtl.sh
         scripts/verify_rv32i_fw_init_rtl.sh --self-test
 
+    - name: Verify D-TCM read/write port timing structure (T4)
+      # `memory-timing-contract` **T4** 的**结构**判据（W0–W4）+ 自检（W5）:
+      #   W1 写口 MUST 是寄存写（always_ff）· W2 MUST 被写使能门控且门控非常量
+      #   W3 地址索引 / 写入数据 MUST 是信号（非常量）
+      #   W4 确定性 · W5 两条投毒（去门控 / 改非寄存）各自必红
+      # ⚠️ **相位**（写使能与地址同拍）**结构上不可判** ⇒ 行为级判据在
+      #   `test_rv32i_soc_dual_parity` 的 `Rv32iSoc - StorePhaseCoherence`
+      # ⚠️ 不需要 verilator / 网络 ⇒ 主 job 可跑
+      shell: bash
+      run: |
+        cmake --build build --target emit_rtl_rv32i_soc
+        scripts/verify_dtcm_read_timing.sh
+        scripts/verify_dtcm_read_timing.sh --self-test
+
     - name: Verify flat RTL emit products (self-test)
       # ⚠️ **verilator is REQUIRED** (2026-11-13 · RC-6): F1/F2/F8 lint and emit
       # real Verilog. This job is `BUILD_VERILATOR=OFF` (fast default path), so
