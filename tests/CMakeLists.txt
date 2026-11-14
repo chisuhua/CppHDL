@@ -1236,6 +1236,12 @@ add_catch_test(test_rv32i_pipeline test_rv32i_pipeline.cpp)
 # ⚠️ 期望值 MUST **手推**（禁抄仿真输出）——「两后端一致」对同构缺陷结构性失明。
 # ⚠️ MUST 用 `riscv::ALU_*` 符号常量（**禁**字面量 3 —— 那是 RISC-V funct3 编码）。
 add_catch_test(test_rv32i_alu test_rv32i_alu.cpp)
+# B4 · C1 差分测试（`rv32i-dead-component-consolidation` 的「差分（先于接入）」）：
+# `Rv32iAlu`（库组件）vs `ExStage`（流水线**当前**的内联 ALU）⇒ ⇒ 值等价 + 编码差异。
+# ⚠️ **单后端**（interpreter）⇒ ⇒ 因为差分对象是**两套 C++ 实现**（不是同一实现的两后端）
+#   ⇒ ⇒ 后端一致性由 `test_rv32i_stage_dual`（ExStage 双后端）+ `test_rv32i_alu`（库组件）承担
+#   ⇒ ⇒ 故**不动** parity 计数锚点（`DUAL_BACKEND_PARITY_TOTAL` / `_PAIRS`）
+add_catch_test(test_rv32i_alu_differential test_rv32i_alu_differential.cpp)
 # dual-backend-rv32i-pipeline-behavior-tests: RV32I microarchitecture 子组件
 # dual 行为 parity. _behavior suffix 区别原 test_rv32i_pipeline.cpp (per spec R6 #5
 # SECTION 排除 + R7 "原文件不动"). 原文件 MUST NOT 改动.
