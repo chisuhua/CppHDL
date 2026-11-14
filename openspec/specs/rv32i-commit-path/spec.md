@@ -51,14 +51,16 @@
 
 ### Requirement: 「退休指令数」MUST 由流水线的**有效链**定义
 
-- **MODIFIED**: 本 Requirement 的**契约面**扩展 —— 新增一条 Scenario
-  「取指填充期 MUST NOT 把同一条指令装进流水线两次」。
-  理由：取指填充期的「同一条指令被装两次」**违反**本 Requirement 的
-  「退休指令数 MUST 由**有效链**定义」（该指令被计了**两次**退休 ⇒ 计数 ≠ 有效链）。
+- **MODIFIED**: 本 Requirement 的**契约面**再次扩展 —— 在既有内容之上追加
+  一条 Scenario「时序基线修订后的退休数与停顿拍数」。
+  理由：MEM/WB 装载点后移一拍 ⇒ ⇒ **load-use 停顿 3 → 4 拍** ⇒ ⇒ 退休数与停顿计数
+  的**基线值**随之变化 ⇒ ⇒ 本 Requirement 的基线 MUST 随之订正。
   ⚠️ MODIFIED 会**整体替换**该 Requirement ⇒ **既有 Scenario 一条都不删**
-  （「ALU 指令必须计入退休数」/「有效链 MUST 逐级传递」**逐字保留**）；
+  （「ALU 指令必须计入退休数」/「有效链 MUST 逐级传递」/「取指填充期 MUST NOT 把同一条指令
+  装进流水线两次」**逐字保留**）；
   ⚠️ 既有条款（WHEN/THEN/AND 全部）**逐字保留**，本 delta 只**追加**一条 Scenario
-  ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md`（D6 / D9.2）。
+  ⇒ ⇒ 架构依据 = `docs/adr/ADR-069-mem-data-alignment.md`（**Accepted** · 决策 = A0）
+  与 `docs/adr/ADR-047-rv32i-data-forwarding.md` §5.5（dated addendum）。
 
 - **WHEN** 统计已退休指令数（`perf_instructions` / `commit_count`）
 - **THEN** 「本拍有一条指令退休」MUST 等价于「MEM 级持有**有效**指令」
@@ -96,7 +98,13 @@
   **不再恒幂等**（第二条会读到第一条的前推值 ⇒ 若该指令自依赖则**非幂等**）
   ⇒ 架构依据 = ADR-048 D6（`primed` 门控）；修复后退休数 **−1**。
 
----
+#### Scenario: 时序基线修订后的退休数与停顿拍数
+
+- **WHEN** MEM/WB 装载点后移一拍后统计同一份固件的退休数与停顿拍数
+- **THEN** 退休数 MUST 等于该基线下**手推**得到的值（**禁**抄仿真输出）
+- **AND** `load_use_stalls` MUST 等于该基线下**手推**得到的值
+- **AND** 任何基线值的变更 MUST 在 capability 的**验证记录**里给出**手推推导**
+  （⇒ ⇒ 两后端同源 ⇒ ⇒ parity 对该族缺陷**结构性失明** ⇒ ⇒ parity 不构成证据）
 
 ### Requirement: 流水线级寄存器 MUST NOT 装载**其它级**的信号
 

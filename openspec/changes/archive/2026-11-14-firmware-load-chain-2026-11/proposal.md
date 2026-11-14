@@ -111,3 +111,21 @@ tools/rv32i-fw-dump --in <fw.json|elf> --format vh|mem|manifest --out <path>
 - ❌ **MMIO 设备接入** —— 本项**只留位**。
 - ❌ **CSR / ECALL / FENCE** —— 属 `rv32i-isa-gap-closure`（P6）。
 - ❌ **cache 接入** —— 独立立项。
+
+## 用户可见变更
+
+- **`InstrTCM` / `DataTCM` 新增**可选**构造参数 `init_words`**（`include/cpu/pipeline/rv32i_tcm.h`）
+  ⇒ ⇒ 传**字镜像** ⇒ ⇒ 内部 `ch_mem` 带 `init_data` ⇒ ⇒ **产物自带 `initial` 初值块**
+  ⇒ ⇒ **TB 零装载动作** · **顶层端口面一字不变**
+  ⇒ ⇒ ⚠️ 默认空 ⇒ ⇒ 与基线**逐字节等价**（**非破坏性**）。
+- **`Rv32iPipelineTop` 新增 `itcm_init` / `dtcm_init` 构造参数**
+  （`examples/riscv-mini/src/rv32i_pipeline_top.h`）
+  ⇒ ⇒ 🔴 **`dtcm_init` 是 `.data` 段的落点** —— 此前 `prog_*` **只**接 I-TCM
+  ⇒ ⇒ 有初始化 `.data` 的程序**此前装不进去**。
+- **新增公开头**：`include/cpu/riscv/rv32i_mem_map.h`（**地址映射单一真相** · 修掉
+  「**声明 64 KB · 实现 16 KB**」）· `include/cpu/riscv/rv32i_asm_encode.h`（**RV32I 编码器库化**）
+  ⇒ ⇒ ⚠️ 下游若硬编码 `ADDR_ITCM_SIZE == 0x10000` ⇒ ⇒ **MUST 改为 16384**。
+- **新增工具** `tools/rv32i-fw-dump`（固件**转储器 / ELF 装载器** · `mem` / `vh` / `manifest`）
+  ⇒ ⇒ ⚠️ **不解析符号表**（`.rela` 在 section 里 ⇒ ⇒ 静态重定位检查**不完整**）。
+- **契约面**：新增 capability **`rv32i-firmware-loading`**（7 requirements）·
+  `rv32i-isa-semantics` 追加 1 条（PC 复位值 MUST 等于 I-TCM 的 `base`）。

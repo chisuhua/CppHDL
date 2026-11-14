@@ -28,6 +28,17 @@ riscv-tests 二进制 ⇒ CI 中全部 SKIP ⇒ **有效覆盖为 0**。
 
 ### Requirement: 字节道写 MUST 只写选中的车道
 
+- **MODIFIED**: 本 Requirement 的**契约面**扩展 —— 在既有内容之上追加两条 Scenario：
+  ①「写使能 MUST 与被覆盖的地址同拍」（**相位**契约）；
+  ②「MEM 反压期间写使能 MUST 保持」。
+  理由：数据通路改**固定 1 拍寄存读**后 ⇒ ⇒ 写侧的**相位**从「看不见」变成
+  「看得见的错」⇒ ⇒ 相位 MUST 成为契约的一部分；
+  且 MEM 级新增反压 ⇒ ⇒ 反压期间的写行为 MUST 有明确定义。
+  ⚠️ MODIFIED 会**整体替换**该 Requirement ⇒ **既有 Scenario 一条都不删**
+  （「源数据低位对齐」/「掩码合并」/「整字写行为 MUST 不变」**逐字保留**）；
+  ⚠️ 既有条款（WHEN/THEN/AND 全部）**逐字保留**，本 delta 只**追加**两条 Scenario
+  ⇒ ⇒ 架构依据 = `docs/adr/ADR-068-dtcm-memory-timing-contract.md`（**Accepted**）。
+
 - **WHEN** 一条 `sb` / `sh` 指令在 RV32I SoC 上执行
 - **THEN** 目标字 MUST 只被修改**被选中的字节道**
 - **AND** 未选中的车道 MUST 保持原值（读-改-写语义）
@@ -56,6 +67,20 @@ riscv-tests 二进制 ⇒ CI 中全部 SKIP ⇒ **有效覆盖为 0**。
 - **WHEN** 一条 `sw` 执行
 - **THEN** 目标字 MUST 被**整字**覆盖（字节使能 = 全 1 ⇒ 合并结果 = 写数据）
 - **AND** **非对齐** `sw` 的既有行为 MUST **保持不变**（不引入新的对齐检查）
+
+#### Scenario: 写使能 MUST 与被覆盖的地址同拍（相位契约）
+
+- **WHEN** 一条 `sb` / `sh` 在第 N 拍写地址
+- **THEN** 写使能 MUST 在**同一拍**有效
+- **AND** 被写入的车道 MUST 由**该拍**的 `addr[1:0]` 决定
+- **AND** 判据 MUST 覆盖 `sb` / `sh` 的**四个字节车道 × 两个半字车道**组合
+  （⇒ ⇒ 只覆盖 2 个用例**判别力不足**）
+
+#### Scenario: MEM 反压期间写使能 MUST 保持
+
+- **WHEN** MEM 级被反压（就绪信号被拉低）且当前有效链非空
+- **THEN** 写使能 MUST **保持**（不重复发、不丢）
+- **AND** 被写车道 MUST 仍由该拍地址决定
 
 ### Requirement: `DataTCM.strbe` MUST 被其实例化点显式驱动
 
@@ -292,3 +317,26 @@ riscv-tests 二进制 ⇒ CI 中全部 SKIP ⇒ **有效覆盖为 0**。
 - **THEN** 两者的立即数输出 MUST **逐位相等**
 - **NOTE**: 该判据只能发现「两份实现不一致」；**两份一起错**时它恒成立
       ⇒ 「一起错」由上面三条 Scenario 的绝对期望值负责抓。
+
+### Requirement: SoC 的存储映射 MUST 显式声明，且 PC 复位值 MUST 与映射 base 一致
+
+RV32I SoC MUST 以**显式映射表**声明其存储区域
+⇒ ⇒ 且 **PC 的复位值 MUST 等于映射中 I-TCM 的 `base`**。
+
+⇒ ⇒ 理由：PC 复位值与 I-TCM 的 `base` **恰好**都是 `0x8000_0000`
+⇒ ⇒ 任何一侧改动而另一侧未改 ⇒ ⇒ **静默失配** ⇒ ⇒ 从零取指 ⇒ ⇒ **无任何报错**。
+
+⇒ ⇒ ⚠️ 本 Requirement 是**新增**条款 ⇒ ⇒ 不改任何既有 ISA 语义条款
+⇒ ⇒ 既有 `JAL` / `JALR` / `SRA` / 立即数提取等条款**逐字保留**。
+
+#### Scenario: PC 复位值 MUST 由映射派生
+
+- **WHEN** SoC 声明了存储映射
+- **THEN** PC 的复位值 MUST 由映射中 **I-TCM 的 `base`** 派生
+- **AND** MUST NOT 出现「PC 复位值」与「I-TCM base」两个**各自独立**的字面量
+
+#### Scenario: 映射 MUST 显式
+
+- **WHEN** 检查 SoC 的存储布局
+- **THEN** 存储区域 MUST 以**显式映射表**声明（`{base, size}`）
+- **AND** MUST NOT 依赖「高位被丢弃」的隐式截断行为

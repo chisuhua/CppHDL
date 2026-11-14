@@ -120,3 +120,20 @@ auto read_data = memory.sread(io().addr, ch_bool(true));
 - ❌ **固件装载链路**（`prog_addr` 语义 / D-TCM 加载通路）—— 属 `firmware-load-chain`。
 - ❌ **CSR / ECALL / FENCE** —— 属 `rv32i-isa-gap-closure`（P6）。
 - ❌ **分支预测器接入** —— 独立立项。
+
+## 用户可见变更
+
+- **`riscv::DataTCM` 的读口语义变更**（`include/cpu/pipeline/rv32i_tcm.h`）
+  ⇒ ⇒ 由**全组合读**（`aread` · 0 拍）改为**寄存读**（`sread` · 1 拍）
+  ⇒ ⇒ ⚠️ **迁移指引**：下游若按「**同拍**读回数据」写的 TB ⇒ ⇒ **MUST 改成「下一拍」**
+  ⇒ ⇒ 内存时序 golden **全部**重算（`load_use_stalls` 6 → **8** · `non_retired` 21 → **23**
+  · 退休数 178 → **176**）。
+- **`Rv32iPipeline::data_ready` 的语义** ⇒ ⇒ 登记为「**固定 1 拍延迟**（**不是握手**）」
+  ⇒ ⇒ **driver 仍恒 1**（⚠️ **禁**在本批实现真反压 ⇒ ⇒ 那是「接 cache」独立立项）。
+- **新增组件 `riscv::LoadLaneSelector`**（`include/cpu/pipeline/load_lane_selector.h`）
+  ⇒ ⇒ load 的**车道选择 + 符号 / 零扩展**从 `MemStage` **迁出**到 **M2 的下游**（语义**逐字**不变）。
+- **`riscv::MemStage` 的 `mem_read_data`（输入）/ `mem_data`（输出）移除**
+  ⇒ ⇒ 载体内接线已迁到 `m2_load_data` ⇒ ⇒ 下游改用 `riscv::LoadLaneSelector`。
+- **契约面**：新增 capability **`rv32i-memory-timing`**（5 requirements）·
+  `rv32i-commit-path` / `rv32i-data-forwarding` / `rv32i-isa-semantics` 各有 Requirement 订正
+  ⇒ ⇒ 依据 = `docs/adr/ADR-069-mem-data-alignment.md`（**Accepted** · 决策 **A0** · §7.6 追认）。
