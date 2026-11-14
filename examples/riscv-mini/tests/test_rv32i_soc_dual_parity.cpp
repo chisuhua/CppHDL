@@ -440,6 +440,18 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
 // ⚠️ 2026-10-27：拆成「带固件参数」的重载 ⇒ **判别性固件**（ADR-047 D9）
 //    可以是**独立**的一套 ⇒ 既有固件的 golden **零变化**
 //    ⇒ 「既有 golden 的变化 MUST 全部可归因」⇒ 本次归因 = **零**。
+// ⚠️⚠️ **G3（尾部填 NOP · 2026-11-15 · B4）**：I-TCM 在固件末尾之后读到的字是
+//    `ch_mem` 初值 **0** ⇒ ⇒ `0x00000000` 的 opcode = `0x00` ⇒ ⇒ 是**未知 opcode**
+//    ⇒ ⇒ **G1 落地后流水线会在此冻结** ⇒ ⇒ 既有 golden 的退休数会从 176 掉到 ~102。
+//    ⇒ ⇒ 故**装载器 MUST 把尾部填成 NOP**（`0x00000013` = `addi x0,x0,0`）：
+//      · 1 拍退休（与 0 字**相同**）
+//      · `rd = 0` ⇒ 被 x0 保护吞掉（与 0 字**相同**）
+//      · 不访存 / 不跳转 ⇒ 副作用**为空**（与 0 字**相同**）
+//    ⇒ ⇒ ⇒ **退休数 / `non_retired` / 写回序列 逐项不变**（G3 的算术：NOP ≡ 0 字）。
+//    ⚠️ 填充量 `kTailFillWords = 256` ≫ 本文件任何用例的 `kCycles` 上界（200）
+//    ⇒ ⇒ 被执行到的范围**必然**被覆盖；且装载期 `ext_rst = 1` ⇒ 计数器不被污染。
+constexpr std::size_t kTailFillWords = 256;
+
 template <std::size_t N>
 void load_firmware(Simulator &sim, Rv32iPipelineTop &dut,
                     const std::array<uint32_t, N> &fw) {
@@ -449,6 +461,12 @@ void load_firmware(Simulator &sim, Rv32iPipelineTop &dut,
     for (std::size_t i = 0; i < fw.size(); ++i) {
         sim.set_input_value(io.prog_addr, i);
         sim.set_input_value(io.prog_data, fw[i]);
+        sim.tick(1);
+    }
+    // ⚠️ **G3**：尾部填 NOP（见上方注释）⇒ ⇒ 未填 ⇒ G1 落地后在尾部冻结
+    for (std::size_t i = fw.size(); i < fw.size() + kTailFillWords; ++i) {
+        sim.set_input_value(io.prog_addr, i);
+        sim.set_input_value(io.prog_data, NOP);
         sim.tick(1);
     }
     sim.set_input_value(io.prog_we, 0u);
