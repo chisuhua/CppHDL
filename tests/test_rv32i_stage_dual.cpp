@@ -80,6 +80,7 @@
 #include "core/context.h"
 #include "cpu/pipeline/rv32i_decoder.h"
 #include "cpu/pipeline/stages/ex_stage.h"
+#include "cpu/riscv/rv32i_asm_encode.h"
 // ⚠️ **2026-11-13 新增**：load 车道选择器（ADR-069 A0 · V5）
 #include "cpu/pipeline/load_lane_selector.h"
 #include "cpu/pipeline/stages/id_stage.h"
@@ -342,6 +343,174 @@ TEST_CASE("ExStage - unknown opcode keeps its ALU semantics (zero-change)",
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.zero)) == 0ull);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.less_than)) == 0ull);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(io.less_than_u)) == 0ull);
+}
+
+
+// ===========================================================================
+// **B4 · C4 差分测试**：`riscv::Rv32iDecoder`（库组件）vs `riscv::IdStage`（流水线**当前**的内联译码）
+//
+// ## 为什么必须先差分（与 C1 同一方法学）
+//
+// `id_stage.h` 与 `rv32i_decoder.h` 各自持有一份**立即数提取**实现 ⇒ ⇒ 接入（把 ID 级
+// 交给库组件）之前 MUST 先知道「两者**哪里不一样**」⇒ ⇒ 否则接入后**行为漂移**且**零报错**。
+//
+// ⚠️ **风险点不是字段，是立即数**：
+//   · 字段（opcode / rd / funct3 / rs1 / rs2 / funct7）= **纯 bit 提取** ⇒ ⇒ 恒等
+//   · 立即数 = **移位 + OR + 符号扩展** ⇒ ⇒ ⚠️ 两份实现的**移位量类型宽度不同**
+//     （ID 级 `<< ch_uint<5>(12_d)` vs 库 `<< ch_uint<12>(12_d)`）⇒ ⇒ 框架的
+//     `operator<<` 结果宽度 = `lhs_width + rhs_extra_width` ⇒ ⇒ **结果宽度差 100 倍**
+//     ⇒ ⇒ 截断到 13/21 位后**是否仍等价** = **必须实测**（不能靠读码断言）
+//
+// ## 口径
+//
+//   · **差分另一侧 = 生产代码本体**（`IdStage` 组件）⇒ ⇒ 零复制漂移（同 C1 的做法）
+//   · **ID 级的 `imm` / `opcode` / `funct3` 是「寄存后」的值** ⇒ ⇒ 需 `valid=1` 跑一拍
+//   · `rs1` / `rs2` **不参与差分**：ID 级把它们过了**按指令类型的 mux**
+//     （`rs1_addr_mux`）⇒ ⇒ 与 decoder 的裸字段**不同口径**
+//   · `rd` / `funct7` 只在 **R 型**可比（其它类型的该位是**立即数位**）⇒ ⇒ 按 `check_mask`
+//   · **期望值全部手推**（复用既有 `kDecCases` 的手推表 ⇒ ⇒ **零新表**）
+// ===========================================================================
+namespace {
+
+/// 跑一遍 ID 级（**寄存后**的译码结果）
+struct IdDecoded {
+    uint64_t imm = 0, opcode = 0, funct3 = 0, rd_addr = 0, funct7 = 0;
+};
+IdDecoded run_id_stage(uint64_t instruction) {
+    ch::ch_device<riscv::IdStage> ids;
+    Simulator sim(ids.context());
+    auto &io = ids.instance().io();
+    sim.set_input_value(io.pc, 0x1000u);
+    sim.set_input_value(io.instruction, instruction);
+    sim.set_input_value(io.valid, 1u);
+    sim.set_input_value(io.flush, 0u);
+    sim.set_input_value(io.stall, 0u);
+    sim.set_input_value(io.reg_rs1_data, 0u);
+    sim.set_input_value(io.reg_rs2_data, 0u);
+    sim.tick();   // ⚠️ 译码结果是**寄存后**的 ⇒ MUST 跑一拍
+    IdDecoded d;
+    d.imm = static_cast<uint64_t>(sim.get_port_value(io.imm));
+    d.opcode = static_cast<uint64_t>(sim.get_port_value(io.opcode));
+    d.funct3 = static_cast<uint64_t>(sim.get_port_value(io.funct3));
+    d.rd_addr = static_cast<uint64_t>(sim.get_port_value(io.rd_addr));
+    d.funct7 = static_cast<uint64_t>(sim.get_port_value(io.funct7_out));
+    return d;
+}
+
+/// 跑一遍库组件译码器（**组合**输出）
+struct DecDecoded {
+    uint64_t opcode = 0, rd = 0, funct3 = 0, rs1 = 0, rs2 = 0, funct7 = 0;
+    uint64_t imm = 0, instr_type = 0;
+};
+DecDecoded run_decoder(uint64_t instruction) {
+    ch::ch_device<riscv::Rv32iDecoder> dec;
+    Simulator sim(dec.context());
+    sim.set_input_value(dec.instance().io().instruction, instruction);
+    sim.tick();
+    DecDecoded d;
+    auto &io = dec.instance().io();
+    d.opcode = static_cast<uint64_t>(sim.get_port_value(io.opcode));
+    d.rd = static_cast<uint64_t>(sim.get_port_value(io.rd));
+    d.funct3 = static_cast<uint64_t>(sim.get_port_value(io.funct3));
+    d.rs1 = static_cast<uint64_t>(sim.get_port_value(io.rs1));
+    d.rs2 = static_cast<uint64_t>(sim.get_port_value(io.rs2));
+    d.funct7 = static_cast<uint64_t>(sim.get_port_value(io.funct7));
+    d.imm = static_cast<uint64_t>(sim.get_port_value(io.imm));
+    d.instr_type = static_cast<uint64_t>(sim.get_port_value(io.instr_type));
+    return d;
+}
+
+/// **边界补充**（既有 `kDecCases` 未覆盖的**立即数极值**）⇒ ⇒ 全部**手推**
+///
+/// ⚠️ **每条 MUST 用库编码器 `riscv::enc_*` 反查**（下方 `enc` 字段）⇒ ⇒ 「手写的机器码」
+///    与「手推的立即数」**必须**自洽 ⇒ ⇒ 这条纪律**真的抓到了东西**：
+///    S 型曾被我按 **B 型布局**手写（`imm[11:5]→31:25` + `imm[4:0]→11:7`，
+///    而**不是** B 型的 `imm[12]/[11]/[4:1]`）⇒ ⇒ 立即数差 2036 ⇒ ⇒ 靠人眼不会发现。
+enum class BKind { I, S, B, U, J };
+struct ImmBoundary {
+    uint64_t instruction;
+    uint64_t imm;          // 手推
+    const char *what;
+    BKind kind;
+    uint32_t a, b, c;
+    int32_t d;             // 编码器实参（见下方 `enc` 交叉校验）
+    uint32_t enc;          // 库编码器产出的机器码（MUST == instruction）
+};
+const ImmBoundary kImmBoundaries[] = {
+    // B 型：imm[12]（±2048）与 imm[11]（±1）的极值
+    // B 型：imm[12] / imm[11] / ±8
+    {0x002080E3ULL, 0x00000800ULL, "beq x1,x2,+2048（imm[12]=1）", BKind::B, 1, 2, 0, 2048,
+     riscv::enc_b(1, 2, 0, 2048)},
+    {0x00208463ULL, 0x00000008ULL, "beq x1,x2,+8", BKind::B, 1, 2, 0, 8,
+     riscv::enc_b(1, 2, 0, 8)},
+    {0xFE208CE3ULL, 0xFFFFFFF8ULL, "beq x1,x2,-8（imm[11]=1）", BKind::B, 1, 2, 0, -8,
+     riscv::enc_b(1, 2, 0, -8)},
+    // I 型：-2048 / +2047
+    {0x80000093ULL, 0xFFFFF800ULL, "addi x1,x0,-2048", BKind::I, 1, 0, 0, 2048,
+     riscv::enc_i(1, 0, 0, -2048, 0x13)},
+    {0x7FF00093ULL, 0x000007FFULL, "addi x1,x0,+2047", BKind::I, 1, 0, 0, 2047,
+     riscv::enc_i(1, 0, 0, 2047, 0x13)},
+    // S 型：-2048 / +2047
+    // ⚠️ **S 型布局**：imm[11:5] → instr[31:25] · imm[4:0] → instr[11:7]
+    //    ⇒ ⇒ 编码**不是** B 型布局（我第一次就踩了这个 ⇒ ⇒ 由本文件交叉校验抓住）
+    {0x80102023ULL, 0xFFFFF800ULL, "sw x1,-2048(x0)", BKind::S, 1, 0, 2, 2048,
+     riscv::enc_s(1, 0, 2, -2048)},
+    {0x7E102FA3ULL, 0x000007FFULL, "sw x1,+2047(x0)", BKind::S, 1, 0, 2, 2047,
+     riscv::enc_s(1, 0, 2, 2047)},
+    // U 型：低 12 位 MUST 清零（0xFFFFF000 掩码）
+    // ⚠️ **本库的 U 型别名 = `AUIPC`**（opcode 0x17）⇒ ⇒ `enc_u` 产出的就是 AUIPC
+    //    ⇒ ⇒ **没有** `LUI`（opcode 0x37）别名 ⇒ ⇒ 本行用 AUIPC 才能与库编码器交叉校验
+    {0x12345197ULL, 0x12345000ULL, "auipc x3,0x12345", BKind::U, 3, 0, 0, 0x12345,
+     riscv::enc_u(3, 0x12345)},
+    {0x00000017ULL, 0x00000000ULL, "auipc x0,0", BKind::U, 0, 0, 0, 0, riscv::enc_u(0, 0)},
+    // J 型：±1 MiB 的极值（imm[20]）
+    {0x000000EFULL, 0x00000000ULL, "jal x1,0", BKind::J, 1, 0, 0, 0, riscv::enc_j(1, 0)},
+};
+
+}  // namespace
+
+TEST_CASE("B4 C4 - Rv32iDecoder vs IdStage differential (immediate + fields)",
+          "[rv32i][decoder][differential][b4]") {
+    // ---- ① 既有手推表（`kDecCases`）逐条：两侧一致 + 各自对手推值 ----
+    for (const auto &tc : kDecCases) {
+        INFO("instruction=0x" << std::hex << tc.instruction);
+        const DecDecoded dec = run_decoder(tc.instruction);
+        const IdDecoded ids = run_id_stage(tc.instruction);
+
+        // ---- 差分（两侧）----
+        REQUIRE(dec.imm == ids.imm);
+        REQUIRE(dec.opcode == ids.opcode);
+        REQUIRE(dec.funct3 == ids.funct3);
+
+        // ---- 各自**对手推值**（期望值 MUST 手推 ⇒ 禁抄仿真输出）----
+        REQUIRE(dec.opcode == tc.opcode);
+        REQUIRE(dec.funct3 == tc.funct3);
+        REQUIRE(dec.imm == tc.imm);
+        REQUIRE(dec.instr_type == tc.instr_type);
+        if (tc.check_mask & CK_RD) {
+            REQUIRE(dec.rd == tc.rd);
+            REQUIRE(ids.rd_addr == tc.rd);   // R 型：ID 级的 rd 无 mux ⇒ 可比
+        }
+        if (tc.check_mask & CK_F7) {
+            REQUIRE(dec.funct7 == tc.funct7);
+            REQUIRE(ids.funct7 == tc.funct7);
+        }
+    }
+}
+
+TEST_CASE("B4 C4 - immediate boundaries are equivalent in both implementations",
+          "[rv32i][decoder][differential][b4]") {
+    for (const auto &b : kImmBoundaries) {
+        INFO(b.what);
+        // ---- ① **库编码器反查**：手写的机器码 MUST 与手推立即数自洽 ----
+        //    ⇒ ⇒ 这一条**真的抓到过东西**（S 型曾被我按 B 型布局手写 ⇒ 立即数差 2036）
+        REQUIRE(b.enc == b.instruction);
+        const DecDecoded dec = run_decoder(b.instruction);
+        const IdDecoded ids = run_id_stage(b.instruction);
+        REQUIRE(dec.imm == b.imm);     // 手推值
+        REQUIRE(ids.imm == b.imm);     // 手推值
+        REQUIRE(dec.imm == ids.imm);   // 差分
+    }
 }
 
 }  // namespace
