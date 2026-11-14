@@ -4,7 +4,7 @@ id: memory-timing-contract-t1-t2-verify-2026-11
 对象: change `memory-timing-contract-2026-11` 的 **T1 + T2 + T3**（ADR-068 T1/T3 · ADR-069 决策 A0）
 状态: 🟡 **部分通过**（T1 / T2 / T3 落地且全绿 · **V12 已闭** · **V13–V15 的专向判别用例未写** · **T4 / T6 未做** · **L1–L6 未做**）
 角色: builder 角色内建验收（**verifier 契约** · 只验不改）
-判据来源: ① `openspec/changes/memory-timing-contract-2026-11/tasks.md`（S1–S6）② `design.md` §10（**先推后写**的手推金标）③ ADR-069 §5 **V1–V16** + §7.1–§7.6 ④ ADR-068 §5 **V7**
+判据来源: ① `openspec/changes/memory-timing-contract-2026-11/tasks.md`（⚠️ **2026-11-14 已归档** ⇒ ⇒ 现行路径 = `openspec/changes/archive/2026-11-14-memory-timing-contract-2026-11/tasks.md`）（S1–S6）② `design.md` §10（**先推后写**的手推金标）③ ADR-069 §5 **V1–V16** + §7.1–§7.6 ④ ADR-068 §5 **V7**
 ---
 
 # 验收报告：`memory-timing-contract-2026-11` · T1 + T2 + T3（ADR-069 决策 A0）

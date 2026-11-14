@@ -4,7 +4,7 @@
 - **Date**: 2026-11-12
 - **Author**: architect role（build agent）
 - **Parent**: **ADR-068**（D-TCM 的存储时序契约 —— 寄存读 + 字节道拆分存储）· ADR-041（cache Sync/Async 变体 —— `aread`/`sread` 的时序语义来源）· ADR-047（数据前推 · **本 ADR 修订其停顿拍数契约**，见 §3.3）· ADR-048（取指 skid buffer）
-- **关联 change**: `openspec/changes/memory-timing-contract-2026-11/`（**已立项** · B3 批 · 草案 = `.rddf/improvements/memory-timing-contract-2026-11.md`）⇒ ⇒ ⚠️ **2026-11-13 订正**：原写 `backlog: memory-timing-contract` + 「**尚未立项** ⇒ B3 批 ⇒ 立项后回填」⇒ ⇒ 立项**已完成** ⇒ ⇒ 指针已回填（原句逐字保留于 §6 ①）
+- **关联 change**: `openspec/changes/archive/2026-11-14-memory-timing-contract-2026-11/`（**已归档** · 2026-11-14 · B3 批 · ⚠️ **2026-11-14 订正**：归档后路径由 `openspec/changes/memory-timing-contract-2026-11/` 变为归档路径 ⇒ ⇒ 立项时的原句见下） ·（**已立项** · B3 批 · 草案 = `.rddf/improvements/memory-timing-contract-2026-11.md`）⇒ ⇒ ⚠️ **2026-11-13 订正**：原写 `backlog: memory-timing-contract` + 「**尚未立项** ⇒ B3 批 ⇒ 立项后回填」⇒ ⇒ 立项**已完成** ⇒ ⇒ 指针已回填（原句逐字保留于 §6 ①）
 - **AC 映射**: 本 ADR §5 的 **V1–V15** → `memory-timing-contract` 的 **T2**（MEM 数据对齐）；**T1 / T3 / T4 / T5 / T6 / T2′** 仍归 **ADR-068**（**零改动**）
 - **审稿记录**: `.rddf/reviews/ADR-069-mem-data-alignment.md`（**oracle ×3**：第 1/2 轮 REJECT ⇒ **第 3 轮 PASS-WITH-NOTES** · **critic ×1**：**APPROVE_WITH_CONDITIONS**（0 BLOCKER · 4 SHOULD_FIX + 3 NITS 全部采纳））
 
@@ -241,7 +241,7 @@ MEM 级 MUST 决定**何时把数据采进 MEM/WB** ⇒ ⇒ 那是 **T2（MEM �
 
 | # | 事项 | 归属 | 载体 |
 |---|---|---|---|
-| ① | 本 ADR 的**实施** | builder | change `memory-timing-contract`（B3 批 · ⚠️ **2026-11-13 订正**：**已立项** ⇒ ⇒ 载体 = `openspec/changes/memory-timing-contract-2026-11/` ⇒ ⇒ 本 ADR 的「关联 change」指针**已回填**）|
+| ① | 本 ADR 的**实施** | builder | change `memory-timing-contract`（B3 批 · ⚠️ **2026-11-13 订正**：**已立项** ⇒ ⇒ 载体 = `openspec/changes/memory-timing-contract-2026-11/` ⇒ ⇒ 本 ADR 的「关联 change」指针**已回填**）⇒ ⇒ ⚠️ **2026-11-14**：该 change **已归档** ⇒ ⇒ 现行路径 = `openspec/changes/archive/2026-11-14-memory-timing-contract-2026-11/` ⇒ ⇒ **契约面载体** = capability `rv32i-memory-timing` |
 | ② | **ADR-068 的 dated addendum**（§4 的唯一允许交互）⇒ ⇒ ⚠️ **MUST 与本 ADR 的 acceptance 同期**（同一 commit / 同批复批）⇒ ⇒ 否则两个 Accepted ADR 之间会开一个「068 说未裁决 / 069 说已裁决」的**无桥窗口**（§4 自己把该形态判为持久矛盾） | architect（**与 acceptance 同批**） | `docs/adr/ADR-068-dtcm-memory-timing-contract.md` **追加一段**（★ 原文承重句**逐字保留**） |
 | ③ | **ADR-047 的停顿拍数契约修订**（3→4）**+ 🔴 A0-③ 的实施形态订正**（D11 = **两级优先旁路** · 「mux 前移一级」按字面 = 静默错值）⇒ ⇒ 🔴 **ADR-047 追加 dated addendum**（机制同 §6 ②：追加 ≠ 改写 · 原句逐字保留）⇒ ⇒ **已闭**：ADR-047 **§5.5.2.1**（2026-11-13 dated note · 逐字保留 §5.5.2 ③ 原文 + 指向本 ADR §7.1）⇒ ⇒ 依据 = ADR-047 有 **3 处规范性「3 拍」陈述**（`:38` 现状表 · `:191` D6 标题 · `:473` 负面后果）⇒ ⇒ Accepted 后全部陈旧 | **architect**（**强制项** · 与 acceptance **同批**）· builder（spec delta） | `docs/adr/ADR-047*.md` 的 addendum **+** `openspec/specs/rv32i-data-forwarding/` MODIFIED |
 | ④ | `perf_cycles` / `perf_instructions` / `load_use_stalls` 基线更新 | builder | change 内 + `rv32i-commit-path` capability 的 MODIFIED |
