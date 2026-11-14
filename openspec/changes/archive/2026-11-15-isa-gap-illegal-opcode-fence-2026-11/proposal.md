@@ -47,3 +47,14 @@ G1 单独落地 ⇒ 流水线在固件尾部冻结 ⇒ 退休数 **176 → ~102*
 - [x] 无组合环（`illegal_reason` 的来源是 ID 级**输入**；`if_stage.valid` 是**寄存**值）
 - [x] `ctest -LE perf` **254/254** · 全部 `scripts/verify_*.sh` PASS
 - [x] 独立 Verilog TB `checks=24 fails=0`
+
+## 用户可见变更
+
+| 面 | 变更 | 迁移动作 |
+|---|---|---|
+| **SoC 顶层端口** | 新增 `dbg_illegal_reason`（2 bit · 输出）⇒ ⇒ 顶层端口 **31 → 32** · 产物端口 **126 → 129** | 按名字接线者无需动作；自行解析产物端口表者 MUST 重取 |
+| **`riscv::Rv32iPipeline` 端口** | 新增输出 `dbg_illegal_reason`（2 bit） | 同上（新增端口，不删不改既有端口） |
+| **`riscv::IdStage` 端口** | 新增输出 `illegal_reason`（2 bit · **显式具名**） | 同上 |
+| **`riscv::Rv32iDecoder` 库常量** | 新增 `OP_FENCE = 0x0F` | 纯新增 |
+| **行为（可见）** | 未知 opcode（含程序尾部未填的 `0` 字）MUST **冻结**流水线（PC 不前进 · 该指令**永不退休**）⇒ ⇒ 此前它们被**静默当 NOP 退休** | 依赖「跑出程序尾部仍继续退休」的下游 MUST 把程序尾部填成 **NOP**（`0x00000013`） |
+| **行为（`FENCE`）** | `FENCE` / `FENCE.I` 属**已知**指令，本版 = `NOP`（不冻结） | 无需动作 |
