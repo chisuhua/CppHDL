@@ -25,9 +25,9 @@
 #       ⚠️ **fail-closed**：解析不出条目（表被清空 / 措辞变更 / 解析器坏了）
 #          ⇒ MUST 视为违规，不得静默放行（否则「删掉文档表」可让护栏静默失效）。
 #   C6  SoC 顶层端口冻结：Rv32iPipelineTop 的端口集合（**名 + 方向 + 位宽**）
-#        ⚠️ **自检 fixture 里的输入端口是「C6 解析器」的合成样本**，不是 SoC 端口面的镜像
-#           ⇒ ⇒ 它们**故意保留**（自检用例 ⑭ 靠删掉其中一行制造「端口面变化」）；
-#           ⇒ ⇒ **真实** SoC 的端口集合见上面的 `SOC_TOP_PORTS`（2026-11-14 · R8 改判后 31 个）
+#        ⚠️ **自检 fixture 的端口面 MUST 从上面的 `SOC_TOP_PORTS` 生成**（不得硬编码第二份）
+#           ⇒ ⇒ 改快照时若 fixture 没跟上 ⇒ C6 在**每个** fixture 都违规 ⇒ ⇒
+#           ⇒ ⇒ 一批用例红 + 一批「期望 exit=1」的用例**假绿**（= R24 的形状）
 #   C7  库 → example 源文件耦合：根 tests/CMakeLists.txt MUST NOT 编译
 #        examples/ 目录里的 .cpp（ADR-046 D3 反向耦合的**第三种形态**）
 #       MUST 与登记快照一致 —— ADR-046 D10
@@ -240,12 +240,27 @@ trap 'rm -rf "$WORK"' EXIT INT TERM
 if [ "${1:-}" = "--self-test" ]; then
     echo "=== verify_no_duplicate_rv32i_headers: self-test ==="
     st_fail=0
+    # ⚠️⚠️ **假绿闸门**（R24 复盘新增）：「期望 exit=1」的用例若其输出里带着一条
+    #    **与本用例无关**的 C6 端口面违规 ⇒ ⇒ 该用例是**假绿**（exit=1 是被 C6
+    #    顶出来的 ⇒ 它真正要检验的成因根本没被检验）⇒ ⇒ MUST 红。
+    #    ⇒ ⇒ 这正是 R24 的形状：快照改了、fixture 没改 ⇒ 一批红 + **一批假绿**。
+    #    ⇒ ⇒ 豁免：⑭⑮⑯ 三条用例**就是要**触发 C6（显式传第 4 个参数 `1`）。
+    C6_MISMATCH_MARK="SoC 顶层端口集合与快照不一致"
+
     st_check() {
-        local desc="$1" expect="$2" actual="$3"
-        if [ "$expect" = "$actual" ]; then
+        local desc="$1" expect="$2" actual="$3" allow_c6="${4:-0}"
+        local fail=""
+        if [ "$expect" != "$actual" ]; then
+            fail="exit=$actual（期望 $expect）"
+        fi
+        if [ "$allow_c6" != "1" ] && [ -f "$WORK/last_run.log" ] \
+           && grep -qF -- "$C6_MISMATCH_MARK" "$WORK/last_run.log" 2>/dev/null; then
+            fail="$fail；输出含 C6 端口面失同步 ⇒ exit=1 可能由 C6 顶出（假绿）"
+        fi
+        if [ -z "$fail" ]; then
             printf "  %sOK%s   %s（exit=%s）\n" "$GREEN" "$NC" "$desc" "$actual"
         else
-            printf "  %sFAIL%s %s（期望 exit=%s，实际 %s）\n" "$RED" "$NC" "$desc" "$expect" "$actual"
+            printf "  %sFAIL%s %s：%s\n" "$RED" "$NC" "$desc" "$fail"
             st_fail=$((st_fail+1))
         fi
     }
@@ -277,47 +292,24 @@ include/cpu/
 ## OVERVIEW
 **1 headers, 1 lines**
 AGEOF
-        cat > "$root/examples/riscv-mini/src/rv32i_pipeline_top.h" <<'TOPEOF'
-#pragma once
-#include "ch.hpp"
-class Rv32iPipelineTop : public ch::Component {
-public:
-    __io(
-        ch_out<ch_bool>          dbg_branch_taken;
-        ch_out<ch_uint<32>>      dbg_exmem_alu_result;
-        ch_out<ch_uint<32>>      dbg_exmem_imm;
-        ch_out<ch_uint<32>>      dbg_exmem_rs2_data;
-        ch_out<ch_bool>          dbg_exmem_valid;
-        ch_out<ch_uint<32>>      dbg_id_instr;
-        ch_out<ch_bool>          dbg_id_is_branch;
-        ch_out<ch_bool>          dbg_id_is_load;
-        ch_out<ch_bool>          dbg_id_is_store;
-        ch_out<ch_uint<32>>      dbg_id_pc;
-        ch_out<ch_bool>          dbg_id_valid;
-        ch_out<ch_bool>          dbg_load_use_detected;
-        ch_out<ch_bool>          dbg_mem_valid_out;
-        ch_out<ch_uint<5>>       dbg_wb_rd_addr;
-        ch_out<ch_uint<32>>      dbg_wb_write_data;
-        ch_out<ch_bool>          dbg_wb_write_en;
-        ch_in<ch_bool>          ext_clk;
-        ch_in<ch_bool>          ext_rst;
-        ch_out<ch_uint<32>>      obs_data_addr;
-        ch_out<ch_uint<32>>      obs_data_rdata;
-        ch_out<ch_uint<32>>      obs_data_write_data;
-        ch_out<ch_bool>          obs_data_write_en;
-        ch_out<ch_uint<32>>      obs_instr_addr;
-        ch_out<ch_uint<32>>      obs_perf_branch_count;
-        ch_out<ch_uint<32>>      obs_perf_branch_mispredict;
-        ch_out<ch_uint<32>>      obs_perf_control_stalls;
-        ch_out<ch_uint<48>>      obs_perf_cycles;
-        ch_out<ch_uint<48>>      obs_perf_instructions;
-        ch_out<ch_uint<32>>      obs_perf_load_use_stalls;
-        ch_in<ch_uint<32>>      prog_addr;
-        ch_in<ch_uint<32>>      prog_data;
-        ch_in<ch_bool>          prog_we;
-    )
-};
-TOPEOF
+        # ⚠️⚠️ **fixture 的端口面 MUST 与 `SOC_TOP_PORTS` 快照一致** ⇒ ⇒ **从快照生成**。
+        #    硬编码一份端口表 ⇒ ⇒ 下次改快照时又忘了改 fixture ⇒ ⇒ C6 在**每个**
+        #    fixture 都违规 ⇒ ⇒ ① 一批「期望 exit=0」的用例全红；② 更糟：
+        #    一批「期望 exit=1」的用例被 C6 **顶成假绿**（exit=1 的成因根本
+        #    没被检验 ⇒ 判别力归零）。
+        #    ⇒ ⇒ **这正是 R24 的形状**（2026-11-14 · D-1 落地 `1156563` 改了快照
+        #    却没改 fixture ⇒ 9 红 + 假绿；`a2f5075` 的自检还是全绿的）
+        #    ⇒ ⇒ 从快照生成 ⇒ **失同步结构性不可能**。
+        {
+            printf '#pragma once\n#include "ch.hpp"\nclass Rv32iPipelineTop : public ch::Component {\npublic:\n    __io(\n'
+            for spec in $SOC_TOP_PORTS; do
+                pname="${spec%%:*}"; prest="${spec#*:}"
+                pdir="${prest%%:*}"; pwidth="${prest#*:}"
+                # ⚠️ 快照的「方向」字段已是 `ch_in` / `ch_out`（**含前缀**）⇒ ⇒ 直接用
+                printf '        %s<%s> %s;\n' "$pdir" "$pwidth" "$pname"
+            done
+            printf '    )\n};\n'
+        } > "$root/examples/riscv-mini/src/rv32i_pipeline_top.h"
         cat > "$root/include/cpu/pipeline/alpha.h" <<'ALEOF'
 #pragma once
 ALEOF
@@ -340,6 +332,8 @@ TEOF
     #    「为什么红了」不可见 ⇒ 失败时可直接看 $WORK/last_guard.log。
     run_guard() {
         ( cd "$1" && bash scripts/verify_no_duplicate_rv32i_headers.sh ) >"$1/last_guard.log" 2>&1 && echo 0 || echo $?
+        # ⚠️ 留存**最近一次**的输出 ⇒ 供 `st_check` 的假绿闸门读取
+        cp "$1/last_guard.log" "$WORK/last_run.log" 2>/dev/null || true
     }
 
     # ⚠️ **输出级断言**（exit code 不够用时的必要工具）：
@@ -640,18 +634,19 @@ CMEOF
 
     # ⑭ C6 SoC 顶层端口变化 MUST 被抓到
     F="$WORK/fx_ports"; mk_fixture "$F"
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *ext_clk;||'
-    st_check "SoC 顶层端口变化 MUST 被抓" 1 "$(run_guard "$F")"
+    # ⚠️ 删的行 MUST 是**生成后仍存在**的那一行（fixture 端口面已改为从快照生成）
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *prog_we;||'
+    st_check "SoC 顶层端口变化 MUST 被抓" 1 "$(run_guard "$F")" 1
 
     # ⑮ C6 端口**方向**翻转 MUST 被抓到
     F="$WORK/fx_ports_dir"; mk_fixture "$F"
     sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *ext_rst;|ch_out<ch_bool> ext_rst;|'
-    st_check "SoC 顶层端口方向翻转 MUST 被抓" 1 "$(run_guard "$F")"
+    st_check "SoC 顶层端口方向翻转 MUST 被抓" 1 "$(run_guard "$F")" 1
 
     # ⑯ C6 端口**位宽**变化 MUST 被抓到
     F="$WORK/fx_ports_w"; mk_fixture "$F"
     sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_uint<32>> *prog_data;|ch_in<ch_uint<64>> prog_data;|'
-    st_check "SoC 顶层端口位宽变化 MUST 被抓" 1 "$(run_guard "$F")"
+    st_check "SoC 顶层端口位宽变化 MUST 被抓" 1 "$(run_guard "$F")" 1
 
     # ⑰ C7 库 → example 源文件耦合 MUST 被抓到（单行形态）
     #    ⚠️ 增量归因：fixture 是**干净树**（① 已验证 PASS）⇒ ⇒ 只加这一行
