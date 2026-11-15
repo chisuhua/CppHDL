@@ -112,6 +112,17 @@ struct HierarchyEmitResult {
     ///    （跨 ctx 无可比性契约）。
     /// ⚠️ **value-only**：MUST NOT 带 `lnodeimpl*` / 连接关系。
     std::vector<SignalMapEntry> signal_map;
+    /// **被改接的 pin 清单**（ADR-070 **D1** · H-A/H-B 的可观测面 · 2026-11-15）
+    ///
+    /// 语义 = 「该 pin 的**分析层连接行**被丢弃，改由**父侧落点网**承载」
+    /// （即 `sub` 的 `ch_out` 被父体表达式 / 父 `output` 端口消费的形态）
+    /// ⇒ ⇒ 每项 = `<父 module>:<实例名>.<子侧端口> -> <落点网名>`。
+    ///
+    /// ⚠️ **MUST 用结构化字段，MUST NOT 用 `CHWARN`**（ADR-070 D1）：该路径对**每个**
+    ///    「子 output 被父体消费」的 pin 都会发生 ⇒ ⇒ 发 `CHWARN` 会让**所有**层次化
+    ///    发射常态告警，并牵连断言 `warnings.empty()` 的既有测试。
+    /// ⚠️ **value-only** + 顺序 = **键序**（`<module>:<instance>.<port>` 的字典序 ⇒ 确定性）。
+    std::vector<std::string> rewired_pins;
     /// **本次发射的来源 ctx**（ADR-058 §2.2 · T3-⑤ B7）
     ///
     /// 用途 = 给「两次 emit MUST 共享同一 ctx」这条契约提供**可机械判定**的**身份**锚：

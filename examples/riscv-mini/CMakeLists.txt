@@ -127,6 +127,19 @@ set_tests_properties(test_rv32i_soc_dual_parity PROPERTIES
     TIMEOUT 600
 )
 
+# === RV32I **层次化产物交付物**（诉求 ④ · ADR-070 D1/D2 · R21-C）===
+# DUT = `src/rv32i_pipeline_top.h`（example 侧 ⇒ 测试也必须在 example 侧）。
+# ⚠️ 重量级：层次化 + 扁平两份 Verilator 模型（分钟级）⇒ ⇒ `verilator_e2e` 标签 +
+#    `verilator_backend` 资源锁 + `TIMEOUT 900`。
+# ⚠️ `CTEST_TOTAL` +1 · `VERILATOR_E2E_TOTAL` +1 ⇒ 锚点必须同批同步。
+riscv_mini_catch_test(test_rv32i_hier_rtl tests/test_rv32i_hier_rtl.cpp)
+set_tests_properties(test_rv32i_hier_rtl PROPERTIES
+    LABELS "base;verilator_e2e"
+    RESOURCE_LOCK "verilator_backend"
+    ENVIRONMENT "${_soc_vl_path_env}"
+    TIMEOUT 900
+)
+
 # cache-complete-rewrite §3.4 smoke: ICachePrefetch + DCacheWriteBuffer wrapper build probe
 # ⚠️ 2026-10-28（change `riscv-mini-cache-wrapper-live-logic-2026-10`）：本测试现在
 # **双后端**跑（interpreter + verilator）⇒ 需要 `verilator_e2e` 标签 +

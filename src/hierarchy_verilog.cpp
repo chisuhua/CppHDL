@@ -401,6 +401,17 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
         //      ⇒ MUST 丢弃 ⇒ ⇒ 这里跳过冲突检查）
         if (!replace_existing && iit != inst_of.end()) {
             for (const auto &c : iit->second->connections) {
+                // ⚠️⚠️ **方向感知**（ADR-070 **D1 / H-A** · 2026-11-15）：
+                //    `into_child == false` 的行是「子 **output** → 父侧**消费点**」的
+                //    **记录**（`parent_side` = 消费点的 ctx 名，**不是**该 pin 的实参名
+                //    ⇒ ⇒ 两者**必然**不等）⇒ ⇒ 它与「父驱动子 **input**」不是同一类
+                //    ⇒ ⇒ MUST NOT 判冲突。
+                //    ⚠️ **反向不变式（承重 · MUST NOT 放宽）**：`into_child == true`
+                //    （父驱动子 **input**）的双驱动**永远** fail-closed —— IR 的
+                //    `set_src` 是 last-wins ⇒ 语义上只会**丢掉**一个驱动。
+                if (!c.into_child) {
+                    continue;
+                }
                 if (c.child_port == child_port && c.parent_side != arg) {
                     err = "child port '" + child_port + "' is already driven by '" +
                           c.parent_side + "' in module '" + parent_mod +
@@ -751,6 +762,13 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 taken_names.insert(wire);
             }
             record_synth_object("net '" + wire + "'");
+            // ⚠️⚠️ **H-B**（ADR-070 **D1 / H-B** · 2026-11-15）：驱动侧 pin 的**分析层旧行**
+            //    （「子 **output** → 父侧**消费点**」）MUST 在此登记为「**已改接父侧落点网**」
+            //    ⇒ ⇒ 发射期丢弃旧行（否则同一 pin 出现两次连接 ⇒ Verilator 报
+            //    `Duplicate pin connection`）⇒ ⇒ 若被丢弃行的 `parent_side` 是父
+            //    **output 端口** ⇒ 由决策⑤ 的显式 `assign` 取该网的值（不丢连接）。
+            parent_landing_wire[lca + "\x1f" + p_from->second.second + "\x1f" +
+                                names.at(e.from_ptr)] = wire;
             {
                 std::string err;
                 if (!add_conn(lca, p_from->second.second, names.at(e.from_ptr), wire,
@@ -1773,6 +1791,22 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
     result.ok = true;
     result.files.push_back(out_path);
+    // ── **被改接的 pin 清单**（ADR-070 D1 · 结构化可观测面 · MUST NOT 用 CHWARN）
+    //    语义 = 「该 pin 的分析层连接行被丢弃，改由父侧落点网承载」⇒ ⇒ 覆盖
+    //    §2 的**三条**登记路径（行 2 族 ①/③ · `analysis.edges` 路径 B · 兄弟边 H-B）
+    //    ⚠️ 顺序 = **键序**（`parent_landing_wire` 是 `std::map` ⇒ 确定性；MUST NOT 依赖登记序）
+    //    ⚠️ 只在**成功**路径填（失败时为空 ⇒ 与 `ok` 一起读）
+    for (const auto &kv : parent_landing_wire) {
+        const std::string &key = kv.first;
+        const std::size_t s1 = key.find('\x1f');
+        const std::size_t s2 = key.find('\x1f', s1 == std::string::npos ? s1 : s1 + 1);
+        if (s1 == std::string::npos || s2 == std::string::npos) {
+            continue;
+        }
+        result.rewired_pins.push_back(key.substr(0, s1) + ":" +
+                                      key.substr(s1 + 1, s2 - s1 - 1) + "." +
+                                      key.substr(s2 + 1) + " -> " + kv.second);
+    }
     // ── 来源 ctx（ADR-058 §2.2 · T3-005 B7）：「两次 emit 共享同一 ctx」的**身份**锚
     //    ⚠️ 只在**成功**路径填（失败时保持 `nullptr` ⇒ 调用方 MUST 先看 `ok`）
     result.source_ctx = root.context();

@@ -467,7 +467,7 @@ ctest --output-on-failure
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 265
+- CTEST_TOTAL: 266
      ⚠️ **B1 批（N1 + P1 + C4/C3 manifest + C6 产物卫生）** —— `test_port_name_named_ctor`
      + `test_port_name_parity` + `test_rtl_manifest` + `test_rtl_emit_hygiene` 四个新增
      ⇒ ⇒ 由 **257** 增至 **261**（+4）⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**
@@ -489,7 +489,7 @@ ctest --output-on-failure
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
-- VERILATOR_E2E_TOTAL: 76
+- VERILATOR_E2E_TOTAL: 77
      ⚠️ **2026-11-11 · B0 批（`rv32i-dead-component-consolidation` C5+C6 同批退役）**：
      `test_hazard_complete_dual` 退役 ⇒ ⇒ **76**（−1）⇒ ⇒ **这是显式批准的缩面**
      （`riscv::HazardUnitComplete` 无交付路径消费者 + 独有语义为空集 ⇒ ⇒ 组件随之退役）
@@ -525,7 +525,7 @@ ctest --output-on-failure
      TEMPLATE_TEST_CASE / TEMPLATE_PRODUCT_TEST_CASE / SCENARIO）的
      .cpp/.cc/.cxx/.C ∪ (b) 含 `CATCH_` 的同类文件 ∪ (c) `examples/**/tests/`
      下的任意 .cpp/.cc/.cxx/.C，去重。Do not reformat. -->
-- EXAMPLES_TEST_SOURCES: 17
+- EXAMPLES_TEST_SOURCES: 18
 - **Test counts（单一真相在上面的 CI 锚点；改动测试后 MUST 同步锚点 + 复核命令）**
 
   | 指标 | 值 | 复核命令 |

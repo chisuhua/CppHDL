@@ -127,20 +127,30 @@ public:
     // member fields so the helpers can be plain void methods.
 
     // Stage instances + reg file + pipeline regs (all shared state)
-    ch::ch_module<IfStage>  if_stage{"if_stage"};
-    ch::ch_module<IdStage>  id_stage{"id_stage"};
-    ch::ch_module<ExStage>  ex_stage{"ex_stage"};
-    ch::ch_module<MemStage> mem_stage{"mem_stage"};
+    //
+    // ⚠️⚠️ **实例级成层**（ADR-070 **D2** · 选项 **①** · 2026-11-15 落地）：
+    //    stage 实例 MUST 用 `ch::ch_layer<T>` + **显式模块类型名**（这些组件**未**做
+    //    类级声明 ⇒ ⇒ 走档③ 双参形态 ⇒ ⇒ 缺名 = 编译期错误）。
+    //    · **只影响层次化产物**：`ch_layer` 只写 `is_layer` / `module_type_name` 两个
+    //      标志 ⇒ ⇒ **扁平产物逐字节不变**（结构性恒真 ⇒ 只作跳线，不作承重证据）
+    //    · ⚠️ **7 个模块类型名 = 产物级契约名**（ADR-070 §2.3 · 改名 = **产物级破坏性变更**）
+    //    · ⚠️ ADR-070 点名的 **7 处**不含 `load_lane`（它由 B3 在 ADR 之后新增）
+    //      ⇒ ⇒ 本层**按 ADR 的字面集合**实施 ⇒ `load_lane` 保持 `ch_module`（inline）
+    //      ⇒ ⇒ 见 change 的 design.md「实施期事实订正」
+    ch::ch_layer<IfStage>  if_stage{"if_stage", "IfStage"};
+    ch::ch_layer<IdStage>  id_stage{"id_stage", "IdStage"};
+    ch::ch_layer<ExStage>  ex_stage{"ex_stage", "ExStage"};
+    ch::ch_layer<MemStage> mem_stage{"mem_stage", "MemStage"};
     // ⚠️ **load 车道选择器**（2026-11-13 · ADR-069 A0 · V5）⇒ ⇒ 它的
     //    输入 MUST 是 **M2 锁存的**地址 / funct3 / 原始字 ⇒ ⇒ **不是**
     //    `EX/MEM` 的 ⇒ ⇒ 位置 = **M2 的下游**。
     ch::ch_module<LoadLaneSelector> load_lane{"load_lane_selector"};
-    ch::ch_module<WbStage>  wb_stage{"wb_stage"};
-    ch::ch_module<HazardUnit> hazard{"hazard_unit"};
+    ch::ch_layer<WbStage>  wb_stage{"wb_stage", "WbStage"};
+    ch::ch_layer<HazardUnit> hazard{"hazard_unit", "HazardUnit"};
     // ⚠️ **数据 mux**（ADR-047 D2）：既有组件，**零新增组件**。
     //    档位语义与当年被移出 `HazardUnit` 的 mux **逐档等价**
     //    （0→REG / 1→EX/MEM / 2→MEM/WB）。
-    ch::ch_module<chlib::ForwardingMux<32>> fwd_mux{"forwarding_mux"};
+    ch::ch_layer<chlib::ForwardingMux<32>> fwd_mux{"forwarding_mux", "ForwardingMux<32>"};
 
     // ⚠️ **档位 select 的打拍寄存器**（ADR-047 D5）：
     //    `hazard` 的比较点是「**EX 级** rd vs **ID 级** rs」（那是 load-use

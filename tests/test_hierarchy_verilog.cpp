@@ -393,6 +393,78 @@ public:
     }
 };
 
+// ── DUT ⑩：**兄弟边 + 父 `output` 端口消费同一子输出**（ADR-070 §4.2 ④ · R21-A 负向对照 c）
+//    = RV32I 21–23 条（`dtcm.unnamed_output` 既喂兄弟 `pipeline` 又被 `obs_data_rdata` 观测）
+//    的**最小形态** ⇒ ⇒ H-B 登记落点网后：`.dout(<wire>)` **一次** + `assign dout = <wire>;`
+class MixLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mix_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    MixLeaf(ch::Component *p = nullptr, const std::string &n = "leaf") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class MixSharedConsumerTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mix_shared_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<MixLeaf> a{"a"};
+    ch::ch_module<MixLeaf> b{"b"};
+    MixSharedConsumerTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= a.io().dout;   // ⚠️ 兄弟边 ⇒ 共同祖先内的中转网
+        io().dout <<= a.io().dout;    // ⚠️ 父 **output 端口** 消费同一个子输出
+    }
+};
+
+// ── DUT ⑪：同一子输出被**不同 LCA** 的两个兄弟消费（R21-A 负向对照 b）
+//    `mid.a.dout` 既喂 `mid.d`（LCA = `mid`）又喂 `top.b`（LCA 应是 `top`）
+//    ⇒ ⇒ 后者**不是**「同一父的两个直接子」⇒ ⇒ MUST **仍 fail-closed** 且消息点名
+class FanLeaf : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("fan_leaf");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    FanLeaf(ch::Component *p = nullptr, const std::string &n = "leaf") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class FanMid : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("fan_mid");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<FanLeaf> a{"a"};
+    ch::ch_module<FanLeaf> d{"d"};
+    FanMid(ch::Component *p = nullptr, const std::string &n = "mid") : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        d.io().din <<= a.io().dout;   // LCA = mid
+        io().dout <<= d.io().dout;
+    }
+};
+
+class FanAcrossLcaTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("fan_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<FanMid> mid{"mid"};
+    ch::ch_module<FanLeaf> b{"b"};
+    FanAcrossLcaTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        mid.io().din <<= io().din;
+        // ⚠️ `mid.a.dout` 的第二个消费者在**另一个** LCA（top）下
+        b.io().din <<= mid.instance().a.io().dout;
+        io().dout <<= b.io().dout;
+    }
+};
+
 // ── DUT ⑥：**父层直接改子层寄存器的 next** ⇒ ⇒ ADR-060 §2.1 **行 1** ─────
 //    （子侧端点**不是**子端口 ⇒ ⇒ 必须合成**子侧 input** 端口 + 驱动重定向）
 class InnerRow1 : public ch::Component {
@@ -1726,6 +1798,72 @@ TEST_CASE("hierarchical emission: port policy tuple on synthesizable edges",
         }
         REQUIRE(synth_lines == 1);
     }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// R21-A 的**负向对照**（ADR-070 D1 · 「放宽过头」的防护）
+//   ⚠️ 「真双驱动」的两个合成驱动争**同一个子 input pin** 在 IR 层**结构性不可达**
+//      （`ch_in` 的 `set_driver` 是 **last-wins** ⇒ ⇒ 一个 pin 只可能有**一个** IR 驱动
+//      ⇒ ⇒ 分析层不会同时产出两条 `into_child == true` 的边）
+//      ⇒ ⇒ 该负向对照**无法**用真实 DUT 构造 ⇒ ⇒ 它的保障载体 = **代码不变量**
+//      （`add_conn` 只跳过 `!c.into_child` 的行 · 见源码注释）+ capability 的反向
+//      Requirement ⇒ ⇒ **不作假绿**：本文件不写「已覆盖」。
+//   ⚠️ 可构造的两条（b / c）**必须**有。
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("hierarchical emission: child output shared by a sibling and a parent output port",
+          "[hierarchy][emit][policy][rewire]") {
+    // (c) 形态 = RV32I 21–23 条的**最小复现**：子 output 的一个消费者是兄弟子模块，
+    //     另一个是**父 `output` 端口** ⇒ ⇒ H-B 登记落点网后：
+    //       · 实例语句里 `.dout(<wire>)` **恰好一次**（分析层的旧行被丢弃）
+    //       · 父 `output` 端口由**显式 `assign`** 取值（决策⑤：不丢连接）
+    //       · `rewired_pins`（**结构化字段** · 不是 CHWARN）点名该 pin
+    ch::ch_device<MixSharedConsumerTop> dev;
+    const std::string path = kOutDir() + "/shared_consumer.v";
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+
+    const std::string all = strip_synth_comments(read_file(path));
+    const std::string top = module_text(all, "top");
+    REQUIRE_FALSE(top.empty());
+
+    // ① 中转网**声明**在 top 内
+    REQUIRE(top.find("logic [7:0] top_a_unnamed_output;") != std::string::npos);
+    // ② 驱动端 pin **恰好一次**（旧行 + 新行并存 ⇒ Verilator `Duplicate pin connection`）
+    REQUIRE(count_occurrences(top, ".top_a_unnamed_output(") == 1);
+    // ③ 父 `output` 端口由 `assign` 取该网的值（**不丢连接**）
+    {
+        // ⚠️ MUST 拆开写（Catch2 的 `||` 重载会把 `a != npos || b != npos` 判成
+        //    **链式比较** ⇒ 编译期 static_assert 失败）
+        // ⚠️ 端口名 = 该节点的 **ctx 级全局名**（`top_unnamed_output` · 与扁平产物逐字相同）
+        const bool assign_from_wire =
+            top.find("assign top_unnamed_output = top_a_unnamed_output;") != std::string::npos;
+        REQUIRE(assign_from_wire);
+    }
+    // ④ **结构化字段**（不是 CHWARN）点名该 pin ⇒ ⇒ `warnings` 的语义不被稀释
+    const bool named = std::any_of(r.rewired_pins.begin(), r.rewired_pins.end(),
+                                  [](const std::string &p) {
+                                      return p.find("top:a.top_a_unnamed_output -> "
+                                                    "top_a_unnamed_output") != std::string::npos;
+                                  });
+    REQUIRE(named);
+}
+
+TEST_CASE("hierarchical emission: fan-out across different LCAs stays fail-closed",
+          "[hierarchy][emit][policy][negative]") {
+    // (b) 同一子输出被**不同 LCA** 下的两个兄弟消费 ⇒ ⇒ 兄弟边机制**不支持**
+    //     ⇒ ⇒ MUST **仍 fail-closed** 且消息**点名**（不许静默放过 ⇒ 那会造出双驱动产物）
+    ch::ch_device<FanAcrossLcaTop> dev;
+    const std::string path = kOutDir() + "/fan_across_lca.v";
+    std::remove(path.c_str());
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE_FALSE(r.ok);
+    REQUIRE_FALSE(file_exists(path));
+    // 消息 MUST 点名涉及的边（不是只有计数）
+    REQUIRE(r.error.find("top_mid_a_unnamed_output") != std::string::npos);
+    REQUIRE(r.error.find("sibling edge") != std::string::npos);
 }
 
 TEST_CASE("hierarchical emission: sibling edges go through a parent-module wire",

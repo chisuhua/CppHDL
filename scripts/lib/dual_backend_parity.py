@@ -260,7 +260,17 @@ def contract_locked_files(root):
     end = para.find("\n### ")
     if end > 0:
         para = para[:end]
-    files = re.findall(r"`(tests/[A-Za-z0-9_./-]+\.cpp)`", para)
+    # ⚠️ **覆盖缺口修正（2026-11-15 · `rv32i-hierarchical-example-2026-11`）**：
+    #    原正则只认 `tests/` 前缀 ⇒ ⇒ **example 侧**的单后端条目（它们的 DUT 在
+    #    `examples/**` 下 ⇒ 根 `tests/**` 不许 include ⇒ 只能在 example 侧）**无法**
+    #    进入契约锁定清单 ⇒ ⇒ 会被误判成 `unclassified-labeled-entry`
+    #    （实测：`examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp`）
+    #    ⇒ ⇒ 现在同时认 `tests/...` 与 `examples/**/tests/...`。
+    #    ⚠️ **这不是放宽**：「**不在**清单里」仍会被判违规（判据的对象与严格度不变，
+    #    只是让合法登记**可被解析**）。
+    files = re.findall(
+        r"`((?:tests|examples/[A-Za-z0-9_./-]+/tests)/[A-Za-z0-9_./-]+\.cpp)`", para
+    )
     return sorted(set(files))
 
 

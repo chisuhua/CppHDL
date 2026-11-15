@@ -269,6 +269,22 @@ DUT（实测：移位寄存器恒 `0x00`、FSM 状态卡死在 `TRANSFER`、`STO
 ⚠️ 它**不**增加 parity 的两个锚点（`DUAL_BACKEND_PARITY_TOTAL` / `_PAIRS`）
 ⇒ ⇒ 因为它**不写** `DUAL_BACKEND_TEST_PAIR` 调用。
 
+**新增登记（2026-11-15 · `rv32i-hierarchical-example-2026-11` 引入）**：
+`examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` 是 RV32I 的**层次化产物交付物**判据
+（粒度 / 确定性 / 单连接不变式 / 顶层端口表 / **lint 门** / **逐拍等价** / 手判期望值 /
+判别性自证）⇒ ⇒ 它比较的是**两份 Verilog 产物**（扁平 vs 层次化），每侧**只走一个 backend**
+⇒ ⇒ **不**属于 `DUAL_BACKEND_TEST` 的 parity 形态 ⇒ ⇒ 属**单后端（verilator-only）**条目
+⇒ ⇒ MUST **保留原状**（MUST NOT 迁移到 macro）⇒ ⇒ 它同样带 `verilator_e2e` 标签
+⇒ ⇒ 计入 `VERILATOR_E2E_TOTAL` 锚点。
+⚠️ **本 Requirement 的标题（「9 个」）仍不变**（它指 macro 的 reference implementation 数量）
+⇒ ⇒ 本段登记的是**再一个**单后端条目（与 `test_hierarchy_equivalence.cpp` /
+`test_public_equivalence_api.cpp` 同型）。
+⚠️ **它 MUST 带 `verilator_e2e` 标签**：它要编译**两份** RV32I 模型（分钟级）
+⇒ ⇒ 不带标签 ⇒ 只在 `BUILD_VERILATOR=OFF` 的 job 里跑 ⇒ ⇒ **恒跳过**
+⇒ ⇒ 「交付物真的可发射且行为等价」这条证据永远不被真正执行。
+⚠️ 它**不**增加 parity 的两个锚点（`DUAL_BACKEND_PARITY_TOTAL` / `_PAIRS`）
+⇒ ⇒ 因为它**不写** `DUAL_BACKEND_TEST_PAIR` 调用。
+
 ### Requirement: CTEST_TOTAL 同步 MUST 在 phase 边界更新根 AGENTS.md
 
 每次新测试 target 通过 `add_dual_backend_test` 注册，MUST 按根 `AGENTS.md §NOTES` 的 `CTEST_TOTAL: <N>` 行更新计数（与 `scripts/verify_test_counts.sh` 同步）。Phase 1 边界 `CTEST_TOTAL` 数字 MUST 由实测 `ctest -N | tail -1` 回填（禁止拍脑袋）。

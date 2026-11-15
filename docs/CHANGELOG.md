@@ -1,3 +1,32 @@
+## 2026-11-15 — **新增：RV32I 的层次化 RTL 交付物**（诉求 ④）+ 发射器「双类消费者」修复（ADR-070 D1/D2）
+
+**交付物**：`Rv32iPipeline` 的 **7 个 stage 成员**声明为**实例级成层**
+（`ch::ch_layer` + 显式模块类型名）⇒ ⇒ 默认粒度（`RespectDeclarations`）下层次化产物
+= **8 个 module**（`IfStage` / `IdStage` / `ExStage` / `MemStage` / `WbStage` / `HazardUnit` /
+`ForwardingMux_32_` + `top`）⇒ ⇒ **扁平产物逐字节不变**（成层声明只写两个标志位）。
+
+**⚠️ 产物级契约名（新增）**：`IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` ·
+`HazardUnit` · `ForwardingMux<32>`（经 `sanitize_verilog_name` ⇒ 产物中为 `ForwardingMux_32_`）
+⇒ ⇒ **改名 = 产物级破坏性变更**。⚠️ 该「契约名 vs 明文非契约」的强度在 **ADR-070 §6 ⑦**
+仍是**待裁决项**。`load_lane`（B3 新增）**不**在该集合内 ⇒ 保持 inline。
+
+**缺陷修复（ADR-070 D1 · H-A / H-B）**：同一子模块输出被「兄弟子模块的输入」与
+「父体表达式 / 父 `output` 端口」**同时**消费时，发射器把分析层记录的**消费点名字**当成
+pin 的实参 ⇒ ⇒ 判为双驱动 ⇒ ⇒ RV32I 层次化发射 **20 条边** fail-closed。
+现：跨 module 边按「中转网 / 父侧落点网」发射，父 `output` 端口由显式 `assign` 取值。
+⚠️ **反向不变式**：`into_child == true`（父驱动子 **input**）的双驱动**仍** fail-closed
+—— IR 的源赋值是 last-wins ⇒ 放行等于**静默丢掉一个驱动**。
+
+**公开面（追加）**：`HierarchyEmitResult::rewired_pins`（`<module>:<instance>.<port> -> <net>`）
+⇒ ⇒ 「哪些 pin 被改接」从**日志**（`CHWARN`）升级为**结构化字段**。
+
+**判据**：`test_rv32i_hier_rtl`（层次化产物：静态检查零 `%Error` / 零 `%Warning` ·
+确定性 · 单连接不变式 · 顶层端口表 · 扁平 ≡ 层次化 **198 拍 × 9 观测** ·
+**手推**写回序列 `{(x1,10),(x2,3),(x3,13),(x4,13),(x5,23)}` · 篡改一条 `assign` ⇒ **转红**）。
+
+**承载文档**：`docs/adr/ADR-070-rv32i-hierarchical-layering-granularity.md`（D1/D2/D3）·
+`openspec/changes/archive/2026-11-15-rv32i-hierarchical-example-2026-11`（ADDED ×2 + MODIFIED ×1）
+
 ## 2026-11-15 — **修复：`flush` 与「未知 opcode 冻结」同拍时重定向被丢掉**（ADR-071 审稿发现）
 
 **缺陷（oracle 对抗式复核发现 · 同一批内自查出）**：上一批落地的「未知 opcode ⇒ 冻结」
