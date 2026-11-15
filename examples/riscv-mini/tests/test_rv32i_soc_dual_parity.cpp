@@ -2517,3 +2517,112 @@ TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
         }
     }
 }
+
+// ===========================================================================
+// **ADR-071 审稿修正的回归用例**：flush（重定向）与「未知 opcode 冻结」**同拍**
+//
+// ## 为什么必须有这条（oracle 2026-11-15 的对抗式复核找出的**真缺陷**）
+//
+// 原实现里 `if_stage` 的 PC 更新门 = `!rst & !stall` ⇒ ⇒ **stall 无条件压过
+// redirect** ⇒ ⇒ 取指侧的「冻结」stall（`illegal_active`）与 EX 级的 flush
+// **同拍**时 ⇒ ⇒ **重定向被丢掉** ⇒ ⇒ 下一拍 `valid = 0` ⇒ **冻结只活 1 拍**
+// ⇒ ⇒ 非法字被静默跳过、`illegal_reason` 回落到 0 ⇒ ⇒ **「跑飞零信号」被 G1
+// 自己造出来**（且两后端同构 ⇒ parity 结构性失明）。
+//
+// ## 场景的**语义正确性**（为什么「丢掉非法字」是对的）
+//
+// flush 只来自 **EX 级**的分支/跳转 ⇒ ⇒ 同拍 ID 级持有的是该分支的
+// **fall-through**（= **错误路径**）指令 ⇒ ⇒ 「错误路径上的非法字」被 flush
+// 杀掉是**正确**的（那本就不该被执行）⇒ ⇒ **正确路径**上的非法字 **不可能**
+// 与 flush 同拍 ⇒ ⇒ 冻结在正确路径上仍是**终态**。
+//
+// ## 期望值全部**手推**
+//
+// 固件：word0 = `beq x0,x0,+8`（taken ⇒ 目标 = word2）· word1 = `0xFFFFFFFF`
+// （**非法** · opcode 0x7F · **rd = 31** ⇒ ⇒ 若它被执行 ⇒ 会写回 x31 ⇒ ⇒
+// 「x31 未被写回」是「它没被执行」的**可观测**判据）· word2 = `addi x5,x0,1`
+// ⇒ ⇒ **x5 = 1** MUST 被写回（重定向被兑现 ⇒ ⇒ **旧实现会红在这里**）
+// ⇒ ⇒ `illegal_reason == 2` MUST **恰好在碰撞拍**出现（word1 在 ID 级的那一拍）
+// ⇒ ⇒ 之后回落到 0（flush 杀掉它 ⇒ 冻结域只覆盖正确路径）。
+// ===========================================================================
+constexpr std::size_t kFlushIllegalWords = 8;
+constexpr std::array<uint32_t, kFlushIllegalWords> flush_illegal_firmware() {
+    return {{0x00000463u,   // 0: beq x0, x0, +8  ⇒ taken ⇒ 目标 = word2
+             0xFFFFFFFFu,   // 1: 非法字（fall-through = **错误路径**）· rd = 31
+             0x00100293u,   // 2: addi x5, x0, 1  ⇒ 分支目标 ⇒ x5 = 1
+             0x00000013u, 0x00000013u, 0x00000013u,
+             0x00000013u, 0x00000013u}};
+}
+
+TEST_CASE("Rv32iSoc - flush wins over illegal-freeze stall (redirect not lost)",
+          "[rv32i][soc][isa][illegal][flush][dual][verilator][e2e]") {
+    constexpr unsigned kCycles = 40;
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    for (int backend_kind = 0; backend_kind < 2; ++backend_kind) {
+        const bool use_verilator = (backend_kind == 1);
+        INFO("backend: " << (use_verilator ? "verilator" : "interpreter"));
+        auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+        auto sim = std::make_unique<Simulator>(dev->context());
+#if __has_include("jit/jit_compiler.h")
+        sim->set_jit_enabled(false);
+#endif
+        if (!use_verilator) {
+            sim->set_backend(std::make_unique<InterpreterBackend>());
+        } else {
+            ch::data_map_t data_map;
+            auto workdir = make_temp_dir("_flush_illegal");
+            REQUIRE_FALSE(workdir.empty());
+            auto backend = std::make_unique<VerilatorBackend>(workdir);
+            if (!backend->initialize(dev->context(), data_map)) {
+                WARN("VerilatorBackend::initialize() returned false - skipped");
+                continue;
+            }
+            if (backend->port_access_snapshot().empty()) {
+                WARN("verilator dlopen did not populate port_access_ - skipped");
+                continue;
+            }
+            sim->set_backend(std::move(backend));
+        }
+
+        load_firmware(*sim, dev->instance(), flush_illegal_firmware());
+        const Trace t = run_trace(*sim, dev->instance(), kCycles);
+
+        // ---- ① 重定向 MUST 被兑现：分支目标的 `addi x5,x0,1` ⇒ x5 = 1 被写回 ----
+        //      ⚠️ 这是本用例的**承重**判据：旧实现（stall 压过 flush）会**丢重定向**
+        //      ⇒ ⇒ x5 永不写回 ⇒ ⇒ 本条转红 ⇒ ⇒ 判别力来源。
+        bool saw_x5 = false;
+        bool saw_x31 = false;
+        for (std::size_t c = 0; c < t.size(); ++c) {
+            INFO("cycle " << c);
+            if (t[c][kIdxWbWriteEn] != 1u) continue;
+            if (t[c][kIdxWbRdAddr] == 5u && t[c][kIdxWbWriteData] == 1u) {
+                saw_x5 = true;
+            }
+            // ⚠️ **反向判据**：非法字（rd = 31）在**错误路径**上 ⇒ MUST NOT 被执行
+            //    ⇒ ⇒ x31 MUST NOT 收到 0xFFFFFFFF（若被误执行 ⇒ 写回 0xFFFFFFFF）
+            if (t[c][kIdxWbRdAddr] == 31u) {
+                INFO("x31 writeback data=0x" << std::hex << t[c][kIdxWbWriteData]);
+                saw_x31 = true;
+            }
+        }
+        REQUIRE(saw_x5);
+        REQUIRE_FALSE(saw_x31);
+
+        // ---- ② 非法字 MUST 在 ID 级被**点亮**（reason = 2）且**只在碰撞拍** ----
+        //      ⇒ ⇒ 「被检出」与「不被执行」**同时**成立（检出但不误执行）。
+        std::size_t illegal_cycles = 0;
+        for (std::size_t c = 0; c < t.size(); ++c) {
+            INFO("cycle " << c);
+            if (t[c][kIdxIllegalReason] == 2u) ++illegal_cycles;
+        }
+        REQUIRE(illegal_cycles >= 1u);
+        // ⇒ 碰撞拍**之后** MUST 回落到 0（flush 杀掉错误路径 ⇒ 冻结域结束）
+        REQUIRE(t.back()[kIdxIllegalReason] == 0u);
+    }
+}

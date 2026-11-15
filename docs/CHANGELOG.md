@@ -1,3 +1,36 @@
+## 2026-11-15 — **修复：`flush` 与「未知 opcode 冻结」同拍时重定向被丢掉**（ADR-071 审稿发现）
+
+**缺陷（oracle 对抗式复核发现 · 同一批内自查出）**：上一批落地的「未知 opcode ⇒ 冻结」
+引入本仓**第二个** stall 来源 ⇒ ⇒ 它与 `flush`（分支/跳转重定向）**可以同拍**；
+而 `if_stage` 的 PC 更新门是 `!rst & !stall` ⇒ ⇒ **stall 无条件压过 redirect** ⇒ ⇒
+
+1. **重定向被丢掉**（PC 被冻住 ⇒ 分支目标被跳过）
+2. 下一拍 `valid = 0` ⇒ **冻结只活 1 拍**（不是终态）
+3. 非法字被**静默**跳过 + `illegal_reason` 回落到 0
+
+⇒ ⇒ **「跑飞零信号」被 G1 自己造出来**（且两后端同构 ⇒ parity 结构性失明）。
+
+**修法**：`pc_update_en = !rst & !(stall & !(flush & branch_valid))`
+⇒ ⇒ **`flush`（重定向）优先于冻结 stall**，但**仅当确有重定向**。
+
+- **与 ID 级对齐**：`id_stage` 的 `idex_bubble = flush | stall` 本来就优先造气泡。
+- **语义正确性**：`flush` 只来自 EX 级分支/跳转 ⇒ 同拍 ID 级持的是其 **fall-through**
+  （= **错误路径**）⇒ 杀掉错误路径上的非法字**正确**；正确路径上的非法字**不可能**与
+  `flush` 同拍 ⇒ 冻结在正确路径上仍是**终态**。
+- **既有契约零改动**：「`flush` 但无重定向」在流水线内不可达 ⇒ `tests/test_rv32i_pipeline_behavior.cpp`
+  Batch 4-a 的「`stall=1 ∧ flush=1 ∧ branch_valid=0` ⇒ PC 冻结」**原样通过**。
+
+**判别力证据（变异自证）**：新增用例
+`test_rv32i_soc_dual_parity` 的 `Rv32iSoc - flush wins over illegal-freeze stall`
+（taken 分支 + fall-through 非法字 `0xFFFFFFFF` · `rd=31`）⇒ ⇒ 断言「分支目标的 `addi x5`
+写回出现」+「x31 **未**被写回」+「`illegal_reason == 2` 恰在碰撞拍」
+⇒ ⇒ **反转 `flush_redirect`（回退到 stall 优先）⇒ `REQUIRE(saw_x5)` 转红**（实测）⇒ 还原重建复绿。
+
+**承载文档**：`docs/adr/ADR-071-fence-and-illegal-opcode-semantics.md`（D3-b 优先级 / D3-c 缺陷史 /
+D1 假设登记与重开触发器）· `openspec/changes/illegal-freeze-flush-priority-2026-11`（1 Requirement / 4 Scenario）
+
+**不在本项**：真 trap 语义（`mtvec` 接入）= 特权级独立立项 · `funct3`/`funct7` 非法组合 = residual
+
 ## 2026-11-15 — **RV32I 未知 opcode 可观测 + 冻结 · `FENCE` 显式化**（B4 · G3 → G1+G4）
 
 **问题（实测 · 2026-11-10 登记）**：未识别的 opcode 被**静默当 NOP 逐条退休**

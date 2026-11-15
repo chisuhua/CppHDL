@@ -111,22 +111,50 @@ public:
         //    ⇒ 若将来引入**第三个** flush 来源（例如分支预测失败），此处 MUST
         //      改为「flush 时也更新 PC」。
         //
-        // ⚠️ **flush 与 stall 不会同拍**（第 18 轮 critic 要求写明的互斥论证）：
-        //    flush 由 **EX 级**的 `branch_taken` 产生 ⇒ 触发那一拍 EX 级只有
-        //    那一条（分支）指令 ⇒ 它**不是** load ⇒ `ex_is_load` 为假 ⇒
-        //    load-use 检测不可能同拍成立。
-        //    ⇒ 若将来引入**第二个 flush 来源**（如预测失败）或让 stall 与
-        //      flush 可同拍，MUST 重新审视此处（stall 冻结 PC 会让 PC 失去
-        //      分支重定向）。
-        //    ⚠️ **取指 skid buffer 也不改变本互斥论证**（ADR-048）：skid 的
+        // ⚠️⚠️ **flush 与 stall 现在 CAN 同拍**（2026-11-15 · ADR-071 审稿修正）：
+        //    **第二个 stall 来源** = 「未知 opcode 冻结」
+        //    （`rv32i_pipeline.h`：`stall = hazard.stall | illegal_active`）
+        //    ⇒ ⇒ 旧的互斥论证（「flush 由 EX 产生 ⇒ 那拍 EX 不是 load ⇒
+        //    load-use 不可能同拍」）**只覆盖 hazard.stall** ⇒ ⇒ 冻结 stall
+        //    可与 flush 同拍 ⇒ ⇒ 原实现（`!rst & !stall`）会让 **stall 压过
+        //    redirect** ⇒ ⇒ **重定向被丢掉**（实测轨迹：taken 分支的
+        //    fall-through 槽放一条非法字 ⇒ flush 与冻结同拍 ⇒ PC 被冻住 ⇒
+        //    redirect 丢失 ⇒ 下一拍 `valid=0` ⇒ **冻结只活 1 拍** ⇒ 非法字被
+        //    静默跳过 ⇒ `illegal_reason` 回落到 0 ⇒ ⇒ **「跑飞零信号」被
+        //    自己造出来** ⇒ ⇒ 结构性缺陷（两后端同构 ⇒ parity 必然失明））。
+        //
+        //    ⇒ ⇒ **优先级 = flush 优先**，但**仅当确有重定向**（`flush & branch_valid`）：
+        //    ① **与 ID 级对齐**：`id_stage` 的 `idex_bubble = flush | stall`
+        //       ⇒ flush 本来就优先造气泡（ID 级指令被 flush 杀掉）⇒ ⇒
+        //       PC 也 MUST 跟随 flush ⇒ ⇒ 否则「ID 已被杀、PC 却不动」⇒
+        //       ⇒ 指令流与 PC **失步**。
+        //    ② **语义正确性**：flush 只来自 **EX 级**的分支/跳转 ⇒ ⇒ 同拍
+        //       ID 级持有的是该分支的 **fall-through**（= **错误路径**）指令
+        //       ⇒ ⇒ 「错误路径上的非法字」被 flush 杀掉是**正确**的
+        //       （那本就不该被执行）⇒ ⇒ **不是**「放过非法指令」。
+        //    ③ **冻结域不受影响**：**正确路径**上的非法字 **不可能**与 flush
+        //       同拍（flush ⇒ ID 必在错误路径上）⇒ ⇒ ⇒ 冻结（PC 不前进 +
+        //       ID/EX 气泡 ⇒ 永不退休）在**正确路径**上仍是**终态**。
+        //    ④ **必须有重定向才让 flush 优先**（`flush & branch_valid`）：
+        //       本仓 flush 的唯一来源 = `hazard.io().flush = ex_branch &
+        //       ex_branch_taken`，而 `branch_valid` 接的正是同一个
+        //       `ex_stage.io().branch_taken` ⇒ ⇒ **流水线内 flush ⇒
+        //       `branch_valid` 恒为 1** ⇒ ⇒ ④ 在流水线内**恒等于 flush**。
+        //       而「flush 但无重定向」（`branch_valid = 0`）在流水线内**不可达**
+        //       ⇒ ⇒ 组件级场景（`tests/test_rv32i_pipeline_behavior.cpp` 的
+        //       Batch 4-a：`stall=1 ∧ flush=1 ∧ branch_valid=0`）仍保持
+        //       「PC 冻结」的旧契约 ⇒ ⇒ **不改动既有钉住的判据**。
+        //
+        //    ⚠️ **取指 skid buffer 不受该修正影响**（ADR-048）：skid 的
         //    填充条件已排除 `flush | flush_d1`，且在写 `skid_valid` 时被
         //    flush 清空 ⇒ 「flush ∥ skid 非空」在**本微架构**下不可达
         //    （ADR-048 D5；组件级负向对照见
         //    `tests/test_rv32i_pipeline_behavior.cpp`）。
+        auto flush_redirect = io().flush & io().branch_valid;
         auto pc_update_en = select(
             io().rst,
             ch_bool(false),
-            select(io().stall, ch_bool(false), ch_bool(true))
+            select(io().stall & !flush_redirect, ch_bool(false), ch_bool(true))
         );
         
         // ⚠️ 历史注释「flush 时 PC 重置为 0 (简化处理，实际应该是分支目标)」是一个
