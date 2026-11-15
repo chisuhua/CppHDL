@@ -63,9 +63,35 @@ struct Tree {
 
 void collect(Component* c, Tree& t) {
     t.layered[c] = c->is_layer();
+    // ⚠️⚠️ **同父下同名实例 MUST 响亮失败**（残差 id=22 · 2026-11-15 用户裁决 **A**）
+    //
+    //    发射侧的七处索引表（`module_by_key` / `parent_of` / `inst_of` /
+    //    `name_of_key` / `needs_of` …）按 `name()`（**全路径** = 父路径 + `.` +
+    //    `local_name()`）建键 ⇒ ⇒ 同父下同 `local_name()` ⇒ **全路径相同**
+    //    ⇒ ⇒ **last-wins** ⇒ 实例连错 module + 某 module **不可达**
+    //    ⇒ ⇒ 而产物仍是**合法 Verilog** ⇒ ⇒ R1 lint **盲区**（零报错）。
+    //    ⇒ ⇒ 故在**分析层**（本函数 = 唯一的树构建点）前置 fail-closed。
+    //
+    //    ⚠️ **为什么比照 `local_name()` 而不是 `name()`**：`name()` 已含父路径
+    //    ⇒ 同父同名的两个兄弟**名字完全相同** ⇒ 用 `name()` 判重同样能抓；
+    //    但**跨父同名**（`a.x` 与 `b.x`）是**合法**的 ⇒ ⇒ 判重 MUST 按
+    //    **父内局部名**口径 ⇒ 用 `local_name()` 并逐父独立。报错信息同时给
+    //    两个名字（局部 + 全路径），便于定位。
+    std::unordered_map<std::string, const Component*> sibling_local_names;
     for (const auto& child : c->children()) {
         if (!child) {
             continue;
+        }
+        const std::string& lname = child->local_name();
+        auto ins_ok = sibling_local_names.emplace(lname, child.get());
+        if (!ins_ok.second) {
+            CHFATAL_EXCEPTION(
+                "hierarchical analysis: duplicate instance name '%s' under parent "
+                "'%s' (both resolve to full path '%s') — emission indexes are keyed "
+                "by full path and would be LAST-WINS ⇒ silent mis-wiring + an "
+                "unreachable module (legal Verilog ⇒ lint cannot catch it). "
+                "Rename one instance.",
+                lname.c_str(), c->local_name().c_str(), child->name().c_str());
         }
         auto it = t.parent.find(child.get());
         if (it != t.parent.end()) {

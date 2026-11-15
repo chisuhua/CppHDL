@@ -663,6 +663,101 @@ TEST_CASE("hierarchy analysis: cross-layer pass-through edges are rejected until
     }
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// **残差 id=22（2026-11-15 用户裁决 A）**：同父下**同名实例** MUST 响亮失败
+//
+// ## 为什么这条判据必须有（缺陷形态）
+//
+// `Component::name()` = **全路径**（`parent_path + "." + local_name`）⇒ ⇒ 同父下两个
+// 兄弟若 `local_name` 相同 ⇒ **全路径相同** ⇒ ⇒ 发射侧七处索引表
+// （`module_by_key` / `parent_of` / `inst_of` / `name_of_key` / `needs_of` …）
+// 按全路径建键 ⇒ ⇒ **last-wins** ⇒ 实例**连错 module** + 某个 module **不可达**
+// ⇒ ⇒ 而产物仍是**合法 Verilog** ⇒ ⇒ R1 lint **零报错**（盲区）。
+//
+// ## 判别力（正反两面）
+//
+// · **正面**：本用例要求 `analyze_hierarchy` **抛异常**且消息**点名**「duplicate instance name」
+//   + 局部名 + 父局部名 ⇒ ⇒ 去掉前置校验 ⇒ 分析**成功返回** ⇒ `FAIL("MUST be rejected")` ⇒ 转红。
+// · **反向**：用例 ③ 用**跨父同名**（`x` 出现在两个不同父下）⇒ ⇒ MUST **不**被拒
+//   （否则前置校验会把**合法**设计拒掉 ⇒ 误报）。
+// ═════════════════════════════════════════════════════════════════════════
+class DupLeaf : public ch::Component {
+public:
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    DupLeaf(ch::Component* p = nullptr, const std::string& n = "leaf")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+class DupNameTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("dup_name_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    // ⚠️ **两个实例的 local_name 相同**（"dup"）⇒ ⇒ 全路径相同
+    ch::ch_module<DupLeaf> a{"dup"};
+    ch::ch_module<DupLeaf> b{"dup"};
+    DupNameTop(ch::Component* p = nullptr, const std::string& n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        // ⚠️ **MUST NOT 有兄弟边**：否则「去掉前置校验」时会被**兄弟边**规则拒绝
+        //    ⇒ ⇒ 判据红在**错的原因**上（判别力被污染）
+        a.io().din <<= io().din;
+        b.io().din <<= io().din;
+        io().dout <<= a.io().dout;
+    }
+};
+
+// 反向载体：**跨父**同名（合法）⇒ MUST 不拒
+class CrossParentDupTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("cross_parent_dup_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<DupLeaf> a{"p1"};   // a 下的叶子名 …
+    ch::ch_module<DupLeaf> b{"p2"};
+    CrossParentDupTop(ch::Component* p = nullptr, const std::string& n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        a.io().din <<= io().din;
+        b.io().din <<= io().din;
+        io().dout <<= b.io().dout;
+    }
+};
+
+TEST_CASE("hierarchy analysis: duplicate instance name under one parent MUST fail closed",
+          "[hierarchy][analysis][reject][dup-instance]") {
+    ch::ch_device<DupNameTop> dev;
+    try {
+        ch::analyze_hierarchy(dev.instance());
+        FAIL("duplicate instance name under one parent MUST be rejected");
+    } catch (const std::runtime_error& e) {
+        const std::string msg(e.what());
+        INFO("message: " << msg);
+        // ⚠️ 断言**归因的实质内容**（只断言「duplicate」会被任何去重消息满足 ⇒ 零判别力）
+        REQUIRE(msg.find("duplicate instance name") != std::string::npos);
+        REQUIRE(msg.find("'dup'") != std::string::npos);
+        REQUIRE(msg.find("LAST-WINS") != std::string::npos);
+    }
+}
+
+TEST_CASE("hierarchy analysis: identical leaf names under DIFFERENT parents MUST NOT be rejected",
+          "[hierarchy][analysis][dup-instance][reverse]") {
+    // ⚠️ **反向判据**：前置校验 MUST 按「**父内**局部名」判重 ⇒ ⇒ 跨父同名（合法）
+    // 若被拒 ⇒ ⇒ 会把**合法设计**拒掉（误报）⇒ ⇒ 本用例转红（`FAIL`）。
+    ch::ch_device<CrossParentDupTop> dev;
+    try {
+        ch::analyze_hierarchy(dev.instance());
+    } catch (const std::runtime_error& e) {
+        const std::string msg(e.what());
+        // ⚠️ 允许其它（既有）拒绝理由（如兄弟边）⇒ ⇒ 但 MUST NOT 是本条新增的
+        // 「duplicate instance name」⇒ ⇒ 否则就是误报
+        INFO("message: " << msg);
+        REQUIRE(msg.find("duplicate instance name") == std::string::npos);
+    }
+}
+
 TEST_CASE("hierarchy analysis: cross-module ch_mem is rejected", "[hierarchy][analysis][reject]") {
     ch::core::context ctx("mem_ctx");
     std::shared_ptr<MemTop> top;

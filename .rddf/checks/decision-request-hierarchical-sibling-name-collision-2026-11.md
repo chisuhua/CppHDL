@@ -133,3 +133,26 @@ id: decision-request-hierarchical-sibling-name-collision-2026-11
 | 2 | **不**立 ADR 承载本项 | 本项是**实现层的键空间 / 唯一性**缺陷 ⇒ ⇒ 不是架构决策 ⇒ ⇒ **登记 + 留待独立 change** |
 | 3 | **不**新增护栏 | 护栏需要**能构造出同名实例的语料**（目前仓内零）⇒ ⇒ 先归零覆盖的缺口 |
 | 4 | **不**改 `port-name-literal-parity` 的 AC 勾选状态 | 属 planner 域（U2 后续）⇒ ⇒ 见 §5.3 |
+
+---
+
+## 2026-11-15 用户裁决（残差 id=22 的**处置**）
+
+- **裁决 = A**：**分析层前置校验 fail-closed** —— 同父下同名实例 ⇒ **响亮失败**并点名。
+- **实现**：`src/hierarchy_analysis.cpp` 的 `collect()` 按**父内 `local_name()`** 判重
+  ⇒ ⇒ 同父同局部名（= 同全路径）⇒ `CHFATAL_EXCEPTION`（消息含：局部名 · 父局部名 ·
+  全路径 · 「LAST-WINS ⇒ silent mis-wiring + an unreachable module」）。
+- **判据（正反两面）**：`tests/test_hierarchy_analysis.cpp`
+  - 正：`DupNameTop`（两个 `local_name == "dup"`）⇒ `analyze_hierarchy` MUST 抛
+    ⇒ 断言消息含 `duplicate instance name` + `'dup'` + `LAST-WINS`
+  - 反：`CrossParentDupTop`（**跨父**同名）⇒ MUST **不**被本条误报
+- **变异自证**：把校验置 `false` ⇒ 正例 `FAIL("...MUST be rejected")` **转红** ⇒ 还原后 93 断言全绿。
+- **台账**：`docs/architecture/2026-11-02-hierarchical-rtl-output.md` 行 22 ⇒ `未决` → **`已收口`** ·
+  登记表同批更新（`scripts/verify_arch_ledger_residuals.sh` PASS · 25 行）。
+
+## 2026-11-15 用户裁决（残差 id=21 / 21b）
+
+- **裁决 = 不要求**（route (c)「字面同名」**保持不做**）⇒ ⇒ 台账状态保持 `未决`，
+  复核条件追加「2026-11-15 用户已确认『不要求』⇒ 仅在用户**再次**要求时重开」。
+- 依据：manifest 产物已提供**机器可读**的端口/网名映射（capability `rtl-emit-portability`）
+  ⇒ ⇒ 「人眼可读」的诉求由 manifest 承担。
