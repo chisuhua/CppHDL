@@ -5,10 +5,12 @@
 = **8 个 module**（`IfStage` / `IdStage` / `ExStage` / `MemStage` / `WbStage` / `HazardUnit` /
 `ForwardingMux_32_` + `top`）⇒ ⇒ **扁平产物逐字节不变**（成层声明只写两个标志位）。
 
-**⚠️ 产物级契约名（新增）**：`IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` ·
-`HazardUnit` · `ForwardingMux<32>`（经 `sanitize_verilog_name` ⇒ 产物中为 `ForwardingMux_32_`）
-⇒ ⇒ **改名 = 产物级破坏性变更**。⚠️ 该「契约名 vs 明文非契约」的强度在 **ADR-070 §6 ⑦**
-仍是**待裁决项**。`load_lane`（B3 新增）**不**在该集合内 ⇒ 保持 inline。
+**⚠️ 模块类型名 = 明文非契约**（**用户裁决 · 2026-11-15** · ADR-070 §6 ⑦ 的待裁决项）：
+`IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` ·
+`ForwardingMux<32>`（经 `sanitize_verilog_name` ⇒ 产物中为 `ForwardingMux_32_`）
+⇒ ⇒ 它们是产物里的**名字**，改名 **不**构成破坏性变更（唯一义务 = 产物重新 lint 干净）。
+⇒ ⇒ 稳定性来源是**成层粒度**（`ch_layer` 7 处），**不是**名字。
+`load_lane`（B3 新增）**不**在该集合内 ⇒ 保持 inline。
 
 **缺陷修复（ADR-070 D1 · H-A / H-B）**：同一子模块输出被「兄弟子模块的输入」与
 「父体表达式 / 父 `output` 端口」**同时**消费时，发射器把分析层记录的**消费点名字**当成
