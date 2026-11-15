@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <sys/stat.h>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -137,6 +138,69 @@ std::size_t count_occurrences(const std::string &haystack, const std::string &ne
         ++n;
     }
     return n;
+}
+
+/// ★ `// CppHDL-synth: <kind> ` 的出现次数（`kind` = `implicit port` / `net`）。
+///
+/// ⚠️ **两类 MUST 分别计数**（R3.3）：1 条边常合成 k 个**端口** + 1 根**网**
+///    ⇒ ⇒ 「两类之和 == 边数」是**假**判据 ⇒ ⇒ 两个计数各自有自己的期望值。
+std::size_t count_synth_comments(const std::string &text, const std::string &kind) {
+    return count_occurrences(text, "// CppHDL-synth: " + kind + " ");
+}
+
+/// ★ 诊断里 `[n]` 编号的行数（`^\s*\[<digits>\]` · 不含 `[<非数字>]`）
+std::size_t count_indexed_lines(const std::string &text) {
+    std::size_t n = 0;
+    std::size_t pos = 0;
+    while (pos <= text.size()) {
+        const std::size_t nl = text.find('\n', pos);
+        const std::string line =
+            text.substr(pos, (nl == std::string::npos ? text.size() : nl) - pos);
+        std::size_t i = line.find_first_not_of(" \t");
+        if (i != std::string::npos && line[i] == '[') {
+            const std::size_t rb = line.find(']', i);
+            if (rb != std::string::npos && rb > i + 1) {
+                bool digits = true;
+                for (std::size_t k = i + 1; k < rb; ++k) {
+                    if (line[k] < '0' || line[k] > '9') {
+                        digits = false;
+                        break;
+                    }
+                }
+                if (digits) {
+                    ++n;
+                }
+            }
+        }
+        if (nl == std::string::npos) {
+            break;
+        }
+        pos = nl + 1;
+    }
+    return n;
+}
+
+/// ★ 取 `marker` **紧前面**那个整数（`… <N><marker> …`；允许中间有空格）
+///    · 找不到 ⇒ `-1`（⇒ ⇒ 调用方的 `==` 断言自然转红 ⇒ ⇒ **不**静默通过）
+///    ⚠️ 「首行计数 == 实际列出的条目数」是用户可见判据（R3.1 ③）
+///    ⇒ ⇒ MUST 从**诊断文本**里解析，而不是拿一个常量去比（否则计数写死也能绿）
+long count_before(const std::string &text, const std::string &marker) {
+    const auto at = text.find(marker);
+    if (at == std::string::npos) {
+        return -1;
+    }
+    std::size_t end = at;
+    while (end > 0 && text[end - 1] == ' ') {
+        --end;
+    }
+    std::size_t beg = end;
+    while (beg > 0 && text[beg - 1] >= '0' && text[beg - 1] <= '9') {
+        --beg;
+    }
+    if (beg == end) {
+        return -1;
+    }
+    return std::stol(text.substr(beg, end - beg));
 }
 
 // ── DUT ①：三层（全部成层）───────────────────────────────────────────────
@@ -299,6 +363,33 @@ public:
         inner.io().din <<= io().din;
         // ⚠️⚠️ 父层读**子成员的内部寄存器** ⇒ ⇒ 行 2 的典型形态
         io().dout <<= inner.instance().acc;
+    }
+};
+
+// ── DUT ⑤b：**可合成**样本（**端口 + 网** · N = 2 条边）──────────────────
+//    R3.2b 的四约束：① 矩阵内可合成 ② **N ≥ 2** 条可合成边 ③ 含**端口 + 网**
+//    ④ 无悬空 `ch_in`。
+//    ⚠️ 仓内既有的四个候选**各缺一条**（实测选定过程）：
+//      · `TwoSiblingTop`（2 边）⇒ ⇒ 只有**网**，无端口
+//      · `OuterRow2` / `OuterRow1` / `SibLeaf` 单例（1 边）⇒ ⇒ N < 2
+//      · `sibling_wire` 的样本 = `TwoSiblingTop` ⇒ ⇒ 同第一条
+//    ⇒ ⇒ 故新增本样本 = **行 2（合成端口）+ 兄弟边（合成网）各一条**。
+//    ⚠️ 行 2 用的是既有 `InnerRow2`（`acc` 是**子内部寄存器** ⇒ ⇒ 不是子端口）。
+class MixRow2SiblingTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("mix_row2_sibling_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InnerRow2> inner{"inner"};
+    ch::ch_module<SibLeaf> a{"a"};
+    ch::ch_module<SibLeaf> b{"b"};
+    MixRow2SiblingTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        inner.io().din <<= io().din;
+        a.io().din <<= io().din;
+        b.io().din <<= a.io().dout;          // ⚠️ 兄弟边 ⇒ ⇒ 共同祖先内的**中转网**
+        io().dout <<= inner.instance().acc;  // ⚠️ 行 2 ⇒ ⇒ 子侧**合成 output 端口**
     }
 };
 
@@ -1501,6 +1592,139 @@ TEST_CASE("hierarchical emission: port policy decides the diagnostic breadth",
         REQUIRE(r.error.find("[1]") != std::string::npos);
         REQUIRE(r.error.find("[2]") != std::string::npos);
         REQUIRE_FALSE(file_exists(path));
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// R3.2b：**成功路径**的三档元组 = (产物是否存在, 边级诊断条数, 产物注释是否存在)
+//   ⚠️ 样本 MUST **可合成**且含**端口 + 网**（N = 2 条边）⇒ ⇒ 否则三元组不可观测。
+//   ⚠️ 上面「`TwoOpTop`」那条用例**保留**：它测的是**失败路径**（矩阵外形态）的
+//      诊断广度 —— 与这里**不是同一个分支**，删掉会丢覆盖。
+// ═════════════════════════════════════════════════════════════════════════
+TEST_CASE("hierarchical emission: port policy tuple on synthesizable edges",
+          "[hierarchy][emit][policy][tuple]") {
+    ch::ch_device<MixRow2SiblingTop> dev;
+    const std::string path = kOutDir() + "/policy_tuple.v";
+
+    // ═══ ① `SynthesizeWarn`（默认）⇒ (true, 2, 有) ═══
+    {
+        auto r = ch::toVerilogHierarchical(path, dev.instance());
+        INFO("error: " << r.error);
+        REQUIRE(r.ok);
+        REQUIRE(file_exists(path));
+
+        // ⚠️ **只数 `result.warnings`** 里含「synthesized」的行 ⇒ ⇒ **不抓 stderr**
+        //    （R3.2a：`CHWARN` 只进日志 ⇒ ⇒ 抓 stderr 的判据脆；载体 = 已存在的字段）
+        std::size_t synth_lines = 0;
+        for (const auto &w : r.warnings) {
+            synth_lines += (w.find("synthesized") != std::string::npos) ? 1 : 0;
+        }
+        REQUIRE(synth_lines == 2);
+
+        // 边级记录 MUST 点名**边**（`from <node> (<module>) -> to <node> (<module>)`）
+        // ⚠️ 箭头用 **ASCII** `->`（诊断全 ASCII · 与既有 `desc` 一致）
+        std::size_t row2_seen = 0;
+        std::size_t sibling_seen = 0;
+        for (const auto &w : r.warnings) {
+            if (w.find("synthesized") == std::string::npos) {
+                continue;
+            }
+            REQUIRE(w.find(" -> to ") != std::string::npos);
+            // ⚠️ `(<module>)` = **实例路径**（`HierarchyModule::key`），不是 module **类型名**
+            //    ⇒ ⇒ `sib_leaf` 的两个实例分别是 `top.a` / `top.b`
+            if (w.find("output port '__x_0'") != std::string::npos) {
+                ++row2_seen;
+                REQUIRE(w.find("(top.inner) -> to ") != std::string::npos);
+                REQUIRE(w.find(" (top)") != std::string::npos);
+            } else if (w.find("net '") != std::string::npos) {
+                ++sibling_seen;
+                REQUIRE(w.find("(top.a) -> to ") != std::string::npos);
+                REQUIRE(w.find(" (top.b)") != std::string::npos);
+            }
+        }
+        REQUIRE(row2_seen == 1);      // 行 2 ⇒ 合成**端口**
+        REQUIRE(sibling_seen == 1);   // 兄弟边 ⇒ 合成**网**
+
+        // 产物注释 MUST 存在，且 **`implicit port` / `net` 分别计数**（R3.3）
+        //    ⚠️ 1 条边 ⇒ k 端口 + 1 网 ⇒ ⇒ 「两类的和 == 边数」是**假**判据
+        const std::string product = read_file(path);
+        REQUIRE(count_synth_comments(product, "implicit port") == 1);
+        REQUIRE(count_synth_comments(product, "net") == 1);
+    }
+
+    // ═══ ② `SynthesizeFatal` ⇒ (false, 2, —) · 端口名 MUST 仍在 ═══
+    {
+        // ⚠️ **这是判据的一部分**（R3.2b）：Fatal 在落盘前 `return` ⇒ ⇒ 磁盘上是①的产物
+        //    ⇒ ⇒ 「先删残留」不是保险措施；删除**成功**本身就证明①确实落过盘
+        REQUIRE(std::filesystem::remove(path));
+        REQUIRE_FALSE(file_exists(path));
+
+        HierarchyEmitOptions opts;
+        opts.port_policy = PortPolicy::SynthesizeFatal;
+        auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE_FALSE(file_exists(path));   // ⇒ **不产出**
+
+        // 列出的条目数 = 2 条**边**（不是合成物数）· 首行计数与之一致（R3.1 ③）
+        REQUIRE(count_indexed_lines(r.error) == 2);
+        REQUIRE(count_before(r.error, "cross-module edge(s) were synthesized") == 2);
+        // ⚠️ 端口名 MUST 仍在（ADR-060 v1.7：Fatal 列**全部边 + 端口名**）
+        //    （负向：把 `objects` 一并删掉 ⇒ ⇒ 本条转红）
+        REQUIRE(r.error.find("__x_0") != std::string::npos);
+        REQUIRE(r.error.find("net '") != std::string::npos);
+    }
+
+    // ═══ ③ `Reject` ⇒ (false, 1, —) · **不含**合成端口名 · 1 条边级记录 ═══
+    {
+        // ⚠️ 重新造残留（②已把①的产物删掉且未写回）
+        REQUIRE(ch::toVerilogHierarchical(path, dev.instance()).ok);
+        REQUIRE(std::filesystem::remove(path));
+
+        HierarchyEmitOptions opts;
+        opts.port_policy = PortPolicy::Reject;
+        auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
+        INFO("error: " << r.error);
+        REQUIRE_FALSE(r.ok);
+        REQUIRE_FALSE(file_exists(path));
+
+        // ① **不含合成端口名 / 合成物名**（本档不合成 ⇒ ⇒ ADR-060 §2.4.1）
+        //    ⚠️ 三条**各自**必要：`__x_`/`__if_` 只覆盖合成端口名，`port '`/`net '` 才覆盖
+        //    「产物名」这一整类（本样本的**第一条**边恰好只合成**网** ⇒ ⇒ 少了 `net '`
+        //    这条，把产物名塞进 `Reject` 的诊断**不会转红** —— 实测 M2 恒绿）
+        REQUIRE(r.error.find("__x_") == std::string::npos);
+        REQUIRE(r.error.find("__if_") == std::string::npos);
+        REQUIRE(r.error.find("implicit port") == std::string::npos);
+        REQUIRE(r.error.find("port '") == std::string::npos);
+        REQUIRE(r.error.find("net '") == std::string::npos);
+        // ② 含**1 条边级记录**
+        REQUIRE(count_indexed_lines(r.error) == 1);
+        REQUIRE(r.error.find("from ") != std::string::npos);
+        REQUIRE(r.error.find(" -> to ") != std::string::npos);
+        // ③ 首行计数 == 实际列出的条目数（R3.1 ③）· 总数另行给出（避免「只有 1 条」的误导）
+        const long total = count_before(r.error, " cross-module edge(s)");
+        REQUIRE(total == 2);
+        const long listed =
+            count_before(r.error, " of " + std::to_string(total) + " cross-module edge(s)");
+        REQUIRE(listed == 1);
+        REQUIRE(listed == static_cast<long>(count_indexed_lines(r.error)));
+        // ④ 元组第 2 项 = 1（本档只在 `warnings` 里报**第一条**边）
+        //    ⚠️ 措辞 MUST 是**条件式**「would be synthesized」—— 本档**不合成**
+        //    ⇒ ⇒ 声称「已合成」是假陈述 ⇒ ⇒ 断言过去式短语 `synthesized cross-module`
+        //    （`Warn` / `Fatal` 两档的措辞）不出现
+        std::size_t synth_lines = 0;
+        for (const auto &w : r.warnings) {
+            if (w.find("synthesized") == std::string::npos) {
+                continue;
+            }
+            ++synth_lines;
+            REQUIRE(w.find("synthesized cross-module") == std::string::npos);
+            REQUIRE(w.find("would be synthesized") != std::string::npos);
+            // 本档**不带**产物名（ADR-060 §2.4.1）
+            REQUIRE(w.find("__x_") == std::string::npos);
+            REQUIRE(w.find("net '") == std::string::npos);
+        }
+        REQUIRE(synth_lines == 1);
     }
 }
 

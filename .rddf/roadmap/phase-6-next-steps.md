@@ -781,7 +781,7 @@ S1（T1：D-TCM 改 sread）
 
 | # | 条目 | 证据锚 | 归属 | 规模 |
 |---|---|---|---|---|
-| 乙-1 | **R3 簇 / 台账行 15**：R3.1 `Reject` 诊断粒度 → R3.2a 观测载体（`CHWARN` 只进日志 ⇒ 未 push 进 `result.warnings`）→ R3.2b 判据用例 → R3.3 计数分别判 → R3.4 change 立项/实施/归档 → R3.5 台账闭口 | `phase-6-next-steps.md` R3.1–R3.5 · 残差表 **id=15**（状态「已知」· 归属 builder） | builder → architect | 中（6 步 · 顺序固定） |
+| 乙-1 | ✅ **已收口（2026-11-15）**：**R3 簇 / 台账行 15** —— R3.1 `Reject` 诊断粒度（改为**边级**记录 · **不含**产物名 · 首行 `1 of N`）→ R3.2a 观测载体（逐条 push 进 `result.warnings`；此前只进 `CHWARN` 日志）→ R3.2b 元组判据（新样本 `MixRow2SiblingTop` · N=2 · 端口 + 网 · 三个 `filesystem::remove` 均断言成功）→ R3.3 `implicit port` 与 `net` **分别**计数 → R3.4 change 立项/实施/**归档**（`2026-11-15-hierarchy-synth-diagnostic-granularity-2026-11` · capability `rtl-hierarchical-output` **MODIFIED ×1**）→ R3.5 台账闭口（id=15 → `已收口`）⇒ ⇒ 变异 M1–M5 逐条转红（**M2 初版恒绿** ⇒ 补 `port '` / `net '` 两条断言后转红） | `phase-6-next-steps.md` R3.1–R3.5 · 残差表 **id=15**（状态「已收口」· 归属 `—`） | builder → architect | 已完成 |
 | 乙-2 | **R16 = 10 条独立立项**（批次表 §4 的 9 行 + 台账 id=22）⇒ 逐条立项（**不是一批做**） | `phase-6-next-steps.md` R16 | planner → builder | 大（10 条） |
 | 乙-3 | **R21 / RV32I 层次化 RTL 示例**（`rv32i-hierarchical-example-2026-11` = **approved** · ADR-070 裁决已落）⇒ ⇒ **实施零进度**（tasks 全未勾：spike 探针 23→0 · 产物级 lint 无 `%Error` · 负向对照 ×3 · 多消费者 ≥3 · proxy 端点 · 既有语料零回归 · 改接结构化字段 · 扁平产物不变 · 撞名可诊断） | `.rddf/improvements/rv32i-hierarchical-example-2026-11.md`（tasks 段） | builder | 🔴 **最大未实施块** |
 | 乙-4 | **G5**（`ExceptionUnit` 的 `mcause` **永远写不到**）⇒ 首选 **B**（内部跨两拍 · `CsrBank` 零改动）⇒ 需**复合 DUT** 才有判别力 | 同 improvement 的 G5 段 | builder | 中 |
@@ -789,7 +789,7 @@ S1（T1：D-TCM 改 sread）
 | 乙-6 | **P12/P13/P14/P15**（下游 ChipForge issue #28 的**两项** improvement 仍 `draft`）⇒ ① 待**用户**拍板 CHANGELOG 载体命运（R1/R2/R3）· ② 待 P13 的 architect 裁定 ⇒ 然后 P14/P15 实施 | `phases/phase-6.md` P12–P15 · `.rddf/improvements/`（两项 draft） | 用户 → architect → builder | 中（**外部驱动**） |
 | 乙-7 | **B2（消费侧批）**：E1/E2/E3/E4/E5/E7/E8 ✅ ⇒ 剩 **E6**（CI 形态：挂 `pr-verilator-fast` **一个** step · 不新建 job）+ 墙钟登记 | `phases/phase-6.md` B2 行 | builder | 小 |
 | 乙-8 | **R23-A.2**（CI 证据回填：`sha` + `job` + `step` + `conclusion`）· **R23-B**（`verify_guard_reachability.sh` 静态护栏 + 6 job 可达性分类 + 纪律落点） | `phase-6-next-steps.md` R23-A.2 / R23-B.1–B.4 | builder | 小–中 |
-| 乙-9 | **残差登记表未闭行** ⇒ ⇒ **2026-11-15 进展**：**id=22** ⇒ 用户裁决 **A** ⇒ **已收口**（分析层前置校验 + 正反判据 + 变异自证）；**id=21/21b** ⇒ 用户裁决「**不要求**」（保持 `未决` · 复核条件已记）；**id=23** ⇒ 数字订正 **113/31/80 → 129/32/95**（含沿革）；**id=24** ⇒ `已知`（不动）；**id=14** ⇒ 仍欠（归属「下游」⇒ ADR-062 §2.5 决策⑤ 的下游实现） | `.rddf/checks/arch-residual-registry.md` | architect（id=14 下游） | — |
+| 乙-9 | **残差登记表未闭行** ⇒ ⇒ **2026-11-15 进展**：**id=22** ⇒ 用户裁决 **A** ⇒ **已收口**（分析层前置校验 + 正反判据 + 变异自证）；**id=21/21b** ⇒ 用户裁决「**不要求**」（保持 `未决` · 复核条件已记）；**id=23** ⇒ 数字订正 **113/31/80 → 129/32/95**（含沿革）；**id=24** ⇒ `已知`（不动）；**id=14** ⇒ 仍欠（归属「下游」⇒ ADR-062 §2.5 决策⑤ 的下游实现）；**id=15** ⇒ **批 2 收口**（边级诊断粒度 + 观测载体归档） | `.rddf/checks/arch-residual-registry.md` | architect（id=14 下游） | — |
 | 乙-10 | **P6（RV32I ISA 缺口）**：**`FENCE` ✅（G4）** ⇒ 剩 **CSR / `ECALL` / `EBREAK`**（现在**可观测** = reason 1，但**仍未实现**）⇒ ⇒ 特权级独立立项 | `phases/phase-6.md` P6 行 · 根 `AGENTS.md` ISA 段 | planner → architect → builder | 🔴 大（特权级） |
 
 ### 7.4 丙类（外部 / 日历锁 · **不在本仓推进**）
@@ -807,7 +807,7 @@ S1（T1：D-TCM 改 sread）
 |---|---|---|---|---|
 | **批 0** | 甲-1/甲-5 收尾 · **push + 一次 CI run** | — | ✅ **已完成（2026-11-15）**：push 10 commit · **CI run `43672487384` = success**（此前红的 `Verify RV32I single-source convergence (self-test)` 已转绿）· 甲-6 确认仅本机 | builder + architect |
 | **批 1** | **架构补审批** | 批 0 | ✅ **已完成（2026-11-15）**：甲-3 ⇒ **ADR-071 Accepted**（oracle REJECT ⇒ 修 **1 真缺陷** ⇒ critic **APPROVE_WITH_CONDITIONS** · 0 BLOCKER）· 甲-4 ⇒ `.rddf/checks/isa-gap-reuse-survey.md` · 乙-9 ⇒ **id=22 收口**（用户裁决 A）· id=21/21b 用户确认「不要求」· id=23 数字订正· 甲-2 ⇒ **归因订正为「无需台账行」** | architect + builder |
-| **批 2** | **乙-1 R3 簇**（顺序固定 R3.1 → R3.2a → R3.2b → R3.3 → R3.4 → R3.5） | 批 1（架构裁定面） | change **归档** + 台账行 15 状态格 = 「已收口」 | builder → architect |
+| **批 2** | **乙-1 R3 簇**（顺序固定 R3.1 → R3.2a → R3.2b → R3.3 → R3.4 → R3.5） | 批 1（架构裁定面） | ✅ **已完成（2026-11-15）**：change `2026-11-15-hierarchy-synth-diagnostic-granularity-2026-11` **已归档**（`openspec/specs/rtl-hierarchical-output` **MODIFIED ×1** · 4 Scenario 全保留）· 台账 id=15 = **`已收口`**（规范句由 `--render` 生成）· 元组判据 3/3 · 变异 M1–M5 · `ctest -LE perf` **254/254** · 全部 `scripts/verify_*.sh` PASS | builder → architect |
 | **批 3** | **乙-3 R21 层次化示例**（最大块）：**spike 先行**（探针 `ok=true` 且 **23 → 0** ⇒ 未归零则**停**）⇒ 产物级 lint 无 `%Error` ⇒ 负向对照 ×3 ⇒ 多消费者 ≥3 ⇒ proxy 端点 ⇒ 既有语料零回归 ⇒ 改接为结构化字段 ⇒ 扁平产物**逐字节不变** ⇒ 撞名可诊断 | 批 1（ADR-070 §6 ⑥/⑦ 的裁决） | tasks 全勾 + 新 capability 进主 spec + 既有语料零回归 | builder |
 | **批 4** | **ISA 残项**：乙-4 G5（首选 B）· `funct3`/`funct7` 非法组合检测（独立增量）· 乙-10 CSR/`ECALL`/`EBREAK`/`MRET` 独立立项 | 批 1（甲-3/甲-4 的裁决 + 台账行） | 每项独立 change + delta 进主 spec + **退休数/时序 golden 不变**（手推） | builder |
 | **批 5** | **乙-2 R16 的 10 条** ⇒ 逐条立项（**不一批做**） | 批 0 | 每条有独立载体（improvement/change）+ 优先级 | planner → builder |

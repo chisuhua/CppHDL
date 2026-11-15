@@ -48,7 +48,7 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 12 | 已收口 | 2026-11-02 | C0-0 spike 提取器 | scripts/lib/verilog_tree_extract.py | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 13 | 已收口 | 2026-11-06 | 随 T3-005 关闭 | openspec/changes/archive/2026-11-06-hierarchical-rtl-equivalence-2026-11 | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 11 | 已收口 | 2026-11-07 | P6 + P8 双立项归档 | openspec/changes/archive/2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11,openspec/changes/archive/2026-11-07-p8-hierarchical-equivalence-public-helper-2026-11 | — | — |
-| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 15 | 已知 | 2026-11-08 | 三档 PortPolicy 在可合成形态上语义未分化 | — | 三档差异化处置（Reject 拒可合成形态 / SynthesizeFatal 先合成后失败）且默认档 SynthesizeWarn 的 CHWARN + 产物注释义务分别落地后复核 | builder |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 15 | 已收口 | 2026-11-15 | 边级诊断粒度与观测载体归档 | openspec/changes/archive/2026-11-15-hierarchy-synth-diagnostic-granularity-2026-11 | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 16 | 已裁决 | 2026-11-08 | ADR-066 决策 ① 落点语义裁定 | docs/adr/ADR-066-hierarchical-parent-side-landing-semantics.md | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 17 | 已收口 | 2026-11-08 | 语料登记归因与 tripwire 同批修订 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 19 | 已收口 | 2026-11-08 | 路径 B 父侧落点网 + 产物可编译 | openspec/changes/archive/2026-11-09-hierarchical-parent-side-landing-implementation | — | — |
