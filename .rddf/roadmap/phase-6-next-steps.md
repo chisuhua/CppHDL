@@ -774,8 +774,8 @@ S1（T1：D-TCM 改 sread）
 | 甲-3 | **R11（`FENCE` 语义裁决）实现先于决策** | 同左 | ✅ **已闭（2026-11-15）**：`docs/adr/ADR-071-fence-and-illegal-opcode-semantics.md`（**Accepted**）· 审稿记录 = `.rddf/reviews/ADR-071-fence-and-illegal-opcode-semantics.md`（oracle **REJECT** ⇒ critic **APPROVE_WITH_CONDITIONS** · 0 BLOCKER）⇒ ⇒ ⚠️ **oracle 复核查出一个真缺陷**（`flush ∥ 冻结` 同拍丢 redirect）⇒ 已修实现 + 补回归用例 + 变异自证 + 新 change `illegal-freeze-flush-priority-2026-11` |
 | 甲-4 | **R7（P6-0 侦察）仍欠 CSR/`ECALL`/`EBREAK` 的复用面清单**（`FENCE` 部分已被 G4 取代 ⇒ ⇒ P6 的立项依据缺这一块） | 同上 R7 行（🟡） | ⬜ planner 只读侦察（`CsrBank` / `ExceptionUnit` **已存在可复用**） |
 | 甲-5 | **状态格漂移**：R13/R14（**已闭**仍写 🔴）· R15（🔴 → 🟡）· B1 行（开头「⬜ 未开工」与结尾「✅ 11/11」**自相矛盾**） | `phase-6-next-steps.md` R13/R14/R15 · `phases/phase-6.md` B1 行 | ✅ **本轮已修**（2026-11-15） |
-| 甲-6 | **本机 verilator PCH 环境缺陷**：`build/verilator-install/include/verilated.mk` 的 `CFG_CXXFLAGS_PCH_I` **为空**（configure 未识别编译器 ⇒ `CFG_CXX_VERSION = ""`）⇒ ⇒ 任何**未命中缓存**的模型编译都会失败 ⇒ ⇒ **CI 侧是否同缺陷未验证** | 该文件（非跟踪产物）· `.rddf/checks/examples-rtl-expectations.md`（已登记） | ⬜ **一次 CI run** 确认（本地绿 **≠** CI 绿） |
-| 甲-7 | **9 个 commit 未 push**（`2cacf89` … `d1060e1`） | `git log origin/main..HEAD` | ⬜ push（**不主动** ⇒ 等用户口令） |
+| 甲-6 | **本机 verilator PCH 环境缺陷**：`build/verilator-install/include/verilated.mk` 的 `CFG_CXXFLAGS_PCH_I` **为空**（configure 未识别编译器）⇒ ⇒ 任何**未命中缓存**的模型编译都会失败 | 该文件（非跟踪产物）· `.rddf/checks/examples-rtl-expectations.md`（已登记） | ✅ **已确认（2026-11-15）**：**CI run `43672487384` = success**（`ubuntu-22.04 - Release` + `Debug` 两 job 全绿）⇒ ⇒ **CI 侧无此缺陷**（CI 自建 verilator ⇒ 检测路径不同）⇒ ⇒ 结论 = **仅本机环境问题**；本地修法 = 该行补 `-include`（⚠️ **会被后续 `cmake --build` 重新生成覆盖** ⇒ ⇒ 每次跑 RTL sim 护栏前须重贴） |
+| 甲-7 | **未 push 的 commit** | `git log origin/main..HEAD` | ✅ **已 push（2026-11-15 · 用户口令「执行批 0」）**：`2cacf89` … `6d7b4d2` **10 个**已上 main ⇒ 批 1 的 2 个（`4159a65` / `4b89e35`）同批推送 |
 
 ### 7.3 乙类（仓内既有 · 未闭口）
 
@@ -805,8 +805,8 @@ S1（T1：D-TCM 改 sread）
 
 | 批 | 内容 | 依赖 | 出口判据 | 归属 |
 |---|---|---|---|---|
-| **批 0** | 甲-1/甲-5 收尾（✅ 已做）· 甲-2 走 architect 加台账行 · **push + 一次 CI run**（确认甲-6 与全绿） | — | `git log origin/main..HEAD` 为空 · CI 全绿（含 `--self-test` step） | builder + architect |
-| **批 1** | **架构补审批**：甲-3 R11 `FENCE` 裁决 + oracle→critic（确认）· 甲-4 R7 侦察 · 乙-9 残差 id=21/21b/22/23/24 裁决 · 甲-2 台账行 | 批 0（台账行先落） | 每条有裁决记录（`.rddf/reviews/`）+ 台账状态格回填 | architect |
+| **批 0** | 甲-1/甲-5 收尾 · **push + 一次 CI run** | — | ✅ **已完成（2026-11-15）**：push 10 commit · **CI run `43672487384` = success**（此前红的 `Verify RV32I single-source convergence (self-test)` 已转绿）· 甲-6 确认仅本机 | builder + architect |
+| **批 1** | **架构补审批** | 批 0 | ✅ **已完成（2026-11-15）**：甲-3 ⇒ **ADR-071 Accepted**（oracle REJECT ⇒ 修 **1 真缺陷** ⇒ critic **APPROVE_WITH_CONDITIONS** · 0 BLOCKER）· 甲-4 ⇒ `.rddf/checks/isa-gap-reuse-survey.md` · 乙-9 ⇒ **id=22 收口**（用户裁决 A）· id=21/21b 用户确认「不要求」· id=23 数字订正· 甲-2 ⇒ **归因订正为「无需台账行」** | architect + builder |
 | **批 2** | **乙-1 R3 簇**（顺序固定 R3.1 → R3.2a → R3.2b → R3.3 → R3.4 → R3.5） | 批 1（架构裁定面） | change **归档** + 台账行 15 状态格 = 「已收口」 | builder → architect |
 | **批 3** | **乙-3 R21 层次化示例**（最大块）：**spike 先行**（探针 `ok=true` 且 **23 → 0** ⇒ 未归零则**停**）⇒ 产物级 lint 无 `%Error` ⇒ 负向对照 ×3 ⇒ 多消费者 ≥3 ⇒ proxy 端点 ⇒ 既有语料零回归 ⇒ 改接为结构化字段 ⇒ 扁平产物**逐字节不变** ⇒ 撞名可诊断 | 批 1（ADR-070 §6 ⑥/⑦ 的裁决） | tasks 全勾 + 新 capability 进主 spec + 既有语料零回归 | builder |
 | **批 4** | **ISA 残项**：乙-4 G5（首选 B）· `funct3`/`funct7` 非法组合检测（独立增量）· 乙-10 CSR/`ECALL`/`EBREAK`/`MRET` 独立立项 | 批 1（甲-3/甲-4 的裁决 + 台账行） | 每项独立 change + delta 进主 spec + **退休数/时序 golden 不变**（手推） | builder |
