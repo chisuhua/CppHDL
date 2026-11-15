@@ -253,29 +253,78 @@ TEST_CASE("rv32i hierarchical rtl: deliverable product shape (granularity, deter
         //        与「成层子组件的 `ch_out`」的相对序两侧不同（扁平按 eval 序，层次化按
         //        owner 序）⇒ ⇒ 该差异**已登记**（见 change 的 design.md §「实测订正」）
         //    ⇒ ⇒ 判据按可判定的形态写：**根端口段逐字逐序** + **其余逐字（集合 ⊆）**。
-        const auto is_root_port = [](const std::string &line) {
-            return line.find("top_pipeline_") == std::string::npos &&
-                   line.find("top_itcm_") == std::string::npos &&
-                   line.find("top_dtcm_") == std::string::npos;
+        // ⚠️⚠️ **段归属 MUST 以 `PortProvenanceOrigin` 为准**（ADR-062 v1.7 · oracle F3）
+        //    ⇒ ⇒ **MUST NOT** 以**名称前缀**推断（原实现用 `top_pipeline_` / `top_itcm_` /
+        //    `top_dtcm_` 黑名单 ⇒ ⇒ 实例改名即**静默错分类** ⇒ fail-safe 转红但诊断误导）。
+        //    ⇒ ⇒ 机械切法（实现自带的数据模型）：根 module 的 `Self` / `ClockReset` /
+        //    `Bubbled` 三类 = **根段**；`InlineFolded` = ⊆ 组。
+        std::set<std::string> root_names;
+        std::set<std::string> inline_folded_names;
+        for (const auto &pp : r1.port_provenance) {
+            if (pp.module != "top") continue;   // ★ 根 module（产物里的顶层）
+            if (pp.origin == ch::PortProvenanceOrigin::Self ||
+                pp.origin == ch::PortProvenanceOrigin::ClockReset ||
+                pp.origin == ch::PortProvenanceOrigin::Bubbled) {
+                root_names.insert(pp.port);
+            } else if (pp.origin == ch::PortProvenanceOrigin::InlineFolded) {
+                inline_folded_names.insert(pp.port);
+            }
+        }
+        REQUIRE_FALSE(root_names.empty());
+        const auto port_name_of = [](const std::string &line) {
+            std::string t = line;
+            while (!t.empty() && (t.back() == ',' || std::isspace(
+                     static_cast<unsigned char>(t.back())))) {
+                t.pop_back();
+            }
+            const auto pos = t.find_last_of(" \t");
+            return pos == std::string::npos ? t : t.substr(pos + 1);
         };
-        std::size_t root_count = 0;
-        while (root_count < hier_ports.size() && is_root_port(hier_ports[root_count])) {
-            ++root_count;
-        }
-        REQUIRE(root_count > 0);
-        // ① **根端口段**：逐字逐序（clock → reset → 无 driver input → 全部根 `ch_out`）
-        for (std::size_t i = 0; i < root_count; ++i) {
-            INFO("root port #" << i << " hier=" << hier_ports[i] << " flat=" << flat_ports[i]);
-            REQUIRE(hier_ports[i] == flat_ports[i]);
-        }
+        const auto root_segment = [&](const std::vector<std::string> &lines) {
+            std::vector<std::string> out;
+            for (const auto &l : lines) {
+                if (root_names.count(port_name_of(l))) out.push_back(l);
+            }
+            return out;
+        };
+        const auto hier_root = root_segment(hier_ports);
+        const auto flat_root = root_segment(flat_ports);
+        REQUIRE_FALSE(hier_root.empty());
+        // ① **根端口段**：**逐字逐序**（clock → reset → 无 driver input → 根组件自身的 `ch_out`）
+        //    ⚠️ 两侧**都**按 `root_names` 过滤 ⇒ ⇒ 比的是「同一组端口的**内容 + 顺序**」
+        //    ⇒ ⇒ 不再依赖「根段是前缀」这个**结构性假设**。
+        REQUIRE(hier_root == flat_root);
         // ② **其余**：逐字存在（集合 ⊆ · 扁平侧多出的 = 成层子组件的 `ch_out` ⇒ 观测盲区）
         const std::set<std::string> flat_set(flat_ports.begin(), flat_ports.end());
-        for (std::size_t i = root_count; i < hier_ports.size(); ++i) {
+        for (std::size_t i = 0; i < hier_ports.size(); ++i) {
+            if (root_names.count(port_name_of(hier_ports[i]))) continue;   // 根段已逐字逐序比过
             INFO("port #" << i << " = " << hier_ports[i]);
             REQUIRE(flat_set.count(hier_ports[i]) == 1);
         }
         // ③ 盲区**确实存在**（否则「子 ch_out 在层次化顶层不可观测」这条前提是空的）
         REQUIRE(flat_ports.size() > hier_ports.size());
+        // ④ **排他句（承重 · ADR-062 v1.7）**：**扁平 \\ 层次化顶层**的端口 MUST ⊆
+        //    {**成层子组件**的 `ch_out`} ⇒ ⇒ 等价两半，**都可机械判**：
+        //    (a) 层次化顶层 MUST 含**全部** inline 后代 的 `ch_out`
+        //        ⇒ ⇒ 否则「漏抬」在 ①② 下**都不被任何判据抓住**
+        for (const auto &nm : inline_folded_names) {
+            INFO("inline-folded port: " << nm);
+            const bool in_hier = std::any_of(
+                hier_ports.begin(), hier_ports.end(),
+                [&](const std::string &l) { return port_name_of(l) == nm; });
+            REQUIRE(in_hier);
+        }
+        //    (b) 扁平 \\ 层次化顶层 的端口 MUST NOT 是 inline 后代的 `ch_out`
+        //        ⇒ ⇒ 它们只能是**成层子组件**的 `ch_out`（= 观测盲区）
+        for (const auto &fl : flat_ports) {
+            const auto nm = port_name_of(fl);
+            const bool in_hier = std::any_of(
+                hier_ports.begin(), hier_ports.end(),
+                [&](const std::string &l) { return port_name_of(l) == nm; });
+            if (in_hier) continue;
+            INFO("flat-only port: " << nm);
+            REQUIRE(inline_folded_names.count(nm) == 0);
+        }
     }
 
     // ═══ ④' **lint 门**（ADR-060 §2.5 / R21-C ②）═══

@@ -17,6 +17,9 @@ All header-only.
 ## STRUCTURE
 ```
 include/cpu/                             # 30 headers, 6657 lines（2026-11-15 实测）
+│   ⚠️ **STRUCTURE 树里的 per-file 行数只对 `rv32i_pipeline.h` 保持同步**（2026-11-15 · R21-B 改行数后订正）
+│      ⇒ ⇒ 另有 **6** 个 per-file 计数**陈旧**（`rv32i_decoder.h` / `rv32i_tcm.h` / `hazard_unit.h` /
+│      `rv32i_alu.h` / `address_decoder.h` / …）⇒ ⇒ **预存在漂移** ⇒ ⇒ 已登记 **R25**（不在 R21-B 范围内 ⇒ 不顺手清理）
 ├── cache/                            # ch_mem-based cache (ADR-039, ADR-041)
 │   ├── i_cache_sync.h / d_cache_sync.h       # 1-cycle sread — RV32I L1 默认
 │   ├── i_cache_async.h / d_cache_async.h     # 0-cycle aread — TCM-style 备选
@@ -26,7 +29,7 @@ include/cpu/                             # 30 headers, 6657 lines（2026-11-15 �
 ├── pipeline/                          # 流水线数据通路（ADR-046 D2）
 │   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode (161)
 │   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 — largest)
-│   ├── rv32i_pipeline.h            # 5-stage top-level (247)
+│   ├── rv32i_pipeline.h            # 5-stage top-level (847)
 │   ├── rv32i_tcm.h                # Tightly-coupled memory (ITCM/DTCM) (133)
 │   ├── hazard_unit.h               # 冒险检测 + 停顿/冲刷控制 (178)
 │   ├── load_lane_selector.h        # load 车道选择 + 符号/零扩展（ADR-069 A0 · 从 MemStage 迁出）

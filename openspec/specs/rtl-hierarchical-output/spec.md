@@ -308,10 +308,24 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 #### Scenario: RTL 顶层 module MUST 走扁平规则
 
-- **WHEN** 一个设计里 RTL 顶层 module 的下方有被 inline 的子组件
-- **THEN** 顶层端口表 MUST 是 clock → reset → 无 driver 的 `input` → **全部** `ch_out`
-      （⇒ 含 inline 后代的 `ch_out`）
-- **AND** 该端口表 MUST 与扁平产物**逐字逐序相同**
+- ⚠️ **Scenario 标题**保留原样（「走扁平规则」⇒ ⇒ 标题与新口径不再逐字相符 ⇒ ⇒ **保留是为可追溯性**
+  ⇒ ⇒ **口径以本 Scenario 正文 + `docs/adr/ADR-062-hierarchical-unit-interface-typing.md` §5 为准**）
+- ⚠️ **MODIFIED（ADR-062 v1.7 · 2026-11-15 · 据实施期实测追认）**：本 Scenario 原写
+  「顶层端口表 MUST 与扁平产物**逐字逐序相同**」⇒ ⇒ 该句**对任何部分成层设计结构性不可满足**
+  （成层子组件的 `ch_out` 在扁平侧恒为顶层端口、在层次化侧恒不是 ⇒ = 观测盲区）
+  ⇒ ⇒ 收窄为两段 ⇒ ⇒ **唯一权威 = `docs/adr/ADR-062-hierarchical-unit-interface-typing.md` §5**
+- **WHEN** 对比一个设计的层次化产物与扁平产物的**顶层端口表**
+- **THEN** **根 `io()` 端口段** MUST **逐字逐序**相同
+      （clock → reset → 无 driver 的 `input` → **根组件自身**的 `ch_out`
+      ⇒ ⇒ ⚠️ **不含** inline 后代的 `ch_out` —— 那些属下一条）
+- **AND** 层次化侧**其余**顶层端口 MUST 在扁平侧**逐字存在**（集合 **⊆**）
+- **AND** 扁平侧 MAY 多出**成层子组件**的 `ch_out`（它们在层次化顶层**不可观测**
+      ⇒ = `include/hierarchy_equivalence.h` 明写的「观测盲区」）
+- **AND** **排他句（承重）**：**扁平 \\ 层次化顶层**的端口 MUST **⊆** {**成层子组件**的 `ch_out`}
+      ⇒ ⇒ 等价表述 = 层次化顶层 MUST 含**全部** inline 后代 的 `ch_out`
+      ⇒ ⇒ 否则「漏抬某个 inline 后代 `ch_out`」在**前两条**下**都不被任何判据抓住**
+- **AND** **段归属 MUST 以 `PortProvenanceOrigin` 为准**（`Self` / `ClockReset` / `Bubbled`
+      ⇒ 归根段；`InlineFolded` ⇒ 归 ⊆ 组）⇒ ⇒ **MUST NOT** 以**名称前缀**推断
 
 #### Scenario: 非根 module MUST NOT 抬 inline 后代的 `ch_out`
 

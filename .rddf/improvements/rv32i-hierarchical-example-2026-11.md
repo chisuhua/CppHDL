@@ -192,13 +192,20 @@ verilator --lint-only --top-module top <hier 产物，文件名 MUST == module �
 
 ### R21-A（发射器）
 
-- [ ] **spike 先行**：H-A + H-B 后探针 `ok=true` 且 **23 → 0**（不是"减少到 N"）；若未归零 ⇒ 把**残余边逐条点名**并重新裁决范围（**不许**就地扩权）⇒ 归属: **builder**
-- [ ] **产物级验证**（探针之外）：对 RV32I 层次化产物跑 ② 的 lint ⇒ **无 `%Error`**、退出码 0（19–21 条的 `Duplicate pin connection` 若存在，这里必红）⇒ 归属: **builder**
-- [ ] ⚠️ **负向对照 × 3（承重）**：<br>(a) 两个**合成**驱动争同一 pin ⇒ **仍** fail-closed；<br>(b) 同一子输出 fan-out 到**不同 LCA** 的两个兄弟 ⇒ **仍** fail-closed 且消息点名（`:361-371`）；<br>(c) 子 output pin 的既有行连的是父 **output 端口** ⇒ 走**决策⑤ `assign`**、**不丢连接**（21–23 条的形态）⇒ 归属: **builder**
-- [ ] **多消费者 ≥ 3** 的 pin 有覆盖（幂等路径）⇒ 归属: **builder**
-- [ ] **proxy 端点**（#15/#16 的 `reg_file.rs1`/`rs2` 作为父侧消费点）实测成立（`print_proxy` 的 RHS 能否读同名网）⇒ 归属: **builder**
-- [ ] 既有语料零回归：`test_hierarchy_equivalence` / `test_hierarchy_verilog` / `test_hierarchy_analysis` / `test_rv32i_stage_dual`（含 `ImmConsistencyDut` 的单连接不变式）/ `verify_hierarchical_rtl.sh --self-test` 全绿 ⇒ 归属: **builder**
-- [ ] 「改接」是**结构化字段**（`HierarchyEmitResult`），**不是** CHWARN；且不破坏断言 `warnings.empty()` 的既有测试 ⇒ 归属: **builder**
+- [x] **spike 先行**：H-A + H-B 后探针 `ok=true` 且 **当前基线 → 0**（不是"减少到 N"）；若未归零 ⇒ 把**残余边逐条点名**并重新裁决范围（**不许**就地扩权）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change A1 · 探针 `ok=true` 且边数 **归零**）⇒ ⇒ ⚠️ **基线订正**：improvement 写的 **23** 是 B3 之前的数 ⇒ ⇒ **实测基线 = 20 条** ⇒ ⇒ 判据按「当前基线 → 0」判（差异**显式登记**于 change `design.md §8` ⇒ MUST NOT 让「23→0」成为不可对账的数字）
+- [x] **产物级验证**（探针之外）：对 RV32I 层次化产物跑 ② 的 lint ⇒ **无 `%Error`**、退出码 0（19–21 条的 `Duplicate pin connection` 若存在，这里必红）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change A2 · `scripts/verify_rv32i_hier_rtl.sh` 退出码 0 · 零 `%Error` · 零 `%Warning`）
+- [x] ⚠️ **负向对照 × 3（承重）**：<br>(a) 两个**合成**驱动争同一 pin ⇒ **仍** fail-closed；<br>(b) 同一子输出 fan-out 到**不同 LCA** 的两个兄弟 ⇒ **仍** fail-closed 且消息点名（`:361-371`）；<br>(c) 子 output pin 的既有行连的是父 **output 端口** ⇒ 走**决策⑤ `assign`**、**不丢连接**（21–23 条的形态）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change **A3**（跨 LCA fan-out 仍 fail-closed 且消息点名）· **A4**（父 `output` 端口消费 ⇒ 实例映射恰好一次 + `assign` 取值 + `rewired_pins` 登记）· **A5**（`ch_in` 的 `set_driver` last-wins ⇒ 同一 pin 不可能有两个 IR 驱动 ⇒ **结构性不可达** ⇒ 如实登记））
+- [x] **多消费者 ≥ 3** 的 pin 有覆盖（幂等路径）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change A6 · RV32I `hazard_unit` 的输出喂多个 stage ⇒ 幂等路径有覆盖）
+- [x] **proxy 端点**（#15/#16 的 `reg_file.rs1`/`rs2` 作为父侧消费点）实测成立（`print_proxy` 的 RHS 能否读同名网）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change A7 · 产物里 `top_pipeline_reg_file_rs1/rs2_data_proxy` 存在 + lint 绿）
+- [x] 既有语料零回归：`test_hierarchy_equivalence` / `test_hierarchy_verilog` / `test_hierarchy_analysis` / `test_rv32i_stage_dual`（含 `ImmConsistencyDut` 的单连接不变式）/ `verify_hierarchical_rtl.sh --self-test` 全绿 ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change D1 · `ctest -LE perf` **255/255** + `verify_hierarchical_rtl.sh`（R1–**R9**）+ `--self-test` 全绿）
+- [x] 「改接」是**结构化字段**（`HierarchyEmitResult`），**不是** CHWARN；且不破坏断言 `warnings.empty()` 的既有测试 ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change A8 · `HierarchyEmitResult::rewired_pins`（value-only + 键序 ⇒ 确定性）· 既有 `warnings.empty()` 断言未破）
 
 ### R21-B（成层）
 
@@ -206,31 +213,49 @@ verilator --lint-only --top-module top <hier 产物，文件名 MUST == module �
       ⇒ ⇒ **2026-11-13 已闭**：ADR-070（**Accepted**）⇒ ⇒ 选项 **①**（`rv32i_pipeline.h:119-128` 的 7 处
       `ch_module` ⇒ `ch_layer` + 显式模块类型名）⇒ ⇒ 「部分成层」= **条件式可接受**（三条件）
       ⇒ ⇒ ⚠️ **D2 排在 B3 之后**（同文件 ⇒ 写点冲突）⇒ ⇒ ⚠️ 契约强度待用户裁决（ADR-070 §6 ⑦）
-- [ ] 若选 ⑤ ⇒ **重新跑探针**（边集合与 ForceLayer 不同）并把新清单写进 change 的 design.md ⇒ 归属: **builder**
-- [ ] **扁平产物不变**：⚠️ 它是**结构性恒真**的回归跳线（`ch_layer` 只写 `is_layer` / `module_type_name` 两个标志，扁平路径不读）⇒ ⇒ **不作为承重证据**，但 MUST 保留（证明改动确实没碰扁平路径）⇒ 归属: **builder**
-- [ ] 模块类型名**撞名**行为可诊断（`sanitize_verilog_name` 后同 base 不同类型 ⇒ `:1017-1028` 拒绝）⇒ 归属: **builder**
-- [ ] 若选 ①/④ ⇒ 模块类型名登记（`.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`）**或**在 capability 明文「这些名字不是契约」⇒ 归属: **builder**
+- [x] ~~若选 ⑤ ⇒ **重新跑探针**~~（**不适用**）（边集合与 ForceLayer 不同）并把新清单写进 change 的 design.md ⇒ 归属: **builder** ⇒ ⇒ **2026-11-15：选项 = ①**（7 处 `ch_layer`）⇒ ⇒ 本条**条件不触发**
+- [x] **扁平产物不变**：⚠️ 它是**结构性恒真**的回归跳线（`ch_layer` 只写 `is_layer` / `module_type_name` 两个标志，扁平路径不读）⇒ ⇒ **不作为承重证据**，但 MUST 保留（证明改动确实没碰扁平路径）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change B2 · `ch_layer` 只写 `is_layer` / `module_type_name` 两个标志 ⇒ **结构性恒真** ⇒ 只作跳线不作承重证据）
+- [x] 模块类型名**撞名**行为可诊断（`sanitize_verilog_name` 后同 base 不同类型 ⇒ `:1017-1028` 拒绝）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change B3 · 既有 `sanitize_verilog_name` 拒绝路径 ⇒ 本 change 不新增行为）
+- [x] 若选 ①/④ ⇒ 模块类型名登记（`.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`）**或**在 capability 明文「这些名字不是契约」⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（用户裁决 · ADR-070 §6 ⑦ ⇒ **明文非契约**（不是产物级契约名）⇒ change `2026-11-15-hier-module-name-not-contract-2026-11` 已归档）
 
 ### R21-C（等价性与产物）
 
-- [ ] **交付粒度**发射 `ok==true` 且 `files.size()>1` ⇒ 归属: **builder**
-- [ ] lint 按 ② 的**显式参数**通过；允许的 warning 逐条列出 + 理由；**无** `-Wno-<单项>` ⇒ 归属: **builder**
-- [ ] **确定性**：两次发射逐字节相同 ⇒ 归属: **builder**
-- [ ] **单连接不变式**：每个 pin 恰好一次 ⇒ 归属: **builder**
-- [ ] **逐拍等价**（扁平 ≡ 层次化，同一段固件）：<br>· `DrivenInput` = `ext_rst` / `prog_we` / `prog_addr` / `prog_data`（⚠️ **不含 `ext_clk`**，⑩）<br>· `Observation` ⊇ { `dbg_id_pc` · `dbg_id_valid` · `dbg_wb_write_en` · `dbg_wb_rd_addr` · `dbg_wb_write_data` · `dbg_branch_taken` · `obs_data_addr` · `obs_data_write_en` · `obs_perf_instructions` }<br>· **MUST** 断言一个「**只有程序真被装载**才成立」的值（否则恒 NOP 的流水线也能过）⇒ 归属: **builder**
-- [ ] **判别性自证**：篡改层次化产物的**一根线** ⇒ 等价性**转红**（否则全绿可能来自观测面恒定量）⇒ 归属: **builder**
-- [ ] **期望值手推**（禁抄仿真输出）：手推对象 = `Result::flat_trace`（`include/hierarchy_equivalence.h:118-120` 只有扁平侧轨迹）⇒ 至少「`ext_rst` 释放后第 N 拍的 `dbg_id_pc` 序列」+「一条 `sw` 的 `obs_data_addr`/`obs_data_write_en`」+「3 条 `addi` 后的 `dbg_wb_write_data`」<br>⚠️ 手推 MUST 区分「框架 `default_reset` 脉冲」与「DUT 的 `ext_rst`」，且把 `primed`/`fetch_pc_reg` 的跳拍算进去 ⇒ 归属: **builder**
-- [ ] 计数锚点同步：`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL`（新用例若带 `verilator_e2e` 标签 ⇒ **+1**；并写明 **TIMEOUT**，RV32I 层次化编译是分钟级）⇒ **MUST 引用锚点，禁写死数字** ⇒ 归属: **builder**
+- [x] **交付粒度**发射 `ok==true` 且 `files.size()>1` ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change B1 · 发射 `ok==true` 且 **8 个 module**（7 stage + `top`））
+- [x] lint 按 ② 的**显式参数**通过；允许的 warning 逐条列出 + 理由；**无** `-Wno-<单项>` ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change A2 · 允许的 warning **逐条列出 + 理由** · **无** `-Wno-<单项>`）
+- [x] **确定性**：两次发射逐字节相同 ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change C1）
+- [x] **单连接不变式**：每个 pin 恰好一次 ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change C2 · 实例语句里每个 pin **恰好出现一次** ⇒ 无 `Duplicate pin connection`）
+- [x] **逐拍等价**（扁平 ≡ 层次化，同一段固件）：<br>· `DrivenInput` = `ext_rst` / `prog_we` / `prog_addr` / `prog_data`（⚠️ **不含 `ext_clk`**，⑩）<br>· `Observation` ⊇ { `dbg_id_pc` · `dbg_id_valid` · `dbg_wb_write_en` · `dbg_wb_rd_addr` · `dbg_wb_write_data` · `dbg_branch_taken` · `obs_data_addr` · `obs_data_write_en` · `obs_perf_instructions` }<br>· **MUST** 断言一个「**只有程序真被装载**才成立」的值（否则恒 NOP 的流水线也能过）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change C4 · **198 拍 × 9 观测** · 公共 helper `ch::hier_eq`）
+- [x] **判别性自证**：篡改层次化产物的**一根线** ⇒ 等价性**转红**（否则全绿可能来自观测面恒定量）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change C6）
+- [x] **期望值手推**（禁抄仿真输出）：手推对象 = `Result::flat_trace`（`include/hierarchy_equivalence.h:118-120` 只有扁平侧轨迹）⇒ 至少「`ext_rst` 释放后第 N 拍的 `dbg_id_pc` 序列」+「一条 `sw` 的 `obs_data_addr`/`obs_data_write_en`」+「3 条 `addi` 后的 `dbg_wb_write_data`」<br>⚠️ 手推 MUST 区分「框架 `default_reset` 脉冲」与「DUT 的 `ext_rst`」，且把 `primed`/`fetch_pc_reg` 的跳拍算进去 ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change C5 · 写回序列 `{(x1,10),(x2,3),(x3,13),(x4,13),(x5,23)}` + `sw` 地址 `0x100` + ID 级指令序列 == 固件）
+- [x] 计数锚点同步：`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL`（新用例若带 `verilator_e2e` 标签 ⇒ **+1**；并写明 **TIMEOUT**，RV32I 层次化编译是分钟级）⇒ **MUST 引用锚点，禁写死数字** ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（change 4.4 · `CTEST_TOTAL` **266** / `VERILATOR_E2E_TOTAL` **77** · 新用例带 `verilator_e2e` 标签 ⇒ **+1**）
 
 ### 不回归 / 文档同步
 
-- [ ] 全量 `ctest` 绿（数字以 `CTEST_TOTAL` 锚点为准）⇒ 归属: **builder**
-- [ ] `test_rv32i_soc_dual_parity` 的 golden 全绿（本项零流水线语义改动）⇒ 归属: **builder**
-- [ ] `verify_hierarchical_rtl.sh`（R1–R8）+ `--self-test` 全绿 ⇒ 归属: **builder**
-- [ ] **`ADR-060` / `ADR-066` 的判据正文**更新（不只是主题文档加一行）：行 2 的适用面 + **反向不变式**（`into_child==true` 永远拒绝）+ 决策⑤ 的适用面 ⇒ 归属: **architect（判据面）/builder（实施后回填）**
-- [ ] **roadmap R21 行改写**（旧文本写「立项范围 = 23 处双驱动点的单驱动化」，与本文冲突）⇒ MUST 同步，否则下个会话按旧范围行动 ⇒ 归属: **planner**
-- [ ] `include/cpu/AGENTS.md` 的 `rv32i_pipeline.h` 行数与目录总行数（若 ①/④ 改了行数）⇒ 归属: **builder**
-- [ ] 残差登记（若「语料全套 R2–R8」不做）：`.rddf/checks/arch-residual-registry.md` 的 `id=25`（`已知`）+ 台账 §7 同批 ⇒ 走 `verify_arch_ledger_residuals.sh` 的**生成句前缀**格式 ⇒ 归属: **architect**
+- [x] 全量 `ctest` 绿（数字以 `CTEST_TOTAL` 锚点为准）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（`ctest -LE perf` **255/255** · 锚点 **266**）
+- [x] `test_rv32i_soc_dual_parity` 的 golden 全绿（本项零流水线语义改动）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（11 用例 / 20289 断言全绿）
+- [x] `verify_hierarchical_rtl.sh`（R1–R8）+ `--self-test` 全绿 ⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（★ 实际判据已扩到 **R1–R9** ⇒ 数目按实现为准）
+- [x] **`ADR-060` / `ADR-066` 的判据正文**更新（不只是主题文档加一行）：行 2 的适用面 + **反向不变式**（`into_child==true` 永远拒绝）+ 决策⑤ 的适用面 ⇒ 归属: **architect（判据面）/builder（实施后回填）**
+      ⇒ ⇒ **2026-11-15 已闭**（**ADR-060 v1.19 §2.1.1**（新增「反向不变式」· 判定 MUST 以**边方向**为判据）· **ADR-066 v1.6 §2.5**（决策⑤ 适用面覆盖**实例语句侧 + 分析层侧** · 改接清单 MUST 是**结构化字段**）· **ADR-062 v1.7 §5**（顶层端口表判据收窄：根段**逐字逐序** + 其余 **⊆** + 排他句 + 机械切法）⇒ ⇒ **决策内容零变更**（只界定适用面）⇒ ⇒ 审稿记录 = `.rddf/reviews/ADR-060-062-066-judgment-scope-2026-11.md`）
+- [x] **roadmap R21 行改写**（旧文本写「立项范围 = 23 处双驱动点的单驱动化」，与本文冲突）⇒ MUST 同步，否则下个会话按旧范围行动 ⇒ 归属: **planner**
+      ⇒ ⇒ **2026-11-15 已闭**（`phase-6-next-steps.md` 的 R21 行已改为「✅ 已实施并归档」+ 范围订正 + 基线订正）
+- [x] `include/cpu/AGENTS.md` 的 `rv32i_pipeline.h` 行数与目录总行数（若 ①/④ 改了行数）⇒ 归属: **builder**
+      ⇒ ⇒ **2026-11-15 已闭**（目录总行数 **6657**（护栏 C5 绿）· `rv32i_pipeline.h` 的 per-file 计数 **247 → 847**）⇒ ⇒ ⚠️ **顺带发现（预存在漂移 · 不在本项范围）**：STRUCTURE 树里另有 **6** 个 per-file 行数陈旧（`rv32i_decoder.h` / `rv32i_tcm.h` / `hazard_unit.h` / `rv32i_alu.h` / `address_decoder.h` 等）⇒ ⇒ 已登记为 **R25**
+- [x] 残差登记（若「语料全套 R2–R8」不做）：`.rddf/checks/arch-residual-registry.md` 的 `id=25`（`已知`）+ 台账 §7 同批 ⇒ 走 `verify_arch_ledger_residuals.sh` 的**生成句前缀**格式 ⇒ 归属: **architect**
+      ⇒ ⇒ **2026-11-15 已闭**（`id=25` 状态 **已知** + 台账 §7 行 25 同批 ⇒ `verify_arch_ledger_residuals.sh` **PASS（26 行）**）
 
 ---
 
