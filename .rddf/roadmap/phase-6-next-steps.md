@@ -39,15 +39,15 @@
 | **R4** | ✅ **P8 builder 步**（删 `set_ab_verification` stub + golden 下限派生 + 两份文案订正） | builder | — | ✅ **2026-11-13 已闭** ⇒ ⇒ ① R4.1 三个符号 + WARN 块 + 两个局部量**全删**（代码面 grep == 0 · **两种 JIT 构建各自编译通过**）② R4.2 四件套登记（surface.md +1 行 · tsv +2 探针 · CHANGELOG 一节 · 锚点 19/32）③ R4.3 **集合判据**落地 = `scripts/verify_jit_golden_coverage.sh` + 基线 `.rddf/checks/jit-golden-coverage.md`（39 分母 / 5 已覆盖 · **5 条自检投毒**含「计数不变但集合变」）④ R4.4 文案（根 `AGENTS.md` **替换** + usage guide + JIT_ROADMAP + ADR-005「已禁用」→「已移除」）⇒ ⇒ ⚠️ 顺带修 **C6 解析器回归**（见 R22） |
 | **R5** | ✅ **B3 的 T2 裁决**（MEM 数据对齐）⇒ ⇒ 载体 = **ADR-069**（**Accepted · 2026-11-12**）⇒ ⇒ 决策 = **候选 ②（A0）**（地址照旧 + MEM/WB 延后 1 拍）· oracle **×3**（第 1/2 轮 REJECT ⇒ 第 3 轮 PASS-WITH-NOTES）· critic **×1**（APPROVE_WITH_CONDITIONS · **0 BLOCKER**） | architect | 用户 2026-11-12「按你建议拍板」 | ★ **B3 的🚪 门之一 ⇒ ✅ 已闭** ⇒ ⇒ ✅ **2026-11-12 晚补齐 SF-3 强制项**：**ADR-047 §5.5 dated addendum**（3 处「3 拍」原文**逐字保留** + 三处 dated 指针）⇒ ⇒ ⚠️ **spec MODIFIED 已重分类**为 **R14 内的 change 步骤**（承载**实施后**的真实基线 ⇒ ⇒ 提前写 = 写未验证的值）⇒ ⇒ 审稿记录 `.rddf/reviews/ADR-069-mem-data-alignment.md` |
 | **R6** | ✅ **B3 的公开面前置门**（CHANGELOG + `public-api-surface.md` 各一行） | planner | — | ★ **B3 的🚪 门之二** ⇒ ⇒ ✅ **已登记**（2026-11-12 · 前置登记 = 预告 + 迁移指引 · 非「已发布」）⇒ ⇒ `firmware-load-chain` L1–L6（加载端口族语义变更）+ `memory-timing-contract` T1/T3（`data_ready` 语义重定义）⇒ ⇒ 护栏 `verify_public_api_visibility.sh` PASS |
-| **R7** | 🟡 **P6-0 侦察**（RV32I ISA 缺口：复用面清单 + `FENCE` 裁决候选） | planner → architect | — | **只读侦察** ⇒ ⇒ 可全程并行 |
+| **R7** | 🟡 **P6-0 侦察（FENCE 部分已被 G4 取代 · CSR/ECALL/EBREAK 复用面清单仍欠）**（RV32I ISA 缺口：复用面清单 + `FENCE` 裁决候选） | planner → architect | — | **只读侦察** ⇒ ⇒ 可全程并行 |
 | **R8** | ✅ **D8**（`ext_clk` 死端口）⇒ ⇒ ⚠️ **2026-11-14 改判 = A2 的「删端口」半**（原 2026-11-13 裁决是「保留端口 + 注释」） | architect → 用户 | — | ✅ **2026-11-13 首闭（保留 + 注释）** ⇒ ⇒ ⚠️ **2026-11-14 用户改判 = 删端口**（接受公开面变更的成本，换「端口面上不留会骗人的名字」）⇒ ⇒ ✅ **已落地**：`Rv32iPipelineTop::ext_clk` + `riscv::Rv32iPipeline::clk`（零消费者 ⇒ ZERO-DEBT）**双双删除** ⇒ ⇒ 顶层端口 **32 → 31**（产物 **114 → 113**）⇒ ⇒ 公开面移除登记 2 行 + 探针 2 条 ⇒ ⇒ **删前针对性实测**（`ext_clk` 0/1 交替翻转 ⇒ 60 拍 × 27 观测逐拍全等）⇒ ⇒ 「真让 `ext_clk` 生效」= **另独立立项** |
 | **R9** | 🔒 **P11**（ADR-036 物理移除） | builder | 日历锁 **2027-04-17** | 本窗口**不做** |
 | **R10** | ✅ **第三处状态漂移**（`mem-port-arg` 草案 frontmatter） | planner | — | ✅ **2026-11-12 已闭**（frontmatter = `implemented`）⇒ ⇒ ⚠️ **但索引列当时漏改** ⇒ ⇒ 已并入 **R12**（发现 6）|
-| **R11** | 🟡 **`FENCE` 语义裁决**（architect · **planner 无权拍板**） | architect | R7 | 须在 R7 侦察之后（侦察提供候选方案）⇒ ⇒ 可与 B3 并行 |
+| **R11** | 🟡 **`FENCE` 语义裁决（实现已先行 = NOP · architect 裁决 + 审稿仍欠）**（architect · **planner 无权拍板**） | architect | R7 | 须在 R7 侦察之后（侦察提供候选方案）⇒ ⇒ 可与 B3 并行 |
 | **R12** | ✅ **12 条漂移一次性扫干净**（architect 复盘 #3 的发现 1/2/4/5/6/7 + 发现 8 的 5 处）⇒ ⇒ 真相源 / 状态格 / 公开面载体 / 索引列 / 指针 | planner | — | ✅ **完成态 = 已提交**（metis P2-18：判据只看**工作区文本** ⇒ ⇒ 未提交时一次 `checkout` 就把它变回「未执行」而判据仍绿）⇒ ⇒ **漂移订正 = `83cdb89`** · **清单刷新 = 本 commit** ⇒ ⇒ 判据见 §2 的 **R12**（逐条可 grep）|
-| **R13** | 🔴 **B3 立项**（**两个** change：`memory-timing-contract` + `firmware-load-chain`）⇒ ⇒ 载体 = `openspec/changes/<name>/{proposal,design,tasks}.md` | planner → builder | R12 | ★ **B3 的真起点** ⇒ ⇒ 🚪 门 R5 + R6 **已闭** ⇒ ⇒ ~~只差立项~~<br>✅ **2026-11-13：两个 change 立项全部完成**<br>① `openspec/changes/memory-timing-contract-2026-11/`（`proposal` + `design` + `tasks` + **3 份 delta**：`rv32i-memory-timing`(ADDED,新) / `rv32i-commit-path`(MODIFIED) / `rv32i-isa-semantics`(MODIFIED)）<br>② `openspec/changes/firmware-load-chain-2026-11/`（`proposal` + `design` + `tasks` + **2 份 delta**：`rv32i-firmware-loading`(ADDED,新) / `rv32i-isa-semantics`(**ADDED** ⚠️ **不是** MODIFIED —— 草案标 MODIFIED 但语义是「追加」⇒ ⇒ MODIFIED 会**整体替换**既有条款 ⇒ ⇒ 用 ADDED 才不破坏))<br>⇒ ⇒ 两个 change 均 `openspec validate --strict` **exit 0** + `verify_openspec_delta.sh` **4/4 绿**<br>✅ **2026-11-14：实施（R14）已完成并归档** ⇒ ⇒ 两个 change 均入 `openspec/changes/archive/`（`2026-11-14-memory-timing-contract-2026-11` + `2026-11-14-firmware-load-chain-2026-11`）⇒ ⇒ **原子性裁决兑现**（无「一个已归档另一个未归档」的发布态）⇒ ⇒ **新建** capability `rv32i-memory-timing`（5 reqs）+ `rv32i-firmware-loading`（7 reqs）⇒ ⇒ `openspec validate --specs` = **47 passed / 0 failed** |
-| **R14** | 🔴 **B3 实施**（T1+T3 同批 · T6 · T2/T4/T5 · L1–L6）⇒ ⇒ 出口 = **ADR-068 的 V1–V10 + ADR-069 的 V1–V15 全绿** + 时序 golden **手推重算** | builder | R13 | ⚠️ **必须在 R15 之前**（时序金标只算一遍）⇒ ⇒ **两个 change 同批**（T1 与 T3 耦合）⇒ ⇒ 🟡 **2026-11-14：T1 + T2 + T3 已落地并全绿**（`ctest -LE perf` **252/252** + **44/44** 护栏绿）⇒ ⇒ **手推金标逐项命中**（`load_use_stalls` **8** · `non_retired` **23** · 退休数 **176**）⇒ ⇒ ⚠️ **实施期挖到 ADR-069 §7.2 的实施形态缺陷**（`m2_word` 采到**上一拍**的字 ⇒ ⇒ 静默错车道）⇒ ⇒ 已修 + 已登记为 **ADR-069 §7.6**（dated addendum · 决策零变更 · **architect 追认中**）⇒ ⇒ ✅ **V12 已闭**（2026-11-14 · 新建 `tests/chlib/test_hazard_unit_stall.cpp` · 组件级停顿链真值表）⇒ ⇒ ⛔ **仍欠**：T4 · T6 · L1–L6 · **V13–V15 的专向判别用例** · 「产物级」判据⇒ ⇒ ✅ **两条「注释 vs 行为」差异已闭（2026-11-14 · architect 批次 · 只改注释不改行为）**：① `hazard_unit.h` 称移位链「**固定延迟 · 不依赖 rd**」⇒ ⇒ **表述已订正**：只对**移位链**成立，**不对停顿总长成立**（`stall` 含组合项 ⇒ 停顿 = 条件持续拍数 + 2；条件掉一拍 ⇒ 提前结束；检测条件本身依赖 rd）② `load_use_detected` 称「**单拍脉冲**」⇒ ⇒ **已订正**为「检测条件的**组合**输出（不自清）」⇒ ⇒ **行为零改动**（流水线里 4 拍 = 2 + 2 是**正确**设计）⇒ ⇒ 登记 = `docs/architecture/rv32i-microarchitecture.md`「已知残留」表 · 判据 = `tests/chlib/test_hazard_unit_stall.cpp` ⇒ ⇒ 验收报告 = `.rddf/reviews/memory-timing-contract-t1-t2-verify-2026-11.md` |
-| **R15** | 🔴 **B4 实施**（C1 差分 → C2 ALU 编码归一 → C3/C4 组件接入 → G3→G1+G4 同批 → 其余） | builder | **R14 已闭** | ⚠️ **必须等 R14 闭**（同依据） |
+| **R13** | ✅ **B3 立项（2026-11-14 已闭）**（**两个** change：`memory-timing-contract` + `firmware-load-chain`）⇒ ⇒ 载体 = `openspec/changes/<name>/{proposal,design,tasks}.md` | planner → builder | R12 | ★ **B3 的真起点** ⇒ ⇒ 🚪 门 R5 + R6 **已闭** ⇒ ⇒ ~~只差立项~~<br>✅ **2026-11-13：两个 change 立项全部完成**<br>① `openspec/changes/memory-timing-contract-2026-11/`（`proposal` + `design` + `tasks` + **3 份 delta**：`rv32i-memory-timing`(ADDED,新) / `rv32i-commit-path`(MODIFIED) / `rv32i-isa-semantics`(MODIFIED)）<br>② `openspec/changes/firmware-load-chain-2026-11/`（`proposal` + `design` + `tasks` + **2 份 delta**：`rv32i-firmware-loading`(ADDED,新) / `rv32i-isa-semantics`(**ADDED** ⚠️ **不是** MODIFIED —— 草案标 MODIFIED 但语义是「追加」⇒ ⇒ MODIFIED 会**整体替换**既有条款 ⇒ ⇒ 用 ADDED 才不破坏))<br>⇒ ⇒ 两个 change 均 `openspec validate --strict` **exit 0** + `verify_openspec_delta.sh` **4/4 绿**<br>✅ **2026-11-14：实施（R14）已完成并归档** ⇒ ⇒ 两个 change 均入 `openspec/changes/archive/`（`2026-11-14-memory-timing-contract-2026-11` + `2026-11-14-firmware-load-chain-2026-11`）⇒ ⇒ **原子性裁决兑现**（无「一个已归档另一个未归档」的发布态）⇒ ⇒ **新建** capability `rv32i-memory-timing`（5 reqs）+ `rv32i-firmware-loading`（7 reqs）⇒ ⇒ `openspec validate --specs` = **47 passed / 0 failed** |
+| **R14** | ✅ **B3 实施（2026-11-14 已闭并归档）**（T1+T3 同批 · T6 · T2/T4/T5 · L1–L6）⇒ ⇒ 出口 = **ADR-068 的 V1–V10 + ADR-069 的 V1–V15 全绿** + 时序 golden **手推重算** | builder | R13 | ⚠️ **必须在 R15 之前**（时序金标只算一遍）⇒ ⇒ **两个 change 同批**（T1 与 T3 耦合）⇒ ⇒ 🟡 **2026-11-14：T1 + T2 + T3 已落地并全绿**（`ctest -LE perf` **252/252** + **44/44** 护栏绿）⇒ ⇒ **手推金标逐项命中**（`load_use_stalls` **8** · `non_retired` **23** · 退休数 **176**）⇒ ⇒ ⚠️ **实施期挖到 ADR-069 §7.2 的实施形态缺陷**（`m2_word` 采到**上一拍**的字 ⇒ ⇒ 静默错车道）⇒ ⇒ 已修 + 已登记为 **ADR-069 §7.6**（dated addendum · 决策零变更 · **architect 追认中**）⇒ ⇒ ✅ **V12 已闭**（2026-11-14 · 新建 `tests/chlib/test_hazard_unit_stall.cpp` · 组件级停顿链真值表）⇒ ⇒ ⛔ **仍欠**：T4 · T6 · L1–L6 · **V13–V15 的专向判别用例** · 「产物级」判据⇒ ⇒ ✅ **两条「注释 vs 行为」差异已闭（2026-11-14 · architect 批次 · 只改注释不改行为）**：① `hazard_unit.h` 称移位链「**固定延迟 · 不依赖 rd**」⇒ ⇒ **表述已订正**：只对**移位链**成立，**不对停顿总长成立**（`stall` 含组合项 ⇒ 停顿 = 条件持续拍数 + 2；条件掉一拍 ⇒ 提前结束；检测条件本身依赖 rd）② `load_use_detected` 称「**单拍脉冲**」⇒ ⇒ **已订正**为「检测条件的**组合**输出（不自清）」⇒ ⇒ **行为零改动**（流水线里 4 拍 = 2 + 2 是**正确**设计）⇒ ⇒ 登记 = `docs/architecture/rv32i-microarchitecture.md`「已知残留」表 · 判据 = `tests/chlib/test_hazard_unit_stall.cpp` ⇒ ⇒ 验收报告 = `.rddf/reviews/memory-timing-contract-t1-t2-verify-2026-11.md` |
+| **R15** | 🟡 **B4 实施（2026-11-15：C1/C2/C3/C4 + G3→G1+G4 已闭）**（C1 差分 → C2 ALU 编码归一 → C3/C4 组件接入 → G3→G1+G4 同批 → 其余） | builder | **R14 已闭** | ⚠️ **必须等 R14 闭**（同依据） |
 | **R16** | 🟡 **独立立项 12 条**（批次表 §4 的 **11 行** + **台账 id=22**）⇒ ⇒ 含**用户 ⑤ 的端口名消化**（⇒ ⇒ 与 B3 **同区** ⇒ ⇒ **不可并行**，见 R17） | planner → architect | — | ⚠️ **逐项写点**（metis P1-14：不可笼统写「`src/hierarchy_*`」）⇒ ⇒ **大部分**与 B3/B4 零重叠 ⇒ ⇒ **但端口名消化项落在 `examples/riscv-mini/src/rv32i_pipeline_top.h` + 10 个 TB 的 tsv** ⇒ ⇒ **与 B3 的 L1–L6 同区** ⇒ ⇒ ⚠️ **2026-11-13 +2 条**（F-1 / F-2 · B0 批退役遗留的两条 CI 红）⇒ ⇒ ✅ **同日 P0 批已完成**（用户裁决「按推荐顺序推进」⇒ ⇒ 先清红再 push）⇒ ⇒ **未做数 = 10** |
 | **R17** | 🔴 **用户 ⑤ 的原始诉求：RTL 端口名 == C++ 成员名**（32 端口 · `Rv32iPipelineTop`）⇒ ⇒ ✅ **R17.1 已闭（2026-11-13 · architect 裁量）=「现在做」**，**放置 = 独立于 B3 的小批**（先于 B3 执行）⇒ ⇒ ⚠️ **与 B3 的 L1–L6 在 `rv32i_pipeline_top.h` 上同区 ⇒ MUST 顺序执行**（依据 `firmware-load-chain-2026-11.md:197` 的爆炸半径）⇒ ⇒ ⇒ **本轮交付 = R17.2** | architect（已闭）→ **builder** | — | ★ **用户诉求仍未在真实 CPU 上兑现**：`Rv32iPipelineTop` 的 32 个端口**全部未具名** · 棘轮豁免 = **1484/1484** ⇒ ⇒ **零组件被消费** ⇒ ⇒ ⚠️ 做完会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 examples 的 tsv / `examples-rtl-expectations.md` / 10 个 TB **同批** ⇒ ⇒ ✅ **回退成本 = 一次 revert**（改动自洽 ⇒ ⇒ 无沉没成本 ⇒ ⇒ 用户可随时推翻）|
 | **R18** | ✅ **R1 = 端口面残留登记**（扁平顶层暴露 **80** 个内部 `ch_out` · `.v` 114 端口 vs 根组件自有 32 ⇒ ⇒ **台账无行** ⇒ ⇒ 补登记为已知残留） | planner → architect | **用户裁决** | ✅ **2026-11-13 已闭**（用户授权按建议裁决 ⇒ ⇒ 选 **A** = 补登记）⇒ ⇒ 台账 **`id=23`**（`已知`）+ 登记表同批 ⇒ ⇒ 两侧双向 1:1（**25 行**）⇒ ⇒ ⚠️ **零实现改动**（只补台账行 ⇒ ⇒ 缺口可见）⇒ ⇒ 只差「补台账行」这一步 |
@@ -746,3 +746,87 @@ S1（T1：D-TCM 改 sread）
 | ① | **ADR-070 §6 ⑥** = 诉求 ④ 的交付形态认定（若 spike 撞出第二层失败 ⇒ ⇒ 退路 ⑥ 还是 ⑤） | 用户 / architect |
 | ② | **ADR-070 §6 ⑦** = 7 个模块类型名的契约强度（产物级契约名 vs 明文非契约） | 用户 |
 | ③ | **R8**（D8 `ext_clk` 死端口）· **R11**（`FENCE` 语义裁决）· **R19**（F6 判据缺口） | 用户 |
+
+---
+
+## 7. ⚠️ **剩余 / 遗留 / 遗漏**清单 + 后续实施规划（2026-11-15 全量扫描）
+
+> ⚠️ **本节不是新增任务**，而是把**散在 6 处**的未闭口条目**收成一张可交接的表**：
+> ① `phases/phase-6.md` 的批次表（B0–B4 + P1–P15）· ② 本文件 §1–§2 的 R 序列
+> · ③ `.rddf/improvements/**` 的 frontmatter 状态 · ④ `.rddf/checks/arch-residual-registry.md`
+> · ⑤ 根 / `include/cpu` 的 `AGENTS.md`（KNOWN LIMITATIONS）· ⑥ `openspec/changes/**`（active）。
+> ⇒ ⇒ **每条带证据锚**（文件 + 状态格 / 登记表 id）⇒ ⇒ **不靠记忆**。
+
+### 7.1 三类未闭口（**分类口径**）
+
+| 类 | 含义 | 谁收 |
+|---|---|---|
+| **甲 · 本批自产** | 本轮（B4 / R24 / C4 / G 批）**自己引入或自己遗漏**的 | builder（+ architect 的裁决件） |
+| **乙 · 仓内既有** | 本轮之前就存在、**尚未闭口**的 | 按既有归属（见各条） |
+| **丙 · 外部 / 日历锁** | 等用户裁决 / 等 CI / 等日历 / 等下游 | **不在本仓推进** |
+
+### 7.2 甲类（本批自产）
+
+| # | 条目 | 证据锚 | 处置 |
+|---|---|---|---|
+| 甲-1 | 根 `AGENTS.md` 的「RV32I ISA 覆盖边界」**已过时**（仍写「`FENCE` 不在任何 capability 内」⇒ 已被 G4 作废） | `AGENTS.md:266` | ✅ **本轮已修**（2026-11-15）：`FENCE` 已覆盖 + 未知 opcode 已可观测 |
+| 甲-2 | **`funct3`/`funct7` 非法组合 = residual 未进残差登记表**（improvement 写了「MUST 登记为 residual」⇒ 但台账无该行 ⇒ 登记表与台账是 1:1 双向核对 ⇒ builder **不能单方面**加台账行） | `.rddf/improvements/rv32i-isa-gap-closure-2026-11.md`（G1 段）· `.rddf/checks/arch-residual-registry.md`（无对应行） | ⬜ **architect 加台账行** ⇒ builder 再登记（**顺序不可反**） |
+| 甲-3 | **R11（`FENCE` 语义裁决）实现先于决策**：G4 已实现「= NOP」，但 architect 的裁决 + oracle→critic 审稿未做 ⇒ ⇒ 属**流程债**（不是技术债） | `.rddf/roadmap/phase-6-next-steps.md` R11 行（🟡） | ⬜ architect **补裁决 + 补审**（是**确认**而非重做） |
+| 甲-4 | **R7（P6-0 侦察）仍欠 CSR/`ECALL`/`EBREAK` 的复用面清单**（`FENCE` 部分已被 G4 取代 ⇒ ⇒ P6 的立项依据缺这一块） | 同上 R7 行（🟡） | ⬜ planner 只读侦察（`CsrBank` / `ExceptionUnit` **已存在可复用**） |
+| 甲-5 | **状态格漂移**：R13/R14（**已闭**仍写 🔴）· R15（🔴 → 🟡）· B1 行（开头「⬜ 未开工」与结尾「✅ 11/11」**自相矛盾**） | `phase-6-next-steps.md` R13/R14/R15 · `phases/phase-6.md` B1 行 | ✅ **本轮已修**（2026-11-15） |
+| 甲-6 | **本机 verilator PCH 环境缺陷**：`build/verilator-install/include/verilated.mk` 的 `CFG_CXXFLAGS_PCH_I` **为空**（configure 未识别编译器 ⇒ `CFG_CXX_VERSION = ""`）⇒ ⇒ 任何**未命中缓存**的模型编译都会失败 ⇒ ⇒ **CI 侧是否同缺陷未验证** | 该文件（非跟踪产物）· `.rddf/checks/examples-rtl-expectations.md`（已登记） | ⬜ **一次 CI run** 确认（本地绿 **≠** CI 绿） |
+| 甲-7 | **9 个 commit 未 push**（`2cacf89` … `d1060e1`） | `git log origin/main..HEAD` | ⬜ push（**不主动** ⇒ 等用户口令） |
+
+### 7.3 乙类（仓内既有 · 未闭口）
+
+| # | 条目 | 证据锚 | 归属 | 规模 |
+|---|---|---|---|---|
+| 乙-1 | **R3 簇 / 台账行 15**：R3.1 `Reject` 诊断粒度 → R3.2a 观测载体（`CHWARN` 只进日志 ⇒ 未 push 进 `result.warnings`）→ R3.2b 判据用例 → R3.3 计数分别判 → R3.4 change 立项/实施/归档 → R3.5 台账闭口 | `phase-6-next-steps.md` R3.1–R3.5 · 残差表 **id=15**（状态「已知」· 归属 builder） | builder → architect | 中（6 步 · 顺序固定） |
+| 乙-2 | **R16 = 10 条独立立项**（批次表 §4 的 9 行 + 台账 id=22）⇒ 逐条立项（**不是一批做**） | `phase-6-next-steps.md` R16 | planner → builder | 大（10 条） |
+| 乙-3 | **R21 / RV32I 层次化 RTL 示例**（`rv32i-hierarchical-example-2026-11` = **approved** · ADR-070 裁决已落）⇒ ⇒ **实施零进度**（tasks 全未勾：spike 探针 23→0 · 产物级 lint 无 `%Error` · 负向对照 ×3 · 多消费者 ≥3 · proxy 端点 · 既有语料零回归 · 改接结构化字段 · 扁平产物不变 · 撞名可诊断） | `.rddf/improvements/rv32i-hierarchical-example-2026-11.md`（tasks 段） | builder | 🔴 **最大未实施块** |
+| 乙-4 | **G5**（`ExceptionUnit` 的 `mcause` **永远写不到**）⇒ 首选 **B**（内部跨两拍 · `CsrBank` 零改动）⇒ 需**复合 DUT** 才有判别力 | 同 improvement 的 G5 段 | builder | 中 |
+| 乙-5 | **P9 ①**：`DCacheWriteBuffer` **不真缓冲** ⇒ 「真 FIFO 写缓冲」= 独立立项 | `phases/phase-6.md` P9 行 | builder | 小–中 |
+| 乙-6 | **P12/P13/P14/P15**（下游 ChipForge issue #28 的**两项** improvement 仍 `draft`）⇒ ① 待**用户**拍板 CHANGELOG 载体命运（R1/R2/R3）· ② 待 P13 的 architect 裁定 ⇒ 然后 P14/P15 实施 | `phases/phase-6.md` P12–P15 · `.rddf/improvements/`（两项 draft） | 用户 → architect → builder | 中（**外部驱动**） |
+| 乙-7 | **B2（消费侧批）**：E1/E2/E3/E4/E5/E7/E8 ✅ ⇒ 剩 **E6**（CI 形态：挂 `pr-verilator-fast` **一个** step · 不新建 job）+ 墙钟登记 | `phases/phase-6.md` B2 行 | builder | 小 |
+| 乙-8 | **R23-A.2**（CI 证据回填：`sha` + `job` + `step` + `conclusion`）· **R23-B**（`verify_guard_reachability.sh` 静态护栏 + 6 job 可达性分类 + 纪律落点） | `phase-6-next-steps.md` R23-A.2 / R23-B.1–B.4 | builder | 小–中 |
+| 乙-9 | **残差登记表未闭行**：**id=14**（已裁决 · 归属「下游」⇒ 实现待办）· **id=21/21b/22**（未决 · architect）· **id=23/24**（已知 · architect） | `.rddf/checks/arch-residual-registry.md` | architect（id=14 下游） | — |
+| 乙-10 | **P6（RV32I ISA 缺口）**：**`FENCE` ✅（G4）** ⇒ 剩 **CSR / `ECALL` / `EBREAK`**（现在**可观测** = reason 1，但**仍未实现**）⇒ ⇒ 特权级独立立项 | `phases/phase-6.md` P6 行 · 根 `AGENTS.md` ISA 段 | planner → architect → builder | 🔴 大（特权级） |
+
+### 7.4 丙类（外部 / 日历锁 · **不在本仓推进**）
+
+| # | 条目 | 锚 | 处置 |
+|---|---|---|---|
+| 丙-1 | **P11** ADR-036 逻辑算子物理移除（`&&`/`\|\|` ⇒ `&`/`\|`） | `phases/phase-6.md` P11 行 | 🔒 **日历锁 2027-04-17** ⇒ 本窗口不做；**到期 MUST 做**（`scripts/verify_deprecation_calendar_gate.sh` 守） |
+| 丙-2 | 残差 **id=6/7/8/10** = **不做** | 残差登记表 | 已终态 |
+| 丙-3 | **CI 平台 = 仅 Ubuntu**（用户 2026-11-03 裁决）⇒ macOS/Windows **无 CI 证据** | 根 `AGENTS.md` KNOWN LIMITATIONS | 不在本仓推进 |
+| 丙-4 | 等用户裁决：ADR-070 §6 ⑥/⑦ · R8 / R11 / R19 | `phase-6-next-steps.md` §5 | 用户 |
+
+### 7.5 实施规划（**批次 · 依赖 · 判据**）
+
+| 批 | 内容 | 依赖 | 出口判据 | 归属 |
+|---|---|---|---|---|
+| **批 0** | 甲-1/甲-5 收尾（✅ 已做）· 甲-2 走 architect 加台账行 · **push + 一次 CI run**（确认甲-6 与全绿） | — | `git log origin/main..HEAD` 为空 · CI 全绿（含 `--self-test` step） | builder + architect |
+| **批 1** | **架构补审批**：甲-3 R11 `FENCE` 裁决 + oracle→critic（确认）· 甲-4 R7 侦察 · 乙-9 残差 id=21/21b/22/23/24 裁决 · 甲-2 台账行 | 批 0（台账行先落） | 每条有裁决记录（`.rddf/reviews/`）+ 台账状态格回填 | architect |
+| **批 2** | **乙-1 R3 簇**（顺序固定 R3.1 → R3.2a → R3.2b → R3.3 → R3.4 → R3.5） | 批 1（架构裁定面） | change **归档** + 台账行 15 状态格 = 「已收口」 | builder → architect |
+| **批 3** | **乙-3 R21 层次化示例**（最大块）：**spike 先行**（探针 `ok=true` 且 **23 → 0** ⇒ 未归零则**停**）⇒ 产物级 lint 无 `%Error` ⇒ 负向对照 ×3 ⇒ 多消费者 ≥3 ⇒ proxy 端点 ⇒ 既有语料零回归 ⇒ 改接为结构化字段 ⇒ 扁平产物**逐字节不变** ⇒ 撞名可诊断 | 批 1（ADR-070 §6 ⑥/⑦ 的裁决） | tasks 全勾 + 新 capability 进主 spec + 既有语料零回归 | builder |
+| **批 4** | **ISA 残项**：乙-4 G5（首选 B）· `funct3`/`funct7` 非法组合检测（独立增量）· 乙-10 CSR/`ECALL`/`EBREAK`/`MRET` 独立立项 | 批 1（甲-3/甲-4 的裁决 + 台账行） | 每项独立 change + delta 进主 spec + **退休数/时序 golden 不变**（手推） | builder |
+| **批 5** | **乙-2 R16 的 10 条** ⇒ 逐条立项（**不一批做**） | 批 0 | 每条有独立载体（improvement/change）+ 优先级 | planner → builder |
+| **批 6** | **乙-6 框架级**：用户拍板 CHANGELOG 载体命运 ⇒ P13 architect 裁定 ⇒ P14/P15 实施 | **外部**（用户 + 下游） | 2 份 capability delta + 机械判据 | 用户 → architect → builder |
+| **批 7** | **乙-7 / 乙-8 CI 收口**：E6（`pr-verilator-fast` 一个 step）· 墙钟登记 · R23-A.2 证据回填 · R23-B 可达性护栏 | 批 0（CI 需先跑一次） | CI 步骤 **executed（非 skipped）且绿** + 护栏 `--self-test` 6 条具名投毒各自红 | builder |
+
+**依赖边（硬约束）**
+- **批 0 是所有批的开工门**（push + CI 绿 ⇒ 否则「本地绿」不可信 ⇒ 甲-6 未证）。
+- **批 1 → 批 2 / 批 3 / 批 4**（架构裁决面必须先落：R3 的差异化语义 · ADR-070 §6 ⑥/⑦ · `FENCE` 与特权级边界）。
+- **批 2 与批 3 可并行**（写点不同：R3 动 `src/hierarchy_*` + 台账 · R21 动层次化示例与语料）⇒ ⇒ **收口阶段不并行**（§1.1）。
+- **批 4 内部**：G5 与 `funct3`/`funct7` **可同批**（零交付风险）⇒ CSR/`ECALL`/`EBREAK` **必须独立**（特权级 ⇒ 面大 ⇒ 独立立项）。
+- **批 6 被外部阻塞** ⇒ 不占本仓排期。
+- ⚠️ **任何批都 MUST NOT 改退休数 / 时序 golden 而不写手推依据**（B3 之后的基线 = `non_retired == 23` · `retire == kCycles - 24`）。
+
+### 7.6 本轮判据自检（**可复跑**）
+
+```bash
+ctest --test-dir build -LE perf                      # 254/254
+for s in scripts/verify_*.sh; do bash "$s"; done       # 全 PASS
+openspec validate --specs                             # 47 passed / 0 failed
+bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test   # exit 0（含假绿闸门）
+```

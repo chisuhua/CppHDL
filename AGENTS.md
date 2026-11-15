@@ -263,11 +263,18 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 
 Documented gaps that are by-design or awaiting redesign. Each entry points to authoritative docs (ADR / usage guide) to avoid drift between this file and the linked source.
 
-- **RV32I ISA 覆盖边界**（2026-11-05 实测核对）：固件已覆盖 ALU（ADD/SUB/ADDI）+
+- **RV32I ISA 覆盖边界**（2026-11-15 订正）：固件已覆盖 ALU（ADD/SUB/ADDI）+
   `LUI`/`AUIPC` + `LW`/`SW`/`SB`/`SH` + `LB`/`LH`/`LBU`/`LHU` + `BEQ`/`BNE` +
   `JAL`/`JALR` + `SRA`。**仍未实现 / 未验证** = **CSR**（`csrrw`/`csrrs`/`csrrc`）+
-  **`ECALL`/`EBREAK`** + **`FENCE`**（不含**预测取指**）⇒ 这三项**不在**任何仓内
-  capability 覆盖内 ⇒ 需**独立立项**（不可顺手塞进本条）。
+  **`ECALL`/`EBREAK`**（不含**预测取指**）⇒ ⇒ 这两项**不在**任何仓内 capability
+  覆盖内 ⇒ ⇒ 需**独立立项**（不可顺手塞进本条）。
+  ⚠️ **2026-11-15 · B4 · G1+G4 订正**（此前写「`FENCE` 也不在任何 capability 内」= **已过时**）：
+  · `FENCE` / `FENCE.I`（opcode `0x0F`）**已显式实现**（本版 = **NOP**：单核无 cache
+    ⇒ 无排序语义）⇒ ⇒ 已进 capability `rv32i-isa-semantics`。
+  · **未知 opcode**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
+    `dbg_illegal_reason`（`0` 合法 / `1` **已知未实现** / `2` **未知 opcode**）⇒ ⇒
+    进入 ID 级即**冻结**（PC 不前进 · 该指令**永不退休**）⇒ ⇒ 「跑飞」不再**静默**
+    （此前未知 opcode 被**当 NOP 逐条退休**）。
 - **RV32I 数据前推已接入**（ADR-047）：档位 1 = EX/MEM 级、档位 2 = MEM/WB 级的合并写回值。
   ⚠️ **成环仍然被禁止**：数据源的**叶子** MUST 是**流水线寄存器**（MUST NOT 取 EX/MEM 级的
   **组合输出** —— 那正是 `git show bf78367` 的事故形态）⇒ 负向对照见
