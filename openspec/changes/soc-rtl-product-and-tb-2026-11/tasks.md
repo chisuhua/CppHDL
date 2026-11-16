@@ -98,7 +98,7 @@
       grep -c "Timer" examples/axi4/axi_soc_example.cpp examples/axi4/AGENTS.md
       grep -c "axi_soc_example" .rddf/checks/examples-rtl-sim-exclusions.md
       ```
-- [ ] **T9** **残留登记**：`uart.irq` + 根的 `timer_irq` ⇒ ⇒ 台账 §7 + `.rddf/checks/arch-residual-registry.md` **两侧同批**
+- [x] **T9** **残留登记**：`uart.irq` + 根的 `timer_irq` ⇒ ⇒ 台账 §7 + `.rddf/checks/arch-residual-registry.md` **两侧同批**<br>      - ✅ **已完成（2026-11-17）**：新增 **id 26 · 27**（状态 = `已知`）—— 26 = UART 的 `irq` 输出未接 ⇒ 层次化顶层**不可观测**；27 = 根自有 `timer_irq` 输入 DUT **从不读** ⇒ 在端口面里但**无语义**<br>      - 台账 §7 的状态格用 `--render` 生成的**规范句**（`⚠ 已知 ⇒ …`）· 附 dated 追加注记（该台账的既有惯例）<br>      - ✅ `verify_arch_ledger_residuals.sh` **PASS（28 行 · 1:1 双向）** + `--self-test` **11/11 全绿**<br>      - ⚠️ **architect 域**：台账在 `docs/architecture/` ⇒ ⇒ 本条由 builder 代落（**内容为工具生成 + 零判断**）⇒ ⇒ 归档前 architect 可复核
       - ⚠️ **architect 域**（`docs/architecture/`）⇒ ⇒ 由 architect 执行，builder 只验收
       - 判据：`bash scripts/verify_arch_ledger_residuals.sh` PASS（**行数由台账派生 · 禁写死**）
       ```bash

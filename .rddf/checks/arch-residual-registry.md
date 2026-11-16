@@ -59,3 +59,5 @@ ADR-062 §2.5 决策⑤ 裁决；★ **下游实现待办** ⇒ 故 `归属 = �
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 23 | 已知 | 2026-11-13 | 扁平产物顶层暴露 80 个内部 ch_out ⇒ 用户 2026-11-11 已裁决保持现状（C2 撤回）⇒ 台账补登记为已知残留 | — | 用户推翻 C2 撤回（⇒ 走 ADR 取代）⇒ ⇒ 重开端口面收敛裁决 | architect |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 24 | 已知 | 2026-11-13 | ADR-035 判据 (b) 对带日期评审快照面永久失明 ⇒ 快照内的过期引用不被清零要求覆盖 | — | 新增评审快照 ⇒ ⇒ 或快照内出现面向读者的现行接口声明 ⇒ ⇒ 重开排除口径裁决 | architect |
 | docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 25 | 已知 | 2026-11-15 | 层次化语料全套 R2–R8 未接入 RV32I ⇒ 本轮只接入四项（产物级 lint + 单连接不变式 + 顶层端口表 + 确定性） | — | RV32I 语料接入 `verify_hierarchical_rtl.sh` 的 **R2–R8 全套** ⇒ ⇒ 或 R1 lint 的 `DECLFILENAME` / `UNUSEDSIGNAL` 白名单收敛 | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 26 | 已知 | 2026-11-17 | UART 的 IRQ 输出零消费者 —— SoC 未接 ⇒ 层次化顶层不可观测（端口在子 module 内） | — | UART 侧需要可观测的 IRQ 通路 ⇒ ⇒ 或 SoC 顶层需要暴露该信号 ⇒ ⇒ 重开 SoC 的 IRQ 方案 | architect |
+| docs/architecture/2026-11-02-hierarchical-rtl-output.md | 7 | 27 | 已知 | 2026-11-17 | 根自有的 timer_irq 输入零消费 —— DUT 从不读它 ⇒ 在顶层端口面里但无语义 | — | SoC 需要真实的 Timer 外设 ⇒ ⇒ 或 移除该占位端口 ⇒ ⇒ 重开 SoC 的 Timer 立项 | architect |
