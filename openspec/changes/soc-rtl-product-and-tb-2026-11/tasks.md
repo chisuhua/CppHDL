@@ -64,13 +64,13 @@
 
 ## 2. 期望源与独立 TB
 
-- [ ] **T4** **期望源登记**：`.rddf/checks/soc-rtl-expectations.md`（端口映射 + 地址映射 + 事务序列 + **手推结果** + **冻结的模块名期望集**）
+- [x] **T4** **期望源登记**：`.rddf/checks/soc-rtl-expectations.md`（端口映射 + 地址映射 + 事务序列 + **手推结果** + **冻结的模块名期望集**）<br>      - ✅ **已完成（2026-11-16）**：§1 端口映射（14 端口 · 产物名 ↔ C++ 成员 ↔ 语义 · **位宽序列唯一确定** ⇒ 不是猜编号）· §2 冻结 module 集（5）· §3 地址映射（matrix 2×2 默认窗口 + GPIO/UART 寄存器表）· §4 事务序列 + **手推结果**（含事务延迟推导 ≤4 拍）· §5 TB 输入常量 · §6 判别力自证 · §7 已知盲区（`uart_rx` 反向 8 根未覆盖 / DECERR 不可观测 / `timer_irq` 死端口）
       - 依赖：T1（模块名须先定死）
       - 判据：文件在册且可 grep；`EXPECT-SRC:` 指针指向它
       ```bash
       test -f .rddf/checks/soc-rtl-expectations.md
       ```
-- [ ] **T5** **独立 TB**：`examples/axi4/tb_axi_soc_example.sv`（**14** 个顶层端口 + **4** 个可观测场景）
+- [x] **T5** **独立 TB**：`examples/axi4/tb_axi_soc_example.sv`（**14** 个顶层端口 + **4** 个可观测场景）<br>      - ✅ **已完成（2026-11-16）**：`RESULT: checks=14 fails=0` · EXIT 0 · 14 端口全连（`timer_irq`=0 · `uart_rx`=1 · `gpio_in`=0x5A）<br>      - 断言分布：① `gpio_out==0xA5` · ② `rdata==0x0000_005A` · ③ UART 8N1 帧（起始位 + **8 个数据位逐位** + 停止位 = 10 条）· ④ `gpio_out==0` + `uart_tx` 空闲高<br>      - ✅ **变异自证**：切断 `matrix.s1_wdata → uart.wdata`（DUT 侧）⇒ **fails=4** ⇒ TB 真的在验证 uart↔matrix 的数据通路<br>      - ⚠️ **实测修正**：采样窗 MUST **从写脉冲起算**（matrix 的 m0→s1 路由是**组合**的 ⇒ 帧紧贴写脉冲启动 ⇒ 先等 16 拍再采会丢掉起始位）<br>      - ⚠️ 帧定位用「**先逐拍采样成数组 → 找第一个低电平**」（**不用**下降沿检测 —— 实测那有竞态，不同编译结果不稳定）
       - ⚠️ **14 个端口 MUST 全部连接**（否则严格 flags 下 `%Warning-PINMISSING` **致命** —— 仓内实证 `examples/axi4/tb_axi4_lite_example.sv:33-34`）⇒ 其中 **`timer_irq`（零消费死端口）接 `0`** · **`uart_rx` 接 `1`**（否则 RX 引擎把低电平当起始位）· **`gpio_in` 给固定值**
       - 场景：① 写 GPIO DATA_OUT ⇒ `gpio_out` == 手推值 ② 读 GPIO DATA_IN ⇒ `rdata` == `gpio_in` ③ 写 UART TX_DATA ⇒ `uart_tx` 出现 8N1 帧（UART 场景需 **≥160 拍** = 10 bit × `UART_BIT_PERIOD` = 16）④ `rst_n` 拉低后读 GPIO DATA_OUT == 0
       - ⚠️ 完成判定 MUST 用「按已知延迟采样」（**禁**等 `done` 上升沿）
