@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: feature
 状态: draft
-进度: **立项（2026-11-16）** · 未开工 · 🚪 **开工前门 = ADR-072 v2**（含 7 条 architect 域修订 + 6 条 architect 域裁决）· ⚠️ **spec delta 尚未写**（依赖 v2 的裁决 ⇒ ⇒ 不得归档）
+进度: "**立项（2026-11-16）** · 未开工 · ✅ **开工前门 P-0 已闭（2026-11-16 · ADR-072 v2 + v2.1 Accepted · `ef0d284` / `e00b321`）** ⇒ ⇒ **P-1（spec delta）已解封**（G-1…G-8 全部已由 ADR-072 v2 交付）· ⚠️ **spec delta 尚未写**（依赖 v2 的裁决 ⇒ ⇒ 不得归档）"
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）—— 顶层端口面收敛 + 产品单元四件套
 依赖: rtl-emit-product-tooling-2026-11（implemented）· examples-rtl-sim-coverage-2026-11（implemented）· rv32i-hierarchical-example-2026-11（implemented）· rtl-hierarchical-output capability · rtl-emit-portability capability
 来源: 用户 2026-11-16「评估能否生成功能完整的 RISC-V CPU 核 RTL + 推进为 RTL 生成能力产品化」+ **ADR-072**（Accepted 2026-11-16 · oracle ×1 + critic ×2 复审 APPROVE）
@@ -201,7 +201,7 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 | P2-11 | D5 的 9 条缺失排除项可点名 | ⚠️ 归 **D5 的独立 change**（本 change 不做）⇒ ⇒ 9 条点名已记入该 change 的立项准备 |
 | P2-12 | proposal 的「用户可见变更」必须逐项写出下游拿到什么 | ✅ 已采纳 —— proposal 的 `## 用户可见变更` 段（护栏 R1 的载体） |
 
-### 🚪 开工前门（**ADR-072 v2 MUST 先落地**）
+### 🚪 开工前门（✅ **已闭 2026-11-16** · ADR-072 **v2 + v2.1** Accepted · `ef0d284` / `e00b321`）
 
 > ⚠️ **ADR-072 的 D1 有 7 处 MUST 修订 + 6 处 MUST 裁决**（metis 实测推翻）⇒ ⇒ **change 的实施 MUST 以 v2 为准** ⇒ ⇒ **v2 未落地前，本 change MUST NOT 开工、delta MUST NOT 写**。
 
@@ -209,9 +209,9 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 |---|---|---|
 | **G-1** | **撤回 ① 与 V5**（backend 端口面改造）⇒ ⇒ 改为「backend = 遗留路径」+ 显式声明产品/仿真器端口面差异 | metis P0-1 ② |
 | **G-2** | **⑩ 改写为「新增带根公开入口」** + ⑦ 的公开面分类改为「新增符号」 | metis P0-1 ① |
-| **G-3** | **② 的 delta 形状**改为「两份 capability · 逐条 Requirement 列举」+ 补 `:518` / `:98` 两条 | metis P0-1 ⑤ + P0-3 ④ |
+| **G-3** | **② 的 delta 形状**改为「两份 capability · 逐条 Requirement 列举」⚠️ **v2 已把此条改写**（H-5 同步）：`:518` **不需 delta**（v1 曾要求「补」）· `:98` 走 **MODIFIED**（**不是** R+A）· 另 `:402` **MUST** 进 delta ⇒ ⇒ 权威口径 = ADR-072 `:355` 的 **4 MODIFIED + 2 R+A** | metis P0-1 ⑤ + P0-3 ④ · **v2 改写** |
 | **G-4** | **裁决「后代悬空 `ch_in`」的产物语义**（推荐 = fail-closed） | metis P0-2 ① |
-| **G-5** | **裁决 `:98` 与 `:478` / `:518` / `:529` 四条的冲突**（root-owned vs owner==nullptr 归顶层；「既有路径逐字节不变」vs D1；「全 inline 逐字节一致」vs D1） | metis P0-2 ① + P0-3 ④ |
+| **G-5** | ✅ **已闭** —— **裁决 `:98` 与 `:478` / `:518` / `:529` 四条的冲突**（root-owned vs owner==nullptr 归顶层；「既有路径逐字节不变」vs D1；「全 inline 逐字节一致」vs D1）⇒ ⇒ **v2 裁决**：`:98` = MODIFIED（归**体内** + 保留 `CHWARN` + 不拒绝）· `:478` / `:518` / `:529` / `:637` **不需 delta** | metis P0-2 ① + P0-3 ④ |
 | **G-6** | **「34」的构成**写死（2 + 32）· **manifest `ports[]` 不收敛**（新增维度）· **三处顶层判定收敛到唯一来源** | metis P0-1 ③④ + P0-2 ⑤ |
 | **G-7** | **① 的 blast radius 收缩后**，重列「同批必改」清单（原 12 项 → 本草案的 4 判据面 + 附属产物） | metis AI-slop finding |
 | **G-8** | 🆕 **裁决 `:98`「不属于任何组件的节点 MUST 归顶层 module」在产品端口面下的处置** —— **推荐形态**（对齐 M6 的 fail-closed 取向，但**不同**：`:98` 的节点不是「悬空」而是「无归属」⇒ ⇒ **不**是发射失败）⇒ ⇒ 推荐 = **「归顶层 module 的**体内**（不再是顶层**端口**）+ MUST 保留 `CHWARN` 点名 + MUST NOT 被拒绝」** ⇒ ⇒ 理由：① `:98` 的既有义务是「归属空洞**必须可观测**」⇒ ⇒ `CHWARN` MUST 保留 ② 「归顶层 module」= **归属**，不等于「占顶层端口」⇒ ⇒ 改「端口归属」不违反 `:98` 的意图 ③ 与 M6 的差别 MUST 写进 v2（悬空 = **无驱动源** ⇒ ⇒ fail-closed；无归属 = **有逻辑无归属** ⇒ ⇒ 归体内 + 告警） | critic 第 1 轮 focus 5（对称补推荐形态 ⇒ 省一轮 v2 往返）· 冲突面 = `rtl-hierarchical-output/spec.md:98-111` |

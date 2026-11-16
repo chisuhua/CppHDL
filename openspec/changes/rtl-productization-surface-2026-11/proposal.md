@@ -67,9 +67,10 @@
 
 ## What Changes
 
-### A. **ADR-072「12 项同批必改」→ task 映射**（用户 2026-11-16 明确要求）
+### A. **ADR-072 **v2** 的 12 项同批必改**（**含 ④′ 冒泡机制退役**）**→ task 映射**（用户 2026-11-16 明确要求 · **H-4 同步**）
 
 > ⚠️ **metis 修正后的映射** —— 3 项移出 / 2 项改写 / 1 项拆细 ⇒ ⇒ 12 → **T2–T13（12 个 task）+ T14（archive 后）**。
+> 🆕 **v2 增补（H-4）**：④′（冒泡机制退役）⇒ ⇒ **T15**（ADR-072 §2.1.10 的 ④′ 行）· 另加 2 条**簿记** task ⇒ ⇒ **T16**（账本锚点）· **T17**（两处 Purpose 归档后手工写）⇒ ⇒ **T2–T17（16 个 task）**，其中 **T14 / T17 在 archive 之后**。
 > 🆕 **P0/P1 审计新增 3 个 task**：**T15**（冒泡机制退役 · ADR-072 D1-h 同批必改 ④′）· **T16**（账本锚点同步）· **T17**（两处 Purpose 归档后手工写）⇒ ⇒ 均**不被** ADR-072 的「12 项」覆盖（D1-h 是 v2 新增的第 12 项细分、锚点与 Purpose 属簿记）。
 > ⚠️ **不为 12 项逐行建 task**（metis AI-slop finding）⇒ ⇒ 验收落在 **4 个判据面**（J1–J4）上，簿记类产物作为判据的**附属**。
 
@@ -79,6 +80,7 @@
 | ② capability delta（2 份 spec） | 「各一条 MODIFIED」 | ⚠️ **改写** —— 实为 **2 份 capability · 6 条 Requirement**（**ADR-072 v2 `:355` 的权威口径**）：**4 MODIFIED**（`:32` 层级粒度 · `:98` 无归属节点 · `:240` 成层且非根 · **`:402` 跨层端口策略**）+ **2 REMOVED+ADDED**（`rtl-emit-portability` 的 manifest schema · `:190` 悬空子输入）⇒ ⇒ **另 4 条不需 delta**（`:478` · `:518` · `:529` · `:637`）⇒ ⇒ ⚠️ **改法要点与标题逐字 MUST 照抄 ADR-072 §2.8**（禁自由发挥） | **T7** | J3 / AC6 |
 | ③ manifest 契约 | 「三类互斥」 | ⚠️ **改写** —— `ports[]` **仍列全量**（`test_rtl_emit_contract.cpp:278` 的 `top_ports < man.ports.size()`）⇒ ⇒ **新增维度**不收敛旧字段；且「34」= **2 + 32**（clock/reset 的 `is_top_io` 是 `false`） | **T4** | J2 / AC3 |
 | ④ 10 份 TB 的端口映射 | 「同批必改」 | ✅ 保留（`axi4_lite` S8 **8** 条判据整体消失 ⇒ `min_checks` 45 → **37** · `scenarios` 8 → **7**；⚠️ **删除面不止「场景」**：`examples/axi4/tb_axi4_lite_example.sv` 另有 **8 条 `logic s_*` 声明**（`:69-76`）与 **8 条实例引脚连接**（`:112-119` 的 `top_slave_unnamed_output*`）MUST 同批删 —— 只删场景 ⇒ `%Error-PINNOTFOUND`；且 `examples/riscv-mini/tb_rv32i_soc.sv` 的 **96 根 sink** MUST 同批删） | **T5** | J1 / AC1 / AC5 |
+| ④′ 冒泡机制退役（**v2 新增** · ADR-072 §2.1.10 ④′） | 「（v1 无此项）」 | 🆕 **必改** —— D1-f 让后代悬空 `ch_in` 恒被拒绝 ⇒ ⇒ 冒泡端口**零生产** ⇒ ⇒ `UndrivenPolicy::Bubble` · `*Origin::Bubbled` · `ensure_bubbled_port` · **`BubbledInput`** · `dangling` 消费全部**不可达** ⇒ ⇒ ZERO-DEBT「No dead code」⇒ ⇒ **物理删除** + 公开面「移除 / 改名」登记 + `tests/test_component_granularity.cpp:248-254` 的 `static_assert` 同步（**不改 ⇒ 编译失败**） | **T15**（与 T6 **同批** ⇒ 否则中间态编译红） | AC18 / V19 |
 | ⑤ 护栏与测试期望集 | 「4 处」 | ⚠️ **拆细 + 补漏** —— `verify_flat_rtl_emit.sh:119` 的 F3 **契约算法**（`flat_rtl_emit_check.py:79-92`）也要改；且**漏了最大的文件** `tests/test_hierarchy_verilog.cpp`（`:2079` 顺序断言 / `:2876-2884` 顶层端口表 / `:2972-2994` 全 inline 逐字节 / `:3154` 顶层端口全覆盖） | **T6** | J3 / AC6 |
 | ⑥ tsv + expectations | 「同批必改」 | ✅ 保留（与 ④ 同源 ⇒ 合并进 **T5** 的第二半） | **T5** | J1 |
 | ⑦ 公开面登记 | 「行为变更（非符号移除）」 | ⚠️ **改写分类** —— 新增带根入口 = **新增公开符号**（`toVerilog(path, Component&, …)` / `make_flat_module_view(Component&, …)`）⇒ ⇒ **不是**行为变更 | **T9** | AC15 |
@@ -209,7 +211,7 @@
 | # | 事项 | 归属 |
 |---|---|---|
 | **P-0** | ✅ **已闭（2026-11-16）** —— **ADR-072 v2 + v2.1 Accepted**（`ef0d284` / `e00b321`）⇒ ⇒ 认领内容 = 7 处 MUST 修订 + 6 条 MUST 裁决（见 improvement 草案的 🚪 门表 **G-1…G-8**）+ 架构裁决（后代悬空 `ch_in` 的产物语义 · `:98`/`:478`/`:518`/`:529` 四条冲突） | ✅ architect 已交付 |
-| **P-1** | **spec delta 写齐**（2 份 spec · 6 条 Requirement）⇒ ⇒ `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 | builder（依赖 P-0） |
+| **P-1** | ✅ **已解封（2026-11-16 · P-0 已闭）** —— **spec delta 写齐**（2 份 spec · **6 条 Requirement**）⇒ ⇒ `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 | builder |
 | **P-2** | **公开面前置登记**（新增符号 + CHANGELOG）⇒ ⇒ **开工前**，不是事后补记 | builder |
 | **P-3** | **ADR-058 / ADR-061 的 dated addendum 已落**（architect 域 · 对应 **T8 / AC6**）⇒ ⇒ 归档门 MUST 可追踪该外部依赖 | architect |
 
