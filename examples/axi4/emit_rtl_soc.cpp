@@ -22,6 +22,7 @@
 #include "axi_soc_example.cpp"
 #undef main
 
+#include "hierarchy_equivalence.h"
 #include "hierarchy_verilog.h"
 #include "rtl_emit/manifest.h"
 
@@ -30,6 +31,7 @@
 #include <unistd.h>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <iostream>
 #include <set>
 #include <string>
@@ -125,8 +127,149 @@ std::string find_verilator() {
     return {};
 }
 
+/// 顶层输入（受驱动）—— 顺序 MUST 与 `stimulus` 每行的取值顺序**逐字一致**
+std::vector<ch::hier_eq::DrivenInput> make_inputs(AxiSocTop &root) {
+    std::vector<ch::hier_eq::DrivenInput> in;
+    // ⚠️ MUST 用 `set_input_value`（`<<=` 会把端口变成内部驱动 ⇒ 假分歧）
+    in.push_back({"top.rst_n", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().rst_n, v & 1);
+                  }});
+    in.push_back({"top.start", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().start, v & 1);
+                  }});
+    in.push_back({"top.write", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().write, v & 1);
+                  }});
+    in.push_back({"top.addr", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().addr, v);
+                  }});
+    in.push_back({"top.wdata", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().wdata, v);
+                  }});
+    in.push_back({"top.gpio_in", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().gpio_in, v & 0xFF);
+                  }});
+    return in;
+}
+
+/// 顶层观测面（**只能**取根的 `ch_out` ⇒ 子组件的 `ch_out` 在层次化顶层不可观测）
+std::vector<ch::hier_eq::Observation> make_observations(AxiSocTop &root) {
+    std::vector<ch::hier_eq::Observation> obs;
+    obs.push_back(ch::hier_eq::make_observation(
+        "top.rdata", root.io().rdata, [&root](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(root.io().rdata));
+        }));
+    obs.push_back(ch::hier_eq::make_observation(
+        "top.gpio_out", root.io().gpio_out, [&root](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(root.io().gpio_out));
+        }));
+    // ⚠️ `uart_tx` 恒为 1（无帧 ⇒ 空闲高）⇒ ⇒ 它**不随激励变化** ⇒ 只作「同值对照」
+    obs.push_back(ch::hier_eq::make_observation(
+        "top.uart_tx", root.io().uart_tx, [&root](ch::Simulator &s) -> std::uint64_t {
+            return static_cast<std::uint64_t>(s.get_port_value(root.io().uart_tx));
+        }));
+    return obs;
+}
+
+/// 逐拍激励（**≥10 拍**且**值不同** ⇒ ⇒ 否则 `compare` 判 `no-varying-signal`）
+/// ⚠️ 顺序 MUST 与 `make_inputs` 的顺序一致：rst_n · start · write · addr · wdata · gpio_in
+std::vector<std::vector<std::uint64_t>> make_stimulus() {
+    const std::uint64_t gpio_a = 0x5A;
+    const std::uint64_t gpio_b = 0xA5;
+    const std::uint64_t gpio_data_out = 0x000000A5;
+    const std::uint64_t gpio_data_in = 0x00000004;
+    const std::uint64_t idle = 0;
+    // ⚠️⚠️ **AXI payload MUST 保持稳定**（实测踩到）：master 的 `awaddr` / `wdata_axi`
+    //   是**组合**跟随顶层 `addr` / `wdata` 的 ⇒ ⇒ 激励若在下一行把 `wdata` 清零
+    //   ⇒ ⇒ **W 通道送出去的是 0 而不是 0xA5** ⇒ ⇒ `gpio_out` 恒 0（且**不报错**）。
+    //   ⇒ ⇒ 事务期间 `addr` / `wdata` MUST 原样保持（这正是仓内 `tb_axi4_lite_example.sv`
+    //   的 `send_aw` / `send_w` 分开送、且 `valid && !ready` 期间 payload 不变 的同型规则）。
+    return {
+        /* 0  */ {1, 1, 1, 0x00000000, gpio_data_out, gpio_a},  // 写事务：发起
+        /* 1  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},  // 保持 payload
+        /* 2  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},
+        /* 3  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},
+        /* 4  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},  // 等写完成 ⇒ gpio_out 变
+        /* 5  */ {1, 1, 0, gpio_data_in, idle, gpio_a},           // 读事务 #1：发起
+        /* 6  */ {1, 0, 0, gpio_data_in, idle, gpio_a},           // 保持 addr
+        /* 7  */ {1, 0, 0, gpio_data_in, idle, gpio_a},
+        /* 8  */ {1, 0, 0, gpio_data_in, idle, gpio_a},           // 等读完成 ⇒ rdata = 0x5A
+        /* 9  */ {1, 0, 0, gpio_data_in, idle, gpio_b},           // 改 gpio_in ⇒ 让 rdata 能再变
+        /* 10 */ {1, 1, 0, gpio_data_in, idle, gpio_b},           // 读事务 #2：发起
+        /* 11 */ {1, 0, 0, gpio_data_in, idle, gpio_b},           // 保持 addr
+        /* 12 */ {1, 0, 0, gpio_data_in, idle, gpio_b},
+        /* 13 */ {1, 0, 0, gpio_data_in, idle, gpio_b},           // 等读完成 ⇒ rdata = 0xA5
+    };
+}
+
+
+/// **变异自证**（ADR-073 V5）：把层次化产物里**驱动某个被观测端口**的 `assign`
+/// **取反** ⇒ ⇒ 行为改变 ⇒ ⇒ `compare` MUST 判不等（⇒ 证明这条判据不是恒绿）。
+///
+/// ⚠️ **为什么不能直接取反顶层端口**：顶层端口名出现在**实例端口连接**的右侧
+///   （`.child_port(top_port)`）⇒ ⇒ 把它取反 = **组合环** ⇒ ⇒ Verilator 直接报错
+///   ⇒ ⇒ 那是「编译失败」而不是「行为差异」⇒ ⇒ 判别力更弱。
+///   ⇒ ⇒ 必须取反**子 module 内驱动该端口的那条 assign**（`assign child_port = X;`
+///   ⇒ ⇒ `assign child_port = ~X;`）⇒ ⇒ **真行为差异**。
+///
+/// ⚠️ **端口名与子 module 名全部由 `signal_map` 派生**（禁手写）⇒ ⇒ 与产物真相不脱钩。
+/// @return 空串 = 篡改失败（⇒ 自证不成立 ⇒ 判据 MUST 判红）
+std::string tamper_hier(const std::string &hier_path,
+                        const std::vector<ch::SignalMapEntry> &signal_map,
+                        const std::vector<ch::hier_eq::Observation> &observations,
+                        const std::string &top_module) {
+    // ① 被观测端口在**层次化顶层**的名字（**由 signal_map 派生** ⇒ 禁手写）
+    std::string top_port;
+    for (const auto &o : observations) {
+        for (const auto &e : signal_map) {
+            if (e.node_id == o.node_id && !e.hier_top_port_name.empty()) {
+                top_port = e.hier_top_port_name;
+                break;
+            }
+        }
+        if (!top_port.empty()) break;
+    }
+    if (top_port.empty()) return {};
+    std::string child_port;
+
+    // ② 读产物 → 从**实例端口连接**反查子 module 的端口名
+    //    （连接形如 `.child_port(top_port)` ⇒ ⇒ child_port = '.' 与 '(' 之间的标识符）
+    std::ifstream in(hier_path);
+    if (!in) return {};
+    std::string text((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+    const std::string conn = "(" + top_port + ")";
+    const auto conn_pos = text.find(conn);
+    if (conn_pos == std::string::npos) return {};
+    const auto dot_pos = text.rfind('.', conn_pos);
+    if (dot_pos == std::string::npos) return {};
+    const auto name_begin = dot_pos + 1;
+    if (name_begin >= conn_pos) return {};
+    child_port = text.substr(name_begin, conn_pos - name_begin);
+    if (child_port.empty()) return {};
+
+    // ③ 找到 `assign <child_port> = <rhs>;` → 取反 rhs（**真行为差异**）
+    const std::string key = "assign " + child_port + " = ";
+    const auto pos = text.find(key);
+    if (pos == std::string::npos) return {};
+    const auto rhs_begin = pos + key.size();
+    const auto rhs_end = text.find(';', rhs_begin);
+    if (rhs_end == std::string::npos) return {};
+    const std::string rhs = text.substr(rhs_begin, rhs_end - rhs_begin);
+    if (rhs.empty() || rhs.find('(') != std::string::npos) return {};   // 只改**简单** rhs
+    text.replace(rhs_begin, rhs.size(), "~(" + rhs + ")");
+
+    const std::string out_path = hier_path + ".tampered";
+    std::ofstream out(out_path);
+    if (!out) return {};
+    out << text;
+    out.close();
+    return out_path;
+}
+
 /// 产物级自检（4 项）—— 任一失败 ⇒ 返回非零
-int check_products(const std::string &verilog_path,
+int check_products(AxiSocTop &root, ch::core::context *ctx,
+                   const std::string &out_dir, const std::string &verilog_path,
                    const ch::HierarchyEmitResult &emitted,
                    const ch::rtl_emit::RtlManifest &manifest,
                    const std::string &top_module) {
@@ -184,14 +327,88 @@ int check_products(const std::string &verilog_path,
         if (!lint_ok) ++failures;
     }
 
-    // ---- ④ 双形态逐拍等价 —— 由 **T7** 落地（`ch::hier_eq::emit` + `compare`）----
-    std::cout << "CHECK 4 双形态等价: TODO (T7)\n";
+    // ---- ④ 双形态逐拍等价（J-4）----
+    // ⚠️ **A 侧固定是「扁平产物」**（`hier_eq::compare` 的语义）⇒ ⇒ 本判据 = 「扁平 ≡ 层次化」
+    //   （层次化侧由 `emit` 按 `RespectDeclarations` 生成 ⇒ 4 个 IP 成层）。
+    // ⚠️ `ports` **MUST 由 `emit` 派生**（禁手写 ⇒ 否则与 emitter 真相脱钩）。
+    {
+        const std::string eq_dir = out_dir + "/eq";
+        std::error_code fec;
+        std::filesystem::create_directories(eq_dir, fec);
+        auto products = ch::hier_eq::emit(root, eq_dir,
+                                          ch::Granularity::RespectDeclarations);
+        if (!products.ok) {
+            std::cout << "CHECK 4 双形态等价: FAIL (emit 失败: " << products.error << ")\n";
+            ++failures;
+        } else {
+            const auto inputs = make_inputs(root);
+            const auto observations = make_observations(root);
+            const auto stimulus = make_stimulus();
+            const auto res = ch::hier_eq::compare(ctx, eq_dir, products.hier_path,
+                                                  products.ports, inputs, observations,
+                                                  stimulus);
+            // ⚠️ **变化量计数**（ADR-073 J-4：「MUST 有 ≥2 个随激励变化的观测量」）：
+            //   `uart_tx` 无帧时恒 1 ⇒ ⇒ 它**不**贡献变化量 ⇒ ⇒ 只认 `rdata` + `gpio_out`。
+            std::size_t varying = 0;
+            if (!res.flat_trace.empty()) {
+                for (std::size_t k = 0; k < observations.size(); ++k) {
+                    bool varies = false;
+                    for (std::size_t c = 1; c < res.flat_trace.size(); ++c) {
+                        if (res.flat_trace[c][k] != res.flat_trace[0][k]) {
+                            varies = true;
+                            break;
+                        }
+                    }
+                    if (varies) ++varying;
+                }
+            }
+            // ⚠️ **变异自证**（ADR-073 V5）：篡改层次化产物 ⇒ ⇒ MUST 判不等
+            //   ⇒ ⇒ 否则这条判据可能是**恒绿**（等价成立也可能只是「两边都没动」）。
+            bool tamper_detected = false;
+            std::string tamper_msg;
+            if (res.ok && res.equal) {
+                const std::string tampered =
+                    tamper_hier(products.hier_path, products.signal_map, observations,
+                                top_module);
+                if (tampered.empty()) {
+                    tamper_msg = "篡改失败（未找到可取反的观测端口连接）";
+                } else {
+                    const std::string tamper_dir = eq_dir + "/tampered";
+                    std::error_code tec;
+                    std::filesystem::create_directories(tamper_dir, tec);
+                    const auto res_t = ch::hier_eq::compare(ctx, tamper_dir, tampered,
+                                                            products.ports, inputs,
+                                                            observations, stimulus);
+                    tamper_detected = res_t.ok && !res_t.equal;
+                    if (!res_t.ok) {
+                        tamper_msg = "篡改后 compare 报错: " + res_t.error;
+                    } else if (tamper_detected) {
+                        tamper_msg = "篡改被抓住（first_mismatch=" + res_t.first_mismatch + ")";
+                    } else {
+                        tamper_msg = "篡改**未**被抓住 ⇒ ⇒ 判据恒绿";
+                    }
+                }
+            } else {
+                tamper_msg = "主比对未通过 ⇒ 未做自证";
+            }
+            const bool ok = res.ok && res.equal && (varying >= 2) && tamper_detected;
+            std::cout << "CHECK 4 双形态等价: " << (ok ? "PASS" : "FAIL")
+                      << " (ok=" << (res.ok ? 1 : 0) << " equal=" << (res.equal ? 1 : 0)
+                      << " 变化量=" << varying << "/"
+                      << observations.size() << " 自证=" << (tamper_detected ? "PASS" : "FAIL")
+                      << (tamper_msg.empty() ? "" : " [" + tamper_msg + "]")
+                      << (res.error.empty() ? "" : " err=" + res.error)
+                      << ")\n";
+            if (!ok) ++failures;
+        }
+    }
 
     std::cout << (failures == 0 ? "PRODUCTS-CHECK: PASS\n"
                                 : "PRODUCTS-CHECK: FAIL (" + std::to_string(failures) +
                                        " 项)\n");
     return failures == 0 ? 0 : 1;
 }
+
 
 }  // namespace
 
@@ -258,7 +475,8 @@ int main(int argc, char **argv) {
               << " 条 · 顶层 module " << opts.top_module_name << "\n";
 
     if (args.check_products) {
-        return check_products(verilog_path, emitted, manifest,
+        return check_products(dev.instance(), dev.context(), args.out_dir, verilog_path,
+                              emitted, manifest,
                               opts.top_module_name);
     }
     return 0;

@@ -163,6 +163,36 @@ matrix 的 `m0 → s1` 路由 ⇒ ⇒ uart 才收得到。
 | 把 `wdata` 的期望值改错 | 场景① 的 `gpio_out` 判据红 |
 | 把 `gpio_in` 改成 0 | 场景② 的 `rdata` 判据红（`rdata` 会是 0 而非 0x5A） |
 
+### 6b. **双形态等价的判据规格**（T7 · ADR-073 J-4 / V5）
+
+> **载体** = `emit_rtl_axi_soc --check-products` 的 **CHECK 4**；**执行者** = 护栏 ④″。
+
+| 项 | 值 / 形态 |
+|---|---|
+| 等价方向 | **A 侧固定是「扁平产物」**（`ch::hier_eq::compare` 的语义）⇒ ⇒ 本判据 = 「**扁平 ≡ 层次化**」（层次化侧按 `RespectDeclarations` ⇒ 4 个 IP 成层） |
+| `ports` | **MUST 由 `ch::hier_eq::emit` 派生**（禁手写 ⇒ 否则与 emitter 真相脱钩） |
+| 观测集 | {`rdata`, `gpio_out`, `uart_tx`} —— ⚠️ **不含 `done`**（粘滞 ⇒ 恒 1 ⇒ 计入只会让变化判据恒绿） |
+| 变化量 | **≥2 个**随激励变化的观测量（`uart_tx` 无帧时恒 1 ⇒ **不**贡献变化量 ⇒ 实际由 `rdata` + `gpio_out` 承担） |
+| 激励 | **14 拍**（≥10）· 每拍 6 个值：`rst_n` · `start` · `write` · `addr` · `wdata` · `gpio_in` |
+| 事务 | ① 拍0 写 GPIO DATA_OUT（`addr=0x0` · `wdata=0xA5`）⇒ `gpio_out` 变 ② 拍5 读 GPIO DATA_IN（`addr=0x4`）⇒ `rdata` 变 ③ 拍9 改 `gpio_in` → 拍10 再读 ⇒ `rdata` 再变 |
+
+⚠️⚠️ **AXI payload MUST 在事务期间保持稳定**（**实测踩到** · 判据级的硬约束）：
+
+- master 的 `awaddr` / `wdata_axi` 是**组合**跟随顶层 `addr` / `wdata` 的
+  ⇒ ⇒ 激励若在下一行把 `wdata` 清零 ⇒ ⇒ **W 通道送出去的是 0 而不是 0xA5**
+  ⇒ ⇒ `gpio_out` 恒 0，**且不报任何错**（等价检查仍会「成立」⇒ ⇒ **恒绿陷阱**）。
+- ⇒ ⇒ 事务期间 `addr` / `wdata` **MUST 原样保持**（这正是仓内 `tb_axi4_lite_example.sv`
+  的 `send_aw` / `send_w` 分开送、且 `valid && !ready` 期间 payload 不变 的同型规则）。
+- ⇒ ⇒ **等价检查 MUST 自带变异自证**（否则「等价成立」可能只是「两边都没动」）。
+
+⚠️ **变异自证的形态（ADR-073 V5）**：篡改**层次化产物**里**驱动某个被观测端口**的那条
+`assign`（取反其 RHS）⇒ ⇒ MUST 判不等（`first_mismatch` 给出 cycle 与观测名）。
+- ⚠️ **MUST NOT** 直接取反**顶层端口**：顶层端口名出现在**实例端口连接**的右侧
+  （`.child_port(top_port)`）⇒ ⇒ 取反它 = **组合环** ⇒ ⇒ Verilator 直接报错
+  ⇒ ⇒ 那是「编译失败」而不是「行为差异」⇒ ⇒ 判别力更弱。
+- ⇒ ⇒ 故取反点在**子 module 内**（`assign child_port = ~X;`）⇒ ⇒ **真行为差异**。
+  实测：`first_mismatch=cycle 0, observation 'top.rdata': flat=0x0 hier=0xFFFFFFFF`。
+
 ### 7. 已知盲区（如实登记）
 
 - ⚠️ **`done` 粘滞** ⇒ TB **不能**用它判完成 ⇒ 所有场景用固定延迟采样 ⇒ ⇒

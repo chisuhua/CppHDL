@@ -53,7 +53,7 @@
       ```bash
       build/examples/axi4/emit_rtl_axi_soc --check-products --out build/rtl_products/soc
       ```
-- [ ] **T7** **双形态一致性（J-4）** —— 载体随 T3 落在 examples 侧（`--check-products` 第 ④ 项）
+- [x] **T7** **双形态一致性（J-4）** —— 载体随 T3 落在 examples 侧（`--check-products` 第 ④ 项）<br>      - ✅ **已完成（2026-11-16）**：`CHECK 4 双形态等价: PASS (ok=1 equal=1 变化量=2/3 自证=PASS)`<br>      - `ch::hier_eq::emit` + `compare`（`ports` **由产物派生** · 禁手写）· 观测集 {`rdata`,`gpio_out`,`uart_tx`}（**不含 `done`** —— 粘滞）· 激励 **14 拍**<br>      - ✅ **变异自证（ADR-073 V5）**：篡改层次化产物里**驱动被观测端口**的 assign（取反 RHS）⇒ ⇒ **必红**（实测 `first_mismatch=cycle 0, observation 'top.rdata': flat=0x0 hier=0xFFFFFFFF`）⇒ ⇒ 判据**非恒绿**<br>      - ⚠️ **实测修正 1**：激励 MUST **保持 AXI payload 稳定**（`addr`/`wdata` 在事务期间不清零）—— master 的 `awaddr`/`wdata_axi` 是**组合**跟随顶层输入的 ⇒ ⇒ 清零即写进 0 ⇒ ⇒ `gpio_out` 恒 0 **且不报错**（恒绿陷阱）<br>      - ⚠️ **实测修正 2**：篡改点 MUST 在**子 module 内**（`assign child_port = ~X;`）—— 直接取反**顶层端口** = 组合环 ⇒ ⇒ Verilator 编译错（是「编译失败」不是「行为差异」⇒ 判别力更弱）
       - `ch::hier_eq::emit` + `compare`（`ports` **由产物派生**）· 激励 **≥10 拍** · 观测集 {`rdata`, `gpio_out`, `uart_tx`}（⚠️ **不含 `done`** —— 它**粘滞**）
       - ⚠️ **这只是 parity，不是正确性** ⇒ 正确性锚点唯一地压在 AC6 的手推断言上
       - 依赖：T3 · T4
