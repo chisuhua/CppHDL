@@ -92,7 +92,7 @@
 
 ## 4. 簿记与文档
 
-- [ ] **T8** **事实漂移订正（四处同批）**：`examples/axi4/axi_soc_example.cpp:4` 源码头注释 + `:24` 零使用 include + `examples/axi4/AGENTS.md` OVERVIEW 表 + `.rddf/checks/examples-rtl-sim-exclusions.md:36`（SoC TB 交付后该行 **MUST 移除**）
+- [x] **T8** **事实漂移订正（四处同批）**：`examples/axi4/axi_soc_example.cpp:4` 源码头注释 + `:24` 零使用 include + `examples/axi4/AGENTS.md` OVERVIEW 表 + `.rddf/checks/examples-rtl-sim-exclusions.md:36`（SoC TB 交付后该行 **MUST 移除**）<br>      - ✅ **已完成（2026-11-16）**：① 源码头「+ Timer」⇒ 「**4 个 IP**：Test Master + Matrix 2x2 + GPIO + UART」；② 删零使用 include `axi4/peripherals/axi_timer.h`；③ AGENTS.md 的 OVERVIEW 行 + PATTERNS 的外设头清单（`axi_timer.h` 本目录不用）⇒ 一并订正；④ 排除表的 `axi_soc_example` 行 **MUST 移除**（TB 已交付 ⇒ 排除理由消失 ⇒ 保留即**双重登记**）<br>      - ✅ **AC10 四条判据逐条零命中**：`Timer`∈源码头 **0** · `axi_timer.h`∈源码头 **0** · `Timer`∈AGENTS.md **0** · `axi_soc_example`∈排除表 **0**<br>      - ✅ example 仍绿（`GPIO_OUT=0xab` · `DATA_IN=0x5a`）· 编译零告警<br>      - ⚠️ **遗留（不属本 change）**：排除表**表头的计数**（`共 19 项 ⇒ 落选 10 项`，实为更多）**早已漂** ⇒ ⇒ 归 `rtl-productization-coverage-registration-2026-11`（**待立项** · D5）修 ⇒ ⇒ 本 change 只删 SoC 行，不碰那个计数
       - 判据：AC10 的四条断言逐条可判
       ```bash
       grep -c "Timer" examples/axi4/axi_soc_example.cpp examples/axi4/AGENTS.md

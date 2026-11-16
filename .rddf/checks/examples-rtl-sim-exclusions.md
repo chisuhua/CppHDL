@@ -33,7 +33,6 @@
 | `width_adapter_example` | 流控（4×8→32 位拼接） | 类别已覆盖（流控：`fifo_stream`）· 语义面最窄（一个移位寄存器）⇒ ⇒ 边际收益最低 | 一般不补 |
 | `assert_example` | **框架自身** | 它验证的是**断言机制**（源码头：「断言系统使用示例」）⇒ ⇒ 不是「被测设计」⇒ ⇒ RTL 侧的期望源是**框架语义**而非设计语义 | 若断言机制需要**独立 RTL 面** ⇒ 另立立项 |
 | `axi4_full_example` | 总线（AXI4 **Full**） | AXI4-Lite 已被 `axi4_lite` 覆盖；**Full** 的 burst / 拆包 / DECERR 语义由**独立 capability** `axi4-full-slave-burst` 承载 ⇒ ⇒ 期望源面显著更大 ⇒ ⇒ 首批准备不足 | 待 `axi4-full-slave-burst` 的判据口径稳定后补 |
-| `axi_soc_example` | SoC 集成 | 与 `riscv-mini`（SoC）**同类重复** · 且它是「AXI 矩阵 + GPIO + UART + Timer」的**集成体** ⇒ ⇒ 规模更大、失败定位更难 | 若 `riscv-mini` 的 SoC 已被覆盖 ⇒ 一般不补 |
 
 > ⚠️ **落选 ≠ 不做**：本表是「首批不做」的登记，**不是**永久排除。
 > 每行都带**归位条件** ⇒ ⇒ 「新增即漏」被堵住。

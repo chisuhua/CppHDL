@@ -1,7 +1,8 @@
 /**
  * AXI4-Lite SoC Integration Example
  * 
- * 集成 AXI4 矩阵 + GPIO + UART + Timer
+ * 集成 AXI4 矩阵 + GPIO + UART
+ * （**4 个 IP**：Test Master + Matrix 2x2 + GPIO + UART）
  * 
  * 系统架构:
  * ```
@@ -10,7 +11,7 @@
  *                  │                 │
  *   Master 0 ──────┤                 ├───▶ Slave 0 (GPIO @ 0x0000_0000)
  *   (Test Master)  │                 │
- *   Master 1 ──────┤                 ├───▶ Slave 1 (UART/Timer @ 0x8000_0000)
+ *   Master 1 ──────┤                 ├───▶ Slave 1 (UART @ 0x8000_0000)
  *   (Reserved)     │                 │
  *                  └─────────────────┘
  * ```
@@ -21,7 +22,6 @@
 #include "axi4/axi4_lite_matrix.h"
 #include "axi4/peripherals/axi_gpio.h"
 #include "axi4/peripherals/axi_uart.h"
-#include "axi4/peripherals/axi_timer.h"
 #include "component.h"
 #include "simulator.h"
 #include "codegen_verilog.h"
@@ -176,7 +176,7 @@ public:
         ch_out<ch_bool> uart_tx;
         ch_in<ch_bool> uart_rx;
         
-        // Timer IRQ
+        // 根自有的 IRQ 输入端口（**零消费** —— DUT 从不读它 · ADR-073 事实⑭）
         ch_in<ch_bool> timer_irq;
     )
     
