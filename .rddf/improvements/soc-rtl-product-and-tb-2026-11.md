@@ -5,12 +5,19 @@ phase: phase-6
 category: framework
 type: feature
 状态: draft
-进度: **立项（2026-11-16）** · 未开工 · 🚪 开工前门 = **ADR-073 已 Accepted**（架构依据）· ⚠️ **顺序硬约束**：本项的 **T0（后代输入驱动源）MUST 先于 ADR-072（D1）的合并** · ⚠️ **metis 第 1 轮 19 条 finding 全处置**（见末节）
+进度: '**立项（2026-11-16）** · 未开工 · 🚪 开工前门 = **ADR-073 已 Accepted**（架构依据）· ⚠️ **顺序硬约束**：本项的
+  **T0（后代输入驱动源）MUST 先于 ADR-072（D1）的合并** · ⚠️ **metis 第 1 轮 19 条 finding 全处置**（见末节）'
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）—— SoC 层产物形态 + SoC 层 TB 契约
-依赖: rtl-emit-product-tooling-2026-11（implemented）· examples-rtl-sim-coverage-2026-11（implemented）· rv32i-hierarchical-example-2026-11（implemented）· **ADR-073**（Accepted 2026-11-16）· **ADR-072**（Accepted · v2.1 · 本项的 D2 与它耦合）
+依赖: rtl-emit-product-tooling-2026-11（implemented）· examples-rtl-sim-coverage-2026-11（implemented）·
+  rv32i-hierarchical-example-2026-11（implemented）· **ADR-073**（Accepted 2026-11-16）·
+  **ADR-072**（Accepted · v2.1 · 本项的 D2 与它耦合）
 来源: 用户 2026-11-16「SOC 的 Verilator 要怎么走？独立 TB 是继续 IP 层次的吗？SoC 如何构建 IP 互联和 SOC 层的 TB？」
 生成时间: 2026-11-16
 evidence: probe:scripts/verify_examples_rtl_sim.sh
+revision_count: 2
+last_feedback_id: feedback-20261116-002
+last_feedback_at: '2026-11-16T13:05:54+00:00'
+feedback_status: needs-revision
 ---
 
 # Improvement: SoC 层的 RTL 产物形态 + SoC 层 TB 的交付契约
@@ -219,3 +226,80 @@ evidence: probe:scripts/verify_examples_rtl_sim.sh
 |---|---|---|
 | ① | **ADR-073 的 dated 修订**：`「\`AxiSocTop\` = 5」` ⇒ 「根 module 名 `top`（默认）+ 4 个成层 module = 5」· 「`done` 是单拍脉冲」⇒ 「`done` 是**粘滞**完成标志（`:149-151`），故不能靠其边沿同步，也**不可**作『随激励变化』的观测证据」· **未驱动后代输入 30 → 31**（`master.rst_n`）· 扁平顶层 44 → **45** · 「19 根**双向**」⇒ 「19 根**单向**接线」 | ADR-073 已 Accepted ⇒ ⇒ 决策内容/事实的修订属 **architect 域**（须复审）⇒ ⇒ 本项**只登记不自行修改** · **✅ 已完成**（architect · 2026-11-16 · ADR-073 v1.1 · commit `57c781c` · 实为 **7 处**：额外含 V6 删 DECERR + `master.rst_n` 无行为影响 · oracle 第 2 轮复核 0 BLOCKER） |
 | ② | **ADR-072 的 change 加一句前置说明**：「本 change 的 D1-f 会让 `axi_soc_example` 的发射 fail-closed ⇒ ⇒ 前置 = `soc-rtl-product-and-tb-2026-11` 的 T0」 | 属 ADR-072 那个 change 的作者（**仍待办**） |
+
+## Feedback
+
+### feedback-20261116-001
+
+- **source**: rdd-builder
+- **kind**: needs-revision
+- **created_at**: 2026-11-16T13:03:08+00:00
+- **ref_change**: soc-rtl-product-and-tb-2026-11
+- **resolution**: open
+
+#### Body
+
+**kind**: needs-revision（plan_drift —— 需改 AC1 / AC3 的判据措辞）
+
+**① 阻塞点（file:line / task）**
+- `openspec/changes/soc-rtl-product-and-tb-2026-11/proposal.md` 的 **AC1**（「`origin == Bubbled` **计数 == 0**」）与 **AC3**（「每个端口 `origin ∈ {Self, ClockReset}`」）
+- 实测（2026-11-16 · `emit_rtl_axi_soc` + `HierarchyEmitResult.port_provenance`）：顶层 module 的 14 个端口 = **8 × `Bubbled`**（**根自有的 8 个 `ch_in`**：start / write / addr / wdata / rst_n / gpio_in / uart_rx / timer_irq —— `examples/axi4/axi_soc_example.cpp:161-181`）+ **4 × `Self`**（根自有 `ch_out`）+ **2 × `ClockReset`**（default_clock / default_reset）
+  ⇒ ⇒ **根自有的顶层输入被实现标为 `Bubbled`**（分析层语义 = 「无内部 driver 的 `ch_in` ⇒ 提升到顶层」）⇒ ⇒ **`Bubbled == 0` 与 `origin ∈ {Self, ClockReset}` 在今天都不成立** ⇒ ⇒ AC1/AC3 的**字面无法通过**。
+
+**② 需要什么决策**
+- 把 AC1 / AC3 的判据从「**零 Bubbled**」改为「**零后代冒泡**」：
+  ⇒ **所有 `origin == Bubbled` 的端口，其 `owner` MUST 是根**（= 它们是顶层输入本身）
+  ⇒ **任何 `owner != 根` 的 `Bubbled` 端口 ⇒ 失败**（那才是「后代悬空被冒泡」）
+- 并同步 `ADR-073` §5 **V2**（负向对照「恢复一根未驱动输入 ⇒ 该输入冒泡 / 发射失败」）的措辞：成层后是「**发射失败**」，不是「冒泡」（D1-h 退役冒泡机制后）。
+- （可选，另一条路）改 `src/hierarchy_analysis.cpp` 让**根自有**的无 driver `ch_in` 标 `Self` 而非 `Bubbled` —— 但那是**库改动**，属 `rtl-productization-surface-2026-11` 的写点 ⇒ **本 change 不碰** ⇒ 建议走前者（措辞修正）。
+
+**③ 已完成 / 未完成**
+- 已完成：**T0**（31 根后代输入驱动源 · 变异自证 39→8，判据 = manifest 未驱动端口中 `owner != "top"` == 0）· **T1**（4 个 `ch_layer` 档③ · 产物 5 module · 标识符 `AxiLiteTestMaster` / `AxiLiteMatrix2x2_32_32_` / `AxiLiteGpio_8_` / `AxiLiteUart_16_` · 顶层端口 **14**）· **T2**（`examples/axi4/emit_rtl_soc.cpp` + CMake target `emit_rtl_axi_soc` · EXIT 0 · manifest 诊断 0 · lint exit 0）
+- 未完成：T3（`--check-products` 的 ①②③④）· T4–T13
+- ⚠️ **T3 的 ② 直接依赖 AC3** ⇒ ⇒ AC3 措辞不定 ⇒ T3 的判据写法不定 ⇒ **T3 等 AC3 订正**（本轮已按「零后代冒泡」实现，但**以 AC 订正为准**）
+
+**④ 建议的下一步指令草案**
+- planner：把 soc proposal 的 **AC1 / AC3** 改成「零**后代**冒泡（Bubbled 端口的 owner MUST 是根）」，并同步 `ADR-073` V2 的措辞（architect 域）⇒ ⇒ 改完通知 builder 解冻 T3。
+
+**⑤ 证据**
+- `emit_rtl_axi_soc` 的 stdout：`OK: 产物 1 个 · manifest 端口 161 条 · 诊断 0 条 · 顶层 module top`
+- `HierarchyEmitResult.port_provenance` 汇总（探针）：`Bubbled=8 · ClockReset=10 · Self=151 · InlineFolded=0`；顶层 module 的端口逐项见上
+- 根 `__io` 的 `ch_in` 数 = **8**（`examples/axi4/axi_soc_example.cpp:161-181`）= Bubbled 数 **8** ⇒ 一一对应
+
+### feedback-20261116-002
+
+- **source**: rdd-builder
+- **kind**: needs-revision
+- **created_at**: 2026-11-16T13:05:54+00:00
+- **ref_change**: soc-rtl-product-and-tb-2026-11
+- **resolution**: open
+
+#### Body
+
+**kind**: needs-revision（补充 feedback-20261116-001 · 同一 improvement 的第二条）
+
+**① 阻塞点**
+- `docs/adr/ADR-073-soc-rtl-product-and-tb.md` 的 **§5 V2 负向对照** 与 soc proposal 的 **AC3** 措辞（**metis 的结论被实测证伪**）
+- metis 第 2 轮曾判定：「**『去掉一个 `ch_layer`』不是有效负向对照**（成层 IP 的 `ch_out` 本就不冒泡 ⇒ ⇒ 顶层端口集合不变 ⇒ ⇒ 恒绿）」⇒ ⇒ 据此把 V2 的负向对照限定为「恢复一根未驱动输入」。
+- **实测（2026-11-16 · `emit_rtl_axi_soc --check-products`）**：把 `AxiLiteUart<16>` 的 `ch_layer` 改回 `ch_module` ⇒
+  - `CHECK 1 module 集`: **5 → 4 ⇒ FAIL**
+  - `CHECK 2 顶层端口`: **14 → 24 ⇒ FAIL**（**+10** = uart 的 10 个 `ch_out`：8 个 AXI 响应侧 + `uart_tx` + `irq` ⇒ ⇒ **inline 后代的 `ch_out` 被提升到顶层** ⇒ ⇒ 顶层端口集合**确实变了**）
+  ⇒ ⇒ **「去掉一个 `ch_layer`」是比「恢复一根未驱动输入」更强的负向对照**（同时打红 CHECK 1 + CHECK 2）⇒ ⇒ metis 的「恒绿」判断**不成立**。
+
+**② 需要什么决策**
+- `ADR-073` **V2** 的负向对照**补一条**：「把某个成层 IP 改回 `ch_module` ⇒ ⇒ module 数必减 **且** 顶层端口数必增（该 IP 的 `ch_out` 被 inline 提升）⇒ ⇒ 必红」。
+- soc proposal **AC3** 的负向对照同理补这一条（**它比现有的「恢复一根未驱动输入」更强** ⇒ ⇒ 判别力更高）。
+- ⚠️ 连带：`rtl-soc-output` 的 delta（`specs/rtl-soc-output/spec.md`）里若也写了「去掉 ch_layer 不是有效负向对照」的措辞，MUST 同步订正。
+
+**③ 已完成 / 未完成**
+- 已完成：**T0 · T1 · T2 · T3（①②③）**，全部带**变异自证**（改回 `ch_module` ⇒ CHECK 1 + CHECK 2 双红 ⇒ 判据非恒绿）
+- 未完成：**T4–T13**（T7 的 ④ 双形态等价待落地）
+
+**④ 建议的下一步指令草案**
+- architect：给 `ADR-073` V2 补「去掉 `ch_layer` ⇒ 顶层端口必增」的负向对照（**小改 · dated 订正**）
+- planner：soc proposal 的 AC3 负向对照同步补这一条 + 并入上一条 feedback 的 AC1/AC3 措辞订正（**一次改完**）
+
+**⑤ 证据**
+- 正：`CHECK 1 module 集: PASS (5/5)` · `CHECK 2 顶层端口: PASS (14/14 · 后代未驱动 0)` · `CHECK 3 lint: PASS` ⇒ `PRODUCTS-CHECK: PASS` · EXIT 0
+- 负（变异体：`uart` 改回 `ch_module`）：`CHECK 1: FAIL (期望 5 · 实际 4)` · `CHECK 2: FAIL (端口 24/14)` ⇒ `PRODUCTS-CHECK: FAIL (2 项)` · EXIT 1
+

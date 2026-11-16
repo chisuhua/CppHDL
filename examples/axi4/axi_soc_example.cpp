@@ -189,16 +189,18 @@ public:
     
     void describe() override {
         // 测试主设备
-        ch::ch_module<AxiLiteTestMaster> master{"master"};
+        // ⚠️ **成层声明用档 ③**（实例处给模块类型名）—— 4 个 IP 均无类级 CH_HIERARCHY_LAYER
+        // ⇒ ⇒ 模块类型名**一次定死**（ADR-073 T1）⇒ ⇒ 改名会改结构判据（J-2 的期望 module 数）
+        ch::ch_layer<AxiLiteTestMaster> master{"master", "AxiLiteTestMaster"};
         
         // AXI4 矩阵
-        ch::ch_module<AxiLiteMatrix2x2<32, 32>> matrix{"matrix"};
+        ch::ch_layer<AxiLiteMatrix2x2<32, 32>> matrix{"matrix", "AxiLiteMatrix2x2<32,32>"};
         
         // 外设：GPIO (从设备 0)
-        ch::ch_module<AxiLiteGpio<8>> gpio{"gpio"};
+        ch::ch_layer<AxiLiteGpio<8>> gpio{"gpio", "AxiLiteGpio<8>"};
         
         // 外设：UART (从设备 1)
-        ch::ch_module<AxiLiteUart<16>> uart{"uart"};
+        ch::ch_layer<AxiLiteUart<16>> uart{"uart", "AxiLiteUart<16>"};
         
         // 连接主设备到矩阵
         matrix.io().m0_awaddr <<= master.io().awaddr;
@@ -254,6 +256,45 @@ public:
         io().gpio_out <<= gpio.io().gpio_out;
         gpio.io().gpio_in <<= io().gpio_in;
 
+        // 连接矩阵从设备 1 口 (s1_*) 到 UART（AXI4-Lite 从设备）
+        // —— 此前 s1_* 零连线 ⇒ uart 不在总线上（不可达）；接通后 uart 可经矩阵访问。
+        // 请求侧 11 根（矩阵 ch_out → uart ch_in）
+        uart.io().awaddr  <<= matrix.io().s1_awaddr;
+        uart.io().awprot  <<= matrix.io().s1_awprot;
+        uart.io().awvalid <<= matrix.io().s1_awvalid;
+        uart.io().wdata   <<= matrix.io().s1_wdata;
+        uart.io().wstrb   <<= matrix.io().s1_wstrb;
+        uart.io().wvalid  <<= matrix.io().s1_wvalid;
+        uart.io().bready  <<= matrix.io().s1_bready;
+        uart.io().araddr  <<= matrix.io().s1_araddr;
+        uart.io().arprot  <<= matrix.io().s1_arprot;
+        uart.io().arvalid <<= matrix.io().s1_arvalid;
+        uart.io().rready  <<= matrix.io().s1_rready;
+        // 响应侧 8 根（uart ch_out → 矩阵 ch_in）
+        matrix.io().s1_awready <<= uart.io().awready;
+        matrix.io().s1_wready  <<= uart.io().wready;
+        matrix.io().s1_bresp   <<= uart.io().bresp;
+        matrix.io().s1_bvalid  <<= uart.io().bvalid;
+        matrix.io().s1_arready <<= uart.io().arready;
+        matrix.io().s1_rdata   <<= uart.io().rdata;
+        matrix.io().s1_rresp   <<= uart.io().rresp;
+        matrix.io().s1_rvalid  <<= uart.io().rvalid;
+
+        // 主设备 1 接口未使用 —— tie-off
+        // （惯用法照 examples/axi4/phase3a_complete.cpp:259-263：握手信号接常量）
+        matrix.io().m1_awvalid <<= ch_bool(false);
+        matrix.io().m1_wvalid  <<= ch_bool(false);
+        matrix.io().m1_bready  <<= ch_bool(false);
+        matrix.io().m1_arvalid <<= ch_bool(false);
+        matrix.io().m1_rready  <<= ch_bool(false);
+        // ⚠️ payload 也 MUST tie —— 否则它们仍是**未驱动的后代输入** ⇒ ⇒ 发射 fail-closed
+        matrix.io().m1_awaddr  <<= ch_uint<32>(0_d);
+        matrix.io().m1_awprot  <<= ch_uint<2>(0_d);
+        matrix.io().m1_wdata   <<= ch_uint<32>(0_d);
+        matrix.io().m1_wstrb   <<= ch_uint<4>(0_d);
+        matrix.io().m1_araddr  <<= ch_uint<32>(0_d);
+        matrix.io().m1_arprot  <<= ch_uint<2>(0_d);
+
         // UART 物理接口
         io().uart_tx <<= uart.io().uart_tx;
         uart.io().uart_rx <<= io().uart_rx;
@@ -265,6 +306,9 @@ public:
         // 互连层是 rst_n 链路的**中间节点**：MUST 透传父级复位源
         // （MUST NOT tie 常量 —— 那会永久掩盖复位路径）
         matrix.io().rst_n <<= io().rst_n;
+        // 主设备的 rst_n 同样透传（此前声明但零驱动 ⇒ 未驱动后代输入）
+        // ⚠️ AxiLiteTestMaster::describe() **不消费** rst_n ⇒ 纯发射前置，无行为影响
+        master.io().rst_n <<= io().rst_n;
 
         // 主设备控制接口
         master.io().start <<= io().start;
