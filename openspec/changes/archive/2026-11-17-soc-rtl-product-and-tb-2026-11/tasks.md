@@ -128,7 +128,9 @@
 
 ## 5. 归档与收口
 
-- [ ] **T13** **archive** ⇒ ⇒ 归档后手写 `openspec/specs/rtl-soc-output/spec.md` 的 `## Purpose`（**非占位符**）⇒ ⇒ 清理 `.rddf/checks/examples-rtl-sim-exclusions.md` 的 SoC 行（已由 T8 移除）
+- [x] **T13** **archive** ⇒ ⇒ 归档后手写 `openspec/specs/rtl-soc-output/spec.md` 的 `## Purpose`（**非占位符**）⇒ ⇒ 清理 `.rddf/checks/examples-rtl-sim-exclusions.md` 的 SoC 行（已由 T8 移除）
+      - ✅ **已完成（2026-11-17）**：`openspec archive soc-rtl-product-and-tb-2026-11` ⇒ ⇒ 目录移到 `openspec/changes/archive/2026-11-17-soc-rtl-product-and-tb-2026-11/`（含 `proposal.md` ⇒ ⇒ 满足「archive 类 MUST 含 proposal.md」）+ delta 合并生成 `openspec/specs/rtl-soc-output/spec.md`
+      - ✅ **手写 `## Purpose`**（**禁**留 `TBD - created by archiving …` 占位）· 根 `AGENTS.md` 的 capability 计数 **48 → 49**
       - 判据：`grep -c "TBD - created by archiving" openspec/specs/rtl-soc-output/spec.md` == 0
       ```bash
       openspec archive soc-rtl-product-and-tb-2026-11
