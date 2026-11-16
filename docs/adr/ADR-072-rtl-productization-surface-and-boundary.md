@@ -3,6 +3,16 @@
 - **Status**: **Accepted · v2**（2026-11-16 · architect role（build agent）· **v1 轮**：oracle ×1 **REJECT**（3 BLOCKER）⇒ 全闭 · critic ×2（第 1 轮 **REJECT** 1 BLOCKER ⇒ 复审 **APPROVE**）· **v2 轮**：oracle ×1 **REJECT**（3 BLOCKER + 3 SHOULD_FIX）⇒ 全闭 · critic ×2（第 1 轮 **REJECT** 2 BLOCKER + 3 NIT ⇒ 全闭 · 复审 **APPROVE · 0 BLOCKER** · `mergeable: yes`）·
   ⚠️ **保留的未决分支**：D1 的条件式（V1 落地确认失败 ⇒ 退到选项 ④）仍是「显式标注的未决」⇒ ⇒ 一旦触发 = 决策内容变更 ⇒ MUST 重新审稿）
 - **Date**: 2026-11-16
+- **修订 v2.1（2026-11-16 · architect · **事实订正 · 无决策变更** · oracle 复核 **APPROVE · 0 BLOCKER · 3 SHOULD_FIX 全闭**）**：
+  用户追问「为什么 `VerilatorBackend` 拿不到 root」⇒ ⇒ 复核发现 **v2 的表述过强**：
+  root **原理上可从 ctx 推导**（`src/core/lnodeimpl.cpp:30` 节点记归属 + `include/component.h:79` `parent()` 可上溯）
+  ⇒ ⇒ **真实障碍 = 「推导不可靠」** —— `node_owner()` 只有 **2** 条 `nullptr` 路径（`src/component.cpp:16-26`）· **多根** ⇒ 上溯结果不唯一 · `parent_` 是 `weak_ptr` ⇒ 父组件非 shared 管理时上溯静默终止，
+  不是「物理不可能」。
+  ⇒ ⇒ **订正 6 处**：§1.2 事实 ⑩ · **§1.2 事实 ⑫（同义残留 —— oracle SHOULD_FIX-1）** · 「修订 v2 表」第 1 行 ·
+  §2.1.2 D1-a（**精确归因**：`node_owner()` 只有 **2** 条 `nullptr` 路径；**多根** ⇒ 上溯不唯一（不是 `nullptr`）；
+  `parent_` 是 `weak_ptr` ⇒ 父组件非 shared 管理时上溯**静默终止**）· §3 选项 ⑩ · §5 V5。
+  ⇒ ⇒ **决策零变更**（backend 仍 = 遗留路径 · ① 仍撤回 · V5 仍撤回）⇒ ⇒ 只是**理由变准确且更弱**
+  （「推导不可靠」比「不可能」更弱，但结论仍成立：**显式路径已存在 ⇒ 无收益**）。
 - **Author**: architect role（build agent）
 - **Parent**: **ADR-046**（D10 SoC 端口冻结）· **ADR-058**（层次化 RTL 输出）· **ADR-060**（端口策略）· **ADR-061**（粒度用户可控）· **ADR-066**（父侧落点）· **ADR-070**（RV32I 成层粒度）· **ADR-071**（`FENCE` / 非法指令冻结）
 - **关联 change**: **`rtl-productization-surface-2026-11`**（`openspec/changes/rtl-productization-surface-2026-11/` · **已立项** · planner 2026-11-16）⇒ ⇒ 本 ADR 的 **AC 映射** = 该 change 的 **AC1–AC15** + task **T1–T14**（逐条见 §5）
@@ -15,7 +25,7 @@
 
 | # | v1 的问题 | v2 的改法 | 出处 |
 |---|---|---|---|
-| **1** | **①（Verilator backend 端口面改造）不可执行** —— `VerilatorBackend` **拿不到 root**（`include/core/verilator_backend.h:94-96` 只收 `verilog_path`；端口表来自 `ctx->get_eval_list()`）⇒ ⇒ auto-mode **无数据来源** ⇒ ⇒ 连带的 **V5「77 个 `verilator_e2e` 全绿」也不可执行** | **撤回 ① 与 V5** ⇒ ⇒ **backend = 遗留路径**（ctx-only 旧语义 · **零改动**）⇒ ⇒ 产品产物的验证载体 = **独立 Verilog TB** ⇒ ⇒ 新增 **V5′**（A 类零扰动） | metis P0-1 ② |
+| **1** | **①（Verilator backend 端口面改造）不可执行** —— `VerilatorBackend` 的 auto-mode **没有被交付 root**（接口只收 `ctx`）· 且**从 ctx 推导 root 不可靠**（见 §2.1.2）⇒ ⇒ 连带的 **V5「77 个 `verilator_e2e` 全绿」也不可执行** | **撤回 ① 与 V5** ⇒ ⇒ **backend = 遗留路径**（ctx-only 旧语义 · **零改动**）⇒ ⇒ 产品产物的验证载体 = **独立 Verilog TB** ⇒ ⇒ 新增 **V5′**（A 类零扰动） | metis P0-1 ② |
 | **2** | **② 的 delta 形状错** —— 「各一条 MODIFIED」⇒ ⇒ 实为 **2 份 capability · 5 条 Requirement**；且 **1 条标题会变假**（MODIFIED 改不了标题） | 新增 **§2.8 D8**：**逐条**给改法要点 + **新标题逐字** ⇒ ⇒ 按实测定为 **2 份 capability · 6 条**：**4 MODIFIED**（`:32` / `:98` / `:240` / **`:402`**）+ **2 REMOVED+ADDED**（`rtl-emit-portability` 的 manifest schema · `:190`）⇒ ⇒ **另 4 条不需 delta**（`:478` / `:518` / `:529` / `:637`） | metis P0-1 ⑤ · critic plan 档 · **v2-oracle BLOCKER-1** |
 | **3** | **⑩「切换调用点」是事实错误** —— 「带根重载」**不存在**（`include/codegen_verilog.h:65,68,151,347` 全是 `ctx` 形参） | ⑩ = **新增公开入口**（**ADDED** 符号，**不是**行为变更）⇒ ⇒ **只增不改**（ctx-only 保留） | metis P0-1 ① |
 | **4** | **「34」的构成未写明** · **manifest `ports[]` 收敛不收敛未定** · **「顶层端口」三处各自实现且口径不同** | **D1-c / D1-d / D1-e** 三条写死 | metis P0-1 ③④ + P0-2 ⑤ |
@@ -53,9 +63,9 @@
 | ⑦ | 🔴 **codegen 没有「顶层面」概念** —— 端口 = 「图中**每个** `type_output`」 | `src/codegen_verilog.cpp:410-448` |
 | ⑧ | 🔴 **manifest 不携带产品端口表** —— `is_top_io = (owner == &root)` ⇒ ⇒ 实测 `is_top_io: true` = **32** vs 产物顶层 **130** ⇒ ⇒ **98 个错标** | `src/rtl_emit/manifest.cpp:155-156` |
 | ⑨ | 🔴 **「顶层端口」三处各自实现且口径互不相同** | `scripts/lib/flat_rtl_emit_check.py:79-92`（**契约算法**）/ `src/rtl_emit/tb_stub.cpp:59`（`p.is_top_io`）/ `tests/test_rtl_emit_contract.cpp:142`（`e.is_top_io`） |
-| ⑩ | 🔴 **`VerilatorBackend` 拿不到 root** | `include/core/verilator_backend.h:94-96` · `src/core/verilator_backend.cpp:857-867`（端口表来自 `ctx->get_eval_list()`） |
+| ⑩ | 🔴 **`VerilatorBackend` 的 auto-mode **未被交付 root**（接口只收 `ctx`）** · ⚠️ **但 root **原理上可从 ctx 推导**（节点记归属 + `Component::parent()` 可上溯）⇒ ⇒ **真实障碍 = 「推导不可靠」，不是「不可能」**（见 §2.1.2 D1-a 的三类 `nullptr` 形态） | `include/core/eval_backend.h:25`（`initialize(context*, …)`）· `include/core/verilator_backend.h:96`（ctor 只收 `verilog_path`）· `include/simulator.h:68`（`Simulator(context*, …)`）· `src/core/verilator_backend.cpp:857-867`（端口表来自 `ctx->get_eval_list()`）· **推导面**：`src/core/lnodeimpl.cpp:30`（`parent_ = node_owner()`）· `src/component.cpp:16-26`（`node_owner()` 的**三种返回 `nullptr`**）· `include/component.h:79`（`parent()` 可上溯）· 旁证 = `include/hierarchy_verilog.h:144`（`toVerilogHierarchical` **显式收 root** ⇒ 框架选择「不猜」） |
 | ⑪ | ✅ **显式入口已存在**：`try_initialize_with_verilog(path, ports, dm)` + `backend_port_set(emitted, root_module)` | `include/core/verilator_backend.h:113,121` · `include/hierarchy_verilog.h:154` ⇒ ⇒ **层次化**产物可被 backend 消费；**扁平**产物**无**对应入口 |
-| ⑫ | 🔴 **ctx-only 公开 API 无根可推导**（context 全类**无**组件注册表）· 仓内 **49** 处活跃调用点 · ⚠️ **产品路径走的就是 ctx-only** | `include/core/context.h:83-247` · `include/codegen_verilog.h:65,68` · `src/rtl_emit/cli.cpp:181` |
+| ⑫ | 🔴 **ctx-only 公开 API **无根注册表可直取**（root 只可**不可靠地推导** —— 见事实 ⑩ · **不是**「不可推导」）· 仓内 **49** 处活跃调用点 · ⚠️ **产品路径走的就是 ctx-only** | `include/core/context.h:83-247` · `include/codegen_verilog.h:65,68` · `src/rtl_emit/cli.cpp:181` |
 | ⑬ | 🔴 **无任何以 `Component&` 为根的公开入口** | `include/codegen_verilog.h:65,68,151,347` |
 | ⑭ | 🔴 **capability 契约与「端口面收敛」逐字相反**（**5 条 Requirement** · 见 §2.8） | `rtl-emit-portability:61-62` · `rtl-hierarchical-output:32,98,190,240,637` |
 | ⑮ | 🔴 **两份 Accepted ADR 的决策内容被实质修订** | `ADR-058:63-64` + `ADR-061:132`（写死的枚举「任意 `ch_out` ⇒ 顶层 `output`」） |
@@ -90,7 +100,14 @@ G1 = **发射器面** · G2 = **ISA 集成面**（独立立项 · 与 G1 零写�
 
 #### 2.1.2 **D1-a**（v2 新增）= **撤回原 ①**：`VerilatorBackend` = **遗留路径**（零改动）
 
-- `VerilatorBackend` **拿不到 root**（事实 ⑩）⇒ ⇒ auto-mode **无数据来源** ⇒ ⇒ 无法让它的端口面跟随产品面。
+- `VerilatorBackend` 的 auto-mode **只有 `ctx`**（事实 ⑩）⇒ ⇒ **root 未被交付**。
+- ⚠️ **但「拿不到」是过强的说法（**v2.1 事实订正**）**：root **原理上可推导** —— 每个节点建时记归属（`src/core/lnodeimpl.cpp:30`），`Component::parent()` 可上溯到最顶层（`include/component.h:79`）。
+  ⇒ ⇒ **真实障碍 = 「推导不可靠」**，四个来源（**精确归因** · v2.1-oracle SHOULD_FIX-3）：
+  **① `node_owner()` 返回 `nullptr` 的两条路径**（`src/component.cpp:16-26` 只有两条 `return nullptr`）：`node_ownership_suppressed()` 期间（唯一置位点 = `src/core/context.cpp:111` 的 RAII ⇒ 建 `default_clock`/`default_reset`）· `scope_.empty() && current_ == nullptr`（用户在 `describe()` 之外建节点）
+  **② 多根** ⇒ ⇒ `node_owner()` **不是** `nullptr`，而是**上溯结果不唯一**（`Component::build(external_ctx)` 是公开 API ⇒ 同一 ctx 可建多棵组件树 · ctx 级节点无根）
+  **③ `parent_` 是 `weak_ptr`** ⇒ ⇒ 父组件非 `shared_ptr` 管理时上溯**静默终止**（`src/component.cpp:54-56,88-92`；`Simulator` **不持有**组件树 —— `include/simulator.h:68` 只收 `ctx*`）
+  ⇒ ⇒ 用启发式 ⇒ **端口面建立在一个会静默误分类的猜测上**（本仓最怕的缺陷族）。
+  ⇒ ⇒ **旁证**：`toVerilogHierarchical(path, Component &root, …)` **显式收 root**（`include/hierarchy_verilog.h:144`）⇒ 框架自己也选择「不猜」。
 - ⇒ ⇒ **裁决：auto-mode 的 backend 保持 ctx-only 旧语义**（130 端口 · **零改动**）。
 - ⇒ ⇒ **后果必须显式声明**（下游面）：**产品产物（34 端口）≠ 仿真器产物（130 端口）· 行为等价、端口面不同**。
   ⇒ ⇒ 理由：**对 RV32I** 差别**只在顶层端口面**且多出来的 **96 个全是 `ch_out`**（事实 ⑥）⇒ ⇒ 内部逻辑与逐拍行为**不变**（v2-oracle Q1 已独立核实两侧的 `type_input` driver 过滤**逐字同构** ⇒ D1 不引入新变化）。
@@ -353,7 +370,7 @@ G1 = **发射器面** · G2 = **ISA 集成面**（独立立项 · 与 G1 零写�
 | ⑦ | 覆盖：锚点钉 28 | 护栏要求 28 全有 TB | ❌ **拒**（用户裁决「维持首批 10」） | 等于把 19 个人工 TB 变成**护栏红** |
 | ⑧ | 覆盖：维持现状且不管漂移 | 只修数字 | 🟡 **不足** | 一次性 ⇒ 下次再长照旧漂 ⇒ ⇒ 必须**有判据**（D5） |
 | ⑨ | 卫生：保持 `emit_hygiene` off | 不动 | ❌ **拒** | 「默认 off」的唯一理由已被 D1 消灭 ⇒ 继续 off = 产品面带 blanket `lint_off` 出货 |
-| **⑩** | **（v2 新增）backend 跟随产品面** | 新增「root 进 backend / Simulator」设计点 | ❌ **拒** | ① backend **拿不到 root**（事实 ⑩）⇒ ⇒ 要新增设计点 ② 会推翻 **ADR-058 §2.3 决策③「既有入口一律不动」** ⇒ 需**第二个 ADR addendum** ③ 收益 = 仿真器能跑产品产物 —— 而**独立 Verilog TB 已经能跑** ⇒ ⇒ **收益为零、代价是公开面 + ADR 变更** |
+| **⑩** | **（v2 新增）backend 跟随产品面** | 新增「root 进 backend / Simulator」设计点（或**在 backend 内启发式推导 root**） | ❌ **拒** | ① 若走启发式推导 ⇒ **三类 `nullptr` 形态导致静默误分类**（事实 ⑩）⇒ 违背本仓 fail-closed 纪律 ② 若走显式传 root ⇒ 要改 `IEvalBackend::initialize` 的签名 ⇒ 推翻 **ADR-058 §2.3 决策③「既有入口一律不动」** ⇒ 需**第二个 ADR addendum** ③ 收益 = 仿真器能跑产品产物 —— 而**独立 Verilog TB 已经能跑**；且**显式路径已存在**（`try_initialize_with_verilog` + `backend_port_set`，调用方本来就持有 root）—— ⚠️ **但该「已有路径」只对**层次化**产物成立**（`backend_port_set` 的唯一重载收 `HierarchyEmitResult`，`include/hierarchy_verilog.h:154`；**扁平**产物的 `toVerilog` 返回 `void` ⇒ 无对应入口 —— 事实 ⑪）⇒ ⇒ 扁平面「收益为零」由另一条独立支撑：**auto-mode 本就跑扁平遗留产物**（= `verilator_e2e` 全套）⇒ **收益为零、代价是公开面 + ADR 变更** |
 | **⑪** | **（v2 新增）ctx-only 路径全部迁移到带根** | 改 49 处调用点 | ❌ **拒** | 爆炸半径远超 D1 本身（49 处 · `examples/` 21 · `tests/` 18 · `samples/` 5 · `src/` 5）⇒ ⇒ 且与「产品面收敛」目标**不冲突**（产品面 = `rtl_emit` 路径）⇒ ⇒ **保留 + 登记** 即可 |
 | **⑫** | **（v2 新增）后代悬空 `ch_in` 静默降格**（wire / tie-off） | 不上顶层但保留信号 | ❌ **拒** | 两者**都静默**（读 X / 静默改行为）⇒ ⇒ 与仓内「响亮拒绝」纪律相反；且 `verilator --lint-only` 对未驱动 wire 的行为不可依 |
 | **⑬** | **（v2 新增）`port_table[]` 取代 `ports[]`** | `ports[]` 只列产品端口 | ❌ **拒** | `tests/test_rtl_emit_contract.cpp:278` 的 `top_ports < man.ports.size()` 恒红；且 `ports[]` 的**节点清单**用途（`owner` / `driven` / `effective` 诊断）会丢失 |
@@ -411,7 +428,7 @@ G1 = **发射器面** · G2 = **ISA 集成面**（独立立项 · 与 G1 零写�
 - [ ] **V2**（保留）🔴 **端口表判据**：扁平产物顶层端口表 **== {clock, reset} ∪ 根自有 32**（**逐字逐序** · 计数 = `2 + 根自有 IO 数`）⇒ ⇒ 且**冒泡端口零出现**
 - [ ] **V3**（修订）🔴 **manifest 自洽**：`port_table[]` == 产物端口表（**逐字逐序**）⇒ ⇒ `ports[]` **仍列全量**（`top_ports < man.ports.size()` 仍成立）⇒ ⇒ schema == `rtl-emit-manifest-v2`
 - [ ] **V4**（保留）🔴 **观测不退化**：根自有 **28 个 `obs_*` / `dbg_*`** 全部仍在顶层 ⇒ ⇒ `riscv` TB 仍 `checks=24 fails=0` ⇒ ⇒ **负向对照**：删一个 `dbg_*` ⇒ 必红
-- [ ] **V5**（**撤回**）~~backend 同源（77 个 `verilator_e2e` 全绿）~~ ⇒ ⇒ **理由 = 事实 ⑩（backend 拿不到 root）⇒ 判据不可满足**
+- [ ] **V5**（**撤回**）~~backend 同源（77 个 `verilator_e2e` 全绿）~~ ⇒ ⇒ **理由 = 事实 ⑩（auto-mode 未被交付 root · 从 ctx 推导不可靠）⇒ 判据在「backend 跟随产品面」这一前提下不可满足**
 - [ ] **V5′**（新增 · 替代 V5）🔴 **A 类零扰动**：**ctx-only 遗留路径产物逐字节不变**（= 130 端口 · 与 v1 前一致）⇒ ⇒ 且 `verilator_e2e` 全套**仍绿**（因为它们走 ctx-only）⇒ ⇒ **负向对照**：把 backend 端口表改回「带根」⇒ ⇒ 必红（编译期失败）
 - [ ] **V6**（修订）🔴 **契约逐句清理（**6 条** Requirement · 见 §2.8）**：① `rtl-emit-portability` 的 v1 标题**已删**、v2 标题**已加**、`port_table[]` 已入、`:64-69` 的解读已补 ② `:32` 的 4 处已改 ③ `:98` 的两类区分已入 ④ `:190` 的旧标题**已删**、新标题**已加** ⑤ `:240` 的 **4 处**已改（含 五类 → 三类 + **`:336-344` 的末句**）⑥ **`:402`** 的 `Bubble` 已删⇒ ⇒ **正面判据**：新契约文本**可 grep 到** ⇒ ⇒ **负向判据**：旧措辞**零残留** ⇒ ⇒ ⚠️ **`：637` 不在本判据内**（不需 delta · v2-oracle BLOCKER-1）
 - [ ] **V18**（新增 · v2-oracle BLOCKER-2）🔴 **「inline 折叠进根」的悬空 `ch_in` MUST 被拒**：构造 `RootUndrivenTop`（inline 子组件有未驱动 `din`）⇒ ⇒ `ok == false` + `error` 点名 ⇒ ⇒ ⚠️ **该用例今天断言 `REQUIRE(r.ok)`**（`tests/test_hierarchy_verilog.cpp:2181-2192` + 注释「拒绝它们 = 拒绝合法设计」）⇒ ⇒ **MUST 重设计为验证拒绝**
