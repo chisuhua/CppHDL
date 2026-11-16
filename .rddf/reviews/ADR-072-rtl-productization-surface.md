@@ -149,3 +149,94 @@ oracle **无执行权限**（`./build/.../emit_rtl_rv32i_soc` 被拒），故「
 | ⑤ | 审稿报告已落 `.rddf/reviews/` | ✅ 本文件 |
 
 ⚠️ **自指审查声明**：本 ADR 的 **D1** 触及 `ADR-058` / `ADR-061` 的决策内容 ⇒ ⇒ 其 dated addendum（同批必改 ⑨）**按仓内先例走复审**（ADR-060 v1.20 / ADR-062 v1.7）⇒ ⇒ 那一步**不是**本轮审查能替代的。
+
+---
+
+# 6. **v2 轮 · oracle 第 1 轮**（对抗式复核 · v2 增量）—— **REJECT**（3 BLOCKER + 3 SHOULD_FIX）
+
+**触发**：planner 的 **metis 第 1 轮**（7 P0 + 3 P1 + 2 P2）+ change 的 **critic 第 1 轮**（plan 档 `APPROVE_WITH_CONDITIONS`）实测推翻 v1 的 7 处 ⇒ ⇒ ADR-072 **v2**。
+
+## 6.1 BLOCKER（3 条 · 全部已闭）
+
+| # | BLOCKER | 证据 | 闭合位置 |
+|---|---|---|---|
+| **B1** | **R-6 的「D1 下顶层不再有 C 类」= 事实错误** —— 冒泡端口只是顶层 C 类的**一个**来源；另一个来源 = **根组件自有的 legacy 未具名端口**，D1 下**仍是顶层端口** | `examples/axi4/axi4_lite_example.cpp:20-31`（`AxiLiteTop` 的 `__io` 全部 legacy 未具名）· `.rddf/checks/port-naming-exempt.tsv:36-55`（20 个端口登记为「既有债·基线豁免」⇒ C 类）· `.rddf/checks/examples-rtl-sim-targets.tsv:40`（`axi4_lite_example` = 首批 10 个 **verified** 产品目标之一）⇒ ⇒ 照原稿写进 delta ⇒ **已登记在册的 verified 产品立刻违反主 spec** | **撤回 R-6** ⇒ ⇒ **`:637` 不需 delta**（三类判定与「冒泡端口是否存在」**正交**）⇒ ⇒ 列进「不需 delta 的四条」 |
+| **B2** | **「inline 折叠进根」的悬空 `ch_in` 未裁决** —— 现行 spec 要求**放行**，D1 契约要求**拒绝** | `openspec/specs/rtl-hierarchical-output/spec.md:192-194`（「折叠进根的悬空 `ch_in` 在扁平里本就是顶层 input ⇒ ⇒ **仍 MUST 产出**」）· Scenario `:213-214`（「inline 折叠进根 ⇒ MUST NOT 触发拒绝」）· `tests/test_hierarchy_verilog.cpp:2181-2192`（`REQUIRE(r.ok)` + 注释「拒绝它们 = 拒绝合法设计」） | **D1-f 扩写**：「inline 折叠进根 ⇒ **拒绝**」+ 明写**取代** `:192-194`/`:213-214`（旧理由「在扁平里本就是顶层 input」的**前提已不成立**）+ 新增 **V18** + 同批必改 ④ 补 `:2181-2192` 与 4 个 `[bubble]` 用例 |
+| **B3** | **Status 曾写「Accepted · v2」而 §7 不存在** ⇒ ⇒ 「把未决问题写成已决」（`arch` 档 BLOCKER 第四类） | ADR `:3` / `:380` 引用 §7 · 文档到 §6 就结束 · `.rddf/reviews/` 无任何 v2 记录 | **退回 Draft · v2 待审稿**（本章即其自证） |
+
+## 6.2 SHOULD_FIX（3 条 · 全部已闭）
+
+| # | finding | 闭合位置 |
+|---|---|---|
+| S1 | **fail-closed 的爆炸半径被低估**，且「同批改期望集」**措辞误导**（fail-closed 后**产物不存在** ⇒ 无表可改）· 漏 6 个同步点（含 `tests/test_component_granularity.cpp:248-254` 的 `static_assert` 把 `Bubble` 钉为 canonical 默认 ⇒ 一退役即编译失败） | 措辞改为「语料**重设计**为拒绝断言或删除」+ 同批必改 ④ 补全（`:2044` / `:2096` / `:2162` / `:2239` / `:2181-2192` / `:2638-2639` / `hier_rtl_products.cpp:114-141,476` / `verify_hierarchical_rtl.sh:501-520` / `test_component_granularity.cpp:248-254`） |
+| S2 | **R-4 消灭冒泡 vs R-5 保留「冒泡端口」来源 + `Bubbled` 值** ⇒ 内部矛盾 + 默许死代码 | **R-5 改「五类 → 三类」**（删「inline 后代的 `ch_out`」+「冒泡端口」）+ **新增 D1-h**（`UndrivenPolicy::Bubble` / `*Origin::Bubbled` / `ensure_bubbled_port` / **`BubbledInput`** **MUST 退役 · 时点 = 同批**）+ **V19** |
+| S3 | D1-a 的「（多出来的是输出）」**以偏概全** | 明写「**对 RV32I** 成立」+ 「**不得外推为一般性不变量**」（含后代悬空 `ch_in` 的设计在产品路径上是**拒绝**，不是「变成 output」） |
+
+## 6.3 核实通过项（v2 增量无问题的部分）
+
+- **backend 130 不变成立**：`src/core/verilator_backend.cpp:708-709` 走 `verilogwriter writer(ctx)`；`:849-879` 的 `build_port_access_table` 只依赖 `ctx_->get_eval_list()`，且 `:874-878` 跳过有 driver 的 `type_input` —— 与 `src/codegen_verilog.cpp:432-441` **逐字同构** ⇒ ⇒ D1 **不引入新变化**。
+- **「只增不改」可行**：`ModuleEmitter(context*, ModuleView)`（`include/codegen_verilog.h:156`）与 `ModuleView`（`:90-147`）**无需新增字段**；新 `toVerilog` 可绕 `verilogwriter` 直接用 `ModuleEmitter`。**重载歧义不成立**（全仓 `toVerilog("...", nullptr|NULL|0)` **0 命中**；`ch_device` 只暴露 `context()` 访问器）。
+- **`:98` 的标题确实中性**：三个条款 + 唯一 Scenario（`:104-111`）**均无**「用户直建节点的值可经顶层端口观测」⇒ ⇒ **R-3 是 MODIFIED，不是 R+A**。
+- **delta 标题判据对反引号不敏感**：`scripts/verify_openspec_delta.sh:155` 用 `grep -qxF`（固定串）；且新标题是 **ADDED**（R3 只查 MODIFIED）。
+- **`:478` 不需 delta 成立**：`:478-482` 的「既有路径」**直指**「既有 `toVerilog()`」（两个 ctx 形参重载）；Scenario `:492-496` 把「签名不变 + 产物逐字节不变」钉在该入口上。
+- **`′` 编号有先例**：`docs/adr/ADR-059-*.md:156` 的 `D2′`。
+- **冒泡机制在 ctx-only 路径零耦合**（v2-critic 复核）：`src/codegen_verilog.cpp` **0 处** `Bubble/Bubbled/UndrivenPolicy` 引用 ⇒ ⇒ 物理删 `Bubble` **不改变 130 端口产物的任何字节** ⇒ ⇒ **V5′ 可满足**。
+
+---
+
+# 7. **v2 轮 · critic 第 1 轮**（arch 档 · 冲突审稿）—— **REJECT**（2 BLOCKER）
+
+## 7.1 BLOCKER（2 条 · 全部已闭）
+
+| # | BLOCKER | 内容 | 闭合位置 |
+|---|---|---|---|
+| **B1** | **第三类（文档内自相矛盾）** | §2.8 **R-4 要点④** 写「`UndrivenPolicy::Bubble` 对后代悬空 `ch_in` 不再有效（**枚举是否退役 = 实施期可选简化**）」，而 **D1-h** 写「**MUST 退役** ⇒ 时点 = 本 change 同批（**MUST NOT** 留作『实施期可选简化』）」，**V19** 又把「零残留」列为 🔴 ⇒ ⇒ **builder 无法决定 delta 里该写「退役」还是「保留」** | R-4 要点④ 改为「**MUST 退役（见 D1-h）· 时点 = 同批**」+ 明写「**MUST NOT 留可选项的余地**」 |
+| **B2** | **第三类 + 冻错契约** | 「§2.8 = **5 条** delta 的唯一权威输入 · MUST 照抄」与 **V6 负向判据（旧措辞零残留）** 及 **D1-h** **不能同时成立** —— 主 spec 另有 **4 处**旧契约面不被 5 条 delta 覆盖：<br>**(a)** `:240` 的 Scenario `:336-344` 末句「**未驱动的子 input MUST 冒泡成顶层 input**」（**R-5 自己的目标 Requirement 内部** ⇒ MODIFIED 是整条替换）<br>**(b)** `:408` 的「悬空输入的策略 MUST 由 `UndrivenPolicy`（**`Bubble` / `Reject`**）承载」⇒ D1-h 删 `Bubble` 后**指称不存在的符号**<br>**(c)** capability Purpose `:12-13`「悬空子输入 MUST 向上**冒泡**为顶层输入」⇒ delta 不合并 Purpose ⇒ 归档后**与新 R-4 相反**<br>**(d)** `rtl-emit-portability:64-69`「manifest 不定义端口面与命名规则」 vs R-1 要点③ 的**标题级张力** | **(a)** R-5 补**第 4 处**改法 + 新增「**MODIFIED 的完整性义务**」段（整条替换含全部 Scenario · `:240` 有 8 个 · R3 只查标题 ⇒ **抓不到正文漏改** ⇒ 必须人工逐 Scenario 对照）<br>**(b)** 新增 **R-6**（`:402` 的 MODIFIED）⇒ ⇒ **delta 5 → 6 条**<br>**(c)** 新增「**Purpose 的两处落点**」表<br>**(d)** R-1 补要点⑥（该条约束的是**产物不变**，不是「字段不能描述端口面」） |
+
+## 7.2 SHOULD_FIX（1 条已闭）+ NIT（2 条已闭）
+
+| # | finding | 闭合位置 |
+|---|---|---|
+| S1 | **退役清单漏 `BubbledInput` 结构与其消费者**（`include/hierarchy_analysis.h:121,152` · `src/hierarchy_verilog.cpp:144,1261` 的 `dangling` 收集）⇒ 退役后残留死公开结构 ⇒ 与 D1-h 自我矛盾 | D1-h / 同批必改 ④′ / V19 **三处**补入 + V19 加「删后 MUST 全量重建（禁只重建被点名 target）」 |
+| N1 | R-4 **新标题**无「后代」限定（正文 ① 又放行「根自己的」） | 新标题改为「悬空**后代**子输入 MUST 被响亮拒绝…」 |
+| N2 | R-5 要点 2 的「根的端口集合 MUST == 自身 `ch_in` ∪ `ch_out`」**未排除框架 clock/reset** | 限定为「根的**自有 IO 段**（不含框架 clock/reset）」⇒ 与 D1-d 的「34 = 2 + 32」逐字对齐 |
+| N3 | 「`tb_stub` 会把 **124** 个 output 连到 34 端口」不可复算 | ⚠️ **architect 复核认为 critic 的算术有误**（124 = 28 根自有 out + 96 冒泡 ✔）⇒ ⇒ 仍改为**派生表述**（= `ports[]` 中 `dir==output` 的条目数 · **禁**写死） |
+
+## 7.3 核实通过项（v2 增量的其余部分）
+
+- **R-3 维持 MODIFIED 成立**（同 §6.3）。
+- **R-5 的「五类 → 三类」逻辑一致**（与 R-2 / R-4 无冲突）。
+- **D1-h 判定成立**：冒泡唯一生产者 = `src/hierarchy_analysis.cpp:404-416`；**ctx-only 遗留路径零耦合**；层次化公开入口本来就收 `Component& root`（`include/hierarchy_verilog.h:144`）⇒ ⇒ **不存在「ctx-only 层次化路径用冒泡」的形态**。
+- **D1-f × D1-g 不冲突**：分类键同为 `get_parent()`，一个 `!= nullptr` 一个 `== nullptr` ⇒ 天然不相交。
+- **ADR-vs-spec 的时序不构成 BLOCKER**：取代载体（delta）已立项且排在实施**同批** ⇒ 不是绕过；Status = Draft ⇒ 未把未决写成已决。
+- **V5′ 可满足**（同 §6.3）。
+- **登记**：`src/hierarchy_analysis.cpp:412-416` 有 `owner == nullptr` 的 `type_input` 防御分支 ⇒ ⇒ 该形态**归 D1-g 管辖**（不拒绝）⇒ ⇒ 已在 D1-f 的表中新增该行。
+
+---
+
+# 8. **v2 轮 · critic 第 2 轮（复审）** —— **APPROVE · 0 BLOCKER**
+
+- **BLOCKER-1 闭合** ✅：`ADR:274` 现为「MUST 退役（见 D1-h · 时点 = 本 change 同批）…MUST NOT 留可选项的余地」；全文 grep「可选 / 实施期简化」的 4 处命中**全部是**历史行或闭合否定句本身，**无残留活体矛盾**；R-4 / D1-h / V19 三处**方向一致** ⇒ builder 无第二种读法。
+- **BLOCKER-2 闭合** ✅（四组证据逐条核实）：
+  (a) R-5 要点 4 给出 `:336-344` 末句的**逐字改写** + 「漏它的后果」；「MODIFIED 的完整性义务」段成文；
+  (b) 新增 R-6 逐字给出 `:408` 的改写文本 + 「不改 ⇒ 冻错契约」；delta 5 → 6 及**原因**成文；
+  (c) Purpose 两处落点表成文（含 `:12-13`「与新 R-4 方向相反」）+ §6 ②/⑨ 登记为 builder 任务；
+  (d) R-1 要点⑥ 给出 `:64-69` 的**显式解读** + MUST 补的逐字句子。
+- **本轮新 diff 无新 BLOCKER**：退役清单三处一致；delta 条数全文一致（`:367` 的「缩到 5 条」是**历史裁决句**，其后 R-6 已把总范围重新定为 6）；Status 仍 Draft。
+- **SHOULD_FIX（1 条）**：**V6 的 grep 范围未圈定** —— 「冒泡 / `Bubble` / `Bubbled` 全部命中 MUST 清零」与「Purpose `:12-13` 不被 delta 合并」并存 ⇒ verifier 无法判定 `:13` 算红还是豁免。⇒ ⇒ **已补范围裁定**：「清零范围 = 6 条 Requirement 的正文与 Scenario；**Purpose 不在该范围内**（走 §6 ②/⑨ 通道）」+ 列出 8 处命中中**仅 `:13` 走 Purpose 通道**。
+- **NIT**：D1-f 边界行（`:142`）与「`ch_in` 端口节点恒 `owner != nullptr`」（`:157`）的张力 ⇒ **降为 NIT**（「不可能发生 vs 发生时归谁」的裁决**唯一** ⇒ 不构成决策二义）。
+- **结论**：**`mergeable: yes` · `scope_exceeded: false`**。
+
+---
+
+# 9. 本 ADR v2 的完成标志核对（`arch` 档）
+
+| # | 标志 | 状态 |
+|---|---|---|
+| ① | 四要素齐（元数据 / 选项对比表 ≥ 3 行 / 独立「后果·代价」章 / 前瞻性 Verification 章） | ✅（**13** 行对比表 · §4 · §5 的 **V1–V19** 全未勾） |
+| ② | oracle + critic 双审；BLOCKER 全闭并**经复审确认** | ✅（v1 轮 oracle 1 + critic 2 · **v2 轮 oracle 1 + critic 2（复审 APPROVE）**） |
+| ③ | Status 已转已决 | ✅ **Accepted · v2** |
+| ④ | 「关联 change」已落库 | ✅ `openspec/changes/rtl-productization-surface-2026-11/`（**已立项** · planner 2026-11-16）· AC 映射 = 该 change 的 AC1–AC15 + T1–T14 |
+| ⑤ | 审稿报告已落 `.rddf/reviews/` | ✅ 本文件（§1–§9） |
+
+⚠️ **自指审查声明**：`ADR-058` / `ADR-061` 的 dated addendum（同批必改 ⑧）**不是**本轮审查能替代的 ⇒ ⇒ 那一步**按仓内先例走独立复审**（ADR-060 v1.20 / ADR-062 v1.7）。
