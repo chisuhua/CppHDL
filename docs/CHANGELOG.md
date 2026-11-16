@@ -1,3 +1,26 @@
+## 2026-11-16 — **陷阱入口的 `mcause` 现在真的写得进去**（B4 · G5）
+
+**缺陷（2026-11-10 登记 · 今天修）**：`riscv::ExceptionUnit` 的 CSR 写是
+`write_mepc = write_mcause = do_trap_entry` ⇒ ⇒ 两者**同时**为真 ⇒ ⇒
+`csr_addr = select(write_mepc, CSR_MEPC, …)` ⇒ ⇒ **MEPC 恒命中** ⇒ ⇒
+**`mcause` 分支永远不可达** ⇒ ⇒ **`mcause` 永远写不到**（读回恒 0）。
+⚠️ 它能活到今天的原因：**既有测试只查写口的值**，**从不查 `CsrBank` 的读回** ⇒ 零信号。
+
+**修法 = 跨两拍**（`CsrBank` **零改动** ⇒ 不触发「新增输入端口 ⇒ 全部实例化点 MUST 显式驱动」）：
+- **拍 1** 写 `mepc`（= `current_pc`）并**锁存** `exception_cause`
+- **拍 2** 写 `mcause`（= **锁存的**原因码 ⇒ ⇒ 与 `mepc` **同配对**）
+
+**判别力**：新增**复合 DUT**（`ExceptionUnit` → `CsrBank`）⇒ ⇒ 断言落在 **`CsrBank` 的读回值**上
+（写口是组合输出 ⇒ 沿后读到的是**下一拍**的写 ⇒ ⇒ 观察不到「陷阱当拍」）⇒ ⇒ 这正是原缺陷缺的那一维。
+**变异自证**：还原旧形态 ⇒ ⇒ 复合 DUT 用例**转红**；还原 + **重建** ⇒ 复绿。
+
+⚠️ **下游注意**：依赖「陷阱当拍 `csr_write_addr == CSR_MEPC`」的断言 **MUST 改** —— 沿后读到的是
+**下一拍**的写（= `CSR_MCAUSE`）⇒ ⇒ 「陷阱当拍写 mepc」MUST 改用 `CsrBank.mepc` 的读回值观察。
+**端口面零变更**（`ExceptionUnit.__io` 未动 · `CsrBank` 未动）。
+
+spec：新增 capability **`rv32i-privilege`**（种子 Requirement：陷阱入口 MUST 把 `mepc` 与 `mcause`
+都写进去且可读回）⇒ ⇒ `mtval` 仍**恒 0**（无数据源 ⇒ 属特权级立项）。
+
 ## 2026-11-15 — **新增：RV32I 的层次化 RTL 交付物**（诉求 ④）+ 发射器「双类消费者」修复（ADR-070 D1/D2）
 
 **交付物**：`Rv32iPipeline` 的 **7 个 stage 成员**声明为**实例级成层**

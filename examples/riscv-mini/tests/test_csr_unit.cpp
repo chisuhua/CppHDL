@@ -23,6 +23,7 @@
 #include "simulator.h"
 #include "cpu/riscv/rv32i_csr.h"
 #include "cpu/riscv/rv32i_exception.h"
+#include "component.h"
 
 #include <iostream>
 
@@ -314,23 +315,168 @@ TEST_CASE("ECALL/EBREAK generate exception request", "[csr][exception]") {
     
     std::cout << "  [PASS] ECALL exception request: trap_entry_valid = true" << std::endl;
     
-    // 验证 CSR 写地址为 mepc
+    // ⚠️⚠️ **2026-11-16 · B4 · G5：此处断言口径已改**（**不是**放松，是**换了观察点**）——
+    //    旧实现把 mepc 与 mcause **同拍**写（⇒ ⇒ `mcause` 分支**不可达** ⇒ ⇒ 缺陷零信号）；
+    //    修法 = **跨两拍**（拍 1 写 mepc · 拍 2 写 mcause）⇒ ⇒ 写口（组合输出）
+    //    在沿后读到的是**下一拍**的写 ⇒ ⇒ 「陷阱当拍写的是 mepc」这条契约
+    //    **无法**再用写口观察 ⇒ ⇒ MUST 落到**复合 DUT** 的 `CsrBank.mepc` 值上
+    //    ⇒ ⇒ 见本文件用例「Trap entry writes BOTH mepc and mcause (two-phase)」。
+    //    ⚠️ 既有断言「写 addr == MEPC」**恰好**是旧缺陷的产物（MEPC 恒命中）⇒ ⇒
+    //    它**钉不住**正确行为 ⇒ ⇒ 本处改为断言「下一拍的写指向 mcause」。
     auto csr_addr = to_uint32(sim.get_port_value(exc.instance().io().csr_write_addr));
-    REQUIRE(csr_addr == CSR_MEPC);
+    REQUIRE(csr_addr == CSR_MCAUSE);
     
-    std::cout << "  [PASS] ECALL exception: CSR write addr = mepc (0x" << std::hex << csr_addr << ")" << std::dec << std::endl;
-    
-    // 验证 CSR 写数据为当前 PC
-    auto csr_data = to_uint32(sim.get_port_value(exc.instance().io().csr_write_data));
-    REQUIRE(csr_data == 0x00001000);
-    
-    std::cout << "  [PASS] ECALL exception: CSR write data = current_pc (0x" << std::hex << csr_data << ")" << std::dec << std::endl;
+    std::cout << "  [PASS] ECALL exception: next write addr = mcause (0x" << std::hex << csr_addr << ")" << std::dec << std::endl;
     
     // 验证 trap_flush 信号
     auto trap_flush = to_bool(sim.get_port_value(exc.instance().io().trap_flush));
     REQUIRE(trap_flush == true);
     
     std::cout << "  [PASS] ECALL exception: trap_flush = true" << std::endl;
+}
+
+// ============================================================================
+// **G5（2026-11-16 · B4）**：陷阱入口的 `mcause` **必须真的写得进去**
+//
+// ## 为什么需要**复合 DUT**（而不是只测 `ExceptionUnit` 的写口）
+//
+// ⚠️ **原缺陷的结构**：旧实现 `write_mepc = write_mcause = do_trap_entry`
+// ⇒ ⇒ 两者**同时**为真 ⇒ ⇒ `csr_addr = select(write_mepc, MEPC, …)` ⇒ ⇒ **MEPC 恒命中**
+// ⇒ ⇒ **`mcause` 分支永远不可达** ⇒ ⇒ `mcause` **永远写不到**。
+// ⇒ ⇒ 而既有测试（case 6）只查**写口**的值 ⇒ ⇒ **从不查 `CsrBank` 的读回**
+// ⇒ ⇒ ⇒ 该缺陷**零信号**（这就是它能活到今天的原因）。
+// ⇒ ⇒ ⇒ **判别力只能来自「写进去 + 读回来」的闭环** ⇒ ⇒ MUST 用**复合 DUT**
+// （`ExceptionUnit` → `CsrBank`）⇒ ⇒ 断言落在 **`CsrBank` 的寄存器值**上。
+//
+// ## 期望值全部**手推**（禁抄仿真输出）
+//
+// `CsrBank` 的写口是**时钟沿**写入 ⇒ ⇒ 「异常进入」那一拍（cycle 1）写入 **mepc**
+// ⇒ ⇒ 沿后（读到的就是 cycle 1 写下的值）⇒ ⇒ `mepc == current_pc` ✓
+// ⇒ ⇒ `mcause` 在**下一拍**（cycle 2）写入 ⇒ ⇒ 沿后 `mcause == exception_cause` ✓
+// ⇒ ⇒ ⚠️ 读**写口**（组合输出）读到的是**下一拍**的写 ⇒ ⇒ 故「陷阱当拍写的是 mepc」
+// 这条契约 MUST 用 **`CsrBank.mepc` 的值**来观察（写口观察不到 cycle 1）。
+// ============================================================================
+class ExceptionCsrDut : public ch::Component {
+public:
+    // ⚠️ **端口 MUST 具名**（端口命名契约：Verilog 端口名 MUST == C++ 成员名
+    //    ⇒ ⇒ 否则护栏 `verify_port_naming.sh` 判「未登记的非合规端口」= 债增长）
+    __io(
+        ch_in<ch_uint<32>> current_pc{"current_pc"};
+        ch_in<ch_uint<32>> exception_cause{"exception_cause"};
+        ch_in<ch_bool>     exception_valid{"exception_valid"};
+        ch_out<ch_uint<32>> mepc_value{"mepc_value"};    // ← CsrBank 的 mepc（**写回读**）
+        ch_out<ch_uint<32>> mcause_value{"mcause_value"};  // ← CsrBank 的 mcause（**写回读**）
+        ch_out<ch_uint<12>> write_addr{"write_addr"};   // ← ExceptionUnit 的写口（**下一拍**的写）
+        ch_out<ch_bool>     write_en{"write_en"};
+    )
+    ExceptionCsrDut(ch::Component *parent = nullptr,
+                    const std::string &name = "exc_csr_dut")
+        : ch::Component(parent, name) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        ch::ch_module<ExceptionUnit> exc{"exc"};
+        ch::ch_module<CsrBank> csr{"csr"};
+        // 流水线侧输入
+        exc.io().current_pc <<= io().current_pc;
+        exc.io().exception_cause <<= io().exception_cause;
+        exc.io().exception_valid <<= io().exception_valid;
+        // CSR 读侧（回灌给 ExceptionUnit）
+        exc.io().csr_mstatus <<= csr.io().mstatus_value;
+        exc.io().csr_mtvec <<= csr.io().mtvec_value;
+        exc.io().csr_mepc <<= csr.io().mepc_value;
+        exc.io().csr_mie <<= csr.io().mie_value;
+        exc.io().csr_mcause <<= csr.io().mcause_value;
+        // 写侧：ExceptionUnit → CsrBank（**单写口** ⇒ ⇒ 两拍各写一个 CSR）
+        csr.io().csr_addr <<= exc.io().csr_write_addr;
+        csr.io().csr_wdata <<= exc.io().csr_write_data;
+        csr.io().csr_write_en <<= exc.io().csr_write_en;
+        // ⚠️ **未驱动输入 MUST 显式驱动**（未驱动读到**未定义值**）
+        csr.io().mtip <<= ch_bool(false);
+        csr.io().meip <<= ch_bool(false);
+        // 观测
+        io().mepc_value <<= csr.io().mepc_value;
+        io().mcause_value <<= csr.io().mcause_value;
+        io().write_addr <<= exc.io().csr_write_addr;
+        io().write_en <<= exc.io().csr_write_en;
+    }
+};
+
+TEST_CASE("Trap entry writes BOTH mepc and mcause (two-phase)",
+          "[csr][exception][g5][dual]") {
+    ch::ch_device<ExceptionCsrDut> dut;
+    ch::Simulator sim(dut.context());
+    auto &io = dut.instance().io();
+
+    sim.set_input_value(io.current_pc, 0x00001000u);
+    sim.set_input_value(io.exception_cause, 11u);   // ECALL 的原因码（手推取值）
+    sim.set_input_value(io.exception_valid, 1u);
+
+    // ---- 拍 1：陷阱当拍 ⇒ 写 **mepc**（`mcause` 尚未写）----
+    sim.tick();
+    REQUIRE(to_uint32(sim.get_port_value(io.mepc_value)) == 0x00001000u);
+    REQUIRE(to_uint32(sim.get_port_value(io.mcause_value)) == 0u);
+    // 读**写口**读到的是**下一拍**的写 ⇒ ⇒ 此刻应指向 **mcause**
+    REQUIRE(to_uint32(sim.get_port_value(io.write_addr)) == CSR_MCAUSE);
+    REQUIRE(to_bool(sim.get_port_value(io.write_en)) == true);
+
+    // ---- 拍 1 与拍 2 之间**改掉** `exception_cause` ⇒ ⇒ 判别「配对」（锁存）----
+    // ⚠️ **判别点**：拍 2 写的 `mcause` MUST 是**拍 1 锁存**的 **11** ⇒ ⇒ **不是**当前的 7
+    //    ⇒ ⇒ 若实现不锁存（直接用当前输入）⇒ ⇒ 拍 2 写的是 7 ⇒ ⇒ 本断言**转红** ✓
+    sim.set_input_value(io.exception_cause, 7u);
+    sim.set_input_value(io.current_pc, 0x00002000u);
+    // ---- 拍 2：写 **mcause** ⇒ ⇒ **读回**必须是原因码 ----
+    // ⚠️ **撤销 `exception_valid`**（真实消费方语义：取走陷阱后 MUST 撤销 ⇒ ⇒ 否则
+    //    每 2 拍重复一次序列 ⇒ ⇒ 见下一个用例「level 语义」把那条行为钉住）
+    sim.set_input_value(io.exception_valid, 0u);
+    sim.tick();
+    // ⚠️ **锁存值 = 11**（不是当前的 7）⇒ ⇒ 「配对正确」的可判形态
+    REQUIRE(to_uint32(sim.get_port_value(io.mcause_value)) == 11u);
+    REQUIRE(to_uint32(sim.get_port_value(io.mepc_value)) == 0x00001000u);
+    // 写口此刻回到空闲（撤销后 ⇒ ⇒ 无新陷阱 ⇒ ⇒ 不再写）
+    REQUIRE(to_bool(sim.get_port_value(io.write_en)) == false);
+}
+
+// ============================================================================
+// **G5 的第二条契约**：`exception_valid` 是**电平** ⇒ ⇒ 持续拉高 ⇒ ⇒ 每 **2** 拍
+// 重复一次「写 mepc / 写 mcause」序列 ⇒ ⇒ 但两个 CSR 的**值**始终等于**最近一次异常**
+// ⇒ ⇒ **无数据丢失**（⇒ ⇒ 这条是「跨两拍」修法**不引入**新缺陷的证据）。
+//
+// ⚠️ 期望值手推：cause = 11 · pc = 0x1000 ⇒ ⇒ 任意拍之后
+//    `mepc == 0x1000` 且（拍 ≥ 2 后）`mcause == 11`。
+// ============================================================================
+TEST_CASE("exception_valid is a LEVEL: repeated traps keep both CSRs consistent",
+          "[csr][exception][g5]") {
+    ch::ch_device<ExceptionCsrDut> dut;
+    ch::Simulator sim(dut.context());
+    auto &io = dut.instance().io();
+
+    sim.set_input_value(io.current_pc, 0x00001000u);
+    sim.set_input_value(io.exception_cause, 11u);
+    sim.set_input_value(io.exception_valid, 1u);   // ⚠️ **持续**拉高（电平）
+
+    for (int tick = 1; tick <= 5; ++tick) {
+        // ⚠️ **拍 2 起改激励**（cause 11 → 7 · pc 0x1000 → 0x2000）⇒ ⇒ 判别「配对」：
+        //    拍 2 写的 `mcause` MUST 仍是**上一拍锁存**的 **11** ⇒ ⇒ 不串配
+        if (tick == 2) {
+            sim.set_input_value(io.exception_cause, 7u);
+            sim.set_input_value(io.current_pc, 0x00002000u);
+        }
+        sim.tick();
+        INFO("tick=" << tick);
+        if (tick == 1) {
+            REQUIRE(to_uint32(sim.get_port_value(io.mepc_value)) == 0x00001000u);
+        } else if (tick == 2) {
+            // 拍 2：`mcause` = **锁存值 11**（不是当前输入 7）· `mepc` 仍是 0x1000
+            REQUIRE(to_uint32(sim.get_port_value(io.mcause_value)) == 11u);
+            REQUIRE(to_uint32(sim.get_port_value(io.mepc_value)) == 0x00001000u);
+        } else {
+            // 拍 3：`mepc` ← **新** pc 0x2000（新一轮陷阱当拍）· 拍 4：`mcause` ← 新 cause 7
+            REQUIRE(to_uint32(sim.get_port_value(io.mepc_value)) == 0x00002000u);
+            if (tick >= 4) {
+                REQUIRE(to_uint32(sim.get_port_value(io.mcause_value)) == 7u);
+            }
+        }
+    }
 }
 
 // ============================================================================

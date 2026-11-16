@@ -124,30 +124,58 @@ public:
         io().trap_flush = do_trap_entry;
         
         // ========================================================================
-        // CSR 写操作：保存异常上下文
+        // CSR 写操作：保存异常上下文（**两拍**写完 mepc + mcause）
+        //
+        // ⚠️⚠️ **2026-11-16 · B4 · G5（原缺陷）**：旧实现是
+        //      `write_mepc = write_mcause = do_trap_entry` ⇒ ⇒ 两个**同时**为真
+        //      ⇒ ⇒ `csr_addr = select(write_mepc, MEPC, …)` ⇒ ⇒ **MEPC 恒命中**
+        //      ⇒ ⇒ **`mcause` 分支永远不可达** ⇒ ⇒ `mcause` **永远写不到**
+        //      ⇒ ⇒（实测：`test_csr_unit.cpp` 的既有断言只查**写口**，
+        //      ⇒ ⇒ ⇒ 从不查 `CsrBank` 的**读回** ⇒ ⇒ 该缺陷**零信号**）。
+        //
+        // ⚠️ **修法 = 跨两拍**（`CsrBank` **零改动** ⇒ ⇒ 不触发「新增输入端口 ⇒
+        //    全部实例化点 MUST 显式驱动」的义务）：
+        //    · **拍 1** ⇒ 写 `mepc`（= `current_pc`）⇒ 并**锁存** `exception_cause`
+        //    · **拍 2** ⇒ 写 `mcause`（= **拍 1 锁存**的原因码 ⇒ ⇒ 与 mepc **同配对**）
+        // ⇒ ⇒ **配对正确性**：即便 `exception_valid` 是**电平**（持续拉高），
+        //    ⇒ ⇒ `mepc` 与 `mcause` 始终是**同一次异常**的一对（mcause 晚 1 拍）
+        //    ⇒ ⇒ **无数据丢失**（旧的「每拍重写 mepc」也不会丢 mcause —— 因为它压根写不到）。
+        //
+        // ⚠️ **`exception_valid` 的契约**：它是**电平** ⇒ ⇒ 持续拉高 ⇒ ⇒ 每 **2** 拍
+        //    重复一次「写 mepc / 写 mcause」序列（两者的**值**始终等于最近一次异常
+        //    ⇒ ⇒ **无害**）⇒ ⇒ **真实使用方 MUST 在取走陷阱后撤销 `exception_valid`**。
         // ========================================================================
+        // 阶段：0 = 空闲（可开始一次陷阱）· 1 = 已写 mepc（待写 mcause）
+        ch_reg<ch_uint<2>> trap_phase{0_d, "trap_phase"};
+        // 拍 1 锁存的原因码（拍 2 写 mcause 时用它 ⇒ ⇒ 保证与 mepc **同配对**）
+        ch_reg<ch_uint<32>> cause_latched{0_d, "cause_latched"};
         
-        // 写 mepc：保存当前 PC（异常指令地址）
-        // 当有异常时，将 current_pc 写入 mepc CSR
-        auto write_mepc = do_trap_entry;
+        // 拍 1：开始一次陷阱（写 mepc）
+        auto start_trap = (trap_phase == ch_uint<2>(0_d)) & do_trap_entry;
+        // 拍 2：写 mcause
+        auto finish_trap = (trap_phase == ch_uint<2>(1_d));
         
-        // 写 mcause：保存异常原因码
-        // 当有异常时，将 exception_cause 写入 mcause CSR
-        auto write_mcause = do_trap_entry;
+        auto write_mepc = start_trap;
+        auto write_mcause = finish_trap;
         
-        // CSR 写地址选择：mepc 或 mcause
-        // 优先级：mepc > mcause（实际上两个都会写，这里简化处理）
+        // 状态推进：拍 1 ⇒ 1；拍 2 ⇒ 0（其余保持）
+        trap_phase->next = select(start_trap, ch_uint<2>(1_d),
+                                 select(finish_trap, ch_uint<2>(0_d), trap_phase));
+        // 原因码在拍 1 锁存（拍 2 读它 ⇒ ⇒ 与 mepc 同配对）
+        cause_latched->next = select(start_trap, io().exception_cause, cause_latched);
+        
+        // CSR 写地址选择：mepc 或 mcause（**互斥** ⇒ ⇒ 两拍各写一个）
         auto csr_addr = select(write_mepc,
                               CSR_MEPC_ADDR,
                               select(write_mcause,
                                      CSR_MCAUSE_ADDR,
                                      ch_uint<12>(0_d)));
         
-        // CSR 写数据选择：current_pc 或 exception_cause
+        // CSR 写数据选择：current_pc 或 **锁存的** exception_cause
         auto csr_data = select(write_mepc,
                                io().current_pc,
                                select(write_mcause,
-                                      io().exception_cause,
+                                      cause_latched,
                                       ch_uint<32>(0_d)));
         
         // CSR 写使能：任一 CSR 需要写
@@ -168,9 +196,13 @@ public:
         io().mret_pc = io().csr_mepc;
         io().mret_valid = do_mret;
         
-        // 注意：mstatus 恢复由 CSR Bank 在 MRET 时自动处理
-        // 或由流水线中的控制单元在执行 MRET 时处理
-        // 这里仅输出 mret_valid 信号表示 MRET 已完成
+        // ⚠️⚠️ **2026-11-16 订正（原注释是**假陈述** · oracle SHOULD_FIX-1）**：原文写
+        //    「mstatus 恢复由 CSR Bank 在 MRET 时自动处理」⇒ ⇒ **实测不成立** ——
+        //    `CsrBank` 的 mstatus **只有写口**（`include/cpu/riscv/rv32i_csr.h` 的写路径）
+        //    ⇒ ⇒ **没有**任何「MRET 自动恢复」路径 ⇒ ⇒ 该行为**当前不存在**。
+        // ⇒ ⇒ 本组件**只**输出 `mret_valid` 表示「MRET 已被识别」⇒ ⇒ **恢复语义不在本组件**。
+        // ⇒ ⇒ `mstatus` 的 MIE↔MPIE 更新 / `mret` 的 PC 恢复 ⇒ ⇒ **不在覆盖内**
+        //    ⇒ ⇒ 属**特权级立项**（capability `rv32i-privilege` 的范围声明已登记）。
     }
 };
 
