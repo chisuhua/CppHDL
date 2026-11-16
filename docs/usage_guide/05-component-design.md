@@ -952,6 +952,67 @@ int main() {
 
 ---
 
+### 5.8 SoC 装配（**下游怎么用**：产物怎么接线 · 端口怎么找 · TB 怎么搭）
+
+> 范例 = `examples/axi4/axi_soc_example.cpp`（SoC = Test Master + Matrix 2x2 + GPIO + UART）。
+
+#### 产物怎么来
+
+```bash
+cmake --build build --target emit_rtl_axi_soc -j$(nproc)
+build/examples/axi4/emit_rtl_axi_soc --out build/rtl_products/soc
+```
+
+⇒ 产出 **5 个 module**（`AxiLiteTestMaster` / `AxiLiteMatrix2x2_32_32_` / `AxiLiteGpio_8_` /
+`AxiLiteUart_16_` / `top`）—— IP 边界**在产物里可见**（这是「SoC 层产物」与「单 IP 产物」的
+结构区别）。
+
+#### 端口怎么找
+
+顶层端口 = **框架 2**（`default_clock` / `default_reset`）+ **根自有 12**（8 in + 4 out）
+= **14**；层次化顶层**不含**任何后代 IP 的端口。
+
+⚠️ **端口名是 `top_unnamed_input_N` / `top_unnamed_output_N`**（根 `__io` 用 legacy 未具名声明
+⇒ ⇒ 产物名无语义）⇒ ⇒ **端口 ↔ C++ 成员的对照表在**
+`.rddf/checks/soc-rtl-expectations.md#soc-example` §1（**位宽序列唯一确定** ⇒ 不是猜编号）。
+
+| 产物端口 | 方向/位宽 | C++ 成员 | 备注 |
+|---|---|---|---|
+| `top_unnamed_input` | in / 1 | `start` | 启动一笔事务 |
+| `top_unnamed_input_1` | in / 1 | `write` | 1=写 · 0=读 |
+| `top_unnamed_input_2` | in / 32 | `addr` | `addr[31]=0`⇒GPIO · `=1`⇒UART |
+| `top_unnamed_input_3` | in / 32 | `wdata` | 写数据 |
+| `top_unnamed_input_4` | in / 1 | `rst_n` | **低有效**复位 |
+| `top_unnamed_input_5` | in / 8 | `gpio_in` | |
+| `top_unnamed_input_6` | in / 1 | `uart_rx` | **空闲高**（低电平会被当起始位） |
+| `top_unnamed_input_7` | in / 1 | `timer_irq` | **零消费死端口** ⇒ 接 `0` |
+| `top_unnamed_output` | out / 32 | `rdata` | 读数据 |
+| `top_unnamed_output_1` | out / 1 | `done` | ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
+| `top_unnamed_output_2` | out / 8 | `gpio_out` | |
+| `top_unnamed_output_3` | out / 1 | `uart_tx` | **空闲高** |
+
+#### 怎么接线
+
+⚠️ **14 个端口 MUST 全部连接**（否则严格 flags 下 `%Warning-PINMISSING` **致命**）。
+
+⚠️ **AXI payload MUST 在事务期间保持稳定**：master 的 `awaddr` / `wdata_axi` 是**组合**跟随顶层
+`addr` / `wdata` 的 ⇒ ⇒ 事务没握完就清零 ⇒ **写进去的是 0 而不是你的数据**，且**不报任何错**。
+
+#### TB 怎么搭
+
+范例 = `examples/axi4/tb_axi_soc_example.sv`（`RESULT: checks=14 fails=0`）：
+
+- 复位释放 MUST 在 **negedge**（在 `posedge` 同刻拉低 ⇒ 复位拍被吃掉）；
+- 采样时机 `@(posedge clk); #1;`；
+- **按已知延迟采样**（事务 ≤ 4 拍 ⇒ 取 16 拍余量）⇒ **禁**等 `done` 上升沿（它粘滞）；
+- 期望值出处 MUST 指向登记文档（`EXPECT-SRC:`）⇒ ⇒ **禁**把被实现 `.cpp` 写成出处。
+
+#### 护栏
+
+`scripts/verify_examples_rtl_sim.sh` 的 **④″**（`kind=soc` 专用）会跑
+`emit_rtl_axi_soc --check-products` ⇒ ⇒ 一次判掉：**module 集 · 顶层端口面 · lint ·
+双形态逐拍等价 + 变异自证**（篡改层次化产物 ⇒ 必红 ⇒ ⇒ 判据非恒绿）。
+
 ## 6. 反模式与静默失效清单
 
 | # | 反模式 | 后果 | 证据 |

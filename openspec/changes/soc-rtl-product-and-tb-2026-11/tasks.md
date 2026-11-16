@@ -8,7 +8,7 @@
 
 ## 0. 执行前置
 
-- [ ] **T-0** **补齐执行载体**：本 change 的 `tasks.md`（本文件）存在 ⇒ `openspec list` 的 task 列不再是 "No tasks" ⇒ ⇒ `scripts/verify_openspec_delta.sh` 的 **R4**（tasks.md 的 bash 块语法可达）从「零信号假绿」恢复为有效判据
+- [x] **T-0** **补齐执行载体**：本 change 的 `tasks.md`（本文件）存在 ⇒ `openspec list` 的 task 列不再是 "No tasks" ⇒ ⇒ `scripts/verify_openspec_delta.sh` 的 **R4**（tasks.md 的 bash 块语法可达）从「零信号假绿」恢复为有效判据
       - 判据：`openspec list` 显示 13 个 task · `bash scripts/verify_openspec_delta.sh` 4/4 绿且 R4 **有输出**
       ```bash
       openspec list
@@ -104,18 +104,22 @@
       ```bash
       bash scripts/verify_arch_ledger_residuals.sh
       ```
-- [ ] **T10** **账本锚点与全局校验**：① `AGENTS.md` 的 `CTEST_TOTAL` / `VERILATOR_E2E_TOTAL`（若带标签；锚点值**从实测派生**，可用 `scripts/update_test_count_anchors.sh`）② **顺序无回归复核**：`git diff --name-only` **不含** `src/**` / `include/**` + `ctest -LE perf` 全绿
+- [x] **T10** **账本锚点与全局校验**：① `AGENTS.md` 的 `CTEST_TOTAL` / `VERILATOR_E2E_TOTAL`（若带标签；锚点值**从实测派生**，可用 `scripts/update_test_count_anchors.sh`）② **顺序无回归复核**：`git diff --name-only` **不含** `src/**` / `include/**` + `ctest -LE perf` 全绿
+      - ✅ **锚点实测一致 ⇒ 零改动**：`ctest -N` = **266** == `CTEST_TOTAL` · `ctest -N -L verilator_e2e` = **77** == `VERILATOR_E2E_TOTAL`（本 change 未增删 ctest 用例 ⇒ ⇒ 不需改 `AGENTS.md`）
+      - ✅ **顺序无回归**：`git diff --name-only 5c27185..HEAD` = 14 个文件 · **`src/` 与 `include/` 命中数 = 0**（只碰 `examples/**` · `.rddf/**` · `docs/architecture/**` · `openspec/changes/**` · `scripts/**`）
       - 判据：`bash scripts/verify_test_counts.sh` 绿 · `verify_dual_backend_parity.sh` 绿
       ```bash
       bash scripts/verify_test_counts.sh
       ```
-- [ ] **T11** **文档同步**：① `docs/usage_guide/05-component-design.md` 的「SoC 装配」小节（产物怎么接线 · 端口怎么找 · TB 怎么搭）② `examples/axi4/AGENTS.md` 的 FILES 表 ③ 🔴 **根 `AGENTS.md:196` 的 capability 计数** —— ⚠️ **实测当前已是 48**（该处写 47 ⇒ 本身已陈旧）⇒ ⇒ 归档后应为 **49**
+- [x] **T11** **文档同步**：① `docs/usage_guide/05-component-design.md` 的「SoC 装配」小节（产物怎么接线 · 端口怎么找 · TB 怎么搭）② `examples/axi4/AGENTS.md` 的 FILES 表 ③ 🔴 **根 `AGENTS.md:196` 的 capability 计数** —— ⚠️ **实测当前已是 48**（该处写 47 ⇒ 本身已陈旧）⇒ ⇒ 归档后应为 **49**
+      - ✅ **已完成（2026-11-17）**：① `docs/usage_guide/05-component-design.md` 新增 **§5.8「SoC 装配」**（产物怎么来 / 端口怎么找（含 14 端口对照表）/ 怎么接线 / TB 怎么搭 / 护栏）② `examples/axi4/AGENTS.md` 的 FILES 表补 `emit_rtl_soc.cpp` + `tb_axi_soc_example.sv` ③ 根 `AGENTS.md` 的 capability 计数 **47 → 48**（**原值已陈旧** —— 实测 48，因 `rv32i-privilege` 于 2026-11-16 归档）并登记「本 change 归档后 ⇒ **49**」
       - 判据：「SoC 装配」小节可 grep 到；计数订正到位
       ```bash
       grep -c "SoC 装配" docs/usage_guide/05-component-design.md
       ```
-- [ ] **T12** ✅ **能力面**：`rtl-soc-output` 的 ADDED Requirements —— ⚠️ **delta 已落**（G-1 已闭）⇒ ⇒ 本 task = **校验并保持未漂**
+- [x] **T12** ✅ **能力面**：`rtl-soc-output` 的 ADDED Requirements —— ⚠️ **delta 已落**（G-1 已闭）⇒ ⇒ 本 task = **校验并保持未漂**
       - ⚠️ **两处措辞义务**：① 正文 **MUST NOT** 指称已退役符号（`UndrivenPolicy::Bubble` / `Bubbled`）——「冒泡端口」只可作为**禁止态措辞** ② **`## Purpose` 归档后手工写**（`openspec archive` **不合并** delta 的 Purpose ⇒ 新 capability 会留 `TBD - created by archiving …` 占位符）
+      - ✅ **已完成（2026-11-17）**：delta **零已退役符号**（`UndrivenPolicy::Bubble` / `Bubbled` / `ensure_bubbled_port` / `BubbledInput` 各 **0** 命中）；「冒泡」**4 处**全部是**禁止态措辞**（合法）
       - 判据：`openspec validate soc-rtl-product-and-tb-2026-11` = valid · `bash scripts/verify_openspec_delta.sh` 4/4 绿
       ```bash
       openspec validate soc-rtl-product-and-tb-2026-11
