@@ -217,5 +217,5 @@ evidence: probe:scripts/verify_examples_rtl_sim.sh
 
 | # | 事项 | 理由 |
 |---|---|---|
-| ① | **ADR-073 的 dated 修订**：`「\`AxiSocTop\` = 5」` ⇒ 「根 module 名 `top`（默认）+ 4 个成层 module = 5」· 「`done` 是单拍脉冲」⇒ 「`done` 是**粘滞**完成标志（`:149-151`），故不能靠其边沿同步，也**不可**作『随激励变化』的观测证据」· **未驱动后代输入 30 → 31**（`master.rst_n`）· 扁平顶层 44 → **45** · 「19 根**双向**」⇒ 「19 根**单向**接线」 | ADR-073 已 Accepted ⇒ ⇒ 决策内容/事实的修订属 **architect 域**（须复审）⇒ ⇒ 本项**只登记不自行修改** |
-| ② | **ADR-072 的 change 加一句前置说明**：「本 change 的 D1-f 会让 `axi_soc_example` 的发射 fail-closed ⇒ ⇒ 前置 = `soc-rtl-product-and-tb-2026-11` 的 T0」 | 属 ADR-072 那个 change 的作者 |
+| ① | **ADR-073 的 dated 修订**：`「\`AxiSocTop\` = 5」` ⇒ 「根 module 名 `top`（默认）+ 4 个成层 module = 5」· 「`done` 是单拍脉冲」⇒ 「`done` 是**粘滞**完成标志（`:149-151`），故不能靠其边沿同步，也**不可**作『随激励变化』的观测证据」· **未驱动后代输入 30 → 31**（`master.rst_n`）· 扁平顶层 44 → **45** · 「19 根**双向**」⇒ 「19 根**单向**接线」 | ADR-073 已 Accepted ⇒ ⇒ 决策内容/事实的修订属 **architect 域**（须复审）⇒ ⇒ 本项**只登记不自行修改** · **✅ 已完成**（architect · 2026-11-16 · ADR-073 v1.1 · commit `57c781c` · 实为 **7 处**：额外含 V6 删 DECERR + `master.rst_n` 无行为影响 · oracle 第 2 轮复核 0 BLOCKER） |
+| ② | **ADR-072 的 change 加一句前置说明**：「本 change 的 D1-f 会让 `axi_soc_example` 的发射 fail-closed ⇒ ⇒ 前置 = `soc-rtl-product-and-tb-2026-11` 的 T0」 | 属 ADR-072 那个 change 的作者（**仍待办**） |

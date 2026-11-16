@@ -103,7 +103,12 @@
 
 1. **新增 SoC 层 RTL 产物** —— `build/examples/axi4/emit_rtl_axi_soc --out <dir>` ⇒ ⇒ 产出 **5 个 module** 的单文件 Verilog（4 个 IP 各一层 + 根 `top`）⇒ ⇒ **失败时非零退出**（`ok == false` ⇒ ⇒ **不写任何文件**）。
 2. **新增独立 Verilog TB** —— `examples/axi4/tb_axi_soc_example.sv` ⇒ ⇒ `RESULT: checks=<N> fails=0` ⇒ ⇒ 失败**非零退出**。
-3. **`AxiSocTop` 的内部连线被补完** —— 31 个此前未驱动的后代输入现在有驱动源 ⇒ ⇒ **解释器与后端行为不变**（tie-off 的是本来没人用的口；`master.rst_n` 此前**零驱动**⇒ ⇒ 补上后**复位路径才真正通到 master** ⇒ ⇒ ⚠️ **这是一处行为修正**：此前 master 未收到复位 ⇒ ⇒ **下游若依赖「master 不被复位」的旧行为会受影响** ⇒ ⇒ MUST 登记为「行为变更（非符号移除）」）。
+3. **`AxiSocTop` 的内部连线被补完** —— 31 个此前未驱动的后代输入现在有驱动源，**分三组、行为影响不同**：
+   - `matrix.m1_*` **11 根 tie-off** + `master.rst_n` **1 根透传** ⇒ ⇒ **无行为影响**（m1 无人使用；`master.rst_n` 的 `AxiLiteTestMaster::describe()` **零引用** `rst_n`，是**声明但未消费**的输入 ⇒ ⇒ 补驱动不改变任何行为）
+   - `matrix.s1_* ↔ uart` **19 根单向接线** ⇒ ⇒ **有行为变化**（uart 此前**不在总线上**，接通后经总线可访问 ⇒ ⇒ 这是本 change 的目的之一）
+   ⇒ ⇒ ⚠️ **不涉及库公开符号**：改动只在 **example 文件**（`examples/axi4/axi_soc_example.cpp`），不碰 `include/**` / `src/**`
+   ⇒ ⇒ **无需公开面（`public-api-surface.md`）登记**（非符号变更）
+   ⇒ ⇒ ⚠️ 但 **example 有行为变化**（uart 可达）：既有 `main()` 断言 MUST 仍绿（builder 在 T0 负责）
 4. **tsv 新增 `kind=soc`** ⇒ ⇒ 消费该清单的下游工具 MUST 认这个 kind（护栏已扩展）。
 5. **新增 capability `rtl-soc-output`** ⇒ ⇒ 归档后主 spec 多一个 capability（47 → **48**）。
 6. **产品边界（明示）** —— ① SoC TB **不验证总线协议**（协议面归 `tb_axi4_lite_example.sv`）② 产物是**固定功能的 demo SoC**，顶层**不暴露 AXI**，**不支持**自定义 master / 从设备 ③ **不支持**「CPU 经 AXI 访问外部存储」。
@@ -128,5 +133,5 @@
 |---|---|---|---|
 | **G-0** | **ADR-073 Accepted** | architect | ✅ 已闭（2026-11-16） |
 | **G-1** | **spec delta 写齐**（`rtl-soc-output` 的 ADDED）⇒ ⇒ `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 | builder | ⬜ 待办（T12） |
-| **G-2** | **公开面前置登记**（第 3 条「行为变更」⇒ ⇒ `master.rst_n` 补驱动）⇒ ⇒ `.rddf/checks/public-api-surface.md`「行为变更」节 + `docs/CHANGELOG.md` 一行 | builder | ⬜ 待办 |
-| **G-3** | ⚠️ **architect 域的 dated 修订**（ADR-073 的 5 处措辞/事实订正 + ADR-072 的 change 的前置说明）⇒ ⇒ 见 improvement 的「移交 architect」段 | architect | ⬜ 待办（**不阻塞** T0–T3） |
+| **G-2** | ~~**公开面前置登记**（第 3 条「行为变更」）~~ ⇒ ⇒ **核查结论：不需要登记**（改动只在 example 文件，无 `include/**` / `src/**` 公开符号变更；`master.rst_n` 补驱动**无行为影响**；`s1↔uart` 的行为变化限于 example 内部 ⇒ ⇒ **G-2 关闭**） | planner | ✅ 已闭（2026-11-16 · 原「行为变更登记」撤销） |
+| **G-3** | ⚠️ **architect 域的 dated 修订** —— **ADR-073 的 7 处事实订正已完成**（commit `57c781c` · v1.1）⇒ ⇒ **剩余**：ADR-072 的 change 加一句前置说明（「本 change 的 D1-f 会让 `axi_soc_example` 发射 fail-closed ⇒ ⇒ 前置 = 本 change 的 T0」）⇒ ⇒ 归 ADR-072 那个 change 的作者 | architect | 🟡 **部分已闭**（ADR-073 部分 ✅；ADR-072 部分 ⬜，**不阻塞** T0–T3） |
