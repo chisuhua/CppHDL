@@ -132,6 +132,10 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 - [ ] **AC13** 🔴 **M4 三处口径一致**：`tb_stub` / `test_rtl_emit_contract` / `flat_rtl_emit_check` 的产品端口集 == manifest 产品端口表（**逐项相等**）⇒ ⇒ **负向对照**：让其中一处回到旧算法 ⇒ ⇒ 必红
 - [ ] **AC14** 🔴 **M6 后代悬空 `ch_in`**：语义 == v2 裁决的形态 ⇒ ⇒ **负向对照**（构造一个后代悬空 `ch_in` ⇒ ⇒ 按裁决的形态断言）
 - [ ] **AC15** 🔴 **公开面登记**：新增带根入口 = **新增公开符号**（**不是**「行为变更」）⇒ ⇒ 登记进 `.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md` 一行 ⇒ ⇒ `verify_public_api_visibility.sh` 绿
+- [ ] **AC16** 🔴 **无归属节点（ADR-072 V16 · D1-g）**：用户直接创建的 `owner == nullptr` 节点 ⇒ **不上**顶层端口表 + **`CHWARN` 已触发** + 发射**不失败** ⇒ ⇒ **负向对照**：删 `CHWARN` ⇒ 必红
+- [ ] **AC17** 🔴 **inline 折叠进根的悬空 `ch_in` MUST 被拒（ADR-072 V18）**：`ok == false` + error 点名（端口 + module + 层级）+ `files` 为空 ⇒ ⇒ 既有用例 `tests/test_hierarchy_verilog.cpp:2181-2192`（`REQUIRE(r.ok)`）MUST 重设计为验证拒绝
+- [ ] **AC18** 🔴 **冒泡机制零残留（ADR-072 V19 · D1-h）**：`UndrivenPolicy::Bubble` / `*Origin::Bubbled` / `ensure_bubbled_port` / `BubbledInput` 跨 `src/` `include/` `tests/` `scripts/` grep == 0 + 公开面移除登记 + `test_component_granularity.cpp:248-254` 的 `static_assert` 已同步
+- [ ] **AC19** 🔴 **A 类零扰动（ADR-072 V5′）**：ctx-only 遗留路径产物**逐字节不变**（= 130 端口）⇒ ⇒ 且 `ctest -L verilator_e2e` 全套仍绿 ⇒ ⇒ **负向对照**：把 backend 端口表改回「带根」⇒ 编译期必红
 
 ---
 
@@ -139,11 +143,13 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 
 | capability | 动作 | 触及的 Requirement（逐字标题） |
 |---|---|---|
-| `rtl-emit-portability` | **REMOVED + ADDED**（标题含 `rtl-emit-manifest-v1` ⇒ ⇒ 标题**必变** ⇒ ⇒ MODIFIED 改不了标题） | 旧：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v1\` schema` ⇒ 新：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v2\` schema` |
-| `rtl-hierarchical-output` | **MODIFIED × 4 + REMOVED + ADDED × 3**（**逐条列举为准**；计数仅作速览） | MODIFIED：`层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定` · `层次化产物 MUST 与扁平产物等价（可机械判定）`；REMOVED + ADDED：`悬空子输入 MUST 向上冒泡为顶层输入`（标题会变假）· `不属于任何组件的节点 MUST 归顶层 module`（与 root-owned 冲突）· `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变`（「既有路径」= ctx-only 遗留路径 ⇒ 须钉死口径） |
+| `rtl-emit-portability` | **REMOVED + ADDED**（标题含 `rtl-emit-manifest-v1` ⇒ ⇒ 标题**必变** ⇒ ⇒ MODIFIED 改不了标题） | 旧：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v1\` schema` ⇒ 新：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v2\` schema，且 MUST 携带产品端口表`（新标题逐字取 ADR-072 §2.8 R-1） |
+| `rtl-hierarchical-output` | **MODIFIED × 4 + REMOVED + ADDED × 1**（= **5 条**） | **MODIFIED（4）**：`层级粒度 MUST 由显式声明决定（默认 inline）`（`:32`）· `不属于任何组件的节点 MUST 归顶层 module`（`:98` · 标题中性）· `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯`（`:240`）· `跨层端口策略 MUST 是单一权威的线性枚举，且各取值的失败语义 MUST 明确`（`:402`）<br>**REMOVED + ADDED（1）**：`悬空子输入 MUST 向上冒泡为顶层输入`（`:190` · 标题会变假） |
 
-> ⚠️ **delta 尚未写**（🚪 门 = ADR-072 v2 ⇒ ⇒ 见下方 G-1…G-8）⇒ ⇒ 原因：上表 7 条 Requirement 的改写**依赖 v2 的裁决** ⇒ ⇒ **本 change 在 delta 写齐前 MUST NOT 归档**（否则主 spec 会冻着与新产品逐字相反的条款 ⇒ ⇒ 正是 critic BLOCKER 的根因）。
-> ⚠️ **依赖裁决的 Requirement 集合（唯一权威口径 · proposal T7 MUST 与此一致）**：`不属于任何组件的节点 MUST 归顶层 module` · `悬空子输入 MUST 向上冒泡为顶层输入` · `层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变` · `默认（全 inline）产物 MUST 与扁平产物逐字节一致` · `层次化产物 MUST 与扁平产物等价（可机械判定）`。
+> ⚠️ **delta 尚未写**（🚪 门 = ADR-072 v2 ⇒ ⇒ 见下方 G-1…G-8）⇒ ⇒ 原因：上表 **6 条** Requirement 的改写**依赖 v2 的裁决** ⇒ ⇒ **本 change 在 delta 写齐前 MUST NOT 归档**（否则主 spec 会冻着与新产品逐字相反的条款 ⇒ ⇒ 正是 critic BLOCKER 的根因）。
+> ⚠️ **delta 的唯一权威 = `docs/adr/ADR-072-rtl-productization-surface-and-boundary.md` §2.8（`:355` 定 6 条）** ⇒ ⇒ 本草案**不再自持口径**（原「唯一权威口径 · proposal T7 MUST 与此一致」的表述**已作废** —— 它列了 7 条，含 3 条已被裁决**不需 delta** 的 `:478`/`:518`/`:529`，且**漏 `:402`**）。
+> ⇒ ⇒ **6 条** = **4 MODIFIED**（`:32` `:98` `:240` `:402`）+ **2 REMOVED+ADDED**（`rtl-emit-portability` 的 manifest schema · `:190`）
+> ⇒ ⇒ **4 条 MUST NOT 进 delta**：`:478` · `:518` · `:529` · `:637`（ADR-072 v2 已逐一裁决）
 
 ---
 
