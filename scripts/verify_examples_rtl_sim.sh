@@ -86,17 +86,42 @@ VERILATOR="$(find_verilator || true)"
 
 data_rows() { grep -vE '^[[:space:]]*(#|$)' "$LIST"; }
 
-# ⓪ 登记数守恒（**fail-closed**：没有锚点行也算红）
+# ⓪ 登记数守恒（**三桶** · **fail-closed**：没有锚点行也算红）
+# ⚠️ **三桶互斥**（2026-11-16 · `soc-rtl-product-and-tb-2026-11` T6）：
+#   · `kind ∈ {target, dut}` 的行数 == `REGISTERED_TARGETS`（**首批 10** 的守卫）
+#   · `kind = soc` 的行数 == `REGISTERED_SOC`（**SoC 层独立计数** ⇒ 不混进「首批 10」）
+#   · 数据行总数 == 两桶之和；且每行的 `kind` MUST ∈ {target, dut, soc}（未知 ⇒ 红）
 check_registration() {
-    local registered actual
+    local registered rec_soc actual n_td n_soc n_unknown
     registered="$(grep -oE '^#[[:space:]]*REGISTERED_TARGETS:[[:space:]]*[0-9]+' "$LIST" | grep -oE '[0-9]+$' || true)"
+    rec_soc="$(grep -oE '^#[[:space:]]*REGISTERED_SOC:[[:space:]]*[0-9]+' "$LIST" | grep -oE '[0-9]+$' || true)"
     actual="$(data_rows | wc -l | tr -d ' ')"
     if [ -z "$registered" ]; then
         fail "⓪ 清单里没有 \`REGISTERED_TARGETS\` 锚点 ⇒ ⇒ 无法检测「删行缩面」"
         return 1
     fi
-    if [ "$actual" -ne "$registered" ]; then
-        fail "⓪ 登记数不守恒：清单 $actual 行 ≠ REGISTERED_TARGETS=$registered（删行 = 静默缩面）"
+    if [ -z "$rec_soc" ]; then
+        fail "⓪ 清单里没有 \`REGISTERED_SOC\` 锚点 ⇒ ⇒ 无法检测「SoC 行被删」"
+        return 1
+    fi
+    n_td="$(data_rows | awk -F'\t' '$2=="target" || $2=="dut"' | wc -l | tr -d ' ')"
+    n_soc="$(data_rows | awk -F'\t' '$2=="soc"' | wc -l | tr -d ' ')"
+    n_unknown="$(data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc"' | wc -l | tr -d ' ')"
+    if [ "$n_unknown" -ne 0 ]; then
+        fail "⓪ 有 $n_unknown 行的 \`kind\` 不属于已知集合 {target, dut, soc}"
+        data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc" {print "      ::error::未知 kind ⇒ " $1 " (kind=" $2 ")"}'
+        return 1
+    fi
+    if [ "$n_td" -ne "$registered" ]; then
+        fail "⓪ 首批桶不守恒：kind∈{target,dut} 有 $n_td 行 ≠ REGISTERED_TARGETS=$registered"
+        return 1
+    fi
+    if [ "$n_soc" -ne "$rec_soc" ]; then
+        fail "⓪ SoC 桶不守恒：kind=soc 有 $n_soc 行 ≠ REGISTERED_SOC=$rec_soc"
+        return 1
+    fi
+    if [ "$actual" -ne $((n_td + n_soc)) ]; then
+        fail "⓪ 三桶之和不等于数据行总数（$n_td + $n_soc ≠ $actual）"
         return 1
     fi
     if [ "$actual" -eq 0 ]; then
@@ -168,6 +193,23 @@ check_one() {
         fail "②' \`EXPECT-SRC\` 指向 \`.cpp\` ⇒ ⇒ 转录实现 = 循环论证"
         return 1
     fi
+    # ②′ (2) **锚点存在性**（`soc-rtl-product-and-tb-2026-11` T6 · AC7）：
+    #   形如 `<file>#<anchor>` ⇒ **文件**与**锚点**都必须真的存在
+    #   （否则「登记在册」只是注释里的一句话 ⇒ 指针可指向空气 ⇒ 判据不可追溯）。
+    local esrc esrc_file esrc_anchor
+    esrc="$(grep -m1 -E '^// EXPECT-SRC:' "$tb_path" | sed 's|^// EXPECT-SRC:[[:space:]]*||' | tr -d '\r')"
+    if printf '%s' "$esrc" | grep -q '#'; then
+        esrc_file="${esrc%%#*}"
+        esrc_anchor="${esrc##*#}"
+        if [ ! -f "$REPO_ROOT/$esrc_file" ]; then
+            fail "②' \`EXPECT-SRC\` 指向的文件不存在：$esrc_file"
+            return 1
+        fi
+        if ! grep -qF "{#${esrc_anchor}}" "$REPO_ROOT/$esrc_file"; then
+            fail "②' \`EXPECT-SRC\` 的锚点不存在：$esrc_file#${esrc_anchor}"
+            return 1
+        fi
+    fi
 
     # ②'' **spec_checks 软检查**（不失败，只告警）：
     #   「verified 但 spec_checks < 3」= 只有 impl-contract 断言
@@ -238,6 +280,20 @@ check_one() {
         if [ "$f9_bad" -eq 0 ]; then
             ok "④' 产物读口结构正确（load 口 = always_ff 寄存器 · RMW 口 = 组合 assign）"
         fi
+    fi
+
+    # ── ④″ **SoC 层产物级判据**（`soc-rtl-product-and-tb-2026-11` T6 · ADR-073 J-1/J-2/J-3）──
+    #   `kind=soc` 的行 MUST 通过 `--check-products` ⇒ ⇒ 它是
+    #   **AC4（lint）的执行者** + module 数（J-2）+ 顶层端口面（J-1）的**唯一执行者**
+    #   （R1–R3 只遍历 `verify_hierarchical_rtl.sh` 的主产物目录 ⇒ ⇒ 独立目录**没人 lint**）。
+    #   ⚠️ 产物目录 = 本行的 `$work`（**已隔离**）⇒ ⇒ 不污染主产物目录的「恰好 3 个 .v」。
+    if [ "$kind" = "soc" ]; then
+        if ! "$emitter_bin" --out "$work" --emit-hygiene --check-products \
+                >"$work/check-products.log" 2>&1; then
+            fail "④″ SoC 产物级判据失败（见 $work/check-products.log）"
+            return 1
+        fi
+        ok "④″ SoC 产物级判据通过（module 集 · 顶层端口面 · lint）"
     fi
 
     # ④⑤ 编译 + 缓存（key 用**内容**哈希；写入**原子**）
@@ -355,6 +411,7 @@ run_self_test() {
         cat >"$1" <<EOF
 # self-test 用的临时清单
 # REGISTERED_TARGETS: $3
+# REGISTERED_SOC: 0
 selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	$2	$4	1	256	0	self-test
 EOF
     }
@@ -417,7 +474,7 @@ PY
     # ── 投毒 3：REGISTERED_TARGETS 与实际行数不符 ⇒ ⓪ 必红 ───────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
     make_list "$st_list" "$st_tb_rel" 2 verified
-    run_case "投毒3（登记数不守恒）" "登记数不守恒"
+    run_case "投毒3（登记数不守恒）" "首批桶不守恒"
 
     # ── 投毒 4：status=verified 但 TB 缺失 ⇒ ② 必红 ──────────────
     rm -f "$REPO_ROOT/$st_tb_rel"

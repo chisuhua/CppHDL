@@ -82,7 +82,7 @@
 
 ## 3. 覆盖登记与护栏
 
-- [ ] **T6** **覆盖登记 + 护栏**：tsv +1 行 `kind=soc`（`target` = `axi_soc_example`）+ 锚点 `# REGISTERED_SOC: 1` + 护栏 ⓪ **三桶**判定 + **kind=soc 专用判据**（跑 `--check-products` ⇒ = AC4 的执行者）+ `EXPECT-SRC:` **锚点存在性**判据
+- [x] **T6** **覆盖登记 + 护栏**：tsv +1 行 `kind=soc`（`target` = `axi_soc_example`）+ 锚点 `# REGISTERED_SOC: 1` + 护栏 ⓪ **三桶**判定 + **kind=soc 专用判据**（跑 `--check-products` ⇒ = AC4 的执行者）+ `EXPECT-SRC:` **锚点存在性**判据<br>      - ✅ **已完成（2026-11-16）**：`verify_examples_rtl_sim: PASS（11 项）` · `--self-test: PASS`（基线绿 + **5 条投毒各自转红** + 还原复绿）<br>      - ⓪ **三桶**：`kind∈{target,dut}` == `REGISTERED_TARGETS`(10) · `kind=soc` == `REGISTERED_SOC`(1) · 未知 kind ⇒ 红 · 三桶之和 == 行总数<br>      - ④″ **SoC 产物级判据**（`--check-products`）⇒ ⇒ = **AC4 的 lint 执行者** + J-1（顶层端口面）+ J-2（module 数）；产物目录用本行的 `$work`（隔离）<br>      - ②′ **锚点存在性**：`EXPECT-SRC: <file>#<anchor>` ⇒ 文件与锚点都必须真的存在<br>      - ✅ **变异自证**：① 锚点改成 `#no-such-anchor` ⇒ ②′ 红 ✔ ② ⓪ 的自检投毒3（fixture 登记数不符）⇒ 红 ✔（措辞已同步为「首批桶不守恒」）<br>      - ✅ **连带效果**：`emit_rtl_axi_soc` 经 tsv 的 `emitter` 列获得归属 ⇒ examples 护栏的 C1 从「2 个 UNTRACKED」降到 **1 个**（只剩**既有**的 `emit_rtl_rv32i_soc_fw_init`）
       - ⚠️ **共用工件**（与 `rtl-productization-surface-2026-11` 的 T5/T13 串行）⇒ ⇒ **本 change 先落**
       - 依赖：T3 · T5
       - 判据：`bash scripts/verify_examples_rtl_sim.sh`（含 `--self-test`）绿 · `kind ∈ {target,dut}` 行数 == `REGISTERED_TARGETS` · `kind=soc` 行数 == `REGISTERED_SOC` · 三桶之和 == 数据行总数

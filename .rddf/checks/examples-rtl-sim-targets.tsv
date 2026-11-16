@@ -8,7 +8,9 @@
 #
 # 列：
 # · `target`      —— CMake target 名（权威；`kind=dut` 时是自定的标识）
-# · `kind`        —— `target`（在 `CH_TRACKED_EXAMPLE_TARGETS` 里）/ `dut`（test DUT）
+# · `kind`        —— `target`（在 `CH_TRACKED_EXAMPLE_TARGETS` 里）/ `dut`（test DUT）/ `soc`（**SoC 层产物**）
+#                    ⚠️ **三桶互斥**：`target` + `dut` == `REGISTERED_TARGETS`；`soc` == `REGISTERED_SOC`
+#                    ⇒ ⇒ SoC 不混进「首批 10」的计数与 status 判定面（用户 2026-11-16 裁决「维持首批 10」）
 # · `source`/`component`/`emitter` —— 实现文件 / 顶层组件类 / RTL 发射器 target
 # · `tb`          —— 独立 Verilog TB 路径（约定 `examples/<dir>/tb_<name>.sv`）
 # · `status`      —— `verified` / `pending`
@@ -27,7 +29,8 @@
 #   `run_all_ported_tests.sh` 的 `rtl_emitters()` 仍取 `$4` ⇒ ⇒ 静默指向了
 #   `component` 列 ⇒ ⇒ 10 个 RTL 发射器失去归属 ⇒ C1 红）。
 #COLUMNS: target kind source component emitter tb status min_checks scenarios spec_checks note
-# REGISTERED_TARGETS: 10
+# REGISTERED_TARGETS: 10   ← 口径 = `kind ∈ {target, dut}` 的行数（**首批 10**）
+# REGISTERED_SOC: 1        ← 口径 = `kind=soc` 的行数（**SoC 层独立计数** ⇒ 不混进「首批 10」）
 riscv-mini-rv32i-soc	dut	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc	examples/riscv-mini/tb_rv32i_soc.sv	verified	24	6	22	6 场景（复位 pc + 首条指令 · **程序每个字都被取到** · 取指 pc +4 递增 · **写回值 x1=42 / x2=11 / x3=53** · **写存储 53 到地址 0** · 退休计数单调递增）· `RESULT: checks=24 fails=0` · ⚠️ **口径改动**：不再用仓内 minitest 金标（178）⇒ ⇒ **TB 装载自己的小程序**（经 `prog_*` 装载口）⇒ ⇒ 期望值**全由 ISA 语义手推** ⇒ ⇒ **B3 的 T5 重算金标时不会红** ⇒ ⇒ retire 数只判「单调 + > 0」⇒ ⇒ **D3 由此消解** · 编码已与 `rv32i-isa-semantics` capability 的样例交叉核对 · ✅ **D8 已闭**（2026-11-14 · R8 改判 · 用户裁决 A2）：`ext_clk` **死端口已删**（顶层端口 32 → 31 · 产物 114 → 113 · 删前实测 0/1 翻转 ⇒ 逐拍全等） · ✅ **2026-11-14 · B4 · C3**：`ExStage` 算术核心改由库组件 `Rv32iAlu` 承担 ⇒ ⇒ **产物 113 → 118**（+5 = ALU 组件内部节点冒泡）⇒ ⇒ **根组件自有端口仍 31** ⇒ ⇒ 原端口名**一字未改**（TB 只新增 5 根） · 变异自证 5 条**全红**（pc 复位值 → 1 · dbg_id_valid 恒 0 → 8 · 写使能恒 0 → 1 · 退休计数恒 0 → 1 · 装载口数据恒 0 → 14）
 counter_example	target	examples/spinalhdl-ported/counter/counter.cpp	Top	emit_rtl_counter	examples/spinalhdl-ported/counter/tb_counter_example.sv	verified	54	6	14	既有 TB：clear 优先 + 8 位回绕 · 6 场景 + **场景 7：逐拍相对判据 `enable=1⇒+1 / =0⇒不变`（40 拍确定性伪随机）** · `EXPECT-SRC` 指向登记文档（Scala 上游） · ✅ **D4 结案**：**无 interpreter / RTL 分叉**（两侧一致：clear 优先 / enable 门控 / 255 / 溢出回 0）⇒ ⇒ 那条「enable/clear may not fully work yet」是**过时注释**，已更正 ⇒ ⇒ **不独立立项**
 counter_simple_example	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	examples/spinalhdl-ported/counter/tb_counter_simple_example.sv	verified	512	2	512	既有 TB：自由运行 +1 · **2 个场景**（① spec-derived 绝对判据 256 条 ② **metamorphic 周期 256** 256 条）· `EXPECT-SRC` 指向登记文档
@@ -38,3 +41,4 @@ pwm_example	target	examples/spinalhdl-ported/pwm/pwm.cpp	PwmTop	emit_rtl_pwm	exa
 gpio_example	target	examples/spinalhdl-ported/gpio/gpio.cpp	GpioTop	emit_rtl_gpio	examples/spinalhdl-ported/gpio/tb_gpio_example.sv	verified	9	7	0	既有 TB：两级同步 + 逐位边沿 + `gpio_out = oe ? output_reg : 0` · 6 场景 + **场景 G：metamorphic 自反性「输入恒定 ⇒ 中断恒 0」** ⚠️ **上游 Scala 与 C++ 实现语义不同**（1 级 vs 2 级同步 / 单 bit vs 逐位边沿 / 多两端口）⇒ `spec_checks=0`（impl-contract only）⇒ **待裁决是否缺陷** · ✅ **D1 裁决**（2026-11-12 用户「按你的建议推进」）：判为「**移植简化**」⇒ ⇒ **不追平**上游 Scala 的逐位边沿语义 ⇒ ⇒ `spec_checks` **保持 0**（只判 impl-contract）⇒ ⇒ 备选「追平 Scala」未采用（会改可观测行为 ⇒ 需另立项 + 公开面登记）
 quadrature_encoder_example	target	examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	QuadEncTop	emit_rtl_quadrature_encoder	examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example.sv	verified	7	5	4	TB 用**语义级**判据：复位=0 · **正转 2 周期 ⇒ +8**（4 倍频 spec）· **metamorphic：反转 2 周期 ⇒ 回原点** · **Z 上升 ⇒ 清零** · `a_sync/b_sync` = 2 拍延迟（impl-contract）· ⚠️ 同步寄存器初值是 **true** ⇒ 输入初值 MUST 也是 1（否则启动伪边沿）
 axi4_lite_example	target	examples/axi4/axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	verified	45	8	33	8 场景（低有效复位 · **AW/W 相位分离 + 地址锁存** · 写读一致 · **未映射 ⇒ DECERR** · **写响应保持到 BREADY** · **读响应保持到 RREADY** · **字节道 wstrb** · 后代端口同源）· `RESULT: checks=45 fails=0` · 期望源 = capability `axi-slave-conformance`（低有效复位 / 锁存地址 / AW-W 相位分离 / 响应保持 / DECERR）+ `dual-backend-test-coverage`（字节写）· metamorphic = **写入什么读回什么** · impl-contract = 寄存器窗口 0x00..0x0C（4 个）· `wstrb` bit i = 从 LSB 起的第 i 字节道 · `awready`/`arready`/`wready` 是组合的 · ⚠️ **端口映射以产物为准**（首版把 awaddr/wdata 互换 ⇒ 15 判据误红 ⇒ 差点误判成实现缺陷）· 变异自证 5 条**全红**（DECERR 去掉 → 1 · 地址不锁存 → 4 · rst_n 复位失效 → 1 · 字节道恒有效 → 1 · bvalid 单拍脉冲 → 6）
+axi_soc_example	soc	examples/axi4/axi_soc_example.cpp	AxiSocTop	emit_rtl_axi_soc	examples/axi4/tb_axi_soc_example.sv	verified	14	4	10	SoC 层产物（ADR-073）· 5 个 module（AxiLiteTestMaster / AxiLiteMatrix2x2_32_32_ / AxiLiteGpio_8_ / AxiLiteUart_16_ / top）· 顶层端口 14（框架 2 + 根自有 12）· 4 个场景：① 写 GPIO DATA_OUT ⇒ gpio_out==0xA5 ② 读 GPIO DATA_IN ⇒ rdata==0x0000_005A ③ 写 UART TX_DATA ⇒ 8N1 帧（0x5A LSB 先出 · 逐位断言）④ rst_n 拉低 ⇒ gpio_out==0 · `RESULT: checks=14 fails=0` · 期望源 = `.rddf/checks/soc-rtl-expectations.md#soc-example`（**手推** · 禁从被实现转录）· spec_checks 10 = UART 8N1 帧格式的外部规范（start + 8 data + stop）· 变异自证：切断 matrix.s1_wdata→uart.wdata ⇒ fails=4
