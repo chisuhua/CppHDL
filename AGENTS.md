@@ -271,10 +271,15 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   ⚠️ **2026-11-15 · B4 · G1+G4 订正**（此前写「`FENCE` 也不在任何 capability 内」= **已过时**）：
   · `FENCE` / `FENCE.I`（opcode `0x0F`）**已显式实现**（本版 = **NOP**：单核无 cache
     ⇒ 无排序语义）⇒ ⇒ 已进 capability `rv32i-isa-semantics`。
-  · **未知 opcode**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
-    `dbg_illegal_reason`（`0` 合法 / `1` **已知未实现** / `2` **未知 opcode**）⇒ ⇒
+  · **非法指令**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
+    `dbg_illegal_reason`（`0` 合法 / `1` **已知未实现** / `2` **未知 opcode** / `3` **保留组合**）⇒ ⇒
     进入 ID 级即**冻结**（PC 不前进 · 该指令**永不退休**）⇒ ⇒ 「跑飞」不再**静默**
     （此前未知 opcode 被**当 NOP 逐条退休**）。
+    ⚠️ **2026-11-16 订正（纯事实 · 无决策变更）**：本条原写「**未知 opcode**」+ **3 态**（缺 `3`）
+    ⇒ ⇒ `0e44c0a`（4b · `funct3`/`funct7` 保留组合检测）起 `illegal_reason` 为 **4 态**
+    （`3` = **保留组合**）⇒ ⇒ 故标题由「未知 opcode」扩为「**非法指令**」（`3` 态不是「未知 opcode」）
+    ⇒ ⇒ 权威载体 = capability `rv32i-isa-semantics` 的「4 态 + 优先级」条款（含 `1` > `3` > `2` > `0`）
+    · 实现 = `include/cpu/pipeline/rv32i_decoder.h:217-220`
 - **RV32I 数据前推已接入**（ADR-047）：档位 1 = EX/MEM 级、档位 2 = MEM/WB 级的合并写回值。
   ⚠️ **成环仍然被禁止**：数据源的**叶子** MUST 是**流水线寄存器**（MUST NOT 取 EX/MEM 级的
   **组合输出** —— 那正是 `git show bf78367` 的事故形态）⇒ 负向对照见
