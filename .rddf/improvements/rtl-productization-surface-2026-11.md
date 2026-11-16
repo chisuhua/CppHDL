@@ -140,9 +140,10 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 | capability | 动作 | 触及的 Requirement（逐字标题） |
 |---|---|---|
 | `rtl-emit-portability` | **REMOVED + ADDED**（标题含 `rtl-emit-manifest-v1` ⇒ ⇒ 标题**必变** ⇒ ⇒ MODIFIED 改不了标题） | 旧：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v1\` schema` ⇒ 新：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v2\` schema` |
-| `rtl-hierarchical-output` | **MODIFIED × 3 + REMOVED + ADDED × 2 + MODIFIED × 1** | MODIFIED：`层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定`；REMOVED+ADDED：`悬空子输入 MUST 向上冒泡为顶层输入`（标题会变假）· `不属于任何组件的节点 MUST 归顶层 module`（与 root-owned 冲突） |
+| `rtl-hierarchical-output` | **MODIFIED × 4 + REMOVED + ADDED × 3**（**逐条列举为准**；计数仅作速览） | MODIFIED：`层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定` · `层次化产物 MUST 与扁平产物等价（可机械判定）`；REMOVED + ADDED：`悬空子输入 MUST 向上冒泡为顶层输入`（标题会变假）· `不属于任何组件的节点 MUST 归顶层 module`（与 root-owned 冲突）· `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变`（「既有路径」= ctx-only 遗留路径 ⇒ 须钉死口径） |
 
-> ⚠️ **delta 尚未写**（🚪 门 = ADR-072 v2）⇒ ⇒ 原因：`不属于任何组件的节点` / `层级粒度…` / `成层且非根的 module 端口…` / `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变` / `默认（全 inline）产物 MUST 与扁平产物逐字节一致` / `层次化产物 MUST 与扁平产物等价（可机械判定）` 六条的改写**依赖 v2 的裁决** ⇒ ⇒ **本 change 在 delta 写齐前 MUST NOT 归档**（否则主 spec 会冻着与新产品逐字相反的条款 ⇒ ⇒ 正是 critic BLOCKER 的根因）。
+> ⚠️ **delta 尚未写**（🚪 门 = ADR-072 v2 ⇒ ⇒ 见下方 G-1…G-8）⇒ ⇒ 原因：上表 7 条 Requirement 的改写**依赖 v2 的裁决** ⇒ ⇒ **本 change 在 delta 写齐前 MUST NOT 归档**（否则主 spec 会冻着与新产品逐字相反的条款 ⇒ ⇒ 正是 critic BLOCKER 的根因）。
+> ⚠️ **依赖裁决的 Requirement 集合（唯一权威口径 · proposal T7 MUST 与此一致）**：`不属于任何组件的节点 MUST 归顶层 module` · `悬空子输入 MUST 向上冒泡为顶层输入` · `层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变` · `默认（全 inline）产物 MUST 与扁平产物逐字节一致` · `层次化产物 MUST 与扁平产物等价（可机械判定）`。
 
 ---
 
@@ -182,7 +183,7 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 | **P0-3 ⑤** | **⑪ 的承重测试清单漏了最大的文件** `tests/test_hierarchy_verilog.cpp` | ✅ **已采纳** —— J3 的附属产物点名该文件（`:2079` 顺序断言 · `:2876-2884` 顶层端口表 · `:2972-2994` 全 inline 逐字节 · `:3154` 顶层端口全覆盖） |
 | **P0-3 ⑥** | `VERILATOR_E2E_TOTAL: 77` 与其下一行注记「−1 ⇒ 76」自相矛盾 ⇒ ⇒ 「77」不可作 AC 常量 | ✅ **已采纳** —— Acceptance 段的「禁裸数字」条款（计数一律派生） |
 | **P0-3 ⑦** | ⑧ 的目标状态（`已收口` / `已裁决` · 后缀 · 日期 · 闭口证据）从未写 | ✅ **已采纳** —— M8 明确闭口证据指向 archive 目录（**MUST 含 `proposal.md`**）⇒ ⇒ 状态格在 archive 后回填 |
-| **P0-3 ⑧** | `.rddf/state/.planner-handoff.json` 停在 2026-10-27 · `proposals_ready` 全部已归档 | ⚠️ **登记为 🚪 门 G-6**（增强层入口前置）⇒ ⇒ 本 change 的实施走**内置流程**（非 `rdd-builder` 路径）⇒ ⇒ 或刷新 handoff |
+| **P0-3 ⑧** | `.rddf/state/.planner-handoff.json` 停在 2026-10-27 · `proposals_ready` 全部已归档 | ⚠️ **非门 · 实施走**内置流程**（本 change 的实施**不依赖** `rdd-builder` 的 handoff 前置 ⇒ ⇒ 故**不**作为 🚪 门）⇒ ⇒ 刷新 handoff 归**后续独立项**（增强层入口前置 · 与本 change 零写点交集） |
 
 ### P1 / P2 处置
 
@@ -207,3 +208,6 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 | **G-5** | **裁决 `:98` 与 `:478` / `:518` / `:529` 四条的冲突**（root-owned vs owner==nullptr 归顶层；「既有路径逐字节不变」vs D1；「全 inline 逐字节一致」vs D1） | metis P0-2 ① + P0-3 ④ |
 | **G-6** | **「34」的构成**写死（2 + 32）· **manifest `ports[]` 不收敛**（新增维度）· **三处顶层判定收敛到唯一来源** | metis P0-1 ③④ + P0-2 ⑤ |
 | **G-7** | **① 的 blast radius 收缩后**，重列「同批必改」清单（原 12 项 → 本草案的 4 判据面 + 附属产物） | metis AI-slop finding |
+| **G-8** | 🆕 **裁决 `:98`「不属于任何组件的节点 MUST 归顶层 module」在产品端口面下的处置** —— **推荐形态**（对齐 M6 的 fail-closed 取向，但**不同**：`:98` 的节点不是「悬空」而是「无归属」⇒ ⇒ **不**是发射失败）⇒ ⇒ 推荐 = **「归顶层 module 的**体内**（不再是顶层**端口**）+ MUST 保留 `CHWARN` 点名 + MUST NOT 被拒绝」** ⇒ ⇒ 理由：① `:98` 的既有义务是「归属空洞**必须可观测**」⇒ ⇒ `CHWARN` MUST 保留 ② 「归顶层 module」= **归属**，不等于「占顶层端口」⇒ ⇒ 改「端口归属」不违反 `:98` 的意图 ③ 与 M6 的差别 MUST 写进 v2（悬空 = **无驱动源** ⇒ ⇒ fail-closed；无归属 = **有逻辑无归属** ⇒ ⇒ 归体内 + 告警） | critic 第 1 轮 focus 5（对称补推荐形态 ⇒ 省一轮 v2 往返）· 冲突面 = `rtl-hierarchical-output/spec.md:98-111` |
+
+> ⚠️ **编号命名空间**：本表用 **G-1…G-8**（= ADR-072 v2 的修订/裁决清单）⇒ ⇒ **change proposal 的门表用 P-0 / P-1 / P-2**（= 另一套）⇒ ⇒ 两者**不冲突** ⇒ ⇒ 引用时 MUST 带出处。

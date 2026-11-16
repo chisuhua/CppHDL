@@ -42,7 +42,7 @@
 
 | ADR-072 项 | 原判据 | **处置** | **task** | 落点判据 |
 |---|---|---|---|---|
-| ① Verilator backend 端口面 | 「由发射产物端口表派生」 | 🔴 **移出** —— backend **拿不到 root**（`include/core/verilator_backend.h:94-96`）⇒ ⇒ auto-mode **无数据来源** ⇒ ⇒ ① **不可执行** ⇒ ⇒ 改为「backend = 遗留路径」 | **T1**（v2 撤回 ①） | 🚪 门 G-1 |
+| ① Verilator backend 端口面 | 「由发射产物端口表派生」 | 🔴 **移出** —— backend **拿不到 root**（`include/core/verilator_backend.h:94-96`）⇒ ⇒ auto-mode **无数据来源** ⇒ ⇒ ① **不可执行** ⇒ ⇒ 改为「backend = 遗留路径」 | **T1**（v2 撤回 ①） | 🚪 门 **improvement G-1** |
 | ② capability delta（2 份 spec） | 「各一条 MODIFIED」 | ⚠️ **改写** —— 实为 **1 REMOVED+ADDED + 3 MODIFIED + 2 REMOVED+ADDED**（共 6 条 Requirement）⇒ ⇒ 且 **2 条标题会变假** ⇒ ⇒ MODIFIED 改不了标题 | **T7** | J3 / AC6 |
 | ③ manifest 契约 | 「三类互斥」 | ⚠️ **改写** —— `ports[]` **仍列全量**（`test_rtl_emit_contract.cpp:278` 的 `top_ports < man.ports.size()`）⇒ ⇒ **新增维度**不收敛旧字段；且「34」= **2 + 32**（clock/reset 的 `is_top_io` 是 `false`） | **T4** | J2 / AC3 |
 | ④ 10 份 TB 的端口映射 | 「同批必改」 | ✅ 保留（`axi4_lite` S8 **8** 条判据整体消失 ⇒ `min_checks` 45 → **37** · `scenarios` 8 → **7**） | **T5** | J1 / AC1 / AC5 |
@@ -69,13 +69,13 @@
 | **T4** | **manifest schema v1 → v2**：新增产品端口表维度（`port_table[]` 或 `in_port_table`）⇒ ⇒ `ports[]` **不变**（仍列全量）⇒ ⇒ `is_top_io` **仍只是消费方筛选信号**（不再定义发射器行为） | 「标为产品端口的集合」== 产物端口表（数量相等）· `top_ports < man.ports.size()` 仍成立 | T3 |
 | **T5** | **10 份独立 TB 的端口映射** + `axi4_lite` S8 场景删除 + tsv / expectations 重登记（`min_checks` 45 → 37 · `scenarios` 8 → 7） | 10 份 TB 全部可独立跑 + `riscv` 仍 `checks=24 fails=0` + `axi4_lite` `checks=37 fails=0` | T3 · T4 |
 | **T6** | **护栏与测试期望集重算**：`flat_rtl_emit_check.py:79-92` 的 F3 **契约算法**改写 · `verify_flat_rtl_emit.sh:119` 的 F3 echo · `verify_hierarchical_rtl.sh` R8 期望集 · `verify_hierarchical_port_naming.sh` 语料 · `tests/test_hierarchy_verilog.cpp` **4 处** · `tests/test_rtl_manifest.cpp` · `tests/test_rtl_tb_stub.cpp` · `tests/test_rtl_emit_contract.cpp` · `tests/test_hierarchy_equivalence.cpp` | 各护栏 `--self-test` 全绿（**含新增的「回到旧算法 ⇒ 必红」投毒**） | T3 · T4 |
-| **T7** | **两份 capability 的 spec delta**（2 份 spec · 6 条 Requirement）⇒ ⇒ 🚪 **MUST 等 T1 的 v2 裁决**（`不属于任何组件的节点` / `悬空子输入` / `既有路径逐字节不变` / `全 inline 逐字节一致` / `层次化等价` 五条的改写依赖裁决） | `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 + 每条 Requirement 含 `SHALL`/`MUST` + **新契约文本可 grep 到** | T1 · T6 |
+| **T7** | **两份 capability 的 spec delta**（2 份 spec · 6 条 Requirement）⇒ ⇒ 🚪 **MUST 等 T1 的 v2 裁决** ⇒ ⇒ **依赖裁决的 Requirement 集合（唯一权威口径，两份工件 MUST 一致）**：`不属于任何组件的节点 MUST 归顶层 module` · `悬空子输入 MUST 向上冒泡为顶层输入` · `层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变` · `默认（全 inline）产物 MUST 与扁平产物逐字节一致` · `层次化产物 MUST 与扁平产物等价（可机械判定）` ⇒ ⇒ ⚠️ **另 2 条不依赖裁决、直接 MODIFIED**：`顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定` · `层级粒度…` 的「收缩只发生在成层子树」半句 | `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 + 每条 Requirement 含 `SHALL`/`MUST` + **新契约文本可 grep 到** | T1 · T6 |
 | **T8** | **`ADR-058` / `ADR-061` 的 dated addendum**（+ `ADR-058:187-191` 的第二条）⇒ ⇒ **决策内容变更 ⇒ ⇒ 需 architect 复审** | 审稿记录落 `.rddf/reviews/` · addendum 逐条引用本 change | T1 |
 | **T9** | **公开面登记**：新增符号（`toVerilog(path, Component&, …)` / `make_flat_module_view(Component&, …)`）⇒ ⇒ `.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md` 一行 ⇒ ⇒ **「新增符号」**（非「行为变更」） | `verify_public_api_visibility.sh` 绿 | T2 |
 | **T10** | **顶层端口判定的唯一来源** = manifest 产品端口表 ⇒ ⇒ `tb_stub.cpp:59` / `test_rtl_emit_contract.cpp:142` / `flat_rtl_emit_check.py:79-92` 三处**只消费** | 三处算出的产品端口集 == manifest 产品端口表（**逐项相等**）· 负向对照：任一处回到旧算法 ⇒ ⇒ 必红 | T4 · T6 |
 | **T11** | **用户面 / 架构文档同步**：`docs/usage_guide/05-component-design.md:552,680` · `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md:49-55,88` · `PORT-NAMING-GUIDE.md:78` ⇒ ⇒ 写明**哪条入口适用哪条规则** | 文档中「扁平规则」**一分为二**的表述可 grep 到 | T3 |
 | **T12** | **D7：卫生进默认档（仅 CLI 层）** —— `CliOptions::emit_hygiene` 默认 on + 逃生口 `--no-emit-hygiene` ⇒ ⇒ **库层 `EmitOptions{}` / `verilogwriter(ctx)` 不动** ⇒ ⇒ 两处护栏里的显式 `--emit-hygiene` **保留**（护栏**必须**显式打卫生产物） | CLI 默认产物满足 A 类 6 条 + B 类 3 条 · `F1–F6 + F8` 逐条在新靶子上仍绿 · `STATIC_REQUIRE(ch::EmitOptions{}.emit_hygiene == false)` | **T3 之后** |
-| **T13** | **产品面声明**：① 四件套判据（首批 10 个产品单元逐个具备 manifest + Verilog + 独立可跑 TB + 覆盖登记）② ISA 边界成文声明（**不含**特权级 / **冻结是终态**）③ 独立 TB 的判据汇总骨架（`RESULT: checks=<N> fails=0` + 失败非零退出码） | 三个声明/骨架**精确串**可 grep 到 + 四件套判据可跑 | T5 · T7 |
+| **T13** | **产品面声明**：① 四件套判据（首批 10 个产品单元逐个具备 manifest + Verilog + 独立可跑 TB + 覆盖登记）② ISA 边界成文声明（**不含**特权级 / **冻结是终态**）③ 独立 TB 的判据汇总骨架（`RESULT: checks=<N> fails=0` + 失败非零退出码）<br>⇒ ⇒ **四件套判据的可执行载体 = `scripts/verify_examples_rtl_sim.sh` 的新增判据④**（逐个产品单元断言：manifest 存在且其**产品端口表** == 该单元 Verilog 产物的端口表（**逐字逐序**）· 产物存在 · 独立 TB 可跑且 `RESULT: checks=<N> fails=0` · tsv 有行）<br>⇒ ⇒ ⚠️ **该判据 MUST 标为「新增」且 MUST 在实施期证明判别力**（**今天恒红**：manifest 的 `is_top_io` 标 32 个顶层端口，而产物顶层 130 个 ⇒ ⇒ 差 98 ⇒ ⇒ 实施前**判红** ⇒ ⇒ 实施后**判绿** ⇒ ⇒ 判别力自证 = 删掉某个产品单元的 manifest ⇒ ⇒ 必红） | 三个声明/骨架**精确串**可 grep 到 + 护栏新判据④ 对存量 10 个单元**今天判红**（差 98）且实施后判绿 | T5 · T7 |
 | **T14** | **残差 id=23 闭口**（**archive 之后**）—— 台账 §7 + 登记表**两侧同批** ⇒ ⇒ 状态 = `已收口` · 闭口证据 = `openspec/changes/archive/<date>-rtl-productization-surface-2026-11/proposal.md` | `verify_arch_ledger_residuals.sh` PASS（**26 → 27 行**）· 台账状态格由 `--render` 生成 | **archive 之后** |
 
 ---
@@ -92,8 +92,8 @@
 - [ ] **AC5** 🔴 根组件自有的 **28 个 `obs_*` / `dbg_*`** 在收敛后**全部仍在**顶层端口表内 ⇒ ⇒ 且 `riscv` 独立 TB 仍 `checks=24 fails=0` ⇒ ⇒ **负向对照**：删一个 `dbg_*` ⇒ ⇒ 必红
 - [ ] **AC6** 🔴 两份主 spec 的受影响 Requirement **逐句** == 新契约 ⇒ ⇒ **新契约文本可 grep 到**（正面判据）⇒ ⇒ **旧措辞零残留**（负向判据）⇒ ⇒ 且 `ADR-058` / `ADR-061` 的 dated addendum 已落
 - [ ] **AC7** 🔴 **变异自证**：任一旧措辞残留 ⇒ ⇒ AC6 必红
-- [ ] **AC8** 🔴 四件套判据可跑（首批 10 个产品单元逐个齐备）+ ISA 边界声明**精确串**可 grep（「不含特权级」/「冻结是终态」）+ 独立 TB 的判据汇总骨架可跑
-- [ ] **AC9** 两次发射**逐字节**相同
+- [ ] **AC8** 🔴 四件套判据可跑 —— 载体 = `scripts/verify_examples_rtl_sim.sh` 的**新增判据④**（逐个产品单元：manifest 的**产品端口表** == 该单元 Verilog 产物的端口表（**逐字逐序**）· 产物存在 · 独立 TB 可跑且 `RESULT: checks=<N> fails=0` · tsv 有行）⇒ ⇒ ⚠️ **该判据今天恒红**（manifest 标 32 个顶层端口 vs 产物 130 ⇒ 差 98）⇒ ⇒ **判别力自证**：删掉某个产品单元的 manifest ⇒ ⇒ 必红；且 ISA 边界声明**精确串**可 grep（「不含特权级」/「冻结是终态」）+ 独立 TB 的判据汇总骨架可跑
+- [ ] **AC9** 两次发射**逐字节**相同（⇒ ⇒ 载体 = **T3**（带根路径的确定性）+ **T6**（护栏 F2 确定性判据在新靶子上仍绿））
 - [ ] **AC10** 收敛后的产物 `verilator --lint-only` **exit 0** · **零 `%Error`**
 - [ ] **AC11** 🔴 **库层默认未被误伤**：`STATIC_REQUIRE(ch::EmitOptions{}.emit_hygiene == false)` + `git diff` 证明 `sim_main` prelude 与 `emit_sim_main_postlude` 文本未变
 - [ ] **AC12** 🔴 CLI 默认产物满足卫生 A 类 6 条 + B 类 3 条 ⇒ ⇒ 且 `F1–F6 + F8` 在新靶子上**逐条**仍绿 ⇒ ⇒ **变异自证**：去掉 `default_nettype none` ⇒ ⇒ 必红
@@ -108,7 +108,7 @@
 | capability | 动作 | 触及的 Requirement（**标题逐字**） |
 |---|---|---|
 | `rtl-emit-portability` | **REMOVED + ADDED**（标题含 `rtl-emit-manifest-v1` ⇒ ⇒ 标题**必变** ⇒ ⇒ MODIFIED 改不了标题） | 旧：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v1\` schema` ⇒ 新：`端口清单（manifest）MUST 遵循 \`rtl-emit-manifest-v2\` schema` |
-| `rtl-hierarchical-output` | **MODIFIED × 3 + REMOVED + ADDED × 2 + MODIFIED × 1** | MODIFIED：`层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定`；REMOVED + ADDED：`悬空子输入 MUST 向上冒泡为顶层输入`（标题会变假）· `不属于任何组件的节点 MUST 归顶层 module`（与 root-owned 冲突） |
+| `rtl-hierarchical-output` | **MODIFIED × 4 + REMOVED + ADDED × 3**（**逐条列举为准**；计数仅作速览） | MODIFIED：`层级粒度 MUST 由显式声明决定（默认 inline）` · `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯` · `顶层端口名的 C++ 成员可解析性 MUST 按端口三类分别规定` · `层次化产物 MUST 与扁平产物等价（可机械判定）`；REMOVED + ADDED：`悬空子输入 MUST 向上冒泡为顶层输入`（标题会变假）· `不属于任何组件的节点 MUST 归顶层 module`（与 root-owned 冲突）· `层次化 MUST 有独立的公开入口，既有路径 MUST 逐字节不变`（「既有路径」= ctx-only 遗留路径 ⇒ 须钉死口径） |
 
 > ⚠️ **delta 尚未写**（🚪 门 = T1）⇒ ⇒ 原因：6 条 Requirement 的改写**依赖 v2 的裁决** ⇒ ⇒ **本 change 在 delta 写齐前 MUST NOT 归档**
 > ⇒ ⇒ 理由：半份 delta 归档 ⇒ ⇒ 主 spec 冻着与新产品逐字相反的条款 ⇒ ⇒ **双权威**（= critic 第 1 轮 BLOCKER 的根因）。
@@ -142,11 +142,13 @@
 
 ## 🚪 门（**开工前 MUST 闭**）
 
+> ⚠️ **编号命名空间**：本表用 **P-0 / P-1 / P-2**（= proposal 的门）⇒ ⇒ **improvement 草案的 G-1…G-7** 是**另一套**（= ADR-072 v2 的修订/裁决清单）⇒ ⇒ 两者**不冲突** ⇒ ⇒ 引用时 MUST 带出处（「improvement G-n」/「proposal P-n」）。
+
 | # | 事项 | 归属 |
 |---|---|---|
-| **G-0** | **ADR-072 v2 落地**（7 处 MUST 修订 + 6 条 MUST 裁决 ⇒ 见 improvement 草案的 🚪 门表 G-1…G-7）⇒ ⇒ 含**架构裁决**：后代悬空 `ch_in` 的产物语义 · `:98` / `:478` / `:518` / `:529` 四条冲突 | architect |
-| **G-1** | **spec delta 写齐**（2 份 spec · 6 条 Requirement）⇒ ⇒ `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 | builder（依赖 G-0） |
-| **G-2** | **公开面前置登记**（新增符号 + CHANGELOG）⇒ ⇒ **开工前**，不是事后补记 | builder |
+| **P-0** | **ADR-072 v2 落地**（7 处 MUST 修订 + 6 条 MUST 裁决 ⇒ 见 improvement 草案的 🚪 门表 **G-1…G-7**）⇒ ⇒ 含**架构裁决**：后代悬空 `ch_in` 的产物语义 · `:98` / `:478` / `:518` / `:529` 四条冲突 | architect |
+| **P-1** | **spec delta 写齐**（2 份 spec · 6 条 Requirement）⇒ ⇒ `verify_openspec_delta.sh` 绿 + `openspec validate <change>` 非零错误 | builder（依赖 P-0） |
+| **P-2** | **公开面前置登记**（新增符号 + CHANGELOG）⇒ ⇒ **开工前**，不是事后补记 | builder |
 
 > ⚠️ **当前状态（如实登记 · 勿当疏漏）**：`openspec validate rtl-productization-surface-2026-11` **报 ERROR** ——
 > 「Change must have at least one delta」⇒ ⇒ 这是**有意为之**：delta 依赖 G-0 的裁决 ⇒ ⇒
