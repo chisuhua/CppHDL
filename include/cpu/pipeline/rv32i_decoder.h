@@ -68,6 +68,10 @@ public:
         ch_out<ch_uint<7>>  funct7;
         ch_out<ch_uint<32>> imm;       // 符号扩展立即数
         ch_out<ch_uint<3>>  instr_type; // 指令类型
+        // ⚠️ **2026-11-16 · B4 · G1 扩展**：**保留组合**判定（ISA 的非法编码）
+        //    0 = 合法 · 1 = **已知未实现**（`OP_SYSTEM`）· 2 = **未知 opcode**
+        //    · 3 = 已知 opcode 但 **funct3 / funct7 是保留组合**
+        ch_out<ch_uint<2>>  illegal_reason{"illegal_reason"};   // ⚠️ **具名**（端口命名契约）
     )
     
     Rv32iDecoder(ch::Component* parent = nullptr, const std::string& name = "rv32i_decoder")
@@ -152,6 +156,49 @@ public:
         type = select(op == ch_uint<7>(OP_JAL),   ch_uint<3>(INSTR_J), type);
         
         // ========================================================================
+        // **保留组合**判定（ISA 的非法编码 ⇒ 非法指令）
+        //
+        // ⚠️⚠️ **关键事实（手推 · 实测踩过）**：**U 型（LUI / AUIPC）与 J 型（JAL）
+        //    **没有 funct3 字段** —— bits 14:12 是**立即数位**
+        //    （U 型 = `imm[14:12]` · J 型 = `imm[19:17]`）⇒ ⇒ 它们的**任何**取值都合法
+        //    ⇒ ⇒ ⚠️ 把「funct3 MUST 为 000」套到 U/J 型上 ⇒ ⇒ **误判合法指令为非法**
+        //    ⇒ ⇒ （实测：`lui x10, 0x1` = `0x00001537` 的 funct3 位 = 001 ⇒ **合法**）
+        //
+        // ⚠️ **R 型（OP）的 funct7**：只允许 `0x00`（ADD/SLL/SLT/SLTU/XOR/SRL/OR/AND）
+        //    与 `0x20`（SUB / SRA）⇒ ⇒ 且 `0x20` **仅当** funct3 ∈ {000, 101}
+        //    ⇒ ⇒ ⚠️ **funct7[5] 对 I 型是 `imm[10]`**（立即数位）⇒ ⇒ OP-IMM **不查 funct7**
+        // ========================================================================
+        auto f3_load   = (f3 == ch_uint<3>(0)) | (f3 == ch_uint<3>(1))
+                       | (f3 == ch_uint<3>(2)) | (f3 == ch_uint<3>(4))
+                       | (f3 == ch_uint<3>(5));
+        auto f3_store  = (f3 == ch_uint<3>(0)) | (f3 == ch_uint<3>(1))
+                       | (f3 == ch_uint<3>(2));
+        auto f3_branch = (f3 == ch_uint<3>(0)) | (f3 == ch_uint<3>(1))
+                       | (f3 == ch_uint<3>(4)) | (f3 == ch_uint<3>(5))
+                       | (f3 == ch_uint<3>(6)) | (f3 == ch_uint<3>(7));
+        auto f3_zero   = (f3 == ch_uint<3>(0));
+        // R 型 funct7：`0x00` 全合法；`0x20` 仅当 funct3 ∈ {000, 101}
+        auto f7_ok     = (f7 == ch_uint<7>(0))
+                       | ((f7 == ch_uint<7>(0x20))
+                          & ((f3 == ch_uint<3>(0)) | (f3 == ch_uint<3>(5))));
+        auto reserved  = ((op == ch_uint<7>(OP_OP))      & !f7_ok)
+                       | ((op == ch_uint<7>(OP_LOAD))    & !f3_load)
+                       | ((op == ch_uint<7>(OP_STORE))   & !f3_store)
+                       | ((op == ch_uint<7>(OP_BRANCH))  & !f3_branch)
+                       | ((op == ch_uint<7>(OP_JALR))    & !f3_zero);
+        // ⚠️ **OP-IMM / JAL / LUI / AUIPC 不在此表** ⇒ ⇒ 前者 `imm[10]` 是立即数位
+        //    ⇒ 后两者**无 funct3 字段** ⇒ ⇒ 任何取值都合法
+        
+        // 已知 opcode 集合（**FENCE 已含** ⇒ 它是已知 = NOP ⇒ NOT 非法）
+        auto known_opcode = (op == ch_uint<7>(OP_OP)) | (op == ch_uint<7>(OP_OPIMM))
+                          | (op == ch_uint<7>(OP_LOAD)) | (op == ch_uint<7>(OP_STORE))
+                          | (op == ch_uint<7>(OP_BRANCH)) | (op == ch_uint<7>(OP_JALR))
+                          | (op == ch_uint<7>(OP_JAL)) | (op == ch_uint<7>(OP_LUI))
+                          | (op == ch_uint<7>(OP_AUIPC)) | (op == ch_uint<7>(OP_FENCE));
+        // 已知但**未实现**（`OP_SYSTEM` = ECALL / EBREAK / CSR / MRET）
+        auto known_unimplemented = (op == ch_uint<7>(OP_SYSTEM));
+        
+        // ========================================================================
         // 输出
         // ========================================================================
         io().opcode = op;
@@ -162,6 +209,15 @@ public:
         io().funct7 = f7;
         io().imm = imm_val;
         io().instr_type = type;
+        // ⚠️ **MUST 是最后一个 `io()` 赋值**（2026-11-16）：端口节点按**赋值顺序**编号
+        //    ⇒ 插在中间会让既有 `decoder_unnamed_output_N` **整体位移**
+        //    ⇒ ⇒ 独立 Verilog TB 的端口表**全部错位**（实测踩过 · 见 id_stage 的同型记录）。
+        //
+        // reason 码：0 合法 · 1 已知未实现（`OP_SYSTEM`）· 2 未知 opcode · 3 保留组合
+        io().illegal_reason =
+            select(known_unimplemented, ch_uint<2>(1),
+            select(reserved, ch_uint<2>(3),
+            select(known_opcode, ch_uint<2>(0), ch_uint<2>(2))));
     }
 };
 

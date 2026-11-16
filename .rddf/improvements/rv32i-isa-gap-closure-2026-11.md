@@ -4,7 +4,7 @@ priority: P1
 phase: phase-6
 category: cpu
 type: feature
-状态: partial（G3 + G1 + G4 + G2 最小面 + **G5** 已落地 · 仅 `funct3`/`funct7` 维度与特权级立项未做）
+状态: partial（G3 + G1 + G2 最小面 + G4 + G5 + **G1 扩展（funct3/funct7 保留组合）** 已落地 · 仅**特权级立项**未做）
 进度: B4 已开工（G3 → G1+G4 已落地 2026-11-15） · ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ ⇒ 实施前 MUST 先确认 phase-6 P6 的侦察结论已并入
 主题: RV32I ISA 缺口
 依赖: rv32i-commit-path（时序基线）· memory-timing-contract-2026-11（建议先行，稳时序基线）

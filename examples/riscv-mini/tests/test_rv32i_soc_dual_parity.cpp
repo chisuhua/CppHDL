@@ -2462,6 +2462,12 @@ TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
         {"OP_SYSTEM(ecall 0x73)",      0x00000073u, 1u, kRetireBeforeProbe},
         // 0x0FF0000F = `fence iorw,iorw` ⇒ opcode 0x0F ⇒ **已知 = NOP**
         {"FENCE(0x0F)",                0x0FF0000Fu, 0u, kRetireNoFreeze},
+        // ⚠️ **2026-11-16 · B4 · G1 扩展**：`lb x1, 0(x0)` 但 **funct3 = 011**
+        //    ⇒ ⇒ `LB` 只允许 funct3 ∈ {000,001,010,100,101} ⇒ ⇒ **保留组合** ⇒ ⇒ reason **3**
+        //    ⇒ ⇒ 编码（手推）：`(imm=0 << 20) | (rs1=0 << 15) | (3 << 12) | (rd=1 << 7) | 0x03`
+        //    ⇒ ⇒ = **0x00003083**（⚠️ 第一版我写成 `0x00001083` ⇒ 那是 funct3=**001** = `LH`
+        //    ⇒ ⇒ **合法** ⇒ ⇒ 被本判据当场抓住 ⇒ ⇒ 判别力实证 ✓）
+        {"LB with reserved funct3=011", 0x00003083u, 3u, kRetireBeforeProbe},
     };
 
     for (const auto &sc : scenarios) {

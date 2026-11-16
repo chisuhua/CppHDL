@@ -344,7 +344,18 @@ RV32I SoC MUST 以**显式映射表**声明其存储区域
 ### Requirement: 未知 opcode MUST 可观测，且 MUST NOT 被当作 NOP 退休
 
 ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（`OP_SYSTEM`，
-即 `ECALL`/`EBREAK`/CSR/`MRET`）· `2` = **未知 opcode**）。
+即 `ECALL`/`EBREAK`/CSR/`MRET`）· `2` = **未知 opcode**
+· **`3` = 已知 opcode 但 `funct3` / `funct7` 是保留组合**（见下）。
+
+⇒ ⇒ **保留组合判定（v1.2 · 2026-11-16 扩展）**：判定 MUST 覆盖 `funct3` / `funct7` 的
+**ISA 保留组合** ⇒ ⇒ 判定表 = `docs/adr/ADR-071-fence-and-illegal-opcode-semantics.md` **§2.6.1**
+⇒ ⇒ **唯一权威在那份表**（本 Requirement 只要求「MUST 判」+ reason 值）。
+⇒ ⇒ ⚠️ **关键边界**：**U 型（`LUI` / `AUIPC`）与 J 型（`JAL`）没有 `funct3` 字段**
+（bits 14:12 是**立即数位**）⇒ ⇒ 它们的 bits 14:12 **任何取值都合法**
+⇒ ⇒ **MUST NOT** 把「`funct3` MUST 为 `000`」套到它们上（否则**误判合法指令为非法**）。
+⇒ ⇒ **优先级**：`1`（`OP_SYSTEM`）> `3`（保留组合）> `2`（未知）> `0`（合法）。
+⇒ ⇒ **判定 MUST 在库组件 `Rv32iDecoder`**（**单一来源**）⇒ ⇒ ID 级**只转发** + 保留 `valid` 门控
+⇒ ⇒ **MUST NOT** 在两处各写一份判据（漂移风险）⇒ ⇒ 两份判据会**静默分叉**。
 
 ⇒ ⇒ 判据 MUST 以「ID 级**有效**」为门控（`valid`）—— 否则 flush 后 IF/ID 寄存器
 保留的**残留旧指令**会被误判 ⇒ ⇒ 在**错误路径**上冻结流水线。
@@ -380,8 +391,14 @@ ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（
 
 #### Scenario: 本版只覆盖 opcode
 
-- **WHEN** 一条指令的 opcode 合法但 `funct3` / `funct7` 组合非法
-- **THEN** 本版 MUST 不对其报非法（该维度**不在**本 Requirement 覆盖内）
+- ⚠️ **标题保留为可追溯性**（openspec MODIFIED 语义要求 Scenario **同名**）⇒ ⇒
+  **判据以本 Scenario 正文为准**（2026-11-16 · v1.2：**本版已覆盖该维度**）
+- **WHEN** 一条指令的 opcode **合法**但 `funct3` / `funct7` 是 **ISA 保留组合**
+      （判定表 = **ADR-071 §2.6.1**；例：`LOAD` 的 `funct3 = 011` · `OP` 的 `funct7 = 0x40`）
+- **THEN** 操作码分类 MUST 为 **`3`**（保留组合）
+- **AND** 该指令 MUST **冻结**（同「未知 opcode」的处置）
+- **AND** ⚠️ **负向对照**：`LUI` / `AUIPC` / `JAL` / `FENCE` 的 bits 14:12 **不是 `funct3`**
+      ⇒ ⇒ 它们的**任何**取值 MUST 判为**合法**（`0`）
 
 ### Requirement: `FENCE` / `FENCE.I` MUST **显式**为合法指令（本版 = `NOP`）
 

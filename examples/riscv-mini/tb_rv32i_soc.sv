@@ -33,8 +33,8 @@
 //   ⇒ ⇒ ⚠️ **仍保留未具名的是后代冒泡端口**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`）
 //   ⇒ ⇒ 它们**不在**本批范围（不是根组件自有 IO）⇒ ⇒ 归属**后续批次**。
 //
-// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **129** 个
-//   （**6** 输入 + **123** 输出 · 2026-11-15 实测 · B4 · G1+G4 后）⇒ ⇒ **6** 输入 = 框架的
+// ⚠️ **端口映射（实测确认，非猜）**：本顶层产物端口表 = **130** 个
+//   （**6** 输入 + **124** 输出 · 2026-11-16 实测 · B4 · G1 扩展后）⇒ ⇒ **6** 输入 = 框架的
 //   `default_clock` / `default_reset` + 本组件自有的 **4** 个
 //   ⇒ ⇒ **4** 个自有输入里 **1 位输入有 3 个** ⇒ 必须实证：
 //   · `top_ext_rst` = `ext_rst`（实测：只有它拉低后流水线才取指）
@@ -43,7 +43,7 @@
 //     —— 它是**死端口**（零消费者；产物里**所有**流水线寄存器都锁在框架 `default_clock`）
 //     ⇒ ⇒ 删前已做针对性实测（`ext_clk` 0/1 交替翻转 ⇒ 60 拍 × 27 观测**逐拍全等**）
 //     ⇒ ⇒ **真时钟源 = `default_clock`**（本 TB 的 `clk`）⇒ ⇒ **行为零变化**
-//   ⇒ ⇒ **123** 个输出 = 本组件自有的 **28** 个 + **后代冒泡**的 **95** 个
+//   ⇒ ⇒ **124** 个输出 = 本组件自有的 **28** 个 + **后代冒泡**的 **96** 个
 //   （**93** = 80 + **5**（`Rv32iAlu` · 2026-11-14 · B4 · C3）
 //            + **8**（`Rv32iDecoder` · 2026-11-15 · B4 · C4：opcode/rd/funct3/rs1/
 //              rs2/funct7/imm/instr_type ⇒ ⇒ `id_stage_decoder_unnamed_output*`）
@@ -57,7 +57,8 @@
 //   ⇒ ⇒ 2026-11-14 删 `ext_clk` ⇒ ⇒ **113（6 + 107）**
 //   ⇒ ⇒ 2026-11-14（B4 · C3）`ExStage` 接入 `Rv32iAlu` ⇒ ⇒ **118（6 + 112）**
 //   ⇒ ⇒ 2026-11-15（B4 · C4）`IdStage` 接入 `Rv32iDecoder` ⇒ ⇒ **126（6 + 120）**
-//   ⇒ ⇒ 2026-11-15（B4 · G1+G4）新增 `dbg_illegal_reason` ⇒ ⇒ **129（6 + 123）**。
+//   ⇒ ⇒ 2026-11-15（B4 · G1+G4）新增 `dbg_illegal_reason` ⇒ ⇒ **129（6 + 123）**
+//   ⇒ ⇒ 2026-11-16（B4 · G1 扩展）decoder 增 `illegal_reason` ⇒ ⇒ **130（6 + 124）**。
 //
 // ⚠️ **未用输出 MUST 被读**：本 TB 把 107 个不参与判据的输出接进 `sink*` 数组
 //   ⇒ ⇒ 严格 flags 下不读会触发 `%Warning-UNUSEDSIGNAL`（**致命** —— 实测踩过同类坑）。
@@ -86,7 +87,7 @@ module tb_rv32i_soc;
     logic [4:0]  dbg_wb_rd_addr;
 
     logic [41:0] sink1;   // 42 个未用输出（宽度 1）
-    logic [9:0] sink2;   // 5 个未用输出（宽度 2）
+    logic [11:0] sink2;  // 6 个未用输出（宽度 2）
     logic [8:0] sink3;   // 3 个未用输出（宽度 3）
     logic [7:0] sink4;   // 2 个未用输出（宽度 4）
     logic [54:0] sink5;  // 11 个未用输出（宽度 5）
@@ -251,6 +252,10 @@ module tb_rv32i_soc;
         //   承担 ⇒ ⇒ 该子组件的 **8 个输出**冒泡到顶层（opcode 7 · rd 5 · funct3 3 ·
         //   rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）
         //   ⇒ ⇒ 全部是本 TB 的观察面之外 ⇒ ⇒ 接进 `sink*`（**未用输出 MUST 被读**）
+        // ⚠️ **2026-11-16 · B4 · G1 扩展**：decoder **新增** `illegal_reason` 输出
+        //    ⇒ ⇒ 它**具名**（端口命名契约）⇒ ⇒ **脱离 unnamed 编号池**
+        //    ⇒ ⇒ ⇒ 既有 8 根**编号零位移**（⚠️ 若不具名 ⇒ 它会占 `_0` ⇒ 全体 +1 位移）
+        .top_pipeline_id_stage_decoder_illegal_reason(sink2[5*2 +: 2]),
         .top_pipeline_id_stage_decoder_unnamed_output(sink7[2*7 +: 7]),
         .top_pipeline_id_stage_decoder_unnamed_output_1(sink5[8*5 +: 5]),
         .top_pipeline_id_stage_decoder_unnamed_output_2(sink3[1*3 +: 3]),

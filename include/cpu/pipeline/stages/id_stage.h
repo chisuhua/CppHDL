@@ -178,16 +178,12 @@ public:
         //    「错误路径上的残留旧值」被当成非法指令 ⇒ ⇒ **把流水线冻死在错误路径上**。
         // ⚠️ **全部用 `select` / `&` / `|` / `!`** —— 硬件值 MUST NOT 参与 C++ 控制流
         //    （仓内铁律：`if (ch_bool)` = 建图期恒假 ⇒ 分支体从不发射）。
-        // ⚠️ **本版只覆盖 opcode**：`funct3` / `funct7` 的非法组合**不在本项**
-        //    ⇒ ⇒ 已登记为 residual（`rv32i-isa-gap-closure-2026-11` 的 G1）。
+        // ✅ **2026-11-16 · B4 · G1 扩展**：`funct3` / `funct7` 的**保留组合**
+        //    **已纳入本版覆盖** ⇒ ⇒ 判定表在**库组件 `Rv32iDecoder`**（单一来源）
+        //    ⇒ ⇒ 本段**不再**自带判据（原先的 `known_opcode` / `is_system` /
+        //    `illegal_known_unimpl` / `illegal_unknown` 四个局部量**已删** ⇒ ⇒ 零死代码）。
         // ⚠️ **FENCE（0x0F）在本版 = NOP**（单核无 cache ⇒ 无排序语义；`FENCE.I` 同理）
         //    ⇒ ⇒ MUST **显式**算「已知」⇒ 否则它会被误判成未知 opcode（G4 的判据）。
-        auto is_fence  = (opcode_raw == ch_uint<7>(OP_FENCE));
-        auto is_system = (opcode_raw == ch_uint<7>(OP_SYSTEM));
-        auto known_opcode = is_op | is_opimm | is_load | is_store | is_branch |
-                            is_jalr | is_jal | is_lui | is_auipc | is_fence;
-        auto illegal_known_unimpl = io().valid & is_system;                  // 01
-        auto illegal_unknown      = io().valid & !known_opcode & !is_system; // 10
 
         // ========================================================================
         // 寄存器地址选择 (组合逻辑)
@@ -320,9 +316,13 @@ public:
         // ⚠️ **MUST 是最后一个 `io()` 赋值**（2026-11-15）：端口节点按**赋值顺序**
         //    编号 ⇒ 插在中间会让既有 `id_stage_unnamed_output_N` **整体位移**
         //    ⇒ ⇒ 独立 Verilog TB 的端口表**全部错位**（实测踩过）。
-        io().illegal_reason = select(illegal_known_unimpl, ch_uint<2>(1_d),
-                                     select(illegal_unknown, ch_uint<2>(2_d),
-                                            ch_uint<2>(0_d)));
+        // ⚠️⚠️ **合法性判定 = 库组件的**（**单一来源** · C4 的精神 · 2026-11-16 · B4 · G1 扩展）
+        //    ⇒ ⇒ `Rv32iDecoder` 独占「保留组合」判定（funct3 / funct7 的合法组合表）
+        //    ⇒ ⇒ ID 级**只转发**，MUST NOT 自带一份判据（两份判据 = 漂移风险）
+        //    ⇒ ⇒ ⚠️ **`valid` 门控留在 ID 级**（无效拍 ⇒ 合法 ⇒ 不是非法指令）
+        //    ⇒ ⇒ reason 码：0 合法 · 1 已知未实现（`OP_SYSTEM`）· 2 未知 opcode · 3 保留组合
+        io().illegal_reason = select(io().valid, decoder.io().illegal_reason,
+                                     ch_uint<2>(0_d));
     }
 };
 
