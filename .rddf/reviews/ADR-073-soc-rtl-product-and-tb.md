@@ -100,7 +100,42 @@
 | ① | 四要素齐（元数据 / 选项对比表 ≥ 3 行 / 独立「后果·代价」章 / 前瞻性 Verification 章） | ✅（**9 行**对比表 · §4 · §5 的 **V1–V12** 全未勾） |
 | ② | oracle + critic 双审；critic 报过的 BLOCKER 全闭并**经复审确认** | ✅（oracle ×1 REJECT + critic ×2 · 复审 **APPROVE** · 0 BLOCKER · `mergeable: yes`） |
 | ③ | Status 已转已决 | ✅ **Accepted**（2026-11-16） |
-| ④ | 「关联 change」已落库或已登记 | ✅ `backlog: soc-rtl-product-and-tb-2026-11`（**尚未立项** ⇒ ⇒ 立项后由 planner 回填指针 + AC 映射） |
+| ④ | 「关联 change」已落库或已登记 | ✅ **已立项** `openspec/changes/soc-rtl-product-and-tb-2026-11/`（2026-11-16 · 指针 + AC 映射已回填） |
 | ⑤ | 审稿报告已落 `.rddf/reviews/` | ✅ 本文件 |
 
 ⚠️ **自指审查声明**：本 ADR 的 **D2** 与 **ADR-072 D1-f** 耦合（SoC 侧 tie-off 是 D1-f 的逃生舱）⇒ ⇒ **ADR-072 的在途 delta 与本 ADR 的 D2 MUST 同批协调**（D10 的顺序硬约束）⇒ ⇒ 该协调**不是**本轮审查能替代的 ⇒ ⇒ 落地时以**两个 change 的实施顺序**为准。
+
+---
+
+## 6. 2026-11-16 dated 订正（v1.1 · **D1–D10 方向不变**；J-4/V6 验证判据做最小修订）
+
+> **触发**：`soc-rtl-product-and-tb-2026-11` 立项时跑的 **metis 第 1 轮** gap 分析查出 7 处事实错误。
+> **性质**：7 处中 **#1/#2/#3/#5/#7 = 纯事实订正**；**#4/#6 触及 D7/J-4、V6 的验证判据**（补偿：因原判据建立在错误事实之上、从未可满足）⇒ ⇒ 属**订正**而非新决策（**D1–D10 方向零变更**）⇒ ⇒ 下游 change 的 AC1–AC14 **已按订正后的口径起草** ⇒ ⇒ 本订正把 ADR 拉回与 change 自洽。
+> **oracle 第 2 轮复核（2026-11-16）**：7 处事实**全部独立复算成立** ✅；抓到 1 BLOCKER（V5 漏改）+ 2 SHOULD_FIX + 声明措辞过强 ⇒ ⇒ **本轮已全闭**（见 §6.1）。
+
+| # | 订正项 | 原文 | 订正后 | 复算证据 |
+|---|---|---|---|---|
+| 1 | 未驱动后代 `ch_in` 数 | 30 | **31** | `master.io()` 只在 `axi_soc_example.cpp:204-226`（AXI）+`:270-275`（控制）出现，**无** `rst_n` ⇒ ⇒ `grep rst_n` 只见 gpio(`:263`)/uart(`:264`)/matrix(`:267`) 被驱动 ⇒ ⇒ `master.rst_n` 零驱动 ⇒ ⇒ 11+11+8+**1**=31 |
+| 2 | 扁平顶层端口数 | 44 | **45** | 框架 2 + 根自有 12 + 31 冒泡 = 45 |
+| 3 | 根 module 名 | 「`AxiSocTop` = 5」 | 「根 module 名 `top`（默认）+ 4 成层 = 5」 | `include/hierarchy_verilog.h:33` `top_module_name = "top"` |
+| 4 | `done` 语义 | 单拍脉冲 | **粘滞**（首笔后恒 1）⇒ ⇒ J-4 观测集去 `done`、激励 **≥4 → ≥10 拍**（⚠️ **验证判据的最小修订**） | `axi_soc_example.cpp:149-151` `done_reg->next = select(write_done, true, select(read_done, true, done_reg))` ⇒ ⇒ **无清零**。**≥10 拍推导**：一笔事务 `main()` 实测 **10 拍等待窗口**（`:310`/`:337`）⇒ ⇒ ≥10 拍保证至少一笔完整事务闭合（≥4 拍仅覆盖半笔 ⇒ ⇒ 观测不到响应） |
+| 5 | s1↔uart 接线方向 | 19 根双向 | **19 根单向**（11 正 + 8 反） | 全文件 `s1_` **零命中**；接线只能用 `<<=`（单向） |
+| 6 | V6 的 DECERR 场景 | 「未映射地址 DECERR」 | **删除**（换「读 GPIO DATA_IN」） | ① 顶层 `__io` 无 `bresp`（`axi_soc_example.cpp:161-181`）⇒ ⇒ DECERR/OKAY 不可区分 ② matrix 默认映射铺满 32 位（`interconnect_common.h:63,74`）⇒ ⇒ 结构性不可触发 |
+| 7 | `master.rst_n` 的行为影响 | 「行为修正」 | **无行为影响**（纯发射前置） | `AxiLiteTestMaster::describe()`（`axi_soc_example.cpp:39-152`）**零引用** `rst_n` ⇒ ⇒ 补驱动不改变行为 |
+
+**⚠️ 连带影响（移交 planner，architect 无权改 improvement/proposal）**：
+
+`openspec/changes/soc-rtl-product-and-tb-2026-11/proposal.md` 的「用户可见变更」第 3 条 + **G-2 门**把 `master.rst_n` 补驱动登记为「**行为变更**（非符号移除）」⇒ ⇒ **该登记不成立**（订正 7：`describe()` 不消费 `rst_n`）⇒ ⇒ MUST 改为「**无行为影响的发射前置**」⇒ ⇒ **G-2 门可关闭**（无需公开面 API 变更登记）。⇒ ⇒ 另有 §5 完成标志 ④ 的 change 指针已回填（原写「尚未立项」）。
+
+### 6.1 oracle 第 2 轮复核（dated 订正 · 对抗式）
+
+**结论**：7 处事实**全部独立复算成立**（`master.rst_n` 节点**确实**在 `create_ports()` 无条件创建，与 describe 是否引用无关 ⇒ ⇒ 31 成立；`done` 无清零路径 ⇒ ⇒ 粘滞成立；顶层确无 `bresp` + matrix 默认铺满 ⇒ ⇒ DECERR 不可触发成立；`describe()` 零引用 `rst_n` ⇒ ⇒ 无行为影响成立）。⇒ ⇒ 但查到 **1 BLOCKER + 2 SHOULD_FIX + 1 措辞问题**：
+
+| # | 级别 | finding | 闭合 |
+|---|---|---|---|
+| B1 | **BLOCKER** | **ADR-073 §5 V5（`:220`）漏改** —— 仍写「激励 ≥ 4 拍 + 观测集 {`rdata`, `done`, `gpio_out`, `uart_tx`}」⇒ ⇒ 与 §2.7 J-4（订正后 = ≥10 拍 + 3 观测集）**直接矛盾**，且与 change AC5 矛盾 | ✅ V5 改 **≥10 拍 + 观测集去 `done` + 补 done 粘滞说明** |
+| S1 | SHOULD_FIX | §4 风险⑤（`:206`）缓解列残留「≥4 拍激励」 | ✅ 改 **≥10 拍** |
+| S2 | SHOULD_FIX | 主题文档 §2.1 对比表（`:121`）仍写「（`AxiSocTop` = 5）」，未同步「根 module 名 `top`」 | ✅ 改「4 个成层 IP + 根 module `top`（默认名，非组件类名）= 5」 |
+| S3 | SHOULD_FIX | header「**无决策变更 / 决策内容零变更**」措辞过强（#4/#6 实质是验证判据修订） | ✅ 改为「**D1–D10 方向不变；J-4/V6 验证判据随事实做最小修订**」+ 明写 #4/#6 的补偿理由；review 本段标题同步 |
+
+⇒ ⇒ oracle 同时确认：**不需走 ADR 取代流程**（D1–D10 方向未动，修订由错误事实强制）⇒ ⇒ 本轮为 dated 订正的对抗复核，闭合后**无需重跑 critic 全轮**。
