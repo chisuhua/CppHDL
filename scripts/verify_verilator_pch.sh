@@ -146,7 +146,8 @@ compile_design() {
         echo "模型没有自动 split（VM_PARALLEL_BUILDS != 1）⇒ 判据无判别力" >>"$obj/verilator.log"
         return 1
     fi
-    if ! (cd "$obj" && make -f Vtop.mk "-j$(nproc)" >"$obj/make.log" 2>&1); then
+    # ⚠️ `nproc` 的 fallback 形态与仓内其它护栏一致（macOS 无 nproc）
+    if ! (cd "$obj" && make -f Vtop.mk "-j$(nproc 2>/dev/null || echo 4)" >"$obj/make.log" 2>&1); then
         return 1
     fi
     # ⇒ PCH 真的被生成了 ⇒ ⇒ 「走了 PCH 路径」的机械证据
