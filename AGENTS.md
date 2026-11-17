@@ -73,6 +73,7 @@ CppHDL/
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
 | 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|
+| **RV32I 核的 RTL 交付 + Verilator 仿真环境** | 设计与环境指南 = `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · **一条命令跑通** = `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）· 发射器 = `examples/riscv-mini/emit_rtl.cpp`（扁平）+ `emit_rtl_hier.cpp`（层次化）· 独立 TB = `examples/riscv-mini/tb_rv32i_soc.sv`（两形态**共用**）|
 | 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | 公共 API = `include/hierarchy_equivalence.h`（`ch::hier_eq`）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | 端口命名（具名构造写法 + 已知限制） | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`（探针 `tests/test_port_name_named_ctor.cpp`） |
@@ -465,6 +466,11 @@ ctest --output-on-failure
 
 # Run specific example
 ./build/examples/stream/stream_mux_demo
+
+# RV32I 核的 RTL 交付 + Verilator 仿真环境（**一条命令**）
+#   ⇒ 生成扁平 + 层次化两种产物 → lint → 编译独立 TB → 运行
+#   ⇒ 末尾打印 RESULT: checks=24 fails=0（**两种形态同一组判据**）
+bash scripts/rv32i_rtl_sim_env.sh
 ```
 
 > ⚠️ **openspec CLI 版本漂移（实测 2026-11-09：CLI = `1.14.3`）** —— 本仓 `openspec/specs/**` 是按

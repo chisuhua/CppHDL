@@ -1,3 +1,31 @@
+## 2026-11-17 — **RV32I 核的 RTL 交付 + Verilator 仿真环境**（一条命令跑通）
+
+**背景**：层次化进产品面后，用户侧仍缺两件东西 —— ① 一份说清「RV32I 核的 RTL 产物长什么样」
+的交付文档；② 一个**开箱即用**的 Verilator 仿真环境（此前只在护栏内部跑，用户要用得自己拼命令）。
+
+**改了什么**
+- 新增 `scripts/rv32i_rtl_sim_env.sh`：**一条命令**跑通四种形态的完整流程 ——
+  生成产物 → `verilator --lint-only` → `verilator --binary --timing` 编译独立 TB → 运行 ⇒
+  打印 `RESULT: checks=<N> fails=0` ⇒ ⇒ **扁平与层次化跑出同一组判据**
+  ⇒ ⇒ 「层次化 ≡ 扁平」在**产品路径**上得到证据（不只在用例路径上）
+  ⇒ ⇒ fail-closed（缺 verilator / 缺发射器 / lint 非零 / 编译失败 / 断言失败 ⇒ 非零退出）
+- 新增 `docs/developer_guide/rv32i-rtl-delivery-and-sim.md`：交付物清单 · **产物形态**
+  （顶层端口面 **34** = 框架 2 + 根自有 32 · 模块树 **8** module · 存储映射
+  I-TCM `0x8000_0000` / D-TCM `0x8001_0000`（各 16 KB · PC 复位 = I-TCM base）·
+  时钟复位（**真时钟源 = `default_clock`**）· ISA 边界（**未覆盖 = 特权级**））
+  + **Verilator 仿真环境**（一条命令 / 手动四步 / 判据与期望源 / **8 条常见陷阱**）
+  + 「换成你自己的设计」的模板
+- `examples/riscv-mini/src/rv32i_pipeline_top.h`：**订正一处过时注释**（事实订正 · 无行为变更）
+  —— 原写「固件 MUST 无数据冒险：lib 版 `HazardUnit` 不接数据前推」⇒ ⇒ **与实际装配矛盾**
+  （ADR-047 D2 的前推 mux = `chlib::ForwardingMux<32>`，装在**流水线装配层**
+  `rv32i_pipeline.h::build_forwarding_paths()` ⇒ ⇒ 层次化产物里可见 `ForwardingMux_32_` module）
+  ⇒ ⇒ 订正为「前推已接入」并指向 ADR-047 §5.5 + ADR-069（**不复制**其判据）
+- 根 `AGENTS.md`：「WHERE TO LOOK」+「COMMANDS」各加一行（交付入口 + 一条命令）
+
+**实测**：脚本 PASS —— 扁平（1 module · 34 端口 · lint 干净 · `checks=24 fails=0`）·
+层次化（8 module · 34 端口 · lint 干净 · `checks=24 fails=0`）· 产物端口表 ==
+manifest `port_table[]`（34 == 34）。
+
 ## 2026-11-17 — **层次化 RTL 进入产品面**（诉求 ⑤「层次化输出示例」：CLI + 独立 TB + 覆盖登记）
 
 **问题**：层次化输出此前只有**测试级**载体（`examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp`

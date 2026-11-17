@@ -16,9 +16,13 @@
 //    IF 阶段 `pc_reg` 复位为 0x80000000（`stages/if_stage.h`），其低 12 位为 0
 //    ⇒ 从字 0 开始取指，按 +4 递增。
 //
-// ⚠️ 固件 MUST 无数据冒险：lib 版 `HazardUnit` 不接数据前推
-//    （`pipeline/hazard_unit.h` 的 `io().rs1_data = io().rs1_data_raw`，
-//    接上会在真实装配里形成组合环 —— ADR-046 D3 #14；D5 对此仍悬置）。
+// ⚠️ **数据前推已接入**（ADR-047 D2）：前推 mux = **既有**的 `chlib::ForwardingMux<32>`
+//    （装在**流水线装配层** `rv32i_pipeline.h::build_forwarding_paths()` ⇒ ⇒ **不在**
+//    `HazardUnit` 里）⇒ ⇒ ADR-046 D3 #14 的组合环风险已由「独立 mux」消解
+//    （D5 悬置项指的正是「把 EX 级组合输出接回 hazard」那条环饵 ⇒ ⇒ 不要再照那条接线）
+//    ⇒ ⇒ `HazardUnit::rs1_data` / `rs2_data` 仍是**直通**（组件层语义 · 不变）
+// ⚠️ **固件的冒险处理 MUST 以 ADR-047 §5.5 + ADR-069 为准**（档位 1 **不覆盖 load**
+//    · load-use 停顿的拍数由 ADR-069 决策 A0 规定）⇒ ⇒ 本文件**不复制**其判据。
 #pragma once
 
 #include "ch.hpp"
