@@ -1100,6 +1100,32 @@ jobs:
       shell: bash
       run: scripts/verify_example_assertion_quality.sh
 
+    - name: Verify examples RTL sim coverage registration
+      # The RTL-simulation coverage ledger MUST stay *conserved* against the
+      # tracked example set: every tracked example is either covered by an
+      # independent Verilog TB (`.rddf/checks/examples-rtl-sim-targets.tsv`)
+      # or explicitly registered as "not done yet" with a reason + a re-entry
+      # condition (`.rddf/checks/examples-rtl-sim-exclusions.tsv`).
+      # ⚠️ Why this job: the check is PURE STATIC (no verilator / no network /
+      #   no git history) ⇒ ⇒ it can run on every PR of every platform.
+      # ⚠️ Why it exists: the tracked set grew 19 -> 28 while the exclusion
+      #   ledger was only kept up to 19 ⇒ ⇒ 9 tracked examples were in NEITHER
+      #   list ⇒ ⇒ the "new ones must not slip through" promise had silently
+      #   stopped holding ⇒ ⇒ conservation is now mechanical instead of prose.
+      # C1 = conservation (28 == 10 covered + 18 registered) · C2 = every
+      # exclusion row carries a reason + a re-entry condition · C3 = the
+      # `spec_checks` column stays a bare integer (otherwise the sibling
+      # guard's "spec_checks < 3" check silently stops evaluating).
+      shell: bash
+      run: scripts/verify_examples_rtl_sim_coverage.sh
+
+    - name: Verify examples RTL sim coverage registration (self-test)
+      # Negative control: each criterion MUST turn red on a poisoned copy
+      # (drop one exclusion row / blank one reason / pollute the numeric
+      # column) — otherwise the criterion is a constant-green.
+      shell: bash
+      run: scripts/verify_examples_rtl_sim_coverage.sh --self-test
+
     - name: Verify assertion quality fixtures (spec)
       # The fixture set IS the spec of the assertion-quality guardrail:
       # each fixture pins one mechanism (comment stripping / macro bodies /

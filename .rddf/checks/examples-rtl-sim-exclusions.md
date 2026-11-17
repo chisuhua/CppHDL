@@ -2,7 +2,9 @@
 
 > **为什么必须有这份文档**：E4 的核心风险是「**先做 10 个 ⇒ 变成永远只有 10 个**」
 > ⇒ ⇒ 「没做」必须**留痕**：谁没做、为什么、什么条件下归位。
-> **权威名单** = `.rddf/checks/examples-rtl-sim-targets.tsv`（E4 的载体）· **本文件** = 落选理由与未覆盖项。
+> **权威名单** = `.rddf/checks/examples-rtl-sim-targets.tsv`（E4 的载体 · **已覆盖**）·
+> **落选名单（机器可读）** = `.rddf/checks/examples-rtl-sim-exclusions.tsv`（**没做的**）·
+> **本文件** = 入选准则 + 首批的未覆盖项 + 墙钟实测。
 
 ---
 
@@ -20,22 +22,23 @@
 时序状态机（`uart_tx` · `uart_rx`）· 流控（`fifo_stream`）·
 计数/相位（`quadrature_encoder`）· 总线（`axi4_lite`）· CPU（`riscv-mini` smoke）。
 
-## 2. 落选名单（`examples/CMakeLists.txt` 的 `CH_TRACKED_EXAMPLE_TARGETS` 共 **19** 项 ⇒ 首批选 9 项 + 1 个 `kind=dut` ⇒ **落选 10** 项）
+## 2. 落选名单（**机器可读** = `.rddf/checks/examples-rtl-sim-exclusions.tsv`）
 
-| 落选 target | 类别 | 落选理由（有据） | 归位条件 |
-|---|---|---|---|
-| `spi_controller_example` | 时序状态机 | **类别已覆盖**（`uart_tx`/`uart_rx` 同为时序 FSM）· 且它是 **SPI 主控 + 完整帧协议**（源码头注释）⇒ 期望源面比 UART 大 | 首批扩到第二批时补（协议面独立 ⇒ 需单独推导帧格式） |
-| `i2c_controller_example` | 时序状态机 | 同上 · 源码头自述「**简化验证版**」⇒ ⇒ 其行为**不是完整 I2C** ⇒ ⇒ 按它写期望源会把「简化」固化成契约 | 若该 example 被补成完整 I2C（START/STOP + ACK）后再补 TB |
-| `ws2812_controller_example` | 时序（LED 编码） | 类别已覆盖（时序 FSM）· 且 WS2812B 的**位时序 + 颜色打包**是另一套外部协议 ⇒ 期望源需另推 | 第二批（与 `samples/` 的独立立项一起评估） |
-| `vga_controller_example` | 时序（640x480@60Hz） | 类别已覆盖 + **规模大**（整帧时序生成 ⇒ 违反准则 ④「编译 ≲ 10 s」）⇒ ⇒ 编译成本会挤占 CI 墙钟 | 需要单独测墙钟预算后再评估 |
-| `timer_example` | 时序（预分频 + reload） | 类别已覆盖（时序）· 且它的语义**已被** `quadrature_encoder`（计数/相位）部分覆盖 | 一般不补（增量收益低） |
-| `sigma_delta_dac_example` | 组合 + 滤波器 | 类别已覆盖（组合）· 且 σ-Δ 的判据本质是**噪声/精度统计**⇒ ⇒ 不适合「离散拍级」断言 | 若要补 ⇒ 需另立「统计型判据」的规范口径 |
-| `width_adapter_example` | 流控（4×8→32 位拼接） | 类别已覆盖（流控：`fifo_stream`）· 语义面最窄（一个移位寄存器）⇒ ⇒ 边际收益最低 | 一般不补 |
-| `assert_example` | **框架自身** | 它验证的是**断言机制**（源码头：「断言系统使用示例」）⇒ ⇒ 不是「被测设计」⇒ ⇒ RTL 侧的期望源是**框架语义**而非设计语义 | 若断言机制需要**独立 RTL 面** ⇒ 另立立项 |
-| `axi4_full_example` | 总线（AXI4 **Full**） | AXI4-Lite 已被 `axi4_lite` 覆盖；**Full** 的 burst / 拆包 / DECERR 语义由**独立 capability** `axi4-full-slave-burst` 承载 ⇒ ⇒ 期望源面显著更大 ⇒ ⇒ 首批准备不足 | 待 `axi4-full-slave-burst` 的判据口径稳定后补 |
+`examples/CMakeLists.txt` 的 `CH_TRACKED_EXAMPLE_TARGETS` 共 **28** 项 ⇒ ⇒
+**已覆盖 10** 项（覆盖表里 `kind ∈ {target, soc}`：首批 9 个 `target` + SoC 1 个 `soc`）
+⇒ ⇒ **落选 18** 项 ⇒ ⇒ 逐行的**理由 + 归位条件**登记在
+**`.rddf/checks/examples-rtl-sim-exclusions.tsv`**。
 
-> ⚠️ **落选 ≠ 不做**：本表是「首批不做」的登记，**不是**永久排除。
+⚠️ **本文不复制那张表** ⇒ ⇒ 落选名单**只有一份**（单一真相）⇒ ⇒ 杜绝两份漂移。
+
+> ⚠️ **落选 ≠ 不做**：该表是「这批不做」的登记，**不是**永久排除。
 > 每行都带**归位条件** ⇒ ⇒ 「新增即漏」被堵住。
+> ⚠️ **守恒是机械判据**（不再靠本文的散文承诺）：`scripts/verify_examples_rtl_sim_coverage.sh`
+> ①（`28 == 10 ∪ 18` 且三者互斥）⇒ ⇒ **漏登记即 CI 红**。
+> ⚠️ **2026-11-17 订正**：本文此前写「共 **19** 项 ⇒ 落选 **10**」且表里只有 **9** 行 ⇒ ⇒
+> 被跟踪集合从 19 涨到 28 后，**9 个 example 既没进覆盖表、也没进落选表** ⇒ ⇒
+> 「新增即漏」**当时已经失效** ⇒ ⇒ 本次按 28 项重算并补登
+> （变更 = `examples-rtl-sim-registration-hygiene-2026-11`）。
 
 ## 3. 首批 10 项的**未覆盖项**（同样必须留痕）
 

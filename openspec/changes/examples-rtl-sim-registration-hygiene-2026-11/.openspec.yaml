@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-17
+# 本 change **无 spec 变更**：它只改**仓内登记面**（覆盖表 / 落选表 / 护栏 / CI），
+# 不新增也不修改任何 Requirement。
+# 该 capability 面（`example-runtime-coverage` 的「被跟踪集合 MUST 有单一来源」·
+# 「未被跟踪的程序 MUST 有归属」）管的是**运行护栏**的归属；本 change 管的是
+# **RTL 仿真覆盖登记面**的归属 ⇒ ⇒ 两者是**不同的登记面** ⇒ ⇒ 无 capability 条款可改。
+# ⇒ 归档时用 `openspec archive examples-rtl-sim-registration-hygiene-2026-11 --skip-specs`
+# （`AGENTS.md` 的规则：只有**显式声明 no spec changes** 的 change 才可用该标志
+#   —— 本文件即该显式声明）。
+skip_specs: true

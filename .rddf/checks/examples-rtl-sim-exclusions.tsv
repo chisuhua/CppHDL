@@ -1,0 +1,40 @@
+# examples 的 RTL 仿真覆盖：**落选登记**（机器可读）
+#
+# ⚠️ **为什么必须有这张表**：E4 的核心风险是「**先做 10 个 ⇒ 变成永远只有 10 个**」
+#   ⇒ ⇒ 「没做」必须**留痕**：谁没做、为什么、什么条件下归位。
+#
+# ⚠️ **单一真相** = 本表（**机器可读**）⇒ ⇒ 散文版（`.rddf/checks/examples-rtl-sim-exclusions.md`）
+#   只保留**入选准则 / 首批未覆盖项 / 墙钟实测**，落选名单**只在这里**。
+#
+# ⚠️ **守恒判据** = `scripts/verify_examples_rtl_sim_coverage.sh` ①：
+#   `CH_TRACKED_EXAMPLE_TARGETS`（**28**）== 覆盖（**10**：`kind ∈ {target, soc}`）
+#   ∪ 落选（**18** = 本表行数）⇒ ⇒ 且三者互斥 ⇒ ⇒ 「新增即漏」即红。
+#
+# 列：
+# · `target`            —— 被跟踪的 example target 名（权威 = `examples/CMakeLists.txt` 的
+#                          `CH_TRACKED_EXAMPLE_TARGETS`）⇒ ⇒ 本表**只登记没做的**
+# · `category`          —— 语义类别（组合 / 时序 / 流控 / 总线 / CPU / 框架自身 / 阶段回归）
+# · `reason`            —— 落选理由（**有据**：类别覆盖 / 期望源面 / 规模 / 非被测设计）
+#                          ⇒ ⇒ MUST 非空
+# · `return_condition`  —— 归位条件（什么条件下补做）⇒ ⇒ MUST 非空
+#
+# ⚠️ **落选 ≠ 不做**：本表是「这批不做」的登记，**不是**永久排除。
+#COLUMNS: target category reason return_condition
+spi_controller_example	时序状态机	类别已覆盖（uart_tx / uart_rx 同为时序 FSM）· 且它是 SPI 主控 + 完整帧协议（源码头注释）⇒ ⇒ 期望源面比 UART 大	首批扩到第二批时补（协议面独立 ⇒ ⇒ 需单独推导帧格式）
+i2c_controller_example	时序状态机	同上 · 源码头自述「简化验证版」⇒ ⇒ 其行为不是完整 I2C ⇒ ⇒ 按它写期望源会把「简化」固化成契约	若该 example 被补成完整 I2C（START/STOP + ACK）后再补 TB
+ws2812_controller_example	时序（LED 编码）	类别已覆盖（时序 FSM）· 且 WS2812B 的位时序 + 颜色打包是另一套外部协议 ⇒ ⇒ 期望源需另推	第二批（与 samples/ 的独立立项一起评估）
+vga_controller_example	时序（640x480@60Hz）	类别已覆盖 + 规模大（整帧时序生成 ⇒ ⇒ 违反准则 ④「编译 ≲ 10 s」）⇒ ⇒ 编译成本会挤占 CI 墙钟	需要单独测墙钟预算后再评估
+timer_example	时序（预分频 + reload）	类别已覆盖（时序）· 且它的语义已被 quadrature_encoder（计数/相位）部分覆盖	一般不补（增量收益低）
+sigma_delta_dac_example	组合 + 滤波器	类别已覆盖（组合）· 且 σ-Δ 的判据本质是噪声/精度统计 ⇒ ⇒ 不适合「离散拍级」断言	若要补 ⇒ ⇒ 需另立「统计型判据」的规范口径
+width_adapter_example	流控（4×8→32 位拼接）	类别已覆盖（流控：fifo_stream）· 语义面最窄（一个移位寄存器）⇒ ⇒ 边际收益最低	一般不补
+assert_example	框架自身	它验证的是断言机制（源码头：「断言系统使用示例」）⇒ ⇒ 不是「被测设计」⇒ ⇒ RTL 侧的期望源是框架语义而非设计语义	若断言机制需要独立 RTL 面 ⇒ ⇒ 另立立项
+axi4_full_example	总线（AXI4 Full）	AXI4-Lite 已被 axi4_lite 覆盖；Full 的 burst / 拆包 / DECERR 语义由独立 capability axi4-full-slave-burst 承载 ⇒ ⇒ 期望源面显著更大 ⇒ ⇒ 首批准备不足	待 axi4-full-slave-burst 的判据口径稳定后补
+phase1c_test	多组件拼装（Phase 1c 组合）	类别已覆盖（组合 counter + 流控 fifo_stream）· 且它是阶段回归集（非单一被测设计）⇒ ⇒ RTL 侧需要一个「跨组件拼装」的独立期望源	若将来要把「多组件拼装」作为独立产品面分发 ⇒ ⇒ 补一条拼装级 TB
+stream_mux_demo	流控（多路复用 + 背压）	类别已覆盖（流控：fifo_stream）· mux 的语义由 capability chlib-stream-semantics 承载 ⇒ ⇒ 期望源面窄	若 chlib-stream-semantics 之外需要「多路复用 + 背压」的独立判据 ⇒ ⇒ 补 TB
+stream_demux_demo	流控（分发）	同上 · demux 的判据面与 mux 同源 ⇒ ⇒ 边际收益低	若 chlib-stream-semantics 之外需要「分发」的独立判据 ⇒ ⇒ 补 TB
+stream_arbiter_demo	流控（round-robin 仲裁）	仲裁语义由独立 capability chlib-stream-arbitration 承载 ⇒ ⇒ RTL 侧期望源需另推（轮转公平性）	待 chlib-stream-arbitration 的判据口径稳定后补
+stream_fork_demo	流控（扇出复制）	类别已覆盖（流控）· 且 fork 的复制语义与「同一输入多路读」同源	若需要「扇出保真」的独立拍级判据 ⇒ ⇒ 补 TB
+phase3a_complete	综合回归（AXI4 + SoC 拼装）	其子面已由 axi4_lite / axi_soc 覆盖 ⇒ ⇒ 本 target 是阶段汇总回归（非独立产品单元）⇒ ⇒ 重复覆盖的成本高于收益	若需要「端到端综合场景」的 RTL 面 ⇒ ⇒ 另立立项
+rv32i_phase1_test	流水线阶段测试（阶段 1）	它是流水线单阶段的 C++ 侧回归 ⇒ ⇒ 产品面由整 SoC（riscv-mini-rv32i-soc）承载 ⇒ ⇒ 单阶段不作为产品单元分发	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
+rv32i_phase2_test	流水线阶段测试（阶段 2）	同上	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
+rv32i_phase3_test	流水线阶段测试（阶段 3）	同上	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB

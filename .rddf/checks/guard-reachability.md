@@ -66,6 +66,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_example_assertion_quality.sh` | `build-and-test:Verify example assertion quality`, `pr-verilator-fast:Verify example assertion quality` | `none` | — |
 | `scripts/verify_example_test_wiring.sh` | `build-and-test:Verify example test wiring`, `pr-verilator-fast:Verify example test wiring` | `none` | — |
 | `scripts/verify_examples_rtl_sim.sh` | `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB)` | `gate-event-only` | — |
+| `scripts/verify_examples_rtl_sim_coverage.sh` | `build-and-test:Verify examples RTL sim coverage registration`, `build-and-test:Verify examples RTL sim coverage registration (self-test)` | `none` | — |
 | `scripts/verify_verilator_pch.sh` | `pr-verilator-fast:Verify verilator PCH toolchain (split-capable models)`, `pr-verilator-fast:Verify verilator PCH toolchain (self-test)` | `gate-event-only` | — |
 | `scripts/verify_flat_rtl_emit.sh` | `build-and-test:Verify flat RTL emit products`, `build-and-test:Verify flat RTL emit products (self-test)`, `pr-verilator-fast:Verify flat RTL emit products (verilator required)`, `pr-verilator-fast:Verify flat RTL emit products (self-test)`, `nightly-verilator:Verify flat RTL emit products (verilator required)`, `nightly-verilator:Verify flat RTL emit products (self-test)` | `gate-event-only` | — |
 | `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)` | `none` | — |
