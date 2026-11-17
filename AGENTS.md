@@ -73,6 +73,7 @@ CppHDL/
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
 | 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|
+| **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端） | 验证源 DSL = `examples/axi4/tb_axi4_lite_example.verif` · 库层 = `include/rtl_emit/verif.h`（`src/rtl_emit/verif_{scan,run,render}.cpp`）· 判据用例 = `tests/test_verif_single_source.cpp` · 护栏 = `scripts/verify_examples_rtl_sim.sh`（⑥ 等式 / ⑥' 新鲜度 / ⑥'' 双向键 / ⑥⁗ 三方一致）|
 | **RV32I 核的 RTL 交付 + Verilator 仿真环境** | 设计与环境指南 = `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · **一条命令跑通** = `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）· 发射器 = `examples/riscv-mini/emit_rtl.cpp`（扁平）+ `emit_rtl_hier.cpp`（层次化）· 独立 TB = `examples/riscv-mini/tb_rv32i_soc.sv`（两形态**共用**）|
 | 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | 公共 API = `include/hierarchy_equivalence.h`（`ch::hier_eq`）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
@@ -488,7 +489,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 266
+- CTEST_TOTAL: 268
      ⚠️ **B1 批（N1 + P1 + C4/C3 manifest + C6 产物卫生）** —— `test_port_name_named_ctor`
      + `test_port_name_parity` + `test_rtl_manifest` + `test_rtl_emit_hygiene` 四个新增
      ⇒ ⇒ 由 **257** 增至 **261**（+4）⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**

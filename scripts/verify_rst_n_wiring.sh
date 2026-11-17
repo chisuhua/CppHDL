@@ -98,6 +98,25 @@ if [ -z "$COMPONENTS_W_RST_N" ]; then
   exit 1
 fi
 
+# ⚠️ **新的「测试台级驱动」形态**：`.verif` **验证源**（`rtl-verification-single-source`
+#   · ADR-074）—— 验证源本身就是新的测试台 ⇒ ⇒ 它对 `rst_n` 的 `SET` **就是**
+#   「测试台级驱动」⇒ ⇒ 引用该验证源的文件**算**驱动了该端口。
+#   ⚠️ 解析方式：文件里出现的 `.verif` **basename** ⇒ ⇒ 在仓内按 basename 找
+#   （验证源路径在测试里常是**运行期拼出来**的 ⇒ ⇒ 只能按 basename 定位）。
+verif_drives() { # $1 = 源文件；$2 = 端口名
+    local f="$1" port="$2" v base cand
+    for v in $(grep -oE '[A-Za-z0-9_.-]+\.verif' "$f" 2>/dev/null | sort -u); do
+        base="$v"
+        while read -r cand; do
+            [ -n "$cand" ] || continue
+            if grep -qE "^[[:space:]]*SET[[:space:]]+${port}[[:space:]]" "$cand"; then
+                return 0
+            fi
+        done < <(find "$REPO_ROOT" -name "$base" -type f 2>/dev/null)
+    done
+    return 1
+}
+
 # True if the component set is mentioned anywhere in the file.
 comp_mentioned() {
   awk -v comps="$COMPONENTS_W_RST_N" '
@@ -123,7 +142,12 @@ violations=0
 for f in $(scan_files); do
   # ---- R1 + R3 -----------------------------------------------------------
   base=$(basename "$f")
-  out=$(awk -v comps="$COMPONENTS_W_RST_N" -v base="$base" '
+  # ⚠️ 本文件是否通过 `.verif` 验证源驱动 `rst_n`（见 `verif_drives()` 的口径）
+  vdrive=0
+  if verif_drives "$f" rst_n; then
+    vdrive=1
+  fi
+  out=$(awk -v comps="$COMPONENTS_W_RST_N" -v base="$base" -v vdrive="$vdrive" '
     function has_comp(s,   i, c, n, arr) {
         n = split(comps, arr, " ")
         for (i = 1; i <= n; i++) {
@@ -158,7 +182,7 @@ for f in $(scan_files); do
         # a test case simulates when it constructs a Simulator, or when it
         # uses the DUAL_BACKEND_TEST_PAIR macro (which builds one)
         has_sim   = (block ~ /Simulator[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/) || (block_is_macro == 1)
-        has_drive = (block ~ /set_input_value\([^;]*rst_n/) || calls_driver(block)
+        has_drive = (block ~ /set_input_value\([^;]*rst_n/) || calls_driver(block) || (vdrive == 1)
         if (!optout && has_comp_or_alias(block) && has_dev && has_sim && !has_drive) {
             printf("VIOLATION\t%s\t%s\n", FILENAME, tcname)
         }
@@ -220,7 +244,7 @@ for f in $(scan_files); do
         w_comp   = has_comp_or_alias(whole)
         w_dev    = (whole ~ /ch_device|ch_module|DUAL_BACKEND_TEST/)
         w_sim    = (whole ~ /Simulator[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/)
-        w_drive  = (whole ~ /set_input_value\([^;]*rst_n/)
+        w_drive  = (whole ~ /set_input_value\([^;]*rst_n/) || (vdrive == 1)
         if (!optout && w_comp && w_dev && w_sim && !w_drive) {
             printf("VIOLATION_FILE\t%s\t-\n", FILENAME)
         }

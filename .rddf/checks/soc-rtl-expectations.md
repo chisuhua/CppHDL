@@ -17,40 +17,39 @@
 - **复位释放 MUST 在 `negedge`** —— 在 `posedge` 同一时刻（0 delta）拉低 `rst` ⇒ 该沿的
   `always_ff` 会采到**新的** `rst` 值 ⇒ 复位拍被吃掉（实测：手推 1、实测 2）。
 - **采样时机**：`@(posedge clk); #1;` ⇒ 读的是沿**后**的值。
-- ⚠️ **顶层端口名是 `top_unnamed_input_N` / `top_unnamed_output_N`** ⇒ **无语义**
-  （根 `__io` 用 legacy 未具名声明 ⇒ manifest 的 `cpp_member` 是占位符 `unnamed_input`）
-  ⇒ ⇒ **本文件的端口映射表就是那张对照表**（ADR-073 D6 的设计意图）。
+- ⚠️ **顶层端口已具名**（ADR-075 · 2026-11-17）⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`
+  ⇒ ⇒ **无语义编号 ⇒ 不再需要「按位宽序列反推编号」那张对照表**
+  ⇒ ⇒ 下面的映射表改为**直接登记**（成员名 → 产物端口名）。
 
 ---
 
 ## axi_soc_example {#soc-example}
 
-### 1. 顶层端口映射表（**14** 个 = 框架 2 + 根自有 12）
+### 1. 顶层端口表（**14** 个 = 框架 2 + 根自有 12）
 
-⚠️ **映射的推导依据**：① 根 `__io` 的**声明顺序**（= 端口创建顺序 = 产物里的发射顺序）
-② **位宽序列唯一确定**（8 个输入里只有 `addr`/`wdata` 是 32 位、只有 `gpio_in` 是 8 位、
-其余皆 1 位 ⇒ 顺序**不可歧义**）③ **产物侧复核**（`top.v` 的 `module top` 端口表逐条位宽一致）。
-⇒ ⇒ **不是猜编号**。
+⚠️ **口径（2026-11-17 · ADR-075）**：根 `__io` 的 12 个端口**全部具名**
+⇒ ⇒ 产物端口名 = `top_<C++ 成员名>` ⇒ ⇒ **不需要**「按声明顺序 + 位宽序列反推编号」
+⇒ ⇒ 下表是**直接登记**（权威 = `manifest.port_table[]`，与产物端口表**同源**）。
 
 | # | 产物端口名 | 方向 | 位宽 | C++ 成员（根 `__io`） | 语义 |
 |---|---|---|---|---|---|
 | 1 | `default_clock` | in | 1 | （框架注入） | 时钟 |
 | 2 | `default_reset` | in | 1 | （框架注入） | 复位（高有效） |
-| 3 | `top_unnamed_input` | in | 1 | `start` | 启动一笔事务 |
-| 4 | `top_unnamed_input_1` | in | 1 | `write` | 1=写 · 0=读 |
-| 5 | `top_unnamed_input_2` | in | 32 | `addr` | 事务地址 |
-| 6 | `top_unnamed_input_3` | in | 32 | `wdata` | 写数据 |
-| 7 | `top_unnamed_input_4` | in | 1 | `rst_n` | **AXI 级低有效**复位（透传给 gpio/matrix/uart） |
-| 8 | `top_unnamed_input_5` | in | 8 | `gpio_in` | GPIO 外部输入 |
-| 9 | `top_unnamed_input_6` | in | 1 | `uart_rx` | UART 接收（**空闲高**） |
-| 10 | `top_unnamed_input_7` | in | 1 | `timer_irq` | **零消费死端口**（ADR-073 事实⑭）⇒ TB 须接 `0` |
-| 11 | `top_unnamed_output` | out | 32 | `rdata` | 读数据 |
-| 12 | `top_unnamed_output_1` | out | 1 | `done` | 完成标志 ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
-| 13 | `top_unnamed_output_2` | out | 8 | `gpio_out` | GPIO 输出 |
-| 14 | `top_unnamed_output_3` | out | 1 | `uart_tx` | UART 发送（**空闲高**） |
+| 3 | `top_start` | in | 1 | `start` | 启动一笔事务 |
+| 4 | `top_write` | in | 1 | `write` | 1=写 · 0=读 |
+| 5 | `top_addr` | in | 32 | `addr` | 事务地址 |
+| 6 | `top_wdata` | in | 32 | `wdata` | 写数据 |
+| 7 | `top_rst_n` | in | 1 | `rst_n` | **AXI 级低有效**复位（透传给 gpio/matrix/uart） |
+| 8 | `top_gpio_in` | in | 8 | `gpio_in` | GPIO 外部输入 |
+| 9 | `top_uart_rx` | in | 1 | `uart_rx` | UART 接收（**空闲高**） |
+| 10 | `top_timer_irq` | in | 1 | `timer_irq` | **零消费死端口**（ADR-073 事实⑭）⇒ TB 须接 `0` |
+| 11 | `top_rdata` | out | 32 | `rdata` | 读数据 |
+| 12 | `top_done` | out | 1 | `done` | 完成标志 ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
+| 13 | `top_gpio_out` | out | 8 | `gpio_out` | GPIO 输出 |
+| 14 | `top_uart_tx` | out | 1 | `uart_tx` | UART 发送（**空闲高**） |
 
 ⚠️ **14 个端口 MUST 全部连接**（否则严格 flags 下 `%Warning-PINMISSING` **致命** ——
-仓内实证 `examples/axi4/tb_axi4_lite_example.sv:33-34`）。
+仓内实证）。
 
 ### 2. 冻结的产物 module 期望集（**手推** · 禁从成层声明处派生）
 

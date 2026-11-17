@@ -40,6 +40,40 @@ cd "$REPO_ROOT"
 # ⚠️ 三份源文件都可被 env 覆盖 ⇒ ⇒ `--self-test` 能在**副本**上投毒（零风险）
 EXAMPLES_CMAKE="${EXAMPLES_CMAKE:-examples/CMakeLists.txt}"
 TARGETS_TSV="${RTL_SIM_TARGETS_TSV:-.rddf/checks/examples-rtl-sim-targets.tsv}"
+
+# ⚠️ **列号 MUST 从机器可读表头推导**（清单自己的 `#COLUMNS:` 规则）
+#   ⇒ ⇒ 清单增删列时，本脚本**不会**静默指向别的列
+#   ⇒ ⇒ （2026-11-17：`rtl-verification-single-source` 在 `status` 之后插了
+#   ⇒ ⇒  `generated` 列 ⇒ ⇒ 硬编码的 `NF != 11` 与 `$10` 立刻失效 ⇒ ⇒ 必须推导）
+TSV_COLS=""
+TSV_NCOLS=0
+tsv_colidx() { # $1 = 列名 ⇒ 1-based 列号（未命中 ⇒ 1 且返回 1）
+    local i=0 c
+    for c in $TSV_COLS; do
+        i=$((i + 1))
+        if [ "$c" = "$1" ]; then
+            echo "$i"
+            return 0
+        fi
+    done
+    echo 1
+    return 1
+}
+load_tsv_columns() {
+    local line
+    line="$(grep -m1 '^#COLUMNS:' "$TARGETS_TSV" 2>/dev/null || true)"
+    if [ -z "$line" ]; then
+        echo "${RED}ERROR: $TARGETS_TSV 缺 \`#COLUMNS\` 机器可读表头 ⇒ 无法推导列号${NC}" >&2
+        return 1
+    fi
+    TSV_COLS="$(printf '%s' "${line#*#COLUMNS:}" | tr -s '[:space:]' ' ')"
+    TSV_NCOLS="$(printf '%s' "$TSV_COLS" | wc -w | tr -d ' ')"
+    return 0
+}
+load_tsv_columns || exit 2
+C_TARGET="$(tsv_colidx target)"
+C_KIND="$(tsv_colidx kind)"
+C_SPEC="$(tsv_colidx spec_checks)"
 EXCLUSIONS_TSV="${RTL_SIM_EXCLUSIONS_TSV:-.rddf/checks/examples-rtl-sim-exclusions.tsv}"
 
 SELF_TEST=0
@@ -77,7 +111,8 @@ tracked="$(sed -n '/set(CH_TRACKED_EXAMPLE_TARGETS/,/^)/p' "$EXAMPLES_CMAKE" \
     | sed -n 's/^    \([A-Za-z0-9_]\{1,\}\)$/\1/p' | sort -u)"
 # 覆盖表：`kind ∈ {target, soc}` 才是「已做 RTL 仿真」的产品单元
 # （`kind=dut` 是 test DUT ⇒ 不是被跟踪 target ⇒ 不进守恒等式）
-covered_all="$(awk -F'\t' '!/^#/ && NF >= 2 && ($2 == "target" || $2 == "soc") {print $1}' "$TARGETS_TSV" | sort -u)"
+covered_all="$(awk -F'\t' -v ck="$C_KIND" -v ct="$C_TARGET" \
+    '!/^#/ && NF >= 2 && ($ck == "target" || $ck == "soc") {print $ct}' "$TARGETS_TSV" | sort -u)"
 excluded="$(awk -F'\t' '!/^#/ && NF >= 1 && $1 != "" {print $1}' "$EXCLUSIONS_TSV" | sort -u)"
 
 if [ -z "$tracked" ] || [ -z "$covered_all" ] || [ -z "$excluded" ]; then
@@ -124,17 +159,18 @@ else
 fi
 
 # ── ③ 列纯度 ──────────────────────────────────────────────────────
-info "③ 列纯度：覆盖表每行 MUST 是 11 列且 spec_checks MUST 是裸整数"
-bad_cols="$(awk -F'\t' '!/^#/ && NF > 0 {
-    if (NF != 11) { printf "%s(列数=%d)\n", $1, NF; next }
-    if ($10 !~ /^[0-9]+$/) { printf "%s(spec_checks=%s)\n", $1, $10 }
-}' "$TARGETS_TSV")"
+info "③ 列纯度：覆盖表每行 MUST 是 ${TSV_NCOLS} 列且 spec_checks MUST 是裸整数"
+bad_cols="$(awk -F'\t' -v want="$TSV_NCOLS" -v cspec="$C_SPEC" -v ctarget="$C_TARGET" '
+    !/^#/ && NF > 0 {
+        if (NF != want) { printf "%s(列数=%d)\n", $ctarget, NF; next }
+        if ($cspec !~ /^[0-9]+$/) { printf "%s(spec_checks=%s)\n", $ctarget, $cspec }
+    }' "$TARGETS_TSV")"
 if [ -n "$bad_cols" ]; then
     fail "③ 覆盖表的列不纯：$(printf '%s' "$bad_cols" | tr '\n' ' ')⇒ ⇒ 护栏 ②'' 判据会静默失效"
 else
-    ok "③ 覆盖表列纯（11 列 · spec_checks 全为整数）"
+    ok "③ 覆盖表列纯（${TSV_NCOLS} 列 · spec_checks 全为整数）"
 fi
-dupes="$(awk -F'\t' '!/^#/ && NF > 0 {print $1}' "$TARGETS_TSV" | sort | uniq -d)"
+dupes="$(awk -F'\t' -v ct="$C_TARGET" '!/^#/ && NF > 0 {print $ct}' "$TARGETS_TSV" | sort | uniq -d)"
 if [ -n "$dupes" ]; then
     fail "③ 覆盖表有重复 target 行：$(printf '%s' "$dupes" | tr '\n' ' ')"
 else
@@ -190,7 +226,8 @@ if [ "$SELF_TEST" -eq 1 ]; then
 
     # 投毒 ③：给数值列塞散文 ⇒ ⇒ 列纯度必红
     cp "$TARGETS_TSV" "$WORK/targets.tsv"
-    awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && NF > 0 && $1 == "uart_tx_example" {$10=$10" · 散文"; print; next} {print}' \
+    awk -F'\t' -v cspec="$C_SPEC" -v ct="$C_TARGET" \
+        'BEGIN{OFS="\t"} !/^#/ && NF > 0 && $ct == "uart_tx_example" {$cspec=$cspec" · 散文"; print; next} {print}' \
         "$TARGETS_TSV" >"$WORK/targets.tsv"
     if run_poisoned; then
         fail "④ 投毒 ③（给 spec_checks 塞散文）⇒ 判据仍绿 ⇒ ⇒ 判据 ③ 无判别力"

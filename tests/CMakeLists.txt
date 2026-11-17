@@ -1124,6 +1124,19 @@ add_catch_test(test_rtl_tb_stub test_rtl_tb_stub.cpp)
 # ⚠️ 需要 `build/tools/cpphdl-emit-rtl` 与 verilator（缺失 ⇒ SKIP，不静默通过）
 add_catch_test(test_rtl_emit_contract test_rtl_emit_contract.cpp)
 
+# RTL 验证的**单一真相源**（`rtl-verification-single-source` · ADR-074）
+# ⚠️ 覆盖扫描器 fail-closed + REPEAT 扫描期展开 + **IR 解释器**跑通仓内 axi4 验证源
+#   ⇒ ⇒ 「两个执行后端共享一份语义」的解释器侧证据（渲染侧由
+#   `scripts/verify_examples_rtl_sim.sh` 的 ⑤/⑥ 跑真产物负责）。
+add_catch_test(test_verif_single_source test_verif_single_source.cpp)
+
+# `AxiLiteTestMaster` 的**直接**判别性用例（`input-port-required-registry` R2/R3）
+# ⚠️ 该组件声明了 `rst_n`（永久复位类端口）⇒ ⇒ MUST 登记 ⇒ ⇒ 登记行 MUST 有
+#   **实例化**它的文件 ⇒ ⇒ 它此前只作为 `AxiSocTop` 的成层子组件存在 ⇒ ⇒ 补上。
+add_catch_test(test_axi_lite_test_master test_axi_lite_test_master.cpp)
+target_compile_definitions(test_verif_single_source PRIVATE
+    CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+
 # component ownership (hierarchical RTL T3-①b): construction scope stack, member
 # ch_module parent/ctx, cross-ctx guard, deferred child build, io.h direction guards
 add_catch_test(test_component_ownership test_component_ownership.cpp)

@@ -1,3 +1,56 @@
+## 2026-11-17 — **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端 · AXI4 示例改造）
+
+**问题**：examples 的 RTL 验证有**三组重复载体** —— ① 期望值（`.rddf/checks/*.md` 的散文 +
+TB 里的字面量 + C++ 侧的断言各写一遍）② 端口身份（TB 里**手写**端口映射表，靠「按编号反推」
+才能连对 —— 实测踩过「awaddr/wdata 互换 ⇒ 15 条判据误红」）③ 发射实现（`emit_rtl_soc.cpp`
+自解析命令行 + 自发射，**483 行**里约 380 行重复库层已有能力）⇒ ⇒ 需求「希望项目代码不要
+过于碎片化」直接落在这三组上。
+
+**改了什么**
+
+- **新增「验证源」`.verif`**（`include/rtl_emit/verif.h` + `src/rtl_emit/verif_{scan,run,render}.cpp`）：
+  扫描器在**生成期**把表达式全部求值成字面量（`REPEAT` 在扫描期展开、`_i` 在扫描期绑定）
+  ⇒ ⇒ **IR 里没有表达式** ⇒ ⇒ 两个执行后端**不需要各自解释表达式** ⇒ ⇒ **语义真的只有一份**
+  （① IR 解释器驱动 `Simulator`；② Verilog 渲染器生成 `.sv` TB）
+  ⚠️ 时序锚点：驱动在「沿后采样窗」内（不消耗拍），观测在「最近一次结算之后」
+  ⇒ ⇒ Verilog 侧统一 `@(posedge clk); #1;`（**禁 `#0`**）
+  ⇒ ⇒ `SET → EXPECT` **MUST** 先 `SETTLE`（扫描器**静态**强制 ⇒ 不靠人记得写）
+  ⇒ ⇒ 集合外构造 / 文法外 token / 嵌套 `REPEAT` 一律 **fail-closed**
+- `src/rtl_emit/tb_stub.cpp`：拆出 `write_tb_prelude` / `write_tb_reset_pulse` /
+  `write_tb_epilogue` ⇒ ⇒ **骨架**与**渲染式 TB** 共用同一份端口连线/时钟/复位实现
+  （防两份副本漂移）
+- `src/rtl_emit/cli.cpp`：`--emit-tb-verif <path.verif>` / `--tb-verif-out <path>`，
+  并打印机器可读的 `VERIF-CHECKS: <N>`（供护栏做三方等式）
+- `include/simulator.h` + `src/simulator.cpp`：新增 `set_value_by_node_id()` /
+  `get_value_by_node_id()`（**未命中返回 `false`/`nullopt`，绝不静默读 0**）
+- **顶层组件上提**（消「双权威」）：`AxiLiteTop` → `include/axi4/axi4_lite_example_top.h`，
+  `AxiLiteTestMaster` / `AxiSocTop` → `include/axi4/axi_soc_example_top.h`
+  ⇒ ⇒ `tests/test_axi_lite_verilator_e2e.cpp` 不再**复制**一份 `AxiLiteTop`
+- **32 个顶层端口具名**（ADR-075）：`AxiLiteTop` 20 个 + `AxiSocTop` 12 个
+  ⇒ ⇒ 产物端口名由 `top_unnamed_input_N` 改为 `top_<C++ 成员名>`
+  ⇒ ⇒ 豁免表 `1447 → 1415`（`AxiLiteTestMaster` 的 23 个成层端口**不在**本次范围）
+- `examples/axi4/tb_axi4_lite_example.sv` 改为**由 `.verif` 生成**（`generated=yes`）
+  ⇒ ⇒ 端口连线来自 `manifest.port_table[]` ⇒ ⇒ **无手写映射表**
+  ⇒ ⇒ 实测 `RESULT: checks=113 fails=0`（Verilator）· 解释器侧 `fails=0`（同一份 IR）
+- `examples/axi4/emit_rtl_soc.cpp` 483 → 330 行：公共发射路径（解析 / 发射 / manifest /
+  诊断 fail-closed）全部走**库层 `run_emit_cli`**（`--hierarchical`）⇒ ⇒ 只保留
+  **SoC 专属**的 `--check-products`（冻结 module 集 / 顶层端口数 / 双形态逐拍等价 —— 都是
+  **设计专属**期望值，按 ADR-074「不覆盖」条不下沉库层）
+- `scripts/verify_examples_rtl_sim.sh`：① 列号**从 `#COLUMNS:` 推导**（禁位置绑定 ——
+  中间插列会静默错列）② ⑥ 由**下界**改为**等式**（`.md` 登记 == `.verif` 静态展开 == 运行期）
+  ③ 新增 **⑥'** 生成物新鲜度（逐字节重生成比对）**⑥''** 期望源锚点 ↔ 验证源 scenario
+  **双向 1:1** **⑥‴** TB 无 TODO 残留 + 每行断言带 `check_id` **⑥⁗** 生成覆盖度三方一致
+  **⑧''** TB 可判定为生成物 ④ `--self-test` 8 → **13 条投毒**（新增 5 条各自必红）
+- `.rddf/checks/examples-rtl-sim-targets.tsv`：新增 `generated` 列；`min_checks` 语义改为等式
+- `.rddf/checks/examples-rtl-expectations.md`：`axi4-lite-example` 段新增 7 个
+  `#### scenario:` 锚点（与 `.verif` 的 `@scenario` 双向 1:1）
+- 新增 `tests/test_verif_single_source.cpp`（7 用例 / 33 断言）：扫描器 fail-closed +
+  `REPEAT` 扫描期展开 + **IR 解释器**跑通仓内真实验证源
+
+**⚠️ 已知未覆盖**：`examples/axi4/tb_axi_soc_example.sv` 仍是**手写** TB
+（清单 `generated=no` + 具体原因）—— UART 8N1 帧解码需要「逐拍采样成数组 + 首个低电平
+定位 + 变长位偏移」，**封闭原语集无此构造** ⇒ ⇒ 不硬塞进 DSL。
+
 ## 2026-11-17 — **RV32I 核的 RTL 交付 + Verilator 仿真环境**（一条命令跑通）
 
 **背景**：层次化进产品面后，用户侧仍缺两件东西 —— ① 一份说清「RV32I 核的 RTL 产物长什么样」

@@ -39,6 +39,7 @@
 #include <sys/stat.h>
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
+#include "axi4/axi4_lite_example_top.h"
 #include "axi4/axi4_lite_slave.h"
 #include "component.h"
 #include "core/context.h"
@@ -49,6 +50,7 @@
 using namespace ch;
 using namespace ch::core;
 using namespace axi4;
+using axi4::example::AxiLiteTop;
 
 namespace {
 
@@ -71,75 +73,6 @@ std::string make_temp_dir(const std::string &suffix) {
 // Minimal AxiLiteTop fixture. Mirrors examples/axi4/axi4_lite_example.cpp's
 // AxiLiteTop but strips VcdRecorder / Axi4TimingChecker (those are
 // interpreter-only instrumentation; the backend path doesn't need VCD).
-class AxiLiteTop : public ch::Component {
-public:
-    __io(
-        ch_in<ch_uint<32>> awaddr;
-        ch_in<ch_uint<2>>  awprot;
-        ch_in<ch_bool>     awvalid;
-        ch_out<ch_bool>    awready;
-
-        ch_in<ch_uint<32>> wdata;
-        ch_in<ch_uint<4>>  wstrb;
-        ch_in<ch_bool>     wvalid;
-        ch_out<ch_bool>    wready;
-
-        ch_out<ch_uint<2>> bresp;
-        ch_out<ch_bool>    bvalid;
-        ch_in<ch_bool>     bready;
-
-        ch_in<ch_uint<32>> araddr;
-        ch_in<ch_uint<2>>  arprot;
-        ch_in<ch_bool>     arvalid;
-        ch_out<ch_bool>    arready;
-
-        ch_out<ch_uint<32>> rdata;
-        ch_out<ch_uint<2>>  rresp;
-        ch_out<ch_bool>     rvalid;
-        ch_in<ch_bool>      rready;
-
-        // 复位（低有效，在时钟沿生效）—— AxiLiteSlave 的必需端口
-        ch_in<ch_bool>      rst_n;
-    )
-
-    AxiLiteTop(ch::Component *parent = nullptr,
-               const std::string &name = "axi_top")
-        : ch::Component(parent, name) {}
-
-    void create_ports() override {
-        new (io_storage_) io_type;
-    }
-
-    void describe() override {
-        ch::ch_module<AxiLiteSlave<32, 32, 4>> slave{"slave"};
-
-        slave.io().awaddr  <<= io().awaddr;
-        slave.io().awprot  <<= io().awprot;
-        slave.io().awvalid <<= io().awvalid;
-        io().awready       <<= slave.io().awready;
-
-        slave.io().wdata <<= io().wdata;
-        slave.io().wstrb <<= io().wstrb;
-        slave.io().wvalid <<= io().wvalid;
-        io().wready       <<= slave.io().wready;
-
-        io().bresp        <<= slave.io().bresp;
-        io().bvalid       <<= slave.io().bvalid;
-        slave.io().bready <<= io().bready;
-
-        slave.io().araddr  <<= io().araddr;
-        slave.io().arprot  <<= io().arprot;
-        slave.io().arvalid <<= io().arvalid;
-        io().arready       <<= slave.io().arready;
-
-        io().rdata  <<= slave.io().rdata;
-        io().rresp  <<= slave.io().rresp;
-        io().rvalid <<= slave.io().rvalid;
-        slave.io().rready <<= io().rready;
-
-        slave.io().rst_n <<= io().rst_n;
-    }
-};
 
 // Read output port via data_map_ (per test_verilator_e2e_harness.cpp pattern:
 // static_cast<uint64_t>(it->second), NOT ch_uint::operator uint64_t).

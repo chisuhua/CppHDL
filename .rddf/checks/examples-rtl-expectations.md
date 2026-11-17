@@ -492,14 +492,16 @@ demo 的测试值已改为 **0x4B**（非回文）⇒ ⇒ 实测：重新注入�
 | 部分字节写（`wstrb`=0b0011） | spec-derived | 只改低 2 字节（`0x11223344` ⇒ `0x1122CCDD`） |
 | 空写（`wstrb`=0） | spec-derived | 响应仍 OKAY 且寄存器**不变** |
 
-### ⚠️ **端口映射 MUST 以产物为准**（本 TB 的第一课）
+### ⚠️ **端口映射 MUST 以产物为准**（本 TB 的第一课 · 2026-11-17 起**已消解**）
 
-axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的顺序 ⇒
-本例与 `__io` 声明顺序一致（`awaddr`=`top_unnamed_input` · `wdata`=`top_unnamed_input_3` …）
-⇒ ⇒ **但不能靠猜**：TB 首版把 `awaddr`/`wdata` **互换** ⇒ ⇒ 15 个判据全红
-⇒ ⇒ **差点误判成「实现缺陷」** ⇒ ⇒ 幸好先读了产物的寄存器/多路器链才定位到是 TB 自己写错。
-⇒ ⇒ 判据：顶层输入编号 **由 `describe()` 首次引用顺序**决定；`awvalid`/`wvalid` 的位置
-已由产物里的 `awready`/`wready` 两条链**独立印证**。
+axi4 example 此前顶层输入**编号** = 组件 `describe()` 里**首次引用**的顺序 ⇒
+TB 首版把 `awaddr`/`wdata` **互换** ⇒ ⇒ 15 个判据全红 ⇒ ⇒ 差点误判成「实现缺陷」
+⇒ ⇒ 幸好先读了产物的寄存器/多路器链才定位到是 TB 自己写错。
+
+⇒ ⇒ **2026-11-17 起该坑已消解**（ADR-075）：`AxiLiteTop` 的 20 个顶层端口**全部具名**
+⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`（`top_awaddr` / `top_wdata` / …）
+⇒ ⇒ TB 的连线**按名**写，不再依赖「编号 + 位宽序列反推」⇒ ⇒ 「猜错」这一类缺陷**不可能**再发生。
+⇒ ⇒ ⚠️ 而**期望值仍 MUST 手推**（端口名可解析 ≠ 期望值可抄 ⇒ 两者无关）。
 
 ### 变异自证（对 DUT 变异 ⇒ TB MUST 转红）
 
@@ -516,6 +518,55 @@ axi4 example 的顶层输入编号 = 组件 `describe()` 里**首次引用**的�
 ⇒ ⇒ 坏 DUT **快速失败**。
 ⚠️ **有界等待 MUST 用 do-while**（不能用 `for`）：`for` 的条件在**边沿之前**求值
 ⇒ 组合 ready 时**一次边沿都不走** ⇒ 握手不会发生 ⇒ ⇒ 实测直接踩到（9 个判据误红）。
+
+### 验证源（`.verif` · 单一语义来源 · 2026-11-17）
+
+**断言条数（人工登记）= 113** ⇒ ⇒ 三方等式：本行 == `tb_axi4_lite_example.verif` 的
+静态展开（`EXPECT`+`WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 113
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `bringup_and_low_active_reset` | 「低有效复位」行 + 「复位清零」行 |
+| `aw_w_phase_split_and_addr_latch` | 「AW/W 相位分离」+「锁存地址」行 |
+| `write_read_roundtrip` | 「写 4 个寄存器后读回」（**metamorphic**） |
+| `unmapped_addr_decerr` | 「写/读 0x10（窗口外）」行 |
+| `bvalid_hold_until_bready` | 「不拉 BREADY ⇒ `bvalid`」+「`awready` 仍为 0」行 |
+| `rvalid_hold_until_rready` | 「不拉 RREADY ⇒ `rvalid`」+「`arready` 仍为 0」行 |
+| `wstrb_byte_lanes` | 「部分字节写」+「空写」行 |
+
+#### scenario: bringup_and_low_active_reset
+
+期望值见上表第 1 行的两条判据（均为 **spec-derived**）。
+
+#### scenario: aw_w_phase_split_and_addr_latch
+
+期望值见上表第 2 行的两条判据（**spec-derived**）。
+
+#### scenario: write_read_roundtrip
+
+**metamorphic**：写入什么就读回什么（相对判据 ⇒ 不锁死绝对值）。
+
+#### scenario: unmapped_addr_decerr
+
+写/读 `0x10`（窗口外）⇒ 响应 `2'b11`；读数据 MUST NOT 呈现别的寄存器值。
+
+#### scenario: bvalid_hold_until_bready
+
+不拉 `BREADY` ⇒ `bvalid` 跨周期保持 1，且 `awready` 保持 0；握手后清除。
+
+#### scenario: rvalid_hold_until_rready
+
+不拉 `RREADY` ⇒ `rvalid` 跨周期保持 1，且 `arready` 保持 0；握手后清除。
+
+#### scenario: wstrb_byte_lanes
+
+`wstrb`=0b0011 ⇒ 只改低 2 字节（`0x11223344` ⇒ `0x1122CCDD`）；`wstrb`=0 ⇒ 不变但响应仍 OKAY。
 
 ## riscv-mini-rv32i-soc {#riscv-mini-rv32i-soc}
 

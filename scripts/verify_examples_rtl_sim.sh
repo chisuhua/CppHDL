@@ -95,6 +95,67 @@ VERILATOR="$(find_verilator || true)"
 
 data_rows() { grep -vE '^[[:space:]]*(#|$)' "$LIST"; }
 
+# ── 列号 MUST 从 `#COLUMNS:` 表头推导（清单自己的规则）─────────────────
+# ⚠️ 2026-11-17（`rtl-verification-single-source`）：旧实现按**位置**绑定
+#   （`read -r a b c … note`）⇒ ⇒ 清单中间插入一列会**静默错列**（末列吸收剩余字段）
+#   ⇒ ⇒ 「看起来还在跑，实际读错了列」⇒ ⇒ 这正是清单自己的 `#COLUMNS:` 规则要防的。
+#   ⇒ ⇒ 现在：列名 → 列号（1-based），全部消费方按**名字**取字段。
+COLS=""
+load_columns() {
+    local line need
+    line="$(grep -m1 '^#COLUMNS:' "$LIST" || true)"
+    if [ -z "$line" ]; then
+        echo "::error::清单缺 \`#COLUMNS:\` 表头 ⇒ fail-closed（无法推导列号）" >&2
+        return 1
+    fi
+    COLS="$(printf '%s' "${line#*#COLUMNS:}" | tr -s '[:space:]' ' ')"
+    for need in target kind source component emitter tb status generated \
+        min_checks scenarios spec_checks note; do
+        case " $COLS " in
+        *" $need "*) ;;
+        *)
+            echo "::error::\`#COLUMNS\` 缺列 \`$need\`（实际：$COLS）" >&2
+            return 1
+            ;;
+        esac
+    done
+    return 0
+}
+
+colidx() { # $1 = 列名 ⇒ 输出 1-based 列号（未命中 ⇒ 返回 1）
+    local i=0 c
+    for c in $COLS; do
+        i=$((i + 1))
+        if [ "$c" = "$1" ]; then
+            echo "$i"
+            return 0
+        fi
+    done
+    return 1
+}
+
+load_columns || exit 2
+C_TARGET="$(colidx target)"
+C_KIND="$(colidx kind)"
+C_SRC="$(colidx source)"
+C_COMP="$(colidx component)"
+C_EMITTER="$(colidx emitter)"
+C_TB="$(colidx tb)"
+C_STATUS="$(colidx status)"
+C_GENERATED="$(colidx generated)"
+C_MINCHECKS="$(colidx min_checks)"
+C_SCENARIOS="$(colidx scenarios)"
+C_SPEC="$(colidx spec_checks)"
+C_NOTE="$(colidx note)"
+
+# 取一行（tab 分隔）里的第 N 列（1-based）
+fieldn() { # $1 = 整行；$2 = 列号
+    printf '%s' "$1" | awk -F'\t' -v n="$2" '{print $n}'
+}
+
+# 把一行拆进 `F[]`（供 check_one 按列名取字段）
+split_row() { IFS=$'\t' read -r -a F <<<"$1"; }
+
 # ⓪ 登记数守恒（**三桶** · **fail-closed**：没有锚点行也算红）
 # ⚠️ **三桶互斥**（2026-11-16 · `soc-rtl-product-and-tb-2026-11` T6）：
 #   · `kind ∈ {target, dut}` 的行数 == `REGISTERED_TARGETS`（**首批 10** 的守卫）
@@ -121,13 +182,14 @@ check_registration() {
         fail "⓪ 清单里没有 \`REGISTERED_HIER\` 锚点 ⇒ ⇒ 无法检测「层次化行被删」"
         return 1
     fi
-    n_td="$(data_rows | awk -F'\t' '$2=="target" || $2=="dut"' | wc -l | tr -d ' ')"
-    n_soc="$(data_rows | awk -F'\t' '$2=="soc"' | wc -l | tr -d ' ')"
-    n_hier="$(data_rows | awk -F'\t' '$2=="hier"' | wc -l | tr -d ' ')"
-    n_unknown="$(data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc" && $2!="hier"' | wc -l | tr -d ' ')"
+    # ⚠️ 列号**从 `#COLUMNS` 推导**（禁位置绑定）
+    n_td="$(data_rows | awk -F'\t' -v k="$C_KIND" '$k=="target" || $k=="dut"' | wc -l | tr -d ' ')"
+    n_soc="$(data_rows | awk -F'\t' -v k="$C_KIND" '$k=="soc"' | wc -l | tr -d ' ')"
+    n_hier="$(data_rows | awk -F'\t' -v k="$C_KIND" '$k=="hier"' | wc -l | tr -d ' ')"
+    n_unknown="$(data_rows | awk -F'\t' -v k="$C_KIND" '$k!="target" && $k!="dut" && $k!="soc" && $k!="hier"' | wc -l | tr -d ' ')"
     if [ "$n_unknown" -ne 0 ]; then
         fail "⓪ 有 $n_unknown 行的 \`kind\` 不属于已知集合 {target, dut, soc, hier}"
-        data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc" && $2!="hier" {print "      ::error::未知 kind ⇒ " $1 " (kind=" $2 ")"}'
+        data_rows | awk -F'\t' -v k="$C_KIND" -v n1="$C_TARGET" '$k!="target" && $k!="dut" && $k!="soc" && $k!="hier" {print "      ::error::未知 kind ⇒ " $n1 " (kind=" $k ")"}'
         return 1
     fi
     if [ "$n_td" -ne "$registered" ]; then
@@ -155,9 +217,14 @@ check_registration() {
 
 if [ "$MODE" = "list" ]; then
     echo "── 首批 examples 的 RTL 仿真清单（$LIST）"
-    printf "  %-30s %-8s %-9s %-6s %-6s %-6s %s\n" "target" "kind" "status" "minck" "scen" "spec" "tb"
-    while IFS=$'\t' read -r tgt kind src comp emitter tb status minck scen spec note; do
-        printf "  %-30s %-8s %-9s %-6s %-6s %-6s %s\n" "$tgt" "$kind" "$status" "$minck" "$scen" "$spec" "$tb"
+    printf "  %-30s %-8s %-9s %-5s %-6s %-6s %-6s %s\n" \
+        "target" "kind" "status" "gen" "minck" "scen" "spec" "tb"
+    while IFS= read -r row; do
+        split_row "$row"
+        printf "  %-30s %-8s %-9s %-5s %-6s %-6s %-6s %s\n" \
+            "${F[$((C_TARGET - 1))]}" "${F[$((C_KIND - 1))]}" "${F[$((C_STATUS - 1))]}" \
+            "${F[$((C_GENERATED - 1))]}" "${F[$((C_MINCHECKS - 1))]}" \
+            "${F[$((C_SCENARIOS - 1))]}" "${F[$((C_SPEC - 1))]}" "${F[$((C_TB - 1))]}"
     done < <(data_rows)
     echo
     echo "  （status=pending ⇒ ⇒ 尚未补齐期望源 ⇒ ⇒ **护栏判红**）"
@@ -177,7 +244,7 @@ mkdir -p "$WORK_ROOT"
 # 返回 0 = 通过；非 0 = 失败（FAILED 已累加）
 check_one() {
     local tgt="$1" kind="$2" src="$3" comp="$4" emitter="$5" tb="$6" status="$7"
-    local minck="$8" scen="$9" spec="${10}" note="${11}"
+    local gen="$8" minck="$9" scen="${10}" spec="${11}" note="${12}"
     CHECKED=$((CHECKED + 1))
     info "$tgt（$kind · $emitter · $tb）"
 
@@ -199,7 +266,9 @@ check_one() {
     fi
 
     # ② TB 存在
-    local tb_path="$REPO_ROOT/$tb"
+    # ⚠️ `RTL_SIM_TB_OVERRIDE` **仅供 `--self-test`**（生产路径恒空）：
+    #   让「TB 形态 / 残留」类判据的判别力自证**不必改动仓内 TB**。
+    local tb_path="${RTL_SIM_TB_OVERRIDE:-$REPO_ROOT/$tb}"
     if [ ! -f "$tb_path" ]; then
         fail "② TB 文件缺失：$tb（缺失 = 失败，不跳过）"
         return 1
@@ -239,6 +308,121 @@ check_one() {
     #   ⇒ ⇒ 不硬判是因为 `gpio_example` 的上游偏离**待裁决**（不能因裁决未定就阻塞）
     if [ "$status" = "verified" ] && [ "$spec" -lt 3 ]; then
         echo "  [0;33m⚠️  ②'' spec_checks=$spec < 3 ⇒ ⇒ impl-contract only（只能防漂移，不能证明符合规范）[0m"
+    fi
+
+    # ── ⑥⁗ **生成覆盖度三方一致**（`rtl-verification-single-source` · 2026-11-17）──
+    #   三方：① 清单的 `generated` 列 ② TB 内**生成器标记**是否存在 ③ `.verif` 是否存在
+    #   ⇒ ⇒ 任一侧单独变化 MUST 转红（这是「手写 TB 逃生口」的**唯一机械抓手**）。
+    #   ⚠️ 约定：`.verif` 路径 = TB 路径的扩展名换成 `.verif`（同 stem）⇒ ⇒ 不新增列。
+    local verif_path="${REPO_ROOT}/${tb%.sv}.verif"
+    case "$gen" in
+    yes)
+        if ! grep -qF '@generated by cpphdl rtl_emit::verif' "$tb_path"; then
+            fail "⑥⁗ generated=yes 但 TB 内**没有生成器标记**（应改回生成 / 或把本列改成 no 并写明原因）"
+            return 1
+        fi
+        if [ ! -f "$verif_path" ]; then
+            fail "⑥⁗ generated=yes 但验证源缺失：${verif_path#"$REPO_ROOT"/}"
+            return 1
+        fi
+        ;;
+    no)
+        if [ -f "$verif_path" ]; then
+            fail "⑥⁗ generated=no 但验证源存在（${verif_path#"$REPO_ROOT"/}）⇒ ⇒ 应改为生成"
+            return 1
+        fi
+        # `note` MUST 含**非占位符**原因（长度下限 + 不得是纯占位符）
+        case "$note" in
+        *TODO* | *TBD* | *"待补"* | "")
+            fail "⑥⁗ generated=no 的 \`note\` 是占位符（MUST 写明具体原因）"
+            return 1
+            ;;
+        esac
+        if [ "${#note}" -lt 20 ]; then
+            fail "⑥⁗ generated=no 的 \`note\` 过短（${#note} 字符）⇒ ⇒ 不是具体原因"
+            return 1
+        fi
+        ;;
+    *)
+        fail "⑥⁗ 未知 generated=$gen（只允许 yes / no）"
+        return 1
+        ;;
+    esac
+    ok "⑥⁗ 生成覆盖度三方一致（generated=$gen）"
+
+    # ── ⑥'' / ⑥‴ 仅对**由验证源生成**的行生效 ──────────────────────────
+    if [ "$gen" = "yes" ]; then
+        # ⑥'' **期望源锚点 ↔ 验证源 scenario 双向 1:1**（粒度 = scenario）
+        #   ⚠️ **本条只判「键集合」** ⇒ ⇒ 数值一致性 MUST NOT 被它的通过所承诺
+        #   （数值由 ⑥ 的三方等式承担）。
+        #   ⚠️ `.md` 的锚点载体 = `## … {#anchor}` 段落内的 `#### scenario: <名>` 行
+        local vif="${RTL_SIM_VERIF:-$verif_path}"
+        local md_path="${RTL_SIM_MD:-$REPO_ROOT/${esrc%%#*}}"
+        if [ ! -f "$vif" ]; then
+            fail "⑥'' 验证源缺失：$vif"
+            return 1
+        fi
+        if [ ! -f "$md_path" ]; then
+            fail "⑥'' 期望源文档缺失：$md_path"
+            return 1
+        fi
+        local md_scen vf_scen md_checks
+        md_scen="$(awk -v a="{#${esrc_anchor}}" '
+            index($0, a) {inside = 1; next}
+            inside && /^## / {inside = 0}
+            inside && /^#### scenario: / {sub(/^#### scenario: /, ""); print}
+        ' "$md_path" | sed 's/[[:space:]]*$//' | sort -u)"
+        # ⚠️ **三方等式的第一边**（**人**登记的条数 ⇒ ⇒ 禁由生成器输出回填）
+        md_checks="$(awk -v a="{#${esrc_anchor}}" '
+            index($0, a) {inside = 1; next}
+            inside && /^## / {inside = 0}
+            inside && /^VERIF-CHECKS: / {sub(/^VERIF-CHECKS: /, ""); print; exit}
+        ' "$md_path" | tr -d "[:space:]")"
+        if [ -z "$md_checks" ]; then
+            fail "⑥'' 期望源 \`${esrc}\` 段落里没有 \`VERIF-CHECKS:\` 行（三方等式缺第一边）"
+            return 1
+        fi
+        vf_scen="$(grep -E '^@scenario ' "$vif" | sed 's/^@scenario[[:space:]]*//' |
+            sed 's/[[:space:]]*$//' | sort -u)"
+        if [ -z "$md_scen" ]; then
+            fail "⑥'' 期望源 \`${esrc}\` 段落里没有 \`#### scenario:\` 锚点（双向键集合无从比对）"
+            return 1
+        fi
+        if [ "$md_scen" != "$vf_scen" ]; then
+            printf '%s\n' "$md_scen" | sed 's/^/      md: /'
+            printf '%s\n' "$vf_scen" | sed 's/^/      vf: /'
+            fail "⑥'' 期望源锚点集合 ≠ 验证源 scenario 集合（双向 1:1 破裂）"
+            return 1
+        fi
+        ok "⑥'' 期望源锚点 == 验证源 scenario（$(printf '%s\n' "$vf_scen" | wc -l | tr -d ' ') 个）"
+
+        # ⑥‴ **TB 无未完成残留**
+        #   ⚠️ 只判「无 TODO」时**完全未生成**的产物会因「没有 TODO」而蒙混
+        #   ⇒ ⇒ 两条 MUST 同时具备：① `// TODO:` 计数 == 0 ② 场景数 ≥ 1
+        if grep -qE '//[[:space:]]*TODO:' "$tb_path"; then
+            fail "⑥‴ TB 内仍有 \`// TODO:\` 残留（生成物 MUST 无未完成标记）"
+            return 1
+        fi
+        local n_scen
+        n_scen="$(grep -cE '^@scenario ' "$vif" || true)"
+        if [ "$n_scen" -lt 1 ]; then
+            fail "⑥‴ 验证源场景数为 0 ⇒ ⇒ 只连端口、无断言的产物不得通过"
+            return 1
+        fi
+        if [ "$n_scen" -ne "$scen" ]; then
+            fail "⑥‴ 验证源场景数 $n_scen ≠ 清单登记 scenarios=$scen"
+            return 1
+        fi
+        # 每个断言行 MUST 带 `check_id`（形如 `<scenario>#<n>`）
+        local bad_ids
+        bad_ids="$(grep -oE '"[^"]*CHECK [^"]*"' "$tb_path" |
+            grep -vE 'CHECK [A-Za-z0-9_]+#[0-9]+ (PASS|FAIL)' || true)"
+        if [ -n "$bad_ids" ]; then
+            printf '%s\n' "$bad_ids" | sed 's/^/      /'
+            fail "⑥‴ TB 里有断言行**不带 check_id**（形如 \`CHECK <scenario>#<n> PASS|FAIL\`）"
+            return 1
+        fi
+        ok "⑥‴ TB 无 TODO 残留 · 场景 $n_scen 个 · 每行断言都带 check_id"
     fi
 
     # ③ 发射器
@@ -348,6 +532,61 @@ PY
         return 1
     fi
     ok "⑧ 四件套：manifest port_table[] == 产物端口表（逐字逐序）"
+
+    # ── ⑧'' **TB MUST 可判定为「生成物」**（`generated=yes` 的行）──────────
+    #   ⚠️ 两条 MUST **同时**满足 —— 只判「无未命名」时，「什么都没连」也会通过：
+    #     ① 文件内 MUST NOT 出现 `<根module>_unnamed_*` 形态的字面量
+    #     ② DUT 实例连线数 MUST == `port_table[]` 条目数（且逐条端口名 ∈ port_table）
+    # ── AC2：**顶层端口身份**的 1:1 join（**所有行**）────────────────────────
+    #   `port_table[].name` ↔ `ports[].cpp_member`（key = name）· 顶层端口 MUST 具名
+    #   ⇒ ⇒ 判据面 = `role ∉ {clock, reset}` 且 `is_top_io == true`
+    if ! python3 "$REPO_ROOT/scripts/lib/verif_tb_shape_check.py" \
+        "$tb_path" "$man" join; then
+        fail "⑧⁗ 顶层端口身份不是 1:1（未具名 / cpp_member 不唯一 / 集合不一致）"
+        return 1
+    fi
+    ok "⑧⁗ 顶层端口身份 1:1（具名 · cpp_member 唯一 · 与 port_table 集合相等）"
+
+    if [ "$gen" = "yes" ]; then
+        if grep -qE "_unnamed_(input|output)" "$tb_path"; then
+            fail "⑧'' TB 内出现 \`top_unnamed_*\` 字面量 ⇒ ⇒ 手写映射表残留"
+            return 1
+        fi
+        if ! python3 "$REPO_ROOT/scripts/lib/verif_tb_shape_check.py" \
+            "$tb_path" "$man" full; then
+            fail "⑧'' TB 不是「按 manifest 生成」的形态（见上）"
+            return 1
+        fi
+        ok "⑧'' TB 可判定为生成物（无 unnamed 字面量 · 连线 == port_table）"
+    fi
+
+    # ── ⑥' **生成物新鲜度**（`generated=yes` 的行）────────────────────────
+    #   **逐字节重现**：对同一验证源 + 同一生成器重新生成 ⇒ MUST 与仓内文件**逐字节相同**
+    #   ⇒ ⇒ 违反 ⇒ 「人改生成物忘改源」⇒ 红。
+    #   ⚠️ **由生成器自身 bug 导致的「两侧同错」不受本条保护** ⇒ ⇒ 那由 ⑥ 的三方等式承担。
+    if [ "$gen" = "yes" ]; then
+        local regen="$work/regen"
+        rm -rf "$regen"
+        mkdir -p "$regen"
+        if ! "$emitter_bin" --out "$regen" --emit-hygiene \
+            --emit-tb-verif "$verif_path" --tb-verif-out "$regen/regen.sv" \
+            >"$regen/emit.log" 2>&1; then
+            fail "⑥' 重新生成 TB 失败（见 $regen/emit.log）"
+            return 1
+        fi
+        if [ "${RTL_SIM_TAMPER:-}" = "regen_drift" ]; then
+            printf '// tampered\n' >>"$regen/regen.sv"
+        fi
+        # ⚠️ 比对对象 = **仓内规范路径**（`$REPO_ROOT/$tb`）⇒ ⇒ 自检的 `TB_OVERRIDE`
+        #   只影响「编译 / 运行」那一侧 ⇒ ⇒ 「刻意失败注入」类投毒不会被新鲜度先抓走
+        local canonical_tb="$REPO_ROOT/$tb"
+        if ! cmp -s "$regen/regen.sv" "$canonical_tb"; then
+            cmp "$regen/regen.sv" "$canonical_tb" 2>&1 | sed 's/^/      /'
+            fail "⑥' 生成物与验证源不一致（仓内 TB 被手改 / 验证源已更新但未重新生成）"
+            return 1
+        fi
+        ok "⑥' 生成物新鲜度：逐字节重现 ✓"
+    fi
 
     # ── ⑧' **层次化形态判据**（`kind=hier` 生效 · 2026-11-17）─────────────
     #   ⚠️ **为什么必须有这条**：⑧ 只验**端口表** ⇒ ⇒ 若层次化**退化成扁平**
@@ -466,6 +705,9 @@ PY
 
     # ⑤ 运行（**timeout** —— 挂死 TB 不得拖死 job）
     if ! timeout "$TB_TIMEOUT" "$sim_bin" >"$work/run.log" 2>&1; then
+        # ⚠️ **打印失败的 check_id**（TB 以 `$fatal` 收尾 ⇒ 退出码非零 ⇒ 先红在 ⑤）
+        #   ⇒ ⇒ 不打印就只剩「仿真失败」四个字 ⇒ ⇒ 判别力自证看不到「同一失败」
+        grep -E 'CHECK .* FAIL' "$work/run.log" 2>/dev/null | head -20 | sed 's/^/      /'
         fail "⑤ 仿真失败或超时（${TB_TIMEOUT}s）（见 $work/run.log）"
         return 1
     fi
@@ -480,6 +722,8 @@ PY
     checks="$(printf '%s' "$line" | sed -E 's/.*checks=([0-9]+).*/\1/')"
     fails="$(printf '%s' "$line" | sed -E 's/.*fails=([0-9]+).*/\1/')"
     if [ "$fails" -ne 0 ]; then
+        # ⚠️ **打印失败的 check_id**（判别力自证要看「同一失败」⇒ ⇒ 必可定位到条）
+        grep -E 'CHECK .* FAIL' "$work/run.log" 2>/dev/null | head -20 | sed 's/^/      /'
         fail "⑥ 断言失败数非 0（$line）"
         return 1
     fi
@@ -487,8 +731,16 @@ PY
         fail "⑥ 断言数为 0（checks=0）⇒ ⇒ TB 只编译不跑"
         return 1
     fi
-    if [ "$minck" -gt 0 ] && [ "$checks" -lt "$minck" ]; then
-        fail "⑥ 断言数 $checks < 登记下界 min_checks=$minck ⇒ ⇒ 断言被删（不算缩面？算）"
+    # ⚠️ 2026-11-17 起 **等式**（不是下界）：`.md` 登记 == `.verif` 静态展开 == 运行期
+    #   ⇒ ⇒ 下界只防「删断言」；等式连「**生成器少发断言**」也一起抓（下界抓不到）。
+    if [ "$minck" -gt 0 ] && [ "$checks" -ne "$minck" ]; then
+        fail "⑥ 断言数 $checks ≠ 登记值 min_checks=$minck ⇒ ⇒ 三方等式破裂（等式，不是下界）"
+        return 1
+    fi
+    # ⚠️ **三方等式的第一边**：期望源（`.md`）里**人**登记的条数
+    #   ⇒ ⇒ 清单的 `min_checks` 若只是抄了生成器的输出 ⇒ ⇒ 两侧同时变 ⇒ ⇒ 恒绿
+    if [ "$gen" = "yes" ] && [ -n "${md_checks:-}" ] && [ "$md_checks" -ne "$checks" ]; then
+        fail "⑥ 断言数 $checks ≠ 期望源登记的 VERIF-CHECKS=$md_checks ⇒ ⇒ 三方等式破裂"
         return 1
     fi
     if [ "$status" = "verified" ] && [ "$minck" -le 0 ]; then
@@ -501,9 +753,14 @@ PY
 
 # ── 主循环（check）──────────────────────────────────────────────────
 if [ "$MODE" = "check" ]; then
-    while IFS=$'\t' read -r tgt kind src comp emitter tb status minck scen spec note; do
-        check_one "$tgt" "$kind" "$src" "$comp" "$emitter" "$tb" "$status" \
-            "$minck" "$scen" "$spec" "$note"
+    while IFS= read -r row; do
+        split_row "$row"
+        check_one "${F[$((C_TARGET - 1))]}" "${F[$((C_KIND - 1))]}" \
+            "${F[$((C_SRC - 1))]}" "${F[$((C_COMP - 1))]}" \
+            "${F[$((C_EMITTER - 1))]}" "${F[$((C_TB - 1))]}" \
+            "${F[$((C_STATUS - 1))]}" "${F[$((C_GENERATED - 1))]}" \
+            "${F[$((C_MINCHECKS - 1))]}" "${F[$((C_SCENARIOS - 1))]}" \
+            "${F[$((C_SPEC - 1))]}" "${F[$((C_NOTE - 1))]}"
     done < <(data_rows)
 
     # 预算检查（--allow-pending 时）
@@ -522,7 +779,7 @@ if [ "$MODE" = "check" ]; then
         echo "❌ verify_examples_rtl_sim: $FAILED 项失败（共检查 $CHECKED 项）"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim: PASS（$CHECKED 项 · 登记数守恒 · status 合规 · TB 存在 · 四件套（manifest 端口表 == 产物端口表）· 编译通过 · 跑通 · 断言 ≥ 下界）"
+    echo "✅ verify_examples_rtl_sim: PASS（$CHECKED 项 · 登记数守恒 · status 合规 · TB 存在 · 四件套（manifest 端口表 == 产物端口表）· 编译通过 · 跑通 · 断言 == 登记（等式）· 生成覆盖度三方一致 · 生成物形态/新鲜度/双向键集合/无残留）"
     exit 0
 fi
 
@@ -539,20 +796,25 @@ run_self_test() {
     fi
     cp "$src_tb" "$golden_tb"
 
+    # ⚠️ `generated` 列（2026-11-17）放在 `status` 之后 —— **中间插列** ⇒ ⇒ 顺带
+    #   自证「列号从 `#COLUMNS` 推导」这条规则（按位置绑定的实现会立刻错列）。
     make_list() { # $1 = 目标路径；$2 = TB 路径；$3 = REGISTERED_TARGETS；$4 = status
-        # ⚠️ **两行**（`kind=target` + `kind=hier`）：
+        # ⚠️ **三行**：
         #   · `target` 行 = 轻量 fixture（counter_simple）⇒ 主判据的载体
         #   · `hier` 行 = **真实的层次化产品单元**（RV32I）⇒ ⑧' 判据的载体
-        #     ⇒ ⇒ 它的必要性：⑧' 的判别力自证（投毒 8「压扁」）必须有一个
-        #     **真会产出多 module** 的单元 ⇒ 否则投毒落空 ⇒ 判据恒绿。
+        #   · `axi4_lite_example` 行 = **真的由 `.verif` 生成**的单元
+        #     ⇒ ⇒ ⑥'（新鲜度）/ ⑥''（双向键集合）/ ⑥‴（无残留）/ ⑧''（生成物形态）
+        #     / ⑥⁗（三方一致）**只有它有可判对象** ⇒ ⇒ 缺它这 5 条判据在自检里恒绿。
         # ⚠️ 锚点：`REGISTERED_TARGETS: $3` · `REGISTERED_SOC: 0` · `REGISTERED_HIER: 1`
         cat >"$1" <<EOF
 # self-test 用的临时清单
+#COLUMNS: target kind source component emitter tb status generated min_checks scenarios spec_checks note
 # REGISTERED_TARGETS: $3
 # REGISTERED_SOC: 0
 # REGISTERED_HIER: 1
-selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	$2	$4	1	256	0	self-test
-selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	examples/riscv-mini/tb_rv32i_soc.sv	verified	24	6	22	self-test-hier
+selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
+selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
+axi4_lite_example	target	examples/axi4/axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体）
 EOF
     }
 
@@ -582,7 +844,7 @@ EOF
 
     # ── 基线：未投毒 ⇒ MUST 绿 ────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel.st_orig" 2>/dev/null || true
-    make_list "$st_list" "$st_tb_rel" 1 verified
+    make_list "$st_list" "$st_tb_rel" 2 verified
     local base_out base_rc
     base_out="$(RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" bash "$0" 2>&1)"
     base_rc=$?
@@ -613,24 +875,24 @@ PY
 
     # ── 投毒 3：REGISTERED_TARGETS 与实际行数不符 ⇒ ⓪ 必红 ───────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
-    make_list "$st_list" "$st_tb_rel" 2 verified
+    make_list "$st_list" "$st_tb_rel" 3 verified
     run_case "投毒3（登记数不守恒）" "首批桶不守恒"
 
     # ── 投毒 4：status=verified 但 TB 缺失 ⇒ ② 必红 ──────────────
     rm -f "$REPO_ROOT/$st_tb_rel"
-    make_list "$st_list" "$st_tb_rel" 1 verified
+    make_list "$st_list" "$st_tb_rel" 2 verified
     run_case "投毒4（status=verified 但 TB 缺失）" "TB 文件缺失"
 
     # ── 投毒 5：status=pending 且未放行 ⇒ ① 必红 ─────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
-    make_list "$st_list" "$st_tb_rel" 1 pending
+    make_list "$st_list" "$st_tb_rel" 2 pending
     run_case "投毒5（pending 未放行）" "status=pending"
 
     # ── 投毒 6/7：⑧ 的**正负成对**判别力自证（T13 / AC8）───────────
     #   ⚠️ 只投「删 manifest」不算 —— 那只证明判据会打开文件；
     #      MUST 证明它**区分对错** ⇒ ⇒ 两个方向各投一次。
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
-    make_list "$st_list" "$st_tb_rel" 1 verified
+    make_list "$st_list" "$st_tb_rel" 2 verified
     run_case "投毒6（篡改 port_table 的一个端口名）" "⑧ manifest 的 port_table" \
         "RTL_SIM_TAMPER=port_table_name"
     run_case "投毒7（产物里多插一个下沉端口）" "⑧ manifest 的 port_table" \
@@ -642,11 +904,74 @@ PY
     run_case "投毒8（层次化产物被压成单 module）" "⑧' 层次化产物只有" \
         "RTL_SIM_TAMPER=flatten_hier"
 
+    # ── 投毒 9–13：`generated=yes` 的**五条判据**各自的判别力自证 ──────────
+    #   ⚠️ 载体 = 清单里那行**真的由 `.verif` 生成**的 `axi4_lite_example`
+    #     ⇒ ⇒ 没有它，⑥'/⑥''/⑥‴/⑧''/⑥⁗ 在自检里**恒绿**（无可判对象）。
+    #   ⚠️ 全部投毒都**只动临时产物 / 环境变量 / 临时清单**（不动仓内 `.verif` / `.md`）
+    #     ⇒ ⇒ `RTL_SIM_VERIF` / `RTL_SIM_MD` / `RTL_SIM_TB_OVERRIDE` 是为此设的钩子。
+    cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
+    local vif_real="$REPO_ROOT/examples/axi4/tb_axi4_lite_example.verif"
+
+    # 投毒 9：重新生成的 TB 与仓内文件逐字节不同 ⇒ ⑥' 新鲜度必红
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    run_case "投毒9（生成物与验证源不一致）" "生成物与验证源不一致" \
+        "RTL_SIM_TAMPER=regen_drift"
+
+    # 投毒 10：登记的 min_checks 与运行期不同 ⇒ ⑥ 等式必红
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    sed -i 's/\t113\t7\t33\t/\t112\t7\t33\t/' "$st_list"
+    run_case "投毒10（min_checks 与运行期不等）" "三方等式破裂"
+
+    # 投毒 11：验证源少一个 scenario（`.md` 未变）⇒ ⑥'' 双向键集合必红
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    local vif_bad="$st_root/bad.verif"
+    awk '
+        /^@scenario wstrb_byte_lanes$/ {skip = 1; next}
+        skip && /^@scenario / {skip = 0}
+        !skip {print}
+    ' "$vif_real" >"$vif_bad"
+    if ! cmp -s "$vif_real" "$vif_bad"; then
+        run_case "投毒11（验证源少一个 scenario）" "双向 1:1 破裂" \
+            "RTL_SIM_VERIF=$vif_bad"
+    else
+        fail "自检 投毒11 无效：没能从验证源里删掉 scenario"
+    fi
+
+    # 投毒 12：登记的 `generated` 说 no 但 `.verif` 存在 ⇒ ⑥⁗ 三方一致必红
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    sed -i 's/\(axi4_lite_example\t[A-Za-z]*\t[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*\t[A-Za-z]*\t\)yes/\1no/' "$st_list"
+    run_case "投毒12（generated=no 却有验证源）" "应改为生成"
+
+    # 投毒 13：TB 里残留 `TOP_unnamed_input` 字面量 ⇒ ⑧'' 生成物形态必红
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    local tb_bad="$st_root/bad_tb.sv"
+    cp "$REPO_ROOT/examples/axi4/tb_axi4_lite_example.sv" "$tb_bad"
+    sed -i '0,/^module /s//\/\/ legacy: top_unnamed_input_1\nmodule /' "$tb_bad"
+    run_case "投毒13（TB 残留 unnamed 端口字面量）" "手写映射表残留" \
+        "RTL_SIM_TB_OVERRIDE=$tb_bad"
+
+    # ── 投毒 14：**刻意失败注入** ⇒ 两后端**同一失败**（AC8 / AC20 的载体）──
+    #   ⚠️ 只把一个 `EXPECT` 的期望值改错 ⇒ ⇒ 渲染式 TB 跑出 `fails != 0`
+    #     且**失败点的 check_id 逐字可定位** ⇒ ⇒ 与解释器侧（单元测试
+    #     `tests/test_verif_single_source.cpp`）报出的**同一条** check_id 对照
+    #     ⇒ ⇒ 「同一份 IR ⇒ 同一结论」有了**两端各自的实证**。
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    local tb_fail="$st_root/failing_tb.sv"
+    cp "$REPO_ROOT/examples/axi4/tb_axi4_lite_example.sv" "$tb_fail"
+    sed -i "s/if (top_rdata !== 32'd3405691582)/if (top_rdata !== 32'd1)/" "$tb_fail"
+    if cmp -s "$tb_fail" "$REPO_ROOT/examples/axi4/tb_axi4_lite_example.sv"; then
+        fail "自检 投毒14 无效：没能改掉期望值"
+    else
+        run_case "投毒14（刻意失败注入 ⇒ 同一 check_id 转红）" \
+            "CHECK aw_w_phase_split_and_addr_latch#8 FAIL" \
+            "RTL_SIM_TB_OVERRIDE=$tb_fail"
+    fi
+
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
     rm -f "$REPO_ROOT/$st_tb_rel.st_orig"
     # 还原后复绿
-    make_list "$st_list" "$st_tb_rel" 1 verified
+    make_list "$st_list" "$st_tb_rel" 2 verified
     if RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" bash "$0" >/dev/null 2>&1; then
         ok "自检：还原后复绿 ✓"
     else
@@ -658,7 +983,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 8 条投毒各自转红 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 14 条投毒各自转红 · 还原复绿）"
     exit 0
 }
 
