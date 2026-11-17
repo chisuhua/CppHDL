@@ -112,11 +112,13 @@ cmake --build build -j"$(nproc)"
 - [x] **删除后 MUST 全量重建**（禁只重建被点名 target ⇒ 旧二进制假绿）
       ⇒ 实测 `cmake --build build` 后 `ctest -LE perf` = **255/255 通过**
 
-验证：
+验证（**AC18 口径已订正 · 用户 2026-11-17 裁决** —— 原写法把 `-e dangling` 与退役符号
+并列 ⇒ ⇒ **字面不可满足**：`dangling_input` 是**未退役**的公开诊断契约）：
 
 ```bash
 grep -rn -e 'UndrivenPolicy::Bubble' -e 'Origin::Bubbled' -e 'Origin::InlineFolded' \
-     -e 'ensure_bubbled_port' -e 'BubbledInput' -e 'dangling' src/ include/ tests/ scripts/
+     -e 'ensure_bubbled_port' -e 'BubbledInput' src/ include/ tests/ scripts/   # 实测 0
+grep -rn 'dangling' src/hierarchy_verilog.cpp                                # 实测 0
 bash scripts/verify_hierarchical_rtl.sh --self-test
 bash scripts/verify_hierarchical_port_naming.sh --self-test
 bash scripts/verify_flat_rtl_emit.sh
