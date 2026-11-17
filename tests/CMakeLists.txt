@@ -1101,7 +1101,7 @@ add_catch_test(test_port_name_named_ctor test_port_name_named_ctor.cpp)
 add_catch_test(test_port_name_parity test_port_name_parity.cpp)
 
 # RTL 端口清单（manifest）—— capability `rtl-emit-portability` 的 schema
-# `rtl-emit-manifest-v1`（rtl-emit-product-tooling C4 / N5(a) / C3）
+# `rtl-emit-manifest-v2`（rtl-emit-product-tooling C4 / N5(a) / C3 · v2 见 rtl-productization-surface）
 # ⚠️ 判别力：① 10 个字段 MUST 全部在场且语义正确（尤其 `driven`（有驱动源）
 #   与 `effective`（能到达 ch_out）**不是**一回事 ⇒ 用 `get_users()` 判「被消费」
 #   会**恒为 true** ⇒ ⇒ 零信息量）② C3 悬空输入 MUST 被点名 ③ 清单 MUST 确定性

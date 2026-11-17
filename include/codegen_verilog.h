@@ -34,6 +34,8 @@ enum class ch_op;
 
 namespace ch {
 
+class Component;
+
 /// 扁平产物的 module 名（**唯一真源**）。
 ///
 /// ⚠️ 扁平发射（`make_flat_module_view`）与层次化发射的**映射表**（「扁平位置」那一列）
@@ -67,6 +69,19 @@ void toVerilog(const std::string &filename, ch::core::context *ctx);
 /// 发射扁平产物（带选项）。
 void toVerilog(const std::string &filename, ch::core::context *ctx,
                const EmitOptions &options);
+
+/// 发射**产品**扁平产物（**带根** · 新增入口 · 见 capability
+/// `rtl-hierarchical-output` 的「顶层端口面」条款）。
+///
+/// ⚠️ 与上面两个 ctx-only 重载**不是**同一条路径：
+///   · ctx-only ⇒ **遗留 / 非产品**路径（端口面 = ctx 里**每个** `ch_out` +
+///     无 driver 的 `ch_in`）⇒ ⇒ **产物逐字节不变**；
+///   · 带根（本重载）⇒ **产品**路径（端口面 = `default_clock` → `default_reset` →
+///     **根组件自有 `__io`**）⇒ ⇒ 后代 `ch_out` MUST NOT 出现在顶层端口表。
+///
+/// ⚠️ **只增不改**：既有签名与 49 处调用点**零改动**。
+void toVerilog(const std::string &filename, Component &root,
+               const EmitOptions &options = {});
 
 /// 一个 module 的**发射输入**（层次化 T3-③）。
 ///
@@ -149,6 +164,16 @@ struct ModuleView {
 /// 扁平产物的 `ModuleView`（= 拆分前的行为：整个 ctx 一个 `module top`）。
 /// 扁平路径的 `ModuleView`（**默认** ⇒ ⇒ 产物逐字节不变）。
 ModuleView make_flat_module_view(ch::core::context *ctx, bool emit_hygiene = false);
+
+/// **产品**扁平产物的 `ModuleView`（带根 · 新增入口）。
+///
+/// 与 `make_flat_module_view(ctx, …)` 的**唯一**差异 = 端口选择：
+/// 只取 `default_clock` / `default_reset` + **根组件自有**（`node->get_parent() == &root`）
+/// 且无 driver 的 `ch_in` / 全部 `ch_out` ⇒ ⇒ **后代 `ch_out` MUST NOT 上顶层**。
+///
+/// ⚠️ 节点遍历顺序 / 命名表 / body 生成**逐字复用** ctx 版本 ⇒ ⇒ 两侧除端口面外
+///    **零差异**（可机械比对）。
+ModuleView make_flat_module_view(Component &root, bool emit_hygiene = false);
 
 // Emits **one** module from a `ModuleView`.
 class ModuleEmitter {
@@ -345,6 +370,10 @@ class verilogwriter {
 public:
     /// ⚠️ **默认** ⇒ ⇒ 产物逐字节不变（`emit_hygiene` 默认 **off**）
     explicit verilogwriter(ch::core::context *ctx, bool emit_hygiene = false);
+
+    /// **产品**路径（带根 · 新增入口）⇒ ⇒ 端口面 = 根组件自有 `__io`。
+    /// ⚠️ 要求 `root` 已 `build()`（`root.context()` 非空）⇒ ⇒ 否则行为未定义。
+    explicit verilogwriter(Component &root, bool emit_hygiene = false);
 
     void print(std::ostream &out);
 

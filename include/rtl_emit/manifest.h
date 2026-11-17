@@ -1,7 +1,7 @@
 // include/rtl_emit/manifest.h
 //
 // **端口清单（manifest）** 的构建与序列化 —— capability `rtl-emit-portability`
-// 的 schema `rtl-emit-manifest-v1` 的**参考实现**。
+// 的 schema `rtl-emit-manifest-v2` 的**参考实现**。
 //
 // ⚠️ **本文件是「库」侧**：用户在自己的可执行文件里**登记**自己的设计 ⇒ ⇒ 调用
 //   `build_rtl_manifest()` 拿清单 ⇒ ⇒ 写盘 / 喂 TB 生成器。
@@ -65,14 +65,33 @@ struct RtlDiagnostic {
     std::string detail;
 };
 
+// ── 产品端口表的一行（schema v2 · **端口面的唯一权威**）─────────────────
+//
+// ⚠️ **只放产物端口真正需要的四件事**（名字 / 方向 / 位宽 / 角色）⇒ ⇒ 它是
+//   「产物端口表」的**描述**，不是全量节点清单（后者仍是 `ports[]`）。
+// ⚠️ **顺序 = 产物发射顺序**（`default_clock` → `default_reset` → 无 driver 的
+//   根自有 `ch_in` → 根自有 `ch_out`）⇒ ⇒ MUST NOT 排序（与 `ports[]` 相反）。
+struct RtlProductPort {
+    /// RTL 全名（产物里的名字）
+    std::string name;
+    /// `input` / `output`
+    std::string dir;
+    /// 位宽（bit）
+    std::uint32_t width = 0;
+    /// `clock` / `reset` / `data`
+    std::string role;
+};
+
 // ── 端口清单 ─────────────────────────────────────────────────────────
 struct RtlManifest {
     /// schema 标识（**固定** ⇒ ⇒ 消费方可据此判版本）
-    std::string schema = "rtl-emit-manifest-v1";
+    std::string schema = "rtl-emit-manifest-v2";
     /// 根组件路径
     std::string root;
     /// 端口条目（**按名字排序** ⇒ ⇒ 清单**确定性**）
     std::vector<RtlPortEntry> ports;
+    /// **产品端口表**（schema v2 新增 · **按产物顺序** · **端口面的唯一权威**）
+    std::vector<RtlProductPort> port_table;
     /// 诊断（**不阻断** ⇒ ⇒ 只记录）
     std::vector<RtlDiagnostic> diagnostics;
 };
@@ -95,7 +114,10 @@ struct RtlManifest {
 /// · **`driven`** = 该端口**有下游使用者**（`get_users()` 非空）
 ///   ⇒ ⇒ 复用 `diagnose_drive()` 的**同一套**节点状态语义（不另造判定）；
 /// · **`effective`** = 从该端口**前向可达**到**至少一个** `type_output` 节点
-///   ⇒ ⇒ 「功能级」的可观测行为判据。
+///   ⇒ ⇒ 「功能级」的可观测行为判据；
+/// · **`port_table[]`** = **产品端口表**（schema v2）⇒ ⇒ 由 `make_flat_module_view(root, …)`
+///   派生（**与产品产物的端口选择同源**）⇒ ⇒ **按产物顺序**、只含
+///   `default_clock` / `default_reset` / **根组件自有** `ch_in` / `ch_out`。
 ///
 /// ⚠️ **`member_known` 的诚实边界**：框架**无反射** ⇒ ⇒ 未具名端口的 C++ 成员名
 ///   **拿不到** ⇒ ⇒ 本实现把 `cpp_member` 记为 `unnamed_input`（**可识别**的占位）
@@ -103,7 +125,7 @@ struct RtlManifest {
 ///   ⇒ ⇒ （要真正拿到成员名 ⇒ ⇒ 端口**必须具名** ⇒ ⇒ N2 护栏就是为此存在）。
 RtlManifest build_rtl_manifest(Component &root, core::context *ctx);
 
-/// 把清单写成 **JSON**（`rtl-emit-manifest-v1`）。
+/// 把清单写成 **JSON**（`rtl-emit-manifest-v2`）。
 ///
 /// ⚠️ **确定性**：端口按名字排序 ⇒ ⇒ 同一设计**两次生成逐字节相同**
 ///   （C5 护栏的 F2 判据）。

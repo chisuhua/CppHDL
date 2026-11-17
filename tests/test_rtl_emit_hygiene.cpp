@@ -248,7 +248,7 @@ TEST_CASE("hygiene: 开关 on ⇒ default_nettype none + 不发 blanket lint_off
 
     // ① 头部：`default_nettype none` + **确定性**元数据头（⚠️ **无时间戳**）
     REQUIRE(v.find("`default_nettype none") != std::string::npos);
-    REQUIRE(v.find("schema=rtl-emit-manifest-v1") != std::string::npos);
+    REQUIRE(v.find("schema=rtl-emit-manifest-v2") != std::string::npos);
     REQUIRE(v.find("hygiene=on") != std::string::npos);
     // ⚠️ **时间只进 manifest** ⇒ ⇒ 产物**不含**年份/时间戳形态（否则不确定性）
     REQUIRE(v.find("2026") == std::string::npos);

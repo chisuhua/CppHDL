@@ -1,7 +1,7 @@
 // tests/test_rtl_manifest.cpp
 //
 // **端口清单（manifest）** 的判据 —— capability `rtl-emit-portability`
-// 的 schema `rtl-emit-manifest-v1`（`rtl-emit-product-tooling` **C4** / **N5(a)** / **C3**）。
+// 的 schema `rtl-emit-manifest-v2`（`rtl-emit-product-tooling` **C4** / **N5(a)** / **C3**）。
 //
 // ⚠️ **判别力**（本文件 MUST 抓住的具体缺陷）：
 //   ① **字段缺失 / 语义错位** ⇒ ⇒ schema 的 10 个字段 MUST **全部**在场且语义正确
@@ -111,7 +111,7 @@ TEST_CASE("manifest: 10 个字段 MUST 全部在场且语义正确", "[rtl][mani
     Built b = build_top();
     const auto m = ch::rtl_emit::build_rtl_manifest(*b.root, b.ctx.get());
 
-    REQUIRE(m.schema == "rtl-emit-manifest-v1");
+    REQUIRE(m.schema == "rtl-emit-manifest-v2");
     REQUIRE(m.root == "top");
     REQUIRE_FALSE(m.ports.empty());
 
@@ -128,7 +128,7 @@ TEST_CASE("manifest: 10 个字段 MUST 全部在场且语义正确", "[rtl][mani
     REQUIRE(we->owner == "top");
     REQUIRE(we->is_top_io == true);
     REQUIRE(we->cpp_member == "prog_we");
-    // `semantic` 在 v1 **无生产者** ⇒ ⇒ 恒 null
+    // `semantic` 在 v2 **无生产者** ⇒ ⇒ 恒 null
     REQUIRE_FALSE(we->semantic.has_value());
 
     // ── `top_prog_data`：**没人接**（顶层 input 天然无内部驱动）但**值能到输出** ──
@@ -236,6 +236,41 @@ TEST_CASE("manifest: JSON MUST 含 schema 的全部字段名", "[rtl][manifest]"
         CAPTURE(field);
         REQUIRE(j.find(field) != std::string::npos);
     }
-    REQUIRE(j.find("\"schema\": \"rtl-emit-manifest-v1\"") != std::string::npos);
+    REQUIRE(j.find("\"schema\": \"rtl-emit-manifest-v2\"") != std::string::npos);
+    REQUIRE(j.find("\"port_table\"") != std::string::npos);
     REQUIRE(j.find("\"diagnostics\"") != std::string::npos);
+}
+
+// ============================================================================
+// 判据 6（schema v2）：产品端口表 MUST 在场 · **只含**根组件自有 IO + 框架基础设施
+//   ⇒ ⇒ 后代 `ch_out` MUST NOT 进入产品端口表（旧口径：`is_top_io` 只标 32 / 130）
+// ============================================================================
+TEST_CASE("manifest: 产品端口表（v2）只含根自有 IO 且按产物顺序", "[rtl][manifest]") {
+    Built b = build_top();
+    const auto m = ch::rtl_emit::build_rtl_manifest(*b.root, b.ctx.get());
+
+    // 手推：clock + reset + prog_we + prog_data + result = 5
+    REQUIRE(m.port_table.size() == 5);
+    // `ports[]` 仍列**全量**（含后代 data_in / data_hole / data_out）⇒ ⇒ 严格大于
+    REQUIRE(m.port_table.size() < m.ports.size());
+
+    // 顺序 = 产物发射顺序：clock → reset → 根 input（按 id 升序）→ 根 output
+    REQUIRE(m.port_table[0].name == "default_clock");
+    REQUIRE(m.port_table[0].role == "clock");
+    REQUIRE(m.port_table[0].dir == "input");
+    REQUIRE(m.port_table[1].name == "default_reset");
+    REQUIRE(m.port_table[1].role == "reset");
+    REQUIRE(m.port_table[2].name == "top_prog_we");
+    REQUIRE(m.port_table[2].dir == "input");
+    REQUIRE(m.port_table[2].width == 1);
+    REQUIRE(m.port_table[3].name == "top_prog_data");
+    REQUIRE(m.port_table[3].width == 8);
+    REQUIRE(m.port_table[4].name == "top_result");
+    REQUIRE(m.port_table[4].dir == "output");
+
+    // 后代端口 MUST NOT 出现在产品端口表
+    for (const auto &p : m.port_table) {
+        CAPTURE(p.name);
+        REQUIRE(p.name.find("leaf") == std::string::npos);
+    }
 }

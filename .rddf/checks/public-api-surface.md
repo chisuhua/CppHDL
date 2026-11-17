@@ -105,7 +105,8 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 | 顶层 RTL 端口表（RV32I SoC） | ⚠️ **根组件自有的 31 个端口**（2026-11-14 R8 改判：删 `ext_clk` ⇒ 32 → 31）由 `top_unnamed_input*` / `top_unnamed_output*` 改为 **`top_<C++ 成员名>`**（例：`top_ext_rst` / `top_prog_we` / `top_obs_data_addr` / `top_dbg_id_pc`）⇒ ⇒ **当时**端口数量、方向、宽度、顺序全部不变（**114** 个顶层端口一一对应 · ⚠️ **2026-11-14 R8 改判后 = 113**，见上面「已移除」节的 `ext_clk` 行）⇒ ⇒ 仅**名字**变 | 2026-11-13 | `port-naming-ratchet` **N2 补遗「首批消化 32 端口」** · R17.2（architect 裁量闭 R17.1 =「现在做」） | 下游若按 `top_unnamed_*` **序号**硬编码顶层端口 ⇒ ⇒ **MUST 改为按名取**（这正是本项的立意）⇒ ⇒ ⚠️ **行为零变化**（只改名字；TB 期望值只依赖信号语义）⇒ ⇒ ⚠️ **后代冒泡端口仍无名字**（`top_pipeline_*` / `top_itcm_*` / `top_dtcm_*`，**80** 个）⇒ ⇒ 不在本项范围 ⇒ ⇒ ⚠️ **2026-11-14 · B4 · C3 订正**：`ExStage` 的算术核心改由库组件 `Rv32iAlu` 承担 ⇒ ⇒ **产物顶层端口 114 → 118**（+5 = ALU 组件的内部节点冒泡）⇒ ⇒ **根组件自有端口仍是 31**（不变）⇒ ⇒ ⇒ ⇒ 原 113 个端口**名一字未改**（只有新增）|
 | 顶层 RTL 端口表（RV32I SoC） | `mem_is_load` 的装配点**补上 driver** ⇒ ⇒ 该 `ch_in` **不再是无 driver 的顶层 input** ⇒ ⇒ **顶层 input 少 1 个**（8 → 7） | 2026-11-11 | `rv32i-dead-component-consolidation` **C8** · 契约相容（契约说的是「**无 driver 的** input」⇒ 补 driver = 修缺陷） | 下游若按端口**数量/序号**硬编码顶层 input ⇒ ⇒ MUST 改为**按名**取；**行为零变化**（MEM 级那一路在流水线里永不触发） |
 | 端口清单（manifest）schema `rtl-emit-manifest-v1`（**新** capability `rtl-emit-portability`） | **新增**一份 manifest schema（10 个字段：`name` / `dir` / `width` / `role` / `driven` / `effective` / `owner` / `is_top_io` / `cpp_member` / `semantic`）⇒ ⇒ `driven`（节点级）与 `effective`（功能级）**拆成两个独立字段**（「有连线但无功能」这一类**单布尔表达不了**） | 2026-11-11 | `rtl-emit-product-tooling` **C4**（B1 批地基）· change `rtl-emit-manifest-schema-2026-11` | ⚠️ **无库代码变更**（纯规格）⇒ ⇒ 下游若实现 RTL / TB / 命名工具，MUST 按这 10 个字段产出 manifest；**端口面与命名规则一字未改** ⇒ ⇒ 现有产物解析不受影响 |
-| UART RX demo 的 `data` / 采样点（`examples/spinalhdl-ported/uart_rx/uart_rx.cpp`） | **① 解出的字节不再位反转**（旧：线上 LSB first ⇒ 解出的是**位反转**的字节，例：线上 `0x10` ⇒ 解出 `0x08`）· **② 采样点随 `prescale` 缩放**（旧：硬编码 `div == 4` ⇒ 只对 `prescale == 9` 成立 ⇒ 别的 `prescale` 在**位的前沿**采样）| 2026-11-12 | D6 + D7（实测缺陷 · 见 `.rddf/checks/decision-request-uart-rx-defects-2026-11.md`） | **无需迁移**（旧行为是错的）· ⚠️ 下游若**依赖**旧的位反转结果 ⇒ 那是在依赖一个缺陷 ⇒ 需改 |\n| 手写 FIFO demo 的 `full` 端口（`samples/fifo_example.cpp` + `examples/spinalhdl-ported/fifo/stream_fifo_example.cpp`） | **`full` 的门限修正**：旧写法在**完整指针**空间里比 `wr+1 == rd` ⇒ 门限 = `2^(addr_width+1)-1`（N=16 ⇒ 31）⇒ **永不置位** ⇒ 第 N+1 次写入起地址混叠 ⇒ ⇒ 改为经典方案（**地址位相等 + wrap 位不同** ⇒ 容量 = N）| 2026-11-12 | D5（实测缺陷 · 见 `.rddf/checks/decision-request-fifo-full-threshold-2026-11.md`） | **无需迁移**（旧行为是错的）；若曾依赖「`full` 恒 0」，该依赖本就不成立 ⇒ 现在 `full` 会在满时正确置位。⚠️ 库组件 `chlib::sync_fifo` **未变**（它一直是对的）|
+| UART RX demo 的 `data` / 采样点（`examples/spinalhdl-ported/uart_rx/uart_rx.cpp`） | **① 解出的字节不再位反转**（旧：线上 LSB first ⇒ 解出的是**位反转**的字节，例：线上 `0x10` ⇒ 解出 `0x08`）· **② 采样点随 `prescale` 缩放**（旧：硬编码 `div == 4` ⇒ 只对 `prescale == 9` 成立 ⇒ 别的 `prescale` 在**位的前沿**采样）| 2026-11-12 | D6 + D7（实测缺陷 · 见 `.rddf/checks/decision-request-uart-rx-defects-2026-11.md`） | **无需迁移**（旧行为是错的）· ⚠️ 下游若**依赖**旧的位反转结果 ⇒ 那是在依赖一个缺陷 ⇒ 需改 |\n
+| 手写 FIFO demo 的 `full` 端口（`samples/fifo_example.cpp` + `examples/spinalhdl-ported/fifo/stream_fifo_example.cpp`） | **`full` 的门限修正**：旧写法在**完整指针**空间里比 `wr+1 == rd` ⇒ 门限 = `2^(addr_width+1)-1`（N=16 ⇒ 31）⇒ **永不置位** ⇒ 第 N+1 次写入起地址混叠 ⇒ ⇒ 改为经典方案（**地址位相等 + wrap 位不同** ⇒ 容量 = N）| 2026-11-12 | D5（实测缺陷 · 见 `.rddf/checks/decision-request-fifo-full-threshold-2026-11.md`） | **无需迁移**（旧行为是错的）；若曾依赖「`full` 恒 0」，该依赖本就不成立 ⇒ 现在 `full` 会在满时正确置位。⚠️ 库组件 `chlib::sync_fifo` **未变**（它一直是对的）|
 
 ### **已弃用（尚未移除）** —— 下游现在就该迁移
 
@@ -123,6 +124,18 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 > - **机器探针**在 `.rddf/checks/public-api-removals.tsv`（逐符号 / 逐文件族 · 四种 kind ·
 >   判定在**剥掉注释与字符串字面量之后**进行）⇒ ⇒ 本节是**人读**的（含迁移指引），
 >   tsv 是**机器读**的 ⇒ 两者由护栏 **R5/R6** 双向绑定（探针 id MUST 出现在本节）。
+
+## ⚠️ **新增公开符号（非行为变更）**（2026-11-17 起登记）
+
+> **为什么需要这一节**：新增**符号**（既不是新头文件、也不是移除）此前**没有落点**
+> ⇒ ⇒ 「公开面扩张」只能靠 diff 逐行看 ⇒ ⇒ 不可检索。
+> ⚠️ **与相邻两节的分工**：已移除 / 改名 = **符号级消失** · 行为变更 = **还在但变了** ·
+> 本节 = **新增**（含新增重载）。
+
+| 符号 | 归属头 | 日期 | 依据 | 迁移指引 |
+|---|---|---|---|---|
+| `ch::toVerilog(const std::string &, Component &, const EmitOptions &)` | `include/codegen_verilog.h` | 2026-11-17 | ADR-072 决策 **D1-b**（**新增**带根入口；ctx-only 入口 = **非产品遗留路径**） | **新增**（无迁移）：既有 `toVerilog(path, ctx[, options])` 的签名与产物**逐字节不变** ⇒ ⇒ 下游既有代码零动作；要拿**产品端口面**（根组件自有 `__io`）MUST 改用本重载 |
+| `ch::make_flat_module_view(Component &, bool)` | `include/codegen_verilog.h` | 2026-11-17 | 同上（端口选择 = **根组件自有 `__io`**） | **新增**（无迁移）：与 `make_flat_module_view(ctx, …)` 的差异**只有端口面**（后代 `ch_out` 不上顶层） |
 
 ## 维护规则
 

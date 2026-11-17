@@ -1,11 +1,12 @@
 // src/rtl_emit/manifest.cpp
 //
-// `rtl-emit-manifest-v1` 的**参考实现**（见 `include/rtl_emit/manifest.h` 的口径说明）。
+// `rtl-emit-manifest-v2` 的**参考实现**（见 `include/rtl_emit/manifest.h` 的口径说明）。
 
 #include "rtl_emit/manifest.h"
 
 #include "ast/ast_nodes.h"
 #include "codegen_naming.h"
+#include "codegen_verilog.h"
 #include "component.h"
 
 #include <algorithm>
@@ -114,6 +115,42 @@ RtlManifest build_rtl_manifest(Component &root, core::context *ctx) {
     // ⚠️ **端口名 = 扁平产物的 Verilog 名**（与层次化产物**逐字相同**）
     //   ⇒ ⇒ 复用**同一个**命名表构造器 ⇒ ⇒ 两侧**不会**漂移。
     const auto names = build_verilog_name_table(ctx->get_eval_list());
+
+    // ── 产品端口表（schema v2 · **端口面的唯一权威**）──────────────────
+    // ⚠️ **与产品产物同源**：直接复用同一个端口选择函数 ⇒ ⇒ 「清单说 N 个」与
+    //   「产物 N 个」不靠约定维持，而靠**同一次计算**（`make_flat_module_view`）。
+    // ⚠️ **顺序 = 产物发射顺序**（clock → reset → 无 driver 的根自有 input →
+    //   根自有 output）⇒ ⇒ MUST NOT 排序。
+    {
+        const ModuleView view =
+            make_flat_module_view(root, /*emit_hygiene=*/false);
+        manifest.port_table.reserve(view.ports.size());
+        for (const core::lnodeimpl *node : view.ports) {
+            RtlProductPort p;
+            const auto it = names.find(node);
+            p.name = (it != names.end()) ? it->second : node->name();
+            p.width = node->size();
+            switch (node->type()) {
+            case core::lnodetype::type_clock:
+                p.dir = "input";
+                p.role = "clock";
+                break;
+            case core::lnodetype::type_reset:
+                p.dir = "input";
+                p.role = "reset";
+                break;
+            case core::lnodetype::type_output:
+                p.dir = "output";
+                p.role = "data";
+                break;
+            default:
+                p.dir = "input";
+                p.role = "data";
+                break;
+            }
+            manifest.port_table.push_back(std::move(p));
+        }
+    }
 
     for (core::lnodeimpl *node : ctx->get_eval_list()) {
         if (node == nullptr) {
@@ -252,6 +289,23 @@ void write_rtl_manifest_json(const RtlManifest &manifest, std::ostream &out) {
         }
         out << "}";
         if (i + 1 < manifest.ports.size()) {
+            out << ",";
+        }
+        out << "\n";
+    }
+    out << "  ],\n";
+
+    // ── 产品端口表（schema v2）⇒ ⇒ **按产物顺序**（MUST NOT 排序）─────────
+    out << "  \"port_table\": [\n";
+    for (std::size_t i = 0; i < manifest.port_table.size(); ++i) {
+        const RtlProductPort &p = manifest.port_table[i];
+        out << "    {";
+        out << "\"name\": ";  json_escape(p.name, out);
+        out << ", \"dir\": "; json_escape(p.dir, out);
+        out << ", \"width\": " << p.width;
+        out << ", \"role\": "; json_escape(p.role, out);
+        out << "}";
+        if (i + 1 < manifest.port_table.size()) {
             out << ",";
         }
         out << "\n";

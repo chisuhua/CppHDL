@@ -178,7 +178,11 @@ int run_emit_cli(const std::vector<std::string> &args, const DesignFactory &fact
         // ⚠️ **产物卫生**开关（C6）—— ⚠️ **默认 off** ⇒ ⇒ 默认路径**逐字节不变**
         ch::EmitOptions emit_opts;
         emit_opts.emit_hygiene = options.emit_hygiene;
-        toVerilog(options.verilog_path, ctx.get(), emit_opts);
+        // ⚠️ **产品面 = 带根路径**（`toVerilog(path, Component&, …)`）：
+        //   端口面 = `default_clock` → `default_reset` → **根组件自有 `__io`**
+        //   ⇒ ⇒ 与 manifest 的产品端口表**同源**（同一个 `make_flat_module_view`）
+        //   ⇒ ⇒ 「产物端口表 == manifest 产品端口表」可机械成立。
+        toVerilog(options.verilog_path, *root, emit_opts);
         std::error_code fec;
         if (!std::filesystem::exists(options.verilog_path, fec) || fec) {
             std::cerr << "::error::产物未生成：" << options.verilog_path << "\n";
