@@ -1,8 +1,12 @@
 # ADR-066: 父侧落点语义 —— 父层消费子 `ch_out` 的**合成与重定向**（Q1 裁 B）
 
-- Status: **Accepted**（⚠️ **下列 oracle / critic 轮次 =「v1.0 轮」的记录**；v1.1 / v1.2 / v1.3 各轮的审稿记录见 `.rddf/reviews/ADR-066-parent-side-landing.md` §7 / §8 / §9）（2026-11-08 · **用户拍板 Q1 = B** · oracle 1 轮 `PASS-WITH-NOTES` + critic **3 轮** ⇒ ⇒ 两轮 BLOCKER 全部**闭合并经复审确认**（第 3 轮：`CLOSED` / 新 BLOCKER `NONE` / `mergeable: yes`）⇒ ⇒ 审稿记录 = `.rddf/reviews/ADR-066-parent-side-landing.md`）
+- Status: **Accepted**（**v1.4** · 2026-11-17 · §6 dated addendum · ADR-072 **D1-h** 对齐 ·
+  **决策内容零变更** · ⚠️ **下列 oracle / critic 轮次 =「v1.0 轮」的记录**；v1.1 / v1.2 / v1.3 各轮的审稿记录见 `.rddf/reviews/ADR-066-parent-side-landing.md` §7 / §8 / §9）（2026-11-08 · **用户拍板 Q1 = B** · oracle 1 轮 `PASS-WITH-NOTES` + critic **3 轮** ⇒ ⇒ 两轮 BLOCKER 全部**闭合并经复审确认**（第 3 轮：`CLOSED` / 新 BLOCKER `NONE` / `mergeable: yes`）⇒ ⇒ 审稿记录 = `.rddf/reviews/ADR-066-parent-side-landing.md`）
 - Date: 2026-11-08
 - Author: build-agent（architect role）
+- 关联 change: `rtl-productization-surface-2026-11`（**T8** · §6 dated addendum）
+- 审稿报告: `.rddf/reviews/ADR-058-061-060-d1-h-dated-addendum.md`（**v1.4** · §6 dated
+  addendum · oracle 1 + critic 1）
 - Parent: 无（新增决策）· ⚠️ **修订** ADR-060 §2.1 矩阵（**补一格**）·
   ⚠️ **修订** ADR-062 **§2.6 落点表**（`ch_out` 的「父侧落点」列）与 **§5 最后一条**
   （「父 module MUST 为子 `ch_out` 声明连接网」的无条件要求
@@ -637,3 +641,48 @@ MUST 先给 R1 开**显式 carve-out**（并点名适用行）」⇒ ⇒ 目的�
 - [ ] **V23 单连接不变式在 mem 实参上的复算（v1.3）**：同一子 `ch_out` **既**驱动 mem 实参**又**参与父侧运算
       ⇒ ⇒ MUST 扇出**同一根**父侧网（决策 ⑤）⇒ ⇒ 产物 MUST NOT 出现 `Duplicate pin connection`
       ⇒ ⇒ 同一 `(实例, pin)` 的**相同网名**连接 MUST 幂等去重
+
+## 6. ⚠️ **2026-11-17 追加（dated addendum · ADR-072 D1-h 对齐）** —— **两处指针订正**
+
+> ⚠️ **本节是「追加」不是「改写」** ⇒ ⇒ §2 的决策 / §3 选项 / §4 后果 / §5 Verification 的
+> **既有决策句逐字保留** ⇒ ⇒ **决策本身零变更** ⇒ ⇒ 只**订正两处已失效的指针** ⇒ ⇒
+> Status 不变（仍 Accepted）。
+> ⚠️ **触发** = change `rtl-productization-surface-2026-11` 的实施落地（ADR-072 **D1-h**
+> 冒泡机制物理退役）⇒ ⇒ 本 ADR 的两处指针指向**已退役**的章节 ⇒ ⇒ 不补 dated 指针 ⇒ ⇒
+> 下游按指针去读，会读到一条**不存在的路径**。
+> ⚠️ **关联 change** = `rtl-productization-surface-2026-11`（**T8**）·
+> **审稿记录** = `.rddf/reviews/ADR-058-061-060-d1-h-dated-addendum.md`（oracle 1 + critic 1）·
+> **AC 映射** = change 的 **AC18**。
+
+### 6.1 §4 边界表的「跨多层」行 —— 「向上冒泡」那条路**已退役**
+
+**原句（§4 边界表 · 逐字保留）**：
+> | **跨多层**（孙组件 output 进祖父表达式） | **不在授权范围** ⇒ ⇒ 沿既有向上冒泡 / 拒绝路径 ⇒ ⇒ **属另立裁定** |
+
+**订正**：「向上冒泡」这条路**已退役**（ADR-072 **D1-h**）⇒ ⇒ 现存路径 = **拒绝**
+（`ok = false` + 点名 + 零文件）⇒ ⇒ 合法接法只有两条：**接上驱动源** 或 **父层显式 tie-off**
+⇒ ⇒ ⚠️ 本行的**结论**（「不在授权范围」·「属另立裁定」）**零变更** ⇒ ⇒ 只退役被引用的那条路径名。
+
+### 6.2 §2 的「inline 折叠口径」指针 —— 被指的那个章节**已退役**
+
+**原句（§2 的 ④ · 逐字保留）**：
+> ④ inline 折叠口径 = **ADR-060 的「跨模块」判定口径**（§2.1 的 `:169` · v1.2 行）
+> / **ADR-062 v1.2 同词口径**（⚠️ **不是** ADR-060 的**冒泡章节** —— 那一章的 G3 讲的是
+> **冒泡的注册层位与端口顺序**，**不**定义「inline 折叠后的 module 归属」⇒ ⇒ 指针 MUST 写准）
+
+**订正**：被指的那个章节（ADR-060 §2.2 的 **G3 段**）**已整体退役**（ADR-060 §7.1）⇒ ⇒ 这条
+**否定式**区分（`**不是** ADR-060 的冒泡章节」）**不再有指向对象** ⇒ ⇒ 「**inline 折叠后的
+module 归属**」的定义**现由** ADR-060 **§7.2**（`Reject` 的适用范围 + 半退役说明）+ ADR-072
+**D1-f 界定表**（`owner` = 内联子组件 ⇒ **不是**根自有 ⇒ 🔴 拒绝）承担 ⇒ ⇒ 指针 MUST 改指那里。
+
+### 6.3 **零变更**条款
+
+§2 的**决策本体**（父侧落点语义 / 跨多层不在授权范围 / mem 本体跨 module 仍拒绝）· §3 选项 ·
+§4 后果 · §5 Verification ⇒ ⇒ **逐字不动** ⇒ ⇒ 理由：D1-h 退役的是**悬空输入的冒泡路径**
+⇒ ⇒ **不**触碰本 ADR 的任何决策点。
+
+### 6.4 Verification（可勾选 · 映射到 change AC）
+
+- [x] 两处指针已逐条订正，且**指向仍然存在的段落**（ADR-060 §7.2 · ADR-072 D1-f 界定表）
+      —— change **AC18**
+- [x] 退役符号 / 退役章节在全仓 ADR 中**不再有活指针** —— change **AC18**

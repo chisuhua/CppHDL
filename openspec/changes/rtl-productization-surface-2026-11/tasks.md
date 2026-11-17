@@ -229,14 +229,26 @@ grep -rn 'STATIC_REQUIRE(ch::EmitOptions{}.emit_hygiene == false)' tests/
 
 ---
 
-## B10 · T8 — ADR-058 / ADR-061 的 dated addendum（**architect 域**）
+## B10 · T8 — dated addendum（**architect 域**）
 
-> ⚠️ **需切 architect**（决策内容变更 · proposal 的 P-3 门亦写 `architect`）。
+> ⚠️ **已切 architect**（2026-11-17 · 用户口令「我现在切 architect」）⇒ ⇒ 交付后**切回 builder** 收尾。
 > ⚠️ `ADR-058:187-191` 的「既有路径 MUST 逐字节不变」需**第二个** addendum。
 
-- [ ] `ADR-058` dated addendum（含 `:187-191` 的第二条）
-- [ ] `ADR-061` dated addendum
-- [ ] 审稿记录落 `.rddf/reviews/`
+- [x] `ADR-058` dated addendum（**§7** · v2.18）—— 3 条：① §2.3「既有路径」的**指称**精确化
+      （= ctx-only 一族；新增带根入口**不**构成改动）② 选项摘录 `// 默认 Bubble` 陈旧
+      ③ §2.2/§5「与扁平逐字节一致」的**比较基准** = 带根产品产物
+- [x] `ADR-061` dated addendum（**§7** · v1.6.6）—— 4 条 + §3/§4/§5 处置清单
+- [x] `ADR-060` dated addendum（**§7** · v1.22）—— **实施期扩充**（它是冒泡机制的**权威所有者**）
+- [x] `ADR-062` dated addendum（**§7** · v1.8）—— **实施期扩充**（引用**已删除**的
+      `Bubbled` / `InlineFolded` 枚举 ⇒ 符号级死链）
+- [x] `ADR-066` dated addendum（**§6** · v1.4）—— **实施期扩充**（两处指针指向**已退役**章节）
+- [x] 审稿记录落 `.rddf/reviews/ADR-058-061-060-d1-h-dated-addendum.md`
+      （**oracle 1 轮 + critic 1 轮** · arch 档 · critic = **APPROVE_WITH_CONDITIONS** · **0 BLOCKER**）
+      ⇒ oracle 的 1 BLOCKER（ADR-060 §7.2 与 D1-f 界定表 / AC17 矛盾）**已闭合**；
+      critic 的 5 SHOULD_FIX + 1 NIT **逐条处置**（版本号碰撞 ×2 · 审稿文件落盘 ·
+      proposal T8 措辞同步 · 「四类」口径 · 变更记录行位置）
+- [x] **决策内容零变更**：Status 五份**保持 Accepted** · 既有决策句**逐字保留**（含已陈旧处）
+      ⇒ ⇒ 只追加 dated 段 + 元数据行 + 变更记录行
 
 ---
 

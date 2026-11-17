@@ -1,6 +1,7 @@
 # ADR-062: 层次化单元的**接口类型** —— 结构化端口（`Payload<T>` 不可充当接口）
 
-- Status: **Accepted**（2026-11-04 · 用户拍板 · **v1.4**：据 2026-11-04 架构评审转正）
+- Status: **Accepted**（2026-11-04 · 用户拍板 · **v1.8**（2026-11-17 · §7 dated addendum ·
+  ADR-072 **D1-f / D1-h** 对齐 · **决策内容零变更**）· **v1.4**：据 2026-11-04 架构评审转正）
 - Date: 2026-11-02
 - Author: build-agent（architect role）
 - Parent: 无（新增决策）；**约束** ADR-060 §2.1（成层组件的端口角色）·
@@ -8,6 +9,8 @@
 - 关联 capability: `rtl-hierarchical-output`（本 ADR 的主张作为其 Requirement 落地）
 - 关联 change: 已归档 `hierarchical-rtl-emission-2026-11`（T3-④）·
   在建 `hierarchical-rtl-equivalence-2026-11`（T3-005）
+  · `rtl-productization-surface-2026-11`（**T8** · §7 dated addendum）
+- 审稿报告: `.rddf/reviews/ADR-058-061-060-d1-h-dated-addendum.md`（**v1.8** · §7 dated addendum · oracle 1 + critic 1）
 - 关联台账: `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §2（需求 N1–N8）
 - 下游依据: ChipForge `docs/architecture/adr/ADR-091-chmem-open-core-port-architecture.md`
   §D3a.7（两层范式）· 硬约束 **G-1q**（层 2 输入 MUST NOT 走 `Payload<T>`）·
@@ -388,6 +391,7 @@ CH_INTERFACE(RegFileIface,
 
 | 日期 | 变更 |
 |---|---|
+| 2026-11-17 | **v1.8**（change `rtl-productization-surface-2026-11` **T8** · architect 角色 · **决策内容零变更**）：**§7 dated addendum** —— ① §2 落点表的**产品路径**订正（根 = 根自有 IO · 后代 `ch_out` 落体内 `logic` · 悬空后代 `ch_in` 改**拒绝**）② §5「五类来源」的 ②④ **退役** ⇒ ⇒ 产品路径下判据 = **四类** ③ §5 的 `PortProvenanceOrigin` 枚举引用（`Bubbled` / `InlineFolded`）**已失效**（枚举已删）⇒ ⇒ 详见 §7 |
 | 2026-11-08 | **v1.6**（architect 角色 · 据 oracle 复核 · 配套 **ADR-066 v1.1**）：① **§2.6 落点表「父侧落点」列收窄** —— 「`ch_out` ⇒ 父 module MUST 声明一根 `logic` 网」**仅在「消费点不是父 `output` 端口」时**成立 ⇒ ⇒ 直通形态 MUST NOT 强制造网 ⇒ ⇒ 加反向指针 `→ ADR-066 决策 ③ 为唯一权威`；② **§5 同一条判据同步收窄**（否则 §2.6 已收窄而 §5 仍无条件 ⇒ ⇒ 同一 ADR 内部出现**活矛盾**）⇒ ⇒ 决策内容**由 ADR-066 承载**，本 ADR 只做**指向** |
 | 2026-11-05 | **v1.5**（T3-④ 归档后 · architect 角色 · 据 **oracle** 复核）：**§5 的 `-Wall` 措辞订正 + 补实测依据** —— 改为指向 **ADR-060 §2.5 的 lint 门**（⚠️ **不加 `-Wall`**）；并补「`assign` 到 input 端口在**默认 warning 集**下即报 `%Error-ASSIGNIN` ⇒ exit≠0 ⇒ 该判据**不需要** `-Wall`」的实测背书 ⇒ ⇒ 决策内容**零变更** |
 | 2026-11-02 | **创建**（调研产出：下游 ADR-091 §D3a.7 + G-1q + `payload.h` + 桥接 plugin 实测。裁决：① 层次化单元接口 = **结构化端口**，且**成层组件的全部 `ch_in`/`ch_out` 都成端口**（不论是否被驱动）② `Payload<T>` **不可**作接口（4 条理由，其中 R1「codegen 不可见」不依赖时序）③ 层 2 输入 MUST 走组合端口（采纳 G-1q 并给出**结构性**理由）④ 建议「单一声明派生」消除四处手写 ⑤ 下游装配 MUST 补 `add_child` 或改用 `ch_layer`） |
@@ -396,3 +400,74 @@ CH_INTERFACE(RegFileIface,
 | 2026-11-02 | **v1.3**（据 critic 第 5 轮，**撤回一处错裁**）：原「观测端口归创建它的 module ⇒ 端口合成在**父**侧」**物理上不可能**（Verilog 父层无法直读子内部信号）⇒ ⇒ 改为三段裁决：① 父读子内部 ⇒ **按 ADR-060 §2.1 行 2 合成子侧 output 隐式端口**；② 稳定交付观测面 MUST 由单元自己声明成 `ch_out`；③ MUST NOT 把「父层临时 `ch_out`」当交付接口。⇒ 原裁决的动机（与 module 复用冲突）**已随「复用改判 MUST NOT」消失**。并在 §5 补对应可勾选判据 |
 | 2026-11-04 | **v1.4**（2026-11-04 架构评审 · 用户拍板）：① **§5 订正** —— 「观测/跨层读取（情形①②③）」一条**未标注适用范围** ⇒ ⇒ 读 ADR 的人会以为②③ 在本仓有验收项而实际没有 ⇒ ⇒ 补「**① 在本仓可测**；**②③ 的判据落在下游**（『交付观测面』是下游的交付契约概念）⇒ ⇒ **本仓不适用**」⇒ ⇒ 消解 change 侧「tasks 单方面豁免一条 ADR MUST」的冲突；② **Status 转正**（Proposed → Accepted） |
 | 2026-11-15 | **v1.7**（architect 角色 · 据实施期实测追认 · 来源 = change `2026-11-15-rv32i-hierarchical-example-2026-11`）：**§5 的「顶层端口表 == 扁平端口表（逐字逐序）」收窄为两段** —— ① 根 `io()` 端口段**逐字逐序**；② 其余端口 **⊆**（扁平 MAY **多出**成层子组件的 `ch_out` = 观测盲区 / 台账 id=23）⇒ ⇒ 「等于」在成层设计上**结构性不可满足** ⇒ ⇒ MUST NOT 写成「等于」（沿用本节第一条的既有告诫）|
+
+## 7. ⚠️ **2026-11-17 追加（dated addendum · ADR-072 D1-f / D1-h 对齐）** —— **端口来源分类与落点表的产品路径订正**
+
+> ⚠️ **本节是「追加」不是「改写」** ⇒ ⇒ §2 的**落点表** / §3 选项 / §4 后果 / §5 Verification
+> 的**既有决策句与表格逐字保留** ⇒ ⇒ **决策本身零变更** ⇒ ⇒ 只**标注退役条款** + 补**前向指针**
+> ⇒ ⇒ Status 不变（仍 Accepted）。
+> ⚠️ **触发** = change `rtl-productization-surface-2026-11` 的实施落地（ADR-072 **D1-f** 后代
+> `ch_out` 不上任何 module 的端口表 + **D1-h** 冒泡机制物理退役）⇒ ⇒ 本 ADR 的**落点表**与
+> **「五类来源」判据**都建立在「后代 `ch_out` 上端口」+「悬空输入冒泡」这两条**已退役**的机制上
+> ⇒ ⇒ 不补 dated 指针 ⇒ ⇒ 下游按 §5 的判据实现 ⇒ ⇒ 会去找**不存在**的来源类。
+> ⚠️ **关联 change** = `rtl-productization-surface-2026-11`（**T8**）·
+> **审稿记录** = `.rddf/reviews/ADR-058-061-060-d1-h-dated-addendum.md`（oracle 1 + critic 1）·
+> **AC 映射** = change 的 **AC1 / AC14 / AC18**。
+
+### 7.1 落点表（§2 的矩阵）—— **产品路径**下的三行订正
+
+| 粒度 | 2026-11-02 的写法（**遗留口径** · 逐字保留在 §2） | 2026-11-17 的**产品路径**（ADR-072 D1-f） |
+|---|---|---|
+| **RTL 顶层 module**（根） | 无 driver 的 `ch_in` ⇒ 顶层 `input`；**全部** `ch_out`（含 inline 后代）⇒ 顶层 `output` | **根自有** `ch_in`（无 driver）⇒ 顶层 `input`；**根自有** `ch_out` ⇒ 顶层 `output`；**后代 `ch_out` ⇒ 体内 `logic`**（不再上任何 module 的端口表） |
+| **inline**（在非根 module 内） | 该 module 的 `input`（无人驱动 ⇒ **冒泡**） | 产品路径：inline 后代的**无 driver `ch_in`** ⇒ 🔴 **拒绝**（`ok = false` + 点名） |
+| **成层**（非根） | 该 module 的 `input` 端口（⇒ **向上冒泡**） | 产品路径：非根成层 module 的**无 driver `ch_in`** ⇒ 🔴 **拒绝**（同上） |
+
+⚠️ **ctx-only 遗留路径不受影响**：遗留路径**不经** `toVerilogHierarchical` ⇒ ⇒ 它的端口面仍是
+ctx 级 ⇒ ⇒ 悬空输入**仍然**是顶层 input（分界见 ADR-058 §7.1 的对照表）。
+⚠️ **「根 module 必须单列」那条（oracle R1/R9）仍然成立** ⇒ ⇒ 只是「根按扁平规则」的**扁平**
+二字**只指遗留路径** ⇒ ⇒ 产品路径的根规则 = **根自有 IO**（不再是 ctx 级全部 `ch_out`）。
+
+### 7.2 §5「五类来源」判据 —— ④ **退役** ⇒ ⇒ 判据的**主语**变了
+
+**原句（§5 端口完整性判据 · 逐字保留）**：
+> ⇒ ⇒ **且每个端口 MUST 可追溯到五类来源之一**：
+> ① 自身 `ch_in` / `ch_out`；② **inline 后代**的 `ch_out`（⇒ **仅根 module 允许**）；
+> ③ ADR-060 §2.1 的**隐式端口**；④ ADR-060 §2.2 的**冒泡端口**；
+> ⑤ **时序基础设施** `default_clock` / `default_reset`
+
+**订正**：
+- **④ 冒泡端口** ⇒ **退役**（该来源**零生产** · ADR-060 §7.1）⇒ ⇒ 「五类」⇒ ⇒ **四类**；
+- **② inline 后代的 `ch_out`** ⇒ **退役**（后代 `ch_out` 不再上任何 module 的端口表 ⇒ ⇒
+  该来源在**产品路径**下**零生产**；ctx-only 遗留路径下它仍成立）⇒ ⇒ **②** 在产品路径下
+  **恒空**；
+- ⇒ ⇒ **产品路径**下的判据 MUST 改为「**⊇** 自身 `ch_in` ∪ `ch_out` ∪ **③ 合成端口**
+  ∪ **⑤ 时序基础设施**」⇒ ⇒ **有效来源 = ①③⑤ 共三类**（② 在产品路径下**恒空** ⇒ ⇒ 它的
+  「遗留路径来源」身份保留在文本里，但**不计入**产品路径的来源计数）⇒ ⇒ 「MUST NOT 写成
+  『等于』」那条论证**只对 ③ 成立**（③④ 不再必然存在）。
+- ⚠️ **判别力提醒**：合成端口（`__if_` / `__x_` / `__up_`）**仍然只出现在非顶层 module**
+  ⇒ ⇒ 「根 module 上 MUST 恒空」这条（ADR-060 G3-5 + 端口命名契约 N1）**仍然成立**。
+
+### 7.3 §5 的 `PortProvenanceOrigin` 枚举引用 —— **两个取值已物理删除**
+
+**原句（§5 · 逐字保留）**：
+> ⇒ ⇒ **段归属 MUST 以 `PortProvenanceOrigin` 为准**（`Self` / `ClockReset` / `Bubbled`
+> ⇒ ⇒ 归 ①；`InlineFolded` ⇒ ⇒ 归 ②）⇒ ⇒ **MUST NOT** 以**名称前缀**推断
+
+**订正**：`Bubbled` / `InlineFolded` **已物理删除**（ADR-072 **D1-h** ⇒ ⇒ 公开面「移除 / 改名」
+已登记）⇒ ⇒ 现有取值 = `Self` / `ClockReset` / `Synthesized` ⇒ ⇒ 「`Bubbled` 归 ① /
+`InlineFolded` 归 ②」这条分法**随之退役**（② 的主语不存在）⇒ ⇒ 「**MUST NOT** 以**名称前缀**
+推断段归属」这条**精神仍然成立**，且更强（产品路径下**根本没有**后代 `ch_out` 端口可归属）。
+
+### 7.4 **零变更**条款
+
+§2 的**决策本体**（成层组件的端口角色 = 自身 `ch_in` / `ch_out` + 跨模块边的归属）· §3 选项 ·
+§4 后果 ⇒ ⇒ **逐字不动** ⇒ ⇒ 理由：D1-f 改的是**「后代 `ch_out` 是否上端口表」**与
+**「悬空输入的失败语义」** ⇒ ⇒ **不**改变「成层且非根的 module 的端口 = 自身 IO + 合成端口
++ 时序基础设施」这条本体。
+
+### 7.5 Verification（可勾选 · 映射到 change AC）
+
+- [x] 产品路径下，**根 module** 的端口集合 == manifest `port_table[]`（逐字逐序）
+      —— change **AC1 / AC3**
+- [x] 悬空**后代** `ch_in` ⇒ 发射 `ok = false` + 点名 + 零文件 —— change **AC14**
+- [x] 退役枚举（`Bubbled` / `InlineFolded` / `Bubble` 等）全仓**零残留** —— change **AC18**
