@@ -1,6 +1,7 @@
 # SoC 层的 RTL 产物与 SoC 层 TB —— 完整方案（架构主题文档）
 
 - **Date**: 2026-11-16
+- **2026-11-17 dated 订正（**方案方向不变** · 2 处承接指针）**: ① §3 改动清单第 2 行写「发射入口用 `run_emit_cli`」与**实现不符**（落地为「自己解析 + 自己发射」，483 行）⇒ ⇒ 库层现已支持 `--hierarchical`（`2db2eda`）⇒ ⇒ **收敛为库层薄壳**（**实施收敛**，见 `2026-11-17-rtl-verification-single-source.md` §4.3 + **ADR-074**）② 本方案的 **(C) 独立 Verilog TB** 分工**实质不变** ⇒ ⇒ 只变**撰写形态**（生成式，**ADR-074 D1/D2**）⇒ ⇒ 另：SoC 顶层端口**具名化** ⇒ ⇒ 端口名变、**数量仍 = 14**（**ADR-075 E1**）。⚠️ **本文件正文（历史方案）不追溯改写** ⇒ ⇒ 当前态见 `2026-11-17-rtl-verification-single-source.md`。
 - **Author**: architect role（build agent）
 - **状态**: **Draft**（**oracle 第 1 轮 REJECT**（3 BLOCKER + 6 SHOULD_FIX）⇒ ⇒ 已修 ⇒ ⇒ **critic 待跑**；配套 ADR = `docs/adr/ADR-073-soc-rtl-product-and-tb.md`）
 - **上游**:
@@ -187,6 +188,7 @@ D4 要求期望值**手推** ⇒ ⇒ SoC 的期望源 MUST 是一份**仓内可�
 |---|---|---|---|
 | 1 | `examples/axi4/axi_soc_example.cpp` | ① 4 个 `ch_module` → `ch_layer`（**档 ③**：给模块类型名）② `matrix.m1_*` **11 个 tie-off**（仿 `phase3a_complete.cpp:259-263`）③ `matrix.s1_* ↔ uart` **AXI 通道接通**（**19 根单向**：11 正 + 8 反）④ `master.rst_n` **1 根透传**（`describe()` 不消费 ⇒ 无行为影响）⇒ ⇒ **这是 D2 的可发射性前置（31 全覆盖）** | 本方案 |
 | 2 | `examples/axi4/emit_rtl_soc.cpp`（**新**） | SoC 的发射入口（`#define main` + include + `run_emit_cli`） | 本方案 |
+<!-- ⚠️ **2026-11-17 dated 订正**：上行的「`run_emit_cli`」与**实现不符** —— 落地时 `emit_rtl_soc.cpp` 采用了「**自己解析参数 + 自己调 `toVerilogHierarchical` + 自己写 manifest**」的形态（483 行）⇒ ⇒ **且其头注释所依据的前提「`run_emit_cli` 只发扁平」已被 commit `2db2eda`（2026-11-17）推翻**（库层现已支持 `--hierarchical`）⇒ ⇒ **收敛方案 = 改用库层薄壳**（与 `examples/riscv-mini/emit_rtl_hier.cpp` 的 52 行形态统一）⇒ ⇒ 见 `docs/architecture/2026-11-17-rtl-verification-single-source.md` §4.3 + **ADR-074**（**实施收敛，非新决策**）。**本行不追溯改写**（它是本方案的历史清单）。 -->
 | 3 | `examples/axi4/CMakeLists.txt` | +1 target `emit_rtl_axi_soc` | 本方案 |
 | 4 | `examples/axi4/tb_axi_soc_example.sv`（**新**） | SoC 层独立 TB（**14 个顶层端口**（框架 2 + 根自有 12）+ ≥4 场景） | 本方案 |
 | 5 | `.rddf/checks/soc-rtl-expectations.md`（**新**） | SoC 的期望源（端口映射 + 地址映射 + 事务序列 + 手推结果） | 本方案 |

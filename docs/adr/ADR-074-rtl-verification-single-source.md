@@ -1,0 +1,214 @@
+# ADR-074: RTL 验证的单一真相源与生成式 TB —— 判据的单一语义、TB 生命周期与同源失明防御
+
+- **Status**: **Accepted**（2026-11-17 · architect role（build agent）· 双审已闭合：oracle 第 1 轮 REJECT（6B）⇒ 全闭 · critic 第 1 轮 REJECT（4B）⇒ 全闭 · **复审（只验闭合）APPROVE_WITH_CONDITIONS · 0 BLOCKER · `mergeable: yes`** ⇒ 关联 change 已立项 + AC 映射已回填 ⇒ 详见 `.rddf/reviews/ADR-074-rtl-verification-single-source.md`）
+- **Date**: 2026-11-17
+- **Author**: architect role（build agent）
+- **Parent**: **ADR-072**（顶层端口面收敛 + 四件套 · D2 · D4）· **ADR-073**（SoC 产物形态 + SoC 层 TB · D3 · D6）· **ADR-058 / ADR-061**（层次化输出）· **ADR-035**（Verilator backend）
+- **关联 change**: **`rtl-verification-single-source-2026-11`**（`openspec/changes/rtl-verification-single-source-2026-11/` · **已立项** · planner 2026-11-17）⇒ ⇒ **AC 映射** = 该 change 的 **AC1–AC23**（双向对照见 `.rddf/improvements/rtl-verification-single-source-2026-11.md` §3）
+- **蓝图**: `docs/architecture/2026-11-17-rtl-verification-single-source.md`（**推导 / 逐文件清单 / 分阶段 / 残留在此**）
+- **审稿记录**: `.rddf/reviews/ADR-074-rtl-verification-single-source.md`
+- **超长自检**: 正文 **< 250 行**；Decision 各条 ≤ 40 行（推导已在蓝图）
+- **实施序**: **ADR-075 E1 先于本 ADR 的 D1**（不是互相依赖，是**单向实施序**）
+
+---
+
+## 1. 背景与问题
+
+### 1.1 诉求（用户 2026-11-17）
+
+> 「从原始的 `*example.cpp` 构建端口连线，然后再创建提供测试激励 + 断言 + 期望值的 cpp，提供激励的 cpp，可以考虑直接提供对应的 `.sv` TB。而生成端口连线的 cpp 文件，可以直接用库层提供的能力」
+
+拆为 **A**（判据写在 C++ 侧 · 并产出 `.sv` TB）· **B**（端口连线用库层能力）· **C**（发射入口用库层能力）。
+⇒ ⇒ 本 ADR 裁 **A**；**B** 见 ADR-075；**C** 是**实施收敛**（蓝图 §4.3，**无取舍** ⇒ 不单立 ADR）。
+
+### 1.2 问题陈述
+
+RTL 验证面有 **3 条执行器路径**（解释器 / 仓内 backend / 独立 Verilog TB）与 **3 组同义载体**（期望值 · 端口身份 · 发射实现）。
+⇒ ⇒ **「碎片化」= 同一语义的多个物理载体**（不是文件数）。
+⇒ ⇒ 本 ADR 只裁一件事：**同一批判据的「语义」只能有一份实现**。
+
+### 1.3 实测事实（2026-11-17 · 可复算）
+
+| # | 事实 | 证据 |
+|---|---|---|
+| ① | ✅ 库层已有 TB 骨架生成器（端口连线 + clk/rst + VCD；激励/断言留 `// TODO:`） | `include/rtl_emit/tb_stub.h:59` · `src/rtl_emit/tb_stub.cpp:95-98, 154-158` |
+| ② | ✅ 库层已支持层次化产物 | `src/rtl_emit/cli.cpp:77-78, 186-208`（`2db2eda`） |
+| ③ | 🔴 **期望值三处重复**（`.md` 手推表 / `tb_*.sv` 的 `expect_*` / `tests/*` 的 `REQUIRE`） | `examples/axi4/tb_axi4_lite_example.sv`（37 断言）· `tests/test_axi_lite_slave_conformance.cpp`（15 例） |
+| ④ | 🔴 **手写端口映射表当前就是漂的** —— 头注释写 `awprot=input_1 · arprot=input_8`，而实例化是 `.top_unnamed_input_1(arprot)` / `.top_unnamed_input_8(awprot)` ⇒ ⇒ **注释与连线已经不一致**（只因两者都是 2 位 PROT 且从端不消费才没炸） | `examples/axi4/tb_axi4_lite_example.sv:18-25`（注释）vs `:84-93`（连线） |
+| ⑤ | 🔴 护栏 ②' 硬禁 `EXPECT-SRC` 指向 `.cpp`（转录实现 = 循环论证）⇒ ⚠️ **但它只查「指针形态」**，从不保证「值由人推」 | `scripts/verify_examples_rtl_sim.sh:214-217` |
+| ⑥ | ⚠️ 框架无反射 ⇒ 未具名端口的 `manifest.cpp_member` = `unnamed_input` 占位 | `include/rtl_emit/manifest.h:110-125` |
+| ⑦ | ⚠️ **`port_table[]` 的元素只有 `{name, dir, width, role}` —— 没有 `cpp_member`**；`cpp_member` 只在全量 `ports[]` 里 | `include/rtl_emit/manifest.h:74-83`（`RtlProductPort`）· `:51`（`RtlPortEntry::cpp_member`） |
+| ⑧ | ⚠️ **backend 自发射端口面 ≠ 产品端口面**（ctx 视图含后代 `ch_out`）⇒ ⇒ backend 侧无法按产品端口名寻址 | `src/codegen_verilog.cpp:435-505` · `src/core/verilator_backend.cpp:708-721` |
+| ⑨ | ⚠️ **两后端一致 ≠ 正确性证据**（同构缺陷两后端一致地错） | 根 `AGENTS.md` ANTI-PATTERNS |
+| ⑩ | ⚠️ 护栏 ⑥ 只判 `checks >= min_checks`（不判 `// TODO:` 残留）；`min_checks` 来自 tsv 的人登记下界 | `scripts/verify_examples_rtl_sim.sh:486-490` · `.rddf/checks/examples-rtl-sim-targets.tsv:21-22` |
+| ⑪ | 🔴 **`done` 粘滞 ⇒ 禁边沿判定** ⇒ 现有 TB 用**固定拍数**（`repeat (16)`），不是等沿 | `examples/axi4/tb_axi_soc_example.sv:9-18, 105-120` |
+| ⑫ | ⚠️ 现有 TB 真正用到「机器原语」的形态 = 有界 `do-while` 等握手（**非粘滞** ready）+ `for` 循环写 4 个寄存器（**含计算地址** `0xA5000000 + i*4`） | `examples/axi4/tb_axi4_lite_example.sv:134-209, 265-280` |
+
+### 1.4 问题
+
+**判据的权威表述该是什么？** 必须同时满足：① C++ 侧可直接跑（逻辑迭代 / 快速回归）② `.sv` 侧可机械生成（交付验证层不手写）③ **语义只有一份实现**（不是「两个实现 + 一句承诺」）④ 不产生循环论证 ⑤ 生成物有新鲜度判据。
+
+---
+
+## 2. 决策
+
+### 2.1 **D1** = 判据的权威表述 = **一个 DSL 文件 → 一份 IR → 两个后端**
+
+- 权威载体 = `examples/axi4/verif_<example>.verif`（**扩展名 `.verif`，不是 `.cpp`**）。
+- **处理链**：`扫描器 → IR（唯一语义载体） → ① IR 解释器（驱动 `Simulator`） ② Verilog 渲染器（生成 `.sv`）`。
+- ⚠️ **为什么不是「合法 C++ + 宏展开」**（**v2 修订**）：宏展开走预处理器、IR 只在 `.sv` 侧 ⇒ ⇒ **实际是两个语义实现**（宏体 vs 渲染器）⇒ ⇒ 「语义只有一份」不成立。⇒ ⇒ **源文件不参与 C++ 编译** ⇒ ⇒ 扩展名 `.verif`（防被 glob / 编译单元拾取）⇒ ⇒ **代价：失去 C++ 编译期语法检查**（缓解 = 扫描器 fail-closed + IR 解释器实际执行）。
+- ⚠️ **禁止** `std::function` 回调表冒充 DSL（那样每个 example 仍手写命令式序列）。
+
+### 2.2 **D2** = 原语集**封闭** + **表达式文法**闭合 + 渲染器 **fail-closed**
+
+**语句原语**（封闭集）：`RESET` · `SET` · `TICK` · `SETTLE` · `WAIT` · `EXPECT` · `EXPECT_STABLE` · `REPEAT(n){…}`（带隐式 `_i`）· `OBSERVE`。
+
+**表达式文法**（受控递归下降，**生成期求值** ⇒ 产物里只出现字面量）：
+`字面量（十进制 / 0x / 0b）` · `+ - * & | ^ ~ << >>` · 位选 `[hi:lo]` · 括号 · 循环变量 `_i`。
+**禁止**：变量声明 · 条件分支 · 预处理 · 多行调用 · 引用实现头 / 函数 / 全局量（⇒ 堵死「期望值转录实现」的通道）。
+
+**⚠️ 时序锚点（v2 新增 · 闭合「两个执行后端对同一 `.verif` 得出不同结论」的漏洞）**：
+
+> **IR 语义（唯一）**：**驱动发生在「沿后采样窗」内**（不消耗拍）· **观测发生在「最近一次结算之后」**（= 沿后已结算）。
+
+| 动作 | IR 语义 | IR 解释器 | Verilog 渲染 | 依据 |
+|---|---|---|---|---|
+| **驱动**（`SET`） | 写入当前拍采样窗（不推拍） | `sim.set_input_value`（或 node_id 级等价的非类型化入口，见下） | 赋值语句（紧接在上一个 `#1` 之后） | 现有 TB 的 `@(posedge clk); #1;` 后驱动（`tb_axi4_lite_example.sv:145-146, 173-176`） |
+| **推拍**（`TICK(n)`） | 每拍 = 驱动 → 沿 → 结算 | `sim.tick()` ×n | `repeat (n) @(posedge clk); #1;` | 事实 ⑩（tick 后读 = 沿后值） |
+| **观测**（`EXPECT`） | **最近一次结算之后**采样 | `get_port_value` **或 node_id 级等价入口**（⚠️ 读侧**同样**需要新访问器：DSL 标识符只能解析到 `node_id`） | 与上一个 `#1` 同点比较（**不再 `#0`**） | 同上 |
+| **组合观测**（`SETTLE`） | 不推拍 · 只重算组合 | `sim.eval_combinational()` | `#1;`（**不是 `#0`** —— `#0` 落在 inactive region，NBA 未结算） | `include/simulator.h:82`（public） |
+
+⚠️ **`#0` 被明确否决**（v1 的错误）—— 它在 inactive region，仍在 NBA 更新之前 ⇒ ⇒ 读到旧值 ⇒ **两个执行后端必然分叉**。
+⚠️ **序列语义 fail-closed**：**自上次结算以来有 `SET` ⇒ 拒 `EXPECT`**（扫描器非零退出）⇒ ⇒ 否则渲染器若在比较前插 `#1`，两执行后端会分叉（一个读到驱动后的新值、一个读旧值）⇒ ⇒ 该情形 MUST **不可表达**，而不是「约定一致」。
+⚠️ **判别性构例（MUST 有）**：`TICK(1)` 后立即 `EXPECT` 一个**寄存器输出** ⇒ ⇒ IR 解释器与生成的 `.sv` MUST 给**同一结论**（这条构例在 v1 的语义表下**会红**）。
+
+**⚠️ 端口绑定（v2 新增 · 闭合「DSL 标识符 → C++ 端口对象」缺失）**：
+
+- **问题**：`Simulator` 的 `set_input_value` / `get_port_value` 是**静态类型化的**（`include/simulator.h:415, 111`），而框架**无反射** ⇒ 仅凭字符串名无法调用。
+- **决策**：**新增 node_id 级的非类型化公开访问器**（`Simulator` 内已有 `data_map_` 按 `node_id` 索引的实现基础：`:127-137, 193-204`）⇒ ⇒ IR 解释器按 **`context` 的节点名建立 `name → node_id` 表**后直接读写。
+- **⇒ 端口具名因此是「双必需」**：① `.sv` 连线可生成（ADR-075）② `name → node_id` 可唯一解析（`unnamed_input` **重名不可区分**）⇒ ⇒ 进一步确认 ADR-075 的 E1 是硬前置。
+- ⚠️ **与「禁 `std::function` 回调表」不冲突**：被禁的是**命令式序列表**（把每个 example 的步骤写进回调）；`name → node_id` 是**端口注册表**（由 `context` 派生，**非手写**）。
+
+⚠️ **`REPEAT` 是必需原语**（事实 ⑫：4 个寄存器的循环写含计算地址）⇒ ⇒ 无它则首批目标写不出来。
+⚠️ **`EXPECT` 的值 MUST 是文法内表达式**（禁符号/函数引用）⇒ ⇒ 机器值只能是人写的字面量算式。
+⚠️ **扫描器对任何不认识的构造 ⇒ 非零退出**（**MUST NOT** 静默跳过）。
+
+### 2.3 **D3** = `WAIT` 只用于**非粘滞**信号，且 **MUST 至少推进一拍**
+
+- **粘滞信号**（如 `done`，事实 ⑪）⇒ MUST 用固定拍数 `TICK(n)` 采样 ⇒ ⇒ **禁** `WAIT`（第二笔事务起会立刻返回 ⇒ 静默错语义）。
+- `WAIT(signal, max)`：**`max` 有界** + **至少推进 1 拍**（对齐现有 `do-while`：同拍组合就绪时也要走一拍）。
+- ⚠️ **v2 订正**：v1 曾写「首批两个 AXI4 目标落地**依赖 `WAIT`**」⇒ ⇒ **错误**（`done` 的解法是固定拍数）。真实依赖 = **`REPEAT` + 表达式求值**（事实 ⑫）。
+
+### 2.4 **D4** = TB 生命周期 = **checked-in 生成物 + 新鲜度判据 + `min_checks` 等式**
+
+- `.sv` TB **进仓** ⇒ ⇒ **ADR-072 D2「四件套」的「独立 TB」语义不变**。
+- 新鲜度判据：重新生成 ⇒ **逐字节相同**（防「人改生成物忘改源」）。
+- ⚠️ **新鲜度防不了生成器自身 bug**（同源同错 ⇒ 逐字节相同 ⇒ 恒绿）⇒ ⇒ MUST 再加 **`tsv.min_checks` == 展开后运行期 checks 数**（= `.sv` 的 `RESULT: checks=N`；⚠️ **不是** `.verif` 的静态 `EXPECT` 语句数 —— `REPEAT` 内的语句会计多次 ⇒ ⇒ 取**运行期**口径）。
+- ⚠️ **同步义务**：`tsv` 的 `min_checks` 语义从「**下界**」改为「**等式**」⇒ ⇒ 表头 / `#COLUMNS` / 护栏读取三处 MUST 同批改。
+- ⚠️ **跨 ADR 的口径同步义务**：本变更会让**两处已签批 ADR 的「下界」表述变陈旧** —— `ADR-073:215`（照 `min_checks` 下界 + `scenarios`）· `ADR-072:208`（`min_checks` 45→37）⇒ ⇒ 实施时 MUST 各补一行 dated 订正（**不改决策，只订正口径**）。
+
+### 2.5 **D5** = 期望值的**机器层**在 DSL · **推导层**在 `.rddf/checks/*.md` · **双向 1:1**
+
+- `EXPECT-SRC` **仍指向 `.md`** ⇒ ⇒ 护栏 ②' **字面不变**。
+- ⚠️ **如实声明**：②' 只保证「指针形态」⇒ ⇒ **「值由人推导」的实质防线仍是 process + review**（本 ADR **不**宣称机械保证）。
+- 补强（可机械）：① `.md` 的锚点区**格式 fail-closed**（坏格式 ⇒ 红）② **双向 1:1**（每个 `.md` 锚点必有 `EXPECT`；每个 `EXPECT` 必有锚点）③ 期望值 / 锚点**正文** MUST NOT 由生成器产出（否则核对变自证）；⚠️ **例外**：`.md` 的**机械端口映射段**（`top_<成员名>` ↔ 端口号）**可以**由生成器产出（它不是期望值，是端口身份 ⇒ 与 ADR-075 同源）。
+- ⚠️ **如实声明（v2 补）**：**双向 1:1 只保证「存在」双向，不保证「数值」一致** ⇒ ⇒ 数值漂移**没有**机械判据 ⇒ 只能靠 process + review + 变异自证（N3 的措辞已按此订正）。
+
+### 2.6 **D6** = 判据的 **C++ 侧后端锁定「IR 解释器 + Simulator」**
+
+- ⇒ **不用** Verilator backend（端口面不同源（事实 ⑧）· 64-bit cap · backend 缺陷面）。
+- ⇒ ⇒ 交付验证仍由 **(C) 独立 Verilog TB** 承担（ADR-073 D3 分工**不变**）。
+
+### 2.7 **D7** = **保留手写 TB 逃生口**
+
+- 生成覆盖度**不强制 100%**（复杂 TB 可保留手写）⇒ ⇒ 覆盖度 MUST 登记在 `.rddf/checks/examples-rtl-sim-targets.tsv`。
+- ⇒ ⇒ **禁**「所有 TB MUST 生成」这类不可达义务。
+
+### 2.8 **D8** = 同源失明防御 = **逐原语语义一致性 + 变异自证 + 集合相等**
+
+- **逐原语**：**IR 解释器**与**Verilog 渲染器**是**两份执行后端实现**（⚠️ **不与**仓内既定的「双后端」= `InterpreterBackend` vs `VerilatorBackend` 混称 —— 后者见 `openspec/specs/dual-backend-test-coverage/spec.md:5-7`；本 ADR 的新套件 **MUST NOT** 按 `DUAL_BACKEND_TEST_PAIR` 规则注册）⇒ ⇒ 每个原语 MUST 有「两执行后端同结论」判据（**check_id 集合相等** + 各自结论相同）。
+- **变异自证** ≥3 条，**注入点与期望签名 MUST 写明**：共享源（⇒ 必须由 `.md` 交叉核对独立抓红）· 单个执行后端 · DUT · manifest。
+- ⚠️ **两侧一起变绿 = 零判别力 ⇒ 判红**。
+- ⚠️ **新增护栏判据各自 MUST 配负向对照**（⑥ 等式删一条 `EXPECT` · ⑥' 手改生成 `.sv` · ⑥'' 删一个锚点 · ⑥‴ 塞一行 `// TODO:` · ⑧' 塞一个 `top_unnamed_`）⇒ ⇒ **逐条确认转红**（v1 只列了 3 条时序变异 ⇒ 覆盖不到新增判据）。
+
+---
+
+## 3. 选项对比表
+
+| # | 选项 | 结论 | 理由 |
+|---|---|---|---|
+| **①** | 判据写在 `.md`（人读表）+ 两套读取器 | ❌ 拒 | C++ 侧无法直接跑 ⇒ 逻辑迭代面丢失；散文混进机器面 ⇒ 判别力不可控 |
+| **②** | 判据写成普通 C++ + C++ 解析器抽语义 | ❌ 拒 | 解析器 = **第二个语义实现** ⇒ 漂移源翻倍；「哪些语句算判据」不可机械判定 |
+| **③** | `std::function` 回调表冒充 DSL | ❌ 拒 | 每 example 仍手写命令式序列 ⇒ 两侧各解释一遍（AI slop） |
+| **④** | **合法 C++（宏展开）+ 行级扫描** | ❌ 拒（**v2 改判**） | 宏展开不经 IR ⇒ **实际两个语义实现**（v1 误称「一份 IR」） |
+| **⑤** | **`.verif` DSL → 一份 IR → IR 解释器 + Verilog 渲染器** | ✅ **采用** | 语义**真的**只有一份；代价 = 失去 C++ 编译期语法检查（用 fail-closed + 实际执行缓解） |
+| **⑥** | TB **build-time 生成 · 不进仓** | ❌ 拒 | **评审面**：`.sv` 变不可读派生物 ⇒ 四件套的清单式校验失去对象（**v2 改理由**：v1 的「要改 D2 语义」偏强） |
+| **⑦** | 判据的 C++ 侧跑 Verilator backend | ❌ 拒 | 端口面不同源（事实 ⑧）· 64-bit cap · backend 缺陷面 |
+| **⑧** | `EXPECT-SRC` 改为指向 `.verif` / `.cpp` | ❌ 拒 | 撞护栏 ②' ⇒ 循环论证防线回归；且 `.verif` 就是机器层 ⇒ 自证 |
+| **⑨** | 取消 (C) 独立 Verilog TB | ❌ 拒 | 交付验证层消失 ⇒ 违背 ADR-072/073 产品边界；失去「绕开 CppHDL runtime」的独立判据 |
+| **⑩** | 数值只写在 `.md`，DSL 只放锚点引用 | ❌ 拒（**已考虑**） | 理论上一处数值，但需在 `.md` 里造受控机器可读区 ⇒ 散文污染机器面（同选项①的失败模式）；⇒ 改为「机器层在 DSL + 推导层副本 + 双向 1:1 核对」 |
+
+---
+
+## 4. 后果 / 代价
+
+### 4.1 正面
+
+| # | 后果 |
+|---|---|
+| P1 | **判据的语义来源只有一份**（IR）；原语求值有**两份执行后端实现** + 逐原语一致性判据 ⇒ ⇒ 不是「两个语义定义 + 一句承诺」 |
+| P2 | 期望值**机器值只写一遍**；端口映射表**消失**（事实 ④ 的漂移面封口） |
+| P3 | 交付验证层与逻辑迭代层**共享判据**；C++ 侧无需 verilator 编译 ⇒ 回归快 |
+| P4 | 生成物**新鲜度** + **条数等式**双重保证 |
+
+### 4.2 负面 / 代价
+
+| # | 代价 | 量级 |
+|---|---|---|
+| N1 | 新增一套机制（扫描器 + IR + IR 解释器 + 渲染器 + 判据）⇒ ⇒ **有自身缺陷面** | 蓝图 §5.1 |
+| N2 | **失去 C++ 编译期语法检查**（`.verif` 不进编译单元） | 缓解：fail-closed + 实际执行 |
+| N3 | **`.md` 保留锚点副本** ⇒ 数值仍两处 ⇒ 靠双向 1:1 判据 | 1 条判据 |
+| N4 | 复杂 TB 需逃逸 ⇒ D7 | 治理成本 |
+| N5 | 双后端同源失明仍在 ⇒ 靠逐原语一致性 + 变异自证 | ≥3 条变异 |
+| N6 | `.verif` 是新文件类型 ⇒ 工具链（编辑器 / lint）无原生支持 | 低 |
+
+### 4.3 风险
+
+| # | 风险 | 缓解 |
+|---|---|---|
+| R1 | 后端实现 bug ⇒ TB 少断言 ⇒ 假绿 | D2 fail-closed + D4 条数等式 + D8 集合相等 |
+| R2 | 「两侧一致」被误当正确性证据（事实 ⑨） | D8 明写「一起绿 = 判红」；共享源变异必须由 `.md` 核对独立抓红 |
+| R3 | 新鲜度恒绿（生成器自身 bug） | D4 的 `min_checks` 等式（不依赖生成器自证） |
+
+---
+
+## 5. Verification（可勾选验收判据 · **前瞻**）
+
+> 执行者 = 蓝图 §8 的 **AC1–AC20** + 护栏新增条目。⚠️ **两套编号不同**（本节 AC1–AC16 / 蓝图 AC1–AC20）⇒ ⇒ 对照：本节 **AC1–AC14** ↔ 蓝图 **AC1–AC15**（前者少一条）；本节 **AC15/AC16** ↔ 蓝图 **AC19/AC20**；蓝图的 **AC16–AC18**（豁免表/活动面 grep/子 module 端口）在**ADR-075 §5** 里。⇒ ⇒ **planner 立项时 MUST 统一编号**（见蓝图 §8 导语）。
+
+- [ ] **AC1** **发射入口实现**中**无**直接调用 `toVerilogHierarchical`：`git grep -n "toVerilogHierarchical" -- 'examples/**/emit_rtl*.cpp'` == 空 且 `examples/axi4/emit_rtl.cpp` 已删；⚠️ **白名单（不改）**：`examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp:161,181`（库层 API 的**测试** · 合法消费者）· `examples/riscv-mini/{AGENTS.md,CMakeLists.txt}` 的**注释**（**v2 修正**：v1 的「`examples/` 全域 == 0」**不可满足**）
+- [ ] **AC2** 关键 32 个产品顶层端口 `ports[].cpp_member != "unnamed_input"` 且与 `port_table[].name` **1:1 唯一映射**（缺失/不唯一 ⇒ 红）
+- [ ] **AC3** `.md` 锚点 ↔ `.verif` `EXPECT` **双向 1:1**（缺一边即红）；`.md` 锚点区格式坏 ⇒ 红；⚠️ **期望值/锚点正文**不由生成器产出（**机械端口映射段**可由生成器产出）
+- [ ] **AC4** 生成的 `.sv` 内**无** `top_unnamed_*` 字面量
+- [ ] **AC5** 生成的 `.sv` 内 `// TODO:` 计数 == **0**
+- [ ] **AC6** 重新生成 ⇒ **逐字节相同**
+- [ ] **AC7** `tsv.min_checks` == **展开后运行期 checks 数**（= `.sv` 的 `RESULT: checks=N`；⚠️ 不是静态 `EXPECT` 语句数）
+- [ ] **AC8** 同一 `check_id` 集合在 **IR 解释器**与 **`.sv`** 两执行后端**集合相等**且各自结论相同
+- [ ] **AC9** ≥3 条变异**各自转红**（注入点 + 期望签名写明）；**共享源变异 MUST 由 `.md` 核对独立抓红**
+- [ ] **AC10** 扫描器对集合外构造 **fail-closed**（负向用例：投一条非法构造 ⇒ 非零退出）
+- [ ] **AC11** 生成覆盖度登记在 tsv（「哪些 TB 是生成的」可机械判；需 tsv 增列 + `#COLUMNS` 同步）
+- [ ] **AC12** `bash scripts/verify_examples_rtl_sim.sh` 绿 **且** `--self-test` 绿
+- [ ] **AC13** `ctest -LE perf` 全绿 **且** `ctest -L verilator_e2e` 全绿
+- [ ] **AC14** `scripts/verify_examples_rtl_sim.sh:214-217`（禁 `EXPECT-SRC` → `.cpp`）**逐字未改**
+- [ ] **AC15**（**时序锚点判别性构例**）`TICK(1)` 后立即 `EXPECT` 一个**寄存器输出** ⇒ **IR 解释器与 `.sv` 同结论**（该构例在 v1 语义表下会红）
+- [ ] **AC16**（**端口绑定**）`verif_run.cpp` 的通用实现**不含逐例端口绑定表**（`name → node_id` 由 `context` 派生）⇒ ⇒ 判据 = 同一份 `verif_run` 可跑两个不同 example
+
+---
+
+## 6. 边界与不变量（**不是决策**）
+
+- **不改**：ADR-072 D2（四件套的 TB 语义）· ADR-073 D3（(A)/(B)/(C) 分工）· ADR-073 D6（期望源 = `.md` 登记 + TB 头指针）· ADR-035 的 backend 语义。
+- **实施序**：**ADR-075 E1（端口具名）先于本 ADR 的 D1**（身份链前置 ⇒ 单向，非互依赖）。
+- **不覆盖**：`.md` 的人读改写体例 · `docs/developer_guide/**` 与 `docs/usage_guide/**` 的同步（蓝图 §6 Step 6）· `--check-products` 的库层下沉（蓝图 §4.3，需按仓规登记公开面）。
+- **本 ADR 隐含的实现面（MUST 落实，不属 architect 写集）**：① `Simulator` 的 **node_id 级非类型化访问器**（新增公开 API ⇒ 必须登记 `.rddf/checks/public-api-surface.md` + CHANGELOG）② `tsv` 的 `min_checks` 语义由「下界」改「等式」（表头 / `#COLUMNS` / 护栏读取三处同批）。
+- **归档前**：`Proposed` → `Accepted` + 关联 change 已立项并回填 AC 映射。
