@@ -166,6 +166,12 @@ bash scripts/verify_flat_rtl_emit.sh
       `CFG_CXXFLAGS_PCH_I`（上游 autoconf 在 `configure.ac:704-712` 定义为 `-include`）
       ⇒ ⇒ GCC 分支拿到**空串** ⇒ PCH 被当 linker input ⇒ 任何**触发 output-split** 的设计
       C++ 构建必失败。判别力：给 `counter` 加 `--output-split 200` 可**同型复现**
+      ⇒ ⇒ ⚠️ **前向注记（2026-11-17 · 归档后追加）**：该绕行**已被移除** ——
+      `verilator-pch-toolchain-fix-2026-11` 在**仓内 CMake 层**注入 `CFG_CXXFLAGS_PCH_I`
+      修好了工具链（零 submodule 改动），并把护栏改回**默认** split（真实覆盖 PCH 路径）。
+      ⇒ ⇒ **别把 `--output-split 0` 加回来**（那会把缺陷重新变成潜伏 CI 红）；
+      依据 = `docs/developer_guide/verilator-integration.md` §「PCH 与自动 output-split」·
+      判据 = `scripts/verify_verilator_pch.sh`
 
 验证：
 
