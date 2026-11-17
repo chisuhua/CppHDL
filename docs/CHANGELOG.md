@@ -33,6 +33,13 @@
 - **后代 `ch_out` 不再上任何 module 的端口表**（含根）⇒ 一律体内 `logic`
 - **悬空后代输入 MUST 被响亮拒绝**：`ok = false` + `error` 点名（端口名 + module + 层级），
   `files` 为空；**根自己**的悬空 `ch_in` 不受影响（它就是顶层 `input`）
+  ⇒ ⇒ ⚠️ **迁移指引（下游 MUST 照此改，否则发射直接失败）**：被拒的输入只有**两条**合法出路 ——
+  **① 接上驱动源**（父层 `u.io().din <<= io().din;`）或 **② 父层显式 tie-off 常量**
+  （`u.io().din <<= ch_bool(false);` / `<<= ch_uint<8>(0_d);`）⇒ ⇒ **tie-off 的输入有 driver**
+  ⇒ ⇒ 不触发拒绝（两条各有**机械**判据：`tests/test_hierarchy_verilog.cpp` 的
+  「WITH a driver is accepted」与「tied off by the parent is accepted」两条**配对正向**用例）
+  ⇒ ⇒ ⚠️ **注意**：`inline` 折叠进根的后代输入**同样被拒**（它不在根自有 `__io` 里 ⇒
+  不是合法的顶层 `input`）⇒ ⇒ 旧行为（把它冒泡成顶层 `input`）**不再存在**
 - 物理删除：`UndrivenPolicy::Bubble`（只剩 `Reject`）· `HierarchyPortOrigin::Bubbled/InlineFolded` ·
   `PortProvenanceOrigin::Bubbled/InlineFolded` · `BubbledInput` / `bubbled_inputs` ·
   `ensure_bubbled_port` · `dangling` 向量（公开面登记见 `.rddf/checks/public-api-surface.md`）

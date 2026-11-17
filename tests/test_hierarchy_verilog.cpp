@@ -1029,6 +1029,41 @@ public:
     void describe() override { io().dout <<= u.io().dout; }
 };
 
+// ── DUT（AC17 的**配对正向**）：inline 子组件的 `din` **有** driver ⇒ MUST 可发射 ──
+//    ⚠️ 与 `RootUndrivenTop` **同一拓扑**（inline 子组件 + 同样的端口形状）⇒ ⇒ 只差
+//    「`din` 有没有 driver」⇒ ⇒ 这一对用例合起来钉住「拒绝的**触发条件** = 没有 driver」，
+//    而**不是**「是后代就不许」⇒ ⇒ 否则「拒绝过宽」这类缺陷**测不出来**。
+class RootDrivenTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("root_driven_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InlineUndriven> u{"u"};
+    RootDrivenTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        u.io().din <<= io().din;   // ← **有** driver ⇒ 合法
+        io().dout <<= u.io().dout;
+    }
+};
+
+// ── DUT（AC17 的配对正向 · **tie-off**）：父层显式 tie-off ⇒ 该输入**同样有** driver ──
+//    ⚠️ 这是发射器 `error` 文本里给用户的**第二条出路**（「接上驱动源，或由父层显式
+//    tie-off 常量」）⇒ ⇒ 它 MUST 有**机械**证据（否则下游按提示改完仍然发不出来）。
+class RootTiedTop : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("root_tied_top");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    ch::ch_module<InlineUndriven> u{"u"};
+    RootTiedTop(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override {
+        u.io().din <<= ch_uint<8>(0_d);   // ← tie-off（**有** driver）⇒ 合法
+        io().dout <<= u.io().dout;
+    }
+};
+
 // ── DUT ㉑：**inline 子组件的悬空 `ch_in` 折进非根成层 module** ────────────
 //    ⚠️ 这是**存量缺口**（metis 指出）：原实现只给祖先登记端口，**不生成连接**
 //    ⇒ ⇒ 中间层空连接 ⇒ 值传到中途断线且零报错。F2 修复 MUST 一并覆盖它。
@@ -2089,6 +2124,46 @@ TEST_CASE("hierarchical emission: inline descendant's dangling input is rejected
     REQUIRE(r.error.find("component 'top.u'") != std::string::npos);
     REQUIRE(r.files.empty());
     REQUIRE_FALSE(file_exists(path));
+}
+
+// ============================================================================
+// AC17 的**配对正向**判据：同一拓扑，**只因有无 driver** ⇒ 一拒一放
+// ============================================================================
+// ⚠️ **为什么必须有这一条（判别力的另一半）**：AC17 的负向用例只证明
+//    「未驱动 ⇒ 被拒」⇒ ⇒ 它**证明不了**「拒绝没有过宽」⇒ ⇒ 若实现退化成
+//    「inline 子组件的 input **一律**不许」（哪怕它有 driver）⇒ ⇒ 负向用例**仍绿**
+//    ⇒ ⇒ 零判别力。⇒ ⇒ 本用例用**同一个拓扑**（inline 子组件 + 同样的端口）
+//    只改**一件事**：给子组件的 `din` 接上 driver ⇒ ⇒ MUST 可发射成功。
+//    ⇒ ⇒ 这对用例合起来钉住「拒绝的**触发条件**是「没有 driver」，不是「是后代」。
+TEST_CASE("hierarchical emission: inline descendant's input WITH a driver is accepted "
+          "(AC17 的配对正向)",
+          "[hierarchy][emit][undriven][inline]") {
+    ch::ch_device<RootDrivenTop> dev;
+    const std::string path = kOutDir() + "/driven_inline_root.v";
+    std::remove(path.c_str());
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.error.empty());
+    REQUIRE(r.files.size() == 1);
+    REQUIRE(file_exists(path));
+}
+
+TEST_CASE("hierarchical emission: inline descendant's input tied off by the parent is accepted "
+          "(AC17 的配对正向 · tie-off)",
+          "[hierarchy][emit][undriven][inline]") {
+    // ⚠️ **tie-off 是合法的第二条出路**（ADR-072 D1-f 的错误文本自带这条提示）：
+    //    父层显式给常量 ⇒ ⇒ 该输入**有** driver ⇒ ⇒ **不**触发拒绝。
+    //    ⇒ ⇒ 与上一条一起，证明「拒绝只看 driver 有无」，不看「是后代与否」。
+    ch::ch_device<RootTiedTop> dev;
+    const std::string path = kOutDir() + "/tied_inline_root.v";
+    std::remove(path.c_str());
+    auto r = ch::toVerilogHierarchical(path, dev.instance());
+    INFO("error: " << r.error);
+    REQUIRE(r.ok);
+    REQUIRE(r.error.empty());
+    REQUIRE(r.files.size() == 1);
+    REQUIRE(file_exists(path));
 }
 
 TEST_CASE("hierarchical emission: upward pass-through synthesizes output ports on each level",
