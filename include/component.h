@@ -51,8 +51,12 @@ enum class Granularity { RespectDeclarations, ForceInline, ForceLayer };
 /// 跨层非端口边的处理策略（ADR-060）：默认**合成隐式端口 + 告警**。
 enum class PortPolicy { SynthesizeWarn, SynthesizeFatal, Reject };
 
-/// 悬空子输入的策略（ADR-060）：默认**向上冒泡**。
-enum class UndrivenPolicy { Bubble, Reject };
+/// 悬空子输入的策略（ADR-060 §2.4.2 · ADR-072 **D1-h**）—— **唯一取值 = `Reject`**。
+///
+/// ⚠️ 悬空**后代**输入 MUST 被**响亮拒绝**（发射返回 `ok = false` + 点名端口/module/层级）
+///   ⇒ ⇒ 「冒泡」（`Bubble`）档已**退役**：它把「漏接线」变成**看起来合法的新顶层端口**
+///   ⇒ ⇒ 与「端口面 MUST 可机器消费」冲突。
+enum class UndrivenPolicy { Reject };
 
 class Component : public std::enable_shared_from_this<Component> {
 public:

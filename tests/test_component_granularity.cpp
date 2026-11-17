@@ -246,10 +246,11 @@ TEST_CASE("granularity: assembly without an active parent still respects declara
 // 策略枚举的默认值 MUST 在框架层定义（MUST NOT 留给实现者自行发明）
 // ═════════════════════════════════════════════════════════════════════════
 TEST_CASE("granularity: policy enums have canonical values", "[granularity][component]") {
-    // ADR-060 §2.4 的默认值：合成 + 告警 / 冒泡
+    // ADR-060 §2.4 的默认值：合成 + 告警
+    // ⚠️ ADR-072 **D1-h**：`UndrivenPolicy` 只剩 **`Reject`**（「冒泡」档已退役）
     constexpr ch::PortPolicy port_policy = ch::PortPolicy::SynthesizeWarn;
-    constexpr ch::UndrivenPolicy undriven_policy = ch::UndrivenPolicy::Bubble;
+    constexpr ch::UndrivenPolicy undriven_policy = ch::UndrivenPolicy::Reject;
     static_assert(port_policy == ch::PortPolicy::SynthesizeWarn);
-    static_assert(undriven_policy == ch::UndrivenPolicy::Bubble);
+    static_assert(undriven_policy == ch::UndrivenPolicy::Reject);
     REQUIRE(true);
 }

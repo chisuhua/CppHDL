@@ -19,6 +19,7 @@
 #include "ch.hpp"
 #include "bundle/stream_bundle.h"
 #include "codegen_naming.h"
+#include "codegen_verilog.h"
 #include "hierarchy_verilog.h"
 #include "hier_equivalence.h"
 #include "simulator.h"
@@ -318,11 +319,8 @@ ObsPlan plan_for(EqInlineTop &root, ch::Granularity g, PlanBase base = std::null
                                   return static_cast<std::uint64_t>(
                                       s.get_port_value(root.io().dout));
                               }));
-    p.obs.push_back(make_obs("leaf.dout", root.leaf.io().dout.impl()->id(),
-                              [&root](ch::Simulator &s) -> std::uint64_t {
-                                  return static_cast<std::uint64_t>(
-                                      s.get_port_value(root.leaf.io().dout));
-                              }));
+    // ⚠️ **ADR-072 D1-f**：后代 `ch_out` **不上**顶层（与粒度无关）
+    //    ⇒ ⇒ `leaf.dout` 是**盲区**（登记在 `all_ch_outs`，不进 `O`）
     return p;
 }
 
@@ -341,22 +339,10 @@ ObsPlan plan_for(EqTop &root, ch::Granularity g, PlanBase base = std::nullopt) {
                                   return static_cast<std::uint64_t>(
                                       s.get_port_value(root.io().dout));
                               }));
-    // 叶子的 `ch_out` 只在 **ForceInline** 下可见（全 inline ⇒ 落进根 module）
-    const bool leaf_visible = (g == ch::Granularity::ForceInline);
-    const bool leaf_visible_base = (b == ch::Granularity::ForceInline);
-    const bool single = (g == b);
-    // `O` = 该粒度与基准粒度**都可见**者（单粒度时基准 = 自身 ⇒ 即「全部可见」）
-    if (leaf_visible && (leaf_visible_base || single)) {
-        p.obs.push_back(make_obs("leaf.dout", root.leaf.io().dout.impl()->id(),
-                                  [&root](ch::Simulator &s) -> std::uint64_t {
-                                      return static_cast<std::uint64_t>(
-                                          s.get_port_value(root.leaf.io().dout));
-                                  }));
-    } else if (leaf_visible) {
-        // 可见但本次未选入 `O` ⇒ **显式豁免**（机械载体）
-        p.exempt.push_back({root.leaf.io().dout.impl()->id(), "leaf.dout"});
-    }
-    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    // ⚠️ **ADR-072 D1-f**：可见性**只**取决于「是不是根组件自有 `ch_out`」
+    //    ⇒ ⇒ 与粒度**无关**（后代 `ch_out` 在**任何**粒度下都不上顶层）
+    //    ⇒ ⇒ `O` = {`top.dout`}；`leaf.dout` 是**盲区**（`all_ch_outs`）。
+    p.mode = ObsMode::FullCoverage;
     return p;
 }
 
@@ -400,18 +386,29 @@ TEST_CASE("hierarchical equivalence - all-inline product is byte-identical to th
     REQUIRE_FALSE(res.hier_product.empty());
 
     // ① 逐字节一致（= `cmp` 退出码 0 ⇒ 允许差异 = 空集）
-    INFO("flat size=" << res.flat_product.size()
-                      << " hier size=" << res.hier_product.size());
-    REQUIRE(res.flat_product == res.hier_product);
+    //    ⚠️ 「扁平产物」= **产品（带根）**入口（ADR-072 D1：ctx-only 是**遗留**路径，
+    //    它仍把后代 `ch_out` 当顶层端口 ⇒ 与产品端口面不同）
+    {
+        const std::string flat_path = dir + "/flat_product.v";
+        ch::toVerilog(flat_path, dev.instance());
+        const std::string flat_txt = read_file(flat_path);
+        const std::string hier_txt = read_file(products.hier_path);
+        REQUIRE_FALSE(flat_txt.empty());
+        const auto at = hier_txt.find("/* verilator lint_off WIDTHEXPAND */");
+        REQUIRE(at != std::string::npos);   // 层次化文件带 module 归属注释前缀
+        INFO("flat size=" << flat_txt.size() << " hier size=" << hier_txt.size());
+        REQUIRE(hier_txt.substr(at) == flat_txt);
+    }
 
     // ② **负向对照**：在层次化产物里加一行注释 ⇒ MUST 检出差异
     //    （⇒ 判据不是「恒绿」：一个字节的差别就能被抓到）
     const std::string mutated = res.hier_product + "// injected comment\n";
     REQUIRE(mutated != res.flat_product);
 
-    // ③ 观测面**手写**且 ⊇ 全部 `ch_out`（任务 2.2）：全 inline ⇒ 叶子的 `ch_out`
-    //    也在顶层 ⇒ MUST 可观测（两侧都读得到）
-    REQUIRE(obs.size() == 2);
+    // ③ 观测面**手写**且 = 该粒度下**全部可见** `ch_out`
+    //    ⚠️ **ADR-072 D1-f**：可见集 = **根自有** `ch_out` ⇒ ⇒ 只有 `top.dout`
+    //    （`leaf.dout` 任何粒度下都不上顶层 ⇒ 盲区）
+    REQUIRE(obs.size() == 1);
     REQUIRE(res.flat_trace.size() == stim.size());
     for (const auto &row : res.flat_trace) {
         REQUIRE(row.size() == obs.size());
@@ -793,38 +790,10 @@ ObsPlan plan_for(EqDeepTop &root, ch::Granularity g, PlanBase base = std::nullop
                                   return static_cast<std::uint64_t>(
                                       s.get_port_value(root.io().dout));
                               }));
-    const bool all_inline = (g == ch::Granularity::ForceInline);
-    const bool all_inline_base = (b == ch::Granularity::ForceInline);
-    const bool single = (g == b);
-    if (all_inline && (all_inline_base || single)) {
-        p.obs.push_back(make_obs("mid.dout", root.mid.io().dout.impl()->id(),
-                                  [&root](ch::Simulator &s) -> std::uint64_t {
-                                      return static_cast<std::uint64_t>(
-                                          s.get_port_value(root.mid.io().dout));
-                                  }));
-        // ⚠️⚠️ **兄弟叶的真实输出**（此前这条是 `mid.dout` 的**死重** ⇒ 零增量判别力 ⇒
-        //    oracle 在实施后审查里抓出 ⇒ ⇒ MUST 真的观测它们，否则「兄弟边」只被间接覆盖）
-        p.obs.push_back(make_obs("a.dout",
-                                  root.mid.instance().a.instance().io().dout.impl()->id(),
-                                  [&root](ch::Simulator &s) -> std::uint64_t {
-                                      return static_cast<std::uint64_t>(
-                                          s.get_port_value(
-                                              root.mid.instance().a.instance().io().dout));
-                                  }));
-        p.obs.push_back(make_obs("b.dout",
-                                  root.mid.instance().b.instance().io().dout.impl()->id(),
-                                  [&root](ch::Simulator &s) -> std::uint64_t {
-                                      return static_cast<std::uint64_t>(
-                                          s.get_port_value(
-                                              root.mid.instance().b.instance().io().dout));
-                                  }));
-    } else if (all_inline) {
-        // ForceInline 下可见、但本次未选入 `O` ⇒ **显式豁免**（机械载体）
-        p.exempt.push_back({root.mid.io().dout.impl()->id(), "mid.dout"});
-        p.exempt.push_back({root.mid.instance().a.instance().io().dout.impl()->id(), "a.dout"});
-        p.exempt.push_back({root.mid.instance().b.instance().io().dout.impl()->id(), "b.dout"});
-    }
-    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    // ⚠️ **ADR-072 D1-f**：只有**根组件自有** `ch_out` 上顶层
+    //    ⇒ ⇒ `mid.dout` / `a.dout` / `b.dout` 在**任何**粒度下都是**盲区**
+    //    ⇒ ⇒ `O` = {`top.dout`}（兄弟边的可观测性由 `top.dout` 承担）
+    p.mode = ObsMode::FullCoverage;
     return p;
 }
 
@@ -846,19 +815,8 @@ ObsPlan plan_for(EqBundleTop &root, ch::Granularity g, PlanBase base = std::null
                                   return static_cast<std::uint64_t>(
                                       s.get_port_value(root.io().dout));
                               }));
-    const bool leaf_visible = (g == ch::Granularity::ForceInline);
-    const bool leaf_visible_base = (b == ch::Granularity::ForceInline);
-    const bool single = (g == b);
-    if (leaf_visible && (leaf_visible_base || single)) {
-        p.obs.push_back(make_obs("leaf.dout", root.leaf.io().dout.impl()->id(),
-                                  [&root](ch::Simulator &s) -> std::uint64_t {
-                                      return static_cast<std::uint64_t>(
-                                          s.get_port_value(root.leaf.io().dout));
-                                  }));
-    } else if (leaf_visible) {
-        p.exempt.push_back({root.leaf.io().dout.impl()->id(), "leaf.dout"});
-    }
-    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    // ⚠️ **ADR-072 D1-f**：`leaf.dout` 任何粒度下都不上顶层 ⇒ 盲区（不进 `O`）
+    p.mode = ObsMode::FullCoverage;
     return p;
 }
 
@@ -880,19 +838,8 @@ ObsPlan plan_for(EqMemTop &root, ch::Granularity g, PlanBase base = std::nullopt
                                   return static_cast<std::uint64_t>(
                                       s.get_port_value(root.io().rdata));
                               }));
-    const bool leaf_visible = (g == ch::Granularity::ForceInline);
-    const bool leaf_visible_base = (b == ch::Granularity::ForceInline);
-    const bool single = (g == b);
-    if (leaf_visible && (leaf_visible_base || single)) {
-        p.obs.push_back(make_obs("leaf.rdata", root.leaf.io().rdata.impl()->id(),
-                                  [&root](ch::Simulator &s) -> std::uint64_t {
-                                      return static_cast<std::uint64_t>(
-                                          s.get_port_value(root.leaf.io().rdata));
-                                  }));
-    } else if (leaf_visible) {
-        p.exempt.push_back({root.leaf.io().rdata.impl()->id(), "leaf.rdata"});
-    }
-    p.mode = single ? ObsMode::FullCoverage : ObsMode::PublicSubset;
+    // ⚠️ **ADR-072 D1-f**：`leaf.rdata` 任何粒度下都不上顶层 ⇒ 盲区（不进 `O`）
+    p.mode = ObsMode::FullCoverage;
     return p;
 }
 
@@ -1017,14 +964,25 @@ TEST_CASE("hierarchical equivalence - three levels with a sibling edge",
         const auto &inline_obs = inline_plan.obs;
         // ⚠️ **观测面必须真的含兄弟叶的输出**（此前是 `mid.dout` 的死重 ⇒ 零判别力 ⇒
         //    oracle 在实施后审查里抓出 ⇒ ⇒ 这里钉住条数，防再 slip）
-        REQUIRE(inline_obs.size() == 4);
+        // ⚠️ **ADR-072 D1-f**：可见 `ch_out` 只剩**根自有**的 `top.dout`
+        REQUIRE(inline_obs.size() == 1);
         auto res = ch_test::hier::compare(dev.context(), dir, products.hier_path, products.ports,
                                           deep_inputs(dev.instance()), inline_obs, stim);
         INFO("compare error: " << res.error);
         INFO("first mismatch: " << res.first_mismatch);
         REQUIRE(res.ok);
         REQUIRE(res.equal);
-        REQUIRE(res.flat_product == res.hier_product);
+        // 产品（带根）扁平 vs 全 inline 层次化 ⇒ 逐字节相同
+        {
+            const std::string flat_path = dir + "/flat_product_inline.v";
+            ch::toVerilog(flat_path, dev.instance());
+            const std::string flat_txt = read_file(flat_path);
+            const std::string hier_txt = read_file(products.hier_path);
+            REQUIRE_FALSE(flat_txt.empty());
+            const auto at = hier_txt.find("/* verilator lint_off WIDTHEXPAND */");
+            REQUIRE(at != std::string::npos);
+            REQUIRE(hier_txt.substr(at) == flat_txt);
+        }
         check_observation_surface(inline_plan, products.signal_map);
     }
 

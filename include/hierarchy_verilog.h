@@ -26,7 +26,7 @@ struct HierarchyEmitOptions {
     /// （`include/component.h` · ADR-060 §2.4）⇒ ⇒ 本文件 MUST NOT 再定义第二份副本
     /// ⇒ ⇒ 否则「两份枚举必然漂移」（ADR-060 §2.4 的原话）。
     PortPolicy port_policy = PortPolicy::SynthesizeWarn;
-    UndrivenPolicy undriven_policy = UndrivenPolicy::Bubble;
+    UndrivenPolicy undriven_policy = UndrivenPolicy::Reject;
     /// 根 module 的名字（默认 `top`，与扁平产物同名 ⇒ 便于 A/B 比对）
     /// ⇒ ⇒ 只由本选项决定（根组件自己写 `CH_HIERARCHY_LAYER("x")` MUST 是 no-op ·
     /// ADR-061 v1.6.2 §2.5.2）。
@@ -39,14 +39,13 @@ struct HierarchyEmitOptions {
 
 /// 一个端口的**来源分类**（G2 · value-only ⇒ 不带节点指针、不带连接关系）。
 ///
-/// 五类 = ADR-062 §5 的端口完整性判据：自身 / 时序基础设施 / inline 后代 / 冒泡 / 合成。
+/// **三类** = 自身 / 时序基础设施 / 发射期合成。
+/// ⚠️ 「inline 后代」与「冒泡」两类已退役（ADR-072 **D1-h**）。
 /// ⚠️ `ClockReset` 同时覆盖**根 module 的分析层端口**与**非根 module 发射期注入**的
 ///    clock/reset（二者在产物里是同一类基础设施）。
 enum class PortProvenanceOrigin {
     Self,          ///< 该 module 自己的 `ch_in` / `ch_out`
     ClockReset,    ///< `default_clock` / `default_reset`（分析层端口或发射期注入）
-    InlineFolded,  ///< inline 后代的 `ch_out`（**仅根 module**）
-    Bubbled,       ///< 悬空 `ch_in` 的逐级冒泡（ADR-060 §2.2）
     Synthesized,   ///< 发射期合成端口（`__if_` / `__x_` / `__up_`）
 };
 

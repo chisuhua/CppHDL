@@ -288,7 +288,7 @@ import sys
 EXPECTED = {
     "three_layers": [("m3_unit", "leaf", "l3_unit"), ("top", "mid", "m3_unit")],
     "row1_implicit": [("top", "inner", "inner_row1")],
-    "bubble": [("bubble_mid", "leaf", "bubble_leaf"), ("top", "mid", "bubble_mid")],
+    "two_siblings": [("top", "a", "sib_leaf"), ("top", "b", "sib_leaf_1")],
 }
 
 name = sys.argv[1]
@@ -511,11 +511,10 @@ EXPECTED = {
         ("top_unnamed_input", "INPUT", 8),
         ("top_unnamed_output", "OUTPUT", 8),
     ],
-    "bubble": [
+    # ⚠️ ADR-072 D1-f：后代 `ch_out` / 冒泡输入**都不上**顶层 ⇒ 顶层 = root 自有 IO
+    "two_siblings": [
         ("default_clock", "INPUT", 1),
         ("default_reset", "INPUT", 1),
-        # ⚠️ 冒泡上来的悬空输入（ADR-060 §2.2）⇒ 顶层**可驱动** ⇒ 名字 = ctx 级全局名
-        ("top_mid_leaf_unnamed_input", "INPUT", 8),
         ("top_unnamed_input", "INPUT", 8),
         ("top_unnamed_output", "OUTPUT", 8),
     ],
@@ -601,7 +600,7 @@ run_all() {
 
     local products="$WORK/products"
     gen_products "$GENERATOR" "$products" "$WORK/logs/gen.log" || return 1
-    ok "R0 产物生成（three_layers.v / row1_implicit.v / bubble.v）"
+    ok "R0 产物生成（three_layers.v / row1_implicit.v / two_siblings.v）"
 
     r1_lint_gate "$products" || return 1
     r2_pin_names "$products" || return 1
@@ -706,7 +705,7 @@ PY
     # ---- 投毒 4：R4 —— 改一份产物（确定性）-----------------------------
     echo "[self-test] 4/10 R4：产物被外部篡改"
     reset_products
-    printf '\n// tampered\n' >>"$products/bubble.v"
+    printf '\n// tampered\n' >>"$products/two_siblings.v"
     expect_red "R4 产物不一致" r4_determinism "$GENERATOR" "$products"
 
     # ---- 投毒 5：R5 —— 假工具输出错消息 --------------------------------

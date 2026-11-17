@@ -110,37 +110,38 @@ public:
     }
 };
 
-// ── 设计 ③：冒泡（中间的 `leaf.din` 悬空 ⇒ 逐级冒泡到顶层）────────────────
-class BubbleLeaf : public ch::Component {
+// ── 设计 ③：**同层两个成层兄弟**（两个实例 · 输入**全部有驱动**）──────────
+//    ⚠️ ADR-072 D1-f 之后「悬空输入冒泡」不再是合法产物形态 ⇒ 本设计接替它，
+//       继续为 R6（module 树同构）/ R8（顶层端口表）提供**第三个**靶子。
+//    期望树：top → a / b（同类型两个 module · 2 实例）
+class SibLeaf : public ch::Component {
 public:
-    CH_HIERARCHY_LAYER("bubble_leaf");
+    CH_HIERARCHY_LAYER("sib_leaf");
     __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
-    BubbleLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
+    ch_reg<ch_uint<8>> r{0_d};
+    SibLeaf(ch::Component *p = nullptr, const std::string &n = "leaf")
         : ch::Component(p, n) {}
     void create_ports() override { new (io_storage_) io_type; }
-    void describe() override { io().dout <<= io().din; }
+    void describe() override {
+        r->next = io().din;
+        io().dout <<= r;
+    }
 };
 
-class BubbleMid : public ch::Component {
+class SibTop : public ch::Component {
 public:
-    CH_HIERARCHY_LAYER("bubble_mid");
-    __io(ch_out<ch_uint<8>> dout;)
-    ch::ch_module<BubbleLeaf> leaf{"leaf"};
-    BubbleMid(ch::Component *p = nullptr, const std::string &n = "mid")
-        : ch::Component(p, n) {}
-    void create_ports() override { new (io_storage_) io_type; }
-    void describe() override { io().dout <<= leaf.io().dout; }   // leaf.din 悬空
-};
-
-class BubbleTop : public ch::Component {
-public:
-    CH_HIERARCHY_LAYER("bubble_top");
+    CH_HIERARCHY_LAYER("sib_top");
     __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
-    ch::ch_module<BubbleMid> mid{"mid"};
-    BubbleTop(ch::Component *p = nullptr, const std::string &n = "top")
+    ch::ch_module<SibLeaf> a{"a"};
+    ch::ch_module<SibLeaf> b{"b"};
+    SibTop(ch::Component *p = nullptr, const std::string &n = "top")
         : ch::Component(p, n) {}
     void create_ports() override { new (io_storage_) io_type; }
-    void describe() override { io().dout <<= mid.io().dout; }
+    void describe() override {
+        a.io().din <<= io().din;      // 有驱动
+        b.io().din <<= a.io().dout;   // 有驱动（兄弟链）
+        io().dout <<= b.io().dout;
+    }
 };
 
 // ── 拒绝形态：跨模块 `ch_mem`（父层读子层持有的 mem）────────────────────
@@ -473,10 +474,10 @@ int main(int argc, char **argv) {
     }
     ok = emit_one<T3>(dir, "three_layers.v") && ok;
     ok = emit_one<OuterRow1>(dir, "row1_implicit.v") && ok;
-    ok = emit_one<BubbleTop>(dir, "bubble.v") && ok;
+    ok = emit_one<SibTop>(dir, "two_siblings.v") && ok;
     if (!ok) {
         return 1;
     }
-    std::cout << "products-ok: three_layers.v row1_implicit.v bubble.v\n";
+    std::cout << "products-ok: three_layers.v row1_implicit.v two_siblings.v\n";
     return 0;
 }

@@ -76,20 +76,20 @@ def top_module_ports(text: str) -> list[tuple[str, str]]:
     return ports
 
 
-def manifest_expected_top_ports(manifest: dict) -> set[str]:
-    """按**契约**从清单算出顶层端口集。"""
-    out: set[str] = set()
-    for p in manifest.get("ports", []):
-        role = p.get("role")
-        if role in ("clock", "reset"):
-            out.add(p["name"])
-            continue
-        if p.get("dir") == "output":
-            out.add(p["name"])
-            continue
-        if p.get("dir") == "input" and not p.get("driven", False):
-            out.add(p["name"])
-    return out
+def manifest_product_port_table(manifest: dict) -> list[str]:
+    """顶层端口表 = 清单的**产品端口表**（`port_table[]` · schema v2）—— **按产物顺序**。
+
+    ⚠️ **唯一权威 = `port_table[]`**（T10）：旧口径「clock/reset ∪ 全部 output ∪
+       无 driver 的 input」已作废 —— `is_top_io` 只是「根组件自有 IO」的**描述信号**，
+       不是端口面定义（后代 `ch_out` 在产物里**不是**顶层端口）。
+    ⚠️ schema v1 清单**没有**该字段 ⇒ **fail-closed**（点名 schema，不静默回退）。
+    """
+    schema = manifest.get("schema", "")
+    table = manifest.get("port_table")
+    if not isinstance(table, list):
+        raise SystemExit(
+            f"::error::清单 schema='{schema}' 缺 port_table[] ⇒ 需要 rtl-emit-manifest-v2")
+    return [p["name"] for p in table]
 
 
 def main() -> int:
@@ -119,17 +119,25 @@ def main() -> int:
         vpath, mpath = args.check_top_ports
         text = pathlib.Path(vpath).read_text(encoding="utf-8", errors="replace")
         manifest = json.loads(pathlib.Path(mpath).read_text(encoding="utf-8"))
-        actual = {n for _, n in top_module_ports(text)}
-        expected = manifest_expected_top_ports(manifest)
-        missing = sorted(expected - actual)
-        extra = sorted(actual - expected)
+        actual = [n for _, n in top_module_ports(text)]
+        expected = manifest_product_port_table(manifest)
+        missing = sorted(set(expected) - set(actual))
+        extra = sorted(set(actual) - set(expected))
         if missing:
             print(f"::error::清单算出但产物顶层端口表里没有：{missing}")
         if extra:
             print(f"::error::产物顶层端口表里有但清单算不出：{extra}")
         if missing or extra:
             return 1
-        print(f"OK：顶层端口集 == 清单（{len(actual)} 个）")
+        # ⚠️ **逐字逐序**（端口面契约 = 集合 + 顺序；只比集合会漏掉「顺序错」
+        #    ⇒ ⇒ 下游按位置连线的 TB 会连错）
+        if actual != expected:
+            for i, (a, e) in enumerate(zip(actual, expected)):
+                if a != e:
+                    print(f"::error::端口顺序不符（# {i}）：产物 '{a}' vs 清单 '{e}'")
+                    break
+            return 1
+        print(f"OK：顶层端口表 == 清单产品端口表（{len(actual)} 个 · 逐字逐序）")
         return 0
 
     if args.self_assign:

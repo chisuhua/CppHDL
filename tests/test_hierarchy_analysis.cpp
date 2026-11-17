@@ -534,7 +534,7 @@ TEST_CASE("hierarchy analysis: three layers", "[hierarchy][analysis]") {
 // ═════════════════════════════════════════════════════════════════════════
 // inline 折叠：端口落到最近的成层祖先 + 悬空输入冒泡
 // ═════════════════════════════════════════════════════════════════════════
-TEST_CASE("hierarchy analysis: inline folding and input bubbling",
+TEST_CASE("hierarchy analysis: inline folding keeps descendant ports out of the table",
           "[hierarchy][analysis][inline]") {
     ch::ch_device<TopInline> dev;
     auto& top = dev.instance();
@@ -546,28 +546,37 @@ TEST_CASE("hierarchy analysis: inline folding and input bubbling",
     REQUIRE(a.modules[0].key == "top");
     REQUIRE(a.modules[0].instances.empty());
 
-    bool saw_folded_out = false;
-    bool saw_bubbled_in = false;
+    // ⚠️ ADR-072 **D1-f / D1-h**：
+    //   · inline 后代的 `ch_out` ⇒ **体内信号**（**不再**是顶层端口）
+    //   · 悬空后代 `ch_in` ⇒ 只登记为「未驱动」⇒ 发射 MUST **拒绝**（**不再**冒泡）
+    bool saw_helper_body = false;
     for (const auto& p : a.modules[0].ports) {
-        if (p.origin == ch::HierarchyPortOrigin::InlineFolded) {
-            saw_folded_out = true;
-            REQUIRE_FALSE(p.is_input);
-        }
-        if (p.origin == ch::HierarchyPortOrigin::Bubbled) {
-            saw_bubbled_in = true;
-            REQUIRE(p.is_input);
-            // 冒泡端口的名字 MUST 来自 **扁平发射器的全局命名表**（ADR-061 决策④）
-            // ⇒ 组件路径前缀被 sanitize 成 `_`
-            REQUIRE(p.name.rfind("top_helper_", 0) == 0);
-        }
-        // inline 的**有 driver** `ch_in` MUST 是体内 wire（不是端口）
-        if (p.is_input && p.origin == ch::HierarchyPortOrigin::Self &&
-            p.name.find("helper") != std::string::npos) {
-            FAIL("driven inline ch_in must be a body wire, not a port: " << p.name);
+        INFO("port: " << p.name);
+        REQUIRE(p.name.rfind("top_helper_", 0) != 0);
+    }
+    for (const auto& b : a.modules[0].body) {
+        if (b.name.rfind("top_helper_", 0) == 0) {
+            saw_helper_body = true;
         }
     }
-    REQUIRE(saw_folded_out);
-    REQUIRE(saw_bubbled_in);
+    REQUIRE(saw_helper_body);
+
+    // 悬空输入：**根自己**的（`top.din`）= 合法顶层 input；**后代**的（`helper.spare`）
+    // ⇒ 发射器 MUST 拒绝。两者都登记 ⇒ ⇒ 用 `owned_by_root` 区分。
+    std::size_t descendant_undriven = 0;
+    bool saw_root_own_undriven = false;
+    for (const auto& u : a.undriven_inputs) {
+        if (u.owned_by_root) {
+            saw_root_own_undriven = true;
+            continue;
+        }
+        ++descendant_undriven;
+        REQUIRE(u.node != nullptr);
+        REQUIRE(u.module == "top");
+        REQUIRE_FALSE(u.chain.empty());
+    }
+    REQUIRE(saw_root_own_undriven);
+    REQUIRE(descendant_undriven == 1);
 
     // inline 组件之间没有跨模块边
     REQUIRE(a.edges.empty());

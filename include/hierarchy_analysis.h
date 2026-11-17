@@ -9,8 +9,9 @@
 //    只读 `lnodeimpl` 的 `parent()` / `type()` / `num_srcs()` / `src()`
 //    ⇒ ⇒ 否则 `toVerilog()` 的既有路径与仿真行为都会变。
 //
-// ⚠️ **本阶段（T3-②）的范围**：模块清单 + 节点折叠 + `self` / `clock_reset` /
-//    `inline_folded` / `bubbled` 四类端口 + 连接表 + 三条前置校验。
+// ⚠️ **本阶段（T3-②）的范围**：模块清单 + 节点折叠 + `self` / `clock_reset`
+//    两类端口 + 连接表 + 三条前置校验（「inline 折叠端口」与「冒泡端口」已退役 ·
+//    ADR-072 D1-f / D1-h）。
 //    **隐式端口合成**（跨模块边上「子侧端点不是端口」/ 兄弟边）是 **T3-④** 的义务
 //    ⇒ ⇒ 本层遇到它 MUST **响亮拒绝**（MUST NOT 静默产出不完整的端口表
 //       —— 那会让 golden 变成「把 bug 合法化」）。
@@ -36,8 +37,9 @@ class lnodeimpl;
 enum class HierarchyPortOrigin {
     Self,          ///< 该 module 自己的 `ch_in` / `ch_out`
     ClockReset,    ///< context 级 `default_clock` / `default_reset`（`owner == nullptr`）
-    InlineFolded,  ///< 被 inline 的后代的 `ch_out` ⇒ 落到最近的成层祖先
-    Bubbled,       ///< 无 driver 的子 `ch_in` ⇒ 逐级向上冒泡成 input（ADR-060 §2.2）
+    /// ⚠️ **只有这两个取值**（ADR-072 **D1-h**）：
+    ///   · 「被 inline 的后代 `ch_out` 上顶层」已退役（D1 ⇒ 后代 `ch_out` **不上**任何端口表）
+    ///   · 「悬空子输入逐级冒泡」已退役（D1-f ⇒ 悬空**后代**输入 MUST 被**响亮拒绝**）
 };
 
 struct HierarchyPort {
@@ -114,16 +116,21 @@ struct PendingImplicitEdge {
     std::string child_instance_name;
 };
 
-/// 一条「需要跨 module 边界的**冒泡**」（ADR-060 v1.13 §2.2 G3）。
+/// 一条「**未驱动的后代输入**」（ADR-072 **D1-f / D1-h**）。
 ///
-/// ⚠️ 用途只有两个：`UndrivenPolicy::Reject` 的诊断、`Bubble` 的 `CHWARN` / 产物注释
-/// ⇒ ⇒ **MUST NOT 进 `to_text()`**（T3-② 的 4 份 golden 不受影响）。
-struct BubbledInput {
+/// ⚠️ 用途 = **诊断与拒绝**：发射器 MUST 用它在 `error` 里点名**全部**悬空后代输入
+///   （端口名 + module + 层级）⇒ ⇒ 它**不产生任何端口**（冒泡机制已退役）。
+/// ⚠️ **MUST NOT 进 `to_text()`**（golden 不受影响）。
+struct UndrivenInput {
     const ch::core::lnodeimpl* node = nullptr;
-    /// **inline 折叠后**的 owner module key（`== root` ⇒ 不跨 module 边界 ⇒ 不属「隐式悬空」）
+    /// **inline 折叠后**的 owner module key
     std::string module;
-    /// 冒泡层级链（owner module → … → root），用于诊断点名「冒泡到哪几层」
+    /// **拥有该端口的组件路径**（诊断用 ⇒ 用户据此在源码里找到它）
+    std::string owner;
+    /// 层级链（owner module → … → root），用于诊断点名「属于哪几层」
     std::vector<std::string> chain;
+    /// `true` = **根组件自己**的悬空 `ch_in`（⇒ **不是**错误：它就是顶层 `input`）
+    bool owned_by_root = false;
 };
 
 /// 连接表的一行（**只记录跨 module 的边**）。
@@ -147,9 +154,9 @@ struct HierarchyAnalysis {
     /// `ImplicitPortHandling::Record` 下填充**。
     /// ⚠️ **MUST NOT 进 `to_text()`** ⇒ ⇒ T3-② 的 4 份 golden 逐字节不变。
     std::vector<PendingImplicitEdge> pending_implicit_edges;
-    /// **需要冒泡**的悬空 `ch_in`（ADR-060 v1.13 G3）—— 端口与**逐跳连接**都在本层生成。
+    /// **未驱动的后代输入**（ADR-072 D1-f）—— 只作**诊断 / 拒绝**用，**不产生端口**。
     /// ⚠️ **MUST NOT 进 `to_text()`**（同上）。
-    std::vector<BubbledInput> bubbled_inputs;
+    std::vector<UndrivenInput> undriven_inputs;
 
     /// 结构化文本快照（golden 形态 ⇒ 可逐字节比对）。
     /// ⚠️ 确定性：模块按拓扑序；端口按节点 id 升序；体内节点按 id 升序；
@@ -182,8 +189,9 @@ HierarchyAnalysis analyze_hierarchy(Component& root,
 ///
 /// ⚠️ **为什么是 3 档而不是 5 档**：报告的 5 大项里有 **4 项是正交事实**
 /// （隐式边 / 悬空输入 / 未消费子输出 / 跨模块 mem）⇒ ⇒ 谁更糟**没有客观依据**
-/// （默认 `PortPolicy::SynthesizeWarn` + `UndrivenPolicy::Bubble` ⇒ 隐式边与
-/// 悬空输入**都是可发射的告警**）⇒ ⇒ 5 档是**伪全序** ⇒ ⇒ 收敛为 3 档，
+/// （默认 `PortPolicy::SynthesizeWarn` ⇒ 隐式边是**可发射的告警**；而悬空**后代**
+/// 输入在 `UndrivenPolicy` 只剩 `Reject` 后是**硬失败**）⇒ ⇒ 5 档是**伪全序**
+/// ⇒ ⇒ 收敛为 3 档，
 /// 严重度信息放在**明细**里。
 enum class HierarchyFriendliness {
     kClean = 0,          ///< 无隐式边 / 无悬空输入 / 无未消费子输出 / 无跨模块 mem

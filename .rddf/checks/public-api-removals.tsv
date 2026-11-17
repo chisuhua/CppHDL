@@ -61,3 +61,10 @@ ext_clk	removed	examples/riscv-mini/src/rv32i_pipeline_top.h	-	R8-改判-2026-11
 ALU_OP_*	re	include/cpu/pipeline/stages/ex_stage.h	ALU_OP_(ADD|SUB|AND|OR|XOR|SLL|SRL|SRA|SLT|SLTU)\b	B4-C2-alu-encoding-unification
 mem_size	removed	include/cpu/pipeline/rv32i_alu.h	-	B4-C3-alu-component-adoption
 mem_signed	removed	include/cpu/pipeline/rv32i_alu.h	-	B4-C3-alu-component-adoption
+UndrivenPolicy::Bubble	removed	include/component.h	-	ADR-072-D1-h
+BubbledInput	removed	include/hierarchy_analysis.h	-	ADR-072-D1-h
+bubbled_inputs	removed	include/hierarchy_analysis.h	-	ADR-072-D1-h
+Origin::Bubbled	removed	include	-	ADR-072-D1-h
+InlineFolded	removed	include	-	ADR-072-D1-h
+ensure_bubbled_port	removed	src/hierarchy_analysis.cpp	-	ADR-072-D1-h
+dangling	removed	src/hierarchy_verilog.cpp	-	ADR-072-D1-h

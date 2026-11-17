@@ -1,3 +1,21 @@
+## 2026-11-17 — **顶层端口面收敛 + 冒泡机制退役**（ADR-072 D1-f / D1-h）
+
+**问题**：manifest 声称的顶层端口表与产物**不自洽**（`is_top_io: true` = 32，产物顶层 = 130
+⇒ ⇒ 98 个顶层端口是后代信号）；且「悬空后代输入冒泡成顶层 input」把**漏接线**变成看起来
+合法的新顶层端口（编号随 eval-list 序漂移、无语义）。
+
+**改了什么**（`rtl-productization-surface-2026-11` **T15 + T6**）
+- **后代 `ch_out` 不再上任何 module 的端口表**（含根）⇒ 一律体内 `logic`
+- **悬空后代输入 MUST 被响亮拒绝**：`ok = false` + `error` 点名（端口名 + module + 层级），
+  `files` 为空；**根自己**的悬空 `ch_in` 不受影响（它就是顶层 `input`）
+- 物理删除：`UndrivenPolicy::Bubble`（只剩 `Reject`）· `HierarchyPortOrigin::Bubbled/InlineFolded` ·
+  `PortProvenanceOrigin::Bubbled/InlineFolded` · `BubbledInput` / `bubbled_inputs` ·
+  `ensure_bubbled_port` · `dangling` 向量（公开面登记见 `.rddf/checks/public-api-surface.md`）
+- 用户可见：**RV32I 分层产物顶层 34 端口**（= `default_clock` / `default_reset` + 4 `ch_in` +
+  28 `ch_out`，与 `AGENTS.md` 手推锚一致）；ctx-only 遗留扁平产物**逐字节不变**（130）
+- 护栏同步：`flat_rtl_emit_check.py` 的 F3 改为**只消费** manifest 的 `port_table[]`（逐字逐序）·
+  `verify_hierarchical_rtl.sh` R6/R8 期望集重算（冒泡靶子换成「同层两兄弟」正向设计）
+
 ## 2026-11-17 — **manifest schema v1 → v2**（新增产品端口表 `port_table[]`）
 
 **背景**：v1 只有 `is_top_io`（语义 = 根组件自有 IO）⇒ ⇒ 消费方**无法**据此复原产物端口面。

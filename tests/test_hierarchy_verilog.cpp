@@ -996,8 +996,19 @@ public:
     void describe() override { io().dout <<= a.io().dout; }   // a/b 的 din 都悬空
 };
 
-// ── DUT ⑳：**不属「隐式悬空」的两类**（`Reject` 下 MUST 仍产出）────────────
-//    ① 根自己的 `ch_in`；② inline 折叠进根的悬空 `ch_in`
+// ── DUT ⑳a：**根自己的 `ch_in` 悬空**（合法 ⇒ MUST 仍产出）────────────────
+//    ⚠️ 根自己的无 driver `ch_in` = 顶层 `input`（**不是**错误）。
+class RootOnlyUndriven : public ch::Component {
+public:
+    CH_HIERARCHY_LAYER("root_only_undriven");
+    __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
+    RootOnlyUndriven(ch::Component *p = nullptr, const std::string &n = "top")
+        : ch::Component(p, n) {}
+    void create_ports() override { new (io_storage_) io_type; }
+    void describe() override { io().dout <<= io().din; }
+};
+
+// ── DUT ⑳b：**inline 折叠进根的悬空 `ch_in`**（ADR-072 V18 ⇒ MUST 被拒绝）──
 class InlineUndriven : public ch::Component {
 public:
     __io(ch_in<ch_uint<8>> din; ch_out<ch_uint<8>> dout;)
@@ -1559,8 +1570,8 @@ static_assert(std::is_same_v<decltype(HierarchyEmitOptions{}.undriven_policy), c
               "undriven_policy MUST use the single authoritative ch::UndrivenPolicy");
 static_assert(HierarchyEmitOptions{}.port_policy == ch::PortPolicy::SynthesizeWarn,
               "default port policy MUST be SynthesizeWarn (ADR-060 §2.4)");
-static_assert(HierarchyEmitOptions{}.undriven_policy == ch::UndrivenPolicy::Bubble,
-              "default undriven policy MUST be Bubble (ADR-060 §2.4)");
+static_assert(HierarchyEmitOptions{}.undriven_policy == ch::UndrivenPolicy::Reject,
+              "undriven policy MUST be Reject (ADR-072 D1-h: bubbling retired)");
 
 TEST_CASE("hierarchical emission: granularity scope covers construction and emission",
           "[hierarchy][emit][granularity]") {
@@ -2041,89 +2052,43 @@ TEST_CASE("hierarchical emission: cross-module width mismatch is rejected before
     }
 }
 
-TEST_CASE("hierarchical emission: dangling layered input bubbles to the top with real links",
-          "[hierarchy][emit][bubble]") {
-    // ⚠️ **F2**（ADR-060 v1.13 G3）：成层组件的悬空 `ch_in` MUST 逐级冒泡
-    //    ⇒ ⇒ ① 顶层可驱动 · ② 每级同名 · ③ **逐跳实连**（G3-2，连接也由分析层生成）
-    //       · ④ 端口名字 = ctx 级全局名（与扁平逐字相同）· ⑤ 端口旁注释 · ⑥ 每条一条 CHWARN
+TEST_CASE("hierarchical emission: undriven layered descendant input is rejected",
+          "[hierarchy][emit][undriven]") {
+    // ⚠️ ADR-072 **D1-f / D1-h**：悬空**后代**输入 MUST 使发射 fail-closed
+    //    ⇒ ⇒ ① `ok == false` · ② `error` 点名端口 + module + 层级（全部）· ③ 不留产物
     ch::ch_device<BubbleTop> dev;
-    const std::string path = kOutDir() + "/bubble.v";
+    const std::string path = kOutDir() + "/undriven_layered.v";
     std::remove(path.c_str());
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
-    REQUIRE(r.ok);
-
-    const std::string all = read_file(path);
-    const std::string top = module_text(all, "top");
-    const std::string mid = module_text(all, "bubble_mid");
-    const std::string leaf = module_text(all, "bubble_leaf");
-    REQUIRE_FALSE(top.empty());
-    REQUIRE_FALSE(mid.empty());
-    REQUIRE_FALSE(leaf.empty());
-
-    // ① 顶层有**同名 input**（名字 = ctx 级全局名 ⇒ 与扁平逐字相同）
-    const std::string name = "top_mid_leaf_unnamed_input";
-    REQUIRE(top.find("input [7:0] " + name) != std::string::npos);
-    // ② 中间层也有（逐级同名）
-    REQUIRE(mid.find("input [7:0] " + name) != std::string::npos);
-    // ③ ⭐ **逐跳实连**：两处实例映射都接上（`.X(X)` 而不是空连接）
-    REQUIRE(mid.find("." + name + "(" + name + ")") != std::string::npos);
-    REQUIRE(top.find("." + name + "(" + name + ")") != std::string::npos);
-    REQUIRE(all.find("." + name + "()") == std::string::npos);
-    // ④ 叶 module 体内**不引用**父层信号（值只经实例端口传入）
-    REQUIRE(leaf.find("top_unnamed_input") == std::string::npos);
-    // ⑤ 端口旁注释（来源可追溯）
-    //    ⚠️ 注释里的路径 = **组件全路径**（module key），不是 module_type_name
-    REQUIRE(top.find("// implicit: undriven input of top.mid.leaf") != std::string::npos);
-    REQUIRE(mid.find("// implicit: undriven input of top.mid.leaf") != std::string::npos);
-    // ⑥ 顶层端口顺序：bubbled input MUST 排在 `ch_out` **之前**
-    const auto in_pos = top.find("input [7:0] " + name);
-    const auto out_pos = top.find("output [7:0] top_unnamed_output");
-    REQUIRE(in_pos != std::string::npos);
-    REQUIRE(out_pos != std::string::npos);
-    REQUIRE(in_pos < out_pos);
-    // ⑦ 每条悬空输入**恰好一条**告警（分析层不重复打）
-    std::size_t bubble_warnings = 0;
-    for (const auto &w : r.warnings) {
-        if (w.find(name) != std::string::npos) {
-            ++bubble_warnings;
-        }
-    }
-    REQUIRE(bubble_warnings == 1);
+    REQUIRE_FALSE(r.ok);
+    // ① 点名端口（名字 = ctx 级全局名）
+    REQUIRE(r.error.find("top_mid_leaf_unnamed_input") != std::string::npos);
+    // ② 点名 module + 层级链（`top.mid.leaf -> top.mid -> top`）
+    REQUIRE(r.error.find("top.mid.leaf") != std::string::npos);
+    REQUIRE(r.error.find("top.mid.leaf -> top.mid -> top") != std::string::npos);
+    // ③ fail-closed：不留任何产物
+    REQUIRE(r.files.empty());
+    REQUIRE_FALSE(file_exists(path));
 }
 
-TEST_CASE("hierarchical emission: inline descendant's dangling input also gets real links",
-          "[hierarchy][emit][bubble][inline]") {
-    // ⚠️ **存量缺口**（metis · ADR-060 v1.13 G3-2）：inline 组件的悬空 `ch_in`
-    //    折进**非根**成层 module 时，原实现只登记端口、**不生成连接**
-    //    ⇒ ⇒ 中间层空连接 ⇒ 值传到中途断线，且结构 / lint 都看不见。
-    ch::ch_device<InlineBubbleTop> dev;
-    const std::string path = kOutDir() + "/bubble_inline.v";
+TEST_CASE("hierarchical emission: inline descendant's dangling input is rejected (AC17)",
+          "[hierarchy][emit][undriven][inline]") {
+    // ⚠️ ADR-072 **V18**：**inline 折叠进根**的悬空 `ch_in` **同样** MUST 被拒
+    //    ⇒ ⇒ 它**不在**根自有 `__io` 里 ⇒ 不是合法的顶层 input。
+    //    ⚠️ 旧行为（把该用例断言成 `REQUIRE(r.ok)` = 「拒绝它们等于拒绝合法设计」）
+    //       已**翻转**。
+    ch::ch_device<RootUndrivenTop> dev;
+    const std::string path = kOutDir() + "/undriven_inline_root.v";
     std::remove(path.c_str());
     auto r = ch::toVerilogHierarchical(path, dev.instance());
     INFO("error: " << r.error);
-    REQUIRE(r.ok);
-
-    const std::string all = read_file(path);
-    const std::string top = module_text(all, "top");
-    const std::string mid = module_text(all, "inline_bubble_mid");
-    REQUIRE_FALSE(top.empty());
-    REQUIRE_FALSE(mid.empty());
-
-    const std::string name = "top_mid_u_unnamed_input";
-    REQUIRE(mid.find("input [7:0] " + name) != std::string::npos);
-    REQUIRE(top.find("input [7:0] " + name) != std::string::npos);
-    // ⭐ 逐跳实连（这条正是原实现缺失的）
-    REQUIRE(top.find("." + name + "(" + name + ")") != std::string::npos);
-    REQUIRE(all.find("." + name + "()") == std::string::npos);
-    // 告警恰好一条（inline 折叠后的 owner = inline_bubble_mid ⇒ 跨边界 ⇒ 属悬空）
-    std::size_t n = 0;
-    for (const auto &w : r.warnings) {
-        if (w.find(name) != std::string::npos) {
-            ++n;
-        }
-    }
-    REQUIRE(n == 1);
+    REQUIRE_FALSE(r.ok);
+    // 点名端口（inline 子组件的未驱动 `din`）+ 其 module 路径 + 组件路径
+    REQUIRE(r.error.find("top_u_unnamed_input") != std::string::npos);
+    REQUIRE(r.error.find("component 'top.u'") != std::string::npos);
+    REQUIRE(r.files.empty());
+    REQUIRE_FALSE(file_exists(path));
 }
 
 TEST_CASE("hierarchical emission: upward pass-through synthesizes output ports on each level",
@@ -2158,13 +2123,13 @@ TEST_CASE("hierarchical emission: upward pass-through synthesizes output ports o
     REQUIRE(leaf.find("top_unnamed_output") == std::string::npos);
 }
 
-TEST_CASE("hierarchical emission: UndrivenPolicy::Reject lists every dangling input",
-          "[hierarchy][emit][bubble][policy]") {
-    // ⚠️ ADR-060 v1.13 §2.4.2：`Reject` ⇒ **不产出** + 列出**全部**悬空输入（不是首条）
+TEST_CASE("hierarchical emission: undriven rejection lists every dangling input",
+          "[hierarchy][emit][undriven][policy]") {
+    // ⚠️ ADR-072 D1-f：拒绝 MUST 列出**全部**悬空后代输入（不是首条）
     //    ⇒ ⇒ 诊断广度用例 MUST 含**两个**实例（否则「全部」与「首条」不可区分）
     {
         ch::ch_device<BubbleTwoTop> dev;
-        const std::string path = kOutDir() + "/bubble_reject_two.v";
+        const std::string path = kOutDir() + "/undriven_reject_two.v";
         std::remove(path.c_str());
         HierarchyEmitOptions opts;
         opts.undriven_policy = UndrivenPolicy::Reject;
@@ -2173,29 +2138,33 @@ TEST_CASE("hierarchical emission: UndrivenPolicy::Reject lists every dangling in
         REQUIRE_FALSE(r.ok);
         REQUIRE(r.error.find("top_a_unnamed_input") != std::string::npos);
         REQUIRE(r.error.find("top_b_unnamed_input") != std::string::npos);
-        // 冒泡层级链（点名「冒泡到哪几层」）
-        REQUIRE(r.error.find("bubbles: top.a -> top") != std::string::npos);
-        REQUIRE(r.error.find("bubbles: top.b -> top") != std::string::npos);
+        // 层级链（点名「属于哪几层」）
+        REQUIRE(r.error.find("top.a -> top") != std::string::npos);
+        REQUIRE(r.error.find("top.b -> top") != std::string::npos);
         REQUIRE_FALSE(file_exists(path));   // fail-closed：不留产物
     }
-    // 防误拒：根自己的 `ch_in` + inline 折叠进根的悬空 `ch_in` ⇒ **不是**隐式悬空端口
+    // ⚠️ **不误拒**：**根自己**的悬空 `ch_in` MUST 仍产出（它就是顶层 input）
     {
-        ch::ch_device<RootUndrivenTop> dev;
-        const std::string path = kOutDir() + "/bubble_reject_root.v";
+        ch::ch_device<RootOnlyUndriven> dev;
+        const std::string path = kOutDir() + "/undriven_reject_root_own.v";
         std::remove(path.c_str());
         HierarchyEmitOptions opts;
         opts.undriven_policy = UndrivenPolicy::Reject;
         auto r = ch::toVerilogHierarchical(path, dev.instance(), opts);
         INFO("error: " << r.error);
-        REQUIRE(r.ok);   // ⚠️ 拒绝它们 = 拒绝合法设计（扁平里它们本就是顶层 input）
+        REQUIRE(r.ok);
         REQUIRE(file_exists(path));
+        const std::string top = module_text(read_file(path), "top");
+        REQUIRE(top.find("input [7:0] top_unnamed_input") != std::string::npos);
     }
 }
 
-TEST_CASE("hierarchical emission: port provenance covers all five origins",
+TEST_CASE("hierarchical emission: port provenance covers the three remaining origins",
           "[hierarchy][emit][provenance]") {
-    // ⚠️ G2（ADR-058 v1.12 §2.3）：端口清单 = **value-only**，覆盖五类来源，
+    // ⚠️ G2（ADR-058 v1.12 §2.3）：端口清单 = **value-only**，
     //    且每个条目 MUST 能在产物里找到（expected ⊆ actual 的外部可观测形态）。
+    //    ⚠️ ADR-072 **D1-h**：来源只剩**三类**（`Self` / `ClockReset` / `Synthesized`）
+    //       —— 「inline 折叠」与「冒泡」两类已退役。
     auto width_text = [](std::uint32_t w) {
         return w <= 1 ? std::string() : ("[" + std::to_string(w - 1) + ":0] ");
     };
@@ -2219,26 +2188,11 @@ TEST_CASE("hierarchical emission: port provenance covers all five origins",
         return s;
     };
 
-    // ① 自身 + clock/reset + inline 折叠
+    // ① 自身 + clock/reset（inline 后代的 `ch_out` 已**不再**是端口）
     {
         ch::ch_device<InlineOutTop> dev;
         const std::string path = kOutDir() + "/prov_inline.v";
-        std::remove(path.c_str());
-        auto r = ch::toVerilogHierarchical(path, dev.instance());
-        INFO("error: " << r.error);
-        REQUIRE(r.ok);
-        const auto o = origins_of(r);
-        REQUIRE(o.count(ch::PortProvenanceOrigin::Self) == 1);
-        REQUIRE(o.count(ch::PortProvenanceOrigin::ClockReset) == 1);
-        REQUIRE(o.count(ch::PortProvenanceOrigin::InlineFolded) == 1);
-        check_entries(r, path);
-    }
-
-    // ② 冒泡（跨 module 边界）+ 确定性
-    {
-        ch::ch_device<BubbleTop> dev;
-        const std::string path = kOutDir() + "/prov_bubble.v";
-        const std::string path2 = kOutDir() + "/prov_bubble_2.v";
+        const std::string path2 = kOutDir() + "/prov_inline_2.v";
         std::remove(path.c_str());
         std::remove(path2.c_str());
         auto r = ch::toVerilogHierarchical(path, dev.instance());
@@ -2246,7 +2200,15 @@ TEST_CASE("hierarchical emission: port provenance covers all five origins",
         INFO("error: " << r.error);
         REQUIRE(r.ok);
         REQUIRE(r2.ok);
-        REQUIRE(origins_of(r).count(ch::PortProvenanceOrigin::Bubbled) == 1);
+        const auto o = origins_of(r);
+        REQUIRE(o.size() == 2);   // ⚠️ 顶层**只允许** Self / ClockReset
+        REQUIRE(o.count(ch::PortProvenanceOrigin::Self) == 1);
+        REQUIRE(o.count(ch::PortProvenanceOrigin::ClockReset) == 1);
+        // 后代 `ch_out` MUST NOT 出现在**任何** module 的端口清单里
+        for (const auto &p : r.port_provenance) {
+            INFO("port: " << p.module << " / " << p.port);
+            REQUIRE(p.port.find("kid_") == std::string::npos);
+        }
         // 确定性：两次生成的清单逐项相同（顺序也相同）
         REQUIRE(r.port_provenance.size() == r2.port_provenance.size());
         for (std::size_t i = 0; i < r.port_provenance.size(); ++i) {
@@ -2259,7 +2221,7 @@ TEST_CASE("hierarchical emission: port provenance covers all five origins",
         check_entries(r, path);
     }
 
-    // ③ 合成端口（行 1 的 `__if_<n>`）
+    // ② 合成端口（行 1 的 `__if_<n>`）
     {
         ch::ch_device<OuterRow1> dev;
         const std::string path = kOutDir() + "/prov_synth.v";
@@ -2634,14 +2596,15 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
         {"sibling", "ch_proxy", State::Reject, "\"[hierarchy][emit][matrix]\""},
         {"sibling", "op", State::Reject, "\"[hierarchy][emit][matrix]\""},
         {"sibling", "mem", State::Reject, "\"[hierarchy][emit][reject][naming]\""},
-        // ── 冒泡（无跨层边：悬空 ch_in 逐级上提）──
-        {"bubble", "ch_in", State::Ok, "\"[hierarchy][emit][bubble]\""},
-        {"bubble", "ch_out", State::Na,
+        // ── 未驱动后代输入（无跨层边）⇒ **MUST 被拒**（ADR-072 D1-f：冒泡已退役）──
+        {"undriven", "ch_in", State::Reject, "\"[hierarchy][emit][undriven]\""},
+        {"undriven", "ch_out", State::Na,
          "ch_out 不存在「悬空」形态：无人消费时以空连接 .port() 出现（ADR-061 决策②）"},
-        {"bubble", "ch_reg", State::Na, "寄存器没有「悬空」形态：next 恒有驱动或保持"},
-        {"bubble", "ch_proxy", State::Na, "bundle 字段不是端口 ⇒ 不参与冒泡（合成端口由跨层边触发）"},
-        {"bubble", "op", State::Na, "运算节点是体内逻辑 ⇒ 没有端口身份"},
-        {"bubble", "mem", State::Na, "跨模块 mem 更早被拒 ⇒ 到不了冒泡路径"},
+        {"undriven", "ch_reg", State::Na, "寄存器没有「悬空」形态：next 恒有驱动或保持"},
+        {"undriven", "ch_proxy", State::Na,
+         "bundle 字段不是端口 ⇒ 不参与未驱动判定（合成端口由跨层边触发）"},
+        {"undriven", "op", State::Na, "运算节点是体内逻辑 ⇒ 没有端口身份"},
+        {"undriven", "mem", State::Na, "跨模块 mem 更早被拒 ⇒ 到不了该路径"},
         // ── `row2_expr`（父读子端点 **且父侧带运算**）──
         //   ⚠️ **本矩阵是活的现状快照**：它记的是「**今天**发射器怎么判」。
         //   ⚠️ `row2_expr × ch_out` = 台账行 16 的「族 ①/③」（父侧端点不是父 output
@@ -2667,8 +2630,8 @@ TEST_CASE("hierarchical emission: probe matrix is complete and every cell is dec
         }
     }
     INFO("ok=" << n_ok << " reject=" << n_reject << " na=" << n_na);
-    REQUIRE(n_ok == 20);
-    REQUIRE(n_reject == 16);
+    REQUIRE(n_ok == 19);
+    REQUIRE(n_reject == 17);
     REQUIRE(n_na == 6);
 
     // 每一格的证据/理由 MUST 成立：Ok/Reject ⇒ tag 真实存在；Na ⇒ 有理由且不是 tag
@@ -2985,7 +2948,9 @@ TEST_CASE("hierarchical emission: all-inline design equals the flat output",
     REQUIRE(hier.find("_unit ") == std::string::npos);
 
     std::ostringstream flat;
-    ch::verilogwriter w(dev.context());
+    // ⚠️ **ADR-072 D1**：「扁平产物」= **产品（带根）**入口 —— ctx-only 入口是
+    //    非产品**遗留**路径（它仍把后代 `ch_out` 当顶层端口 ⇒ 与层次化侧不同）。
+    ch::verilogwriter w(dev.instance());
     w.print(flat);
     // ⚠️ 层次化文件多了「module 归属注释」前缀 ⇒ 去掉后再逐字节比
     const auto at = hier.find("/* verilator lint_off WIDTHEXPAND */");

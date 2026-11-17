@@ -34,6 +34,7 @@
 #include "device.h"
 #include "hierarchy_equivalence.h"
 #include "hierarchy_verilog.h"
+#include "rtl_emit/manifest.h"
 #include "rv32i_pipeline_top.h"
 
 #include <algorithm>
@@ -258,17 +259,12 @@ TEST_CASE("rv32i hierarchical rtl: deliverable product shape (granularity, deter
         //    `top_dtcm_` 黑名单 ⇒ ⇒ 实例改名即**静默错分类** ⇒ fail-safe 转红但诊断误导）。
         //    ⇒ ⇒ 机械切法（实现自带的数据模型）：根 module 的 `Self` / `ClockReset` /
         //    `Bubbled` 三类 = **根段**；`InlineFolded` = ⊆ 组。
+        // ⚠️ **ADR-072 D1-f** 之后：顶层端口**只有** `Self` / `ClockReset` 两类
+        //    （「inline 折叠」与「冒泡」两类已退役）
         std::set<std::string> root_names;
-        std::set<std::string> inline_folded_names;
         for (const auto &pp : r1.port_provenance) {
             if (pp.module != "top") continue;   // ★ 根 module（产物里的顶层）
-            if (pp.origin == ch::PortProvenanceOrigin::Self ||
-                pp.origin == ch::PortProvenanceOrigin::ClockReset ||
-                pp.origin == ch::PortProvenanceOrigin::Bubbled) {
-                root_names.insert(pp.port);
-            } else if (pp.origin == ch::PortProvenanceOrigin::InlineFolded) {
-                inline_folded_names.insert(pp.port);
-            }
+            root_names.insert(pp.port);
         }
         REQUIRE_FALSE(root_names.empty());
         const auto port_name_of = [](const std::string &line) {
@@ -283,7 +279,17 @@ TEST_CASE("rv32i hierarchical rtl: deliverable product shape (granularity, deter
         const auto root_segment = [&](const std::vector<std::string> &lines) {
             std::vector<std::string> out;
             for (const auto &l : lines) {
-                if (root_names.count(port_name_of(l))) out.push_back(l);
+                if (root_names.count(port_name_of(l))) {
+                    // ⚠️ 归一化行尾逗号：两侧的**最后一个**端口分别带/不带逗号
+                    //    （扁平侧后面还有别的端口）⇒ ⇒ 不归一化会把「同一端口」判成不同
+                    std::string t = l;
+                    while (!t.empty() &&
+                           (t.back() == ',' ||
+                            std::isspace(static_cast<unsigned char>(t.back())))) {
+                        t.pop_back();
+                    }
+                    out.push_back(t);
+                }
             }
             return out;
         };
@@ -303,27 +309,17 @@ TEST_CASE("rv32i hierarchical rtl: deliverable product shape (granularity, deter
         }
         // ③ 盲区**确实存在**（否则「子 ch_out 在层次化顶层不可观测」这条前提是空的）
         REQUIRE(flat_ports.size() > hier_ports.size());
-        // ④ **排他句（承重 · ADR-062 v1.7）**：**扁平 \\ 层次化顶层**的端口 MUST ⊆
-        //    {**成层子组件**的 `ch_out`} ⇒ ⇒ 等价两半，**都可机械判**：
-        //    (a) 层次化顶层 MUST 含**全部** inline 后代 的 `ch_out`
-        //        ⇒ ⇒ 否则「漏抬」在 ①② 下**都不被任何判据抓住**
-        for (const auto &nm : inline_folded_names) {
-            INFO("inline-folded port: " << nm);
-            const bool in_hier = std::any_of(
-                hier_ports.begin(), hier_ports.end(),
-                [&](const std::string &l) { return port_name_of(l) == nm; });
-            REQUIRE(in_hier);
-        }
-        //    (b) 扁平 \\ 层次化顶层 的端口 MUST NOT 是 inline 后代的 `ch_out`
-        //        ⇒ ⇒ 它们只能是**成层子组件**的 `ch_out`（= 观测盲区）
-        for (const auto &fl : flat_ports) {
-            const auto nm = port_name_of(fl);
-            const bool in_hier = std::any_of(
-                hier_ports.begin(), hier_ports.end(),
-                [&](const std::string &l) { return port_name_of(l) == nm; });
-            if (in_hier) continue;
-            INFO("flat-only port: " << nm);
-            REQUIRE(inline_folded_names.count(nm) == 0);
+        // ④ **收敛恒等式（ADR-072 D1-f）**：层次化顶层端口表 MUST **逐字逐序**等于
+        //    manifest 的**产品端口表**（同一根组件 / 同一 ctx ⇒ 同一份定义）
+        //    ⚠️ 旧的「层次化顶层 MUST 含**全部** inline 后代 `ch_out`」半句已**删除**
+        //       （ADR-072 §2.8 R-5 改法③）⇒ ⇒ 后代 `ch_out` 一律不上顶层。
+        const auto manifest =
+            ch::rtl_emit::build_rtl_manifest(dev.instance(), dev.context());
+        REQUIRE_FALSE(manifest.port_table.empty());
+        REQUIRE(hier_ports.size() == manifest.port_table.size());
+        for (std::size_t i = 0; i < hier_ports.size(); ++i) {
+            INFO("port #" << i << " = " << hier_ports[i]);
+            REQUIRE(port_name_of(hier_ports[i]) == manifest.port_table[i].name);
         }
     }
 

@@ -118,6 +118,10 @@ public:
         // ⚠️ 端口**不能用 `operator=`**（`io.h:227` 声明为 deleted ⇒ 那是
         //    「节点重绑定」语义，不是连线）⇒ ⇒ MUST 用 `<<=`（数据流边）
         stage.io().data_in <<= io().data_in;
+        // ⚠️ **ADR-072 D1-f**：悬空**后代**输入 ⇒ 发射 fail-closed ⇒ ⇒ `clk`（本组件
+        //    **零消费者**：寄存器全部锁在框架 `default_clock`）MUST 被**显式 tie-off**
+        //    ⇒ ⇒ tie-off 的输入**有** driver ⇒ 不触发拒绝；行为零影响（没人读它）。
+        stage.io().clk <<= ch_bool(false);
         stage.io().rst <<= rst_b;
         stage.io().stall <<= stall_b;
         stage.io().flush <<= flush_b;
@@ -164,6 +168,8 @@ public:
         ch_bool flush_b = ch_bool(io().flush == ch_uint<1>(1_d));
         ch::ch_module<PipelineChain<ch_uint<8>, 3>> chain{"chain"};
         chain.io().data_in <<= io().data_in;
+        // ⚠️ 同上：`clk` 零消费者 ⇒ 显式 tie-off（否则悬空后代输入被拒）
+        chain.io().clk <<= ch_bool(false);
         chain.io().rst <<= rst_b;
         chain.io().stall <<= stall_b;
         chain.io().flush <<= flush_b;

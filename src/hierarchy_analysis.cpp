@@ -361,8 +361,8 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
 
     // ── 端口表 + 体内节点
     //    ⚠️ 遍历顺序 = ctx 节点创建序（确定性）
-    //    ⚠️ **冒泡**（端口 + 逐跳连接）在实例建好之后统一生成（G3-2）⇒ 先记录节点
-    std::vector<lnodeimpl *> pending_bubbles;
+    //    ⚠️ **未驱动的后代输入**只登记、**不产端口**（ADR-072 D1-f/D1-h）
+    std::vector<lnodeimpl *> pending_undriven;
     auto find_port = [&out](std::size_t mi, const lnodeimpl* n, bool& is_input)
         -> HierarchyPort* {
         for (auto& p : out.modules[mi].ports) {
@@ -395,24 +395,36 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
                 mod.body.push_back(HierarchyBodyNode{n, vname(n)});
             }
         } else if (ty == lnodetype::type_input) {
-            const bool layered_owner = (owner != nullptr) && tree.layered.at(owner);
+            // ⚠️ 判据 = **`owner == mod_c`**（= owner 自己就是"最近的成层祖先"）
+            //    ⇒ 与 output 分支同一条判据。**MUST NOT** 用 `tree.layered.at(owner)`：
+            //    根组件即使没声明成层，也**永远是 RTL 顶层 module**
+            //    （见 `nearest_layer` 的注释）⇒ ⇒ 用 `layered` 会把根自己的 `ch_in`
+            //    误判成「inline 子组件的端口」（旧实现因此把根的 input 冒泡成
+            //    `Bubbled` 端口 —— 这次一并修正）。
+            const bool layered_owner = (owner != nullptr) && (owner == mod_c);
+            // ⚠️ **「有 driver」的判据 MUST 用 `inputimpl::driver()`**（**不是** `num_srcs()`）：
+            //    `ch_in` 节点**自身**的 `num_srcs()` 恒为 0（驱动落在 **proxy** 上）
+            //    ⇒ ⇒ 用 `num_srcs()` 会把**每个**被正常驱动的子组件端口误报成「未驱动」
+            //    ⇒ ⇒ 那会让本 change 的 fail-closed 把**合法设计**判死。
+            const bool has_driver =
+                (static_cast<const ch::core::inputimpl *>(n)->driver() != nullptr);
             if (layered_owner) {
                 // 成层组件的 `ch_in` ⇒ **本 module 的 input 端口**
                 // （⚠️ emitter MUST 忽略 driver() —— ADR-062 决策①）
                 mod.ports.push_back(HierarchyPort{vname(n), /*is_input=*/true, n->size(),
                                                   HierarchyPortOrigin::Self, n});
-                if (n->num_srcs() == 0) {
-                    // ⚠️ **F2**（ADR-060 v1.13 G3）：成层组件的**悬空** `ch_in`
-                    //    也 MUST 逐级冒泡（否则它只在子 module 上 ⇒ 顶层驱动不到）
-                    pending_bubbles.push_back(n);
+                if (!has_driver) {
+                    // ⚠️ **悬空的后代输入**（成层组件自己）⇒ 记为「未驱动」
+                    //    ⇒ ⇒ 发射器 MUST **响亮拒绝**（ADR-072 D1-f）
+                    pending_undriven.push_back(n);
                 }
-            } else if (n->num_srcs() > 0) {
+            } else if (has_driver) {
                 // inline 组件的有 driver 的 `ch_in` ⇒ 体内 wire（扁平规则）
                 mod.body.push_back(HierarchyBodyNode{n, vname(n)});
             } else {
-                // 无 driver ⇒ **逐级向上冒泡**（ADR-060 §2.2）⇒ 顶层可驱动
-                // ⚠️ 端口 + **逐跳连接**统一在实例建好之后生成（G3-2 ⇒ 见下）
-                pending_bubbles.push_back(n);
+                // 悬空 + **inline**（含折叠进根）⇒ **同样 MUST 被拒绝**
+                //   （它**不在**根自有 `__io` 里 ⇒ 不是合法的顶层 input）
+                pending_undriven.push_back(n);
             }
         } else if (ty == lnodetype::type_output) {
             // ⚠️ **ADR-061 决策② 的两作用域表**（F3 · 2026-11-05）：
@@ -426,10 +438,9 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
             if (owner == mod_c) {
                 mod.ports.push_back(HierarchyPort{vname(n), /*is_input=*/false, n->size(),
                                                   HierarchyPortOrigin::Self, n});
-            } else if (mod.is_root) {
-                mod.ports.push_back(HierarchyPort{vname(n), /*is_input=*/false, n->size(),
-                                                  HierarchyPortOrigin::InlineFolded, n});
             } else {
+                // ⚠️ **后代 `ch_out` MUST NOT 出现在任何 module 的端口表**（含根）
+                //   ⇒ ⇒ 一律体内信号（ADR-072 D1-f；「inline 折叠端口」已退役）
                 mod.body.push_back(HierarchyBodyNode{n, vname(n)});
             }
         } else {
@@ -464,125 +475,29 @@ HierarchyAnalysis analyze_hierarchy(Component& root, ImplicitPortHandling handli
         out.modules[mi].instances.push_back(std::move(inst));
     }
 
-    // ── **冒泡**（ADR-060 v1.13 G3）：端口 + **逐跳 pass-through 连接** ──────────
-    //    ⚠️ **F2**：成层组件的悬空 `ch_in` 也要冒泡（原先只登记 `Self` 端口）。
-    //    ⚠️ **存量 inline 缺口**：原实现只登记端口、**不生成连接** ⇒ 折进非根成层
-    //       module 时中间层空连接 ⇒ 值传到中途**断线且零报错**（结构/lint 都看不见）。
-    //    ⚠️ 连接生成在**本层**（G3-2）：发射器 MUST NOT 自行推导冒泡连接。
-    {
-        // module key → (父 module key, 父 module 内的实例名)
-        std::map<std::string, std::pair<std::string, std::string>> parent_of_key;
-        for (const auto &m : out.modules) {
-            for (const auto &inst : m.instances) {
-                parent_of_key[inst.module_key] = {m.key, inst.instance_name};
-            }
+    // ── **未驱动的后代输入**（ADR-072 **D1-f / D1-h**）：只登记 · **不产端口** ────
+    //    ⚠️ 冒泡机制已**退役**：悬空后代输入 MUST 使发射 fail-closed
+    //       （`ok = false` + 点名端口/module/层级）⇒ ⇒ 本层**只**产数据。
+    //    ⚠️ **根自己**的悬空 `ch_in` **不是**错误（它本就是顶层 input）
+    //       ⇒ ⇒ 记 `owned_by_root` 供消费者区分。
+    for (auto *n : pending_undriven) {
+        Component *mod_c = mod_of[n];
+        if (mod_c == nullptr) {
+            continue;
         }
-        auto module_index_or_throw = [&](const std::string &mk) -> std::size_t {
-            const auto it = module_index_by_key.find(mk);
-            if (it == module_index_by_key.end()) {
-                CHFATAL_EXCEPTION("hierarchical analysis: module '%s' not found while bubbling",
-                                  mk.c_str());
+        UndrivenInput u;
+        u.node = n;
+        u.module = module_key(mod_c);
+        u.owner = (n->get_parent() != nullptr) ? n->get_parent()->name() : std::string();
+        u.owned_by_root = (n->get_parent() == &root);
+        for (Component *c = mod_c;;) {
+            u.chain.push_back(module_key(c));
+            if (c == &root) {
+                break;
             }
-            return it->second;
-        };
-        // G3-3：同名 + 同向 + 同宽 ⇒ **幂等复用**；否则响亮拒绝（不静默择一）
-        auto ensure_bubbled_port = [&](const std::string &mk, const lnodeimpl *n) {
-            auto &ports = out.modules[module_index_or_throw(mk)].ports;
-            for (const auto &p : ports) {
-                if (p.name != vname(n)) {
-                    continue;
-                }
-                if (p.is_input && p.width == n->size()) {
-                    return;   // owner 的 Self 端口 / 既有 Bubbled 端口
-                }
-                CHFATAL_EXCEPTION(
-                    "hierarchical analysis: bubbled input '%s' collides with an existing port "
-                    "of module '%s' (direction/width mismatch)",
-                    vname(n).c_str(), mk.c_str());
-            }
-            ports.push_back(HierarchyPort{vname(n), /*is_input=*/true, n->size(),
-                                          HierarchyPortOrigin::Bubbled, n});
-        };
-        for (auto *n : pending_bubbles) {
-            Component *mod_c = mod_of[n];
-            if (mod_c == nullptr) {
-                continue;
-            }
-            // 链 = [owner module … root]
-            std::vector<Component *> chain;
-            for (Component *c = mod_c;;) {
-                chain.push_back(c);
-                if (c == &root) {
-                    break;
-                }
-                c = nearest_layer(tree.parent.at(c), tree);
-            }
-            BubbledInput bi;
-            bi.node = n;
-            bi.module = module_key(mod_c);
-            for (auto *c : chain) {
-                bi.chain.push_back(module_key(c));
-            }
-            out.bubbled_inputs.push_back(std::move(bi));
-
-            // 端口：链上每一级（owner 的 `Self` 端口 / 已有的 `Bubbled` 端口 ⇒ 幂等跳过）
-            for (auto *c : chain) {
-                ensure_bubbled_port(module_key(c), n);
-            }
-
-            // 连接：顶端 = root（不属 `path`），底端 = owner module（其端口名 = 全局名）
-            std::vector<std::string> path;
-            for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-                if (*it == &root) {
-                    continue;
-                }
-                path.push_back(module_key(*it));
-            }
-            if (path.empty()) {
-                continue;   // owner 就是 root ⇒ 不跨 module 边界
-            }
-            const auto hops = ch::detail::plan_pass_chain(
-                path, vname(n), vname(n), /*leaf_is_port=*/true, vname(n), parent_of_key);
-            if (hops.empty()) {
-                CHFATAL_EXCEPTION(
-                    "hierarchical analysis: broken ancestor chain while bubbling '%s'",
-                    vname(n).c_str());
-            }
-            for (const auto &hop : hops) {
-                bool linked = false;
-                for (auto &inst : out.modules[module_index_or_throw(hop.parent_module)].instances) {
-                    if (inst.instance_name != hop.instance_name ||
-                        inst.module_key != hop.child_module) {
-                        continue;
-                    }
-                    bool exists = false;
-                    for (const auto &c : inst.connections) {
-                        if (c.child_port == hop.child_port) {
-                            if (c.parent_side != hop.parent_arg) {
-                                CHFATAL_EXCEPTION(
-                                    "hierarchical analysis: bubbled port '%s' is already "
-                                    "connected to a different signal in module '%s'",
-                                    hop.child_port.c_str(), hop.parent_module.c_str());
-                            }
-                            exists = true;
-                            break;
-                        }
-                    }
-                    if (!exists) {
-                        inst.connections.push_back(
-                            HierarchyConnection{hop.child_port, hop.parent_arg, /*into_child=*/true});
-                    }
-                    linked = true;
-                    break;
-                }
-                if (!linked) {
-                    CHFATAL_EXCEPTION(
-                        "hierarchical analysis: instance '%s' of module '%s' not found while "
-                        "bubbling '%s'",
-                        hop.instance_name.c_str(), hop.parent_module.c_str(), vname(n).c_str());
-                }
-            }
+            c = nearest_layer(tree.parent.at(c), tree);
         }
+        out.undriven_inputs.push_back(std::move(u));
     }
 
     // ── 连接表（只记跨 module 的边）+ 实例端口映射
@@ -832,12 +747,6 @@ std::string HierarchyAnalysis::to_text() const {
             case HierarchyPortOrigin::ClockReset:
                 origin = "clock_reset";
                 break;
-            case HierarchyPortOrigin::InlineFolded:
-                origin = "inline_folded";
-                break;
-            case HierarchyPortOrigin::Bubbled:
-                origin = "bubbled";
-                break;
             }
             os << "  port " << (p.is_input ? "in " : "out") << " " << p.name
                << " w=" << p.width << " origin=" << origin << "\n";
@@ -1005,24 +914,21 @@ HierarchyDiagnosis diagnose_hierarchy(Component &root) {
         diag.synthesized_port_count = keys.size();
     }
 
-    // ── ⑤ 跨层悬空输入数（★ 口径同发射器：根自己的 / inline 折叠进根的**不计**）
-    std::string root_key;
-    for (const auto &m : an.modules) {
-        if (m.is_root) {
-            root_key = m.key;
+    // ── ⑤ 未驱动的后代输入数（★ 口径同发射器：**根自己**的悬空 `ch_in` **不计**）
+    //    ⚠️ ADR-072 D1-f 之后，**inline 折叠进根**的悬空输入**也计入**
+    //       （它不在根自有 `__io` 里 ⇒ 发射 MUST 拒绝）
+    std::size_t undriven = 0;
+    for (const auto &u : an.undriven_inputs) {
+        if (u.owned_by_root) {
+            continue;   // 根自己的悬空 `ch_in` = 合法的顶层 input
         }
+        ++undriven;
+        diag.details.push_back(HierarchyDiagnosisDetail{"dangling_input", u.module,
+                                                         vname(u.node),
+                                                         "undriven descendant input is "
+                                                         "rejected (ADR-072 D1-f)"});
     }
-    std::size_t dangling = 0;
-    for (const auto &b : an.bubbled_inputs) {
-        if (b.module == root_key) {
-            continue;   // 不跨 module 边界 ⇒ 不属「隐式悬空」
-        }
-        ++dangling;
-        diag.details.push_back(HierarchyDiagnosisDetail{"dangling_input", b.module,
-                                                         vname(b.node),
-                                                         "undriven input bubbles up"});
-    }
-    diag.dangling_input_count = dangling;
+    diag.dangling_input_count = undriven;
 
     // ── ⑥ 未被子层消费的输出数（★ 并集推导 + 四条排除规则 ⇒ **不**重遍历 IR）
     {
@@ -1045,8 +951,7 @@ HierarchyDiagnosis diagnose_hierarchy(Component &root) {
                 if (p.is_input) {
                     continue;
                 }
-                if (p.origin != HierarchyPortOrigin::Self &&
-                    p.origin != HierarchyPortOrigin::InlineFolded) {
+                if (p.origin != HierarchyPortOrigin::Self) {
                     continue;
                 }
                 // ① `edges` 里有「从该端口出发」的跨 module 边 ⇒ 已消费

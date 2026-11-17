@@ -131,50 +131,37 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
     //    （纯读 ⇒ ⇒ 无副作用 ⇒ ⇒ 提前不影响任何既有行为）
     const auto names = build_verilog_name_table(root.context()->get_eval_list());
 
-    // ── **UndrivenPolicy**（ADR-060 v1.13 §2.4.2）────────────────────────
-    //    ⚠️ 只对「inline 折叠后 module 归属是**非根成层 module**」的悬空 `ch_in` 生效
-    //       （根自己的 / inline 折叠进根的悬空 `ch_in` 在扁平产物里**本就是**顶层 input
-    //        ⇒ 拒绝它们等于拒绝合法设计）。
-    std::string root_key;
-    for (const auto &m : analysis.modules) {
-        if (m.is_root) {
-            root_key = m.key;
-        }
-    }
-    std::vector<const BubbledInput *> dangling;
-    std::map<const lnodeimpl *, std::string> dangling_owner;
-    for (const auto &b : analysis.bubbled_inputs) {
-        if (b.module == root_key) {
-            continue;   // 不跨 module 边界 ⇒ 不属「隐式悬空端口」
-        }
-        dangling.push_back(&b);
-        dangling_owner[b.node] = b.module;
-    }
-    if (options.undriven_policy == UndrivenPolicy::Reject && !dangling.empty()) {
-        std::ostringstream oss;
-        oss << "hierarchical emission: " << dangling.size()
-            << " dangling input(s) require bubbling across module boundaries "
-               "(ADR-060 §2.2), which UndrivenPolicy::Reject forbids:";
-        for (std::size_t i = 0; i < dangling.size(); ++i) {
-            const auto *b = dangling[i];
-            oss << "\n  [" << (i + 1) << "] '" << names.at(b->node) << "' in module '"
-                << b->module << "' bubbles:";
-            for (std::size_t k = 0; k < b->chain.size(); ++k) {
-                oss << (k == 0 ? " " : " -> ") << b->chain[k];
+    // ── **未驱动的后代输入 ⇒ 响亮拒绝**（ADR-072 **D1-f / D1-h**）────────────
+    //    ⚠️ 冒泡机制已退役 ⇒ `UndrivenPolicy` 只剩 `Reject` ⇒ ⇒ **无条件**拒绝。
+    //    ⚠️ **根自己**的悬空 `ch_in` 不在此列（它本就是合法的顶层 input）。
+    auto node_name = [&names](const lnodeimpl *n) {
+        const auto it = names.find(n);
+        return (it != names.end()) ? it->second : n->name();
+    };
+    {
+        std::vector<const UndrivenInput *> undriven;
+        for (const auto &u : analysis.undriven_inputs) {
+            if (u.owned_by_root) {
+                continue;
             }
+            undriven.push_back(&u);
         }
-        result.error = oss.str();   // ⚠️ 不抛异常（ADR-058 v2.12 §2.3 ⑤）
-        return result;
-    }
-    for (const auto *b : dangling) {
-        // ⚠️ 变量 MUST NOT 命名为 `msg`（CHWARN 宏内部声明了同名变量 ⇒ SIGSEGV）
-        std::string text = "undriven input '" + names.at(b->node) + "' in module '" + b->module +
-                           "' bubbles up:";
-        for (std::size_t k = 0; k < b->chain.size(); ++k) {
-            text += (k == 0 ? " " : " -> ") + b->chain[k];
+        if (!undriven.empty()) {
+            std::ostringstream oss;
+            oss << "hierarchical emission: " << undriven.size()
+                << " undriven descendant input(s) are rejected (ADR-072 D1-f) "
+                   "=> 接上驱动源，或由父层显式 tie-off 常量（tie-off 的输入**有** driver）:";
+            for (std::size_t i = 0; i < undriven.size(); ++i) {
+                const auto *u = undriven[i];
+                oss << "\n  [" << (i + 1) << "] '" << node_name(u->node) << "' in module '"
+                    << u->module << "' (component '" << u->owner << "'):";
+                for (std::size_t k = 0; k < u->chain.size(); ++k) {
+                    oss << (k == 0 ? " " : " -> ") << u->chain[k];
+                }
+            }
+            result.error = oss.str();   // ⚠️ 不抛异常（ADR-058 v2.12 §2.3 ⑤）
+            return result;
         }
-        result.warnings.push_back(text);
-        CHWARN("hierarchical emission: %s", text.c_str());
     }
 
     // ── **行 2（子 → 父）的隐式端口合成**（ADR-060 §2.1 行 2）────────────
@@ -850,11 +837,15 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                     continue;
                 }
                 // (c) 父体内节点 ⇒ 造网
+                //    ⚠️ 网名 = **驱动端点的 ctx 全局名**（ADR-066 决策 ①②）⇒ ⇒
+                //       父侧体内消费者（表达式 / 本 module 的 `ch_out` 的 assign）按该名解析。
                 const std::string wire = names.at(e.from_ptr);
-                std::string werr;
-                if (!register_parent_wire(parent_key, wire, e.from_ptr->size(), werr)) {
-                    remaining.push_back(werr);
-                    continue;
+                {
+                    std::string werr;
+                    if (!register_parent_wire(parent_key, wire, e.from_ptr->size(), werr)) {
+                        remaining.push_back(werr);
+                        continue;
+                    }
                 }
                 if (!add_conn(parent_key, e.child_instance_name, it->second, wire,
                               /*into_child=*/false, err)) {
@@ -1256,14 +1247,6 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 continue;   // 已在上面 push
             }
             view.ports.push_back(node);
-            // ⚠️ 冒泡端口旁**注释**（ADR-060 §2.2）：只对**跨 module 边界**的悬空输入加
-            //    ⇒ ⇒ 全 inline 设计无此类 ⇒ 「与扁平逐字节一致」判据不受影响
-            if (p.origin == HierarchyPortOrigin::Bubbled) {
-                const auto nit = dangling_owner.find(p.node);
-                if (nit != dangling_owner.end()) {
-                    view.port_notes[p.name] = "implicit: undriven input of " + nit->second;
-                }
-            }
         }
 
         // 端口排序：clock → reset → input → output
@@ -1318,6 +1301,11 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
 
         // ── 跨 module 的驱动边 ⇒ 本 module **不发**那条 assign（值由实例端口映射提供）
         {
+            // ⚠️ **模块端口判定**（本 module 的端口集合 = 分析层的 ports）
+            std::unordered_set<const lnodeimpl *> module_ports;
+            for (const auto &p : m.ports) {
+                module_ports.insert(p.node);
+            }
             std::unordered_set<const lnodeimpl *> suppress;
             for (auto *n : view.nodes) {
                 if (n->num_srcs() == 0) {
@@ -1329,6 +1317,16 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 if (it_self != analysis.module_of_node.end() &&
                     it_drv != analysis.module_of_node.end() &&
                     it_self->second != it_drv->second) {
+                    // ⚠️ **例外：本 module 的「体内」`ch_out`（不是端口）MUST 仍发 assign**
+                    //    —— 它的值由**父侧落点网**（合成网 · 名为驱动端点）承载
+                    //    ⇒ ⇒ `assign <out> = <驱动网>;` 就是那条桥；抑制它 ⇒
+                    //    `out` 被声明但**永不被驱动**（读 0）⇒ 静默错值
+                    //    （实测：RV32I 层次化 `dbg_id_pc` 第 70 拍起分歧）。
+                    //    ⚠️ **端口**仍必须抑制（值由实例端口映射提供）。
+                    if (n->type() == lnodetype::type_output &&
+                        module_ports.count(n) == 0) {
+                        continue;
+                    }
                     suppress.insert(n);
                 }
             }
@@ -1429,13 +1427,6 @@ HierarchyEmitResult toVerilogHierarchical(const std::string &out_path, Component
                 case HierarchyPortOrigin::ClockReset:
                     push_expected(p.name, p.is_input, p.width,
                                   PortProvenanceOrigin::ClockReset);
-                    break;
-                case HierarchyPortOrigin::InlineFolded:
-                    push_expected(p.name, p.is_input, p.width,
-                                  PortProvenanceOrigin::InlineFolded);
-                    break;
-                case HierarchyPortOrigin::Bubbled:
-                    push_expected(p.name, p.is_input, p.width, PortProvenanceOrigin::Bubbled);
                     break;
                 }
             }
