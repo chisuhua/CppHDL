@@ -8,6 +8,7 @@
 #include "hierarchy_verilog.h"
 #include "rtl_emit/manifest.h"
 #include "rtl_emit/tb_stub.h"
+#include "rtl_emit/verif.h"
 
 #include <filesystem>
 #include <fstream>
@@ -76,6 +77,10 @@ bool parse_cli_options(const std::vector<std::string> &args, CliOptions &out,
             out.emit_hygiene = false;
         } else if (a == "--hierarchical") {
             out.hierarchical = true;
+        } else if (a == "--emit-tb-verif") {
+            if (!need_value(out.tb_verif_path)) return false;
+        } else if (a == "--tb-verif-out") {
+            if (!need_value(out.tb_verif_out)) return false;
         } else if (a == "--allow-diagnostics") {
             out.allow_diagnostics = true;
         } else {
@@ -92,6 +97,10 @@ bool parse_cli_options(const std::vector<std::string> &args, CliOptions &out,
     }
     if (out.verilog_path.empty()) {
         out.verilog_path = out.out_dir + "/top.v";
+    }
+    if (out.emit_tb_stub && !out.tb_verif_path.empty()) {
+        error = "--emit-tb-stub 与 --emit-tb-verif 互斥（骨架 = 待补；渲染 = 已完成）";
+        return false;
     }
     return true;
 }
@@ -111,6 +120,10 @@ void print_cli_usage(const char *program_name) {
         << "  --tb-stub-module <名>  骨架的 module 名（默认 tb_top_stub）\n"
         << "  --tb-stub-hint <名>    骨架里 // TODO 的归属提示（默认 <example>）\n"
         << "  --tb-clock-half-period <ns>  骨架的时钟半周期（默认 5 = 100 MHz）\n"
+        << "  --emit-tb-verif <path>  由 `.verif` 验证源**渲染**完整 TB\n"
+        << "                         （端口连线来自 manifest ⇒ 无手写映射表；\n"
+        << "                          与 --emit-tb-stub 互斥）\n"
+        << "  --tb-verif-out <path>   渲染 TB 的落盘路径（默认 <out>/<@tb-module>.sv）\n"
         << "  --emit-hygiene         产物卫生（default_nettype none + 元数据头 +\n"
         << "                         剪零引用信号 + proxy 恒等直通 + 不发 blanket\n"
         << "                         lint_off）—— **默认 on**\n"
@@ -248,6 +261,54 @@ int run_emit_cli(const std::vector<std::string> &args, const DesignFactory &fact
             return 1;
         }
         std::cout << "TB 骨架： " << tb_path << "\n";
+    }
+
+    // ── 由 `.verif` 渲染完整 TB（`rtl-verification-single-source` · ADR-074 D1）──
+    if (!options.tb_verif_path.empty()) {
+        std::ifstream vin(options.tb_verif_path, std::ios::binary);
+        if (!vin) {
+            std::cerr << "::error::无法读验证源：" << options.tb_verif_path << "\n";
+            return 2;
+        }
+        VerifProgram program;
+        VerifParseError perr;
+        if (!parse_verif(vin, program, perr)) {
+            std::cerr << "::error::" << options.tb_verif_path << ":" << perr.line
+                      << "：" << perr.message << "\n";
+            return 1;
+        }
+        if (program.tb_module.empty()) {
+            std::cerr << "::error::" << options.tb_verif_path
+                      << "：缺 `@tb-module`（TB 的 module 名无处推导）\n";
+            return 1;
+        }
+        TbRenderOptions rb;
+        rb.tb_module = program.tb_module;
+        rb.dut_module = ch::kFlatModuleName;
+        rb.expect_src = program.expect_src;
+        rb.example_hint = options.tb_stub_hint;
+        rb.clock_half_period_ns = options.tb_clock_half_period_ns;
+
+        const std::string tb_path = options.tb_verif_out.empty()
+                                        ? (options.out_dir + "/" + program.tb_module + ".sv")
+                                        : options.tb_verif_out;
+        std::ofstream tb_out(tb_path, std::ios::binary);
+        if (!tb_out) {
+            std::cerr << "::error::无法写渲染 TB：" << tb_path << "\n";
+            return 2;
+        }
+        std::string render_error;
+        if (!render_tb(tb_out, program, manifest, rb, render_error)) {
+            std::cerr << "::error::渲染 TB 失败：" << render_error << "\n";
+            return 1;
+        }
+        if (!tb_out) {
+            std::cerr << "::error::写渲染 TB 失败：" << tb_path << "\n";
+            return 1;
+        }
+        // ⚠️ 机器可读的静态断言条数 —— 运行护栏据此判「`.verif` 展开 == tsv 登记 == 运行期」
+        std::cout << "TB（渲染）： " << tb_path << "\n";
+        std::cout << "VERIF-CHECKS: " << verif_check_count(program) << "\n";
     }
 
     // ── 诊断 ⇒ fail-closed（除非显式放行）─────────────────────────────

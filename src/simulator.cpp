@@ -264,9 +264,29 @@ void Simulator::eval_combinational() {
     CHDBG("Evaluation combinational completed");
 }
 
+// ── node_id 级非类型化访问（`rtl-verification-single-source` C7 · ADR-074 D2）──
+// ⚠️ 未命中返回 false / nullopt（**MUST NOT** 静默返回 0 —— 那会让拼错的端口名
+//    读回 0 ⇒ 断言恒真）。
+bool Simulator::set_value_by_node_id(uint32_t node_id, uint64_t value) {
+    auto it = data_map_.find(node_id);
+    if (it == data_map_.end()) {
+        return false;
+    }
+    it->second = ch::core::sdata_type(value, it->second.bitwidth());
+    return true;
+}
+
+std::optional<uint64_t>
+Simulator::get_value_by_node_id(uint32_t node_id) const {
+    auto it = data_map_.find(node_id);
+    if (it == data_map_.end()) {
+        return std::nullopt;
+    }
+    return static_cast<uint64_t>(it->second);
+}
+
 void Simulator::tick() {
     CHDBG_FUNC();
-
     // 检查context是否有效
     if (!initialized_ || disconnected_ || !ctx_) {
         CHERROR("Simulator not initialized or disconnected");

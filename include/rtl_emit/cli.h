@@ -60,6 +60,14 @@ struct CliOptions {
     std::string tb_stub_hint;
     /// TB 骨架的时钟半周期（ns，默认 5 = 100 MHz）
     unsigned tb_clock_half_period_ns = 5;
+    /// ⚠️ **由 `.verif` 渲染完整 TB**（`rtl-verification-single-source` · ADR-074 D1）
+    ///
+    /// 空 ⇒ 关闭。非空 ⇒ 读该验证源、扫描成 **IR**、渲染成完整 `.sv` TB
+    /// （端口连线来自 `manifest.port_table[]` ⇒ ⇒ **无手写映射表**）。
+    /// ⚠️ 与 `--emit-tb-stub` **互斥**（骨架 = 待补；渲染 = 已完成）。
+    std::string tb_verif_path;
+    /// 渲染 TB 的落盘路径（空 ⇒ `<out_dir>/<@tb-module>.sv`）
+    std::string tb_verif_out;
     /// **层次化**产物开关（**默认 off** ⇒ ⇒ 默认路径**逐字节不变**）
     ///
     /// ⚠️ **off = 扁平**（`toVerilog(path, root, …)` · ADR-072 **D1-b** 的带根入口）

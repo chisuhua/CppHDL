@@ -19,6 +19,7 @@
 
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 namespace ch {
 namespace rtl_emit {
@@ -36,6 +37,28 @@ struct TbStubOptions {
     /// 复位拍数 —— 默认 4
     unsigned reset_cycles = 4;
 };
+
+/// **端口连线前段**（骨架与「由 IR 渲染的 TB」**共用同一份实现** ⇒ ⇒ 防两份副本漂移）。
+///
+/// 产出：文件头注释 → `` `timescale `` → `module` → 端口清单注释 → 端口信号声明 →
+/// DUT 实例化 → `checks` / `fails` 计数器 → 时钟 / 复位驱动。
+/// 返回发现到的 clock / reset 端口名（可能为空）。
+struct TbPreludeResult {
+    std::string clock_port;
+    std::string reset_port;
+};
+
+/// @param header_lines 追加到文件头的注释行（每行**不含** `// ` 前缀）
+TbPreludeResult write_tb_prelude(std::ostream &out, const RtlManifest &manifest,
+                                 const TbStubOptions &options,
+                                 const std::vector<std::string> &header_lines);
+
+/// 复位脉冲（**骨架与渲染式 TB 共用**）。调用方 MUST 先写 `initial begin`。
+void write_tb_reset_pulse(std::ostream &out, const TbStubOptions &options,
+                          const TbPreludeResult &pre);
+
+/// 收尾（`RESULT:` + 失败非零 + `$finish` + `end` + VCD 开关 + `endmodule`）。
+void write_tb_epilogue(std::ostream &out, const std::string &tb_module);
 
 /// 生成 TB 骨架（**SystemVerilog**）到 `out`。
 ///

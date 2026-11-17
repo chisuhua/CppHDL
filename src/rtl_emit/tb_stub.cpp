@@ -1,12 +1,17 @@
 // src/rtl_emit/tb_stub.cpp
 //
 // **测试台骨架生成**的实现（`examples-rtl-sim-coverage` E2）—— 见头文件的口径。
+//
+// ⚠️ 2026-11-17（`rtl-verification-single-source`）：端口连线 / 时钟 / 复位 / 收尾
+//   抽成 `write_tb_prelude` / `write_tb_reset_pulse` / `write_tb_epilogue`
+//   ⇒ ⇒ **骨架**与**由 `.verif` IR 渲染的 TB** 共用同一份实现（防两份副本漂移）。
 
 #include "rtl_emit/tb_stub.h"
 
 #include <algorithm>
 #include <ostream>
 #include <string>
+#include <vector>
 
 namespace ch {
 namespace rtl_emit {
@@ -45,25 +50,20 @@ void emit_signal(std::ostream &out, const RtlProductPort &p) {
 
 } // namespace
 
-void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
-                   const TbStubOptions &options) {
-    const std::string tb_module = options.tb_module.empty()
-                                      ? ("tb_" + options.dut_module + "_stub")
-                                      : options.tb_module;
-    const std::string hint = options.example_hint.empty()
-                                 ? std::string("<example>")
-                                 : options.example_hint;
+TbPreludeResult write_tb_prelude(std::ostream &out, const RtlManifest &manifest,
+                                 const TbStubOptions &options,
+                                 const std::vector<std::string> &header_lines) {
+    const std::string tb_module =
+        options.tb_module.empty() ? ("tb_" + options.dut_module + "_stub") : options.tb_module;
+
+    TbPreludeResult pre;
 
     // ── ① 文件头（**无时间戳** ⇒ ⇒ 可重复生成、可 diff）────────────────
     out << "// " << tb_module << ".sv\n";
     out << "//\n";
-    out << "// **测试台骨架** —— 由 `cpphdl-emit-rtl --emit-tb-stub` 生成。\n";
-    out << "// 本文件**只有**端口连线 + 时钟/复位 + VCD 开关；激励与断言 MUST 由人补齐。\n";
-    out << "//\n";
-    out << "// ⚠️ 补完的 TB MUST 在文件头登记**期望值出处**\n";
-    out << "//    （协议规范 / 手推推导 / C++ 侧断言位置）—— 仓内纪律：期望值 MUST 手推。\n";
-    out << "// ⚠️ 补完的 TB MUST 结尾打印 `RESULT: checks=<N> fails=0`\n";
-    out << "//    （运行护栏 `scripts/verify_examples_rtl_sim.sh` 据此判红绿）。\n";
+    for (const auto &line : header_lines) {
+        out << "// " << line << "\n";
+    }
     out << "\n";
     out << "`timescale 1ns/1ps\n";
     out << "\n";
@@ -77,11 +77,10 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     }
     name_w = std::min<std::size_t>(name_w + 2, 46);
     out << "    // ── 端口清单（manifest · rtl-emit-manifest-v2 的 port_table）──\n";
-    out << "    // " << pad("name", name_w) << pad("dir", 8) << pad("width", 7)
-        << "role\n";
+    out << "    // " << pad("name", name_w) << pad("dir", 8) << pad("width", 7) << "role\n";
     for (const auto &p : manifest.port_table) {
-        out << "    // " << pad(p.name, name_w) << pad(p.dir, 8)
-            << pad(std::to_string(p.width), 7) << p.role << "\n";
+        out << "    // " << pad(p.name, name_w) << pad(p.dir, 8) << pad(std::to_string(p.width), 7)
+            << p.role << "\n";
     }
     out << "\n";
 
@@ -106,51 +105,88 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     out << "    );\n";
     out << "\n";
 
-    // ── ⑤ 时钟 / 复位驱动骨架 ────────────────────────────────────────
-    const std::string clock_port =
-        [&]() -> std::string {
-        for (const auto &p : manifest.port_table) {
-            if (p.role == "clock") {
-                return p.name;
-            }
+    // ── ⑤ 时钟 / 复位 + 计数器 ───────────────────────────────────────
+    for (const auto &p : manifest.port_table) {
+        if (p.role == "clock" && pre.clock_port.empty()) {
+            pre.clock_port = p.name;
         }
-        return {};
-    }();
-    const std::string reset_port =
-        [&]() -> std::string {
-        for (const auto &p : manifest.port_table) {
-            if (p.role == "reset") {
-                return p.name;
-            }
+        if (p.role == "reset" && pre.reset_port.empty()) {
+            pre.reset_port = p.name;
         }
-        return {};
-    }();
+    }
 
     out << "    // ── 时钟 / 复位 ────────────────────────────────────────────────\n";
     out << "    integer checks = 0;\n";
     out << "    integer fails = 0;\n";
-    if (!clock_port.empty()) {
-        out << "    initial " << clock_port << " = 0;\n";
-        out << "    always #" << options.clock_half_period_ns << " " << clock_port
-            << " = ~" << clock_port << ";\n";
+    out << "    integer wi = 0;\n";
+    out << "    logic wait_ok = 1'b0;\n";
+    out << "    logic [63:0] hold_val = 0;\n";
+    if (!pre.clock_port.empty()) {
+        out << "    initial " << pre.clock_port << " = 0;\n";
+        out << "    always #" << options.clock_half_period_ns << " " << pre.clock_port << " = ~"
+            << pre.clock_port << ";\n";
     } else {
         out << "    // ⚠️ 清单里**没有** `role == clock` 的端口 ⇒ ⇒ 本骨架无法驱动时钟。\n";
         out << "    //    若被测设计确实无时钟（纯组合）⇒ ⇒ 删掉本段即可。\n";
     }
     out << "\n";
+    return pre;
+}
 
-    // ── ⑥ 主过程：复位 + **留空**的激励/断言 ─────────────────────────
-    out << "    initial begin\n";
-    if (!reset_port.empty()) {
-        out << "        // 复位脉冲（" << options.reset_cycles << " 拍）\n";
-        out << "        " << reset_port << " = 1;\n";
-        out << "        repeat (" << options.reset_cycles << ") @(posedge "
-            << (clock_port.empty() ? reset_port : clock_port) << ");\n";
-        out << "        " << reset_port << " = 0;\n";
-        out << "        @(posedge " << (clock_port.empty() ? reset_port : clock_port)
-            << ");\n";
+void write_tb_reset_pulse(std::ostream &out, const TbStubOptions &options,
+                          const TbPreludeResult &pre) {
+    if (pre.reset_port.empty()) {
+        return;
     }
+    const std::string &clk = pre.clock_port.empty() ? pre.reset_port : pre.clock_port;
+    out << "        // 复位脉冲（" << options.reset_cycles << " 拍）\n";
+    out << "        " << pre.reset_port << " = 1;\n";
+    out << "        repeat (" << options.reset_cycles << ") @(posedge " << clk << ");\n";
+    out << "        " << pre.reset_port << " = 0;\n";
+    out << "        @(posedge " << clk << ");\n";
     out << "\n";
+}
+
+void write_tb_epilogue(std::ostream &out, const std::string &tb_module) {
+    // ⚠️ 注释措辞注意：**不**在注释里写 "verilator" 这个词，也**不**让注释行
+    //   以 `*` / `/` 结尾 —— 仿真的 pragma 扫描会把 `/*verilator ... */` 当指令
+    //   ⇒ ⇒ 实测：`Verilator 的 ...` 被当成 `Unknown verilator comment` ⇒ 编译失败。
+    out << "        // 收尾约定：运行护栏按这一行判红绿（不是退出码：$finish 恒返回 0）。\n";
+    out << "        $display(\"RESULT: checks=%0d fails=%0d\", checks, fails);\n";
+    out << "        if (fails != 0) $fatal(1, \"TB failed\");\n";
+    out << "        $finish;\n";
+    out << "    end\n";
+    out << "\n";
+    out << "`ifdef DUMP_VCD\n";
+    out << "    initial begin\n";
+    out << "        $dumpfile(\"" << tb_module << ".vcd\");\n";
+    out << "        $dumpvars(0, " << tb_module << ");\n";
+    out << "    end\n";
+    out << "`endif\n";
+    out << "\n";
+    out << "endmodule\n";
+}
+
+void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
+                   const TbStubOptions &options) {
+    const std::string tb_module =
+        options.tb_module.empty() ? ("tb_" + options.dut_module + "_stub") : options.tb_module;
+    const std::string hint = options.example_hint.empty() ? std::string("<example>")
+                                                          : options.example_hint;
+
+    const std::vector<std::string> header = {
+        "**测试台骨架** —— 由 `cpphdl-emit-rtl --emit-tb-stub` 生成。",
+        "本文件**只有**端口连线 + 时钟/复位 + VCD 开关；激励与断言 MUST 由人补齐。",
+        "",
+        "⚠️ 补完的 TB MUST 在文件头登记**期望值出处**",
+        "   （协议规范 / 手推推导 / C++ 侧断言位置）—— 仓内纪律：期望值 MUST 手推。",
+        "⚠️ 补完的 TB MUST 结尾打印 `RESULT: checks=<N> fails=0`",
+        "   （运行护栏 `scripts/verify_examples_rtl_sim.sh` 据此判红绿）。",
+    };
+    const auto pre = write_tb_prelude(out, manifest, options, header);
+
+    out << "    initial begin\n";
+    write_tb_reset_pulse(out, options, pre);
     out << "        // ── TODO（" << hint << "）：激励 ────────────────────────────\n";
     out << "        //   在这里逐拍驱动输入并推进时钟。\n";
     out << "        //   ⚠️ 不得只写 `$finish` —— 那是「TB 只编译不跑」的历史事故形态。\n";
@@ -163,25 +199,7 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     out << "        //      （未驱动 / 半驱动输出在默认 Verilog 语义下是 X ⇒ 值断言可能\n";
     out << "        //       恰好通过，只有 X 检查能抓到「信号根本没接上」。）\n";
     out << "\n";
-    // ⚠️ 注释措辞注意：**不**在注释里写 "verilator" 这个词，也**不**让注释行
-    //   以 `*` / `/` 结尾 —— 仿真的 pragma 扫描会把 `/*verilator ... */` 当指令
-    //   ⇒ ⇒ 实测：`Verilator 的 ...` 被当成 `Unknown verilator comment` ⇒ 编译失败。
-    out << "        // 收尾约定：运行护栏按这一行判红绿（不是退出码：$finish 恒返回 0）。\n";
-    out << "        $display(\"RESULT: checks=%0d fails=%0d\", checks, fails);\n";
-    out << "        if (fails != 0) $fatal(1, \"TB failed\");\n";
-    out << "        $finish;\n";
-    out << "    end\n";
-    out << "\n";
-
-    // ── ⑦ VCD 开关 ───────────────────────────────────────────────────
-    out << "`ifdef DUMP_VCD\n";
-    out << "    initial begin\n";
-    out << "        $dumpfile(\"" << tb_module << ".vcd\");\n";
-    out << "        $dumpvars(0, " << tb_module << ");\n";
-    out << "    end\n";
-    out << "`endif\n";
-    out << "\n";
-    out << "endmodule\n";
+    write_tb_epilogue(out, tb_module);
 }
 
 } // namespace rtl_emit

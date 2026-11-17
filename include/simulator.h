@@ -23,6 +23,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -415,6 +416,15 @@ public:
     void set_input_value(const ch::core::ch_in<T> &port, uint64_t value) {
         set_port_value(port, value);
     }
+
+    // ── node_id 级**非类型化**访问（`rtl-verification-single-source` C7 · ADR-074 D2）
+    //
+    // ⚠️ **用途**：`.verif` 的 IR 解释器按「名字 → node_id」驱动/观测，**不依赖 C++
+    //    反射**（框架无反射 ⇒ 只有字符串名可用）。
+    // ⚠️ **未命中 MUST 返回 `false` / `nullopt`** —— **MUST NOT** 静默返回 0：
+    //    拼错的端口名若读回 0，会让 `EXPECT(typo, 0)` **恒真**（仓内已有的静默面）。
+    bool set_value_by_node_id(uint32_t node_id, uint64_t value);
+    std::optional<uint64_t> get_value_by_node_id(uint32_t node_id) const;
     
     // T401.2: 扩展 set_input_value() 支持 Bundle 字段 (ch_uint<N> 类型)
     // 用于直接访问 Bundle IO 字段，无需整个 Bundle 设置
