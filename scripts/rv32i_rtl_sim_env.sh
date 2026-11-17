@@ -177,6 +177,66 @@ for form in flat hier; do
     echo "      lint.log / compile.log / run.log（证据）"
 done
 
+# ── 人工检查摘要（含行号坐标 / 端口全表 / 结构统计）─────────────────────────
+# ⚠️ **为什么固化进脚本**：产物目录是**一次性**的（`--out` 换位置即重建）
+#   ⇒ ⇒ 摘要若靠人手生成，重建后就丢了 ⇒ ⇒ 而「人工检查」最需要的正是它。
+write_summary() {
+    python3 - "$OUT_DIR" <<'PY' >"$OUT_DIR/SUMMARY.md"
+import json, re, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+out = ["# RV32I 核 RTL 交付 —— 人工检查摘要\n",
+       f"> 生成自 `scripts/rv32i_rtl_sim_env.sh --out {root}`\n"]
+for form in ('flat', 'hier'):
+    d = root / form
+    if not d.is_dir():
+        continue
+    v = d / 'top.v'
+    t = v.read_text(encoding='utf-8')
+    man = json.loads((d / 'manifest.json').read_text(encoding='utf-8'))
+    lines = t.split('\n')
+    out += [f"\n## 形态 `{form}`\n",
+            f"- 产物：`{v}`（**{len(lines)} 行** · {len(t)} 字节）",
+            f"- manifest：`{d/'manifest.json'}`（schema `{man['schema']}`）",
+            f"- `ports[]`（全量，含后代）= **{len(man['ports'])}** · "
+            f"`port_table[]`（产品端口面）= **{len(man['port_table'])}**",
+            f"- 诊断 = **{len(man['diagnostics'])}** 条",
+            "\n### module 清单（含行号）\n", "| 行号 | module |", "|---:|---|"]
+    for i, l in enumerate(lines, 1):
+        m = re.match(r'^\s*module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(', l)
+        if m:
+            out.append(f"| {i} | `{m.group(1)}` |")
+    ff = len(re.findall(r'always_ff', t))
+    asg = len(re.findall(r'^\s*assign\s', t, re.M))
+    ini = len(re.findall(r'^\s*initial\b', t, re.M))
+    mem = re.findall(r'logic\s*\[31:0\]\s*(\w*memory\w*)\s*\[([^\]]+)\]', t)
+    lo = re.findall(r'/\*\s*verilator\s+lint_off\s+([A-Za-z0-9_]+)\s*\*/', t)
+    out += ["\n### 结构统计\n", "| 项 | 值 |", "|---|---:|",
+            f"| `always_ff`（寄存器） | {ff} |",
+            f"| `assign`（组合） | {asg} |",
+            f"| `initial`（初值块） | {ini}（⚠️ 可能为空 = `ch_mem` 初值位，非缺陷） |",
+            f"| `default_nettype none` | {'✅ 有' if 'default_nettype none' in t else '❌ 无'} |",
+            f"| 末尾 `default_nettype wire` | {'✅ 有' if 'default_nettype wire' in t else '❌ 无'} |",
+            f"| blanket `lint_off` | {len(lo)} 处{'（零 ✅）' if not lo else ' ' + str(lo)} |"]
+    if mem:
+        out.append("| 内存数组 | " + " · ".join(f"`{n} [{r}]`" for n, r in mem) + " |")
+    out += [f"\n### 顶层端口表（{len(man['port_table'])} 个 · 逐字逐序 == manifest `port_table[]`）\n",
+            "| # | 方向 | 端口 | 位宽 | 角色 |", "|---:|---|---|---:|---|"]
+    for i, e in enumerate(man['port_table'], 1):
+        out.append(f"| {i} | {e['dir']} | `{e['name']}` | {e['width']} | {e['role']} |")
+    out += ["\n### 人工核对点（可直接 grep）\n", "```bash",
+            f"grep -n '^module top' {v}                       # 顶层 module 头 + 端口表",
+            f"python3 scripts/lib/flat_rtl_emit_check.py --top-ports {v} --module top | wc -l   # 期望 34",
+            f"python3 scripts/lib/flat_rtl_emit_check.py --modules {v}                        # module 树",
+            f"grep -c 'always_ff' {v}; grep -c '^ *assign ' {v}                              # 规模",
+            f"grep -n 'prog_we\\|prog_addr\\|prog_data' {v} | head                            # 装载口（只接 I-TCM）",
+            f"grep -n 'lint_off' {v} || echo '零命中 ✅'                                       # 卫生产物",
+            "```"]
+sys.stdout.write('\n'.join(out) + '\n')
+PY
+    echo "  $OUT_DIR/SUMMARY.md   （人工检查摘要：module 行号 / 端口全表 / 结构统计 / grep 坐标）"
+}
+write_summary
+
 if [ "$RC" -ne 0 ]; then
     echo
     echo "❌ rv32i_rtl_sim_env: 失败"
