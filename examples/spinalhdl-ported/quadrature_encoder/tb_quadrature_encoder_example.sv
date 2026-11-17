@@ -37,10 +37,7 @@ module tb_quadrature_encoder_example;
     logic        b_sync;         // top_unnamed_output_3
     // ⚠️ **inline 后代的 4 个输出也是顶层端口** ⇒ MUST 连接
     //   （否则严格 flags 下 `%Warning-PINMISSING` **致命** —— 实测踩过）
-    logic [15:0] enc_position;   // top_enc_unnamed_output
-    logic        enc_direction;  // top_enc_unnamed_output_1
-    logic        enc_a_sync;     // top_enc_unnamed_output_2
-    logic        enc_b_sync;     // top_enc_unnamed_output_3
+
 
     integer checks = 0;
     integer fails  = 0;
@@ -55,11 +52,8 @@ module tb_quadrature_encoder_example;
         .top_unnamed_output(position),
         .top_unnamed_output_1(direction),
         .top_unnamed_output_2(a_sync),
-        .top_unnamed_output_3(b_sync),
-        .top_enc_unnamed_output(enc_position),
-        .top_enc_unnamed_output_1(enc_direction),
-        .top_enc_unnamed_output_2(enc_a_sync),
-        .top_enc_unnamed_output_3(enc_b_sync)
+        .top_unnamed_output_3(b_sync)
+
     );
 
     always #5 clk = ~clk;

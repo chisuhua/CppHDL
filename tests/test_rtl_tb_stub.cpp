@@ -61,9 +61,10 @@ std::string make_stub(const ch::rtl_emit::RtlManifest &m) {
 } // namespace
 
 // ============================================================================
-// 判据 1：顶层端口齐全 · **内部 wire 不得被连线**（判别力 ①）
+// 判据 1：端口面**只**来自 `port_table[]` · 内部 wire 连「点名」都不出现
+//        （判别力 ①）
 // ============================================================================
-TEST_CASE("tb_stub: 只连**顶层端口**，子组件的 input（内部 wire）不得连线",
+TEST_CASE("tb_stub: 只连 `port_table[]` 里的端口，子组件的 input 完全不出场",
           "[rtl][tb_stub]") {
     ch::ch_device<Top2> dev;
     const auto m = ch::rtl_emit::build_rtl_manifest(dev.instance(), dev.context());
@@ -79,11 +80,19 @@ TEST_CASE("tb_stub: 只连**顶层端口**，子组件的 input（内部 wire）
     REQUIRE(s.find(".default_clock(default_clock)") != std::string::npos);
     REQUIRE(s.find(".default_reset(default_reset)") != std::string::npos);
 
-    // 🔴 **子组件的 input**（名形如 `top_leaf_din`）MUST NOT 出现在**实例连接**里
-    //   （它在产物里是内部 wire ⇒ 连上去会让 Verilator 报
-    //    `Instance attempts to connect to 'X', but it is a variable`）
-    REQUIRE(s.find("top_leaf_din") != std::string::npos);   // 清单注释里点名
-    REQUIRE(s.find(".top_leaf_din(") == std::string::npos); // 但不连线
+    // 连线集合 == `port_table[]`（**逐字逐序**，无遗漏无多余）
+    for (const auto &p : m.port_table) {
+        REQUIRE(s.find("." + p.name + "(" + p.name + ")") != std::string::npos);
+    }
+    REQUIRE(m.port_table.size() == 5); // clock · reset · we · data · result
+
+    // 🔴 **子组件的 input**（名形如 `top_leaf_din`）MUST **完全不出场** ——
+    //   它在 `ports[]`（全量）里，但**不在** `port_table[]` ⇒ ⇒ 只要生成器
+    //   回头去推 `ports[]`，这个名字就会以**连线**或**注释**形态出现 ⇒ ⇒ 转红
+    REQUIRE(s.find("top_leaf_din") == std::string::npos);
+    // 同一个 `leaf` 的 `ch_out` 也不是根自有 ⇒ 同样不出场
+    REQUIRE(s.find("top_leaf_dout") == std::string::npos);
+    // 但根组件的 `ch_out` 是（`result`）⇒ ⇒ 上面已正面断言
 }
 
 // ============================================================================

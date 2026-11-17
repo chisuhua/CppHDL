@@ -5,16 +5,18 @@
 // ⚠️ **本文件只保留依赖项（C5 的 F1–F8）没有的部分**（metis 订正：同一判据两份实现
 //   必然漂移）。即：
 //   ① **跨进程**确定性 —— 同进程内两次生成恒等（判别力 ≈ 0）
-//   ② 产物**结构完整** —— 非空 / `module`·`endmodule` 配平 / **端口数 == manifest 的顶层端口数**
+//   ② 产物**结构完整** —— 非空 / `module`·`endmodule` 配平 / **端口数 == `port_table[]` 的条目数**
 //   ③ **「按名驱动」的机械证据** —— 改 manifest 的端口名 ⇒ TB **编译失败**
 //      （TB 编译通过本身就是「名字对」的硬证据，比任何端口表比对都硬）
 //   ④ **产物变异 ⇒ TB 必红** —— 删一条 `assign` ⇒ 断言失败 ⇒ `RESULT: ... fails!=0`
 //   ⑤ **X 检测** —— TB MUST 断言 `!$isunknown(<输出>)`（未驱动输出 ⇒ X ⇒ 必红）
 //
-// ⚠️ **端口口径**（2026-11-11 用户裁决 **A**）：manifest 的 `ports[]` = **全部**节点端口
-//   （含子组件的 input，扁平化后是内部 wire）⇒ ⇒ 所以本文件的判据 ② 比的是
-//   「产物端口数 == manifest 中**顶层端口**数」，判据与 `tb_stub` 的过滤同源
-//   （`role ∈ {clock,reset}` ∪ `dir == output` ∪ `is_top_io`）。
+// ⚠️ **端口口径**（ADR-072 · schema v2 起）：**唯一权威 = `port_table[]`**
+//   （产品端口表）⇒ ⇒ 判据 ② 是「**带根产品**的端口数 == `port_table[].size()`」。
+//   `ports[]` 仍是**全量节点清单**（含子组件的 input / output）⇒ ⇒ **不是**端口面
+//   ⇒ ⇒ 消费方 MUST NOT 从它自行推导「哪些是顶层端口」（推导只在上游做一次）。
+//   ⚠️ ctx-only 扁平产物是**遗留 / 非产品**路径（端口面含后代 `ch_out`）
+//   ⇒ ⇒ 拿它比 `port_table[]` 会**多算** ⇒ ⇒ 判据无法成立。
 //
 // ⚠️ **期望值 MUST 手推**（禁抄仿真输出）—— 判据 ④/⑤ 的「应该红」是**手推**的。
 
@@ -132,15 +134,6 @@ void write_file(const fs::path &p, const std::string &s) {
     out << s;
 }
 
-bool has_top_level_port(const ch::rtl_emit::RtlPortEntry &e) {
-    if (e.role == "clock" || e.role == "reset") {
-        return true;
-    }
-    if (e.dir == "output") {
-        return true;
-    }
-    return e.is_top_io;
-}
 
 /// 从 **Verilog 文本**里数顶层端口（`module <name> ( ... );` 之间的 input/output）
 std::size_t count_verilog_ports(const std::string &v) {
@@ -263,22 +256,19 @@ TEST_CASE("contract: 产物非空 · module/endmodule 配平 · 端口数 == man
     REQUIRE(n_end == 1);
     REQUIRE(v.find("module ") < v.find("endmodule"));
 
-    // ③ 端口数 == manifest 的**顶层**端口数（口径见文件头：用户裁决 A）
-    // ⚠️ 用**含子组件**的设计：它的 manifest 里有一个「子组件的 input」
-    //   （扁平化后是内部 wire）⇒ ⇒ **不过滤就会多算 1 个** ⇒ ⇒ 判据有判别力
+    // ③ 端口数 == manifest 的 `port_table[]`（**产品端口表 · schema v2**）
+    // ⚠️ 比的是**带根产品**（`toVerilog(path, root)`）—— 那才是"产品"；
+    //   ctx-only 扁平产物是**遗留 / 非产品**路径（端口面含后代 `ch_out`）
+    //   ⇒ ⇒ 拿它比 `port_table[]` 必然多算 ⇒ ⇒ 判据会误红。
+    // ⚠️ 用**含子组件**的设计：它的 `ports[]` 里有「子组件的 input / output」
+    //   （都不在 `port_table[]` 里）⇒ ⇒ 拿 `ports[]` 当端口面的实现会多算 ⇒ ⇒ 有判别力
     ch::ch_device<ContractTop> dev;
     const auto man = ch::rtl_emit::build_rtl_manifest(dev.instance(), dev.context());
-    std::size_t top_ports = 0;
-    for (const auto &e : man.ports) {
-        if (has_top_level_port(e)) {
-            ++top_ports;
-        }
-    }
-    // 🔴 设计本身必须**真的**含有内部 wire（否则本判据无判别力 ⇒ 断言失败）
-    REQUIRE(top_ports < man.ports.size());
+    // 🔴 设计本身必须**真的**含有非产品端口（否则本判据无判别力 ⇒ 断言失败）
+    REQUIRE(man.port_table.size() < man.ports.size());
     const fs::path own = fresh_dir("struct_own");
-    ch::toVerilog((own / "own.v").string(), dev.context());
-    REQUIRE(count_verilog_ports(read_file(own / "own.v")) == top_ports);
+    ch::toVerilog((own / "own.v").string(), dev.instance(), ch::EmitOptions{});
+    REQUIRE(count_verilog_ports(read_file(own / "own.v")) == man.port_table.size());
     // manifest 的 JSON 里端口条目数 == `man.ports.size()`
     std::size_t entries = 0;
     for (std::size_t i = m.find("\"name\":"); i != std::string::npos;
@@ -315,11 +305,12 @@ TEST_CASE("contract: 改 manifest 的端口名 ⇒ TB **编译失败**（名字�
                                (d / "tb_ok.sv").string());
         REQUIRE(r.compiled);
     }
-    // ② 改一个**顶层端口**的 `name`（只改 manifest，产物不动）⇒ 编译**必须失败**
+    // ② 改一个**产品端口**的 `name`（只改 manifest 的 `port_table[]`，产物不动）
+    //   ⇒ ⇒ 编译**必须失败**（名字对不上 = 按名驱动的机械证据）
     {
         auto bad = man;
         bool mutated = false;
-        for (auto &e : bad.ports) {
+        for (auto &e : bad.port_table) {
             if (e.name == "top_a") {
                 e.name = "top_a_renamed";
                 mutated = true;

@@ -38,8 +38,7 @@ module tb_uart_tx_example;
     logic       busy;                 // top_unnamed_output_1
 
     // ⚠️ inline 后代（`uart_tx_inst`）的输出**也是顶层端口** ⇒ MUST 连接
-    logic       inst_uart_tx;         // top_uart_tx_inst_unnamed_output
-    logic       inst_busy;            // top_uart_tx_inst_unnamed_output_1
+
 
     integer checks = 0;
     integer fails  = 0;
@@ -70,9 +69,7 @@ module tb_uart_tx_example;
         .top_unnamed_input(frame_start),
         .top_unnamed_input_1(data),
         .top_unnamed_output(uart_tx),
-        .top_unnamed_output_1(busy),
-        .top_uart_tx_inst_unnamed_output(inst_uart_tx),
-        .top_uart_tx_inst_unnamed_output_1(inst_busy)
+        .top_unnamed_output_1(busy)
     );
 
     always #5 clk = ~clk;
@@ -168,9 +165,6 @@ module tb_uart_tx_example;
         end
         // impl-contract：IDLE 时 `busy` = 0
         expect_bit(busy, 1'b0);
-        // inline 后代端口与顶层端口同源
-        expect_bit(inst_uart_tx, uart_tx);
-        expect_bit(inst_busy, busy);
 
         // ══════════════════════════════════════════════════════════════
         // 帧 A：**0x55（交替位）** ⇒ 用边沿**测得**位宽与各位取值

@@ -103,6 +103,6 @@ bash scripts/verify_port_naming.sh --self-test
 ## 5. 相关
 
 - 契约：capability `rtl-hierarchical-output`（端口命名规则的**唯一**规范所有者）
-- manifest schema：capability `rtl-emit-portability`（`rtl-emit-manifest-v1`）
+- manifest schema：capability `rtl-emit-portability`（`rtl-emit-manifest-v2` ⇒ ⇒ 端口面看 `port_table[]`）
 - 组件生命周期（`create_ports()` / `describe()` 的调用时机）：`COMPONENT-LIFECYCLE-GUIDE.md`
 - 层次化 RTL 写法：`HIERARCHICAL-RTL-AUTHORING-GUIDE.md`

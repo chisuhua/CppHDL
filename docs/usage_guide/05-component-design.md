@@ -497,16 +497,18 @@ class Bad {
 
 ## 5. RTL 输出形态
 
-框架有**两条** RTL 出口 ⇒ ⇒ ⇒ 同一份 ctx、同一套发射底座 ⇒ ⇒ ⇒ **默认参数下逐字节一致**：
+框架有**三个** RTL 出口 ⇒ ⇒ ⇒ 同一份 ctx、同一套发射底座 ⇒ ⇒ ⇒ **默认参数下**前两条
+**逐字节一致**（差别只在**端口面**）：
 
 | 入口 | 产物 | 何时用 |
 |---|---|---|
-| `ch::toVerilog(filename, ctx)` | **单个** `module top` | **默认**；既有全部交付物走这条 |
+| `ch::toVerilog(filename, ctx)` | **单个** `module top` · 端口面 = **ctx 里每个 `ch_out`** + 无 driver 的 `ch_in` | **遗留 / 非产品**路径（既有 49 处调用点）⇒ ⇒ 产物**逐字节不变** |
+| `ch::toVerilog(filename, root, options)` | **单个** `module top` · 端口面 = **根组件自有 IO** | **产品**路径（`cpphdl-emit-rtl` / 各 example 发射器） |
 | `ch::toVerilogHierarchical(out_path, root, options)` | **多个** module（**单文件**） | 需要**可读的层级 RTL**（IP 单独交付 / 逐级看 RTL / 外部评审） |
 
 ### 5.1 扁平产物（默认）
 
-`ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:43`）**只接收 context**，
+`ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:67`）**只接收 context**，
 固定输出一个 `module top (`（`src/codegen_verilog.cpp:313`）到 `endmodule`
 （`:390`）。整个 writer 里**没有任何** `children()` / `child_count()` 遍历，
 也不发射实例化语句。
@@ -542,6 +544,11 @@ endmodule
 
 ### 5.2 扁平产物的端口规则
 
+⚠️ **两条入口的端口面不同** —— 选错入口 = 交付「不该出现的端口」。
+**产品端口面的唯一权威 = manifest 的 `port_table[]`**（`rtl-emit-manifest-v2`）。
+
+#### 5.2.1 ctx-only 入口：`toVerilog(filename, ctx)`
+
 | 节点 | 在生成的 Verilog 里 |
 |---|---|
 | 顶层 `ch_in`（无驱动） | `input` 端口 |
@@ -551,7 +558,30 @@ endmodule
 推论：多层设计里「某个层的输入忘了驱动」在 Verilog 里表现为**顶层凭空多出一个
 input 端口**；而子模块输出会全部暴露在顶层端口列表里（端口表随层次变长）。
 
-⚠️ 这条「**子输出全部进顶层端口表**」在**层次化**产物里**不再成立**（见 §5.5）。
+⚠️ **这是遗留 / 非产品路径**（ADR-072）：产物**逐字节冻结**（既有 49 处调用点
+不受影响），但它**不是**产品端口面 —— 下游 IP 交付 MUST 用带根入口。
+
+#### 5.2.2 带根入口：`toVerilog(filename, root, options)`
+
+端口面 = `default_clock` → `default_reset` → **根组件自有的、无 driver 的 `ch_in`**
+→ **根组件自有的 `ch_out`**。**后代**（成层或 inline）的 `ch_in` / `ch_out` **一律**
+落到体内 `logic`（不再被抬成顶层端口）。
+
+| 节点 | 在生成的 Verilog 里 |
+|---|---|
+| 根自有 `ch_in`（无驱动） | `input` 端口 |
+| **后代**的 `ch_in`（无论有没有 driver） | 体内 `logic`（有 driver 的发 `assign`；无 driver 的 ⇒ 见下） |
+| 根自有 `ch_out` | `output` 端口 |
+| **后代**的 `ch_out` | 体内 `logic` + `assign out = <落点网>` |
+
+⚠️ **唯一例外：悬空的后代 `ch_in`**（既没有父层驱动、也没有 tie-off）⇒ ⇒
+**响亮拒绝**（`ok = false` + 点名 + 不产生文件）—— 不再「冒泡成顶层 `input`」。
+接法只有两条：给它接上驱动源，或由父层显式 tie-off 常量（tie-off 的输入**有** driver）。
+
+```cpp
+// 产品路径：端口面 = 根组件自有 IO
+ch::toVerilog("top.v", dev.instance(), ch::EmitOptions{});
+```
 
 ### 5.3 层次化产物
 
@@ -669,22 +699,22 @@ endmodule
    第一个参数（局部名）⇒ ⇒ 两者都会出现在外部评审看到的 RTL 里；
 2. **端口名仍是设计级全局名**（`top_m_unnamed_input` 带全路径前缀）⇒ ⇒ 这是**故意**的
    —— 顶层端口名 MUST 与扁平产物**逐字相同**（下游按名解析不受影响）；
-3. ⚠️ **顶层端口比扁平**少了 `top_m_unnamed_output` / `top_m_lf_unnamed_output`
-   ⇒ ⇒ 这不是「丢了」，是**契约**（成层子树的 `ch_out` 不再被抬到顶层）⇒ ⇒
+3. ⚠️ **顶层端口比 ctx-only 扁平**少了 `top_m_unnamed_output` / `top_m_lf_unnamed_output`
+   ⇒ ⇒ 这不是「丢了」，是**契约**（后代 `ch_out` 一律落在体内 `logic`）⇒ ⇒
    **观测盲区**见 §5.5。
 
 #### 5.3.4 层次化产物的端口规则
 
 | module | 端口集合 |
 |---|---|
-| **根** module | 走**扁平规则**（clock → reset → 无 driver 的 `input` → **全部** `ch_out`（含 inline 后代））⇒ ⇒ 顶层端口表与扁平产物**逐字逐序相同** |
-| **非根**成层 module | 自身 `ch_in` ∪ 自身 `ch_out` ∪ **隐式端口** ∪ **冒泡端口** ∪ 时序基础设施（clock / reset，**分开判**） |
+| **根** module | **只含根组件自有 IO**（clock → reset → 无 driver 的**根自有** `input` → **根自有** `ch_out`）⇒ ⇒ 与 `toVerilog(path, root)` 的产品端口表 / manifest 的 `port_table[]` **逐字逐序相同** |
+| **非根**成层 module | 自身 `ch_in` ∪ 自身 `ch_out` ∪ **隐式端口** ∪ 时序基础设施（clock / reset，**分开判**） |
 
 - **隐式端口**：跨层**非端口边**按方向合成（父→子 = 子侧 `input`；子→父 = 子侧 `output`）
   ⇒ ⇒ 端口名带框架前缀 `__if_` / `__x_`（`__up_` = 向上 pass-through）⇒ ⇒
   **这正是 §1 的 D1 / D5 要避免的写法**；
-- **冒泡端口**：**无驱动源**的子 `ch_in` 逐级向上冒泡成顶层 `input`（名字与扁平**逐字相同**）
-  ⇒ ⇒ 这是 §1 的 D4 要避免的写法；
+- **悬空的后代 `ch_in`**（无驱动源）⇒ ⇒ **响亮拒绝**（`ok = false` + 点名 + 不产生文件）
+  ⇒ ⇒ 不再「向上冒泡成顶层 `input`」（ADR-072 D1-f）⇒ ⇒ 接上驱动源或由父层 tie-off 常量；
 - **跨模块 `ch_mem`**（父层直接读 `child.mem.aread()`）⇒ ⇒ **响亮拒绝**（`ok = false`
   + `error` 点名 + **不产生任何文件**）⇒ ⇒ 改用「mem 与使用者同层」；
 - **成层组件自驱动自己的 `ch_in`** ⇒ ⇒ 同样**响亮拒绝**；
@@ -697,7 +727,7 @@ endmodule
 ```cpp
 ch::HierarchyEmitOptions opts;
 opts.port_policy    = ch::PortPolicy::SynthesizeWarn;   // 默认：隐式端口 + 告警
-opts.undriven_policy = ch::UndrivenPolicy::Bubble;      // 默认：悬空输入向上冒泡
+opts.undriven_policy = ch::UndrivenPolicy::Reject;      // 默认（且唯一）：悬空后代输入被拒
 opts.top_module_name = "top";                            // 根 module 名
 ch::HierarchyEmitResult r = ch::toVerilogHierarchical("out.v", dev.instance(), opts);
 ```
@@ -1012,6 +1042,51 @@ build/examples/axi4/emit_rtl_axi_soc --out build/rtl_products/soc
 `scripts/verify_examples_rtl_sim.sh` 的 **④″**（`kind=soc` 专用）会跑
 `emit_rtl_axi_soc --check-products` ⇒ ⇒ 一次判掉：**module 集 · 顶层端口面 · lint ·
 双形态逐拍等价 + 变异自证**（篡改层次化产物 ⇒ 必红 ⇒ ⇒ 判据非恒绿）。
+
+### 5.9 产品面声明（**交付前必读**）
+
+> 权威 = ADR-072 的 **D2 / D3 / D4** · 可执行载体 = `scripts/verify_examples_rtl_sim.sh`
+> 的**判据⑧**（四件套）与 ④″（SoC 产物级）。
+
+#### 5.9.1 产品单元 = **四件套**
+
+一个「产品单元」= 下列四件**齐备**才算产品化完成（只有前两件 = **工具**，不是产品）：
+
+| # | 件 | 判据 |
+|---|---|---|
+| ① | **manifest**（机器可读契约） | `manifest.json` 存在且 schema = `rtl-emit-manifest-v2` |
+| ② | **Verilog 产物** | `top.v` 存在且 lint 干净（卫生产物） |
+| ③ | **独立可跑的 TB** | 独立编译 + 跑通 + `RESULT: checks=<N> fails=0` + 失败**非零退出码** |
+| ④ | **覆盖登记** | `.rddf/checks/examples-rtl-sim-targets.tsv` 有该行（`status=verified`） |
+
+🔴 **最硬的耦合**（= 判据⑧）：manifest 的 `port_table[]` MUST == 该单元产物端口表
+（**逐字逐序**）。首批 **10** 个产品单元逐个受检；负向对照（篡改一个端口名 / 产物多插
+一个下沉端口）各投一次 ⇒ MUST 转红（`--self-test` 的投毒 6/7）。
+
+#### 5.9.2 ISA 边界（RV32I **用户态**）
+
+- **含**：`RV32I` 基础整数指令 + `FENCE` / `FENCE.I`（本版 = **NOP**：单核无 cache ⇒ 无排序语义）
+  + **非法指令 4 态可观测**（`0` 合法 / `1` 已知未实现 / `2` 未知 opcode / `3` 保留组合）。
+- 🔴 **不含特权级** —— 没有 CSR（`csrrw/csrrs/csrrc`）、没有 `ECALL` / `EBREAK` / `MRET`、
+  没有 trap / 中断 / 特权态切换。特权级是**独立立项**（`rv32i-privileged-csr-2026-11`），
+  本产品面 MUST NOT 顺手塞进来。
+- 🔴 用户态下遇到非法指令时的 **冻结是终态**：PC 停在原地、该指令**永不退休**
+  （`dbg_illegal_reason` 可观测）⇒ ⇒ 它不是「可恢复异常」，也**不会**被跳过 ⇒ ⇒
+  用它做「跑飞检测」是**契约内**的用法。
+
+#### 5.9.3 独立 TB 的判据汇总骨架
+
+TB 的**机械部分**（端口连线 · clk/rst · VCD · 收尾骨架）由
+`cpphdl-emit-rtl --emit-tb-stub` 生成；**激励与期望值 MUST 人工手推**
+（禁抄仿真输出）。收尾骨架 = 每个 TB 的固定约定：
+
+```systemverilog
+$display("RESULT: checks=%0d fails=%0d", checks, fails);
+if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
+```
+
+⇒ ⇒ 护栏按 `RESULT:` 行判红绿（Verilator 的 `$finish` **恒** exit 0 ⇒ 不能靠退出码），
+且 `checks` MUST ≥ 登记的 `min_checks`（否则「删断言」不会被发现）。
 
 ## 6. 反模式与静默失效清单
 

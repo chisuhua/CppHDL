@@ -31,7 +31,7 @@
 //     ⇒ ⇒ 握手在**同拍**完成 ⇒ ⇒ TB 的「等 READY」循环第一次就成立。
 //
 // ⚠️ **inline 后代的输出也是顶层端口** ⇒ MUST 连接（否则严格 flags 下
-//   `%Warning-PINMISSING` **致命** —— 实测踩过）；本 TB 顺带断言它们与顶层端口同源。
+//   `%Warning-PINMISSING` **致命** —— 实测踩过）；ADR-072 D1-f 之后后代 `ch_out` **不再是**顶层端口 ⇒ S8「同源」场景已删除。
 
 `timescale 1ns/1ps
 
@@ -66,14 +66,6 @@ module tb_axi4_lite_example;
     logic        rready = 1'b0;
 
     // ⚠️ inline 后代（`slave`）的输出**也是顶层端口** ⇒ MUST 连接
-    logic        s_awready;
-    logic        s_wready;
-    logic [1:0]  s_bresp;
-    logic        s_bvalid;
-    logic        s_arready;
-    logic [31:0] s_rdata;
-    logic [1:0]  s_rresp;
-    logic        s_rvalid;
 
     integer checks = 0;
     integer fails  = 0;
@@ -108,15 +100,7 @@ module tb_axi4_lite_example;
         .top_unnamed_output_4(arready),
         .top_unnamed_output_5(rdata),
         .top_unnamed_output_6(rresp),
-        .top_unnamed_output_7(rvalid),
-        .top_slave_unnamed_output(s_awready),
-        .top_slave_unnamed_output_1(s_wready),
-        .top_slave_unnamed_output_2(s_bresp),
-        .top_slave_unnamed_output_3(s_bvalid),
-        .top_slave_unnamed_output_4(s_arready),
-        .top_slave_unnamed_output_5(s_rdata),
-        .top_slave_unnamed_output_6(s_rresp),
-        .top_slave_unnamed_output_7(s_rvalid)
+        .top_unnamed_output_7(rvalid)
     );
 
     // ⚠️ **时钟生成器**（漏掉 ⇒ 仿真无事件即结束 ⇒ 表现为「end at 0s」）
@@ -389,16 +373,6 @@ module tb_axi4_lite_example;
         send_ar(32'h00000000);
         take_r(got_data, got_resp);
         expect_eq32(got_data, 32'h1122CCDD);   // MUST NOT 被改
-
-        // ── S8：inline 后代端口与顶层端口同源 ───────────────────────
-        expect_bit(s_awready, awready);
-        expect_bit(s_wready, wready);
-        expect_eq2(s_bresp, bresp);
-        expect_bit(s_bvalid, bvalid);
-        expect_bit(s_arready, arready);
-        expect_eq32(s_rdata, rdata);
-        expect_eq2(s_rresp, rresp);
-        expect_bit(s_rvalid, rvalid);
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);
         if (fails != 0) $fatal(1, "tb_axi4_lite_example failed");

@@ -36,7 +36,7 @@
 //   ② 复位释放 MUST 在 **`negedge`**（在 `posedge` 同一时刻拉低 ⇒ 复位拍被吃掉）。
 //
 // ⚠️ **inline 后代的输出也是顶层端口** ⇒ MUST 连接（否则严格 flags 下
-//   `%Warning-PINMISSING` **致命** —— 实测踩过）；本 TB 顺带断言它们与顶层端口同源。
+//   `%Warning-PINMISSING` **致命** —— 实测踩过）；ADR-072 D1-f 之后后代 `ch_out` **不再是**顶层端口 ⇒ 无「同源」可断言。
 
 `timescale 1ns/1ps
 
@@ -54,9 +54,7 @@ module tb_fifo_stream_example;
     logic       full;           // top_unnamed_output_2
 
     // ⚠️ inline 后代（`fifo_inst`）的输出**也是顶层端口** ⇒ MUST 连接
-    logic [7:0] inst_dout;      // top_fifo_inst_unnamed_output
-    logic       inst_empty;     // top_fifo_inst_unnamed_output_1
-    logic       inst_full;      // top_fifo_inst_unnamed_output_2
+
 
     integer checks = 0;
     integer fails  = 0;
@@ -78,10 +76,8 @@ module tb_fifo_stream_example;
         .top_unnamed_input_2(pop),
         .top_unnamed_output(dout),
         .top_unnamed_output_1(empty),
-        .top_unnamed_output_2(full),
-        .top_fifo_inst_unnamed_output(inst_dout),
-        .top_fifo_inst_unnamed_output_1(inst_empty),
-        .top_fifo_inst_unnamed_output_2(inst_full)
+        .top_unnamed_output_2(full)
+
     );
 
     always #5 clk = ~clk;
@@ -138,20 +134,6 @@ module tb_fifo_stream_example;
         end
     endtask
 
-    // inline 后代端口与顶层端口同源（抓「顶层端口与子组件脱钩」）
-    task automatic expect_descendant_ports_match;
-        begin
-            checks = checks + 1;
-            if ($isunknown(inst_dout))                        fails = fails + 1;
-            else if (inst_dout !== dout)                      fails = fails + 1;
-            checks = checks + 1;
-            if ($isunknown(inst_empty))                       fails = fails + 1;
-            else if (inst_empty !== empty)                    fails = fails + 1;
-            checks = checks + 1;
-            if ($isunknown(inst_full))                        fails = fails + 1;
-            else if (inst_full !== full)                      fails = fails + 1;
-        end
-    endtask
 
     initial begin
         // ── 复位 ─────────────────────────────────────────────────────
@@ -166,7 +148,6 @@ module tb_fifo_stream_example;
         expect_bit(empty, 1'b1);
         //   impl-contract：在途为 0 时 `full` 必为 0
         expect_bit(full, 1'b0);
-        expect_descendant_ports_match();
 
         // ── S2：顺序保持（**spec-derived**）────────────────────────
         //   push 三个不同值 ⇒ 依次 pop 出来 MUST 是**同样顺序**
@@ -238,7 +219,6 @@ module tb_fifo_stream_example;
         expect_bit(empty, 1'b1);                   // 16 个全部取回 ⇒ 空
         expect_empty_matches_outstanding();
 
-        expect_descendant_ports_match();
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);
         if (fails != 0) $fatal(1, "tb_fifo_stream_example failed");

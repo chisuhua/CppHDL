@@ -71,6 +71,8 @@ bool parse_cli_options(const std::vector<std::string> &args, CliOptions &out,
             }
         } else if (a == "--emit-hygiene") {
             out.emit_hygiene = true;
+        } else if (a == "--no-emit-hygiene") {
+            out.emit_hygiene = false;
         } else if (a == "--allow-diagnostics") {
             out.allow_diagnostics = true;
         } else {
@@ -108,7 +110,8 @@ void print_cli_usage(const char *program_name) {
         << "  --tb-clock-half-period <ns>  骨架的时钟半周期（默认 5 = 100 MHz）\n"
         << "  --emit-hygiene         产物卫生（default_nettype none + 元数据头 +\n"
         << "                         剪零引用信号 + proxy 恒等直通 + 不发 blanket\n"
-        << "                         lint_off）—— ⚠️ **默认 off** ⇒ 默认路径产物逐字节不变\n"
+        << "                         lint_off）—— **默认 on**\n"
+        << "  --no-emit-hygiene      关掉产物卫生（仅用于与旧产物形态做对照）\n"
         << "  -h, --help             本用法\n"
         << "\n"
         << "退出码：0 成功 · 1 运行失败或有诊断 · 2 用法错误（fail-closed）\n";

@@ -86,14 +86,9 @@ module tb_rv32i_soc;
     logic [31:0] dbg_wb_write_data;
     logic [4:0]  dbg_wb_rd_addr;
 
-    logic [41:0] sink1;   // 42 个未用输出（宽度 1）
-    logic [11:0] sink2;  // 6 个未用输出（宽度 2）
-    logic [8:0] sink3;   // 3 个未用输出（宽度 3）
-    logic [7:0] sink4;   // 2 个未用输出（宽度 4）
-    logic [54:0] sink5;  // 11 个未用输出（宽度 5）
-    logic [27:0] sink7;  // 4 个未用输出（宽度 7）
-    logic [1375:0] sink32;  // 43 个未用输出（宽度 32）
-    logic [95:0] sink48;   // 2 个未用输出（宽度 48）
+    logic [6:0] sink1;   // 7 个未用输出（宽度 1）
+    logic [1:0] sink2;   // 1 个未用输出（宽度 2）
+    logic [287:0] sink32;   // 9 个未用输出（宽度 32）
 
     integer checks = 0;
     integer fails  = 0;
@@ -199,155 +194,34 @@ module tb_rv32i_soc;
         .top_prog_we(prog_we),
         .top_prog_addr(prog_addr),
         .top_prog_data(prog_data),
-        .top_obs_instr_addr(sink32[0*32 +: 32]),
+        .top_obs_instr_addr(sink32[0 +: 32]),
         .top_obs_data_addr(obs_data_addr),
         .top_obs_data_write_data(obs_data_write_data),
         .top_obs_data_write_en(obs_data_write_en),
         .top_obs_perf_cycles(obs_perf_cycles),
         .top_obs_perf_instructions(obs_perf_instructions),
-        .top_obs_perf_branch_count(sink32[1*32 +: 32]),
-        .top_obs_perf_branch_mispredict(sink32[2*32 +: 32]),
-        .top_obs_perf_load_use_stalls(sink32[3*32 +: 32]),
-        .top_obs_perf_control_stalls(sink32[4*32 +: 32]),
+        .top_obs_perf_branch_count(sink32[32 +: 32]),
+        .top_obs_perf_branch_mispredict(sink32[64 +: 32]),
+        .top_obs_perf_load_use_stalls(sink32[96 +: 32]),
+        .top_obs_perf_control_stalls(sink32[128 +: 32]),
         .top_dbg_id_instr(dbg_id_instr),
         .top_dbg_id_pc(dbg_id_pc),
         .top_dbg_id_valid(dbg_id_valid),
-        .top_dbg_id_is_branch(sink1[0*1 +: 1]),
-        .top_dbg_id_is_load(sink1[1*1 +: 1]),
-        .top_dbg_id_is_store(sink1[2*1 +: 1]),
-        .top_dbg_branch_taken(sink1[3*1 +: 1]),
+        .top_dbg_id_is_branch(sink1[0 +: 1]),
+        .top_dbg_id_is_load(sink1[1 +: 1]),
+        .top_dbg_id_is_store(sink1[2 +: 1]),
+        .top_dbg_branch_taken(sink1[3 +: 1]),
         .top_dbg_wb_write_en(dbg_wb_write_en),
         .top_dbg_wb_write_data(dbg_wb_write_data),
         .top_dbg_wb_rd_addr(dbg_wb_rd_addr),
-        .top_dbg_exmem_alu_result(sink32[5*32 +: 32]),
-        .top_dbg_exmem_imm(sink32[6*32 +: 32]),
-        .top_dbg_exmem_rs2_data(sink32[7*32 +: 32]),
-        .top_obs_data_rdata(sink32[8*32 +: 32]),
-        .top_dbg_exmem_valid(sink1[4*1 +: 1]),
-        .top_dbg_mem_valid_out(sink1[5*1 +: 1]),
-        .top_dbg_load_use_detected(sink1[6*1 +: 1]),
-        .top_pipeline_if_stage_unnamed_output_2(sink32[9*32 +: 32]),
-        .top_pipeline_if_stage_unnamed_output_1(sink32[10*32 +: 32]),
-        .top_pipeline_if_stage_unnamed_output_3(sink1[7*1 +: 1]),
-        .top_pipeline_if_stage_unnamed_output(sink32[11*32 +: 32]),
-        .top_pipeline_id_stage_unnamed_output_13(sink5[0*5 +: 5]),
-        .top_pipeline_id_stage_unnamed_output_14(sink5[1*5 +: 5]),
-        .top_pipeline_id_stage_unnamed_output_5(sink32[12*32 +: 32]),
-        .top_pipeline_id_stage_unnamed_output_8(sink32[13*32 +: 32]),
-        .top_pipeline_id_stage_unnamed_output_7(sink32[14*32 +: 32]),
-        .top_pipeline_id_stage_unnamed_output_6(sink7[0*7 +: 7]),
-        .top_pipeline_id_stage_unnamed_output_4(sink3[0*3 +: 3]),
-        .top_pipeline_id_stage_unnamed_output(sink1[8*1 +: 1]),
-        .top_pipeline_id_stage_unnamed_output_1(sink1[9*1 +: 1]),
-        .top_pipeline_id_stage_unnamed_output_2(sink1[10*1 +: 1]),
-        .top_pipeline_id_stage_unnamed_output_3(sink1[11*1 +: 1]),
-        .top_pipeline_id_stage_unnamed_output_15(sink1[12*1 +: 1]),
-        .top_pipeline_id_stage_unnamed_output_9(sink5[2*5 +: 5]),
-        .top_pipeline_id_stage_unnamed_output_16(sink1[13*1 +: 1]),
-        .top_pipeline_id_stage_unnamed_output_12(sink32[15*32 +: 32]),
-        .top_pipeline_id_stage_unnamed_output_10(sink5[3*5 +: 5]),
-        .top_pipeline_id_stage_unnamed_output_11(sink5[4*5 +: 5]),
-        .top_pipeline_id_stage_unnamed_output_17(sink7[1*7 +: 7]),
-        // ⚠️ **2026-11-15 · B4 · C4**：`IdStage` 的立即数改由库组件 `Rv32iDecoder`
-        //   承担 ⇒ ⇒ 该子组件的 **8 个输出**冒泡到顶层（opcode 7 · rd 5 · funct3 3 ·
-        //   rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）
-        //   ⇒ ⇒ 全部是本 TB 的观察面之外 ⇒ ⇒ 接进 `sink*`（**未用输出 MUST 被读**）
-        // ⚠️ **2026-11-16 · B4 · G1 扩展**：decoder **新增** `illegal_reason` 输出
-        //    ⇒ ⇒ 它**具名**（端口命名契约）⇒ ⇒ **脱离 unnamed 编号池**
-        //    ⇒ ⇒ ⇒ 既有 8 根**编号零位移**（⚠️ 若不具名 ⇒ 它会占 `_0` ⇒ 全体 +1 位移）
-        .top_pipeline_id_stage_decoder_illegal_reason(sink2[5*2 +: 2]),
-        .top_pipeline_id_stage_decoder_unnamed_output(sink7[2*7 +: 7]),
-        .top_pipeline_id_stage_decoder_unnamed_output_1(sink5[8*5 +: 5]),
-        .top_pipeline_id_stage_decoder_unnamed_output_2(sink3[1*3 +: 3]),
-        .top_pipeline_id_stage_decoder_unnamed_output_3(sink5[9*5 +: 5]),
-        .top_pipeline_id_stage_decoder_unnamed_output_4(sink5[10*5 +: 5]),
-        .top_pipeline_id_stage_decoder_unnamed_output_5(sink7[3*7 +: 7]),
-        .top_pipeline_id_stage_decoder_unnamed_output_6(sink32[42*32 +: 32]),
-        .top_pipeline_id_stage_decoder_unnamed_output_7(sink3[2*3 +: 3]),
-        // ⚠️ **2026-11-15 · B4 · G1+G4**：未知 opcode 的可观测面（**具名**端口
-        //   ⇒ ⇒ 不参与 unnamed 编号 ⇒ ⇒ 既有端口表**零位移**）
-        .top_dbg_illegal_reason(sink2[2*2 +: 2]),
-        .top_pipeline_dbg_illegal_reason(sink2[3*2 +: 2]),
-        .top_pipeline_id_stage_illegal_reason(sink2[4*2 +: 2]),
-        .top_pipeline_ex_stage_unnamed_output_2(sink32[16*32 +: 32]),
-        .top_pipeline_ex_stage_unnamed_output(sink1[14*1 +: 1]),
-        .top_pipeline_ex_stage_unnamed_output_1(sink32[17*32 +: 32]),
-        .top_pipeline_ex_stage_unnamed_output_3(sink32[18*32 +: 32]),
-        .top_pipeline_ex_stage_unnamed_output_4(sink1[15*1 +: 1]),
-        .top_pipeline_ex_stage_unnamed_output_5(sink1[16*1 +: 1]),
-        .top_pipeline_ex_stage_unnamed_output_6(sink1[17*1 +: 1]),
-        .top_pipeline_ex_stage_unnamed_output_7(sink1[18*1 +: 1]),
-        .top_pipeline_mem_stage_unnamed_output_1(sink32[19*32 +: 32]),
-        .top_pipeline_mem_stage_unnamed_output_2(sink5[5*5 +: 5]),
-        // ⚠️ **2026-11-13 · ADR-069 A0**：端口表随「load 车道选择迁出 `MemStage`」变化：
-        //   · `MemStage` 的 `mem_data` 输出**已删** ⇒ ⇒ 原来的
-        //     `mem_stage_unnamed_output_3`（32 位 · `mem_data`）**不再存在**
-        //     ⇒ ⇒ `store_byte_enable_out`（4 位）由 `_4` **前移为 `_3`**
-        //   · 新增 `load_lane_selector`（`riscv::LoadLaneSelector`）的输出
-        //     （32 位 · 车道选择后的 load 值）⇒ ⇒ 接进**腾出来的** `sink32[20]`
-        //     ⇒ ⇒ **端口总数不变**（107 输出）⇒ ⇒ 其它 sink 下标**不动**
-        .top_pipeline_mem_stage_unnamed_output_3(sink4[0*4 +: 4]),
-        .top_pipeline_load_lane_selector_data(sink32[20*32 +: 32]),
-        .top_pipeline_mem_stage_unnamed_output(sink1[19*1 +: 1]),
-        .top_pipeline_wb_stage_unnamed_output_2(sink5[6*5 +: 5]),
-        // ⚠️ **2026-11-13**：`wb_stage` 的**未具名输出编号**随全局节点序变化
-        //   （`unnamed_output` = `write_en`（1 位）· `_1` = `write_data`（32 位）
-        //   · `_2` = `rd_addr_out`（5 位））⇒ ⇒ 与旧产物的编号**互换了 0/1**
-        //   ⇒ ⇒ 此处按**产物实测**对齐（`sink*` 只是「必须被接住」的哑沉 ⇒
-        //   ⇒ 交换编号**不改变**本 TB 的任何判据语义）
-        .top_pipeline_wb_stage_unnamed_output_1(sink32[21*32 +: 32]),
-        .top_pipeline_wb_stage_unnamed_output(sink1[20*1 +: 1]),
-        .top_pipeline_hazard_unit_unnamed_output_3(sink2[0*2 +: 2]),
-        .top_pipeline_hazard_unit_unnamed_output_4(sink2[1*2 +: 2]),
-        .top_pipeline_hazard_unit_unnamed_output_5(sink32[22*32 +: 32]),
-        .top_pipeline_hazard_unit_unnamed_output_6(sink32[23*32 +: 32]),
-        .top_pipeline_hazard_unit_unnamed_output_1(sink1[21*1 +: 1]),
-        .top_pipeline_hazard_unit_unnamed_output(sink1[22*1 +: 1]),
-        .top_pipeline_hazard_unit_unnamed_output_2(sink1[23*1 +: 1]),
-        .top_pipeline_hazard_unit_unnamed_output_7(sink1[24*1 +: 1]),
-        .top_pipeline_forwarding_mux_unnamed_output(sink32[24*32 +: 32]),
-        .top_pipeline_forwarding_mux_unnamed_output_1(sink32[25*32 +: 32]),
-        .top_pipeline_unnamed_output(sink32[26*32 +: 32]),
-        .top_pipeline_unnamed_output_1(sink32[27*32 +: 32]),
-        .top_pipeline_unnamed_output_2(sink32[28*32 +: 32]),
-        .top_pipeline_unnamed_output_26(sink4[1*4 +: 4]),
-        .top_pipeline_unnamed_output_3(sink1[25*1 +: 1]),
-        .top_pipeline_unnamed_output_4(sink48[0*48 +: 48]),
-        .top_pipeline_unnamed_output_5(sink48[1*48 +: 48]),
-        .top_pipeline_unnamed_output_6(sink32[29*32 +: 32]),
-        .top_pipeline_unnamed_output_7(sink32[30*32 +: 32]),
-        .top_pipeline_unnamed_output_8(sink32[31*32 +: 32]),
-        .top_pipeline_unnamed_output_9(sink32[32*32 +: 32]),
-        .top_pipeline_unnamed_output_10(sink32[33*32 +: 32]),
-        .top_pipeline_unnamed_output_11(sink32[34*32 +: 32]),
-        .top_pipeline_unnamed_output_12(sink1[26*1 +: 1]),
-        .top_pipeline_unnamed_output_13(sink1[27*1 +: 1]),
-        .top_pipeline_unnamed_output_14(sink1[28*1 +: 1]),
-        .top_pipeline_unnamed_output_15(sink1[29*1 +: 1]),
-        .top_pipeline_unnamed_output_16(sink1[30*1 +: 1]),
-        .top_pipeline_unnamed_output_23(sink1[31*1 +: 1]),
-        .top_pipeline_unnamed_output_27(sink1[32*1 +: 1]),
-        .top_pipeline_unnamed_output_24(sink1[33*1 +: 1]),
-        .top_pipeline_unnamed_output_25(sink1[34*1 +: 1]),
-        .top_pipeline_unnamed_output_17(sink1[35*1 +: 1]),
-        .top_pipeline_unnamed_output_18(sink32[35*32 +: 32]),
-        .top_pipeline_unnamed_output_19(sink5[7*5 +: 5]),
-        .top_pipeline_unnamed_output_20(sink32[36*32 +: 32]),
-        .top_pipeline_unnamed_output_21(sink32[37*32 +: 32]),
-        .top_pipeline_unnamed_output_22(sink32[38*32 +: 32]),
-        .top_itcm_unnamed_output(sink32[39*32 +: 32]),
-        .top_itcm_unnamed_output_1(sink1[36*1 +: 1]),
-        .top_dtcm_unnamed_output_1(sink1[37*1 +: 1]),
-        .top_dtcm_unnamed_output(sink32[40*32 +: 32]),
-        // ⚠️ **2026-11-14 · B4 · C3**：`ExStage` 的算术核心改由**库组件**
-        //   `riscv::Rv32iAlu` 承担 ⇒ ⇒ 组件的**内部节点**冒泡到顶层 ⇒ ⇒ **+5** 个端口
-        //   ⇒ ⇒ 原 113 个端口**名一字未改** ⇒ ⇒ 只**新增**这 5 根（无重映射）
-        //   ⚠️ 宽度**按产物实测**（不是猜）：`_2` 是 32 位，其余 4 个是 1 位
-        .top_pipeline_ex_stage_alu_unnamed_output(sink1[38*1 +: 1]),
-        .top_pipeline_ex_stage_alu_unnamed_output_1(sink1[39*1 +: 1]),
-        .top_pipeline_ex_stage_alu_unnamed_output_2(sink32[41*32 +: 32]),
-        .top_pipeline_ex_stage_alu_unnamed_output_3(sink1[40*1 +: 1]),
-        .top_pipeline_ex_stage_alu_unnamed_output_4(sink1[41*1 +: 1])
+        .top_dbg_exmem_alu_result(sink32[160 +: 32]),
+        .top_dbg_exmem_imm(sink32[192 +: 32]),
+        .top_dbg_exmem_rs2_data(sink32[224 +: 32]),
+        .top_obs_data_rdata(sink32[256 +: 32]),
+        .top_dbg_exmem_valid(sink1[4 +: 1]),
+        .top_dbg_mem_valid_out(sink1[5 +: 1]),
+        .top_dbg_load_use_detected(sink1[6 +: 1]),
+        .top_dbg_illegal_reason(sink2[0 +: 2])
     );
 
     always #5 clk = ~clk;

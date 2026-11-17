@@ -292,16 +292,17 @@ if [ "$SELF_TEST" -eq 1 ]; then
         return 0
     }
 
-    # M1：清单里塞一个**产物没有**的端口 ⇒ F3 MUST 红
+    # M1：**产品端口表**里塞一个产物没有的端口 ⇒ F3 MUST 红
+    #   ⚠️ 投毒点 MUST 是 `port_table[]`（F3 的唯一权威）—— 往 `ports[]`（全量节点
+    #      清单）里塞条目**不会**影响 F3（它不再消费 `ports[]`）⇒ ⇒ 那是**无判别力**
+    #      的投毒（实测：旧写法在 T6 之后恒绿）。
     poisoned=1
     python3 - "$M" <<'PY'
 import json, sys
 p = sys.argv[1]
 m = json.load(open(p, encoding="utf-8"))
-m["ports"].append({"name": "top_ghost_port", "dir": "input", "width": 1,
-                    "role": "data", "driven": False, "effective": False,
-                    "owner": "top", "is_top_io": True, "cpp_member": "ghost_port",
-                    "semantic": None})
+m["port_table"].append({"name": "top_ghost_port", "dir": "input", "width": 1,
+                        "role": "data"})
 json.dump(m, open(p, "w", encoding="utf-8"), indent=2)
 PY
     if python3 "$CHECKER" --check-top-ports "$V" "$M" >/dev/null 2>&1; then

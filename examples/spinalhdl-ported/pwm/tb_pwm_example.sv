@@ -19,8 +19,8 @@
 //        enable = 0 ⇒ pwm = **0**（无论 counter）
 //        duty_cycle = 0 ⇒ pwm = **0**（counter < 0 恒假）
 //
-// ⚠️ **两个顶层输出**：`top_unnamed_output`（`PwmTop` 的 `pwm_out`）与
-//   `top_pwm_inst_unnamed_output`（inline 后代 `PWM` 的 `pwm_out`）
+// ⚠️ **顶层输出只有一个**：`top_unnamed_output`（`PwmTop` 的 `pwm_out`）
+//   —— 后代 `pwm_inst` 的 `ch_out` **不再**是顶层端口（ADR-072 D1-f）
 //   ⇒ ⇒ 同一根线 ⇒ ⇒ 必须相等（也是一条判据）。
 //
 // ⚠️ **X 检查**：每个输出都查 `$isunknown`。
@@ -34,7 +34,6 @@ module tb_pwm_example;
     logic       enable = 0;        // top_unnamed_input
     logic [7:0] duty_cycle = 0;   // top_unnamed_input_1
     logic       pwm_out;           // top_unnamed_output
-    logic       pwm_inst_out;      // top_pwm_inst_unnamed_output
 
     integer checks = 0;
     integer fails  = 0;
@@ -47,8 +46,7 @@ module tb_pwm_example;
         .default_reset(rst),
         .top_unnamed_input(enable),
         .top_unnamed_input_1(duty_cycle),
-        .top_unnamed_output(pwm_out),
-        .top_pwm_inst_unnamed_output(pwm_inst_out)
+        .top_unnamed_output(pwm_out)
     );
 
     always #5 clk = ~clk;
@@ -61,8 +59,6 @@ module tb_pwm_example;
             checks = checks + 1;
             if ($isunknown(pwm_out))      fails = fails + 1;
             else if (pwm_out !== want)    fails = fails + 1;
-            if ($isunknown(pwm_inst_out)) fails = fails + 1;
-            else if (pwm_inst_out !== want) fails = fails + 1;
         end
     endtask
 

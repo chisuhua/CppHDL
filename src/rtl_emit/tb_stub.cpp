@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <ostream>
 #include <string>
-#include <vector>
 
 namespace ch {
 namespace rtl_emit {
@@ -23,7 +22,7 @@ std::string pad(const std::string &s, std::size_t width) {
 
 /// 声明一个端口信号（输入 tie-off 的初始化在 ⑤ 之前用 `initial` 不做 —— 直接用
 /// `logic ... = 0;` 的 NSDMI 形态，语义更直白且**不**依赖过程块顺序）。
-void emit_signal(std::ostream &out, const RtlPortEntry &p) {
+void emit_signal(std::ostream &out, const RtlProductPort &p) {
     out << "    logic ";
     if (p.width > 1) {
         out << "[" << (p.width - 1) << ":0] ";
@@ -35,29 +34,14 @@ void emit_signal(std::ostream &out, const RtlPortEntry &p) {
     out << ";\n";
 }
 
-/// ⚠️ **该条目是否是产物的顶层端口**（E2 · 实测踩坑）。
+/// ⚠️ **本生成器只消费 `manifest.port_table[]`**（schema v2 的**产品端口表**）。
 ///
-/// **为什么需要过滤**：manifest 的 `ports[]` 是**全部** `type_input`/`type_output`，
-/// 而**产物**的顶层端口表按 F3 的契约是
-/// 「clock → reset → **无 driver 的 input** → **全部 `ch_out`**」
-/// ⇒ ⇒ 子组件的**有 driver 的 input**在扁平化后是**内部 wire**（不是端口）
-/// ⇒ ⇒ 盲目按 manifest 连线会得到
-/// `Instance attempts to connect to 'top_leaf_data_in', but it is a variable`（实测）。
-///
-/// 判据（**只用 manifest 现有字段**，与 F3 的契约对齐）：
-/// · `role ∈ {clock, reset}` ⇒ 顶层；
-/// · `dir == "output"` ⇒ 顶层（**全部** `ch_out`，含 inline 后代冒泡上来的）；
-/// · `is_top_io`（根组件自有 IO）⇒ 顶层；
-/// · 其余（**子组件的 input**）⇒ **不是**顶层端口 ⇒ **不连**。
-bool is_top_level_port(const RtlPortEntry &p) {
-    if (p.role == "clock" || p.role == "reset") {
-        return true;
-    }
-    if (p.dir == "output") {
-        return true;
-    }
-    return p.is_top_io;
-}
+/// **为什么不能自己从 `ports[]` 筛**：`ports[]` 是**全部** `type_input` /
+/// `type_output` 节点，而产物顶层端口表由**发射器**决定（"clock → reset →
+/// 无 driver 的根自有 `ch_in` → 根自有 `ch_out`"）⇒ ⇒ 消费方**再推一遍**
+/// 必然与发射器漂移：实测踩过的形态是「子组件的有 driver 的 input」被当成端口
+/// ⇒ ⇒ Verilator 报 `Instance attempts to connect to 'X', but it is a variable`。
+/// ⇒ ⇒ 判据来源**唯一** = `port_table[]`（生产者与 `make_flat_module_view` 同源）。
 
 } // namespace
 
@@ -86,51 +70,35 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     out << "module " << tb_module << ";\n";
     out << "\n";
 
-    // ── ② 端口清单注释块（来自 manifest）────────────────────────────
-    out << "    // ── 端口清单（manifest · rtl-emit-manifest-v1）────────────────\n";
-    out << "    // " << pad("name", 46) << pad("dir", 8) << pad("width", 7)
-        << pad("role", 8) << pad("is_top_io", 11) << "owner\n";
+    // ── ② 端口清单注释块（来自 manifest 的**产品端口表**）────────────
     std::size_t name_w = 4;
-    for (const auto &p : manifest.ports) {
-        if (is_top_level_port(p)) {
-            name_w = std::max(name_w, p.name.size());
-        }
+    for (const auto &p : manifest.port_table) {
+        name_w = std::max(name_w, p.name.size());
     }
     name_w = std::min<std::size_t>(name_w + 2, 46);
-    for (const auto &p : manifest.ports) {
-        if (!is_top_level_port(p)) {
-            out << "    // (内部 wire，非顶层端口) " << p.name << " · owner="
-                << (p.owner.empty() ? "<ctx>" : p.owner) << "\n";
-            continue;
-        }
+    out << "    // ── 端口清单（manifest · rtl-emit-manifest-v2 的 port_table）──\n";
+    out << "    // " << pad("name", name_w) << pad("dir", 8) << pad("width", 7)
+        << "role\n";
+    for (const auto &p : manifest.port_table) {
         out << "    // " << pad(p.name, name_w) << pad(p.dir, 8)
-            << pad(std::to_string(p.width), 7) << pad(p.role, 8)
-            << pad(p.is_top_io ? "yes" : "no", 11)
-            << (p.owner.empty() ? "<ctx>" : p.owner) << "\n";
+            << pad(std::to_string(p.width), 7) << p.role << "\n";
     }
     out << "\n";
 
     // ── ③ 端口信号声明 ───────────────────────────────────────────────
     out << "    // ── 端口信号（输入已 tie-off 到 0）──────────────────────────────\n";
-    for (const auto &p : manifest.ports) {
-        if (is_top_level_port(p)) {
-            emit_signal(out, p);
-        }
+    for (const auto &p : manifest.port_table) {
+        emit_signal(out, p);
     }
     out << "\n";
 
-    // ── ④ DUT 实例化（按 manifest 顺序）──────────────────────────────
+    // ── ④ DUT 实例化（**按 `port_table[]` 的顺序** —— 即产物端口顺序）───
     out << "    // ── DUT ──────────────────────────────────────────────────────\n";
     out << "    " << options.dut_module << " dut (\n";
     {
-        std::vector<const RtlPortEntry *> top_ports;
-        for (const auto &p : manifest.ports) {
-            if (is_top_level_port(p)) {
-                top_ports.push_back(&p);
-            }
-        }
+        const auto &top_ports = manifest.port_table;
         for (std::size_t i = 0; i < top_ports.size(); ++i) {
-            const auto &p = *top_ports[i];
+            const auto &p = top_ports[i];
             out << "        ." << p.name << "(" << p.name << ")"
                 << (i + 1 < top_ports.size() ? "," : "") << "\n";
         }
@@ -141,7 +109,7 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     // ── ⑤ 时钟 / 复位驱动骨架 ────────────────────────────────────────
     const std::string clock_port =
         [&]() -> std::string {
-        for (const auto &p : manifest.ports) {
+        for (const auto &p : manifest.port_table) {
             if (p.role == "clock") {
                 return p.name;
             }
@@ -150,7 +118,7 @@ void write_tb_stub(std::ostream &out, const RtlManifest &manifest,
     }();
     const std::string reset_port =
         [&]() -> std::string {
-        for (const auto &p : manifest.ports) {
+        for (const auto &p : manifest.port_table) {
             if (p.role == "reset") {
                 return p.name;
             }

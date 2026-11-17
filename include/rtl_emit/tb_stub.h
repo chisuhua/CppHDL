@@ -41,13 +41,17 @@ struct TbStubOptions {
 ///
 /// 产物结构（顺序固定 ⇒ ⇒ 确定性）：
 ///   ① 文件头（生成器标识 + **不含时间戳** ⇒ ⇒ 可重复生成）
-///   ② **端口清单注释块**（来自 manifest：name / dir / width / role / owner / cpp_member）
+///   ② **端口清单注释块**（来自 **`manifest.port_table[]`**：name / dir / width / role）
 ///   ③ 端口信号声明（输入按 `role` tie-off 到 0 · 输出接 `logic`）
-///   ④ DUT 实例化（**按 manifest 顺序**逐端口连线 ⇒ ⇒ 与产物端口表一致）
+///   ④ DUT 实例化（**按 `port_table[]` 的顺序**逐端口连线 ⇒ ⇒ 与产物端口表**逐字逐序**）
 ///   ⑤ 时钟 / 复位驱动骨架
 ///   ⑥ VCD 开关（`ifdef DUMP_VCD`）
 ///   ⑦ **留空**的激励 / 断言位置（`// TODO:` + 断言收尾约定）
 ///   ⑧ `endmodule`
+///
+/// ⚠️ **端口面只消费 `port_table[]`**（schema v2 的产品端口表）⇒ ⇒ 生成器
+///   **MUST NOT** 从 `ports[]`（全量节点清单）自行推导哪些是顶层端口 ——
+///   那套推导已在上游（`make_flat_module_view`）做过一次，再推一遍必然漂移。
 ///
 /// ⚠️ **断言收尾约定**（E5 的运行护栏据此判「跑过且通过」）：
 ///   补完的 TB **MUST** 在结尾打印 `RESULT: checks=<N> fails=0`

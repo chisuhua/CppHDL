@@ -39,8 +39,7 @@ module tb_uart_rx_example;
     logic        valid;              // top_unnamed_output_1
 
     // ⚠️ inline 后代（`u`）的输出**也是顶层端口** ⇒ MUST 连接
-    logic [7:0]  u_data;             // top_u_unnamed_output
-    logic        u_valid;            // top_u_unnamed_output_1
+
 
     integer checks = 0;
     integer fails  = 0;
@@ -62,9 +61,7 @@ module tb_uart_rx_example;
         .top_unnamed_input(rx),
         .top_unnamed_input_1(prescale),
         .top_unnamed_output(data),
-        .top_unnamed_output_1(valid),
-        .top_u_unnamed_output(u_data),
-        .top_u_unnamed_output_1(u_valid)
+        .top_unnamed_output_1(valid)
     );
 
     // ⚠️ **时钟生成器**（漏掉 ⇒ 仿真无事件即结束 ⇒ 表现为「end at 0s」）
@@ -159,9 +156,6 @@ module tb_uart_rx_example;
         // ── S1：复位态（**impl-contract**：`valid`/`data` 的复位值）──
         expect_bit(valid, 1'b0);
         expect_eq8(data, 8'h00);
-        // inline 后代端口与顶层端口同源
-        expect_eq8(u_data, data);
-        expect_bit(u_valid, valid);
 
         // ══════════════════════════════════════════════════════════════
         // 阶段 1：`prescale = 9`（位周期 10 拍）⇒ 收字节

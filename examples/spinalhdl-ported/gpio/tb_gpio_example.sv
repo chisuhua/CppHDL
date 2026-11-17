@@ -32,9 +32,8 @@
 //                ⇒ interrupt = **1**；oe=0 ⇒ gpio_out = **0x00**（高阻用 0 模拟）
 //        场景 F：interrupt_enable=0 ⇒ 中断恒 **0**（边沿仍发生，只是被屏蔽）
 //
-// ⚠️ **两个顶层输出组**：`top_unnamed_output`(gpio_out) 与
-//   `top_gpio_inst_unnamed_output`（inline 后代）⇒ 同一根线 ⇒ 必须相等；
-//   `top_unnamed_output_1`(interrupt) 与 `top_gpio_inst_unnamed_output_1` 同理。
+// ⚠️ **顶层输出** = `top_unnamed_output`(gpio_out) 与 `top_unnamed_output_1`(interrupt)
+//   —— 后代 `gpio_inst` 的 `ch_out` **不再**是顶层端口（ADR-072 D1-f）。
 
 `timescale 1ns/1ps
 
@@ -47,8 +46,6 @@ module tb_gpio_example;
     logic       interrupt_enable = 1'b0;// top_unnamed_input_2
     logic [7:0] gpio_out;              // top_unnamed_output
     logic       interrupt;             // top_unnamed_output_1
-    logic [7:0] gpio_inst_out;         // top_gpio_inst_unnamed_output
-    logic       interrupt_inst;        // top_gpio_inst_unnamed_output_1
 
     integer checks = 0;
     integer fails  = 0;
@@ -61,9 +58,8 @@ module tb_gpio_example;
         .top_unnamed_input_1(output_enable),
         .top_unnamed_input_2(interrupt_enable),
         .top_unnamed_output(gpio_out),
-        .top_unnamed_output_1(interrupt),
-        .top_gpio_inst_unnamed_output(gpio_inst_out),
-        .top_gpio_inst_unnamed_output_1(interrupt_inst)
+        .top_unnamed_output_1(interrupt)
+
     );
 
     always #5 clk = ~clk;

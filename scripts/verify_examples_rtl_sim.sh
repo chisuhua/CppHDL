@@ -15,7 +15,11 @@
 #   ⑤ TB **跑过**且退出码 0（**带 timeout** —— 挂死 TB 会拖死 CI job）
 #   ⑥ 断言**非空且达到下界** —— 运行时证据 `RESULT: checks=<N> fails=0`
 #      且 **N >= `min_checks`**（⚠️ 只判 N>0 太弱：删到 1 条断言仍绿）
-#   ⑦ `--self-test`：4 条投毒**各自**必红（见 `run_self_test`）
+#   ⑧ **四件套判据**（ADR-072 D2 · T13 / AC8）—— manifest 的**产品端口表**
+#      MUST == 该单元产物端口表（**逐字逐序**）⇒ ⇒ 缺 manifest / 缺 `port_table[]`
+#      一律 fail-closed（schema v1 清单没有该字段 ⇒ **不**静默回退旧算法）
+#   ⑦ `--self-test`：**7 条**投毒**各自**必红（含 ⑧ 的**正负成对**两向：
+#      篡改 `port_table` 一个名字 / 产物多插一个下沉端口）
 #
 # ⚠️ **禁**自研 Verilog 静态分析器判「断言非空」
 #   （草案 metis 订正：仓内那个自研 C 子集分析器在第 4/5/6 轮对抗审稿里
@@ -250,6 +254,70 @@ check_one() {
         return 1
     }
 
+    # ── ⑧ **四件套判据**（ADR-072 **D2** · T13 / AC8）────────────────────
+    #   「产品单元 = 四件套」 ⇒ ⇒ 本判据是它的**可执行载体**：
+    #     · ① manifest 存在
+    #     · ② 产物存在                                  ← ③
+    #     · ③ 独立 TB 可跑且 `RESULT: checks=<N> fails=0` ← ⑤ + ⑥
+    #     · ④ tsv 有行（`status` 合规）                  ← ⓪ + ①
+    #   ⇒ ⇒ **本项只负责它们之间最硬的那条耦合**：manifest 的**产品端口表**
+    #   MUST == 该单元 Verilog 产物的端口表（**逐字逐序**）。
+    #   ⚠️ 为什么必须**逐字逐序**（不是集合）：下游 TB 按**名字**连线、按**位置**
+    #     写断言，顺序错 = 「都对但对错位」⇒ ⇒ 只有顺序判据能抓住。
+    #   ⚠️ 唯一权威 = `port_table[]`（schema v2）⇒ ⇒ 缺该字段 **fail-closed**
+    #      （schema v1 清单**没有**它 ⇒ ⇒ 不能静默回退到旧算法）。
+    local man="$work/manifest.json"
+    if [ ! -f "$man" ]; then
+        fail "⑧ manifest 缺失：$man（四件套的第 ① 件）"
+        return 1
+    fi
+
+    # ⚠️ **仅供 `--self-test` 的判别力自证**（生产路径恒空）：给 ⑧ 的两个方向
+    #    各投一次毒 ⇒ ⇒ MUST 转红。「删掉 manifest ⇒ 必红」只证明判据**会打开
+    #    文件**，不证明它**区分对错** ⇒ ⇒ 所以这里投的是「名字错 1 个」与
+    #    「产物多出 1 个下沉端口」。
+    case "${RTL_SIM_TAMPER:-}" in
+    port_table_name)
+        python3 - "$man" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+m = json.loads(p.read_text(encoding="utf-8"))
+for e in m["port_table"]:
+    if e["dir"] == "output":
+        e["name"] = e["name"] + "_tampered"
+        break
+p.write_text(json.dumps(m, ensure_ascii=False, indent=2), encoding="utf-8")
+PY
+        ;;
+    product_extra_port)
+        python3 - "$dut_v" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text(encoding="utf-8")
+t2 = re.sub(r"(module\s+\w+\s*\(\n)", r"\1    output [7:0] top_ghost_descendant_out,\n", t, count=1)
+assert t2 != t, "投毒失败：找不到 module 头"
+p.write_text(t2, encoding="utf-8")
+PY
+        ;;
+    esac
+
+    local f8_out f8_rc
+    # ⚠️ **层次化产物（`kind=soc`）是单文件多 module，且子 module 在前** ⇒ ⇒
+    #    MUST 显式点名**根 module**（`top`）；扁平产物只有 `top` 一个 ⇒ 默认即可。
+    local f8_mod=()
+    if [ "$kind" = "soc" ]; then
+        f8_mod=(--module top)
+    fi
+    f8_out="$(python3 "$REPO_ROOT/scripts/lib/flat_rtl_emit_check.py" \
+        --check-top-ports "$dut_v" "$man" "${f8_mod[@]}" 2>&1)"
+    f8_rc=$?
+    if [ "$f8_rc" -ne 0 ]; then
+        printf '%s\n' "$f8_out" | sed 's/^/      /'
+        fail "⑧ manifest 的 port_table[] 与产物端口表**不一致**（逐字逐序）"
+        return 1
+    fi
+    ok "⑧ 四件套：manifest port_table[] == 产物端口表（逐字逐序）"
+
     # ── ④' **产物级**结构判据（`memory-timing-contract` T1 · D-TCM 读口）─────
     #   ⚠️ 为什么必须是**产物级**：C++ 侧的 `sread(...)` 只证明「源码这么写」
     #   ⇒ ⇒ 产物里它到底落成了**寄存器**（1 拍）还是**组合 mux**（0 拍），
@@ -306,7 +374,18 @@ check_one() {
     #   ⚠️ `--x-assign unique` 保留（**但它不能制造 X** —— 实测 Verilator 把 X
     #     优化成已知值 ⇒ ⇒ TB 里的 `$isunknown` 在本 runner 下**恒 false**
     #     ⇒ ⇒ 它是**装饰性**断言，真正的 X 判据见 E1 ⑤ 的内容判据）。
-    flags="--binary --timing -CFLAGS -fcoroutines --x-assign unique"
+    #   ⚠️ **`--output-split 0` MUST 保留**（工具链缺陷的绕行，不是优化项）：
+    #     `third_party/verilator` 用 **CMake** 构建（不是上游 autoconf），其
+    #     `CMakeLists.txt` **没有定义** `CFG_CXXFLAGS_PCH_I` / `CFG_GCH_IF_CLANG`
+    #     （见 `configure.ac:704-712` 的上游定义）⇒ 生成的 `verilated.mk` 里
+    #     `CFG_CXXFLAGS_PCH_I = `（空）⇒ ⇒ GCC 分支本应是 `-include`，实际空
+    #     ⇒ ⇒ `VK_PCH_I_FAST` 只剩裸文件名 `Vtb_*__pch.h.fast`，GCC 按**未知扩展名**
+    #     把它当 linker input ⇒ `linker input file not found` ⇒ **C++ 构建失败**。
+    #     触发条件 = `--output-split`（VM_PARALLEL_BUILDS=1 ⇒ 用 PCH）；大设计会
+    #     **自动** split ⇒ ⇒ 实测 `rv32i_soc` 中招；用 `--output-split 200` 强制
+    #     给 **counter** 开 split 可**同型复现** ⇒ ⇒ 与本仓 HDL 无关。
+    #     ⇒ ⇒ 判据「关掉 split」⇒ PCH 不参与 ⇒ 与 split 前的产物**语义等价**。
+    flags="--binary --timing -CFLAGS -fcoroutines --x-assign unique --output-split 0"
     tb_hash="$(sha1sum "$tb_path" | cut -d' ' -f1)"
     dut_hash="$(sha1sum "$dut_v" | cut -d' ' -f1)"
     # ⚠️ key MUST 含：产物内容 + TB 内容 + flags + verilator 版本 + **TB 名**
@@ -390,7 +469,7 @@ if [ "$MODE" = "check" ]; then
         echo "❌ verify_examples_rtl_sim: $FAILED 项失败（共检查 $CHECKED 项）"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim: PASS（$CHECKED 项 · 登记数守恒 · status 合规 · TB 存在 · 编译通过 · 跑通 · 断言 ≥ 下界）"
+    echo "✅ verify_examples_rtl_sim: PASS（$CHECKED 项 · 登记数守恒 · status 合规 · TB 存在 · 四件套（manifest 端口表 == 产物端口表）· 编译通过 · 跑通 · 断言 ≥ 下界）"
     exit 0
 fi
 
@@ -419,9 +498,9 @@ EOF
     local st_list="$st_root/list.tsv"
     local st_tb_rel="examples/spinalhdl-ported/counter/tb_counter_simple_example.sv"
 
-    run_case() { # $1 = 名称；$2 = 期望的错误关键词
-        local name="$1" want="$2" out rc
-        out="$(RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" \
+    run_case() { # $1 = 名称；$2 = 期望的错误关键词；$3（可选）= 环境前缀
+        local name="$1" want="$2" env="${3:-}" out rc
+        out="$(env $env RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" \
             bash "$0" 2>&1)"
         rc=$?
         if [ "$rc" -eq 0 ]; then
@@ -486,6 +565,16 @@ PY
     make_list "$st_list" "$st_tb_rel" 1 pending
     run_case "投毒5（pending 未放行）" "status=pending"
 
+    # ── 投毒 6/7：⑧ 的**正负成对**判别力自证（T13 / AC8）───────────
+    #   ⚠️ 只投「删 manifest」不算 —— 那只证明判据会打开文件；
+    #      MUST 证明它**区分对错** ⇒ ⇒ 两个方向各投一次。
+    cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
+    make_list "$st_list" "$st_tb_rel" 1 verified
+    run_case "投毒6（篡改 port_table 的一个端口名）" "⑧ manifest 的 port_table" \
+        "RTL_SIM_TAMPER=port_table_name"
+    run_case "投毒7（产物里多插一个下沉端口）" "⑧ manifest 的 port_table" \
+        "RTL_SIM_TAMPER=product_extra_port"
+
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
     rm -f "$REPO_ROOT/$st_tb_rel.st_orig"
@@ -502,7 +591,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 5 条投毒各自转红 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 7 条投毒各自转红 · 还原复绿）"
     exit 0
 }
 

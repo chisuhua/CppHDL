@@ -24,7 +24,6 @@ module tb_counter_simple_example;
     logic clk = 0;
     logic rst = 1;
     logic [7:0] top_value;          // Top 自己的 value
-    logic [7:0] top_counter_value;   // inline 后代 Counter 的 value
 
     integer checks = 0;
     integer fails  = 0;
@@ -34,8 +33,7 @@ module tb_counter_simple_example;
     top dut (
         .default_clock(clk),
         .default_reset(rst),
-        .top_unnamed_output(top_value),
-        .top_counter1_unnamed_output(top_counter_value)
+        .top_unnamed_output(top_value)
     );
 
     always #5 clk = ~clk;

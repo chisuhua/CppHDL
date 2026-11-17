@@ -43,10 +43,13 @@ struct CliOptions {
     bool emit_manifest = true;
     /// 有诊断时**仍然**返回 0（默认 false ⇒ ⇒ 诊断 ⇒ 退出码 1）
     bool allow_diagnostics = false;
-    /// ⚠️ **产物卫生**开关（C6 · **默认 off** ⇒ ⇒ 默认路径**产物逐字节不变**）
-    /// ⇒ ⇒ 打开它 = **显式的**产物形态变更（批次表 ★3：层次化产物逐字节不变
-    /// 那条 AC **只在该开关默认 off 时成立**）
-    bool emit_hygiene = false;
+    /// **产物卫生**开关（C6 · ADR-072 **D7**：**默认 on**）
+    /// ⇒ ⇒ 产品面默认交付**自身 lint 干净**的产物（无 blanket `lint_off`）
+    /// ⇒ ⇒ 逃生口 = `--no-emit-hygiene`（**仅**为兼容旧产物形态的对照用）
+    /// ⚠️ **只有 CLI 层默认变了**：库层 `EmitOptions{}` / `verilogwriter(ctx)`
+    /// **不动**（`EmitOptions{}.emit_hygiene == false`）⇒ ⇒ 49 处 ctx-only 调用点
+    /// 的产物**逐字节不变**。
+    bool emit_hygiene = true;
     /// ⚠️ **测试台骨架**开关（`examples-rtl-sim-coverage` **E2**）—— 默认 **off**
     /// ⇒ ⇒ 打开后额外产出 `<out_dir>/tb_<module>_stub.sv`（**只发骨架**：
     /// 端口连线 + 时钟/复位 + VCD 开关；激励与断言留 `// TODO:`）

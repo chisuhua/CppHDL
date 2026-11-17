@@ -47,7 +47,22 @@ def strip_lint_off(text: str) -> str:
 
 def top_module_ports(text: str) -> list[tuple[str, str]]:
     """提取顶层 module 的端口表 ⇒ 返回 `[(dir, name), ...]`（**按产物顺序**）。"""
-    m = MODULE_RE.search(text)
+    return module_ports(text, None)
+
+
+def module_ports(text: str, name: str | None) -> list[tuple[str, str]]:
+    """提取**指定名字** module 的端口表（`name is None` ⇒ 取产物里的**第一个**
+    module，即扁平产物的 `top`）。
+
+    ⚠️ **为什么需要按名字取**：**层次化**产物是**单文件多 module**，且
+    **子 module 在前、根 module 在后** ⇒ ⇒ 取「第一个 module」会抓到**子模块**
+    ⇒ ⇒ 与 manifest 的**产品端口表**（= 根自有 IO）比 ⇒ 必然假红（实测：
+    `axi_soc_example` 的 `top_master_*` 被当成根端口）。
+    """
+    if name is None:
+        m = MODULE_RE.search(text)
+    else:
+        m = re.search(rf"^\s*module\s+{re.escape(name)}\s*\(", text, re.M)
     if not m:
         return []
     start = text.index("(", m.start())
@@ -97,6 +112,8 @@ def main() -> int:
     ap.add_argument("--strip-lint-off", nargs=2, metavar=("IN", "OUT"))
     ap.add_argument("--top-ports")
     ap.add_argument("--check-top-ports", nargs=2, metavar=("V", "MANIFEST"))
+    ap.add_argument("--module", help="--check-top-ports 时取哪个 module 的端口（默认：产物里的第一个，"
+                                     "= 扁平产物的 top；层次化产物 MUST 显式给根 module 名）")
     ap.add_argument("--self-assign")
     ap.add_argument("--zero-reference", help="V 文件：列出「声明了但没人读」的信号")
     ap.add_argument("--undeclared-refs", help="V 文件：列出「被引用但没有声明」的标识符（剪枝误伤的**唯一**直接判据）")
@@ -111,7 +128,7 @@ def main() -> int:
 
     if args.top_ports:
         text = pathlib.Path(args.top_ports).read_text(encoding="utf-8", errors="replace")
-        for d, n in top_module_ports(text):
+        for d, n in module_ports(text, args.module):
             print(f"{d} {n}")
         return 0
 
@@ -119,7 +136,10 @@ def main() -> int:
         vpath, mpath = args.check_top_ports
         text = pathlib.Path(vpath).read_text(encoding="utf-8", errors="replace")
         manifest = json.loads(pathlib.Path(mpath).read_text(encoding="utf-8"))
-        actual = [n for _, n in top_module_ports(text)]
+        actual = [n for _, n in module_ports(text, args.module)]
+        if not actual:
+            print(f"::error::产物里找不到 module '{args.module or '<first>'}' 的端口表")
+            return 1
         expected = manifest_product_port_table(manifest)
         missing = sorted(set(expected) - set(actual))
         extra = sorted(set(actual) - set(expected))

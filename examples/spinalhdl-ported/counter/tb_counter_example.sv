@@ -25,8 +25,8 @@
 //   ⇒ ⇒ 且 examples 的 C++ 侧**无任何断言** ⇒ ⇒ 分叉不会被任何测试发现
 //   ⇒ ⇒ 已登记为独立待立项项（**不在** B2 范围）。
 //
-// ⚠️ **两个顶层输出**：`top_unnamed_output`（`Top` 的 value）与
-//   `top_counter1_unnamed_output`（inline 后代）⇒ 同一根线 ⇒ 必须相等。
+// ⚠️ **顶层输出只有一个**：`top_unnamed_output`（`Top` 的 value）
+//   —— 后代 `counter1` 的 `ch_out` **不再**是顶层端口（ADR-072 D1-f）。
 
 `timescale 1ns/1ps
 
@@ -37,7 +37,6 @@ module tb_counter_example;
     logic       enable = 1'b0;   // top_unnamed_input
     logic       clear  = 1'b0;   // top_unnamed_input_1
     logic [7:0] value;           // top_unnamed_output
-    logic [7:0] counter_value;    // top_counter1_unnamed_output
 
     integer checks = 0;
     integer fails  = 0;
@@ -51,8 +50,7 @@ module tb_counter_example;
         .default_reset(rst),
         .top_unnamed_input(enable),
         .top_unnamed_input_1(clear),
-        .top_unnamed_output(value),
-        .top_counter1_unnamed_output(counter_value)
+        .top_unnamed_output(value)
     );
 
     always #5 clk = ~clk;
@@ -64,11 +62,8 @@ module tb_counter_example;
             checks = checks + 1;
             if ($isunknown(value))        fails = fails + 1;
             else if (value !== want)      fails = fails + 1;
-            // ⚠️ **不再断言** `counter_value == value`：两者在产物里是
-            //   `assign top_unnamed_output = top_counter1_unnamed_output;` 的
-            //   同一条线 ⇒ ⇒ 断言**恒真** ⇒ 零信息量，且把「inline 后代复制出
-            //   同名端口」这个**实现产物**固化成契约（metis 指出的 slop 形态）。
-            //   ⇒ ⇒ 端口存在性由「编译通过」保证（E1 已有同类判据）。
+            // ⚠️ 后代 `ch_out` 不再是顶层端口（ADR-072 D1-f）⇒ 无「同线相等」可断言；
+            //   端口存在性由「编译通过」保证（E1 已有同类判据）。
         end
     endtask
 

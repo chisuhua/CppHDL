@@ -109,7 +109,8 @@ cmake --build build -j"$(nproc)"
 - [x] **T6**：`emit_rtl_soc.cpp` 的 `--check-products` **零改动**即通过（其实测 `顶层 14/14`）
 - [x] **修了一处** `suppress_driver_assign` 的边界：**体内** `ch_out`（非端口）MUST 仍发
       `assign out = <驱动网>`（否则被声明但永不驱动 ⇒ RV32I `dbg_id_pc` 第 70 拍起分歧）
-- [ ] **删除后 MUST 全量重建**（禁只重建被点名 target ⇒ 旧二进制假绿）
+- [x] **删除后 MUST 全量重建**（禁只重建被点名 target ⇒ 旧二进制假绿）
+      ⇒ 实测 `cmake --build build` 后 `ctest -LE perf` = **255/255 通过**
 
 验证：
 
@@ -125,9 +126,16 @@ bash scripts/verify_flat_rtl_emit.sh
 
 ## B6 · T10 — 顶层端口判定的唯一来源
 
-- [ ] `tb_stub.cpp:59` / `test_rtl_emit_contract.cpp:142` / `flat_rtl_emit_check.py:79-92`
-      **只消费** manifest 的产品端口表
-- [ ] 负向对照：任一处回到旧算法 ⇒ 必红
+- [x] `tb_stub.cpp` / `test_rtl_emit_contract.cpp` / `flat_rtl_emit_check.py`
+      **只消费** manifest 的产品端口表（`port_table[]`）
+      ⇒ ⇒ `is_top_level_port()` / `has_top_level_port()` 两处**自推**已删除；
+      `tb_stub` 的内部 wire 现在连「注释里点名」都不出现（更强的负向对照）
+- [x] 判据 ② 改比 **带根产品**（`toVerilog(path, root)`）vs `port_table[].size()`
+      —— ctx-only 扁平产物是**遗留 / 非产品**路径 ⇒ 拿它比 `port_table[]` 必然多算
+- [x] 判据 ③ 的变异靶从 `ports[]` 换成 `port_table[]`（否则变异不再影响骨架 ⇒ 假绿）
+- [x] 负向对照（实测）：把 `tb_stub` 的端口来源改回「从 `ports[]` 推（clock/reset ∪
+      output ∪ `is_top_io`）」⇒ `test_rtl_tb_stub` **转红**（`top_leaf_din` 出场）⇒
+      还原 + 重建后复绿
 
 验证：
 
@@ -141,11 +149,21 @@ bash scripts/verify_flat_rtl_emit.sh
 
 ## B7 · T5 — 10 份独立 TB 的端口映射 + tsv / expectations 重登记
 
-- [ ] 10 份 TB 按新端口面重连（`axi4_lite`：删 S8 场景 + 8 条 `logic s_*` 声明 + 8 条实例引脚；
-      `riscv-mini/tb_rv32i_soc.sv`：删 96 根 sink）
-- [ ] `.rddf/checks/examples-rtl-sim-targets.tsv`：`axi4_lite` `min_checks` 45 → **37** · `scenarios` 8 → **7**；
-      两桶锚点**同 commit 重算**
-- [ ] `riscv` 仍 `checks=24 fails=0` · `axi4_lite` `checks=37 fails=0`
+- [x] 10 份 TB 按新端口面重连（实测：**9 份**有后代镜像端口需删）
+      · `counter` / `counter_simple` / `pwm`：删后代 `ch_out` 引脚与对应「同线相等」断言
+      · `uart_tx` / `uart_rx` / `gpio` / `fifo_stream` / `quadrature_encoder`：同上
+      · `axi4_lite`：删 S8 场景（8 条断言）+ 8 条 `logic s_*` 声明 + 8 条实例引脚
+      · `riscv-mini/tb_rv32i_soc.sv`：实例按 manifest 的 `port_table[]` **逐字逐序**重建
+        （96 根后代端口 → 0；未用输出重新分桶成 `sink1/2/32`）
+- [x] `.rddf/checks/examples-rtl-sim-targets.tsv`：`axi4_lite` `min_checks` 45 → **37** ·
+      `scenarios` 8 → **7**；`fifo_stream` 62 → **56** · `uart_tx` 34 → **32** ·
+      `uart_rx` 22 → **20**（每行都写明「删的是哪些断言、为什么主语不存在」）
+- [x] `riscv` 仍 `checks=24 fails=0` · `axi4_lite` `checks=37 fails=0`
+- [x] **工具链绕行（B7 实测挖出，非本 change 引入）**：`verify_examples_rtl_sim.sh` 加
+      `--output-split 0` —— `third_party/verilator` 的 **CMake** 构建没定义
+      `CFG_CXXFLAGS_PCH_I`（上游 autoconf 在 `configure.ac:704-712` 定义为 `-include`）
+      ⇒ ⇒ GCC 分支拿到**空串** ⇒ PCH 被当 linker input ⇒ 任何**触发 output-split** 的设计
+      C++ 构建必失败。判别力：给 `counter` 加 `--output-split 200` 可**同型复现**
 
 验证：
 
@@ -157,13 +175,25 @@ bash scripts/verify_examples_rtl_sim.sh
 
 ## B8 · T11 + T13 + T16 + T9
 
-- [ ] **T11** 用户面 / 架构文档同步：`05-component-design.md:552,680` ·
-      `HIERARCHICAL-RTL-AUTHORING-GUIDE.md:49-55,88` · `PORT-NAMING-GUIDE.md:78`
-      （+ `PORT-NAMING-GUIDE.md:106` 的 `rtl-emit-manifest-v1` 陈旧指称 → v2）
-      ⇒ 必须出现 `ctx-only 入口：` 与 `带根入口：` 两个小标题
-- [ ] **T13** 产品面声明 + `verify_examples_rtl_sim.sh` **新增判据⑧**（四件套）+ 正/负成对判别力自证
-- [ ] **T16** 账本锚点同步（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` 等，值从实测派生）
-- [ ] **T9** 公开面登记终稿（`public-api-surface.md` + `docs/CHANGELOG.md`）
+- [x] **T11** 用户面 / 架构文档同步（实测落点）
+      · `05-component-design.md` **§5 入口表改成 3 行** + **§5.2.1 `ctx-only 入口：`** /
+        **§5.2.2 `带根入口：`**（各自写明「顶层端口 = 哪个集合」）· §5.3.3 事实 3 ·
+        §5.3.4 根 module 端口集合 · §5.3.5 默认值 `Reject`
+      · `HIERARCHICAL-RTL-AUTHORING-GUIDE.md` D2 拆成两条入口（`ctx-only 入口：` /
+        `带根入口：`）· D4 的「冒泡」→「发射直接失败」· 删「零冒泡端口」等陈旧措辞
+      · `PORT-NAMING-GUIDE.md:106` 的 `rtl-emit-manifest-v1` → **v2**（+ 指向 `port_table[]`）
+- [x] **T13** 产品面声明（`05-component-design.md` **§5.9**）：四件套表 · ISA 边界
+      （**不含特权级** / **冻结是终态**，两串逐字可 grep）· 独立 TB 收尾骨架
+      （`RESULT: checks=<N> fails=0` + `$fatal(1,...)` 非零退出）
+- [x] **T13** `verify_examples_rtl_sim.sh` **新增判据⑧**（四件套 = manifest `port_table[]`
+      == 产物端口表 **逐字逐序**；其余三条腿 = ③ / ⑤⑥ / ⓪）⇒
+      层次化产物（`kind=soc`）按**根 module 名**取端口表（`--module top`）
+- [x] **T13** 判别力自证**正/负成对**：`--self-test` 投毒 6（篡改 `port_table` 一个端口名）·
+      投毒 7（产物里多插一个下沉端口）⇒ **各自转红**（实测 `7 条投毒各自转红`）
+- [x] **T16** 账本锚点同步：本次**未增删 TEST_CASE** ⇒ `CTEST_TOTAL` / `VERILATOR_E2E_TOTAL`
+      等锚点**值不变**（`verify_test_counts.sh` / `verify_dual_backend_parity.sh` 均绿）
+- [x] **T9** 公开面登记终稿：`public-api-surface.md`（移除 1 行搬到**正确章节** · 新增符号 2 行 ·
+      行为变更 1 行 = CLI 卫生产物默认档）+ `docs/CHANGELOG.md` 5 条（T2 / T4 / T15+T6 / T13 / T12）
 
 验证：
 
@@ -179,9 +209,14 @@ grep -rn '带根入口：' docs/usage_guide docs/developer_guide
 
 ## B9 · T12 — 卫生进默认档（仅 CLI 层）
 
-- [ ] `CliOptions::emit_hygiene` 默认 on + 逃生口 `--no-emit-hygiene`
-- [ ] 库层 `EmitOptions{}` / `verilogwriter(ctx)` **不动**
-- [ ] 护栏里的显式 `--emit-hygiene` **保留**
+- [x] `CliOptions::emit_hygiene` 默认 on + 逃生口 `--no-emit-hygiene`
+      ⇒ 实测：默认产物 `lint_off` 计数 **0** + 有 `default_nettype none`；
+      `--no-emit-hygiene` ⇒ `lint_off` **2** + 无 `default_nettype`（旧形态）
+- [x] 库层 `EmitOptions{}` / `verilogwriter(ctx)` **不动**（`STATIC_REQUIRE(... == false)` 仍绿）
+- [x] 护栏里的显式 `--emit-hygiene` **保留**（`verify_examples_rtl_sim.sh` / `verify_flat_rtl_emit.sh`）
+- [x] **顺带修了一处投毒退化**：`verify_flat_rtl_emit.sh` 的 M1 原本往 `ports[]`（全量清单）
+      里塞端口 ⇒ T6 之后 F3 只消费 `port_table[]` ⇒ 该投毒**恒绿**（无判别力）
+      ⇒ 已改投 `port_table[]`（`--self-test` 复绿）
 
 验证：
 
