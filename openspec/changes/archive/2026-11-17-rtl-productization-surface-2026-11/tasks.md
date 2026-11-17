@@ -32,7 +32,7 @@
 - [x] MODIFIED 是**整条替换**：全部 Scenario 都要带上（`:240` 有 **8 个**），
       `:336-344` 末句「未驱动子 input MUST 冒泡」已改
 - [x] 4 条**不需 delta** 的标题零命中（`:478` / `:518` / `:529` / `:637`）
-- [ ] `## Purpose` **不写进 delta**（`openspec archive` 不合并 ⇒ 归 T17）
+- [x] `## Purpose` **不写进 delta**（`openspec archive` 不合并 ⇒ 归 T17）⇒ 已由 T17 手工写
 
 验证：
 
@@ -254,8 +254,11 @@ grep -rn 'STATIC_REQUIRE(ch::EmitOptions{}.emit_hygiene == false)' tests/
 
 ## archive
 
-- [ ] `openspec archive rtl-productization-surface-2026-11`
-- [ ] 归档后确认主 spec 的 6 条已逐字合入（`verify_openspec_delta.sh` 的等价证据 = 主 spec grep）
+- [x] `openspec archive rtl-productization-surface-2026-11`
+      ⇒ 归档为 `openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11/`
+- [x] 归档后确认主 spec 的 6 条已逐字合入 ⇒ 实测：`rtl-emit-portability` **+1 / −1**（v2 标题 + `port_table[]`）；
+      `rtl-hierarchical-output` **+1 / ~4 / −1**（`openspec archive` 输出）；`openspec validate --specs`（非 strict）
+      = **49 passed / 0 failed**
 
 ```bash
 openspec archive rtl-productization-surface-2026-11 --yes
@@ -267,12 +270,18 @@ grep -n 'port_table' openspec/specs/rtl-emit-portability/spec.md
 
 ## 归档后 · T14 / T17
 
-- [ ] **T14** 残差 id=23 闭口：`.rddf/checks/arch-residual-registry.md` +
-      `docs/architecture/2026-11-02-hierarchical-rtl-output.md §7` **两侧同批**，
-      状态格由 `--render` 生成，闭口证据指向 archive 目录
-- [ ] **T17** 两处 capability Purpose 手工写：`rtl-emit-portability` 占位符 → 实质 Purpose；
-      `rtl-hierarchical-output:12-13` 「悬空子输入 MUST 向上冒泡」→「未驱动的**后代**子输入 MUST 被**响亮拒绝**」
-- [ ] T17 的判据口径 = **「历史否定式除外」**（`MUST NOT …冒泡…` 形态允许命中）
+- [x] **T14** 残差 id=23 闭口：`.rddf/checks/arch-residual-registry.md` +
+      `docs/architecture/2026-11-02-hierarchical-rtl-output.md §7` **两侧同批**
+      ⇒ 状态 = `已收口`（`--render` 生成的规范句，逐字节前缀匹配）· 闭口证据 =
+      `openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11`
+      ⇒ `verify_arch_ledger_residuals.sh` **PASS（28 行）** + `--self-test` **11 条投毒全绿**
+- [x] **T17** 两处 capability Purpose 手工写：`rtl-emit-portability` 占位符 → 实质 Purpose
+      （10 字段 + `port_table[]` 唯一权威 + `is_top_io` 退为筛选信号 + 确定性）；
+      `rtl-hierarchical-output` 的「悬空子输入 MUST 向上冒泡」→「**未驱动的后代子输入 MUST 被
+      响亮拒绝**（`ok=false` + 点名 + 零文件）」
+- [x] T17 的判据口径 = **「历史否定式除外」**（`MUST NOT …冒泡…` 形态允许命中）
+      ⇒ 实测主 spec 剩余命中 = `:253` / `:342` / `:407` / `:770` 与 Purpose 里的「已退役」句
+      ⇒ 全部为**历史否定式 / 约束式**，无陈述式残留
 
 验证：
 

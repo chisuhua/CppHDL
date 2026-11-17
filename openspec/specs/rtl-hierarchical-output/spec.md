@@ -9,8 +9,10 @@
 - **边界**：module 边界 = **所有权边界**（节点归属哪个组件 ⇒ 它就属于哪个 module）。
 - **命名**：命名权威 MUST 是 **ctx 级全局表** ⇒ ⇒ 顶层端口名 MUST 与扁平产物**逐字相同**
   （MUST NOT 发明 per-module 局部命名）。
-- **跨层连线**：跨层的非端口边 MUST 按**方向**合成隐式端口（默认告警）；悬空子输入 MUST
-  向上**冒泡**为顶层输入。
+- **跨层连线**：跨层的非端口边 MUST 按**方向**合成隐式端口（默认告警）；**未驱动的后代
+  子输入 MUST 被响亮拒绝**（`ok = false` + 点名「端口名 + module + 层级」+ 零文件）
+  ⇒ ⇒ MUST **NOT** 被抬成顶层 `input`，MUST **NOT** 静默 tie-off（ADR-072 D1-f / D1-h：
+  「向上冒泡」那条路**已退役**）。
 - **等价性**：层次化产物 MUST 与扁平产物**等价**，且 MUST 可**机械判定**
   （默认全 inline ⇒ 逐字节一致；成层时 ⇒ 映射表上的观测集合逐拍全等）。
 - **接口与策略**：单元接口 MUST 限于 `ch_uint` / `ch_bool`（+ 框架供给的 clock/reset）；
@@ -33,11 +35,13 @@
 
 组件是否成为一个独立 Verilog module，MUST 由**显式声明**决定；未声明者 MUST **inline**
 （不产生 module / 实例化 / 隐式端口）。其端口的落点 MUST 按「**最近的成层祖先 module**」
-分两格：**该祖先 = RTL 顶层** ⇒ 照扁平规则（无 driver 的 `ch_in` ⇒ 顶层 `input`；
-**任意** `ch_out` ⇒ 顶层 `output`）；**该祖先 = 非顶层成层 module** ⇒ `ch_out` 是该
-module **体内的普通信号**（**不**上 RTL 顶）。
+分两格：**该祖先 = RTL 顶层** ⇒ 走**顶层端口面契约**（`default_clock` → `default_reset` →
+**根组件自有 `__io`**：无 driver 的 `ch_in` ⇒ 顶层 `input`；**根自有的** `ch_out` ⇒ 顶层
+`output`；**后代 `ch_out` MUST NOT 上顶层**（降为体内 `logic`））；**该祖先 = 非顶层成层
+module** ⇒ `ch_out` 是该 module **体内的普通信号**（**不**上 RTL 顶）。
 
-⇒ ⇒ **端口表收缩（无人消费的子输出不上 RTL 顶）MUST 只发生在成层子树**。
+⇒ ⇒ **端口表收缩发生在两处**：① **顶层端口面**（框架 clock/reset + 根组件自有 `__io` ·
+**与粒度无关**）② **成层子树的非根 module**（由本条定）。
 
 ⇒ ⇒ MUST NOT 由框架按端口数 / 节点数**自动推断** ⇒ ⇒ 粒度是用户的领域决策。
 
@@ -45,9 +49,10 @@ module **体内的普通信号**（**不**上 RTL 顶）。
 
 - **WHEN** 一个组件未声明为「成层」且被用作子组件
 - **THEN** 层次化产物 MUST NOT 为它生成 module 或实例化语句
-- **AND** 其端口落点 MUST 按「最近的成层祖先」分两格：祖先 = RTL 顶层 ⇒ 照扁平规则
-      （任意 `ch_out` ⇒ 顶层 `output`，**包括已被父层消费的** ⇒ MUST NOT 降成纯内部 wire）；
-      祖先 = 非顶层成层 module ⇒ `ch_out` 是该 module 体内的普通信号（MUST NOT 上 RTL 顶）
+- **AND** 其端口落点 MUST 按「最近的成层祖先」分两格：祖先 = RTL 顶层 ⇒ **仅根组件自有的**
+      `ch_out` 成为顶层 `output`；**后代** `ch_out`（**含已被父层消费的**）MUST 降为体内
+      `logic`（MUST NOT 上 RTL 顶）；祖先 = 非顶层成层 module ⇒ `ch_out` 是该 module
+      体内的普通信号（MUST NOT 上 RTL 顶）
 
 #### Scenario: 声明 MUST 可在类级与实例级表达
 
@@ -97,9 +102,16 @@ MUST NOT 静默并入顶层 module）。
 
 ### Requirement: 不属于任何组件的节点 MUST 归顶层 module
 
-不属于任何组件实例的节点（`owner == nullptr`：context 级 `default_clock` / `default_reset`，
-以及用户不经组件直接创建的节点）MUST 归**顶层 module** ⇒ ⇒ MUST NOT 被拒绝
-⇒ ⇒ 且 MUST 有 `CHWARN` 点名（归属空洞必须可观测）。
+不属于任何组件实例的节点（`owner == nullptr`）MUST 归**顶层 module** ⇒ ⇒ MUST NOT 被拒绝。
+其处置 MUST 按**两类**区分：
+
+| 子类 | 条款 |
+|---|---|
+| `default_clock` / `default_reset`（context 级） | MUST 是**顶层端口** · MUST NOT 触发 `CHWARN` |
+| 其余 `owner == nullptr`（**用户直接创建**） | MUST 归**顶层 module 的体内**（**MUST NOT** 是顶层端口）· MUST **保留 `CHWARN` 点名** · MUST NOT 被拒绝 |
+
+⇒ ⇒ **归属空洞必须可观测**：用户直接创建的节点 MUST 在 `HierarchyEmitResult.warnings`
+里被点名（MUST NOT 只能靠抓 stderr 才可观测）。
 
 #### Scenario: 含寄存器的设计 MUST 仍能层次化
 
@@ -109,6 +121,14 @@ MUST NOT 静默并入顶层 module）。
 - **AND** `default_clock` / `default_reset` MUST **NOT** 触发 `CHWARN`
       （按设计不归属任何组件 ⇒ 告警会让每个含寄存器的设计恒响）
 - **AND** 只有「用户在 `main()` 里不经组件建的节点」MUST 触发 `CHWARN`
+
+#### Scenario: 用户直接创建的无归属节点 MUST 是顶层体内的信号
+
+- **WHEN** 一个设计在 `main()` 里创建了不属于任何组件实例的节点（`owner == nullptr`，
+      **且**不是 `default_clock` / `default_reset`）
+- **THEN** 该节点 MUST **NOT** 出现在顶层 module 的**端口表**里
+- **AND** `HierarchyEmitResult.warnings` MUST **非空**且**点名**该节点
+- **AND** 发射 MUST **成功**（`ok == true`）⇒ ⇒ MUST NOT 因该节点被拒绝
 
 ### Requirement: 成层组件 MUST 形成独立 module，且 module 树等价于成层组件子树
 
@@ -187,32 +207,6 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 > ⚠️ **本条是「按方向分列」矩阵的第三轴**（ADR-060 §2.1 v1.4）⇒ ⇒
 > **缺了它 ⇒ ⇒ 驱动源在顶层的输入会在中间层丢失 ⇒ ⇒ 行为分叉且无告警**。
 
-### Requirement: 悬空子输入 MUST 向上冒泡为顶层输入
-
-- **MODIFIED**：`UndrivenPolicy::Reject` 的适用范围**已收窄**（ADR-060 §2.4.2）：只对
-  「inline 折叠后 module 归属为**非根成层 module**」的悬空 `ch_in` 生效 ⇒ ⇒ **根自己的**
-  与**折叠进根**的悬空 `ch_in` 在扁平里本就是顶层 input ⇒ ⇒ **仍 MUST 产出**。
-
-无驱动源的子模块输入端口 MUST 逐级向上冒泡，最终成为**顶层 input**
-（与扁平产物行为一致）⇒ ⇒ 默认（`UndrivenPolicy::Bubble`）MUST 有 `CHWARN` 点名路径
-与端口旁注释；**`UndrivenPolicy::Reject`** MUST **不产出**（`ok = false` + `files` 为空）
-且 `error` MUST 列出**全部**悬空输入（端口名 + module + 层级）。
-
-#### Scenario: 悬空输入在两份产物中都可驱动
-
-- **WHEN** 一个子模块的输入端口未被驱动
-- **THEN** 扁平与层次化两份产物 MUST 都把它暴露为**顶层可驱动输入**
-- **AND** 层次化侧该端口名 MUST **与扁平产物逐字相同**（= 该输入节点的 ctx 级全局名）
-      ⇒ ⇒ MUST NOT 加任何框架前缀
-- **AND** 该端口旁 MUST 有注释标明它来自哪个组件的未驱动输入
-
-#### Scenario: `Reject` MUST 列出全部悬空输入且不误拒根自己的端口
-
-- **WHEN** `undriven_policy = UndrivenPolicy::Reject`，设计里有**两个**实例含悬空 `ch_in`
-- **THEN** `error` MUST 同时点名**两个**端口（只报第一条 ⇒ 判据转红）
-- **AND** 根 module 自己的 `ch_in` 与 inline 折叠进根的悬空 `ch_in` MUST NOT 触发拒绝
-      ⇒ ⇒ 产物 MUST 仍被产出
-
 ### Requirement: 时序模块 MUST 有 clock/reset 端口
 
 - **MODIFIED**：lint 门 = **ADR-060 §2.5**（不启用全量告警开关 · 捕获退出码 · stderr 无
@@ -248,11 +242,19 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 
 **成层且非根**的 module，其端口集合 MUST **⊇** 它自己的 `ch_in` ∪ `ch_out`
 ⇒ ⇒ **是否已被父层驱动不影响它是否成为端口**（emitter MUST 忽略 `inputimpl::driver()`）。
-且每个端口 MUST 可追溯到五类来源之一：自身端口 · inline 后代的 `ch_out`（**仅根允许**）·
-隐式端口 · 冒泡端口 · **时序基础设施**（clock/reset）。
+且每个端口 MUST 可追溯到**三类**来源之一：**自身端口** · **隐式端口** ·
+**时序基础设施**（clock / reset）。
 
-⇒ ⇒ **RTL 顶层 module MUST 走扁平规则**，MUST NOT 套用本条。
+⇒ ⇒ **RTL 顶层 module MUST 走顶层端口面契约**（框架 `default_clock` / `default_reset` +
+**根组件自有 `__io`**），MUST NOT 套用本条。
+⇒ ⇒ ⚠️ 根的**自有 IO 段**（即 `__io` 声明的那些端口 · **不含**框架 `default_clock` /
+`default_reset`）MUST **==** 自身 `ch_in` ∪ `ch_out`（**==** 而非 **⊇** ⇒ ⇒ 故它仍不套用本条）。
 ⇒ ⇒ **自驱动**：成层组件自己驱动自己的 `ch_in` ⇒ MUST **返回 `ok = false`** 并点名该端口。
+
+⇒ ⇒ `PortProvenanceOrigin` 的**顶层合法取值 MUST 只有** `Self` / `ClockReset`
+（`Bubbled` MUST NOT 存在：悬空后代输入恒被拒绝 ⇒ 无冒泡端口；
+`InlineFolded` MUST NOT 存在：后代 `ch_out` MUST NOT 出现在**任何** module 的端口表里
+（**含根**）⇒ 无 inline 折叠端口）。
 
 #### Scenario: 已被父层驱动的 `ch_in` MUST 仍是 module 端口
 
@@ -317,15 +319,12 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 - **WHEN** 对比一个设计的层次化产物与扁平产物的**顶层端口表**
 - **THEN** **根 `io()` 端口段** MUST **逐字逐序**相同
       （clock → reset → 无 driver 的 `input` → **根组件自身**的 `ch_out`
-      ⇒ ⇒ ⚠️ **不含** inline 后代的 `ch_out` —— 那些属下一条）
+      ⇒ ⇒ ⚠️ **不含** inline 后代的 `ch_out` —— 那些**不上**顶层）
 - **AND** 层次化侧**其余**顶层端口 MUST 在扁平侧**逐字存在**（集合 **⊆**）
 - **AND** 扁平侧 MAY 多出**成层子组件**的 `ch_out`（它们在层次化顶层**不可观测**
       ⇒ = `include/hierarchy_equivalence.h` 明写的「观测盲区」）
-- **AND** **排他句（承重）**：**扁平 \\ 层次化顶层**的端口 MUST **⊆** {**成层子组件**的 `ch_out`}
-      ⇒ ⇒ 等价表述 = 层次化顶层 MUST 含**全部** inline 后代 的 `ch_out`
-      ⇒ ⇒ 否则「漏抬某个 inline 后代 `ch_out`」在**前两条**下**都不被任何判据抓住**
-- **AND** **段归属 MUST 以 `PortProvenanceOrigin` 为准**（`Self` / `ClockReset` / `Bubbled`
-      ⇒ 归根段；`InlineFolded` ⇒ 归 ⊆ 组）⇒ ⇒ **MUST NOT** 以**名称前缀**推断
+- **AND** **段归属 MUST 以 `PortProvenanceOrigin` 为准**（顶层**只允许** `Self` /
+      `ClockReset` 两个取值）⇒ ⇒ **MUST NOT** 以**名称前缀**推断
 
 #### Scenario: 非根 module MUST NOT 抬 inline 后代的 `ch_out`
 
@@ -340,8 +339,9 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 - **AND** 父 module 的实例化语句 MUST 以**空连接**（`.port()`）接上它
 - **AND** 该产物 MUST 通过 **ADR-060 §2.5 的 lint 门**（退出码 + 无 `%Error`；
       ⚠️ 空连接在默认集下本就合法 ⇒ MUST NOT 靠放宽门来通过）
-- **AND** ⚠️ **子 input 端口 MUST NOT** 用空连接糊过去 ⇒ ⇒ 未驱动的子 input MUST
-  **冒泡**成顶层 input 并由父层接上（⇒ ⇒ 否则其值是未定义值 X）
+- **AND** ⚠️ **子 input 端口 MUST NOT** 用空连接糊过去 ⇒ ⇒ 未驱动的**后代**子 input MUST
+  依「悬空后代子输入 MUST 被响亮拒绝」条被**响亮拒绝**（`ok = false` + 点名）
+  ⇒ ⇒ MUST NOT 冒泡成顶层 input（⇒ ⇒ 否则其值是未定义值 X）
 
 ### Requirement: 单元体内 MUST NOT 引用「非自己、非祖先」的端口节点
 
@@ -405,14 +405,15 @@ MUST 按**边方向**合成隐式端口（父→子 = 子侧 input；子→父 =
 （`SynthesizeWarn` / `SynthesizeFatal` / `Reject`）
 ⇒ ⇒ MUST NOT 存在第二份同义枚举副本
 ⇒ ⇒ 「合成」MUST 是**纯内存 phase**、**先于任何文件 I/O**
-⇒ ⇒ 悬空输入的策略 MUST 由 `UndrivenPolicy`（`Bubble` / `Reject`）承载。
+⇒ ⇒ 悬空输入的策略 MUST 由 `UndrivenPolicy`（**仅** `Reject`）承载
+⇒ ⇒ `Bubble` 取值 MUST **NOT** 存在（后代悬空输入恒被**响亮拒绝** ⇒ 无「冒泡」档可承载）。
 
 ⚠️ **诊断的计数与列举单位 MUST 是「边」（需合成的跨 module 边），MUST NOT 是
 「合成物」（1 条边常合成 k 个端口 + 1 根网）** ⇒ ⇒ 否则「首行计数」与「实际列出的
 条目数」**必然**不等（用户可见的错报）。
 
 ⚠️ **每条边级诊断 MUST 点名该边**（形如 `from <node> (<module>) -> to <node> (<module>)`；
-`(<module>)` = 该 module 在层次树里的**实例路径**）⇒ ⇒ MUST NOT 只报合成物名
+`(<module>)` = 该 module 在层次树里的**实例路径**）⇒ MUST NOT 只报合成物名
 （用户据此无法定位是哪条跨 module 边）。
 
 #### Scenario: SynthesizeWarn 是默认策略
@@ -755,3 +756,48 @@ RV32I 流水线的**交付级**层次化产物 MUST 由**声明式**粒度产生
 - **THEN** MUST 退出码 0 且 MUST NOT 出现 `%Error`
 - **AND** MUST NOT 使用 `-Wall`、`-Wno-fatal` 或任何 `-Wno-<单项>` 规避
   ⇒ ⇒ 产物 MUST 自身 lint 干净
+
+### Requirement: 悬空后代子输入 MUST 被响亮拒绝，MUST NOT 静默降格为顶层输入或体内未驱动 wire
+
+**根自己**的悬空 `ch_in` ⇒ ⇒ MUST **仍是顶层端口**（与扁平产物一致）。
+**后代**（**含** inline 折叠进根的组件）的悬空 `ch_in` ⇒ ⇒ 层次化发射 MUST **失败**：
+
+- ① 发射 MUST 返回 `ok = false`；
+- ② `error` MUST 点名**全部**悬空后代输入（端口名 + module + 层级）；
+- ③ `files` MUST 为空（失败路径 MUST NOT 产出任何文件）；
+- ④ MUST NOT **静默降格**为：**顶层端口** / 体内**未驱动 wire** / **tie-off**。
+
+⇒ ⇒ 三种静默降格形态**都是**「读 X 或静默改行为」⇒ ⇒ 与仓内「响亮拒绝」纪律相反。
+⇒ ⇒ `UndrivenPolicy` 的**唯一取值 MUST 是 `Reject`** ⇒ ⇒ 本条正文 MUST NOT 留
+「冒泡是否可选」的余地。
+
+#### Scenario: 根自己的悬空 `ch_in` MUST 仍是顶层端口
+
+- **WHEN** 根组件自己声明了一个 `ch_in`，而它**没有**内部 driver
+- **THEN** 它 MUST 出现在顶层 module 的端口表里（`input`）
+- **AND** 发射 MUST **成功**（`ok == true`）
+- **AND** MUST NOT 因它触发拒绝
+
+#### Scenario: 后代悬空 `ch_in` MUST 被拒绝
+
+- **WHEN** 一个**成层**子组件的 `ch_in` 没有驱动源
+- **THEN** 发射 MUST 返回 `ok == false`
+- **AND** `error` MUST 点名该端口 · 其模块 · 其层级
+- **AND** `files` MUST 为空
+- **AND** MUST NOT 把它提升为顶层 `input`
+
+#### Scenario: inline 折叠进根的后代悬空 `ch_in` MUST 同样被拒绝
+
+- **WHEN** 一个**被 inline**（折叠进根 module）的子组件含未驱动的 `ch_in`
+- **THEN** 发射 MUST 返回 `ok == false`（该输入**不属于根自有 IO** ⇒ ⇒ 与根自己的悬空
+      `ch_in` 不同）
+- **AND** `error` MUST 点名该端口 · 该子组件的 module 路径 · 其层级
+- **AND** `files` MUST 为空
+- **AND** MUST NOT 把它当顶层 `input` 产出（⇒ ⇒ 否则「拒绝合法设计」的镜像错误：
+      把**非法**设计当**合法**）
+
+#### Scenario: 拒绝 MUST 列出全部悬空后代输入
+
+- **WHEN** 设计里有**两个**成层实例各含悬空 `ch_in`
+- **THEN** `error` MUST 同时点名**两个**端口（只报第一条 ⇒ 判据转红）
+- **AND** 根 module 自己的悬空 `ch_in` MUST NOT 触发拒绝 ⇒ ⇒ 产物 MUST 仍被产出
