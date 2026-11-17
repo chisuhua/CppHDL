@@ -33,6 +33,13 @@ import sys
 
 LINT_OFF_RE = re.compile(r"/\*\s*verilator\s+lint_off\s+([A-Za-z0-9_]+)\s*\*/")
 MODULE_RE = re.compile(r"^\s*module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.M)
+# ⚠️ **module 块**（module 头 → 对应的 `endmodule`）—— 用于「只保留某个 module」的
+#   裁剪（判别力自证的投毒用）⇒ ⇒ **非贪婪** ⇒ ⇒ 匹配到**第一个** `endmodule`
+#   （Verilog 的 module 体不含嵌套的 module 定义 ⇒ ⇒ 第一个即本 module 的结束）。
+MODULE_BLOCK_RE = re.compile(
+    r"^[ \t]*module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(.*?^[ \t]*endmodule\b[^\n]*\n?",
+    re.M | re.S,
+)
 # 顶层 module 的端口声明行：`input  name,` / `output [7:0] name` / `input name`
 PORT_LINE_RE = re.compile(
     r"^\s*(input|output|inout)\s*(?:\[[^\]]*\]\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*[,)]?\s*$"
@@ -91,9 +98,34 @@ def module_ports(text: str, name: str | None) -> list[tuple[str, str]]:
     return ports
 
 
+def module_names(text: str) -> list[str]:
+    """列出产物里**所有** module 的名字（按出现顺序）。
+
+    ⚠️ **用途**：「层次化产物 ≠ 扁平产物」的**结构**判据 —— 扁平产物只有
+    **1** 个 module（`top`）⇒ ⇒ 层次化产物 MUST **≥ 2** 个。
+    ⚠️ 与 `module_ports` 共用同一个 `MODULE_RE` ⇒ ⇒ **不自研第二份解析器**。
+    """
+    return MODULE_RE.findall(text)
+
+
+def strip_modules_except(text: str, keep: str) -> str:
+    """裁掉**除 `keep` 以外**的所有 module 定义 ⇒ 只留根 module。
+
+    ⚠️ **用途 = 判别力自证的投毒**：把层次化产物「压扁」成单 module ⇒ ⇒
+    「层次化产物 MUST ≥ 2 个 module」这条判据 MUST 转红 ⇒ ⇒ 否则该判据恒绿。
+    ⚠️ **被裁掉的子 module 仍被根 module 的实例语句引用** ⇒ ⇒ 产物**不再能编译**
+    ⇒ ⇒ 这正是「层次化形态被破坏」的真实形态 ⇒ ⇒ 判据 MUST 在**编译之前**跑。
+    """
+    out = text
+    for m in list(MODULE_BLOCK_RE.finditer(text)):
+        if m.group(1) == keep:
+            continue
+        out = out.replace(m.group(0), "", 1)
+    return out
+
+
 def manifest_product_port_table(manifest: dict) -> list[str]:
     """顶层端口表 = 清单的**产品端口表**（`port_table[]` · schema v2）—— **按产物顺序**。
-
     ⚠️ **唯一权威 = `port_table[]`**（T10）：旧口径「clock/reset ∪ 全部 output ∪
        无 driver 的 input」已作废 —— `is_top_io` 只是「根组件自有 IO」的**描述信号**，
        不是端口面定义（后代 `ch_out` 在产物里**不是**顶层端口）。
@@ -115,6 +147,9 @@ def main() -> int:
     ap.add_argument("--module", help="--check-top-ports 时取哪个 module 的端口（默认：产物里的第一个，"
                                      "= 扁平产物的 top；层次化产物 MUST 显式给根 module 名）")
     ap.add_argument("--self-assign")
+    ap.add_argument("--modules", help="V 文件：列出产物里**所有** module 的名字（每行一个）")
+    ap.add_argument("--strip-modules-except", nargs=2, metavar=("ROOT", "IN"),
+                    help="只保留 ROOT 这一个 module 的定义（其余裁掉）⇒ 输出到 stdout")
     ap.add_argument("--zero-reference", help="V 文件：列出「声明了但没人读」的信号")
     ap.add_argument("--undeclared-refs", help="V 文件：列出「被引用但没有声明」的标识符（剪枝误伤的**唯一**直接判据）")
     ap.add_argument("--identity-proxy", help="V 文件：列出「恒等直通」（assign 的 LHS 从未被读且**不是**端口）")
@@ -130,6 +165,18 @@ def main() -> int:
         text = pathlib.Path(args.top_ports).read_text(encoding="utf-8", errors="replace")
         for d, n in module_ports(text, args.module):
             print(f"{d} {n}")
+        return 0
+
+    if args.modules:
+        text = pathlib.Path(args.modules).read_text(encoding="utf-8", errors="replace")
+        for n in module_names(text):
+            print(n)
+        return 0
+
+    if args.strip_modules_except:
+        root, src = args.strip_modules_except
+        text = pathlib.Path(src).read_text(encoding="utf-8", errors="replace")
+        sys.stdout.write(strip_modules_except(text, root))
         return 0
 
     if args.check_top_ports:

@@ -585,6 +585,18 @@ ch::toVerilog("top.v", dev.instance(), ch::EmitOptions{});
 
 ### 5.3 层次化产物
 
+#### 5.3.0 拿到层次化产物：两种入口
+
+| 入口 | 形态 | 适用 |
+|---|---|---|
+| **CLI**（推荐） | `cpphdl-emit-rtl --hierarchical --out <dir>`（或调用 `ch::rtl_emit::run_emit_cli` 时传 `--hierarchical`） | 用户在自己的可执行文件里登记设计 + 一个 flag ⇒ 同时拿到产物 + manifest |
+| C++ API | `ch::toVerilogHierarchical(path, root, opts)` | 需要自定义选项 / 在测试内发射 |
+
+⚠️ **CLI 的两种形态（扁平 / 层次化）产物顶层端口表同源**（都走 `make_flat_module_view`）
+⇒ ⇒ **同一个独立 Verilog TB 可吃两种产物**（顶层 module 名同为 `top`）
+⇒ ⇒ 仓内实例 = `examples/riscv-mini/emit_rtl_rv32i_soc_hier`（层次化）与
+`emit_rtl_rv32i_soc`（扁平）共用 `tb_rv32i_soc.sv` ⇒ 两者 `checks=24 fails=0` 完全相同。
+
 #### 5.3.1 怎么声明成层
 
 **默认不成层**（inline）⇒ ⇒ 组件默认**不**产生独立 module ⇒ ⇒ 它的逻辑留在**最近的

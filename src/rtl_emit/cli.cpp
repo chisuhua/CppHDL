@@ -5,6 +5,7 @@
 #include "rtl_emit/cli.h"
 
 #include "codegen_verilog.h"
+#include "hierarchy_verilog.h"
 #include "rtl_emit/manifest.h"
 #include "rtl_emit/tb_stub.h"
 
@@ -73,6 +74,8 @@ bool parse_cli_options(const std::vector<std::string> &args, CliOptions &out,
             out.emit_hygiene = true;
         } else if (a == "--no-emit-hygiene") {
             out.emit_hygiene = false;
+        } else if (a == "--hierarchical") {
+            out.hierarchical = true;
         } else if (a == "--allow-diagnostics") {
             out.allow_diagnostics = true;
         } else {
@@ -112,6 +115,9 @@ void print_cli_usage(const char *program_name) {
         << "                         剪零引用信号 + proxy 恒等直通 + 不发 blanket\n"
         << "                         lint_off）—— **默认 on**\n"
         << "  --no-emit-hygiene      关掉产物卫生（仅用于与旧产物形态做对照）\n"
+        << "  --hierarchical         发射**层次化**产物（单文件 · 多 module）\n"
+        << "                         （默认 = 扁平；两种形态的顶层端口表同源 ⇒\n"
+        << "                          同一个独立 TB 可吃两种产物）\n"
         << "  -h, --help             本用法\n"
         << "\n"
         << "退出码：0 成功 · 1 运行失败或有诊断 · 2 用法错误（fail-closed）\n";
@@ -178,14 +184,38 @@ int run_emit_cli(const std::vector<std::string> &args, const DesignFactory &fact
 
     // ── 产物（Verilog）────────────────────────────────────────────────
     if (options.emit_verilog) {
-        // ⚠️ **产物卫生**开关（C6）—— ⚠️ **默认 off** ⇒ ⇒ 默认路径**逐字节不变**
-        ch::EmitOptions emit_opts;
-        emit_opts.emit_hygiene = options.emit_hygiene;
-        // ⚠️ **产品面 = 带根路径**（`toVerilog(path, Component&, …)`）：
-        //   端口面 = `default_clock` → `default_reset` → **根组件自有 `__io`**
-        //   ⇒ ⇒ 与 manifest 的产品端口表**同源**（同一个 `make_flat_module_view`）
-        //   ⇒ ⇒ 「产物端口表 == manifest 产品端口表」可机械成立。
-        toVerilog(options.verilog_path, *root, emit_opts);
+        if (options.hierarchical) {
+            // ⚠️ **层次化产物**（ADR-058 §2.3）—— 根 = **本 CLI 注册的 factory 造出的根**
+            //   ⇒ ⇒ 显式传入（层次化入口收 `Component&` · **不从 ctx 猜根** —— ADR-072
+            //   D1-a 的「推导不可靠」教训 ⇒ ⇒ 框架选择「不猜」）。
+            // ⚠️ **产物的顶层 module 名 = `top`**（`HierarchyEmitOptions::top_module_name`
+            //   的默认值）⇒ ⇒ **与扁平产物同名** ⇒ ⇒ 同一个独立 TB 可吃两种产物。
+            ch::HierarchyEmitOptions hier_opts;
+            hier_opts.emit_hygiene = options.emit_hygiene;
+            const auto emitted =
+                toVerilogHierarchical(options.verilog_path, *root, hier_opts);
+            // ⚠️ **fail-closed**：层次化入口**不抛异常**（失败由返回值承载）⇒ ⇒
+            //   必须显式判 `ok` ⇒ ⇒ 否则「发射失败」会静默通过（退出码 0）。
+            if (!emitted.ok) {
+                std::cerr << "::error::层次化发射失败：" << emitted.error << "\n";
+                return 1;
+            }
+            // ⚠️ **告警 ≠ 诊断**：「synthesized cross-module」（ADR-060 §2.4.1 的
+            //   **父侧落点**语义 · ADR-070 D1）是层次化发射的**常态** ⇒ ⇒ 只作
+            //   信息打印，**不**影响退出码（口径与 `examples/axi4/emit_rtl_soc.cpp` 一致）。
+            for (const auto &w : emitted.warnings) {
+                std::cerr << "[warn] " << w << "\n";
+            }
+        } else {
+            // ⚠️ **产物卫生**开关（C6）—— ⚠️ **默认 off** ⇒ ⇒ 默认路径**逐字节不变**
+            ch::EmitOptions emit_opts;
+            emit_opts.emit_hygiene = options.emit_hygiene;
+            // ⚠️ **产品面 = 带根路径**（`toVerilog(path, Component&, …)`）：
+            //   端口面 = `default_clock` → `default_reset` → **根组件自有 `__io`**
+            //   ⇒ ⇒ 与 manifest 的产品端口表**同源**（同一个 `make_flat_module_view`）
+            //   ⇒ ⇒ 「产物端口表 == manifest 产品端口表」可机械成立。
+            toVerilog(options.verilog_path, *root, emit_opts);
+        }
         std::error_code fec;
         if (!std::filesystem::exists(options.verilog_path, fec) || fec) {
             std::cerr << "::error::产物未生成：" << options.verilog_path << "\n";

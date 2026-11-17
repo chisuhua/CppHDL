@@ -15,6 +15,10 @@ examples/riscv-mini/
 ├── rv32i_phase3_test.cpp    # Load/Store (13/13)
 ├── emit_rtl.cpp             # RTL 发射入口（基线：内存无初值）
 ├── emit_rtl_fw_init.cpp     # RTL 发射入口 · **带固件初值**（`firmware-load-chain` L2 路线 A）
+├── emit_rtl_hier.cpp        # RTL 发射入口 · **层次化形态**（诉求 ⑤ 的产品级交付面）
+│                            #   ⇒ 走库层 CLI 的 `--hierarchical`（`toVerilogHierarchical`）
+│                            #   ⇒ 产物 = 单文件 8 module · 顶层端口表与扁平**同源**（34）
+│                            #   ⇒ **复用同一个独立 TB** `tb_rv32i_soc.sv`
 ├── src/                     # **2** 个头（SoC 顶层 + 带 `.data` 的示例固件）
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
 │   └── rv32i_pipeline_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）

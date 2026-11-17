@@ -60,6 +60,19 @@ struct CliOptions {
     std::string tb_stub_hint;
     /// TB 骨架的时钟半周期（ns，默认 5 = 100 MHz）
     unsigned tb_clock_half_period_ns = 5;
+    /// **层次化**产物开关（**默认 off** ⇒ ⇒ 默认路径**逐字节不变**）
+    ///
+    /// ⚠️ **off = 扁平**（`toVerilog(path, root, …)` · ADR-072 **D1-b** 的带根入口）
+    /// ⇒ ⇒ **on = 层次化**（`toVerilogHierarchical(path, root, …)` · ADR-058 §2.3）
+    /// ⇒ ⇒ 两种形态的**顶层端口表同源**（同一个 `make_flat_module_view`）
+    /// ⇒ ⇒ **同一个独立 Verilog TB 可同时吃两种产物**（顶层 module 名同为 `top`）。
+    ///
+    /// ⚠️ **层次化产物的额外约束**（发射器会 fail-closed 拒绝 ⇒ 退出码 1）：
+    ///   · 成层组件**不自驱动** `ch_in`（后代悬空输入恒被拒绝 · ADR-072 **D1-f**）
+    ///   · **跨模块 `ch_mem`** 被拒（mem 本体不得跨 module）
+    /// ⚠️ **根必须显式**：层次化入口收 `Component&`（不是 ctx）⇒ ⇒ 由本 CLI
+    ///   注册的 factory 造出的根组件**就是**那个根 ⇒ ⇒ 调用方无需额外动作。
+    bool hierarchical = false;
     /// 打印用法
     bool help = false;
 };

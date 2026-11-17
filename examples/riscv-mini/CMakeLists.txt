@@ -186,6 +186,20 @@ set_target_properties(emit_rtl_rv32i_soc_fw_init PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
+# ── 层次化 RTL 发射入口（诉求 ⑤「层次化输出示例」的产品级交付面）────────
+# ⚠️ **独立 target**（不与 `emit_rtl_rv32i_soc` 合流）⇒ ⇒ 层次化走**层次化入口**
+#   （`toVerilogHierarchical(path, root, …)` · ADR-058 §2.3）⇒ ⇒ 根必须显式传入
+#   ⇒ ⇒ 库层 CLI 的 `--hierarchical` 承担这件事（`rtl_emit::run_emit_cli`）。
+# ⚠️ **共用同一个设计定义**（`Rv32iPipelineTop`）⇒ ⇒ 唯一差别 = 发射形态 ⇒ ⇒
+#   两种产物的**顶层端口表同源** ⇒ ⇒ **同一个独立 TB 可吃两种产物**。
+add_executable(emit_rtl_rv32i_soc_hier emit_rtl_hier.cpp)
+target_link_libraries(emit_rtl_rv32i_soc_hier PRIVATE cpphdl)
+target_include_directories(emit_rtl_rv32i_soc_hier PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(emit_rtl_rv32i_soc_hier PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+)
+
 # === 安装 (Phase 1-3 + 5 个核心 Pipeline 测试) ===
 install(TARGETS rv32i_phase1_test rv32i_phase2_test rv32i_phase3_test
               test_pipeline_exec test_soc_hello_world test_riscv_tests

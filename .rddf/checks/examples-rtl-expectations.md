@@ -619,3 +619,26 @@ rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）⇒ ⇒ **根组件自有
 | M3：`obs_data_write_en` 恒 0 | 转红 | ✅ `fails=1` |
 | M4：退休计数恒 0 | 转红 | ✅ `fails=1` |
 | M5：**装载口数据恒 0**（程序全 0） | 转红 | ✅ `fails=14` |
+
+### ✅ 层次化形态（`kind=hier` · 2026-11-17 · 诉求 ⑤「层次化输出示例」）
+
+**同一份期望源**适用于**两种发射形态**（扁平 `/ kind=dut` · 层次化 `/ kind=hier`）
+⇒ ⇒ 二者共用**同一个独立 Verilog TB**（`examples/riscv-mini/tb_rv32i_soc.sv`）
+⇒ ⇒ 理由 = **顶层端口表同源**：两种形态都走 `make_flat_module_view`
+⇒ ⇒ 端口名 + 方向 + 宽度 + 顺序**逐字逐序相同**（实测 **34** = 6 in + 28 out）。
+
+| 面 | 扁平（`kind=dut`） | 层次化（`kind=hier`） |
+|---|---|---|
+| 发射入口 | `emit_rtl_rv32i_soc`（`toVerilog`） | `emit_rtl_rv32i_soc_hier`（`--hierarchical` ⇒ `toVerilogHierarchical`） |
+| 产物形态 | 单 module（`top`） | **8 module**（7 stage + `top`）· 单文件 |
+| 顶层端口 | 34（6 in + 28 out） | **34**（6 in + 28 out）⇒ ⇒ 逐字逐序同源 |
+| 期望值 | 本节的判据表 | **同一张表**（同源 ⇒ 无需另写一份） |
+| 实测 | `RESULT: checks=24 fails=0` | `RESULT: checks=24 fails=0` |
+
+⚠️ **不新增独立的期望源**：层次化形态**不引入新语义** ⇒ ⇒ 若另写一份判据，
+两份**必然漂移**。⇒ ⇒ 本节的判据表是**唯一真相**。
+
+⚠️ **层次化形态的专属护栏判据**（不属于期望值，属**形态**）：
+`scripts/verify_examples_rtl_sim.sh` 的 **⑧'** —— 产物 MUST 含 **≥ 2** 个 module
+且含根 module `top` ⇒ ⇒ 否则「层次化」已**静默退化成扁平**
+（⚠️ 端口表判据 ⑧ 对这条**结构性失明**：退化后端口表照样相同）。

@@ -1,3 +1,36 @@
+## 2026-11-17 — **层次化 RTL 进入产品面**（诉求 ⑤「层次化输出示例」：CLI + 独立 TB + 覆盖登记）
+
+**问题**：层次化输出此前只有**测试级**载体（`examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp`
+在用例内发射）⇒ ⇒ **用户拿不到产物**（无 CLI ⇒ 拿不到 `.v`；且没有独立 Verilog TB 能跑它）
+⇒ ⇒ 「层次化输出」停在**特性**层，没到**产品**层 ⇒ ⇒ 与「RTL 生成能力产品化」的目标不符。
+
+**改了什么**
+- `include/rtl_emit/cli.h` + `src/rtl_emit/cli.cpp`：`CliOptions` 新增 `hierarchical`
+  （`--hierarchical`）⇒ ⇒ **通用生成器**层面支持层次化：用户在自己的可执行文件里登记设计
+  + 加一个 flag 即可（复用「库 + 薄 CLI」形态）；层次化分支走 `toVerilogHierarchical`
+  并**显式判 `ok`**（该入口不抛异常 ⇒ 不加判定会让发射失败静默通过）
+- 新增 `examples/riscv-mini/emit_rtl_hier.cpp` + CMake target `emit_rtl_rv32i_soc_hier`
+  ⇒ ⇒ RV32I SoC 的**层次化形态**产品级交付（薄壳：强制 `--hierarchical`）
+- **复用同一份独立 TB**（`examples/riscv-mini/tb_rv32i_soc.sv`）⇒ ⇒ 依据 = 两种形态的
+  **顶层端口表同源**（都走 `make_flat_module_view` ⇒ 34 端口逐字逐序相同）⇒ ⇒ 同一套判据
+  跑两种形态 ⇒ 实测 `RESULT: checks=24 fails=0`（与扁平**完全相同**）
+- `.rddf/checks/examples-rtl-sim-targets.tsv`：新增 `kind=hier` 桶（`REGISTERED_HIER: 1`）
+  ⇒ ⇒ 独立计数（不改「首批 10」的口径）
+- `scripts/verify_examples_rtl_sim.sh`：⓪ 升为**三桶守恒**；新增 **⑧' 层次化形态判据**
+  （`kind=hier` 的产物 MUST 含 ≥ 2 个 module 且含根 `top`）⇒ ⇒ ⚠️ ⑧（端口表）对
+  「层次化静默退化成扁平」**结构性失明**（退化后端口表照样相同）⇒ ⇒ ⑧' 补上该盲区
+- `scripts/lib/flat_rtl_emit_check.py`：新增 `--modules` / `--strip-modules-except`
+  （后者供投毒用；裁剪复用**同一个**分析器 ⇒ 不自研第二套解析器）
+- **判别力自证**：`--self-test` 新增投毒 8（`RTL_SIM_TAMPER=flatten_hier`：把层次化产物
+  压成单 module）⇒ ⇒ ⑧' MUST 转红
+- 文档：`.rddf/checks/examples-rtl-expectations.md` 补「层次化形态」段（**不新增期望源** ——
+  层次化不引入新语义，另写一份必然漂移）· `examples/riscv-mini/AGENTS.md` 结构表 ·
+  `docs/usage_guide/05-component-design.md` 新增 **§5.3.0**（两个入口 + TB 复用前提）
+
+**实测**：层次化产物 = **单文件 8 module**（7 stage + `top`）· 顶层端口 **34**（6 in + 28 out）·
+`verilator --lint-only --top-module top` **exit 0** · 同一 TB `checks=24 fails=0` ·
+主护栏 `verify_examples_rtl_sim` **PASS（12 项）** · 守恒护栏 `28 == 10 ∪ 18` 不变。
+
 ## 2026-11-17 — **vendored Verilator 的 PCH 工具链修复**（自动 split 的模型可编译了）
 
 **问题**：vendored Verilator 走 **CMake** 构建 ⇒ 上游 autoconf 的 PCH 选项探测

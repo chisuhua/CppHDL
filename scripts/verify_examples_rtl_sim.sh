@@ -4,7 +4,8 @@
 # **首批 examples 的独立 Verilog 仿真护栏**（`examples-rtl-sim-coverage` **E5**）。
 #
 # 判据（逐项，缺一即红）：
-#   ⓪ **登记数守恒** —— 数据行数 MUST == 清单里的 `REGISTERED_TARGETS`
+#   ⓪ **登记数守恒** —— 数据行数 MUST == **三桶之和**
+#      （`REGISTERED_TARGETS` + `REGISTERED_SOC` + `REGISTERED_HIER`）
 #      ⇒ ⇒ 防「删一行 ⇒ 静默缩面」（与仓内计数锚点同型）
 #   ① **`status` 参与判定** —— `pending` 行**红**（除非 `--allow-pending` 且未超预算）
 #      ⇒ ⇒ ⚠️ 旧实现**从不读 status** ⇒ `pending` 行只要有 TB 能打 `RESULT` 就转绿
@@ -18,8 +19,12 @@
 #   ⑧ **四件套判据**（ADR-072 D2 · T13 / AC8）—— manifest 的**产品端口表**
 #      MUST == 该单元产物端口表（**逐字逐序**）⇒ ⇒ 缺 manifest / 缺 `port_table[]`
 #      一律 fail-closed（schema v1 清单没有该字段 ⇒ **不**静默回退旧算法）
-#   ⑦ `--self-test`：**7 条**投毒**各自**必红（含 ⑧ 的**正负成对**两向：
-#      篡改 `port_table` 一个名字 / 产物多插一个下沉端口）
+#   ⑧' **层次化形态判据**（`kind=hier`）—— 产物 MUST 含 **≥ 2** 个 module
+#      且含根 module `top` ⇒ ⇒ 否则「层次化」已静默退化成扁平
+#      （⚠️ ⑧ 对这条**结构性失明**：退化后端口表**照样相同**）
+#   ⑦ `--self-test`：**8 条**投毒**各自**必红（含 ⑧ 的**正负成对**两向：
+#      篡改 `port_table` 一个名字 / 产物多插一个下沉端口；以及 ⑧' 的一向：
+#      把层次化产物压成单 module）
 #
 # ⚠️ **禁**自研 Verilog 静态分析器判「断言非空」
 #   （草案 metis 订正：仓内那个自研 C 子集分析器在第 4/5/6 轮对抗审稿里
@@ -94,11 +99,15 @@ data_rows() { grep -vE '^[[:space:]]*(#|$)' "$LIST"; }
 # ⚠️ **三桶互斥**（2026-11-16 · `soc-rtl-product-and-tb-2026-11` T6）：
 #   · `kind ∈ {target, dut}` 的行数 == `REGISTERED_TARGETS`（**首批 10** 的守卫）
 #   · `kind = soc` 的行数 == `REGISTERED_SOC`（**SoC 层独立计数** ⇒ 不混进「首批 10」）
-#   · 数据行总数 == 两桶之和；且每行的 `kind` MUST ∈ {target, dut, soc}（未知 ⇒ 红）
+#   · `kind = hier` 的行数 == `REGISTERED_HIER`（**层次化形态独立计数** ⇒ 同理不混进）
+#     ⇒ ⇒ 2026-11-17 新增：层次化产物（诉求 ⑤「层次化输出示例」）进产品面 ⇒ ⇒
+#     它是**同一设计的另一种发射形态** ⇒ ⇒ 独立桶（不改「首批 10」的口径）
+#   · 数据行总数 == 三桶之和；且每行的 `kind` MUST ∈ {target, dut, soc, hier}（未知 ⇒ 红）
 check_registration() {
-    local registered rec_soc actual n_td n_soc n_unknown
+    local registered rec_soc rec_hier actual n_td n_soc n_hier n_unknown
     registered="$(grep -oE '^#[[:space:]]*REGISTERED_TARGETS:[[:space:]]*[0-9]+' "$LIST" | grep -oE '[0-9]+$' || true)"
     rec_soc="$(grep -oE '^#[[:space:]]*REGISTERED_SOC:[[:space:]]*[0-9]+' "$LIST" | grep -oE '[0-9]+$' || true)"
+    rec_hier="$(grep -oE '^#[[:space:]]*REGISTERED_HIER:[[:space:]]*[0-9]+' "$LIST" | grep -oE '[0-9]+$' || true)"
     actual="$(data_rows | wc -l | tr -d ' ')"
     if [ -z "$registered" ]; then
         fail "⓪ 清单里没有 \`REGISTERED_TARGETS\` 锚点 ⇒ ⇒ 无法检测「删行缩面」"
@@ -108,12 +117,17 @@ check_registration() {
         fail "⓪ 清单里没有 \`REGISTERED_SOC\` 锚点 ⇒ ⇒ 无法检测「SoC 行被删」"
         return 1
     fi
+    if [ -z "$rec_hier" ]; then
+        fail "⓪ 清单里没有 \`REGISTERED_HIER\` 锚点 ⇒ ⇒ 无法检测「层次化行被删」"
+        return 1
+    fi
     n_td="$(data_rows | awk -F'\t' '$2=="target" || $2=="dut"' | wc -l | tr -d ' ')"
     n_soc="$(data_rows | awk -F'\t' '$2=="soc"' | wc -l | tr -d ' ')"
-    n_unknown="$(data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc"' | wc -l | tr -d ' ')"
+    n_hier="$(data_rows | awk -F'\t' '$2=="hier"' | wc -l | tr -d ' ')"
+    n_unknown="$(data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc" && $2!="hier"' | wc -l | tr -d ' ')"
     if [ "$n_unknown" -ne 0 ]; then
-        fail "⓪ 有 $n_unknown 行的 \`kind\` 不属于已知集合 {target, dut, soc}"
-        data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc" {print "      ::error::未知 kind ⇒ " $1 " (kind=" $2 ")"}'
+        fail "⓪ 有 $n_unknown 行的 \`kind\` 不属于已知集合 {target, dut, soc, hier}"
+        data_rows | awk -F'\t' '$2!="target" && $2!="dut" && $2!="soc" && $2!="hier" {print "      ::error::未知 kind ⇒ " $1 " (kind=" $2 ")"}'
         return 1
     fi
     if [ "$n_td" -ne "$registered" ]; then
@@ -124,8 +138,12 @@ check_registration() {
         fail "⓪ SoC 桶不守恒：kind=soc 有 $n_soc 行 ≠ REGISTERED_SOC=$rec_soc"
         return 1
     fi
-    if [ "$actual" -ne $((n_td + n_soc)) ]; then
-        fail "⓪ 三桶之和不等于数据行总数（$n_td + $n_soc ≠ $actual）"
+    if [ "$n_hier" -ne "$rec_hier" ]; then
+        fail "⓪ 层次化桶不守恒：kind=hier 有 $n_hier 行 ≠ REGISTERED_HIER=$rec_hier"
+        return 1
+    fi
+    if [ "$actual" -ne $((n_td + n_soc + n_hier)) ]; then
+        fail "⓪ 三桶之和不等于数据行总数（$n_td + $n_soc + $n_hier ≠ $actual）"
         return 1
     fi
     if [ "$actual" -eq 0 ]; then
@@ -299,13 +317,26 @@ assert t2 != t, "投毒失败：找不到 module 头"
 p.write_text(t2, encoding="utf-8")
 PY
         ;;
+    flatten_hier)
+        # ⚠️ **投毒「层次化退化成扁平」**（2026-11-17 · 层次化产品面）
+        #   ⇒ 裁掉除根 module 外的**全部** module 定义 ⇒ ⇒ 产物只剩 1 个 module
+        #   ⇒ ⇒ ⑧'（「层次化产物 MUST ≥ 2 个 module」）MUST 转红
+        #   ⇒ ⇒ 裁剪复用**同一个分析器**（`flat_rtl_emit_check.py`）⇒ ⇒ 不自研解析器
+        python3 "$REPO_ROOT/scripts/lib/flat_rtl_emit_check.py" \
+            --strip-modules-except top "$dut_v" >"$dut_v.flat" 2>/dev/null
+        if [ -s "$dut_v.flat" ]; then
+            mv "$dut_v.flat" "$dut_v"
+        else
+            rm -f "$dut_v.flat"
+        fi
+        ;;
     esac
 
     local f8_out f8_rc
-    # ⚠️ **层次化产物（`kind=soc`）是单文件多 module，且子 module 在前** ⇒ ⇒
+    # ⚠️ **层次化产物（`kind ∈ {soc, hier}`）是单文件多 module，且子 module 在前** ⇒ ⇒
     #    MUST 显式点名**根 module**（`top`）；扁平产物只有 `top` 一个 ⇒ 默认即可。
     local f8_mod=()
-    if [ "$kind" = "soc" ]; then
+    if [ "$kind" = "soc" ] || [ "$kind" = "hier" ]; then
         f8_mod=(--module top)
     fi
     f8_out="$(python3 "$REPO_ROOT/scripts/lib/flat_rtl_emit_check.py" \
@@ -317,6 +348,30 @@ PY
         return 1
     fi
     ok "⑧ 四件套：manifest port_table[] == 产物端口表（逐字逐序）"
+
+    # ── ⑧' **层次化形态判据**（`kind=hier` 生效 · 2026-11-17）─────────────
+    #   ⚠️ **为什么必须有这条**：⑧ 只验**端口表** ⇒ ⇒ 若层次化**退化成扁平**
+    #   （发射器的 `--hierarchical` 失效 / 未来重构掉了层次化分支）⇒ ⇒
+    #   端口表**照样相同** ⇒ ⇒ ⑧ 仍绿 ⇒ ⇒ 护栏对「形态退化」**结构性失明**。
+    #   ⇒ ⇒ MUST 额外断言「产物里 ≥ 2 个 module 且含根 module `top`」⇒ ⇒ 退化即红。
+    #   ⚠️ **MUST 跑在编译之前**：压扁后的产物**不可编译**（根 module 的实例语句
+    #   仍引用被裁掉的子 module ⇒ `MODMISSING`）⇒ ⇒ 否则红在「编译失败」而不是
+    #   「形态不对」⇒ ⇒ 判别力自证会「红了但不是期望的判据」。
+    if [ "$kind" = "hier" ]; then
+        local mods n_mods
+        mods="$(python3 "$REPO_ROOT/scripts/lib/flat_rtl_emit_check.py" \
+            --modules "$dut_v" 2>&1)"
+        n_mods="$(printf '%s\n' "$mods" | grep -c '[A-Za-z_]' || true)"
+        if [ "$n_mods" -lt 2 ]; then
+            fail "⑧' 层次化产物只有 $n_mods 个 module（应 ≥ 2）⇒ ⇒ 层次化形态已退化成扁平"
+            return 1
+        fi
+        if ! printf '%s\n' "$mods" | grep -qx "top"; then
+            fail "⑧' 层次化产物里没有根 module 'top'（实际：$(printf '%s' "$mods" | tr '\n' ' '))"
+            return 1
+        fi
+        ok "⑧' 层次化形态成立（module 数 $n_mods · 根 = top）"
+    fi
 
     # ── ④' **产物级**结构判据（`memory-timing-contract` T1 · D-TCM 读口）─────
     #   ⚠️ 为什么必须是**产物级**：C++ 侧的 `sread(...)` 只证明「源码这么写」
@@ -485,11 +540,19 @@ run_self_test() {
     cp "$src_tb" "$golden_tb"
 
     make_list() { # $1 = 目标路径；$2 = TB 路径；$3 = REGISTERED_TARGETS；$4 = status
+        # ⚠️ **两行**（`kind=target` + `kind=hier`）：
+        #   · `target` 行 = 轻量 fixture（counter_simple）⇒ 主判据的载体
+        #   · `hier` 行 = **真实的层次化产品单元**（RV32I）⇒ ⑧' 判据的载体
+        #     ⇒ ⇒ 它的必要性：⑧' 的判别力自证（投毒 8「压扁」）必须有一个
+        #     **真会产出多 module** 的单元 ⇒ 否则投毒落空 ⇒ 判据恒绿。
+        # ⚠️ 锚点：`REGISTERED_TARGETS: $3` · `REGISTERED_SOC: 0` · `REGISTERED_HIER: 1`
         cat >"$1" <<EOF
 # self-test 用的临时清单
 # REGISTERED_TARGETS: $3
 # REGISTERED_SOC: 0
+# REGISTERED_HIER: 1
 selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	$2	$4	1	256	0	self-test
+selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	examples/riscv-mini/tb_rv32i_soc.sv	verified	24	6	22	self-test-hier
 EOF
     }
 
@@ -573,6 +636,12 @@ PY
     run_case "投毒7（产物里多插一个下沉端口）" "⑧ manifest 的 port_table" \
         "RTL_SIM_TAMPER=product_extra_port"
 
+    # ── 投毒 8：⑧' 的判别力自证（**层次化形态退化** · 2026-11-17）──────
+    #   ⚠️ 为什么必须单独投：⑧（端口表）对「层次化 → 扁平」**结构性失明**
+    #   ⇒ ⇒ 把层次化产物裁成单 module ⇒ ⇒ 端口表**照样相同** ⇒ ⇒ 只有 ⑧' 能抓。
+    run_case "投毒8（层次化产物被压成单 module）" "⑧' 层次化产物只有" \
+        "RTL_SIM_TAMPER=flatten_hier"
+
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
     rm -f "$REPO_ROOT/$st_tb_rel.st_orig"
@@ -589,7 +658,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 7 条投毒各自转红 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 8 条投毒各自转红 · 还原复绿）"
     exit 0
 }
 

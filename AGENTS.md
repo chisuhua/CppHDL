@@ -336,6 +336,16 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   `ch_in` · 父驱动子 `ch_out` · 改写子运算节点操作数 · 接口白名单）一律 `ok=false` +
   **点名 module/端口**（对外唯一载体 = `HierarchyEmitResult`；发射器内**不抛**，分析层的
   前置校验抛由入口统一转换）。
+  ⇒ ⇒ **2026-11-17 新增产品级交付面**（诉求 ⑤「层次化输出示例」）：RV32I 的层次化产物现在有
+  **CLI 发射器**（`emit_rtl_rv32i_soc_hier` · 库层 `--hierarchical` ⇒ `toVerilogHierarchical`）
+  + **独立 Verilog TB**（**复用** `examples/riscv-mini/tb_rv32i_soc.sv` ⇒ 两种形态的顶层
+  端口表**同源**（都走 `make_flat_module_view`）⇒ 同一套判据 `checks=24 fails=0`）
+  + 覆盖登记（tsv 的 `kind=hier` 桶 · `REGISTERED_HIER`）⇒ ⇒ 形态判据 =
+  `scripts/verify_examples_rtl_sim.sh` 的 **⑧'**（产物 MUST ≥ 2 个 module 且含根 `top`）
+  ⇒ ⇒ ⚠️ ⑧（端口表）对「层次化静默退化成扁平」**结构性失明**（退化后端口表照样相同）
+  ⇒ ⇒ ⑧' 的判别力自证 = `--self-test` 投毒 8（`RTL_SIM_TAMPER=flatten_hier`）。
+  ⚠️ **R1–R8 仍只覆盖 `hier_rtl_products` 语料**（3 个小 DUT）⇒ ⇒ **RV32I 语料的全套
+  R2–R8 接入仍待办**（残差 `id=25`，状态 `已知` ⇒ 需 architect 收口）。
 - **运行期 A/B（interpreter vs JIT）双跑校验已移除**（2026-11-13 · ADR-035 v2.2 **R9** · phase-6 **P8**）：
   `Simulator::set_ab_verification()` / `is_ab_verification()` / `ab_verification_` 是**从未做过比对**的
   no-op（开启后每 `tick()` 只打一条 `CHWARN`，**不改变任何行为**）⇒ ⇒ 已按 Zero-Debt **整体删除**
