@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-17
+# 本 change **无 spec 变更**：它修的是**构建工具链**（vendored Verilator 的
+# `CFG_CXXFLAGS_PCH_I` 注入）+ 一条**工具链护栏**（`scripts/verify_verilator_pch.sh`）
+# + 删掉一处护栏绕行 + 文档。
+# 端口面 / manifest schema / 层级语义 / 任何 capability 契约 **零改动**
+# ⇒ ⇒ 没有 Requirement 可 ADDED/MODIFIED/REMOVED/RENAMED。
+# ⇒ 归档时用 `openspec archive verilator-pch-toolchain-fix-2026-11 --skip-specs`
+# （`AGENTS.md` 的规则：只有**显式声明 no spec changes** 的 change 才可用该标志
+#   —— 本文件即该显式声明）。
+skip_specs: true
