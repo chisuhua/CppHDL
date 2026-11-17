@@ -1,0 +1,398 @@
+# examples/axi4/tb_axi4_lite_example.verif
+#
+# **AXI4-Lite 从端示例的验证源**（`rtl-verification-single-source` · ADR-074 D1）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+# ⚠️ 时序锚点：SET 在「沿后采样窗」内生效；EXPECT 读「最近一次结算之后」的值
+#    ⇒ ⇒ `SET → EXPECT` MUST 先 `SETTLE`（扫描器静态强制）。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#axi4-lite-example
+@tb-module tb_axi4_lite_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：低有效复位（spec-derived）
+#   · 设计跑过之后**重新**拉低 rst_n ⇒ `bvalid`/`rvalid` MUST 为 0
+#   · 且寄存器 MUST 清零（先写再复位，读回 MUST 为 0）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario bringup_and_low_active_reset
+@anchor axi4-lite-example
+
+# 框架复位由 TB 前段（`write_tb_reset_pulse`）驱动；此处只管 AXI 级 rst_n
+SET rst_n 0
+TICK 2
+SET rst_n 1
+TICK 2
+
+# 写一个非零值（为后面判「复位清零」建立前提）
+SET awaddr 0x00000000
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0x11223344
+SET wstrb 0xF
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 0
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+
+# 运行后拉低 rst_n ⇒ 响应位 MUST 为 0
+SET rst_n 0
+TICK 2
+EXPECT bvalid 0
+EXPECT rvalid 0
+
+# 释放复位后读回 ⇒ MUST 是 0（寄存器被清零）
+SET rst_n 1
+TICK 2
+SET araddr 0x00000000
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rdata 0x00000000
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：AW / W 相位分离 + 地址锁存（spec-derived）
+#   · 只有 AW、无 W ⇒ MUST NOT 产生 `bvalid`
+#   · AW 握手后 master 改写 `awaddr` ⇒ 写入 MUST 落在**锁存**的地址
+# ══════════════════════════════════════════════════════════════════════════
+@scenario aw_w_phase_split_and_addr_latch
+@anchor axi4-lite-example
+
+SET awaddr 0x00000000
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+# AXI 允许握手后改写地址 ⇒ 从端 MUST 用**锁存**地址
+SET awaddr 0x00000008
+TICK 2
+EXPECT bvalid 0
+
+SET wdata 0xCAFEBABE
+SET wstrb 0xF
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 0
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+
+# 读回 0x00 ⇒ 必须是刚写的值（锁存生效）
+SET araddr 0x00000000
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rdata 0xCAFEBABE
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+
+# 读回 0x08 ⇒ MUST 未被这次写影响
+SET araddr 0x00000008
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rdata 0x00000000
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：写读回值一致（**metamorphic**：写入什么就读回什么）
+#   · 4 个寄存器（0x00 / 0x04 / 0x08 / 0x0C）逐个写读
+# ══════════════════════════════════════════════════════════════════════════
+@scenario write_read_roundtrip
+@anchor axi4-lite-example
+
+REPEAT 4
+SET awaddr _i * 4
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0xA5000000 + _i
+SET wstrb 0xF
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 0
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+SET araddr _i * 4
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rdata 0xA5000000 + _i
+EXPECT rresp 0
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+END
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：未映射地址 ⇒ DECERR（spec-derived）
+#   · 窗口 = 0x00..0x0C（4 个寄存器，步长 4 字节）⇒ 0x10 起窗口外
+# ══════════════════════════════════════════════════════════════════════════
+@scenario unmapped_addr_decerr
+@anchor axi4-lite-example
+
+SET awaddr 0x00000010
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0xDEADBEEF
+SET wstrb 0xF
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 3
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+
+SET araddr 0x00000010
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rresp 3
+EXPECT rdata 0x00000000
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 5：写响应保持到 BREADY（spec-derived）
+#   · `bvalid` MUST 跨周期保持 · 且 MUST NOT 接受下一笔写事务（`awready` 保持 0）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario bvalid_hold_until_bready
+@anchor axi4-lite-example
+
+SET awaddr 0x00000004
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0x12345678
+SET wstrb 0xF
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bvalid 1
+# 不拉 BREADY ⇒ `bvalid` MUST 保持
+TICK 3
+EXPECT bvalid 1
+# 且 MUST NOT 接受下一笔写事务
+SET awaddr 0x0000000C
+SET awvalid 1
+SETTLE
+EXPECT awready 0
+SET awvalid 0
+# BREADY 握手 ⇒ MUST 清除
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+TICK 2
+EXPECT bvalid 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 6：读响应保持到 RREADY（spec-derived）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario rvalid_hold_until_rready
+@anchor axi4-lite-example
+
+SET araddr 0x00000004
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rvalid 1
+# 不拉 RREADY ⇒ `rvalid` MUST 保持
+TICK 3
+EXPECT rvalid 1
+# 且 MUST NOT 接受下一笔读事务
+SET araddr 0x00000008
+SET arvalid 1
+SETTLE
+EXPECT arready 0
+SET arvalid 0
+# RREADY 握手 ⇒ MUST 清除
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+TICK 2
+EXPECT rvalid 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 7：字节道（wstrb）（spec-derived）
+#   · `wstrb` bit i ⇒ 第 i 个字节道（从 LSB 起）
+#   · 部分字节写 MUST 只改选中的字节 · 空写（wstrb == 0）响应仍 OKAY 且不改
+# ══════════════════════════════════════════════════════════════════════════
+@scenario wstrb_byte_lanes
+@anchor axi4-lite-example
+
+SET awaddr 0x00000000
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0x11223344
+SET wstrb 0xF
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 0
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+
+# 部分字节写（lane 0/1 = 低 2 字节）
+SET awaddr 0x00000000
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0xAABBCCDD
+SET wstrb 0b0011
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 0
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+
+SET araddr 0x00000000
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+# 高 2 字节保持、低 2 字节被改
+EXPECT rdata 0x1122CCDD
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0
+
+# 空写（wstrb == 0）⇒ 响应仍 OKAY 且寄存器不变
+SET awaddr 0x00000000
+SET awprot 0
+SET awvalid 1
+SETTLE
+EXPECT awready 1
+TICK 1
+SET awvalid 0
+SET wdata 0xFFFFFFFF
+SET wstrb 0x0
+SET wvalid 1
+SETTLE
+EXPECT wready 1
+TICK 1
+SET wvalid 0
+WAIT bvalid 64
+EXPECT bresp 0
+SET bready 1
+TICK 1
+EXPECT bvalid 0
+SET bready 0
+
+SET araddr 0x00000000
+SET arprot 0
+SET arvalid 1
+SETTLE
+EXPECT arready 1
+TICK 1
+SET arvalid 0
+WAIT rvalid 64
+EXPECT rdata 0x1122CCDD
+SET rready 1
+TICK 1
+EXPECT rvalid 0
+SET rready 0

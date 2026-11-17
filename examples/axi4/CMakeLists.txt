@@ -38,9 +38,9 @@ set_target_properties(emit_rtl_axi4_lite PROPERTIES
 )
 
 # ── SoC 层 RTL 发射入口（ADR-073 D1 · `soc-rtl-product-and-tb-2026-11` T2）────
-# ⚠️ **独立 target**（不与 `emit_rtl_axi4_lite` 合流）⇒ ⇒ SoC 走**层次化**入口
-#   （`run_emit_cli` **只发扁平** —— `src/rtl_emit/cli.cpp:177-187`）⇒ ⇒ 根必须显式传入。
-# ⚠️ **复用 example 的同一份定义**（`#define main` + `#include`）⇒ ⇒ example 源码零结构改动。
+# ⚠️ **独立 target**（不与 `emit_rtl_axi4_lite` 合流）—— 它注册的是 SoC 根
+#   （`AxiSocTop`），发射时带 `--hierarchical`（**同一份** `run_emit_cli`，
+#   2026-11-17 起扁平/层次化只差一个开关 ⇒ ⇒ 不再有自解析命令行）。
 add_executable(emit_rtl_axi_soc emit_rtl_soc.cpp)
 target_link_libraries(emit_rtl_axi_soc PRIVATE cpphdl)
 target_include_directories(emit_rtl_axi_soc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

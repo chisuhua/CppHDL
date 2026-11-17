@@ -9,18 +9,22 @@
 // ⚠️ **期望值全部手推**（期望源 = `.rddf/checks/soc-rtl-expectations.md#soc-example`）
 //   ⇒ ⇒ **禁**把被测 `axi_soc_example.cpp` 或产物 `top.v` 写成出处（那是转录不是推导）。
 //
-// ⚠️ **顶层端口名是 `top_unnamed_input_N` / `top_unnamed_output_N`**（根 `__io` 用 legacy
-//   未具名声明 ⇒ manifest 的 `cpp_member` 是占位符）⇒ ⇒ 映射表见期望源 §1
-//   （**位宽序列唯一确定** ⇒ 不是猜编号）。
+// ⚠️ **顶层端口已具名**（ADR-075 · 2026-11-17）：产物端口名 = `top_<C++ 成员名>`
+//   ⇒ ⇒ **本 TB 不再需要「按编号反推」的映射表**（此前是纯编号端口名，
+//   只能靠位宽序列唯一确定 ⇒ 引错一位就误红）。
 //
 // ⚠️ **完成判定 MUST 用「按已知延迟采样」** —— `done` 是**粘滞**的
-//   （`axi_soc_example.cpp:149-151` 的 `done_reg` 无清零分支 ⇒ 首笔后恒 1）
+//   （`axi_soc_example.cpp` 的 `done_reg` 无清零分支 ⇒ 首笔后恒 1）
 //   ⇒ ⇒ **禁**等 `done` 上升沿。
 //
 // ⚠️ **14 个端口 MUST 全部连接**（否则严格 flags 下 `%Warning-PINMISSING` 致命 ——
-//   仓内实证 `tb_axi4_lite_example.sv:33-34`）：
-//   `timer_irq` 是**零消费死端口**（ADR-073 事实⑭）⇒ 接 0；
+//   仓内实证）：`timer_irq` 是**零消费死端口**（ADR-073 事实⑭）⇒ 接 0；
 //   `uart_rx` MUST 接**空闲高**（低电平会被当成起始位）。
+//
+// ⚠️ **本 TB 是手写的**（清单 `generated=no`）—— UART 8N1 帧解码需要
+//   **逐拍采样成数组 + 首个低电平定位 + 变长位偏移**，封闭原语集（ADR-074 D2）
+//   无此构造 ⇒ ⇒ 手写；其期望值仍**登记**在 `EXPECT-SRC` 指向的文档里。
+
 
 `timescale 1ns/1ps
 
@@ -55,18 +59,18 @@ module tb_axi_soc_example;
     top dut (
         .default_clock(clk),
         .default_reset(rst),
-        .top_unnamed_input(start),
-        .top_unnamed_input_1(write),
-        .top_unnamed_input_2(addr),
-        .top_unnamed_input_3(wdata),
-        .top_unnamed_input_4(rst_n),
-        .top_unnamed_input_5(gpio_in),
-        .top_unnamed_input_6(uart_rx),
-        .top_unnamed_input_7(timer_irq),
-        .top_unnamed_output(rdata),
-        .top_unnamed_output_1(done),
-        .top_unnamed_output_2(gpio_out),
-        .top_unnamed_output_3(uart_tx)
+        .top_start(start),
+        .top_write(write),
+        .top_addr(addr),
+        .top_wdata(wdata),
+        .top_rst_n(rst_n),
+        .top_gpio_in(gpio_in),
+        .top_uart_rx(uart_rx),
+        .top_timer_irq(timer_irq),
+        .top_rdata(rdata),
+        .top_done(done),
+        .top_gpio_out(gpio_out),
+        .top_uart_tx(uart_tx)
     );
 
     // ⚠️ **时钟生成器**（漏掉 ⇒ 仿真无事件即结束 ⇒ 表现为「end at 0s」）
