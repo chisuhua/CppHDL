@@ -329,6 +329,28 @@ if(BUILD_VERILATOR)
     # Build Verilator into the build tree (hermetic, no system pollution).
     # ExternalProject_Add is EXCLUDE_FROM_ALL by default — developers
     # must explicitly run 'cmake --build build --target verilator'.
+    #
+    # ⚠️ **PCH 选项必须由本仓注入**（`verilator-pch-toolchain-fix-2026-11`）：
+    #   上游 **autoconf** 构建会探测并定义 `CFG_CXXFLAGS_PCH_I` / `CFG_GCH_IF_CLANG`
+    #   （`third_party/verilator/configure.ac:704-712`），而 vendored verilator 走
+    #   **CMake** 构建（`third_party/verilator/CMakeLists.txt:125` 的
+    #   `configure_file(include/verilated.mk.in … @ONLY)`）⇒ ⇒ **没有变量源**
+    #   ⇒ ⇒ 生成的 `verilated.mk` 里 `CFG_CXXFLAGS_PCH_I = `（**空**）
+    #   ⇒ ⇒ `VK_PCH_I_FAST` 只剩裸文件名 ⇒ GCC 按未知扩展名当 **linker input**
+    #   ⇒ ⇒ `g++: error: Vtb_xxx__pch.h.fast: linker input file not found`
+    #   ⇒ ⇒ **任何「自动 output-split」的模型（> 20000 statements）C++ 构建必失败**
+    #   （实测：rv32i_soc 3066 行 Verilog ⇒ 自动 split ⇒ 编译失败）。
+    #   ⇒ ⇒ 这里**镜像上游 autoconf 的判定**：GCC 用 `-include`（GCC 自动找
+    #   `<hdr>.gch`）；Clang 用 `-include-pch` + `.gch` 后缀。
+    #   ⚠️ **零 submodule 改动** ⇒ ⇒ 升级 submodule 时**须复核**本注入是否仍需要
+    #   （正解 = 给上游提 PR ⇒ 届时可删掉这两行）。
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(_cppp_vlt_pch_i "-include-pch")
+        set(_cppp_vlt_gch ".gch")
+    else()
+        set(_cppp_vlt_pch_i "-include")
+        set(_cppp_vlt_gch "")
+    endif()
     include(ExternalProject)
     ExternalProject_Add(verilator
         SOURCE_DIR    "${_verilator_src}"
@@ -339,6 +361,8 @@ if(BUILD_VERILATOR)
             -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/verilator-install
             -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
             -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+            -DCFG_CXXFLAGS_PCH_I=${_cppp_vlt_pch_i}
+            -DCFG_GCH_IF_CLANG=${_cppp_vlt_gch}
         BUILD_ALWAYS   TRUE
         USES_TERMINAL TRUE
         COMMENT       "Building Verilator (10-30 min cold; seconds warm)"

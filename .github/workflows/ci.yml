@@ -1804,6 +1804,26 @@ jobs:
       shell: bash
       run: bash scripts/verify_examples_rtl_sim.sh
 
+    # ---- vendored Verilator 的 **PCH 工具链**判据 ------------------------
+    # ⚠️ 为什么挂在这个 job：它需要**真实的 verilator**（要真的编译一个
+    #    「自动 output-split」的模型 ⇒ 走 PCH 路径）⇒ ⇒ 而 verilator 只在
+    #    `pr-verilator-fast` / `nightly-verilator` 里构建 ⇒ ⇒ 增量成本 ≈ 0。
+    # ⚠️ 为什么 `if: matrix.shard == 1`：与本 job 的分片无关 ⇒ 只跑一次。
+    # ⚠️ **为什么必需**：`third_party/verilator` 走 **CMake** 构建 ⇒ 上游 autoconf 的
+    #    PCH 选项探测（`configure.ac:704-712`）没有变量源 ⇒ ⇒ `CFG_CXXFLAGS_PCH_I`
+    #    为空 ⇒ ⇒ **任何自动 split 的模型编译必失败**（`linker input file not found`）
+    #    ⇒ ⇒ 由 `verilator-pch-toolchain-fix-2026-11` 在**仓内 CMake 层**注入修好
+    #    ⇒ ⇒ 本护栏把它变成**机械可判**（构建期指纹 + 强制 split 编译 + 负向对照）。
+    - name: Verify verilator PCH toolchain (split-capable models)
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_verilator_pch.sh
+
+    - name: Verify verilator PCH toolchain (self-test)
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_verilator_pch.sh --self-test
+
     # ---- P2 lever ② 的护栏：分片 MUST 覆盖全集 ------------------------
     # ⚠️ 为什么必需：`-I` 是在 **`-L` 过滤之后**的列表上做区间/步长选择
     # （实测：`-I 1,12,2`→6 · `-I 1,24,2`→12 · `-I 1,46,2`→23 ⇒ 与过滤后

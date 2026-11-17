@@ -374,18 +374,16 @@ PY
     #   ⚠️ `--x-assign unique` 保留（**但它不能制造 X** —— 实测 Verilator 把 X
     #     优化成已知值 ⇒ ⇒ TB 里的 `$isunknown` 在本 runner 下**恒 false**
     #     ⇒ ⇒ 它是**装饰性**断言，真正的 X 判据见 E1 ⑤ 的内容判据）。
-    #   ⚠️ **`--output-split 0` MUST 保留**（工具链缺陷的绕行，不是优化项）：
-    #     `third_party/verilator` 用 **CMake** 构建（不是上游 autoconf），其
-    #     `CMakeLists.txt` **没有定义** `CFG_CXXFLAGS_PCH_I` / `CFG_GCH_IF_CLANG`
-    #     （见 `configure.ac:704-712` 的上游定义）⇒ 生成的 `verilated.mk` 里
-    #     `CFG_CXXFLAGS_PCH_I = `（空）⇒ ⇒ GCC 分支本应是 `-include`，实际空
-    #     ⇒ ⇒ `VK_PCH_I_FAST` 只剩裸文件名 `Vtb_*__pch.h.fast`，GCC 按**未知扩展名**
-    #     把它当 linker input ⇒ `linker input file not found` ⇒ **C++ 构建失败**。
-    #     触发条件 = `--output-split`（VM_PARALLEL_BUILDS=1 ⇒ 用 PCH）；大设计会
-    #     **自动** split ⇒ ⇒ 实测 `rv32i_soc` 中招；用 `--output-split 200` 强制
-    #     给 **counter** 开 split 可**同型复现** ⇒ ⇒ 与本仓 HDL 无关。
-    #     ⇒ ⇒ 判据「关掉 split」⇒ PCH 不参与 ⇒ 与 split 前的产物**语义等价**。
-    flags="--binary --timing -CFLAGS -fcoroutines --x-assign unique --output-split 0"
+    #   ⚠️ **刻意**保持**默认** output-split 行为（**不**加 `--output-split 0`）：
+    #     大模型会**自动** split（阈值 20000 statements）⇒ ⇒ 走 PCH 路径 ⇒ ⇒
+    #     本护栏因此**真实覆盖**「自动 split ⇒ PCH」这条编译路径（工具链缺陷面）。
+    #     ⚠️ 这条路径曾因 vendored verilator 的 **CMake** 构建缺 `CFG_CXXFLAGS_PCH_I`
+    #     （上游 autoconf 在 `configure.ac:704-712` 定义）而**必失败**
+    #     （`g++: error: Vtb_*__pch.h.fast: linker input file not found`）
+    #     ⇒ ⇒ 已由 `verilator-pch-toolchain-fix-2026-11` 在**仓内 CMake 层**注入修好
+    #     ⇒ ⇒ 机械判据 = `scripts/verify_verilator_pch.sh`（构建期指纹 + 强制 split 编译
+    #     + 负向对照）⇒ ⇒ **别再把绕行加回来**（那会让缺陷重新变成潜伏 CI 红）。
+    flags="--binary --timing -CFLAGS -fcoroutines --x-assign unique"
     tb_hash="$(sha1sum "$tb_path" | cut -d' ' -f1)"
     dut_hash="$(sha1sum "$dut_v" | cut -d' ' -f1)"
     # ⚠️ key MUST 含：产物内容 + TB 内容 + flags + verilator 版本 + **TB 名**

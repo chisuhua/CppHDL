@@ -1,3 +1,25 @@
+## 2026-11-17 — **vendored Verilator 的 PCH 工具链修复**（自动 split 的模型可编译了）
+
+**问题**：vendored Verilator 走 **CMake** 构建 ⇒ 上游 autoconf 的 PCH 选项探测
+（`third_party/verilator/configure.ac:704-712`）**没有变量源** ⇒ ⇒ 生成的 `verilated.mk`
+里 `CFG_CXXFLAGS_PCH_I` 为**空** ⇒ ⇒ GCC 拿不到 PCH ⇒ ⇒ **任何「自动 output-split」的模型
+（> 20000 statements）C++ 构建必失败**（实测：`g++: error: Vtb_xxx__pch.h.fast:
+linker input file not found`）⇒ ⇒ 影响 `verify_examples_rtl_sim.sh`（rv32i_soc）与
+`VerilatorBackend` 的 `verilator --cc`（**潜伏 CI 红**：模型一大就炸）。
+
+**改了什么**（`verilator-pch-toolchain-fix-2026-11`）
+- `CMakeLists.txt`：给 verilator 的 `ExternalProject` **注入** `CFG_CXXFLAGS_PCH_I` /
+  `CFG_GCH_IF_CLANG`（镜像上游 autoconf 判定：GCC ⇒ `-include`；Clang ⇒ `-include-pch` + `.gch`）
+  ⇒ ⇒ **零 submodule 改动**（升级不丢补丁）
+- `scripts/verify_examples_rtl_sim.sh`：**删掉** `--output-split 0` 绕行 ⇒ ⇒ 护栏**真实覆盖**
+  「自动 split ⇒ PCH」路径（此前绕行把缺陷藏成了潜伏 CI 红）
+- 新增护栏 `scripts/verify_verilator_pch.sh`（构建期指纹 + 强制 split 编译 + **负向对照**：
+  安装根**副本**清空 flag ⇒ 必红 ⇒ ⇒ 真实安装产物零风险）+ CI 一步 + 可达性登记表一行
+- 文档：`docs/developer_guide/verilator-integration.md` 新增「PCH 与自动 output-split」小节
+
+**实测**：rv32i_soc（3066 行 Verilog · **不加任何 flag** ⇒ 自动 split ⇒ 真的走 PCH）编译 rc=0；
+强制 split 的最小设计 rc=0 且产出 `.gch`；flag 清空的副本 ⇒ 必红（`linker input file not found`）。
+
 ## 2026-11-17 — **产品面声明 + 四件套判据（护栏新增判据⑧）**（ADR-072 D2 / D3 / D4）
 
 **背景**：「产品化完成」不能只是「有个发射器」—— 一个**产品单元** = manifest + Verilog 产物 +

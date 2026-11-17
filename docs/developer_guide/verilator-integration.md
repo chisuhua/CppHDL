@@ -121,6 +121,62 @@ Verilator is `EXCLUDE_FROM_ALL` for `ExternalProject_Add` and must
 be targeted explicitly. This avoids re-walking Verilator's
 dependency graph on every incremental build.
 
+## PCH 与「自动 output-split」（**必读** · 工具链缺陷面）
+
+> 关联 change：`verilator-pch-toolchain-fix-2026-11` · 机械判据 =
+> `scripts/verify_verilator_pch.sh`（+ `--self-test` 负向对照）。
+
+### 缺陷（2026-11-17 实测 · 已修）
+
+vendored Verilator 走 **CMake** 构建 ⇒ 上游 **autoconf** 的 PCH 选项探测
+（`third_party/verilator/configure.ac:704-712`）**没有变量源** ⇒ ⇒ 生成的
+`verilated.mk` 里 `CFG_CXXFLAGS_PCH_I` 为**空** ⇒ ⇒ `VK_PCH_I_FAST` 只剩裸文件名 ⇒ ⇒
+GCC 按**未知扩展名**把它当 **linker input** ⇒ ⇒
+`g++: error: Vtb_xxx__pch.h.fast: linker input file not found`
+⇒ ⇒ **任何「自动 output-split」的模型（> 20000 statements）C++ 构建必失败**。
+
+- **触发条件**：Verilator 对大模型**自动** split（默认阈值 **20000 statements**，
+  `V3Options.h:336`）⇒ ⇒ `VM_PARALLEL_BUILDS = 1` ⇒ ⇒ 用 PCH ⇒ ⇒ **中等以上模型必中**。
+- **与本仓 HDL 无关**：给 **counter**（40 行 Verilog）加 `--output-split 200` 可同型复现。
+- **影响面**：`scripts/verify_examples_rtl_sim.sh`（rv32i_soc）**与**
+  `src/core/verilator_backend.cpp` 的 `verilator --cc`（**不带** split flag ⇒ 同样暴露）。
+
+### 修复形态（**仓内 CMake 层** · 零 submodule 改动）
+
+`CMakeLists.txt` 的 `ExternalProject_Add(verilator … CMAKE_ARGS …)` **注入两个 configure
+变量**（镜像上游 autoconf 的判定，按编译器族属取值）：
+
+| 编译器族 | `CFG_CXXFLAGS_PCH_I` | `CFG_GCH_IF_CLANG` |
+|---|---|---|
+| GCC / GNU | `-include`（GCC 自动找 `<hdr>.gch`） | （空） |
+| Clang | `-include-pch` | `.gch` |
+
+⇒ ⇒ **零 submodule 改动** ⇒ ⇒ `git -C third_party/verilator status --short` 恒为空 ⇒ ⇒
+升级 submodule **不会**丢补丁。
+⚠️ **上游修法**（正解）= 给 verilator 上游提 PR（CMake 构建补这两个探测）⇒ ⇒
+**升级 submodule 时 MUST 复核**本注入是否仍需要（可删则删）。
+
+### 判据（机械可判）
+
+```bash
+bash scripts/verify_verilator_pch.sh            # ① 构建期指纹 + ② 强制 split 编译
+bash scripts/verify_verilator_pch.sh --self-test # + ③ 负向对照（副本清空 flag ⇒ 必红）
+```
+
+- **① 构建期指纹**：`CFG_CXXFLAGS_PCH_I` 非空 **且** 与 `verilator -getenv CXX` 的族属匹配
+  （⇒ ⇒ 「flag 选错族」会**立刻**红，而不是等某个大模型编译时才炸）；
+- **② 行为**：现场生成一个**最小设计**（> 200 statements ⇒ 强制 split 后**真的** split）
+  ⇒ 编译 rc=0 **且产出 `.gch`** ⇒ ⇒ 证明**真的**走了 PCH 路径（否则「模型太小没 split」也会绿）；
+- **③ 负向对照**：把**安装根副本**的 flag 清空 ⇒ 同一编译**必红** ⇒ ⇒ 判据区分对错；
+  ⚠️ 用**副本** ⇒ **真实安装产物零改动**。
+
+### ⚠️ 别把绕行加回来
+
+`scripts/verify_examples_rtl_sim.sh` **刻意不加** `--output-split 0` ⇒ ⇒ 护栏**真实覆盖**
+「自动 split ⇒ PCH」这条编译路径 ⇒ ⇒ 工具链缺陷一回来就红。
+（历史：`rtl-productization-surface-2026-11` 曾用 `--output-split 0` 绕行过该缺陷 ⇒ ⇒
+代价 = 大模型退化成单个巨型 `.cpp` + 缺陷重新变成**潜伏 CI 红** ⇒ ⇒ 已由本 change 移除。）
+
 ## Where things live
 
 | Path | Purpose |
