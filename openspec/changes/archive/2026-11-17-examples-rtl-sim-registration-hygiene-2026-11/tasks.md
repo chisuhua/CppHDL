@@ -119,5 +119,5 @@ ctest --test-dir build -LE perf -j"$(nproc)"
 
 ## archive
 
-- [ ] `openspec archive examples-rtl-sim-registration-hygiene-2026-11 --yes`（**无 spec 合并**
+- [x] `openspec archive examples-rtl-sim-registration-hygiene-2026-11 --skip-specs --yes`（**无 spec 合并**
       ⇒ ⇒ 只移动 change 目录）
