@@ -52,3 +52,11 @@ testbench_template	源文件 `examples/spinalhdl-ported/testbench_template.cpp` 
 #    `riscv_mini_catch_test_noctest` 声明、只构建不注册）⇒ 它属「存活但未跑」
 #    ⇒ 登记在本清单（豁免），**不是**删除留痕。
 test_riscv_tests_pipeline	**已构建但不进 CTest**（2026-10-23）：其 46 个用例**全部**依赖仓外 riscv-tests 的预编译二进制 ⇒ 在 CI（无该 checkout）里全部被 SKIP ⇒ Catch2 v3 退出码为 **4**（= 没有真正跑起来的用例）⇒ **CTest 会把它判为 FAILED**。⚠️ `ctest -N` 仍会列出它 ⇒「CTest 里认得它」**不等于**「它会绿」——这正是护栏 C3（实际运行 + 要求 exit 0）要抓的形态	归位条件：CI 具备 riscv-tests 的预编译二进制（`RISCV_TESTS_PATH` 可指向）后，改回 `riscv_mini_catch_test` 注册进 CTest 并从本清单移除
+
+# --- RTL 发射器（有专属护栏，不属「example 程序」）---
+# ⚠️ 下面这条是**活着的** emitter target（`emit_rtl_fw_init.cpp`），它的行为覆盖
+#    在 `scripts/verify_rv32i_fw_init_rtl.sh`（5 项判据 + `--self-test`，已进 CI）
+#    ⇒ ⇒ **登记 ≠ 失去覆盖**。它不进 `.rddf/checks/examples-rtl-sim-targets.tsv`
+#    的 `emitter` 列，是因为该表的口径 = 「有 TB 的 RTL 仿真产品」，而它是无 TB 的
+#    发射形态检查器 ⇒ 强行入表会破坏 coverage 守卫的守恒（27 == 10 ∪ 17）。
+emit_rtl_rv32i_soc_fw_init	**发射器，不是 example 程序**：由 `scripts/verify_rv32i_fw_init_rtl.sh` 专属消费（5 项判据 + `--self-test`，CI 常驻）；其产物不属 RTL 仿真产品清单（`examples-rtl-sim-targets.tsv` 的 `emitter` 列）⇒ 故不进 `CH_TRACKED_EXAMPLE_TARGETS`	归位条件：若它成为 RTL 仿真产品清单的一行（有独立 TB 且登记进 tsv 的 `emitter` 列）⇒ 从本清单移除该行
