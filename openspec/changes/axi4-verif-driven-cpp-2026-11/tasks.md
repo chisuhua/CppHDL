@@ -9,66 +9,66 @@
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| A1 | 新增 `target_compile_definitions(axi4_lite_example PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")`（与 `tests/CMakeLists.txt:1138` 同形） | `examples/axi4/CMakeLists.txt` | AC13 | ☐ |
-| A2 | `main` 签名改 `int main(int argc, char** argv)`（argv 暂不用 ⇒ 后继 change 不再改签名） | `examples/axi4/axi4_lite_example.cpp` | — | ☐ |
+| A1 | 新增 `target_compile_definitions(axi4_lite_example PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")`（与 `tests/CMakeLists.txt:1138` 同形） | `examples/axi4/CMakeLists.txt` | AC13 | ✅ 证据：`examples/axi4/CMakeLists.txt:10` 注入 CPPHDL_SOURCE_DIR |
+| A2 | `main` 签名改 `int main(int argc, char** argv)`（argv 暂不用 ⇒ 后继 change 不再改签名） | `examples/axi4/axi4_lite_example.cpp` | — | ✅ 证据：`tb_axi4_lite_example.cpp:51` int main(int argc, char **argv) |
 
 ## 批次 B — 驱动改造（AC2 · AC4 · AC5 · AC6 · AC12）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| B1 | `main()` 改为 `parse_verif()` → `build_rtl_manifest()` → `run_verif()`；路径字面量**只有** `/examples/axi4/tb_axi4_lite_example.verif` 与 `CPPHDL_SOURCE_DIR` 拼接（**恰好 1 次**） | 同上 | AC2 | ☐ |
-| B2 | **fail-closed**：打不开 / 解析失败 / `manifest.diagnostics` 非空 ⇒ `return 1` + stderr，且**不打印** `RESULT:`（也不得以其它形态写出 `checks=/fails=`） | 同上 | AC11 | ☐ |
-| B3 | **自洽退出码**：`res.ok && res.checks == verif_check_count(prog) && res.fails == 0` 才 `return 0` | 同上 | AC1 · AC12 | ☐ |
-| B4 | 打印 `RESULT: checks=<N> fails=<M>`（**十进制** · 单行 · 无 ANSI；**禁** `std::hex` 残留） | 同上 | AC12 | ☐ |
-| B5 | 删 `Axi4TimingChecker` / `VcdRecorder` / 手写激励 / 6 行 `set_input_value` / `toVerilog(...)` ⇒ **零残留** | 同上 | AC4 · AC5 · AC6 | ☐ |
-| B6 | **失败明细进 stderr**：把 `res.failure_lines` 逐条打印（`CHECK <id> FAIL …`）⇒ spec 的 scenario 要求「结论行 MUST 报出失败的 `check_id`」 | 同上 | AC1 | ☐ |
+| B1 | `main()` 改为 `parse_verif()` → `build_rtl_manifest()` → `run_verif()`；路径字面量**只有** `/examples/axi4/tb_axi4_lite_example.verif` 与 `CPPHDL_SOURCE_DIR` 拼接（**恰好 1 次**） | 同上 | AC2 | ✅ 证据：同文件 :100 parse_verif → :108 build_rtl_manifest → :119 run_verif |
+| B2 | **fail-closed**：打不开 / 解析失败 / `manifest.diagnostics` 非空 ⇒ `return 1` + stderr，且**不打印** `RESULT:`（也不得以其它形态写出 `checks=/fails=`） | 同上 | AC11 | ✅ 证据：AC11 投毒：路径不存在 ⇒ exit 1 · stdout 无 RESULT/checks=/fails= |
+| B3 | **自洽退出码**：`res.ok && res.checks == verif_check_count(prog) && res.fails == 0` 才 `return 0` | 同上 | AC1 · AC12 | ✅ 证据：:133 verif_check_count 参与判据；AC12 实测失败态 checks=113 fails=1 ⇒ exit 1 |
+| B4 | 打印 `RESULT: checks=<N> fails=<M>`（**十进制** · 单行 · 无 ANSI；**禁** `std::hex` 残留） | 同上 | AC12 | ✅ 证据：AC12：`RESULT: checks=113 fails=0`（十进制 · 无 ANSI · 单行） |
+| B5 | 删 `Axi4TimingChecker` / `VcdRecorder` / 手写激励 / 6 行 `set_input_value` / `toVerilog(...)` ⇒ **零残留** | 同上 | AC4 · AC5 · AC6 | ✅ 证据：AC4/AC5：该文件 grep -c 分别 = 0 / 0 |
+| B6 | **失败明细进 stderr**：把 `res.failure_lines` 逐条打印（`CHECK <id> FAIL …`）⇒ spec 的 scenario 要求「结论行 MUST 报出失败的 `check_id`」 | 同上 | AC1 | ✅ 证据：AC1 投毒：stderr 含 `bringup_and_low_active_reset#0` |
 
 ## 批次 C — 判别力与 CWD（AC1 · AC11 · AC13）
 
 | # | 任务 | 判据 | 状态 |
 |---|---|---|---|
-| C0 | **失败路径可执行判据**：把 `.verif` **复制到 `mktemp -d`** 的临时副本并把一条 `EXPECT` 改成必失败值 ⇒ 以该副本为路径**重建** ⇒ exit ≠ 0 且 stderr 含 `check_id`、stdout 无 `RESULT:` ⇒ **丢弃副本**（不提交、不改仓内 `.verif` ⇒ 与 AC7 不冲突） | AC1 | ☐ |
-| C1 | **fail-closed 投毒**：把路径改成不存在的文件 ⇒ 改源 ⇒ **重建** ⇒ 验红 ⇒ 还原 ⇒ **全量重建** ⇒ 复绿 | AC11 | ☐ |
-| C2 | 四 CWD 实测：仓根 / `build/` / `build/tests/` / `mktemp -d` 新建空目录 ⇒ 都 exit 0 且 `RESULT:` 行相同 | AC13 | ☐ |
-| C3 | 空目录运行后该目录仍为空（零落盘） | AC6 | ☐ |
+| C0 | **失败路径可执行判据**：把 `.verif` **复制到 `mktemp -d`** 的临时副本并把一条 `EXPECT` 改成必失败值 ⇒ 以该副本为路径**重建** ⇒ exit ≠ 0 且 stderr 含 `check_id`、stdout 无 `RESULT:` ⇒ **丢弃副本**（不提交、不改仓内 `.verif` ⇒ 与 AC7 不冲突） | AC1 | ✅ 证据：验收轮实跑（临时树改 EXPECT ⇒ exit 1 + check_id；仓内 .verif 未动） |
+| C1 | **fail-closed 投毒**：把路径改成不存在的文件 ⇒ 改源 ⇒ **重建** ⇒ 验红 ⇒ 还原 ⇒ **全量重建** ⇒ 复绿 | AC11 | ✅ 证据：验收轮实跑（删临时树 .verif ⇒ exit 1 + FATAL 行） |
+| C2 | 四 CWD 实测：仓根 / `build/` / `build/tests/` / `mktemp -d` 新建空目录 ⇒ 都 exit 0 且 `RESULT:` 行相同 | AC13 | ✅ 证据：验收轮实跑：仓根/build//build/tests//空目录 四者 RESULT 行逐字相同 |
+| C3 | 空目录运行后该目录仍为空（零落盘） | AC6 | ✅ 证据：验收轮实跑：空目录运行后条目数 = 0 |
 
 ## 批次 D — 条数等式与时长（AC3 · AC14）
 
 | # | 任务 | 判据 | 状态 |
 |---|---|---|---|
-| D1 | 既有护栏 **⑥**（`.md` `VERIF-CHECKS` ↔ 运行期 `checks` ↔ `min_checks`）仍绿 ⇒ ⇒ **⑥''** 是键集合判据，**不**承担数值 | AC3 | ☐ |
-| D2 | 实测运行时长 < 30s | AC14 | ☐ |
+| D1 | 既有护栏 **⑥**（`.md` `VERIF-CHECKS` ↔ 运行期 `checks` ↔ `min_checks`）仍绿 ⇒ ⇒ **⑥''** 是键集合判据，**不**承担数值 | AC3 | ✅ 证据：`verify_examples_rtl_sim.sh` ⑥ 三方等式绿 |
+| D2 | 实测运行时长 < 30s | AC14 | ✅ 证据：实测 190 ms（≪ 30 s）；`add_spinalhdl_ported_test` 固定 TIMEOUT 30 |
 
 ## 批次 E — 改名与引用面（AC7 · AC8）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| E1 | `git mv` `axi4_lite_example.cpp` → `tb_axi4_lite_example.cpp` | `examples/axi4/` | AC8 | ☐ |
-| E2 | `add_executable` / `target_link_libraries` / `target_include_directories` / `set_target_properties` / **`install(TARGETS …)`** 逐条改名 | `examples/axi4/CMakeLists.txt` | AC8 | ☐ |
-| E3 | **`add_spinalhdl_ported_test` 的第二参数**改名（CTest 名 `spinalhdl_axi4_lite` **不变**） | `tests/CMakeLists.txt:1455` | AC8 | ☐ |
-| E4 | `CH_TRACKED_EXAMPLE_TARGETS` 改名 | `examples/CMakeLists.txt` | AC8 | ☐ |
-| E5 | tsv 第 53 行 `target` / `source` 两列同步（`emitter` 列**不动** ⇒ 属后继 change） | tsv | AC8 | ☐ |
-| E6 | **引用面全同步**：`include/axi4/AGENTS.md` · `examples/axi4/AGENTS.md` · **根 `AGENTS.md:83`** · `run_all_ported_tests.sh:100-105`（点名 `.vcd`）· `examples/axi4/emit_rtl.cpp:6-7` · `tests/test_axi_lite_verilator_e2e.cpp:8,21,73-75,216` · `docs/CHANGELOG.md` | 同上 | AC16 | ☐ |
-| E7 | 生成式 TB **逐字节不变**（⑥' 新鲜度绿） | 护栏 | AC7 | ☐ |
+| E1 | `git mv` `axi4_lite_example.cpp` → `tb_axi4_lite_example.cpp` | `examples/axi4/` | AC8 | ✅ 证据：`examples/axi4/tb_axi4_lite_example.cpp` 存在（旧名零命中，见 F4） |
+| E2 | `add_executable` / `target_link_libraries` / `target_include_directories` / `set_target_properties` / **`install(TARGETS …)`** 逐条改名 | `examples/axi4/CMakeLists.txt` | AC8 | ✅ 证据：`examples/axi4/CMakeLists.txt:27` install(TARGETS tb_axi4_lite_example …) |
+| E3 | **`add_spinalhdl_ported_test` 的第二参数**改名（CTest 名 `spinalhdl_axi4_lite` **不变**） | `tests/CMakeLists.txt:1455` | AC8 | ✅ 证据：`tests/CMakeLists.txt:1462` add_spinalhdl_ported_test(axi4_lite tb_axi4_lite_example) |
+| E4 | `CH_TRACKED_EXAMPLE_TARGETS` 改名 | `examples/CMakeLists.txt` | AC8 | ✅ 证据：`examples/CMakeLists.txt` 的 CH_TRACKED 含 tb_axi4_lite_example |
+| E5 | tsv 第 53 行 `target` / `source` 两列同步（`emitter` 列**不动** ⇒ 属后继 change） | tsv | AC8 | ✅ 证据：tsv：target=source=tb_axi4_lite_example |
+| E6 | **引用面全同步**：`include/axi4/AGENTS.md` · `examples/axi4/AGENTS.md` · **根 `AGENTS.md:83`** · `run_all_ported_tests.sh:100-105`（点名 `.vcd`）· `examples/axi4/emit_rtl.cpp:6-7` · `tests/test_axi_lite_verilator_e2e.cpp:8,21,73-75,216` · `docs/CHANGELOG.md` | 同上 | AC16 | ✅ 证据：清单内 7 处已同步；⚠️ 清单外的 `axi4_lite_example_top.h:3` 曾遗漏 ⇒ 本批 B1 已补（549163f） |
+| E7 | 生成式 TB **逐字节不变**（⑥' 新鲜度绿） | 护栏 | AC7 | ✅ 证据：护栏 ⑥' 生成物逐字节重现 ✓ |
 
 ## 批次 F — 护栏升级与验收（AC9 · AC17）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| F1 | 新增 **⑨（C++ 侧条数相等）**：遍历 tsv 里「**登记了解释器入口**」的行 ⇒ 按 `target` 列在 `$BUILD_DIR/examples/**` 找可执行文件（**找不到 ⇒ fail-closed 违规**）⇒ 运行 ⇒ 断言 stdout 含 `RESULT: checks=<min_checks> fails=0` | `scripts/verify_examples_rtl_sim.sh` | AC17 | ☐ |
-| F1c | **在清单里表达「有解释器入口」**（**用 note 约定，不新增列** —— 新增列会与后继 change 的「12 → 13 列」前提冲突）⇒ ⇒ ⑨ 只对登记了入口的行生效（**不得**假设「凡 `generated=yes` 必有 C++ 侧」） | tsv + 护栏 | AC17 | ☐ |
-| F1a | **self-test fixture 同步**：fixture 里 axi4 行的 `target` 改为 `tb_axi4_lite_example`（否则 ⑨ 找不到二进制） | 同上 | AC17 | ☐ |
-| F1b | **新增判据 + 投毒**：tsv 的 `source` 列路径 MUST 存在于磁盘（该列目前**读了不判**）⇒ 投毒「改成不存在的路径 ⇒ 必红」 | 同上 | AC8 · AC17 | ☐ |
-| F2 | `verify_example_test_wiring.sh` 的 C3 仍绿（**注**：C3 对 `spinalhdl_*` 空跑 ⇒ 本 example 的判别力由 ⑨ 承担；该洞已登记为独立遗留） | 护栏 | AC9 | ☐ |
-| F3 | `./run_all_ported_tests.sh` 绿（28 tracked · PASS 计数仍 28） | 护栏 | AC10 | ☐ |
-| F4 | 旧名归零（精确模式 + 作用域 + 白名单，见 AC16） | grep | AC16 | ☐ |
-| F5 | `--self-test` **整轮绿**（含 F1/F1b 的两条投毒）⇒ **禁止** `\|\| true` | 护栏 | AC17 | ☐ |
+| F1 | 新增 **⑨（C++ 侧条数相等）**：遍历 tsv 里「**登记了解释器入口**」的行 ⇒ 按 `target` 列在 `$BUILD_DIR/examples/**` 找可执行文件（**找不到 ⇒ fail-closed 违规**）⇒ 运行 ⇒ 断言 stdout 含 `RESULT: checks=<min_checks> fails=0` | `scripts/verify_examples_rtl_sim.sh` | AC17 | ✅ 证据：护栏 ⑨ 存在且绿（`✅ ⑨ 解释器条数相等（checks=113 fails=0）`） |
+| F1c | **在清单里表达「有解释器入口」**（**用 note 约定，不新增列** —— 新增列会与后继 change 的「12 → 13 列」前提冲突）⇒ ⇒ ⑨ 只对登记了入口的行生效（**不得**假设「凡 `generated=yes` 必有 C++ 侧」） | tsv + 护栏 | AC17 | ✅ 证据：tsv note 含 `interp-entry`（1 行） |
+| F1a | **self-test fixture 同步**：fixture 里 axi4 行的 `target` 改为 `tb_axi4_lite_example`（否则 ⑨ 找不到二进制） | 同上 | AC17 | ✅ 证据：self-test fixture 的 axi4 行 target = tb_axi4_lite_example |
+| F1b | **新增判据 + 投毒**：tsv 的 `source` 列路径 MUST 存在于磁盘（该列目前**读了不判**）⇒ 投毒「改成不存在的路径 ⇒ 必红」 | 同上 | AC8 · AC17 | ✅ 证据：self-test 投毒16（source 列路径不存在）⇒ 转红 |
+| F2 | `verify_example_test_wiring.sh` 的 C3 仍绿（**注**：C3 对 `spinalhdl_*` 空跑 ⇒ 本 example 的判别力由 ⑨ 承担；该洞已登记为独立遗留） | 护栏 | AC9 | ✅ 证据：`verify_no_duplicate_rv32i_headers.sh` 的 C3 绿 |
+| F3 | `./run_all_ported_tests.sh` 绿（**27** tracked · PASS 计数 **27**） | 护栏 | AC10 | ✅ 证据：本批 D3 后 `./run_all_ported_tests.sh` ⇒ exit 0 · PASS 27 / FAIL 0 |
+| F4 | 旧名归零（精确模式 + 作用域 + 白名单，见 AC16） | grep | AC16 | ✅ 证据：本批 B1 后旧名在作用域内零命中 |
+| F5 | `--self-test` **整轮绿**（含 F1/F1b 的两条投毒）⇒ **禁止** `\|\| true` | 护栏 | AC17 | ✅ 证据：`--self-test` 整轮绿（未用 `|| true`） |
 
 ## 批次 G — 构建矩阵（AC15）
 
 | # | 任务 | 判据 | 状态 |
 |---|---|---|---|
-| G1 | **本地** `cmake -B build-nojit -DCH_JIT_ENABLE=OFF` ⇒ 构建该 target ⇒ 运行 ⇒ exit 0（记录命令 + 输出；**不**声称由 CI 保证） | AC15 | ☐ |
+| G1 | **本地** `cmake -B build-nojit -DCH_JIT_ENABLE=OFF` ⇒ 构建该 target ⇒ 运行 ⇒ exit 0（记录命令 + 输出；**不**声称由 CI 保证） | AC15 | ✅ 证据：验收轮实跑 `-DCH_JIT_ENABLE=OFF` 构建 + 空目录运行 ⇒ exit 0 · RESULT 113/0 |
 
 ## 复核命令
 

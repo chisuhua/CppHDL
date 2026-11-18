@@ -65,12 +65,12 @@
 | F1 | ✅ **architect 裁决已产出（2026-11-18）** —— 蓝图 §4.3 订正 + §4.3.1 逐符号切分表（9 符号 · 维度 = **规则 vs 值**）+ §4.3.2 形态裁决（**分支 A**）+ §7 R12 ⇒ ⇒ **builder 只验证**（AC22 / AC23）⇒ ⇒ **MUST NOT** 由 builder 代改蓝图（architect 写集） | AC22 · AC23 | architect 交付 |
 | F2 | **按蓝图 §4.3.1 的切分表下沉**到**公开头** `include/rtl_emit/*.h`（实现落 `src/rtl_emit/*.cpp`）⇒ ⇒ **下沉集 = 完整 2 个（`product_modules` · `tamper_hier`）+ 拆分 1 个（`check_products` 的规则侧）** ⇒ ⇒ ⚠️ **该头的实现 TU 必然 include 它 ⇒ 按 R2 定义不算「消费者」**（实现 ≠ 使用）⇒ ⇒ 故 R2 反向判据不会误红 ⇒ ⇒ **linter 路径作为参数**（**不下沉** `find_verilator`）⇒ ⇒ **只下沉规则，值留 example**（ADR-074「不覆盖」：`kExpectedModules` · `kExpectedTopPorts` · `make_inputs` · `make_observations` · `make_stimulus` **+ 根组件名 · lint 的 `--top-module` 名 · 最小变化观测量阈值**）⇒ ⇒ **CHECK 3 的 lint 规则**归库层（工具发现留 example）⇒ ⇒ ⚠️ **库层 MUST NOT 内置字面根名（`"top"`）/ MUST NOT 内置 `>= 2` 之类阈值** ⇒ ⇒ 一律**参数传入** | AC17 | ✅ |
 | F3 | **`emit_rtl_soc.cpp` 整文件删除**（2026-11-18 · §4.3.3 取代原「壳层退化」）⇒ **结构判据**：被裁下沉的符号在 example 侧**无定义**（⚠️ 拆分符号 `check_products` 判「**规则侧实现** MUST NOT 出现在 example 侧」⇒ 禁断言「无 `check_products` 定义」）+ **库层公开函数 == 3**（`product_modules` · `tamper_hier` · `check_products` 规则侧）且 **库层 TU 内** `product_modules` / `tamper_hier` 各 1 处调用、`check_products` **0** 处（入口）· **example 侧** `product_modules` / `tamper_hier` **0** 处、`check_products` 1 处（**不用行数靶**；⚠️ **2026-11-18 与 AC17 同批订正** —— 原「example 侧各调用 == 1」作废，见 proposal AC17）⇒ ⇒ 发射由 **`tb_axi_soc_example --emit-rtl`** 承担；`--check-products` = 「发射 + 自检」模式标记（内部等价 `--emit-rtl --hierarchical --check-products`）⇒ 该模式下 `--out` / `--emit-hygiene` MUST 照常透传⇒ ⇒ ⚠️ example 侧产品专属 helper（`make_inputs` / `make_observations` / `check_products` 的判据值）**无论是否被 `main` 直接调用，一律归 example**（归属以蓝图 §4.3.1 为准） | AC17 | ✅ |
-| F4 | **第二消费者**：把 `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` 的 module 集/端口计数改为调用新 API；做不到 ⇒ 明写为带门的 follow-up ⇒ ⇒ ⚠️ **`tamper_hier` 的语义归一化另立项**（SoC = 由观测信号反查子端口 → 取反 RHS；RV32I = 硬编码 3 条 `assign` 名 + RHS 置 `'0'` ⇒ **语义不同**）⇒ ⇒ 本 change **只做 `product_modules`** 的归一化 | AC17 | ☐ |
+| F4 | **第二消费者**：把 `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` 的 module 集/端口计数改为调用新 API；做不到 ⇒ 明写为带门的 follow-up ⇒ ⇒ ⚠️ **`tamper_hier` 的语义归一化另立项**（SoC = 由观测信号反查子端口 → 取反 RHS；RV32I = 硬编码 3 条 `assign` 名 + RHS 置 `'0'` ⇒ **语义不同**）⇒ ⇒ 本 change **只做 `product_modules`** 的归一化 | AC17 | follow-up（**2026-11-18**）证据：AC17 指名的 `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` **不存在**（`ls` 实测）；现存第二消费者 = `tests/test_hierarchy_verilog.cpp` 的 `count_occurrences("module ")`（**内存字符串**） + 护栏 ⑧''（**产物文件**）⇒ 与 `product_modules(path)` 入参形态不同 ⇒ **非 drop-in** ⇒ 记 backlog（AC17 已声明「第二消费者是加分项、不是门槛」） |
 | F5 | **常驻判别力回归**：4 项判据各自注入错期望 ⇒ 必红；④″ 仍执行；退出码语义不变 ⇒ ⇒ ⚠️ **已知边界**：`emit_rtl_soc.cpp:263-273` 的 CHECK 3 在 verilator 不可用时打印 `SKIP` 且**不计 failures** ⇒ ⇒ 基线记录 MUST 含 verilator 可用性 / 版本 | AC18 | ✅ |
 | F6 | **公开面登记（真载体）**：新增公开头 MUST 进 **`.rddf/checks/example-only-headers.tsv` 豁免通道** + `docs/CHANGELOG.md` 一行 ⇒ ⇒ ⚠️ **实现 TU 的 include 不算「消费者」**（R2 定义）⇒ ⇒ 该形态**可登记** ⇒ ⇒ ⚠️ **如实声明**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头 ⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围** ⇒ ⇒ 登记到那里**零判别力**（只作记录，不构成护栏）⇒ ⇒ 该事实 MUST 写进登记条目本身 | AC19 | ✅ |
-| F7 | ⚠️ **2026-11-18 复核为未闭**（⑧' 仍 `kind=hier` · self-test 无 soc fixture · `REGISTERED_SOC` 锚点 0）⇒ **产物形态（分支 A · 已裁决）**：SoC 发射入口**恒发层次化** ⇒ ⇒ 护栏 ③ 对 `kind=soc` 行的**发射语义 MUST 同步**（它现在发扁平产物）+ 产物形态 **MUST 登记** ⇒ ⇒ ⚠️ **护栏 ⑧' MUST 扩到 `kind=soc`**（现仅 `kind=hier`）⇒ **且 soc 行 MUST 有负向对照**（投毒 ⇒ 必红）⇒ ⇒ ⚠️ **载体**：self-test 清单**当前无 `kind=soc` fixture**（`REGISTERED_SOC` 锚点 = 0）⇒ ⇒ MUST **新增一条 soc fixture 行** **且** 把锚点 **0 → 1**（否则「⓪ SoC 桶不守恒」会红）⇒ ⇒ **CHANGELOG MUST 有一行** ⇒ ⇒ ⑧ 在层次化产物上复核（实测成立 · 工具 = **集合 + 顺序双重**判据 ⇒ 「逐字逐序」措辞**准确** ⇒ 勿弱化为只比集合）⇒ ⇒ ⚠️ **③ 无需改代码**（默认即层次化 ⇒ 变的只是**产物形态** ⇒ 但产物形态 MUST 登记） | AC24 | ☐ **⑧' 未落地（2026-11-18）** |
+| F7 | ⚠️ **2026-11-18 复核为未闭**（⑧' 仍 `kind=hier` · self-test 无 soc fixture · `REGISTERED_SOC` 锚点 0）⇒ **产物形态（分支 A · 已裁决）**：SoC 发射入口**恒发层次化** ⇒ ⇒ 护栏 ③ 对 `kind=soc` 行的**发射语义 MUST 同步**（它现在发扁平产物）+ 产物形态 **MUST 登记** ⇒ ⇒ ⚠️ **护栏 ⑧' MUST 扩到 `kind=soc`**（现仅 `kind=hier`）⇒ **且 soc 行 MUST 有负向对照**（投毒 ⇒ 必红）⇒ ⇒ ⚠️ **载体**：self-test 清单**当前无 `kind=soc` fixture**（`REGISTERED_SOC` 锚点 = 0）⇒ ⇒ MUST **新增一条 soc fixture 行** **且** 把锚点 **0 → 1**（否则「⓪ SoC 桶不守恒」会红）⇒ ⇒ **CHANGELOG MUST 有一行** ⇒ ⇒ ⑧ 在层次化产物上复核（实测成立 · 工具 = **集合 + 顺序双重**判据 ⇒ 「逐字逐序」措辞**准确** ⇒ 勿弱化为只比集合）⇒ ⇒ ⚠️ **③ 无需改代码**（默认即层次化 ⇒ 变的只是**产物形态** ⇒ 但产物形态 MUST 登记） | AC24 | ✅ 证据：⑧' 覆盖 `kind ∈ {hier, soc}`（生产轮 soc 行 `✅ ⑧' 层次化形态成立（module 数 5 · 根 = top）`）· self-test **18 投毒 + 2 必绿**（投毒18 = soc 压成单 module ⇒ 转红） |
 | F8 | **产物等价核对**：用 F0 采的基线逐项比对（分模式两套 + 全部落盘物） ⇒ ⇒ ⚠️ **2026-11-18 订正（用户裁决 D2 · 与 AC25 同步）**：默认模式侧按 **AC25 的等价证据**判定（`eq/flat/top.v` 为 1 module 参照 + `manifest.json` 逐字节相同 ⇒ 端口面不变） ⇒ ⇒ `--check-products` 与 `eq/` 侧仍 MUST **零差异**⇒ ⇒ **分支 A 例外**：默认模式的差异 MUST **恰为形态变化**且**可机器判定**（落盘物集合 == {`top.v`, `manifest.json`} ∧ `manifest.json` 逐字节相同 ∧ module 集 1 → 5 ∧ `top.v` 的顶层端口表与 `eq/flat/top.v` 的顶层端口表逐字逐序相同）；`eq/` 与 `--check-products` 模式 MUST **零差异** ⇒ ⇒ **禁**「逐字节相同」一刀切（那会让分支 A 必红）⇒ ⇒ **改动过产物 ⇒ 必红** | AC25 | ✅ |
-| F9 | **切分表为空的合法终态**（⚠️ **本轮裁决未触发** —— 蓝图 §4.3.1 已选出「完整 2 + 拆分 1」⇒ ⇒ 本条仅在切分表**最终**为空时生效）：⇒ ⇒ 本批次零代码改动 ⇒ ⇒ 实质结论 MUST 由 **F1** 在 **2026-11-17 蓝图 §7「已知残留与边界」** 留一条**已收口**残差（闭口证据 = **存在的路径** · 逗号分隔 · 无空格 · 无反引号）⇒ ⇒ ⚠️ **不是** `.rddf/checks/arch-residual-registry.md`：那本护栏的台账**硬编码**为**另一本**蓝图（`scripts/lib/ledger_residual.py:17`）⇒ ⇒ 往它加行**必红**（「结算行数不一致」）⇒ ⇒ 本条判据 = **蓝图 §7 段落自证** | AC26 | ☐ |
+| F9 | **切分表为空的合法终态**（⚠️ **本轮裁决未触发** —— 蓝图 §4.3.1 已选出「完整 2 + 拆分 1」⇒ ⇒ 本条仅在切分表**最终**为空时生效）：⇒ ⇒ 本批次零代码改动 ⇒ ⇒ 实质结论 MUST 由 **F1** 在 **2026-11-17 蓝图 §7「已知残留与边界」** 留一条**已收口**残差（闭口证据 = **存在的路径** · 逗号分隔 · 无空格 · 无反引号）⇒ ⇒ ⚠️ **不是** `.rddf/checks/arch-residual-registry.md`：那本护栏的台账**硬编码**为**另一本**蓝图（`scripts/lib/ledger_residual.py:17`）⇒ ⇒ 往它加行**必红**（「结算行数不一致」）⇒ ⇒ 本条判据 = **蓝图 §7 段落自证** | AC26 | N/A（**2026-11-18**）证据：蓝图 §4.3.1 的切分表符号行 == **9**（`awk` 数表行；`grep -c` 于 §4.3.1 段）⇒ 切分表**非空** ⇒ 本条不适用 |
 ## 复核命令
 
 ```bash
@@ -215,3 +215,35 @@ fi
 |---|---|---|
 | **AC17** ✅ **已订正 2026-11-18** | 「**example 侧对每个的调用 == 1**」与「**编排整体下沉**」（蓝图 §4.3.1 钉死）**不自洽**：编排下沉后 `product_modules` / `tamper_hier` 由**库层内部**调用 ⇒ example 侧只调 `check_products` **1 次**（另两个为 0） | 改为「**库层实现 TU 内**每个公开函数恰 1 处调用 + example 侧对 `check_products` 恰 1 处调用」 |
 | **AC18** ✅ **已订正 2026-11-18** | 「`emit_rtl_soc.cpp` 的 CHECK 3 在 verilator 不可用时打印 `SKIP` 且不计 failures」被写成**合法语义**（「行为不变」）⇒ ⇒ 那其实是 **fail-open 缺陷** | 改为「CHECK 3 NEVER 静默跳过：linter 缺失 ⇒ 按失败计（fail-closed）」 |
+
+---
+
+## 证据索引（**2026-11-18 验收轮实测** · 每批一条可复算命令）
+
+> ⚠️ **口径**：表的「判据」列已逐行写死护栏 / 命令 ⇒ ⇒ 本索引只补**批次级的复算命令**与结果。
+> 逐行证据 = 判据列 + 本索引对应行的实测结果（避免把同一串命令复制 39 遍）。
+
+| 批次 | 复算命令 | 2026-11-18 结果 |
+|---|---|---|
+| **A1–A5** | `ls examples/axi4/*example_top*` · `grep -rn 'AxiLiteTop\|AxiSocTop\|AxiLiteTestMaster' include/` · `grep -rn '"axi4/axi4_lite_example_top\.h"\|"axi4/axi_soc_example_top\.h"' examples tests` | 两头在 `examples/axi4/`；`include/` 零命中；引用零命中 |
+| **A6** | `bash scripts/verify_no_duplicate_rv32i_headers.sh` + `--self-test` | PASS；self-test 含新增 2 fixture（注释绿 / `…examples/axi4` 红） |
+| **A7** | `ls examples/axi4/axi4_full_example.cpp` · `ctest -N \| grep -c spinalhdl_axi4_full` · tracked 计数 · `ctest -R test_axi4_full_burst` | 文件/target/CTest 条目全无；tracked **27**；覆盖证据 Passed |
+| **B1–B5** | `git diff 55f3f5a..HEAD -- tests/test_axi_lite_verilator_e2e.cpp` · TEST_CASE 名集合差集 | 差集（拆分）= **∅**（13 == 13）；e2e 唯一改动 = DUT + 用例名 + 注释 |
+| **B2** | `ctest -R test_axi_lite_verilator_e2e` | Passed |
+| **B6** | `./build/examples/axi4/tb_axi_soc_example` · `--emit-rtl` · `--check-products` · `--bogus` | 4 条全 exit 0 / 0 / 0 / 2 |
+| **C1–C4** | `ctest -N \| tail -1` · `ctest -N -LE perf` · `ctest -N -L base` · `ls tests/test_*.cpp \| wc -l` · `bash scripts/verify_test_counts.sh` | **269 / 258 / 233 / 159**；锚点与实测一致 |
+| **C5** | `grep -n 'CPPHDL_BUILD_EXAMPLES=OFF' AGENTS.md` | 显式接受项已登记（`AGENTS.md:551-556`） |
+| **D1** | `git diff --numstat 55f3f5a..08298a0 -- .rddf/checks/port-naming-exempt.tsv` · `verify_port_naming.sh` | **23 增 / 54 删**（23 改路径 + 31 删）；锚点 **1384**；PASS |
+| **D2** | `verify_public_api_visibility.sh` + `--self-test` | PASS；`EXPECTED_PROBES=51` · `EXPECTED_REMOVAL_ROWS=30` |
+| **D3–D4** | `verify_input_port_required_registry.sh` · `verify_rst_n_wiring.sh` | 均 PASS（3 行保留、`header_of` 搜索根含 `examples/`、rst_n 覆盖零缩面） |
+| **D5** | `verify_example_assertion_quality.sh` + `verify_assertion_quality_fixtures.sh` | PASS；`CH4_ANCHOR` 新增 2 行（10 / 41） |
+| **D6** | `verify_example_only_headers.sh` + `--self-test` | PASS；6 条投毒各自成立；锚点 38 |
+| **E1** | `grep -rn 'include/axi4/\(axi4_lite\|axi_soc\)_example_top\.h' AGENTS.md include/axi4/AGENTS.md examples/axi4/AGENTS.md docs/usage_guide .rddf/checks` | 零命中 |
+| **E2–E3** | `sha256sum` 对比 `.rddf/checks/product-equivalence-header-move-2026-11-18.md` | 4 件 sha256 逐字节相同 |
+| **F0/F8** | `.rddf/checks/product-check-equivalence-2026-11-18.md` 的复算命令 | 4 件与记录逐字相同（`dc476556…` / `b0019abd…` / `286ecd93…` / `ede8e169…`） |
+| **F1** | — | architect 交付（蓝图 §4.3 / §4.3.1 / §4.3.2 / §4.3.3） |
+| **F2–F3** | `grep -nE '…（3 个符号）' include/rtl_emit/product_check.h src/rtl_emit/product_check.cpp examples/axi4/tb_axi_soc_example.cpp` | 库层 3 个公开函数齐备；example 侧对 `product_modules`/`tamper_hier` 调用 = 0 |
+| **F5** | `./build/tests/test_product_check` | 10 用例 / 27 断言全绿（①②③④ 各一条注入） |
+| **F6** | `grep -n product_check .rddf/checks/example-only-headers.tsv` · `grep -n product_check.h docs/CHANGELOG.md` | 已登记（豁免表 + CHANGELOG 专条） |
+| **F7** | `bash scripts/verify_examples_rtl_sim.sh` + `--self-test` | **⑧' 已覆盖 `kind ∈ {hier, soc}`**；self-test **18 投毒 + 2 必绿**全成立（投毒18 = soc 压成单 module ⇒ 转红；soc 未投毒 ⇒ 仍绿） |
+| **F9** | 蓝图 §4.3.1 的符号行计数 | **9 行** ⇒ 切分表非空 ⇒ 本条 N/A |

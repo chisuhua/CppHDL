@@ -9,56 +9,56 @@
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| A1 | 清单增 `emitter_args` 列（13 列，`#COLUMNS` 同步）⇒ **无参写 `-`** | tsv | AC1 | ☐ |
-| A2 | 护栏按**列名**取 `emitter` + `emitter_args`；在 **2 处**调用点组装（③ `:449` · ⑥' `:571`），跳过 `-`；**并写两份证据**：原始命令行 → `<work>/argv.txt`、归一化（剥离模式标记）→ `<work>/argv.norm` | `scripts/verify_examples_rtl_sim.sh` | AC4 | ☐ |
-| A3 | `run_all_ported_tests.sh` 的 `rtl_emitters()` **零改动**确认 ⇒ 并在 tsv 的 note 列登记「emitter 集合与 tracked 集合**不再互斥**」 | 同上 + tsv | AC9 | ☐ |
-| A4 | `verify_examples_rtl_sim_coverage.sh` **零改动**确认（列数/列号本就从 `#COLUMNS` 推导） | 同上 | AC10 | ☐ |
-| A5 | **字段数守恒判据**：每行字段数 != `#COLUMNS` 词数 ⇒ **具名 fail**（行号 + 期望字段数 + 提示「空单元 ⇒ 无参写 `-`」）⇒ 把 `set -u` 的无名 abort 变成可归因的红 | `scripts/verify_examples_rtl_sim.sh` | AC3 | ☐ |
-| A6 | **④″ 保持原状**（`--check-products` 仍硬编码）⇒ 已登记残留；**并在该处写注释说明「本调用故意不读 `emitter_args`」**（否则将来 `kind=soc` 行需要额外参数时会被静默忽略） | `:653` | — | ☐ |
+| A1 | 清单增 `emitter_args` 列（13 列，`#COLUMNS` 同步）⇒ **无参写 `-`** | tsv | AC1 | ✅ 证据：tsv `#COLUMNS` = 13 词（含 emitter_args）；12 数据行字段数全等 |
+| A2 | 护栏按**列名**取 `emitter` + `emitter_args`；在 **2 处**调用点组装（③ `:449` · ⑥' `:571`），跳过 `-`；**并写两份证据**：原始命令行 → `<work>/argv.txt`、归一化（剥离模式标记）→ `<work>/argv.norm` | `scripts/verify_examples_rtl_sim.sh` | AC4 | ✅ 证据：列号由 `colidx()` 从 `#COLUMNS` 推导（`scripts/verify_examples_rtl_sim.sh:106-146`）；两处调用点 :465 / :587 |
+| A3 | `run_all_ported_tests.sh` 的 `rtl_emitters()` **零改动**确认 ⇒ 并在 tsv 的 note 列登记「emitter 集合与 tracked 集合**不再互斥**」 | 同上 + tsv | AC9 | ✅ 证据：`git diff --stat 55f3f5a^..55f3f5a -- run_all_ported_tests.sh` 空；tsv note 已登记 emitter 集 |
+| A4 | `verify_examples_rtl_sim_coverage.sh` **零改动**确认（列数/列号本就从 `#COLUMNS` 推导） | 同上 | AC10 | ✅ 证据：`git diff --stat 55f3f5a^..55f3f5a -- scripts/verify_examples_rtl_sim_coverage.sh` 空；实跑 PASS |
+| A5 | **字段数守恒判据**：每行字段数 != `#COLUMNS` 词数 ⇒ **具名 fail**（行号 + 期望字段数 + 提示「空单元 ⇒ 无参写 `-`」）⇒ 把 `set -u` 的无名 abort 变成可归因的红 | `scripts/verify_examples_rtl_sim.sh` | AC3 | ✅ 证据：具名 fail 在 :164（`清单行字段数 … ≠ #COLUMNS 词数 …`） |
+| A6 | **④″ 保持原状**（`--check-products` 仍硬编码）⇒ 已登记残留；**并在该处写注释说明「本调用故意不读 `emitter_args`」**（否则将来 `kind=soc` 行需要额外参数时会被静默忽略） | `:653` | — | ✅ 证据：④″ 仍硬编码 `--check-products`；:669 附近有「本调用故意不读 emitter_args」注记 |
 
 ## 批次 B — self-test fixture 与投毒（AC1 · AC2 · AC3 的耐久载体）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| B1 | fixture 的 `#COLUMNS` + 3 行数据变 **13 列**（否则 `--self-test` 基线直接 exit 2） | 同上 | — | ☐ |
-| B2 | **fixture 的 axi4 行改名**：`emitter` → `tb_axi4_lite_example`、`emitter_args` → `--emit-rtl`（否则 D2 删掉 target 后基线必红） | 同上 | — | ☐ |
-| B3 | **重写投毒 12 的 sed**：现用固定 8 字段 regex（`\t` 计数），插入 `emitter_args` 后**不匹配** ⇒ 必须改为按列名/`awk -F'\t' -v c=…` 构造 | 同上 | — | ☐ |
-| B4 | 新增投毒 `empty_emitter_args`（**钉在 axi4 行**：参数改 `-` ⇒ ③ 必红） | 同上 | AC1 | ☐ |
-| B5 | 新增**必绿**用例 `insert_column`（中间插一列 + 同步 `#COLUMNS`，**值非空**）⇒ 需给 `run_case` 加 `expect_green` 分支（现有契约只有「必红」） | 同上 | AC2 | ☐ |
+| B1 | fixture 的 `#COLUMNS` + 3 行数据变 **13 列**（否则 `--self-test` 基线直接 exit 2） | 同上 | — | ✅ 证据：self-test fixture 的 `#COLUMNS` = 13 列（:865） |
+| B2 | **fixture 的 axi4 行改名**：`emitter` → `tb_axi4_lite_example`、`emitter_args` → `--emit-rtl`（否则 D2 删掉 target 后基线必红） | 同上 | — | ✅ 证据：fixture axi4 行：emitter=tb_axi4_lite_example · emitter_args=--emit-rtl |
+| B3 | **重写投毒 12 的 sed**：现用固定 8 字段 regex（`\t` 计数），插入 `emitter_args` 后**不匹配** ⇒ 必须改为按列名/`awk -F'\t' -v c=…` 构造 | 同上 | — | ✅ 证据：投毒12 的 sed 已按列名重建（:1009-1013 注释 + awk `idx[]`） |
+| B4 | 新增投毒 `empty_emitter_args`（**钉在 axi4 行**：参数改 `-` ⇒ ③ 必红） | 同上 | AC1 | ✅ 证据：投毒17（emitter_args 置 `-`）实测转红：`③ 发射失败` |
+| B5 | 新增**必绿**用例 `insert_column`（中间插一列 + 同步 `#COLUMNS`，**值非空**）⇒ 需给 `run_case` 加 `expect_green` 分支（现有契约只有「必红」） | 同上 | AC2 | ✅ 证据：必绿 insert_column 实测仍绿 |
 
 ## 批次 C — example 的发射模式（AC11 · AC12）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| C1 | `main()` 支持发射模式：**位置无关**剥离该标记 ⇒ 其余 argv 透传 `run_emit_cli` | `examples/axi4/tb_axi4_lite_example.cpp` | AC11 | ☐ |
-| C2 | **factory 复用**：根组件名 MUST 仍是 `"top"`（与原薄壳逐字一致）⇒ **两条模式建不同的根**（验证模式用 `ch_device`） | 同上 | AC5 | ☐ |
-| C3 | **fail-closed 两跳**：默认模式收到未知参数 ⇒ exit 2；`--emit-rtl` 缺 `--out` ⇒ exit 2 | 同上 | AC12 | ☐ |
-| C4 | 默认模式在**仓库根**运行 ⇒ exit 0 且 stdout 含 `RESULT: checks=113 fails=0` | 同上 | AC11 | ☐ |
-| C5 | 两条 fail-closed 都在 `mktemp -d` 新建**空**目录下判 ⇒ 且该目录 MUST NOT 出现 `rtl_out/`；`--out` 缺失识别 MUST **按选项语法**（`--out` + 值） | shell | AC12 | ☐ |
+| C1 | `main()` 支持发射模式：**位置无关**剥离该标记 ⇒ 其余 argv 透传 `run_emit_cli` | `examples/axi4/tb_axi4_lite_example.cpp` | AC11 | ✅ 证据：`tb_axi4_lite_example.cpp:59-67` 位置无关剥离 `--emit-rtl` |
+| C2 | **factory 复用**：根组件名 MUST 仍是 `"top"`（与原薄壳逐字一致）⇒ **两条模式建不同的根**（验证模式用 `ch_device`） | 同上 | AC5 | ✅ 证据：根名 = `axi4::example::kLiteRootName`（值 `"top"`）；验证模式用 `ch_device` 的默认根 |
+| C3 | **fail-closed 两跳**：默认模式收到未知参数 ⇒ exit 2；`--emit-rtl` 缺 `--out` ⇒ exit 2 | 同上 | AC12 | ✅ 证据：实测：未知参数 exit 2 · `--emit-rtl` 缺 `--out` exit 2 |
+| C4 | 默认模式在**仓库根**运行 ⇒ exit 0 且 stdout 含 `RESULT: checks=113 fails=0` | 同上 | AC11 | ✅ 证据：仓根默认模式 ⇒ `RESULT: checks=113 fails=0`（exit 0） |
+| C5 | 两条 fail-closed 都在 `mktemp -d` 新建**空**目录下判 ⇒ 且该目录 MUST NOT 出现 `rtl_out/`；`--out` 缺失识别 MUST **按选项语法**（`--out` + 值） | shell | AC12 | ✅ 证据：空目录下两条均 exit 2 且无 `rtl_out/`；`--out` 按「选项 + 值」识别且值不得以 `-` 开头 |
 
 ## 批次 D — 基线与删薄壳（AC5 · AC6）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| D1 | **采基线（MUST 在删除之前）**：`emit_rtl_axi4_lite --out /tmp/opencode/axi4_base --emit-hygiene --emit-tb-verif examples/axi4/tb_axi4_lite_example.verif` ⇒ 记 `flag token 序列`（**不含 `argv[0]`**）+ sha256(`top.v`) + sha256(`manifest.json`) | note | AC5 | ☐ |
-| D2 | 删 `examples/axi4/emit_rtl.cpp` + CMake target `emit_rtl_axi4_lite` ⇒ **并同步该文件里的活注释**（`:29-31`「每个 example 一个独立 target」· `:41`「不与 `emit_rtl_axi4_lite` 合流」⇒ 已成假陈述） | `examples/axi4/` + CMakeLists | AC6 · AC13 | ☐ |
-| D3 | 清单该行：`emitter` → `tb_axi4_lite_example`、`emitter_args` → `--emit-rtl` | tsv | AC5 | ☐ |
-| D4 | **对照**：新入口产出的 `top.v` + `manifest.json` 与 D1 基线**逐字节相同** ⇒ ⇒ 且**flag token 序列**（丢弃 `argv[0]` + 剥离模式标记后）与 D1 **逐 token 相同**（原始 argv 必然差「二进制名 + 一个模式标记」⇒ **不得**按原始比） | diff | AC5 | ☐ |
-| D5 | **STALE-ARTIFACT 投毒（MUST 在 D3 之后）**：手工放 dummy 到 `build/examples/axi4/emit_rtl_axi4_lite` ⇒ 跑 `./run_all_ported_tests.sh` ⇒ 报 `STALE-ARTIFACT` 且不报 `UNTRACKED` | 投毒 | AC6 | ☐ |
-| D6 | **路径无关性**：同一 flag 序列下两个不同 `--out` 路径 ⇒ 产物仍逐字节相同（防路径泄露到 manifest/产物） | diff | AC5 | ☐ |
+| D1 | **采基线（MUST 在删除之前）**：`emit_rtl_axi4_lite --out /tmp/opencode/axi4_base --emit-hygiene --emit-tb-verif examples/axi4/tb_axi4_lite_example.verif` ⇒ 记 `flag token 序列`（**不含 `argv[0]`**）+ sha256(`top.v`) + sha256(`manifest.json`) | note | AC5 | ✅ 证据：基线 sha 记录于本文件 :102 与 `.rddf/checks/product-equivalence-header-move-2026-11-18.md`（20e0f88e… / cf7b40f6…） |
+| D2 | 删 `examples/axi4/emit_rtl.cpp` + CMake target `emit_rtl_axi4_lite` ⇒ **并同步该文件里的活注释**（`:29-31`「每个 example 一个独立 target」· `:41`「不与 `emit_rtl_axi4_lite` 合流」⇒ 已成假陈述） | `examples/axi4/` + CMakeLists | AC6 · AC13 | ✅ 证据：`examples/axi4/emit_rtl.cpp` 与 target 均不存在；活注释旧名零命中 |
+| D3 | 清单该行：`emitter` → `tb_axi4_lite_example`、`emitter_args` → `--emit-rtl` | tsv | AC5 | ✅ 证据：tsv：emitter=tb_axi4_lite_example · emitter_args=--emit-rtl |
+| D4 | **对照**：新入口产出的 `top.v` + `manifest.json` 与 D1 基线**逐字节相同** ⇒ ⇒ 且**flag token 序列**（丢弃 `argv[0]` + 剥离模式标记后）与 D1 **逐 token 相同**（原始 argv 必然差「二进制名 + 一个模式标记」⇒ **不得**按原始比） | diff | AC5 | ✅ 证据：本验收实跑：新入口产物 sha 与基线逐字节相同（top.v 20e0f88e… · manifest cf7b40f6…） |
+| D5 | **STALE-ARTIFACT 投毒（MUST 在 D3 之后）**：手工放 dummy 到 `build/examples/axi4/emit_rtl_axi4_lite` ⇒ 跑 `./run_all_ported_tests.sh` ⇒ 报 `STALE-ARTIFACT` 且不报 `UNTRACKED` | 投毒 | AC6 | ✅ 证据：本验收复跑：dummy 放入 build ⇒ `STALE-ARTIFACT emit_rtl_axi4_lite`（清理后归零） |
+| D6 | **路径无关性**：同一 flag 序列下两个不同 `--out` 路径 ⇒ 产物仍逐字节相同（防路径泄露到 manifest/产物） | diff | AC5 | ✅ 证据：两个不同 `--out` ⇒ top.v / manifest 逐字节相同；产物内无临时目录名 |
 
 ## 批次 E — 文档与验收（AC7 · AC8 · AC9 · AC10 · AC13）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| E1 | `examples/axi4/AGENTS.md`：FILES 表删 `emit_rtl.cpp` 行；RUN 段命令改为 `tb_axi4_lite_example --emit-rtl …` | 该文件 | AC13 | ☐ |
-| E2 | `docs/CHANGELOG.md` 一行 | 同上 | AC13 | ☐ |
-| E3 | `examples/axi4/CMakeLists.txt` 的活注释已随 D2 同步（`:29-31` / `:41`） | CMakeLists | AC13 | ☐ |
-| E4 | 旧名 `emit_rtl_axi4_lite` 归零（白名单：`docs/archive/**` · `openspec/changes/archive/**` · `docs/architecture/**` 历史记述 · **self-test fixture 行**） | grep | AC13 | ☐ |
-| E5 | `bash scripts/verify_examples_rtl_sim.sh` + `--self-test` 绿（**不加 `\|\| true`**） | 护栏 | AC7 · AC8 | ☐ |
-| E6 | `bash scripts/verify_examples_rtl_sim_coverage.sh` 绿（守恒） | 护栏 | AC10 | ☐ |
-| E7 | `./run_all_ported_tests.sh` 绿（28 tracked · PASS 计数仍 28 · C1 无 UNTRACKED） | 护栏 | AC9 | ☐ |
-| E8 | **零 diff 判据**：`git diff --stat <base>..HEAD -- examples/axi4/emit_rtl_soc.cpp` 为空（⇒ 硬顺序「本 change 先于 3.2」的机械依据） | shell | AC14 | ☐ |
+| E1 | `examples/axi4/AGENTS.md`：FILES 表删 `emit_rtl.cpp` 行；RUN 段命令改为 `tb_axi4_lite_example --emit-rtl …` | 该文件 | AC13 | ✅ 证据：`examples/axi4/AGENTS.md:12,35-36` 已是 tb_ 名 + `--emit-rtl` 用法 |
+| E2 | `docs/CHANGELOG.md` 一行 | 同上 | AC13 | ✅ 证据：`docs/CHANGELOG.md` 有本 change 条目（含 `--emit-rtl` 用法与迁移表） |
+| E3 | `examples/axi4/CMakeLists.txt` 的活注释已随 D2 同步（`:29-31` / `:41`） | CMakeLists | AC13 | ✅ 证据：`examples/axi4/CMakeLists.txt` 的旧名活注释零命中 |
+| E4 | 旧名 `emit_rtl_axi4_lite` 归零（白名单：`docs/archive/**` · `openspec/changes/archive/**` · `docs/architecture/**` 历史记述 · **self-test fixture 行**） | grep | AC13 | ✅ 证据：`examples/` 下 `emit_rtl_axi4_lite` 零命中（白名单外） |
+| E5 | `bash scripts/verify_examples_rtl_sim.sh` + `--self-test` 绿（**不加 `\|\| true`**） | 护栏 | AC7 · AC8 | ✅ 证据：`verify_examples_rtl_sim.sh` + `--self-test` 整轮绿（未用 `|| true`） |
+| E6 | `bash scripts/verify_examples_rtl_sim_coverage.sh` 绿（守恒） | 护栏 | AC10 | ✅ 证据：`verify_examples_rtl_sim_coverage.sh` PASS（27 == 10 ∪ 17） |
+| E7 | `./run_all_ported_tests.sh` 绿（**27** tracked · PASS 计数 **27** · C1 无 UNTRACKED） | 护栏 | AC9 | ✅ 证据：本批 D3 后 `./run_all_ported_tests.sh` ⇒ exit 0 · PASS 27 / FAIL 0 · 无 UNTRACKED |
+| E8 | **零 diff 判据**：`git diff --stat <base>..HEAD -- examples/axi4/emit_rtl_soc.cpp` 为空（⇒ 硬顺序「本 change 先于 3.2」的机械依据） | shell | AC14 | ✅ 证据：`git diff --stat 55f3f5a^..55f3f5a -- examples/axi4/emit_rtl_soc.cpp` 为空 |
 
 ## 复核命令
 
