@@ -55,20 +55,20 @@
 | E2 | **产物等价基线**：搬前产 4 个 sha256（AXI4-Lite / SoC × `top.v` + `manifest.json`）+ 复算命令 + 前提（同 build dir / 同 emitter / 前置已完成的 HEAD）记入 `.rddf/checks/` | `.rddf/checks/` | AC16 | ☐ |
 | E3 | 搬后重产 ⇒ 4 个 sha256 **相同** | diff | AC16 | ☐ |
 
-## 批次 F — 3.2 SoC checker 机制下沉（**G-1 未闭 ⇒ 不开工**）
+## 批次 F — 3.2 SoC checker 机制下沉（**F1 = G-1 的交付物 · architect 执行 ⇒ 未闭前 F2–F9 不开工**）
 
 | # | 任务 | 判据 | 状态 |
 |---|---|---|---|
-| F1 | **architect 裁决（本批次的前置 · architect 执行）**：① 蓝图 §4.3 **4 处陈旧表述订正**（`:19` G-发射总表 · `:43` 缺口② 的悬空 `415-483` · `:200` §4.3 行 1 · `:272` §5.2 M4）② **9 个符号的逐符号切分表**（`kExpectedModules` · `kExpectedTopPorts` · `product_modules` · `find_verilator` · `make_inputs` · `make_observations` · `make_stimulus` · `tamper_hier` · `check_products`）—— 逐个定归属（库层 / example / 不下沉），**禁**「待定」，「下沉」**须给具名第二消费者 + 调用点** ③ **形态裁决**（默认模式是否恒发层次化 ⇒ 分支 A / B）④ **ADR-074「不覆盖」条**是否需同步措辞 ⑤ **`.rddf/improvements/rtl-verification-single-source-2026-11.md`（draft 活文档）同批订正** ⇒ ⇒ ⚠️ 蓝图属 **architect 写集** ⇒ ⇒ builder 不可写 ⇒ ⇒ **MUST NOT** 由 builder 代改 | AC22 · AC23 | ☐ |
-| F2 | **按 F1 的切分表下沉**到**公开头** `include/rtl_emit/*.h`（产物派生 module 集 · 顶层端口计数 · 变异自证编排）⇒ **linter 路径作为参数**（**不下沉** `find_verilator`）⇒ ⇒ **只下沉编排，判据值留 example**（ADR-074「不覆盖」）⇒ ⇒ 下沉范围**由切分表定**，不是写死的 3 个 | AC17 | ☐ |
-| F3 | `emit_rtl_soc.cpp` 的**壳层**（= `main()` 及其直接委派路径）退化为「组装参数 + 调用」⇒ **结构判据**：被裁下沉的符号在 example 侧**无定义** + 新 API 调用点 == 2（**不用行数靶**）⇒ ⇒ ⚠️ 同文件内的产品专属 helper（`make_inputs` / `make_observations` / `check_products` 的判据值）**归 example**，不受本条约束 | AC17 | ☐ |
+| F0 | **开工前准备（不受 G-1 约束 ⇒ 可与 F1 并行；MUST 在任何代码改动之前完成）**：① **采基线**：MUST 在本 change 任何代码改动之前、且 MUST 在 `emit-cli-into-example` **之后**（SoC 入口形态已变）⇒ **分模式两套**（默认模式 / `--check-products` 模式）+ 比较面 = 该 `--out` 目录**全部落盘物**（含 `eq/`）+ 记录 verilator 可用性 ⇒ 前提 = 同 build 配置 + **唯一变量 = `examples/axi4/emit_rtl_soc.cpp`**（**不是**「同 emitter」）② **订正上游活跃 change** `rtl-verification-single-source-2026-11` 的同款陈旧目标（`proposal.md` 的 `:21` / `:34` / `:46` + `tasks.md:29`）⇒ ⇒ 该 change **尚未归档** ⇒ **不是**「历史记录」豁免 | AC23 · AC25 | ☐ |
+| F1 | **architect 裁决（architect 交付 · builder 只验证）**：① 蓝图 §4.3 **6 处**订正（**按锚点文本**定位 · 行号仅辅助）——「G-发射 总表行」·「缺口 ② 行」（含悬空 `415-483`）·「§4.3 行 1」·「§4.3 行 2」（机制落点：`src/rtl_emit/` ⇒ **公开头** `include/rtl_emit/`）·「§4.3 末尾『不动』条」（与 ⑤ 冲突）·「§5.2 M4 行」② **9 个符号的逐符号切分表**（`kExpectedModules` · `kExpectedTopPorts` · `product_modules` · `find_verilator` · `make_inputs` · `make_observations` · `make_stimulus` · `tamper_hier` · `check_products`）—— 逐个定归属（库层 / example / 不下沉），**禁**「待定」，「下沉」**须给具名第二消费者 + 调用点** ③ **形态裁决**（默认模式是否恒发层次化 ⇒ 分支 A / B）④ **ADR-074「不覆盖」条**是否需同步措辞 ⑤ **`.rddf/improvements/rtl-verification-single-source-2026-11.md`（draft 活文档）同批订正** + **2026-11-17 蓝图 §7 登记「默认模式扁平产物」为已知残留** ⇒ ⇒ ⚠️ 蓝图属 **architect 写集** ⇒ ⇒ builder 不可写 ⇒ ⇒ **MUST NOT** 由 builder 代改 | AC22 · AC23 | architect 交付 |
+| F2 | **按 F1 的切分表下沉**到**公开头** `include/rtl_emit/*.h`（实现落 `src/rtl_emit/*.cpp`）⇒ ⇒ ⚠️ **该头的实现 TU 必然 include 它 ⇒ 按 R2 定义不算「消费者」**（实现 ≠ 使用）⇒ ⇒ 故 R2 反向判据不会误红 ⇒ ⇒ **linter 路径作为参数**（**不下沉** `find_verilator`）⇒ ⇒ **只下沉编排，判据值留 example**（ADR-074「不覆盖」）⇒ ⇒ 下沉范围**由切分表定**，不是写死的 3 个 | AC17 | ☐ |
+| F3 | `emit_rtl_soc.cpp` 的**壳层**（= `main()` 本体 + 它调用的**库层**入口）退化为「组装参数 + 调用」⇒ **结构判据**：被裁下沉的符号在 example 侧**无定义** + 新 API 调用点 == 2（**不用行数靶**）⇒ ⇒ ⚠️ example 侧产品专属 helper（`make_inputs` / `make_observations` / `check_products` 的判据值）**无论是否被 `main` 直接调用，一律归 example**（归属以 F1 切分表为准） | AC17 | ☐ |
 | F4 | **第二消费者**：把 `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` 的 module 集/端口计数改为调用新 API；做不到 ⇒ 明写为带门的 follow-up（否则下沉 = 第 5 份实现） | AC17 | ☐ |
 | F5 | **常驻判别力回归**：4 项判据各自注入错期望 ⇒ 必红；④″ 仍执行；退出码语义不变 ⇒ ⇒ ⚠️ **已知边界**：`emit_rtl_soc.cpp:263-273` 的 CHECK 3 在 verilator 不可用时打印 `SKIP` 且**不计 failures** ⇒ ⇒ 基线记录 MUST 含 verilator 可用性 / 版本 | AC18 | ☐ |
-| F6 | **公开面登记（真载体）**：新增公开头 MUST 进 **`.rddf/checks/example-only-headers.tsv` 豁免通道** + `docs/CHANGELOG.md` 一行 ⇒ ⇒ ⚠️ **如实声明**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头 ⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围** ⇒ ⇒ 登记到那里**零判别力**（只作记录，不构成护栏）⇒ ⇒ 该事实 MUST 写进登记条目本身 | AC19 | ☐ |
+| F6 | **公开面登记（真载体）**：新增公开头 MUST 进 **`.rddf/checks/example-only-headers.tsv` 豁免通道** + `docs/CHANGELOG.md` 一行 ⇒ ⇒ ⚠️ **实现 TU 的 include 不算「消费者」**（R2 定义）⇒ ⇒ 该形态**可登记** ⇒ ⇒ ⚠️ **如实声明**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头 ⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围** ⇒ ⇒ 登记到那里**零判别力**（只作记录，不构成护栏）⇒ ⇒ 该事实 MUST 写进登记条目本身 | AC19 | ☐ |
 | F7 | **产物形态（分支 A 专属）**：SoC 发射入口**恒发层次化** ⇒ ⇒ 护栏 ③ 对 `kind=soc` 行的**发射语义 MUST 同步**（它现在发扁平产物）+ 产物形态 **MUST 登记** ⇒ ⇒ 护栏 ⑧（顶层端口表）在**层次化**产物上仍绿 ⇒ ⇒ 分支 B 下本条**不执行** | AC24 | ☐ |
-| F8 | **基线与等价**：基线 **MUST 在本 change 任何代码改动之前**、且 MUST 在 `emit-cli-into-example` **之后**采 ⇒ ⇒ **分模式两套**（默认模式 / `--check-products` 模式）+ 比较面 = 该 `--out` 目录**全部落盘物**（含 `eq/`）⇒ ⇒ 前提 = 同 build 配置 + **唯一变量 = `examples/axi4/emit_rtl_soc.cpp`**（**不是**「同 emitter」）⇒ ⇒ 记录 verilator 可用性 | AC25 | ☐ |
-| F9 | **切分表为空的合法终态**：若 F1 裁定**无符号可下沉** ⇒ ⇒ 本批次零代码改动 ⇒ ⇒ 实质结论 MUST 在 `.rddf/checks/arch-residual-registry.md` 留一条**已闭合残差**（闭口证据 = 订正后的蓝图位置 + `wc -l` 输出）⇒ ⇒ `bash scripts/verify_arch_ledger_residuals.sh` 绿 | AC26 | ☐ |
-
+| F8 | **产物等价核对**：用 F0 采的基线逐项比对（**分模式两套** + **全部落盘物**）⇒ ⇒ 差异 MUST 为**零**；改动过产物 ⇒ 必红 | AC25 | ☐ |
+| F9 | **切分表为空的合法终态**：若 F1 裁定**无符号可下沉** ⇒ ⇒ 本批次零代码改动 ⇒ ⇒ 实质结论 MUST 由 **F1** 在 **2026-11-17 蓝图 §7「已知残留与边界」** 留一条**已收口**残差（闭口证据 = **存在的路径** · 逗号分隔 · 无空格 · 无反引号）⇒ ⇒ ⚠️ **不是** `.rddf/checks/arch-residual-registry.md`：那本护栏的台账**硬编码**为**另一本**蓝图（`scripts/lib/ledger_residual.py:17`）⇒ ⇒ 往它加行**必红**（「结算行数不一致」）⇒ ⇒ 本条判据 = **蓝图 §7 段落自证** | AC26 | ☐ |
 ## 复核命令
 
 ```bash
@@ -102,31 +102,52 @@ bash scripts/verify_examples_rtl_sim.sh
 ## 复核命令 —— 批次 F（**仅 G-1 闭后执行**）
 
 ```bash
-# AC17 —— 壳层侧无被下沉的符号（示例：product_modules）
-grep -n '^std::set<std::string> product_modules' examples/axi4/emit_rtl_soc.cpp \
-  || echo 'OK: 壳层侧无定义'
+BP=docs/architecture/2026-11-17-rtl-verification-single-source.md
 
-# AC22 —— 切分表覆盖 9 个符号（判据 MUST 命中**表格行**，不是散文）
+# AC17 —— 壳层侧无被下沉的符号（示例：product_modules）
+if grep -q '^std::set<std::string> product_modules' examples/axi4/emit_rtl_soc.cpp; then
+  echo 'FAIL: 壳层侧仍有 product_modules 的定义'; exit 1
+fi
+echo 'OK: 壳层侧无定义'
+
+# AC22 —— 切分表覆盖 9 个符号（**限定在蓝图 §4.3 段内** · 命中表格行 · **带退出码**）
+SEC=$(sed -n '/^### 4.3/,/^### 4.4/p' "$BP")
 for s in kExpectedModules kExpectedTopPorts product_modules find_verilator \
          make_inputs make_observations make_stimulus tamper_hier check_products; do
-  printf '%-22s %s\n' "$s" \
-    "$(grep -c "^| .*$s" docs/architecture/2026-11-17-rtl-verification-single-source.md)"
+  n=$(printf '%s\n' "$SEC" | grep -c "^| .*$s")
+  if [ "$n" -lt 1 ]; then
+    echo "FAIL: §4.3 段缺 $s 的切分表行"; exit 1
+  fi
 done
-# ⇒ 每个计数 MUST ≥ 1；且表内 MUST NOT 出现「待定」
-grep -n '待定' docs/architecture/2026-11-17-rtl-verification-single-source.md \
-  || echo 'OK: 无待定'
+if printf '%s\n' "$SEC" | grep -q '待定'; then
+  echo 'FAIL: 切分表含「待定」'; exit 1
+fi
+echo 'OK: 切分表 9 符号齐备且无待定'
 
-# AC23 —— 陈旧表述清零（按位置限定；蓝图 §5.1 的估算行豁免 ⇒ 不做全文一刀切）
-grep -n '483\|~60\|415-483' docs/architecture/2026-11-17-rtl-verification-single-source.md
-grep -n '483\|~60\|415-483' .rddf/improvements/rtl-verification-single-source-2026-11.md
+# AC23 —— 陈旧表述清零（**按位置**限定；豁免 = 蓝图 §5.1 的估算段 ⇒ 不做全文一刀切）
+if sed '/^### 5.1/,/^### 5.2/d' "$BP" | grep -q '483\|~60\|415-483'; then
+  echo 'FAIL: 蓝图仍有陈旧表述（483 / ~60 / 415-483）'; exit 1
+fi
+if grep -q '483\|~60\|415-483' .rddf/improvements/rtl-verification-single-source-2026-11.md; then
+  echo 'FAIL: draft 活文档仍有陈旧表述'; exit 1
+fi
+echo 'OK: 陈旧表述清零'
 
-# AC24 —— 形态（分支 A：默认模式恒层次化 ⇒ module 数 == 成层 IP 数 + 1）
-d=$(mktemp -d)
+# AC24 —— 形态（分支 A：默认模式恒层次化 ⇒ module 数 == 5 = 4 成层 IP + 根 top）
+d=$(mktemp -d /tmp/opencode/soc_flat.XXXXXX)
 ./build/examples/axi4/emit_rtl_axi_soc --out "$d" --emit-hygiene
-grep -c '^module ' "$d/top.v"
+if test "$(grep -c '^module ' "$d/top.v")" -eq 5; then
+  echo 'OK: 默认模式恒层次化'
+else
+  echo "FAIL: 默认模式 module 数 = $(grep -c '^module ' "$d/top.v")（期望 5）"; exit 1
+fi
 
-# AC26 —— 切分表为空的终态 ⇒ 残差登记闭合
-bash scripts/verify_arch_ledger_residuals.sh
+# AC26 —— 切分表为空的终态 ⇒ 登记在**蓝图 §7**（不是 arch-residual-registry：其台账硬编码另一本蓝图）
+if sed -n '/^## 7\./,$p' "$BP" | grep -q '§4.3'; then
+  echo 'OK: 蓝图 §7 已登记'
+else
+  echo 'FAIL: 蓝图 §7 未登记该残差'; exit 1
+fi
 ```
 
 ## ⚠️ 未做 / 本次不做
