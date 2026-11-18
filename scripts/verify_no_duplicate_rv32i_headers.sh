@@ -10,7 +10,9 @@
 # 六条检查：
 #   C1  同 basename 双副本：include/cpu/** 与 examples/riscv-mini/src/** 之下
 #       同一 basename 的头文件数 MUST ≤ 1
-#   C2  反向 -I：根 tests/CMakeLists.txt MUST NOT 出现 examples/riscv-mini/src 的 -I
+#   C2  反向 -I：根 tests/CMakeLists.txt MUST NOT 出现指向 **examples/** 的 -I
+#       （2026-11-18 起匹配面从 `examples/riscv-mini/src` 扩到 `examples/`；
+#        **注释**里的路径不算 —— CMake 注释先剥掉）
 #       （**跨行续行也 MUST 抓到** —— CMake 的多行命令靠**括号配平**判定结束）
 #   C3  反向 include：根 tests/** 的任何 TU MUST NOT #include examples/** 路径
 #   C4  硬死头：include/cpu/** 与 examples/riscv-mini/src/** 下的头文件若
@@ -388,6 +390,20 @@ target_include_directories(test_alpha PRIVATE
 )
 CMEOF
     st_check "正常跨行 -I MUST NOT 误报" 0 "$(run_guard "$F")"
+
+    # ③c **注释**里出现 examples/ MUST NOT 误报（A6 · 2026-11-18 · 剥注释）
+    F="$WORK/fx_i_comment"; mk_fixture "$F"
+    cat >> "$F/tests/CMakeLists.txt" <<'CMEOF'
+# 历史说明：${PROJECT_SOURCE_DIR}/examples/riscv-mini/src 曾被当作 -I（已移除）
+CMEOF
+    st_check "注释里的 examples/ MUST NOT 误报" 0 "$(run_guard "$F")"
+
+    # ③d 指向 **examples/axi4** 的反向 -I MUST 被抓（匹配面扩到 examples/）
+    F="$WORK/fx_i_axi4"; mk_fixture "$F"
+    cat >> "$F/tests/CMakeLists.txt" <<'CMEOF'
+target_include_directories(test_alpha PRIVATE ${PROJECT_SOURCE_DIR}/examples/axi4)
+CMEOF
+    st_check "指向 examples/axi4 的反向 -I MUST 被抓" 1 "$(run_guard "$F")"
 
     # ④ 反向 include MUST 被抓到
     F="$WORK/fx_inc"; mk_fixture "$F"
@@ -955,20 +971,26 @@ echo ""
 note "--- C2: 根 tests/CMakeLists.txt MUST NOT 有反向 -I ---"
 c2_hits="$(awk '
     {
+        # ⚠️ **剥 CMake 注释**（`#` 到行尾）—— 否则「注释里提到 examples/」会假红
+        #    （2026-11-18 · A6：`tests/CMakeLists.txt` 的历史说明里就有这类路径）
+        line = $0
+        sub(/#.*/, "", line)
         if (buf == "") start = FNR
-        buf = (buf == "") ? $0 : buf " " $0
-        o = gsub(/\(/, "&")
-        c = gsub(/\)/, "&")
+        buf = (buf == "") ? line : buf " " line
+        o = gsub(/\(/, "&", line)
+        c = gsub(/\)/, "&", line)
         depth += o - c
-        cont = ($0 ~ /\\[[:space:]]*$/)
+        cont = (line ~ /\\[[:space:]]*$/)
         if (depth > 0 || cont) next
-        if (buf ~ /include_directories/ && buf ~ /examples\/riscv-mini\/src/) {
+        # ⚠️ 匹配面 = **`examples/`**（不只是 `examples/riscv-mini/src`）—— 库 → example
+        #    反向 `-I` 的**任何**形态都算（2026-11-18 · A6）
+        if (buf ~ /(^|[^_[:alnum:]])target_include_directories|(^|[^_[:alnum:]])include_directories/ && buf ~ /examples\//) {
             print FILENAME ":" start ": " buf
         }
         buf = ""; depth = 0
     }
     END {
-        if (buf != "" && buf ~ /include_directories/ && buf ~ /examples\/riscv-mini\/src/) {
+        if (buf != "" && buf ~ /(^|[^_[:alnum:]])target_include_directories|(^|[^_[:alnum:]])include_directories/ && buf ~ /examples\//) {
             print FILENAME ":" start ": " buf
         }
     }

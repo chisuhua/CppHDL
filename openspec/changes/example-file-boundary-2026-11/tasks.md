@@ -14,7 +14,7 @@
 | A3 | 库公开面归零核验 | `include/**` | AC2 | ✅ |
 | A4 | 根 `tests/` 不再引用这两个头（由 B1–B4 完成后核验） | `tests/**` | AC7 | ✅ |
 | A5 | **搬入的 2 个测试**（`examples/axi4/tests/*.cpp`）也用裸 include（靠 helper 的 `-I examples/axi4`） | `examples/axi4/tests/` | AC3 | ✅ |
-| A6 | **C2 扩展（最小面 + 剥注释）**：扫描面仍只 `tests/CMakeLists.txt`，匹配串 `examples/riscv-mini/src` → `examples/`，**移植 C7 的剥注释 + 括号配平**；新增 fixtures：① 注释里出现 `examples/` ⇒ **绿** ② `target_include_directories(… examples/axi4)` ⇒ **红** ⇒ 并在 AC4 里点名 C7 一并绿 | `scripts/verify_no_duplicate_rv32i_headers.sh` | AC4 | ☐ |
+| A6 | **C2 扩展（最小面 + 剥注释）**：扫描面仍只 `tests/CMakeLists.txt`，匹配串 `examples/riscv-mini/src` → `examples/`，**移植 C7 的剥注释 + 括号配平**；新增 fixtures：① 注释里出现 `examples/` ⇒ **绿** ② `target_include_directories(… examples/axi4)` ⇒ **红** ⇒ 并在 AC4 里点名 C7 一并绿 | `scripts/verify_no_duplicate_rv32i_headers.sh` | AC4 | ✅ |
 | **A7** | **`axi4_full_example` 退役**（2026-11-18 · §4.3.3 裁决）：删 `examples/axi4/axi4_full_example.cpp` ⇒ 连带面 = target · `add_spinalhdl_ported_test(axi4_full …)`（CTest `spinalhdl_axi4_full`）· `CH_TRACKED_EXAMPLE_TARGETS`（**28 → 27**）· `install(TARGETS …)` 删该项 · **`.rddf/checks/examples-rtl-sim-exclusions.tsv` 删该行**（coverage 的 ghost 判据）· **`.rddf/checks/port-naming-exempt.tsv` 删 31 行 + `EXPECTED_EXEMPT_PORTS` 1415 → 1384** · `examples/axi4/AGENTS.md` + `include/axi4/AGENTS.md` 的 EXAMPLES 行 ⇒ ⇒ **覆盖证据** = `tests/test_axi4_full_burst.cpp`（dual-backend） · **MUST 显式登记为缩面**（不静默） | `examples/axi4/` · `.rddf/checks/` · 根 `AGENTS.md` | AC1 · AC11 | ✅ |
 
 ## 批次 B — 消费者归位 / 换 DUT（AC5 · AC6 · AC8 · AC9）
@@ -36,7 +36,7 @@
 | C2 | 根 `tests/CMakeLists.txt` 去掉迁走的注册项（**不得**重复注册） | `tests/CMakeLists.txt` | AC9 | ✅ |
 | C3 | **锚点按实测回填**：⚠️ 2026-11-18 订正 = 原 `+1`（拆分新增）**− 1**（axi4_full 退役）= **净 0** ⇒ ⇒ `CTEST_TOTAL` **268 → 268** · non-perf **257 → 257** · `-L base` **231 → 231** · `EXAMPLES_TEST_SOURCES` 18 → **20** ⇒ ⇒ **MUST 以实测回填**（上面是推导） | 根 `AGENTS.md` | AC10 | ✅ |
 | C4 | **手工改 `tests/test_*.cpp` 计数行**：现写 **145** 但实测 **159** ⇒ 搬走 1 个后为 **158**（**MUST 用实测值，禁「原值 −1」**） | 根 `AGENTS.md` | AC10 | ✅ |
-| C5 | **登记 `CPPHDL_BUILD_EXAMPLES=OFF` 的接受项**（被搬走的 2 个条目消失 ⇒ 锚点只在默认配置成立）⇒ 写在该锚点旁 + 指向本 change | 根 `AGENTS.md` / `.rddf/checks/` | AC20 | ☐ |
+| C5 | **登记 `CPPHDL_BUILD_EXAMPLES=OFF` 的接受项**（被搬走的 2 个条目消失 ⇒ 锚点只在默认配置成立）⇒ 写在该锚点旁 + 指向本 change | 根 `AGENTS.md` / `.rddf/checks/` | AC20 | ✅ |
 
 ## 批次 D — 登记面（AC11 · AC12 · AC13 · AC14）
 

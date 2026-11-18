@@ -548,12 +548,17 @@ bash scripts/rv32i_rtl_sim_env.sh
      .cpp/.cc/.cxx/.C ∪ (b) 含 `CATCH_` 的同类文件 ∪ (c) `examples/**/tests/`
      下的任意 .cpp/.cc/.cxx/.C，去重。Do not reformat. -->
 - EXAMPLES_TEST_SOURCES: 20
+     ⚠️ **`CPPHDL_BUILD_EXAMPLES=OFF` 下的显式接受项**（`example-file-boundary-2026-11` **C5** · AC20）：
+     上述 examples 相关锚点（`EXAMPLES_TEST_SOURCES` · 「examples 的 main() 程序」计数 ·
+     `CTEST_TOTAL` 里的 `spinalhdl_*` 条目）**只在默认配置（`BUILD_EXAMPLES=ON`）成立** ⇒ ⇒
+     `-DCPPHDL_BUILD_EXAMPLES=OFF` 时被搬走的条目会**消失** ⇒ ⇒ 这是**已知且接受**的
+     （锚点是「默认构建的守护」，不是「所有配置的守恒」）。
 - **Test counts（单一真相在上面的 CI 锚点；改动测试后 MUST 同步锚点 + 复核命令）**
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | CTest 条目总数 | 268 | `cd build && ctest -N \| tail -1` |
-  | 其中 non-perf | 257 | `cd build && ctest -N -LE perf \| tail -1` |
+  | CTest 条目总数 | 269 | `cd build && ctest -N \| tail -1` |
+  | 其中 non-perf | 258 | `cd build && ctest -N -LE perf \| tail -1` |
   | `verilator_e2e` 标签数 | 77 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
   | 双后端 parity 源文件数 | 66 | `bash scripts/verify_dual_backend_parity.sh` |
   | 双后端 parity macro 调用数 | 290 | 同上 |
