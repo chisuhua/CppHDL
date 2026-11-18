@@ -43,7 +43,7 @@
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
 | D1 | **棘轮豁免表「两段」（2026-11-18 拆分）**：① 3.1 = **23 行只改第一列路径**（**不删行**）⇒ 锚点仍 **1415** ② A7 = **删 `axi4_full_example` 的 31 行** ⇒ 锚点 **1415 → 1384** ⇒ ⇒ 两段 MUST **分开跑** | `.rddf/checks/port-naming-exempt.tsv` | AC11 | ☐ |
-| D2 | **公开面移除登记 5 条**：2 条 `nofile`（两个头的 glob）+ 3 条 `removed`（类名 · `scope=include/`）⇒ 同步 `EXPECTED_PROBES` 46 → **51**、`EXPECTED_REMOVAL_ROWS` 25 → **30**（登记行 MUST 用 `**移除**`）⇒ `public-api-surface.md` 同章逐条登记 | `.rddf/checks/public-api-removals.tsv` · `public-api-surface.md` | AC12 | ☐ |
+| D2 | **公开面移除登记 5 条**：2 条 `nofile`（两个头的 glob）+ 3 条 `removed`（类名 · `scope=include/`）⇒ 同步 `EXPECTED_PROBES` 46 → **51**、`EXPECTED_REMOVAL_ROWS` 25 → **30**（登记行 MUST 用 `**移除**`）⇒ `public-api-surface.md` 同章逐条登记 | `.rddf/checks/public-api-removals.tsv` · `public-api-surface.md` | AC12 | ✅ |
 | D3 | **输入端口登记表的 3 行保留**：把 `input_port_registry.py` 的 `header_of()` 搜索根从 `include/**` 扩到 `include/**` + `examples/**`（否则 R1 报「登记过时」）⇒ 只更新这 3 行的**消费者路径**列 | `scripts/lib/input_port_registry.py` + 登记表 | AC13 | ☐ |
 | D4 | **零缩面核对**：`verify_rst_n_wiring.sh` 的 `COMPONENTS_W_RST_N` 组件数 **搬家前后相同**（3 个组件仍在表内）⇒ 若数量变化 ⇒ 说明走了「删行」路线 ⇒ 回退 | `scripts/verify_rst_n_wiring.sh` | AC13 | ☐ |
 | D5 | `CH4_ANCHOR` **+2 行**（两个新 `examples/axi4/tests/*.cpp` 的断言数下限） | `scripts/verify_example_assertion_quality.sh` | AC14 | ☐ |

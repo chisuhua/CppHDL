@@ -68,3 +68,8 @@ Origin::Bubbled	removed	include	-	ADR-072-D1-h
 InlineFolded	removed	include	-	ADR-072-D1-h
 ensure_bubbled_port	removed	src/hierarchy_analysis.cpp	-	ADR-072-D1-h
 dangling	removed	src/hierarchy_verilog.cpp	-	ADR-072-D1-h
+AxiLiteTop	removed	include	-	example-file-boundary-2026-11
+AxiSocTop	removed	include	-	example-file-boundary-2026-11
+AxiLiteTestMaster	removed	include	-	example-file-boundary-2026-11
+include/axi4/axi4_lite_example_top.h	nofile	include/axi4/axi4_lite_example_top.h	-	example-file-boundary-2026-11
+include/axi4/axi_soc_example_top.h	nofile	include/axi4/axi_soc_example_top.h	-	example-file-boundary-2026-11
