@@ -371,7 +371,7 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 ⇒ MUST 登记
 `.rddf/checks/public-api-surface.md` + CHANGELOG；且 `scripts/verify_examples_rtl_sim.sh` 的 **④″ 调用点**
 （`kind=soc` 分支）直接调 `emit_rtl_axi_soc --check-products` ⇒ **行为与退出码 MUST 逐字保持**
-（⚠️ 分支 A 后 **module 数 == 5** 的唯一执行者仍为 ④″；护栏 ⑧'（形态退化）是**冗余**判据 ⇒ ⇒ 二者**不是**同一判据）。
+（⚠️ 分支 A 后 **module 数 == 5** 的唯一执行者仍为 ④″；护栏 ⑧'（形态退化）是**互补**判据 —— ④″ 的 `--check-products` 会**覆写 `$work`**（`scripts/verify_examples_rtl_sim.sh` 的 ④″ 段）⇒ ⇒ ⑤ 编译的是 ④″ **重发**的层次化产物 ⇒ ⇒ **③ 当次产物的形态只有 ⑧' 在查** ⇒ ⇒ 二者仍**不是**同一判据（⚠️ **2026-11-18 订正**：原写「冗余」与实现相反 —— 该措辞会诱导后人把 ⑧' 「优化」回 `kind=hier`，从而重新打开 R12 的回归路径））。
 ⚠️ **登记载体订正**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头
 ⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围内** ⇒ ⇒ 登记到那里**零判别力**
 ⇒ ⇒ **真载体** = `.rddf/checks/example-only-headers.tsv` 的**豁免通道**（消费者恰为 examples ⇒
@@ -509,6 +509,9 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 
 > **「缓解」列的状态词**：**裁决**（口径已定）· **落实**（实施未闭）· **闭口判据**（何时算闭）
 > ⇒ ⇒ R1–R11 用的是散文式缓解 ⇒ ⇒ R12 起采用本词表（**两段式**：裁决 ✅ / 落实 ⚠️ 未闭）。
+>
+> ⚠️ **落实状态变更**（**唯一在读的一处**，避免读者把「未闭」当现状）：**R12 于 2026-11-18 落实闭合**（commit `0395cfc`；闭口证据 = 护栏 ⑧' 覆盖 `kind ∈ {hier, soc}` + 投毒18 + `REGISTERED_SOC: 1`）。
+> 其余残留行的「未闭」仍属实 ⇒ ⇒ 本节的未闭条目仍是**当前态**，不是历史。
 
 | # | 残留 | 后果 | 缓解 |
 |---|---|---|---|
@@ -523,8 +526,8 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 | R9 | 护栏 `--self-test` 的投毒对象改变（TB 成生成物） | 自检失效 | Step 5 内改为投毒 **IR / 生成器** |
 | R10 | **`tests/*` 的组件级判据仍是期望值的第三个载体**（`tests/test_axi_lite_slave_conformance.cpp` 的 15 个 `REQUIRE` 字面值） | 「G-期望 3 处」若把它计入则不成立 | **如实登记**：它是 **(A) 路径（组件级规范符合性）** 的判据，与 (C) 的交付验证**不同层** ⇒ ⇒ 本 change **不动**；若将来要收敛 ⇒ 单独立项 |
 | R11 | `Simulator` 新增 node_id 级访问器 = **公开面扩张** | 下游可见 | 按仓规登记 `public-api-surface.md` + CHANGELOG（M19） |
-| **R12** | **SoC 发射入口的默认模式发扁平产物**（2026-11-18 实测：`emit_rtl_soc.cpp` 只在 `--check-products` 模式补 `--hierarchical` ⇒ 护栏 ③ 对 `kind=soc` 发的**正是**默认模式）⇒ ⇒ 现状 = **实现偏离已登记的交付契约**（默认模式 = 5 module 早已在 TB 头注 / `CMakeLists.txt` target 注 / tsv SoC 行 note / 已归档 change 的交付契约 **四处**登记）⇒ ⇒ 与 `rtl-soc-output` 的既有 requirement 冲突 | SoC 的「交付产物」形态不确定 ⇒ 消费方可能拿到 1-module 的 SoC | **裁决** ✅ 已裁决（2026-11-18 · SoC 发射入口恒发层次化 ⇒ **恢复契约**）· **落实** ⚠️ 未闭（归 change `example-file-boundary-2026-11` 的 3.2 批次）· **闭口判据** = 护栏 ⑧' 覆盖 `kind=soc`（现仅 `kind=hier` ⇒ 该回归路径**当前无任何常驻判据**）⇒ ⇒ **裁决前本条持续存在**，不得静默 ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 本行的判据只能来自**实现侧护栏** |
-| **R13** | **`tb_axi_soc_example` 的激励是手写过渡态**（根因 = UART 8N1 帧解码超出 `.verif` 封闭原语集 · ADR-074 D2）⇒ ⇒ 激励语义的**完备性只在 `.sv` 侧**（C++ 侧 = 最小可用集：GPIO 写/读 + 复位） | 「设计定义/激励分离」在 SoC 侧**只到文件级、未到语义级** | **裁决** ✅ 已裁决（§4.3.3）· **落实** ⚠️ 未闭（**扩展 `.verif` 原语集** = ADR-074 D2 的签批决策变更 ⇒ **独立立项**）· **检查时机** = 产生 `tb_axi_soc_example.cpp` 的 change（`example-file-boundary-2026-11`）**归档时**由 verifier 核对此行 + 产生该 ADR 修订的 change 归档时再核对一次 · **漂移判据** = tsv SoC 行 **MUST NOT** 加 `interp-entry`（护栏 ⑨ 的条数等式**不适用于** SoC 过渡期 —— C++ 侧 N ≠ `.sv` 侧 14 是**预期**，不是缺陷）⇒ ⇒ 若将来加 `interp-entry` ⇒ 先决条件 = R13 已闭 · **MUST NOT** 把手写记成已收敛 ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 同 R12：**不得**往它加行
+| **R12** | **SoC 发射入口的默认模式发扁平产物**（2026-11-18 实测：`emit_rtl_soc.cpp` 只在 `--check-products` 模式补 `--hierarchical` ⇒ 护栏 ③ 对 `kind=soc` 发的**正是**默认模式）⇒ ⇒ 现状 = **实现偏离已登记的交付契约**（默认模式 = 5 module 早已在 TB 头注 / `CMakeLists.txt` target 注 / tsv SoC 行 note / 已归档 change 的交付契约 **四处**登记）⇒ ⇒ 与 `rtl-soc-output` 的既有 requirement 冲突 | SoC 的「交付产物」形态不确定 ⇒ 消费方可能拿到 1-module 的 SoC | **裁决** ✅ 已裁决（2026-11-18 · SoC 发射入口恒发层次化 ⇒ **恢复契约**）· **落实** ✅ **已闭**（2026-11-18 · commit `0395cfc`）· **闭口判据** = 护栏 ⑧' 覆盖 `kind=soc` ⇒ ✅ **已满足**：⑧' 的生效条件已改为 `kind ∈ {hier, soc}`（`scripts/verify_examples_rtl_sim.sh`）⇒ ⇒ 判别力 = **投毒18**（soc 产物压成单 module ⇒ 必红，**在 `--self-test` 内**）+ **soc 清单未投毒 ⇒ 仍绿**（`REGISTERED_SOC: 1`）；生产轮 soc 行实测 `✅ ⑧' 层次化形态成立（module 数 5 · 根 = top）` ⇒ ⇒ **本条关闭**（回顾：关闭前「入口退回扁平」这条回归路径**无任何常驻判据** —— 这正是本条的成因）· ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 本行的判据只能来自**实现侧护栏** · **状态复算**（本行**无自动守护** ⇒ 每次 phase-exit / 被质疑时手动执行，≈10 秒）：四式全真才维持「已闭」（**MUST 用 `grep -F`** —— 串里含 `[ ]` 走 BRE 会被当字符类；且**分片匹配**，避免把竖线写进表格单元格）：① `grep -qF '[ "$kind" = "hier" ]' scripts/verify_examples_rtl_sim.sh` · ② `grep -qF '[ "$kind" = "soc" ]' scripts/verify_examples_rtl_sim.sh` · ③ `grep -qF 'flatten_soc' scripts/verify_examples_rtl_sim.sh` · ④ `grep -qF 'REGISTERED_SOC: 1' scripts/verify_examples_rtl_sim.sh` ⇒ ⇒ 任一落空 ⇒ **本行即刻翻回「⚠️ 未闭」**（闭口判据消失即 reopen，无需新裁决） ⚠️ **正/负两面口径**：正向（⑧' 对 soc）**常驻**（生产轮每跑必查 · CI 在跑）；**负向**（投毒18）只在 `--self-test`，而**该 self-test 当前未挂 CI** ⇒ ⇒ 若要「⑧' 被改回 hier-only ⇒ 自动红」成为系统性保证，需另立项把 `scripts/verify_examples_rtl_sim.sh --self-test` 挂进 CI（一行 yml，属 builder 写集） |
+| **R13** | **`tb_axi_soc_example` 的激励是手写过渡态**（根因 = UART 8N1 帧解码超出 `.verif` 封闭原语集 · ADR-074 D2）⇒ ⇒ 激励语义的**完备性只在 `.sv` 侧**（C++ 侧 = 最小可用集：GPIO 写/读 + 复位） | 「设计定义/激励分离」在 SoC 侧**只到文件级、未到语义级** | **裁决** ✅ 已裁决（§4.3.3）· **落实** ⚠️ 未闭（**扩展 `.verif` 原语集** = ADR-074 D2 的签批决策变更 ⇒ **独立立项**）· **检查时机** = 产生 `tb_axi_soc_example.cpp` 的 change（`example-file-boundary-2026-11`）**归档时**由 verifier 核对此行 + 产生该 ADR 修订的 change 归档时再核对一次 · **漂移判据** = tsv SoC 行 **MUST NOT** 加 `interp-entry`（护栏 ⑨ 的条数等式**不适用于** SoC 过渡期 —— C++ 侧 N ≠ `.sv` 侧 14 是**预期**，不是缺陷）⇒ ⇒ 若将来加 `interp-entry` ⇒ 先决条件 = R13 已闭 · **MUST NOT** 把手写记成已收敛 ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 同 R12：**不得**往它加行 |
 
 ---
 
