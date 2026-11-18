@@ -1,6 +1,6 @@
 // examples/axi4/axi4_lite_example_top.h
 //
-// AXI4-Lite 示例的**顶层组件**（从 `examples/axi4/axi4_lite_example.cpp` 抽出）。
+// AXI4-Lite 示例的**顶层组件**（从 `examples/axi4/tb_axi4_lite_example.cpp` 抽出）。
 //
 // ⚠️ **住址变更**（2026-11-18 · `example-file-boundary-2026-11` A1/A2）：本头**从
 //   `include/axi4/` 搬到 `examples/axi4/`** ⇒ ⇒ 理由 = 它是 **example 专属设计**
