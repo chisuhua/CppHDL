@@ -22,9 +22,10 @@
 #   ⑧' **层次化形态判据**（`kind=hier`）—— 产物 MUST 含 **≥ 2** 个 module
 #      且含根 module `top` ⇒ ⇒ 否则「层次化」已静默退化成扁平
 #      （⚠️ ⑧ 对这条**结构性失明**：退化后端口表**照样相同**）
-#   ⑦ `--self-test`：**8 条**投毒**各自**必红（含 ⑧ 的**正负成对**两向：
-#      篡改 `port_table` 一个名字 / 产物多插一个下沉端口；以及 ⑧' 的一向：
-#      把层次化产物压成单 module）
+#   ⑦ `--self-test`：**18 条**投毒**各自**必红 + **2 条**必绿（2026-11-18 · 计数会漂，
+#      以本注释与末尾 PASS 行为准）。其中 ⑧ 的**正负成对**两向（篡改 `port_table`
+#      一个名字 / 产物多插一个下沉端口）+ ⑧' 的**两向**（`kind=hier` 压成单 module ·
+#      `kind=soc` 压成单 module ⇒ 2026-11-18 起 ⑧' 也覆盖 soc）
 #
 # ⚠️ **禁**自研 Verilog 静态分析器判「断言非空」
 #   （草案 metis 订正：仓内那个自研 C 子集分析器在第 4/5/6 轮对抗审稿里
@@ -33,7 +34,7 @@
 # 用法：
 #   scripts/verify_examples_rtl_sim.sh                     # 严格（CI 用）
 #   scripts/verify_examples_rtl_sim.sh --list              # 只列清单
-#   scripts/verify_examples_rtl_sim.sh --self-test         # 4 条投毒自检
+#   scripts/verify_examples_rtl_sim.sh --self-test         # 18 条投毒 + 2 条必绿自检
 #   scripts/verify_examples_rtl_sim.sh --allow-pending --budget=6
 #        # 允许 `pending` 的行数 ≤ 6（**E6 接 CI 的过渡形态**：
 #        #  预算 MUST 随进度**单调下降** ⇒ ⇒ 忘更新就从「预算超额」变红）
@@ -517,7 +518,7 @@ assert t2 != t, "投毒失败：找不到 module 头"
 p.write_text(t2, encoding="utf-8")
 PY
         ;;
-    flatten_hier)
+    flatten_hier|flatten_soc)
         # ⚠️ **投毒「层次化退化成扁平」**（2026-11-17 · 层次化产品面）
         #   ⇒ 裁掉除根 module 外的**全部** module 定义 ⇒ ⇒ 产物只剩 1 个 module
         #   ⇒ ⇒ ⑧'（「层次化产物 MUST ≥ 2 个 module」）MUST 转红
@@ -604,7 +605,7 @@ PY
         ok "⑥' 生成物新鲜度：逐字节重现 ✓"
     fi
 
-    # ── ⑧' **层次化形态判据**（`kind=hier` 生效 · 2026-11-17）─────────────
+    # ── ⑧' **层次化形态判据**（`kind ∈ {hier, soc}` 生效 · 2026-11-17 · soc 于 2026-11-18 扩展）──
     #   ⚠️ **为什么必须有这条**：⑧ 只验**端口表** ⇒ ⇒ 若层次化**退化成扁平**
     #   （发射器的 `--hierarchical` 失效 / 未来重构掉了层次化分支）⇒ ⇒
     #   端口表**照样相同** ⇒ ⇒ ⑧ 仍绿 ⇒ ⇒ 护栏对「形态退化」**结构性失明**。
@@ -612,7 +613,12 @@ PY
     #   ⚠️ **MUST 跑在编译之前**：压扁后的产物**不可编译**（根 module 的实例语句
     #   仍引用被裁掉的子 module ⇒ `MODMISSING`）⇒ ⇒ 否则红在「编译失败」而不是
     #   「形态不对」⇒ ⇒ 判别力自证会「红了但不是期望的判据」。
-    if [ "$kind" = "hier" ]; then
+    # ⚠️ **2026-11-18**（`example-file-boundary-2026-11` F7 · 蓝图 §4.3.2 的后置条件
+    #   + §7 **R12 的闭口判据**）：条件从 `kind=hier` 扩到 **`kind ∈ {hier, soc}`**
+    #   ⇒ ⇒ 否则「SoC 发射入口退回扁平」这条回归路径**无任何常驻判据**
+    #   （⑧ 只比端口表 ⇒ 退化后照样相同）；④″ 的 `--check-products` 会把 `$work`
+    #   覆写成层次化 ⇒ ⑤ 编译的仍是层次化 ⇒ ⇒ 整条链**全绿**。
+    if [ "$kind" = "hier" ] || [ "$kind" = "soc" ]; then
         local mods n_mods
         mods="$(python3 "$REPO_ROOT/scripts/lib/flat_rtl_emit_check.py" \
             --modules "$dut_v" 2>&1)"
@@ -835,7 +841,7 @@ if [ "$MODE" = "check" ]; then
     exit 0
 fi
 
-# ── ⑦ --self-test：4 条投毒**各自**必红 ─────────────────────────────
+# ── ⑦ --self-test：**18 条**投毒各自必红 + **2 条**必绿（2026-11-18 计数）───────────
 run_self_test() {
     local st_root="$WORK_ROOT/selftest"
     rm -rf "$st_root"
@@ -873,9 +879,9 @@ EOF
     local st_list="$st_root/list.tsv"
     local st_tb_rel="examples/spinalhdl-ported/counter/tb_counter_simple_example.sv"
 
-    run_case() { # $1 = 名称；$2 = 期望的错误关键词；$3（可选）= 环境前缀
-        local name="$1" want="$2" env="${3:-}" out rc
-        out="$(env $env RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" \
+    run_case() { # $1 = 名称；$2 = 期望的错误关键词；$3（可选）= 环境前缀；$4（可选）= 清单
+        local name="$1" want="$2" env="${3:-}" list="${4:-$st_list}" out rc
+        out="$(env $env RTL_SIM_LIST="$list" RTL_SIM_WORK="$st_root/work" \
             bash "$0" 2>&1)"
         rc=$?
         if [ "$rc" -eq 0 ]; then
@@ -895,9 +901,9 @@ EOF
     }
 
     # **必绿**用例（`emit-cli-into-example` B5）：投毒形态不改变可观测行为 ⇒ MUST 仍绿
-    run_case_green() { # $1 = 名称
-        local name="$1" out rc
-        out="$(RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" bash "$0" 2>&1)"
+    run_case_green() { # $1 = 名称；$2（可选）= 清单
+        local name="$1" list="${2:-$st_list}" out rc
+        out="$(RTL_SIM_LIST="$list" RTL_SIM_WORK="$st_root/work" bash "$0" 2>&1)"
         rc=$?
         if [ "$rc" -ne 0 ]; then
             echo "  [0;31m❌ 自检 $name：**转红** ⇒ ⇒ 该形态本应不影响行为[0m"
@@ -907,6 +913,21 @@ EOF
         fi
         ok "自检 $name：仍绿 ✓"
         return 0
+    }
+
+    # ⚠️ **kind=soc 的独立清单**（2026-11-18 · F7）：不并入上面的共享清单 ——
+    #   共享清单会被**每一个**投毒用例跑一遍，而 soc 行会额外触发 ④″
+    #   （`--check-products`：lint + 双形态逐拍等价 + verilator 编译）⇒ ⇒ 并入会让
+    #   自检时长乘上用例数。⇒ ⇒ 只用一个只含 soc 行的清单跑 **2 次**（绿 + 毒）。
+    make_soc_list() { # $1 = 清单路径 ⇒ ⇒ 只含一行 kind=soc
+        cat >"$1" <<'SOCEOF'
+# self-test 用的临时清单（**只含 soc 行** ⇒ ⇒ ⑧' 对 kind=soc 的载体）
+#COLUMNS: target kind source component emitter emitter_args tb status generated min_checks scenarios spec_checks note
+# REGISTERED_TARGETS: 0
+# REGISTERED_SOC: 1
+# REGISTERED_HIER: 0
+tb_axi_soc_example	soc	examples/axi4/tb_axi_soc_example.cpp	AxiSocTop	tb_axi_soc_example	--emit-rtl	examples/axi4/tb_axi_soc_example.sv	verified	no	14	4	10	self-test fixture（kind=soc · ⑧' 的载体）
+SOCEOF
     }
 
     # ── 基线：未投毒 ⇒ MUST 绿 ────────────────────────────────────
@@ -1089,6 +1110,17 @@ PY
     ' "$st_list" >"$st_list.tmp" && mv "$st_list.tmp" "$st_list"
     run_case_green "必绿：中间插列（值非空）"
 
+    # ── 投毒 18：**kind=soc 的形态退化**（⑧' 对 soc 的判别力 · 2026-11-18 · F7）──
+    #   ⚠️ 与投毒8（flatten_hier）**不同**：那条钉的是 kind=hier 行；本条钉的是
+    #   **kind=soc** 行 ⇒ ⇒ 两者各自证明 ⑧' 在两个桶上都有判别力（AC24 的
+    #   「soc 负向对照（投毒 ⇒ 必红）」）。
+    local st_soc_list="$st_root/list_soc.tsv"
+    make_soc_list "$st_soc_list"
+    run_case "投毒18（SoC 产物被压成单 module ⇒ ⑧' 对 kind=soc 必红）" \
+        "⑧' 层次化产物只有" "RTL_SIM_TAMPER=flatten_soc" "$st_soc_list"
+    # 必绿：soc 清单**未投毒** ⇒ MUST 绿（证明 ⑧' 对 kind=soc 不误伤）
+    run_case_green "soc 清单未投毒（⑧' 对 kind=soc 不误伤）" "$st_soc_list"
+
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
     rm -f "$REPO_ROOT/$st_tb_rel.st_orig"
@@ -1105,7 +1137,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 17 条投毒各自转红 · 1 条必绿用例仍绿 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 18 条投毒各自转红 · 2 条必绿用例仍绿 · 还原复绿）"
     exit 0
 }
 
