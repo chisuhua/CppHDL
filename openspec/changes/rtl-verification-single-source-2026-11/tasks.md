@@ -26,7 +26,7 @@
 | B2 | **32 个顶层端口具名**（`AxiLiteTop` 20 + `AxiSocTop` 12） | 同上 | AC2 · `scripts/verify_port_naming.sh`（豁免表 **1447 → 1415**） | ✅ |
 | B3 | 验证源 `examples/axi4/tb_axi4_lite_example.verif`（7 场景 / 113 断言） | 同上 | AC7（三方等式） | ✅ |
 | B4 | 生成式 TB 入仓（`examples/axi4/tb_axi4_lite_example.sv`） | 同上 | AC6（逐字节重现） | ✅ |
-| B5 | 发射入口**薄化**（`emit_rtl.cpp` 43 → 43；`emit_rtl_soc.cpp` 483 → 330） | `examples/axi4/emit_rtl*.cpp` | AC1（`grep toVerilogHierarchical` 归零） | ✅ |
+| B5 | 发射入口**薄化**（⚠️ **2026-11-18 订正**：原「`emit_rtl_soc.cpp` 压到某个小行数」的估算**作废** —— 实测 388 行 ⇒ ⇒ 目标改为**结构判据**：被下沉的符号在 example 侧**无定义**；见蓝图 §4.3.1 的逐符号切分表） | `examples/axi4/emit_rtl*.cpp` | AC1（`grep toVerilogHierarchical` 归零） | ✅ |
 | B6 | SoC TB 改**具名**连线（此前是 `top_unnamed_input_N`） | `examples/axi4/tb_axi_soc_example.sv` | AC18 | ✅ |
 
 ## 批次 C — 护栏与登记

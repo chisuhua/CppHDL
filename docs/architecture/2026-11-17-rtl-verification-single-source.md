@@ -1,10 +1,11 @@
 # RTL 验证的单一真相源与生成式 TB —— 完整方案（架构主题文档）
 
-- **状态**: **Draft · v4**（architect · 2026-11-17 · oracle 第 1 轮 REJECT（6B + 9S）⇒ v2 全闭 · critic 第 1 轮 REJECT（4B + 6S）⇒ v3 全闭 · **复审 APPROVE_WITH_CONDITIONS · 0 BLOCKER · `mergeable: yes`** ⇒ v4 处置 SHOULD_FIX）
+- **状态**: **Draft · v4**（architect · 2026-11-17 · oracle 第 1 轮 REJECT（6B + 9S）⇒ v2 全闭 · critic 第 1 轮 REJECT（4B + 6S）⇒ v3 全闭 · **复审 APPROVE_WITH_CONDITIONS · 0 BLOCKER · `mergeable: yes`** ⇒ v4 处置 SHOULD_FIX）· **2026-11-18 订正 §4.3（发射面收敛口径 · 事实订正 + 形态裁决 + 逐符号切分表）⇒ oracle 第 2 轮 REJECT（3B）⇒ 复审 REJECT（1 新 B + B3 收尾）⇒ **均已处置** ⇒ critic 第 1 轮 **APPROVE_WITH_CONDITIONS**（0 BLOCKER）⇒ SHOULD_FIX **10 条已处置**（含 1 条**事实错误**：⑧ 实为「集合 + 顺序」双重判据 ⇒ 原「只用 set 比较」的告诫**作废**）**
 - **关联决策**: **ADR-074**（验证单一真相源 + 生成式 TB）· **ADR-075**（端口具名化 = 产品面前提）
 - **上位决策**: ADR-072（顶层端口面 + 四件套 · D2/D4）· ADR-073（SoC 产物形态 + SoC 层 TB · D3/D6）· ADR-058/061（层次化输出）· ADR-035（Verilator backend）
-- **关联 change**: **待立项**（`backlog: rtl-verification-single-source-2026-11`）
+- **关联 change**: `rtl-verification-single-source-2026-11`（**已立项 · 未归档**）· `example-file-boundary-2026-11`（**已立项** · §4.3 的切分表与形态裁决由其 **3.2 批次**落实）· `emit-cli-into-example-2026-11`（**已立项** · `emit_rtl.cpp` 删除）· `axi4-verif-driven-cpp-2026-11`（**已立项**）
 - **文档定位**: **当前态唯一权威**（`docs/architecture/README.md` 登记 · 既有日期化文件 = 历史快照）
+- **行号约定**：本文件的行号引用**仅作辅助定位** ⇒ ⇒ 权威锚点是**符号名 / 章节标题 / 表格行文本**（行号随编辑漂移）。
 
 ---
 
@@ -16,7 +17,7 @@
 |---|---|---|---|---|
 | **G-期望** | `.rddf/checks/*.md` 手推表 | `tb_*.sv` 的 `expect_*` | `tests/*` 的 `REQUIRE` | 同一批期望值写 3 遍 |
 | **G-端口** | C++ 成员名 | 产物端口名（`top_unnamed_input_N`） | **手写映射表** | 🔴 **当前已漂**（见 §2.2 ⑭） |
-| **G-发射** | `emit_rtl.cpp`（43 行薄壳） | `emit_rtl_soc.cpp`（483 行自解析） | `emit_rtl_hier.cpp`（52 行薄壳） | 两个层次化入口形态不一致 |
+| **G-发射** | `examples/axi4/emit_rtl.cpp`（**32 行**薄壳 ⇒ 归 change `emit-cli-into-example` 删除） | `examples/axi4/emit_rtl_soc.cpp`（**388 行** · 壳层 39 行**已**走库层 CLI） | `examples/riscv-mini/emit_rtl_hier.cpp`（**48 行**薄壳） | 两个层次化入口形态不一致（收敛口径见 §4.3） |
 
 **用户诉求（2026-11-17）**：「从原始 `*example.cpp` 构建端口连线 + 提供激励/断言/期望值的 cpp + 直接产出 `.sv` TB」，且「不要过于碎片化」。
 **本方案的核心判断**：诉求成立，但**不能按字面实现** —— 字面实现会撞两条既有纪律（§4.1.2 D5 · §4.1.2 D2），且会引入「两个语义实现」的隐性分裂（§4.1.1）。
@@ -40,7 +41,8 @@
 | # | 事实 | 证据 |
 |---|---|---|
 | ① | ✅ 库层支持层次化产物 | `src/rtl_emit/cli.cpp:77-78, 186-208`（`2db2eda`） |
-| ② | 🔴 `emit_rtl_soc.cpp` 仍自解析 + 自发射（483 行）⇒ 其「`run_emit_cli` 只发扁平」前提**已被 ① 推翻** | `examples/axi4/emit_rtl_soc.cpp:5-8, 64-89, 415-483` · `examples/axi4/CMakeLists.txt:41-42` |
+| ② | 🔴 `emit_rtl_soc.cpp` 的 **checker 机制**仍自实现（**388 行**；壳层 39 行**已**走库层 CLI ⇒ 「自解析 + 自发射」已不成立）⇒ 其「`run_emit_cli` 只发扁平」前提**已被 ① 推翻** | `examples/axi4/emit_rtl_soc.cpp:53, 90, 115, 138, 169, 218`（自实现符号）· `:350-388`（壳层）· `examples/axi4/CMakeLists.txt:41-42` |
+| ②' | ⚠️ **历史快照**：同题的另一本日期化蓝图 `docs/architecture/2026-11-16-soc-rtl-product-and-tb.md` 仍写「自己解析 + 自己发射 · 旧行数」⇒ ⇒ 它是**历史快照 ⇒ 不追溯改写**（本文件是**当前态唯一权威**）⇒ ⇒ 但它**不得**被当作现状依据 | `docs/architecture/2026-11-16-soc-rtl-product-and-tb.md`（历史快照）· 本文件头部「文档定位」 |
 | ③ | ✅ 库层已有 TB 骨架生成器（连线 + clk/rst + VCD；激励/断言留 `// TODO:`） | `include/rtl_emit/tb_stub.h:59` · `src/rtl_emit/tb_stub.cpp:95-98, 154-158` |
 | ④ | 🔴 无反射 ⇒ 未具名端口 `cpp_member` = `unnamed_input` 占位 | `include/rtl_emit/manifest.h:110-125` |
 | ⑤ | ✅ N2 棘轮已把「可解析到成员名」立为 MUST（仅新增端口）；**豁免表 1447 行**，护栏锚点 `EXPECTED_EXEMPT_PORTS=1447` | `scripts/verify_port_naming.sh:30-32, 50` |
@@ -195,15 +197,107 @@
 
 ### 4.3 方案 C —— 发射面收敛（G-发射）
 
+> ⚠️ **本节于 2026-11-18 订正**（architect 裁决 · 落实于 change `example-file-boundary-2026-11` 的
+> **3.2 批次**）：原表的**现状描述**与**行数目标**双双陈旧 ⇒ ⇒ 本节改为**结构判据**。
+> 订正依据 = 实测（`emit_rtl_soc.cpp` = **388 行**；壳层 `main` = `:350-388`）。
+
 | 动作 | 净变化 |
 |---|---|
-| `emit_rtl_soc.cpp` ⇒ 库层 `run_emit_cli`（强制 `--hierarchical`，同 `emit_rtl_hier.cpp:38-40`） | 483 → ~60 行 |
-| `--check-products` 的**机制**下沉 `src/rtl_emit/`（RV32I 侧可复用）；**SoC 专属期望**留参数 | 库层 +1 入口 |
-| `emit_rtl.cpp`（43 行）⇒ 并入 `axi4_lite_example.cpp` 的 `--emit-rtl <dir>` 模式 | −1 文件 / −1 target |
-| 陈旧注释（`emit_rtl_soc.cpp:5-8` + `CMakeLists.txt:41-42`） | 订正 |
+| `emit_rtl_soc.cpp` 的**壳层**（`main()` 本体）⇒ 库层 `run_emit_cli`（**恒** `--hierarchical`，同 `emit_rtl_hier.cpp:38-40`） | **壳层 39 行** ⇒ ⇒ **不再是行数目标**（见 §4.3.1） |
+| `--check-products` 的**机制**下沉 **`include/rtl_emit/`（公开头）+ 实现 `src/rtl_emit/`**（RV32I 侧可复用）；**SoC 专属期望**留参数 | 库层 +1 入口 |
+| `examples/axi4/emit_rtl.cpp`（**32 行**）⇒ 并入 `axi4_lite_example.cpp` 的 `--emit-rtl <dir>` 模式 | −1 文件 / −1 target |
+| 陈旧注释：`emit_rtl_soc.cpp` 头部 —— 旧**行数** MUST 订正（**388 行**）·「**重复实现库层已有的能力**」句**已失真**（壳层早已走库层 CLI）⇒ MUST 删 · 用法行仍写 `--hierarchical` ⇒ 分支 A 后它**已是默认** ⇒ MUST 更新 · `CMakeLists.txt` 的 target 注（「发射时带 `--hierarchical`」**已与分支 A 一致 ⇒ 保留，不再订正**） | 订正 |
 
-⚠️ **治理义务**：`--check-products` 下沉 = **新增公开 CLI 选项 + 新公开头** ⇒ MUST 登记 `.rddf/checks/public-api-surface.md` + CHANGELOG；且 `scripts/verify_examples_rtl_sim.sh:414` 直接调 `emit_rtl_axi_soc --check-products` ⇒ **行为与退出码 MUST 逐字保持**（ADR-073 V1–V3 的唯一执行者）。
-⚠️ **不动**：`.rddf/improvements/` 与 `openspec/changes/archive/**` 的同款表述（历史记录）。
+#### 4.3.1 逐符号切分表（`emit_rtl_soc.cpp` · **9 个**符号）
+
+> 归属维度 = **规则 vs 值**（**不是**「编排 vs 值」）：**规则** = 产品无关的判定逻辑
+> （⇒ 可下沉）· **值** = 某个产品的期望（⇒ 留 example，ADR-074「不覆盖」）。
+> ⇒ ⇒ **「下沉」的门槛 = 规则侧产品无关**（判定逻辑不依赖任何产品）⇒ ⇒ **具名第二消费者是加分项、
+> 不是门槛** ⇒ ⇒ 但**门槛未满足者 MUST 如实标注**（如 `tamper_hier`：第二消费者**语义不同**）⇒ ⇒
+> ⇒ 两者冲突时**以本表为准**（change 3 的 AC17 / F2 已同步）。
+
+| 符号 | 行 | 性质 | 归属 | 依据 |
+|---|---|---|---|---|
+| `kExpectedModules` | `:43` | **值**（module 集冻结） | **example** | ADR-074「不覆盖」 |
+| `kExpectedTopPorts` | `:50` | **值**（顶层端口数 = 14） | **example** | 同上 |
+| `product_modules` | `:53` | **规则**（从产物派生 module 集） | **下沉** | 与产品无关；✔ 第二消费者 = `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp`（`count_occurrences("\nmodule ")`）⇒ ⇒ **同一语义两份实现** |
+| `find_verilator` | `:67` | **规则（环境依赖 ⇒ 不下沉）** | **不下沉** | 仓内先例：lint 门属**产物级护栏**，不进代码（`examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` 的「lint 门不在这里」注记）⇒ ⇒ **路径作参数传入** ⇒ ⇒ ⚠️ **口径调和**：**工具发现**（环境依赖）留 example；**lint 判据**（`--lint-only` 退出码 == 0）是**产品无关规则 ⇒ 下沉**，其 **linter 路径**与 **`--top-module` 名**一并作参数 ⇒ ⇒ 两者不矛盾 |
+| `make_inputs` | `:90` | **值**（SoC 顶层自有端口面 · 收 `AxiSocTop&`） | **example** | 产品专属 |
+| `make_observations` | `:115` | **值**（SoC 观测面 · 收 `AxiSocTop&`） | **example** | 同上 |
+| `make_stimulus` | `:138` | **值**（`0x5A` / `0xA5` 的 GPIO·AXI 事务表） | **example** | ⚠️ **类型通用但内容是 SoC 的期望值** ⇒ ⇒ 属值 ⇒ ⇒ **不下沉** |
+| `tamper_hier` | `:169` | **规则**（变异自证编排：由观测信号反查子端口 → 取反 RHS） | **下沉** | ⚠️ **第二消费者语义不同**：`test_rv32i_hier_rtl.cpp` 是**硬编码 3 条 `assign` 名** + RHS 置 `'0'` ⇒ ⇒ **归一化另立项**（⇒ 下沉**不得**宣称「同一语义两份实现」） |
+| `check_products` | `:218` | **规则**（4 项判据的判定逻辑）+ **值**（判据引用） | **拆分**：规则下沉 · 值留 example | 规则侧 = 「module 集相等」·「端口数 == 期望 且 后代未驱动 == 0」·「lint 退出码 == 0」·「双形态逐拍等价」⇒ ⇒ 全部**产品无关**；值侧 = 期望 module 集 / 期望端口数 / 激励面 / 观测面 / 变异目标 **+ 根组件名（owner 基准）· lint 的 `--top-module` 名 · 最小变化观测量阈值** ⇒ ⇒ 全部作**参数**传入 ⇒ ⇒ ⚠️ 后三项**当前被焊死**在 example 侧（`e.owner != "top"` · `--top-module top` · `varying >= 2`）⇒ ⇒ **根名可配**（`rtl-soc-output` Req-1）⇒ ⇒ **MUST NOT** 让库层内置字面根名或阈值 |
+
+⇒ ⇒ **下沉集 = 完整 2 个（`product_modules` · `tamper_hier`）+ 拆分 1 个（`check_products` 的规则侧）**
+⇒ ⇒ **库层 MUST NOT 内置产品值**：MUST NOT 出现字面根名（`"top"`）/ MUST NOT 内置 `>= 2` 之类阈值 ⇒ ⇒ 根名与阈值一律**参数传入**
+⇒ ⇒ ⚠️ **适用范围**：本条**只约束库层 API** ⇒ ⇒ **不约束护栏**（护栏侧的 `top` 是**既有事实** ⇒ 不动）
+⇒ ⇒ **结构判据**（**不是**行数靶）：被下沉的符号 MUST 在 example 侧**无定义**；
+example 侧 MUST NOT 出现「产物派生的 module 集 / 顶层端口面 / 变异编排」的第二份实现。
+
+⚠️ **门槛未满足者**：`tamper_hier` 的第二消费者**语义不同**（见上）⇒ ⇒ 「下沉」的理由是
+「它是产品无关的编排规则」，**不是**「已有第二消费者」⇒ ⇒ RV32I 侧的语义归一化**另立项**。
+
+#### 4.3.2 形态裁决（2026-11-18）
+
+**SoC 发射入口 MUST 恒发层次化产物**（默认模式亦然）⇒ ⇒ **这是恢复已登记的交付契约，不是新决策** ⇒ ⇒
+**不新立 ADR**、**不改** `rtl-soc-output` 的既有 requirement。
+
+⇒ ⇒ **依据**（默认模式 = 5 module 早已在**四处**登记 ⇒ ⇒ **扁平才是偏离方**）：
+`examples/axi4/tb_axi_soc_example.sv` 的头注（`emit_rtl_axi_soc --out <dir>` ⇒ 5 个 module）·
+`examples/axi4/CMakeLists.txt` 的 target 注（发射时带 `--hierarchical`）·
+`.rddf/checks/examples-rtl-sim-targets.tsv` 的 SoC 行 note（5 个 module · 顶层端口 14）·
+已归档 change `soc-rtl-product-and-tb-2026-11` 的交付契约。
+
+⇒ ⇒ **代价 / 必须同步的后置条件**（缺一即红）：
+· **护栏 ⑧' MUST 扩到 `kind=soc`**（现仅对 `kind=hier` 生效）⇒ ⇒ 否则「入口退回扁平」这条回归路径
+  **无任何常驻判据** ⇒ ⇒ 且 MUST 配 **soc 行的负向对照**（投毒 ⇒ 必红）
+  ⇒ ⇒ ⚠️ **载体**：护栏 self-test 的清单**当前无 `kind=soc` fixture**（`REGISTERED_SOC` 锚点 = 0）
+  ⇒ ⇒ 配 soc 负向对照 MUST **新增一条 soc fixture 行** **且** 把该锚点从 **0 改成 1**
+  （否则「⓪ SoC 桶不守恒」判据会红）⇒ ⇒ 这两项副作用是 **⑧' 扩展的必然后果**，不是可选项
+· **护栏 ③ 对 `kind=soc` 行**：分支 A 后**默认即层次化** ⇒ ⇒ ③ **无需改代码**，变的只是**产物形态**
+  （③ 在默认模式发 · ④″ 在 `:652-654` 覆写同一目录）⇒ ⇒ 但**产物形态 MUST 登记**
+· **产物等价判据 MUST 开「分支 A 例外」**：默认模式的差异 MUST **恰为形态变化**且**可机器判定** ——
+  落盘物集合 **== {`top.v`, `manifest.json`}** ∧ `manifest.json` **逐字节相同** ∧ module 集 **1 → 5** ∧
+  `top.v` 的**顶层端口表**与基线扁平产物**逐字逐序相同**（⇒ 差异只在**形态**、不在**端口面**）；
+  `eq/` 与 `--check-products` 模式 MUST **零差异** ⇒ ⇒ 否则「恒发层次化」与「产物逐字节等价」两条判据**互斥**
+· **CHANGELOG MUST 有一行**（默认模式产物形态变化 = **用户可见变更**）
+· **⑧ 在层次化产物上复核**：实测成立 ⇒ ⇒ ⑧ = **集合 + 顺序双重判据**（工具
+  `scripts/lib/flat_rtl_emit_check.py`：先集合差集，再 `actual != expected` 的**有序**比较）
+  ⇒ ⇒ 「逐字逐序」措辞**准确**，**MUST NOT** 弱化为只比集合 ⇒ ⇒ **⑥ 今天已在层次化产物上成立**
+  （④″ 已用 `--check-products` 覆写 `$work/top.v` ⇒ ⑤ 编译跑的就是层次化产物）
+· ④″ 的 `--check-products` 注入从「必要」变「冗余」（**保留** —— 它还做 checker）
+
+⇒ ⇒ **登记**：裁决**前**该偏离**持续存在**（现状 = 存在一条能产出非层次化 SoC 产物的路径）⇒ ⇒
+归 §7 **R12**（⇒ 不得等裁决才登记）。
+
+⚠️ **治理义务**（订正）：`--check-products` 的**机制**下沉 = **新增公开头**（库层机制 API · **函数** +
+参数）⇒ ⇒ ⚠️ **example 侧的 `--check-products` 开关保留**（它是**产品专属开关** ⇒ 库层 CLI 不新增该选项）
+⇒ MUST 登记
+`.rddf/checks/public-api-surface.md` + CHANGELOG；且 `scripts/verify_examples_rtl_sim.sh` 的 **④″ 调用点**
+（`kind=soc` 分支）直接调 `emit_rtl_axi_soc --check-products` ⇒ **行为与退出码 MUST 逐字保持**
+（⚠️ 分支 A 后 **module 数 == 5** 的唯一执行者仍为 ④″；护栏 ⑧'（形态退化）是**冗余**判据 ⇒ ⇒ 二者**不是**同一判据）。
+⚠️ **登记载体订正**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头
+⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围内** ⇒ ⇒ 登记到那里**零判别力**
+⇒ ⇒ **真载体** = `.rddf/checks/example-only-headers.tsv` 的**豁免通道**（消费者恰为 examples ⇒
+反向判据会报「可移出登记表」）+ CHANGELOG 一行；`public-api-surface.md` 只作**记录**
+⇒ ⇒ ⚠️ 该 tsv 与其护栏**当前尚未建**（由 change `example-file-boundary-2026-11` 的 D6/F6 新建）
+⇒ ⇒ **在它建成之前，本次公开面登记无判别力载体**（须如实登记为「待载体」，不得记成已登记）。
+
+⚠️ **「不动」的例外**（订正）—— 三类归属不同，MUST 分开处置：
+· **归档记录**（`docs/archive/**` · `openspec/changes/archive/**`）= 历史 ⇒ **不动**
+· **`docs/architecture/**` 的既有日期化蓝图** = **历史快照 ⇒ 不追溯改写**（见 §2.2 事实 ②'）⇒ ⇒ 但**不得**被当作现状依据
+· **`draft` 活文档**（`.rddf/improvements/rtl-verification-single-source-2026-11.md`）= **活文档 ≠ 历史**
+  ⇒ ⇒ MUST **同批订正** ⇒ ⇒ ⚠️ 该路径属 **planner 写集** ⇒ ⇒ 归属 = **planner 侧**（同批）
+· **未归档的 active change**（`openspec/changes/rtl-verification-single-source-2026-11/`）= **活文档 ≠ 历史**
+  ⇒ ⇒ MUST **同批订正** ⇒ ⇒ 归属 = **builder 侧**（该 change 的 F0 ②）
+
+⚠️ **「同批」的可判定边界** = **同一 change 归档之前**（⇒ ⇒ 归档后它即成历史 ⇒ ⇒ 不再追溯）。
+
+⚠️ **ADR-074 的「不覆盖」条无需改动**（2026-11-18 判定）：该条把 `--check-products` 的库层下沉
+**指向本节**并给出登记义务 ⇒ ⇒ 本节订正后指向**仍然有效** ⇒ ⇒ 不做无谓的 ADR 文本改动。
+⇒ ⇒ ⚠️ **dated 说明**：ADR-074 写「C 是实施收敛（蓝图 §4.3，**无取舍** ⇒ 不单立 ADR）」—— 该
+「无取舍」前提**已被本节的 A/B 取舍取代**；**结论不变**（= 恢复 ADR-073 D1 / `rtl-soc-output` Req-1
+的**已登记契约** ⇒ 仍不单立 ADR）⇒ ⇒ **ADR 文本不动**，以此 dated 说明取代该前提。
 
 ### 4.4 护栏改造（`scripts/verify_examples_rtl_sim.sh`）
 
@@ -269,7 +363,7 @@
 | M1 | `examples/axi4/axi4_lite_example.cpp` | 改为 include N1 + **20 端口具名** + `--emit-rtl` 模式 |
 | M2 | `examples/axi4/axi_soc_example.cpp` | 改为 include N2 + **12 端口具名** |
 | M3 | `examples/axi4/emit_rtl.cpp` | **删除**（并入 M1） |
-| M4 | `examples/axi4/emit_rtl_soc.cpp` | 483 → ~60（库层 `run_emit_cli` + `--check-products` 调库层） |
+| M4 | `examples/axi4/emit_rtl_soc.cpp` | **壳层退化为「组装参数 + 调用」**（**结构判据** · 非行数靶）⇒ 库层 `run_emit_cli` + `--check-products` 调库层（落点与逐符号归属见 §4.3.1） |
 | M5 | `examples/axi4/CMakeLists.txt` | target 调整（+`verif_run` / −`emit_rtl_axi4_lite`）+ 删旧注释 + ⚠️ **同步 tsv 的 `emitter` 列**（`.rddf/checks/examples-rtl-sim-targets.tsv:49` 现登记 `emit_rtl_axi4_lite` ⇒ ⇒ 不删会指向不存在的二进制，**会把 AC13 绊倒**） |
 | M6 | `examples/axi4/tb_axi4_lite_example.sv` | **改为生成物** |
 | M7 | `examples/axi4/tb_axi_soc_example.sv` | **改为生成物** |
@@ -317,6 +411,9 @@
 
 ## 7. 已知残留与边界
 
+> **「缓解」列的状态词**：**裁决**（口径已定）· **落实**（实施未闭）· **闭口判据**（何时算闭）
+> ⇒ ⇒ R1–R11 用的是散文式缓解 ⇒ ⇒ R12 起采用本词表（**两段式**：裁决 ✅ / 落实 ⚠️ 未闭）。
+
 | # | 残留 | 后果 | 缓解 |
 |---|---|---|---|
 | R1 | DSL 是新机制 ⇒ 有自身缺陷面 | 渲染 bug ⇒ 少断言 ⇒ 假绿 | fail-closed + ⑥ 条数等式 + ⑧' |
@@ -330,6 +427,7 @@
 | R9 | 护栏 `--self-test` 的投毒对象改变（TB 成生成物） | 自检失效 | Step 5 内改为投毒 **IR / 生成器** |
 | R10 | **`tests/*` 的组件级判据仍是期望值的第三个载体**（`tests/test_axi_lite_slave_conformance.cpp` 的 15 个 `REQUIRE` 字面值） | 「G-期望 3 处」若把它计入则不成立 | **如实登记**：它是 **(A) 路径（组件级规范符合性）** 的判据，与 (C) 的交付验证**不同层** ⇒ ⇒ 本 change **不动**；若将来要收敛 ⇒ 单独立项 |
 | R11 | `Simulator` 新增 node_id 级访问器 = **公开面扩张** | 下游可见 | 按仓规登记 `public-api-surface.md` + CHANGELOG（M19） |
+| **R12** | **SoC 发射入口的默认模式发扁平产物**（2026-11-18 实测：`emit_rtl_soc.cpp` 只在 `--check-products` 模式补 `--hierarchical` ⇒ 护栏 ③ 对 `kind=soc` 发的**正是**默认模式）⇒ ⇒ 现状 = **实现偏离已登记的交付契约**（默认模式 = 5 module 早已在 TB 头注 / `CMakeLists.txt` target 注 / tsv SoC 行 note / 已归档 change 的交付契约 **四处**登记）⇒ ⇒ 与 `rtl-soc-output` 的既有 requirement 冲突 | SoC 的「交付产物」形态不确定 ⇒ 消费方可能拿到 1-module 的 SoC | **裁决** ✅ 已裁决（2026-11-18 · SoC 发射入口恒发层次化 ⇒ **恢复契约**）· **落实** ⚠️ 未闭（归 change `example-file-boundary-2026-11` 的 3.2 批次）· **闭口判据** = 护栏 ⑧' 覆盖 `kind=soc`（现仅 `kind=hier` ⇒ 该回归路径**当前无任何常驻判据**）⇒ ⇒ **裁决前本条持续存在**，不得静默 ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 本行的判据只能来自**实现侧护栏** |
 
 ---
 

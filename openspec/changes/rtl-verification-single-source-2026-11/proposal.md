@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | **G-期望**（**产品交付链路**） | `.rddf/checks/*.md` | `tb_*.sv` 的 `expect_*` | — | 同一批期望值写 2 遍（⚠️ `tests/*` 是 **(A) 组件级**判据，**不在本项**） |
 | **G-端口** | C++ 成员名 | 产物 `top_unnamed_input_N` | **手写映射表** | 🔴 **当前已漂**：注释 `awprot=input_1` vs 实例化 `.top_unnamed_input_1(arprot)`（`tb_axi4_lite_example.sv:18-25` vs `:84-93`） |
-| **G-发射** | `emit_rtl.cpp`(43) | `emit_rtl_soc.cpp`(483) | `emit_rtl_hier.cpp`(52) | 483 行里 ~380 行重复实现库层能力（库层已支持 `--hierarchical`，`2db2eda`） |
+| **G-发射** | `examples/axi4/emit_rtl.cpp`（32） | `examples/axi4/emit_rtl_soc.cpp`（**388** · 壳层 39 行**已**走库层 CLI） | `examples/riscv-mini/emit_rtl_hier.cpp`（48） | ⚠️ **2026-11-18 订正**：原「旧行数里大部分重复实现库层能力」的陈述**已失真**（壳层早已走库层 CLI）⇒ ⇒ 现状 = **checker 机制**仍自实现 ⇒ ⇒ 收敛口径见蓝图 §4.3.1 的**逐符号切分表** |
 
 ### 为什么现在做
 
@@ -31,7 +31,7 @@
 | 项 | 量 |
 |---|---|
 | 净新增机制 | **≈ +1300 行**（扫描器 / IR / IR 解释器 / 渲染器 / 判据 / 3 个测试文件） |
-| 净删除 | **≈ −530 行**（`emit_rtl_soc.cpp` 483→60 · `emit_rtl.cpp` 43 → 0） |
+| 净删除 | ⚠️ **2026-11-18 订正**：原「≈ −530 行」估算**作废**（实测 388 行 ⇒ 原行数目标算术不成立）⇒ ⇒ 目标改为**结构判据**（蓝图 §4.3.1）⇒ ⇒ 净删除量 MUST 按实测重算 |
 | 换掉的重复 | 2 个手写 TB 的 **51 条断言**（37 + 14）的端口映射与期望值双写 |
 
 ⚠️ **这是「一次性机制成本换长期单一真相」的取舍** ⇒ 若不接受，替代 = 只做 C2/C3（发射收敛 + 具名），跳过 C4–C8。
@@ -43,7 +43,7 @@
 | # | 变更 | 依据 |
 |---|---|---|
 | **C1** | **抽取顶层组件**到 `include/axi4/{axi4_lite,axi_soc}_example_top.h`；删 `tests/test_axi_lite_verilator_e2e.cpp:74-142` 的 `AxiLiteTop` 副本（**C3/C7 不放宽** ⇒ 抽上去） | 蓝图 §4.5 |
-| **C2** | **发射面收敛**：`emit_rtl_soc.cpp` → 库层薄壳（483→~60）；删 `emit_rtl.cpp`（并入 example 的 `--emit-rtl` 模式）；`--check-products` 机制下沉 `src/rtl_emit/` | 蓝图 §4.3 |
+| **C2** | **发射面收敛**：`emit_rtl_soc.cpp` 的**壳层**退化为「组装参数 + 调用」（**结构判据** · 非行数靶）；删 `examples/axi4/emit_rtl.cpp`（并入 example 的 `--emit-rtl` 模式）；`--check-products` 的**机制**下沉 `include/rtl_emit/`（公开头）+ 实现 `src/rtl_emit/` | 蓝图 §4.3（2026-11-18 订正 · 含 §4.3.1 切分表 + §4.3.2 形态裁决） |
 | **C3** | **端口具名（本 change 登记的 32 个）**：`AxiLiteTop` **20** + `AxiSocTop` **12**；⚠️ `AxiLiteTestMaster` 的 **23** 条**不改**；豁免表 `1447 → 1415` | **ADR-075 E1–E6** |
 | **C4** | **`.verif` DSL → 一份 IR → 两个执行后端**；封闭原语 + 表达式文法 + **时序锚点** + **fail-closed**（含 `SET→EXPECT` 序列、名字未命中/多义） | **ADR-074 D1/D2/D3** |
 | **C5** | **TB 改生成物（checked-in）+ 新鲜度（逐字节）+ 条数三方等式** | **ADR-074 D4** |

@@ -40,7 +40,7 @@ revision_count: 0
 |---|---|---|
 | W1 | **期望值三处重复**（`.rddf/checks/*.md` 手推表 / `tb_*.sv` 的 `expect_*` / `tests/*` 的 `REQUIRE`） | `examples/axi4/tb_axi4_lite_example.sv`（37 断言）· `tests/test_axi_lite_slave_conformance.cpp`（15 例） |
 | W2 | **手写端口映射表且当前就是漂的** —— 头注释写 `awprot=input_1 · arprot=input_8`，实例化是 `.top_unnamed_input_1(arprot)` / `.top_unnamed_input_8(awprot)` | `examples/axi4/tb_axi4_lite_example.sv:18-25` vs `:84-93` |
-| W3 | **发射实现两处**：`emit_rtl_soc.cpp` 483 行自解析（其「库层只发扁平」的前提**已被 `2db2eda` 推翻**）vs `emit_rtl_hier.cpp` 52 行薄壳 | `examples/axi4/emit_rtl_soc.cpp:5-8,64-89,415-483` · `src/rtl_emit/cli.cpp:77-78,186-208` |
+| W3 | **发射实现两处**：`emit_rtl_soc.cpp` 388 行（壳层 39 行**已**走库层 CLI ⇒ 「自解析」已不成立；**checker 机制**仍自实现）vs `emit_rtl_hier.cpp` 48 行薄壳 | `examples/axi4/emit_rtl_soc.cpp:53,90,115,138,169,218`（自实现符号）· `:350-388`（壳层）· `src/rtl_emit/cli.cpp:77-78,186-208` |
 | W4 | **生成物无新鲜度判据**；护栏⑥ 只判 `checks >= min_checks`（不判 TODO 残留） | `scripts/verify_examples_rtl_sim.sh:486-490` |
 | W5 | **`AxiLiteTop` 双权威**（`tests/test_axi_lite_verilator_e2e.cpp:74-142` 复制一份） | C3/C7 禁 tests 反向 include examples ⇒ 只能抽到 `include/` |
 
@@ -49,7 +49,7 @@ revision_count: 0
 | # | 变更 | 对应 ADR |
 |---|---|---|
 | C1 | **顶层组件抽取**（`AxiLiteTop` / `AxiSocTop` / `AxiLiteTestMaster` → `include/axi4/*_top.h`）+ 删 `tests/` 副本 | 蓝图 §4.5 |
-| C2 | **发射面收敛**：`emit_rtl_soc.cpp` → 库层薄壳（483→~60）· 删 `emit_rtl.cpp`（并入 example 的 `--emit-rtl`）· `--check-products` 机制下沉 `src/rtl_emit/` | 蓝图 §4.3 |
+| C2 | **发射面收敛**：`emit_rtl_soc.cpp` 的**壳层**退化为「组装参数 + 调用」（**结构判据** · 非行数靶）· 删 `emit_rtl.cpp`（并入 example 的 `--emit-rtl`）· `--check-products` 的**规则**下沉 `include/rtl_emit/`（公开头）+ 实现 `src/rtl_emit/` | 蓝图 §4.3（2026-11-18 订正 · 含逐符号切分表 §4.3.1 与形态裁决 §4.3.2） |
 | C3 | **产品顶层端口具名化（32 个）**：`AxiLiteTop` 20 + `AxiSocTop` 12（⚠️ `AxiLiteTestMaster` 的 23 条**不改**）· 豁免表 `1447 → 1415` | **ADR-075 E1–E6** |
 | C4 | **`.verif` DSL + 一份 IR + 两个执行后端**（IR 解释器 / Verilog 渲染器）· 封闭原语集 + 表达式文法 + **时序锚点** + **fail-closed** | **ADR-074 D1/D2** |
 | C5 | **TB 改为生成物（checked-in）+ 新鲜度 + 条数等式** | **ADR-074 D4** |
@@ -158,7 +158,7 @@ T1 抽取顶层组件  →  T2 发射面收敛  →  T3 端口具名（32）  �
 | 项 | 量 |
 |---|---|
 | 净新增机制 | **≈ +1300 行**（扫描器 / IR / 解释器 / 渲染器 / 判据 / 3 个测试文件） |
-| 净删除 | **≈ −530 行**（`emit_rtl_soc.cpp` 483→60 · `emit_rtl.cpp` 43→0） |
+| 净删除 | ⚠️ **2026-11-18 订正**：原「净删除量」估算**作废** —— 实测 `emit_rtl_soc.cpp` = **388 行**（壳层 39 行**已**走库层 CLI ⇒ 原「压到约 60 行」的算术**不成立**）⇒ ⇒ 目标改为**结构判据**（被下沉的符号在 example 侧无定义）⇒ ⇒ **净删除量 MUST 按实测重算**（蓝图 §4.3.1） |
 | 换掉的重复 | 2 个手写 TB 的 **51 条断言**的端口映射 + 期望值双写 |
 
 ⚠️ **若用户认为不值** ⇒ 替代方案 = **只做 C1/C2/C3**（抽取 + 发射收敛 + 具名，≈ −530 行、判据零损失），跳过 C4–C8 的 DSL 机制。
