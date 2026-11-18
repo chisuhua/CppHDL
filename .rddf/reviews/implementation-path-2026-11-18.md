@@ -283,3 +283,49 @@ bash scripts/verify_openspec_delta.sh
 | 解除条件 | 上游 `rtl-verification-single-source-2026-11` **验收通过 + 归档**（独立 commit）之后 ⇒ change 1 → change 2 依次归档 |
 | 本轮不做的后果 | change 1/2 的代码与验证已完成并保持在工作区/主线上；只是**不落正典**（`openspec/specs/` 不出现 `examples-rtl-sim-coverage`）。**无返工**，仅延后 |
 | 留痕位置 | 本节 + `.rddf/reviews/decisions-required-2026-11-18.md`（待补 D6 行）+ 归档时 change 1/2 的 proposal 需加 dated addendum（届时由 planner 执行） |
+
+---
+
+## 十一、阶段 2 执行实况（builder · 2026-11-18）—— **已闭**
+
+| 序 | 笔 | commit | 判据结果 |
+|---|---|---|---|
+| 0 | 报告 + 裁决清单 + 路径（阶段 0） | `34e2225` | 5 份 `??` 已入库 |
+| 0' | AC 措辞（阶段 1 · 12 处） | `f59dcde` | 3 份 `validate --strict` exit 0 · delta 自检 4 绿 |
+| 1 | **B1** 一行注释（AC16） | `549163f` | 旧名在作用域内零命中（含 `include/` 与 docs 递归） |
+| 2 | **B0** CHANGELOG：e2e 用例名改名（D1 漏项） | `563fbc7` | `AxiLiteSlavePortAccessSnapshot` ≥1 行 |
+| 3 | **B3** CHANGELOG：`axi4_full_example` 退役（AC27） | `dbc0ab4` | 三 token 同行同现 |
+| 4 | **D3** 登记 fw_init 发射器（AC9/AC10 的「绿」前提） | `f389c3c` | `run_all_ported_tests` **exit 0** · PASS 27 / FAIL 0 · 无 UNTRACKED · `verify_rv32i_fw_init_rtl` 仍绿 |
+| 5 | **F7 补漏** ⑧' → `kind ∈ {hier, soc}`（蓝图 §7 R12 闭口） | `0395cfc` | 生产轮 soc 行 `⑧' module 数 5`；self-test **18 投毒 + 2 必绿** |
+| 6 | **B2** argv 双证据 + 正交自检（AC4） | `ac48bef` | `argv.txt` 5 token 含 `--emit-rtl` · `argv.norm` 3 token 无孤立 `-`；self-test **19 投毒 + 2 必绿** |
+| 7 | **D5** tasks.md 账实回填（3 份） | `3f9fc1f` | change1 **30/30** · change2 **30/30** · change3 除 F4（follow-up）/F9（N/A）外全 ✅ |
+| 附 | **补登记** guard-reachability（双向 1:1 缺口） | `b34dba5` | 该缺口由 A8「换成 CI guard 全集」抓到（属上一批 `b9da984` 的漏登记） |
+
+### 全量验证（A8 的 CI guard 全集）
+
+```
+ctest -LE perf                       258/258 通过（base 233 · verilator_e2e 77）
+verify_examples_rtl_sim.sh           PASS（12 项）· --self-test PASS（19 投毒 + 2 必绿）
+verify_example_only_headers.sh       PASS · --self-test PASS（6 投毒）
+verify_no_duplicate_rv32i_headers    PASS · --self-test PASS
+verify_public_api_visibility.sh      PASS · --self-test PASS
+verify_roadmap_fragments.sh          PASS · --self-test PASS
+verify_example_assertion_quality.sh  PASS · verify_assertion_quality_fixtures.sh PASS
+verify_input_port_required_registry  PASS · verify_rst_n_wiring.sh PASS
+verify_example_test_wiring.sh        PASS · verify_examples_rtl_sim_coverage.sh PASS（27 == 10 ∪ 17）
+verify_guard_reachability.sh         PASS（51 被引用脚本 · 双向 1:1）
+verify_flat_rtl_emit.sh              PASS · verify_dual_backend_parity.sh PASS
+verify_arch_ledger_residuals.sh      PASS
+verify_hierarchical_rtl.sh           PASS · --self-test PASS（12/12 投毒）
+verify_port_naming.sh                PASS · verify_test_counts.sh PASS · verify_agents_size.sh PASS
+verify_openspec_delta.sh             PASS
+run_all_ported_tests.sh              **exit 0**（PASS 27 / FAIL 0 / STALE-ARTIFACT 0）
+```
+
+### 遗留（交阶段 3 / 阶段 4）
+
+| 项 | 处置 |
+|---|---|
+| 蓝图 §7 **R12** 的「落实」状态仍是「⚠️ 未闭」 | **architect 写集**（builder 不代改）⇒ 需把「落实」翻为已闭，闭口证据 = `0395cfc` 的 ⑧' 覆盖 |
+| 阶段 3 复核清单（A9） | AC24/F7 的 ⑧' 落地 + AC5 的**两条** CHANGELOG 登记（`563fbc7` / `dbc0ab4`） |
+| 阶段 4（D6-1） | **只归档 change 3**；change 1/2 挂起至上游验收 + 归档 |
