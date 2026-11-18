@@ -19,11 +19,11 @@
 ⇒ ⇒ 消除复制的唯一合规解 = 抽到两处都能看到的地方；而 C3 禁「根 `tests/**` include `examples/**`」
 ⇒ ⇒ `include/` 是**当时**唯一合规落点。
 
-⇒ ⇒ **现在拆得掉**，因为消费者只有 7 处（逐条已核）：
+⇒ ⇒ **现在拆得掉**，因为消费者只有 **6 处**（逐条已核；⚠️ 2026-11-18 由 7 减 1 —— `emit_rtl_soc.cpp` 整文件删除）：
 
 | 消费者 | 归位后 |
 |---|---|
-| `examples/axi4/tb_axi4_lite_example.cpp`（`axi4-verif-driven-cpp` 改名后）· `examples/axi4/axi_soc_example.cpp` · `examples/axi4/emit_rtl_soc.cpp` | **include 文本 MUST 改为裸文件名**（见下「事实订正」） |
+| `examples/axi4/tb_axi4_lite_example.cpp`（`axi4-verif-driven-cpp` 改名后）· `examples/axi4/tb_axi_soc_example.cpp`（本 change 的 **B6** 改名后） | **include 文本 MUST 改为裸文件名** ⇒ ⇒ ⚠️ **2026-11-18 订正**：`emit_rtl_soc.cpp` **已从本表删除**（§4.3.3 裁决**整文件删除** ⇒ 不再是消费者）⇒ ⇒ 计数 **7 → 6**（见下「事实订正」） |
 | `tests/test_axi_lite_verilator_e2e.cpp:42` | **换 DUT** = 库组件 `AxiLiteSlave<32,32,4>`（端口集合与成员名逐字相同 ⇒ 断言零改动） |
 | `tests/test_axi_lite_test_master.cpp:19` → `examples/axi4/tests/` | 移入后 include 改裸名（helper 注入 `-I examples/axi4`） |
 | `tests/test_verif_single_source.cpp:15` 的 DUT 用例 → `examples/axi4/tests/test_verif_axi4_lite.cpp` | 同上 |
@@ -47,6 +47,11 @@ C++ 成员名相同 ⇒ ⇒ 路径 / TEST_CASE 名 / SECTION / 断言**全不变
 **未具名** ⇒ ⇒ 必须与具名 DUT 同处 `examples/`（先例：`examples/riscv-mini/tests/`）。
 
 ### 3.2 `emit_rtl_soc.cpp` 的 checker **机制**仍自实现
+
+> ⚠️ **2026-11-18 载体说明**：本节的「现状」描述的是**删除前**的文件。§4.3.3 裁决该文件**整文件删除**
+> ⇒ ⇒ 本节描述的下沉动作照旧（F2），但**载体**从「壳层退化」改为「发射并入 `tb_axi_soc_example.cpp`」
+> ⇒ ⇒ 实施判据见 **F3 / B6 / AC27 / AC28**。
+
 
 `examples/axi4/emit_rtl_soc.cpp`（388 行）持有 SoC 产品级 checker。**双形态逐拍等价已走公共 helper**
 `ch::hier_eq`（`:290`/`:317`）⇒ ⇒ 自实现的只有 **3 个机制函数 + 编排**（`:53` `product_modules` ·
@@ -139,7 +144,12 @@ module 数 MUST == 「成层 IP 实例数 + 1」（本项目 = **5**）。
 ⇒ ⇒ **「下沉」这一格 MUST 可反驳** ⇒ ⇒ 判据 = **具名第二消费者 + 调用点**（不是行数、不是主观归类）
 ⇒ ⇒ **给不出第二消费者 ⇒ 只能写「不下沉」**。
 
-### 3.2-d 「壳层」必须**定义**，否则判据自否
+### 3.2-d ~~「壳层」必须**定义**，否则判据自否~~ ⇒ ⚠️ **2026-11-18 作废**
+
+> **本节的整段推导随 §4.3.3 裁决失效** —— `emit_rtl_soc.cpp` **整文件删除**后「壳层」**没有对象**。
+> 保留原文仅为可追溯；**实施判据以 §4.3.3 + F3（整文件删除）为准**。
+
+
 
 `make_inputs` / `make_observations` / `check_products` 与 `main` **同在一个文件** ⇒ ⇒
 「壳层」若指文件 ⇒ 现状**违反**且与「判据值留 example」自相矛盾；若指 `main` ⇒ 现状**已满足**。
@@ -177,10 +187,10 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 
 | # | 变更 |
 |---|---|
-| **F0** | **开工前准备（不受 G-1 约束 ⇒ 可与 F1 并行；MUST 在任何代码改动之前完成）**：① **采基线**：MUST 在本 change **任何代码改动之前**、且 MUST 在 `emit-cli-into-example` **之后**（SoC 入口形态已变）⇒ ⇒ **分模式两套**（默认模式 / `--check-products` 模式）+ 比较面 = 该 `--out` 目录**全部落盘物**（含 `eq/`）+ 记录 verilator 可用性 ⇒ ⇒ 前提 = 同 build 配置 + **唯一变量 = `examples/axi4/emit_rtl_soc.cpp`**（**不是**「同 emitter」）② **订正上游活跃 change** `rtl-verification-single-source-2026-11` 的同款陈旧目标（`proposal.md` 的 `:21` / `:34` / `:46` + `tasks.md:29`）⇒ ⇒ 该 change **尚未归档** ⇒ ⇒ **不是**「历史记录」豁免 ⇒ ⇒ 不订正 ⇒ 旧目标被冻进历史 |
+| **F0** | **开工前准备（不受 G-1 约束 ⇒ 可与 F1 并行；MUST 在任何代码改动之前完成）**：① **采基线**：MUST 在本 change **任何代码改动之前**、且 MUST 在 `emit-cli-into-example` **之后**（SoC 入口形态已变）⇒ ⇒ **分模式两套**（默认模式 / `--check-products` 模式）+ 比较面 = 该 `--out` 目录**全部落盘物**（含 `eq/`）+ 记录 verilator 可用性 ⇒ ⇒ 前提 = 同 build 配置 + **变量集（2026-11-18 由「唯一变量」扩为「多变量」）** = `examples/axi4/emit_rtl_soc.cpp`（删） + `examples/axi4/axi_soc_example.cpp`（删/改名） + `examples/axi4/tb_axi_soc_example.cpp`（新增） + `examples/axi4/axi4_full_example.cpp`（退役） ⇒ ⇒ ⚠️ **基线 MUST 在批次 F 的代码改动之前采集**（不是「唯一变量」⇒ 但**仍 MUST 单次采集**，否则无法归因）② **订正上游活跃 change** `rtl-verification-single-source-2026-11` 的同款陈旧目标（`proposal.md` 的 `:21` / `:34` / `:46` + `tasks.md:29`）⇒ ⇒ 该 change **尚未归档** ⇒ ⇒ **不是**「历史记录」豁免 ⇒ ⇒ 不订正 ⇒ 旧目标被冻进历史 |
 | **F1** | ✅ **architect 裁决已产出（2026-11-18）** —— 载体 = 蓝图 `docs/architecture/2026-11-17-rtl-verification-single-source.md` 的 **§4.3 订正 + §4.3.1 逐符号切分表 + §4.3.2 形态裁决 + §7 R12** ⇒ ⇒ ① 6 处订正按**锚点文本**落地 ② 切分表维度 = **规则 vs 值**（9 符号 · **禁**「待定」；**第二消费者是加分项、不是门槛** —— `tamper_hier` 语义不同 ⇒ 如实标注）③ 形态 = **分支 A**（恒发层次化 = **恢复已登记契约** ⇒ 不改 `rtl-soc-output` · **不新立 ADR** · ADR-074「不覆盖」条**无需改动**）④ 登记载体订正（`public-api-surface.md` 只扫**顶层**头 ⇒ 子目录头**零判别力** ⇒ 真载体是**待建**的 `example-only-headers.tsv` 豁免通道）⑤ 「不动」例外**三类归属**：归档记录不动 / draft 活文档 = **planner 侧**（本轮已订正）/ 未归档 active change = **builder 的 F0 ②** ⇒ ⇒ ⚠️ 蓝图属 architect 写集 ⇒ ⇒ **builder MUST NOT 代改** ⇒ ⇒ **F2–F9 的实施判据以蓝图 §4.3.1 / §4.3.2 为准** |
 | **F2** | **按 F1 的切分表下沉**到**公开头** `include/rtl_emit/*.h`（实现落 `src/rtl_emit/*.cpp`）⇒ ⇒ ⚠️ **该头的实现 TU 必然 include 它 ⇒ 按 R2 定义它不算「消费者」**（**实现 ≠ 使用**）⇒ ⇒ 故 R2 的反向判据不会误红 ⇒ ⇒ SoC 专属期望值 / 激励面 / 观测面 / 变异目标改为**参数**；**linter 路径由调用方传入**（不下沉 `find_verilator`）⇒ ⇒ ⚠️ **只下沉「编排」**，`--check-products` 的 4 项**判据值**属产品专属期望（ADR-074 的「不覆盖」）⇒ ⇒ MUST NOT 搬进库 |
-| **F3** | `emit_rtl_soc.cpp` 的**壳层**（= `main()` 及其直接委派路径）退化为「组装参数 + 调用」⇒ ⇒ **结构判据**（被下沉的符号在 example 侧**无定义** + 调用点计数 + `--check-products` 的四项判据各自仍可红），**不用行数靶** ⇒ ⇒ ⚠️ **同文件内的产品专属 helper 归 example**（不受本条约束） |
+| **F3** | **`emit_rtl_soc.cpp` 整文件删除**（2026-11-18 · §4.3.3 取代原「壳层退化」）⇒ ⇒ **结构判据**：被下沉的符号在 example 侧**无定义**（值侧 5 项在 `tb_axi_soc_example.cpp`；规则侧 3 项在库层）+ `--check-products` 的四项判据各自仍可红 ⇒ ⇒ ⚠️ 发射由 **`tb_axi_soc_example --emit-rtl`** 承担（§4.3.3）；`--check-products` = 「发射 + 自检」模式标记（内部等价 `--emit-rtl --hierarchical --check-products`）⇒ ⇒ 该模式下 `--out` / `--emit-hygiene` MUST 照常透传 |
 | **F4** | **第二消费者**：本 change 内把 `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` 的 module 集/端口计数改为调用新 API；**做不到** ⇒ 明写为带门的 follow-up（否则下沉 = 第 5 份实现）⇒ ⇒ ⚠️ **`tamper_hier` 的语义归一化另立项**：SoC 版 = 由观测信号反查子端口 → 取反 RHS；RV32I 版 = **硬编码 3 条 `assign` 名** + RHS 置 `'0'` ⇒ ⇒ **语义不同** ⇒ ⇒ 本 change **只做 `product_modules` 的归一化**（真同语义）⇒ ⇒ **MUST NOT** 宣称 `tamper_hier`「同一语义两份实现」 |
 | **F5** | 下沉后的机制 MUST 有**常驻**判别力回归（注入错期望 ⇒ 必红），且 `verify_examples_rtl_sim.sh` ④″ 仍执行、`--check-products` 退出码语义不变 ⇒ ⇒ ⚠️ **已知边界**：`emit_rtl_soc.cpp:263-273` 的 CHECK 3 在 verilator 不可用时打印 `SKIP` 且**不计 failures** ⇒ ⇒ 基线记录 MUST 含 **verilator 可用性 / 版本** ⇒ ⇒ 「行为不变」MUST NOT 覆盖一个未验证分支 |
 | **F6** | **公开面登记（真载体）**：新增的公开头 MUST 走 **`.rddf/checks/example-only-headers.tsv` 豁免通道**（消费者恰为 examples ⇒ 这是本仓**唯一**会判它的护栏）+ `docs/CHANGELOG.md` 一行 ⇒ ⇒ ⚠️ **如实声明**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头 ⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围内** ⇒ ⇒ 登记到那里**零判别力**（不红也不绿）⇒ ⇒ 该处只作**记录**，不构成护栏 |
@@ -205,8 +215,8 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 | AC7 | 根 `tests/` 下 MUST NOT 再有引用这两个头的 TU（`grep -rn … tests/` == 0） | grep |
 | AC8 | **拆分守恒（判据，不是记录）**：拆分前后 **TEST_CASE 名集合差集 == ∅**（用 `--list-tests` 或源码解析；**`ctest -N` 不可用** —— 它列的是 CTest 条目名而非 `TEST_CASE` 名）；共享 helper（`verif_path()` / `LateAxiLiteTop` / `read_file()`）随用例一起搬；新 helper MUST 带 `LABELS base` | shell |
 | AC9 | 归位后测试仍进 CTest：`ctest -N` 含 `test_axi_lite_test_master` · `test_verif_single_source` · `test_verif_axi4_lite` ⇒ **仅在 `CPPHDL_BUILD_EXAMPLES=ON`（默认）成立** | shell |
-| AC10 | **计数锚点按实测重算（不是原值 −1）**：`CTEST_TOTAL` 268 → **269** · non-perf **257 → 258** · `-L base` **231 → 232** · `EXAMPLES_TEST_SOURCES` 18 → **20** · `tests/test_*.cpp` **159 → 158**（AGENTS.md 现写 145 —— **已陈旧**，本次必须用实测值 158 回填） | shell |
-| AC11 | 棘轮豁免表：23 行**只改第一列**（**不删行**）⇒ `verify_port_naming.sh` 绿 且 `EXPECTED_EXEMPT_PORTS=1415` **不变** | 护栏 |
+| AC10 | **计数锚点按实测重算（不是原值 −1）**：⚠️ **2026-11-18 订正**（§4.3.3 的 `axi4_full_example` 退役 ⇒ CTest **−1**）⇒ ⇒ 算术 = 原「+1（`test_verif_axi4_lite` 拆分新增）」**− 1（axi4_full 退役）** = **净 0** ⇒ ⇒ `CTEST_TOTAL` **268 → 268** · non-perf **257 → 257** · `-L base` **231 → 231** · `EXAMPLES_TEST_SOURCES` 18 → **20**（不变 —— `axi4_full_example.cpp` 不是测试源）· `tests/test_*.cpp` **159 → 158**（不变 —— 它不在 `tests/`）⇒ ⇒ ⚠️ **MUST 以实测回填**（上面的算术是推导，不是实测值；AGENTS.md 现写 145 已陈旧） | shell |
+| AC11 | **棘轮豁免表「两段」判据（2026-11-18 拆分）**：① **3.1（头归位）** = 23 行**只改第一列路径**（**不删行**）⇒ 锚点 `EXPECTED_EXEMPT_PORTS` **仍 1415** ② **A7（`axi4_full_example` 退役）** = **删该文件的 31 行** ⇒ 锚点 **1415 → 1384** ⇒ ⇒ 两段 MUST **分开跑**（3.1 先、A7 后）⇒ ⇒ ⚠️ 单一「1415 不变」判据**作废**（与 A7 直接冲突 ⇒ 会落地即红） | 护栏 |
 | AC12 | **公开面移除登记**：`public-api-removals.tsv` 新增 **5 条**（2 条 `nofile`：两个头的 glob；3 条 `removed`：三个类名 · `scope=include/`）⇒ `EXPECTED_PROBES` 46 → **51**、`EXPECTED_REMOVAL_ROWS` 25 → **30**（登记行 MUST 用 `**移除**` 关键字）⇒ `public-api-surface.md` 同章逐条登记 | 护栏 |
 | AC13 | 输入端口登记表 **3 行保留** ⇒ 把 `input_port_registry.py` 的 `header_of()` 搜索根从 `include/**` 扩到 `include/**` + `examples/**` ⇒ ⇒ 护栏绿且 **rst_n 的 per-TEST-CASE 覆盖零缩面**（这比「删行 + 加锚点接受缩面」更省） | 护栏 |
 | AC14 | `CH4_ANCHOR` **+2 行**（两个新 `examples/axi4/tests/*.cpp` 的断言数下限）⇒ `verify_example_assertion_quality.sh` 绿 | 护栏 |
@@ -217,27 +227,31 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 | AC19 | 3.2 若落地 ⇒ **公开面登记 MUST 落真载体**：新增公开头 MUST 进 `.rddf/checks/example-only-headers.tsv` **豁免通道**（反向判据会报「可移出登记表」⇒ 这是**唯一**会判它的护栏）+ `docs/CHANGELOG.md` 一行 ⇒ ⇒ ⚠️ **实现 TU 的 include 不算「消费者」**（R2 定义：实现 ≠ 使用）⇒ ⇒ 故「公开头 + `src/` 实现」这一形态**可登记** ⇒ ⇒ ⚠️ **如实声明**：`public-api-surface.md` 的扫描范围 = **顶层 `include/*.h`** + 两个已裁决 core 头 ⇒ ⇒ `include/rtl_emit/*.h` 属**子目录头 ⇒ 不在扫描范围内** ⇒ ⇒ 登记到那里**零判别力**（不红也不绿）⇒ ⇒ 该处只作**记录**，**不构成**护栏 | 登记 |
 | AC20 | `CPPHDL_BUILD_EXAMPLES=OFF` 下被搬走的 2 个条目消失 ⇒ **显式接受**并登记（AC9/AC10 的锚点只在默认配置成立） | 登记 |
 | AC21 | **新 capability 的护栏存在且可自证**：`scripts/verify_example_only_headers.sh` + 登记表 + `--self-test`（**6 条投毒**：① 新头落 `include/` ⇒ 红 ② **子路径引用被认出** ⇒ 绿 ③ 登记路径不存在 ⇒ 红 ④ 登记头新增库侧消费者 ⇒ **红** ⑤ **孤儿头 ⇒ 不得红（退出码 0）** ⑥ **末段同名歧义 ⇒ 不得红**）⇒ ⇒ `--self-test` 整轮绿 ⇒ ⇒ ⚠️ **投毒④ 的「库侧消费者」MUST 指「API 使用方」**（不含实现 TU 的 include）⇒ ⇒ 否则它与 AC19（登记库层机制头）**互斥** | 护栏 |
-| AC22 | **切分表齐备且可复算**：蓝图 §4.3 MUST 含 **9 个符号各一行**（`kExpectedModules` · `kExpectedTopPorts` · `product_modules` · `find_verilator` · `make_inputs` · `make_observations` · `make_stimulus` · `tamper_hier` · `check_products`）⇒ ⇒ 归属维度 MUST 是 **规则 vs 值**（规则 = 产品无关的判定逻辑 ⇒ 可下沉；值 = 某产品的期望 ⇒ 留 example）⇒ ⇒ 判据 MUST **限定在 §4.3 段内**（不可全文 grep ⇒ 否则无关表格行可满足）⇒ ⇒ 表内 MUST NOT 出现「待定」（同样限定在该段）⇒ ⇒ **门槛未满足者 MUST 如实标注**（`tamper_hier`：第二消费者**语义不同**）⇒ ⇒ **禁**以裸行号 pin（行号随 HEAD 漂移）⇒ ⇒ 定位 MUST 用**复算命令**（`grep -nE '(^|[^A-Za-z0-9_])<symbol>([[:space:]]*\(|[[:space:]]*=)' examples/axi4/emit_rtl_soc.cpp`（**函数定义与常量定义两种形态**）⇒ ⚠️ **禁** `grep '^<symbol>'` —— 定义以类型关键字开头 ⇒ 那样**零命中**）⇒ ⇒ 命令**必须有退出码**（计数 < 1 ⇒ 非零） | grep |
+| AC22 | **切分表齐备且可复算**：蓝图 §4.3 MUST 含 **9 个符号各一行**（`kExpectedModules` · `kExpectedTopPorts` · `product_modules` · `find_verilator` · `make_inputs` · `make_observations` · `make_stimulus` · `tamper_hier` · `check_products`）⇒ ⇒ 归属维度 MUST 是 **规则 vs 值**（规则 = 产品无关的判定逻辑 ⇒ 可下沉；值 = 某产品的期望 ⇒ 留 example）⇒ ⇒ 判据 MUST **限定在 §4.3 段内**（不可全文 grep ⇒ 否则无关表格行可满足）⇒ ⇒ 表内 MUST NOT 出现「待定」（同样限定在该段）⇒ ⇒ **门槛未满足者 MUST 如实标注**（`tamper_hier`：第二消费者**语义不同**）⇒ ⇒ **禁**以裸行号 pin（行号随 HEAD 漂移）⇒ ⇒ 定位 MUST 用**复算命令**（`grep -nE '(^|[^A-Za-z0-9_])<symbol>([[:space:]]*\(|[[:space:]]*=)' <新落点文件>`（**函数定义与常量定义两种形态**）⇒ ⚠️ **禁** `grep '^<symbol>'` —— 定义以类型关键字开头 ⇒ 那样**零命中**）⇒ ⇒ ⚠️ **2026-11-18 订正**：`emit_rtl_soc.cpp` **整文件删除** ⇒ ⇒ 复算的**源文件 MUST 改为「新落点」** —— 值侧 5 项（`kExpectedModules` · `kExpectedTopPorts` · `make_inputs` · `make_observations` · `make_stimulus`）在 `examples/axi4/tb_axi_soc_example.cpp`；规则侧 3 项（`product_modules` · `tamper_hier` · `check_products` 的规则侧）在 `include/rtl_emit/` + `src/rtl_emit/` ⇒ ⇒ 若 grep 已删文件 ⇒ **空/报错 ⇒ 判据静默失效** ⇒ ⇒ 命令**必须有退出码**（计数 < 1 ⇒ 非零） | grep |
 | AC23 | **陈旧表述清零（按位置限定）**：蓝图 + **`.rddf/improvements/rtl-verification-single-source-2026-11.md`（draft 活文档）**里，`483` / `~60` / `415-483` 在**指定位置**零命中 ⇒ ⇒ 定位 MUST 按**锚点文本**（行号仅辅助）⇒ ⇒ 豁免 = 蓝图 **「§5.1 N10 行」**（它估的是 `examples/axi4/verif_run.cpp` 的行数，**不是** SoC 发射入口 ⇒ 非本条目标栏）· `docs/archive/**` · `openspec/changes/archive/**` ⇒ ⇒ 判据 MUST **按位置**限定（不可全文一刀切 ⇒ 否则误伤该合法估算）⇒ ⇒ **上游活跃 change** `rtl-verification-single-source-2026-11`（**未归档 ⇒ 不是历史记录**）的同款目标 MUST 由 **F0 ②** 订正 ⇒ ⇒ 命令**必须有退出码** | grep |
 | AC24 | **形态与写明一致（分支 A 专属）**：SoC 发射入口**恒发层次化** ⇒ ⇒ 默认模式产物 module 数 **== 5**（4 个成层 IP + 根 `top`；权威来源 `.rddf/checks/soc-rtl-expectations.md` 的 module 集表）⇒ ⇒ 护栏 ③ 对 `kind=soc` 行的**发射语义 MUST 已同步**（它现在发的是扁平产物）+ 产物形态 **MUST 登记** ⇒ ⇒ 护栏 ⑧（顶层端口表）在**层次化**产物上仍绿 ⇒ ⇒ 分支 B 下本条**不适用**（走 ADR 修订 + follow-up）⇒ ⇒ 判据 MUST 是**退出码**（`test "$(grep -c '^module ' …)" -eq 5`）⇒ ⇒ **禁**只打印计数让人眼比对 | shell + 护栏 |
 | AC25 | **基线先行 + 分模式 + 全落盘物**：基线（**F0 ①**）MUST 在本 change **任何代码改动之前**、且 MUST 在 `emit-cli-into-example` **之后**采集 ⇒ ⇒ 默认模式与 `--check-products` 模式**各一套** ⇒ ⇒ 比较面 = 该 `--out` 目录下**全部落盘物**（`--check-products` 额外产 `eq/`）⇒ ⇒ 前提 = 同 build 配置 + **唯一变量 = `examples/axi4/emit_rtl_soc.cpp`**（**不是**「同 emitter」—— 本 change 改的就是 emitter 本体）⇒ ⇒ 记录 verilator 可用性 ⇒ ⇒ ⚠️ 3.1（批次 A–E）**不触及** SoC 发射入口的产物语义 ⇒ ⇒ 「任何代码改动之前」指**批次 F 的代码改动之前** ⇒ ⇒ ⚠️ **分支 A 例外**（形态裁决 = 恒发层次化 ⇒ 默认模式产物**必然**变）：默认模式的差异 MUST **恰为形态变化**且**可机器判定** —— 即：落盘物集合 **== {`top.v`, `manifest.json`}** ∧ `manifest.json` **逐字节相同** ∧ module 集 **1 → 5** ∧ `top.v` 的**顶层端口表**与基线扁平产物**逐字逐序相同**（⇒ 差异只在**形态**、不在**端口面**）；`eq/` 与 `--check-products` 模式 MUST **零差异** ⇒ ⇒ **禁**用「逐字节相同」一刀切（那会让分支 A 必红）⇒ ⇒ **禁**只写「可解释」（人眼判 ⇒ 无判别力）⇒ ⇒ 判据 MUST 分别列出「预期差异」与「零差异」两组 | diff |
 | AC26 | **切分表为空的终态已登记**：若 F1 裁定**无符号可下沉** ⇒ ⇒ **2026-11-17 蓝图 §7「已知残留与边界」** MUST 有一条对应行（状态 = **已收口**；闭口证据 = **存在的路径** · 逗号分隔 · 无空格 · 无反引号）⇒ ⇒ ⚠️ **不是** `.rddf/checks/arch-residual-registry.md`：那本护栏的台账**硬编码**为**另一本**蓝图（`scripts/lib/ledger_residual.py:17`）⇒ ⇒ 往它加行**必红**（「结算行数不一致」）⇒ ⇒ 本条的判据 = **蓝图 §7 段落自证**（grep 该段命中对应行）⇒ ⇒ 否则是「口头上闭合、账本上没有」的静默债 | grep |
+| AC27 | **`axi4_full_example` 退役完整（§4.3.3）**：文件不存在 · target 不存在 · CTest 条目 `spinalhdl_axi4_full` 消失 · `CH_TRACKED_EXAMPLE_TARGETS` == **27** · `examples-rtl-sim-exclusions.tsv` 无该行 · `port-naming-exempt.tsv` 无该文件的行 · 覆盖证据 `tests/test_axi4_full_burst.cpp` 仍绿 ⇒ ⇒ **显式登记为缩面**（不得静默） | shell |
+| AC28 | **`tb_axi_soc_example` 三模式（§4.3.3）**：① 默认 = 激励 + `RESULT: checks=N fails=0` ② `--emit-rtl <dir>` = 发射（**恒** `--hierarchical`）③ `--check-products` = 发射 + 自检（该模式下 `--out` / `--emit-hygiene` **照常透传**）⇒ ⇒ 三种均 exit 0；**未知参数 ⇒ exit 2** | shell |
 
 ### AC ↔ task
 
 | AC | task |
 |---|---|
-| AC1 · AC2 · AC3 · AC7 | A1–A3 · A5 |
+| AC1 · AC2 · AC3 · AC7 | A1–A3 · A5 · **A7** |
 | AC4 | A6（C2 扩展 + fixtures） |
 | AC5 · AC6 | B1 · B2 |
 | AC8 · AC9 | B3–B5 · C1–C3 |
 | AC10 | C3 · C4 |
-| AC11 · AC12 · AC13 · AC14 | D1–D5 |
+| AC11 · AC12 · AC13 · AC14 | D1–D5 · **A7**（棘轮删行段） |
 | AC15 | E1 |
 | AC16 | E2 · E3 |
 | AC17 · AC18 · AC19 · AC22 · AC23 · AC24 · AC25 · AC26 | F0–F9 |
 | AC20 | C5 |
 | AC21 | D6 |
+| AC27 | **A7** |
+| AC28 | **B6** |
 
 ---
 
@@ -289,13 +303,13 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 | 给库组件 `AxiLiteSlave` 的端口具名 | 会改所有用它的产品的 Verilog 端口名 ⇒ 公开面变更 ⇒ 需 architect（ADR-075 域）；本 change 靠「测试归位」绕开 |
 | 给 `AxiLiteTestMaster` 的 23 个端口具名 | 成层子 module 端口 ⇒ 独立立项 |
 | 把 `AxiLiteTop` / `AxiSocTop` **提升**为库组件 | 与本 change 方向相反 ⇒ 需 ADR |
-| `emit_rtl_soc.cpp` **整个文件**的合并 | 合并的前提是 3.2 ⇒ 本 change 只做 3.2（若 G-1 闭） |
+| ~~`emit_rtl_soc.cpp` **整个文件**的合并~~ | ✅ **2026-11-18 改为纳入**（§4.3.3 裁决**整文件删除** ⇒ 不再是「前提未满足」⇒ 本 change 的 3.2 就做它） |
 | **默认模式扁平产物的「合规化」**（分支 B） | 分支 B = 改 `rtl-soc-output` 的既有 MUST ⇒ 走 **ADR 修订 + MODIFIED** ⇒ ⇒ **不在本 change 实施面** ⇒ ⇒ 走 follow-up |
 | **module 集 / 顶层端口数的多载体收敛** | 现状 **3 处载体**：`emit_rtl_soc.cpp` 的 `kExpectedModules` / `kExpectedTopPorts` · `.rddf/checks/soc-rtl-expectations.md` · `examples-rtl-sim-targets.tsv` 的散文 ⇒ ⇒ **本 change 不收敛**（ADR-074「判据值留 example」 ⇒ example 侧常量 MUST NOT 被删）⇒ ⇒ **登记为已知残留** ⇒ 独立立项 |
 | `find_verilator()` 下沉 | 仓内已有裁决（fork 外部 lint 会污染失败归因）⇒ linter 路径作为参数 |
 | RV32I 侧顶层组件归位 | 另一批 example ⇒ 独立立项 |
 | 删 `emit_rtl.cpp` | 属 `emit-cli-into-example` |
-| 把 `examples/axi4/emit_rtl_soc.cpp` 在 `emit-cli-into-example` 的「零 diff」判据下保持 | **单向顺序**：本 change 的 3.2 若先行 ⇒ 该判据失效 ⇒ ⇒ **3.2 MUST 在 `emit-cli-into-example` 之后** |
+| ~~把 `examples/axi4/emit_rtl_soc.cpp` 在 `emit-cli-into-example` 的「零 diff」判据下保持~~ | ✅ **2026-11-18 作废**（整文件删除 ⇒ 零 diff 判据对**已删文件**无对象）⇒ ⇒ 顺序仍 MUST 为 `axi4-verif-driven-cpp` → `emit-cli-into-example` → 本 change（订单不变，理由改为「谁先删谁」）li-into-example` 之后** |
 
 ---
 
@@ -304,7 +318,7 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 | 门 | 内容 | 闭法 |
 |---|---|---|
 | **G-1** | ✅ **已闭（2026-11-18 · architect 裁决已产出）** —— 载体 = 蓝图 `docs/architecture/2026-11-17-rtl-verification-single-source.md` 的 **§4.3 订正 + §4.3.1 逐符号切分表（9 符号 · 维度 = **规则 vs 值**）+ §4.3.2 形态裁决（**分支 A**）+ §7 R12** ⇒ ⇒ ④ **ADR-074「不覆盖」条无需改动**（它把下沉**指向**蓝图 §4.3 ⇒ 订正后指向仍有效）⇒ ⇒ ⑤ draft 活文档（**planner 侧**）+ 上游 active change（**builder 的 F0 ②**）同批订正 ⇒ ⇒ ⚠️ **F2–F9 的实施判据以蓝图 §4.3.1 / §4.3.2 为准** | 已闭 ⇒ **F2–F9 可开工**（⚠️ F0 的基线采集仍 MUST 早于任何代码改动） |
-| **G-2** | **单向顺序**：3.2 与 `emit-cli-into-example` 的「`emit_rtl_soc.cpp` 零 diff」互斥 | 顺序 MUST 为 `axi4-verif-driven-cpp` → `emit-cli-into-example` → 本 change（3.1）→ 3.2 |
+| **G-2** | **单向顺序（理由已于 2026-11-18 更新）**：3.2 与 `emit-cli-into-example` 现在**都删文件**（前者删 `emit_rtl_soc.cpp`、后者删 `emit_rtl.cpp`）⇒ ⇒ 互斥点不再是「零 diff」而是「**同一 tsv 行的 `emitter`/`emitter_args` 列**」 | 顺序 MUST 为 `axi4-verif-driven-cpp` → `emit-cli-into-example` → 本 change（3.1）→ 3.2 |
 | **G-3** | **测试归位登记**：新增的 `examples/axi4/tests/*.cpp` MUST 进 `EXAMPLES_TEST_SOURCES`（18 → 20）与 `CH4_ANCHOR` | 实施期 T5/T6 |
 
 ---
@@ -315,11 +329,12 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 |---|---|---|---|
 | `examples/axi4/tb_axi4_lite_example.cpp` | owner（驱动 + 改名） | 加 `--emit-rtl` | — |
 | `examples/axi4/emit_rtl.cpp` | — | **删** | — |
-| `examples/axi4/emit_rtl_soc.cpp` | — | **零 diff** | 3.2 owner |
+| `examples/axi4/emit_rtl_soc.cpp` | — | — | **删**（§4.3.3 · 整文件删除 ⇒ 非「零 diff」） |
 | `tests/CMakeLists.txt:1455` | 改第二参数 | — | — |
 | `tests/test_verif_single_source.cpp` | **零改动** | — | owner（拆分） |
-| `examples/axi4/CMakeLists.txt` | target/install | 删 emitter target | 加 helper |
-| `examples-rtl-sim-targets.tsv` 第 53 行 | `target`/`source` | `emitter`/`emitter_args` | — |
+| `examples/axi4/CMakeLists.txt` | target/install | 删 `emit_rtl_axi4_lite` target | 加 helper · **删 `emit_rtl_axi_soc` target** · **`axi_soc_example` → `tb_axi_soc_example`** · **删 `axi4_full_example`** |
+| `examples-rtl-sim-targets.tsv` 第 53 行（Lite） | `target`/`source` | `emitter`/`emitter_args` | — |
+| tsv 的 **SoC 行** | — | — | **`target`/`source`/`emitter`/`emitter_args` 四列**（`emit_rtl_axi_soc` → `tb_axi_soc_example` + `--emit-rtl`；`source` → `tb_axi_soc_example.cpp`） |
 
 ⇒ ⇒ **最小改纪律**：该行 / `examples/axi4/CMakeLists.txt` 被多方改 ⇒ ⇒ MUST **按列、按块**最小编辑，
 **MUST NOT** 整行 / 整文件替换（两个 worktree 并行时会丢改）。
@@ -332,9 +347,10 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 |---|---|---|
 | include 文本没改 ⇒ 编译红 | A2/A5（3 个 example + 2 个搬入测试改裸名）+ **AC3** 的 grep | 反向 `git mv` |
 | 用「加 include 路径」绕过依赖方向 | **AC4** 的 C2 扩展 + 投毒（现有 C2 只匹配 `examples/riscv-mini/src`） | — |
-| 棘轮豁免表顺手删行 ⇒ `EXPECTED_EXEMPT_PORTS` 红 | **AC11**：只改第一列，**不删行** | — |
+| 棘轮豁免表顺手删行 ⇒ `EXPECTED_EXEMPT_PORTS` 红 | **AC11 两段**：3.1 只改第一列（**不删行** · 锚点仍 1415）· A7 **受控删 31 行**（锚点 → 1384，与 `verify_port_naming.sh:50` 同批改） | — |
 | 公开面移除漏登记 ⇒ R2/R6 锚点红 | AC12：`public-api-removals.tsv` **5 条探针**（2 `nofile` + 3 `removed`）+ 两个锚点同步（46→51 / 25→30） | — |
 | `CH4_ANCHOR` 缺行 ⇒ 断言质量护栏 exit 1 | **AC14** | — |
+| `openspec/specs/axi-interconnect-routing/spec.md:242` 引用 `axi_soc_example.cpp:47/:263-264` ⇒ 文件删除后**行引用悬空** | **登记为已知漂移**（spec 非护栏面 ⇒ 不红；按仓惯例不改历史引用） | — |
 | 产物不等价（搬家意外改语义） | **AC16** 的 sha256（同 build dir / 同 emitter / 串行前置 HEAD） | — |
 | 3.2 下沉后判据变恒绿 | **AC18** 的逐项常驻投毒 + **AC17** 的「下沉须有具名第二消费者」 | 回退 3.2 |
 | **蓝图订正漏位置**（6 处：总表 · 缺口② · §4.3 行 1 · §4.3 行 2 · §4.3 末尾「不动」条 · §5.2 M4 + draft 活文档）⇒ 文档继续说谎 | **AC23**（按**锚点文本**定位 + 活文档同批订正 + 上游活跃 change 同批订正）⇒ ⇒ **AC22** 的切分表复算 | 蓝图回滚 |
