@@ -213,6 +213,24 @@ DUT（实测：移位寄存器恒 `0x00`、FSM 状态卡死在 `TRANSFER`、`STO
 除上述四类变更外，该文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
 + 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
 
+**例外（顶层组件归位引入 · 见 capability `example-component-boundary`）**：
+`tests/test_axi_lite_verilator_e2e.cpp` 的 DUT 原为 **example 专用**的顶层组件
+`AxiLiteTop`（定义在 `examples/axi4/`）⇒ ⇒ 而它只是 `AxiLiteSlave` 的**纯透传**封装
+⇒ ⇒ 顶层组件归位到 `examples/` 后，**根** `tests/**` MUST NOT 引用 `examples/**`
+（依赖方向）⇒ ⇒ 该文件 MUST 被允许**受限**变更（**逐条**）：
+
+1. **删** `#include "axi4/axi4_lite_example_top.h"`（该头已移出 `include/`）；
+2. `using axi4::example::AxiLiteTop;` MUST 改为库组件的引用
+   （`using ch::AxiLiteSlave;` 或其等价形态）；
+3. DUT MUST 换为**库组件** `AxiLiteSlave<32, 32, 4>`（**端口集合与 C++ 成员名逐字相同**
+   ⇒ ⇒ 激励与断言**零改动**）；
+4. 顶部注释里的 DUT 引用 MUST 同步，**并订正陈旧的端口计数**（「10 inputs / 7 outputs」
+   → 实际的 **12 inputs / 8 outputs**）；
+5. 文件**路径**、**TEST_CASE 名**、**Catch2 SECTION 结构**、**断言** MUST NOT 变化。
+
+除上述五类变更外，该文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签
++ 在文件顶注释声明 `Reference implementation for DUAL_BACKEND_TEST macro`"两类变更。
+
 #### Scenario: 9 个测试保留原状
 
 - **WHEN** 本 capability 的 builder 阶段执行
@@ -254,6 +272,14 @@ DUT（实测：移位寄存器恒 `0x00`、FSM 状态卡死在 `TRANSFER`、`STO
 - **AND** MUST NOT 增删该文件的观测端口
 - **AND** ⚠️ **parity 断言 MUST 保留**（它是**必要**条件）⇒ 但 MUST NOT 被当作
   **充分**条件（同构缺陷恒被 parity 掩盖 ⇒ MUST 另有**绝对**语义金标）
+
+#### Scenario: example DUT 归位 ⇒ 库测试的 DUT 换库组件（受限变更）
+
+- **WHEN** 顶层组件归位到 `examples/` 的 builder 阶段执行
+- **THEN** `tests/test_axi_lite_verilator_e2e.cpp` 的 `git diff` MUST 仅限
+  "DUT 换为库组件 `AxiLiteSlave<32, 32, 4>` + 顶部注释的 DUT 引用同步"
+- **AND** 该文件的**路径**、**TEST_CASE 名**、**Catch2 SECTION 结构**、**断言** MUST NOT 变化
+- **AND** 其余 8 个文件的 `git diff` MUST 仍仅限"加 `LABELS verilator_e2e` 标签 + 顶注释声明"
 
 **新增登记（2026-11-07 · `p8-hierarchical-equivalence-public-helper-2026-11` 引入）**：
 `tests/test_public_equivalence_api.cpp` 是**公共 helper 的仓外视角消费者**

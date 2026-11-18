@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change adr-035-phase-3-complete. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: dlopen 真实 Vtop 与 extern "C" 符号解析
 `VerilatorBackend::initialize()` 在 `verilator --cc --build` 成功生成 `obj_dir/Vtop` 后，**MUST** 真实 `dlopen` 该二进制并 `dlsym` 解析 5 个符号 (`new_Vtop`, `eval_Vtop`, `final_Vtop`, `delete_Vtop`, `set_input_Vtop`, `get_output_Vtop`, `get_field_ptr_Vtop`)。任一符号缺失 **MUST** `dlclose` + 返回 false，且 `CHWARN` log 缺失符号名。
 
@@ -171,7 +173,7 @@ The Verilator backend (`src/core/verilator_backend.cpp`) SHALL propagate Vtop ou
 
 #### Scenario: AXI4-Lite write-then-read data integrity under VerilatorBackend
 
-- **WHEN** the design wraps `ch::ch_module<AxiLiteSlave<32, 32, 4>>` (`tests/test_axi_lite_verilator_e2e.cpp::AxiLiteTop`)
+- **WHEN** the design **is** the library component `ch::AxiLiteSlave<32, 32, 4>`（`tests/test_axi_lite_verilator_e2e.cpp` 的 DUT；它此前经 example 专用的透传封装 `AxiLiteTop` ⇒ 归位后直接用库组件）
 - **AND** a write transaction writes `0xDEADBEEF` to `addr=0x00` (reg0)
   （AW 一拍、W 另一拍 —— `AxiLiteSlave` 的 AW→W 相位分离）
 - **AND** a subsequent read transaction reads `addr=0x00`
@@ -193,4 +195,3 @@ The Verilator backend's `eval_sequential()` SHALL execute a 3-step clock toggle 
 - **WHEN** `VerilatorBackend::eval_sequential()` returns
 - **THEN** `sync_outputs_from_vtop()` SHALL have been called to refresh all user-output fields from Vtop into `data_map_`
 - **AND** the clock and reset fields SHALL be excluded from this sync (to avoid round-trip)
-

@@ -309,7 +309,8 @@ example 侧的产品专属 helper（`make_inputs` / `make_observations` / `check
 | `find_verilator()` 下沉 | 仓内已有裁决（fork 外部 lint 会污染失败归因）⇒ linter 路径作为参数 |
 | RV32I 侧顶层组件归位 | 另一批 example ⇒ 独立立项 |
 | 删 `emit_rtl.cpp` | 属 `emit-cli-into-example` |
-| ~~把 `examples/axi4/emit_rtl_soc.cpp` 在 `emit-cli-into-example` 的「零 diff」判据下保持~~ | ✅ **2026-11-18 作废**（整文件删除 ⇒ 零 diff 判据对**已删文件**无对象）⇒ ⇒ 顺序仍 MUST 为 `axi4-verif-driven-cpp` → `emit-cli-into-example` → 本 change（订单不变，理由改为「谁先删谁」）li-into-example` 之后** |
+| ~~把 `examples/axi4/emit_rtl_soc.cpp` 在 `emit-cli-into-example` 的「零 diff」判据下保持~~ | ✅ **2026-11-18 作废**（整文件删除 ⇒ 零 diff 判据对**已删文件**无对象）⇒ ⇒ 顺序仍 MUST 为 `axi4-verif-driven-cpp` → `emit-cli-into-example` → 本 change（顺序不变，理由改为「谁先删谁」）⇒ ⇒ 本 change 在两个前置之后 |
+| **主 specs 的两处存量引用**（`verilator-backend-e2e/spec.md:174` 的 `::AxiLiteTop` · `verilator-e2e-coverage/spec.md:95` 的 `axi4_full_example`） | **引用 1 由本 change 的 delta 覆盖**（该 delta 的 MODIFIED Requirement 正是含此行的那条 ⇒ 归档即闭）· **引用 2 登记为接受项**：它所在 requirement（`代表性 Memory 设计在 Verilator 仿真下行为契约`，39 行）本 change 未改 ⇒ 改它需整条复制进 MODIFIED ⇒ 收益（一句话的陈旧指称）远小于复制偏差风险；且该 Scenario 的判据（`rdata` 序列）**不依赖**该文件存在 ⇒ ⇒ **下一次碰这条 requirement 的 change 顺手改** |
 
 ---
 
