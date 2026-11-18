@@ -1,3 +1,29 @@
+## 2026-11-18 — RTL 发射入口并入 example（`--emit-rtl` 模式 · `emit-cli-into-example`）
+
+**问题**：AXI4-Lite 的 RTL 发射入口是**独立可执行文件** `emit_rtl_axi4_lite`（32 行薄壳：注册
+`AxiLiteTop` + 调库层 `run_emit_cli`）⇒ ⇒ 与 `tb_axi4_lite_example` **重复同一个 factory**
+⇒ ⇒ 同一设计有两个 main、两份根组件声明。
+
+**改了什么**
+
+- **`tb_axi4_lite_example` 新增 `--emit-rtl` 模式**：位置无关剥离该标记 ⇒ 其余 argv 透传库层
+  `run_emit_cli`；默认模式**仍是验证模式**（`.verif` 驱动）
+- **删除** `examples/axi4/emit_rtl.cpp` + target `emit_rtl_axi4_lite`
+- **fail-closed 两条**：默认模式收到任何未知参数 ⇒ **exit 2**；`--emit-rtl` 缺 `--out` ⇒ **exit 2**
+  （**不回落**库层默认 `rtl_out/` ⇒ 不写 CWD）
+- 清单 `.rddf/checks/examples-rtl-sim-targets.tsv` **增 `emitter_args` 列**（12 → 13 列；无参写 `-` 哨兵）
+  ⇒ 该行 `emitter` → `tb_axi4_lite_example`、`emitter_args` → `--emit-rtl`
+- 护栏 `verify_examples_rtl_sim.sh`：按**列名**取 `emitter_args`（③ 发射 / ⑥' 重新生成两处）；
+  新增**字段数守恒**具名 fail（空单元 ⇒ 提示写 `-`）；`--self-test` 增至 **17 条投毒**
+  （新增「`emitter_args` 置 `-` ⇒ ③ 必红」）+ **1 条必绿用例**（中间插列 ⇒ 按名字取列 ⇒ 仍绿）
+
+**用户可见变更**
+
+| 项 | 前 | 后 |
+|---|---|---|
+| AXI4-Lite 的 RTL 发射 | `build/examples/axi4/emit_rtl_axi4_lite --out <dir>` | `build/examples/axi4/tb_axi4_lite_example --emit-rtl --out <dir>` |
+| 产物 | — | **逐字节相同**（`top.v` · `manifest.json` · TB 三者的 sha256 对照通过） |
+
 ## 2026-11-18 — AXI4-Lite 示例改由 `.verif` 驱动（C++ 侧）
 
 **问题**：`.verif` 已经是**唯一语义来源**，但接着它的只有**渲染式 TB**；C++ 侧

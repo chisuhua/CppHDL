@@ -88,3 +88,27 @@ rmdir "$t"
 | RV32I 侧 3 个样板薄壳 | 影响面不同源（`scripts/rv32i_rtl_sim_env.sh` + CI/文档）⇒ 独立立项 |
 | 改 `split_row` 解析原语 | 牵动 `F[]` 全部消费点 ⇒ 独立重构（本 change 用 `-` 哨兵 + 字段数守恒判据） |
 | 库层 `run_emit_cli` 语义 | 零变化 |
+
+
+---
+
+## 实施实况（2026-11-18 · builder）
+
+| 批次 | 状态 | 取证摘要 |
+|---|---|---|
+| A（清单 + 护栏按列名） | ✅ | tsv 12 → **13 列**（`emitter_args` · 无参 `-`）· 护栏 ③/⑥' 两处按列名取参 · 字段数守恒具名 fail · ④″ 加「故意不读 `emitter_args`」注释 |
+| B（self-test） | ✅ | fixture 13 列 · axi4 行改 `tb_axi4_lite_example` + `--emit-rtl` · 投毒12 改按列名 awk · **投毒17**（args 置 `-` ⇒ ③ 必红）· **必绿用例**（插列 ⇒ 仍绿）+ `run_case_green` |
+| C（tb 双模式） | ✅ | `--emit-rtl` 位置无关剥离 · 默认模式无参才跑验证 · factory 复用根名 `"top"` |
+| D（删文件 + 对照） | ✅ | 基线 sha256（`top.v` 20e0f88e… · `manifest.json` cf7b40f6…）⇒ 新入口**逐字节相同** · 删 `emit_rtl.cpp` + target · tsv 改行 · **STALE-ARTIFACT 判据实测转红**（旧二进制残留 ⇒ 报 `STALE-ARTIFACT emit_rtl_axi4_lite`）⇒ 清理后归零 |
+| E（文档 + 护栏） | ✅ | `examples/axi4/AGENTS.md`（FILES / RUN）· `docs/CHANGELOG.md` · CMakeLists 注 · 旧名归零 · `verify_examples_rtl_sim.sh` **PASS** · `--self-test` **PASS（17 投毒 + 1 必绿）** · `coverage` **PASS** · `run_all_ported_tests.sh`：`STALE-ARTIFACT 0`（仅剩既有 `UNTRACKED emit_rtl_rv32i_soc_fw_init`，change `axi4-verif-driven-cpp` 已登记） |
+
+### AC 取证
+
+| AC | 证据 |
+|---|---|
+| AC1（空 args 必红） | 投毒17：`emitter_args` = `-` ⇒ ③ 发射失败 ✓ |
+| AC11（默认模式在仓根） | `RESULT: checks=113 fails=0` · exit 0 ✓ |
+| AC12（fail-closed 两条） | 未知参数 ⇒ exit **2** · `--emit-rtl` 缺 `--out` ⇒ exit **2** · CWD 零落盘 ✓ |
+| AC13（文档同步） | AGENTS.md + CHANGELOG + 旧名归零 ✓ |
+| AC14（零 diff `emit_rtl_soc.cpp`） | 未触碰该文件 ✓ |
+| AC5（产物等价） | sha256 三者逐字节相同 ✓ |

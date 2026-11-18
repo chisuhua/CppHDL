@@ -9,29 +9,82 @@
  * ⚠️ **验证源路径 = 编译期绝对路径**：仓内三个面的 CWD 各不相同
  *    （`run_all_ported_tests.sh` → `build/` · CTest → `build/tests` · 护栏 → 仓根）
  *    ⇒ ⇒ 相对路径必失败 ⇒ ⇒ 用 CMake 注入的 `CPPHDL_SOURCE_DIR`。
+ *
+ * ⚠️ **两种模式**（`emit-cli-into-example` · 发射入口并入 example）：
+ *    · **默认**（无参）= **验证模式**：读 `.verif` → 驱动 → 断言 → `RESULT:` 行
+ *    · **`--emit-rtl <dir>`** = **发射模式**：剥离该标记 ⇒ 其余 argv 透传库层 `run_emit_cli`
+ *    ⇒ ⇒ 两种模式**建不同的根**（验证模式 `ch_device` 的默认根 / 发射模式显式 `"top"`）
+ *    ⇒ ⇒ 后者与原独立薄壳**逐字一致**（产物因此逐字节相同）
  */
 
 #include "ch.hpp"
 #include "axi4/axi4_lite_example_top.h"
 #include "component.h"
 #include "simulator.h"
+#include "rtl_emit/cli.h"
 #include "rtl_emit/manifest.h"
 #include "rtl_emit/verif.h"
 
 #include <cstddef>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
 /// 相对仓根的验证源路径（**唯一**的路径字面量）
 constexpr const char *kVerifRelPath = "/examples/axi4/tb_axi4_lite_example.verif";
 
+/// 发射模式的根组件名（**MUST 与原独立薄壳逐字一致** ⇒ 产物逐字节相同）
+constexpr const char *kEmitRootName = "top";
+
+/// 发射模式的 design factory（与 `run_emit_cli` 的 `DesignFactory` 同型）
+std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {
+    return std::make_unique<axi4::example::AxiLiteTop>(nullptr, kEmitRootName);
+}
+
 } // namespace
 
-int main(int /*argc*/, char ** /*argv*/) {
+int main(int argc, char **argv) {
     using namespace ch;
+
+    // ── 0) 模式判定：**位置无关**剥离 `--emit-rtl`（其余 argv 原序保留）──────────
+    bool emit_mode = false;
+    std::vector<std::string> rest;
+    rest.reserve(static_cast<std::size_t>(argc > 0 ? argc - 1 : 0));
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--emit-rtl") {
+            emit_mode = true;
+            continue;
+        }
+        rest.push_back(a);
+    }
+
+    if (emit_mode) {
+        // ── 发射模式 fail-closed：缺 `--out <dir>` ⇒ exit 2 ──────────────────
+        //   ⚠️ MUST NOT 落到库层默认 `rtl_out/`（那会写进 CWD）
+        bool has_out = false;
+        for (std::size_t i = 0; i + 1 < rest.size(); ++i) {
+            if (rest[i] == "--out") {
+                has_out = true;
+                break;
+            }
+        }
+        if (!has_out) {
+            std::cerr << "FATAL: --emit-rtl 缺 --out <dir>（拒绝回落到默认 rtl_out/）\n";
+            return 2;
+        }
+        return rtl_emit::run_emit_cli(rest, make_emit_design);
+    }
+
+    // ── 验证模式 fail-closed：收到**任何**未知参数 ⇒ exit 2 ──────────────────
+    if (!rest.empty()) {
+        std::cerr << "FATAL: 未知参数（默认模式只接受无参）：" << rest[0] << "\n";
+        return 2;
+    }
 
     const std::string verif_path = std::string(CPPHDL_SOURCE_DIR) + kVerifRelPath;
 
@@ -64,7 +117,7 @@ int main(int /*argc*/, char ** /*argv*/) {
     const rtl_emit::VerifRunOptions opts{};
     const auto res = rtl_emit::run_verif(prog, sim, dev.context(), manifest, opts);
 
-    // ── 4) 逐条结论：PASS 留在 `check_lines` · FAIL 进 stderr ─────────────
+    // ── 4) 逐条结论：FAIL 进 stderr ──────────────────────────────────────
     for (const auto &line : res.failure_lines) {
         std::cerr << line << "\n";
     }

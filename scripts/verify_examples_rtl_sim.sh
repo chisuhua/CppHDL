@@ -109,7 +109,7 @@ load_columns() {
         return 1
     fi
     COLS="$(printf '%s' "${line#*#COLUMNS:}" | tr -s '[:space:]' ' ')"
-    for need in target kind source component emitter tb status generated \
+    for need in target kind source component emitter emitter_args tb status generated \
         min_checks scenarios spec_checks note; do
         case " $COLS " in
         *" $need "*) ;;
@@ -119,6 +119,9 @@ load_columns() {
             ;;
         esac
     done
+    local -a _cols_arr=()
+    read -r -a _cols_arr <<<"$COLS"
+    NCOLS="${#_cols_arr[@]}"
     return 0
 }
 
@@ -140,6 +143,7 @@ C_KIND="$(colidx kind)"
 C_SRC="$(colidx source)"
 C_COMP="$(colidx component)"
 C_EMITTER="$(colidx emitter)"
+C_EMITTER_ARGS="$(colidx emitter_args)"
 C_TB="$(colidx tb)"
 C_STATUS="$(colidx status)"
 C_GENERATED="$(colidx generated)"
@@ -154,7 +158,16 @@ fieldn() { # $1 = 整行；$2 = 列号
 }
 
 # 把一行拆进 `F[]`（供 check_one 按列名取字段）
-split_row() { IFS=$'\t' read -r -a F <<<"$1"; }
+split_row() { # $1 = 整行 ⇒ 拆进 F[]；**字段数 != NCOLS ⇒ 具名 fail（return 2）**
+    IFS=$'\t' read -r -a F <<<"$1"
+    if [ "${#F[@]}" -ne "${NCOLS:-0}" ]; then
+        echo "::error::清单行字段数 ${#F[@]} ≠ #COLUMNS 词数 ${NCOLS:-0}" >&2
+        echo "::error::  行：$1" >&2
+        echo "::error::  ⇒ 空单元 MUST 写 \`-\`（无参哨兵）" >&2
+        return 2
+    fi
+    return 0
+}
 
 # ⓪ 登记数守恒（**三桶** · **fail-closed**：没有锚点行也算红）
 # ⚠️ **三桶互斥**（2026-11-16 · `soc-rtl-product-and-tb-2026-11` T6）：
@@ -244,7 +257,9 @@ mkdir -p "$WORK_ROOT"
 # 返回 0 = 通过；非 0 = 失败（FAILED 已累加）
 check_one() {
     local tgt="$1" kind="$2" src="$3" comp="$4" emitter="$5" tb="$6" status="$7"
-    local gen="$8" minck="$9" scen="${10}" spec="${11}" note="${12}"
+    local gen="$8" minck="$9" scen="${10}" spec="${11}" note="${12}" eargs="${13}"
+    # ⚠️ `emitter_args` = 空格分隔的 token 序列；`-` 哨兵 ⇒ 展开为空
+    if [ "$eargs" = "-" ]; then eargs=""; fi
     CHECKED=$((CHECKED + 1))
     info "$tgt（$kind · $emitter · $tb）"
 
@@ -446,7 +461,8 @@ check_one() {
     #   **23 条**（RV32I 实测）宽度问题盖住 ⇒ ⇒ 「宽度错位只 warning ⇒ 绿」
     #   正是 B2 想避免的缺口（metis 指出的「静态门失效」形态）。
     #   ⇒ ⇒ 实测：9 个 example 的卫生产物全部 `--lint-only` 零告警零错误。
-    if ! "$emitter_bin" --out "$work" --emit-hygiene >"$work/emit.log" 2>&1; then
+    # ⚠️ `$eargs` **不加引号**（要按空格拆成多个 token）⇒ ⇒ 无参时为空（不传多余 token）
+    if ! "$emitter_bin" $eargs --out "$work" --emit-hygiene >"$work/emit.log" 2>&1; then
         fail "③ 发射失败（见 $work/emit.log）"
         return 1
     fi
@@ -568,7 +584,7 @@ PY
         local regen="$work/regen"
         rm -rf "$regen"
         mkdir -p "$regen"
-        if ! "$emitter_bin" --out "$regen" --emit-hygiene \
+        if ! "$emitter_bin" $eargs --out "$regen" --emit-hygiene \
             --emit-tb-verif "$verif_path" --tb-verif-out "$regen/regen.sv" \
             >"$regen/emit.log" 2>&1; then
             fail "⑥' 重新生成 TB 失败（见 $regen/emit.log）"
@@ -650,6 +666,9 @@ PY
     #   （R1–R3 只遍历 `verify_hierarchical_rtl.sh` 的主产物目录 ⇒ ⇒ 独立目录**没人 lint**）。
     #   ⚠️ 产物目录 = 本行的 `$work`（**已隔离**）⇒ ⇒ 不污染主产物目录的「恰好 3 个 .v」。
     if [ "$kind" = "soc" ]; then
+        # ⚠️ **本调用故意不读 `emitter_args`**（change `emit-cli-into-example` 的 A6）：
+        #   `--check-products` 是 SoC 行专属硬编码开关 ⇒ ⇒ 将来 `kind=soc` 行需要额外
+        #   参数时会被**静默忽略**（已知残留）
         if ! "$emitter_bin" --out "$work" --emit-hygiene --check-products \
                 >"$work/check-products.log" 2>&1; then
             fail "④″ SoC 产物级判据失败（见 $work/check-products.log）"
@@ -786,13 +805,14 @@ PY
 # ── 主循环（check）──────────────────────────────────────────────────
 if [ "$MODE" = "check" ]; then
     while IFS= read -r row; do
-        split_row "$row"
+        split_row "$row" || exit 2
         check_one "${F[$((C_TARGET - 1))]}" "${F[$((C_KIND - 1))]}" \
             "${F[$((C_SRC - 1))]}" "${F[$((C_COMP - 1))]}" \
             "${F[$((C_EMITTER - 1))]}" "${F[$((C_TB - 1))]}" \
             "${F[$((C_STATUS - 1))]}" "${F[$((C_GENERATED - 1))]}" \
             "${F[$((C_MINCHECKS - 1))]}" "${F[$((C_SCENARIOS - 1))]}" \
-            "${F[$((C_SPEC - 1))]}" "${F[$((C_NOTE - 1))]}"
+            "${F[$((C_SPEC - 1))]}" "${F[$((C_NOTE - 1))]}" \
+            "${F[$((C_EMITTER_ARGS - 1))]}"
     done < <(data_rows)
 
     # 预算检查（--allow-pending 时）
@@ -840,13 +860,13 @@ run_self_test() {
         # ⚠️ 锚点：`REGISTERED_TARGETS: $3` · `REGISTERED_SOC: 0` · `REGISTERED_HIER: 1`
         cat >"$1" <<EOF
 # self-test 用的临时清单
-#COLUMNS: target kind source component emitter tb status generated min_checks scenarios spec_checks note
+#COLUMNS: target kind source component emitter emitter_args tb status generated min_checks scenarios spec_checks note
 # REGISTERED_TARGETS: $3
 # REGISTERED_SOC: 0
 # REGISTERED_HIER: 1
-selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
-selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
-tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体）· interp-entry
+selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	-	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
+selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
+tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	tb_axi4_lite_example	--emit-rtl	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体）· interp-entry
 EOF
     }
 
@@ -860,17 +880,32 @@ EOF
         rc=$?
         if [ "$rc" -eq 0 ]; then
             echo "  [0;31m❌ 自检 $name：**仍绿** ⇒ ⇒ 该判据无判别力[0m"
-            printf '%s\n' "$out" | tail -6 | sed 's/^/       /'
+            printf '%s\n' "$out" | tail -30 | sed 's/^/       /'
             FAILED=$((FAILED + 1))
             return 1
         fi
         if ! printf '%s' "$out" | grep -q "$want"; then
             echo "  [0;31m❌ 自检 $name：红了但不是期望的判据（期望含：$want）[0m"
-            printf '%s\n' "$out" | tail -6 | sed 's/^/       /'
+            printf '%s\n' "$out" | tail -30 | sed 's/^/       /'
             FAILED=$((FAILED + 1))
             return 1
         fi
         ok "自检 $name：转红 ✓（$want）"
+        return 0
+    }
+
+    # **必绿**用例（`emit-cli-into-example` B5）：投毒形态不改变可观测行为 ⇒ MUST 仍绿
+    run_case_green() { # $1 = 名称
+        local name="$1" out rc
+        out="$(RTL_SIM_LIST="$st_list" RTL_SIM_WORK="$st_root/work" bash "$0" 2>&1)"
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "  [0;31m❌ 自检 $name：**转红** ⇒ ⇒ 该形态本应不影响行为[0m"
+            printf '%s\n' "$out" | tail -30 | sed 's/^/       /'
+            FAILED=$((FAILED + 1))
+            return 1
+        fi
+        ok "自检 $name：仍绿 ✓"
         return 0
     }
 
@@ -971,7 +1006,14 @@ PY
 
     # 投毒 12：登记的 `generated` 说 no 但 `.verif` 存在 ⇒ ⑥⁗ 三方一致必红
     make_list "$st_list" "$st_tb_rel" 2 verified
-    sed -i 's/\(tb_axi4_lite_example\t[A-Za-z]*\t[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*\t[A-Za-z]*\t\)yes/\1no/' "$st_list"
+    # ⚠️ 2026-11-18（`emit-cli-into-example`）：插入 `emitter_args` 列 ⇒ 原 8 字段 regex **不再匹配**
+    #   ⇒ ⇒ 改为**按列名**构造（用 `colidx` 的同一套 `#COLUMNS` 解析在 awk 里重建）
+    awk -F'\t' -v OFS='\t' '
+        BEGIN { }
+        /^#COLUMNS:/ { n = split($0, c, " "); for (i = 2; i <= n; i++) idx[c[i]] = i - 1; print; next }
+        /^#/ || /^$/ { print; next }
+        { if ($idx["target"] == "tb_axi4_lite_example") $idx["generated"] = "no"; print }
+    ' "$st_list" >"$st_list.tmp" && mv "$st_list.tmp" "$st_list"
     run_case "投毒12（generated=no 却有验证源）" "应改为生成"
 
     # 投毒 13：TB 里残留 `TOP_unnamed_input` 字面量 ⇒ ⑧'' 生成物形态必红
@@ -1006,7 +1048,11 @@ PY
     local ibin="$BUILD_DIR/examples/axi4/tb_axi4_lite_example"
     if [ -x "$ibin" ]; then
         cp "$ibin" "$st_root/ibin.bak"
-        printf '#!/bin/sh\necho "RESULT: checks=99 fails=0"\n' >"$ibin"
+        # ⚠️ 2026-11-18（`emit-cli-into-example`）：tb 现在是**双模式**（验证 / --emit-rtl）
+        #   ⇒ ⇒ stub MUST **先转发真实二进制**（否则 ③ 拿不到产物 ⇒ 先报「产物缺失」⇒ ⑨ 永远没机会红）
+        #   ⇒ ⇒ 再覆盖 stdout 的 RESULT 行（只在默认模式调用时生效 —— 即 ⑨ 那一路）
+        printf '#!/bin/sh\n"%s" "$@" >/dev/null 2>&1\necho "RESULT: checks=99 fails=0"\n' \
+            "$st_root/ibin.bak" >"$ibin"
         chmod +x "$ibin"
         run_case "投毒15（解释器条数与 min_checks 不等）" "⑨ 解释器条数不等"
         cp "$st_root/ibin.bak" "$ibin"
@@ -1018,6 +1064,30 @@ PY
     make_list "$st_list" "$st_tb_rel" 2 verified
     sed -i 's#examples/spinalhdl-ported/counter/counter_simple.cpp#examples/spinalhdl-ported/counter/NOPE.cpp#' "$st_list"
     run_case "投毒16（source 列路径不存在）" "F1b source 列路径不存在"
+
+    # 投毒 17：`emitter_args` 被置为 `-`（钉在 axi4 行）⇒ ③ 必红
+    #   （tb 的默认模式收到 `--out` 等未知参数 ⇒ exit 2 ⇒ 发射失败）
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    awk -F'\t' -v OFS='\t' '
+        /^#COLUMNS:/ { n = split($0, c, " "); for (i = 2; i <= n; i++) idx[c[i]] = i - 1; print; next }
+        /^#/ || /^$/ { print; next }
+        { if ($idx["target"] == "tb_axi4_lite_example") $idx["emitter_args"] = "-"; print }
+    ' "$st_list" >"$st_list.tmp" && mv "$st_list.tmp" "$st_list"
+    run_case "投毒17（emitter_args 置 - ⇒ 默认模式收到未知参数）" "③ 发射失败"
+
+    # 必绿用例：中间插一列（值非空）+ 同步 #COLUMNS ⇒ 按**名字**取列 ⇒ 仍绿
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    awk -F'\t' -v OFS='\t' '
+        /^#COLUMNS:/ {
+            n = split($0, c, " ")
+            out = "#COLUMNS:"
+            for (i = 2; i <= n; i++) { if (c[i] == "component") out = out " zzz_inserted"; out = out " " c[i] }
+            print out; next
+        }
+        /^#/ || /^$/ { print; next }
+        { row = ""; for (i = 1; i <= NF; i++) { if (i == 4) row = row (row == "" ? "" : "\t") "nonempty"; row = row (row == "" ? "" : "\t") $i }; print row }
+    ' "$st_list" >"$st_list.tmp" && mv "$st_list.tmp" "$st_list"
+    run_case_green "必绿：中间插列（值非空）"
 
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
@@ -1035,7 +1105,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 16 条投毒各自转红 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 17 条投毒各自转红 · 1 条必绿用例仍绿 · 还原复绿）"
     exit 0
 }
 

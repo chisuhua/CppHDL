@@ -29,19 +29,13 @@ set_target_properties(phase3a_complete PROPERTIES CXX_STANDARD 23 CXX_STANDARD_R
 
 install(TARGETS tb_axi4_lite_example axi_soc_example axi4_full_example phase3a_complete RUNTIME DESTINATION bin/axi4)
 
-# ── RTL 发射入口（`examples-rtl-sim-coverage` E3/E5 · 方案 3）────────────
-# ⚠️ **每个 example 一个独立 target** ⇒ ⇒ 护栏 `scripts/verify_examples_rtl_sim.sh`
-#   直接调用它产出 RTL + TB 骨架 ⇒ ⇒ 「产物从哪来」有了**唯一**答案。
-add_executable(emit_rtl_axi4_lite emit_rtl.cpp)
-target_link_libraries(emit_rtl_axi4_lite PRIVATE cpphdl)
-target_include_directories(emit_rtl_axi4_lite PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-set_target_properties(emit_rtl_axi4_lite PROPERTIES
-    CXX_STANDARD 23
-    CXX_STANDARD_REQUIRED ON
-)
+# ── RTL 发射入口（`emit-cli-into-example` · 2026-11-18）────────────
+# ⚠️ **发射入口已并入 `tb_axi4_lite_example`**（`--emit-rtl` 模式）⇒ ⇒
+#   原独立 target（Lite 的发射薄壳）已删除（它只是「注册设计 + 调库」的 32 行薄壳，
+#   与 tb 重复同一个 factory）⇒ ⇒ 产物**逐字节相同**（基线留档见 change `emit-cli-into-example`）。
 
 # ── SoC 层 RTL 发射入口（ADR-073 D1 · `soc-rtl-product-and-tb-2026-11` T2）────
-# ⚠️ **独立 target**（不与 `emit_rtl_axi4_lite` 合流）—— 它注册的是 SoC 根
+# ⚠️ **独立 target**（不与 Lite 的发射入口合流）—— 它注册的是 SoC 根
 #   （`AxiSocTop`），发射时带 `--hierarchical`（**同一份** `run_emit_cli`，
 #   2026-11-17 起扁平/层次化只差一个开关 ⇒ ⇒ 不再有自解析命令行）。
 add_executable(emit_rtl_axi_soc emit_rtl_soc.cpp)
