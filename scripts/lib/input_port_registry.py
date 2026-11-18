@@ -130,11 +130,20 @@ def port_owners(header: pathlib.Path, port_re: re.Pattern) -> list[tuple[int, st
 
 
 def header_of(component: str) -> pathlib.Path | None:
-    """组件定义所在的头（含该组件名且有 class/struct 声明）。"""
-    for p in sorted((ROOT / "include").rglob("*.h")):
-        text = p.read_text(errors="replace")
-        if re.search(r"\b(?:class|struct)\s+" + re.escape(component) + r"\b", text):
-            return p
+    """组件定义所在的头（含该组件名且有 class/struct 声明）。
+
+    ⚠️ **搜索根 = `include/` + `examples/`**（2026-11-18 · `example-file-boundary` D3）：
+    example 专属设计（`AxiLiteTop` / `AxiSocTop` / `AxiLiteTestMaster`）已从
+    `include/axi4/` 搬到 `examples/axi4/` ⇒ ⇒ 只搜 `include/` 会把**登记过的组件**
+    误判成「登记过时」。
+    """
+    for base in (ROOT / "include", ROOT / "examples"):
+        if not base.is_dir():
+            continue
+        for p in sorted(base.rglob("*.h")):
+            text = p.read_text(errors="replace")
+            if re.search(r"\b(?:class|struct)\s+" + re.escape(component) + r"\b", text):
+                return p
     return None
 
 

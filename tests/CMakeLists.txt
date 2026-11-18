@@ -1130,6 +1130,13 @@ add_catch_test(test_rtl_emit_contract test_rtl_emit_contract.cpp)
 #   `scripts/verify_examples_rtl_sim.sh` 的 ⑤/⑥ 跑真产物负责）。
 add_catch_test(test_verif_single_source test_verif_single_source.cpp)
 
+# 产物级自检的**产品无关规则**（`example-file-boundary-2026-11` F2 · 蓝图 §4.3.1）
+# ⚠️ 测的是**规则**（product_modules / tamper_hier / check_products 的判定与编排）
+#   ⇒ ⇒ example 侧的**值**不在这里 ⇒ ⇒ 本测试自带最小设计 + 自带值。
+# ⚠️ `check_products` 的 CHECK 4（双形态逐拍等价）需要**真 verilator** ⇒ ⇒ 本文件
+#   只覆盖**不依赖 linter**的分支（module 集 / 篡改定位 / fail-closed 退出码）。
+add_catch_test(test_product_check test_product_check.cpp)
+
 # `AxiLiteTestMaster` 的**直接**判别性用例（`input-port-required-registry` R2/R3）
 # ⚠️ 该组件声明了 `rst_n`（永久复位类端口）⇒ ⇒ MUST 登记 ⇒ ⇒ 登记行 MUST 有
 #   **实例化**它的文件 ⇒ ⇒ 它此前只作为 `AxiSocTop` 的成层子组件存在 ⇒ ⇒ 补上。

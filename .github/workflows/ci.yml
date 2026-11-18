@@ -594,6 +594,22 @@ jobs:
       shell: bash
       run: scripts/verify_public_api_visibility.sh --self-test
 
+    - name: Verify example-only headers stay out of include/
+      # `include/**` 是**库公开面** => 只有 example/test 消费者（库侧零消费者）的头
+      # 本质是 example 专属设计 => 混进去就变成「同一语义两个物理载体」的温床。
+      # 三态：违规（红，除非已登记）· 孤儿（不判）· 末段同名歧义（不判）。
+      # 登记表双向：违规头 MUST 已登记 · 登记头出现库侧消费者 => 「可移出登记表」=> 红。
+      # R2：`src/**/<同 stem>.cpp` 是**实现 TU** => 不算消费者（实现 ≠ 使用）。
+      shell: bash
+      run: scripts/verify_example_only_headers.sh
+
+    - name: Verify example-only headers guard self-test
+      # 6 条投毒：① 新头只被 example 消费 => 红 ② 子路径引用被认出 => 绿
+      # ③ 登记路径不存在 => 红 ④ 登记头新增库侧消费者 => 红 ⑤ 孤儿头 => 不红
+      # ⑥ 末段同名歧义 => 不红。合成 fixture 树 => 不碰真实源树。
+      shell: bash
+      run: scripts/verify_example_only_headers.sh --self-test
+
     - name: Verify JIT golden coverage floor
       # phase-6 P8 / R4.3: after removing the runtime A/B comparison, JIT
       # miscompiles can only be caught by the golden suite, so *which* JitOps

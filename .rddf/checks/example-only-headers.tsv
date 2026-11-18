@@ -1,0 +1,52 @@
+# **example-only 头的登记表**（豁免通道 · 由 scripts/verify_example_only_headers.sh 读取）
+#
+# ⚠️ 语义（三态 + 双向）：
+#   · **违规头**（`include/**` 下、库侧消费者 == 0、非孤儿、非歧义）MUST 在本表里（正向）
+#   · 表里的头 MUST **仍然**违规 ⇒ 一旦出现**库侧消费者** ⇒ 「**可移出登记表**」⇒ 红（反向）
+#   · 表里的路径 MUST 存在
+#   · **「库侧消费者」= `include/**` 或 `src/**` 的 `#include`，但**不含该头自己的实现 TU**
+#     （`src/**/<同 stem>.cpp`）** —— R2：实现 ≠ 使用。
+#
+# ⚠️ 本表是 **ratchet**：条目数受 `EXPECTED_EXEMPT_HEADERS` 约束（增删 MUST 同步）。
+#   新增公开头若只有 example/test 消费者 ⇒ ⇒ 要么搬去 `examples/`，要么在此登记理由。
+#
+# 列（TAB 分隔）：path<TAB>理由
+#
+include/axi4/axi4_lite_matrix.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/axi4_lite_slave.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/axi_interconnect_4x4.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/axi_to_axilite.h	示例用法（库侧零消费者）
+include/axi4/peripherals/axi_dma.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/peripherals/axi_gpio.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/peripherals/axi_i2c.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/peripherals/axi_pwm.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/peripherals/axi_spi.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/peripherals/axi_timer.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/peripherals/axi_uart.h	库组件的 tests 用法（库侧零消费者）
+include/bundle/axi_bundle.h	库组件的 tests 用法（库侧零消费者）
+include/bundle/axi_lite_bundle.h	库组件的 tests 用法（库侧零消费者）
+include/bundle/axi_protocol.h	库组件的 tests 用法（库侧零消费者）
+include/bundle/common_bundles.h	库组件的 tests 用法（库侧零消费者）
+include/bundle/fragment.h	库组件的 tests 用法（库侧零消费者）
+include/codegen_dag.h	公开 API（src 实现 TU + tests 用法）⇒ R2：实现 ≠ 使用
+include/core/bundle/bundle_utils.h	库组件的 tests 用法（库侧零消费者）
+include/core/bundle/tlm/tlm_bundle_converter.h	库组件的 tests 用法（库侧零消费者）
+include/core/interpreter_backend.h	公开 API（src 实现 TU + tests 用法）⇒ R2：实现 ≠ 使用
+include/cpu/cache/d_cache_async.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/cache/d_cache_complete.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/cache/d_cache_write_buffer.h	示例用法（库侧零消费者）
+include/cpu/cache/i_cache_async.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/cache/i_cache_prefetch.h	示例用法（库侧零消费者）
+include/cpu/pipeline/branch_predictor_v2.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/pipeline/rv32i_branch_predict.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/pipeline/rv32i_pc.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/pipeline/rv32i_pipeline.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/pipeline/rv32i_regfile.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/riscv/address_decoder.h	示例用法（库侧零消费者）
+include/cpu/riscv/clint.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/riscv/rv32i_asm_encode.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/riscv/rv32i_csr.h	库组件的 tests 用法（库侧零消费者）
+include/cpu/riscv/rv32i_exception.h	示例用法（库侧零消费者）
+include/rtl_emit/product_check.h	公开 API（src 实现 TU + tests 用法）⇒ R2：实现 ≠ 使用
+include/utils/format_utils.h	库组件的 tests 用法（库侧零消费者）
+include/utils/source_info.h	库组件的 tests 用法（库侧零消费者）

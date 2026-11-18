@@ -1,11 +1,12 @@
-// include/axi4/axi4_lite_example_top.h
+// examples/axi4/axi4_lite_example_top.h
 //
 // AXI4-Lite 示例的**顶层组件**（从 `examples/axi4/axi4_lite_example.cpp` 抽出）。
 //
-// ⚠️ **为什么抽到 `include/`**（`rtl-verification-single-source` C1）：
-//   ① `tests/` 里曾**复制**一份同名类（双权威）⇒ ⇒ 而护栏 C3 禁止 `tests/**`
-//      反向 include `examples/**` ⇒ ⇒ 只能**抽上去**（两处都 include 本头）。
-//   ② `.verif` 的 IR 解释器与渲染器都要实例化它。
+// ⚠️ **住址变更**（2026-11-18 · `example-file-boundary-2026-11` A1/A2）：本头**从
+//   `include/axi4/` 搬到 `examples/axi4/`** ⇒ ⇒ 理由 = 它是 **example 专属设计**
+//   （库 `include/` 不装 example 设计）⇒ ⇒ 公开面移除登记 =
+//   `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」章。
+//   ⇒ ⇒ 消费者**只有** `examples/**`（护栏 C3 禁止 `tests/**` 反向 include examples）。
 //
 // ⚠️ **端口 MUST 具名**（ADR-075 E1 · 20 个）：框架无反射 ⇒ ⇒ 未具名端口的
 //   `manifest.cpp_member` 只能是 `unnamed_input` 占位 ⇒ ⇒ 验证源无法按名寻址。
@@ -16,12 +17,18 @@
 #include "ch.hpp"
 #include "component.h"
 
+#include <memory>
+
 #include <string>
 
 namespace axi4 {
 namespace example {
 
 using namespace ch::core; // ch_uint / ch_bool / ch_reg / select / 0_d 等
+
+/// **根组件名**（**单一真相源** · 2026-11-18）—— 发射 factory 与验证模式的
+/// 根**共用**此常量 ⇒ ⇒ 消除「字面量恰好一致」的巧合。
+inline constexpr const char *kLiteRootName = "top";
 
 class AxiLiteTop : public ch::Component {
 public:

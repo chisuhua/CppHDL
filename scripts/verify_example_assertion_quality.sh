@@ -73,7 +73,9 @@ violation() { printf "${RED}VIOLATION${NC} %s\n" "$1" >&2; violations=$((violati
 # 归位条件：无（这是长期护栏）。新增测试源 MUST 在此登记一行。
 # ═══════════════════════════════════════════════════════════════════════════
 CH4_ANCHOR_README='C4 锚点：examples 测试源的可执行断言数下限。格式 <源文件>|<语义>|<下限>。下调/删除 MUST 在 commit message 里解释（放宽即需理由）。'
-CH4_ANCHOR="examples/riscv-mini/tests/test_cache_smoke.cpp|ICache 冷 miss 透出 + DCache 未驱动端口的当前事实|3
+CH4_ANCHOR="examples/axi4/tests/test_axi_lite_test_master.cpp|AxiLiteTestMaster 的 rst_n 驱动 + 事务握手判别性用例|10
+examples/axi4/tests/test_verif_axi4_lite.cpp|AxiLiteTop 经 .verif 语义驱动的 DUT 用例（7 个 DUT 用例）|41
+examples/riscv-mini/tests/test_cache_smoke.cpp|ICache 冷 miss 透出 + DCache 未驱动端口的当前事实|3
 examples/riscv-mini/tests/test_csr_unit.cpp|CSR 寄存器复位/读写/MRET/异常/WFI/中断|42
 examples/riscv-mini/tests/test_ifstage_device.cpp|ch_device<IfStage> 的 PC 复位/推进/stall 冻结|2
 examples/riscv-mini/tests/test_interrupt_flow.cpp|CLINT 定时器/CSR 中断条件/陷阱入口/MRET|28

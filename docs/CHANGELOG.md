@@ -1,3 +1,39 @@
+## 2026-11-18 — 产物级自检的规则下沉到库层（`ch::rtl_emit` · F2）
+
+**问题**：SoC 的产品级自检（4 项判据 + 编排）此前住在 example 里 ⇒ ⇒ 判定逻辑是
+**产品无关**的（module 集相等 / 端口面 / lint 退出码 / 双形态逐拍等价）⇒ ⇒ 想给第二个
+产品复用就只能**复制一份**（那正是本 change 立项要消的「同一语义多个物理载体」）。
+
+**改了什么**
+
+- **新增公开 API**（`include/rtl_emit/product_check.h` + `src/rtl_emit/product_check.cpp`）：
+  - `product_modules(verilog_path)` —— 产物里的 module 名集合
+  - `tamper_hier(...)` —— 变异自证（把某条被观测信号的顶层连接取反 ⇒ 产出篡改副本）
+  - `ProductCheckSpec` / `ProductCheckHooks` / `check_products(...)` —— 4 项判据 + **编排**
+    （顺序 / `failures` 累加 / `eq/` 产出 / 结论行 / 退出码 0-1 全在库层）
+- **值留在 example**：期望 module 集 · 期望顶层端口数 · 激励面 · 观测面 · 变异目标 ·
+  `--top-module` 名 · 最小变化观测量阈值 ⇒ ⇒ 库层**不内置**字面根名 / 阈值
+- **owner 基准由建出来的根组件派生**（`Component::name()`）⇒ ⇒ 根名可配，不再依赖
+  「三处字面量恰好一致」；两份设计头新增 `kSocRootName` / `kLiteRootName` 作**单一真相源**
+- `examples/axi4/tb_axi_soc_example.cpp` 544 → **311 行**（规则移出；只剩值 + 三模式 main）
+
+**顺带**（同一批自查修掉的 fail-open · 上游已单独提交）
+
+| 缺陷 | 前 | 后 |
+|---|---|---|
+| `--check-products` 的 lint 发现 | CWD 相对路径 ⇒ 从 `build/` 跑静默 `SKIP` | `CPPHDL_SOURCE_DIR` 搜索根 + **SKIP 升格 FAIL** |
+| lint 执行 | `std::system` 拼串（空格路径断裂 + 注入面） | `fork` + `execl`（argv 式） |
+| `--out` 取值 | `--out --emit-hygiene` 把 flag 当目录名 | 取值以 `-` 开头 ⇒ exit 2 |
+
+**用户可见变更 / 新增公开面**
+
+| 项 | 说明 |
+|---|---|
+| 新公开头 | `include/rtl_emit/product_check.h`（登记于 `.rddf/checks/example-only-headers.tsv` 豁免通道） |
+| 新库 TU | `src/rtl_emit/product_check.cpp` |
+| `check_products` 的退出码 | **只 0/1**（用法错误按失败计 ⇒ fail-closed）⇒ ⇒ 与搬移前**一致** |
+| 产物 | **逐字节不变**（`top.v` / `manifest.json` / `eq/{flat,hier}/top.v` 四件 sha256 相同 ⇒ `.rddf/checks/product-check-equivalence-2026-11-18.md`） |
+
 ## 2026-11-18 — AXI4-SoC 示例去 main + 产品自检内联（`example-file-boundary-2026-11` B6）
 
 **问题**：SoC 侧有**两个**可执行入口（`axi_soc_example` 的激励 + `emit_rtl_soc` 的发射/自检），

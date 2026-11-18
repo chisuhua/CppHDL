@@ -171,6 +171,7 @@ set(CH_SOURCES
     src/rtl_emit/manifest.cpp
     src/rtl_emit/tb_stub.cpp
     src/rtl_emit/cli.cpp
+    src/rtl_emit/product_check.cpp
     src/rtl_emit/verif_scan.cpp
     src/rtl_emit/verif_run.cpp
     src/rtl_emit/verif_render.cpp

@@ -37,8 +37,9 @@ namespace {
 /// 相对仓根的验证源路径（**唯一**的路径字面量）
 constexpr const char *kVerifRelPath = "/examples/axi4/tb_axi4_lite_example.verif";
 
-/// 发射模式的根组件名（**MUST 与原独立薄壳逐字一致** ⇒ 产物逐字节相同）
-constexpr const char *kEmitRootName = "top";
+/// 发射模式的根组件名（**单一真相源** = 设计头的常量 ⇒ ⇒ 消除「字面量恰好一致」的
+/// 巧合；值仍为 `"top"` ⇒ ⇒ **产物逐字节不变**）
+constexpr const char *kEmitRootName = axi4::example::kLiteRootName;
 
 /// 发射模式的 design factory（与 `run_emit_cli` 的 `DesignFactory` 同型）
 std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {

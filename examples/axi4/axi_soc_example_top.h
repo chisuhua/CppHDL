@@ -1,4 +1,4 @@
-// include/axi4/axi_soc_example_top.h
+// examples/axi4/axi_soc_example_top.h
 //
 // AXI4-Lite SoC 示例的**顶层组件**与**测试主设备**（从
 // `examples/axi4/axi_soc_example.cpp` 抽出 · `rtl-verification-single-source` C1）。
@@ -7,8 +7,11 @@
 //   都按名寻址。⚠️ **`AxiLiteTestMaster` 的 23 个端口本次不具名**（它是**成层后的
 //   子 module 端口**，不属产品顶层 ⇒ ⇒ 具名化属另一类产品可见变更 ⇒ ⇒ 不在本 change）。
 //
-// ⚠️ 抽取动机：`.verif` 的 IR 解释器 / 渲染器都要实例化顶层；而 `tests/` 不能
-//   反向 include `examples/**`（护栏 C3）⇒ ⇒ 只能抽到 `include/`。
+// ⚠️ **住址变更**（2026-11-18 · `example-file-boundary-2026-11` A1/A2）：本头**从
+//   `include/axi4/` 搬到 `examples/axi4/`** ⇒ ⇒ 理由 = 它是 **example 专属设计**
+//   （库 `include/` 不装 example 设计）⇒ ⇒ 公开面移除登记 =
+//   `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」章。
+//   ⇒ ⇒ 消费者**只有** `examples/**`（`tests/**` 不反向 include examples —— 护栏 C3）。
 
 #pragma once
 
@@ -19,6 +22,7 @@
 #include "ch.hpp"
 #include "component.h"
 
+#include <memory>
 #include <string>
 
 namespace axi4 {
@@ -148,6 +152,10 @@ public:
 // ============================================================================
 // 顶层 SoC
 // ============================================================================
+
+/// **根组件名**（**单一真相源** · 2026-11-18）—— 发射 factory 与产品自检的
+/// owner 基准**共用**此常量 ⇒ ⇒ 消除「三处字面量恰好一致」的巧合。
+inline constexpr const char *kSocRootName = "top";
 
 class AxiSocTop : public ch::Component {
 public:
