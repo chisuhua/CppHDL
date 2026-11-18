@@ -1454,7 +1454,7 @@ add_spinalhdl_ported_test(phase1c phase1c_test)
 
 add_spinalhdl_ported_test(axi4_lite tb_axi4_lite_example)
 # ⚠️ `axi4_full` 已退役（2026-11-18 · 覆盖证据 = tests/test_axi4_full_burst.cpp）
-add_spinalhdl_ported_test(axi4_soc axi_soc_example)
+add_spinalhdl_ported_test(axi4_soc tb_axi_soc_example)
 add_spinalhdl_ported_test(axi4_phase3a phase3a_complete)
 
 # ============================================================================

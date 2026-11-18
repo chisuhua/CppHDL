@@ -10,10 +10,10 @@ set_target_properties(tb_axi4_lite_example PROPERTIES CXX_STANDARD 23 CXX_STANDA
 target_compile_definitions(tb_axi4_lite_example PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 # AXI4-Lite SoC Integration Example
-add_executable(axi_soc_example axi_soc_example.cpp)
-target_link_libraries(axi_soc_example PRIVATE cpphdl)
-target_include_directories(axi_soc_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../..)
-set_target_properties(axi_soc_example PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+add_executable(tb_axi_soc_example tb_axi_soc_example.cpp)
+target_link_libraries(tb_axi_soc_example PRIVATE cpphdl)
+target_include_directories(tb_axi_soc_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+set_target_properties(tb_axi_soc_example PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
 # ⚠️ `axi4_full_example` 已退役（2026-11-18 · §4.3.3）：行为覆盖 = `tests/test_axi4_full_burst.cpp`（dual-backend）
 
@@ -23,24 +23,15 @@ target_link_libraries(phase3a_complete PRIVATE cpphdl)
 target_include_directories(phase3a_complete PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set_target_properties(phase3a_complete PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
-install(TARGETS tb_axi4_lite_example axi_soc_example phase3a_complete RUNTIME DESTINATION bin/axi4)
+install(TARGETS tb_axi4_lite_example tb_axi_soc_example phase3a_complete RUNTIME DESTINATION bin/axi4)
 
 # ── RTL 发射入口（`emit-cli-into-example` · 2026-11-18）────────────
 # ⚠️ **发射入口已并入 `tb_axi4_lite_example`**（`--emit-rtl` 模式）⇒ ⇒
 #   原独立 target（Lite 的发射薄壳）已删除（它只是「注册设计 + 调库」的 32 行薄壳，
 #   与 tb 重复同一个 factory）⇒ ⇒ 产物**逐字节相同**（基线留档见 change `emit-cli-into-example`）。
 
-# ── SoC 层 RTL 发射入口（ADR-073 D1 · `soc-rtl-product-and-tb-2026-11` T2）────
-# ⚠️ **独立 target**（不与 Lite 的发射入口合流）—— 它注册的是 SoC 根
-#   （`AxiSocTop`），发射时带 `--hierarchical`（**同一份** `run_emit_cli`，
-#   2026-11-17 起扁平/层次化只差一个开关 ⇒ ⇒ 不再有自解析命令行）。
-add_executable(emit_rtl_axi_soc emit_rtl_soc.cpp)
-target_link_libraries(emit_rtl_axi_soc PRIVATE cpphdl)
-target_include_directories(emit_rtl_axi_soc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-set_target_properties(emit_rtl_axi_soc PROPERTIES
-    CXX_STANDARD 23
-    CXX_STANDARD_REQUIRED ON
-)
+# ⚠️ `emit_rtl_axi_soc` 已删除（2026-11-18 · B6）：发射并入 `tb_axi_soc_example --emit-rtl`，
+#   产品自检在其 `--check-products` 模式（`soc_product_check.h`）。
 
 # ── C1: `examples/axi4/tests/*.cpp` 的 Catch2 helper（`example-file-boundary` 批次 C1）──
 # ⚠️ **CTest 条目名 = 函数第一参数**（与原 `tests/` 的注册名**逐字相同** ⇒ `ctest -N` 不变）

@@ -1,26 +1,26 @@
-// examples/axi4/emit_rtl_soc.cpp
+// examples/axi4/soc_product_check.h
 //
-// **SoC 层 RTL 发射入口**（ADR-073 D1/D2 · `soc-rtl-product-and-tb-2026-11` T2）。
+// **SoC 的产品级自检**（4 项判据 + 编排）—— `example-file-boundary-2026-11` 的 B6。
 //
-// ⚠️ **2026-11-17（`rtl-verification-single-source` C2）**：本文件此前 **483 行**，
-//   其中约 380 行是**重复实现库层已有的能力**（命令行解析 / 层次化发射 / manifest /
-//   诊断 fail-closed）—— 它当时的唯一理由是「库层 CLI 当时不支持层次化发射」，而那条理由
-//   **已失效**（`2db2eda` 起 `cli.cpp` 已解析 `--hierarchical`）⇒ ⇒ 现在：
-//     · 公共发射路径 → **库层** `run_emit_cli`（与扁平入口同一份代码）
-//     · 本文件只保留 **SoC 专属** 的产物级自检 `--check-products`
-//       （冻结的 module 期望集 / 顶层端口数 / 双形态逐拍等价 —— 都是**设计专属**
-//       期望值，按 ADR-074「不覆盖」条**不下沉**到库层）
+// ⚠️ **本文件是从 `emit_rtl_soc.cpp` 抽出的「checker」部分**（2026-11-18）。原文件把
+//   「发射壳」与「产品自检」混在一个可执行文件里 ⇒ ⇒ 发射已并入
+//   `tb_axi_soc_example --emit-rtl`（B6）⇒ ⇒ checker 独立成本头，由 tb 的
+//   `--check-products` 模式调用。
 //
-// 用法（与扁平入口一致，多一个自检开关）：
-//   build/examples/axi4/emit_rtl_axi_soc --hierarchical --out <dir>
-//       [--emit-hygiene] [--check-products]
-//       [--emit-tb-verif examples/axi4/tb_axi_soc_example.verif]
+// ⚠️ **规则 vs 值**（蓝图 §4.3.1）：
+//   · **规则**（产品无关的判定逻辑）= `product_modules` · `tamper_hier` ·
+//     `check_products` 的 4 项判定与编排 ⇒ ⇒ **F2 将下沉 `include/rtl_emit/`**
+//   · **值**（本产品专属）= `kExpectedModules` · `kExpectedTopPorts` · `make_inputs` ·
+//     `make_observations` · `make_stimulus` · 根名 `"top"` · `--top-module top` · `varying >= 2`
+//
+// ⚠️ **CWD 无关**：所有路径由调用方传入（`out_dir` / `verilog_path`）。
+
+#pragma once
 
 #include "axi_soc_example_top.h"
 #include "device.h"
 #include "hierarchy_equivalence.h"
 #include "hierarchy_verilog.h"
-#include "rtl_emit/cli.h"
 #include "rtl_emit/manifest.h"
 
 #include <unistd.h>
@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-namespace {
+namespace axi4::example::soc_check {
 
 /// ⚠️ **冻结的产物 module 期望集**（ADR-073 T1 · **手推** ⇒ 禁从成层声明处派生 ——
 /// 后者会让「漏给某个 IP 加成层声明」同时改变期望 ⇒ 判据**恒绿**）。
@@ -345,44 +345,4 @@ int check_products(const std::string &out_dir, const std::string &verilog_path) 
     return failures == 0 ? 0 : 1;
 }
 
-} // namespace
-
-int main(int argc, char **argv) {
-    // ⚠️ `--check-products` 是**本 example 专属**开关（ADR-074「不覆盖」条：
-    //   设计专属期望值不下沉库层）⇒ ⇒ 先从参数里剥离，其余原样交给库层 CLI
-    //   ⇒ ⇒ 「命令行解析 / 发射 / manifest / 诊断」全部走**同一份**库代码。
-    bool do_check = false;
-    std::string out_dir = "rtl_out";
-    std::vector<std::string> args;
-    args.reserve(static_cast<std::size_t>(argc > 0 ? argc - 1 : 0));
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--check-products") {
-            do_check = true;
-            continue;
-        }
-        if (a == "--out" && i + 1 < argc) {
-            out_dir = argv[i + 1];
-        }
-        args.push_back(a);
-    }
-    // ⚠️ `--check-products` 的判据是**层次化产物**的（module 集 / 双形态等价）
-    //   ⇒ ⇒ 未显式给 `--hierarchical` 时**补上**（旧实现在此模式下恒走层次化入口）。
-    if (do_check) {
-        bool has_hier = false;
-        for (const auto &a : args) {
-            if (a == "--hierarchical") has_hier = true;
-        }
-        if (!has_hier) args.emplace_back("--hierarchical");
-    }
-
-    const ch::rtl_emit::DesignFactory factory =
-        [](ch::core::context *) -> std::unique_ptr<ch::Component> {
-        return std::make_unique<axi4::example::AxiSocTop>(nullptr, "top");
-    };
-    const int rc = ch::rtl_emit::run_emit_cli(args, factory);
-    if (rc != 0 || !do_check) {
-        return rc;
-    }
-    return check_products(out_dir, out_dir + "/top.v");
-}
+} // namespace axi4::example::soc_check

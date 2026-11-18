@@ -16,7 +16,7 @@
 //
 // ⚠️ **全部 23 个端口 MUST 显式驱动**（`ch_in` 未驱动 ⇒ 读回未定义值）。
 
-#include "axi4/axi_soc_example_top.h"
+#include "axi_soc_example_top.h"
 #include "device.h"
 #include "simulator.h"
 
