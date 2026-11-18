@@ -73,14 +73,14 @@ CppHDL/
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
 | 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|
-| **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端） | 验证源 DSL = `examples/axi4/tb_axi4_lite_example.verif` · 库层 = `include/rtl_emit/verif.h`（`src/rtl_emit/verif_{scan,run,render}.cpp`）· 判据用例 = `tests/test_verif_single_source.cpp` · 护栏 = `scripts/verify_examples_rtl_sim.sh`（⑥ 等式 / ⑥' 新鲜度 / ⑥'' 双向键 / ⑥⁗ 三方一致）|
+| **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端） | 验证源 DSL = `examples/axi4/tb_axi4_lite_example.verif` · 库层 = `include/rtl_emit/verif.h`（`src/rtl_emit/verif_{scan,run,render}.cpp`）· 判据用例 = `tests/test_verif_single_source.cpp`（扫描器 6 用例）+ `examples/axi4/tests/test_verif_axi4_lite.cpp`（DUT 7 用例）· 护栏 = `scripts/verify_examples_rtl_sim.sh`（⑥ 等式 / ⑥' 新鲜度 / ⑥'' 双向键 / ⑥⁗ 三方一致）|
 | **RV32I 核的 RTL 交付 + Verilator 仿真环境** | 设计与环境指南 = `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · **一条命令跑通** = `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）· 发射器 = `examples/riscv-mini/emit_rtl.cpp`（扁平）+ `emit_rtl_hier.cpp`（层次化）· 独立 TB = `examples/riscv-mini/tb_rv32i_soc.sv`（两形态**共用**）|
 | 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | 公共 API = `include/hierarchy_equivalence.h`（`ch::hier_eq`）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | 端口命名（具名构造写法 + 已知限制） | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`（探针 `tests/test_port_name_named_ctor.cpp`） |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
-| AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/tb_axi4_lite_example.cpp` |
+| AXI4 examples | `examples/axi4/` (AGENTS.md) · 设计定义 `*_top.h`（无 main）· 激励驱动 `tb_*_example.cpp`（三/双模式）|
 | Stream examples | `examples/stream/` (functional API — no Component subclass), `examples/spinalhdl-ported/stream/` (moved to sibling) |
 | Verilator backend (ADR-035) | `include/core/verilator_backend.h`, `src/core/verilator_backend.cpp`, `tests/test_verilator_backend.cpp` |
 | Verilator submodule integration | `docs/developer_guide/verilator-integration.md` + `third_party/verilator/` (git submodule) + `scripts/init-submodules.sh` |

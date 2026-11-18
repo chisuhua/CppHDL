@@ -2,7 +2,7 @@
 
 > 本文件是 **SoC 层 TB 的期望值出处**。TB 头部 MUST 写
 > `EXPECT-SRC: .rddf/checks/soc-rtl-expectations.md#soc-example`，
-> **禁止**把被测 `examples/axi4/axi_soc_example.cpp` 或产物 `top.v` 写成出处
+> **禁止**把被测 `examples/axi4/axi_soc_example_top.h` 或产物 `top.v` 写成出处
 > （那是**转录**不是推导 —— 循环论证）。
 >
 > ⚠️ **期望分两级**（沿用 `.rddf/checks/examples-rtl-expectations.md` 的约定）：
@@ -92,7 +92,7 @@
 ### 4. 事务序列 + 手推结果（4 个场景）
 
 ⚠️ **完成判定 MUST 用「按已知延迟采样」**（**禁**等 `done` 上升沿 —— 它**粘滞**：
-`examples/axi4/axi_soc_example.cpp:149-151` 的 `done_reg` **无清零分支** ⇒ 首笔后恒 1）。
+`examples/axi4/axi_soc_example_top.h:142-144` 的 `done_reg` **无清零分支** ⇒ 首笔后恒 1）。
 
 #### 手推：事务延迟（impl-contract）
 
@@ -137,7 +137,7 @@ matrix 的 `m0 → s1` 路由 ⇒ ⇒ uart 才收得到。
 
 | 项 | 值 |
 |---|---|
-| 动作 | `rst_n = 0` ⇒ 透传给 gpio/matrix/uart（`axi_soc_example.cpp:263-267`） |
+| 动作 | `rst_n = 0` ⇒ 透传给 gpio/matrix/uart（`axi_soc_example_top.h:293-300`） |
 | 等待 | 2 拍（`data_out_reg->next = select(!rst_n, 0, ...)` ⇒ **下一个沿**即清零） |
 | **期望** | `gpio_out == 8'h00`（且 `uart_tx` 回**空闲高**） |
 
@@ -164,7 +164,7 @@ matrix 的 `m0 → s1` 路由 ⇒ ⇒ uart 才收得到。
 
 ### 6b. **双形态等价的判据规格**（T7 · ADR-073 J-4 / V5）
 
-> **载体** = `emit_rtl_axi_soc --check-products` 的 **CHECK 4**；**执行者** = 护栏 ④″。
+> **载体** = `tb_axi_soc_example --check-products` 的 **CHECK 4**；**执行者** = 护栏 ④″。
 
 | 项 | 值 / 形态 |
 |---|---|

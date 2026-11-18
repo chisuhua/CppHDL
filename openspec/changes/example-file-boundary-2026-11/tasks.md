@@ -53,7 +53,7 @@
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| E1 | 文档同步 + **旧路径归零**：三份 `AGENTS.md` · `docs/usage_guide/**` · `.rddf/checks/**`（新增记录）；**排除** `openspec/changes/**`（含本 change 与**仍活跃的**前置 change）· `docs/archive/**` · `docs/architecture/**` · `docs/adr/**` · `docs/reports/**` · **整份 `docs/CHANGELOG.md`** · `.rddf/improvements/**` · `.rddf/reviews/**` | 同上 | AC15 | ☐ |
+| E1 | 文档同步 + **旧路径归零**：三份 `AGENTS.md` · `docs/usage_guide/**` · `.rddf/checks/**`（新增记录）；**排除** `openspec/changes/**`（含本 change 与**仍活跃的**前置 change）· `docs/archive/**` · `docs/architecture/**` · `docs/adr/**` · `docs/reports/**` · **整份 `docs/CHANGELOG.md`** · `.rddf/improvements/**` · `.rddf/reviews/**` | 同上 | AC15 | ✅ |
 | E2 | **产物等价基线**：搬前产 4 个 sha256（AXI4-Lite / SoC × `top.v` + `manifest.json`）+ 复算命令 + 前提（同 build dir / 同 emitter / 前置已完成的 HEAD）记入 `.rddf/checks/` | `.rddf/checks/` | AC16 | ☐ |
 | E3 | 搬后重产 ⇒ 4 个 sha256 **相同** | diff | AC16 | ☐ |
 

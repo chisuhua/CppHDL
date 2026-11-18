@@ -254,7 +254,7 @@ void describe() override {
 
 仓内实例：
 - ② ③：`examples/riscv-mini/src/rv32i_pipeline_top.h:112-119`
-- ④：`include/cpu/pipeline/rv32i_pipeline.h:238-262`、`examples/axi4/axi_soc_example.cpp:204-215`
+- ④：`include/cpu/pipeline/rv32i_pipeline.h:238-262`、`examples/axi4/axi_soc_example_top.h:197-219`
 
 ### 3.3 表达式 / 常量 / 位切片驱动
 
@@ -996,13 +996,14 @@ int main() {
 
 ### 5.8 SoC 装配（**下游怎么用**：产物怎么接线 · 端口怎么找 · TB 怎么搭）
 
-> 范例 = `examples/axi4/axi_soc_example.cpp`（SoC = Test Master + Matrix 2x2 + GPIO + UART）。
+> 设计定义 = `examples/axi4/axi_soc_example_top.h`（SoC = Test Master + Matrix 2x2 + GPIO + UART）
+> ⇒ ⇒ 激励与发射入口 = `examples/axi4/tb_axi_soc_example.cpp`（**三模式**：默认激励 · `--emit-rtl` · `--check-products`）。
 
 #### 产物怎么来
 
 ```bash
-cmake --build build --target emit_rtl_axi_soc -j$(nproc)
-build/examples/axi4/emit_rtl_axi_soc --out build/rtl_products/soc
+cmake --build build --target tb_axi_soc_example -j$(nproc)
+build/examples/axi4/tb_axi_soc_example --emit-rtl --out build/rtl_products/soc
 ```
 
 ⇒ 产出 **5 个 module**（`AxiLiteTestMaster` / `AxiLiteMatrix2x2_32_32_` / `AxiLiteGpio_8_` /
@@ -1052,7 +1053,7 @@ build/examples/axi4/emit_rtl_axi_soc --out build/rtl_products/soc
 #### 护栏
 
 `scripts/verify_examples_rtl_sim.sh` 的 **④″**（`kind=soc` 专用）会跑
-`emit_rtl_axi_soc --check-products` ⇒ ⇒ 一次判掉：**module 集 · 顶层端口面 · lint ·
+`tb_axi_soc_example --check-products --out <dir>` ⇒ ⇒ 一次判掉：**module 集 · 顶层端口面 · lint ·
 双形态逐拍等价 + 变异自证**（篡改层次化产物 ⇒ 必红 ⇒ ⇒ 判据非恒绿）。
 
 ### 5.9 产品面声明（**交付前必读**）
@@ -1147,7 +1148,7 @@ if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
 | 两层单子模块（最简） | `samples/counter.cpp:44-52` |
 | 两层多实例 + `instance()` 取成员 | `samples/bundle_top_example.cpp:94-108` |
 | 三层（SoC → pipeline → stages） | `examples/riscv-mini/src/rv32i_pipeline_top.h:94-96` |
-| 5+ 子模块 + 互连 | `examples/axi4/axi_soc_example.cpp:192-201` |
+| 5+ 子模块 + 互连（`ch::ch_layer<T>` 四处） | `examples/axi4/axi_soc_example_top.h:185-194` |
 | 流水线级间寄存器/存储 | `include/cpu/pipeline/rv32i_pipeline.h:134, 189-196, 359-442` |
 | bundle 成员 `connect()` | `tests/test_bundle_master_slave.cpp:110-115` |
 | 测试承载 wrapper | `examples/riscv-mini/tests/test_pipeline_debug.cpp:47-62` |
