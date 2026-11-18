@@ -22,7 +22,7 @@
 #   ⑧' **层次化形态判据**（`kind=hier`）—— 产物 MUST 含 **≥ 2** 个 module
 #      且含根 module `top` ⇒ ⇒ 否则「层次化」已静默退化成扁平
 #      （⚠️ ⑧ 对这条**结构性失明**：退化后端口表**照样相同**）
-#   ⑦ `--self-test`：**18 条**投毒**各自**必红 + **2 条**必绿（2026-11-18 · 计数会漂，
+#   ⑦ `--self-test`：**19 条**投毒**各自**必红 + **2 条**必绿（2026-11-18 · 计数会漂，
 #      以本注释与末尾 PASS 行为准）。其中 ⑧ 的**正负成对**两向（篡改 `port_table`
 #      一个名字 / 产物多插一个下沉端口）+ ⑧' 的**两向**（`kind=hier` 压成单 module ·
 #      `kind=soc` 压成单 module ⇒ 2026-11-18 起 ⑧' 也覆盖 soc）
@@ -34,7 +34,7 @@
 # 用法：
 #   scripts/verify_examples_rtl_sim.sh                     # 严格（CI 用）
 #   scripts/verify_examples_rtl_sim.sh --list              # 只列清单
-#   scripts/verify_examples_rtl_sim.sh --self-test         # 18 条投毒 + 2 条必绿自检
+#   scripts/verify_examples_rtl_sim.sh --self-test         # 19 条投毒 + 2 条必绿自检
 #   scripts/verify_examples_rtl_sim.sh --allow-pending --budget=6
 #        # 允许 `pending` 的行数 ≤ 6（**E6 接 CI 的过渡形态**：
 #        #  预算 MUST 随进度**单调下降** ⇒ ⇒ 忘更新就从「预算超额」变红）
@@ -473,6 +473,64 @@ check_one() {
         return 1
     }
 
+    # ── ③' **实参级证据**（`emit-cli-into-example` **AC4** · 2026-11-18）────────
+    #   「透传了什么」过去只能看 `emit.log` ⇒ ⇒ 不可机械判定。现在落**两份证据**：
+    #     · `<work>/argv.txt`  = 真实 argv（**逐 token 一行**，含 `argv[0]`）
+    #     · `<work>/argv.norm` = 归一化序列（丢 `argv[0]` + 剥离**模式标记**
+    #       `--emit-rtl` / `--check-products`）⇒ ⇒ 只剩 flag token
+    #   ⚠️ 先删旧文件：`$work` 虽已 `rm -rf`，但自检会复用 `$st_root/work`
+    #      ⇒ ⇒ 残留会伪造结论。
+    rm -f "$work/argv.txt" "$work/argv.norm"
+    {
+        printf '%s\n' "$emitter_bin"
+        for a in $eargs; do printf '%s\n' "$a"; done
+        printf '%s\n' --out "$work" --emit-hygiene
+    } >"$work/argv.txt"
+    {
+        for a in $eargs; do
+            case "$a" in --emit-rtl|--check-products) continue ;; esac
+            printf '%s\n' "$a"
+        done
+        printf '%s\n' --out "$work" --emit-hygiene
+    } >"$work/argv.norm"
+    # ⚠️ **仅供 `--self-test` 的判别力自证**（生产路径恒空）：向 `argv.norm` 追加
+    #   一个**孤立 `-` token** ⇒ ⇒ 「无孤立 `-`」这条断言 MUST 转红。
+    #   ⚠️ 与**投毒17**（`emitter_args` 置 `-` ⇒ ③ 发射失败）**正交** —— 本条在
+    #   ③ **成功之后**才注入 ⇒ ⇒ 不会以错误原因变红。
+    if [ "${RTL_SIM_TAMPER:-}" = "argv_norm_dash" ]; then
+        printf '%s\n' '-' >>"$work/argv.norm"
+    fi
+    local n_argv n_norm
+    n_argv="$(grep -c . "$work/argv.txt" 2>/dev/null || true)"
+    n_norm="$(grep -c . "$work/argv.norm" 2>/dev/null || true)"
+    if [ "${n_argv:-0}" -lt 1 ] || [ "${n_norm:-0}" -lt 1 ]; then
+        fail "③' argv 证据为空（argv.txt=$n_argv · argv.norm=$n_norm 行）"
+        return 1
+    fi
+    # ① 透传成立：`emitter_args` 的**每个 token** MUST 出现在**原始 argv** 里
+    #    （对 axi4 行来说，这等价于 AC4 的「原始 argv MUST 含 `--emit-rtl`」）
+    #    ⚠️ 判 **argv.txt** 而不是 argv.norm —— 后者按定义**剥掉了模式标记**
+    #       （`--emit-rtl` 正是模式标记）⇒ ⇒ 在 norm 里查它必然零命中。
+    for a in $eargs; do
+        if ! grep -qxF -- "$a" "$work/argv.txt"; then
+            fail "③' emitter_args 的 token 未透传：'$a'（见 $work/argv.txt）"
+            return 1
+        fi
+    done
+    # ①' 归一化确实剥掉了模式标记（否则「归一化」名不副实）
+    for m in --emit-rtl --check-products; do
+        if grep -qxF -- "$m" "$work/argv.norm"; then
+            fail "③' argv.norm 仍含模式标记 '$m' ⇒ ⇒ 归一化未生效"
+            return 1
+        fi
+    done
+    # ② 归一化序列 MUST NOT 含**孤立 `-`**（`-` 是「无参」哨兵 ⇒ MUST 已展开为空）
+    if grep -qx -- '-' "$work/argv.norm"; then
+        fail "③' argv.norm 含孤立 '-' token ⇒ ⇒ emitter_args 的 '-' 哨兵未被展开"
+        return 1
+    fi
+    ok "③' argv 双证据（argv.txt $n_argv token · argv.norm 无孤立 '-'）"
+
     # ── ⑧ **四件套判据**（ADR-072 **D2** · T13 / AC8）────────────────────
     #   「产品单元 = 四件套」 ⇒ ⇒ 本判据是它的**可执行载体**：
     #     · ① manifest 存在
@@ -841,7 +899,7 @@ if [ "$MODE" = "check" ]; then
     exit 0
 fi
 
-# ── ⑦ --self-test：**18 条**投毒各自必红 + **2 条**必绿（2026-11-18 计数）───────────
+# ── ⑦ --self-test：**19 条**投毒各自必红 + **2 条**必绿（2026-11-18 计数）───────────
 run_self_test() {
     local st_root="$WORK_ROOT/selftest"
     rm -rf "$st_root"
@@ -1110,6 +1168,13 @@ PY
     ' "$st_list" >"$st_list.tmp" && mv "$st_list.tmp" "$st_list"
     run_case_green "必绿：中间插列（值非空）"
 
+    # ── 投毒 19：`argv.norm` 含**孤立 `-`**（AC4 的判别力 · 2026-11-18）──────────
+    #   ⚠️ 与投毒17 **正交**：那条毒的是 `emitter_args`（⇒ ③ 发射失败，本断言根本
+    #   到不了）；本条在 ③ **成功之后**注入 ⇒ ⇒ 只有 ③' 会红。
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    run_case "投毒19（argv.norm 含孤立 '-' ⇒ ③' 必红）" \
+        "③' argv.norm 含孤立" "RTL_SIM_TAMPER=argv_norm_dash"
+
     # ── 投毒 18：**kind=soc 的形态退化**（⑧' 对 soc 的判别力 · 2026-11-18 · F7）──
     #   ⚠️ 与投毒8（flatten_hier）**不同**：那条钉的是 kind=hier 行；本条钉的是
     #   **kind=soc** 行 ⇒ ⇒ 两者各自证明 ⑧' 在两个桶上都有判别力（AC24 的
@@ -1137,7 +1202,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 18 条投毒各自转红 · 2 条必绿用例仍绿 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 19 条投毒各自转红 · 2 条必绿用例仍绿 · 还原复绿）"
     exit 0
 }
 
