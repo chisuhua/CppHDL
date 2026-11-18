@@ -8,7 +8,7 @@ Child of root `AGENTS.md`.
 ## FILES
 | File | Focus | CTest |
 |------|-------|-------|
-| `axi4_lite_example.cpp` | AXI4-Lite slave timing, VCD + assertions | ✅ |
+| `tb_axi4_lite_example.cpp` | AXI4-Lite slave 验证（**由 `.verif` 驱动** · `RESULT: checks=113`） | ✅ |
 | `axi4_full_example.cpp` | AXI4 Full 5-channel burst slave | ✅ |
 | `axi_soc_example.cpp` | SoC: Matrix 2x2 + GPIO + UART（4 个 IP） | ✅ |
 | `phase3a_complete.cpp` | Phase 3A: 4x4 Interconnect + AXI-to-Lite Converter | ✅ |

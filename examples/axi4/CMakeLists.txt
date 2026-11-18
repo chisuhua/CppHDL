@@ -1,10 +1,13 @@
 # AXI4 Examples CMakeLists.txt
 
-# AXI4-Lite Example (时序验证)
-add_executable(axi4_lite_example axi4_lite_example.cpp)
-target_link_libraries(axi4_lite_example PRIVATE cpphdl)
-target_include_directories(axi4_lite_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../..)
-set_target_properties(axi4_lite_example PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+# AXI4-Lite Example (由 `.verif` 验证源驱动 · `axi4-verif-driven-cpp-2026-11`)
+add_executable(tb_axi4_lite_example tb_axi4_lite_example.cpp)
+target_link_libraries(tb_axi4_lite_example PRIVATE cpphdl)
+target_include_directories(tb_axi4_lite_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+set_target_properties(tb_axi4_lite_example PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+# ⚠️ **验证源的编译期绝对路径**：仓内三个面的 CWD 各不相同（`build/` · `build/tests` ·
+#   仓根）⇒ ⇒ 相对路径必失败 ⇒ ⇒ 与 `tests/CMakeLists.txt` 同款注入。
+target_compile_definitions(tb_axi4_lite_example PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 # AXI4-Lite SoC Integration Example
 add_executable(axi_soc_example axi_soc_example.cpp)
@@ -24,7 +27,7 @@ target_link_libraries(phase3a_complete PRIVATE cpphdl)
 target_include_directories(phase3a_complete PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set_target_properties(phase3a_complete PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
-install(TARGETS axi4_lite_example axi_soc_example axi4_full_example phase3a_complete RUNTIME DESTINATION bin/axi4)
+install(TARGETS tb_axi4_lite_example axi_soc_example axi4_full_example phase3a_complete RUNTIME DESTINATION bin/axi4)
 
 # ── RTL 发射入口（`examples-rtl-sim-coverage` E3/E5 · 方案 3）────────────
 # ⚠️ **每个 example 一个独立 target** ⇒ ⇒ 护栏 `scripts/verify_examples_rtl_sim.sh`

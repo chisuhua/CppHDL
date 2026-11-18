@@ -80,7 +80,7 @@ CppHDL/
 | 端口命名（具名构造写法 + 已知限制） | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`（探针 `tests/test_port_name_named_ctor.cpp`） |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
 | AXI4 interconnect | `include/axi4/` (AGENTS.md), `include/axi4/peripherals/` |
-| AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/axi4_lite_example.cpp` |
+| AXI4 examples | `examples/axi4/` (AGENTS.md), `examples/axi4/tb_axi4_lite_example.cpp` |
 | Stream examples | `examples/stream/` (functional API — no Component subclass), `examples/spinalhdl-ported/stream/` (moved to sibling) |
 | Verilator backend (ADR-035) | `include/core/verilator_backend.h`, `src/core/verilator_backend.cpp`, `tests/test_verilator_backend.cpp` |
 | Verilator submodule integration | `docs/developer_guide/verilator-integration.md` + `third_party/verilator/` (git submodule) + `scripts/init-submodules.sh` |

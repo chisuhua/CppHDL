@@ -1,3 +1,38 @@
+## 2026-11-18 — AXI4-Lite 示例改由 `.verif` 驱动（C++ 侧）
+
+**问题**：`.verif` 已经是**唯一语义来源**，但接着它的只有**渲染式 TB**；C++ 侧
+（`examples/axi4/axi4_lite_example.cpp`）仍是**手写激励 + 只打印不判定**的检查器
+（`Axi4TimingChecker` 的 5 个 `check_*` 只 `std::cout`，**不影响退出码**）⇒ ⇒
+「同一语义两个载体」在 C++ 侧仍然存在，且 `VcdRecorder` 喂的是**硬编码常量**
+（不是真实波形）⇒ ⇒ 产物**误导**。
+
+**改了什么**
+
+- **`examples/axi4/axi4_lite_example.cpp` → `tb_axi4_lite_example.cpp`**（CMake target 同步；
+  **CTest 条目名 `spinalhdl_axi4_lite` 不变**）⇒ ⇒ 219 行 → **88 行**，**零**激励/断言/期望值
+- `main()` 改为 **`parse_verif` → `build_rtl_manifest` → `run_verif`** ⇒ ⇒ C++ 侧与渲染式 TB
+  由**同一份 IR** 驱动 ⇒ ⇒ 断言不可能漂移
+- 验证源路径 = **编译期绝对路径**（`CPPHDL_SOURCE_DIR`）⇒ ⇒ 与 CWD 无关
+  （仓根 / `build/` / `build/tests/` / 任意空目录 ⇒ 均 exit 0）
+- **fail-closed**：验证源打不开 / 解析失败 / manifest 有诊断 / 执行失败 ⇒ **非零退出**且
+  **不打印** `RESULT:` 行；失败明细（`CHECK <id> FAIL`）进 stderr
+- **自洽退出码**：仅当 `res.ok && res.checks == verif_check_count(prog) && res.fails == 0` 才 `return 0`
+- **删除** `VcdRecorder`（喂常量的假波形）· `Axi4TimingChecker`（只打印）· 手写激励 ·
+  `toVerilog("axi4_lite_example.v")`（在 CWD 落游离产物）
+
+**用户可见变更**
+
+| 项 | 前 | 后 |
+|---|---|---|
+| 二进制名 | `axi4_lite_example` | **`tb_axi4_lite_example`**（CTest 名不变） |
+| 产物 | `axi4_lite_waveform.vcd`（**手喂常量 · 非忠实波形**）+ `axi4_lite_example.v`（CWD 落盘） | **零落盘**（波形改由渲染式 TB 的 `VcdRecorder`/TB 生成；Verilog 由 `emit_rtl_axi4_lite` 发射） |
+| 结论行 | 无（只打印散文） | `RESULT: checks=113 fails=0`（十进制 · 单行 · 无 ANSI） |
+| 断言可判定性 | 5 个检查**只打印** ⇒ 不影响退出码 | **113 条**全部参与退出码 |
+
+**护栏**：`scripts/verify_examples_rtl_sim.sh` 新增 **⑨**（C++ 侧条数 == 清单 `min_checks` ·
+按 note 列 `interp-entry` 约定取作用域 · 找不到二进制 ⇒ fail-closed）+ `source` 列路径存在性判据；
+`--self-test` 增至 **16 条投毒**（新增「解释器条数不等」与「source 路径不存在」两条，各自必红）。
+
 ## 2026-11-17 — **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端 · AXI4 示例改造）
 
 **问题**：examples 的 RTL 验证有**三组重复载体** —— ① 期望值（`.rddf/checks/*.md` 的散文 +

@@ -5,7 +5,7 @@
 // AXI4-Lite end-to-end VerilatorBackend integration test.
 //
 // Closes Gap F2 from the verilator-perf-three-way review:
-// "examples/axi4/axi4_lite_example.cpp is a full AXI4-Lite design that
+// "examples/axi4/tb_axi4_lite_example.cpp is a full AXI4-Lite design that
 //  runs through the interpreter, but no VerilatorBackend e2e coverage
 //  exists for any AXI class".
 //
@@ -18,7 +18,7 @@
 //      perform a write transaction (AW+W → reg0 = 0xDEADBEEF), then a read
 //      transaction (AR → R), and check RVALID is asserted and RDATA matches
 //      the written value. Complements the interpreter path in
-//      examples/axi4/axi4_lite_example.cpp with a cycle-accurate path.
+//      examples/axi4/tb_axi4_lite_example.cpp with a cycle-accurate path.
 //
 // Tagged [verilator][e2e][axi4lite]: skipped when verilator is not on PATH
 // (PR matrix). For nightly, set CPPHDL_REQUIRE_VERILATOR=1 to require.
@@ -70,7 +70,7 @@ std::string make_temp_dir(const std::string &suffix) {
     return result;
 }
 
-// Minimal AxiLiteTop fixture. Mirrors examples/axi4/axi4_lite_example.cpp's
+// Minimal AxiLiteTop fixture. Mirrors examples/axi4/tb_axi4_lite_example.cpp's
 // AxiLiteTop but strips VcdRecorder / Axi4TimingChecker (those are
 // interpreter-only instrumentation; the backend path doesn't need VCD).
 
@@ -213,7 +213,7 @@ TEST_CASE("AXI4-Lite VerilatorBackend E2E WriteReadReg0ThroughBackend",
     // root-cause fix in verilator-hier-input-flattening-fix).
     // RVALID is combinational on arvalid && !busy, so we read it
     // while arvalid is still asserted (the cycle 1 handshake, just
-    // like axi4_lite_example.cpp:236). Walk several cycles while
+    // like tb_axi4_lite_example.cpp). Walk several cycles while
     // arvalid stays high so we capture the handshake even if the
     // verilator 2-step clock toggle adds a cycle of latency vs.
     // interpreter.

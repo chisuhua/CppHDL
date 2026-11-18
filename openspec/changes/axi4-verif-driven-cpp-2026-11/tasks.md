@@ -100,3 +100,29 @@ t=$(mktemp -d); ( cd "$t" && /workspace/project/CppHDL/build/examples/axi4/tb_ax
 | **修 `verify_example_test_wiring.sh` 的 C3 空跑** | 影响全部 26 个 `add_spinalhdl_ported_test` 条目 ⇒ 需「CTest 名 → 二进制」映射机制 ⇒ 独立立项（本 change 用 ⑨ 覆盖本 example） |
 | 其余 26 个 example 的 C++ 侧改造 | 本 change 只做 1 个 |
 | 期望值改动 | AC7 ⇒ 必须独立 change + `.md` 登记 |
+
+---
+
+## 实施实况（2026-11-18 · builder）
+
+| 批次 | 状态 | 取证摘要 |
+|---|---|---|
+| A（构建接线） | ✅ | `CPPHDL_SOURCE_DIR` 已注入；`main(int, char**)`；构建绿 |
+| B（驱动改造） | ✅ | `parse_verif` → `build_rtl_manifest` → `run_verif`；零残留（`grep -c 'Axi4TimingChecker\|VcdRecorder\|toVerilog\|set_input_value'` == **0**）；**88 行**（原 219） |
+| C（判别力 / CWD） | ✅ | 四 CWD 均 `RESULT: checks=113 fails=0` · 空目录零落盘 · 验证源缺失 ⇒ exit 1 + **无** RESULT 行 · 改一条 `EXPECT` ⇒ exit 1 + `fails=1` + stderr 具名 `CHECK bringup_and_low_active_reset#0 FAIL` ⇒ `.verif` 逐字还原 |
+| D（条数 / 时长） | ✅ | 护栏 ⑥ 三方等式绿 · 实测 **0.10 s**（< 30 s） |
+| E（改名） | ✅ | `git mv` + CMake（5 处 + install）+ `tests/CMakeLists.txt` 第二参数（CTest 名 `spinalhdl_axi4_lite` **不变**）+ `CH_TRACKED_EXAMPLE_TARGETS` + tsv `target`/`source` + 三份 AGENTS + e2e 注释 + `run_all_ported_tests.sh` 注释；旧名归零（唯一残留 = AC16 白名单的 `docs/CHANGELOG.md`） |
+| F（护栏） | ✅ | 新增 **⑨**（note 列 `interp-entry` 约定 · 找不到二进制 ⇒ fail-closed）+ **F1b**（`source` 列路径须存在）⇒ `--self-test` **16 条投毒各自转红 · 基线绿 · 还原复绿** |
+| G（构建矩阵） | ✅ | `-DCH_JIT_ENABLE=OFF` 构建 + 运行 ⇒ `RESULT: checks=113 fails=0` |
+
+### ⚠️ 遗留（**既有缺口 · 非本 change 引入**）
+
+`./run_all_ported_tests.sh` 的 **C1** 报 `UNTRACKED emit_rtl_rv32i_soc_fw_init` ⇒ ⇒
+**AC10 的「C1 无 UNTRACKED」不成立**。证据：
+· 该 emitter 在 `examples/riscv-mini/CMakeLists.txt` 声明、被 `scripts/verify_rv32i_fw_init_rtl.sh` 消费；
+· 但**从未**登记进 `.rddf/checks/examples-rtl-sim-targets.tsv` 的 `emitter` 列
+  （`git log -S "emit_rtl_rv32i_soc_fw_init" -- <tsv>` ⇒ **空**）；
+· 本 change **未触碰** `examples/riscv-mini/**`（`git status` 无该目录）。
+
+⇒ ⇒ 归属是 **RV32I firmware-load 链条**的登记缺口 ⇒ ⇒ **独立立项**（不在本 change 顺手补：登记一个产品单元需要 TB + 期望源 + `min_checks`）。
+⇒ ⇒ 本 change 的 PASS 计数 **28** 与既有基线**一致**（`PASS: 28`），FAIL 仅此 1 项且与本 change 无关。

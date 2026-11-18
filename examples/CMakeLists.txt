@@ -64,7 +64,7 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     stream_fork_demo
 
     # PHASE: Phase 3A: AXI4 总线
-    axi4_lite_example
+    tb_axi4_lite_example
     axi4_full_example
     axi_soc_example
     phase3a_complete

@@ -747,6 +747,38 @@ PY
         fail "⑥ status=verified 但 min_checks 未登记（=0）⇒ ⇒ 无法检测断言被删"
         return 1
     fi
+    # ── ⑨ **C++ 侧（解释器路径）条数相等**（`axi4-verif-driven-cpp` · ADR-074 D1）──
+    #   作用域 = **note 列含 `interp-entry` 的行**（**用 note 约定 ⇒ 不新增列**）
+    #   ⇒ ⇒ 按 `target` 列在 `$BUILD_DIR/examples/**` 找可执行文件（**找不到 ⇒ fail-closed**）
+    #   ⇒ ⇒ 运行 ⇒ 断言 stdout 含 `RESULT: checks=<min_checks> fails=0`
+    #   ⚠️ 「两后端一致」不是正确性证据 ⇒ ⇒ 本判据只判**条数相等 + 零失败**，不判语义
+    if printf '%s' "$note" | grep -q 'interp-entry'; then
+        local ibin=""
+        while IFS= read -r cand; do ibin="$cand"; break; done \
+            < <(find "$BUILD_DIR/examples" -type f -name "$tgt" 2>/dev/null | sort)
+        if [ -z "$ibin" ]; then
+            fail "⑨ 解释器入口缺失：$tgt（先构建：cmake --build $BUILD_DIR --target $tgt）"
+            return 1
+        fi
+        local iout irc
+        iout="$("$ibin" 2>/dev/null)"; irc=$?
+        if [ "$irc" -ne 0 ]; then
+            fail "⑨ 解释器路径非零退出（exit=$irc）：$tgt"
+            return 1
+        fi
+        if ! printf '%s\n' "$iout" | grep -qx "RESULT: checks=${minck} fails=0"; then
+            fail "⑨ 解释器条数不等或缺结论行：期望 'RESULT: checks=${minck} fails=0'"
+            return 1
+        fi
+        ok "⑨ 解释器条数相等（checks=${minck} fails=0）"
+    fi
+
+    # ── F1b：`source` 列的路径 MUST 存在于磁盘（该列原「读了不判」）─────────
+    if [ -n "$src" ] && [ ! -e "$src" ]; then
+        fail "F1b source 列路径不存在：$src"
+        return 1
+    fi
+
     ok "$tgt：$line（scenarios=$scen · spec_checks=$spec）"
     return 0
 }
@@ -802,7 +834,7 @@ run_self_test() {
         # ⚠️ **三行**：
         #   · `target` 行 = 轻量 fixture（counter_simple）⇒ 主判据的载体
         #   · `hier` 行 = **真实的层次化产品单元**（RV32I）⇒ ⑧' 判据的载体
-        #   · `axi4_lite_example` 行 = **真的由 `.verif` 生成**的单元
+        #   · `tb_axi4_lite_example` 行 = **真的由 `.verif` 生成**的单元
         #     ⇒ ⇒ ⑥'（新鲜度）/ ⑥''（双向键集合）/ ⑥‴（无残留）/ ⑧''（生成物形态）
         #     / ⑥⁗（三方一致）**只有它有可判对象** ⇒ ⇒ 缺它这 5 条判据在自检里恒绿。
         # ⚠️ 锚点：`REGISTERED_TARGETS: $3` · `REGISTERED_SOC: 0` · `REGISTERED_HIER: 1`
@@ -814,7 +846,7 @@ run_self_test() {
 # REGISTERED_HIER: 1
 selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
 selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
-axi4_lite_example	target	examples/axi4/axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体）
+tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	emit_rtl_axi4_lite	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体）· interp-entry
 EOF
     }
 
@@ -905,7 +937,7 @@ PY
         "RTL_SIM_TAMPER=flatten_hier"
 
     # ── 投毒 9–13：`generated=yes` 的**五条判据**各自的判别力自证 ──────────
-    #   ⚠️ 载体 = 清单里那行**真的由 `.verif` 生成**的 `axi4_lite_example`
+    #   ⚠️ 载体 = 清单里那行**真的由 `.verif` 生成**的 `tb_axi4_lite_example`
     #     ⇒ ⇒ 没有它，⑥'/⑥''/⑥‴/⑧''/⑥⁗ 在自检里**恒绿**（无可判对象）。
     #   ⚠️ 全部投毒都**只动临时产物 / 环境变量 / 临时清单**（不动仓内 `.verif` / `.md`）
     #     ⇒ ⇒ `RTL_SIM_VERIF` / `RTL_SIM_MD` / `RTL_SIM_TB_OVERRIDE` 是为此设的钩子。
@@ -939,7 +971,7 @@ PY
 
     # 投毒 12：登记的 `generated` 说 no 但 `.verif` 存在 ⇒ ⑥⁗ 三方一致必红
     make_list "$st_list" "$st_tb_rel" 2 verified
-    sed -i 's/\(axi4_lite_example\t[A-Za-z]*\t[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*\t[A-Za-z]*\t\)yes/\1no/' "$st_list"
+    sed -i 's/\(tb_axi4_lite_example\t[A-Za-z]*\t[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*\t[A-Za-z]*\t\)yes/\1no/' "$st_list"
     run_case "投毒12（generated=no 却有验证源）" "应改为生成"
 
     # 投毒 13：TB 里残留 `TOP_unnamed_input` 字面量 ⇒ ⑧'' 生成物形态必红
@@ -967,6 +999,26 @@ PY
             "RTL_SIM_TB_OVERRIDE=$tb_fail"
     fi
 
+    # 投毒 15：**只**毒解释器二进制（`min_checks` 不动 ⇒ ⑥ 仍绿）⇒ ⑨ 必红
+    #   ⚠️ 不能用「改 `min_checks`」当投毒 —— 那会被 ⑥（三方等式，先跑）抢先命中
+    #      ⇒ ⇒ ⑨ 就**永远**没有独立判别力。
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    local ibin="$BUILD_DIR/examples/axi4/tb_axi4_lite_example"
+    if [ -x "$ibin" ]; then
+        cp "$ibin" "$st_root/ibin.bak"
+        printf '#!/bin/sh\necho "RESULT: checks=99 fails=0"\n' >"$ibin"
+        chmod +x "$ibin"
+        run_case "投毒15（解释器条数与 min_checks 不等）" "⑨ 解释器条数不等"
+        cp "$st_root/ibin.bak" "$ibin"
+    else
+        fail "自检 投毒15 无效：解释器二进制不存在（$ibin）"
+    fi
+
+    # 投毒 16：`source` 列指向不存在的路径 ⇒ F1b 必红
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    sed -i 's#examples/spinalhdl-ported/counter/counter_simple.cpp#examples/spinalhdl-ported/counter/NOPE.cpp#' "$st_list"
+    run_case "投毒16（source 列路径不存在）" "F1b source 列路径不存在"
+
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
     rm -f "$REPO_ROOT/$st_tb_rel.st_orig"
@@ -983,7 +1035,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 14 条投毒各自转红 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 16 条投毒各自转红 · 还原复绿）"
     exit 0
 }
 

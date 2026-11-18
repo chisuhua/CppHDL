@@ -98,7 +98,7 @@ LOG_DIR="$BUILD_DIR_ABS/logs/examples"
 mkdir -p "$LOG_DIR"
 
 # ⚠️ The examples write their generated Verilog / waveform dumps into the
-# **current working directory** (counter.v, axi4_lite_waveform.vcd, …).
+# **current working directory** (counter.v, 各 example 的 RTL 发射产物, …).
 # The script has always run them from the build directory so that those
 # artifacts land in build/ and not in the repository root.
 # (`.gitignore` covers `*.v` but NOT `*.vcd` ⇒ running from the repo root

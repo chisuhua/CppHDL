@@ -4,7 +4,7 @@
 //
 // ⚠️ **2026-11-17（`rtl-verification-single-source` C1）**：顶层组件 `AxiLiteTop`
 //   已抽到 `include/axi4/axi4_lite_example_top.h` ⇒ ⇒ 本文件**不再**用
-//   `#define main` + `#include "axi4_lite_example.cpp"` 的旧手法（那是「类定义在 .cpp
+//   `#define main` + `#include "tb_axi4_lite_example.cpp"` 的旧手法（那是「类定义在 .cpp
 //   里」的绕路）⇒ ⇒ 现在只做**注册设计 + 调库**。
 //
 // 用法：

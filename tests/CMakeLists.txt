@@ -1452,7 +1452,7 @@ add_spinalhdl_ported_test(phase1c phase1c_test)
 # 4 个示例：AXI4-Lite, AXI4 Full, AXI SoC, Phase 3A 集成
 # ============================================================================
 
-add_spinalhdl_ported_test(axi4_lite axi4_lite_example)
+add_spinalhdl_ported_test(axi4_lite tb_axi4_lite_example)
 add_spinalhdl_ported_test(axi4_full axi4_full_example)
 add_spinalhdl_ported_test(axi4_soc axi_soc_example)
 add_spinalhdl_ported_test(axi4_phase3a phase3a_complete)
