@@ -80,9 +80,9 @@ C++ 侧**又**手写一遍「写后读回」⇒ ⇒ 值与地址还不同 ⇒ �
 | AC5 | 零端口访问（**限定该文件**）：`grep -c 'set_input_value\|get_port_value\|\.io()\.' <该文件>` == 0 | grep |
 | AC6 | **零落盘**：在 `mktemp -d` 新建的空目录里运行 ⇒ 该目录运行后仍为空 | shell |
 | AC7 | 改名不改期望：生成式 TB **逐字节不变**（⑥' 新鲜度绿） | 护栏 |
-| AC8 | 同步面全绿：`verify_examples_rtl_sim_coverage.sh`（28 == 10 ∪ 18）· `ctest -N` 仍有 `spinalhdl_axi4_lite` · `install(TARGETS)` 行已改 · **`source` 列路径存在于磁盘**（新增判据 —— 该列目前**读了不判**：`verify_examples_rtl_sim.sh:140` 取出后作为 `$3` 传入而 `check_one` 从未使用它） | shell |
+| AC8 | 同步面全绿：`verify_examples_rtl_sim_coverage.sh`（**27 == 10 ∪ 17**；⚠️ **2026-11-18 订正**：原 28/18 未计入 change `example-file-boundary-2026-11` 的 `axi4_full_example` 退役 ⇒ ⇒ 该数字无判别力（护栏比的是**活值**），但字面 MUST 与实测一致）· `ctest -N` 仍有 `spinalhdl_axi4_lite` · `install(TARGETS)` 行已改 · **`source` 列路径存在于磁盘**（新增判据 —— 该列目前**读了不判**：`verify_examples_rtl_sim.sh:140` 取出后作为 `$3` 传入而 `check_one` 从未使用它） | shell |
 | AC9 | 护栏 C3 仍绿（**注**：C3 对 `spinalhdl_*` 这类「CTest 名 ≠ 二进制名」的条目**空跑** ⇒ 它对本 example 无判别力 ⇒ 已登记为独立遗留）；**本 change 的判别力由 AC17 承担** | 护栏 |
-| AC10 | `./run_all_ported_tests.sh` 绿（28 tracked · PASS 计数仍 28） | shell |
+| AC10 | `./run_all_ported_tests.sh` 绿（**27** tracked · PASS 计数 **27**）⇒ ⇒ ⚠️ **2026-11-18 订正（用户裁决 D4）**：原「仍 28」与 change `example-file-boundary-2026-11` 的 AC27（`axi4_full_example` 退役 ⇒ tracked 28 → 27）**互斥** ⇒ ⇒ 以 **27** 为准；⇒ ⇒ 「绿」的前提 = **无 `UNTRACKED`**（既有缺口 `emit_rtl_rv32i_soc_fw_init` ⇒ 由 `examples/disabled_examples.txt` 登记处置） | shell |
 | AC11 | **fail-closed**：`.verif` 路径指向不存在的文件 ⇒ 退出非 0 · stderr 有说明 · stdout **无** `RESULT:` 行（且不得以其它形态写出 `checks=/fails=`） | 投毒 |
 | AC12 | **自洽 + 格式**：成功路径输出 `RESULT: checks=113 fails=0`（**十进制** · 单行 · 无 ANSI） | grep |
 | AC13 | **CWD 无关**：从仓根 / `build/` / `build/tests/` / `mktemp -d` 新建空目录各跑一次 ⇒ 都 exit 0 且 `RESULT:` 行相同 | shell |

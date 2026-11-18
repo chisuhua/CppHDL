@@ -77,13 +77,13 @@
 | AC1 | 清单 MUST 有 `emitter_args` 列；**负向对照**：把 axi4 行的参数改成 `-` ⇒ 护栏 MUST 必红（**红因是 fail-closed**：默认模式收到 `--out` ⇒ 未知参数 ⇒ exit 2 ⇒ 不产产物） | 投毒 |
 | AC2 | `emitter` / `emitter_args` 两列 MUST 都从 `#COLUMNS` 推导；**负向对照**：中间插一列（**值非空**）⇒ 仍绿 | 投毒 |
 | AC3 | **字段数守恒**：每行字段数 MUST == `#COLUMNS` 词数 ⇒ 不等 ⇒ **具名 fail**（「该行字段数 ≠ `#COLUMNS`（空单元？无参 MUST 写 `-`）」）⇒ ⇒ 把 `set -u` 的无名 abort 变成可归因的红 | 护栏 |
-| AC4 | **实参级判据**：护栏写两份证据 —— 原始命令行 → `<work>/argv.txt`；**归一化命令行** → `<work>/argv.norm`，归一化 = **丢弃 `argv[0]`（发射器路径）** + 剥离模式标记，只留 **flag token 序列** ⇒ 原始 argv MUST 含 `--emit-rtl`；两文件 MUST NOT 含由 `emitter_args` 透传的 `-` | grep |
+| AC4 | **实参级判据**：护栏写两份证据 —— 原始命令行 → `<work>/argv.txt`；**归一化命令行** → `<work>/argv.norm`，归一化 = **丢弃 `argv[0]`（发射器路径）** + 剥离模式标记，只留 **flag token 序列** ⇒ 原始 argv MUST 含 `--emit-rtl` ⇒ ⇒ ⚠️ **2026-11-18 订正（可判化）**：判据 = 「`argv.norm` MUST NOT 含**恰好等于 `-` 的 token**」（判据命令 `grep -qx -- '-' <work>/argv.norm` 期望**非零**）；原「两文件 MUST NOT 含由 `emitter_args` 透传的 `-`」**不可判**（「来源」在文件内容里不可观测，且 argv 必然含以 `-` 开头的 flag）⇒ 作废 | grep |
 | AC5 | **产物逐字节等价**：基线在删除旧 target **之前**采集；比较口径 = **flag token 序列**（两侧均不含 `argv[0]`）逐 token 相同；且**两个不同 `--out`** 路径下产物仍逐字节相同（防路径泄露） | diff |
 | AC6 | `emit_rtl_axi4_lite` target MUST NOT 再存在；**残留判定** = 在 **D3 之后**手工放 dummy 到 `build/examples/axi4/emit_rtl_axi4_lite` ⇒ 跑 `run_all_ported_tests.sh` ⇒ 报 `STALE-ARTIFACT` 且不报 `UNTRACKED` | 投毒 |
 | AC7 | 护栏 ③ 与 ⑥' MUST 仍绿 | 护栏 |
 | AC8 | ⑥'' 新鲜度 MUST 仍绿 | 护栏 |
-| AC9 | `run_all_ported_tests.sh` 的 C1 归属判据 MUST 仍绿（28 tracked · **PASS 计数仍 28** ⇒ 同一 target 兼 tracked + emitter 不得产生 ±1）⇒ `rtl_emitters()` **零改动** | shell |
-| AC10 | `verify_examples_rtl_sim_coverage.sh` 守恒 MUST 仍绿（28 == 10 ∪ 18）⇒ **该脚本零改动** | shell |
+| AC9 | `run_all_ported_tests.sh` 的 C1 归属判据 MUST 仍绿（**27** tracked · **PASS 计数 27** ⇒ 同一 target 兼 tracked + emitter 不得产生 ±1）⇒ `rtl_emitters()` **零改动** ⇒ ⇒ ⚠️ **2026-11-18 订正（用户裁决 D4）**：原「仍 28」与 change `example-file-boundary-2026-11` 的 AC27（退役 ⇒ 28 → 27）**互斥** ⇒ ⇒ 以 **27** 为准 | shell |
+| AC10 | `verify_examples_rtl_sim_coverage.sh` 守恒 MUST 仍绿（**27 == 10 ∪ 17**；⚠️ **2026-11-18 订正**：原 28/18 与 change `example-file-boundary-2026-11` 的 AC27 退役冲突 ⇒ 以实测为准）⇒ **该脚本零改动** | shell |
 | AC11 | 默认模式（无 `--emit-rtl`）在**仓库根**运行 ⇒ exit 0 且 stdout 含 `RESULT: checks=113 fails=0` | shell |
 | AC12 | **fail-closed**：默认模式收到未知参数 ⇒ exit **2**；`--emit-rtl` 缺 `--out` ⇒ exit **2** ⇒ ⇒ 两条都在 **`mktemp -d` 新建空目录**下判，且该目录 MUST NOT 出现 `rtl_out/`；`--out` 缺失的识别 MUST **按选项语法**（`--out` + 值）而非裸 token 扫描 | shell |
 | AC13 | 文档同步：`examples/axi4/AGENTS.md`（FILES 表 + RUN 段）· `docs/CHANGELOG.md` · **`examples/axi4/CMakeLists.txt:29-31` 与 `:41` 的活注释**（「每个 example 一个独立 target」/「不与 `emit_rtl_axi4_lite` 合流」已成假陈述）⇒ 旧名归零（白名单：`docs/archive/**` · `openspec/changes/archive/**` · `docs/architecture/**` 历史记述 · self-test fixture **行**） | grep |
