@@ -1,3 +1,16 @@
+## 2026-11-18 — e2e 用例名随 DUT 改名（`example-file-boundary-2026-11` B1 · AC5）
+
+`tests/test_axi_lite_verilator_e2e.cpp` 的 DUT 由 example 专属的 `AxiLiteTop` 换成库组件
+`AxiLiteSlave<32, 32, 4>` ⇒ ⇒ 用例名 MUST 同步 —— 否则名字里留着一个**已退役的类**，
+后人按名检索会指向不存在的 DUT。
+
+| 项 | 前 | 后 |
+|---|---|---|
+| TEST_CASE 名 | `AXI4-Lite VerilatorBackend E2E AxiLiteTopPortAccessSnapshot` | `AXI4-Lite VerilatorBackend E2E AxiLiteSlavePortAccessSnapshot` |
+
+断言数 14 → 14（零变化）· 无 SECTION 增删 · 路径不变 · 该用例仍绿
+（`ctest -R test_axi_lite_verilator_e2e` ⇒ Passed）。
+
 ## 2026-11-18 — 产物级自检的规则下沉到库层（`ch::rtl_emit` · F2）
 
 **问题**：SoC 的产品级自检（4 项判据 + 编排）此前住在 example 里 ⇒ ⇒ 判定逻辑是
