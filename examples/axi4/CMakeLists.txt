@@ -14,6 +14,7 @@ add_executable(tb_axi_soc_example tb_axi_soc_example.cpp)
 target_link_libraries(tb_axi_soc_example PRIVATE cpphdl)
 target_include_directories(tb_axi_soc_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set_target_properties(tb_axi_soc_example PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+target_compile_definitions(tb_axi_soc_example PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 # ⚠️ `axi4_full_example` 已退役（2026-11-18 · §4.3.3）：行为覆盖 = `tests/test_axi4_full_burst.cpp`（dual-backend）
 

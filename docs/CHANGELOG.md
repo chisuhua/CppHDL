@@ -1,3 +1,38 @@
+## 2026-11-18 — AXI4-SoC 示例去 main + 产品自检内联（`example-file-boundary-2026-11` B6）
+
+**问题**：SoC 侧有**两个**可执行入口（`axi_soc_example` 的激励 + `emit_rtl_soc` 的发射/自检），
+而设计定义（`AxiSocTop` + `AxiLiteTestMaster`）早已独立在 `axi_soc_example_top.h` ⇒ ⇒ 文件名里
+的 `axi_soc_example` 名不副实（它只剩 `main`），且 `toVerilog("axi_soc_example.v")` 把产物写进 CWD。
+
+**改了什么**
+
+- `axi_soc_example.cpp` → **`tb_axi_soc_example.cpp`**（与 `tb_axi4_lite_example.cpp` 对称）
+- **三模式**：默认（激励 + `RESULT: checks=2 fails=0`）· `--emit-rtl <dir>`（恒 `--hierarchical`）·
+  `--check-products`（= 发射 + 4 项自检）
+- **删除** `examples/axi4/emit_rtl_soc.cpp` + target `emit_rtl_axi_soc`；其 checker 内联进 tb
+  （用户裁决：值侧 MUST 留在 example ⇒ 不新设中间头）
+- 删 `toVerilog("axi_soc_example.v")` ⇒ **零 CWD 落盘**
+- 清单 tsv 的 SoC 行 → `tb_axi_soc_example` + `emitter_args=--emit-rtl`（④″ 自检改指同一二进制）
+- CMake target 改名（**CTest 条目名 `spinalhdl_axi4_soc` 不变**）· tracked · install ·
+  `input-port-required-registry.md` · 两份 `AGENTS.md`
+
+**顺带修掉三个 fail-open 缺陷**（自查发现，均在同一 checker 里）
+
+| 缺陷 | 前 | 后 |
+|---|---|---|
+| `find_verilator` 用 CWD 相对路径 | 从 `build/` 跑 ⇒ CHECK 3 静默 `SKIP`（lint **从未**被验） | 改用 `CPPHDL_SOURCE_DIR` 搜索根；**SKIP 升格为 FAIL** |
+| `std::system` 拼串跑 lint | 路径含空格 ⇒ 静默 `SKIP`；且**有 shell 注入面** | 改 `fork` + `execl`（argv 式，参数与注入面同时消除） |
+| `--out` 取下一个 argv | `--out --emit-hygiene` ⇒ 把 `--emit-hygiene` 当目录名 | 取值以 `-` 开头 ⇒ **exit 2** |
+
+**用户可见变更**
+
+| 项 | 前 | 后 |
+|---|---|---|
+| SoC 的 RTL 发射 | `build/examples/axi4/emit_rtl_axi_soc --hierarchical --out <dir>` | `build/examples/axi4/tb_axi_soc_example --emit-rtl --out <dir>` |
+| SoC 的产品级自检 | `emit_rtl_axi_soc ... --check-products` | `tb_axi_soc_example --check-products --out <dir>` |
+| SoC 激励 | `build/examples/axi4/axi_soc_example`（无结论行） | `build/examples/axi4/tb_axi_soc_example`（`RESULT: checks=2 fails=0`） |
+| 产物 | — | 形态与 module 集**逐字不变**（5 module · 顶层 14 端口） |
+
 ## 2026-11-18 — RTL 发射入口并入 example（`--emit-rtl` 模式 · `emit-cli-into-example`）
 
 **问题**：AXI4-Lite 的 RTL 发射入口是**独立可执行文件** `emit_rtl_axi4_lite`（32 行薄壳：注册

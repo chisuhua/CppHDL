@@ -9,33 +9,33 @@
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| A1 | `git mv` 两个顶层头到 `examples/axi4/`（保留历史） | `include/axi4/` → `examples/axi4/` | AC1 | ☐ |
-| A2 | **2 个 examples 消费者改裸 include**：`tb_axi4_lite_example.cpp` · `tb_axi_soc_example.cpp`（由 B6 改名）⇒ ⇒ ⚠️ **2026-11-18 订正**：`emit_rtl_soc.cpp` **已从本任务移除**（§4.3.3 整文件删除 ⇒ 不再是消费者）；`emit_rtl.cpp` 已被前序 change 删除 | `examples/axi4/` | AC3 | ☐ |
-| A3 | 库公开面归零核验 | `include/**` | AC2 | ☐ |
-| A4 | 根 `tests/` 不再引用这两个头（由 B1–B4 完成后核验） | `tests/**` | AC7 | ☐ |
-| A5 | **搬入的 2 个测试**（`examples/axi4/tests/*.cpp`）也用裸 include（靠 helper 的 `-I examples/axi4`） | `examples/axi4/tests/` | AC3 | ☐ |
+| A1 | `git mv` 两个顶层头到 `examples/axi4/`（保留历史） | `include/axi4/` → `examples/axi4/` | AC1 | ✅ |
+| A2 | **2 个 examples 消费者改裸 include**：`tb_axi4_lite_example.cpp` · `tb_axi_soc_example.cpp`（由 B6 改名）⇒ ⇒ ⚠️ **2026-11-18 订正**：`emit_rtl_soc.cpp` **已从本任务移除**（§4.3.3 整文件删除 ⇒ 不再是消费者）；`emit_rtl.cpp` 已被前序 change 删除 | `examples/axi4/` | AC3 | ✅ |
+| A3 | 库公开面归零核验 | `include/**` | AC2 | ✅ |
+| A4 | 根 `tests/` 不再引用这两个头（由 B1–B4 完成后核验） | `tests/**` | AC7 | ✅ |
+| A5 | **搬入的 2 个测试**（`examples/axi4/tests/*.cpp`）也用裸 include（靠 helper 的 `-I examples/axi4`） | `examples/axi4/tests/` | AC3 | ✅ |
 | A6 | **C2 扩展（最小面 + 剥注释）**：扫描面仍只 `tests/CMakeLists.txt`，匹配串 `examples/riscv-mini/src` → `examples/`，**移植 C7 的剥注释 + 括号配平**；新增 fixtures：① 注释里出现 `examples/` ⇒ **绿** ② `target_include_directories(… examples/axi4)` ⇒ **红** ⇒ 并在 AC4 里点名 C7 一并绿 | `scripts/verify_no_duplicate_rv32i_headers.sh` | AC4 | ☐ |
-| **A7** | **`axi4_full_example` 退役**（2026-11-18 · §4.3.3 裁决）：删 `examples/axi4/axi4_full_example.cpp` ⇒ 连带面 = target · `add_spinalhdl_ported_test(axi4_full …)`（CTest `spinalhdl_axi4_full`）· `CH_TRACKED_EXAMPLE_TARGETS`（**28 → 27**）· `install(TARGETS …)` 删该项 · **`.rddf/checks/examples-rtl-sim-exclusions.tsv` 删该行**（coverage 的 ghost 判据）· **`.rddf/checks/port-naming-exempt.tsv` 删 31 行 + `EXPECTED_EXEMPT_PORTS` 1415 → 1384** · `examples/axi4/AGENTS.md` + `include/axi4/AGENTS.md` 的 EXAMPLES 行 ⇒ ⇒ **覆盖证据** = `tests/test_axi4_full_burst.cpp`（dual-backend） · **MUST 显式登记为缩面**（不静默） | `examples/axi4/` · `.rddf/checks/` · 根 `AGENTS.md` | AC1 · AC11 | ☐ |
+| **A7** | **`axi4_full_example` 退役**（2026-11-18 · §4.3.3 裁决）：删 `examples/axi4/axi4_full_example.cpp` ⇒ 连带面 = target · `add_spinalhdl_ported_test(axi4_full …)`（CTest `spinalhdl_axi4_full`）· `CH_TRACKED_EXAMPLE_TARGETS`（**28 → 27**）· `install(TARGETS …)` 删该项 · **`.rddf/checks/examples-rtl-sim-exclusions.tsv` 删该行**（coverage 的 ghost 判据）· **`.rddf/checks/port-naming-exempt.tsv` 删 31 行 + `EXPECTED_EXEMPT_PORTS` 1415 → 1384** · `examples/axi4/AGENTS.md` + `include/axi4/AGENTS.md` 的 EXAMPLES 行 ⇒ ⇒ **覆盖证据** = `tests/test_axi4_full_burst.cpp`（dual-backend） · **MUST 显式登记为缩面**（不静默） | `examples/axi4/` · `.rddf/checks/` · 根 `AGENTS.md` | AC1 · AC11 | ✅ |
 
 ## 批次 B — 消费者归位 / 换 DUT（AC5 · AC6 · AC8 · AC9）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| B1 | `tests/test_axi_lite_verilator_e2e.cpp`：删顶层头 include ⇒ `using` 改库组件 ⇒ DUT 换 `AxiLiteSlave<32,32,4>` ⇒ 顶部注释同步（**把陈旧的「10 inputs / 7 outputs」订正为 12 / 8**）⇒ 路径 / 用例名 / SECTION / 断言**零改动** | 该文件 | AC5 | ☐ |
-| B2 | 该 e2e 仍绿（verilator 在 `build/verilator-install/bin` 或 PATH） | ctest | AC6 | ☐ |
-| B3 | `tests/test_axi_lite_test_master.cpp` → `examples/axi4/tests/`（**CTest 条目名不变**） | `examples/axi4/tests/` | AC9 | ☐ |
-| B4 | `tests/test_verif_single_source.cpp` **按准则拆分**：凡以 `ch_device<axi4::example::AxiLiteTop>` / `LateAxiLiteTop` 为 DUT 的用例 → `examples/axi4/tests/test_verif_axi4_lite.cpp`；其余（扫描器用例）留 `tests/` ⇒ **共享 helper 一并搬**（`verif_path()` / `LateAxiLiteTop` / `read_file()`） | 两处 | AC8 | ☐ |
-| B5 | **TEST_CASE 名集合守恒（判据）**：拆分前后差集 == ∅（源码解析或 `ctest -N` 对照）⇒ 结果记录在 note | 记录 | AC8 | ☐ |
-| **B6** | **`axi_soc_example.cpp` → `tb_axi_soc_example.cpp`**（2026-11-18 · §4.3.3）：`git mv` 改名（类已住 `axi_soc_example_top.h` ⇒ 文件只剩 main）⇒ ① 删 `toVerilog("axi_soc_example.v")`（CWD 落盘）② 补 **`RESULT: checks=N fails=0`** 协议行（**N 由 C++ 侧自定，不要求与 `.sv` 的 14 对齐**）③ 补 **`--emit-rtl <dir>`** 模式（发射）④ 补 **`--check-products`** 模式（= 发射 + 自检，内部等价 `--emit-rtl --hierarchical --check-products`；该模式下 `--out` / `--emit-hygiene` **照常透传**）⇒ ⑤ CMake target 改名（`add_spinalhdl_ported_test(axi4_soc tb_axi_soc_example)` ⇒ **CTest 条目名 `spinalhdl_axi4_soc` 不变**）· `CH_TRACKED_EXAMPLE_TARGETS` · `install(TARGETS …)` · tsv SoC 行四列 · **`.rddf/checks/input-port-required-registry.md:45` 的 `AxiSocTop` 用例路径** · **`examples/axi4/AGENTS.md` FILES 行** · **`include/axi4/AGENTS.md` EXAMPLES 行** ⇒ ⇒ ⚠️ **手写激励 = 过渡态**（R13：UART 8N1 帧解码超出 `.verif` 封闭原语集 ⇒ 独立立项） | `examples/axi4/` · `.rddf/checks/` | AC1 · AC17 · AC22 | ☐ |
+| B1 | `tests/test_axi_lite_verilator_e2e.cpp`：删顶层头 include ⇒ `using` 改库组件 ⇒ DUT 换 `AxiLiteSlave<32,32,4>` ⇒ 顶部注释同步（**把陈旧的「10 inputs / 7 outputs」订正为 12 / 8**）⇒ 路径 / 用例名 / SECTION / 断言**零改动** | 该文件 | AC5 | ✅ |
+| B2 | 该 e2e 仍绿（verilator 在 `build/verilator-install/bin` 或 PATH） | ctest | AC6 | ✅ |
+| B3 | `tests/test_axi_lite_test_master.cpp` → `examples/axi4/tests/`（**CTest 条目名不变**） | `examples/axi4/tests/` | AC9 | ✅ |
+| B4 | `tests/test_verif_single_source.cpp` **按准则拆分**：凡以 `ch_device<axi4::example::AxiLiteTop>` / `LateAxiLiteTop` 为 DUT 的用例 → `examples/axi4/tests/test_verif_axi4_lite.cpp`；其余（扫描器用例）留 `tests/` ⇒ **共享 helper 一并搬**（`verif_path()` / `LateAxiLiteTop` / `read_file()`） | 两处 | AC8 | ✅ |
+| B5 | **TEST_CASE 名集合守恒（判据）**：拆分前后差集 == ∅（源码解析或 `ctest -N` 对照）⇒ 结果记录在 note | 记录 | AC8 | ✅ |
+| **B6** | **`axi_soc_example.cpp` → `tb_axi_soc_example.cpp`**（2026-11-18 · §4.3.3）：`git mv` 改名（类已住 `axi_soc_example_top.h` ⇒ 文件只剩 main）⇒ ① 删 `toVerilog("axi_soc_example.v")`（CWD 落盘）② 补 **`RESULT: checks=N fails=0`** 协议行（**N 由 C++ 侧自定，不要求与 `.sv` 的 14 对齐**）③ 补 **`--emit-rtl <dir>`** 模式（发射）④ 补 **`--check-products`** 模式（= 发射 + 自检，内部等价 `--emit-rtl --hierarchical --check-products`；该模式下 `--out` / `--emit-hygiene` **照常透传**）⇒ ⑤ CMake target 改名（`add_spinalhdl_ported_test(axi4_soc tb_axi_soc_example)` ⇒ **CTest 条目名 `spinalhdl_axi4_soc` 不变**）· `CH_TRACKED_EXAMPLE_TARGETS` · `install(TARGETS …)` · tsv SoC 行四列 · **`.rddf/checks/input-port-required-registry.md:45` 的 `AxiSocTop` 用例路径** · **`examples/axi4/AGENTS.md` FILES 行** · **`include/axi4/AGENTS.md` EXAMPLES 行** ⇒ ⇒ ⚠️ **手写激励 = 过渡态**（R13：UART 8N1 帧解码超出 `.verif` 封闭原语集 ⇒ 独立立项） | `examples/axi4/` · `.rddf/checks/` | AC1 · AC17 · AC22 | ✅ |
 
 ## 批次 C — 构建与锚点（AC8 · AC9 · AC10 · AC20）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| C1 | `examples/axi4/CMakeLists.txt` 增 `axi4_catch_test` helper：链 `catch_amalgamated` + include 集（`include` · `tests` · `examples/axi4`）+ `add_test` + **`LABELS base`** + `TIMEOUT 300` + **`CPPHDL_SOURCE_DIR` 编译定义** | 同上 | AC8 · AC9 | ☐ |
-| C2 | 根 `tests/CMakeLists.txt` 去掉迁走的注册项（**不得**重复注册） | `tests/CMakeLists.txt` | AC9 | ☐ |
-| C3 | **锚点按实测回填**：⚠️ 2026-11-18 订正 = 原 `+1`（拆分新增）**− 1**（axi4_full 退役）= **净 0** ⇒ ⇒ `CTEST_TOTAL` **268 → 268** · non-perf **257 → 257** · `-L base` **231 → 231** · `EXAMPLES_TEST_SOURCES` 18 → **20** ⇒ ⇒ **MUST 以实测回填**（上面是推导） | 根 `AGENTS.md` | AC10 | ☐ |
-| C4 | **手工改 `tests/test_*.cpp` 计数行**：现写 **145** 但实测 **159** ⇒ 搬走 1 个后为 **158**（**MUST 用实测值，禁「原值 −1」**） | 根 `AGENTS.md` | AC10 | ☐ |
+| C1 | `examples/axi4/CMakeLists.txt` 增 `axi4_catch_test` helper：链 `catch_amalgamated` + include 集（`include` · `tests` · `examples/axi4`）+ `add_test` + **`LABELS base`** + `TIMEOUT 300` + **`CPPHDL_SOURCE_DIR` 编译定义** | 同上 | AC8 · AC9 | ✅ |
+| C2 | 根 `tests/CMakeLists.txt` 去掉迁走的注册项（**不得**重复注册） | `tests/CMakeLists.txt` | AC9 | ✅ |
+| C3 | **锚点按实测回填**：⚠️ 2026-11-18 订正 = 原 `+1`（拆分新增）**− 1**（axi4_full 退役）= **净 0** ⇒ ⇒ `CTEST_TOTAL` **268 → 268** · non-perf **257 → 257** · `-L base` **231 → 231** · `EXAMPLES_TEST_SOURCES` 18 → **20** ⇒ ⇒ **MUST 以实测回填**（上面是推导） | 根 `AGENTS.md` | AC10 | ✅ |
+| C4 | **手工改 `tests/test_*.cpp` 计数行**：现写 **145** 但实测 **159** ⇒ 搬走 1 个后为 **158**（**MUST 用实测值，禁「原值 −1」**） | 根 `AGENTS.md` | AC10 | ✅ |
 | C5 | **登记 `CPPHDL_BUILD_EXAMPLES=OFF` 的接受项**（被搬走的 2 个条目消失 ⇒ 锚点只在默认配置成立）⇒ 写在该锚点旁 + 指向本 change | 根 `AGENTS.md` / `.rddf/checks/` | AC20 | ☐ |
 
 ## 批次 D — 登记面（AC11 · AC12 · AC13 · AC14）
