@@ -283,7 +283,6 @@ include/axi4/
 
 ## EXAMPLES
 - `examples/axi4/tb_axi4_lite_example.cpp` — Lite slave 验证（**由 `.verif` 驱动** ⇒ 无手写激励/断言）
-- `examples/axi4/axi4_full_example.cpp` — Full 5-channel burst slave
 - `examples/axi4/axi_soc_example.cpp` — Matrix 2x2 + GPIO + UART + Timer SoC
 - `examples/axi4/phase3a_complete.cpp` — 4x4 interconnect + converter + slave
 

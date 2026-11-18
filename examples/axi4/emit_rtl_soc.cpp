@@ -16,7 +16,7 @@
 //       [--emit-hygiene] [--check-products]
 //       [--emit-tb-verif examples/axi4/tb_axi_soc_example.verif]
 
-#include "axi4/axi_soc_example_top.h"
+#include "axi_soc_example_top.h"
 #include "device.h"
 #include "hierarchy_equivalence.h"
 #include "hierarchy_verilog.h"

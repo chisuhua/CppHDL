@@ -547,17 +547,17 @@ bash scripts/rv32i_rtl_sim_env.sh
      TEMPLATE_TEST_CASE / TEMPLATE_PRODUCT_TEST_CASE / SCENARIO）的
      .cpp/.cc/.cxx/.C ∪ (b) 含 `CATCH_` 的同类文件 ∪ (c) `examples/**/tests/`
      下的任意 .cpp/.cc/.cxx/.C，去重。Do not reformat. -->
-- EXAMPLES_TEST_SOURCES: 18
+- EXAMPLES_TEST_SOURCES: 20
 - **Test counts（单一真相在上面的 CI 锚点；改动测试后 MUST 同步锚点 + 复核命令）**
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | CTest 条目总数 | 257 | `cd build && ctest -N \| tail -1` |
-  | 其中 non-perf | 246 | `cd build && ctest -N -LE perf \| tail -1` |
+  | CTest 条目总数 | 268 | `cd build && ctest -N \| tail -1` |
+  | 其中 non-perf | 257 | `cd build && ctest -N -LE perf \| tail -1` |
   | `verilator_e2e` 标签数 | 77 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
   | 双后端 parity 源文件数 | 66 | `bash scripts/verify_dual_backend_parity.sh` |
   | 双后端 parity macro 调用数 | 290 | 同上 |
-  | `tests/test_*.cpp` | 145 | `ls tests/test_*.cpp \| wc -l` |
+  | `tests/test_*.cpp` | 158 | `ls tests/test_*.cpp \| wc -l` |
   | `tests/chlib/test_*.cpp` | 52 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|

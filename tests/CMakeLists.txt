@@ -1133,7 +1133,7 @@ add_catch_test(test_verif_single_source test_verif_single_source.cpp)
 # `AxiLiteTestMaster` 的**直接**判别性用例（`input-port-required-registry` R2/R3）
 # ⚠️ 该组件声明了 `rst_n`（永久复位类端口）⇒ ⇒ MUST 登记 ⇒ ⇒ 登记行 MUST 有
 #   **实例化**它的文件 ⇒ ⇒ 它此前只作为 `AxiSocTop` 的成层子组件存在 ⇒ ⇒ 补上。
-add_catch_test(test_axi_lite_test_master test_axi_lite_test_master.cpp)
+# ⚠️ `test_axi_lite_test_master` 已移至 `examples/axi4/tests/`（2026-11-18 · example-file-boundary）
 target_compile_definitions(test_verif_single_source PRIVATE
     CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
@@ -1453,7 +1453,7 @@ add_spinalhdl_ported_test(phase1c phase1c_test)
 # ============================================================================
 
 add_spinalhdl_ported_test(axi4_lite tb_axi4_lite_example)
-add_spinalhdl_ported_test(axi4_full axi4_full_example)
+# ⚠️ `axi4_full` 已退役（2026-11-18 · 覆盖证据 = tests/test_axi4_full_burst.cpp）
 add_spinalhdl_ported_test(axi4_soc axi_soc_example)
 add_spinalhdl_ported_test(axi4_phase3a phase3a_complete)
 

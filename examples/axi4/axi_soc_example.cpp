@@ -18,7 +18,7 @@
  */
 
 #include "ch.hpp"
-#include "axi4/axi_soc_example_top.h"
+#include "axi_soc_example_top.h"
 #include "axi4/axi4_lite_slave.h"
 #include "axi4/axi4_lite_matrix.h"
 #include "axi4/peripherals/axi_gpio.h"

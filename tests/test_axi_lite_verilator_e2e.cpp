@@ -10,7 +10,7 @@
 //  exists for any AXI class".
 //
 // Two test cases:
-//   1. AxiLiteTopPortAccessSnapshot: VerilatorBackend compiles the AxiLiteTop
+//   1. AxiLiteSlavePortAccessSnapshot: VerilatorBackend compiles the AxiLiteSlave
 //      fixture, dlopens libVtop.so, and populates port_access_ with all
 //      AXI4-Lite channels (AW/W/B/AR/R, all signals as inputs/outputs).
 //      This is the "backend can drive this design" sanity gate.
@@ -39,7 +39,6 @@
 #include <sys/stat.h>
 #include "catch_amalgamated.hpp"
 #include "ch.hpp"
-#include "axi4/axi4_lite_example_top.h"
 #include "axi4/axi4_lite_slave.h"
 #include "component.h"
 #include "core/context.h"
@@ -50,7 +49,7 @@
 using namespace ch;
 using namespace ch::core;
 using namespace axi4;
-using axi4::example::AxiLiteTop;
+using axi4::AxiLiteSlave;
 
 namespace {
 
@@ -70,8 +69,9 @@ std::string make_temp_dir(const std::string &suffix) {
     return result;
 }
 
-// Minimal AxiLiteTop fixture. Mirrors examples/axi4/tb_axi4_lite_example.cpp's
-// AxiLiteTop but strips VcdRecorder / Axi4TimingChecker (those are
+// Minimal DUT fixture. Uses the **library** `AxiLiteSlave<32,32,4>` (2026-11-18:
+// the example-specific `AxiLiteTop` moved to `examples/axi4/` and is no longer a
+// tests/ dependency). Strips VcdRecorder / Axi4TimingChecker (those are
 // interpreter-only instrumentation; the backend path doesn't need VCD).
 
 // Read output port via data_map_ (per test_verilator_e2e_harness.cpp pattern:
@@ -85,14 +85,14 @@ uint64_t read_port_output(Simulator &sim, ch::core::lnodeimpl *ln) {
 } // namespace
 
 // ============================================================================
-// E2E Sanity: AxiLiteTop + VerilatorBackend compile/dlopen/port_access_.
+// E2E Sanity: AxiLiteSlave + VerilatorBackend compile/dlopen/port_access_.
 // ============================================================================
-TEST_CASE("AXI4-Lite VerilatorBackend E2E AxiLiteTopPortAccessSnapshot",
+TEST_CASE("AXI4-Lite VerilatorBackend E2E AxiLiteSlavePortAccessSnapshot",
           "[verilator][e2e][axi4lite][m5]") {
     if (!tool_available("verilator")) {
         SKIP("verilator not on PATH");
     }
-    auto device = std::make_unique<ch::ch_device<AxiLiteTop>>();
+    auto device = std::make_unique<ch::ch_device<AxiLiteSlave<32, 32, 4>>>();
 
     ch::data_map_t data_map;
     auto workdir = make_temp_dir("_snap");
@@ -110,9 +110,10 @@ TEST_CASE("AXI4-Lite VerilatorBackend E2E AxiLiteTopPortAccessSnapshot",
     REQUIRE(backend.is_native());
     REQUIRE(backend.clock_node_id() != UINT32_MAX);
 
-    // AxiLiteTop IO: awaddr/awprot/awvalid/wdata/wstrb/wvalid/araddr/arprot/
-    // arvalid/bready/rready = 10 inputs; awready/wready/bresp/bvalid/
-    // rdata/rresp/rvalid = 7 outputs; + default_clock + default_reset = 2.
+    // AxiLiteSlave<32,32,4> IO: awaddr/awprot/awvalid/wdata/wstrb/wvalid/araddr/arprot/
+    // AxiLiteSlave<32,32,4>：12 inputs（awaddr/awprot/awvalid/wdata/wstrb/wvalid/
+    // bready/araddr/arprot/arvalid/rready/rst_n）；8 outputs（awready/wready/bresp/
+    // bvalid/arready/rdata/rresp/rvalid）⇒ 用户端口 20 + default_clock + default_reset = 22
     // So at least 10 inputs and 7 outputs total (default_clock/reset are
     // infrastructure, NOT user IO; we only require >=10 and >=7).
     size_t n_inputs = 0, n_outputs = 0;
@@ -134,7 +135,7 @@ TEST_CASE("AXI4-Lite VerilatorBackend E2E WriteReadReg0ThroughBackend",
     if (!tool_available("verilator")) {
         SKIP("verilator not on PATH");
     }
-    auto device = std::make_unique<ch::ch_device<AxiLiteTop>>();
+    auto device = std::make_unique<ch::ch_device<AxiLiteSlave<32, 32, 4>>>();
 
     ch::data_map_t data_map;
     auto workdir = make_temp_dir("_rdwr");

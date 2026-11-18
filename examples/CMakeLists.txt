@@ -65,7 +65,6 @@ set(CH_TRACKED_EXAMPLE_TARGETS
 
     # PHASE: Phase 3A: AXI4 总线
     tb_axi4_lite_example
-    axi4_full_example
     axi_soc_example
     phase3a_complete
 

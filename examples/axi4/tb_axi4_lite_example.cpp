@@ -18,7 +18,7 @@
  */
 
 #include "ch.hpp"
-#include "axi4/axi4_lite_example_top.h"
+#include "axi4_lite_example_top.h"
 #include "component.h"
 #include "simulator.h"
 #include "rtl_emit/cli.h"
