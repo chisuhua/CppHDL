@@ -15,7 +15,7 @@
   `--top-module` 名 · 最小变化观测量阈值 ⇒ ⇒ 库层**不内置**字面根名 / 阈值
 - **owner 基准由建出来的根组件派生**（`Component::name()`）⇒ ⇒ 根名可配，不再依赖
   「三处字面量恰好一致」；两份设计头新增 `kSocRootName` / `kLiteRootName` 作**单一真相源**
-- `examples/axi4/tb_axi_soc_example.cpp` 544 → **311 行**（规则移出；只剩值 + 三模式 main）
+- `examples/axi4/tb_axi_soc_example.cpp` 543 → **388 行**（规则移出；只剩值 + 三模式 main）
 
 **顺带**（同一批自查修掉的 fail-open · 上游已单独提交）
 

@@ -194,7 +194,7 @@ fi
 
 | 项 | 实况 |
 |---|---|
-| **F2 已落地** | 新公开头 `include/rtl_emit/product_check.h` + `src/rtl_emit/product_check.cpp`（`product_modules` · `tamper_hier` · `ProductCheckSpec/Hooks` · `check_products`）。**编排整体下沉**（4 项顺序 / `failures` 累加 / `eq/` / 结论行 / 退出码 0-1）。**值留 example**（期望 module 集 · 端口数 · 激励面 · 观测面 · 变异目标 · `--top-module` 名 · 阈值）。`tb_axi_soc_example.cpp` 544 → **311 行** |
+| **F2 已落地** | 新公开头 `include/rtl_emit/product_check.h` + `src/rtl_emit/product_check.cpp`（`product_modules` · `tamper_hier` · `ProductCheckSpec/Hooks` · `check_products`）。**编排整体下沉**（4 项顺序 / `failures` 累加 / `eq/` / 结论行 / 退出码 0-1）。**值留 example**（期望 module 集 · 端口数 · 激励面 · 观测面 · 变异目标 · `--top-module` 名 · 阈值）。`tb_axi_soc_example.cpp` 543 → **388 行** |
 | **owner 基准的取值方式（偏离字面「作参数传入」）** | 库层**从建出来的根组件派生**（`Component::name()`）⇒ ⇒ 比「调用方传一个字面根名」更强：根名**不可能**与实例不一致。根名常量 `kSocRootName` / `kLiteRootName` 落在**设计头**（= example 层）⇒ ⇒ `include/rtl_emit/**` 内**零**字面根名 |
 | **`tamper_hier` 按 AC17 下沉** | 蓝图表明确要求沉（「第二消费者语义不同」已如实标注）⇒ ⇒ 采纳 AC17；metis 的「暂不沉」建议与 AC17 冲突 ⇒ **以 AC17 为准** |
 | **`find_verilator` 不下沉，但 lint 判据下沉** | 库层收 `spec.lint` 回调（跑 linter ⇒ 返回是否干净）⇒ ⇒ 库层负责**判定与计数**、example 负责**工具发现与执行**（POSIX 进程 API 不进库层 ⇒ 保 Windows/macOS 可编译）。**回调缺失 ⇒ 按失败计**（fail-closed） |
