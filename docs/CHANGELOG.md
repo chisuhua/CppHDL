@@ -1,3 +1,17 @@
+## 2026-11-18 — `axi4_full_example` 退役（显式缩面 · `example-file-boundary-2026-11` AC27）
+
+**为什么**：它与 `tests/test_axi4_full_burst.cpp` 是**同一行为的两个载体**（一个是可运行的
+example 程序，一个是 dual-backend 测试）⇒ ⇒ 保留 example 只是多养一个入口。
+
+**删了什么**（一次删干净，避免半截状态）：`examples/axi4/axi4_full_example.cpp` 退役；
+连带 target · CTest 条目 `spinalhdl_axi4_full` · `CH_TRACKED_EXAMPLE_TARGETS`（**28 → 27**）·
+`install(TARGETS)` 该项；`.rddf/checks/examples-rtl-sim-exclusions.tsv` 的该行；
+`.rddf/checks/port-naming-exempt.tsv` 的 **31 行**（`EXPECTED_EXEMPT_PORTS` **1415 → 1384**）。
+
+**这是显式登记的缩面**（不是静默消失）。
+
+**一行摘要**：`examples/axi4/axi4_full_example.cpp` 退役（`example-file-boundary-2026-11` AC27）⇒ 行为覆盖迁至 `tests/test_axi4_full_burst.cpp`（dual-backend · 仍绿 · 实测 15.26 s）。
+
 ## 2026-11-18 — e2e 用例名随 DUT 改名（`example-file-boundary-2026-11` B1 · AC5）
 
 `tests/test_axi_lite_verilator_e2e.cpp` 的 DUT 由 example 专属的 `AxiLiteTop` 换成库组件
