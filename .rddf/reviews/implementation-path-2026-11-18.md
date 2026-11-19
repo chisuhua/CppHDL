@@ -329,3 +329,40 @@ run_all_ported_tests.sh              **exit 0**（PASS 27 / FAIL 0 / STALE-ARTIF
 | 蓝图 §7 **R12** 的「落实」状态仍是「⚠️ 未闭」 | **architect 写集**（builder 不代改）⇒ 需把「落实」翻为已闭，闭口证据 = `0395cfc` 的 ⑧' 覆盖 |
 | 阶段 3 复核清单（A9） | AC24/F7 的 ⑧' 落地 + AC5 的**两条** CHANGELOG 登记（`563fbc7` / `dbc0ab4`） |
 | 阶段 4（D6-1） | **只归档 change 3**；change 1/2 挂起至上游验收 + 归档 |
+
+---
+
+## 十二、归档链路收口（2026-11-19）—— **4 个 change 全部归档**
+
+### 12.1 上游 change 的验收（verifier 两轮）
+
+| 轮次 | 结论 | 3 条 finding 的处置 |
+|---|---|---|
+| 第 1 轮（`8df27c6`） | **20 ✅ / 2 ⚠️ / 1 ❌** ⇒ 不通过 | **AC18** ❌（`implementation_gap`：目标集内 1 处字面命中 + AC 要求的「加一句『产品面已具名』」未做 + 教学段主体事实已过时）· **AC17** ⚠️（终值 1415 被后续 change 改为 1384）· **AC23 ②** ⚠️（口径歧义） |
+| 修复 | builder `73cb612` + planner `efc383e` + 收尾 `3f84e34` | AC18：usage_guide §5.8 段改具名形态 + 对照表按产物 `port_table` 更新（12 行集合相等）+ `examples/axi4/AGENTS.md:27` 改措辞 · AC17：dated addendum · AC23 ②：口径澄清（产物端口名 vs `.verif` 引用的 C++ 成员名） |
+| 第 2 轮（`20ed1d2`） | **3 条全闭合 ⇒ 23/23** | 新增 diff = 4 笔文档/proposal 改动（零 `src/**`）⇒ 无新 BLOCKER |
+
+### 12.2 归档顺序（D6-1 的解除链）
+
+| 序 | change | 门 | 合并 | 归档 commit |
+|---|---|---|---|---|
+| 1 | `rtl-verification-single-source-2026-11`（上游） | — | **新建** `examples-rtl-sim-coverage`（7 reqs）+ 2 capability 各 +1 + `rtl-soc-output` +1/~2 | `3e2df5a` |
+| 2 | `example-file-boundary-2026-11` | — | **新建** `example-component-boundary`（3 reqs）+ 2 个 capability 的 MODIFIED | `137fb59` |
+| 3 | `axi4-verif-driven-cpp-2026-11` | **G-1** ✓（capability 已存在 + 上游归档独立 commit） | `examples-rtl-sim-coverage` **+2** | `27b1e2d` |
+| 4 | `emit-cli-into-example-2026-11` | **G-3** ✓（前置 change 已独立 commit 归档） | `examples-rtl-sim-coverage` **+1** | 本批最后一笔 |
+
+⇒ `openspec/changes/` 下**已无活跃 change**；`examples-rtl-sim-coverage` 现 **10 条** requirement（7 + 2 + 1）· 无重复标题 · `## Purpose` 已写（非 TBD）。
+
+### 12.3 归档后的合并校验（逐条，不是抽查）
+
+- 10 条 ADDED/MODIFIED 在 delta 侧与主 spec 侧**逐字相同**（唯一差异 = CLI 补的尾部空行）⇒ 无内容丢失 / 重复
+- 4 个 capability 的主 spec **无重复标题**；`validate --specs` ⇒ **51 passed / 0 failed**；新 capability strict ⇒ valid
+- capability 数 49 → **51**（AGENTS.md 同步）
+
+### 12.4 遗留（交用户裁决 / 另立项）
+
+| 项 | 状态 |
+|---|---|
+| **`verify_examples_rtl_sim.sh --self-test` 挂进 CI** | ⛔ **未挂**（`ci.yml` 只有生产轮）⇒ ⇒ 「⑧' 被改回 `kind=hier` ⇒ 自动红」**无系统性保证**（蓝图 §7 R12 的行内四式锚点是廉价过渡）⇒ **建议另立项**（一行 yml） |
+| `git push` | ⛔ 本批 20 笔提交**全在本地 `main`**，未 push ⇒ **等用户确认** |
+| 上游 change 的 `## Purpose`（新建 capability 之外的 3 个） | 已存在 TBD（`build-cpp-standard` 等 8 个既有 spec 同样如此）⇒ 仓级既有问题，非本批引入 |
