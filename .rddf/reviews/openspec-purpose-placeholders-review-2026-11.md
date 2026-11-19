@@ -293,3 +293,55 @@
 5. **批 B 立项**（按 §4.2 优先级）：
    `verilator-hier-input` #13（**危险**：判据写错会误杀合法设计）→ `verilator-e2e-coverage` #7（**内部矛盾**）→ `verilator-backend-e2e` #6 #1 #2 #3 #4 #5 → `verilator-error-flow` #12 → `jit-llvm-compat-tests` #14 → `build-cpp-standard` #15 #16 #17 → `verilator-reg-init` #18 → `verilator-e2e-coverage` #8 #9 #10 #11。
 6. **批 C 登记**：§8 的 O1–O6。
+
+---
+
+## 11. ⚠️ 2026-11-19 订正（文档重组后的复核）
+
+**触发**：仓内出现文档目录重组（commit `0ab3263`「docs: 文档目录重组 —— 活文档区 483→40 篇，历史材料归档，usage_guide 重编号」），根 `AGENTS.md` 的路径引用随之改动（`docs/usage_guide/05-component-design.md` → `docs/usage_guide/02-component-design.md`）⇒ ⇒ 需要复核本报告的结论是否仍然有效。
+
+### 11.1 复核结论：**全部有效**（零条被推翻）
+
+| 复核项 | 结果 |
+|---|---|
+| 重组是否触及 `openspec/specs/**` | **否**（`git show --stat 0ab3263 -- openspec/` 为空）⇒ ⇒ **8 个 capability 的文本一字未动** ⇒ §4 的 19 条过期项与 §6 的 8 段草稿**全部成立** |
+| 重组是否触及 `src/` `include/` `tests/` | **否**（commit 自述「零 `src/**` · 零 `include/**` 改动」）⇒ ⇒ §4.2 的全部**实现侧证据**（`verilator_backend.cpp:822-834` / `:748-797` / `:1008` / `hierarchy_analysis.cpp:405-411` / `codegen_verilog.cpp:484` `:1164-1171` / `verilator_backend.h:61-68`）**未移位** |
+| 本报告引用的行号是否移位 | **否**：`AGENTS.md` 的 strict 快照仍在 `:479-480`；`ADR-072` 的「Purpose 的两处落点」仍在 `:345`、「⑨」仍在 `:484`；`.rddf/improvements/rv32i-privileged-csr-2026-11.md:146`（`rv32i-privilege` = **扩展**）内容未变 |
+| 本报告引用的文件是否还在 | **是**：`rv32i-privilege-capability-2026-11.md` / `rv32i-privileged-csr-2026-11.md` / `openspec-specs-guide.md` / `scripts/verify_openspec_delta.sh:112` 全部在位 |
+| 悬空引用断言是否仍成立 | **是**：`examples/axi4/axi4_full_example.cpp` 仍**不存在**（该目录只有 `axi4_lite_example_top.h` / `axi_soc_example_top.h` / `tb_*`）⇒ §4.2 #11 成立 |
+| 是否存在进行中的 change 冲突（metis E8 前置） | **否**：`.rddf/state/iteration.json` 不存在 ⇒ 无活跃 change ⇒ §10 步骤 1 的前置条件当前满足 |
+
+### 11.2 §3.2「护栏真空」的表述**精化**（结论方向不变，枚举修正）
+
+原文说「`scripts/` 下引用 `openspec/specs` 的仅 **3 个**脚本……**全部是「把 spec 当数据源」**」⇒ ⇒ 逐个复核后精化：
+
+| 脚本 | 对主 spec 的实际用法 | 是否「判红」 |
+|---|---|---|
+| `scripts/verify_openspec_delta.sh:141` | 读主 spec **仅为**匹配 MODIFIED delta 的 Requirement 标题（**合并正确性**） | ❌ 不判 spec 内容真伪 |
+| `scripts/lib/dual_backend_parity.py:252` | 读 `openspec/specs/dual-backend-test-coverage/spec.md` 提取「契约锁定文件清单」⇒ 作为**契约源** | ⚠️ 判红，但覆盖的是**契约措辞的存在性**，且**不在本批 8 个之内** |
+| `scripts/verify_chlib_dtor_composability.sh:149` | grep `chlib-state-machine-semantics` + `chlib-conditional-semantics` 的**契约 token** | ⚠️ 同上，**不在本批 8 个之内** |
+| `scripts/verify_no_duplicate_rv32i_headers.sh:1076` | **仅注释**里举例 `openspec/specs/build-cpp-standard/`（说明 `build*` glob 危险） | ❌ 无实际依赖 |
+
+⇒ ⇒ 修正后的准确表述：**没有任何护栏对主 spec 的「规范 vs 实现」一致性判红**；引用主 spec 的护栏共 3 个，作用分别是「delta 标题合并校验」与「两个 capability 的措辞锚点」⇒ ⇒ **本批这 8 个 capability 的内容零护栏覆盖**（结论不变，且更精确）。
+
+⚠️ **并且这次重组让这条结论更强**：2026-11-19 新增的文档链接护栏（`scripts/verify_docs_links.sh` + `scripts/lib/docs_link_scope.py` + `.rddf/checks/docs-link-scope.md`）在**范围登记表 `:69` 里明确把 `openspec/**` 列为 out-of-scope** ⇒ ⇒ 连新增的护栏都**明确不覆盖主 spec** ⇒ ⇒ §7「批 A 完成后必须补 Purpose 护栏」的必要性**不降反升**。
+
+### 11.3 §7 护栏建议**强化**（仓内已有同型模板可抄）
+
+2026-11-19 新增的 `scripts/verify_docs_links.sh` 恰好是**本报告 §7 建议的同型范式**：
+**薄壳脚本 + 范围登记表（`.rddf/checks/docs-link-scope.md`）+ 逻辑载体（`scripts/lib/docs_link_scope.py`）+ `--self-test` 投毒自检** ⇒ ⇒ §7 的 `scripts/verify_openspec_purpose.sh` **不必另发明**，照该四件套抄即可（登记表换成「占位符 capability 集合」）。
+
+### 11.4 新登记（O7）：根 `AGENTS.md` 的路径引用**无护栏覆盖**
+
+- `scripts/lib/docs_link_scope.py:23`：`SKIP_FILE_NAMES = {"AGENTS.md"}` ⇒ **AGENTS.md 家族被显式排除**（`.rddf/checks/docs-link-scope.md:69` 同款口径）。
+- ⇒ 本次 `05-component-design.md → 02-component-design.md` 的修正**是人工做的**（重组 commit 里「L1 活文档（含 AGENTS.md / README / 各级索引）全部修」= 人工修）⇒ ⇒ 根 `AGENTS.md`（**每次会话都注入上下文**的文件）的链接漂移属**无护栏区** ⇒ 同类漂移会复发。
+- ⇒ **建议**（不属本批 A/B）：把「根 `AGENTS.md` 的路径引用」纳入某个**已有**护栏的扫描面，或至少给它一条**枚举式**判据（AGENTS.md 的路径引用 **MUST** 全部 `test -e` 成立）⇒ 登记为 O7。
+
+### 11.5 复核到的**非问题**（避免下轮误判）
+
+- `.rddf/improvements/soc-rtl-product-and-tb-2026-11.md`（4 处）与 `.rddf/improvements/hierarchical-corpus-regression-2026-11.md`（1 处）仍引用旧路径 `docs/usage_guide/05-component-design.md` ⇒ ⇒ **但两者均已有对应的归档 change**（`2026-11-17-soc-rtl-product-and-tb-2026-11` / `2026-11-07-hierarchical-corpus-regression-2026-11`）⇒ ⇒ 属**已落地工作的历史记录** ⇒ ⇒ 与重组的治理口径（「历史归档区 / openspec / `.rddf` 按治理口径**不追**」）**一致** ⇒ ⇒ **不构成新增债**，仅登记。
+- `docs/CHANGELOG.md:268` 引用旧路径 ⇒ 历史条目 ⇒ 正确做法就是**保留**。
+
+### 11.6 本次 AGENTS.md 改动与本报告的关系（一句话）
+
+**无影响**。该改动是**文档重组**的一个副作用（usage_guide 重编号），与 8 个 capability 的 Purpose / Requirement **零交集**（本报告与 8 个 spec 均**未**引用 `usage_guide` 路径，已 grep 确认）⇒ ⇒ 本报告的**结论、证据、草稿、验收判据全部维持原样**；仅 §3.2 表述精化 + 新增 O7 与 §7 的模板引用。
