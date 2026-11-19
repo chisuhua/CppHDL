@@ -237,10 +237,14 @@ MUST 与下游 slave 在**同一复位窗口内**复位 —— 否则 slave 的�
    interpreter 清 0 而 verilator 加载 INIT → **两后端中途复位语义分歧**。
    唯一两后端一致、testbench 可控的中途复位机制 = 组件级 `rst_n`。
 3. 互连在 rst_n 链路上是**唯一断点**：
-   `examples/axi4/phase3a_complete.cpp` 的顶层 `rst_n`（`:60`）已透传到
-   converter（`:126`）与 slave（`:127`），唯独互连（`:75`）没有该端口；
-   `examples/axi4/axi_soc_example.cpp` 同理（顶层 `:47` → gpio/uart `:263-264`，
-   唯独 matrix `:195` 断开）。
+   `examples/axi4/phase3a_top.h`（设计定义）的顶层 `rst_n` 已透传到 converter 与
+   AXI4-Lite slave，唯独互连没有该端口；`examples/axi4/tb_axi_soc_example.cpp`
+   同理（顶层 `rst_n` → gpio/uart，唯独 matrix 断开）。
+   ⚠️ **证据按符号定位、不按行号**（2026-11-20）：原文引用的
+   `phase3a_complete.cpp` 已拆为 `phase3a_top.h`（设计定义）+
+   `tb_phase3a_example.cpp`（激励驱动），`axi_soc_example.cpp` 亦已改名
+   —— 行号随重构漂移
+   ⇒ ⇒ 引用 MUST 落在**文件 + 符号**上，否则会随重构悬空。
 4. 「可选端口」在本框架**不可行**：未接线的 `ch_in<ch_bool>` 读出为 0，
    配标准 pattern 即永久复位；「未接线 = 不复位」需要运行期「是否被驱动」查询，
    而 `num_srcs()` / `driver()` 是**构图期**属性（子组件 `describe()` 执行时
