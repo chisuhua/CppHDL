@@ -168,3 +168,45 @@ Requirement」，本批**零 Requirement 改动**）。
 | §3 的「不改」清单 | 同上 §2.3 + §4.2（19 条过期项） |
 | §4 的三条风险 + §4.1 预检 | 同上 §5（AC-0…AC-7）+ §6 写法约定 + §11.8；metis S1–S6 / oracle 的假绿论证 |
 | 批 B 的 19 条逐条判据 | 同上 §4.2（表头「判据 D1–D5」） |
+
+---
+
+## 6. 载体形态与跟踪面（P1 补充 —— 本节原本在手写的 proposal 里，现按工件归属归 design）
+
+### 6.1 派生关系（proposal.md 的来源）
+
+```
+.rddf/improvements/openspec-purpose-placeholders-2026-11.md   ← 权威提案层（**入库** · 跨人可见）
+        │  generate_full_proposal.py（rdd-builder P0 的生成器 · canonical）
+        ▼
+openspec/changes/openspec-purpose-placeholders-2026-11/proposal.md   ← **P0 生成物**（原样采用）
+        │  P1（本文件 = design.md）
+        ▼
+design.md（§2 逐字终稿 = 批准对象）+ tasks.md（T0 批准门 + 任务 + AC + 批 B 清单）
+```
+
+⇒ 本仓同类先例 = `.rddf/improvements/arch-residual-registry-2026-11.md`（其 Status 行同样写明
+「`proposal.md` 由 `rdd-builder` **P0** 从本草稿生成 ⇒ **不手写**」）。
+
+### 6.2 为什么本 change **无 spec delta**（`skip_specs: true`）
+
+- openspec 的 delta **机制上不含 `## Purpose`**（CLI 提示原文 + `scripts/verify_openspec_delta.sh:112`
+  双重证实）⇒ ⇒ **change 流程对 Purpose 是死路** ⇒ ⇒ 该动作属「**归档后手工写**」通道
+  （`ADR-072` §6 ⑨ + commit `1952ba5` 的 T17 先例）。
+- ⇒ ⇒ 本 change 承载**任务 + 逐字终稿**，执行时手工写进主 spec ⇒ ⇒ **零 `### Requirement:` 改动**
+  ⇒ ⇒ 与 AGENTS.md「spec 变更必须走 change」的禁令**不冲突**（该禁令的本意是防「绕过 delta 改
+  Requirement」）。
+- ⚠️ **代价（已知并接受）**：`openspec validate <change> --strict` 的「delta 完整性」检查对本 change
+  **不适用** ⇒ ⇒ 实质校验落在 **AC-0…AC-10**（`tasks.md`）与 §4.1 的机械预检上。
+
+### 6.3 跟踪面（你在哪里能看到它的进度）
+
+| 视图 | 命令 | 性质 |
+|---|---|---|
+| **openspec（权威 · 入库）** | `openspec list` / `openspec validate <change>` | ✅ 提案 + 逐字终稿 + 任务 checkbox **都在 git 里** ⇒ 跨会话/跨人可见 |
+| **rddf 面板（本机 · 不入库）** | `rddf status openspec-purpose-placeholders-2026-11` | ✅ `.rddf/state/iteration.json`（`status: proposed` · `tasks 0/23`）⇒ ⚠️ `.rddf/state/` 整个被 `.gitignore` ⇒ **只在本机可见** |
+
+### 6.4 批准门
+
+**T0（`tasks.md`）是硬门**：未经用户显式批准，**不得**执行 T1 及之后任何任务（改主 spec /
+改 AGENTS.md / 落护栏 / 提交）。批准语句 + 日期回填进 `tasks.md` 的 T0 记录区。

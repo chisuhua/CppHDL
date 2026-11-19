@@ -385,3 +385,31 @@
 2. **字符数阈值 ≠ 语义相似度** ⇒ 凡以「共有 N 个字符」为判据者，MUST 先看它会不会被功能词/术语触发。
 
 ⇒ ⇒ **对 §5 其它 AC 的同类体检**：AC-2（长度 + 关键词）、AC-4（diff 范围）、AC-5（路径存在）、AC-6（门绿）、AC-7（簿记）**均为「可机械判定的结构/事实型」** ⇒ 不受本条缺陷影响 ⇒ **无需改**。
+
+### 11.9 ⚠️ 2026-11-19 四次订正：**提案层归位**（improvement → change）
+
+**触发**：用户指出「批 A 应按 planner→builder 流程推进 —— 先在 `.rddf/improvements/` 建改进提案，
+再由改进提案创建 openspec change，最后进入 change 实施」⇒ ⇒ **本人此前的顺序跳过了 planner 这一步**
+（builder 直接写了 openspec change 的 `proposal.md`）。
+
+**核准结果（仓内先例支撑用户的更正）**：
+- `add-improve` skill 自述：「本 skill 创建的是 improvement … **不是 openspec proposal**。
+  **`openspec/changes/<name>/` 由 rdd-builder P0 创建**」⇒ ⇒ **手写 proposal.md 违反增强层工件归属**。
+- 同型先例 `.rddf/improvements/arch-residual-registry-2026-11.md` 的 Status 行：「下一步 = 创建
+  openspec change（★ 按增强层工件归属 ⇒ `proposal.md` 由 `rdd-builder` **P0** 从本草稿生成 ⇒ **不手写**）」。
+- `rdd-builder` 的生成器 `generate_full_proposal.py` 把 improvement 的 5 段映射为 proposal 的
+  `## Why` / `## What Changes` / `## Capabilities` / `## Impact` / `## 验收标准`；且 **AC 数取自
+  improvement 的 `## Acceptance`** ⇒ ⇒ **改进提案层才是 AC 的权威源**（不是 change 的 tasks.md）。
+
+**已执行的归位动作**：
+1. 建 `.rddf/improvements/openspec-purpose-placeholders-2026-11.md`（7 段 + YAML frontmatter）⇒
+   **过 `pre_create_brainstorm_check.sh` HARD-GATE（一次通过）** ⇒ 注册 `improvement-suggestions.md`
+   ⇒ `rddf planner attach` 到 phase-6 / theme「已知功能缺口清零」。
+2. 用 `generate_full_proposal.py`（P0 canonical）**生成** `openspec/changes/<name>/proposal.md`
+   ⇒ **原样采用**（不再手写）⇒ ⇒ 本报告 §6 的 8 段终稿与 §5 的 AC **移入 improvement**（权威源）。
+3. 原手写 proposal 里独有的内容（**无 spec delta 的理由** + **跟踪面** + **派生关系**）⇒ 迁入
+   `design.md` §6（P1 = builder 的产物）⇒ ⇒ **零内容丢失**。
+4. `tasks.md` 的 T0 追加 **T0.4**：「AC 的权威源 = improvement」。
+
+⇒ ⇒ **结论与判据全部不变**（8 段终稿 0 改动 · AC-0…AC-7 不变 · 逐字一致性 8/8 复验通过）⇒
+⇒ 只变**提案层的位置与归属**（现在入库 · 跨人可见 · 符合增强层工件归属）。

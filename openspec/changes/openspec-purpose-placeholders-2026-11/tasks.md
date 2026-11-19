@@ -2,14 +2,21 @@
 
 ## T0 —— 【硬门】用户批准
 
-- [ ] **T0.1** 用户已批准批 A（8 段 Purpose 直改主 spec + AGENTS.md 快照订正 + 护栏）
+> 📌 **批准对象 = 权威提案层** `.rddf/improvements/openspec-purpose-placeholders-2026-11.md`
+> （7 段草稿 · 已过 `pre_create_brainstorm_check.sh` HARD-GATE · 已 `rddf planner attach` 到 phase-6）。
+> 本 change 的 `proposal.md` = 由该 improvement 经 `generate_full_proposal.py`（rdd-builder P0）
+> **生成** ⇒ ⇒ **逐字终稿在 `design.md` §2**（与审查报告 §6 逐字一致）⇒ ⇒ **改字只改那一份**。
+
+- [ ] **T0.1** 用户已批准批 A（8 段 Purpose 直改主 spec + AGENTS.md 快照订正 + 护栏 + 批 B/C 登记）
       - 批准语句（逐字记录）：`<待填>`
       - 批准日期：`<待填>`
       - 批准人：`<待填>`
 - [ ] **T0.2** 用户已阅 `design.md` §2 的 8 段逐字终稿（**禁自由发挥** ⇒ 执行时逐字抄）
 - [ ] **T0.3** 用户已确认 `design.md` §4 的三条风险（R1 散文注水 / R2 把假话写进第一屏 / R3 假绿）
+- [ ] **T0.4** 用户已阅 `.rddf/improvements/openspec-purpose-placeholders-2026-11.md` 的
+      `## Acceptance`（AC-0…AC-10）⇒ ⇒ **AC 的权威源 = improvement**，本 `tasks.md` 是其投影
 
-> ⚠️ **T0 未勾选 ⇒ T1…T9 一律不得执行**（改主 spec / 改 AGENTS.md / 落护栏 / 提交）。
+> ⚠️ **T0 未勾选 ⇒ T1…T19 一律不得执行**（改主 spec / 改 AGENTS.md / 落护栏 / 提交）。
 
 ---
 
