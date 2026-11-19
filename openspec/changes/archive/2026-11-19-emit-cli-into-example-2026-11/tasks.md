@@ -74,8 +74,8 @@ bash scripts/verify_examples_rtl_sim_coverage.sh
 
 # fail-closed（AC12）；在空目录下判，避免 rtl_out/ 旧残留干扰
 t=$(mktemp -d)
-( cd "$t" && /workspace/project/CppHDL/build/examples/axi4/tb_axi4_lite_example --bogus; echo "exit=$?"; ls )
-( cd "$t" && /workspace/project/CppHDL/build/examples/axi4/tb_axi4_lite_example --emit-rtl; echo "exit=$?"; ls )
+( cd "$t" && «本机»/build/examples/axi4/tb_axi4_lite_example --bogus; echo "exit=$?"; ls )
+( cd "$t" && «本机»/build/examples/axi4/tb_axi4_lite_example --emit-rtl; echo "exit=$?"; ls )
 rmdir "$t"
 ```
 

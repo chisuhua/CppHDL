@@ -43,7 +43,7 @@
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 bash scripts/verify_header_odr.sh
 bash scripts/verify_header_odr.sh --self-test
 cmake --build build -j"$(nproc)"

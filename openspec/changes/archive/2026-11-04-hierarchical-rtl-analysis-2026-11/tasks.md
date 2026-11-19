@@ -37,7 +37,7 @@
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j"$(nproc)"
 ctest -LE perf --output-on-failure
 openspec validate hierarchical-rtl-analysis-2026-11 --type change --strict

@@ -204,7 +204,7 @@ fixture 的**自报** ⇒ ⇒ ⇒ 把 fixture 的自报恒置为「好」⇒ ⇒
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 cmake --build build -j"$(nproc)"
 ( cd build && ctest -LE perf --output-on-failure )

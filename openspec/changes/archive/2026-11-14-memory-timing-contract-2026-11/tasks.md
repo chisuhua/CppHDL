@@ -28,7 +28,7 @@
 ⇒ ⇒ 逐条定位 + **手推推导**落 `design.md` §10（**先推后写**）⇒ ⇒ **只改 3 个数**。
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 ctest --test-dir build -N | tail -1
 bash scripts/verify_flat_rtl_emit.sh
 bash scripts/verify_test_counts.sh
@@ -51,7 +51,7 @@ bash scripts/verify_test_counts.sh
       「1 拍延迟」由此**可判别**（退回 `aread` ⇒ ⇒ 第 1 拍即见新值 ⇒ ⇒ **必红**）)
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 bash scripts/verify_flat_rtl_emit.sh
 ```
@@ -105,7 +105,7 @@ bash scripts/verify_flat_rtl_emit.sh
       ⇒ ⇒ 变异：改增量源为 M2 的 valid ⇒ ⇒ `fill` 段 3→4 ⇒ ⇒ `non_retired` 断言必红
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure -R 'rv32i_pipeline|forwarding'
 ```
@@ -127,7 +127,7 @@ ctest --test-dir build --output-on-failure -R 'rv32i_pipeline|forwarding'
       + `docs/CHANGELOG.md` 的一节
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure -R 'rv32i'
 bash scripts/verify_rst_n_wiring.sh
@@ -161,7 +161,7 @@ bash scripts/verify_rst_n_wiring.sh
       的**两条原地投毒**：去掉 `if` 门控 ⇒ W2 红；写口改非寄存 ⇒ W1 红）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure -R 'rv32i'
 ```
@@ -195,7 +195,7 @@ ctest --test-dir build --output-on-failure -R 'rv32i'
       ⇒ ⇒ ⚠️ **若实施后「别的」断言转红 ⇒ ⇒ 那是实现错了** ⇒ ⇒ MUST 逐条查因（**禁**顺手改期望值）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure -R 'rv32i'
 bash scripts/verify_test_counts.sh
@@ -218,7 +218,7 @@ bash scripts/verify_test_counts.sh
   ⇒ ⇒ **2026-11-14**：`.rddf/reviews/memory-timing-contract-t1-t2-verify-2026-11.md`
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 bash scripts/verify_openspec_delta.sh

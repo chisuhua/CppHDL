@@ -54,7 +54,7 @@ CTest 仍然一个都认不出来。修复 = 把 `enable_testing()` 提到所有
 该测试的 2 个 mtip 断言即转绿。
 
 `test_riscv_tests` 的 44 个失败**不是 RTL 分歧**（草稿 §1 的预诊断有误）：
-- **40 个**是 `Failed to load binary: /workspace/project/riscv-tests/build/rv32ui/*.bin`
+- **40 个**是 `Failed to load binary: «本机»/*.bin`
   —— 依赖**仓外** riscv-tests 套件的预编译二进制，硬编码绝对路径，CI 中永不存在；
 - **4 个**是手写用例的**指令编码写错**（实测逐条解码确认）：
   `0x002181B3` 实际是 `add x3, x3, x2`（rs1 应为 x1）、`0x00022023` 实际是 `sw x0, 0(x0)`、

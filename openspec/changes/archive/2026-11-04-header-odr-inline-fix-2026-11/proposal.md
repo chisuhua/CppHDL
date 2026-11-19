@@ -14,7 +14,7 @@ std::string build_hierarchical_name(Component* parent, const std::string& local_
 ### 实测复现（可复算）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 INC="-I include -I include/core -I include/ast -I include/abstract -I include/utils -I external/inipp"
 printf '#include "ch.hpp"\nint a(){return 1;}\n'                     > /tmp/a.cpp
 printf '#include "ch.hpp"\nint a(); int main(){return a()==1?0:1;}\n' > /tmp/b.cpp

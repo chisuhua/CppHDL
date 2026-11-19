@@ -103,7 +103,7 @@
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 # ⚠️ `set -e` ⇒ 中途失败**即红**（否则最后一条命令的退出码会**吃掉**前面的失败）
 # ⚠️ `ctest` MUST 在 **build 目录**里跑（仓库根没有 `CTestTestfile.cmake` ⇒
 #    ctest 会报「No tests were found!!!」⇒ **空跑** ⇒ 判据形同虚设）
@@ -119,7 +119,7 @@ bash scripts/verify_openspec_delta.sh
 ### ① 用户面文档的**合并宏签名面**（任务 1.3）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 # ⚠️ 每条 MUST **显式判定** ⇒ 命中即 `exit 1`（只 `echo` 计数 ⇒ 命中也**恒绿** ⇒ 判据形同虚设）
 # ⚠️ `set -e` ⇒ python 子步骤的 `sys.exit(1)` MUST 传播成**块**失败
@@ -154,7 +154,7 @@ echo '✅ 判据 ① 通过'
 ### ② F8 的 **4 条 grep 清单**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 fail=0
 for pat in '不被 Verilator backend 消费' '两套真值' '待 T3-005' '待 T3-⑤'; do
@@ -172,7 +172,7 @@ echo '✅ 判据 ② 通过'
 ### ③ 文档示例**照抄即过**（任务 3.1）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 TMP=$(mktemp -d /tmp/opencode/docex.XXXXXX)
 python3 - docs/usage_guide/05-component-design.md > "$TMP/example.cpp" <<'PY'
@@ -198,7 +198,7 @@ rm -rf "$TMP"
 ### ④ 示例用到的**框架 API MUST 存在于仓内已编译的源**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 fail=0
 for api in CH_HIERARCHY_LAYER ch_layer ch_inline toVerilogHierarchical HierarchyEmitResult; do
@@ -216,7 +216,7 @@ echo '✅ 判据 ④ 通过'
 ### ⑤ 本次改写段落内的 `file:line` 引用 MUST 指向**非空行**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 python3 - <<'PY'
 import os, re, sys

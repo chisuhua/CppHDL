@@ -86,8 +86,8 @@ bash scripts/verify_examples_rtl_sim.sh --self-test
 ./run_all_ported_tests.sh
 
 # CWD 无关（四 CWD；空目录用 mktemp）
-for d in . build build/tests; do ( cd "$d" && /workspace/project/CppHDL/build/examples/axi4/tb_axi4_lite_example | tail -1 ); done
-t=$(mktemp -d); ( cd "$t" && /workspace/project/CppHDL/build/examples/axi4/tb_axi4_lite_example | tail -1; find . -type f | wc -l ); rmdir "$t"
+for d in . build build/tests; do ( cd "$d" && «本机»/build/examples/axi4/tb_axi4_lite_example | tail -1 ); done
+t=$(mktemp -d); ( cd "$t" && «本机»/build/examples/axi4/tb_axi4_lite_example | tail -1; find . -type f | wc -l ); rmdir "$t"
 ```
 
 ## ⚠️ 未做 / 本次不做

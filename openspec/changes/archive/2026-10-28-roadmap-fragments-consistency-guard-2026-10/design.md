@@ -106,7 +106,7 @@
 cp AGENTS.md /tmp/AGENTS_oracle.md
 PROJECT_ROOT="$PWD" MODE=update-agent-md \
   AGENTS_MD_PATH=/tmp/AGENTS_oracle.md FRAGMENTS_DIR="$PWD/.rddf/roadmap" \
-  python3 /workspace/main/rdd-workflow/_lib/roadmap_state_wrapper.py
+  python3 «本机»
 # 再把工具输出与护栏的渲染结果逐字比对
 ```
 

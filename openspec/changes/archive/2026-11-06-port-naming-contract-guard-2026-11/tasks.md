@@ -256,7 +256,7 @@ N1（只查根）不红 ⇒ ⇒ 且 N2a 只要求「≥1」⇒ ⇒ 整体仍绿�
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 
 # ── 护栏本体 ──

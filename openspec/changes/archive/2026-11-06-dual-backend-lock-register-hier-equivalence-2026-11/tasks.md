@@ -19,7 +19,7 @@
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 bash scripts/verify_dual_backend_parity.sh
 bash scripts/verify_test_counts.sh
 openspec validate --specs --strict

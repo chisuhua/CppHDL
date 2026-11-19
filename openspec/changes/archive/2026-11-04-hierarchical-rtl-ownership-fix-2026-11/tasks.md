@@ -50,7 +50,7 @@
 ## 验证命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j"$(nproc)"
 ctest -LE perf --output-on-failure
 bash scripts/run_all_samples.sh

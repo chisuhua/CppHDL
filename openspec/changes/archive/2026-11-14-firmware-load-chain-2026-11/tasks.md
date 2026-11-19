@@ -16,7 +16,7 @@
       ⇒ ⇒ **2026-11-14 已完成**（提交 `2e8b529` / `a2f5075` 后工作区干净）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 ctest --test-dir build -N | tail -1
 grep -rn 'has_store(t, 0x' tests/ | wc -l
 bash scripts/verify_test_counts.sh
@@ -54,7 +54,7 @@ bash scripts/verify_test_counts.sh
       ⇒ ⇒ ⚠️ 若将来改成**绝对地址**（如 `0x8001_0100`）⇒ ⇒ 这条**重新生效** ⇒ ⇒ 必须逐条登记
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 bash scripts/verify_port_naming.sh
 ```
@@ -77,7 +77,7 @@ bash scripts/verify_port_naming.sh
 - [x] 公开面登记：`docs/CHANGELOG.md`（**新增**可选构造参数 ⇒ 非破坏性）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) --target emit_rtl_rv32i_soc emit_rtl_rv32i_soc_fw_init
 bash scripts/verify_rv32i_fw_init_rtl.sh
 bash scripts/verify_rv32i_fw_init_rtl.sh --self-test
@@ -98,7 +98,7 @@ bash scripts/verify_port_naming.sh
       ⇒ ⇒ `rv32i_mem_map.h` ← SoC 顶层 + `address_decoder.h` + `if_stage.h` + 转储器工具
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure -R 'rv32i|firmware|encoder'
 bash scripts/verify_header_self_contained.sh
@@ -114,7 +114,7 @@ bash scripts/verify_header_self_contained.sh
       ⇒ ⇒ **2026-11-14 已实施** + **有护栏**（`scripts/verify_rv32i_fw_dump.sh` 的 **D6**，`ldd` 实测）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build --target rv32i-fw-dump -j$(nproc)
 bash scripts/verify_example_test_wiring.sh
 ```
@@ -135,7 +135,7 @@ bash scripts/verify_example_test_wiring.sh
       ⇒ ⇒ 落点 = 本 change 的「已知边界」+ 未来工具
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build --target rv32i-fw-dump -j$(nproc)
 ctest --test-dir build --output-on-failure -R 'firmware|elf'
 ```
@@ -159,7 +159,7 @@ ctest --test-dir build --output-on-failure -R 'firmware|elf'
       ⇒ ⇒ + `.rddf/reviews/firmware-load-chain-l2-a-verify-2026-11.md`（L2 路线 A / L6）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 bash scripts/verify_openspec_delta.sh
