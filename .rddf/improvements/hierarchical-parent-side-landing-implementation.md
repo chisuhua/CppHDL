@@ -7,7 +7,7 @@ type: feature
 状态: implemented
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）
 依赖: ADR-066, ADR-060, ADR-062
-来源: ADR-066（Accepted 2026-11-08）· 台账 §7 行 16 + 行 19 · 裁定输入文档 docs/architecture/2026-11-08-hierarchical-parent-side-landing.md
+来源: ADR-066（Accepted 2026-11-08）· 台账 §7 行 16 + 行 19 · 裁定输入文档 docs/archive/architecture-history/2026-11-08-hierarchical-parent-side-landing.md
 生成时间: 2026-11-08
 evidence: test:tests/test_hierarchy_verilog.cpp
 ---

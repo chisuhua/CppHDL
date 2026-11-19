@@ -7,9 +7,9 @@ type: chore
 状态: draft
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）
 依赖: ADR-060, ADR-062
-来源: 台账 §7 残留 16 + 裁定输入文档 docs/architecture/2026-11-08-hierarchical-parent-side-landing.md
+来源: 台账 §7 残留 16 + 裁定输入文档 docs/archive/architecture-history/2026-11-08-hierarchical-parent-side-landing.md
 生成时间: 2026-11-08
-evidence: probe:docs/architecture/2026-11-08-hierarchical-parent-side-landing.md#2
+evidence: probe:docs/archive/architecture-history/2026-11-08-hierarchical-parent-side-landing.md#2
 ---
 
 # Improvement: 父侧落点形态矩阵的轴缺口补齐（族 ①/③ 的现状基线）
@@ -25,7 +25,7 @@ evidence: probe:docs/architecture/2026-11-08-hierarchical-parent-side-landing.md
 ## 架构依据
 
 层次化 RTL 输出的「父层消费子 `ch_out`」有**四族形态**（分类与实测见
-`docs/architecture/2026-11-08-hierarchical-parent-side-landing.md` §2.2）：
+`docs/archive/architecture-history/2026-11-08-hierarchical-parent-side-landing.md` §2.2）：
 
 | 族 | 方向 | 消费点 / 父表达式 | 现状 | 既有仓内覆盖 |
 |---|---|---|---|---|

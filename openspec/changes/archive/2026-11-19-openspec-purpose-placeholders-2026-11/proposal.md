@@ -112,6 +112,19 @@
   ⇒ P2 实施 ⇒ P3 归档 ⇒ 归档后 `verilator-error-flow` / `verilator-hier-input` /
   `verilator-reg-init` / `build-cpp-standard` 4 个 spec 的 strict 红项**翻绿**
 
+## 用户可见变更
+
+> ⚠️ **本段是 2026-11-20 补写的**（归档时遗漏 ⇒ `scripts/verify_public_api_visibility.sh`
+> 的 **R1**（归档 change MUST 带「## 用户可见变更」段 · 机制生效日 2026-11-09）报红
+> ⇒ ⇒ 补的是**归档流程的产物要求**，不改动本 change 的任何决策与实施内容）。
+
+| 项 | 前 | 后 |
+|---|---|---|
+| 8 个 capability 的 `## Purpose` 段 | `TBD - created by archiving change <name>. Update Purpose after archive.`（CLI 归档时写的骨架） | **逐字终稿**（实质描述）· 涉及 `build-cpp-standard` · `jit-llvm-compat-tests` · `rv32i-privilege` · `verilator-backend-e2e` · `verilator-e2e-coverage` · `verilator-error-flow` · `verilator-hier-input` · `verilator-reg-init` |
+| 根 `AGENTS.md`「OPENSPEC WORKFLOW」段 | strict 快照写作 `21 passed / 23 failed (44 items)` | 订正为**实测** `23/28/51` · 并补一行「`## Purpose` 无 change 通道 ⇒ **归档后手工写**」（引用 `ADR-072` §6 ⑨ + commit `1952ba5`） |
+| CI 步骤 | 无 Purpose 判据 | **新增 2 步**：`scripts/verify_openspec_purpose.sh` + `--self-test`（占位符 0 个 · 与登记表**双向**集合校验 · fail-closed） |
+| 规范债的可见性 | 19 条过期 / 矛盾 Requirement + 7 条范围外观察**散落**在 spec 正文 | 登记进 `.rddf/checks/openspec-spec-debt.tsv`（逐条带 **owner + 触发条件**）⇒ ⇒ 「规范债」成为**可查的账**而非隐形负担 |
+
 ## Acceptance
 
 > ⚠️ **AC-0 是否决性条款**：**不得**以仓级 strict totals 当判据 ⇒ 补完 8 段 Purpose 后
