@@ -1,7 +1,13 @@
 # verilator-error-flow Specification
 
 ## Purpose
-TBD - created by archiving change verilator-std-expected. Update Purpose after archive.
+
+定义 **Verilator 后端失败时的错误传递契约** —— 后端的每一个失败点 MUST 以**结构化错误**（机器可判的错误码 + 人类可读消息 + 源码位置）返回给调用方，而不是以布尔值 + 散落的日志存在。
+
+- **覆盖**：① **错误类型契约**（错误码变体集合 + 消息 + 源码位置三元组）⇒ ⇒ ② **失败点覆盖面**（后端的**全部**失败路径 MUST 走同一条结构化通道，MUST NOT 有「某个失败点只返回 false 而不携带原因」的漏网）⇒ ⇒ ③ **向后兼容**（公共初始化入口仍返回布尔 ⇒ ⇒ 旧调用点 MUST NOT 被迫改写）⇒ ⇒ ④ **风险可追溯**（错误码与已登记风险项的对应关系 MUST 可见；**不**对应任何已登记风险的错误码 MUST 显式标注「无对应风险」）。
+- **为什么存在**：后端失败在流水线里最常见的形态是「初始化返回 false ⇒ 测试 SKIP ⇒ 全绿」⇒ ⇒ 失败原因一旦不可见，**真实故障会被伪装成「环境不支持」** ⇒ ⇒ 错误码 MUST 可被断言。
+- **边界**：本 capability **只管「失败怎么被报告」**；**不**规定「失败之后该怎么办」（重试策略 / 是否致命 ⇒ 属调用方）⇒ **不**管辖 Verilator 工具链自身的诊断输出。
+
 ## Requirements
 ### Requirement: VerilatorError 类型契约
 `VerilatorBackend` 失败时 **MUST** 返回 `std::expected<void, VerilatorError>`，其中 `VerilatorError` **SHALL** 包含三个字段：`VerilatorErrorCode code`（枚举 8 个变体）、`std::string message`（人类可读，从原 `CHERROR` 格式字符串迁移）、`std::source_location location`（C++20 特性，自动捕获 file:line:function）。

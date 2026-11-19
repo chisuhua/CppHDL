@@ -474,14 +474,25 @@ ctest --output-on-failure
 bash scripts/rv32i_rtl_sim_env.sh
 ```
 
-> ⚠️ **openspec CLI 版本漂移（实测 2026-11-09：CLI = `1.14.3`）** —— 本仓 `openspec/specs/**` 是按
+> ⚠️ **openspec CLI 版本漂移（实测 2026-11-19：CLI = `1.14.3`）** —— 本仓 `openspec/specs/**` 是按
 > **1.4.1** 的校验规则写就的；CLI **1.14.x** 新增了两条 strict 规则（「Requirement 正文 > 500 字符」
-> 「Purpose 仍是占位符」）⇒ ⇒ **快照（2026-11-09 实测 · 不承诺长期有效）**：
-> `openspec validate --specs --strict` **exit 1** · `Totals: 21 passed, 23 failed (44 items)`
-> ⇒ ⇒ **红项与本仓改动无关**（纯净 HEAD 同样红）⇒ ⇒ 本仓**只登记、不消除**（phase-6 **P10** 的处置
+> 「Purpose 仍是占位符」）⇒ ⇒ **快照（2026-11-19 实测 · 不承诺长期有效）**：
+> `openspec validate --specs --strict` **exit 1** · `Totals: 27 passed, 24 failed (51 items)`
+> ⇒ ⇒ **「Purpose 仍是占位符」这一类已清零**（8 个 capability 于 2026-11-19 补写实质 Purpose ·
+> 权威提案层 = `.rddf/improvements/openspec-purpose-placeholders-2026-11.md` · 载体 change =
+> `openspec/changes/openspec-purpose-placeholders-2026-11/` · 防复发护栏 =
+> `scripts/verify_openspec_purpose.sh`）⇒ ⇒ **剩余 24 条红项 = 「Requirement 正文 > 500 字符」**
+> ⇒ ⇒ 那一类**与本仓改动无关**（纯净 HEAD 同样红）⇒ ⇒ 本仓**只登记、不消除**（phase-6 **P10** 的处置
 > ⇒ ⇒ 环境级「钉回 1.4.1」不可复现且不落仓 ⇒ ⇒ **未采用**）。
 > ⇒ ⇒ 看到 `openspec validate` 报这两类 warning 时，**先确认 CLI 版本**，不要误判为自己改坏了 spec。
-> ⚠️ CI **不跑** `openspec validate`（`.github/workflows/ci.yml` 无此步骤）⇒ 该漂移不阻断合并。
+> ⚠️ **Purpose 的修改通道（2026-11-19 登记）**：openspec 的 delta **不含 `## Purpose`**（CLI 提示原文
+> + 仓内护栏 `scripts/verify_openspec_delta.sh:112`「`## Purpose` 不会被合并 ⇒ 不算违规」双重证实）
+> ⇒ ⇒ **change 流程改不了已存在 capability 的 Purpose** ⇒ ⇒ 该动作走「**归档后手工写**」通道
+> ⇒ ⇒ 先例 = `ADR-072` §6 ⑨ + commit `1952ba5`（T17）⇒ ⇒ 载体 change 用 `.openspec.yaml` 的
+> `skip_specs: true` 声明「no spec changes」（⇒ 归档无需合并 spec ⇒ **零 Requirement 改动**）。
+> ⚠️ CI **不跑** `openspec validate`（`.github/workflows/ci.yml` 无此步骤）⇒ 该漂移不阻断合并；
+> ⇒ ⇒ 但 **Purpose 占位符有独立护栏**（`scripts/verify_openspec_purpose.sh` · **已进 CI**）⇒ ⇒
+> 新建 capability 归档时若又写出占位符 ⇒ ⇒ 护栏转红（**不等 strict 门**）。
 > ⚠️ **archive 前的实际门** = `scripts/verify_openspec_delta.sh`（见 OPENSPEC WORKFLOW 段）。
 
 ## NOTES

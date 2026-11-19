@@ -1,7 +1,13 @@
 # build-cpp-standard Specification
 
 ## Purpose
-TBD - created by archiving change cpp23-standard-upgrade. Update Purpose after archive.
+
+定义 CppHDL 的 **C++ 语言基线**契约 —— 整个仓库（库 / 示例 / 测试 / benchmark）MUST 以 **C++23** 为唯一的 C++ 标准基线，且**不得**由任何子目录单独降级或改写。
+
+- **唯一权威**：根 `CMakeLists.txt` 的 `CMAKE_CXX_STANDARD` / `CMAKE_CXX_STANDARD_REQUIRED` / `CMAKE_CXX_EXTENSIONS` 三元组；子目录 CMakeLists **MUST NOT** 覆写这三项（⇒ ⇒ 覆写即视为违反本 capability）。
+- **为什么存在**：C++ 标准差异会改变**语言语义**（`char8_t` / `auto{x}` / `consteval` 收紧）⇒ ⇒ 同一份源码在不同子目录用不同标准编译 ⇒ ⇒ 「能编过」与「行为一致」不再等价 ⇒ ⇒ 标准基线必须有单点权威。
+- **边界**：本 capability **不**管辖具体特性的可用性（`std::expected` 的平台限制 ⇒ 归 `verilator-error-flow`）⇒ **不**管辖第三方代码（`third_party/**` / `external/**` 保留其自带标准）⇒ **不**管辖「升级到新标准时的破坏点审计」——那是**一次性动作**，其结论保留在归档 change 中。
+
 ## Requirements
 ### Requirement: 项目 baseline C++ standard 为 C++23
 CppHDL 项目 **MUST** 使用 C++23 作为 baseline C++ standard，所有 CMake target、示例、测试、benchmarks 的 `CXX_STANDARD` 属性 **SHALL** 一致设置为 23，`CMAKE_CXX_STANDARD` 全局变量 **SHALL** 为 23，`CXX_STANDARD_REQUIRED` **SHALL** 为 `ON`，`CXX_EXTENSIONS` **SHALL** 为 `OFF`。

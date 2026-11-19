@@ -1,7 +1,12 @@
 # verilator-backend-e2e Specification
 
 ## Purpose
-TBD - created by archiving change adr-035-phase-3-complete. Update Purpose after archive.
+
+定义 **Verilator 后端与 CppHDL 解释器在端到端行为上的对齐契约** —— 同一份设计分别跑解释器与 Verilator 仿真时，两者在**可观测顶层端口**上 MUST 给出一致的结果。
+
+- **覆盖**：① **符号解析**（后端 MUST 真实 `dlopen` 生成的共享库并解析出**全部 7 个**入口符号，缺一 MUST 优雅失败并报出缺失符号名）⇒ ⇒ ② **数据同步**（设计状态与仿真模型之间的双向读写 MUST 是真的读写，不是日志）⇒ ⇒ ③ **时钟模型**（1 cycle MUST 等于 3 次求值调用：组合求值 1 次 + 时钟沿相关求值 2 次）⇒ ⇒ ④ **缓存**（同一份设计的第二次初始化 MUST 命中缓存，MUST NOT 重跑编译子进程）⇒ ⇒ ⑤ **字面量宽度**（生成的 Verilog 字面量 MUST 落在目标 wire 宽度内 ⇒ ⇒ 否则 Verilator 报 `Too many digits` 硬错）⇒ ⇒ ⑥ **输出传播**（组合 `assign` 与 `always_ff` 两条路径的值 MUST 都回到可观测状态）。
+- **为什么存在**：Verilator 后端是**第二条执行路径** ⇒ ⇒ 它与解释器不一致时，缺陷会在「只在 Verilator 跑」的交付面上暴露 ⇒ ⇒ 本 capability 是那条路径的一致性锚点。
+- **边界**：本 capability **只管「两后端一致」**；**不**规定 Verilator 的**具体建模方式**（时钟序列 / 缓存键算法 / 生成命令属实现细节，会随 ADR-035 演进 ⇒ ⇒ 本规范只钉**可观测行为**）⇒ **不**覆盖「覆盖率的充分性」（⇒ 归 `verilator-e2e-coverage`）⇒ **不**覆盖「失败怎么被报告」（⇒ 归 `verilator-error-flow`）。
 
 ## Requirements
 

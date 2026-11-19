@@ -245,6 +245,7 @@
 | O4 | `rv32i-privilege` 改名的长期选项（留到真正覆盖 CSR 指令时再一并改） | 引用面 ≥6 处 | improvement `rv32i-privileged-csr-2026-11` 内决策 |
 | O5 | `AGENTS.md:479-482` 的 strict 快照数字（`21 passed / 23 failed (44 items)`）**已陈旧**（实测 `23/28/51`）⇒ 与本次同 commit 订正 | 实测 | 批 A 的 AC-7 |
 | O6 | `openspec/config.yaml` 的 `rules.specs` 只有 3 条 ⇒ **仓内没有任何「Purpose 该怎么写」的规范** ⇒ ⇒ 建议把写法约定落到 `AGENTS.md`「OPENSPEC WORKFLOW」段（config 的 rules 无执行者 ⇒ 写了也是装饰） | 实测 | 批 A 或批 B |
+| O8 | **`.gitignore:114` 的 `build*/` 撞上 capability 目录名**：`openspec/specs/build-cpp-standard/` **整目录被 ignore** ⇒ ⇒ ① `git add <该目录下任何路径>` 直接报「ignored」（本批实测）⇒ ⇒ 必须 `git add -f`（该文件**已跟踪** ⇒ `-f` 安全）；② **`git add -A` / `git add .` 会静默漏掉该目录**（⇒ 与 AGENTS.md「禁 `git add -A`」的纪律**同型**，但这条纪律救不了「已跟踪文件的修改」被漏掉的情形——实际上 `git add -A` 对**已跟踪**文件仍会 stage ⇒ 风险点仅在**新增**文件） | 实测（2026-11-19 · T16 提交时踩到） | **不在本批改**（改 `build*/` 的 ignore 语义 = 仓级决定 ⇒ 可能放行真 build 产物 ⇒ 须显式批准）；⇒ ⇒ 本批用 `git add -f` 处理并在此登记 |
 
 ---
 

@@ -1,7 +1,13 @@
 # verilator-reg-init Specification
 
 ## Purpose
-TBD - created by archiving change verilator-reset-initial-value-mismatch. Update Purpose after archive.
+
+定义 **Verilator 后端与解释器在寄存器初值上的对齐契约** —— 带非零初值的寄存器，在两个后端上 MUST 从**同一个初值**开始，且**复位**语义 MUST 一致。
+
+- **覆盖**：① **初值对齐**（`ch_reg` 的初值 MUST 经「一次复位脉冲」载入仿真模型 ⇒ ⇒ 否则模型从 0 起、解释器从初值起 ⇒ ⇒ 首个观察点就分叉）⇒ ⇒ ② **复位脉冲的单一实现**（初始化路径与复位路径 MUST 复用同一套脉冲序列 ⇒ ⇒ 两条路径各写一遍是漂移的来源）⇒ ⇒ ③ **字面量宽度**（复位分支的字面量 MUST 按寄存器宽度归一 ⇒ ⇒ 否则窄宽字面量会让复位值随字面量写法漂移）⇒ ⇒ ④ **幂等**（重复初始化 MUST NOT 产生累积副作用）。
+- **为什么存在**：初值分叉是**静默**的 —— 首个差异往往出现在「初值非零的设计」上，而这类设计在测试里通常不占多数 ⇒ ⇒ 不钉住就会在集成期才暴露。
+- **边界**：本 capability **只管「寄存器初值 / 复位」这一条对齐**；**不**管辖「复位后的功能行为」（⇒ 归各组件自己的 capability）⇒ **不**管辖「复位信号本身的产生方」（⇒ 归 SoC / 组件层）。
+
 ## Requirements
 ### Requirement: VerilatorBackend MUST 脉冲 default_reset 在 initialize 完成时
 

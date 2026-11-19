@@ -46,8 +46,6 @@ evidence: probe:scripts/verify_guard_reachability.sh
 
 ## 护栏清单（**由 `scripts/verify_guard_reachability.sh --render` 生成** ⇒ ⇒ 禁手改）
 
-── R0：必需文件齐备（fail-closed）
-  [0;32m✅ R0 派生器 + CI 配置 + 登记表 齐备[0m
 | 脚本 | 调用入口 | 排除类型 | 最近一次 executed+绿 |
 |---|---|---|---|
 | `run_all_ported_tests.sh` | `examples-runtime:Run examples runtime guard` | `none` | — |
@@ -61,19 +59,16 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_conditional_assign_integrity.sh` | `build-and-test:Verify conditional_assign integrity`, `build-and-test:Verify conditional_assign integrity (self-test)` | `none` | — |
 | `scripts/verify_deprecation_calendar_gate.sh` | `build-and-test:Verify deprecation calendar gate`, `build-and-test:Verify deprecation calendar gate (self-test)` | `none` | — |
 | `scripts/verify_deprecation_callsites.sh` | `build-and-test:Verify deprecation callsites (0 new call sites)`, `build-and-test:Verify deprecation callsites (self-test)` | `none` | — |
+| `scripts/verify_docs_links.sh` | `build-and-test:Verify docs links (L1 nav + file:line refs + machine-local paths)`, `build-and-test:Verify docs links (self-test)` | `none` | — |
 | `scripts/verify_downstream_consumer.sh` | `build-and-test:Verify downstream consumer (installed artifact)`, `build-and-test:Verify downstream consumer (self-test)` | `none` | — |
+| `scripts/verify_dtcm_read_timing.sh` | `build-and-test:Verify D-TCM read/write port timing structure (T4)`, `build-and-test:Verify D-TCM read/write port timing structure (T4)` | `none` | — |
 | `scripts/verify_dual_backend_parity.sh` | `build-and-test:Verify dual-backend parity coverage count`, `build-and-test:Verify dual-backend parity guard self-test`, `pr-verilator-fast:Verify dual-backend parity coverage count`, `pr-verilator-fast:Verify dual-backend parity guard self-test` | `none` | — |
 | `scripts/verify_example_assertion_quality.sh` | `build-and-test:Verify example assertion quality`, `pr-verilator-fast:Verify example assertion quality` | `none` | — |
-| `scripts/verify_docs_links.sh` | `build-and-test:Verify docs links (L1 nav + file:line refs + machine-local paths)`, `build-and-test:Verify docs links (self-test)` | `none` | — |
 | `scripts/verify_example_only_headers.sh` | `build-and-test:Verify example-only headers stay out of include/`, `build-and-test:Verify example-only headers guard self-test` | `none` | — |
 | `scripts/verify_example_test_wiring.sh` | `build-and-test:Verify example test wiring`, `pr-verilator-fast:Verify example test wiring` | `none` | — |
 | `scripts/verify_examples_rtl_sim.sh` | `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB)`, `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB) self-test` | `gate-event-only` | — |
 | `scripts/verify_examples_rtl_sim_coverage.sh` | `build-and-test:Verify examples RTL sim coverage registration`, `build-and-test:Verify examples RTL sim coverage registration (self-test)` | `none` | — |
-| `scripts/verify_verilator_pch.sh` | `pr-verilator-fast:Verify verilator PCH toolchain (split-capable models)`, `pr-verilator-fast:Verify verilator PCH toolchain (self-test)` | `gate-event-only` | — |
 | `scripts/verify_flat_rtl_emit.sh` | `build-and-test:Verify flat RTL emit products`, `build-and-test:Verify flat RTL emit products (self-test)`, `pr-verilator-fast:Verify flat RTL emit products (verilator required)`, `pr-verilator-fast:Verify flat RTL emit products (self-test)`, `nightly-verilator:Verify flat RTL emit products (verilator required)`, `nightly-verilator:Verify flat RTL emit products (self-test)` | `gate-event-only` | — |
-| `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)` | `none` | — |
-| `scripts/verify_rv32i_fw_init_rtl.sh` | `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)` | `none` | — |
-| `scripts/verify_dtcm_read_timing.sh` | `build-and-test:Verify D-TCM read/write port timing structure (T4)` | `none` | — |
 | `scripts/verify_fsm_next_wiring.sh` | `build-and-test:Verify FSM next-state wiring`, `build-and-test:Verify FSM next-state wiring (self-test)`, `pr-verilator-fast:Verify FSM next-state wiring`, `pr-verilator-fast:Verify FSM next-state wiring (self-test)` | `none` | — |
 | `scripts/verify_get_lnode_entry_set.sh` | `build-and-test:Verify get_lnode entry set`, `build-and-test:Verify get_lnode entry set (self-test)` | `none` | — |
 | `scripts/verify_guard_reachability.sh` | `build-and-test:Verify guard reachability`, `build-and-test:Verify guard reachability (self-test)` | `none` | — |
@@ -94,11 +89,16 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_no_duplicate_rv32i_headers.sh` | `build-and-test:Verify RV32I single-source convergence`, `build-and-test:Verify RV32I single-source convergence (self-test)`, `pr-verilator-fast:Verify RV32I single-source convergence`, `pr-verilator-fast:Verify RV32I single-source convergence (self-test)` | `none` | — |
 | `scripts/verify_node_names_single_source.sh` | `build-and-test:Verify node-names single source (R1–R3)`, `build-and-test:Verify node-names single source guard self-test` | `none` | — |
 | `scripts/verify_openspec_delta.sh` | `build-and-test:Verify OpenSpec delta self-check`, `pr-verilator-fast:Verify OpenSpec delta self-check` | `none` | — |
+| `scripts/verify_openspec_purpose.sh` | `build-and-test:Verify openspec purpose placeholders (spec debt registry)`, `build-and-test:Verify openspec purpose placeholders (self-test)` | `none` | — |
 | `scripts/verify_perf_baseline_anchors.sh` | `build-and-test:Verify perf baseline anchor conservation`, `build-and-test:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation` | `none` | — |
 | `scripts/verify_port_naming.sh` | `build-and-test:Verify port naming ratchet`, `build-and-test:Verify port naming ratchet (self-test)` | `none` | — |
 | `scripts/verify_public_api_visibility.sh` | `build-and-test:Verify public API removal visibility (issue`, `build-and-test:Verify public API removal visibility (self-test)` | `none` | — |
 | `scripts/verify_roadmap_fragments.sh` | `build-and-test:Verify roadmap fragments consistency`, `build-and-test:Verify roadmap fragments consistency (self-test)`, `pr-verilator-fast:Verify roadmap fragments consistency`, `pr-verilator-fast:Verify roadmap fragments consistency (self-test)` | `none` | — |
 | `scripts/verify_rst_n_wiring.sh` | `build-and-test:Verify rst_n wiring`, `pr-verilator-fast:Verify rst_n wiring` | `none` | — |
+| `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)` | `none` | — |
+| `scripts/verify_rv32i_fw_init_rtl.sh` | `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)`, `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)` | `none` | — |
 | `scripts/verify_stream_domain_closure.sh` | `build-and-test:Verify stream domain closure checklist`, `build-and-test:Verify stream domain closure checklist (self-test)` | `none` | — |
 | `scripts/verify_stream_ready_ownership.sh` | `build-and-test:Verify stream ready ownership`, `build-and-test:Verify stream ready ownership (self-test)` | `none` | — |
 | `scripts/verify_test_counts.sh` | `build-and-test:Verify AGENTS.md test counts`, `pr-verilator-fast:Verify AGENTS.md test counts` | `none` | — |
+| `scripts/verify_verilator_pch.sh` | `pr-verilator-fast:Verify verilator PCH toolchain (split-capable models)`, `pr-verilator-fast:Verify verilator PCH toolchain (self-test)` | `gate-event-only` | — |
+

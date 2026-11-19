@@ -7,13 +7,13 @@
 > 本 change 的 `proposal.md` = 由该 improvement 经 `generate_full_proposal.py`（rdd-builder P0）
 > **生成** ⇒ ⇒ **逐字终稿在 `design.md` §2**（与审查报告 §6 逐字一致）⇒ ⇒ **改字只改那一份**。
 
-- [ ] **T0.1** 用户已批准批 A（8 段 Purpose 直改主 spec + AGENTS.md 快照订正 + 护栏 + 批 B/C 登记）
-      - 批准语句（逐字记录）：`<待填>`
-      - 批准日期：`<待填>`
-      - 批准人：`<待填>`
-- [ ] **T0.2** 用户已阅 `design.md` §2 的 8 段逐字终稿（**禁自由发挥** ⇒ 执行时逐字抄）
-- [ ] **T0.3** 用户已确认 `design.md` §4 的三条风险（R1 散文注水 / R2 把假话写进第一屏 / R3 假绿）
-- [ ] **T0.4** 用户已阅 `.rddf/improvements/openspec-purpose-placeholders-2026-11.md` 的
+- [x] **T0.1** 用户已批准批 A（8 段 Purpose 直改主 spec + AGENTS.md 快照订正 + 护栏 + 批 B/C 登记）
+      - 批准语句（逐字记录）：`批准，请实施`
+      - 批准日期：`2026-11-19`
+      - 批准人：`用户`
+- [x] **T0.2** 用户已阅 `design.md` §2 的 8 段逐字终稿（**禁自由发挥** ⇒ 执行时逐字抄）
+- [x] **T0.3** 用户已确认 `design.md` §4 的三条风险（R1 散文注水 / R2 把假话写进第一屏 / R3 假绿）
+- [x] **T0.4** 用户已阅 `.rddf/improvements/openspec-purpose-placeholders-2026-11.md` 的
       `## Acceptance`（AC-0…AC-10）⇒ ⇒ **AC 的权威源 = improvement**，本 `tasks.md` 是其投影
 
 > ⚠️ **T0 未勾选 ⇒ T1…T19 一律不得执行**（改主 spec / 改 AGENTS.md / 落护栏 / 提交）。
@@ -22,32 +22,32 @@
 
 ## 批 A —— 8 段 Purpose（**零 Requirement 改动**）
 
-- [ ] **T1** 前置检查：`git status` 干净；`openspec list` ⇒「No active changes found.」（**权威口径**：
+- [x] **T1** 前置检查：`git status` 干净；`openspec list` ⇒「No active changes found.」（**权威口径**：
       `openspec/changes/` 下只有 `archive/` ⇒ 零 active change ⇒ 无并发归档冲突）
-- [ ] **T1.1** **机械预检**：对 `design.md` §2 的 8 段跑 AC-2 / AC-3′ / AC-5 ⇒ 8/8 全绿
+- [x] **T1.1** **机械预检**：对 `design.md` §2 的 8 段跑 AC-2 / AC-3′ / AC-5 ⇒ 8/8 全绿
       （预检脚本落地位置 = `scripts/verify_openspec_purpose.sh` 的前身；2026-11-19 已实跑全绿 ⇒
       脚本随 T12 一起入库）
-- [ ] **T2** 逐字写入 `build-cpp-standard` 的 `## Purpose`（文本 = `design.md` §2.1）
-- [ ] **T3** 逐字写入 `jit-llvm-compat-tests`（§2.2）
-- [ ] **T4** 逐字写入 `rv32i-privilege`（§2.3）
-- [ ] **T5** 逐字写入 `verilator-hier-input`（§2.4）
-- [ ] **T6** 逐字写入 `verilator-error-flow`（§2.5）
-- [ ] **T7** 逐字写入 `verilator-backend-e2e`（§2.6）
-- [ ] **T8** 逐字写入 `verilator-e2e-coverage`（§2.7）
-- [ ] **T9** 逐字写入 `verilator-reg-init`（§2.8）
+- [x] **T2** 逐字写入 `build-cpp-standard` 的 `## Purpose`（文本 = `design.md` §2.1）
+- [x] **T3** 逐字写入 `jit-llvm-compat-tests`（§2.2）
+- [x] **T4** 逐字写入 `rv32i-privilege`（§2.3）
+- [x] **T5** 逐字写入 `verilator-hier-input`（§2.4）
+- [x] **T6** 逐字写入 `verilator-error-flow`（§2.5）
+- [x] **T7** 逐字写入 `verilator-backend-e2e`（§2.6）
+- [x] **T8** 逐字写入 `verilator-e2e-coverage`（§2.7）
+- [x] **T9** 逐字写入 `verilator-reg-init`（§2.8）
       （建议顺序 = 热身优先：`verilator-reg-init` → `build-cpp-standard` → `rv32i-privilege`
       → `verilator-hier-input` → `verilator-error-flow` → `verilator-backend-e2e`
       → `verilator-e2e-coverage` → `jit-llvm-compat-tests`）
-- [ ] **T10** 根 `AGENTS.md`「OPENSPEC WORKFLOW」段：① strict 快照订正
+- [x] **T10** 根 `AGENTS.md`「OPENSPEC WORKFLOW」段：① strict 快照订正
       （`21 passed / 23 failed (44 items)` → 实测 `23/28/51`）② 补一行通道说明
       （「Purpose 无 change 通道 ⇒ 归档后手工写」⇒ 引用 ADR-072 §6 ⑨ + commit `1952ba5`）
 
 ## 护栏（防复发：新建 capability 归档时 CLI 会再写占位符）
 
-- [ ] **T11** `.rddf/checks/openspec-purpose-placeholders.tsv`（登记表：`capability` / `owner` /
+- [x] **T11** `.rddf/checks/openspec-purpose-placeholders.tsv`（登记表：`capability` / `owner` /
       `why_open` / `source_change`）—— 批 A 完成后**应为空集**（8 条全部清零 ⇒ 登记表留表头 + 0 行）
       ⚠️ 登记表**不得**删掉（它是**双向校验的另一半**；删掉 ⇒ 护栏失去对照面）
-- [ ] **T12** `scripts/verify_openspec_purpose.sh`（照 `scripts/verify_docs_links.sh` 四件套抄：
+- [x] **T12** `scripts/verify_openspec_purpose.sh`（照 `scripts/verify_docs_links.sh` 四件套抄：
       薄壳 + 登记表 + 逻辑载体 + `--self-test`）
       - **R1 双向**：`grep -l "^TBD - created by archiving" openspec/specs/*/spec.md` 的集合
         **==** 登记表行集合（**双向**，不是单向）
@@ -56,14 +56,14 @@
         capability ⇒ 必红）
       - **R4** fail-closed（脚本缺失 / 0 行 ⇒ exit 2，**禁恒 0**）
       - ⚠️ **不要**做「全仓零 TBD」的单向判据（下次归档时它会自己转红）
-- [ ] **T13** T12 接进 CI（`build-and-test` 的 guard 段，照 `verify_docs_links.sh` 的接法）
-- [ ] **T14** 护栏自检：`bash scripts/verify_openspec_purpose.sh` ⇒ PASS；
+- [x] **T13** T12 接进 CI（`build-and-test` 的 guard 段，照 `verify_docs_links.sh` 的接法）
+- [x] **T14** 护栏自检：`bash scripts/verify_openspec_purpose.sh` ⇒ PASS；
       `bash scripts/verify_openspec_purpose.sh --self-test` ⇒ PASS
 
 ## 收口
 
-- [ ] **T15** 验收判据全过（见下 AC-0…AC-7）
-- [ ] **T16** 单 commit 落库（**按路径显式 `git add`**，禁 `git add -A`；仓内多人/多会话并行）
+- [x] **T15** 验收判据全过（见下 AC-0…AC-7）
+- [x] **T16** 单 commit 落库（**按路径显式 `git add`**，禁 `git add -A`；仓内多人/多会话并行）
       ⇒ commit message 逐条列出「改了哪 8 个 capability 的 Purpose + AGENTS.md 哪一段 + 护栏」
 
 ---
@@ -114,8 +114,14 @@
 
 ## 批 C —— 登记（不在本批修）
 
-- [ ] **T17** 把批 B 的 17 条 + 审查报告 §8 的 O1–O7 登记进 `.rddf/checks/` 既有残留登记表
+- [x] **T17** 把批 B 的 17 条 + 审查报告 §8 的 O1–O7 登记进 `.rddf/checks/` 既有残留登记表
       （照 `ledger-residual-registry` 的双向校验范式）⇒ **每条有 owner + 触发条件**
-- [ ] **T18** O7（根 `AGENTS.md` 家族被链接护栏显式排除 ⇒ 本次 `05→02` 路径修正是人工做的）
+- [x] **T18** O7（根 `AGENTS.md` 家族被链接护栏显式排除 ⇒ 本次 `05→02` 路径修正是人工做的）
       ⇒ 登记「根 AGENTS.md 路径引用无护栏覆盖」
 - [ ] **T19** VCD 实现缺口（批 B #7 的实现侧）单独立项
+      > ⚠️ **本批不做（须用户先裁决）**：「补不补这个实现」是**产品裁决**（不是文案问题）
+      > ⇒ ⇒ 且「新建 improvement」走 `add-improve` skill ⇒ ⇒ 其 **HARD-GATE** 要求
+      > **用户先批准该设计**才允许写文件 ⇒ ⇒ 本 agent **不替用户拍板、也不伪造立项**。
+      > ⇒ ⇒ 已登记为待裁决项：登记表 `D04`（规范侧改写）+ `O3`（实现缺口）
+      > ⇒ ⇒ owner = `architect` · trigger = 「用户裁决是否立项」。
+      > ⇒ ⇒ 用户点头后 ⇒ 走 `add-improve` ⇒ 再建 change ⇒ 再实施。

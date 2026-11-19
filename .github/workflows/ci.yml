@@ -378,6 +378,22 @@ jobs:
       shell: bash
       run: scripts/verify_docs_links.sh --self-test
 
+    - name: Verify openspec purpose placeholders (spec debt registry)
+      # 判据来源 = .rddf/checks/openspec-spec-debt.tsv（登记表 · 唯一真相）
+      #   R1 占位符 capability 集合 ⟷ 登记表 kind=placeholder 行（**双向**）
+      #   R2 每条债行有 owner；open 行有 trigger；location 的文件/行号存在；capability 目录存在
+      #   R3 id 唯一 + 必填列非空 + status ∈ {open, closed}
+      # WHY: `openspec validate --specs --strict` 有「Purpose 仍是占位符」规则，但 **CI 不跑它**
+      #   => 新建 capability 归档时若又写出占位符，无人知晓；本护栏独立于 CLI 措辞。
+      shell: bash
+      run: scripts/verify_openspec_purpose.sh
+
+    - name: Verify openspec purpose placeholders (self-test)
+      # 4 类投毒各自必红：R1 实质 Purpose 被换回占位符 / R2 登记不存在的 capability /
+      #   R2 open 债缺 trigger / R3 登记表 id 重复 => 证明判据不是恒绿。
+      shell: bash
+      run: scripts/verify_openspec_purpose.sh --self-test
+
     - name: Verify arch ledger residual registry
       # The architecture ledger's section 7 "known residuals" statuses MUST have
       # a SINGLE source of truth (the registry .rddf/checks/arch-residual-registry.md)

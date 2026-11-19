@@ -1,7 +1,13 @@
 # jit-llvm-compat-tests Specification
 
 ## Purpose
-TBD - created by archiving change 2026-09-20-add-jit-llvm-compat-tests. Update Purpose after archive.
+
+定义 CppHDL **JIT 后端与 LLVM 版本之间的兼容性红线**契约 —— 仓库必须携带一组**可判定的版本探测测试**，使「换一个 LLVM 大版本会不会静默把 JIT 打坏」这件事在构建矩阵里**可见**，而不是等到某个设计跑不出结果时才发现。
+
+- **覆盖**：① **版本区间判定**（当前受测区间 = LLVM 17–22）⇒ ⇒ 区间内 JIT **MUST** 可用；区间外 **MUST** 显式 SUCCEED 并**报出版本号**（⇒ ⇒ 「未来版本需要显式 opt-in」而不是「静默失败」）；② **构造期不崩**（构造 + 可用性报告）；③ **关闭 JIT 的构建矩阵不受影响**（该配置下这些测试 **MUST NOT** 链接 JIT 实现）。
+- **为什么存在**：LLVM 的 C 风格 `LLVMInitializeNative*` 家族在大版本间被移除 ⇒ ⇒ 故障只在**编译期**暴露 ⇒ ⇒ 需要一个**每次构建都跑**的红线测试，把「编译不过」变成一条明确的红线。
+- **边界**：本 capability **不**管辖 JIT 的**性能**（⇒ 归 perf 基线）⇒ **不**管辖 JIT 的**正确性**（⇒ 归 golden 测试）⇒ **不**规定「JIT 应当支持哪些 LLVM 版本」这个**产品决策**（⇒ 属 roadmap）；只要求「区间判定 + 区间外的显式 opt-in 机制」存在。
+
 ## Requirements
 ### Requirement: LLVM version compatibility red-line test guards JitCompiler initialization
 

@@ -1,7 +1,12 @@
 # verilator-e2e-coverage Specification
 
 ## Purpose
-TBD - created by archiving change strengthen-verilator-e2e-coverage. Update Purpose after archive.
+
+定义 **Verilator 双后端仿真的覆盖面在 CTest 矩阵中可见**的契约 —— 「哪些设计类别被双后端仿真覆盖了」这件事 MUST 在 `ctest -N` 里**一眼可见**，而不是只藏在某个测试文件里。
+
+- **覆盖**：① **类别维度**（trace parity / bundle / stream / memory / 复杂设计（流水线 + FSM）各自 MUST 至少有一组可执行用例）⇒ ⇒ ② **命名维度**（误导性的测试名 MUST 被纠正，且旧名 MUST 保留为 CTest alias 以免打断历史命令）⇒ ⇒ ③ **判据维度**（每条覆盖 MUST 同时有**双后端 parity 断言**与**手推的绝对语义金标** ⇒ ⇒ 两端由**同一份** fixture 生成 ⇒ ⇒ parity 对「同构缺陷」**结构性失明** ⇒ ⇒ 金标不可省）⇒ ⇒ ④ **判别力前提**（字节序方向 MUST 用**非回文**字节 ⇒ ⇒ 回文字节使「位序」这一维度零判别力）。
+- **为什么存在**：覆盖不足在 CI 上是**静默**的（少一个测试，ctest 照样全绿）⇒ ⇒ 必须让「覆盖了什么」成为**可枚举**的矩阵，而不是靠人记。
+- **边界**：本 capability **不**规定「具体覆盖了哪些 DUT」（⇒ 那会立刻过期）⇒ ⇒ 只规定**维度**；**不**管辖「两后端一致性的深度」（⇒ 归 `verilator-backend-e2e`）⇒ **不**管辖环境矩阵本身（平台范围 / CI 拓扑）。
 
 ## Requirements
 

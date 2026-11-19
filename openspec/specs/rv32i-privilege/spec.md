@@ -1,7 +1,13 @@
 # rv32i-privilege Specification
 
 ## Purpose
-TBD - created by archiving change csr-mcause-write-2026-11. Update Purpose after archive.
+
+定义 RV32I **机器级陷阱入口的异常上下文写入**契约 —— 陷阱被接收时，`mepc`（异常指令 PC）与 `mcause`（异常原因码）MUST 以**同一次异常的一对**被写入 CSR 存储体，并且 MUST 可从 CSR 存储体**读回**。
+
+- **为什么存在**：陷阱上下文一旦丢失或**配对错位**（`mcause` 写的是另一次异常的原因码），软件侧就**无法**判定「为何陷入、陷入在哪」⇒ ⇒ 缺陷发生在**硬件层**却**只由软件可见** ⇒ ⇒ 必须在组件级把「写入 + 配对 + 读回」钉死。
+- **覆盖**：写入的**两拍配对**语义（陷阱当拍写 `mepc`、其后一拍写 `mcause`）+ 从 CSR 存储体**读回**的闭环验收 + `exception_valid` 为**电平**时的重复写入行为。
+- **⚠️ 边界（名与实的落差）**：本 capability 名字带 `privilege`，但**只覆盖陷阱入口的异常上下文写入**；**不**覆盖 CSR 指令语义（`csrrw`/`csrrs`/`csrrc`）· `ECALL`/`EBREAK` · `mtval` · `mtvec` 取值语义 · `mstatus` 的陷阱侧更新（`MIE`↔`MPIE`）· `MRET` 的 PC 恢复 · 并发异常的排队语义 ⇒ ⇒ 这些**当前不存在**，属独立立项（登记在 `.rddf/improvements/rv32i-privileged-csr-2026-11.md`）。
+- **接缝**：本 capability **不**改变 `rv32i-isa-semantics` 的「未知 / 未实现 opcode ⇒ 流水线级冻结」条款 ⇒ ⇒ 未来把陷阱入口接进流水线时，**MUST** 以 MODIFIED delta 修订那条冻结条款（触发信号已登记）。
 
 ## Requirements
 
