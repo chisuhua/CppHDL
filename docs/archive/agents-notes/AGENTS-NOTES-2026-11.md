@@ -26,7 +26,7 @@
 
 | 章节 | 内容 |
 |------|------|
-| [2026-11](#2026-11) | 40 条 —— 双后端 parity 路线 A/B/C · ADR-063/064/065 · 层次化 RTL T3-①～④ |
+| [2026-11](#2026-11) | 51 条 —— 双后端 parity 路线 A/B/C · ADR-063/064/065 · 层次化 RTL T3-①～④ · 根 `AGENTS.md` 二次瘦身（2026-11-19）|
 | [2026-10](#2026-10) | 25 条 —— chlib stream/FIFO/FSM 语义收敛 · multi_if 接受面 · AXI4 peripheral · RV32I 单源化 |
 | [杂项](#杂项无日期条目) | 11 条 —— 无日期条目（测试计数口径 / perf 套件说明）|
 | [已消除的过时信息](#已消除的过时信息历史记录) | 曾经有过、后来被消除的过时说法（**不构成当前约束**）|
@@ -1068,6 +1068,101 @@
   ✅ **验收**：`ctest -LE perf` **197/197** · self-test **13/13** · `openspec validate … --strict` **valid** · `verify_openspec_delta.sh` **4 条全绿** · `verify_test_counts.sh` / `verify_dual_backend_parity.sh` 通过 · **计数**：`CTEST_TOTAL` 207 → **208** · `VERILATOR_E2E_TOTAL` 40 → **41** · `DUAL_BACKEND_PARITY_TOTAL` 31 → **32** · `PAIRS` 190 → **192** · non-perf 196 → **197** · `tests/test_*.cpp` 119 → **120**。
   ⚠️ **本 change 不做（各自独立立项）**：`stream_demux` 的 ready 方向（B2，行为变更 ⇒ 需独立 ADR）· `stream_fork` 的真同步语义（B3，从未工作过 ⇒ 等于新功能）· `fwft_fifo` 物理删除（B4）· `sequence` 删除（B5）· 未驱动字段诊断 API（B7）。
   ✅ **归档**（2026-11-01，**未**用 `--skip-specs` ⇒ ADDED ×1 已合并进主 spec：`chlib-stream-ready-ownership` **6 → 7** Requirement / **20 → 28** Scenario）：`openspec/changes/archive/2026-11-01-stream-builder-and-pipe-ready-ownership-2026-11/`。⚠️ archive **不合并** delta 的 `## Purpose` ⇒ 已手写补齐「覆盖面扩展」段（链内中间级 + pipe 族 ⇒ ADR-054 §3.2 第 1 条**不适用**）。
+
+
+### 2026-11-19 · 根 `AGENTS.md` 二次瘦身（本批归档）
+
+> **来源**：2026-11-19 审查根 `AGENTS.md` 时移出的**变更流水**（**逐字**保留）。
+> **触发**：根 `AGENTS.md` = **63,725 B（62 KiB）** ⇒ 超 `scripts/verify_agents_size.sh` 的
+> **WARN** 阈值 56 KiB（基线 45.1 KiB · **+38%**）⇒ CI 每次跑都打 warning；且根文件
+> §NOTES 自身写着「新增 change 的**当前态**影响 MUST 落在上面各段，**MUST NOT** 再往本文件
+> 追加流水条目 —— 本文件是**每次会话都注入上下文**的文件」⇒ ⇒ **现状违反了自己的规则**。
+> **处置**：① 修 **3 处陈旧事实**（load-use 停顿拍数 / dmem 读口口径 / §NOTES 计数表）；
+> ② 合并 **4 处重复**（两条取指条 / 两条 cache 变体条 / 计数表与锚点重复 / 陷阱节归位）；
+> ③ 本批流水归档 ⇒ ⇒ 压回 WARN 阈值内。
+> ⚠️ 移出时的**口径变更**（不是「丢信息」）：
+> · **load-use 停顿拍数** ⇒ 由「写 3 拍」改为「**只留 capability 指针**」⇒ ⇒ 数字的唯一
+>   权威 = capability `rv32i-data-forwarding`（ADR-069 决策 A0）⇒ 与根文件既有的
+>   「距离矩阵的唯一权威」规则**同型**。
+> · **dmem 读口** ⇒ 由「dmem MUST use `aread`（0-cycle）」改为「D-TCM 读口 = **固定 1 拍
+>   `sread`**（ADR-069 决策 A0）⇒ 仅**字节写 RMW** 与**寄存器堆**仍是 `aread`」。
+> · **§NOTES 计数表** ⇒ 删掉与 CI 锚点**重复**的 4 行（两份真值必然漂）⇒ 只留**非锚点**
+>   指标；锚点行是 CI 解析的**唯一真相**。
+> · **仿真时序陷阱 T2 / T5 / T6** ⇒ 由「VERILATOR BACKEND RULES」节**移到**「CONVENTIONS」
+>   节（紧随 `Mem read port` 条）⇒ ⇒ 内容**未删**，只是归位（它们是通用 `aread`/`sread`
+>   与 codegen↔Simulator 语义，不是 verilator 专属）。
+
+- **2026-10-28 通用「未驱动端口」状态型护栏的 spike 结论**（原变更归档于 `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`）——
+  ✅ **2026-10-28 spike 已给出结论**（`openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`）：**通用状态型护栏关闭**（实测：① 运行期**无法识别端口身份** —— 节点名恒为 `unnamed_input`、`source_location` 恒为 `include/core/io.h:219`、Verilog 端口名为 `dut_unnamed_input_N` ⇒ 诊断**不可行动**；② **语义判定缺承重件**：「从未被驱动」≠「应该被驱动」⇒ 需「必需端口注册表」（规范层**已明文**要求，`openspec/specs/rv32i-isa-semantics/spec.md:60-87`）⇒ 且「per-TEST-CASE」是**必需**的粒度（文件粒度会掩盖），而平规则在该粒度上**必然**误报（只跑写路径的用例**理应**不驱动读通道）⇒ **死结**；③ 驱动藏在 **29 个 helper + 186 次宏**里 ⇒ 需过程间分析）⇒ ⇒ **义务继续留在本节**（人工核对 + code review）⇒ ⇒ 替代路线**已于 2026-11-03 落地**：**事件驱动（git diff）增量检查**（实测近 100 commit 的生产代码新增 `ch_in` 分布 = **99×0 / 1×1**〔口径 B〕⇒ 典型负载 ≈ 0）与 **必需端口注册表**（D2-A，见上方两条护栏）。
+- **2026-11-10 补 · 2026-11-09 订正 —— OPENSPEC WORKFLOW 的两条 dated 条目**（⚠️ 其中「`openspec/specs/` 的 capability 计数变更史」= **纯历史**，当前事实只有「51 个 capability」）——
+  - ⚠️ **口径分层（★ 2026-11-10 补 · 对齐 ADR 判据面）**：**非 strict** 的 `openspec validate --specs` 作为 **ADR 判据面**的 MUST（**人工执行** · 实测 `47 passed / 0 failed`（2026-11-14 · B3 归档后）⇒ ⇒ **可满足且有判别力**）⇒ ⇒ 但 **CI 不跑** `openspec validate` ⇒ ⇒ **不在 CI 门内** ⇒ ⇒ 与下面的「archive 前的实际门」**不是同一件事**
+  - **CI 校验（★ 2026-11-09 订正）**：`openspec validate --specs --strict` **当前仓级为红**（CLI **1.14.x** 新增的两条 strict 规则 ⇒ ⇒ **与本仓改动无关** ⇒ ⇒ 成因与快照见 COMMANDS 段的「openspec CLI 版本漂移」条）⇒ ⇒ **archive 前的实际门 = `scripts/verify_openspec_delta.sh`**（绿即可）⇒ ⇒ `validate --specs`（**strict**）在 **CI / archive 门内仅作参考，不作为门**（⚠️ **非 strict**
+    的 `validate --specs` 作为 **ADR 判据面**的 MUST，见上一条 ⇒ ⇒ 两者**不是同一件事**） ⇒ ⇒ 证据：2026-11-09 的 P15 归档（`2026-11-09-chlib-dtor-composability-2026-11`）在仓级红的情况下**归档成功**。当前 `openspec/specs/` 已含 **51** 个 capability（含 `chlib-aggregator/` · 2 requirements · 来自 `2026-06-17-fix-include-aggregation`；**2026-11-14** B3 归档新增 `rv32i-memory-timing`（5 reqs）+ `rv32i-firmware-loading`（7 reqs）⇒ ⇒ **44 → 47**；**2026-11-16** `rv32i-privilege` ⇒ ⇒ **47 → 48**（⚠️ 原先此处写 47 ⇒ **已陈旧**，2026-11-17 订正）；**2026-11-17** `soc-rtl-product-and-tb-2026-11` 归档新增 `rtl-soc-output` ⇒ ⇒ **48 → 49**；**2026-11-18** `example-file-boundary-2026-11` 归档新增 `example-component-boundary`（3 reqs）⇒ ⇒ **49 → 50**；**2026-11-19** `rtl-verification-single-source-2026-11` 归档新增 `examples-rtl-sim-coverage`（7 reqs）⇒ ⇒ **50 → 51**）。
+- **2026-11-15 · B4 · G1+G4 订正 —— RV32I ISA 覆盖边界**（⚠️ 此前写「`FENCE` 也不在任何 capability 内」= **已过时**）——
+  ⚠️ **2026-11-15 · B4 · G1+G4 订正**（此前写「`FENCE` 也不在任何 capability 内」= **已过时**）：
+  · `FENCE` / `FENCE.I`（opcode `0x0F`）**已显式实现**（本版 = **NOP**：单核无 cache
+    ⇒ 无排序语义）⇒ ⇒ 已进 capability `rv32i-isa-semantics`。
+  · **非法指令**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
+    `dbg_illegal_reason`（`0` 合法 / `1` **已知未实现** / `2` **未知 opcode** / `3` **保留组合**）⇒ ⇒
+    进入 ID 级即**冻结**（PC 不前进 · 该指令**永不退休**）⇒ ⇒ 「跑飞」不再**静默**
+    （此前未知 opcode 被**当 NOP 逐条退休**）。
+    ⚠️ **2026-11-16 订正（纯事实 · 无决策变更）**：本条原写「**未知 opcode**」+ **3 态**（缺 `3`）
+    ⇒ ⇒ `0e44c0a`（4b · `funct3`/`funct7` 保留组合检测）起 `illegal_reason` 为 **4 态**
+    （`3` = **保留组合**）⇒ ⇒ 故标题由「未知 opcode」扩为「**非法指令**」（`3` 态不是「未知 opcode」）
+    ⇒ ⇒ 权威载体 = capability `rv32i-isa-semantics` 的「4 态 + 优先级」条款（含 `1` > `3` > `2` > `0`）
+    · 实现 = `include/cpu/pipeline/rv32i_decoder.h:217-220`
+- **2026-11-16 订正（纯事实 · 无决策变更）—— 「非法指令」4 态**（本条原写「**未知 opcode**」+ **3 态**（缺 `3`）⇒ ⇒ `0e44c0a`（4b · `funct3`/`funct7` 保留组合检测）起 `illegal_reason` 为 **4 态**（`3` = **保留组合**）⇒ ⇒ 故标题由「未知 opcode」扩为「**非法指令**」（`3` 态不是「未知 opcode」））⇒ ⇒ 权威载体 = capability `rv32i-isa-semantics` 的「4 态 + 优先级」条款（含 `1` > `3` > `2` > `0`）· 实现 = `include/cpu/pipeline/rv32i_decoder.h:217-220` —— 上面的 2026-11-15 条目里已含本条**逐字**原文（故此处不重复）。
+- **2026-11-12 dated 前向注记（ADR-069）—— load-use 停顿拍数**——
+  ⇒ ⇒ ⚠️ **2026-11-12 dated 前向注记（ADR-069）**：**「3 拍」在 B3 实施前仍属实**
+  ⇒ ⇒ 但**「零改动」已前向为假** —— `docs/adr/ADR-069-mem-data-alignment.md`（**Accepted · 2026-11-12**
+  · 决策 = **A0**）把 **load-use 停顿修订为 4 拍**（`EX→WB` 级数 2→3 **推导**出来的结果值）
+  ⇒ ⇒ **B3 实施后 MUST 改本行为 4** ⇒ ⇒ ⚠️ **在 B3 实施前禁改**（那是**未验证的值**）
+  ⇒ ⇒ 依据：`docs/adr/ADR-047-rv32i-data-forwarding.md` **§5.5**（dated addendum）。
+  ⚠️ **本条已于 2026-11-13/14 失效**：B3 批（T1/T3）已实施 ⇒ ⇒ 停顿链已由 2 级加到 3 级 ⇒ ⇒ 根 `AGENTS.md` 的「3 拍」陈述**已陈旧** ⇒ ⇒ 本批已把根文件里的数字**删除**（只留 capability 指针）。
+- **2026-11-09（phase-6 P9）—— cache wrapper 的死数据 / 死配置面删除**——
+  ⚠️ **2026-11-09（phase-6 **P9**）**：① ② 两项的**死数据 / 死配置面已删除**
+  （`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲
+  ⇒ 零消费者 ⇒ Zero-Debt；删除走 **P14 登记**）⇒ ⇒ **真 FIFO 写缓冲 / 真预取 = 独立立项**；
+  ③ 新增**契约**「调用方 MUST 在 `miss` 期间保持 `addr` 不变」（否则 AXI 请求跟**新地址**
+  发出 ⇒ 取回的是**新块**数据）⇒ ⇒ 载体 = capability `cpu-cache-subsystem` 的
+  「`miss` 期间的地址稳定性」Requirement ⇒ ⇒ 判别力 = 新增的**错位探针**用例。
+- **2026-11-13 · ADR-035 v2.2 R9 · phase-6 P8 —— 运行期 A/B（interpreter vs JIT）双跑校验移除 + 订正**——
+  - **运行期 A/B（interpreter vs JIT）双跑校验已移除**（2026-11-13 · ADR-035 v2.2 **R9** · phase-6 **P8**）：
+    `Simulator::set_ab_verification()` / `is_ab_verification()` / `ab_verification_` 是**从未做过比对**的
+    no-op（开启后每 `tick()` 只打一条 `CHWARN`，**不改变任何行为**）⇒ ⇒ 已按 Zero-Debt **整体删除**
+    （含那段 WARN 与两个只为它存在的局部量）⇒ ⇒ **残余风险** = 运行期**无**双跑校验
+    ⇒ ⇒ 缓解 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · 以**手推期望值**逐值断言）+ JIT 默认 ON
+    ⇒ ⇒ ⚠️ **订正**：「`CH_JIT_ENABLE=OFF` 时该符号不存在」是**事实错误** —— `__has_include` 对**源树物理头**
+    恒真 ⇒ ⇒ 该 API 在**两种构建中都存在**，删除因此也是**无条件**的（两种构建各自编译通过已验证）。
+- **2026-10-19 cache-complete-rewrite —— `*_cache_complete.h` 兼容 shim**（原「dead-on-arrival」已修复）——
+  - **`*_cache_complete.h` 是兼容 shim** (2026-10-19 cache-complete-rewrite 完成, ADR-041). 原"dead-on-arrival"已修复 (commit 91a0833 ch_mem-based rewrite + 1221819 test coverage + ADR-041 Sync/Async variant split). `ICacheComplete` / `DCacheComplete` 现在是 `using ICacheComplete = ICacheSync;` 别名, 指向 **1-cycle sread 版本** (`include/cpu/cache/{i,d}_cache_sync.h`). 0-cycle TCM-style 用户可用 `include/cpu/cache/{i,d}_cache_async.h`. 见 `include/cpu/AGENTS.md` STRUCTURE 表.
+- **Cache 变体条目的历史片段**（2026-10-24 C2 从 `examples/riscv-mini/src/` 提升到此，ADR-046 D3 #9/#10 · 2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复 ch_reg array → ch_mem + ch_module 替换 `Component ctor + parent`, instantiation 0 SIGSEGV · stub 头文件于 2026-10-20 物理删除，change `cache-stub-physical-removal-2026-10`）—— ⇒ ⇒ **当前态**（留在根 `AGENTS.md`）：`*_complete.h` 是兼容 shim 别名指向 `*_sync.h`；新代码用 `_sync` / `_async` 变体直接引用；stub 已物理删除且**没有**替代的 BYPASS 模式。
+- **CI 锚点的批次变更史**（锚点行的**当前值**留在根 `AGENTS.md`；此处是**历史**）——
+     ⚠️ **B1 批（N1 + P1 + C4/C3 manifest + C6 产物卫生）** —— `test_port_name_named_ctor`
+     + `test_port_name_parity` + `test_rtl_manifest` + `test_rtl_emit_hygiene` 四个新增
+     ⇒ ⇒ 由 **257** 增至 **261**（+4）⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**
+     （节点创建回落 `unnamed_input`）⇒ ⇒ **3 个用例转红**；P1 三条 `Ratchet*` 各有正向变异
+     （① 改匿名 / ② 空名 fallback 保空 / ③ counter 恒 0）⇒ ⇒ **三条各自转红**；
+     `test_rtl_manifest` 的 `driven`（节点级）vs `effective`（功能级）**两字段分别验**
+     ⇒ ⇒ ⚠️ 实测踩坑：`get_users()` 判「被消费」⇒ ⇒ **恒 true** ⇒ 零信息量。
+     ⚠️ **B2 批 E2（TB 骨架）**：`test_rtl_tb_stub` 新增 ⇒ ⇒ **262**（+1）。
+     ⚠️ **B1 批 C5（产物护栏）**：`test_rtl_emit_contract` 新增 ⇒ ⇒ **263**（+1）
+     （5 个 TEST_CASE · 见 `tests/test_rtl_emit_contract.cpp`）。
+     本次同步由 `scripts/update_test_count_anchors.sh` 完成（E8）。
+  ⚠️ **VERILATOR_E2E_TOTAL 的锚点由来**：⚠️ 2026-10-28 之前**没有**这个锚点 ⇒ `37` 这个数只出现在**历史** NOTES 条目里（记录当时的真值 ⇒ **不可**改）⇒ 本锚点是**新增**的。
+  ⚠️ **2026-11-11 · B0 批（`rv32i-dead-component-consolidation` C5+C6 同批退役）**：`test_hazard_complete_dual` 退役 ⇒ ⇒ **76**（−1）⇒ ⇒ **这是显式批准的缩面**（`riscv::HazardUnitComplete` 无交付路径消费者 + 独有语义为空集 ⇒ ⇒ 组件随之退役）。
+  ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：`test_hazard_complete_dual.cpp` 整文件退役 ⇒ ⇒ **65**（−1）⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准）。
+  ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：−6（`ForwardingUnit` ×3 + `HazardDetectionUnit` ×2 + `HazardUnitComplete` ×1）⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准 · metis finding 9 要求登记）。
+- **§NOTES「Test counts」表的旧值**（⚠️ 与上方 CI 锚点**重复** ⇒ 两份真值必然漂 ⇒ 本批已删表中的重复行）——
+  | 指标 | 旧值 | 现值 |
+  |------|----:|-----:|
+  | CTest 条目总数 | 269 | 269（= 锚点） |
+  | `verilator_e2e` 标签数 | 77 | 77（= 锚点） |
+  | 双后端 parity 源文件数 | 66 | **65**（= 锚点） |
+  | 双后端 parity macro 调用数 | 290 | **285**（= 锚点） |
+  | `tests/chlib/test_*.cpp` | 52 | **51** |
+  | examples 的 main() 程序 | 32（28 跟踪 + 4 未跟踪） | **42**（全部已跟踪） |
+  ⚠️ 锚点 `DUAL_BACKEND_PARITY_TOTAL` 的注释里原写「⇒ 现值 **33**」= **陈旧**（与同一锚点的值 65 矛盾）⇒ 本批已删。
 
 
 ## 2026-10

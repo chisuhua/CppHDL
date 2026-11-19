@@ -72,10 +72,9 @@ CppHDL/
 | 多层模块装配 / 跨层连线 / 成员接口 / RTL 输出形态 | `docs/usage_guide/02-component-design.md` |
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
-| 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|
+| 层次化 ≡ 扁平 **等价性**（公共 API · 逐拍） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端） | 验证源 DSL = `examples/axi4/tb_axi4_lite_example.verif` · 库层 = `include/rtl_emit/verif.h`（`src/rtl_emit/verif_{scan,run,render}.cpp`）· 判据用例 = `tests/test_verif_single_source.cpp`（扫描器 6 用例）+ `examples/axi4/tests/test_verif_axi4_lite.cpp`（DUT 7 用例）· 护栏 = `scripts/verify_examples_rtl_sim.sh`（⑥ 等式 / ⑥' 新鲜度 / ⑥'' 双向键 / ⑥⁗ 三方一致）|
 | **RV32I 核的 RTL 交付 + Verilator 仿真环境** | 设计与环境指南 = `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · **一条命令跑通** = `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）· 发射器 = `examples/riscv-mini/emit_rtl.cpp`（扁平）+ `emit_rtl_hier.cpp`（层次化）· 独立 TB = `examples/riscv-mini/tb_rv32i_soc.sv`（两形态**共用**）|
-| 层次化**等价性**（扁平 ≡ 层次 · 逐拍） | 公共 API = `include/hierarchy_equivalence.h`（`ch::hier_eq`）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | 端口命名（具名构造写法 + 已知限制） | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`（探针 `tests/test_port_name_named_ctor.cpp`） |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
@@ -116,6 +115,23 @@ CppHDL/
   会绑定到宏内那个**尚未初始化**的 `msg` ⇒ 实测 **SIGSEGV** / 打印 `(null)` / 乱码。
   ⇒ ⇒ 传参的局部变量 MUST NOT 命名为 `msg`（改用 `text` 等）。
 - **Mem read port**: `aread` emits combinational `assign` in Verilog (0-cycle) and is evaluated in `combinational_instr_list_` in the Simulator (0-cycle); `sread` emits `always_ff` (1-cycle) and is evaluated at posedge in `sequential_instr_list_` (1-cycle). Both now match the generated Verilog exactly. `imem` must use `sread` to maintain `pc_lag` alignment. A register-driven read address is observed in the same cycle the register commits it — a FIFO's `dout` therefore follows the *advanced* head pointer after a pop edge (sample `dout` before the pop edge to get the element being popped). See `docs/simulation/ARCHITECTURE.md` "Memory read port timing".
+- **⚠️ 仿真时序陷阱（T2 / T5 / T6 —— 通用 `aread`/`sread` 与 codegen↔Simulator 语义，非 verilator 专属）**：
+  - **T2（0-cycle 与 1-cycle 在端口读值上不可判别）**：`set_input_value(addr) → tick() →
+    get_port_value()` **无法区分** `aread`（0-cycle）与 `sread`（1-cycle）—— 地址是
+    **TB 驱动的输入端口** ⇒ TB 在 `tick()` **之前**就已把它写进 `data_map_` ⇒ 沿上采样到的
+    已是新地址 ⇒ 两种时序**观测值相同**（「tick 之间观测」也救不了：`get_port_value` 只读
+    `data_map_`，组合值不会自动重算）。⇒ ⇒ 唯一可判别的形态 = **地址由「同沿提交的
+    `ch_reg`」驱动**（沿前值 ≠ 沿后值）。
+  - **T5（codegen 与 Simulator 的时序表漂移 ⇒ 静默不工作）**：**不变量** ——
+    「codegen 为该设计发射了任一 `always_ff`」 ⟺ 「Simulator 的 `sequential_instr_list_`
+    非空」。两者漂移 ⇒ 生成的时序逻辑**永不触发** ⇒ 读出 **0**（**无任何报错**）。
+    ⚠️ 该不变量**当前无护栏**，且「是否还有其它构造也在漂移」**未审计**。
+    ⇒ ⇒ 判别力见 `tests/test_mem_multiplex_dual.cpp`（N4 变异：把 `aread` 改发 `always_ff`）。
+  - **T6（`aread` 的 0-cycle 读 ⇒ 填充在同一 `tick()` 内就可见）**：`aread` 是
+    **0-cycle 组合**读，而填充是 `ch_mem::write`（**沿上**提交），且 `Simulator::tick()` 的
+    **最后一步是 `eval_combinational()`** ⇒ ⇒ 沿之后再求值一次 ⇒ ⇒ 刚写进去的 valid/tag
+    在同一 `tick()` 的收尾求值里就被 `aread` 读到 ⇒ `hit=1` ⇒ ⇒ **`miss` 已是 0**。
+    ⇒ ⇒ 要观测 `miss=1`，MUST 用「**冷地址 + `axi_resp_valid=0`**」的拍。
 
 ## COMPONENT LIFECYCLE PATTERNS
 | Scenario | Pattern | Example |
@@ -184,7 +200,7 @@ See `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` for full detail
   - `scripts/verify_input_port_required_registry.sh`（**登记表双向校验**）：只覆盖 `.rddf/checks/input-port-required-registry.md` 里登记的两类风险（永久复位 `rst_n` / 写入放大 `strbe`）⇒ 反向判据会抓「新组件带必需端口却没进表」；`rst_n` 的 per-TEST-CASE 驱动检测仍由 `scripts/verify_rst_n_wiring.sh` 负责（其组件清单**从登记表读**，不硬编码）。⚠️ **登记表不是全仓普查**（未登记的端口类别仍无护栏），且 `AxiDma.rst_n` 目前是**已登记的已知缺口**（无行为覆盖）。
   ⇒ 「未驱动端口」**没有通用变异判别力**（期望值碰巧等于未驱动读值时变异不转红）⇒ 逐条核对端口驱动表 + 代码评审仍然是**承重**环节。具体实例见 `openspec/specs/rv32i-isa-semantics/spec.md`。
   ⚠️ **驱动方式 MUST 用 `sim.set_input_value(port, <纯整数>)`**（2026-10-28 实测登记）：`ch_in` **无** `operator=` ⇒ `io().X = value` 走 `CHERROR("Cannot assign value to input port!")` + **什么都不做** ⇒ **端口保持未驱动**（编译通过、运行不崩、exit 0 ⇒ 守护脚本判 PASS ⇒ **静默失效**）；`io().X <<= value` 走 `inputimpl::set_driver` ⇒ 变成「**有内部驱动**」⇒ 该端口不再算顶层端口（判据 `type_input && driver() == nullptr`）⇒ 对**顶层**端口用 `<<=` 是**反向**修法。⚠️ 值侧 MUST 用**纯整数**（`ch_bool::operator uint64_t` 是 `explicit` ⇒ `set_input_value(port, ch_bool(false))` 编译不过）。
-  ✅ **2026-10-28 spike 已给出结论**（`openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`）：**通用状态型护栏关闭**（实测：① 运行期**无法识别端口身份** —— 节点名恒为 `unnamed_input`、`source_location` 恒为 `include/core/io.h:219`、Verilog 端口名为 `dut_unnamed_input_N` ⇒ 诊断**不可行动**；② **语义判定缺承重件**：「从未被驱动」≠「应该被驱动」⇒ 需「必需端口注册表」（规范层**已明文**要求，`openspec/specs/rv32i-isa-semantics/spec.md:60-87`）⇒ 且「per-TEST-CASE」是**必需**的粒度（文件粒度会掩盖），而平规则在该粒度上**必然**误报（只跑写路径的用例**理应**不驱动读通道）⇒ **死结**；③ 驱动藏在 **29 个 helper + 186 次宏**里 ⇒ 需过程间分析）⇒ ⇒ **义务继续留在本节**（人工核对 + code review）⇒ ⇒ 替代路线**已于 2026-11-03 落地**：**事件驱动（git diff）增量检查**（实测近 100 commit 的生产代码新增 `ch_in` 分布 = **99×0 / 1×1**〔口径 B〕⇒ 典型负载 ≈ 0）与 **必需端口注册表**（D2-A，见上方两条护栏）。
+  ⚠️ **通用状态型「未驱动」护栏不可行**（已评估并关闭）：① 运行期**无法识别端口身份** —— 节点名恒为 `unnamed_input`、Verilog 端口名为 `dut_unnamed_input_N` ⇒ 诊断**不可行动**；② **语义判定缺承重件**：「从未被驱动」≠「应该被驱动」⇒ 需「必需端口注册表」（规范层**已明文**要求，`openspec/specs/rv32i-isa-semantics/spec.md:60-87`）⇒ 且「per-TEST-CASE」是**必需**的粒度（文件粒度会掩盖），而平规则在该粒度上**必然**误报（只跑写路径的用例**理应**不驱动读通道）⇒ **死结** ⇒ ⇒ **义务继续留在本节**（人工核对 + code review）⇒ ⇒ 替代路线 = 上方两条护栏（事件驱动增量检查 + 必需端口注册表）。
 
 ## OPENSPEC WORKFLOW
 The project is `schema: spec-driven` (see `openspec/config.yaml`). `openspec/specs/` is the **current spec source of truth** — never bypass it.
@@ -193,9 +209,9 @@ The project is `schema: spec-driven` (see `openspec/config.yaml`). `openspec/spe
 - **Archive must merge specs**: `openspec archive <name>` 默认会合并 `openspec/changes/<name>/specs/<capability>/spec.md` 的 `## ADDED Requirements` 到 `openspec/specs/<capability>/spec.md`。**禁止**使用 `--skip-specs` 标志，除非该 change 显式声明 "no spec changes"（参见 `fix-ns-pollution` 模式）。
 - **Spec 变更必须走 change 流程**：直接修改 `openspec/specs/<capability>/spec.md` 是禁止的；先创建 change 提案，archive 时由 CLI 自动合并。
 - **Spec 内容规范**：每条 requirement 描述**必须**含 `SHALL` 或 `MUST` 关键字（RFC 2119）；`## Purpose` 与 `## Requirements` 必须是 heading 而非引用块。
-- ⚠️ **口径分层（★ 2026-11-10 补 · 对齐 ADR 判据面）**：**非 strict** 的 `openspec validate --specs` 作为 **ADR 判据面**的 MUST（**人工执行** · 实测 `47 passed / 0 failed`（2026-11-14 · B3 归档后）⇒ ⇒ **可满足且有判别力**）⇒ ⇒ 但 **CI 不跑** `openspec validate` ⇒ ⇒ **不在 CI 门内** ⇒ ⇒ 与下面的「archive 前的实际门」**不是同一件事**
-- **CI 校验（★ 2026-11-09 订正）**：`openspec validate --specs --strict` **当前仓级为红**（CLI **1.14.x** 新增的两条 strict 规则 ⇒ ⇒ **与本仓改动无关** ⇒ ⇒ 成因与快照见 COMMANDS 段的「openspec CLI 版本漂移」条）⇒ ⇒ **archive 前的实际门 = `scripts/verify_openspec_delta.sh`**（绿即可）⇒ ⇒ `validate --specs`（**strict**）在 **CI / archive 门内仅作参考，不作为门**（⚠️ **非 strict**
-  的 `validate --specs` 作为 **ADR 判据面**的 MUST，见上一条 ⇒ ⇒ 两者**不是同一件事**） ⇒ ⇒ 证据：2026-11-09 的 P15 归档（`2026-11-09-chlib-dtor-composability-2026-11`）在仓级红的情况下**归档成功**。当前 `openspec/specs/` 已含 **51** 个 capability（含 `chlib-aggregator/` · 2 requirements · 来自 `2026-06-17-fix-include-aggregation`；**2026-11-14** B3 归档新增 `rv32i-memory-timing`（5 reqs）+ `rv32i-firmware-loading`（7 reqs）⇒ ⇒ **44 → 47**；**2026-11-16** `rv32i-privilege` ⇒ ⇒ **47 → 48**（⚠️ 原先此处写 47 ⇒ **已陈旧**，2026-11-17 订正）；**2026-11-17** `soc-rtl-product-and-tb-2026-11` 归档新增 `rtl-soc-output` ⇒ ⇒ **48 → 49**；**2026-11-18** `example-file-boundary-2026-11` 归档新增 `example-component-boundary`（3 reqs）⇒ ⇒ **49 → 50**；**2026-11-19** `rtl-verification-single-source-2026-11` 归档新增 `examples-rtl-sim-coverage`（7 reqs）⇒ ⇒ **50 → 51**）。
+- ⚠️ **口径分层**：**非 strict** 的 `openspec validate --specs` 作为 **ADR 判据面**的 MUST（**人工执行** · 实测 `51 passed / 0 failed` ⇒ ⇒ **可满足且有判别力**）⇒ ⇒ 但 **CI 不跑** `openspec validate` ⇒ ⇒ **不在 CI 门内** ⇒ ⇒ 与下面的「archive 前的实际门」**不是同一件事**
+- **CI 校验**：`openspec validate --specs --strict` **当前仓级为红**（CLI **1.14.x** 新增的两条 strict 规则 ⇒ ⇒ **与本仓改动无关** ⇒ ⇒ 成因与快照见 COMMANDS 段的「openspec CLI 版本漂移」条）⇒ ⇒ **archive 前的实际门 = `scripts/verify_openspec_delta.sh`**（绿即可）⇒ ⇒ `validate --specs`（**strict**）在 **CI / archive 门内仅作参考，不作为门**（⚠️ **非 strict**
+  的 `validate --specs` 作为 **ADR 判据面**的 MUST，见上一条 ⇒ ⇒ 两者**不是同一件事**） ⇒ ⇒ 证据：2026-11-09 的 P15 归档（`2026-11-09-chlib-dtor-composability-2026-11`）在仓级红的情况下**归档成功**。当前 `openspec/specs/` 已含 **51** 个 capability。
 - **See**: `docs/developer_guide/openspec-specs-guide.md`（完整格式规范与迁移历史）
 
 ## JIT COMPILER RULES (CRITICAL)
@@ -218,23 +234,6 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 - **initialize() MUST pulse default_reset** (1 → eval → 0 → eval). The reset pulse loads `ch_reg<ch_uint<N>>(INIT_d)` init values into the Verilog `always_ff @(posedge clk or posedge default_reset)` reset branch via the `@(posedge default_reset)` edge. Without this pulse, `VerilatorBackend` returns `0 + add-addend` after `tick(1)` on designs with `INIT != 0` (verilator-init-zero default), whereas `InterpreterBackend` returns `INIT + add-addend` (interpreter assigns `*init_buf` at register construction). `try_initialize()` and `reset()` MUST share the same 4-step sequence via `pulse_reset()` — implementing them separately leads to trace-parity bugs that are subtle to debug. Idempotent across repeated `initialize()` calls (same INIT loaded N times → final state == INIT).
 - **`ch_mem` imem in RV32I / RISC-V fixtures MUST use sread (not aread)**. `mem.sread(addr, enable=true)` is posedge-aligned and trace-parity-safe with both InterpreterBackend and VerilatorBackend. `mem.aread(addr)` is 0-cycle combinational in Verilog (Verilator returns the value in the same cycle as the address change) but posedge-sampled in the Simulator (the value lands in the next cycle's data_map_) — a 1-cycle skew that breaks trace parity. See `verilator-e2e-coverage` spec §Requirement 1 invariant 3.
 - **Hierarchical input driver MUST be emitted by codegen**. A submodule `ch_in` with an internal driver (`sub.io().x <<= some_wire` invokes `inputimpl::set_driver`, equivalent to `num_srcs() > 0`) MUST NOT be emitted as a top-level Verilog `input` port — it becomes an internal `logic` wire (`src/codegen_verilog.cpp::print_header` filters these out), declared by `print_decl`, and assigned from its driver in `print_logic` (walks the unnamed-proxy chain, mirroring `type_output`). The matching backend code MUST also skip them: `emit_sim_main_postlude` skips the `set_input_Vtop` / `get_field_ptr_Vtop` case (the Vtop field does not exist), and `build_port_access_table` does not add the port to `port_access_` (`sync_inputs_to_vtop` won't try to write it). Skipping any of the four sites makes verilator either reference a non-existent Vtop field (compile/link error) or keep the port at X (=0 after `initialize()`'s reset pulse), silently disabling every `ch_in` below the top component — RV32I `instr_data` becomes NOP (commit_count=0), AXI4-Lite `slave.awvalid` triggers handshake deadlock (rvalid=0). This was originally misdiagnosed as issue #25 register propagation. JIT already follows the same rule (`src/jit/jit_ir_gen_lnode_io.cpp:31-46`); the verilog codegen path is now in parity.
-
-- **⚠️ 陷阱 T2（0-cycle 与 1-cycle 在端口读值上不可判别）**：`set_input_value(addr) → tick() →
-  get_port_value()` **无法区分** `aread`（0-cycle）与 `sread`（1-cycle）—— 地址是
-  **TB 驱动的输入端口** ⇒ TB 在 `tick()` **之前**就已把它写进 `data_map_` ⇒ 沿上采样到的
-  已是新地址 ⇒ 两种时序**观测值相同**（「tick 之间观测」也救不了：`get_port_value` 只读
-  `data_map_`，组合值不会自动重算）。⇒ ⇒ 唯一可判别的形态 = **地址由「同沿提交的
-  `ch_reg`」驱动**（沿前值 ≠ 沿后值）。
-- **⚠️ 陷阱 T5（codegen 与 Simulator 的时序表漂移 ⇒ 静默不工作）**：**不变量** ——
-  「codegen 为该设计发射了任一 `always_ff`」 ⟺ 「Simulator 的 `sequential_instr_list_`
-  非空」。两者漂移 ⇒ 生成的时序逻辑**永不触发** ⇒ 读出 **0**（**无任何报错**）。
-  ⚠️ 该不变量**当前无护栏**，且「是否还有其它构造也在漂移」**未审计**。
-  ⇒ ⇒ 判别力见 `tests/test_mem_multiplex_dual.cpp`（N4 变异：把 `aread` 改发 `always_ff`）。
-- **⚠️ 陷阱 T6（`aread` 的 0-cycle 读 ⇒ 填充在同一 `tick()` 内就可见）**：`aread` 是
-  **0-cycle 组合**读，而填充是 `ch_mem::write`（**沿上**提交），且 `Simulator::tick()` 的
-  **最后一步是 `eval_combinational()`** ⇒ ⇒ 沿之后再求值一次 ⇒ ⇒ 刚写进去的 valid/tag
-  在同一 `tick()` 的收尾求值里就被 `aread` 读到 ⇒ `hit=1` ⇒ ⇒ **`miss` 已是 0**。
-  ⇒ ⇒ 要观测 `miss=1`，MUST 用「**冷地址 + `axi_resp_valid=0`**」的拍。
 
 ## KNOWN LIMITATIONS
 > 🔴 **Verilator 后端 = 显式 Linux-only**（2026-11-03 裁决）：`-DBUILD_VERILATOR=ON`
@@ -265,55 +264,46 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 
 Documented gaps that are by-design or awaiting redesign. Each entry points to authoritative docs (ADR / usage guide) to avoid drift between this file and the linked source.
 
-- **RV32I ISA 覆盖边界**（2026-11-15 订正）：固件已覆盖 ALU（ADD/SUB/ADDI）+
+- **RV32I ISA 覆盖边界**：固件已覆盖 ALU（ADD/SUB/ADDI）+
   `LUI`/`AUIPC` + `LW`/`SW`/`SB`/`SH` + `LB`/`LH`/`LBU`/`LHU` + `BEQ`/`BNE` +
-  `JAL`/`JALR` + `SRA`。**仍未实现 / 未验证** = **CSR**（`csrrw`/`csrrs`/`csrrc`）+
+  `JAL`/`JALR` + `SRA` + `FENCE`/`FENCE.I`（opcode `0x0F`· 本版 = **NOP**：单核无 cache
+  ⇒ 无排序语义）⇒ ⇒ 已进 capability `rv32i-isa-semantics`。
+  **仍未实现 / 未验证** = **CSR**（`csrrw`/`csrrs`/`csrrc`）+
   **`ECALL`/`EBREAK`**（不含**预测取指**）⇒ ⇒ 这两项**不在**任何仓内 capability
   覆盖内 ⇒ ⇒ 需**独立立项**（不可顺手塞进本条）。
-  ⚠️ **2026-11-15 · B4 · G1+G4 订正**（此前写「`FENCE` 也不在任何 capability 内」= **已过时**）：
-  · `FENCE` / `FENCE.I`（opcode `0x0F`）**已显式实现**（本版 = **NOP**：单核无 cache
-    ⇒ 无排序语义）⇒ ⇒ 已进 capability `rv32i-isa-semantics`。
-  · **非法指令**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
-    `dbg_illegal_reason`（`0` 合法 / `1` **已知未实现** / `2` **未知 opcode** / `3` **保留组合**）⇒ ⇒
+  ⚠️ **非法指令**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
+    `dbg_illegal_reason`（**4 态 + 优先级**（`1` > `3` > `2` > `0`）：`0` 合法 /
+    `1` **已知未实现** / `2` **未知 opcode** / `3` **保留组合**）⇒ ⇒
     进入 ID 级即**冻结**（PC 不前进 · 该指令**永不退休**）⇒ ⇒ 「跑飞」不再**静默**
     （此前未知 opcode 被**当 NOP 逐条退休**）。
-    ⚠️ **2026-11-16 订正（纯事实 · 无决策变更）**：本条原写「**未知 opcode**」+ **3 态**（缺 `3`）
-    ⇒ ⇒ `0e44c0a`（4b · `funct3`/`funct7` 保留组合检测）起 `illegal_reason` 为 **4 态**
-    （`3` = **保留组合**）⇒ ⇒ 故标题由「未知 opcode」扩为「**非法指令**」（`3` 态不是「未知 opcode」）
-    ⇒ ⇒ 权威载体 = capability `rv32i-isa-semantics` 的「4 态 + 优先级」条款（含 `1` > `3` > `2` > `0`）
+    ⇒ ⇒ 权威载体 = capability `rv32i-isa-semantics` 的「4 态 + 优先级」条款
     · 实现 = `include/cpu/pipeline/rv32i_decoder.h:217-220`
 - **RV32I 数据前推已接入**（ADR-047）：档位 1 = EX/MEM 级、档位 2 = MEM/WB 级的合并写回值。
   ⚠️ **成环仍然被禁止**：数据源的**叶子** MUST 是**流水线寄存器**（MUST NOT 取 EX/MEM 级的
   **组合输出** —— 那正是 `git show bf78367` 的事故形态）⇒ 负向对照见
   `tests/chlib/test_forwarding.cpp`（**常驻**回归）。
-  ⚠️ **load-use 停顿仍在（3 拍）**：档位 1 **保守地不覆盖 load** ⇒ 停顿契约**零改动**
-  （那是一个**选择**，不是无奈）⇒ 「档位 1 覆盖 load」= **V2** 独立立项。
-  ⇒ ⇒ ⚠️ **2026-11-12 dated 前向注记（ADR-069）**：**「3 拍」在 B3 实施前仍属实**
-  ⇒ ⇒ 但**「零改动」已前向为假** —— `docs/adr/ADR-069-mem-data-alignment.md`（**Accepted · 2026-11-12**
-  · 决策 = **A0**）把 **load-use 停顿修订为 4 拍**（`EX→WB` 级数 2→3 **推导**出来的结果值）
-  ⇒ ⇒ **B3 实施后 MUST 改本行为 4** ⇒ ⇒ ⚠️ **在 B3 实施前禁改**（那是**未验证的值**）
+  ⚠️ **档位 1 保守地不覆盖 load**（那是一个**选择**，不是无奈）⇒ 「档位 1 覆盖 load」= **V2** 独立立项。
+  ⚠️ **load-use 停顿拍数与距离矩阵的唯一权威 = capability `rv32i-data-forwarding`**
+  （含 ADR-069 决策 A0 的拍级推导）⇒ ⇒ 本文档 MUST NOT 另写一份数字（两份必然漂移）。
   ⇒ ⇒ 依据：`docs/adr/ADR-047-rv32i-data-forwarding.md` **§5.5**（dated addendum）。
-  ⚠️ **距离矩阵的唯一权威 = capability `rv32i-data-forwarding`** ⇒ 本文档 MUST NOT
-  另写一份（两份必然漂移）。
-- **RV32I 取指侧**：imem MUST 用 `sread`（1 拍）⇒ IF/ID 的 pc MUST 同样延迟
-  （`fetch_pc_reg`），否则分支目标算错 4 字节。⚠️ 与 **dmem** 相反：dmem MUST 用
-  `aread`（0-cycle）—— MEM 级在**当前拍**采样读数据。
+- **RV32I 取指侧（imem 的 1 拍 `pc_lag`）**：imem MUST 用 `sread`（1 拍，ADR-041）⇒
+  指令比地址晚 1 拍到 ⇒ IF/ID 的 pc **必须同样延迟**（`fetch_pc_reg`），否则 ID 拿到
+  「比它译码的指令晚一个字」的 pc ⇒ 分支目标算错 4 字节。
+  ⚠️ **数据侧相反**：D-TCM（dmem）读口 = **固定 1 拍 `sread`**（ADR-069 决策 A0 ⇒
+  **不是** 0 拍组合读）⇒ ⇒ 仅**字节写 RMW** 与**寄存器堆**仍是 `aread`。
   ⚠️ 取指侧的**停顿丢指令**与**同一条指令被装两次**（ADR-048）**均已消除**
   （`IfStage` 内置 1 级 skid buffer + `primed` 门控）⇒ 「停顿点之后 MUST 是 NOP」
   这条固件约束**已取消**。
 - **`HazardUnit` 只保留 4 个直通端口**（`rs1_data_raw`/`rs2_data_raw`/`rs1_data`/`rs2_data`）
   ⇒ 作为**独立组件**仍可用。⚠️ 不得再把 `ex_alu_result` 接到 EX 级**组合输出** ——
   那是**环饵** ⇒ 留着就诱使后人复现 `bf78367` 的组合环。
-- **RV32I imem 的 1 拍 `pc_lag`**（2026-10-25 实测确认）：imem MUST 用 `sread`（ADR-041）⇒ 指令比地址晚 1 拍到 ⇒ IF/ID 的 pc **必须同样延迟**（`fetch_pc_reg`），否则 ID 拿到「比它译码的指令晚一个字」的 pc ⇒ 分支目标算错 4 字节。⚠️ 与 **dmem** 相反：dmem MUST 用 `aread`（0-cycle）—— MEM 级在**当前拍**采样读数据。
 - **cache wrapper 的已知债务**（如实登记）：`DCacheWriteBuffer` **并不真缓冲**
   （直通式 ⇒ 名字 over-promise ⇒ `ready` 无背压语义）；`ICachePrefetch` 的**预取缓冲**
-  是死数据（真预取未实现）；内层 cache 的 `miss`(1 拍 `sread`) 与 `axi_addr`(当拍地址)
+  是死数据（真预取未实现）⇒ ⇒ **真 FIFO 写缓冲 / 真预取 = 独立立项**；
+  内层 cache 的 `miss`(1 拍 `sread`) 与 `axi_addr`(当拍地址)
   存在 **1 拍错位**（属 cache 本体）。⇒ 判别力见
   `examples/riscv-mini/tests/test_cache_smoke.cpp`（**12 个用例 / 78 断言**，双后端）。
-  ⚠️ **2026-11-09（phase-6 **P9**）**：① ② 两项的**死数据 / 死配置面已删除**
-  （`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲
-  ⇒ 零消费者 ⇒ Zero-Debt；删除走 **P14 登记**）⇒ ⇒ **真 FIFO 写缓冲 / 真预取 = 独立立项**；
-  ③ 新增**契约**「调用方 MUST 在 `miss` 期间保持 `addr` 不变」（否则 AXI 请求跟**新地址**
+  ⚠️ **契约**「调用方 MUST 在 `miss` 期间保持 `addr` 不变」（否则 AXI 请求跟**新地址**
   发出 ⇒ 取回的是**新块**数据）⇒ ⇒ 载体 = capability `cpu-cache-subsystem` 的
   「`miss` 期间的地址稳定性」Requirement ⇒ ⇒ 判别力 = 新增的**错位探针**用例。
 - **CLINT 的 `mtime` 是 64 位自由运行计数器**（ADR-049，2026-10-30 落地）——
@@ -348,15 +338,12 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   ⇒ ⇒ ⑧' 的判别力自证 = `--self-test` 投毒 8（`RTL_SIM_TAMPER=flatten_hier`）。
   ⚠️ **R1–R8 仍只覆盖 `hier_rtl_products` 语料**（3 个小 DUT）⇒ ⇒ **RV32I 语料的全套
   R2–R8 接入仍待办**（残差 `id=25`，状态 `已知` ⇒ 需 architect 收口）。
-- **运行期 A/B（interpreter vs JIT）双跑校验已移除**（2026-11-13 · ADR-035 v2.2 **R9** · phase-6 **P8**）：
-  `Simulator::set_ab_verification()` / `is_ab_verification()` / `ab_verification_` 是**从未做过比对**的
-  no-op（开启后每 `tick()` 只打一条 `CHWARN`，**不改变任何行为**）⇒ ⇒ 已按 Zero-Debt **整体删除**
-  （含那段 WARN 与两个只为它存在的局部量）⇒ ⇒ **残余风险** = 运行期**无**双跑校验
-  ⇒ ⇒ 缓解 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · 以**手推期望值**逐值断言）+ JIT 默认 ON
-  ⇒ ⇒ ⚠️ **订正**：「`CH_JIT_ENABLE=OFF` 时该符号不存在」是**事实错误** —— `__has_include` 对**源树物理头**
-  恒真 ⇒ ⇒ 该 API 在**两种构建中都存在**，删除因此也是**无条件**的（两种构建各自编译通过已验证）。
-- **Cache 变体选择（ADR-039 ch_mem 重写 + ADR-041 Sync/Async 拆分）**：完整实现位于 `include/cpu/cache/{i,d}_cache_{sync,async}.h`；`*_complete.h` 是兼容 shim 别名指向 `*_sync.h`. RV32I L1 默认用 `ICacheSync` / `DCacheSync` (1-cycle sread)；TCM-style 用 `ICacheAsync` / `DCacheAsync` (0-cycle aread). 新代码用 `_sync` / `_async` 变体直接引用（`_complete` 仅作 legacy alias）. The wrappers `include/cpu/cache/{i_cache_prefetch.h,d_cache_write_buffer.h}`（2026-10-24 C2 从 `examples/riscv-mini/src/` 提升到此，ADR-046 D3 #9/#10）实例化 `ICacheSync` / `DCacheSync` (2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复 ch_reg array → ch_mem + ch_module 替换 `Component ctor + parent`, instantiation 0 SIGSEGV). 见 `include/cpu/AGENTS.md` STRUCTURE 表. **历史 pass-through stub 头文件（`include/cpu/cache/*_stub.h`）已于 2026-10-20 物理删除**（ADR-037，change `cache-stub-physical-removal-2026-10`）—— 其语义（`ready := req, miss := false, data := axi_data`、未 block 对齐的 `axi_addr`）不构成合法 cache 行为，不再保留，也没有替代的 BYPASS 模式.
-- **`*_cache_complete.h` 是兼容 shim** (2026-10-19 cache-complete-rewrite 完成, ADR-041). 原"dead-on-arrival"已修复 (commit 91a0833 ch_mem-based rewrite + 1221819 test coverage + ADR-041 Sync/Async variant split). `ICacheComplete` / `DCacheComplete` 现在是 `using ICacheComplete = ICacheSync;` 别名, 指向 **1-cycle sread 版本** (`include/cpu/cache/{i,d}_cache_sync.h`). 0-cycle TCM-style 用户可用 `include/cpu/cache/{i,d}_cache_async.h`. 见 `include/cpu/AGENTS.md` STRUCTURE 表.
+- **运行期 A/B（interpreter vs JIT）双跑校验不存在**：曾经存在的 `Simulator::set_ab_verification()`
+  / `is_ab_verification()` / `ab_verification_` 是**从未做过比对**的 no-op（开启后每 `tick()`
+  只打一条 `CHWARN`，**不改变任何行为**）⇒ ⇒ 已按 Zero-Debt **整体删除** ⇒ ⇒
+  **残余风险** = 运行期**无**双跑校验
+  ⇒ ⇒ 缓解 = **golden 测试**（`tests/jit/test_jit_golden.cpp` · 以**手推期望值**逐值断言）+ JIT 默认 ON。
+- **Cache 变体选择（ADR-039 ch_mem 重写 + ADR-041 Sync/Async 拆分）**：完整实现位于 `include/cpu/cache/{i,d}_cache_{sync,async}.h`；`*_complete.h` 是兼容 shim 别名指向 `*_sync.h`. RV32I L1 默认用 `ICacheSync` / `DCacheSync` (1-cycle sread)；TCM-style 用 `ICacheAsync` / `DCacheAsync` (0-cycle aread). 新代码用 `_sync` / `_async` 变体直接引用（`_complete` 仅作 legacy alias）. The wrappers `include/cpu/cache/{i_cache_prefetch.h,d_cache_write_buffer.h}` 实例化 `ICacheSync` / `DCacheSync`. 见 `include/cpu/AGENTS.md` STRUCTURE 表. **历史 pass-through stub 头文件（`include/cpu/cache/*_stub.h`）已物理删除**（ADR-037）—— 其语义（`ready := req, miss := false, data := axi_data`、未 block 对齐的 `axi_addr`）不构成合法 cache 行为，不再保留，也没有替代的 BYPASS 模式.
 
 ## ZERO-DEBT POLICY
 Every Phase must exit with **zero technical debt** before marking complete:
@@ -407,9 +394,7 @@ cmake --build build --target all-examples -j$(nproc)
 # Run all samples (regression guard for samples/ — Linux: `timeout`, macOS: `gtimeout`)
 bash scripts/run_all_samples.sh
 
-# 层次化 RTL 产物护栏（R1 lint 门 = ADR-060 §2.5 · R2 pin 名 ∈ 目标端口集 · R3 宽度一致
-# 〔= 剥掉 lint_off 后重新 lint〕· R4 确定性 · R5 跨模块 ch_mem 被拒 · R6 module 树同构
-# 〔复用 scripts/lib/verilog_tree_extract.py〕· R7 层次化产物路径 ≠ 扁平产物路径）
+# 层次化 RTL 产物护栏（判据 R1–R8 的逐条说明见 KNOWN LIMITATIONS「层次化 RTL 输出」条）
 # ⚠️ 需要 build/tests/hier_rtl_products（产物生成器 · **不是** ctest 用例）
 bash scripts/verify_hierarchical_rtl.sh
 bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条原地投毒 ⇒ 必红 ⇒ 还原复绿
@@ -501,43 +486,25 @@ bash scripts/rv32i_rtl_sim_env.sh
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
 - CTEST_TOTAL: 269
-     ⚠️ **B1 批（N1 + P1 + C4/C3 manifest + C6 产物卫生）** —— `test_port_name_named_ctor`
-     + `test_port_name_parity` + `test_rtl_manifest` + `test_rtl_emit_hygiene` 四个新增
-     ⇒ ⇒ 由 **257** 增至 **261**（+4）⇒ ⇒ 判别力实测（逐条）：让具名构造**忽略显式名**
-     （节点创建回落 `unnamed_input`）⇒ ⇒ **3 个用例转红**；P1 三条 `Ratchet*` 各有正向变异
-     （① 改匿名 / ② 空名 fallback 保空 / ③ counter 恒 0）⇒ ⇒ **三条各自转红**；
-     `test_rtl_manifest` 的 `driven`（节点级）vs `effective`（功能级）**两字段分别验**
-     ⇒ ⇒ ⚠️ 实测踩坑：`get_users()` 判「被消费」⇒ ⇒ **恒 true** ⇒ 零信息量。
-     ⚠️ **B2 批 E2（TB 骨架）**：`test_rtl_tb_stub` 新增 ⇒ ⇒ **262**（+1）。
-     ⚠️ **B1 批 C5（产物护栏）**：`test_rtl_emit_contract` 新增 ⇒ ⇒ **263**（+1）
-     （5 个 TEST_CASE · 见 `tests/test_rtl_emit_contract.cpp`）。
-     本次同步由 `scripts/update_test_count_anchors.sh` 完成（E8）。
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
      计数 +1，而**删**一个标签会让计数 −1 ⇒ 两者都不体现在 CTEST_TOTAL 里
      ⇒ 需要**独立**锚点。
-     ⚠️ 2026-10-28 之前**没有**这个锚点 ⇒ `37` 这个数只出现在**历史** NOTES
-     条目里（记录当时的真值 ⇒ **不可**改）⇒ 本锚点是**新增**的。
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
 - VERILATOR_E2E_TOTAL: 77
-     ⚠️ **2026-11-11 · B0 批（`rv32i-dead-component-consolidation` C5+C6 同批退役）**：
-     `test_hazard_complete_dual` 退役 ⇒ ⇒ **76**（−1）⇒ ⇒ **这是显式批准的缩面**
-     （`riscv::HazardUnitComplete` 无交付路径消费者 + 独有语义为空集 ⇒ ⇒ 组件随之退役）
-<!-- CI anchor: 「**双后端 parity 源文件数**」（2026-10-30，planner 判据修订配套）。
+<!-- CI anchor: 「**双后端 parity 源文件数**」。
      scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
      口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
      ⚠️ 它防的是「**parity** 静默缩面」—— VERILATOR_E2E_TOTAL 防的是
      「**标签** 静默缩面」，而 9 个契约锁定的**单后端** verilator 参考实现
      **也**带 verilator_e2e 标签 ⇒ ⇒ 标签数**看不见** parity 缩面。
-     ⚠️ 计数口径 = 「剥注释与字符串后含 `DUAL_BACKEND_TEST_PAIR(` **调用**的
-     测试源文件」+ 「hand-crafted 真 dual 白名单（1 个）」⇒ 现值 **33**。
+     计数口径 = 「剥注释与字符串后含 `DUAL_BACKEND_TEST_PAIR(` **调用**的
+     测试源文件」+ 「hand-crafted 真 dual 白名单（1 个）」。
      任何增减 MUST 显式更新本行。Do not reformat. -->
 - DUAL_BACKEND_PARITY_TOTAL: 65
-     ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：`test_hazard_complete_dual.cpp` 整文件退役
-     ⇒ ⇒ **65**（−1）⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准）
 <!-- CI anchor: 「**双后端 parity macro 调用数**」= 上一个锚点的**深度**维度。
      ⚠️ 为什么两个锚点都要：只钉「文件数」的话，**从有多个 dual pair 的文件里
      删掉 1 个 pair** ⇒ 该文件仍被计数 ⇒ 护栏**看不见**（实测：变异 M1 恒绿）
@@ -545,9 +512,6 @@ bash scripts/rv32i_rtl_sim_env.sh
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
 - DUAL_BACKEND_PARITY_PAIRS: 285
-     ⚠️ **2026-11-11 · B0 批（C5+C6 同批退役）**：−6
-     （`ForwardingUnit` ×3 + `HazardDetectionUnit` ×2 + `HazardUnitComplete` ×1）
-     ⇒ ⇒ **这是显式批准的缩面**（用户 2026-11-11 批准 · metis finding 9 要求登记）
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——
@@ -564,23 +528,20 @@ bash scripts/rv32i_rtl_sim_env.sh
      `CTEST_TOTAL` 里的 `spinalhdl_*` 条目）**只在默认配置（`BUILD_EXAMPLES=ON`）成立** ⇒ ⇒
      `-DCPPHDL_BUILD_EXAMPLES=OFF` 时被搬走的条目会**消失** ⇒ ⇒ 这是**已知且接受**的
      （锚点是「默认构建的守护」，不是「所有配置的守恒」）。
-- **Test counts（单一真相在上面的 CI 锚点；改动测试后 MUST 同步锚点 + 复核命令）**
+- **Test counts（**锚点**的单一真相在上方 CI 锚点；此处只列**非锚点**指标 ——
+  改动测试后 MUST 同步上方锚点 + 复核命令）**
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | CTest 条目总数 | 269 | `cd build && ctest -N \| tail -1` |
   | 其中 non-perf | 258 | `cd build && ctest -N -LE perf \| tail -1` |
-  | `verilator_e2e` 标签数 | 77 | `cd build && ctest -N -L verilator_e2e \| tail -1` |
-  | 双后端 parity 源文件数 | 66 | `bash scripts/verify_dual_backend_parity.sh` |
-  | 双后端 parity macro 调用数 | 290 | 同上 |
   | `tests/test_*.cpp` | 159 | `ls tests/test_*.cpp \| wc -l` |
-  | `tests/chlib/test_*.cpp` | 52 | `ls tests/chlib/test_*.cpp \| wc -l` |
+  | `tests/chlib/test_*.cpp` | 51 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|
-  | examples 的 main() 程序 | 32 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（28 跟踪 + 4 未跟踪）|
+  | examples 的 main() 程序 | 42 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
 
 - **变更流水（历史）已归档** ⇒ `docs/archive/agents-notes/AGENTS-NOTES-2026-11.md`
-  （2026-11-05 起；76 条历史条目 + KNOWN LIMITATIONS 的已解决条目 **逐字**保留）。
+  （2026-11-05 起；**87** 条历史条目 + KNOWN LIMITATIONS 的已解决条目 **逐字**保留）。
   ⇒ ⇒ 新增 change 的**当前态**影响 MUST 落在上面各段的
   `CONVENTIONS` / `ANTI-PATTERNS` / `KNOWN LIMITATIONS` / `VERILATOR BACKEND RULES`，
   **MUST NOT** 再往本文件追加流水条目 —— 本文件是**每次会话都注入上下文**的文件。
