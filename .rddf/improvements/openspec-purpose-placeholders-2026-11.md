@@ -26,8 +26,11 @@ evidence: probe:.rddf/reviews/openspec-purpose-placeholders-review-2026-11.md
 - **Drafted by**：build-agent（planner 角色代写 · 用户 2026-11-19 批准 7 段设计 + 范围 A）
 - **权威依据**：审查报告 `.rddf/reviews/openspec-purpose-placeholders-review-2026-11.md`
   （**oracle** 对抗式审查判定 `REJECT` + **metis** gap 分析 17 条 ⇒ 两者的 finding **逐条已应答**）
-- **Status**：📝 **draft**（设计已批准 · 待 `rdd-planner` 复核 + 用户最终批准 ⇒ 然后由
-  **rdd-builder P0** 从本草稿生成 `openspec/changes/<name>/proposal.md` ⇒ **不手写**）
+- **Status**：✅ **implemented**（2026-11-19 · 用户「批准，请实施」⇒ 载体 change
+  `openspec-purpose-placeholders-2026-11` **已实施并归档** ⇒ ⇒ `proposal.md` 由 **rdd-builder P0** 从本草稿生成（未手写）⇒ ⇒ **AC-0…AC-10 全绿**（11/11，证据 =
+  `.rddf/reviews/openspec-purpose-placeholders-2026-11-verify.md`）⇒ ⇒ 19 条过期 Requirement
+  + 7 条范围外观察已登记（`.rddf/checks/openspec-spec-debt.tsv`）⇒ ⇒ 遗留 1 项待用户裁决：
+  **VCD「每拍自动 dump」的实现缺口**（`D04` + `O3`））
 
 ---
 
