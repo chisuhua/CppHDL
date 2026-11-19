@@ -137,7 +137,7 @@
 |:-:|---|---|
 | AC-1 | 8 个 target 的 **Purpose 占位符 warning 清零**（per-item，不看 totals） | 对 8 个 target 逐个 `openspec validate <c> --type spec --strict` ⇒「Purpose section is still a placeholder」**零命中** |
 | AC-2 | Purpose 段非占位符（**与 CLI 文案解耦**，防 CLI 改措辞失明） | 8 个文件的 `## Purpose` 段：长度 ≥ 120 字符 ∧ 不含 `TBD`/`TODO`/`placeholder`/`created by archiving` |
-| AC-3 | **信息量下限**（防「Requirement 标题拼接」）| Purpose 段与该文件任一 `### Requirement:` 标题的**最长公共子串 < 10 字符**；Purpose 段长度 ≥ 120 字符 |
+| AC-3 | **信息量下限**（防「Requirement 标题拼接」）| Purpose 段与该文件任一 `### Requirement:` 标题的**最长公共「实词片段」MUST < 4 个实词**（实词 = 剔除 `MUST`/`NOT`/`SHALL`/冠词/介词/标点后的词元；**按连续片段**计）⇒ ⇒ ⚠️ 阈值 **10 字符**的旧版判据会把「 MUST NOT 」这类**功能词碎片**误判 ⇒ ⇒ 已于 2026-11-19 改为实词计数（见 §11.8）| Purpose 段长度 ≥ 120 字符 |
 | AC-4 | **纯散文改动**（不夹带 Requirement 改动）| `git diff -U0` 中 8 个文件**只在 `## Purpose` 块内**有 `+` 行；`grep '^[+-]### Requirement'` 零命中 |
 | AC-5 | **指针对得着**（防悬空引用扩散到第一屏）| Purpose 中出现的反引号路径 `test -e` 必须成立；出现的符号必须在 `include/`/`src/`/`tests/`/`examples/` 有定义 |
 | AC-6 | **不破坏既有门** | `openspec validate --specs`（**非 strict**，ADR 判据面的人工 MUST）仍 exit 0；`bash scripts/verify_openspec_delta.sh` 仍绿 |
@@ -189,7 +189,7 @@
 
 ### 6.5 `verilator-e2e-coverage`
 
-> 定义 **Verilator 仿真覆盖深度在 CTest 矩阵中可见**的契约 —— 「哪些设计类别被双后端仿真覆盖了」这件事 MUST 在 `ctest -N` 里**一眼可见**，而不是只藏在某个测试文件里。
+> 定义 **Verilator 双后端仿真的覆盖面在 CTest 矩阵中可见**的契约 —— 「哪些设计类别被双后端仿真覆盖了」这件事 MUST 在 `ctest -N` 里**一眼可见**，而不是只藏在某个测试文件里。
 >
 > - **覆盖**：① **类别维度**（trace parity / bundle / stream / memory / 复杂设计（流水线 + FSM）各自 MUST 至少有一组可执行用例）⇒ ⇒ ② **命名维度**（误导性的测试名 MUST 被纠正，且旧名 MUST 保留为 CTest alias 以免打断历史命令）⇒ ⇒ ③ **判据维度**（每条覆盖 MUST 同时有**双后端 parity 断言**与**手推的绝对语义金标** ⇒ ⇒ 两端由**同一份** fixture 生成 ⇒ ⇒ parity 对「同构缺陷」**结构性失明** ⇒ ⇒ 金标不可省）⇒ ⇒ ④ **判别力前提**（字节序方向 MUST 用**非回文**字节 ⇒ ⇒ 回文字节使「位序」这一维度零判别力）。
 > - **为什么存在**：覆盖不足在 CI 上是**静默**的（少一个测试，ctest 照样全绿）⇒ ⇒ 必须让「覆盖了什么」成为**可枚举**的矩阵，而不是靠人记。
@@ -358,3 +358,30 @@
 
 **影响范围**：**结论不变**（前置条件仍满足），**仅证据出处改正**。
 ⇒ ⇒ 附带一条**通用纪律**（与本仓「判据载体 MUST 可解析」惯例一致）：**「某文件不存在 ⇒ 某状态为真」这类推论，只有在该文件是**权威状态载体**时才成立** ⇒ 引用前 MUST 先确认它是权威载体（本次是**我没确认就引用**）。
+
+### 11.8 ⚠️ 2026-11-19 三次订正：**AC-3 判据本身有缺陷**（跑预检才发现）
+
+**触发**：为让用户能**逐字批准**而建立载体型 change（`openspec/changes/openspec-purpose-placeholders-2026-11/`）⇒ ⇒ 把 §5 的 AC-3 写成脚本**预检** ⇒ ⇒ **8 段里有 4 段「未过」**。
+
+**逐条查明**（最长公共子串 ⇒ 命中的 Requirement 标题）：
+
+| capability | 公共子串 | 命中标题 | 判定 |
+|---|---|---|---|
+| `verilator-e2e-coverage` | 「Verilator 仿真覆盖深度」（16 字符） | 「Verilator 仿真覆盖深度 MUST 在 ctest 中可见」 | ❌ **真问题** —— Purpose 开头是 Requirement 标题的近义复述 ⇒ **已改写**为「Verilator 双后端仿真的覆盖面在 CTest 矩阵中可见」 |
+| `verilator-backend-e2e` | 「目标 wire 宽度内」（11 字符） | 「codegen 字面量值 MUST mask 到目标 wire 宽度内」 | ⚠️ **技术术语重合**，非 slop（Purpose 并非标题的复制） |
+| `verilator-hier-input` | 「 MUST NOT 」（10 字符） | 「…fixture MUST NOT 走 documented SKIP…」 | ⚠️ **纯功能词碎片** ⇒ 旧判据的**误报** |
+| `verilator-reg-init` | 「字面量 MUST 按」（10 字符） | 「print_reg 字面量 MUST 按 reg 宽规范化」 | ⚠️ **功能词 + 单个实词** ⇒ 旧判据的**误报** |
+
+⇒ ⇒ **根因**：AC-3 的「最长公共子串 < **10 字符**」是**按字符数**算的 ⇒ ⇒ 它把**功能词碎片**（「 MUST NOT 」「 MUST 按」）与**技术术语**也算成「标题拼接」的证据 ⇒ ⇒ **判据不可用**（假阳性 3/4）。
+
+⇒ ⇒ **已改判据**（§5 的 AC-3 行已就地更新）：**最长公共「实词片段」MUST < 4 个实词**（实词 = 剔除 `MUST`/`NOT`/`SHALL`/冠词/介词/标点后的词元，按**连续**片段计）⇒ ⇒
+- 「Verilator 仿真覆盖深度」= 4 实词 ⇒ **命中** ⇒ 判红（真 slop，会被抓）；
+- 「目标 wire 宽度内」= 3 实词 ⇒ 不命中；
+- 「 MUST NOT 」= 0 实词 ⇒ 不命中；
+- 「字面量 MUST 按」= 1 实词 ⇒ 不命中。
+
+⇒ ⇒ **两条通用纪律**（与本仓「判别力自证」惯例一致）：
+1. **判据必须先在真实数据上跑一遍** ⇒ 否则「判据本身有缺陷」会被当成「产物不合格」⇒ 本次若照旧阈值执行，会**逼着执行者去改 3 段本来合格的 Purpose**（假阳性 ⇒ 真损伤）。
+2. **字符数阈值 ≠ 语义相似度** ⇒ 凡以「共有 N 个字符」为判据者，MUST 先看它会不会被功能词/术语触发。
+
+⇒ ⇒ **对 §5 其它 AC 的同类体检**：AC-2（长度 + 关键词）、AC-4（diff 范围）、AC-5（路径存在）、AC-6（门绿）、AC-7（簿记）**均为「可机械判定的结构/事实型」** ⇒ 不受本条缺陷影响 ⇒ **无需改**。
