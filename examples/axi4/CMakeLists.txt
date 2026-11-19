@@ -18,13 +18,17 @@ target_compile_definitions(tb_axi_soc_example PRIVATE CPPHDL_SOURCE_DIR="${PROJE
 
 # ⚠️ `axi4_full_example` 已退役（2026-11-18 · §4.3.3）：行为覆盖 = `tests/test_axi4_full_burst.cpp`（dual-backend）
 
-# Phase 3A Complete Integration (T304)
-add_executable(phase3a_complete phase3a_complete.cpp)
-target_link_libraries(phase3a_complete PRIVATE cpphdl)
-target_include_directories(phase3a_complete PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../..)
-set_target_properties(phase3a_complete PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+# Phase 3A Integration —— **激励驱动**（设计定义在 `phase3a_top.h` · `axi4-convergence-tail` B2）
+# ⚠️ target 由 `phase3a_complete` 改名 ⇒ ⇒ **CTest 条目名 `spinalhdl_axi4_phase3a` 不变**
+#   （`tests/CMakeLists.txt` 的 `add_spinalhdl_ported_test(axi4_phase3a tb_phase3a_example)`）
+#   ⇒ ⇒ 改名不是缩面 ⇒ CTest 总数不变。
+# ⚠️ 本 target **无 `--emit-rtl`** ⇒ 不进 RTL 产品清单（不冻结 module 集期望）。
+add_executable(tb_phase3a_example tb_phase3a_example.cpp)
+target_link_libraries(tb_phase3a_example PRIVATE cpphdl)
+target_include_directories(tb_phase3a_example PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+set_target_properties(tb_phase3a_example PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
 
-install(TARGETS tb_axi4_lite_example tb_axi_soc_example phase3a_complete RUNTIME DESTINATION bin/axi4)
+install(TARGETS tb_axi4_lite_example tb_axi_soc_example tb_phase3a_example RUNTIME DESTINATION bin/axi4)
 
 # ── RTL 发射入口（`emit-cli-into-example` · 2026-11-18）────────────
 # ⚠️ **发射入口已并入 `tb_axi4_lite_example`**（`--emit-rtl` 模式）⇒ ⇒

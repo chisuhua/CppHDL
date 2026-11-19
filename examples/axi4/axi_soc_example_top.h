@@ -280,7 +280,7 @@ public:
         matrix.io().s1_rvalid <<= uart.io().rvalid;
 
         // 主设备 1 接口未使用 —— tie-off
-        // （惯用法照 examples/axi4/phase3a_complete.cpp:259-263：握手信号接常量）
+        // （惯用法照 `examples/axi4/phase3a_top.h` 的 `describe()`：握手信号接常量）
         matrix.io().m1_awvalid <<= ch_bool(false);
         matrix.io().m1_wvalid <<= ch_bool(false);
         matrix.io().m1_bready <<= ch_bool(false);

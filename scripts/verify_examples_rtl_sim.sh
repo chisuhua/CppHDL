@@ -22,7 +22,7 @@
 #   ⑧' **层次化形态判据**（`kind=hier`）—— 产物 MUST 含 **≥ 2** 个 module
 #      且含根 module `top` ⇒ ⇒ 否则「层次化」已静默退化成扁平
 #      （⚠️ ⑧ 对这条**结构性失明**：退化后端口表**照样相同**）
-#   ⑦ `--self-test`：**19 条**投毒**各自**必红 + **2 条**必绿（2026-11-18 · 计数会漂，
+#   ⑦ `--self-test`：**21 条**投毒**各自**必红 + **2 条**必绿（2026-11-19 · 计数会漂，
 #      以本注释与末尾 PASS 行为准）。其中 ⑧ 的**正负成对**两向（篡改 `port_table`
 #      一个名字 / 产物多插一个下沉端口）+ ⑧' 的**两向**（`kind=hier` 压成单 module ·
 #      `kind=soc` 压成单 module ⇒ 2026-11-18 起 ⑧' 也覆盖 soc）
@@ -34,7 +34,7 @@
 # 用法：
 #   scripts/verify_examples_rtl_sim.sh                     # 严格（CI 用）
 #   scripts/verify_examples_rtl_sim.sh --list              # 只列清单
-#   scripts/verify_examples_rtl_sim.sh --self-test         # 19 条投毒 + 2 条必绿自检
+#   scripts/verify_examples_rtl_sim.sh --self-test         # 21 条投毒 + 2 条必绿自检
 #   scripts/verify_examples_rtl_sim.sh --allow-pending --budget=6
 #        # 允许 `pending` 的行数 ≤ 6（**E6 接 CI 的过渡形态**：
 #        #  预算 MUST 随进度**单调下降** ⇒ ⇒ 忘更新就从「预算超额」变红）
@@ -110,7 +110,7 @@ load_columns() {
         return 1
     fi
     COLS="$(printf '%s' "${line#*#COLUMNS:}" | tr -s '[:space:]' ' ')"
-    for need in target kind source component emitter emitter_args tb status generated \
+    for need in target kind source component emitter emitter_args interp_checks tb status generated \
         min_checks scenarios spec_checks note; do
         case " $COLS " in
         *" $need "*) ;;
@@ -145,6 +145,7 @@ C_SRC="$(colidx source)"
 C_COMP="$(colidx component)"
 C_EMITTER="$(colidx emitter)"
 C_EMITTER_ARGS="$(colidx emitter_args)"
+C_INTERP="$(colidx interp_checks)"
 C_TB="$(colidx tb)"
 C_STATUS="$(colidx status)"
 C_GENERATED="$(colidx generated)"
@@ -259,6 +260,7 @@ mkdir -p "$WORK_ROOT"
 check_one() {
     local tgt="$1" kind="$2" src="$3" comp="$4" emitter="$5" tb="$6" status="$7"
     local gen="$8" minck="$9" scen="${10}" spec="${11}" note="${12}" eargs="${13}"
+    local interp="${14}"
     # ⚠️ `emitter_args` = 空格分隔的 token 序列；`-` 哨兵 ⇒ 展开为空
     if [ "$eargs" = "-" ]; then eargs=""; fi
     CHECKED=$((CHECKED + 1))
@@ -830,12 +832,31 @@ PY
         fail "⑥ status=verified 但 min_checks 未登记（=0）⇒ ⇒ 无法检测断言被删"
         return 1
     fi
+    # ── ⑨' **登记面**（2026-11-19 · `axi4-convergence-tail`）──────────────────
+    #   **自发行**（`emitter == target`）= 发射器**就是**它自己 ⇒ 必然有一个 C++ 侧
+    #   `main` ⇒ ⇒ MUST 登记 `interp_checks` 且 > 0（**反向判据**：新增自发射产品单元
+    #   却忘登记 ⇒ 红 ⇒ 不依赖「谁记得改护栏」）。
+    #   非自发行（`emitter != target`）= 发射器是**别的** target ⇒ 该行没有自己的
+    #   C++ 侧入口 ⇒ ⇒ MUST 写 `-` 哨兵（写了数字 ⇒ 红）。
+    if [ "$emitter" = "$tgt" ]; then
+        if ! printf '%s' "$interp" | grep -qE '^[0-9]+$' || [ "$interp" -le 0 ]; then
+            fail "⑨' 自发行（emitter == target）MUST 登记 interp_checks > 0：$tgt（实际 '$interp'）"
+            return 1
+        fi
+    elif [ "$interp" != "-" ]; then
+        fail "⑨' 非自发行（emitter != target）的 interp_checks MUST 写 '-' 哨兵：$tgt（实际 '$interp'）"
+        return 1
+    fi
+
     # ── ⑨ **C++ 侧（解释器路径）条数相等**（`axi4-verif-driven-cpp` · ADR-074 D1）──
-    #   作用域 = **note 列含 `interp-entry` 的行**（**用 note 约定 ⇒ 不新增列**）
+    #   作用域 = **`interp_checks` 列非 `-` 的行**（2026-11-19 起由列承载 ⇒
+    #   **退役 note 的自由文本标记** —— 自由文本承载判据 = 脆弱）
     #   ⇒ ⇒ 按 `target` 列在 `$BUILD_DIR/examples/**` 找可执行文件（**找不到 ⇒ fail-closed**）
-    #   ⇒ ⇒ 运行 ⇒ 断言 stdout 含 `RESULT: checks=<min_checks> fails=0`
+    #   ⇒ ⇒ 运行 ⇒ 断言 stdout 含 `RESULT: checks=<interp_checks> fails=0`
+    #   ⚠️ **等式用 `interp_checks` 而非 `min_checks`**：两者语义不同（`.sv` 侧 vs C++ 侧）
+    #      ⇒ ⇒ 手写激励的产品（R13 过渡态）两侧本来就不等 ⇒ ⇒ MUST 各自登记
     #   ⚠️ 「两后端一致」不是正确性证据 ⇒ ⇒ 本判据只判**条数相等 + 零失败**，不判语义
-    if printf '%s' "$note" | grep -q 'interp-entry'; then
+    if [ "$interp" != "-" ]; then
         local ibin=""
         while IFS= read -r cand; do ibin="$cand"; break; done \
             < <(find "$BUILD_DIR/examples" -type f -name "$tgt" 2>/dev/null | sort)
@@ -843,17 +864,18 @@ PY
             fail "⑨ 解释器入口缺失：$tgt（先构建：cmake --build $BUILD_DIR --target $tgt）"
             return 1
         fi
-        local iout irc
+        local iout irc iactual
         iout="$("$ibin" 2>/dev/null)"; irc=$?
         if [ "$irc" -ne 0 ]; then
             fail "⑨ 解释器路径非零退出（exit=$irc）：$tgt"
             return 1
         fi
-        if ! printf '%s\n' "$iout" | grep -qx "RESULT: checks=${minck} fails=0"; then
-            fail "⑨ 解释器条数不等或缺结论行：期望 'RESULT: checks=${minck} fails=0'"
+        iactual="$(printf '%s\n' "$iout" | grep -Eo 'RESULT: checks=[0-9]+ fails=[0-9]+' | tail -1)"
+        if ! printf '%s\n' "$iout" | grep -qx "RESULT: checks=${interp} fails=0"; then
+            fail "⑨ 解释器条数不等或缺结论行：$tgt 期望 'RESULT: checks=${interp} fails=0'（实际：${iactual:-无结论行}）"
             return 1
         fi
-        ok "⑨ 解释器条数相等（checks=${minck} fails=0）"
+        ok "⑨ 解释器条数相等（checks=${interp} fails=0）"
     fi
 
     # ── F1b：`source` 列的路径 MUST 存在于磁盘（该列原「读了不判」）─────────
@@ -876,7 +898,7 @@ if [ "$MODE" = "check" ]; then
             "${F[$((C_STATUS - 1))]}" "${F[$((C_GENERATED - 1))]}" \
             "${F[$((C_MINCHECKS - 1))]}" "${F[$((C_SCENARIOS - 1))]}" \
             "${F[$((C_SPEC - 1))]}" "${F[$((C_NOTE - 1))]}" \
-            "${F[$((C_EMITTER_ARGS - 1))]}"
+            "${F[$((C_EMITTER_ARGS - 1))]}" "${F[$((C_INTERP - 1))]}"
     done < <(data_rows)
 
     # 预算检查（--allow-pending 时）
@@ -899,7 +921,7 @@ if [ "$MODE" = "check" ]; then
     exit 0
 fi
 
-# ── ⑦ --self-test：**19 条**投毒各自必红 + **2 条**必绿（2026-11-18 计数）───────────
+# ── ⑦ --self-test：**21 条**投毒各自必红 + **2 条**必绿（2026-11-19 计数）───────────
 run_self_test() {
     local st_root="$WORK_ROOT/selftest"
     rm -rf "$st_root"
@@ -924,13 +946,13 @@ run_self_test() {
         # ⚠️ 锚点：`REGISTERED_TARGETS: $3` · `REGISTERED_SOC: 0` · `REGISTERED_HIER: 1`
         cat >"$1" <<EOF
 # self-test 用的临时清单
-#COLUMNS: target kind source component emitter emitter_args tb status generated min_checks scenarios spec_checks note
+#COLUMNS: target kind source component emitter emitter_args interp_checks tb status generated min_checks scenarios spec_checks note
 # REGISTERED_TARGETS: $3
 # REGISTERED_SOC: 0
 # REGISTERED_HIER: 1
-selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	-	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
-selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
-tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	tb_axi4_lite_example	--emit-rtl	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体）· interp-entry
+selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	-	-	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
+selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	-	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
+tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	tb_axi4_lite_example	--emit-rtl	113	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体 · 自发行 ⇒ ⑨/⑨' 的载体）
 EOF
     }
 
@@ -980,11 +1002,11 @@ EOF
     make_soc_list() { # $1 = 清单路径 ⇒ ⇒ 只含一行 kind=soc
         cat >"$1" <<'SOCEOF'
 # self-test 用的临时清单（**只含 soc 行** ⇒ ⇒ ⑧' 对 kind=soc 的载体）
-#COLUMNS: target kind source component emitter emitter_args tb status generated min_checks scenarios spec_checks note
+#COLUMNS: target kind source component emitter emitter_args interp_checks tb status generated min_checks scenarios spec_checks note
 # REGISTERED_TARGETS: 0
 # REGISTERED_SOC: 1
 # REGISTERED_HIER: 0
-tb_axi_soc_example	soc	examples/axi4/tb_axi_soc_example.cpp	AxiSocTop	tb_axi_soc_example	--emit-rtl	examples/axi4/tb_axi_soc_example.sv	verified	no	14	4	10	self-test fixture（kind=soc · ⑧' 的载体）
+tb_axi_soc_example	soc	examples/axi4/tb_axi_soc_example.cpp	AxiSocTop	tb_axi_soc_example	--emit-rtl	2	examples/axi4/tb_axi_soc_example.sv	verified	no	14	4	10	self-test fixture（kind=soc · ⑧' 的载体 · 自发行 ⇒ ⑨ 判 C++ 侧 2 条 ≠ `.sv` 侧 14 条）
 SOCEOF
     }
 
@@ -1120,8 +1142,8 @@ PY
             "RTL_SIM_TB_OVERRIDE=$tb_fail"
     fi
 
-    # 投毒 15：**只**毒解释器二进制（`min_checks` 不动 ⇒ ⑥ 仍绿）⇒ ⑨ 必红
-    #   ⚠️ 不能用「改 `min_checks`」当投毒 —— 那会被 ⑥（三方等式，先跑）抢先命中
+    # 投毒 15：**只**毒解释器二进制（`min_checks` / `interp_checks` 都不动 ⇒ ⑥ 仍绿）⇒ ⑨ 必红
+    #   ⚠️ 不能用「改登记值」当投毒 —— 那会被 ⑥（三方等式，先跑）或 ⑨' 抢先命中
     #      ⇒ ⇒ ⑨ 就**永远**没有独立判别力。
     make_list "$st_list" "$st_tb_rel" 2 verified
     local ibin="$BUILD_DIR/examples/axi4/tb_axi4_lite_example"
@@ -1175,6 +1197,18 @@ PY
     run_case "投毒19（argv.norm 含孤立 '-' ⇒ ③' 必红）" \
         "③' argv.norm 含孤立" "RTL_SIM_TAMPER=argv_norm_dash"
 
+    # ── 投毒 20：**反向判据** —— 自发行（`emitter == target`）的 `interp_checks` 置 `-`
+    #   ⚠️ 与投毒15 **正交**：那条毒的是**运行期输出**（二进制被换）⇒ ⑨ 红；
+    #   本条毒的是**登记面**（列本身缺失）⇒ ⇒ 只有 ⑨' 会红 ⇒ ⇒ 「新增自发射产品单元
+    #   却忘登记」这条形态才有独立判别力（不依赖谁记得改护栏）。
+    make_list "$st_list" "$st_tb_rel" 2 verified
+    awk -F'\t' -v OFS='\t' '
+        /^#COLUMNS:/ { n = split($0, c, " "); for (i = 2; i <= n; i++) idx[c[i]] = i - 1; print; next }
+        /^#/ || /^$/ { print; next }
+        { if ($idx["target"] == "tb_axi4_lite_example") $idx["interp_checks"] = "-"; print }
+    ' "$st_list" >"$st_list.tmp" && mv "$st_list.tmp" "$st_list"
+    run_case "投毒20（自发行缺 interp_checks 登记）" "⑨' 自发行（emitter == target）MUST 登记"
+
     # ── 投毒 18：**kind=soc 的形态退化**（⑧' 对 soc 的判别力 · 2026-11-18 · F7）──
     #   ⚠️ 与投毒8（flatten_hier）**不同**：那条钉的是 kind=hier 行；本条钉的是
     #   **kind=soc** 行 ⇒ ⇒ 两者各自证明 ⑧' 在两个桶上都有判别力（AC24 的
@@ -1185,6 +1219,20 @@ PY
         "⑧' 层次化产物只有" "RTL_SIM_TAMPER=flatten_soc" "$st_soc_list"
     # 必绿：soc 清单**未投毒** ⇒ MUST 绿（证明 ⑧' 对 kind=soc 不误伤）
     run_case_green "soc 清单未投毒（⑧' 对 kind=soc 不误伤）" "$st_soc_list"
+
+    # ── 投毒 21：⑨ 的**等式**对 SoC 行的判别力（AC7）────────────────────────
+    #   ⚠️ 2026-11-19 之前 SoC 行的 C++ 侧断言**完全无守护**：⑥ 读的是 `.sv` 侧的 14 条，
+    #   ⑨ 因 note 无标记而**跳过该行** ⇒ ⇒ 实测把 C++ 侧换成 `checks=0` 的 stub ⇒
+    #   exit 0 且护栏**无任何反应** ⇒ ⇒ 本条证明「SoC 现在被守护」：登记值改成 ≠ 实际
+    #   的 2 ⇒ ⇒ 必红（**不能**用改 `min_checks` 冒充 —— ⑥ 会抢先命中）。
+    local st_soc_bad="$st_root/list_soc_interp.tsv"
+    sed 's/\t2\texamples\/axi4\/tb_axi_soc_example.sv\t/\t3\texamples\/axi4\/tb_axi_soc_example.sv\t/' \
+        "$st_soc_list" >"$st_soc_bad"
+    if cmp -s "$st_soc_list" "$st_soc_bad"; then
+        fail "自检 投毒21 无效：没能改掉 SoC 的 interp_checks"
+    else
+        run_case "投毒21（SoC 的 C++ 侧条数与登记不等）" "⑨ 解释器条数不等" "" "$st_soc_bad"
+    fi
 
     # ── 还原 ─────────────────────────────────────────────────────
     cp "$golden_tb" "$REPO_ROOT/$st_tb_rel"
@@ -1202,7 +1250,7 @@ PY
         echo "❌ verify_examples_rtl_sim --self-test: $FAILED 条投毒未被抓住"
         exit 1
     fi
-    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 19 条投毒各自转红 · 2 条必绿用例仍绿 · 还原复绿）"
+    echo "✅ verify_examples_rtl_sim --self-test: PASS（基线绿 · 21 条投毒各自转红 · 2 条必绿用例仍绿 · 还原复绿）"
     exit 0
 }
 

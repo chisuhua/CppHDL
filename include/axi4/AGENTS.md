@@ -284,7 +284,7 @@ include/axi4/
 ## EXAMPLES
 - `examples/axi4/tb_axi4_lite_example.cpp` — Lite slave 验证（**由 `.verif` 驱动** ⇒ 无手写激励/断言）
 - `examples/axi4/tb_axi_soc_example.cpp` — Matrix 2x2 + GPIO + UART + Timer SoC（激励 + 发射 + 自检）
-- `examples/axi4/phase3a_complete.cpp` — 4x4 interconnect + converter + slave
+- `examples/axi4/phase3a_top.h` + `tb_phase3a_example.cpp` — 4x4 interconnect + converter + slave（设计定义 / 激励驱动分离）
 
 ## TESTS
 | File | Tag | Focus |

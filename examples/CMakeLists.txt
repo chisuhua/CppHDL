@@ -66,7 +66,7 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     # PHASE: Phase 3A: AXI4 总线
     tb_axi4_lite_example
     tb_axi_soc_example
-    phase3a_complete
+    tb_phase3a_example
 
     # PHASE: RISC-V Mini
     rv32i_phase1_test

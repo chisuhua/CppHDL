@@ -100,6 +100,7 @@ target ⇒ ⇒ 该行**没有**自己的 C++ 侧入口 ⇒ ⇒ `interp_checks = 
 | capability | 动作 |
 |---|---|
 | `examples-rtl-sim-coverage` | **ADDED** 1 条 requirement：「C++ 侧入口的断言条数 MUST 登记且被守护」（含反向判据） |
+| `axi-interconnect-routing` | **MODIFIED** 1 条 requirement：「AXI 互连层 MUST 提供低有效复位」—— 仅订正**证据引用**（`phase3a_complete.cpp` 已拆 / `axi_soc_example.cpp` 已改名 ⇒ 行号悬空）⇒ ⇒ 语义条款**一字未改** |
 
 ⇒ ⇒ 既有 requirement **不修改**：「C++ 侧 MUST 与生成式 TB 共享同一验证源」**只约束 `.verif` 驱动的产品**
 ⇒ ⇒ SoC 是**手写激励**（R13 过渡态）⇒ ⇒ **不适用**那条 ⇒ ⇒ 本条**补的是它没覆盖的另一半**
@@ -117,6 +118,21 @@ target ⇒ ⇒ 该行**没有**自己的 C++ 侧入口 ⇒ ⇒ `interp_checks = 
 | 构建 | target 改名（**条目数不变**）· tracked 名单 / install 同名项改名 |
 | 文档 | `examples/axi4/AGENTS.md` · `docs/CHANGELOG.md` |
 | 锚点 | **全部不变**（CTest 条目名不变 ⇒ `CTEST_TOTAL` 不变 · 无新增测试源 ⇒ `EXAMPLES_TEST_SOURCES` / `tests/test_*.cpp` 不变） |
+
+---
+
+## 用户可见变更
+
+| 项 | 前 | 后 |
+|---|---|---|
+| `examples/axi4/phase3a_complete.cpp` | 存在（463 行 · 设计定义 + `main` 一体） | 拆为 `phase3a_top.h`（设计定义）+ `tb_phase3a_example.cpp`（激励驱动） |
+| example 二进制名 | `phase3a_complete` | `tb_phase3a_example` |
+| CTest 条目 `spinalhdl_axi4_phase3a` | 存在 | **存在（名字不变 ⇒ 非缩面）** |
+| `phase3a` 的结论输出 | 散文「…链路仿真通过」 | `RESULT: checks=2 fails=0`（协议行） |
+| `phase3a` 收到未知参数 | exit 0（静默忽略） | **exit 2**（默认模式不接受参数） |
+| SoC 的 C++ 侧 2 条断言 | **无守护**（全删也绿） | 由 ⑨ 按 `interp_checks=2` 对账 |
+| 清单 `.rddf/checks/examples-rtl-sim-targets.tsv` | 13 列 | **14 列**（+`interp_checks`） |
+| `--self-test` 投毒数 | 19 | **21** |
 
 ---
 

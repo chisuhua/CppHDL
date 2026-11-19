@@ -1,3 +1,46 @@
+## 2026-11-20 — C++ 侧断言纳入判据守护 + `phase3a` 拆三角色（`axi4-convergence-tail`）
+
+**问题一（判据面）**：`tb_axi_soc_example` 的 **C++ 侧 2 条断言无任何守护** —— ⑥ 读的是
+`tb` 列指向的 `.sv`（checks=14），⑨ 只作用于 note 含 `interp-entry` 的行（SoC 行没有）
+⇒ ⇒ 实测把 C++ 侧换成输出 `RESULT: checks=0 fails=0` 的 stub ⇒ **exit 0 且护栏无反应**。
+蓝图 §7 R13 允许「C++ 侧条数 ≠ `.sv` 侧」是过渡态的必然，但「条数无人守护」不是。
+
+**问题二（结构面）**：`phase3a_complete.cpp`（463 行）是该目录最后一个「设计定义 + `main`
+一体」的 example，且结论是**散文**（「Phase 3A AXI-Lite 链路仿真通过」）而非协议行
+⇒ ⇒ 护栏无法对账条数 ⇒ ⇒ 与已退役的 `axi4_full_example` 是同一族缺陷（只打印不判定）。
+
+**改了什么**
+
+- **清单新增 `interp_checks` 列**（13 → **14 列** · `.rddf/checks/examples-rtl-sim-targets.tsv`）：
+  C++ 侧入口的**等式值**；自发行（`emitter == target`）MUST 登记且 > 0，其余写 `-` 哨兵。
+  值：Lite = **113** · SoC = **2**（≠ `.sv` 侧的 14 ⇒ 两侧语义不同，MUST 各自登记）。
+- **⑨ 作用域从 note 的自由文本标记迁到列**：`interp-entry` 约定**退役**（自由文本承载
+  判据 = 脆弱）；等式改为 `checks == interp_checks`（**不是** `min_checks`）。
+- **新增反向判据 ⑨'**：`emitter == target` ⇒ MUST 有 `interp_checks` 且 > 0；非自发行
+  写了数字 ⇒ 也红。⇒ ⇒ 未来任何自发射产品单元**自动**纳入守护（不依赖谁记得改护栏）。
+- **`phase3a_complete.cpp` 拆三角色**：`phase3a_top.h`（设计定义 · **无 `main`**）+
+  `tb_phase3a_example.cpp`（`main` + **2 条断言** + `RESULT: checks=2 fails=0`）·
+  原文件删除 · target 改名 `phase3a_complete` → `tb_phase3a_example`。
+- 顺带删掉 `phase3a` 输出里的**假陈述**「Verilog generation ready」（本 example 从不产出
+  RTL 产物 —— 无 emitter target · 无清单登记行）。
+
+**用户可见变更**
+
+| 项 | 前 | 后 |
+|---|---|---|
+| `examples/axi4/phase3a_complete.cpp` | 存在（463 行 · 设计 + main 一体） | 拆为 `phase3a_top.h` + `tb_phase3a_example.cpp` |
+| example 二进制名 | `phase3a_complete` | `tb_phase3a_example` |
+| CTest 条目 `spinalhdl_axi4_phase3a` | 存在 | **存在（名字不变 ⇒ 非缩面）** |
+| `phase3a` 的结论输出 | 散文「…链路仿真通过」 | `RESULT: checks=2 fails=0`（协议行） |
+| `phase3a --bogus` | exit 0 | **exit 2**（默认模式不接受参数） |
+| SoC 的 C++ 侧断言（2 条） | **无守护**（全删也绿） | 由 ⑨ 按 `interp_checks=2` 对账 |
+
+**判据面自证**（`--self-test` 19 → **21 条**投毒）：新增 ⑨'（自发行缺登记 ⇒ 红）与
+⑨ 对 SoC 行的等式（登记值改 ≠ 2 ⇒ 红）各一条投毒，**各自转红**；2 条必绿用例仍绿。
+
+锚点：`CTEST_TOTAL` / non-perf / `tests/test_*.cpp` / `EXAMPLES_TEST_SOURCES` /
+`EXPECTED_EXEMPT_PORTS`（1384 · 豁免表 7 行仅路径改名）**全部不变**。
+
 ## 2026-11-19 — 发射入口的模式标记与 `--out` 校验下沉库层（修 Lite 侧 fail-open）
 
 **问题**：`examples/axi4/` 的两个 tb（`tb_axi4_lite_example` · `tb_axi_soc_example`）**各写一份**

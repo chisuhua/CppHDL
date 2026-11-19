@@ -31,7 +31,7 @@ evidence: probe:scripts/verify_input_port_required_registry.sh
 |---|---|---|---|
 | `AxiLiteSlave` | `rst_n` | 永久复位 | `tests/test_axi_lite_slave_conformance.cpp` |
 | `Axi4Slave` | `rst_n` | 永久复位 | `tests/test_axi4_full_burst.cpp` |
-| `AxiToAxiLiteConverter` | `rst_n` | 永久复位 | `examples/axi4/phase3a_complete.cpp` |
+| `AxiToAxiLiteConverter` | `rst_n` | 永久复位 | `examples/axi4/phase3a_top.h` |
 | `AxiLiteGpio` | `rst_n` | 永久复位 | `tests/test_axi_gpio_behavior.cpp` |
 | `AxiLiteUart` | `rst_n` | 永久复位 | `tests/test_axi_uart_behavior.cpp` |
 | `AxiLiteTimer` | `rst_n` | 永久复位 | `tests/test_axi_timer_behavior.cpp` |

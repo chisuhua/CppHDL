@@ -33,7 +33,7 @@ stream_mux_demo	流控（多路复用 + 背压）	类别已覆盖（流控：fif
 stream_demux_demo	流控（分发）	同上 · demux 的判据面与 mux 同源 ⇒ ⇒ 边际收益低	若 chlib-stream-semantics 之外需要「分发」的独立判据 ⇒ ⇒ 补 TB
 stream_arbiter_demo	流控（round-robin 仲裁）	仲裁语义由独立 capability chlib-stream-arbitration 承载 ⇒ ⇒ RTL 侧期望源需另推（轮转公平性）	待 chlib-stream-arbitration 的判据口径稳定后补
 stream_fork_demo	流控（扇出复制）	类别已覆盖（流控）· 且 fork 的复制语义与「同一输入多路读」同源	若需要「扇出保真」的独立拍级判据 ⇒ ⇒ 补 TB
-phase3a_complete	综合回归（AXI4 + SoC 拼装）	其子面已由 axi4_lite / axi_soc 覆盖 ⇒ ⇒ 本 target 是阶段汇总回归（非独立产品单元）⇒ ⇒ 重复覆盖的成本高于收益	若需要「端到端综合场景」的 RTL 面 ⇒ ⇒ 另立立项
+tb_phase3a_example	综合回归（AXI4 + SoC 拼装）	其子面已由 axi4_lite / axi_soc 覆盖 ⇒ ⇒ 本 target 是阶段汇总回归（非独立产品单元）⇒ ⇒ 重复覆盖的成本高于收益	若需要「端到端综合场景」的 RTL 面 ⇒ ⇒ 另立立项
 rv32i_phase1_test	流水线阶段测试（阶段 1）	它是流水线单阶段的 C++ 侧回归 ⇒ ⇒ 产品面由整 SoC（riscv-mini-rv32i-soc）承载 ⇒ ⇒ 单阶段不作为产品单元分发	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
 rv32i_phase2_test	流水线阶段测试（阶段 2）	同上	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
 rv32i_phase3_test	流水线阶段测试（阶段 3）	同上	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB

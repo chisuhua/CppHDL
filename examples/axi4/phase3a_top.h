@@ -1,49 +1,35 @@
-/**
- * Phase 3A Complete Example
- * 
- * 集成验证 Phase 3A 所有组件:
- * - AXI4 全功能从设备
- * - AXI4 4x4 Interconnect
- * - AXI 到 AXI-Lite 转换器
- * 
- * 系统架构:
- * ```
- *                  ┌─────────────────────┐
- *                  │   AXI Interconnect  │
- *                  │       4x4 Matrix    │
- *                  └─────────────────────┘
- *                         │
- *                         ▼
- *              ┌──────────────────────┐
- *              │  AXI to AXI-Lite     │
- *              │     Converter        │
- *              └──────────────────────┘
- *                         │
- *                         ▼
- *              ┌──────────────────────┐
- *              │   AXI4-Lite Slave    │
- *              │     (GPIO/UART)      │
- *              └──────────────────────┘
- * ```
- */
+// examples/axi4/phase3a_top.h
+//
+// Phase 3A 的**顶层组件**（从 `phase3a_complete.cpp` 抽出 · `axi4-convergence-tail-2026-11` B1）。
+//
+// ⚠️ **三角色分离**（蓝图 §4.3.3 · `example-file-boundary-2026-11` 的收口）：
+//   · **本文件** = 设计定义（只做实例化与连接 · **无 `main`**）
+//   · 激励驱动 = `tb_phase3a_example.cpp`（`main` + `RESULT:` 协议行）
+//   ⇒ ⇒ 与 `axi4_lite_example_top.h` / `axi_soc_example_top.h` **同型**。
+//
+// ⚠️ **本设计不进 RTL 产品清单**（无 `--emit-rtl` · 无 emitter target ⇒
+//   `.rddf/checks/examples-rtl-sim-targets.tsv` 无该行）⇒ ⇒ 端口**未具名**
+//   （ADR-075 E1 的具名要求只对有产物的设计生效）。
+//   ⇒ ⇒ 若未来把它纳入产品面（follow-up）⇒ ⇒ MUST **先具名**（否则
+//   `manifest.cpp_member` 只能是 `unnamed_input` ⇒ 验证源无法按名寻址）。
 
-#include "ch.hpp"
-#include "axi4/axi4_full.h"
+#pragma once
+
+#include "axi4/axi4_lite_slave.h"
 #include "axi4/axi_interconnect_4x4.h"
 #include "axi4/axi_to_axilite.h"
-#include "axi4/axi4_lite_slave.h"
+#include "ch.hpp"
 #include "component.h"
-#include "simulator.h"
-#include "codegen_verilog.h"
-#include <iostream>
 
-using namespace ch;
-using namespace ch::core;
-using namespace axi4;
+#include <string>
 
-// ============================================================================
-// 顶层系统集成
-// ============================================================================
+namespace axi4 {
+namespace example {
+
+using namespace ch::core; // ch_uint / ch_bool / ch_reg / select / 0_d 等
+
+/// **根组件名**（**单一真相源**）—— 与另两个设计头的根名常量同型
+inline constexpr const char *kPhase3aRootName = "top";
 
 class Phase3ATop : public ch::Component {
 public:
@@ -304,159 +290,5 @@ public:
     }
 };
 
-// ============================================================================
-// 主函数
-// ============================================================================
-
-int main() {
-    std::cout << "=== Phase 3A Complete Integration Test ===" << std::endl;
-    std::cout << std::endl;
-
-    // ========================================================================
-    // 仿真：跑通 interconnect → converter → AXI4-Lite slave 的完整链路
-    // ========================================================================
-    // ⚠️ 本 example 此前**只构建设计、不跑仿真** ⇒ AXI-Lite 路径从未被验证过。
-    //   现补上真实的 AXI4 Full master 事务（写 + 读回）+ 数据断言。
-    //   验收范围说明：**只验证 slave 0 一路** —— s1-3 在本 example 里被 tie-off
-    //   （未接线的 ch_in 读出为 0）。16 对路由的验收由
-    //   `tests/test_axi_interconnect_4x4.cpp` 承担，MUST NOT 把 example 当作
-    //   16 对路由的验收手段。
-    ch::ch_device<Phase3ATop> top_device;
-    ch::Simulator sim(top_device.context());
-    auto &io = top_device.instance().io();
-
-    sim.set_input_value(io.start, false);
-    sim.set_input_value(io.is_write, false);
-    sim.set_input_value(io.addr, 0);
-    sim.set_input_value(io.wdata, 0);
-    // 顶层 `rst_n` MUST 显式驱动（未接线的 ch_in<ch_bool> 读出为 0 = 永久复位）
-    sim.set_input_value(io.rst_n, true);
-    sim.tick();
-
-    // 有界等待 `done`（组合脉冲在 tick() 之后可能已消失 ⇒ 先求值再采样）
-    auto wait_done = [&]() -> bool {
-        for (int i = 0; i < 64; ++i) {
-            sim.eval_combinational();
-            if (sim.get_port_value(io.done) == 1) return true;
-            sim.tick();
-        }
-        sim.eval_combinational();
-        return sim.get_port_value(io.done) == 1;
-    };
-
-    int failures = 0;
-
-    std::cout << "--- Test 1: 写 AXI4-Lite 寄存器 0 (addr=0x00, data=0xAB) ---" << std::endl;
-    sim.set_input_value(io.addr, 0x00);
-    sim.set_input_value(io.wdata, 0xAB);
-    sim.set_input_value(io.is_write, true);
-    sim.set_input_value(io.start, true);
-    sim.tick();
-    sim.set_input_value(io.start, false);
-    if (!wait_done()) {
-        std::cerr << "FAIL: 写事务超时（done 未在 64 拍内拉高）" << std::endl;
-        return 1;
-    }
-    std::cout << "  写事务完成 OK" << std::endl;
-
-    std::cout << "--- Test 2: 读回 AXI4-Lite 寄存器 0 (addr=0x00) ---" << std::endl;
-    sim.set_input_value(io.addr, 0x00);
-    sim.set_input_value(io.is_write, false);
-    sim.set_input_value(io.start, true);
-    sim.tick();
-    sim.set_input_value(io.start, false);
-    if (!wait_done()) {
-        std::cerr << "FAIL: 读事务超时（done 未在 64 拍内拉高）" << std::endl;
-        return 1;
-    }
-    sim.eval_combinational();
-    const uint32_t rdata = static_cast<uint32_t>(static_cast<uint64_t>(sim.get_port_value(io.rdata)));
-    if (rdata != 0xAB) {
-        std::cerr << "FAIL: 读回值 = 0x" << std::hex << rdata << "（期望 0xab）" << std::endl;
-        ++failures;
-    } else {
-        std::cout << "  读回 0x" << std::hex << rdata << std::dec
-                  << " OK（= 写入值）" << std::endl;
-    }
-
-    if (failures != 0) {
-        std::cerr << "Phase 3A 仿真验证失败（" << failures << " 项）" << std::endl;
-        return 1;
-    }
-    std::cout << "Phase 3A AXI-Lite 链路仿真通过（写 + 读回）" << std::endl;
-    std::cout << std::endl;
-
-    // ⚠️ **本 example 不产出 RTL 产物**（无 emitter target · 无清单登记行）
-    //   ⇒ ⇒ 原先的 "Generating Verilog..." / "Verilog generation ready" 是**假动作**
-    //   （`toVerilog` 早已被注释掉 ⇒ 实际什么都没生成）⇒ ⇒ 会向用户谎报「已生成」
-    //   ⇒ ⇒ 2026-11-19 删除（死代码清扫）。
-
-    // 输出系统架构
-    std::cout << "=== System Architecture ===" << std::endl;
-    std::cout << std::endl;
-    std::cout << "  ┌─────────────────────────────────┐" << std::endl;
-    std::cout << "  │      Test Master (External)     │" << std::endl;
-    std::cout << "  └──────────────┬──────────────────┘" << std::endl;
-    std::cout << "                 │" << std::endl;
-    std::cout << "                 ▼" << std::endl;
-    std::cout << "  ┌─────────────────────────────────┐" << std::endl;
-    std::cout << "  │    AXI Interconnect 4x4         │" << std::endl;
-    std::cout << "  │  - Round-Robin Arbiter          │" << std::endl;
-    std::cout << "  │  - Address Decode [31:30]       │" << std::endl;
-    std::cout << "  │  - 4 Masters × 4 Slaves         │" << std::endl;
-    std::cout << "  └──────────────┬──────────────────┘" << std::endl;
-    std::cout << "                 │ Slave 0" << std::endl;
-    std::cout << "                 ▼" << std::endl;
-    std::cout << "  ┌─────────────────────────────────┐" << std::endl;
-    std::cout << "  │  AXI to AXI-Lite Converter      │" << std::endl;
-    std::cout << "  │  - Burst → Single               │" << std::endl;
-    std::cout << "  │  - ID Ignore                    │" << std::endl;
-    std::cout << "  │  - Protocol Adaptation          │" << std::endl;
-    std::cout << "  └──────────────┬──────────────────┘" << std::endl;
-    std::cout << "                 │" << std::endl;
-    std::cout << "                 ▼" << std::endl;
-    std::cout << "  ┌─────────────────────────────────┐" << std::endl;
-    std::cout << "  │    AXI4-Lite Slave (GPIO)       │" << std::endl;
-    std::cout << "  │  - 4 Registers                  │" << std::endl;
-    std::cout << "  │  - 32-bit Data Width            │" << std::endl;
-    std::cout << "  └─────────────────────────────────┘" << std::endl;
-    std::cout << std::endl;
-    
-    // 输出完成状态
-    std::cout << "=== Phase 3A Completion Status ===" << std::endl;
-    std::cout << std::endl;
-    std::cout << "✅ T301: AXI4 Full Function Slave" << std::endl;
-    std::cout << "   - 5 independent channels (AW/W/B/AR/R)" << std::endl;
-    std::cout << "   - Burst transfers (INCR, 1-16 beats)" << std::endl;
-    std::cout << "   - 16 registers (4-byte aligned)" << std::endl;
-    std::cout << std::endl;
-    std::cout << "✅ T302: AXI Interconnect 4x4" << std::endl;
-    std::cout << "   - 4 masters × 4 slaves crossbar" << std::endl;
-    std::cout << "   - Round-robin arbitration" << std::endl;
-    std::cout << "   - Address decoding [31:30]" << std::endl;
-    std::cout << std::endl;
-    std::cout << "✅ T303: AXI to AXI-Lite Converter" << std::endl;
-    std::cout << "   - Protocol adaptation" << std::endl;
-    std::cout << "   - Burst to single transfer" << std::endl;
-    std::cout << "   - ID ignore" << std::endl;
-    std::cout << std::endl;
-    std::cout << "✅ T304: Complete Integration Example" << std::endl;
-    std::cout << "   - Full system integration" << std::endl;
-    std::cout << "   - Verilog generation ready" << std::endl;
-    std::cout << std::endl;
-    
-    std::cout << "=== Next Steps: Phase 3B ===" << std::endl;
-    std::cout << std::endl;
-    std::cout << "📋 T305: RV32I Core Implementation" << std::endl;
-    std::cout << "   - 40 base instructions" << std::endl;
-    std::cout << "   - Instruction/Data TCM" << std::endl;
-    std::cout << "   - AXI4 interface" << std::endl;
-    std::cout << std::endl;
-    std::cout << "📋 T306-T309: RISC-V Integration" << std::endl;
-    std::cout << "   - I-TCM / D-TCM" << std::endl;
-    std::cout << "   - Debug module" << std::endl;
-    std::cout << "   - Boot ROM" << std::endl;
-    std::cout << std::endl;
-    
-    return 0;
-}
+} // namespace example
+} // namespace axi4
