@@ -363,6 +363,6 @@ run_all_ported_tests.sh              **exit 0**（PASS 27 / FAIL 0 / STALE-ARTIF
 
 | 项 | 状态 |
 |---|---|
-| **`verify_examples_rtl_sim.sh --self-test` 挂进 CI** | ⛔ **未挂**（`ci.yml` 只有生产轮）⇒ ⇒ 「⑧' 被改回 `kind=hier` ⇒ 自动红」**无系统性保证**（蓝图 §7 R12 的行内四式锚点是廉价过渡）⇒ **建议另立项**（一行 yml） |
+| **`verify_examples_rtl_sim.sh --self-test` 挂进 CI** | ✅ **已实施**（`c6b0a0b`，2026-11-19）⇒ 「⑧' 被改回 `kind=hier` ⇒ 自动红」现在有**系统性保证**（CI 常驻 · 本机实测 ≈ 1 分 48 秒）⇒ ⇒ 蓝图 §7 R12 的行内四式锚点降级为「快速复算」而非唯一守护 |
 | `git push` | ⛔ 本批 20 笔提交**全在本地 `main`**，未 push ⇒ **等用户确认** |
 | 上游 change 的 `## Purpose`（新建 capability 之外的 3 个） | 已存在 TBD（`build-cpp-standard` 等 8 个既有 spec 同样如此）⇒ 仓级既有问题，非本批引入 |
