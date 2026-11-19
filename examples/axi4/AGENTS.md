@@ -17,7 +17,8 @@ Child of root `AGENTS.md`.
 | `tb_axi_soc_example.sv` | SoC 层独立 TB（**手写** · `generated=no` · UART 帧解码超出封闭原语集） | — |
 
 ## PATTERNS
-- All use `Component` subclass → `Top` wrapper → `ch_device<T>` → `Simulator` in `main()`
+- **三角色分离**（`example-file-boundary-2026-11`）：设计定义 `*_top.h`（**无 `main`** · 只做实例化与连接）
+  → 激励驱动 `tb_*.cpp`（`main`：加载激励 + `--emit-rtl` 发射）→ 激励源 `tb_*.{verif,sv}`
 - `ch_module<T>` instantiation inside `Component::describe()` (see root AGENTS.md)
 - Peripheral headers: `include/axi4/peripherals/axi_gpio.h`, `axi_uart.h`
 - ⚠️ **顶层组件住在 `examples/axi4/`**（`axi4_lite_example_top.h` / `axi_soc_example_top.h`）

@@ -98,6 +98,34 @@ void print_cli_usage(const char *program_name);
 /// ⚠️ 返回 `nullptr` ⇒ ⇒ 调用方 MUST 退出码 2（fail-closed）。
 using DesignFactory = std::function<std::unique_ptr<Component>(core::context *)>;
 
+/// 剥离若干**模式标记**（位置无关）⇒ 返回剩余 argv（**保持原序**）。
+///
+/// ⚠️ **为什么在库层**：`--emit-rtl` / `--check-products` 这类标记的剥离规则
+///   （位置无关 + 其余 argv 原序保留）是**产品无关的规则** ⇒ ⇒ 每个 tb 各写一份
+///   必然漂移 —— 实测：Lite 侧曾漏掉 `--out` 的取值校验 ⇒ `--out --emit-hygiene`
+///   静默建出名为 `--emit-hygiene` 的目录（fail-open · 2026-11-19 修复）。
+///
+/// @param args  完整 argv（**不含** `argv[0]`）
+/// @param flags 要剥离的标记集合（如 `{"--emit-rtl", "--check-products"}`）
+/// @param hit   命中的标记按出现顺序追加（可传 `nullptr`）
+/// @return 剩余参数（原序）
+std::vector<std::string> strip_mode_flags(const std::vector<std::string> &args,
+                                          const std::vector<std::string> &flags,
+                                          std::vector<std::string> *hit);
+
+/// 取 `--out <dir>` 的值并**校验形态**（fail-closed）。
+///
+/// ⚠️ 校验三条：① 必须出现 ② 必须紧跟一个取值 ③ 取值 MUST NOT 为空、MUST NOT 以
+///   `-` 开头 —— 否则 `--out --emit-hygiene` 会把 flag 当目录名 ⇒ 静默建出
+///   `--emit-hygiene/`（2026-11-18 在 SoC 侧查实；Lite 侧曾漏 ⇒ 2026-11-19 统一）。
+///
+/// @param args    待解析参数（通常 = `strip_mode_flags` 的返回值）
+/// @param out_dir 成功时写入取值
+/// @param error   失败时写入原因（**调用方 MUST 退出码 2**）
+/// @return true = 已取得合法取值
+bool require_out_dir(const std::vector<std::string> &args, std::string *out_dir,
+                     std::string *error);
+
 /// 跑一次完整发射（解析参数 → 建 ctx → 注册设计 → 写 manifest → 发射产物）。
 ///
 /// @return 退出码（0 / 1 / 2，见文件头）

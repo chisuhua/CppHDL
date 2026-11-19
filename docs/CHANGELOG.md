@@ -1,3 +1,39 @@
+## 2026-11-19 — 发射入口的模式标记与 `--out` 校验下沉库层（修 Lite 侧 fail-open）
+
+**问题**：`examples/axi4/` 的两个 tb（`tb_axi4_lite_example` · `tb_axi_soc_example`）**各写一份**
+「剥离模式标记 + 校验 `--out` + 调 `run_emit_cli`」的逻辑 ⇒ ⇒ 两份拷贝必然漂移 —— 实测：
+SoC 侧 2026-11-18 查实并修了「`--out --emit-hygiene` 会把 flag 当目录名」，**Lite 侧漏修**
+⇒ ⇒ `tb_axi4_lite_example --emit-rtl --out --emit-hygiene` **exit 0 且静默建出名为
+`--emit-hygiene` 的目录**（fail-open）。
+
+**改了什么**
+
+- **新增公开 API**（`include/rtl_emit/cli.h` + `src/rtl_emit/cli.cpp`）：
+  - `rtl_emit::strip_mode_flags(args, flags, hit)` —— 位置无关地剥离模式标记，
+    其余 argv **原序保留**
+  - `rtl_emit::require_out_dir(args, out_dir, error)` —— 取 `--out` 并**校验形态**
+    （必须出现 / 必须紧跟取值 / 取值不得为空、不得以 `-` 开头）⇒ 失败 ⇒ 调用方退出码 **2**
+- 两个 tb 改用这两个共用实现 ⇒ 重复代码消除 ⇒ **Lite 侧的 fail-open 同时修复**
+- `tb_axi_soc_example` 的 `make_inputs` **补齐根的全部 8 个 `ch_in`**（原缺 `uart_rx` ·
+  `timer_irq`）⇒ 「双形态逐拍等价」的输入面不再缺项；`make_stimulus` 同步补 2 列
+- `phase3a_complete.cpp`：删掉**假动作**输出（打印「Generating Verilog…」但 `toVerilog`
+  早已被注释 ⇒ 实际什么都没生成 ⇒ 会向用户谎报）
+- `examples/axi4/AGENTS.md`：PATTERNS 首句订正为三角色分离（原句对无 `main` 的
+  `*_top.h` 不成立）
+
+**用户可见变更**
+
+| 项 | 前 | 后 |
+|---|---|---|
+| `tb_axi4_lite_example --emit-rtl --out --emit-hygiene` | **exit 0** + 建出 `--emit-hygiene/` | **exit 2** + 零落盘 |
+| `tb_axi_soc_example --check-products --out --emit-hygiene` | exit 2 | exit 2（不变） |
+| Lite 的 RTL 产物 | `top.v` / `manifest.json` | **逐字节相同**（sha256 `20e0f88e…` / `cf7b40f6…`） |
+| SoC 的 `CHECK 1..4`（产品级自检） | PASS | PASS（输入面补齐后仍 PASS） |
+
+**新增测试**：`tests/test_emit_cli_modes.cpp`（9 用例 / 22 断言）—— 把「`--out` 的取值不能是
+另一个 flag」钉成必红判据。锚点回填：`CTEST_TOTAL` 269 → **270** · non-perf 258 → **259** ·
+`tests/test_*.cpp` 159 → **160**。
+
 ## 2026-11-18 — `axi4_full_example` 退役（显式缩面 · `example-file-boundary-2026-11` AC27）
 
 **为什么**：它与 `tests/test_axi4_full_burst.cpp` 是**同一行为的两个载体**（一个是可运行的

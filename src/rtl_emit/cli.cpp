@@ -136,6 +136,49 @@ void print_cli_usage(const char *program_name) {
         << "退出码：0 成功 · 1 运行失败或有诊断 · 2 用法错误（fail-closed）\n";
 }
 
+std::vector<std::string> strip_mode_flags(const std::vector<std::string> &args,
+                                          const std::vector<std::string> &flags,
+                                          std::vector<std::string> *hit) {
+    std::vector<std::string> rest;
+    rest.reserve(args.size());
+    for (const auto &a : args) {
+        bool matched = false;
+        for (const auto &f : flags) {
+            if (a == f) {
+                matched = true;
+                if (hit) hit->push_back(a);
+                break;
+            }
+        }
+        if (!matched) rest.push_back(a);
+    }
+    return rest;
+}
+
+bool require_out_dir(const std::vector<std::string> &args, std::string *out_dir,
+                     std::string *error) {
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        if (args[i] != "--out") continue;
+        if (i + 1 >= args.size()) {
+            if (error) *error = "--out 缺少取值";
+            return false;
+        }
+        const std::string &v = args[i + 1];
+        // ⚠️ **取值形态校验**：`--out --emit-hygiene` 会把 flag 当目录名
+        //   ⇒ ⇒ 静默建出 `--emit-hygiene/` ⇒ ⇒ 必须拒绝（fail-closed）。
+        if (v.empty() || v.front() == '-') {
+            if (error) {
+                *error = "--out 的取值不能为空、也不能以 '-' 开头（疑似把 flag 当目录名）：" + v;
+            }
+            return false;
+        }
+        if (out_dir) *out_dir = v;
+        return true;
+    }
+    if (error) *error = "缺 --out <dir>";
+    return false;
+}
+
 int run_emit_cli(const std::vector<std::string> &args, const DesignFactory &factory) {
     CliOptions options;
     std::string error;

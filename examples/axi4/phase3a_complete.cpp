@@ -386,12 +386,11 @@ int main() {
     std::cout << "Phase 3A AXI-Lite 链路仿真通过（写 + 读回）" << std::endl;
     std::cout << std::endl;
 
-    // 生成 Verilog
-    std::cout << "Generating Verilog..." << std::endl;
-    // toVerilog("phase3a_complete.v", top.context());
-    std::cout << "Verilog generation ready" << std::endl;
-    std::cout << std::endl;
-    
+    // ⚠️ **本 example 不产出 RTL 产物**（无 emitter target · 无清单登记行）
+    //   ⇒ ⇒ 原先的 "Generating Verilog..." / "Verilog generation ready" 是**假动作**
+    //   （`toVerilog` 早已被注释掉 ⇒ 实际什么都没生成）⇒ ⇒ 会向用户谎报「已生成」
+    //   ⇒ ⇒ 2026-11-19 删除（死代码清扫）。
+
     // 输出系统架构
     std::cout << "=== System Architecture ===" << std::endl;
     std::cout << std::endl;

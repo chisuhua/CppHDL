@@ -52,30 +52,23 @@ int main(int argc, char **argv) {
     using namespace ch;
 
     // ── 0) 模式判定：**位置无关**剥离 `--emit-rtl`（其余 argv 原序保留）──────────
-    bool emit_mode = false;
+    //   ⚠️ 剥离与 `--out` 校验**走库层共用实现**（`rtl_emit/cli.h`）⇒ ⇒ 两个 tb
+    //   不会各写一份而漂移 —— 2026-11-19 修复：Lite 侧曾漏 `--out` 的取值校验
+    //   ⇒ `--out --emit-hygiene` 静默建出名为 `--emit-hygiene` 的目录（fail-open）。
     std::vector<std::string> rest;
     rest.reserve(static_cast<std::size_t>(argc > 0 ? argc - 1 : 0));
     for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--emit-rtl") {
-            emit_mode = true;
-            continue;
-        }
-        rest.push_back(a);
+        rest.emplace_back(argv[i]);
     }
+    std::vector<std::string> mode_flags;
+    rest = rtl_emit::strip_mode_flags(rest, {"--emit-rtl"}, &mode_flags);
 
-    if (emit_mode) {
-        // ── 发射模式 fail-closed：缺 `--out <dir>` ⇒ exit 2 ──────────────────
+    if (!mode_flags.empty()) {
+        // ── 发射模式 fail-closed：`--out` 缺失 / 取值形态非法 ⇒ exit 2 ───────────
         //   ⚠️ MUST NOT 落到库层默认 `rtl_out/`（那会写进 CWD）
-        bool has_out = false;
-        for (std::size_t i = 0; i + 1 < rest.size(); ++i) {
-            if (rest[i] == "--out") {
-                has_out = true;
-                break;
-            }
-        }
-        if (!has_out) {
-            std::cerr << "FATAL: --emit-rtl 缺 --out <dir>（拒绝回落到默认 rtl_out/）\n";
+        std::string error;
+        if (!rtl_emit::require_out_dir(rest, nullptr, &error)) {
+            std::cerr << "FATAL: --emit-rtl " << error << "（拒绝回落到默认 rtl_out/）\n";
             return 2;
         }
         return rtl_emit::run_emit_cli(rest, make_emit_design);

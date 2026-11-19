@@ -40,6 +40,7 @@
 #include <unistd.h>
 #endif
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -136,6 +137,10 @@ std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {
 // ── 值侧 ②：双形态逐拍等价（J-4）的**设计专属**激励面 ─────────────────────
 
 /// 顶层输入（受驱动）—— 顺序 MUST 与 `make_stimulus()` 每行的取值顺序**逐字一致**
+///
+/// ⚠️ **输入面 MUST 覆盖根的全部 `ch_in`**（8 个）—— 缺一个 ⇒ 该端口在等价性比对里
+///   读到**未定义值** ⇒ ⇒ 「双形态逐拍等价」实际只覆盖了部分输入面。
+///   （`uart_rx` 恒 1 = 空闲高 · `timer_irq` 恒 0 = 零消费端口 · ADR-073 事实⑭）
 std::vector<ch::hier_eq::DrivenInput> make_inputs(axi4::example::AxiSocTop &root) {
     std::vector<ch::hier_eq::DrivenInput> in;
     // ⚠️ MUST 用 `set_input_value`（`<<=` 会把端口变成内部驱动 ⇒ 假分歧）
@@ -156,6 +161,12 @@ std::vector<ch::hier_eq::DrivenInput> make_inputs(axi4::example::AxiSocTop &root
                   }});
     in.push_back({"top.gpio_in", [&root](ch::Simulator &sim, std::uint64_t v) {
                       sim.set_input_value(root.io().gpio_in, v & 0xFF);
+                  }});
+    in.push_back({"top.uart_rx", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().uart_rx, v & 1);
+                  }});
+    in.push_back({"top.timer_irq", [&root](ch::Simulator &sim, std::uint64_t v) {
+                      sim.set_input_value(root.io().timer_irq, v & 1);
                   }});
     return in;
 }
@@ -179,28 +190,31 @@ std::vector<ch::hier_eq::Observation> make_observations(axi4::example::AxiSocTop
     return obs;
 }
 
-/// ⚠️ 顺序 MUST 与 `make_inputs()` 一致：rst_n · start · write · addr · wdata · gpio_in
+/// ⚠️ 顺序 MUST 与 `make_inputs()` 一致：
+///   rst_n · start · write · addr · wdata · gpio_in · uart_rx · timer_irq
 std::vector<std::vector<std::uint64_t>> make_stimulus() {
     const std::uint64_t gpio_a = 0x5A;
     const std::uint64_t gpio_b = 0xA5;
     const std::uint64_t gpio_data_out = 0x000000A5;
     const std::uint64_t gpio_data_in = 0x00000004;
     const std::uint64_t idle = 0;
+    const std::uint64_t uart_idle = 1;  // UART 空闲高（无帧）
+    const std::uint64_t no_irq = 0;     // `timer_irq` 零消费（ADR-073 事实⑭）
     return {
-        /* 0  */ {1, 1, 1, 0x00000000, gpio_data_out, gpio_a},  // 写事务：发起
-        /* 1  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},  // 保持 payload
-        /* 2  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},
-        /* 3  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},
-        /* 4  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a},  // 等写完成 ⇒ gpio_out 变
-        /* 5  */ {1, 1, 0, gpio_data_in, idle, gpio_a},         // 读事务 #1：发起
-        /* 6  */ {1, 0, 0, gpio_data_in, idle, gpio_a},         // 保持 addr
-        /* 7  */ {1, 0, 0, gpio_data_in, idle, gpio_a},
-        /* 8  */ {1, 0, 0, gpio_data_in, idle, gpio_a},         // 等读完成 ⇒ rdata = 0x5A
-        /* 9  */ {1, 0, 0, gpio_data_in, idle, gpio_b},         // 改 gpio_in ⇒ 让 rdata 能再变
-        /* 10 */ {1, 1, 0, gpio_data_in, idle, gpio_b},         // 读事务 #2：发起
-        /* 11 */ {1, 0, 0, gpio_data_in, idle, gpio_b},         // 保持 addr
-        /* 12 */ {1, 0, 0, gpio_data_in, idle, gpio_b},
-        /* 13 */ {1, 0, 0, gpio_data_in, idle, gpio_b},         // 等读完成 ⇒ rdata = 0xA5
+        /* 0  */ {1, 1, 1, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},  // 写事务：发起
+        /* 1  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},  // 保持 payload
+        /* 2  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},
+        /* 3  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},
+        /* 4  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},  // 等写完成 ⇒ gpio_out 变
+        /* 5  */ {1, 1, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},         // 读事务 #1：发起
+        /* 6  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},         // 保持 addr
+        /* 7  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},
+        /* 8  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},         // 等读完成 ⇒ rdata = 0x5A
+        /* 9  */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 改 gpio_in ⇒ 让 rdata 能再变
+        /* 10 */ {1, 1, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 读事务 #2：发起
+        /* 11 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 保持 addr
+        /* 12 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},
+        /* 13 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 等读完成 ⇒ rdata = 0xA5
     };
 }
 
@@ -247,45 +261,26 @@ int main(int argc, char **argv) {
     using namespace ch;
 
     // ── 0) 模式判定：**位置无关**剥离两个模式标记 ────────────────────────────
-    bool emit_mode = false;
-    bool check_mode = false;
+    //   ⚠️ 剥离与 `--out` 校验**走库层共用实现**（`rtl_emit/cli.h`）⇒ ⇒ 与 Lite 侧
+    //   不会各写一份而漂移（2026-11-19：Lite 侧曾漏 `--out` 取值校验 ⇒ fail-open）。
     std::vector<std::string> rest;
     rest.reserve(static_cast<std::size_t>(argc > 0 ? argc - 1 : 0));
     for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        if (a == "--emit-rtl") {
-            emit_mode = true;
-            continue;
-        }
-        if (a == "--check-products") {
-            check_mode = true;
-            continue;
-        }
-        rest.push_back(a);
+        rest.emplace_back(argv[i]);
     }
+    std::vector<std::string> mode_flags;
+    rest = rtl_emit::strip_mode_flags(rest, {"--emit-rtl", "--check-products"}, &mode_flags);
+    const bool emit_mode =
+        std::find(mode_flags.begin(), mode_flags.end(), "--emit-rtl") != mode_flags.end();
+    const bool check_mode =
+        std::find(mode_flags.begin(), mode_flags.end(), "--check-products") != mode_flags.end();
 
     // ── 发射 / 自检模式 ────────────────────────────────────────────────────
     if (emit_mode || check_mode) {
         std::string out_dir;
-        bool has_out = false;
-        for (std::size_t i = 0; i + 1 < rest.size(); ++i) {
-            if (rest[i] != "--out") {
-                continue;
-            }
-            const std::string &v = rest[i + 1];
-            // ⚠️ **取值形态校验**（2026-11-18 查实：`--out --emit-hygiene` 会把
-            //    `--emit-hygiene` 当目录名 ⇒ 静默建成 `--emit-hygiene/`）。
-            if (v.empty() || v.front() == '-') {
-                std::cerr << "FATAL: --out 的取值不能以 '-' 开头（疑似把 flag 当目录名）：" << v
-                          << "\n";
-                return 2;
-            }
-            out_dir = v;
-            has_out = true;
-            break;
-        }
-        if (!has_out) {
-            std::cerr << "FATAL: --emit-rtl / --check-products 缺 --out <dir>\n";
+        std::string error;
+        if (!rtl_emit::require_out_dir(rest, &out_dir, &error)) {
+            std::cerr << "FATAL: --emit-rtl / --check-products " << error << "\n";
             return 2;
         }
 

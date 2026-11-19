@@ -1136,6 +1136,7 @@ add_catch_test(test_verif_single_source test_verif_single_source.cpp)
 # ⚠️ `check_products` 的 CHECK 4（双形态逐拍等价）需要**真 verilator** ⇒ ⇒ 本文件
 #   只覆盖**不依赖 linter**的分支（module 集 / 篡改定位 / fail-closed 退出码）。
 add_catch_test(test_product_check test_product_check.cpp)
+add_catch_test(test_emit_cli_modes test_emit_cli_modes.cpp)
 
 # `AxiLiteTestMaster` 的**直接**判别性用例（`input-port-required-registry` R2/R3）
 # ⚠️ 该组件声明了 `rst_n`（永久复位类端口）⇒ ⇒ MUST 登记 ⇒ ⇒ 登记行 MUST 有
