@@ -142,8 +142,8 @@ grep -rn '\.io()\.\<[a-z_]\+\s*=' examples/ tests/ | grep -v '<<=' | grep -v '='
 ## 🔗 相关资源
 
 - [Simulator set_port_value 技能](../cpphdl-simulator-port-value/SKILL.md)
-- [AGENTS.md 常见错误 Section 3](../../AGENTS.md#3-常见错误及修复)
-- [include/core/io.h](../../include/core/io.h) — port 赋值实现
+- [AGENTS.md 常见错误 Section 3](../../../AGENTS.md#3-常见错误及修复)
+- [include/core/io.h](../../../include/core/io.h) — port 赋值实现
 
 ---
 

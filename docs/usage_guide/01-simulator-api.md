@@ -465,8 +465,8 @@ Simulator sim2(comp.context());
 
 | 文档 | 说明 |
 |------|------|
-| [T001-simulator-api.md](../developer_guide/api-reference/T001-simulator-api.md) | API 技术规格 |
-| [T001-simulator-api.md](../developer_guide/api-reference/T001-simulator-api.md) | Simulator API 技术分析报告 |
+| [T001-simulator-api.md](../archive/tech-reports/T001-simulator-api.md) | API 技术规格 |
+| [T001-simulator-api.md](../archive/tech-reports/T001-simulator-api.md) | Simulator API 技术分析报告 |
 | [simulator-api-quickref.md](../skills/simulator-api-quickref.md) | 速查手册 |
 
 ### 代码示例

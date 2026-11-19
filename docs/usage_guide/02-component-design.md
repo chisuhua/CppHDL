@@ -4,7 +4,7 @@
 **版本**: v1.1
 **最后更新**: 2026-11-06
 **目标读者**: 使用 CppHDL 设计硬件的工程师
-**前置知识**: [Simulator API 使用指南](04-simulator-api.md)、[Bundle 使用模式](06-bundle-patterns.md)
+**前置知识**: [Simulator API 使用指南](01-simulator-api.md)、[Bundle 使用模式](03-bundle-patterns.md)
 
 ---
 
@@ -1164,11 +1164,11 @@ if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
 ## 9. 相关文档
 
 - [Component Lifecycle Guide](../developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md) —— `ch_device` vs `ch_module` 的生命周期
-- [Bundle 使用模式](06-bundle-patterns.md) —— bundle 定义、方向、序列化
+- [Bundle 使用模式](03-bundle-patterns.md) —— bundle 定义、方向、序列化
 - [层次化 RTL 写法指南](../developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md) —— 今天就能用的 7 条纪律 + 什么时候该成层
 - [层次化 RTL 输出 · 目标架构](../architecture/2026-11-02-hierarchical-rtl-output.md) —— 需求 / 结构事实 / 已知残留（**取代** `verilog-codegen-architecture.md` §7.1）
 - `docs/adr/ADR-058-hierarchical-rtl-output.md` · `ADR-059`（归属与命名）· `ADR-060`（端口策略与复用）· `ADR-061`（层级粒度由用户显式控制）—— 决策正本
-- [Verilator 后端](10-verilator-backend.md) —— 只认顶层端口、64 bit 上限
-- [Testbench 编写指南](09-testbench-guide.md) §模式 5 —— **验证源（`.verif`）驱动**（产品级 RTL 仿真的推荐路径：一份语义 → 解释器 + Verilog 独立 TB）
+- [Verilator 后端](05-verilator-backend.md) —— 只认顶层端口、64 bit 上限
+- [Testbench 编写指南](04-testbench-guide.md) §模式 5 —— **验证源（`.verif`）驱动**（产品级 RTL 仿真的推荐路径：一份语义 → 解释器 + Verilog 独立 TB）
 - `docs/adr/ADR-042-bundle-field-first-class-nodes.md` —— bundle 字段作为一等节点
 - `docs/adr/ADR-008-single-clock-domain-constraint.md` —— 单时钟域约束

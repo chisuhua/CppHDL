@@ -329,9 +329,9 @@ docs/
 
 | 文档 | 说明 |
 |------|------|
-| [DOCUMENT-ARCHITECTURE.md](../DOCUMENT-ARCHITECTURE.md) | 文档架构规范 v2.0 |
+| [DOCUMENT-ARCHITECTURE.md](../../DOCUMENT-ARCHITECTURE.md) | 文档架构规范 v2.0 |
 | [DOCUMENT-REFACTOR-COMPLETION-REPORT.md](DOCUMENT-REFACTOR-COMPLETION-REPORT.md) | 文档重构 v2.0 报告 |
-| [README.md](../README.md) | 文档中心导航 |
+| [README.md](../../README.md) | 文档中心导航 |
 
 ---
 

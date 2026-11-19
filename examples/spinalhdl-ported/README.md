@@ -160,7 +160,7 @@ class Top : public ch::Component {
 
 ## 🔗 参考资料
 
-- [CppHDL 架构差距分析](../../docs/architecture/2026-03-30-cpphdl-architecture-gap-analysis.md)
-- [SpinalHDL 移植架构](../../docs/architecture/2026-03-30-spinalhdl-port-architecture.md)
-- [Phase 架构总览](../../docs/architecture/phases/README.md)
+- [CppHDL 架构差距分析](../../docs/archive/architecture-history/2026-03-30-cpphdl-architecture-gap-analysis.md)
+- [SpinalHDL 移植架构](../../docs/archive/architecture-history/2026-03-30-spinalhdl-port-architecture.md)
+- [Phase 架构总览](../../docs/archive/architecture-history/phases/README.md)
 - [官方 Counter 示例](../../samples/counter.cpp)

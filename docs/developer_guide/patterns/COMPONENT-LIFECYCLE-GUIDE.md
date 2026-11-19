@@ -150,7 +150,7 @@ instances of the same type); used directly as the root it fails outright
 
 Declare `ch_module` as a **local inside `describe()`** instead. Full rules and
 the member-variable alternatives (bundle / `ch_reg` / `ch_mem` / ctor injection)
-are in [Component 设计指南](../../usage_guide/05-component-design.md) §2.4 / §4.
+are in [Component 设计指南](../../usage_guide/02-component-design.md) §2.4 / §4.
 
 ## Architecture: Why Two Patterns?
 
@@ -363,7 +363,7 @@ TEST_CASE("PipelineTop with ITCM/DTCM", "[pipeline]") {
 
 ## Related Files
 
-- [Component 设计指南（多层模块 / 跨层连线 / 成员接口 / RTL 输出）](../../usage_guide/05-component-design.md) — 完整的装配与连线规则
+- [Component 设计指南（多层模块 / 跨层连线 / 成员接口 / RTL 输出）](../../usage_guide/02-component-design.md) — 完整的装配与连线规则
 - `include/module.h` — `ch_module` and `ch_device` implementation
 - `include/component.h` — `Component` base class, `add_child()`, `current()`
 - `include/core/context.h` — Context management

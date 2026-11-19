@@ -1,8 +1,8 @@
 # CppHDL 项目概览 (PROJECT OVERVIEW)
 
-**最后更新**: 2026-04-08  
-**项目定位**: SpinalHDL 的 C++ 实现  
-**当前阶段**: Phase 3 (AXI4 外设 + RISC-V)  
+**最后更新**: 2026-11-19
+**项目定位**: SpinalHDL 的 C++ 实现（header-only HDL 库 + 解释器 / JIT / Verilator 后端 + 层次化 RTL 输出）
+**当前阶段**: **Phase 6**（Phase 1–5 已 done；Phase 6 = 高级特性与 RTL 产品化，进行中）
 
 ---
 
@@ -109,51 +109,53 @@ struct MyBundle : public bundle_base<MyBundle> {
 
 ---
 
-## 4. 已完成功能 (Phase 1-3)
+## 4. 功能现状（**按 roadmap 的 phase 状态**）
 
-### Phase 1: 核心基础设施 ✅
+> 状态源（唯一真相）：`.rddf/roadmap/phases/phase-*.md` 的 `status` 与 `.rddf/roadmap/features/`。
 
-- ✅ `ch_bool`, `ch_uint`, `ch_sint` 类型定义
-- ✅ Bundle 元编程支持
-- ✅ Component/Module 基类
-- ✅ 编译时 Verilog 生成
-- ✅ 基本仿真器
+| Phase | 状态 | 主题 |
+|---|---|---|
+| **Phase 1** | ✅ done | 核心抽象与算子基础设施 |
+| **Phase 2** | ✅ done | 高级特性与 JIT 编译器 · C-class 结构重构 · 组件库与 Bundle 系统 |
+| **Phase 3** | ✅ done | Verilator 后端集成 · Verilog codegen 完整化 · 性能对比框架 |
+| **Phase 4** | ✅ done | 双后端测试覆盖 · cache 子系统重建（`ch_mem` · Sync/Async 双变体）· 逻辑算子 deprecation |
+| **Phase 5** | ✅ done | RV32I 五级流水线 + riscv-mini SoC 集成 · ISA 语义边界收口 · 层次化 RTL 输出 |
+| **Phase 6** | 🔄 active | 高级特性与 RTL 产品化（层次化产物 / SoC 级 RTL+TB / 验证单一真相源） |
 
-### Phase 2: Chlib 组件库 ✅
+**能力快照**（`.rddf/roadmap/features/` 的 9 个 feature）：
 
-- ✅ FIFO 组件
-- ✅ Shift Register
-- ✅ Counter
-- ✅ Stream Operators
-- ✅ State Machine DSL
+| feature | 状态 | 内容 |
+|---|---|---|
+| `feat-cache-rewrite` | ✅ | cache 子系统从 C-style 数组重写为 `ch_mem` + Sync/Async 双变体 |
+| `feat-dual-backend-coverage` | ✅ | 单元测试统一跑 interpreter + verilator 双后端 |
+| `feat-riscv-mini-convergence` | ✅ | `include/cpu` 与 `examples/riscv-mini` 收敛成单一 RV32I 实现 |
+| `feat-riscv-mini-rtl-debt` | ✅ | riscv-mini 实测挖出的两个 RTL 缺陷收口 |
+| `feat-rv32i-integration` | ✅ | RV32I 5-stage 流水线 + riscv-mini SoC 端到端（双路 parity） |
+| `feat-rv32i-isa-completeness` | ✅ | SB/SH/LB/LH/JAL/JALR/SRA 等语义边界 + 流水线健壮性 |
+| `feat-platform-matrix` | ✅ | CI 平台矩阵 = 仅 Ubuntu（macOS/Windows 明确不做） |
+| `feat-hdl-logical-deprecation` | 🔄 | ADR-036 逻辑算子 deprecation → 迁移 → 移除（移除受日历锁 2027-04-17） |
+| `feat-hierarchical-rtl-output` | 🔄 | 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline） |
 
-### Phase 3: AXI4 + RISC-V 🟡
+**已知边界**（详见根 [`AGENTS.md`](../AGENTS.md) §KNOWN LIMITATIONS）：
 
-- ✅ AXI4-Lite 外设 (SPI, PWM, I2C, GPIO)
-- ✅ AXI4 DMA Controller
-- 🟡 RISC-V RV32I 核心 (Pipeline 阶段)
-- 🟡 分支预测单元
-
-### Phase 4: 性能优化 🔴
-
-- 🔴 并行仿真
-- 🔴 增量编译
-- 🔴 内存优化
-
-**图例**: ✅ 完成 | 🟡 进行中 | 🔴 待开始
+- Verilator 后端 **仅 Linux**（`BUILD_VERILATOR=OFF` 时其余后端不受影响）；端口位宽上限 64 bit
+- RV32I **未实现** CSR（`csrrw/csrrs/csrrc`）与 `ECALL/EBREAK` ⇒ 走「非法指令可观测」路径（`dbg_illegal_reason` 4 态）
+- FreeRTOS 支持**仅有规划文档**（[`archive/freertos-planning/`](archive/freertos-planning/)），仓内无实现
 
 ---
 
-## 5. 代码库统计
+## 5. 代码库统计（2026-11-19 实测）
 
 | 统计项 | 数量 |
-|--------|------|
-| 头文件 | ~150 |
-| 源文件 | ~50 |
-| 测试文件 | ~60 |
-| 文档文件 | ~40 |
-| 代码行数 (C++) | ~50K |
-| 测试断言数 | ~5K |
+|--------|-----:|
+| 头文件（`include/**/*.h`） | 172 |
+| 源文件（`src/**/*.cpp`） | 45 |
+| C++ 代码行（include + src） | 53,518 |
+| 测试源文件（`tests/**/test_*.cpp`） | 220 |
+| CTest 条目 | 269 |
+| samples | 40 |
+| examples 的 main() 程序 | 42 |
+| 文档（`docs/**/*.md`） | 265（其中归档 144） |
 
 ---
 
@@ -279,7 +281,7 @@ git push origin feature/axi-dma
 
 - [README.md](README.md) - 项目简介
 - [QUICK_REFERENCE.md](../QUICK_REFERENCE.md) - 快速参考
-- [Compare.md](../Compare.md) - 与 SpinalHDL 详细对比
+- [Compare.md](archive/root-scratch/Compare.md) - 与 SpinalHDL 详细对比
 - [docs/](README.md) - 完整文档目录
 
 ---

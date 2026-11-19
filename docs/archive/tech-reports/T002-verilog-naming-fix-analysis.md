@@ -331,8 +331,8 @@ public:
 
 | 文档 | 说明 |
 |------|------|
-| [PHASE4-PLAN-2026-04-09.md](../../plans/PHASE4-PLAN-2026-04-09.md) | Phase 4 总计划 |
-| [T002-VERILOG-CODEGEN-FIX-PLAN.md](../../plans/T002-VERILOG-CODEGEN-FIX-PLAN.md) | T002 实施计划 |
+| [PHASE4-PLAN-2026-04-09.md](../phase-plans/PHASE4-PLAN-2026-04-09.md) | Phase 4 总计划 |
+| [T002-VERILOG-CODEGEN-FIX-PLAN.md](../phase-plans/T002-VERILOG-CODEGEN-FIX-PLAN.md) | T002 实施计划 |
 | [DOCUMENT-ARCHITECTURE.md](../../DOCUMENT-ARCHITECTURE.md) | 文档架构规范 |
 
 ### 测试文件

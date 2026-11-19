@@ -261,7 +261,7 @@ P1 change 的 `design.md`（先定子模块端口名 → 再由父层实例化�
 | 文档 | 关系 |
 |---|---|
 | `docs/developer_guide/architecture/verilog-codegen-architecture.md` §7.1 | ⚠️ **本文取代其 §7.1** ⇒ ⇒ 那份文档改为一行指针 |
-| `docs/usage_guide/05-component-design.md` §5 | **面向用户的现状说明** ⇒ 由 P5 change 同步 |
+| `docs/usage_guide/02-component-design.md` §5 | **面向用户的现状说明** ⇒ 由 P5 change 同步 |
 | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` | **用户写法指南**（含粒度选择 + 方案的用户面审查）⇒ 与本文互补 |
 | `docs/adr/ADR-042-bundle-field-first-class-nodes.md` | bundle 成员跨层是**已声明支持**的用法 ⇒ ⇒ ADR-060 的隐式端口策略必须覆盖它 |
 | `openspec/changes/component-framework-hardening-2026-10` | 下游提出的**三处框架硬化**（ODR / const io / 节点名唯一性）⇒ ⇒ **U-4 是本方案的前置依赖**；U-1 与本方案互补 |

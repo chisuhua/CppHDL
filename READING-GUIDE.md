@@ -1,130 +1,71 @@
 # 文档阅读指南
 
-**用途**: 帮助您快速了解本次交付的所有文档
-
-**阅读顺序** (推荐):
-
-1. 先了解项目全貌
-2. 再理解当前阻塞问题
-3. 最后决定是否继续修复
+> **按你手上有的时间和要做的事选路径**。文档全貌见 [`docs/README.md`](docs/README.md)。
+> 最后更新：2026-11-19（旧版本是 2026-04 的一次性交付说明，已过时）
 
 ---
 
-## 必读文档 (优先级排序)
+## 只有 10 分钟
 
-### 🔴 P0 (必须阅读)
-
-| 文档 | 预计时间 | 说明 |
-|------|----------|------|
-| [PROJECT-OVERVIEW.md](docs/PROJECT-OVERVIEW.md) | 10 分钟 | **项目全貌**: 目标、功能、完成情况、路线图 |
-| [docs/developer_guide/tech-reports/bundle-connection-issue.md](docs/developer_guide/tech-reports/bundle-connection-issue.md) | 15 分钟 | **问题分析**: 当前阻塞性问题的深度分析 |
-| [docs/plans/bundle-connection-fix-plan.md](docs/plans/bundle-connection-fix-plan.md) | 10 分钟 | **修复方案**: 详细的修复步骤与验收标准 |
+| 读什么 | 为什么 |
+|---|---|
+| [`docs/PROJECT-OVERVIEW.md`](docs/PROJECT-OVERVIEW.md) | 项目是什么、现在做到哪 |
+| [`docs/usage_guide/01-simulator-api.md`](docs/usage_guide/01-simulator-api.md) | 跑起第一个测试的最小 API 集 |
 
 ---
 
-### 🟡 P1 (建议阅读)
+## 半天：写完第一个能跑的设计
 
-| 文档 | 预计时间 | 说明 |
-|------|----------|------|
-| [docs/README.md](docs/README.md) | 5 分钟 | **文档导航**: 快速找到需要的文档 |
-| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | 15 分钟 | **API 参考**: 常用操作速查 |
-| [docs/README.md](docs/README.md) | 10 分钟 | **交付清单**: 所有文档的完整清单 |
-
----
-
-### 🟢 P2 (参考阅读)
-
-| 文档 | 预计时间 | 说明 |
-|------|----------|------|
-| [docs/DOCUMENT-ARCHITECTURE.md](docs/DOCUMENT-ARCHITECTURE.md) | 20 分钟 | **文档架构**: 文档分类体系与维护指南 |
-| [docs/usage_guide/06-bundle-patterns.md](docs/usage_guide/06-bundle-patterns.md) | 30 分钟 | **Bundle 使用**: 详细使用教程 |
-| [docs/usage_guide/06-bundle-patterns.md](docs/usage_guide/06-bundle-patterns.md) | 30 分钟 | **Bundle 开发**: 框架实现细节 |
-| [docs/usage_guide/05-component-design.md](docs/usage_guide/05-component-design.md) | 30 分钟 | **综合指南**: CppHDL 完整使用教程 |
+1. [`docs/usage_guide/01-simulator-api.md`](docs/usage_guide/01-simulator-api.md) —— 设置输入 / 读输出 / `tick`
+2. [`docs/usage_guide/02-component-design.md`](docs/usage_guide/02-component-design.md) —— 组件怎么装成树、跨层怎么连
+3. [`docs/usage_guide/04-testbench-guide.md`](docs/usage_guide/04-testbench-guide.md) —— 写 TB、断言、双后端跑
+4. 手边放 [`docs/skills/simulator-api-quickref.md`](docs/skills/simulator-api-quickref.md) 速查
 
 ---
 
-## 快速决策路径
+## 一天：要出 RTL
 
-### 场景 A: 想了解项目能否继续使用
-
-**阅读顺序**:
-1. [PROJECT-OVERVIEW.md](docs/PROJECT-OVERVIEW.md) - 了解功能完成情况
-2. [docs/architecture/](docs/architecture/) - 了解技术决策
-3. [Compare.md](Compare.md) - 与 SpinalHDL 对比
-
-**决策点**: Phase 1-2 已完成，Phase 3 接近完成，可以继续使用
+1. [`docs/usage_guide/02-component-design.md`](docs/usage_guide/02-component-design.md) §5 —— **三种 RTL 出口怎么选**（扁平 / 根组件 / 层次化）
+2. [`docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md`](docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md) —— 层次化写法的纪律
+3. [`docs/usage_guide/05-verilator-backend.md`](docs/usage_guide/05-verilator-backend.md) —— 要 RTL 级仿真时的后端用法与边界
+4. [`docs/developer_guide/rv32i-rtl-delivery-and-sim.md`](docs/developer_guide/rv32i-rtl-delivery-and-sim.md) —— 完整跑通一个 SoC 的例子
 
 ---
 
-### 场景 B: 想解决当前阻塞问题
+## 改框架内部
 
-**阅读顺序**:
-1. [docs/developer_guide/tech-reports/bundle-connection-issue.md](docs/developer_guide/tech-reports/bundle-connection-issue.md) - 理解问题
-2. [docs/plans/bundle-connection-fix-plan.md](docs/plans/bundle-connection-fix-plan.md) - 了解方案
-3. [docs/usage_guide/06-bundle-patterns.md](docs/usage_guide/06-bundle-patterns.md) - 理解技术细节
-
-**决策点**: 
-- 方案 1: 短期修复 (8 小时，风险中) - 推荐
-- 方案 2: 长期重构 (16 小时，风险高) - 不推荐
-
----
-
-### 场景 C: 想接手继续开发
-
-**阅读顺序**:
-1. [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - 快速上手 API
-2. [docs/usage_guide/05-component-design.md](docs/usage_guide/05-component-design.md) - 详细使用
-3. [tests/](tests/) - 现有测试
-4. [samples/](samples/) - 示例代码
-
-**决策点**: 代码质量高，文档完整，适合继续开发
+| 要改什么 | 读什么 |
+|---|---|
+| Verilog 发射面 | [`docs/developer_guide/architecture/verilog-codegen-architecture.md`](docs/developer_guide/architecture/verilog-codegen-architecture.md) |
+| JIT 编译器 | [`docs/developer_guide/patterns/JIT-DEBUGGING-GUIDE.md`](docs/developer_guide/patterns/JIT-DEBUGGING-GUIDE.md) |
+| Verilator 后端 | [`docs/developer_guide/verilator-integration.md`](docs/developer_guide/verilator-integration.md) |
+| 端口命名 | [`docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`](docs/developer_guide/patterns/PORT-NAMING-GUIDE.md) |
+| 组件生命周期（SIGSEGV 排查） | [`docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md`](docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md) |
+| 仿真时序语义（`sread` / `aread`） | [`docs/simulation/ARCHITECTURE.md`](docs/simulation/ARCHITECTURE.md) |
 
 ---
 
-## 时间预算
+## 想知道「为什么这么设计」
 
-### 1 小时快速了解
-
-- 10 分钟 - PROJECT-OVERVIEW.md
-- 15 分钟 - 问题报告
-- 10 分钟 - 修复计划
-- 15 分钟 - QUICK_REFERENCE.md
-- 10 分钟 - 总结决策
-
----
-
-### 半日深入了解
-
-- 30 分钟 - 必读文档
-- 60 分钟 - Bundle 指南 (Usage + Developer)
-- 60 分钟 - 文档架构与交付清单
-- 60 分钟 - 代码浏览 (include/, tests/)
-- 30 分钟 - 总结决策
+| 主题 | 读什么 |
+|---|---|
+| 层次化 RTL 输出 | [`docs/architecture/2026-11-02-hierarchical-rtl-output.md`](docs/architecture/2026-11-02-hierarchical-rtl-output.md) |
+| RTL 验证单一真相源 / 生成式 TB | [`docs/architecture/2026-11-17-rtl-verification-single-source.md`](docs/architecture/2026-11-17-rtl-verification-single-source.md) |
+| RV32I 微架构 | [`docs/architecture/rv32i-microarchitecture.md`](docs/architecture/rv32i-microarchitecture.md) |
+| 文档治理 | [`docs/architecture/2026-11-19-document-governance.md`](docs/architecture/2026-11-19-document-governance.md) |
+| **所有已签批决策** | [`docs/adr/`](docs/adr/)（ADR 是**决策正本**，主题文档只承载推导） |
 
 ---
 
-## 决策清单
+## 找旧资料（计划 / 报告 / 复盘）
 
-### 修复 Bundle 连接问题？
-
-□ 是，立即继续修复 (短期方案)  
-□ 否，先归档，稍后处理  
-□ 讨论后再决定
-
-**理由**: ________________
+全部在 [`docs/archive/`](docs/archive/README.md)，**按类别分 14 个目录 + 索引**。
+索引里有「**旧路径 → 新位置**」对照表 ⇒ 从 ADR / CHANGELOG 里看到旧路径时按表换算。
 
 ---
 
-### 需要进一步的信息？
+## 从 SpinalHDL 迁过来
 
-□ 需要更多技术细节  
-□ 需要性能数据  
-□ 需要对比分析  
-□ 其他：________________
-
----
-
-**阅读人**: ________________  
-**日期**: ________________  
-**反馈**: 提交 Issue 或 PR
-
+1. [`docs/usage_guide/06-spinalhdl-comparison.md`](docs/usage_guide/06-spinalhdl-comparison.md) —— Stream / Flow 逐条对照
+2. [`docs/usage_guide/01-simulator-api.md`](docs/usage_guide/01-simulator-api.md) —— 仿真 API 的差异
+3. [`docs/usage_guide/02-component-design.md`](docs/usage_guide/02-component-design.md) —— 组件装配的差异

@@ -194,10 +194,13 @@ CppHDL/
 ├── tests/                      # 单元测试
 ├── samples/                    # 快速示例
 ├── examples/                   # 完整项目
-└── docs/                       # 文档
-    ├── *UsageGuide.md          # 使用指南
-    ├── problem-reports/        # 问题报告
-    └── archive/                # 归档文档
+└── docs/                       # 文档（详见 docs/README.md）
+    ├── usage_guide/            # 📘 用户指南（01–06）
+    ├── developer_guide/        # 🔧 开发者指南
+    ├── architecture/           # 🏛 架构主题
+    ├── skills/                 # ⚡ 技能库 / 速查
+    ├── adr/                    # ⚖️ 决策正本
+    └── archive/                # 📦 历史归档（14 个分类）
 ```
 
 ---
@@ -249,9 +252,9 @@ A: 使用 `thread_local` 存储当前上下文，每个线程独立。
 
 | 阶段 | 学习内容 | 资源 | 预计时间 |
 |------|----------|------|----------|
-| 入门 | 基本类型、Component 定义 | `README.md`, `samples/simple_io.cpp` | 2h |
-| 进阶 | Bundle、Stream、FIFO | `Bundle_UsageGuide.md`, `samples/fifo_example.cpp` | 4h |
-| 高级 | AXI 协议、RISC-V | `PHASE3` 系列报告 | 8h |
+| 入门 | 基本类型、Component 定义 | [`README.md`](README.md) · [`samples/`](samples/) | 2h |
+| 进阶 | Bundle、Stream、FIFO | [`usage_guide/03-bundle-patterns.md`](docs/usage_guide/03-bundle-patterns.md) · [`samples/`](samples/) | 4h |
+| 高级 | AXI 协议、RISC-V | [`usage_guide/`](docs/usage_guide/README.md) · [`include/cpu/AGENTS.md`](include/cpu/AGENTS.md) | 8h |
 
 ---
 
@@ -268,10 +271,12 @@ A: 使用 `thread_local` 存储当前上下文，每个线程独立。
 
 ## 10. 相关文档
 
-- [Bundle 使用模式](docs/usage_guide/06-bundle-patterns.md) - Bundle 详细使用指南
-- [Component 设计指南](docs/usage_guide/05-component-design.md) - CppHDL 综合指南
-- [docs/developer_guide/tech-reports/bundle-connection-issue.md](docs/developer_guide/tech-reports/bundle-connection-issue.md) - Bundle 连接问题分析
-- [docs/plans/bundle-connection-fix-plan.md](docs/plans/bundle-connection-fix-plan.md) - Bundle 连接修复计划
+- [文档中心](docs/README.md) - 全部活文档的总入口（按角色 / 任务导航）
+- [用户指南](docs/usage_guide/README.md) - 6 篇：Simulator / Component / Bundle / Testbench / Verilator / SpinalHDL 对比
+- [开发者指南](docs/developer_guide/README.md) - 架构 / 模式 / 集成
+- [架构主题](docs/architecture/README.md) - 设计推导与当前态权威
+- [ADR](docs/adr/) - 决策正本
+- [归档区](docs/archive/README.md) - 历史计划 / 报告（含旧路径对照表）
 
 ---
 

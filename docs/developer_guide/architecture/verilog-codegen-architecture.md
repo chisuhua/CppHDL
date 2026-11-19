@@ -454,7 +454,7 @@ TEST_CASE("All ch_op values have Verilog mappings", "[verilog][coverage]") {
    ⇒ 实测 `Leaf` 的路径成了 `top.top.m.lf`。
 
 在这两个缺陷修复之前，可行的折中是「逐层单独生成 + 手写顶层例化」，
-做法与限制见 `docs/usage_guide/05-component-design.md` §5.4。
+做法与限制见 `docs/usage_guide/02-component-design.md` §5.4。
 
 > ⚠️ **本节已由 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` 取代**
 > （同一主题的两份描述必然漂移 ⇒ ⇒ 目标形态、模块关系、数据结构、命名规则、

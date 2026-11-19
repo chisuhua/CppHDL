@@ -57,7 +57,7 @@
 | ⑬ | 🔴 **`port_table[]` 元素只有 `{name, dir, width, role}` —— 无 `cpp_member`**；`cpp_member` 只在全量 `ports[]` | `include/rtl_emit/manifest.h:74-83` · `:51` |
 | ⑭ | 🔴 **手写映射表当前就是漂的** —— 头注释写 `awprot=input_1 · arprot=input_8`，连线是 `.top_unnamed_input_1(arprot)` / `.top_unnamed_input_8(awprot)` | `examples/axi4/tb_axi4_lite_example.sv:18-25`（注释）vs `:84-93`（连线） |
 | ⑮ | 🔴 `tests/test_axi_lite_verilator_e2e.cpp:74-142` 复制一份 `AxiLiteTop`（双权威）；C3/C7 禁 tests 反向 include examples | `scripts/verify_no_duplicate_rv32i_headers.sh:998`（C3）· `:170-196`（C7） |
-| ⑯ | ⚠️ `docs/architecture/` 缺当前态索引（已建 `README.md`）；`docs/usage_guide/05-component-design.md:1024` 也有一份 `top_unnamed_input_1` 映射表 | 目录 · 该文件 |
+| ⑯ | ⚠️ `docs/architecture/` 缺当前态索引（已建 `README.md`）；`docs/usage_guide/02-component-design.md:1024` 也有一份 `top_unnamed_input_1` 映射表 | 目录 · 该文件 |
 
 ### 2.3 缺口清单
 
@@ -193,7 +193,7 @@
 | 手写 TB 连线 | 两个 `.sv` 的连线名全部失效 ⇒ MUST 与具名化**同批**改 |
 | 期望源端口表 | `.rddf/checks/{examples,soc}-rtl-expectations.md` 的映射表 ⇒ 由生成器产出 |
 | manifest 快照 | `port_table[].name` 变 ⇒ 护栏 ⑧（逐字逐序）同批重生成 |
-| **`docs/usage_guide/05-component-design.md:1024`** | 也有一份 `top_unnamed_input_1` 映射表 ⇒ 归 Step 6（**不在 architect 写集**） |
+| **`docs/usage_guide/02-component-design.md:1024`** | 也有一份 `top_unnamed_input_1` 映射表 ⇒ 归 Step 6（**不在 architect 写集**） |
 | ADR-046 D10 | RV32I 的 32 根（**已具名**）⇒ 不动 |
 
 ### 4.3 方案 C —— 发射面收敛（G-发射）
@@ -427,7 +427,7 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 |---|---|---|
 | **当前态唯一权威** | 本文件 | ✅ 已完成 |
 | **索引** | `docs/architecture/README.md`（新） | ✅ 已完成 |
-| dated 订正 | `2026-11-16-soc-rtl-product-and-tb.md`（§3 清单第 2 行与实现不符） | ✅ 已完成 |
+| dated 订正 | `../archive/architecture-history/2026-11-16-soc-rtl-product-and-tb.md`（§3 清单第 2 行与实现不符） | ✅ 已完成 |
 | **不在 architect 写集** | `docs/developer_guide/**` · `docs/usage_guide/**`（含 `:1024`）· `docs/CHANGELOG.md` · `PORT-NAMING-GUIDE.md` · `include/core/AGENTS.md` | ⬅ **Step 6（task）** |
 
 ---
@@ -469,7 +469,7 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 | M11 | `tests/test_axi_lite_verilator_e2e.cpp` | 删 `AxiLiteTop` 副本 ⇒ include N1 |
 | M12–M14 | `docs/adr/ADR-072` / `ADR-073` / `docs/architecture/2026-11-16-…` | dated addendum | ✅ **已完成** |
 | M15 | `docs/architecture/README.md` | 索引 | ✅ **已完成** |
-| M16 | `docs/usage_guide/05-component-design.md` | `:1024` 映射表 + §5.9 同步（Step 6）⇒ ⇒ ⚠️ **2026-11-18 扩**：`emit_rtl_axi_soc` 的命令示例（`:1004-1005,1055`）**同批改指** `tb_axi_soc_example`（Step 6 的 grep 只查「只发扁平 / `top_unnamed_input`」⇒ **抓不到命令名变更** ⇒ MUST 单独加词） |
+| M16 | `docs/usage_guide/02-component-design.md` | `:1024` 映射表 + §5.9 同步（Step 6）⇒ ⇒ ⚠️ **2026-11-18 扩**：`emit_rtl_axi_soc` 的命令示例（`:1004-1005,1055`）**同批改指** `tb_axi_soc_example`（Step 6 的 grep 只查「只发扁平 / `top_unnamed_input`」⇒ **抓不到命令名变更** ⇒ MUST 单独加词） |
 | M17 | `docs/CHANGELOG.md` | 用户可见变更（端口名）+ 新公开面（`Simulator` 访问器 · `--check-products` 下沉） |
 | M18 | `AGENTS.md` 锚点 | `CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `EXAMPLES_TEST_SOURCES` / 「examples 的 main() 程序」计数（**按实际新增的 CTest / Catch2 / main 属件计**，Step 5 落实） |
 | **M19** | `include/simulator.h` + `src/simulator.cpp` | **新增 `node_id` 级非类型化访问器**（公开 API ⇒ 登记 `.rddf/checks/public-api-surface.md`） |

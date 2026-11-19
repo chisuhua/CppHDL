@@ -38,8 +38,8 @@
 
 | 文件名 | 说明 | 内容概要 |
 |--------|------|----------|
-| [PROJECT-OVERVIEW.md](PROJECT-OVERVIEW.md) | 项目概览 | 项目目标、技术栈、完成情况、路线图 |
-| [docs/README.md](README.md) | 文档中心首页 | 快速导航、文档分类、索引 |
+| [PROJECT-OVERVIEW.md](../PROJECT-OVERVIEW.md) | 项目概览 | 项目目标、技术栈、完成情况、路线图 |
+| [docs/README.md](../README.md) | 文档中心首页 | 快速导航、文档分类、索引 |
 | [PROJECT-DOCUMENTATION-STRUCTURE.md](PROJECT-DOCUMENTATION-STRUCTURE.md) | 文档结构整理报告 | 文档分类体系、归档清单、维护指南 |
 
 **内容**:
@@ -173,7 +173,7 @@
 ### 6.2 建议
 
 **推荐优先阅读文档**:
-1. [PROJECT-OVERVIEW.md](PROJECT-OVERVIEW.md) - 了解项目全貌
+1. [PROJECT-OVERVIEW.md](../PROJECT-OVERVIEW.md) - 了解项目全貌
 2. [problem-reports/bundle-connection-issue.md](problem-reports/bundle-connection-issue.md) - 理解当前阻塞问题
 3. [plans/bundle-connection-fix-plan.md](plans/bundle-connection-fix-plan.md) - 了解修复方案
 

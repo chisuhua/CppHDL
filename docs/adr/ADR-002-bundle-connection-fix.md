@@ -118,8 +118,8 @@ if (dst_impl && src_impl) {
 
 ## 相关文档
 
-- [docs/plans/bundle-connection-fix-plan.md](../plans/bundle-connection-fix-plan.md)
-- [bundle-connection-issue.md](../developer_guide/tech-reports/bundle-connection-issue.md)
+- [docs/plans/bundle-connection-fix-plan.md](../archive/phase-plans/bundle-connection-fix-plan.md)
+- [bundle-connection-issue.md](../archive/tech-reports/bundle-connection-issue.md)
 
 ---
 
@@ -168,8 +168,8 @@ if (this->node_impl_) {
 
 | 原引用 | 现引用 | 处置 |
 |---|---|---|
-| `bundle-connection-fix-plan.md` | `../plans/bundle-connection-fix-plan.md` | **修链** |
-| `bundle-connection-issue.md` | `../developer_guide/tech-reports/bundle-connection-issue.md` | **修链**（指向**活的** tech-report；`docs/archive/problem-reports/` 那份是归档副本） |
+| `bundle-connection-fix-plan.md` | `../archive/phase-plans/bundle-connection-fix-plan.md` | **修链**（2026-11-19 二次迁移：`docs/plans/` → `docs/archive/phase-plans/`） |
+| `bundle-connection-issue.md` | `../archive/tech-reports/bundle-connection-issue.md` | **修链**（同上：`docs/developer_guide/tech-reports/` → `docs/archive/tech-reports/`） |
 
 > ⚠️ **若上游被否**：上述指针随之回滚（链接目标回指原路径）。
 > 裁决 = `docs/architecture/2026-11-19-document-governance.md` §7.4（oracle 第 1 轮 APPROVE 附 6 项必改）。

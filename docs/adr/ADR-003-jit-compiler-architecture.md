@@ -372,8 +372,8 @@ opt -O2 /tmp/jit_ir.ll -o jit_ir_opt.ll        # 优化 IR
 **相关链接**:
 - `架构审查报告`（原 `../architecture-review-report.md` · 文件已不存在 ⇒ delink）
 - [JIT 调试指南](../developer_guide/patterns/JIT-DEBUGGING-GUIDE.md)
-- [JIT IR 位宽修复计划](../superpowers/plans/2026-05-02-jit-ir-bitwidth-fix.md)
-- [JIT 编译器路线图](../simulation/JIT_ROADMAP.md)
+- [JIT IR 位宽修复计划](../archive/superpowers/plans/2026-05-02-jit-ir-bitwidth-fix.md)
+- [JIT 编译器路线图](../archive/simulation-plans/JIT_ROADMAP.md)
 - [ADR-005: 双模式仿真设计](ADR-005-dual-mode-simulation.md) — D2 说明 CALL_EXTERNAL 的正确执行顺序
 - [PRD - 已知架构债务](../adr/PRD.md) — P0 债务列表
 - `include/jit/AGENTS.md` — JIT 子系统开发指南

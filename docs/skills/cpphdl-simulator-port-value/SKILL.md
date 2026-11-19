@@ -235,10 +235,10 @@ REQUIRE(val == 1);  // C++ 自动转换（隐式）
 
 ## 🔗 相关资源
 
-- [Simulator API 使用指南](../../docs/usage_guide/04-simulator-api.md)
+- [Simulator API 使用指南../../usage_guide/01-simulator-api.md
 - [Bundle 连接模式技能](../cpphdl-bundle-patterns/SKILL.md)
-- [Testbench 编写指南](../../docs/usage_guide/09-testbench-guide.md)
-- [RISC-V Hazard Unit](../../include/cpu/pipeline/hazard_unit.h)
+- [Testbench 编写指南../../usage_guide/04-testbench-guide.md
+- [RISC-V Hazard Unit](../../../include/cpu/pipeline/hazard_unit.h)
 
 ---
 

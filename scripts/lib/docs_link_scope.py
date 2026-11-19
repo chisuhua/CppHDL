@@ -24,45 +24,50 @@ SKIP_FILE_NAMES = {"AGENTS.md"}          # AGENTS.md 家族：显式 out-of-scop
 
 # ── L1 前缀（D1′ ①：目录前缀默认）
 L1_PREFIX = ("docs/usage_guide/", "docs/developer_guide/", "docs/skills/", "docs/simulation/",
-             "skills/", "tests/", "examples/", "samples/")   # 仓根的操作指南 / 测试入口 / 示例说明
+             "docs/riscv-mini/", "docs/architecture/",
+             "tests/", "examples/", "samples/")   # 代码目录的 README 也算活文档
 # ── L2/L3 前缀（最长前缀优先 ⇒ docs/skills/archive/ 落 L2）
-L23_PREFIX = ("docs/adr/", "docs/archive/", "docs/plans/", "docs/reports/", "docs/freertos/",
-              "docs/skills/archive/", ".rddf/", "openspec/changes/archive/",
-              "docs/developer_guide/plans/", "docs/superpowers/")   # 过程记录（最长前缀优先）
+L23_PREFIX = ("docs/adr/", "docs/archive/", "docs/skills/archive/",
+              ".rddf/", "openspec/changes/archive/")   # 历史（最长前缀优先）
 # ── 逐字保留区（P1 豁免 + 级别 = L2）
 ARCHIVE_PREFIX = "docs/archive/"
 
 # ��─ 混合目录的派生规则（D1′ ②：不需要人工表 ⇒ 由规则派生，C5 兜住「规则没覆盖」）
-ARCH_L2_PAT = re.compile(r"^docs/architecture/(phases/|.*review.*\.md$|README\.md$)")
-
 # ── 特殊文件显式清单（D1′ ②：混合目录里**无法由前缀机械判定**的例外）
 #    ⚠️ 依据 = `docs/architecture/README.md` §1/§2 的判读口径 + 文件自身的 dated 声明
 SPECIAL_LEVEL = {
+    # 变更流水 ⇒ 历史记录（不是导航入口）
     "docs/CHANGELOG.md": "L2",
-    "docs/phase_f_status.md": "L3",
-    "docs/architecture/2026-03-30-cpphdl-architecture-gap-analysis.md": "L2",
-    "docs/architecture/2026-03-30-spinalhdl-port-architecture.md": "L2",
-    "docs/architecture/2026-03-30-state-machine-dsl-design.md": "L2",
-    "docs/architecture/PHASE6-ARCHITECTURE.md": "L2",
-    "docs/architecture/SYNC-REPORT.md": "L2",
-    "docs/architecture/2026-10-30-n4-n6-evidence.md": "L3",
-    "docs/architecture/2026-11-16-soc-rtl-product-and-tb.md": "L2",
 }
-ROOT_MD_L3 = {"PHASE1-REVISED-PLAN.md", "perf_results.md", "Compare.md"}
+ROOT_MD_L3 = {"perf_results.md"}   # 生成物（gitignored）
 
 
-def iter_docs():
-    """扫描范围内所有 .md（相对仓根的 posix 路径）"""
-    out = []
+_DOCS_CACHE = None
+_NAME_INDEX = None   # basename → [Path]，一次 rglob 建好（C2 消歧用；避免逐引用全仓扫）
+
+
+def _scan():
+    """一次 rglob，同时产出 (docs 列表, 文件名索引)"""
+    global _DOCS_CACHE, _NAME_INDEX
+    if _DOCS_CACHE is not None:
+        return _DOCS_CACHE, _NAME_INDEX
+    out, by_name = [], {}
     for p in REPO.rglob("*.md"):
         rel = p.relative_to(REPO).as_posix()
         parts = set(rel.split("/")[:-1])
         if parts & SKIP_DIR_PARTS:
             continue
+        by_name.setdefault(p.name, []).append(p)
         if p.name in SKIP_FILE_NAMES:
             continue
         out.append(rel)
-    return sorted(out)
+    _DOCS_CACHE, _NAME_INDEX = sorted(out), by_name
+    return _DOCS_CACHE, _NAME_INDEX
+
+
+def iter_docs():
+    """扫描范围内所有 .md（相对仓根的 posix 路径）"""
+    return _scan()[0]
 
 
 def level_of(rel):
@@ -79,8 +84,6 @@ def level_of(rel):
         return lvl
     if rel.startswith("external/"):
         return "L4"
-    if rel.startswith("docs/architecture/"):
-        return "L2" if ARCH_L2_PAT.match(rel) else "L1"
     if rel in ROOT_MD_L3:
         return "L3"
     if "/" not in rel:                        # 仓根散落 *.md
@@ -148,8 +151,7 @@ def check(verbose=False):
             stats["l1_refs"] += 1
             q = REPO / f
             if not q.exists():
-                cands = [x for x in REPO.rglob(Path(f).name)
-                         if not (set(x.relative_to(REPO).parts[:-1]) & SKIP_DIR_PARTS)]
+                cands = _scan()[1].get(Path(f).name, [])
                 if len(cands) == 1:
                     q = cands[0]
                 elif "/" in f:

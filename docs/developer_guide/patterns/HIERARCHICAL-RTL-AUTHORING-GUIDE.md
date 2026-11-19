@@ -19,7 +19,7 @@
   `docs/adr/ADR-059-node-ownership-and-component-naming.md` ·
   `docs/adr/ADR-060-hierarchical-port-policy-and-module-reuse.md` ·
   `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md`（组件生命周期，本文的前置）·
-  `docs/usage_guide/05-component-design.md` §5（RTL 输出形态的现状说明）
+  `docs/usage_guide/02-component-design.md` §5（RTL 输出形态的现状说明）
 
 ---
 
@@ -298,6 +298,6 @@ mem_stage.io().alu_result <<= exmem_alu_result;
 ## 6. 相关文档
 
 - `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` —— 组件生命周期（本文的前置）
-- `docs/usage_guide/05-component-design.md` —— 多层模块装配 / 跨层连线 / 成员接口（**今天**的完整口径）
+- `docs/usage_guide/02-component-design.md` —— 多层模块装配 / 跨层连线 / 成员接口（**今天**的完整口径）
 - `docs/architecture/2026-11-02-hierarchical-rtl-output.md` —— 目标架构
 - `docs/adr/ADR-058` / `ADR-059` / `ADR-060` —— 决策

@@ -3,8 +3,5 @@
     "docs/adr",
     "docs/architecture"
   ],
-  "exclude_paths": [
-    "docs/architecture/phases",
-    "docs/architecture/plans"
-  ]
+  "exclude_paths": []
 }

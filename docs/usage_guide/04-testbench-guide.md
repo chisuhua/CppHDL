@@ -4,7 +4,7 @@
 **版本**: v2.0  
 **最后更新**: 2026-04-09  
 **目标读者**: CppHDL 用户（硬件设计者）  
-**前置知识**: [Simulator API 使用指南](04-simulator-api.md)
+**前置知识**: [Simulator API 使用指南](01-simulator-api.md)
 
 ---
 
@@ -72,7 +72,7 @@ TEST_CASE("MyComponent - Functionality Test", "[my_component][testbench]") {
 
 > ⚠️ **读输出端口用 `get_value`（不是 `get_input_value`）**：`get_input_value`
 > 只有 `ch_in<T>` 与 `ch_uint<N>` 两个重载（`include/simulator.h:464` / `:469`）
-> ⇒ ⇒ 给 `ch_out` 传它 ⇒ **编译不过**。见 `04-simulator-api.md` §2.1。
+> ⇒ ⇒ 给 `ch_out` 传它 ⇒ **编译不过**。见 `01-simulator-api.md` §2.1。
 
 ---
 
@@ -567,7 +567,7 @@ REQUIRE(val != 0);
 
 **症状**: `sim.get_input_value(bundle.field)` 失败
 
-**解决**: 参考 [Simulator API 使用指南](04-simulator-api.md) 的注意事项章节
+**解决**: 参考 [Simulator API 使用指南](01-simulator-api.md) 的注意事项章节
 
 ---
 
@@ -625,8 +625,8 @@ ctest --rerun-failed
 
 | 文档 | 说明 |
 |------|------|
-| [04-simulator-api.md](04-simulator-api.md) | Simulator API 使用 |
-| [06-bundle-patterns.md](06-bundle-patterns.md) | Bundle 使用模式 |
+| [01-simulator-api.md](01-simulator-api.md) | Simulator API 使用 |
+| [03-bundle-patterns.md](03-bundle-patterns.md) | Bundle 使用模式 |
 
 ### 示例代码
 

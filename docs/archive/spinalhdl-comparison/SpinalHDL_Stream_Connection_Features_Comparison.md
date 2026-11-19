@@ -719,8 +719,8 @@ struct FilterAndMap {
 
 ### CppHDL 文档
 - [CppHDL vs SpinalHDL Stream/Flow 使用对比](./CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)
-- [CppHDL Stream 实现](../include/chlib/stream.h)
-- [CppHDL Stream Bundle 定义](../include/bundle/stream_bundle.h)
+- [CppHDL Stream 实现](../../../include/chlib/stream.h)
+- [CppHDL Stream Bundle 定义](../../../include/bundle/stream_bundle.h)
 
 ### 博客和教程
 - [SpinalHDL之Stream - CSDN博客](https://blog.csdn.net/m0_59092412/article/details/140492621)

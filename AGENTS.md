@@ -69,7 +69,7 @@ CppHDL/
 | Bundle types | `include/bundle/` (stream_bundle, axi_bundle, flow_bundle) |
 | State machine DSL | `include/chlib/state_machine.h` |
 | If/else statement DSL | `include/chlib/if_stmt.h` |
-| 多层模块装配 / 跨层连线 / 成员接口 / RTL 输出形态 | `docs/usage_guide/05-component-design.md` |
+| 多层模块装配 / 跨层连线 / 成员接口 / RTL 输出形态 | `docs/usage_guide/02-component-design.md` |
 | 层次化 RTL 写法指南（**用户视角** · 含方案的用户面审查） | `docs/developer_guide/patterns/HIERARCHICAL-RTL-AUTHORING-GUIDE.md` |
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
 | 层次化 ≡ 扁平 **等价性 helper**（公共 API） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）|

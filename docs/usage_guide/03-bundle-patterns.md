@@ -4,7 +4,7 @@
 **版本**: v2.0  
 **最后更新**: 2026-04-09  
 **目标读者**: CppHDL 用户（硬件设计者）  
-**前置知识**: [Simulator API 使用指南](04-simulator-api.md), Component 设计基础  
+**前置知识**: [Simulator API 使用指南](01-simulator-api.md), Component 设计基础  
 
 ---
 
@@ -316,7 +316,7 @@ ch::ch_device<MyComponent> dev;  // 自动 build()
 sim.set_input_value(dev.io().stream.payload, value);  // ✅ 可用
 ```
 
-参考：[Simulator API 使用指南](04-simulator-api.md)
+参考：[Simulator API 使用指南](01-simulator-api.md)
 
 ---
 
@@ -324,8 +324,8 @@ sim.set_input_value(dev.io().stream.payload, value);  // ✅ 可用
 
 ### 开发者文档
 
-- [Bundle 连接问题分析](../developer_guide/tech-reports/bundle-connection-issue.md) - Bundle 内部实现与已知连接问题
-- [Verilog 命名修复分析](../developer_guide/tech-reports/T002-verilog-naming-fix-analysis.md) - Bundle 字段命名与 API 细节
+- [Bundle 连接问题分析](../archive/tech-reports/bundle-connection-issue.md) - Bundle 内部实现与已知连接问题
+- [Verilog 命名修复分析](../archive/tech-reports/T002-verilog-naming-fix-analysis.md) - Bundle 字段命名与 API 细节
 
 ### 示例代码
 
@@ -339,8 +339,8 @@ sim.set_input_value(dev.io().stream.payload, value);  // ✅ 可用
 
 | 文档 | 说明 |
 |------|------|
-| [04-simulator-api.md](04-simulator-api.md) | Simulator API 使用 |
-| [05-component-design.md](05-component-design.md) | Component 设计指南 |
+| [01-simulator-api.md](01-simulator-api.md) | Simulator API 使用 |
+| [02-component-design.md](02-component-design.md) | Component 设计指南 |
 | 07-stream-patterns.md | Stream 使用模式（**规划中 · 文件尚未创建**） |
 
 ---
