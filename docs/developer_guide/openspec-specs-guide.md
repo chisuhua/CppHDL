@@ -108,27 +108,56 @@ bash scripts/verify_openspec_delta.sh            # 检查全部 active change
 bash scripts/verify_openspec_delta.sh <change>   # 只检查一个
 ```
 
-### ⚠️ 口径分层（★ 2026-11-10 · 与根 `AGENTS.md` 同步）
+### ⚠️ 口径分层（三者**不是同一件事**，不要互相替代）
 
-三者**不是同一件事**，不要互相替代：
-
-| 命令 | 作用面 | 当前状态（实测 2026-11-10） | 地位 |
+| 命令 | 作用面 | 当前状态（实测 2026-11-19 · CLI `1.14.3`） | 地位 |
 |---|---|---|---|
-| `openspec validate --specs`（**非 strict**） | `openspec/specs/` 主 spec 的**结构 / 关键字**（`SHALL`/`MUST` · `## Purpose`） | **exit 0** · `Totals: 44 passed, 0 failed` | **ADR 判据面的人工 MUST**（`ADR-052 V8` / `ADR-063 §5.3` / `ADR-066 V12` / `ADR-067` 验收清单）· ⚠️ **CI 不跑** |
-| `openspec validate --specs --strict` | 上面 + 1.14.x 新增的两条 strict 规则（Requirement 正文 > 500 字符 · Purpose 占位符） | **exit 1** · `21 passed / 23 failed (44 items)` ⇒ **红项与本仓改动无关**（纯净 HEAD 同样红） | **只登记、不消除**（根 `AGENTS.md` 的「openspec CLI 版本漂移」条 · phase-6 **P10**）⇒ 「钉回 CLI 1.4.1」= 环境级、不可复现、不落仓 ⇒ **不实施** |
+| `openspec validate --specs`（**非 strict**） | `openspec/specs/` 主 spec 的**结构 / 关键字**（`SHALL`/`MUST` · `## Purpose`） | **exit 0** · `Totals: 51 passed, 0 failed (51 items)` | **ADR 判据面的人工 MUST**（`ADR-052 V8` / `ADR-063 §5.3` / `ADR-066 V12` / `ADR-067` 验收清单）· ⚠️ **CI 不跑** |
+| `openspec validate --specs --strict` | 上面 + 1.14.x 新增的两条 strict 规则（Requirement 正文 > 500 字符 · Purpose 占位符） | **exit 1** · `27 passed / 24 failed (51 items)` ⇒ **红项与本仓改动无关**（纯净 HEAD 同样红） | **只登记、不消除**（phase-6 **P10**）⇒ 「钉回 CLI 1.4.1」= 环境级、不可复现、不落仓 ⇒ **不实施** |
 | `bash scripts/verify_openspec_delta.sh` | **active change** 的 delta（R1–R4） | 零 active change 时 **零信号**（只打 `::warning::`，**不是** pass） | **CI / archive 前的实际门** |
 
 ⇒ ⇒ 实践口径：**提 PR / 归档前跑 delta 门**（有 active change 时它才有判别力）；
 **改完主 spec 后跑一次非 strict 的 `validate --specs`**（它只抓「本仓把 spec 写坏」，
 不抓 CLI 规则差异）；**strict 的红当作背景噪声**，先确认 CLI 版本再判断。
 
-## 未来规则
+### ⚠️ CLI 版本漂移（快照 · 不承诺长期有效）
 
-参见 `AGENTS.md` → "OPENSPEC WORKFLOW" 节。简要：
+本仓 `openspec/specs/**` 是按 CLI **1.4.1** 的校验规则写就的；CLI **1.14.x** 新增了两条 strict 规则
+（「Requirement 正文 > 500 字符」/「Purpose 仍是占位符」）⇒ ⇒ 处置：
 
-1. **新建 spec**：`openspec archive` **必须**不跳过 spec（不要加 `--skip-specs`）
-2. **修改 spec**：现有 `openspec/specs/<capability>/spec.md` 的修改必须通过新的 change 流程
-3. **格式合规**：每条 requirement 描述必须含 `SHALL`/`MUST`；Purpose/Requirements 必须是 heading 不是引用块
+- **「Requirement 正文 > 500 字符」** ⇒ 剩余 24 条红项**全部**属于这一类 ⇒ 与本仓改动无关
+  （纯净 HEAD 同样红）⇒ **只登记、不消除**（phase-6 **P10** 的处置）；环境级「钉回 1.4.1」
+  不可复现且不落仓 ⇒ **未采用**。
+- **「Purpose 仍是占位符」** ⇒ **这一类已清零**（8 个 capability 于 2026-11-19 补写实质 Purpose）。
+  防复发护栏 = `scripts/verify_openspec_purpose.sh`（**已进 CI** ⇒ 新建 capability 归档时若又写出
+  占位符 ⇒ 护栏转红，**不等 strict 门**）。
+
+⚠️ **CI 不跑 `openspec validate`**（`.github/workflows/ci.yml` 无此步骤）⇒ 该漂移**不阻断合并**；
+看到 `openspec validate` 报这两类 warning 时，**先确认 CLI 版本**，不要误判为自己改坏了 spec。
+
+### `## Purpose` 的修改通道（**只能归档后手工写**）
+
+openspec 的 delta **不含 `## Purpose`**（CLI 提示原文 + 护栏 `scripts/verify_openspec_delta.sh`
+里「`## Purpose` 不会被合并 ⇒ 不算违规」的判定双重证实）⇒ ⇒ **change 流程改不了已存在 capability
+的 Purpose** ⇒ ⇒ 该动作走「**归档后手工写**」通道：载体 change 用 `.openspec.yaml` 的
+`skip_specs: true` 声明「no spec changes」（⇒ 归档无需合并 spec ⇒ **零 Requirement 改动**）。
+先例 = `ADR-072` §6 ⑨ + commit `1952ba5`（T17）。
+
+## 硬性规则（违反即回归）
+
+1. **`openspec/specs/` 是当前 spec 的单一真相** —— 永不绕过它。项目 schema = `spec-driven`
+   （见 `openspec/config.yaml`）。
+2. **Directory layout（OpenSpec 1.4.0）**：主规范 MUST 用 capability 文件夹结构
+   `openspec/specs/<capability>/spec.md`。**禁止**扁平的 `openspec/specs/<capability>.md`
+   （CLI 不识别）。
+3. **Archive MUST 合并 spec**：`openspec archive <name>` 默认把
+   `openspec/changes/<name>/specs/<capability>/spec.md` 的 `## ADDED Requirements` 合进主 spec。
+   **禁止** `--skip-specs`，除非该 change 用 `.openspec.yaml` 的 `skip_specs: true` 显式声明
+   "no spec changes"（参见 `fix-ns-pollution` 模式）。
+4. **Spec 变更 MUST 走 change 流程**：直接改 `openspec/specs/<capability>/spec.md` 是禁止的；
+   先创建 change 提案，archive 时由 CLI 自动合并。
+5. **Spec 内容规范**：每条 requirement 描述**必须**含 `SHALL` 或 `MUST`（RFC 2119）；
+   `## Purpose` 与 `## Requirements` 必须是 **heading** 而非引用块。
 
 ## 已知遗留问题
 

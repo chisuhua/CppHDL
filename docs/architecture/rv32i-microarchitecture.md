@@ -145,6 +145,89 @@ imem(sread 1拍) ──► IF/ID ──► ID/EX ──► EX/MEM ──► MEM/
 | ~~`hazard_unit.h` 称 `load_use_detected` 是「**单拍脉冲**」~~ | ✅ **已订正（注释）**（2026-11-14 · architect 裁决 · **行为零改动**）：它 = 检测条件的**组合**输出 ⇒ ⇒ 条件持续多少拍就高多少拍（**不自清**）⇒ ⇒ 「单拍」只在调用方只给一拍条件时成立 | ✅ 已收口 ⇒ 判据 = 同上（V12 真值表）|
 | JIT 对 `ch_mem` 读端口 `UNSUPPORTED_OP` ⇒ RV32I 必然回落 interpreter | **有意设计**（`jit_compiler.cpp`）⇒ 回落原因**可归因**且被断言 | ✅ 已契约化（`verilator-rv32i-e2e`） |
 
+## 契约明细（逐条 · 迁移自根 `AGENTS.md` 的 `KNOWN LIMITATIONS`）
+
+> 这些是**当前态约束**，不是历史。根 `AGENTS.md` 只保留「红线」摘要 + 指向本文；
+> **本文是逐条权威**（改动契约时先改 ADR / capability，再同步本节）。
+
+### 1. ISA 覆盖边界
+
+固件已覆盖：ALU（ADD/SUB/ADDI）· `LUI`/`AUIPC` · `LW`/`SW`/`SB`/`SH` · `LB`/`LH`/`LBU`/`LHU` ·
+`BEQ`/`BNE` · `JAL`/`JALR` · `SRA` · `FENCE`/`FENCE.I`（opcode `0x0F` · 本版 = **NOP**：
+单核无 cache ⇒ 无排序语义）⇒ ⇒ 均已进 capability `rv32i-isa-semantics`。
+
+**仍未实现 / 未验证** = **CSR**（`csrrw`/`csrrs`/`csrrc`）+ **`ECALL`/`EBREAK`**（不含**预测取指**）
+⇒ ⇒ 这两项**不在**任何仓内 capability 覆盖内 ⇒ ⇒ 需**独立立项**（不可顺手塞进相邻条目）。
+
+⚠️ **非法指令**（含 `CSR`/`ECALL`/`EBREAK` 所属的 `OP_SYSTEM`）MUST **可观测**：
+`dbg_illegal_reason` 是 **4 态 + 优先级（`1` > `3` > `2` > `0`）**：
+`0` 合法 / `1` **已知未实现** / `2` **未知 opcode** / `3` **保留组合** ⇒ ⇒ 进入 ID 级即**冻结**
+（PC 不前进 · 该指令**永不退休**）⇒ ⇒ 「跑飞」不再**静默**（此前未知 opcode 被**当 NOP 逐条退休**）。
+⇒ 权威载体 = capability `rv32i-isa-semantics` 的「4 态 + 优先级」条款 · 实现 =
+`include/cpu/pipeline/rv32i_decoder.h:217-220`。
+
+### 2. 数据前推（ADR-047）
+
+档位 1 = EX/MEM 级、档位 2 = MEM/WB 级的合并写回值。
+
+⚠️ **成环仍然被禁止**：数据源的**叶子** MUST 是**流水线寄存器**（MUST NOT 取 EX/MEM 级的
+**组合输出** —— 那正是 `git show bf78367` 的事故形态）⇒ 负向对照见
+`tests/chlib/test_forwarding.cpp`（**常驻**回归）。
+
+⚠️ **档位 1 保守地不覆盖 load**（那是一个**选择**，不是无奈）⇒ 「档位 1 覆盖 load」= **V2**
+独立立项。
+
+⚠️ **load-use 停顿拍数与距离矩阵的唯一权威 = capability `rv32i-data-forwarding`**
+（含 ADR-069 决策 A0 的拍级推导）⇒ ⇒ **任何文档 MUST NOT 另写一份数字**（两份必然漂移）。
+依据 = `docs/adr/ADR-047-rv32i-data-forwarding.md` **§5.5**（dated addendum）+
+`docs/adr/ADR-069-mem-data-alignment.md`（决策 A0 · 停顿 3 → 4 拍的级数推导）。
+
+⚠️ **停顿链口径**（`include/cpu/pipeline/hazard_unit.h:159` 的注释订正 · 行为零改动）：
+`stall` 含**组合**项（当前检测结果）⇒ **停顿总长 = 检测条件持续拍数 + 2** ⇒ 条件**掉一拍**
+⇒ 停顿**提前结束**；检测条件**本身依赖 rd** ⇒ 流水线里观测到的「4 拍」= 条件持续 2 拍 + 2
+⇒ **正确设计，MUST NOT 改**。判据 = `tests/chlib/test_hazard_unit_stall.cpp`（V12 真值表）。
+
+### 3. 取指侧 / 存储时序
+
+- **imem MUST `sread`（1 拍，ADR-041）** ⇒ 指令比地址晚 1 拍到 ⇒ IF/ID 的 pc **必须同样延迟**
+  （`fetch_pc_reg`），否则 ID 拿到「比它译码的指令晚一个字」的 pc ⇒ 分支目标算错 4 字节。
+- **数据侧相反**：D-TCM（dmem）读口 = **固定 1 拍 `sread`**（ADR-069 决策 A0 ⇒ **不是** 0 拍
+  组合读）⇒ ⇒ 仅**字节写 RMW**（`rv32i_tcm.h:137`）与**寄存器堆**（`rv32i_pipeline.h:275`）
+  仍是 `aread`。权威 = capability `rv32i-memory-timing` R1/R2。
+- **取指侧的停顿丢指令 / 同一条指令被装两次（ADR-048）均已消除**（`IfStage` 内置 1 级 skid
+  buffer + `primed` 门控）⇒ 「停顿点之后 MUST 是 NOP」这条固件约束**已取消**。
+- ⚠️ **判据边界**：`primed` 是「**靠时序假设**」的正确性依赖（依赖 imem 的 1 拍 `sread` 延迟）
+  ⇒ 若将来换 imem 变体（`aread`）或引入预测取指，MUST 重审 ADR-048 D6 与 D3/D4 的前提。
+
+### 4. `HazardUnit` 端口面
+
+只保留 4 个直通端口（`rs1_data_raw`/`rs2_data_raw`/`rs1_data`/`rs2_data`）⇒ 作为**独立组件**
+仍可用。⚠️ 不得再把 `ex_alu_result` 接到 EX 级**组合输出** —— 那是**环饵** ⇒ 留着就诱使后人
+复现 `bf78367` 的组合环。
+
+### 5. cache 子系统
+
+- **变体选择**（ADR-039 ch_mem 重写 + ADR-041 Sync/Async 拆分）：完整实现位于
+  `include/cpu/cache/` 下的 `{i,d}_cache_{sync,async}.h`；`*_complete.h` 是兼容 shim 别名指向
+  `*_sync.h`；RV32I L1 默认 `ICacheSync` / `DCacheSync`（1 拍 sread）；TCM-style 用
+  `ICacheAsync` / `DCacheAsync`（0 拍 aread）⇒ 新代码用 `_sync` / `_async` 直接引用。
+  历史 pass-through stub 头文件（`*_stub.h`）已物理删除（ADR-037）—— 其语义不构成合法 cache
+  行为，且**没有**替代的 BYPASS 模式。
+- **已知债务**：`DCacheWriteBuffer` **并不真缓冲**（直通式 ⇒ 名字 over-promise ⇒ `ready` 无
+  背压语义）；`ICachePrefetch` 的**预取缓冲**是死数据（真预取未实现）⇒ ⇒ **真 FIFO 写缓冲 /
+  真预取 = 独立立项**；内层 cache 的 `miss`（1 拍 `sread`）与 `axi_addr`（当拍地址）存在
+  **1 拍错位**（属 cache 本体）。判别力见 `examples/riscv-mini/tests/test_cache_smoke.cpp`
+  （**12 个用例 / 78 断言**，双后端）。
+- ⚠️ **契约**「调用方 MUST 在 `miss` 期间保持 `addr` 不变」（否则 AXI 请求跟**新地址**发出 ⇒
+  取回的是**新块**数据）⇒ 载体 = capability `cpu-cache-subsystem` 的「`miss` 期间的地址稳定性」
+  Requirement ⇒ 判别力 = 错位探针用例。
+
+### 6. CLINT `mtime`
+
+64 位自由运行计数器（ADR-049）—— **不是**「只能由软件写」的静态比较器 ⇒ 递增频率 =
+**编译期**常量 `TIMER_DIVIDER`（默认 1）· **写优先** · 复位值 0。⚠️ 64 位读**允许撕裂**（已知边界）。
+⇒ 权威 = `include/cpu/AGENTS.md` §「CLINT 的 `mtime` 契约」。
+
 ## 决策依赖关系
 
 ```
@@ -172,10 +255,13 @@ ADR-037（stub 退役） ─► ADR-038（forwarding 归属） ─► ADR-047 �
 - **V2**：档位 `1` 覆盖 load ⇒ 消除 load-use 停顿（独立立项）
 - ~~**框架层加 API**（ADR-048 D7）~~：D6 的**局部修法（`primed`）已足够** ⇒ D7 **不启动**
   （`sread` 的初值语义与 `aread` 契约零改动）
-- **ISA 覆盖缺口**：**CSR**（`csrrw`/`csrrs`/`csrrc`）+ **`ECALL`/`EBREAK`** + **`FENCE`**
-  （不含**预测取指**）仍无实现 / 无验证 ⇒ ⇒ 这三项**不在**任何仓内 capability 覆盖内
+- **ISA 覆盖缺口**：**CSR**（`csrrw`/`csrrs`/`csrrc`）+ **`ECALL`/`EBREAK`**
+  （不含**预测取指**）仍无实现 / 无验证 ⇒ ⇒ 这两项**不在**任何仓内 capability 覆盖内
   ⇒ ⇒ 需**独立立项**（`rv32i-isa-gap-closure-2026-11` · phase-6 P6 边界 · 不可顺手塞进本条）
-  ⇒ ⇒ ✅ **已覆盖**（不再算缺口）：ALU（ADD/SUB/ADDI）· `LUI`/`AUIPC` · `LW`/`SW`/`SB`/`SH` ·
+  ⇒ ⇒ 逐条权威 = 本文 §「契约明细」1
+  ⚠️ **`FENCE` / `FENCE.I` 不算缺口**（opcode `0x0F` · 本版 = **NOP** · 已进 capability
+  `rv32i-isa-semantics`）—— 此前本条把它列为缺口 = **已过时**，2026-11-19 订正
+  ⇒ ⇒ ✅ **已覆盖**：ALU（ADD/SUB/ADDI）· `LUI`/`AUIPC` · `LW`/`SW`/`SB`/`SH` ·
   `LB`/`LH`/`LBU`/`LHU`（判别性固件 `Rv32iSoc - LoadByteLaneDiscriminating`，
   `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:1688`）· `BEQ`/`BNE` ·
   `JAL`/`JALR` · `SRA` ⇒ ⇒ 权威 = capability `rv32i-isa-semantics`
