@@ -24,7 +24,7 @@ Child of root `AGENTS.md`.
   ⇒ ⇒ 库 `include/` **不再**承载 example 专属设计（2026-11-18 搬出 ⇒ 见
   `.rddf/checks/public-api-surface.md` 的移除登记）；`examples/**` 与 `tests/**` **共用同一份定义**
   （禁复制 —— 那会变成双权威）
-  ⇒ ⇒ 顶层端口**已具名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`（不再是 `top_unnamed_input_N`）
+  ⇒ ⇒ 顶层端口**已具名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`（未具名编号形态已退役）
 
 ## RUN
 ```bash

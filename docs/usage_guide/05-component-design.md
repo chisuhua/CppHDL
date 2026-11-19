@@ -1015,24 +1015,30 @@ build/examples/axi4/tb_axi_soc_example --emit-rtl --out build/rtl_products/soc
 顶层端口 = **框架 2**（`default_clock` / `default_reset`）+ **根自有 12**（8 in + 4 out）
 = **14**；层次化顶层**不含**任何后代 IP 的端口。
 
-⚠️ **端口名是 `top_unnamed_input_N` / `top_unnamed_output_N`**（根 `__io` 用 legacy 未具名声明
-⇒ ⇒ 产物名无语义）⇒ ⇒ **端口 ↔ C++ 成员的对照表在**
-`.rddf/checks/soc-rtl-expectations.md#soc-example` §1（**位宽序列唯一确定** ⇒ 不是猜编号）。
+✅ **产品面已具名**（2026-11-18 · `example-file-boundary-2026-11` B2 · ADR-075 的
+「首批 32 个顶层端口具名」落地）⇒ ⇒ **产物端口名 = `top_<C++ 成员名>`**
+（`top_start` / `top_rdata` …）⇒ ⇒ **端口 ↔ C++ 成员直接同名**，不再是「按编号猜」。
+
+⚠️ **通用未具名机制仍在**（**未具名**的顶层组件 ⇒ 产物端口名退化为
+`top_unnamed_input_N` 那种编号形态）⇒ ⇒ 讲**机制**见 §1.3 / §5.1 / §5.3.3；
+**产品面**（本节这张表）**已不是**那种形态。
+⇒ ⇒ 权威的端口 ↔ C++ 成员对照表在
+`.rddf/checks/soc-rtl-expectations.md#soc-example` §1。
 
 | 产物端口 | 方向/位宽 | C++ 成员 | 备注 |
 |---|---|---|---|
-| `top_unnamed_input` | in / 1 | `start` | 启动一笔事务 |
-| `top_unnamed_input_1` | in / 1 | `write` | 1=写 · 0=读 |
-| `top_unnamed_input_2` | in / 32 | `addr` | `addr[31]=0`⇒GPIO · `=1`⇒UART |
-| `top_unnamed_input_3` | in / 32 | `wdata` | 写数据 |
-| `top_unnamed_input_4` | in / 1 | `rst_n` | **低有效**复位 |
-| `top_unnamed_input_5` | in / 8 | `gpio_in` | |
-| `top_unnamed_input_6` | in / 1 | `uart_rx` | **空闲高**（低电平会被当起始位） |
-| `top_unnamed_input_7` | in / 1 | `timer_irq` | **零消费死端口** ⇒ 接 `0` |
-| `top_unnamed_output` | out / 32 | `rdata` | 读数据 |
-| `top_unnamed_output_1` | out / 1 | `done` | ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
-| `top_unnamed_output_2` | out / 8 | `gpio_out` | |
-| `top_unnamed_output_3` | out / 1 | `uart_tx` | **空闲高** |
+| `top_start` | in / 1 | `start` | 启动一笔事务 |
+| `top_write` | in / 1 | `write` | 1=写 · 0=读 |
+| `top_addr` | in / 32 | `addr` | `addr[31]=0`⇒GPIO · `=1`⇒UART |
+| `top_wdata` | in / 32 | `wdata` | 写数据 |
+| `top_rst_n` | in / 1 | `rst_n` | **低有效**复位 |
+| `top_gpio_in` | in / 8 | `gpio_in` | |
+| `top_uart_rx` | in / 1 | `uart_rx` | **空闲高**（低电平会被当起始位） |
+| `top_timer_irq` | in / 1 | `timer_irq` | **零消费死端口** ⇒ 接 `0` |
+| `top_rdata` | out / 32 | `rdata` | 读数据 |
+| `top_done` | out / 1 | `done` | ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
+| `top_gpio_out` | out / 8 | `gpio_out` | |
+| `top_uart_tx` | out / 1 | `uart_tx` | **空闲高** |
 
 #### 怎么接线
 
