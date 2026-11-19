@@ -309,7 +309,7 @@
 | 本报告引用的行号是否移位 | **否**：`AGENTS.md` 的 strict 快照仍在 `:479-480`；`ADR-072` 的「Purpose 的两处落点」仍在 `:345`、「⑨」仍在 `:484`；`.rddf/improvements/rv32i-privileged-csr-2026-11.md:146`（`rv32i-privilege` = **扩展**）内容未变 |
 | 本报告引用的文件是否还在 | **是**：`rv32i-privilege-capability-2026-11.md` / `rv32i-privileged-csr-2026-11.md` / `openspec-specs-guide.md` / `scripts/verify_openspec_delta.sh:112` 全部在位 |
 | 悬空引用断言是否仍成立 | **是**：`examples/axi4/axi4_full_example.cpp` 仍**不存在**（该目录只有 `axi4_lite_example_top.h` / `axi_soc_example_top.h` / `tb_*`）⇒ §4.2 #11 成立 |
-| 是否存在进行中的 change 冲突（metis E8 前置） | **否**：`.rddf/state/iteration.json` 不存在 ⇒ 无活跃 change ⇒ §10 步骤 1 的前置条件当前满足 |
+| 是否存在进行中的 change 冲突（metis E8 前置） | **否**（**权威口径**）：`openspec list` ⇒ 「No active changes found.」；`openspec/changes/` 下**只有** `archive/`（173 项）⇒ 零 active change ⇒ §10 步骤 1 的前置条件当前满足 |
 
 ### 11.2 §3.2「护栏真空」的表述**精化**（结论方向不变，枚举修正）
 
@@ -345,3 +345,16 @@
 ### 11.6 本次 AGENTS.md 改动与本报告的关系（一句话）
 
 **无影响**。该改动是**文档重组**的一个副作用（usage_guide 重编号），与 8 个 capability 的 Purpose / Requirement **零交集**（本报告与 8 个 spec 均**未**引用 `usage_guide` 路径，已 grep 确认）⇒ ⇒ 本报告的**结论、证据、草稿、验收判据全部维持原样**；仅 §3.2 表述精化 + 新增 O7 与 §7 的模板引用。
+
+### 11.7 ⚠️ 2026-11-19 二次订正：**自纠一条「引错判据载体」的错误**
+
+**触发**：用户以 `openspec list` 复核「无活跃 change」，指出本报告 §11.1 的判据选错了载体。
+
+**错误**：§11.1 原写「`.rddf/state/iteration.json` 不存在 ⇒ 无活跃 change」⇒ ⇒ 这是**用非权威载体做推论**：
+- `.rddf/state/iteration.json` 是 **rdd-workflow** 的状态文件（且本仓**从未入库** —— `git log --all -- .rddf/state/iteration.json` **零命中**）⇒ ⇒ **它不存在既不能证明、也不能否证「无活跃 change」**；
+- openspec 的权威活跃态 = **`openspec/changes/` 下非 `archive/` 的子目录**（`openspec list` 即按此口径）。
+
+**已修正为**（§11.1 该行）：`openspec list` ⇒ 「No active changes found.」+ `openspec/changes/` 下只有 `archive/`（173 项）⇒ 零 active change。
+
+**影响范围**：**结论不变**（前置条件仍满足），**仅证据出处改正**。
+⇒ ⇒ 附带一条**通用纪律**（与本仓「判据载体 MUST 可解析」惯例一致）：**「某文件不存在 ⇒ 某状态为真」这类推论，只有在该文件是**权威状态载体**时才成立** ⇒ 引用前 MUST 先确认它是权威载体（本次是**我没确认就引用**）。
