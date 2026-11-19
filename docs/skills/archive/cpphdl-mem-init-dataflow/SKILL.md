@@ -183,7 +183,7 @@ for (uint32_t i = 0; i < std::min(4u, depth_); ++i) {
 ### 1. 定位问题文件
 
 ```bash
-cd /workspace/CppHDL
+cd <仓库根>
 
 # 查找 ch_mem 实现
 grep -rn "create_init_data" include/chlib/memory.h include/core/mem.h
@@ -218,7 +218,7 @@ cat src/simulator.cpp | grep -A 30 "initialize_memory"
 ### 4. 验证修复
 
 ```bash
-cd /workspace/CppHDL/build
+cd <仓库根>/build
 
 # 重新编译
 cmake .. && make -j$(nproc)

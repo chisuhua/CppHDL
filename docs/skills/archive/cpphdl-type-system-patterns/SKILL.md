@@ -489,10 +489,10 @@ auto safe = (static_cast<ch::u64>(x) << shift) & 0xFFFFFFFF;
 
 ## 参考文档
 
-- CppHDL 核心文档：`/workspace/CppHDL/docs/component_design.md`
-- 操作符参考：`/workspace/CppHDL/include/core/operators.h`
-- AXI4 示例：`/workspace/CppHDL/include/axi4/axi4_lite_slave.h`
-- 类型系统：`/workspace/CppHDL/include/core/literal.h`
+- CppHDL 核心文档：`<仓库根>/docs/component_design.md`
+- 操作符参考：`<仓库根>/include/core/operators.h`
+- AXI4 示例：`<仓库根>/include/axi4/axi4_lite_slave.h`
+- 类型系统：`<仓库根>/include/core/literal.h`
 
 ---
 
@@ -569,7 +569,7 @@ int main() {
 
 ```bash
 # 编译测试
-cd /workspace/CppHDL
+cd <仓库根>
 make test_type_system
 
 # 运行测试

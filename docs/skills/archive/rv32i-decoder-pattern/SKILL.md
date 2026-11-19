@@ -374,8 +374,8 @@ auto correct = bits<7, 0>(instr);  // HIGH >= LOW
 
 - RISC-V 官方规范：https://riscv.org/specifications/
 - RV32I 指令集手册：`riscv-spec-v2.2.pdf` Chapter 2
-- CppHDL 操作符文档：`/workspace/CppHDL/docs/operators.md`
-- 相关实现：`/workspace/CppHDL/include/riscv/rv32i_decoder.h`
+- CppHDL 操作符文档：`<仓库根>/docs/operators.md`
+- 相关实现：`<仓库根>/include/riscv/rv32i_decoder.h`
 
 ---
 
@@ -423,7 +423,7 @@ int main() {
 
 ```bash
 # 编译测试
-cd /workspace/CppHDL
+cd <仓库根>
 make test_decoder
 
 # 运行测试

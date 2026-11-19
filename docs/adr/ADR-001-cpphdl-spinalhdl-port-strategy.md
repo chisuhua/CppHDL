@@ -107,6 +107,19 @@
 ---
 
 **相关链接**:
-- [架构差距分析](../2026-03-30-cpphdl-architecture-gap-analysis.md)
-- [Phase 0 任务计划](../plans/phase0-tasks.md)
-- [SpinalHDL 移植架构](../2026-03-30-spinalhdl-port-architecture.md)
+- [架构差距分析](../architecture/2026-03-30-cpphdl-architecture-gap-analysis.md)
+- `Phase 0 任务计划`（原 `../plans/phase0-tasks.md` · 文件已不存在 ⇒ delink）
+- [SpinalHDL 移植架构](../architecture/2026-03-30-spinalhdl-port-architecture.md)
+
+## Addendum（2026-11-19 · 链接指针修正）
+
+> **背景**：本 ADR 的引用链接在文件迁移后失效 ⇒ 按《文档治理口径》（`docs/architecture/2026-11-19-document-governance.md` · D2 / D3 / P1）的 **L2 口径**处置：**正文一行不改** ⇒ ⇒ 只修**链接指针**，并在此记一笔。
+
+| 原引用 | 现引用 | 处置 |
+|---|---|---|
+| `../2026-03-30-cpphdl-architecture-gap-analysis.md` | `../architecture/2026-03-30-cpphdl-architecture-gap-analysis.md` | **修链**（文件在 `docs/architecture/`） |
+| `../plans/phase0-tasks.md` | 同左（行内代码） | **delink**（仓内无此文件 ⇒ 不得 relink 到不存在的目标） |
+| `../2026-03-30-spinalhdl-port-architecture.md` | `../architecture/2026-03-30-spinalhdl-port-architecture.md` | **修链** |
+
+> ⚠️ **若上游被否**：上述指针随之回滚（链接目标回指原路径）。
+> 裁决 = `docs/architecture/2026-11-19-document-governance.md` §7.4（oracle 第 1 轮 APPROVE 附 6 项必改）。

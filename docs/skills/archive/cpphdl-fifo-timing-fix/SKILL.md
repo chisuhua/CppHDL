@@ -104,7 +104,7 @@ ch_always_ff(clk) {
 ### 1. 定位问题文件
 
 ```bash
-cd /workspace/CppHDL
+cd <仓库根>
 
 # 查找 sync_fifo 使用
 grep -rn "sync_fifo" examples/ include/chlib/
@@ -116,7 +116,7 @@ grep -rn "write_enable" include/chlib/fifo.h
 ### 2. 检查架构问题记录
 
 ```bash
-cat /workspace/CppHDL/.acf/status/arch-issues-found.md
+cat <仓库根>/.acf/status/arch-issues-found.md
 ```
 
 ### 3. 应用修复
@@ -129,7 +129,7 @@ cat /workspace/CppHDL/.acf/status/arch-issues-found.md
 ### 4. 验证修复
 
 ```bash
-cd /workspace/CppHDL/build
+cd <仓库根>/build
 
 # 重新编译
 cmake .. && make -j$(nproc)

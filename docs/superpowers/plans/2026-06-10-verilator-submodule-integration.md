@@ -722,7 +722,7 @@ Expected: shows verilator rows with `"status": "PASS"` and non-zero `sim_us`.
 - [ ] **Step 3: Compare three-way timings**
 
 ```bash
-/home/ubuntu/venv/bin/python3 -c "
+<venv>/bin/python3 -c "
 import json
 with open('perf_results.json') as f: d = json.load(f)
 print(f'{'test':5s} {'params':12s} {'backend':12s} {'sim_us':>12s} {'status':12s}')

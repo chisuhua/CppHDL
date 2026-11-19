@@ -162,7 +162,7 @@ auto result = select(cond_bool, a, b);
 ### 1. 识别问题操作符
 
 ```bash
-cd /workspace/CppHDL
+cd <仓库根>
 
 # 查找特定 ch_op 使用
 grep -rn "ch_op::shl" include/ src/
@@ -198,7 +198,7 @@ auto operator<<(const LHS &lhs, const RHS &rhs) {
 ### 4. 验证修复
 
 ```bash
-cd /workspace/CppHDL/build
+cd <仓库根>/build
 
 # 重新编译
 cmake .. && make -j$(nproc)

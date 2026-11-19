@@ -76,7 +76,7 @@ template <typename BundleT> void connect(BundleT &src, BundleT &dst) {
 ### 步骤 2: 编译验证
 
 ```bash
-cd /workspace/CppHDL/build
+cd build
 cmake --build . --target cpphdl -j4
 ```
 
@@ -94,7 +94,7 @@ cmake --build . --target cpphdl -j4
 ### 步骤 3: 运行单元测试
 
 ```bash
-cd /workspace/CppHDL/build
+cd build
 ctest -R test_bundle_connection --output-on-failure
 ```
 
@@ -112,7 +112,7 @@ assertions: 73 | 73 passed
 ### 步骤 4: 回归测试
 
 ```bash
-cd /workspace/CppHDL/build
+cd build
 ctest --output-on-failure 2>&1 | tail -10
 ```
 

@@ -379,8 +379,8 @@ CppHDL 项目已完成基础框架建设，支持：
 
 ### 10.1 参考文档
 
-- [CppHDL Technical Debt Cleanup Plan](/workspace/CppHDL/.sisyphus/plans/cpphdl-debt-cleanup.md)
-- [SpinalHDL Stream Operators Implementation Plan](/workspace/CppHDL/.sisyphus/plans/2026-03-04-spinalhdl-stream-operators.md)
+- `CppHDL Technical Debt Cleanup Plan`
+- `SpinalHDL Stream Operators Implementation Plan`
 - [SpinalHDL Documentation](https://spinalhdl.github.io/SpinalDoc-RTD/)
 
 ### 10.2 相关文件
@@ -395,3 +395,13 @@ CppHDL 项目已完成基础框架建设，支持：
 **状态**: 🟡 待评审  
 **评审日期**: 待定  
 **评审人**: 老板
+
+## Addendum（2026-11-19 · 本机绝对路径 delink）
+
+> ⚠️ **本机绝对路径**（`«本机»/.sisyphus/plans/…`）在文档迁移后指向**只在作者机器上存在**的路径 ⇒ 按《文档治理口径》的 **P1 · 本机路径禁令**（级别无关）⇒ L2 文档 ⇒ **delink**（降级为行内代码）⇒ ⇒ **不 relink 到不存在的目标**。
+> 裁决 = `docs/architecture/2026-11-19-document-governance.md` §7.4 item 2。
+
+| 原链接 | 现形态 |
+|---|---|
+| `[CppHDL Technical Debt Cleanup Plan](«本机»/.sisyphus/plans/cpphdl-debt-cleanup.md)` | 行内代码（delink） |
+| `[SpinalHDL Stream Operators Implementation Plan](«本机»/.sisyphus/plans/2026-03-04-spinalhdl-stream-operators.md)` | 行内代码（delink） |

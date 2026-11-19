@@ -76,7 +76,7 @@ constexpr unsigned rhs_extra_width = [] {
 
 ### 1. 定位错误文件
 ```bash
-cd /workspace/CppHDL
+cd <仓库根>
 grep -n "1 << ch_width_v" include/core/operators.h
 ```
 
@@ -94,7 +94,7 @@ grep -rn "1 <<" include/ src/ | grep -v ".md"
 
 ### 4. 验证修复
 ```bash
-cd /workspace/CppHDL/build
+cd <仓库根>/build
 cmake .. && make -j$(nproc)
 ```
 
@@ -147,7 +147,7 @@ CXXFLAGS="-Wshift-overflow=2 -Werror"
 
 **问题现象**:
 ```
-/workspace/CppHDL/include/core/operators.h:758:23: error: 
+<仓库根>/include/core/operators.h:758:23: error: 
 right operand of shift expression '(1 << 32)' is greater than or equal 
 to the precision 32 of the left operand [-fpermissive]
 ```
@@ -188,10 +188,10 @@ return actual_value == ((uint64_t{1} << actual_width) - 1);
 ```bash
 # 自动修复 operators.h 中的位移问题
 sed -i 's/(1 << ch_width_v/(static_cast<uint64_t>(1) << ch_width_v/g' \
-  /workspace/CppHDL/include/core/operators.h
+  <仓库根>/include/core/operators.h
 
 # 重新构建
-cd /workspace/CppHDL/build && make -j$(nproc)
+cd <仓库根>/build && make -j$(nproc)
 ```
 
 ---

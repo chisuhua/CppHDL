@@ -2,7 +2,7 @@
 
 **同步时间**: 2026-03-30 09:15:00  
 **源目录**: /workspace/mynotes/CppHDL-SpinalHDL-Port/docs/architecture  
-**目标目录**: /workspace/CppHDL/docs/architecture  
+**目标目录**: docs/architecture  
 
 ## 同步文件列表
 - 2026-03-30-spinalhdl-port-architecture.md

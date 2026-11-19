@@ -370,7 +370,7 @@ opt -O2 /tmp/jit_ir.ll -o jit_ir_opt.ll        # 优化 IR
 ---
 
 **相关链接**:
-- [架构审查报告](../architecture-review-report.md)
+- `架构审查报告`（原 `../architecture-review-report.md` · 文件已不存在 ⇒ delink）
 - [JIT 调试指南](../developer_guide/patterns/JIT-DEBUGGING-GUIDE.md)
 - [JIT IR 位宽修复计划](../superpowers/plans/2026-05-02-jit-ir-bitwidth-fix.md)
 - [JIT 编译器路线图](../simulation/JIT_ROADMAP.md)
@@ -383,3 +383,14 @@ opt -O2 /tmp/jit_ir.ll -o jit_ir_opt.ll        # 优化 IR
 **决策人**: AI Agent  
 **审阅人**: ________________  
 **状态**: 草稿（待评审）
+
+## Addendum（2026-11-19 · 链接指针修正）
+
+> **背景**：本 ADR 的引用链接在文件迁移后失效 ⇒ 按《文档治理口径》（`docs/architecture/2026-11-19-document-governance.md` · D2 / D3 / P1）的 **L2 口径**处置：**正文一行不改** ⇒ ⇒ 只修**链接指针**，并在此记一笔。
+
+| 原引用 | 现引用 | 处置 |
+|---|---|---|
+| `../architecture-review-report.md` | 同左（行内代码） | **delink**（仓内无此文件） |
+
+> ⚠️ **若上游被否**：上述指针随之回滚（链接目标回指原路径）。
+> 裁决 = `docs/architecture/2026-11-19-document-governance.md` §7.4（oracle 第 1 轮 APPROVE 附 6 项必改）。

@@ -11,6 +11,7 @@
 | **SoC 层的 RTL 产物形态与 SoC 层 TB** | `2026-11-16-soc-rtl-product-and-tb.md`（⚠️ **历史方案**：其 dated 注已声明「当前态见 `2026-11-17-…`」；**决策面以 ADR-073 为准**） | ADR-073（**Accepted**） |
 | **层次化 RTL 输出** | `2026-11-02-hierarchical-rtl-output.md` · `2026-11-08-hierarchical-parent-side-landing.md` | ADR-058 · ADR-060 · ADR-061 · ADR-066 · ADR-070 |
 | **RV32I 微架构** | `rv32i-microarchitecture.md` | ADR-046 · ADR-047 · ADR-068 · ADR-069 |
+| **文档治理口径**（分级 · 引用有效性 · 死链处置 · 自动化门） | `2026-11-19-document-governance.md`（**Draft** · oracle 第 1 轮 APPROVE 附 6 项必改 · 已落） | ——（**不是**决策正本；规范正本 = `../DOCUMENT-ARCHITECTURE.md` v2.1 待校准） |
 
 ⚠️ **冲突时以 ADR 为准**（主题文档承载推导与快照，**不新增**架构义务）。
 

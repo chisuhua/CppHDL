@@ -483,7 +483,7 @@ return ch::select(ch_width_v<T> >= 64, ~0ull, (1ULL << ch_width_v<T>) - 1);
 
 ## 参考文档
 
-- Phase 3A 报告：`/workspace/CppHDL/docs/PHASE3A-FINAL-REPORT.md`
+- Phase 3A 报告：`<仓库根>/docs/PHASE3A-FINAL-REPORT.md`
 - Phase 3B 计划：`/workspace/home/openclaw/workspace/temp/phase3b-rv32i-plan.md`
 - RISC-V 规范：https://riscv.org/specifications/
 - ACP-Workflow 文档：`/workspace/acf-workflow/docs/WORK_PRINCIPLES.md`

@@ -99,7 +99,7 @@ static SomeObject obj;  // 静态对象
 ### 1. 定位问题宏
 
 ```bash
-cd /workspace/CppHDL
+cd <仓库根>
 
 # 查找所有断言/日志宏使用
 grep -rn "CHREQUIRE\|CHCHECK\|CHINFO\|CHERROR" include/ src/ | head -30
@@ -111,8 +111,8 @@ grep -rn "if.*condition" include/utils/logger.h
 ### 2. 检查 destruction_manager 实现
 
 ```bash
-cat /workspace/CppHDL/include/utils/destruction_manager.h
-cat /workspace/CppHDL/include/utils/logger.h | grep -A 5 "in_static_destruction"
+cat <仓库根>/include/utils/destruction_manager.h
+cat <仓库根>/include/utils/logger.h | grep -A 5 "in_static_destruction"
 ```
 
 ### 3. 应用修复
@@ -129,7 +129,7 @@ cat /workspace/CppHDL/include/utils/logger.h | grep -A 5 "in_static_destruction"
 ### 4. 验证修复
 
 ```bash
-cd /workspace/CppHDL/build
+cd <仓库根>/build
 
 # 重新编译
 cmake .. && make -j$(nproc)

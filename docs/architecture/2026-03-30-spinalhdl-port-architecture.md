@@ -356,7 +356,7 @@ public:
 ## 7. 下一步行动
 
 1. **架构评审**：等待老板评审本设计文档
-2. **同步到编码仓库**：评审通过后同步到 `/workspace/CppHDL/docs/architecture/`
+2. **同步到编码仓库**：评审通过后同步到 `docs/architecture/`
 3. **开始 Phase 1**：执行 Task 001 (Counter)
 
 ---

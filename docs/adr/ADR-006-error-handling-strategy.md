@@ -291,7 +291,7 @@ try {
 
 **相关链接**:
 - `include/utils/logger.h` — 错误处理宏定义
-- [PRD - 已知架构债务 T3](prd.md)
+- `PRD - 已知架构债务 T3`（原 `prd.md` · 文件已不存在 ⇒ delink）
 - [ADR-003: JIT 编译器架构](ADR-003-jit-compiler-architecture.md) — JIT 模块中的错误处理策略
 - [ADR-004: 数据所有权和生命周期](ADR-004-data-ownership-lifecycle.md) — 静态销毁阶段的错误处理保护
 - [ADR-004: 数据所有权和生命周期](ADR-004-data-ownership-lifecycle.md)
@@ -301,3 +301,14 @@ try {
 **决策人**: AI Agent  
 **审阅人**: ________________  
 **状态**: 草稿（待评审）
+
+## Addendum（2026-11-19 · 链接指针修正）
+
+> **背景**：本 ADR 的引用链接在文件迁移后失效 ⇒ 按《文档治理口径》（`docs/architecture/2026-11-19-document-governance.md` · D2 / D3 / P1）的 **L2 口径**处置：**正文一行不改** ⇒ ⇒ 只修**链接指针**，并在此记一笔。
+
+| 原引用 | 现引用 | 处置 |
+|---|---|---|
+| `prd.md` | 同左（行内代码） | **delink**（仓内无此文件） |
+
+> ⚠️ **若上游被否**：上述指针随之回滚（链接目标回指原路径）。
+> 裁决 = `docs/architecture/2026-11-19-document-governance.md` §7.4（oracle 第 1 轮 APPROVE 附 6 项必改）。

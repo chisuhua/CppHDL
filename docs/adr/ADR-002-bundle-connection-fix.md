@@ -118,8 +118,8 @@ if (dst_impl && src_impl) {
 
 ## 相关文档
 
-- [docs/plans/bundle-connection-fix-plan.md](bundle-connection-fix-plan.md)
-- [docs/problem-reports/bundle-connection-issue.md](bundle-connection-issue.md)
+- [docs/plans/bundle-connection-fix-plan.md](../plans/bundle-connection-fix-plan.md)
+- [bundle-connection-issue.md](../developer_guide/tech-reports/bundle-connection-issue.md)
 
 ---
 
@@ -161,3 +161,15 @@ if (this->node_impl_) {
 - 测试使用`sim.set_value()` 访问 Bundle IO 端口字段，但 API 可能不支持
 - 需要进一步研究或修改测试使用正确的访问方式
 - 不影响 ADR-002 核心修复的功能正确性
+
+## Addendum（2026-11-19 · 链接指针修正）
+
+> **背景**：本 ADR 的引用链接在文件迁移后失效 ⇒ 按《文档治理口径》（`docs/architecture/2026-11-19-document-governance.md` · D2 / D3 / P1）的 **L2 口径**处置：**正文一行不改** ⇒ ⇒ 只修**链接指针**，并在此记一笔。
+
+| 原引用 | 现引用 | 处置 |
+|---|---|---|
+| `bundle-connection-fix-plan.md` | `../plans/bundle-connection-fix-plan.md` | **修链** |
+| `bundle-connection-issue.md` | `../developer_guide/tech-reports/bundle-connection-issue.md` | **修链**（指向**活的** tech-report；`docs/archive/problem-reports/` 那份是归档副本） |
+
+> ⚠️ **若上游被否**：上述指针随之回滚（链接目标回指原路径）。
+> 裁决 = `docs/architecture/2026-11-19-document-governance.md` §7.4（oracle 第 1 轮 APPROVE 附 6 项必改）。
