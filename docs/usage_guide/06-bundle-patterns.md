@@ -324,8 +324,8 @@ sim.set_input_value(dev.io().stream.payload, value);  // ✅ 可用
 
 ### 开发者文档
 
-- [Bundle 设计模式](../developer_guide/patterns/bundle-design.md) - Bundle 内部实现
-- [Bundle 技术规格](../developer_guide/api-reference/T002-bundle-api.md) - API 细节
+- [Bundle 连接问题分析](../developer_guide/tech-reports/bundle-connection-issue.md) - Bundle 内部实现与已知连接问题
+- [Verilog 命名修复分析](../developer_guide/tech-reports/T002-verilog-naming-fix-analysis.md) - Bundle 字段命名与 API 细节
 
 ### 示例代码
 
@@ -341,7 +341,7 @@ sim.set_input_value(dev.io().stream.payload, value);  // ✅ 可用
 |------|------|
 | [04-simulator-api.md](04-simulator-api.md) | Simulator API 使用 |
 | [05-component-design.md](05-component-design.md) | Component 设计指南 |
-| [07-stream-patterns.md](07-stream-patterns.md) | Stream 使用模式 |
+| 07-stream-patterns.md | Stream 使用模式（**规划中 · 文件尚未创建**） |
 
 ---
 

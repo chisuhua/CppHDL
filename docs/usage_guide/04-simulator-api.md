@@ -63,9 +63,17 @@ int main() {
 |-----|---------|------|-------|
 | `set_input_value(signal, value)` | `ch_uint<N>` | 设置无符号整数 | 4+ |
 | `get_input_value(signal)` | `ch_uint<N>` | 读取无符号整数 | 4+ |
-| `get_input_value(port)` | `ch_in<T>` | 读取输入端口 | 4+ |
+| `get_input_value(port)` | `ch_in<T>` | 读取**输入**端口 | 4+ |
+| **`get_value(port)`** | `ch_out<T>` | 读取**输出**端口 | 4+ |
+| **`get_value(signal)`** | `ch_uint<N>` / `ch_bool` | 读取信号 | 4+ |
+| **`get_port_value(port)`** | 任意端口（`ch_in` / `ch_out`） | 通用读端口 | 4+ |
 | `set_value(signal, value)` | `ch_bool` | 设置布尔值 | 3+ |
 | `set_bundle_value(bundle, val)` | Bundle | 设置整个 Bundle | 3+ |
+
+> ⚠️ **读输出端口用 `get_value` / `get_port_value`，**不是** `get_input_value`**
+> （2026-11-19 补）：`get_input_value` 只有 **`ch_in<T>`** 与 **`ch_uint<N>`**
+> 两个重载（`include/simulator.h:464` / `:469`）⇒ ⇒ 给 `ch_out` 传它 ⇒
+> **编译不过**（`no matching function`）⇒ ⇒ 见 §2.1。
 
 > ⚠️ **Bundle 的 codegen 限制**：bundle 成员**不会**被注册为组件 IO ⇒ 它的信号
 > **不会**成为生成 Verilog 的**顶层端口**。需要可综合的顶层时请用普通
@@ -188,6 +196,33 @@ sdata_type get_input_value(const ch::core::ch_in<T>& port) const;
 auto port_val = sim.get_input_value(dev.instance().io().data_in);
 REQUIRE(static_cast<uint64_t>(port_val) == 0x42);
 ```
+
+### 2.1 读**输出**端口：`get_value` / `get_port_value`
+
+⚠️ **`get_input_value` 没有 `ch_out` 重载**（只有 `ch_in<T>` 与 `ch_uint<N>`，
+见 `include/simulator.h:464` / `:469`）⇒ ⇒ 拿它读输出 ⇒ **编译不过**：
+
+```cpp
+// ❌ 编译不过：no matching function for call to 'get_input_value(ch_out<...>&)'
+auto v = sim.get_input_value(io().data_out);
+
+// ✅ 读 ch_out：get_value
+auto v = sim.get_value(io().data_out);
+REQUIRE(static_cast<uint64_t>(v) == 0x42);
+
+// ✅ 读任意端口（ch_in / ch_out 通用）：get_port_value
+auto w = sim.get_port_value(io().data_out);
+```
+
+| 你要读的 | 用这个 | 签名位置 |
+|---|---|---|
+| `ch_out<T>` 端口 | `sim.get_value(port)` | `include/simulator.h:300` |
+| `ch_uint<N>` / `ch_bool` 信号 | `sim.get_value(signal)` | `include/simulator.h:307` / `:313` |
+| `ch_in<T>` 端口 | `sim.get_input_value(port)` | `include/simulator.h:464` |
+| 端口（不分方向，泛型代码里用） | `sim.get_port_value(port)` | `include/simulator.h:112` |
+
+> 💡 **记忆法**：`get_input_value` = 「读**输入**端口的值」；`get_value` = 「读
+> **输出**端口 / 信号的值」；`get_port_value` = 「我不关心方向」。
 
 ---
 
@@ -431,7 +466,7 @@ Simulator sim2(comp.context());
 | 文档 | 说明 |
 |------|------|
 | [T001-simulator-api.md](../developer_guide/api-reference/T001-simulator-api.md) | API 技术规格 |
-| [T001-analysis.md](../developer_guide/tech-reports/T001-analysis.md) | 技术分析报告 |
+| [T001-simulator-api.md](../developer_guide/api-reference/T001-simulator-api.md) | Simulator API 技术分析报告 |
 | [simulator-api-quickref.md](../skills/simulator-api-quickref.md) | 速查手册 |
 
 ### 代码示例

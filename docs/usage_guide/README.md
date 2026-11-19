@@ -1,7 +1,7 @@
 # 用户使用指南 (Usage Guide)
 
 > **目标读者**: 使用 CppHDL 设计硬件的工程师  
-> **版本**: v2.1 | **最后更新**: 2026-11-01
+> **版本**: v2.2 | **最后更新**: 2026-11-19
 
 ---
 
@@ -35,7 +35,7 @@
 
 | 编号 | 文档 | 说明 | 状态 |
 |------|------|------|------|
-| 10 | [10-verilator-backend.md](10-verilator-backend.md) | Verilator 仿真后端 | ✅ 已完成（脚手架） |
+| 10 | [10-verilator-backend.md](10-verilator-backend.md) | Verilator 仿真后端 | ✅ 已完成 |
 | 11 | [11-stream-flow-comparison.md](11-stream-flow-comparison.md) | Stream/Flow 对比 | ✅ 已完成 |
 
 ---
@@ -57,7 +57,7 @@
 ### 完整项目路径
 
 ```
-02-quickstart → 04-simulator-api → 05-component-design → 09-testbench-guide → 10-verilog-synthesis
+02-quickstart → 04-simulator-api → 05-component-design → 09-testbench-guide → 10-verilator-backend
 ```
 
 ---
@@ -83,4 +83,4 @@
 ---
 
 **维护**: AI Agent  
-**版本**: v2.1
+**版本**: v2.2

@@ -151,7 +151,7 @@ void describe() override {
 |---|---|---|
 | 1 | `Component::current()` 取父 | 为空 ⇒ `CHERROR` 后**静默 return** |
 | 2 | 取 `parent->context()` | 为空 ⇒ 同上 |
-| 3 | 拼层级名 `parent.child`（`module.h:13-32`） | — |
+| 3 | 拼层级名 `parent.child`（`component.h:270` `build_hierarchical_name`；⚠️ 该函数**已从 `module.h` 移到 `component.h`** —— 留在原处会构成两个真源） | — |
 | 4 | `make_unique<T>(parent, 拼好的名字, ...)` | 子组件 ctor 也必须是 `(Component*, string, ...)` |
 | 5 | `parent->add_child()` 移交所有权 | — |
 | 6 | `child->build(parent_context)` —— **复用父 context** | — |
@@ -175,7 +175,7 @@ x.instance().member  // 子组件的非端口成员（bundle / stream / ch_reg /
 
 ### 2.5 `create_child` / 手工 `build(ctx)`：不要拿来做装配
 
-- `Component::create_child<T>(name, ...)`（`component.h:42-59`）：`make_shared` +
+- `Component::create_child<T>(name, ...)`（`component.h:171-186`）：`make_shared` +
   塞进 `children_shared_`，**不调用 `build()`** ⇒ 子组件的 `create_ports()` /
   `describe()` **不会执行**。仓内唯一用途是 `tests/test_multithread.cpp:236-317`
   验证父子关系与 `child_count()`。
@@ -253,8 +253,8 @@ void describe() override {
 ```
 
 仓内实例：
-- ② ③：`examples/riscv-mini/src/rv32i_pipeline_top.h:112-119`
-- ④：`include/cpu/pipeline/rv32i_pipeline.h:238-262`、`examples/axi4/axi_soc_example_top.h:197-219`
+- ② ③：`examples/riscv-mini/src/rv32i_pipeline_top.h:159-164`
+- ④：`include/cpu/pipeline/rv32i_pipeline.h:403-412`、`examples/axi4/axi_soc_example_top.h:205-216`
 
 ### 3.3 表达式 / 常量 / 位切片驱动
 
@@ -264,7 +264,7 @@ void describe() override {
 dtcm.io().valid <<= ch_bool(true);                                        // 常量
 itcm.io().addr  <<= bits<kTcmAddrWidth + 1, 2>(pipeline.io().instr_addr); // 位切片
 ```
-（`rv32i_pipeline_top.h:111,124`）
+（`rv32i_pipeline_top.h:159,171`）
 
 ### 3.4 父层中间节点：扇出与 mux
 
@@ -290,7 +290,7 @@ mem_stage.io().alu_result <<= exmem_alu_result;                                 
 
 - `ch_reg::operator<<=` 是**非阻塞赋 next**（`include/core/reg.h:52-57`），等价 `reg->next = expr`
 - `ch_mem` 归父层持有，父层做 `aread` / `write`，把结果接给子层端口
-  （`rv32i_pipeline.h:134, 189-196`）
+  （`rv32i_pipeline.h:164, 275-276`）
 
 ### 3.6 bundle / stream 级连线
 
@@ -338,7 +338,7 @@ consumer1_inst.instance().stream_in <<= producer_inst.instance().stream_out;  //
 | `ch_out` 被驱动多次 | `set_src(0, …)` ⇒ **last-wins**，前一个驱动变孤儿节点 |
 | `ch_in` 被驱动多次 | `set_driver()` = `driver_ = drv; add_src(drv);`（`ast_nodes.h:156-159`）⇒ **替换指针但累积 src 边** ⇒ IR 里残留死边 |
 
-仓内明确记录：`include/cpu/pipeline/rv32i_pipeline.h:250-256`（ADR-047 D8）。
+仓内明确记录：`include/cpu/pipeline/rv32i_pipeline.h:431-433`（ADR-047 D8）。
 
 ### 3.10 禁止 / 无意义的组合
 
@@ -437,7 +437,7 @@ public:
 ch::ch_module<MemChild, MemT&> c{"c", mem}; // ★ 注意第二组模板实参
 ```
 
-> ⚠️ 被注入的节点对象 MUST 是父组件的**成员变量**（如 `rv32i_pipeline.h:134`
+> ⚠️ 被注入的节点对象 MUST 是父组件的**成员变量**（如 `rv32i_pipeline.h:164`
 > 的 `reg_file`）。写成 `describe()` 里的**局部变量**也不会报错——但 `describe()`
 > 返回后该 C++ 对象就析构了，子模块手里那条引用随即**悬垂**（节点本身仍在
 > context 里，所以仿真结果可能"看起来对"）。
@@ -480,7 +480,7 @@ class Bad {
 父层 `din <<= x` 对 lit 无效 ⇒ **完全静默**，结果恒 0，一条错误都不打。
 
 > `ch_uint` / `ch_bool` 上确实有 `as_input()/as_output()/direction()`
-> （`include/core/uint.h:130-171`、`include/core/bool.h:55-78`），但那是
+> （`include/core/uint.h:132-141`、`include/core/bool.h:55-64`），但那是
 > `bundle_base::make_input/make_output` 的**内部**通道，不是给用户当模块接口的。
 
 ### 4.5 什么时候用成员、什么时候用 `io()`
@@ -509,7 +509,7 @@ class Bad {
 ### 5.1 扁平产物（默认）
 
 `ch::toVerilog(filename, ctx)`（`include/codegen_verilog.h:67`）**只接收 context**，
-固定输出一个 `module top (`（`src/codegen_verilog.cpp:313`）到 `endmodule`
+固定输出一个 `module top (`（`src/codegen_verilog.cpp:745`）到 `endmodule`
 （`:390`）。整个 writer 里**没有任何** `children()` / `child_count()` 遍历，
 也不发射实例化语句。
 
@@ -1113,7 +1113,7 @@ if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
 | 1 | 把 `ch_module<T>` 声明成**成员变量** | 成员构造早于 `build()` ⇒ 子模块挂到**祖父**节点下（父子关系错、同类型多实例重名）；顶层直接用会 SIGSEGV | `include/cpu/pipeline/rv32i_pipeline.h:114-123`；`examples/riscv-mini/tests/test_pipeline_debug.cpp:26-31`；`examples/removed_examples.txt:26` |
 | 2 | `ch_module` 出现在 `TEST_CASE` / `main()` 顶层 | ctor `CHERROR` 后静默 return ⇒ `io()` 时 `CHFATAL` ⇒ SIGSEGV | `module.h:41-46, 78-84` |
 | 3 | 两个 `ch_device` 分别实例化再互连 | 各自 context/时钟；`Simulator` 与 `toVerilog` 只看一个 | `device.h:20`、`simulator.cpp:463` |
-| 4 | 用 `create_child` 当装配手段 | 子组件从不 `build()` ⇒ 端口/`describe()` 全不执行 | `component.h:42-59` |
+| 4 | 用 `create_child` 当装配手段 | 子组件从不 `build()` ⇒ 端口/`describe()` 全不执行 | `component.h:171-186` |
 | 5 | bundle 成员没 `as_master()/as_slave()` 就使用字段 | 字段节点不存在 ⇒ `Invalid operands`，结果恒 0 | `bundle_base.h:409-437` |
 | 6 | 裸 `ch_uint`/`ch_bool` 成员当接口 | 子层读到 null；用字面量初始化则**静默恒 0** | §4.4 实测 |
 | 7 | 子模块输入端口漏驱动 | 读到**未定义值**（不是 0）⇒ 跨后端可能分叉 | `AGENTS.md` ANTI-PATTERNS |
@@ -1150,14 +1150,14 @@ if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
 
 | 场景 | 位置 |
 |---|---|
-| 两层单子模块（最简） | `samples/counter.cpp:44-52` |
+| 两层单子模块（最简） | `samples/counter.cpp:53` |
 | 两层多实例 + `instance()` 取成员 | `samples/bundle_top_example.cpp:94-108` |
-| 三层（SoC → pipeline → stages） | `examples/riscv-mini/src/rv32i_pipeline_top.h:94-96` |
-| 5+ 子模块 + 互连（`ch::ch_layer<T>` 四处） | `examples/axi4/axi_soc_example_top.h:185-194` |
-| 流水线级间寄存器/存储 | `include/cpu/pipeline/rv32i_pipeline.h:134, 189-196, 359-442` |
-| bundle 成员 `connect()` | `tests/test_bundle_master_slave.cpp:110-115` |
+| 三层（SoC → pipeline → stages） | `examples/riscv-mini/src/rv32i_pipeline_top.h:137` |
+| 5+ 子模块 + 互连（`ch::ch_layer<T>` 四处） | `examples/axi4/axi_soc_example_top.h:193-202` |
+| 流水线级间寄存器/存储 | `include/cpu/pipeline/rv32i_pipeline.h:164, 166-183, 241-259` |
+| bundle 成员 `connect()` | `tests/test_bundle_master_slave.cpp:114` |
 | 测试承载 wrapper | `examples/riscv-mini/tests/test_pipeline_debug.cpp:47-62` |
-| 双实例共享同一 DUT（双后端 parity） | `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:679-712` |
+| 双实例共享同一 DUT（双后端 parity） | `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp:648-649` |
 
 ---
 
@@ -1169,5 +1169,6 @@ if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
 - [层次化 RTL 输出 · 目标架构](../architecture/2026-11-02-hierarchical-rtl-output.md) —— 需求 / 结构事实 / 已知残留（**取代** `verilog-codegen-architecture.md` §7.1）
 - `docs/adr/ADR-058-hierarchical-rtl-output.md` · `ADR-059`（归属与命名）· `ADR-060`（端口策略与复用）· `ADR-061`（层级粒度由用户显式控制）—— 决策正本
 - [Verilator 后端](10-verilator-backend.md) —— 只认顶层端口、64 bit 上限
+- [Testbench 编写指南](09-testbench-guide.md) §模式 5 —— **验证源（`.verif`）驱动**（产品级 RTL 仿真的推荐路径：一份语义 → 解释器 + Verilog 独立 TB）
 - `docs/adr/ADR-042-bundle-field-first-class-nodes.md` —— bundle 字段作为一等节点
 - `docs/adr/ADR-008-single-clock-domain-constraint.md` —— 单时钟域约束

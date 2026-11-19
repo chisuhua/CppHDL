@@ -65,10 +65,14 @@ TEST_CASE("MyComponent - Functionality Test", "[my_component][testbench]") {
     sim.tick();
     
     // 6. 验证输出
-    auto output = sim.get_input_value(io.data_out);
+    auto output = sim.get_value(io.data_out);   // ⚠️ 读 ch_out 用 get_value
     REQUIRE(static_cast<uint64_t>(output) == 0x42);
 }
 ```
+
+> ⚠️ **读输出端口用 `get_value`（不是 `get_input_value`）**：`get_input_value`
+> 只有 `ch_in<T>` 与 `ch_uint<N>` 两个重载（`include/simulator.h:464` / `:469`）
+> ⇒ ⇒ 给 `ch_out` 传它 ⇒ **编译不过**。见 `04-simulator-api.md` §2.1。
 
 ---
 
@@ -217,10 +221,16 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
     sim.set_input_value(io.awprot, 0);
     sim.set_input_value(io.awvalid, 1);
     
-    // 等待握手
-    while (sim.get_input_value(io.awready) == 0) {
+    // ⚠️ **等握手 MUST 有界**（2026-11-19 订正）：仓内一律写成
+    //    `for (i < max_cycles)` + 超时判失败（见 `tests/axi_lite_slave_fixture.h:39-45`）
+    //    ⇒ ⇒ 无界 `while` 在 DUT 不握手时会**永久挂死** ⇒ CI 卡住 ⇒ 查不出是谁的问题
+    // ⚠️ 读 `ch_out`（awready 是从端的**输出**）⇒ 用 `get_value`，不是 `get_input_value`
+    bool aw_done = false;
+    for (int i = 0; i < 16; ++i) {
+        if (static_cast<uint64_t>(sim.get_value(io.awready)) == 1) { aw_done = true; break; }
         sim.tick();
     }
+    REQUIRE(aw_done);                 // 握手超时 ⇒ 直接判红（不挂死）
     
     sim.tick();
     sim.set_input_value(io.awvalid, 0);
@@ -230,9 +240,12 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
     sim.set_input_value(io.wstrb, 0xF);
     sim.set_input_value(io.wvalid, 1);
     
-    while (sim.get_input_value(io.wready) == 0) {
+    bool w_done = false;
+    for (int i = 0; i < 16; ++i) {
+        if (static_cast<uint64_t>(sim.get_value(io.wready)) == 1) { w_done = true; break; }
         sim.tick();
     }
+    REQUIRE(w_done);
     
     sim.tick();
     sim.set_input_value(io.wvalid, 0);
@@ -246,6 +259,98 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
 - AXI 协议验证
 - 寄存器访问测试
 - 总线互连测试
+
+---
+
+### 模式 5: 验证源（`.verif`）驱动 —— **产品级 RTL 仿真的推荐路径**
+
+> 📌 **2026-11-19 新增**。前 4 个模式都是「C++ 里手写激励」⇒ 适合**单元级**验证。
+> 当你需要一个**产品级 RTL 仿真**（同一份语义要同时喂给「解释器跑」与
+> 「Verilog 独立 TB 跑」），用手写激励就必然出现**同一语义的多个物理载体**
+> ⇒ ⇒ `.verif` 机制就是为消掉它而生的（ADR-074）。
+
+#### 为什么需要它
+
+```
+.verif 验证源 ──扫描器──> IR（唯一语义载体）─┬─> IR 解释器 ──> Simulator
+                                             └─> Verilog 渲染器 ──> .sv 独立 TB
+```
+
+⚠️ **值在生成期全部求值成字面量**（`REPEAT` 在扫描期展开、`_i` 在扫描期绑定）
+⇒ ⇒ IR 里**没有表达式** ⇒ ⇒ 两个执行后端**不必各自解释表达式**
+⇒ ⇒ 「语义真的只有一份」⇒ ⇒ **两侧断言不可能漂移**。
+
+#### `.verif` 的语法（原语**封闭集**）
+
+| 头部指令 | 含义 |
+|---|---|
+| `@expect-src <path>#<anchor>` | **期望值的推导**在哪个登记文档（**必须是人写的推导**，不是抄生成器输出） |
+| `@tb-module <name>` | 生成的 TB 的 module 名 |
+| `@scenario <name>` | 一个场景（= 一组断言） |
+| `@anchor <name>` | 该场景在期望源文档里的锚点 ⇒ 护栏按 **scenario 级 1:1** 核对两边 |
+
+| 原语 | 含义 |
+|---|---|
+| `SET <port> <value>` | 驱动一个端口（**不消耗拍**） |
+| `TICK <n>` | 走 n 个时钟沿 |
+| `SETTLE` | 等待采样窗结算（**`SET` 之后 `EXPECT` 之前 MUST 有它**） |
+| `WAIT <port> <max>` | 等某端口为 1（上限 max 拍）⇒ 产生一条断言 |
+| `EXPECT <port> <value>` | 断言某端口等于某值 ⇒ 产生一条断言 |
+| `EXPECT_STABLE <port> <n>` | 断言某端口连续 n 拍不变 |
+| `OBSERVE <port>` | 观测（只记录，不判定） |
+| `RESET <port> <high\|low> [cycles]` | 复位某个端口 |
+
+#### 一个最小完整例子
+
+```
+# examples/axi4/tb_axi4_lite_example.verif（节选）
+@expect-src .rddf/checks/examples-rtl-expectations.md#axi4-lite-example
+@tb-module tb_axi4_lite_example
+
+@scenario bringup_and_low_active_reset
+@anchor axi4-lite-example
+
+SET rst_n 0
+TICK 2
+SET rst_n 1
+TICK 2
+
+SET awaddr 0x00000000
+SET awvalid 1
+SETTLE              # ⚠️ SET 之后 EXPECT 之前 MUST 先 SETTLE
+EXPECT awready 1    # ⇒ 一条断言（check_id = bringup_and_low_active_reset#0）
+TICK 1
+```
+
+#### 怎么跑（**两个模式，同一份 `.verif`**）
+
+```bash
+# ① 解释器模式（默认）：IR 解释器驱动 Simulator ⇒ 打印结论行
+build/examples/axi4/tb_axi4_lite_example
+# ⇒ RESULT: checks=113 fails=0
+
+# ② 发射模式：发射 Verilog 产物 + 由同一份 .verif 渲染独立 TB
+build/examples/axi4/tb_axi4_lite_example --emit-rtl --out <dir> \
+    --emit-tb-verif examples/axi4/tb_axi4_lite_example.verif --tb-verif-out <dir>/tb.sv
+# ⇒ 打印 VERIF-CHECKS: 113（静态展开数）
+```
+
+⚠️ **改完 `.verif` MUST 重新生成 TB**：仓内 TB 由 `.verif` 渲染而来（**禁手改**）⇒
+护栏 `scripts/verify_examples_rtl_sim.sh` 的 ⑥′ 判据会**逐字节**比对 ⇒ 不重新生成
+⇒ 护栏红（`生成物与验证源不一致`）。
+
+#### 四条纪律
+
+| # | 纪律 | 为什么 |
+|---|---|---|
+| 1 | **`SET` / `RESET` 之后必须先 `SETTLE`**（或 `TICK` / `WAIT`）才能 `EXPECT` | 「沿后采样窗」内驱动、「最近一次结算之后」观测 ⇒ 不结算就观测 ⇒ **观测点未定义** ⇒ 扫描器**静态强制**（违例直接报错） |
+| 2 | **期望值的推导 MUST 写在 `@expect-src` 指向的文档里**（人写） | 否则就是「抄生成器输出」⇒ ⇒ 两侧同时变 ⇒ **恒绿** ⇒ 护栏要求三方等式（登记 == 静态展开 == 运行期） |
+| 3 | **fail-closed**：端口名拼错 / 多义 / 集合外构造 ⇒ 一律报错 + 点名 | `gpio_out` 写成 `gpio_outt` ⇒ 静默读 0 ⇒ 断言永远「通过」⇒ 必须显式拒绝 |
+| 4 | **两侧结论逐条可比** | 解释器与渲染式 TB 都输出 `CHECK <id> PASS\|FAIL` ⇒ ⇒ 可直接比对集合（护栏 ⑧⁗ / 单元测试） |
+
+> 📚 **权威载体**：capability `examples-rtl-sim-coverage`（`openspec/specs/`）
+> · 设计 = `docs/adr/ADR-074-rtl-verification-single-source.md`
+> · 护栏 = `scripts/verify_examples_rtl_sim.sh`（+ `--self-test`）
 
 ---
 

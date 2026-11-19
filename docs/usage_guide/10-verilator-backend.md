@@ -111,17 +111,17 @@ int main() {
 
 ---
 
-## 当前实现状态（ADR-035 Phase 1-4.1 + v2.1 e2e 验证）
+## 当前实现状态（2026-11-19 复核 · ADR-035 v2.2 + phase-6 产物化交付面）
 
 ### ✅ 已完成
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
 | **Verilog codegen 修复** | ✅ | 5 个 Verilator 阻塞已修（默认 clock/reset 在 port list, 多输出发射, 走 proxy 链, bundle 字段名, input 重复声明移除） |
-| **iverilog/verilator 验证** | ✅ | 6 个端到端测试通过 iverilog 和 verilator --lint-only |
+| **iverilog/verilator 验证** | ✅ | 端到端测试通过 iverilog 和 verilator --lint-only |
 | **IEvalBackend 抽象** | ✅ | `include/core/eval_backend.h` 定义统一后端接口 |
 | **InterpreterBackend** | ✅ | 包装现有解释器循环的默认后端 |
-| **Simulator::set_backend()** | ✅ | Phase 2.3 完整重构，Simulator 可通过 `ch::IEvalBackend` 接口切换后端 |
+| **Simulator::set_backend()** | ✅ | Simulator 可通过 `ch::IEvalBackend` 接口切换后端 |
 | **Verilog + sim_main.cpp 生成** | ✅ | `generate_verilog()` 写 top.v + sim_main.cpp（含 extern "C" factory/eval/delete/set_input/get_output 符号） |
 | **verilator --cc + dlopen .so** | ✅ | 两步编译：verilator --cc 生成 obj_dir/，再 `g++ -shared -fPIC -o libVtop.so`；dlopen 符号 7 个 |
 | **data_map_ ↔ Vtop 同步** | ✅ | `sync_inputs_to_vtop()` 将 `data_map_` 输入推入 Vtop；`sync_outputs_from_vtop()` 将 Vtop 输出拉回 `data_map_` |
@@ -129,16 +129,28 @@ int main() {
 | **SHA-1 缓存** | ✅ | 缓存键含 verilog_source + sim_main template + flags + verilator --version；产物 `~/.cache/cpphdl/verilator/<hash>/libVtop.so` |
 | **VCD 跟踪 API** | ✅ | `enable_vcd()` toggle + `dump_vcd()` 写端口值到 .vcd 文件 |
 | **Simulator 集成 + 多 backend 切换** | ✅ | `set_backend()` 热替换；`sim_setbackend_*` 测试覆盖 default/null/interpreter 场景 |
-| **VerilatorBackend 测试** | ✅ | **26 个测试, 25 passed, 1 skipped, 76/76 assertions**（含 `E2E CounterSimulator50Cycles`—50 ticks 后 counter==50 🔥） |
+| **VerilatorBackend 测试** | ✅ | **35 个用例 / 167 个断言全绿**（`./build/tests/test_verilator_backend` 实测，2026-11-19；含 `E2E CounterSimulator50Cycles`—50 ticks 后 counter==50 🔥） |
 | **线程安全销毁** | ✅ | `close_top()` 在 `dlclose` 前调用 `delete_fn_()` 销毁 Vtop 对象，VlThreadPool 线程池干净退出，消除多测试间 SIGSEGV |
+| **e2e 套件规模** | ✅ | CTest 里 `verilator` 相关条目 **11 个**（`test_verilator_backend` / `_e2e_harness` / `_trace_parity` / `_bundle_e2e` / `_stream_e2e` / `_memory_e2e` / `_complex_e2e` / `_error_flow` / `_three_way` / `test_axi_lite_verilator_e2e` / `perf_verilator_integration`）；另有 **77** 条带 `verilator_e2e` 标签的双后端用例 |
+
+### ⚠️ 已知限制（**踩坑前先看这里**）
+
+| 限制 | 表现 | 出处 |
+|---|---|---|
+| **端口位宽 ≤ 64** | 任何 `ch_in<ch_uint<N>>` / `ch_out<ch_uint<N>>` 且 **N > 64** ⇒ `initialize()` **返回 false** + `CHERROR`（**不是**静默截断）⇒ ⇒ 设计被判「不可用」 | `src/core/verilator_backend.cpp:544`（`build_port_access_table`）· `:881`（另一处同规则）⇒ 原理：Verilator 的 `QData`/`UData` 访问器模型上限 64 位，`VlWide` 向量会**丢高位** |
+| `type_clock` / `type_reset` **豁免** | 基础设施信号（约定 1 位）**不参与**该检查（`node->size()` 对它们返回垃圾值） | 同上（`!spec.is_clock && !spec.is_reset`） |
+| **平台 = Linux only** | `-DBUILD_VERILATOR=ON` 在 macOS / Windows **configure 期**失败（刻意） | 见本文件顶部「平台支持」 |
 
 ### ⏳ 待完成
 
 | 功能 | 状态 | 说明 |
-|------|------|------|
-| `riscv-mini` 端到端 | ⏳ | 需要 ChipForge 仓集成 + ELF 加载 |
-| 性能基准对比（解释器 vs JIT vs Verilator） | ⏳ | `perf_tests` 框架已支持，需在 Verilator 安装环境跑 |
+|---|---|---|
+| 性能基准对比（解释器 vs JIT vs Verilator） | ⏳ | **框架已就位**（`perf_build_us` / `perf_jit_reg` / `perf_jit_smallgraph` / `perf_verilator_integration` 四个 target，标签 `perf` ⇒ 默认 `ctest` 会跳过）⇒ ⇒ 缺的是**基线数据采集与对比结论** |
 | A/B 验证（interpreter vs JIT 运行期双跑） | ❌ **已移除** | `set_ab_verification` / `is_ab_verification` 是**从未做过比对**的 no-op（开启只打 `CHWARN`）⇒ ⇒ 已删除（Zero-Debt · ADR-035 v2.2 R9）⇒ ⇒ 改用 golden 测试 `tests/jit/test_jit_golden.cpp` |
+
+> ✅ **RV32I / riscv-mini 端到端**已**完成**（不再待办）：RV32I 5-stage 流水线 + riscv-mini
+> SoC 端到端集成（双路 parity + JIT 回落断言）⇒ ⇒ 一条命令跑通
+> `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）。
 
 ### 🔬 e2e 验证（v2.1 新增）
 
@@ -336,7 +348,7 @@ TEST_CASE("MyDesign - VerilatorLints", "[verilator]") {
 - [ADR-035-verilator-backend.md](../adr/ADR-035-verilator-backend.md) — 完整决策记录
 - [Verilator 用户指南](https://verilator.org/guide/latest/) — 官方文档
 - [SpinalHDL VerilatorBackend](https://github.com/SpinalHDL/SpinalHDL/blob/dev/sim/src/main/scala/spinal/sim/VerilatorBackend.scala) — 生产级参考实现
-- [CppHDL 测试](../tests/test_verilog_external.cpp) — 端到端验证测试
+- [CppHDL 测试](../../tests/test_verilog_external.cpp) — 端到端验证测试
 
 ---
 
