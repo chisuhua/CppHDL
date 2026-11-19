@@ -112,13 +112,13 @@
 | AC14 | `ctest -LE perf` 绿 + `ctest -L verilator_e2e` 绿 | ctest |
 | **AC15** | `bash scripts/verify_test_counts.sh` 绿，**且** `CTEST_TOTAL` 266 → **269**（含 `VERILATOR_E2E_TOTAL` 是否变化的判定） | shell |
 | AC16 | 护栏 `:214-217`（禁 `EXPECT-SRC` → `.cpp`）**逐字未改** | diff |
-| AC17 | 豁免表 `1447 → 1415` + `verify_port_naming.sh` 绿 | shell |
-| **AC18** | **活动面** `grep "只发扁平\|top_unnamed_input"` 归零；⚠️ **白名单（禁改）** = `docs/adr/**` · `docs/architecture/**` · `docs/CHANGELOG.md`（历史条目）· `.rddf/{reviews,roadmap,improvements}/**` · `openspec/changes/archive/**` · `docs/usage_guide/05-component-design.md:78,522,533,698,702,1017`（**教学段**：讲通用未具名机制，1415 条仍在 ⇒ 保留 + 加一句「产品面已具名」）；**精确目标集** = `examples/axi4/**` · `.rddf/checks/{examples,soc}-rtl-expectations.md` 的端口映射段 | grep |
+| AC17 | 豁免表 `1447 → 1415` + `verify_port_naming.sh` 绿；⚠️ **2026-11-19 dated addendum**：`1415` 是**本 change 交付时**的终值（`git show 08298a0~1:.rddf/checks/port-naming-exempt.tsv` 实测 = 1415 ✓）⇒ 后续 `08298a0`（`example-file-boundary-2026-11` 的 A7 退役 `axi4_full_example`，−31 行）使**现值** = **1384**（护栏锚点同步为 1384）⇒ ⇒ 本 AC 判的是「**本 change 交付时**把 1447 降到 1415」，**不因后续 change 的再变更而失效**（当前态判据 = `verify_port_naming.sh` 绿） | shell |
+| **AC18** | **活动面** `grep "只发扁平\|top_unnamed_input"` 归零；⚠️ **白名单（禁改）** = `docs/adr/**` · `docs/architecture/**` · `docs/CHANGELOG.md`（历史条目）· `.rddf/{reviews,roadmap,improvements}/**` · `openspec/changes/archive/**` · `docs/usage_guide/05-component-design.md` 的 **§1.3 / §5.1 / §5.3.3 教学段**（讲通用未具名机制 ⇒ **保留**；⚠️ **2026-11-19 行号漂移**：原引用的 `:78,522,533,698,702,1017` 中 `:1017` 现为空行 ⇒ 改为**按小节**引用，不再 pin 行号）· ⚠️ **2026-11-19**：同文件的 **§5.8「端口怎么找」段**（SoC 产品的端口对照表）**已按产品面具名形态更新**（2026-11-18 B2 落地）⇒ ⇒ 它**不再**是「讲未具名机制的教学段」⇒ ⇒ 从白名单移出；同时该文件已加「产品面已具名」一句（AC18 要求的动作）；**精确目标集** = `examples/axi4/**` · `.rddf/checks/{examples,soc}-rtl-expectations.md` 的端口映射段 | grep |
 | AC19 | 子 module 端口名（`AxiLiteTestMaster` 23 条）**未变** | diff |
 | AC20 | 时序锚点构例（`TICK(1)` 后 `EXPECT` 寄存器输出）两后端同结论 | 双跑 |
 | **AC21** | **名字未命中 / 多义 ⇒ fail-closed + 点名**；负向对照：`.verif` 把 `gpio_out` 写成 `gpio_outt` ⇒ 必红且错误文本可区分（⚠️ 现状 `data_map_` 未命中是 `CHWARN` + **返回 0** ⇒ 拼错会静默读 0 ⇒ 必须显式拒绝） | probe |
 | **AC22** | 发射器调用契约：tsv `emitter` 列指向的二进制 MUST 接受 `--out/--emit-hygiene`（或 tsv 增 `emitter_args` 列）；现状 = `verify_examples_rtl_sim.sh:265` 的调用形态 | shell |
-| **AC23** | **碎片化量化**（隐藏意图）：① 改一个 AXI 期望值 ⇒ 只动 `.verif` 一处 + `.md` 锚点一处 ② 改一个端口名 ⇒ 只动 C++ 一处 ③ `examples/axi4/` 每个文件能从**文件名 + 头部 5 行**看出角色（读者视角） | 人工 + review |
+| **AC23** | **碎片化量化**（隐藏意图）：① 改一个 AXI 期望值 ⇒ 只动 `.verif` 一处 + `.md` 锚点一处 ② 改一个**产物端口名** ⇒ 只动 C++ 一处（⚠️ **2026-11-19 口径澄清**：本条的「端口名」= **产物端口名**（由 C++ 成员名派生 ⇒ 改它 = 1 处）；**若指 `.verif` 引用的 C++ 成员名**（实测 `awvalid` 在 `.verif` 出现 **18** 次 · `bvalid` **21** 次）⇒ 改它要动 **C++ + `.verif`** 共 2 处 ⇒ ⇒ **不属本条的判据**） ③ `examples/axi4/` 每个文件能从**文件名 + 头部 5 行**看出角色（读者视角） | 人工 + review |
 
 ---
 
