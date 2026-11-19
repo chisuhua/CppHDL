@@ -6,9 +6,13 @@
 
 ## Purpose
 
-`openspec/specs/` 是项目**当前生效规范**的 source of truth。OpenSpec 1.4.0 CLI 强制要求 capability 文件夹结构。
+`openspec/specs/` 是项目**当前生效规范**的 source of truth。
 
-## 关键约束（OpenSpec 1.4.0 强制）
+> ⚠️ **本文只规定「产物格式」**，不规定「用哪个工具 / 哪个 CLI 版本去生成它」。
+> 生成路径归 rdd-workflow：canonical = `rdd-planner` → `rdd-builder` P0（`proposal.md` 由 P0
+> 生成）；`propose` 技能是 ADR-0025 的 **legacy** 旁路。**两者产出的都必须是本文规定的格式。**
+
+## 格式契约（**与 CLI 版本无关** · 实测 1.14.3 同样成立）
 
 | 约束 | 正确格式 | 错误示例 |
 |------|---------|---------|
@@ -16,25 +20,37 @@
 | **Purpose 段** | `## Purpose`（heading） | ❌ `> **Purpose**`（引用块） |
 | **Requirements 段** | `## Requirements`（heading） | — |
 | **每条 requirement** | 描述必须含 `SHALL` 或 `MUST` | ❌ 缺关键字会被 validate 拒绝 |
-| **Scenario 段** | `#### Scenario: <name>`（4 级 heading） | — |
+| **Scenario 段** | `#### Scenario: <name>`（4 级 heading）· 每条 requirement **至少一个** | — |
 | **change 端结构** | `openspec/changes/<name>/specs/<capability>/spec.md`（含 `## ADDED Requirements` delta 头） | ❌ `<name>/spec.md`（旧格式） |
 
-## 目录结构示例（当前状态）
+> 📌 本表的版本史：建档时（2026-06-17）CLI 是 **1.4.0** ⇒ 原标题写成「OpenSpec 1.4.0 强制」。
+> 但**六条约束没有一条是版本相关的** —— 它们全部由 schema（`openspec/config.yaml` 的
+> `schema: spec-driven`）决定 ⇒ 1.14.3 下逐条实测仍成立 ⇒ **标题已去版本化**。
+> 版本只在**一处**有意义（strict 独有规则）：见下方「CLI 版本漂移」。
+
+⚠️ **失败模式是「静默」而不是「报错」**（2026-11-19 实测 · CLI 1.14.3）：扁平文件
+`openspec/specs/<capability>.md` **不会**被拒绝 —— 它被 `openspec list --specs` /
+`validate --specs` **直接看不见**（探针：文件夹结构 1 个 + 扁平 1 个 ⇒ `Totals: 1 items`）。
+⇒ 反过来同样成立：**`validate` 全绿 ≠ 你的 spec 被收录了** ⇒ 写完后 MUST
+`openspec list --specs` 确认它出现在清单里。
+
+## 目录结构示例
 
 ```
 openspec/
 ├── specs/                              # 主规范（source of truth）
-│   └── chlib-aggregator/               # 能力文件夹
+│   └── chlib-aggregator/               # 能力文件夹（仅示例 ⇒ 清单见 §「当前 capability 清单」）
 │       └── spec.md                     # 该能力的完整规范
 └── changes/
     ├── <active-change>/
-    │   ├── specs/                      # 增量规范（OpenSpec 1.4 期望）
+    │   ├── specs/                      # 增量规范（delta）
     │   │   └── <capability>/
     │   │       └── spec.md             # 包含 ## ADDED Requirements
     │   └── ...                         # 其他制品
     └── archive/
         └── <date>-<name>/
-            └── spec.md                 # 顶层（项目历史遗留格式）
+            ├── specs/<capability>/spec.md   # 现行：163 例（delta 归档前已合并进主 spec）
+            └── spec.md                      # ⚠️ 2026-06 前的历史遗留：2 例 · 勿模仿
 ```
 
 ## 历史背景
@@ -53,11 +69,14 @@ openspec/
 
 `fix-ns-pollution` change 显式记录"无 spec 级别行为变更"（占位 README），但**未触发本目录建立**——因为无实质性内容可迁。
 
-## 当前文件
+## 当前 capability 清单
 
-| Capability | 来源 | Requirements 数 |
-|------------|------|----------------|
-| `chlib-aggregator/` | fix-include-aggregation | 2 |
+⚠️ **不在本文维护副本** —— 会漂（本节曾列 **1** 个，实际已是 **51** 个）。
+**机器真值**：
+
+```bash
+openspec list --specs        # capability 名 + 每个的 requirement 数
+```
 
 ## 提案阶段的 delta 自检 4 条（2026-10-22 补）
 
@@ -75,7 +94,7 @@ openspec/
 
 ### 补充：`## Purpose` 段 **MUST 在 archive 之后手工写入**
 
-⚠️ **实测**（CLI 1.4.1）：archive 对**新建** capability **一律生成**骨架
+⚠️ **实测**（CLI 1.4.1 首测 · **1.14.3 复核仍如此**）：archive 对**新建** capability **一律生成**骨架
 
 ```
 ## Purpose
@@ -147,9 +166,9 @@ openspec 的 delta **不含 `## Purpose`**（CLI 提示原文 + 护栏 `scripts/
 
 1. **`openspec/specs/` 是当前 spec 的单一真相** —— 永不绕过它。项目 schema = `spec-driven`
    （见 `openspec/config.yaml`）。
-2. **Directory layout（OpenSpec 1.4.0）**：主规范 MUST 用 capability 文件夹结构
+2. **Directory layout（capability 文件夹结构 · 与 CLI 版本无关）**：主规范 MUST 用
    `openspec/specs/<capability>/spec.md`。**禁止**扁平的 `openspec/specs/<capability>.md`
-   （CLI 不识别）。
+   —— 它不会被拒绝，而是被 CLI **静默忽略**（见 §「格式契约」的失败模式）。
 3. **Archive MUST 合并 spec**：`openspec archive <name>` 默认把
    `openspec/changes/<name>/specs/<capability>/spec.md` 的 `## ADDED Requirements` 合进主 spec。
    **禁止** `--skip-specs`，除非该 change 用 `.openspec.yaml` 的 `skip_specs: true` 显式声明
@@ -161,4 +180,6 @@ openspec 的 delta **不含 `## Purpose`**（CLI 提示原文 + 护栏 `scripts/
 
 ## 已知遗留问题
 
-历史 `openspec/changes/` 下的 change 目录使用**顶层 `spec.md` 格式**（与 OpenSpec 1.4 期望的 `specs/<capability>/spec.md` 不一致），但 archive 流程仍可工作。**未来新 change 应使用 capability 文件夹结构**。
+历史 `openspec/changes/` 下的 change 目录用**顶层 `spec.md` 格式**（与现行的
+`specs/<capability>/spec.md` 不一致）⇒ 现存 **2 例**（2026-06 前），但 archive 流程仍可工作。
+**新 change MUST 用 capability 文件夹结构**（见 §「格式契约」）。
