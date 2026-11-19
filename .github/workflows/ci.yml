@@ -1846,6 +1846,19 @@ jobs:
       shell: bash
       run: bash scripts/verify_examples_rtl_sim.sh
 
+    - name: Verify examples RTL simulation (independent Verilog TB) self-test
+      # ⚠️ **为什么必须挂 CI**（2026-11-19）：护栏 ⑧' 的**正向**判据（产物形态）
+      #   在生产轮里查 ⇒ 常驻；但它的**负向**判别力（投毒 ⇒ 必红）只在
+      #   `--self-test` 里 ⇒ ⇒ 未挂 CI 时，「⑧' 被改回 hier-only」这条回归路径
+      #   **静默假绿**（生产轮只查端口表 ⇒ 退化后照样相同 ⇒ ④″ 覆写 $work ⇒ 全链绿）。
+      #   ⇒ ⇒ 本 step 是「判据不是恒绿」的**系统性保证**（不是可选的额外检查）。
+      # ⚠️ 耗时：本机实测 ≈ 1 分 48 秒（TB 内容哈希命中缓存）⇒ CI 增量可接受。
+      # ⚠️ self-test 会**临时改写仓内 TB 与二进制**（投毒）并在结束时**还原**
+      #   ⇒ ⇒ 必须在 checkout 的副本里跑（CI 天然满足）；本 step 自带「还原后复绿」判据。
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_examples_rtl_sim.sh --self-test
+
     # ---- vendored Verilator 的 **PCH 工具链**判据 ------------------------
     # ⚠️ 为什么挂在这个 job：它需要**真实的 verilator**（要真的编译一个
     #    「自动 output-split」的模型 ⇒ 走 PCH 路径）⇒ ⇒ 而 verilator 只在
