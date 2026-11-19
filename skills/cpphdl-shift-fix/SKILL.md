@@ -74,7 +74,7 @@ static_cast<uint64_t>(1) << N
 ### Step 1: 搜索风险点
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 
 # 搜索所有 1 << 模式
 grep -rn "1\s*<<" include/ | grep -v "1ULL\|1u\|static_cast"

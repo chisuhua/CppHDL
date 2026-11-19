@@ -238,7 +238,7 @@ REQUIRE(val == 1);  // C++ 自动转换（隐式）
 - [Simulator API 使用指南](../../docs/usage_guide/04-simulator-api.md)
 - [Bundle 连接模式技能](../cpphdl-bundle-patterns/SKILL.md)
 - [Testbench 编写指南](../../docs/usage_guide/09-testbench-guide.md)
-- [RISC-V Hazard Unit](../../include/riscv/hazard_unit.h)
+- [RISC-V Hazard Unit](../../include/cpu/pipeline/hazard_unit.h)
 
 ---
 

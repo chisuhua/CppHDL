@@ -68,7 +68,7 @@
 ## 5. 复现命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j"$(nproc)"
 ctest --test-dir build -LE perf --output-on-failure
 bash scripts/verify_hierarchical_rtl.sh

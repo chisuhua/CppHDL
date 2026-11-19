@@ -1,6 +1,6 @@
 # Verilog Codegen 完整化计划（2026-06-05 v2.0）
 
-> **关联文档**：[ADR-019: Verilog 代码生成操作完整性](../adr/ADR-019-verilog-codegen-completeness.md) ·
+> **关联文档**：[ADR-019: Verilog 代码生成操作完整性](../../adr/ADR-019-verilog-codegen-completeness.md) ·
 > [历史计划：verilog-codegen-implementation-plan.md](../../plans/verilog-codegen-implementation-plan.md)（2026-05-08）·
 > **预计工作量**：2-3 小时 · **优先级**：P2
 > **前置依赖**：[A 阶段 commit `3396b23`](#)（启用 `-Wswitch-enum`）+ [C 阶段 commit `18fae71`](#)（删除 6 个死 JitOp）

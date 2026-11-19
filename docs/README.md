@@ -17,13 +17,13 @@
 
 - [开发者指南](developer_guide/README.md) - 框架内部机制
 - [API 参考](developer_guide/api-reference/) - 技术规格文档
-- [贡献指南](developer_guide/contributing.md) - 如何贡献代码
+- 贡献指南 —— ⚠️ **文件尚未创建**（规划中 · 原 `developer_guide/contributing.md`）
 
 ### 查找特定内容？
 
 - [Simulator API](usage_guide/04-simulator-api.md) - T001 任务成果
 - [Bundle 模式](usage_guide/06-bundle-patterns.md) - Bundle 设计模式
-- [测试指南](CppHDL_Testing_Guide.md) - 测试编写指南
+- [测试指南](usage_guide/09-testbench-guide.md) - 测试编写指南
 
 ---
 
@@ -109,13 +109,13 @@ docs/
 
 | 任务 | 相关文档 |
 |------|---------|
-| **T001: Simulator API** | [使用指南](usage_guide/04-simulator-api.md), [API 规格](developer_guide/api-reference/T001-simulator-api.md), [技术报告](developer_guide/tech-reports/T001-analysis.md) |
+| **T001: Simulator API** | [使用指南](usage_guide/04-simulator-api.md), [API 规格](developer_guide/api-reference/T001-simulator-api.md), [API 规格](developer_guide/api-reference/T001-simulator-api.md) |
 
 ### 按主题查找
 
-- **Bundle**: [使用模式](usage_guide/06-bundle-patterns.md), [设计指南](Bundle_DeveloperGuide.md)
-- **Stream**: [使用指南](CppHDL_UsageGuide.md), [对比分析](CppHDL_vs_SpinalHDL_Stream_Flow_Usage.md)
-- **测试**: [测试指南](CppHDL_Testing_Guide.md)
+- **Bundle**: [使用模式](usage_guide/06-bundle-patterns.md), [设计指南](usage_guide/06-bundle-patterns.md)
+- **Stream**: [使用指南](usage_guide/05-component-design.md), [对比分析](usage_guide/11-stream-flow-comparison.md)
+- **测试**: [测试指南](usage_guide/09-testbench-guide.md)
 - **仿真性能**: [架构分析](simulation/ARCHITECTURE.md), [实施路线图](simulation/ROADMAP.md), [性能测试](simulation/PERFORMANCE_TESTS.md)
 
 ---

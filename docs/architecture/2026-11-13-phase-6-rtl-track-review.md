@@ -332,7 +332,7 @@ B3 改的是 `prog_addr` 的**语义 / 译码**）⇒ ⇒ ⇒ **不会互相覆�
 ## 7. 判据自检（**可复跑**）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 bash scripts/verify_flat_rtl_emit.sh          # 扁平产物护栏 ⇒ PASS（F6 = 「不适用」⇒ §3.1）
 bash scripts/verify_port_naming.sh            # 命名棘轮 ⇒ PASS（豁免数 = 1452 · R17.2 后 · 审计时点为 1484 ⇒ §3.4）
 bash scripts/verify_examples_rtl_sim.sh      # 10 个独立 TB ⇒ PASS（gpio 标 impl-contract only ⇒ §3.2）

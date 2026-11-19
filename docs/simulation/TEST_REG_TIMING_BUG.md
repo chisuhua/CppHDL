@@ -12,7 +12,7 @@
 `test_reg_timing` 测试失败，期望输出 `1`，实际得到 `0`：
 
 ```
-/workspace/project/CppHDL/tests/test_reg_timing.cpp:263: FAILED:
+«本机»/tests/test_reg_timing.cpp:263: FAILED:
   REQUIRE( static_cast<uint64_t>(val) == 1 )
 with expansion:
   0 == 1

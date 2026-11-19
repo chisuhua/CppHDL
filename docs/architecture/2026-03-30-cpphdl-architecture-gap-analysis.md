@@ -403,5 +403,5 @@ CppHDL 项目已完成基础框架建设，支持：
 
 | 原链接 | 现形态 |
 |---|---|
-| `[CppHDL Technical Debt Cleanup Plan](«本机»/.sisyphus/plans/cpphdl-debt-cleanup.md)` | 行内代码（delink） |
-| `[SpinalHDL Stream Operators Implementation Plan](«本机»/.sisyphus/plans/2026-03-04-spinalhdl-stream-operators.md)` | 行内代码（delink） |
+| ``CppHDL Technical Debt Cleanup Plan`（原链接指向本机 `.sisyphus/` 路径 · 已 delink）` | 行内代码（delink） |
+| ``SpinalHDL Stream Operators Implementation Plan`（原链接指向本机 `.sisyphus/` 路径 · 已 delink）` | 行内代码（delink） |

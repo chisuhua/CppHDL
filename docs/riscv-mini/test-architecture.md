@@ -149,8 +149,8 @@ Phase 0 (Layer 0) → Phase A (CSR) → Phase B (流水线)
 ### 3.1 测试概述
 
 riscv-tests 是 RISC-V 官方 ISA 验证套件。我们在 Phase D.5 已经完成了：
-- ✅ riscv-tests 仓库克隆到 `/workspace/project/riscv-tests/`
-- ✅ riscv32-unknown-elf-gcc 工具链 (v15.2.0) 位于 `/workspace/project/opt/riscv/bin/`
+- ✅ riscv-tests 仓库克隆到 `«本机»/`
+- ✅ riscv32-unknown-elf-gcc 工具链 (v15.2.0) 位于 `«本机»/`
 - ✅ 41 个 RV32UI 测试编译为 .bin 文件 (位于 `build/rv32ui/`)
 - ✅ Rv32iInterpreter 解释器框架创建
 - ✅ 4 个手写测试通过 (add, load/store, branch, jal)
@@ -260,13 +260,13 @@ set_tests_properties(riscv_tests_soc PROPERTIES LABELS "riscv-tests;soc")
 
 当前 `test_riscv_tests.cpp` 中硬编码路径：
 ```cpp
-const char* RISCV_TESTS_PATH = "/workspace/project/riscv-tests/build/rv32ui/";
+const char* RISCV_TESTS_PATH = "«本机»/";
 ```
 
 改为 CMake 编译宏传入：
 ```cpp
 #ifndef RISCV_TESTS_BIN_DIR
-#define RISCV_TESTS_BIN_DIR "/workspace/project/riscv-tests/build/rv32ui/"
+#define RISCV_TESTS_BIN_DIR "«本机»/"
 #endif
 ```
 
@@ -615,7 +615,7 @@ set -e
 echo "=== riscv-mini Full Test Suite ==="
 
 # 1. 构建
-cmake -B build -DRISCV_TESTS_PATH=/workspace/project/riscv-tests/build/rv32ui
+cmake -B build -DRISCV_TESTS_PATH=«本机»
 cmake --build build -j$(nproc)
 
 # 2. 单元+集成测试
@@ -742,7 +742,7 @@ CppHDL/
 │       └── full_demo.c                         # full demo 入口
 │
 ├── third_party/
-│   └── riscv-tests/ → /workspace/project/riscv-tests/  # symlink 或 submodule
+│   └── riscv-tests/ → «本机»/  # symlink 或 submodule
 │
 ├── cmake/
 │   └── FetchRiscvTests.cmake                   # riscv-tests CMake 集成

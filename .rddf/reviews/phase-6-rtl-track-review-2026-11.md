@@ -81,7 +81,7 @@ id: phase-6-rtl-track-review-2026-11
 ## 5. 复核命令（**可复跑**）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 # ---- ADR-047 的 addendum：原文零删除 + 三处指针就位 ----
 git diff HEAD -- docs/adr/ADR-047-rv32i-data-forwarding.md | grep -c '^-[^-]'   # ⇒ 0（纯追加）
 grep -c "2026-11-12 dated 指针" docs/adr/ADR-047-rv32i-data-forwarding.md          # ⇒ 3

@@ -61,7 +61,7 @@
 
 ```python
 import importlib.util, pathlib, sys
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
 reg = lr.parse_registry(pathlib.Path("/tmp/opencode/lr_fixture/registry.md"))
 assert [r["id"] for r in reg] == ["1", "1b"], reg
@@ -225,7 +225,7 @@ python3 /tmp/opencode/lr_t1.py
 
 ```python
 import importlib.util, pathlib
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
 # 生成句模板（★ builder 草案 ⇒ architect 在 S2 复核）
 assert lr.gen_sentence("已收口", "2026-11-07", "P8 公共 helper 归档") == "✅ 已收口（2026-11-07 · P8 公共 helper 归档）"
@@ -285,7 +285,7 @@ def sentence_matches(status_cell: str, sentence: str) -> bool:
 
 ```python
 import importlib.util, pathlib
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
 reg = [
     {"台账": "docs/architecture/x.md", "section": "7", "id": "1", "状态": "已收口", "日期": "2026-11-07",
@@ -352,9 +352,9 @@ def r1_bidirectional(reg: list[dict], led: list[dict]) -> list[str]:
 
 ```python
 import importlib.util, pathlib
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
-root = pathlib.Path("/workspace/project/CppHDL")
+root = pathlib.Path("«本机»")
 ok_row = {"id": "1", "状态": "已收口", "闭口证据": "docs/adr/ADR-060-hierarchical-port-policy-and-module-reuse.md"}
 assert lr.r2_evidence([ok_row], root) == []
 missing = {"id": "5", "状态": "已收口", "闭口证据": "docs/adr/ADR-NOPE.md"}
@@ -418,7 +418,7 @@ def r2prime_candidate(reg: list[dict], root: pathlib.Path) -> list[str]:
 
 ```python
 import importlib.util, pathlib
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
 good = {"台账": "d.md", "section": "7", "id": "1", "状态": "已收口", "日期": "2026-11-07",
         "后缀": "S", "闭口证据": "docs/adr/ADR-008-single-clock-domain-constraint.md",
@@ -537,7 +537,7 @@ def cmd_check(root: pathlib.Path) -> int:
 
 ```python
 import importlib.util, pathlib, subprocess
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
 lines = lr.cmd_render_rows([{"id": "1", "状态": "已收口", "日期": "2026-11-07", "后缀": "S"}])
 assert lines == ["id=1 | ✅ 已收口（2026-11-07 · S）"], lines
@@ -568,7 +568,7 @@ def cmd_render_rows(reg: list[dict]) -> list[str]:
 
 ```python
 import importlib.util
-spec = importlib.util.spec_from_file_location("lr", "/workspace/project/CppHDL/scripts/lib/ledger_residual.py")
+spec = importlib.util.spec_from_file_location("lr", "«本机»/scripts/lib/ledger_residual.py")
 lr = importlib.util.module_from_spec(spec); spec.loader.exec_module(lr)
 old = "✅ 已收口（2026-11-07 · 旧）⇒ ⇒ 段一 ⇒ ⇒ 段二"
 new = "✅ 已收口（2026-11-07 · 旧）⇒ ⇒ 段一"

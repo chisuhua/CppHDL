@@ -268,9 +268,9 @@ A: 使用 `thread_local` 存储当前上下文，每个线程独立。
 
 ## 10. 相关文档
 
-- [Bundle_UsageGuide.md](Bundle_UsageGuide.md) - Bundle 详细使用指南
-- [CppHDL_UsageGuide.md](CppHDL_UsageGuide.md) - CppHDL 综合指南
-- [docs/problem-reports/bundle-connection-issue.md](docs/problem-reports/bundle-connection-issue.md) - Bundle 连接问题分析
+- [Bundle 使用模式](docs/usage_guide/06-bundle-patterns.md) - Bundle 详细使用指南
+- [Component 设计指南](docs/usage_guide/05-component-design.md) - CppHDL 综合指南
+- [docs/developer_guide/tech-reports/bundle-connection-issue.md](docs/developer_guide/tech-reports/bundle-connection-issue.md) - Bundle 连接问题分析
 - [docs/plans/bundle-connection-fix-plan.md](docs/plans/bundle-connection-fix-plan.md) - Bundle 连接修复计划
 
 ---

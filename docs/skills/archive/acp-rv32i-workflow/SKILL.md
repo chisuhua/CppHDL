@@ -484,10 +484,10 @@ return ch::select(ch_width_v<T> >= 64, ~0ull, (1ULL << ch_width_v<T>) - 1);
 ## 参考文档
 
 - Phase 3A 报告：`<仓库根>/docs/PHASE3A-FINAL-REPORT.md`
-- Phase 3B 计划：`/workspace/home/openclaw/workspace/temp/phase3b-rv32i-plan.md`
+- Phase 3B 计划：`«本机»`
 - RISC-V 规范：https://riscv.org/specifications/
-- ACP-Workflow 文档：`/workspace/acf-workflow/docs/WORK_PRINCIPLES.md`
-- OpenCode 多轮对话：`/workspace/home/openclaw/workspace/AGENTS.md` 第 0.1 节
+- ACP-Workflow 文档：`«本机»`
+- OpenCode 多轮对话：`«本机»` 第 0.1 节
 
 ---
 

@@ -278,9 +278,9 @@ git push origin feature/axi-dma
 ## 11. 相关资源
 
 - [README.md](README.md) - 项目简介
-- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - 快速参考
-- [Compare.md](Compare.md) - 与 SpinalHDL 详细对比
-- [docs/](docs/) - 完整文档目录
+- [QUICK_REFERENCE.md](../QUICK_REFERENCE.md) - 快速参考
+- [Compare.md](../Compare.md) - 与 SpinalHDL 详细对比
+- [docs/](README.md) - 完整文档目录
 
 ---
 

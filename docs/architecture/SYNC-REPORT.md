@@ -1,7 +1,7 @@
 # 架构文档同步报告
 
 **同步时间**: 2026-03-30 09:15:00  
-**源目录**: /workspace/mynotes/CppHDL-SpinalHDL-Port/docs/architecture  
+**源目录**: «本机»  
 **目标目录**: docs/architecture  
 
 ## 同步文件列表

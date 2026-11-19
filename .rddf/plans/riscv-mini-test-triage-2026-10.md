@@ -63,7 +63,7 @@ if (sequential_instr_list_.empty()) { default_clock_instr_ = nullptr; }
 | `:657` | `0x00100113` | `addi x2, x2, 1` | `0x00100193`（`addi x3, x0, 1`） |
 | `:658` | `0x00200113` | `addi x2, x2, 2` | `0x00200193`（`addi x3, x0, 2`） |
 
-另 41 个用例的失败是 `Failed to load binary: /workspace/project/riscv-tests/build/rv32ui/*.bin`
+另 41 个用例的失败是 `Failed to load binary: «本机»/*.bin`
 —— 依赖**仓外** riscv-tests 套件的预编译二进制（硬编码绝对路径，CI 中永不存在）。
 
 ### R5. `test_pipeline_debug4` 的 16 个用例互为重复 ⇒ 删
@@ -366,7 +366,7 @@ cd build && ./examples/riscv-mini/test_address_decoder; echo "exit=$?"   # 期�
 - [ ] **Step 3: `RISCV_TESTS_PATH` 支持环境变量覆盖**
 
 ```cpp
-const char* RISCV_TESTS_PATH_DEFAULT = "/workspace/project/riscv-tests/build/rv32ui/";
+const char* RISCV_TESTS_PATH_DEFAULT = "«本机»/";
 // 优先读环境变量 RISCV_TESTS_PATH
 ```
 

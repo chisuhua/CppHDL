@@ -191,7 +191,7 @@ sim.set_input_value(dev.io().field, value);  // 需验证
 ### 代码位置
 
 ```
-/workspace/project/CppHDL/
+«本机»/
 ├── include/simulator.h (T401 API 实现)
 ├── tests/
 │   ├── test_simulator_bundle.cpp (T401 测试)
@@ -201,7 +201,7 @@ sim.set_input_value(dev.io().field, value);  // 需验证
 ### 文档位置
 
 ```
-/workspace/project/CppHDL/docs/
+«本机»/docs/
 ├── tech/T401-TECHNICAL-DOC.md (技术文档)
 ├── skills/SIMULATOR-API-GUIDE.md (使用指南)
 └── plans/

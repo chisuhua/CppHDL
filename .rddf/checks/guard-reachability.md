@@ -64,6 +64,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_downstream_consumer.sh` | `build-and-test:Verify downstream consumer (installed artifact)`, `build-and-test:Verify downstream consumer (self-test)` | `none` | — |
 | `scripts/verify_dual_backend_parity.sh` | `build-and-test:Verify dual-backend parity coverage count`, `build-and-test:Verify dual-backend parity guard self-test`, `pr-verilator-fast:Verify dual-backend parity coverage count`, `pr-verilator-fast:Verify dual-backend parity guard self-test` | `none` | — |
 | `scripts/verify_example_assertion_quality.sh` | `build-and-test:Verify example assertion quality`, `pr-verilator-fast:Verify example assertion quality` | `none` | — |
+| `scripts/verify_docs_links.sh` | `build-and-test:Verify docs links (L1 nav + file:line refs + machine-local paths)`, `build-and-test:Verify docs links (self-test)` | `none` | — |
 | `scripts/verify_example_only_headers.sh` | `build-and-test:Verify example-only headers stay out of include/`, `build-and-test:Verify example-only headers guard self-test` | `none` | — |
 | `scripts/verify_example_test_wiring.sh` | `build-and-test:Verify example test wiring`, `pr-verilator-fast:Verify example test wiring` | `none` | — |
 | `scripts/verify_examples_rtl_sim.sh` | `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB)`, `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB) self-test` | `gate-event-only` | — |

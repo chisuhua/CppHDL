@@ -17,7 +17,7 @@
 | 文档 | 预计时间 | 说明 |
 |------|----------|------|
 | [PROJECT-OVERVIEW.md](docs/PROJECT-OVERVIEW.md) | 10 分钟 | **项目全貌**: 目标、功能、完成情况、路线图 |
-| [docs/problem-reports/bundle-connection-issue.md](docs/problem-reports/bundle-connection-issue.md) | 15 分钟 | **问题分析**: 当前阻塞性问题的深度分析 |
+| [docs/developer_guide/tech-reports/bundle-connection-issue.md](docs/developer_guide/tech-reports/bundle-connection-issue.md) | 15 分钟 | **问题分析**: 当前阻塞性问题的深度分析 |
 | [docs/plans/bundle-connection-fix-plan.md](docs/plans/bundle-connection-fix-plan.md) | 10 分钟 | **修复方案**: 详细的修复步骤与验收标准 |
 
 ---
@@ -28,7 +28,7 @@
 |------|----------|------|
 | [docs/README.md](docs/README.md) | 5 分钟 | **文档导航**: 快速找到需要的文档 |
 | [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | 15 分钟 | **API 参考**: 常用操作速查 |
-| [docs/DOCUMENT-DELIVERY-LIST.md](docs/DOCUMENT-DELIVERY-LIST.md) | 10 分钟 | **交付清单**: 所有文档的完整清单 |
+| [docs/README.md](docs/README.md) | 10 分钟 | **交付清单**: 所有文档的完整清单 |
 
 ---
 
@@ -36,10 +36,10 @@
 
 | 文档 | 预计时间 | 说明 |
 |------|----------|------|
-| [docs/PROJECT-DOCUMENTATION-STRUCTURE.md](docs/PROJECT-DOCUMENTATION-STRUCTURE.md) | 20 分钟 | **文档架构**: 文档分类体系与维护指南 |
-| [docs/Bundle_UsageGuide.md](docs/Bundle_UsageGuide.md) | 30 分钟 | **Bundle 使用**: 详细使用教程 |
-| [docs/Bundle_DeveloperGuide.md](docs/Bundle_DeveloperGuide.md) | 30 分钟 | **Bundle 开发**: 框架实现细节 |
-| [docs/CppHDL_UsageGuide.md](docs/CppHDL_UsageGuide.md) | 30 分钟 | **综合指南**: CppHDL 完整使用教程 |
+| [docs/DOCUMENT-ARCHITECTURE.md](docs/DOCUMENT-ARCHITECTURE.md) | 20 分钟 | **文档架构**: 文档分类体系与维护指南 |
+| [docs/usage_guide/06-bundle-patterns.md](docs/usage_guide/06-bundle-patterns.md) | 30 分钟 | **Bundle 使用**: 详细使用教程 |
+| [docs/usage_guide/06-bundle-patterns.md](docs/usage_guide/06-bundle-patterns.md) | 30 分钟 | **Bundle 开发**: 框架实现细节 |
+| [docs/usage_guide/05-component-design.md](docs/usage_guide/05-component-design.md) | 30 分钟 | **综合指南**: CppHDL 完整使用教程 |
 
 ---
 
@@ -59,9 +59,9 @@
 ### 场景 B: 想解决当前阻塞问题
 
 **阅读顺序**:
-1. [docs/problem-reports/bundle-connection-issue.md](docs/problem-reports/bundle-connection-issue.md) - 理解问题
+1. [docs/developer_guide/tech-reports/bundle-connection-issue.md](docs/developer_guide/tech-reports/bundle-connection-issue.md) - 理解问题
 2. [docs/plans/bundle-connection-fix-plan.md](docs/plans/bundle-connection-fix-plan.md) - 了解方案
-3. [docs/Bundle_DeveloperGuide.md](docs/Bundle_DeveloperGuide.md) - 理解技术细节
+3. [docs/usage_guide/06-bundle-patterns.md](docs/usage_guide/06-bundle-patterns.md) - 理解技术细节
 
 **决策点**: 
 - 方案 1: 短期修复 (8 小时，风险中) - 推荐
@@ -73,7 +73,7 @@
 
 **阅读顺序**:
 1. [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - 快速上手 API
-2. [docs/CppHDL_UsageGuide.md](docs/CppHDL_UsageGuide.md) - 详细使用
+2. [docs/usage_guide/05-component-design.md](docs/usage_guide/05-component-design.md) - 详细使用
 3. [tests/](tests/) - 现有测试
 4. [samples/](samples/) - 示例代码
 

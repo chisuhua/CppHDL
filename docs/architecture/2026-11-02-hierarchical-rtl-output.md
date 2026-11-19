@@ -76,8 +76,8 @@
 | **N4** | ★ **顶层端口名 MUST NOT 与内部 `ch_reg` / `ch_node` 同名**（否则唯一化会改**端口**名 ⇒ 两后端端口名不一致） | ChipForge ADR-091 §G-1o | ⇒ ⇒ 层次化 emitter MUST NOT 引入新的改名 ⇒ ⇒ 命名沿用全局表（§4.2）⇒ ⇒ **天然满足** |
 | **N5** | ★ **节点名唯一性 opt-in 检测**（解释器侧不改名 / Verilator 侧改名 ⇒ 按名解析会**静默采到错节点**） | `openspec/changes/component-framework-hardening-2026-10` §Why.2 + U-1 | ⇒ ⇒ 层次化**不解决**它（不改名语义）⇒ ⇒ ⇒ 但层次化的全局命名表让「改名只发生在 codegen 侧」这一既有事实**更显眼** ⇒ ⇒ ⇒ 与 U-1 互补 |
 | **N6** | ★ **公共头 ODR 安全**（`module.h:13` 的自由函数缺 `inline` ⇒ 2+ TU include 即链接失败） | 同上 §Why.1 + U-4；ChipForge ADR-091 §G-1b | ⇒ ⇒ **层次化 emitter 是库级代码** ⇒ ⇒ ⇒ 多 TU 项目必踩 ⇒ ⇒ ⇒ **U-4 是层次化的前置**（已在同仓 change 内立项） |
-| **N8** | ★ **层 2 单元的接口类型 MUST 是「结构化端口」** —— 下游的 `Payload<T>` 是 host 侧 key-value（cell 是 `std::any`、store 由 `PipeNode` 持有）⇒ ⇒ **不产生端口、也不构成接口声明** ⇒ 若拿它当单元接口 ⇒ 单元的端口集合**由实现细节偶然决定** ⇒ 「可单独交付/综合」直接失败 | `include/cf/plugin/payload.h:48-180` · ChipForge ADR-091 **G-1q** · ADR-062 | ⇒ ⇒ **ADR-062 决策①②**（`Payload` 不可作接口；成层组件的全部端口都成端口） |
-| **N7** | ★ **按 ctx 级节点名解析观测点**（`resolve_node_id(ctx, name)` 精确匹配 `node->name()`） | `tools/parity_runner/parity_sim_runner.cpp:249-255` | ⇒ ⇒ **顶层端口名 MUST 与 ctx 节点名一致** ⇒ ⇒ ⇒ **命名权威 MUST 是 ctx 级全局表**（§4.2）⇒ ⇒ ⇒ **per-module 局部命名被否决** |
+| **N8** | ★ **层 2 单元的接口类型 MUST 是「结构化端口」** —— 下游的 `Payload<T>` 是 host 侧 key-value（cell 是 `std::any`、store 由 `PipeNode` 持有）⇒ ⇒ **不产生端口、也不构成接口声明** ⇒ 若拿它当单元接口 ⇒ 单元的端口集合**由实现细节偶然决定** ⇒ 「可单独交付/综合」直接失败 | `include/cf/plugin/payload.h（**属 ChipForge 仓** ⇒ 本仓不校验行号）-180` · ChipForge ADR-091 **G-1q** · ADR-062 | ⇒ ⇒ **ADR-062 决策①②**（`Payload` 不可作接口；成层组件的全部端口都成端口） |
+| **N7** | ★ **按 ctx 级节点名解析观测点**（`resolve_node_id(ctx, name)` 精确匹配 `node->name()`） | `tools/parity_runner/parity_sim_runner.cpp（**属 ChipForge 仓** ⇒ 本仓无此路径）-255` | ⇒ ⇒ **顶层端口名 MUST 与 ctx 节点名一致** ⇒ ⇒ ⇒ **命名权威 MUST 是 ctx 级全局表**（§4.2）⇒ ⇒ ⇒ **per-module 局部命名被否决** |
 
 ⇒ ⇒ **需求 → 决策的映射**：
 
@@ -785,7 +785,7 @@ oracle 的**唯一高影响发现**（连接生成的层位歧义）已按原句
 
 | # | 漂移 / 缺口 | 证据 | 裁决 | 落点 |
 |---|---|---|---|---|
-| **D1** | T3-005 的 `tasks.md` 1.4 要求 backend 支持**多文件** + 缓存 key 纳入全部 source ⇒ ⇒ **已被 ADR-058 v2.10 撤销**（单文件 ⇒ 成本不翻倍）⇒ ⇒ 照做 = 无背书的 backend 改造 | `openspec/changes/hierarchical-rtl-equivalence-2026-11/tasks.md:13` vs ADR-058 v2.10 | **删该任务**（v2.10 已封死多文件模式） | T3-005 的 tasks（**builder** 落地） |
+| **D1** | T3-005 的 `tasks.md` 1.4 要求 backend 支持**多文件** + 缓存 key 纳入全部 source ⇒ ⇒ **已被 ADR-058 v2.10 撤销**（单文件 ⇒ 成本不翻倍）⇒ ⇒ 照做 = 无背书的 backend 改造 | `openspec/changes/archive/2026-11-06-hierarchical-rtl-equivalence-2026-11/tasks.md` vs ADR-058 v2.10 | **删该任务**（v2.10 已封死多文件模式） | T3-005 的 tasks（**builder** 落地） |
 | **D2** | T3-005 `tasks.md:3` 写「ADDED ×3」，实际 delta 只有 **2** 条 Requirement | 该 change 的 `specs/rtl-hierarchical-output/spec.md` + `proposal.md:58` | 计数订正为 **×2** | T3-005（builder） |
 | **D3** | T3-005 三处写「`verilator --lint-only -Wall` 零 error」⇒ ⇒ 与 **ADR-060 §2.5**（唯一权威 · **不加** `-Wall`）冲突 | `tasks.md:34` / `proposal.md:50` / `design.md:11` | 改按 ADR-060 §2.5 执行（**ADR-061 §5 / ADR-062 §5 的同款残留已在本轮一并订正**） | T3-005（builder）· ADR-061 v1.6.5 · ADR-062 v1.5 |
 | **D4** | **已归档主 spec** 三处与实现/已签批 ADR 冲突：(a) `:190` 的 `-Wall`；(b) `:78/:87/:144/:219` 的「MUST **抛异常**」（实现是 `ok=false`，且与**本 spec 自己的 Purpose** `:18-19` 互斥）；(c) `:126/:161` 的 `strict` 死引用（代码里无此策略） | `openspec/specs/rtl-hierarchical-output/spec.md` | 由 **T3-005 的 delta 以 MODIFIED 顺带修订**（同 capability 连续变更 ⇒ 不新开 change）⇒ ⇒ **MUST 任务化**（5 个 Requirement 标题 ⇒ 漏一处 = 复发）⇒ ⇒ **闭环判据见下（V1 · 可机械执行）** | T3-005（builder）· **architect 已把裁决写进 ADR-058 v2.13 / ADR-060 v1.14** |

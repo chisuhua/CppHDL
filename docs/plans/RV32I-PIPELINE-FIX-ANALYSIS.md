@@ -121,7 +121,7 @@ auto signed_ge = !signed_less;
 ### 修复后测试运行
 
 ```bash
-$ cd /workspace/project/CppHDL/build && ctest -R test_rv32i_pipeline --verbose
+$ cd «本机»/build && ctest -R test_rv32i_pipeline --verbose
 ...
 100% tests passed, 0 tests failed out of 1
 

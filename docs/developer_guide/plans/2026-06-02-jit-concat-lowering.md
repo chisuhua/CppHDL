@@ -281,7 +281,7 @@ longer marked as CALL_EXTERNAL. Test `test_reg_timing` passes with JIT.
 
 ### 4.1 Build Verification
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) 2>&1 | grep -E "error|warning" | head
 ```
 Expected: 0 errors, 0 warnings (or only pre-existing).

@@ -290,7 +290,7 @@
 - `docs/simulation/ROADMAP.md` - 实施路线图
 - `docs/simulation/JIT_ROADMAP.md` - JIT 实施路线图
 - `docs/simulation/PERFORMANCE_TESTS.md` - 测试计划
-- `/workspace/project/cash/src/compiler/simjit.cpp` - Cash JIT 参考
+- `«本机»` - Cash JIT 参考
 
 ---
 

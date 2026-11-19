@@ -447,7 +447,7 @@ phase-6 的 **P6**（RV32I ISA 缺口）与 B4 的 **G1–G5** 是**同一片区
 > metis 第 1 轮 P1-5 已判过的弱形态 ⇒ ⇒ builder 跑本段会拿到**假绿**）⇒ ⇒ **旧版已删**。
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 # ---- R0 / R1 / R2 / R10（已闭）----
 bash scripts/verify_ledger_evidence.sh              # R0 ⇒ PASS（91 台账 · 6 项待补 = WARN）
 bash scripts/verify_ledger_evidence.sh --self-test   # R0 ⇒ PASS（投毒转红 + 还原复绿）

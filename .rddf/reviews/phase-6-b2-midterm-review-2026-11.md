@@ -74,7 +74,7 @@
 ## 6. 本次复盘的**判据自检**（可复跑 · 8 条）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 bash scripts/verify_examples_rtl_sim.sh        # ① PASS（10 项 · 严格模式）
 bash scripts/verify_arch_ledger_residuals.sh    # ② PASS（双向 1:1）
 bash scripts/verify_ledger_evidence.sh         # ③ FAIL(10) ← 发现 1 · 待 T0 修

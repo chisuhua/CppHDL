@@ -361,6 +361,23 @@ jobs:
       shell: bash
       run: scripts/verify_guard_reachability.sh --self-test
 
+    - name: Verify docs links (L1 nav + file:line refs + machine-local paths)
+      # 判据来源 = docs/DOCUMENT-ARCHITECTURE.md §9（治理口径正本）
+      #   C1 L1 导航的 Markdown 链接 MUST 可达（排除代码块内的 [..](..)）
+      #   C2 L1 的 file:line 引用 MUST 文件存在 + 行号在范围内（L2/L3 不扫 => 零伪缺陷）
+      #   C3 全仓 MUST NOT 含本机绝对路径（排除 docs/archive/**）
+      #   C5 分级覆盖率（fail-closed：任一 .md 无法归级 => 红）
+      # 分级由 scripts/lib/docs_link_scope.py 派生（--render => .rddf/checks/docs-link-scope.md）
+      # => 无需人工维护清单，也不会成为恒绿出口。
+      shell: bash
+      run: scripts/verify_docs_links.sh
+
+    - name: Verify docs links (self-test)
+      # 4 类投毒各自必红：C1 死链 / C2 行号越界 / C3 本机路径 / C5 无法归级
+      # => 证明判据不是恒绿（与本仓其它护栏同形态）。
+      shell: bash
+      run: scripts/verify_docs_links.sh --self-test
+
     - name: Verify arch ledger residual registry
       # The architecture ledger's section 7 "known residuals" statuses MUST have
       # a SINGLE source of truth (the registry .rddf/checks/arch-residual-registry.md)

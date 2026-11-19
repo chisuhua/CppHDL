@@ -99,7 +99,7 @@
 ## 5. 复现命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 cmake --build build --target hier_rtl_products -j"$(nproc)"
 bash scripts/verify_hierarchical_port_naming.sh              # 主路径 ⇒ PASS

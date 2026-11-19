@@ -79,7 +79,7 @@ bash scripts/probe_arch_ledger_residuals.sh <台账副本>  # 负向对照（可
 ## 4. 复现命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 bash scripts/probe_arch_ledger_residuals.sh
 # 期望：3 行 STALE（1 · 1b · 5）
 ```

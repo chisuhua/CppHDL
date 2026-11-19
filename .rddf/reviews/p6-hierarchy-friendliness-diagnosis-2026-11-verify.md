@@ -90,7 +90,7 @@
 ## 5. 复现命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 cmake --build build -j"$(nproc)"
 ./build/tests/test_hierarchy_friendliness_diagnosis          # 13 用例 / 58 断言

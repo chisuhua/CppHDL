@@ -1,9 +1,11 @@
-# CppHDL 文档架构规范 v2.0
+# CppHDL 文档架构规范 v2.1
 
 **文档编号**: CPPHDL-DOC-ARCH-001  
 **创建日期**: 2026-04-09  
-**状态**: ✅ 已批准  
+**最后更新**: 2026-11-19（**v2.1**：按《文档治理口径》校准到当前态 —— 见 §9 变更记录）  
+**状态**: ✅ 已批准（⚠️ **2026-11-19 订正**：§8.1 的批准记录原写「✅ 已批准」而同表「审稿 / 批准 = 待定」⇒ 矛盾**原样保留**并在此标注；**签署状态属事实史料，本规范不替用户改状态**）  
 **维护人**: AI Agent  
+
 
 ---
 
@@ -38,72 +40,39 @@
 
 ## 📁 2. 目录结构
 
-### 2.1 完整目录树
+### 2.1 完整目录树（**2026-11-19 实测校准**）
+
+> ⚠️ **本节曾长期停留在「规划态」**（2026-04-09 的版本列了 **21 个此后从未存在或已改名的文件**）⇒ ⇒ 导航照它建 ⇒ ⇒ 必然指向不存在的文件（实测 **27 处死链**）⇒ ⇒ 本次校准为**当前态**（判据 = 逐项核对磁盘存在性）。
 
 ```
-/workspace/project/CppHDL/
+CppHDL/
+├── README.md · AGENTS.md · QUICK_REFERENCE.md · READING-GUIDE.md · Compare.md
 │
-├── README.md                          # 项目首页 (对外)
-├── AGENTS.md                          # AI 代理指南 (对内)
+├── docs/
+│   ├── README.md                # 📑 文档中心（导航）
+│   ├── DOCUMENT-ARCHITECTURE.md # 本规范（**治理正本**）
+│   ├── PROJECT-OVERVIEW.md · CHANGELOG.md · phase_f_status.md
+│   │
+│   ├── usage_guide/             # 📘 用户指南（7 篇 · **L1**）
+│   │   └── README · 04-simulator-api · 05-component-design · 06-bundle-patterns
+│   │       09-testbench-guide · 10-verilator-backend · 11-stream-flow-comparison
+│   ├── developer_guide/         # 🔧 开发者指南（19 篇 · **L1**）
+│   │   └── README · verilator-integration · openspec-specs-guide
+│   │       rv32i-rtl-delivery-and-sim · api-reference/ · architecture/
+│   │       patterns/（4 篇）· tech-reports/（7 篇）· plans/（2 篇 · **L3**）
+│   ├── skills/                  # ⚡ 快速参考（14 篇 = 3 活 + 11 归档 · 归档 **L2**）
+│   ├── simulation/              # 仿真语义（8 篇 · **L1**：ARCHITECTURE.md 是 memory read timing 权威）
+│   ├── adr/                     # ⚖️ 决策正本（76 篇 · **L2**）
+│   ├── architecture/            # 🏛 主题文档（32 篇 · **L1/L2 混居** · 判读纪律见其 README）
+│   ├── riscv-mini/（2）· freertos/（5 · **L3**）· plans/（35 · **L3**）· reports/（7 · **L3**）· superpowers/（7 · **L3**）
+│   └── archive/                 # 40 篇（**逐字保留区** · 历史条目一字不改）
 │
-├── docs/                              # 文档根目录
-│   ├── README.md                      # 📑 文档导航中心
-│   │
-│   ├── usage_guide/                   # 📘 用户使用指南
-│   │   ├── README.md                  # 使用指南导航
-│   │   ├── 01-introduction.md         # CppHDL 简介
-│   │   ├── 02-quickstart.md           # 5 分钟快速入门
-│   │   ├── 03-core-concepts.md        # 核心概念
-│   │   │                              #
-│   │   ├── 04-simulator-api.md        # Simulator API 使用
-│   │   ├── 05-component-design.md     # Component 设计指南
-│   │   ├── 06-bundle-patterns.md      # Bundle 使用模式
-│   │   ├── 07-stream-patterns.md      # Stream 使用模式
-│   │   ├── 08-state-machine.md        # 状态机设计
-│   │   ├── 09-testbench-guide.md      # Testbench 编写
-│   │   ├── 10-verilog-synthesis.md    # Verilog 生成与综合
-│   │   └── 11-examples-gallery.md     # 示例代码集
-│   │
-│   ├── developer_guide/               # 🔧 开发者指南
-│   │   ├── README.md                  # 开发指南导航
-│   │   ├── contributing.md            # 贡献指南
-│   │   │                              #
-│   │   ├── architecture/              # 架构文档
-│   │   │   ├── overview.md            # 系统架构概览
-│   │   │   ├── core-design.md         # 核心层设计
-│   │   │   ├── simulator-internals.md # Simulator 内部机制
-│   │   │   ├── node-lifecycle.md      # 节点生命周期
-│   │   │   └── context-management.md  # Context 管理
-│   │   │                              #
-│   │   ├── api-reference/             # API 参考
-│   │   │   ├── T001-simulator-api.md  # T001: Simulator API 规格
-│   │   │   ├── T002-verilog-codegen.md# T002: Verilog 代码生成
-│   │   │   └── ...                    # 未来 T0xx 系列
-│   │   │                              #
-│   │   ├── tech-reports/              # 技术报告
-│   │   │   ├── T001-analysis.md       # T001 技术分析报告
-│   │   │   └── ...                    # 未来报告
-│   │   │                              #
-│   │   └── patterns/                  # 开发模式
-│   │       ├── module-patterns.md     # 模块设计模式
-│   │       ├── test-patterns.md       # 测试编写模式
-│   │       └── debug-patterns.md      # 调试模式
-│   │
-│   ├── skills/                        # ⚡ 快速参考技能
-│   │   ├── README.md                  # 技能列表
-│   │   ├── simulator-api-quickref.md  # Simulator API 速查
-│   │   ├── component-template.md      # Component 模板
-│   │   └── testbench-template.md      # Testbench 模板
-│   │
-│   ├── plans/                         # 📅 计划与报告
-│   │   ├── README.md                  # 计划文档索引
-│   │   ├── PHASE4-PLAN-2026-04-09.md  # Phase 4 总计划
-│   │   ├── T001-completion-report.md  # T001 完成报告
-│   │   └── ...                        # 其他计划
-│   │
-│   └── archive/                       # 🗄️ 归档文档
-│       └── ...                        # 历史文档
+├── openspec/（specs/ 正典 · changes/ 流程）· .rddf/（路线图 / 改进 / 登记表 / 验收）
+└── examples/ · tests/ · samples/ · include/ · src/ · scripts/（护栏）
 ```
+
+> ⚠️ **分级口径（L1/L2/L3/L4）见 §9.1** ⇒ ⇒ 「哪些文档的死链算缺陷」由它决定。
+
 
 ---
 
@@ -224,7 +193,8 @@ sim.set_input_value(data, x);  // x 未定义
  │      │      │      │       │
  │      │      │      │       └─ 内容过时
  │      │      │      └─ 定期审查 (季度)
- │      │      └─ CI 检查
+ │      │      └─ CI 检查 ✅ 已实现（2026-11-19）：`scripts/verify_docs_links.sh`
+ │      │         （C1 链接可达 · C2 引用行号 · C3 本机路径 · C4 自检 · C5 分级覆盖）
  │      └─ 至少 2 人审稿
  └─ 创建者起草
 ```
@@ -255,11 +225,15 @@ sim.set_input_value(data, x);  // x 未定义
 ### 6.1 数量指标
 
 | 类别 | 目标数量 | 当前数量 | 完成率 |
-|------|---------|---------|--------|
-| usage_guide | 11 篇 | 0 篇 | 0% |
-| developer_guide | 15 篇 | 0 篇 | 0% |
-| skills | 5 篇 | 1 篇 | 20% |
-| plans | 按需 | 2 篇 | - |
+|------|---------|--------|--------|
+| usage_guide | 按需 | **7 篇** | ✅（原规划的 01/02/03/07/08 已并入现有篇目） |
+| developer_guide | 按需 | **19 篇** | ✅（`architecture/` 下 3 篇「规划中」见 §2.1） |
+| skills | 按需 | **3 篇活 + 11 篇归档** | ✅ |
+| simulation | 按需 | **8 篇** | ✅ |
+| adr（决策正本） | 按需 | **76 篇** | ✅ |
+| architecture（主题文档） | 按需 | **32 篇** | ✅ |
+| plans | 按需 | **35 篇** | ✅ |
+| archive（逐字保留区） | 按需 | **40 篇** | ✅ |
 
 ### 6.2 质量指标
 
@@ -332,6 +306,8 @@ sim.set_input_value(data, x);  // x 未定义
 | 审稿 | 待指定 | 待定 | ⏳ 待审稿 |
 | 批准 | 用户 | 待定 | ⏳ 待批准 |
 
+> ⚠️ **2026-11-19 订正（本规范不替用户改状态）**：本表**自相矛盾** —— 文档头部标「✅ 已批准」，而本表「审稿 / 批准」两行仍「⏳ 待定」⇒ ⇒ **签署状态属事实史料** ⇒ ⇒ **原样保留 + 在此标注**（不代用户把「待批准」改成「已批准」）。后续若要正式批准，由**用户**在本表两行签署 ⇒ 本规范随之去掉本注。
+
 ### 8.2 实施检查清单
 
 - [ ] 创建目录结构
@@ -347,3 +323,70 @@ sim.set_input_value(data, x);  // x 未定义
 **版本**: v2.0  
 **下次审查**: 2026-07-09  
 **相关文档**: PHASE4-PLAN-2026-04-09.md
+
+
+---
+
+## 📐 9. 文档治理口径（2026-11-19 新增）
+
+> ⚠️ 本节是**治理规则的正本**；`docs/architecture/2026-11-19-document-governance.md` 承载**本次审计与裁决**（证据 / 选项对比 / 实施范围）⇒ ⇒ 两者冲突时**以本节为准**（规则），审计过程以那份为准。
+
+### 9.1 文档分级（L1 / L2 / L3 / L4）
+
+| 级别 | 判据 | 读者义务 | 治理义务 |
+|---|---|---|---|
+| **L1 活文档** | 导航入口或当前态权威 | **可直接作实现依据** | 死链 MUST 归零；行号引用 MUST 准；示例 MUST 可编译 |
+| **L2 历史快照** | 记录当时的判断 / 计划 / 评审 | 只作历史参考 | **不改写正文**；dated addendum 追落；死链 / 行号漂移**不追** |
+| **L3 过程记录** | 计划 / 报告 / 迁移计划 | 同 L2 | 同 L2 |
+| **L4 外部** | 第三方文档（`external/**`） | 同上游 | 不归本仓管 |
+
+**分级来源两级**：① **目录前缀默认**（L1 = `usage_guide/` `developer_guide/` `skills/` `simulation/`；L2/L3 = `adr/` `archive/` `plans/` `reports/` `freertos/` `.rddf/` `openspec/changes/archive/`）② **混合目录逐文件登记**（`architecture/` · `docs/` 根 · 仓根散落 `*.md`）⇒ ⇒ 登记表 MUST 由护栏 `--render` **派生**、禁手改（`.rddf/checks/docs-link-scope.md`）。
+
+### 9.2 引用有效性（`file:line`）
+
+| 级别 | 口径 | 理由 |
+|---|---|---|
+| L1 | MUST **准**（逐条重定位 + 核实被引行内容） | 是实现依据 |
+| L2 / L3 | **不追**（历史锚点） | 改成今天的行号 = 篡改历史语境 |
+
+✅ **正向模式**：**L1 负责刷新 pin · ADR 保留历史 pin** ⇒ L1 引用 ADR 决策时 MUST **按符号 / 内容重新锚定**。
+
+### 9.3 死链处置
+
+| 死链所在 | 处置 |
+|---|---|
+| L1 导航 | MUST 修（改指核实过的现存文件）；目标不存在 ⇒ **delink**（去链保留文本 + 标「文件尚未创建」）⇒ 不删行 |
+| L2 / L3 | 不追（加 dated 注记即可） |
+| L4 | 不动 |
+
+### 9.4 本机路径禁令（P1 · 级别无关）
+
+任何**被跟踪文档** MUST NOT 含本机绝对路径（`/workspace/` · `/home/`）。⚠️ **豁免 `docs/archive/**`**（仓规「历史条目逐字保留」区）。
+
+| 级别 | 处置 |
+|---|---|
+| L1 | 改为仓内相对路径 |
+| L2 / L3 | **delink**（行内代码 + dated 注记）⇒ 不得 relink 到不存在的目标 |
+
+### 9.5 自动化门（`scripts/verify_docs_links.sh`）
+
+| # | 判据 |
+|---|---|
+| C1 | L1 的 Markdown 链接 MUST 全可达（排除代码块内的 `[..](..)`） |
+| C2 | L1 的 `file:line` 引用 MUST 文件存在 + 行号在范围内（L2/L3 不扫） |
+| C3 | 全仓 MUST NOT 含本机绝对路径（排除 `archive/**`） |
+| C4 | `--self-test` MUST 自证判别力（投毒 ⇒ 必红） |
+| C5 | **分级覆盖率**（fail-closed）：任一 `.md` 无法归级 ⇒ 红 |
+
+---
+
+## 📋 10. 变更记录（v2.1 · 2026-11-19）
+
+| 章节 | 变更 | 依据 |
+|---|---|---|
+| §2.1 目录树 | 从**规划态**校准为**当前态**（原列的 21 个文件不存在 ⇒ 删；计划中者标「规划中」） | 导航照它建 ⇒ 实测 27 处死链 |
+| §5.1「CI 检查」 | 从**空头支票**改为指向实际护栏 `scripts/verify_docs_links.sh`（C1–C5） | 仓内此前无任何文档类护栏 |
+| §6.1 统计表 | 按实测回填（usage_guide 7 · developer_guide 19 · adr 76 · architecture 32 …） | 原表停在「0 篇」 |
+| §8.1 批准记录 | **如实标注矛盾**（不改写签署状态） | 签署状态属事实史料 |
+| **§9（新增）** | 文档治理口径：分级 / 引用有效性 / 死链处置 / 本机路径禁令 / 自动化门 | `architecture/2026-11-19-document-governance.md`（oracle APPROVE） |
+| 全文 | 删本机绝对路径（§2.1 的 `«本机»/`） | P1 本机路径禁令 |

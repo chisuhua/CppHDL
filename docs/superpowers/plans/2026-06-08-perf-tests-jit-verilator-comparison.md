@@ -371,7 +371,7 @@ int main() {
     return 0;
 }
 EOF
-g++ -std=c++20 -I /workspace/project/CppHDL/tests/benchmark /tmp/test_runner.cpp -o /tmp/test_runner && /tmp/test_runner
+g++ -std=c++20 -I «本机»/tests/benchmark /tmp/test_runner.cpp -o /tmp/test_runner && /tmp/test_runner
 ```
 
 Expected output:
@@ -386,7 +386,7 @@ If `verilator --version` is empty, ensure `verilator` is on PATH (`which verilat
 
 ```bash
 rm -f /tmp/test_runner.cpp /tmp/test_runner
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/verilator_runner.h
 git commit -m "feat(perf): add verilator_runner.h with SHA-1 cache + build/run"
 ```
@@ -439,7 +439,7 @@ int main(int argc, char **argv) {
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/verilator_harness_tc07.cpp
 git commit -m "feat(perf): add TC-07 Verilator harness (XOR chain)"
 ```
@@ -493,7 +493,7 @@ int main(int argc, char **argv) {
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/verilator_harness_tc08.cpp
 git commit -m "feat(perf): add TC-08 Verilator harness (sequential regs)"
 ```
@@ -575,7 +575,7 @@ void print_summary() const {
 - [ ] **Step 4: Build to confirm no regressions in the existing CSV output path**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) --target perf_tests 2>&1 | tail -5
 ./build/tests/perf_tests --tc=01 --report=csv
 cat perf_results.csv
@@ -586,7 +586,7 @@ Expected: header now has 10 columns (added `backend`, `speedup_vs_interpreter`, 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/report_generator.h
 git commit -m "feat(perf): add backend + speedup fields to BenchmarkResult"
 ```
@@ -643,7 +643,7 @@ std::string emit_verilog(ch::core::context *ctx, const std::string &path) {
 - [ ] **Step 2: Build to confirm the helpers compile**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) --target perf_tests 2>&1 | tail -10
 ```
 
@@ -652,7 +652,7 @@ Expected: clean build (no new warnings on the modified file).
 - [ ] **Step 3: Commit (no behaviour change yet)**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/perf_main.cpp
 git commit -m "refactor(perf): add XOR/sequential design-with-IO builders"
 ```
@@ -791,7 +791,7 @@ At the top of `perf_main.cpp`, after the existing includes, add:
 - [ ] **Step 3: Build to confirm TC-07 compiles**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) --target perf_tests 2>&1 | tail -10
 ```
 
@@ -800,7 +800,7 @@ Expected: clean compile.
 - [ ] **Step 4: Commit (function added, not yet called from main)**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/perf_main.cpp
 git commit -m "feat(perf): add run_three_way_xor() for TC-07"
 ```
@@ -925,7 +925,7 @@ ThreeWayResult run_three_way_seq(int num_regs, int ticks,
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/perf_main.cpp
 git commit -m "feat(perf): add run_three_way_seq() for TC-08"
 ```
@@ -1083,7 +1083,7 @@ void print_usage(const char* prog) {
 - [ ] **Step 6: Build and run TC-07/TC-08**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) --target perf_tests 2>&1 | tail -10
 ./build/tests/perf_tests --tc=07 --tc=08 --workdir=/tmp/cpphdl_perf_v1
 ```
@@ -1097,7 +1097,7 @@ Expected:
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/perf_main.cpp
 git commit -m "feat(perf): wire TC-07/TC-08 into main() CLI"
 ```
@@ -1163,7 +1163,7 @@ set_tests_properties(perf_tests PROPERTIES
 - [ ] **Step 4: Build and run all TCs to confirm regression-free**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) --target perf_tests 2>&1 | tail -5
 ./build/tests/perf_tests --tc=01 --tc=02 --tc=04 --tc=06 --report=csv
 ```
@@ -1173,7 +1173,7 @@ Expected: existing TC-01/02/04/06 still run; CSV is produced.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add tests/benchmark/CMakeLists.txt
 git commit -m "build(perf): register harness sources + raise CTest timeout"
 ```
@@ -1271,7 +1271,7 @@ At the end of the file (after the existing 总结 section), insert:
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git add docs/simulation/PERFORMANCE_TESTS.md
 git commit -m "docs(perf): document TC-07/TC-08 three-way comparison"
 ```
@@ -1285,7 +1285,7 @@ git commit -m "docs(perf): document TC-07/TC-08 three-way comparison"
 - [ ] **Step 1: Clean build, full perf suite, full regression**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 cmake --build build -j$(nproc) 2>&1 | grep -E "error|warning" | head -20
 ./build/tests/perf_tests --all --report=csv
 cat perf_results.csv
@@ -1299,7 +1299,7 @@ Expected:
 - [ ] **Step 2: Run full Catch2 regression to confirm no side effects**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 ctest -L base --output-on-failure 2>&1 | tail -20
 ```
 
@@ -1308,7 +1308,7 @@ Expected: pass count unchanged from before this plan (108 pass, 1 timeout pre-ex
 - [ ] **Step 3: Run all 28 ported examples**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 ./run_all_ported_tests.sh 2>&1 | tail -5
 ```
 
@@ -1317,7 +1317,7 @@ Expected: 28/28 pass.
 - [ ] **Step 4: Verify the harness .cpp files are reachable by verilator**
 
 ```bash
-ls /workspace/project/CppHDL/build/tests/benchmark/verilator_harness_tc07.cpp
+ls «本机»/build/tests/benchmark/verilator_harness_tc07.cpp
 ```
 
 If the file is missing, verilator --build will fail at runtime. The
@@ -1326,7 +1326,7 @@ CMake step registers it as a source, so it should be present.
 - [ ] **Step 5: Commit a final tag if all green**
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 git status
 # If clean, no commit needed. If dirty, fix or report.
 ```

@@ -42,7 +42,7 @@
 | # | 事实 | 证据 |
 |---|---|---|
 | ① | ✅ 库层支持层次化产物 | `src/rtl_emit/cli.cpp:77-78, 186-208`（`2db2eda`） |
-| ② | 🔴 `emit_rtl_soc.cpp` 的 **checker 机制**仍自实现（**388 行**；壳层 39 行**已**走库层 CLI ⇒ 「自解析 + 自发射」已不成立）⇒ 其「`run_emit_cli` 只发扁平」前提**已被 ① 推翻** | `examples/axi4/emit_rtl_soc.cpp:53, 90, 115, 138, 169, 218`（自实现符号）· `:350-388`（壳层）· `examples/axi4/CMakeLists.txt:41-42` |
+| ② | 🔴 `emit_rtl_soc.cpp`（⚠️ **已于 2026-11-18 整文件删除** · `example-file-boundary-2026-11` 的 §4.3.3） 的 **checker 机制**仍自实现（**388 行**；壳层 39 行**已**走库层 CLI ⇒ 「自解析 + 自发射」已不成立）⇒ 其「`run_emit_cli` 只发扁平」前提**已被 ① 推翻** | `examples/axi4/emit_rtl_soc.cpp`（⚠️ **已于 2026-11-18 整文件删除**）的 `:53, 90, 115, 138, 169, 218`（自实现符号当时的位置）· `:350-388`（壳层当时的位置）· `examples/axi4/CMakeLists.txt:41-42` |
 | ②' | ⚠️ **历史快照**：同题的另一本日期化蓝图 `docs/architecture/2026-11-16-soc-rtl-product-and-tb.md` 仍写「自己解析 + 自己发射 · 旧行数」⇒ ⇒ 它是**历史快照 ⇒ 不追溯改写**（本文件是**当前态唯一权威**）⇒ ⇒ 但它**不得**被当作现状依据 | `docs/architecture/2026-11-16-soc-rtl-product-and-tb.md`（历史快照）· 本文件头部「文档定位」 |
 | ③ | ✅ 库层已有 TB 骨架生成器（连线 + clk/rst + VCD；激励/断言留 `// TODO:`） | `include/rtl_emit/tb_stub.h:59` · `src/rtl_emit/tb_stub.cpp:95-98, 154-158` |
 | ④ | 🔴 无反射 ⇒ 未具名端口 `cpp_member` = `unnamed_input` 占位 | `include/rtl_emit/manifest.h:110-125` |
@@ -306,7 +306,7 @@ example 侧 MUST NOT 出现「产物派生的 module 集 / 顶层端口面 / 变
 （`e.owner != "top"`）**一致**」⇒ ⇒ 根名漂移 ⇒ **假红或假绿**
 
 **`axi4_full_example` 退役（2026-11-18 裁决）**：
-· `Axi4Top`（`examples/axi4/axi4_full_example.cpp:24`）是 `include/axi4/axi4_full.h` 的 `Axi4Slave`
+· `Axi4Top`（`examples/axi4/axi4_full_example.cpp`（⚠️ **已于 2026-11-18 退役** · `example-file-boundary-2026-11` A7））是 `include/axi4/axi4_full.h` 的 `Axi4Slave`
   的**唯一 example 用法**，但其 `main` **只打印功能列表**（`toVerilog` 在 `:137` 被注释）⇒ **不构成验证**
 · **覆盖证据** = `tests/test_axi4_full_burst.cpp`（`add_dual_backend_test` · **dual-backend**）
   ⇒ ⇒ 该设计的行为面已有常驻回归
@@ -362,7 +362,7 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 | 10 | **④″ 的调用契约**（`scripts/verify_examples_rtl_sim.sh:653`；change 2 的 A6 刻意让 ④″ **不读** `emitter_args`） | ④″ 将调 `tb_axi_soc_example --out … --emit-hygiene --check-products`（**无 `--emit-rtl`**）⇒ 与 change 2 C3「默认模式未知参数 ⇒ exit 2」**冲突** | **钉死**：tb 的 `--check-products` = **「发射 + 自检」模式标记**（内部等价 `--emit-rtl --hierarchical --check-products`）⇒ ④″ 的**判据逻辑无需改**（这符合 `emit_rtl_soc.cpp:371-377` 的现状：`--check-products` 时补 `--hierarchical`）⇒ ⇒ ⚠️ **调用点的「二进制名」改指**归 **row 9 / §4.3.2**（`emit_rtl_axi_soc` → `tb_axi_soc_example`）⇒ ⇒ 两件事分开：**逻辑不改 · 路径必改**⇒ ⇒ ⚠️ **该模式下其余 argv MUST 照常透传**（④″ 的真实调用是 `--out $work --emit-hygiene --check-products` ⇒ ⇒ 若把 `--emit-hygiene` 当未知参数 ⇒ exit 2 ⇒ ④″ 红）⇒ ⇒ ⚠️ **Lite 侧无需** `--check-products` 模式（无任何护栏消费点 ⇒ 对称加它 = 死代码） |
 | 11 | **旧角色的最终词** | — | `tb_axi_soc_example --check-products` 与 `tb_axi_soc_example --emit-rtl` **两条模式都必须存在**：前者给 ④″（产品级自检），后者给 ③（产物发射）⇒ ⇒ **MUST NOT** 只留一条 |
 | **12** | **change 3 的 `AC11` / `tasks.md` 的 `D1`**（「棘轮豁免表 23 行**只改第一列**（**不删行**）⇒ `EXPECTED_EXEMPT_PORTS=1415` **不变**」） | **1415 不变 · 不删行** | ⚠️ **BLOCKER 级冲突**：本裁决的 `axi4_full_example` 退役要**删 31 行** ⇒ 锚点 **1415 → 1384** ⇒ ⇒ AC11/D1 MUST 拆成两段：**3.1（头归位）** = 23 行只改路径（锚点不变）· **A7（退役）** = 删 31 行 + 锚点 1415 → **1384** ⇒ ⇒ 不拆 ⇒ **验收判据互相矛盾、落地即红**（`verify_port_naming.sh:92-97` 的 R2 逐行数条目） |
-| 13 | `openspec/specs/axi-interconnect-routing/spec.md:242`（引用 `examples/axi4/axi_soc_example.cpp:47/:263-264`） | 文件删除后**行引用悬空** | **登记为已知漂移**（spec 非护栏面 ⇒ 不红；按仓惯例不改历史引用，只在实施时记一笔） |
+| 13 | `openspec/specs/axi-interconnect-routing/spec.md:242`（引用 `examples/axi4/tb_axi_soc_example.cpp`（2026-11-18 改名）`:264`） | 文件删除后**行引用悬空** | **登记为已知漂移**（spec 非护栏面 ⇒ 不红；按仓惯例不改历史引用，只在实施时记一笔） |
 
 ⚠️ **归属**：`openspec/changes/**` = **planner 写集** ⇒ ⇒ architect **不代改**；本清单是**交接凭据**。
 

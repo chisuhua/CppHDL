@@ -89,7 +89,7 @@
 ## 3. 复现命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 cmake --build build -j"$(nproc)"
 ( cd build && ctest -LE perf --output-on-failure )            # 242/242

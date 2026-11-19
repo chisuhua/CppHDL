@@ -253,6 +253,6 @@ Debt 1 Option B（双函数架构）已实现，JIT 现在可以安全地默认�
 | `include/lnode/logic_buffer.tpp` | logic_buffer::operator= 实现（bug 根因）|
 | `src/ast/ast_nodes.cpp` | regimpl::create_instruction (current_buf_, next_buf_) |
 | `src/ast/instr_reg.cpp` | 寄存器指令 eval() |
-| `src/simulator.cpp:750-870` | eval_combinational(), tick(), eval_sequential() |
+| `src/simulator.cpp:227-420`（eval_combinational / tick） | eval_combinational(), tick(), eval_sequential() |
 | `tests/test_jit_compiler.cpp` | 15 个 JIT 测试用例 |
 | `docs/simulation/JIT_ROADMAP.md` | JIT 实施路线图 |

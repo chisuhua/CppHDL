@@ -108,7 +108,7 @@
 ## 5. 复现命令
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 set -euo pipefail
 cmake --build build -j"$(nproc)"
 ./build/tests/test_public_equivalence_api          # 5 用例 / 43 断言

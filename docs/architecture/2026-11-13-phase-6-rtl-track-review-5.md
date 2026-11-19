@@ -245,7 +245,7 @@ MUST 声明在脚本头或登记表，且 MUST 与**引用它的那个 step 的�
 ## 7. 判据自检（**可复跑**）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 # ① 护栏可达性（RC-8 的形态）= 裁决 ①-a 的**种子**（静态层 ⇒ 无逆递归）
 #    ⇒ ⇒ 落地件 = scripts/verify_guard_reachability.sh（含投毒自检）
 python3 - <<'PY'

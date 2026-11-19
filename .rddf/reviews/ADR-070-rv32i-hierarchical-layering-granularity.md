@@ -89,7 +89,7 @@
 ## 5. 复跑命令（只读）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 grep -rn "前移一级" docs/adr/ | cut -c1-140
 grep -n "5.5.2.1\|已闭" docs/adr/ADR-047-rv32i-data-forwarding.md docs/adr/ADR-069-mem-data-alignment.md
 bash scripts/probe_r21_hier_granularity.sh    # ⇒ 当前基线：ok=false + 23 条（D1 spike 的对照）

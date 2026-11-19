@@ -236,7 +236,7 @@ if (std::memcmp(curr_value.bitvector().data(), prev.first, byte_len) == 0) conti
 
 实测显示批量 `tick(N)` 比循环单步 `tick()` **慢 27%**。
 
-**⚠️ 根因分析（待验证）**：从 `src/simulator.cpp:831-845` 代码看，`tick(N)` 实际就是简单循环调用 `tick()`：
+**⚠️ 根因分析（待验证）**：从 `src/simulator.cpp:389-420`（`Simulator::tick(size_t count)`） 代码看，`tick(N)` 实际就是简单循环调用 `tick()`：
 ```cpp
 void Simulator::tick(size_t count) {
     for (size_t i = 0; i < count; ++i) {
@@ -349,8 +349,8 @@ void Simulator::tick(size_t count) {
 | **并行能力** | 无 | simref 无 / simjit 可选 | 多线程 + CPU 亲和 |
 
 **源码引用**：
-- [1] SpinalHDL: `/workspace/project/SpinalHDL/sim/src/main/scala/spinal/sim/`, `/workspace/project/SpinalHDL/core/src/main/scala/spinal/core/sim/`
-- [2] Cash: `/workspace/project/cash/src/compiler/simjit.cpp`, `/workspace/project/cash/src/sim/simulatorimpl.cpp`
+- [1] SpinalHDL: `«本机»/`, `«本机»/`
+- [2] Cash: `«本机»`, `«本机»`
 
 ---
 

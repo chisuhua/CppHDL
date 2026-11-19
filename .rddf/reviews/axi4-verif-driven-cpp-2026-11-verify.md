@@ -87,7 +87,7 @@ for d in . build build/tests "$(mktemp -d)"; do (cd "$d" && "$OLDPWD/build/examp
 # AC15
 cmake -B build-nojit -DCH_JIT_ENABLE=OFF -DBUILD_VERILATOR=OFF && \
   cmake --build build-nojit --target tb_axi4_lite_example -j"$(nproc)" && \
-  (cd "$(mktemp -d)" && /workspace/project/CppHDL/build-nojit/examples/axi4/tb_axi4_lite_example | tail -1)
+  (cd "$(mktemp -d)" && «本机»/build-nojit/examples/axi4/tb_axi4_lite_example | tail -1)
 
 # AC16
 grep -rnE 'axi4_lite_example\.cpp|(^|[^A-Za-z0-9_])axi4_lite_example([^A-Za-z0-9_]|$)' \

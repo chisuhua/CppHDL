@@ -322,7 +322,7 @@ ADR-069 §6 ③ + critic 的 **SF-3** 把「ADR-047 追加 dated addendum」列�
 ## 7. 判据自检（**可复跑**）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 bash scripts/verify_arch_ledger_residuals.sh          # 双向 1:1（23 行）⇒ PASS
 bash scripts/verify_ledger_evidence.sh                # 91 台账 ⇒ PASS
 bash scripts/verify_public_api_visibility.sh          # 公开面 ⇒ PASS

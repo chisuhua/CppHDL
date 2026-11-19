@@ -58,4 +58,4 @@ ctest -N
 
 - 核心功能测试应添加到基础测试组
 - chlib相关功能测试应添加到chlib测试组
-- 修改 [CMakeLists.txt](file:///mnt/ubuntu/chisuhua/github/CppHDL/tests/CMakeLists.txt) 文件以包含新的测试文件
+- 修改 [CMakeLists.txt](CMakeLists.txt) 文件以包含新的测试文件

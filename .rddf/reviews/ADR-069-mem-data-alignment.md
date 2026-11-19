@@ -124,7 +124,7 @@ grep -n "^- \*\*Status\*\*" docs/adr/ADR-069-mem-data-alignment.md
 ### 6.5 复跑命令（只读）
 
 ```bash
-cd /workspace/project/CppHDL
+cd «本机»
 grep -rn "前移一级" docs/adr/ | cut -c1-140   # ⇒ ADR-047:629（原文逐字）+ :631/:636/:638（订正）+ ADR-069:246/:302/:362
 grep -n "5.5.2.1" docs/adr/ADR-047-rv32i-data-forwarding.md
 grep -n "critic 第 2 轮" docs/adr/ADR-069-mem-data-alignment.md

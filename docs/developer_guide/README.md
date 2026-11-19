@@ -10,9 +10,9 @@
 
 | 文档 | 说明 | 状态 |
 |------|------|------|
-| [overview.md](architecture/overview.md) | 系统架构概览 | 🟡 规划中 |
-| [simulator-internals.md](architecture/simulator-internals.md) | Simulator 内部机制 | 🟡 规划中 |
-| [node-lifecycle.md](architecture/node-lifecycle.md) | 节点生命周期管理 | 🟡 规划中 |
+| `overview.md` | 系统架构概览 | 🟡 规划中（⚠️ 文件尚未创建） |
+| `simulator-internals.md` | Simulator 内部机制 | 🟡 规划中（⚠️ 文件尚未创建） |
+| `node-lifecycle.md` | 节点生命周期管理 | 🟡 规划中（⚠️ 文件尚未创建） |
 
 ### API 参考
 
@@ -24,7 +24,7 @@
 
 | 文档 | 说明 | 状态 |
 |------|------|------|
-| [T001-analysis.md](tech-reports/T001-analysis.md) | T001 技术分析报告 | 🟡 规划中 |
+| [T001-simulator-api.md](api-reference/T001-simulator-api.md) | T001 Simulator API 规格 | ✅ 已完成 |
 
 ### 开发模式
 
@@ -59,7 +59,7 @@
 
 - [用户使用指南](../usage_guide/README.md) - API 使用方法
 - [快速参考技能](../skills/README.md) - 速查手册
-- [贡献指南](contributing.md) - 如何贡献代码
+- 贡献指南 —— ⚠️ **文件尚未创建**（规划中 · 原 `contributing.md`）
 
 ---
 
