@@ -164,7 +164,13 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
                 out << "        wait_ok = 1'b0;\n";
                 out << "        for (wi = 0; wi < " << op.count << "; wi = wi + 1) begin\n";
                 out << "            @(posedge " << clk << "); #1;\n";
-                out << "            if (" << info.name << " !== 0) begin\n";
+                if (op.level == WaitLevel::Low) {
+                    // `low` ≡ 值 == 0 ⇒ 用 `==`（X 时表达式为 X ⇒ `if` 判假 ⇒ **fail-closed**）
+                    out << "            if (" << info.name << " == 0) begin\n";
+                } else {
+                    // `high` ≡ 值 != 0（≡ 缺省）⇒ ⚠️ 本行文本 MUST 逐字不变（默认路径零改动）
+                    out << "            if (" << info.name << " !== 0) begin\n";
+                }
                 out << "                wait_ok = 1'b1; wi = " << op.count << ";\n";
                 out << "            end\n";
                 out << "        end\n";

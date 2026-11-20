@@ -311,6 +311,7 @@ struct RawOp {
     std::string port;
     std::string expr;        // Set/Expect 的值表达式；Tick/Wait/ExpectStable/Reset 的计数表达式
     std::uint64_t level = 0; // Reset 的电平（1 = high）
+    WaitLevel wait_level{WaitLevel::High}; // Wait 的目标电平（缺省 = 非零）
 };
 
 std::vector<std::string> split_ws(const std::string &line) {
@@ -346,6 +347,9 @@ bool materialize(const RawOp &raw, std::uint64_t loop_var, VerifOp &o, std::stri
             return false;
         }
         o.count = static_cast<std::uint32_t>(v);
+        if (raw.kind == VerifOpKind::Wait) {
+            o.level = raw.wait_level;
+        }
         return true;
     }
     case VerifOpKind::Reset: {
@@ -548,12 +552,36 @@ bool parse_verif(std::istream &in, VerifProgram &out, VerifParseError &err) {
             }
             op.kind = VerifOpKind::Tick;
             op.expr = toks[1];
-        } else if (head == "WAIT" || head == "EXPECT_STABLE") {
+        } else if (head == "WAIT") {
+            // `WAIT <port> [<high|low>] <max>`（ADR-074 §7.2 D2′）⇒ 2 或 3 个实参
+            // ⚠️ 与 `EXPECT_STABLE` **不共分支**：后者的参数个数/语法不得被本原语的放宽连带。
+            if (toks.size() < 3) {
+                err = {lineno, "WAIT 需要 <port> [<high|low>] <max>"};
+                return false;
+            }
+            if (toks.size() > 4) {
+                err = {lineno, "WAIT 参数过多（MUST 是 <port> [<high|low>] <max>）"};
+                return false;
+            }
+            op.kind = VerifOpKind::Wait;
+            op.port = toks[1];
+            if (toks.size() == 4) {
+                if (toks[2] != "high" && toks[2] != "low") {
+                    err = {lineno, "WAIT 的 level 形参 MUST 是 `high` / `low` 关键字（收到 `" +
+                                       toks[2] + "`）⇒ 数字与大小写变体均非法（fail-closed）"};
+                    return false;
+                }
+                op.wait_level = (toks[2] == "high") ? WaitLevel::High : WaitLevel::Low;
+                op.expr = toks[3];
+            } else {
+                op.expr = toks[2]; // 缺省 level = 非零（High）
+            }
+        } else if (head == "EXPECT_STABLE") {
             if (toks.size() < 3) {
                 err = {lineno, head + " 需要 <port> <n>"};
                 return false;
             }
-            op.kind = (head == "WAIT") ? VerifOpKind::Wait : VerifOpKind::ExpectStable;
+            op.kind = VerifOpKind::ExpectStable;
             op.port = toks[1];
             op.expr = toks[2];
         } else if (head == "SETTLE") {

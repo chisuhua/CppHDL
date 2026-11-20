@@ -11,17 +11,17 @@
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| A0 | ⚠️ **ADR-074 §7.2 的 dated 补注（architect 域 · MUST 由 architect 落 + 走 oracle）** —— 两处澄清：① **`high` ≡ 缺省 ≡「端口值 ≠ 0」**（**不是**「N 位全 1」）⇒ 理由：解释器的 `Resolver` **不返回 width** ⇒ 「全 1」判定**缺输入** ⇒ 且二者等价 ⇒ 无歧义；② 「**位宽比较**」的准确含义 = 「按端口自身位宽取值比较，不做符号/宽度扩展」（**不是**「与全 1 比较」）⇒ ⇒ 后果：**N>1 端口**上 `WAIT p high max` **不是**「等全 1」（现役消费者 `uart_tx` 是 1-bit ⇒ 当前无行为差异 ⇒ 但 API 语义以此为准） | `docs/adr/ADR-074-…md` §7.2 | 补注已落 + architect 的 oracle 判定行 | ☐ |
+| A0 | ⚠️ **ADR-074 §7.2 的 dated 补注（architect 域 · MUST 由 architect 落 + 走 oracle）** —— 两处澄清：① **`high` ≡ 缺省 ≡「端口值 ≠ 0」**（**不是**「N 位全 1」）⇒ 理由：解释器的 `Resolver` **不返回 width** ⇒ 「全 1」判定**缺输入** ⇒ 且二者等价 ⇒ 无歧义；② 「**位宽比较**」的准确含义 = 「按端口自身位宽取值比较，不做符号/宽度扩展」（**不是**「与全 1 比较」）⇒ ⇒ 后果：**N>1 端口**上 `WAIT p high max` **不是**「等全 1」（现役消费者 `uart_tx` 是 1-bit ⇒ 当前无行为差异 ⇒ 但 API 语义以此为准） | `docs/adr/ADR-074-…md` §7.2 | 补注已落 + architect 的 oracle 判定行 | ☑（`cf473fd` · oracle `判定: APPROVE` · 1 must-fix 已闭） |
 
 ## 批次 A — 原语与三处同步（AC1 · AC2 · AC3 · AC13 · AC14 · AC15）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| A1 | **AST 加 `level` 字段**（`Wait` 的电平目标；**缺省 = 非零** ⇒ 旧构造零影响）⇒ ⇒ ⚠️ **不得复用** `RawOp::level` / `VerifOp::value`（`Reset` 的 0/1）⇒ ⇒ 否则「缺省 0」会被读成 **low** ⇒ **语义翻转** | `include/rtl_emit/verif.h` | AC1 | ☐ |
-| A2 | **扫描器**：`WAIT` 接受 **2 或 3 个实参**（2 ⇒ 缺省 level = 非零）⇒ ⇒ `level` MUST 是 `high`/`low` **关键字** ⇒ ⇒ 数字 / `HIGH` / `High` ⇒ **非零退出**且错误消息**点名 `level`**（不是「非法数字」）⇒ ⇒ ⚠️ `WAIT` 与 `EXPECT_STABLE` **不得共用分支**（否则会顺手放宽后者） | `src/rtl_emit/verif_scan.cpp` | AC2 · AC12 | ☐ |
-| A3 | **解释器**：按 `level` 比较（**非零**判定 ⇒ **不需要端口宽度**）⇒ ⇒ 命中后 **≥1 拍推进**（D3′）⇒ ⇒ 失败文案**点名端口与 `max`**（⇒ 与渲染侧的文案差异**只允许**参数差异，不允许语义差异） | `src/rtl_emit/verif_run.cpp` | AC1 · AC9 · AC11 | ☐ |
-| A4 | **渲染器**：与解释器**逐字同语义** ⇒ ⇒ ⚠️ **默认路径的渲染文本 MUST NOT 改**（= **禁止重构渲染器**，不是「结果等价」）⇒ ⇒ 双证：⑥' 新鲜度 + `top.v` 的 sha256 与改动前逐字相同 ⇒ ⇒ ⚠️ 解释器遇未知 kind MUST `default: error`（fail-closed） | `src/rtl_emit/verif_render.cpp` | AC3 · AC15 | ☐ |
-| A5 | ⚠️ **X 态差异登记**（AC14）：渲染侧 `!==` 对 X 恒真 ⇒ `high` 把 X 当高（fail-open）· `low` 永不命中（fail-closed）⇒ ⇒ **两端对 X 的处理不对称** ⇒ ⇒ **登记**（与既有 `EXPECT` 的 X 差异**同型**）⇒ ⇒ 本 change **不修** | `docs/developer_guide/` 或 `.rddf/checks/` 的既有差异登记处 | AC14 | ☐ |
+| A1 | **AST 加 `level` 字段**（`Wait` 的电平目标；**缺省 = 非零** ⇒ 旧构造零影响）⇒ ⇒ ⚠️ **不得复用** `RawOp::level` / `VerifOp::value`（`Reset` 的 0/1）⇒ ⇒ 否则「缺省 0」会被读成 **low** ⇒ **语义翻转** | `include/rtl_emit/verif.h` | AC1 | ☑ |
+| A2 | **扫描器**：`WAIT` 接受 **2 或 3 个实参**（2 ⇒ 缺省 level = 非零）⇒ ⇒ `level` MUST 是 `high`/`low` **关键字** ⇒ ⇒ 数字 / `HIGH` / `High` ⇒ **非零退出**且错误消息**点名 `level`**（不是「非法数字」）⇒ ⇒ ⚠️ `WAIT` 与 `EXPECT_STABLE` **不得共用分支**（否则会顺手放宽后者） | `src/rtl_emit/verif_scan.cpp` | AC2 · AC12 | ☑ |
+| A3 | **解释器**：按 `level` 比较（**非零**判定 ⇒ **不需要端口宽度**）⇒ ⇒ 命中后 **≥1 拍推进**（D3′）⇒ ⇒ 失败文案**点名端口与 `max`**（⇒ 与渲染侧的文案差异**只允许**参数差异，不允许语义差异） | `src/rtl_emit/verif_run.cpp` | AC1 · AC9 · AC11 | ☑ |
+| A4 | **渲染器**：与解释器**逐字同语义** ⇒ ⇒ ⚠️ **默认路径的渲染文本 MUST NOT 改**（= **禁止重构渲染器**，不是「结果等价」）⇒ ⇒ 双证：⑥' 新鲜度 + `top.v` 的 sha256 与改动前逐字相同 ⇒ ⇒ ⚠️ 解释器遇未知 kind MUST `default: error`（fail-closed） | `src/rtl_emit/verif_render.cpp` | AC3 · AC15 | ☑ |
+| A5 | ⚠️ **X 态差异登记**（AC14）：渲染侧 `!==` 对 X 恒真 ⇒ `high` 把 X 当高（fail-open）· `low` 永不命中（fail-closed）⇒ ⇒ **两端对 X 的处理不对称** ⇒ ⇒ **登记**（与既有 `EXPECT` 的 X 差异**同型**）⇒ ⇒ 本 change **不修** | `docs/usage_guide/04-testbench-guide.md` 的「`WAIT` 的已知边界」段（X 态不对称 · >64 位低 64 位口径 · `max=0` 恒 FAIL） | AC14 | ☑ |
 
 ## 批次 B — 判别力装置 + helper 下沉（AC4 · AC5 · AC6 · AC7 · AC10）
 

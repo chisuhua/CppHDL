@@ -258,7 +258,10 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
                         res.error = sc.name + " · WAIT " + op.port + "：node_id 未命中";
                         return res;
                     }
-                    if (*v != 0) {
+                    // 目标电平判定 = **零值测试**（ADR-074 §7.2 D2′：`high` ≡ 非零 ≡ 缺省
+                    // ⇒ **不是**「N 位全 1」⇒ 不需要端口位宽）
+                    const bool hit = (op.level == WaitLevel::Low) ? (*v == 0u) : (*v != 0u);
+                    if (hit) {
                         seen = true;
                         break;
                     }

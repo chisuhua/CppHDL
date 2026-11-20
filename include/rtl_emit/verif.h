@@ -32,12 +32,23 @@ class context;
 }
 namespace rtl_emit {
 
+/// `WAIT` 的**目标电平**（ADR-074 §7.2 D2′ · 2026-11-20 dated 订正）
+///
+/// ⚠️ **不得复用 `VerifOp::value`**（那是 `Reset` 的 0/1 电平）—— 二者**默认值语义相反**
+/// （`value` 默认 0 · 而 `WAIT` 缺省 = **High / 非零**）⇒ ⇒ 复用会让缺省写法被读成 `low`。
+/// ⚠️ **`High` ≡ 非零**，**不是**「N 位全 1」（二者仅 N = 1 时等价）⇒ ⇒ 判定是**零值测试**
+/// ⇒ ⇒ 不需要端口位宽。
+enum class WaitLevel : std::uint8_t {
+    High = 0, // 值 != 0（**≡ 缺省**）
+    Low = 1,  // 值 == 0
+};
+
 /// IR 原语（**封闭集** · ADR-074 D2）
 enum class VerifOpKind {
     Set,          // SET <port> <expr>
     Tick,         // TICK <n>
     Settle,       // SETTLE
-    Wait,         // WAIT <port> <max>
+    Wait,         // WAIT <port> [<high|low>] <max>
     Expect,       // EXPECT <port> <expr>
     ExpectStable, // EXPECT_STABLE <port> <n>
     Observe,      // OBSERVE <port>
@@ -51,6 +62,7 @@ struct VerifOp {
     std::uint64_t value = 0;  // Set 的值 / Expect 的期望值 / Reset 的电平（0|1）
     std::uint32_t count = 0;  // Tick 拍数 / Wait 上限 / ExpectStable 拍数 / Reset 复位拍数
     std::string check_id;     // Expect / Wait 的逐条结果标识（渲染期输出 `RESULT: check <id>`）
+    WaitLevel level{WaitLevel::High}; // Wait 的目标电平（缺省 = High ≡ 非零 ⇒ 旧写法零影响）
 };
 
 struct VerifScenario {

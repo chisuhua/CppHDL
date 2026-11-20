@@ -294,11 +294,22 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
 | `SET <port> <value>` | 驱动一个端口（**不消耗拍**） |
 | `TICK <n>` | 走 n 个时钟沿 |
 | `SETTLE` | 等待采样窗结算（**`SET` 之后 `EXPECT` 之前 MUST 有它**） |
-| `WAIT <port> <max>` | 等某端口为 1（上限 max 拍）⇒ 产生一条断言 |
+| `WAIT <port> [<high\|low>] <max>` | 等某端口达到目标电平（`high` ≡ **非零** ≡ **缺省**；`low` ≡ 零）⇒ 上限 max 拍 ⇒ 产生一条断言 |
 | `EXPECT <port> <value>` | 断言某端口等于某值 ⇒ 产生一条断言 |
 | `EXPECT_STABLE <port> <n>` | 断言某端口连续 n 拍不变 |
 | `OBSERVE <port>` | 观测（只记录，不判定） |
 | `RESET <port> <high\|low> [cycles]` | 复位某个端口 |
+
+**`WAIT` 的已知边界**（钉死语义，避免两端各理解一次）：
+
+- **`high` ≡ 非零**（**不是**「N 位全 1」，二者仅 N = 1 时等价）⇒ N>1 端口上 `WAIT p high <max>`
+  **不是**「等全 1」。判定是**零值测试** ⇒ 不需要端口位宽。
+- **X 态两端不对称**（既有，与 `EXPECT` 同型）：渲染侧 `high` 用 `!== 0`（X 判真 ⇒ 当高）·
+  `low` 用 `== 0`（X ⇒ `if` 判假 ⇒ 当未命中 ⇒ fail-closed）。
+- **>64 位端口**：解释器的零值测试走 64 位视图 ⇒ 只覆盖**低 64 位**；渲染侧的 `EXPECT` 是全宽
+  比较 ⇒ 该不对称早已存在（非本原语引入）⇒ 宽端口上的 `WAIT` 结论以低 64 位为准。
+- **`max` = 0** ⇒ 不推进任何拍 ⇒ 恒 FAIL（不产生「零拍命中」）。
+
 
 #### 一个最小完整例子
 
