@@ -3,8 +3,17 @@
 Child of root `AGENTS.md`.
 
 ## OVERVIEW
-4 个流控组合子示例。**产品化进度 = 3/4**（`stream_mux` · `stream_demux` · `stream_fork`
-已进 RTL 产品面；arbiter 仍是纯 demo —— 见 §PATTERNS 的归位条件）。
+4 个流控组合子示例。**产品化进度 = 4/4**（`stream_mux` · `stream_demux` · `stream_fork` ·
+`stream_arbiter` **全部**已进 RTL 产品面）。
+
+⚠️ **4 个示例的语义面各不相同**（⇒ ⇒ 判据面**不重叠** ⇒ ⇒ 不是重复覆盖）：
+
+| 示例 | 语义 | ready 方向 | 时序? |
+|---|---|---|---|
+| `stream_mux` | 4 选 1 | `in[i].ready` = `(select==i) & out_ready`（**上游侧扇出**） | 组合 |
+| `stream_demux` | 1 选 4 分发 | `in.ready` = `out[select].ready`（**消费端 ⇒ 上游**） | 组合 |
+| `stream_fork` | 1 转 3 广播 | `in.ready` = `AND(out[i].ready)`（**消费端 ⇒ 上游**） | 组合 |
+| `stream_arbiter` | 4 输入 round-robin | `in[i].ready` = `(selected==i) & out_ready & any_valid` | ⚠️ **时序**（内部 `last_grant_reg`） |
 
 ## FILES
 | File | Focus | CTest |
@@ -21,15 +30,19 @@ Child of root `AGENTS.md`.
 | `tb_stream_fork_demo.cpp` | Stream Fork **激励驱动**（默认由 `.verif` 驱动 · `--emit-rtl` 发射 · `RESULT: checks=26`） | ✅（`run_all_ported_tests.sh`） |
 | `tb_stream_fork_demo.verif` | **验证源**（`.verif` · 4 场景 / 26 断言 · **单一语义来源**） | — |
 | `tb_stream_fork_demo.sv` | **由 `.verif` 生成**的独立 TB（`generated=yes` · 禁手改） | — |
-| `stream_arbiter_demo.cpp` | Round-robin 仲裁演示（**未产品化**） | ✅ |
+| `stream_arbiter_top.h` | Stream Arbiter **设计定义**（4 输入 round-robin · **无 `main`** · 16 根具名端口 · **时序**） | — |
+| `tb_stream_arbiter_demo.cpp` | Stream Arbiter **激励驱动**（默认由 `.verif` 驱动 · `--emit-rtl` 发射 · `RESULT: checks=38`） | ✅（`run_all_ported_tests.sh`） |
+| `tb_stream_arbiter_demo.verif` | **验证源**（`.verif` · 5 场景 / 38 断言 · **单一语义来源** · **不锁相位**） | — |
+| `tb_stream_arbiter_demo.sv` | **由 `.verif` 生成**的独立 TB（`generated=yes` · 禁手改） | — |
 
 ## PATTERNS
 - **三角色分离**（`example-file-boundary-2026-11`）：设计定义 `*_top.h`（**无 `main`**）
   → 激励驱动 `tb_*.cpp`（`main`：加载 `.verif` + `--emit-rtl` 发射）→ 激励源 `tb_*.{verif,sv}`
 - **产品面登记**（`stream-mux-rtl-product-2026-11` · `stream-demux-rtl-product-2026-11` ·
-  `stream-fork-rtl-product-2026-11`）：
-  `tb_stream_mux_demo` / `tb_stream_demux_demo` / `tb_stream_fork_demo` 已进
-  `.rddf/checks/examples-rtl-sim-targets.tsv`（`kind=target` · 自发行 · `generated=yes`）
+  `stream-fork-rtl-product-2026-11` · `stream-arbiter-rtl-product-2026-11`）：
+  `tb_stream_mux_demo` / `tb_stream_demux_demo` / `tb_stream_fork_demo` /
+  `tb_stream_arbiter_demo` 已进 `.rddf/checks/examples-rtl-sim-targets.tsv`
+  （`kind=target` · 自发行 · `generated=yes`）
   ⇒ ⇒ 期望源 = `.rddf/checks/examples-rtl-expectations.md#<anchor>`（**手推**）
   ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`（根自有端口全部具名）
 - **组合子契约**（capability `chlib-stream-ready-ownership`）：调用方 MUST 先
@@ -40,11 +53,11 @@ Child of root `AGENTS.md`.
   - `demux`：`in.ready` = `out[select].ready`（**消费端 ⇒ 上游**）
   - `fork`：`in.ready` = `AND(out[i].ready)`（**消费端 ⇒ 上游**）
   - `arbiter`：`in[i].ready` = `(selected == i) & out_ready & any_valid`
-- **归位条件**（arbiter 进产品面）：需要一份**手推**的轮转公平性期望源
-  ⇒ ⇒ 且轮转相位（首拍授予谁）**取决于实现的状态初值**⇒ ⇒ capability
-  `chlib-stream-arbitration` 明文「MUST NOT 要求某一具体相位」⇒ ⇒ 判据 MUST
-  以「效果属性」（覆盖全部有效通道 / 无饿死）为主，**相位字面量只作 impl-contract**
-  （`.rddf/checks/examples-rtl-sim-exclusions.tsv` 逐行登记）
+- **归位条件**（已全部达成）：4 个单元各有**一份手推**的期望源
+  ⇒ ⇒ arbiter 的轮转相位（首拍授予谁）**取决于实现的状态初值**⇒ ⇒ capability
+  `chlib-stream-arbitration` 明文「MUST NOT 要求某一具体相位」⇒ ⇒ 判据以
+  **效果属性**（每路在有限拍内被服务 / 无饿死）为主，**相位字面量只进判别力用例**
+  （`tests/chlib/test_stream.cpp` 的 `[rotation]`）⇒ ⇒ 产品面 TB **不锁相位**。
 
 ## RUN
 ```bash
@@ -55,6 +68,7 @@ ctest -L spinalhdl-ported -R "stream" 2>/dev/null || true
 ./build/examples/stream/tb_stream_mux_demo
 ./build/examples/stream/tb_stream_demux_demo
 ./build/examples/stream/tb_stream_fork_demo
+./build/examples/stream/tb_stream_arbiter_demo
 
 # 重新生成 TB（改 `.verif` 之后）
 build/examples/stream/tb_stream_mux_demo --emit-rtl --out <dir> --emit-hygiene \

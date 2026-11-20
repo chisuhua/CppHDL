@@ -1107,3 +1107,135 @@ VERIF-CHECKS: 26
 
 ⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=26 fails=0` ⇒ ⇒ 变异未污染产物。
 ⚠️ 每条变异 MUST **先确认仍能编译**（三条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
+
+---
+
+## tb_stream_arbiter_demo {#stream-arbiter-demo}
+
+### 上游语义（**spec-derived** · capability `chlib-stream-arbitration` + `chlib-stream-ready-ownership`）
+
+被测单元 = `examples/stream/stream_arbiter_top.h`（`chlib::stream_arbiter_round_robin<ch_uint<8>, 4>` 的具名端口包装）。
+⚠️ **本组合子是【时序】的**（内部有 `last_grant_reg` 轮转反馈寄存器）⇒ ⇒ 与
+mux / demux / fork 三个**纯组合**示例不同 ⇒ ⇒ 判据 MUST 用 `TICK` / `WAIT` 推进拍。
+
+| 端口 | 语义 | 出处 |
+|---|---|---|
+| `out.valid` | 任一输入 `valid` | `round_robin_selector` 的 `valid` |
+| `out.payload` | **被授予通道**的 payload | capability「输出 payload MUST 是该通道的 payload」 |
+| `selected` | 被授予的通道索引（**纯组合输出** = `priority_encoder(grant)`） | capability「选择 MUST 用硬件原语表达」 |
+| `in[i].ready` | `(selected == i) & out_ready & any_valid` | capability「转发类的上游 MUST 真的收到反压」 |
+| 轮转 | 扫描起点 = **上次授予的下一个** ⇒ ⇒ 持续有效的通道**轮流**被服务 | capability「轮转仲裁器 MUST 真正轮转（MUST NOT 饿死持续有效的通道）」 |
+
+### ⚠️⚠️ **相位口径（本行的关键口径决策）**
+
+capability `chlib-stream-arbitration` 明文：
+
+> MUST NOT 要求某一具体相位（首拍授予谁取决于实现的状态初值）
+
+⇒ ⇒ **本行【不锁相位】**：判据一律写成**效果属性**（「每路在有限拍内被服务」），
+**不是**逐拍字面量 ⇒ ⇒ 逐拍金标已在 `tests/chlib/test_stream.cpp` 的 `[rotation]`
+判别力用例里（golden = `0,2,0,2,…`）⇒ ⇒ 本产品面**不重复**锁它 ⇒ ⇒ **不**把
+「相位」冻进产品契约。
+
+⇒ ⇒ **相位无关的表达方式**：`WAIT <in[i]_ready> <上界>`
+（`in[i].ready` 为 1 ⟺ 通道 i 被授予 ⇒ ⇒ 「该路在有限拍内被服务」= 零值测试可表达）
+⇒ ⇒ 上界取**轮转周期的紧界**（4 路 ⇒ 4 拍；2 路 ⇒ 2 拍）⇒ ⇒ 「恒选一路」的缺陷必超时红。
+
+⚠️ **观测点的「一拍偏移」**：`selected` 是**纯组合**输出 ⇒ ⇒ 沿上 `last_grant_reg`
+推进后组合**重新求值** ⇒ ⇒ 沿后读到的 `selected` 是**下一拍**将授予的通道
+⇒ ⇒ `WAIT` 观察到的也是「下一拍」的授予 ⇒ ⇒ **界仍成立**（周期不变）。
+
+### impl-contract（本实现的取值）
+
+- **框架复位**把全部数据输入置 0 ⇒ ⇒ 复位后四路 `valid=0` / `out_ready=0`。
+- `no_valid_no_grant` 场景里的 `selected == 0` = `priority_encoder(0)` 的取值
+  ⇒ ⇒ **不是**契约条款（契约只要求「不授予」）⇒ ⇒ 计入 impl-contract。
+
+### 判据
+
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 唯一有效通道（in1）被选中 | spec-derived | `selected == 1`（**逐拍**，相位无关） |
+| 2 | 输出 payload = **该通道**的 payload | spec-derived | `0x21`（不是别的通道的） |
+| 3 | 只有被授予的一路 `ready=1` | spec-derived | `in1_ready=1`，其余 3 路 `=0` |
+| 4 | 两路（0 / 2）持续有效 ⇒ 每路在 **2 拍内**被服务 | spec-derived | `WAIT` 紧界 ⇒ ⇒ 「恒选一路」必超时红 |
+| 5 | 四路持续有效 ⇒ 每路在 **4 拍内**被服务 | spec-derived | `WAIT` 紧界 ⇒ ⇒ 「固定优先级」必超时红 |
+| 6 | 每路被服务时 `out.payload` = **该路**的 payload | spec-derived | `0x10` / `0x21` / `0x32` / `0x43` |
+| 7 | `out_ready=0` ⇒ 四路 `in*_ready` 全 0 | spec-derived | 上游停顿 = **可观测** |
+| 8 | `out_ready=0` 时 `out.valid` | spec-derived | 仍为 1（valid 与 ready 独立） |
+| 9 | 四路 `valid` 全 0 ⇒ `out.valid=0` · 四路 `ready=0` | spec-derived | 无授予 ⇒ 无反压 |
+| 10 | 四路 `valid` 全 0 时 `selected` | **impl-contract** | 0（= `priority_encoder(0)` 的取值，**非**契约） |
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 38** ⇒ ⇒ 三方等式：本行 == `tb_stream_arbiter_demo.verif` 的
+静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 38
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `single_valid_channel_held` | 判据 1 · 2 · 3 |
+| `two_channels_alternate` | 判据 4 · 6 |
+| `four_channels_all_served` | 判据 5 · 6 |
+| `backpressure_stalls_upstream` | 判据 7 · 8 |
+| `no_valid_no_grant` | 判据 9（spec-derived）· 10（impl-contract） |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 18 根** = 框架 2（`default_clock` · `default_reset`）+ 根自有 **16**
+  （4 路输入流 × {payload[7:0], valid, ready} + 输出流 {payload[7:0], valid, ready} + `selected[1:0]`）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+- ⚠️ **产物含 1 个寄存器**（`top_rr_last_grant` · 4 bit）⇒ ⇒ 本行是**首个时序**产品单元。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_stream_arbiter_demo.cpp` 默认模式）= **38** 条 ⇒ ⇒ `interp_checks = 38`。
+- TB 侧（Verilog 产物，`tb_stream_arbiter_demo.sv`）= **38** 条 ⇒ ⇒ `min_checks = 38`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**
+  （护栏 ⑨ 判 C++ 侧、⑥ 判 TB 侧 ⇒ ⇒ 禁一侧代另一侧）。
+
+#### scenario: single_valid_channel_held
+
+只有 `in1` 有效 ⇒ ⇒ `selected == 1`（逐拍）· `out.valid == 1` · `out.payload == 0x21` ·
+`in1_ready == 1` 且其余三路 `ready == 0`（13 条）。
+
+#### scenario: two_channels_alternate
+
+只有 `in0` / `in2` 有效 ⇒ ⇒ 轮转周期 = 2 ⇒ ⇒ 每路 MUST 在 **2 拍内**被服务
+（`WAIT in0_ready 2` / `WAIT in2_ready 2` 各两轮）⇒ ⇒ 每路被服务时 `out.payload`
+= 该路 payload（`0x10` / `0x32`）（6 条）。
+
+#### scenario: four_channels_all_served
+
+四路全有效 ⇒ ⇒ 轮转周期 = 4 ⇒ ⇒ 每路 MUST 在 **4 拍内**被服务
+（`WAIT in*_ready 4`）⇒ ⇒ 每路被服务时 `out.payload` = 该路 payload
+（`0x10` / `0x21` / `0x32` / `0x43`）（8 条）。
+
+#### scenario: backpressure_stalls_upstream
+
+`out_ready=0` ⇒ ⇒ 四路 `in*_ready == 0`（上游停顿可观测）· `out.valid == 1`（5 条）。
+
+#### scenario: no_valid_no_grant
+
+四路 `valid` 全 0 ⇒ ⇒ `out.valid == 0` · 四路 `in*_ready == 0` · `selected == 0`
+（**impl-contract**）（6 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测 | 抓的是 |
+|---|---|---|---|
+| M1 | `assign top_out_valid = 1'b0;`（valid 通路断） | ✅ `fails=3`（`single_valid_channel_held#1/#8` · `backpressure_stalls_upstream#4`） | 输出 valid |
+| M2 | `assign top_selected = 2'h0;`（选择恒定） | ✅ `fails=3`（`single_valid_channel_held#0/#7/#11`） | 授予索引 |
+| M3 | `top_rr_last_grant <= 4'h0;`（**轮转反馈恒 0** ⇒ 轮转失效 ⇒ 退化为固定优先级） | ✅ `fails=9`（**5 条 `WAIT` 超时**：`two_channels_alternate#0/#4` · `four_channels_all_served#0/#4/#6` + 4 条 payload 判据） | **轮转 / 无饿死**（历史缺陷形态） |
+
+⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=38 fails=0` ⇒ ⇒ 变异未污染产物。
+⚠️ 每条变异 MUST **先确认仍能编译**（三条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
+⚠️ **M3 是本行的核心判别力**：它正是 capability 记载的历史缺陷形态
+（「`last_grant` 恒传 `0_d` ⇒ ⇒ 轮转从不发生 ⇒ ⇒ 低位通道饿死」）⇒ ⇒
+**相位无关**的 `WAIT` 判据能抓住它 ⇒ ⇒ 这就是「不锁相位」仍能有判别力的证据。

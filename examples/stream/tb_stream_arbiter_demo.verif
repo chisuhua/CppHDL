@@ -1,0 +1,150 @@
+# examples/stream/tb_stream_arbiter_demo.verif
+#
+# **Stream Arbiter 示例的验证源**（ADR-074 D1 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+# ⚠️ 时序锚点：SET 在「沿后采样窗」内生效；EXPECT 读「最近一次结算之后」的值
+#    ⇒ ⇒ `SET → EXPECT` MUST 先 `SETTLE`（扫描器静态强制）。
+#
+# 被测语义（capability `chlib-stream-arbitration` + `chlib-stream-ready-ownership`）：
+#   · `out.valid`   = 任一输入 valid
+#   · `out.payload` = **被授予通道**的 payload
+#   · `selected`    = 被授予的通道索引（**纯组合输出** = `priority_encoder(grant)`）
+#   · `in[i].ready` = `(selected == i) & out_ready & any_valid`
+#   · 轮转：扫描起点 = **上次授予的下一个** ⇒ ⇒ 持续有效的通道**轮流**被服务
+#
+# ⚠️⚠️ **本文件【不锁相位】**（capability 明文「MUST NOT 要求某一具体相位」）：
+#   · 「首拍授予谁」取决于 `last_grant_reg` 的状态初值 ⇒ ⇒ **实现选择**，非契约；
+#   · ⇒ ⇒ 判据一律写成**效果属性**（「每路在有限拍内被服务」⇒ 用 `WAIT` 表达），
+#     而**不是**逐拍字面量（逐拍金标已在 `tests/chlib/test_stream.cpp` 的
+#     `[rotation]` 判别力用例里 ⇒ ⇒ 本文件**不重复**锁它）。
+#   · ⇒ ⇒ 由此，本文件的场景**顺序无关**（每个场景的效果属性都与相位无关）。
+#
+# ⚠️ **观测点的「一拍偏移」**：`selected` 是**纯组合**输出 ⇒ ⇒ 沿上 `last_grant_reg`
+#   推进后组合**重新求值** ⇒ ⇒ 沿后读到的 `selected` 是**下一拍**将授予的通道
+#   ⇒ ⇒ `WAIT` 观察到的也是「下一拍」的授予 ⇒ ⇒ 界仍成立（周期不变）。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#stream-arbiter-demo
+@tb-module tb_stream_arbiter_demo
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：唯一有效通道 MUST 仍被选中（spec-derived · 相位无关 · 逐拍）
+#   · 只有 in1 有效 ⇒ ⇒ 扫描起点无论落在哪，都 MUST 落到通道 1
+#   · payload MUST 是**该通道**的 payload（不是别的通道的）
+#   · 只有被授予的一路 ready=1，其余为 0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario single_valid_channel_held
+@anchor stream-arbiter-demo
+
+SET in0_payload 0x10
+SET in1_payload 0x21
+SET in2_payload 0x32
+SET in3_payload 0x43
+
+SET in0_valid 0
+SET in1_valid 1
+SET in2_valid 0
+SET in3_valid 0
+SET out_ready 1
+SETTLE
+EXPECT selected 1
+EXPECT out_valid 1
+EXPECT out_payload 0x21
+EXPECT in1_ready 1
+EXPECT in0_ready 0
+EXPECT in2_ready 0
+EXPECT in3_ready 0
+
+TICK 1
+EXPECT selected 1
+EXPECT out_valid 1
+EXPECT out_payload 0x21
+EXPECT in1_ready 1
+
+TICK 1
+EXPECT selected 1
+EXPECT out_payload 0x21
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：两路持续有效 MUST 交替（spec-derived · 相位无关 · 无饿死）
+#   · 只有 in0 / in2 有效 ⇒ ⇒ 轮转周期 = 2 ⇒ ⇒ 每路 MUST 在 **2 拍内**被服务
+#   · ⇒ ⇒ `WAIT <ready> 2` 是**紧界** ⇒ ⇒ 「恒选一路」的缺陷 ⇒ ⇒ 必红
+#   · 每路被服务时 payload MUST 是**该路**的 payload
+# ══════════════════════════════════════════════════════════════════════════
+@scenario two_channels_alternate
+
+SET in0_valid 1
+SET in1_valid 0
+SET in2_valid 1
+SET in3_valid 0
+SET out_ready 1
+SETTLE
+WAIT in0_ready 2
+EXPECT out_payload 0x10
+WAIT in2_ready 2
+EXPECT out_payload 0x32
+WAIT in0_ready 2
+WAIT in2_ready 2
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：四路持续有效 MUST 全部被服务（spec-derived · 相位无关 · 覆盖）
+#   · 轮转周期 = 4 ⇒ ⇒ 每路 MUST 在 **4 拍内**被服务（紧界）
+#   · ⇒ ⇒ 「固定优先级」「只服务一部分通道」的缺陷 ⇒ ⇒ 必红
+#   · 每路被服务时 payload MUST 是**该路**的 payload
+# ══════════════════════════════════════════════════════════════════════════
+@scenario four_channels_all_served
+
+SET in0_valid 1
+SET in1_valid 1
+SET in2_valid 1
+SET in3_valid 1
+SET out_ready 1
+SETTLE
+WAIT in0_ready 4
+EXPECT out_payload 0x10
+WAIT in1_ready 4
+EXPECT out_payload 0x21
+WAIT in2_ready 4
+EXPECT out_payload 0x32
+WAIT in3_ready 4
+EXPECT out_payload 0x43
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：消费端不就绪 ⇒ 上游被挡住（spec-derived）
+#   · `out_ready=0` ⇒ ⇒ 四路 `in*_ready` 全 0（**上游停顿 = 可观测**）
+#   · `out_valid` MUST 不受反压影响（valid 与 ready 独立）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario backpressure_stalls_upstream
+
+SET out_ready 0
+SETTLE
+EXPECT in0_ready 0
+EXPECT in1_ready 0
+EXPECT in2_ready 0
+EXPECT in3_ready 0
+EXPECT out_valid 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 5：无任何有效输入 ⇒ 不授予（spec-derived ×5 + impl-contract ×1）
+#   · 四路 valid 全 0 ⇒ ⇒ out_valid=0 · 四路 ready 全 0（无授予 ⇒ 无反压）
+#   · `selected == 0` 属 **impl-contract**（= `priority_encoder(0)` 的取值，
+#     **不是**契约条款 ⇒ ⇒ 契约只要求「不授予」）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario no_valid_no_grant
+
+SET in0_valid 0
+SET in1_valid 0
+SET in2_valid 0
+SET in3_valid 0
+SET out_ready 1
+SETTLE
+EXPECT out_valid 0
+EXPECT selected 0
+EXPECT in0_ready 0
+EXPECT in1_ready 0
+EXPECT in2_ready 0
+EXPECT in3_ready 0

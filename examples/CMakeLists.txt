@@ -60,7 +60,7 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     # PHASE: Phase 3: Stream 组件
     tb_stream_mux_demo
     tb_stream_demux_demo
-    stream_arbiter_demo
+    tb_stream_arbiter_demo
     tb_stream_fork_demo
 
     # PHASE: Phase 3A: AXI4 总线

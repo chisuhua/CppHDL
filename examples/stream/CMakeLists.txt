@@ -17,10 +17,12 @@ set_target_properties(tb_stream_demux_demo PROPERTIES CXX_STANDARD 23 CXX_STANDA
 target_compile_definitions(tb_stream_demux_demo PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 install(TARGETS tb_stream_demux_demo RUNTIME DESTINATION bin/examples/stream)
 
-add_executable(stream_arbiter_demo stream_arbiter_demo.cpp)
-target_link_libraries(stream_arbiter_demo PRIVATE cpphdl)
-set_target_properties(stream_arbiter_demo PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
-install(TARGETS stream_arbiter_demo RUNTIME DESTINATION bin/examples/stream)
+add_executable(tb_stream_arbiter_demo tb_stream_arbiter_demo.cpp)
+target_link_libraries(tb_stream_arbiter_demo PRIVATE cpphdl)
+target_include_directories(tb_stream_arbiter_demo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(tb_stream_arbiter_demo PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON)
+target_compile_definitions(tb_stream_arbiter_demo PRIVATE CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+install(TARGETS tb_stream_arbiter_demo RUNTIME DESTINATION bin/examples/stream)
 
 add_executable(tb_stream_fork_demo tb_stream_fork_demo.cpp)
 target_link_libraries(tb_stream_fork_demo PRIVATE cpphdl)

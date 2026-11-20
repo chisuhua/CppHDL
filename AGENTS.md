@@ -422,6 +422,7 @@ ctest --output-on-failure
 ./build/examples/stream/tb_stream_mux_demo
 ./build/examples/stream/tb_stream_demux_demo
 ./build/examples/stream/tb_stream_fork_demo
+./build/examples/stream/tb_stream_arbiter_demo
 
 # RV32I 核的 RTL 交付 + Verilator 仿真环境（**一条命令**）
 #   ⇒ 生成扁平 + 层次化两种产物 → lint → 编译独立 TB → 运行

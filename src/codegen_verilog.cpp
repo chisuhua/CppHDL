@@ -312,6 +312,34 @@ ch::core::lnodeimpl *ModuleEmitter::port_driver_endpoint(
     return driver;
 }
 
+/// ⚠️ **Verilog 口径的「自然运算宽」**（= 表达式自身的位宽 ⇒ 决定赋值处
+///   是否发生**隐式截断** ⇒ ⇒ Verilator 的 `WIDTHTRUNC`）。
+///
+/// · `add` / `sub`：结果宽 = max(两侧) **+ 1**（Verilog 的算术结果规则）
+/// · 比较族（`eq` / `ne` / `lt` / `le` / `gt` / `ge`）：结果宽 = **1**（布尔）
+/// · 其余（`mul` / `div` / `mod` / 位运算）：结果宽 = max(两侧)
+///
+/// ⚠️ **与框架的 `get_binary_result_width` 的差异点**：`mod` / `div` 在 RHS 是
+///   **编译期字面量**时，框架按「结果 ≤ 字面量-1 ⇒ ⇒ 只需 `bit_width(N-1)`」
+///   定宽 ⇒ ⇒ **可能小于** Verilog 的自然宽 ⇒ ⇒ 赋值处发生隐式截断 ⇒ ⇒
+///   必须在 hygiene 模式下**显式**写出来（见 `print_binary_op`）。
+static uint32_t natural_binary_width(ch::core::ch_op op, uint32_t w) {
+    switch (op) {
+    case ch::core::ch_op::add:
+    case ch::core::ch_op::sub:
+        return w + 1;
+    case ch::core::ch_op::eq:
+    case ch::core::ch_op::ne:
+    case ch::core::ch_op::lt:
+    case ch::core::ch_op::le:
+    case ch::core::ch_op::gt:
+    case ch::core::ch_op::ge:
+        return 1;
+    default:
+        return w;
+    }
+}
+
 /// ⚠️ **显式宽度转换**（C6 · 见头文件说明）。
 std::string ModuleEmitter::hygiene_cast(const std::string &expr, uint32_t from_w,
                                         uint32_t to_w) const {
@@ -1381,6 +1409,18 @@ void ModuleEmitter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
         //   blanket `lint_off` 盖住，那 23 条告警从未被看过）。
         //   · 移位：只有 **LHS** 参与运算宽度 ⇒ cast 到结果宽度；RHS 是移位量，不动；
         //   · 其余：运算宽度 = max(两侧) ⇒ 两侧都对齐到 max。
+        //
+        // ⚠️⚠️ **结果宽度也 MUST 对齐**（2026-11-20 · arbiter 产品化挖出）：
+        //   「操作数对齐」只消掉了**操作数侧**的宽度错位 ⇒ ⇒ **结果侧**仍可能
+        //   「运算自然宽 > 节点声明宽」⇒ ⇒ 赋值处**隐式截断** ⇒ ⇒ Verilator 报
+        //   `WIDTHTRUNC` ⇒ ⇒ **卫生产物编译失败**（卫生产物**刻意不带**
+        //   blanket `lint_off` ⇒ ⇒ 这类错位 MUST 真的被看见）。
+        //   实测触发形态：`chlib::round_robin_selector` 的 `(idx + i) % N`
+        //   ⇒ 框架按「模字面量 ⇒ 结果宽 = `compute_bit_width(N-1)`」定宽（2 bit）
+        //   ⇒ ⇒ 而运算自然宽 = max(两侧) = 3 bit ⇒ ⇒ 隐式截断 ⇒ ⇒ `WIDTHTRUNC`。
+        //   ⇒ ⇒ 修法 = **把截断写成显式 cast**（与既有卫生口径同型）⇒ ⇒
+        //   **语义逐位不变**（显式截断 ≡ 隐式截断）。
+        uint32_t op_width = 0; // 本算子的「自然运算宽」（Verilog 口径）
         if (view_.emit_hygiene) {
             const uint32_t lw = lhs_node->size();
             const uint32_t rw = rhs_node->size();
@@ -1389,18 +1429,23 @@ void ModuleEmitter::print_binary_op(std::ostream &out, ch::core::opimpl *node) {
             case ch::core::ch_op::shr:
             case ch::core::ch_op::sshr:
                 lhs_name = hygiene_cast(lhs_name, lw, node->size());
+                op_width = node->size(); // 移位：只有 LHS 参与运算宽
                 break;
             default: {
                 const uint32_t w = (lw > rw) ? lw : rw;
                 lhs_name = hygiene_cast(lhs_name, lw, w);
                 rhs_name = hygiene_cast(rhs_name, rw, w);
+                op_width = natural_binary_width(node->op(), w);
                 break;
             }
             }
         }
 
-        out << "    assign " << node_names_[node] << " = " << lhs_name << " "
-            << op_str << " " << rhs_name << ";\n";
+        std::string expr = lhs_name + " " + op_str + " " + rhs_name;
+        if (view_.emit_hygiene && op_width > node->size()) {
+            expr = hygiene_cast(expr, op_width, node->size());
+        }
+        out << "    assign " << node_names_[node] << " = " << expr << ";\n";
     } catch (...) {
         // Silently ignore exceptions
     }

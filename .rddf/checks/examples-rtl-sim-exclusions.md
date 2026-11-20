@@ -17,26 +17,27 @@
 | ③ | C++ 侧已有**断言质量**合格的测试（用于交叉参考，**不作为** RTL 侧期望源） |
 | ④ | RTL 规模适中（verilator 编译 ≲ 10 s） |
 
-⇒ ⇒ **首批 14 项**（TSV 的权威名单）覆盖类别：
+⇒ ⇒ **首批 15 项**（TSV 的权威名单）覆盖类别：
 组合（`counter` · `counter_simple` · `pwm` · `gpio`）·
 时序状态机（`uart_tx` · `uart_rx`）· 流控（`fifo_stream`）·
 多路复用（`stream_mux` · 4 选 1 + 反压扇出）· 分发（`stream_demux` · 1 选 4 + 消费端 ⇒ 上游）·
 扇出（`stream_fork` · 1 转 3 广播 + ready 的 AND）·
+仲裁（`stream_arbiter` · round-robin 轮转 + 无饿死）·
 计数/相位（`quadrature_encoder`）· 总线（`axi4_lite` · `phase3a`）· CPU（`riscv-mini` smoke）。
 
 ⚠️ **TSV 里另有两个不计入「首批」的条目**（各自独立桶 · 见 tsv 的 `REGISTERED_SOC` /
 `REGISTERED_HIER` 锚点）：`axi_soc_example`（`kind=soc` · SoC 层产物）与
 `riscv-mini-rv32i-soc-hier`（`kind=hier` · **同一设计的层次化形态** ⇒ 复用同一份独立 TB）。
-⇒ ⇒ 守恒等式 **`27 == 14 ∪ 13`**（⚠️ **2026-11-20 订正**：原写 `28 == 10 ∪ 18`
+⇒ ⇒ 守恒等式 **`27 == 15 ∪ 12`**（⚠️ **2026-11-20 订正**：原写 `28 == 10 ∪ 18`
 —— `axi4_full_example` 退役后 tracked 减 1、phase3a 与 stream_mux / stream_demux /
-stream_fork 转入覆盖表后落选再减 4）
+stream_fork / stream_arbiter 转入覆盖表后落选再减 5）
 **只**作用于「首批」口径⇒ ⇒ 这两个桶不参与 ✅
 
 ## 2. 落选名单（**机器可读** = `.rddf/checks/examples-rtl-sim-exclusions.tsv`）
 
 `examples/CMakeLists.txt` 的 `CH_TRACKED_EXAMPLE_TARGETS` 共 **27** 项 ⇒ ⇒
-**已覆盖 14** 项（覆盖表里 `kind ∈ {target, soc}`：13 个 `target` + 1 个 `soc`）
-⇒ ⇒ **落选 13** 项 ⇒ ⇒ 逐行的**理由 + 归位条件**登记在
+**已覆盖 15** 项（覆盖表里 `kind ∈ {target, soc}`：14 个 `target` + 1 个 `soc`）
+⇒ ⇒ **落选 12** 项 ⇒ ⇒ 逐行的**理由 + 归位条件**登记在
 **`.rddf/checks/examples-rtl-sim-exclusions.tsv`**。
 
 ⚠️ **本文不复制那张表** ⇒ ⇒ 落选名单**只有一份**（单一真相）⇒ ⇒ 杜绝两份漂移。
@@ -44,7 +45,7 @@ stream_fork 转入覆盖表后落选再减 4）
 > ⚠️ **落选 ≠ 不做**：该表是「这批不做」的登记，**不是**永久排除。
 > 每行都带**归位条件** ⇒ ⇒ 「新增即漏」被堵住。
 > ⚠️ **守恒是机械判据**（不再靠本文的散文承诺）：`scripts/verify_examples_rtl_sim_coverage.sh`
-> ①（`27 == 14 ∪ 13` 且三者互斥）⇒ ⇒ **漏登记即 CI 红**。
+> ①（`27 == 15 ∪ 12` 且三者互斥）⇒ ⇒ **漏登记即 CI 红**。
 > ⚠️ **2026-11-17 订正**：本文此前写「共 **19** 项 ⇒ 落选 **10**」且表里只有 **9** 行 ⇒ ⇒
 > 被跟踪集合从 19 涨到 28 后，**9 个 example 既没进覆盖表、也没进落选表** ⇒ ⇒
 > 「新增即漏」**当时已经失效** ⇒ ⇒ 本次按 28 项重算并补登

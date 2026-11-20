@@ -1,3 +1,53 @@
+## 2026-11-20 — stream_arbiter 示例进 RTL 产品面（stream 目录 4/4 · 并修掉一处 codegen 宽度缺陷）
+
+**是什么**：`examples/stream/` 的 arbiter demo 此前是「`main()` + 内联激励 + `std::cout`
+比对」⇒ ⇒ 没有设计定义、没有 RTL 产物、期望值散在代码里。现在按同型形态产品化：
+设计定义 `stream_arbiter_top.h`（16 根具名端口）→ 激励驱动 `tb_stream_arbiter_demo.cpp`
+（默认 `.verif` 驱动 / `--emit-rtl` 发射）→ 验证源 `tb_stream_arbiter_demo.verif`
+（5 scenario / **38** 断言）→ 生成的独立 TB `tb_stream_arbiter_demo.sv`。
+
+**⚠️ 与前三个示例的本质差异**：arbiter 是**时序**的（内部 `last_grant_reg` 轮转反馈寄存器）
+⇒ ⇒ 判据 MUST 用 `TICK` / `WAIT` 推进拍 ⇒ ⇒ 且**相位**（首拍授予谁）取决于实现的状态初值。
+
+**改了什么**
+
+- **新增** `examples/stream/stream_arbiter_top.h`：`chlib::stream_arbiter_round_robin<ch_uint<8>, 4>`
+  的具名端口包装（4 路输入流 + 输出流 + `selected[1:0]`）。
+- **改名 + 双模式** `stream_arbiter_demo.cpp` → `tb_stream_arbiter_demo.cpp`；默认模式只跑
+  `.verif`（`RESULT: checks=38 fails=0`），`--emit-rtl <dir>` 产出 `top.v` + `manifest.json`。
+- **清单登记**：`.rddf/checks/examples-rtl-sim-targets.tsv` 新增行（自发行 · `generated=yes` ·
+  `interp_checks=38` == `min_checks=38`）⇒ ⇒ `REGISTERED_TARGETS` **14 → 15**；
+  落选表删 `stream_arbiter_demo` 行 ⇒ ⇒ 守恒 `27 == 15 ∪ 12`。
+- **期望源**：`.rddf/checks/examples-rtl-expectations.md#stream-arbiter-demo`
+  （module 集 `{top}` · 顶层端口 **18** = 框架 2 + 根自有 16 · `VERIF-CHECKS: 38` + 5 个 scenario 锚点）。
+
+**🔴 顺带修掉一处 codegen 宽度缺陷（`src/codegen_verilog.cpp`）**
+
+arbiter 是**第一个被发射**的轮转组合子 ⇒ ⇒ 它的 RTL 产物**编译不过**（Verilator
+`WIDTHTRUNC` × 5）⇒ ⇒ 根因 = hygiene 模式只把**操作数**宽度写成显式 cast，
+**结果宽度没对齐** ⇒ ⇒ `mod` 节点的声明宽（框架按「模字面量 ⇒ 结果宽 = `bit_width(N-1)`」
+定宽 = 2 bit）小于运算自然宽（`max(两侧)` = 3 bit）⇒ ⇒ 赋值处**隐式截断** ⇒ ⇒ 告警。
+
+⇒ ⇒ 修法 = **把截断写成显式 cast**（与既有卫生口径同型）⇒ ⇒ **语义逐位不变**
+（显式截断 ≡ 隐式截断）⇒ ⇒ 产物从 `assign x = a % 3'h4;` 变成
+`assign x = 2'(a % 3'h4);` ⇒ ⇒ Verilator 零告警。
+
+⚠️ **卫生产物刻意不带 blanket `lint_off`**（护栏设计如此 ⇒ 宽度错位 MUST 真的被看见）
+⇒ ⇒ 这类缺陷**只能**在产品化过程中暴露 ⇒ ⇒ 也说明「9 个 example 卫生产物零告警」
+那条旧结论**只覆盖当时那 9 个**。
+
+**说明**
+
+- `spec_checks = 37`（场景 1–5）；`no_valid_no_grant` 里的 `selected == 0` 属
+  impl-contract（= `priority_encoder(0)` 的取值，**非**契约条款）。
+- ⚠️ **本产品面【不锁相位】**：capability `chlib-stream-arbitration` 明文
+  「MUST NOT 要求某一具体相位」⇒ ⇒ 判据一律写成**效果属性**（每路在有限拍内被服务，
+  用 `WAIT` + 紧界表达）⇒ ⇒ 逐拍金标已在 `tests/chlib/test_stream.cpp` 的 `[rotation]`
+  判别力用例里 ⇒ ⇒ 产品面**不重复**锁它。
+- **判别力自证**：M1 `out_valid` 恒 0 → 3 条红；M2 `selected` 恒 0 → 3 条红；
+  M3 `last_grant` 反馈恒 0（= capability 记载的**历史缺陷形态**：轮转从不发生）
+  → **9 条红**（含 **5 条 `WAIT` 超时**）⇒ ⇒ 证明「相位无关」的判据**照样**抓得住轮转失效。
+
 ## 2026-11-20 — stream_fork 示例进 RTL 产品面（stream 目录第 3 个产品单元）
 
 **是什么**：`examples/stream/` 的 fork demo 此前是「`main()` + 内联激励 + `std::cout`
