@@ -28,11 +28,11 @@
 > ⇒ ⇒ 护栏 `verify_arch_ledger_residuals.sh` 的「证据存在」判据会红 ⇒ ⇒
 > ⇒ 故本组 MUST 在**归档之后**回填（与归档同一 commit）。
 
-- [ ] 4.1 `.rddf/checks/arch-residual-registry.md` id=27：状态 `已知` → `已收口` ·
+- [x] 4.1 `.rddf/checks/arch-residual-registry.md` id=27：状态 `已知` → `已收口` ·
       日期 2026-11-21 · 后缀 · 闭口证据（归档 change `proposal.md` + `examples/axi4/axi_soc_example_top.h`）· 归属 `—`
-- [ ] 4.2 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7 行 27：状态格 MUST 以
+- [x] 4.2 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7 行 27：状态格 MUST 以
       **登记表生成的规范句**开头（`✅ 已收口（2026-11-21 · <后缀>）`）
-- [ ] 4.3 `bash scripts/verify_arch_ledger_residuals.sh` ⇒ PASS
+- [x] 4.3 `bash scripts/verify_arch_ledger_residuals.sh` ⇒ PASS
 
 ## 5. 验证
 
@@ -43,6 +43,6 @@
 
 ## 6. 归档
 
-- [ ] 6.1 `openspec archive soc-timer-irq-port-removal-2026-11 --yes --skip-specs`
+- [x] 6.1 `openspec archive soc-timer-irq-port-removal-2026-11 --yes --skip-specs`
       （**带** `.openspec.yaml` 的 `skip_specs: true` 声明 ⇒ 本 change 无 spec 变更）
-- [ ] 6.2 归档后回填 §4 的两侧（证据 = 归档路径）⇒ ⇒ 护栏绿 ⇒ ⇒ commit
+- [x] 6.2 归档后回填 §4 的两侧（证据 = 归档路径）⇒ ⇒ 护栏绿 ⇒ ⇒ commit

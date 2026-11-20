@@ -79,3 +79,19 @@ SoC 顶层（`examples/axi4/axi_soc_example_top.h`）的根 `__io` 里有一个 
 - **不**改 SoC 的**功能行为**：删的是零消费端口 ⇒ ⇒ 四个场景的期望值逐字不变
   （`VERIF-CHECKS: 15` 不变）。
 - **不**引入新的 Timer 外设（那是 id=27 的「复核条件」，属另案）。
+
+---
+
+## 用户可见变更
+
+> ⚠️ **本段是 2026-11-21 补写的**（归档时遗漏 ⇒ `scripts/verify_public_api_visibility.sh`
+> 的 **R1**（归档 change MUST 带「## 用户可见变更」段 · 机制生效日 2026-11-09）会报红
+> ⇒ ⇒ 补的是**归档流程的产物要求**，不改动本 change 的任何决策与实施内容）。
+
+| 项 | 前 | 后 |
+|---|---|---|
+| SoC 顶层端口表（`examples/axi4/axi_soc_example_top.h`） | **14** 根（框架 2 + 根自有 12）⇒ ⇒ 含一根**零消费**的 `top_timer_irq` 输入（下游会误以为「接上就能收中断」） | **13** 根（框架 2 + 根自有 **11**）⇒ ⇒ `top_timer_irq` **物理删除**（台账 id=27 · ADR-074 §7.7 裁决 = 删 ⇒ 用户 2026-11-20 追认） |
+| SoC 的 TB / 验证源 / 生成物 | `.verif` 含 `SET timer_irq 0` · TB 输入面 8 根 + stimulus 8 列 · `.sv` 含 `top_timer_irq` 连线 | 三者**同步**（`.verif` 删该 SET · 输入面 7 根 + stimulus 7 列 · `.sv` **由 `.verif` 重新渲染** ⇒ 逐字节可复现） |
+| SoC 的场景期望值 | `VERIF-CHECKS: 15` · `RESULT: checks=15 fails=0` | **逐字不变**（删的是零消费端口 ⇒ ⇒ 行为不变） |
+| 台账 **id=27**（根自有 `timer_irq` 零消费） | 状态 `已知` | 状态 **`已收口`**（登记表 + 台账 §7 **两侧同批** ⇒ 闭口证据 = 本归档 change） |
+| 库层 `AxiLiteUart::irq`（台账 **id=26**） | `ch_out` · 零消费者 | **不动**（id=26 的裁决 = **不删**：它是 in-force spec `dual-backend-test-coverage` 强制的行为覆盖载体）⇒ ⇒ 与 `timer_irq` 语义**不可混用** |
