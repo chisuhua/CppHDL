@@ -34,19 +34,33 @@
 #        （`isPrimaryIO` + dtype 的 `range` ⇒ 复用提取器的 `--ports` 模式）
 #        ⇒ ⇒ 名字 + 方向 + 宽度**逐项**比对 ⇒ ⇒ 同时判掉「成层子树的 `ch_out`
 #        跑到顶层」（期望集里没有它们 ⇒ 出现即红）。
+#   R8′ **RV32I 产品级语料**的顶层端口表 == **手推期望集**（34 根）—— 与 R8 同机制，
+#        但**语料与发射器都不同**（examples 侧的 emitter CLI ⇒ ⇒ `tests/**` 禁引
+#        `examples/**` ⇒ ⇒ 不可能塞进 `hier_rtl_products`）⇒ ⇒ 独立块 + 独立前置。
+#        ⚠️ **为什么必须有这一条**：RV32I 现有的两条端口面判据（层次化 == 扁平根端口段
+#        前缀 · == `manifest.port_table[]`）**都与产物同源** ⇒ ⇒ 「发射底座算错」时
+#        **两侧一起错** ⇒ ⇒ 抓不到 ⇒ ⇒ R8′ 是**唯一独立于产物**的端口面判据
+#        （台账 id=25 的裁决 · 选项 B · 2026-11-21）。
 #
 # 用法：
 #   bash scripts/verify_hierarchical_rtl.sh              # 主路径（R1–R8）
 #   bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条投毒 ⇒ 必红 ⇒ 还原复绿
 #
-# 前置：`build/tests/hier_rtl_products`（生成器）+ 仓内 verilator
-#       （`build/verilator-install/bin/verilator`）⇒ **缺一即失败**（fail-closed）。
+# 前置：`build/tests/hier_rtl_products`（生成器）
+#       + `build/examples/riscv-mini/emit_rtl_rv32i_soc_hier`（R8′ 的产品语料发射器）
+#       + 仓内 verilator（`build/verilator-install/bin/verilator`）
+#       ⇒ **缺一即失败**（fail-closed）。
 # ============================================================================
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXTRACTOR="$REPO_ROOT/scripts/lib/verilog_tree_extract.py"
 GENERATOR="${HIER_RTL_GENERATOR:-$REPO_ROOT/build/tests/hier_rtl_products}"
+# ── RV32I **产品级**层次化语料的发射器（R8′ 用 · **独立驱动**）──────────────
+#    ⚠️ 为什么独立：R8 的语料 = `tests/` 的生成器；RV32I SoC 是**产品级**语料
+#    （`examples/riscv-mini/`）⇒ ⇒ `tests/**` MUST NOT 引用 `examples/**`
+#    （`example-file-boundary` 裁决）⇒ ⇒ 不可能塞进同一个生成器。
+RV32I_HIER_EMITTER="${RV32I_HIER_EMITTER:-$REPO_ROOT/build/examples/riscv-mini/emit_rtl_rv32i_soc_hier}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/logs"
@@ -67,6 +81,10 @@ require_tools() {
     }
     [ -x "$GENERATOR" ] || {
         fail "R0 产物生成器不可用：$GENERATOR（先 cmake --build build --target hier_rtl_products）"
+        return 1
+    }
+    [ -x "$RV32I_HIER_EMITTER" ] || {
+        fail "R0 RV32I 层次化发射器不可用：$RV32I_HIER_EMITTER（先 cmake --build build --target emit_rtl_rv32i_soc_hier）"
         return 1
     }
     [ -f "$EXTRACTOR" ] || {
@@ -548,6 +566,124 @@ PY
     return "$bad"
 }
 
+# ── gen_rv32i_hier：发射 RV32I 产品级层次化产物（R8′ 的语料）─────────────────
+gen_rv32i_hier() {  # $1 = out dir · $2 = log
+    local dir="$1" log="$2"
+    rm -rf "$dir"; mkdir -p "$dir"
+    "$RV32I_HIER_EMITTER" --out "$dir" --emit-hygiene >"$log" 2>&1
+}
+
+# ── R8′：RV32I **产品级**层次化语料的顶层端口表 == **手推期望集** ────────────
+#    ⚠️ **与 R8 的关系**：机制同源（`verilator --json-only` + 提取器 `--ports`），
+#       但**语料与发射器都不同** ⇒ ⇒ 独立块 + 独立前置（见文件头）。
+#    ⚠️ **为什么必须有这一条**（台账 id=25 · 选项 B · 2026-11-21）：
+#       RV32I 现有的两条顶层端口面判据（层次化 == **扁平**根端口段前缀 ·
+#       == `manifest.port_table[]`）**都与产物同源**（扁平与 manifest 都来自
+#       同一次发射）⇒ ⇒ 「发射底座算错」时**两侧一起错** ⇒ ⇒ **抓不到**
+#       ⇒ ⇒ R8′ 是**唯一独立于产物**的顶层端口面判据。
+#    ⚠️ **期望集 = 手推**（推导源 = `examples/riscv-mini/src/rv32i_pipeline_top.h`
+#       的 `__io`：4 in + 28 out ⇒ **声明顺序即端口顺序**；端口名 = `top_<C++ 成员名>`
+#       （ADR-075 E1）⇒ + 框架 2（`default_clock` · `default_reset`）⇒ 共 **34** 根）
+#       ⇒ ⇒ **禁**从产物输出抄（抄了就是判据自证 ⇒ 恒绿）。
+r8p_rv32i_port_set() {  # $1 = 产品目录（内含 top.v）
+    local dir="$1" f name json bad=0
+    for f in "$dir"/*.v; do
+        [ -f "$f" ] || continue
+        name="$(basename "$f" .v)"
+        if [ "$name" != "top" ]; then
+            fail "R8′ 产物文件名 MUST 为 top.v（实际 $name）"
+            bad=1
+            continue
+        fi
+        rm -rf "$WORK/json8p/$name"
+        mkdir -p "$WORK/json8p/$name"
+        "$VERILATOR" --json-only --Mdir "$WORK/json8p/$name" "$f" \
+            >"$WORK/logs/$name-r8p.json.log" 2>&1
+        if [ $? -ne 0 ]; then
+            fail "R8′ verilator --json-only 失败：$name"
+            sed -n '1,20p' "$WORK/logs/$name-r8p.json.log" >&2
+            bad=1
+            continue
+        fi
+        json="$(find "$WORK/json8p/$name" -name '*.tree.json' ! -name '*.meta.json' | head -1)"
+        if [ -z "$json" ]; then
+            fail "R8′ 未产出 .tree.json：$name"
+            bad=1
+            continue
+        fi
+        python3 "$EXTRACTOR" "$json" --ports | awk -F'\t' '$1 == "top"' \
+            >"$WORK/logs/$name-r8p-ports.tsv"
+        if ! python3 - "$WORK/logs/$name-r8p-ports.tsv" <<'PY'
+import sys
+
+# ★ **手推期望集**（34 根）—— 推导源 = `examples/riscv-mini/src/rv32i_pipeline_top.h`
+#   的 `__io`（4 in + 28 out · **声明顺序即端口顺序**）+ 框架 2（clock/reset）
+#   ⇒ ⇒ **禁**从产物输出抄（抄了 = 判据自证 ⇒ 恒绿）。
+EXPECTED = [
+    # 框架基础设施（2）
+    ("default_clock", "INPUT", 1),
+    ("default_reset", "INPUT", 1),
+    # 根自有输入（4 · `__io` 声明顺序）
+    ("top_ext_rst", "INPUT", 1),
+    ("top_prog_we", "INPUT", 1),
+    ("top_prog_addr", "INPUT", 32),
+    ("top_prog_data", "INPUT", 32),
+    # 根自有输出（28 · `__io` 声明顺序）
+    ("top_obs_instr_addr", "OUTPUT", 32),
+    ("top_obs_data_addr", "OUTPUT", 32),
+    ("top_obs_data_write_data", "OUTPUT", 32),
+    ("top_obs_data_write_en", "OUTPUT", 1),
+    ("top_obs_perf_cycles", "OUTPUT", 48),
+    ("top_obs_perf_instructions", "OUTPUT", 48),
+    ("top_obs_perf_branch_count", "OUTPUT", 32),
+    ("top_obs_perf_branch_mispredict", "OUTPUT", 32),
+    ("top_obs_perf_load_use_stalls", "OUTPUT", 32),
+    ("top_obs_perf_control_stalls", "OUTPUT", 32),
+    ("top_dbg_id_instr", "OUTPUT", 32),
+    ("top_dbg_id_pc", "OUTPUT", 32),
+    ("top_dbg_id_valid", "OUTPUT", 1),
+    ("top_dbg_id_is_branch", "OUTPUT", 1),
+    ("top_dbg_id_is_load", "OUTPUT", 1),
+    ("top_dbg_id_is_store", "OUTPUT", 1),
+    ("top_dbg_branch_taken", "OUTPUT", 1),
+    ("top_dbg_wb_write_en", "OUTPUT", 1),
+    ("top_dbg_wb_write_data", "OUTPUT", 32),
+    ("top_dbg_wb_rd_addr", "OUTPUT", 5),
+    ("top_dbg_exmem_alu_result", "OUTPUT", 32),
+    ("top_dbg_exmem_imm", "OUTPUT", 32),
+    ("top_dbg_exmem_rs2_data", "OUTPUT", 32),
+    ("top_obs_data_rdata", "OUTPUT", 32),
+    ("top_dbg_exmem_valid", "OUTPUT", 1),
+    ("top_dbg_mem_valid_out", "OUTPUT", 1),
+    ("top_dbg_load_use_detected", "OUTPUT", 1),
+    ("top_dbg_illegal_reason", "OUTPUT", 2),
+]
+
+rows = [
+    (parts[1], parts[2], int(parts[3]))
+    for parts in (line.split("\t") for line in
+                  open(sys.argv[1], encoding="utf-8").read().splitlines() if line.strip())
+    if len(parts) == 4
+]
+if rows != EXPECTED:
+    print("R8′ 的顶层端口表与手推期望不一致", file=sys.stderr)
+    for i, (got, want) in enumerate(zip(rows + [None] * len(EXPECTED), EXPECTED)):
+        if got != want:
+            print(f"  第 {i + 1} 项：期望 {want} · 实际 {got}", file=sys.stderr)
+    if len(rows) != len(EXPECTED):
+        print(f"  条数：期望 {len(EXPECTED)} · 实际 {len(rows)}", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+        then
+            fail "R8′ 顶层端口表判据失败：$name"
+            bad=1
+        fi
+    done
+    [ "$bad" -eq 0 ] && ok "R8′ RV32I 产品语料的顶层端口表 == 手推期望集（34 根 · 独立于产物）"
+    return "$bad"
+}
+
 # ── R9：父侧落点产物（族 ①/③ + 路径 B）过 lint 门 ───────────────────────────
 #    ⚠️ **为什么需要这条**：第四态 `Broken`（「`ok=true` 但产物不可编译」）被
 #    ADR-066 决策 ①/② 删除后，MUST 有**机械**判据证明「`ok=true` ⇒ 产物可编译」
@@ -611,6 +747,16 @@ run_all() {
     r7_path_separation "$REPO_ROOT" || return 1
     r8_port_set "$products" || return 1
 
+    # ⚠️ R8′：RV32I **产品级**层次化语料（**独立驱动** · examples 侧 emitter）
+    #    ⇒ ⇒ 与 R8 的语料不同 ⇒ ⇒ 独立块（见块头注释）
+    local rvdir="$WORK/rv32i"
+    if ! gen_rv32i_hier "$rvdir" "$WORK/logs/rv32i-gen.log"; then
+        fail "R8′ RV32I 层次化产物生成失败（见 $WORK/logs/rv32i-gen.log）"
+        sed -n '1,20p' "$WORK/logs/rv32i-gen.log" >&2
+        return 1
+    fi
+    r8p_rv32i_port_set "$rvdir" || return 1
+
     # ⚠️ R9：父侧落点 fixture 走**独立目录**（主产物目录 MUST 保持「恰好 3 个 .v」）
     local psdir="$WORK/parent_side"
     rm -rf "$psdir" && mkdir -p "$psdir"
@@ -665,7 +811,7 @@ self_test() {
     }
 
     # ---- 投毒 1：R1 —— 未声明标识符 -------------------------------------
-    echo "[self-test] 1/10 R1：未声明标识符"
+    echo "[self-test] 1/11 R1：未声明标识符"
     reset_products
     python3 - "$products/three_layers.v" <<'PY'
 import sys
@@ -678,7 +824,7 @@ PY
     expect_red "R1 未声明标识符" r1_lint_gate "$products"
 
     # ---- 投毒 2：R2 —— 改 pin 名 ---------------------------------------
-    echo "[self-test] 2/10 R2：实例 pin 名不在目标端口集"
+    echo "[self-test] 2/11 R2：实例 pin 名不在目标端口集"
     reset_products
     python3 - "$products/row1_implicit.v" <<'PY'
 import sys
@@ -690,7 +836,7 @@ PY
     expect_red "R2 pin 名不存在" r2_pin_names "$products"
 
     # ---- 投毒 3：R3 —— 改端口宽度（R1 必须仍绿 ⇒ 证明 R3 不是 R1 的重复）----
-    echo "[self-test] 3/10 R3：端口宽度不一致（lint_off 生效 ⇒ R1 看不见）"
+    echo "[self-test] 3/11 R3：端口宽度不一致（lint_off 生效 ⇒ R1 看不见）"
     reset_products
     python3 - "$products/row1_implicit.v" <<'PY'
 import sys
@@ -703,13 +849,13 @@ PY
     expect_red "R3 剥掉 lint_off 后转红" r3_widths "$products"
 
     # ---- 投毒 4：R4 —— 改一份产物（确定性）-----------------------------
-    echo "[self-test] 4/10 R4：产物被外部篡改"
+    echo "[self-test] 4/11 R4：产物被外部篡改"
     reset_products
     printf '\n// tampered\n' >>"$products/two_siblings.v"
     expect_red "R4 产物不一致" r4_determinism "$GENERATOR" "$products"
 
     # ---- 投毒 5：R5 —— 假工具输出错消息 --------------------------------
-    echo "[self-test] 5/10 R5：生成器假成功（不拒绝跨模块 mem）"
+    echo "[self-test] 5/11 R5：生成器假成功（不拒绝跨模块 mem）"
     cat >"$WORK/fake_gen" <<'SH'
 #!/usr/bin/env bash
 echo "products-ok: pretend"
@@ -719,7 +865,7 @@ SH
     expect_red "R5 假成功" r5_reject_mem "$WORK/fake_gen" "$WORK/reject_fake"
 
     # ---- 投毒 6：R6 —— 删一条实例化语句 --------------------------------
-    echo "[self-test] 6/10 R6：删掉一条实例化语句（Verilog 仍合法）"
+    echo "[self-test] 6/11 R6：删掉一条实例化语句（Verilog 仍合法）"
     reset_products
     python3 - "$products/three_layers.v" <<'PY'
 import sys
@@ -739,7 +885,7 @@ PY
     expect_red "R6 树形同构（少一条边）" r6_tree "$products"
 
     # ---- 投毒 7：R7 —— 造同路径调用点 ----------------------------------
-    echo "[self-test] 7/10 R7：同一文件里层次化产物与扁平产物同路径"
+    echo "[self-test] 7/11 R7：同一文件里层次化产物与扁平产物同路径"
     rm -rf "$WORK/fake_repo"
     mkdir -p "$WORK/fake_repo/tests"
     cat >"$WORK/fake_repo/tests/poison.cpp" <<'CPP'
@@ -751,7 +897,7 @@ CPP
     expect_red "R7 同路径调用点" r7_path_separation "$WORK/fake_repo"
 
     # ---- 投毒 8：R1a —— 在 lint 调用里塞 -Wno-fatal ---------------------
-    echo "[self-test] 8/10 R1a：lint 调用含 -Wno-fatal"
+    echo "[self-test] 8/11 R1a：lint 调用含 -Wno-fatal"
     cp "${BASH_SOURCE[0]}" "$WORK/poisoned_guard.sh"
     python3 - "$WORK/poisoned_guard.sh" <<'PY'
 import sys
@@ -764,7 +910,7 @@ PY
     expect_red "R1a -Wno-fatal 被拒" check_lint_flags "$WORK/poisoned_guard.sh"
 
     # ---- 投毒 9：R8 —— 改顶层端口的宽度（Verilog 仍合法 · R1 仍绿）--------
-    echo "[self-test] 9/10 R8：顶层端口宽度被改（lint_off 消音 ⇒ R1 看不见）"
+    echo "[self-test] 9/11 R8：顶层端口宽度被改（lint_off 消音 ⇒ R1 看不见）"
     reset_products
     python3 - "$products/three_layers.v" <<'PYX'
 import sys
@@ -778,7 +924,7 @@ PYX
     expect_red "R8 顶层端口宽度与手推期望不符" r8_port_set "$products"
 
     # ---- 投毒 10：R9 —— 改掉父侧落点网的**声明名** ⇒ 父作用域不可解析 ⇒ lint 必红
-    echo "[self-test] 10/10 R9：父侧落点网被改名（父作用域不可解析）"
+    echo "[self-test] 10/11 R9：父侧落点网被改名（父作用域不可解析）"
     reset_parent_side
     python3 - "$psdir/ps_expr_reg.v" <<'PYX'
 import sys
@@ -792,6 +938,23 @@ tail = tail.replace("    logic [7:0] top_leaf__reg;",
 open(p, "w").write(head + sep + tail)
 PYX
     expect_red "R9 落点网改名后 lint 必红（父作用域不可解析）" r9_parent_side_lint "$psdir"
+
+    # ---- 投毒 11：R8′ —— 改产品顶层端口的宽度 ⇒ 与手推期望不符 ⇒ 必红 ----
+    #   WHY: 证明「期望集**真的在比**」⇒ ⇒ 否则 R8′ 可能恒绿（判据空转）。
+    echo "[self-test] 11/11 R8′：RV32I 产品顶层端口宽度被改"
+    local rvdir="$WORK/rv32i"
+    gen_rv32i_hier "$rvdir" "$WORK/logs/rv32i-gen.log"
+    python3 - "$rvdir/top.v" <<'PYX'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "    output [31:0] top_dbg_id_pc,"
+new = "    output [15:0] top_dbg_id_pc,"
+assert old in s, "R8′ 投毒锚点未命中（产物端口表形态变了？）"
+s = s.replace(old, new, 1)
+open(p, "w").write(s)
+PYX
+    expect_red "R8′ 顶层端口宽度与手推期望不符" r8p_rv32i_port_set "$rvdir"
 
     echo
     if [ "$pass" -ne "$total" ]; then

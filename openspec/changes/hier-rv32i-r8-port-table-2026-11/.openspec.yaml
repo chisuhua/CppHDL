@@ -1,0 +1,11 @@
+schema: spec-driven
+created: 2026-11-21
+# 本 change **无 spec 变更**：它是**台账 id=25 裁决**（选项 B · 2026-11-21 用户裁决）的
+# **下游实施项** —— 「RV32I 产品级层次化语料的顶层端口表 == 手推期望集」这条**独立于产物**
+# 的判据 ⇒ ⇒ 判据本体在台账 id=25 的后缀 + 决策请求单
+# `.rddf/checks/decision-request-hierarchical-rv32i-corpus-r2-r8-2026-11.md`
+# ⇒ ⇒ 既有 capability `rtl-hierarchical-output` 的 Requirement 描述的是**形态与契约面**
+# （顶层端口表 MUST 等于「框架 + 根自有 IO」等），**不枚举**具体端口 ⇒ ⇒ 本 change
+# **不改变**任何 Requirement 的判据 ⇒ ⇒ 不新增也不修改任何 Requirement。
+# ⇒ 归档时用 `openspec archive hier-rv32i-r8-port-table-2026-11 --skip-specs`
+skip_specs: true
