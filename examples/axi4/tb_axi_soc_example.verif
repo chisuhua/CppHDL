@@ -24,7 +24,6 @@
 # 输入常量（期望源 §5：impl-contract）—— 解释器/渲染侧的端口初值都是 0 ⇒ MUST 显式驱动
 SET gpio_in 0x5A
 SET uart_rx 1
-SET timer_irq 0
 SET rst_n 0
 TICK 2
 SET rst_n 1

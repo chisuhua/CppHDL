@@ -72,9 +72,11 @@ const std::vector<std::string> kExpectedModules = {
     "AxiLiteUart_16_", "top",
 };
 
-/// ⚠️ **顶层端口数期望值** = 框架 2（clock/reset）+ 根自有 `__io` 12（8 in + 4 out）
+/// ⚠️ **顶层端口数期望值** = 框架 2（clock/reset）+ 根自有 `__io` 11（7 in + 4 out）
 /// ⇒ ADR-073 J-1 / AC3。
-constexpr std::size_t kExpectedTopPorts = 14;
+/// ⚠️ 2026-11-21：根自有 `__io` 由 12（8 in + 4 out）→ 11（7 in + 4 out）—— 删掉
+///   零消费的 `timer_irq` 占位端口（台账 id=27 · ADR-074 §7.7 裁决 = 删）。
+constexpr std::size_t kExpectedTopPorts = 13;
 
 /// ⚠️ **最小变化观测量阈值**（ADR-073 J-4）—— MUST 有 ≥2 个随激励变化的观测量
 /// ⇒ ⇒ **阈值是值**（⇒ 留 example；库层 MUST NOT 内置）。
@@ -148,9 +150,11 @@ std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {
 
 /// 顶层输入（受驱动）—— 顺序 MUST 与 `make_stimulus()` 每行的取值顺序**逐字一致**
 ///
-/// ⚠️ **输入面 MUST 覆盖根的全部 `ch_in`**（8 个）—— 缺一个 ⇒ 该端口在等价性比对里
+/// ⚠️ **输入面 MUST 覆盖根的全部 `ch_in`**（7 个）—— 缺一个 ⇒ 该端口在等价性比对里
 ///   读到**未定义值** ⇒ ⇒ 「双形态逐拍等价」实际只覆盖了部分输入面。
-///   （`uart_rx` 恒 1 = 空闲高 · `timer_irq` 恒 0 = 零消费端口 · ADR-073 事实⑭）
+///   （`uart_rx` 恒 1 = 空闲高）
+/// ⚠️ 2026-11-21：根自有 `ch_in` 由 8 个 → 7 个（删掉零消费的 `timer_irq` 占位端口
+///   · 台账 id=27 · ADR-074 §7.7 裁决 = 删）。
 std::vector<ch::hier_eq::DrivenInput> make_inputs(axi4::example::AxiSocTop &root) {
     std::vector<ch::hier_eq::DrivenInput> in;
     // ⚠️ MUST 用 `set_input_value`（`<<=` 会把端口变成内部驱动 ⇒ 假分歧）
@@ -175,9 +179,6 @@ std::vector<ch::hier_eq::DrivenInput> make_inputs(axi4::example::AxiSocTop &root
     in.push_back({"top.uart_rx", [&root](ch::Simulator &sim, std::uint64_t v) {
                       sim.set_input_value(root.io().uart_rx, v & 1);
                   }});
-    in.push_back({"top.timer_irq", [&root](ch::Simulator &sim, std::uint64_t v) {
-                      sim.set_input_value(root.io().timer_irq, v & 1);
-                  }});
     return in;
 }
 
@@ -201,7 +202,7 @@ std::vector<ch::hier_eq::Observation> make_observations(axi4::example::AxiSocTop
 }
 
 /// ⚠️ 顺序 MUST 与 `make_inputs()` 一致：
-///   rst_n · start · write · addr · wdata · gpio_in · uart_rx · timer_irq
+///   rst_n · start · write · addr · wdata · gpio_in · uart_rx
 std::vector<std::vector<std::uint64_t>> make_stimulus() {
     const std::uint64_t gpio_a = 0x5A;
     const std::uint64_t gpio_b = 0xA5;
@@ -209,22 +210,21 @@ std::vector<std::vector<std::uint64_t>> make_stimulus() {
     const std::uint64_t gpio_data_in = 0x00000004;
     const std::uint64_t idle = 0;
     const std::uint64_t uart_idle = 1;  // UART 空闲高（无帧）
-    const std::uint64_t no_irq = 0;     // `timer_irq` 零消费（ADR-073 事实⑭）
     return {
-        /* 0  */ {1, 1, 1, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},  // 写事务：发起
-        /* 1  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},  // 保持 payload
-        /* 2  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},
-        /* 3  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},
-        /* 4  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle, no_irq},  // 等写完成 ⇒ gpio_out 变
-        /* 5  */ {1, 1, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},         // 读事务 #1：发起
-        /* 6  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},         // 保持 addr
-        /* 7  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},
-        /* 8  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle, no_irq},         // 等读完成 ⇒ rdata = 0x5A
-        /* 9  */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 改 gpio_in ⇒ 让 rdata 能再变
-        /* 10 */ {1, 1, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 读事务 #2：发起
-        /* 11 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 保持 addr
-        /* 12 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},
-        /* 13 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle, no_irq},         // 等读完成 ⇒ rdata = 0xA5
+        /* 0  */ {1, 1, 1, 0x00000000, gpio_data_out, gpio_a, uart_idle},  // 写事务：发起
+        /* 1  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle},  // 保持 payload
+        /* 2  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle},
+        /* 3  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle},
+        /* 4  */ {1, 0, 0, 0x00000000, gpio_data_out, gpio_a, uart_idle},  // 等写完成 ⇒ gpio_out 变
+        /* 5  */ {1, 1, 0, gpio_data_in, idle, gpio_a, uart_idle},         // 读事务 #1：发起
+        /* 6  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle},         // 保持 addr
+        /* 7  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle},
+        /* 8  */ {1, 0, 0, gpio_data_in, idle, gpio_a, uart_idle},         // 等读完成 ⇒ rdata = 0x5A
+        /* 9  */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle},         // 改 gpio_in ⇒ 让 rdata 能再变
+        /* 10 */ {1, 1, 0, gpio_data_in, idle, gpio_b, uart_idle},         // 读事务 #2：发起
+        /* 11 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle},         // 保持 addr
+        /* 12 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle},
+        /* 13 */ {1, 0, 0, gpio_data_in, idle, gpio_b, uart_idle},         // 等读完成 ⇒ rdata = 0xA5
     };
 }
 

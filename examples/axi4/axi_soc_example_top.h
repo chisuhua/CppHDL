@@ -176,9 +176,9 @@ public:
         // UART 物理接口
         ch_out<ch_bool> uart_tx{"uart_tx"};
         ch_in<ch_bool> uart_rx{"uart_rx"};
-
-        // 根自有的 IRQ 输入端口（**零消费** —— DUT 从不读它 · ADR-073 事实⑭）
-        ch_in<ch_bool> timer_irq{"timer_irq"};
+        // ⚠️ 原根自有的 `timer_irq` 输入端口（**零消费**死端口 · ADR-073 事实⑭）
+        //    已于 2026-11-21 **物理删除**（台账 id=27 · ADR-074 §7.7 裁决 = 删
+        //    ⇒ 用户 2026-11-20 追认）⇒ ⇒ 根自有 `__io` = 11（7 in + 4 out）· 顶层端口 = 13。
     )
 
     AxiSocTop(ch::Component *parent = nullptr, const std::string &name = "axi_soc_top")

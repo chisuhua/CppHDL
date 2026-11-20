@@ -21,7 +21,6 @@ module tb_axi_soc_example;
     // top_rst_n      input   1      data
     // top_gpio_in    input   8      data
     // top_uart_rx    input   1      data
-    // top_timer_irq  input   1      data
     // top_rdata      output  32     data
     // top_done       output  1      data
     // top_gpio_out   output  8      data
@@ -37,7 +36,6 @@ module tb_axi_soc_example;
     logic top_rst_n = 0;
     logic [7:0] top_gpio_in = 0;
     logic top_uart_rx = 0;
-    logic top_timer_irq = 0;
     logic [31:0] top_rdata;
     logic top_done;
     logic [7:0] top_gpio_out;
@@ -54,7 +52,6 @@ module tb_axi_soc_example;
         .top_rst_n(top_rst_n),
         .top_gpio_in(top_gpio_in),
         .top_uart_rx(top_uart_rx),
-        .top_timer_irq(top_timer_irq),
         .top_rdata(top_rdata),
         .top_done(top_done),
         .top_gpio_out(top_gpio_out),
@@ -80,7 +77,6 @@ module tb_axi_soc_example;
         // ── scenario: bringup_and_gpio_write  (anchor: soc-example) ──
         top_gpio_in = 8'd90;
         top_uart_rx = 1'd1;
-        top_timer_irq = 1'd0;
         top_rst_n = 1'd0;
         repeat (2) @(posedge default_clock);
         #1;

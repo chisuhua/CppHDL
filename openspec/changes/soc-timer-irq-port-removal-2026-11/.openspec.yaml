@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-21
+# 本 change **无 spec 变更**：它是**台账 id=27 裁决**（`docs/adr/ADR-074-rtl-verification-single-source.md`
+# §7.7 + 2026-11-20 用户追认）的**实施侧** —— 「SoC 顶层删掉零消费的 `timer_irq` 占位端口」
+# 这件事的判据本体在 ADR-074 §7.7 与残留登记表 `.rddf/checks/arch-residual-registry.md`
+# 的 **id=27** 行 ⇒ ⇒ 既有 capability `rtl-soc-output` 的 Requirement 描述的是**形态**
+# （「顶层端口数 MUST 等于 框架基础设施数 + 根组件自有 `__io` 数」）⇒ ⇒ **不枚举**具体端口
+# ⇒ ⇒ 删掉一个根自有端口**不改变**任何 Requirement 的判据 ⇒ ⇒ 不新增也不修改任何 Requirement。
+# ⇒ 归档时用 `openspec archive soc-timer-irq-port-removal-2026-11 --skip-specs`
+skip_specs: true

@@ -25,9 +25,9 @@
 
 ## axi_soc_example {#soc-example}
 
-### 1. 顶层端口表（**14** 个 = 框架 2 + 根自有 12）
+### 1. 顶层端口表（**13** 个 = 框架 2 + 根自有 11）
 
-⚠️ **口径（2026-11-17 · ADR-075）**：根 `__io` 的 12 个端口**全部具名**
+⚠️ **口径（2026-11-17 · ADR-075）**：根 `__io` 的 11 个端口**全部具名**
 ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>` ⇒ ⇒ **不需要**「按声明顺序 + 位宽序列反推编号」
 ⇒ ⇒ 下表是**直接登记**（权威 = `manifest.port_table[]`，与产物端口表**同源**）。
 
@@ -42,14 +42,17 @@
 | 7 | `top_rst_n` | in | 1 | `rst_n` | **AXI 级低有效**复位（透传给 gpio/matrix/uart） |
 | 8 | `top_gpio_in` | in | 8 | `gpio_in` | GPIO 外部输入 |
 | 9 | `top_uart_rx` | in | 1 | `uart_rx` | UART 接收（**空闲高**） |
-| 10 | `top_timer_irq` | in | 1 | `timer_irq` | **零消费死端口**（ADR-073 事实⑭）⇒ TB 须接 `0` |
-| 11 | `top_rdata` | out | 32 | `rdata` | 读数据 |
-| 12 | `top_done` | out | 1 | `done` | 完成标志 ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
-| 13 | `top_gpio_out` | out | 8 | `gpio_out` | GPIO 输出 |
-| 14 | `top_uart_tx` | out | 1 | `uart_tx` | UART 发送（**空闲高**） |
+| 10 | `top_rdata` | out | 32 | `rdata` | 读数据 |
+| 11 | `top_done` | out | 1 | `done` | 完成标志 ⚠️ **粘滞**（首笔后恒 1）⇒ **禁**用它判完成 |
+| 12 | `top_gpio_out` | out | 8 | `gpio_out` | GPIO 输出 |
+| 13 | `top_uart_tx` | out | 1 | `uart_tx` | UART 发送（**空闲高**） |
 
-⚠️ **14 个端口 MUST 全部连接**（否则严格 flags 下 `%Warning-PINMISSING` **致命** ——
+⚠️ **13 个端口 MUST 全部连接**（否则严格 flags 下 `%Warning-PINMISSING` **致命** ——
 仓内实证）。
+
+⚠️ **2026-11-21**：原第 10 行 `top_timer_irq`（**零消费死端口** · ADR-073 事实⑭）已
+**物理删除**（台账 id=27 · ADR-074 §7.7 裁决 = 删 ⇒ 用户 2026-11-20 追认）⇒ ⇒
+端口数 14 → 13 · 根自有 `__io` 12 → 11。
 
 ### 2. 冻结的产物 module 期望集（**手推** · 禁从成层声明处派生）
 
@@ -149,7 +152,6 @@ matrix 的 `m0 → s1` 路由 ⇒ ⇒ uart 才收得到。
 |---|---|---|
 | `gpio_in` | `8'h5A` | 场景 ② 的被读值 ⇒ 非零才能证明读通道真的取到数据 |
 | `uart_rx` | `1'b1` | **空闲高**（`axi_uart.h:220`：未发送时 `uart_tx` 恒高 ⇒ 接收侧同理）⇒ 拉低会被当成起始位 |
-| `timer_irq` | `1'b0` | **零消费死端口** ⇒ 接 0（不接 ⇒ PINMISSING 致命） |
 | `rst_n` | `1'b1`（初始）→ 场景④ 拉 0 | 低有效 |
 | `default_reset` | `1'b1` → **negedge** 释放 | 通用前提 |
 
@@ -168,7 +170,7 @@ VERIF-CHECKS: 15
 
 | scenario | 判据出处（本节的哪一段） |
 |---|---|
-| `bringup_and_gpio_write` | §4 场景① + §5 输入常量（`gpio_in` / `uart_rx` / `timer_irq`） |
+| `bringup_and_gpio_write` | §4 场景① + §5 输入常量（`gpio_in` / `uart_rx`） |
 | `gpio_read_data_in` | §4 场景② + §3 地址映射（`0x04` = GPIO `DATA_IN`） |
 | `uart_tx_frame_8n1` | §4 场景③（帧格式 + 位中点 = 帧起点 + 8 + 16×k） |
 | `low_active_reset_clears_gpio` | §4 场景④（`rst_n` 拉低 ⇒ GPIO 清零 + `uart_tx` 空闲高） |

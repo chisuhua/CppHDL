@@ -1,3 +1,32 @@
+## 2026-11-21 — SoC 顶层删掉零消费的 `timer_irq` 占位端口（台账 id=27 落地）
+
+**是什么**：`examples/axi4/axi_soc_example_top.h` 的根 `__io` 里有一个 `timer_irq` 输入端口
+⇒ ⇒ **DUT 从不读它**（全仓 grep：声明 1 命中 · 消费者 0 命中）⇒ ⇒ 它**在顶层端口面里但没有
+语义** ⇒ ⇒ 下游会误以为「接上就能收中断」⇒ ⇒ 且 TB 还被迫为它接一个常量
+（否则 verilator 严格 flags 下 `%Warning-PINMISSING` 致命）⇒ ⇒ **端口存在**被误当成
+**端口有义务**。
+
+⇒ ⇒ 架构裁决（`ADR-074` §7.7 · 台账 **id=27** · `ext_clk` 同型先例 · 用户 **2026-11-20**
+追认）= **删除该占位端口** ⇒ ⇒ 本条 = 该裁决的实施。
+
+**改了什么**
+
+- **设计**：`examples/axi4/axi_soc_example_top.h` 删 `ch_in<ch_bool> timer_irq` ⇒ ⇒
+  根自有 `__io` **12 → 11**（8 in + 4 out → **7 in + 4 out**）⇒ ⇒ 顶层端口 **14 → 13**。
+- **验证面**：`.verif` 删 `SET timer_irq 0` · TB 的 `make_inputs()` 删该输入项（根 `ch_in`
+  全集 8 → 7）· `make_stimulus()` 每行删最后一列（14 行）· `kExpectedTopPorts` 14 → 13 ·
+  `tb_axi_soc_example.sv` **由 `.verif` 重新渲染**（单一真相源 ⇒ 禁手改生成物）。
+- **期望源 / 清单**：`.rddf/checks/soc-rtl-expectations.md`（端口表删行 10 + 重编号 +
+  输入常量 + 场景出处 + 盲区段）· `.rddf/checks/examples-rtl-sim-targets.tsv`（SoC 行 note）。
+- **残留登记**：台账 **id=27** 与残留登记表**两侧同批**转「已收口」（闭口证据 = 归档 change）。
+
+**行为不变**：删的是**零消费**端口 ⇒ ⇒ 四个场景的期望值**逐字不变**
+（`VERIF-CHECKS: 15` / `RESULT: checks=15 fails=0` 不变）⇒ ⇒ 产物形态判据
+（module 集 5 · lint · 双形态逐拍等价）全绿。
+
+**⚠️ 不动库层 `AxiLiteUart::irq`**（台账 **id=26** 的裁决 = **不删**：它是 in-force spec
+`dual-backend-test-coverage` 强制的行为覆盖载体）⇒ ⇒ 两者语义**不可混用**。
+
 ## 2026-11-20 — stream_arbiter 示例进 RTL 产品面（stream 目录 4/4 · 并修掉一处 codegen 宽度缺陷）
 
 **是什么**：`examples/stream/` 的 arbiter demo 此前是「`main()` + 内联激励 + `std::cout`
