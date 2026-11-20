@@ -28,8 +28,8 @@
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
 | B0 | ⚠️ **实施中发现的两条「前置序列」差异**（**非 `WAIT` 引入** · 本 change **不修** ⇒ 登记待裁）：① 渲染式 TB 的 `write_tb_reset_pulse` 末尾多一个 `@(posedge clk)`（`src/rtl_emit/tb_stub.cpp:146`），解释器的 `apply_frame_reset` 只做 `sim.reset()`（**无该沿**）⇒ 依赖「复位后**绝对**拍数」的场景两端差 **1 拍**；② `RESET` 原语的**去断言与最后一个 `@(posedge)` 同拍**（`verif_render.cpp` 的 `repeat (n) @(posedge); name = <deassert>;` **无 `#1`**）⇒ 与 DUT 的 `always_ff` **竞态**（Verilator 实测「该沿已采样到去断言」）⇒ 与解释器差 1 拍。**处置** = 本 change 的夹具用 `SET` + `TICK` 绕开（`TICK` 末尾带 `#1`）⇒ 修哪一侧（解释器补 1 拍 / 渲染器去掉该沿 / `RESET` 加 `#1`）属**语义决策** ⇒ 交 architect（改渲染器文本会破 AC15 的「Lite 产物逐字节不变」） | `src/rtl_emit/tb_stub.cpp` · `src/rtl_emit/verif_render.cpp` · `src/rtl_emit/verif_run.cpp` | 差异已登记（待 architect 裁决） | ☑ |
-| B1 | **运行期同结论比对夹具**：同一份 `.verif` ⇒ IR 解释器 + **渲染 TB 实跑** ⇒ 逐条 `(check_id, PASS/FAIL)` **对**比对相等（⚠️ **不是**静态 id 集合比对 ⇒ 那是现状且对时序敏感原语**结构性失明**）⇒ ⇒ **载体 = ctest**（新测试文件 · 打 `verilator_e2e` 标签）⇒ ⇒ ⚠️ 比对粒度 = `(check_id, 结论)` 对（**不是**原始文本 ⇒ 两端的 FAIL 文案本就不同） | `tests/test_verif_wait_level.cpp`（新 · 4 用例/50 断言 · `base;verilator_e2e` 标签） | AC4 | ☑ |
-| B2 | **4 条时序判别性构例**：① 首拍即成立 ⇒ 期望「**命中后仍推进 ≥1 拍**」（⚠️ **不是**「立即返回」⇒ 「入口即成立 ⇒ MUST 用 `TICK(n)`」是**规范义务**，不是 `WAIT` 的行为）② 目标在窗口**最后一拍**才成立 ⇒ PASS ③ 命中**恰在第 `max` 拍** ⇒ PASS · 第 `max+1` 拍 ⇒ **FAIL** 且点名 `check_id` ④ 窗口内**从未**成立 ⇒ FAIL 且点名 | 同上 | AC5 · AC9 · AC11 · AC13 | ☑ |
+| B1 | **运行期同结论比对夹具**：同一份 `.verif` ⇒ IR 解释器 + **渲染 TB 实跑** ⇒ 逐条 `(check_id, PASS/FAIL)` **对**比对相等（⚠️ **不是**静态 id 集合比对 ⇒ 那是现状且对时序敏感原语**结构性失明**）⇒ ⇒ **载体 = ctest**（新测试文件 · 打 `verilator_e2e` 标签）⇒ ⇒ ⚠️ 比对粒度 = `(check_id, 结论)` 对（**不是**原始文本 ⇒ 两端的 FAIL 文案本就不同） | `tests/test_verif_wait_level.cpp`（新 · 4 用例 · `base;verilator_e2e` 标签 · **7 条构例**） | AC4 | ☑ |
+| B2 | **4 条时序判别性构例**：① 首拍即成立 ⇒ 期望「**命中后仍推进 ≥1 拍**」（⚠️ **不是**「立即返回」⇒ 「入口即成立 ⇒ MUST 用 `TICK(n)`」是**规范义务**，不是 `WAIT` 的行为）② 目标在窗口**最后一拍**才成立 ⇒ PASS ③ 命中**恰在第 `max` 拍** ⇒ PASS · 第 `max+1` 拍 ⇒ **FAIL** 且点名 `check_id` ④ 窗口内**从未**成立 ⇒ FAIL 且点名 | 同上（**7 条构例**：AC11 的 max / max+1 两条 · AC5 的首拍即成立 + 窗口最后一拍 + 从未成立 · AC13 用紧跟 `EXPECT val 1` 钉「命中后**恰好推进 1 拍**」· AC9 用 1 位 `p3=(cnt==3)` 钉「命中拍 = 第 3 拍」（`max=3` PASS / `max=2` FAIL ⇒ 判别力已证）· 缺省向后兼容） | AC5 · AC9 · AC11 · AC13 | ☑ |
 | B3 | **N>1 端口的 high/low 构例** ⇒ ⇒ 钉死「`high` = 非零」在多位端口上的行为（**不是**全 1） | 同上 | AC10 | ☑ |
 | B4 | **变异自证（自动化）**：变异**投在夹具的 `.verif` 输入上**（改 `WAIT` 的 `max` ⇒ ⇒ 边界构例必红）⇒ ⇒ **不动实现代码** ⇒ ⇒ 可重跑 ⇒ ⇒ 优于「改解释器一行」（与「还原源码 ≠ 复原」同型 ⇒ 需重建 ⇒ 成本高且易留污染） | 同上 | AC5 | ☑ |
 | B5 | **库层 `run_verif` helper 下沉**：把 Lite 侧内联的「默认模式 `run_verif` 七步序列」下沉为库层 helper ⇒ ⇒ Lite 改调它 ⇒ ⇒ ⚠️ helper **MUST NOT 返回 `RESULT:` 结论行**（结论行由各 example 自己打印 ⇒ 否则双权威）⇒ ⇒ ⚠️ 落点若为**新公开头** ⇒ MUST 登记 `.rddf/checks/public-api-surface.md` | `include/rtl_emit/verif.h` + `src/rtl_emit/verif_run.cpp`（`run_verif_file`）· `examples/axi4/tb_axi4_lite_example.cpp`（改调 · RESULT 仍 113/0） | AC7 | ☑ |
@@ -74,7 +74,7 @@
 | A1 | `grep -c "level" include/rtl_emit/verif.h` | ≥ 1（新增字段） |
 | A2 | 负向：`WAIT p 1 10` / `WAIT p HIGH 10` ⇒ 扫描器退出码 | **非 0** + 消息含 `level` |
 | A3–A4 | 运行期比对夹具 | 逐条 `(check_id, PASS/FAIL)` 相等 |
-| B2 | 4 条构例 | 各自的期望成立（含 max 拍 PASS / max+1 拍 FAIL） |
+| B2 | 7 条构例 | 各自的**手推**期望成立（含 max 拍 PASS / max+1 拍 FAIL / 命中拍 = 第 3 拍） |
 | B4 | 变异（改夹具 `.verif` 的 `max`） | 边界构例**必红** |
 | B5 | `grep -c "run_verif" examples/axi4/tb_axi4_lite_example.cpp` | ≥ 1（改调 helper）· helper 内 **无** `RESULT:` |
 | C1 | `bash scripts/verify_test_counts.sh` | 锚点与实测一致 |

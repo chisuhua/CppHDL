@@ -17,6 +17,8 @@
 // ⚠️ 夹具的时序（**手推**）：`cnt` 复位后 0，每拍 +1 ⇒ 第 k 拍 `cnt == k`
 //   · `sig = (cnt >= 8) & (cnt < 16)` ⇒ 第 1..7 拍 0 · 第 8..15 拍 1 · 第 16 拍起 0
 //   · `val = cnt`（8 位）⇒ 第 1 拍 = 1（**非零但非全 1** ⇒ 用于判别 `high` 的定义）
+//   · `p3 = (cnt == 3)`（1 位）⇒ **只有第 3 拍为高** ⇒ 用于钉死「命中拍 = 第 k 拍」
+//     （AC9：若命中被推迟到第 4 拍，`WAIT p3 high 3` 必 FAIL ⇒ 该构例有判别力）
 
 #include "catch_amalgamated.hpp"
 
@@ -42,7 +44,8 @@ namespace {
 
 class WaitLevelDut : public ch::Component {
 public:
-    __io(ch_in<ch_bool> rst_n{"rst_n"}; ch_out<ch_bool> sig{"sig"}; ch_out<ch_uint<8>> val{"val"};)
+    __io(ch_in<ch_bool> rst_n{"rst_n"}; ch_out<ch_bool> sig{"sig"}; ch_out<ch_bool> p3{"p3"};
+         ch_out<ch_uint<8>> val{"val"};)
 
     ch_reg<ch_uint<8>> cnt{0_d, "cnt"};
 
@@ -53,9 +56,10 @@ public:
 
     void describe() override {
         // `rst_n` 低有效 ⇒ 计数器**清零**（`next = 0`，不是「保持」—— 保持会把前置序列的
-        // 1 拍偏移带进场景）⇒ 场景用 `RESET rst_n low N` 显式对齐起点
+        // 1 拍偏移带进场景）⇒ 场景用 `SET` + `TICK` 显式对齐起点
         cnt->next = select(io().rst_n, cnt + 1_d, ch_uint<8>(0_d));
         io().sig = (cnt >= 8_d) & (cnt < 16_d);
+        io().p3 = (cnt == 3_d);
         io().val = cnt;
     }
 };
@@ -229,20 +233,40 @@ Pairs run_rendered(const std::string &text, const std::string &tag, std::string 
 struct Case {
     const char *name;   // 构例名（同时是工作目录名）
     const char *body;   // `.verif` 场景体
-    const char *want;   // **手推**期望结论（PASS / FAIL）
+    const char *want;   // **手推**期望结论（按顺序空格分隔：`PASS` / `FAIL`）
 };
 
-// 6 条构例 —— 覆盖 AC5/AC9/AC10/AC11/AC13 与向后兼容
-// ⚠️ 每条都带 `kPrelude`（显式复位）⇒ 期望拍数从**复位释放后**起算（手推）：
+// 7 条构例 —— 覆盖 AC5/AC9/AC10/AC11/AC13 与向后兼容
+// ⚠️ 每条都带 `kPrelude`（显式对齐起点）⇒ 期望拍数从**释放复位后**起算（手推）：
 //   第 k 次 `WAIT` 迭代后 `cnt == k`
 const Case kCases[] = {
-    {"high_hit_at_max", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig high 8\n", "PASS"},   // 恰在第 max 拍命中
-    {"high_miss_max_minus_1", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig high 7\n", "FAIL"}, // max 少 1 ⇒ 必红
-    {"low_entry_already_low", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig low 8\n", "PASS"}, // 入口即低 ⇒ 第 1 拍命中
-    {"high_nonzero_not_all_ones", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT val high 1\n", "PASS"}, // val=1 ⇒ 非零
-    {"low_nonzero_miss", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT val low 1\n", "FAIL"},   // val=1 ⇒ low 不命中
-    {"default_level_backcompat", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig 8\n", "PASS"}, // 缺省 = 非零
+    // AC11 ①：命中**恰在第 max 拍** ⇒ PASS
+    {"high_hit_at_max", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig high 8\n", "PASS"},
+    // AC11 ②：命中在第 max+1 拍 ⇒ FAIL（sig 第 8 拍才为高，max=7 ⇒ 窗口内从未成立）
+    {"high_miss_max_minus_1", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig high 7\n", "FAIL"},
+    // AC5 ① / AC13：入口即低 ⇒ 第 1 次迭代即命中；**紧跟 `EXPECT val 1`** 证明
+    //   「命中后仍推进**恰好 1 拍**」（不是 0 拍、也不是 2 拍）
+    {"low_entry_already_low",
+     "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig low 8\nEXPECT val 1\n", "PASS PASS"},
+    // AC10：8 位端口 val=1（**非零但非全 1**）⇒ `high` 命中（若 high = 全 1（255）必 FAIL）
+    {"high_nonzero_not_all_ones", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT val high 1\n", "PASS"},
+    {"low_nonzero_miss", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT val low 1\n", "FAIL"},
+    // 向后兼容：缺省 level ≡ 非零
+    {"default_level_backcompat", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT sig 8\n", "PASS"},
+    // AC9：1 位信号 `p3` **只在第 3 拍**为高 ⇒ `WAIT p3 high 3` 恰在 max 拍命中 ⇒ PASS
+    //   ⚠️ 若命中被推迟到第 4 拍 ⇒ 该构例 FAIL ⇒ 判别「命中拍 = 第 k 拍」
+    {"high_hits_at_third_tick", "SET rst_n 0\nTICK 2\nSET rst_n 1\nWAIT p3 high 3\n", "PASS"},
 };
+
+std::vector<std::string> split_ws(const char *s) {
+    std::vector<std::string> out;
+    std::istringstream ss(s);
+    std::string tok;
+    while (ss >> tok) {
+        out.push_back(tok);
+    }
+    return out;
+}
 
 } // namespace
 
@@ -319,8 +343,15 @@ TEST_CASE("verif-wait-level: 两端（IR 解释器 / 渲染 TB）逐条结论相
         REQUIRE(rerr.empty());
 
         // ① **手推**期望（两端一致**不是**正确性证据 ⇒ 必须另有独立期望）
-        REQUIRE(ip.size() == 1);
-        REQUIRE(ip[0].second == c.want);
+        const std::vector<std::string> want = split_ws(c.want);
+        REQUIRE(ip.size() == want.size());
+        for (std::size_t i = 0; i < want.size(); ++i) {
+            INFO("check index: " << i);
+            // check_id MUST **按序命名**（`s#0` / `s#1` …）⇒ ⇒ FAIL 行能**点名**是哪条断言
+            // （AC5 ③ / AC11 ② 的「点名 check_id」）
+            REQUIRE(ip[i].first == "s#" + std::to_string(i));
+            REQUIRE(ip[i].second == want[i]);
+        }
         // ② 两端**逐条**（id, 结论）相等
         REQUIRE(rp == ip);
     }
@@ -348,6 +379,8 @@ TEST_CASE("verif-wait-level: 变异（max 8→7）⇒ 边界构例转红（两�
 
     REQUIRE(i_base.size() == 1);
     REQUIRE(i_mut.size() == 1);
+    REQUIRE(i_base[0].first == "s#0");
+    REQUIRE(i_mut[0].first == "s#0");
     REQUIRE(i_base[0].second == "PASS"); // 第 8 拍恰好命中
     REQUIRE(i_mut[0].second == "FAIL");  // 第 7 拍还没到
     REQUIRE(r_base == i_base);
