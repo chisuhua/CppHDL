@@ -794,3 +794,98 @@ AXI4-Lite slave 任一处出错 ⇒ 读回值 ≠ 0xAB ⇒ ⇒ 断言 4 转红 �
 
 ⇒ ⇒ **两者不等是预期**（SoC 行同型）⇒ ⇒ ⚠️ MUST NOT 用一侧代用另一侧
 （ADR-074 §7.6 的 AC-R13′-2 口径）⇒ ⇒ 护栏 ⑨ 判 C++ 侧（`interp_checks`）、⑥ 判 TB 侧（`min_checks`）。
+
+---
+
+## tb_stream_mux_demo {#stream-mux-demo}
+
+### 上游语义（**spec-derived** · capability `chlib-stream-ready-ownership`）
+
+被测单元 = `examples/stream/stream_mux_top.h`（`chlib::stream_mux<4, ch_uint<8>>` 的具名端口包装）。
+`stream_mux` 的契约（组合 0-cycle，无内部状态）：
+
+| 端口 | 语义 |
+|---|---|
+| `out_payload` | `in[select].payload`（多路选择的定义） |
+| `out_valid` | `in[select].valid`（**只有被选中路**的 valid 能到达输出） |
+| `in[i].ready` | `(select == i) & out_ready`（反压**只**扇出到被选中路） |
+
+### impl-contract（本实现的取值）
+
+- **框架复位**把全部数据输入置 0（`run_verif` 的 `apply_frame_reset` 与渲染式 TB 的
+  `write_tb_reset_pulse` 同构）⇒ ⇒ 复位后 `select=0` / 四路 `valid=0` / `out_ready=0`。
+- 组合逻辑 ⇒ ⇒ `SET → SETTLE → EXPECT` 即可观测（**无需** `TICK`）。
+- `select` 宽 2 bit 且 `N = 4` ⇒ ⇒ **不存在**越界选择。
+
+### 判据
+
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 复位后 `out_valid` / 四路 `in*_ready` | impl-contract | 全 0（输入全 0 ⇒ 选中的 `valid`=0 · `out_ready`=0） |
+| 2 | `select=0..3` 时 `out_payload` | spec-derived | 依次 = `0x11` / `0x22` / `0x33` / `0x44` |
+| 3 | 四路都有效时 `out_valid` | spec-derived | 1 |
+| 4 | `out_ready=1` 时 `in[i].ready` | spec-derived | 仅 `i == select` 为 1，其余为 0 |
+| 5 | `out_ready=0` 时 `in[select].ready` | spec-derived | 0（反压生效） |
+| 6 | `out_ready=0` 时 `out_valid` | spec-derived | 仍为 1（valid 与 ready 独立） |
+| 7 | 未被选中路 `valid=1`、被选中路 `valid=0` ⇒ `out_valid` | spec-derived | 0（valid 不外泄） |
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 24** ⇒ ⇒ 三方等式：本行 == `tb_stream_mux_demo.verif` 的
+静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 24
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_defaults` | 判据 1（impl-contract） |
+| `payload_follows_select` | 判据 2 · 3 · 4 |
+| `backpressure_only_selected_ready` | 判据 5 · 6 |
+| `unselected_valid_does_not_leak` | 判据 7 |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 18 根** = 框架 2（`default_clock` · `default_reset`）+ 根自有 **16**
+  （4 路 × {payload[7:0], valid, ready} + `select[1:0]` + {out_payload[7:0], out_valid, out_ready}）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_stream_mux_demo.cpp` 默认模式）= **24** 条 ⇒ ⇒ `interp_checks = 24`。
+- TB 侧（Verilog 产物，`tb_stream_mux_demo.sv`）= **24** 条 ⇒ ⇒ `min_checks = 24`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**
+  （护栏 ⑨ 判 C++ 侧、⑥ 判 TB 侧 ⇒ ⇒ 禁一侧代另一侧）。
+
+#### scenario: reset_defaults
+
+框架复位后：`out_payload == 0` · `out_valid == 0` · `in0..in3_ready == 0`（6 条）。
+
+#### scenario: payload_follows_select
+
+四路 payload 分别为 `0x11/0x22/0x33/0x44`、四路 `valid=1`、`out_ready=1`；
+`select` 依次取 0/1/2/3 ⇒ 输出跟随选中路，且只有选中路 `ready=1`（10 条）。
+
+#### scenario: backpressure_only_selected_ready
+
+`select=2`、`in2.valid=1`：`out_ready=0` ⇒ `in2_ready=0` 且 `out_valid=1`；
+`out_ready=1` ⇒ `in2_ready=1` 且 `in0_ready=0`（5 条）。
+
+#### scenario: unselected_valid_does_not_leak
+
+`select=1`、`in1.valid=0`、`in0.valid=1` ⇒ `out_valid=0`、`in1_ready=1`；
+`in1.valid=1` ⇒ `out_valid=1`（3 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测 | 抓的是 |
+|---|---|---|---|
+| M1 | `assign top_out_valid = 1'b0;`（valid 通路断） | ✅ `fails=3`（`payload_follows_select#1` · `backpressure_only_selected_ready#1` · `unselected_valid_does_not_leak#2`） | valid 选择语义 |
+| M2 | `assign top_in0_ready = 1'b1;`（反压扇出断） | ✅ `fails=4`（`reset_defaults#2` · `payload_follows_select#6` · `backpressure_only_selected_ready#2/#4`） | ready 扇出规则 |
+
+⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=24 fails=0` ⇒ ⇒ 变异未污染产物。
+⚠️ 每条变异 MUST **先确认仍能编译**（两条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。

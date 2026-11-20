@@ -58,7 +58,7 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     phase1c_test
 
     # PHASE: Phase 3: Stream 组件
-    stream_mux_demo
+    tb_stream_mux_demo
     stream_demux_demo
     stream_arbiter_demo
     stream_fork_demo

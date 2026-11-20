@@ -1,0 +1,113 @@
+# examples/stream/tb_stream_mux_demo.verif
+#
+# **Stream Mux 示例的验证源**（ADR-074 D1 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+# ⚠️ 时序锚点：SET 在「沿后采样窗」内生效；EXPECT 读「最近一次结算之后」的值
+#    ⇒ ⇒ `SET → EXPECT` MUST 先 `SETTLE`（扫描器静态强制）。
+#
+# 被测语义（capability `chlib-stream-ready-ownership` · `stream_mux`）：
+#   · `out_payload` = `in[select].payload`（组合 0-cycle）
+#   · `out_valid`   = `in[select].valid`
+#   · `in[i].ready` = `(select == i) & out_ready`
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#stream-mux-demo
+@tb-module tb_stream_mux_demo
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：框架复位后的默认态（impl-contract：框架复位把全部数据输入置 0）
+#   · select=0 / out_ready=0 / 四路 valid=0 ⇒ 输出无效、四路 ready 全 0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_defaults
+@anchor stream-mux-demo
+
+SET select 0
+SETTLE
+EXPECT out_payload 0
+EXPECT out_valid 0
+EXPECT in0_ready 0
+EXPECT in1_ready 0
+EXPECT in2_ready 0
+EXPECT in3_ready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：payload / valid 跟随 select（spec-derived：多路选择的定义）
+#   · 四路都有效且 out_ready=1 ⇒ 输出 = 被选中路的 payload，且只有被选中路 ready=1
+# ══════════════════════════════════════════════════════════════════════════
+@scenario payload_follows_select
+
+SET in0_payload 0x11
+SET in1_payload 0x22
+SET in2_payload 0x33
+SET in3_payload 0x44
+SET in0_valid 1
+SET in1_valid 1
+SET in2_valid 1
+SET in3_valid 1
+SET out_ready 1
+
+SET select 0
+SETTLE
+EXPECT out_payload 0x11
+EXPECT out_valid 1
+EXPECT in0_ready 1
+EXPECT in1_ready 0
+
+SET select 1
+SETTLE
+EXPECT out_payload 0x22
+EXPECT in1_ready 1
+EXPECT in0_ready 0
+
+SET select 2
+SETTLE
+EXPECT out_payload 0x33
+
+SET select 3
+SETTLE
+EXPECT out_payload 0x44
+EXPECT in3_ready 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：反压只作用于被选中路（spec-derived：ready 扇出规则）
+#   · out_ready=0 ⇒ 被选中路 ready=0（其余本来也是 0）
+#   · 输出 valid 不受反压影响（valid 与 ready 独立）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario backpressure_only_selected_ready
+
+SET in2_payload 0x33
+SET in2_valid 1
+SET select 2
+SET out_ready 0
+SETTLE
+EXPECT in2_ready 0
+EXPECT out_valid 1
+EXPECT in0_ready 0
+
+SET out_ready 1
+SETTLE
+EXPECT in2_ready 1
+EXPECT in0_ready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：未被选中路的 valid 不外泄（spec-derived：valid 选择语义）
+#   · select=1 且 in1.valid=0、in0.valid=1 ⇒ out_valid MUST 为 0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario unselected_valid_does_not_leak
+
+SET in1_payload 0x22
+SET in1_valid 0
+SET in0_valid 1
+SET select 1
+SET out_ready 1
+SETTLE
+EXPECT out_valid 0
+EXPECT in1_ready 1
+
+SET in1_valid 1
+SETTLE
+EXPECT out_valid 1

@@ -419,7 +419,7 @@ ctest --output-on-failure
 #   **别一起删**；MCP 的用法表见全局 `~/.config/opencode/AGENTS.md`（本文件不复述）。
 
 # Run specific example
-./build/examples/stream/stream_mux_demo
+./build/examples/stream/tb_stream_mux_demo
 
 # RV32I 核的 RTL 交付 + Verilator 仿真环境（**一条命令**）
 #   ⇒ 生成扁平 + 层次化两种产物 → lint → 编译独立 TB → 运行

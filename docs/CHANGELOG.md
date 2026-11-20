@@ -1,3 +1,30 @@
+## 2026-11-20 — stream_mux 示例进 RTL 产品面（stream 目录的首个产品单元）
+
+**是什么**：`examples/stream/` 的 mux demo 此前是「`main()` + 内联激励 + `std::cout`
+比对」⇒ ⇒ 没有设计定义、没有 RTL 产物、期望值散在代码里。现在按 axi4 的同型形态
+产品化：设计定义 `stream_mux_top.h`（16 根具名端口）→ 激励驱动 `tb_stream_mux_demo.cpp`
+（默认 `.verif` 驱动 / `--emit-rtl` 发射）→ 验证源 `tb_stream_mux_demo.verif`
+（4 scenario / **24** 断言）→ 生成的独立 TB `tb_stream_mux_demo.sv`。
+
+**改了什么**
+
+- **新增** `examples/stream/stream_mux_top.h`：`chlib::stream_mux<4, ch_uint<8>>` 的
+  具名端口包装（4 路 × {payload, valid, ready} + `select[1:0]` + 输出流）⇒ ⇒
+  调用方先 `as_master()` 建字段节点，ready 链用 `<<=`（capability 契约）。
+- **改名 + 双模式** `stream_mux_demo.cpp` → `tb_stream_mux_demo.cpp`；默认模式只跑
+  `.verif`（`RESULT: checks=24 fails=0`），`--emit-rtl <dir>` 产出 `top.v` + `manifest.json`。
+- **清单登记**：`.rddf/checks/examples-rtl-sim-targets.tsv` 新增行（自发行 · `generated=yes` ·
+  `interp_checks=24` == `min_checks=24`）⇒ ⇒ `REGISTERED_TARGETS` **11 → 12**；
+  落选表删 `stream_mux_demo` 行 ⇒ ⇒ 守恒 `27 == 12 ∪ 15`。
+- **期望源**：`.rddf/checks/examples-rtl-expectations.md#stream-mux-demo`
+  （module 集 `{top}` · 顶层端口 **18** = 框架 2 + 根自有 16 · `VERIF-CHECKS: 24` + 4 个 scenario 锚点）。
+
+**说明**
+
+- `spec_checks = 18`（场景 2–4：选择语义 / ready 扇出 / valid 不外泄）；场景 1 的
+  「复位后默认态」属 impl-contract（框架复位置 0）。
+- demux / arbiter / fork **本次未做**（用户选定 mux 试点）⇒ ⇒ 仍留在落选表并带归位条件。
+
 ## 2026-11-20 — SoC 迁 `.verif`（R13 闭口 · 双载体消灭）
 
 **是什么**：`tb_axi_soc_example` 的验证语义此前有**两个物理载体** —— C++ 侧 2 条（写 `0xAB`）
