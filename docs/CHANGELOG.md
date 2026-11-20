@@ -1,3 +1,34 @@
+## 2026-11-20 — stream_demux 示例进 RTL 产品面（stream 目录第 2 个产品单元）
+
+**是什么**：`examples/stream/` 的 demux demo 此前是「`main()` + 内联激励 + `std::cout`
+比对」⇒ ⇒ 没有设计定义、没有 RTL 产物、期望值散在代码里。现在按 mux 的同型形态
+产品化：设计定义 `stream_demux_top.h`（16 根具名端口）→ 激励驱动 `tb_stream_demux_demo.cpp`
+（默认 `.verif` 驱动 / `--emit-rtl` 发射）→ 验证源 `tb_stream_demux_demo.verif`
+（4 scenario / **38** 断言）→ 生成的独立 TB `tb_stream_demux_demo.sv`。
+
+**改了什么**
+
+- **新增** `examples/stream/stream_demux_top.h`：`chlib::stream_demux<ch_uint<8>, 4>` 的
+  具名端口包装（输入流 + `select[1:0]` + 4 路输出流）⇒ ⇒ 调用方先 `as_master()` 建字段
+  节点，ready 链用 `<<=`，消费端用 `<<=` **覆盖**输出 ready 的默认驱动（形态 E · 单阶段）。
+- **改名 + 双模式** `stream_demux_demo.cpp` → `tb_stream_demux_demo.cpp`；默认模式只跑
+  `.verif`（`RESULT: checks=38 fails=0`），`--emit-rtl <dir>` 产出 `top.v` + `manifest.json`。
+- **清单登记**：`.rddf/checks/examples-rtl-sim-targets.tsv` 新增行（自发行 · `generated=yes` ·
+  `interp_checks=38` == `min_checks=38`）⇒ ⇒ `REGISTERED_TARGETS` **12 → 13**；
+  落选表删 `stream_demux_demo` 行 ⇒ ⇒ 守恒 `27 == 13 ∪ 14`。
+- **期望源**：`.rddf/checks/examples-rtl-expectations.md#stream-demux-demo`
+  （module 集 `{top}` · 顶层端口 **18** = 框架 2 + 根自有 16 · `VERIF-CHECKS: 38` + 4 个 scenario 锚点）。
+
+**说明**
+
+- `spec_checks = 32`（场景 2–4：分发语义 / ready 方向与隔离 / valid 只依赖 `in.valid`）；
+  场景 1 的「复位后默认态」属 impl-contract（框架复位置 0）。
+- ⚠️ **「越界 ⇒ 挡住上游」条在本设计不可达**（`select` 2 bit 且 `N = 4` ⇒ 恒在范围内）
+  ⇒ ⇒ **如实登记**在期望源段（不假装覆盖）。
+- demux 与 mux 的 **ready 方向相反**（demux = 消费端 ⇒ 上游；mux = 上游侧扇出）
+  ⇒ ⇒ 判据面不重叠 ⇒ ⇒ 不是重复覆盖。
+- arbiter / fork **本次未做**（各自独立 change）⇒ ⇒ 仍留在落选表并带归位条件。
+
 ## 2026-11-20 — stream_mux 示例进 RTL 产品面（stream 目录的首个产品单元）
 
 **是什么**：`examples/stream/` 的 mux demo 此前是「`main()` + 内联激励 + `std::cout`

@@ -1,0 +1,133 @@
+# examples/stream/tb_stream_demux_demo.verif
+#
+# **Stream Demux 示例的验证源**（ADR-074 D1 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+# ⚠️ 时序锚点：SET 在「沿后采样窗」内生效；EXPECT 读「最近一次结算之后」的值
+#    ⇒ ⇒ `SET → EXPECT` MUST 先 `SETTLE`（扫描器静态强制）。
+#
+# 被测语义（capability `chlib-stream-ready-ownership` 的「分流 / 分叉类」条 · ADR-056）：
+#   · `out[i].valid`   = `in.valid & (select == i)`
+#   · `out[i].payload` = `(select == i) ? in.payload : 0`
+#   · `in.ready`       = `in_range & out[select].ready`（消费端 ⇒ 上游）
+#   ⚠️ `select` 宽 2 bit 且 `N = 4` ⇒ ⇒ **越界形态在本设计不可达**
+#      （capability 的「越界 ⇒ 挡住上游」条在此不适用 ⇒ 已在期望源登记）。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#stream-demux-demo
+@tb-module tb_stream_demux_demo
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：框架复位后的默认态（impl-contract：框架复位把全部数据输入置 0）
+#   · select=0 / in_valid=0 / 四路 out*_ready=0
+#   ⇒ ⇒ 全部输出 valid=0 · 被选中路（out0）payload=0 · in_ready=0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_defaults
+@anchor stream-demux-demo
+
+SET select 0
+SETTLE
+EXPECT out0_valid 0
+EXPECT out1_valid 0
+EXPECT out2_valid 0
+EXPECT out3_valid 0
+EXPECT out0_payload 0
+EXPECT in_ready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：payload / valid 跟随 select（spec-derived：分发的定义）
+#   · in_payload=0xAB / in_valid=1 / 四路 ready=1
+#   · select=k ⇒ 仅 out[k].valid=1 且 payload=0xAB；其余 valid=0 且 payload=0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario payload_follows_select
+
+SET in_payload 0xAB
+SET in_valid 1
+SET out0_ready 1
+SET out1_ready 1
+SET out2_ready 1
+SET out3_ready 1
+
+SET select 0
+SETTLE
+EXPECT out0_valid 1
+EXPECT out0_payload 0xAB
+EXPECT out1_valid 0
+EXPECT out2_valid 0
+EXPECT out3_valid 0
+EXPECT out1_payload 0
+EXPECT out2_payload 0
+EXPECT out3_payload 0
+EXPECT in_ready 1
+
+SET select 1
+SETTLE
+EXPECT out1_valid 1
+EXPECT out1_payload 0xAB
+EXPECT out0_valid 0
+EXPECT out0_payload 0
+EXPECT out2_valid 0
+EXPECT out3_valid 0
+
+SET select 2
+SETTLE
+EXPECT out2_valid 1
+EXPECT out2_payload 0xAB
+EXPECT out1_valid 0
+EXPECT out3_valid 0
+
+SET select 3
+SETTLE
+EXPECT out3_valid 1
+EXPECT out3_payload 0xAB
+EXPECT out2_valid 0
+EXPECT out0_valid 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：反压由消费端 ⇒ 上游（spec-derived：ready 方向 + 隔离）
+#   · select=2 · out2_ready=0 ⇒ in_ready=0（上游停顿 = 可观测）
+#   · **非选中路**的 ready 不影响上游（out0/out1/out3 仍为 1）
+#   · 数据面 MUST NOT 依赖 ready（out2_valid / out2_payload 保持）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario backpressure_reaches_upstream
+
+SET in_payload 0xCD
+SET in_valid 1
+SET out0_ready 1
+SET out1_ready 1
+SET out2_ready 0
+SET out3_ready 1
+
+SET select 2
+SETTLE
+EXPECT in_ready 0
+EXPECT out2_valid 1
+EXPECT out2_payload 0xCD
+
+SET out2_ready 1
+SETTLE
+EXPECT in_ready 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：上游无有效数据 ⇒ 全部输出无效（spec-derived：valid 只依赖 in.valid）
+#   · in_valid=0 ⇒ 四路 valid 全 0（数据面与反压面分离）
+#   · in_ready 仍 = 被选中路的 ready（= 1）⇒ ⇒ ready 不依赖 valid
+# ══════════════════════════════════════════════════════════════════════════
+@scenario no_valid_all_outputs_idle
+
+SET in_valid 0
+SET out0_ready 1
+SET out1_ready 1
+SET out2_ready 1
+SET out3_ready 1
+
+SET select 1
+SETTLE
+EXPECT out0_valid 0
+EXPECT out1_valid 0
+EXPECT out2_valid 0
+EXPECT out3_valid 0
+EXPECT in_ready 1

@@ -889,3 +889,113 @@ VERIF-CHECKS: 24
 
 ⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=24 fails=0` ⇒ ⇒ 变异未污染产物。
 ⚠️ 每条变异 MUST **先确认仍能编译**（两条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
+
+---
+
+## tb_stream_demux_demo {#stream-demux-demo}
+
+### 上游语义（**spec-derived** · capability `chlib-stream-ready-ownership` 的「分流 / 分叉类」条 · ADR-056）
+
+被测单元 = `examples/stream/stream_demux_top.h`（`chlib::stream_demux<ch_uint<8>, 4>` 的具名端口包装）。
+`stream_demux` 的契约（组合 0-cycle，无内部状态）：
+
+| 端口 | 语义 | 出处 |
+|---|---|---|
+| `out[i].valid` | `in.valid & (select == i)` | ADR-056 D3（数据面只依赖 `input.valid`） |
+| `out[i].payload` | `(select == i) ? in.payload : 0` | `chlib::demux` 的数据面（未选中路取 0） |
+| `in.ready` | `in_range & out[select].ready` | ADR-056 D1（**消费端 ⇒ 上游**） |
+| `out[i].ready` | **默认恒就绪 + 消费端 `<<=` 覆盖** | ADR-054 形态 E（capability「输出 ready MUST 是『默认值 + 可覆盖』」） |
+
+⚠️ **「非选中路不影响上游」**（capability 的隔离条）：`in.ready` 只由**被选中路**的
+ready 决定 ⇒ ⇒ 未选中路的 ready 传什么都无所谓 ⇒ ⇒ 判据 MUST 覆盖「把未选中路拉低
+**不**影响上游」这一面（只断言被选中的一路不足以证明隔离）。
+
+⚠️ **「越界 ⇒ 挡住上游」条在本设计不可达**：`select` 宽 2 bit 且 `N = 4` ⇒ ⇒
+`select ∈ [0,4)` **恒成立** ⇒ ⇒ capability 的越界条在此**不适用**（**如实登记**，
+不假装覆盖）。
+
+### impl-contract（本实现的取值）
+
+- **框架复位**把全部数据输入置 0（`run_verif` 的 `apply_frame_reset` 与渲染式 TB 的
+  `write_tb_reset_pulse` 同构）⇒ ⇒ 复位后 `select=0` / `in_valid=0` / 四路 `out*_ready=0`。
+- 组合逻辑 ⇒ ⇒ `SET → SETTLE → EXPECT` 即可观测（**无需** `TICK`）。
+- `select` 宽 2 bit 且 `N = 4` ⇒ ⇒ **不存在**越界选择（同上）。
+
+### 判据
+
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 复位后四路 `out*_valid` | impl-contract | 全 0（`in_valid=0` ⇒ 数据面无效） |
+| 2 | 复位后 `out0_payload` / `in_ready` | impl-contract | 0（`select=0` ⇒ `out0.payload = in.payload = 0`；`out0_ready=0` ⇒ 上游停顿） |
+| 3 | `select=k` 时 `out[k].valid` | spec-derived | 1（其余三路 0） |
+| 4 | `select=k` 时 `out[k].payload` | spec-derived | `in.payload`（`0xAB`） |
+| 5 | `select=k` 时**未选中路**的 `payload` | spec-derived | 0（**不是**广播） |
+| 6 | 四路 ready=1 时 `in.ready` | spec-derived | 1 |
+| 7 | `select=2` 且 `out2_ready=0`（未选中路 ready 仍为 1）⇒ `in.ready` | spec-derived | **0**（隔离 + 反压方向） |
+| 8 | `out2_ready=0` 时 `out2.valid` / `out2.payload` | spec-derived | 1 / `0xCD`（数据面不依赖 ready） |
+| 9 | `out2_ready` 恢复 1 ⇒ `in.ready` | spec-derived | 1 |
+| 10 | `in_valid=0` ⇒ 四路 `out*_valid` | spec-derived | 全 0 |
+| 11 | `in_valid=0` 时 `in.ready` | spec-derived | 1（ready 不依赖 valid） |
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 38** ⇒ ⇒ 三方等式：本行 == `tb_stream_demux_demo.verif` 的
+静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 38
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_defaults` | 判据 1 · 2（impl-contract） |
+| `payload_follows_select` | 判据 3 · 4 · 5 · 6 |
+| `backpressure_reaches_upstream` | 判据 7 · 8 · 9 |
+| `no_valid_all_outputs_idle` | 判据 10 · 11 |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 18 根** = 框架 2（`default_clock` · `default_reset`）+ 根自有 **16**
+  （输入流 {payload[7:0], valid, ready} + `select[1:0]` + 4 路输出流 × {payload[7:0], valid, ready}）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_stream_demux_demo.cpp` 默认模式）= **38** 条 ⇒ ⇒ `interp_checks = 38`。
+- TB 侧（Verilog 产物，`tb_stream_demux_demo.sv`）= **38** 条 ⇒ ⇒ `min_checks = 38`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**
+  （护栏 ⑨ 判 C++ 侧、⑥ 判 TB 侧 ⇒ ⇒ 禁一侧代另一侧）。
+
+#### scenario: reset_defaults
+
+框架复位后：四路 `out*_valid == 0` · `out0_payload == 0` · `in_ready == 0`（6 条）。
+
+#### scenario: payload_follows_select
+
+`in_payload=0xAB` / `in_valid=1` / 四路 `out*_ready=1`；
+`select` 依次取 0/1/2/3 ⇒ 仅被选中路 `valid=1` 且 `payload=0xAB`，
+未选中路 `valid=0` 且 `payload=0`；`in_ready=1`（23 条）。
+
+#### scenario: backpressure_reaches_upstream
+
+`select=2`、`in_payload=0xCD`、`in_valid=1`、`out2_ready=0`（未选中路 ready 仍为 1）
+⇒ ⇒ `in_ready=0`（反压到达上游 + 非选中路隔离）· `out2_valid=1` · `out2_payload=0xCD`；
+`out2_ready` 恢复 1 ⇒ ⇒ `in_ready=1`（4 条）。
+
+#### scenario: no_valid_all_outputs_idle
+
+`in_valid=0`（四路 `out*_ready=1`、`select=1`）⇒ ⇒ 四路 `out*_valid == 0` · `in_ready == 1`（5 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测 | 抓的是 |
+|---|---|---|---|
+| M1 | `assign top_out0_valid = 1'b0;`（valid 通路断） | ✅ `fails=1`（`payload_follows_select#0`） | 分发的 valid 语义 |
+| M2 | `assign top_in_ready = 1'b1;`（反压方向断：上游恒就绪） | ✅ `fails=2`（`reset_defaults#5` · `backpressure_reaches_upstream#0`） | 消费端 ⇒ 上游 的方向 |
+| M3 | `assign top_mux_select_1 = top_in_payload;`（未选中路 payload 广播） | ✅ `fails=1`（`payload_follows_select#5`） | 未选中路 payload MUST 为 0 |
+
+⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=38 fails=0` ⇒ ⇒ 变异未污染产物。
+⚠️ 每条变异 MUST **先确认仍能编译**（三条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
