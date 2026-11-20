@@ -44,3 +44,16 @@
 - 不讨论「`test_verif_wait_level` 是否应该改成双后端形态」—— 它测的是 `.verif` 原语语义，
   与「同一 DUT 两个 eval backend」不是同一个判据面（改形态属另一项工作）。
 - 不动护栏脚本的解析逻辑（它按既有规则正确识别了这条漏登记）。
+
+---
+
+## 用户可见变更
+
+> ⚠️ **本段是 2026-11-21 补写的**（归档时遗漏 ⇒ `scripts/verify_public_api_visibility.sh`
+> 的 **R1**（归档 change MUST 带「## 用户可见变更」段 · 机制生效日 2026-11-09）报红
+> ⇒ ⇒ 补的是**归档流程的产物要求**，不改动本 change 的任何决策与实施内容）。
+
+| 项 | 前 | 后 |
+|---|---|---|
+| capability `dual-backend-test-coverage` 的「现有 9 个 verilator 测试 MUST 保留原状」Requirement | **未登记** `tests/test_verif_wait_level.cpp` ⇒ ⇒ 该文件带 `verilator_e2e` 标签但既无 `DUAL_BACKEND_TEST_PAIR`、也不在契约锁定清单里 ⇒ ⇒ `scripts/verify_dual_backend_parity.sh` 判 `unclassified-labeled-entry` ⇒ ⇒ **CI 的 4 个执行点自 2026-11-20 归档起恒红** | **新增一段单后端登记**（分类依据 = 它比的是 `.verif` 的两条执行路径而非两个 eval backend · MUST 保留原状 · MUST 带 `verilator_e2e` 标签 · **不**增加 parity 两个锚点）⇒ ⇒ 护栏**零 VIOLATION** |
+| 库代码 / 测试 / 锚点（`CTEST_TOTAL` · `VERILATOR_E2E_TOTAL` · `DUAL_BACKEND_PARITY_TOTAL` · `_PAIRS`） | — | **零改动**（本 change 只改 spec 文本 ⇒ 不增删任何测试） |
