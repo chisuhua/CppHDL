@@ -1,3 +1,43 @@
+## 2026-11-20 — SoC 迁 `.verif`（R13 闭口 · 双载体消灭）
+
+**是什么**：`tb_axi_soc_example` 的验证语义此前有**两个物理载体** —— C++ 侧 2 条（写 `0xAB`）
++ **手写** `.sv` 14 条（写 `0xA5`）⇒ ⇒ 连期望值都不同，任何一侧改了另一侧不会红。
+现在收敛为**一份** `.verif`（4 scenario / **15** 条断言）⇒ ⇒ 解释器侧与生成的 Verilog TB
+由同一份源驱动。
+
+**改了什么**
+
+- **新增** `examples/axi4/tb_axi_soc_example.verif`：帧起点用 `WAIT uart_tx low 240`
+  （ADR-074 §7.3 D3′ 受裁用法 —— 入口电平**未成立** ⇒ 等跃迁沿）⇒ ⇒ 起点锚定后各位中点
+  = **字面量偏移**（bit 周期 16 拍）⇒ ⇒ **不需要**数组 / 变长偏移（那正是 ADR-074 §7.4
+  选项 E 被否决的机制）。
+- **`tb_axi_soc_example.cpp`**：默认模式改调库层 `run_verif_file`（Lite 之后的**第二个**
+  消费者 ⇒ 验证「同一份实现」不是口号）· `--emit-rtl` / `--check-products` 路径不动。
+- **`tb_axi_soc_example.sv`**：由验证源**重新生成**（替换手写版）⇒ ⇒ ⑥' 逐字节新鲜度 /
+  ⑥‴ 无 TODO / ⑧'' 无 `unnamed` 字面量 **首次对 SoC 有可判对象**。
+- **tsv SoC 行原子翻转**：`generated no→yes` · `interp_checks 2→15` · `min_checks 14→15`
+  ⇒ ⇒ `verify_verif_migration_state.sh --require-closed`（R13 归档门）**PASS**。
+- **期望源** `.rddf/checks/soc-rtl-expectations.md` 增 `VERIF-CHECKS: 15`（**人写**）+
+  4 个 `#### scenario:` 锚点（与验证源双向 1:1）。
+
+**判别力自证**（手推期望值 · 非抄输出）
+
+| 变异 | 结果 |
+|---|---|
+| 数据位 bit1 期望 `1→0` | `uart_tx_frame_8n1#3` 转红（id 映射正确） |
+| `WAIT` 的 `max=0` | `#0` 转红（证明它**至少推进 1 拍**、不是 no-op） |
+| `WAIT` **前**插 `TICK 8` | 4 条数据位判据转红（证明**锚点**决定后续偏移，不是碰巧对上） |
+
+⚠️ 如实登记：`WAIT` 的 `max` 改 **1** **不**转红 —— 帧起点在写握手后 **1 拍内**就出现
+（matrix m0→s1 是**组合**路由，期望源已登记）⇒ 该写法**不**作为判据。
+
+**断言数变化**：C++ 侧 2 → **15** · TB 侧 14 → **15** ⇒ ⇒ 两侧相等（⑨ 等式）。
+旧 C++ 的 `done` 断言**移除**：`done` 是**粘滞**信号（首笔后恒 1 ⇒ 上升沿不可判，期望源已登记）
+⇒ 值正确已蕴含事务完成。逐条映射表见 change 的 `tasks.md`。
+
+**遗留（交 architect）**：蓝图 `docs/architecture/2026-11-17-rtl-verification-single-source.md`
+的 **R13 行**与 §「手写过渡态」段仍写「未闭」⇒ ⇒ 该文件属 architect 写集，本次未改。
+
 ## 2026-11-20 — `.verif` 的 `WAIT` 增补电平形参（ADR-074 §7.2 D2′）
 
 **是什么**：`WAIT` 从「只等**非零**」扩展为 `WAIT <port> [<high|low>] <max>` ⇒ ⇒ 可表达

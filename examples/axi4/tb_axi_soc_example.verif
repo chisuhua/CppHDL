@@ -1,0 +1,94 @@
+# examples/axi4/tb_axi_soc_example.verif
+#
+# **SoC 产品的唯一验证语义载体**（ADR-074 D1 · R13 闭口 · change `axi4-soc-verif-migration-2026-11`）
+#
+# 期望值出处 = `.rddf/checks/soc-rtl-expectations.md#soc-example`（**手推** · 禁抄仿真输出）
+#
+# ⚠️ **UART 帧起点用 `WAIT uart_tx low`**（ADR-074 §7.3 D3′ 点名的受裁用法）：
+#   等待的目标电平（low）在**等待入口处尚未成立**（空闲高）⇒ 等的是**跃迁沿** ⇒ 合法。
+#   ⚠️ **禁** `WAIT uart_tx high` —— 空闲时入口电平**已成立** ⇒ `WAIT` 会立即返回 ⇒
+#      D3′ 明禁（静默错语义）。
+#   ⇒ ⇒ 起点一旦锚定，各位中点就是**字面量偏移**（bit 周期 16 拍 · 手推自期望源）
+#      ⇒ ⇒ 不需要数组 / 变长偏移（那正是 ADR-074 §7.4 选项 E 被否决的机制）。
+#
+# ⚠️ 帧结构（8N1 · LSB 先出 · `TX_DATA = 0x5A`）：
+#   `0x5A` = `0101_1010` ⇒ 数据位（bit0→bit7）= `0 1 0 1 1 0 1 0`
+#   起始位 = 0 · 停止位 = 1 · 位中点 = 帧起点 + 8 + 16×k
+
+@expect-src .rddf/checks/soc-rtl-expectations.md#soc-example
+@tb-module tb_axi_soc_example
+
+# ── 场景 ①：释放复位 + 写 GPIO `DATA_OUT`(0x00) = 0xA5 ───────────────────
+@scenario bringup_and_gpio_write
+@anchor soc-example
+# 输入常量（期望源 §5：impl-contract）—— 解释器/渲染侧的端口初值都是 0 ⇒ MUST 显式驱动
+SET gpio_in 0x5A
+SET uart_rx 1
+SET timer_irq 0
+SET rst_n 0
+TICK 2
+SET rst_n 1
+TICK 2
+SET addr 0x00000000
+SET wdata 0x000000A5
+SET write 1
+SET start 1
+TICK 1
+SET start 0
+SET write 0
+TICK 16
+EXPECT gpio_out 0xA5
+
+# ── 场景 ②：读 GPIO `DATA_IN`(0x04) ⇒ rdata = gpio_in = 0x5A ────────────
+@scenario gpio_read_data_in
+@anchor soc-example
+SET addr 0x00000004
+SET write 0
+SET start 1
+TICK 1
+SET start 0
+TICK 16
+EXPECT rdata 0x5A
+
+# ── 场景 ③：写 UART `TX_DATA`(0x8000_0000) = 0x5A ⇒ 8N1 帧 ──────────────
+# ⚠️ 本场景同时证明 `matrix.s1_* ↔ uart` 的 19 根接线是通的（写 `TX_DATA` MUST 经
+#   matrix 的 m0 → s1 路由）。
+@scenario uart_tx_frame_8n1
+@anchor soc-example
+SET addr 0x80000000
+SET wdata 0x0000005A
+SET write 1
+SET start 1
+TICK 1
+SET start 0
+SET write 0
+WAIT uart_tx low 240
+TICK 8
+EXPECT uart_tx 0
+TICK 16
+EXPECT uart_tx 0
+TICK 16
+EXPECT uart_tx 1
+TICK 16
+EXPECT uart_tx 0
+TICK 16
+EXPECT uart_tx 1
+TICK 16
+EXPECT uart_tx 1
+TICK 16
+EXPECT uart_tx 0
+TICK 16
+EXPECT uart_tx 1
+TICK 16
+EXPECT uart_tx 0
+TICK 16
+EXPECT uart_tx 1
+
+# ── 场景 ④：`rst_n` 拉低 ⇒ GPIO 输出寄存器清零 + uart 回空闲高 ───────────
+# ⚠️ MUST 放最后（rst_n 拉低后整个 SoC 复位 ⇒ 后续事务不可用）。
+@scenario low_active_reset_clears_gpio
+@anchor soc-example
+SET rst_n 0
+TICK 3
+EXPECT gpio_out 0
+EXPECT uart_tx 1

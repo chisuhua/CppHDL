@@ -1006,7 +1006,7 @@ EOF
 # REGISTERED_TARGETS: 0
 # REGISTERED_SOC: 1
 # REGISTERED_HIER: 0
-tb_axi_soc_example	soc	examples/axi4/tb_axi_soc_example.cpp	AxiSocTop	tb_axi_soc_example	--emit-rtl	2	examples/axi4/tb_axi_soc_example.sv	verified	no	14	4	10	self-test fixture（kind=soc · ⑧' 的载体 · 自发行 ⇒ ⑨ 判 C++ 侧 2 条 ≠ `.sv` 侧 14 条）
+tb_axi_soc_example	soc	examples/axi4/tb_axi_soc_example.cpp	AxiSocTop	tb_axi_soc_example	--emit-rtl	15	examples/axi4/tb_axi_soc_example.sv	verified	yes	15	4	10	self-test fixture（kind=soc · ⑧' 的载体 · **已迁 `.verif`** ⇒ `generated=yes` + 两侧条数 15）
 SOCEOF
     }
 
@@ -1224,10 +1224,14 @@ PY
     #   ⚠️ 2026-11-19 之前 SoC 行的 C++ 侧断言**完全无守护**：⑥ 读的是 `.sv` 侧的 14 条，
     #   ⑨ 因 note 无标记而**跳过该行** ⇒ ⇒ 实测把 C++ 侧换成 `checks=0` 的 stub ⇒
     #   exit 0 且护栏**无任何反应** ⇒ ⇒ 本条证明「SoC 现在被守护」：登记值改成 ≠ 实际
-    #   的 2 ⇒ ⇒ 必红（**不能**用改 `min_checks` 冒充 —— ⑥ 会抢先命中）。
+    #   值（3 ≠ 15）⇒ ⇒ 必红（**不能**用改 `min_checks` 冒充 —— ⑥ 会抢先命中）。
     local st_soc_bad="$st_root/list_soc_interp.tsv"
-    sed 's/\t2\texamples\/axi4\/tb_axi_soc_example.sv\t/\t3\texamples\/axi4\/tb_axi_soc_example.sv\t/' \
-        "$st_soc_list" >"$st_soc_bad"
+    #   ⚠️ 按 **列名** 定位（不写字面量 2 / 15）⇒ ⇒ SoC 的条数再变也**不必改夹具**
+    awk -F'\t' -v OFS='\t' '
+        /^#COLUMNS:/ { n = split($0, c, " "); for (i = 2; i <= n; i++) idx[c[i]] = i - 1; print; next }
+        /^#/ || /^$/ { print; next }
+        { if ($idx["target"] == "tb_axi_soc_example") $idx["interp_checks"] = 3; print }
+    ' "$st_soc_list" >"$st_soc_bad"
     if cmp -s "$st_soc_list" "$st_soc_bad"; then
         fail "自检 投毒21 无效：没能改掉 SoC 的 interp_checks"
     else

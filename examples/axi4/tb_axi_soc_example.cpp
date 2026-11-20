@@ -13,8 +13,13 @@
  *      且与扁平产物**逐字节相同** ⇒ 对它是 **no-op**
  *    ⇒ ⇒ 形态由**设计**决定，不由发射开关决定 ⇒ 可以统一加 `--hierarchical`。
  *
- * ⚠️ **激励是手写过渡态**（蓝图 §7 R13）：UART 8N1 帧解码超出 `.verif` 封闭原语集
- *    （ADR-074 D2）⇒ ⇒ 扩展该原语集是**独立立项**。
+ * ⚠️ **验证语义的单一载体 = `.verif`**（ADR-074 D1 · R13 闭口）：
+ *    `examples/axi4/tb_axi_soc_example.verif` ⇒ ⇒ 默认模式（IR 解释器）与生成的
+ *    `tb_axi_soc_example.sv`（Verilog TB）**由同一份验证源驱动**。
+ *    · UART 8N1 帧的**起点**由 `WAIT uart_tx low <max>` 锚定（ADR-074 §7.3 D3′ 受裁用法：
+ *      等待的目标电平在入口处**尚未成立** ⇒ 等的是**跃迁沿**）
+ *    · 起点锚定后各位中点 = **字面量偏移**（bit 周期 16 拍）⇒ ⇒ 不需要数组 / 变长偏移
+ *      （那正是 ADR-074 §7.4 选项 E 被否决的机制）
  *
  * ⚠️ **本文件只留「值」**（蓝图 §4.3.1 · F2）：规则侧（`product_modules` ·
  *    `tamper_hier` · `check_products` 的判定与编排）**在库层**
@@ -33,6 +38,7 @@
 #include "hierarchy_verilog.h"
 #include "rtl_emit/cli.h"
 #include "rtl_emit/product_check.h"
+#include "rtl_emit/verif.h"
 #include "simulator.h"
 
 #if !defined(_WIN32)
@@ -49,6 +55,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+/// 验证源路径（相对仓根 · CMake 注入 `CPPHDL_SOURCE_DIR` ⇒ 三个面的 CWD 各异，
+/// 相对路径必失败 ⇒ ⇒ 与 Lite 侧同款注入）。
+constexpr const char *kVerifRelPath = "/examples/axi4/tb_axi_soc_example.verif";
 
 namespace {
 
@@ -310,74 +320,21 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    // ── 默认模式：激励 + 断言 ───────────────────────────────────────────────
+    // ── 默认模式：**由 `.verif` 驱动**（ADR-074 D1 · R13 闭口）──────────────
+    //   ⚠️ 同一份 `.verif` 也生成 `tb_axi_soc_example.sv` ⇒ ⇒ 两侧**同一语义载体**
+    //   （此前是 C++ 侧 2 条 + 手写 `.sv` 14 条，连写入值都不同）。
+    //   ⚠️ helper **不打印** `RESULT:` 行（结论行是**值**侧 ⇒ 由本 example 打印）。
     ch::ch_device<axi4::example::AxiSocTop> top_device;
-    ch::Simulator sim(top_device.context());
-
-    int checks = 0;
-    int fails = 0;
-
-    sim.set_input_value(top_device.instance().io().start, false);
-    sim.set_input_value(top_device.instance().io().write, false);
-    sim.set_input_value(top_device.instance().io().rst_n, true);
-    sim.set_input_value(top_device.instance().io().gpio_in, 0x5a_h);
-    sim.set_input_value(top_device.instance().io().uart_rx, true);
-
-    // ---- 检查 1：写 GPIO DATA_OUT（addr=0x00）⇒ gpio_out == 0xAB ----
-    {
-        const std::uint64_t expect = 0xAB;
-        sim.set_input_value(top_device.instance().io().addr, 0_d);
-        sim.set_input_value(top_device.instance().io().wdata, 0xAB_h);
-        sim.set_input_value(top_device.instance().io().write, true);
-        sim.set_input_value(top_device.instance().io().start, true);
-        sim.tick();
-        sim.set_input_value(top_device.instance().io().start, false);
-        bool done = false;
-        for (int i = 0; i < 10; ++i) {
-            sim.tick();
-            if (static_cast<std::uint64_t>(sim.get_port_value(top_device.instance().io().done))) {
-                done = true;
-                break;
-            }
-        }
-        sim.tick();
-        const auto gpio_out =
-            static_cast<std::uint64_t>(sim.get_port_value(top_device.instance().io().gpio_out));
-        ++checks;
-        if (!done || gpio_out != expect) {
-            ++fails;
-            std::cerr << "CHECK gpio_write FAIL (done=" << done << " gpio_out=0x" << std::hex
-                      << gpio_out << " want 0x" << expect << std::dec << ")\n";
-        }
+    const std::string verif_path = std::string(CPPHDL_SOURCE_DIR) + kVerifRelPath;
+    const auto r = rtl_emit::run_verif_file(verif_path, top_device.instance(),
+                                            top_device.context());
+    for (const auto &line : r.run.failure_lines) {
+        std::cerr << line << "\n";
     }
-
-    // ---- 检查 2：读 GPIO DATA_IN（addr=0x04）⇒ rdata == 0x5A ----
-    {
-        const std::uint64_t expect = 0x5A;
-        sim.set_input_value(top_device.instance().io().addr, 4_d);
-        sim.set_input_value(top_device.instance().io().write, false);
-        sim.set_input_value(top_device.instance().io().start, true);
-        sim.tick();
-        sim.set_input_value(top_device.instance().io().start, false);
-        bool done = false;
-        std::uint64_t rdata = 0;
-        for (int i = 0; i < 10; ++i) {
-            sim.tick();
-            if (static_cast<std::uint64_t>(sim.get_port_value(top_device.instance().io().done))) {
-                done = true;
-                rdata =
-                    static_cast<std::uint64_t>(sim.get_port_value(top_device.instance().io().rdata));
-                break;
-            }
-        }
-        ++checks;
-        if (!done || rdata != expect) {
-            ++fails;
-            std::cerr << "CHECK gpio_read FAIL (done=" << done << " rdata=0x" << std::hex << rdata
-                      << " want 0x" << expect << std::dec << ")\n";
-        }
+    if (!r.ok) {
+        std::cerr << "FATAL: " << r.error << "\n";
+        return 1;
     }
-
-    std::cout << "RESULT: checks=" << checks << " fails=" << fails << "\n";
-    return fails == 0 ? 0 : 1;
+    std::cout << "RESULT: checks=" << r.run.checks << " fails=" << r.run.fails << "\n";
+    return r.run.fails == 0 ? 0 : 1;
 }

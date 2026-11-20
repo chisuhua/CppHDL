@@ -153,6 +153,44 @@ matrix 的 `m0 → s1` 路由 ⇒ ⇒ uart 才收得到。
 | `rst_n` | `1'b1`（初始）→ 场景④ 拉 0 | 低有效 |
 | `default_reset` | `1'b1` → **negedge** 释放 | 通用前提 |
 
+### 5b. 验证源登记（`.verif` · **机器可读边**）
+
+验证源 = `examples/axi4/tb_axi_soc_example.verif`（ADR-074 D1 · R13 闭口的唯一语义载体）。
+
+VERIF-CHECKS: 15
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读的第一边**（由**人**登记 ⇒ ⇒ **禁**由生成器输出
+回填 ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ 判据恒绿）。组成：**1**（场景① 写 GPIO）
++ **1**（场景② 读 GPIO）+ **11**（场景③：`WAIT` 帧起点 1 + 起始位 1 + 数据位 8 + 停止位 1）
++ **2**（场景④ 复位 2 条）= **15**。
+
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `bringup_and_gpio_write` | §4 场景① + §5 输入常量（`gpio_in` / `uart_rx` / `timer_irq`） |
+| `gpio_read_data_in` | §4 场景② + §3 地址映射（`0x04` = GPIO `DATA_IN`） |
+| `uart_tx_frame_8n1` | §4 场景③（帧格式 + 位中点 = 帧起点 + 8 + 16×k） |
+| `low_active_reset_clears_gpio` | §4 场景④（`rst_n` 拉低 ⇒ GPIO 清零 + `uart_tx` 空闲高） |
+
+#### scenario: bringup_and_gpio_write
+
+写 GPIO `DATA_OUT`（`addr 0x00`）= `0xA5` ⇒ `gpio_out == 0xA5`（§4 场景①）。
+
+#### scenario: gpio_read_data_in
+
+读 GPIO `DATA_IN`（`addr 0x04`）⇒ `rdata == 0x0000_005A`（= `gpio_in` 的 0x5A · §4 场景②）。
+
+#### scenario: uart_tx_frame_8n1
+
+写 UART `TX_DATA`（`addr 0x8000_0000`）= `0x5A` ⇒ 8N1 帧：**帧起点由 `WAIT uart_tx low`
+锚定**（ADR-074 §7.3 D3′ 受裁用法），随后起始位 / 8 数据位（LSB 先出 `0 1 0 1 1 0 1 0`）/
+停止位的中点 = 帧起点 + 8 + 16×k（§4 场景③）。
+
+#### scenario: low_active_reset_clears_gpio
+
+`rst_n` 拉低 ⇒ `gpio_out == 0` 且 `uart_tx == 1`（空闲高）（§4 场景④）。
+
 ### 6. 判别力自证（负向对照）
 
 | 变异 | 预期转红 |

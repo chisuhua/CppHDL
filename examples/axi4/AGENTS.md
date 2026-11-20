@@ -10,13 +10,14 @@ Child of root `AGENTS.md`.
 | File | Focus | CTest |
 |------|-------|-------|
 | `tb_axi4_lite_example.cpp` | AXI4-Lite slave 验证（**由 `.verif` 驱动** · `RESULT: checks=113`） | ✅ |
-| `tb_axi_soc_example.cpp` | SoC 激励 + 三模式（默认 / --emit-rtl / --check-products） | ✅ |
+| `tb_axi_soc_example.cpp` | SoC 三模式（**默认由 `.verif` 驱动** · `RESULT: checks=15` / `--emit-rtl` / `--check-products`） | ✅ |
 | `phase3a_top.h` | Phase 3A **设计定义**（4x4 Interconnect + AXI-to-Lite Converter · **无 `main`**） | — |
 | `tb_phase3a_example.cpp` | Phase 3A **激励驱动**（2 条断言 · `RESULT: checks=2 fails=0`）+ `--emit-rtl` 发射 | ✅ |
 | `tb_phase3a_example.sv` | Phase 3A **独立 TB**（**手写** · 6 条断言 · `RESULT: checks=6 fails=0`） | — |
 | `tb_axi4_lite_example.verif` | **验证源**（`.verif` · 7 场景 / 113 断言 · **单一语义来源**） | — |
 | `tb_axi4_lite_example.sv` | **由 `.verif` 生成**的独立 TB（`generated=yes` · 禁手改） | — |
-| `tb_axi_soc_example.sv` | SoC 层独立 TB（**手写** · `generated=no` · UART 帧解码超出封闭原语集） | — |
+| `tb_axi_soc_example.verif` | **验证源**（`.verif` · 4 场景 / **15** 断言 · 帧起点由 `WAIT uart_tx low` 锚定） | — |
+| `tb_axi_soc_example.sv` | **由 `.verif` 生成**的独立 TB（`generated=yes` · 禁手改） | — |
 
 ## PATTERNS
 - **三角色分离**（`example-file-boundary-2026-11`）：设计定义 `*_top.h`（**无 `main`** · 只做实例化与连接）
