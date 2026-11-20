@@ -315,18 +315,36 @@ check_r4_registry() {
         return 1
     fi
     # ① 登记了不存在 ⇒ 红
-    #    ⚠️ **只查「登记清单」段**（= 登记为**存在**的公开头）⇒ ⇒
-    #    「已移除 / 已改名的公开符号」段登记的路径**按定义就不存在**
-    #    ⇒ ⇒ 查它 = **假阳性 by construction**（2026-11-13 实测：B0 批退役的
-    #    3 个头在该段有登记 ⇒ ⇒ 护栏红 ⇒ ⇒ 登记为 **F-2**）。
-    #    ⇒ ⇒ **该段的路径 MUST NOT 被删**（它是「移除 / 改名登记」的**证据**）
-    #    ⇒ ⇒ ⇒ 只是**不要求它存在** ⇒ ⇒ 判据**强度不减**（登记清单段照查）。
+    # ② 存在未登记 ⇒ 红
+    #
+    # ⚠️ **判据面 = 只取「登记清单」段**（= 活账的**权威**段 · 双向都只看它）。
+    #    其余各段是**历史记录**，它们的路径**按定义**可能已不存在：
+    #    · 「已移除 / 已改名的公开符号」段 ⇒ 登记的路径**必然**不存在（= 登记的目的）
+    #    · 「行为变更（非符号移除）」段 ⇒ 是**叙述**不是登记（路径出现在「迁移指引」
+    #      的句子里）⇒ ⇒ 查它 = **假阳性 by construction**
+    #      （2026-11-18 `88eae35` 把 `include/axi4/*_example_top.h` 搬进
+    #      「行为变更」段的迁移指引 ⇒ ⇒ 本护栏从那天起**在 CI 上恒红**；
+    #      ⚠️ 这是 F-2（2026-11-13 修「已移除」段的同类假阳性）**漏掉的第二个段标题**）
+    #    · 「已弃用（尚未移除）」小节（`###` 级）⇒ 同属历史记录
+    #
+    # ⚠️ **为什么必须是白名单而不是黑名单**（2026-11-20 订正）：
+    #    黑名单（「跳过这几个段标题」）对一个**新增的历史段**会漏 ⇒ ⇒ 假阳性；
+    #    而白名单能顺带堵住**另一方向的洞** —— 黑名单下可以把一个**活着**的公共头
+    #    的路径写进任意**非历史**段（如「维护规则」/「相关」）来冒充「已登记」
+    #    ⇒ ⇒ ② 会静默放过。白名单把「已登记」的唯一来源钉在「登记清单」段。
+    #
+    # ⚠️ **fail-closed**：该段缺失 / 为空 ⇒ **红**（否则**改一个段标题**就能
+    #    把双向核对**静默关掉**）⇒ ⇒ 见下方 `grep -q` 检查。
     local reg_scan
     reg_scan="$(awk '
-        /^## .*已移除/ { skip = 1; next }
-        /^## / { skip = 0 }
-        !skip { print }
+        /^## / && /登记清单/ { in_reg = 1; next }
+        /^## / { in_reg = 0 }
+        in_reg { print }
     ' "$REGISTRY" 2>/dev/null || true)"
+    if ! printf '%s\n' "$reg_scan" | grep -q '`include/'; then
+        fail "R4② 活账的「登记清单」段**缺失或为空**（$REGISTRY）⇒ 活账结构变了 ⇒ MUST 同步本护栏，否则双向核对会**静默失效**"
+        return 1
+    fi
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         if [ ! -f "$f" ]; then
@@ -335,9 +353,9 @@ check_r4_registry() {
         fi
     done < <(printf '%s\n' "$reg_scan" | grep -oE '`include/[^*`]+`' 2>/dev/null | tr -d '`' | sort -u)
     # ② 存在未登记 ⇒ 红（扫描范围 = 顶层 include/*.h + SCAN_EXTRA）
-    #    ⚠️ **登记面同样只取「登记清单」段**（`$reg_scan`）⇒ ⇒
-    #    否则「把一个**活着**的公共头塞进『已移除』段」就能冒充「已登记」
-    #    ⇒ ⇒ ⇒ 收紧后**强度不减反增**（①② 都只看登记清单段）。
+    #    ⚠️ **登记面 = 同一个「登记清单」段**（`$reg_scan`，见上）⇒ ⇒
+    #    「把一个**活着**的公共头写进别段（历史段 / 叙述段）冒充已登记」这条路
+    #    **被堵住**（⇒ ⇒ 它只会出现在扫描里、不会出现在登记面里 ⇒ ⇒ 红）。
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         registered=0
@@ -467,21 +485,72 @@ run_self_test() {
         ok "self-test[⑥ 公共面多一个符号] ⇒ 红"
     fi
 
-    # ⑧ 投毒 ⑦：活账登记了一个**不存在**的头 ⇒ MUST 红（R4② 的另一方向）
-    #    ⇒ ⇒ 用**活账副本**投毒（★ 绝不改仓库里的真活账）
-    local reg_backup="$WORK/registry.bak"
-    cp "$REGISTRY" "$reg_backup"
-    printf '\n| `include/does_not_exist_xyz.h` | poison | 2026-11-07 |\n' >> "$REGISTRY"
+    # ⑧ 投毒 ⑦：活账登记了一个**不存在**的头 ⇒ MUST 红（R4② 的「①」方向）
+    #    ⇒ ⇒ **用活账副本**投毒（★ 绝不改仓库里的真活账）· 且 MUST 落在**「登记清单」段内**
+    #    （⚠️ 判据面 = 该段 ⇒ ⇒ 若按旧写法追加到文件尾，会落进「相关」段 ⇒ ⇒ 投毒**失效**）
+    local reg_poison="$WORK/registry.poison.md"
+    awk '
+        in_reg && /^## / { print "| `include/does_not_exist_xyz.h` | poison | 2026-11-07 |"; in_reg = 0 }
+        /^## / && /登记清单/ { in_reg = 1 }
+        { print }
+        END { if (in_reg) print "| `include/does_not_exist_xyz.h` | poison | 2026-11-07 |" }
+    ' "$REGISTRY" > "$reg_poison"
     rm -rf "$poison_root"; mkdir -p "$poison_root"; cp -r include/. "$poison_root/" 2>/dev/null
-    if judge "$poison_root" include >/dev/null 2>&1; then
+    if ( REGISTRY="$reg_poison"; judge "$poison_root" include ) >/dev/null 2>&1; then
         fail "self-test[⑦ 活账登记了不存在的头]：竟被判绿"
         rc=1
     else
         ok "self-test[⑦ 活账登记了不存在的头] ⇒ 红"
     fi
-    cp "$reg_backup" "$REGISTRY"
 
-    # ⑧ 反向对照：投毒全部还原 ⇒ MUST 复绿
+    # ⑨ 投毒 ⑧：把**活着**的公共头从「登记清单」**搬到历史段**（模拟「写进别段冒充已登记」）
+    #    ⇒ ⇒ MUST 红（R4② 的「②」方向：存在未登记）
+    #    ⇒ ⇒ ★ 这条**证明收窄（白名单）带来的判别力**：旧实现扫全文件 ⇒ ⇒ 该路径仍
+    #    出现在「行为变更」段里 ⇒ ⇒ 被判「已登记」⇒ ⇒ **恒绿**（漏报）。
+    local reg_moved="$WORK/registry.moved.md"
+    awk '
+        in_reg && /^## / { in_reg = 0 }
+        /^## / && /登记清单/ { in_reg = 1 }
+        in_reg && /`include\/hierarchy_equivalence\.h`/ { moved = $0; next }
+        /^## / && /行为变更/ { print; print moved; in_beh = 1; next }
+        { print }
+    ' "$REGISTRY" > "$reg_moved"
+    # 投毒构造自检：搬移 MUST 真的发生（否则投毒无效 ⇒ ⇒ 不能声称红 = 判别力）
+    if printf '%s\n' "$(awk '/^## / && /登记清单/ { in_reg = 1; next } /^## / { in_reg = 0 } in_reg { print }' "$reg_moved")" \
+           | grep -q 'hierarchy_equivalence\.h' \
+       || ! awk '/^## / && /行为变更/ { in_beh = 1; next } /^## / { in_beh = 0 } in_beh { print }' "$reg_moved" \
+           | grep -q 'hierarchy_equivalence\.h'; then
+        fail "self-test[⑧ 活头搬进历史段]：**投毒构造失败**（活账格式变了）⇒ 请同步本条投毒"
+        rc=1
+    else
+        rm -rf "$poison_root"; mkdir -p "$poison_root"; cp -r include/. "$poison_root/" 2>/dev/null
+        if ( REGISTRY="$reg_moved"; judge "$poison_root" include ) >/dev/null 2>&1; then
+            fail "self-test[⑧ 活头搬进历史段]：竟被判绿 ⇒ 登记面没有收窄到「登记清单」段"
+            rc=1
+        else
+            ok "self-test[⑧ 活头搬进历史段（旧实现会判绿）] ⇒ 红"
+        fi
+    fi
+
+    # ⑩ 投毒 ⑨：活账的「登记清单」**段标题被改**（模拟「重构活账结构」）⇒ MUST 红
+    #    ⇒ ⇒ 证明 **fail-closed**：该段缺失 / 为空 ⇒ 双向核对**不会静默关掉**
+    #    （旧实现整文件扫 ⇒ ⇒ 段标题改了照样扫得到 ⇒ ⇒ 绿 ⇒ ⇒ 这条是新判据的判别力）
+    local reg_nohdr="$WORK/registry.nohdr.md"
+    sed 's/^## 登记清单$/## 登记表（段标题被改）/' "$REGISTRY" > "$reg_nohdr"
+    if cmp -s "$REGISTRY" "$reg_nohdr"; then
+        fail "self-test[⑨ 登记清单段标题被改]：**投毒构造失败**（未匹配到段标题）⇒ 请同步本条投毒"
+        rc=1
+    else
+        rm -rf "$poison_root"; mkdir -p "$poison_root"; cp -r include/. "$poison_root/" 2>/dev/null
+        if ( REGISTRY="$reg_nohdr"; judge "$poison_root" include ) >/dev/null 2>&1; then
+            fail "self-test[⑨ 登记清单段标题被改]：竟被判绿 ⇒ fail-closed 失效"
+            rc=1
+        else
+            ok "self-test[⑨ 登记清单段标题被改（fail-closed）] ⇒ 红"
+        fi
+    fi
+
+    # ⑪ 反向对照：投毒全部还原 ⇒ MUST 复绿
     rm -rf "$poison_root"; mkdir -p "$poison_root"; cp -r include/. "$poison_root/" 2>/dev/null
     if judge "$poison_root" include >/dev/null 2>&1; then
         ok "self-test：还原后复绿"
