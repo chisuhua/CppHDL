@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-20
+# 本 change **无 spec 变更**：它是 ADR-074 §7（D2′ 已落地）的**实施侧** ——
+# 「SoC 的验证语义收敛到单一载体」这件事的判据本体在 ADR-074 §7.6（AC-R13′-1/-2）
+# 与蓝图 §7 的 R13 行；既有 capability `examples-rtl-sim-coverage` 的 requirement
+# （「C++ 侧 MUST 与生成式 TB 共享同一验证源」）已完整覆盖本 change 的义务
+# ⇒ ⇒ 不新增也不修改任何 Requirement。
+# ⇒ 归档时用 `openspec archive axi4-soc-verif-migration-2026-11 --skip-specs`
+#   （仓内规则：只有**显式声明 no spec changes** 的 change 才可用该标志 —— 本文件即该声明）。
+skip_specs: true
