@@ -41,7 +41,7 @@
 | C1 | **锚点回填**：实测后回填 `CTEST_TOTAL` · `VERILATOR_E2E_TOTAL`（**会变**）· `tests/test_*.cpp`（**会变**）⇒ ⇒ ⚠️ `EXAMPLES_TEST_SOURCES` **不变**（夹具在 `tests/**`） | 根 `AGENTS.md` | AC8 | ☑ |
 | C2 | **遗留清扫**：本 change 触及的文件 MUST NOT 有 TODO / 半截实现 / 注释掉的代码 / 临时日志 | 全部触及文件 | AC8 | ☑ |
 | C3 | **文档同步**：`include/rtl_emit/` 附近的 AGENTS.md（若有）+ `docs/CHANGELOG.md` + 本 change 的 `## 用户可见变更` 段 | — | AC8 | ☑ |
-| C4 | **归档**：`openspec archive verif-wait-level-2026-11 --yes --skip-specs` ⇒ ⇒ 归档后核对主 spec **零变更** | — | AC8 | ☐ |
+| C4 | **归档**：`openspec archive verif-wait-level-2026-11 --yes --skip-specs` ⇒ ⇒ 归档后核对主 spec **零变更** | 归档为 `2026-11-20-verif-wait-level-2026-11` · `openspec/specs/**` 的 sha256 **前后相同**（`b9ce9aca…`） | AC8 | ☑ |
 
 ---
 
