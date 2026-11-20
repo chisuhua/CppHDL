@@ -693,3 +693,104 @@ rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）⇒ ⇒ **根组件自有
 `scripts/verify_examples_rtl_sim.sh` 的 **⑧'** —— 产物 MUST 含 **≥ 2** 个 module
 且含根 module `top` ⇒ ⇒ 否则「层次化」已**静默退化成扁平**
 （⚠️ 端口表判据 ⑧ 对这条**结构性失明**：退化后端口表照样相同）。
+
+## tb_phase3a_example {#phase3a-example}
+
+> ⚠️ **2026-11-20 新增**（change `phase3a-rtl-product-2026-11`）—— Phase 3A 集成单元
+> （4×4 Interconnect + AXI-to-Lite Converter + AXI4-Lite Slave）进 RTL 产品面。
+> ⇒ ⇒ 期望值**手推**（**禁**从仿真输出 / 从被测实现转录）。
+
+### 1. 顶层端口表（**9** 个 = 框架 2 + 根自有 7）
+
+⚠️ **口径 = SoC 的同款**（`soc-rtl-expectations.md` §1「顶层端口表（**14** 个 = 框架 2 + 根自有 12）」）
+⇒ ⇒ **不是 7**（根 `__io` 只 7 个，但产品端口面**含框架注入的 2 个**）。
+
+| # | 产物端口名 | 方向 | 位宽 | C++ 成员（根 `__io`） | 语义 |
+|---|---|---|---|---|---|
+| 1 | `default_clock` | in | 1 | （框架注入） | 时钟 |
+| 2 | `default_reset` | in | 1 | （框架注入） | 复位（**高有效**） |
+| 3 | `top_start` | in | 1 | `start` | 事务发起（1 拍脉冲） |
+| 4 | `top_is_write` | in | 1 | `is_write` | 写 / 读选择（1 = 写） |
+| 5 | `top_addr` | in | 32 | `addr` | 地址（事务期间保持稳定） |
+| 6 | `top_wdata` | in | 32 | `wdata` | 写数据 |
+| 7 | `top_rst_n` | in | 1 | `rst_n` | AXI 级低有效复位（**与框架复位不是同一个**） |
+| 8 | `top_rdata` | out | 32 | `rdata` | 读回数据 |
+| 9 | `top_done` | out | 1 | `done` | 事务完成（**注册一拍** ⇒ 非组合脉冲） |
+
+⇒ ⇒ 权威 = manifest `port_table[]`（与产物端口表**同源**）；护栏 ⑧ 逐字逐序比对。
+
+### 2. module 集（**1** 个 = `{top}`）
+
+⚠️ **phase3a 的 `describe()` 里无 `ch_layer`**（三个 `ch_module` 都是**内联**组件）⇒ ⇒
+**层次化产物 = 扁平产物 = 1 个 module**（两者逐字节相同）⇒ ⇒ 期望 module 集 = **`{top}`**。
+
+⇒ ⇒ 护栏 ⑧'（「层次化产物 MUST ≥ 2 module」）对本单元**结构性失明** ⇒ ⇒ 故归 `target` 桶
+（`soc` 桶 = **有显式 `ch_layer` 成层声明**的装配 ⇒ 本单元无 ⇒ 不属该桶）。
+
+### 3. 断言集（**6** 条 = `min_checks`）
+
+**外部规范 = AXI4-Lite 协议**（AW/W/B/AR/R 五通道 + 寄存器读写语义 + 复位语义）⇒ ⇒ 标
+**spec-derived** 的断言有 **3** 条（②③④ ⇒ ⇒ `spec_checks = 3`）；上电初值与两种复位 =
+**impl-contract**（①⑤⑥ ⇒ **不计入**）；拍数余量亦为 impl-contract。
+
+⚠️ **两种复位语义不同（MUST 分别驱动 · 2026-11-20 手推修正）**：
+
+| 复位 | 极性 | 作用面 | 手推依据 |
+|---|---|---|---|
+| `rst_n`（根自有） | **低有效** | **只**透传 AXI 子系统（converter → slave / interconnect）⇒ ⇒ **清 slave 的寄存器** ⇒ ⇒ **不影响**内部 FSM | `converter.io().axil_rst_n = io().rst_n`；slave 的寄存器走 `select(!io().rst_n, <init>, …)` |
+| `default_reset`（框架注入） | **高有效** | **所有 `ch_reg`**（含内部 FSM：`done_reg` / `mstate` / …） | `include/core/context.h:242`「所有寄存器共享 `default_clock_` 和 `default_reset_`」 |
+
+⇒ ⇒ ⚠️ **初稿曾把断言 5 写成「`rst_n` 拉低 ⇒ `done == 0`」⇒ ⇒ 错**（`done_reg` 的复位源是
+框架 `default_reset`，**不是**根 `rst_n` ⇒ ⇒ 拉低 `rst_n` **不会**清 `done`）⇒ ⇒ 已订正。
+⇒ ⇒ ⚠️ **二次订正（2026-11-20 · 实测后）**：初稿的第二版写成「`rst_n` 拉低 ⇒ **再读同址**
+⇒ `rdata == 0`」⇒ ⇒ **也错** —— 实测读回**仍是 0xAB** ⇒ ⇒ 根因 = 拉低 `rst_n` 后 master 的
+FSM **仍在等 R 响应**（不受 `rst_n` 影响）⇒ ⇒ 而 slave 已被复位 ⇒ ⇒ **响应永不到来**
+⇒ ⇒ 读事务**根本不完成** ⇒ ⇒ `rdata` 不会被更新 ⇒ ⇒ 「读回 0」**不可达** ⇒ ⇒ 已订正为
+断言 ⑥（「读事务**不完成** ⇒ `done` 仍 == 0」）⇒ ⇒ 该形态**可观测且有判别力**。
+
+**断言时序（6 条的顺序不可换）**：① 上电 ⇒ ② 写 ⇒ ③ 读 ⇒ ④ 读回值 ⇒ ⑤ 框架复位（脉冲后
+**释放**）⇒ ⑥ `rst_n` 拉低 + 读 ⇒ ⇒ ④ 必须在 ⑤ **之前**（否则读回已是 0）⇒ ⇒ ⑤ 必须在
+②③ **之后**（否则 `done` 恒 0 ⇒ 无判别力）⇒ ⇒ ⑤ 之后**必须释放**框架复位（`rst` 是 level
+有效）⇒ ⇒ 否则 ⑥ 的读事务压根发不出去 ⇒ ⇒ ⑥ 的判别力就来自 `rst_n` 而非「框架仍复位」。
+
+| # | 断言 | 期望 | 类别 | 手推依据 |
+|---|---|---|---|---|
+| 1 | 复位后初始 `done` | `0` | impl-contract | `done_reg` 的 INIT = `ch_bool(false)`；框架复位分支把它清 0 ⇒ ⇒ 上电即 0 |
+| 2 | 写事务完成 | `start=1, is_write=1, addr=0x00, wdata=0xAB` ⇒ **有界拍数内** `done == 1` | **spec-derived** | AXI4-Lite 写 = AW+W+B 三段握手 ⇒ B 响应必须回来 ⇒ 完成信号必须拉高 |
+| 3 | 读事务完成 | `start=1, is_write=0, addr=0x00` ⇒ **有界拍数内** `done == 1` | **spec-derived** | AXI4-Lite 读 = AR+R 两段握手 ⇒ R 响应必须回来 |
+| 4 | 读回值 | 断言 3 之后 `rdata == 32'h0000_00AB` | **spec-derived** | AXI4-Lite 寄存器语义 = **同址写后读回同值** ⇒ 写 0xAB 到 0x00 ⇒ 读 0x00 ⇒ 0xAB |
+| 5 | 框架复位生效 | `default_reset` 拉高（高有效）跨过 1 个时钟沿 ⇒ `done == 0` | impl-contract | `ch_reg` **共享框架 `default_reset`**（`include/core/context.h:242`）⇒ ⇒ 内部 FSM（`done_reg` / `mstate`）被框架复位清零 ⇒ ⇒ 此刻 `done` **曾为 1**（断言 ③ 之后）⇒ ⇒ **有判别力** |
+| 6 | AXI 级复位 ⇒ 事务被丢弃 | `rst_n` 拉低（跨过 ≥1 沿）⇒ 发起一笔读 ⇒ **有界拍数内** `done` **仍 == 0** | impl-contract | `rst_n`（低有效）经 converter 透传到 `AxiLiteSlave` ⇒ ⇒ slave 的 `ch_reg` 被 `select(!rst_n, <init>, …)` 清零 ⇒ ⇒ 但 **master 的 FSM（`mstate` / `done_reg`）不受 `rst_n` 影响**（其复位源是**框架** `default_reset`）⇒ ⇒ master 仍在等 R 响应 ⇒ ⇒ 而 slave 已被复位 ⇒ ⇒ 响应永不到来 ⇒ ⇒ **事务被丢弃 ⇒ `done` 永不拉高** ⇒ ⇒ **判别力**：若 `rst_n` 链路失效 ⇒ 读事务正常完成 ⇒ `done == 1` ⇒ 转红 |
+
+⚠️ **拍数余量 = impl-contract**（不计入 `spec_checks`）：断言 2/3 的「有界」上界取 **64 拍**
+（**余量常量**，**不是**期望值 —— 期望值是「完成」这个事件本身；上界只保证「有界」⇒ ⇒
+**不**用它判语义）⇒ ⇒ 实际拍数由实现决定 ⇒ ⇒ 上界只用于「挂死 ⇒ 失败」。
+
+⚠️ **断言 4 的判别力来源**：`rdata` 是**读回数据** ⇒ 若 interconnect 路由 / converter 相位分离 /
+AXI4-Lite slave 任一处出错 ⇒ 读回值 ≠ 0xAB ⇒ ⇒ 断言 4 转红 ⇒ ⇒ 这是本单元**最强的判据**。
+
+⚠️ **验收边界**：16 对路由的验收由 `tests/test_axi_interconnect_4x4.cpp`（**组件级**）承担
+⇒ ⇒ 本 TB **不是** 16 对路由的验收手段（既有纪律）。
+
+### 4. 变异自证（判别力自证 · 登记于本段）
+
+⚠️ **实测结果（2026-11-20 · 变异打在**临时产物**上 ⇒ 仓内产物零改动）**：
+
+| # | 变异形态 | 实测 | 抓的是 |
+|---|---|---|---|
+| M1 | `assign top_rdata = top_reg;` ⇒ `= 32'h0`（读回通路断） | ✅ **断言 4 转红**（`got=0x00000000 want=0x000000ab`）· `checks=6 fails=1` | 读回语义（**最强判据**） |
+| M2 | `assign top_done = top_reg_1;` ⇒ `= 1'b0`（完成信号断） | ✅ **断言 2 + 3 同时转红** · `checks=6 fails=2` | 完成信号 |
+| M3 | 复位失效（`done` 不被框架复位清零） | **未做**（本轮只做 2 条 ⇒ 满足「≥2 条」门槛） | 复位路径（留待后续） |
+
+⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=6 fails=0` ⇒ ⇒ 变异未污染产物。
+⚠️ 每条变异 MUST **先确认仍能编译**（编译失败 ⇒ 跑的是**旧二进制** ⇒ 假绿）。
+
+⚠️ 每条变异 MUST **先确认仍能编译**（编译失败 ⇒ 跑的是**旧二进制** ⇒ 假绿）。
+
+### 5. C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_phase3a_example.cpp`）= **2** 条 ⇒ ⇒ 清单 `interp_checks = 2`。
+- TB 侧（Verilog 产物）= **6** 条 ⇒ ⇒ 清单 `min_checks = 6`。
+
+⇒ ⇒ **两者不等是预期**（SoC 行同型）⇒ ⇒ ⚠️ MUST NOT 用一侧代用另一侧
+（ADR-074 §7.6 的 AC-R13′-2 口径）⇒ ⇒ 护栏 ⑨ 判 C++ 侧（`interp_checks`）、⑥ 判 TB 侧（`min_checks`）。

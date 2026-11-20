@@ -9,11 +9,15 @@
  *    护栏无法对账条数（「断言被删光」只会表现为 exit 0）⇒ ⇒ 与已退役的
  *    `axi4_full_example` 是同一族缺陷（只打印不判定 · AC27）。
  *
- * ⚠️ **2 条断言** = 本文件的全部判据面：
- *    ① 写事务在 64 拍内完成（`done` 拉高）
- *    ② 读回值 == 写入值（0xAB）
- *    ⇒ ⇒ 本 example **不进 RTL 产品清单**（无 `--emit-rtl` · 无 emitter target）
- *    ⇒ ⇒ 故清单里没有 `interp_checks` 行可对账；条数由本文件的协议行自证。
+ * ⚠️ **两种模式**（`phase3a-rtl-product-2026-11` B1）：
+ *    · **默认**（无参）= **验证模式**：C++ 侧 2 条断言 + `RESULT: checks=2 fails=0`
+ *    · **`--emit-rtl <dir>`** = **发射模式**：剥离该标记 ⇒ 其余 argv 透传库层 `run_emit_cli`
+ *      ⇒ ⇒ 产物 = **1 module（`top`）** + **9 个顶层端口**（框架 2 + 根自有 7）
+ *      ⇒ ⇒ 独立 TB = `examples/axi4/tb_phase3a_example.sv`（**手写**）
+ *      ⇒ ⇒ 期望源 = `.rddf/checks/examples-rtl-expectations.md#phase3a-example`（**手推**）
+ *
+ * ⚠️ **两侧条数各自登记**：C++ 侧 = **2** 条（清单 `interp_checks`）· TB 侧 = **6** 条
+ *    （清单 `min_checks`）⇒ ⇒ **不等是预期**（SoC 行同型）⇒ ⇒ MUST NOT 用一侧代用另一侧。
  *
  * ⚠️ **验收范围**：只验证 slave 0 一路 —— s1-3 在本设计里被 tie-off（未接线的
  *    `ch_in` 读出为 0）。16 对路由的验收由 `tests/test_axi_interconnect_4x4.cpp`
@@ -23,17 +27,52 @@
 #include "ch.hpp"
 #include "device.h"
 #include "phase3a_top.h"
+#include "rtl_emit/cli.h"
 #include "simulator.h"
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+/// 发射模式的 design factory（与 `run_emit_cli` 的 `DesignFactory` 同型）
+/// ⚠️ 根名取**设计头的常量**（单一真相源）⇒ ⇒ 产物 module 名 = `top`
+std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {
+    return std::make_unique<axi4::example::Phase3ATop>(nullptr, axi4::example::kPhase3aRootName);
+}
+
+} // namespace
 
 int main(int argc, char **argv) {
-    // ── 默认模式 fail-closed：收到**任何**参数 ⇒ exit 2 ──────────────────────
-    //   ⚠️ 本 example 无发射模式（不进产品清单）⇒ ⇒ 不接受任何参数
+    // ── 0) 模式判定：**位置无关**剥离 `--emit-rtl`（其余 argv 原序保留）──────────
+    //   ⚠️ 剥离与 `--out` 校验**走库层共用实现**（`rtl_emit/cli.h`）⇒ ⇒ 与 Lite / SoC
+    //   两个 tb **同型**（不各写一份 ⇒ 不漂移）。
+    std::vector<std::string> rest;
+    rest.reserve(static_cast<std::size_t>(argc > 0 ? argc - 1 : 0));
+    for (int i = 1; i < argc; ++i) {
+        rest.emplace_back(argv[i]);
+    }
+    std::vector<std::string> mode_flags;
+    rest = rtl_emit::strip_mode_flags(rest, {"--emit-rtl"}, &mode_flags);
+
+    if (!mode_flags.empty()) {
+        // ── 发射模式 fail-closed：`--out` 缺失 / 取值形态非法 ⇒ exit 2 ───────────
+        //   ⚠️ MUST NOT 落到库层默认 `rtl_out/`（那会写进 CWD）
+        std::string error;
+        if (!rtl_emit::require_out_dir(rest, nullptr, &error)) {
+            std::cerr << "FATAL: --emit-rtl " << error << "（拒绝回落到默认 rtl_out/）\n";
+            return 2;
+        }
+        return rtl_emit::run_emit_cli(rest, make_emit_design);
+    }
+
+    // ── 默认模式 fail-closed：收到**任何**未知参数 ⇒ exit 2 ──────────────────
     //   （与 `tb_axi4_lite_example` / `tb_axi_soc_example` 的默认模式同型）
-    if (argc > 1) {
-        std::cerr << "FATAL: 未知参数（默认模式只接受无参）：" << argv[1] << "\n";
+    if (!rest.empty()) {
+        std::cerr << "FATAL: 未知参数（默认模式只接受无参）：" << rest[0] << "\n";
         return 2;
     }
 

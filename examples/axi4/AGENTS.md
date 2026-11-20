@@ -12,7 +12,8 @@ Child of root `AGENTS.md`.
 | `tb_axi4_lite_example.cpp` | AXI4-Lite slave 验证（**由 `.verif` 驱动** · `RESULT: checks=113`） | ✅ |
 | `tb_axi_soc_example.cpp` | SoC 激励 + 三模式（默认 / --emit-rtl / --check-products） | ✅ |
 | `phase3a_top.h` | Phase 3A **设计定义**（4x4 Interconnect + AXI-to-Lite Converter · **无 `main`**） | — |
-| `tb_phase3a_example.cpp` | Phase 3A **激励驱动**（2 条断言 · `RESULT: checks=2 fails=0`） | ✅ |
+| `tb_phase3a_example.cpp` | Phase 3A **激励驱动**（2 条断言 · `RESULT: checks=2 fails=0`）+ `--emit-rtl` 发射 | ✅ |
+| `tb_phase3a_example.sv` | Phase 3A **独立 TB**（**手写** · 6 条断言 · `RESULT: checks=6 fails=0`） | — |
 | `tb_axi4_lite_example.verif` | **验证源**（`.verif` · 7 场景 / 113 断言 · **单一语义来源**） | — |
 | `tb_axi4_lite_example.sv` | **由 `.verif` 生成**的独立 TB（`generated=yes` · 禁手改） | — |
 | `tb_axi_soc_example.sv` | SoC 层独立 TB（**手写** · `generated=no` · UART 帧解码超出封闭原语集） | — |
@@ -20,6 +21,11 @@ Child of root `AGENTS.md`.
 ## PATTERNS
 - **三角色分离**（`example-file-boundary-2026-11`）：设计定义 `*_top.h`（**无 `main`** · 只做实例化与连接）
   → 激励驱动 `tb_*.cpp`（`main`：加载激励 + `--emit-rtl` 发射）→ 激励源 `tb_*.{verif,sv}`
+- **产品面登记**（`phase3a-rtl-product-2026-11`）：phase3a 已进 `.rddf/checks/examples-rtl-sim-targets.tsv`
+  ⇒ ⇒ **端口已具名**（产物端口名 = `top_<成员名>`）· 期望源 =
+  `.rddf/checks/examples-rtl-expectations.md#phase3a-example`（**手推**）
+  ⇒ ⇒ ⚠️ **两种复位语义不同**：`default_reset`（框架 · 高有效 · level ⇒ 清**所有** ch_reg）
+  vs `rst_n`（根自有 · 低有效 ⇒ **只**清 AXI 子系统）⇒ ⇒ MUST 分别驱动
 - `ch_module<T>` instantiation inside `Component::describe()` (see root AGENTS.md)
 - Peripheral headers: `include/axi4/peripherals/axi_gpio.h`, `axi_uart.h`
 - ⚠️ **顶层组件住在 `examples/axi4/`**（`axi4_lite_example_top.h` / `axi_soc_example_top.h`）

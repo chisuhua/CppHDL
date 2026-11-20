@@ -1,3 +1,50 @@
+## 2026-11-20 — phase3a 进 RTL 产品面（端口具名 + `--emit-rtl` + 冻结手推期望）
+
+**是什么**：`examples/axi4/phase3a`（4×4 Interconnect + AXI-to-Lite Converter + AXI4-Lite
+Slave）从「只有 C++ 侧验证」变成**登记在册的 RTL 产品面** ⇒ ⇒ 它的 **Verilog 产物首次被
+独立验证**（此前只有解释器路径的 2 条断言）。
+
+**改了什么**
+
+- **端口具名**（ADR-075 E1 · 硬前置）：`phase3a_top.h` 的 7 个顶层端口全部具名 ⇒ ⇒ 产物端口名
+  = `top_<C++ 成员名>` ⇒ ⇒ 独立 TB 能**按名连线**（未具名 ⇒ `top_unnamed_input_N` ⇒ 不可能）。
+  连带：豁免表删 7 行 ⇒ 棘轮 `EXPECTED_EXEMPT_PORTS` **1384 → 1377**。
+- **`--emit-rtl` 模式**（照 Lite / SoC 同型 ⇒ 复用库层 `strip_mode_flags` / `require_out_dir` /
+  `run_emit_cli`）⇒ ⇒ 默认模式行为**逐字不变**。
+- **可发射性前置**（ADR-073 D2 的同型）：interconnect 的后代 `ch_in`（m1–m3 各 14 根 +
+  s1–s3 各 11 根 = **75 根**）此前**悬空** ⇒ ⇒ 发射 fail-closed（实测 75 条
+  `dangling_input` 诊断）⇒ ⇒ 补 tie-off 到常量 0（**与「未接线读出 0」行为等价** ⇒ C++ 侧
+  2 条断言仍绿 ⇒ 可复算）；另补 `m0_wid`（**此前漏接**，同属悬空）。
+- **独立 TB**（**手写** · `examples/axi4/tb_phase3a_example.sv`）：9 根连线（框架 2 + 根自有 7）
+  + **6 条断言** ⇒ `RESULT: checks=6 fails=0`。
+- **期望源**（`.rddf/checks/examples-rtl-expectations.md#phase3a-example` · **手推**）：
+  module 集 = **{top}**（1 个）· 顶层端口表 = **9** 行 · 6 条断言的逐条推导 · 变异自证登记。
+- **清单**：新增 `tb_phase3a_example` 行 ⇒ `REGISTERED_TARGETS` **10 → 11**；**落选表删该行**
+  （原理由「阶段汇总回归 · 非独立产品单元」已被本 change 取代 ⇒ 理由留痕在 proposal）⇒ ⇒
+  守恒式 `27 == 11 ∪ 16`（两处陈旧值 `28 == 10 ∪ 18` 同批订正）。
+
+**用户可见变更**
+
+| 项 | 前 | 后 |
+|---|---|---|
+| `phase3a` 的 RTL 产物 | **不可发射**（75 条 `dangling_input` ⇒ exit 1） | **可发射**（exit 0 · 1 module · 9 端口） |
+| 产物端口名 | `top_unnamed_input_N` 形态 | `top_start` / `top_addr` / `top_rdata` / … （**具名**） |
+| `tb_phase3a_example --emit-rtl --out <dir>` | 不支持 | **支持**（与 Lite / SoC 同型） |
+| 独立 TB | 无 | `tb_phase3a_example.sv`（6 条断言 · `checks=6 fails=0`） |
+| 端口命名棘轮 | 1384 | **1377**（7 根具名 ⇒ 债减少） |
+
+**手推期望的两处订正（实测暴露 · 已如实登记在期望源）**
+
+1. 初稿把断言 ⑤ 写成「`rst_n` 拉低 ⇒ `done == 0`」⇒ ⇒ **错** —— `done_reg` 的复位源是**框架**
+   `default_reset`（`ch_reg` 共享 default_reset），**不是**根 `rst_n`。
+2. 二次订正写成「`rst_n` 拉低 ⇒ 再读同址 ⇒ `rdata == 0`」⇒ ⇒ **也错** —— 实测读回**仍是 0xAB**
+   ⇒ ⇒ 根因 = 拉低 `rst_n` 后 **master 的 FSM 仍在等 R 响应**（不受 `rst_n` 影响）⇒ ⇒ 而 slave
+   已被复位 ⇒ ⇒ **响应永不到来** ⇒ ⇒ 读事务**根本不完成** ⇒ ⇒ 「读回 0」**不可达** ⇒ ⇒ 已订正为
+   断言 ⑥「读事务**不完成** ⇒ `done` 仍 == 0」（可观测且有判别力）。
+
+**变异自证（打在临时产物上 ⇒ 仓内产物零改动）**：M1（`rdata` 恒 0）⇒ **断言 ④ 转红** ·
+M2（`done` 恒 0）⇒ **断言 ②③ 同时转红** · 还原复跑 `checks=6 fails=0` ✅
+
 ## 2026-11-20 — C++ 侧断言纳入判据守护 + `phase3a` 拆三角色（`axi4-convergence-tail`）
 
 **问题一（判据面）**：`tb_axi_soc_example` 的 **C++ 侧 2 条断言无任何守护** —— ⑥ 读的是

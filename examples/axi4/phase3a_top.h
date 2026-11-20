@@ -7,11 +7,11 @@
 //   · 激励驱动 = `tb_phase3a_example.cpp`（`main` + `RESULT:` 协议行）
 //   ⇒ ⇒ 与 `axi4_lite_example_top.h` / `axi_soc_example_top.h` **同型**。
 //
-// ⚠️ **本设计不进 RTL 产品清单**（无 `--emit-rtl` · 无 emitter target ⇒
-//   `.rddf/checks/examples-rtl-sim-targets.tsv` 无该行）⇒ ⇒ 端口**未具名**
-//   （ADR-075 E1 的具名要求只对有产物的设计生效）。
-//   ⇒ ⇒ 若未来把它纳入产品面（follow-up）⇒ ⇒ MUST **先具名**（否则
-//   `manifest.cpp_member` 只能是 `unnamed_input` ⇒ 验证源无法按名寻址）。
+// ⚠️ **本设计已进 RTL 产品面**（2026-11-20 · change `phase3a-rtl-product-2026-11`）
+//   ⇒ ⇒ 端口**已全部具名**（ADR-075 E1）⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`
+//   ⇒ ⇒ 独立 TB 按名连线 ⇒ ⇒ 期望源 = `.rddf/checks/examples-rtl-expectations.md#phase3a-example`。
+//   ⚠️ **无 `ch_layer`** ⇒ ⇒ 层次化产物 = 扁平产物 = **1 module**（`{top}`）⇒ ⇒
+//   护栏 ⑧'（「≥2 module」）对本设计**结构性失明** ⇒ ⇒ 故归 `target` 桶（不是 `soc` 桶）。
 
 #pragma once
 
@@ -35,15 +35,19 @@ class Phase3ATop : public ch::Component {
 public:
     __io(
         // 测试控制
-        ch_in<ch_bool> start;
-        ch_in<ch_bool> is_write;
-        ch_in<ch_uint<32>> addr;
-        ch_in<ch_uint<32>> wdata;
-        ch_out<ch_uint<32>> rdata;
-        ch_out<ch_bool> done;
-        
+        // ⚠️ **端口 MUST 具名**（ADR-075 E1 · 2026-11-20）—— 本设计已进入 RTL 产品面
+        //   （`phase3a-rtl-product-2026-11`）⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`
+        //   ⇒ ⇒ 独立 TB MUST 能**按名连线**（未具名 ⇒ 端口名 = `top_unnamed_input_N`
+        //   ⇒ ⇒ 按名寻址不可能）。
+        ch_in<ch_bool> start{"start"};
+        ch_in<ch_bool> is_write{"is_write"};
+        ch_in<ch_uint<32>> addr{"addr"};
+        ch_in<ch_uint<32>> wdata{"wdata"};
+        ch_out<ch_uint<32>> rdata{"rdata"};
+        ch_out<ch_bool> done{"done"};
+
         // 复位（低有效，在时钟沿生效）—— 透传到 converter 与 AXI4-Lite slave
-        ch_in<ch_bool> rst_n;
+        ch_in<ch_bool> rst_n{"rst_n"};
     )
     
     Phase3ATop(ch::Component* parent = nullptr, const std::string& name = "phase3a_top")
@@ -192,6 +196,10 @@ public:
         // ---------------- W 通道 ----------------
         interconnect.io().m0_wdata<<=wdata_reg;
         interconnect.io().m0_wstrb<<=ch_uint<4>(15_d);
+        // ⚠️ **WID 之前漏接**（2026-11-20 发射时由 `dangling_input` 诊断查实：
+        //   interconnect 的 `m0_wid` 是 `ch_in` ⇒ 未驱动 ⇒ ⇒ ADR-072 D1-f 的
+        //   「后代悬空 ⇒ 发射 fail-closed」⇒ ⇒ tie-off 到 0（= 未接线读值 ⇒ 行为等价）
+        interconnect.io().m0_wid<<=ch_uint<4>(0_d);
         interconnect.io().m0_wlast<<=ch_bool(true);
         // WVALID **保持到 W 握手**（与 AW 分开保持 ⇒ 相位分离安全）
         auto w_active = select(is_write, select(w_done, ch_bool(false), ch_bool(true)),
@@ -241,6 +249,88 @@ public:
         io().done = done_reg;
         io().rdata = rdata_reg;
         
+        // ⚠️ **未用主设备 / 从设备的后代输入 tie-off**（ADR-073 D2 的**可发射性前置**：
+        //   所有后代 `ch_in` MUST 有驱动源 = **接通** 或 **tie-off** ⇒ ⇒ 否则
+        //   ADR-072 D1-f 的「后代悬空 ⇒ 发射 fail-closed」会拦下本设计
+        //   （实测 2026-11-20：发射报 75 条 `dangling_input` 诊断 ⇒ exit 1）
+        //   ⇒ ⇒ tie-off 到常量 **0** ⇒ ⇒ 与「未接线读出为 0」**行为等价**
+        //   ⇒ ⇒ 故 C++ 侧行为不变（2 条断言仍绿 ⇒ 可复算）。
+        interconnect.io().m1_awaddr <<= ch_uint<32>(0_d);
+        interconnect.io().m1_awid <<= ch_uint<4>(0_d);
+        interconnect.io().m1_awlen <<= ch_uint<4>(0_d);
+        interconnect.io().m1_awsize <<= ch_uint<3>(0_d);
+        interconnect.io().m1_awburst <<= ch_uint<2>(0_d);
+        interconnect.io().m1_wdata <<= ch_uint<32>(0_d);
+        interconnect.io().m1_wid <<= ch_uint<4>(0_d);
+        interconnect.io().m1_wstrb <<= ch_uint<4>(0_d);
+        interconnect.io().m1_wlast <<= ch_bool(false);
+        interconnect.io().m1_araddr <<= ch_uint<32>(0_d);
+        interconnect.io().m1_arid <<= ch_uint<4>(0_d);
+        interconnect.io().m1_arlen <<= ch_uint<4>(0_d);
+        interconnect.io().m1_arsize <<= ch_uint<3>(0_d);
+        interconnect.io().m1_arburst <<= ch_uint<2>(0_d);
+        interconnect.io().m2_awaddr <<= ch_uint<32>(0_d);
+        interconnect.io().m2_awid <<= ch_uint<4>(0_d);
+        interconnect.io().m2_awlen <<= ch_uint<4>(0_d);
+        interconnect.io().m2_awsize <<= ch_uint<3>(0_d);
+        interconnect.io().m2_awburst <<= ch_uint<2>(0_d);
+        interconnect.io().m2_wdata <<= ch_uint<32>(0_d);
+        interconnect.io().m2_wid <<= ch_uint<4>(0_d);
+        interconnect.io().m2_wstrb <<= ch_uint<4>(0_d);
+        interconnect.io().m2_wlast <<= ch_bool(false);
+        interconnect.io().m2_araddr <<= ch_uint<32>(0_d);
+        interconnect.io().m2_arid <<= ch_uint<4>(0_d);
+        interconnect.io().m2_arlen <<= ch_uint<4>(0_d);
+        interconnect.io().m2_arsize <<= ch_uint<3>(0_d);
+        interconnect.io().m2_arburst <<= ch_uint<2>(0_d);
+        interconnect.io().m3_awaddr <<= ch_uint<32>(0_d);
+        interconnect.io().m3_awid <<= ch_uint<4>(0_d);
+        interconnect.io().m3_awlen <<= ch_uint<4>(0_d);
+        interconnect.io().m3_awsize <<= ch_uint<3>(0_d);
+        interconnect.io().m3_awburst <<= ch_uint<2>(0_d);
+        interconnect.io().m3_wdata <<= ch_uint<32>(0_d);
+        interconnect.io().m3_wid <<= ch_uint<4>(0_d);
+        interconnect.io().m3_wstrb <<= ch_uint<4>(0_d);
+        interconnect.io().m3_wlast <<= ch_bool(false);
+        interconnect.io().m3_araddr <<= ch_uint<32>(0_d);
+        interconnect.io().m3_arid <<= ch_uint<4>(0_d);
+        interconnect.io().m3_arlen <<= ch_uint<4>(0_d);
+        interconnect.io().m3_arsize <<= ch_uint<3>(0_d);
+        interconnect.io().m3_arburst <<= ch_uint<2>(0_d);
+        interconnect.io().s1_awready <<= ch_bool(false);
+        interconnect.io().s1_wready <<= ch_bool(false);
+        interconnect.io().s1_bid <<= ch_uint<4>(0_d);
+        interconnect.io().s1_bresp <<= ch_uint<2>(0_d);
+        interconnect.io().s1_bvalid <<= ch_bool(false);
+        interconnect.io().s1_arready <<= ch_bool(false);
+        interconnect.io().s1_rdata <<= ch_uint<32>(0_d);
+        interconnect.io().s1_rid <<= ch_uint<4>(0_d);
+        interconnect.io().s1_rresp <<= ch_uint<2>(0_d);
+        interconnect.io().s1_rlast <<= ch_bool(false);
+        interconnect.io().s1_rvalid <<= ch_bool(false);
+        interconnect.io().s2_awready <<= ch_bool(false);
+        interconnect.io().s2_wready <<= ch_bool(false);
+        interconnect.io().s2_bid <<= ch_uint<4>(0_d);
+        interconnect.io().s2_bresp <<= ch_uint<2>(0_d);
+        interconnect.io().s2_bvalid <<= ch_bool(false);
+        interconnect.io().s2_arready <<= ch_bool(false);
+        interconnect.io().s2_rdata <<= ch_uint<32>(0_d);
+        interconnect.io().s2_rid <<= ch_uint<4>(0_d);
+        interconnect.io().s2_rresp <<= ch_uint<2>(0_d);
+        interconnect.io().s2_rlast <<= ch_bool(false);
+        interconnect.io().s2_rvalid <<= ch_bool(false);
+        interconnect.io().s3_awready <<= ch_bool(false);
+        interconnect.io().s3_wready <<= ch_bool(false);
+        interconnect.io().s3_bid <<= ch_uint<4>(0_d);
+        interconnect.io().s3_bresp <<= ch_uint<2>(0_d);
+        interconnect.io().s3_bvalid <<= ch_bool(false);
+        interconnect.io().s3_arready <<= ch_bool(false);
+        interconnect.io().s3_rdata <<= ch_uint<32>(0_d);
+        interconnect.io().s3_rid <<= ch_uint<4>(0_d);
+        interconnect.io().s3_rresp <<= ch_uint<2>(0_d);
+        interconnect.io().s3_rlast <<= ch_bool(false);
+        interconnect.io().s3_rvalid <<= ch_bool(false);
+
         // 其他主设备接口 (未使用，接地)
         interconnect.io().m1_awvalid <<= ch_bool(false);
         interconnect.io().m1_wvalid <<= ch_bool(false);

@@ -25,7 +25,9 @@
 ⚠️ **TSV 里另有两个不计入「首批 10」的条目**（各自独立桶 · 见 tsv 的 `REGISTERED_SOC` /
 `REGISTERED_HIER` 锚点）：`axi_soc_example`（`kind=soc` · SoC 层产物）与
 `riscv-mini-rv32i-soc-hier`（`kind=hier` · **同一设计的层次化形态** ⇒ 复用同一份独立 TB）。
-⇒ ⇒ 守恒等式 `28 == 10 ∪ 18` **只**作用于「首批 10」⇒ ⇒ 这两个桶不参与 ✅
+⇒ ⇒ 守恒等式 **`27 == 11 ∪ 16`**（⚠️ **2026-11-20 订正**：原写 `28 == 10 ∪ 18`
+—— `axi4_full_example` 退役后 tracked 减 1、phase3a 转入覆盖表后落选再减 1）
+**只**作用于「首批」口径⇒ ⇒ 这两个桶不参与 ✅
 
 ## 2. 落选名单（**机器可读** = `.rddf/checks/examples-rtl-sim-exclusions.tsv`）
 
