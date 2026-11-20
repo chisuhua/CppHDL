@@ -84,6 +84,39 @@ a ∈ {0,1,2,3,4,5,6,7,8,15} × b ∈ {1,2,3,5,7}，共 **50 例**）：
 - 原因是**数学上闭合**的：余数 ∈ [0, N-1]，`compute_bit_width(N-1)` 恰好足够；
   信号做除数时结果宽取 RHS 的类型宽，余数 ≤ 2^N-2 同样放得下 ⇒ 截断**永不丢有效位**。
 
-⇒ 因此**不登记**残留（登记一个不存在的缺陷会污染台账）。这条口径若今后被改动，
-风险点是「定宽公式与余数上界不再匹配」，建议届时补一条常驻双后端点测
-（是否现在落地由用户裁决）。
+⇒ 因此**不登记**残留（登记一个不存在的缺陷会污染台账）。这条口径已固化为**常驻 tripwire**
+`tests/test_mod_width_dual.cpp`（2026-11-20 落地）：
+
+- **编译期** `static_assert` 钉住框架定宽公式（`% 字面量(3) → 2 bit` / `% 字面量(5) → 3 bit`
+  / `% 信号 → RHS 类型宽`）⇒ 改公式**立刻编译失败**；
+- **运行期** 4 条**手推**期望值 × 双后端（挑选「必须用满结果宽」的拍：
+  `a%5` 在 a=4/9 处为 4、`a%b` 在 b=7/a=6 处为 6）⇒ 截断若丢位，verilator 侧立刻转红。
+
+## 附带发现（**范围外** · 待路由 · 2026-11-20）
+
+加 `tests/test_mod_width_dual.cpp` 时跑 `scripts/verify_dual_backend_parity.sh`，发现一条
+**与本次改动无关的既有违规**：
+
+```
+VIOLATION unclassified-labeled-entry: test_verif_wait_level
+```
+
+判定：`tests/test_verif_wait_level.cpp` 经 `add_dual_backend_test()` 注册（⇒ 带
+`verilator_e2e` 标签），但①文件内**没有** `DUAL_BACKEND_TEST_PAIR`，②
+`openspec/specs/dual-backend-test-coverage/spec.md` 的「现有 9 个 verilator 测试 MUST
+保留原状」段与其后的单后端登记段**都没有**它。
+
+三处证据都来自 **HEAD 已提交内容**（与本工作树改动无关）：
+
+- `git show HEAD:tests/CMakeLists.txt | grep -n test_verif_wait_level` ⇒ 注册行存在；
+- `git show HEAD:tests/test_verif_wait_level.cpp | grep -c DUAL_BACKEND_TEST_PAIR` ⇒ 0；
+- `git show HEAD:openspec/specs/dual-backend-test-coverage/spec.md` 的两段清单均无该文件。
+
+⇒ 该护栏在 CI 有 4 个执行点（`build-and-test` / `pr-verilator-fast`，各含 `--self-test`）
+⇒ ⇒ **自 `2026-11-20-verif-wait-level-2026-11` 归档起恒红**。
+
+**为什么不在这里修**：修法只能是把它登记为**单后端条目**（同
+`test_hierarchy_equivalence.cpp` 的既有先例），而登记面是
+`openspec/specs/**` —— builder MUST NOT 直接改主 spec（走 change + archive 合并）
+⇒ ⇒ 需 planner 立一个登记小 change（或 architect 裁定是否该保留该标签）。
+本条只作留痕，不在本次范围内动手。

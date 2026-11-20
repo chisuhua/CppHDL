@@ -397,6 +397,16 @@ add_dual_backend_test(test_arithmetic_carry_dual
     SOURCES chlib/test_arithmetic_carry_dual.cpp
     TIMEOUT 300
 )
+
+# ⚠️ **`%`（mod）结果宽口径的常驻 tripwire**（2026-11-20）
+#    ⇒ 框架按 `compute_bit_width(N-1)`（字面量除数）/ RHS 类型宽（信号除数）定宽，
+#      Verilog 自然宽是 `max(两侧)` ⇒ 两者**取值相同**（余数上界与结果宽匹配）。
+#    ⇒ 本用例 = 编译期 `static_assert`（钉公式）+ 手推期望值 × 双后端（钉截断不丢位）。
+#    ⇒ 详细动机与判别力说明见该文件头。
+add_dual_backend_test(test_mod_width_dual
+    SOURCES test_mod_width_dual.cpp
+    TIMEOUT 300
+)
 add_dual_backend_test(test_sequential_counters_dual
     SOURCES chlib/test_sequential_counters_dual.cpp
     TIMEOUT 300
