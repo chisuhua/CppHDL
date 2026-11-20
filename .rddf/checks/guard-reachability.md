@@ -90,6 +90,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_node_names_single_source.sh` | `build-and-test:Verify node-names single source (R1–R3)`, `build-and-test:Verify node-names single source guard self-test` | `none` | — |
 | `scripts/verify_openspec_delta.sh` | `build-and-test:Verify OpenSpec delta self-check`, `pr-verilator-fast:Verify OpenSpec delta self-check` | `none` | — |
 | `scripts/verify_openspec_purpose.sh` | `build-and-test:Verify openspec purpose placeholders (spec debt registry)`, `build-and-test:Verify openspec purpose placeholders (self-test)` | `none` | — |
+| `scripts/verify_verif_migration_state.sh` | `build-and-test:Verify verif migration state (R13 closure probe)`, `build-and-test:Verify verif migration state (self-test)` | `none` | — |
 | `scripts/verify_perf_baseline_anchors.sh` | `build-and-test:Verify perf baseline anchor conservation`, `build-and-test:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation` | `none` | — |
 | `scripts/verify_port_naming.sh` | `build-and-test:Verify port naming ratchet`, `build-and-test:Verify port naming ratchet (self-test)` | `none` | — |
 | `scripts/verify_public_api_visibility.sh` | `build-and-test:Verify public API removal visibility (issue`, `build-and-test:Verify public API removal visibility (self-test)` | `none` | — |

@@ -394,6 +394,21 @@ jobs:
       shell: bash
       run: scripts/verify_openspec_purpose.sh --self-test
 
+    - name: Verify verif migration state (R13 closure probe)
+      # WHY: 蓝图 §7 的 R13（「SoC 的 C++ 侧激励是手写过渡态」）**不被**任何护栏覆盖
+      #   —— verify_arch_ledger_residuals.sh 的台账路径硬编码为另一本蓝图 => 无人抓
+      #   「台账称已闭、SoC 手写回潮」。本护栏判 `.verif` 迁移态的**自洽性**：
+      #   未迁（generated=no ⇒ .verif 不存在）/ 已迁（generated=yes ⇒ .verif 存在
+      #   + interp_checks == min_checks）=> 两态皆绿，红只发生在不自洽时。
+      shell: bash
+      run: scripts/verify_verif_migration_state.sh
+
+    - name: Verify verif migration state (self-test)
+      # 4 类投毒各自必红：宣称已迁但验证源缺失 / 宣称未迁但验证源存在 /
+      #   已迁但两侧条数不等 / 归档门在未迁态仍放行 => 证明判据不是恒绿。
+      shell: bash
+      run: scripts/verify_verif_migration_state.sh --self-test
+
     - name: Verify arch ledger residual registry
       # The architecture ledger's section 7 "known residuals" statuses MUST have
       # a SINGLE source of truth (the registry .rddf/checks/arch-residual-registry.md)
