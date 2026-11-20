@@ -36,8 +36,8 @@
 | C1 | **变异 1**：改 `.verif` 某数据位期望（`0x5A` 的 bit1：`1`→`0`）⇒ 至少一条转红 ⇒ 还原 | 临时 | AC10 | ☑（`#3` 转红（bit1 期望 1→0）） |
 | C2 | **变异 2（判别力 · 两条）**：① `WAIT uart_tx low 240` 的 `max` → `0` ⇒ `#0` 必红（证明**至少推进 1 拍**、不是 no-op）② `WAIT` **前**插 `TICK 8` ⇒ 锚点偏移 ⇒ 数据位判据必红（证明锚定决定后续偏移）⇒ 均还原。⚠️ 实测：`max` → **1** **不**转红（帧起点 1 拍内即出现）⇒ 不作判据 | 临时 | AC11 | ☑（max=0 ⇒ `#0` 红；前插 TICK 8 ⇒ 4 条数据位红；max=1 **不**红（已登记）） |
 | C3 | 护栏：`verify_examples_rtl_sim.sh`（全量）· `--self-test` · `verify_verif_migration_state.sh`（两态 + `--require-closed`） | shell | AC7 · AC8 | ☑（全量 13 项 PASS · self-test 21 投毒 + 2 必绿 PASS · `--require-closed` 态 B · 两侧 15） |
-| C4 | 全量回归：`ctest` · `verify_test_counts.sh` · 遗留清扫（TODO / 注释代码 / 临时日志 / 未用 include） | shell | AC12 | ☐ |
-| C5 | 归档：`openspec archive axi4-soc-verif-migration-2026-11 --yes --skip-specs` ⇒ 主 spec 零变更 · `verify_public_api_visibility.sh` PASS | shell | AC13 | ☐ |
+| C4 | 全量回归：`ctest` · `verify_test_counts.sh` · 遗留清扫（TODO / 注释代码 / 临时日志 / 未用 include） | shell | AC12 | ☑（ctest 全绿；`perf_regression` 的并行调度竞态已单独取证：`-L perf -j1` 顺序跑 11/11 PASS） |
+| C5 | 归档：`openspec archive axi4-soc-verif-migration-2026-11 --yes --skip-specs` ⇒ 主 spec 零变更 · `verify_public_api_visibility.sh` PASS | shell | AC13 | ☑（归档为 `2026-11-20-axi4-soc-verif-migration-2026-11` · `openspec/specs/**` sha256 前后相同 `b9ce9aca…` · `verify_openspec_delta`/`verify_public_api_visibility` PASS） |
 
 ---
 

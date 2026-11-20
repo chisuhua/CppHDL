@@ -27,7 +27,9 @@
 # · `interp_checks` —— 该行 **C++ 侧（解释器路径）入口**的**等式值**（⚠️ 2026-11-19 起）
 #                    ⚠️ **与 `min_checks` 语义不同**：`min_checks` 判的是 `.sv` 侧（生成式 / 手写 TB），
 #                    `interp_checks` 判的是 C++ 侧入口自己的 `RESULT: checks=<N>` 行
-#                    ⇒ ⇒ 手写激励的产品（如 SoC · R13 过渡态）两侧**本来就不等** ⇒ ⇒ MUST 各自登记
+#                    ⇒ ⇒ 两侧**不必然相等** —— 已迁 `.verif` 的行（`generated=yes`）两侧同源 ⇒ 相等；
+#                        **手写** TB 的行两侧本来就可能不等 ⇒ ⇒ 一律 MUST 各自登记（🔴 2026-11-20 起：
+#                        SoC 已迁 `.verif` ⇒ 它不再是「手写激励」的例子）
 #                    ⚠️ **作用域 = 自发行**（`emitter == target` ⇒ 发射器就是它自己 ⇒ 必然有 C++ 侧 `main`）
 #                    ⇒ ⇒ 自发行 MUST 登记且 > 0（**反向判据**）；非自发行 MUST 写 `-` 哨兵
 #                    ⇒ ⇒ 护栏 `scripts/verify_examples_rtl_sim.sh` 的 ⑨ + 反向判据按本列判定

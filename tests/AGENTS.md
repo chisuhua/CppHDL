@@ -85,3 +85,19 @@ Follow root Zero-Debt Policy: **编译通过 + 测试覆盖 + 文档同步**. Fo
 - **Catch2 tags**: `[category][subcategory]` for `ctest -L` filtering
 - **No test dependencies**: each TEST_CASE is independent with its own context
 - **Perf subprocess tests** (`tests/benchmark/test_perf_subprocess_*.cpp`): expect ~15-20 minute total runtime because the test invokes `perf_tests --all` (which spawns 9 child processes for TC-07/08/09 × {10,100,1000} plus TC-01/02/04/06/10/11 in-process). Wall-clock is dominated by TC-09 (`ch_uint<32>` arith chain, depth=1000) and TC-11 (`ch_uint<256>` wide reg chain, regs=1000). Set `TIMEOUT 1800` (30 min) in CMake — original TIMEOUT 300 was insufficient and caused false failures.
+
+## KNOWN FLAKE — perf fixture chain under `-j$(nproc)`
+
+`perf_regression` 失败为 **`cannot open <repo>/perf_results.json`**（缺文件，**不是**基线超限）时，
+**先判调度竞态，不要先怀疑性能回归**（2026-11-20 实测两次：并行整跑失败、`ctest -L perf -j1`
+顺序跑 11/11 PASS）。
+
+- 链路：`perf_results_clean`（`FIXTURES_SETUP`：`cmake -E rm -f perf_results.{json,csv,md}`）
+  → `perf_tests` 产出该文件 → `perf_regression`（`DEPENDS perf_tests`）读它。
+  并行调度下 fixture setup 与生产者的先后**不总能保证** ⇒ 文件被删在读取之后/之前。
+- 判别命令（≈1 分钟，不用等 21 分钟）：`ctest --test-dir build -L perf -j1`
+  ⇒ 绿 = 竞态；**仍红** = 真问题（那时才看基线阈值）。
+- 处置候选（未实施，属独立小改动）：给 `perf_regression` 加 `RUN_SERIAL`，或把删除动作并入
+  `perf_tests` 的前置步骤（去掉独立 fixture setup）。
+- ⚠️ 单个 `-R` 跑 `perf_regression` **必然红**（文件不存在）—— 它的输入由 `perf_tests` 产出，
+  不在该测试内生成 ⇒ **不能用单测复跑判红绿**。
