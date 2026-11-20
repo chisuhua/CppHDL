@@ -314,7 +314,10 @@ example 侧 MUST NOT 出现「产物派生的 module 集 / 顶层端口面 / 变
   MUST 在 change 里登记（tracked **28 → 27** · CTest 条目 `spinalhdl_axi4_full` 消失 · 不是静默）
 · ⇒ ⇒ 退役**不**影响 `include/axi4/axi4_full.h`（库组件保留；它仍有 `tests/test_axi4_full_burst.cpp`）
 
-**`tb_axi_soc_example` 的激励 = 手写过渡态（如实登记）**：
+**`tb_axi_soc_example` 的激励 = 手写过渡态（如实登记 · ⚠️ 2026-11-20 已闭）**：
+> **⚠️ 2026-11-20 闭口**：change `axi4-soc-verif-migration-2026-11` 已把 SoC 的验证语义收敛为
+> **一份** `.verif`（4 scenario / **15** 断言）⇒ 手写 `.sv` 由生成物替换、C++ 侧改调同一 helper
+> ⇒ 下面的登记转为**历史记录**（其「工作量级差 / 语义差」的判断仍有效，只是现状已变）。
 SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首个低电平定位 + 变长位偏移）
 **超出 `.verif` 封闭原语集（ADR-074 D2）** ⇒ ⇒
 · **本 change**：`tb_axi_soc_example.cpp` 的激励是 **重写，不是「迁移」** —— ⚠️ **实测**：现
@@ -328,7 +331,11 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
   那是**判据用错**，不是缺陷）⇒ ⇒ ⚠️ **被否决的替代**：在 C++ 侧重写 UART 8N1 解码以对齐 4 场景 ——
   那等于在 C++ 侧重做「超出封闭原语集」的工作，**做完即消灭 R13 的立项理由**，且双重手写（C++/SV 各一份）比现状更糟
 · **扩展原语集** = **ADR-074 D2 的签批决策变更 ⇒ 独立立项**（不在本蓝图的实施面）
-⇒ ⇒ **MUST NOT** 把手写激励记成「已收敛」；归 §7 **R13**
+⇒ ⇒ ⚠️ **2026-11-20 起**：该独立立项（ADR-074 §7 的 D2′）**已落地并归档**（change
+`2026-11-20-verif-wait-level-2026-11`），随后的 SoC 迁移（change `axi4-soc-verif-migration-2026-11`）
+已把上述「手写过渡态」消除 ⇒ ⇒ 原禁令「**MUST NOT** 把手写激励记成已收敛」的**回潮**形态改由
+机械探针抓 —— ① **常驻**（CI 跑 `--check`）：SoC 行 `generated=no` 但 `.verif` 存在 ⇒ 红；
+② **归档门**（`--require-closed`）：宣称已闭却未迁 ⇒ 红
 
 **被取代 / 删除的文件处置表**（连带面必须枚举完整）：
 
@@ -510,8 +517,10 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 > **「缓解」列的状态词**：**裁决**（口径已定）· **落实**（实施未闭）· **闭口判据**（何时算闭）
 > ⇒ ⇒ R1–R11 用的是散文式缓解 ⇒ ⇒ R12 起采用本词表（**两段式**：裁决 ✅ / 落实 ⚠️ 未闭）。
 >
-> ⚠️ **落实状态变更**（**唯一在读的一处**，避免读者把「未闭」当现状）：**R12 于 2026-11-18 落实闭合**（commit `0395cfc`；闭口证据 = 护栏 ⑧' 覆盖 `kind ∈ {hier, soc}` + 投毒18 + `REGISTERED_SOC: 1`）。
-> 其余残留行的「未闭」仍属实 ⇒ ⇒ 本节的未闭条目仍是**当前态**，不是历史。
+> ⚠️ **落实状态变更**（**唯一在读的一处**，避免读者把「未闭」当现状）：
+> **R12 于 2026-11-18 落实闭合**（commit `0395cfc`；闭口证据 = 护栏 ⑧' 覆盖 `kind ∈ {hier, soc}` + 投毒18 + `REGISTERED_SOC: 1`）·
+> **R13 于 2026-11-20 落实闭合**（change `axi4-soc-verif-migration-2026-11`；闭口证据 = SoC 行 `generated=yes` + 同一份 `.verif` 驱动两侧 + ⑥' 逐字节 + ⑨ 等式 + 探针 `scripts/verify_verif_migration_state.sh --require-closed`）。
+> 其余残留行（R1–R11）的「未闭」仍属实 ⇒ ⇒ 它们的未闭条目仍是**当前态**，不是历史。
 
 | # | 残留 | 后果 | 缓解 |
 |---|---|---|---|
@@ -527,7 +536,7 @@ SoC 的手写 TB 根因 = **UART 8N1 帧解码**（逐拍采样成数组 + 首�
 | R10 | **`tests/*` 的组件级判据仍是期望值的第三个载体**（`tests/test_axi_lite_slave_conformance.cpp` 的 15 个 `REQUIRE` 字面值） | 「G-期望 3 处」若把它计入则不成立 | **如实登记**：它是 **(A) 路径（组件级规范符合性）** 的判据，与 (C) 的交付验证**不同层** ⇒ ⇒ 本 change **不动**；若将来要收敛 ⇒ 单独立项 |
 | R11 | `Simulator` 新增 node_id 级访问器 = **公开面扩张** | 下游可见 | 按仓规登记 `public-api-surface.md` + CHANGELOG（M19） |
 | **R12** | **SoC 发射入口的默认模式发扁平产物**（2026-11-18 实测：`emit_rtl_soc.cpp` 只在 `--check-products` 模式补 `--hierarchical` ⇒ 护栏 ③ 对 `kind=soc` 发的**正是**默认模式）⇒ ⇒ 现状 = **实现偏离已登记的交付契约**（默认模式 = 5 module 早已在 TB 头注 / `CMakeLists.txt` target 注 / tsv SoC 行 note / 已归档 change 的交付契约 **四处**登记）⇒ ⇒ 与 `rtl-soc-output` 的既有 requirement 冲突 | SoC 的「交付产物」形态不确定 ⇒ 消费方可能拿到 1-module 的 SoC | **裁决** ✅ 已裁决（2026-11-18 · SoC 发射入口恒发层次化 ⇒ **恢复契约**）· **落实** ✅ **已闭**（2026-11-18 · commit `0395cfc`）· **闭口判据** = 护栏 ⑧' 覆盖 `kind=soc` ⇒ ✅ **已满足**：⑧' 的生效条件已改为 `kind ∈ {hier, soc}`（`scripts/verify_examples_rtl_sim.sh`）⇒ ⇒ 判别力 = **投毒18**（soc 产物压成单 module ⇒ 必红，**在 `--self-test` 内**）+ **soc 清单未投毒 ⇒ 仍绿**（`REGISTERED_SOC: 1`）；生产轮 soc 行实测 `✅ ⑧' 层次化形态成立（module 数 5 · 根 = top）` ⇒ ⇒ **本条关闭**（回顾：关闭前「入口退回扁平」这条回归路径**无任何常驻判据** —— 这正是本条的成因）· ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 本行的判据只能来自**实现侧护栏** · **状态复算**（本行**无自动守护** ⇒ 每次 phase-exit / 被质疑时手动执行，≈10 秒）：四式全真才维持「已闭」（**MUST 用 `grep -F`** —— 串里含 `[ ]` 走 BRE 会被当字符类；且**分片匹配**，避免把竖线写进表格单元格）：① `grep -qF '[ "$kind" = "hier" ]' scripts/verify_examples_rtl_sim.sh` · ② `grep -qF '[ "$kind" = "soc" ]' scripts/verify_examples_rtl_sim.sh` · ③ `grep -qF 'flatten_soc' scripts/verify_examples_rtl_sim.sh` · ④ `grep -qF 'REGISTERED_SOC: 1' scripts/verify_examples_rtl_sim.sh` ⇒ ⇒ 任一落空 ⇒ **本行即刻翻回「⚠️ 未闭」**（闭口判据消失即 reopen，无需新裁决） ⚠️ **正/负两面口径**：正向（⑧' 对 soc）**常驻**（生产轮每跑必查 · CI 在跑）；**负向**（投毒18）只在 `--self-test`，而**该 self-test 当前未挂 CI** ⇒ ⇒ 若要「⑧' 被改回 hier-only ⇒ 自动红」成为系统性保证，需另立项把 `scripts/verify_examples_rtl_sim.sh --self-test` 挂进 CI（一行 yml，属 builder 写集） |
-| **R13** | **`tb_axi_soc_example` 的激励是手写过渡态**（根因 = UART 8N1 帧解码超出 `.verif` 封闭原语集 · ADR-074 D2）⇒ ⇒ 激励语义的**完备性只在 `.sv` 侧**（C++ 侧 = 最小可用集：GPIO 写/读 + 复位） | 「设计定义/激励分离」在 SoC 侧**只到文件级、未到语义级** | **裁决** ✅ 已裁决（§4.3.3）· **落实** ⚠️ 未闭（**扩展 `.verif` 原语集** = ADR-074 D2 的签批决策变更 ⇒ **独立立项**）· **检查时机** = 产生 `tb_axi_soc_example.cpp` 的 change（`example-file-boundary-2026-11`）**归档时**由 verifier 核对此行 + 产生该 ADR 修订的 change 归档时再核对一次 · **漂移判据** = tsv SoC 行的 **C++ 侧条数等式**（护栏 ⑨ 按 `interp_checks` 列）⇒ ⇒ ⚠️ **2026-11-20 dated 订正**：原判据写作「MUST NOT 加 `interp-entry`」（C++ 侧 N ≠ `.sv` 侧 14 是**预期**，不是缺陷）⇒ ⇒ 该**自由文本标记机制已退役**（由 `interp_checks` **列**承载）⇒ ⇒ 现状（`interp_checks=2` + `min_checks=14` **各自登记**）**正是**原判据想保护的东西的机制化 ⇒ ⇒ **不违反**本条 ⇒ ⇒ 但 ⚠️ `interp_checks` 只钉**地板**（防「连 2 条都丢了」），**不逼增长** ⇒ ⇒ R13 维持「未闭」的正当性来源不变 ⇒ ⇒ **R13 闭合的充要条件** = SoC 行 `generated=yes` + 同一份 `.verif` 驱动两侧 + ⑥' 新鲜度成立 + ⑨ 等式成立（`interp_checks == min_checks`）⇒ ⇒ ⚠️ **2026-11-20 用户追认**：**闭口探针 MUST 做并挂 CI**（读 tsv 的 SoC 行断言 `generated=yes` + `.verif` 存在 + ⑥' 新鲜度）⇒ ⇒ 否则「台账称已闭、SoC 手写回潮」**无人抓**（⚠️ 本蓝图 §7 **不被** `verify_arch_ledger_residuals.sh` 覆盖 —— 该护栏的台账路径硬编码为另一本蓝图）⇒ ⇒ 裁决见 `docs/adr/ADR-074-rtl-verification-single-source.md` §7（D2′/D3′） · **MUST NOT** 把手写记成已收敛 ⚠️ **本蓝图 §7 不被** `verify_arch_ledger_residuals.sh` 覆盖（该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py`）⇒ ⇒ 同 R12：**不得**往它加行 |
+| **R13** | **`tb_axi_soc_example` 的激励是手写过渡态**（根因 = UART 8N1 帧解码超出 `.verif` 封闭原语集 · ADR-074 D2）⇒ ⇒ 激励语义的**完备性只在 `.sv` 侧**（C++ 侧 = 最小可用集：GPIO 写/读 + 复位） | 「设计定义/激励分离」在 SoC 侧**只到文件级、未到语义级** | **裁决** ✅ 已裁决（§4.3.3）· **落实** ✅ **已闭（2026-11-20）** —— change `axi4-soc-verif-migration-2026-11`：同一份 `.verif`（4 scenario / **15** 断言）驱动两侧 · tsv SoC 行 `generated=yes` · `interp_checks == min_checks == 15` · ⑥' 逐字节重现 · ⑨ 等式成立 · 归档门 `scripts/verify_verif_migration_state.sh --require-closed` **PASS**（态 B）· **检查时机** = 产生 `tb_axi_soc_example.cpp` 的 change（`example-file-boundary-2026-11`）**归档时**由 verifier 核对此行 + 产生该 ADR 修订的 change 归档时再核对一次 · **漂移判据** = ① tsv SoC 行的**两侧条数等式**（护栏 ⑨ 按 `interp_checks` / `min_checks` 列）② **回潮探针** `scripts/verify_verif_migration_state.sh`（两态自洽 + `--require-closed` 归档门）⇒ ⇒ ⚠️ **2026-11-20 dated 订正（一）**：原判据写作「MUST NOT 加 `interp-entry`」（C++ 侧 N ≠ `.sv` 侧 14 是**预期**，不是缺陷）⇒ ⇒ 该**自由文本标记机制已退役**（由 `interp_checks` **列**承载）⇒ ⇒ ⚠️ **2026-11-20 dated 订正（二）**：`interp_checks` 只钉**地板**（防「连最小集都丢了」）**不逼增长** ⇒ ⇒ 故 R13 闭合**不依赖**该列增长，而依赖「两侧同源」这一事实 ⇒ ⇒ **R13 闭合的充要条件**（2026-11-20 定稿）= SoC 行 `generated=yes` + 同一份 `.verif` 驱动两侧 + ⑥' 新鲜度成立 + ⑨ 等式成立（`interp_checks == min_checks`）⇒ ⇒ **四项已于 2026-11-20 全部成立** ⇒ ⇒ ⚠️ **2026-11-20 用户追认**：**闭口探针 MUST 做并挂 CI**（已落地 `scripts/verify_verif_migration_state.sh` + `ci.yml` 2 步）⇒ ⇒ 否则「蓝图称已闭、SoC 手写回潮」**无人抓**（⚠️ 本蓝图 §7 **不被** `verify_arch_ledger_residuals.sh` 覆盖 —— 该护栏的台账路径硬编码为另一本蓝图，见 `scripts/lib/ledger_residual.py` ⇒ ⇒ 同 R12：**不得**往它加行）· 裁决见 `docs/adr/ADR-074-rtl-verification-single-source.md` §7（D2′/D3′） |
 
 ---
 
