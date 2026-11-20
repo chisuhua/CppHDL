@@ -120,3 +120,9 @@ VIOLATION unclassified-labeled-entry: test_verif_wait_level
 `openspec/specs/**` —— builder MUST NOT 直接改主 spec（走 change + archive 合并）
 ⇒ ⇒ 需 planner 立一个登记小 change（或 architect 裁定是否该保留该标签）。
 本条只作留痕，不在本次范围内动手。
+
+**处置（2026-11-20 · 同日闭环）**：已按上面的路由立登记 change 并归档 ⇒
+`openspec/changes/archive/2026-11-20-dual-backend-register-verif-wait-level-2026-11`
+（delta = `## MODIFIED Requirements`，逐字保留原 Requirement 后追加单后端登记段）⇒
+主 spec 已合并该段 ⇒ ⇒ `scripts/verify_dual_backend_parity.sh` **零 VIOLATION**
+（`PARITY_COUNT=66` / `PARITY_PAIRS=286` 与锚点一致，`--self-test` 亦绿）。
