@@ -1,0 +1,98 @@
+# examples/stream/tb_stream_fork_demo.verif
+#
+# **Stream Fork 示例的验证源**（ADR-074 D1 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+# ⚠️ 时序锚点：SET 在「沿后采样窗」内生效；EXPECT 读「最近一次结算之后」的值
+#    ⇒ ⇒ `SET → EXPECT` MUST 先 `SETTLE`（扫描器静态强制）。
+#
+# 被测语义（capability `chlib-stream-ready-ownership` 的「分流 / 分叉类」条 · ADR-057）：
+#   · `out[i].valid`   = `in.valid`（**广播**）
+#   · `out[i].payload` = `in.payload`（**广播**）
+#   · `in.ready`       = `AND(out[0].ready, out[1].ready, out[2].ready)`
+#   ⚠️ **只覆盖同步语义**（`synchronous = true`）⇒ ⇒ `false` 会在建图期
+#      **响亮拒绝**（`CHFATAL_EXCEPTION`）⇒ ⇒ 异步 fork 不在本示例的判据面内。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#stream-fork-demo
+@tb-module tb_stream_fork_demo
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：框架复位后的默认态（impl-contract：框架复位把全部数据输入置 0）
+#   · in_valid=0 / 三路 out*_ready=0 ⇒ ⇒ 全部输出 valid=0 · payload=0 · in_ready=0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_defaults
+@anchor stream-fork-demo
+
+SET in_valid 0
+SETTLE
+EXPECT out0_valid 0
+EXPECT out1_valid 0
+EXPECT out2_valid 0
+EXPECT out0_payload 0
+EXPECT out1_payload 0
+EXPECT out2_payload 0
+EXPECT in_ready 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：广播语义（spec-derived：valid / payload 复制到每一路）
+#   · in_payload=0x5A / in_valid=1 / 三路 ready=1
+#   ⇒ ⇒ 三路 valid=1 且 payload=0x5A；in_ready=1（全部 ready 为高 ⇒ AND=1）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario broadcast_payload_and_valid
+
+SET in_payload 0x5A
+SET in_valid 1
+SET out0_ready 1
+SET out1_ready 1
+SET out2_ready 1
+SETTLE
+EXPECT out0_valid 1
+EXPECT out1_valid 1
+EXPECT out2_valid 1
+EXPECT out0_payload 0x5A
+EXPECT out1_payload 0x5A
+EXPECT out2_payload 0x5A
+EXPECT in_ready 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：上游 ready = 各输出 ready 的 AND（spec-derived：AND 语义 · 须覆盖两面）
+#   · out1_ready=0（其余为 1）⇒ ⇒ in_ready=0（**任一**为低 ⇒ 0）
+#     ⚠️ 若是 OR / 只看第一路 ⇒ in_ready 会是 1 ⇒ ⇒ 本条可区分
+#   · **数据面 MUST NOT 依赖任何 ready** ⇒ ⇒ valid / payload 保持不变
+#   · out1_ready 恢复 1 ⇒ ⇒ in_ready=1（全部为高 ⇒ 1）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario ready_is_and_of_outputs
+
+SET out0_ready 1
+SET out1_ready 0
+SET out2_ready 1
+SETTLE
+EXPECT in_ready 0
+EXPECT out0_valid 1
+EXPECT out1_valid 1
+EXPECT out2_valid 1
+EXPECT out0_payload 0x5A
+EXPECT out1_payload 0x5A
+EXPECT out2_payload 0x5A
+
+SET out1_ready 1
+SETTLE
+EXPECT in_ready 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：上游无有效数据 ⇒ 全部输出无效（spec-derived：valid 只依赖 in.valid）
+#   · in_valid=0 ⇒ 三路 valid 全 0；in_ready 仍 = AND(三路 ready) = 1
+#     ⇒ ⇒ ready 不依赖 valid
+# ══════════════════════════════════════════════════════════════════════════
+@scenario no_valid_outputs_idle
+
+SET in_valid 0
+SETTLE
+EXPECT out0_valid 0
+EXPECT out1_valid 0
+EXPECT out2_valid 0
+EXPECT in_ready 1

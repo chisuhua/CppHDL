@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-11-20
+# 本 change **无 spec 变更**：它只把 `examples/stream/` 的 stream_fork 示例做成
+# 「设计定义 + 独立 TB + 产物 + 登记」的产品单元（ADR-072 四件套 / ADR-074 单一真相源）。
+# 既有的 capability `examples-rtl-sim-coverage`（登记 / 期望源 / 三方等式 / 端口表）
+# 与 `chlib-stream-ready-ownership`（分流 / 分叉类的 ready 语义）已覆盖本 change 的判据面。
+# ⇒ 归档时用 `openspec archive stream-fork-rtl-product-2026-11 --yes --skip-specs`
+skip_specs: true

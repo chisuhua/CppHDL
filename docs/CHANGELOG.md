@@ -1,3 +1,34 @@
+## 2026-11-20 — stream_fork 示例进 RTL 产品面（stream 目录第 3 个产品单元）
+
+**是什么**：`examples/stream/` 的 fork demo 此前是「`main()` + 内联激励 + `std::cout`
+比对」⇒ ⇒ 没有设计定义、没有 RTL 产物、期望值散在代码里。现在按 mux 的同型形态
+产品化：设计定义 `stream_fork_top.h`（12 根具名端口）→ 激励驱动 `tb_stream_fork_demo.cpp`
+（默认 `.verif` 驱动 / `--emit-rtl` 发射）→ 验证源 `tb_stream_fork_demo.verif`
+（4 scenario / **26** 断言）→ 生成的独立 TB `tb_stream_fork_demo.sv`。
+
+**改了什么**
+
+- **新增** `examples/stream/stream_fork_top.h`：`chlib::stream_fork<ch_uint<8>, 3>` 的
+  具名端口包装（输入流 + 3 路输出流）⇒ ⇒ 调用方先 `as_master()` 建字段节点，ready 链用
+  `<<=`，消费端用 `<<=` **覆盖**输出 ready 的默认驱动（形态 E · 单阶段）。
+- **改名 + 双模式** `stream_fork_demo.cpp` → `tb_stream_fork_demo.cpp`；默认模式只跑
+  `.verif`（`RESULT: checks=26 fails=0`），`--emit-rtl <dir>` 产出 `top.v` + `manifest.json`。
+- **清单登记**：`.rddf/checks/examples-rtl-sim-targets.tsv` 新增行（自发行 · `generated=yes` ·
+  `interp_checks=26` == `min_checks=26`）⇒ ⇒ `REGISTERED_TARGETS` **13 → 14**；
+  落选表删 `stream_fork_demo` 行 ⇒ ⇒ 守恒 `27 == 14 ∪ 13`。
+- **期望源**：`.rddf/checks/examples-rtl-expectations.md#stream-fork-demo`
+  （module 集 `{top}` · 顶层端口 **14** = 框架 2 + 根自有 12 · `VERIF-CHECKS: 26` + 4 个 scenario 锚点）。
+
+**说明**
+
+- `spec_checks = 19`（场景 2–4：广播语义 / ready 的 AND 语义 / valid 只依赖 `in.valid`）；
+  场景 1 的「复位后默认态」属 impl-contract（框架复位置 0）。
+- ⚠️ **AND 语义 MUST 覆盖两面**（capability 明文要求）：场景 2 判「全部为高 ⇒ 1」，
+  场景 3 把**中间那一路**拉低判「任一为低 ⇒ 0」⇒ ⇒ 可区分「OR」与「只看第一路」。
+- ⚠️ **只覆盖同步语义**：`synchronous = false` 在建图期**响亮拒绝**（ADR-057 D2）
+  ⇒ ⇒ 异步 fork **不在判据面内**（**如实登记**，不假装覆盖）。
+- arbiter **本次未做**（独立 change）⇒ ⇒ 仍留在落选表并带归位条件。
+
 ## 2026-11-20 — stream_demux 示例进 RTL 产品面（stream 目录第 2 个产品单元）
 
 **是什么**：`examples/stream/` 的 demux demo 此前是「`main()` + 内联激励 + `std::cout`

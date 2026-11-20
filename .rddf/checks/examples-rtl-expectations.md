@@ -999,3 +999,111 @@ VERIF-CHECKS: 38
 
 ⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=38 fails=0` ⇒ ⇒ 变异未污染产物。
 ⚠️ 每条变异 MUST **先确认仍能编译**（三条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
+
+---
+
+## tb_stream_fork_demo {#stream-fork-demo}
+
+### 上游语义（**spec-derived** · capability `chlib-stream-ready-ownership` 的「分流 / 分叉类」条 · ADR-057）
+
+被测单元 = `examples/stream/stream_fork_top.h`（`chlib::stream_fork<ch_uint<8>, 3>` 的具名端口包装）。
+`stream_fork` 的契约（组合 0-cycle，无内部状态 · **同步语义**）：
+
+| 端口 | 语义 | 出处 |
+|---|---|---|
+| `out[i].valid` | `in.valid`（**广播**） | ADR-057 D3（数据面不依赖任何 ready） |
+| `out[i].payload` | `in.payload`（**广播**） | ADR-057 D3 |
+| `in.ready` | `AND(out[0].ready, out[1].ready, out[2].ready)` | ADR-057 D1（**消费端 ⇒ 上游**） |
+| `out[i].ready` | **默认恒就绪 + 消费端 `<<=` 覆盖** | ADR-054 形态 E |
+
+⚠️ **AND 语义 MUST 覆盖两面**（capability 明文要求）：「全部为高 ⇒ 1」（场景 2）
+与「**任一**为低 ⇒ 0」（场景 3）⇒ ⇒ 只测一面时无法与「OR」「只看第一路」区分
+⇒ ⇒ 场景 3 把**中间那一路**（`out1_ready`）拉低 ⇒ ⇒ 「只看第一路」的实现会红。
+
+⚠️ **只覆盖同步语义**：`synchronous = false` 在建图期**响亮拒绝**
+（`CHFATAL_EXCEPTION` · ADR-057 D2）⇒ ⇒ 异步 fork **不在本示例的判据面内**
+⇒ ⇒ **如实登记**（不假装覆盖）。
+
+### impl-contract（本实现的取值）
+
+- **框架复位**把全部数据输入置 0（`run_verif` 的 `apply_frame_reset` 与渲染式 TB 的
+  `write_tb_reset_pulse` 同构）⇒ ⇒ 复位后 `in_valid=0` / 三路 `out*_ready=0`。
+- 组合逻辑 ⇒ ⇒ `SET → SETTLE → EXPECT` 即可观测（**无需** `TICK`）。
+
+### 判据
+
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 复位后三路 `out*_valid` | impl-contract | 全 0（`in_valid=0`） |
+| 2 | 复位后三路 `out*_payload` | impl-contract | 全 0（`in_payload=0` ⇒ 广播 0） |
+| 3 | 复位后 `in.ready` | impl-contract | 0（三路 `out*_ready=0` ⇒ AND=0） |
+| 4 | `in_valid=1` 时三路 `out*_valid` | spec-derived | 全 1（**广播**） |
+| 5 | `in_payload=0x5A` 时三路 `out*_payload` | spec-derived | 全 `0x5A`（**广播**） |
+| 6 | 三路 `out*_ready=1` 时 `in.ready` | spec-derived | 1（**全部为高** ⇒ AND=1） |
+| 7 | `out1_ready=0`（其余为 1）时 `in.ready` | spec-derived | **0**（**任一为低** ⇒ AND=0） |
+| 8 | `out1_ready=0` 时三路 `out*_valid` / `out*_payload` | spec-derived | 不变（1 / `0x5A`）⇒ ⇒ 数据面不依赖 ready |
+| 9 | `out1_ready` 恢复 1 时 `in.ready` | spec-derived | 1 |
+| 10 | `in_valid=0` 时三路 `out*_valid` | spec-derived | 全 0 |
+| 11 | `in_valid=0` 时 `in.ready` | spec-derived | 1（ready 不依赖 valid） |
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 26** ⇒ ⇒ 三方等式：本行 == `tb_stream_fork_demo.verif` 的
+静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 26
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_defaults` | 判据 1 · 2 · 3（impl-contract） |
+| `broadcast_payload_and_valid` | 判据 4 · 5 · 6 |
+| `ready_is_and_of_outputs` | 判据 7 · 8 · 9 |
+| `no_valid_outputs_idle` | 判据 10 · 11 |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 14 根** = 框架 2（`default_clock` · `default_reset`）+ 根自有 **12**
+  （输入流 {payload[7:0], valid, ready} + 3 路输出流 × {payload[7:0], valid, ready}）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_stream_fork_demo.cpp` 默认模式）= **26** 条 ⇒ ⇒ `interp_checks = 26`。
+- TB 侧（Verilog 产物，`tb_stream_fork_demo.sv`）= **26** 条 ⇒ ⇒ `min_checks = 26`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**
+  （护栏 ⑨ 判 C++ 侧、⑥ 判 TB 侧 ⇒ ⇒ 禁一侧代另一侧）。
+
+#### scenario: reset_defaults
+
+框架复位后：三路 `out*_valid == 0` · 三路 `out*_payload == 0` · `in_ready == 0`（7 条）。
+
+#### scenario: broadcast_payload_and_valid
+
+`in_payload=0x5A` / `in_valid=1` / 三路 `out*_ready=1` ⇒ ⇒ 三路 `valid=1` 且
+`payload=0x5A`；`in_ready=1`（7 条）。
+
+#### scenario: ready_is_and_of_outputs
+
+`out0_ready=1` · `out1_ready=0` · `out2_ready=1` ⇒ ⇒ `in_ready=0`（任一为低 ⇒ AND=0）·
+三路 `valid=1` 且 `payload=0x5A`（数据面不依赖 ready）；`out1_ready` 恢复 1 ⇒ ⇒
+`in_ready=1`（8 条）。
+
+#### scenario: no_valid_outputs_idle
+
+`in_valid=0`（三路 `out*_ready=1`）⇒ ⇒ 三路 `out*_valid == 0` · `in_ready == 1`（4 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测 | 抓的是 |
+|---|---|---|---|
+| M1 | `assign top_in_ready = 1'b1;`（AND 断成恒就绪） | ✅ `fails=2`（`reset_defaults#6` · `ready_is_and_of_outputs#0`） | ready 的 AND 语义 |
+| M2 | `assign top_out1_valid = 1'b0;`（valid 广播断） | ✅ `fails=2`（`broadcast_payload_and_valid#1` · `ready_is_and_of_outputs#2`） | valid 广播 |
+| M3 | `assign top_out1_payload = 8'd0;`（payload 广播断） | ✅ `fails=2`（`broadcast_payload_and_valid#4` · `ready_is_and_of_outputs#5`） | payload 广播 |
+
+⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=26 fails=0` ⇒ ⇒ 变异未污染产物。
+⚠️ 每条变异 MUST **先确认仍能编译**（三条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
