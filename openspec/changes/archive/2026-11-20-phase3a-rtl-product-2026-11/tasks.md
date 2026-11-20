@@ -37,7 +37,7 @@
 | C1 | **文档同步**：`examples/axi4/AGENTS.md`（FILES + PATTERNS + 「无发射模式」的旧句）· `docs/CHANGELOG.md`（**用户可见变更**节） | 同左 | AC9 | ✅ |
 | C2 | **锚点核对**：`CTEST_TOTAL` / non-perf / `tests/test_*.cpp` / `EXAMPLES_TEST_SOURCES` / `DUAL_BACKEND_*` ⇒ ⇒ **预期全部不变**（无新增测试源 · 无新增 CTest 条目）⇒ ⇒ 变了的按实测回填 | 根 `AGENTS.md` | AC9 | ✅ |
 | C3 | **遗留清扫**：本次范围内 MUST NOT 有 TODO / 半截实现 / 注释掉的代码 / 临时日志 / 被 skip 的测试 | 本 change 触及的全部文件 | AC9 | ✅ |
-| C4 | **归档**（待复验后执行）：`openspec archive phase3a-rtl-product-2026-11 --yes --skip-specs` ⇒ ⇒ 归档后核对主 spec **零变更**（`skip_specs` 的合法性由 `.openspec.yaml` 声明支撑） | — | AC10 | ☐ |
+| C4 | **归档**（2026-11-20 · `openspec archive … --yes --skip-specs` ⇒ 归档为 `2026-11-20-phase3a-rtl-product-2026-11`）（待复验后执行）：`openspec archive phase3a-rtl-product-2026-11 --yes --skip-specs` ⇒ ⇒ 归档后核对主 spec **零变更**（`skip_specs` 的合法性由 `.openspec.yaml` 声明支撑） | — | AC10 | ✅ |
 
 ---
 
