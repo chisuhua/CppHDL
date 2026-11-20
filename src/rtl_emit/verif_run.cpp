@@ -13,6 +13,7 @@
 #include "core/lnodeimpl.h"
 #include "simulator.h"
 
+#include <fstream>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -342,6 +343,43 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
     }
     res.ok = true;
     return res;
+}
+
+VerifRunFileResult run_verif_file(const std::string &verif_path, Component &root,
+                                  core::context *ctx, const VerifRunOptions &options) {
+    VerifRunFileResult out;
+    std::ifstream in(verif_path);
+    if (!in) {
+        out.error = "打不开验证源：" + verif_path;
+        return out;
+    }
+    VerifProgram prog;
+    VerifParseError perr;
+    if (!parse_verif(in, prog, perr)) {
+        out.error = "验证源解析失败（" + verif_path + ":" + std::to_string(perr.line) +
+                    "）：" + perr.message;
+        return out;
+    }
+    const auto manifest = build_rtl_manifest(root, ctx);
+    if (!manifest.diagnostics.empty()) {
+        out.error = "manifest 诊断：" + manifest.diagnostics.front().detail;
+        return out;
+    }
+    ch::Simulator sim(ctx);
+    out.run = run_verif(prog, sim, ctx, manifest, options);
+    if (!out.run.ok) {
+        out.error = "执行失败：" + out.run.error;
+        return out;
+    }
+    // 条数自洽：运行期条数 MUST == 静态条数（防「0 条断言被当绿」）
+    const std::size_t expected = verif_check_count(prog);
+    if (out.run.checks != expected) {
+        out.error = "条数不等 —— 运行期 " + std::to_string(out.run.checks) + " ≠ 静态 " +
+                    std::to_string(expected);
+        return out;
+    }
+    out.ok = true;
+    return out;
 }
 
 } // namespace rtl_emit

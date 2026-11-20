@@ -26,7 +26,6 @@
 #include "rtl_emit/verif.h"
 
 #include <cstddef>
-#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -82,54 +81,26 @@ int main(int argc, char **argv) {
 
     const std::string verif_path = std::string(CPPHDL_SOURCE_DIR) + kVerifRelPath;
 
-    // ── 1) 扫描 + 生成期求值（fail-closed ⇒ ⇒ 不打印结论行）────────────────
-    std::ifstream in(verif_path);
-    if (!in) {
-        std::cerr << "FATAL: 打不开验证源：" << verif_path << "\n";
-        return 1;
-    }
-    rtl_emit::VerifProgram prog;
-    rtl_emit::VerifParseError perr;
-    if (!rtl_emit::parse_verif(in, prog, perr)) {
-        std::cerr << "FATAL: 验证源解析失败（" << verif_path << ":" << perr.line << "）："
-                  << perr.message << "\n";
-        return 1;
-    }
-
-    // ── 2) 建图 + 端口清单（`port_table[]` = 端口面的唯一权威）────────────
+    // ── 1) 建图（`port_table[]` = 端口面的唯一权威）────────────────────────
     ch::ch_device<axi4::example::AxiLiteTop> dev;
-    const auto manifest = rtl_emit::build_rtl_manifest(dev.instance(), dev.context());
-    if (!manifest.diagnostics.empty()) {
-        for (const auto &d : manifest.diagnostics) {
-            std::cerr << "FATAL: manifest 诊断：" << d.detail << "\n";
-        }
-        return 1;
-    }
 
-    // ── 3) IR 解释器（驱动 `Simulator`）───────────────────────────────────
-    ch::Simulator sim(dev.context());
-    const rtl_emit::VerifRunOptions opts{};
-    const auto res = rtl_emit::run_verif(prog, sim, dev.context(), manifest, opts);
+    // ── 2) 解析 → 端口清单 → IR 解释器 → 运行期条数 == 静态条数（**公共部分**）
+    //   ⚠️ 库层 helper **不打印** `RESULT:` 行：结论行是**值**侧 ⇒ 由本 example 打印
+    //   （否则库层结论行与 example 协议行成**双权威**）· 同一份 helper 供 SoC 复用。
+    const auto r = rtl_emit::run_verif_file(verif_path, dev.instance(), dev.context());
 
-    // ── 4) 逐条结论：FAIL 进 stderr ──────────────────────────────────────
-    for (const auto &line : res.failure_lines) {
+    // ── 3) 逐条结论：FAIL 进 stderr ──────────────────────────────────────
+    for (const auto &line : r.run.failure_lines) {
         std::cerr << line << "\n";
     }
 
-    // ── 5) fail-closed：执行失败 ⇒ 不打印结论行 ──────────────────────────
-    if (!res.ok) {
-        std::cerr << "FATAL: 执行失败：" << res.error << "\n";
+    // ── 4) fail-closed：任一步失败（解析 / 清单 / 执行 / 条数）⇒ 不打印结论行
+    if (!r.ok) {
+        std::cerr << "FATAL: " << r.error << "\n";
         return 1;
     }
 
-    // ── 6) 条数自洽：运行期条数 MUST == 静态条数（防「0 条断言被当绿」）──
-    const std::size_t expected = rtl_emit::verif_check_count(prog);
-    if (res.checks != expected) {
-        std::cerr << "FATAL: 条数不等 —— 运行期 " << res.checks << " ≠ 静态 " << expected << "\n";
-        return 1;
-    }
-
-    // ── 7) 结论行（协议：十进制 · 单行 · 无 ANSI）────────────────────────
-    std::cout << "RESULT: checks=" << res.checks << " fails=" << res.fails << "\n";
-    return res.fails == 0 ? 0 : 1;
+    // ── 5) 结论行（协议：十进制 · 单行 · 无 ANSI）────────────────────────
+    std::cout << "RESULT: checks=" << r.run.checks << " fails=" << r.run.fails << "\n";
+    return r.run.fails == 0 ? 0 : 1;
 }

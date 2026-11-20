@@ -97,6 +97,18 @@
 
 ---
 
+## 用户可见变更
+
+| 项 | 前 | 后 |
+|---|---|---|
+| `phase3a` 的 RTL 产物 | **不在产品面**（无登记、无独立 TB ⇒ 只有 C++ 侧 2 条断言） | 登记为 RTL 产品面 ⇒ 产物被**独立 TB** 验证（`RESULT: checks=6 fails=0`） |
+| `tb_phase3a_example` 的命令行 | 只有默认模式（跑 C++ 侧激励） | 新增 `--emit-rtl <dir>`（发射 `top.v` + `manifest.json`）⇒ 默认模式行为**逐字不变** |
+| 顶层端口名 | `top_unnamed_input_N`（未具名 ⇒ 无法按名连线） | `top_<C++ 成员名>`（7 个根自有端口全部具名） |
+| 端口命名豁免表 | 含 phase3a 的 7 行 ⇒ `EXPECTED_EXEMPT_PORTS` = 1384 | 无 phase3a 行 ⇒ 棘轮收敛到 **1377** |
+| RTL 产品清单 | 10 个 target | **11** 个（新增 phase3a 行） |
+
+---
+
 ## 验收标准
 
 | # | 判据 | 方式 |

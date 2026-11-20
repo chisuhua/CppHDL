@@ -32,15 +32,15 @@
 | B2 | **4 条时序判别性构例**：① 首拍即成立 ⇒ 期望「**命中后仍推进 ≥1 拍**」（⚠️ **不是**「立即返回」⇒ 「入口即成立 ⇒ MUST 用 `TICK(n)`」是**规范义务**，不是 `WAIT` 的行为）② 目标在窗口**最后一拍**才成立 ⇒ PASS ③ 命中**恰在第 `max` 拍** ⇒ PASS · 第 `max+1` 拍 ⇒ **FAIL** 且点名 `check_id` ④ 窗口内**从未**成立 ⇒ FAIL 且点名 | 同上 | AC5 · AC9 · AC11 · AC13 | ☑ |
 | B3 | **N>1 端口的 high/low 构例** ⇒ ⇒ 钉死「`high` = 非零」在多位端口上的行为（**不是**全 1） | 同上 | AC10 | ☑ |
 | B4 | **变异自证（自动化）**：变异**投在夹具的 `.verif` 输入上**（改 `WAIT` 的 `max` ⇒ ⇒ 边界构例必红）⇒ ⇒ **不动实现代码** ⇒ ⇒ 可重跑 ⇒ ⇒ 优于「改解释器一行」（与「还原源码 ≠ 复原」同型 ⇒ 需重建 ⇒ 成本高且易留污染） | 同上 | AC5 | ☑ |
-| B5 | **库层 `run_verif` helper 下沉**：把 Lite 侧内联的「默认模式 `run_verif` 七步序列」下沉为库层 helper ⇒ ⇒ Lite 改调它 ⇒ ⇒ ⚠️ helper **MUST NOT 返回 `RESULT:` 结论行**（结论行由各 example 自己打印 ⇒ 否则双权威）⇒ ⇒ ⚠️ 落点若为**新公开头** ⇒ MUST 登记 `.rddf/checks/public-api-surface.md` | `include/rtl_emit/verif.h`（或新头）· `examples/axi4/tb_axi4_lite_example.cpp` | AC7 | ☐ |
+| B5 | **库层 `run_verif` helper 下沉**：把 Lite 侧内联的「默认模式 `run_verif` 七步序列」下沉为库层 helper ⇒ ⇒ Lite 改调它 ⇒ ⇒ ⚠️ helper **MUST NOT 返回 `RESULT:` 结论行**（结论行由各 example 自己打印 ⇒ 否则双权威）⇒ ⇒ ⚠️ 落点若为**新公开头** ⇒ MUST 登记 `.rddf/checks/public-api-surface.md` | `include/rtl_emit/verif.h` + `src/rtl_emit/verif_run.cpp`（`run_verif_file`）· `examples/axi4/tb_axi4_lite_example.cpp`（改调 · RESULT 仍 113/0） | AC7 | ☑ |
 
 ## 批次 C — 验收与归档（AC6 · AC8 · AC15）
 
 | # | 任务 | 落点 | 判据 | 状态 |
 |---|---|---|---|---|
-| C1 | **锚点回填**：实测后回填 `CTEST_TOTAL` · `VERILATOR_E2E_TOTAL`（**会变**）· `tests/test_*.cpp`（**会变**）⇒ ⇒ ⚠️ `EXAMPLES_TEST_SOURCES` **不变**（夹具在 `tests/**`） | 根 `AGENTS.md` | AC8 | ☐ |
-| C2 | **遗留清扫**：本 change 触及的文件 MUST NOT 有 TODO / 半截实现 / 注释掉的代码 / 临时日志 | 全部触及文件 | AC8 | ☐ |
-| C3 | **文档同步**：`include/rtl_emit/` 附近的 AGENTS.md（若有）+ `docs/CHANGELOG.md` + 本 change 的 `## 用户可见变更` 段 | — | AC8 | ☐ |
+| C1 | **锚点回填**：实测后回填 `CTEST_TOTAL` · `VERILATOR_E2E_TOTAL`（**会变**）· `tests/test_*.cpp`（**会变**）⇒ ⇒ ⚠️ `EXAMPLES_TEST_SOURCES` **不变**（夹具在 `tests/**`） | 根 `AGENTS.md` | AC8 | ☑ |
+| C2 | **遗留清扫**：本 change 触及的文件 MUST NOT 有 TODO / 半截实现 / 注释掉的代码 / 临时日志 | 全部触及文件 | AC8 | ☑ |
+| C3 | **文档同步**：`include/rtl_emit/` 附近的 AGENTS.md（若有）+ `docs/CHANGELOG.md` + 本 change 的 `## 用户可见变更` 段 | — | AC8 | ☑ |
 | C4 | **归档**：`openspec archive verif-wait-level-2026-11 --yes --skip-specs` ⇒ ⇒ 归档后核对主 spec **零变更** | — | AC8 | ☐ |
 
 ---

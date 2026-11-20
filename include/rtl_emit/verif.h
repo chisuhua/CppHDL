@@ -26,6 +26,7 @@
 #include <vector>
 
 namespace ch {
+class Component;
 class Simulator;
 namespace core {
 class context;
@@ -115,6 +116,23 @@ struct VerifRunResult {
 VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
                          ch::core::context *ctx, const RtlManifest &manifest,
                          const VerifRunOptions &options = {});
+
+/// 从 `.verif` **文件**跑一次验证（= 「解析 → 建图清单 → 解释器 → 条数自洽」的公共部分）。
+///
+/// ⚠️ **本 helper 只承载「规则」**：解析 / 端口清单 / 执行 / 运行期条数 == 静态条数。
+///   ⇒ ⇒ **MUST NOT 打印 `RESULT:` 结论行**（那是**值**侧，由各 example 自己打印
+///   —— 否则库层结论行与 example 协议行成**双权威**）。
+/// ⚠️ **fail-closed**：任一步失败 ⇒ `ok=false` + `error`（调用方 MUST 在**不打印**结论行
+///   的前提下退出非零）。
+/// ⚠️ 同一份实现供 Lite / SoC 共用（ADR-074 AC16/AC20 的「同一性」判据形态）。
+struct VerifRunFileResult {
+    bool ok = false;
+    std::string error;  // 失败原因（唯一出口；`ok=true` 时为空）
+    VerifRunResult run; // 逐条结论 + `failure_lines`
+};
+
+VerifRunFileResult run_verif_file(const std::string &verif_path, Component &root,
+                                  core::context *ctx, const VerifRunOptions &options = {});
 
 // ── ② Verilog 渲染器 ───────────────────────────────────────────────────
 
