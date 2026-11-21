@@ -1,3 +1,35 @@
+## 2026-11-21 — 改进提案索引的**状态列**从 frontmatter 生成（+ 一致性护栏）
+
+**改了什么**：
+
+- **缺口**：`improvement-suggestions.md` 的状态列**人工维护** ⇒ ⇒ 必然漂
+  （`.rddf/roadmap/phase-6-rtl-productization.md` §4 登记：「本轮三处漂移里 **2 处**出在索引表」）
+  ⇒ ⇒ 根本修法 = 从 frontmatter `状态:` 生成 + 一致性护栏。
+- **载体**：`scripts/lib/improvement_index.py`（**生成器 + 判据**）+
+  `scripts/verify_improvement_index.sh`（薄壳 + **8** 条 fixture）⇒ ⇒ **已进 CI**
+  （`build-and-test` · 无 gate ⇒ 排除类型 `none`）+ 护栏可达性登记表（`--render` 重新派生 ⇒ 双向 1:1）。
+- **口径**：状态列 = **状态词 + 大量人工附注** ⇒ ⇒ **不能整表派生**（会丢附注）
+  ⇒ ⇒ 只**刷新状态词**（`**word**`）⇒ ⇒ **emoji 与附注逐字保留**（fixture F7 钉死）。
+- **判据**：索引表的词 == frontmatter `状态:` 的词 ⇒ ⇒ **两个漂移方向**都转红
+  （frontmatter 改了没跟上 / 索引表手改了没跟上）；且 fail-closed
+  （行形态异常 / 目标文件缺失 / frontmatter 缺 `状态:` / 状态列无 `**word**` 形态 ⇒ ⇒ 红）。
+- ⚠️ **边界（明确不做）**：**不**判「每个 `.rddf/improvements/*.md` 都在表里」⇒ ⇒ 索引表是
+  **提案池**（实施 / 归档后**从表移除**）⇒ ⇒ 那样判必假红（仓内 70+ 份 · 表里 **16** 份）
+  ⇒ ⇒ 反向覆盖由「表内每行都必须有对应文件」承担。
+
+**护栏首跑即抓到 3 处真实漂移** ⇒ ⇒ 全部对齐：
+
+| 提案 | 索引表原值 | frontmatter | 处置 |
+|---|---|---|---|
+| `rv32i-isa-gap-closure-2026-11` | `draft` | `partial` | 索引表刷新 |
+| `rv32i-hierarchical-example-2026-11` | `draft` | `approved` | 索引表刷新 |
+| `openspec-purpose-placeholders-2026-11` | `implemented` | **缺 `状态:`** | frontmatter 补（对齐正文 + change 已归档）|
+
+**实现期抓到的两个自身缺陷**（fixture 抓的 ⇒ ⇒ 证明 fixture 有判别力）：
+① frontmatter 键正则只认 ASCII ⇒ ⇒ **`状态:` 是中文键** ⇒ ⇒ 永远解析不到 ⇒ ⇒ 护栏对每一行
+都误判红；② 报错用 `%` 格式化时**占位符与参数个数不匹配**（Python 编译器不报错 ⇒ ⇒ 只有
+fixture 能抓到）；③ `--render` MUST 用 `write`（`print` 追加尾部换行 ⇒ ⇒ 渲染结果多一个空行）。
+
 ## 2026-11-21 — 端口重名 `CHERROR` 的**触发**判别力补齐（假绿缺口闭合）
 
 **改了什么**：

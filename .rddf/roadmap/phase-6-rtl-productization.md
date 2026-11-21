@@ -203,6 +203,35 @@
 | **N2 补遗 · 首批端口消化（32 端口）** | `port-naming-ratchet` N2 /「存量消化」AC | 对象 = `examples/riscv-mini/src/rv32i_pipeline_top.h`（用户 **2026-11-11** 拍板 · **32 端口**）。<br>判据 = 该文件 `__io` 全部端口带**显式名** ⇒ ⇒ `.rddf/checks/port-naming-registry.md` 的相应豁免条目**减少**（棘轮只许减）。<br>触发条件 = 用户要求 RTL 端口**人眼可读**（用户 ⑤ 的原始诉求）；⚠️ 会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 `examples-rtl-sim-coverage` 的 tsv / `examples-rtl-expectations.md` **同批**同步（否则 10 个 TB 的端口名漂移）。<br>✅ **2026-11-13 · R17.1 已闭（architect 裁量）=「现在做」**，**放置 = 独立小批**（先于 B3）⇒ ⇒ 实施路径 = `.rddf/roadmap/phase-6-next-steps.md` §2 的 **R17.4**（8 步 · 每步一个判据）⇒ ⇒ ⚠️ **与 B3 的 L1–L6 在本文件上同区 ⇒ MUST 顺序执行**（`firmware-load-chain-2026-11.md:197` 的爆炸半径）⇒ ⇒ **用户可随时推翻**（回退 = 一次 revert）|
 | **N2 补遗 · 产物层双测试**（`NamedRootArtifactsUnchanged` + `UnnamedRootArtifactPinned`） | `node-name-prefix-consistency` P2 的**产物层**两条（`## Acceptance` 的 N4 / N5）⇒ ⇒ **从未实施**（全仓 grep 两个标识符 = 0 命中） | 判别力自证要求：① `NamedRootArtifactsUnchanged` = 仓内 3 份既有 `.v` 的 `git diff --stat` **== 0**（⚠️ `scripts/verify_hierarchical_rtl.sh` 对本改动**结构性失明** ⇒ ⇒ MUST 用 `git diff` 直证）· ② `UnnamedRootArtifactPinned` = 显式生成无名根产物 + golden 钉住新形态（`unnamed_leaf_*`）· ③ 负向对照：把 `include/component.h` 的特判加回去 ⇒ ⇒ 产物层 MUST 必红 ⇒ ⇒ 还原复绿 · ④ 变异自证 MUST 含「重建」步骤（还原源码 ≠ 复原）· 触发条件 = route (c) 重开时一并处置 ⇒ ⇒ 登记人 = builder · **登记来源** = `rtl-track-followup-list-2026-11.md` §1.3.1 的 N4 / N5 |
 | **索引表状态列的自动生成**（`improvement-suggestions.md` 的状态列从 frontmatter `状态:` 生成） | 本轮 planner 实测 + `rtl-track-followup-list-2026-11.md` §2 F8 | 现状 = **人工维护** ⇒ ⇒ 9 份草案（7 份 RTL 轨 + 2 份本批）要人工同步 ⇒ ⇒ 必然漂（本轮三处漂移里 **2 处**出在索引表）⇒ ⇒ 根本修法 = **从 frontmatter `状态:` 生成** + 一致性护栏（类比 `scripts/verify_roadmap_fragments.sh` 的 vendored 渲染 + `verify_roadmap_fragments.sh`）⇒ ⇒ 归 planner（文档面）· 触发条件 = 下一轮改动 `improvement-suggestions.md` 状态列时 |
+
+✅ **2026-11-21 已完成**（**builder 回填** · 用户授权跨域执行）⇒ ⇒ 载体 =
+`scripts/lib/improvement_index.py`（**生成器 + 判据**）+ `scripts/verify_improvement_index.sh`
+（薄壳 + **8** 条 fixture）⇒ ⇒ **已进 CI**（`build-and-test` · 无 gate ⇒ 排除类型 `none`）+
+登记表（`verify_guard_reachability.sh --render` 重新派生 ⇒ 双向 1:1）。
+
+⚠️ **口径**：索引表状态列 = **状态词 + 大量人工附注**（复核记录 / 裁决依据 / 遗留登记）
+⇒ ⇒ **不能整表派生**（会丢附注）⇒ ⇒ 只**刷新状态词**（`**word**`）⇒ ⇒ **emoji 与附注逐字保留**
+（fixture F7 钉死）⇒ ⇒ 判据 = 「索引表的词 == frontmatter `状态:` 的词」⇒ ⇒ **两个漂移方向**
+都转红（frontmatter 改了没跟上 / 索引表手改了没跟上）。
+⚠️ **边界（重要）**：**不**判「每个 `.rddf/improvements/*.md` 都在表里」⇒ ⇒ 索引表是**提案池**
+（实施 / 归档后**从表移除**）⇒ ⇒ 那样判必假红（仓内 70+ 份 · 表里 **16** 份）
+⇒ ⇒ 反向覆盖由「表内每行都必须有对应文件」承担。
+
+⚠️ **护栏首跑即抓到 3 处真实漂移**（= 本登记「必然漂」的实证）⇒ ⇒ 已全部对齐：
+
+| 提案 | 索引表原值 | frontmatter | 处置 |
+|---|---|---|---|
+| `rv32i-isa-gap-closure-2026-11` | `draft` | `partial`（G3/G1/G2/G4/G5 已落地）| 索引表 `--render` 刷新 |
+| `rv32i-hierarchical-example-2026-11` | `draft` | `approved`（ADR-070 Accepted）| 索引表 `--render` 刷新 |
+| `openspec-purpose-placeholders-2026-11` | `implemented` | **缺 `状态:` 字段** | frontmatter 补 `状态: implemented`（对齐正文 `**Status**：✅ implemented` + change 已归档）|
+
+⚠️ **实现期抓到的两个自身缺陷**（fixture 抓的 ⇒ ⇒ 证明 fixture 有判别力）：
+① frontmatter 键正则只认 `[A-Za-z_]` ⇒ ⇒ **`状态:` 是中文键** ⇒ ⇒ 永远解析不到
+⇒ ⇒ 护栏对**每一行**都误判红（F0/F6/F7 三条 fixture 全红才发现）⇒ ⇒ 改为「第一个 `:` 前」；
+② 状态词不一致的报错用 `%` 格式化时**占位符与参数个数不匹配**（Python 编译器不报错
+⇒ ⇒ 只有 fixture 能抓到）⇒ ⇒ 修。
+⚠️ **`--render` MUST 用 `write` 而不是 `print`** ⇒ ⇒ `print` 追加尾部换行 ⇒ ⇒ 渲染结果比
+原文件多一个空行 ⇒ ⇒ 与「逐字一致」冲突（实测 diff `28d27`）。
 | **「BRAM 可推断」的真实验证** | `memory-timing-contract` ④ | CI **无 yosys** ⇒ ⇒ 只能本地/opt-in ⇒ ⇒ 已登记进 `.rddf/checks/arch-residual-registry.md` |
 | **F-1 · `include/cpu/AGENTS.md` 自述计数订正** | B0 批 C5+C6 退役遗留（`rv32i-forwarding.h` / `hazard_detection_unit.h` / `rv32i_hazard_complete.h` 三件物理删除 ⇒ ⇒ 头文件自述数未同步） | **对象** = `include/cpu/AGENTS.md` 的自述行「30 headers, 6473 lines」<br>**判据** = `bash scripts/verify_no_duplicate_rv32i_headers.sh` ⇒ ⇒ **零 VIOLATION**（实测 **27 headers / 6064 lines**）⇒ ⇒ 且 `--self-test` 仍绿<br>**触发条件** = **已成立**（2026-11-13 实测复现于 HEAD ⇒ ⇒ **不是**「等 CI 变红才发现」）<br>**归属批** = 独立小批（**约 2 个数字**）⇒ ⇒ **不并入 B3 / B4**（写点 `include/cpu/AGENTS.md`，与 B3/B4 的 `include/cpu/**` 写点**相邻但不同文件** ⇒ ⇒ 顺序无关）<br>⚠️ **CI 门内**（`ci.yml:1021` / `:1921`）⇒ ⇒ **CI 当前为红**（与本批无关）<br>✅ **2026-11-13 已完成**（P0 批）：自述数 → **27 headers / 6064 lines**（2 处）⇒ ⇒ 护栏零 VIOLATION |
 | **F-2 · `public-api-surface.md` 活账清理（3 个已删头）** | B0 批 C5+C6 退役遗留（同源） | **对象** = `.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」节 ⇒ ⇒ 仍登记着 **3 个已物理删除**的头（`include/cpu/pipeline/{rv32i_forwarding,hazard_detection_unit,rv32i_hazard_complete}.h`）⇒ ⇒ 护栏判「活账登记的头**不存在**」<br>**判据** = `bash scripts/verify_hierarchical_p8.sh` ⇒ ⇒ **零 VIOLATION**（且 `--self-test` 恢复绿 —— 现为「基线不绿 ⇒ 投毒无效」）<br>**触发条件** = **已成立**（2026-11-13 实测复现于 HEAD）<br>**归属批** = 独立小批（**约 3 行**）⇒ ⇒ **建议与 F-1 同批**（两者同源 = 「B0 批退役后的登记未同步」）⇒ ⇒ **不并入 B3 / B4**<br>⚠️ **CI 门内**（`ci.yml:735` / `:744`）⇒ ⇒ **CI 当前为红**（与本批无关）<br>✅ **2026-11-13 已完成**（P0 批）⇒ ⇒ ⚠️ **但解法不是「删登记」** —— 那 3 行是「移除 / 改名登记」的**证据** ⇒ ⇒ **改护栏**：`verify_hierarchical_p8.sh` 的 R4② **①② 都只查「登记清单」段**（`## 已移除 …` 段登记的路径**按定义就不存在** ⇒ ⇒ 查它 = 假阳性 by construction）⇒ ⇒ ⇒ **判据强度不减反增**（①② 收紧 ⇒ ⇒ 「把活着的公共头塞进『已移除』段冒充已登记」的漏洞同时被堵）⇒ ⇒ ⇒ **顺带恢复了 `--self-test` 的判别力**（此前基线红 ⇒ ⇒ 7 条投毒**全部空转** ⇒ ⇒ 现逐条真红）<br>⚠️ **2026-11-20 二次收口**（commit `5c5581a`）：2026-11-13 那次实现的是**黑名单**（awk 只跳过 `^## .*已移除` 一个段标题）⇒ ⇒ **注释写「只查『登记清单』段」而代码不是** ⇒ ⇒ F-2 当时**只修了一半** ⇒ ⇒ `88eae35`（2026-11-18）把 `include/axi4/*_example_top.h` 搬进「**行为变更（非符号移除）**」段 ⇒ ⇒ 该段未被跳过 ⇒ ⇒ 护栏自那天起**在 CI 上恒红**（实测 2 条违规）⇒ ⇒ 今日改为**白名单**（只取「登记清单」段）+ **fail-closed**（该段缺失 / 为空 ⇒ 红）⇒ ⇒ 投毒由 7 条扩到 **9** 条（新增「活头搬进历史段」「段标题被改」两条 ⇒ ⇒ 旧实现下**均判绿** ⇒ ⇒ 有判别力）⇒ ⇒ **本次才是 F-2 的完整闭口** |

@@ -336,6 +336,33 @@ jobs:
       shell: bash
       run: scripts/verify_roadmap_fragments.sh --self-test
 
+    - name: Verify improvement index state column
+      # phase-6 §4 「索引表状态列的自动生成」—— the status column of
+      # `improvement-suggestions.md` MUST be derived from each proposal's
+      # front-matter `状态:` field.
+      #   R1 per row: the index's status word MUST equal the front-matter word
+      #      => BOTH drift directions turn red (front-matter changed / index
+      #      hand-edited).
+      #   R2 fail-closed: a row whose target file is missing, or whose
+      #      front-matter has no `状态:` field, or whose cell has no `**word**`
+      #      shape => RED (never silently skipped).
+      # ⚠️ NOT judged: "every `.rddf/improvements/*.md` is listed" -- the index
+      #   is a PROPOSAL POOL (rows are REMOVED after implementation/archiving),
+      #   so that judgement would be permanently red (70+ files vs 16 rows).
+      # Needs python3 only: NO network, NO git history, NO verilator.
+      shell: bash
+      run: scripts/verify_improvement_index.sh
+
+    - name: Verify improvement index state column (self-test)
+      # 8 fixtures (5 poisons + 2 render assertions + 1 baseline):
+      # index word vs front-matter mismatch / missing `状态:` / front-matter
+      # changed without regenerating / target file missing / cell without a
+      # `**word**` shape / `--render` refreshes the word / `--render` keeps
+      # emoji+note verbatim.
+      # The fixtures run in a temp dir => they never touch the real repo.
+      shell: bash
+      run: scripts/verify_improvement_index.sh --self-test
+
     - name: Verify guard reachability
       # phase-6 R23-B (1-a): the guards themselves must be REACHABLE.
       #   R0 fail-closed (analyser + ci.yml + registry)

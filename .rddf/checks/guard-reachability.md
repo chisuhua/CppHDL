@@ -80,6 +80,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_hierarchical_rtl.sh` | `pr-verilator-fast:Verify hierarchical RTL products (R1–R7)`, `pr-verilator-fast:Verify hierarchical RTL guard self-test` | `gate-event-only` | — |
 | `scripts/verify_hierarchical_tree_extract.sh` | `pr-verilator-fast:Verify hierarchical module-tree extraction` | `gate-event-only` | — |
 | `scripts/verify_if_stmt_wiring.sh` | `build-and-test:Verify conditional-block assignment wiring`, `build-and-test:Verify conditional-block assignment wiring (self-test)`, `pr-verilator-fast:Verify conditional-block assignment wiring`, `pr-verilator-fast:Verify conditional-block assignment wiring (self-test)` | `none` | — |
+| `scripts/verify_improvement_index.sh` | `build-and-test:Verify improvement index state column`, `build-and-test:Verify improvement index state column (self-test)` | `none` | — |
 | `scripts/verify_input_port_additions.sh` | `build-and-test:Verify input-port additions (event-driven, PR only)`, `build-and-test:Verify input-port additions (self-test)` | `none` | — |
 | `scripts/verify_input_port_required_registry.sh` | `build-and-test:Verify input-port required registry (D2-A)`, `build-and-test:Verify input-port required registry (self-test)` | `none` | — |
 | `scripts/verify_jit_golden_coverage.sh` | `build-and-test:Verify JIT golden coverage floor`, `build-and-test:Verify JIT golden coverage floor (self-test)` | `none` | — |
@@ -90,7 +91,6 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_node_names_single_source.sh` | `build-and-test:Verify node-names single source (R1–R3)`, `build-and-test:Verify node-names single source guard self-test` | `none` | — |
 | `scripts/verify_openspec_delta.sh` | `build-and-test:Verify OpenSpec delta self-check`, `pr-verilator-fast:Verify OpenSpec delta self-check` | `none` | — |
 | `scripts/verify_openspec_purpose.sh` | `build-and-test:Verify openspec purpose placeholders (spec debt registry)`, `build-and-test:Verify openspec purpose placeholders (self-test)` | `none` | — |
-| `scripts/verify_verif_migration_state.sh` | `build-and-test:Verify verif migration state (R13 closure probe)`, `build-and-test:Verify verif migration state (self-test)` | `none` | — |
 | `scripts/verify_perf_baseline_anchors.sh` | `build-and-test:Verify perf baseline anchor conservation`, `build-and-test:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation` | `none` | — |
 | `scripts/verify_port_naming.sh` | `build-and-test:Verify port naming ratchet`, `build-and-test:Verify port naming ratchet (self-test)` | `none` | — |
 | `scripts/verify_public_api_visibility.sh` | `build-and-test:Verify public API removal visibility (issue`, `build-and-test:Verify public API removal visibility (self-test)` | `none` | — |
@@ -101,5 +101,5 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_stream_domain_closure.sh` | `build-and-test:Verify stream domain closure checklist`, `build-and-test:Verify stream domain closure checklist (self-test)` | `none` | — |
 | `scripts/verify_stream_ready_ownership.sh` | `build-and-test:Verify stream ready ownership`, `build-and-test:Verify stream ready ownership (self-test)` | `none` | — |
 | `scripts/verify_test_counts.sh` | `build-and-test:Verify AGENTS.md test counts`, `pr-verilator-fast:Verify AGENTS.md test counts` | `none` | — |
+| `scripts/verify_verif_migration_state.sh` | `build-and-test:Verify verif migration state (R13 closure probe)`, `build-and-test:Verify verif migration state (self-test)` | `none` | — |
 | `scripts/verify_verilator_pch.sh` | `pr-verilator-fast:Verify verilator PCH toolchain (split-capable models)`, `pr-verilator-fast:Verify verilator PCH toolchain (self-test)` | `gate-event-only` | — |
-

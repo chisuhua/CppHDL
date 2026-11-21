@@ -4,6 +4,7 @@ priority: P2
 phase: phase-6
 category: infra-setup
 type: debt
+状态: implemented
 created_at: 2026-11-19
 roadmap_ref:
   project_id: 层次化父侧落点收口 + mem 端口实参跨层支持 + RV32I ISA 缺口 + PortPolicy 三档分化
