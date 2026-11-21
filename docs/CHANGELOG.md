@@ -1,3 +1,40 @@
+## 2026-11-22 — 收口「层次化 + 固件初值」组合变体（原登记为「独立排期」）
+
+**背景**：该组合变体在两份验收报告里被显式递延 ——
+`.rddf/reviews/hier-rtl-product-surface-verify-2026-11.md`（「另一维（固件链路）⇒ **独立排期**」）
+与 `.rddf/reviews/rv32i-rtl-delivery-sim-verify-2026-11.md`（「`--hierarchical` 与 `init_data`
+正交 ⇒ 需要时按同一模式加一个即可」）。`docs/developer_guide/rv32i-rtl-delivery-and-sim.md`
+§3.4 也一直写着「**层次化形态暂无 fw_init 变体**（本次不做）」。
+
+**本次结论：零新增发射代码即已可用** —— 发射入口并入 TB 自身后，
+`--hierarchical`（库层 CLI 的既有选项）与 `--firmware-init`（选设计工厂）**走两条独立路径**
+⇒ ⇒ 同时给两个标记就得到组合变体：
+
+```bash
+tb_rv32i_soc --emit-rtl --hierarchical --firmware-init --out <dir> --emit-hygiene
+```
+
+**判据补齐（把「文档声称」变成「机械判定」）**：`scripts/verify_rv32i_fw_init_rtl.sh` 新增 **F7**：
+
+| 条目 | 判据 |
+|---|---|
+| **F7a** 形态成立 | 产物 MUST 含 **≥ 2** 个 module 且含根 `top`（否则「层次化」已静默退化成扁平）|
+| **F7b** 初值仍落盘 | 与 F3 **同一组**手推固件字（I-TCM[0..3] + D-TCM[64]）|
+| **F7c** 端口面同源 | 顶层端口表 == 扁平带初值产物的（**逐字逐序**）|
+| 自检 | 新增一条投毒：把层次化产物**压成单 module**（复用 `scripts/lib/flat_rtl_emit_check.py`）⇒ ⇒ **F7a 必红** |
+
+⇒ ⇒ **为什么三条缺一不可**：只判 F7b ⇒ 「初值在」与「形态对」是两件事；
+只判 F7a ⇒ 「多 module」也兼容「初值被 codegen 吞掉」（两个标记的实现路径不同）。
+
+**文档同步**：`docs/developer_guide/rv32i-rtl-delivery-and-sim.md` §3.4 的「本次不做」改为
+「已可用 + 判据指针」· `examples/riscv-mini/AGENTS.md` 的 RUN 段新增第 ④' 条 ·
+`examples/riscv-mini/tb_rv32i_soc.cpp` 头注释标注两标记正交。
+
+**验证**：`scripts/verify_rv32i_fw_init_rtl.sh` PASS（F0/F1/F2/F3/F4/F5/F7）·
+`--self-test` PASS（3 条负向对照各自转红，含新增的压平投毒）·
+实测组合产物 = **8 module** · 顶层端口 **34** 根（与扁平带初值**逐字逐序相同**）·
+手推固件字**全部落盘**。
+
 ## 2026-11-22 — RV32I SoC 示例的**三角色分离**（发射入口并入 TB 自身 · 薄壳清零）
 
 **改了什么**：

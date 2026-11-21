@@ -18,7 +18,21 @@
 |---|---|---|---|---|
 | **G-期望** | `.rddf/checks/*.md` 手推表 | `tb_*.sv` 的 `expect_*` | `tests/*` 的 `REQUIRE` | 同一批期望值写 3 遍 |
 | **G-端口** | C++ 成员名 | 产物端口名（`top_unnamed_input_N`） | **手写映射表** | 🔴 **当前已漂**（见 §2.2 ⑭） |
-| **G-发射** | `examples/axi4/emit_rtl.cpp`（**32 行**薄壳 ⇒ 归 change `emit-cli-into-example` 删除） | `examples/axi4/emit_rtl_soc.cpp`（**388 行** · 壳层 39 行**已**走库层 CLI ⇒ 归 change `example-file-boundary-2026-11` 的 3.2 **整文件删除**） | `examples/riscv-mini/emit_rtl_hier.cpp`（**48 行**薄壳） | 两个层次化入口形态不一致（收敛口径见 §4.3） |
+| **G-发射** | `examples/axi4/emit_rtl.cpp`（**32 行**薄壳 ⇒ **已删** · change `emit-cli-into-example`） | `examples/axi4/emit_rtl_soc.cpp`（**388 行** · 壳层 39 行**已**走库层 CLI ⇒ **已删** · `example-file-boundary-2026-11` 的 3.2） | `examples/riscv-mini/emit_rtl_hier.cpp`（**48 行**薄壳 ⇒ **已删** · 2026-11-22「TB 自发射」收敛） | 两个层次化入口形态不一致（收敛口径见 §4.3）· **✅ 已收敛**（见下方 2026-11-22 注记） |
+
+> ✅ **2026-11-22 · G-发射已全量收敛（三个薄壳清零）**：
+> `find examples -name 'emit_rtl*.cpp'` == **空** ⇒ ⇒ **发射入口 = TB 自身**
+> （`--emit-rtl` 模式 · 与 `examples/axi4` / `examples/stream` 同型）⇒ ⇒ §4.3 的
+> 「发射面收敛」**剩余项为零**。RV32I 侧的落地 = `emit_rtl.cpp` / `emit_rtl_fw_init.cpp` /
+> `emit_rtl_hier.cpp` 三文件删除、并入 `examples/riscv-mini/tb_rv32i_soc.cpp` 的
+> `--emit-rtl` / `--firmware-init` / `--hierarchical`（三者**正交** ⇒ 可组合）⇒ ⇒
+> 三种形态的 `top.v` + `manifest.json` 与删除前**逐字节相同**（产物零漂移）。
+> ⚠️ **判据面零丢失**：`verify_hierarchical_rtl.sh`（R8′）· `verify_dtcm_read_timing.sh` ·
+> `verify_rv32i_fw_init_rtl.sh`（F0–F5 + F7）· `verify_examples_rtl_sim.sh`（③/③'/⑨/⑨'）
+> 全部改指新入口并各自 `--self-test` 通过。
+> ⚠️ **存量文档不追溯**：`docs/adr/ADR-072` 与该批 `decision-request-*` 里的
+> `emit_rtl_rv32i_soc --out <dir>` 属**签批/提交当时的历史证据命令** ⇒ ⇒ 保持原样，
+> 现行可复跑入口见 `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` §3.2。
 
 **用户诉求（2026-11-17）**：「从原始 `*example.cpp` 构建端口连线 + 提供激励/断言/期望值的 cpp + 直接产出 `.sv` TB」，且「不要过于碎片化」。
 **本方案的核心判断**：诉求成立，但**不能按字面实现** —— 字面实现会撞两条既有纪律（§4.1.2 D5 · §4.1.2 D2），且会引入「两个语义实现」的隐性分裂（§4.1.1）。

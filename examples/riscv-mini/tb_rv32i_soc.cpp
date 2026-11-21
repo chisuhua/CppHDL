@@ -23,6 +23,10 @@
 //   ⇒ ⇒ 与被取代的 `emit_rtl_fw_init.cpp` **逐字节同构**（同一 factory + 同一组
 //   `init_data`）⇒ ⇒ TB 侧只换**设计工厂**，发射流程仍走库层 CLI
 //
+// ⚠️ **`--hierarchical` 与 `--firmware-init` 正交** ⇒ ⇒ 两个标记同时给即得
+//   「带固件初值的层次化产物」（**零新增代码**；判据 =
+//   `scripts/verify_rv32i_fw_init_rtl.sh` 的 F7a/F7b/F7c）。
+//
 // ## 期望值出处
 //
 // `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc`

@@ -44,6 +44,14 @@ revision_count: 0
 | W4 | **生成物无新鲜度判据**；护栏⑥ 只判 `checks >= min_checks`（不判 TODO 残留） | `scripts/verify_examples_rtl_sim.sh:486-490` |
 | W5 | **`AxiLiteTop` 双权威**（`tests/test_axi_lite_verilator_e2e.cpp:74-142` 复制一份） | C3/C7 禁 tests 反向 include examples ⇒ 只能抽到 `include/` |
 
+> ✅ **2026-11-22 · W3 已收口**：`find examples -name 'emit_rtl*.cpp'` == **空**
+> ⇒ ⇒ `examples/axi4/emit_rtl_soc.cpp`（change `example-file-boundary-2026-11` 的 3.2）
+> 与 `examples/riscv-mini/emit_rtl_hier.cpp`（2026-11-22 RV32I「TB 自发射」收敛，
+> 同批含 `emit_rtl.cpp` / `emit_rtl_fw_init.cpp`）**均已删** ⇒ ⇒ 「发射实现两处」
+> **不再成立**。⇒ ⇒ 现行入口 = 各 TB 自身的 `--emit-rtl` 模式
+> （组合 `--hierarchical` / `--firmware-init` 两个正交标记）。
+> ⚠️ 该表的其余行（W1/W2/W4/W5）状态不变。
+
 ## 2. What Changes（改什么）
 
 | # | 变更 | 对应 ADR |

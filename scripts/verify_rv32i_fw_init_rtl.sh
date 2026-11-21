@@ -4,8 +4,9 @@
 # **RV32I 固件「产物自带初值」**的判据（`firmware-load-chain` **L2 = 路线 A** / **L6**）
 #
 # 判据（逐条可复跑 · 失败即 exit 1）：
-#   F0 两个发射器存在（缺 ⇒ **fail-closed**，不是 skip）
-#   F1 两次发射都成功，产物 `top.v` 存在
+#   F0 **发射器**存在（`tb_rv32i_soc` · 基线 / 带初值 / 层次化带初值共用同一个二进制；
+#      缺 ⇒ **fail-closed**，不是 skip）
+#   F1 四次发射都成功，产物 `top.v` 存在
 #   F2 **零端口变更** —— 带初值产物与基线产物的**顶层端口表逐字相同**
 #      ⇒ ⇒ 这条钉住 L2 的核心承诺：「装载不进端口面」
 #   F3 **正向内容** —— 带初值产物的 `initial` 块携带**手推**的固件字：
@@ -15,8 +16,16 @@
 #   F4 **反向内容** —— 基线产物（不带初值）的 `initial` 块**一条赋值都没有**
 #      ⇒ ⇒ 证明 F3 的内容**只能**来自 `ch_mem::init_data`（不是发射器里写死的常量）
 #   F5 **确定性** —— 带初值产物连发两次**逐字节相同**
+#   F7 「层次化 + 固件初值」**组合变体**（原登记为「独立排期」· 2026-11-22 收口）：
+#      `--emit-rtl --hierarchical --firmware-init` ⇒ ⇒ 三条判据同时成立
+#      · F7a **形态成立**：产物 MUST 含 **≥ 2** 个 module（否则层次化已静默退化成扁平）
+#      · F7b **初值仍落盘**：与 F3 **同一组**手推固件字（`init_data` 与 `--hierarchical` 正交）
+#      · F7c **端口面同源**：顶层端口表 == 扁平带初值产物的（**逐字逐序**）
+#      ⇒ ⇒ ⚠️ 三条**缺一即不成立**：F7b 单独绿 ⇒ 可能退化成扁平；F7a 单独绿 ⇒
+#      可能初值被 codegen 吞掉（两个模式标记的实现路径不同 ⇒ 必须分别验）
 #   F6 `--self-test`：把 F3 的正反两面**互换**喂给判定函数 ⇒ ⇒ **各自必红**
 #      （只查「有值」不够：常量写死也能绿；必须证明**判据对内容敏感**）
+#      + F7a 的负向对照：把层次化产物**压成单 module** ⇒ ⇒ F7a MUST 转红
 #
 # ⚠️ **为什么是产物级而不是 C++ 级**：C++ 侧的 `init_words_` 只证明「构造时传了参数」
 #   ⇒ ⇒ 它到底落成了 Verilog `initial`（下游能用的形态）还是被 codegen 吞掉，
@@ -51,7 +60,7 @@ for arg in "$@"; do
     case "$arg" in
     --self-test) MODE="self-test" ;;
     -h | --help)
-        sed -n '3,40p' "$0"
+        sed -n '3,48p' "$0"
         exit 0
         ;;
     *)
@@ -72,9 +81,9 @@ fi
 ok "F0 发射器存在（基线 / 带初值共用同一个二进制）"
 
 rm -rf "$WORK"
-mkdir -p "$WORK/plain" "$WORK/init" "$WORK/init2"
+mkdir -p "$WORK/plain" "$WORK/init" "$WORK/init2" "$WORK/hierfw"
 
-echo "── F1：发射（基线 / 带初值 / 带初值复跑）"
+echo "── F1：发射（基线 / 带初值 / 带初值复跑 / 层次化带初值）"
 # ⚠️ **参数不加引号**（要按空格拆成多个 token）⇒ ⇒ 无参时为空
 emit_one() {  # $1 = out dir · $2 = 附加模式标记（可空）
     local out="$1" eargs="${2:-}"
@@ -90,7 +99,10 @@ emit_one() {  # $1 = out dir · $2 = 附加模式标记（可空）
 emit_one "$WORK/plain" ""
 emit_one "$WORK/init" "--firmware-init"
 emit_one "$WORK/init2" "--firmware-init"
-ok "F1 三份产物均生成"
+# ⚠️ **组合变体**：`--hierarchical`（库层 CLI 选项）与 `--firmware-init`（设计工厂）
+#   **正交** ⇒ ⇒ 两个标记同时给即可 ⇒ ⇒ 零新增发射代码（原「独立排期」项因此收口）。
+emit_one "$WORK/hierfw" "--hierarchical --firmware-init"
+ok "F1 四份产物均生成（含层次化 + 固件初值）"
 
 # ── 产物解析（端口表 + 内存 initial 赋值）─────────────────────────────
 # 输出：第一行 `PORTS <n>`，随后每行 `PORT <decl>`；
@@ -122,6 +134,17 @@ for blk in re.finditer(r"initial begin(.*?)^\s*end\s*$", src, re.S | re.M):
         print("MEM %s %s %s" % (am.group(1), am.group(2),
                                 am.group(3).lower()))
 PY
+}
+
+# hier_modules <top.v> ⇒ 产物里的 module 数（`^module <name>` 计数）
+#   ⚠️ 与 `parse_product` 的 `module top` 正则**刻意分开**：后者只取顶层端口表，
+#      本条要的是**形态**（层次化 MUST 多 module）⇒ ⇒ 判据面不同，不共用解析。
+hier_modules() {
+    local n
+    # ⚠️ `grep -c` **零命中时退出码非零** ⇒ ⇒ 直接 `|| echo 0` 会**多打印一个 0**
+    #   （grep 已打印 "0"）⇒ ⇒ 取赋值再兜底，MUST NOT 用 `|| echo`。
+    n="$(grep -cE '^module [A-Za-z_][\w$]*' "$1" 2>/dev/null)" || n=0
+    printf '%s\n' "${n:-0}"
 }
 
 # 手推期望（**字节地址 ÷ 4 = 字索引**；见 rv32i_fw_demo.h）
@@ -193,6 +216,21 @@ check_product() {
     return 0
 }
 
+# ── F7a 形态判据（**单独成函数** ⇒ ⇒ 自检能对「被压平的副本」直接判红）─────
+check_f7_form() {  # $1 = top.v 路径
+    local n
+    n="$(hier_modules "$1")"
+    if [ "${n:-0}" -lt 2 ]; then
+        fail "F7a 层次化产物只有 $n 个 module（期望 ≥ 2）⇒ ⇒ 「层次化」已静默退化成扁平"
+        return 1
+    fi
+    if ! grep -qE '^module top[[:space:](]' "$1"; then
+        fail "F7a 产物缺根 module 'top'"
+        return 1
+    fi
+    return 0
+}
+
 if [ "$MODE" = "self-test" ]; then
     echo "── F6：自检（把正反两面互换 ⇒ ⇒ 各自必红）"
     st=0
@@ -215,6 +253,22 @@ if [ "$MODE" = "self-test" ]; then
         st=1
     elif check_product "$poisoned" 1 2>/dev/null; then
         red "  ❌ 值投毒（0x5a→0x5b）后仍判绿 ⇒ ⇒ 判据只查「有位」不查「值」"
+        st=1
+    fi
+    # ── F7a 负向对照：层次化产物**压成单 module** ⇒ ⇒ 形态判据必红 ──
+    #   ⚠️ 复用**同一个分析器**（`scripts/lib/flat_rtl_emit_check.py`）⇒ ⇒ 不自研解析器
+    flat_stub="$WORK/hierfw_flat"
+    rm -rf "$flat_stub" && mkdir -p "$flat_stub"
+    python3 "$REPO_ROOT/scripts/lib/flat_rtl_emit_check.py" \
+        --strip-modules-except top "$WORK/hierfw/top.v" >"$flat_stub/top.v" 2>/dev/null
+    if [ ! -s "$flat_stub/top.v" ]; then
+        red "  ❌ F7a 投毒未生效（压平器没产出）⇒ ⇒ 自检本身无效"
+        st=1
+    elif [ "$(hier_modules "$flat_stub/top.v")" -ge 2 ]; then
+        red "  ❌ F7a 投毒后 module 数仍 ≥ 2 ⇒ ⇒ 压平没生效"
+        st=1
+    elif check_f7_form "$flat_stub/top.v" 2>/dev/null; then
+        red "  ❌ F7a 层次化产物压成单 module 后仍判绿 ⇒ ⇒ 形态判据无判别力"
         st=1
     fi
     FAILED=0  # 自检里上面的 fail 输出是**预期的**，不计入
@@ -252,9 +306,25 @@ else
     fail "两次发射不同（产物不确定 ⇒ ⇒ 下游无法做内容哈希缓存/比对）"
 fi
 
+echo "── F7：层次化 + 固件初值组合变体"
+if check_f7_form "$WORK/hierfw/top.v"; then
+    ok "F7a 形态成立（module 数 $(hier_modules "$WORK/hierfw/top.v") · 根 = top）"
+fi
+if check_product "$WORK/hierfw" 1; then
+    ok "F7b 初值仍落盘（与 F3 同一组手推固件字）"
+fi
+# ⚠️ 端口面**同源**：扁平带初值 vs 层次化带初值 ⇒ ⇒ 逐字逐序相同
+if ! diff <(parse_product "$WORK/init/top.v" | grep '^PORT ') \
+    <(parse_product "$WORK/hierfw/top.v" | grep '^PORT ') >"$WORK/ports.hierfw.diff" 2>&1; then
+    fail "F7c 层次化带初值产物的顶层端口表 ≠ 扁平带初值产物的（见 $WORK/ports.hierfw.diff）"
+    head -20 "$WORK/ports.hierfw.diff" | sed 's/^/       /'
+else
+    ok "F7c 两形态顶层端口表同源（$(parse_product "$WORK/hierfw/top.v" | awk '/^PORTS /{print $2}') 个）"
+fi
+
 echo
 if [ "$FAILED" -ne 0 ]; then
     red "❌ verify_rv32i_fw_init_rtl: FAIL"
     exit 1
 fi
-green "✅ verify_rv32i_fw_init_rtl: PASS（F0 发射器 · F1 三份产物 · F2 零端口变更 · F3 手推初值 · F4 反向零赋值 · F5 确定性）"
+green "✅ verify_rv32i_fw_init_rtl: PASS（F0 发射器 · F1 四份产物 · F2 零端口变更 · F3 手推初值 · F4 反向零赋值 · F5 确定性 · F7 层次化带初值）"

@@ -64,6 +64,11 @@ build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --hierarchical --out out/hier 
 # ④ 带固件初值的扁平产物（TCM 的 `initial` 初值块）
 build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --firmware-init --out out/fw --emit-hygiene
 
+# ④' 带固件初值的**层次化**产物（两个模式标记正交 ⇒ 组合即得 · 判据见
+#    scripts/verify_rv32i_fw_init_rtl.sh 的 F7a/F7b/F7c）
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --hierarchical --firmware-init \
+    --out out/hier_fw --emit-hygiene
+
 # ⑤ 一条命令跑通（生成 → lint → 编译 → 运行 ⇒ RESULT: checks=24 fails=0）
 bash scripts/rv32i_rtl_sim_env.sh
 ```

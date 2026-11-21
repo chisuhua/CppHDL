@@ -194,8 +194,13 @@ return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm_init, /* dtcm */ 
 > （固件**硬编码**在 `examples/riscv-mini/src/rv32i_fw_demo.h` · 手推的字镜像）⇒ ⇒
 > 产物级判据 = `scripts/verify_rv32i_fw_init_rtl.sh`（F0–F5）· 固件链路判据 =
 > `scripts/verify_rv32i_fw_dump.sh`（D0–D6）。
-> ⚠️ **层次化形态暂无 fw_init 变体**（本次不做）⇒ ⇒ 需要时按同一模式加一个即可
-> （`run_emit_cli` 的 `--hierarchical` 与 `init_data` 正交）。
+> ⚠️ **层次化形态的 fw_init 变体已可用**（2026-11-22 收口 · 原登记为「独立排期」）：
+> `run_emit_cli` 的 `--hierarchical` 与 `init_data` **正交** ⇒ ⇒ 两个模式标记同时给即可
+> ⇒ ⇒ `tb_rv32i_soc --emit-rtl --hierarchical --firmware-init --out <dir>`，**零新增代码**。
+> ⇒ ⇒ 判据 = `scripts/verify_rv32i_fw_init_rtl.sh` 的 **F7a / F7b / F7c**
+> （形态 ≥ 2 module / 初值仍落盘 / 顶层端口表**两形态同源**）——
+> ⚠️ 三条**缺一不可**：只看「初值在」抓不到「静默退化成扁平」，只看「多 module」
+> 抓不到「初值被 codegen 吞掉」（两个模式标记走不同实现路径）。
 
 #### 路线 B —— `$readmemh`（**SoC 用不了**）
 
