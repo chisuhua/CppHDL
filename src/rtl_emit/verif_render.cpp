@@ -103,6 +103,18 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
     stub_opts.clock_half_period_ns = options.clock_half_period_ns;
     stub_opts.reset_cycles = options.reset_cycles;
 
+    // `RESET` 指向框架复位端口 ⇒ 两端同源的 fail-closed（与解释器**同一函数**）
+    // ⚠️ **必须排在端口解析之前** ⇒ ⇒ 否则「后代 reset 成员」这类 ident 会让渲染器报
+    //   「无法解析」、而解释器报本条 ⇒ ⇒ **两端消息不同**（判定一致、消息不一致）
+    //   ⇒ ⇒ 放在前面 ⇒ ⇒ 两端**逐字相同**。
+    {
+        const std::string viol = verif_reset_port_violation(program, manifest);
+        if (!viol.empty()) {
+            error = viol;
+            return false;
+        }
+    }
+
     // ⚠️ 先解析**全部**端口名 ⇒ 任一失败即 fail-closed（不产出半成品）
     for (const auto &sc : program.scenarios) {
         for (const auto &op : sc.ops) {
@@ -160,6 +172,10 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
     const auto pre = write_tb_prelude(out, manifest, stub_opts, header);
 
     // 无时钟却用到需要推进拍的原语 ⇒ fail-closed
+    // ⚠️ **本检查在 `RESET` 检查之后** ⇒ ⇒ 「无时钟」+「`RESET` 违例」**同时**成立时：
+    //   渲染器先命中本条（报「无时钟」）、解释器命中 `RESET` 那条 ⇒ ⇒ **两端消息不同**
+    //   ⇒ ⇒ 但**判定一致**（都拒绝）⇒ ⇒ 不破坏「两端同结论」（= 判定层面）。
+    //   ⚠️ 「逐字相同」的强断言只覆盖**单独**命中本检查的构例（见测试用例的注释）。
     if (pre.clock_port.empty()) {
         for (const auto &sc : program.scenarios) {
             for (const auto &op : sc.ops) {
@@ -171,6 +187,7 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
             }
         }
     }
+
     const std::string clk = pre.clock_port;
 
     // ── 历史序列的声明（ADR-076 D2）──────────────────────────────────────

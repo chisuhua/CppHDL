@@ -298,7 +298,7 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
 | `EXPECT <port> <value>` | 断言某端口等于某值 ⇒ 产生一条断言 |
 | `EXPECT_STABLE <port> <n>` | 断言某端口连续 n 拍不变 |
 | `OBSERVE <port>` | 观测（只记录，不判定） |
-| `RESET <port> <high\|low> [cycles]` | 复位某个端口 |
+| `RESET <port> <high\|low> [cycles]` | 把某个端口拉成该电平、保持 n 拍、再拉回**相反**电平（⚠️ **不是**框架复位 ⇒ 见下方边界） |
 | `RECORD <port>` | 把端口**当前采样点**的值追加到该端口的**历史序列**（**不**产生断言） |
 | `EXPECT_SEQ_SELF <port> <n> <lag>` | 断言该端口历史的**最近 n 项**与**再往前 lag 项**逐项恒等 ⇒ 产生一条断言 |
 | `EXPECT_SEQ_STEP <portV> <portE> <n>` | 断言「`portV` 的相邻差」与「`portE` 的同位项」逐项恒等 ⇒ 产生一条断言 |
@@ -336,6 +336,29 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
   **结论相反** ⇒ ⇒ 需要「回绕点」时写成循环到 `255` + 单列一条 `EXPECT value 0`。
 - ⚠️ **`EXPECT_STABLE <port> <n>` 的 n 条结论共用同一个 `check_id`**（原语级 id，
   不是逐拍 id）⇒ ⇒ 与 `EXPECT` 的逐条命名不同（历史行为，未改）。
+
+**`RESET` 的已知边界**（2026-11-21 实测 · 钉死语义，避免两端各理解一次）：
+
+- ⚠️ **`RESET` = 「拉电平 + 保持 n 拍 + 拉回相反电平」**，**不是**「让 DUT 复位」
+  ⇒ ⇒ 对**普通数据输入**（如 `rst_n`）它是**正确的用法**（电平型信号）。
+- ⛔ **`RESET` 指向**框架复位端口**（`default_reset` · manifest `role == "reset"`）⇒ ⇒
+  **fail-closed 拒绝**（两端同源：解释器与渲染器**逐字相同**的错误消息）。
+  **为什么**（实测，gpio 真实 DUT + 真 verilator）：
+  · **解释器**：`build_register` 给寄存器的 `rst_val` 是 **nullptr** ⇒ 复位期间
+    `instr_reg::eval` **只 return、不赋值** ⇒ 寄存器**保持原值**；
+  · **渲染 TB**：释放动作与**最后一个**时钟沿**同拍** ⇒ 该沿走 `else` 分支
+    ⇒ 刚写下的复位值被**同拍覆盖**。
+  ⇒ ⇒ **两端都不复位** ⇒ 「看起来像复位、实际不复位」⇒ ⇒ 与「两端结论相反」不同，
+  但同样危险（作者会以为复位发生了 ⇒ 可能把期望值改成「不复位的值」⇒ **假绿**）。
+- ⇒ ⇒ **运行期中框架复位当前不可表达** ⇒ ⇒ 需要框架侧新增能力（如 `FRAME_RESET`）
+  ⇒ ⇒ 决策归 architect（见 `.rddf/checks/examples-rtl-expectations.md#phase3a-example`
+  的「⛔ 为什么该 TB MUST 保持手写」节）。
+- ⚠️ **另一条仍开放的已知差异**（**对所有** `RESET` 用法，含数据端口）：渲染侧的
+  **去断言**与**最后一个**时钟沿**同拍**（`repeat(n) @(posedge clk); name = <deassert>;`
+  **无 `#1`**）⇒ ⇒ 该沿可能已采样到**去断言后的值** ⇒ 与解释器（先 `tick` 完再 `set`）差 **1 拍**。
+  登记 = `openspec/changes/archive/2026-11-20-verif-wait-level-2026-11/tasks.md` 的 **B0 ②**
+  （**待 architect 裁决** ⇒ ⇒ 修任一侧都会影响另一侧的同结论 ⇒ ⇒ 不是本地可定的小改）。
+  当前 `.verif` 零处使用 `RESET` ⇒ ⇒ **潜在**差异（未触发）。
 
 **`WAIT` 的已知边界**（钉死语义，避免两端各理解一次）：
 

@@ -327,6 +327,46 @@ TEST_CASE("verif-frame-reset: 寄存器 INIT 在框架复位后生效（不是�
 }
 
 // ============================================================================
+// `RESET` 指向**框架复位端口** ⇒ 两端同源的 fail-closed（2026-11-21 实测）
+//
+//   · **解释器**：`build_register` 给寄存器的 `rst_val` 是 nullptr ⇒ 复位期间
+//     「只 return、不赋值」⇒ ⇒ 寄存器**保持原值**（不复位）；
+//   · **渲染 TB**：释放动作与**最后一个**时钟沿**同拍**⇒ ⇒ 该沿走 `else` 分支
+//     ⇒ ⇒ 刚写下的复位值被**同拍覆盖**（也不复位）。
+//
+// ⇒ ⇒ 两端**都不复位** ⇒ ⇒ 「看起来像复位、实际不复位」⇒ ⇒ 明确拒绝（fail-closed）
+// ⇒ ⇒ 判据 = **两端都拒绝且消息逐字相同**（否则「两端同结论」被破坏）。
+// ============================================================================
+TEST_CASE("verif-reset-port: `RESET default_reset` 两端同源 fail-closed",
+          "[verif][wait-level]") {
+    ch::ch_device<WaitLevelDut> dev;
+    const std::string text = std::string(kHead) + "@scenario s\n@anchor a\nRESET default_reset high 2\n";
+    std::istringstream in(text);
+    ch::rtl_emit::VerifProgram prog;
+    ch::rtl_emit::VerifParseError perr;
+    REQUIRE(ch::rtl_emit::parse_verif(in, prog, perr));
+
+    const auto manifest = ch::rtl_emit::build_rtl_manifest(dev.instance(), dev.context());
+
+    // ① 解释器侧：拒绝
+    ch::Simulator sim(dev.context());
+    const auto res = ch::rtl_emit::run_verif(prog, sim, dev.context(), manifest);
+    INFO("interp error: " << res.error);
+    REQUIRE_FALSE(res.ok);
+    REQUIRE(res.error.find("default_reset") != std::string::npos);
+
+    // ② 渲染侧：拒绝，且**消息与解释器侧逐字相同**（两端同结论）
+    ch::rtl_emit::TbRenderOptions ro;
+    ro.tb_module = "tb_wait_level";
+    ro.dut_module = "top";
+    std::ostringstream tb;
+    std::string rerr;
+    REQUIRE_FALSE(ch::rtl_emit::render_tb(tb, prog, manifest, ro, rerr));
+    INFO("render error: " << rerr);
+    REQUIRE(rerr == res.error);
+}
+
+// ============================================================================
 // 扫描器：`level` 只接受 `high` / `low` 关键字（fail-closed · AC2 / AC12）
 // ============================================================================
 TEST_CASE("verif-wait-level: 扫描器负向 —— level 只接受 high/low 关键字",

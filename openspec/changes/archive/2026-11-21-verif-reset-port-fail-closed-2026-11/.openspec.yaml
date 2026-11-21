@@ -1,0 +1,8 @@
+schema: spec-driven
+created: 2026-11-21
+# 本 change **无 spec 变更**：`openspec/specs/` 里**没有任何** capability 承载 `.verif` 的
+# 原语语义（ADR-074 D2 的封闭原语集在 **ADR**，不在 spec）⇒ ⇒ 本 change 只改**实现**
+# （两端同源的 fail-closed 拒绝）+ 文档 + 测试 ⇒ ⇒ 不新增也不修改任何 Requirement。
+# ⇒ 归档时用 `openspec archive verif-reset-port-fail-closed-2026-11 --skip-specs`
+#   （仓内规则：只有**显式声明 no spec changes** 的 change 才可用该标志 —— 本文件即该声明）。
+skip_specs: true

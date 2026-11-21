@@ -8,6 +8,8 @@
 
 #include "rtl_emit/verif.h"
 
+#include "verif_internal.h"
+
 #include "ast/ast_nodes.h"
 #include "component.h"
 #include "core/context.h"
@@ -174,6 +176,16 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
     if (!r.build(ctx, manifest)) {
         res.error = r.errors.empty() ? "端口解析表构建失败" : r.errors.front();
         return res;
+    }
+
+    // ── `RESET` 不得指向框架复位端口（两端同源的 fail-closed）──────────────
+    // ⚠️ **必须在解析之前**判 ⇒ ⇒ 否则「解释器接受、渲染器拒绝」⇒ ⇒ 两端结论分叉。
+    {
+        const std::string viol = verif_reset_port_violation(program, manifest);
+        if (!viol.empty()) {
+            res.error = viol;
+            return res;
+        }
     }
 
     auto resolve_or_fail = [&](const std::string &port, std::uint32_t &id,
