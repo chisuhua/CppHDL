@@ -1,3 +1,32 @@
+## 2026-11-21 — `uart_tx` / `uart_rx` 迁移（三角色分离 + `.verif` 单一真相源）
+
+**改了什么**：
+
+- `uart_tx`：`uart_top.h`（具名 `frame_start`/`data`/`uart_tx`/`busy`）+ `tb_uart_tx_example.cpp/.verif`；
+  3 scenario / **49** 断言 = 空闲恒高（含 16 采样计数）· 两帧（0x55 / 0x5A）逐位窗**首/尾两拍**断言。
+- `uart_rx`：`uart_rx_top.h`（具名 `rx`/`prescale`/`data`/`valid`）+ `tb_uart_rx_example.cpp/.verif`；
+  6 个 `@scenario` / **32** 断言 = 排空的复位态 · 两字节（0x96 / 0x69）· **metamorphic** 四字节序列
+  + `valid` 单拍性 · **采样相位夹逼**（prescale=99 + 1/3 / 2/3 翻转点的 3 个探针）。
+- 删除两份 `*.cpp` 与 `emit_rtl.cpp`（发射入口 = TB 自身）；target 改名为
+  `tb_uart_tx_example` / `tb_uart_rx_example`（CTest 条目名不变）。
+- 棘轮登记表同步：删掉两份已删文件的 **16** 条未具名端口豁免 ⇒ 锚点 `1363 → 1347`。
+
+**方法变更（已登记，不降判别力）**：旧 TB 用**边沿时间戳**「测出」UART TX 的位宽再断言
+「9 段等宽」；`.verif` 原语集**没有时间戳** ⇒ ⇒ 改为用 impl-contract **434** 锚定位窗 +
+每窗**首/尾两拍**各断言一次（每位被钉在恰好 434；任何一位多/少一拍都会让某窗首或尾错）。
+代价 = 434 成为必须与实现同步的常量（`docs` 与清单 `note` 都写明）。
+
+**变异自证**：uart_tx —— MSB first `fails=16` · 起始位高 `fails=25` · 位宽减半 `fails=16` ·
+停止位低 `fails=2`；uart_rx —— 重新注入 D7 位反转 `fails=7` · 重新注入 D6 硬编码采样点
+`fails=2`（**只有相位探针红** —— 正是探针存在的理由）· `valid` 恒 1 `fails=16`。
+
+**两条实施期发现**（都是「两侧同源」，不是分叉）：
+
+1. **复位释放那一拍会误触发一帧**（数据输入被 tie-off 为 0 ⇒ `rx=0` ⇒ 下降沿检测真的启动一帧）
+   ⇒ ⇒ `uart_rx` 的 `reset_state` 用 `prescale=0`（1 拍/位）+ 12 拍把它**排空**再断言。
+2. **解释器必须落回寄存器 INIT**（框架修复见上一条 CHANGELOG 条目）—— `uart_rx` 是第一个
+   `INIT != 0` 的 DUT。
+
 ## 2026-11-21 — `.verif` 解释器的框架复位 MUST 落回寄存器 INIT（与渲染式 TB 同终态）
 
 **是什么**：`run_verif` 的 `apply_frame_reset` 之前只调 `Simulator::reset()`（实现是

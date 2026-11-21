@@ -1,0 +1,314 @@
+# examples/spinalhdl-ported/uart_rx/tb_uart_rx_example.verif
+#
+# **UART RX 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+#
+# 被测协议（**外部规范 · spec-derived**）：UART 8N1 + **中点采样**
+#   · 线上 **LSB first** ⇒ 解出的字节 MUST 等于发出的字节
+#   · `valid` MUST 是**单拍脉冲**（每字节一次）
+#   · 采样点 MUST 在位的**中段**（否则真实串口的抖动会直接采错）
+#
+# ⚠️ **位周期 = `prescale + 1` 拍**（impl-contract）⇒ 驱动器按它排布；
+#   采样相位由**夹逼**判定（前 1/3 / 后 1/3 的两次探针），**不写死**采样点。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#uart-rx-example
+@tb-module tb_uart_rx_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：复位态（impl-contract：`data` / `valid` 复位为 0）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_state
+@anchor uart-rx-example
+
+# ⚠️ **复位释放那一拍会误触发一帧**（两侧同源 ⇒ 不是分叉）：框架复位的最后一拍
+#   复位已释放、而全部数据输入被 tie-off 为 0 ⇒ `rx=0` ⇒ 接收器的下降沿检测
+#   **真的**启动一次接收。⇒ ⇒ 用 `prescale=0`（1 拍/位）+ 12 拍把它**排空**
+#   （排空期间 `data` 恒 0 —— 收到的位全是 0；`valid` 的脉冲在排空窗内）。
+SET rx 0
+SET prescale 0
+TICK 12
+
+SET rx 1
+TICK 2
+SET prescale 9
+SETTLE
+EXPECT data 0x00
+EXPECT valid 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：两个**非位回文**字节（0x96 / 0x69 ⇒ 抓 D7 位反转）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario recv_two_bytes
+@anchor uart-rx-example
+
+SET prescale 9
+
+# ── 字节 0x96（LSB first：01101001）
+SET rx 1
+TICK 4
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+
+WAIT valid high 20
+EXPECT data 0x96
+EXPECT valid 1
+TICK 1
+EXPECT valid 0
+TICK 9
+SET rx 1
+TICK 4
+# ── 字节 0x69（LSB first：10010110）
+SET rx 1
+TICK 4
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+
+WAIT valid high 20
+EXPECT data 0x69
+EXPECT valid 1
+TICK 1
+EXPECT valid 0
+TICK 9
+SET rx 1
+TICK 4
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3（**metamorphic**）：连发 4 个字节 ⇒ 收到的序列 MUST **逐项恒等**发出的序列
+#   · 每个字节都验「解码值 + `valid` 单拍脉冲」⇒ 与具体字节无关（相对判据）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario recv_sequence
+@anchor uart-rx-example
+
+SET prescale 9
+
+# ── 字节 0x96（LSB first：01101001）
+SET rx 1
+TICK 4
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+
+WAIT valid high 20
+EXPECT data 0x96
+EXPECT valid 1
+TICK 1
+EXPECT valid 0
+TICK 9
+SET rx 1
+TICK 4
+# ── 字节 0x69（LSB first：10010110）
+SET rx 1
+TICK 4
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+
+WAIT valid high 20
+EXPECT data 0x69
+EXPECT valid 1
+TICK 1
+EXPECT valid 0
+TICK 9
+SET rx 1
+TICK 4
+# ── 字节 0x4B（LSB first：11010010）
+SET rx 1
+TICK 4
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+
+WAIT valid high 20
+EXPECT data 0x4B
+EXPECT valid 1
+TICK 1
+EXPECT valid 0
+TICK 9
+SET rx 1
+TICK 4
+# ── 字节 0xA5（LSB first：10100101）
+SET rx 1
+TICK 4
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+TICK 10
+SET rx 0
+TICK 10
+SET rx 1
+
+WAIT valid high 20
+EXPECT data 0xA5
+EXPECT valid 1
+TICK 1
+EXPECT valid 0
+TICK 9
+SET rx 1
+TICK 4
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：**采样相位夹逼**（spec-derived）—— 长位周期（prescale=99 ⇒ 100 拍/位）
+#   · 探针 A：bit0 前 1/3 为 **1**、其后为 0 ⇒ 读 **0**（0xFE）⇒ 采样点**不在**前 1/3
+#   · 探针 A′：bit0 前 1/3 为 **0**、其后为 1 ⇒ 读 **1**（0xFF）⇒ 与 A 互证
+#   · 探针 B：bit0 前 2/3 为 **0**、其后为 1 ⇒ 读 **0**（0xFE）⇒ 采样点**不在**后 1/3
+#   ⇒ ⇒ 采样点 ∈ [1/3, 2/3) ⇒ ⇒ 旧实现（硬编码 `div == 4`）会落在前沿 ⇒ 红
+# ══════════════════════════════════════════════════════════════════════════
+
+@scenario phase_probe_a
+@anchor uart-rx-example
+
+SET prescale 99
+SET rx 1
+TICK 4
+SET rx 0
+TICK 100
+
+# bit0：前 1/3（33 拍）为 1，余下 67 拍为 0
+SET rx 1
+TICK 33
+SET rx 0
+TICK 67
+
+# bit1..bit6 = 1（6 位 × 100 拍）
+SET rx 1
+TICK 600
+
+# bit7 开始时等 valid（采样点应落在**中段**）
+WAIT valid high 120
+EXPECT data 0xFE
+TICK 100
+
+@scenario phase_probe_a_prime
+@anchor uart-rx-example
+
+SET prescale 99
+SET rx 1
+TICK 4
+SET rx 0
+TICK 100
+
+# bit0：前 1/3（33 拍）为 0，余下 67 拍为 1
+SET rx 0
+TICK 33
+SET rx 1
+TICK 67
+
+# bit1..bit6 = 1（6 位 × 100 拍）
+SET rx 1
+TICK 600
+
+# bit7 开始时等 valid（采样点应落在**中段**）
+WAIT valid high 120
+EXPECT data 0xFF
+TICK 100
+
+@scenario phase_probe_b
+@anchor uart-rx-example
+
+SET prescale 99
+SET rx 1
+TICK 4
+SET rx 0
+TICK 100
+
+# bit0：前 **2/3**（66 拍）为 0，余下 34 拍为 1 ⇒ 采样点在中段 ⇒ 读 **0**
+SET rx 0
+TICK 66
+SET rx 1
+TICK 34
+
+# bit1..bit6 = 1（6 位 × 100 拍）
+SET rx 1
+TICK 600
+
+# bit7 开始时等 valid（采样点应落在**中段**）
+WAIT valid high 120
+EXPECT data 0xFE
+TICK 100
+

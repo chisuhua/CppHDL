@@ -36,8 +36,8 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     tb_counter_simple_example
     tb_counter_example
     fifo_stream_example
-    uart_tx_example
-    uart_rx_example
+    tb_uart_tx_example
+    tb_uart_rx_example
 
     # PHASE: Phase 2: 核心组件
     tb_pwm_example

@@ -1,0 +1,173 @@
+# examples/spinalhdl-ported/uart/tb_uart_tx_example.verif
+#
+# **UART TX 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+#
+# 被测协议（**外部规范 · spec-derived**）：UART 8N1
+#   · 空闲**高** · 起始位 **1 位低** · 数据 **8 位 LSB first** · 停止位 **1 位高**
+#
+# ⚠️ **位宽 = 434 拍**（impl-contract · `baud_counter == 433` ⇒ 0..433）。
+#   位窗锚定用 434：`WAIT uart_tx low` 命中起始位的**第一拍** ⇒ 位窗 =
+#   `[S + 434k, S + 434k + 433]` ⇒ 每个位窗在**首/尾两拍**各断言一次
+#   ⇒ ⇒ **两侧夹逼**：位宽多一拍或少一拍都会让某个窗口的首/尾取值错。
+#   ⚠️ 这比「测出位宽再比相等」**更紧**（每位都被钉在恰好 434），
+#      代价是 **434 变成必须与实现同步的 impl-contract**（见登记文档）。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#uart-tx-example
+@tb-module tb_uart_tx_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：空闲期 —— `uart_tx` 恒高 · `busy` == 0
+# ══════════════════════════════════════════════════════════════════════════
+@scenario idle_line
+@anchor uart-tx-example
+
+SETTLE
+EXPECT uart_tx 1
+EXPECT busy 0
+
+REPEAT 16
+TICK 1
+RECORD uart_tx
+END
+EXPECT_SEQ_COUNT uart_tx 1 16 16
+
+@scenario send_0x55
+@anchor uart-tx-example
+
+SET data 0x55
+SET frame_start 1
+SETTLE
+TICK 1
+SET frame_start 0
+
+# 起始位：低（窗口首 / 窗口尾 各一条 + busy 覆盖）
+WAIT uart_tx low 600
+EXPECT uart_tx 0
+EXPECT busy 1
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+
+# 数据位 0（= bit0 of 0x55 = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 1（= bit1 of 0x55 = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+# 数据位 2（= bit2 of 0x55 = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 3（= bit3 of 0x55 = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+# 数据位 4（= bit4 of 0x55 = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 5（= bit5 of 0x55 = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+# 数据位 6（= bit6 of 0x55 = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 7（= bit7 of 0x55 = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+
+# 停止位：高（STOP 与 IDLE 同为高 ⇒ 宽度不可观测 ⇒ 只判取值与 busy）
+EXPECT uart_tx 1
+EXPECT busy 0
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+@scenario send_0x5A
+@anchor uart-tx-example
+
+SET data 0x5A
+SET frame_start 1
+SETTLE
+TICK 1
+SET frame_start 0
+
+# 起始位：低（窗口首 / 窗口尾 各一条 + busy 覆盖）
+WAIT uart_tx low 600
+EXPECT uart_tx 0
+EXPECT busy 1
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+
+# 数据位 0（= bit0 of 0x5A = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+# 数据位 1（= bit1 of 0x5A = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 2（= bit2 of 0x5A = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+# 数据位 3（= bit3 of 0x5A = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 4（= bit4 of 0x5A = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 5（= bit5 of 0x5A = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+# 数据位 6（= bit6 of 0x5A = 1）
+EXPECT uart_tx 1
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# 数据位 7（= bit7 of 0x5A = 0）
+EXPECT uart_tx 0
+TICK 433
+EXPECT uart_tx 0
+TICK 1
+
+# 停止位：高（STOP 与 IDLE 同为高 ⇒ 宽度不可观测 ⇒ 只判取值与 busy）
+EXPECT uart_tx 1
+EXPECT busy 0
+TICK 433
+EXPECT uart_tx 1
+TICK 1
+# ══════════════════════════════════════════════════════════════════════════
+# 两帧用不同字节是**刻意**的（沿用原手写 TB 的理由）：
+#   · 0x55（交替位）⇒ 每个位边界都有跳变 ⇒ 位窗首/尾的取值最敏感；
+#   · 0x5A（含相邻同值位）⇒ 抓「位序 / LSB-first 错」（若按 MSB first 发 ⇒ 0xA5 ⇒ 红）。
+# ══════════════════════════════════════════════════════════════════════════
