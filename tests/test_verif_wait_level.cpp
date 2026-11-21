@@ -273,7 +273,58 @@ std::vector<std::string> split_ws(const char *s) {
     return out;
 }
 
+// ============================================================================
+// 框架复位的**寄存器 INIT**（与渲染式 TB 的 `if (default_reset) reg <= <INIT>` 同构）
+// ============================================================================
+//
+// ⚠️ **为什么必须钉住这件事**（2026-11-21 · uart_rx 迁移实测）：
+//   `Simulator::reset()` 的实现是「把**所有**节点清 0」⇒ ⇒ 若解释器只调它，
+//   `INIT != 0` 的寄存器会起在**错误初态** ⇒ ⇒ 与 RTL 路径**分叉**
+//   （实测：uart_rx 的 `idle`/`rx_d` INIT=true ⇒ 接收器起在「非空闲」⇒ 解码全错）。
+//   修法 = 解释器**驱动 reset 节点 4 拍 + 释放 1 拍**（与 `write_tb_reset_pulse` 逐拍同构）。
+//
+// 手推：寄存器 `INIT = 5`、每拍 +1 ⇒ 复位 4 拍（值为 5）+ 释放拍（6）⇒ ⇒ `cnt == 6`。
+//   · 若仍用「清零 + 1 拍」⇒ 得到 **1** ⇒ 红；
+//   · 若只复位不补释放拍 ⇒ 得到 **5** ⇒ 红。
+class InitRegDut : public ch::Component {
+  public:
+    __io(ch_out<ch_uint<8>> cnt{"cnt"})
+
+    ch_reg<ch_uint<8>> c{5_d, "c"};
+
+    InitRegDut(ch::Component *parent = nullptr, const std::string &name = "top")
+        : ch::Component(parent, name) {}
+
+    void create_ports() override { new (io_storage_) io_type; }
+
+    void describe() override {
+        c->next = c + 1_d;
+        io().cnt = c;
+    }
+};
+
 } // namespace
+
+TEST_CASE("verif-frame-reset: 寄存器 INIT 在框架复位后生效（不是清零）", "[verif][wait-level]") {
+    ch::ch_device<InitRegDut> dev;
+    const std::string text = std::string(kHead) + "@scenario s\n@anchor a\nSETTLE\nEXPECT cnt 6\n";
+    std::istringstream in(text);
+    ch::rtl_emit::VerifProgram prog;
+    ch::rtl_emit::VerifParseError perr;
+    INFO("parse line: " << perr.line << " msg: " << perr.message);
+    REQUIRE(ch::rtl_emit::parse_verif(in, prog, perr));
+
+    const auto manifest = ch::rtl_emit::build_rtl_manifest(dev.instance(), dev.context());
+    ch::Simulator sim(dev.context());
+    const auto res = ch::rtl_emit::run_verif(prog, sim, dev.context(), manifest);
+    INFO("run error: " << res.error);
+    for (const auto &line : res.failure_lines) {
+        std::printf("[DBG] %s\n", line.c_str());
+    }
+    REQUIRE(res.ok);
+    REQUIRE(res.checks == 1);
+    REQUIRE(res.fails == 0);
+}
 
 // ============================================================================
 // 扫描器：`level` 只接受 `high` / `low` 关键字（fail-closed · AC2 / AC12）

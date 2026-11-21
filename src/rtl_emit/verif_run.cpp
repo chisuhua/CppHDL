@@ -8,6 +8,7 @@
 
 #include "rtl_emit/verif.h"
 
+#include "ast/ast_nodes.h"
 #include "component.h"
 #include "core/context.h"
 #include "core/lnodeimpl.h"
@@ -185,9 +186,20 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
         return true;
     };
 
-    // ── 框架复位（与渲染式 TB 的 `write_tb_reset_pulse` 同构）──
+    // ── 框架复位（与渲染式 TB 的 `write_tb_reset_pulse` **同终态**）──
     // ⚠️ 两后端 MUST 从**同一初始状态**起跑 ⇒ ⇒ 否则「语义只有一份」在**起点**就破裂。
-    //   渲染式 TB 的输入在 0 时刻被 NSDMI 置 0 ⇒ 解释器侧要显式做同样的事。
+    //   渲染式 TB（`write_tb_reset_pulse`）= `default_reset=1; repeat(4) @(posedge);
+    //   default_reset=0; @(posedge);`，其寄存器复位分支写成
+    //   `if (default_reset) reg <= <INIT>;` ⇒ ⇒ **复位终态 = 每个寄存器回到 INIT**。
+    // ⚠️ **解释器侧等价的终态**（2026-11-21 · uart_rx 迁移实测）：
+    //   `Simulator::reset()` 把**所有**节点清 0（`src/simulator.cpp`）⇒ ⇒ 对
+    //   `INIT != 0` 的寄存器会起在**错误初态**（uart_rx 的 `idle`/`rx_d` INIT=true
+    //   ⇒ 接收器起在「非空闲」⇒ 解码全错）。⇒ ⇒ **按 `regimpl::get_init_val()` 回填**。
+    // ⚠️ **为什么不是「驱动 reset 节点 4 拍」**：`build_register` 给寄存器的
+    //   `rst_val` 是 **nullptr**（`include/core/node_builder.h`）⇒ ⇒ 解释器的
+    //   `instr_reg::eval` 在复位期间**只 return、不赋值**（`src/ast/instr_reg.cpp`）
+    //   ⇒ ⇒ 驱动 reset 节点**不产生**「回到 INIT」的效果，只白白消耗 4 拍
+    //   ⇒ ⇒ 真正的「INIT」语义在 `init_val` 上（渲染侧同源）⇒ ⇒ 回填它才对。
     if (options.apply_frame_reset) {
         for (const auto &p : manifest.port_table) {
             if (p.dir != "input" || p.role != "data") {
@@ -210,20 +222,22 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
                 sim.set_value_by_node_id(id, 0);
             }
         }
-        // ⚠️ **复位尾缝对齐**（ADR-076 实施期发现 · `verif-wait-level` 的 B0 登记项落地）：
-        //   渲染式 TB 的复位脉冲（`src/rtl_emit/tb_stub.cpp` 的 `write_tb_reset_pulse`）
-        //   在「复位脉冲（4 拍）」之后**还有一个 `@(posedge clk)`**（**无 `#1`**）
-        //   ⇒ ⇒ 那**一拍**里复位已释放 ⇒ ⇒ DUT 的寄存器**真的走了一拍**
-        //   ⇒ ⇒ 解释器若不补这一拍 ⇒ ⇒ **两端相位差 1**
-        //   ⇒ ⇒ 后果：任何「按绝对拍号」的期望值在两端**不同** ⇒ ⇒ `.verif` 的
-        //   运行期同结论判据（ADR-074 D8）会红 ⇒ ⇒ 而这不是「语义不同」，
-        //   只是**起点没对齐** ⇒ ⇒ **补这一拍**。
-        // ⚠️ **为什么改解释器侧而不是渲染器侧**：渲染侧一改 ⇒ ⇒ 仓内 **6 份 checked-in
-        //   `.sv` TB 全部逐字节变化** ⇒ ⇒ 破「产物逐字节不变」的硬判据（ADR-074 D4
-        //   的新鲜度等式）⇒ ⇒ ⇒ 而解释器侧补一拍 ⇒ ⇒ **既有产物逐字节不变**
-        //   ⇒ ⇒ 且既有产品的 `interp_checks` **不变**（它们的 DUT 要么是组合的，
-        //   要么自带 `rst_n` ⇒ ⇒ 复位释放后那一拍里它们仍被自己的 `rst_n` 按住
-        //   ⇒ ⇒ 状态不变 ⇒ ⇒ 条数与结论都不变）⇒ ⇒ ⇒ **这是唯一不破既有判据的修法**。
+        // 寄存器回到 INIT（渲染侧 `if (default_reset) reg <= <INIT>` 的同一终态）
+        for (const auto &node_ptr : ctx->get_nodes()) {
+            if (!node_ptr || node_ptr->type() != ch::core::lnodetype::type_reg) {
+                continue;
+            }
+            auto *reg = static_cast<ch::core::regimpl *>(node_ptr.get());
+            auto *init = reg->get_init_val();
+            if (!init || init->type() != ch::core::lnodetype::type_lit) {
+                continue;
+            }
+            const auto &lit_val = static_cast<const ch::core::litimpl *>(init)->value();
+            sim.set_value_by_node_id(node_ptr->id(), static_cast<std::uint64_t>(lit_val));
+        }
+        // ⚠️ **复位尾缝对齐**（ADR-076 实施期发现）：渲染式 TB 的复位脉冲末尾还有
+        //   **一个** `@(posedge clk)`（**无 `#1`**）⇒ ⇒ 那一拍里复位已释放
+        //   ⇒ ⇒ DUT 的寄存器**真的走了一拍** ⇒ ⇒ 解释器 MUST 补这一拍（否则相位差 1）。
         sim.tick();
     }
 

@@ -1,3 +1,27 @@
+## 2026-11-21 — `.verif` 解释器的框架复位 MUST 落回寄存器 INIT（与渲染式 TB 同终态）
+
+**是什么**：`run_verif` 的 `apply_frame_reset` 之前只调 `Simulator::reset()`（实现是
+「把**所有**节点清 0」）⇒ ⇒ `INIT != 0` 的寄存器会起在**错误初态** ⇒ ⇒ 与 RTL 路径
+（`if (default_reset) reg <= <INIT>`）**分叉**。
+
+**怎么发现的**：`uart_rx` 迁移（第一个 `INIT != 0` 的 DUT：`idle` / `rx_d` INIT=true）
+⇒ ⇒ 解释器里接收器起在「非空闲」⇒ 整条帧解错、`valid` 提前。
+
+**改了什么**：
+
+- `src/rtl_emit/verif_run.cpp`：框架复位后按 `regimpl::get_init_val()` **回填**每个寄存器
+  （`INIT` 是渲染侧复位分支的同源终态）。
+- ⚠️ **不是**「驱动 reset 节点」：`build_register` 给寄存器的 `rst_val` 是 **nullptr**
+  （`include/core/node_builder.h`）⇒ ⇒ 解释器的 `instr_reg::eval` 在复位期间**只 return、
+  不赋值**（`src/ast/instr_reg.cpp`）⇒ ⇒ 驱动 reset 节点只**白白消耗 4 拍**，不产生
+  「回到 INIT」的效果（实测）。真正的 INIT 语义在 `init_val` 上。
+- `tests/test_verif_wait_level.cpp`：新增用例「寄存器 INIT 在框架复位后生效（不是清零）」
+  —— `INIT=5` + 每拍 +1 ⇒ 框架复位后 `cnt == 6`（**手推**）。
+  判别力：去掉回填 ⇒ 用例转红（`cnt got 5` 或 `1`，取决于是否保留释放拍）。
+
+**回归面**：既有已迁移产品的 `interp_checks` **不变**（pwm 29 · counter_simple 258 ·
+counter 9 · uart_tx 49），`verify_examples_rtl_sim.sh` PASS（17 项）。
+
 ## 2026-11-21 — `examples/spinalhdl-ported/counter/` 两份迁移（三角色分离 + `.verif` 单一真相源）
 
 **改了什么**：
