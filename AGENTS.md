@@ -48,7 +48,9 @@ CppHDL/
 │   └── *.cpp         # CodeGen (Verilog/DAG), Simulator, Component, 层次化发射
 ├── samples/          # 40 HDL pattern demos (bundles, streams, protocols)
 ├── examples/         # Full design examples
-│   ├── spinalhdl-ported/  # 17 SpinalHDL port examples (each with main())
+│   ├── spinalhdl-ported/  # 17 SpinalHDL port examples（**8 个已迁**为三角色分离：
+│   │                      # 设计头 `*_top.h` + 驱动 `tb_*.cpp` + 验证源 `tb_*.verif`
+│   │                      # ⇒ 详见 `examples/spinalhdl-ported/AGENTS.md`）
 │   ├── axi4/              # AXI4 bus demos
 │   ├── stream/            # Stream Mux/Demux/Arbiter/Fork
 │   └── riscv-mini/        # RV32I 5-stage pipeline (partial)
@@ -311,8 +313,10 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   `scripts/verify_examples_rtl_sim.sh` 的 **⑧'**（产物 MUST ≥ 2 个 module 且含根 `top`）
   ⇒ ⇒ ⚠️ ⑧（端口表）对「层次化静默退化成扁平」**结构性失明**（退化后端口表照样相同）
   ⇒ ⇒ ⑧' 的判别力自证 = `--self-test` 投毒 8（`RTL_SIM_TAMPER=flatten_hier`）。
-  ⚠️ **R1–R8 仍只覆盖 `hier_rtl_products` 语料**（3 个小 DUT）⇒ ⇒ **RV32I 语料的全套
-  R2–R8 接入仍待办**（残差 `id=25`，状态 `已知` ⇒ 需 architect 收口）。
+  ⚠️ **R1–R8 仍只覆盖 `hier_rtl_products` 语料**（3 个小 DUT）⇒ ⇒ RV32I **产品级**语料的
+  顶层端口面改由 **R8′** 判（顶层端口表 == **手推期望集** 34 根 · **独立于产物**）⇒ ⇒
+  台账 `id=25` **已于 2026-11-21 已收口**（口径收敛：R2–R8 全套 = 专用 DUT 语料
+  ⇒ ⇒ 变更载体 `openspec/changes/archive/2026-11-21-hier-rv32i-r8-port-table-2026-11/`）。
 - **运行期 A/B（interpreter vs JIT）双跑校验不存在**：曾经存在的 `Simulator::set_ab_verification()`
   / `is_ab_verification()` / `ab_verification_` 是**从未做过比对**的 no-op（开启后每 `tick()`
   只打一条 `CHWARN`，**不改变任何行为**）⇒ ⇒ 已按 Zero-Debt **整体删除** ⇒ ⇒

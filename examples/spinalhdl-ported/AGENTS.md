@@ -3,7 +3,13 @@
 Child of root `AGENTS.md`. Read `examples/spinalhdl-ported/README.md` for full port status.
 
 ## OVERVIEW
-17 SpinalHDL examples ported to CppHDL, each with standalone main() self-test + Verilog generation.
+17 SpinalHDL examples ported to CppHDL.
+
+> ⚠️ **两种形态并存**（勿假设「每个 example 都是手写 `main()` 自测」）：
+> ① **已迁（8 个产品面 target）** = 三角色分离 = 设计头 `*_top.h`（无 `main`）+
+> 激励驱动 `tb_*.cpp`（**默认模式读 `tb_*.verif` 跑断言** · `--emit-rtl` 发射 RTL/TB）+
+> 验证源 `tb_*.verif`（**唯一语义来源**）⇒ ⇒ C++ 侧与生成式 TB **同源**。
+> ② **未迁** = 传统手写 `main()` 自测 demo。
 
 ## STRUCTURE
 18 subdirectories, each with 1-2 .cpp files:
