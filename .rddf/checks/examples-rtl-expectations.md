@@ -23,11 +23,11 @@
 
 ---
 
-## counter_simple_example {#counter-simple-example}
+## tb_counter_simple_example {#counter-simple-example}
 
 ### 上游参考（**spec-derived**）
 
-来源：SpinalHDL 原示例（`examples/spinalhdl-ported/counter/counter_simple.cpp` 头部逐字转录的 Scala）：
+来源：SpinalHDL 原示例（设计定义现为 `counter/counter_simple_top.h` 头部逐字转录的 Scala）：
 
 ```scala
 class Counter extends Component {
@@ -44,40 +44,84 @@ class Counter extends Component {
 
 ### 输入序列 → 期望输出（无输入 ⇒ 只随拍变化）
 
-| 拍（复位释放后） | 期望 `value` |
+| 拍（**回绕点之后**） | 期望 `value` |
 |---|---|
+| 0（回绕点） | 0 |
 | 1 | 1 |
 | 2 | 2 |
 | 3 | 3 |
 | N（1..255） | N |
-| 256 | **0**（回绕） |
 
-### ✅ **D4 结案（2026-11-12）**：**无 interpreter / RTL 分叉** ⇒ ⇒ **不独立立项**
+### 判据
 
-⇒ ⇒ 起因：`counter.cpp` 原有一句「Note: enable/clear may not fully work yet」
-（怀疑 `select()` 吃 `ch_in<ch_bool>` 端口不生效）⇒ ⇒ **该怀疑是错的**：
-实测（**interpreter 与独立 RTL 仿真两侧一致**）：
-· `clear` 优先（clear=1 ⇒ 立即归零）· `enable=0` ⇒ 保持 · `enable=1` ⇒ +1
-· 计到 255 ⇒ **255** ✓ · 再进一拍 ⇒ 溢出回 **0** ✓
-⇒ ⇒ ⇒ `select(io().clear, …, select(io().enable, …))` **直接吃 `ch_in<ch_bool>` 是可行的**
-（`uart_tx.cpp` 那条「端口无 `ch_bool` 转换 ⇒ MUST 经寄存器中转」只约束
-`transition_when()` 的用法，**不**约束 `select()`）⇒ ⇒ 旧注释已**过时** ⇒ ⇒ 已更正
-⇒ ⇒ ⇒ **结论：不是缺陷，是过时注释** ⇒ ⇒ **无需独立立项**（D4 结案）。
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 回绕存在 | spec-derived | 300 拍内 `value == 0`（`WAIT low`） |
+| 2 | 逐拍绝对计数 | spec-derived | 回绕点后第 N 拍 `value == N`（N = 1..255） |
+| 3 | metamorphic：**周期 256** | spec-derived | 任意 512 个连续采样里 `v[k] == v[k-256]`（256 对） |
+| 4 | 步进恒为 1 | spec-derived | **由判据 2 覆盖**（无 enable 端口 ⇒ `EXPECT_SEQ_STEP` 不适用） |
 
-### metamorphic（相对判据，不依赖绝对值）
+⚠️ **相位无关锚定**：本设计**没有输入端口**可锚，而框架复位的末尾 `@(posedge)` 已让
+自由运行计数器走了一拍（场景入口 `value == 1`，两侧同源）⇒ ⇒ 绝对判据 MUST 先
+`WAIT value low 300` 锚到**回绕点**（= 0），此后段长确定。
 
-- **步进恒为 1**：任意相邻两拍 `(v[n+1] - v[n]) mod 256 == 1`。
-- **周期 256**：`v[n] == v[n+256]`。
+### 验证源（`.verif` · 单一语义来源）
 
-**首次跑红**：无（首跑即绿）。
+**断言条数（人工登记）= 258** ⇒ ⇒ 三方等式：本行 == `tb_counter_simple_example.verif`
+的静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 258
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `absolute_count` | 判据 1 · 2 · 4 |
+| `period_256` | 判据 3（metamorphic） |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 3 根** = 框架 2（`default_clock` · `default_reset`）+ 根自有 **1**（`value[7:0]`）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_counter_simple_example.cpp` 默认模式）= **258** 条
+  ⇒ ⇒ `interp_checks = 258`。
+- TB 侧（Verilog 产物，`tb_counter_simple_example.sv`）= **258** 条 ⇒ ⇒ `min_checks = 258`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**
+  （护栏 ⑨ 判 C++ 侧、⑥ 判 TB 侧 ⇒ ⇒ 禁一侧代另一侧）。
+
+#### scenario: absolute_count
+
+先 `WAIT value low 300` 锚到回绕点（1 条），随后逐拍断言 `value == N`（N = 1..255，255 条），
+共 257 条。
+
+#### scenario: period_256
+
+连续 512 个采样 ⇒ `EXPECT_SEQ_SELF value 256 256`（1 条，覆盖 256 对相邻周期比较）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测（`RESULT: checks=258 fails=N`） | 抓的是 |
+|---|---|---|---|
+| M1 | 自增改 `+0`（计数器卡住） | ✅ `fails=255`（`absolute_count#10..#255`） | 逐拍绝对计数 |
+| M2 | 自增改 `+2`（步长 2） | ✅ `fails=255`（`absolute_count#…`） | 逐拍绝对计数 |
+
+⚠️ **M2 暴露的已知局限（登记不修）**：`EXPECT_SEQ_SELF value 256 256` **抓不到**
+「步长 2」（周期 128 **整除** 256 ⇒ `v[k] == v[k-256]` 仍成立）⇒ ⇒ 该性质由**绝对判据**
+承担。原手写 TB 的周期判据有**同一局限**（未降级）。
 
 ---
 
-## counter_example {#counter-example}
+## tb_counter_example {#counter-example}
 
 ### 上游参考（**spec-derived**）
 
-Scala 原文（同目录 `counter.cpp` 头部）：
+Scala 原文（设计定义现为 `counter/counter_top.h` 头部）：
 
 ```scala
 val counterReg = RegInit(U(0, 8 bits))
@@ -100,17 +144,89 @@ io.value := counterReg
 | 1 | 1 | **0**（clear 胜） |
 | 0 | 1 | **0** |
 
-### metamorphic
+### 判据
 
-- **静止性**：`enable=0 ∧ clear=0` 的任意连续区间内，`value` 恒定。
-- **clear 后重建**：`clear` 一拍后 `value == 0`，且随后每拍步进仍为 1。
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 复位初值 | impl-contract | 0 |
+| 2 | `clear=1 ∧ enable=1` | spec-derived | 0（**clear 胜**） |
+| 3 | `clear=0 ∧ enable=1` | spec-derived | 逐拍 +1 |
+| 4 | `enable=0 ∧ clear=0` | spec-derived | 保持 |
+| 5 | 溢出回绕 | spec-derived | 255 + 1 == 0 |
+| 6 | metamorphic：**静止性** | spec-derived | `enable=0 ∧ clear=0` 的 63 对相邻项全等 |
+| 7 | metamorphic：**Δ == enable** | spec-derived | 40 对相邻差逐对等于**较早端**的 `enable` |
 
-**首次跑红**：无。
+### 验证源（`.verif` · 单一语义来源）
 
-**⚠️ 已登记的跨路径分叉**：`counter.cpp:211-214` 的 C++ 侧注释自认
-「enable/clear may not fully work yet」，但 **RTL 实测四项全对** ⇒ ⇒
-该注释对 RTL **过时** ⇒ ⇒ **interpreter 路径与 RTL 路径可能分叉**，且 examples 的
-C++ 侧**无任何断言** ⇒ 分叉不会被任何测试发现（已记入清单 `note`，待独立立项）。
+**断言条数（人工登记）= 9** ⇒ ⇒ 三方等式：本行 == `tb_counter_example.verif` 的
+静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 9
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_value` | 判据 1（impl-contract） |
+| `clear_priority` | 判据 2 · 3 · 4 |
+| `wrap_255_to_zero` | 判据 5 |
+| `hold_while_disabled` | 判据 6（metamorphic） |
+| `step_equals_enable` | 判据 7（metamorphic） |
+
+⚠️ **`EXPECT_SEQ_STEP` 的同采样点前提**（ADR-076 D5）：每拍 `RECORD value` →
+`SET enable <下一拍的使能>` → `SETTLE` → `RECORD enable` ⇒ ⇒ 采样点 k 的 `enable`
+是**下一拍**的使能 ⇒ 与「ΔV 由**较早端** E 造成」的对齐一致。
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 5 根** = 框架 2 + 根自有 **3**（`enable` · `clear` · `value[7:0]`）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_counter_example.cpp` 默认模式）= **9** 条 ⇒ ⇒ `interp_checks = 9`。
+- TB 侧（Verilog 产物，`tb_counter_example.sv`）= **9** 条 ⇒ ⇒ `min_checks = 9`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**。
+
+#### scenario: reset_value
+
+框架复位后 `value == 0`（1 条）。
+
+#### scenario: clear_priority
+
+`enable=1 ∧ clear=1` ⇒ 0；`clear=0` ⇒ 1、2；`enable=0` 两拍 ⇒ 仍 2（4 条）。
+
+#### scenario: wrap_255_to_zero
+
+clear 后连续 255 拍 +1 ⇒ 255；再一拍 ⇒ 0（2 条）。
+
+#### scenario: hold_while_disabled
+
+`enable=0 ∧ clear=0` 连续 64 个采样 ⇒ 63 对相邻项全等（1 条）。
+
+#### scenario: step_equals_enable
+
+确定性伪随机使能（`(_i*17+3)` 的第 4 位）⇒ 41 个采样点 / 40 对相邻差逐对等于
+较早端 `enable`（1 条）。
+
+### ✅ 历史结案（D4）与迁移后的状态
+
+- **D4（2026-11-12 结案）**：旧 `counter.cpp` 的注释自称「enable/clear may not fully work yet」
+  ⇒ ⇒ 实测（interpreter 与独立 RTL **两侧一致**）**四项全对** ⇒ ⇒ 那是**过时注释**
+  ⇒ ⇒ 不是缺陷。
+- **迁移后的状态**：C++ 侧不再是「无断言」（旧登记项担忧的分叉**已消失**）——
+  本行两侧由**同一份 `.verif`** 派生 ⇒ ⇒ 判据同源。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测（`RESULT: checks=9 fails=N`） | 抓的是 |
+|---|---|---|---|
+| M1 | clear 优先级被去掉（`clear` 不再压过 `enable`） | ✅ `fails=6`（`clear_priority#0..#3` · `wrap_255_to_zero#0/#1`） | 判据 2 / 5 |
+| M2 | enable 门控被去掉（计数恒 +1） | ✅ `fails=4`（`reset_value#0` · `clear_priority#3` · `hold_while_disabled#0` · `step_equals_enable#0`） | 判据 4 / 6 / 7 |
+| M3 | 自增改 `+2`（步长 2） | ✅ `fails=5`（`clear_priority#1..#3` · `wrap_255_to_zero#0` · `step_equals_enable#0`） | 判据 3 / 7（**相对判据**抓步长） |
 
 ---
 

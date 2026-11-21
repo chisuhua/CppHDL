@@ -1,3 +1,27 @@
+## 2026-11-21 — `examples/spinalhdl-ported/counter/` 两份迁移（三角色分离 + `.verif` 单一真相源）
+
+**改了什么**：
+
+- `counter_simple`：`CounterSimpleTop`（具名 `value`）+ `tb_counter_simple_example.cpp/.verif`；
+  2 scenario / **258** 断言 = `absolute_count`（先 `WAIT value low` 锚回绕点，再 255 拍绝对计数）
+  + `period_256`（512 采样 / 256 对 `EXPECT_SEQ_SELF`）。
+- `counter`：`CounterTop`（具名 `enable` / `clear` / `value`）+ `tb_counter_example.cpp/.verif`；
+  5 scenario / **9** 断言 = reset 初值 · **clear 优先** · 溢出回绕 · metamorphic 静止性
+  （63 对）· metamorphic `Δ == enable`（40 对 · 确定性伪随机使能）。
+- 删除 `counter.cpp` / `counter_simple.cpp` / `emit_rtl_counter*.cpp`（发射入口 = TB 自身）。
+- 棘轮登记表同步：`.rddf/checks/port-naming-exempt.tsv` 删掉三个已删文件的 **14** 条
+  未具名端口豁免 ⇒ 计数锚点 `1377 → 1363`（这两份的**新**端口全部具名 ⇒ 零新增豁免）。
+
+**判据面的两个教学点**：
+
+- **`WAIT` 是电平不是边沿**：`counter_simple` 没有输入可锚，而框架复位末尾那一拍
+  已让自由运行计数器走了一拍（入口 `value == 1`）⇒ 绝对判据 MUST 先锚回绕点，
+  否则两侧都「红得一致」但红的原因不是判据。
+- **周期 256 抓不到步长 2**（128 整除 256）：该性质只能由**绝对判据**承担
+  ⇒ 已登记为已知局限（原手写 TB 同局限 ⇒ 未降级）。
+- 变异自证：`counter_simple` 卡住 / +2 ⇒ `fails=255`；`counter` 去 clear 优先级 ⇒ 6 ·
+  去 enable 门控 ⇒ 4 · 步长 +2 ⇒ 5（含**相对**判据 `step_equals_enable`）。
+
 ## 2026-11-21 — 渲染侧窄端口写入 64 位载体 MUST 零扩展（`WIDTHEXPAND` ⇒ TB 编译失败）
 
 **是什么**：`EXPECT_STABLE` / `RECORD` 的渲染把端口值写进 `logic [63:0]` 的 `hold_val` /

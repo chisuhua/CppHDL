@@ -1464,8 +1464,8 @@ function(add_spinalhdl_ported_test TEST_NAME TARGET_NAME)
 endfunction()
 
 # Phase 1: 基础移植验证
-add_spinalhdl_ported_test(counter counter_example)
-add_spinalhdl_ported_test(counter_simple counter_simple_example)
+add_spinalhdl_ported_test(counter tb_counter_example)
+add_spinalhdl_ported_test(counter_simple tb_counter_simple_example)
 add_spinalhdl_ported_test(fifo fifo_example)
 add_spinalhdl_ported_test(uart_tx uart_tx_example)
 add_spinalhdl_ported_test(uart_rx uart_rx_example)

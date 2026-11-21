@@ -33,8 +33,8 @@
 # ---------------------------------------------------------------------------
 set(CH_TRACKED_EXAMPLE_TARGETS
     # PHASE: Phase 1: 基础移植验证
-    counter_simple_example
-    counter_example
+    tb_counter_simple_example
+    tb_counter_example
     fifo_stream_example
     uart_tx_example
     uart_rx_example

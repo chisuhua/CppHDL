@@ -1,0 +1,115 @@
+# examples/spinalhdl-ported/counter/tb_counter_example.verif
+#
+# **Counter 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+#
+# 被测语义（**上游 SpinalHDL Scala 原文** · spec-derived）：
+#   when(io.clear) { counterReg := 0 }
+#   elsewhen(io.enable) { counterReg := counterReg + 1 }
+#   ⇒ **clear 优先**（同步优先级）· 否则 enable ⇒ +1 · 否则**保持** · 模 256 回绕。
+#
+# ⚠️ `EXPECT_SEQ_STEP` 的**同采样点集合**前提（ADR-076 D5）：每拍
+#   `RECORD value` → `SET enable <下一拍的使能>` → `SETTLE` → `RECORD enable`
+#   ⇒ ⇒ 采样点 k 记录的 `enable` 是**下一拍**的使能 ⇒ 与「ΔV 由**较早端** E 造成」
+#   的对齐一致（`ΔV[k+1] == enable[k]`）。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#counter-example
+@tb-module tb_counter_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：复位后的初值（impl-contract：框架复位把寄存器置 0）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_value
+@anchor counter-example
+
+SETTLE
+EXPECT value 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：**clear 优先** + enable 门控 + 保持（spec-derived）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario clear_priority
+@anchor counter-example
+
+SET enable 1
+SET clear 1
+SETTLE
+TICK 1
+EXPECT value 0
+
+SET clear 0
+TICK 1
+EXPECT value 1
+
+TICK 1
+EXPECT value 2
+
+SET enable 0
+TICK 2
+EXPECT value 2
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：**溢出回绕** 255 → 0（spec-derived：8 位无符号）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario wrap_255_to_zero
+@anchor counter-example
+
+SET enable 1
+SET clear 1
+TICK 1
+
+SET clear 0
+REPEAT 255
+TICK 1
+END
+EXPECT value 255
+
+TICK 1
+EXPECT value 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4（**metamorphic**）：**静止性** —— `enable=0 ∧ clear=0` ⇒ 值恒定
+#   · 只依赖「保持」语义 ⇒ ⇒ 与绝对值无关（63 对相邻项全等）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario hold_while_disabled
+@anchor counter-example
+
+SET enable 0
+SET clear 0
+SETTLE
+
+REPEAT 64
+TICK 1
+RECORD value
+END
+
+EXPECT_SEQ_SELF value 63 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 5（**metamorphic**）：**逐拍相对判据** `Δvalue == enable`
+#   · 确定性伪随机使能（`(_i*17+3)` 的第 4 位 ⇒ 可复现、不写死具体拍）
+#   · 41 个采样点 ⇒ 40 对相邻差 ⇒ 每对都要求 `ΔV == 较早端的 enable`
+#   · ⇒ ⇒ 抓「步进不为 1 / enable 失效 / 保持失效」，且**不依赖任何绝对期望**
+# ══════════════════════════════════════════════════════════════════════════
+@scenario step_equals_enable
+@anchor counter-example
+
+SET enable 0
+SET clear 0
+SETTLE
+
+REPEAT 41
+TICK 1
+RECORD value
+SET enable (_i*17+3)[4:4]
+SETTLE
+RECORD enable
+END
+
+EXPECT_SEQ_STEP value enable 40

@@ -1,0 +1,56 @@
+# examples/spinalhdl-ported/counter/tb_counter_simple_example.verif
+#
+# **Counter Simple 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+#
+# 被测语义（**上游 SpinalHDL Scala 原文** · spec-derived）：
+#   val counterReg = RegInit(U(0, 8 bits))
+#   counterReg := counterReg + 1
+#   io.value := counterReg
+#   ⇒ 复位值 0 · 每拍 +1 · **模 256 回绕** · 输出 = 寄存器。
+#
+# ⚠️ **期望值 MUST 落在端口位宽内**（已知边界，本次不修）：`EXPECT` 的字面量在
+#   渲染侧按端口位宽截断（`8'd0`），而解释器按 64 位原值比较 ⇒ ⇒ 写成 `EXPECT value 256`
+#   会让**两侧结论相反** ⇒ ⇒ 本文件只断言 0..255。
+# ⚠️ **起点相位无关**：框架复位的末尾 `@(posedge)` 已让自由运行计数器走了一拍
+#   （入口 value = 1，两侧同源）⇒ ⇒ 绝对判据 MUST 先 `WAIT value low` 锚到回绕点。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#counter-simple-example
+@tb-module tb_counter_simple_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：绝对判据 —— 第 N 拍 `value == N`（N = 1..255），第 256 拍回绕到 0
+#   · 起点 = 框架复位后的 0（两侧同源 ⇒ 同相位）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario absolute_count
+@anchor counter-simple-example
+
+# 相位无关锚定：先等输出**回绕到 0**（自由运行计数器无输入可锚 ⇒ 锚输出）
+WAIT value low 300
+EXPECT value 0
+
+REPEAT 255
+TICK 1
+EXPECT value _i+1
+END
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2（**metamorphic · 相对判据**）：**周期 256**
+#   · 记录 512 个连续采样 ⇒ `v[k] == v[k-256]` 逐项成立（256 对）
+#   · ⇒ ⇒ 完全**不依赖**场景 1 的绝对期望（第一轮实测即基准）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario period_256
+@anchor counter-simple-example
+
+REPEAT 512
+TICK 1
+RECORD value
+END
+
+EXPECT_SEQ_SELF value 256 256

@@ -83,14 +83,6 @@ examples/spinalhdl-ported/assert/assert_example.cpp	0	ch_out<ch_uint<WIDTH>> cou
 examples/spinalhdl-ported/assert/assert_example.cpp	1	ch_in<ch_bool> enable	既有债·基线豁免
 examples/spinalhdl-ported/assert/assert_example.cpp	1	ch_in<ch_bool> reset	既有债·基线豁免
 examples/spinalhdl-ported/assert/assert_example.cpp	1	ch_out<ch_uint<8>> counter	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter.cpp	0	ch_in<ch_bool> clear	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter.cpp	0	ch_in<ch_bool> enable	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter.cpp	0	ch_out<ch_uint<N>> value	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter.cpp	1	ch_in<ch_bool> clear	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter.cpp	1	ch_in<ch_bool> enable	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter.cpp	1	ch_out<ch_uint<8>> value	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter_simple.cpp	0	ch_out<ch_uint<N>> value	既有债·基线豁免
-examples/spinalhdl-ported/counter/counter_simple.cpp	1	ch_out<ch_uint<8>> value	既有债·基线豁免
 examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	0	ch_in<T> din	既有债·基线豁免
 examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	0	ch_in<ch_bool> pop	既有债·基线豁免
 examples/spinalhdl-ported/fifo/stream_fifo_example.cpp	0	ch_in<ch_bool> push	既有债·基线豁免
@@ -136,12 +128,6 @@ examples/spinalhdl-ported/phase1c/phase1c_test.cpp	1	ch_in<ch_bool> enable	既�
 examples/spinalhdl-ported/phase1c/phase1c_test.cpp	1	ch_in<ch_bool> reset	既有债·基线豁免
 examples/spinalhdl-ported/phase1c/phase1c_test.cpp	1	ch_out<ch_uint<8>> counter	既有债·基线豁免
 examples/spinalhdl-ported/phase1c/phase1c_test.cpp	1	ch_out<ch_uint<8>> gray_result	既有债·基线豁免
-examples/spinalhdl-ported/pwm/pwm.cpp	0	ch_in<ch_bool> enable	既有债·基线豁免
-examples/spinalhdl-ported/pwm/pwm.cpp	0	ch_in<ch_uint<WIDTH>> duty_cycle	既有债·基线豁免
-examples/spinalhdl-ported/pwm/pwm.cpp	0	ch_out<ch_bool> pwm_out	既有债·基线豁免
-examples/spinalhdl-ported/pwm/pwm.cpp	1	ch_in<ch_bool> enable	既有债·基线豁免
-examples/spinalhdl-ported/pwm/pwm.cpp	1	ch_in<ch_uint<8>> duty_cycle	既有债·基线豁免
-examples/spinalhdl-ported/pwm/pwm.cpp	1	ch_out<ch_bool> pwm_out	既有债·基线豁免
 examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	0	ch_in<ch_bool> enc_a	既有债·基线豁免
 examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	0	ch_in<ch_bool> enc_b	既有债·基线豁免
 examples/spinalhdl-ported/quadrature_encoder/quadrature_encoder.cpp	0	ch_in<ch_bool> enc_z	既有债·基线豁免
