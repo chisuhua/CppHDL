@@ -40,7 +40,7 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     uart_rx_example
 
     # PHASE: Phase 2: 核心组件
-    pwm_example
+    tb_pwm_example
     gpio_example
     spi_controller_example
     i2c_controller_example

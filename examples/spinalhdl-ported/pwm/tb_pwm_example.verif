@@ -1,0 +1,130 @@
+# examples/spinalhdl-ported/pwm/tb_pwm_example.verif
+#
+# **PWM 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# ⚠️ 本文件是**唯一语义来源**：IR 解释器（驱动 `Simulator`）与 Verilog 渲染器
+#    （生成 `.sv` TB）都由它派生 ⇒ ⇒ 两侧断言**不可能**漂移。
+# ⚠️ 期望值的**推导**在 `@expect-src` 指向的登记文档里（人登记）；本文件只承载机器值。
+# ⚠️ 时序锚点：SET 在「沿后采样窗」内生效；EXPECT 读「最近一次结算之后」的值
+#    ⇒ ⇒ `SET → EXPECT` MUST 先 `SETTLE`（扫描器静态强制）。
+#
+# 被测语义（**上游 SpinalHDL Scala 原文** · spec-derived）：
+#   val counter = Reg(UInt(8 bits)) init(0)
+#   counter := counter + 1
+#   io.pwm = (counter < io.value) & io.enable
+#   ⇒ `pwm_out = enable ∧ (counter < duty)`；counter **自由运行**（模 256）。
+#
+# ⚠️ **为什么用「事件锚定」而不是「按绝对拍号」**：
+#   PWM 的计数器**自由运行** ⇒ ⇒ 它的**相位不可控** ⇒ ⇒ 「复位后第 N 拍」的
+#   绝对期望**依赖实现内部相位** ⇒ ⇒ 不可移植 ⇒ ⇒ 场景 1 用 `WAIT` 锚到
+#   **PWM 上升沿** ⇒ ⇒ 此后**段长**确定 ⇒ ⇒ 判据与相位**无关** ⇒ ⇒ 两个执行
+#   后端同起点 ⇒ ⇒ 结论必然相同。
+#   ⚠️ **必须先用 `WAIT pwm_out low` 再 `WAIT pwm_out high`**：`WAIT` 判的是
+#   **电平**（不是边沿）⇒ ⇒ 若起跑时输出已在高段 ⇒ 单条 `WAIT … high` 会**立刻命中**
+#   ⇒ ⇒ 剩下的高电平**不足一个完整段** ⇒ ⇒ 「段长 == duty」的判据**不成立**
+#   （实测该写法红：`duty_run_length#2 FAIL (unstable pwm_out)`）
+#   ⇒ ⇒ 先等低段（最迟在 counter 到达 duty 时命中）再等上升沿 ⇒ ⇒ 相位无关。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#pwm-example
+@tb-module tb_pwm_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：占空比 = 4 ⇒ **高电平段恰好 4 拍**（spec-derived）
+#   · 先等低段（相位无关的入口条件）再等上升沿（counter 回绕到 0）
+#   · 高段 = counter 0,1,2,3 ⇒ 连续 3 拍保持高（counter 1,2,3）+ 起始拍 ⇒ 共 4 拍
+#   · 第 5 拍（counter = 4）⇒ `4 < 4` 为假 ⇒ 变低 ⇒ ⇒ 高段**恰好** 4 拍
+# ══════════════════════════════════════════════════════════════════════════
+@scenario duty_run_length
+@anchor tb-pwm-example
+
+SET enable 1
+SET duty_cycle 4
+SETTLE
+
+WAIT pwm_out low 300
+WAIT pwm_out high 300
+EXPECT pwm_out 1
+EXPECT_STABLE pwm_out 3
+TICK 1
+EXPECT pwm_out 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：**enable 支配**（spec-derived）—— enable=0 ⇒ 输出恒 0
+#   · 与 counter 无关 ⇒ ⇒ 连续 8 拍都必须为 0
+#   · 再加**整周期**判据：任意连续 256 拍里高电平拍数 == 0
+#     ⇒ ⇒ 8 拍窗口只覆盖 8 个 counter 相位 ⇒ ⇒ 单独不够（实测：`<` 改 `<=`
+#     的变异在 8 拍窗口里**可能漏**）⇒ ⇒ 用整周期把它封住
+# ══════════════════════════════════════════════════════════════════════════
+@scenario enable_zero
+@anchor tb-pwm-example
+
+SET enable 0
+SETTLE
+EXPECT pwm_out 0
+EXPECT_STABLE pwm_out 8
+
+REPEAT 256
+TICK 1
+RECORD pwm_out
+END
+EXPECT_SEQ_COUNT pwm_out 1 256 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：占空比 = 0 ⇒ **恒低**（spec-derived）—— `counter < 0` 恒假
+#   · 同场景 2：8 拍稳定 + **整周期计数 == 0**
+# ══════════════════════════════════════════════════════════════════════════
+@scenario duty_zero
+@anchor tb-pwm-example
+
+SET enable 1
+SET duty_cycle 0
+SETTLE
+EXPECT pwm_out 0
+EXPECT_STABLE pwm_out 8
+
+REPEAT 256
+TICK 1
+RECORD pwm_out
+END
+EXPECT_SEQ_COUNT pwm_out 1 256 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4（**metamorphic · 相对判据**）：占空比 = 200 ⇒ **256 拍内高电平数 == 200**
+#   · 只依赖「counter 跑满 0..255」+ `pwm = en ∧ (counter < duty)`
+#   · ⇒ **与相位无关**：任意 256 个连续拍里 counter 恰好取遍 0..255
+#   · ⇒ ⇒ 期望值**不依赖任何手推的绝对拍号** ⇒ ⇒ 相对判据
+# ══════════════════════════════════════════════════════════════════════════
+@scenario duty_ratio
+@anchor tb-pwm-example
+
+SET enable 1
+SET duty_cycle 200
+SETTLE
+
+REPEAT 256
+TICK 1
+RECORD pwm_out
+END
+
+EXPECT_SEQ_COUNT pwm_out 1 256 200
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 5（**metamorphic**）：占空比 = 255 ⇒ **256 拍内高电平数 == 255**
+#   · 与场景 4 同型（窗口取**最近**的 256 条记录 ⇒ 与场景 4 的记录不重叠）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario duty_max_ratio
+@anchor tb-pwm-example
+
+SET enable 1
+SET duty_cycle 255
+SETTLE
+
+REPEAT 256
+TICK 1
+RECORD pwm_out
+END
+
+EXPECT_SEQ_COUNT pwm_out 1 256 255

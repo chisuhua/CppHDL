@@ -114,11 +114,11 @@ C++ 侧**无任何断言** ⇒ 分叉不会被任何测试发现（已记入清�
 
 ---
 
-## pwm_example {#pwm-example}
+## tb_pwm_example {#pwm-example}
 
 ### 上游参考（**spec-derived**）
 
-Scala 原文（同目录 `pwm.cpp` 头部）：
+Scala 原文（原 `pwm.cpp` 头部；设计定义现为 `pwm_top.h`）：
 
 ```scala
 val counter = Reg(UInt(8 bits)) init(0)
@@ -130,21 +130,98 @@ io.pwm = (counter < io.value) & io.enable
 
 ### 输入序列 → 期望输出
 
-| enable | duty | 拍 N（counter = N mod 256） | 期望 `pwm_out` |
+| enable | duty | counter | 期望 `pwm_out` |
 |---|---|---|---|
-| 1 | 4 | 1,2,3 | 1 |
-| 1 | 4 | 4,5,6 | 0 |
+| 1 | 4 | 0..3 | 1（**连续恰好 4 拍**） |
+| 1 | 4 | 4..255 | 0 |
 | 0 | 任意 | 任意 | **0** |
 | 1 | 0 | 任意 | **0**（`counter < 0` 恒假） |
-| 1 | 255 | 任意（counter ≠ 255） | 1 |
+| 1 | 255 | 0..254 | 1（**256 拍里恰好 255 拍高**） |
 
-### metamorphic
+### 判据
 
-- **占空比周期性**：连续 **256 拍**里高电平拍数 **== duty**（这是强判据 ——
-  只依赖「counter 跑满 0..255」与 `pwm = en ∧ (counter < duty)`）。
-- **enable 支配**：`enable=0` ⇒ 输出恒 0（与 counter 无关）。
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | duty=4 的高电平段长度 | spec-derived | **恰好 4 拍**（上升沿后连续 4 拍高，第 5 拍低） |
+| 2 | `enable=0` 时输出 | spec-derived | 恒 0（连续 8 拍 + **整周期 256 拍计数 == 0**） |
+| 3 | `duty=0` 时输出 | spec-derived | 恒 0（连续 8 拍 + **整周期 256 拍计数 == 0**） |
+| 4 | metamorphic：duty=200 的周期性 | spec-derived | 任意连续 256 拍里高电平拍数 == **200** |
+| 5 | metamorphic：duty=255 的周期性 | spec-derived | 任意连续 256 拍里高电平拍数 == **255** |
 
-**首次跑红**：无。
+⚠️ **相位无关性**：counter 自由运行 ⇒ ⇒ 「复位后第 N 拍」的绝对期望**不可移植**
+⇒ ⇒ 场景 1 先 `WAIT low` 再 `WAIT high` 锚到**上升沿**（`WAIT` 判的是**电平** ⇒ ⇒
+单条 `WAIT high` 在起跑已为高时会立刻命中 ⇒ ⇒ 段长判据不成立），场景 4/5 用
+**任意 256 拍窗口**（counter 必取遍 0..255）⇒ ⇒ 两条都不依赖内部相位。
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 29** ⇒ ⇒ 三方等式：本行 == `tb_pwm_example.verif` 的
+静态展开（`EXPECT` + `WAIT` 计数）== 运行期 `RESULT: checks`。
+
+VERIF-CHECKS: 29
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记 ⇒ ⇒ 禁由生成器
+输出回填 ⇒ ⇒ 否则「生成器少发断言」时两侧同时变 ⇒ ⇒ 判据恒绿）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**（粒度 = scenario）。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `duty_run_length` | 判据 1 |
+| `enable_zero` | 判据 2 |
+| `duty_zero` | 判据 3 |
+| `duty_ratio` | 判据 4（metamorphic） |
+| `duty_max_ratio` | 判据 5（metamorphic） |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个 —— 本设计无 `ch_layer` ⇒ 层次化 = 扁平）。
+- **顶层端口表 = 5 根** = 框架 2（`default_clock` · `default_reset`）+ 根自有 **3**
+  （`enable` · `duty_cycle[7:0]` · `pwm_out`）。
+- 产物端口名 = `top_<C++ 成员名>`（ADR-075 E1 · 端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（解释器路径，`tb_pwm_example.cpp` 默认模式）= **29** 条 ⇒ ⇒ `interp_checks = 29`。
+- TB 侧（Verilog 产物，`tb_pwm_example.sv`）= **29** 条 ⇒ ⇒ `min_checks = 29`。
+- **两侧同源**（同一份 `.verif` 派生）⇒ ⇒ 相等是预期 ⇒ ⇒ 但 MUST **各自登记**
+  （护栏 ⑨ 判 C++ 侧、⑥ 判 TB 侧 ⇒ ⇒ 禁一侧代另一侧）。
+
+#### scenario: duty_run_length
+
+`enable=1` / `duty=4`：先等低段再等上升沿（相位无关锚定），随后
+`pwm_out=1` 保持 3 拍（counter 1,2,3），第 5 拍（counter=4）转低（7 条）。
+
+#### scenario: enable_zero
+
+`enable=0`：输出恒 0 —— 连续 8 拍 + 整周期 256 拍计数 == 0（10 条）。
+
+#### scenario: duty_zero
+
+`duty=0`：输出恒 0 —— 连续 8 拍 + 整周期 256 拍计数 == 0（10 条）。
+
+#### scenario: duty_ratio
+
+**metamorphic**：`duty=200`，连续 256 拍里高电平拍数 == 200（1 条）。
+
+#### scenario: duty_max_ratio
+
+**metamorphic**：`duty=255`，连续 256 拍里高电平拍数 == 255（1 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测（`RESULT: checks=29 fails=N`） | 抓的是 |
+|---|---|---|---|
+| M1 | `assign top_pwm_inst_lt_lt = 1'b0;`（去掉 `counter < duty` ⇒ 输出恒低） | ✅ `fails=4`（`duty_run_length#1` timeout · `#2` · `duty_ratio#0` · `duty_max_ratio#0`） | 「输出会变高」+ 两条 metamorphic |
+| M2 | `mux_select = enable ? 1'b1 : bool_lit`（enable 直通 ⇒ 失去占空比调制） | ✅ `fails=6`（`duty_run_length#0` timeout · `#4` · `duty_zero#0` · `duty_zero#2` · `duty_ratio#0` · `duty_max_ratio#0`） | 占空比调制（段长 / 恒低 / 两条 metamorphic） |
+| M3 | 比较写成 `<=`（段长 +1） | ✅ `fails=4`（`duty_run_length#4` · `duty_zero#2` · `duty_ratio#0` · `duty_max_ratio#0`） | 段长**等式**（不是「存在高电平」）+ 整周期计数 |
+
+⚠️ **M3 的实测教训**：场景 3 初版只有「连续 8 拍恒 0」⇒ ⇒ M3 **漏网**（8 拍窗口未覆盖
+`counter == 0` 那一拍）⇒ ⇒ 已补**整周期 256 拍计数 == 0**（任意 256 拍必然覆盖全部
+counter 相位）⇒ ⇒ M3 现在抓在 `duty_zero#2`。**8 拍窗口单独不够**，这不是风格问题。
+⚠️ **每条变异 MUST 先确认仍能编译**（三条实测 `compile_rc=0`）⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
+
+⇒ ⇒ 还原后复跑 ⇒ `RESULT: checks=29 fails=0` ⇒ ⇒ 变异未污染产物。
+⚠️ 每条变异 MUST **先确认仍能编译** ⇒ ⇒ 否则跑的是**旧二进制** ⇒ 假绿。
 
 ---
 

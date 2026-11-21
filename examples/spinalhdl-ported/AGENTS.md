@@ -15,7 +15,7 @@ Child of root `AGENTS.md`. Read `examples/spinalhdl-ported/README.md` for full p
 | uart_rx/ | uart_rx.cpp | ✅ RX state machine |
 | fifo/ | stream_fifo_example.cpp | ✅ With backpressure |
 | width_adapter/ | stream_width_adapter_example.cpp | ✅ CTest registered |
-| pwm/ | pwm.cpp | ✅ Duty cycle |
+| pwm/ | pwm_top.h（设计）+ tb_pwm_example.cpp（验证 / `--emit-rtl` 双模式）+ tb_pwm_example.verif | ✅ Duty cycle（`.verif` 单一真相源） |
 | gpio/ | gpio.cpp | ✅ Edge detect |
 | spi/ | spi_controller.cpp | ✅ Master, state machine |
 | i2c/ | i2c_controller.cpp | ⚠️ Simplified (no ACK) |
@@ -30,6 +30,10 @@ Child of root `AGENTS.md`. Read `examples/spinalhdl-ported/README.md` for full p
 
 ## CONVENTIONS
 - Each example: `Component` subclass → `Top` wrapper → `main()` self-test
+- **已迁移示例（三角色分离 · `rtl-verification-single-source`）**：设计定义 `*_top.h` +
+  激励驱动 `tb_*.cpp`（默认模式 = 读 `.verif` 跑断言；`--emit-rtl` = 发射 RTL/TB）+
+  验证源 `tb_*.verif`（**唯一语义来源**）⇒ ⇒ 激励与期望值 MUST NOT 写进 `.cpp`
+  ⇒ ⇒ 已迁移：`pwm/`（其余按同一模板推进）
 - Build to `build/examples/spinalhdl-ported/<module>/<binary>`
 - Test via `run_all_ported_tests.sh` (not CTest directly — uses timeout wrapper)
 

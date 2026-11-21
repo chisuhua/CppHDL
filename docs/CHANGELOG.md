@@ -1,3 +1,48 @@
+## 2026-11-21 — 渲染侧窄端口写入 64 位载体 MUST 零扩展（`WIDTHEXPAND` ⇒ TB 编译失败）
+
+**是什么**：`EXPECT_STABLE` / `RECORD` 的渲染把端口值写进 `logic [63:0]` 的 `hold_val` /
+历史数组 ⇒ ⇒ **窄端口**（如 1 位）直接赋 ⇒ Verilator `WIDTHEXPAND` ⇒ ⇒ 产品护栏 ④
+**禁 `-Wno-fatal`** ⇒ ⇒ 整个 TB **编译失败**（不是 warning 警告，是红）。
+
+**为什么到 2026-11-21 才暴露**：`EXPECT_STABLE` 此前**零单元消费者**
+（已迁移产物只在 `.verif` 的封闭集注释里提到它）⇒ ⇒ 渲染路径从未被窄端口走过；
+两处单元 harness 又带 `-Wno-fatal` ⇒ ⇒ 结构性失明。
+
+**改了什么**：
+
+- `src/rtl_emit/verif_render.cpp`：新增 `u64_rhs()` —— width < 64 ⇒ `{{N{1'b0}}, port}`；
+  width ≥ 64 ⇒ 直接赋。用于 `hold_val` 与历史数组**两处**。
+- `tests/test_verif_wait_level.cpp`：新增用例「两端逐条结论相等（窄 / 宽端口 · 稳定 /
+  不稳定）」（**手推**期望序列 = `PASS FAIL PASS PASS` / `FAIL ×3` / `PASS ×2`）。
+- 两处单元 harness（wait-level · history）**删掉 `-Wno-fatal`** ⇒ 与护栏 ④ 同一纪律。
+
+**判别力**：把 `u64_rhs()` 改回直接 `return info.name` ⇒ 新用例转红（render error:
+verilator 编译失败）⇒ 还原复绿。
+
+## 2026-11-21 — `examples/spinalhdl-ported/` 迁移开工：pwm 首个（三角色分离 + `.verif` 单一真相源）
+
+**是什么**：`examples/spinalhdl-ported/` 的 8 个已登记产品面 target 仍走「手写 TB +
+`emit_rtl*.cpp` 薄壳」⇒ ⇒ 期望值散落在 C++ / Verilog 两份手写件里 ⇒ ⇒ 两侧可漂移。
+本次按 `examples/stream/` 的形态迁移（**三角色分离**）：设计定义 `pwm_top.h` +
+激励驱动 `tb_pwm_example.cpp`（验证模式 / `--emit-rtl` 双模式）+ 验证源
+`tb_pwm_example.verif`（**唯一语义来源** ⇒ 解释器与渲染 TB 由同一份 IR 派生）。
+
+**改了什么**（`pwm/`）：
+
+- 删除 `pwm.cpp` 与 `emit_rtl.cpp`（发射入口 = TB 自身的 `--emit-rtl`）。
+- 根组件端口**具名**（`enable` / `duty_cycle[7:0]` / `pwm_out`）⇒ 产物端口 5 根。
+- `.verif` 5 个 scenario / **29** 条断言：段长（相位无关锚定：先 `WAIT low` 再
+  `WAIT high`）· enable 支配 · duty=0 恒低 · 2 条 metamorphic（任意连续 256 拍高电平数
+  == duty）。
+- 期望源登记 `.rddf/checks/examples-rtl-expectations.md#pwm-example`（`VERIF-CHECKS: 29`
+  + 5 个 `#### scenario:`）· 清单 `.rddf/checks/examples-rtl-sim-targets.tsv` 行改为
+  `target=tb_pwm_example` / `generated=yes` / `interp_checks=min_checks=29`。
+
+**判据面没有降级**：3 条变异实测全红 —— M1（去掉占空比比较）`fails=4` ·
+M2（enable 直通）`fails=6` · M3（`<` 改 `<=`）`fails=4`。
+⚠️ M3 的教学点：场景 3 初版只有「连续 8 拍恒 0」⇒ **漏网**（8 拍窗口未覆盖
+`counter == 0` 那一拍）⇒ ⇒ 已补「整周期 256 拍计数 == 0」⇒ ⇒ M3 现在抓在 `duty_zero#2`。
+
 ## 2026-11-21 — `.verif` 原语集扩展：历史/序列判据（`RECORD` + 3 条 `EXPECT_SEQ_*`）
 
 **是什么**：`.verif` 的封闭原语集（ADR-074 D2）只能表达「**当前采样点**的观测」
