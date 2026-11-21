@@ -54,7 +54,17 @@ enum class VerifOpKind {
     ExpectStable, // EXPECT_STABLE <port> <n>
     Observe,      // OBSERVE <port>
     Reset,        // RESET <port> <high|low> [cycles]
+    // ── 历史/序列判据（ADR-076 D1）────────────────────────────────────
+    Record,        // RECORD <port>
+    ExpectSeqSelf, // EXPECT_SEQ_SELF <port> <n> <lag>
+    ExpectSeqStep, // EXPECT_SEQ_STEP <portV> <portE> <n>
+    ExpectSeqCount // EXPECT_SEQ_COUNT <port> <value> <n> <count>
 };
+
+/// **历史序列的深度上限**（ADR-076 D2）⇒ ⇒ **扫描期**静态判定 ⇒ ⇒ 运行期不可能超限。
+///
+/// ⚠️ 该值同时是**渲染侧** Verilog 数组的维长 ⇒ ⇒ 扫描器与渲染器 MUST 共用同一常量。
+inline constexpr std::uint32_t kVerifHistoryDepth = 1024;
 
 /// IR 的一条语句（**值已求值为字面量**）
 struct VerifOp {
@@ -64,6 +74,14 @@ struct VerifOp {
     std::uint32_t count = 0;  // Tick 拍数 / Wait 上限 / ExpectStable 拍数 / Reset 复位拍数
     std::string check_id;     // Expect / Wait 的逐条结果标识（渲染期输出 `RESULT: check <id>`）
     WaitLevel level{WaitLevel::High}; // Wait 的目标电平（缺省 = High ≡ 非零 ⇒ 旧写法零影响）
+    // ── 历史/序列判据的字段（ADR-076 D1）──────────────────────────────
+    // ⚠️ **不复用** `value` / `count` ⇒ ⇒ 否则「缺省 0」会被读成另一个语义
+    //   （与 ADR-074 §7.2 的 `WAIT` level 同型坑）⇒ ⇒ **新语义一律新字段**。
+    std::string port2;             // ExpectSeqStep 的第二个端口
+    std::uint32_t seq_n = 0;       // 窗口长度 n（Self / Step / Count）
+    std::uint32_t seq_lag = 0;     // 滞后 lag（仅 ExpectSeqSelf）
+    std::uint64_t seq_value = 0;   // 目标值（仅 ExpectSeqCount）
+    std::uint32_t seq_count = 0;   // 计数目标（仅 ExpectSeqCount）
 };
 
 struct VerifScenario {

@@ -145,6 +145,7 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 |---|---|---|---|---|
 | `ch::toVerilog(const std::string &, Component &, const EmitOptions &)` | `include/codegen_verilog.h` | 2026-11-17 | ADR-072 决策 **D1-b**（**新增**带根入口；ctx-only 入口 = **非产品遗留路径**） | **新增**（无迁移）：既有 `toVerilog(path, ctx[, options])` 的签名与产物**逐字节不变** ⇒ ⇒ 下游既有代码零动作；要拿**产品端口面**（根组件自有 `__io`）MUST 改用本重载 |
 | `ch::make_flat_module_view(Component &, bool)` | `include/codegen_verilog.h` | 2026-11-17 | 同上（端口选择 = **根组件自有 `__io`**） | **新增**（无迁移）：与 `make_flat_module_view(ctx, …)` 的差异**只有端口面**（后代 `ch_out` 不上顶层） |
+| `ch::rtl_emit::VerifOpKind::Record` / `ExpectSeqSelf` / `ExpectSeqStep` / `ExpectSeqCount` + `VerifOp` 的 `port2` / `seq_n` / `seq_lag` / `seq_value` / `seq_count` + `kVerifHistoryDepth` | `include/rtl_emit/verif.h` | 2026-11-21 | **ADR-076** D1（`.verif` 原语集增补：历史/序列判据） | **新增**（无迁移）：既有 `.verif` 的语义与渲染产物**逐字节不变**（护栏 ⑥' 新鲜度 ✓）；新原语的**参数**是扫描期求值的**字面量** ⇒ ⇒ 不引入表达式 ⇒ ⇒ ADR-074 D2 的「IR 无表达式」不变量保持 |
 
 ## 维护规则
 

@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-21
+# 本 change **无 spec 变更**：它只**实施** ADR-076（`.verif` 原语集扩展 —— 历史/序列判据）
+# —— 判据本体在 **ADR**（不在 openspec spec）⇒ ⇒ 既有 `examples-rtl-sim-coverage` 的
+# requirement（「C++ 侧 MUST 与生成式 TB 共享同一验证源」「清单列号 MUST 从机器可读表头推导」
+# 「期望源锚点 ↔ 验证源 scenario 双向 1:1」等）已完整覆盖本 change 的义务
+# ⇒ ⇒ 不新增也不修改任何 Requirement。
+# ⇒ 归档时用 `openspec archive verif-history-primitives-2026-11 --skip-specs`
+#   （仓内规则：只有**显式声明 no spec changes** 的 change 才可用该标志 —— 本文件即该声明）。
+skip_specs: true

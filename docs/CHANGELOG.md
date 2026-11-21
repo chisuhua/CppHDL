@@ -1,3 +1,42 @@
+## 2026-11-21 — `.verif` 原语集扩展：历史/序列判据（`RECORD` + 3 条 `EXPECT_SEQ_*`）
+
+**是什么**：`.verif` 的封闭原语集（ADR-074 D2）只能表达「**当前采样点**的观测」
+⇒ ⇒ **表达不了**「对过去若干采样点的关系」的观测 ⇒ ⇒ `examples/spinalhdl-ported/` 的
+3 条 **metamorphic 判据**（counter_simple「周期 256」· counter「Δ == enable」·
+pwm「256 拍内高电平数 == duty」）在迁往 `.verif` 单一真相源时会被**降级成绝对判据**
+⇒ ⇒ **判据面实质收窄**。
+
+⇒ ⇒ 架构裁决（`ADR-076` · 新独立 ADR · **不改** ADR-074 的任何决策）= **扩展原语集 4 条**
+⇒ ⇒ 用户 **2026-11-21** 裁决「先扩展 `.verif` 原语集」⇒ ⇒ 本条 = 该裁决的实施。
+
+**改了什么**
+
+- **新原语**（ADR-076 D1）：`RECORD <port>`（把当前采样点的值追加到该端口的历史序列·
+  **不**产生断言）· `EXPECT_SEQ_SELF <port> <n> <lag>`（最近 n 项 vs 再往前 lag 项逐项恒等）·
+  `EXPECT_SEQ_STEP <portV> <portE> <n>`（V 的相邻差 vs E 的同位项逐项恒等）·
+  `EXPECT_SEQ_COUNT <port> <value> <n> <count>`（窗口内等于某值的项数）。
+- **扫描期静态良构性**（D4）：参数个数 · 取值域（`n≥1` / `lag≥1` / `count≤n`）·
+  **32 位上溢** · 历史深度上限（1024）· **历史充足性**（`EXPECT_SEQ_STEP` **两端口各判**）·
+  **端口 width > 64 ⇒ fail-closed**（两端同源于 manifest）⇒ ⇒
+  「历史不足 / 深度超限 / 宽端口截断」三类**执行后端分叉**在**扫描期**被消灭。
+- **静态计数器生命周期**（D3）：**一份** · **跨 scenario 不清空** · 按展开后程序顺序累计
+  ⇒ ⇒ 运行期历史长度恒等于静态计数 ⇒ ⇒ 超限与不足**都不可达**。
+- **IR / 扫描 / 解释 / 渲染**四处同批改（`include/rtl_emit/verif.h` · `src/rtl_emit/verif_{scan,run,render}.cpp`）
+  ⇒ ⇒ 解释器遇未知 kind ⇒ `default: error`（fail-closed）。
+- **判别力装置**：`tests/test_verif_history_primitives.cpp`（**运行期**两后端逐对
+  `(check_id, PASS/FAIL)` 比对 + 静态负向 + **5 条变异**自证）。
+- **文档**：`docs/usage_guide/04-testbench-guide.md`（原语表 + 已知边界 + 第 5 条纪律）·
+  `docs/adr/ADR-076-verif-history-primitives.md` · `.rddf/reviews/ADR-076-…md`。
+
+**行为不变**：既有原语的语义与**渲染文本 MUST NOT 改** ⇒ ⇒ `examples/axi4/` 与
+`examples/stream/` 的 checked-in `.sv` TB **逐字节不变**（护栏 ⑥' 新鲜度 ✓）。
+
+**⚠️ 实施期抓到一处「两端一致地错」**：`EXPECT_SEQ_STEP` 的公式初版**差一错位**
+（V 侧越界读 `hV[LV]` · E 侧取**晚一拍**的值）⇒ ⇒ 两个后端**一致地错**
+⇒ ⇒ 正是「**两端一致不能当作正确性证据**」的活标本 ⇒ ⇒ 由**手推期望**抓出
+⇒ ⇒ 已修正（解释器 / 渲染器 / 扫描期充足性三处同批）⇒ ⇒ ADR-076 D5 加了**反向锚点**
+（「不是 `hV[LV-n+i+1]`」「不是 `hE[LE-n+i]`」）防复发。
+
 ## 2026-11-21 — SoC 顶层删掉零消费的 `timer_irq` 占位端口（台账 id=27 落地）
 
 **是什么**：`examples/axi4/axi_soc_example_top.h` 的根 `__io` 里有一个 `timer_irq` 输入端口

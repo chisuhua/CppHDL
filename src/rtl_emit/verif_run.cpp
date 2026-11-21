@@ -212,9 +212,162 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
         }
     }
 
+    // ── 端口位宽表（ADR-076 D4 的「width > 64 ⇒ fail-closed」）────────────
+    //
+    // ⚠️ **与渲染器同源**：只用 `manifest.port_table[]`（按产物端口名）与
+    //   `manifest.ports[]` 里 `is_top_io` 的条目（按 C++ 成员名）⇒ ⇒ 与
+    //   `src/rtl_emit/verif_render.cpp` 的 `PortTable` **同一份口径** ⇒ ⇒
+    //   两端对「宽端口」给出**同一结论**。
+    // ⚠️ 解析器（`Resolver`）还有一条「后代端口兜底」⇒ ⇒ 该口径下**查不到**的端口
+    //   在渲染侧也会 fail-closed ⇒ ⇒ 解释器侧同样 fail-closed（不静默放行）。
+    std::unordered_map<std::string, std::uint32_t> width_by_name;
+    std::unordered_map<std::string, std::uint32_t> width_by_member;
+    for (const auto &p : manifest.port_table) {
+        width_by_name.emplace(p.name, p.width);
+    }
+    for (const auto &e : manifest.ports) {
+        if (!e.is_top_io || e.cpp_member.empty()) {
+            continue;
+        }
+        if (e.cpp_member == kOpaque || e.cpp_member == kOpaqueOut) {
+            continue;
+        }
+        width_by_member.emplace(e.cpp_member, e.width);
+    }
+    auto width_of = [&](const std::string &ident, std::uint32_t &out) -> bool {
+        auto it = width_by_member.find(ident);
+        if (it != width_by_member.end()) {
+            out = it->second;
+            return true;
+        }
+        it = width_by_name.find(ident);
+        if (it != width_by_name.end()) {
+            out = it->second;
+            return true;
+        }
+        return false;
+    };
+    // 被历史/序列判据引用的端口 MUST 位宽 ≤ 64（否则历史值会被截成低 64 位 ⇒ ⇒
+    // 两端「大概都截断」⇒ ⇒ 「大概同构」正是 ADR-074 D8 要消灭的 ⇒ ⇒ 直接拒）
+    auto check_width_or_fail = [&](const std::string &port, const std::string &where) -> bool {
+        std::uint32_t w = 0;
+        if (!width_of(port, w)) {
+            res.error = where + "：端口 `" + port + "` 不在产品端口表 ⇒ 无法确定位宽 ⇒ "
+                                     "fail-closed";
+            return false;
+        }
+        if (w > 64) {
+            res.error = where + "：端口 `" + port + "` 的位宽是 " + std::to_string(w) +
+                         "（> 64）⇒ ⇒ 历史值会被截成低 64 位 ⇒ ⇒ fail-closed";
+            return false;
+        }
+        return true;
+    };
+
+    // ── 历史序列（ADR-076 D2）──
+    // ⚠️ key = **端口标识符字符串** ⇒ ⇒ 与渲染侧的历史数组**同一分桶口径**
+    //   ⇒ ⇒ 「一个物理端口只用一个标识符」是**规范义务**（否则两条独立历史）。
+    std::unordered_map<std::string, std::vector<std::uint64_t>> history;
+
     for (const auto &sc : program.scenarios) {
         for (const auto &op : sc.ops) {
             switch (op.kind) {
+            case VerifOpKind::Record: {
+                if (!check_width_or_fail(op.port, sc.name + " · RECORD " + op.port)) {
+                    return res;
+                }
+                std::uint32_t id = 0;
+                if (!resolve_or_fail(op.port, id, sc.name + " · RECORD " + op.port)) {
+                    return res;
+                }
+                const auto v = sim.get_value_by_node_id(id);
+                if (!v) {
+                    res.error = sc.name + " · RECORD " + op.port + "：node_id 未命中";
+                    return res;
+                }
+                history[op.port].push_back(*v);
+                break;
+            }
+            case VerifOpKind::ExpectSeqSelf:
+            case VerifOpKind::ExpectSeqStep:
+            case VerifOpKind::ExpectSeqCount: {
+                if (!check_width_or_fail(op.port, sc.name + " · " + op.port)) {
+                    return res;
+                }
+                if (op.kind == VerifOpKind::ExpectSeqStep &&
+                    !check_width_or_fail(op.port2, sc.name + " · " + op.port2)) {
+                    return res;
+                }
+                const auto it = history.find(op.port);
+                if (it == history.end()) {
+                    res.error = sc.name + " · " + op.port + "：历史序列为空";
+                    return res;
+                }
+                const std::vector<std::uint64_t> &h = it->second;
+                const std::size_t L = h.size();
+                const std::size_t n = op.seq_n;
+                bool ok = true;
+                std::string detail;
+                if (op.kind == VerifOpKind::ExpectSeqSelf) {
+                    const std::size_t lag = op.seq_lag;
+                    for (std::size_t i = 0; i < n; ++i) {
+                        const std::uint64_t a = h[L - n + i];
+                        const std::uint64_t b = h[L - n - lag + i];
+                        if (a != b) {
+                            ok = false;
+                            detail = "idx " + std::to_string(i) + " got " +
+                                     std::to_string(a) + " want " + std::to_string(b);
+                            break;
+                        }
+                    }
+                } else if (op.kind == VerifOpKind::ExpectSeqStep) {
+                    const auto it2 = history.find(op.port2);
+                    if (it2 == history.end()) {
+                        res.error = sc.name + " · " + op.port2 + "：历史序列为空";
+                        return res;
+                    }
+                    const std::vector<std::uint64_t> &he = it2->second;
+                    const std::size_t LE = he.size();
+                    for (std::size_t i = 0; i < n; ++i) {
+                        // ⚠️ **对齐**：V 的第 i 个相邻差 = 「倒数第 (n-i) 项」−「倒数第 (n+1-i) 项」
+                        //   ⇒ 下标 h[L-n+i] − h[L-n-1+i]（**不是** h[L-n+i+1] ⇒ ⇒ 那会越界）
+                        // ⚠️ 差值按 **mod 2^64** 回绕（与渲染侧 `logic [63:0]` 的减法同语义）
+                        const std::uint64_t diff = h[L - n + i] - h[L - n - 1 + i];
+                        // ⚠️ 对应的 E 样本 = **同一个窗口的同位项**（同样按「距末尾」对齐）
+                        //   ⇒ 下标 he[LE-n-1+i]（与 diff 的「较早端」同拍 ⇒ ⇒ 该端的 E
+                        //   才是**造成这次跃迁**的那个值）
+                        const std::uint64_t want = he[LE - n - 1 + i];
+                        if (diff != want) {
+                            ok = false;
+                            detail = "idx " + std::to_string(i) + " got " +
+                                     std::to_string(diff) + " want " + std::to_string(want);
+                            break;
+                        }
+                    }
+                } else { // ExpectSeqCount
+                    std::uint32_t cnt = 0;
+                    for (std::size_t i = 0; i < n; ++i) {
+                        if (h[L - n + i] == op.seq_value) {
+                            ++cnt;
+                        }
+                    }
+                    if (cnt != op.seq_count) {
+                        ok = false;
+                        detail = "count " + std::to_string(cnt) + " want " +
+                                 std::to_string(op.seq_count);
+                    }
+                }
+                ++res.checks;
+                if (!ok) {
+                    ++res.fails;
+                    res.check_lines.push_back("CHECK " + op.check_id + " FAIL");
+                    res.failure_lines.push_back("CHECK " + op.check_id + " FAIL (" +
+                                                op.port + " " + detail + ")");
+                } else {
+                    res.check_lines.push_back("CHECK " + op.check_id + " PASS");
+                }
+                break;
+            }
             case VerifOpKind::Tick:
                 for (std::uint32_t i = 0; i < op.count; ++i) {
                     sim.tick();
@@ -338,6 +491,11 @@ VerifRunResult run_verif(const VerifProgram &program, ch::Simulator &sim,
                 }
                 break;
             }
+            default:
+                // ⚠️ **fail-closed**（ADR-076 AC9）：遇未知 kind ⇒ **绝不**静默跳过
+                //   ⇒ ⇒ 否则「扫描器认得、解释器不认得」会变成「断言被悄悄丢掉」。
+                res.error = sc.name + "：未知的原语种类（解释器拒绝执行）";
+                return res;
             }
         }
     }

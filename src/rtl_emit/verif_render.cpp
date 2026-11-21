@@ -12,9 +12,12 @@
 
 #include "rtl_emit/tb_stub.h"
 
+#include "verif_internal.h"
+
 #include <ostream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace ch {
@@ -88,14 +91,41 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
     // ⚠️ 先解析**全部**端口名 ⇒ 任一失败即 fail-closed（不产出半成品）
     for (const auto &sc : program.scenarios) {
         for (const auto &op : sc.ops) {
-            if (op.port.empty()) {
-                continue;
+            if (!op.port.empty()) {
+                PortInfo info;
+                if (!ports.resolve(op.port, info)) {
+                    error = "场景 `" + sc.name + "` 的端口 `" + op.port +
+                            "` 无法解析（未具名 / 拼写错误 / 不在产品端口表）";
+                    return false;
+                }
             }
-            PortInfo info;
-            if (!ports.resolve(op.port, info)) {
-                error = "场景 `" + sc.name + "` 的端口 `" + op.port +
-                        "` 无法解析（未具名 / 拼写错误 / 不在产品端口表）";
-                return false;
+            if (!op.port2.empty()) {
+                PortInfo info2;
+                if (!ports.resolve(op.port2, info2)) {
+                    error = "场景 `" + sc.name + "` 的端口 `" + op.port2 +
+                            "` 无法解析（未具名 / 拼写错误 / 不在产品端口表）";
+                    return false;
+                }
+            }
+            // ⚠️ **width > 64 ⇒ fail-closed**（ADR-076 D4）—— 历史值按 64 位存
+            //   ⇒ ⇒ 宽端口上两端会「大概都截断」⇒ ⇒ 「大概同构」正是 D8 要消灭的
+            //   ⇒ ⇒ 与解释器侧**同一决策**（解释器从同一个 manifest 查 width）。
+            if (op.kind == VerifOpKind::Record || op.kind == VerifOpKind::ExpectSeqSelf ||
+                op.kind == VerifOpKind::ExpectSeqStep ||
+                op.kind == VerifOpKind::ExpectSeqCount) {
+                for (const std::string *p : {&op.port, &op.port2}) {
+                    if (p->empty()) {
+                        continue;
+                    }
+                    PortInfo info;
+                    ports.resolve(*p, info);
+                    if (info.width > 64) {
+                        error = "场景 `" + sc.name + "` 的端口 `" + *p + "` 位宽是 " +
+                                std::to_string(info.width) +
+                                "（> 64）⇒ ⇒ 历史值会被截成低 64 位 ⇒ ⇒ fail-closed";
+                        return false;
+                    }
+                }
             }
         }
     }
@@ -127,6 +157,59 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
         }
     }
     const std::string clk = pre.clock_port;
+
+    // ── 历史序列的声明（ADR-076 D2）──────────────────────────────────────
+    //
+    // ⚠️ **只在用到历史原语时**才声明 ⇒ ⇒ 既有 TB 的渲染文本**逐字节不变**。
+    // ⚠️ 名字 = `hist_` + sanitize(DSL 标识符) ⇒ ⇒ 与扫描器**同一函数**
+    //   （`src/rtl_emit/verif_internal.h`）⇒ ⇒ 两端算出**同一个**数组名。
+    // ⚠️ 声明顺序 = **首次出现顺序**（不是 `unordered_set` 的遍历序）⇒ ⇒ 渲染结果
+    //   **确定性**（否则 ⑥' 的「逐字节重现」会随机漂）。
+    std::vector<std::string> hist_ports;
+    std::unordered_set<std::string> hist_seen;
+    bool need_seq = false;
+    auto note_hist = [&](const std::string &p) {
+        if (p.empty()) {
+            return;
+        }
+        if (hist_seen.insert(p).second) {
+            hist_ports.push_back(p);
+        }
+    };
+    for (const auto &sc : program.scenarios) {
+        for (const auto &op : sc.ops) {
+            switch (op.kind) {
+            case VerifOpKind::Record:
+                note_hist(op.port);
+                break;
+            case VerifOpKind::ExpectSeqSelf:
+            case VerifOpKind::ExpectSeqCount:
+                note_hist(op.port);
+                need_seq = true;
+                break;
+            case VerifOpKind::ExpectSeqStep:
+                note_hist(op.port);
+                note_hist(op.port2);
+                need_seq = true;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    if (!hist_ports.empty()) {
+        out << "\n    // ── 历史序列（`.verif` 的 `RECORD` / `EXPECT_SEQ_*`）────────────\n";
+        for (const auto &p : hist_ports) {
+            const std::string h = "hist_" + verif_hist_ident(p);
+            out << "    logic [63:0] " << h << "[0:" << (kVerifHistoryDepth - 1) << "];\n";
+            out << "    integer      hist_idx_" << h << " = 0;\n";
+        }
+        if (need_seq) {
+            out << "    logic        seq_ok = 1'b0;\n";
+            out << "    integer      seq_bad = 0;\n";
+            out << "    integer      seq_cnt = 0;\n";
+        }
+    }
 
     out << "    initial begin\n";
     write_tb_reset_pulse(out, stub_opts, pre);
@@ -204,6 +287,80 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
                 ports.resolve(op.port, info);
                 out << "        $display(\"OBSERVE " << sc.name << " " << info.name
                     << "=%0d\", " << info.name << ");\n";
+                break;
+            // ── 历史/序列判据（ADR-076 D1）────────────────────────────────
+            case VerifOpKind::Record:
+                ports.resolve(op.port, info);
+                {
+                    const std::string h = "hist_" + verif_hist_ident(op.port);
+                    out << "        " << h << "[hist_idx_" << h << "] = " << info.name << ";\n";
+                    out << "        hist_idx_" << h << " = hist_idx_" << h << " + 1;\n";
+                }
+                break;
+            case VerifOpKind::ExpectSeqSelf:
+                ports.resolve(op.port, info);
+                {
+                    const std::string h = "hist_" + verif_hist_ident(op.port);
+                    const std::string idx = "hist_idx_" + h;
+                    out << "        seq_ok = 1'b1;\n";
+                    out << "        seq_bad = 0;\n";
+                    out << "        for (wi = 0; wi < " << op.seq_n << "; wi = wi + 1) begin\n";
+                    out << "            if (" << h << "[" << idx << " - 1 - wi] !== " << h << "["
+                        << idx << " - 1 - wi - " << op.seq_lag << "]) begin\n";
+                    out << "                seq_ok = 1'b0;\n";
+                    out << "                seq_bad = wi;\n";
+                    out << "            end\n";
+                    out << "        end\n";
+                    out << "        checks = checks + 1;\n";
+                    out << "        if (!seq_ok) begin fails = fails + 1; $display(\"CHECK "
+                        << op.check_id << " FAIL (seq_self " << info.name << " idx=%0d\", "
+                        << "seq_bad); end else $display(\"CHECK " << op.check_id << " PASS\");\n";
+                }
+                break;
+            case VerifOpKind::ExpectSeqStep:
+                ports.resolve(op.port, info);
+                {
+                    const std::string hv = "hist_" + verif_hist_ident(op.port);
+                    const std::string he = "hist_" + verif_hist_ident(op.port2);
+                    const std::string iv = "hist_idx_" + hv;
+                    const std::string ie = "hist_idx_" + he;
+                    const std::string n = std::to_string(op.seq_n);
+                    out << "        seq_ok = 1'b1;\n";
+                    out << "        seq_bad = 0;\n";
+                    out << "        for (wi = 0; wi < " << n << "; wi = wi + 1) begin\n";
+                    // ⚠️ **对齐**：V 的第 i 个相邻差 = 「倒数第 (n-i) 项」−「倒数第 (n+1-i) 项」
+                    //   ⇒ 下标 `[idx - n + wi]` − `[idx - n - 1 + wi]`（**不是** `[idx - n + wi + 1]`）
+                    // ⚠️ E 侧同位项 = `[idx_e - n - 1 + wi]`（与 diff 的**较早端**同拍）
+                    // ⚠️ `logic [63:0]` 的减法**天然回绕** ⇒ ⇒ 与解释器的 `uint64_t` 同语义
+                    out << "            if ((" << hv << "[" << iv << " - " << n << " + wi] - "
+                        << hv << "[" << iv << " - " << n << " - 1 + wi]) !== " << he << "[" << ie
+                        << " - " << n << " - 1 + wi]) begin\n";
+                    out << "                seq_ok = 1'b0;\n";
+                    out << "                seq_bad = wi;\n";
+                    out << "            end\n";
+                    out << "        end\n";
+                    out << "        checks = checks + 1;\n";
+                    out << "        if (!seq_ok) begin fails = fails + 1; $display(\"CHECK "
+                        << op.check_id << " FAIL (seq_step " << info.name << " idx=%0d\", "
+                        << "seq_bad); end else $display(\"CHECK " << op.check_id << " PASS\");\n";
+                }
+                break;
+            case VerifOpKind::ExpectSeqCount:
+                ports.resolve(op.port, info);
+                {
+                    const std::string h = "hist_" + verif_hist_ident(op.port);
+                    const std::string idx = "hist_idx_" + h;
+                    out << "        seq_cnt = 0;\n";
+                    out << "        for (wi = 0; wi < " << op.seq_n << "; wi = wi + 1) begin\n";
+                    out << "            if (" << h << "[" << idx << " - 1 - wi] === 64'h"
+                        << std::hex << op.seq_value << std::dec << ") seq_cnt = seq_cnt + 1;\n";
+                    out << "        end\n";
+                    out << "        checks = checks + 1;\n";
+                    out << "        if (seq_cnt != " << op.seq_count
+                        << ") begin fails = fails + 1; $display(\"CHECK " << op.check_id
+                        << " FAIL (seq_count " << info.name << ")\"); end else $display(\"CHECK "
+                        << op.check_id << " PASS\");\n";
+                }
                 break;
             }
         }

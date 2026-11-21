@@ -1150,6 +1150,16 @@ add_dual_backend_test(test_verif_wait_level
     TIMEOUT 600
 )
 
+# `.verif` 的**历史/序列判据原语**（ADR-076 · `verif-history-primitives-2026-11`）
+# ⚠️ **运行期同结论**判据：同一份 `.verif` 在 ① IR 解释器 与 ② **真 verilator 渲染 TB**
+#   各跑一次 ⇒ ⇒ 逐条 `(check_id, PASS/FAIL)` **对**比对
+#   （⚠️ 静态 `check_id` 集合比对对**序列敏感**原语**结构性失明**）
+# ⚠️ 渲染侧需要真编译 ⇒ MUST 带 `verilator_e2e` 标签 + `RESOURCE_LOCK`（故不用 add_catch_test）
+add_dual_backend_test(test_verif_history_primitives
+    SOURCES test_verif_history_primitives.cpp
+    TIMEOUT 600
+)
+
 # 产物级自检的**产品无关规则**（`example-file-boundary-2026-11` F2 · 蓝图 §4.3.1）
 # ⚠️ 测的是**规则**（product_modules / tamper_hier / check_products 的判定与编排）
 #   ⇒ ⇒ example 侧的**值**不在这里 ⇒ ⇒ 本测试自带最小设计 + 自带值。
