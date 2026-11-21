@@ -60,7 +60,7 @@ as_master() 后 s2.valid impl=有节点
 ⇒ ⇒ ⇒ **一条从未被文档化的框架层隐含前提**：
 **调用方的 stream MUST 先 `as_master()` / `as_slave()`，组合子才能驱动它的 `ready`**。
 ⇒ ⇒ 仓内**遵守情况不一致**：`spinalhdl_stream_example.cpp` **7** 处 ·
-`test_stream.cpp` **5** 处 ✔ ↔ `stream_fifo_example.cpp` /
+`test_stream.cpp` **5** 处 ✔ ↔ `stream_fifo_example.cpp`（⚠️ 2026-11-21 已删除 ⇒ 现位于 `examples/spinalhdl-ported/fifo/fifo_top.h`） /
 `stream_component_example.cpp` / `stream_handshake_example.cpp` **各 0** 处 ✘
 ⇒ ⇒ ⇒ **框架内不一致**（「修复不完整」病症的第 4 个实例）。
 

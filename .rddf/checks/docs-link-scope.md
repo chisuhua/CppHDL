@@ -1,10 +1,16 @@
+---
+# ⚠️ **本文件是台账** ⇒ ⇒ `evidence:` 必填（`scripts/verify_ledger_evidence.sh` 的 R1）
+#    ⇒ 指向**派生器自己的护栏**（本表的分级漂移由它抓 ⇒ ⇒ 同一载体）
+evidence: probe:scripts/verify_docs_links.sh
+---
+
 # 文档链接护栏 —— 分级登记表（**派生 · 禁手改**）
 
 > ⚠️ **本文件由 `scripts/lib/docs_link_scope.py --render` 生成** ⇒ ⇒ **手改无效**
 > （下次 `--render` 会覆盖 ⇒ 分级漂移会被 C5 抓）。
 > 分级规则见 `docs/DOCUMENT-ARCHITECTURE.md` §9.1（治理口径正本）。
 
-**统计**：扫描 484 篇 · L1 **44** 篇 · L2/L3 440 篇
+**统计**：扫描 497 篇 · L1 **44** 篇 · L2/L3 453 篇
 
 ## 显式登记的例外（无法由前缀机械判定）
 

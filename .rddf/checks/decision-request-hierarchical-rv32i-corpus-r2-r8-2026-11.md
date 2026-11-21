@@ -4,6 +4,7 @@ id: decision-request-hierarchical-rv32i-corpus-r2-r8-2026-11
 提出者: builder（2026-11-21 · **实测三路交叉**：护栏源码 + 现场发射 + lint 复跑）
 状态: **待裁决**（台账 id=25 · 归属 architect）
 关联: .rddf/checks/arch-residual-registry.md · docs/architecture/2026-11-02-hierarchical-rtl-output.md §7 行 25 · scripts/verify_hierarchical_rtl.sh · openspec/specs/rtl-hierarchical-output/spec.md · .rddf/checks/hier-corpus-registry.md
+evidence: probe:scripts/verify_hierarchical_rtl.sh
 ---
 
 # 决策请求单：台账 **id=25** 的收口方向 —— 层次化语料「R2–R8 全套」要不要接到 RV32I 语料

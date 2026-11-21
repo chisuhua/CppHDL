@@ -17,6 +17,7 @@ id: rtl-track-followup-list-2026-11
   - openspec/changes/archive/2026-11-11-node-name-prefix-path-contract-2026-11/
   - .rddf/checks/decision-request-port-naming-parity-2026-11.md
   - .rddf/checks/arch-residual-registry.md（行 21 / 21b）
+evidence: probe:scripts/verify_arch_ledger_residuals.sh
 ---
 
 # 订正清单（后继 · v2）：另外 2 份草案的**同型四通道漂移 + AC 逐条回填**

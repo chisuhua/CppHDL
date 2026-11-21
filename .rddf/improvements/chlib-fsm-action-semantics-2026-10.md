@@ -80,7 +80,7 @@ ADR-050 §5 的 **16** 条可勾选判据（静态护栏 / 编译期拒绝 / 运
 ## 5. Impact (影响面分析)
 
 - **改动文件**：`include/chlib/state_machine.h`（主）· `tests/test_state_machine.cpp` ·
-  `examples/spinalhdl-ported/uart/uart_tx.cpp` · `tests/test_verilator_complex_e2e.cpp` ·
+  `examples/spinalhdl-ported/uart/uart_top.h`（⚠️ 原 `uart_tx.cpp` · 2026-11-21 已删除） · `tests/test_verilator_complex_e2e.cpp` ·
   `scripts/verify_fsm_next_wiring.sh` · capability 主 spec · `AGENTS.md` ·
   `include/chlib/AGENTS.md` · `.rddf/roadmap.md`
 - **计数**：**不变**（新用例进**既有** target）

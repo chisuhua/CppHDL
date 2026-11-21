@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_examples_rtl_sim.sh
+---
+
 # SoC 层 RTL 期望登记（`soc-rtl-product-and-tb-2026-11` · **T4**）
 
 > 本文件是 **SoC 层 TB 的期望值出处**。TB 头部 MUST 写

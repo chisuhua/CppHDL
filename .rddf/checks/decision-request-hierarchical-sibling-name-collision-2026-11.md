@@ -9,6 +9,7 @@ id: decision-request-hierarchical-sibling-name-collision-2026-11
   - .rddf/improvements/port-name-literal-parity-2026-11.md（`## Acceptance` 的 Q21 / Q22）
   - .rddf/checks/arch-residual-registry.md（行 21 / 21b —— **相邻但不同项**）
   - .rddf/checks/decision-request-port-naming-parity-2026-11.md（route (c) 的既有裁定包）
+evidence: probe:scripts/verify_hierarchical_rtl.sh
 ---
 
 # 登记请求：层次化侧「**同名兄弟**」疑**静默覆盖** ⇒ 待查项登记

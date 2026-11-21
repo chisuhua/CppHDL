@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_examples_rtl_sim.sh
+---
+
 # 产物等价记录 —— 头文件归位（`example-file-boundary-2026-11` · **E2 / E3** · AC16）
 
 > **判据（AC16）**：把两个顶层设计头从 `include/axi4/` 搬到 `examples/axi4/` 之后，

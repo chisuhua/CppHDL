@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_examples_rtl_sim_coverage.sh
+---
+
 # examples 的 RTL 仿真覆盖：**落选名单 + 未覆盖项**（`examples-rtl-sim-coverage` **E4′**）
 
 > **为什么必须有这份文档**：E4 的核心风险是「**先做 10 个 ⇒ 变成永远只有 10 个**」

@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_examples_rtl_sim.sh
+---
+
 # F2 产物等价记录（`example-file-boundary-2026-11` · 「规则下沉」前后）
 
 > **判据**：把 checker 的**规则侧**从 example 搬进 `ch::rtl_emit`（`include/rtl_emit/product_check.h`）

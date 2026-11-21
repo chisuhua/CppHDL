@@ -14,8 +14,16 @@ evidence: probe:run_all_ported_tests.sh
 - **Date drafted**: 2026-10-28
 - **Drafted by**: build-agent (builder role)
 - **Status**: ✅ **已修复**（10 处全部收敛）⇒ ⇒ 判据（2026-11-03 复跑）：
-  `grep -nE "io\(\)\.[a-z_]+ *= *[^=]" examples/spinalhdl-ported/uart/uart_tx.cpp
+  `grep -nE "io\(\)\.[a-z_]+ *= *[^=]" examples/spinalhdl-ported/uart/uart_top.h
   samples/stream_component_example.cpp samples/stream_handshake_example.cpp` **零输出**。
+  ⚠️ **2026-11-21 路径迁移**：`uart_tx.cpp` 已删除 ⇒ 同一逻辑在 `uart_top.h`。
+  ⚠️ **该 grep 形态的适用边界**（迁移后新增的注意点）：`io().X = ` 在**本仓**是
+  **`ch_out` 的合法驱动形态**（`ch_out` 有 `operator=`）⇒ ⇒ 一旦把判据扩到
+  `*_top.h` 全集，**naive grep 会命中合法的 `ch_out` 驱动**（实测 8 个 `*_top.h`
+  共 14 处，全部落在 `ch_out` 上）⇒ ⇒ **`ch_in` 专属判据 MUST 按端口方向作用域**
+  （`ch_in` 无 `operator=` ⇒ `io().X =` 走 `CHERROR("Cannot assign value to input port!")`
+  ⇒ 编译通过、运行不崩、**静默失效**）⇒ ⇒ 已实测：8 个 `*_top.h` 的 `ch_in` 端口
+  **无一**被 `=` 赋值（`ch_in` ∩ `io().X=` == ∅）。
   落地来自两个 change（都不是为本项立的）：① `uart_tx.cpp` 的 4 处 —— 2026-10-28
   `input-port-assignment-antipattern-fix-2026-10` 本身（改 `sim.set_input_value`）+ 2026-10-29
   `uart-tx-fsm-live-logic-2026-10`（FSM 重写）；② 两个 sample 的 6 处 —— 2026-10-31
@@ -38,7 +46,7 @@ evidence: probe:run_all_ported_tests.sh
 
 | # | 位置 | 形态 |
 |---|---|---|
-| 1–4 | `examples/spinalhdl-ported/uart/uart_tx.cpp:193,194,203,205` | `device.instance().io().frame_start = ch_bool(false);` 等 |
+| 1–4 | `examples/spinalhdl-ported/uart/uart_tx.cpp:193,194,203,205`（⚠️ 2026-11-21 已删除 ⇒ 现位于 `examples/spinalhdl-ported/uart/uart_top.h`） | `device.instance().io().frame_start = ch_bool(false);` 等 |
 | 5–8 | `samples/stream_component_example.cpp:78,79,80,119` | `fifo_comp.io().clk = clk;` / `.rst` / `.input_stream` |
 | 9–10 | `samples/stream_handshake_example.cpp:92,131` | `fifo_comp.io().input_stream = input_stream;` |
 
@@ -86,7 +94,7 @@ evidence: probe:run_all_ported_tests.sh
 
 ## 5. Impact (影响面分析)
 
-- **改动文件**：`examples/spinalhdl-ported/uart/uart_tx.cpp`（4 处）·
+- **改动文件**：`examples/spinalhdl-ported/uart/uart_tx.cpp`（4 处 · ⚠️ 2026-11-21 已删除 ⇒ 现位于 `examples/spinalhdl-ported/uart/uart_top.h`）·
   `samples/stream_component_example.cpp`（4 处）·
   `samples/stream_handshake_example.cpp`（2 处）
 - **计数**：**不变**

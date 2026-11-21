@@ -326,6 +326,22 @@ backend」⇒ ⇒ **不**属于 `DUAL_BACKEND_TEST` 的 parity 形态 ⇒ ⇒ �
 ⚠️ 它**不**增加 parity 的两个锚点（`DUAL_BACKEND_PARITY_TOTAL` / `_PAIRS`）
 ⇒ ⇒ 因为它**不写** `DUAL_BACKEND_TEST_PAIR` 调用。
 
+**新增登记（2026-11-21 · `verif-history-primitives-2026-11` 引入的测试 · 补登记）**：
+`tests/test_verif_history_primitives.cpp` 是 `.verif` **历史/序列原语**（ADR-076）的
+**运行期同结论**判据（同一份 `.verif` ⇒ **IR 解释器** vs **渲染出的 TB 经 verilator 实跑**，
+逐条 `(check_id, PASS/FAIL)` 对**运行期**比对相等）⇒ ⇒ 它比较的是**两条执行路径**，而**不是**
+「同一 DUT 跑两个 eval backend」⇒ ⇒ **不**属于 `DUAL_BACKEND_TEST` 的 parity 形态 ⇒ ⇒ 属
+**单后端**条目 ⇒ ⇒ MUST **保留原状**（MUST NOT 迁移到 macro）⇒ ⇒ 它带 `verilator_e2e` 标签
+（渲染 TB 需要真 verilator）⇒ ⇒ 计入 `VERILATOR_E2E_TOTAL` 锚点。
+⚠️ **本 Requirement 的标题（「9 个」）仍不变**（它指 macro 的 reference implementation 数量）
+⇒ ⇒ 本段登记的是**再一个**单后端条目（与 `test_hierarchy_equivalence.cpp` /
+`test_public_equivalence_api.cpp` / `examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp` /
+`tests/test_verif_wait_level.cpp` 同型）。
+⚠️ **它 MUST 带 `verilator_e2e` 标签**：不带标签 ⇒ 只在 `BUILD_VERILATOR=OFF` 的 job 里跑
+⇒ ⇒ 那里 verilator 不存在 ⇒ ⇒ **恒跳过** ⇒ ⇒ 「IR 与渲染 TB 结论一致」这条证据永远不被真正执行。
+⚠️ 它**不**增加 parity 的两个锚点（`DUAL_BACKEND_PARITY_TOTAL` / `_PAIRS`）
+⇒ ⇒ 因为它**不写** `DUAL_BACKEND_TEST_PAIR` 调用。
+
 ### Requirement: CTEST_TOTAL 同步 MUST 在 phase 边界更新根 AGENTS.md
 
 每次新测试 target 通过 `add_dual_backend_test` 注册，MUST 按根 `AGENTS.md §NOTES` 的 `CTEST_TOTAL: <N>` 行更新计数（与 `scripts/verify_test_counts.sh` 同步）。Phase 1 边界 `CTEST_TOTAL` 数字 MUST 由实测 `ctest -N | tail -1` 回填（禁止拍脑袋）。

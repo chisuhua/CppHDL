@@ -4,6 +4,7 @@ id: decision-request-rv32i-ext-clock-dead-port-2026-11
 提出者: builder（B2 / E3 · `riscv-mini` 的独立 RTL TB）
 状态: ✅ **已裁决并落地**（2026-11-14 · 用户裁决 **A2** = 删端口）
 关联: .rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc
+evidence: probe:scripts/verify_no_duplicate_rv32i_headers.sh
 ---
 
 # 决策请求单：`ext_clk` 是**死端口**（顶层头声明的意图未在产物里兑现）

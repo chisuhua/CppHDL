@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-21
+# 本 change **有** spec 变更（1 条 MODIFIED Requirement）⇒ ⇒ 归档**不得**用 `--skip-specs`
+# ⇒ ⇒ 归档时由 CLI 自动合并进 `openspec/specs/dual-backend-test-coverage/spec.md`。

@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_examples_rtl_sim.sh
+---
+
 # examples 的 RTL 期望登记（`examples-rtl-sim-coverage` **E3**）
 
 > 本文件是 **TB 的期望值出处**。TB 头部 MUST 写

@@ -4,6 +4,7 @@ id: decision-request-fifo-full-threshold-2026-11
 提出者: builder（B2 / E3 · `fifo_stream_example` 的独立 RTL TB）
 状态: **已裁决（2026-11-12 · 选项 A 落地）**
 关联: .rddf/checks/examples-rtl-expectations.md#fifo-stream-example · .rddf/checks/examples-rtl-sim-targets.tsv
+evidence: probe:scripts/verify_examples_rtl_sim.sh
 ---
 
 # 决策请求单：`fifo_stream_example` 的 `full` 门限算错 ⇒ 第 16 次写入起**地址混叠**
@@ -15,7 +16,7 @@ id: decision-request-fifo-full-threshold-2026-11
 
 ## 1. 现象（实测 · 可复现）
 
-`examples/spinalhdl-ported/fifo/stream_fifo_example.cpp` 的 `FiFo<ch_uint<8>, 16>`：
+`examples/spinalhdl-ported/fifo/fifo_top.h`（⚠️ 原 `stream_fifo_example.cpp` · 2026-11-21 迁移后已删除）的 `FiFo<ch_uint<8>, 16>`：
 
 ```cpp
 ch_reg<ch_uint<addr_width + 1>> rd_ptr(0_d, "rd_ptr");   // addr_width = 4 ⇒ 指针 5 位
@@ -108,7 +109,7 @@ pop 17 -> 20   pop 18 -> 21  pop 19 -> 22  pop 20 -> 23
 
 | 项 | 处置 | 落点 |
 |---|---|---|
-| **A** 修 `full` 门限 | **已改**为经典方案（**地址位相等 + wrap 位不同** ⇒ 容量 = N） | `samples/fifo_example.cpp` + `examples/spinalhdl-ported/fifo/stream_fifo_example.cpp`（**两处同改**） |
+| **A** 修 `full` 门限 | **已改**为经典方案（**地址位相等 + wrap 位不同** ⇒ 容量 = N） | `samples/fifo_example.cpp` + `examples/spinalhdl-ported/fifo/fifo_top.h`（**两处同改** · ⚠️ 后者 2026-11-21 已迁移改名） |
 | **C** 口径对齐 | 源文件注释已改写为新判定 + 旧写法的**错误原因**（门限 = `2^(addr_width+1)-1`） | 同上两处 |
 | **B** 登记为已知缺陷 | **不适用**（缺陷已修 ⇒ 无需进残差登记） | — |
 

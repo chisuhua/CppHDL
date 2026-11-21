@@ -4,6 +4,7 @@ id: decision-request-uart-rx-defects-2026-11
 提出者: builder（B2 / E3 · `uart_rx_example` 的独立 RTL TB）
 状态: **已裁决并落地（2026-11-12 · 用户「按建议推进」⇒ 选项 A）**
 关联: .rddf/checks/examples-rtl-expectations.md#uart-rx-example · .rddf/checks/examples-rtl-sim-targets.tsv
+evidence: probe:scripts/verify_examples_rtl_sim.sh
 ---
 
 # 决策请求单：UART RX 的两个缺陷（采样点不缩放 + 解出的字节位反转）
@@ -15,7 +16,7 @@ id: decision-request-uart-rx-defects-2026-11
 
 ## 1. D6 —— 采样点**硬编码** `div == 4`（不随 `prescale` 缩放）
 
-**源码原状**（`examples/spinalhdl-ported/uart_rx/uart_rx.cpp`）：
+**源码原状**（`examples/spinalhdl-ported/uart_rx/uart_rx_top.h` · ⚠️ 原 `uart_rx.cpp` · 2026-11-21 迁移后已删除）：
 
 ```cpp
 // 采样点：每位中间 (div == prescale/2)

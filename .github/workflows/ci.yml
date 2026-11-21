@@ -563,7 +563,9 @@ jobs:
       # => An output driven from inside a closure is likewise overwritten.
       # The typical symptom is SILENT: the "load the data" branch of the FIRST
       # state never takes effect. Two real occurrences (2026-10-29):
-      # examples/spinalhdl-ported/uart/uart_tx.cpp and
+      # examples/spinalhdl-ported/uart/uart_top.h (the file was
+      # examples/spinalhdl-ported/uart/uart_tx.cpp until the 2026-11-21
+      # .verif migration) and
       # tests/test_verilator_complex_e2e.cpp (whose SPI fixture never worked;
       # its assertions were parity-only => same defect on both backends =>
       # parity stayed green).
@@ -2073,7 +2075,9 @@ jobs:
       # => An output driven from inside a closure is likewise overwritten.
       # The typical symptom is SILENT: the "load the data" branch of the FIRST
       # state never takes effect. Two real occurrences (2026-10-29):
-      # examples/spinalhdl-ported/uart/uart_tx.cpp and
+      # examples/spinalhdl-ported/uart/uart_top.h (the file was
+      # examples/spinalhdl-ported/uart/uart_tx.cpp until the 2026-11-21
+      # .verif migration) and
       # tests/test_verilator_complex_e2e.cpp (whose SPI fixture never worked;
       # its assertions were parity-only => same defect on both backends =>
       # parity stayed green).

@@ -6,7 +6,7 @@ phase: phase-5
 category: testing
 type: bugfix
 created_at: 2026-10-28
-evidence: probe:examples/spinalhdl-ported/uart/uart_tx.cpp
+evidence: probe:examples/spinalhdl-ported/uart/uart_top.h
 ---
 
 # Improvement: `uart_tx_example` 的状态机从未工作过（C++ `if` 恒走 else）
@@ -19,7 +19,7 @@ evidence: probe:examples/spinalhdl-ported/uart/uart_tx.cpp
 
 ## 1. Why (背景与动机)
 
-`examples/spinalhdl-ported/uart/uart_tx.cpp` 是**被跟踪**的 example
+`examples/spinalhdl-ported/uart/uart_tx.cpp`（⚠️ **2026-11-21 迁移** ⇒ 该文件**已删除** ⇒ 同一逻辑现位于 `examples/spinalhdl-ported/uart/uart_top.h`） 是**被跟踪**的 example
 （`CH_TRACKED_EXAMPLE_TARGETS` ⇒ 受 `run_all_ported_tests.sh` 守护，28/28 之一）。
 
 ⚠️ **实测：它生成的设计图里，输出是两个常量，状态机自环。**
@@ -93,7 +93,7 @@ C++ 控制流的写法都恒走「假」分支**。实测仓内出现三种形�
 
 | # | 形态 | 位置 | 现状 |
 |---|---|---|---|
-| ① | `if (ch_bool_expr)` | `uart_tx.cpp:72` 等 **5 处**（examples 内**唯一**的文件） | **坏**（§1.1） |
+| ① | `if (ch_bool_expr)` | `uart_tx.cpp:72` 等 **5 处**（⚠️ 该文件 2026-11-21 已删除 ⇒ 现位于 `examples/spinalhdl-ported/uart/uart_top.h`）（examples 内**唯一**的文件） | **坏**（§1.1） |
 | ② | `if (ch_uint == lit)` | 同上（`baud_counter == 433` ×3、`bit_counter == 7` ×1） | **坏**（只发射 else） |
 | ③ | **三元条件** `cond ? A : B` | `tests/test_verilator_complex_e2e.cpp:150` 的 `last_bit ? SpiState::STOP : SpiState::TRANSFER` | ⚠️ **`STOP` 状态不可达**（恒选 `TRANSFER`） |
 
@@ -241,7 +241,7 @@ early `return` / 把硬件值传给 **`bool` 形参** ⇒ **全部**触发 `expl
 
 ## 5. Impact (影响面分析)
 
-- **改动文件**：`examples/spinalhdl-ported/uart/uart_tx.cpp`（1 个）
+- **改动文件**：`examples/spinalhdl-ported/uart/uart_tx.cpp`（1 个 · ⚠️ 2026-11-21 已删除 ⇒ 现位于 `examples/spinalhdl-ported/uart/uart_top.h`）
 - **计数**：视 2.3 是否执行 ⇒ 若升级为 Catch2 则 `CTEST_TOTAL` +1
 - **风险**：**中** —— 重写 FSM 会改变生成 Verilog 的结构（当前是死图）；
   且该 example 是 17 个 spinalhdl-ported 之一 ⇒ 其修法可作为**其余 16 个的模板**

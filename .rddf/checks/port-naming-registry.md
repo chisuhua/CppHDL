@@ -1,3 +1,7 @@
+---
+evidence: probe:scripts/verify_port_naming.sh
+---
+
 # 端口命名棘轮登记表（port naming ratchet registry）
 
 > **机器面**（逐端口条目）= `.rddf/checks/port-naming-exempt.tsv` ← **护栏读它**

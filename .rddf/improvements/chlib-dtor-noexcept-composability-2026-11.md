@@ -56,7 +56,7 @@ evidence: test:tests/test_chlib_composability_api.cpp
 `include/component.h:62` 的 `virtual ~Component();`（隐式 `noexcept`）⇒ ⇒ **用仓内自己的 `Component` 作基类**、
 **按值**持有一个 FSM ⇒ **同样的编译错误**（实测：`inrepo.cpp` ⇒ `note: overridden function is 'virtual ch::Component::~Component() noexcept'`）。
 
-⇒ ⇒ 而仓内的 FSM **全是 describe() 里的局部对象**（`examples/spinalhdl-ported/uart/uart_tx.cpp:71`
+⇒ ⇒ 而仓内的 FSM **全是 describe() 里的局部对象**（`examples/spinalhdl-ported/uart/uart_top.h`（⚠️ 原 `uart_tx.cpp:71` · 2026-11-21 迁移后已删除）
 `ch_state_machine<UartTxState, 4> sm;`）⇒ ⇒ **「把局部 FSM 提为组件成员 / 把 demo 抽成可复用组件」
 是标准重构动作** ⇒ ⇒ 该动作今天**编译不过** ⇒ ⇒ **这不是下游的怪用法**（比引用 issue 更有力）。
 

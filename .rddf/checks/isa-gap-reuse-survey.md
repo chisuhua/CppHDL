@@ -1,3 +1,7 @@
+---
+evidence: probe:include/cpu/riscv/rv32i_csr.h
+---
+
 # P6-0 侦察：RV32I ISA 缺口的**复用面清单**（R7 · 2026-11-15）
 
 > ⚠️ **本文件是只读侦察的产物**（`phase-6-next-steps.md` 的 **R7**）⇒ ⇒ 用途 = 给 **P6**

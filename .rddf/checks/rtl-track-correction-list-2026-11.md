@@ -15,6 +15,7 @@ id: rtl-track-correction-list-2026-11
   - .rddf/reviews/b0-batch-verify-2026-11.md · b1-batch-verify-2026-11.md · phase-6-b2-midterm-review-2026-11.md
   - AGENTS.md（CI 锚点段）
   - improvement-suggestions.md（索引表）
+evidence: probe:scripts/verify_arch_ledger_residuals.sh
 ---
 
 # 订正清单：RTL 轨 7 份草案的**状态 / 簿记漂移**（5 条）

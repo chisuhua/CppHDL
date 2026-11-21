@@ -4,6 +4,7 @@ id: decision-request-port-face-2026-11
 提出者: planner（2026-11-13 独立复核 · **护栏实测 + 源码 grep + 产物实测**三路交叉 · 不采信 Status 行自述）
 状态: ✅ **已闭**（2026-11-14 复核：R1 **已登记**（残差登记表 id=23 + 台账 §7 行 23 · 2026-11-13）· R2 已落地 2026-11-13 · R3 已闭 2026-11-12 D1 裁决 · R4 = 指针 ⇒ ⇒ **本单四条全部闭口**）
 关联: .rddf/improvements/rtl-emit-product-tooling-2026-11.md · .rddf/improvements/examples-rtl-sim-coverage-2026-11.md · .rddf/checks/rtl-track-correction-list-2026-11.md · openspec/specs/rtl-emit-portability/spec.md
+evidence: probe:scripts/verify_examples_rtl_sim.sh
 ---
 
 # 决策请求单：RTL 轨的**端口面残留**登记 + **两处判据缺口**（2026-11-13）
@@ -102,6 +103,8 @@ sed -n '/^module top (/,/^);/p' /tmp/x/top.v | grep -cE '^\s+(input|output)'   #
 
 ```
 ── gpio_example（target · emit_rtl_gpio · examples/spinalhdl-ported/gpio/tb_gpio_example.sv）
+  ⚠️ **2026-11-21 迁移后**：发射器已改名为 `tb_gpio_example`（`--emit-rtl`）·
+     断言数 9 → **11** · scenario 7 → **6** ⇒ ⇒ 下方引用是**历史实测输出**
   ⚠️  ②'' spec_checks=0 < 3 ⇒ ⇒ impl-contract only（只能防漂移，不能证明符合规范）
   ✅ gpio_example：命中缓存（245652e62990b313a701c90d3d0af6cfcc5ace3e）
   ✅ gpio_example：RESULT: checks=9 fails=0（scenarios=7 · spec_checks=0）

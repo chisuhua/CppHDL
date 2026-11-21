@@ -1,3 +1,26 @@
+## 2026-11-21 — 台账证据补齐（M-b 批）+ 双后端 parity 登记漏项闭合
+
+**改了什么**：
+
+- **`verify_ledger_evidence` 由红转绿**：`.rddf/improvements/uart-tx-fsm-live-logic-2026-10.md`
+  的 `evidence:` 指向 `examples/spinalhdl-ported/uart/uart_tx.cpp` ⇒ 该文件在 uart_tx 迁移时
+  已删除 ⇒ ⇒ 假证据 ⇒ ⇒ 改指 `examples/spinalhdl-ported/uart/uart_top.h`（FSM 的现居所）。
+- **台账 `evidence:` 待补项 16 → 0**：16 份 `.rddf/checks/*.md` 补 `evidence:`（指向**机械核验
+  该台账的护栏**）⇒ ⇒ `verify_ledger_evidence` 报「110 个台账 · **0 项待补**」。
+  ⚠️ `docs-link-scope.md` 是**派生**文件 ⇒ ⇒ 改的是**派生器**
+  （`scripts/lib/docs_link_scope.py --render` 现在输出 `evidence:` 头）⇒ ⇒ 派生与登记同源。
+- **悬空指针清扫**（本次迁移删掉的文件在台账/文档/CI 注释里的残留引用 → 逐处加「已删除 ⇒ 现位于
+  `<新路径>`」注记，**保留历史陈述**）：`uart_tx.cpp`（4 处）· `uart_rx.cpp`（2 处）·
+  `stream_fifo_example.cpp`（3 处）· `counter.cpp`（1 处）。
+- **`verify_dual_backend_parity` 由红转绿**：`tests/test_verif_history_primitives.cpp`
+  （ADR-076 套件）带 `verilator_e2e` 标签却**不在** capability 的契约锁定清单里 ⇒ ⇒
+  判 `unclassified-labeled-entry` ⇒ ⇒ 经 openspec change
+  `dual-backend-single-backend-registration-2026-11`（**MODIFIED delta · 正常合并通道**）
+  登记进 `dual-backend-test-coverage` 的「现有 9 个 verilator 测试 MUST 保留原状」Requirement
+  ⇒ ⇒ **三个锚点不变**（66 / 286 / 80）⇒ ⇒ 修的是**分类**，不是覆盖面。
+  ⚠️ 与已登记的 `tests/test_verif_wait_level.cpp` **同型**（同一份 `.verif` ⇒ IR 解释器 vs
+  渲染 TB 真 verilator 实跑）⇒ ⇒ 前者已登记、后者漏登记 ⇒ ⇒ 本次补的是**登记面漏项**。
+
 ## 2026-11-21 — `fifo` / `gpio` / `quadrature_encoder` 迁移（8 个产品面 target 收官）
 
 **改了什么**：
@@ -13,7 +36,7 @@
 - **顺带修正**：`tests/CMakeLists.txt` 的 `add_spinalhdl_ported_test(fifo fifo_example)`
   一直指向 **samples** 的 `fifo_example`（不是 spinalhdl-ported 的 FIFO）⇒ ⇒ 改为
   `tb_fifo_stream_example`。
-- 棘轮登记表同步：删掉三份已删文件的未具名端口豁免 ⇒ 锚点 `1347 → 1334`。
+- 棘轮登记表同步：删掉三份已删文件的未具名端口豁免（12 + 10 + 14 = **36** 条）⇒ 锚点 `1347 → 1311`。
 
 **判据面的三个要点**：
 

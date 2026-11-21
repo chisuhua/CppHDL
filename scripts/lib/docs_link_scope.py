@@ -181,6 +181,12 @@ def check(verbose=False):
 
 def render(l1, stats):
     lines = [
+        "---",
+        "# ⚠️ **本文件是台账** ⇒ ⇒ `evidence:` 必填（`scripts/verify_ledger_evidence.sh` 的 R1）",
+        "#    ⇒ 指向**派生器自己的护栏**（本表的分级漂移由它抓 ⇒ ⇒ 同一载体）",
+        "evidence: probe:scripts/verify_docs_links.sh",
+        "---",
+        "",
         "# 文档链接护栏 —— 分级登记表（**派生 · 禁手改**）",
         "",
         "> ⚠️ **本文件由 `scripts/lib/docs_link_scope.py --render` 生成** ⇒ ⇒ **手改无效**",
