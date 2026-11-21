@@ -62,21 +62,33 @@
 
 ## Acceptance Criteria
 
-- [ ] **AC1** 8 个 target 全部变为 `generated=yes`（`.verif` 存在 + TB 含生成器标记 +
+- [x] **AC1** 8 个 target 全部变为 `generated=yes`（`.verif` 存在 + TB 含生成器标记 +
       清单列一致）⇒ 护栏 ⑥⁗
-- [ ] **AC2** 每个 target 的 `RESULT: checks` == 清单 `min_checks` == 期望源 `VERIF-CHECKS`
+- [x] **AC2** 每个 target 的 `RESULT: checks` == 清单 `min_checks` == 期望源 `VERIF-CHECKS`
       == C++ 侧 `interp_checks`（三方等式 + 双侧各自登记）
-- [ ] **AC3** 期望源锚点 ↔ 验证源 `@scenario` **双向 1:1**（⑥''）· TB 无 TODO 残留（⑥‴）
-- [ ] **AC4** 生成物**逐字节重现**（⑥' 新鲜度）· 端口表四件套一致（⑧）· 生成物形态（⑧''）
-- [ ] **AC5** 每条被测性质都有**至少一条变异**使其转红（逐 target 的变异表见期望源登记）；
+- [x] **AC3** 期望源锚点 ↔ 验证源 `@scenario` **双向 1:1**（⑥''）· TB 无 TODO 残留（⑥‴）
+- [x] **AC4** 生成物**逐字节重现**（⑥' 新鲜度）· 端口表四件套一致（⑧）· 生成物形态（⑧''）
+- [x] **AC5** 每条被测性质都有**至少一条变异**使其转红（逐 target 的变异表见期望源登记）；
       **无效变异如实登记**
-- [ ] **AC6** 判据面**不降级**：原手写 TB 的 metamorphic 相对判据在 `.verif` 中有对应形态
+- [x] **AC6** 判据面**不降级**：原手写 TB 的 metamorphic 相对判据在 `.verif` 中有对应形态
       （counter_simple 周期 256 · counter Δ==enable · pwm 窗口计数 · fifo 序列恒等 ·
       quadrature 往返恒等 · uart_rx 序列恒等 + 单拍脉冲）；方法确实变更的（uart_tx 位宽测量）
       在文档中**显式登记**并说明判别力补偿
-- [ ] **AC7** `verify_examples_rtl_sim.sh` PASS（17 项）+ `--self-test` PASS +
+- [x] **AC7** `verify_examples_rtl_sim.sh` PASS（17 项）+ `--self-test` PASS +
       `verify_examples_rtl_sim_coverage.sh` PASS
-- [ ] **AC8** `run_all_ported_tests.sh` 27/27 PASS · `verify_port_naming.sh` PASS（锚点回填）·
+- [x] **AC8** `run_all_ported_tests.sh` 27/27 PASS · `verify_port_naming.sh` PASS（锚点回填）·
       `verify_example_test_wiring.sh` / `verify_example_assertion_quality.sh` PASS
-- [ ] **AC9** 文档同步：根 `AGENTS.md`（如需）· `examples/spinalhdl-ported/AGENTS.md` ·
+- [x] **AC9** 文档同步：根 `AGENTS.md`（如需）· `examples/spinalhdl-ported/AGENTS.md` ·
       `docs/CHANGELOG.md` · 期望源登记 · 清单 · 棘轮登记表
+
+## 用户可见变更
+
+| 项 | 前 | 后 |
+|---|---|---|
+| `examples/spinalhdl-ported/` 的产品面 target | 8 个仍是「手写 C++ `main` + 手写 `.sv` + `emit_rtl*.cpp`」 | **8 个全部**三角色分离（`*_top.h` + `tb_*.cpp` + `tb_*.verif`）· 发射入口 = TB 自身的 `--emit-rtl` |
+| target 名 | `pwm_example` / `counter_example` / `counter_simple_example` / `uart_tx_example` / `uart_rx_example` / `fifo_stream_example` / `gpio_example` / `quadrature_encoder_example` | `tb_pwm_example` / `tb_counter_example` / `tb_counter_simple_example` / `tb_uart_tx_example` / `tb_uart_rx_example` / `tb_fifo_stream_example` / `tb_gpio_example` / `tb_quadrature_encoder_example`（**CTest 条目名不变**） |
+| 顶层端口 | 多为 `top_unnamed_input_*` / `top_unnamed_output` | **全部具名**（`top_<C++ 成员名>`）⇒ 验证源可按名寻址 |
+| 期望值 | C++ 侧通常**无断言**；Verilog 侧手写 | C++ 侧与 TB 侧**同源**（同一份 `.verif` ⇒ 同一份 IR）⇒ 断言不可能漂移 |
+| 断言条数 | 旧手写 TB 口径（如 pwm 13 / counter 54 / counter_simple 768） | 新口径（pwm 29 / counter 9 / counter_simple 258 / uart_tx 49 / uart_rx 32 / fifo 20 / gpio 11 / quadrature 15）⇒ 每行均登记 `min_checks` == `interp_checks` |
+| `EXPECT` 的字面量 | 未声明范围约束 | **MUST 落在端口位宽内**（渲染侧按位宽截断、解释器按 64 位比较 ⇒ 越界值两端结论相反）⇒ 已写入 `docs/usage_guide/04-testbench-guide.md` |
+| UART TX 的位宽 | 由 TB 用边沿时间戳「测出来」 | **434 成为 impl-contract**（`.verif` 无时间戳 ⇒ 用 434 锚定位窗 + 首/尾双端断言）⇒ 改位宽 MUST 同步改 `.verif` |
