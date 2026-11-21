@@ -594,8 +594,9 @@ ch::toVerilog("top.v", dev.instance(), ch::EmitOptions{});
 
 ⚠️ **CLI 的两种形态（扁平 / 层次化）产物顶层端口表同源**（都走 `make_flat_module_view`）
 ⇒ ⇒ **同一个独立 Verilog TB 可吃两种产物**（顶层 module 名同为 `top`）
-⇒ ⇒ 仓内实例 = `examples/riscv-mini/emit_rtl_rv32i_soc_hier`（层次化）与
-`emit_rtl_rv32i_soc`（扁平）共用 `tb_rv32i_soc.sv` ⇒ 两者 `checks=24 fails=0` 完全相同。
+⇒ ⇒ 仓内实例 = `examples/riscv-mini/tb_rv32i_soc` 的 `--emit-rtl --hierarchical`（层次化）
+与 `--emit-rtl`（扁平）共用 `tb_rv32i_soc.sv` ⇒ 两者 `checks=24 fails=0` 完全相同
+（⚠️ **发射入口 = TB 自身** ⇒ 原三个发射薄壳**已删**）。
 
 #### 5.3.1 怎么声明成层
 

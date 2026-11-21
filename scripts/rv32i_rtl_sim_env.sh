@@ -84,16 +84,17 @@ find_emitter() {  # $1 = target 名
     find "$BUILD_DIR" -type f -name "$1" -perm -u+x 2>/dev/null | sort | head -1
 }
 
-FLAT_EMITTER="$(find_emitter emit_rtl_rv32i_soc)"
-HIER_EMITTER="$(find_emitter emit_rtl_rv32i_soc_hier)"
-if [ "$FORM" != "hier" ] && [ -z "$FLAT_EMITTER" ]; then
-    fail "缺扁平发射器 emit_rtl_rv32i_soc ⇒ 先 cmake --build build --target emit_rtl_rv32i_soc"
+# ⚠️ **发射器 = TB 自身**（`--emit-rtl` 模式）⇒ ⇒ 三个薄壳
+#   （`emit_rtl.cpp` / `emit_rtl_fw_init.cpp` / `emit_rtl_hier.cpp`）**已删**
+#   ⇒ ⇒ 扁平 / 层次化两种形态**共用同一个二进制**，靠**模式标记**区分。
+EMITTER_BIN="$(find_emitter tb_rv32i_soc)"
+if [ -z "$EMITTER_BIN" ]; then
+    fail "缺发射器 tb_rv32i_soc ⇒ 先 cmake --build build --target tb_rv32i_soc"
     exit 2
 fi
-if [ "$FORM" != "flat" ] && [ -z "$HIER_EMITTER" ]; then
-    fail "缺层次化发射器 emit_rtl_rv32i_soc_hier ⇒ 先 cmake --build build --target emit_rtl_rv32i_soc_hier"
-    exit 2
-fi
+# ⚠️ **层次化 = 库层 CLI 的既有选项**（`--hierarchical`）⇒ ⇒ 透传给发射器
+FLAT_EMITTER="$EMITTER_BIN"
+HIER_EMITTER="$EMITTER_BIN"
 
 mkdir -p "$OUT_DIR"
 echo "════ RV32I RTL 交付 + Verilator 仿真环境 ════"
@@ -102,14 +103,15 @@ echo "  verilator：$VERILATOR"
 echo "  独立 TB ：$TB_REL"
 echo
 
-run_one() {  # $1 = 形态（flat|hier）；$2 = 发射器
-    local form="$1" emitter="$2"
+run_one() {  # $1 = 形态（flat|hier）；$2 = 发射器；$3 = 发射器附加参数
+    local form="$1" emitter="$2" eargs="${3:-}"
     local work="$OUT_DIR/$form"
     rm -rf "$work"
     mkdir -p "$work"
 
     info "［$form］① 生成 RTL 产物"
-    if ! "$emitter" --out "$work" --emit-hygiene >"$work/emit.log" 2>&1; then
+    # ⚠️ **参数不加引号**（要按空格拆成多个 token）⇒ ⇒ 无参时为空
+    if ! "$emitter" --emit-rtl $eargs --out "$work" --emit-hygiene >"$work/emit.log" 2>&1; then
         fail "[$form] 发射失败（见 $work/emit.log）"; tail -5 "$work/emit.log" >&2; return 1
     fi
     local dut_v="$work/top.v"
@@ -162,10 +164,10 @@ run_one() {  # $1 = 形态（flat|hier）；$2 = 发射器
 
 RC=0
 if [ "$FORM" = "flat" ] || [ "$FORM" = "both" ]; then
-    run_one flat "$FLAT_EMITTER" || RC=1
+    run_one flat "$FLAT_EMITTER" "" || RC=1
 fi
 if [ "$FORM" = "hier" ] || [ "$FORM" = "both" ]; then
-    run_one hier "$HIER_EMITTER" || RC=1
+    run_one hier "$HIER_EMITTER" "--hierarchical" || RC=1
 fi
 
 echo "════ 产物清单 ════"

@@ -215,8 +215,12 @@ if [ "$SELF_TEST" -eq 1 ]; then
     # 投毒 ②：清空某行的理由 ⇒ ⇒ 完备性必红
     # ⚠️ 目标 MUST 是**落选表里真实存在**的行（`uart_rx_example` 是**已覆盖**项
     #   ⇒ ⇒ 不在落选表里 ⇒ ⇒ 投毒会落空 ⇒ ⇒ 自检会误报「无判别力」）
+    # ⚠️ **2026-11-22 订正**：原投毒目标是 `stream_fork_demo` ⇒ ⇒ 它已于
+    #   2026-11-20（stream_fork 试点）**转入覆盖表** ⇒ ⇒ 不在落选表里 ⇒ ⇒
+    #   投毒**落空** ⇒ ⇒ 自检恒红（误报「判据 ② 无判别力」）⇒ ⇒ 改投
+    #   `rv32i_phase3_test`（**仍在**落选表里）。
     cp "$EXCLUSIONS_TSV" "$WORK/exclusions.tsv"
-    awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && NF > 0 && $1 == "stream_fork_demo" {$3=""; print; next} {print}' \
+    awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && NF > 0 && $1 == "rv32i_phase3_test" {$3=""; print; next} {print}' \
         "$EXCLUSIONS_TSV" >"$WORK/exclusions.tsv"
     if run_poisoned; then
         fail "④ 投毒 ②（清空一条落选理由）⇒ 判据仍绿 ⇒ ⇒ 判据 ② 无判别力"
@@ -225,9 +229,12 @@ if [ "$SELF_TEST" -eq 1 ]; then
     fi
 
     # 投毒 ③：给数值列塞散文 ⇒ ⇒ 列纯度必红
+    # ⚠️ **2026-11-22 订正**：原投毒目标是 `uart_tx_example` ⇒ ⇒ 该行的 `target`
+    #   列**改名**为 `tb_uart_tx_example`（三角色分离）⇒ ⇒ 旧名**匹配不到任何行**
+    #   ⇒ ⇒ 投毒**落空** ⇒ ⇒ 自检恒红（误报「判据 ③ 无判别力」）⇒ ⇒ 改投新名。
     cp "$TARGETS_TSV" "$WORK/targets.tsv"
     awk -F'\t' -v cspec="$C_SPEC" -v ct="$C_TARGET" \
-        'BEGIN{OFS="\t"} !/^#/ && NF > 0 && $ct == "uart_tx_example" {$cspec=$cspec" · 散文"; print; next} {print}' \
+        'BEGIN{OFS="\t"} !/^#/ && NF > 0 && $ct == "tb_uart_tx_example" {$cspec=$cspec" · 散文"; print; next} {print}' \
         "$TARGETS_TSV" >"$WORK/targets.tsv"
     if run_poisoned; then
         fail "④ 投毒 ③（给 spec_checks 塞散文）⇒ 判据仍绿 ⇒ ⇒ 判据 ③ 无判别力"

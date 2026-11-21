@@ -765,7 +765,7 @@ jobs:
       # ⚠️ 不需要 verilator / 网络 ⇒ ⇒ 主 job（BUILD_VERILATOR=OFF）也能跑
       shell: bash
       run: |
-        cmake --build build --target emit_rtl_rv32i_soc emit_rtl_rv32i_soc_fw_init
+        cmake --build build --target tb_rv32i_soc
         scripts/verify_rv32i_fw_init_rtl.sh
         scripts/verify_rv32i_fw_init_rtl.sh --self-test
 
@@ -779,7 +779,7 @@ jobs:
       # ⚠️ 不需要 verilator / 网络 ⇒ 主 job 可跑
       shell: bash
       run: |
-        cmake --build build --target emit_rtl_rv32i_soc
+        cmake --build build --target tb_rv32i_soc
         scripts/verify_dtcm_read_timing.sh
         scripts/verify_dtcm_read_timing.sh --self-test
 

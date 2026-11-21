@@ -47,7 +47,7 @@
 #   bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条投毒 ⇒ 必红 ⇒ 还原复绿
 #
 # 前置：`build/tests/hier_rtl_products`（生成器）
-#       + `build/examples/riscv-mini/emit_rtl_rv32i_soc_hier`（R8′ 的产品语料发射器）
+#       + `build/examples/riscv-mini/tb_rv32i_soc`（R8′ 的产品语料发射器 · `--emit-rtl --hierarchical` 模式）
 #       + 仓内 verilator（`build/verilator-install/bin/verilator`）
 #       ⇒ **缺一即失败**（fail-closed）。
 # ============================================================================
@@ -60,7 +60,9 @@ GENERATOR="${HIER_RTL_GENERATOR:-$REPO_ROOT/build/tests/hier_rtl_products}"
 #    ⚠️ 为什么独立：R8 的语料 = `tests/` 的生成器；RV32I SoC 是**产品级**语料
 #    （`examples/riscv-mini/`）⇒ ⇒ `tests/**` MUST NOT 引用 `examples/**`
 #    （`example-file-boundary` 裁决）⇒ ⇒ 不可能塞进同一个生成器。
-RV32I_HIER_EMITTER="${RV32I_HIER_EMITTER:-$REPO_ROOT/build/examples/riscv-mini/emit_rtl_rv32i_soc_hier}"
+#    ⚠️ **发射器 = TB 自身**（`--emit-rtl --hierarchical` 模式）⇒ ⇒ 原
+#    `emit_rtl_hier.cpp` 薄壳**已删** ⇒ ⇒ 层次化靠**模式标记**区分。
+RV32I_HIER_EMITTER="${RV32I_HIER_EMITTER:-$REPO_ROOT/build/examples/riscv-mini/tb_rv32i_soc}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/logs"
@@ -84,7 +86,7 @@ require_tools() {
         return 1
     }
     [ -x "$RV32I_HIER_EMITTER" ] || {
-        fail "R0 RV32I 层次化发射器不可用：$RV32I_HIER_EMITTER（先 cmake --build build --target emit_rtl_rv32i_soc_hier）"
+        fail "R0 RV32I 层次化发射器不可用：$RV32I_HIER_EMITTER（先 cmake --build build --target tb_rv32i_soc）"
         return 1
     }
     [ -f "$EXTRACTOR" ] || {
@@ -570,7 +572,9 @@ PY
 gen_rv32i_hier() {  # $1 = out dir · $2 = log
     local dir="$1" log="$2"
     rm -rf "$dir"; mkdir -p "$dir"
-    "$RV32I_HIER_EMITTER" --out "$dir" --emit-hygiene >"$log" 2>&1
+    # ⚠️ **`--emit-rtl --hierarchical`** = TB 自身的发射模式（两个标记分别是
+    #   「进入发射模式」与「库层 CLI 的层次化选项」⇒ ⇒ 位置无关）
+    "$RV32I_HIER_EMITTER" --emit-rtl --hierarchical --out "$dir" --emit-hygiene >"$log" 2>&1
 }
 
 # ── R8′：RV32I **产品级**层次化语料的顶层端口表 == **手推期望集** ────────────

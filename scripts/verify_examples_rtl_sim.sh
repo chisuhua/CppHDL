@@ -954,7 +954,7 @@ run_self_test() {
 # REGISTERED_SOC: 0
 # REGISTERED_HIER: 1
 selftest_target	target	examples/axi4/tb_phase3a_example.cpp	Phase3ATop	tb_phase3a_example	--emit-rtl	-	$2	$4	no	6	4	3	self-test fixture（**手写** TB · 只作 ①/②/⑤/⑥ 的载体）
-selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	-	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
+selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	tb_rv32i_soc	--emit-rtl --hierarchical	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
 tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	tb_axi4_lite_example	--emit-rtl	113	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体 · 自发行 ⇒ ⑨/⑨' 的载体）
 EOF
     }

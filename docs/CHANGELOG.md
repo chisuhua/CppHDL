@@ -1,3 +1,50 @@
+## 2026-11-22 — RV32I SoC 示例的**三角色分离**（发射入口并入 TB 自身 · 薄壳清零）
+
+**改了什么**：
+
+- **形态对齐**：RV32I SoC 此前是「**三个发射薄壳** + 一份手写 `.sv` TB」的形态 ⇒ ⇒
+  与 `examples/axi4` / `examples/stream` 的**三角色分离**（设计头 `*_top.h` → 激励驱动
+  `tb_*.cpp` → 激励源 `tb_*.{verif,sv}`）**不同型** ⇒ ⇒ 本次收敛为同型。
+- **新增**：`examples/riscv-mini/tb_rv32i_soc.cpp`（**激励驱动**）⇒ ⇒
+  · **默认模式** = **验证模式**（解释器路径 · 装载 7 字小程序 ⇒ **24 条手推判据**
+    ⇒ `RESULT: checks=24 fails=0` ⇒ ⇒ 与 `.sv` TB **同 24 条**、**实现独立**
+    ⇒ ⇒ 两侧**互为跨后端佐证**（期望值**同一份登记**
+    `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc`）；
+  · `--emit-rtl` = **扁平** RTL 产物 · `--emit-rtl --hierarchical` = **层次化**产物
+    （`--hierarchical` 是**库层 CLI 的既有选项** ⇒ 位置无关）·
+    `--emit-rtl --firmware-init` = **带固件初值**的扁平产物。
+- **删除**三个发射薄壳：`emit_rtl.cpp` / `emit_rtl_fw_init.cpp` / `emit_rtl_hier.cpp`
+  ⇒ ⇒ **产物逐字节不变**（`top.v` + `manifest.json` 在**卫生产物**（`--emit-hygiene`）
+  与**默认产物**两侧均 `cmp` 一致 ⇒ ⇒ 产品面**零漂移**）。
+  ⇒ ⇒ 这是 change `emit-cli-into-example-2026-11` 的「**RV32I 侧 3 个样板薄壳 ⇒
+  独立立项**」那一项的落地。
+- **登记面**：`.rddf/checks/examples-rtl-sim-targets.tsv` 的 RV32I 行
+  `kind=dut` → **`kind=target`**（`target=tb_rv32i_soc` · `emitter=tb_rv32i_soc` ·
+  `emitter_args=--emit-rtl` · `interp_checks=24`）⇒ ⇒ **自发行** ⇒ ⇒ 护栏的
+  **⑨**（C++ 侧条数等式）+ **⑨'**（自发行 MUST 登记 `interp_checks > 0`）**首次覆盖**
+  RV32I ⇒ ⇒ `examples/CMakeLists.txt` 的 `CH_TRACKED_EXAMPLE_TARGETS` **27 → 28**
+  ⇒ ⇒ 覆盖守恒等式 `28 == 16 ∪ 12`。
+- **fail-closed**（与 `examples/axi4` 同型）：默认模式收到**任何**未知参数 ⇒ exit **2**；
+  发射模式缺 `--out` ⇒ exit **2**（MUST NOT 回落到库层默认 `rtl_out/`）。
+
+**护栏与消费者同步**（旧名归零）：
+
+| 位置 | 处置 |
+|---|---|
+| `scripts/verify_examples_rtl_sim.sh` | `kind=hier` 自检 fixture 的 `emitter` → `tb_rv32i_soc` + `emitter_args=--emit-rtl --hierarchical` |
+| `scripts/verify_hierarchical_rtl.sh` | `RV32I_HIER_EMITTER` → `build/examples/riscv-mini/tb_rv32i_soc`（调用加 `--emit-rtl --hierarchical`）|
+| `scripts/verify_dtcm_read_timing.sh` | 发射器 → `tb_rv32i_soc`（调用加 `--emit-rtl`）|
+| `scripts/verify_rv32i_fw_init_rtl.sh` | **两个**发射器 → **同一个** `tb_rv32i_soc`（基线 = 无参 / 带初值 = `--firmware-init`）⇒ ⇒ F0–F5 五项判据 + `--self-test` **全部保留** |
+| `scripts/rv32i_rtl_sim_env.sh` | 扁平 / 层次化**共用**同一个二进制（靠模式标记区分）|
+| `.github/workflows/ci.yml` | 构建目标 → `tb_rv32i_soc` |
+| `examples/disabled_examples.txt` | 移除 `emit_rtl_rv32i_soc_fw_init` 的归属登记（**判据面零丢失** ⇒ 见上表）|
+| `examples/removed_examples.txt` | 新增三条**删除留痕**（理由 + 归位条件 + 「产物逐字节不变」证据）|
+
+⚠️ **`.sv` TB 仍 MUST 保持手写**（`generated=no` = **终态**，不是欠账）：`.verif` 的
+**封闭原语集**表达不了 4 个形态（首事件捕获 / 窗口内集合成员 / 序列相邻差 / 跨拍单调不减）
+⇒ ⇒ ADR-076 复核（2026-11-21）结论不变 ⇒ ⇒ 本次**不动**该结论，只新增**独立**的
+C++ 侧实现（普通 C++ **无**封闭原语集 ⇒ 那 4 个形态**全部可表达** ⇒ ⇒ 判据面**零缺口**）。
+
 ## 2026-11-21 — 改进提案索引的**状态列**从 frontmatter 生成（+ 一致性护栏）
 
 **改了什么**：

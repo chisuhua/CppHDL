@@ -16,8 +16,8 @@
 | # | 交付物 | 位置 | 说明 |
 |---|---|---|---|
 | ① | **通用生成器**（库 + 薄 CLI） | `include/rtl_emit/cli.h` · `src/rtl_emit/cli.cpp` | 用户在自己的可执行文件里登记设计 ⇒ `run_emit_cli` |
-| ② | 扁平 RTL 发射入口 | `examples/riscv-mini/emit_rtl.cpp` → `emit_rtl_rv32i_soc` | `toVerilog(path, root, opts)`（带根入口） |
-| ③ | **层次化** RTL 发射入口 | `examples/riscv-mini/emit_rtl_hier.cpp` → `emit_rtl_rv32i_soc_hier` | `--hierarchical` ⇒ `toVerilogHierarchical` |
+| ② | 扁平 RTL 发射入口 | `examples/riscv-mini/tb_rv32i_soc.cpp` → `tb_rv32i_soc --emit-rtl` | `toVerilog(path, root, opts)`（带根入口） |
+| ③ | **层次化** RTL 发射入口 | 同上二进制 · `tb_rv32i_soc --emit-rtl --hierarchical` | `--hierarchical` ⇒ `toVerilogHierarchical` |
 | ④ | 产物清单 | `<out>/manifest.json`（schema `rtl-emit-manifest-v2`） | `port_table[]` = **产品端口面的唯一权威** |
 | ⑤ | 独立 Verilog TB | `examples/riscv-mini/tb_rv32i_soc.sv` | 装载自己的小程序 ⇒ 期望值**全由 ISA 语义手推** |
 | ⑥ | **仿真环境**（一条命令） | `scripts/rv32i_rtl_sim_env.sh` | 生成 → lint → 编译 → 运行 ⇒ 打印 `RESULT: checks=N fails=0` |
@@ -148,9 +148,9 @@ bash scripts/rv32i_rtl_sim_env.sh
 ### 3.2 手动四步
 
 ```bash
-# ① 生成（形态二选一）
-build/examples/riscv-mini/emit_rtl_rv32i_soc      --out out/flat --emit-hygiene
-build/examples/riscv-mini/emit_rtl_rv32i_soc_hier --out out/hier --emit-hygiene
+# ① 生成（形态二选一）—— ⚠️ **发射入口 = TB 自身**（`--emit-rtl` 模式）
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl                 --out out/flat --emit-hygiene
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --hierarchical   --out out/hier --emit-hygiene
 
 # ② lint
 verilator --lint-only --top-module top out/hier/top.v
@@ -171,6 +171,7 @@ verilator --binary --timing -CFLAGS -fcoroutines --x-assign unique \
 | TB 的固件 | TB **自带**小程序（7 个字：2×`addi` + `nop` + `add` + `sw` + `jal` 自环）⇒ ⇒ **不依赖任何仓内金标** ⇒ ⇒ 改金标时不会红 |
 | 期望值 | **手推**（ISA 语义）⇒ ⇒ 期望源登记 = `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` ⇒ ⇒ **禁抄仿真输出** |
 | 判据数 | `checks=24`（6 个语义场景：复位 PC / 每个字都被取到 / pc +4 / 写回 x1=42·x2=11·x3=53 / 写存储 53@0 / 退休计数单调） |
+| **C++ 侧** | **同 24 条判据**的**独立实现** = `build/examples/riscv-mini/tb_rv32i_soc`（默认模式 · 解释器路径）⇒ ⇒ 两侧**互为跨后端佐证**（期望值**同一份登记**）⇒ ⇒ ⚠️ 「两后端一致」**不是**正确性证据 ⇒ ⇒ 期望值 MUST **手推** |
 | 护栏 | `scripts/verify_examples_rtl_sim.sh`（四件套 + 形态判据 ⑧'）+ `--self-test`（8 条投毒各自转红） |
 
 ### 3.4 固件怎么进产物（三条路，SoC 只能走第一条）
@@ -189,8 +190,8 @@ auto itcm_init = load_hex_words("fw.mem");     // → std::vector<uint32_t>
 return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm_init, /* dtcm */ {});
 ```
 
-> 仓内示例 = `examples/riscv-mini/emit_rtl_fw_init.cpp`（`emit_rtl_rv32i_soc_fw_init`），
-> 固件**硬编码**在 `examples/riscv-mini/src/rv32i_fw_demo.h`（手推的字镜像）⇒ ⇒
+> 仓内示例 = `examples/riscv-mini/tb_rv32i_soc.cpp` 的 **`--emit-rtl --firmware-init` 模式**
+> （固件**硬编码**在 `examples/riscv-mini/src/rv32i_fw_demo.h` · 手推的字镜像）⇒ ⇒
 > 产物级判据 = `scripts/verify_rv32i_fw_init_rtl.sh`（F0–F5）· 固件链路判据 =
 > `scripts/verify_rv32i_fw_dump.sh`（D0–D6）。
 > ⚠️ **层次化形态暂无 fw_init 变体**（本次不做）⇒ ⇒ 需要时按同一模式加一个即可

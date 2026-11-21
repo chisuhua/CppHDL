@@ -163,39 +163,25 @@ set_tests_properties(riscv_mini_cache_smoke PROPERTIES
     TIMEOUT 600
 )
 
-# ── RTL 发射入口（`examples-rtl-sim-coverage` E3/E5 · 方案 3）────────────
-# ⚠️ **每个 example 一个独立 target** ⇒ ⇒ 护栏 `scripts/verify_examples_rtl_sim.sh`
-#   直接调用它产出 RTL + TB 骨架 ⇒ ⇒ 「产物从哪来」有了**唯一**答案。
-add_executable(emit_rtl_rv32i_soc emit_rtl.cpp)
-target_link_libraries(emit_rtl_rv32i_soc PRIVATE cpphdl)
-target_include_directories(emit_rtl_rv32i_soc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set_target_properties(emit_rtl_rv32i_soc PROPERTIES
-    CXX_STANDARD 23
-    CXX_STANDARD_REQUIRED ON
-)
-
-# ⚠️ **同一设计的「带固件初值」变体**（`firmware-load-chain` L2 = 路线 A）：
-#   与上面的 target **共用全部组件**，唯一差别 = TCM 的 `init_data`
-#   ⇒ ⇒ 产物里多出 `initial begin mem[i] = … end`
-#   ⇒ ⇒ **零端口变更** ⇒ ⇒ 两条产物路径互不影响（各自的 `--out` 目录）
-add_executable(emit_rtl_rv32i_soc_fw_init emit_rtl_fw_init.cpp)
-target_link_libraries(emit_rtl_rv32i_soc_fw_init PRIVATE cpphdl)
-target_include_directories(emit_rtl_rv32i_soc_fw_init PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set_target_properties(emit_rtl_rv32i_soc_fw_init PROPERTIES
-    CXX_STANDARD 23
-    CXX_STANDARD_REQUIRED ON
-)
-
-# ── 层次化 RTL 发射入口（诉求 ⑤「层次化输出示例」的产品级交付面）────────
-# ⚠️ **独立 target**（不与 `emit_rtl_rv32i_soc` 合流）⇒ ⇒ 层次化走**层次化入口**
-#   （`toVerilogHierarchical(path, root, …)` · ADR-058 §2.3）⇒ ⇒ 根必须显式传入
-#   ⇒ ⇒ 库层 CLI 的 `--hierarchical` 承担这件事（`rtl_emit::run_emit_cli`）。
-# ⚠️ **共用同一个设计定义**（`Rv32iPipelineTop`）⇒ ⇒ 唯一差别 = 发射形态 ⇒ ⇒
-#   两种产物的**顶层端口表同源** ⇒ ⇒ **同一个独立 TB 可吃两种产物**。
-add_executable(emit_rtl_rv32i_soc_hier emit_rtl_hier.cpp)
-target_link_libraries(emit_rtl_rv32i_soc_hier PRIVATE cpphdl)
-target_include_directories(emit_rtl_rv32i_soc_hier PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set_target_properties(emit_rtl_rv32i_soc_hier PROPERTIES
+# ── RV32I SoC 的**激励驱动**（三角色分离 · `example-file-boundary-2026-11`）──
+# ⚠️ **发射入口 = TB 自身**（`--emit-rtl` 模式）⇒ ⇒ 原独立的三个发射薄壳
+#   （`emit_rtl.cpp` / `emit_rtl_fw_init.cpp` / `emit_rtl_hier.cpp`）**已删**
+#   ⇒ ⇒ 与 `examples/axi4` / `examples/stream` 的收敛**同型**
+#   （change `emit-cli-into-example` + 蓝图 §4.3.3「职责分离裁决」）。
+# ⚠️ 默认模式 = **验证模式**（解释器路径 ⇒ `RESULT: checks=24 fails=0`）。
+# ⚠️ 三种发射形态**共用这一个二进制**（模式标记 ⇒ 库层 CLI 的既有选项）：
+#   · `--emit-rtl`                ⇒ 扁平产物
+#   · `--emit-rtl --hierarchical` ⇒ 层次化产物（诉求 ⑤ · 走 `toVerilogHierarchical` ·
+#                                    ADR-058 §2.3 · 产物 = 单文件 8 module）
+#   · `--emit-rtl --firmware-init` ⇒ 带固件初值的扁平产物（`firmware-load-chain` L2 路线 A）
+#                                    ⇒ 与基线**共用全部组件**，唯一差别 = TCM 的 `init_data`
+#                                    ⇒ 产物里多出 `initial begin mem[i] = … end` ⇒ **零端口变更**
+# ⇒ ⇒ 三种产物的**顶层端口表同源**（同一个 `make_flat_module_view`）
+#   ⇒ ⇒ **同一个独立 TB 可吃全部产物**；各自用独立的 `--out` 目录 ⇒ 互不影响。
+add_executable(tb_rv32i_soc tb_rv32i_soc.cpp)
+target_link_libraries(tb_rv32i_soc PRIVATE cpphdl)
+target_include_directories(tb_rv32i_soc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(tb_rv32i_soc PROPERTIES
     CXX_STANDARD 23
     CXX_STANDARD_REQUIRED ON
 )

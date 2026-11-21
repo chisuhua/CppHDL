@@ -13,12 +13,22 @@ examples/riscv-mini/
 ├── rv32i_phase1_test.cpp    # RegFile + ALU + Decoder
 ├── rv32i_phase2_test.cpp    # Branch + Jump (13/13)
 ├── rv32i_phase3_test.cpp    # Load/Store (13/13)
-├── emit_rtl.cpp             # RTL 发射入口（基线：内存无初值）
-├── emit_rtl_fw_init.cpp     # RTL 发射入口 · **带固件初值**（`firmware-load-chain` L2 路线 A）
-├── emit_rtl_hier.cpp        # RTL 发射入口 · **层次化形态**（诉求 ⑤ 的产品级交付面）
-│                            #   ⇒ 走库层 CLI 的 `--hierarchical`（`toVerilogHierarchical`）
-│                            #   ⇒ 产物 = 单文件 8 module · 顶层端口表与扁平**同源**（34）
-│                            #   ⇒ **复用同一个独立 TB** `tb_rv32i_soc.sv`
+├── tb_rv32i_soc.cpp         # **激励驱动**（三角色分离 · 与 `examples/axi4` / `examples/stream` 同型）
+│                            #   ⇒ 默认模式 = **验证模式**（解释器路径 ⇒ 24 条手推判据
+│                            #     ⇒ `RESULT: checks=24 fails=0`）
+│                            #   ⇒ `--emit-rtl` = **发射模式**（扁平 RTL 产物）
+│                            #   ⇒ `--emit-rtl --hierarchical` = 层次化产物（诉求 ⑤ 的产品级交付面
+│                            #     ⇒ 走库层 CLI 的 `--hierarchical`（`toVerilogHierarchical`）
+│                            #     ⇒ 产物 = 单文件 8 module · 顶层端口表与扁平**同源**（34）
+│                            #     ⇒ **复用同一个独立 TB** `tb_rv32i_soc.sv`）
+│                            #   ⇒ `--emit-rtl --firmware-init` = 带固件初值的扁平产物
+│                            #     （`firmware-load-chain` L2 路线 A）
+│                            # ⚠️ 原三个发射薄壳（`emit_rtl.cpp` / `emit_rtl_fw_init.cpp` /
+│                            #   `emit_rtl_hier.cpp`）**已删**（2026-11-22）⇒ ⇒ 删除留痕见
+│                            #   `examples/removed_examples.txt`；**产物逐字节不变**
+├── tb_rv32i_soc.sv         # **独立 Verilog TB**（**手写** · 24 条判据 · 与 C++ 侧同源）
+│                            #   ⇒ `.verif` 封闭原语集表达不了 4 个形态 ⇒ MUST 保持手写
+│                            #     （`generated=no` = **终态**，不是欠账 · ADR-076 复核 2026-11-21）
 ├── src/                     # **2** 个头（SoC 顶层 + 带 `.data` 的示例固件）
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
 │   └── rv32i_pipeline_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
@@ -38,6 +48,28 @@ examples/riscv-mini/
 > 根因是根 `CMakeLists.txt` 的 `enable_testing()` 排在 `add_subdirectory(examples)`
 > 之后 ⇒ examples 子目录的 `add_test()` 是空操作）。
 > 护栏：`scripts/verify_example_test_wiring.sh`。
+
+## RUN（SoC 产品面 · 三角色）
+```bash
+# ① C++ 侧（解释器路径）· 24 条手推判据
+build/examples/riscv-mini/tb_rv32i_soc
+#   ⇒ RESULT: checks=24 fails=0
+
+# ② 扁平 RTL 产物（发射入口 = TB 自身）
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --out out/flat --emit-hygiene
+
+# ③ 层次化 RTL 产物（8 module · 顶层端口表与扁平同源）
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --hierarchical --out out/hier --emit-hygiene
+
+# ④ 带固件初值的扁平产物（TCM 的 `initial` 初值块）
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --firmware-init --out out/fw --emit-hygiene
+
+# ⑤ 一条命令跑通（生成 → lint → 编译 → 运行 ⇒ RESULT: checks=24 fails=0）
+bash scripts/rv32i_rtl_sim_env.sh
+```
+
+⚠️ **fail-closed**：默认模式收到**任何**未知参数 ⇒ exit **2**；
+发射模式缺 `--out` ⇒ exit **2**（MUST NOT 回落到库层默认 `rtl_out/`）。
 
 ## PASSING TESTS
 - Phase 1 (RegFile/ALU/Decoder): ✅ 537 lines test_forwarding, 235 lines test_hazard_complete
@@ -83,6 +115,9 @@ examples/riscv-mini/
 | Pipeline stages | `include/cpu/pipeline/stages/` |
 | ALU / RegFile / PC / decoder | `include/cpu/pipeline/{rv32i_alu,rv32i_regfile,rv32i_pc,rv32i_decoder}.h` |
 | SoC 顶层（唯一留在本目录的头）| `src/rv32i_pipeline_top.h` |
+| SoC 的**激励驱动**（C++ 侧 + 发射入口）| `tb_rv32i_soc.cpp`（**24 条判据**的 C++ 侧实现）|
+| SoC 的**独立 Verilog TB**（手写）| `tb_rv32i_soc.sv`（**24 条判据**的 Verilog 侧实现）|
+| 期望值**单一真相**（两侧共用）| `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` |
 
 > ⚠️ **2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）**：
 > 本目录的 `src/` 曾有 **32** 个头，其中 10 组与 `include/cpu/` **同名**

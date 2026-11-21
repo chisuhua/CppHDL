@@ -27,7 +27,8 @@ cd "$REPO_ROOT" || exit 2
 
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 WORK="${WORK:-/tmp/opencode/dtcm_timing}"
-EMITTER="$BUILD_DIR/examples/riscv-mini/emit_rtl_rv32i_soc"
+# ⚠️ **发射器 = TB 自身**（`--emit-rtl` 模式）⇒ ⇒ 原 `emit_rtl.cpp` 薄壳**已删**
+EMITTER="$BUILD_DIR/examples/riscv-mini/tb_rv32i_soc"
 
 red() { printf '\033[0;31m%s\033[0m\n' "$*"; }
 green() { printf '\033[0;32m%s\033[0m\n' "$*"; }
@@ -54,7 +55,7 @@ FAILED=0
 echo "── W0：发射器存在（fail-closed）"
 if [ ! -x "$EMITTER" ]; then
     red "❌ W0 发射器缺失：$EMITTER"
-    echo "     先构建：cmake --build $BUILD_DIR --target emit_rtl_rv32i_soc" >&2
+    echo "     先构建：cmake --build $BUILD_DIR --target tb_rv32i_soc" >&2
     exit 2
 fi
 ok "W0 发射器存在"
@@ -168,7 +169,7 @@ check_product() {
 
 echo "── W1–W3 + W4：发射两次并判定"
 for d in a b; do
-    if ! "$EMITTER" --out "$WORK/$d" >"$WORK/$d/emit.log" 2>&1; then
+    if ! "$EMITTER" --emit-rtl --out "$WORK/$d" >"$WORK/$d/emit.log" 2>&1; then
         fail "发射失败（见 $WORK/$d/emit.log）"
         exit 1
     fi

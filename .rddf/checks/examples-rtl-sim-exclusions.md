@@ -32,7 +32,8 @@ evidence: probe:scripts/verify_examples_rtl_sim_coverage.sh
 ⚠️ **TSV 里另有两个不计入「首批」的条目**（各自独立桶 · 见 tsv 的 `REGISTERED_SOC` /
 `REGISTERED_HIER` 锚点）：`axi_soc_example`（`kind=soc` · SoC 层产物）与
 `riscv-mini-rv32i-soc-hier`（`kind=hier` · **同一设计的层次化形态** ⇒ 复用同一份独立 TB）。
-⇒ ⇒ 守恒等式 **`27 == 15 ∪ 12`**（⚠️ **2026-11-20 订正**：原写 `28 == 10 ∪ 18`
+⇒ ⇒ 守恒等式 **`28 == 16 ∪ 12`**（⚠️ **2026-11-22 订正**：`tb_rv32i_soc` 转为被跟踪
+target ⇒ tracked 27 → 28、覆盖 15 → 16；⚠️ **2026-11-20 订正**：原写 `28 == 10 ∪ 18`
 —— `axi4_full_example` 退役后 tracked 减 1、phase3a 与 stream_mux / stream_demux /
 stream_fork / stream_arbiter 转入覆盖表后落选再减 5）
 **只**作用于「首批」口径⇒ ⇒ 这两个桶不参与 ✅
@@ -49,7 +50,7 @@ stream_fork / stream_arbiter 转入覆盖表后落选再减 5）
 > ⚠️ **落选 ≠ 不做**：该表是「这批不做」的登记，**不是**永久排除。
 > 每行都带**归位条件** ⇒ ⇒ 「新增即漏」被堵住。
 > ⚠️ **守恒是机械判据**（不再靠本文的散文承诺）：`scripts/verify_examples_rtl_sim_coverage.sh`
-> ①（`27 == 15 ∪ 12` 且三者互斥）⇒ ⇒ **漏登记即 CI 红**。
+> ①（`28 == 16 ∪ 12` 且三者互斥）⇒ ⇒ **漏登记即 CI 红**。
 > ⚠️ **2026-11-17 订正**：本文此前写「共 **19** 项 ⇒ 落选 **10**」且表里只有 **9** 行 ⇒ ⇒
 > 被跟踪集合从 19 涨到 28 后，**9 个 example 既没进覆盖表、也没进落选表** ⇒ ⇒
 > 「新增即漏」**当时已经失效** ⇒ ⇒ 本次按 28 项重算并补登
@@ -59,7 +60,7 @@ stream_fork / stream_arbiter 转入覆盖表后落选再减 5）
 
 | target | 未覆盖 | 原因 |
 |---|---|---|
-| `riscv-mini-rv32i-soc` | ① **minitest 固件全流程**（178 条退休、`sw` 落 tohost 的真实判定） | 外部 TB 装载 minitest 会让期望值依赖**仓内金标** ⇒ ⇒ B3 的 T5 要重算它 ⇒ ⇒ 硬判必在 B3 落地时转红 ⇒ ⇒ **改用 TB 自己的小程序**（判据全由 ISA 语义手推） |
+| `tb_rv32i_soc` | ① **minitest 固件全流程**（178 条退休、`sw` 落 tohost 的真实判定） | 外部 TB 装载 minitest 会让期望值依赖**仓内金标** ⇒ ⇒ B3 的 T5 要重算它 ⇒ ⇒ 硬判必在 B3 落地时转红 ⇒ ⇒ **改用 TB 自己的小程序**（判据全由 ISA 语义手推） |
 | | ② **CSR / `ECALL` / `EBREAK` / `FENCE`** | 仓内 `AGENTS.md` KNOWN LIMITATIONS 明写「**不在任何仓内 capability 覆盖内**」⇒ ⇒ 需独立立项 |
 | | ③ 分支预测 / mispredict 统计 | `obs_perf_branch_mispredict` 已暴露，但**期望源**（预测器契约）未定义 ⇒ ⇒ 待 ISA/预测器 capability 收口 |
 | `uart_rx_example` | ① **停止位错误 ⇒ 不产生 `valid`**（framing check） | 本实现**不校验停止位** ⇒ ⇒ 判它 = 要求一个没有的能力 ⇒ ⇒ 已登记为已知偏离 |

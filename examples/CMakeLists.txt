@@ -72,6 +72,9 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     rv32i_phase1_test
     rv32i_phase2_test
     rv32i_phase3_test
+
+    # PHASE: RISC-V Mini · SoC 产品面（三角色分离 · 与 axi4 / stream 同型）
+    tb_rv32i_soc
 )
 
 # ---------------------------------------------------------------------------

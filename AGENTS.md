@@ -76,7 +76,7 @@ CppHDL/
 | 层次化 RTL 输出（分析层 / 发射层） | `include/hierarchy_analysis.h` + `include/hierarchy_verilog.h`（`src/hierarchy_analysis.cpp` / `src/hierarchy_verilog.cpp`）|
 | 层次化 ≡ 扁平 **等价性**（公共 API · 逐拍） | `include/hierarchy_equivalence.h`（命名空间 `ch::hier_eq`）+ `src/hierarchy_equivalence.cpp`（实现）+ `src/hierarchy_equivalence_impl.h`（内部头）· 判据用例 = `tests/test_hierarchy_equivalence.cpp` · 仓外视角 = `tests/test_public_equivalence_api.cpp`（`tests/hier_equivalence.h` 现为**兼容转发层**）|
 | **RTL 验证的单一真相源**（`.verif` → IR → 两个执行后端） | 验证源 DSL = `examples/axi4/tb_axi4_lite_example.verif` · 库层 = `include/rtl_emit/verif.h`（`src/rtl_emit/verif_{scan,run,render}.cpp`）· 判据用例 = `tests/test_verif_single_source.cpp`（扫描器 6 用例）+ `examples/axi4/tests/test_verif_axi4_lite.cpp`（DUT 7 用例）· 护栏 = `scripts/verify_examples_rtl_sim.sh`（⑥ 等式 / ⑥' 新鲜度 / ⑥'' 双向键 / ⑥⁗ 三方一致）|
-| **RV32I 核的 RTL 交付 + Verilator 仿真环境** | 设计与环境指南 = `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · **一条命令跑通** = `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）· 发射器 = `examples/riscv-mini/emit_rtl.cpp`（扁平）+ `emit_rtl_hier.cpp`（层次化）· 独立 TB = `examples/riscv-mini/tb_rv32i_soc.sv`（两形态**共用**）|
+| **RV32I 核的 RTL 交付 + Verilator 仿真环境** | 设计与环境指南 = `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · **一条命令跑通** = `bash scripts/rv32i_rtl_sim_env.sh`（生成 → lint → 编译 → 运行 ⇒ `RESULT: checks=24 fails=0`）· **激励驱动 = `examples/riscv-mini/tb_rv32i_soc.cpp`**（默认 = C++ 侧验证 ⇒ `RESULT: checks=24 fails=0`；`--emit-rtl` = 扁平产物；`--emit-rtl --hierarchical` = 层次化产物；`--emit-rtl --firmware-init` = 带固件初值）· 独立 TB = `examples/riscv-mini/tb_rv32i_soc.sv`（手写 · 两形态**共用**）|
 | Verilog codegen | `include/codegen_verilog.h`, `src/codegen_verilog.cpp` (SystemVerilog 2017: `always_ff` + `logic`) |
 | 端口命名（具名构造写法 + 已知限制） | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md`（探针 `tests/test_port_name_named_ctor.cpp`） |
 | JIT compiler | `src/jit/jit_compiler.cpp`, `include/jit/AGENTS.md` |
@@ -306,7 +306,8 @@ Documented gaps that are by-design or awaiting redesign. Each entry points to au
   **点名 module/端口**（对外唯一载体 = `HierarchyEmitResult`；发射器内**不抛**，分析层的
   前置校验抛由入口统一转换）。
   ⇒ ⇒ **2026-11-17 新增产品级交付面**（诉求 ⑤「层次化输出示例」）：RV32I 的层次化产物现在有
-  **CLI 发射器**（`emit_rtl_rv32i_soc_hier` · 库层 `--hierarchical` ⇒ `toVerilogHierarchical`）
+  **CLI 发射器**（`tb_rv32i_soc --emit-rtl --hierarchical` · 库层 `--hierarchical` ⇒
+  `toVerilogHierarchical`；⚠️ **发射入口 = TB 自身** ⇒ 原 `emit_rtl_hier.cpp` 薄壳**已删**）
   + **独立 Verilog TB**（**复用** `examples/riscv-mini/tb_rv32i_soc.sv` ⇒ 两种形态的顶层
   端口表**同源**（都走 `make_flat_module_view`）⇒ 同一套判据 `checks=24 fails=0`）
   + 覆盖登记（tsv 的 `kind=hier` 桶 · `REGISTERED_HIER`）⇒ ⇒ 形态判据 =
@@ -497,7 +498,7 @@ bash scripts/rv32i_rtl_sim_env.sh
   | `tests/chlib/test_*.cpp` | 51 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|
-  | examples 的 main() 程序 | 34 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
+  | examples 的 main() 程序 | 32 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
 
   ⚠️ **本表是**快照**，不是锚点** ⇒ ⇒ **无机械判据**（`scripts/verify_test_counts.sh` 第 3 条
   只**打印**、不判违规）⇒ ⇒ 漂移靠**人工**发现 ⇒ ⇒ 改测试数时 MUST 同步本表。
@@ -509,6 +510,11 @@ bash scripts/rv32i_rtl_sim_env.sh
       `*_example.cpp` 被 `tb_*.cpp` 取代 + `examples/axi4/phase3a_complete.cpp` + 4 个
       `examples/stream/stream_*_demo.cpp`）**新增 12 个**（8 个 `tb_*.cpp` + 4 个
       `tb_stream_*_demo.cpp`）⇒ ⇒ 净 **−8** ⇒ ⇒ 42 − 20 + 12 = **34**（实测复算一致）。
+    · 「examples 的 main() 程序」**34 → 32**（2026-11-22 · RV32I SoC 的「TB 自发射」收敛）：
+      **删 3 个**含 main 的发射薄壳（`examples/riscv-mini/emit_rtl.cpp` /
+      `emit_rtl_fw_init.cpp` / `emit_rtl_hier.cpp` ⇒ 发射入口并入 TB 自身）
+      **新增 1 个**（`examples/riscv-mini/tb_rv32i_soc.cpp`）⇒ ⇒ 净 **−2**
+      ⇒ ⇒ 34 − 3 + 1 = **32**（实测复算一致）。
   - ⚠️ **派生表**「扩脚本一并更新」/「标历史快照 + 加 grep 断言」**这两个处置仍未闭合**
     ⇒ ⇒ 本表**继续**是人工维护 ⇒ ⇒ 属**未决治理项**（不是已完成）。
 

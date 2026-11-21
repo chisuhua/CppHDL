@@ -36,8 +36,10 @@ cd "$REPO_ROOT" || exit 2
 
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 WORK="${WORK:-/tmp/opencode/rv32i_fw_init_rtl}"
-EMIT_PLAIN="$BUILD_DIR/examples/riscv-mini/emit_rtl_rv32i_soc"
-EMIT_INIT="$BUILD_DIR/examples/riscv-mini/emit_rtl_rv32i_soc_fw_init"
+# ⚠️ **发射器 = TB 自身**（`--emit-rtl` 模式）⇒ ⇒ 原 `emit_rtl.cpp` /
+#   `emit_rtl_fw_init.cpp` 两个薄壳**已删** ⇒ ⇒ 「基线」与「带初值」两种产物
+#   **共用同一个二进制**，靠**模式标记**区分（`--firmware-init`）。
+EMIT_BIN="$BUILD_DIR/examples/riscv-mini/tb_rv32i_soc"
 
 red() { printf '\033[0;31m%s\033[0m\n' "$*"; }
 green() { printf '\033[0;32m%s\033[0m\n' "$*"; }
@@ -62,31 +64,32 @@ done
 FAILED=0
 
 echo "── F0：发射器存在（fail-closed）"
-for bin in "$EMIT_PLAIN" "$EMIT_INIT"; do
-    if [ ! -x "$bin" ]; then
-        red "❌ F0 发射器缺失：$bin"
-        echo "     先构建：cmake --build $BUILD_DIR --target emit_rtl_rv32i_soc emit_rtl_rv32i_soc_fw_init" >&2
-        exit 2
-    fi
-done
-ok "F0 两个发射器存在"
+if [ ! -x "$EMIT_BIN" ]; then
+    red "❌ F0 发射器缺失：$EMIT_BIN"
+    echo "     先构建：cmake --build $BUILD_DIR --target tb_rv32i_soc" >&2
+    exit 2
+fi
+ok "F0 发射器存在（基线 / 带初值共用同一个二进制）"
 
 rm -rf "$WORK"
 mkdir -p "$WORK/plain" "$WORK/init" "$WORK/init2"
 
 echo "── F1：发射（基线 / 带初值 / 带初值复跑）"
-for pair in "plain:$EMIT_PLAIN:$WORK/plain" "init:$EMIT_INIT:$WORK/init" \
-    "init2:$EMIT_INIT:$WORK/init2"; do
-    IFS=: read -r _tag bin out <<<"$pair"
-    if ! "$bin" --out "$out" >"$out/emit.log" 2>&1; then
-        fail "F1 发射失败（$bin，见 $out/emit.log）"
+# ⚠️ **参数不加引号**（要按空格拆成多个 token）⇒ ⇒ 无参时为空
+emit_one() {  # $1 = out dir · $2 = 附加模式标记（可空）
+    local out="$1" eargs="${2:-}"
+    if ! "$EMIT_BIN" --emit-rtl $eargs --out "$out" >"$out/emit.log" 2>&1; then
+        fail "F1 发射失败（见 $out/emit.log）"
         exit 1
     fi
     [ -f "$out/top.v" ] || {
         fail "F1 产物缺失：$out/top.v"
         exit 1
     }
-done
+}
+emit_one "$WORK/plain" ""
+emit_one "$WORK/init" "--firmware-init"
+emit_one "$WORK/init2" "--firmware-init"
 ok "F1 三份产物均生成"
 
 # ── 产物解析（端口表 + 内存 initial 赋值）─────────────────────────────
