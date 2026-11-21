@@ -1,0 +1,147 @@
+# examples/spinalhdl-ported/fifo/tb_fifo_stream_example.verif
+#
+# **Stream FIFO 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# 被测语义（**spec-derived** = 上游 `samples/fifo_example.cpp` 的经典方案）：
+#   · 深度 16（addr_width = 4）· 同步读写 · `dout` = `aread(rd)` ⇒ **0 拍组合读**（FWFT）
+#   · `empty` = 读指针 == 写指针（全部位）· `full` = 地址位相等 + wrap 位不同
+#   ⇒ ⇒ **D5 回归**：在途 15 ⇒ full=0；在途 16 ⇒ full=1（旧公式门限 31 ⇒ 必红）
+#
+# ⚠️ **`dout` 是组合读**（`aread`）⇒ `SET`/`TICK` 之后 MUST `SETTLE` 再 `EXPECT`。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#fifo-stream-example
+@tb-module tb_fifo_stream_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：复位后为空（impl-contract）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_empty
+@anchor fifo-stream-example
+
+SET push 0
+SET pop 0
+SETTLE
+EXPECT empty 1
+EXPECT full 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：**顺序保持**（spec-derived）—— 入队 3 个 ⇒ 出队顺序完全相同
+# ══════════════════════════════════════════════════════════════════════════
+@scenario order_preserved
+@anchor fifo-stream-example
+
+SET din 0x11
+SET push 1
+TICK 1
+SET din 0x22
+TICK 1
+SET din 0x33
+TICK 1
+SET push 0
+SETTLE
+EXPECT empty 0
+EXPECT dout 0x11
+
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT dout 0x22
+
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT dout 0x33
+
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT empty 1
+EXPECT full 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3（**metamorphic**）：5 个元素的**序列恒等**
+#   · 入队 5 个 ⇒ 出队逐个等于入队序列（不依赖任何内部指针值）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario sequence_identity
+@anchor fifo-stream-example
+
+SET din 0xA1
+SET push 1
+TICK 1
+SET din 0xB2
+TICK 1
+SET din 0xC3
+TICK 1
+SET din 0xD4
+TICK 1
+SET din 0xE5
+TICK 1
+SET push 0
+SETTLE
+
+EXPECT dout 0xA1
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT dout 0xB2
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT dout 0xC3
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT dout 0xD4
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT dout 0xE5
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT empty 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：**容量边界 = 16**（spec-derived · D5 回归）
+#   · 在途 15 ⇒ full=0 · 在途 16 ⇒ full=1 · 取回 16 ⇒ empty=1
+# ══════════════════════════════════════════════════════════════════════════
+@scenario capacity_16
+@anchor fifo-stream-example
+
+SET din 0x5A
+SET push 1
+TICK 15
+SET push 0
+SETTLE
+EXPECT full 0
+
+SET push 1
+TICK 1
+SET push 0
+SETTLE
+EXPECT full 1
+EXPECT empty 0
+
+SET pop 1
+TICK 15
+SET pop 0
+SETTLE
+EXPECT empty 0
+EXPECT dout 0x5A
+
+SET pop 1
+TICK 1
+SET pop 0
+SETTLE
+EXPECT empty 1

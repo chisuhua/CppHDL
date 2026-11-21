@@ -35,13 +35,13 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     # PHASE: Phase 1: 基础移植验证
     tb_counter_simple_example
     tb_counter_example
-    fifo_stream_example
+    tb_fifo_stream_example
     tb_uart_tx_example
     tb_uart_rx_example
 
     # PHASE: Phase 2: 核心组件
     tb_pwm_example
-    gpio_example
+    tb_gpio_example
     spi_controller_example
     i2c_controller_example
     timer_example
@@ -49,7 +49,7 @@ set(CH_TRACKED_EXAMPLE_TARGETS
     # PHASE: Phase 2: 高级外设
     vga_controller_example
     ws2812_controller_example
-    quadrature_encoder_example
+    tb_quadrature_encoder_example
     sigma_delta_dac_example
 
     # PHASE: Phase 1-3: 辅助组件

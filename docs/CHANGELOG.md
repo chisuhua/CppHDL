@@ -1,3 +1,30 @@
+## 2026-11-21 — `fifo` / `gpio` / `quadrature_encoder` 迁移（8 个产品面 target 收官）
+
+**改了什么**：
+
+- `fifo`：`fifo_top.h`（具名 6 端口）+ `tb_fifo_stream_example.cpp/.verif`；4 scenario / **20** 断言
+  = 复位空 · 顺序保持 · 5 元素序列恒等（metamorphic）· **容量边界 16**（D5 回归承重）。
+- `gpio`：`gpio_top.h`（具名 5 端口）+ `tb_gpio_example.cpp/.verif`；6 scenario / **11** 断言
+  = 复位 · 输出 1 拍寄存 · 输出使能 · 上升沿中断 · 中断使能 · metamorphic 恒定输入无中断。
+- `quadrature_encoder`：`quadrature_encoder_top.h`（具名 7 端口）+ `tb_*` 套件；
+  5 scenario / **15** 断言 = Z 清零初态 · 正向 4 倍频 · **往返回 0**（metamorphic）· 方向 · Z 清零。
+- 删除三份 `*.cpp` 与 `emit_rtl.cpp`（发射入口 = TB 自身）；target 改名为
+  `tb_fifo_stream_example` / `tb_gpio_example` / `tb_quadrature_encoder_example`。
+- **顺带修正**：`tests/CMakeLists.txt` 的 `add_spinalhdl_ported_test(fifo fifo_example)`
+  一直指向 **samples** 的 `fifo_example`（不是 spinalhdl-ported 的 FIFO）⇒ ⇒ 改为
+  `tb_fifo_stream_example`。
+- 棘轮登记表同步：删掉三份已删文件的未具名端口豁免 ⇒ 锚点 `1347 → 1334`。
+
+**判据面的三个要点**：
+
+- **D5 回归**：`full` 重新注入旧公式 ⇒ `capacity_16#1` 红（门限 31 ⇒ 永不置位）。
+- **gpio 的 `spec_checks` 保持 0**（D1 裁决「移植简化」），判据全部是 impl-contract。
+- **quadrature 的确定性起点**：框架复位把 A/B tie-off 为 0 ⇒ 同步器跟着走 ⇒ 位置不为 0
+  ⇒ ⇒ 每个场景先用 **Z 上升沿**清零（两侧同源）。
+- 变异自证：fifo `full` 恒 0 → 1 · 旧公式 → 1 · pop 不推进 → 11 · push 不推进 → 14；
+  gpio 中断恒 0 → 1 · 忽略使能 → 1 · 输出不寄存 → 2；quadrature 无加法 → 3 ·
+  Z 清零失效 → 10 · 方向取反 → 3。
+
 ## 2026-11-21 — `uart_tx` / `uart_rx` 迁移（三角色分离 + `.verif` 单一真相源）
 
 **改了什么**：

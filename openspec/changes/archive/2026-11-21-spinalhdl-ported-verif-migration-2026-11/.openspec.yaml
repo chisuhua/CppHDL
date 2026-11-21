@@ -1,0 +1,10 @@
+schema: spec-driven
+created: 2026-11-21
+# 本 change **无 spec 变更**：它把 `examples/spinalhdl-ported/` 的 8 个已登记产品面 target
+# 迁移到「三角色分离 + `.verif` 单一真相源」形态 —— 判据本体在
+# `.rddf/checks/examples-rtl-expectations.md`（外部期望源）与 ADR-074 / ADR-076。
+# 既有 requirement（`examples-rtl-sim-coverage`：「C++ 侧 MUST 与生成式 TB 共享同一验证源」
+# 「清单列号 MUST 从机器可读表头推导」「期望源锚点 ↔ 验证源 scenario 双向 1:1」等）
+# 已完整覆盖 ⇒ ⇒ 不新增也不修改任何 Requirement。
+# ⇒ 归档时用 `openspec archive spinalhdl-ported-verif-migration-2026-11 --skip-specs`。
+skip_specs: true

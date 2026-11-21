@@ -341,193 +341,269 @@ counter 相位）⇒ ⇒ M3 现在抓在 `duty_zero#2`。**8 拍窗口单独不�
 
 ---
 
-## gpio_example {#gpio-example}
+## tb_gpio_example {#gpio-example}
 
-### ✅ **D1 裁决（2026-11-12 · 用户「按你的建议推进」）**：判为「**移植简化**」
+### ✅ D1 裁决（2026-11-12 · 用户「按你的建议推进」）：判为「**移植简化**」
 
-⇒ ⇒ **不追平**上游 Scala 的逐位边沿语义 ⇒ ⇒ `spec_checks` **保持 0**（只判 impl-contract）
-⇒ ⇒ ⇒ 备选（「追平 Scala」）**未采用** ⇒ ⇒ 若将来要追平 ⇒ ⇒ 需另独立项
-（它会**改产品的可观测行为** ⇒ ⇒ 属行为变更 ⇒ ⇒ 须走公开面登记）。
-⇒ ⇒ 裁决记录见本文「D1」条 + `.rddf/checks/examples-rtl-sim-targets.tsv` 的 `gpio_example` note。
+⇒ ⇒ **不追平**上游 Scala 的逐位边沿语义 ⇒ ⇒ `spec_checks` **保持 0**（只判 impl-contract）。
+上游参考（`gpio.cpp` 头部的 Scala）与本实现的差异：1 级 vs 2 级同步 · 单 bit vs 逐位边沿 ·
+端口集不同。
 
-### ⚠️ **上游 Scala 与被测 C++ 实现语义不同**（因此**不算** spec-derived）
+### impl-contract（本实现的取值）
 
-Scala 原文（同目录 `gpio.cpp` 头部）：
-
-```scala
-val sync = Reg(Bool()) init(false)
-sync := io.pin
-val rise = io.pin & !sync
-val fall = !io.pin & sync
-io.interrupt := rise | fall
-io.value := io.pin ## sync ## ...
-```
-
-与 C++ 实现的**实质差异**：
-
-| 维度 | 上游 Scala | 被测 C++ 实现 |
-|---|---|---|
-| 同步级数 | **1 级**（`sync`） | **2 级**（`sync_stage1` / `sync_stage2`） |
-| 边沿判定 | **单 bit**（`io.pin` 是 `Bool`） | **8 位逐位**（`gpio_in & ~sync_stage2` ⇒ 非零即中断） |
-| 端口 | `pin` / `interrupt` / `value` | 多出 `output_enable` / `interrupt_enable`，且有 `output_reg` 锁存 |
-| 输出 | `io.value := io.pin ## sync` | `gpio_out = oe ? output_reg : 0` |
-
-⇒ ⇒ **本 TB 的期望值只能锁「当前 C++ 实现」的行为** ⇒ 级别 = `impl-contract`
-⇒ ⇒ `spec_checks = 0`。
-⇒ ⇒ ⚠️ **待裁决**：这些差异是「有意的扩展」还是「移植缺陷」？
-⇒ ⇒ 在裁决前，本 TB 的作用是**防止行为静默漂移**（不是「证明它符合上游」）。
-
-### 输入序列 → 期望输出（按**当前实现**手推）
-
-记 `s1` / `s2` = 两级同步寄存器（**复位值 0**，注意与 quadrature 不同）。
-
-| 场景 | 输入变化 | 期望 `interrupt` | 期望 `gpio_out` |
-|---|---|---|---|
-| A | 无变化（全 0） | 0 | 0 |
-| B | `0x00 → 0xFF` | 第 1 拍 **1**（`rise = 0xFF & ~0x00`），第 2 拍 0 | 0 |
-| C | `0xFF → 0x00` | 第 1 拍 **1**（`fall = ~0x00 & 0xFF`），第 2 拍 0 | 0 |
-| D | `oe=1`，`0x00 → 0xA5` | **1**（⚠️ 场景切换本身是边沿） | 0xA5 |
-| E | `oe=0`，`0xA5 → 0x5A` | **1**（`rise = 0x5A & ~0xA5 = 0x5A ≠ 0`） | 0 |
-| F | `interrupt_enable=0` | **0**（边沿仍发生，被屏蔽） | — |
-
-### metamorphic
-
-- **场景 G（自反性）**：输入恒定 8 拍 ⇒ `interrupt` 恒 0
-  ⇒ 抓「中断卡在 1」「边沿检测退化成电平跟随」（**不需要任何期望值**）。
-- 场景 F 的**屏蔽性**（`interrupt_enable=0` ⇒ 恒 0）是绝对判据，不计入 spec。
-
-⚠️ **被否决的一个写法（留档）**：曾试图断言「**一次输入跳变 ⇒ 恰好 1 拍脉冲**」
-⇒ ⇒ 实测 `pulse_count=0` ⇒ ⇒ 该判据与本 TB 前面的场景状态**强耦合**
-（同步链相位不确定）⇒ ⇒ **不可靠** ⇒ 改为上面的自反性判据
-（无状态依赖，且仍能抓「电平跟随」这一具体缺陷）。
-
-**首次跑红**：**有** —— 首版手推把场景 D/E 的 `interrupt` 写成 0；
-实测 `fails=2` ⇒ 定位到「**场景切换本身就是一次边沿**」⇒ 修的是**手推表**，不是实现。
-
----
-
-## quadrature_encoder_example {#quadrature-encoder-example}
-
-### 上游参考（**spec-derived**）
-
-该 example 头部原文（无 Scala 源码，只有功能约定）：
-
-> · **4 倍频计数**（上升沿 + 下降沿）
-> · **A 相领先 B 相 = 顺时针 (CW)** · B 相领先 A 相 = 逆时针 (CCW)
-> · **每个周期产生 4 个计数边沿**
-> · 索引 (Z) 信号清零
-
-⇒ ⇒ 规范只保证**幅值**（一周期 = 4 计数）与**方向名**（CW/CCW）；
-**「CW 对应 +1 还是 -1」是计数器的符号约定 ⇒ 属 impl-contract**（本 TB **不硬判符号**）。
-
-### 判据（语义级，不逐拍抄中间值）
-
-| 判据 | 级别 | 期望 |
-|---|---|---|
-| 复位后 position | spec-derived | **0** |
-| 正转 **2 个完整周期** | spec-derived（幅值） | `(pos - pos0) mod 65536 ∈ {+8, -8}` |
-| 正转 2 周期后**反转 2 周期** | **metamorphic** | 回到 `pos0`（符号无关） |
-| 正转 1 周期 | spec-derived（幅值） | `∈ {+4, -4}`（确认此刻确实非 0） |
-| **Z 相上升沿** | spec-derived | `position == 0` |
-| `a_sync` / `b_sync` 静止在 A=1/B=1 | impl-contract | 均为 1 |
-
-### impl-contract 前提
-
-- **同步寄存器初值是 `true`**（`a_sync1(true)` 等）⇒ 静止初态 **A=1 · B=1**
-  ⇒ ⇒ TB 输入初值 MUST 也是 1（否则第一拍就有**启动伪边沿**）。
-- 边沿用 `sync1/sync2`（2 拍延迟）⇒ 每个相位 MUST 维持 **≥4 拍**。
-
-**首次跑红**：有 —— 首版按 `count_up/down` 的公式推出「11→10 是 +1」，
-但实测是 **-1** ⇒ ⇒ 判定：**符号属 impl-contract**（规范未规定）⇒
-改为**符号无关的幅值判据** + metamorphic（正反转回原点）。
-（另：严格 flags 下还抓到 TB 自身的 `PINMISSING`（inline 后代输出未连）与
-`WIDTHEXPAND`（`integer` vs 16 位）⇒ 均已修。）
-
-## fifo_stream_example {#fifo-stream-example}
-
-### ⚠️ 被测接口（实测 · 2026-11-12）
-
-`examples/spinalhdl-ported/fifo/stream_fifo_example.cpp:28-34` 的顶层端口是
-`din` / `push` / `pop` / `dout` / `empty` / `full` ⇒ ⇒ **没有 ready/valid**
-⇒ ⇒ 原清单「缺 ready/valid 握手期望」的口径**已订正**（R3-a）⇒ ⇒
-本项的判据对象 = **push/pop + empty/full**。
-
-### 上游参考（**spec-derived** · FIFO 的定义性语义）
-
-规格面 = `openspec/specs/chlib-stream-semantics/spec.md`（仓内唯一的 FIFO 语义 capability）
-⇒ ⚠️ **口径**：那份 spec 治理的是 `chlib::sync_fifo` / `chlib::stream_fifo`（**库组件**）
-⇒ ⇒ 本 TB 引它的**语义条款**（尤其「消费者 MUST 在 pop 沿**之前**采样才能拿到
-正在被弹出的那个元素」+「pop 沿之后 payload 指向**下一个**队首」）
-⇒ ⇒ **不引**它的**实现条款**（空/满自保护门控）—— 见下方「已知偏离」。
+| 项 | 契约 |
+|---|---|
+| 同步 | `sync_stage1/2` 两级（INIT 0） |
+| 边沿 | `rise = gpio_in & ~sync2` · `fall = ~gpio_in & sync2` ⇒ 归约成 **1 位** |
+| `interrupt` | `interrupt_enable ? (edge_detect != 0) : 0` ⇒ **组合**（边沿当拍可见） |
+| `gpio_out` | `output_enable ? output_reg : 0`，`output_reg->next = gpio_in` ⇒ **1 拍延迟** |
 
 ### 判据
 
-| 判据 | 级别 | 期望 |
-|---|---|---|
-| 复位后 `empty` | spec-derived | `1`（无在途） |
-| 在途为 0 时 `full` | impl-contract | `0` |
-| push A,B,C 后依次 pop | spec-derived | 依次得到 **A,B,C**（顺序保持） |
-| 取走全部后 `empty` | spec-derived | `1` |
-| **16 个在途**（= 容量 = N）全部取回 | spec-derived | 顺序一致、**不丢数据** |
-| `full` 门限（在途 15 / 16） | spec-derived（容量 = N） | `0` / `1`（**修复后**，见 D5） |
-| `dout` 在 pop 沿**之前**采样 | spec-derived（FWFT 采样点） | 拿到的是**正在被弹出**的那个元素 |
-| inline 后代端口（`top_fifo_inst_unnamed_output*`）与顶层端口 | impl-contract | 逐拍同源 |
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 复位态 | impl-contract | `gpio_out=0` · `interrupt=0` |
+| 2 | 输出 = 输入寄存 1 拍 | impl-contract | 改输入后第一拍输出仍是旧值，第二拍才跟随 |
+| 3 | 输出使能=0 | impl-contract | `gpio_out` 恒 0（与输入无关） |
+| 4 | 上升沿 ⇒ 中断 | impl-contract | 边沿当拍 `interrupt=1`；同步追上后回 0 |
+| 5 | 中断使能=0 | impl-contract | 有边沿也 `interrupt=0` |
+| 6 | **metamorphic**：输入恒定 ⇒ 中断恒 0 | impl-contract | 8 个连续采样全 0 |
 
-### metamorphic（**相对判据** · 不依赖任何绝对期望值）
+### 验证源（`.verif` · 单一语义来源）
 
-- **R1 置换性**：push N 个 ⇒ pop 出来的序列 **逐项恒等**于写入序列
-  （TB 侧记录写入值再比较 ⇒ 不判任何绝对常量）。
-- **R2 `empty` 不变量**：每次操作后 `empty` == 「TB 侧在途计数是否为 0」
-  ⇒ ⇒ 抓「`empty` 卡住 / 乱跳」。
+**断言条数（人工登记）= 11** ⇒ ⇒ 三方等式。
 
-### ✅ D5 **已修复**（2026-11-12 · 缺陷 → 修复）
+VERIF-CHECKS: 11
 
-**原缺陷**：`full` 的比较用的是**完整 5 位指针**（`ch_reg<ch_uint<addr_width+1>>` = 5 位，
-地址取低 4 位）⇒ `full = (wr+1 == rd)` ⇒ **门限 = 31 个在途**，
-而内存只有 **16 槽** ⇒ ⇒ **第 17 次写入起地址混叠**（最老的元素被覆盖丢失）。
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**。
 
-**实测证据**（修复前 · 用内部指针对齐时序后复跑）：
-push 20 个（`10..23`）后逐个 pop ⇒ 得到 `20 21 22 23 14 15 ... 1f 20 21 22 23`
-⇒ ⇒ 最老的 4 个（`10 11 12 13`）**已丢失**；且 `full` 在 20 次 push 内**从不置位**。
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_state` | 判据 1 |
+| `output_is_delayed_input` | 判据 2 |
+| `output_disabled_is_zero` | 判据 3 |
+| `interrupt_on_edge` | 判据 4 |
+| `interrupt_disabled_is_zero` | 判据 5 |
+| `steady_input_no_interrupt` | 判据 6（metamorphic） |
 
-**根因与范围**：该写法**不是移植引入的** —— **上游参考** `samples/fifo_example.cpp`
-（`FiFo<ch_uint<2>, 2>`）用的是**同一公式** ⇒ ⇒ **同型缺陷 ⇒ 两处同改**
-（仓内 Zero-Debt「同型缺陷一处不留」）。
-⚠️ 库组件 `chlib::sync_fifo`（`include/chlib/fifo.h`）**本身是对的**
-（`tests/chlib/test_fifo.cpp` 断言满态）⇒ ⇒ 缺陷只在**手写 demo**。
+### 产物形态（**手推**）
 
-**修法（经典方案）**：`full` = **地址位相等 + wrap 位不同**
-⇒ ⇒ 容量 = N（16）⇒ ⇒ 与 `empty`（`rd == wr`，全部位相等）自洽。
+- **module 集 = {`top`}**（1 个）。
+- **顶层端口表 = 7 根** = 框架 2 + 根自有 **5**（`gpio_in[7:0]` · `output_enable` ·
+  `interrupt_enable` · `gpio_out[7:0]` · `interrupt`）。
+- 产物端口名 = `top_<C++ 成员名>`（端口全部具名 ⇒ 无 `top_unnamed_*`）。
 
-**修复后的 TB 判据（正面判，不再回避）**：
+### C++ 侧 vs TB 侧（**两侧各自登记**）
 
-| 判据 | 级别 | 期望 |
-|---|---|---|
-| 在途 ≤ 15 | spec-derived（容量 = N） | `full == 0` |
-| 在途 == 16 | spec-derived（容量 = N） | `full == 1` |
-| 取出一个后（在途 15） | spec-derived | `full == 0`（重新有空间） |
-| push 16 个后全部取回 | spec-derived | 顺序一致、**不丢数据** |
+- C++ 侧（`tb_gpio_example.cpp` 默认模式）= **11** 条 ⇒ ⇒ `interp_checks = 11`。
+- TB 侧（`tb_gpio_example.sv`）= **11** 条 ⇒ ⇒ `min_checks = 11`。
 
-⚠️ **不判**「满后再 push」 ⇒ ⇒ 本手写 demo **无自保护**（空/满不门控指针）
-⇒ ⇒ 那是库组件 `chlib::sync_fifo` 的契约（`chlib-stream-semantics` 的自保护条款）
-⇒ ⇒ **不适用**于本 example ⇒ ⇒ 判它 = 要求一个本 example 没有的能力。
+#### scenario: reset_state
 
-**变异自证 v2**（修复后 · 对 DUT 变异 ⇒ TB MUST 转红）：
+`gpio_out==0` · `interrupt==0`（2 条）。
 
-| 变异 | 期望 | 实测 |
-|---|---|---|
-| M1：删掉 wrap 位条件（`full` = 仅地址相等） | 转红 | ✅ `fails=1` |
-| M2：读地址 `rd+1`（`dout` 指向下一个） | 转红 | ✅ `fails=25` |
-| M3：`empty` 粘住（`rd == 5'h1F`） | 转红 | ✅ `fails=6` |
-| M4：写地址 `wr+1`（写入偏移） | 转红 | ✅ `fails=27` |
-| **M5：`full` 回退成旧公式**（`(wr+1 == rd)` 5 位） | **转红** | ✅ `fails=1` |
+#### scenario: output_is_delayed_input
 
-⇒ ⇒ **M5 是承重证据**：修复前的实现正是 M5 ⇒ ⇒ 修复**可被本 TB 判出** ⇒ ⇒
-修完的 `full` 门限**不是**固化，而是**可判的**。
+`output_enable=1`：改输入后的**第一拍**输出仍是旧值，第二拍才跟随（3 条）⇒ ⇒ 1 拍延迟。
 
-**首版 TB 的处置留档**：修复前 TB **刻意不判** `full` 在 15/16 在途处的取值
-（当时连「两种正确实现」都不一致 ⇒ 判它 = 固化偶然选择）⇒ ⇒ 修复后判据才**正面放开**。
+#### scenario: output_disabled_is_zero
 
+`output_enable=0` + 输入 0xFF ⇒ 输出 0（1 条）。
+
+#### scenario: interrupt_on_edge
+
+先等同步追上（0 干扰），再把输入 0→1 ⇒ 边沿当拍 `interrupt=1`；3 拍后回 0（3 条）。
+
+#### scenario: interrupt_disabled_is_zero
+
+`interrupt_enable=0` + 输入 0→1 ⇒ `interrupt=0`（1 条）。
+
+#### scenario: steady_input_no_interrupt
+
+输入恒定 0x5A ⇒ 8 个连续采样的 `interrupt` 全 0（1 条）⇒ ⇒ **metamorphic**（自反性）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测（`RESULT: checks=11 fails=N`） | 抓的是 |
+|---|---|---|---|
+| M1 | `interrupt` 恒 0 | ✅ `fails=1`（`interrupt_on_edge#1`） | 判据 4 |
+| M2 | 中断**忽略使能**（直连 `edge_detect`） | ✅ `fails=1`（`interrupt_disabled_is_zero#0`） | 判据 5 |
+| M3 | 输出**不寄存**（直连输入） | ✅ `fails=2`（`output_is_delayed_input#0` · `output_disabled_is_zero#0`） | 判据 2 / 3 |
+
+---
+
+## tb_quadrature_encoder_example {#quadrature-encoder-example}
+
+### 上游参考（**spec-derived** · 正交编码 4 倍频）
+
+| 项 | 契约 |
+|---|---|
+| 同步 | A/B/Z 各两级（**INIT = true**，Z 的 INIT = false） |
+| 计数 | A/B 的**每个边沿**都计数 ⇒ 一个正交周期 = **4 计数** |
+| 方向 | `direction = a_sync2 ^ b_sync2`（1 = CW） |
+| 索引 | `enc_z` 上升沿 ⇒ `position <= 0` |
+
+### impl-contract（本实现的取值）
+
+- 同步延迟：输入变更后 **2 拍**到 `a_sync2/b_sync2`；边沿检测在 `a_sync1 vs a_sync2`。
+- **确定性起点**：框架复位把 A/B tie-off 为 0 ⇒ 同步器跟着走 ⇒ 位置计数**不是 0**
+  ⇒ ⇒ 每个场景先用 **Z 上升沿**清零、并把 A/B 置到空闲态 `(1,1)`。
+
+### 判据
+
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | Z 清零后的初态 | spec + impl | `position=0` · `a_sync=1` · `b_sync=1` |
+| 2 | **正向 4 倍频** | spec-derived | 11→10→00→01→11 ⇒ **+4** |
+| 3 | **metamorphic**：往返恒等 | spec-derived | 再走反序列（11→01→00→10→11）⇒ **回 0** |
+| 4 | 方向指示 | spec-derived | `direction = a_sync2 ^ b_sync2`（相位差半周期） |
+| 5 | Z 上升沿清零 | spec-derived | `position` 变 0 并保持 0 |
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 15** ⇒ ⇒ 三方等式。
+
+VERIF-CHECKS: 15
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_state` | 判据 1 |
+| `forward_4x` | 判据 2 |
+| `reverse_returns_to_origin` | 判据 3（metamorphic） |
+| `direction_follows_phase` | 判据 4 |
+| `z_clears_position` | 判据 5 |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个）。
+- **顶层端口表 = 9 根** = 框架 2 + 根自有 **7**（`enc_a` · `enc_b` · `enc_z` ·
+  `position[15:0]` · `direction` · `a_sync` · `b_sync`）。
+- 产物端口名 = `top_<C++ 成员名>`（端口全部具名）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（`tb_quadrature_encoder_example.cpp` 默认模式）= **15** 条 ⇒ ⇒ `interp_checks = 15`。
+- TB 侧（`tb_quadrature_encoder_example.sv`）= **15** 条 ⇒ ⇒ `min_checks = 15`。
+
+#### scenario: reset_state
+
+Z 上升沿清零后：`position==0` · `a_sync==1` · `b_sync==1`（3 条）。
+
+#### scenario: forward_4x
+
+11→10→00→01→11 ⇒ `position==4`（2 条：起点 0 + 终点 4）。
+
+#### scenario: reverse_returns_to_origin
+
+先正向一个周期（4），再反向一个周期 ⇒ 回 0（3 条）⇒ ⇒ **metamorphic**（往返恒等）。
+
+#### scenario: direction_follows_phase
+
+11（0）→ 10（1）→ 00（0）⇒ `direction` 跟随相位差（3 条）。
+
+#### scenario: z_clears_position
+
+先走 2 个边沿（计数非 0），再打 Z 上升沿 ⇒ `position==0` 且保持（2 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测（`RESULT: checks=15 fails=N`） | 抓的是 |
+|---|---|---|---|
+| M1 | `count_up` 恒 0（加法通路断） | ✅ `fails=3`（`forward_4x#1` · `reverse_returns_to_origin#1/#2`） | 判据 2 / 3 |
+| M2 | Z 清零失效 | ✅ `fails=10`（含 `reset_state#0` —— 起点不再确定） | 判据 1 / 5 |
+| M3 | `direction` 取反 | ✅ `fails=3`（`direction_follows_phase#1/#2/#3`） | 判据 4 |
+
+---
+
+## tb_fifo_stream_example {#fifo-stream-example}
+
+### 上游参考（**spec-derived** · `samples/fifo_example.cpp` 的经典方案）
+
+| 项 | 契约 |
+|---|---|
+| 深度 | **16**（`addr_width = 4`） |
+| `empty` | 读指针 == 写指针（**全部位**相等） |
+| `full` | **地址位相等 + wrap 位不同**（⇒ 在途 16 ⇒ `full=1`） |
+| `dout` | `mem.aread(rd)` ⇒ **0 拍组合读**（FWFT：非空即可见队首） |
+| 顺序 | 出队顺序 == 入队顺序（FIFO 定义） |
+
+### impl-contract（本实现的取值）
+
+- `empty` / `full` 的复位值 = 1 / 0（指针归零 ⇒ 空）。
+- 组合读 ⇒ `SET`/`TICK` 之后 MUST `SETTLE` 再 `EXPECT`。
+
+### ✅ D5 回归（2026-11-12 修）
+
+旧写法 `full = (wr + 1 == rd)` 在**完整指针**空间比较 ⇒ 门限 31 ⇒ 第 17 次写入起地址混叠
+（最老元素被覆盖丢失）。现改为经典方案 ⇒ 判据 = 「在途 15 ⇒ full=0 · 在途 16 ⇒ full=1」。
+
+### 判据
+
+| # | 判据 | 级别 | 期望 |
+|---|---|---|---|
+| 1 | 复位后 `empty` / `full` | impl-contract | 1 / 0 |
+| 2 | 顺序保持（3 元素） | spec-derived | 出队顺序 == 入队顺序 |
+| 3 | **metamorphic**：5 元素序列恒等 | spec-derived | 出队序列逐项等于入队序列 |
+| 4 | 容量边界 | spec-derived | 在途 15 ⇒ `full=0` · 16 ⇒ `full=1` · 取回 16 ⇒ `empty=1` |
+
+### 验证源（`.verif` · 单一语义来源）
+
+**断言条数（人工登记）= 20** ⇒ ⇒ 三方等式。
+
+VERIF-CHECKS: 20
+
+⚠️ 上面的 `VERIF-CHECKS:` 行是**机器可读**的**第一边**（由**人**登记）。
+⚠️ 本节的 `#### scenario:` 锚点与验证源的 `@scenario` **双向 1:1**。
+
+| scenario | 判据出处（本节的哪一段） |
+|---|---|
+| `reset_empty` | 判据 1 |
+| `order_preserved` | 判据 2 |
+| `sequence_identity` | 判据 3（metamorphic） |
+| `capacity_16` | 判据 4 |
+
+### 产物形态（**手推**）
+
+- **module 集 = {`top`}**（1 个）。
+- **顶层端口表 = 8 根** = 框架 2 + 根自有 **6**（`din[7:0]` · `push` · `pop` · `dout[7:0]` · `empty` · `full`）。
+- 产物端口名 = `top_<C++ 成员名>`（端口全部具名 ⇒ 无 `top_unnamed_*`）。
+
+### C++ 侧 vs TB 侧（**两侧各自登记**）
+
+- C++ 侧（`tb_fifo_stream_example.cpp` 默认模式）= **20** 条 ⇒ ⇒ `interp_checks = 20`。
+- TB 侧（`tb_fifo_stream_example.sv`）= **20** 条 ⇒ ⇒ `min_checks = 20`。
+
+#### scenario: reset_empty
+
+复位后 `empty==1` · `full==0`（2 条）。
+
+#### scenario: order_preserved
+
+入队 0x11/0x22/0x33 ⇒ 出队逐个相等 + 空标志（6 条）。
+
+#### scenario: sequence_identity
+
+入队 0xA1/0xB2/0xC3/0xD4/0xE5 ⇒ 出队序列逐项恒等（6 条）⇒ ⇒ **metamorphic**。
+
+#### scenario: capacity_16
+
+在途 15 ⇒ `full=0`；在途 16 ⇒ `full=1`、`empty=0`；取回 15 ⇒ `empty=0` + 队首值；
+取回第 16 ⇒ `empty=1`（6 条）。
+
+### 变异自证（判别力自证 · 打在**临时产物**上 ⇒ 仓内产物零改动）
+
+| # | 变异形态 | 实测（`RESULT: checks=20 fails=N`） | 抓的是 |
+|---|---|---|---|
+| M1 | `full` 恒 0 | ✅ `fails=1`（`capacity_16#1`） | 判据 4 |
+| M1b | **重新注入 D5 旧公式** `full = (wr+1 == rd)` | ✅ `fails=1`（`capacity_16#1`，门限 31 ⇒ 永不置位） | 判据 4（**D5 回归承重**） |
+| M2 | `pop` 不推进读指针 | ✅ `fails=11`（`order_preserved#2/#3/#4` · `sequence_identity#0` 等） | 判据 2 / 3 / 4 |
+| M3 | `push` 不推进写指针 | ✅ `fails=14`（`order_preserved#0/#1/#2` · `capacity_16#4/#5` 等） | 判据 2 / 3 / 4 |
+
+---
 
 ## tb_uart_tx_example {#uart-tx-example}
 

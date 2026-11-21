@@ -324,8 +324,18 @@ TEST_CASE("AXI Lite - Register Write/Read", "[axi][register]") {
   ⇒ ⇒ 不做「截成低 64 位」的静默降级。
 - **X 态两端不对称**（与 `EXPECT` 同型）：渲染侧用 `!==` / `===` ⇒ X 判不等 ⇒ FAIL；
   `EXPECT_SEQ_COUNT` 的 X 项**不计数** ⇒ 计数偏少 ⇒ FAIL。解释器侧无 X。
-- ⚠️ **场景首条 `RECORD`** 继承渲染式 TB 复位尾缝（比解释器多一个 `@(posedge clk)`）
-  ⇒ ⇒ 夹具 SHOULD 用 `SET` + `TICK` 前缀显式对齐起点（先例：`tests/test_verif_wait_level.cpp`）。
+- ~~场景首条 `RECORD` 继承渲染式 TB 复位尾缝（比解释器多一个 `@(posedge clk)`）~~
+  ⇒ ⇒ **2026-11-21 已对齐**：解释器的框架复位末尾补了同一拍（`apply_frame_reset`）
+  ⇒ ⇒ 两侧相位一致 ⇒ 夹具**仍建议**用 `SET` + `TICK` 前缀（显式起点更好读，
+  但不依赖它是为了对齐）。
+
+**`EXPECT` / `EXPECT_STABLE` 的已知边界**（2026-11-21 迁移实测）：
+
+- ⚠️ **`EXPECT <port> <value>` 的字面量 MUST 落在该端口位宽内**：渲染侧按位宽截断
+  （`8'd0`），解释器按 **64 位原值**比较 ⇒ ⇒ `EXPECT value 256`（8 位端口）会让两侧
+  **结论相反** ⇒ ⇒ 需要「回绕点」时写成循环到 `255` + 单列一条 `EXPECT value 0`。
+- ⚠️ **`EXPECT_STABLE <port> <n>` 的 n 条结论共用同一个 `check_id`**（原语级 id，
+  不是逐拍 id）⇒ ⇒ 与 `EXPECT` 的逐条命名不同（历史行为，未改）。
 
 **`WAIT` 的已知边界**（钉死语义，避免两端各理解一次）：
 

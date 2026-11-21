@@ -87,9 +87,18 @@ cd build && cmake .. && make -j$(nproc)
 ### 运行单个示例
 
 ```bash
-./examples/spinalhdl-ported/pwm/pwm_example          # PWM
-./examples/spinalhdl-ported/gpio/gpio_example        # GPIO
-./examples/spinalhdl-ported/spi/spi_controller_example  # SPI
+# 已迁移到 `.verif` 单一真相源的示例（默认模式 = 读验证源跑断言）
+./examples/spinalhdl-ported/pwm/tb_pwm_example
+./examples/spinalhdl-ported/gpio/tb_gpio_example
+./examples/spinalhdl-ported/counter/tb_counter_example
+./examples/spinalhdl-ported/counter/tb_counter_simple_example
+./examples/spinalhdl-ported/fifo/tb_fifo_stream_example
+./examples/spinalhdl-ported/uart/tb_uart_tx_example
+./examples/spinalhdl-ported/uart_rx/tb_uart_rx_example
+./examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example
+
+# 尚未迁移（手写 main 自测）
+./examples/spinalhdl-ported/spi/spi_controller_example
 ```
 
 ### 运行测试

@@ -927,7 +927,10 @@ run_self_test() {
     rm -rf "$st_root"
     mkdir -p "$st_root"
     local golden_tb="$st_root/golden_tb.sv"
-    local src_tb="$REPO_ROOT/examples/spinalhdl-ported/counter/tb_counter_simple_example.sv"
+    # ⚠️ 2026-11-21：`spinalhdl-ported` 的 8 个 target 迁成**生成式** TB 后，
+    #   「手写 TB」的 fixture 改用 `tb_phase3a_example`（仍是手写、仍 check-in）。
+    #   用生成式 TB 当 fixture 会让基线就红在 ⑥'（新鲜度）⇒ ⇒ 判据面被污染。
+    local src_tb="$REPO_ROOT/examples/axi4/tb_phase3a_example.sv"
     if [ ! -f "$src_tb" ]; then
         echo "::error::self-test 需要 $src_tb 存在" >&2
         exit 2
@@ -950,14 +953,14 @@ run_self_test() {
 # REGISTERED_TARGETS: $3
 # REGISTERED_SOC: 0
 # REGISTERED_HIER: 1
-selftest_target	target	examples/spinalhdl-ported/counter/counter_simple.cpp	Top	emit_rtl_counter_simple	-	-	$2	$4	no	768	256	0	self-test fixture（手写 TB · 只作 ①/②/⑤/⑥ 的载体）
+selftest_target	target	examples/axi4/tb_phase3a_example.cpp	Phase3ATop	tb_phase3a_example	--emit-rtl	-	$2	$4	no	6	4	3	self-test fixture（**手写** TB · 只作 ①/②/⑤/⑥ 的载体）
 selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	emit_rtl_rv32i_soc_hier	-	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
 tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	tb_axi4_lite_example	--emit-rtl	113	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体 · 自发行 ⇒ ⑨/⑨' 的载体）
 EOF
     }
 
     local st_list="$st_root/list.tsv"
-    local st_tb_rel="examples/spinalhdl-ported/counter/tb_counter_simple_example.sv"
+    local st_tb_rel="examples/axi4/tb_phase3a_example.sv"
 
     run_case() { # $1 = 名称；$2 = 期望的错误关键词；$3（可选）= 环境前缀；$4（可选）= 清单
         local name="$1" want="$2" env="${3:-}" list="${4:-$st_list}" out rc
@@ -1163,7 +1166,7 @@ PY
 
     # 投毒 16：`source` 列指向不存在的路径 ⇒ F1b 必红
     make_list "$st_list" "$st_tb_rel" 2 verified
-    sed -i 's#examples/spinalhdl-ported/counter/counter_simple.cpp#examples/spinalhdl-ported/counter/NOPE.cpp#' "$st_list"
+    sed -i 's#examples/axi4/tb_phase3a_example.cpp#examples/axi4/NOPE.cpp#' "$st_list"
     run_case "投毒16（source 列路径不存在）" "F1b source 列路径不存在"
 
     # 投毒 17：`emitter_args` 被置为 `-`（钉在 axi4 行）⇒ ③ 必红

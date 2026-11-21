@@ -1,0 +1,112 @@
+# examples/spinalhdl-ported/gpio/tb_gpio_example.verif
+#
+# **GPIO 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# 被测语义（**impl-contract** · 上游 Scala 的「移植简化」形态，D1 裁决 2026-11-12）：
+#   · 两级同步（sync_stage1/2）· **单 bit** 边沿检测（`rise|fall` 归约成 1 位）
+#   · `interrupt = interrupt_enable ? (edge_detect != 0) : 0`（**组合**：边沿当拍即可见）
+#   · `gpio_out = output_enable ? output_reg : 0`，`output_reg->next = gpio_in`（**1 拍延迟**）
+#   ⇒ ⇒ 与上游 Scala（逐位边沿 / 1 级同步 / 端口集不同）**不求一致**（只判 impl-contract）。
+#
+# 原语封闭集：SET / TICK / SETTLE / WAIT / EXPECT / EXPECT_STABLE / OBSERVE / RESET
+#             + RECORD / EXPECT_SEQ_SELF / EXPECT_SEQ_STEP / EXPECT_SEQ_COUNT（ADR-076）
+#
+@expect-src .rddf/checks/examples-rtl-expectations.md#gpio-example
+@tb-module tb_gpio_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：复位态（impl-contract）—— 输出使能=0 ⇒ gpio_out=0；中断使能=0 ⇒ 无中断
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_state
+@anchor gpio-example
+
+SET output_enable 0
+SET interrupt_enable 0
+SETTLE
+EXPECT gpio_out 0
+EXPECT interrupt 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：输出 = **输入寄存 1 拍**（impl-contract）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario output_is_delayed_input
+@anchor gpio-example
+
+SET output_enable 1
+SET interrupt_enable 0
+SET gpio_in 0xA5
+SETTLE
+EXPECT gpio_out 0x00
+
+TICK 1
+SETTLE
+EXPECT gpio_out 0xA5
+
+SET gpio_in 0x3C
+TICK 1
+SETTLE
+EXPECT gpio_out 0x3C
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3：输出使能=0 ⇒ gpio_out **恒 0**（与输入无关）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario output_disabled_is_zero
+@anchor gpio-example
+
+SET output_enable 0
+SET gpio_in 0xFF
+SETTLE
+EXPECT gpio_out 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：中断 = **输入电平与同步值的差**（组合 · 边沿当拍可见）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario interrupt_on_edge
+@anchor gpio-example
+
+SET output_enable 0
+SET interrupt_enable 1
+SET gpio_in 0x00
+TICK 3
+SETTLE
+EXPECT interrupt 0
+
+# 0 → 1（上升沿）：同步值仍为 0 ⇒ 边沿当拍 interrupt=1
+SET gpio_in 0x01
+SETTLE
+EXPECT interrupt 1
+
+# 同步追上后（2 拍）⇒ 边沿消失 ⇒ interrupt=0
+TICK 3
+SETTLE
+EXPECT interrupt 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 5：中断使能=0 ⇒ 即使有边沿也**无中断**
+# ══════════════════════════════════════════════════════════════════════════
+@scenario interrupt_disabled_is_zero
+@anchor gpio-example
+
+SET interrupt_enable 0
+SET gpio_in 0x00
+TICK 3
+SET gpio_in 0x01
+SETTLE
+EXPECT interrupt 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 6（**metamorphic**）：输入恒定时中断恒 0（自反性）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario steady_input_no_interrupt
+@anchor gpio-example
+
+SET interrupt_enable 1
+SET gpio_in 0x5A
+TICK 3
+SETTLE
+
+REPEAT 8
+TICK 1
+RECORD interrupt
+END
+EXPECT_SEQ_COUNT interrupt 1 8 0

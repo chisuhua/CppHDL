@@ -1,0 +1,171 @@
+# examples/spinalhdl-ported/quadrature_encoder/tb_quadrature_encoder_example.verif
+#
+# **Quadrature Encoder 示例的验证源**（ADR-074 D1 · ADR-076 · 单一语义来源）
+#
+# 被测语义（**spec-derived** = 正交编码 4 倍频）：
+#   · A/B/Z 各两级同步（INIT **true**）
+#   · A/B 的**每个边沿**都计数（方向由另一相的相位决定）⇒ 一个正交周期 = **4 计数**
+#   · `direction = a_sync2 ^ b_sync2`（1=CW）
+#   · `enc_z` 上升沿 ⇒ `position <= 0`
+#
+# ⚠️ **同步延迟**：输入变更后 2 拍才到 `a_sync2/b_sync2`，而边沿检测在
+#   `a_sync1 vs a_sync2`（相隔 1 拍）⇒ ⇒ 每步给 3 拍（含余量）。
+#
+# ⚠️ **确定性起点**（impl-contract）：框架复位把 A/B 输入 tie-off 为 0 ⇒ 同步器
+#   会跟着走 ⇒ 位置计数不是 0 ⇒ ⇒ 每个场景先用 **Z 相上升沿**把位置清零，
+#   并把 A/B 置到空闲态 (1,1)。
+@expect-src .rddf/checks/examples-rtl-expectations.md#quadrature-encoder-example
+@tb-module tb_quadrature_encoder_example
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 1：复位态（impl-contract：同步寄存器 INIT=true ⇒ a_sync/b_sync = 1）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reset_state
+@anchor quadrature-encoder-example
+
+SET enc_a 1
+SET enc_b 1
+SET enc_z 0
+TICK 3
+SET enc_z 1
+TICK 3
+SET enc_z 0
+TICK 3
+SETTLE
+EXPECT position 0
+EXPECT a_sync 1
+EXPECT b_sync 1
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 2：**正向 4 倍频**（spec-derived）—— 一个正交周期 ⇒ +4
+#   序列（A,B）：11 → 01 → 00 → 10 → 11
+# ══════════════════════════════════════════════════════════════════════════
+@scenario forward_4x
+@anchor quadrature-encoder-example
+
+SET enc_a 1
+SET enc_b 1
+SET enc_z 0
+TICK 3
+SET enc_z 1
+TICK 3
+SET enc_z 0
+TICK 3
+SETTLE
+EXPECT position 0
+
+SET enc_a 0
+TICK 3
+SET enc_b 0
+TICK 3
+SET enc_a 1
+TICK 3
+SET enc_b 1
+TICK 3
+SETTLE
+EXPECT position 4
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 3（**metamorphic**）：**反向序列** ⇒ 回到起点（4 个边沿 ⇒ −4）
+#   序列（A,B）：11 → 10 → 00 → 01 → 11
+# ══════════════════════════════════════════════════════════════════════════
+@scenario reverse_returns_to_origin
+@anchor quadrature-encoder-example
+
+SET enc_a 1
+SET enc_b 1
+SET enc_z 0
+TICK 3
+SET enc_z 1
+TICK 3
+SET enc_z 0
+TICK 3
+SETTLE
+EXPECT position 0
+
+# 先正向一个周期（与场景 2 同型：11→10→00→01→11）⇒ 4
+SET enc_a 0
+TICK 3
+SET enc_b 0
+TICK 3
+SET enc_a 1
+TICK 3
+SET enc_b 1
+TICK 3
+SETTLE
+EXPECT position 4
+
+# 反向一个周期（11→01→00→10→11）⇒ −4 ⇒ 回到 0（**metamorphic**：往返恒等）
+SET enc_b 0
+TICK 3
+SET enc_a 0
+TICK 3
+SET enc_b 1
+TICK 3
+SET enc_a 1
+TICK 3
+SETTLE
+EXPECT position 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 4：**方向指示**（spec-derived）—— `direction = a_sync2 ^ b_sync2`
+# ══════════════════════════════════════════════════════════════════════════
+@scenario direction_follows_phase
+@anchor quadrature-encoder-example
+
+SET enc_a 1
+SET enc_b 1
+SET enc_z 0
+TICK 3
+SET enc_z 1
+TICK 3
+SET enc_z 0
+TICK 3
+SETTLE
+EXPECT position 0
+
+SETTLE
+EXPECT direction 0
+
+SET enc_a 0
+TICK 3
+SETTLE
+EXPECT direction 1
+
+SET enc_b 0
+TICK 3
+SETTLE
+EXPECT direction 0
+
+# ══════════════════════════════════════════════════════════════════════════
+# 场景 5：**Z 相上升沿清零**（spec-derived）
+# ══════════════════════════════════════════════════════════════════════════
+@scenario z_clears_position
+@anchor quadrature-encoder-example
+
+SET enc_a 1
+SET enc_b 1
+SET enc_z 0
+TICK 3
+SET enc_z 1
+TICK 3
+SET enc_z 0
+TICK 3
+SETTLE
+EXPECT position 0
+
+SET enc_b 0
+TICK 3
+SET enc_a 0
+TICK 3
+SETTLE
+
+SET enc_z 1
+TICK 3
+SETTLE
+EXPECT position 0
+
+SET enc_z 0
+TICK 3
+SETTLE
+EXPECT position 0
