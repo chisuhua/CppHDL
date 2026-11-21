@@ -2,7 +2,7 @@
 id: decision-request-hierarchical-rv32i-corpus-r2-r8-2026-11
 日期: 2026-11-21
 提出者: builder（2026-11-21 · **实测三路交叉**：护栏源码 + 现场发射 + lint 复跑）
-状态: **待裁决**（台账 id=25 · 归属 architect）
+状态: ✅ **已裁决并落地**（2026-11-21 · **选项 B** · 台账 id=25 **已收口** · 闭口证据 = `openspec/changes/archive/2026-11-21-hier-rv32i-r8-port-table-2026-11/`）
 关联: .rddf/checks/arch-residual-registry.md · docs/architecture/2026-11-02-hierarchical-rtl-output.md §7 行 25 · scripts/verify_hierarchical_rtl.sh · openspec/specs/rtl-hierarchical-output/spec.md · .rddf/checks/hier-corpus-registry.md
 evidence: probe:scripts/verify_hierarchical_rtl.sh
 ---
@@ -142,3 +142,35 @@ evidence: probe:scripts/verify_hierarchical_rtl.sh
   （或另开 id 承接 R8 那条）。
 - **选 C** ⇒ ⇒ 登记表 id=25 转「**不做**」+ 后缀写明**不承担的理由**（含「产品级语料的
   顶层端口面**无独立手推判据**」这个已知风险）+ 台账 §7 行 25 两侧同批。
+
+---
+
+## 6. ✅ 裁决结果与落地（2026-11-21 · **选项 B**）
+
+> ⚠️ **本节是 dated 收口记录** ⇒ ⇒ §1–§5 的正文**逐字保留**（那是 2026-11-21 builder 侧
+> 实测的事实与当时的建议）⇒ ⇒ **不**改写历史陈述 ⇒ ⇒ 与同族的
+> `decision-request-port-face-2026-11.md` / `decision-request-uart-rx-defects-2026-11.md`
+> 同体例。
+
+**裁决 = 选项 B**（builder 建议被采纳）⇒ ⇒ §5「选 B ⇒ ① ② ③」逐条落地：
+
+| §5 条款 | 落地 | 证据 |
+|---|---|---|
+| ① 登记表 id=25 转「**已裁决**」+ 后缀写明**收窄后的口径** + 闭口证据 = 本单路径 | ✅ **转「已收口」**（2026-11-21）· 后缀 = 「口径已收敛（R2–R8 全套 = 专用 DUT 语料） · RV32I 产品级语料的顶层端口表已由 R8′ 接入手推期望集（34 根） · R6 的 4 条树结构不变量今天恒绿（未来回归防护 · 按裁决不单独立项）」 | `.rddf/checks/arch-residual-registry.md` 行 `id=25` · commit `fa6c34e` |
+| ② 台账 §7 行 25 状态格以**登记表生成的规范句**开头 | ✅ **两侧同批**（`verify_arch_ledger_residuals.sh` 双向 1:1 ⇒ PASS） | 同上 |
+| ③ **另立**一个 change 做「R8 手推端口表」（34 根） | ✅ **已落地并归档** = `openspec/changes/archive/2026-11-21-hier-rv32i-r8-port-table-2026-11/`（护栏加 **R8′** 块：fail-closed 前置 + `verilog_tree_extract.py --ports` 结构化提取 + 与**手推期望集**逐项比对 + `--self-test` 新增端口宽度投毒 + 期望源登记）⇒ ⇒ id=25 的复核条件转「**已收口**」 | 归档 change · commit `fa6c34e` |
+
+**判据（复跑命令）**：
+
+```bash
+bash scripts/verify_hierarchical_rtl.sh              # 含 R8′ ⇒ PASS
+bash scripts/verify_hierarchical_rtl.sh --self-test   # 含新投毒 ⇒ PASS
+bash scripts/verify_examples_rtl_sim.sh              # RV32I 产物面不回归 ⇒ PASS
+bash scripts/verify_arch_ledger_residuals.sh         # 残留两侧同批 ⇒ PASS
+```
+
+⚠️ **R6 的 4 条树结构不变量按裁决**不单独立项**（实测**今天恒绿** ⇒ 价值 = 未来回归防护）⇒ ⇒
+已在台账后缀写明 ⇒ ⇒ **不**因「没接 R6」而重开本项。
+
+⚠️ **复核条件已收窄**（原 =「RV32I 语料接入 R2–R8 全套」）⇒ ⇒ 现 = 「RV32I 层次化产物的
+顶层端口面变化 ⇒ ⇒ 或『R2–R8 全套』的闭口口径再次需要调整 ⇒ ⇒ 重开本项」。

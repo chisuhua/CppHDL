@@ -492,12 +492,25 @@ bash scripts/rv32i_rtl_sim_env.sh
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | 其中 non-perf | 261 | `cd build && ctest -N -LE perf \| tail -1` |
+  | 其中 non-perf | 262 | `cd build && ctest -N -LE perf \| tail -1` |
   | `tests/test_*.cpp` | 163 | `ls tests/test_*.cpp \| wc -l` |
   | `tests/chlib/test_*.cpp` | 51 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|
-  | examples 的 main() 程序 | 42 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
+  | examples 的 main() 程序 | 34 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
+
+  ⚠️ **本表是**快照**，不是锚点** ⇒ ⇒ **无机械判据**（`scripts/verify_test_counts.sh` 第 3 条
+  只**打印**、不判违规）⇒ ⇒ 漂移靠**人工**发现 ⇒ ⇒ 改测试数时 MUST 同步本表。
+  - **2026-11-21 回填**（本表两处陈旧值的根因 · 与上方 CI 锚点无关）：
+    · `non-perf` **261 → 262**：commit `af63c0d`（ADR-076 `.verif` 原语集扩展）新增 1 个
+      ctest target `test_verif_history_primitives` ⇒ ⇒ `CTEST_TOTAL` 272 → 273 ⇒ 同步 +1。
+    · 「examples 的 main() 程序」**42 → 34**：根因 = **发射入口退役 + 改名**，**不是**「main
+      搬走了」⇒ ⇒ **删 20 个**含 main 的文件（8 个 `emit_rtl*.cpp` 退役 + 8 个旧
+      `*_example.cpp` 被 `tb_*.cpp` 取代 + `examples/axi4/phase3a_complete.cpp` + 4 个
+      `examples/stream/stream_*_demo.cpp`）**新增 12 个**（8 个 `tb_*.cpp` + 4 个
+      `tb_stream_*_demo.cpp`）⇒ ⇒ 净 **−8** ⇒ ⇒ 42 − 20 + 12 = **34**（实测复算一致）。
+  - ⚠️ **派生表**「扩脚本一并更新」/「标历史快照 + 加 grep 断言」**这两个处置仍未闭合**
+    ⇒ ⇒ 本表**继续**是人工维护 ⇒ ⇒ 属**未决治理项**（不是已完成）。
 
 - **变更流水（历史）已归档** ⇒ `docs/archive/agents-notes/AGENTS-NOTES-2026-11.md`
   （2026-11-05 起；**87** 条历史条目 + KNOWN LIMITATIONS 的已解决条目 **逐字**保留）。
