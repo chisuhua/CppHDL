@@ -74,6 +74,21 @@ std::string lit(std::uint32_t width, std::uint64_t value) {
     return std::to_string(width) + "'d" + std::to_string(value & mask);
 }
 
+/// 把**端口值**写进 **64 位载体**（`hold_val` / 历史数组）时的 RHS 形态。
+///
+/// ⚠️ **窄端口 MUST 显式补零**：`logic [63:0] x = port;`（port 窄于 64 位）会触发
+///   `WIDTHEXPAND` —— 而护栏 ④（`scripts/verify_examples_rtl_sim.sh`）**禁用
+///   `-Wno-fatal`** ⇒ ⇒ 该 warning 会让整个 TB **编译失败** ⇒ ⇒ 不是「风格问题」。
+///   （实测：`EXPECT_STABLE pwm_out 3`（1 位端口）⇒ `%Warning-WIDTHEXPAND` × N
+///   ⇒ exit 1 ⇒ 「TB 编译失败」。）
+/// ⚠️ `width >= 64` ⇒ 直接赋（载体本来就是 64 位 ⇒ 无扩展 ⇒ 无 warning）。
+std::string u64_rhs(const PortInfo &info) {
+    if (info.width == 0 || info.width >= 64) {
+        return info.name;
+    }
+    return "{{" + std::to_string(64 - info.width) + "{1'b0}}, " + info.name + "}";
+}
+
 } // namespace
 
 bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest &manifest,
@@ -273,7 +288,7 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
                 break;
             case VerifOpKind::ExpectStable:
                 ports.resolve(op.port, info);
-                out << "        hold_val = " << info.name << ";\n";
+                out << "        hold_val = " << u64_rhs(info) << ";\n";
                 out << "        for (wi = 0; wi < " << op.count << "; wi = wi + 1) begin\n";
                 out << "            @(posedge " << clk << "); #1;\n";
                 out << "            checks = checks + 1;\n";
@@ -293,7 +308,8 @@ bool render_tb(std::ostream &out, const VerifProgram &program, const RtlManifest
                 ports.resolve(op.port, info);
                 {
                     const std::string h = "hist_" + verif_hist_ident(op.port);
-                    out << "        " << h << "[hist_idx_" << h << "] = " << info.name << ";\n";
+                    out << "        " << h << "[hist_idx_" << h << "] = " << u64_rhs(info)
+                        << ";\n";
                     out << "        hist_idx_" << h << " = hist_idx_" << h << " + 1;\n";
                 }
                 break;

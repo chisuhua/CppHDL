@@ -67,9 +67,11 @@ public:
 /// 每个场景的**对齐前缀**：显式把计数器拉到已知起点。
 ///
 /// ⚠️ **为什么必需**（2026-11-20 实测，两条**前置**差异，非 `WAIT` 引入）：
-///   ① 渲染式 TB 的 `write_tb_reset_pulse` 末尾多一个 `@(posedge clk)`
-///      （`src/rtl_emit/tb_stub.cpp:146`），解释器的 `apply_frame_reset` 只做
-///      `sim.reset()`（无该沿）⇒ ⇒ 依赖「复位后**绝对**拍数」的场景两端差 1 拍。
+///   ① ~~渲染式 TB 的 `write_tb_reset_pulse` 末尾多一个 `@(posedge clk)` 而解释器的
+///      `apply_frame_reset` 只做 `sim.reset()` ⇒ 依赖「复位后**绝对**拍数」的场景差 1 拍~~
+///      ⇒ ⇒ **2026-11-21 已修**（`src/rtl_emit/verif_run.cpp` 的 `apply_frame_reset`
+///      末尾补 `sim.tick()` ⇒ 两侧相位一致）⇒ ⇒ 本夹具**仍**保留显式前缀
+///      （不依赖隐式框架复位的拍数 ⇒ 场景自足）。
 ///   ② `RESET` 原语的**去断言与最后一个 `@(posedge)` 同拍**
 ///      （`src/rtl_emit/verif_render.cpp` 的 `repeat (n) @(posedge); name = <deassert>;`
 ///      **无 `#1`**）⇒ 与 DUT 的 `always_ff` 竞态 ⇒ Verilator 实测「该沿已采样到去断言」
@@ -210,8 +212,11 @@ Pairs run_rendered(const std::string &text, const std::string &tag, std::string 
     fs::create_directories(obj, ec);
     // ⚠️ `--x-assign unique`：Verilator 默认把未驱动值当 0 ⇒ 「未驱动」与「驱动成 0」
     //   不可区分（与 `tests/test_rtl_emit_contract.cpp` 同一理由）
+    // ⚠️ **禁 `-Wno-fatal`**（与护栏 ④ 同一纪律）：warning 必须**影响退出码**
+    //   ⇒ ⇒ 否则「渲染出宽度扩展赋值」这类缺陷会被 warning 静默吞掉
+    //   （实测 2026-11-21：`hold_val = <1 位端口>` 触发 `WIDTHEXPAND` ⇒ 产品产物编译失败）
     const std::string cmd =
-        vlt + " --binary --timing -CFLAGS -fcoroutines -Wno-fatal --x-assign unique" +
+        vlt + " --binary --timing -CFLAGS -fcoroutines --x-assign unique" +
         " --top-module tb_wait_level -Mdir " + obj.string() + " " +
         (d / "tb_wait_level.sv").string() + " " + (d / "dut.v").string() + " -o sim >" +
         (d / "compile.log").string() + " 2>&1";
@@ -355,6 +360,53 @@ TEST_CASE("verif-wait-level: 两端（IR 解释器 / 渲染 TB）逐条结论相
         // ② 两端**逐条**（id, 结论）相等
         REQUIRE(rp == ip);
     }
+}
+
+// ============================================================================
+// **`EXPECT_STABLE` 的两端结论相等**（窄端口 / 宽端口 · 稳定 / 不稳定）
+// ============================================================================
+//
+// ⚠️ **为什么单列一个用例**（2026-11-21）：
+//   ① `EXPECT_STABLE` 此前**没有任何单元消费者**（只有 pwm 迁移后才有）⇒ ⇒
+//      渲染侧「把窄端口赋给 64 位载体」的 `WIDTHEXPAND` **结构性测不出**
+//      （旧 harness 带 `-Wno-fatal` ⇒ warning 不影响退出码）
+//   ② 本用例的期望值 **手推**（cnt 复位后 0，每拍 +1）：
+//      · `p3 = (cnt == 3)`（1 位）· `val = cnt`（8 位）· `sig = (8 <= cnt < 16)`
+//      ⇒ `TICK 1` 后 cnt=1；`EXPECT_STABLE p3 4` ⇒ 观测 cnt 2,3,4,5 ⇒ `0,1,0,0`
+//        ⇒ **PASS FAIL PASS PASS**
+//      ⇒ `EXPECT_STABLE val 3` ⇒ 观测 cnt 6,7,8 ⇒ `6,7,8` ≠ 5 ⇒ **FAIL ×3**
+//      ⇒ `EXPECT_STABLE sig 2` ⇒ 观测 cnt 9,10 ⇒ `1,1` == 1 ⇒ **PASS ×2**
+//   ③ harness **禁 `-Wno-fatal`** ⇒ ⇒ 渲染出的宽度扩展赋值会让**编译**失败 ⇒
+//      本用例在缺陷回归时**转红**（不是「warning 静默通过」）。
+TEST_CASE("verif-stable: 两端逐条结论相等（窄 / 宽端口 · 稳定 / 不稳定）",
+          "[verif][wait-level][verilator_e2e]") {
+    if (verilator_path().empty()) {
+        SKIP("verilator 不可用（本用例的渲染侧需要真编译）");
+    }
+    const std::string body = std::string(kPrelude) + "TICK 1\n" +
+                             "EXPECT_STABLE p3 4\n" +  // cnt 2,3,4,5 ⇒ 0,1,0,0
+                             "EXPECT_STABLE val 3\n" + // cnt 6,7,8   ⇒ 6,7,8 (≠5)
+                             "EXPECT_STABLE sig 2\n";  // cnt 9,10    ⇒ 1,1 (==1)
+    const std::string text = scenario_text(body);
+    std::string ierr, rerr;
+    const Pairs ip = run_interp(text, ierr);
+    const Pairs rp = run_rendered(text, "stable_wide_narrow", rerr);
+    INFO("interp error: " << ierr);
+    INFO("render error: " << rerr);
+    REQUIRE(ierr.empty());
+    REQUIRE(rerr.empty());
+
+    const std::vector<std::string> want = {"PASS", "FAIL", "PASS", "PASS", "FAIL",
+                                           "FAIL", "FAIL", "PASS", "PASS"};
+    REQUIRE(ip.size() == want.size());
+    for (std::size_t i = 0; i < want.size(); ++i) {
+        INFO("check index: " << i);
+        // ⚠️ `EXPECT_STABLE` 的 **N 条**结论共用**同一个** `check_id`（一个原语 = 一个 id）
+        //   ⇒ ⇒ 只判前缀，不判 `s#i`（与 `EXPECT` 的逐条命名不同）
+        REQUIRE(ip[i].first.rfind("s#", 0) == 0);
+        REQUIRE(ip[i].second == want[i]);
+    }
+    REQUIRE(rp == ip);
 }
 
 // ============================================================================

@@ -202,8 +202,11 @@ Pairs run_rendered(const std::string &text, const std::string &tag, std::string 
     const fs::path obj = d / "obj";
     std::error_code ec;
     fs::create_directories(obj, ec);
+    // ⚠️ **禁 `-Wno-fatal`**（与护栏 ④ 同一纪律）：warning 必须影响退出码
+    //   ⇒ ⇒ 否则渲染器发出的宽度/未驱动类 warning 会被静默吞掉
+    //   （实测 2026-11-21：`hold_val` / 历史数组的窄端口赋值 ⇒ `WIDTHEXPAND`）
     const std::string cmd =
-        vlt + " --binary --timing -CFLAGS -fcoroutines -Wno-fatal --x-assign unique" +
+        vlt + " --binary --timing -CFLAGS -fcoroutines --x-assign unique" +
         " --top-module tb_hist -Mdir " + obj.string() + " " + (d / "tb_hist.sv").string() + " " +
         (d / "dut.v").string() + " -o sim >" + (d / "compile.log").string() + " 2>&1";
     if (ch_test::run_tool(cmd).exit_code != 0 || !fs::exists(obj / "sim")) {
