@@ -1,3 +1,32 @@
+## 2026-11-21 — 端口重名 `CHERROR` 的**触发**判别力补齐（假绿缺口闭合）
+
+**改了什么**：
+
+- **缺口**：`tests/test_port_name_parity.cpp` 的 `Ratchet 3` 只断言**名字**
+  （`top_dup_prog_addr` / `top_dup_prog_addr_1`）⇒ ⇒ **删掉 `include/codegen_naming.h` 里的
+  `CHERROR` 也全绿** ⇒ ⇒ 「`CHERROR` 的**触发**」从未被任何测试断言（假绿缺口）。
+- **新增 2 个用例**（**同一 target** ⇒ ⇒ **`CTEST_TOTAL` 锚点不变**）：
+  ① **正向**：显式端口名冲突 ⇒ 断言 `CHERROR` **被点名**（含 base `top_dup_prog_addr`
+  + 节点 `top.dup.prog_addr`）**且**两个名字仍唯一（点名报告 ≠ 丢名）；
+  ② **反向**：不重名 ⇒ 断言**该条消息不出现**（⚠️ **不是**断言「stderr 为空」⇒ 不受
+  其它日志噪声影响）。
+- **观测手段**：`CHERROR` ⇒ `log_level::error` ⇒ `std::cerr` ⇒ ⇒ 仓内**无**「最近一条
+  error」的编程接口 ⇒ ⇒ 用 `tmpfile` + `dup2` 捕获（⚠️ **不用 pipe** ⇒ 缓冲区写满会
+  **死锁**）⇒ ⇒ **RAII 还原**（`REQUIRE` 抛异常时 MUST 还原 ⇒ 否则后续用例诊断全丢）。
+  ⚠️ **POSIX-only** ⇒ CI 平台 = 仅 Ubuntu（2026-11-03 裁决）⇒ macOS/Windows 无 CI 证据。
+
+**判别力自证（两条变异，各自只打自己那一格）**：
+
+| 变异 | 实测 |
+|---|---|
+| **M1**：删 `CHERROR`（保留变量使用 ⇒ 编译干净） | ✅ **仅正向红**（`:393`）|
+| **M2**：报错**无条件**化（**保留** `reserved.insert` 占位副作用 ⇒ 名字行为零变化） | ✅ **仅反向红**（`:435`）|
+| 还原 + **重建** | ✅ 复绿（40 断言 / 7 用例）|
+
+⚠️ **M2 的第一次实现不纯**（用 `if (true)` 顶掉了 `reserved.insert` ⇒ ⇒ 连占位副作用一起改
+⇒ ⇒ `Ratchet 3` 跟着红 ⇒ ⇒ 证据不纯）⇒ ⇒ **已重做为干净变异** ⇒ ⇒ 如实登记在
+`.rddf/roadmap/phase-6-rtl-productization.md` §4（该行追加 dated 注记 · **不改写**原登记）。
+
 ## 2026-11-21 — `.verif` 的 `RESET` 指向框架复位端口 ⇒ **两端同源 fail-closed**（静默空操作硬化）
 
 **改了什么**：

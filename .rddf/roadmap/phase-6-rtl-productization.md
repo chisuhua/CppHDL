@@ -182,6 +182,24 @@
 | **特权级接线**（CSR 指令 / `ECALL` / `EBREAK` / `MRET` / trap 入口 / 中断） | `rv32i-isa-gap-closure`「不在本项」 | 周期长、面大 ⇒ ⇒ 与 phase-6 P6「MUST 独立立项」的裁决一致 |
 | **AXI cache 接入流水线**（MEM 级 stall 反压通路） | 本轮 planner 实测 | 流水线 MEM 级**无反压通路** ⇒ ⇒ 架构级改动 |
 | **N3 补遗 · 重复显式名的 `CHERROR` 判别力** | `port-naming-ratchet` N3（实现在 `include/codegen_naming.h:195-200,210-218`） | 现有 `tests/test_port_name_parity.cpp` 的 **Ratchet 3** 只断言**名字**（`top_dup_prog_addr` / `top_dup_prog_addr_1`）⇒ ⇒ **删掉 `CHERROR` 也全绿** ⇒ ⇒ 缺口 = 「`CHERROR` 的**触发**未被断言」。<br>立项内容：**正向**（构造重名 ⇒ 断言 `CHERROR` 触发 **且** 两名不同）∧ **反向**（不重名 ⇒ 断言**无** `CHERROR`）+ **判别力自证**（删 `CHERROR` ⇒ 正向必红）。<br>触发条件 = 本项进入任一批次时；纯测试增量（动 `CTEST_TOTAL` ⇒ 与注释块编辑同批或在其后）。 |
+
+✅ **2026-11-21 已完成**（**builder 回填** · 纯测试增量 · **未动** `CTEST_TOTAL`）⇒ ⇒
+判据 = `tests/test_port_name_parity.cpp` 新增 **2** 个用例（同一 target ⇒ ⇒ **锚点不变**）：
+① **正向**「显式端口名冲突 ⇒ `CHERROR` 被点名（且两个名字仍唯一）」⇒ ⇒ 断言 stderr 含
+「端口命名冲突」+ 点名 base（`top_dup_prog_addr`）+ 点名节点（`top.dup.prog_addr`）
++ 两名字仍不同；② **反向**「无冲突 ⇒ 不触发 `CHERROR`」⇒ ⇒ 断言**该条消息**不出现
+（⚠️ **不是**断言「stderr 为空」⇒ ⇒ 不受其它日志噪声影响）。
+⚠️ **观测手段** = 捕获 `std::cerr`（`CHERROR` ⇒ `log_level::error` ⇒ stderr）⇒ ⇒ 仓内
+**无**「最近一条 error」的编程接口 ⇒ ⇒ 用 `tmpfile` + `dup2`（⚠️ 不用 pipe ⇒ 缓冲区写满会
+**死锁**）⇒ ⇒ **RAII 还原**（`REQUIRE` 抛异常时 MUST 还原 ⇒ 否则后续用例诊断全丢）。
+⚠️ **POSIX-only** ⇒ CI 平台 = 仅 Ubuntu（2026-11-03 裁决）⇒ macOS/Windows 无 CI 证据。
+⇒ ⇒ **判别力自证（两条变异，各自只打自己那一格）**：
+**M1**（删 `CHERROR`，保留变量使用 ⇒ 编译干净）⇒ ⇒ **仅正向红**（`:393`）；
+**M2**（报错**无条件**化，但**保留** `reserved.insert` 的占位副作用 ⇒ ⇒ 名字行为零变化）
+⇒ ⇒ **仅反向红**（`:435`）⇒ ⇒ 还原 + **重建** ⇒ 复绿（40 断言 / 7 用例）。
+⚠️ **M2 的第一次实现不纯**（用 `if (true)` 顶掉了 `reserved.insert` ⇒ ⇒ 连占位副作用一起
+改 ⇒ ⇒ `Ratchet 3` 跟着红 ⇒ ⇒ 证据不纯）⇒ ⇒ **已重做为干净变异** ⇒ ⇒ 记录在此，
+免得下次把「3 个用例红」误读成「M2 判别力更强」。
 | **N2 补遗 · 首批端口消化（32 端口）** | `port-naming-ratchet` N2 /「存量消化」AC | 对象 = `examples/riscv-mini/src/rv32i_pipeline_top.h`（用户 **2026-11-11** 拍板 · **32 端口**）。<br>判据 = 该文件 `__io` 全部端口带**显式名** ⇒ ⇒ `.rddf/checks/port-naming-registry.md` 的相应豁免条目**减少**（棘轮只许减）。<br>触发条件 = 用户要求 RTL 端口**人眼可读**（用户 ⑤ 的原始诉求）；⚠️ 会改该 SoC 的**产物端口名** ⇒ ⇒ MUST 与 `examples-rtl-sim-coverage` 的 tsv / `examples-rtl-expectations.md` **同批**同步（否则 10 个 TB 的端口名漂移）。<br>✅ **2026-11-13 · R17.1 已闭（architect 裁量）=「现在做」**，**放置 = 独立小批**（先于 B3）⇒ ⇒ 实施路径 = `.rddf/roadmap/phase-6-next-steps.md` §2 的 **R17.4**（8 步 · 每步一个判据）⇒ ⇒ ⚠️ **与 B3 的 L1–L6 在本文件上同区 ⇒ MUST 顺序执行**（`firmware-load-chain-2026-11.md:197` 的爆炸半径）⇒ ⇒ **用户可随时推翻**（回退 = 一次 revert）|
 | **N2 补遗 · 产物层双测试**（`NamedRootArtifactsUnchanged` + `UnnamedRootArtifactPinned`） | `node-name-prefix-consistency` P2 的**产物层**两条（`## Acceptance` 的 N4 / N5）⇒ ⇒ **从未实施**（全仓 grep 两个标识符 = 0 命中） | 判别力自证要求：① `NamedRootArtifactsUnchanged` = 仓内 3 份既有 `.v` 的 `git diff --stat` **== 0**（⚠️ `scripts/verify_hierarchical_rtl.sh` 对本改动**结构性失明** ⇒ ⇒ MUST 用 `git diff` 直证）· ② `UnnamedRootArtifactPinned` = 显式生成无名根产物 + golden 钉住新形态（`unnamed_leaf_*`）· ③ 负向对照：把 `include/component.h` 的特判加回去 ⇒ ⇒ 产物层 MUST 必红 ⇒ ⇒ 还原复绿 · ④ 变异自证 MUST 含「重建」步骤（还原源码 ≠ 复原）· 触发条件 = route (c) 重开时一并处置 ⇒ ⇒ 登记人 = builder · **登记来源** = `rtl-track-followup-list-2026-11.md` §1.3.1 的 N4 / N5 |
 | **索引表状态列的自动生成**（`improvement-suggestions.md` 的状态列从 frontmatter `状态:` 生成） | 本轮 planner 实测 + `rtl-track-followup-list-2026-11.md` §2 F8 | 现状 = **人工维护** ⇒ ⇒ 9 份草案（7 份 RTL 轨 + 2 份本批）要人工同步 ⇒ ⇒ 必然漂（本轮三处漂移里 **2 处**出在索引表）⇒ ⇒ 根本修法 = **从 frontmatter `状态:` 生成** + 一致性护栏（类比 `scripts/verify_roadmap_fragments.sh` 的 vendored 渲染 + `verify_roadmap_fragments.sh`）⇒ ⇒ 归 planner（文档面）· 触发条件 = 下一轮改动 `improvement-suggestions.md` 状态列时 |

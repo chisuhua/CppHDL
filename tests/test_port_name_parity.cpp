@@ -35,9 +35,15 @@
 #include "device.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
+
+// ⚠️ POSIX-only（`dup2` / `tmpfile`）—— CI 平台范围 = **仅 Ubuntu**
+//   （2026-11-03 用户裁决）⇒ ⇒ macOS/Windows **无 CI 证据**（已知且接受）。
+#include <unistd.h>
 
 using namespace ch;
 using namespace ch::core;
@@ -274,4 +280,162 @@ TEST_CASE("退化 6: 根无名 + 无端口 ⇒ 命名表为空且不崩", "[port
     // 发射也不崩（空模块）
     const std::string v = emit_module_text(ctx.get());
     REQUIRE(v.find("module top") != std::string::npos);
+}
+
+// ============================================================================
+// `N3 补遗` · 显式端口名冲突的 **`CHERROR` 触发判别力**
+//
+// ⚠️ **缺口是什么**（`.rddf/roadmap/phase-6-rtl-productization.md` §4 · N3 补遗）：
+//   `Ratchet 3` 只断言**名字**（`top_dup_prog_addr` / `top_dup_prog_addr_1`）
+//   ⇒ ⇒ **删掉 `include/codegen_naming.h` 里的 `CHERROR` 也全绿**
+//   ⇒ ⇒ 「`CHERROR` 的**触发**」从未被任何测试断言 ⇒ ⇒ 假绿缺口。
+//
+// ⚠️ **为什么必须观测 stderr**：`CHERROR` 是 logger 宏 ⇒ ⇒ 输出到 `std::cerr`
+//   （`include/utils/logger.h` 的 `log_message` / `log_message_simple` 的
+//   `log_level::error` 分支）⇒ ⇒ 仓内**无**「最近一条 error」这类编程接口
+//   ⇒ ⇒ 只能观测它的输出通道。
+//   ⚠️ **为什么用临时文件而不是 pipe**：pipe 的缓冲区写满会**死锁**
+//   ⇒ ⇒ 临时文件无上限 ⇒ ⇒ 安全。
+//   ⚠️ **RAII 是必须的**：`REQUIRE` 失败会抛异常 ⇒ ⇒ 若无析构还原 ⇒ stderr
+//   **永久**被重定向 ⇒ ⇒ 后续用例的诊断全丢 ⇒ ⇒ 掩盖真实失败。
+// ============================================================================
+
+// ── 工具：捕获 stderr（判定 `CHERROR` 是否触发）───────────────────────────
+class StderrCapture {
+public:
+    StderrCapture() {
+        std::fflush(stderr);
+        saved_ = ::dup(STDERR_FILENO);
+        if (saved_ < 0) {
+            return;
+        }
+        file_ = std::tmpfile();
+        if (file_ == nullptr) {
+            ::close(saved_);
+            saved_ = -1;
+            return;
+        }
+        std::fflush(stderr);
+        if (::dup2(::fileno(file_), STDERR_FILENO) < 0) {
+            std::fclose(file_);
+            file_ = nullptr;
+            ::close(saved_);
+            saved_ = -1;
+        }
+    }
+
+    ~StderrCapture() { restore(); }
+
+    StderrCapture(const StderrCapture &) = delete;
+    StderrCapture &operator=(const StderrCapture &) = delete;
+
+    /// 捕获是否**建立成功**（fail-closed 判据 ⇒ 失败 ⇒ 用例红，**不**静默跳过）
+    bool ok() const { return file_ != nullptr && saved_ >= 0; }
+
+    /// 读回**已捕获**的文本（**不**关闭捕获 ⇒ 之后仍可继续捕获）
+    std::string text() {
+        if (file_ == nullptr) {
+            return {};
+        }
+        std::fflush(stderr);
+        std::rewind(file_);
+        std::string out;
+        char buf[4096];
+        std::size_t n = 0;
+        while ((n = std::fread(buf, 1, sizeof(buf), file_)) > 0) {
+            out.append(buf, n);
+        }
+        return out;
+    }
+
+    /// 还原 stderr（**幂等** ⇒ 析构里再调一次也安全）
+    void restore() {
+        if (file_ == nullptr) {
+            return;
+        }
+        std::fflush(stderr);
+        ::dup2(saved_, STDERR_FILENO);
+        ::close(saved_);
+        saved_ = -1;
+        std::fclose(file_);
+        file_ = nullptr;
+    }
+
+private:
+    int saved_ = -1;
+    std::FILE *file_ = nullptr;
+};
+
+// ── 正向：重名 ⇒ `CHERROR` **确实被触发**，且两个名字仍唯一 ──────────────
+TEST_CASE("N3 补遗: 显式端口名冲突 ⇒ CHERROR 被点名（且两个名字仍唯一）",
+          "[port][naming][parity][ratchet][cherror]") {
+    auto ctx = std::make_unique<ch::core::context>("n3_cherror_hit");
+    ch::core::ctx_swap swap(ctx.get());
+
+    // ⚠️ **两个子组件实例都叫 `dup`** ⇒ ⇒ 端口节点名同为 `top.dup.prog_addr`
+    //   ⇒ ⇒ sanitize 后同为 `top_dup_prog_addr` ⇒ ⇒ **必然冲突**。
+    DupParent parent(nullptr, "top");
+    parent.create_ports();
+    parent.describe();
+
+    REQUIRE(parent.child_count() == 2);
+
+    // ── 在**捕获窗口内**构建命名表（`CHERROR` 就在这里触发）─────────
+    StderrCapture cap;
+    REQUIRE(cap.ok()); // ⚠️ fail-closed：捕获不成 ⇒ 红（**不**静默跳过）
+    const auto table = name_table(ctx.get());
+    const std::string err = cap.text();
+    cap.restore();
+
+    // ── ① `CHERROR` **确实被触发**（本用例的**唯一**新增判据）──────
+    //    ⚠️ **变异自证 M1**：删掉 `include/codegen_naming.h` 里的 `CHERROR`
+    //      ⇒ ⇒ 本条必红 ⇒ ⇒ 证明「判据真的在判 `CHERROR`」而不是恒绿。
+    REQUIRE(err.find("端口命名冲突") != std::string::npos);
+    // ⚠️ 消息 MUST **点名** base 与节点 ⇒ ⇒ 否则「点名报告」退化成「报了个错」
+    REQUIRE(err.find("top_dup_prog_addr") != std::string::npos);
+    REQUIRE(err.find("top.dup.prog_addr") != std::string::npos);
+
+    // ── ② 报错**不**等于拒绝：两个名字仍唯一（点名报告 ≠ 丢名）──────
+    //    ⚠️ 这条**已有** `Ratchet 3` 覆盖 ⇒ ⇒ 此处是**对照**（同一构造下
+    //      「既报错、又不丢名」两条同时成立）⇒ ⇒ 防止有人把 `CHERROR`
+    //      改成「抛异常/中止」而测试仍绿。
+    std::vector<std::string> names;
+    for (const auto &child : parent.children()) {
+        const auto *probe = static_cast<const Probe *>(child.get());
+        const auto it = table.find(probe->io().prog_addr.impl());
+        REQUIRE(it != table.end());
+        names.push_back(it->second);
+    }
+    std::sort(names.begin(), names.end());
+    REQUIRE(names.size() == 2);
+    REQUIRE(names[0] == "top_dup_prog_addr");
+    REQUIRE(names[1] == "top_dup_prog_addr_1");
+    REQUIRE(names[0] != names[1]);
+}
+
+// ── 反向：不重名 ⇒ **不**触发 `CHERROR`（与正向配对，防「无条件报错」）──
+TEST_CASE("N3 补遗: 无冲突 ⇒ 不触发 CHERROR（反向判据）",
+          "[port][naming][parity][ratchet][cherror]") {
+    auto ctx = std::make_unique<ch::core::context>("n3_cherror_miss");
+    ch::core::ctx_swap swap(ctx.get());
+
+    Probe probe(nullptr, "top");
+    probe.create_ports();
+
+    StderrCapture cap;
+    REQUIRE(cap.ok());
+    const auto table = name_table(ctx.get());
+    const std::string err = cap.text();
+    cap.restore();
+
+    // ⚠️ **不是**断言「stderr 为空」⇒ ⇒ 其它级别（warning/fatal）也走 stderr
+    //   ⇒ ⇒ 只断言**本条消息**不出现 ⇒ ⇒ 精确且不受噪声影响。
+    //   ⚠️ **变异自证 M2**：把 `CHERROR` 改成**无条件**触发 ⇒ ⇒ 本条必红
+    //      ⇒ ⇒ 证明反向判据**不是**恒绿（正反两面都有判别力）。
+    REQUIRE(err.find("端口命名冲突") == std::string::npos);
+
+    // 对照：名字是那个唯一名（**没有** `_1` 后缀 ⇒ ⇒ 差别来自冲突本身）
+    const auto it = table.find(probe.io().prog_addr.impl());
+    REQUIRE(it != table.end());
+    REQUIRE(it->second == "top_prog_addr");
 }
