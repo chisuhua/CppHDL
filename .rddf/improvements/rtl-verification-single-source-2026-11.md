@@ -4,8 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: refactor
-状态: draft
-进度: '**立项（2026-11-17）** · 未开工 · 🚪 开工前门 = **ADR-074 / ADR-075 已 Proposed（双审闭合 + 复审 APPROVE）** ⇒ 立项后回填 Accepted'
+状态: in-progress
+进度: '**立项（2026-11-17）** · **已实施并归档**（change `rtl-verification-single-source-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-19-rtl-verification-single-source-2026-11/` · verifier 第 2 轮 **23/23** ⇒ 「本 change 可归档」· 证据 `.rddf/reviews/rtl-verification-single-source-2026-11-verify-2.md`）· 🚪 开工前门 = **ADR-074 / ADR-075**（**均已 Accepted**）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **C1–C6 已落地**（W3「发射实现两处」已收口 · 2026-11-22）⇒ ⇒ 但**移交项尚未全部立项**（「其余 example 的 `.sv` TB 仍手写」·「子 module 端口名具名化」⇒ ⇒ **无对应 improvement 文件**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐对应草案后可改 `implemented`**'
 主题: RTL 验证的单一真相源 —— 判据单一语义（IR）+ 生成式 `*.sv` TB + 端口具名化 + 发射面收敛
 依赖: ADR-072（Accepted · v2.2 · D4 被本项部分 supersede）· ADR-073（Accepted · v1.2）·
   ADR-074（**Proposed**）· ADR-075（**Proposed**）·
@@ -50,7 +50,12 @@ revision_count: 0
 > 同批含 `emit_rtl.cpp` / `emit_rtl_fw_init.cpp`）**均已删** ⇒ ⇒ 「发射实现两处」
 > **不再成立**。⇒ ⇒ 现行入口 = 各 TB 自身的 `--emit-rtl` 模式
 > （组合 `--hierarchical` / `--firmware-init` 两个正交标记）。
-> ⚠️ 该表的其余行（W1/W2/W4/W5）状态不变。
+> ⚠️ 该表的其余行：**W4 的症状已由 `f2cc422` 消除**（护栏 `scripts/verify_examples_rtl_sim.sh`
+>   的 **⑥' 生成物新鲜度** + **⑥‴ 无残留** ⇒ ⇒ 「生成物无新鲜度判据」不再成立）
+>   ⇒ ⇒ **行未回填**（症状行 ≠ 判据行）；**W1 / W2 / W5 仍开**（W2 / W5 属 axi4 侧 ⇒ ⇒
+>   「子 module 端口名具名化」·「`AxiLiteTop` 抽到 `include/axi4/`」⇒ ⇒ 均**未立项**）。
+> ⚠️ **frontmatter `状态:` 已由 `draft` 改为 `in-progress`**（2026-11-22 · builder 回填 · 理由见
+>   `进度:` 字段 · §0.0 词表）。
 
 ## 2. What Changes（改什么）
 

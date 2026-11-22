@@ -4,8 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
-状态: draft
-进度: "**立项（2026-11-16）** · 未开工 · ✅ **开工前门 P-0 已闭（2026-11-16 · ADR-072 v2 + v2.1 Accepted · `ef0d284` / `e00b321`）** ⇒ ⇒ **P-1（spec delta）已解封**（G-1…G-8 全部已由 ADR-072 v2 交付）· ⚠️ **spec delta 尚未写**（依赖 v2 的裁决 ⇒ ⇒ 不得归档）"
+状态: in-progress
+进度: "**立项（2026-11-16）** · **已实施并归档**（change `rtl-productization-surface-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11/`）· ✅ **开工前门 P-0 已闭**（2026-11-16 · ADR-072 v2 + v2.1 Accepted · `ef0d284` / `e00b321`）⇒ ⇒ **P-1 spec delta 已交付并合并**（G-1…G-8 全部由 ADR-072 v2 交付）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **D1 / J1–J4 已落地**（产品端口面 **130 → 34** · manifest schema **v1 → v2** · 两份 capability delta 已合并进 `openspec/specs/`）⇒ ⇒ 但 **D5 / D6**（覆盖登记完备性 + 可执行载体）仍**未立项**（`rtl-productization-coverage-registration-2026-11` **文件不存在**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐该草案后可改 `implemented`**"
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）—— 顶层端口面收敛 + 产品单元四件套
 依赖: rtl-emit-product-tooling-2026-11（implemented）· examples-rtl-sim-coverage-2026-11（implemented）· rv32i-hierarchical-example-2026-11（implemented）· rtl-hierarchical-output capability · rtl-emit-portability capability
 来源: 用户 2026-11-16「评估能否生成功能完整的 RISC-V CPU 核 RTL + 推进为 RTL 生成能力产品化」+ **ADR-072**（Accepted 2026-11-16 · oracle ×1 + critic ×2 复审 APPROVE）
@@ -147,9 +147,18 @@ evidence: probe:scripts/verify_flat_rtl_emit.sh
 | `rtl-hierarchical-output` | **MODIFIED × 4 + REMOVED + ADDED × 1**（= **5 条**） | **MODIFIED（4）**：`层级粒度 MUST 由显式声明决定（默认 inline）`（`:32`）· `不属于任何组件的节点 MUST 归顶层 module`（`:98` · 标题中性）· `成层且非根的 module 端口 MUST 覆盖自身 \`ch_in\` / \`ch_out\`，且每个端口可追溯`（`:240`）· `跨层端口策略 MUST 是单一权威的线性枚举，且各取值的失败语义 MUST 明确`（`:402`）<br>**REMOVED + ADDED（1）**：`悬空子输入 MUST 向上冒泡为顶层输入`（`:190` · 标题会变假） |
 
 > ⚠️ **delta 尚未写**（🚪 门 = ADR-072 v2 ⇒ ⇒ 见下方 G-1…G-8）⇒ ⇒ 原因：上表 **6 条** Requirement 的改写**依赖 v2 的裁决** ⇒ ⇒ **本 change 在 delta 写齐前 MUST NOT 归档**（否则主 spec 会冻着与新产品逐字相反的条款 ⇒ ⇒ 正是 critic BLOCKER 的根因）。
+
 > ⚠️ **delta 的唯一权威 = `docs/adr/ADR-072-rtl-productization-surface-and-boundary.md` §2.8（`:355` 定 6 条）** ⇒ ⇒ 本草案**不再自持口径**（原「唯一权威口径 · proposal T7 MUST 与此一致」的表述**已作废** —— 它列了 7 条，含 3 条已被裁决**不需 delta** 的 `:478`/`:518`/`:529`，且**漏 `:402`**）。
 > ⇒ ⇒ **6 条** = **4 MODIFIED**（`:32` `:98` `:240` `:402`）+ **2 REMOVED+ADDED**（`rtl-emit-portability` 的 manifest schema · `:190`）
 > ⇒ ⇒ **4 条 MUST NOT 进 delta**：`:478` · `:518` · `:529` · `:637`（ADR-072 v2 已逐一裁决）
+
+> ✅ **2026-11-22 · 状态订正（builder 回填）**：上段的「**delta 尚未写**」**已过时** ⇒ ⇒
+> delta **已写并合并**（`rtl-emit-portability/spec.md` 携带产品端口表维度 ·
+> `rtl-hierarchical-output/spec.md:38-55` 已写「顶层端口面 = 框架 clock/reset + 根组件自有 `__io`；
+> 后代 `ch_out` MUST NOT 上顶层」·「悬空子输入冒泡」那条已退役为**恒拒绝**）⇒ ⇒ change 已归档
+> （`openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11/`）⇒ ⇒
+> **AC 判定以归档 change 的 proposal + verifier 报告为准**（本文件的 checkbox 是立项期快照 · 未逐条回填）。
+> ⚠️ **frontmatter `状态:` 已由 `draft` 改为 `in-progress`**（理由见 `进度:` 字段 · §0.0 词表）。
 
 ---
 
