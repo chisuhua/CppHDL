@@ -5,9 +5,9 @@ phase: phase-6
 category: framework
 type: feature
 状态: draft
-进度: "**立项（2026-11-22 · planner）** · 未开工 · 计划 **4 项**：**S0 决策门（architect）** → **S1 结构骨架** → **S2 MEM 反压** → **S3 总线主口 + L1** · ⚠️ **S0 未闭前 S1 MUST NOT 开工** · ✅ **metis 第 1 轮已处置（4 P0 + 7 P1 + 5 P2 · 见文末）**"
+进度: "**立项（2026-11-22 · planner）** · 未开工 · 计划 **4 项**：**S0 决策门（architect）** → **S1 结构骨架** → **S2 MEM 反压** → **S3 总线主口 + L1** · ✅ **S0 决策门已闭（ADR-077 `Accepted` 2026-11-23 · G-1…G-4 = D1…D4）⇒ S1 可开工** · ✅ **metis 第 1 轮已处置（4 P0 + 7 P1 + 5 P2 · 见文末）** · ✅ **2026-11-23 proposal 已同步 ADR-077 的权威数字**（端口 8 · `min_varying == 2` · `SocTraceCounter` · 7 字程序）"
 主题: RV32I 从「示例 SoC」走向「可组合 SoC 平台」—— 核心复合体 / SoC 根两级产品单元 + 总线化演进
-依赖: ADR-046（微架构唯一权威）· ADR-061（成层粒度显式声明）· ADR-070（RV32I 成层 + 兄弟边 · D4 条件③）· ADR-072（产品端口面 + 四件套）· ADR-073（SoC 产物形态 + SoC 级 TB）· ADR-074（验证单一真相源）· `rv32i-privileged-csr-2026-11`（**S5 的硬前置** · draft · 不属本项）
+依赖: **ADR-077**（两级顶层 + SoC 组合的四条形态裁决 · **Accepted** 2026-11-23 · **S0 决策门的载体**）· ADR-046（微架构唯一权威 · §D1 已由 ADR-077 追记细分）· ADR-061（成层粒度显式声明）· ADR-070（RV32I 成层 + 兄弟边 · D4 条件③）· ADR-072（产品端口面 + 四件套）· ADR-073（SoC 产物形态 + SoC 级 TB）· ADR-074（验证单一真相源）· `rv32i-privileged-csr-2026-11`（**S5 的硬前置** · draft · 不属本项）
 来源: 用户 2026-11-22「想把 RV32I 核做成真实可替换单元 —— 后续加 L1/L2 缓冲、MMU、内存控制器、总线」+「riscv-mini 可看成 riscv-soc 的 spike」+「riscv-mini 改造成核复合体，另建 examples/riscv-soc 实施 Rv32iSocTop」
 生成时间: 2026-11-22
 evidence: probe:scripts/probe_r21_hier_granularity.sh
@@ -26,9 +26,10 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 
 | # | 权威 | 对本项的约束 |
 |---|---|---|
-| ① | **ADR-046**（`include/cpu/` = 微架构唯一权威；`examples/riscv-mini/src/` 收敛后**只留 SoC 顶层**） | 🔴 **字面张力**：本项产生**两个** example 侧顶层（IP 级 + SoC 级）⇒ MUST 由 architect 以 dated addendum 明确分工（**G-1**） |
+| ⓪ | **ADR-077**（**Accepted** 2026-11-23 · **S0 决策门**） | **D1** 两级顶层 + 判据分域（「8」只约束核复合体 · SoC 根 = 10）· **D2** 模块类型名 = 非契约（登记在产品登记面）· **D3** `prog_*` 长期保留根端口 · **D4** 单行 `kind=soc` ⇒ ⇒ **本项的权威数字来源 = ADR-077 的 V1 / V2 / V4** |
+| ① | **ADR-046**（`include/cpu/` = 微架构唯一权威；`examples/riscv-mini/src/` 收敛后**只留 SoC 顶层**） | ✅ **字面张力已闭**：ADR-077 把它解释为「消除同名重复」而非「全仓只许一个 example 顶层」，并以 dated addendum（2026-11-23）把第 1 类条目细分为**两个装配层级**（**G-1** 已裁） |
 | ② | **ADR-061 决策①**（成层**显式**声明 · 默认 inline） | 新根与新 IP 的成层声明 MUST 显式写 |
-| ③ | **ADR-070 D2 / D3 / D4** | D2 的 7 个成层点是既有裁决（**不改**）· D3：**模块类型名 = 产物级契约名**（改名 = 产物级破坏）· D4 条件③：产物 MUST 有**至少一条真实兄弟边** |
+| ③ | **ADR-070 D2 / D3 / D4** | D2 的 7 个成层点是既有裁决（**不改**）· D3：**模块类型名 = 明文非契约**（用户 2026-11-15 裁决 · 改名**不**构成破坏性变更，但结构判据 MUST 重算）· D4 条件③：产物 MUST 有**至少一条真实兄弟边**（S1 = **两条**） |
 | ④ | **ADR-072 D1 / D1-h** | 产品端口面 = 框架 2 + **根自有 IO**；后代 `ch_out` 降为体内 `logic`；**冒泡机制已退役** |
 | ⑤ | **ADR-073**（SoC 产物 = 层次化 · 每 IP 一 module · **每个后代 `ch_in` 必须有驱动或 tie-off** · SoC 级 TB = 独立 Verilog TB） | 新 SoC 根按同一纪律建；模板 = `examples/axi4/axi_soc_example_top.h` |
 | ⑥ | **ADR-074** | 期望值 MUST 手推；`.sv` 生成不了（RV32I 的 4 个形态）⇒ 手写 + `generated=no` 终态 |
@@ -78,7 +79,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 ### IN
 
 - **S0 决策门**（architect）：G-1 … G-4（见文末）
-- **S1 结构骨架**：`examples/riscv-soc/` + `Rv32iSocTop`（核作 `ch_layer`）+ **`SocStoreCounter`**（核→兄弟的真实连线）+ SoC 级 TB（走 `check_products` 四件套）+ 登记（**核零改动**）
+- **S1 结构骨架**：`examples/riscv-soc/` + `Rv32iSocTop`（核作 `ch_layer`）+ **`SocTraceCounter`**（核→兄弟的两条真实连线）+ SoC 级 TB（走 `check_products` 四件套）+ 登记（**核零改动**）
 - **S2 MEM 反压**：`data_ready` 真消费（`ready ≡ 1` 时**时序等价**）
 - **S3 总线主口 + L1**：数据侧总线化（**新增**总线路径、**不删**根 `prog_*`）+ L1 接入（吃 S2 的反压）
 
@@ -118,7 +119,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | 批 | change（拟定） | 内容 | 行为变化 | 前置 |
 |---|---|---|---|---|
 | **S0** | 决策单（architect · 非 change） | G-1…G-4 | 无 | — |
-| **S1** | `riscv-soc-skeleton-2026-11` | 新目录 + `Rv32iSocTop`（`ch_layer<Rv32iPipelineTop>` + `ch_layer<SocStoreCounter>`）+ SoC 级 TB（`check_products` 4 项 + 解释器路径手推断言）+ 登记 | **零**（核不动） | S0 |
+| **S1** | `riscv-soc-skeleton-2026-11` | 新目录 + `Rv32iSocTop`（`ch_layer<Rv32iPipelineTop>` + `ch_layer<SocTraceCounter>`）+ SoC 级 TB（`check_products` 4 项 + 解释器路径手推断言）+ 登记 | **零**（核不动） | S0 ✅（ADR-077 Accepted 2026-11-23） |
 | **S2** | `rv32i-mem-backpressure-2026-11` | `data_ready` → hazard/IF 联动（`ready ≡ 1` ⇒ 时序不变）+ **`ready=0` 的测试 wrapper**（TCM ready 恒 1 ⇒ 事实⑨） | **功能等价**（`ready≡1` 下） | S0 |
 | **S3** | `rv32i-bus-master-and-l1-2026-11` | 数据侧 AXI4 主口 + L1 + TCM 旁路开关（**新增**路径、**不删** `prog_*` 根端口） | 新增时序契约（hit/miss 拍数） | S2 |
 | **S4/S5** | 索引行（不属本项） | L2/内存控制器 → `rv32i-privileged-csr-2026-11` | — | — |
@@ -129,8 +130,8 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 |---|---|---|
 | S1-① | `Rv32iSocTop`（根 · 无 `main`） | `examples/riscv-soc/src/rv32i_soc_top.h` |
 | S1-② | `ch_layer<Rv32iPipelineTop> core{"core", "Rv32iCoreComplex"}`（**类型名 = 产物级契约名** · ADR-070 D3） | 同上 |
-| S1-③ | `ch_layer<SocStoreCounter> trace{"trace", "SocStoreCounter"}`：`store_event ← core.io().obs_data_write_en` ⇒ **真实兄弟边** · `store_count → 根 `ch_out`` | 同上 + `examples/riscv-soc/src/soc_store_counter.h` |
-| S1-④ | 根 `__io`（手推 **5** 根：`ext_rst` / `prog_we` / `prog_addr[31:0]` / `prog_data[31:0]` / `store_count[15:0]`） | 同上 |
+| S1-③ | `ch_layer<SocTraceCounter> trace{"trace", "SocTraceCounter"}`：`store_event ← core.io().obs_data_write_en` + `retire_event ← core.io().dbg_wb_write_en` ⇒ **两条真实兄弟边** · 两个计数 → 根 `ch_out` | 同上 + `examples/riscv-soc/src/soc_trace_counter.h` |
+| S1-④ | 根 `__io`（手推 **6** 根：`ext_rst` / `prog_we` / `prog_addr[31:0]` / `prog_data[31:0]` / `store_count[15:0]` / `writeback_count[15:0]`） | 同上 |
 | S1-⑤ | 激励驱动（默认 = 解释器验证 · `--emit-rtl [--hierarchical] --out` = 发射 · fail-closed） | `examples/riscv-soc/tb_riscv_soc.cpp` |
 | S1-⑥ | SoC 级独立 Verilog TB（**只读根端口**） | `examples/riscv-soc/tb_riscv_soc.sv` |
 | S1-⑦ | 构建 + 跟踪（`CH_TRACKED_EXAMPLE_TARGETS` 28 → 29） | `examples/riscv-soc/CMakeLists.txt` · `examples/CMakeLists.txt` |
@@ -146,12 +147,12 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 ### S1
 
 - [ ] **AC1** `examples/riscv-soc/` 文件集齐（①–⑦）· `cmake --build` 0 error / 0 warning
-- [ ] **AC2** 🔴 **产物 module 集 == 手推集（集合相等 · `check_products` CHECK 1）**：`{top, Rv32iCoreComplex, SocStoreCounter, IfStage, IdStage, ExStage, MemStage, WbStage, HazardUnit, ForwardingMux_32_}` = **10**（⚠️ **不是 3** —— 子层不折叠，事实③）· **期望集写死在 TB 里**（禁从成层声明派生 ⇒ 否则"漏一个声明"同时改期望 ⇒ 恒绿）
-- [ ] **AC3** 🔴 **根端口表 == 手推 7 根**（框架 2 + 根自有 **5**）· **集合相等**（自动排除后代端口 ⇒ 不需要 grep `top_pipeline_*`：真实前缀是 `top_core_*`，且冒泡机制已退役，事实④）· 且 `check_products` CHECK 2：顶层端口数 == 7 且**后代未驱动端口 == 0**
-- [ ] **AC4** 🔴 `check_products` CHECK 4：**双形态逐拍等价 + 篡改自证**（观测 = `store_count`，**随激励变化** ⇒ 满足 `hier_eq` 的非空洞条件，事实⑧）· `min_varying_observations ≥ 1`
+- [ ] **AC2** 🔴 **产物 module 集 == 手推集（集合相等 · `check_products` CHECK 1）**：`{top, Rv32iCoreComplex, SocTraceCounter, IfStage, IdStage, ExStage, MemStage, WbStage, HazardUnit, ForwardingMux_32_}` = **10**（⚠️ **不是 3** —— 子层不折叠，事实③）· **期望集写死在 TB 里**（禁从成层声明派生 ⇒ 否则"漏一个声明"同时改期望 ⇒ 恒绿）
+- [ ] **AC3** 🔴 **根端口表 == 手推 8 根**（框架 2 + 根自有 **6**：`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count`）· **集合相等**（自动排除后代端口 ⇒ 不需要 grep `top_pipeline_*`：真实前缀是 `top_core_*`，且冒泡机制已退役，事实④）· 且 `check_products` CHECK 2：顶层端口数 == **8**（含框架 2）且**后代未驱动端口 == 0**
+- [ ] **AC4** 🔴 `check_products` CHECK 4：**双形态逐拍等价 + 篡改自证**（观测 = `store_count` + `writeback_count` · 手推 **1** 与 **3**（互不相同）⇒ 满足 `hier_eq` 的非空洞条件，事实⑧）· `min_varying_observations == **2**`（签批 spec `rtl-soc-output` 硬要求）· **三条反向判据**（移出观测集 / 两源接反 / 两源同源 ⇒ 各自必红）
 - [ ] **AC5** 🔴 **回归锚点**：`git diff --stat <S1-base-sha> -- examples/riscv-mini/ include/cpu/` 为空 **且** `git status --porcelain examples/riscv-mini/` 为空 **且** `examples/riscv-mini/tb_rv32i_soc` 仍 `RESULT: checks=24 fails=0`（`<S1-base-sha>` 由 proposal 钉死，MUST NOT 用「工作树为空」代替）
-- [ ] **AC6** 🔴 **核复合体端口契约**：`Rv32iCoreComplex` module 的端口表 == 手推集（**34** · 4 in + 28 out）· 写进 `examples/riscv-soc/AGENTS.md` ⇒ 这是"可替换单元"的**唯一物证**，也是 S3 的变更基线
-- [ ] **AC7** 🔴 **双向等式**：解释器路径 `RESULT: checks=L fails=0` 且 `.sv` 侧 `checks=L fails=0`，其中 **`interp_checks == min_checks == L`**（同一手推字面量）· tsv 的 `scenarios` / `spec_checks` 两列**必填**（先例 4/10 · 6/22）· 变异自证：任一期望改 1 位 ⇒ 该条必红
+- [ ] **AC6** 🔴 **核复合体端口契约**：`Rv32iCoreComplex` module 的端口表 == 手推集（**34** = 框架 2 + 核自有 32 = 4 in + 28 out）· 写进 `examples/riscv-soc/AGENTS.md` ⇒ 这是"可替换单元"的**唯一物证**，也是 S3 的变更基线 ⇒ ⇒ ⚠️ **判据载体 MUST 新建**（`manifest.port_table[]` 只覆盖顶层 ⇒ 子 module 端口表需独立提取 + 判别力自证）
+- [ ] **AC7** 🔴 **双向等式**：解释器路径 `RESULT: checks=L fails=0` 且 `.sv` 侧 `checks=L fails=0`，其中 **`interp_checks == min_checks == L`**（同一手推字面量）· **两条计数断言两侧同值**（`store_count == 1` ∧ `writeback_count == 3`）· tsv 的 `scenarios` / `spec_checks` 两列**必填**（先例 4/10 · 6/22）· 变异自证：任一期望改 1 位 ⇒ 该条必红
 - [ ] **AC8** 🔴 **兄弟边被走通**（= ADR-070 D4 条件③ 当场达标）：发射结果里**该边**出现在兄弟边分支（结构化证据：`HierarchyEmitResult` 的相关计数/`rewired_pins` 非空并点名该边）⇒ **禁止**用散文"已达标"代替
 - [ ] **AC9** 登记守恒：`CH_TRACKED_EXAMPLE_TARGETS` **28 → 29** · `exclusions.tsv` 等式 **`29 == 17 ∪ 12`** · tsv 新行 `kind=soc`（`REGISTERED_SOC` 1→2，`REGISTERED_HIER` **不动** · G-4 建议）· `EXAMPLES_TEST_SOURCES` **不变**（无 Catch2）· `CTEST_TOTAL` **不变**（**不** `add_test`，同 `tb_rv32i_soc`）· root `AGENTS.md` 的「examples main() 32 → **33**」
 - [ ] **AC10** **索引行**（builder 义务 · 写集约束）：S1 第一笔提交补根 `improvement-suggestions.md` 的行（状态词 MUST 是 `**draft**`，与 frontmatter `状态: draft` 逐词一致）+ `verify_improvement_index.sh` 绿（**planner 不能写根索引文件** ⇒ 见文末「待粘贴索引行」）
@@ -183,10 +184,10 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 
 | 面 | 影响 |
 |---|---|
-| **新增** | `examples/riscv-soc/`（`rv32i_soc_top.h` · `soc_store_counter.h` · `tb_riscv_soc.cpp` · `tb_riscv_soc.sv` · CMake · AGENTS.md） |
+| **新增** | `examples/riscv-soc/`（`rv32i_soc_top.h` · `soc_trace_counter.h` · `tb_riscv_soc.cpp` · `tb_riscv_soc.sv` · CMake · AGENTS.md） |
 | **登记/守恒（8 处）** | ① CMake 跟踪（28→29）② `exclusions.tsv`（`29 == 17 ∪ 12`）③ tsv 新行 + 锚点 ④ `_coverage --self-test` 的 poison（若受影响）⑤ `EXAMPLES_TEST_SOURCES`（**不变**）⑥ `CTEST_TOTAL`（**不变**）⑦ `disabled_examples.txt`（新 TB 有 `main` ⇒ 必须被跟踪）⑧ `verify_guard_reachability`（若新增护栏） |
 | **文档** | root `AGENTS.md`（Structure + main() 32→33）· `examples/AGENTS.md` · `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · `docs/usage_guide/02-component-design.md` · `docs/CHANGELOG.md` |
-| **观测面** | 🔴 SoC 级**看不到** `dbg_*`/`obs_*`（ADR-072 D1）⇒ 核级 24 条只能留 `examples/riscv-mini` ⇒ SoC 级只有根自有 `store_count` |
+| **观测面** | 🔴 SoC 级**看不到** `dbg_*`/`obs_*`（ADR-072 D1）⇒ 核级 24 条只能留 `examples/riscv-mini` ⇒ SoC 级有**两个**根自有观测量（`store_count` / `writeback_count`）⇒ 满足签批 spec 的 ≥2 下限 |
 | **零风险面** | S1 **不动** `include/**` 与 `examples/riscv-mini/**`（AC5 用 base SHA 钉死） |
 
 ---
@@ -196,12 +197,12 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | # | 风险 | 处置 |
 |---|---|---|
 | **R1** | "零行为变化"只靠声明 | AC5（base SHA + `git status` + 24 条 `RESULT` 逐字）+ AC4（逐拍等价） |
-| **R2** | **S1 无变化观测量 ⇒ `hier_eq` 机械拒绝** | `SocStoreCounter` 的 `store_count` 随激励变化（0→1）⇒ 观测集非空且非恒定（事实⑧） |
+| **R2** | **S1 变化观测量 < 2 ⇒ `hier_eq` 机械拒绝 / 违反签批 spec** | `SocTraceCounter` 的**两个**计数随激励变化（`store_count` 0→1 · `writeback_count` 0→3）⇒ 观测集非空、非恒定、且**≥2**（事实⑧ · ADR-077 D1） |
 | **R3** | 命名漂移（`Rv32iPipelineTop` / `tb_rv32i_soc` 名不副实） | **S1 不改名**；改名单列一批（tsv `dut` 列 + 各 include + 文档） |
 | **R4** | S2 的"功能等价"不成立 | S2 AC = 「`ready≡1` 逐拍等价」+ `ready=0` wrapper 的 stall 手推值；**不**用 S1 的 SoC 产物判等价（只有 1 个观测量） |
 | **R5** | S3 撞反压不足 | S2 是 S3 **硬前置**；S2 未验收 ⇒ S3 不开工 |
 | **R6** | 新增 example "新增即漏" | AC9/AC11/AC12 把 8 处登记全部列成机械判据 |
-| **R7** | 装载期复位极性接反 ⇒ "装载成功但永不执行"（`prog_*` 与 `ext_rst` 无关） | AC7 的 `store_count == 1` 是**唯一**能发现它的判据（`top_core_*` 不可见）⇒ 该断言 MUST 手推（装载期 `ext_rst=1`、释放后再跑） |
+| **R7** | 装载期复位极性接反 ⇒ "装载成功但永不执行"（`prog_*` 与 `ext_rst` 无关） | AC7 的 `store_count == 1` ∧ `writeback_count == 3` 是**唯一**能发现它的判据（`top_core_*` 不可见）⇒ 两个断言 MUST 手推（装载期 `ext_rst=1`、释放后再跑） |
 
 **回滚**：S1 全是**新增文件 + 登记行** ⇒ 删目录 + 撤登记（核零改动）。
 
@@ -212,7 +213,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | # | 决策 | 不能由 planner 定的理由 |
 |---|---|---|
 | **G-1** | **IP 级 top vs SoC 级 top 的分工**（ADR-046 dated addendum / 新 ADR） | ADR-046 原文「只留 SoC 顶层」⇒ 本项产生**两个** example 侧顶层 ⇒ 解释既有决策 = architect |
-| **G-2** | **模块类型名批准权**：`Rv32iCoreComplex` / `SocStoreCounter` 是**产物级契约名**（ADR-070 D3） | 类型名一改 = 产物级破坏 ⇒ 命名审批属架构面 |
+| **G-2** | **模块类型名批准权**：`Rv32iCoreComplex` / `SocTraceCounter` | ✅ **已闭**（ADR-077 D2）= **当前产品名（非契约）** · 登记在产品登记面 ⇒ 改名不构成破坏性变更，但**结构判据 MUST 重算** |
 | **G-3** | **`prog_*` 装载口归属** —— 建议**收窄**为：S1/S2 保留根端口（TB 后门）· S3 **新增**总线路径而**不删**根端口 | 若 S3 删根端口 ⇒ 产品端口面破坏性变更（ADR-072 D1） |
 | **G-4** | **新行的 `kind`** —— 建议单行 `kind=soc`（`REGISTERED_SOC` 1→2） | 影响 AC9 的守恒等式 |
 
@@ -226,7 +227,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > 并跑 `scripts/verify_improvement_index.sh`（状态词 MUST 与 frontmatter `状态: draft` 逐词一致）。
 
 ```
-| [rv32i-soc-platform-2026-11](.rddf/improvements/rv32i-soc-platform-2026-11.md) | P1 | 用户 2026-11-22「核做成真实可替换单元 + L1/L2/MMU/内存控制器/总线」· S0–S3（S4/S5 只留索引） | 2026-11-22 | 📝 **draft**（立项 · S0 决策门 G-1…G-4 未闭 ⇒ S1 MUST NOT 开工） |
+| [rv32i-soc-platform-2026-11](.rddf/improvements/rv32i-soc-platform-2026-11.md) | P1 | 用户 2026-11-22「核做成真实可替换单元 + L1/L2/MMU/内存控制器/总线」· S0–S3（S4/S5 只留索引） | 2026-11-22 | 📝 **draft**（立项 · ✅ S0 决策门已闭 = ADR-077 `Accepted` 2026-11-23 ⇒ S1 可开工） |
 ```
 
 ---
@@ -238,9 +239,9 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | # | finding | 处置 |
 |---|---|---|
 | **P0-1** | AC2 的「3 module」**错**：子层不折叠 ⇒ 实为 **10** | ✅ **已改**（AC2 手推集 10 项 · 并写明"不是 3"） |
-| **P0-2** | 无变化观测 ⇒ `hier_eq` **机械拒绝**（非"很弱"） | ✅ **已改**：`SocStoreCounter` 的 `store_count` 0→1（AC4/AC7） |
+| **P0-2** | 无变化观测 ⇒ `hier_eq` **机械拒绝**（非"很弱"） | ✅ **已改**：`SocTraceCounter` 的**两个**计数 0→1 / 0→3（AC4/AC7） |
 | **P0-3** | AC3 的"零后代冒泡 grep"**双重失效**（前缀是 `top_core_*` · 冒泡已退役） | ✅ **已改**：删 grep ⇒ 改「根端口**集合相等**」+ `check_products` CHECK 2 |
-| **P0-4** | `AxiLiteGpio` 全 tie-off = **死组件** + 兄弟边仍 0 ⇒ 换 **`SocStoreCounter`** | ✅ **已改**（S1-③；D4③ 当场达标 ⇒ AC8 由"递延声明"改为"结构化证据"） |
+| **P0-4** | `AxiLiteGpio` 全 tie-off = **死组件** + 兄弟边仍 0 ⇒ 换 **`SocTraceCounter`** | ✅ **已改**（S1-③；D4③ 当场达标 ⇒ AC8 由"递延声明"改为"结构化证据"） |
 | **P0-5**（并入） | AC6 只写"≥ 最小值" ⇒ 改**双向等式** + `scenarios`/`spec_checks` + 变异自证 | ✅ **已改**（AC7） |
 | **P0-6** | AC7（登记）在 G-4 前**不可判** | ✅ **已改**（AC9 写死建议口径 + G-4 裁决） |
 | **P0-7** | 缺**核 module 端口契约** AC | ✅ **已加**（AC6） |
