@@ -3,8 +3,9 @@
 - **ADR**: `docs/adr/ADR-077-two-level-tops-and-soc-composition.md`
 - **日期**: 2026-11-23
 - **顺序**: **oracle → critic**（architect 路径，顺序不可颠倒）
-- **轮次**: oracle **1** 轮 · critic **2** 轮（第 1 轮 + 1 次复审；**已达 §审查配对 的 architect 预算 2 轮**）
-- **当前状态**: **Draft**（⚠️ 第 2 轮新增的 1 个「陈旧数字」BLOCKER **已机械修复**，但**未过第 3 轮复审** ⇒ 见 §4 待裁决）
+- **轮次**: oracle **1** 轮 · critic **3** 轮（第 1 轮 + 1 次复审 + **1 次用户批准的预算外窄复审**）
+- **当前状态**: **Accepted**（2026-11-23 · 三轮全闭 · 第 3 轮 `mergeable: yes`）
+- **用户裁决**: 2026-11-23 选 **(a)** = 批准第 3 轮窄复审（而非 (b) 机械自证闭合）
 
 ---
 
@@ -64,13 +65,22 @@ grep -nE "root .*__io|产品端口|顶层端口数|== \*\*[0-9]+\*\*" \
 ```
 
 - **第 1 个 BLOCKER**：经 critic 第 2 轮**确认闭合** ✔
-- **第 2 个 BLOCKER（陈旧数字）**：**已机械修复并 grep 自证**，但**未过第 3 轮 critic 复审**
+- **第 2 个 BLOCKER（陈旧数字）**：已修复，并**经第 3 轮窄复审确认闭合**（见 §4.1）
 
-⚠️ **待裁决**（architect 不自行越过预算）：
-- **(a)** 用户批准 **第 3 轮窄复审**（只验 V3 一行 + 无新 diff）⇒ 通过后 Status 转 `Proposed`/`Accepted`
-- **(b)** 用户认可「**一行转录错误 + grep 自证**」等价于闭合 ⇒ 本报告登记为闭合，Status 转 `Proposed`
+---
 
-> 在 (a)/(b) 任一落地前，本 ADR **保持 Draft**（「未审先 Accepted」= `arch` 档 BLOCKER 第四类）。
+## 4.1 critic 第 3 轮（用户批准的预算外窄复审 · 只验第 2 轮 BLOCKER 闭合）
+
+- **触发**: 用户 2026-11-23 选 **(a)**（批准窄复审，而非 (b) 机械自证）
+- **本轮提交**: 第 2 轮 BLOCKER 的闭合证据（V3 两行 diff）+ 「自第 2 轮以来仅两处 diff」的范围声明 + `review_profile: 继承第 2 轮：arch`
+- **判定**: **APPROVE · mergeable: yes · scope_exceeded: false**
+- **findings**:
+  - **BLOCKER 无** —— V3（L209）「顶层端口数 == **8**（`manifest.port_table.size()` · 含框架 2）」与 V1（L207）「root `__io` == 6 ⇒ 产品端口 == 8（框架 2 + 根自有 6）」**数字与推导链一致**（6 + 2 = 8）；全篇无 `== 5` / `== 7` 残留；§4 ① 的「AC3（7 → **8**）」是给 planner 的处置指令，方向与 V1/V3 一致，不构成文档内矛盾。
+  - **SHOULD_FIX 无** —— 第 2 轮「审稿轮次叙述混入决策正文」已删（正文只留结论）。
+  - **NITS 无新**（窄复审范围 = 上述两处 diff）。
+  - ⚠️ **审查者自陈的范围限制**：critic 环境 `shell` 权限被拒 ⇒ 无法独立确认「仅两处 diff」，只能验证给定 diff 在**当前文件**的落点状态。⇒ 由本报告 §4 的 grep 机械复核补足。
+
+⇒ **ADR-077 三轮全闭，转 `Accepted`（2026-11-23）**。
 
 ---
 
@@ -78,6 +88,7 @@ grep -nE "root .*__io|产品端口|顶层端口数|== \*\*[0-9]+\*\*" \
 
 | 项 | 归属 | 状态 |
 |---|---|---|
-| proposal 的 AC3（7→**8**）· AC4（`≥1`→**==2** + ≥10 拍）· 组件名 `SocStoreCounter`→**`SocTraceCounter`** | **planner**（architect 写集不含 proposal） | 🔴 **未同步**（critic 复审已点名：proposal `:146-148` 仍写 7 / ≥1 / 旧名） |
+| **ADR-046 §D1 的 dated addendum** | architect | ✅ **已落地**（2026-11-23 · D1 第 1 类条目改写为「装配层 · 两个层级」+ 行尾追记指向 ADR-077，无决策变更；落在 §审查配对的 ADR「描述性措辞」豁免的可数条件内） |
+| proposal 的 AC3（7→**8**）· AC4（`≥1`→**==2** + ≥10 拍）· 组件名 `SocStoreCounter`→**`SocTraceCounter`** | **planner**（architect 写集不含 proposal） | 🔴 **未同步**（critic 复审已点名：proposal `:146-148` 仍写 7 / ≥1 / 旧名）⇒ ⇒ **权威数字以 ADR-077 的 V1/V2/V4 为准**，proposal 未同步前 S1 的 AC 与 ADR 不一致 |
 | `verify_no_duplicate_rv32i_headers.sh` 扫描面扩到 `examples/riscv-soc/src/` | builder | 待 S1（AC11） |
 | 子 module 端口表提取（V5 载体）· 登记面↔TB 期望集比对（V6 主语） | builder | 待 S1（AC6 / AC11） |

@@ -146,8 +146,10 @@ tests/test_csr_unit.cpp)` ⇒ ⇒ **CTest 条目名不变**（`test_csr_unit`）
 `include/cpu/` 是 RV32I 微架构的**唯一权威**。`examples/riscv-mini/src/` 收敛后
 **只允许**存在两类文件：
 
-1. **SoC 顶层装配** —— 把流水线 + TCM + cache 组装成 example 的 SoC 顶层
-   （当前唯一实例：`rv32i_pipeline_top.h`，49 LOC）；
+1. **装配层** —— 把流水线 + TCM + cache 组装成 example 的顶层（**两个层级**：
+   IP 级核复合体 / SoC 级根 ⇒ 实例 = `examples/riscv-mini/src/rv32i_pipeline_top.h`（核复合体）+
+   `examples/riscv-soc/src/rv32i_soc_top.h`（SoC 根））
+   （**2026-11-23 追记**：本条表述经 **ADR-077 D1** 细分；微架构归属条款不变，无决策变更）；
 2. **example 专属件** —— 仅供该 example 的测试/演示使用、且不构成可复用微架构组件的文件。
 
 任何**可复用的 RV32I 微架构组件**（ALU / 寄存器堆 / PC / decoder / 流水线寄存器 /

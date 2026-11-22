@@ -8,8 +8,8 @@
 | 主题 | 当前态权威文档 | 决策面（ADR） |
 |---|---|---|
 | **RTL 验证的单一真相源 / 生成式 TB / 端口具名化 / 发射面收敛** | [2026-11-17-rtl-verification-single-source.md](2026-11-17-rtl-verification-single-source.md) | **ADR-074** · **ADR-075** |
-| **层次化 RTL 输出** | [2026-11-02-hierarchical-rtl-output.md](2026-11-02-hierarchical-rtl-output.md) | ADR-058 · ADR-060 · ADR-061 · ADR-066 · ADR-070 |
-| **RV32I 微架构** | [rv32i-microarchitecture.md](rv32i-microarchitecture.md) | ADR-046 · ADR-047 · ADR-068 · ADR-069 |
+| **层次化 RTL 输出** | [2026-11-02-hierarchical-rtl-output.md](2026-11-02-hierarchical-rtl-output.md) | ADR-058 · ADR-060 · ADR-061 · ADR-066 · ADR-070 · **ADR-077**（判据作用域分域） |
+| **RV32I 微架构** | [rv32i-microarchitecture.md](rv32i-microarchitecture.md) | ADR-046 · ADR-047 · ADR-068 · ADR-069 · **ADR-077** |
 | **文档治理口径**（分级 · 引用有效性 · 死链处置 · 自动化门） | [2026-11-19-document-governance.md](2026-11-19-document-governance.md)（**Draft** · oracle APPROVE 附 6 项必改 · 已落） | ——（**不是**决策正本；规范正本 = [`../DOCUMENT-ARCHITECTURE.md`](../DOCUMENT-ARCHITECTURE.md) v2.1） |
 
 ⚠️ **冲突时以 ADR 为准** —— 主题文档承载推导与快照，**不新增**架构义务。

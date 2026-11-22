@@ -1,13 +1,14 @@
 # ADR-077: RV32I 的**两级顶层**（IP 级 / SoC 级）与 SoC 组合的四条形态裁决
 
-- **Status**: **Draft**（审完转 `Proposed` / `Accepted`）
+- **Status**: **Accepted**（2026-11-23 · 审稿 = oracle 1 轮 + critic 3 轮全闭；轮次与 BLOCKER 记录见 §审稿记录）
 - **Date**: 2026-11-23
 - **Author**: architect role（build agent · 用户 2026-11-23 指令「选择 A」= 过 S0 决策门）
 - **Parent**: **ADR-046**（微架构唯一归属）· **ADR-061**（成层粒度显式声明）· **ADR-070**（RV32I 成层 · D3 模块类型名 · D4 条件③）· **ADR-072**（产品端口面 D1）· **ADR-073**（SoC 产物形态 D1/D2/D3）· **ADR-074**（验证单一真相源）
 - **关联 change**: `openspec/changes/riscv-soc-skeleton-2026-11/`（**已立项** · 本 ADR 是其 **S0 决策门**）
   ⇒ ⇒ **AC 映射** = 该 change 的 **AC2 / AC3 / AC4 / AC6 / AC9**（module 集 / 根端口集 / 逐拍等价 / 核端口契约 / 登记 `kind`）
 - **上游规划**: `.rddf/improvements/rv32i-soc-platform-2026-11.md`（S1–S3 · metis 第 1 轮已处置）
-- **审稿记录**: `.rddf/reviews/ADR-077-two-level-tops.md`（oracle → critic）
+- **审稿记录**: `.rddf/reviews/ADR-077-two-level-tops.md`（oracle → critic，顺序不可颠倒；critic 第 3 轮 = 用户批准的第 3 轮窄复审）
+- **Amends**: ADR-046 §D1（dated addendum · **2026-11-23 已落地**于该 ADR D1 第 1 类条目的行尾追记；无决策变更）
 - **超长自检**: 正文 < 250 行 · 每个 Decision 子节 ≤ 40 行 · 推导与实测数据见 §2.2 / 关联 change 的 proposal
 
 ---
