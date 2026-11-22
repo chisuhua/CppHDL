@@ -195,6 +195,7 @@ constexpr std::size_t kMinVaryingObservations = 2;
 | V2 | 端口数 == 34（框架 2 + 核自有 32） |
 | V3 | 核自有 32 条（去 `top_core_` 前缀）== `verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照** ⇒ 三方闭环 |
 | V4 | `examples/riscv-soc/src/**` 下**无**微架构头的同名副本（ADR-077 D1 / **R4 缓解的落点**） |
+| V5 | **两条真兄弟边**（ADR-070 D4③ · **AC8**）：产物里 `SocTraceCounter` 的两个事件输入 MUST 由 `Rv32iCoreComplex` 的输出驱动（**结构化端口连接** `.top_trace_<port>(top_core_<src>)`，不是散文） |
 
 **为什么是独立脚本而不是扩 `verify_examples_rtl_sim.sh`**：
 - 那个脚本 470+ 行且有 21 条投毒 self-test ⇒ 改它会动既有期望值（风险 > 收益）；
@@ -203,8 +204,8 @@ constexpr std::size_t kMinVaryingObservations = 2;
 **为什么表不在 `.rddf/checks/` 另建一份**：表是**人读契约**（开发者要查）⇒ 放 AGENTS.md；
 护栏**解析该表**（不做第二份拷贝）⇒ 单一真相源，零漂移面。
 
-⚠️ **已实测的判别力**：6 条投毒各自必红（P1 删行 / P2 改方向 / P3 改位宽 / P4 改端口名 /
-P5 与 C6 不符 / P6 微架构副本）。
+⚠️ **已实测的判别力**：**7** 条投毒各自必红（P1 删行 / P2 改方向 / P3 改位宽 / P4 改端口名 /
+P5 与 C6 不符 / P6 微架构副本 / P7 兄弟边改接常量）。
 ⚠️ **self-test 抓到的真实缺陷**：V4 初版写 `find ... | grep -q .`，在 `set -o pipefail` 下
 `grep -q` 早退 ⇒ `find` 收 SIGPIPE ⇒ 管道非零 ⇒ **判据恒绿**（P6 转红失败暴露）⇒ 已改为
 `find -print -quit` + `[ -n "$found" ]`。

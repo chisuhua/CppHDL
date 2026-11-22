@@ -16,6 +16,10 @@
 #   V4  **微架构副本禁入**（ADR-077 D1 的「MUST NOT 复制任何微架构实现」）——
 #       `examples/riscv-soc/src/**` 下的头 basename MUST NOT 出现在
 #       `include/cpu/**` 或 `examples/riscv-mini/src/**`
+#   V5  **两条真兄弟边**（ADR-070 D4 条件③ · change AC8）——
+#       产物里 `SocTraceCounter` 实例的两个事件输入 MUST 由 `Rv32iCoreComplex` 的
+#       输出驱动（**child → child**）⇒ MUST NOT 是顶层 input / 常量 / 未连接
+#       ⚠️ 证据形态是**结构化端口连接**（`.top_trace_<port>(top_core_<src>)`），不是散文
 #       （⚠️ 这是 ADR-077 R4 缓解的**落点**：把既有护栏的扫描面语义扩到 riscv-soc 侧，
 #        而不动那个 470+ 行脚本的 C1/C4 —— 它们的 self-test 期望值不受影响）
 #
@@ -26,6 +30,7 @@
 #   P4 期望表改某端口名       ⇒ V1 红
 #   P5 期望表的核自有端口与 C6 快照不符 ⇒ V3 红
 #   P6 riscv-soc 侧出现与 include/cpu 同 basename 的头 ⇒ V4 红
+#   P7 产物里某条兄弟边改接常量            ⇒ V5 红
 #
 # 退出码：0 = 全成立 · 1 = 违规 · 2 = 用法 / 环境错误（fail-closed）。
 #
@@ -127,6 +132,26 @@ check_no_core_copy() {  # $1 = repo root
     fi
 }
 
+# ── V5：两条真兄弟边（child → child · ADR-070 D4③）──
+check_sibling_edges() {  # $1 = product verilog
+    local prod="$1" n=0 port src
+    [ -f "$prod" ] || { fail "V5 产物缺失：$prod"; return; }
+    for pair in "store_event:top_core_obs_data_write_en" \
+                "retire_event:top_core_dbg_wb_write_en"; do
+        port="${pair%%:*}"
+        src="${pair##*:}"
+        # ⚠️ 不用管道（`set -o pipefail` + grep -q 早退会让状态失真 —— V4 踩过）
+        if grep -qE "\.top_trace_${port}\( *${src} *\)" "$prod"; then
+            n=$((n + 1))
+        else
+            fail "V5 兄弟边缺失/被改接：SocTraceCounter.${port} 未由 ${src} 驱动"
+        fi
+    done
+    if [ "$n" -eq 2 ]; then
+        ok "V5 两条兄弟边成立（child→child · ADR-070 D4③ · AC8）"
+    fi
+}
+
 run_checks() {  # $1 = agents md · $2 = product verilog
     local agents="$1" prod="$2"
 
@@ -208,6 +233,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
     fail_count=0
     run_checks "$AGENTS_MD" "$PROD"
     check_no_core_copy "$REPO_ROOT"
+    check_sibling_edges "$PROD"
     [ "$fail_count" -eq 0 ] || { echo "FATAL: 基线不通过 ⇒ self-test 无意义" >&2; exit 1; }
 
     # 投毒模板
@@ -262,9 +288,23 @@ if [ "$SELF_TEST" -eq 1 ]; then
         fail "投毒 P6 ⇒ **未转红**（V4 判据失效）"
     fi
 
+    # P7：产物里把一条兄弟边改接常量 ⇒ V5 必红
+    p7="$OUT/p7.v"
+    sed 's/\.top_trace_store_event(top_core_obs_data_write_en)/.top_trace_store_event(1'"'"'b0)/' "$PROD" > "$p7"
+    before7=$fail_count
+    fail_count=0
+    check_sibling_edges "$p7" >/dev/null 2>&1
+    delta7=$fail_count
+    fail_count=$before7
+    if [ "$delta7" -gt 0 ]; then
+        ok "投毒 P7 兄弟边改接常量 ⇒ 必红（命中 V5）"
+    else
+        fail "投毒 P7 ⇒ **未转红**（V5 判据失效）"
+    fi
+
     echo
     if [ "$fail_count" -eq 0 ]; then
-        echo "✅ verify_riscv_soc_core_ports --self-test: PASS（6 条投毒各自必红）"
+        echo "✅ verify_riscv_soc_core_ports --self-test: PASS（7 条投毒各自必红）"
         exit 0
     else
         echo "❌ verify_riscv_soc_core_ports --self-test: FAIL（$fail_count 项）" >&2
@@ -278,10 +318,11 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 emit_products "$OUT/emit" || exit 2
 run_checks "$AGENTS_MD" "$OUT/emit/top.v"
 check_no_core_copy "$REPO_ROOT"
+check_sibling_edges "$OUT/emit/top.v"
 
 echo
 if [ "$fail_count" -eq 0 ]; then
-    echo "✅ verify_riscv_soc_core_ports: PASS（34 端口契约 + 无微架构副本）"
+    echo "✅ verify_riscv_soc_core_ports: PASS（34 端口契约 + 无微架构副本 + 两条兄弟边）"
     exit 0
 else
     echo "❌ verify_riscv_soc_core_ports: FAIL（$fail_count 项）" >&2

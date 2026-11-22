@@ -76,7 +76,7 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out /tmp/opencode/soc_c
 
 ## T6 护栏（AC11 新面 + AC12 回归面）
 
-- [x] 6.1 `verify_examples_rtl_sim.sh` 新增检查：`Rv32iCoreComplex` module 端口表 == 34 且自有 32 条与 `riscv-core-complex-ports.md` 逐字一致（**含判别力自证**）
+- [x] 6.1 新护栏 `scripts/verify_riscv_soc_core_ports.sh`：V1 端口表 == AGENTS.md 的 34 行 · V2 == 34 · V3 与 C6 闭环 · V4 无微架构副本 · **V5 两条兄弟边（AC8）** · 7 条投毒各自必红 · 已挂 CI
 - [x] 6.2 `verify_no_duplicate_rv32i_headers.sh` 的扫描面扩到 `examples/riscv-soc/src/`（ADR-077 R4 的缓解）
 - [x] 6.3 「登记面 ↔ TB 期望集逐字比对」= `verify_examples_rtl_sim.sh` 的既有 ⑥（`RESULT` 条数等式）+ ⑧（manifest 端口表 == 产物）⇒ riscv-soc 行已覆盖
 - [x] 6.4 AC11 其余护栏：`check_products` · `verify_example_only_headers` · `verify_downstream_consumer` · `verify_port_naming` · `verify_component_naming`
