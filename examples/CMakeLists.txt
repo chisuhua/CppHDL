@@ -75,6 +75,9 @@ set(CH_TRACKED_EXAMPLE_TARGETS
 
     # PHASE: RISC-V Mini · SoC 产品面（三角色分离 · 与 axi4 / stream 同型）
     tb_rv32i_soc
+
+    # PHASE: RV32I SoC 平台 · SoC 级产品单元（ADR-077 D1 · 两级顶层）
+    tb_riscv_soc
 )
 
 # ---------------------------------------------------------------------------
@@ -115,6 +118,9 @@ add_subdirectory(axi4)
 # Phase 3A: RISC-V SoC
 # add_subdirectory(riscv)  # Deprecated, use riscv-mini
 add_subdirectory(riscv-mini)  # Phase B: API 兼容,已启用
+
+# RV32I SoC 平台：SoC 级产品单元（ADR-077 D1 · 核复合体仍住 riscv-mini）
+add_subdirectory(riscv-soc)
 
 # ---------------------------------------------------------------------------
 # 聚合 target：一次构建全部**被跟踪**的 example。

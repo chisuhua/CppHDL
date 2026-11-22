@@ -53,7 +53,8 @@ CppHDL/
 │   │                      # ⇒ 详见 `examples/spinalhdl-ported/AGENTS.md`）
 │   ├── axi4/              # AXI4 bus demos
 │   ├── stream/            # Stream Mux/Demux/Arbiter/Fork
-│   └── riscv-mini/        # RV32I 5-stage pipeline (partial)
+│   ├── riscv-mini/        # RV32I 5-stage pipeline + TCM（IP 级 = 核复合体 · 34 端口）
+│   └── riscv-soc/         # SoC 级产品单元（Rv32iSocTop · 8 端口 · ADR-077 D1 两级顶层）
 ├── tests/            # Catch2 unit tests (counts in NOTES §Test counts)
 │   └── chlib/              # Component library tests
 └── docs/             # Architecture plans, usage guides, phase reports
@@ -498,7 +499,7 @@ bash scripts/rv32i_rtl_sim_env.sh
   | `tests/chlib/test_*.cpp` | 51 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|
-  | examples 的 main() 程序 | 32 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
+  | examples 的 main() 程序 | 33 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
 
   ⚠️ **本表是**快照**，不是锚点** ⇒ ⇒ **无机械判据**（`scripts/verify_test_counts.sh` 第 3 条
   只**打印**、不判违规）⇒ ⇒ 漂移靠**人工**发现 ⇒ ⇒ 改测试数时 MUST 同步本表。
@@ -510,6 +511,9 @@ bash scripts/rv32i_rtl_sim_env.sh
       `*_example.cpp` 被 `tb_*.cpp` 取代 + `examples/axi4/phase3a_complete.cpp` + 4 个
       `examples/stream/stream_*_demo.cpp`）**新增 12 个**（8 个 `tb_*.cpp` + 4 个
       `tb_stream_*_demo.cpp`）⇒ ⇒ 净 **−8** ⇒ ⇒ 42 − 20 + 12 = **34**（实测复算一致）。
+    · 「examples 的 main() 程序」**32 → 33**（2026-11-23 · change `riscv-soc-skeleton-2026-11`）：
+      新增 `examples/riscv-soc/tb_riscv_soc.cpp`（SoC 级产品单元 · ADR-077 D1 两级顶层）
+      ⇒ ⇒ 净 **+1** ⇒ ⇒ 32 + 1 = **33**（`CTEST_TOTAL` **不变**：该 TB 不 `add_test`）。
     · 「examples 的 main() 程序」**34 → 32**（2026-11-22 · RV32I SoC 的「TB 自发射」收敛）：
       **删 3 个**含 main 的发射薄壳（`examples/riscv-mini/emit_rtl.cpp` /
       `emit_rtl_fw_init.cpp` / `emit_rtl_hier.cpp` ⇒ 发射入口并入 TB 自身）

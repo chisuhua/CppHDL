@@ -1,3 +1,30 @@
+## 2026-11-23 — 新增 SoC 级产品单元 `examples/riscv-soc/`（S1 结构骨架 · ADR-077 D1）
+
+**背景**：RV32I 此前「一个组件既是核又是 SoC」（`Rv32iPipelineTop` 同时持有 pipeline + ITCM/DTCM）
+⇒ 想换缓存化的核就必须连存储器、TB、登记一起换。ADR-077（`Accepted` · 2026-11-23）裁定
+**两级顶层**：核复合体（IP 级 · 住 `examples/riscv-mini`）+ SoC 根（`Rv32iSocTop` · 住本新目录）。
+
+**本次交付（S1 = 纯结构骨架 · 核零改动）**：
+
+| 项 | 内容 |
+|---|---|
+| 新目录 | `examples/riscv-soc/`（`src/rv32i_soc_top.h` · `src/soc_trace_counter.h` · `tb_riscv_soc.cpp` · `tb_riscv_soc.sv` · CMake · AGENTS.md） |
+| 产物形态 | **10 module**（`top` / `Rv32iCoreComplex` / `SocTraceCounter` / 7 个 stage/hazard/mux）· 顶层端口 **8**（框架 2 + 根自有 6） |
+| 观测面 | 两个**根自有**计数器（`store_count` / `writeback_count`）⇒ 满足签批 spec `rtl-soc-output` 的「≥2 个随激励变化的量」 |
+| 判据 | 两侧各 **7** 条（`interp_checks == min_checks == 7`）· 三条变异自证（移出观测 / 两源对调 / 两源同源 ⇒ 各自必红） |
+| 新护栏 | `scripts/verify_riscv_soc_core_ports.sh`（34 端口契约 + 无微架构副本 · 6 条投毒各自必红 · 已挂 CI） |
+| 核零改动 | `examples/riscv-mini/**` 与 `include/**` 一字不动（24 条核级判据仍 `checks=24 fails=0`） |
+
+⚠️ **手推值为何是 1 与 3**：7 字程序（与核级**同源**）⇒ 1 条 `sw` · 3 次写回（x1/x2/x3）⇒
+两值**不同** ⇒ 两个事件源接反 / 同源时观测值变化 ⇒ 判据可抓（同值则恒绿）。
+
+⚠️ **`rtl-soc-output` 的措辞歧义已登记**（不改 spec）：其「module 数 == 成层 IP 实例数 + 1」
+在**嵌套成层**时字面读法（顶层直接实例化 = 2 ⇒ 3）与产物（10）不符；机械判据
+（`check_products` CHECK 1 比对**产物 module 集**）无歧义 ⇒ 按**全树**读法（9 + 根 = 10）。
+修订点登记为「第三次装配时」。
+
+---
+
 ## 2026-11-22 — 收口「层次化 + 固件初值」组合变体（原登记为「独立排期」）
 
 **背景**：该组合变体在两份验收报告里被显式递延 ——

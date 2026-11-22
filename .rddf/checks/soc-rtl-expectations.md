@@ -246,3 +246,69 @@ VERIF-CHECKS: 15
 - ⚠️ **`bresp`/`rresp` 不可观测**（顶层无这两个端口）⇒ ⇒ **DECERR / OKAY 在 SoC 层不可观测**
   （与 ADR-073 v1.1 订正⑥ 同源）⇒ ⇒ 协议面归 IP 级 TB（`tb_axi4_lite_example.sv`）。
 - ⚠️ **`timer_irq` 是零消费死端口** ⇒ ⇒ 它在端口面里但**没有语义** ⇒ **MUST NOT** 假装它可观测。
+
+---
+
+## riscv_soc {#riscv-soc}
+
+> **产品**：`examples/riscv-soc/` 的 `Rv32iSocTop`（SoC 级顶层 · ADR-077 D1）
+> **TB**：`tb_riscv_soc.cpp`（默认模式 · 解释器路径）+ `tb_riscv_soc.sv`（独立 Verilog · `generated=no`）
+> **上游登记**：`.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` —— **程序与写回/存储手推台账同源**
+>
+> ⚠️ **两侧判据 MUST 逐条同值**（AC7 的 `interp_checks == min_checks == L`）：本段 **7** 条 · C++ 侧 7 · `.sv` 侧 7。
+
+### 1. 产物形态（手推 · 禁从 `ch_layer` 调用点派生）
+
+| 项 | 期望 | 推导 |
+|---|---|---|
+| module 集合 | `top` · `Rv32iCoreComplex` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | 根 1 + 2 个 `ch_layer` + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠** |
+| 顶层端口 | **8** = 框架 2 + 根自有 6（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count`） | ADR-077 V1 · ADR-072 D1（后代 `ch_out` 不冒泡） |
+| `Rv32iCoreComplex` module 端口 | **34** = 框架 2 + 核自有 32（4 in + 28 out） | 核自有 32 = `Rv32iPipelineTop` 的 `__io`（**已由 `verify_no_duplicate_rv32i_headers.sh` 的 C6 冻结**）· +2 = 核内 **inline** 的 TCM `sread` 寄存器落在该 module ⇒ 需时钟/复位 |
+
+### 2. 程序（与核级同源 · 编码**手推**）
+
+| word | 指令 | 编码 | 手推结果 |
+|---|---|---|---|
+| 0 | `addi x1, x0, 42` | `0x02A00093` | 写回 x1 = 42 |
+| 1 | `nop` | `0x00000013` | — |
+| 2 | `addi x2, x0, 11` | `0x00B00113` | 写回 x2 = 11 |
+| 3 | `nop` | `0x00000013` | — |
+| 4 | `add x3, x1, x2` | `0x002081B3` | 写回 x3 = 42 + 11 = **53** |
+| 5 | `sw x3, 0(x0)` | `0x00302023` | store 字节地址 0 · 数据 53 |
+| 6 | `jal x0, 0` | `0x0000006F` | 自环；`rd = x0` ⇒ **不写回** |
+
+⇒ ⇒ **写回事件 3 次**（word 0 / 2 / 4）· **store 事件 1 次**（word 5）。
+
+### 3. 判据（7 条 · 逐条手推）
+
+| # | 判据 | 期望 | 级别 | 推导 |
+|---|---|---|---|---|
+| A1a | 复位后 `store_count` | **0** | impl-contract | 计数器复位清零 |
+| A1b | 复位后 `writeback_count` | **0** | impl-contract | 同上 |
+| A2 | 装载期（`ext_rst = 1`）两计数保持 0 | **0 / 0** | impl-contract | `ext_rst` 是**核**复位 ⇒ 装载动作不进流水线 ⇒ 无写回/store；**接反则装载被当指令执行 ⇒ 必红** |
+| A3 | 释放后 `store_count` | **1** | **spec-derived** | ISA 语义：程序里恰有 1 条 `sw` |
+| A4 | 释放后 `writeback_count` | **3** | **spec-derived** | ISA 语义：x1 / x2 / x3 各写回一次；`jal x0,0` 的 `rd = x0` 不写回 |
+| A5 | 两计数单调不减 | **真** | impl-contract | 计数语义 |
+| A6 | 尾段（第 40 拍后）不再增长 | **真** | **spec-derived** | `jal x0, 0` 自环 ⇒ 无新的写回/store |
+
+⇒ **spec-derived = 3**（A3 / A4 / A6）· impl-contract = 4。
+
+### 4. 变异自证（判别力 · 三条全部实测转红）
+
+| # | 变异 | 期望 | 实测 |
+|---|---|---|---|
+| M1 | 把 `writeback_count` 移出 `make_observations` | CHECK 4 红（变化量 1 < 2） | ✅ `CHECK 4 ... FAIL (变化量=1/1)` |
+| M2 | 两条兄弟边**对调**（`store_event` ↔ `retire_event`） | A3 + A4 双红 | ✅ `fails=2`（store=3 · wb=1） |
+| M3 | 两条边接**同一源** | A4 红 | ✅ `fails=1`（wb=1 ≠ 3） |
+
+⇒ ⚠️ **M2 / M3 能被抓住的前提 = 两个手推值不同（1 vs 3）**。若两者同值（例如用「1 次写回」的短程序），
+两条边接反时观测值不变 ⇒ ⇒ **恒绿**。⇒ ⇒ 程序 MUST 保持「写回 3 次 · store 1 次」这一比例。
+
+### 5. 已知盲区（如实登记）
+
+- ⚠️ **SoC 级看不到核的任何内部信号**（`dbg_*` / `obs_*` 不是顶层端口 · ADR-072 D1）⇒ ⇒
+  核级 24 条判据**只能**留在 `examples/riscv-mini` ⇒ ⇒ 本产品只有 **2 个**观测量。
+- ⚠️ **观测盲区**（ADR-073 要求显式登记）：层次化只覆盖**顶层可见行为** ⇒ ⇒
+  `Rv32iCoreComplex` / `SocTraceCounter` 的**内部** `ch_out` 在顶层不可观测 ⇒ ⇒
+  「子树内部算错但顶层输出恰好相同」这类缺陷**结构性测不出**。
+- ⚠️ **`prog_*` 是运行期后门**（ADR-077 D3 长期保留）⇒ ⇒ 真实芯片形态的装载路径未定义。

@@ -11,6 +11,26 @@
 
 ---
 
+## 0. 两个产品单元（ADR-077 D1 · `Accepted` 2026-11-23）
+
+RV32I 现在有**两级顶层**，各自是独立产品（不是两份实现）：
+
+| 级 | 根组件 | 住址 | 产物 | 判据 |
+|---|---|---|---|---|
+| **IP 级**（核复合体） | `Rv32iPipelineTop` | `examples/riscv-mini/src/rv32i_pipeline_top.h` | **8 module** · 34 端口 | 24 条核级判据（`RESULT: checks=24 fails=0`） |
+| **SoC 级** | `Rv32iSocTop` | `examples/riscv-soc/src/rv32i_soc_top.h` | **10 module** · **8** 端口 | 7 条（`RESULT: checks=7 fails=0`） |
+
+⚠️ **判据作用域不可混用**：
+- 「交付粒度 8 module」**只**约束核复合体（`rtl-hierarchical-output` 的既有条款）；
+- SoC 根走 ADR-073 的「module 数 == 成层 IP 实例数 + 1」⇒ 按**全树**读法 = **10**。
+- ⚠️ SoC 级**看不到**核的任何内部信号（`dbg_*` / `obs_*` 不是顶层端口 · ADR-072 D1）
+  ⇒ ⇒ 核级 24 条判据只能留在 `examples/riscv-mini`；SoC 级只有**两个根自有计数**。
+
+⚠️ **核复合体的 34 端口契约表** = `examples/riscv-soc/AGENTS.md`（单一真相源）
+⇒ 护栏 `scripts/verify_riscv_soc_core_ports.sh`（产物 ↔ 表 ↔ C6 快照三方闭环 · 已挂 CI）。
+
+---
+
 ## 1. 交付物清单
 
 | # | 交付物 | 位置 | 说明 |
@@ -23,6 +43,9 @@
 | ⑥ | **仿真环境**（一条命令） | `scripts/rv32i_rtl_sim_env.sh` | 生成 → lint → 编译 → 运行 ⇒ 打印 `RESULT: checks=N fails=0` |
 | ⑦ | 固件转储器 / ELF 装载 | `tools/rv32i-fw-dump` | ELF32 + `PT_LOAD` + `.bss` 补零 ⇒ 三格式（`vh` / `mem` / `manifest`） |
 | ⑧ | 覆盖登记 + 护栏 | `.rddf/checks/examples-rtl-sim-targets.tsv` · `scripts/verify_examples_rtl_sim.sh` | 四件套（manifest + 产物 + 独立 TB + 登记）逐项断言 |
+| ⑨ | **SoC 级**发射 + 自检 | `examples/riscv-soc/tb_riscv_soc.cpp` → `--emit-rtl` / `--check-products` | 10 module · 8 端口 · 四件套（含双形态逐拍 + 篡改自证） |
+| ⑩ | **SoC 级**独立 TB | `examples/riscv-soc/tb_riscv_soc.sv` | 手写（`generated=no`）· 与 C++ 侧同一组手推字面量 · 7 条 |
+| ⑪ | **核端口契约**护栏 | `scripts/verify_riscv_soc_core_ports.sh` | 34 端口 + 无微架构副本 · 6 条投毒各自必红 |
 
 ---
 

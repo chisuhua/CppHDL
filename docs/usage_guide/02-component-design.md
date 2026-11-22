@@ -216,6 +216,54 @@ TEST_CASE("...") {
 
 ---
 
+### 2.7 IP 级 top 与 SoC 级 top（**两级产品单元**）
+
+当一个子系统要变成**可替换单元**（换掉它不影响上层），把它做成**两个**顶层，而不是一个：
+
+| 级 | 职责 | 例 |
+|---|---|---|
+| **IP 级**（组件级 top） | 该单元**自己**的功能 + 它的私有存储 | `Rv32iPipelineTop`（pipeline + I-TCM + D-TCM） |
+| **SoC 级**（装配根） | 把若干 IP 装起来 + 暴露**根自有**的对外接口 | `Rv32iSocTop`（核复合体 + 观测 IP） |
+
+```cpp
+// SoC 级根：只做实例化 + 连线，MUST NOT 复制任何下层实现
+class Rv32iSocTop : public ch::Component {
+public:
+    __io(
+        ch_in<ch_bool>      ext_rst{"ext_rst"};
+        ch_in<ch_uint<32>>  prog_addr{"prog_addr"};
+        ch_out<ch_uint<16>> store_count{"store_count"};
+    )
+    void describe() override {
+        // 档 ③ 成层：实例处给模块类型名（该类未声明 CH_HIERARCHY_LAYER）
+        ch::ch_layer<Rv32iPipelineTop> core{"core", "Rv32iCoreComplex"};
+        ch::ch_layer<SocTraceCounter>  trace{"trace", "SocTraceCounter"};
+
+        core.io().ext_rst   <<= io().ext_rst;
+        core.io().prog_addr <<= io().prog_addr;
+        trace.io().store_event <<= core.io().obs_data_write_en;   // 兄弟边
+        io().store_count       <<= trace.io().store_count;        // 根自有输出
+    }
+};
+```
+
+**三条规则**（ADR-077 D1）：
+
+1. **IP 级只做自己的事** —— 它不知道自己被谁装（没有上层专属端口）。
+2. **SoC 级只做装配** —— MUST NOT 复制下层实现（复制 = 两份权威 ⇒ 静默分叉）。
+3. **观测口必须是根自有语义** —— 后代的 `ch_out` **不是**顶层端口（ADR-072 D1）⇒
+   想在 SoC 级看到什么，就要有一个**自己产生**它的小 IP（计数 / 状态），
+   而不是把下层的调试信号直接抬上来。
+
+⚠️ **判据作用域不可混用**：`rtl-hierarchical-output` 的「交付粒度 8 module」
+只约束 **IP 级**产品；SoC 级走 ADR-073 的「module 数 == 成层 IP 实例数 + 1」
+（含嵌套时按**全树**计）。完整例见 `examples/riscv-soc/`。
+
+⚠️ 另见：`docs/developer_guide/rv32i-rtl-delivery-and-sim.md` §0（两个产品单元的
+交付物 / 判据分工）。
+
+---
+
 ## 3. 跨层连线
 
 ### 3.1 只有 6 个入口

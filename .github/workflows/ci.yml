@@ -1923,6 +1923,25 @@ jobs:
       shell: bash
       run: bash scripts/verify_examples_rtl_sim.sh
 
+    # ---- 核复合体 34 端口契约（ADR-077 V5 · change riscv-soc-skeleton-2026-11 AC6）----
+    # ⚠️ 为什么挂这里：它需要**真实产物**（发射 + verilator 无关，但发射器要构建）
+    #    ⇒ ⇒ 本 job 已构建 `all-examples`（含 `tb_riscv_soc`）⇒ 增量成本 ≈ 0。
+    # ⚠️ 判据的三方闭环：`examples/riscv-soc/AGENTS.md` 的 34 行表（单一真相源）
+    #    == 产物里 `Rv32iCoreComplex` 的 module 端口表 == C6 快照（去前缀后）
+    #    ⇒ ⇒ `manifest.port_table[]` **不覆盖**子 module（ADR-072 D1-c）⇒ 这一格否则无人核。
+    - name: Verify RV32I SoC core-complex port contract (ADR-077 V5)
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_riscv_soc_core_ports.sh
+
+    - name: Verify RV32I SoC core-complex port contract self-test
+      # ⚠️ 必须挂：负向判别力（6 条投毒各自必红）只在 `--self-test` 里
+      #    ⇒ 不挂 ⇒ 「判据被改成恒绿」这条回归路径**静默假绿**
+      #    （实测本仓已发生过同型：V4 的 `find | grep -q` 在 pipefail 下恒绿 ⇒ 被 P6 抓到）。
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_riscv_soc_core_ports.sh --self-test
+
     - name: Verify examples RTL simulation (independent Verilog TB) self-test
       # ⚠️ **为什么必须挂 CI**（2026-11-19）：护栏 ⑧' 的**正向**判据（产物形态）
       #   在生产轮里查 ⇒ 常驻；但它的**负向**判别力（投毒 ⇒ 必红）只在

@@ -7,8 +7,11 @@
 #   只保留**入选准则 / 首批未覆盖项 / 墙钟实测**，落选名单**只在这里**。
 #
 # ⚠️ **守恒判据** = `scripts/verify_examples_rtl_sim_coverage.sh` ①：
-#   `CH_TRACKED_EXAMPLE_TARGETS`（**28**）== 覆盖（**16**：`kind ∈ {target, soc}`）
+#   `CH_TRACKED_EXAMPLE_TARGETS`（**29**）== 覆盖（**17**：`kind ∈ {target, soc}`）
 #   ∪ 落选（**12** = 本表行数）⇒ ⇒ 且三者互斥 ⇒ ⇒ 「新增即漏」即红。
+#   ⚠️ **2026-11-23 订正**（change `riscv-soc-skeleton-2026-11`）：新增被跟踪 target
+#   `tb_riscv_soc`（SoC 级产品单元 · ADR-077 D1）⇒ ⇒ tracked 28 → 29、覆盖 16 → 17
+#   （落选 12 不动）⇒ ⇒ `29 == 17 ∪ 12`。
 #   ⚠️ **2026-11-22 订正**（RV32I SoC 的「TB 自发射」收敛）：`tb_rv32i_soc` 由
 #   「发射器薄壳」转为**被跟踪 target**（发射入口 = TB 自身 · `--emit-rtl` 模式）
 #   ⇒ ⇒ tracked 27 → 28、覆盖 15 → 16（`kind=dut` 行改成 `kind=target` 行）。
