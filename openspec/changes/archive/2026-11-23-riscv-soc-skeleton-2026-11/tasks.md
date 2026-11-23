@@ -91,4 +91,4 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out /tmp/opencode/soc_c
 - [x] 7.1 AC5 回归锚点：`git diff 4c04821 -- examples/riscv-mini/ include/` **为空** + `git status --porcelain` 为空 + `tb_rv32i_soc` 仍 `checks=24 fails=0`
 - [x] 7.2 AC13 平台声明：`examples/riscv-soc/AGENTS.md` 的「已知边界」+ `developer_guide` §0 均已写「verilator 依赖 ⇒ CI 证据仅 Ubuntu」
 - [x] 7.3 遗留清扫：`grep` 四类（TODO / `SKIP()` / 注释代码 / DEBUG 输出）全部为空
-- [ ] 7.4 `openspec archive riscv-soc-skeleton-2026-11 --yes --skip-specs`（无 spec delta · 先例 6/6）
+- [x] 7.4 `openspec archive riscv-soc-skeleton-2026-11 --yes --skip-specs`（无 spec delta · 先例 6/6）⇒ ⇒ **已执行**（2026-11-23）

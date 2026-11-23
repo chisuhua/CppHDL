@@ -22,7 +22,7 @@
 | # | 来源 | 内容 |
 |---|---|---|
 | 1 | 用户本次明确给出的验收条件 | 无（本轮为「切 verifier 继续验收」的延续指令 · 沿用前序已确认的范围） |
-| 2 | `openspec/changes/riscv-soc-skeleton-2026-11/proposal.md` §`## 验收标准` | **AC1–AC13**（本报告的逐条判定对象） |
+| 2 | `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/proposal.md` §`## 验收标准` | **AC1–AC13**（本报告的逐条判定对象） |
 | 3 | 本次变更自己声明的行为 | 2 个 commit 的 commit message + `tasks.md` 89/90 勾选 + `design.md` 的实施规格 |
 | 4 | 关联 ADR | **ADR-077**（`Accepted` 2026-11-23 · D1 两级顶层 / D2 模块类型名 = 非契约 / D3 `prog_*` 长期保留 / D4 单行 `kind=soc`）· 签批 spec `rtl-soc-output`（观测集 ≥2 随激励变化的量 · 激励 ≥10 拍且值不同 · 粘滞信号不计入） |
 
@@ -116,7 +116,7 @@
 | 项 | 结论 |
 |---|---|
 | **AC 判定** | ✅ **13/13 PASS**（`failed_acs = []`） |
-| **归档命令** | `openspec archive riscv-soc-skeleton-2026-11 --yes --skip-specs` |
+| **归档命令** | `openspec archive riscv-soc-skeleton-2026-11 --yes --skip-specs` ⇒ ⇒ **已执行**（2026-11-23 · 归档为 `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/` · `openspec validate --all` 由 1 failed 转 **52 passed / 0 failed**）|
 | **`--skip-specs` 的依据** | `git diff --stat 4c04821..HEAD -- openspec/specs/` ⇒ **空**（本 change **零 spec delta** ⇒ 无需 merge）⇒ 先例一致（同仓 6/6 例外均如此） |
 | **归档前建议** | ① 先由 builder 收口 F1–F4（可选）② `tasks.md` 仅剩 **7.4 归档**未勾 ⇒ 归档后勾选 |
 | **归档后的状态同步** | `.rddf/improvements/rv32i-soc-platform-2026-11.md` 的 `进度:` 字段仍写「**未开工**」⇒ **planner 义务**（S1 落地后更新为「S1 已归档」）。⚠️ 该文件属 planner 写集 ⇒ verifier 只登记、不代改 |

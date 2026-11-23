@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: feature
 状态: in-progress
-进度: "**立项（2026-11-22 · planner）** · ✅ **S0 已闭**（ADR-077 Accepted 2026-11-23） · ✅ **S1 已实施并验收**（`examples/riscv-soc` · verifier **13/13 PASS** · `2cab7fb` + `62337b0` + `c321848`） · ✅ **S2 已闭**（`rv32i-mem-backpressure-2026-11` · critic APPROVE_WITH_CONDITIONS · 3/3 SHOULD_FIX 已修 · 归档 `7b4a5a2`） · ✅ **S3 已实施并验收**（`rv32i-dcache-burst-2026-11` · G-7 = **full AXI4 主干** · D-Cache **首次接入核**） · 🔜 **下一批 = G-5（核 irq 口）/ G-6（MMIO 归属）/ S4** · ⚠️ **S5（IRQ）被 `rv32i-privileged-csr-2026-11` 与「核加 irq 口」双重阻塞** · **2026-11-23 依实测调整了 IP 计划（见 §IP 计划）**"
+进度: "**立项（2026-11-22 · planner）** · ✅ **S0 已闭**（ADR-077 Accepted 2026-11-23） · ✅ **S1 已实施、验收并归档**（`examples/riscv-soc` · verifier **13/13 PASS** · `2cab7fb` + `62337b0` + `c321848` · 归档 `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/`） · ✅ **S2 已闭**（`rv32i-mem-backpressure-2026-11` · critic APPROVE_WITH_CONDITIONS · 3/3 SHOULD_FIX 已修 · 归档 `7b4a5a2`） · ✅ **S3 已实施并验收**（`rv32i-dcache-burst-2026-11` · G-7 = **full AXI4 主干** · D-Cache **首次接入核**） · 🔜 **下一批 = G-5（核 irq 口）/ G-6（MMIO 归属）/ S4** · ⚠️ **S5（IRQ）被 `rv32i-privileged-csr-2026-11` 与「核加 irq 口」双重阻塞** · **2026-11-23 依实测调整了 IP 计划（见 §IP 计划）**"
 主题: RV32I 从「示例 SoC」走向「可组合 SoC 平台」—— 核心复合体 / SoC 根两级产品单元 + 总线化演进
 依赖: ADR-046（微架构唯一权威 · **ADDENDUM 2026-11-23**）· ADR-061（成层粒度显式声明）· ADR-070（RV32I 成层 + 兄弟边 D4③）· ADR-072（产品端口面 + 四件套）· ADR-073（SoC 产物形态 + SoC 级 TB）· ADR-074（验证单一真相源）· **ADR-077（两级顶层 + 四条形态裁决 · Accepted）** · `rv32i-privileged-csr-2026-11`（**S5 的硬前置** · draft）
 来源: 用户 2026-11-22「想把 RV32I 核做成真实可替换单元 —— 后续加 L1/L2 缓冲、MMU、内存控制器、总线」+「riscv-mini 可看成 riscv-soc 的 spike」+「riscv-mini 改造成核复合体，另建 examples/riscv-soc 实施 Rv32iSocTop」+ 用户 2026-11-23「检查 examples/riscv-soc，检查规划要如何调整，特别是整体 SoC 的不同 IP 的计划」
@@ -230,7 +230,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 
 ### S1（✅ **已完成** · 2026-11-23 · verifier 13/13 PASS）
 
-> 判据原文与逐条证据见 `openspec/changes/riscv-soc-skeleton-2026-11/proposal.md` 的 `## 验收标准`（AC1–AC13）
+> 判据原文与逐条证据见 `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/proposal.md` 的 `## 验收标准`（AC1–AC13）
 > 与 `.rddf/reviews/riscv-soc-skeleton-2026-11-verify.md`。实施期与规划的**偏差**（已接受）：
 > ① 根端口 **8**（不是 7）—— 签批 spec 要求 **≥2** 个变化观测量 ⇒ `SocTraceCounter` 出**两个**计数；
 > ② 观测 IP 名 `SocTraceCounter`（不是 `SocStoreCounter`）；③ 新增 `--check-products` 与 `--firmware` 两种模式；
@@ -258,6 +258,10 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > ③ 核侧 MUST 有 `data_req`（cache 读有副作用）+ `data_ready ← !data_req | cache.ready`（否则空闲拍永久冻死）。
 > **已知代价（登记不修）**：`TcmAxiSlave` 的 AW/W 分拍 ⇒ 连续 store 各多 1 拍（真写缓冲 = 独立立项）；
 > `d_cache_async.h` 的同型「假 line」缺陷（async 未接入生产路径）。
+> **S4 的对比基线已立**（2026-11-23 裁决）：`.rddf/checks/rv32i-soc-product-baseline.md`
+> ⇒ ⇒ 记三份产品级产物（核扁平 / 核层次化 / SoC 层次化）的 sha256 + 变更规则
+> ⇒ ⇒ S4 结束时复算即可定位「改了没有」；**对错**仍由 R8′（端口表 == 手推集）/
+> `verify_flat_rtl_emit` / `rv32i_rtl_sim_env`（`checks=24 fails=0`）判。
 
 ### S4
 

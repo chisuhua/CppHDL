@@ -13,13 +13,23 @@
 #   ⚠️ 「宣称已闭却未迁」这一格**不可机械判**（「已闭」无可判载体）⇒ ⇒ 提供
 #   **`--require-closed`** 作**归档门**（归档 SoC 迁移 change 时跑一次 ⇒ 那时必须已迁）。
 #
+# ⚠️ **逐行判**（2026-11-23 · 用户裁决）：本护栏判**每个** `kind=soc` 单元 ⇒ ⇒ **逐行**判。
+#   ⚠️ **为什么改**：原实现写死「`kind=soc` 的行**恰好 1 条**」⇒ ⇒ 那是「仓里只有 1 个
+#   SoC 单元」的**过时实现假设**⇒ ⇒ S1 登记 `tb_riscv_soc`（第 2 条）后变成 fail-closed
+#   ⇒ ⇒ **覆盖面归零**（2 个单元一个都没判）⇒ ⇒ `--self-test` 同样崩溃。
+#   ⇒ ⇒ **防「删行缩面」不在本护栏**：行数守恒由 `scripts/verify_examples_rtl_sim.sh` 的
+#   `REGISTERED_SOC` 锚点负责 ⇒ ⇒ 本护栏**不另造**行数锚点（避免两处清单漂移）。
+#   ⚠️ **归档门在多单元下的语义**：只判 `generated=yes`（已宣称闭口）的单元；`generated=no`
+#   的单元**跳过**（并列出）⇒ ⇒ **已知边界**：单行时代归档门会拦住「停在未迁态就归档」，
+#   逐行后该格退化为**文档纪律**；而「宣称已迁却没迁」仍由**主路径**抓住（回潮 ⇒ 红）。
+#
 # ⚠️ ⑥' 新鲜度**不在本护栏重复判**（双权威禁令）⇒ ⇒ 由
 #   `scripts/verify_examples_rtl_sim.sh` 的 ⑥' 负责。
 #
 # 用法：
-#   scripts/verify_verif_migration_state.sh                    # 两态自洽（CI 用）
-#   scripts/verify_verif_migration_state.sh --self-test        # 4 类投毒 + 2 条必绿
-#   scripts/verify_verif_migration_state.sh --require-closed   # 归档门（R13 必须已闭）
+#   scripts/verify_verif_migration_state.sh                    # 逐行两态自洽（CI 用）
+#   scripts/verify_verif_migration_state.sh --self-test        # 5 类投毒 + 2 条必绿
+#   scripts/verify_verif_migration_state.sh --require-closed   # 归档门（已宣称闭口的单元必须已迁）
 
 set -uo pipefail
 

@@ -1,0 +1,18 @@
+schema: spec-driven
+created: 2026-11-22
+# 本 change 是 **S1 结构骨架**（把「核复合体」与「SoC 根」拆成两个产品单元）⇒ ⇒
+# **不改任何 capability 契约** ⇒ ⇒ 归档用 `--skip-specs`。
+#
+# 依据 = 本 change 的 `proposal.md` §Capabilities：
+#   · `examples-rtl-sim-coverage` —— **无 delta**（只新增 1 行**清单数据**，
+#     清单行是数据、不是 Requirement 文本）
+#   · `example-component-boundary` —— 无 delta（新头生在 `examples/riscv-soc/src/` 内）
+#   · `rtl-soc-output` / `rtl-hierarchical-output` —— 无 delta（本 S1 的产物**满足**
+#     既有条款；措辞歧义已在 proposal 里登记为「第三次装配时的修订点」，**不改 spec**）
+#
+# ⚠️ `openspec validate` 对本 change 报 "No deltas found" 是**预期**
+#   （与 6 个先例同型：`dual-backend-rv32i-integration-2026-10` ·
+#   `dual-backend-full-coverage-inventory-2026-10` ·
+#   `input-port-assignment-antipattern-fix-2026-10` 等）。
+#   实际门 = `scripts/verify_openspec_delta.sh`（不是 `openspec validate`）。
+skip_specs: true

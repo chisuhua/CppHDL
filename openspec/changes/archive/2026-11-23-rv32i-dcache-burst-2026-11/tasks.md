@@ -4,10 +4,11 @@
 
 ## T0 基线
 
-- [ ] **T0.1** 记录核侧三份产物 sha256 ⇒ ⇒ **本次不做（显式）**：基线 sha256 需
-  `git checkout` 旧代码 + **重建**才能取（成本高），而它想守的东西已由**更强**的结构化判据覆盖
-  —— 产物面 = `verify_flat_rtl_emit` / `verify_hierarchical_rtl`（R1–R8 + R8′ 端口表 == 手推集）/
-  `rv32i_rtl_sim_env.sh`（`checks=24 fails=0`）⇒ ⇒ 交用户裁决是否补记录
+- [x] **T0.1** 记录产物 sha256 ⇒ ⇒ **按 2026-11-23 的用户裁决改口径**：**不补记 S3 的
+  「改动前」指纹**（取历史值要 `git checkout 46810a5` + **两次全量重建**；且 S3 是**有意**
+  改产物的 ⇒ 指纹对 S3 **不是**判据）⇒ ⇒ 改为**记当前值作 S4 的对比基线**
+  ⇒ 落点 = `.rddf/checks/rv32i-soc-product-baseline.md`（三份产品级产物的 sha256 +
+  复算命令 + 变更规则 + 「指纹不是判据」的边界）
 - [x] **T0.2** 记录 `tb_rv32i_soc` 的 `RESULT: checks=24 fails=0`
 - [x] **T0.3** 记录既有 5 个 cache 测试的通过状态（`test_cache_sync` / `test_cache_simple`
   / `test_cache_complete` / `test_cache_pipeline_integration` / `test_phase4_integration`）

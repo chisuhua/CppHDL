@@ -4,7 +4,7 @@
 - **Date**: 2026-11-23
 - **Author**: architect role（build agent · 用户 2026-11-23 指令「选择 A」= 过 S0 决策门）
 - **Parent**: **ADR-046**（微架构唯一归属）· **ADR-061**（成层粒度显式声明）· **ADR-070**（RV32I 成层 · D3 模块类型名 · D4 条件③）· **ADR-072**（产品端口面 D1）· **ADR-073**（SoC 产物形态 D1/D2/D3）· **ADR-074**（验证单一真相源）
-- **关联 change**: `openspec/changes/riscv-soc-skeleton-2026-11/`（**已立项** · 本 ADR 是其 **S0 决策门**）
+- **关联 change**: `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/`（**已归档** 2026-11-23 · 本 ADR 是其 **S0 决策门**）（归档用 `--skip-specs`：本 change **零 spec delta** ⇒ 先例一致）
   ⇒ ⇒ **AC 映射** = 该 change 的 **AC2 / AC3 / AC4 / AC6 / AC9**（module 集 / 根端口集 / 逐拍等价 / 核端口契约 / 登记 `kind`）
 - **上游规划**: `.rddf/improvements/rv32i-soc-platform-2026-11.md`（S1–S3 · metis 第 1 轮已处置）
 - **审稿记录**: `.rddf/reviews/ADR-077-two-level-tops.md`（oracle → critic，顺序不可颠倒；critic 第 3 轮 = 用户批准的第 3 轮窄复审）
@@ -195,7 +195,7 @@ planner 已立项（`.rddf/improvements/rv32i-soc-platform-2026-11.md` + `riscv-
 
 | # | 事项 | 归属 | 载体 |
 |---|---|---|---|
-| ① | **proposal 同步**：AC3（根端口 7 → **8**）· AC4（`min_varying ≥1` → **==2** + 激励 ≥10 拍）· 组件名 `SocStoreCounter` → **`SocTraceCounter`**（本 ADR 的 V1/V2/V4 为**权威数字**） | **planner** | `openspec/changes/riscv-soc-skeleton-2026-11/proposal.md` 的 `## 验收标准` |
+| ① | **proposal 同步**：AC3（根端口 7 → **8**）· AC4（`min_varying ≥1` → **==2** + 激励 ≥10 拍）· 组件名 `SocStoreCounter` → **`SocTraceCounter`**（本 ADR 的 V1/V2/V4 为**权威数字**） | **planner** | `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/proposal.md` 的 `## 验收标准` |
 | ② | `verify_no_duplicate_rv32i_headers.sh` 扫描面扩到 `examples/riscv-soc/src/` | builder | S1 的 AC11 |
 | ③ | 子 module 端口表提取（V5 的载体） | builder | S1 的 AC6 |
 | ④ | 「登记面 ↔ TB 期望集逐字比对」（V6 的主语） | builder | S1 的 AC11 |

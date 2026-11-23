@@ -1,3 +1,67 @@
+## 2026-11-23 — S3 遗留的 3 项裁决收口（基线 / 护栏判据 / S1 归档）
+
+S3 归档后交用户裁决的 3 项遗留，本 commit 全部处置（裁决记录见各项）。
+
+### ① S3 的 `T0.1`（记录产物 sha256）⇒ **改为「记当前值作 S4 的基线」**
+
+- **不补记 S3 的「改动前」指纹**：取历史值要 `git checkout 46810a5` + **两次全量重建**
+  （「还原源码 ≠ 复原 · 二进制也是状态」）⇒ ⇒ 且 S3 是**有意**改产物的 ⇒ ⇒ 指纹对 S3
+  **不是判据** ⇒ ⇒ 而它想守的「产物面」已由**结构化判据**覆盖（`verify_hierarchical_rtl`
+  R1–R8 + **R8′ 顶层端口表 == 手推 34 根** · `verify_flat_rtl_emit` ·
+  `rv32i_rtl_sim_env.sh` 的 `checks=24 fails=0`）。
+- **改为**：新建 `.rddf/checks/rv32i-soc-product-baseline.md` ⇒ 记三份**产品级**产物的
+  sha256（**核扁平** `top.v` · **核层次化** `top.v` · **SoC 层次化** `top.v` + 各自的
+  `manifest.json`）+ 复算命令 + **变更规则表**（哪类改动变哪个指纹、谁判对错）+ 明确
+  「**指纹不是判据**」。
+- ⚠️ **顺带记下一个结构事实**：核扁平与核层次化的 `manifest.json` 指纹**相同**
+  ⇒ ⇒ `manifest` 只记顶层端口表 ⇒ ⇒ **端口面变了三个 manifest 都会变**，而 `top.v` 的指纹
+  对**形态**敏感。
+
+### ② `verify_verif_migration_state.sh` ⇒ **改为逐行判自洽**
+
+- **根因**：`scripts/lib/verif_migration_state.py` 写死「`kind=soc` 的行**恰好 1 条**」
+  ⇒ ⇒ 那是「仓里只有 1 个 SoC 单元」的**过时实现假设**（不是判据语义）⇒ ⇒ S1 登记
+  `tb_riscv_soc`（第 2 条）后变成 fail-closed ⇒ ⇒ **覆盖面归零**（2 个单元**一个都没判**）
+  ⇒ ⇒ `--self-test` 同样崩溃（原 4 类投毒全部因异常而中断）。
+- **处置**：主路径改为「**逐行**判态 A / 态 B，任一不自洽即红」⇒ ⇒ 覆盖从 **0** 扩到 **2** 个
+  SoC 单元；**防「删行缩面」不另造锚点**（`REGISTERED_SOC` 已在
+  `verify_examples_rtl_sim.sh` 守桶守恒）。
+- **自测同步**：4 类投毒 → **5 类**（新增「只破坏**第二行**的自洽性 ⇒ 必须红」作为
+  **逐行判的判别力自证** —— 若实现只判第一行，该投毒会**仍绿** ⇒ 判据力为零）。
+- ⚠️ **已知边界（如实登记）**：归档门（`--require-closed`）在多单元下只判
+  `generated=yes`（已宣称闭口）的单元，`generated=no` 的**跳过**⇒ ⇒ 单行时代归档门能拦的
+  「停在未迁态就归档」这一格退化为**文档纪律**；而「**宣称已迁却没迁**」仍由**主路径**抓住
+  （态 B 但 `.verif` 缺失 = 回潮 ⇒ 红）。
+
+### ③ `riscv-soc-skeleton-2026-11` ⇒ **补 `.openspec.yaml` 并归档**
+
+- 该 change **已实施并验收**（`2cab7fb` + `62337b0` + `c321848` · verifier **13/13 PASS**），
+  缺 `.openspec.yaml` ⇒ ⇒ `openspec validate` 报「No deltas found」⇒ ⇒ `validate --all` 长期 1 failed。
+- **处置**：按其 `proposal.md` §Capabilities **已写明**的路径（无 spec delta ⇒ `--skip-specs`，
+  先例 6/6）补 `.openspec.yaml`（含 `skip_specs: true`）⇒ ⇒ 归档为
+  `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/`。
+- **效果**：`openspec validate --all` 由 **52 passed / 1 failed** 转 **52 passed / 0 failed**。
+- 顺带同步**失效路径指针**：`ADR-077` 的「关联 change」段 + AC 映射载体行 · 母 improvement 的
+  AC 载体路径 + `进度:` 字段 · S1 验收报告的判据来源路径（仓内先例：ADR-049 / 051 / 052 / 053
+  的关联 change 指针在归档后同样指向 `openspec/changes/archive/…`）。
+### ④ 如实登记：`perf_regression` 的顺序依赖（**pre-existing** · 本次未修）
+
+- **现象**：本轮第一次跑全量 `ctest` 时 `perf_regression`（ctest #115）报
+  `cannot open .../perf_results.json` ⇒ ⇒ 随后两次复跑（`ctest -L perf` 与全量 `ctest`）
+  均 **275/275 绿**。
+- **机制**（读 `tests/benchmark/CMakeLists.txt` + `tests/CMakeLists.txt` +
+  `tests/benchmark/test_perf_subprocess_isolation.cpp`）：`perf_regression` 读的是**仓库根**的
+  `perf_results.json`（gitignored 产物，由 `perf_tests --all --report=json` 生成）；
+  该文件的生命周期由三方共同决定 —— ① `perf_results_clean`（FIXTURES_SETUP，先删）
+  ② `perf_three_way` / `perf_tests`（生成）③ `perf_subprocess_isolation` 的 RAII
+  `Restore`（备份到 `__saved` → 结束时 `remove` 再恢复）⇒ ⇒ **恢复依赖「开始时有文件」**。
+- **判定**：**与本次改动无关**（本次零代码 / 零测试 / 零 CMake 改动 —— 只动
+  `docs/` `scripts/` `openspec/` `.rddf/`）⇒ ⇒ 属**既有的顺序依赖 flaky**
+  （CTest 调度顺序变化即可触发）。⇒ **本次不修**（不在 S3 遗留的 3 项裁决范围内）⇒
+  ⇒ 交用户裁决是否立项（可选修法：给 `perf_regression` 加 `FIXTURES_REQUIRED perf_tests`
+  式的产物前置，或让 `perf_subprocess_isolation` 的 `Restore` 在无备份时**保留**生成的文件）。
+
+
 ## 2026-11-23 — S3：D-L1 的 AXI4 full 主口 + 真 line + **接入核**（D-Cache 首次上生产路径）
 
 **背景**：G-7 裁决 = **full AXI4 主干**（2026-11-23 · 用户）；S3 一次做完（不拆 S3a/S3b）。
