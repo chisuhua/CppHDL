@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: feature
 状态: in-progress
-进度: "**立项（2026-11-22 · planner）** · ✅ **S0 已闭**（ADR-077 Accepted 2026-11-23） · ✅ **S1 已实施、验收并归档**（`examples/riscv-soc` · verifier **13/13 PASS** · `2cab7fb` + `62337b0` + `c321848` · 归档 `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/`） · ✅ **S2 已闭**（`rv32i-mem-backpressure-2026-11` · critic APPROVE_WITH_CONDITIONS · 3/3 SHOULD_FIX 已修 · 归档 `7b4a5a2`） · ✅ **S3 已实施并验收**（`rv32i-dcache-burst-2026-11` · G-7 = **full AXI4 主干** · D-Cache **首次接入核**） · ✅ **G-6 已裁**（= A 库层全表 + SoC 装配 · 2026-11-23） · 🔜 **下一批 = S4a（MMIO 映射 + 互联 + GPIO 端到端回环）** · ⚠️ **S5（IRQ）被 `rv32i-privileged-csr-2026-11` 与「核加 irq 口」双重阻塞** · **2026-11-23 依实测调整了 IP 计划（见 §IP 计划）**"
+进度: "**立项（2026-11-22 · planner）** · ✅ **S0 已闭**（ADR-077 Accepted 2026-11-23） · ✅ **S1 已实施、验收并归档**（`examples/riscv-soc` · verifier **13/13 PASS** · `2cab7fb` + `62337b0` + `c321848` · 归档 `openspec/changes/archive/2026-11-23-riscv-soc-skeleton-2026-11/`） · ✅ **S2 已闭**（`rv32i-mem-backpressure-2026-11` · critic APPROVE_WITH_CONDITIONS · 3/3 SHOULD_FIX 已修 · 归档 `7b4a5a2`） · ✅ **S3 已实施并验收**（`rv32i-dcache-burst-2026-11` · G-7 = **full AXI4 主干** · D-Cache **首次接入核**） · ✅ **G-6 已裁**（= A 库层全表 + SoC 装配 · 2026-11-23） · ✅ **G-9 已裁**（= Y 外设住 SoC 层 · 核引 **AXI4-Lite 主口 19 根** · 核内 **pre-cache 分流**（MMIO 不进 D-L1）· 2026-11-24） · ✅ **G-5 契约已裁**（`irq` 1 根 · 电平 · 高有效 · **实施在 S5**） · 🔜 **下一批 = S4a（MMIO 映射 + 互联 + GPIO 端到端回环）** · ⚠️ **S5（IRQ）被 `rv32i-privileged-csr-2026-11` 与「核加 irq 口」双重阻塞** · **2026-11-23 依实测调整了 IP 计划（见 §IP 计划）**"
 主题: RV32I 从「示例 SoC」走向「可组合 SoC 平台」—— 核心复合体 / SoC 根两级产品单元 + 总线化演进
 依赖: ADR-046（微架构唯一权威 · **ADDENDUM 2026-11-23**）· ADR-061（成层粒度显式声明）· ADR-070（RV32I 成层 + 兄弟边 D4③）· ADR-072（产品端口面 + 四件套）· ADR-073（SoC 产物形态 + SoC 级 TB）· ADR-074（验证单一真相源）· **ADR-077（两级顶层 + 四条形态裁决 · Accepted）** · `rv32i-privileged-csr-2026-11`（**S5 的硬前置** · draft）
 来源: 用户 2026-11-22「想把 RV32I 核做成真实可替换单元 —— 后续加 L1/L2 缓冲、MMU、内存控制器、总线」+「riscv-mini 可看成 riscv-soc 的 spike」+「riscv-mini 改造成核复合体，另建 examples/riscv-soc 实施 Rv32iSocTop」+ 用户 2026-11-23「检查 examples/riscv-soc，检查规划要如何调整，特别是整体 SoC 的不同 IP 的计划」
@@ -21,8 +21,9 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > （frontmatter 的 `主题:` 是完整表述；本行取**路线图主题**以过 `add-improve` 的 HARD-GATE 匹配。）
 
 > 📌 **2026-11-23 调整记录（builder 依实测回填 · 用户指令）**：S0 已闭（ADR-077）· S1 已实施并验收 ·
-> **IP 计划按「接口类 × 批次」重排**（§IP 计划）· 新增四条待裁决策门 **G-5…G-8**（因 S1 落地后暴露
+> **IP 计划按「接口类 × 批次」重排**（§IP 计划）· 新增五条待裁决策门 **G-5…G-9**（因 S1 落地后暴露
 > 的端口/映射/总线/根端口面问题）· 原 G-1…G-4 **已由 ADR-077 裁决**（见 §决策门）。
+> 📌 **2026-11-24 调整记录（builder · 用户裁决）**：**G-9**（外设住址）= **Y（外设住 SoC 层 · 核引 AXI4-Lite 主口 19 根）** · **G-5** 的**契约**同批裁（`irq` 1 根 · 电平 · 高有效）但**实施仍在 S5** ⇒ ⇒ 核端口面 **34 → 53（S4a）→ 54（S5）**（两次都是**增量追加**） ⇒ 决策材料 `.rddf/checks/decision-request-g9-core-port-face-v2-2026-11.md`。
 
 ---
 
@@ -175,8 +176,8 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | **S1 ✅** | 核复合体 + `SocTraceCounter` | 10 module · 8 端口 · 2 观测量 · 13 AC（verifier 全 PASS） | ADR-077 |
 | **S2 ✅** | MEM 反压（`data_ready` 真消费 · **已签批 spec 的未实现条款**） | `ready≡1` 行为零回归（端口 34 + 24 判据 + dual parity）· `ready=0` 的 stall **手推拍数**（`perf_instructions` 差 == N）· 口径分档（不混进 `perf_load_use_stalls`） ⇒ 2026-11-23 完成并**已归档** · `openspec/changes/archive/2026-11-23-rv32i-mem-backpressure-2026-11/` ⇒ verifier **8/8** · 报告 `.rddf/reviews/rv32i-mem-backpressure-2026-11-verify.md` | — |
 | **S3** | 核**数据侧** AXI4 主口 + **D-L1**（`DCacheSync`）+ wrapper **burst 升级** | burst 事务手推（len/size/burst）· hit/miss 拍数契约 · TCM 旁路后 `prog_*` 一致性 | S2 |
-| **S4** | **`AxiLiteMatrix2x2`** + **`AxiLiteGpio/Uart/Timer/Spi/I2c/Pwm`**（轮询）+ **`AxiDma`**（boot/装载主）+ **MMIO 地址解码** + 取指侧总线化 + **I-L1** | 每 IP 一条总线级 RD/WR 回环（手推地址+值）· 地址映射表 == 手推 · DMA 装载后核能取指 | S3 |
-| **S5** | 核 **`irq` 输入口（34→35）** + **`Clint`** + **IRQ 汇聚器（新写）** | IRQ 边沿 → trap 的拍数（手推）· `mtip`/`mie`/`mip` 语义 | **privilege** + S4 |
+| **S4** | **核的 MMIO 通道**（**G-9**：核内 pre-cache 分流 + 核侧 AXI4-Lite master · 核端口 34 → **53**） + **`AxiLiteMatrix2x2`** + **`AxiLiteGpio/Uart/Timer/Spi/I2c/Pwm`**（轮询）+ **`AxiDma`**（boot/装载主）+ **MMIO 地址解码** + 取指侧总线化 + **I-L1** | 每 IP 一条总线级 RD/WR 回环（手推地址+值）· 地址映射表 == 手推 · DMA 装载后核能取指 | S3 |
+| **S5** | 核 **`irq` 输入口（53→54 · G-5 契约已定）** + **`Clint`** + **IRQ 汇聚器（新写）** | IRQ 边沿 → trap 的拍数（手推）· `mtip`/`mie`/`mip` 语义 | **privilege** + S4 |
 | **S6** | **L2** + **DRAM 控制器**（新写） | 总线事务 + 时序契约（`rv32i-memory-timing` delta） | S3 · S4 |
 | **S7** | **MMU（Sv32）** | 页表走查拍数 · 缺页 trap | S5 · 承接 `rv32i-privileged-csr` |
 
@@ -272,7 +273,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 
 ### S5
 
-- [ ] **ACs5-1** 🔴 核的 `irq` 口（**34 → 35**）⇒ **C6 快照 / 34 端口表 / `verify_riscv_soc_core_ports.sh` 期望表 / SoC 8 端口表**同批重算（**G-5**）
+- [ ] **ACs5-1** 🔴 核的 `irq` 口（**53 → 54** · G-5 契约已定：1 bit · 电平 · 高有效）⇒ **C6 快照 / 核端口契约表 / `verify_riscv_soc_core_ports.sh` 期望表**同批重算 ⇒ ⚠️ **SoC 根端口表不变**（`irq` 在 SoC 内部汇聚）
 - [ ] **ACs5-2** 🔴 IRQ 边沿 → trap 的**拍数**（手推）· `mtip` → `mip.MTIP` → trap 的链路
 - [ ] **ACs5-3** IRQ 汇聚器的**掩码/优先级**语义 == 手推
 
@@ -302,7 +303,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | 面 | 影响 |
 |---|---|
 | **已落地（S1）** | `examples/riscv-soc/`（6 文件）· 跟踪 28 → **29** · `29 == 17 ∪ 12` · `REGISTERED_SOC` 1 → 2 · 新护栏 1 个 |
-| **后续（S3–S7）** | 核端口面（S5，**G-5**）· `rv32i_mem_map.h` 的 MMIO 段（S4，**G-6**）· 缓存 wrapper 的 burst 口（S3）· 新 IP（IRQ 汇聚 / L2 / DRAM / MMU） |
+| **后续（S3–S7）** | 核端口面（S4a **+19 根 AXI-Lite** · **G-9**；S5 **+1 根 `irq`** · **G-5**）· `rv32i_mem_map.h` 的 MMIO 段（S4，**G-6**）· 缓存 wrapper 的 burst 口（S3）· 新 IP（IRQ 汇聚 / L2 / DRAM / MMU） |
 | **观测面** | 🔴 SoC 级**看不到** `dbg_*`/`obs_*`（ADR-072 D1）⇒ 核级 24 条只留 `examples/riscv-mini`；SoC 级靠**根自有观测口** |
 | **文档** | 每批：`examples/riscv-soc/AGENTS.md`（端口/模块表）· root `AGENTS.md` · `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · `docs/CHANGELOG.md` |
 
@@ -319,7 +320,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | **R5** | S3 撞反压不足 | S2 是 S3 **硬前置** |
 | **R6** | 新增 example "新增即漏" | 登记 8 处全部列成机械判据（S1 已验证） |
 | **R7** | 装载期复位极性接反 ⇒ "装载成功但永不执行" | 计数断言是唯一能发现它的判据 ⇒ MUST 手推 |
-| **R8** 🆕 | **IRQ 被双重阻塞**（无 `irq` 口 + 无 privilege） | S5 的入口条件写死：`rv32i-privileged-csr` 完成 **且** G-5 裁决 **且** S4 验收 |
+| **R8** 🆕 | **IRQ 被双重阻塞**（无 `irq` 口 + 无 privilege） | S5 的入口条件写死：`rv32i-privileged-csr` 完成 **且** G-5 裁决（✅ 2026-11-24）**且** S4 验收 ⇒ ⇒ **现在只剩 privilege 一项未闭** |
 | **R9** 🆕 | **根端口暴露外部总线**时 bundle 不是顶层端口（`AGENTS.md` 的 bundle 限制） | 若要把外部 AXI 上根端口 ⇒ MUST 标量拆口（~30 根）⇒ 先过 **G-8** |
 | **R10** 🆕 | 先做 L2（跳过 S3/S4） | 明令不做：L2 无处可挂且会迫使 burst 口返工（§IP 计划 的两条硬顺序约束） |
 
@@ -342,13 +343,14 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 
 | # | 决策 | 为什么不能由 builder/planner 定 | 影响批 |
 |---|---|---|---|
-| **G-5** | **核加 `irq` 输入口（34 → 35）** | 端口契约变更：C6 快照 · 34 端口表 · `verify_riscv_soc_core_ports.sh` 期望表 · SoC 8 端口表 · tsv 全部同批重算 ⇒ 架构面 | S5 |
+| **G-5** ✅ 契约 | **核加 `irq` 输入口** —— ✅ **契约已裁（2026-11-24 · 用户）**：`irq` · INPUT · 1 bit · **电平触发 · 高有效**（高 = 有待处理中断）· 驱动方 = SoC 侧 IRQ 汇聚器（S5）⇒ **SoC 根不暴露 `irq`**（外设 `irq` 全在 SoC 内部汇聚） · ⚠️ **实施仍在 S5**（与 `rv32i-privileged-csr-2026-11` 同批）⇒ **S4a 不得先加**：加了就是「被赋值但零消费者」的**死端口**（同型先例 = 2026-11-14 物理删除的 `ext_clk`）⇒ 核端口 **53 → 54** · 决策材料 `.rddf/checks/decision-request-g9-core-port-face-v2-2026-11.md` §3 | 已闭（实施在 S5） | S5 |
 | ~~G-6~~ ✅ | **MMIO 地址映射的归属** —— ✅ **已裁决 = A（库层全表 + SoC 装配）**（2026-11-23 · 用户） ⇒ 库层 `rv32i_mem_map.h` 扩 7 段（Clint/Uart/Gpio/Spi/I2c/Pwm/Dma，每段 4KB 顺延自 `0x8010_0000`） · `address_decoder.h` 改派生 + 补齐 4 片选（7 片选 + error）· SoC 侧只用 `Map::windows[]` 装配 ⇒ 决策材料 `.rddf/checks/decision-request-g6-mmio-ownership-2026-11.md`（含六维对比 + 3 个新事实） ⇒ ⚠️ **未裁**：S4 的互联形态（级联 / 单窗口+二级译码 / 新写 N×M）随 S4a design | 已闭 | S4 |
 | **G-7** ✅ | **总线类** —— **已裁决 = full AXI4 主干**（2026-11-23 · 用户） ⇒ S3 的 D-L1 直接接 full 主口 + 4-beat burst（**一次做完，不拆 S3a/S3b**） ⇒ S4 用 `AxiInterconnect4x4` + `AxiToAxiLite` · `AxiDma` 全速 ⇒ S6 零返工 ⇒ 决策材料 `.rddf/checks/decision-request-g7-bus-class-2026-11.md`（含**新发现**：`DCacheSync` 是「假 line」—— `offset` 不进数据选择 ⇒ S3 必先修） | 已闭 | S3 / S4 |
 | **G-8** | **SoC 是否把外部总线口暴露到根端口** | 若暴露 ⇒ bundle 不是顶层端口（须标量拆口 ~30 根）⇒ 与 ADR-072 D1「根自有 IO」的相互作用 ⇒ 架构面 | S4 / S6 |
+| **G-9** ✅ | **S4 的外设住址 + 核边界形态** —— ✅ **已裁决 = Y（外设住 SoC 层 · 核引 MMIO 通道）**（2026-11-24 · 用户） ⇒ **G-9.2** 核边界 = **AXI4-Lite 主口 19 根**（与 6 个 Lite 外设同型 ⇒ 直连 `AxiLiteMatrix2x2` 的 m0 · **零桥接**） · **G-9.3** 核内 **pre-cache 分流**：地址 ∈ D-TCM 窗口 → 现有 D-L1 通路（**S3 零返工**）· 其余 → MMIO 通道 ⇒ **MMIO MUST 绕开 D-L1**（`DCacheSync` 的 fill 完成条件 = `r_last`（`d_cache_sync.h:233`）· AXI4-Lite **无 `rlast`** ⇒ 否则第一次 MMIO load **永久挂死**） · **G-9.4** 核侧 MMIO master **核侧自带**（不进库层公开面 · 换核时新核自带 ⇒ SoC 侧零改动） ⇒ 核端口 **34 → 53（S4a）** · 决策材料 `.rddf/checks/decision-request-g9-core-port-face-v2-2026-11.md`（含 18 条实测事实 + 完整端口契约表） | 已闭 | S4 |
 
-> 建议裁决顺序：~~G-7 → G-5 → G-6 → G-8~~ ⇒ **修正为 `G-7 ✅ → G-6 ✅ → (S4a/S4b/S4c) → G-5（S5 前）→ G-8（S6 前）`**（2026-11-23 · 用户裁决 G-6 时一并确认）。
-> ⚠️ **G-5 推迟的依据**：它的影响批是 **S5**，而 S5 的入口条件含 `rv32i-privileged-csr-2026-11` **完成**（该 improvement **仍是 draft** · 未开工、无 change） ⇒ 现在加 `irq` 口后**无人驱动**（IRQ 汇聚器要到 S5 才写）⇒ 悬空输入端口读到**未定义值** ⇒ 本仓 ANTI-PATTERN 明令禁止的形态 ⇒ 且端口表重算换不来任何交付。
+> 建议裁决顺序：~~G-7 → G-5 → G-6 → G-8~~ ⇒ **修正为 `G-7 ✅ → G-6 ✅ → G-9 ✅ / G-5 ✅（契约）→ (S4a/S4b/S4c) → G-5 实施（S5）→ G-8（S6 前）`**（2026-11-23 用户裁 G-6 时修正 · 2026-11-24 用户裁 G-9 + G-5 契约时再修正）。
+> ⚠️ **G-5 的「契约」与「实施」分离**（2026-11-24）：契约（端口名 / 方向 / 位宽 / 触发语义 / 驱动方）**现在定**，**实施在 S5** ⇒ 理由：① S5 的入口条件含 `rv32i-privileged-csr-2026-11` **完成**（该 improvement **仍是 draft** · 未开工、无 change） ⇒ 现在加 `irq` 口后**核内零消费者**（IRQ 汇聚器要到 S5 才写）⇒ **死端口**（同型先例 = 2026-11-14 删除的 `ext_clk`） ⇒ 违反 ZERO-DEBT；② 端口表两次变更都是**增量追加**（+19 行 / 再 +1 行）⇒ **不是全量重算两遍** ⇒ 「一次定契约」的成本优势有限。
 
 ---
 
