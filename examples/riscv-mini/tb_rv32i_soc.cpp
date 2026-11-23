@@ -59,6 +59,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -173,6 +174,179 @@ std::unique_ptr<ch::Component> make_emit_design_fw_init(ch::core::context *) {
     // ⇒ ⇒ **零端口变更**（顶层端口表与基线产物逐字相同）。
     return std::make_unique<Rv32iPipelineTop>(nullptr, "top", rv32i_fw_demo::text(),
                                               rv32i_fw_demo::data());
+}
+
+// ---------------------------------------------------------------------------
+// **方案 a**：ELF → init_data 向量 → 核取指（端到端装载链路）
+//
+// ## 镜像来源
+//
+// `tools/rv32i-fw-dump --format mem-split --out <dir>` ⇒ ⇒ 产出
+// `<dir>/itcm.mem` + `<dir>/dtcm.mem` ⇒ ⇒ **每行一个 32 位字（十六进制）**
+// ⇒ ⇒ **行号 = 区域内的字索引**（空洞已由工具补零 ⇒ ⇒ 索引与地址一致）。
+//
+// ## 装载面
+//
+// ⇒ ⇒ 走**构造参数**（`itcm_init` / `dtcm_init`）⇒ ⇒ `ch_mem::init_data`
+// ⇒ ⇒ **零端口变更**（`__io` 一字未动）⇒ ⇒ 顶层端口表与基线产物逐字相同。
+//
+// ## 为什么尾部要填 NOP（G1 纪律）
+//
+// I-TCM 在程序末尾之后读到的是 `ch_mem` 初值 **0** ⇒ ⇒ `0x00000000` 的
+// opcode = `0x00` ⇒ ⇒ **未知 opcode** ⇒ ⇒ 流水线会在此**冻结**
+// ⇒ ⇒ 镜像**必须**补 NOP（与默认模式的 64 字填充同一条纪律）。
+// ---------------------------------------------------------------------------
+
+/// 读一个字镜像文件（每行一个 32 位十六进制字）。
+///
+/// ⚠️ **fail-closed**：文件缺失 / 空行 / 非法十六进制 ⇒ ⇒ 退出码 2（**不**静默跳过）
+std::vector<uint32_t> read_mem_image(const std::string &path) {
+    std::ifstream in(path);
+    if (!in) {
+        std::cerr << "FATAL：读不到固件镜像：" << path << "\n";
+        std::exit(2);
+    }
+    std::vector<uint32_t> words;
+    std::string line;
+    std::size_t lineno = 0;
+    while (std::getline(in, line)) {
+        ++lineno;
+        // 容忍 CRLF 结尾
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        if (line.empty()) continue;
+        if (line.size() > 2 && line[0] == '/' && line[1] == '/') continue;  // 注释行
+        uint32_t value = 0;
+        try {
+            value = static_cast<uint32_t>(std::stoul(line, nullptr, 16));
+        } catch (...) {
+            std::cerr << "FATAL：固件镜像第 " << lineno << " 行不是合法十六进制："
+                      << path << "\n";
+            std::exit(2);
+        }
+        words.push_back(value);
+    }
+    return words;
+}
+
+/// 读一个区域的镜像（`<dir>/<name>.mem`）⇒ ⇒ 缺文件 ⇒ ⇒ 空镜像（**不**是错误）
+std::vector<uint32_t> read_region_image(const std::string &dir,
+                                         const std::string &name) {
+    std::ifstream probe(dir + "/" + name + ".mem");
+    if (!probe) return {};
+    return read_mem_image(dir + "/" + name + ".mem");
+}
+
+/// 把 I-TCM 镜像补齐到 `kFillWords`（尾部填 NOP）⇒ ⇒ G1 纪律
+std::vector<uint32_t> pad_itcm(const std::vector<uint32_t> &image) {
+    std::vector<uint32_t> padded = image;
+    if (padded.size() < kFillWords) {
+        padded.resize(kFillWords, riscv::NOP);
+    }
+    return padded;
+}
+
+/// 打印一条**机器可读**的观测行（供护栏做**固件专属**判据）
+///
+/// ⚠️ 协议行 = **单行** · 字段用 `,` 分隔 · 数值一律十六进制（带 `0x` 前缀）
+/// ⇒ ⇒ 护栏按 `key=value` 解析 ⇒ ⇒ 不受 C++ 输出的其它噪声影响
+void print_firmware_trace(uint64_t retired, uint32_t fetch0,
+                           const std::vector<std::pair<uint32_t, uint64_t>> &writebacks,
+                           const std::vector<std::pair<uint64_t, uint64_t>> &stores) {
+    std::cout << "FIRMWARE-TRACE:";
+    std::cout << " retired=" << retired;
+    std::cout << " fetch0=0x" << std::hex << fetch0 << std::dec;
+    std::cout << " wb=";
+    for (std::size_t i = 0; i < writebacks.size(); ++i) {
+        if (i) std::cout << ",";
+        std::cout << writebacks[i].first << ":0x" << std::hex << writebacks[i].second
+                  << std::dec;
+    }
+    std::cout << " stores=";
+    for (std::size_t i = 0; i < stores.size(); ++i) {
+        if (i) std::cout << ",";
+        std::cout << "0x" << std::hex << stores[i].first << ":0x" << stores[i].second
+                  << std::dec;
+    }
+    std::cout << "\n";
+}
+
+/// `--firmware <dir>` 的**验证模式**（解释器路径）
+///
+/// ⇒ ⇒ 装载 ⇒ ⇒ 跑 ⇒ ⇒ 断言**固件无关**的不变量（固件专属的期望值由**护栏**
+///      按 `FIRMWARE-TRACE:` 行判 ⇒ ⇒ TB **不**硬编码任何固件的期望值）。
+int run_firmware_verification(const std::string &dir) {
+    Checker ck;
+
+    const std::vector<uint32_t> itcm = pad_itcm(read_region_image(dir, "itcm"));
+    const std::vector<uint32_t> dtcm = read_region_image(dir, "dtcm");
+    if (itcm.empty()) {
+        std::cerr << "FATAL：固件镜像为空（" << dir << "/itcm.mem）\n";
+        return 2;
+    }
+
+    // ⚠️ **装载走构造参数** ⇒ ⇒ 零 `prog_*` 写 ⇒ ⇒ 顶层端口面一字未动
+    //
+    // ⚠️ `ch_device<T, Args...>` 的 `Args...` **MUST 显式给出**（类模板参数
+    //    **不**对构造函数实参做推导 ⇒ ⇒ 只写 `ch_device<T>` = 零参）。
+    //    这里取**引用**类型 ⇒ ⇒ 才能绑住下面的 `const` 左值（`vector&&` 绑不住）。
+    using FwDev = ch::ch_device<Rv32iPipelineTop, const std::vector<uint32_t>&,
+                                 const std::vector<uint32_t>&>;
+    auto dev = std::make_unique<FwDev>(itcm, dtcm);
+    Simulator sim(dev->context());
+    auto &dut = dev->instance();
+    auto &io = dut.io();
+
+    std::vector<uint32_t> fetched;
+    std::vector<std::pair<uint32_t, uint64_t>> writebacks;
+    std::vector<std::pair<uint64_t, uint64_t>> stores;
+    uint64_t retired = 0;
+
+    for (std::size_t c = 0; c < kCycles; ++c) {
+        sim.tick(1);
+
+        const uint64_t id_valid = static_cast<uint64_t>(sim.get_port_value(io.dbg_id_valid));
+        const uint64_t id_instr = static_cast<uint64_t>(sim.get_port_value(io.dbg_id_instr));
+        const uint64_t wb_en = static_cast<uint64_t>(sim.get_port_value(io.dbg_wb_write_en));
+        const uint64_t wb_rd = static_cast<uint64_t>(sim.get_port_value(io.dbg_wb_rd_addr));
+        const uint64_t wb_data = static_cast<uint64_t>(sim.get_port_value(io.dbg_wb_write_data));
+        const uint64_t st_en = static_cast<uint64_t>(sim.get_port_value(io.obs_data_write_en));
+        const uint64_t st_addr = static_cast<uint64_t>(sim.get_port_value(io.obs_data_addr));
+        const uint64_t st_data = static_cast<uint64_t>(sim.get_port_value(io.obs_data_write_data));
+
+        if (id_valid != 0) {
+            fetched.push_back(static_cast<uint32_t>(id_instr));
+        }
+        if (wb_en != 0) {
+            writebacks.emplace_back(static_cast<uint32_t>(wb_rd), wb_data);
+        }
+        if (st_en != 0) {
+            stores.emplace_back(st_addr, st_data);
+        }
+        retired = static_cast<uint64_t>(sim.get_port_value(io.obs_perf_instructions));
+    }
+
+    // ── F1：首个取指的指令字 == 镜像首字 ⇒ ⇒ **取指真的来自装载的镜像** ──
+    // ⚠️ 这是本模式**最承重**的一条：若镜像没进内存 ⇒ ⇒ 取到的是初值 0 ⇒ ⇒ 红。
+    ck.check(!fetched.empty(), "F1a: 至少取到一条指令");
+    ck.check(!fetched.empty() && fetched[0] == itcm[0],
+             "F1b: 首个取指的指令字 == 镜像首字");
+    // ── F2：不得取指到 0x00000000（未知 opcode ⇒ ⇒ 流水线冻结）──
+    bool saw_zero_instr = false;
+    for (const uint32_t instr : fetched) {
+        if (instr == 0u) saw_zero_instr = true;
+    }
+    ck.check(!saw_zero_instr, "F2: 未取指到 0x00000000（未知 opcode）");
+    // ── F3：退休计数 > 0 ⇒ ⇒ 固件真的在跑 ──
+    ck.check(retired > 0u, "F3: 退休计数 > 0");
+    // ── F4：写回非空 ⇒ ⇒ 固件的 load 路径真的通到了 WB ──
+    ck.check(!writebacks.empty(), "F4: 至少一次写回");
+
+    print_firmware_trace(retired, fetched.empty() ? 0u : fetched[0], writebacks, stores);
+
+    std::cout << "RESULT: checks=" << ck.checks() << " fails=" << ck.fails() << "\n";
+    return ck.fails() == 0 ? 0 : 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +489,28 @@ int main(int argc, char **argv) {
         rest.emplace_back(argv[i]);
     }
 
+    // ── **`--firmware <dir>`**（方案 a：ELF → init_data → 核取指）──
+    //
+    // ⚠️ **位置无关**：与其它标记一样，可出现在任意位置。
+    // ⚠️ **fail-closed**：给了 `--firmware` 却没有取值 ⇒ ⇒ exit 2。
+    std::string fw_dir;
+    for (std::size_t i = 0; i < rest.size(); ++i) {
+        if (rest[i] != "--firmware") continue;
+        if (i + 1 >= rest.size() || rest[i + 1].empty() ||
+            rest[i + 1][0] == '-') {
+            std::cerr << "FATAL：--firmware 缺少取值（固件镜像目录）\n";
+            return 2;
+        }
+        if (!fw_dir.empty()) {
+            std::cerr << "FATAL：--firmware 只能给一次\n";
+            return 2;
+        }
+        fw_dir = rest[i + 1];
+        rest.erase(rest.begin() + static_cast<std::ptrdiff_t>(i),
+                   rest.begin() + static_cast<std::ptrdiff_t>(i) + 2);
+        --i;
+    }
+
     // ── 模式判定：**位置无关**剥离模式标记（其余 argv 原序保留）──
     // ⚠️ `--hierarchical` **不剥离** ⇒ ⇒ 它是**库层 CLI 的既有选项**
     //    （`rtl_emit::CliOptions::hierarchical`）⇒ ⇒ 透传给 `run_emit_cli`。
@@ -337,8 +533,25 @@ int main(int argc, char **argv) {
                       << "（拒绝回落到默认 rtl_out/）\n";
             return 2;
         }
+        // ⚠️ **`--firmware <dir>` 优先于 `--firmware-init`**：前者是**从文件装载**
+        //    的真实 ELF 镜像 ⇒ ⇒ 优先级高于内联的示例固件。
+        if (!fw_dir.empty()) {
+            auto make_design = [fw_dir](ch::core::context *) {
+                const std::vector<uint32_t> itcm =
+                    pad_itcm(read_region_image(fw_dir, "itcm"));
+                const std::vector<uint32_t> dtcm =
+                    read_region_image(fw_dir, "dtcm");
+                return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm, dtcm);
+            };
+            return ch::rtl_emit::run_emit_cli(rest, make_design);
+        }
         return ch::rtl_emit::run_emit_cli(
             rest, want_fw_init ? make_emit_design_fw_init : make_emit_design);
+    }
+
+    // ── **`--firmware <dir>` 的验证模式**（解释器路径）──
+    if (!fw_dir.empty()) {
+        return run_firmware_verification(fw_dir);
     }
 
     // ── 验证模式 fail-closed：收到**任何**未知参数 ⇒ exit 2 ──

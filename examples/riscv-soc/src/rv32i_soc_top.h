@@ -26,7 +26,9 @@
 // ⇒ CMake 侧以 target_include_directories 注入该目录（本文件不带 examples/ 前缀）。
 #include "rv32i_pipeline_top.h"
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace riscv_soc {
 
@@ -46,16 +48,37 @@ public:
         ch_out<ch_uint<16>> writeback_count{"writeback_count"};
     )
 
+    /// ⚠️ **固件初值透传**（`firmware-load-chain` L2 路线 A · **方案 a**）
+    ///
+    /// ⇒ ⇒ 走**构造参数** ⇒ ⇒ 核复合体的 `ch_mem::init_data`
+    /// ⇒ ⇒ **零端口变更**（`__io` 一字未动 ⇒ ⇒ 根端口表与基线产物逐字相同）
+    /// ⇒ ⇒ 空（默认）⇒ ⇒ 与基线**逐字节等价**
+    ///
+    /// ⚠️ 此前 SoC 级**整级没有**路线 A ⇒ ⇒ 产品单元只能跑纯 `.text` 程序
+    /// ⇒ ⇒ 有初始化 `.data` 的固件**装不进去** ⇒ ⇒ 本参数补掉这一点。
     explicit Rv32iSocTop(ch::Component *parent = nullptr,
-                         const std::string &name = kSocRootName)
-        : ch::Component(parent, name) {}
+                         const std::string &name = kSocRootName,
+                         const std::vector<uint32_t> &itcm_init = {},
+                         const std::vector<uint32_t> &dtcm_init = {})
+        : ch::Component(parent, name),
+          itcm_init_(itcm_init),
+          dtcm_init_(dtcm_init) {}
+
+    /// 初值字镜像（**空 = 无初值** ⇒ ⇒ 零行为变化）
+    std::vector<uint32_t> itcm_init_;
+    std::vector<uint32_t> dtcm_init_;
 
     void create_ports() override { new (io_storage_) io_type; }
 
     void describe() override {
         // ── 两个成层 IP（档 ③：实例处给模块类型名 —— 两个类都**没有**
         //    `CH_HIERARCHY_LAYER` ⇒ 两参数形态是唯一可用重载）──
-        ch::ch_layer<Rv32iPipelineTop> core{"core", "Rv32iCoreComplex"};
+        // ⚠️ **初值透传**：`ch_layer<T, Args…>` 的 `Args…` MUST **显式**给出
+        //    （类模板参数**不**对构造函数实参做推导）⇒ ⇒ 只写 `ch_layer<T>`
+        //    = 零参 ⇒ ⇒ 初值传不进去。
+        ch::ch_layer<Rv32iPipelineTop, const std::vector<uint32_t> &,
+                     const std::vector<uint32_t> &>
+            core{"core", "Rv32iCoreComplex", itcm_init_, dtcm_init_};
         ch::ch_layer<SocTraceCounter> trace{"trace", "SocTraceCounter"};
 
         // ── 核的 4 个输入全由根驱动（ADR-073 D2：零未驱动后代输入）──

@@ -22,6 +22,9 @@ examples/riscv-mini/
 │                            #     ⇒ 产物 = 单文件 8 module · 顶层端口表与扁平**同源**（34）
 │                            #     ⇒ **复用同一个独立 TB** `tb_rv32i_soc.sv`）
 │                            #   ⇒ `--emit-rtl --firmware-init` = 带固件初值的扁平产物
+│                            #   ⇒ `--firmware <dir>` = 从 **ELF 派生的镜像**装载
+│                            #     （**方案 a**：`rv32i-fw-dump --format mem-split` 的产物 ⇒
+│                            #      `ch_mem::init_data` ⇒ **零 `prog_*` 写**）
 │                            #     （`firmware-load-chain` L2 路线 A）
 │                            # ⚠️ 原三个发射薄壳（`emit_rtl.cpp` / `emit_rtl_fw_init.cpp` /
 │                            #   `emit_rtl_hier.cpp`）**已删**（2026-11-22）⇒ ⇒ 删除留痕见
@@ -63,6 +66,13 @@ build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --hierarchical --out out/hier 
 
 # ④ 带固件初值的扁平产物（TCM 的 `initial` 初值块）
 build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --firmware-init --out out/fw --emit-hygiene
+
+# ④'' 从 **ELF 派生的镜像**装载（**方案 a**：ELF → mem-split → init_data → 核取指）
+build/tools/rv32i-fw-dump --in fw.elf --format mem-split --out out/fwimg
+build/examples/riscv-mini/tb_rv32i_soc --firmware out/fwimg
+#   ⇒ 打印协议行 `FIRMWARE-TRACE: retired=… fetch0=… wb=… stores=…`
+#   ⇒ ⚠️ TB **不**硬编码固件期望值（固件专属期望只在 `scripts/verify_rv32i_elf_e2e.sh`）
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --firmware out/fwimg --out out/fwprod
 
 # ④' 带固件初值的**层次化**产物（两个模式标记正交 ⇒ 组合即得 · 判据见
 #    scripts/verify_rv32i_fw_init_rtl.sh 的 F7a/F7b/F7c）

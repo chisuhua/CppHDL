@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -197,6 +198,100 @@ bool run_lint(const std::string &verilator, const std::string &top_module,
 
 std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {
     return std::make_unique<riscv_soc::Rv32iSocTop>(nullptr, riscv_soc::kSocRootName);
+}
+
+// ---------------------------------------------------------------------------
+// **方案 a**：ELF → init_data 向量 → 核取指（SoC 级）
+//
+// ⚠️ **SoC 级的观测面只有两个计数**（ADR-072 D1：根端口面 = 框架 2 + 根自有 6）
+// ⇒ ⇒ SoC 级**看不到**核的 `dbg_*` / `obs_*` ⇒ ⇒ **无法**在此断言
+//    「`.data` 经 `lw` 读回」⇒ ⇒ 那条判据由**核级**（`examples/riscv-mini`）承担
+// ⇒ ⇒ SoC 级能证明的是「**固件真的在 SoC 里跑起来了**」（两个计数增长）。
+// ---------------------------------------------------------------------------
+
+/// 读一个字镜像文件（每行一个 32 位十六进制字）⇒ ⇒ **fail-closed**
+std::vector<uint32_t> read_mem_image(const std::string &path) {
+    std::ifstream in(path);
+    if (!in) {
+        std::cerr << "FATAL：读不到固件镜像：" << path << "\n";
+        std::exit(2);
+    }
+    std::vector<uint32_t> words;
+    std::string line;
+    std::size_t lineno = 0;
+    while (std::getline(in, line)) {
+        ++lineno;
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.pop_back();
+        }
+        if (line.empty()) continue;
+        if (line.size() > 2 && line[0] == '/' && line[1] == '/') continue;
+        uint32_t value = 0;
+        try {
+            value = static_cast<uint32_t>(std::stoul(line, nullptr, 16));
+        } catch (...) {
+            std::cerr << "FATAL：固件镜像第 " << lineno << " 行不是合法十六进制："
+                      << path << "\n";
+            std::exit(2);
+        }
+        words.push_back(value);
+    }
+    return words;
+}
+
+/// 读一个区域的镜像（`<dir>/<name>.mem`）⇒ ⇒ 缺文件 ⇒ ⇒ 空镜像（**不**是错误）
+std::vector<uint32_t> read_region_image(const std::string &dir,
+                                         const std::string &name) {
+    std::ifstream probe(dir + "/" + name + ".mem");
+    if (!probe) return {};
+    return read_mem_image(dir + "/" + name + ".mem");
+}
+
+/// `--firmware <dir>` 的**验证模式**（解释器路径 · SoC 级）
+int run_firmware_verification(const std::string &dir) {
+    Checker ck;
+
+    const std::vector<uint32_t> itcm = read_region_image(dir, "itcm");
+    const std::vector<uint32_t> dtcm = read_region_image(dir, "dtcm");
+    if (itcm.empty()) {
+        std::cerr << "FATAL：固件镜像为空（" << dir << "/itcm.mem）\n";
+        return 2;
+    }
+
+    // ⚠️ **装载走构造参数** ⇒ ⇒ **零 `prog_*` 写** ⇒ ⇒ 根端口面一字未动
+    using FwDev = ch::ch_device<riscv_soc::Rv32iSocTop, const std::vector<uint32_t> &,
+                                 const std::vector<uint32_t> &>;
+    auto dev = std::make_unique<FwDev>(itcm, dtcm);
+    Simulator sim(dev->context());
+    auto &io = dev->instance().io();
+
+    // ⚠️ **`prog_*` 保持 0** ⇒ ⇒ 装载期**不存在** ⇒ ⇒ 计数从 0 起算
+    sim.set_input_value(io.ext_rst, 0u);
+    sim.set_input_value(io.prog_we, 0u);
+    sim.set_input_value(io.prog_addr, 0u);
+    sim.set_input_value(io.prog_data, 0u);
+
+    uint64_t last_store = 0;
+    uint64_t last_wb = 0;
+    bool monotonic = true;
+    for (std::size_t c = 0; c < kCycles; ++c) {
+        sim.tick(1);
+        const uint64_t store = static_cast<uint64_t>(sim.get_port_value(io.store_count));
+        const uint64_t wb = static_cast<uint64_t>(sim.get_port_value(io.writeback_count));
+        if (store < last_store || wb < last_wb) monotonic = false;
+        last_store = store;
+        last_wb = wb;
+    }
+
+    // ── G1：两个计数单调不减（impl-contract）──
+    ck.check(monotonic, "G1 两个计数单调不减");
+    // ── G2：写回计数 > 0 ⇒ ⇒ 固件真的在 SoC 里执行了 ──
+    ck.check(last_wb > 0u, "G2 writeback_count > 0（固件真的在跑）");
+
+    std::cout << "SOC-FIRMWARE-TRACE: store_count=" << last_store
+              << " writeback_count=" << last_wb << "\n";
+    std::cout << "RESULT: checks=" << ck.checks() << " fails=" << ck.fails() << "\n";
+    return ck.fails() == 0 ? 0 : 1;
 }
 
 // ── 值侧 ②：双形态逐拍等价的激励面 / 观测面 ───────────────────────────────
@@ -391,6 +486,26 @@ int main(int argc, char **argv) {
     }
     std::vector<std::string> mode_flags;
     rest = rtl_emit::strip_mode_flags(rest, {"--emit-rtl", "--check-products"}, &mode_flags);
+
+    // ── **`--firmware <dir>`**（方案 a：ELF → init_data → 核取指）──
+    // ⚠️ **位置无关** · ⚠️ **fail-closed**（缺取值 ⇒ exit 2）
+    std::string fw_dir;
+    for (std::size_t i = 0; i < rest.size(); ++i) {
+        if (rest[i] != "--firmware") continue;
+        if (i + 1 >= rest.size() || rest[i + 1].empty() || rest[i + 1][0] == '-') {
+            std::cerr << "FATAL：--firmware 缺少取值（固件镜像目录）\n";
+            return 2;
+        }
+        if (!fw_dir.empty()) {
+            std::cerr << "FATAL：--firmware 只能给一次\n";
+            return 2;
+        }
+        fw_dir = rest[i + 1];
+        rest.erase(rest.begin() + static_cast<std::ptrdiff_t>(i),
+                   rest.begin() + static_cast<std::ptrdiff_t>(i) + 2);
+        --i;
+    }
+
     const bool emit_mode =
         std::find(mode_flags.begin(), mode_flags.end(), "--emit-rtl") != mode_flags.end();
     const bool check_mode =
@@ -411,9 +526,28 @@ int main(int argc, char **argv) {
         }
         if (!has_hier) rest.emplace_back("--hierarchical");
 
+        // ⚠️ **`--firmware <dir>` 优先**：装载**从文件**来的真实 ELF 镜像
+        auto make_design = [fw_dir](ch::core::context *) {
+            const std::vector<uint32_t> itcm = read_region_image(fw_dir, "itcm");
+            const std::vector<uint32_t> dtcm = read_region_image(fw_dir, "dtcm");
+            return std::make_unique<riscv_soc::Rv32iSocTop>(nullptr,
+                                                             riscv_soc::kSocRootName,
+                                                             itcm, dtcm);
+        };
+        if (!fw_dir.empty()) {
+            const int rc = rtl_emit::run_emit_cli(rest, make_design);
+            if (rc != 0 || !check_mode) return rc;
+            return rtl_emit::check_products(make_spec(out_dir), make_hooks(), make_design);
+        }
+
         const int rc = rtl_emit::run_emit_cli(rest, make_emit_design);
         if (rc != 0 || !check_mode) return rc;
         return rtl_emit::check_products(make_spec(out_dir), make_hooks(), make_emit_design);
+    }
+
+    // ── **`--firmware <dir>` 的验证模式**（解释器路径）──
+    if (!fw_dir.empty()) {
+        return run_firmware_verification(fw_dir);
     }
 
     // ── 默认模式 fail-closed：收到任何未知参数 ⇒ exit 2 ──

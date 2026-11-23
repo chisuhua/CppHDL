@@ -756,6 +756,29 @@ jobs:
         cmake --build build --target rv32i-fw-dump
         scripts/verify_rv32i_fw_dump.sh
 
+    - name: Verify RV32I firmware dumper / ELF loader (L4/L5) (self-test)
+      # D7–D12 的**判别力自证**：正反两面互换 ⇒ ⇒ 各自必红
+      shell: bash
+      run: |
+        scripts/verify_rv32i_fw_dump.sh --self-test
+
+    - name: Verify RV32I ELF to init_data end-to-end chain
+      # **方案 a**：ELF → mem-split → `ch_mem::init_data` → 核取指（E0–E6）
+      #   E1 两个按区域的镜像（行号 = 区域字索引）· E2 核级「.data 经真实读
+      #   通路读回」· E3 SoC 级计数 · E4 产物端口面不变 + initial 块
+      #   E5 投毒自证（改坏 ELF ⇒ 判据必红）· E6 真工具链 leg（env-gated）
+      # ⚠️ 不需要 verilator / 网络 ⇒ ⇒ 主 job（BUILD_VERILATOR=OFF）也能跑
+      shell: bash
+      run: |
+        cmake --build build --target rv32i-fw-dump tb_rv32i_soc tb_riscv_soc
+        scripts/verify_rv32i_elf_e2e.sh
+
+    - name: Verify RV32I ELF to init_data end-to-end chain (self-test)
+      # E5 投毒自证：改坏 ELF 的 .text / .data / 去掉 .data ⇒ ⇒ 判据必红
+      shell: bash
+      run: |
+        scripts/verify_rv32i_elf_e2e.sh --self-test
+
     - name: Verify RV32I firmware init in emitted product (L2/L6)
       # `firmware-load-chain` L2（路线 A）/ L6 的判据（F0–F5）:
       #   F2 **零端口变更**（带初值产物 vs 基线产物的顶层端口表逐字相同）

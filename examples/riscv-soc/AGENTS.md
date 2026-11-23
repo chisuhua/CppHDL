@@ -38,6 +38,14 @@ build/examples/riscv-soc/tb_riscv_soc
 # ② 发射（恒加 --hierarchical ⇒ 10 module）
 build/examples/riscv-soc/tb_riscv_soc --emit-rtl --hierarchical --out out/hier
 
+# ②' 从 **ELF 派生的镜像**装载（**方案 a**：零 `prog_*` 写 ⇒ `ch_mem::init_data`）
+build/tools/rv32i-fw-dump --in fw.elf --format mem-split --out out/fwimg
+build/examples/riscv-soc/tb_riscv_soc --firmware out/fwimg
+#   ⇒ 打印协议行 `SOC-FIRMWARE-TRACE: store_count=… writeback_count=…`
+#   ⇒ ⚠️ SoC 级只判「固件真的在跑」（根端口面 8 ⇒ 看不到 `.data` 读回；
+#      那条承重判据在**核级** `examples/riscv-mini`）
+build/examples/riscv-soc/tb_riscv_soc --emit-rtl --firmware out/fwimg --out out/fwprod
+
 # ③ 四件套自检（module 集 / 顶层端口 + 未驱动 / lint / 双形态逐拍 + 篡改自证）
 build/examples/riscv-soc/tb_riscv_soc --check-products --out out/chk
 #   ⇒ PRODUCTS-CHECK: PASS

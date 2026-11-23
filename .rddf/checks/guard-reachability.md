@@ -97,7 +97,8 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_public_api_visibility.sh` | `build-and-test:Verify public API removal visibility (issue`, `build-and-test:Verify public API removal visibility (self-test)` | `none` | — |
 | `scripts/verify_roadmap_fragments.sh` | `build-and-test:Verify roadmap fragments consistency`, `build-and-test:Verify roadmap fragments consistency (self-test)`, `pr-verilator-fast:Verify roadmap fragments consistency`, `pr-verilator-fast:Verify roadmap fragments consistency (self-test)` | `none` | — |
 | `scripts/verify_rst_n_wiring.sh` | `build-and-test:Verify rst_n wiring`, `pr-verilator-fast:Verify rst_n wiring` | `none` | — |
-| `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)` | `none` | — |
+| `scripts/verify_rv32i_elf_e2e.sh` | `build-and-test:Verify RV32I ELF to init_data end-to-end chain`, `build-and-test:Verify RV32I ELF to init_data end-to-end chain (self-test)` | `none` | — |
+| `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)`, `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5) (self-test)` | `none` | — |
 | `scripts/verify_rv32i_fw_init_rtl.sh` | `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)`, `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)` | `none` | — |
 | `scripts/verify_stream_domain_closure.sh` | `build-and-test:Verify stream domain closure checklist`, `build-and-test:Verify stream domain closure checklist (self-test)` | `none` | — |
 | `scripts/verify_stream_ready_ownership.sh` | `build-and-test:Verify stream ready ownership`, `build-and-test:Verify stream ready ownership (self-test)` | `none` | — |

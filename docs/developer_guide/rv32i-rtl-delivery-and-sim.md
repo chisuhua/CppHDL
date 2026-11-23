@@ -122,6 +122,10 @@ top
 - ⚠️ **`prog_*` 只接 I-TCM** ⇒ ⇒ 带 `.data` 的程序**装不进去** ⇒ ⇒ 用「路线 A」
   （`ch_mem::init_data` ⇒ 产物里出现 `initial begin mem[i] = … end`），
   或让固件自己用 `sw` 写
+- **ELF → init_data 的接缝**（2026-11-23 · 方案 a）：
+  `rv32i-fw-dump --format mem-split` ⇒ `<dir>/{itcm,dtcm}.mem`（行号 = 区域字索引）
+  ⇒ `tb_* --firmware <dir>` ⇒ 构造参数 ⇒ `init_data` ⇒ 核取指
+  ⇒ ⇒ 判据 = `scripts/verify_rv32i_elf_e2e.sh`
 
 ### 2.4 时钟与复位
 
@@ -205,18 +209,41 @@ verilator --binary --timing -CFLAGS -fcoroutines --x-assign unique \
 `initial begin mem[i] = … end` ⇒ ⇒ **TB 零装载动作** · **顶层端口表一字不变**。
 
 ```bash
-# ① ELF → 字镜像（每行一个 8 位 hex）
-build/tools/rv32i-fw-dump --in fw.elf --format mem --out fw.mem
+# ① ELF → **按区域拆分的**字镜像（**方案 a**）
+#    ⇒ 产出 <dir>/itcm.mem + <dir>/dtcm.mem（行号 = 区域字索引 · 空洞补零）
+build/tools/rv32i-fw-dump --in fw.elf --format mem-split --out fwimg
 
-# ② 把字镜像塞进 SoC 构造参数（你的发射器里）
-auto itcm_init = load_hex_words("fw.mem");     // → std::vector<uint32_t>
-return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm_init, /* dtcm */ {});
+# ② 两条路任选：
+#    (a) 仓内 TB 直接装（解释器 / 发射都行）
+build/examples/riscv-mini/tb_rv32i_soc --firmware fwimg
+build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --firmware fwimg --out out/fw
+#    (b) 你自己的发射器里：
+auto itcm = load_hex_words("fwimg/itcm.mem");   // → std::vector<uint32_t>
+auto dtcm = load_hex_words("fwimg/dtcm.mem");
+return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm, dtcm);
 ```
 
+> ⚠️ **`--format mem` 对多区域固件会 exit 3**（单条无地址字流无法表达区域归属）。
+> 单区域固件仍可用 `mem`。
+> ⚠️ **镜像行号 = 区域内的字索引**（工具已补零）⇒ ⇒ 你**不需要**自己做
+> `(addr - base) >> 2`（那换算**只在工具里一处**）。
+> ⚠️ **I-TCM 尾部 MUST 填 NOP**（G1 纪律：末尾读到 0 = 未知 opcode ⇒ 流水线冻结）。
+> `tb_rv32i_soc --firmware` 会替你补齐到 64 字；你自己的发射器里若程序**不**自环
+> （`jal x0, 0`）⇒ ⇒ 也 MUST 补 NOP。
+> ⚠️ **ELF 的入口 MUST == `0x8000_0000`**（I-TCM base = PC 复位值）⇒ ⇒ 否则工具
+> 直接 exit 3（装出来**必砖**）。
+
+> 判据：
+> - **端到端** = `scripts/verify_rv32i_elf_e2e.sh`（E0–E6 · 含 3 条投毒 + **env-gated** 真工具链 leg）
+> - **工具** = `scripts/verify_rv32i_fw_dump.sh`（D0–D12 + `--self-test`）
+> - **产物 `initial` 块**（内联 demo 固件）= `scripts/verify_rv32i_fw_init_rtl.sh`（F0–F7c）
+
 > 仓内示例 = `examples/riscv-mini/tb_rv32i_soc.cpp` 的 **`--emit-rtl --firmware-init` 模式**
-> （固件**硬编码**在 `examples/riscv-mini/src/rv32i_fw_demo.h` · 手推的字镜像）⇒ ⇒
-> 产物级判据 = `scripts/verify_rv32i_fw_init_rtl.sh`（F0–F5）· 固件链路判据 =
-> `scripts/verify_rv32i_fw_dump.sh`（D0–D6）。
+> （固件**硬编码**在 `examples/riscv-mini/src/rv32i_fw_demo.h` · 手推的字镜像）·
+> 以及 **`--firmware <dir>` 模式**（固件来自**真 ELF** 派生的镜像）。
+> ⚠️ **SoC 级**（`examples/riscv-soc`）= `tb_riscv_soc --firmware <dir>`；
+> 它的 `Rv32iSocTop` 也接受 `itcm_init` / `dtcm_init` 构造参数（**零端口变更**），
+> 但根端口面只有 8 ⇒ ⇒ **看不到** `.data` 读回（那条承重判据在**核级**）。
 > ⚠️ **层次化形态的 fw_init 变体已可用**（2026-11-22 收口 · 原登记为「独立排期」）：
 > `run_emit_cli` 的 `--hierarchical` 与 `init_data` **正交** ⇒ ⇒ 两个模式标记同时给即可
 > ⇒ ⇒ `tb_rv32i_soc --emit-rtl --hierarchical --firmware-init --out <dir>`，**零新增代码**。

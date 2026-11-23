@@ -1,4 +1,34 @@
-## 2026-11-23 — 新增 SoC 级产品单元 `examples/riscv-soc/`（S1 结构骨架 · ADR-077 D1）
+## 2026-11-23 — ELF → init_data 端到端装载链路（方案 a · `rv32i-firmware-loading` 收口）
+
+**背景**：`firmware-load-chain`（2026-11-14）已裁决**路线 A**（初值经 `ch_mem::init_data`
+⇒ 产物自带 `initial` ⇒ 零端口变更），但它与「ELF 装载」之间的**接缝从未构建**：
+`tools/rv32i-fw-dump` 的三种产物在仓内**零消费方** ⇒ ⇒ 真 ELF **跑不起来**。
+2026-11-23 用**真工具链**（`riscv64-unknown-elf-gcc`）实测，在
+`scripts/verify_rv32i_fw_dump.sh`（D0–D6）**全绿**的情况下挖出 **4 个真缺陷**
+⇒ ⇒ 根因是「对从未演练过消费者的接口，单测护栏结构性失明」（fixture 是**单段** ELF）。
+
+**本次交付**：
+
+| 项 | 内容 |
+|---|---|
+| 工具 4 修 | ① `manifest` 的 `regions[]` 丢 D-TCM（`covered` 判据错）② `mem`/`vh` 遇**多区域**从「静默拼接」改为 **exit 3** ③ **入口 MUST == `kPcReset`**（否则装出来必砖）⇒ exit 3 ④ **重定位检查**从**空循环**改为读 **section header**（非空 `SHT_RELA`/`SHT_REL` ⇒ exit 3） |
+| 工具新增 | **`--format mem-split --out <dir>`** ⇒ `<dir>/itcm.mem` + `<dir>/dtcm.mem` · **行号 = 区域字索引**（空洞补零）· 字节→字索引换算**只在一处** |
+| 核级 TB | `tb_rv32i_soc --firmware <dir>`（**零 `prog_*` 写** · ITCM 尾部填 NOP · 协议行 `FIRMWARE-TRACE:`）· `--emit-rtl --firmware <dir>`（镜像进产物 `initial`） |
+| SoC 级 | `Rv32iSocTop` 新增 `itcm_init`/`dtcm_init` **构造参数**（**零端口变更** ⇒ 根端口仍 8）· `tb_riscv_soc --firmware <dir>`（协议行 `SOC-FIRMWARE-TRACE:`） |
+| 判据 | `verify_rv32i_fw_dump.sh` 扩 **D7–D12** + `--self-test`（投毒自证）· **新** `verify_rv32i_elf_e2e.sh`（**E0–E6**：端到端 + 3 条投毒 + **env-gated** 真工具链 leg） |
+| CI | `.github/workflows/ci.yml` 加 3 个 step · `.rddf/checks/guard-reachability.md` 双向 1:1 同步 |
+
+⚠️ **行为收紧（非破坏性）**：`mem`/`vh` 多区域、入口不符、非空重定位表三条从
+「静默接受/静默拼接」改为 **exit 3 + 诊断**。仓内**零消费方** ⇒ ⇒ 无下游迁移。
+
+⚠️ **期望值一律手推**：`.text` 的 4 个编码（`0x10002083` / `0x00108113` / `0x10202223` /
+`0x0000006f`）与仓库编码器 `riscv::LW/ADDI/SW/JAL` **交叉校验一致**；`.data` = `0x5A` @
+D-TCM 字索引 **64**。E2 断言 `lw ⇒ x1=0x5A` · `addi ⇒ x2=0x5B` · `sw ⇒ 0x104/0x5B`
+⇒ ⇒ **`.data` 真的经真实读通路读回**（不是「loader 返回成功」）。
+
+⚠️ **SoC 级观测面只有两个计数**（ADR-072 D1）⇒ ⇒ `.data` 读回的承重判据在**核级**；
+SoC 级只判「固件真的在跑」（`store_count=1` / `writeback_count=2` 手推）。
+
 
 **背景**：RV32I 此前「一个组件既是核又是 SoC」（`Rv32iPipelineTop` 同时持有 pipeline + ITCM/DTCM）
 ⇒ 想换缓存化的核就必须连存储器、TB、登记一起换。ADR-077（`Accepted` · 2026-11-23）裁定
