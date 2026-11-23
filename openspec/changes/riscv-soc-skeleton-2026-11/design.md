@@ -187,7 +187,7 @@ constexpr std::size_t kMinVaryingObservations = 2;
 
 ### 6.1 AC6 判据载体的落点决策（**实施后定稿**）
 
-**落点 = 新脚本 `scripts/verify_riscv_soc_core_ports.sh`**（已挂 CI · 含 `--self-test` 6 条投毒）：
+**落点 = 新脚本 `scripts/verify_riscv_soc_core_ports.sh`**（已挂 CI · 含 `--self-test` **7** 条投毒 [V5 两条兄弟边由 P7 守]）：
 
 | 判据 | 内容 |
 |---|---|

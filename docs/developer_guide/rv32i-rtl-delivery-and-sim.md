@@ -45,7 +45,7 @@ RV32I 现在有**两级顶层**，各自是独立产品（不是两份实现）�
 | ⑧ | 覆盖登记 + 护栏 | `.rddf/checks/examples-rtl-sim-targets.tsv` · `scripts/verify_examples_rtl_sim.sh` | 四件套（manifest + 产物 + 独立 TB + 登记）逐项断言 |
 | ⑨ | **SoC 级**发射 + 自检 | `examples/riscv-soc/tb_riscv_soc.cpp` → `--emit-rtl` / `--check-products` | 10 module · 8 端口 · 四件套（含双形态逐拍 + 篡改自证） |
 | ⑩ | **SoC 级**独立 TB | `examples/riscv-soc/tb_riscv_soc.sv` | 手写（`generated=no`）· 与 C++ 侧同一组手推字面量 · 7 条 |
-| ⑪ | **核端口契约**护栏 | `scripts/verify_riscv_soc_core_ports.sh` | 34 端口 + 无微架构副本 · 6 条投毒各自必红 |
+| ⑪ | **核端口契约**护栏 | `scripts/verify_riscv_soc_core_ports.sh` | 34 端口 + 无微架构副本 + **两条兄弟边（V5）** · **7** 条投毒各自必红 |
 
 ---
 
@@ -319,7 +319,7 @@ int main(int argc, char **argv) {
 |---|---|---|
 | 四件套（manifest `port_table[]` == 产物端口表 · 逐字逐序） | `scripts/verify_examples_rtl_sim.sh` ⑧ | CI（`pr-verilator-fast` / `nightly-verilator`） |
 | 层次化**形态**（≥ 2 module + 根 `top`） | 同上 **⑧'**（判别力自证 = 投毒 8 `flatten_hier`） | 同上 |
-| 登记守恒（`28 == 10 ∪ 18` · 三桶） | `scripts/verify_examples_rtl_sim_coverage.sh` | CI（无 verilator 依赖） |
+| 登记守恒（**`29 == 17 ∪ 12`** · 三桶） | `scripts/verify_examples_rtl_sim_coverage.sh` | CI（无 verilator 依赖） |
 | 产物级 lint / 确定性 / module 树同构 | `scripts/verify_hierarchical_rtl.sh` R1–R8 | CI（`hier_rtl_products` 语料） |
 | 扁平产物卫生产物 | `scripts/verify_flat_rtl_emit.sh` F1–F8 | CI |
 | 固件初值链路 | `scripts/verify_rv32i_fw_init_rtl.sh` F0–F5 | CI（不需 verilator） |

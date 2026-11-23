@@ -42,7 +42,7 @@ SoC 级只判「固件真的在跑」（`store_count=1` / `writeback_count=2` �
 | 产物形态 | **10 module**（`top` / `Rv32iCoreComplex` / `SocTraceCounter` / 7 个 stage/hazard/mux）· 顶层端口 **8**（框架 2 + 根自有 6） |
 | 观测面 | 两个**根自有**计数器（`store_count` / `writeback_count`）⇒ 满足签批 spec `rtl-soc-output` 的「≥2 个随激励变化的量」 |
 | 判据 | 两侧各 **7** 条（`interp_checks == min_checks == 7`）· 三条变异自证（移出观测 / 两源对调 / 两源同源 ⇒ 各自必红） |
-| 新护栏 | `scripts/verify_riscv_soc_core_ports.sh`（34 端口契约 + 无微架构副本 · 6 条投毒各自必红 · 已挂 CI） |
+| 新护栏 | `scripts/verify_riscv_soc_core_ports.sh`（34 端口契约 + 无微架构副本 + 两条兄弟边 · **7** 条投毒各自必红 · 已挂 CI） |
 | 核零改动 | `examples/riscv-mini/**` 与 `include/**` 一字不动（24 条核级判据仍 `checks=24 fails=0`） |
 
 ⚠️ **手推值为何是 1 与 3**：7 字程序（与核级**同源**）⇒ 1 条 `sw` · 3 次写回（x1/x2/x3）⇒
