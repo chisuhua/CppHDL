@@ -46,7 +46,7 @@ namespace riscv {
 
 /// ⚠️ **I-TCM / D-TCM 的**字索引**位宽**（**全仓唯一的容量真相**）
 /// ⇒ ⇒ 字节容量 = `1 << (kTcmAddrWidth + 2)` = **16 KB**（不是 4 KB！）
-/// ⚠️ **改这里 = 改全平台的内存布局** ⇒ ⇒ MUST 同步 `address_decoder.h` / SoC 顶层 / 判据。
+/// ⚠️ **改这里 = 改全平台的内存布局** ⇒ ⇒ MUST 同步 `address_decoder.h` / 核 IP 顶层 / 判据。
 inline constexpr unsigned kTcmAddrWidth = 12;
 
 /// **TCM 的字节容量**（**派生** ⇒ ⇒ 禁手写 16 KB 之类的字面量）

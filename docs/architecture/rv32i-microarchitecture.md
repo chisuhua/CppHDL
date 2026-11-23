@@ -4,7 +4,7 @@
 > **组合叙事 + 当前架构快照**；**裁决本身**在 Primary ADRs 里，不在本文。
 >
 > **范围**：`include/cpu/pipeline/**`（5 级流水线与冒险/前推）、`include/cpu/cache/**`、
-> `include/cpu/riscv/**`、以及 SoC 顶层 `examples/riscv-mini/src/rv32i_core_top.h`。
+> `include/cpu/riscv/**`、以及核 IP 顶层 `examples/riscv-mini/src/rv32i_core_top.h`。
 > **不**覆盖：SoC 之外的 AXI 互连层、bundle/stream 组件库、框架层的仿真与 codegen 语义
 > （那些见各自的主题文档 / capability）。
 >
@@ -41,7 +41,7 @@ include/cpu/                          # RV32I 微架构的**唯一权威**
 ├── cache/                           # L1 cache（8 个头）：{i,d}_cache_{sync,async}.h（4）+ {i,d}_cache_complete.h（2 · 兼容 shim 别名）+ {i_cache_prefetch,d_cache_write_buffer}.h（2 个 wrapper）
 └── riscv/                           # 特权级（4 个头）：CSR / exception / address_decoder / clint
 
-examples/riscv-mini/src/rv32i_core_top.h   # **唯一**留在 example 侧的头（SoC 顶层）
+examples/riscv-mini/src/rv32i_core_top.h   # **唯一**留在 example 侧的头（核 IP 顶层）
 ```
 
 ⚠️ 收敛前 `include/cpu/pipeline/` 与 `examples/riscv-mini/src/` 是**两套不同架构**；
@@ -104,7 +104,7 @@ imem(sread 1拍) ──► IF/ID ──► ID/EX ──► EX/MEM ──► MEM/
 
 ⚠️ **字节道写**：`DataTCM` 无字节使能写 API ⇒ 写路径是**读-改-写**（`strbe` 端口 + `byte_lane.h`）。
 
-### 5. SoC 顶层与可观测面（ADR-046 D10）
+### 5. 核 IP 顶层与可观测面（ADR-046 D10）
 
 `rv32i_core_top.h` 暴露 **32 个端口**（5 输入 + 27 输出 = 11 功能 `obs_*` + 16 诊断 `dbg_*`）：
 

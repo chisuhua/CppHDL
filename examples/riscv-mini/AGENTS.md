@@ -4,7 +4,7 @@ Child of root `AGENTS.md`.
 
 ## OVERVIEW
 RV32I 5-stage pipeline 的**示例与测试**。微架构组件本身已收敛到 `include/cpu/`
-（本目录只留 SoC 顶层，ADR-046）。Phases 1-3 pass.
+（本目录只留核 IP 顶层，ADR-046）。Phases 1-3 pass.
 
 ## STRUCTURE
 ```
@@ -32,15 +32,15 @@ examples/riscv-mini/
 ├── tb_rv32i_soc.sv         # **独立 Verilog TB**（**手写** · 24 条判据 · 与 C++ 侧同源）
 │                            #   ⇒ `.verif` 封闭原语集表达不了 4 个形态 ⇒ MUST 保持手写
 │                            #     （`generated=no` = **终态**，不是欠账 · ADR-076 复核 2026-11-21）
-├── src/                     # **2** 个头（SoC 顶层 + 带 `.data` 的示例固件）
+├── src/                     # **2** 个头（核 IP 顶层 + 带 `.data` 的示例固件）
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
-│   └── rv32i_core_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
+│   └── rv32i_core_top.h # 核 IP 顶层装配（ADR-046 D1 类别 1 / D3 #15）
 │                             #  ✅ **已有消费者**（2026-10-25）：`tests/
-│                             #  test_rv32i_soc_dual_parity.cpp`（SoC 级双路
+│                             #  test_rv32i_soc_dual_parity.cpp`（核级双路
 │                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
 │                             #  豁免条目已移除（ADR-046 D10-rev 端口契约）
 └── tests/                   # ✅ 15 个 Catch2 target 已注册进 CTest（2026-10-25 +1：
-                              #   test_rv32i_soc_dual_parity —— SoC 级双后端 parity）
+                              #   test_rv32i_soc_dual_parity —— 核级双后端 parity）
     ├── test_*.cpp           # 17 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
     └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
@@ -188,7 +188,7 @@ bash scripts/rv32i_rtl_sim_env.sh
 | D-Cache wrapper | `include/cpu/cache/d_cache_write_buffer.h` (✅ review PASS 2026-10-20) |
 | Pipeline stages | `include/cpu/pipeline/stages/` |
 | ALU / RegFile / PC / decoder | `include/cpu/pipeline/{rv32i_alu,rv32i_regfile,rv32i_pc,rv32i_decoder}.h` |
-| SoC 顶层（唯一留在本目录的头）| `src/rv32i_core_top.h` |
+| 核 IP 顶层（唯一留在本目录的头）| `src/rv32i_core_top.h` |
 | SoC 的**激励驱动**（C++ 侧 + 发射入口）| `tb_rv32i_soc.cpp`（**24 条判据**的 C++ 侧实现）|
 | SoC 的**独立 Verilog TB**（手写）| `tb_rv32i_soc.sv`（**24 条判据**的 Verilog 侧实现）|
 | 期望值**单一真相**（两侧共用）| `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` |
@@ -196,7 +196,7 @@ bash scripts/rv32i_rtl_sim_env.sh
 > ⚠️ **2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）**：
 > 本目录的 `src/` 曾有 **32** 个头，其中 10 组与 `include/cpu/` **同名**
 > （消歧纯靠 `-I` 顺序 ⇒ 调序即静默换实现）⇒ 已收敛到**只剩 1 个**
-> （SoC 顶层）。所有可复用的微架构组件现在都在 `include/cpu/`。
+> （核 IP 顶层）。所有可复用的微架构组件现在都在 `include/cpu/`。
 > 护栏：`scripts/verify_no_duplicate_rv32i_headers.sh`。
 
 ## PHASE GATES

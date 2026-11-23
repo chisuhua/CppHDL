@@ -1,6 +1,6 @@
 // rv32i_core_top.h
 //
-// RV32I SoC 顶层（pipeline + I-TCM + D-TCM）。
+// RV32I 核 IP 顶层（pipeline + I-TCM + D-TCM）。
 //
 // ⚠️ 端口契约（ADR-046 D10 / D10-rev，2026-10-25 C3
 //    `rv32i-soc-dual-parity-2026-10`）：

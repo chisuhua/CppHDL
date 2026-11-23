@@ -21,7 +21,7 @@
 //    （先例：tests/test_verilator_complex_e2e.cpp 的 SpiFsm 用例）。
 //
 // 2. **观测点全走顶层 ch_out** —— VerilatorBackend 只对 `port_access_` 里的
-//    顶层端口建访问表，读不到设计内部。⇒ SoC 顶层暴露 32 个端口
+//    顶层端口建访问表，读不到设计内部。⇒ 核 IP 顶层暴露 32 个端口
 //    （5 输入 + 27 输出 = 11 功能观测 + 16 诊断观测），本测试比对**全部 27 个输出**。
 //
 // 3. **固件必须无数据冒险** —— lib 版 `HazardUnit` 不接数据前推
@@ -31,7 +31,7 @@
 //    **不要**通过「把前推接上」来修这个 —— 那是 D5 的裁决对象。
 //
 // ---------------------------------------------------------------------------
-// 这个测试的由来：它第一次让 SoC 顶层**可观测**，并因此照出了 17 个缺陷
+// 这个测试的由来：它第一次让核 IP 顶层**可观测**，并因此照出了 17 个缺陷
 // （见 .rddf/improvements/rv32i-pipeline-commit-path-2026-10.md §2）。
 // 断言分三层：
 //   ① 编码器 × 手算常量交叉校验（防自证）；
@@ -123,7 +123,7 @@ constexpr const char *kObsNames[] = {
     "dbg_illegal_reason"};
 constexpr std::size_t kObsCount = sizeof(kObsNames) / sizeof(kObsNames[0]);
 // 32 个端口里 4 个是输入（ext_rst / prog_*）⇒ 28 个输出被观测
-static_assert(kObsCount == 28, "观测向量长度必须与 SoC 顶层的**输出**端口数一致");
+static_assert(kObsCount == 28, "观测向量长度必须与核 IP 顶层的**输出**端口数一致");
 
 // 观测向量的**编译期**下标查找（避免手抄下标 ⇒ 下标漂移会静默读错字段；
 // 名字写错 ⇒ 编译期失败而不是读到别的字段）
@@ -238,7 +238,7 @@ std::array<uint64_t, kObsCount> obs_snapshot(Rv32iCoreTop &dut,
 // 固件：**48 个字**（含 NOP 填充），覆盖 ALU-only / sw→lw / **紧邻 load→use** ×2 /
 // taken + not-taken branch。
 //
-// 地址约束（SoC 顶层的 TCM 是 12 位 ⇒ 16 KB）：程序与数据都 < 0x1000。
+// 地址约束（核 IP 顶层的 TCM 是 12 位 ⇒ 16 KB）：程序与数据都 < 0x1000。
 //
 // ISA 语义 golden（golden A/B/C）：
 //   x1 = 10, x2 = 3  =>  x3 = 13, x4 = 10
@@ -1135,7 +1135,7 @@ TEST_CASE("Rv32iSoc - ForwardingDiscriminatingCases",
     const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
 
     // ---- ① 双后端逐拍全等（**无掩码**）----
-    // ⚠️ **比对端口清单 = `kObsNames`**（全部 27 个 SoC 顶层输出）
+    // ⚠️ **比对端口清单 = `kObsNames`**（全部 27 个核 IP 顶层输出）
     //    ⇒ 「无掩码」是**可执行**的（不是「比对设计内部的一切」——
     //    顶层观测面是**有限**的 ⇒ 不写清单 ⇒ 判据不可执行）。
     REQUIRE(ta.size() == tb.size());
@@ -1681,7 +1681,7 @@ TEST_CASE("Rv32iSoc - LoadByteLaneDiscriminating",
     const Trace ta = run_trace(*sim_a, dev_a->instance(), kCycles);
     const Trace tb = run_trace(*sim_b, dev_b->instance(), kCycles);
 
-    // ---- ① 双后端逐拍全等（**无掩码**，全部 27 个 SoC 顶层输出）----
+    // ---- ① 双后端逐拍全等（**无掩码**，全部 27 个核 IP 顶层输出）----
     //
     // ⚠️ 「无掩码」是**可执行**的：比对端口清单 = `kObsNames`（27 个）
     //    ⇒ 只证明「两个后端一样」；**③** 才证明「两个后端都对」。
@@ -2403,7 +2403,7 @@ TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
 // ## 为什么这三条必须一起测
 //
 // · **G1** 只产出「非法」这个**事实**（`illegal_reason`）
-// · **G2** 才给它**后果**（冻结）与**可观测面**（SoC 顶层端口）
+// · **G2** 才给它**后果**（冻结）与**可观测面**（核 IP 顶层端口）
 // · **G4** 是 G1 的**反向判据**：`FENCE` 看起来像非法（0x0F 不在旧译码表里）
 //   但它是**合法**指令（本版 = NOP）⇒ ⇒ 若只测「未知 ⇒ 冻结」，把 FENCE 也冻住
 //   同样能过 ⇒ ⇒ **必须**用 `FENCE` 做**负向对照**。
