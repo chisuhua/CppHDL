@@ -156,12 +156,24 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > ⇒ ⇒ 顺带订正：原前言「期望表由 `verify_examples_rtl_sim.sh` 解析」**指错了脚本**
 > ⇒ ⇒ 实测唯一消费者 = `verify_riscv_soc_core_ports.sh` ⇒ ⇒ 已改正。
 
+> ✅ **2026-11-23 · S2 完成（builder 回填）**：`data_ready` 从「接了线但没落地」变为**真消费**。
+> ⇒ ⇒ **判据来源 = 已签批 spec**（`rv32i-memory-timing` 的「MEM 级的反压接口 MUST 有可观测的语义」）
+> ⇒ ⇒ **不是新架构决策**（ADR-069 `:134` 明文把 T3 排除在本 ADR 范围内）⇒ ⇒ 零 spec delta。
+> ⇒ ⇒ 实现 = `IdStage` 新增 `freeze`（冻结 ≠ 装气泡）+ `Rv32iPipeline` 冻结链（EX/MEM · M2 ·
+> MEM/WB）+ **退休计数门控**（否则冻结的 `mem_valid_out` 每拍 +1）。
+> ⇒ ⇒ **零端口变化**（34 根）· **行为零回归**（24 判据 + dual parity）⇒ ⚠️ 产物**字节**会变
+> （真实端口上的逻辑 ⇒ Verilator 不折叠）。
+> ⇒ ⇒ ⚠️ **两个未闭合项已登记**：① `perf_mem_stalls` 不可观测（显式分档的代价）⇒ 归 **S3**；
+> ② ADR-069 V4 的判据表述建议加 dated addendum（限定为「load-use 停顿」）⇒ 待 architect。
+> ⇒ ⇒ 🔜 **下一批 = G-7（总线类裁决）**：`data_ready` 只有在 S3 接上 AXI4 主口后才会
+> **第一次真正被拉低**。
+
 ### 批次 × IP（**2026-11-23 调整后** · IP 计划的主表）
 
 | 批 | 新 IP / 变更 | 主判据 | 前置 |
 |---|---|---|---|
 | **S1 ✅** | 核复合体 + `SocTraceCounter` | 10 module · 8 端口 · 2 观测量 · 13 AC（verifier 全 PASS） | ADR-077 |
-| **S2** | —（内部：MEM 反压） | `ready≡1` 与 S1 **逐拍等价** · `ready=0` wrapper 的 stall **手推拍数** | — |
+| **S2 ✅** | MEM 反压（`data_ready` 真消费 · **已签批 spec 的未实现条款**） | `ready≡1` 行为零回归（端口 34 + 24 判据 + dual parity）· `ready=0` 的 stall **手推拍数**（`perf_instructions` 差 == N）· 口径分档（不混进 `perf_load_use_stalls`） ⇒ 2026-11-23 完成 · `openspec/changes/rv32i-mem-backpressure-2026-11/` ⇒ verifier **8/8** · 报告 `.rddf/reviews/rv32i-mem-backpressure-2026-11-verify.md` | — |
 | **S3** | 核**数据侧** AXI4 主口 + **D-L1**（`DCacheSync`）+ wrapper **burst 升级** | burst 事务手推（len/size/burst）· hit/miss 拍数契约 · TCM 旁路后 `prog_*` 一致性 | S2 |
 | **S4** | **`AxiLiteMatrix2x2`** + **`AxiLiteGpio/Uart/Timer/Spi/I2c/Pwm`**（轮询）+ **`AxiDma`**（boot/装载主）+ **MMIO 地址解码** + 取指侧总线化 + **I-L1** | 每 IP 一条总线级 RD/WR 回环（手推地址+值）· 地址映射表 == 手推 · DMA 装载后核能取指 | S3 |
 | **S5** | 核 **`irq` 输入口（34→35）** + **`Clint`** + **IRQ 汇聚器（新写）** | IRQ 边沿 → trap 的拍数（手推）· `mtip`/`mie`/`mip` 语义 | **privilege** + S4 |

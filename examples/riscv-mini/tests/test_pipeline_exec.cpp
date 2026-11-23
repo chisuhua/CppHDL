@@ -274,6 +274,8 @@ TEST_CASE("Pipeline: ID stage immediate path (sign extension)",
         sim.set_input_value(id.instance().io().valid, 1u);
         sim.set_input_value(id.instance().io().flush, 0u);
         sim.set_input_value(id.instance().io().stall, 0u);
+        // ⚠️ `freeze`（S2 新增输入）MUST 显式驱动 ⇒ 本用例不测反压 ⇒ 0
+        sim.set_input_value(id.instance().io().freeze, 0u);
         sim.set_input_value(id.instance().io().reg_rs1_data, 0u);
         sim.set_input_value(id.instance().io().reg_rs2_data, 0u);
         // `imm` 是 ID/EX 寄存器后的值 ⇒ tick 2 次才把它搬出来

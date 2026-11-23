@@ -260,6 +260,16 @@ public:
 
     // Datapath: data flow wiring between the 5 pipeline stages + reg file + memory
     void build_datapath() {
+        // ⚠️ **MEM 级反压源**（2026-11-23 · change `rv32i-mem-backpressure-2026-11` ·
+        //    S2 · 补齐已签批 `specs/rv32i-memory-timing` 的
+        //    「MEM 级的反压接口 MUST 有可观测的语义」）。
+        //    ⇒ ⇒ `data_ready` **无条件下**驱动冻结（spec 原文是「上游拉低它就绪信号
+        //    时」⇒ 不含「仅当 MEM 级有访存」这个前提）⇒ ⇒ 若加 `& mem_valid`
+        //    就是**新语义**（超出 spec），且会让「任意拍拉低」不可测。
+        //    ⚠️ `build_control_signals()` 里**另建一个同值表达式**（两处 helper 各自
+        //    可见；值相同、无状态 ⇒ 不引入顺序依赖 —— 同 `illegal_active` 的做法）。
+        auto mem_stall = !io().data_ready;
+
         // Reg file read ports
         //
         // ⚠️ MUST 用 **aread（0-cycle 组合读）**，不能用 sread（1-cycle）：
@@ -290,14 +300,22 @@ public:
         //   （**零 select**）⇒ ⇒ 否则停顿期间 M2 冻结 ⇒ ⇒ 死锁。
         //   拍级：EX/MEM 在 posedge N+1 锁存 i ⇒ M2 在 posedge N+2 锁存 i
         //   ⇒ ⇒ M2 的元数据源 = `exmem_*`（**MEM 级的输入**）。
-        m2_valid->next      = exmem_valid;
-        m2_is_alu->next     = exmem_is_alu;
-        m2_is_jump->next    = exmem_is_jump;
-        m2_is_load->next    = exmem_is_load;
-        m2_rd_addr->next    = exmem_rd_addr;
-        m2_link_value->next = exmem_link_value;
-        m2_alu_result->next = exmem_alu_result;
-        m2_funct3->next     = exmem_funct3;
+        //
+        // ⚠️⚠️ **T3 反压是 V4 的显式例外**（2026-11-23 · S2）：
+        //   ADR-069 `:134` 明文「不做 MEM 级反压（`data_ready` 真反压）⇒ 归
+        //   `memory-timing-contract` T3 ⇒ 本 ADR **零** T3 内容」⇒ ⇒ V4 的
+        //   「停顿」在 ADR 语境里 = **load-use 停顿**。本 change 只在
+        //   `mem_stall`（外部反压）时冻结，**load-use 期间 `mem_stall=0`
+        //   ⇒ 照常前进** ⇒ ⇒ V4 的**意图**（防 load-use 死锁）完整保留。
+        //   ⇒ ⇒ 判据口径的限定见 change 的 `design.md` §4。
+        m2_valid->next      = select(mem_stall, m2_valid,      exmem_valid);
+        m2_is_alu->next     = select(mem_stall, m2_is_alu,     exmem_is_alu);
+        m2_is_jump->next    = select(mem_stall, m2_is_jump,    exmem_is_jump);
+        m2_is_load->next    = select(mem_stall, m2_is_load,    exmem_is_load);
+        m2_rd_addr->next    = select(mem_stall, m2_rd_addr,    exmem_rd_addr);
+        m2_link_value->next = select(mem_stall, m2_link_value, exmem_link_value);
+        m2_alu_result->next = select(mem_stall, m2_alu_result, exmem_alu_result);
+        m2_funct3->next     = select(mem_stall, m2_funct3,     exmem_funct3);
         // ⚠️ **原始字 NOT 寄存**（理由见 `m2_funct3` 处的注释）：`sread` 的输出
         //   寄存器在同一条沿上更新 ⇒ ⇒ 在本沿采到的是**上一拍**的地址的数据
         //   ⇒ ⇒ 采进 M2 会与 M2 的元数据**错配一拍** ⇒ ⇒ 静默错车道。
@@ -534,7 +552,7 @@ public:
         //       分支本身 MUST 正常退休。
         //    ⇒ 错误路径那条（在 ID 级）由 `id_stage` 的 flush 通路拦住
         //       （ID/EX 装气泡）⇒ 不进 EX ⇒ 不会被写回 ✔
-        auto exmem_en = id_stage.io().valid_out;
+        auto exmem_en = id_stage.io().valid_out & !mem_stall;
         // ⚠️ **气泡时 EX/MEM 的「控制信号」MUST 清零**（不能保持旧值）：
         //    `mem_stage` 的访存使能是 `do_mem_access = is_load | is_store`
         //    —— **它不看 `mem_valid`** ⇒ 若气泡拍残留了上一条 store 的
@@ -542,8 +560,9 @@ public:
         //    **静默的内存误写**。
         //    ⇒ `is_store` / `is_load` 在气泡时清零；其余数据字段保持
         //       （valid=0 ⇒ 不会被写回，故无害）。
-        exmem_is_store <<= select(exmem_en, ex_stage.io().is_store_alu,
-                                  ch_bool(false));
+        exmem_is_store <<= select(mem_stall, exmem_is_store,
+                                  select(exmem_en, ex_stage.io().is_store_alu,
+                                         ch_bool(false)));
         exmem_alu_result <<= select(exmem_en, ex_stage.io().alu_result,
                                     exmem_alu_result);
         // 返回地址（JAL/JALR 的写回值）—— 与 ALU 结果**同拍**锁存
@@ -554,8 +573,9 @@ public:
         exmem_rd_addr <<= select(exmem_en, id_stage.io().rd_addr,
                                  exmem_rd_addr);
         exmem_funct3 <<= select(exmem_en, id_stage.io().funct3, exmem_funct3);
-        exmem_is_load <<= select(exmem_en, id_stage.io().is_load,
-                                 ch_bool(false));
+        exmem_is_load <<= select(mem_stall, exmem_is_load,
+                                 select(exmem_en, id_stage.io().is_load,
+                                        ch_bool(false)));
         exmem_imm <<= select(exmem_en, id_stage.io().imm, exmem_imm);
         // ⚠️ 气泡时 EX/MEM 的 valid MUST **清零**（而不是保持）：
         //    数据保持 + valid 保持 ⇒ 同一条指令在 MEM 级**停留两拍**
@@ -568,11 +588,14 @@ public:
         //    ⇒ EX/MEM 的「有效位」与「数据」可能来自**不同的指令**
         //    ⇒ 同一条指令在 MEM 级**停留两拍** ⇒ MEM/WB 抓两次
         //    ⇒ WB **写回两次**（实测：x1 在连续两拍各写回一次 0x0a）。
-        exmem_valid <<= select(exmem_en, id_stage.io().valid_out, ch_bool(false));
+        exmem_valid <<= select(mem_stall, exmem_valid,
+                               select(exmem_en, id_stage.io().valid_out, ch_bool(false)));
         // EX 级的指令类型（`id_stage.io().*` 是 **ID/EX 寄存后**的值
         //  ⇒ 正是 EX 级看到的指令类型）⇒ 进 EX/MEM 后成为 MEM 级的类型
-        exmem_is_alu <<= select(exmem_en, id_stage.io().is_alu, ch_bool(false));
-        exmem_is_jump <<= select(exmem_en, id_stage.io().is_jump, ch_bool(false));
+        exmem_is_alu <<= select(mem_stall, exmem_is_alu,
+                                select(exmem_en, id_stage.io().is_alu, ch_bool(false)));
+        exmem_is_jump <<= select(mem_stall, exmem_is_jump,
+                                 select(exmem_en, id_stage.io().is_jump, ch_bool(false)));
 
         // EX/MEM -> MEM
         mem_stage.io().alu_result <<= exmem_alu_result;
@@ -602,21 +625,26 @@ public:
         //   ⚠️ 与基线的差异：基线是 `select(exmem_valid, X, memwb_X)`（无效时
         //   **保持**旧值）⇒ ⇒ 现在无效时 M2 的元数据本身就是「无效」⇒ ⇒
         //   MEM/WB 装的是**零/无效**（而非陈旧数据）⇒ ⇒ **更安全**。
-        memwb_is_alu->next     = m2_is_alu;
-        memwb_is_jump->next    = m2_is_jump;
-        memwb_is_load->next    = m2_is_load;
-        memwb_rd_addr->next    = m2_rd_addr;
-        memwb_alu_result->next = m2_alu_result;
+        // ⚠️ **T3 反压冻结**（2026-11-23 · S2）：`mem_stall` 时 MEM/WB **保持**
+        //   ⇒ ⇒ 这是 V4「使能恒定」的**显式例外**（ADR-069 `:134` 把 T3 排除在
+        //   本 ADR 范围外 ⇒ ⇒ V4 的「停顿」= load-use；load-use 期间
+        //   `mem_stall=0` ⇒ 照常前进 ⇒ V4 意图保留）。口径见 `design.md` §4。
+        memwb_is_alu->next     = select(mem_stall, memwb_is_alu,     m2_is_alu);
+        memwb_is_jump->next    = select(mem_stall, memwb_is_jump,    m2_is_jump);
+        memwb_is_load->next    = select(mem_stall, memwb_is_load,    m2_is_load);
+        memwb_rd_addr->next    = select(mem_stall, memwb_rd_addr,    m2_rd_addr);
+        memwb_alu_result->next = select(mem_stall, memwb_alu_result, m2_alu_result);
         // ⚠️ **返回地址同拍 transit M2**（A0-①）⇒ ⇒ 否则 JAL/JALR 写回
         //   **后继**指令的返回地址（垃圾）。
-        memwb_link_value->next = m2_link_value;
+        memwb_link_value->next = select(mem_stall, memwb_link_value, m2_link_value);
         // ⚠️ **load 数据 = M2 下游的车道选择结果**（`m2_load_data`）⇒ ⇒
         //   **不是** `mem_stage.io().mem_data`（该端口已删 · 语义已迁出）。
-        memwb_mem_data->next   = select(m2_valid & m2_is_load, m2_load_data,
-                                         ch_uint<32>(0_d));
+        memwb_mem_data->next   = select(mem_stall, memwb_mem_data,
+                                        select(m2_valid & m2_is_load, m2_load_data,
+                                               ch_uint<32>(0_d)));
         // MEM/WB 的 valid = M2 的 valid（气泡以 valid=0 逐级传播 ⇒
         // 数据保持、valid 清零 ⇒ WB 不会把陈旧指令再写回一次）
-        memwb_valid->next      = m2_valid;
+        memwb_valid->next      = select(mem_stall, memwb_valid, m2_valid);
 
         // MEM/WB -> WB stage（WB 只能看到 MEM/WB 寄存器 ⇒ 与 WB 级指令同拍）
         wb_stage.io().alu_result <<= memwb_alu_result;
@@ -668,8 +696,16 @@ public:
         //    指令取进来）
         //    ⚠️ 表达式在**两处各建一个比较节点**（`wire_id_ex()` 与这里）
         //      ⇒ 值**相同**、无状态 ⇒ 不引入顺序依赖（用局部变量则依赖调用顺序）。
+        //
+        // ⚠️ **MEM 反压也冻结 IF 侧**（2026-11-23 · S2）：`mem_stall` 来自
+        //   `!io().data_ready`（与 `build_datapath()` 里同值 ⇒ 无状态、无环）。
+        //   三者（load-use / 非法指令 / MEM 反压）都是「前级不许前进」⇒ 取 OR。
+        auto mem_stall = !io().data_ready;
         if_stage.io().stall <<= hazard.io().stall |
-            (id_stage.io().illegal_reason != ch_uint<2>(0_d));
+            (id_stage.io().illegal_reason != ch_uint<2>(0_d)) | mem_stall;
+        // ⚠️ **ID/EX 用 `freeze`（保持）而不是 `stall`（装气泡）**：
+        //   反压期间 EX 级那条指令 MUST NOT 丢失 ⇒ 见 `id_stage.h` 的端口注释。
+        id_stage.io().freeze <<= mem_stall;
         if_stage.io().flush <<= hazard.io().flush;
         if_stage.io().rst <<= io().rst;
 
@@ -780,7 +816,14 @@ public:
         // Performance counters
         cycle_count->next = select(reset_active, ch_uint<48>(0_d), cycle_count + 1_d);
 
-        auto commit_valid = mem_stage.io().mem_valid_out;
+        // ⚠️ **退休计数 MUST 被反压门控**（2026-11-23 · S2）：`commit_valid` 取
+        //    `mem_stage.io().mem_valid_out`，而它在反压时**冻结为 1**（MEM 级
+        //    那条指令停留）⇒ ⇒ 若不门控就**每拍 +1**（同一条指令重复计数）。
+        //    语义：反压期间 MEM 级**不前进** ⇒ **不退休** ⇒ 计数不增。
+        //    ⚠️ `mem_stall` 在本函数**另建一个同值节点**（同 `illegal_active` 的
+        //       做法：两处各建一个 ⇒ 值相同、无状态 ⇒ 不引入顺序依赖）。
+        auto mem_stall = !io().data_ready;
+        auto commit_valid = mem_stage.io().mem_valid_out & !mem_stall;
         commit_count->next = select(reset_active, ch_uint<48>(0_d), commit_count + commit_valid);
 
         auto branch_decoded = id_stage.io().is_branch;

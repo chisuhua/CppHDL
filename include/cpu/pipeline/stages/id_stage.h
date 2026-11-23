@@ -51,7 +51,17 @@ public:
         //      （等待 load 的数据写回）⇒ ID/EX 冻结。
         //    此前两者**都没有** ⇒ 冲刷不生效、停顿「停了个寂寞」。
         ch_in<ch_bool>      flush;          // 控制冒险冲刷（错误路径）
-        ch_in<ch_bool>      stall;          // 数据冒险停顿
+        ch_in<ch_bool>      stall;          // 数据冒险停顿（**装气泡**）
+        // ⚠️ `freeze` 与 `stall` 是**两种不同语义**（2026-11-23，
+        //    change `rv32i-mem-backpressure-2026-11` · S2）：
+        //    - `stall`：load-use ⇒ ID/EX **装气泡**（消费者留在 ID 级，
+        //      而 EX 级的 load 正常前进 ⇒ 气泡逐级传播）
+        //    - `freeze`：MEM 级**反压**（`data_ready=0`）⇒ ID/EX **保持**
+        //      （含 valid）⇒ EX 级那条指令 MUST NOT 被丢弃
+        //    ⇒ ⇒ 若反压复用 `stall`：EX 级指令在装气泡时丢失，而 EX/MEM
+        //    已冻结 ⇒ 该指令**既不执行也不退休**（静默丢指令）。
+        //    优先级：`freeze` > `flush` / `stall`（反压期间什么都不许变）。
+        ch_in<ch_bool>      freeze{"freeze"};  // MEM 反压 ⇒ ID/EX 冻结（保持）
         
         // 输入 (来自流水线级 reg_file 的读端口)
         ch_in<ch_uint<32>>  reg_rs1_data;   // RS1 读数据 (来自 reg_file)
@@ -250,7 +260,12 @@ public:
         //    ⇒ stall 时 valid 置 0（气泡）；**数据字段仍会刷新**（无害：
         //    valid=0 ⇒ 该指令在任何一级都不产生副作用）。
         //    flush ⇒ 同样装气泡（错误路径不进 EX）。
-        auto idex_update_en = io().valid;
+        //
+        // ⚠️ **`freeze`（MEM 反压）优先级最高**（2026-11-23 · S2）：
+        //    保持**全部**字段（含 valid）⇒ EX 级那条指令不被丢弃。
+        //    实现上只需把两个使能**门掉**（数据字段的 `else` 分支本就是「保持」⇒
+        //    无需逐行改）。
+        auto idex_update_en = io().valid & !io().freeze;
         
         // 更新寄存器
         idex_rs1_addr->next = select(idex_update_en, rs1_addr_mux, idex_rs1_addr);
@@ -271,7 +286,7 @@ public:
         //      ③ `is_store` / `is_jump` / `is_alu` 残留 ⇒ 同类误判；
         //      ④ `rd_addr` 残留 ⇒ 与 ID 级消费者的地址**误匹配**。
         //    ⇒ 气泡时把它们清零（其余数据字段保持无害：valid=0）。
-        auto idex_bubble = io().flush | io().stall;
+        auto idex_bubble = (io().flush | io().stall) & !io().freeze;
         idex_is_branch->next= select(idex_bubble, ch_bool(false),
                                      select(idex_update_en, branch_flag, idex_is_branch));
         idex_is_load->next  = select(idex_bubble, ch_bool(false),
@@ -289,8 +304,9 @@ public:
         //      （实测：被 taken 分支冲刷的 `addi x6,x0,0x7f` 写回了 0x7f）。
         //    - stall：消费者 MUST **留在 ID 级**（不进 EX）⇒ 装气泡。
         //      （此前是「冻结」⇒ 有效位与数据错开一级 ⇒ 仍被写回。）
-        idex_valid->next    = select(io().flush | io().stall, ch_bool(false),
-                                     select(idex_update_en, io().valid, idex_valid));
+        idex_valid->next    = select(io().freeze, idex_valid,
+                                      select(io().flush | io().stall, ch_bool(false),
+                                             select(idex_update_en, io().valid, idex_valid)));
         
         // ========================================================================
         // 输出到 EX 级

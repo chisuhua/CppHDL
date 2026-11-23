@@ -281,6 +281,10 @@ public:
         ids.io().valid        <<= ch_bool(true);   // ⇒ idex_update_en = 1
         ids.io().flush        <<= ch_bool(false);
         ids.io().stall        <<= ch_bool(false);
+        // ⚠️ `freeze` 是 IdStage 的**新增输入**（2026-11-23 · S2）：未驱动会读到
+        //    未定义值 ⇒ `idex_update_en = valid & !freeze` 可能恒 0 ⇒ 不更新。
+        //    本用例不测反压 ⇒ 显式驱动 0（纪律：新增输入端口 MUST 显式驱动）。
+        ids.io().freeze       <<= ch_bool(false);
         ids.io().reg_rs1_data <<= ch_uint<32>(0_d);
         ids.io().reg_rs2_data <<= ch_uint<32>(0_d);
 
@@ -390,6 +394,8 @@ IdDecoded run_id_stage(uint64_t instruction) {
     sim.set_input_value(io.valid, 1u);
     sim.set_input_value(io.flush, 0u);
     sim.set_input_value(io.stall, 0u);
+    // ⚠️ `freeze`（S2 新增输入）MUST 显式驱动 ⇒ 本用例不测反压 ⇒ 0
+    sim.set_input_value(io.freeze, 0u);
     sim.set_input_value(io.reg_rs1_data, 0u);
     sim.set_input_value(io.reg_rs2_data, 0u);
     sim.tick();   // ⚠️ 译码结果是**寄存后**的 ⇒ MUST 跑一拍

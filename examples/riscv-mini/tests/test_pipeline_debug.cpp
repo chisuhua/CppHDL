@@ -120,6 +120,12 @@ public:
         id_stage.io().valid <<= ch_bool(true);
         id_stage.io().reg_rs1_data <<= ch_uint<32>(0_d);
         id_stage.io().reg_rs2_data <<= ch_uint<32>(0_d);
+        // ⚠️ `flush` / `stall` / `freeze` 是 IdStage 的输入，此前**全部未驱动**
+        //    （未驱动 ⇒ 读到未定义值）。`freeze` 是 2026-11-23（S2）的新增输入
+        //    ⇒ 与另外两个一并显式驱动 0（本用例不测停顿/反压）。
+        id_stage.io().flush <<= ch_bool(false);
+        id_stage.io().stall <<= ch_bool(false);
+        id_stage.io().freeze <<= ch_bool(false);
         io().opcode <<= id_stage.io().opcode;
         io().rs1_addr <<= id_stage.io().rs1_addr;
         io().rs2_addr <<= id_stage.io().rs2_addr;

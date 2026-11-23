@@ -719,6 +719,16 @@ target_include_directories(test_rv32i_stage_dual PRIVATE
     ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
 )
 
+# ── S2 · RV32I MEM 级反压（`data_ready` 真消费）────────────────────────────
+#   判据来源 = `openspec/specs/rv32i-memory-timing/spec.md` 的
+#     「MEM 级的反压接口 MUST 有可观测的语义」（含 2 个 Scenario）
+#   DUT = `riscv::Rv32iPipeline`（`data_ready` 是它的输入；在核里接 `dtcm.ready ≡ 1`
+#         ⇒ ⇒ 只有直接测 pipeline 才能「拉低该就绪信号」）
+#   ⚠️ **单后端**（interpreter）：本文件的判据全部是**拍级状态机语义**
+#      （观察 `dbg_*` / `perf_*` 的保持与计数）⇒ 双后端等价由既有
+#      `test_rv32i_soc_dual_parity`（核级整装配逐拍）承担。
+add_catch_test(test_rv32i_mem_backpressure test_rv32i_mem_backpressure.cpp)
+
 # ⚠️ **路线 C 第 2 批 —— RV32I 的「时序侧」组件进双后端 parity**（2026-11-03）
 #    ⇒ `IdStage`（**16** 个 ch_reg = ID/EX 流水线寄存器）· `Rv32iRegFile`（**32** 个
 #      ch_reg = 仓内最大的 always_ff 面）· `DataTCM<8,32>`（ch_mem **aread** 0-cycle

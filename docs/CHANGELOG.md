@@ -1,3 +1,36 @@
+## 2026-11-23 — S2：RV32I MEM 级反压（`data_ready` 真消费）
+
+**背景**：已签批 spec `openspec/specs/rv32i-memory-timing/spec.md` 的
+「MEM 级的反压接口 MUST 有可观测的语义」要求「上游拉低就绪信号 ⇒ MEM 级 MUST 冻结其
+装载寄存器 + 向前级发 stall + 有效链保持」，并要求「MUST 存在能拉低该就绪信号的 DUT 与
+用例」。实测实现里 `Rv32iPipeline.io().data_ready` 在 pipeline **内部零消费者**
+（只被核从 `dtcm.io().ready ≡ 1` 接线）⇒ ⇒ 该 Requirement 的第二个 Scenario 不成立。
+⇒ ⇒ S2 是**已签批 spec 的未实现条款补齐**（implementation gap · 零 spec delta）。
+
+**本次**：
+- **`IdStage` 新增 `freeze` 输入**（**冻结**语义 · 与 `stall` 的「装气泡」语义分离）
+  ⇒ ⇒ 反压期间 ID/EX **保持**（含 valid）⇒ EX 级那条指令**不被丢弃**；
+  若复用 `stall` 会装气泡 ⇒ 该指令既不执行也不退休（静默丢指令）。
+- **`Rv32iPipeline`** 新增反压冻结链（`mem_stall = !io().data_ready`）：
+  `EX/MEM` / `M2` / `MEM/WB` 三组寄存器冻结 · `IF/ID` 与 `ID/EX` 同时停 ·
+  **退休计数被门控**（否则冻结的 `mem_valid_out` 会每拍 +1 ⇒ 同一条指令重复计数）。
+- **不新增 `perf_mem_stalls` 端口**：`ADR-069:176` 的「另立计数器**或**显式分档」⇒
+  本 change 选**显式分档**（反压**不计入** `perf_load_use_stalls`，并用测试断言钉住）
+  ⇒ ⇒ 核的 **34 端口面不变**（S3 接总线口时一次成型）。
+- 新测试 `tests/test_rv32i_mem_backpressure.cpp`（6 用例 / 60 断言）：反压冻结 ·
+  有效链自洽 · 手推 stall 拍数（`perf_instructions` 差 == N）· **覆盖自证**
+  （去掉拉低驱动则判据必失败）· 口径分档。
+- 4 个直连 `IdStage` 的既有测试显式驱动新输入（未驱动 ⇒ 读到未定义值）。
+
+⚠️ **核侧产物字节会变**（`mem_stall` 是**真实端口**上的逻辑 ⇒ Verilator 不做常量折叠）：
+新增的 mux / 反相器留在产物里（**当前恒 0，S3 接总线时活起来**）。
+⚠️ **顶层端口表零变化**（34 根 · 名 / 方向 / 位宽 / 顺序逐字不变）。
+⚠️ **行为零回归**：24 条判据全过 · `test_rv32i_soc_dual_parity` 逐拍等价（两后端）·
+`perf_load_use_stalls` 口径不变（load-use 仍 4 拍 · 手推）。
+⚠️ **ADR-069 V4 的口径界定**：「M2 / MEM/WB′ 装载使能恒定（不随**停顿**冻结）」的
+「停顿」= **load-use 停顿**（ADR `:134` 明文把 T3 反压排除在本 ADR 范围外）⇒
+本 change 的冻结是**显式例外**，load-use 期间 `mem_stall=0` ⇒ V4 意图完整保留。
+
 ## 2026-11-23 — R3e：核的 **34 端口契约表归位到核侧**（`examples/riscv-mini/AGENTS.md`）
 
 **背景**：核的 34 端口契约表（`Rv32iCoreTop` 的产品端口面）此前住在 **SoC 侧**的
