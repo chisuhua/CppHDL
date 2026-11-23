@@ -113,7 +113,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | 微架构重构（`include/cpu/pipeline/**` 的算法/时序） | 不在本项（本项只加/改**接口**） |
 | 总线互联/IP 的新实现 | 复用 `include/axi4/**`（矩阵 / 桥 / 外设 / DMA） |
 | 改名（`Rv32iPipelineTop` / `Rv32iCoreComplex` / `rv32i_pipeline_top.h`） | 单列一批（**R3**）⇒ ⇒ ✅ **已完成并验收**（`openspec/changes/riscv-core-rename-2026-11/` · R3a `870cda5` / R3b `a82eda1` / R3c `2210e9d` · verifier **15/15** ⇒ 可归档 · 报告 `.rddf/reviews/riscv-core-rename-2026-11-verify.md`）⇒ ⇒ 核的三个名字现统一为 **`Rv32iCoreTop`** / **`Rv32iCoreTop`** / **`rv32i_core_top.h`** ⇒ ⇒ **端口面零变化**（34 根逐字不变）· **行为零变化**（核侧三份产物 sha256 逐字节不变）|
-| 改名（TB 名 `tb_rv32i_soc`） | 单列一批（**R3d**）· **未立项** ⇒ ⇒ 会动 tsv / CMake / CI / 多护栏 fixture ⇒ ⇒ 与 R3a–c 分离 |
+| 改名（TB 名 `tb_rv32i_soc`） | 单列一批（**R3d**）· **未立项** ⇒ ⇒ 与 R3a–c 分离 ⇒ ⇒ ⚠️ **2026-11-23 实测爆炸半径 = 25 处活载体**（CI 3 处 · 6 个脚本 `rv32i_rtl_sim_env` / `verify_dtcm_read_timing` / `verify_examples_rtl_sim`(自检 fixture) / `verify_hierarchical_rtl` / `verify_rv32i_elf_e2e` / `verify_rv32i_fw_init_rtl` · CMake 2 处 · tsv 2 行 · 期望源 6 处 · 文档 ~8 处）⇒ ⇒ ⚠️ **含 `.sv` TB 的 Verilog 顶层 module 名**（`tb_rv32i_soc` ⇒ `--top-module` 同步）⇒ ⇒ **不是纯改名批** ⇒ ⇒ 建议单独排期 |
 
 ### 写面（按批分级）
 

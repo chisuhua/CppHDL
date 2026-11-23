@@ -45,6 +45,16 @@
 | **AC14** | ✅ | `verify_docs_links.sh` ⇒ **PASS**（两个 dated 架构文档的 `file:line` 指针已更新；**行号不变** —— 被引用文件只改了第 1 行注释 ⇒ 行数与内容位置不变） |
 | **AC15** | ✅ | `docs/CHANGELOG.md` 新增 **3** 条（R3a / R3b / R3c 各一条）⇒ 本 change 自带非空 `## 用户可见变更` 段 ⇒ `verify_public_api_visibility.sh` **R1** 成立 |
 
+### R3e（追加 · **核的接口契约表归位**）
+
+| 项 | 判定 | 证据 |
+|---|---|---|
+| 核侧 34 行表存在且条数 = **34** | ✅ | `awk -F'|' '/^\| *[0-9]+ *\|/' examples/riscv-mini/AGENTS.md` ⇒ **34** |
+| SoC 侧该节**不再重复**表（改为指针） | ✅ | `examples/riscv-soc/AGENTS.md` 的「核复合体（`Rv32iCoreTop`）的 **34 端口契约表** ⇒ **已归位到核侧**」节 ⇒ 只留指针 |
+| 护栏期望表指针切到核侧 | ✅ | `scripts/verify_riscv_soc_core_ports.sh` 的 `AGENTS_MD="examples/riscv-mini/AGENTS.md"` ⇒ **PASS**；`--self-test` ⇒ **PASS**（7 投毒各自必红 ⇒ 投毒流程与表路径无关） |
+| **顺带订正**：原前言「期望表由 `verify_examples_rtl_sim.sh` 解析」**指错了脚本** | ✅ | 实测唯一消费者 = `verify_riscv_soc_core_ports.sh`（`parse_agents_table` 只此一处调用）⇒ ⇒ 前言已改正 |
+| 零行为 / 零端口变化 | ✅ | 表内容逐字未动 ⇒ V1/V2 仍绿 ⇒ 34 根端口表不变 |
+
 ## 回归（全部本轮实跑 · 全绿）
 
 `ctest` 273/273 · `run_all_ported_tests.sh` PASS 29 / FAIL 0 ·
