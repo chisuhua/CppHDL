@@ -85,3 +85,18 @@
 - **write-back 策略**：本 change 保持 write-through（母 improvement 未要求变更）
 - **TCM 归属 / 成层决策**：母 improvement 说在 S3 一起定 ⇒ **本 change 先不动**
   （成层集合撞已签批 `rtl-hierarchical-output` ⇒ 需单独裁）
+
+## 用户可见变更
+
+- **`chlib::DCacheSync` 的前端多一根输入 `strbe[4]`**（字节使能）⇒ ⇒ 直连它的代码 MUST 驱动
+  （未驱动 ⇒ 读回全 1 ⇒ 字节写退化为整字覆盖）。
+- **前端握手语义变了**：`ready` / `miss` 是**组合**（对**当拍 `addr``）· `rdata` 是**保持寄存器**
+  （完成那拍捕获、保持到下一次读完成）· `req` MUST 保持到 `ready=1`（真握手，不再是「固定延迟」）。
+- **AXI 侧从简化握手（7 根）换成 AXI4 full 5 通道（19 根）** ⇒ ⇒ 接旧口的代码 MUST 改；
+  读 miss = 4-beat burst（`ARLEN=3` / `ARSIZE=2` / `ARBURST=INCR`）· 写 = write-through 单 beat。
+- **`riscv::Rv32iPipeline` 新增输出 `data_req`**（`MEM 级有效 & (load|store)`）⇒ ⇒ 旧消费者 MUST 驱动。
+- **新增公开头 `include/axi4/tcm_axi_slave.h`**（`axi4::TcmAxiSlave`）。
+- **核的行为变了**：D-L1 **首次接在数据通路上** ⇒ 命中照旧 1 拍；**miss 会反压整条流水线**
+  （S2 的冻结链第一次真正生效）。⚠️ 核的 **34 端口面逐字不变**，但**产物字节会变**。
+- 新 capability `rv32i-dcache-timing`（5 个 Requirement）成为**已签批规格**。
+
