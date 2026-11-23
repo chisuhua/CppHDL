@@ -85,27 +85,37 @@ TEST_CASE("DCache read miss-fill", "[cache][complete][dcache][miss-fill]") {
     ch::Simulator sim(dc_dev.context());
     auto& dc = dc_dev.instance();
 
-    // 周期 1: read miss → fill
-    sim.set_input_value(dc.io().addr,           0x2000u);
-    sim.set_input_value(dc.io().wdata,          0x0u);
-    sim.set_input_value(dc.io().we,             0u);
-    sim.set_input_value(dc.io().req,            1u);
-    sim.set_input_value(dc.io().axi_rdata,      0x12345678u);
-    sim.set_input_value(dc.io().axi_resp_valid, 1u);
-    sim.set_input_value(dc.io().axi_ready,      1u);
+    // ⚠️ 2026-11-23 · S3 重写：AXI 侧是 full 5 通道 ⇒ fill 需要 **4 个 R beat**
+    // 周期 1: read miss ⇒ AR（ar_ready=0 ⇒ 只观察 VALID 保持）
+    sim.set_input_value(dc.io().addr,     0x2000u);
+    sim.set_input_value(dc.io().wdata,    0x0u);
+    sim.set_input_value(dc.io().we,       0u);
+    sim.set_input_value(dc.io().req,      1u);
+    sim.set_input_value(dc.io().ar_ready, 0u);
+    sim.tick();
+    // 周期 2: ar_ready=1 ⇒ **AR 握手**（不握手则 fill_active 永不置 1 ⇒ beat 全丢）
+    sim.set_input_value(dc.io().ar_ready, 1u);
     sim.tick();
 
-    // 周期 2: 同地址再读, axi 关闭 → hit
-    sim.set_input_value(dc.io().addr,           0x2000u);
-    sim.set_input_value(dc.io().wdata,          0x0u);
-    sim.set_input_value(dc.io().we,             0u);
-    sim.set_input_value(dc.io().req,            1u);
-    sim.set_input_value(dc.io().axi_rdata,      0x0u);
-    sim.set_input_value(dc.io().axi_resp_valid, 0u);
-    sim.set_input_value(dc.io().axi_ready,      0u);
+    // 周期 2..5: 4 个 R beat（第 1 个 = lane 0 的数据）
+    sim.set_input_value(dc.io().req, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(dc.io().r_valid, 1u);
+        sim.set_input_value(dc.io().r_data,  b == 0 ? 0x12345678u : 0x0u);
+        sim.set_input_value(dc.io().r_last,  b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(dc.io().r_valid, 0u);
+    sim.set_input_value(dc.io().r_last,  0u);
+
+    // 周期 6: 同地址再读（AXI 关闭）→ hit
+    sim.set_input_value(dc.io().addr,     0x2000u);
+    sim.set_input_value(dc.io().wdata,    0x0u);
+    sim.set_input_value(dc.io().we,       0u);
+    sim.set_input_value(dc.io().req,      1u);
+    sim.set_input_value(dc.io().ar_ready, 0u);
     sim.tick();
 
-    // 验证: hit, rdata == cached
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().miss))  == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().rdata)) == 0x12345678u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().ready)) == 1u);
@@ -125,41 +135,54 @@ TEST_CASE("DCache write hit-through", "[cache][complete][dcache][write-through]"
     ch::Simulator sim(dc_dev.context());
     auto& dc = dc_dev.instance();
 
-    // 周期 1: read miss → fill (way0)
-    sim.set_input_value(dc.io().addr,           0x3000u);
-    sim.set_input_value(dc.io().wdata,          0x0u);
-    sim.set_input_value(dc.io().we,             0u);
-    sim.set_input_value(dc.io().req,            1u);
-    sim.set_input_value(dc.io().axi_rdata,      0xDEADC0DEu);
-    sim.set_input_value(dc.io().axi_resp_valid, 1u);
-    sim.set_input_value(dc.io().axi_ready,      1u);
+    // 周期 1: read miss ⇒ AR 握手（ar_ready=1 ⇒ fill_active 置位）
+    sim.set_input_value(dc.io().addr,     0x3000u);
+    sim.set_input_value(dc.io().wdata,    0x0u);
+    sim.set_input_value(dc.io().we,       0u);
+    sim.set_input_value(dc.io().req,      1u);
+    sim.set_input_value(dc.io().ar_ready, 1u);
     sim.tick();
 
-    // 周期 2: write hit-through (cache 已 fill, way0 hit)
-    sim.set_input_value(dc.io().addr,           0x3000u);
-    sim.set_input_value(dc.io().wdata,          0xCAFEBABEu);
-    sim.set_input_value(dc.io().we,             1u);
-    sim.set_input_value(dc.io().req,            1u);
-    sim.set_input_value(dc.io().axi_rdata,      0x0u);
-    sim.set_input_value(dc.io().axi_resp_valid, 0u);
-    sim.set_input_value(dc.io().axi_ready,      0u);
+    // 周期 2..5: 4 beat fill（lane 0 = 0xDEADC0DE）
+    sim.set_input_value(dc.io().req, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(dc.io().r_valid, 1u);
+        sim.set_input_value(dc.io().r_data,  b == 0 ? 0xDEADC0DEu : 0x0u);
+        sim.set_input_value(dc.io().r_last,  b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(dc.io().r_valid, 0u);
+    sim.set_input_value(dc.io().r_last,  0u);
+    // ⚠️ 空转 1 拍：让 `sread` 的 tag 输出反映刚 fill 的 line
+    //    （`sread` 是 1 拍寄存 ⇒ fill 当拍写、下一拍才读得到）
+    sim.set_input_value(dc.io().req,   0u);
+    sim.set_input_value(dc.io().we,    0u);
+    sim.set_input_value(dc.io().addr,  0x3000u);
     sim.tick();
 
-    // 周期 3: 同地址 read → hit (write-through 已写 cache_data)
-    sim.set_input_value(dc.io().addr,           0x3000u);
-    sim.set_input_value(dc.io().wdata,          0x0u);
-    sim.set_input_value(dc.io().we,             0u);
-    sim.set_input_value(dc.io().req,            1u);
-    sim.set_input_value(dc.io().axi_rdata,      0x0u);
-    sim.set_input_value(dc.io().axi_resp_valid, 0u);
-    sim.set_input_value(dc.io().axi_ready,      0u);
+    // 周期 7: write hit-through（way0 hit ⇒ 同时更新 line 的 lane 0 + 发 AXI 写）
+    sim.set_input_value(dc.io().addr,     0x3000u);
+    sim.set_input_value(dc.io().wdata,    0xCAFEBABEu);
+    sim.set_input_value(dc.io().we,       1u);
+    sim.set_input_value(dc.io().req,      1u);
+    sim.set_input_value(dc.io().aw_ready, 1u);
+    sim.set_input_value(dc.io().w_ready,  1u);
     sim.tick();
 
-    // 验证: miss == 0 (write-through 后 read 仍 hit), ready == 1
+    // 周期 7: 同地址 read → hit，且读回**写入的新值**（write-through 已更新 lane）
+    sim.set_input_value(dc.io().addr,     0x3000u);
+    sim.set_input_value(dc.io().wdata,    0u);
+    sim.set_input_value(dc.io().we,       0u);
+    sim.set_input_value(dc.io().req,      1u);
+    sim.set_input_value(dc.io().ar_ready, 0u);
+    sim.tick();
+
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().miss))  == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().ready)) == 1u);
-    // axi 端口: 读路径不触发 AXI (hit), axi_valid 应是 0
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().axi_valid)) == 0u);
+    // ⚠️ 新判据（「假 line」修复的直接证据）：write-through 后读回**新值**
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().rdata)) == 0xCAFEBABEu);
+    // 读命中不触发 AXI 读
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dc.io().ar_valid)) == 0u);
 }
 
 // =============================================================================
@@ -401,42 +424,68 @@ TEST_CASE("ICacheSync vs ICacheAsync same fill behavior", "[cache][sync][async][
 }
 
 TEST_CASE("DCacheSync vs DCacheAsync same fill behavior", "[cache][sync][async][variant]") {
-    auto run_fill_and_read = [](auto& dc, ch::Simulator& sim, uint32_t addr, uint32_t data) {
-        sim.set_input_value(dc.io().addr, addr);
-        sim.set_input_value(dc.io().wdata, 0u);
-        sim.set_input_value(dc.io().we, 0u);
-        sim.set_input_value(dc.io().req, 1u);
-        sim.set_input_value(dc.io().axi_rdata, data);
-        sim.set_input_value(dc.io().axi_resp_valid, 1u);
-        sim.set_input_value(dc.io().axi_ready, 1u);
-        sim.tick();
-        sim.set_input_value(dc.io().addr, addr);
-        sim.set_input_value(dc.io().wdata, 0u);
-        sim.set_input_value(dc.io().we, 0u);
-        sim.set_input_value(dc.io().req, 1u);
-        sim.set_input_value(dc.io().axi_rdata, 0u);
-        sim.set_input_value(dc.io().axi_resp_valid, 0u);
-        sim.set_input_value(dc.io().axi_ready, 0u);
-        sim.tick();
-    };
+    // ⚠️ 2026-11-23 · S3：两者 AXI 侧**已分化**（Sync = AXI4 full burst · Async = 简化握手）
+    // ⇒ ⇒ fill 激励不同（Sync **4 beat** / Async **1 resp**），但**判据相同**：
+    //      fill 后同地址再读 ⇒ hit 且 `rdata` 正确。
 
-    // DCacheSync (1-cycle sread)
-    ch::core::context ctx_s("dcache_sync_variant");
-    ch::core::ctx_swap swap_s(&ctx_s);
-    ch::ch_device<chlib::DCacheSync> dc_s_dev;
-    ch::Simulator sim_s(dc_s_dev.context());
-    run_fill_and_read(dc_s_dev.instance(), sim_s, 0x200000u, 0x55667788u);
-    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(dc_s_dev.instance().io().miss)) == 0u);
-    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(dc_s_dev.instance().io().rdata)) == 0x55667788u);
+    // ---- DCacheSync（AXI4 full · 4-beat burst）----
+    {
+        ch::core::context ctx_s("dcache_sync_variant");
+        ch::core::ctx_swap swap_s(&ctx_s);
+        ch::ch_device<chlib::DCacheSync> dc_s_dev;
+        ch::Simulator sim_s(dc_s_dev.context());
+        auto& dc = dc_s_dev.instance();
 
-    // DCacheAsync (0-cycle aread)
-    ch::core::context ctx_a("dcache_async_variant");
-    ch::core::ctx_swap swap_a(&ctx_a);
-    ch::ch_device<chlib::DCacheAsync> dc_a_dev;
-    ch::Simulator sim_a(dc_a_dev.context());
-    run_fill_and_read(dc_a_dev.instance(), sim_a, 0x200000u, 0x55667788u);
-    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(dc_a_dev.instance().io().miss)) == 0u);
-    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(dc_a_dev.instance().io().rdata)) == 0x55667788u);
+        sim_s.set_input_value(dc.io().addr,     0x200000u);
+        sim_s.set_input_value(dc.io().wdata,    0u);
+        sim_s.set_input_value(dc.io().we,       0u);
+        sim_s.set_input_value(dc.io().req,      1u);
+        sim_s.set_input_value(dc.io().ar_ready, 0u);
+        sim_s.tick();
+        // 第二拍：ar_ready=1 ⇒ 握手（否则 fill_active 永不置 1）
+        sim_s.set_input_value(dc.io().ar_ready, 1u);
+        sim_s.tick();
+        sim_s.set_input_value(dc.io().req, 0u);
+        for (int b = 0; b < 4; ++b) {
+            sim_s.set_input_value(dc.io().r_valid, 1u);
+            sim_s.set_input_value(dc.io().r_data,  b == 0 ? 0x55667788u : 0u);
+            sim_s.set_input_value(dc.io().r_last,  b == 3 ? 1u : 0u);
+            sim_s.tick();
+        }
+        sim_s.set_input_value(dc.io().r_valid, 0u);
+        sim_s.set_input_value(dc.io().r_last,  0u);
+        sim_s.set_input_value(dc.io().addr,     0x200000u);
+        sim_s.set_input_value(dc.io().req,      1u);
+        sim_s.tick();
+        REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(dc.io().miss))  == 0u);
+        REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(dc.io().rdata)) == 0x55667788u);
+    }
+
+    // ---- DCacheAsync（简化握手 · 1 resp）----
+    {
+        ch::core::context ctx_a("dcache_async_variant");
+        ch::core::ctx_swap swap_a(&ctx_a);
+        ch::ch_device<chlib::DCacheAsync> dc_a_dev;
+        ch::Simulator sim_a(dc_a_dev.context());
+        auto& dc = dc_a_dev.instance();
+
+        sim_a.set_input_value(dc.io().addr, 0x200000u);
+        sim_a.set_input_value(dc.io().wdata, 0u);
+        sim_a.set_input_value(dc.io().we, 0u);
+        sim_a.set_input_value(dc.io().req, 1u);
+        sim_a.set_input_value(dc.io().axi_rdata, 0x55667788u);
+        sim_a.set_input_value(dc.io().axi_resp_valid, 1u);
+        sim_a.set_input_value(dc.io().axi_ready, 1u);
+        sim_a.tick();
+        sim_a.set_input_value(dc.io().addr, 0x200000u);
+        sim_a.set_input_value(dc.io().req, 1u);
+        sim_a.set_input_value(dc.io().axi_rdata, 0u);
+        sim_a.set_input_value(dc.io().axi_resp_valid, 0u);
+        sim_a.set_input_value(dc.io().axi_ready, 0u);
+        sim_a.tick();
+        REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(dc.io().miss))  == 0u);
+        REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(dc.io().rdata)) == 0x55667788u);
+    }
 }
 
 // =============================================================================

@@ -63,6 +63,7 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 
 | 符号 / 头 | 移除或改名 | 日期 | 依据 | 迁移指引 |
 |---|---|---|---|---|
+| `chlib::DCacheSync` 的 AXI **简化握手口**（`axi_addr` / `axi_wdata` / `axi_we` / `axi_valid` / `axi_ready` / `axi_rdata` / `axi_resp_valid` · 7 根） | **改名** → **AXI4 full 5 通道**（`ar_*` / `r_*` / `aw_*` / `w_*` / `b_*` · 19 根） | 2026-11-23 | change `rv32i-dcache-burst-2026-11`（**S3**）· G-7 裁决 = full AXI4 | 下游若接旧简化握手 ⇒ **MUST 改接 full 5 通道**（含 **4-beat burst** 的 `ar_len=3` / `r_last`）；⚠️ **前端零变化**（`addr` / `wdata` / `req` / `we` → `rdata` / `ready` / `miss`） ⇒ ⇒ 只接前端的下游**不必改** | **新增** 语义（旧版无）：`offset` 参与数据选择（**「假 line」已修**） ⇒ ⇒ 同 line 的 4 个地址现在读到**不同的字**（旧版恒读第一个字） |
 | 头文件 `rv32i_pipeline_top.h`（example 侧核顶 · 随类改名） | **改名** → `rv32i_core_top.h` | 2026-11-23 | change `rv32i-core-rename-2026-11`（**R3c**）· 同批类名 `Rv32iPipelineTop` → `Rv32iCoreTop` | 下游若 `#include "rv32i_pipeline_top.h"` ⇒ ⇒ **MUST 改 include 路径**；⚠️ **端口面零变化**（34 根逐字不变）⇒ ⇒ 连线**不必改** |
 | `Rv32iPipelineTop`（`examples/riscv-mini/src/rv32i_pipeline_top.h` · example 侧顶） | **改名** → `Rv32iCoreTop` | 2026-11-23 | change `rv32i-core-rename-2026-11`（**R3b**）· ADR-077 D2（模块类型名 = 非契约 ⇒ 改名不需 architect） | 下游若 `#include` 该头并实例化该类 ⇒ ⇒ **MUST 改类名**；⚠️ **端口面零变化**（34 根顶层端口的名字 / 方向 / 位宽 / 顺序**逐字不变**） ⇒ ⇒ 下游连线**不必改** |
 | `chlib::ch_state_machine::is_built()` | **移除** | 2026-10-30 | ADR-050 D2（`c7b0b28`） | 改断言**可观测产物**：`entry_state()` + 状态寄存器节点已发射 |

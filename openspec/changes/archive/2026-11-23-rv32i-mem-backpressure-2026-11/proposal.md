@@ -93,3 +93,12 @@ soC 侧契约表 / C6 快照 / `verify_riscv_soc_core_ports.sh` **零改动**。
 - **`perf_mem_stalls` 计数器**：本 change 选「显式分档」（见 What Changes 末段）
 - **TCM 归属 / 成层**：S3 的决策（撞已签批 `rtl-hierarchical-output`）
 - **load-use 停顿语义的任何变更**：`stall` 仍是「装气泡」，本 change 只新增 `freeze`
+
+## 用户可见变更
+
+- `IdStage` 新增 **`freeze` 输入**（冻结语义 · 与 `stall` 的装气泡分离）⇒ ⇒ 直连 `IdStage`
+  的代码需驱动它（未驱动会读到未定义值）。
+- `Rv32iPipeline` 的 `data_ready` 从「接了线但没落地」变为**真消费** ⇒ ⇒ 拉低它时
+  MEM/WB / EX/MEM / M2 冻结、前级 stall、退休与四个性能计数器一并冻结。
+- **核的行为与 34 端口面零变化**（`data_ready` 在核里接 `dtcm.ready ≡ 1`）；⚠️ 产物**字节**会变
+  （真实端口上的逻辑 ⇒ Verilator 不折叠）。

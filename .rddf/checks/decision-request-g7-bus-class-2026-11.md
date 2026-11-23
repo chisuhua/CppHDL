@@ -1,5 +1,19 @@
 # 决策请求 · G-7：平台总线类（AXI4-Lite vs AXI4 full）
 
+> ## ✅ 已裁决（2026-11-23 · 用户）
+>
+> **裁决 = B（full AXI4 主干）· S3 一次做完（不拆 S3a/S3b）**
+>
+> 生效范围：
+> - S3 的 D-L1 直接接 **AXI4 full 主口 + 4-beat burst**（`ARLEN=3` / `ARSIZE=2`）
+> - S4 用 `AxiInterconnect4x4` + `AxiToAxiLite`（每外设组一个桥）· `AxiDma` 全速
+> - S6（L2/DRAM）**零返工**
+> - ⑥（D-Cache 假 line）的修法 = burst 4-beat fill + **读按 `addr[3:2]` 选 lane**
+>   —— 共同部分（读选 lane）**无论协议都必须做**
+>
+> 未裁决的相关门：**G-5**（核 `irq` 口）· **G-6**（MMIO 归属）· **G-8**（外部总线是否上根端口）
+> ⇒ 建议顺序仍是 **G-5 → G-6 → G-8**（G-7 已闭）。
+
 - **日期**：2026-11-23 · builder 起草（**待用户 / architect 裁决**）
 - **母 improvement**：`rv32i-soc-platform-2026-11` 的决策门 **G-7**
 - **影响批次**：**S3**（核数据侧总线化）· **S4**（互连 + 外设 + DMA）· **S6**（L2 / DRAM）

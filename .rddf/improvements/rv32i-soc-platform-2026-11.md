@@ -330,7 +330,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 |---|---|---|---|
 | **G-5** | **核加 `irq` 输入口（34 → 35）** | 端口契约变更：C6 快照 · 34 端口表 · `verify_riscv_soc_core_ports.sh` 期望表 · SoC 8 端口表 · tsv 全部同批重算 ⇒ 架构面 | S5 |
 | **G-6** | **MMIO 地址映射的归属** —— 扩展 `include/cpu/riscv/rv32i_mem_map.h`（库层 = 平台契约）vs SoC 侧新建（example 侧 = 产品契约） | 决定"内存图"是库层单一真相还是每 SoC 一份 ⇒ 影响 S4/S6 与 `address_decoder.h` | S4 |
-| **G-7** | **总线类** —— S4 用 **Lite**（现成 6 个外设 + 矩阵）还是直接上 **full AXI4**（`AxiInterconnect4x4`） | 决定 S3 的 burst 升级是否提前、S6 是否返工 | S3 / S4 |
+| **G-7** ✅ | **总线类** —— **已裁决 = full AXI4 主干**（2026-11-23 · 用户） ⇒ S3 的 D-L1 直接接 full 主口 + 4-beat burst（**一次做完，不拆 S3a/S3b**） ⇒ S4 用 `AxiInterconnect4x4` + `AxiToAxiLite` · `AxiDma` 全速 ⇒ S6 零返工 ⇒ 决策材料 `.rddf/checks/decision-request-g7-bus-class-2026-11.md`（含**新发现**：`DCacheSync` 是「假 line」—— `offset` 不进数据选择 ⇒ S3 必先修） | 已闭 | S3 / S4 |
 | **G-8** | **SoC 是否把外部总线口暴露到根端口** | 若暴露 ⇒ bundle 不是顶层端口（须标量拆口 ~30 根）⇒ 与 ADR-072 D1「根自有 IO」的相互作用 ⇒ 架构面 | S4 / S6 |
 
 > 建议裁决顺序：**G-7 → G-5 → G-6 → G-8**（G-7 决定 S3 的口形态；G-5 决定 S5 能否开工）。

@@ -1,3 +1,31 @@
+## 2026-11-23 — S3（第 1 阶段）：`DCacheSync` 的 AXI4 full 主口 + 修「假 line」
+
+**背景**：G-7 裁决 = **full AXI4 主干**（2026-11-23 · 用户）⇒ S3 的 D-L1 直接上 full 主口 +
+4-beat burst。调研同时查出 `DCacheSync` 的**真缺陷**：
+
+- 内部 line = 128 bit（4 字），但 `axi_rdata` 只有 32 bit，fill 是 `zext<128>(axi_rdata)`
+  ⇒ 只填低 32 位
+- 读是 `bits<31,0>(cache_data)` ⇒ **`offset` 完全不参与数据选择**
+- ⇒ ⇒ **同一 line 的 4 个地址恒读到第一个字**（功能错误）
+- 当前不可观测（D-Cache 未接入流水线）⇒ S3 一接上就暴露
+
+**本次（第 1 阶段）**：
+- `chlib::DCacheSync` 的 AXI 侧从**简化握手**（7 根）改为 **AXI4 full 5 通道**（19 根）
+  ⇒ 读 miss = **4-beat burst**（`ARLEN=3` / `ARSIZE=2` / `ARBURST=INCR`）
+  ⇒ 写 = write-through **单 beat**（`AWLEN=0`）
+- **修「假 line」**：`addr[3:2]` 参与**读选择**与**写更新**；fill 的 4 个 beat 各落一个 lane
+- `ready` 语义：**hit ⇒ 1 拍**（与 `DataTCM` 的 `sread` 对齐）；**miss ⇒ 0**（流水线用
+  `data_ready` 反压等待 —— S2 打通的通路）
+- 新测试 3 个（line lane / hit 延迟 / miss 反压）+ 既有 5 个 cache 测试的激励改 4 beat
+
+⚠️ **公开面变更**（已登记 `.rddf/checks/public-api-surface.md`）：旧简化握手口
+（`axi_*` · 7 根）→ **AXI4 full 5 通道**（19 根）⇒ 下游接旧口的代码 MUST 改。
+⚠️ **前端零变化**（`addr` / `wdata` / `req` / `we` → `rdata` / `ready` / `miss`）
+⇒ 只接前端的下游不必改。
+⚠️ **`d_cache_async.h` 的同样缺陷本阶段不修**（登记为已知边界 · async 未接入生产路径）。
+⚠️ **S3 尚未完成**：`TcmAxiSlave`（AXI4 slave 包装 D-TCM）与**核接线**
+（`pipeline → cache → TCM`）待做 ⇒ 核的 `data_ready` **仍未真正被拉低**。
+
 ## 2026-11-23 — S2：RV32I MEM 级反压（`data_ready` 真消费）
 
 **背景**：已签批 spec `openspec/specs/rv32i-memory-timing/spec.md` 的

@@ -170,54 +170,70 @@ DUAL_BACKEND_TEST_PAIR(
     });
 
 // ============================================================================
-// Task 4: DCacheSync scenarios (4 TEST_CASE_PAIRs)
+// Task 4: DCacheSync scenarios（**2026-11-23 · S3 重写**：AXI 侧改为 full 5 通道
+// ⇒ ⇒ 激励从「1 次 resp」改为「**4-beat burst**」；断言端口名同步改）
 // ============================================================================
 
-// 6. DCache cold miss read
+// 6. DCache cold miss read ⇒ 发 AR（4-beat burst 请求）
 DUAL_BACKEND_TEST_PAIR(
     DCacheSync,
-    "DCacheSync - Cold miss read generates AXI request",
+    "DCacheSync - Cold miss read generates AXI burst request",
     "[cache][sync][dcache][cold-miss][dual]",
     [&]() {
         sim.set_input_value(dev.instance().io().addr, 0x8000_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
-        sim.set_input_value(dev.instance().io().axi_ready, 1_h);
+        // ⚠️ 本拍**不拉** `ar_ready` ⇒ 观察 `ar_valid` 保持（AXI：VALID 不等 READY）
+        sim.set_input_value(dev.instance().io().ar_ready, 0_h);
         sim.tick();
 
         REQUIRE(static_cast<uint64_t>(
             sim.get_port_value(dev.instance().io().miss)) == 1u);
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_valid)) == 1u);
+            sim.get_port_value(dev.instance().io().ar_valid)) == 1u);
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_addr)) == (uint64_t)0x8000);
+            sim.get_port_value(dev.instance().io().ar_addr)) == (uint64_t)0x8000);
+        // 手推 burst 参数：ARLEN=3（4 beat）· ARSIZE=2（4 B）· ARBURST=INCR(1)
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().ar_len)) == 3u);
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().ar_size)) == 2u);
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().ar_burst)) == 1u);
     });
 
-// 7. DCache refilled read → hit
+// 7. DCache refilled read → hit（4 beat 填满 line 后按 lane 读回）
 DUAL_BACKEND_TEST_PAIR(
     DCacheSync,
     "DCacheSync - Refilled read returns cached data",
     "[cache][sync][dcache][refilled-read][dual]",
     [&]() {
-        // cycle 1: cold read
+        // cycle 1: cold read ⇒ AR 握手
         sim.set_input_value(dev.instance().io().addr, 0x9000_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
-        sim.set_input_value(dev.instance().io().axi_ready, 1_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 1_h);
         sim.tick();
 
-        // cycle 2: AXI resp brings data
-        sim.set_input_value(dev.instance().io().req,  0_h);
-        sim.set_input_value(dev.instance().io().axi_ready,    1_h);
-        sim.set_input_value(dev.instance().io().axi_resp_valid, 1_h);
-        sim.set_input_value(dev.instance().io().axi_rdata, 0xAABBCCDD_h);
-        sim.tick();
+        // cycle 2..5: 4 个 R beat（第 1 个 = 目标 lane 的数据）
+        sim.set_input_value(dev.instance().io().req,      0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 0_h);
+        for (int b = 0; b < 4; ++b) {
+            sim.set_input_value(dev.instance().io().r_valid, 1_h);
+            sim.set_input_value(dev.instance().io().r_data,
+                                static_cast<uint64_t>(b == 0 ? 0xAABBCCDDull : 0ull));
+            sim.set_input_value(dev.instance().io().r_last,
+                                b == 3 ? 1_h : 0_h);
+            sim.tick();
+        }
+        sim.set_input_value(dev.instance().io().r_valid, 0_h);
+        sim.set_input_value(dev.instance().io().r_last,  0_h);
 
-        // cycle 3: re-read same addr → hit, rdata from cache
+        // re-read same addr（lane 0）→ hit
         sim.set_input_value(dev.instance().io().addr, 0x9000_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
-        sim.set_input_value(dev.instance().io().axi_ready, 0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 0_h);
         sim.tick();
 
         REQUIRE(static_cast<uint64_t>(
@@ -226,60 +242,181 @@ DUAL_BACKEND_TEST_PAIR(
             sim.get_port_value(dev.instance().io().rdata)) == 0xAABBCCDDu);
     });
 
-// 8. DCache hit write write-through
+// 8. DCache hit write ⇒ write-through 单 beat（AW/W）
 DUAL_BACKEND_TEST_PAIR(
     DCacheSync,
     "DCacheSync - Hit write triggers AXI write-through",
     "[cache][sync][dcache][write-through][dual]",
     [&]() {
-        // Pre-fill 0xA000 via read
+        // prefill 0xA000（4 beat）
         sim.set_input_value(dev.instance().io().addr, 0xA000_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
-        sim.set_input_value(dev.instance().io().axi_ready, 1_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 1_h);
         sim.tick();
+        sim.set_input_value(dev.instance().io().req,      0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 0_h);
+        for (int b = 0; b < 4; ++b) {
+            sim.set_input_value(dev.instance().io().r_valid, 1_h);
+            sim.set_input_value(dev.instance().io().r_data,  static_cast<uint64_t>(0));
+            sim.set_input_value(dev.instance().io().r_last,  b == 3 ? 1_h : 0_h);
+            sim.tick();
+        }
+        sim.set_input_value(dev.instance().io().r_valid, 0_h);
+        sim.set_input_value(dev.instance().io().r_last,  0_h);
 
-        sim.set_input_value(dev.instance().io().req,  0_h);
-        sim.set_input_value(dev.instance().io().axi_ready,    1_h);
-        sim.set_input_value(dev.instance().io().axi_resp_valid, 1_h);
-        sim.set_input_value(dev.instance().io().axi_rdata, 0x0_h);
-        sim.tick();
-
-        // cycle 3: write to cache line (hit case after fill)
-        sim.set_input_value(dev.instance().io().addr, 0xA000_h);
+        // 写命中 ⇒ write-through 必须出现在 AXI 写通道上
+        sim.set_input_value(dev.instance().io().addr,  0xA000_h);
         sim.set_input_value(dev.instance().io().wdata, 0x12345678_h);
-        sim.set_input_value(dev.instance().io().req,  1_h);
-        sim.set_input_value(dev.instance().io().we,   1_h);
-        sim.set_input_value(dev.instance().io().axi_ready, 1_h);
+        sim.set_input_value(dev.instance().io().req,   1_h);
+        sim.set_input_value(dev.instance().io().we,    1_h);
+        sim.set_input_value(dev.instance().io().aw_ready, 1_h);
+        sim.set_input_value(dev.instance().io().w_ready,  1_h);
         sim.tick();
 
-        // Write-through must show AXI side
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_we)) == 1u);
+            sim.get_port_value(dev.instance().io().aw_valid)) == 1u);
+        // 手推：写是**单 beat** ⇒ AWLEN=0
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_wdata)) == 0x12345678u);
+            sim.get_port_value(dev.instance().io().aw_len)) == 0u);
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_addr)) == (uint64_t)0xA000);
+            sim.get_port_value(dev.instance().io().w_data)) == 0x12345678u);
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().aw_addr)) == (uint64_t)0xA000);
     });
 
-// 9. DCache miss write (write-allocate)
+// 9. DCache miss write ⇒ 写仍无条件直通 AXI（write-through 的语义）
 DUAL_BACKEND_TEST_PAIR(
     DCacheSync,
     "DCacheSync - Miss write still forwards to AXI",
     "[cache][sync][dcache][miss-write][dual]",
     [&]() {
-        sim.set_input_value(dev.instance().io().addr, 0xB000_h);
+        sim.set_input_value(dev.instance().io().addr,  0xB000_h);
         sim.set_input_value(dev.instance().io().wdata, 0xDEADF00D_h);
-        sim.set_input_value(dev.instance().io().req,  1_h);
-        sim.set_input_value(dev.instance().io().we,   1_h);
-        sim.set_input_value(dev.instance().io().axi_ready, 1_h);
+        sim.set_input_value(dev.instance().io().req,   1_h);
+        sim.set_input_value(dev.instance().io().we,    1_h);
+        sim.set_input_value(dev.instance().io().aw_ready, 1_h);
+        sim.set_input_value(dev.instance().io().w_ready,  1_h);
         sim.tick();
 
-        // Even on miss, write must propagate
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_valid)) == 1u);
+            sim.get_port_value(dev.instance().io().aw_valid)) == 1u);
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_we)) == 1u);
+            sim.get_port_value(dev.instance().io().w_data)) == 0xDEADF00Du);
+    });
+
+// ============================================================================
+// 10-12. **S3 新增判据**：真 line（4 lane 各自可寻址）+ hit/miss 的 ready 语义
+//    判据来源 = `openspec/changes/rv32i-dcache-burst-2026-11/specs/rv32i-dcache-timing/spec.md`
+// ============================================================================
+
+// 10. line 的 4 个 lane 各自可寻址（AC1 + AC2 · 「假 line」修复的直接判据）
+DUAL_BACKEND_TEST_PAIR(
+    DCacheSync,
+    "DCacheSync - line has 4 independently addressable lanes",
+    "[cache][sync][dcache][line-lane][dual]",
+    [&]() {
+        constexpr uint64_t kBase = 0x4000;
+        // fill：4 个 beat 各写一个**不同**的值（lane b = 0x1111_1111 * (b+1)）
+        sim.set_input_value(dev.instance().io().addr,     kBase);
+        sim.set_input_value(dev.instance().io().req,      1_h);
+        sim.set_input_value(dev.instance().io().we,       0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 1_h);
+        sim.tick();
+        sim.set_input_value(dev.instance().io().req, 0_h);
+        for (int b = 0; b < 4; ++b) {
+            sim.set_input_value(dev.instance().io().r_valid, 1_h);
+            sim.set_input_value(dev.instance().io().r_data,
+                                static_cast<uint64_t>(0x11111111ull * (b + 1)));
+            sim.set_input_value(dev.instance().io().r_last,
+                                b == 3 ? 1_h : 0_h);
+            sim.tick();
+        }
+        sim.set_input_value(dev.instance().io().r_valid, 0_h);
+        sim.set_input_value(dev.instance().io().r_last,  0_h);
+
+        // 4 个 offset 各自读回**对应的 lane**
+        for (uint64_t lane = 0; lane < 4; ++lane) {
+            sim.set_input_value(dev.instance().io().addr,     kBase + lane * 4);
+            sim.set_input_value(dev.instance().io().req,      1_h);
+            sim.set_input_value(dev.instance().io().we,       0_h);
+            sim.set_input_value(dev.instance().io().ar_ready, 0_h);
+            sim.tick();
+            INFO("lane " << lane);
+            REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(dev.instance().io().miss)) == 0u);
+            REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(dev.instance().io().rdata)) ==
+                static_cast<uint64_t>(0x11111111ull * (lane + 1)));
+        }
+    });
+
+// 11. hit ⇒ ready 与 rdata 同拍（AC3）
+DUAL_BACKEND_TEST_PAIR(
+    DCacheSync,
+    "DCacheSync - hit returns ready and data in the same cycle",
+    "[cache][sync][dcache][hit-latency][dual]",
+    [&]() {
+        constexpr uint64_t kBase = 0x6000;
+        sim.set_input_value(dev.instance().io().addr,     kBase);
+        sim.set_input_value(dev.instance().io().req,      1_h);
+        sim.set_input_value(dev.instance().io().we,       0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 1_h);
+        sim.tick();
+        sim.set_input_value(dev.instance().io().req, 0_h);
+        for (int b = 0; b < 4; ++b) {
+            sim.set_input_value(dev.instance().io().r_valid, 1_h);
+            sim.set_input_value(dev.instance().io().r_data,
+                                static_cast<uint64_t>(b == 0 ? 0xABCDEF01ull : 0ull));
+            sim.set_input_value(dev.instance().io().r_last, b == 3 ? 1_h : 0_h);
+            sim.tick();
+        }
+        sim.set_input_value(dev.instance().io().r_valid, 0_h);
+        sim.set_input_value(dev.instance().io().r_last,  0_h);
+
+        // hit 读：ready 与 rdata **同拍**有效
+        sim.set_input_value(dev.instance().io().addr,     kBase);
+        sim.set_input_value(dev.instance().io().req,      1_h);
+        sim.set_input_value(dev.instance().io().we,       0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 0_h);
+        sim.tick();
         REQUIRE(static_cast<uint64_t>(
-            sim.get_port_value(dev.instance().io().axi_wdata)) == 0xDEADF00Du);
+            sim.get_port_value(dev.instance().io().miss)) == 0u);
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().ready)) == 1u);
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().rdata)) == 0xABCDEF01ull);
+    });
+
+// 12. miss ⇒ ready 保持 0（AC4 · 反压语义）
+DUAL_BACKEND_TEST_PAIR(
+    DCacheSync,
+    "DCacheSync - miss holds ready low until fill completes",
+    "[cache][sync][dcache][miss-backpressure][dual]",
+    [&]() {
+        // 冷地址 ⇒ miss ⇒ ready MUST 为 0（流水线靠 `data_ready` 反压等待）
+        sim.set_input_value(dev.instance().io().addr,     0x7000);
+        sim.set_input_value(dev.instance().io().req,      1_h);
+        sim.set_input_value(dev.instance().io().we,       0_h);
+        sim.set_input_value(dev.instance().io().ar_ready, 1_h);
+        sim.tick();
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().miss)) == 1u);
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().ready)) == 0u);
+        // fill 进行中（beat 0..2）⇒ ready 仍 0
+        sim.set_input_value(dev.instance().io().req, 0_h);
+        for (int b = 0; b < 3; ++b) {
+            sim.set_input_value(dev.instance().io().r_valid, 1_h);
+            sim.set_input_value(dev.instance().io().r_data,  static_cast<uint64_t>(0));
+            sim.set_input_value(dev.instance().io().r_last,  0_h);
+            sim.tick();
+            REQUIRE(static_cast<uint64_t>(
+                sim.get_port_value(dev.instance().io().ready)) == 0u);
+        }
+        // 最后一个 beat（r_last）⇒ fill 完成那拍 ready 拉高 1 拍
+        sim.set_input_value(dev.instance().io().r_last, 1_h);
+        sim.tick();
+        REQUIRE(static_cast<uint64_t>(
+            sim.get_port_value(dev.instance().io().ready)) == 1u);
     });
