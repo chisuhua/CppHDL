@@ -8,7 +8,8 @@
 >   `kSpi` `0x8010_3000` / `kI2c` `0x8010_4000` / `kPwm` `0x8010_5000` / `kDma` `0x8010_6000`
 >   ⇒ **每段 4 KB**（与既有三段连续 · 均匀间距）
 > - `include/cpu/riscv/address_decoder.h` **改派生自该表**（消除 3 段硬编码）+ **补齐四个片选**
->   （`spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs` ⇒ 共 **7 片选 + `error_cs`**）
+>   （`spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs` ⇒ 共 **9 个片选**（2 TCM + 7 MMIO）+ `error_cs`
+>   ⇒ ⇒ **10** 个片选输出端口）
 > - **SoC 侧只负责装配**：用 `AxiLiteMatrix2x2` / `AxiInterconnect4x4` 的 `Map::windows[]`
 >   模板参数（已是现成机制 · 事实⑦⑧）⇒ **不在库层给默认 `Map`**（那是被否的选项 C）
 > - ⚠️ **公开面变更** ⇒ MUST 登记 `.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`
@@ -95,7 +96,7 @@ S4 的互联需要 **≥ 7~8 个 slave 窗口**（TCM + CLINT + 6 外设）；�
 | 项 | 属谁 | 内容 |
 |---|---|---|
 | 库层 `rv32i_mem_map.h` 加 MMIO 段 | **G-6 裁决的直接落点** | `kClint` / `kUart` / `kGpio` / `kSpi` / `kI2c` / `kPwm` / `kDma`（`MemRegion` · base + size）⇒ **取值沿用 `address_decoder.h` 的既有三段 + 新增四段**（新增段的取值需在同一批裁决 / 或按「每段 4KB 顺延」定） |
-| `address_decoder.h` 改派生 + 补片选 | 同上 | 3 段改为派生；补 `spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs`（**7 个片选 + error**） |
+| `address_decoder.h` 改派生 + 补片选 | 同上 | 3 段改为派生；补 `spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs`（**总片选 9** = 2 TCM + 7 MMIO · 加 `error_cs` ⇒ **10** 个输出端口） |
 | SoC 侧 `Map`（`windows[]` 装配） | **S4 design** | 从库层段派生 `AxiAddrWindow windows[N]`；**N ≥ 8** ⇒ 需先定互联形态（见下） |
 | 互联形态 | **S4 design**（G-7 已定 full 主干，但在 MMIO 侧仍是 Lite） | `DCacheSync.AXI(full) → AxiToAxiLite → Lite 互联 → {各外设}`；TCM 仍走 `TcmAxiSlave`（需与 AXI 走同一条路 ⇒ 要么 TCM 也挂 Lite 互联、要么在 `DCacheSync` 前分流） |
 

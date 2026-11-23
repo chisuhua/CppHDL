@@ -1,5 +1,50 @@
 # 决策请求 · G-9 + G-5：核端口面 v2（外设住址 · MMIO 通道 · `irq` 口）
 
+> ## ⚠️ 订正（2026-11-24 · builder · **用户复核后落库**）
+>
+> **订正对象 = 分流判据的「取反形式」**（G-9.3 的**结论不变**）：
+> 「地址 ∈ **D-TCM 窗口**？」 ⇒ 改为 「地址 ∈ **MMIO 段**？」
+> ⇒ ⇒ **G-9.1 / G-9.2 / G-9.3 / G-9.4 的裁决结论逐条不变**（仍是 pre-cache 分流 · 仍是 MMIO 绕开 D-L1 · 仍是核边界 19 根 AXI4-Lite）⇒ ⇒ **不需要重新裁决**。
+>
+> ### 订正理由（实测 · 带坐标）
+>
+> | # | 事实 | 证据 |
+> |---|---|---|
+> | ① | **D-TCM 窗口 = `[0x8001_0000, 0x8001_4000)`**（16 KB）⇒ ⇒ **字节地址 0 不在其中** | `include/cpu/riscv/rv32i_mem_map.h:50`（`kTcmAddrWidth=12`）· `:53`（`kTcmBytes`）· `:65`（`kDtcm.base = 0x8001_0000`） |
+> | ② | **核级程序与 SoC 级程序是同一份 7 字** ⇒ ⇒ 其 `sw x3, 0(x0)` 落在**字节地址 0** | `examples/riscv-mini/tb_rv32i_soc.cpp:115`（`0x00302023`）· `examples/riscv-soc/tb_riscv_soc.cpp:91`（同一编码） |
+> | ③ | ⇒ ⇒ **按原判据**（`否 ⇒ MMIO 通道`）⇒ 核级的 `sw` 会走 MMIO 通道 ⇒ ⇒ 核级 TB 的 8 根 AXI-Lite 输入**tie 0** ⇒ ⇒ `awready` 恒 0 ⇒ ⇒ **核级 TB 永久挂死**（AC4「核级 24 判据零变化」不成立） | 事实① + 事实② + `examples/riscv-mini/tb_rv32i_soc.cpp`（核级 TB 无 MMIO 从设备） |
+> | ④ | ✅ **订正后的判据 = 「MMIO 段 ⇒ 旁路；其余 ⇒ 现有 D-L1 通路」** ⇒ ⇒ 地址 0 **仍走 D-L1** ⇒ ⇒ **零行为变化** ⇒ ⇒ 核级 24 判据 / 核级 `.sv` TB / 期望台账**全不改** | 事实① + 事实② |
+> | ⑤ | ⇒ ⇒ **「数据侧 TCM 越界 ⇒ 改走 MMIO ⇒ DECERR」这条连带结论也不成立**：按订正判据，越界访问（不在 MMIO 段）**仍走 D-L1** ⇒ ⇒ **仍静默别名进 D-TCM** ⇒ ⇒ 零行为变化 ⇒ ⇒ 与 S4a proposal 的 Out of Scope 第 1 条**一致** | 事实④ + `rv32i_mem_map.h:13-26`（文件头登记的「静默截断」） |
+>
+> ### 订正后的判据（**唯一形式** · 派生自库层地址表）
+>
+> ```
+> MMIO 段 = [kMmioBase, kMmioBase + kMmioBytes)   ← 派生自 rv32i_mem_map.h（G-6 的 7 段）
+>   kMmioBase  = 0x8010_0000   kMmioBytes = 7 × 4 KB = 0x7000
+>
+> data_addr ∈ MMIO 段 ?  ── 是 ──►  MMIO 旁路（核侧 AXI4-Lite master · 19 根）
+>                        └─ 否 ──►  现有 D-L1 通路（D-L1 → TcmAxiSlave → DataTCM）  ← **S3 接线零返工**
+> ```
+>
+> ⇒ ⇒ **TCM 段本身不在 MMIO 段内** ⇒ ⇒ TCM 访问走 D-L1（与今天逐拍相同）✓
+> ⇒ ⇒ **判据 MUST 派生自库层地址表**（禁手写字面量）—— 与 §六 的原意一致，只是**取反的判据对象**。
+>
+> ### 受本订正影响的位置（**逐条已改** · 决策结论未动）
+>
+> | 位置 | 原写法 | 订正后 |
+> |---|---|---|
+> | §二 事实⑯ | 「pre-cache 分流后这类访问改走 MMIO 通道 ⇒ DECERR（**有意的行为变化**）」 | 「**仍走 D-L1 ⇒ 仍静默别名 ⇒ 零行为变化**」 |
+> | §三 G-9.3 选项表 | 「核内按「地址 ∈ D-TCM 窗口？」分流」 | 「核内按「地址 ∈ **MMIO 段**？」分流」 |
+> | §四 形态图 | 判据框写「地址 ∈ D-TCM 窗口？」 | 判据框写「地址 ∈ **MMIO 段**？」· 是/否两支**互换** |
+> | §六 连带工作量 | 「判据派生自 `rv32i_mem_map.h` 的 `kDtcm`」 | 「判据派生自 `rv32i_mem_map.h` 的 **MMIO 段**（`kMmioBase` / `kMmioBytes`）」 |
+>
+> ### 另两处**表述**订正（不影响裁决）
+>
+> | 位置 | 原写法 | 订正后 | 理由 |
+> |---|---|---|---|
+> | §二 事实⑬ | 「`AxiLiteGpio` 有 **3 个必需端口**：`rst_n` · `gpio_in` · `irq`（输出）」 | 「有 **2 个必需驱动端口**：`rst_n` · `gpio_in`；另有 **3 个输出**：`gpio_out` · `gpio_dir` · `irq`」 | `irq` 是**输出** ⇒ 不需要被驱动 ⇒ 计入「必需」是错的（`include/axi4/peripherals/axi_gpio.h:60-66`） |
+> | §五 5.2 表 | `axil_bready` / `axil_rready` 语义写「**恒拉高**」 | 「**恒拉高**（核侧 master 无背压需求）」⇒ 补一句「**若 SoC 侧将来要背压 ⇒ MUST 改核侧 master 的 `ready` 语义**」 | 恒拉高 ⇒ **无背压** ⇒ 是**契约**（不是实现细节）⇒ 登记为契约面 |
+
 > ## ✅ 已裁决（2026-11-24 · 用户）
 >
 > **G-9 = Y（外设住 SoC 层 · 核引 MMIO 通道）· G-9.2 = AXI4-Lite 主口 19 根 · G-9.3 = 核内 pre-cache 分流（MMIO 不被 D-L1 缓存）· G-9.4 = 核侧自带 MMIO master（不进库层公开面）· G-5 = `irq` 1 根（电平 · 高有效）**
@@ -52,10 +97,10 @@
 | ⑩ | ✅ **`AxiToAxiLite`（full→lite）强制 `LEN=0` / `BURST=INCR`** ⇒ **full↔lite 桥不承载 burst** ⇒ 平台的 **MMIO 侧天然是单拍** ⇒ 核边界不必是 full | `include/axi4/axi_to_axilite.h:304-314` |
 | ⑪ | ⚠️ **库层没有 AXI master 组件**（只有 `AxiToAxiLite` full→lite 与 `AxiLiteToAxiAdapter` lite→full 两个**桥**）⇒ 核侧 MMIO master **必须新写** | `ls include/axi4/`（无 master）· `axi_to_axilite.h:221`（`AxiLiteToAxiAdapter`） |
 | ⑫ | ✅ **有可参照的 master 实现**：`examples/axi4/axi_soc_example_top.h` 的 `AxiLiteTestMaster`（AW/W 相位分离 · VALID 保持到握手 · B/R 响应捕获）⇒ 但它是 **example 专属 + 事务式接口**（`start`/`write`，非 `req` 保持式）⇒ 不可直接复用 | `examples/axi4/axi_soc_example_top.h:37-140` |
-| ⑬ | 🔴 **`AxiLiteGpio` 有 3 个必需端口**：`rst_n`（低有效复位 · **必须驱动**）· `gpio_in`（**必须驱动**）· `irq`（输出） | `include/axi4/peripherals/axi_gpio.h:60-66` |
+| ⑬ | ✅ **`AxiLiteGpio` 有 2 个必需驱动端口**：`rst_n`（低有效复位 · **必须驱动**）· `gpio_in`（**必须驱动**）⇒ 另有 3 个**输出**：`gpio_out` / `gpio_dir` / `irq` | `include/axi4/peripherals/axi_gpio.h:60-66` |
 | ⑭ | ✅ **Lite 矩阵**不重定基**（`s0_awaddr` 直通 `m0_awaddr`）⇒ 外设看到**绝对地址** ⇒ 与 `AxiLiteGpio` 的低位译码（reg0=DATA_OUT / reg1=DATA_IN / reg2=DIR / reg3=IRQ）**兼容** | `axi4_lite_matrix.h:327-329`（`fwd2` 直通）· `axi_gpio.h:113-115` |
 | ⑮ | ✅ **`Map::windows[]` 已是可注入策略**（`AxiLiteMatrix2x2` / `AxiInterconnect4x4` 同型）⇒ 「库层定段（G-6）· SoC 装配」**零新机制** | `axi4_lite_matrix.h:29-32`（模板参数）· `:239-250`（编译期校验） |
-| ⑯ | ⚠️ **D-TCM 窗口是 16 KB**（`kTcmAddrWidth=12` → `kTcmBytes=16 KB`）⇒ 今日**数据侧访问越界会静默截断别名**到 D-TCM ⇒ pre-cache 分流后这类访问改走 MMIO 通道 ⇒ **落进未映射窗口 ⇒ DECERR**（**可诊断化 · 有意的行为变化**） | `include/cpu/riscv/rv32i_mem_map.h:50/62/65`（文件头 `:13-26` 明写「静默截断」）· 事实⑧ |
+| ⑯ | ⚠️ **D-TCM 窗口是 16 KB**（`kTcmAddrWidth=12` → `kTcmBytes=16 KB`）⇒ 今日**数据侧访问越界会静默截断别名**到 D-TCM ⇒ ⇒ ⚠️ **按订正后的判据（MMIO 段 ⇒ 旁路）这类访问**（不在 MMIO 段 ⇒ 仍走 D-L1）**仍走 D-L1** ⇒ ⇒ **仍静默别名** ⇒ ⇒ **零行为变化**（**不**落 DECERR）⇒ ⇒ 该缺陷**维持现状**，不在 S4a 修 | `include/cpu/riscv/rv32i_mem_map.h:50/62/65`（文件头 `:13-26` 明写「静默截断」）· 订正块 事实④⑤ |
 | ⑰ | ⚠️ **SoC 根端口面会随外设增长**（ADR-072 D1：产品端口面 = 框架 2 + 根自有）⇒ 外设 IO 落根 ⇒ S4a 加 `gpio_out`/`gpio_in` ⇒ 根 8 → **10**；S4b 再加 UART/SPI/I2C/PWM ⇒ 增量追加 | `examples/riscv-soc/src/rv32i_soc_top.h:42-49`（根自有 6）· 先例 `examples/axi4/axi_soc_example_top.h`（根有 `gpio_out`/`gpio_in`/`uart_tx`/`uart_rx`） |
 | ⑱ | ⚠️ **死端口先例**：`ext_clk` 因「被赋值但**零消费者**」被**物理删除**（2026-11-14）⇒ **在 S4a 先加 `irq` 口 = 复活同型死端口** | `examples/riscv-mini/src/rv32i_core_top.h:50-63`（删除理由的完整记录） |
 
@@ -86,7 +131,7 @@
 
 | 形态 | 后果 |
 |---|---|
-| **pre-cache 分流（推荐）** | 核内按「地址 ∈ D-TCM 窗口？」分流 ⇒ TCM 走**现有** D-L1 通路（**S3 零返工**）· MMIO 走旁路 ⇒ **不被缓存** ⇒ 语义正确。代价：核内新增 1 个地址判据 + 1 组 ready/读数据 mux |
+| **pre-cache 分流（推荐）** | 核内按「地址 ∈ **MMIO 段**？」分流 ⇒ **MMIO 段**走**旁路**（**不被 D-L1 服务**）· **其余**（含 TCM 段）走**现有** D-L1 通路（**S3 零返工**）⇒ ⇒ 语义正确。代价：核内新增 1 个地址判据 + 1 组 ready/读数据 mux<br>⚠️ **判据方向 MUST 是「MMIO 段」而不是「D-TCM 窗口」** —— 取反形式会让**字节地址 0**（核级程序 `sw x3, 0(x0)`）落进 MMIO 旁路 ⇒ ⇒ 核级 TB 挂死 ⇒ ⇒ 见文首订正块 |
 | 给 `DCacheSync` 加 PMA | 库层改公开面（加输入端口）⇒ 且 cache 与 MMIO 共用一个 AXI 主口 ⇒ 边界口被迫是 full ⇒ 变成 G-9.2 的 full 列 + 库层改 ⇒ **双重代价** |
 | **承认 MMIO 被缓存** | ❌ **不可接受**：事实⑤ ⇒ 第一次 MMIO load **永久挂死**（fill 永不完成） |
 
@@ -119,9 +164,9 @@
   取指：            │  I-TCM（内部）                                                    │
   pipeline ────────►│     │                                                             │
   数据：            │  ┌──┴──────────────────────┐                                      │
-  data_addr ──┬────►│  │ 判据：地址 ∈ D-TCM 窗口？│（派生自 rv32i_mem_map.h）              │
+  data_addr ──┬────►│  │ 判据：地址 ∈ MMIO 段？  │（派生自 rv32i_mem_map.h）              │
               │     │  └──┬──────────────────┬───┘                                      │
-              │  TCM │     │ 是               │ 否                                     │
+              │  TCM │     │ 否               │ 是                                     │
               │     ▼     ▼                  ▼                                          │
               │  D-L1（DCacheSync）    **MMIO 通道（新）**                              │
               │  → AXI4 full（内部）   → 核侧 AXI4-Lite master（新）                      │
@@ -131,6 +176,7 @@
 ```
 
 ⇒ **S3 的接线零返工**（TCM 分支原样保留）⇒ **MMIO 不经 D-L1**（事实⑤ 的硬要求）⇒ **核边界 = 19 根标准 AXI4-Lite 主口**。
+⇒ ⚠️ **判据方向 = 「MMIO 段」**（不是「D-TCM 窗口」）⇒ ⇒ **字节地址 0 仍走 D-L1** ⇒ ⇒ 核级行为**逐拍不变** ⇒ ⇒ 见文首订正块。
 
 ## 五、核端口面 v2（契约表 · 演进 34 → 53 → 54）
 
@@ -153,7 +199,7 @@
 | 8 | `axil_wready` | INPUT | 1 | W 就绪 |
 | 9 | `axil_bresp` | INPUT | 2 | 写响应（`OKAY` / `SLVERR` / `DECERR`） |
 | 10 | `axil_bvalid` | INPUT | 1 | 写响应有效 |
-| 11 | `axil_bready` | OUTPUT | 1 | 写响应就绪（**恒拉高** · 无 back-pressure 需求） |
+| 11 | `axil_bready` | OUTPUT | 1 | 写响应就绪（**恒拉高** · 核侧 master 无背压需求）⇒ ⚠️ **契约面**：若 SoC 侧将来要背压 ⇒ MUST 改核侧 master 的 `ready` 语义（**不是** SoC 侧的事） |
 | 12 | `axil_araddr` | OUTPUT | 32 | AR 地址（绝对地址） |
 | 13 | `axil_arprot` | OUTPUT | 2 | 保护属性（**恒 0**） |
 | 14 | `axil_arvalid` | OUTPUT | 1 | AR 有效（保持到 `arready`） |
@@ -161,7 +207,7 @@
 | 16 | `axil_rdata` | INPUT | 32 | 读数据（**完成那拍捕获 · 保持**） |
 | 17 | `axil_rresp` | INPUT | 2 | 读响应 |
 | 18 | `axil_rvalid` | INPUT | 1 | 读数据有效 |
-| 19 | `axil_rready` | OUTPUT | 1 | 读就绪（**恒拉高**） |
+| 19 | `axil_rready` | OUTPUT | 1 | 读就绪（**恒拉高** · 同 `axil_bready` ⇒ **无背压**） |
 
 ⇒ **无 ID**（Lite 无 ID）⇒ 无 `awlen`/`arlen`（Lite 无）⇒ 无 `rlast`/`wlast`（Lite 无）。
 
@@ -197,7 +243,7 @@
 |---|---|---|
 | 库层 `rv32i_mem_map.h` 扩 7 段 | G-6 落点 | `kClint` / `kUart` / `kGpio` / `kSpi` / `kI2c` / `kPwm` / `kDma`（每段 4 KB）· **公开面变更** |
 | `address_decoder.h` 改派生 + 补 4 片选 | G-6 落点 | 7 片选 + `error_cs` · 6 处测试消费者（`test_address_decoder`）同步 |
-| 核内 pre-cache 分流 | S4a design | 判据派生自 `rv32i_mem_map.h` 的 `kDtcm` ⇒ 单一真相；`data_ready` / `data_read_data` 各需一个 mux |
+| 核内 pre-cache 分流 | S4a design | 判据派生自 `rv32i_mem_map.h` 的 **MMIO 段**（`kMmioBase` / `kMmioBytes` · **G-6 的 7 段**）⇒ 单一真相；`data_ready` / `data_read_data` 各需一个 mux<br>⚠️ **判据方向 MUST 是「MMIO 段」**（不是「D-TCM 窗口」）⇒ 见文首订正块 |
 | 核侧 AXI4-Lite master | S4a design | 新写（参照 `AxiLiteTestMaster` 的握手纪律，但接口是**保持式** `req`）· 落 `examples/riscv-mini/src/` |
 | SoC 侧 Lite 互联 | S4a design | ⚠️ **三个待定项**：<br>① **形态**：2×2 只有 2 slave（事实⑨）⇒ S4a 只接 1 个外设够用，但全量需 8 ⇒ 级联 or 新写 N×M<br>② **未用 slave 口的处理**：`s1_*` 是矩阵的 `ch_in` ⇒ **必须驱动** ⇒ 若 window[1] 落在真实 MMIO 区则访问会**挂死** ⇒ 建议 window[1] 放在**真实 MMIO 之外** ⇒ 未接地址落进事实⑧ 的 **DECERR**（可诊断、不挂死）<br>③ **DMA（full 主）** ⇒ 需 `AxiLiteToAxiAdapter`（lite→full）⇒ 归 S4c |
 | GPIO 端到端 | S4a | 写 `0x8010_2000`（`kGpio.base`）⇒ `gpio_out == 0xA5`（手推）· 读 `0x8010_2004` ⇒ `DATA_IN` |
