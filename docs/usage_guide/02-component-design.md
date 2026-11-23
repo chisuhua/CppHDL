@@ -236,7 +236,7 @@ public:
     )
     void describe() override {
         // 档 ③ 成层：实例处给模块类型名（该类未声明 CH_HIERARCHY_LAYER）
-        ch::ch_layer<Rv32iPipelineTop> core{"core", "Rv32iCoreComplex"};
+        ch::ch_layer<Rv32iPipelineTop> core{"core", "Rv32iCoreTop"};
         ch::ch_layer<SocTraceCounter>  trace{"trace", "SocTraceCounter"};
 
         core.io().ext_rst   <<= io().ext_rst;

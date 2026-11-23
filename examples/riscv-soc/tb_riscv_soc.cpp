@@ -135,7 +135,7 @@ private:
 // ⚠️ 与 `.rddf/checks/soc-rtl-expectations.md#riscv-soc` 登记的集合 MUST 一致。
 const std::vector<std::string> kExpectedModules = {
     "top",
-    "Rv32iCoreComplex",
+    "Rv32iCoreTop",
     "SocTraceCounter",
     "IfStage",
     "IdStage",

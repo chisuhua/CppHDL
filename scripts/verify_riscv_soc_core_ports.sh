@@ -3,12 +3,12 @@
 #
 # **核复合体 34 端口契约**护栏（ADR-077 V5 · change `riscv-soc-skeleton-2026-11` AC6）。
 #
-# ⚠️ **要治的病**：`Rv32iCoreComplex` 作为**子 module** 出现在 SoC 产物里 ⇒ 它的端口表
+# ⚠️ **要治的病**：`Rv32iCoreTop` 作为**子 module** 出现在 SoC 产物里 ⇒ 它的端口表
 #   **不在** `manifest.port_table[]`（那只覆盖顶层 · ADR-072 D1-c）⇒ ⇒ 仓内**没有**任何
 #   判据看过它 ⇒ ⇒ 「核可替换单元」的物证无人核。本护栏补这一格。
 #
 # 判据：
-#   V1  产物里 `Rv32iCoreComplex` 的 module 端口表（**名 + 方向 + 位宽**·逐字逐序）
+#   V1  产物里 `Rv32iCoreTop` 的 module 端口表（**名 + 方向 + 位宽**·逐字逐序）
 #       == `examples/riscv-soc/AGENTS.md` 的 34 行表（**单一真相源 = 该表**）
 #   V2  端口数 == **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**
 #   V3  核自有 32 条（去 `top_core_` 前缀）与 `verify_no_duplicate_rv32i_headers.sh` 的
@@ -17,7 +17,7 @@
 #       `examples/riscv-soc/src/**` 下的头 basename MUST NOT 出现在
 #       `include/cpu/**` 或 `examples/riscv-mini/src/**`
 #   V5  **两条真兄弟边**（ADR-070 D4 条件③ · change AC8）——
-#       产物里 `SocTraceCounter` 实例的两个事件输入 MUST 由 `Rv32iCoreComplex` 的
+#       产物里 `SocTraceCounter` 实例的两个事件输入 MUST 由 `Rv32iCoreTop` 的
 #       输出驱动（**child → child**）⇒ MUST NOT 是顶层 input / 常量 / 未连接
 #       ⚠️ 证据形态是**结构化端口连接**（`.top_trace_<port>(top_core_<src>)`），不是散文
 #       （⚠️ 这是 ADR-077 R4 缓解的**落点**：把既有护栏的扫描面语义扩到 riscv-soc 侧，
@@ -46,7 +46,7 @@ BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 AGENTS_MD="examples/riscv-soc/AGENTS.md"
 EMITTER="$BUILD_DIR/examples/riscv-soc/tb_riscv_soc"
 HEADER_GUARD="scripts/verify_no_duplicate_rv32i_headers.sh"
-CORE_MODULE="Rv32iCoreComplex"
+CORE_MODULE="Rv32iCoreTop"
 PORT_PREFIX="top_core_"
 
 SELF_TEST=0

@@ -57,7 +57,7 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out out/chk
 
 | 项 | 值 | 出处 |
 |---|---|---|
-| 产物 module 集 | `top` · `Rv32iCoreComplex` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | ADR-077 V2 |
+| 产物 module 集 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | ADR-077 V2 |
 | 顶层端口 | **8** = 框架 2 + 根自有 6 | ADR-077 V1 |
 | 变化观测量 | **2**（`store_count` / `writeback_count`） | `rtl-soc-output` 签批要求 ≥2 |
 | 手推计数 | `store_count == 1` · `writeback_count == 3`（7 字程序） | 期望源见下 |
@@ -65,7 +65,7 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out out/chk
 > ⚠️ **两值 MUST 不同** ⇒ 否则两个事件源接反 / 同源时观测值不变 ⇒ 判据恒绿
 > （三条变异自证见期望源 §4）。
 
-## 核复合体（`Rv32iCoreComplex`）的**34 端口契约表**
+## 核复合体（`Rv32iCoreTop`）的**34 端口契约表**
 
 > 这是「核可替换」的**唯一物证**，也是 S3（总线化）的**变更基线**。
 > ⚠️ 端口名是**产物名**（带实例路径前缀 `top_core_`）⇒ 期望表由

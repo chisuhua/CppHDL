@@ -261,9 +261,9 @@ VERIF-CHECKS: 15
 
 | 项 | 期望 | 推导 |
 |---|---|---|
-| module 集合 | `top` · `Rv32iCoreComplex` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | 根 1 + 2 个 `ch_layer` + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠** |
+| module 集合 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | 根 1 + 2 个 `ch_layer` + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠** |
 | 顶层端口 | **8** = 框架 2 + 根自有 6（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count`） | ADR-077 V1 · ADR-072 D1（后代 `ch_out` 不冒泡） |
-| `Rv32iCoreComplex` module 端口 | **34** = 框架 2 + 核自有 32（4 in + 28 out） | 核自有 32 = `Rv32iPipelineTop` 的 `__io`（**已由 `verify_no_duplicate_rv32i_headers.sh` 的 C6 冻结**）· +2 = 核内 **inline** 的 TCM `sread` 寄存器落在该 module ⇒ 需时钟/复位 |
+| `Rv32iCoreTop` module 端口 | **34** = 框架 2 + 核自有 32（4 in + 28 out） | 核自有 32 = `Rv32iPipelineTop` 的 `__io`（**已由 `verify_no_duplicate_rv32i_headers.sh` 的 C6 冻结**）· +2 = 核内 **inline** 的 TCM `sread` 寄存器落在该 module ⇒ 需时钟/复位 |
 
 ### 2. 程序（与核级同源 · 编码**手推**）
 
@@ -309,6 +309,6 @@ VERIF-CHECKS: 15
 - ⚠️ **SoC 级看不到核的任何内部信号**（`dbg_*` / `obs_*` 不是顶层端口 · ADR-072 D1）⇒ ⇒
   核级 24 条判据**只能**留在 `examples/riscv-mini` ⇒ ⇒ 本产品只有 **2 个**观测量。
 - ⚠️ **观测盲区**（ADR-073 要求显式登记）：层次化只覆盖**顶层可见行为** ⇒ ⇒
-  `Rv32iCoreComplex` / `SocTraceCounter` 的**内部** `ch_out` 在顶层不可观测 ⇒ ⇒
+  `Rv32iCoreTop` / `SocTraceCounter` 的**内部** `ch_out` 在顶层不可观测 ⇒ ⇒
   「子树内部算错但顶层输出恰好相同」这类缺陷**结构性测不出**。
 - ⚠️ **`prog_*` 是运行期后门**（ADR-077 D3 长期保留）⇒ ⇒ 真实芯片形态的装载路径未定义。

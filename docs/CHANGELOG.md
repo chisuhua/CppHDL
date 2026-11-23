@@ -1,3 +1,24 @@
+## 2026-11-23 — RV32I 核改名 R3a：SoC 产物里的模块类型名 `Rv32iCoreComplex` → `Rv32iCoreTop`
+
+**背景**：同一个核在仓内有三个名字且互不一致（C++ 类 `Rv32iPipelineTop` · 产物模块类型名
+`Rv32iCoreComplex` · 头文件 `rv32i_pipeline_top.h`）⇒ ⇒ 与 `Rv32iSocTop` 不对称。
+改名批拆三批（`openspec/changes/riscv-core-rename-2026-11/`）：**R3a** 模块类型名 ·
+**R3b** C++ 类名 · **R3c** 文件名。
+
+**本次（R3a）**：SoC 层次化产物里的核 module 名 `Rv32iCoreComplex` → `Rv32iCoreTop`
+⇒ ⇒ 改动点 = `examples/riscv-soc/src/rv32i_soc_top.h` 的 `ch_layer` 类型名 ·
+`tb_riscv_soc.cpp` 的冻结期望集 · `scripts/verify_riscv_soc_core_ports.sh` 的
+`CORE_MODULE` · `.rddf/checks/soc-rtl-expectations.md` · 两个 `AGENTS.md` ·
+`docs/usage_guide/02-component-design.md` 的样例。
+
+⚠️ **模块类型名 = 当前产品名 · 非契约**（ADR-077 D2）⇒ ⇒ 改名**不需要** architect
+⇒ ⇒ **已签批 spec `rtl-hierarchical-output` 零 delta**（它钉的是**成层集合 7** +
+**交付粒度 8 module** ⇒ 本批两者都不碰）。
+⚠️ **端口面零变化**（34 根顶层端口的名字/方向/位宽/顺序逐字不变 —— `top_core_*` 前缀由
+**实例名** `core` 决定 ⇒ 不受模块名影响）。
+⚠️ **核侧产物逐字节不变**（模块类型名**只**出现在 SoC 侧 ⇒ `examples/riscv-mini` 的
+flat / 层次化 / 带初值三份产物 sha256 不变）。
+
 ## 2026-11-23 — ELF → init_data 端到端装载链路（方案 a · `rv32i-firmware-loading` 收口）
 
 **背景**：`firmware-load-chain`（2026-11-14）已裁决**路线 A**（初值经 `ch_mem::init_data`

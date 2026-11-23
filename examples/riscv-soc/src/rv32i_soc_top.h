@@ -78,7 +78,7 @@ public:
         //    = 零参 ⇒ ⇒ 初值传不进去。
         ch::ch_layer<Rv32iPipelineTop, const std::vector<uint32_t> &,
                      const std::vector<uint32_t> &>
-            core{"core", "Rv32iCoreComplex", itcm_init_, dtcm_init_};
+            core{"core", "Rv32iCoreTop", itcm_init_, dtcm_init_};
         ch::ch_layer<SocTraceCounter> trace{"trace", "SocTraceCounter"};
 
         // ── 核的 4 个输入全由根驱动（ADR-073 D2：零未驱动后代输入）──

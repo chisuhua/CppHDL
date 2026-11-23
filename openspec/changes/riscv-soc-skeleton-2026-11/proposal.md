@@ -132,6 +132,13 @@ __io(
 
 ---
 
+> 📌 **2026-11-23 · dated 注记（R3a 改名批）**：本 change 的 AC2 / AC6 / design 的
+> `Rv32iCoreComplex` 期望集**已被** `openspec/changes/riscv-core-rename-2026-11/`（**R3a**）
+> 更新为 **`Rv32iCoreTop`**（模块类型名 = **非契约** · ADR-077 D2）⇒ ⇒
+> **重新验收本 change 时**：module 集合判据按「**除名字外**相等」理解
+> ⇒ ⇒ 端口表 == **34** / 集合基数 == **10** 两项**意图不变**。
+> ⚠️ 本 change 的**历史正文不改写**（存量不追溯）⇒ ⇒ 上述注记是唯一的对接点。
+
 ## Out of Scope
 
 - ❌ **MEM 级反压**（`data_ready` 真消费）⇒ **S2** `rv32i-mem-backpressure-2026-11`
