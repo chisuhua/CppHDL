@@ -60,7 +60,7 @@ soC 侧契约表 / C6 快照 / `verify_riscv_soc_core_ports.sh` **零改动**。
   ⇒ 断言：反压期间 `dbg_exmem_valid` / `dbg_exmem_alu_result` **逐拍不变**
 - [ ] **AC3** 🔴 `data_ready=0` ⇒ **向前级发 stall**（IF/ID 与 ID/EX 冻结）
   ⇒ 断言：反压期间 `dbg_id_pc` **不变**且 `perf_instructions` **不增**
-- [ ] **AC4** 🔴 **有效链自洽**（反压解除后不产生气泡误写 / 不多写）
+- [ ] **AC4** 🔴 **有效链自洽**（**固定拍数**双 run：反压 vs 无反压）
   ⇒ 断言：同一程序在「反压 N 拍」与「无反压」两个 run 下，**退休数相同**、
   **写回值序列相同**（`dbg_wb_write_data` 序列逐项相等）
 - [ ] **AC5** 🔴 **反压必须有非零覆盖**（spec Scenario 2）
@@ -69,6 +69,7 @@ soC 侧契约表 / C6 快照 / `verify_riscv_soc_core_ports.sh` **零改动**。
   （=== 覆盖自证：判据对「零覆盖」有判别力）
 - [ ] **AC6** 🔴 **口径分档**（ADR-069 `:176`）
   ⇒ 断言：反压期间 `perf_load_use_stalls` **不增**（反压不得混进 load-use 计数器）
+  ⇒ ⇒ 实现 = `load_use_stalls += hazard.stall & !mem_stall`（纯 load-use 场景不变）
 - [ ] **AC7** 🔴 **`ready≡1` 时行为零回归**
   ⇒ 断言：核侧层次化产物的**顶层端口表**（名 + 方向 + 位宽 + 顺序）**逐字不变**（**34** 根）
   ⇒ ⇒ 且 `tb_rv32i_soc` 的 **24 条判据**全过 · `test_rv32i_soc_dual_parity` 全绿
@@ -78,6 +79,13 @@ soC 侧契约表 / C6 快照 / `verify_riscv_soc_core_ports.sh` **零改动**。
   ⇒ ⇒ 所以新增的 mux / 反相器会留在产物里（**当前恒 0，S3 接总线时活起来**）。
   ⇒ ⇒ **原判据「sha256 逐字节不变」不成立**，已改为上面两条（端口表 + 行为）。
 - [ ] **AC8** 新用例进 CTest（`add_test` 注册）+ 双后端（interpreter + verilator）可跑
+
+- [ ] **AC9** 🔴 **同族计数器不得被污染**（分支 / 控制停顿 / 误预测）
+  ⇒ `perf_branch_count` · `perf_control_stalls` · `perf_branch_mispredict` 在反压期间
+  **逐拍不变**（与 `perf_instructions` 的重复计数**同族**：EX 级指令多拍驻留 ⇒
+  `id_stage.is_branch` / `branch_taken` / `hazard.flush` 稳定为 1）
+  ⇒ ⇒ 判据 = 反压起点选在「**EX 级确有分支**」的那一拍（否则气泡驻留 ⇒ 判据平凡成立）
+  ⇒ ⇒ **变异自证**：去掉任一 `& !mem_stall` ⇒ 该用例 MUST 红（实测已做）
 
 ## Out of Scope
 

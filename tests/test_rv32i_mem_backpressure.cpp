@@ -43,17 +43,26 @@ constexpr uint32_t kNop       = 0x00000013u;  // addi x0, x0, 0
 constexpr uint32_t kAddiX1Inc = 0x00108093u;  // addi x1, x1, 1（WB 每次都写递增的 x1）
 constexpr uint32_t kLw        = 0x00002083u;  // lw   x1, 0(x0)
 constexpr uint32_t kAddUse    = 0x00100133u;  // add  x2, x0, x1（load-use 消费者）
+constexpr uint32_t kBeqSelf   = 0x00000063u;  // beq  x0, x0, 0（恒 taken · 自循环）
 
 struct RunResult {
     std::vector<uint64_t> wb_en;      // 每拍 tick 前 dbg_wb_write_en
     std::vector<uint64_t> wb_data;    // 每拍 tick 前 dbg_wb_write_data
     std::vector<uint64_t> wb_rd;
     std::vector<uint64_t> exmem_alu;  // 每拍 tick 前 dbg_exmem_alu_result
+    std::vector<uint64_t> exmem_valid; // 每拍 tick 前 dbg_exmem_valid
     std::vector<uint64_t> id_pc;      // 每拍 tick 前 dbg_id_pc
     std::vector<uint64_t> instrs;     // 每拍 tick 前 perf_instructions
+    std::vector<uint64_t> branches;   // 每拍 tick 前 perf_branch_count
+    std::vector<uint64_t> ctrl;       // 每拍 tick 前 perf_control_stalls
+    std::vector<uint64_t> mispred;    // 每拍 tick 前 perf_branch_mispredict
+    std::vector<uint64_t> ex_branch;  // 每拍 tick 前 dbg_id_is_branch（**EX 级**视图）
     uint64_t final_cycles   = 0;
     uint64_t final_instrs   = 0;
     uint64_t final_load_use = 0;
+    uint64_t final_branches = 0;
+    uint64_t final_ctrl_stalls = 0;
+    uint64_t final_mispredict  = 0;
 };
 
 RunResult run_pipeline(int cycles, int stall_from, int stall_len,
@@ -82,8 +91,13 @@ RunResult run_pipeline(int cycles, int stall_from, int stall_len,
     r.wb_data.reserve(cycles);
     r.wb_rd.reserve(cycles);
     r.exmem_alu.reserve(cycles);
+    r.exmem_valid.reserve(cycles);
     r.id_pc.reserve(cycles);
     r.instrs.reserve(cycles);
+    r.branches.reserve(cycles);
+    r.ctrl.reserve(cycles);
+    r.mispred.reserve(cycles);
+    r.ex_branch.reserve(cycles);
 
     for (int c = 0; c < cycles; ++c) {
         const uint64_t pc = static_cast<uint64_t>(sim.get_port_value(io.instr_addr));
@@ -98,8 +112,13 @@ RunResult run_pipeline(int cycles, int stall_from, int stall_len,
         r.wb_data.push_back(static_cast<uint64_t>(sim.get_port_value(io.dbg_wb_write_data)));
         r.wb_rd.push_back(static_cast<uint64_t>(sim.get_port_value(io.dbg_wb_rd_addr)));
         r.exmem_alu.push_back(static_cast<uint64_t>(sim.get_port_value(io.dbg_exmem_alu_result)));
+        r.exmem_valid.push_back(static_cast<uint64_t>(sim.get_port_value(io.dbg_exmem_valid)));
         r.id_pc.push_back(static_cast<uint64_t>(sim.get_port_value(io.dbg_id_pc)));
         r.instrs.push_back(static_cast<uint64_t>(sim.get_port_value(io.perf_instructions)));
+        r.branches.push_back(static_cast<uint64_t>(sim.get_port_value(io.perf_branch_count)));
+        r.ctrl.push_back(static_cast<uint64_t>(sim.get_port_value(io.perf_control_stalls)));
+        r.mispred.push_back(static_cast<uint64_t>(sim.get_port_value(io.perf_branch_mispredict)));
+        r.ex_branch.push_back(static_cast<uint64_t>(sim.get_port_value(io.dbg_id_is_branch)));
 
         sim.tick();
     }
@@ -107,6 +126,9 @@ RunResult run_pipeline(int cycles, int stall_from, int stall_len,
     r.final_cycles   = static_cast<uint64_t>(sim.get_port_value(io.perf_cycles));
     r.final_instrs   = static_cast<uint64_t>(sim.get_port_value(io.perf_instructions));
     r.final_load_use = static_cast<uint64_t>(sim.get_port_value(io.perf_load_use_stalls));
+    r.final_branches = static_cast<uint64_t>(sim.get_port_value(io.perf_branch_count));
+    r.final_ctrl_stalls = static_cast<uint64_t>(sim.get_port_value(io.perf_control_stalls));
+    r.final_mispredict = static_cast<uint64_t>(sim.get_port_value(io.perf_branch_mispredict));
     return r;
 }
 
@@ -132,9 +154,13 @@ TEST_CASE("Rv32iPipeline 反压：EX/MEM 与 M2 冻结", "[cpu][pipeline][backpr
     auto r = run_pipeline(kCycles, kStallFrom, kStallLen, alu_program());
 
     const uint64_t base = r.exmem_alu[kStallFrom];
+    const uint64_t vbase = r.exmem_valid[kStallFrom];
     for (int c = kStallFrom + 1; c <= kStallFrom + kStallLen; ++c) {
-        INFO("cycle " << c << " exmem_alu=" << r.exmem_alu[c] << " base=" << base);
+        INFO("cycle " << c << " exmem_alu=" << r.exmem_alu[c] << " base=" << base
+                      << " exmem_valid=" << r.exmem_valid[c] << " vbase=" << vbase);
         REQUIRE(r.exmem_alu[c] == base);
+        // AC2 字面要求：`dbg_exmem_valid` 同样逐拍不变（冻结 ⇒ 不因气泡/新指令而变）
+        REQUIRE(r.exmem_valid[c] == vbase);
     }
 }
 
@@ -230,3 +256,42 @@ TEST_CASE("Rv32iPipeline 反压：口径分档（不混进 perf_load_use_stalls�
                            << " stalled load_use=" << stall.final_load_use);
     REQUIRE(stall.final_load_use == plain.final_load_use);
 }
+
+TEST_CASE("Rv32iPipeline 反压：同族计数器（分支/控制停顿/误预测）不得被污染",
+          "[cpu][pipeline][backpressure]") {
+    // ⚠️ 本用例治的是**同族缺陷**（与 `perf_instructions` 的重复计数同型）：
+    //    反压时 EX 级指令**多拍驻留** ⇒ `id_stage.io().is_branch`（ID/EX 寄存，
+    //    冻结保持 1）· `ex_stage.branch_taken` · `hazard.flush` 全部稳定为 1
+    //    ⇒ ⇒ 不门控就**每停一拍各 +1**。
+    //
+    // ⚠️ **反压起点 MUST 选在「EX 级确有分支」的那一拍**（实测：若反压开始时
+    //    EX 级是气泡，气泡驻留 ⇒ 三个计数器本来就不增 ⇒ 判据**平凡成立**、
+    //    无判别力 —— 变异验证曾因此在「去掉门控」时仍全绿）。
+    constexpr int kCycles = 30, kStallLen = 8;
+    std::vector<uint32_t> prog(16, kBeqSelf);
+    auto plain = run_pipeline(kCycles, -1, 0, prog);
+
+    int br_at = -1;
+    for (int c = 1; c < kCycles; ++c) {
+        if (plain.ex_branch[c] != 0) { br_at = c; break; }
+    }
+    REQUIRE(br_at >= 1);            // 本程序确有分支进 EX（否则判据退化）
+    // ⚠️ 计数器是**寄存**的（+1 在下一拍可见）⇒ 不能断言 `branches[br_at] > 0`；
+    //    改看 `br_at + 1`（分支已被计数的那拍）。
+    REQUIRE(plain.branches[br_at + 1] > plain.branches[br_at]);
+
+    auto r = run_pipeline(kCycles, br_at, kStallLen, prog);
+    const uint64_t b0 = r.branches[br_at];
+    const uint64_t c0 = r.ctrl[br_at];
+    const uint64_t m0 = r.mispred[br_at];
+    for (int c = br_at + 1; c <= br_at + kStallLen; ++c) {
+        INFO("cycle " << c << " branches=" << r.branches[c] << " (base " << b0 << ")"
+                      << " ctrl=" << r.ctrl[c] << " (base " << c0 << ")"
+                      << " mispred=" << r.mispred[c] << " (base " << m0 << ")");
+        REQUIRE(r.branches[c] == b0);
+        REQUIRE(r.ctrl[c] == c0);
+        REQUIRE(r.mispred[c] == m0);
+    }
+}
+
+

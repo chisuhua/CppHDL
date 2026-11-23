@@ -84,7 +84,11 @@ idex_valid->next = select(io().freeze, idex_valid,
 
 反压语义是「**冻结**」（不是脉冲）⇒ 反压 N 拍 ⇒ 流水线停 N 拍：
 
-| 量 | 无反压 | 反压 N 拍 | 差值 |
+**口径（两种 run，结论相反，别混）**：
+- **跑完**（拍数足够）⇒ 退休数**相同**（反压只让序列晚到）
+- **固定拍数**（本次测试用）⇒ 退休数**差 N**（少跑 N 拍）
+
+| 量（固定拍数 T） | 无反压 | 反压 N 拍 | 差值 |
 |---|---|---|---|
 | `perf_cycles`（`cycle_count` 每拍 +1） | T | T + N | **+N** |
 | 退休数 `perf_instructions` | R | R（解除后继续，最终同为 R） | **0**（同一程序） |
@@ -157,3 +161,23 @@ V4 是 ADR 的手动 checkbox 判据，**仓内无自动护栏** ⇒ 不会误�
 
 ⇒ ⇒ **这不是死代码**：`data_ready` 是真输入，S3 接 AXI4 主口后它会真的动。
 ⇒ ⇒ 因此 AC7 从「sha256 逐字节不变」**订正**为「端口表不变 + 行为零回归」。
+
+## 7. 同族计数器（critic SHOULD_FIX #1 的实质缺陷 · 已修）
+
+`perf_instructions` 的重复计数（`mem_valid_out` 冻结为 1 ⇒ 每拍 +1）**不是孤立**的：
+
+| 计数器 | 驱动源 | 反压时为何会污染 |
+|---|---|---|
+| `perf_branch_count` | `id_stage.is_branch`（ID/EX 寄存） | freeze 保持 1 ⇒ 每拍 +1 |
+| `perf_control_stalls` | `ex_stage.branch_taken & if_stage.valid & hazard.flush` | 三者冻结后稳定为 1 ⇒ 每拍 +1 |
+| `perf_branch_mispredict` | 同上 & `id_stage.is_branch` | 同上 |
+| `perf_load_use_stalls` | `hazard.stall` | load 卡在 EX ⇒ stall 持续 1 ⇒ 反压拍被记成 load-use |
+
+⇒ ⇒ 四处**全部**加 `& !mem_stall`（纯 load-use 场景 `mem_stall=0` ⇒ 行为不变）。
+
+**判据的判别力**（变异自证，已实测）：把三处门控去掉 ⇒
+`test_rv32i_mem_backpressure` 的「同族计数器」用例转红
+（`branch=1 ctrl=1 mispred=1` 相对 base 0）⇒ 还原后复绿。
+
+⚠️ **反压起点 MUST 选在「EX 级确有分支」的拍**：若反压开始时 EX 级是气泡，
+气泡驻留 ⇒ 三个计数器本来就不增 ⇒ 判据**平凡成立**（首次实现时踩到，变异验证曾仍全绿）。

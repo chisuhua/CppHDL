@@ -14,12 +14,17 @@
 - **`Rv32iPipeline`** 新增反压冻结链（`mem_stall = !io().data_ready`）：
   `EX/MEM` / `M2` / `MEM/WB` 三组寄存器冻结 · `IF/ID` 与 `ID/EX` 同时停 ·
   **退休计数被门控**（否则冻结的 `mem_valid_out` 会每拍 +1 ⇒ 同一条指令重复计数）。
+- **同族计数器一并门控**（critic 审稿发现的**实质缺陷**）：`perf_branch_count` /
+  `perf_control_stalls` / `perf_branch_mispredict` / `perf_load_use_stalls` 在反压期间
+  都会因「EX 级指令多拍驻留」而每拍 +1（与 `perf_instructions` 的重复计数同族）
+  ⇒ ⇒ 四处全部加 `& !mem_stall`（纯 load-use 场景 `mem_stall=0` ⇒ 行为不变）。
 - **不新增 `perf_mem_stalls` 端口**：`ADR-069:176` 的「另立计数器**或**显式分档」⇒
   本 change 选**显式分档**（反压**不计入** `perf_load_use_stalls`，并用测试断言钉住）
   ⇒ ⇒ 核的 **34 端口面不变**（S3 接总线口时一次成型）。
-- 新测试 `tests/test_rv32i_mem_backpressure.cpp`（6 用例 / 60 断言）：反压冻结 ·
+- 新测试 `tests/test_rv32i_mem_backpressure.cpp`（**7 用例 / 89 断言**）：反压冻结 ·
   有效链自洽 · 手推 stall 拍数（`perf_instructions` 差 == N）· **覆盖自证**
-  （去掉拉低驱动则判据必失败）· 口径分档。
+  （去掉拉低驱动则判据必失败）· 口径分档 · **同族计数器不被污染**（变异自证：
+  去掉门控 ⇒ 转红）。
 - 4 个直连 `IdStage` 的既有测试显式驱动新输入（未驱动 ⇒ 读到未定义值）。
 
 ⚠️ **核侧产物字节会变**（`mem_stall` 是**真实端口**上的逻辑 ⇒ Verilator 不做常量折叠）：

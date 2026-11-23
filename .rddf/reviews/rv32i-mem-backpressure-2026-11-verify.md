@@ -26,6 +26,7 @@
 | **AC6** 口径分档 | ✅ | `plain.final_load_use == 4`（手推：ADR-047 修订后 load-use = 4 拍）· `stall.final_load_use == 4`（反压 6 拍**未混入**） |
 | **AC7** `ready≡1` 行为零回归 | ✅ | 核侧 `flat` / `hier` 顶层端口 **34** 根 · 端口名集 **IDENTICAL** · `RESULT: checks=24 fails=0` · `test_rv32i_soc_dual_parity` **Passed**（逐拍等价） |
 | **AC8** CTest 注册 | ✅ | `add_catch_test(test_rv32i_mem_backpressure ...)` · CTest 总数 **273 → 274**（锚点已同步） |
+| **AC9** 同族计数器不污染 | ✅ | 反压起点选在「EX 级确有分支」的拍 ⇒ `perf_branch_count` / `perf_control_stalls` / `perf_branch_mispredict` 逐拍不变 · **变异自证**：去掉三处 `& !mem_stall` ⇒ 转红（`branch=1 ctrl=1 mispred=1`）⇒ 还原复绿 |
 
 ### AC7 的实施期订正（已回写 proposal）
 
@@ -36,6 +37,29 @@
 ⇒ ⇒ 判据改为**可判定的两条**：① 顶层端口表逐字不变（34 根 · 名集会比）② 行为零回归
 （24 判据 + 双后端逐拍等价）。⇒ ⇒ 新逻辑**不是死代码**：`data_ready` 是真实输入，
 S3 接 AXI4 主口后它会动。
+
+## critic 审稿（架构面 · `0c97b18`）
+
+**结论：APPROVE_WITH_CONDITIONS · mergeable: yes · scope_exceeded: false · BLOCKER 0**
+
+三条 focus 的回复：
+1. **冻结链完整性** —— 成立，五组全冻结，EX/MEM「清零型」字段的两层 `select` 顺序正确
+   （反压保持 / 气泡清零），未发现漏组。
+2. **ADR-069 V4 边界** —— 论证站得住，无死锁组合（`data_ready` 是纯外部输入，驱动源是
+   寄存器 ⇒ 无环）；且「illegal-freeze」这个非 load-use 停顿源在 ADR-069 验收时已与
+   「M2/MEM/WB 照常前进」共存 ⇒ V4 的「停顿」从来不是「一切停顿」。
+3. **退休计数与口径** —— 门控正确且必要；「显式分档」满足 ADR-069 `:176` 字面，不需加端口。
+
+**SHOULD_FIX 处置（3/3 全部修，未留尾巴）**：
+
+| # | critic 发现 | 处置 |
+|---|---|---|
+| 1 | **同族计数器污染**（`branch_count` / `control_stalls` / `branch_mispredict` 反压时每拍 +1）⇒ 与 `commit_valid` 同族，且违反 proposal「不计入任何现有计数器」的声明 | ✅ 三处加 `& !mem_stall` + 新增 AC9 用例 + **变异自证**（去掉门控 ⇒ 转红） |
+| 2 | `load-use ∥ 反压` 重叠时 `perf_load_use_stalls` 会被反压拍污染（与 ADR-069 `:176` 字面冲突），测试刻意回避 | ✅ `load_use_stalls += hazard.stall & !mem_stall`（纯 load-use 场景不变）+ 在 design §7 登记 |
+| 3 | `tasks.md` 的 T5.1 仍写「sha256 逐字节不变」，与 AC7 的订正矛盾 | ✅ T5.1 改为「端口表 34 根名集 IDENTICAL + 行为零回归」并注明原判据不成立 |
+
+**NITS 处置（3/3 采纳）**：AC2 补 `dbg_exmem_valid` 断言 · design §2.4 表头注明两种 run
+口径（跑完 vs 固定拍数，结论相反）· proposal AC4 加「固定拍数」限定。
 
 ## 实施期发现的另外两个问题（都已修）
 

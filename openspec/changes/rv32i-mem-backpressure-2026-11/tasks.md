@@ -44,10 +44,13 @@
   **覆盖自证**：去掉 `data_ready=0` 驱动时该用例 MUST 失败
 - [x] **T4.7** AC6：反压期间 `perf_load_use_stalls` 不增
 - [x] **T4.8** CMake 注册（`add_test`）+ 双后端（interpreter + verilator，若可）
+- [x] **T4.9** AC9：同族计数器（branch / control / mispredict）在反压期间逐拍不变
+  ⇒ ⇒ **变异自证已做**：去掉三处 `& !mem_stall` ⇒ 用例转红（`branch=1 ctrl=1 mispred=1`）⇒ 还原复绿
 
 ## T5 验收
 
-- [x] **T5.1** AC7：核侧三份产物 `top.v` + `manifest.json` sha256 **逐字节不变**
+- [x] **T5.1** AC7（**已订正**）：记录产物 diff ≈ 400 行（真实端口上的逻辑 ⇒ Verilator 不折叠）
+  ⇒ ⇒ 判据改为「顶层端口表 **34** 根且名集 IDENTICAL」+「行为零回归」；原「sha256 逐字节不变」**不成立**
 - [x] **T5.2** AC7：`tb_rv32i_soc` ⇒ `RESULT: checks=24 fails=0`
 - [x] **T5.3** `ctest` 全量绿（含新 target）· `run_all_ported_tests.sh` PASS
 - [x] **T5.4** 护栏回归：`verify_riscv_soc_core_ports` · `verify_no_duplicate_rv32i_headers`

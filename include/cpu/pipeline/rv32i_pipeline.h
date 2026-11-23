@@ -826,13 +826,20 @@ public:
         auto commit_valid = mem_stage.io().mem_valid_out & !mem_stall;
         commit_count->next = select(reset_active, ch_uint<48>(0_d), commit_count + commit_valid);
 
-        auto branch_decoded = id_stage.io().is_branch;
+        // ⚠️⚠️ **三个同族计数器 MUST 也被反压门控**（2026-11-23 · S2 · critic
+        //    SHOULD_FIX #1 的实质缺陷）：反压让 EX 级指令**多拍驻留** ⇒
+        //    `id_stage.io().is_branch`（ID/EX 寄存 ⇒ 冻结保持 1）·
+        //    `ex_stage.branch_taken` · `hazard.io().flush` 全部稳定为 1
+        //    ⇒ ⇒ 不门控就**每停一拍各 +1**（与 `commit_valid` 的重复计数**同族**）。
+        //    ⇒ ⇒ 判据见 `test_rv32i_mem_backpressure` 的「同族计数器不得被污染」用例
+        //    （变异：去掉任一 `& !mem_stall` ⇒ 该用例必红）。
+        auto branch_decoded = id_stage.io().is_branch & !mem_stall;
         branch_count->next = select(reset_active, ch_uint<32>(0_d), branch_count + branch_decoded);
 
         // ⚠️ **控制重定向**（2026-10-26）：`ex_branch` 已扩为「条件分支 **+** 跳转」
         //    ⇒ `branch_taken & flush` 现在同时包含 `JAL`/`JALR` 的重定向。
         auto control_redirect =
-            ex_stage.io().branch_taken & if_stage.io().valid & hazard.io().flush;
+            ex_stage.io().branch_taken & if_stage.io().valid & hazard.io().flush & !mem_stall;
         // ⚠️ **误预测**只统计**条件分支**（`JAL`/`JALR` 是**无条件**跳 ⇒ 不是
         //    「预测错误」）⇒ MUST 用 `id_stage.io().is_branch` 门控
         //    （它是 **EX 级**那条指令的类型，与 `ex_stage.branch_taken` 同拍）。
@@ -841,7 +848,13 @@ public:
         auto branch_mispred_detected = id_stage.io().is_branch & control_redirect;
         branch_mispredict->next = select(reset_active, ch_uint<32>(0_d), branch_mispredict + branch_mispred_detected);
 
-        load_use_stalls->next = select(reset_active, ch_uint<32>(0_d), load_use_stalls + hazard.io().stall);
+        // ⚠️ **反压 ALSO 门控 `load_use_stalls`**（2026-11-23 · S2 · critic
+        //    SHOULD_FIX #2）：反压期间若 load 卡在 EX，`hazard.io().stall` 会
+        //    **持续为 1** ⇒ ⇒ 不门控就把「反压拍」记成「load-use 拍」⇒
+        //    与 ADR-069 `:176`「T3 反压不得混进该计数器」在字面上冲突。
+        //    ⚠️ 纯 load-use 场景 `mem_stall=0` ⇒ 行为不变（`== 4` 的手推断言不受影响）。
+        load_use_stalls->next = select(reset_active, ch_uint<32>(0_d),
+                                       load_use_stalls + (hazard.io().stall & !mem_stall));
         // ⚠️ `control_stalls` 统计**全部**控制重定向造成的停顿拍数
         //    （含 `JAL`/`JALR` —— 它们同样让流水线空 3 拍）⇒ 与「误预测」**分离**
         //    （此前两者同源，只因固件里只有条件分支）。
