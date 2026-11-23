@@ -149,6 +149,13 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > **零消费者** + `MemStage::__io` **无任何 ready/stall 输入** ⇒ ⇒ S2 需**新增** MEM 级停顿通路
 > ⇒ ⇒ **时序契约变更 ⇒ 架构面**。
 
+> ✅ **2026-11-23 · R3e 完成（builder 回填）**：核的 **34 端口契约表已归位到核侧**
+> （`examples/riscv-mini/AGENTS.md` 新章「核 IP 的 34 端口契约表」）⇒ ⇒ SoC 侧改为**指针**
+> ⇒ ⇒ 护栏 `verify_riscv_soc_core_ports.sh` 的期望表指针切到核侧（V1/V2/V3 仍绿 · self-test 7 投毒仍绿）
+> ⇒ ⇒ **理由**：契约表跟随**被描述的对象** ⇒ ⇒ 「核 = 独立可验证的 IP」在**文档归属**上也成立。
+> ⇒ ⇒ 顺带订正：原前言「期望表由 `verify_examples_rtl_sim.sh` 解析」**指错了脚本**
+> ⇒ ⇒ 实测唯一消费者 = `verify_riscv_soc_core_ports.sh` ⇒ ⇒ 已改正。
+
 ### 批次 × IP（**2026-11-23 调整后** · IP 计划的主表）
 
 | 批 | 新 IP / 变更 | 主判据 | 前置 |

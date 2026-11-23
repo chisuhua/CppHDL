@@ -119,6 +119,65 @@ bash scripts/rv32i_rtl_sim_env.sh
   ⚠️ 2026-11-09（phase-6 P9 · Zero-Debt）：该 struct 数组（**零消费者**的死数据）**已删除** ⇒ 本条仅存历史；wrapper 的 `__io` 签名与可观测行为**未变**。
 - **wrapper 端口契约错误** (2026-10-19) — `i_cache_prefetch.h:91` 引用 `icache.io().hit` (不存在); 已修: `ch_bool(icache.io().miss.impl())`. 同时 `0xFFFFFFF0_d` → `0xFFFFFFF0_h` typo fix.
 
+## 核 IP 的**34 端口契约表**（产品端口面 · **本文件 = 单一真相源**）
+> 这是「核 = 可替换 IP」的**唯一物证**，也是 S3（总线化）的**变更基线**。
+> ⚠️ **归属**：本表描述的是**核**（`Rv32iCoreTop`）⇒ ⇒ 契约表住在**核的家**
+> （`examples/riscv-mini/AGENTS.md`）⇒ ⇒ SoC 侧只**引用**它（`examples/riscv-soc/AGENTS.md`）。
+> ⇒ ⇒ **单一真相源 = 本表**（护栏 `scripts/verify_riscv_soc_core_ports.sh` 的 V1/V2 从**本表**解析）。
+> ⚠️ 端口名是**产物名**（带实例路径前缀 `top_core_`）⇒ 期望表由
+> `scripts/verify_riscv_soc_core_ports.sh` 从**本表**解析并与 SoC 产物里的核 module 比对
+> （V1 逐字逐序 · V2 条数 34 · V3 与 C6 快照三方闭环）。
+> ⚠️ **订正（2026-11-23 · R3e）**：本句原先写「由 `scripts/verify_examples_rtl_sim.sh` 解析」
+> ⇒ ⇒ **指错了脚本**（该脚本不解析本表）⇒ ⇒ 实测确认唯一消费者是
+> `verify_riscv_soc_core_ports.sh` ⇒ ⇒ 本句已改正。
+> ⚠️ 核自有 32 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
+> （生成时已机械校验）⇒ 改核端口会**同时**打红 C6 与本表 ⇒ 强制重算。
+
+> 这是「核可替换」的**唯一物证**，也是 S3（总线化）的**变更基线**。
+> ⚠️ 端口名是**产物名**（带实例路径前缀 `top_core_`）⇒ 期望表由
+> `scripts/verify_examples_rtl_sim.sh` 从**本表**解析并与产物比对（单一真相源 = 本表）。
+> ⚠️ 核自有 32 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
+> （生成时已机械校验）⇒ 改核端口会**同时**打红 C6 与本表 ⇒ 强制重算。
+
+| # | 端口（产物名） | 方向 | 位宽 | 归属 |
+|---|---|---|---|---|
+| 1 | `default_clock` | INPUT | 1 | 框架 |
+| 2 | `default_reset` | INPUT | 1 | 框架 |
+| 3 | `top_core_ext_rst` | INPUT | 1 | 核自有 |
+| 4 | `top_core_prog_we` | INPUT | 1 | 核自有 |
+| 5 | `top_core_prog_addr` | INPUT | 32 | 核自有 |
+| 6 | `top_core_prog_data` | INPUT | 32 | 核自有 |
+| 7 | `top_core_obs_instr_addr` | OUTPUT | 32 | 核自有 |
+| 8 | `top_core_obs_data_addr` | OUTPUT | 32 | 核自有 |
+| 9 | `top_core_obs_data_write_data` | OUTPUT | 32 | 核自有 |
+| 10 | `top_core_obs_data_write_en` | OUTPUT | 1 | 核自有 |
+| 11 | `top_core_obs_perf_cycles` | OUTPUT | 48 | 核自有 |
+| 12 | `top_core_obs_perf_instructions` | OUTPUT | 48 | 核自有 |
+| 13 | `top_core_obs_perf_branch_count` | OUTPUT | 32 | 核自有 |
+| 14 | `top_core_obs_perf_branch_mispredict` | OUTPUT | 32 | 核自有 |
+| 15 | `top_core_obs_perf_load_use_stalls` | OUTPUT | 32 | 核自有 |
+| 16 | `top_core_obs_perf_control_stalls` | OUTPUT | 32 | 核自有 |
+| 17 | `top_core_dbg_id_instr` | OUTPUT | 32 | 核自有 |
+| 18 | `top_core_dbg_id_pc` | OUTPUT | 32 | 核自有 |
+| 19 | `top_core_dbg_id_valid` | OUTPUT | 1 | 核自有 |
+| 20 | `top_core_dbg_id_is_branch` | OUTPUT | 1 | 核自有 |
+| 21 | `top_core_dbg_id_is_load` | OUTPUT | 1 | 核自有 |
+| 22 | `top_core_dbg_id_is_store` | OUTPUT | 1 | 核自有 |
+| 23 | `top_core_dbg_branch_taken` | OUTPUT | 1 | 核自有 |
+| 24 | `top_core_dbg_wb_write_en` | OUTPUT | 1 | 核自有 |
+| 25 | `top_core_dbg_wb_write_data` | OUTPUT | 32 | 核自有 |
+| 26 | `top_core_dbg_wb_rd_addr` | OUTPUT | 5 | 核自有 |
+| 27 | `top_core_dbg_exmem_alu_result` | OUTPUT | 32 | 核自有 |
+| 28 | `top_core_dbg_exmem_imm` | OUTPUT | 32 | 核自有 |
+| 29 | `top_core_dbg_exmem_rs2_data` | OUTPUT | 32 | 核自有 |
+| 30 | `top_core_obs_data_rdata` | OUTPUT | 32 | 核自有 |
+| 31 | `top_core_dbg_exmem_valid` | OUTPUT | 1 | 核自有 |
+| 32 | `top_core_dbg_mem_valid_out` | OUTPUT | 1 | 核自有 |
+| 33 | `top_core_dbg_load_use_detected` | OUTPUT | 1 | 核自有 |
+| 34 | `top_core_dbg_illegal_reason` | OUTPUT | 2 | 核自有 |
+
+⇒ **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**（4 INPUT + 28 OUTPUT）。
+
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|

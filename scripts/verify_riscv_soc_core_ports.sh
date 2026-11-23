@@ -9,7 +9,8 @@
 #
 # 判据：
 #   V1  产物里 `Rv32iCoreTop` 的 module 端口表（**名 + 方向 + 位宽**·逐字逐序）
-#       == `examples/riscv-soc/AGENTS.md` 的 34 行表（**单一真相源 = 该表**）
+#       == `examples/riscv-mini/AGENTS.md` 的 34 行表（**单一真相源 = 该表**）
+#       ⇒ ⇒ 2026-11-23（R3e）：契约表**已归位到核侧** ⇒ ⇒ 契约跟随被描述的对象
 #   V2  端口数 == **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**
 #   V3  核自有 32 条（去 `top_core_` 前缀）与 `verify_no_duplicate_rv32i_headers.sh` 的
 #       **C6 快照**逐字一致 ⇒ ⇒ 「头文件 → 产物 → 登记表」三方闭环
@@ -43,7 +44,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT" || exit 2
 
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
-AGENTS_MD="examples/riscv-soc/AGENTS.md"
+AGENTS_MD="examples/riscv-mini/AGENTS.md"
 EMITTER="$BUILD_DIR/examples/riscv-soc/tb_riscv_soc"
 HEADER_GUARD="scripts/verify_no_duplicate_rv32i_headers.sh"
 CORE_MODULE="Rv32iCoreTop"

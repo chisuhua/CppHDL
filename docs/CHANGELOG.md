@@ -1,3 +1,18 @@
+## 2026-11-23 — R3e：核的 **34 端口契约表归位到核侧**（`examples/riscv-mini/AGENTS.md`）
+
+**背景**：核的 34 端口契约表（`Rv32iCoreTop` 的产品端口面）此前住在 **SoC 侧**的
+`examples/riscv-soc/AGENTS.md` ⇒ ⇒ **被描述的对象**（核）没有自己的接口契约 ⇒ ⇒
+读「核 = 可独立验证的 IP」的人要去 SoC 目录找核的接口 ⇒ ⇒ 归属倒置。
+
+**本次**：34 行表 + 其前言迁到 `examples/riscv-mini/AGENTS.md`（新章「核 IP 的 **34 端口契约表**」）
+⇒ ⇒ SoC 侧该节改为**指针**（不再重复该表 ⇒ ⇒ 避免两份真相）
+⇒ ⇒ 护栏 `scripts/verify_riscv_soc_core_ports.sh` 的期望表指针切到核侧（`AGENTS_MD`）。
+⇒ ⇒ **顺带订正一处指错的脚本**：原前言写「期望表由 `scripts/verify_examples_rtl_sim.sh` 解析」
+⇒ ⇒ 实测唯一消费者是 **`verify_riscv_soc_core_ports.sh`**（V1/V2/V3）⇒ ⇒ 已改正。
+
+⚠️ **零行为变化 / 零端口变化**（表的内容逐字未动；护栏 V1/V2 仍绿 ⇒ ⇒ 34 根端口表不变）。
+⚠️ 护栏 `--self-test` 的 7 条投毒**不受影响**（投毒流程与表所在路径无关）。
+
 ## 2026-11-23 — RV32I 核改名 R3c：头文件 `rv32i_pipeline_top.h` → `rv32i_core_top.h`
 
 **背景**：改名批（`openspec/changes/riscv-core-rename-2026-11/`）的第三批 · **路径面**。

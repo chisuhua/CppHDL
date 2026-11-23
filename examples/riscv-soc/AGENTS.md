@@ -65,52 +65,12 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out out/chk
 > ⚠️ **两值 MUST 不同** ⇒ 否则两个事件源接反 / 同源时观测值不变 ⇒ 判据恒绿
 > （三条变异自证见期望源 §4）。
 
-## 核复合体（`Rv32iCoreTop`）的**34 端口契约表**
+## 核复合体（`Rv32iCoreTop`）的**34 端口契约表** ⇒ **已归位到核侧**
 
-> 这是「核可替换」的**唯一物证**，也是 S3（总线化）的**变更基线**。
-> ⚠️ 端口名是**产物名**（带实例路径前缀 `top_core_`）⇒ 期望表由
-> `scripts/verify_examples_rtl_sim.sh` 从**本表**解析并与产物比对（单一真相源 = 本表）。
-> ⚠️ 核自有 32 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
-> （生成时已机械校验）⇒ 改核端口会**同时**打红 C6 与本表 ⇒ 强制重算。
-
-| # | 端口（产物名） | 方向 | 位宽 | 归属 |
-|---|---|---|---|---|
-| 1 | `default_clock` | INPUT | 1 | 框架 |
-| 2 | `default_reset` | INPUT | 1 | 框架 |
-| 3 | `top_core_ext_rst` | INPUT | 1 | 核自有 |
-| 4 | `top_core_prog_we` | INPUT | 1 | 核自有 |
-| 5 | `top_core_prog_addr` | INPUT | 32 | 核自有 |
-| 6 | `top_core_prog_data` | INPUT | 32 | 核自有 |
-| 7 | `top_core_obs_instr_addr` | OUTPUT | 32 | 核自有 |
-| 8 | `top_core_obs_data_addr` | OUTPUT | 32 | 核自有 |
-| 9 | `top_core_obs_data_write_data` | OUTPUT | 32 | 核自有 |
-| 10 | `top_core_obs_data_write_en` | OUTPUT | 1 | 核自有 |
-| 11 | `top_core_obs_perf_cycles` | OUTPUT | 48 | 核自有 |
-| 12 | `top_core_obs_perf_instructions` | OUTPUT | 48 | 核自有 |
-| 13 | `top_core_obs_perf_branch_count` | OUTPUT | 32 | 核自有 |
-| 14 | `top_core_obs_perf_branch_mispredict` | OUTPUT | 32 | 核自有 |
-| 15 | `top_core_obs_perf_load_use_stalls` | OUTPUT | 32 | 核自有 |
-| 16 | `top_core_obs_perf_control_stalls` | OUTPUT | 32 | 核自有 |
-| 17 | `top_core_dbg_id_instr` | OUTPUT | 32 | 核自有 |
-| 18 | `top_core_dbg_id_pc` | OUTPUT | 32 | 核自有 |
-| 19 | `top_core_dbg_id_valid` | OUTPUT | 1 | 核自有 |
-| 20 | `top_core_dbg_id_is_branch` | OUTPUT | 1 | 核自有 |
-| 21 | `top_core_dbg_id_is_load` | OUTPUT | 1 | 核自有 |
-| 22 | `top_core_dbg_id_is_store` | OUTPUT | 1 | 核自有 |
-| 23 | `top_core_dbg_branch_taken` | OUTPUT | 1 | 核自有 |
-| 24 | `top_core_dbg_wb_write_en` | OUTPUT | 1 | 核自有 |
-| 25 | `top_core_dbg_wb_write_data` | OUTPUT | 32 | 核自有 |
-| 26 | `top_core_dbg_wb_rd_addr` | OUTPUT | 5 | 核自有 |
-| 27 | `top_core_dbg_exmem_alu_result` | OUTPUT | 32 | 核自有 |
-| 28 | `top_core_dbg_exmem_imm` | OUTPUT | 32 | 核自有 |
-| 29 | `top_core_dbg_exmem_rs2_data` | OUTPUT | 32 | 核自有 |
-| 30 | `top_core_obs_data_rdata` | OUTPUT | 32 | 核自有 |
-| 31 | `top_core_dbg_exmem_valid` | OUTPUT | 1 | 核自有 |
-| 32 | `top_core_dbg_mem_valid_out` | OUTPUT | 1 | 核自有 |
-| 33 | `top_core_dbg_load_use_detected` | OUTPUT | 1 | 核自有 |
-| 34 | `top_core_dbg_illegal_reason` | OUTPUT | 2 | 核自有 |
-
-⇒ **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**（4 INPUT + 28 OUTPUT）。
+⇒ ⇒ **单一真相源 = `examples/riscv-mini/AGENTS.md` 的「核 IP 的 **34 端口契约表**」**
+（2026-11-23 · R3e · 契约表跟随**被描述的对象** ⇒ ⇒ 核的接口契约住在核的家）
+⇒ ⇒ 护栏 `scripts/verify_riscv_soc_core_ports.sh` 的 V1/V2 从**核侧**该表解析
+⇒ ⇒ 本文件不再重复该表（避免两份真相）⇒ ⇒ **要改核的端口面 ⇒ 改核侧那张表**。
 
 ## 期望源（**单一真相**）
 
