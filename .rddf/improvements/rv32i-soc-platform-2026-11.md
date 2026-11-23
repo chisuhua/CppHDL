@@ -112,7 +112,8 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | 缓存替换策略 / 一致性协议 | 各自独立立项（本项只接**现有** `ICacheSync` / `DCacheSync`） |
 | 微架构重构（`include/cpu/pipeline/**` 的算法/时序） | 不在本项（本项只加/改**接口**） |
 | 总线互联/IP 的新实现 | 复用 `include/axi4/**`（矩阵 / 桥 / 外设 / DMA） |
-| 改名（`Rv32iPipelineTop` / `tb_rv32i_soc`） | 单列一批（R3） |
+| 改名（`Rv32iPipelineTop` / `Rv32iCoreComplex` / `rv32i_pipeline_top.h`） | 单列一批（**R3**）⇒ ⇒ **已立项**：`openspec/changes/riscv-core-rename-2026-11/`（拆 **R3a** 模块类型名 / **R3b** C++ 类名 / **R3c** 文件名 · 三批各自独立提交与判据）|
+| 改名（TB 名 `tb_rv32i_soc`） | 单列一批（**R3d**）· **未立项** ⇒ ⇒ 会动 tsv / CMake / CI / 多护栏 fixture ⇒ ⇒ 与 R3a–c 分离 |
 
 ### 写面（按批分级）
 
