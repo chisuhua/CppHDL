@@ -3,6 +3,8 @@
 - **验收者**：verifier（角色内建 · builder 会话内执行）
 - **日期**：2026-11-23 · **范围**：AC1–AC8 + 遗留清扫
 - **change**：`openspec/changes/rv32i-mem-backpressure-2026-11/`
+  ⇒ ⇒ **2026-11-23 已归档**至 `openspec/changes/archive/2026-11-23-rv32i-mem-backpressure-2026-11/`
+  （本报告写于归档前 ⇒ 正文路径**保持当时形态**，不追溯改写）
 - **判据来源**：已签批 `openspec/specs/rv32i-memory-timing/spec.md` 的
   「MEM 级的反压接口 MUST 有可观测的语义」（2 个 Scenario）+ `ADR-069:176`（口径分档）
 

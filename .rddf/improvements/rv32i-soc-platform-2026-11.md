@@ -173,7 +173,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | 批 | 新 IP / 变更 | 主判据 | 前置 |
 |---|---|---|---|
 | **S1 ✅** | 核复合体 + `SocTraceCounter` | 10 module · 8 端口 · 2 观测量 · 13 AC（verifier 全 PASS） | ADR-077 |
-| **S2 ✅** | MEM 反压（`data_ready` 真消费 · **已签批 spec 的未实现条款**） | `ready≡1` 行为零回归（端口 34 + 24 判据 + dual parity）· `ready=0` 的 stall **手推拍数**（`perf_instructions` 差 == N）· 口径分档（不混进 `perf_load_use_stalls`） ⇒ 2026-11-23 完成 · `openspec/changes/rv32i-mem-backpressure-2026-11/` ⇒ verifier **8/8** · 报告 `.rddf/reviews/rv32i-mem-backpressure-2026-11-verify.md` | — |
+| **S2 ✅** | MEM 反压（`data_ready` 真消费 · **已签批 spec 的未实现条款**） | `ready≡1` 行为零回归（端口 34 + 24 判据 + dual parity）· `ready=0` 的 stall **手推拍数**（`perf_instructions` 差 == N）· 口径分档（不混进 `perf_load_use_stalls`） ⇒ 2026-11-23 完成并**已归档** · `openspec/changes/archive/2026-11-23-rv32i-mem-backpressure-2026-11/` ⇒ verifier **8/8** · 报告 `.rddf/reviews/rv32i-mem-backpressure-2026-11-verify.md` | — |
 | **S3** | 核**数据侧** AXI4 主口 + **D-L1**（`DCacheSync`）+ wrapper **burst 升级** | burst 事务手推（len/size/burst）· hit/miss 拍数契约 · TCM 旁路后 `prog_*` 一致性 | S2 |
 | **S4** | **`AxiLiteMatrix2x2`** + **`AxiLiteGpio/Uart/Timer/Spi/I2c/Pwm`**（轮询）+ **`AxiDma`**（boot/装载主）+ **MMIO 地址解码** + 取指侧总线化 + **I-L1** | 每 IP 一条总线级 RD/WR 回环（手推地址+值）· 地址映射表 == 手推 · DMA 装载后核能取指 | S3 |
 | **S5** | 核 **`irq` 输入口（34→35）** + **`Clint`** + **IRQ 汇聚器（新写）** | IRQ 边沿 → trap 的拍数（手推）· `mtip`/`mie`/`mip` 语义 | **privilege** + S4 |
