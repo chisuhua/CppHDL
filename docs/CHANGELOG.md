@@ -1,3 +1,21 @@
+## 2026-11-23 — RV32I 核改名 R3b：C++ 类 `Rv32iPipelineTop` → `Rv32iCoreTop`
+
+**背景**：改名批（`openspec/changes/riscv-core-rename-2026-11/`）的 **R3b** —— C++ 侧类名。
+R3a 已把 SoC 产物里的模块类型名统一为 `Rv32iCoreTop`（`870cda5`）。
+
+**本次**：C++ 类 `Rv32iPipelineTop` → **`Rv32iCoreTop`**（含构造默认实例名
+`rv32i_pipeline_top` → `rv32i_core_top`）⇒ ⇒ 改动点 = 核的头 + 激励驱动 TB + 2 个
+Catch2 测试 + SoC 根的 `ch_layer` + 探针脚本 + `verify_examples_rtl_sim.sh` 的自检
+fixture + tsv / 期望源 / 两个用户文档。
+
+⚠️ **行为零变化**：类名**不进**端口名（端口名来自 C++ **成员名**）也不进 module 名
+⇒ ⇒ `examples/riscv-mini` 的 **flat / 层次化 / 带固件初值**三份产物**逐字节不变**。
+⚠️ **端口面零变化**（34 根顶层端口逐字不变）。
+⚠️ **模拟日志的节点名前缀随之变**（`rv32i_pipeline_top.*` → `rv32i_core_top.*`）
+⇒ ⇒ 判据 = `scripts/verify_node_names_single_source.sh` 绿。
+⚠️ **公开面登记**（符号级改名 ⇒ 跨仓下游须迁移）：
+`.rddf/checks/public-api-surface.md` 的「已移除 / 已改名的公开符号」节已登记。
+
 ## 2026-11-23 — RV32I 核改名 R3a：SoC 产物里的模块类型名 `Rv32iCoreComplex` → `Rv32iCoreTop`
 
 **背景**：同一个核在仓内有三个名字且互不一致（C++ 类 `Rv32iPipelineTop` · 产物模块类型名

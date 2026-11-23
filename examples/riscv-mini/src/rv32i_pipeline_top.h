@@ -37,7 +37,7 @@
 using namespace ch::core;
 using namespace riscv;
 
-class Rv32iPipelineTop : public ch::Component {
+class Rv32iCoreTop : public ch::Component {
 public:
     // ⚠️ **2026-11-14 · L1**：容量真相**上移到库**（`rv32i_mem_map.h`）
     //    ⇒ ⇒ 本层**不再**持有第二个字面量 ⇒ ⇒ 声明与实现**不可能**不一致
@@ -117,8 +117,8 @@ public:
     ///    ⇒ ⇒ 空（默认）⇒ ⇒ 与基线**逐字节等价**（同一条 `init_memory(…, {})` 路径）
     ///    ⇒ ⇒ 🔴 **`dtcm_init` 就是 `.data` 段的落点** —— `prog_*` **只**接 I-TCM
     ///    ⇒ ⇒ 有初始化 `.data` 的程序此前**装不进去**
-    Rv32iPipelineTop(ch::Component* parent = nullptr,
-                     const std::string& name = "rv32i_pipeline_top",
+    Rv32iCoreTop(ch::Component* parent = nullptr,
+                     const std::string& name = "rv32i_core_top",
                      const std::vector<uint32_t>& itcm_init = {},
                      const std::vector<uint32_t>& dtcm_init = {})
         : ch::Component(parent, name),

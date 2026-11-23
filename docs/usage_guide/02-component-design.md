@@ -222,7 +222,7 @@ TEST_CASE("...") {
 
 | 级 | 职责 | 例 |
 |---|---|---|
-| **IP 级**（组件级 top） | 该单元**自己**的功能 + 它的私有存储 | `Rv32iPipelineTop`（pipeline + I-TCM + D-TCM） |
+| **IP 级**（组件级 top） | 该单元**自己**的功能 + 它的私有存储 | `Rv32iCoreTop`（pipeline + I-TCM + D-TCM） |
 | **SoC 级**（装配根） | 把若干 IP 装起来 + 暴露**根自有**的对外接口 | `Rv32iSocTop`（核复合体 + 观测 IP） |
 
 ```cpp
@@ -236,7 +236,7 @@ public:
     )
     void describe() override {
         // 档 ③ 成层：实例处给模块类型名（该类未声明 CH_HIERARCHY_LAYER）
-        ch::ch_layer<Rv32iPipelineTop> core{"core", "Rv32iCoreTop"};
+        ch::ch_layer<Rv32iCoreTop> core{"core", "Rv32iCoreTop"};
         ch::ch_layer<SocTraceCounter>  trace{"trace", "SocTraceCounter"};
 
         core.io().ext_rst   <<= io().ext_rst;

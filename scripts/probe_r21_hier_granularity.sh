@@ -33,7 +33,7 @@ int main() {
     ch::HierarchyEmitResult r;
     {
         ch::Component::GranularityScope scope(ch::Granularity::ForceLayer);
-        ch::ch_device<Rv32iPipelineTop> dev;
+        ch::ch_device<Rv32iCoreTop> dev;
         r = ch::toVerilogHierarchical("PROBE_OUT", dev.instance());
     }
     std::printf("ok=%s\n", r.ok ? "true" : "false");

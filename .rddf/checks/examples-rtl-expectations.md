@@ -1008,7 +1008,7 @@ VERIF-CHECKS: 113
 
 ### ✅ 2026-11-13 · 端口名已具名（R17.2 · 用户 ⑤ 的原始诉求）
 
-顶层 `Rv32iPipelineTop` 的 **32** 个端口**全部**带**显式名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`
+顶层 `Rv32iCoreTop` 的 **32** 个端口**全部**带**显式名** ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`
 ⇒ ⇒ **本 TB 不再需要「查 port map」**（`.top_obs_data_addr(obs_data_addr)` 取代 `.top_unnamed_output_1(obs_data_addr)`）。
 
 ⇒ ⇒ ⚠️ **判据面零变化**：本节的期望值**只依赖信号语义**，**不依赖端口名** ⇒ ⇒

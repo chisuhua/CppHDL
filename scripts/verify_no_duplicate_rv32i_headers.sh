@@ -26,7 +26,7 @@
 #       （无幽灵条目 + **每一处**自述计数与实测一致）—— ADR-046 D9
 #       ⚠️ **fail-closed**：解析不出条目（表被清空 / 措辞变更 / 解析器坏了）
 #          ⇒ MUST 视为违规，不得静默放行（否则「删掉文档表」可让护栏静默失效）。
-#   C6  SoC 顶层端口冻结：Rv32iPipelineTop 的端口集合（**名 + 方向 + 位宽**）
+#   C6  SoC 顶层端口冻结：Rv32iCoreTop 的端口集合（**名 + 方向 + 位宽**）
 #        ⚠️ **自检 fixture 的端口面 MUST 从上面的 `SOC_TOP_PORTS` 生成**（不得硬编码第二份）
 #           ⇒ ⇒ 改快照时若 fixture 没跟上 ⇒ C6 在**每个** fixture 都违规 ⇒ ⇒
 #           ⇒ ⇒ 一批用例红 + 一批「期望 exit=1」的用例**假绿**（= R24 的形状）
@@ -303,7 +303,7 @@ AGEOF
         #    却没改 fixture ⇒ 9 红 + 假绿；`a2f5075` 的自检还是全绿的）
         #    ⇒ ⇒ 从快照生成 ⇒ **失同步结构性不可能**。
         {
-            printf '#pragma once\n#include "ch.hpp"\nclass Rv32iPipelineTop : public ch::Component {\npublic:\n    __io(\n'
+            printf '#pragma once\n#include "ch.hpp"\nclass Rv32iCoreTop : public ch::Component {\npublic:\n    __io(\n'
             for spec in $SOC_TOP_PORTS; do
                 pname="${spec%%:*}"; prest="${spec#*:}"
                 pdir="${prest%%:*}"; pwidth="${prest#*:}"

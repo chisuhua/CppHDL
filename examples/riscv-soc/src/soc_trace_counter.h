@@ -9,8 +9,8 @@
 //   SoC 交付物的观测集 MUST 含 **≥ 2 个**随激励变化的量 ⇒ ⇒ 单计数会不合规。
 //
 // ⚠️ **两个事件源必须是单拍脉冲**（否则计数无法手推）：
-//   · `store_event`  ← `Rv32iPipelineTop::obs_data_write_en`（= `exmem_is_store`）
-//   · `retire_event` ← `Rv32iPipelineTop::dbg_wb_write_en`（= `wb.write_en`
+//   · `store_event`  ← `Rv32iCoreTop::obs_data_write_en`（= `exmem_is_store`）
+//   · `retire_event` ← `Rv32iCoreTop::dbg_wb_write_en`（= `wb.write_en`
 //     = `needs_writeback & rd_not_zero & mem_valid` —— `mem_valid` 限定已在内
 //     ⇒ 气泡拍不会重复计，见 `include/cpu/pipeline/stages/wb_stage.h:108-110`）
 //

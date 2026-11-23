@@ -704,9 +704,9 @@ PY
     #     · **反**：RMW（字节合并）通路的读口 MUST **仍是组合**（`assign`）
     #             ⇒ ⇒ 否则字节合并拿不到**同拍**的旧字 ⇒ ⇒ 写回的是**已合并**的字
     #               （自我覆盖）⇒ ⇒ `sb`/`sh` 会**丢字节**
-    #   ⚠️ 适用范围 = **发射 Rv32iPipelineTop 的 target**（按 `component` 列判定，
+    #   ⚠️ 适用范围 = **发射 Rv32iCoreTop 的 target**（按 `component` 列判定，
     #   **不是**按 target 名 ⇒ ⇒ 将来新增同组件的 target 也会被覆盖）。
-    if [ "$comp" = "Rv32iPipelineTop" ]; then
+    if [ "$comp" = "Rv32iCoreTop" ]; then
         f9_bad=0
         dut_v="$work/top.v"
         if ! grep -qE 'always_ff.*Read port top_dtcm_mem_sread_data_proxy' "$dut_v"; then
@@ -954,7 +954,7 @@ run_self_test() {
 # REGISTERED_SOC: 0
 # REGISTERED_HIER: 1
 selftest_target	target	examples/axi4/tb_phase3a_example.cpp	Phase3ATop	tb_phase3a_example	--emit-rtl	-	$2	$4	no	6	4	3	self-test fixture（**手写** TB · 只作 ①/②/⑤/⑥ 的载体）
-selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iPipelineTop	tb_rv32i_soc	--emit-rtl --hierarchical	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
+selftest_hier	hier	examples/riscv-mini/src/rv32i_pipeline_top.h	Rv32iCoreTop	tb_rv32i_soc	--emit-rtl --hierarchical	-	examples/riscv-mini/tb_rv32i_soc.sv	verified	no	24	6	22	self-test fixture（层次化形态 · ⑧' 的载体 · 手写 TB）
 tb_axi4_lite_example	target	examples/axi4/tb_axi4_lite_example.cpp	AxiLiteTop	tb_axi4_lite_example	--emit-rtl	113	examples/axi4/tb_axi4_lite_example.sv	verified	yes	113	7	33	self-test fixture（**真的由 .verif 生成** ⇒ ⑥'/⑥''/⑥‴/⑧''/⑥⁗ 的载体 · 自发行 ⇒ ⑨/⑨' 的载体）
 EOF
     }

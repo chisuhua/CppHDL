@@ -154,7 +154,7 @@ TEST_CASE("rv32i hierarchical rtl: deliverable product shape (granularity, deter
     const std::string dir = make_temp_dir("_shape");
     REQUIRE_FALSE(dir.empty());
 
-    ch::ch_device<Rv32iPipelineTop> dev;
+    ch::ch_device<Rv32iCoreTop> dev;
 
     // ═══ ① 交付粒度发射（★ 不是 ForceLayer：那是探针/逃生门 ⇒ ADR-070 D4 条件②）═══
     const std::string p1 = dir + "/first.v";
@@ -396,7 +396,7 @@ TEST_CASE("rv32i hierarchical rtl: cycle-accurate equivalence with the flat prod
     const std::string dir = make_temp_dir("_eq");
     REQUIRE_FALSE(dir.empty());
 
-    ch::ch_device<Rv32iPipelineTop> dev;
+    ch::ch_device<Rv32iCoreTop> dev;
     auto &io = dev.instance().io();
 
     auto ps = ch::hier_eq::emit(dev.instance(), dir);   // ★ 默认 = RespectDeclarations
@@ -532,7 +532,7 @@ TEST_CASE("rv32i hierarchical rtl: corrupting one assign turns the equivalence r
     const std::string dir = make_temp_dir("_mut");
     REQUIRE_FALSE(dir.empty());
 
-    ch::ch_device<Rv32iPipelineTop> dev;
+    ch::ch_device<Rv32iCoreTop> dev;
     auto &io = dev.instance().io();
 
     auto ps = ch::hier_eq::emit(dev.instance(), dir);

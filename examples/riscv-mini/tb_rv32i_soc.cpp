@@ -6,7 +6,7 @@
 //
 // | 角色 | 载体 | 说明 |
 // |---|---|---|
-// | 设计定义 | `src/rv32i_pipeline_top.h` | `Rv32iPipelineTop` · **无 `main`** |
+// | 设计定义 | `src/rv32i_pipeline_top.h` | `Rv32iCoreTop` · **无 `main`** |
 // | **激励驱动** | **本文件** | `main` · 装载程序 → 驱动 → 断言 → 结论行 |
 // | 激励源 | `tb_rv32i_soc.sv` | **手写** · Verilog 侧独立 TB |
 //
@@ -165,14 +165,14 @@ private:
 
 /// 发射模式的 design factory（与被取代的 `emit_rtl.cpp` **同构**）。
 std::unique_ptr<ch::Component> make_emit_design(ch::core::context *) {
-    return std::make_unique<Rv32iPipelineTop>(nullptr, "top");
+    return std::make_unique<Rv32iCoreTop>(nullptr, "top");
 }
 
 /// 带固件初值的 design factory（与被取代的 `emit_rtl_fw_init.cpp` **同构**）。
 std::unique_ptr<ch::Component> make_emit_design_fw_init(ch::core::context *) {
     // ⚠️ **固件不进端口**：走构造参数 ⇒ ⇒ `init_data` ⇒ ⇒ 产物自带 `initial`
     // ⇒ ⇒ **零端口变更**（顶层端口表与基线产物逐字相同）。
-    return std::make_unique<Rv32iPipelineTop>(nullptr, "top", rv32i_fw_demo::text(),
+    return std::make_unique<Rv32iCoreTop>(nullptr, "top", rv32i_fw_demo::text(),
                                               rv32i_fw_demo::data());
 }
 
@@ -291,7 +291,7 @@ int run_firmware_verification(const std::string &dir) {
     // ⚠️ `ch_device<T, Args...>` 的 `Args...` **MUST 显式给出**（类模板参数
     //    **不**对构造函数实参做推导 ⇒ ⇒ 只写 `ch_device<T>` = 零参）。
     //    这里取**引用**类型 ⇒ ⇒ 才能绑住下面的 `const` 左值（`vector&&` 绑不住）。
-    using FwDev = ch::ch_device<Rv32iPipelineTop, const std::vector<uint32_t>&,
+    using FwDev = ch::ch_device<Rv32iCoreTop, const std::vector<uint32_t>&,
                                  const std::vector<uint32_t>&>;
     auto dev = std::make_unique<FwDev>(itcm, dtcm);
     Simulator sim(dev->context());
@@ -356,7 +356,7 @@ int run_firmware_verification(const std::string &dir) {
 int run_verification() {
     Checker ck;
 
-    auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     Simulator sim(dev->context());
     auto &dut = dev->instance();
     auto &io = dut.io();
@@ -541,7 +541,7 @@ int main(int argc, char **argv) {
                     pad_itcm(read_region_image(fw_dir, "itcm"));
                 const std::vector<uint32_t> dtcm =
                     read_region_image(fw_dir, "dtcm");
-                return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm, dtcm);
+                return std::make_unique<Rv32iCoreTop>(nullptr, "top", itcm, dtcm);
             };
             return ch::rtl_emit::run_emit_cli(rest, make_design);
         }

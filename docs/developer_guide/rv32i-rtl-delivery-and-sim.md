@@ -17,7 +17,7 @@ RV32I 现在有**两级顶层**，各自是独立产品（不是两份实现）�
 
 | 级 | 根组件 | 住址 | 产物 | 判据 |
 |---|---|---|---|---|
-| **IP 级**（核复合体） | `Rv32iPipelineTop` | `examples/riscv-mini/src/rv32i_pipeline_top.h` | **8 module** · 34 端口 | 24 条核级判据（`RESULT: checks=24 fails=0`） |
+| **IP 级**（核复合体） | `Rv32iCoreTop` | `examples/riscv-mini/src/rv32i_pipeline_top.h` | **8 module** · 34 端口 | 24 条核级判据（`RESULT: checks=24 fails=0`） |
 | **SoC 级** | `Rv32iSocTop` | `examples/riscv-soc/src/rv32i_soc_top.h` | **10 module** · **8** 端口 | 7 条（`RESULT: checks=7 fails=0`） |
 
 ⚠️ **判据作用域不可混用**：
@@ -220,7 +220,7 @@ build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --firmware fwimg --out out/fw
 #    (b) 你自己的发射器里：
 auto itcm = load_hex_words("fwimg/itcm.mem");   // → std::vector<uint32_t>
 auto dtcm = load_hex_words("fwimg/dtcm.mem");
-return std::make_unique<Rv32iPipelineTop>(nullptr, "top", itcm, dtcm);
+return std::make_unique<Rv32iCoreTop>(nullptr, "top", itcm, dtcm);
 ```
 
 > ⚠️ **`--format mem` 对多区域固件会 exit 3**（单条无地址字流无法表达区域归属）。

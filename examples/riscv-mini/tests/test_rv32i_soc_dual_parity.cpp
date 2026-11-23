@@ -5,7 +5,7 @@
 // Change: rv32i-pipeline-commit-path-2026-10（C3 的前置）
 // Capability: openspec/specs/rv32i-commit-path/spec.md
 //            （+ openspec/specs/verilator-rv32i-e2e/spec.md 的 MODIFIED）
-// DUT:        Rv32iPipelineTop（examples/riscv-mini/src/rv32i_pipeline_top.h）
+// DUT:        Rv32iCoreTop（examples/riscv-mini/src/rv32i_pipeline_top.h）
 //
 // ⚠️ DUT 在 **example 侧** ⇒ 本测试 MUST 住在 example 侧：根 `tests/**` 不许
 //    include example 路径（护栏 C3 / ADR-046「库测试 MUST NOT 经 include 路径
@@ -196,7 +196,7 @@ uint64_t read_port_output(Simulator &sim, ch::core::lnodeimpl *ln) {
 }
 
 // 顶层 27 个输出观测端口的当前值（顺序 == kObsNames）
-std::array<uint64_t, kObsCount> obs_snapshot(Rv32iPipelineTop &dut,
+std::array<uint64_t, kObsCount> obs_snapshot(Rv32iCoreTop &dut,
                                              Simulator &sim) {
     auto &io = dut.io();
     return {read_port_output(sim, io.obs_instr_addr.impl()),
@@ -460,7 +460,7 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
 constexpr std::size_t kTailFillWords = 256;
 
 template <std::size_t N>
-void load_firmware(Simulator &sim, Rv32iPipelineTop &dut,
+void load_firmware(Simulator &sim, Rv32iCoreTop &dut,
                     const std::array<uint32_t, N> &fw) {
     auto &io = dut.io();
     sim.set_input_value(io.ext_rst, 1u);
@@ -483,14 +483,14 @@ void load_firmware(Simulator &sim, Rv32iPipelineTop &dut,
 }
 
 // 既有固件（108 字）的重载
-void load_firmware(Simulator &sim, Rv32iPipelineTop &dut) {
+void load_firmware(Simulator &sim, Rv32iCoreTop &dut) {
     load_firmware(sim, dut, firmware());
 }
 
 // 跑 n 拍，记录每拍的观测向量
 using Trace = std::vector<std::array<uint64_t, kObsCount>>;
 
-Trace run_trace(Simulator &sim, Rv32iPipelineTop &dut, unsigned cycles) {
+Trace run_trace(Simulator &sim, Rv32iCoreTop &dut, unsigned cycles) {
     Trace t;
     t.reserve(cycles);
     for (unsigned c = 0; c < cycles; ++c) {
@@ -565,7 +565,7 @@ TEST_CASE("Rv32iSoc - JitFallbackContract",
     std::ostringstream captured;
     std::streambuf *saved = std::cout.rdbuf(captured.rdbuf());
 
-    auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim = std::make_unique<Simulator>(dev->context());
     // 显式再触发一次（幂等；`jit_compiled_==false` 时会重新尝试）⇒
     // 保证「JIT 被启用过」这个事实与日志无关地成立。
@@ -613,7 +613,7 @@ TEST_CASE("Rv32iSoc - JitFallbackContract",
     load_firmware(*sim, dev->instance());
     const Trace t_fallback = run_trace(*sim, dev->instance(), kCycles);
 
-    auto dev_i = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_i = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_i = std::make_unique<Simulator>(dev_i->context());
     sim_i->set_backend(std::make_unique<ch::InterpreterBackend>());
     load_firmware(*sim_i, dev_i->instance());
@@ -645,8 +645,8 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 
@@ -1103,8 +1103,8 @@ TEST_CASE("Rv32iSoc - ForwardingDiscriminatingCases",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 
@@ -1348,8 +1348,8 @@ TEST_CASE("Rv32iSoc - FetchSkidBufferDiscriminating",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 
@@ -1650,8 +1650,8 @@ TEST_CASE("Rv32iSoc - LoadByteLaneDiscriminating",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 
@@ -1823,8 +1823,8 @@ TEST_CASE("Rv32iSoc - StoreToLoadZeroIntervalReadNew",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 
@@ -1977,8 +1977,8 @@ TEST_CASE("Rv32iSoc - ForwardingTierDistanceCases",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 
@@ -2091,7 +2091,7 @@ TEST_CASE("Rv32iSoc - FirmwareInitDataLoadedFromConstruction",
     //    ⇒ ⇒ **不是**通过端口写进去的
     // ⚠️ `ch_device<T, Args...>` 的 `Args...` MUST **显式**给出
     //    （类模板参数不对构造函数实参做推导 ⇒ ⇒ 只写 `ch_device<T>` = 零参）
-    using FwDev = ch::ch_device<Rv32iPipelineTop, std::vector<uint32_t>,
+    using FwDev = ch::ch_device<Rv32iCoreTop, std::vector<uint32_t>,
                                 std::vector<uint32_t>>;
     auto dev_a = std::make_unique<FwDev>(rv32i_fw_demo::text(),
                                          rv32i_fw_demo::data());
@@ -2122,7 +2122,7 @@ TEST_CASE("Rv32iSoc - FirmwareInitDataLoadedFromConstruction",
 
     // ---- **零装载**：只释放复位 ----
     // ⚠️ 一条 `prog_*` 写都没有 ⇒ ⇒ 下面任何非零读回都**只能**来自 `init_data`
-    auto release_reset = [](Simulator &sim, Rv32iPipelineTop &dut) {
+    auto release_reset = [](Simulator &sim, Rv32iCoreTop &dut) {
         auto &io = dut.io();
             sim.set_input_value(io.ext_rst, 1u);
         sim.set_input_value(io.prog_we, 0u);
@@ -2223,8 +2223,8 @@ TEST_CASE("Rv32iSoc - StorePhaseCoherence",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 #if __has_include("jit/jit_compiler.h")
@@ -2333,8 +2333,8 @@ TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
         return;
     }
 
-    auto dev_a = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
-    auto dev_b = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
     auto sim_a = std::make_unique<Simulator>(dev_a->context());
     auto sim_b = std::make_unique<Simulator>(dev_b->context());
 #if __has_include("jit/jit_compiler.h")
@@ -2477,7 +2477,7 @@ TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
         // ---- 双后端：两侧都要给出**同一**语义 ----
         for (int backend_kind = 0; backend_kind < 2; ++backend_kind) {
             const bool use_verilator = (backend_kind == 1);
-            auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+            auto dev = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
             auto sim = std::make_unique<Simulator>(dev->context());
 #if __has_include("jit/jit_compiler.h")
             sim->set_jit_enabled(false);
@@ -2573,7 +2573,7 @@ TEST_CASE("Rv32iSoc - flush wins over illegal-freeze stall (redirect not lost)",
     for (int backend_kind = 0; backend_kind < 2; ++backend_kind) {
         const bool use_verilator = (backend_kind == 1);
         INFO("backend: " << (use_verilator ? "verilator" : "interpreter"));
-        auto dev = std::make_unique<ch::ch_device<Rv32iPipelineTop>>();
+        auto dev = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
         auto sim = std::make_unique<Simulator>(dev->context());
 #if __has_include("jit/jit_compiler.h")
         sim->set_jit_enabled(false);
