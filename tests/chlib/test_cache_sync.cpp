@@ -181,6 +181,7 @@ DUAL_BACKEND_TEST_PAIR(
     "[cache][sync][dcache][cold-miss][dual]",
     [&]() {
         sim.set_input_value(dev.instance().io().addr, 0x8000_h);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
         // ⚠️ 本拍**不拉** `ar_ready` ⇒ 观察 `ar_valid` 保持（AXI：VALID 不等 READY）
@@ -210,6 +211,7 @@ DUAL_BACKEND_TEST_PAIR(
     [&]() {
         // cycle 1: cold read ⇒ AR 握手
         sim.set_input_value(dev.instance().io().addr, 0x9000_h);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 1_h);
@@ -231,6 +233,7 @@ DUAL_BACKEND_TEST_PAIR(
 
         // re-read same addr（lane 0）→ hit
         sim.set_input_value(dev.instance().io().addr, 0x9000_h);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 0_h);
@@ -250,6 +253,7 @@ DUAL_BACKEND_TEST_PAIR(
     [&]() {
         // prefill 0xA000（4 beat）
         sim.set_input_value(dev.instance().io().addr, 0xA000_h);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,  1_h);
         sim.set_input_value(dev.instance().io().we,   0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 1_h);
@@ -267,6 +271,7 @@ DUAL_BACKEND_TEST_PAIR(
 
         // 写命中 ⇒ write-through 必须出现在 AXI 写通道上
         sim.set_input_value(dev.instance().io().addr,  0xA000_h);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().wdata, 0x12345678_h);
         sim.set_input_value(dev.instance().io().req,   1_h);
         sim.set_input_value(dev.instance().io().we,    1_h);
@@ -292,6 +297,7 @@ DUAL_BACKEND_TEST_PAIR(
     "[cache][sync][dcache][miss-write][dual]",
     [&]() {
         sim.set_input_value(dev.instance().io().addr,  0xB000_h);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().wdata, 0xDEADF00D_h);
         sim.set_input_value(dev.instance().io().req,   1_h);
         sim.set_input_value(dev.instance().io().we,    1_h);
@@ -319,6 +325,7 @@ DUAL_BACKEND_TEST_PAIR(
         constexpr uint64_t kBase = 0x4000;
         // fill：4 个 beat 各写一个**不同**的值（lane b = 0x1111_1111 * (b+1)）
         sim.set_input_value(dev.instance().io().addr,     kBase);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,      1_h);
         sim.set_input_value(dev.instance().io().we,       0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 1_h);
@@ -338,6 +345,7 @@ DUAL_BACKEND_TEST_PAIR(
         // 4 个 offset 各自读回**对应的 lane**
         for (uint64_t lane = 0; lane < 4; ++lane) {
             sim.set_input_value(dev.instance().io().addr,     kBase + lane * 4);
+            sim.set_input_value(dev.instance().io().strbe, 0xF_h);
             sim.set_input_value(dev.instance().io().req,      1_h);
             sim.set_input_value(dev.instance().io().we,       0_h);
             sim.set_input_value(dev.instance().io().ar_ready, 0_h);
@@ -359,6 +367,7 @@ DUAL_BACKEND_TEST_PAIR(
     [&]() {
         constexpr uint64_t kBase = 0x6000;
         sim.set_input_value(dev.instance().io().addr,     kBase);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,      1_h);
         sim.set_input_value(dev.instance().io().we,       0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 1_h);
@@ -376,6 +385,7 @@ DUAL_BACKEND_TEST_PAIR(
 
         // hit 读：ready 与 rdata **同拍**有效
         sim.set_input_value(dev.instance().io().addr,     kBase);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,      1_h);
         sim.set_input_value(dev.instance().io().we,       0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 0_h);
@@ -396,6 +406,7 @@ DUAL_BACKEND_TEST_PAIR(
     [&]() {
         // 冷地址 ⇒ miss ⇒ ready MUST 为 0（流水线靠 `data_ready` 反压等待）
         sim.set_input_value(dev.instance().io().addr,     0x7000);
+        sim.set_input_value(dev.instance().io().strbe, 0xF_h);
         sim.set_input_value(dev.instance().io().req,      1_h);
         sim.set_input_value(dev.instance().io().we,       0_h);
         sim.set_input_value(dev.instance().io().ar_ready, 1_h);

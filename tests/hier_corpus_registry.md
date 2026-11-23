@@ -47,6 +47,7 @@
 | DUT 类型 | 原因 |
 |---|---|
 | `riscv::IdStage` | **2026-11-15 · B4 · C4 之后才成为复合 DUT**：立即数改由库组件 `riscv::Rv32iDecoder` 承担（内联的 5 种立即数生成 + 8 级 select 链已删）⇒ ⇒ 类体里出现 `ch_module<` ⇒ ⇒ 触发 ③。**它不是层次化输出目标**（它是 `Rv32iPipeline` 的**中间级** ⇒ 单独发射无意义）⇒ ⇒ 它作为流水线的一级被 `test_rv32i_stage_dual`（**flat** 用例）覆盖，且 `Rv32iPipeline` 的层次化形态**目前 fail-closed**（22 条跨 module 边）⇒ ⇒ 故**不纳入**层次化语料（**与 `riscv::ExStage` 同一理由**）|
+| `TcmSlaveDut` | **2026-11-23 · S3（change `rv32i-dcache-burst-2026-11`）新增**：`axi4::TcmAxiSlave` + `riscv::DataTCM` 的**功能夹具**（`tests/test_tcm_axi_slave.cpp`），用于钉 `ARLEN=3` / `AWLEN=3` 的 burst 读写与 TCM 落值。**它不是层次化输出目标** ⇒ ⇒ 本 DUT 的形态（root 持 `ch_mem` + 子组件带 AXI 端口，即 C3）若要纳入层次化语料，MUST **单独**立一个 flat≡hier 等价用例（**本 change 未做** ⇒ 已记 backlog，不在此静默声称覆盖）⇒ ⇒ flat 行为由该文件的双后端用例（`DUAL_BACKEND_TEST_PAIR`）覆盖 |
 | `riscv::ExStage` | **2026-11-14 · B4 · C3 之后才成为复合 DUT**：算术核心由库组件 `riscv::Rv32iAlu` 承担（内联 10 个分支已删）⇒ ⇒ 类体里出现 `ch_module<` ⇒ ⇒ 触发 ③。**它不是层次化输出目标**（它是 `Rv32iPipeline` 的**中间级** ⇒ 单独发射无意义）⇒ ⇒ 它作为流水线的一级被 `test_rv32i_stage_dual`（**flat** 用例）覆盖，且 `Rv32iPipeline` 的层次化形态**目前 fail-closed**（22 条跨 module 边）⇒ ⇒ 故**不纳入**层次化语料 |
 
 > ⚠️ **豁免表不是垃圾桶**：每条 MUST 有**具体**原因 ⇒ ⇒ 护栏会核对「豁免的 DUT **确实**在语料里」

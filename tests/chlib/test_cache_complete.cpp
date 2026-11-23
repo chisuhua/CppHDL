@@ -88,6 +88,7 @@ TEST_CASE("DCache read miss-fill", "[cache][complete][dcache][miss-fill]") {
     // ⚠️ 2026-11-23 · S3 重写：AXI 侧是 full 5 通道 ⇒ fill 需要 **4 个 R beat**
     // 周期 1: read miss ⇒ AR（ar_ready=0 ⇒ 只观察 VALID 保持）
     sim.set_input_value(dc.io().addr,     0x2000u);
+    sim.set_input_value(dc.io().strbe, 0xF_h);
     sim.set_input_value(dc.io().wdata,    0x0u);
     sim.set_input_value(dc.io().we,       0u);
     sim.set_input_value(dc.io().req,      1u);
@@ -110,6 +111,7 @@ TEST_CASE("DCache read miss-fill", "[cache][complete][dcache][miss-fill]") {
 
     // 周期 6: 同地址再读（AXI 关闭）→ hit
     sim.set_input_value(dc.io().addr,     0x2000u);
+    sim.set_input_value(dc.io().strbe, 0xF_h);
     sim.set_input_value(dc.io().wdata,    0x0u);
     sim.set_input_value(dc.io().we,       0u);
     sim.set_input_value(dc.io().req,      1u);
@@ -137,6 +139,7 @@ TEST_CASE("DCache write hit-through", "[cache][complete][dcache][write-through]"
 
     // 周期 1: read miss ⇒ AR 握手（ar_ready=1 ⇒ fill_active 置位）
     sim.set_input_value(dc.io().addr,     0x3000u);
+    sim.set_input_value(dc.io().strbe, 0xF_h);
     sim.set_input_value(dc.io().wdata,    0x0u);
     sim.set_input_value(dc.io().we,       0u);
     sim.set_input_value(dc.io().req,      1u);
@@ -158,10 +161,12 @@ TEST_CASE("DCache write hit-through", "[cache][complete][dcache][write-through]"
     sim.set_input_value(dc.io().req,   0u);
     sim.set_input_value(dc.io().we,    0u);
     sim.set_input_value(dc.io().addr,  0x3000u);
+    sim.set_input_value(dc.io().strbe, 0xF_h);
     sim.tick();
 
     // 周期 7: write hit-through（way0 hit ⇒ 同时更新 line 的 lane 0 + 发 AXI 写）
     sim.set_input_value(dc.io().addr,     0x3000u);
+    sim.set_input_value(dc.io().strbe, 0xF_h);
     sim.set_input_value(dc.io().wdata,    0xCAFEBABEu);
     sim.set_input_value(dc.io().we,       1u);
     sim.set_input_value(dc.io().req,      1u);
@@ -171,6 +176,7 @@ TEST_CASE("DCache write hit-through", "[cache][complete][dcache][write-through]"
 
     // 周期 7: 同地址 read → hit，且读回**写入的新值**（write-through 已更新 lane）
     sim.set_input_value(dc.io().addr,     0x3000u);
+    sim.set_input_value(dc.io().strbe, 0xF_h);
     sim.set_input_value(dc.io().wdata,    0u);
     sim.set_input_value(dc.io().we,       0u);
     sim.set_input_value(dc.io().req,      1u);
@@ -437,6 +443,7 @@ TEST_CASE("DCacheSync vs DCacheAsync same fill behavior", "[cache][sync][async][
         auto& dc = dc_s_dev.instance();
 
         sim_s.set_input_value(dc.io().addr,     0x200000u);
+        sim_s.set_input_value(dc.io().strbe,    0xFu);
         sim_s.set_input_value(dc.io().wdata,    0u);
         sim_s.set_input_value(dc.io().we,       0u);
         sim_s.set_input_value(dc.io().req,      1u);

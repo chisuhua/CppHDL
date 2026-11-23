@@ -39,7 +39,7 @@ cd "$REPO_ROOT" || exit 2
 
 ROOT="$REPO_ROOT"
 REGISTRY=".rddf/checks/example-only-headers.tsv"
-EXPECTED=38
+EXPECTED=39
 SELF_TEST=0
 
 while [ $# -gt 0 ]; do

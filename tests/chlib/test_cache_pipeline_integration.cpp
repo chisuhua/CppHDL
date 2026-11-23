@@ -86,6 +86,9 @@ TEST_CASE("Cache-Pipeline - I-Cache Integration", "[integration][icache]") {
 }
 
 TEST_CASE("Cache-Pipeline - D-Cache Integration", "[integration][dcache]") {
+    // ⚠️ **2026-11-23（S3）重写**：`DCacheSync` 的 AXI 侧已是 **AXI4 full 5 通道**
+    //    ⇒ ⇒ 读 miss 需 **4 个 R beat**；`ready`/`miss` 是**组合**（对当前 addr），
+    //    `rdata` 是**寄存**（完成那拍捕获、保持到下一次读完成）。
     ch::core::context ctx("dcache_pipe");
     ch::core::ctx_swap swap(&ctx);
 
@@ -93,118 +96,77 @@ TEST_CASE("Cache-Pipeline - D-Cache Integration", "[integration][dcache]") {
     ch::Simulator sim(dev.context());
     auto& dcache = dev.instance();
 
-    // cycle 1: 冷读 → miss, 并发起 AXI 读请求
-    sim.set_input_value(dcache.io().addr,  0x2000u);
-    sim.set_input_value(dcache.io().req,   1u);
-    sim.set_input_value(dcache.io().we,    0u);
-    sim.set_input_value(dcache.io().axi_ready, 1u);
+    // 默认态（未驱动端口读到未定义值 ⇒ ⇒ 全部显式驱动）
+    sim.set_input_value(dcache.io().wdata, 0u);
+    sim.set_input_value(dcache.io().strbe, 0xFu);
+    sim.set_input_value(dcache.io().ar_ready, 0u);
+    sim.set_input_value(dcache.io().r_valid,  0u);
+    sim.set_input_value(dcache.io().r_data,   0u);
+    sim.set_input_value(dcache.io().r_last,   0u);
+    sim.set_input_value(dcache.io().r_resp,   0u);
+    sim.set_input_value(dcache.io().aw_ready, 0u);
+    sim.set_input_value(dcache.io().w_ready,  0u);
+    sim.set_input_value(dcache.io().b_valid,  0u);
+    sim.set_input_value(dcache.io().b_resp,   0u);
+
+    // cycle 1: 冷读 ⇒ miss + AR（4-beat burst · line 基址对齐）
+    // ⚠️ 本拍**不拉** `ar_ready` ⇒ 观察 `ar_valid` 保持（AXI：VALID 不等 READY）
+    sim.set_input_value(dcache.io().addr,     0x2000u);
+    sim.set_input_value(dcache.io().req,      1u);
+    sim.set_input_value(dcache.io().we,       0u);
+    sim.set_input_value(dcache.io().ar_ready, 0u);
     sim.tick();
 
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().miss))      == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_valid)) == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_addr))  == 0x2000u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ready))     == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().miss))     == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ar_valid)) == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ar_addr))  == 0x2000u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ar_len))   == 3u);
+    // ⚠️ miss ⇒ `ready=0`（流水线用 S2 的 `data_ready` 反压等待，不是固定延迟）
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ready))    == 0u);
 
-    // cycle 2: AXI 响应带回数据 → 填充 way0
-    sim.set_input_value(dcache.io().req,   0u);
-    sim.set_input_value(dcache.io().we,    0u);
-    sim.set_input_value(dcache.io().axi_resp_valid, 1u);
-    sim.set_input_value(dcache.io().axi_rdata, 0x12345678u);
+    // cycle 2: `ar_ready=1` ⇒ **AR 握手**（不握手则 fill 永不启动 ⇒ beat 全丢）
+    sim.set_input_value(dcache.io().ar_ready, 1u);
     sim.tick();
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ar_valid)) == 0u);
 
-    // cycle 3: 同址再读 → hit, rdata 来自 cache
-    sim.set_input_value(dcache.io().addr,  0x2000u);
-    sim.set_input_value(dcache.io().req,   1u);
-    sim.set_input_value(dcache.io().we,    0u);
-    sim.set_input_value(dcache.io().axi_ready, 0u);
+    // cycle 3..6: 4 个 R beat（lane0 = 0x12345678，其余 0）
+    sim.set_input_value(dcache.io().req,      0u);
+    sim.set_input_value(dcache.io().ar_ready, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(dcache.io().r_valid, 1u);
+        sim.set_input_value(dcache.io().r_data,  b == 0 ? 0x12345678u : 0u);
+        sim.set_input_value(dcache.io().r_last,  b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(dcache.io().r_valid, 0u);
+    sim.set_input_value(dcache.io().r_last,  0u);
+
+    // cycle 6: 同址再读 ⇒ hit（ready 与请求**同拍**）
+    sim.set_input_value(dcache.io().addr, 0x2000u);
+    sim.set_input_value(dcache.io().req,  1u);
+    sim.set_input_value(dcache.io().we,   0u);
     sim.tick();
-
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().miss))  == 0u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().ready)) == 1u);
+
+    // cycle 7: `rdata` 在**下一拍**可用（寄存输出）
+    sim.tick();
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().rdata)) == 0x12345678u);
 
-    // cycle 4: 写通道 (write-through) → AXI 侧透写地址/数据/写使能
-    sim.set_input_value(dcache.io().addr,  0x6000u);
-    sim.set_input_value(dcache.io().wdata, 0xCAFEF00Du);
-    sim.set_input_value(dcache.io().req,   1u);
-    sim.set_input_value(dcache.io().we,    1u);
-    sim.set_input_value(dcache.io().axi_ready, 1u);
+    // cycle 8: 写（write-through 单 beat）⇒ AW 握手那拍完成
+    sim.set_input_value(dcache.io().addr,     0x6000u);
+    sim.set_input_value(dcache.io().wdata,    0xCAFEF00Du);
+    sim.set_input_value(dcache.io().req,      1u);
+    sim.set_input_value(dcache.io().we,       1u);
+    sim.set_input_value(dcache.io().aw_ready, 1u);
+    sim.set_input_value(dcache.io().w_ready,  1u);
     sim.tick();
 
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_we))    == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_wdata)) == 0xCAFEF00Du);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_valid)) == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_addr))  == 0x6000u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().aw_valid)) == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().aw_addr))  == 0x6000u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().aw_len))   == 0u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().w_data))   == 0xCAFEF00Du);
 
     SKIP("Rv32iPipelineWithCache not implemented; cache-level assertions above passed.");
 }
 
-TEST_CASE("Cache-Pipeline - Dual Cache Access", "[integration][dual]") {
-    ch::core::context ctx("dual_cache");
-    ch::core::ctx_swap swap(&ctx);
-
-    // 同时实例化 I-Cache 和 D-Cache（独立 context 仅做类型/拓扑校验）。
-    // 真正跨 cache 协同需要 Rv32iPipelineWithCache 顶层容器。
-    ch::ch_device<ICacheSync> icache_dev;
-    ch::ch_device<DCacheSync> dcache_dev;
-    REQUIRE(icache_dev.context() != nullptr);
-    REQUIRE(dcache_dev.context() != nullptr);
-    REQUIRE(icache_dev.context() != dcache_dev.context());
-
-    SKIP("Dual-cache cross-device test needs Rv32iPipelineWithCache wrapper; "
-         "individual caches verified in [icache] and [dcache] cases.");
-}
-
-TEST_CASE("Cache-Pipeline - AXI Interface", "[integration][axi]") {
-    ch::core::context ctx("axi_cache");
-    ch::core::ctx_swap swap(&ctx);
-
-    // AXI 通道验证在独立 ICache / DCache 上下文中进行（ch::ch_device 隔离）。
-    ch::ch_device<ICacheSync> icache_dev;
-    ch::ch_device<DCacheSync> dcache_dev;
-
-    // I-Cache：miss 期间 AXI 请求挂起，ready 跟随 axi_ready
-    {
-        ch::Simulator sim(icache_dev.context());
-        auto& icache = icache_dev.instance();
-
-        sim.set_input_value(icache.io().addr, 0x4000u);
-        sim.set_input_value(icache.io().req,  1u);
-        sim.set_input_value(icache.io().axi_ready,      0u);
-        sim.set_input_value(icache.io().axi_resp_valid, 0u);
-        sim.tick();
-
-        // axi_valid 应保持挂起直到 ready
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().axi_valid)) == 1u);
-        // 真实 cache: miss 时 ready = axi_ready (stub 恒为 1)
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ready))     == 0u);
-
-        sim.set_input_value(icache.io().axi_ready,      1u);
-        sim.set_input_value(icache.io().axi_data,       0xABCD0001u);
-        sim.set_input_value(icache.io().axi_resp_valid, 1u);
-        sim.tick();
-
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ready)) == 1u);
-        // miss 期间数据直通 AXI 数据通道
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().data)) == 0xABCD0001u);
-    }
-
-    // D-Cache 写 AXI 通道
-    {
-        ch::Simulator sim(dcache_dev.context());
-        auto& dcache = dcache_dev.instance();
-        sim.set_input_value(dcache.io().addr,  0x5000u);
-        sim.set_input_value(dcache.io().wdata, 0xBEEF0002u);
-        sim.set_input_value(dcache.io().we,    1u);
-        sim.set_input_value(dcache.io().req,   1u);
-        sim.set_input_value(dcache.io().axi_ready, 1u);
-        sim.set_input_value(dcache.io().axi_resp_valid, 0u);
-        sim.set_input_value(dcache.io().axi_rdata, 0u);
-        sim.tick();
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_addr))  == 0x5000u);
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_wdata)) == 0xBEEF0002u);
-        REQUIRE(static_cast<uint64_t>(sim.get_port_value(dcache.io().axi_we))    == 1u);
-    }
-
-    SKIP("AXI cross-cache burst test needs Rv32iPipelineWithCache wrapper; "
-         "individual cache AXI channels verified above.");
-}

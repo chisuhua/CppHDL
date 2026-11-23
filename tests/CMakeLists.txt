@@ -729,6 +729,19 @@ target_include_directories(test_rv32i_stage_dual PRIVATE
 #      `test_rv32i_soc_dual_parity`（核级整装配逐拍）承担。
 add_catch_test(test_rv32i_mem_backpressure test_rv32i_mem_backpressure.cpp)
 
+# ── S3 · `axi4::TcmAxiSlave`（AXI4 full slave 包装 TCM · burst 读写的对端）──────
+#   判据来源 = change `rv32i-dcache-burst-2026-11` 的 AC6（`ARLEN=3` 读 4 字 /
+#   `AWLEN=3` 写 4 字 · 地址与值全部**手推**）
+#   ⚠️ **双后端**（`add_dual_backend_test`）：本组件是**纯组合 + 1 拍 sread** 的
+#      单口定时逻辑 ⇒ 正是两后端最易分叉的形态。
+add_dual_backend_test(test_tcm_axi_slave
+    SOURCES test_tcm_axi_slave.cpp
+    TIMEOUT 300
+)
+target_include_directories(test_tcm_axi_slave PRIVATE
+    ${PROJECT_SOURCE_DIR}/include/cpu/pipeline
+)
+
 # ⚠️ **路线 C 第 2 批 —— RV32I 的「时序侧」组件进双后端 parity**（2026-11-03）
 #    ⇒ `IdStage`（**16** 个 ch_reg = ID/EX 流水线寄存器）· `Rv32iRegFile`（**32** 个
 #      ch_reg = 仓内最大的 always_ff 面）· `DataTCM<8,32>`（ch_mem **aread** 0-cycle

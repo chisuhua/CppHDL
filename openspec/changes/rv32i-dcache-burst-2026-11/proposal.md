@@ -52,7 +52,11 @@
   ⇒ 断言：对同一 line 的 **4 个不同 offset**（0/4/8/12）写不同值后读回，**4 个值都正确**
 - [ ] **AC2** 🔴 **`offset` 参与数据选择**（修「假 line」的直接判据）
   ⇒ 断言：line 的 4 个 lane 各存不同值 ⇒ 按 `addr[3:2]` 读回对应 lane
-- [ ] **AC3** 🔴 **hit = 1 拍**：hit 时 `ready` 与 `rdata` 同拍有效（与 TCM 语义对齐）
+- [ ] **AC3** 🔴 **hit = 1 拍**：hit 时 `ready` 在**请求拍**即为 1；`rdata` 在**下一拍**给出
+  对应 lane 的数据（与 TCM 的「地址 N ⇒ 数据 N+1」对齐）
+  ⚠️ **2026-11-23 口径订正**（实施期发现）：`rdata` MUST 是**保持寄存器** ——
+  `rv32i-memory-timing` 的「MEM/WB MUST 被冻结」会让 load 结果晚若干拍才装进 MEM/WB
+  ⇒ ⇒ 数据 MUST 可在解冻拍重新读出（详见 `design.md` §2.4b ②）
 - [ ] **AC4** 🔴 **miss = 反压**：miss 期间 `ready=0`，且流水线（S2 的冻结链）停住；
   fill 完成后 `ready=1` 并给出正确数据
 - [ ] **AC5** 🔴 **burst 事务参数手推**：`ARLEN=3` · `ARSIZE=2`（4 B）· `ARBURST=INCR`
@@ -62,6 +66,16 @@
 - [ ] **AC7** 🔴 **核级零回归**：`tb_rv32i_soc` 的 **24 条判据**全过；
   `test_rv32i_soc_dual_parity` 逐拍等价（两后端）；`prog_*` 装载一致（I-TCM 不受影响）
 - [ ] **AC8** **双后端**：新用例走 `DUAL_BACKEND_TEST_PAIR`（interpreter + verilator）
+
+> **实施期新增的 3 条**（都是「一接进流水线才暴露」的，见 `design.md` §2.4b）：
+
+- [ ] **AC9** 🔴 **握手逐请求对齐**：`ready` / `miss` MUST 是**组合**（对当拍 `addr`）；
+  `req` MUST 保持到 `ready`（真握手）⇒ 连续两条访存 MUST NOT 错位
+- [ ] **AC10** 🔴 **`strbe` 字节写**：前端字节使能 MUST 生效（`SB` 不破坏同字其余字节；
+  AXI 侧 `w_strb` 同源）
+- [ ] **AC11** 🔴 **核侧零请求放行 + 访存门控**：`data_ready = !data_req | cache.ready`
+  （空闲拍 MUST NOT 冻结流水线）；`data_req` 只在 MEM 级 load/store 时为 1
+  （ALU/NOP MUST NOT 触发 AXI 事务）
 
 ## Out of Scope
 

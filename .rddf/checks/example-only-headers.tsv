@@ -50,3 +50,4 @@ include/cpu/riscv/rv32i_exception.h	示例用法（库侧零消费者）
 include/rtl_emit/product_check.h	公开 API（src 实现 TU + tests 用法）⇒ R2：实现 ≠ 使用
 include/utils/format_utils.h	库组件的 tests 用法（库侧零消费者）
 include/utils/source_info.h	库组件的 tests 用法（库侧零消费者）
+include/axi4/tcm_axi_slave.h	示例用法（库侧零消费者：消费者是 examples/riscv-mini 的核顶层 + tests）

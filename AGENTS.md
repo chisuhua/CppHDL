@@ -446,7 +446,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 274
+- CTEST_TOTAL: 275
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -455,7 +455,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
-- VERILATOR_E2E_TOTAL: 80
+- VERILATOR_E2E_TOTAL: 81
 <!-- CI anchor: 「**双后端 parity 源文件数**」。
      scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
      口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
@@ -465,14 +465,14 @@ bash scripts/rv32i_rtl_sim_env.sh
      计数口径 = 「剥注释与字符串后含 `DUAL_BACKEND_TEST_PAIR(` **调用**的
      测试源文件」+ 「hand-crafted 真 dual 白名单（1 个）」。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_TOTAL: 66
+- DUAL_BACKEND_PARITY_TOTAL: 67
 <!-- CI anchor: 「**双后端 parity macro 调用数**」= 上一个锚点的**深度**维度。
      ⚠️ 为什么两个锚点都要：只钉「文件数」的话，**从有多个 dual pair 的文件里
      删掉 1 个 pair** ⇒ 该文件仍被计数 ⇒ 护栏**看不见**（实测：变异 M1 恒绿）
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 286
+- DUAL_BACKEND_PARITY_PAIRS: 290
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——
@@ -494,8 +494,8 @@ bash scripts/rv32i_rtl_sim_env.sh
 
   | 指标 | 值 | 复核命令 |
   |------|----:|----------|
-  | 其中 non-perf | 263 | `cd build && ctest -N -LE perf \| tail -1` |
-  | `tests/test_*.cpp` | 164 | `ls tests/test_*.cpp \| wc -l` |
+  | 其中 non-perf | 264 | `cd build && ctest -N -LE perf \| tail -1` |
+  | `tests/test_*.cpp` | 165 | `ls tests/test_*.cpp \| wc -l` |
   | `tests/chlib/test_*.cpp` | 51 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|

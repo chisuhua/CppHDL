@@ -1,30 +1,48 @@
-## 2026-11-23 — S3（第 1 阶段）：`DCacheSync` 的 AXI4 full 主口 + 修「假 line」
+## 2026-11-23 — S3：D-L1 的 AXI4 full 主口 + 真 line + **接入核**（D-Cache 首次上生产路径）
 
-**背景**：G-7 裁决 = **full AXI4 主干**（2026-11-23 · 用户）⇒ S3 的 D-L1 直接上 full 主口 +
-4-beat burst。调研同时查出 `DCacheSync` 的**真缺陷**：
+**背景**：G-7 裁决 = **full AXI4 主干**（2026-11-23 · 用户）；S3 一次做完（不拆 S3a/S3b）。
+调研同时查出 `DCacheSync` 的**真缺陷**（当前不可观测，接上就暴露）：内部 line = 128 bit（4 字），
+但 `axi_rdata` 只有 32 bit ⇒ fill 是 `zext<128>(axi_rdata)`（只填低 32 位）· 读是
+`bits<31,0>(cache_data)` ⇒ **`offset` 完全不参与数据选择** ⇒ ⇒ **同一 line 的 4 个地址恒读第一个字**。
 
-- 内部 line = 128 bit（4 字），但 `axi_rdata` 只有 32 bit，fill 是 `zext<128>(axi_rdata)`
-  ⇒ 只填低 32 位
-- 读是 `bits<31,0>(cache_data)` ⇒ **`offset` 完全不参与数据选择**
-- ⇒ ⇒ **同一 line 的 4 个地址恒读到第一个字**（功能错误）
-- 当前不可观测（D-Cache 未接入流水线）⇒ S3 一接上就暴露
+**本次**（三阶段，同一 change `rv32i-dcache-burst-2026-11`）：
 
-**本次（第 1 阶段）**：
-- `chlib::DCacheSync` 的 AXI 侧从**简化握手**（7 根）改为 **AXI4 full 5 通道**（19 根）
-  ⇒ 读 miss = **4-beat burst**（`ARLEN=3` / `ARSIZE=2` / `ARBURST=INCR`）
-  ⇒ 写 = write-through **单 beat**（`AWLEN=0`）
-- **修「假 line」**：`addr[3:2]` 参与**读选择**与**写更新**；fill 的 4 个 beat 各落一个 lane
-- `ready` 语义：**hit ⇒ 1 拍**（与 `DataTCM` 的 `sread` 对齐）；**miss ⇒ 0**（流水线用
-  `data_ready` 反压等待 —— S2 打通的通路）
-- 新测试 3 个（line lane / hit 延迟 / miss 反压）+ 既有 5 个 cache 测试的激励改 4 beat
+1. **`chlib::DCacheSync` 重写**（191 → 296 行）
+   - AXI 侧：简化握手（`axi_*` · 7 根）→ **AXI4 full 5 通道**（AR/R/AW/W/B · 19 根）
+   - 读 miss = **4-beat burst fill**（`ARLEN=3` / `ARSIZE=2` / `ARBURST=INCR`）；写 = write-through **单 beat**
+   - **修「假 line」**：`addr[3:2]` 参与**读选择**与**写更新**；fill 的 4 beat 各落一个 lane
+   - **前端新增 `strbe[4]`**（`SB`/`SH` 只写选中字节；AXI 侧 `w_strb` 同源）
+   - ⚠️ **`ready` / `miss` 改为组合**（对**当拍 `addr`**）：旧 `miss` 来自 `sread` ⇒ 与
+     `addr` **错位一拍** ⇒ 一接进流水线，反压就判在**错误的请求**上。⇒ ⇒ `req` 因此成为
+     **真握手**（MUST 保持到 `ready=1`）
+   - ⚠️ **`rdata` 改为保持寄存器**（**S2 的冻结语义强制**）：已签批 `rv32i-memory-timing` 要求
+     「MEM/WB 寄存器 MUST 被冻结」⇒ ⇒ load 完成后的下一拍若被下一条访存的反压冻结，
+     结果装不进 MEM/WB ⇒ ⇒ 解冻那拍 MUST 仍能读到该 load 的数据 ⇒ ⇒ 数据不能是随 `addr`
+     变化的组合量。⇒ 数据数组因此走 `aread`（组合读）⇒ **hit 仍是 1 拍**
+2. **新增 `axi4::TcmAxiSlave`**（`include/axi4/tcm_axi_slave.h`）：把 `DataTCM` 包成
+   AXI4 full slave（`ARLEN`/`AWLEN` 递增 burst · 字节地址 → 字地址 · `w_strb` → `strbe`）
+3. **核接线**（`Rv32iCoreTop`）：`pipeline ↔ DCacheSync ↔ TcmAxiSlave ↔ DataTCM`（TCM 旁路）
+   - **`data_ready ← !data_req | cache.ready`**（`data_ready` 是**无条件**冻结信号 ⇒ 空闲拍被
+     cache 的 `ready=0` 拖低会**永久冻死**流水线 —— 实测踩中：24 条核级判据 23 条红）
+   - **`Rv32iPipeline` 新增 `data_req`**（`MEM 级有效 & (load|store)`）：cache 读**有副作用**
+     （miss ⇒ AXI burst）⇒ 不能像 TCM 那样对**每条**指令都读（否则 miss 风暴）
 
-⚠️ **公开面变更**（已登记 `.rddf/checks/public-api-surface.md`）：旧简化握手口
-（`axi_*` · 7 根）→ **AXI4 full 5 通道**（19 根）⇒ 下游接旧口的代码 MUST 改。
-⚠️ **前端零变化**（`addr` / `wdata` / `req` / `we` → `rdata` / `ready` / `miss`）
-⇒ 只接前端的下游不必改。
-⚠️ **`d_cache_async.h` 的同样缺陷本阶段不修**（登记为已知边界 · async 未接入生产路径）。
-⚠️ **S3 尚未完成**：`TcmAxiSlave`（AXI4 slave 包装 D-TCM）与**核接线**
-（`pipeline → cache → TCM`）待做 ⇒ 核的 `data_ready` **仍未真正被拉低**。
+**观测面变化（如实登记）**：多拍访存 ⇒ `data_write_en` / `wb_write_en` 呈**电平**（同一事务连续
+多拍）⇒ 相关判据改为「**事务计数**」（连续相同 `(addr,data)` 折一）+ 保留序列/配对断言；
+`perf_load_use_stalls` 8 → **2**（两处 load→use 的 load 都 miss ⇒ 保持拍归入内存反压，S2 口径）；
+核级计时预算 23 → **41** 拍（3 次 miss × 8 + 2 保持，分段分解见测试注释）。
+
+⚠️ **公开面变更**（已登记 `.rddf/checks/public-api-surface.md`）：`DCacheSync` 的 `axi_*` 7 根
+→ AXI4 full 19 根 + 前端 `strbe`（+1）；`Rv32iPipeline` 新增 `data_req`；**新增**公开头
+`include/axi4/tcm_axi_slave.h`。⇒ 下游 MUST 同步。
+⚠️ **核的 34 端口面零变化**（AXI 全在核**内部** —— ADR-073 ⑫）；产物字节会变。
+⚠️ **`d_cache_async.h` 的同样缺陷不修**（登记为已知边界 · async 未接入生产路径）。
+⚠️ **`TcmAxiSlave` 的 AW/W 分拍** ⇒ 连续 store 各多 1 拍（真写缓冲 = 独立立项）。
+
+**验证（实测）**：`ctest` **275/275** · `run_all_ported_tests` PASS 29 / FAIL 0 ·
+`rv32i_rtl_sim_env.sh` PASS（`checks=24 fails=0`）· `verify_hierarchical_rtl` / `verify_flat_rtl_emit` /
+`verify_examples_rtl_sim` / `verify_dual_backend_parity` / `verify_no_duplicate_rv32i_headers` 全绿 ·
+`test_cache_sync` **24 用例 / 80 断言**（双后端）· 新 `test_tcm_axi_slave` **2 用例 / 18 断言**（双后端）。
 
 ## 2026-11-23 — S2：RV32I MEM 级反压（`data_ready` 真消费）
 

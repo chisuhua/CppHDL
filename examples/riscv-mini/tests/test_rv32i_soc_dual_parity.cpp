@@ -637,7 +637,10 @@ TEST_CASE("Rv32iSoc - JitFallbackContract",
 // ===========================================================================
 TEST_CASE("Rv32iSoc - DualBackendTraceParity",
           "[rv32i][soc][dual][verilator][e2e]") {
-    constexpr unsigned kCycles = 200;
+    // ⚠️ **2026-11-23（S3）**：D-Cache 接入后每处 load **miss** 要等 4-beat fill
+    //    ⇒ ⇒ 程序的**完成时刻**后移 ⇒ ⇒ 窗口 MUST 放宽（否则 golden 序列被**截断**，
+    //    断言退化成「窗口边界」而不是 ISA 语义）。260 拍 ⇒ 尾部仍余 ~30 拍。
+    constexpr unsigned kCycles = 260;
 
     if (!tool_available("verilator")) {
         WARN("verilator not on PATH - verilator half skipped (not SKIP: "
@@ -801,7 +804,19 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //    ⇒ 永远对不上）⇒ 本断言是「冒险真的被检测到」的判别力来源。
     //    ⚠️ **手推依据** = `openspec/changes/memory-timing-contract-2026-11/design.md`
     //    §10.2（分段分解：fill 3 + **stall 8** + flush 12 = 23）+ §10.4。
-    REQUIRE(ta.back()[kIdxLoadUseStalls] == 8u);
+    // ⚠️⚠️ **2026-11-23（S3 · D-Cache 接入）后订正 8 → 2**（手推，不是抄波形）：
+    //    两处 load→use 的 `lw` 现在**都 miss**（0x100 / 0x110 两行都是冷行 ——
+    //    之前的 `sw` 是 write-through，**不填行**）⇒ ⇒ 保持拍被分成两段：
+    //      · **检测拍**：load 在 EX、MEM 级里是**非访存**指令 ⇒ ⇒ `mem_stall=0`
+    //        ⇒ ⇒ 这 **1 拍**计入 `perf_load_use_stalls`；
+    //      · 其余保持拍：load 已进 MEM 且 miss ⇒ ⇒ `mem_stall=1`
+    //        ⇒ ⇒ 按 S2 的口径（`& !mem_stall`）归入**内存反压**，不计入本计数器。
+    //    ⇒ ⇒ **每处 1 拍** ⇒ 合计 **2**。
+    //    ⚠️ 判别力不变：修复前本计数器**恒为 0**（检测用的是 MEM 级 load ⇒ 晚一级）
+    //    ⇒ ⇒ 「冒险真的被检测到」仍由本断言钉住（0 依旧转红）。
+    //    ⚠️ 若将来这两条 load 变成 **hit**（例如固件先读后写）⇒ ⇒ 手推值回到 **8**
+    //    （4 拍/处）；本断言 MUST 随之重推，**不得**盲改数字。
+    REQUIRE(ta.back()[kIdxLoadUseStalls] == 2u);
     // 控制停顿 = **全部控制重定向**的**次数**（2026-10-26 起含 JAL/JALR）
     //   = 1（taken 的 beq 误预测）+ 3（JAL @word64 + JALR @word80 + JAL @word100）
     // ⚠️ 口径是「**重定向次数**」而不是「停顿拍数」—— 每次重定向实际代价是 **3 拍**
@@ -870,14 +885,36 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //    两条断言**一起**转红（不会「一条变、一条不变」而掩盖）。
     // ⚠️ ⑤/⑥ 是**2026-10-26 实测**（不是推导）：加入两个跳转后
     //    `non_retired` 从 11 变为 17（各 +3）⇒ 与条件分支的冲刷代价一致。
+    // ⚠️⚠️ **2026-11-23（S3 · D-Cache 接入）后订正 23 → 41** —— 分段分解：
+    //
+    //   **填充 3 + 冲刷 12 + miss 3×8 + load-use 保持 2 = 41**
+    //
+    //   ① **fill 3** —— 不变（`primed` 门控的代价，见上）
+    //   ② **冲刷 12** —— 不变（4 次重定向 × 3 拍；重定向次数与存储器无关）
+    //   ③ **miss 3 × 8 = 24** —— 固件里 3 条 load 落在**冷行**：
+    //      `lw x5,0x100` · `lw x10,0x110` · `lw x13,0x120`
+    //      （`lw x12,0x100` **命中** —— 行已被 `lw x5` 的 fill 铺满，且 `sb` 只改字节）
+    //      ⇒ 每次 miss 的保持拍 = **8**（手推：AR 在请求拍握手 ⇒ 下一拍 slave 进
+    //      `r_active` ⇒ TCM `sread` 1 拍 + `r_pending` 1 拍 ⇒ **2 拍/beat**
+    //      × 4 beat = 8；`r_last` 那拍即 `fill_complete` ⇒ 当拍解冻）
+    //   ④ **load-use 保持 2** —— 两处紧邻 load→use，每处只有**检测拍**是
+    //      「纯冒险」保持（其余保持拍与 ③ 的 miss 重叠 ⇒ 已计入 ③）
+    //      ⇒ 与下面的 `kIdxLoadUseStalls == 2` 是**同一条手推**
+    //
+    //   逐段实测（S3 落地后）：`1..3`(3) `24..33`(10=8 miss + 1 保持 + …)
+    //   `43..45`(3) `58..67`(10) `84..91`(8) `97..99`(3) `114..116`(3) `135..137`(3)
+    //   ⇒ 合计 **41** ✓
+    //   ⚠️ ③ 的 **8 拍/miss** 是**实现属性**（slave 的 beat 节奏）⇒ 若将来把
+    //   slave 改成 1 拍/beat ⇒ 本常数 MUST 按 ③ 重推（**不得**盲改数字）。
     std::size_t non_retired = 0;
     for (std::size_t c = 1; c < ta.size(); ++c) {
         if (ta[c][kIdxInstructions] == ta[c - 1][kIdxInstructions]) {
             ++non_retired;
         }
     }
-    REQUIRE(non_retired == 23u);
-    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 24u);
+    REQUIRE(non_retired == 41u);
+    // 退休数 = 采样拍数 − (非退休拍 + 第 0 拍那条已退休的差)
+    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 42u);
 
     // ---- 写回序列（ISA 语义的最强判据）----
     //
@@ -898,12 +935,22 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //   （word 29 的 BEQ 被 taken ⇒ 冲刷 word 30 的 `addi x7,x0,0x7f`
     //    ⇒ **x7 MUST NOT 出现**）
     {
+        // ⚠️ **2026-11-23（S3）口径修订**：D-Cache 接入后 MEM 级多拍
+        //    ⇒ ⇒ 「MEM/WB 寄存器 MUST 被冻结」（`rv32i-memory-timing`）
+        //    ⇒ ⇒ `wb_write_en` 是**电平**，同一条指令会在 WB **停留多拍**
+        //    ⇒ ⇒ 逐拍收集会重复计数 ⇒ ⇒ 折掉**连续相同** `(rd, data)`。
+        //    ⚠️ 该折算会掩盖「同一条指令连续两拍写回**同一个** (rd,data)」这一形态
+        //    ⇒ ⇒ 该形态由**退休总数**（上面的 `kCycles - 42`）与
+        //    `dbg_load_use_detected` 计数共同覆盖（多退休一条 ⇒ 总数 +1 ⇒ 转红）。
         std::vector<std::pair<uint64_t, uint64_t>> wb;
         for (std::size_t c = 0; c < ta.size(); ++c) {
             if (ta[c][kIdxWbWriteEn] != 1u) {
                 continue;
             }
-            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
+            const std::pair<uint64_t, uint64_t> ev{ta[c][kIdxWbRdAddr],
+                                                   ta[c][kIdxWbWriteData]};
+            if (!wb.empty() && wb.back() == ev) continue;
+            wb.push_back(ev);
         }
         REQUIRE(wb.size() == kExpectedWritebacks.size());
         for (std::size_t i = 0; i < wb.size() && i < kExpectedWritebacks.size();
@@ -924,12 +971,16 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     // ⇒ 仍保留本**计数**断言：把「只写一次」写成显式的 liveness 判据
     //    （序列断言已覆盖，但计数断言的失败信息更直接）。
     {
+        // ⚠️ **2026-11-23（S3）**：`wb_write_en` 是电平（MEM/WB 冻结 ⇒ 同一条指令
+        //    可停留多拍）⇒ ⇒ 计数改为**连续段数**（1 段 = 1 次写回事务）。
+        bool in_run = false;
         std::size_t x8_writes = 0;
         for (std::size_t c = 0; c < ta.size(); ++c) {
-            if (ta[c][kIdxWbWriteEn] == 1u && ta[c][kIdxWbRdAddr] == 8u &&
-                ta[c][kIdxWbWriteData] == 1u) {
-                ++x8_writes;
-            }
+            const bool hit = (ta[c][kIdxWbWriteEn] == 1u &&
+                              ta[c][kIdxWbRdAddr] == 8u &&
+                              ta[c][kIdxWbWriteData] == 1u);
+            if (hit && !in_run) ++x8_writes;
+            in_run = hit;
         }
         REQUIRE(x8_writes == 1u);
     }
@@ -1700,10 +1751,21 @@ TEST_CASE("Rv32iSoc - LoadByteLaneDiscriminating",
     // ⚠️ 用**序列**而不是计数：「多一次假退休」会让计数**同步** +1
     //    ⇒ 任何计数断言都抓不到 ⇒ 只有序列能抓。
     {
+        // ⚠️ **2026-11-23（S3）**：D-Cache 接入后 MEM 级是**多拍**的
+        //    ⇒ ⇒ `rv32i-memory-timing` 的「MEM/WB 寄存器 MUST 被冻结」会让**同一条**
+        //    指令在 WB 停留多拍 ⇒ ⇒ `wb_write_en` 是**电平**（不是脉冲）
+        //    ⇒ ⇒ 逐拍收集会把同一条指令数成多条。
+        //    ⇒ 口径：**连续相同** `(rd, data)` 观测折成一条。
+        //    ⚠️ 残余盲区（如实登记）：紧邻的**同 rd 同 data** 两条指令无法与冻结区分
+        //    ⇒ ⇒ 该角落由 ② 的**序列**（任何顺序错位仍会被抓到）与
+        //    `obs_perf_instructions`（退休计数）共同覆盖。
         std::vector<std::pair<uint64_t, uint64_t>> wb;
         for (std::size_t c = 0; c < ta.size(); ++c) {
             if (ta[c][kIdxWbWriteEn] != 1u) continue;
-            wb.push_back({ta[c][kIdxWbRdAddr], ta[c][kIdxWbWriteData]});
+            const std::pair<uint64_t, uint64_t> ev{ta[c][kIdxWbRdAddr],
+                                                   ta[c][kIdxWbWriteData]};
+            if (!wb.empty() && wb.back() == ev) continue;   // 冻结拍的重复
+            wb.push_back(ev);
         }
         REQUIRE(wb.size() == kLoadByteLaneWritebacks.size());
         for (std::size_t i = 0; i < wb.size(); ++i) {
@@ -2269,11 +2331,25 @@ TEST_CASE("Rv32iSoc - StorePhaseCoherence",
                (addr == kT4AddrB && data == kT4DataB) ||
                (addr == kT4AddrC && data == kT4DataC);
     };
-    std::size_t en_beats = 0;
+    std::size_t en_beats = 0;   // = store **事务数**（连续相同 (addr,data) 折一）
+    std::size_t en_cycles = 0;  // = `en=1` 的**拍数**（多拍 store ⇒ 可能更大）
     std::set<std::pair<uint64_t, uint64_t>> seen;
+    std::pair<uint64_t, uint64_t> last_pair{0, 0};
+    bool have_last = false;
     for (std::size_t c = 0; c < ta.size(); ++c) {
         if (ta[c][kIdxDataWriteEn] != 1u) continue;
-        ++en_beats;
+        ++en_cycles;
+        // ⚠️ **2026-11-23（S3）**：D-Cache 接入后 store 会被**反压**（多拍）
+        //    ⇒ ⇒ `data_write_en` 是**电平** ⇒ ⇒ 「拍数」不再等于「事务数」。
+        //    ⇒ ⇒ 本判据的**意图**（不出现多余的 store）落在**事务数**上
+        //    ⇒ ⇒ **连续相同 `(addr, data)`** 折成一条（冻结/反压期间 exmem 不动）。
+        const std::pair<uint64_t, uint64_t> cur{ta[c][kIdxDataAddr],
+                                                ta[c][kIdxDataWriteData]};
+        if (!have_last || cur != last_pair) {
+            ++en_beats;
+            last_pair = cur;
+            have_last = true;
+        }
         const uint64_t addr = ta[c][kIdxDataAddr];
         const uint64_t data = ta[c][kIdxDataWriteData];
         INFO("store beat " << c << ": addr=0x" << std::hex << addr << " data=0x"
@@ -2284,7 +2360,9 @@ TEST_CASE("Rv32iSoc - StorePhaseCoherence",
     }
 
     // ---- ③ 三条 store 各出现一次（不多不少）----
+    // `en_beats` = 事务数（上升沿）· `en_cycles` 只作诊断（多拍反压时 > 事务数）
     REQUIRE(en_beats == 3u);
+    REQUIRE(en_cycles >= en_beats);
     REQUIRE(seen.size() == 3u);
     REQUIRE(seen.count({kT4AddrA, kT4DataA}) == 1u);
     REQUIRE(seen.count({kT4AddrB, kT4DataB}) == 1u);

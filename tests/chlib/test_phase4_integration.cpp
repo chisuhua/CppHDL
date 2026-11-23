@@ -33,6 +33,7 @@
 //   本文件的价值（「多组件可同时实例化」）**保留** ⇒ ⇒ **不**随头文件一起删。
 #include "cpu/cache/i_cache_sync.h"
 #include "cpu/cache/d_cache_sync.h"
+#include "simulator.h"   // `ch::Simulator`（驱动必需端口 `strbe` 用）
 
 using namespace riscv;
 using namespace chlib;
@@ -48,6 +49,13 @@ TEST_CASE("Phase4 Integration - Basic Execution", "[phase4][basic][chlib]") {
     ch::ch_device<HazardUnit> hu_dev;
     ch::ch_device<ICacheSync> icache_dev;
     ch::ch_device<DCacheSync> dcache_dev;
+
+    // ⚠️ `strbe` 是本仓「必需端口」之一（未驱动 ⇒ 读回**全 1** ⇒ 写路径按整字落盘
+    //    ⇒ 断言可能碰巧通过）⇒ ⇒ 本文件实例化 `DCacheSync` 即 MUST 显式驱动
+    //    （登记表 `.rddf/checks/input-port-required-registry.md` · 护栏 R4）。
+    ch::Simulator dsim(dcache_dev.context());
+    dsim.set_input_value(dcache_dev.instance().io().strbe, 0xFu);
+    dsim.set_input_value(dcache_dev.instance().io().req,   0u);
 
     REQUIRE(true);
 
@@ -129,6 +137,11 @@ TEST_CASE("Phase4 Integration - D-Cache", "[phase4][dcache][chlib]") {
 
     ch::ch_device<DCacheSync>             dcache_dev;
 
+    // ⚠️ `strbe` 必需端口显式驱动（护栏 R4 · 见 `.rddf/checks/input-port-required-registry.md`）
+    ch::Simulator dsim(dcache_dev.context());
+    dsim.set_input_value(dcache_dev.instance().io().strbe, 0xFu);
+    dsim.set_input_value(dcache_dev.instance().io().req,   0u);
+
     // 验证 D-Cache 可独立实例化 (详细接口测试见 chlib/test_cache_simple.cpp)
     REQUIRE(true);
 
@@ -146,6 +159,11 @@ TEST_CASE("Phase4 Integration - Full Pipeline", "[phase4][full][chlib]") {
     ch::ch_device<HazardUnit> hu_dev;
     ch::ch_device<ICacheSync> icache_dev;
     ch::ch_device<DCacheSync> dcache_dev;
+
+    // ⚠️ `strbe` 必需端口显式驱动（护栏 R4 · 见 `.rddf/checks/input-port-required-registry.md`）
+    ch::Simulator dsim(dcache_dev.context());
+    dsim.set_input_value(dcache_dev.instance().io().strbe, 0xFu);
+    dsim.set_input_value(dcache_dev.instance().io().req,   0u);
 
     // 验证上述组件可以共存
     REQUIRE(true);

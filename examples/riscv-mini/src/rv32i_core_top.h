@@ -29,6 +29,8 @@
 #include "component.h"
 #include "cpu/pipeline/rv32i_pipeline.h"
 #include "cpu/pipeline/rv32i_tcm.h"
+#include "cpu/cache/d_cache_sync.h"
+#include "axi4/tcm_axi_slave.h"
 #include "cpu/riscv/rv32i_mem_map.h"
 
 #include <cstdint>
@@ -141,6 +143,10 @@ public:
             itcm{"itcm", itcm_init_};
         ch::ch_module<DataTCM<kTcmAddrWidth, 32>, const std::vector<uint32_t> &>
             dtcm{"dtcm", dtcm_init_};
+        // ⚠️ **2026-11-23 · S3（G-7 = full AXI4 主干）**：D-TCM 前加 D-L1 + AXI4 full。
+        //    `DCacheSync` 在 `chlib`（顶层 namespace）· `TcmAxiSlave` 在 `axi4`。
+        ch::ch_module<::chlib::DCacheSync> dcache{"dcache"};
+        ch::ch_module<axi4::TcmAxiSlave<32, 32, kTcmAddrWidth>> dslave{"dslave"};
 
         // ---- I-TCM：取指 + 固件写 ----
         //
@@ -163,21 +169,65 @@ public:
         pipeline.io().instr_data <<= itcm.io().data;
         pipeline.io().instr_ready <<= itcm.io().ready;
 
-        // ---- D-TCM：load / store ----
-        // ⚠️ 同上：数据地址也是字节地址 ⇒ TCM 需要字索引
-        dtcm.io().addr <<= bits<kTcmAddrWidth + 1, 2>(pipeline.io().data_addr);
-        dtcm.io().wdata <<= pipeline.io().data_write_data;
-        dtcm.io().write <<= pipeline.io().data_write_en;
-        dtcm.io().valid <<= ch_bool(true);
-        // ⚠️ **字节使能 MUST 接到 D-TCM**（2026-10-26 新增）：
-        //    此前 `data_strbe`（MEM 级算好的车道掩码）**全仓无消费者**
-        //    ⇒ `sb` / `sh` 在 SoC 里**完全不生效**（整字覆盖）。
-        //    ⇒ 现在接线 ⇒ D-TCM 按 `strbe` 做读-改-写。
-        //    ⚠️ 约定：`wdata` 已由流水线**lane 对齐**（`rv32i_pipeline.h`），
-        //    `addr` 在此已右移 2 位 ⇒ 是**字地址**。
-        dtcm.io().strbe <<= pipeline.io().data_strbe;
-        pipeline.io().data_read_data <<= dtcm.io().rdata;
-        pipeline.io().data_ready <<= dtcm.io().ready;
+        // ---- D-Cache + AXI4 full → TcmAxiSlave → D-TCM（**TCM 旁路** · S3）----
+        // 数据通路：pipeline（**字节**地址）→ DCacheSync → AXI4 full → TcmAxiSlave
+        //           → DataTCM（**字**地址由 slave 内部换算）
+        // ⚠️ `pipeline.data_req` = `load|store` 且 MEM 级有效 ⇒ 避免对**每条**指令
+        //    做 cache 查找（读有副作用：miss ⇒ 发 AXI burst）
+        // ⚠️ `pipeline.data_ready ← cache.ready` ⇒ **S2 打通的冻结链第一次真正生效**
+        //    （cache hit = 1 拍；miss = 反压等待 4-beat fill）
+        dcache.io().addr  <<= pipeline.io().data_addr;
+        dcache.io().wdata <<= pipeline.io().data_write_data;
+        dcache.io().req   <<= pipeline.io().data_req;
+        dcache.io().we    <<= pipeline.io().data_write_en;
+        dcache.io().strbe <<= pipeline.io().data_strbe;
+        pipeline.io().data_read_data <<= dcache.io().rdata;
+        // ⚠️ `data_ready` 是**无条件**冻结信号（S2 的语义：拉低即冻结）
+        //    ⇒ ⇒ 无访存请求时 MUST 视为「就绪」⇒ ⇒ 否则 cache 的 `ready` 在空闲拍
+        //    为 0 会把整条流水线**永久冻死**（实测踩中：24 条判据 23 条红）。
+        pipeline.io().data_ready <<= (!pipeline.io().data_req) | dcache.io().ready;
+
+        // cache ↔ TcmAxiSlave（AXI4 full 全通道直连）
+        dslave.io().ar_addr  <<= dcache.io().ar_addr;
+        dslave.io().ar_id    <<= ch_uint<4>(0_d);
+        dslave.io().ar_len   <<= dcache.io().ar_len;
+        dslave.io().ar_size  <<= dcache.io().ar_size;
+        dslave.io().ar_burst <<= dcache.io().ar_burst;
+        dslave.io().ar_valid <<= dcache.io().ar_valid;
+        dcache.io().ar_ready <<= dslave.io().ar_ready;
+
+        dcache.io().r_data  <<= dslave.io().r_data;
+        dcache.io().r_resp  <<= dslave.io().r_resp;
+        dcache.io().r_last  <<= dslave.io().r_last;
+        dcache.io().r_valid <<= dslave.io().r_valid;
+        dslave.io().r_ready <<= dcache.io().r_ready;
+
+        dslave.io().aw_addr  <<= dcache.io().aw_addr;
+        dslave.io().aw_id    <<= ch_uint<4>(0_d);
+        dslave.io().aw_len   <<= dcache.io().aw_len;
+        dslave.io().aw_size  <<= dcache.io().aw_size;
+        dslave.io().aw_burst <<= dcache.io().aw_burst;
+        dslave.io().aw_valid <<= dcache.io().aw_valid;
+        dcache.io().aw_ready <<= dslave.io().aw_ready;
+
+        dslave.io().w_data  <<= dcache.io().w_data;
+        dslave.io().w_strb  <<= dcache.io().w_strb;
+        dslave.io().w_last  <<= dcache.io().w_last;
+        dslave.io().w_valid <<= dcache.io().w_valid;
+        dcache.io().w_ready <<= dslave.io().w_ready;
+
+        dcache.io().b_resp  <<= dslave.io().bresp;
+        dcache.io().b_valid <<= dslave.io().bvalid;
+        dslave.io().bready  <<= dcache.io().b_ready;
+
+        // TcmAxiSlave → D-TCM（单口：`valid` 由 slave 驱动，不再恒 1）
+        dtcm.io().addr  <<= dslave.io().tcm_addr;
+        dtcm.io().write <<= dslave.io().tcm_write;
+        dtcm.io().wdata <<= dslave.io().tcm_wdata;
+        dtcm.io().strbe <<= dslave.io().tcm_strbe;
+        dtcm.io().valid <<= dslave.io().tcm_valid;
+        dslave.io().tcm_ready <<= dtcm.io().ready;
+        dslave.io().tcm_rdata <<= dtcm.io().rdata;
 
         // ---- 时钟 / 复位 ----
         pipeline.io().rst <<= io().ext_rst;

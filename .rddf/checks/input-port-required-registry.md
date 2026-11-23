@@ -45,6 +45,7 @@ evidence: probe:scripts/verify_input_port_required_registry.sh
 | `AxiSocTop` | `rst_n` | 永久复位 | `examples/axi4/tb_axi_soc_example.cpp` |
 | `AxiLiteTestMaster` | `rst_n` | 永久复位 | `examples/axi4/tests/test_axi_lite_test_master.cpp` |
 | `DataTCM` | `strbe` | 写入放大 | `tests/test_rv32i_timing_dual.cpp` |
+| `DCacheSync` | `strbe` | 写入放大 | `tests/chlib/test_cache_sync.cpp` |
 
 ## ⚠️ 已知缺口（**如实登记** ⇒ 不编造判别性用例）
 

@@ -65,6 +65,11 @@ public:
         ch_out<ch_uint<32>> data_write_data;
         ch_out<ch_uint<4>>  data_strbe;
         ch_out<ch_bool>     data_write_en;
+        // ⚠️ **访存请求**（2026-11-23 · S3）：`load | store` 且 MEM 级有效。
+        //    ⇒ ⇒ **为什么必需**：接 D-Cache 后，「读」有**副作用**（miss ⇒ 发 AXI burst）
+        //    ⇒ ⇒ 若像 TCM 那样「无条件读」（`valid` 恒 1），**每条指令**都会触发一次
+        //    cache 查找（含 ALU/NOP）⇒ miss 风暴。⇒ ⇒ MUST 只在真正访存时请求。
+        ch_out<ch_bool>     data_req;
         ch_in<ch_uint<32>>  data_read_data;
         ch_in<ch_bool>      data_ready;
 
@@ -686,6 +691,8 @@ public:
         //    ⇒ 改接 MEM 级的输出（SW 仍是 0xF ⇒ 整字写行为不变）。
         io().data_strbe <<= mem_stage.io().store_byte_enable_out;
         io().data_write_en <<= exmem_is_store;
+        // 访存请求 = MEM 级有效 且 是 load/store（⚠️ 不含 ALU/NOP ⇒ 避免 cache miss 风暴）
+        io().data_req <<= exmem_valid & (exmem_is_load | exmem_is_store);
     }
 
     // Control signals: hazard unit + reset/stall/flush to all stages

@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: feature
 状态: in-progress
-进度: "**立项（2026-11-22 · planner）** · ✅ **S0 已闭**（ADR-077 Accepted 2026-11-23）· ✅ **S1 已实施并验收**（`examples/riscv-soc` · verifier **13/13 PASS** · `2cab7fb` + `62337b0` + `c321848`）· 🔜 **下一批 = S3**（S2 为 S3 硬前置）· ⚠️ **S5（IRQ）被 `rv32i-privileged-csr-2026-11` 与「核加 irq 口」双重阻塞** · **2026-11-23 依实测调整了 IP 计划（见 §IP 计划）**"
+进度: "**立项（2026-11-22 · planner）** · ✅ **S0 已闭**（ADR-077 Accepted 2026-11-23） · ✅ **S1 已实施并验收**（`examples/riscv-soc` · verifier **13/13 PASS** · `2cab7fb` + `62337b0` + `c321848`） · ✅ **S2 已闭**（`rv32i-mem-backpressure-2026-11` · critic APPROVE_WITH_CONDITIONS · 3/3 SHOULD_FIX 已修 · 归档 `7b4a5a2`） · ✅ **S3 已实施并验收**（`rv32i-dcache-burst-2026-11` · G-7 = **full AXI4 主干** · D-Cache **首次接入核**） · 🔜 **下一批 = G-5（核 irq 口）/ G-6（MMIO 归属）/ S4** · ⚠️ **S5（IRQ）被 `rv32i-privileged-csr-2026-11` 与「核加 irq 口」双重阻塞** · **2026-11-23 依实测调整了 IP 计划（见 §IP 计划）**"
 主题: RV32I 从「示例 SoC」走向「可组合 SoC 平台」—— 核心复合体 / SoC 根两级产品单元 + 总线化演进
 依赖: ADR-046（微架构唯一权威 · **ADDENDUM 2026-11-23**）· ADR-061（成层粒度显式声明）· ADR-070（RV32I 成层 + 兄弟边 D4③）· ADR-072（产品端口面 + 四件套）· ADR-073（SoC 产物形态 + SoC 级 TB）· ADR-074（验证单一真相源）· **ADR-077（两级顶层 + 四条形态裁决 · Accepted）** · `rv32i-privileged-csr-2026-11`（**S5 的硬前置** · draft）
 来源: 用户 2026-11-22「想把 RV32I 核做成真实可替换单元 —— 后续加 L1/L2 缓冲、MMU、内存控制器、总线」+「riscv-mini 可看成 riscv-soc 的 spike」+「riscv-mini 改造成核复合体，另建 examples/riscv-soc 实施 Rv32iSocTop」+ 用户 2026-11-23「检查 examples/riscv-soc，检查规划要如何调整，特别是整体 SoC 的不同 IP 的计划」
@@ -244,10 +244,20 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 
 ### S3
 
-- [ ] **ACs3-1** 🔴 AXI4 **burst** 事务的手推期望（`len` / `size` / `burst` / `addr`）· wrapper 的 burst 口到位（否则 S6 返工）
-- [ ] **ACs3-2** 🔴 cache hit/miss **拍数契约**（写进 `rv32i-memory-timing` 的 delta）
-- [ ] **ACs3-3** 🔴 **TCM 旁路后 `prog_*` 一致性**：装载写进"核实际读的存储体"（否则装载成功但核读到 0）
-- [ ] **ACs3-4** `prog_*` 根端口**仍在**（ADR-077 D3）
+- [x] **ACs3-1** 🔴 AXI4 **burst** 事务的手推期望（`len` / `size` / `burst` / `addr`）· wrapper 的 burst 口到位（否则 S6 返工）
+  ⇒ 落地：`test_cache_sync`（`ar_len=3` / `ar_size=2` / `ar_burst=INCR` / `ar_addr == line 基址` 全部手推）+ `test_tcm_axi_slave`（`ARLEN=3` 读 4 字 / `AWLEN=3` 写 4 字 · 地址与值手推）
+- [x] **ACs3-2** 🔴 cache hit/miss **拍数契约**（写进 `rv32i-memory-timing` 的 delta）
+  ⇒ ⚠️ **口径订正**：没有改 `rv32i-memory-timing`（它约束 **TCM 的读口**，S3 不动 TCM）⇒ ⇒ 新契约落**独立 ADDED capability** `rv32i-dcache-timing`（hit ⇒ `ready` 与请求同拍 + `rdata` 下一拍并保持；miss ⇒ 反压 until fill）
+- [x] **ACs3-3** 🔴 **TCM 旁路后 `prog_*` 一致性**：装载写进"核实际读的存储体"（否则装载成功但核读到 0）
+  ⇒ 落地：I-TCM **不经** cache（`prog_*` 仍直写）· 核级 24 判据 + `test_rv32i_soc_dual_parity` 的固件用例全绿
+- [x] **ACs3-4** `prog_*` 根端口**仍在**（ADR-077 D3）⇒ 34 端口面**逐字不变**（`verify_riscv_soc_core_ports` PASS）
+
+> **S3 实施期的三个「一接进流水线才暴露」的发现**（已写进 change 的 `design.md` §2.4b）：
+> ① `ready`/`miss` MUST 是**组合**（旧 `miss` 来自 `sread` ⇒ 与 `addr` 错位一拍 ⇒ 反压判错请求）；
+> ② `rdata` MUST 是**保持寄存器**（S2 的 MEM/WB 冻结 ⇒ load 结果可能晚若干拍才进 MEM/WB）；
+> ③ 核侧 MUST 有 `data_req`（cache 读有副作用）+ `data_ready ← !data_req | cache.ready`（否则空闲拍永久冻死）。
+> **已知代价（登记不修）**：`TcmAxiSlave` 的 AW/W 分拍 ⇒ 连续 store 各多 1 拍（真写缓冲 = 独立立项）；
+> `d_cache_async.h` 的同型「假 line」缺陷（async 未接入生产路径）。
 
 ### S4
 
