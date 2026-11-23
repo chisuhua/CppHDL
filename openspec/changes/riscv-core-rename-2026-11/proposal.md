@@ -67,8 +67,11 @@
 - [ ] **AC12** 🔴 `scripts/verify_no_duplicate_rv32i_headers.sh` PASS + `--self-test` PASS
   ⇒ ⇒ ⚠️ 该护栏的**自检 fixture 里有 ~25 处** `rv32i_pipeline_top.h` 字面量 ⇒ ⇒ MUST 成批替换且自检仍绿
 - [ ] **AC13** 🔴 `scripts/verify_port_naming.sh` PASS 且**豁免计数不变**（**1452**）
-  ⇒ ⇒ `.rddf/checks/port-naming-registry.md` 的**活账 MUST 追加新行**（对象 = 新路径 · 32 端口）
-  ⇒ ⇒ ⚠️ **禁改 / 禁删历史行**（该表的活账纪律）⇒ ⇒ **历史行指向的旧路径保持不动**
+  ⇒ ⇒ ⚠️ **口径订正（2026-11-23 · 实施期修正）**：`.rddf/checks/port-naming-registry.md` 的
+  §4.1「消化留痕」是**具名消化**（端口命名债务递减）的活账 ⇒ ⇒ **改名不是消化**
+  ⇒ ⇒ **MUST NOT 追加行**（追加会污染该表的语义）⇒ ⇒ 只改**当前态描述**（对象路径）
+  ⇒ ⇒ §4.1 的**历史行保持原样**（禁改 / 禁删）⇒ ⇒ 改名登记走
+  `public-api-surface.md` 的「已移除 / 已改名的公开符号」节
 - [ ] **AC14** 🔴 文档同步：`examples/riscv-mini/AGENTS.md` · `examples/riscv-soc/AGENTS.md` ·
   `include/cpu/AGENTS.md` · 根 `AGENTS.md` · `docs/architecture/rv32i-microarchitecture.md` ·
   `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` · `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md` ·

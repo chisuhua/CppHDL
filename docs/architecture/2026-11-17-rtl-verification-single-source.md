@@ -61,7 +61,7 @@
 | ③ | ✅ 库层已有 TB 骨架生成器（连线 + clk/rst + VCD；激励/断言留 `// TODO:`） | `include/rtl_emit/tb_stub.h:59` · `src/rtl_emit/tb_stub.cpp:95-98, 154-158` |
 | ④ | 🔴 无反射 ⇒ 未具名端口 `cpp_member` = `unnamed_input` 占位 | `include/rtl_emit/manifest.h:110-125` |
 | ⑤ | ✅ N2 棘轮已把「可解析到成员名」立为 MUST（仅新增端口）；**豁免表 1415 行**，护栏锚点 `EXPECTED_EXEMPT_PORTS=1415`（⚠️ 原写 1447 = **陈旧**；本轮订正） | `scripts/verify_port_naming.sh:30-32, 50` |
-| ⑥ | ✅ 具名先例：RV32I 顶层 32 根具名 | `examples/riscv-mini/src/rv32i_pipeline_top.h:62-73` |
+| ⑥ | ✅ 具名先例：RV32I 顶层 32 根具名 | `examples/riscv-mini/src/rv32i_core_top.h:62-73` |
 | ⑦ | 🔴 **产品顶层未具名 = 32 个**（`axi4_lite_example.cpp` **20** + `axi_soc_example.cpp` 的 `AxiSocTop` **12**（`:161-181`））⇒ ⚠️ **另有 23 个内层端口**（`AxiLiteTestMaster`，`:41-72`）**不属产品顶层** | 逐 `__io` 块计数 · `.rddf/checks/soc-rtl-expectations.md:28-50`（顶层 14 = 框架 2 + 根 12） |
 | ⑧ | 🔴 护栏 ②' 硬禁 `EXPECT-SRC` 指向 `.cpp`（⚠️ **只查指针形态**，不保证「值由人推」） | `scripts/verify_examples_rtl_sim.sh:214-217` |
 | ⑨ | ⚠️ 护栏 ⑥ 只判 `checks >= min_checks`（不判 TODO 残留） | `scripts/verify_examples_rtl_sim.sh:486-490` |

@@ -17,7 +17,7 @@ RV32I 现在有**两级顶层**，各自是独立产品（不是两份实现）�
 
 | 级 | 根组件 | 住址 | 产物 | 判据 |
 |---|---|---|---|---|
-| **IP 级**（核复合体） | `Rv32iCoreTop` | `examples/riscv-mini/src/rv32i_pipeline_top.h` | **8 module** · 34 端口 | 24 条核级判据（`RESULT: checks=24 fails=0`） |
+| **IP 级**（核复合体） | `Rv32iCoreTop` | `examples/riscv-mini/src/rv32i_core_top.h` | **8 module** · 34 端口 | 24 条核级判据（`RESULT: checks=24 fails=0`） |
 | **SoC 级** | `Rv32iSocTop` | `examples/riscv-soc/src/rv32i_soc_top.h` | **10 module** · **8** 端口 | 7 条（`RESULT: checks=7 fails=0`） |
 
 ⚠️ **判据作用域不可混用**：

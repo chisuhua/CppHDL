@@ -1,4 +1,4 @@
-// rv32i_pipeline_top.h
+// rv32i_core_top.h
 //
 // RV32I SoC 顶层（pipeline + I-TCM + D-TCM）。
 //

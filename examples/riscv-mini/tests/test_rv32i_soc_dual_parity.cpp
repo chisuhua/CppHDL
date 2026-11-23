@@ -5,7 +5,7 @@
 // Change: rv32i-pipeline-commit-path-2026-10（C3 的前置）
 // Capability: openspec/specs/rv32i-commit-path/spec.md
 //            （+ openspec/specs/verilator-rv32i-e2e/spec.md 的 MODIFIED）
-// DUT:        Rv32iCoreTop（examples/riscv-mini/src/rv32i_pipeline_top.h）
+// DUT:        Rv32iCoreTop（examples/riscv-mini/src/rv32i_core_top.h）
 //
 // ⚠️ DUT 在 **example 侧** ⇒ 本测试 MUST 住在 example 侧：根 `tests/**` 不许
 //    include example 路径（护栏 C3 / ADR-046「库测试 MUST NOT 经 include 路径
@@ -64,7 +64,7 @@
 #include "cpu/pipeline/rv32i_tcm.h"
 #include "cpu/riscv/rv32i_asm_encode.h"
 #include "rv32i_fw_demo.h"
-#include "rv32i_pipeline_top.h"
+#include "rv32i_core_top.h"
 #include "simulator.h"
 
 namespace {

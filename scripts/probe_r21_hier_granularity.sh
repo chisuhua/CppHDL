@@ -27,7 +27,7 @@ cat > "$OUT_DIR/probe.cpp" <<'CPP'
 #include "component.h"
 #include "device.h"
 #include "hierarchy_verilog.h"
-#include "rv32i_pipeline_top.h"
+#include "rv32i_core_top.h"
 #include <cstdio>
 int main() {
     ch::HierarchyEmitResult r;

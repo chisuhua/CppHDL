@@ -63,6 +63,7 @@ evidence: probe:scripts/verify_hierarchical_p8.sh
 
 | 符号 / 头 | 移除或改名 | 日期 | 依据 | 迁移指引 |
 |---|---|---|---|---|
+| 头文件 `rv32i_pipeline_top.h`（example 侧核顶 · 随类改名） | **改名** → `rv32i_core_top.h` | 2026-11-23 | change `rv32i-core-rename-2026-11`（**R3c**）· 同批类名 `Rv32iPipelineTop` → `Rv32iCoreTop` | 下游若 `#include "rv32i_pipeline_top.h"` ⇒ ⇒ **MUST 改 include 路径**；⚠️ **端口面零变化**（34 根逐字不变）⇒ ⇒ 连线**不必改** |
 | `Rv32iPipelineTop`（`examples/riscv-mini/src/rv32i_pipeline_top.h` · example 侧顶） | **改名** → `Rv32iCoreTop` | 2026-11-23 | change `rv32i-core-rename-2026-11`（**R3b**）· ADR-077 D2（模块类型名 = 非契约 ⇒ 改名不需 architect） | 下游若 `#include` 该头并实例化该类 ⇒ ⇒ **MUST 改类名**；⚠️ **端口面零变化**（34 根顶层端口的名字 / 方向 / 位宽 / 顺序**逐字不变**） ⇒ ⇒ 下游连线**不必改** |
 | `chlib::ch_state_machine::is_built()` | **移除** | 2026-10-30 | ADR-050 D2（`c7b0b28`） | 改断言**可观测产物**：`entry_state()` + 状态寄存器节点已发射 |
 | `chlib::ch_state_machine::on_exit` / `exit_action` | **移除** | 2026-10-30 | ADR-050 D2 | 改用 `on_active` 闭包 + `transition_when` |

@@ -1155,7 +1155,7 @@ rs1 5 · rs2 5 · funct7 7 · imm 32 · instr_type 3）⇒ ⇒ **根组件自有
 
 ⇒ ⇒ 补第三条 = **手推期望集**（**独立于产物**）⇒ ⇒ 判据载体 =
 `scripts/verify_hierarchical_rtl.sh` 的 **R8′** 块（期望集写在护栏内）。
-⇒ ⇒ **推导源** = `examples/riscv-mini/src/rv32i_pipeline_top.h` 的 `__io`
+⇒ ⇒ **推导源** = `examples/riscv-mini/src/rv32i_core_top.h` 的 `__io`
 （**4 in + 28 out** ⇒ **声明顺序即端口顺序**；端口名 = `top_<C++ 成员名>` · ADR-075 E1）
 ⇒ + 框架 2（`default_clock` · `default_reset`）⇒ ⇒ 共 **34** 根
 ⇒ ⇒ 期望集**禁**从产物输出抄（抄了 = 判据自证 ⇒ 恒绿）。

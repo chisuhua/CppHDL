@@ -3,7 +3,7 @@
 // **SoC 级顶层**（ADR-077 D1 · change `riscv-soc-skeleton-2026-11`）。
 //
 // 两级顶层分工（ADR-077 D1）：
-//   · **IP 级**（核复合体）= `examples/riscv-mini/src/rv32i_pipeline_top.h`
+//   · **IP 级**（核复合体）= `examples/riscv-mini/src/rv32i_core_top.h`
 //     （pipeline + I-TCM + D-TCM · 34 端口 · 一字不改）
 //   · **SoC 级**（本文件）= 把核复合体与观测 IP 装配成 SoC 根
 //
@@ -24,7 +24,7 @@
 
 // 核复合体住在 `examples/riscv-mini/src/`（ADR-046 / ADR-077 D1）
 // ⇒ CMake 侧以 target_include_directories 注入该目录（本文件不带 examples/ 前缀）。
-#include "rv32i_pipeline_top.h"
+#include "rv32i_core_top.h"
 
 #include <cstdint>
 #include <string>

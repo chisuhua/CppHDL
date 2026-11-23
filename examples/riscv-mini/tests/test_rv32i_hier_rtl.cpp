@@ -35,7 +35,7 @@
 #include "hierarchy_equivalence.h"
 #include "hierarchy_verilog.h"
 #include "rtl_emit/manifest.h"
-#include "rv32i_pipeline_top.h"
+#include "rv32i_core_top.h"
 
 #include <algorithm>
 #include <cstdint>

@@ -11,7 +11,7 @@ All header-only.
 > 本目录是 RV32I 微架构的**唯一权威**。此前 `examples/riscv-mini/src/` 存在
 > **10 组同 basename 头文件**，消歧纯靠 `-I` 顺序（无护栏 ⇒ 调序即静默换实现），
 > 且根 `tests/` 反向依赖 example 源码。⇒ 已收敛：`examples/riscv-mini/src/`
-> 现只剩 SoC 顶层 `rv32i_pipeline_top.h`。
+> 现只剩 SoC 顶层 `rv32i_core_top.h`。
 > 护栏：`scripts/verify_no_duplicate_rv32i_headers.sh`（**6 条检查** + `--self-test` 自测）。
 
 ## STRUCTURE
@@ -74,7 +74,7 @@ include/cpu/                             # 30 headers, 6745 lines（2026-11-16 �
 | D-Cache (0-cycle, TCM-style) | `cache/d_cache_async.h` |
 | I-Cache wrapper | `cache/i_cache_prefetch.h` (instance ICacheSync) |
 | D-Cache 写直通 shim | `cache/d_cache_write_buffer.h`（**无**内层 cache / **无**读通路） |
-| SoC 顶层装配 | `examples/riscv-mini/src/rv32i_pipeline_top.h`（**唯一**留在 example 侧的头；ADR-046 D3 #15）|
+| SoC 顶层装配 | `examples/riscv-mini/src/rv32i_core_top.h`（**唯一**留在 example 侧的头；ADR-046 D3 #15）|
 | 流水线诊断观测 | `pipeline/rv32i_pipeline.h` 的 `dbg_*` 输出（ID 级指令流 / 分支判定 / 有效链 / 写回 / EX-MEM 数据通路；**SoC 顶层须逐个引出**，否则 verilator 读不到 ⇒ 2026-10-25 追出 17 个流水线缺陷）|
 
 ## ⚠️ **保留但不接入流水线**的组件（2026-11-11 · B0 批 C7 交接登记）
@@ -310,9 +310,9 @@ Active CPU / RV32I test targets registered in `tests/CMakeLists.txt`
 `scripts/verify_example_test_wiring.sh`（归属守恒 + 数量守恒）。
 
 ⚠️ **2026-10-24 收敛后**：`examples/riscv-mini/src/` 只剩 **1** 个头
-（SoC 顶层 `rv32i_pipeline_top.h`，ADR-046 D1 类别 1 / D3 #15）——
+（SoC 顶层 `rv32i_core_top.h`，ADR-046 D1 类别 1 / D3 #15）——
 其余 31 个头已删除（17 个死头）或提升到本目录（10 个）或删除重复副本（4 个）。
-`rv32i_pipeline_top.h` **已归位**（不再是零消费者；2026-10-25，change
+`rv32i_core_top.h` **已归位**（不再是零消费者；2026-10-25，change
 `rv32i-pipeline-commit-path-2026-10`）—— 此前它**零消费者**（其唯一消费者 `test_pipeline_smoke`
 在 C1 被删除）⇒ 已登记在 `scripts/verify_no_duplicate_rv32i_headers.sh` 的
 零消费者豁免表里，**归位条件 = C3**（`rv32i-soc-dual-parity-2026-10`）落地。

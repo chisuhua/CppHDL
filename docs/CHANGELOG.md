@@ -1,3 +1,25 @@
+## 2026-11-23 — RV32I 核改名 R3c：头文件 `rv32i_pipeline_top.h` → `rv32i_core_top.h`
+
+**背景**：改名批（`openspec/changes/riscv-core-rename-2026-11/`）的第三批 · **路径面**。
+R3a（模块类型名 `870cda5`）+ R3b（C++ 类名 `a82eda1`）已完成 ⇒ ⇒ 本批把**文件名**统一。
+
+**本次**：`git mv examples/riscv-mini/src/rv32i_pipeline_top.h → rv32i_core_top.h`
+⇒ ⇒ 连带更新 = 5 处 `#include`（核 TB · 2 个 Catch2 测试 · SoC 根 · 探针脚本）·
+`verify_no_duplicate_rv32i_headers.sh` 的 `SOC_TOP_HEADER` 与 **33 处自检 fixture**
+· `verify_examples_rtl_sim.sh` 的自检 fixture 行 · `verify_hierarchical_rtl.sh` 的推导源注释
+· 登记面（`examples-rtl-expectations.md` · `port-naming-registry.md` 的**当前态描述**）·
+8 处活文档（两个 `AGENTS.md` · `include/cpu/AGENTS.md` · `include/cpu/riscv/rv32i_mem_map.h`
+· `rv32i-microarchitecture.md` · `rv32i-rtl-delivery-and-sim.md` · `02-component-design.md` ·
+`examples/riscv-mini/CMakeLists.txt`）。
+
+⚠️ **公开面登记**：头文件改名记入 `.rddf/checks/public-api-surface.md` 的
+「已移除 / 已改名的公开符号」节（移除/改名表行数锚点 **31 → 32**）⇒ ⇒ 下游若
+`#include "rv32i_pipeline_top.h"` ⇒ ⇒ **MUST 改 include 路径**。
+⚠️ **端口面零变化 / 行为零变化**（34 根顶层端口逐字不变；核侧三份产物逐字节不变）。
+⚠️ **存量不追溯**：`port-naming-registry.md` §4.1「消化留痕」的**历史行保留旧路径**
+（该表是**具名消化**的活账 ⇒ ⇒ **改名不是消化 ⇒ MUST NOT 追加行**）；ADR / 旧 review /
+旧 plans / 教学样例（`COMPONENT-LIFECYCLE-GUIDE` 的示意代码仍带已删除的 `ext_clk`）本批不动。
+
 ## 2026-11-23 — RV32I 核改名 R3b：C++ 类 `Rv32iPipelineTop` → `Rv32iCoreTop`
 
 **背景**：改名批（`openspec/changes/riscv-core-rename-2026-11/`）的 **R3b** —— C++ 侧类名。

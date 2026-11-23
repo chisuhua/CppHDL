@@ -34,7 +34,7 @@ examples/riscv-mini/
 │                            #     （`generated=no` = **终态**，不是欠账 · ADR-076 复核 2026-11-21）
 ├── src/                     # **2** 个头（SoC 顶层 + 带 `.data` 的示例固件）
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
-│   └── rv32i_pipeline_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
+│   └── rv32i_core_top.h # SoC 顶层装配（ADR-046 D1 类别 1 / D3 #15）
 │                             #  ✅ **已有消费者**（2026-10-25）：`tests/
 │                             #  test_rv32i_soc_dual_parity.cpp`（SoC 级双路
 │                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
@@ -129,7 +129,7 @@ bash scripts/rv32i_rtl_sim_env.sh
 | D-Cache wrapper | `include/cpu/cache/d_cache_write_buffer.h` (✅ review PASS 2026-10-20) |
 | Pipeline stages | `include/cpu/pipeline/stages/` |
 | ALU / RegFile / PC / decoder | `include/cpu/pipeline/{rv32i_alu,rv32i_regfile,rv32i_pc,rv32i_decoder}.h` |
-| SoC 顶层（唯一留在本目录的头）| `src/rv32i_pipeline_top.h` |
+| SoC 顶层（唯一留在本目录的头）| `src/rv32i_core_top.h` |
 | SoC 的**激励驱动**（C++ 侧 + 发射入口）| `tb_rv32i_soc.cpp`（**24 条判据**的 C++ 侧实现）|
 | SoC 的**独立 Verilog TB**（手写）| `tb_rv32i_soc.sv`（**24 条判据**的 Verilog 侧实现）|
 | 期望值**单一真相**（两侧共用）| `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` |

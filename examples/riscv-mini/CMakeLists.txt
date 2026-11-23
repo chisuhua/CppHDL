@@ -19,7 +19,7 @@ endfunction()
 # 此前此处有一段「include 顺序敏感 — include/cpu/pipeline 必须在 src 之前」的注释,
 # 因为 include/cpu/ 与 src/ 存在 **10 组同 basename 头文件**, 消歧纯靠 -I 顺序
 # (无任何护栏 ⇒ 调序即静默换实现)。
-# ⇒ 收敛后 example/src 只剩 SoC 顶层 (rv32i_pipeline_top.h), **同名头不再存在**
+# ⇒ 收敛后 example/src 只剩 SoC 顶层 (rv32i_core_top.h), **同名头不再存在**
 #   ⇒ -I 顺序**不再**决定实现 ⇒ 该约束**作废**。
 # ⇒ -I 列表里保留 src/ 与 include/cpu/pipeline/ 是为了 (a) SoC 顶层可被 include,
 #   (b) include/cpu/pipeline/stages/*.h 内部的同目录 include ("rv32i_decoder.h")
@@ -108,7 +108,7 @@ riscv_mini_catch_test(test_rv32i_pipeline_example tests/test_rv32i_pipeline.cpp)
 riscv_mini_catch_test(test_interrupt_flow tests/test_interrupt_flow.cpp)
 
 # === SoC 级双后端 parity（change rv32i-pipeline-commit-path-2026-10）===
-# DUT = `src/rv32i_pipeline_top.h`（SoC 顶层，在 example 侧 ⇒ 测试也必须在
+# DUT = `src/rv32i_core_top.h`（SoC 顶层，在 example 侧 ⇒ 测试也必须在
 # example 侧：根 `tests/**` 不许 include example 路径，护栏 C3 会拦）。
 # 本测试用 verilator 后端 ⇒ 需要 `verilator_e2e` 标签 + `verilator_backend`
 # 资源锁 + verilator 安装目录的 PATH 注入（与根 `tests/CMakeLists.txt` 的
@@ -128,7 +128,7 @@ set_tests_properties(test_rv32i_soc_dual_parity PROPERTIES
 )
 
 # === RV32I **层次化产物交付物**（诉求 ④ · ADR-070 D1/D2 · R21-C）===
-# DUT = `src/rv32i_pipeline_top.h`（example 侧 ⇒ 测试也必须在 example 侧）。
+# DUT = `src/rv32i_core_top.h`（example 侧 ⇒ 测试也必须在 example 侧）。
 # ⚠️ 重量级：层次化 + 扁平两份 Verilator 模型（分钟级）⇒ ⇒ `verilator_e2e` 标签 +
 #    `verilator_backend` 资源锁 + `TIMEOUT 900`。
 # ⚠️ `CTEST_TOTAL` +1 · `VERILATOR_E2E_TOTAL` +1 ⇒ 锚点必须同批同步。

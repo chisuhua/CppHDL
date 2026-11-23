@@ -8,7 +8,7 @@ Child of root `AGENTS.md`.
 
 | 级 | 住址 | 角色 |
 |---|---|---|
-| **IP 级**（核复合体） | `../riscv-mini/src/rv32i_pipeline_top.h` | pipeline + I-TCM + D-TCM · **34 端口** · 24 条核级判据 |
+| **IP 级**（核复合体） | `../riscv-mini/src/rv32i_core_top.h` | pipeline + I-TCM + D-TCM · **34 端口** · 24 条核级判据 |
 | **SoC 级**（本目录） | `src/rv32i_soc_top.h` | 把核复合体 + 观测 IP 装配成 SoC 根 · **8 端口** |
 
 > ⚠️ **本目录 MUST NOT 复制任何微架构实现**（ADR-077 D1）⇒ 只做实例化与连线。

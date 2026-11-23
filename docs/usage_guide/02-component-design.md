@@ -301,7 +301,7 @@ void describe() override {
 ```
 
 仓内实例：
-- ② ③：`examples/riscv-mini/src/rv32i_pipeline_top.h:159-164`
+- ② ③：`examples/riscv-mini/src/rv32i_core_top.h:159-164`
 - ④：`include/cpu/pipeline/rv32i_pipeline.h:403-412`、`examples/axi4/axi_soc_example_top.h:205-216`
 
 ### 3.3 表达式 / 常量 / 位切片驱动
@@ -312,7 +312,7 @@ void describe() override {
 dtcm.io().valid <<= ch_bool(true);                                        // 常量
 itcm.io().addr  <<= bits<kTcmAddrWidth + 1, 2>(pipeline.io().instr_addr); // 位切片
 ```
-（`rv32i_pipeline_top.h:159,171`）
+（`rv32i_core_top.h:159,171`）
 
 ### 3.4 父层中间节点：扇出与 mux
 
@@ -1201,7 +1201,7 @@ if (fails != 0) $fatal(1, "tb_xxx failed");   // ⇒ 失败 MUST 非零退出码
 |---|---|
 | 两层单子模块（最简） | `samples/counter.cpp:53` |
 | 两层多实例 + `instance()` 取成员 | `samples/bundle_top_example.cpp:94-108` |
-| 三层（SoC → pipeline → stages） | `examples/riscv-mini/src/rv32i_pipeline_top.h:137` |
+| 三层（SoC → pipeline → stages） | `examples/riscv-mini/src/rv32i_core_top.h:137` |
 | 5+ 子模块 + 互连（`ch::ch_layer<T>` 四处） | `examples/axi4/axi_soc_example_top.h:193-202` |
 | 流水线级间寄存器/存储 | `include/cpu/pipeline/rv32i_pipeline.h:164, 166-183, 241-259` |
 | bundle 成员 `connect()` | `tests/test_bundle_master_slave.cpp:114` |

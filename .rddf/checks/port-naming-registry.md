@@ -58,7 +58,7 @@ evidence: probe:scripts/verify_port_naming.sh
 | 登记表条目数（= `EXPECTED_EXEMPT_PORTS`） | **1452** | **−32**（锚点 `scripts/verify_port_naming.sh:50`）|
 
 ✅ **2026-11-13 · R17.2 首批消化落地**（architect 裁量闭 R17.1 =「现在做」）：
-对象 = `examples/riscv-mini/src/rv32i_pipeline_top.h` 的 **32** 个端口**全部**带**显式名**
+对象 = `examples/riscv-mini/src/rv32i_core_top.h` 的 **32** 个端口**全部**带**显式名**
 ⇒ ⇒ 产物端口名 = `top_<C++ 成员名>`（实测 `top_ext_rst` / `top_prog_we` / `top_obs_data_addr` / …）
 ⇒ ⇒ ⚠️ **2026-11-14**：`top_ext_clk` **已不存在**（R8 改判删掉 `ext_clk` ⇒ ⇒ 顶层端口 **32 → 31**）
 ⇒ ⇒ **棘轮首次真咬**：豁免 **1484 → 1452** ⇒ ⇒ 「递减」这一半从停滞变为**有推进**。
@@ -74,7 +74,7 @@ evidence: probe:scripts/verify_port_naming.sh
 `include/axi4/axi_to_axilite.h` 95 · `include/axi4/axi4_lite_matrix.h` 77 ·
 `include/cpu/pipeline/rv32i_pipeline_regs.h` 76 · … ⇒ ⇒ **AXI 侧是债的主体**
 ⇒ ⇒ ⇒ **首个消化对象** = `port-naming-ratchet` 的 N3 首批靶
-（`examples/riscv-mini/src/rv32i_pipeline_top.h` · 32 端口 · 用户 2026-11-11 拍板）。
+（`examples/riscv-mini/src/rv32i_core_top.h` · 32 端口 · 用户 2026-11-11 拍板）。
 
 ---
 

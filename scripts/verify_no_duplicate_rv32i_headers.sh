@@ -150,7 +150,7 @@ EXPECTED_DUP_ALLOWANCES=0
 
 CH_DEAD_ALLOWANCE=""
 # ⚠️ 豁免表已**清空**（change rv32i-pipeline-commit-path-2026-10，2026-10-25）：
-#   `examples/riscv-mini/src/rv32i_pipeline_top.h` 获得了消费者 ——
+#   `examples/riscv-mini/src/rv32i_core_top.h` 获得了消费者 ——
 #   `tests/test_rv32i_soc_dual_parity.cpp` 直接 `#include` 它（SoC 级双后端
 #   比对测试的 DUT）。该头此前因「端口全是输入、无观测面」而零消费者；
 #   本 change 落地了观测端口契约（ADR-046 D10-rev）⇒ 它成为真 DUT。
@@ -165,7 +165,7 @@ EXPECTED_DEAD_ALLOWANCES=0
 #    快照格式 = <名>:<方向>:<位宽>（**方向与位宽也在冻结范围内** ——
 #    对下游 DUT 而言，方向翻转的破坏力等同改名）。
 # ---------------------------------------------------------------------------
-SOC_TOP_HEADER="examples/riscv-mini/src/rv32i_pipeline_top.h"
+SOC_TOP_HEADER="examples/riscv-mini/src/rv32i_core_top.h"
 SOC_TOP_PORTS="dbg_branch_taken:ch_out:ch_bool dbg_exmem_alu_result:ch_out:ch_uint<32> dbg_exmem_imm:ch_out:ch_uint<32> dbg_exmem_rs2_data:ch_out:ch_uint<32> dbg_exmem_valid:ch_out:ch_bool dbg_id_instr:ch_out:ch_uint<32> dbg_id_is_branch:ch_out:ch_bool dbg_id_is_load:ch_out:ch_bool dbg_id_is_store:ch_out:ch_bool dbg_id_pc:ch_out:ch_uint<32> dbg_id_valid:ch_out:ch_bool dbg_illegal_reason:ch_out:ch_uint<2> dbg_load_use_detected:ch_out:ch_bool dbg_mem_valid_out:ch_out:ch_bool dbg_wb_rd_addr:ch_out:ch_uint<5> dbg_wb_write_data:ch_out:ch_uint<32> dbg_wb_write_en:ch_out:ch_bool ext_rst:ch_in:ch_bool obs_data_addr:ch_out:ch_uint<32> obs_data_rdata:ch_out:ch_uint<32> obs_data_write_data:ch_out:ch_uint<32> obs_data_write_en:ch_out:ch_bool obs_instr_addr:ch_out:ch_uint<32> obs_perf_branch_count:ch_out:ch_uint<32> obs_perf_branch_mispredict:ch_out:ch_uint<32> obs_perf_control_stalls:ch_out:ch_uint<32> obs_perf_cycles:ch_out:ch_uint<48> obs_perf_instructions:ch_out:ch_uint<48> obs_perf_load_use_stalls:ch_out:ch_uint<32> prog_addr:ch_in:ch_uint<32> prog_data:ch_in:ch_uint<32> prog_we:ch_in:ch_bool"
 
 # ---------------------------------------------------------------------------
@@ -275,9 +275,9 @@ if [ "${1:-}" = "--self-test" ]; then
         cp "$REPO_ROOT/scripts/verify_no_duplicate_rv32i_headers.sh" "$root/scripts/"
         # 每个 fixture 树都带一条**自己的**零消费者豁免：
         #   「stale 豁免」判据的 fixture 需要一个**真实的豁免项**才能被检验，
-        #   而真实仓库的豁免表现已清空（`rv32i_pipeline_top.h` 获得了消费者）。
+        #   而真实仓库的豁免表现已清空（`rv32i_core_top.h` 获得了消费者）。
         sed_inplace "$root/scripts/verify_no_duplicate_rv32i_headers.sh" \
-            's|^CH_DEAD_ALLOWANCE=""$|CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h\tfixture\tfixture"|'
+            's|^CH_DEAD_ALLOWANCE=""$|CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_core_top.h\tfixture\tfixture"|'
         sed_inplace "$root/scripts/verify_no_duplicate_rv32i_headers.sh" \
             's|^EXPECTED_DEAD_ALLOWANCES=0$|EXPECTED_DEAD_ALLOWANCES=1|'
         cat > "$root/include/cpu/AGENTS.md" <<'AGEOF'
@@ -311,7 +311,7 @@ AGEOF
                 printf '        %s<%s> %s;\n' "$pdir" "$pwidth" "$pname"
             done
             printf '    )\n};\n'
-        } > "$root/examples/riscv-mini/src/rv32i_pipeline_top.h"
+        } > "$root/examples/riscv-mini/src/rv32i_core_top.h"
         cat > "$root/include/cpu/pipeline/alpha.h" <<'ALEOF'
 #pragma once
 ALEOF
@@ -407,7 +407,7 @@ CMEOF
 
     # ④ 反向 include MUST 被抓到
     F="$WORK/fx_inc"; mk_fixture "$F"
-    printf '#include "../examples/riscv-mini/src/rv32i_pipeline_top.h"\n' >> "$F/tests/use_alpha.cpp"
+    printf '#include "../examples/riscv-mini/src/rv32i_core_top.h"\n' >> "$F/tests/use_alpha.cpp"
     st_check "反向 include MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑤ 硬死头（两个源都无 includer）MUST 被抓到
@@ -439,7 +439,7 @@ CMEOF
 
     # ⑨ C4 豁免 stale MUST 被抓到
     F="$WORK/fx_dead_stale"; mk_fixture "$F"
-    sed_inplace "$F/scripts/verify_no_duplicate_rv32i_headers.sh" 's|^CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h.*|CH_DEAD_ALLOWANCE="include/cpu/pipeline/alpha.h\tx\ty"|'
+    sed_inplace "$F/scripts/verify_no_duplicate_rv32i_headers.sh" 's|^CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_core_top.h.*|CH_DEAD_ALLOWANCE="include/cpu/pipeline/alpha.h\tx\ty"|'
     st_check "C4 豁免 stale MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑨b **纯注释里的提及 MUST NOT 被当成「已有消费者」**（BLOCKER-2 回归）
@@ -447,12 +447,12 @@ CMEOF
     #     是保守的（漏报，安全）；但若用同一谓词证明「**已有真实消费者**」，
     #     方向相反 ⇒ 注释提及即产生**假违规**，且错误信息会指示「MUST 移除该行」
     #     ⇒ 移除后护栏报「硬死头 MUST 删除」⇒ agent 删掉 ADR-046 D10 **冻结**的
-    #     C3 DUT（rv32i_pipeline_top.h）。
+    #     C3 DUT（rv32i_core_top.h）。
     #     ⇒ 期望：exit=0（不报违规）+ 输出含**那条具体的** warning。
     #     ⚠️ 断言串 MUST 够具体（第七轮审稿 SHOULD_FIX-1）：`::warning` 会被
     #        **任何** warning 满足 ⇒ 将来新增一条无关 warning 就让 fixture 空转。
     F="$WORK/fx_stale_comment"; mk_fixture "$F"
-    printf '// 参考 rv32i_pipeline_top.h 的实现思路（纯注释，不 include）\nint main(){return 0;}\n' \
+    printf '// 参考 rv32i_core_top.h 的实现思路（纯注释，不 include）\nint main(){return 0;}\n' \
         > "$F/tests/mention_only.cpp"
     st_check_out "纯注释提及 MUST NOT 判豁免 stale（只警告）" 0 \
         "在**源码里被提及**" "VIOLATION" "$F"
@@ -465,11 +465,11 @@ CMEOF
     #        fixture 自己转红（flaky）⇒ 用 `touch -t` 钉住「.d 比 TU 至少新 1 年」
 #        （时间跨度 1 年 ⇒ 消除任何 tick 粒度的影响）。
     F="$WORK/fx_stale_dep"; mk_fixture "$F"
-    printf '#include "rv32i_pipeline_top.h"\nint main(){return 0;}\n' \
+    printf '#include "rv32i_core_top.h"\nint main(){return 0;}\n' \
         > "$F/tests/use_top.cpp"
     mkdir -p "$F/build/tests/CMakeFiles/test_top.dir"
     { printf 'build/tests/CMakeFiles/test_top.dir/use_top.cpp.o: '
-      printf '%s/tests/use_top.cpp %s/examples/riscv-mini/src/rv32i_pipeline_top.h\n' "$F" "$F"
+      printf '%s/tests/use_top.cpp %s/examples/riscv-mini/src/rv32i_core_top.h\n' "$F" "$F"
     } > "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
     touch -t 202001010000 "$F/tests/use_top.cpp"
     touch -t 202101010000 "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
@@ -482,14 +482,14 @@ CMEOF
     #     ⚠️ 注释的**形状**必须让「(b) 被移除后的回落正则」**也能匹配**
     #        （第九轮审稿 BLOCKER-1）：回落正则是
     #        `(^|[^A-Za-z0-9_.-])NAME(["'>]|$)` ⇒ 提及后必须跟 `"` / `'` / `>`
-    #        / 行尾。⇒ 用 `"rv32i_pipeline_top.h"`（带引号）而不是全角逗号
+    #        / 行尾。⇒ 用 `"rv32i_core_top.h"`（带引号）而不是全角逗号
     #        （全角逗号既不在 `["'>]` 里也不是行尾 ⇒ 回落也不匹配 ⇒ fixture 空转）。
     F="$WORK/fx_stale_nolonger"; mk_fixture "$F"
-    printf '// 曾经 include 过 "rv32i_pipeline_top.h"，现在改用别的实现\nint main(){return 0;}\n' \
+    printf '// 曾经 include 过 "rv32i_core_top.h"，现在改用别的实现\nint main(){return 0;}\n' \
         > "$F/tests/use_top.cpp"
     mkdir -p "$F/build/tests/CMakeFiles/test_top.dir"
     { printf 'build/tests/CMakeFiles/test_top.dir/use_top.cpp.o: '
-      printf '%s/tests/use_top.cpp %s/examples/riscv-mini/src/rv32i_pipeline_top.h\n' "$F" "$F"
+      printf '%s/tests/use_top.cpp %s/examples/riscv-mini/src/rv32i_core_top.h\n' "$F" "$F"
     } > "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
     touch -t 202001010000 "$F/tests/use_top.cpp"
     touch -t 202101010000 "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
@@ -499,11 +499,11 @@ CMEOF
     # ⑨f **`.d` 比源文件旧 ⇒ MUST NOT 判 stale**（当前性判据 (c) 的覆盖）
     #     ⚠️ (c) 是**唯一**挡住「假违规 + 破坏性指令」的闸门 ⇒ 必须有覆盖。
     F="$WORK/fx_stale_older"; mk_fixture "$F"
-    printf '#include "rv32i_pipeline_top.h"\nint main(){return 0;}\n' \
+    printf '#include "rv32i_core_top.h"\nint main(){return 0;}\n' \
         > "$F/tests/use_top.cpp"
     mkdir -p "$F/build/tests/CMakeFiles/test_top.dir"
     { printf 'build/tests/CMakeFiles/test_top.dir/use_top.cpp.o: '
-      printf '%s/tests/use_top.cpp %s/examples/riscv-mini/src/rv32i_pipeline_top.h\n' "$F" "$F"
+      printf '%s/tests/use_top.cpp %s/examples/riscv-mini/src/rv32i_core_top.h\n' "$F" "$F"
     } > "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
     touch -t 202101010000 "$F/tests/use_top.cpp"
     touch -t 202001010000 "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
@@ -514,12 +514,12 @@ CMEOF
     #     （第十轮审稿 SF-1：判据 (b) MUST 比对 include 的**操作数**，
     #     而不是「行首是 `#include` 的整行」）
     F="$WORK/fx_stale_linecomment"; mk_fixture "$F"
-    printf '#include "other.h" // rv32i_pipeline_top.h\nint main(){return 0;}\n' \
+    printf '#include "other.h" // rv32i_core_top.h\nint main(){return 0;}\n' \
         > "$F/tests/use_top.cpp"
     mkdir -p "$F/build/tests/CMakeFiles/test_top.dir"
     { printf 'build/tests/CMakeFiles/test_top.dir/use_top.cpp.o: \\\n'
       printf ' %s/tests/use_top.cpp \\\n' "$F"
-      printf ' %s/examples/riscv-mini/src/rv32i_pipeline_top.h \\\n' "$F"
+      printf ' %s/examples/riscv-mini/src/rv32i_core_top.h \\\n' "$F"
       printf ' %s/include/ch.hpp\n' "$F"
     } > "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
     touch -t 202001010000 "$F/tests/use_top.cpp"
@@ -533,12 +533,12 @@ CMEOF
     #     ⇒ 本 fixture 钉住它：将来若真修（跳过非激活区）⇒ 本 fixture 转红
     #     ⇒ MUST 同步改契约（spec / ADR / AGENTS 的「已知误报向量」段）。
     F="$WORK/fx_stale_if0"; mk_fixture "$F"
-    printf '#if 0\n#include "rv32i_pipeline_top.h"\n#endif\nint main(){return 0;}\n' \
+    printf '#if 0\n#include "rv32i_core_top.h"\n#endif\nint main(){return 0;}\n' \
         > "$F/tests/use_top.cpp"
     mkdir -p "$F/build/tests/CMakeFiles/test_top.dir"
     { printf 'build/tests/CMakeFiles/test_top.dir/use_top.cpp.o: \\\n'
       printf ' %s/tests/use_top.cpp \\\n' "$F"
-      printf ' %s/examples/riscv-mini/src/rv32i_pipeline_top.h \\\n' "$F"
+      printf ' %s/examples/riscv-mini/src/rv32i_core_top.h \\\n' "$F"
       printf ' %s/include/ch.hpp\n' "$F"
     } > "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
     touch -t 202001010000 "$F/tests/use_top.cpp"
@@ -554,12 +554,12 @@ CMEOF
     #      ⇒ 源文件路径在**续行**里 ⇒ 提取 MUST 处理续行
     #      （`sed -n 's/^[^:]*: //p'` 只处理第一行 ⇒ 真实 `.d` 上恒为空）。
     F="$WORK/fx_stale_multiline"; mk_fixture "$F"
-    printf '#include "rv32i_pipeline_top.h"\nint main(){return 0;}\n' \
+    printf '#include "rv32i_core_top.h"\nint main(){return 0;}\n' \
         > "$F/tests/use_top.cpp"
     mkdir -p "$F/build/tests/CMakeFiles/test_top.dir"
     { printf 'build/tests/CMakeFiles/test_top.dir/use_top.cpp.o: \\\n'
       printf ' %s/tests/use_top.cpp \\\n' "$F"
-      printf ' %s/examples/riscv-mini/src/rv32i_pipeline_top.h \\\n' "$F"
+      printf ' %s/examples/riscv-mini/src/rv32i_core_top.h \\\n' "$F"
       printf ' %s/include/ch.hpp\n' "$F"
     } > "$F/build/tests/CMakeFiles/test_top.dir/use_top.cpp.o.d"
     touch -t 202001010000 "$F/tests/use_top.cpp"
@@ -575,7 +575,7 @@ CMEOF
     F="$WORK/fx_stale_old_dep"; mk_fixture "$F"
     mkdir -p "$F/build/tests/CMakeFiles/test_gone.dir"
     { printf 'build/tests/CMakeFiles/test_gone.dir/gone.cpp.o: '
-      printf '%s/tests/already_deleted.cpp %s/examples/riscv-mini/src/rv32i_pipeline_top.h\n' "$F" "$F"
+      printf '%s/tests/already_deleted.cpp %s/examples/riscv-mini/src/rv32i_core_top.h\n' "$F" "$F"
     } > "$F/build/tests/CMakeFiles/test_gone.dir/gone.cpp.o.d"
     st_check_out "陈旧 .d（引用的 TU 已删除）MUST NOT 判豁免 stale" 0 \
         "无当前证据" "已有**当前**消费者" "$F"
@@ -614,7 +614,7 @@ CMEOF
     # ⑩j **允许清单的格式 MUST 被校验**（3 个 TAB 分隔字段）
     F="$WORK/fx_allow_fmt"; mk_fixture "$F"
     sed_inplace "$F/scripts/verify_no_duplicate_rv32i_headers.sh" \
-        's|^CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h.*|CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_pipeline_top.h 没有TAB分隔"|'
+        's|^CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_core_top.h.*|CH_DEAD_ALLOWANCE="examples/riscv-mini/src/rv32i_core_top.h 没有TAB分隔"|'
     st_check "允许清单格式非法（缺 TAB 分隔）MUST 被抓" 1 "$(run_guard "$F")"
 
     # ⑩ **源① 分析器崩溃 MUST fail-closed**
@@ -651,17 +651,17 @@ CMEOF
     # ⑭ C6 SoC 顶层端口变化 MUST 被抓到
     F="$WORK/fx_ports"; mk_fixture "$F"
     # ⚠️ 删的行 MUST 是**生成后仍存在**的那一行（fixture 端口面已改为从快照生成）
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *prog_we;||'
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_core_top.h" 's|ch_in<ch_bool> *prog_we;||'
     st_check "SoC 顶层端口变化 MUST 被抓" 1 "$(run_guard "$F")" 1
 
     # ⑮ C6 端口**方向**翻转 MUST 被抓到
     F="$WORK/fx_ports_dir"; mk_fixture "$F"
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_bool> *ext_rst;|ch_out<ch_bool> ext_rst;|'
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_core_top.h" 's|ch_in<ch_bool> *ext_rst;|ch_out<ch_bool> ext_rst;|'
     st_check "SoC 顶层端口方向翻转 MUST 被抓" 1 "$(run_guard "$F")" 1
 
     # ⑯ C6 端口**位宽**变化 MUST 被抓到
     F="$WORK/fx_ports_w"; mk_fixture "$F"
-    sed_inplace "$F/examples/riscv-mini/src/rv32i_pipeline_top.h" 's|ch_in<ch_uint<32>> *prog_data;|ch_in<ch_uint<64>> prog_data;|'
+    sed_inplace "$F/examples/riscv-mini/src/rv32i_core_top.h" 's|ch_in<ch_uint<32>> *prog_data;|ch_in<ch_uint<64>> prog_data;|'
     st_check "SoC 顶层端口位宽变化 MUST 被抓" 1 "$(run_guard "$F")" 1
 
     # ⑰ C7 库 → example 源文件耦合 MUST 被抓到（单行形态）
@@ -695,7 +695,7 @@ CMEOF
     #    ⚠️ **形状要求（第六轮审稿 BLOCKER-1）**：悬空续行文件 MUST 在**排序上
     #       紧邻目标头之前**！否则 ② 这条属性**根本没被构造出来** ⇒ 该 fixture
     #       会「空转」（实测：把它放在 `docs/` 下时，它的下一个文件是
-    #       `examples/riscv-mini/src/rv32i_pipeline_top.h`，**不是** alpha.h ⇒
+    #       `examples/riscv-mini/src/rv32i_core_top.h`，**不是** alpha.h ⇒
     #       跨文件归属错误的后果不可见 ⇒ 变异 `self[last]`→`self[FILENAME]`
     #       仍能 33/33 全绿）。
     #       本 fixture 用 `include/cpu/aaa_dangling.cpp` ⇒ 排序后紧邻
@@ -1406,7 +1406,7 @@ dep_mentions_basename() { # <文件> <basename>
 # ⚠️ 辅助：TU 里是否存在一个 `#include` 指令、其**操作数**（引号 /
 #    尖括号内的文本）**就是**该 basename（或以 `<目录>/` + basename 结尾）
 #    —— 不是「整行匹配」（第十轮审稿 SF-1：行尾注释形态
-#    `#include "other.h" // rv32i_pipeline_top.h` 的提及不得算 include 证据）。
+#    `#include "other.h" // rv32i_core_top.h` 的提及不得算 include 证据）。
 tu_includes_basename() { # <TU 路径> <basename>
     awk -v bn="$2" '
         /^[[:space:]]*#[[:space:]]*include/ {
@@ -1463,7 +1463,7 @@ has_current_dep_includer() {
             #     ⚠️ MUST 收窄到 **`#include` 指令的「操作数」**（第十轮审稿 SF-1）：
             #     只查「文本提及」⇒ 注释里的提及被当成证据（第八轮洞，重写在先）；
             #     只查「行首是 `#include`」的**整行** ⇒ 行尾注释形态
-            #     （`#include "other.h" // rv32i_pipeline_top.h`）里的提及
+            #     （`#include "other.h" // rv32i_core_top.h`）里的提及
             #     **仍**会产生破坏性假违规 ⇒ 比对对象 MUST 是操作数
             #     （引号 / 尖括号内的文本），并取**最后一段** == basename。
             #     ⚠️ 只认**字面 include** ⇒ 宏形式与续行形式**漏判**
@@ -1579,7 +1579,7 @@ fi
 #    （漏报，安全）；但若用**同一个谓词**去证明「**已有真实消费者**」，方向
 #    完全相反 ⇒ 一个**纯注释**里的提及就会让豁免被判 stale ⇒ 假违规，且错误
 #    信息会指示「MUST 移除该行」⇒ 移除后护栏报「硬死头 MUST 删除」⇒ agent
-#    删掉 ADR-046 D10 **冻结**的 C3 DUT（`rv32i_pipeline_top.h`）。
+#    删掉 ADR-046 D10 **冻结**的 C3 DUT（`rv32i_core_top.h`）。
 #    ⇒ 违规只认**编译器 .d 证据**（真 include）；源① 的提及**只警告**，
 #      且警告措辞 MUST NOT 指示删除豁免行。
 while IFS= read -r a; do
@@ -1745,7 +1745,7 @@ else
             namepart = substr(line, k + 1)
             gsub(/[[:space:]]/, "", namepart)
             # ⚠️ **具名形态**（`ch_in<T> ident{"ident"}` · 2026-11-13 R17.2 起
-            #    `rv32i_pipeline_top.h` 32 个端口全部具名）⇒ ⇒ `namepart` 会带上
+            #    `rv32i_core_top.h` 32 个端口全部具名）⇒ ⇒ `namepart` 会带上
             #    `{"..."}` 后缀 ⇒ ⇒ MUST 剥掉 ⇒ ⇒ 否则「端口集合」比对会把
             #    `ext_clk{"ext_clk"}` 当成**另一个端口名** ⇒ ⇒ C6 假红。
             #    ⇒ ⇒ 剥掉后取到的仍是 **C++ 成员名** ⇒ ⇒ ADR-046 D10 的

@@ -6,7 +6,7 @@
 //
 // | 角色 | 载体 | 说明 |
 // |---|---|---|
-// | 设计定义 | `src/rv32i_pipeline_top.h` | `Rv32iCoreTop` · **无 `main`** |
+// | 设计定义 | `src/rv32i_core_top.h` | `Rv32iCoreTop` · **无 `main`** |
 // | **激励驱动** | **本文件** | `main` · 装载程序 → 驱动 → 断言 → 结论行 |
 // | 激励源 | `tb_rv32i_soc.sv` | **手写** · Verilog 侧独立 TB |
 //
@@ -50,7 +50,7 @@
 #include "ch.hpp"
 #include "component.h"
 #include "simulator.h"
-#include "rv32i_pipeline_top.h"
+#include "rv32i_core_top.h"
 
 #include "cpu/riscv/rv32i_asm_encode.h"
 #include "rtl_emit/cli.h"

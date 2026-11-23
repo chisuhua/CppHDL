@@ -585,7 +585,7 @@ gen_rv32i_hier() {  # $1 = out dir · $2 = log
 #       == `manifest.port_table[]`）**都与产物同源**（扁平与 manifest 都来自
 #       同一次发射）⇒ ⇒ 「发射底座算错」时**两侧一起错** ⇒ ⇒ **抓不到**
 #       ⇒ ⇒ R8′ 是**唯一独立于产物**的顶层端口面判据。
-#    ⚠️ **期望集 = 手推**（推导源 = `examples/riscv-mini/src/rv32i_pipeline_top.h`
+#    ⚠️ **期望集 = 手推**（推导源 = `examples/riscv-mini/src/rv32i_core_top.h`
 #       的 `__io`：4 in + 28 out ⇒ **声明顺序即端口顺序**；端口名 = `top_<C++ 成员名>`
 #       （ADR-075 E1）⇒ + 框架 2（`default_clock` · `default_reset`）⇒ 共 **34** 根）
 #       ⇒ ⇒ **禁**从产物输出抄（抄了就是判据自证 ⇒ 恒绿）。
@@ -620,7 +620,7 @@ r8p_rv32i_port_set() {  # $1 = 产品目录（内含 top.v）
         if ! python3 - "$WORK/logs/$name-r8p-ports.tsv" <<'PY'
 import sys
 
-# ★ **手推期望集**（34 根）—— 推导源 = `examples/riscv-mini/src/rv32i_pipeline_top.h`
+# ★ **手推期望集**（34 根）—— 推导源 = `examples/riscv-mini/src/rv32i_core_top.h`
 #   的 `__io`（4 in + 28 out · **声明顺序即端口顺序**）+ 框架 2（clock/reset）
 #   ⇒ ⇒ **禁**从产物输出抄（抄了 = 判据自证 ⇒ 恒绿）。
 EXPECTED = [

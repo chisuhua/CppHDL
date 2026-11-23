@@ -10,7 +10,7 @@
  * |---|---|---|
  * | `include/cpu/riscv/address_decoder.h` | `ADDR_ITCM_BASE/SIZE`、`ADDR_DTCM_BASE/SIZE` | ⚠️ **声明 64 KB** |
  * | `include/cpu/pipeline/stages/if_stage.h` | `pc_reg` 的复位值 `0x80000000` | ⚠️ **第二个字面量** |
- * | `examples/riscv-mini/src/rv32i_pipeline_top.h` | `kTcmAddrWidth = 12` | ⚠️ **容量真相在 example 侧** |
+ * | `examples/riscv-mini/src/rv32i_core_top.h` | `kTcmAddrWidth = 12` | ⚠️ **容量真相在 example 侧** |
  *
  * ⇒ ⇒ 而**硬件实际容量** = `1 << (kTcmAddrWidth + 2)` = **16 KB**
  * ⇒ ⇒ 即「**声明 64 KB · 实现 16 KB**」⇒ ⇒ 地址落在
