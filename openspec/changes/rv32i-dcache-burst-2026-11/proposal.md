@@ -32,7 +32,7 @@
 |---|---|
 | `DCacheSync`（`include/cpu/cache/d_cache_sync.h`） | **前端不变**（`addr` / `wdata` / `req` / `we` → `rdata` / `ready` / `miss`）；**AXI 侧改 full 5 通道**（AR / R / AW / W / B）；读 = **4-beat burst fill**；写 = **write-through 单 beat**（`AWLEN=0`）；**修「假 line」**（读按 `addr[3:2]` 选 lane · fill 写满 4 lane · 写按 lane 更新） |
 | **新增** `include/axi4/tcm_axi_slave.h` | `DataTCM` 包成 **AXI4 full slave**（支持 `ARLEN`/`AWLEN` burst ⇒ 一次 burst 铺满 line） |
-| `examples/riscv-mini/src/rv32i_core_top.h` | 数据通路改为 `pipeline → DCacheSync → TcmAxiSlave → DataTCM`（**TCM 旁路**：不再直连）；`data_ready ← cache.ready`（S2 通路第一次真正生效）；`prog_*` 仍直写 I-TCM |
+| `examples/riscv-mini/src/rv32i_core_top.h` | 数据通路改为 `pipeline → DCacheSync → TcmAxiSlave → DataTCM`（**TCM 旁路**：不再直连）；`data_ready ← !data_req | cache.ready`（S2 通路第一次真正生效；⚠️ **必须带零请求放行** —— 见 AC11）；`prog_*` 仍直写 I-TCM |
 | 测试 | `tests/chlib/test_cache_sync.cpp` 等的 DCache 激励从「1 beat」改「4 beat」；新增 burst 事务 / line lane / hit-miss 拍数 / TCM slave 用例；核级 24 判据保持 |
 
 ## spec delta（**ADDED** · 不是修改已签批 Requirement）

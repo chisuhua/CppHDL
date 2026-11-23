@@ -29,8 +29,9 @@
 
 **观测面变化（如实登记）**：多拍访存 ⇒ `data_write_en` / `wb_write_en` 呈**电平**（同一事务连续
 多拍）⇒ 相关判据改为「**事务计数**」（连续相同 `(addr,data)` 折一）+ 保留序列/配对断言；
-`perf_load_use_stalls` 8 → **2**（两处 load→use 的 load 都 miss ⇒ 保持拍归入内存反压，S2 口径）；
-核级计时预算 23 → **41** 拍（3 次 miss × 8 + 2 保持，分段分解见测试注释）。
+`perf_load_use_stalls` 8 → **6**（两处 load→use 的 load 都 miss ⇒ 每处只剩 1 检测拍，S2 的 `& !mem_stall` 口径；
+并在固件**末尾补一条 hit 形态**的 load→use ⇒ 恢复已签批「load-use 停顿 4 拍」形态的**固件级**载体）；
+核级计时预算 23 → **45** 拍（3 次 miss × 8 + 2 检测拍 + 4 拍 hit 形态保持，分段分解见测试注释）。
 
 ⚠️ **公开面变更**（已登记 `.rddf/checks/public-api-surface.md`）：`DCacheSync` 的 `axi_*` 7 根
 → AXI4 full 19 根 + 前端 `strbe`（+1）；`Rv32iPipeline` 新增 `data_req`；**新增**公开头

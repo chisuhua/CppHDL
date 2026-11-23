@@ -37,7 +37,7 @@
 |---|---|
 | `tb_rv32i_soc`（AC7） | **`RESULT: checks=24 fails=0`** |
 | `run_all_ported_tests.sh` | **PASS 29 / FAIL 0 / MISSING 0** |
-| **AC7 逐拍等价**（`test_rv32i_soc_dual_parity`） | **13 用例 / 23132 断言全过**（含 260 拍 × 27 观测的逐拍全等 · 24 条写回序列 · 字节/半字道 · 跳转冲刷） |
+| **AC7 逐拍等价**（`test_rv32i_soc_dual_parity`） | **13 用例 / 23140 断言全过**（含 260 拍 × 27 观测的逐拍全等 · 24 条写回序列 · 字节/半字道 · 跳转冲刷） |
 | **AC4 反压**（核级） | 由上项的 `StoreToLoadZeroIntervalReadNew` / `LoadByteLaneDiscriminating` / `StorePhaseCoherence` 覆盖（load miss ⇒ fill 期间整条流水线冻结 · 期望值手推） |
 | `rv32i_rtl_sim_env.sh`（产物 + lint + 独立 TB） | **PASS** · `RESULT: checks=24 fails=0` |
 | `verify_hierarchical_rtl.sh`（R1–R8 + R8′） | PASS（34 端口表 == 手推期望集） |
@@ -68,6 +68,18 @@
 | 未替换的 mock | 无（`TcmAxiSlave` 是真实实现，不是 mock） |
 | 临时 fallback | 无 |
 | 本次范围外但发现的问题 | ① `verify_verif_migration_state.sh` **红**（`kind=soc` 有 2 行 ⇒ fail-closed）—— **pre-existing**（`2cab7fb` 引入 `tb_riscv_soc` 行时未同步该护栏）⇒ 记 backlog，**本 change 不动**；② `T0.1`（产物 sha256 基线）**显式不做**（见 `tasks.md`）⇒ 交用户裁决 |
+
+## 6. 架构面评审（critic · `review_profile: build, plan`）
+
+| 项 | 结论 |
+|---|---|
+| 总判定 | **APPROVE_WITH_CONDITIONS** · `mergeable: yes` · `scope_exceeded: false` · **BLOCKER 0** |
+| focus 1（`ready`/`miss` 组合 + `rdata` 保持寄存器的**充分性**） | **无失效路径**（逐拍覆盖 hit→hit / hit→miss / miss→hit / fill 完成拍与下一请求同拍 / store 穿插 / 冻结期多次 fill） |
+| focus 2（`data_ready ← !data_req \| cache.ready` 是否削弱已签批条款） | **不构成削弱**（条款约束 MEM 级响应，`mem_stall = !data_ready` 仍无条件；且新决策已落 spec delta 第 5 条 Requirement） |
+| focus 3（判据放宽的判别力） | **可接受**；两处（wb 折一 / `perf_load_use_stalls`）已把残余盲区写进注释与退休总数判据 |
+| SHOULD_FIX #1（固件缺 **hit 形态** load→use ⇒ 已签批「4 拍」形态的固件级载体消失） | ✅ **已修**：固件末尾补 `LW x29,[0x100]`（hit）+ `ADD x30,x29,x29` ⇒ `perf_load_use_stalls` **2 → 6** · `non_retired` **41 → 45** · 退休数 **`kCycles-46`** · 写回序列 **24 → 26** 项 · `hazards` **2 → 3** |
+| SHOULD_FIX #2（`proposal.md` 的 `data_ready` 措辞与实现/AC11 矛盾） | ✅ **已修**（改为 `!data_req \| cache.ready`） |
+| NIT（`d_cache_async.h` 文件头未标「同型缺陷」） | 📋 **记为 backlog**（不在本 change 范围；`d_cache_async` 未接入生产路径） |
 
 ## 结论
 

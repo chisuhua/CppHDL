@@ -187,8 +187,8 @@ cache.AR/R/AW/W/B ⇄ TcmAxiSlave ⇄ DataTCM
 | 面 | 变化 | 处置 |
 |---|---|---|
 | `data_write_en` / `wb_write_en` 的**电平** | 多拍访存 ⇒ 同一事务的观测会**连续重复** | 测试判据从「逐拍计数」改为「**事务计数**」（连续相同 `(addr,data)` 折一）+ 保留序列/配对断言 |
-| `perf_load_use_stalls` | 两处 load→use 的 load **都 miss** ⇒ 保持拍归入**内存反压**（S2 口径 `& !mem_stall`）⇒ 8 → **2** | 已按「每处 1 拍（仅检测拍）」手推订正（注释写明回退条件） |
-| `perf_cycles` / 退休数 | +18 拍（3 次 miss × 8 + 2 保持） | 计时预算 23 → **41**（分段分解已写进测试注释） |
+| `perf_load_use_stalls` | 两处 load→use 的 load **都 miss** ⇒ 保持拍归入**内存反压**（S2 口径 `& !mem_stall`）⇒ 每处只剩 1 检测拍 | 按「每处 1 拍」手推订正；**并在固件末尾补一条 hit 形态的 load→use**（critic SHOULD_FIX #1）⇒ 恢复「4 拍」形态的固件级载体 ⇒ 合计 **6**（2 + 4）|
+| `perf_cycles` / 退休数 | +18 拍（3 次 miss × 8 + 2 保持）+ 4 拍（新增的 hit 形态 load-use） | 计时预算 23 → **45**（分段分解已写进测试注释） |
 | 核的 34 端口面 | **零变化** | `verify_rv32i_soc_core_ports` / `verify_hierarchical_rtl` R8′ |
 | 三份产物 | **字节会变**（数据通路换了组件） | `verify_flat_rtl_emit` / `verify_hierarchical_rtl` / `rv32i_rtl_sim_env` 全绿 |
 

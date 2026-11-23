@@ -300,14 +300,19 @@ constexpr uint32_t kGoldenSraSh0   = 0xFFFFFFF8u;  // 移位 0 ⇒ 不变
 constexpr uint32_t kGoldenLinkJal2 = 0x80000194u;  // word 101 的地址
 constexpr uint32_t kGoldenNestedBody = 0x5Au;      // 90
 
-constexpr size_t kFirmwareWords = 108;
+// ⚠️ **2026-11-23（S3 · critic SHOULD_FIX #1）**：108 → **110** —— 末尾补一条
+//    **hit 形态**的 load→use（`lw x29,[0x100]` 命中已被 `lw x5` 填好的行 +
+//    `add x30,x29,x29`）⇒ ⇒ 恢复已签批条款「load-use 停顿 **4 拍**」在**固件级**
+//    的载体（D-Cache 接入后，原有的两处 load→use 的 load 都 miss ⇒ 保持拍被
+//    归入内存反压 ⇒ 只剩 1 检测拍/处 ⇒ 「恰好 4 拍」这一精确形态在固件级消失）。
+constexpr size_t kFirmwareWords = 110;
 
 // 期望的写回序列（ISA 语义）。
 // ⚠️ **不含 x7** —— 它在 taken 分支的错误路径上 ⇒ MUST 被冲刷 ⇒ 不写回。
 // ⚠️ **不含 x6 之前任何「消费者」的错误值** —— 紧邻的 load→use 必须拿到**新值**。
 // ⚠️ **不含 x19 / x23** —— 它们分别在 JAL / JALR 之后的错误路径上
 //    ⇒ MUST 被冲刷（见下方专项断言）。
-constexpr std::array<std::pair<uint64_t, uint64_t>, 24> kExpectedWritebacks = {{
+constexpr std::array<std::pair<uint64_t, uint64_t>, 26> kExpectedWritebacks = {{
     {1, 10},   // addi x1, x0, 10
     {2, 3},    // addi x2, x0, 3
     {3, 13},   // add  x3, x1, x2
@@ -334,6 +339,11 @@ constexpr std::array<std::pair<uint64_t, uint64_t>, 24> kExpectedWritebacks = {{
     // ⚠️ 「错误路径上的跳转」（2026-10-27 第 1 轮 critic BLOCKER 的最小复现）
     {26, kGoldenLinkJal2},   // JAL x26 ⇒ link = word 101 的地址
     {28, kGoldenNestedBody}, // addi x28 ⇒ **只有 PC 未被 word101 的 JAL 劫持才出现**
+    // ⚠️ **2026-11-23（S3）**：末尾补的 **hit 形态** load→use（word 108/109）
+    //    `lw x29,[0x100]` ⇒ 0x030A（该行已被 `lw x5` 的 fill 铺满，且 `sb` 只改字节）
+    //    `add x30,x29,x29` ⇒ 2 × 0x030A = **0x0614**
+    {29, kGoldenWordSB},   // lw  x29 ⇒ 0x030A
+    {30, 0x614u},          // add x30 ⇒ 0x0614
 }};
 
 // ⚠️ MUST 是 **constexpr**（不是 `static const`）⇒ 才能被编译期护栏检查
@@ -439,6 +449,12 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
         ADDI(28, 0, 0x5A), // 102 目标 ⇒ **只有正确重定向才会写** x28 = 0x5A
         NOP, NOP, NOP,     // 103-105
         NOP, NOP,          // 106-107
+        // ⚠️ **2026-11-23（S3 · critic SHOULD_FIX #1）**：末尾补 **hit 形态**的 load→use
+        //    ⇒ ⇒ 恢复「load-use 停顿 MUST 是 4 拍」这一已签批形态的**固件级**载体
+        //    （D-Cache 接入后，word 20/43 两处的 `lw` 都 miss ⇒ 保持拍归内存反压）。
+        //    `0x100` 这行在此刻**已在 cache 里**（`lw x5` 填过 · `sb` 只改字节）⇒ hit。
+        LW(29, 0, 0x100),  // 108 x29 = 0x030A（hit）
+        ADD(30, 29, 29),   // 109 x30 = 0x0614（紧邻 load→use ⇒ **4 拍**停顿）
     }};
 }
 
@@ -816,7 +832,10 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
     //    ⇒ ⇒ 「冒险真的被检测到」仍由本断言钉住（0 依旧转红）。
     //    ⚠️ 若将来这两条 load 变成 **hit**（例如固件先读后写）⇒ ⇒ 手推值回到 **8**
     //    （4 拍/处）；本断言 MUST 随之重推，**不得**盲改数字。
-    REQUIRE(ta.back()[kIdxLoadUseStalls] == 2u);
+    // ⚠️ **2026-11-23（S3 · critic SHOULD_FIX #1）后 2 → 6**：word 108/109 补了一条
+    //    **hit 形态**的 load→use ⇒ 它**不**被内存反压掩盖 ⇒ 完整 **4 拍**计入
+    //    ⇒ ⇒ 2 + 4 = **6**（两处 miss 形态各 1 + 新增 1 处 hit 形态 4）。
+    REQUIRE(ta.back()[kIdxLoadUseStalls] == 6u);
     // 控制停顿 = **全部控制重定向**的**次数**（2026-10-26 起含 JAL/JALR）
     //   = 1（taken 的 beq 误预测）+ 3（JAL @word64 + JALR @word80 + JAL @word100）
     // ⚠️ 口径是「**重定向次数**」而不是「停顿拍数」—— 每次重定向实际代价是 **3 拍**
@@ -912,9 +931,10 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
             ++non_retired;
         }
     }
-    REQUIRE(non_retired == 41u);
+    // 41 + 4（新增的 hit 形态 load-use 保持 4 拍）= **45**
+    REQUIRE(non_retired == 45u);
     // 退休数 = 采样拍数 − (非退休拍 + 第 0 拍那条已退休的差)
-    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 42u);
+    REQUIRE(ta.back()[kIdxInstructions] == kCycles - 46u);
 
     // ---- 写回序列（ISA 语义的最强判据）----
     //
@@ -987,14 +1007,14 @@ TEST_CASE("Rv32iSoc - DualBackendTraceParity",
 
     // ---- 冒险**次数**（与「停顿**拍数**」区分）----
     // `dbg_load_use_detected` 是**单拍脉冲** ⇒ 数它的脉冲个数 = 冒险次数。
-    // 固件里有**两处**紧邻的 load→use ⇒ 恰好 2 次。
+    // 固件里有**三处**紧邻的 load→use（word 20/21 · 43/44 · **108/109**）⇒ 恰好 3 次。
     std::size_t hazards = 0;
     for (std::size_t c = 0; c < ta.size(); ++c) {
         if (ta[c][kIdxLoadUseDetected] == 1u) {
             ++hazards;
         }
     }
-    REQUIRE(hazards == 2u);
+    REQUIRE(hazards == 3u);
 
     // ---- 指令流与 PC MUST 始终对齐（imem 是 1-cycle sread ⇒ 极易错开）----
     // 取指字索引 = (dbg_id_pc - 0x80000000) / 4
