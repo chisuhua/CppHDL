@@ -3,6 +3,8 @@
 - **验收者**：verifier（角色内建 · builder 会话内执行）
 - **日期**：2026-11-23 · **范围**：本 change 的 AC1–AC15 + 遗留清扫
 - **change**：`openspec/changes/riscv-core-rename-2026-11/`（proposal / design / tasks）
+  ⇒ ⇒ **2026-11-23 已归档**至 `openspec/changes/archive/2026-11-23-riscv-core-rename-2026-11/`
+  （本报告写于归档前 ⇒ 正文路径**保持当时形态**，不追溯改写）
 - **提交**：`870cda5`（R3a）· `a82eda1`（R3b）· `2210e9d`（R3c）· `26d77d4`（立项）
 
 ## 结论
