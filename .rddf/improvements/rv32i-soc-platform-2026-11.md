@@ -112,7 +112,7 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 | 缓存替换策略 / 一致性协议 | 各自独立立项（本项只接**现有** `ICacheSync` / `DCacheSync`） |
 | 微架构重构（`include/cpu/pipeline/**` 的算法/时序） | 不在本项（本项只加/改**接口**） |
 | 总线互联/IP 的新实现 | 复用 `include/axi4/**`（矩阵 / 桥 / 外设 / DMA） |
-| 改名（`Rv32iPipelineTop` / `Rv32iCoreComplex` / `rv32i_pipeline_top.h`） | 单列一批（**R3**）⇒ ⇒ **已立项**：`openspec/changes/riscv-core-rename-2026-11/`（拆 **R3a** 模块类型名 / **R3b** C++ 类名 / **R3c** 文件名 · 三批各自独立提交与判据）|
+| 改名（`Rv32iPipelineTop` / `Rv32iCoreComplex` / `rv32i_pipeline_top.h`） | 单列一批（**R3**）⇒ ⇒ ✅ **已完成并验收**（`openspec/changes/riscv-core-rename-2026-11/` · R3a `870cda5` / R3b `a82eda1` / R3c `2210e9d` · verifier **15/15** ⇒ 可归档 · 报告 `.rddf/reviews/riscv-core-rename-2026-11-verify.md`）⇒ ⇒ 核的三个名字现统一为 **`Rv32iCoreTop`** / **`Rv32iCoreTop`** / **`rv32i_core_top.h`** ⇒ ⇒ **端口面零变化**（34 根逐字不变）· **行为零变化**（核侧三份产物 sha256 逐字节不变）|
 | 改名（TB 名 `tb_rv32i_soc`） | 单列一批（**R3d**）· **未立项** ⇒ ⇒ 会动 tsv / CMake / CI / 多护栏 fixture ⇒ ⇒ 与 R3a–c 分离 |
 
 ### 写面（按批分级）
@@ -137,6 +137,17 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 ---
 
 ## What Changes
+
+> ✅ **2026-11-23 · R3 已收口（builder 回填）**：核的三个名字已统一
+> （**类** `Rv32iCoreTop` · **模块类型名** `Rv32iCoreTop` · **头文件** `rv32i_core_top.h`）
+> ⇒ ⇒ **零行为变化**（核侧 flat / 层次化 / 带固件初值三份产物 **sha256 逐字节不变**）
+> ⇒ ⇒ **零端口变化**（34 根顶层端口逐字不变 ⇒ ⇒ 下游连线不必改）
+> ⇒ ⇒ **spec 零 delta**（`rtl-hierarchical-output` 钉的是成层集合 7 + 交付粒度 8 module ⇒ 本批两者都不碰）
+> ⇒ ⇒ ⚠️ **实施期口径订正**：`port-naming-registry.md` §4.1 是**具名消化**活账 ⇒ ⇒
+> **改名不是消化 ⇒ MUST NOT 追加行**（已回写 change 的 AC13）。
+> ⇒ ⇒ 🔜 **下一批仍是 S2**（MEM 反压）—— 实施期实测供参考：`Rv32iPipeline::data_ready`（`:69`）
+> **零消费者** + `MemStage::__io` **无任何 ready/stall 输入** ⇒ ⇒ S2 需**新增** MEM 级停顿通路
+> ⇒ ⇒ **时序契约变更 ⇒ 架构面**。
 
 ### 批次 × IP（**2026-11-23 调整后** · IP 计划的主表）
 
