@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-24
+# 本 change 只补**判据与文档**（IP 级 MMIO 行为判据 · 层次化等价纳入 19 根新端口 · IP 集成契约）。
+# 不新增能力、不改任何已签批 Requirement、不改端口面 ⇒ 无 spec 变更 ⇒ 归档用 `--skip-specs`。
+skip_specs: true

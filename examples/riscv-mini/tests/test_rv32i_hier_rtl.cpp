@@ -620,3 +620,190 @@ TEST_CASE("rv32i hierarchical rtl: corrupting one assign turns the equivalence r
     REQUIRE_FALSE(res.equal);
     REQUIRE(res.mismatch_count > 0);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// **T2（change `rv32i-ip-freeze-2026-11`）：19 根 `axil_*` 纳入逐拍等价**
+//
+// 为什么要它：S4a 给核加了 19 根 AXI4-Lite 端口，但上文的等价性用例只驱动 4 根输入、
+// 观测 9 根输出 ⇒ ⇒ 层次化发射若**漏连 / 接错** master 的端口，逐拍等价**抓不到**。
+// （端口**表**由 R8′ 覆盖，但那是「名字存在」而不是「值相同」。）
+//
+// 手推程序（与 `tests/test_rv32i_core_mmio.cpp` **同一组常量** · 手推见该文件头）：
+//   `lui x4, 0x80102` / `lw x6, 4(x4)` / `addi x7, x0, 1` / `sw x6, 0(x4)` / `jal x0, 0`
+// ⇒ ⇒ MMIO 写的数据 MUST == 从设备回的 `rdata`（0x5A）
+//
+// ⚠️ 从设备激励 = **开环**「恒快从设备」（`hier_eq` 的激励是**预先算好**的矩阵，
+//    不能逐拍反应）⇒ ⇒ 这是**等价性**用例（两侧收同一组输入 ⇒ 输出逐拍必须相同），
+//    不是协议合规用例（后者归 `test_rv32i_core_mmio`）。
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+/// MMIO 固件（手推编码 · 与 `test_rv32i_core_mmio.cpp` 的 `kMmioHandEncoded` 同源）
+const std::vector<std::uint32_t> &mmio_firmware() {
+    static const std::vector<std::uint32_t> fw = {
+        0x80102237u,  // lui  x4, 0x80102  ⇒ x4 = 0x8010_2000 = kGpio.base
+        0x00422303u,  // lw   x6, 4(x4)    ⇒ MMIO 读（rdata = 0x5A）
+        0x00100393u,  // addi x7, x0, 1    ⇒ 非 MMIO 后继（EX/MEM 地址 = 1）
+        0x00622023u,  // sw   x6, 0(x4)    ⇒ MMIO 写（数据 = 读回来的值）
+        0x0000006Fu,  // jal  x0, 0        ⇒ 自环
+    };
+    return fw;
+}
+
+/// 手推的 MMIO 读 / 写地址（`kGpio.base` 与 `+4`）
+constexpr std::uint64_t kAxilReadAddr = 0x80102004u;
+constexpr std::uint64_t kAxilWriteAddr = 0x80102000u;
+/// 从设备回的读值（手推）
+constexpr std::uint64_t kAxilRdata = 0x5Au;
+
+}  // namespace
+
+TEST_CASE("rv32i hierarchical rtl: the 19 axil ports are cycle-accurate equivalent",
+          "[rv32i][hierarchy][equivalence][axil][verilator]") {
+    const std::string dir = make_temp_dir("_axil_eq");
+    REQUIRE_FALSE(dir.empty());
+
+    ch::ch_device<Rv32iCoreTop> dev;
+    auto &io = dev.instance().io();
+
+    auto ps = ch::hier_eq::emit(dev.instance(), dir);
+    INFO("emit error: " << ps.error);
+    REQUIRE(ps.ok);
+    REQUIRE_FALSE(ps.ports.empty());
+
+    // ── 受驱动的顶层输入：4 根装载/复位 + **8 根 AXI4-Lite** ──
+    std::vector<ch::hier_eq::DrivenInput> inputs;
+    auto add_in = [&](const std::string &n, auto &port) {
+        inputs.push_back({n, [&port](ch::Simulator &s, std::uint64_t v) {
+                              s.set_input_value(port, v);
+                          }});
+    };
+    add_in("ext_rst", io.ext_rst);
+    add_in("prog_we", io.prog_we);
+    add_in("prog_addr", io.prog_addr);
+    add_in("prog_data", io.prog_data);
+    add_in("axil_awready", io.axil_awready);
+    add_in("axil_wready", io.axil_wready);
+    add_in("axil_bresp", io.axil_bresp);
+    add_in("axil_bvalid", io.axil_bvalid);
+    add_in("axil_arready", io.axil_arready);
+    add_in("axil_rdata", io.axil_rdata);
+    add_in("axil_rresp", io.axil_rresp);
+    add_in("axil_rvalid", io.axil_rvalid);
+
+    // ── 观测面：**11 根 AXI4-Lite 输出** + 4 根值锚（都是**根** `ch_out`）──
+    std::vector<ch::hier_eq::Observation> obs;
+    auto add_obs = [&](const std::string &n, auto &port) {
+        obs.push_back(ch::hier_eq::make_observation(n, port, [&port](ch::Simulator &s) {
+            return static_cast<std::uint64_t>(s.get_port_value(port));
+        }));
+    };
+    add_obs("axil_awaddr", io.axil_awaddr);   // 0
+    add_obs("axil_awprot", io.axil_awprot);   // 1
+    add_obs("axil_awvalid", io.axil_awvalid); // 2
+    add_obs("axil_wdata", io.axil_wdata);     // 3
+    add_obs("axil_wstrb", io.axil_wstrb);     // 4
+    add_obs("axil_wvalid", io.axil_wvalid);   // 5
+    add_obs("axil_bready", io.axil_bready);   // 6
+    add_obs("axil_araddr", io.axil_araddr);   // 7
+    add_obs("axil_arprot", io.axil_arprot);   // 8
+    add_obs("axil_arvalid", io.axil_arvalid); // 9
+    add_obs("axil_rready", io.axil_rready);   // 10
+    add_obs("obs_data_addr", io.obs_data_addr);                 // 11
+    add_obs("obs_data_write_data", io.obs_data_write_data);     // 12
+    add_obs("obs_data_write_en", io.obs_data_write_en);         // 13
+    add_obs("dbg_wb_write_data", io.dbg_wb_write_data);         // 14
+
+    // ── 激励：装载（从设备输入全 0）+ 跑动（恒快从设备）──
+    const auto &fw = mmio_firmware();
+    std::vector<std::vector<std::uint64_t>> stim;
+    for (std::size_t i = 0; i < fw.size(); ++i) {
+        stim.push_back({1u, 1u, i, fw[i], 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u});
+    }
+    for (std::size_t i = fw.size(); i < fw.size() + kTailFillWords; ++i) {
+        stim.push_back({1u, 1u, i, kNop, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u});
+    }
+    for (unsigned i = 0; i < kRunCycles; ++i) {
+        // 恒快从设备：ready 恒 1 · valid 恒 1 · rdata = 0x5A · resp = OKAY
+        stim.push_back({0u, 0u, 0u, 0u, 1u, 1u, 0u, 1u, 1u, kAxilRdata, 0u, 1u});
+    }
+
+    auto res = ch::hier_eq::compare(dev.context(), dir, ps.hier_path, ps.ports, inputs, obs,
+                                    stim);
+    INFO("compare error: " << res.error);
+    REQUIRE(res.ok);
+    INFO("first mismatch: " << res.first_mismatch);
+    REQUIRE(res.equal);
+    REQUIRE(res.mismatch_count == 0);
+    REQUIRE(res.flat_trace.size() == stim.size());
+
+    // ═══ ⑥ 观测面**非常量**（否则「全绿」可能来自恒定观测面）═══
+    {
+        bool awvalid_varied = false;
+        bool araddr_varied = false;
+        const std::uint64_t awvalid0 = res.flat_trace.front()[2];
+        const std::uint64_t araddr0 = res.flat_trace.front()[7];
+        for (const auto &row : res.flat_trace) {
+            if (row[2] != awvalid0) awvalid_varied = true;
+            if (row[7] != araddr0) araddr_varied = true;
+        }
+        REQUIRE(awvalid_varied);   // `axil_awvalid` 随拍变化
+        REQUIRE(araddr_varied);    // `axil_araddr` 随拍变化
+    }
+
+    // ═══ ⑥ 手推锚：总线上出现手推地址，且 MMIO 写的数据 == 手推读值 ═══
+    {
+        bool saw_read_req = false;
+        bool saw_write_req = false;
+        bool saw_store = false;
+        for (const auto &row : res.flat_trace) {
+            if (row[9] != 0u && row[7] == kAxilReadAddr) saw_read_req = true;
+            if (row[2] != 0u && row[0] == kAxilWriteAddr) saw_write_req = true;
+            if (row[13] == 0u) continue;
+            saw_store = true;
+            REQUIRE(row[11] == kAxilWriteAddr);   // `obs_data_addr`
+            REQUIRE(row[12] == kAxilRdata);       // `obs_data_write_data`
+            REQUIRE(row[0] == kAxilWriteAddr);    // 同拍 `axil_awaddr`（⇒ 不是碰巧算出来的值）
+        }
+        REQUIRE(saw_read_req);
+        REQUIRE(saw_write_req);
+        REQUIRE(saw_store);
+    }
+
+    // ═══ ⑦ 判别力自证：篡改**一根** `axil_*` 的驱动 ⇒ 等价性 MUST 转红 ═══
+    const std::string original = read_file(ps.hier_path);
+    std::string target_stmt;
+    for (const char *sig : {"assign top_axil_awaddr = ", "assign top_axil_araddr = ",
+                            "assign top_axil_wdata = "}) {
+        const auto at = original.find(sig);
+        if (at == std::string::npos) continue;
+        const auto bol = original.rfind('\n', at);
+        const auto eol = original.find(";\n", at);
+        if (bol == std::string::npos || eol == std::string::npos) continue;
+        const std::string cand = original.substr(bol + 1, eol + 1 - (bol + 1));
+        if (cand.find('\n') != std::string::npos) continue;
+        target_stmt = cand;
+        break;
+    }
+    INFO("corrupted statement: " << target_stmt);
+    REQUIRE_FALSE(target_stmt.empty());
+    REQUIRE(count_occurrences(original, target_stmt) == 1);
+
+    std::string corrupted = original;
+    {
+        const auto eq = target_stmt.find('=');
+        REQUIRE(eq != std::string::npos);
+        const std::string lhs = target_stmt.substr(0, eq);
+        corrupted.replace(corrupted.find(target_stmt), target_stmt.size(), lhs + "= '0;");
+    }
+    const std::string corrupt_path = dir + "/corrupted_axil.v";
+    write_file(corrupt_path, corrupted);
+    REQUIRE(read_file(corrupt_path) != original);
+
+    auto res2 = ch::hier_eq::compare(dev.context(), dir, corrupt_path, ps.ports, inputs, obs,
+                                     stim);
+    INFO("compare error: " << res2.error);
+    REQUIRE(res2.ok);
+    REQUIRE_FALSE(res2.equal);
+    REQUIRE(res2.mismatch_count > 0);
+}

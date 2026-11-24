@@ -183,6 +183,23 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > DECERR 判据要改**（现用 `0x8010_0000` 作「未映射」探针）② `bresp`/`rresp` 被 master 忽略（错误对软件不可见）
 > ⇒ 与 S5 的 `irq` 同批。
 
+> 📌 **2026-11-24 裁决 + 收口记录（builder · IP 冻结批 `rv32i-ip-freeze-2026-11`）**
+> **用户裁决**：「先把 `riscv-mini` 构建完备并归档，然后再继续 riscv-soc 的任务；riscv-mini 构建的 IP 可以用于 riscv-soc」
+> ⇒ ⇒ 与 **G-9.4**（核侧自带 MMIO master ⇒ 换核时 SoC 侧零改动）**同向** ⇒ ⇒ IP 先冻结、后接 SoC。
+>
+> **本批做了什么（不改端口面 · 不改行为 · 不改公开符号）**
+> - ① 新 target `test_rv32i_core_mmio`（**6 用例 / 39 断言**）：`Rv32iCoreTop` + **响应式 AXI4-Lite 从设备 stub**
+>   ⇒ ⇒ 首次给「IP 自己的 MMIO 接口」独立判据（此前 24 条核级判据**全程 tie 0** ⇒ 零 MMIO 覆盖）。
+>   ⇒ ⇒ 判据 = 读值（`obs_data_write_data == 0x5A`）/ 计数（store 1 · 写回 3）/ **反证档**（从设备不应答 ⇒ 程序永不完成）/
+>   DECERR 不挂死 / 非 MMIO 零 `axil` 请求 / AXI-Lite 握手协议。
+> - ② `test_rv32i_hier_rtl` 第 4 个用例：**19 根 `axil_*`** 纳入 flat≡hier **逐拍值**等价 + 变异自证（篡改一根 assign 必红）。
+> - ③ `examples/riscv-mini/AGENTS.md` 新增「**IP 集成契约**」7 条（含**错误语义现状** = `bresp`/`rresp` 不消费 ⇒ 归 S5）。
+>
+> **判别力实测**：M8（读数据 mux 退回 S4a 缺陷形态）⇒ 3 用例红；M9（分流方向反转）⇒ **6 用例全红**；T2 变异 ⇒ 等价性红。
+>
+> ⇒ 🔜 **下一批 = S4b**（SoC 侧：其余 5 个 Lite 外设 + 互联全量形态）—— 现在**核侧零改动**是其前提（IP 已冻结）。
+> ⇒ ⚠️ **S4b MUST 处理**（不变）：① 接上 CLINT 后 A8 的 DECERR 探针地址要改 ② `bresp`/`rresp` 若在 S4b 前修 ⇒ A8 语义变化。
+
 ### 批次 × IP（**2026-11-23 调整后** · IP 计划的主表）
 
 | 批 | 新 IP / 变更 | 主判据 | 前置 |

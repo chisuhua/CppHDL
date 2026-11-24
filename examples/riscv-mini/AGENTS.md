@@ -36,15 +36,15 @@ examples/riscv-mini/
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
 │   ├── axil_mmio_master.h  # 核侧 AXI4-Lite 主设备（S4a · MMIO 通道的核内一端
 │   │                          #   ⇒ 请求面 7 根 + AXI4-Lite 19 根 · `ready` = **单拍完成脉冲**
-│   │                          #   ⇒ 判据 = `test_axil_mmio_master`（5 用例 / 58 断言））
+│   │                          #   ⇒ 判据 = `test_axil_mmio_master`（5 用例 / 58 断言）
+│   │                          #   ⇒ 核级端到端 = `test_rv32i_core_mmio`（6 用例 / 39 断言））
 │   └── rv32i_core_top.h # 核 IP 顶层装配（ADR-046 D1 类别 1 / D3 #15）
 │                             #  ✅ **已有消费者**（2026-10-25）：`tests/
 │                             #  test_rv32i_soc_dual_parity.cpp`（核级双路
 │                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
 │                             #  豁免条目已移除（ADR-046 D10-rev 端口契约）
-└── tests/                   # ✅ 16 个 Catch2 target 已注册进 CTest（2026-10-25 +1：
-                              #   test_rv32i_soc_dual_parity —— 核级双后端 parity）
-    ├── test_*.cpp           # 18 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
+└── tests/                   # ✅ 19 个 Catch2 target 已注册进 CTest（另有 1 个 noctest 只构建）
+    ├── test_*.cpp           # 20 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
     └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
 ```
@@ -220,6 +220,30 @@ bash scripts/rv32i_rtl_sim_env.sh
 > ⇒ ⇒ ⚠️ **禁**把「级属性」端口（`top_core_dbg_exmem_is_store` /
 > `top_core_dbg_id_is_store` / `top_core_dbg_exmem_valid` /
 > `top_core_dbg_mem_valid_out`）改成脉冲 ⇒ ⇒ 那是**另一类语义**（反映寄存器当前内容）。
+
+## IP 集成契约（**复用方必读** · 2026-11-24 · change `rv32i-ip-freeze-2026-11`）
+
+> 上面的端口表管「**有哪些针脚**」；本节管「**用它们时的语义**」。
+> ⇒ ⇒ 换 SoC / 接新宿主时 MUST 先读本节（**端口表不足以开工**）。
+
+| 契约 | 内容 | 判据载体 |
+|---|---|---|
+> ⚠️ **本表的首列 MUST NOT 是纯数字**：`scripts/verify_riscv_soc_core_ports.sh` 按 `^\| *[0-9]+ *\|` 识别**端口表**（V1/V2 的期望源）⇒ ⇒ 数字编号行会被误当成端口行。
+| **端口面** | **53** = 框架 2 + 核自有 51（**12 IN + 39 OUT**）· 单一真相 = 上面的端口表 | `scripts/verify_riscv_soc_core_ports.sh` V1/V2/V3 · C6 快照 |
+| **复位** | `ext_rst` **高有效**（核内流水线 / D-L1 / MMIO 主设备**同极性**）；框架另有一条 `default_reset`（ADR-046）⇒ ⇒ 装载固件期 MUST 保持 `ext_rst = 1`（否则计数器被装载污染） | 核级判据 S1/S6（`tb_rv32i_soc.cpp`） |
+| **MMIO 通道** | **19 根 AXI4-Lite 主口**（无 ID / 无 burst / **单事务**）· **分流判据 = 地址 ∈ MMIO 段**（边界**派生**自 `include/cpu/riscv/rv32i_mem_map.h`）⇒ ⇒ MMIO 请求**不进 D-L1** | `tests/test_rv32i_core_mmio.cpp`（AC1 / AC5） |
+| **事务语义** | 核内 `ready` 是**单拍完成脉冲**（与事务时长无关）⇒ ⇒ 该拍 `data_ready = 1` ⇒ 流水线恢复；从设备**不应答** ⇒ 核**一直等**（不超时、不自造响应） | `tests/test_rv32i_core_mmio.cpp`（AC3 **反证档**） |
+| **错误语义（现状）** | `bresp` / `rresp` **不消费** ⇒ ⇒ DECERR / SLVERR 表现为「事务完成 + 数据取回」⇒ ⇒ **软件无法区分**。⇒ ⇒ 补错误观测面 = **S5**（与 `irq` 同批） | `tests/test_rv32i_core_mmio.cpp`（AC4）· 登记 `.rddf/checks/soc-rtl-expectations.md` §5 |
+| **中断** | **无 `irq` 端口**（G-5 契约已定：1 bit · 电平 · 高有效；实施在 **S5**）⇒ ⇒ **IP v1 = polling-only** | 端口表（53 根里没有 `irq`） |
+| **已知限制** | ① 数据侧 TCM **越界静默别名**（登记在 `rv32i_mem_map.h`）② MMIO 段里**未接**的外设由宿主互联回 DECERR ③ 逐拍 flat≡hier 等价已覆盖 **12/12 个输入** + **21/39 个输出**（旧 9 + 本批 11 根 `axil_*` + `obs_data_write_data` 值锚）⇒ ⇒ 余 18 个输出仍只有「端口表存在」级的覆盖（R8′）；⚠️ **结构性盲区**：恒 0 信号（`axil_awprot` / `axil_arprot`）与本节第 5 条的 `bresp` / `rresp` 在现有激励下读 0 == 正确值 ⇒ ⇒ **漏接它们逐拍等价判不出** | ① `rv32i_mem_map.h` 文件头 ② ③ `tests/test_rv32i_hier_rtl.cpp` |
+
+> ⚠️ **复用方的两个高频坑**
+> - **核级没有从设备 ⇒ 8 根 AXI4-Lite 输入 MUST 显式 tie 0**
+>   （`tb_rv32i_soc.cpp` 的 `tie_axil_inputs()`）⇒ ⇒ 核级程序 MUST NOT 做 MMIO 访问
+>   （会**永久冻结**流水线）。
+> - **MMIO 请求 MUST NOT 进 D-L1**：`DCacheSync` 的 `aw_valid = we & req`
+>   ⇒ ⇒ store-to-MMIO 会向 D-TCM 的 AXI 从口发起**别名地址写** ⇒ ⇒ **静默污染** D-TCM。
+>   ⇒ ⇒ 分流点（`dcache.req = data_req & !addr_in_mmio`）**不得**被「顺手简化」。
 
 ## WHERE TO LOOK
 | Task | Location |

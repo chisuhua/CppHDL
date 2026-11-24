@@ -96,6 +96,13 @@ riscv_mini_catch_test(test_address_decoder tests/test_riscv_tests_soc.cpp)
 # 逐拍手推表（见源文件头）· 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
 riscv_mini_catch_test(test_axil_mmio_master tests/test_axil_mmio_master.cpp)
 
+# === 核级（IP 级）MMIO 通道判据（change `rv32i-ip-freeze-2026-11` · T1）===
+# DUT = `src/rv32i_core_top.h`（核 IP 顶层）· 外接**响应式 AXI4-Lite 从设备 stub**
+# ⇒ ⇒ 补上「IP 自己的接口被单独验证过」这一格（此前 24 条核级判据全程 tie 0 ⇒ 零 MMIO 覆盖）。
+# ⚠️ **不新增端口**（读值用既有 `obs_data_write_data` 观测 ⇒ 端口面零变化）。
+# ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
+riscv_mini_catch_test(test_rv32i_core_mmio tests/test_rv32i_core_mmio.cpp)
+
 # === Pipeline 单元 ===
 # 异常: test_riscv_tests_pipeline 额外需要 examples/riscv-mini/tests/ 在 include 路径
 # ⚠️ 不进 CTest：46 个用例全部依赖仓外 riscv-tests 二进制 ⇒ CI 中恒为

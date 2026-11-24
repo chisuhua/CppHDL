@@ -1,3 +1,60 @@
+## 2026-11-24 — IP 冻结：`riscv-mini` 的判据完备（MMIO 通道核级判据 + 层次化等价纳入 19 根 axil + 集成契约）
+
+change `rv32i-ip-freeze-2026-11`（用户 2026-11-24 裁决「先把 IP 做完备并归档，再继续 SoC 批次」）
+⇒ ⇒ **不改端口面 · 不改行为 · 不改公开符号**，只补「IP 自己的接口被单独验证过」这一格。
+
+### ① 新 target `test_rv32i_core_mmio`（7 用例 / 50 断言）
+
+DUT = `Rv32iCoreTop` + **响应式 AXI4-Lite 从设备 stub**（可编程 ready 延迟 / `rdata` / `bresp` / 反证档 `dead`）。
+
+- **AC1 读值**：程序 `lui/lw/addi/sw/jal`（`lw` 后跟**非 MMIO 后继** ⇒ 逼出「读数据 mux 用当拍地址选路径」的缺陷）
+  ⇒ ⇒ `obs_data_write_data == 0x5A`（`obs_data_addr == 0x8010_2000`） ⇒ ⇒ **不新增端口**（用「存回去」把读值变成可观测量）。
+- **AC2 计数**：store 事件 **1** · 写回 **3**（x4 = 0x8010_2000 / x6 = 0x5A / x7 = 1）。
+- **AC3 事务依赖（两侧夹逼）**：从设备**不应答** ⇒ 程序**永不完成**（store 不提交 · `arvalid` 保持到窗口末）
+  ⇒ ⇒ 证明 AC1 的「完成」不是核自说自话。⚠️ 初稿的「事务拍数上界」已 dated 订正 —— 它会把实现时序写进判据。
+- **AC4** `bresp = rresp = 3`（DECERR）⇒ 程序照常完成（`AxilMmioMaster` 忽略响应码的现状被**显式**记录下来）。
+- **AC5 非 MMIO 零变化**：无 MMIO 的程序 ⇒ `axil_*` 请求线**从未拉高**（⇒ 证明分流方向正确：字节地址 0 不进 MMIO 旁路）。
+- **AC6 AXI-Lite 握手协议**：VALID 保持到握手 · VALID 期间载荷稳定 · **完成事件不得早于 B 响应** · 总线地址 == 手推值。
+- **AC7 慢从设备**（`ready_lat = 3`）：事务照样完成，且 VALID 窗口**真的跨多拍**（`arvalid` / `awvalid` 高位拍数 ≥ 3）。
+- **判别力实测（先见红 · 全部还原复绿）**：
+  - **M8** 读数据 mux 退回 S4a 缺陷形态 ⇒ **3 用例转红**
+  - **M9** 分流方向反转 ⇒ **6 用例全红**
+  - **M-A**（critic 指出的二阶逃逸面）master 在 `ar_fire` 就锁存 `rdata`（早于 `rvalid`）⇒ **4 用例转红**（靠 stub「`rdata` 只在响应拍有效、其余拍给逐拍变化的垃圾值」）
+  - **M-B**（同）写完成在 AW∧W 握手即报 `ready`（不等 `bvalid`）⇒ **AC6f 转红**
+
+### ② `test_rv32i_hier_rtl` 追加第 4 个用例：19 根 `axil_*` 的逐拍等价
+
+- 8 根 axil 输入受驱动（开环「恒快从设备」）· 11 根 axil 输出被观测 + 4 根值锚 ⇒ ⇒ `compare` **equal**。
+- 观测面**非常量自证**（`axil_awvalid` / `axil_araddr` 随拍变化）· 手推锚（读地址 0x8010_2004 · 写地址 0x8010_2000 · 写数据 0x5A）。
+- **判别力**：篡改 `assign top_axil_awaddr = …` ⇒ 等价性**转红**。
+
+### ③ `examples/riscv-mini/AGENTS.md` 新增「IP 集成契约」段
+
+七条（端口面 / 复位极性 / MMIO 通道与分流判据 / 事务语义 / **错误语义现状** / `irq` 缺失 = polling-only / 已知限制）
++ 复用方的两个高频坑（核级 8 根输入 MUST tie 0 · MMIO 请求 MUST NOT 进 D-L1）。
+
+### ④ critic 轮次 1 的处置（REJECT · 1 BLOCKER + 5 SHOULD_FIX + 3 NIT · 全部已修或已记 backlog）
+
+- 🔴 **BLOCKER（已修）**：`proposal` AC1 与 `design` §1.1 写「**地址 0** 的 store 数据 == 0x5A」——
+  实现是 `sw x6, 0(x4)`（**MMIO 写** 0x8010_2000，与 SoC 级 A9 逐字一致）⇒ ⇒ 旧措辞在本程序里
+  **无对应事件**（地址 0 的 store 属 AC5 的非 MMIO 程序，数据 53）⇒ ⇒ 两处均已 dated 订正。
+- **SHOULD_FIX 已采纳并实测**：① `design` §3 的变异表（AC3 行随反证档失效）⇒ 换成实测过的
+  M8/M9/M-A/M-B/T2 ② `design` §4 第 4 条「事务上界 ≤ 4 拍」⇒ 改「单拍完成脉冲 + 一直等」
+  ③ AGENTS.md 覆盖度 **20/39 → 21/39**（`obs_data_write_data` 也是本批新增观测）+ 补**结构性盲区**
+  （恒 0 的 `awprot`/`arprot` 与 `bresp`/`rresp` 漏接判不出）④ stub 的 `ready_lat` 改为
+  **每事务独立**窗口（原来只作用于首个请求 ⇒ 写通道 VALID 窗口退化成 1 拍）⑤ 新增 AC6f / AC7
+  ⑥ AC3d / AC6d / AC6e 明确标注「**激励 / 模型良构性**，不是 DUT 判据」。
+- **NIT 已清**：文件头 `bvalid` 规则改为「AW **与** W 都握手」· proposal T1 行的判据组数 5 → 7 ·
+  CH4 锚点按实测**上调**（core_mmio 34 → 44 · hier_rtl 40 → 78；脚本规则「上调无需理由」）。
+- **未修（记 backlog · `scope_exceeded`）**：`verify_example_assertion_quality.sh` 头部注释与
+  AGENTS.md 端口表两个警告块里的「核自有 32 条」是 **S4a 残留**（非本 diff）。
+
+### ⑤ 锚点与登记
+
+- `CTEST_TOTAL` **276 → 277** · `EXAMPLES_TEST_SOURCES` **21 → 22** · `verify_example_assertion_quality` 的
+  CH4 新增一行（`test_rv32i_core_mmio` 下限 34）+ hier 行描述补 19 根 axil 面。
+- `examples/riscv-mini/AGENTS.md` 的 target / source 计数按实测订正（19 个 ctest target · 20 个 test source）。
+
 ## 2026-11-24 — S4a（P3–P5）：核的 MMIO 通道贯通 SoC（分流 + Lite 互联 + GPIO 回环）
 
 change `rv32i-soc-mmio-channel-2026-11`（**S4a**）的 P3 / P4 / P5 —— 从「库层地址表 + 核侧 master」
