@@ -120,10 +120,10 @@
 
 ## P7 · 验证（先窄后宽）
 
-- [ ] **T7.1** **全量重建**（⚠️ 禁只重建被点名的 target ⇒ 旧二进制 ⇒ 假绿）
-- [ ] **T7.2** SoC 级 **9** 条全绿 · 核级 **24** 条**零变化**（`checks=24 fails=0`）
-- [ ] **T7.3** `ctest` 全绿（**275**）· `run_all_ported_tests` PASS
-- [ ] **T7.4** **全部** `scripts/verify_*.sh` 全绿（含 C6 · 核端口 · 未驱动 · 双形态）
+- [x] **T7.1** ✅ **全量重建**（⚠️ 禁只重建被点名的 target ⇒ 旧二进制 ⇒ 假绿）
+- [x] **T7.2** ✅ SoC 级 **9** 条全绿 · 核级 **24** 条**零变化**（`checks=24 fails=0`）
+- [x] **T7.3** ✅ `ctest` 全绿（**275**）· `run_all_ported_tests` PASS
+- [x] **T7.4** ✅ **全部** `scripts/verify_*.sh` 全绿（含 C6 · 核端口 · 未驱动 · 双形态）
 
 ## P8 · 判别力自证（变异 · MUST 实测转红）
 
@@ -158,8 +158,8 @@
 
 ## P9 · 收口
 
-- [ ] **T9.1** `openspec validate --all` ⇒ ⇒ 绿
-- [ ] **T9.2** `scripts/verify_openspec_delta.sh` ⇒ ⇒ 绿（**实际门**）
-- [ ] **T9.3** 过 **critic**（`review_profile: build`）—— ⚠️ 触及**公开面** + **核端口面** ⇒ MUST 审
-- [ ] **T9.4** 母 improvement 批次表 / 进度行同步（S4a 已闭 ⇒ 下一批 = S4b）
-- [ ] **T9.5** 归档（`openspec archive`）
+- [x] **T9.1** ✅ `openspec validate --all` ⇒ ⇒ 绿
+- [x] **T9.2** ✅ `scripts/verify_openspec_delta.sh` ⇒ ⇒ 绿（**实际门**）
+- [x] **T9.3** ✅（轮次 1 = REJECT · 1 BLOCKER；轮次 2 = **APPROVE**（mergeable yes）· 3 NIT 已清 / 1 记录） 过 **critic**（`review_profile: build`）—— ⚠️ 触及**公开面** + **核端口面** ⇒ MUST 审
+- [x] **T9.4** ✅ 母 improvement 批次表 / 进度行同步（S4a 已闭 ⇒ 下一批 = S4b）
+- [x] **T9.5** ✅ 归档为 `openspec/changes/archive/2026-11-24-rv32i-soc-mmio-channel-2026-11/`（spec delta 并入 `openspec/specs/rv32i-mmio-channel/spec.md`） 归档（`openspec archive`）

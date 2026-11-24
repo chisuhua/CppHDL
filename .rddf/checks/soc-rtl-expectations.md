@@ -314,10 +314,11 @@ VERIF-CHECKS: 15
 | A5 | 两计数单调不减 | **真** | impl-contract | 计数语义 |
 | A6 | 尾段（第 85 拍后）不再增长 | **真** | **spec-derived** | `jal x0, 0` 自环 ⇒ 无新的写回/store |
 | A7 | `gpio_out` | **0xA5** | **spec-derived** | ISA 语义 + GPIO 寄存器表：word 10 把 x5 = 0xA5 写进 `DATA_OUT`（reg0）⇒ ⇒ 只判计数**判不出**「写错段 / 数据错位」 |
-| A8 | DECERR 场景的 `writeback_count` | **3** | **spec-derived** | ISA 语义：独立 4 字程序有 3 条写回；**DECERR 未返回 ⇒ `lw` 永久停顿 ⇒ 冻结在 1** |
+| A8 | DECERR 场景的 `writeback_count` | **3** | impl-contract | ISA 语义：独立 4 字程序有 3 条写回；**DECERR 未返回 ⇒ `lw` 永久停顿 ⇒ 冻结在 1** |
 | A9 | 读值回路的 `gpio_out` | **0x5A** | **spec-derived** | ISA 语义：`lw` 读 DATA_IN（`gpio_in` = 0x5A）→ 一条**非 MMIO** 指令 → `sw` 回 DATA_OUT ⇒ ⇒ 读值 MUST 走 MMIO 通路；若 mux 用**后继指令**的地址选路径 ⇒ ⇒ 读到 `dcache.rdata`（本场景无 D-L1 读 ⇒ 0）⇒ 0 ≠ 0x5A ⇒ 必红 |
 
-⇒ **spec-derived = 6**（A3 / A4 / A6 / A7 / A8 / A9）· impl-contract = 4。
+⇒ **spec-derived = 5**（A3 / A4 / A6 / A7 / A9）· impl-contract = 5（A1a / A1b / A2 / A5 / A8）。
+⇒ ⚠️ **A8 归 impl-contract 的口径**：`writeback_count == 3` 本身由 ISA 语义推出，但「**DECERR 会让事务完成**」是**互联/总线**语义（不是 RV32I ISA 的一部分）⇒ ⇒ 该判据的可推导性依赖本实现的 error responder ⇒ ⇒ 保守归 impl-contract（与 tsv 的 `spec_checks=5` 同一口径 · critic 轮次 2 的 NIT）。
 
 ### 4. 变异自证（判别力 · **六条全部实测** · 2026-11-24）
 
@@ -348,6 +349,14 @@ VERIF-CHECKS: 15
 而消费那一拍的 `data_addr` 已是**后继**指令在 EX/MEM 的地址 ⇒ ⇒ 用当拍 `addr_in_mmio` 选路径 = **选错源**；
 两条路径各有**保持寄存器** ⇒ ⇒ 错源不是随机值，而是**上一条走该路径的指令的旧值** ⇒ ⇒ 波形上也难辨认。
 ⇒ **核级 24 判据零变化与该缺陷完全相容**（核级程序全程 ∉ MMIO ⇒ 永远选 D-L1）⇒ ⇒ 旧判据全绿**不构成反证**。
+
+#### 无效变异（如实登记 · 2026-11-24）
+
+| # | 变异 | 现象 | 判定 |
+|---|---|---|---|
+| M7 | `rd_path_mmio->next` 的 `select` 两分支**对调**（stall 时捕获 · 前进时保持） | A9 **仍绿**（`checks=10 fails=0`） | ⚠️ **无效变异**（不改变本场景可观测行为）：单次 MMIO load 在**停顿期**地址仍是它自己 ⇒ ⇒ 两种写法都捕获到正确的 tag。
+⇒ ⇒ 该 mux 的**专属判别力**由 A9 的「先红」证明（修复前用**当拍**地址 ⇒ `fails=1`），**不是**由 M7 证明。
+⇒ ⇒ **已知边界**：M7 与正确写法只在「MMIO load 完成后的**下一条**指令也在 MEM 停顿」时才有差异；本 change 的程序没有这种形态（不新增该判据）⇒ ⇒ 如实登记为覆盖不足。
 
 ### 5. 已知盲区（如实登记）
 

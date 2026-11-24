@@ -136,6 +136,20 @@
 初稿误按 **S 型**算成 `0x00622223`（实测解回是 `STORE`）⇒ ⇒ 已订正为 `0x00422303`
 ⇒ ⇒ ⇒ **「机器复验」不是形式，是能抓错的**。
 
+## 用户可见变更
+
+> 本节是归档门 `verify_public_api_visibility` **R1** 的载体（标题 MUST 逐字为「用户可见变更」）。
+
+| 面 | 变更 | 影响 |
+|---|---|---|
+| **核端口契约**（`examples/riscv-mini/AGENTS.md`） | **34 → 53**：+19 根 `axil_*`（AXI4-Lite 主口 · 11 OUT + 8 IN） | 换核 / 接线方 MUST 处理 19 根新端口；核级 TB 的 8 根输入 MUST tie 0 |
+| **SoC 根端口**（ADR-077 V1 的 dated addendum） | **8 → 10**：+`gpio_out` / `gpio_in`（8 bit） | 根消费者可见新 GPIO 物理面；`gpio_dir` / `irq` **不落根** |
+| **SoC 产物 module 集**（ADR-077 V2 的 dated addendum） | **10 → 12**：+2×2 Lite 互联 + GPIO 外设 | 层次化产物多两个 module |
+| **库层公开符号** | +`riscv::kMmioBase` / `kMmioBytes` / `kMmioSegmentBytes` · 7 个 MMIO 段（`kClint` … `kDma`）· `riscv::in_mmio()` · `riscv::LUI()` · `ADDR_{SPI,I2C,PWM,DMA}_*` | **纯新增**（既有取值逐项不变 ⇒ 既有消费者零改动）；`LUI` 补 `AUIPC` 的另一半（与 PC 无关的基址装载） |
+| **`riscv::AddressDecoder` 端口面** | **+4 输出**（`spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs` ⇒ 总片选 **9** + `error_cs`） | 新增片选 **MUST** 被消费或**显式 tie 0**；既有 5 个片选取值**逐项不变** |
+| **行为** | MMIO 段（`0x8010_0000` 起 7×4 KB）**可达**：写通路、读通路、未映射地址回 **DECERR**（程序继续） | **非 MMIO 路径零行为变化**（核级 24 判据 · 既有 SoC 计数语义不变） |
+| **潜在缺陷面（已修）** | MMIO 请求**不进 D-L1**（否则 store-to-MMIO 会在 D-TCM 的 AXI 从口发起**别名地址写** ⇒ 静默污染） | 下游若自行改造分流点，MUST 保留该门控 |
+
 ## spec delta（**ADDED** · 不改任何已签批 Requirement）
 
 - **新增 capability `rv32i-mmio-channel`**（核的 MMIO 通道契约）：

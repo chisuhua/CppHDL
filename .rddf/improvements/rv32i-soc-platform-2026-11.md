@@ -171,6 +171,18 @@ evidence: probe:scripts/probe_r21_hier_granularity.sh
 > ⇒ ⇒ 🔜 **下一批 = G-7（总线类裁决）**：`data_ready` 只有在 S3 接上 AXI4 主口后才会
 > **第一次真正被拉低**。
 
+> 📌 **2026-11-24 收口记录（builder · S4a）**：**S4a 已完成并提交**（`d3e2acd` P1 · `622e281` P2 · `a83d0a4` P3–P5）
+> ⇒ ⇒ 核端口 **34 → 53** · SoC 根 **8 → 10** · 产物 module **10 → 12** · SoC 级判据 **7 → 10**（+A7 写通路值 ·
+> A8 DECERR · A9 读值回路）· 核级 **24 判据零变化** · `--check-products` PASS（12 module / 10 端口 / 0 未驱动 /
+> lint / 双形态等价）· 全部 `verify_*.sh` 全绿 · `run_all_ported_tests` 29/29 · `rv32i_rtl_sim_env` PASS。
+> ⇒ ⚠️ **critic 轮次 1 报出 1 个真 BLOCKER**：读数据 mux 用**当拍**地址选路径（消费在 **M2**，那拍已是后继指令）
+> ⇒ ⇒ 静默错源；**修复 + 新增 A9 判据**（先红 `fails=1` → 后绿 `10/10` · 双后端）。
+> ⇒ ⚠️ **实施期发现 1 个真缺陷面（已修）**：`DCacheSync` 的 `aw_valid = we & req` ⇒ store-to-MMIO 若进 D-L1
+> 会向 **D-TCM 的 AXI 从口**发起**别名地址**的写 ⇒ 静默污染 ⇒ 故 `dcache.req` MUST 用 `& !in_mmio` 门控。
+> ⇒ 🔜 **下一批 = S4b**（其余 5 个 Lite 外设 + 互联全量形态）· ⚠️ **S4b MUST 处理**：① 接上 CLINT 后 **A8 的
+> DECERR 判据要改**（现用 `0x8010_0000` 作「未映射」探针）② `bresp`/`rresp` 被 master 忽略（错误对软件不可见）
+> ⇒ 与 S5 的 `irq` 同批。
+
 ### 批次 × IP（**2026-11-23 调整后** · IP 计划的主表）
 
 | 批 | 新 IP / 变更 | 主判据 | 前置 |
