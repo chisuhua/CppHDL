@@ -172,11 +172,11 @@ run_checks() {  # $1 = agents md · $2 = product verilog
     n_act=$(grep -c . "$act" || true)
 
     # V2：条数
-    if [ "$n_exp" -ne 34 ]; then
-        fail "V2 期望表条数 = $n_exp ≠ 34（AGENTS.md 的表被改动？）"
+    if [ "$n_exp" -ne 53 ]; then
+        fail "V2 期望表条数 = $n_exp ≠ 53（AGENTS.md 的表被改动？）"
     fi
-    if [ "$n_act" -ne 34 ]; then
-        fail "V2 产物里 $CORE_MODULE 的端口数 = $n_act ≠ 34"
+    if [ "$n_act" -ne 53 ]; then
+        fail "V2 产物里 $CORE_MODULE 的端口数 = $n_act ≠ 53"
     fi
 
     # V1：逐字逐序
@@ -186,7 +186,7 @@ run_checks() {  # $1 = agents md · $2 = product verilog
         fail "V1 端口表不等（diff $dl 行）："
         diff -u "$exp" "$act" | sed -n '3,20p' >&2
     else
-        ok "V1 $CORE_MODULE 端口表 == AGENTS.md 的 34 行（逐字逐序）"
+        ok "V1 $CORE_MODULE 端口表 == AGENTS.md 的 53 行（逐字逐序）"
     fi
 
     # V3：核自有 32 条 vs C6 快照
@@ -195,17 +195,17 @@ run_checks() {  # $1 = agents md · $2 = product verilog
     c6="$TMPROOT/.soc_core_c6.txt"
     grep "^${PORT_PREFIX}" "$exp" | sort > "$own"
     c6_snapshot > "$c6"
-    if [ "$(grep -c . "$own" || true)" -ne 32 ]; then
-        fail "V3 期望表里核自有端口 = $(grep -c . "$own" || true) ≠ 32"
+    if [ "$(grep -c . "$own" || true)" -ne 51 ]; then
+        fail "V3 期望表里核自有端口 = $(grep -c . "$own" || true) ≠ 51"
     elif diff -q "$own" "$c6" >/dev/null 2>&1; then
-        ok "V3 核自有 32 条与 C6 快照逐字一致（头文件 → 产物 → 登记表 闭环）"
+        ok "V3 核自有 51 条与 C6 快照逐字一致（头文件 → 产物 → 登记表 闭环）"
     else
         fail "V3 核自有端口与 C6 快照不一致："
         diff -u "$c6" "$own" | sed -n '3,20p' >&2
     fi
 
     if [ "$fail_count" -eq 0 ]; then
-        ok "V2 端口数 = 34（框架 2 + 核自有 32）"
+        ok "V2 端口数 = 53（框架 2 + 核自有 51）"
     fi
 }
 
@@ -270,7 +270,7 @@ if [ "$SELF_TEST" -eq 1 ]; then
     poison_case "P2 改方向"            'awk -F: "NR==5{\$2=\"OUTPUT\"}1" OFS=:' "V1"
     poison_case "P3 改位宽"            'awk -F: "NR==7{\$3=\$3+1}1" OFS=:'  "V1"
     poison_case "P4 改端口名"          'awk -F: "NR==9{\$1=\$1\"_x\"}1" OFS=:' "V1"
-    # P5：破坏 V3 —— 把某个核自有的端口名改成不在 C6 里的名字（条数仍 34）
+    # P5：破坏 V3 —— 把某个核自有的端口名改成不在 C6 里的名字（条数仍 53）
     poison_case "P5 核自有端口与 C6 不符" 'awk -F: "NR==6{\$1=\"not_in_c6\"}1" OFS=:' "V3"
 
     # P6：在**临时布局**里放一个与 include/cpu 同名的头 ⇒ V4 必红
@@ -323,7 +323,7 @@ check_sibling_edges "$OUT/emit/top.v"
 
 echo
 if [ "$fail_count" -eq 0 ]; then
-    echo "✅ verify_riscv_soc_core_ports: PASS（34 端口契约 + 无微架构副本 + 两条兄弟边）"
+    echo "✅ verify_riscv_soc_core_ports: PASS（53 端口契约 + 无微架构副本 + 两条兄弟边）"
     exit 0
 else
     echo "❌ verify_riscv_soc_core_ports: FAIL（$fail_count 项）" >&2

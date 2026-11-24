@@ -205,8 +205,8 @@ planner 已立项（`.rddf/improvements/rv32i-soc-platform-2026-11.md` + `riscv-
 
 ## 5. Verification（**前瞻**判据 · 可勾选 · 由 S1 的 AC 承接）
 
-- [ ] **V1** `examples/riscv-soc/src/rv32i_soc_top.h` 存在，root `__io` 声明数 == **6**（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count`）⇒ 产品端口 == **8**（框架 2 + 根自有 6）
-- [ ] **V2** 产物 module **集合相等** == `{top, Rv32iCoreComplex, SocTraceCounter, IfStage, IdStage, ExStage, MemStage, WbStage, HazardUnit, ForwardingMux_32_}`（**10** · 手推 · `check_products` CHECK 1）
+- [ ] **V1** ⚠️ **2026-11-24 · S4a 更新为 8 / 10**（见本节末尾 dated addendum）· 原判据 = `examples/riscv-soc/src/rv32i_soc_top.h` 存在，root `__io` 声明数 == **6**（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count`）⇒ 产品端口 == **8**（框架 2 + 根自有 6）
+- [ ] **V2** ⚠️ **2026-11-24 · S4a 更新为 12**（见本节末尾 dated addendum）· 原判据 = 产物 module **集合相等** == `{top, Rv32iCoreComplex, SocTraceCounter, IfStage, IdStage, ExStage, MemStage, WbStage, HazardUnit, ForwardingMux_32_}`（**10** · 手推 · `check_products` CHECK 1）
 - [ ] **V3** `check_products` CHECK 2：顶层端口数 == **8**（`manifest.port_table.size()` · 含框架 2）**且** 后代未驱动端口 == 0
 - [ ] **V4** `check_products` CHECK 4：双形态逐拍等价 + **篡改自证**（观测 = `store_count` + `writeback_count` · **`min_varying_observations == 2`** · 激励 **≥10 拍且值不同** · 粘滞信号不计入）
 - [ ] **V5** `Rv32iCoreComplex` module 的端口表 == **34** = **框架 2**（`default_clock`/`default_reset`，核内 **inline** 的 TCM `sread` 寄存器落在该 module）+ **核自有 32**（4 in + 28 out）· 表落在 `examples/riscv-soc/AGENTS.md`
@@ -217,5 +217,20 @@ planner 已立项（`.rddf/improvements/rv32i-soc-platform-2026-11.md` + `riscv-
 - [ ] **V8** S1/S2 产物里 `prog_*` 仍是**根端口**（根端口表 grep 命中）
 - [ ] **V9** `docs/adr/ADR-046-rv32i-canonical-home.md` 含 dated addendum（日期 + 「无决策变更」性质 + 指向本 ADR）
 - [ ] **V10** `git diff <S1-base-sha> -- examples/riscv-mini/ include/` **为空**（核复合体零改动）
+
+> ### dated addendum（2026-11-24 · change `rv32i-soc-mmio-channel-2026-11` / **S4a**）
+>
+> **决策不变**（D1 两级顶层 / D2 模块类型名 = 非契约 / D3 `prog_*` 保留 / D4 单行 `kind=soc`）⇒ ⇒
+> 只订正**产品面数字**（V1 / V2 的判据值）：
+>
+> | 判据 | 原值 | S4a 后 | 原因 |
+> |---|---|---|---|
+> | **V1** 根自有端口 / 产品端口 | 6 / 8 | **8 / 10** | + `gpio_out` / `gpio_in`（首个 MMIO 外设的物理面） |
+> | **V2** 产物 module 集 | 10 | **12** | + `AxiLiteMatrix2x2` / `AxiLiteGpio`（两个 SoC 级 `ch_layer`） |
+>
+> ⇒ ⇒ **核复合体端口面** 34 → **53**（+19 根 `axil_*`）⇒ ⇒ 但本 ADR 的 D1「两级顶层分工」与
+> D2「模块类型名 = 当前产品名（非契约）」**逐字不变** ⇒ ⇒ 核侧端口契约表的**单一真相**仍是
+> `examples/riscv-mini/AGENTS.md`（护栏 `verify_riscv_soc_core_ports.sh` V1/V2/V3）。
+> ⇒ ⇒ 机械判据 = `--check-products`（module 集 12 · 端口 10 · 未驱动 0 · lint · 双形态等价）。
 - [ ] **V11** 核复合体产品的 `rtl-hierarchical-output` 判据仍绿：**8 module** + 7 个 stage module 名齐（既有 Scenario 不变）
 - [ ] **V12** 反向判据：① **变异施加在观测集**（只留 `store_count`）⇒ **V4 必红**（变化观测量 = 1 < 2）⇒ ⚠️ **MUST NOT** 改 C++ 侧（编译期先失败 ⇒ 假绿）② 断开 `SocTraceCounter` 的任一 `ch_in`（`store_event` / `retire_event`）⇒ **V3 必红**（后代未驱动 ≠ 0 ⇒ ADR-072 D1-f fail-closed）

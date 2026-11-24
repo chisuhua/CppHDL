@@ -1,3 +1,57 @@
+## 2026-11-24 — S4a（P3–P5）：核的 MMIO 通道贯通 SoC（分流 + Lite 互联 + GPIO 回环）
+
+change `rv32i-soc-mmio-channel-2026-11`（**S4a**）的 P3 / P4 / P5 —— 从「库层地址表 + 核侧 master」
+推进到「**端到端可用的 MMIO 通道**」。
+
+### ① 核顶层（P3）· 端口面 34 → **53**
+
+- 新增 **19 根 `axil_*`**（11 OUT + 8 IN）作为 AXI4-Lite 主口（G-9）⇒ 核自有 32 → **51**（12 IN + 39 OUT）。
+- **pre-cache 分流**（G-9.3）：判据 = 地址 ∈ **MMIO 段**（边界派生自库层 `kMmioBase` / `kMmioBytes`
+  ⇒ ⇒ **禁手写字面量**）。⚠️ `riscv::in_mmio()` 是 constexpr（C++ 数值）⇒ ⇒ 不能作用于硬件值
+  ⇒ ⇒ 用**同一对边界常量**构造硬件比较器（单一真相不变）。
+- **两个 mux**：`data_ready` / `data_read_data`；⚠️ `data_write_en` / `data_write_data` / `data_strbe`
+  **不分流**（观测事件与路径无关）。
+- 🔴 **MMIO 请求 MUST NOT 进 D-L1**：`DCacheSync` 的 `aw_valid = we & req`（`d_cache_sync.h:287`）
+  ⇒ ⇒ store-to-MMIO 会在 D-TCM 的 AXI 从口上发起**别名地址**的写（`TcmAxiSlave` 只看低 12 位）
+  ⇒ ⇒ **静默污染 D-TCM**；读同理会白跑 burst fill（且 Lite 无 `r_last` ⇒ fill 永不完成 ⇒ 冻结）。
+  ⇒ ⇒ `dcache.req = data_req & !in_mmio` · `master.preq = data_req & in_mmio`。
+- 核级 TB 的 **8 根新输入显式 tie 0**（C++ + `.sv` 两侧同值）⇒ ⇒ 核级 **24 条判据零变化**。
+
+### ② SoC 侧装配（P4）· 端口 8 → **10** · module 10 → **12**
+
+- 新增根端口 `gpio_out` / `gpio_in`（8 bit）⇒ 根自有 6 → 8。
+- 装配 `AxiLiteMatrix2x2<32,32,SocLiteMap>` + `AxiLiteGpio<8>`（均 `ch_layer` ⇒ 各成 module）。
+- `SocLiteMap::windows` = `{kGpio.base, 4 KB}`（s0）+ `{0xFFFF_F000, 4 KB}`（s1 · 最高 4 KB ⇒ 核永不发）
+  ⇒ ⇒ ⚠️ **禁**低位窗口（地址 0 会路由到未接的 s1 ⇒ 挂死）。
+- **零未驱动**：matrix 的 m1 面 11 根 + s1 面 8 根**显式 tie 0**；`rst_n` = `!ext_rst`；
+  GPIO 的 `irq` / `gpio_dir` **不落根**（G-5 / 非用户可见 IO）。
+
+### ③ 判据（P5 + critic 追加）· SoC 级 7 → **10** · 程序 7 → **12 字**
+
+- 程序（**手推编码 + 机器复验**）：`sw`@字节地址 0（D-L1 路径）· `lui`/`lw`/`sw` @GPIO（MMIO 旁路）
+  ⇒ ⇒ `store_count == 2` · `writeback_count == 6` · **`gpio_out == 0xA5`**（新增 A7）。
+- **A8（新增）**：独立 4 字程序读 `0x8010_0000`（未接的 CLINT 段）⇒ MUST 得到 **DECERR** 且程序继续
+  ⇒ ⇒ `writeback_count == 3`（挂死 ⇒ 冻结在 1）。
+- **A9（critic BLOCKER 后追加）**：MMIO **读值**回路 —— `gpio_in`=0x5A → `lw` → 一条**非 MMIO** 指令 → `sw` 回 DATA_OUT ⇒ MUST `gpio_out == 0x5A`。
+  🔴 **为什么必需**：`data_read_data` 在 **M2 级组合消费**（`rv32i_pipeline.h:345`），而消费那拍的 `data_addr` 已是**后继**指令 ⇒ ⇒ 原实现用**当拍** `addr_in_mmio` 选路径 = **选错源**（两条路径各有**保持寄存器** ⇒ ⇒ 错源是「上一条走该路径的指令的旧值」）⇒ ⇒ 静默错值。
+  ⇒ ⇒ 原 9 条判据**结构性失明**（读值不在 SoC 根端口 · `gpio_in` tie 0 ⇒ 错源与正源碰巧同值）。
+  ⇒ ⇒ **修法**：选择线改为与 M2 元数据**同门控锁存**的 `rd_path_mmio`（门控 = `!data_ready` = 流水线 `mem_stall`，与 `m2_*` 的 `->next` 逐字同源）。**先红后绿**：A9 先加、不改实现 ⇒ `fails=1`；改完 ⇒ `checks=10 fails=0`（核级仍 24/24）。
+- 两侧同值：C++ `RESULT: checks=10 fails=0` · `.sv` TB `checks=10 fails=0`（`interp_checks == min_checks == 10`）。
+- 库层新增 `riscv::LUI`（`AUIPC` 是 `pc + imm` ⇒ 表达不了「与 PC 无关地装载基址」）。
+
+### ④ 判别力自证（六条变异 · 全部实测转红后还原复绿）
+
+M1 分流取反（核级 3 红 · SoC A7 红）· M2 MMIO 走 D-L1（SoC 4 红）· M3 两条边对调（3 红）·
+M4 两条边同源（2 红）· M5 低位窗口 + M1（3 红）· M6 `gpio_in` 未驱动（发射 **fail-closed**）。
+⚠️ **M1 在 SoC 侧只有 A7 转红**（计数仍到 (2,6)）⇒ ⇒ 这正是 A7 存在的理由。
+
+### ⑤ 载体重算
+
+核端口契约表 **34 → 53**（`examples/riscv-mini/AGENTS.md`）· C6 快照 **32 → 51** ·
+`verify_riscv_soc_core_ports.sh` V1/V2/V3 期望 **53 / 51** · SoC 产品面表（10 → 12 module · 8 → 10 端口）·
+`examples-rtl-sim-targets.tsv` 的 SoC 行（`interp_checks`/`min_checks` **9** · `spec_checks` 4）·
+ADR-077 dated addendum（V1 / V2）⇒ ⇒ **决策不变**。
+
 ## 2026-11-24 — S4a（P2）：核侧 AXI4-Lite 主设备 `AxilMmioMaster`
 
 change `rv32i-soc-mmio-channel-2026-11`（**S4a**）的 P2 —— MMIO 通道的**核内一端**。

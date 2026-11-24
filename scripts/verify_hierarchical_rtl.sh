@@ -586,8 +586,8 @@ gen_rv32i_hier() {  # $1 = out dir · $2 = log
 #       同一次发射）⇒ ⇒ 「发射底座算错」时**两侧一起错** ⇒ ⇒ **抓不到**
 #       ⇒ ⇒ R8′ 是**唯一独立于产物**的顶层端口面判据。
 #    ⚠️ **期望集 = 手推**（推导源 = `examples/riscv-mini/src/rv32i_core_top.h`
-#       的 `__io`：4 in + 28 out ⇒ **声明顺序即端口顺序**；端口名 = `top_<C++ 成员名>`
-#       （ADR-075 E1）⇒ + 框架 2（`default_clock` · `default_reset`）⇒ 共 **34** 根）
+#       的 `__io`：**12 in + 39 out**（S4a 起 +19 根 `axil_*`）⇒ **声明顺序即端口顺序**；端口名 = `top_<C++ 成员名>`
+#       （ADR-075 E1）⇒ + 框架 2（`default_clock` · `default_reset`）⇒ 共 **53** 根）
 #       ⇒ ⇒ **禁**从产物输出抄（抄了就是判据自证 ⇒ 恒绿）。
 r8p_rv32i_port_set() {  # $1 = 产品目录（内含 top.v）
     local dir="$1" f name json bad=0
@@ -632,6 +632,15 @@ EXPECTED = [
     ("top_prog_we", "INPUT", 1),
     ("top_prog_addr", "INPUT", 32),
     ("top_prog_data", "INPUT", 32),
+    # 根自有**输入**（S4a 追加 8 根 · `axil_*` 的 in 面 · `__io` 声明顺序）
+    ("top_axil_awready", "INPUT", 1),
+    ("top_axil_wready", "INPUT", 1),
+    ("top_axil_bresp", "INPUT", 2),
+    ("top_axil_bvalid", "INPUT", 1),
+    ("top_axil_arready", "INPUT", 1),
+    ("top_axil_rdata", "INPUT", 32),
+    ("top_axil_rresp", "INPUT", 2),
+    ("top_axil_rvalid", "INPUT", 1),
     # 根自有输出（28 · `__io` 声明顺序）
     ("top_obs_instr_addr", "OUTPUT", 32),
     ("top_obs_data_addr", "OUTPUT", 32),
@@ -661,6 +670,18 @@ EXPECTED = [
     ("top_dbg_mem_valid_out", "OUTPUT", 1),
     ("top_dbg_load_use_detected", "OUTPUT", 1),
     ("top_dbg_illegal_reason", "OUTPUT", 2),
+    # 根自有**输出**（S4a 追加 11 根 · `axil_*` 的 out 面 · `__io` 声明顺序）
+    ("top_axil_awaddr", "OUTPUT", 32),
+    ("top_axil_awprot", "OUTPUT", 2),
+    ("top_axil_awvalid", "OUTPUT", 1),
+    ("top_axil_wdata", "OUTPUT", 32),
+    ("top_axil_wstrb", "OUTPUT", 4),
+    ("top_axil_wvalid", "OUTPUT", 1),
+    ("top_axil_bready", "OUTPUT", 1),
+    ("top_axil_araddr", "OUTPUT", 32),
+    ("top_axil_arprot", "OUTPUT", 2),
+    ("top_axil_arvalid", "OUTPUT", 1),
+    ("top_axil_rready", "OUTPUT", 1),
 ]
 
 rows = [
@@ -684,7 +705,7 @@ PY
             bad=1
         fi
     done
-    [ "$bad" -eq 0 ] && ok "R8′ RV32I 产品语料的顶层端口表 == 手推期望集（34 根 · 独立于产物）"
+    [ "$bad" -eq 0 ] && ok "R8′ RV32I 产品语料的顶层端口表 == 手推期望集（53 根 · 独立于产物）"
     return "$bad"
 }
 

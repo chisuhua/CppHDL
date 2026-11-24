@@ -255,15 +255,20 @@ VERIF-CHECKS: 15
 > **TB**：`tb_riscv_soc.cpp`（默认模式 · 解释器路径）+ `tb_riscv_soc.sv`（独立 Verilog · `generated=no`）
 > **上游登记**：`.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` —— **程序与写回/存储手推台账同源**
 >
-> ⚠️ **两侧判据 MUST 逐条同值**（AC7 的 `interp_checks == min_checks == L`）：本段 **7** 条 · C++ 侧 7 · `.sv` 侧 7。
+> ⚠️ **两侧判据 MUST 逐条同值**（AC7 的 `interp_checks == min_checks == L`）：本段 **10** 条 · C++ 侧 10 · `.sv` 侧 10。
+> ⚠️ **2026-11-24 · S4a（`rv32i-soc-mmio-channel-2026-11`）**：程序 **7 → 12 字**（含 2 次 MMIO 访问）·
+>   判据 **7 → 9**（+A7 MMIO 写通路的值 · +A8 DECERR 不挂死）· 程序**与核级分叉**（核级 AXI-Lite 输入全 tie 0）。
+> ⚠️ **2026-11-24 · critic BLOCKER 后追加 A9（判据 9 → 10）**：读数据 mux 的选择线**错拍**
+>   （机理与闭合证据见 §4 的「A9 的『先红后绿』」）⇒ ⇒ 原 9 条判据对该缺陷**结构性失明**
+>   （读值不在 SoC 根端口上 · `gpio_in` 又被 tie 0 ⇒ ⇒ 错源与正源**碰巧同值**）。
 
 ### 1. 产物形态（手推 · 禁从 `ch_layer` 调用点派生）
 
 | 项 | 期望 | 推导 |
 |---|---|---|
-| module 集合 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | 根 1 + 2 个 `ch_layer` + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠** |
-| 顶层端口 | **8** = 框架 2 + 根自有 6（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count`） | ADR-077 V1 · ADR-072 D1（后代 `ch_out` 不冒泡） |
-| `Rv32iCoreTop` module 端口 | **34** = 框架 2 + 核自有 32（4 in + 28 out） | 核自有 32 = `Rv32iPipelineTop` 的 `__io`（**已由 `verify_no_duplicate_rv32i_headers.sh` 的 C6 冻结**）· +2 = 核内 **inline** 的 TCM `sread` 寄存器落在该 module ⇒ 需时钟/复位 |
+| module 集合 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` · `AxiLiteMatrix2x2` · `AxiLiteGpio` = **12** | 根 1 + 2 个 `ch_layer` + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠**；**S4a 新增 2 个 SoC 级 `ch_layer`**（Lite 互联 + GPIO）|
+| 顶层端口 | **10** = 框架 2 + 根自有 8（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count` / **`gpio_out`** / **`gpio_in`**） | ADR-077 V1 + **S4a dated addendum** · ADR-072 D1（后代 `ch_out` 不冒泡） |
+| `Rv32iCoreTop` module 端口 | **53** = 框架 2 + 核自有 51（**12 in + 39 out** ⇒ S4a 加 19 根 `axil_*`） | 核自有 32 = `Rv32iPipelineTop` 的 `__io`（**已由 `verify_no_duplicate_rv32i_headers.sh` 的 C6 冻结**）· +2 = 核内 **inline** 的 TCM `sread` 寄存器落在该 module ⇒ 需时钟/复位；端口表单一真相 = `examples/riscv-mini/AGENTS.md`（护栏 V1 逐字逐序）|
 
 ### 2. 程序（与核级同源 · 编码**手推**）
 
@@ -274,10 +279,28 @@ VERIF-CHECKS: 15
 | 2 | `addi x2, x0, 11` | `0x00B00113` | 写回 x2 = 11 |
 | 3 | `nop` | `0x00000013` | — |
 | 4 | `add x3, x1, x2` | `0x002081B3` | 写回 x3 = 42 + 11 = **53** |
-| 5 | `sw x3, 0(x0)` | `0x00302023` | store 字节地址 0 · 数据 53 |
-| 6 | `jal x0, 0` | `0x0000006F` | 自环；`rd = x0` ⇒ **不写回** |
+| 5 | `sw x3, 0(x0)` | `0x00302023` | store 字节地址 **0** ⇒ **走 D-L1** |
+| 6 | `nop` | `0x00000013` | — |
+| 7 | `lui x4, 0x80102` | `0x80102237` | 写回 x4 = **0x8010_2000** = `kGpio.base` |
+| 8 | `lw x6, 4(x4)` | `0x00422303` | **MMIO 读** @ `0x8010_2004`（DATA_IN）⇒ 写回 x6 |
+| 9 | `addi x5, x0, 0xA5` | `0x0A500293` | 写回 x5 = **0xA5** |
+| 10 | `sw x5, 0(x4)` | `0x00522023` | **MMIO 写** @ `0x8010_2000`（DATA_OUT）· 数据 0xA5 |
+| 11 | `jal x0, 0` | `0x0000006F` | 自环；`rd = x0` ⇒ **不写回** |
 
-⇒ ⇒ **写回事件 3 次**（word 0 / 2 / 4）· **store 事件 1 次**（word 5）。
+⇒ ⇒ **写回事件 6 次**（x1 / x2 / x3 / x4 / x6 / x5）· **store 事件 2 次**（word 5 走 D-L1 · word 10 走 MMIO）
+⇒ ⇒ **`gpio_out == 0xA5`**（word 10 的值落到 GPIO 的 DATA_OUT）
+⇒ ⇒ ⚠️ **口径 = 事件次数**（与事务时长无关）⇒ ⇒ MMIO 的多拍停顿**不计入**（依赖 S4a-0 的脉冲化）
+
+**A8 的独立 4 字程序**（DECERR 场景 · 不污染 A1–A7 的计数 ⇒ 先 `default_reset`/`rst` 清计数再装）：
+
+| word | 指令 | 编码 | 手推结果 |
+|---|---|---|---|
+| 0 | `lui x1, 0x80100` | `0x801000B7` | 写回 x1 = **0x8010_0000** = `kClint.base`（S4a **未接 CLINT** ⇒ 未映射） |
+| 1 | `lw x2, 0(x1)` | `0x0000A103` | **MMIO 读未映射窗口** ⇒ MUST 得到 DECERR（而非挂死） |
+| 2 | `addi x3, x0, 7` | `0x00700193` | 写回 x3 = 7（若上一条挂死 ⇒ **永不写回**） |
+| 3 | `jal x0, 0` | `0x0000006F` | 自环 |
+
+⇒ ⇒ **写回事件 3 次**（x1 / x2 / x3）⇒ ⇒ DECERR 未返回 ⇒ 冻结在 **1** ⇒ 必红。
 
 ### 3. 判据（7 条 · 逐条手推）
 
@@ -286,23 +309,45 @@ VERIF-CHECKS: 15
 | A1a | 复位后 `store_count` | **0** | impl-contract | 计数器复位清零 |
 | A1b | 复位后 `writeback_count` | **0** | impl-contract | 同上 |
 | A2 | 装载期（`ext_rst = 1`）两计数保持 0 | **0 / 0** | impl-contract | `ext_rst` 是**核**复位 ⇒ 装载动作不进流水线 ⇒ 无写回/store；**接反则装载被当指令执行 ⇒ 必红** |
-| A3 | 释放后 `store_count` | **1** | **spec-derived** | ISA 语义：程序里恰有 1 条 `sw` |
-| A4 | 释放后 `writeback_count` | **3** | **spec-derived** | ISA 语义：x1 / x2 / x3 各写回一次；`jal x0,0` 的 `rd = x0` 不写回 |
+| A3 | 释放后 `store_count` | **2** | **spec-derived** | ISA 语义：程序里恰有 2 条 `sw`（word 5 D-L1 · word 10 MMIO）⇒ **两条路径各一次** |
+| A4 | 释放后 `writeback_count` | **6** | **spec-derived** | ISA 语义：x1 / x2 / x3 / x4 / x6 / x5 各写回一次；`jal x0,0` 的 `rd = x0` 不写回 |
 | A5 | 两计数单调不减 | **真** | impl-contract | 计数语义 |
-| A6 | 尾段（第 40 拍后）不再增长 | **真** | **spec-derived** | `jal x0, 0` 自环 ⇒ 无新的写回/store |
+| A6 | 尾段（第 85 拍后）不再增长 | **真** | **spec-derived** | `jal x0, 0` 自环 ⇒ 无新的写回/store |
+| A7 | `gpio_out` | **0xA5** | **spec-derived** | ISA 语义 + GPIO 寄存器表：word 10 把 x5 = 0xA5 写进 `DATA_OUT`（reg0）⇒ ⇒ 只判计数**判不出**「写错段 / 数据错位」 |
+| A8 | DECERR 场景的 `writeback_count` | **3** | **spec-derived** | ISA 语义：独立 4 字程序有 3 条写回；**DECERR 未返回 ⇒ `lw` 永久停顿 ⇒ 冻结在 1** |
+| A9 | 读值回路的 `gpio_out` | **0x5A** | **spec-derived** | ISA 语义：`lw` 读 DATA_IN（`gpio_in` = 0x5A）→ 一条**非 MMIO** 指令 → `sw` 回 DATA_OUT ⇒ ⇒ 读值 MUST 走 MMIO 通路；若 mux 用**后继指令**的地址选路径 ⇒ ⇒ 读到 `dcache.rdata`（本场景无 D-L1 读 ⇒ 0）⇒ 0 ≠ 0x5A ⇒ 必红 |
 
-⇒ **spec-derived = 3**（A3 / A4 / A6）· impl-contract = 4。
+⇒ **spec-derived = 6**（A3 / A4 / A6 / A7 / A8 / A9）· impl-contract = 4。
 
-### 4. 变异自证（判别力 · 三条全部实测转红）
+### 4. 变异自证（判别力 · **六条全部实测** · 2026-11-24）
 
-| # | 变异 | 期望 | 实测 |
-|---|---|---|---|
-| M1 | 把 `writeback_count` 移出 `make_observations` | CHECK 4 红（变化量 1 < 2） | ✅ `CHECK 4 ... FAIL (变化量=1/1)` |
-| M2 | 两条兄弟边**对调**（`store_event` ↔ `retire_event`） | A3 + A4 双红 | ✅ `fails=2`（store=3 · wb=1） |
-| M3 | 两条边接**同一源** | A4 红 | ✅ `fails=1`（wb=1 ≠ 3） |
+| # | 变异 | 靶子 | 期望 | 实测 |
+|---|---|---|---|---|
+| M1 | **分流判据取反**（`addr_in_mmio` 加 `!`） | 核级 AC4 + SoC A7 | 核级挂死/错值 · SoC `gpio_out` 不再被写 | ✅ 核级 **fails=3**（S4 写回 x3 / S5 store@0）· SoC **fails=1**（A7） |
+| M2 | **MMIO 走 D-L1**（master `preq` 拉 0 + `dcache.req` 全收） | AC2/AC3/AC7/AC8 | MMIO 读挂死（Lite 无 `r_last` ⇒ fill 永不完成） | ✅ SoC **fails=4**（A3/A4/A7/A8） |
+| M3 | **两条兄弟边对调**（`store_event` ↔ `retire_event`） | AC3 | 计数互换（store=6 · wb=2） | ✅ SoC **fails=3** |
+| M4 | **两条边接同一源** | AC3 | 两计数同源 ⇒ wb=2 ≠ 6 | ✅ SoC **fails=2** |
+| M5 | **`windows[1]` 改低位 `{0,4KB}`**（**与 M1 组合**） | AC3 | 地址 0 被路由到未接的 s1 ⇒ 挂死 | ✅ SoC **fails=3**（A3/A4/A7） |
+| M6 | **`gpio_in` 未驱动** | AC6 | 发射 **fail-closed** | ✅ `层次化发射失败：1 undriven descendant input(s) are rejected`（`top.gpio` 的 `unnamed_input_3`）· exit 1 |
 
-⇒ ⚠️ **M2 / M3 能被抓住的前提 = 两个手推值不同（1 vs 3）**。若两者同值（例如用「1 次写回」的短程序），
-两条边接反时观测值不变 ⇒ ⇒ **恒绿**。⇒ ⇒ 程序 MUST 保持「写回 3 次 · store 1 次」这一比例。
+⇒ ⚠️ **M5 单独无效**（恒绿）：分流正确时地址 0 根本不进 matrix ⇒ ⇒ 低位窗口**今天**观察不到差异
+⇒ ⇒ 它防的是**将来**某次改动（例如分流判据被放宽）⇒ ⇒ 故 MUST 与 M1 组合才有判别力（design §3.1 的原话）。
+⇒ ⚠️ **M1 的 SoC 侧只有 A7 转红**：计数仍到 (2,6)（两条路径都还在响应 `data_ready`）
+⇒ ⇒ **这正是 A7 存在的理由** —— 只判计数**判不出**「写错段 / 数据没落到外设」。
+⇒ ⚠️ **M2 / M3 / M4 能被抓住的前提 = 两个手推值不同（2 vs 6）**；若两者同值 ⇒ 接反/同源时观测值不变 ⇒ **恒绿**。
+⇒ ⚠️ 每条变异均**先确认编译通过**（0 error）再跑；**还原源码后 MUST 重建**（二进制也是状态）。
+
+#### A9 的「先红后绿」（critic BLOCKER 的闭合证据 · 2026-11-24）
+
+| 阶段 | 现象 | 结论 |
+|---|---|---|
+| ① 先加 A9、**不改实现** | `RESULT: checks=10 fails=1`（只有 A9 红） | 缺陷**实锤**：9 条旧判据全绿，而读值是错的 |
+| ② 修实现（选择线改为与 M2 元数据**同门控锁存**的 `rd_path_mmio`） | `checks=10 fails=0` · 核级仍 `checks=24 fails=0` | 闭合 |
+
+⇒ **缺陷机理**：`data_read_data` 在 **M2 级组合消费**（`rv32i_pipeline.h:345` 的 `load_lane.raw_word`），
+而消费那一拍的 `data_addr` 已是**后继**指令在 EX/MEM 的地址 ⇒ ⇒ 用当拍 `addr_in_mmio` 选路径 = **选错源**；
+两条路径各有**保持寄存器** ⇒ ⇒ 错源不是随机值，而是**上一条走该路径的指令的旧值** ⇒ ⇒ 波形上也难辨认。
+⇒ **核级 24 判据零变化与该缺陷完全相容**（核级程序全程 ∉ MMIO ⇒ 永远选 D-L1）⇒ ⇒ 旧判据全绿**不构成反证**。
 
 ### 5. 已知盲区（如实登记）
 
@@ -311,4 +356,7 @@ VERIF-CHECKS: 15
 - ⚠️ **观测盲区**（ADR-073 要求显式登记）：层次化只覆盖**顶层可见行为** ⇒ ⇒
   `Rv32iCoreTop` / `SocTraceCounter` 的**内部** `ch_out` 在顶层不可观测 ⇒ ⇒
   「子树内部算错但顶层输出恰好相同」这类缺陷**结构性测不出**。
+- ⚠️ **`bresp` / `rresp` 被 master 忽略**（2026-11-24 · critic SHOULD_FIX）：`AxilMmioMaster` 不消费
+  两个响应码 ⇒ ⇒ DECERR / SLVERR 对软件**不可见**（A8 恰好依赖「错误响应当成功完成、数据取 0」
+  这一未写下来的语义）⇒ ⇒ 错误观测面 / 陷入口归 **S5**（与 `irq` 同批）。
 - ⚠️ **`prog_*` 是运行期后门**（ADR-077 D3 长期保留）⇒ ⇒ 真实芯片形态的装载路径未定义。

@@ -157,6 +157,14 @@ constexpr uint32_t JALR(uint32_t rd, uint32_t rs1, int32_t imm) {
 constexpr uint32_t AUIPC(uint32_t rd, uint32_t imm_hi20) {
     return enc_u(rd, imm_hi20);
 }
+/// `LUI`：`rd = imm_hi20 << 12`（U 型 · opcode = 0x37 · 与 `AUIPC` 的 0x17 不同）
+///
+/// ⚠️ **2026-11-24（S4a）新增**：SoC 级程序需要**与 PC 无关**地装载 MMIO 基址
+///   （`kGpio.base` = `0x8010_2000`）。`AUIPC` 是 `pc + imm` ⇒ ⇒ 需要按指令
+///   **地址补偿**（且补偿量不必 4 KiB 对齐 ⇒ 单条 U 型表达不了）⇒ ⇒ 只能靠 `LUI`。
+constexpr uint32_t LUI(uint32_t rd, uint32_t imm_hi20) {
+    return ((imm_hi20 & 0xFFFFFu) << 12) | (rd << 7) | 0x37u;
+}
 /// `SRA`：R 型，funct3 = 101，funct7 = 0x20（区分 SRL）
 constexpr uint32_t SRA(uint32_t rd, uint32_t rs1, uint32_t rs2) {
     return enc_r(rd, rs1, rs2, 0x5u, 0x20u);

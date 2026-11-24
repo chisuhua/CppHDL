@@ -21,6 +21,9 @@
 #include "ch.hpp"
 #include "component.h"
 #include "soc_trace_counter.h"
+#include "cpu/riscv/rv32i_mem_map.h"      // MMIO 段基址（单一真相 · G-6）
+#include "axi4/axi4_lite_matrix.h"        // 2×2 Lite 互联（s0 = GPIO）
+#include "axi4/peripherals/axi_gpio.h"    // 首个 MMIO 外设（S4a 只接它）
 
 // 核复合体住在 `examples/riscv-mini/src/`（ADR-046 / ADR-077 D1）
 // ⇒ CMake 侧以 target_include_directories 注入该目录（本文件不带 examples/ 前缀）。
@@ -34,6 +37,20 @@ namespace riscv_soc {
 
 using namespace ch::core;
 
+/// **Lite 互联的地址映射**（S4a · G-6：基址**派生**自库层地址表 ⇒ ⇒ 禁手写字面量）
+///
+/// · `windows[0]` = GPIO 段（`kGpio`）⇒ ⇒ **唯一接上外设的从口**（s0）
+/// · `windows[1]` = **最高 4 KB**（`0xFFFF_F000`）⇒ ⇒ **核永不发该地址**
+///   ⇒ ⇒ s1 永不被选中 ⇒ ⇒ s1 的 8 根输入 tie 0 是**可证明的**死接线
+///   ⇒ ⇒ ⚠️ **禁**用低位窗口（如 `{0, 4 KB}`）—— 字节地址 0 的访问会被路由到
+///   **未接的 s1** ⇒ ⇒ 事务永不完成 ⇒ ⇒ 程序**挂死**（核级 `sw x3, 0(x0)` 就是这种访问）。
+struct SocLiteMap {
+    static constexpr axi4::AxiAddrWindow windows[2] = {
+        {riscv::kGpio.base, riscv::kGpio.size},
+        {0xFFFF'F000ull, 0x1000ull},
+    };
+};
+
 /// 根的**实例名**（≠ 产物 module 名 `top` —— 后者由发射入口配置决定）。
 inline constexpr const char *kSocRootName = "top";
 
@@ -46,6 +63,9 @@ public:
         ch_in<ch_uint<32>>  prog_data{"prog_data"};
         ch_out<ch_uint<16>> store_count{"store_count"};
         ch_out<ch_uint<16>> writeback_count{"writeback_count"};
+        // ── S4a：首个 MMIO 外设（GPIO）的**根端口**（ADR-077 D1「根自有语义」）──
+        ch_out<ch_uint<8>>  gpio_out{"gpio_out"};
+        ch_in<ch_uint<8>>   gpio_in{"gpio_in"};
     )
 
     /// ⚠️ **固件初值透传**（`firmware-load-chain` L2 路线 A · **方案 a**）
@@ -80,6 +100,85 @@ public:
                      const std::vector<uint32_t> &>
             core{"core", "Rv32iCoreTop", itcm_init_, dtcm_init_};
         ch::ch_layer<SocTraceCounter> trace{"trace", "SocTraceCounter"};
+        // ── S4a（G-9）：MMIO 通道的 SoC 侧 = 2×2 Lite 互联 + 首个外设（GPIO）──
+        // ⚠️ 成层 IP ⇒ 实例处给**模块类型名**（层次化产物里可辨识）
+        ch::ch_layer<axi4::AxiLiteMatrix2x2<32, 32, SocLiteMap>>
+            lite{"lite", "AxiLiteMatrix2x2"};
+        ch::ch_layer<axi4::AxiLiteGpio<8>> gpio{"gpio", "AxiLiteGpio"};
+
+        // 复位（低有效）⇒ ⇒ 由高有效的 `ext_rst` 取反
+        lite.io().rst_n <<= !io().ext_rst;
+        gpio.io().rst_n <<= !io().ext_rst;
+
+        // ── 核的 AXI4-Lite 主口 → 互联的 m0 面（**19 根直连，无适配层**）──
+        lite.io().m0_awaddr  <<= core.io().axil_awaddr;
+        lite.io().m0_awprot  <<= core.io().axil_awprot;
+        lite.io().m0_awvalid <<= core.io().axil_awvalid;
+        core.io().axil_awready <<= lite.io().m0_awready;
+        lite.io().m0_wdata   <<= core.io().axil_wdata;
+        lite.io().m0_wstrb   <<= core.io().axil_wstrb;
+        lite.io().m0_wvalid  <<= core.io().axil_wvalid;
+        core.io().axil_wready <<= lite.io().m0_wready;
+        core.io().axil_bresp  <<= lite.io().m0_bresp;
+        core.io().axil_bvalid <<= lite.io().m0_bvalid;
+        lite.io().m0_bready  <<= core.io().axil_bready;
+        lite.io().m0_araddr  <<= core.io().axil_araddr;
+        lite.io().m0_arprot  <<= core.io().axil_arprot;
+        lite.io().m0_arvalid <<= core.io().axil_arvalid;
+        core.io().axil_arready <<= lite.io().m0_arready;
+        core.io().axil_rdata  <<= lite.io().m0_rdata;
+        core.io().axil_rresp  <<= lite.io().m0_rresp;
+        core.io().axil_rvalid <<= lite.io().m0_rvalid;
+        lite.io().m0_rready  <<= core.io().axil_rready;
+
+        // ── 互联的 s0 面 → GPIO（**唯一的从设备**）──
+        gpio.io().awaddr  <<= lite.io().s0_awaddr;
+        gpio.io().awprot  <<= lite.io().s0_awprot;
+        gpio.io().awvalid <<= lite.io().s0_awvalid;
+        lite.io().s0_awready <<= gpio.io().awready;
+        gpio.io().wdata   <<= lite.io().s0_wdata;
+        gpio.io().wstrb   <<= lite.io().s0_wstrb;
+        gpio.io().wvalid  <<= lite.io().s0_wvalid;
+        lite.io().s0_wready <<= gpio.io().wready;
+        lite.io().s0_bresp  <<= gpio.io().bresp;
+        lite.io().s0_bvalid <<= gpio.io().bvalid;
+        gpio.io().bready  <<= lite.io().s0_bready;
+        gpio.io().araddr  <<= lite.io().s0_araddr;
+        gpio.io().arprot  <<= lite.io().s0_arprot;
+        gpio.io().arvalid <<= lite.io().s0_arvalid;
+        lite.io().s0_arready <<= gpio.io().arready;
+        lite.io().s0_rdata   <<= gpio.io().rdata;
+        lite.io().s0_rresp   <<= gpio.io().rresp;
+        lite.io().s0_rvalid  <<= gpio.io().rvalid;
+        gpio.io().rready  <<= lite.io().s0_rready;
+
+        // ── GPIO 的物理面 → 根端口（`gpio_dir` / `irq` 本批**不引出** · G-5）──
+        gpio.io().gpio_in <<= io().gpio_in;
+        io().gpio_out <<= gpio.io().gpio_out;
+
+        // ── **零未驱动**：m1 面（11 根）与 s1 面（8 根）**显式 tie 0** ──
+        //   m1 永不发请求（根只有核一个 master）· s1 永不被选中
+        //   （`windows[1]` = 最高 4 KB ⇒ 核永不发该地址）
+        lite.io().m1_awaddr  <<= ch_uint<32>(0_d);
+        lite.io().m1_awprot  <<= ch_uint<2>(0_d);
+        lite.io().m1_awvalid <<= ch_bool(false);
+        lite.io().m1_wdata   <<= ch_uint<32>(0_d);
+        lite.io().m1_wstrb   <<= ch_uint<4>(0_d);
+        lite.io().m1_wvalid  <<= ch_bool(false);
+        lite.io().m1_bready  <<= ch_bool(false);
+        lite.io().m1_araddr  <<= ch_uint<32>(0_d);
+        lite.io().m1_arprot  <<= ch_uint<2>(0_d);
+        lite.io().m1_arvalid <<= ch_bool(false);
+        lite.io().m1_rready  <<= ch_bool(false);
+
+        lite.io().s1_awready <<= ch_bool(false);
+        lite.io().s1_wready  <<= ch_bool(false);
+        lite.io().s1_bresp   <<= ch_uint<2>(0_d);
+        lite.io().s1_bvalid  <<= ch_bool(false);
+        lite.io().s1_arready <<= ch_bool(false);
+        lite.io().s1_rdata   <<= ch_uint<32>(0_d);
+        lite.io().s1_rresp   <<= ch_uint<2>(0_d);
+        lite.io().s1_rvalid  <<= ch_bool(false);
 
         // ── 核的 4 个输入全由根驱动（ADR-073 D2：零未驱动后代输入）──
         core.io().ext_rst <<= io().ext_rst;

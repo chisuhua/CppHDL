@@ -276,6 +276,24 @@ void print_firmware_trace(uint64_t retired, uint32_t fetch0,
 ///
 /// ⇒ ⇒ 装载 ⇒ ⇒ 跑 ⇒ ⇒ 断言**固件无关**的不变量（固件专属的期望值由**护栏**
 ///      按 `FIRMWARE-TRACE:` 行判 ⇒ ⇒ TB **不**硬编码任何固件的期望值）。
+/// ⚠️ **核级 TB 的 AXI-Lite 输入 MUST 显式 tie 0**（S4a · G-9）
+///
+/// 核级 TB **没有** MMIO 从设备 ⇒ ⇒ `axil_awready` 等 8 根输入**没有驱动源**。
+/// 未接线 ⇒ 读到未定义值（实测形态：全 1 或 0，**取决于实现**）⇒ ⇒ 期望值会
+/// 「碰巧」通过 ⇒ ⇒ 那是**恒绿判据**。⇒ ⇒ 显式 tie 0 ⇒ ⇒ 若核级程序误做 MMIO 访问
+/// （本不该发生），`data_ready` 恒 0 ⇒ ⇒ 流水线冻结 ⇒ ⇒ F3（退休计数 > 0）先红。
+template <typename SimT, typename Io>
+void tie_axil_inputs(SimT &sim, Io &io) {
+    sim.set_input_value(io.axil_awready, 0u);
+    sim.set_input_value(io.axil_wready, 0u);
+    sim.set_input_value(io.axil_bresp, 0u);
+    sim.set_input_value(io.axil_bvalid, 0u);
+    sim.set_input_value(io.axil_arready, 0u);
+    sim.set_input_value(io.axil_rdata, 0u);
+    sim.set_input_value(io.axil_rresp, 0u);
+    sim.set_input_value(io.axil_rvalid, 0u);
+}
+
 int run_firmware_verification(const std::string &dir) {
     Checker ck;
 
@@ -297,6 +315,7 @@ int run_firmware_verification(const std::string &dir) {
     Simulator sim(dev->context());
     auto &dut = dev->instance();
     auto &io = dut.io();
+    tie_axil_inputs(sim, io);
 
     std::vector<uint32_t> fetched;
     std::vector<std::pair<uint32_t, uint64_t>> writebacks;
@@ -360,6 +379,7 @@ int run_verification() {
     Simulator sim(dev->context());
     auto &dut = dev->instance();
     auto &io = dut.io();
+    tie_axil_inputs(sim, io);
 
     // ── 装载程序（装载期 `ext_rst` 保持 1 ⇒ 性能计数器不被装载污染）──
     sim.set_input_value(io.ext_rst, 1u);

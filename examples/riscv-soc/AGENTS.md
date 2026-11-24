@@ -8,8 +8,8 @@ Child of root `AGENTS.md`.
 
 | 级 | 住址 | 角色 |
 |---|---|---|
-| **IP 级**（核复合体） | `../riscv-mini/src/rv32i_core_top.h` | pipeline + I-TCM + D-TCM · **34 端口** · 24 条核级判据 |
-| **SoC 级**（本目录） | `src/rv32i_soc_top.h` | 把核复合体 + 观测 IP 装配成 SoC 根 · **8 端口** |
+| **IP 级**（核复合体） | `../riscv-mini/src/rv32i_core_top.h` | pipeline + I-TCM + D-TCM + MMIO 主设备 · **53 端口** · 24 条核级判据 |
+| **SoC 级**（本目录） | `src/rv32i_soc_top.h` | 把核复合体 + 观测 IP + Lite 互联 + GPIO 装配成 SoC 根 · **10 端口** |
 
 > ⚠️ **本目录 MUST NOT 复制任何微架构实现**（ADR-077 D1）⇒ 只做实例化与连线。
 
@@ -31,11 +31,11 @@ examples/riscv-soc/
 ```bash
 cmake --build build --target tb_riscv_soc -j$(nproc)
 
-# ① 默认 = 解释器路径 + 手推断言（A1–A6）
+# ① 默认 = 解释器路径 + 手推断言（A1–A8）
 build/examples/riscv-soc/tb_riscv_soc
-#   ⇒ RESULT: checks=7 fails=0
+#   ⇒ RESULT: checks=9 fails=0
 
-# ② 发射（恒加 --hierarchical ⇒ 10 module）
+# ② 发射（恒加 --hierarchical ⇒ 12 module）
 build/examples/riscv-soc/tb_riscv_soc --emit-rtl --hierarchical --out out/hier
 
 # ②' 从 **ELF 派生的镜像**装载（**方案 a**：零 `prog_*` 写 ⇒ `ch_mem::init_data`）
@@ -57,10 +57,10 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out out/chk
 
 | 项 | 值 | 出处 |
 |---|---|---|
-| 产物 module 集 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` = **10** | ADR-077 V2 |
-| 顶层端口 | **8** = 框架 2 + 根自有 6 | ADR-077 V1 |
+| 产物 module 集 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` · `AxiLiteMatrix2x2` · `AxiLiteGpio` = **12** | ADR-077 V2 + **S4a dated addendum** |
+| 顶层端口 | **10** = 框架 2 + 根自有 8（+ `gpio_out` / `gpio_in`） | ADR-077 V1 + **S4a dated addendum** |
 | 变化观测量 | **2**（`store_count` / `writeback_count`） | `rtl-soc-output` 签批要求 ≥2 |
-| 手推计数 | `store_count == 1` · `writeback_count == 3`（7 字程序） | 期望源见下 |
+| 手推计数 | `store_count == 2` · `writeback_count == 6`（12 字程序 · D-L1 一条 + MMIO 一条） | 期望源见下 |
 
 > ⚠️ **两值 MUST 不同** ⇒ 否则两个事件源接反 / 同源时观测值不变 ⇒ 判据恒绿
 > （三条变异自证见期望源 §4）。

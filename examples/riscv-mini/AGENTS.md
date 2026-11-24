@@ -150,36 +150,60 @@ bash scripts/rv32i_rtl_sim_env.sh
 | 4 | `top_core_prog_we` | INPUT | 1 | 核自有 |
 | 5 | `top_core_prog_addr` | INPUT | 32 | 核自有 |
 | 6 | `top_core_prog_data` | INPUT | 32 | 核自有 |
-| 7 | `top_core_obs_instr_addr` | OUTPUT | 32 | 核自有 |
-| 8 | `top_core_obs_data_addr` | OUTPUT | 32 | 核自有 |
-| 9 | `top_core_obs_data_write_data` | OUTPUT | 32 | 核自有 |
-| 10 | `top_core_obs_data_write_en` | OUTPUT | 1 | 核自有 |
-| 11 | `top_core_obs_perf_cycles` | OUTPUT | 48 | 核自有 |
-| 12 | `top_core_obs_perf_instructions` | OUTPUT | 48 | 核自有 |
-| 13 | `top_core_obs_perf_branch_count` | OUTPUT | 32 | 核自有 |
-| 14 | `top_core_obs_perf_branch_mispredict` | OUTPUT | 32 | 核自有 |
-| 15 | `top_core_obs_perf_load_use_stalls` | OUTPUT | 32 | 核自有 |
-| 16 | `top_core_obs_perf_control_stalls` | OUTPUT | 32 | 核自有 |
-| 17 | `top_core_dbg_id_instr` | OUTPUT | 32 | 核自有 |
-| 18 | `top_core_dbg_id_pc` | OUTPUT | 32 | 核自有 |
-| 19 | `top_core_dbg_id_valid` | OUTPUT | 1 | 核自有 |
-| 20 | `top_core_dbg_id_is_branch` | OUTPUT | 1 | 核自有 |
-| 21 | `top_core_dbg_id_is_load` | OUTPUT | 1 | 核自有 |
-| 22 | `top_core_dbg_id_is_store` | OUTPUT | 1 | 核自有 |
-| 23 | `top_core_dbg_branch_taken` | OUTPUT | 1 | 核自有 |
-| 24 | `top_core_dbg_wb_write_en` | OUTPUT | 1 | 核自有 |
-| 25 | `top_core_dbg_wb_write_data` | OUTPUT | 32 | 核自有 |
-| 26 | `top_core_dbg_wb_rd_addr` | OUTPUT | 5 | 核自有 |
-| 27 | `top_core_dbg_exmem_alu_result` | OUTPUT | 32 | 核自有 |
-| 28 | `top_core_dbg_exmem_imm` | OUTPUT | 32 | 核自有 |
-| 29 | `top_core_dbg_exmem_rs2_data` | OUTPUT | 32 | 核自有 |
-| 30 | `top_core_obs_data_rdata` | OUTPUT | 32 | 核自有 |
-| 31 | `top_core_dbg_exmem_valid` | OUTPUT | 1 | 核自有 |
-| 32 | `top_core_dbg_mem_valid_out` | OUTPUT | 1 | 核自有 |
-| 33 | `top_core_dbg_load_use_detected` | OUTPUT | 1 | 核自有 |
-| 34 | `top_core_dbg_illegal_reason` | OUTPUT | 2 | 核自有 |
+| 7 | `top_core_axil_awready` | INPUT | 1 | 核自有 |
+| 8 | `top_core_axil_wready` | INPUT | 1 | 核自有 |
+| 9 | `top_core_axil_bresp` | INPUT | 2 | 核自有 |
+| 10 | `top_core_axil_bvalid` | INPUT | 1 | 核自有 |
+| 11 | `top_core_axil_arready` | INPUT | 1 | 核自有 |
+| 12 | `top_core_axil_rdata` | INPUT | 32 | 核自有 |
+| 13 | `top_core_axil_rresp` | INPUT | 2 | 核自有 |
+| 14 | `top_core_axil_rvalid` | INPUT | 1 | 核自有 |
+| 15 | `top_core_obs_instr_addr` | OUTPUT | 32 | 核自有 |
+| 16 | `top_core_obs_data_addr` | OUTPUT | 32 | 核自有 |
+| 17 | `top_core_obs_data_write_data` | OUTPUT | 32 | 核自有 |
+| 18 | `top_core_obs_data_write_en` | OUTPUT | 1 | 核自有 |
+| 19 | `top_core_obs_perf_cycles` | OUTPUT | 48 | 核自有 |
+| 20 | `top_core_obs_perf_instructions` | OUTPUT | 48 | 核自有 |
+| 21 | `top_core_obs_perf_branch_count` | OUTPUT | 32 | 核自有 |
+| 22 | `top_core_obs_perf_branch_mispredict` | OUTPUT | 32 | 核自有 |
+| 23 | `top_core_obs_perf_load_use_stalls` | OUTPUT | 32 | 核自有 |
+| 24 | `top_core_obs_perf_control_stalls` | OUTPUT | 32 | 核自有 |
+| 25 | `top_core_dbg_id_instr` | OUTPUT | 32 | 核自有 |
+| 26 | `top_core_dbg_id_pc` | OUTPUT | 32 | 核自有 |
+| 27 | `top_core_dbg_id_valid` | OUTPUT | 1 | 核自有 |
+| 28 | `top_core_dbg_id_is_branch` | OUTPUT | 1 | 核自有 |
+| 29 | `top_core_dbg_id_is_load` | OUTPUT | 1 | 核自有 |
+| 30 | `top_core_dbg_id_is_store` | OUTPUT | 1 | 核自有 |
+| 31 | `top_core_dbg_branch_taken` | OUTPUT | 1 | 核自有 |
+| 32 | `top_core_dbg_wb_write_en` | OUTPUT | 1 | 核自有 |
+| 33 | `top_core_dbg_wb_write_data` | OUTPUT | 32 | 核自有 |
+| 34 | `top_core_dbg_wb_rd_addr` | OUTPUT | 5 | 核自有 |
+| 35 | `top_core_dbg_exmem_alu_result` | OUTPUT | 32 | 核自有 |
+| 36 | `top_core_dbg_exmem_imm` | OUTPUT | 32 | 核自有 |
+| 37 | `top_core_dbg_exmem_rs2_data` | OUTPUT | 32 | 核自有 |
+| 38 | `top_core_obs_data_rdata` | OUTPUT | 32 | 核自有 |
+| 39 | `top_core_dbg_exmem_valid` | OUTPUT | 1 | 核自有 |
+| 40 | `top_core_dbg_mem_valid_out` | OUTPUT | 1 | 核自有 |
+| 41 | `top_core_dbg_load_use_detected` | OUTPUT | 1 | 核自有 |
+| 42 | `top_core_dbg_illegal_reason` | OUTPUT | 2 | 核自有 |
+| 43 | `top_core_axil_awaddr` | OUTPUT | 32 | 核自有 |
+| 44 | `top_core_axil_awprot` | OUTPUT | 2 | 核自有 |
+| 45 | `top_core_axil_awvalid` | OUTPUT | 1 | 核自有 |
+| 46 | `top_core_axil_wdata` | OUTPUT | 32 | 核自有 |
+| 47 | `top_core_axil_wstrb` | OUTPUT | 4 | 核自有 |
+| 48 | `top_core_axil_wvalid` | OUTPUT | 1 | 核自有 |
+| 49 | `top_core_axil_bready` | OUTPUT | 1 | 核自有 |
+| 50 | `top_core_axil_araddr` | OUTPUT | 32 | 核自有 |
+| 51 | `top_core_axil_arprot` | OUTPUT | 2 | 核自有 |
+| 52 | `top_core_axil_arvalid` | OUTPUT | 1 | 核自有 |
+| 53 | `top_core_axil_rready` | OUTPUT | 1 | 核自有 |
 
-⇒ **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**（4 INPUT + 28 OUTPUT）。
+⇒ **53** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **51**（**12 INPUT + 39 OUTPUT**）。
+> ⚠️ **2026-11-24 · S4a（`rv32i-soc-mmio-channel-2026-11` · G-9）**：34 → **53**
+> = 新增 **19 根 `axil_*`**（**11 输出 + 8 输入**）作为 MMIO 通道（AXI4-Lite 主口 ·
+> 端口集合与 `AxiLiteMatrix2x2` 的 `m0_*` 面**同型** ⇒ 接线无适配层）。
+> ⇒ ⇒ **判据**：`scripts/verify_riscv_soc_core_ports.sh` V1/V2/V3（53 / 51）·
+> C6 快照同步 32 → **51** ⇒ 「头文件 → 产物 → 登记表」三方闭环。
 
 > ⚠️ **语义脚注（2026-11-24 · change `rv32i-commit-event-pulse-2026-11`）** ——
 > **端口名 / 方向 / 位宽全部不变**（⇒ ⇒ 本表**不动** · C6 快照**不动**）⇒ ⇒

@@ -13,7 +13,7 @@
 #
 # ⚠️ **为什么两种形态能共用同一个 TB**：
 #   扁平与层次化产物的**顶层端口表同源**（都走 `make_flat_module_view`）
-#   ⇒ ⇒ 端口名 + 方向 + 宽度 + 顺序**逐字逐序相同**（实测 34）
+#   ⇒ ⇒ 端口名 + 方向 + 宽度 + 顺序**逐字逐序相同**（实测 **53** · S4a 起 +19 根 `axil_*`）
 #   ⇒ ⇒ 顶层 module 名同为 `top` ⇒ ⇒ **同一个 TB 连线逐字相同** ⇒ ⇒
 #   ⇒ ⇒ 跑出**同一组判据** ⇒ ⇒ 「层次化 ≡ 扁平」在**产品路径**上得到证据
 #   （不只在 `tests/test_hierarchy_equivalence.cpp` 的用例路径上）。
@@ -227,7 +227,7 @@ for form in ('flat', 'hier'):
         out.append(f"| {i} | {e['dir']} | `{e['name']}` | {e['width']} | {e['role']} |")
     out += ["\n### 人工核对点（可直接 grep）\n", "```bash",
             f"grep -n '^module top' {v}                       # 顶层 module 头 + 端口表",
-            f"python3 scripts/lib/flat_rtl_emit_check.py --top-ports {v} --module top | wc -l   # 期望 34",
+            f"python3 scripts/lib/flat_rtl_emit_check.py --top-ports {v} --module top | wc -l   # 期望 53",
             f"python3 scripts/lib/flat_rtl_emit_check.py --modules {v}                        # module 树",
             f"grep -c 'always_ff' {v}; grep -c '^ *assign ' {v}                              # 规模",
             f"grep -n 'prog_we\\|prog_addr\\|prog_data' {v} | head                            # 装载口（只接 I-TCM）",

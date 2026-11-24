@@ -36,6 +36,11 @@
 //   ⇒ ⇒ （2026-11-17 · `b3508de` · ADR-072 D1 端口面收敛 ⇒ ⇒ 它们降为**体内 `logic`**）
 //   ⇒ ⇒ ⇒ ⇒ 本 TB 的 `sink*` 因此**只接根组件自有的输出**（实测：产物端口表里冒泡端口 = 0）。
 //
+// ⚠️ **2026-11-24 · S4a（`rv32i-soc-mmio-channel-2026-11` · G-9）**：核端口面
+//   **34 → 53**（框架 2 + 核自有 51 = **12 输入 + 39 输出**）—— 新增 **19 根
+//   `axil_*`**（11 输出 + 8 输入）作为 MMIO 通道。⇒ ⇒ 本 TB 不改判据（**24 条**），
+//   只把 8 根新输入**显式 tie 0**（核级程序 MUST NOT 做 MMIO 访问）。
+//
 // ⚠️ **端口映射（实测确认，非猜）**：**2026-11-17 · `b3508de`（ADR-072 D1 端口面收敛）后
 //   本顶层**产品端口表** = **34** 个**（**6** 输入 + **28** 输出 · 2026-11-17 实测）
 //   ⇒ ⇒ **6** 输入 = 框架的 `default_clock` / `default_reset` + 本组件自有的 **4** 个
@@ -96,6 +101,20 @@ module tb_rv32i_soc;
     logic        dbg_wb_write_en;
     logic [31:0] dbg_wb_write_data;
     logic [4:0]  dbg_wb_rd_addr;
+
+    // ── S4a（G-9）：AXI4-Lite 主口 —— 核级 TB **无 MMIO 从设备** ⇒ ⇒
+    //    8 根输入 **tie 0**（与 C++ 侧 `tie_axil_inputs` 逐项同值）
+    logic        axil_awready = 1'b0;
+    logic        axil_wready  = 1'b0;
+    logic [1:0]  axil_bresp   = 2'b00;
+    logic        axil_bvalid  = 1'b0;
+    logic        axil_arready = 1'b0;
+    logic [31:0] axil_rdata   = 32'h0;
+    logic [1:0]  axil_rresp   = 2'b00;
+    logic        axil_rvalid  = 1'b0;
+
+    logic [95:0] sink_axil32;    // 3 个未用输出（宽度 32：awaddr / wdata / araddr）
+    logic [12:0] sink_axil_small;// 8 个未用输出（2+1+4+1+1+2+1+1 = 13 位）
 
     logic [6:0] sink1;   // 7 个未用输出（宽度 1）
     logic [1:0] sink2;   // 1 个未用输出（宽度 2）
@@ -232,7 +251,27 @@ module tb_rv32i_soc;
         .top_dbg_exmem_valid(sink1[4 +: 1]),
         .top_dbg_mem_valid_out(sink1[5 +: 1]),
         .top_dbg_load_use_detected(sink1[6 +: 1]),
-        .top_dbg_illegal_reason(sink2[0 +: 2])
+        .top_dbg_illegal_reason(sink2[0 +: 2]),
+        // ── S4a：AXI4-Lite 主口（11 输出 → sink · 8 输入 ← tie 0）──
+        .top_axil_awaddr(sink_axil32[0 +: 32]),
+        .top_axil_awprot(sink_axil_small[0 +: 2]),
+        .top_axil_awvalid(sink_axil_small[2]),
+        .top_axil_awready(axil_awready),
+        .top_axil_wdata(sink_axil32[32 +: 32]),
+        .top_axil_wstrb(sink_axil_small[3 +: 4]),
+        .top_axil_wvalid(sink_axil_small[7]),
+        .top_axil_wready(axil_wready),
+        .top_axil_bresp(axil_bresp),
+        .top_axil_bvalid(axil_bvalid),
+        .top_axil_bready(sink_axil_small[8]),
+        .top_axil_araddr(sink_axil32[64 +: 32]),
+        .top_axil_arprot(sink_axil_small[9 +: 2]),
+        .top_axil_arvalid(sink_axil_small[11]),
+        .top_axil_arready(axil_arready),
+        .top_axil_rdata(axil_rdata),
+        .top_axil_rresp(axil_rresp),
+        .top_axil_rvalid(axil_rvalid),
+        .top_axil_rready(sink_axil_small[12])
     );
 
     always #5 clk = ~clk;

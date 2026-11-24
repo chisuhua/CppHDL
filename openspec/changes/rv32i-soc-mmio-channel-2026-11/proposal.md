@@ -28,6 +28,18 @@
 | **D2** | design §2.2：「`data_write_en` MUST NOT 分流」 | ✅ **结论不变**（功能信号**不分流** ⇒ ⇒ store 事件**与路径无关** ⇒ ⇒ 判别力更强）⇒ ⇒ **但**派生式里的 `data_ready_calc` **必须**是**路径 mux 后**的就绪（`in_mmio ? master.ready : cache.ready`）⇒ ⇒ 本 change 实施时 MUST 用**同一个** mux 后的表达式 ⇒ ⇒ 见 tasks 的 **T2.5** |
 | **D3** | 「store 事件的判别力」 | S4a-0 落地时**今日不可判别**（今日 store 路径不反压 ⇒ **恒绿** ⇒ 恒绿判据已撤除）⇒ ⇒ **判别力归本 change**（MMIO 事务必然多拍 ⇒ 那时才可判别）⇒ ⇒ 见本 change 的 **AC3** |
 
+### 订正块（2026-11-24 · critic 轮次 1 的 BLOCKER 闭合）
+
+| # | 原表述 | 订正 | 依据 |
+|---|---|---|---|
+| **D4** | AC7 的「`interp_checks == min_checks == **9**`」 | ⇒ **10**（+A9 读值回路） | critic BLOCKER：`data_read_data` 的 mux 用**当拍** `addr_in_mmio` 选路径 ⇒ 而消费发生在 **M2**（那拍已是后继指令的地址）⇒ **静默错源**。原 9 条判据对它**结构性失明**（读值不在 SoC 根端口 · `gpio_in` tie 0 ⇒ 错源与正源碰巧同值） |
+| **D5** | AC2「读回的**值**在 SoC 级**不可观测** ⇒ 归 `AxiLiteGpio` 的组件级用例」 | ⇒ **不成立**：缺陷不在 GPIO（它的 `rdata` 是对的），而在核顶层 mux + M2 消费时序这一**集成段** ⇒ ⇒ 新增 **A9** 在 SoC 级直接判读值回路（`gpio_in`=0x5A → `lw` → 非 MMIO 后继 → `sw` → `gpio_out` MUST 回 0x5A） | 同上 |
+| — | （无需改的）AC1 / AC3 / AC4 / AC5 / AC6 / AC8 / AC9 | 全部保持原值 | — |
+
+> ⚠️ **D4/D5 是判据面的追加，不改任何决策**（G-6 / G-9 的实施形态不变）⇒ ⇒ 已同步
+> `.rddf/checks/soc-rtl-expectations.md` §3/§4 · `examples-rtl-sim-targets.tsv` · 两个 TB 的 `checks=10`。
+> ⇒ ⇒ **planner 复核点**：A9 属「新判据」而非「改 AC 语义」⇒ 若 planner 认为它应独立成 change，可回退为独立项。
+
 ## Why
 
 1. **外设至今不可达**：核在 S3 后有了 AXI4 主口，但那条口**只接到核内的 `TcmAxiSlave`** ⇒ ⇒

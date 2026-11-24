@@ -32,6 +32,7 @@
 #include "cpu/cache/d_cache_sync.h"
 #include "axi4/tcm_axi_slave.h"
 #include "cpu/riscv/rv32i_mem_map.h"
+#include "axil_mmio_master.h"   // 核侧 AXI4-Lite 主设备（S4a · G-9.4）
 
 #include <cstdint>
 #include <vector>
@@ -110,6 +111,42 @@ public:
         //    · 2 = **未知 opcode** ⇒ ⇒ 「非法」1 bit 位 = `(值 != 0)`
         //    ⚠️ 只留一个 2 bit 端口 ⇒ 不新增「level 位」的**冗余**端口
         ch_out<ch_uint<2>>      dbg_illegal_reason{"dbg_illegal_reason"};
+
+        // ==================================================================
+        // **AXI4-Lite 主口**（19 根 · S4a · change `rv32i-soc-mmio-channel-2026-11`）
+        // ==================================================================
+        //
+        // **G-9 裁决**：外设住 SoC 层 ⇒ ⇒ 核只引一条 **AXI4-Lite 主口**作为它的
+        // **MMIO 通道**（⇒ ⇒ 核端口面 34 → **53**）。
+        // 端口集合 = SoC 侧 2×2 Lite 互联的 **m0 面**（与之**同型** ⇒ 接线无适配层）
+        // ⇒ ⇒ 接线无适配层。
+        //
+        // ⚠️ **核级 TB 必须把这 8 根输入显式 tie 0**（核级程序 MUST NOT 做 MMIO 访问）
+        // ⇒ ⇒ 未接线 ⇒ 读出未定义值 ⇒ 依赖默认值会让判据「碰巧」通过。
+        // ⚠️ **不新增 `irq` 口**（G-5 契约的实施在 **S5**）。
+        ch_out<ch_uint<32>>     axil_awaddr{"axil_awaddr"};
+        ch_out<ch_uint<2>>      axil_awprot{"axil_awprot"};
+        ch_out<ch_bool>         axil_awvalid{"axil_awvalid"};
+        ch_in<ch_bool>          axil_awready{"axil_awready"};
+
+        ch_out<ch_uint<32>>     axil_wdata{"axil_wdata"};
+        ch_out<ch_uint<4>>      axil_wstrb{"axil_wstrb"};
+        ch_out<ch_bool>         axil_wvalid{"axil_wvalid"};
+        ch_in<ch_bool>          axil_wready{"axil_wready"};
+
+        ch_in<ch_uint<2>>       axil_bresp{"axil_bresp"};
+        ch_in<ch_bool>          axil_bvalid{"axil_bvalid"};
+        ch_out<ch_bool>         axil_bready{"axil_bready"};
+
+        ch_out<ch_uint<32>>     axil_araddr{"axil_araddr"};
+        ch_out<ch_uint<2>>      axil_arprot{"axil_arprot"};
+        ch_out<ch_bool>         axil_arvalid{"axil_arvalid"};
+        ch_in<ch_bool>          axil_arready{"axil_arready"};
+
+        ch_in<ch_uint<32>>      axil_rdata{"axil_rdata"};
+        ch_in<ch_uint<2>>       axil_rresp{"axil_rresp"};
+        ch_in<ch_bool>          axil_rvalid{"axil_rvalid"};
+        ch_out<ch_bool>         axil_rready{"axil_rready"};
     )
 
     /// ⚠️ **`itcm_init` / `dtcm_init` = 装载链路的**路线 A**（`firmware-load-chain` L2）**
@@ -147,6 +184,8 @@ public:
         //    `DCacheSync` 在 `chlib`（顶层 namespace）· `TcmAxiSlave` 在 `axi4`。
         ch::ch_module<::chlib::DCacheSync> dcache{"dcache"};
         ch::ch_module<axi4::TcmAxiSlave<32, 32, kTcmAddrWidth>> dslave{"dslave"};
+        // ⚠️ **S4a（G-9.4）**：MMIO 通道的**核内一端**（请求面 ← 流水线 · AXI 主口 → 顶层）
+        ch::ch_module<AxilMmioMaster> mmio_master{"mmio_master"};
 
         // ---- I-TCM：取指 + 固件写 ----
         //
@@ -176,12 +215,33 @@ public:
         //    做 cache 查找（读有副作用：miss ⇒ 发 AXI burst）
         // ⚠️ `pipeline.data_ready ← cache.ready` ⇒ **S2 打通的冻结链第一次真正生效**
         //    （cache hit = 1 拍；miss = 反压等待 4-beat fill）
+        // ---- **pre-cache 分流**（G-9.3 · 判据方向 = 「地址 ∈ MMIO 段」）----
+        //
+        // ⚠️ **判据方向**（G-9 订正块）：MUST 是「∈ MMIO 段 ⇒ 旁路」，
+        //    **不是**「∈ D-TCM 窗口 ⇒ 走 cache」⇒ ⇒ 因为字节地址 **0**
+        //    （核级 / SoC 级程序都有 `sw x3, 0(x0)`）不在 D-TCM 窗口内
+        //    ⇒ ⇒ 取反形式会把它推进 MMIO 旁路 ⇒ ⇒ 核级 TB 无 MMIO 从设备 ⇒ **永久挂死**。
+        //
+        // ⚠️ `riscv::in_mmio()` 是 **constexpr（C++ 数值）** 函数 ⇒ ⇒ **不能**作用于
+        //    **硬件值**（`ch_uint<32>`）⇒ ⇒ 这里用**同一对边界常量**构造硬件比较器
+        //    ⇒ ⇒ 边界仍**派生自库层表**（单一真相）⇒ ⇒ **没有**第二份口径。
+        static constexpr uint32_t kMmioLo = static_cast<uint32_t>(riscv::kMmioBase);
+        static constexpr uint32_t kMmioHi =
+            static_cast<uint32_t>(riscv::kMmioBase + riscv::kMmioBytes);
+        auto addr_in_mmio = (pipeline.io().data_addr >= ch_uint<32>(kMmioLo)) &
+                            (pipeline.io().data_addr < ch_uint<32>(kMmioHi));
+
         dcache.io().addr  <<= pipeline.io().data_addr;
         dcache.io().wdata <<= pipeline.io().data_write_data;
-        dcache.io().req   <<= pipeline.io().data_req;
+        // ⚠️ **MMIO 请求 MUST NOT 进 D-L1**：`DCacheSync` 的 `aw_valid = we & req`
+        //    （`d_cache_sync.h:287`）⇒ ⇒ store-to-MMIO 会在 D-TCM 的 AXI 从口上发起
+        //    一次**别名地址**的写（`aw_addr = addr & ~3`，而 `TcmAxiSlave` 只看低
+        //    `kTcmAddrWidth` 位）⇒ ⇒ **静默污染 D-TCM**；读同理会白跑一次 burst fill
+        //    （且 Lite 外设没有 `r_last` ⇒ ⇒ fill 永不完成 ⇒ ⇒ 流水线冻结，见 §Why 2）。
+        dcache.io().req   <<= pipeline.io().data_req & !addr_in_mmio;
         dcache.io().we    <<= pipeline.io().data_write_en;
         dcache.io().strbe <<= pipeline.io().data_strbe;
-        pipeline.io().data_read_data <<= dcache.io().rdata;
+        // （读数据的 mux 在下方 —— ⚠️ 它的**选择线 MUST 与消费拍对齐**，见那里的注释）
         // ⚠️ `data_ready` 是**无条件**冻结信号（S2 的语义：拉低即冻结）
         //    ⇒ ⇒ 无访存请求时 MUST 视为「就绪」⇒ ⇒ 否则 cache 的 `ready` 在空闲拍
         //    为 0 会把整条流水线**永久冻死**（实测踩中：24 条判据 23 条红）。
@@ -189,8 +249,65 @@ public:
         //    `data_ready` 的表达式**提成局部变量** ⇒ ⇒ 因为「store 提交事件」
         //    MUST 在**总线侧**派生（见下方 `obs_data_write_en` 的注释）
         //    ⇒ ⇒ 两处共用**同一个**表达式节点 ⇒ ⇒ 值恒等、无第二套口径。
-        auto data_ready_calc = (!pipeline.io().data_req) | dcache.io().ready;
+        // ⚠️ **S4a**：`data_ready` 是**两条路径的 mux**（仍是**单个**表达式节点
+        //    ⇒ ⇒ store 观测事件 `data_write_en & data_ready_calc` **与路径无关**）。
+        //    ⚠️ 禁 mux `data_write_en` / `data_write_data` / `data_strbe`
+        //    （功能信号 MUST 保持电平 · 观测事件的**路径无关性**由本行的 mux 保证）。
+        auto data_ready_calc = (!pipeline.io().data_req) |
+            select(addr_in_mmio, mmio_master.io().ready, dcache.io().ready);
         pipeline.io().data_ready <<= data_ready_calc;
+
+        // ---- **读数据 mux**（⚠️ 选择线 MUST 与**消费拍**对齐 · 2026-11-24 critic BLOCKER）----
+        //
+        // 🔴 **为什么不能用当拍的 `addr_in_mmio`**：
+        //    `data_read_data` 是在 **M2 级组合消费**的（`rv32i_pipeline.h:345`：
+        //    `load_lane.raw_word <<= io().data_read_data`，车道选择的 addr / funct3
+        //    取自 **M2 寄存器**）⇒ ⇒ 而消费那一拍的 `data_addr` 已是**后继**指令
+        //    在 EX/MEM 的地址 ⇒ ⇒ 用它会：
+        //      ① MMIO load 之后跟**非 MMIO** 指令（最常见：「`lw` 外设寄存器 → 下一条
+        //         ALU 用它」）⇒ ⇒ 选到 `dcache.rdata`（D-L1 的**保持寄存器** ⇒ 陈旧值）
+        //      ② D-L1 load 之后跟 **MMIO** 地址 ⇒ ⇒ 反向选到陈旧的 `prdata`
+        //    ⇒ ⇒ 两向都是**静默错值**（而且核级 24 判据**看不见** —— 核级全程 ∉ MMIO）。
+        //
+        // ⇒ ⇒ 修法：把选择线做成**与 M2 元数据同门控锁存**的寄存器 —— 门控 =
+        //    `!data_ready`（= 流水线的 `mem_stall`，`rv32i_pipeline.h:276`
+        //    逐字同源）⇒ ⇒ 与 `m2_alu_result` / `m2_funct3` 的 `->next` 同一条沿、
+        //    同一个门控 ⇒ ⇒ **不可能错位**。
+        ch_reg<ch_bool> rd_path_mmio(ch_bool(false));
+        auto mem_stall_now = !data_ready_calc;
+        rd_path_mmio->next = select(mem_stall_now, rd_path_mmio, addr_in_mmio);
+        pipeline.io().data_read_data <<=
+            select(rd_path_mmio, mmio_master.io().prdata, dcache.io().rdata);
+
+        // ---- 核侧 MMIO 主设备接线（请求面 ← 流水线 MEM 级 · 只在 MMIO 段取请求）----
+        mmio_master.io().preq   <<= pipeline.io().data_req & addr_in_mmio;
+        mmio_master.io().pwe    <<= pipeline.io().data_write_en;
+        mmio_master.io().paddr  <<= pipeline.io().data_addr;
+        mmio_master.io().pwdata <<= pipeline.io().data_write_data;
+        mmio_master.io().pstrbe <<= pipeline.io().data_strbe;
+        // 复位 = 核的 `ext_rst`（**高有效** ⇒ ⇒ 与 master 的 `rst` 同极性）
+        mmio_master.io().rst    <<= io().ext_rst;
+
+        // ---- AXI4-Lite 主口 → 核顶层端口（19 根 · 直连，无适配层）----
+        io().axil_awaddr  <<= mmio_master.io().awaddr;
+        io().axil_awprot  <<= mmio_master.io().awprot;
+        io().axil_awvalid <<= mmio_master.io().awvalid;
+        mmio_master.io().awready <<= io().axil_awready;
+        io().axil_wdata   <<= mmio_master.io().wdata;
+        io().axil_wstrb   <<= mmio_master.io().wstrb;
+        io().axil_wvalid  <<= mmio_master.io().wvalid;
+        mmio_master.io().wready <<= io().axil_wready;
+        mmio_master.io().bresp  <<= io().axil_bresp;
+        mmio_master.io().bvalid <<= io().axil_bvalid;
+        io().axil_bready  <<= mmio_master.io().bready;
+        io().axil_araddr  <<= mmio_master.io().araddr;
+        io().axil_arprot  <<= mmio_master.io().arprot;
+        io().axil_arvalid <<= mmio_master.io().arvalid;
+        mmio_master.io().arready <<= io().axil_arready;
+        mmio_master.io().rdata  <<= io().axil_rdata;
+        mmio_master.io().rresp  <<= io().axil_rresp;
+        mmio_master.io().rvalid <<= io().axil_rvalid;
+        io().axil_rready  <<= mmio_master.io().rready;
 
         // cache ↔ TcmAxiSlave（AXI4 full 全通道直连）
         dslave.io().ar_addr  <<= dcache.io().ar_addr;
