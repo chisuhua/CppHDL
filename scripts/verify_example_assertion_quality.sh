@@ -75,6 +75,7 @@ violation() { printf "${RED}VIOLATION${NC} %s\n" "$1" >&2; violations=$((violati
 CH4_ANCHOR_README='C4 锚点：examples 测试源的可执行断言数下限。格式 <源文件>|<语义>|<下限>。下调/删除 MUST 在 commit message 里解释（放宽即需理由）。'
 CH4_ANCHOR="examples/axi4/tests/test_axi_lite_test_master.cpp|AxiLiteTestMaster 的 rst_n 驱动 + 事务握手判别性用例|10
 examples/axi4/tests/test_verif_axi4_lite.cpp|AxiLiteTop 经 .verif 语义驱动的 DUT 用例（7 个 DUT 用例）|41
+examples/riscv-mini/tests/test_axil_mmio_master.cpp|核侧 AXI4-Lite 主设备：单拍完成脉冲 / AW-W 相位分离 / VALID 期间锁存稳定 / 读数据保持 / 复位|56
 examples/riscv-mini/tests/test_cache_smoke.cpp|ICache 冷 miss 透出 + DCache 未驱动端口的当前事实|3
 examples/riscv-mini/tests/test_csr_unit.cpp|CSR 寄存器复位/读写/MRET/异常/WFI/中断|42
 examples/riscv-mini/tests/test_ifstage_device.cpp|ch_device<IfStage> 的 PC 复位/推进/stall 冻结|2
@@ -85,7 +86,7 @@ examples/riscv-mini/tests/test_pipeline_minimal.cpp|Rv32iPipeline 构造 + 复�
 examples/riscv-mini/tests/test_pipeline_wrapper.cpp|Rv32iPipeline + ITCM 装配的取指/周期行为|5
 examples/riscv-mini/tests/test_riscv_tests.cpp|riscv-tests 自包含用例 + 仓外二进制条件 SKIP（⚠️ 用 TEST_CASE_FOR_each 宏**生成**的 41 个用例的断言在宏体里 ⇒ 按「宏体整行不计」的保守规则不计入，故下限 = 8 个字面用例的 14）|14
 examples/riscv-mini/tests/test_riscv_tests_pipeline.cpp|riscv-tests 经流水线跑（全部依赖仓外二进制）|47
-examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO）|10
+examples/riscv-mini/tests/test_riscv_tests_soc.cpp|MMIO 地址解码（ITCM/DTCM/CLINT/UART/GPIO + 7 段 MMIO 全表的派生性与窗口边界 + local_addr 的 7 路 mux）|84
 examples/riscv-mini/tests/test_rv32i_pipeline.cpp|流水寄存器 latch/stall/flush + hazard 前推（含 EX>MEM 双源优先级）+ 分支检测|23
 examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp|SoC 级双路 parity（200 拍 × 27 观测值逐拍全等）+ 3 个 store 的 ISA 语义 golden + 分支/停顿计数 + 指令与 pc 对齐 + 编码器 × 手算常量交叉校验|24
 examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp|RV32I 层次化产物交付物（粒度/确定性/单连接不变式/顶层端口表/lint 门）+ 扁平≡层次化逐拍等价（198 拍 × 9 观测）+ 手推写回序列与 sw 地址 + 判别性自证（篡改一条 assign 必红）|40

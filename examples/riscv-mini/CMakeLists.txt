@@ -90,6 +90,12 @@ riscv_mini_catch_test(test_riscv_tests tests/test_riscv_tests.cpp)
 riscv_mini_catch_test(test_csr_unit tests/test_csr_unit.cpp)
 riscv_mini_catch_test(test_address_decoder tests/test_riscv_tests_soc.cpp)
 
+# === 核侧 AXI4-Lite 主设备（S4a · change `rv32i-soc-mmio-channel-2026-11` · P2）===
+# DUT = `src/axil_mmio_master.h`（核内 MMIO 通道的一端 · 纯 RTL 组件）
+# 判据 = 「一次事务恰好一拍 `ready`」+ AW/W 相位分离 + VALID 期间数据稳定 ⇒
+# 逐拍手推表（见源文件头）· 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
+riscv_mini_catch_test(test_axil_mmio_master tests/test_axil_mmio_master.cpp)
+
 # === Pipeline 单元 ===
 # 异常: test_riscv_tests_pipeline 额外需要 examples/riscv-mini/tests/ 在 include 路径
 # ⚠️ 不进 CTest：46 个用例全部依赖仓外 riscv-tests 二进制 ⇒ CI 中恒为

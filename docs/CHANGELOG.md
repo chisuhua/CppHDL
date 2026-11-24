@@ -1,3 +1,38 @@
+## 2026-11-24 — S4a（P2）：核侧 AXI4-Lite 主设备 `AxilMmioMaster`
+
+change `rv32i-soc-mmio-channel-2026-11`（**S4a**）的 P2 —— MMIO 通道的**核内一端**。
+**示例侧新增头**（`examples/riscv-mini/src/`）⇒ ⇒ **库层公开面不变**。
+
+### ① 新组件 `AxilMmioMaster`（26 端口）
+
+- **请求面 7 根**（核内 MEM 级驱动）：`preq` / `pwe` / `paddr` / `pwdata` / `pstrbe` →
+  `ready`（**单拍完成脉冲**）/ `prdata`（**保持寄存器**）。
+- **AXI4-Lite 主口 19 根**（与 `AxiLiteMatrix2x2` 的 `m0_*` 同型）。
+- `bready` / `rready` 恒 1 · `awprot` / `arprot` 恒 0 · 复位 `rst` **高有效**（接核 `ext_rst`）。
+
+### ② 三条硬约束（都有判据钉住）
+
+1. **`ready` MUST 是单拍完成脉冲**：它进核顶层 `data_ready_calc` ⇒ ⇒ 若为电平，
+   「store 提交事件」会在**整个事务期间**持续为高 ⇒ ⇒ 事件计数**灌水**（S4a-0 的同类陷阱）。
+2. **`awvalid` / `wvalid` / `arvalid` MUST 保持到各自握手**，且 VALID 期间
+   `awaddr` / `wdata` / `wstrb` MUST 稳定 ⇒ ⇒ 故它们由**发送当拍锁存**的寄存器驱动。
+3. **`aw_done` / `w_done` 分离** ⇒ ⇒ AW 与 W **同拍发起**但**各自**等 READY（相位分离，
+   不假定从设备的接受顺序）。
+
+### ③ 判据（新 target `test_axil_mmio_master` · 5 用例 / 58 断言）
+
+逐拍手推表（`eval_combinational` + `tick` 各一次 ⇒ 采样**本拍**组合输出）：写事务 VALID 序列 ·
+`awready` 延迟时的相位分离（`wvalid` 先撤、`awvalid` 保持、地址不随 `paddr` 变）· 读事务
+`rvalid` 延迟 4 拍时 `ready` **仍只有一拍** · 两事务 ⇒ 两脉冲 · 复位后全撤
++ `bready`/`rready` 恒 1 · `prot` 恒 0。
+
+**判别力自证**：① `ready` 改电平 ⇒ 2 用例转红；② `awaddr` 直接接输入（不锁存）⇒ 1 用例转红；
+两者还原后复绿。
+
+### ④ 计数锚点
+
+`CTEST_TOTAL` **275 → 276** · `EXAMPLES_TEST_SOURCES` **20 → 21** · non-perf **264 → 265**。
+
 ## 2026-11-24 — S4a（P1）：MMIO 地址表扩成**库层全表**（G-6）+ `AddressDecoder` 派生化
 
 change `rv32i-soc-mmio-channel-2026-11`（**S4a**）的 P1 —— 库层地址面（G-6）。

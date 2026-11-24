@@ -38,17 +38,29 @@
 
 ## P2 · 核侧 master（**核侧自带** · G-9.4）
 
-- [ ] **T2.1** 新建 `examples/riscv-mini/src/axil_mmio_master.h`
+- [x] **T2.1** ✅ 新建 `examples/riscv-mini/src/axil_mmio_master.h`（**26 端口** = 请求面 7 + AXI4-Lite 19）
   ⇒ ⇒ 接口 = `req` / `we` / `addr` / `wdata` / `strbe` → `ready`（**完成脉冲**）/ `rdata`（**保持寄存器**）
   ⇒ ⇒ **AW/W 相位分离** · **VALID 保持到握手** · `bready`/`rready` **恒拉高** · `awprot`/`arprot` **恒 0**
   ⇒ ⇒ 复位 = 核的 `ext_rst`（高有效）⇒ ⇒ **不新增核端口**
-- [ ] **T2.2** 头文件**自包含**（`scripts/verify_header_self_contained.sh`）· 禁 `&&`/`||`（ADR-036）⇒ 用 `&`/`|`
-- [ ] **T2.3** 🆕 ⚠️ **master 的 `ready` MUST 是「单拍完成脉冲」**（不是电平）——
+- [x] **T2.2** ✅ 头文件**自包含**（`scripts/verify_header_self_contained.sh`）· 禁 `&&`/`||`（ADR-036）⇒ 用 `&`/`|`
+- [x] **T2.3** ✅ 🆕 ⚠️ **master 的 `ready` MUST 是「单拍完成脉冲」**（不是电平）——
   理由（S4a-0 的教训）：`ready` 进了 `data_ready_calc` ⇒ ⇒ 若它是电平 ⇒ ⇒
   观测面的 store 事件会在**整个事务期间**持续为高 ⇒ ⇒ **灌水**（事件次数 = 事件时长之和）
   ⇒ ⇒ 判据：**一次事务 ⇒ 恰好一拍 `ready`**（与事务时长无关）⇒ ⇒
   变异（把 `ready` 改成电平）⇒ ⇒ 该判据**必红**
   ⇒ ⇒ ⚠️ **禁**用 `!data_ready` 门控 `pipeline.data_write_en`（**组合环** ⇒ 仿真 `FATAL`）
+
+> **P2 实施备注（2026-11-24）**：
+> - **载体** = 新 target `test_axil_mmio_master`（`examples/riscv-mini/tests/test_axil_mmio_master.cpp`）
+>   ⇒ 5 用例 / **58 断言**全绿 ⇒ `CTEST_TOTAL` **275 → 276** · `EXAMPLES_TEST_SOURCES` **20 → 21**
+>   （锚点已同批同步）。
+> - **逐拍期望值手推**（`eval_combinational` + `tick` 各一次 ⇒ 采样的是**本拍**组合值；
+>   `get_port_value` 不自己重算 ⇒ 不显式 `eval_combinational` 会**读到上一拍**）。
+> - **判别力自证**（实测转红后还原复绿）：
+>   ① **M-a** `ready = in_wr_resp | in_rd_resp`（电平）⇒ **2 用例转红**（读用例 rvalid 延迟
+>   4 拍 ⇒ 电平实现给 5 拍）—— 这是 T2.3 的靶子；
+>   ② **M-b** `awaddr = io().paddr`（不锁存）⇒ **1 用例转红**（VALID 窗口内改 `paddr`
+>   ⇒ ⇒ `awaddr` MUST 不变 ⇒ ⇒ 直接接输入会跟着变）。
 
 ## P3 · 核内 pre-cache 分流（G-9.3 · **订正后的判据**）
 

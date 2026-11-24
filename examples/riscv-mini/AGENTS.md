@@ -32,16 +32,19 @@ examples/riscv-mini/
 ├── tb_rv32i_soc.sv         # **独立 Verilog TB**（**手写** · 24 条判据 · 与 C++ 侧同源）
 │                            #   ⇒ `.verif` 封闭原语集表达不了 4 个形态 ⇒ MUST 保持手写
 │                            #     （`generated=no` = **终态**，不是欠账 · ADR-076 复核 2026-11-21）
-├── src/                     # **2** 个头（核 IP 顶层 + 带 `.data` 的示例固件）
+├── src/                     # **3** 个头（核 IP 顶层 + MMIO 主设备 + 带 `.data` 的示例固件）
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
+│   ├── axil_mmio_master.h  # 核侧 AXI4-Lite 主设备（S4a · MMIO 通道的核内一端
+│   │                          #   ⇒ 请求面 7 根 + AXI4-Lite 19 根 · `ready` = **单拍完成脉冲**
+│   │                          #   ⇒ 判据 = `test_axil_mmio_master`（5 用例 / 58 断言））
 │   └── rv32i_core_top.h # 核 IP 顶层装配（ADR-046 D1 类别 1 / D3 #15）
 │                             #  ✅ **已有消费者**（2026-10-25）：`tests/
 │                             #  test_rv32i_soc_dual_parity.cpp`（核级双路
 │                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
 │                             #  豁免条目已移除（ADR-046 D10-rev 端口契约）
-└── tests/                   # ✅ 15 个 Catch2 target 已注册进 CTest（2026-10-25 +1：
+└── tests/                   # ✅ 16 个 Catch2 target 已注册进 CTest（2026-10-25 +1：
                               #   test_rv32i_soc_dual_parity —— 核级双后端 parity）
-    ├── test_*.cpp           # 17 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
+    ├── test_*.cpp           # 18 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
     └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
 ```
