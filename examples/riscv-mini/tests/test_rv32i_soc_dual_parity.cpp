@@ -66,6 +66,7 @@
 #include "rv32i_fw_demo.h"
 #include "rv32i_core_top.h"
 #include "simulator.h"
+#include "dual_backend_fixture.h"
 
 namespace {
 
@@ -2730,3 +2731,110 @@ TEST_CASE("Rv32iSoc - flush wins over illegal-freeze stall (redirect not lost)",
         REQUIRE(t.back()[kIdxIllegalReason] == 0u);
     }
 }
+
+// ===========================================================================
+// 提交事件端口的**脉冲性**（2026-11-24 · change `rv32i-commit-event-pulse-2026-11`）
+//
+// ⚠️ **固件 MUST 是「3 条 rd≠0 的写回类指令 + 1 条冷 load」**（关键 · **实测得出**
+//    的充要条件，不是推测 —— 详见下面的推导）：
+//
+//   **灌水（事件电平被拉长）的充要条件** = 「数据通路反压（`mem_stall`）发生时，
+//   MEM/WB 里恰好装着一��� `rd != 0` 的**写回类**指令（ALU / load / jump）」：
+//   ① `wb_stage.write_en = needs_writeback & rd_not_zero & mem_valid`
+//      （`include/cpu/pipeline/stages/wb_stage.h:110`）；
+//   ② `mem_valid` 来自 **MEM/WB 寄存器**（`rv32i_pipeline.h:662`）；
+//   ③ MEM/WB 在 `mem_stall` 时**冻结**（`rv32i_pipeline.h:637-652`）
+//      ⇒ ⇒ 被冻结的那条指令在 WB 级**停留多拍** ⇒ ⇒ 写回使能**持续为高**。
+//
+//   ⇒ ⇒ **MEM/WB 装的是「EX/MEM 里那条指令的前 2 条」**（级序：EX/MEM → M2 →
+//   MEM/WB ⇒ ⇒ **落后 2 级**）⇒ ⇒ 故冷 load 前 MUST 有 **≥ 2 条** `rd != 0` 的
+//   写回类指令 ⇒ ⇒ **「load 紧跟 load」不够**（第一条 load 之前没有任何指令
+//   ⇒ ⇒ MEM/WB 里是空的 ⇒ ⇒ **不触发**）—— 2026-11-24 实测：固件
+//   `lw x2,0x100` · `lw x3,0x120` · `jal x0,0` 在**旧实现**下
+//   `wb_high = 2`（= 写回条数 ⇒ **零灌水**）⇒ ⇒ 该形态的判据**恒绿 = 无效判据**。
+//   ⇒ ⇒ 同理，change 材料 AC1 的程序（`addi x1` · `lw x2,0` · `addi x3` · `jal`）
+//   在**旧实现**下 `wb_high = 3`（= 写回条数 ⇒ **零灌水**）⇒ ⇒ **必须改固件**。
+//
+// ⚠️ **期望值全部手推**（禁抄仿真输出）：
+//   · 固件 = `addi x2,x0,7` · `addi x3,x0,9` · `addi x4,x0,11`
+//            · `lw x5,0x100(x0)` · `jal x0,0`；
+//   · `lw x5, 0x100(x0)` ⇒ **冷行**（D-L1 的 line = 16 B ⇒ `0x100` 未被填过）
+//     ⇒ ⇒ D-L1 miss ⇒ ⇒ 4-beat burst fill ⇒ ⇒ MEM 级**多拍冻结**（实测 8 拍）；
+//   · **写回事件 = 4**（x2 / x3 / x4 三条 addi + x5 一条 lw）
+//     ⇒ ⇒ `jal x0,0` 的 `rd = x0` ⇒ **不写回**（`wb_stage` 的 x0 保护）；
+//   · **每个 rd 恰好写回一次**（x2 / x3 / x4 / x5）；
+//   · **x5 的数据 = 0**（D-TCM 零初始化 ⇒ 该地址无写过 ⇒ 读到 0）；
+//   · **store 事件 = 0**（本固件无 store）⇒ ⚠️ 该条在旧实现下**也**为 0
+//     ⇒ ⇒ **恒绿 = 无效判据** ⇒ ⇒ **不写进判据**（store 事件的脉冲化判别力
+//     归 **S4a**：MMIO 事务必然多拍 ⇒ 那时才可判别）。
+//
+// ⚠️ **旧实现下的实测值（判别力依据）**：`wb_high = 12`（= 4 + 8 停顿拍）
+//    ⇒ ⇒ 「事件拍数 == 事件次数」**必红** ⇒ ⇒ 判据**有判别力**。
+// ===========================================================================
+constexpr std::array<uint32_t, 5> kPulseFirmware = {{
+    ADDI(2, 0, 7),    // 0  addi x2, x0, 7    —— rd≠0 的写回类（灌水的「载体」）
+    ADDI(3, 0, 9),    // 1  addi x3, x0, 9    —— rd≠0 的写回类
+    ADDI(4, 0, 11),   // 2  addi x4, x0, 11   —— rd≠0 的写回类
+    LW(5, 0, 0x100),  // 3  lw  x5, 0x100(x0) —— **冷行** ⇒ miss ⇒ 多拍冻结
+    JAL(0, 0),        // 4  jal x0, 0         —— 自环；rd = x0 ⇒ **不写回**
+}};
+
+DUAL_BACKEND_TEST_PAIR(Rv32iCoreTop,
+                        "Rv32iSoc - CommitEventPulse",
+                        "[rv32i][soc][commit][pulse][dual][verilator][e2e]",
+                        [&]() {
+    // ① 编码器 × 手算常量交叉校验（防自证 —— 用库编码器自证 = 零判别力）
+    REQUIRE(ADDI(2, 0, 7) == 0x00700113u);
+    REQUIRE(ADDI(3, 0, 9) == 0x00900193u);
+    REQUIRE(ADDI(4, 0, 11) == 0x00B00213u);
+    REQUIRE(LW(5, 0, 0x100) == 0x10002283u);
+    REQUIRE(JAL(0, 0) == 0x0000006Fu);
+
+    load_firmware(sim, dev.instance(), kPulseFirmware);
+    const Trace ta = run_trace(sim, dev.instance(), 60);
+
+    std::size_t wb_events = 0;      // 写回**事件**次数（脉冲计数）
+    std::size_t dup_adjacent = 0;   // 相邻两拍都高 **且 (rd,data) 相同** ⇒ 重复写回
+    std::size_t rd_hits[32] = {};    // 每个 rd 的写回事件数
+    uint64_t x5_data = 0;
+    bool x5_seen = false;
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        const bool wb = ta[c][kIdxWbWriteEn] == 1u;
+        if (wb) {
+            ++wb_events;
+            ++rd_hits[static_cast<std::size_t>(ta[c][kIdxWbRdAddr])];
+            if (ta[c][kIdxWbRdAddr] == 5u) {
+                x5_data = ta[c][kIdxWbWriteData];
+                x5_seen = true;
+            }
+            if (c + 1 < ta.size() && ta[c + 1][kIdxWbWriteEn] == 1u &&
+                ta[c + 1][kIdxWbRdAddr] == ta[c][kIdxWbRdAddr] &&
+                ta[c + 1][kIdxWbWriteData] == ta[c][kIdxWbWriteData]) {
+                ++dup_adjacent;
+            }
+        }
+    }
+    CAPTURE(wb_events, dup_adjacent, rd_hits[2], rd_hits[3], rd_hits[4],
+            rd_hits[5]);
+
+    // ② AC1：**事件次数** MUST == 程序里「写回类且 rd≠0」的指令条数（手推 = 4）
+    //   ⇒ ⇒ 这是「事件次数」与「事件时长之和」的**分离判据**
+    //   ⇒ ⇒ 旧实现（电平）⇒ 停顿期间同一条指令停留多拍 ⇒ 拍数 = 4 + 8 = 12 ⇒ 必红
+    CHECK(wb_events == 4u);
+
+    // ③ AC2：每个 rd MUST **恰好**写回一次（x2 / x3 / x4 / x5）
+    //   ⇒ ⇒ 正面覆盖「同一条指令被重复写回」（旧实现：x3 写回 9 次 ⇒ 必红）
+    CHECK(rd_hits[2] == 1u);
+    CHECK(rd_hits[3] == 1u);
+    CHECK(rd_hits[4] == 1u);
+    CHECK(rd_hits[5] == 1u);
+
+    // ④ AC3：**相邻两拍都高且 (rd,data) 相同** ⇒ MUST 为 0
+    //   ⇒ ⇒ 旧实现：x3 在 8 拍停顿期间连续重复 ⇒ 必红
+    CHECK(dup_adjacent == 0u);
+
+    // ⑤ AC4：写回**数据** MUST 正确（x5 = 冷读 D-TCM ⇒ 0）
+    //   ⇒ ⇒ 证明「脉冲化没有改变『哪条指令被写回、写回什么』」
+    CHECK(x5_seen);
+    CHECK(x5_data == 0u);
+});

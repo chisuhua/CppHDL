@@ -14,6 +14,20 @@
 > ⇒ ⇒ ⚠️ **含核端口面变更**（34 → **53**）⇒ MUST 同批重算 C6 快照 / 契约表 / 护栏期望 ⇒ MUST 过 **critic**
 > ⇒ ⇒ 🔴 **硬前置**：`rv32i-commit-event-pulse-2026-11`（**S4a-0**）—— 见 §Why 第 5 条
 
+---
+
+## ⚠️ 订正块（2026-11-24 · S4a-0 实施期实测 · **本块优先于下文任何相冲突的表述**）
+
+> **触发**：S4a-0（硬前置）的实施期实测**改变了「store 事件」的实现形态** ⇒ ⇒ 本 change 的
+> **§Why 第 6 条**与 **design §2.2** 的相关表述 MUST 一并订正。
+> ⇒ ⇒ **AC3 的手推终值 `(2,6)` 不变**（每个 store / 每个写回各计一次）⇒ ⇒ **裁决结论不变**。
+
+| # | 原表述 | 订正 |
+|---|---|---|
+| **D1** | §Why 第 6 条：「`obs_data_write_en` = `exmem_is_store`（`rv32i_pipeline.h:693`）⇒ **电平**」 | **观测面**已由 S4a-0 改为 **`data_write_en & data_ready_calc`**（**核顶层总线侧**派生 · `examples/riscv-mini/src/rv32i_core_top.h`）⇒ ⇒ **脉冲** ⇒ ⇒ §Why 第 6 条的「电平」描述**只对功能信号** `pipeline.io().data_write_en` 成立（它**仍是电平**，且 **MUST 保持电平**） |
+| **D2** | design §2.2：「`data_write_en` MUST NOT 分流」 | ✅ **结论不变**（功能信号**不分流** ⇒ ⇒ store 事件**与路径无关** ⇒ ⇒ 判别力更强）⇒ ⇒ **但**派生式里的 `data_ready_calc` **必须**是**路径 mux 后**的就绪（`in_mmio ? master.ready : cache.ready`）⇒ ⇒ 本 change 实施时 MUST 用**同一个** mux 后的表达式 ⇒ ⇒ 见 tasks 的 **T2.5** |
+| **D3** | 「store 事件的判别力」 | S4a-0 落地时**今日不可判别**（今日 store 路径不反压 ⇒ **恒绿** ⇒ 恒绿判据已撤除）⇒ ⇒ **判别力归本 change**（MMIO 事务必然多拍 ⇒ 那时才可判别）⇒ ⇒ 见本 change 的 **AC3** |
+
 ## Why
 
 1. **外设至今不可达**：核在 S3 后有了 AXI4 主口，但那条口**只接到核内的 `TcmAxiSlave`** ⇒ ⇒

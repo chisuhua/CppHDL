@@ -690,6 +690,14 @@ public:
         //    **从未生效**（mem_stage 里算好的 `store_byte_enable` 是死代码）。
         //    ⇒ 改接 MEM 级的输出（SW 仍是 0xF ⇒ 整字写行为不变）。
         io().data_strbe <<= mem_stage.io().store_byte_enable_out;
+        // ⚠️ **store 写使能 = 「电平」且 MUST 保持电平**（2026-11-24 · change
+        //    `rv32i-commit-event-pulse-2026-11` 的**订正**）：
+        //    ① 它在**功能路径**上（核顶层 → D-L1 的 `we` → `aw_valid` → `aw_fire`
+        //    → `ready` → `data_ready` → `mem_stall`）⇒ ⇒ **不可**用 `!mem_stall`
+        //    门控（**组合环** ⇒ 仿真 `FATAL: Cycle detected`，2026-11-24 实测）；
+        //    ② 「停顿期间电平持续」的**观测面**缺陷由**核顶层**在总线侧派生
+        //    （`obs_data_write_en = data_write_en & data_ready`）修掉
+        //    ⇒ ⇒ 本信号的**功能语义零变化**（D-L1 的写握手次数仍是 1）。
         io().data_write_en <<= exmem_is_store;
         // 访存请求 = MEM 级有效 且 是 load/store（⚠️ 不含 ALU/NOP ⇒ 避免 cache miss 风暴）
         io().data_req <<= exmem_valid & (exmem_is_load | exmem_is_store);
@@ -888,7 +896,26 @@ public:
         io().dbg_exmem_is_store <<= exmem_is_store;
         io().dbg_mem_valid_out <<= mem_stage.io().mem_valid_out;
         io().dbg_load_use_detected <<= hazard.io().load_use_detected;
-        io().dbg_wb_write_en <<= wb_stage.io().write_en;
+        // ⚠️⚠️ **写回事件端口 MUST 是「单拍脉冲」**（2026-11-24 · change
+        //    `rv32i-commit-event-pulse-2026-11`）：
+        //    `wb_stage.write_en = needs_writeback & rd_not_zero & mem_valid`
+        //    （`stages/wb_stage.h:110`）⇒ ⇒ 而 `mem_valid` 来自 **MEM/WB 寄存器**
+        //    ⇒ ⇒ MEM/WB 在 `mem_stall`（数据通路反压）时**冻结**（`:637-652`）
+        //    ⇒ ⇒ 同一条指令在 WB 级**停留多拍** ⇒ ⇒ 事件电平**持续为高**
+        //    ⇒ ⇒ 「事件次数」被污染成「事件时长之和」。
+        //    ⇒ ⇒ 与 `commit_count` **同口径**（`commit_valid = … & !mem_stall`）
+        //    ⇒ ⇒ **恰好一次**（MEM/WB 的内容只在**非停顿拍**才更新 ⇒ ⇒ 每条指令的
+        //    MEM/WB 驻留的**首个**拍必是非停顿拍 ⇒ ⇒ 脉冲不丢也不重）。
+        //    ⚠️ **本端口是纯观测面**（零内部消费者）⇒ ⇒ 门控 `mem_stall` **不成环**。
+        //    ⚠️ **对照**：`io().data_write_en`（store 事件）**不可**在这里门控 ——
+        //    它在**功能路径**上（核顶层 → D-L1 的 `we`）⇒ ⇒ 门控它会形成
+        //    `data_write_en → we → aw_fire → ready → data_ready → mem_stall →
+        //    data_write_en` 的**组合环** ⇒ ⇒ 仿真直接 `FATAL: Cycle detected in IR
+        //    graph during topological sort`（2026-11-24 实测）⇒ ⇒ store 事件
+        //    MUST 在**总线侧**（核顶层）派生 ⇒ 见 `examples/riscv-mini/src/
+        //    rv32i_core_top.h` 的 `obs_data_write_en`。
+        auto mem_stall = !io().data_ready;
+        io().dbg_wb_write_en <<= wb_stage.io().write_en & !mem_stall;
         io().dbg_wb_write_data <<= wb_stage.io().write_data;
         io().dbg_wb_rd_addr <<= wb_stage.io().rd_addr_out;
         io().dbg_exmem_alu_result <<= exmem_alu_result;

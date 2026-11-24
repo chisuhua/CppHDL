@@ -185,7 +185,12 @@ public:
         // ⚠️ `data_ready` 是**无条件**冻结信号（S2 的语义：拉低即冻结）
         //    ⇒ ⇒ 无访存请求时 MUST 视为「就绪」⇒ ⇒ 否则 cache 的 `ready` 在空闲拍
         //    为 0 会把整条流水线**永久冻死**（实测踩中：24 条判据 23 条红）。
-        pipeline.io().data_ready <<= (!pipeline.io().data_req) | dcache.io().ready;
+        // ⚠️ **2026-11-24 · change `rv32i-commit-event-pulse-2026-11`**：
+        //    `data_ready` 的表达式**提成局部变量** ⇒ ⇒ 因为「store 提交事件」
+        //    MUST 在**总线侧**派生（见下方 `obs_data_write_en` 的注释）
+        //    ⇒ ⇒ 两处共用**同一个**表达式节点 ⇒ ⇒ 值恒等、无第二套口径。
+        auto data_ready_calc = (!pipeline.io().data_req) | dcache.io().ready;
+        pipeline.io().data_ready <<= data_ready_calc;
 
         // cache ↔ TcmAxiSlave（AXI4 full 全通道直连）
         dslave.io().ar_addr  <<= dcache.io().ar_addr;
@@ -239,7 +244,22 @@ public:
         io().obs_instr_addr <<= pipeline.io().instr_addr;
         io().obs_data_addr <<= pipeline.io().data_addr;
         io().obs_data_write_data <<= pipeline.io().data_write_data;
-        io().obs_data_write_en <<= pipeline.io().data_write_en;
+        // ⚠️⚠️ **store 提交事件 MUST 是「单拍脉冲」**（2026-11-24 · change
+        //    `rv32i-commit-event-pulse-2026-11`）：
+        //    `pipeline.io().data_write_en` 是**功能信号**（→ D-L1 的 `we`）且是
+        //    **电平** ⇒ ⇒ 反压期间 store 停留在 EX/MEM ⇒ ⇒ 该电平**持续多拍**
+        //    ⇒ ⇒ 「store 事件次数」被污染成「事件时长之和」。
+        //    ⇒ ⇒ **不能**在流水线里用 `!mem_stall` 门控它（**组合环** ⇒ 仿真
+        //    `FATAL: Cycle detected`，2026-11-24 实测）⇒ ⇒ 在**总线侧**派生：
+        //    `data_write_en & data_ready` ⇒ ⇒ 对 store 而言 `data_ready` =
+        //    `dcache.ready` = `aw_fire` ⇒ ⇒ 事件 = **AXI 写地址握手那一拍**
+        //    ⇒ ⇒ 每次 store **恰好一次** ⇒ ⇒ 端口名 / 方向 / 位宽全部不变
+        //    ⇒ ⇒ **核端口面仍是 34**（C6 快照不动）。
+        //    ⚠️ **零功能影响**：功能侧仍用 `pipeline.io().data_write_en`（电平）
+        //    ⇒ ⇒ D-L1 的写握手次数**恒为 1**（今日实测：既有固件 store 事件 = 5
+        //    = store 条数 ⇒ ⇒ 今日**零可观测变化** ⇒ ⇒ 脉冲化的**判别力**归 S4a
+        //    （MMIO 事务必然多拍 ⇒ 那时才可判别）—— 本 change **如实登记**。
+        io().obs_data_write_en <<= pipeline.io().data_write_en & data_ready_calc;
         io().obs_perf_cycles <<= pipeline.io().perf_cycles;
         io().obs_perf_instructions <<= pipeline.io().perf_instructions;
         io().obs_perf_branch_count <<= pipeline.io().perf_branch_count;

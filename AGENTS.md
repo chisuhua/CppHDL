@@ -472,7 +472,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 290
+- DUAL_BACKEND_PARITY_PAIRS: 291
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——

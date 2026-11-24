@@ -30,6 +30,12 @@
   ⇒ ⇒ **AW/W 相位分离** · **VALID 保持到握手** · `bready`/`rready` **恒拉高** · `awprot`/`arprot` **恒 0**
   ⇒ ⇒ 复位 = 核的 `ext_rst`（高有效）⇒ ⇒ **不新增核端口**
 - [ ] **T2.2** 头文件**自包含**（`scripts/verify_header_self_contained.sh`）· 禁 `&&`/`||`（ADR-036）⇒ 用 `&`/`|`
+- [ ] **T2.3** 🆕 ⚠️ **master 的 `ready` MUST 是「单拍完成脉冲」**（不是电平）——
+  理由（S4a-0 的教训）：`ready` 进了 `data_ready_calc` ⇒ ⇒ 若它是电平 ⇒ ⇒
+  观测面的 store 事件会在**整个事务期间**持续为高 ⇒ ⇒ **灌水**（事件次数 = 事件时长之和）
+  ⇒ ⇒ 判据：**一次事务 ⇒ 恰好一拍 `ready`**（与事务时长无关）⇒ ⇒
+  变异（把 `ready` 改成电平）⇒ ⇒ 该判据**必红**
+  ⇒ ⇒ ⚠️ **禁**用 `!data_ready` 门控 `pipeline.data_write_en`（**组合环** ⇒ 仿真 `FATAL`）
 
 ## P3 · 核内 pre-cache 分流（G-9.3 · **订正后的判据**）
 
@@ -43,6 +49,13 @@
   ⇒ ⇒ ⚠️ **`data_write_en` / `data_write_data` / `data_strbe` / `data_req` MUST NOT mux**
   ⇒ ⇒ ⇒ `data_write_en` 是**观测事件**（store 事件**与路径无关**）· `data_req` MUST 对两条路径都成立
   ⇒ ⇒ ⇒ master 的 `req` 输入 = `pipeline.data_req & in_mmio`（**在 master 内部门控**）
+  ⇒ ⇒ ⚠️ **2026-11-24 订正（S4a-0 落地后的派生式）**：观测面的 store 事件 =
+  `pipeline.io().data_write_en & data_ready_calc` ⇒ ⇒ **`data_ready_calc` MUST 是
+  **同一个**路径 mux 后的表达式**（`in_mmio ? master.ready : dcache.ready` · 含
+  `!data_req` 项）⇒ ⇒ **禁**另写一份口径 ⇒ ⇒ 否则 MMIO store 的事件会落在
+  D-L1 的就绪拍上 ⇒ ⇒ **计数错** ⇒ ⇒ AC3 转红
+  ⇒ ⇒ ⇒ ⚠️ **禁**把 `pipeline.io().data_write_en` 门控 `!mem_stall`（**组合环** ⇒
+  仿真 `FATAL`，S4a-0 实测）⇒ ⇒ **功能信号 MUST 保持电平且不分流**
 - [ ] **T3.4** 核级 TB 的 **8 根** AXI-Lite 输入**显式 tie 0**
   （`examples/riscv-mini/tb_rv32i_soc.cpp` + `tb_rv32i_soc.sv`）⇒ ⇒ 核级 24 条**零变化**
 

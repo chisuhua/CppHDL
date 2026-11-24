@@ -178,6 +178,22 @@ bash scripts/rv32i_rtl_sim_env.sh
 
 ⇒ **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**（4 INPUT + 28 OUTPUT）。
 
+> ⚠️ **语义脚注（2026-11-24 · change `rv32i-commit-event-pulse-2026-11`）** ——
+> **端口名 / 方向 / 位宽全部不变**（⇒ ⇒ 本表**不动** · C6 快照**不动**）⇒ ⇒
+> 但两根**事件**端口的**语义**由「**电平**」订正为「**单拍脉冲**（与事件时长无关）」：
+> - `top_core_obs_data_write_en` = **store 提交事件**（= 写使能 **且** 总线就绪
+>   ⇒ ⇒ 对 store 而言 = AXI 写地址握手那一拍 ⇒ ⇒ 每次 store **恰好一拍**）；
+> - `top_core_dbg_wb_write_en` = **写回事件**（= `write_en & !mem_stall`
+>   ⇒ ⇒ 与 `obs_perf_instructions` **同口径**）。
+> ⇒ ⇒ **下游影响**：把这两根端口当「电平」用（如「高电平持续 ⇒ 事务未完成」）的判据
+> ⇒ ⇒ MUST 改判「该拍发生了事件」⇒ ⇒ **今日零可观测变化**（既有 golden 逐项不变）
+> ⇒ ⇒ 仅含**数据通路反压**的程序会看到差异。
+> ⇒ ⇒ **判别力证据**：`tests/test_rv32i_soc_dual_parity.cpp` 的
+> `Rv32iSoc - CommitEventPulse`（双后端）· 变异（去掉 `& !mem_stall`）⇒ ⇒ **必红**。
+> ⇒ ⇒ ⚠️ **禁**把「级属性」端口（`top_core_dbg_exmem_is_store` /
+> `top_core_dbg_id_is_store` / `top_core_dbg_exmem_valid` /
+> `top_core_dbg_mem_valid_out`）改成脉冲 ⇒ ⇒ 那是**另一类语义**（反映寄存器当前内容）。
+
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|

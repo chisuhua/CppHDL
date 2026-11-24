@@ -14,6 +14,37 @@
 > ⇒ ⇒ **零公开面新增**（语义变更 ⇒ 登记 `public-api-surface.md` 的「语义订正」节）
 > ⇒ ⇒ **零 spec delta 的 ADDED**（只 MODIFIED 既有 Requirement 的**观测面**条款）
 
+---
+
+## ⚠️ 订正块（2026-11-24 · 实施期实测 · **本块优先于下文任何相冲突的表述**）
+
+> **触发**：实施期「先见红」阶段的**实测**推翻了初稿的**三处前提**。
+> ⇒ ⇒ **下文 AC / What Changes 已按实测结论重写**；本块保留**被推翻的原文与证据**，
+> ⇒ ⇒ 供审稿人复核「订正是否成立」。
+
+| # | 初稿表述（**已被实测推翻**） | 实测证据 | 订正后 |
+|---|---|---|---|
+| **C1** | **AC1 的程序**（`addi x1` · `lw x2,0` · `addi x3` · `jal x0,0`）在旧实现下**必红** | 该程序在旧实现下 `wb_high = 3` = **写回条数** ⇒ ⇒ **零灌水** ⇒ ⇒ AC1 **恒绿** | AC1 的程序改为 **3 条 `rd≠0` 的写回类指令 + 1 条冷 `lw`**（见下文 AC1）⇒ 旧实现 `wb_high = 12` ⇒ **必红** |
+| **C2** | **修法** = 两根端口都加 `& !mem_stall`（`design` §3） | `io().data_write_en & !mem_stall` ⇒ ⇒ **组合环** ⇒ ⇒ 仿真直接 **`FATAL: Cycle detected in IR graph during topological sort`**（`src/core/context.cpp:376`）⇒ ⇒ **该修法跑不起来** | **写回事件端口**（`dbg_wb_write_en`，纯观测面）门控 `& !mem_stall`；**store 事件端口**（`obs_data_write_en`）**不在流水线里门控** ⇒ ⇒ 改在**核顶层总线侧**派生（`data_write_en & data_ready_calc`）⇒ ⇒ **零功能变化** |
+| **C3** | **AC1 的判据形式** = 「停顿期间事件端口**逐拍为 0**」 | `mem_stall` **不是顶层端口** ⇒ ⇒ 「停顿拍」在核外**不可直接观测** ⇒ ⇒ 该形式**无法实现为顶层判据** | AC1 改为**可观测的等价形式**：「**事件次数** == 程序里写回类且 `rd≠0` 的指令条数」+「**每个 rd 恰好一次**」+「**相邻重复 == 0**」 |
+
+### 补：灌水的**充要条件**（实测确立 · 初稿缺失 ⇒ 这是 C1 的根因）
+
+```
+EX/MEM ──▶ M2 ──▶ MEM/WB ──▶ WB      （级序）
+   ▲                   ▲
+   │                   └── 装的是「EX/MEM 那条指令的**前 2 条**」
+   └── 冷 load 在这里 ⇒ ⇒ 反压时 MEM/WB 被冻结 ⇒ ⇒ 里面的指令**停留多拍**
+```
+
+- `wb_stage.write_en = needs_writeback & rd_not_zero & mem_valid`（`stages/wb_stage.h:110`）
+- `mem_valid` ← MEM/WB 寄存器（`rv32i_pipeline.h:662`）⇒ ⇒ 反压时**冻结**（`:637-652`）
+- ⇒ ⇒ **灌水的充要条件** = 「反压发生时，MEM/WB 里恰有一条 `rd≠0` 的写回类指令」
+- ⇒ ⇒ ⇒ 故冷 load 前 MUST 有 **≥ 2 条** `rd≠0` 的写回类指令
+  ⇒ ⇒ ⇒ 「**load 紧跟 load**」**不够**（实测：旧实现 `wb_high = 2` ⇒ 零灌水 ⇒ **恒绿**）
+
+---
+
 ## Why
 
 1. 🔴 **两根事件端口是「电平」⇒ 停顿期间持续 ⇒ 任何按「计数」消费它们的观测面被灌水**：
@@ -54,10 +85,9 @@
 
 | 面 | 内容 |
 |---|---|
-| **库层** `include/cpu/pipeline/rv32i_pipeline.h` | ① `io().data_write_en <<= exmem_is_store & !mem_stall;`<br>② `io().dbg_wb_write_en <<= wb_stage.io().write_en & !mem_stall;`<br>⇒ ⇒ **两根端口都只作输出**（无内部消费者）⇒ ⇒ **零行为影响**（除观测面） |
-| **核 IP 顶层** `examples/riscv-mini/src/rv32i_core_top.h` | **零改动**（只是转接 pipeline 的同名输出 ⇒ 端口名 / 方向 / 位宽全部不变 ⇒ **核端口面仍是 34**） |
-| **判据**（新增）`examples/riscv-mini/tests/test_commit_event_pulse.cpp` | 新建 Catch2 target：构造一个**含 `lw`（冷 D-TCM ⇒ D-L1 miss ⇒ MEM 级多拍冻结）**的程序 ⇒ ⇒ 断言 ① 停顿期间两根事件端口**逐拍为 0** ② **事件次数 == 指令条数**（手推）③ 停顿期间 `commit_count` / `perf_instructions` **同样不增长**（一致性锚点） |
-| **判据**（加强）`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp` | 保留既有的「折连续相同」workaround（脉冲化后它**变成幂等** ⇒ golden **逐项不变**）⇒ ⇒ **追加**一条断言：**不折**的原始逐拍序列里**不存在相邻重复项** ⇒ ⇒ 补上原 workaround 掩盖的形态 |
+| **库层** `include/cpu/pipeline/rv32i_pipeline.h` | ① `io().dbg_wb_write_en <<= wb_stage.io().write_en & !mem_stall;`（**纯观测面** ⇒ 门控**不成环**）<br>② `io().data_write_en <<= exmem_is_store;` **零改动**（**功能信号** ⇒ 门控会**成环**，见订正块 C2）<br>⇒ ⇒ 附带**口径注释**（说明「事件端口 vs 级属性端口」的判据） |
+| **核 IP 顶层** `examples/riscv-mini/src/rv32i_core_top.h` | `io().obs_data_write_en <<= pipeline.io().data_write_en & data_ready_calc;`（`data_ready_calc` = `(!data_req) \| dcache.ready` ⇒ ⇒ 对 store 而言 = `aw_fire` ⇒ ⇒ **每次 store 恰好一拍**）⇒ ⇒ **端口名 / 方向 / 位宽不变** ⇒ ⇒ **核端口面仍是 34**（C6 快照不动） |
+| **判据**（**追加**到既有）`examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp` | 新增 `DUAL_BACKEND_TEST_PAIR(Rv32iCoreTop, "Rv32iSoc - CommitEventPulse", …)`：固件 = `addi x2,x0,7` · `addi x3,x0,9` · `addi x4,x0,11` · `lw x5,0x100(x0)` · `jal x0,0` ⇒ ⇒ 断言 ① **写回事件次数 == 4** ② **每个 rd 恰好一次** ③ **相邻重复 == 0** ④ **x5 的写回数据 == 0**<br>⇒ ⇒ **零新增 target** ⇒ ⇒ `CTEST_TOTAL` / `DUAL_BACKEND_PARITY_*` / `VERILATOR_E2E_TOTAL` 锚点**零变更** |
 | **登记面** | `.rddf/checks/public-api-surface.md`（**语义订正**节）· `docs/CHANGELOG.md`（一行）· `include/cpu/AGENTS.md`（流水线观测面约定补一节）· `examples/riscv-mini/AGENTS.md`（核端口契约表的**语义**脚注 —— 表本身不动） |
 
 ## spec delta（**MODIFIED** · 不新增 capability）
@@ -77,28 +107,31 @@
 > 期望值 MUST **手推**（禁抄仿真输出）· 事件次数 MUST 由**程序结构**推出。
 > ⚠️ **核级现有 24 条判据 + `.sv` TB + golden 写回序列** MUST **逐项不变**（本 change 是**观测面**改，不是**行为**改）。
 
-- [ ] **AC1** 🔴 **停顿期间事件端口逐拍为 0**：构造程序 `addi x1,x0,42` · `lw x2,0(x0)`
-  （冷 D-TCM ⇒ D-L1 miss ⇒ MEM 级被冻结多拍）· `addi x3,x0,1` · `jal x0,0`
-  ⇒ ⇒ 在 `lw` 处于 MEM 级且 `data_ready=0` 的那些拍 ⇒ ⇒ `dbg_wb_write_en` MUST **逐拍为 0**
-  ⇒ ⇒ ⚠️ **旧实现（电平）在这些拍恒为 1** ⇒ ⇒ **必红**
-  ⇒ ⇒ **判别力自证**：变异 M1 = 去掉 `& !mem_stall` ⇒ ⇒ 该断言转红（实测记录进期望台账）
-- [ ] **AC2** 🔴 **事件次数 == 指令条数（手推）**：AC1 的程序 ⇒ ⇒ **写回事件 = 3**
-  （x1 / x2 / x3；`jal x0,0` 的 `rd=x0` **不写回**）· **store 事件 = 0**
-  ⇒ ⇒ ⚠️ **旧实现（电平）的写回事件 = 3 + 停顿拍数** ⇒ ⇒ **必红**
+- [ ] **AC1** 🔴 **写回事件次数 == 手推条数**：程序 = `addi x2,x0,7` · `addi x3,x0,9`
+  · `addi x4,x0,11` · `lw x5,0x100(x0)`（**冷行** ⇒ D-L1 miss ⇒ 4-beat burst fill ⇒
+  实测 **8 拍**反压）· `jal x0,0`
+  ⇒ ⇒ **写回事件 = 4**（x2 / x3 / x4 / x5；`jal x0,0` 的 `rd=x0` ⇒ **不写回**）
+  ⇒ ⇒ ⚠️ **旧实现（电平）= 4 + 8 = 12**（实测）⇒ ⇒ **必红**
   ⇒ ⇒ ⇒ 这是「事件次数」与「事件时长之和」的**分离判据**
-- [ ] **AC3** 🔴 **与 `commit_count` 同口径**：AC1 程序的停顿期间 ⇒ ⇒
-  `obs_perf_instructions` MUST **逐拍不增长** ⇒ ⇒ 与两根事件端口**同时**为 0
-  ⇒ ⇒ ⇒ 证明三者是**同一个口径**（不是两个各自为政的判定）
-- [ ] **AC4** 🔴 **核级既有判据零变化**：`examples/riscv-mini/tb_rv32i_soc` 的
+- [ ] **AC2** 🔴 **每个 rd 恰好写回一次**（x2 / x3 / x4 / x5 各 1 次）
+  ⇒ ⇒ ⚠️ **旧实现下 x3 写回 9 次**（实测）⇒ ⇒ **必红**
+  ⇒ ⇒ ⇒ 正面覆盖「同一条指令被重复写回」（既有 golden 的「折连续相同」workaround
+  **掩盖**了这一形态 ⇒ 见 `test_rv32i_soc_dual_parity.cpp:962-964` 的自陈）
+- [ ] **AC3** 🔴 **相邻重复 == 0**：相邻两拍 `dbg_wb_write_en` 都为高 **且 `(rd, data)` 相同**
+  ⇒ ⇒ MUST 为 0 ⇒ ⇒ ⚠️ **旧实现下 = 8**（实测）⇒ ⇒ **必红**
+- [ ] **AC4** 🔴 **写回数据未被脉冲化改变**：`x5` 的写回数据 MUST == 0
+  （冷读 D-TCM ⇒ 零初始化）⇒ ⇒ 证明「脉冲化没有改变『哪条指令被写回、写回什么』」
+- [ ] **AC5** 🔴 **核级既有判据零变化**：`examples/riscv-mini/tb_rv32i_soc` 的
   `RESULT: checks=24 fails=0` **不变** · `tb_rv32i_soc.sv` 的 24 条**不变**
   ⇒ ⇒ `test_rv32i_soc_dual_parity.cpp` 的**写回序列 golden 逐项不变**
   ⇒ ⇒ 「折连续相同」workaround 保留（脉冲化后**幂等**）⇒ ⇒ golden **零改动**
-- [ ] **AC5** 🔴 **判别力缺口被补上**：`test_rv32i_soc_dual_parity.cpp` **追加**一条断言 ——
-  **不折**的原始逐拍写回序列里**不存在相邻重复项**
-  ⇒ ⇒ ⚠️ **旧实现下必然存在**（同一条指令在 WB 停留多拍）⇒ ⇒ **必红**
-  ⇒ ⇒ ⇒ 该断言**正面覆盖**了 `test_rv32i_soc_dual_parity.cpp:962-964` 自陈的「掩盖」形态
-- [ ] **AC6** 🔴 **零回归**：`ctest` 全绿（**275**）· `run_all_ported_tests` PASS
+- [ ] **AC6** 🔴 **零回归**：`ctest` 全绿（**275** · 锚点零变更）· `run_all_ported_tests` PASS
   ⇒ ⇒ **全部 `scripts/verify_*.sh` 全绿**（含 C6 快照 —— 端口面**零变更** ⇒ C6 **不动**）
+- [ ] **AC7** ⚪ **store 事件端口的判别力 = 归 S4a**（**如实登记 · 不是遗漏**）：
+  今日 store 路径**不反压**（`aw_ready` 在 store 到达时恒 1 ⇒ 无 fill ⇒ 无 `mem_stall`）
+  ⇒ ⇒ 今日 `obs_data_write_en` 的脉冲化是**零可观测变化**（既有固件 store 事件 = 5
+  = store 条数）⇒ ⇒ 「事件次数 == store 条数」在今日**恒绿** ⇒ ⇒ **恒绿判据必须撤掉**
+  ⇒ ⇒ ⇒ 判别力归 **S4a**（MMIO 事务必然多拍 ⇒ 那时才可判别）
 
 ## Out of Scope（本 change 明确不做）
 
@@ -107,6 +140,7 @@
   ⇒ ⇒ 如实登记为**残留**（见 design §4）
 - **`dbg_exmem_is_store` / `dbg_id_is_store`** ⇒ ⇒ 它们是**级属性**（EX/MEM / ID 寄存器的内容）
   ⇒ ⇒ **电平是正确语义** ⇒ ⇒ **不改**（见 design §2 的「事件端口 vs 级属性端口」判据）
+- **store 事件端口的脉冲化判据** ⇒ ⇒ 见 **AC7**（归 S4a）
 - **MMIO 通道 / pre-cache 分流 / SoC 装配** ⇒ ⇒ **S4a**
 - **`irq` 口** ⇒ ⇒ **S5**
 - **D-TCM 窗口收紧**（今日越界访问静默别名）⇒ ⇒ **S4a 的 Out of Scope**（同批登记）

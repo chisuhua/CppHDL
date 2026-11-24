@@ -78,6 +78,19 @@ pipeline.io().data_addr / data_req / data_write_en / data_write_data / data_strb
 ⇒ ⇒ ⇒ **`data_write_en` MUST 保持 pipeline 原样透传**（它描述的是「流水线发起了 store」，
 不是「store 打到了哪条总线」）⇒ ⇒ store 事件**与路径无关** ⇒ ⇒ 判别力更强。
 
+> ⚠️ **2026-11-24 订正（S4a-0 实施期实测 · 本块优先于上文）**：
+> - **结论不变**（`data_write_en` **不分流** ⇒ ⇒ store 事件**与路径无关** ⇒ ⇒ 判别力更强）✓
+> - **但派生式变了**：S4a-0 落地后，**观测面**的 store 事件 =
+>   `pipeline.io().data_write_en & data_ready_calc`
+>   （**核顶层总线侧**派生 ⇒ ⇒ 对 store 而言 = **被选中路径**的写提交拍）⇒ ⇒
+>   ⇒ ⇒ **本 change 的 `data_ready_calc` MUST 是「路径 mux 后」的同一个表达式**
+>   （`in_mmio ? master.ready : dcache.ready`，含 `!data_req` 项）⇒ ⇒
+>   ⇒ ⇒ 否则 MMIO store 的事件会**落在 D-L1 的就绪拍上** ⇒ ⇒ **计数错**
+>   ⇒ ⇒ ⇒ 实现纪律见 tasks **T3.3**（**同一个**局部变量 ⇒ ⇒ 不许写两份口径）。
+> - **为何 MUST 在总线侧派生**（S4a-0 实测）：`pipeline.io().data_write_en` 在**功能路径**上
+>   ⇒ ⇒ **不可**用 `!mem_stall` 门控 ⇒ ⇒ **组合环** ⇒ ⇒ 仿真直接
+>   `FATAL: Cycle detected in IR graph during topological sort` ⇒ ⇒ 只能取「就绪」口径。
+
 ⚠️ `data_req` 也 **MUST NOT** mux ⇒ ⇒ 理由：`data_req` = 「MEM 级有访存请求」
 ⇒ ⇒ 它**必须**对两条路径都成立（否则 D-L1 侧会误发 AXI 事务）
 ⇒ ⇒ ⇒ 但 master 只在 `in_mmio` 时才启动事务 ⇒ ⇒ master 的 `req` 输入 =

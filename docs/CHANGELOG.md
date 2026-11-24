@@ -1,3 +1,41 @@
+## 2026-11-24 — S4a-0：提交事件端口脉冲化（`dbg_wb_write_en` / `obs_data_write_en`）
+
+change `rv32i-commit-event-pulse-2026-11`（**S4a 的硬前置**）—— **观测面语义订正**，
+**端口名 / 方向 / 位宽零变更** ⇒ ⇒ 核端口面仍 **34** ⇒ ⇒ C6 快照不动。
+
+### ① 观测面：两根「提交事件」端口由**电平**改为**单拍脉冲**
+
+- `Rv32iPipeline::dbg_wb_write_en`（`include/cpu/pipeline/rv32i_pipeline.h`）
+  ⇒ ⇒ `wb_stage.write_en & !mem_stall` ⇒ ⇒ 与 `commit_count` **同口径**
+  （`commit_valid = … & !mem_stall`）⇒ ⇒ 反压期间不再持续为高。
+- `Rv32iCoreTop::obs_data_write_en`（`examples/riscv-mini/src/rv32i_core_top.h`）
+  ⇒ ⇒ `pipeline.data_write_en & data_ready_calc`（**总线侧派生** ⇒ ⇒ 对 store 而言
+  = `aw_fire` = 写地址握手拍）⇒ ⇒ 每次 store **恰好一拍**。
+
+### ② ⚠️ 实施期实测推翻初稿的**三处前提**（判据 + 修法 + 判据形式）
+
+| # | 初稿 | 实测 | 订正 |
+|---|---|---|---|
+| C1 | AC1 的程序（`addi`·`lw`·`addi`·`jal`）旧实现**必红** | 旧实现 `wb_high = 3` = 写回条数 ⇒ **零灌水** ⇒ **恒绿** | 固件改为「**3 条 `rd≠0` 写回类指令 + 1 条冷 `lw`**」⇒ 旧实现 `wb_high = 12` ⇒ **必红** |
+| C2 | 两根端口都加 `& !mem_stall` | `data_write_en` 在**功能路径**上 ⇒ ⇒ **组合环** ⇒ ⇒ 仿真 **`FATAL: Cycle detected in IR graph during topological sort`** | 拆成两处：写回事件在**流水线**（纯观测面）门控；store 事件在**核顶层总线侧**派生 ⇒ ⇒ **零功能变化** |
+| C3 | 判据 = 「停顿期间逐拍为 0」 | `mem_stall` **不是顶层端口** ⇒ ⇒ 核外**不可观测** | 改为可观测形式：**事件次数 == 手推条数** · **每 rd 恰好一次** · **相邻重复 == 0** |
+
+⇒ ⇒ **灌水的充要条件**（实测确立）：反压发生时 **MEM/WB**（= EX/MEM 指令的**前 2 条**）里
+恰有一条 `rd≠0` 的写回类指令 ⇒ ⇒ 故冷 load 前 MUST 有 **≥ 2 条** `rd≠0` 的写回类指令。
+
+### ③ 判据载体 = **既有** `test_rv32i_soc_dual_parity.cpp`（**追加**一个双后端用例）
+
+⇒ ⇒ **零新增 test target** ⇒ ⇒ `CTEST_TOTAL` / `DUAL_BACKEND_PARITY_*` /
+`VERILATOR_E2E_TOTAL` **锚点零变更** ⇒ ⇒ 既有写回 golden **逐项不变**。
+
+### ④ 判别力自证（实测转红）
+
+- **M1**（去掉写回端口的 `& !mem_stall`）⇒ ⇒ `wb_events = 12` · `x3` 写回 **9** 次 ·
+  相邻重复 **8** ⇒ ⇒ **3 条断言转红**
+- **M3**（两根事件端口对调）⇒ ⇒ `wb_events = 0` ⇒ ⇒ **转红**
+- ⚠️ **store 事件端口的脉冲化今日不可判别**（今日 store 路径不反压 ⇒ **恒绿**）
+  ⇒ ⇒ **恒绿判据撤除** ⇒ ⇒ 判别力归 **S4a**（MMIO 事务必然多拍）⇒ ⇒ **如实登记**
+
 ## 2026-11-23 — S3 遗留的 3 项裁决收口（基线 / 护栏判据 / S1 归档）
 
 S3 归档后交用户裁决的 3 项遗留，本 commit 全部处置（裁决记录见各项）。
