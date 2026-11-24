@@ -7,21 +7,34 @@
 
 ## P0 · 前置确认
 
-- [ ] **T0.1** 确认 **S4a-0 已归档**（`openspec/changes/archive/**/rv32i-commit-event-pulse-2026-11/`）
+- [x] **T0.1** ✅ 确认 **S4a-0 已归档**（`openspec/changes/archive/2026-11-24-rv32i-commit-event-pulse-2026-11/`）（`openspec/changes/archive/**/rv32i-commit-event-pulse-2026-11/`）
   ⇒ ⇒ 未归档 ⇒ **STOP**（AC3 的计数口径依赖它）
-- [ ] **T0.2** 确认库层地址表已有 **7 个 MMIO 段** + `kMmioBase` / `kMmioBytes`
+- [x] **T0.2** ✅ 库层地址表已有 **7 个 MMIO 段**（P1.1 落地） + `kMmioBase` / `kMmioBytes`
   ⇒ ⇒ 缺失 ⇒ 先做 T1.1
 
 ## P1 · 库层（G-6）
 
-- [ ] **T1.1** `include/cpu/riscv/rv32i_mem_map.h` ⇒ 新增 7 个 MMIO 段 + `kMmioBase` / `kMmioBytes`
+- [x] **T1.1** ✅ `include/cpu/riscv/rv32i_mem_map.h` ⇒ 新增 7 个 MMIO 段 + `kMmioBase` / `kMmioBytes`
   ⇒ ⇒ 每段 4 KB · 自 `0x8010_0000` 顺延 · **禁手写 0x7000**（派生）
   ⇒ ⇒ 加 `static_assert` 连续性 + 与 TCM 段不重叠
-- [ ] **T1.2** `include/cpu/riscv/address_decoder.h` ⇒ 3 段硬编码改派生 + 补 4 片选
+- [x] **T1.2** ✅ `include/cpu/riscv/address_decoder.h` ⇒ 3 段硬编码改派生 + 补 4 片选
   ⇒ ⇒ **总片选 9**（2 TCM + 7 MMIO）+ `error_cs` ⇒ **10** 个输出端口
   ⇒ ⇒ 文件头表格的「I-TCM 64KB / D-TCM 64KB」**顺手订正为 16 KB**（同文件既有漂移）
-- [ ] **T1.3** 同步 **6 处** `AddressDecoder` 测试消费者（`examples/riscv-mini/tests/test_riscv_tests_soc.cpp`）
-- [ ] **T1.4** 登记公开面：`.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`
+- [x] **T1.3** ✅ 同步 **6 处** `AddressDecoder` 测试消费者（`examples/riscv-mini/tests/test_riscv_tests_soc.cpp`）
+- [x] **T1.4** ✅ 登记公开面：`.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`
+
+> **P1 实施备注（2026-11-24）**：
+> - ⚠️ **T1.2 附带修了一处**既有 **ODR 隐患**：`address_decoder.h` 原把 `rv32i_mem_map.h`
+>   **include 在 `namespace riscv { … }` 内部** ⇒ ⇒ 符号落进 `riscv::riscv::*` ⇒ ⇒ 与直接
+>   include 它的 TU **是两个不同实体** ⇒ ⇒ **ODR 违规** + **顺序依赖**（实测：测试文件用
+>   `in_mmio` ⇒ 编译报「did you mean `riscv::riscv::in_mmio`」）⇒ ⇒ include 已移到 namespace **之外**。
+> - **T1.3 的判据**：新增 2 个用例 ⇒ **7 段基址 + 每段首字节只命中自己 + 窗口最后一字节
+>   （`0x8010_6FFF`）+ 第一个外字节（`0x8010_7000`）+ 空洞（`0x800F_FFFF`）+ `in_mmio` 边界
+>   + **`local_addr` 的 7 路 mux（`base+0x40 ⇒ 0x40`）**
+>   ⇒ ⇒ 期望值**全部手推** ⇒ ⇒ 实测 `test_address_decoder` **132 断言 / 10 用例全绿**。
+> - ⚠️ **`local_addr` 判据为什么必要**：片选与 `local_addr` 是**两条独立的 mux 链**
+>   ⇒ ⇒ 只判片选时「某分支减错基址（如 `spi_local` 用 `i2c_base`）」**不可见**
+>   ⇒ ⇒ 判别力自证（2026-11-24 实测）：注入该变异 ⇒ **1 用例 / 4 断言转红** ⇒ 还原复绿。
 
 ## P2 · 核侧 master（**核侧自带** · G-9.4）
 

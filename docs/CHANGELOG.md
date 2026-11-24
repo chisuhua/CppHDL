@@ -1,3 +1,41 @@
+## 2026-11-24 — S4a（P1）：MMIO 地址表扩成**库层全表**（G-6）+ `AddressDecoder` 派生化
+
+change `rv32i-soc-mmio-channel-2026-11`（**S4a**）的 P1 —— 库层地址面（G-6）。
+**零行为变化**（既有片选与其取值**逐项不变**）⇒ ⇒ 核级 24 条判据**零变化**。
+
+### ① `rv32i_mem_map.h` ⇒ **7 个 MMIO 段**（**库层全表** · G-6 裁决）
+
+- 段序**顺延派生**（每段 **4 KB** · 自 `0x8010_0000`）：`kClint` / `kUart` / `kGpio` / `kSpi` /
+  `kI2c` / `kPwm` / `kDma` ⇒ ⇒ **禁手写 `0x7000`**（`kMmioBytes` 由 `7 × kMmioSegmentBytes` 派生）。
+- `in_mmio(byte_addr)` = 「地址 ∈ **MMIO 段**」⇒ ⇒ **核内 pre-cache 分流的唯一判据**
+  ⇒ ⇒ ⚠️ **方向 MUST 是「∈ MMIO 段」**（取反会让字节地址 **0** 落进 MMIO 旁路 ⇒ ⇒ 核级 TB 挂死 ⇒ ⇒ G-9 订正块）。
+- **10 条编译期 `static_assert`**（段序连续 · 窗口覆盖全部 7 段 · 与 D-TCM 不重叠 · 对齐）
+  ⇒ ⇒ 改表 ⇒ ⇒ **编译失败** ⇒ ⇒ 零漂移。
+
+### ② `address_decoder.h` ⇒ **改派生** + **补 4 片选**（总片选 **9**）
+
+- 7 个 MMIO 基址 / 容量**全部派生**自库层表（原先 `ADDR_CLINT_BASE` 等是**手写** ⇒ ⇒ 两份真相）
+  ⇒ ⇒ 顺带订正文件头表格「I-TCM / D-TCM **64 KB**」的**既有漂移**（真实容量 **16 KB**）。
+- 新增输出 `spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs` ⇒ ⇒ **2 TCM + 7 MMIO + `error_cs` = 10 个片选类输出**
+  ⇒ ⇒ **公开面变更**（已登记 `public-api-surface.md`）。
+
+### ③ ⚠️ 修一处**既有 ODR 隐患**
+
+`address_decoder.h` 把 `rv32i_mem_map.h` **include 在 `namespace riscv { … }` 内部** ⇒ ⇒ 该头的
+`namespace riscv` 变成**嵌套** ⇒ ⇒ 符号落进 `riscv::riscv::kItcm` ⇒ ⇒ 而**直接 include 它的 TU** 里是
+`riscv::kItcm` ⇒ ⇒ **两个 TU 里是两个不同实体** ⇒ ⇒ **ODR 违规**（且「谁先 include」决定符号落哪 ⇒ ⇒ 顺序依赖）。
+**实测现象**：测试文件直接用 `in_mmio` ⇒ 编译报「did you mean `riscv::riscv::in_mmio`」⇒ ⇒
+**include 移到 namespace 之外** ⇒ ⇒ 全仓**单一** `riscv::kItcm` / `riscv::in_mmio`。
+
+### ④ 判据（追加到既有 `test_address_decoder`）
+
+新增 2 个用例（**期望值全部手推**）：7 段基址 + 4 KB 容量 + **每段首字节只命中自己** +
+窗口**最后一字节**（`0x8010_6FFF` ⇒ 命中 DMA）+ **第一个外字节**（`0x8010_7000` ⇒ 报错）
++ 窗口**之前**的空洞（`0x800F_FFFF` ⇒ 报错）+ `in_mmio` 的**边界闭区间**语义 +
+**`local_addr` 的 7 路 mux**（`base + 0x40 ⇒ 0x40` ⇒ ⇒ 片选与 `local_addr` 是**两条独立的
+mux 链** ⇒ ⇒ 只判片选时「某分支减错基址」**不可见**）。
+判别力自证：把 `spi_local` 错接 `i2c_base` ⇒ ⇒ **1 用例转红** ⇒ 还原复绿。
+
 ## 2026-11-24 — S4a-0：提交事件端口脉冲化（`dbg_wb_write_en` / `obs_data_write_en`）
 
 change `rv32i-commit-event-pulse-2026-11`（**S4a 的硬前置**）—— **观测面语义订正**，

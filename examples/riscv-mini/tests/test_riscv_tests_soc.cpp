@@ -84,6 +84,153 @@ TEST_CASE("address_decoder: invalid address", "[address-decoder]") {
     REQUIRE(cs != 0);
 }
 
+// ===========================================================================
+// **G-6 的 MMIO 全表**（2026-11-24 · change `rv32i-soc-mmio-channel-2026-11`）
+//
+// ## 为什么既有 6 处消费者**判不了**新表
+//
+// 既有用例只覆盖 ITCM / DTCM / CLINT / UART / 非法地址 ⇒ ⇒ 新增的 **4 个片选**
+// （`spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs`）与 **7 段表**的**派生性**
+// ⇒ ⇒ **零覆盖** ⇒ ⇒ 「片选接错 / 段序错位 / 窗口越界」全部**不可见**。
+//
+// ## 期望值**手推**（禁抄实现）
+//
+// · 7 段**自 `0x8010_0000` 顺延**，每段 **4 KB** ⇒ ⇒
+//   Clint `0x80100000` · Uart `0x80101000` · Gpio `0x80102000` · Spi `0x80103000`
+//   · I2c `0x80104000` · Pwm `0x80105000` · Dma `0x80106000`
+// · 窗口**最后一字节** = `0x80106000 + 0x1000 - 1` = `0x80106FFF`
+//   ⇒ ⇒ **第一个窗口外字节** = `0x80107000`
+// ===========================================================================
+namespace {
+struct MmioSight {
+    uint64_t clint = 0, uart = 0, gpio = 0, spi = 0, i2c = 0, pwm = 0, dma = 0;
+    uint64_t error = 0;
+    // `local_addr` 是**另一条**独立的 9 路 mux 链（与片选分开推导）⇒ ⇒
+    // 只判片选时「某分支减错基址」（如 spi 分支减 i2c_base）**不可见** ⇒ ⇒ 一并观测。
+    uint64_t local = 0;
+};
+MmioSight probe_mmio(uint32_t addr) {
+    context ctx("addr_decoder_mmio");
+    ctx_swap swap(&ctx);
+    ch::ch_device<AddressDecoder> decoder;
+    Simulator sim(decoder.context());
+    sim.set_input_value(decoder.instance().io().addr, addr);
+    sim.tick();
+    const auto &io = decoder.instance().io();
+    MmioSight out;
+    out.clint = static_cast<uint64_t>(sim.get_port_value(io.clint_cs));
+    out.uart = static_cast<uint64_t>(sim.get_port_value(io.uart_cs));
+    out.gpio = static_cast<uint64_t>(sim.get_port_value(io.gpio_cs));
+    out.spi = static_cast<uint64_t>(sim.get_port_value(io.spi_cs));
+    out.i2c = static_cast<uint64_t>(sim.get_port_value(io.i2c_cs));
+    out.pwm = static_cast<uint64_t>(sim.get_port_value(io.pwm_cs));
+    out.dma = static_cast<uint64_t>(sim.get_port_value(io.dma_cs));
+    out.error = static_cast<uint64_t>(sim.get_port_value(io.error_cs));
+    out.local = static_cast<uint64_t>(sim.get_port_value(io.local_addr));
+    return out;
+}
+}  // namespace
+
+TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 7 段 MUST 各自命中",
+          "[address-decoder][mmio]") {
+    // ① 基址**手推值** vs 派生值（**禁**抄实现常量 ⇒ ⇒ 派生写错必红）
+    REQUIRE(ADDR_CLINT_BASE == 0x80100000u);
+    REQUIRE(ADDR_UART_BASE == 0x80101000u);
+    REQUIRE(ADDR_GPIO_BASE == 0x80102000u);
+    REQUIRE(ADDR_SPI_BASE == 0x80103000u);
+    REQUIRE(ADDR_I2C_BASE == 0x80104000u);
+    REQUIRE(ADDR_PWM_BASE == 0x80105000u);
+    REQUIRE(ADDR_DMA_BASE == 0x80106000u);
+    // ② 每段 **4 KB**（**派生**自库层表 ⇒ ⇒ 禁手写第二份）
+    REQUIRE(ADDR_CLINT_SIZE == 0x1000u);
+    REQUIRE(ADDR_DMA_SIZE == 0x1000u);
+
+    SECTION("每段的**首字节** MUST 只命中自己那一个片选") {
+        const auto c = probe_mmio(ADDR_CLINT_BASE);
+        REQUIRE(c.clint == 1u);
+        REQUIRE(c.uart == 0u);
+        REQUIRE(c.error == 0u);
+        const auto u = probe_mmio(ADDR_UART_BASE);
+        REQUIRE(u.uart == 1u);
+        REQUIRE(u.clint == 0u);
+        REQUIRE(u.error == 0u);
+        const auto g = probe_mmio(ADDR_GPIO_BASE);
+        REQUIRE(g.gpio == 1u);
+        REQUIRE(g.error == 0u);
+        const auto s = probe_mmio(ADDR_SPI_BASE);
+        REQUIRE(s.spi == 1u);
+        REQUIRE(s.gpio == 0u);
+        REQUIRE(s.error == 0u);
+        const auto i = probe_mmio(ADDR_I2C_BASE);
+        REQUIRE(i.i2c == 1u);
+        REQUIRE(i.spi == 0u);
+        REQUIRE(i.error == 0u);
+        const auto p = probe_mmio(ADDR_PWM_BASE);
+        REQUIRE(p.pwm == 1u);
+        REQUIRE(p.i2c == 0u);
+        REQUIRE(p.error == 0u);
+        const auto d = probe_mmio(ADDR_DMA_BASE);
+        REQUIRE(d.dma == 1u);
+        REQUIRE(d.pwm == 0u);
+        REQUIRE(d.error == 0u);
+    }
+    SECTION("窗口**最后一字节** MUST 命中 DMA") {
+        const auto d = probe_mmio(0x80106FFFu);
+        REQUIRE(d.dma == 1u);
+        REQUIRE(d.error == 0u);
+        // 手推：`0x8010_6FFF - 0x8010_6000` = `0x1000 - 1` = `0xFFF`
+        REQUIRE(d.local == 0xFFFu);
+    }
+    SECTION("每段的 **local_addr** MUST 减去**自己**的基址") {
+        // `local_addr` 与片选是**两条独立的 mux 链** ⇒ ⇒ 只判片选时「某分支减错基址」
+        // **不可见**。手推：`base + 0x40` ⇒ ⇒ local = `0x40`；若某分支错用相邻段基址
+        // （如 spi 分支用 i2c_base）⇒ ⇒ 32 位回绕成 `0xFFFFF040` ⇒ ⇒ 必红。
+        REQUIRE(probe_mmio(ADDR_CLINT_BASE + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_UART_BASE  + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_GPIO_BASE  + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_SPI_BASE   + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_I2C_BASE   + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_PWM_BASE   + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_DMA_BASE   + 0x40u).local == 0x40u);
+        // 反向：地址不在任何段 ⇒ ⇒ local 恒 0（窗口外不泄漏基址差）
+        REQUIRE(probe_mmio(0x90000000u).local == 0u);
+    }
+    SECTION("窗口**第一个外字节** MUST 报错且 MUST NOT 命中任何片选") {
+        const auto x = probe_mmio(0x80107000u);
+        REQUIRE(x.error == 1u);
+        REQUIRE(x.dma == 0u);
+        REQUIRE(x.pwm == 0u);
+    }
+    SECTION("MMIO 窗口**之前**的地址 MUST 报错（TCM 与 MMIO 之间是空洞）") {
+        const auto x = probe_mmio(0x800FFFFFu);
+        REQUIRE(x.error == 1u);
+        REQUIRE(x.clint == 0u);
+    }
+}
+
+TEST_CASE("mem_map: MMIO 窗口 MUST 连续且不与 TCM 重叠", "[address-decoder][mmio]") {
+    // ① 窗口**连续**（7 段 × 4 KB = `0x80100000` + `0x7000`）
+    REQUIRE(kMmioBase == 0x80100000ull);
+    REQUIRE(kMmioBytes == 0x7000ull);
+    // ② 段序**不重叠**（逐段断言 ⇒ ⇒ 段序写错必红）
+    REQUIRE(kClint.base + kClint.size == kUart.base);
+    REQUIRE(kUart.base + kUart.size == kGpio.base);
+    REQUIRE(kGpio.base + kGpio.size == kSpi.base);
+    REQUIRE(kSpi.base + kSpi.size == kI2c.base);
+    REQUIRE(kI2c.base + kI2c.size == kPwm.base);
+    REQUIRE(kPwm.base + kPwm.size == kDma.base);
+    // ③ **不与 TCM 重叠**（MMIO 基址 MUST ≥ D-TCM 末地址 + 1）
+    REQUIRE(kMmioBase >= kDtcm.base + kDtcm.size);
+    // ④ `in_mmio` 的**边界**（**闭区间** `[base, base+bytes)`）
+    REQUIRE(in_mmio(kMmioBase));
+    REQUIRE(in_mmio(kMmioBase + kMmioBytes - 1));
+    REQUIRE(!in_mmio(kMmioBase + kMmioBytes));
+    // ⚠️ **方向判据**：字节地址 **0** MUST **不**落在 MMIO 窗口 ⇒ ⇒
+    //    否则核级程序 `sw x3, 0(x0)` 会落进 MMIO 旁路 ⇒ ⇒ 核级 TB 永久挂死
+    //    （G-9 订正块：判据方向 MUST 是「∈ MMIO 段」）
+    REQUIRE(!in_mmio(0ull));
+}
+
 TEST_CASE("itcm: load and read instruction", "[itcm]") {
     context ctx("itcm_test");
     ctx_swap swap(&ctx);

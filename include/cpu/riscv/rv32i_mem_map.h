@@ -67,6 +67,64 @@ inline constexpr MemRegion kDtcm{0x80010000ull, kTcmBytes};
 /// **PC 复位值**（**派生** ⇒ ⇒ 禁第二个字面量）
 inline constexpr uint32_t kPcReset = static_cast<uint32_t>(kItcm.base);
 
+/// ======================================================================
+/// **MMIO 段**（2026-11-24 · change `rv32i-soc-mmio-channel-2026-11` · G-6）
+/// ======================================================================
+///
+/// **归属裁决（G-6）** = **库层全表** + SoC 侧只按 `Map::windows[]` **装配**
+/// ⇒ ⇒ 本表是 MMIO 地址的**唯一真相** ⇒ ⇒ SoC 侧**禁**再手写基地址。
+///
+/// ```
+/// kMmioBase (0x8010_0000)
+///   ├─ kClint  (+0x0000)   ┐
+///   ├─ kUart   (+0x1000)   │
+///   ├─ kGpio   (+0x2000)   │ 每段 kMmioSegmentBytes（4 KB）
+///   ├─ kSpi    (+0x3000)   │ ⇒ ⇒ **顺延** ⇒ ⇒ **禁手写 0x7000 之类总量
+///   ├─ kI2c    (+0x4000)   │
+///   ├─ kPwm    (+0x5000)   │
+///   └─ kDma    (+0x6000)   ┘
+/// ```
+
+/// **单个 MMIO 段的字节容量**（4 KB）
+inline constexpr uint64_t kMmioSegmentBytes = 0x1000ull;
+
+/// **MMIO 窗口的起始字节地址**（**唯一**字面量 ⇒ ⇒ 其余全部派生）
+inline constexpr uint64_t kMmioBase = 0x80100000ull;
+
+/// **7 个 MMIO 段**（**顺延派生** ⇒ ⇒ 禁手写各自的基地址）
+inline constexpr MemRegion kClint{kMmioBase + 0 * kMmioSegmentBytes, kMmioSegmentBytes};
+inline constexpr MemRegion kUart {kMmioBase + 1 * kMmioSegmentBytes, kMmioSegmentBytes};
+inline constexpr MemRegion kGpio {kMmioBase + 2 * kMmioSegmentBytes, kMmioSegmentBytes};
+inline constexpr MemRegion kSpi  {kMmioBase + 3 * kMmioSegmentBytes, kMmioSegmentBytes};
+inline constexpr MemRegion kI2c  {kMmioBase + 4 * kMmioSegmentBytes, kMmioSegmentBytes};
+inline constexpr MemRegion kPwm  {kMmioBase + 5 * kMmioSegmentBytes, kMmioSegmentBytes};
+inline constexpr MemRegion kDma  {kMmioBase + 6 * kMmioSegmentBytes, kMmioSegmentBytes};
+
+/// **MMIO 窗口的总字节数**（**派生** ⇒ ⇒ 禁手写 `0x7000`）
+inline constexpr uint64_t kMmioBytes = 7ull * kMmioSegmentBytes;
+
+/// 字节地址是否落在 **MMIO 窗口**内（**闭区间** `[kMmioBase, kMmioBase+kMmioBytes)`）
+///
+/// ⚠️ **这是「核内 pre-cache 分流」的**唯一**判据**（G-9.3）⇒ ⇒ 方向 MUST 是
+/// 「地址 ∈ **MMIO 段**」（**不是**「地址 ∈ D-TCM 窗口」）⇒ ⇒ 取反形式会让
+/// **字节地址 0**（核级程序 `sw x3, 0(x0)`）落进 MMIO 旁路 ⇒ ⇒ 核级 TB 永久挂死
+/// ⇒ ⇒ **判据方向**已在 G-9 决策材料里 dated 订正。
+constexpr bool in_mmio(uint64_t byte_addr) {
+    return byte_addr >= kMmioBase && byte_addr < kMmioBase + kMmioBytes;
+}
+
+/// **MMIO 段的连续性 + 不重叠**（**编译期** ⇒ ⇒ 改表即编译失败 ⇒ ⇒ 零漂移）
+static_assert(kUart.base == kClint.base + kClint.size, "MMIO 段 MUST 连续顺延");
+static_assert(kGpio.base == kUart.base + kUart.size, "MMIO 段 MUST 连续顺延");
+static_assert(kSpi.base == kGpio.base + kGpio.size, "MMIO 段 MUST 连续顺延");
+static_assert(kI2c.base == kSpi.base + kSpi.size, "MMIO 段 MUST 连续顺延");
+static_assert(kPwm.base == kI2c.base + kI2c.size, "MMIO 段 MUST 连续顺延");
+static_assert(kDma.base == kPwm.base + kPwm.size, "MMIO 段 MUST 连续顺延");
+static_assert(kDma.base + kDma.size == kMmioBase + kMmioBytes, "MMIO 窗口 MUST 覆盖全部 7 段");
+static_assert(kMmioBase >= kDtcm.base + kDtcm.size, "MMIO 窗口 MUST NOT 与 D-TCM 重叠");
+static_assert(kMmioBase % kMmioSegmentBytes == 0, "MMIO 基址 MUST 按段大小对齐");
+static_assert(kMmioBytes % kMmioSegmentBytes == 0, "MMIO 总长 MUST 是段大小的整数倍");
+
 /// 字节地址是否落在区域内（**闭区间** `[base, base+size)`）
 constexpr bool in_region(const MemRegion &r, uint64_t byte_addr) {
     return byte_addr >= r.base && byte_addr < r.base + r.size;
