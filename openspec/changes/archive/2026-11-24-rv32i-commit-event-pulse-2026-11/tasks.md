@@ -112,8 +112,8 @@
 
 ## P5 · 收口
 
-- [ ] **T5.1** `openspec validate --all` ⇒ ⇒ 绿
-- [ ] **T5.2** `scripts/verify_openspec_delta.sh` ⇒ ⇒ 绿（**实际门**）
+- [x] **T5.1** `openspec validate --all` ⇒ ⇒ 绿（**54/54**）
+- [x] **T5.2** `scripts/verify_openspec_delta.sh` ⇒ ⇒ 绿（**实际门** · 4 条全绿）
 - [x] **T5.3** 过 **critic**（`review_profile: build, plan`）—— ⚠️ 本 change 触及
   **公开观测面语义** + **已签批 capability 的 MODIFIED** ⇒ ⇒ MUST 审
   ⇒ ⇒ **轮次 1：APPROVE**（`mergeable: yes` · `scope_exceeded: false` · **0 BLOCKER**）
@@ -121,4 +121,4 @@
   dated 脚注 + 「恰好一次」论证措辞精确化 · **实现不变**）
   ⇒ ⇒ 审稿记录 = `.rddf/reviews/rv32i-commit-event-pulse-2026-11-arch-review.md`
   ⇒ ⇒ ⇒ **无 BLOCKER ⇒ 无需复审**（预算 2 轮，用 1 轮）
-- [ ] **T5.4** 归档（`openspec archive`）⇒ ⇒ **S4a 的硬前置解除**
+- [x] **T5.4** ✅ **已归档**（`openspec archive rv32i-commit-event-pulse-2026-11 --yes` ⇒ ⇒ `openspec/changes/archive/2026-11-24-rv32i-commit-event-pulse-2026-11/` ⇒ ⇒ spec delta 已并入 `openspec/specs/rv32i-commit-path/spec.md`（1 modified））⇒ ⇒ **S4a 的硬前置解除**
