@@ -103,6 +103,39 @@ riscv_mini_catch_test(test_axil_mmio_master tests/test_axil_mmio_master.cpp)
 # ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
 riscv_mini_catch_test(test_rv32i_core_mmio tests/test_rv32i_core_mmio.cpp)
 
+# === 核级（IP 级）反压期操作数完整性判据（change `riscv-tests-gate-2026-11`）===
+# DUT = `src/rv32i_core_top.h`（核 IP 顶层）· **D-L1 冷未命中自然触发多拍反压**
+# ⇒ ⇒ 判据不需要「第几拍拉低就绪信号」这类时序激励（那会把实现时序写进判据）。
+# ⚠️ **不新增端口**（只用既有 `dbg_wb_*` / `dbg_id_pc` 观测 ⇒ 端口面零变化）。
+# ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
+riscv_mini_catch_test(test_rv32i_stall_integrity tests/test_rv32i_stall_integrity.cpp)
+
+# === 官方 riscv-tests 套件门禁（change `riscv-tests-gate-2026-11` · R2）===
+# DUT = `src/rv32i_core_top.h`（核 IP 顶层）· 镜像 = **入库**的 40 份
+# `rv32ui-p-*` mem-split 字镜像（来源 / 改造 / 排除项 = tests/riscv-tests/PROVENANCE.md）。
+# ⚠️ **判据依赖源码树里的镜像** ⇒ ⇒ MUST 传 `CPPHDL_SOURCE_DIR`（仓内既有约定）。
+#
+# ⚠️ **为什么是 4 个独立二进制**（不是 1 个二进制 + 4 个 ctest 过滤参数）：
+#   · 40 个测试跑完 ≈ **7 分钟**（解释器后端 ≈ 36 拍/秒）⇒ ⇒ 超过仓内的
+#     **单测 300 s 上限**（ctest `TIMEOUT 300` + 护栏 C3 的硬编码 300 s）。
+#   · 护栏 C3 按「**ctest 条目名 = 可执行文件名**」找二进制并**不带参数**运行
+#     ⇒ ⇒ 「同一二进制 + 过滤参数」⇒ 护栏跑的是**默认集合** ⇒ 与 ctest 条目
+#     **不等价** ⇒ ⇒ MUST 是**独立二进制**（每个只含自己那 10 个用例）。
+#   · 4 组 × 10 个 ⇒ 每组 ≈ 105 s（300 s 的 1/3）⇒ CI 的 `ctest -j` 下并行。
+# ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +4（锚点同批同步）。
+# ⚠️ **必须逐条显式调用**（不用 `foreach`）：护栏 `verify_example_test_wiring.sh`
+#    按 `riscv_mini_catch_test(<target> <source>)` 的字面行建立「源 → target」映射
+#    ⇒ ⇒ `foreach` 里的 `${_grp}` 展开不出来 ⇒ 该源会被判「未被任何 target 编译」。
+riscv_mini_catch_test(test_rv32i_official_suite_g1 tests/test_rv32i_official_suite.cpp)
+riscv_mini_catch_test(test_rv32i_official_suite_g2 tests/test_rv32i_official_suite.cpp)
+riscv_mini_catch_test(test_rv32i_official_suite_g3 tests/test_rv32i_official_suite.cpp)
+riscv_mini_catch_test(test_rv32i_official_suite_g4 tests/test_rv32i_official_suite.cpp)
+foreach(_grp 1 2 3 4)
+    target_compile_definitions(test_rv32i_official_suite_g${_grp} PRIVATE
+        CPPHDL_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+        RV32I_OFFICIAL_GROUP=${_grp})
+endforeach()
+
 # === Pipeline 单元 ===
 # 异常: test_riscv_tests_pipeline 额外需要 examples/riscv-mini/tests/ 在 include 路径
 # ⚠️ 不进 CTest：46 个用例全部依赖仓外 riscv-tests 二进制 ⇒ CI 中恒为

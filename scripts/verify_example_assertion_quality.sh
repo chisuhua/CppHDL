@@ -77,6 +77,8 @@ CH4_ANCHOR="examples/axi4/tests/test_axi_lite_test_master.cpp|AxiLiteTestMaster 
 examples/axi4/tests/test_verif_axi4_lite.cpp|AxiLiteTop 经 .verif 语义驱动的 DUT 用例（7 个 DUT 用例）|41
 examples/riscv-mini/tests/test_axil_mmio_master.cpp|核侧 AXI4-Lite 主设备：单拍完成脉冲 / AW-W 相位分离 / VALID 期间锁存稳定 / 读数据保持 / 复位|56
 examples/riscv-mini/tests/test_rv32i_core_mmio.cpp|核级（IP 级）MMIO 通道：读值经非 MMIO 后继仍正确（0x5A）/ 事件计数（store=1 · 写回=3）/ 从设备不应答则程序永不完成（反证）/ DECERR 不挂死 / 非 MMIO 零 axil 请求 / AXI-Lite 握手协议 + 慢从设备档（VALID 窗口跨多拍）|44
+examples/riscv-mini/tests/test_rv32i_stall_integrity.cpp|核级反压期操作数完整性：A1 后继别名型 / A2 决策回退型（判别操作数在 **rs2** ⇒ B 口）/ A3 控制面（分支方向 MUST NOT 被翻转）|21
+examples/riscv-mini/tests/test_rv32i_official_suite.cpp|官方 riscv-tests `rv32ui-p-*` 的 `tohost` 判定（40 个 · 宏生成）+ 负向对照（FAIL 值 MUST 被如实读到）|2
 examples/riscv-mini/tests/test_cache_smoke.cpp|ICache 冷 miss 透出 + DCache 未驱动端口的当前事实|3
 examples/riscv-mini/tests/test_csr_unit.cpp|CSR 寄存器复位/读写/MRET/异常/WFI/中断|42
 examples/riscv-mini/tests/test_ifstage_device.cpp|ch_device<IfStage> 的 PC 复位/推进/stall 冻结|2

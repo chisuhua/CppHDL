@@ -803,8 +803,40 @@ public:
         // ---- 前推档位的**打拍**（ADR-047 D5）----
         // `hazard` 的组合逻辑**一字不改** ⇒ 既有真值表测试**因打拍而全部保留**。
         auto reset_active = io().rst;
-        fwd_a_d1->next = select(reset_active, ch_uint<2>(0_d), hazard.io().forward_a);
-        fwd_b_d1->next = select(reset_active, ch_uint<2>(0_d), hazard.io().forward_b);
+        //
+        // ⚠️⚠️⚠️ **2026-11-25 · 反压冻结补丁**（change `riscv-tests-gate-2026-11`）
+        //
+        // **问题**：`fwd_a_d1` / `fwd_b_d1` 是**派生状态**（前推**档位**），
+        //   它服务的对象是 **ID→EX 边界上那条指令**。MEM 级反压（`mem_stall`）时：
+        //     · EX 级被**冻结**（`id_stage.freeze` ⇒ `idex_*` 全字段保持）
+        //     · ID 的**输入**已翻到**后继指令**（IF 侧也被 `mem_stall` 停住 ⇒ 停在后继）
+        //   ⇒ 而 `hazard.io().forward_a/b` 的判据用的是 **ID 输入那条指令**的 rs 地址
+        //      （`id_stage.rs1_addr_id` = **组合**译码 ⇒ `rv32i_pipeline.h:734-735`）
+        //      ⇒ ⇒ 每拍刷新出来的档位是**后继指令的决策**
+        //      ⇒ ⇒ 却被 `fwd_mux` 施加到 EX 级那条**被冻结的**指令上
+        //      ⇒ ⇒ 它的操作数被**别的指令的旁路值**改写（实测：官方 riscv-tests 的
+        //         `rv32ui-p-lb` / `lbu` / `lh` / `lhu` 四个因此失败）。
+        //
+        // **修法**：反压期间**冻结档位**（保持不变）⇒ 档位与它服务的指令**同冻结**
+        //   （这正是 SpinalHDL / VexRiscv 的做法：派生状态随它服务的级一起冻结 ——
+        //   `RiscvCore.scala:666` 的 `m2sPipe` + `Stream.scala:463-481` 的
+        //   `RegNextWhen(payload, self.ready)`；VexRiscv `Pipeline.scala:124`）。
+        //
+        // ⚠️ **MUST NOT 在反压期间清零档位**（那是「看起来保守」的错法）：
+        //   被冻结指令若**自身**在冻结入口档位就非 0（距离-2 生产者此刻在 M2），
+        //   清零会把「错前推」换成「读 `idex_rs1_data` 的**陈旧**值」⇒ 同样是错
+        //   （判据 = `examples/riscv-mini/tests/test_rv32i_stall_integrity.cpp` 的 A2 用例）。
+        // ⚠️ **MUST NOT** 改成「用 ID 读拍的 M2/WB 旁路冻结」：那条通路服务的是
+        //   **解冻沿锁存的后继指令**（`idex_update_en` 在反压期间为 0 ⇒ 其输出
+        //   **无消费者**），冻结它反而会请回 ADR-069 §7.1.2（D11）处理的同沿竞态。
+        // ⚠️ **解冻沿无缝隙**：`mem_stall` 解除的那一拍，寄存器装入「该拍按后继指令
+        //   地址算出的档位」，而后继指令于**下一拍**进 EX 消费它 ⇒ d1 的对齐关系
+        //   逐拍保持（被冻结指令在该拍**仍在 EX** ⇒ 持有档位施加给它**正确**）。
+        auto mem_stall_fwd = !io().data_ready;   // 与 `build_datapath()` 内同值（无状态 ⇒ 组合等价）
+        fwd_a_d1->next = select(reset_active, ch_uint<2>(0_d),
+                                select(mem_stall_fwd, fwd_a_d1, hazard.io().forward_a));
+        fwd_b_d1->next = select(reset_active, ch_uint<2>(0_d),
+                                select(mem_stall_fwd, fwd_b_d1, hazard.io().forward_b));
 
         // ---- 前推 mux 的接线（ADR-047 D2 / D4）----
         // ⚠️ 三个数据源的**叶子** MUST 是**流水线寄存器** ⇒ 不成环

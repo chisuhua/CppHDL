@@ -247,17 +247,36 @@ done
   「The tests themselves do not make use of privileged-architecture features, but their **test environment** does. … **replace those macro definitions** with something appropriate for your platform.」
   ⇒ ⇒ **正路 = 自带一个 env（30 行宏），不改测试体**。
 
-### 8.6 要把「官方测试跑在核上」做实，还差三步（本仓的下一步）
+### 8.6 「官方测试跑在核上」—— **R1 / R2 已落地**（2026-11-25 · change `riscv-tests-gate-2026-11`）
 
-| # | 做什么 | 判据 |
-|---|---|---|
-| **R1** | 自带 `env/`（`RVTEST_CODE_BEGIN` / `PASS` / `FAIL` / `DATA_BEGIN` 四个宏，**无 CSR**）+ `link.ld`（`.data`/`.bss`/`.tohost` → `0x8001_0000`） | 从上游 `.S` 重建 42 个 `rv32ui-p-*` ⇒ 逐个 pass |
-| **R2** | 一个 **runner target**（`tests/test_rv32i_riscv_tests.cpp`）：装载镜像 → 跑 N 拍 → 观测 `tohost` 写 ⇒ pass/fail 表 | 42/42 pass；**负向对照** = `rv32um-p-*` 必须 fail |
-| **R3** | 若需「认证级」证据：`riscv-arch-test` ACT4 的 `rv32i`-only config（`include_priv_tests: False` · 不定义 `STANDARD_SM_SUPPORTED`） | 39 个 `rv32i/I` 自检测 ELF 跑通（生成侧需 Sail 0.16 + UDB） |
+| # | 状态 | 做什么 | 判据（**实测**） |
+|---|---|---|---|
+| **R1** | ✅ **已落地** | 自带 `env/`（`RVTEST_CODE_BEGIN` / `PASS` / `FAIL` / `DATA_BEGIN` 四个宏，**无 CSR**）+ `link.ld`（`.data`/`.bss`/`.tohost` → `0x8001_0000`） | 从上游 `.S` 重建 **40 个** `rv32ui-p-*` ⇒ **40/40 pass**（**排除 2 个**：`fence_i` = 无 Zifencei 扩展 · `ma_data` = 主动式多 hart ⇒ ⇒ **登记**在 `tests/riscv-tests/PROVENANCE.md` §3） |
+| **R2** | ✅ **已落地** | **runner**（`tests/test_rv32i_official_suite.cpp` · **4 个独立二进制**）：装载**入库**镜像 → 跑核 → 观测 `tohost` 写 ⇒ pass/fail | `ctest -R test_rv32i_official_suite` ⇒ 4 个条目全绿（**40/40**）· **负向对照** = 运行器 MUST 如实读到 `tohost` 的 FAIL 值（手写镜像写 3 ⇒ 读到 3） |
+| **R3** | ⬜ **未做** | 若需「认证级」证据：`riscv-arch-test` ACT4 的 `rv32i`-only config（`include_priv_tests: False` · 不定义 `STANDARD_SM_SUPPORTED`） | 39 个 `rv32i/I` 自检测 ELF 跑通（生成侧需 Sail 0.16 + UDB） |
+
+**资产位置**（**单一真相** = `tests/riscv-tests/PROVENANCE.md`）：
+
+| 项 | 位置 |
+|---|---|
+| 自带 env | `tests/riscv-tests/env/riscv_test.h`（**只替换 4 个 harness 宏** ⇒ **测试体一字未改**） |
+| 链接脚本 | `tests/riscv-tests/env/link.ld`（**双 TCM 布局**） |
+| 40 份镜像 | `tests/riscv-tests/images/rv32ui-p-*/{itcm.mem,dtcm.mem}`（`rv32i-fw-dump --format mem-split` 产物） |
+| 复现脚本 | `tests/riscv-tests/env/build.sh`（重建 + 与入库镜像**逐字节**比对） |
+| 上游许可 | `tests/riscv-tests/LICENSE.riscv-tests`（BSD-3-Clause） |
+
+> ⚠️ **两个必须知道的事实**：
+> ① **官方套件暴露了一个核的缺陷**（不是 ISA 语义问题）：MEM 级反压期间，
+>    旁路**档位**寄存器没有跟着冻结 ⇒ ⇒ 被冻结指令的操作数被别的指令的旁路值改写
+>    ⇒ ⇒ 修法与判据见 `tests/test_rv32i_stall_integrity.cpp`（3 个形态）
+>    与 `openspec/specs/rv32i-data-forwarding/spec.md`。
+> ② **官方套件只跑解释器后端**：该核的设计含 **128 bit** 的 mem 节点 ⇒ ⇒ JIT 整体跳过
+>    ⇒ ⇒ ≈ 36 拍/秒 ⇒ ⇒ 40 个测试 ≈ 7 分钟 ⇒ ⇒ 门禁**拆成 4 个独立二进制**
+>    （每个 ≈ 100 s ⇒ ⇒ 落在仓内的**单测 300 s 上限**之内）。
 
 > ⚠️ **现状的诚实说明**：仓内已有的 `tests/test_riscv_tests.cpp`（49 用例 / 43 skip）
 > **不测核** —— 它自带一个 C++ ISA 解释器（`Rv32iInterpreter`），跑的是那颗解释器。
-> 要「官方测试跑在**核**上」，MUST 走 R1/R2（或用 §0 的 `--firmware` 链路 + 自己的 runner）。
+> 「官方测试跑在**核**上」的入口 = **`ctest -R test_rv32i_official_suite`**。
 
 ## 9. 相关载体（都读过再动手）
 

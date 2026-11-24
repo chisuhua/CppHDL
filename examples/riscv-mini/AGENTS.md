@@ -6,6 +6,12 @@ Child of root `AGENTS.md`.
 RV32I 5-stage pipeline 的**示例与测试**。微架构组件本身已收敛到 `include/cpu/`
 （本目录只留核 IP 顶层，ADR-046）。Phases 1-3 pass.
 
+> **「riscv-mini 完成」的定义**（用户口径 · 2026-11-25）=
+> **官方 riscv-tests 的 `rv32ui-p-*` 套件全过**（40 个 · 排除 2 个已登记项）
+> ⇒ ⇒ 门禁 = `ctest -R test_rv32i_official_suite`（见 §RUN ⑥）
+> ⇒ ⇒ 资产 / 排除项 / 复现 = `tests/riscv-tests/PROVENANCE.md`（**单一真相**）。
+> ⚠️ **不是**「本仓自写用例全过」—— 两者是**不同**的判据面。
+
 ## STRUCTURE
 ```
 examples/riscv-mini/
@@ -43,9 +49,18 @@ examples/riscv-mini/
 │                             #  test_rv32i_soc_dual_parity.cpp`（核级双路
 │                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
 │                             #  豁免条目已移除（ADR-046 D10-rev 端口契约）
-└── tests/                   # ✅ 19 个 Catch2 target 已注册进 CTest（另有 1 个 noctest 只构建）
-    ├── test_*.cpp           # 20 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
+└── tests/                   # ✅ 24 个 Catch2 target 已注册进 CTest（另有 1 个 noctest 只构建）
+    ├── test_*.cpp           # 22 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
+    ├── test_rv32i_stall_integrity.cpp  # **反压期操作数完整性**（3 形态 · A1/A2/A3）
+    ├── test_rv32i_official_suite.cpp   # **官方 riscv-tests 套件**（40 个 · 4 个二进制）
+    ├── riscv-tests/         # **官方 riscv-tests 资产**（change `riscv-tests-gate-2026-11`）
+    │   ├── PROVENANCE.md    # 来源 / 改造 / **排除项** / 格式 / 复现方法（**单一真相**）
+    │   ├── LICENSE.riscv-tests  # 上游 BSD-3-Clause 全文
+    │   ├── env/riscv_test.h # 自带 env（**只替换 4 个 harness 宏** · 测试体一字未改）
+    │   ├── env/link.ld      # **双 TCM 链接布局**（`.tohost` @ 0x8001_0000）
+    │   ├── env/build.sh     # 从上游重建 40 份 + 与入库镜像逐字节比对
+    │   └── images/          # 40 份 `rv32ui-p-*` 的 `itcm.mem` / `dtcm.mem`
     └── （Catch2 框架在根 `tests/catch_amalgamated.{cpp,hpp}`，不在本目录）
 ```
 
@@ -84,6 +99,12 @@ build/examples/riscv-mini/tb_rv32i_soc --emit-rtl --hierarchical --firmware-init
 
 # ⑤ 一条命令跑通（生成 → lint → 编译 → 运行 ⇒ RESULT: checks=24 fails=0）
 bash scripts/rv32i_rtl_sim_env.sh
+
+# ⑥ 官方 riscv-tests 套件门禁（40 个 `rv32ui-p-*` · 4 个 CTest 条目 · 每个 ≈ 100 s）
+ctest --test-dir build -R test_rv32i_official_suite --output-on-failure
+#   ⇒ 判定口径 = **上游 env 的协议**（`tohost == 1` ⇒ PASS）
+#   ⇒ ⇒ 「riscv-mini 完成」的定义 = 该套件**全过**
+#   ⇒ ⇒ 资产（镜像 / env / 来源登记）= tests/riscv-tests/（见 PROVENANCE.md）
 ```
 
 ⚠️ **fail-closed**：默认模式收到**任何**未知参数 ⇒ exit **2**；
@@ -260,6 +281,8 @@ bash scripts/rv32i_rtl_sim_env.sh
 | SoC 的**独立 Verilog TB**（手写）| `tb_rv32i_soc.sv`（**24 条判据**的 Verilog 侧实现）|
 | 期望值**单一真相**（两侧共用）| `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` |
 | **跑 ELF / 跑官方 riscv-tests**（用户指南）| `RUNNING-ELF.md`（链路 · 链接脚本 · 三层跑法 · 装载约束 · 故障排查 · 官方套件现状与实测）|
+| **官方 riscv-tests 套件**（来源 / 改造 / **排除项** / 复现）| `tests/riscv-tests/PROVENANCE.md`（**单一真相**）· 门禁 = `tests/test_rv32i_official_suite.cpp`（**4 个独立二进制** · 每个 10 个用例）|
+| **反压期操作数完整性**（缺陷判据）| `tests/test_rv32i_stall_integrity.cpp`（A1 后继别名型 · A2 决策回退型 · A3 控制面）|
 
 > ⚠️ **2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）**：
 > 本目录的 `src/` 曾有 **32** 个头，其中 10 组与 `include/cpu/` **同名**
