@@ -114,6 +114,11 @@
 
 - [ ] **T5.1** `openspec validate --all` ⇒ ⇒ 绿
 - [ ] **T5.2** `scripts/verify_openspec_delta.sh` ⇒ ⇒ 绿（**实际门**）
-- [ ] **T5.3** 过 **critic**（`review_profile: build`）—— ⚠️ 本 change 触及
+- [x] **T5.3** 过 **critic**（`review_profile: build, plan`）—— ⚠️ 本 change 触及
   **公开观测面语义** + **已签批 capability 的 MODIFIED** ⇒ ⇒ MUST 审
+  ⇒ ⇒ **轮次 1：APPROVE**（`mergeable: yes` · `scope_exceeded: false` · **0 BLOCKER**）
+  ⇒ ⇒ **1 SHOULD_FIX + 1 NIT 已逐条处置**（跨产品消费者 `soc_trace_counter.h` 的
+  dated 脚注 + 「恰好一次」论证措辞精确化 · **实现不变**）
+  ⇒ ⇒ 审稿记录 = `.rddf/reviews/rv32i-commit-event-pulse-2026-11-arch-review.md`
+  ⇒ ⇒ ⇒ **无 BLOCKER ⇒ 无需复审**（预算 2 轮，用 1 轮）
 - [ ] **T5.4** 归档（`openspec archive`）⇒ ⇒ **S4a 的硬前置解除**
