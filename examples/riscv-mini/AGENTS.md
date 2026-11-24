@@ -37,7 +37,7 @@ examples/riscv-mini/
 │   ├── axil_mmio_master.h  # 核侧 AXI4-Lite 主设备（S4a · MMIO 通道的核内一端
 │   │                          #   ⇒ 请求面 7 根 + AXI4-Lite 19 根 · `ready` = **单拍完成脉冲**
 │   │                          #   ⇒ 判据 = `test_axil_mmio_master`（5 用例 / 58 断言）
-│   │                          #   ⇒ 核级端到端 = `test_rv32i_core_mmio`（6 用例 / 39 断言））
+│   │                          #   ⇒ 核级端到端 = `test_rv32i_core_mmio`（7 用例 / 50 断言 · 含慢从设备档））
 │   └── rv32i_core_top.h # 核 IP 顶层装配（ADR-046 D1 类别 1 / D3 #15）
 │                             #  ✅ **已有消费者**（2026-10-25）：`tests/
 │                             #  test_rv32i_soc_dual_parity.cpp`（核级双路
@@ -122,24 +122,24 @@ bash scripts/rv32i_rtl_sim_env.sh
   ⚠️ 2026-11-09（phase-6 P9 · Zero-Debt）：该 struct 数组（**零消费者**的死数据）**已删除** ⇒ 本条仅存历史；wrapper 的 `__io` 签名与可观测行为**未变**。
 - **wrapper 端口契约错误** (2026-10-19) — `i_cache_prefetch.h:91` 引用 `icache.io().hit` (不存在); 已修: `ch_bool(icache.io().miss.impl())`. 同时 `0xFFFFFFF0_d` → `0xFFFFFFF0_h` typo fix.
 
-## 核 IP 的**34 端口契约表**（产品端口面 · **本文件 = 单一真相源**）
+## 核 IP 的**53 端口契约表**（产品端口面 · **本文件 = 单一真相源**）
 > 这是「核 = 可替换 IP」的**唯一物证**，也是 S3（总线化）的**变更基线**。
 > ⚠️ **归属**：本表描述的是**核**（`Rv32iCoreTop`）⇒ ⇒ 契约表住在**核的家**
 > （`examples/riscv-mini/AGENTS.md`）⇒ ⇒ SoC 侧只**引用**它（`examples/riscv-soc/AGENTS.md`）。
 > ⇒ ⇒ **单一真相源 = 本表**（护栏 `scripts/verify_riscv_soc_core_ports.sh` 的 V1/V2 从**本表**解析）。
 > ⚠️ 端口名是**产物名**（带实例路径前缀 `top_core_`）⇒ 期望表由
 > `scripts/verify_riscv_soc_core_ports.sh` 从**本表**解析并与 SoC 产物里的核 module 比对
-> （V1 逐字逐序 · V2 条数 34 · V3 与 C6 快照三方闭环）。
+> （V1 逐字逐序 · V2 条数 53 · V3 与 C6 快照三方闭环）。
 > ⚠️ **订正（2026-11-23 · R3e）**：本句原先写「由 `scripts/verify_examples_rtl_sim.sh` 解析」
 > ⇒ ⇒ **指错了脚本**（该脚本不解析本表）⇒ ⇒ 实测确认唯一消费者是
 > `verify_riscv_soc_core_ports.sh` ⇒ ⇒ 本句已改正。
-> ⚠️ 核自有 32 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
+> ⚠️ 核自有 51 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
 > （生成时已机械校验）⇒ 改核端口会**同时**打红 C6 与本表 ⇒ 强制重算。
 
 > 这是「核可替换」的**唯一物证**，也是 S3（总线化）的**变更基线**。
 > ⚠️ 端口名是**产物名**（带实例路径前缀 `top_core_`）⇒ 期望表由
 > `scripts/verify_examples_rtl_sim.sh` 从**本表**解析并与产物比对（单一真相源 = 本表）。
-> ⚠️ 核自有 32 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
+> ⚠️ 核自有 51 条与 `scripts/verify_no_duplicate_rv32i_headers.sh` 的 **C6 快照逐字一致**
 > （生成时已机械校验）⇒ 改核端口会**同时**打红 C6 与本表 ⇒ 强制重算。
 
 | # | 端口（产物名） | 方向 | 位宽 | 归属 |
@@ -259,6 +259,7 @@ bash scripts/rv32i_rtl_sim_env.sh
 | SoC 的**激励驱动**（C++ 侧 + 发射入口）| `tb_rv32i_soc.cpp`（**24 条判据**的 C++ 侧实现）|
 | SoC 的**独立 Verilog TB**（手写）| `tb_rv32i_soc.sv`（**24 条判据**的 Verilog 侧实现）|
 | 期望值**单一真相**（两侧共用）| `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` |
+| **跑 ELF / 跑官方 riscv-tests**（用户指南）| `RUNNING-ELF.md`（链路 · 链接脚本 · 三层跑法 · 装载约束 · 故障排查 · 官方套件现状与实测）|
 
 > ⚠️ **2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）**：
 > 本目录的 `src/` 曾有 **32** 个头，其中 10 组与 `include/cpu/` **同名**
