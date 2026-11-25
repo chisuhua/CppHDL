@@ -5,7 +5,7 @@ phase: phase-6
 category: cpu
 type: feature
 状态: draft
-进度: **立项（2026-11-16）** · 未开工 · ⚠️ P6-1（G5）**已先闭**（change `2026-11-16-csr-mcause-write-2026-11`）
+进度: **立项（2026-11-16）** · ✅ **P6-2 已闭（2026-11-25 · builder）** · change `openspec/changes/archive/2026-11-25-rv32i-csr-instructions-2026-11/`（`rv32i-privilege` **ADDED ×2**） ⇒ ⇒ 6 种 CSR 指令落地（**读在 ID · 写在 EX · `CsrBank` 单地址口 mux · 相邻两条停 1 拍**） ⇒ ⇒ **零端口面变更**（53 端口逐字不变 · 层次化 module 数仍 8）· **零新增 `HazardUnit` 端口** ⇒ ⇒ 判据 = `test_rv32i_csr_instructions`（8 用例 / 30 断言 · 变异 7 红 + 1 无效 + 1 组合红） · 全量回归 **272/272** · 验收报告 = `.rddf/reviews/rv32i-csr-instructions-2026-11-verify.md` ⇒ ⇒ ⬜ **P6-3..P6-7 未做**（trap 入口 / `ECALL`·`EBREAK` / 中断 / `mtval`） · ⚠️ **D-2（`mcause` 编码表 / `WFI` 归属）仍待裁决**（归 P6-4 / P6-6） · ⚠️ P6-1（G5）**已先闭**（change `2026-11-16-csr-mcause-write-2026-11`）
 主题: RV32I **特权级**：CSR 指令 · `ECALL` / `EBREAK` · `MRET` · trap 入口接线 · 中断
 依赖: `rv32i-isa-gap-closure-2026-11`（G1 / G4 / G5 已闭 · ADR-071 Accepted）· ADR-048（取指 skid / flush 不变量）· ADR-069（内存时序）· **ADR-047**（前推 ⇒ CSR RAW 判据要用）· **ADR-049**（`mtime` 逐拍）
 来源: **R7 侦察**（`.rddf/checks/isa-gap-reuse-survey.md` · 2026-11-15 只读实测）+ capability `rv32i-privilege` 的**范围声明**（5 项排除）+ **metis 1 轮**（17 条 finding · A/B 全采纳）

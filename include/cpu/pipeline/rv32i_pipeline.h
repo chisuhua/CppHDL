@@ -36,6 +36,10 @@
 #include "cpu/pipeline/stages/wb_stage.h"
 #include "cpu/pipeline/hazard_unit.h"
 #include "cpu/pipeline/rv32i_pipeline_regs.h"
+// ⚠️ **CSR bank**（2026-11-25 · P6-2 · change `rv32i-csr-instructions-2026-11`）：
+//    本项把它的**生产消费者**从 0 变成 1（此前只有组件级测试实例化它）。
+//    ⚠️ `CsrBank` 的 `__io` **一字未动** ⇒ ⇒ 零公开 API 变更。
+#include "cpu/riscv/rv32i_csr.h"
 // ⚠️ 数据 mux（ADR-046 D3 #14 / ADR-047 D2）：**既有**的 `chlib::ForwardingMux`
 //    —— MUST NOT 新建组件，也 MUST NOT 把 mux 放回 `HazardUnit`
 //    （放进 `HazardUnit` 并接进真实流水线装配会成**组合环**，
@@ -152,6 +156,10 @@ public:
     ch::ch_module<LoadLaneSelector> load_lane{"load_lane_selector"};
     ch::ch_layer<WbStage>  wb_stage{"wb_stage", "WbStage"};
     ch::ch_layer<HazardUnit> hazard{"hazard_unit", "HazardUnit"};
+    // ⚠️ **CSR bank**（2026-11-25 · P6-2）：**inline**（`ch_module`）——
+    //    ADR-070 D2 点名的 7 处成层集合**不含**它 ⇒ ⇒ 本层按字面集合实施
+    //    （与 `load_lane` 同型）⇒ ⇒ 层次化产物的 module 数**不变**。
+    ch::ch_module<CsrBank> csr_bank{"csr_bank"};
     // ⚠️ **数据 mux**（ADR-047 D2）：既有组件，**零新增组件**。
     //    档位语义与当年被移出 `HazardUnit` 的 mux **逐档等价**
     //    （0→REG / 1→EX/MEM / 2→MEM/WB）。
@@ -256,6 +264,38 @@ public:
     ch_reg<ch_uint<5>>  memwb_rd_addr{0_d, "memwb_rd_addr"};
     ch_reg<ch_bool>     memwb_valid{false, "memwb_valid"};
 
+    // ======================================================================
+    // ⚠️ **CSR 指令的流水线寄存器**（2026-11-25 · P6-2 · change
+    //    `rv32i-csr-instructions-2026-11`）
+    // ======================================================================
+    // 为什么这些**不是** `IdExRegs` / `MemWbRegs` 的字段（design §2.2 的订正）：
+    //   `rv32i_pipeline_regs.h` 的 4 个结构体**在流水线实现里零使用**（实测 grep）
+    //   ⇒ ⇒ 真实载体 = **本文件顶层的 `ch_reg`** ⇒ ⇒ 顶层可自由读写
+    //   ⇒ ⇒ **零新增端口**（C1/C2）⇒ ⇒ 产物端口表零变化。
+    //
+    // ⚠️ **读值的取法（关键 · 决定 RAW 停顿为什么必需）**：
+    //   `CsrBank` 只有**一个**地址口（读与写共用）⇒ ⇒
+    //     · **读**在 **ID 级**（`csr_bank.csr_addr` ← ID 指令的 CSR 地址）
+    //       ⇒ 读值锁存进 `csr_idex_read_value`（`csr_old`）
+    //     · **写**在 **EX 级**（`csr_bank.csr_write_en/csr_wdata` ← EX 级那条指令）
+    //       ⇒ 地址口在「EX 级有 CSR」时**切到 EX 的地址**（否则会写到 ID 那条的地址）
+    //   ⇒ ⇒ 若相邻两条 CSR 都访问同一 CSR：读者在 ID 的那一拍，写者的写**尚未落在沿上**
+    //       ⇒ ⇒ 直接锁存会读到**旧值** ⇒ ⇒ ⇒ **必须停 1 拍**（`csr_stall`）。
+    //   ⇒ ⇒ 停顿 1 拍后：写者已离开 EX（写落在沿上）⇒ 读者在 ID 重新读到**新值** ✔
+    //
+    // ⚠️ **ID/EX 级的使能 MUST 与 `id_stage` 的 `idex_*` 一致**（否则两者错拍）：
+    //   数据字段 = `valid & !freeze`；控制位在 `flush | stall` 时清 0（气泡语义）。
+    ch_reg<ch_bool>     csr_idex_valid{false, "csr_idex_valid"};
+    ch_reg<ch_uint<12>> csr_idex_addr{0_d, "csr_idex_addr"};
+    ch_reg<ch_uint<32>> csr_idex_read_value{0_d, "csr_idex_read_value"};
+    // EX/MEM → M2 → MEM/WB：CSR 标记与**读值**逐级透传（A0 的 3 段 MEM 区）
+    ch_reg<ch_bool>     exmem_is_csr{false, "exmem_is_csr"};
+    ch_reg<ch_uint<32>> exmem_csr_read_value{0_d, "exmem_csr_read_value"};
+    ch_reg<ch_bool>     m2_is_csr{false, "m2_is_csr"};
+    ch_reg<ch_uint<32>> m2_csr_read_value{0_d, "m2_csr_read_value"};
+    ch_reg<ch_bool>     memwb_is_csr{false, "memwb_is_csr"};
+    ch_reg<ch_uint<32>> memwb_csr_read_value{0_d, "memwb_csr_read_value"};
+
     ch_reg<ch_uint<48>> cycle_count{0_d, "cycle_count"};
     ch_reg<ch_uint<48>> commit_count{0_d, "commit_count"};
     ch_reg<ch_uint<32>> branch_count{0_d, "branch_count"};
@@ -321,6 +361,11 @@ public:
         m2_link_value->next = select(mem_stall, m2_link_value, exmem_link_value);
         m2_alu_result->next = select(mem_stall, m2_alu_result, exmem_alu_result);
         m2_funct3->next     = select(mem_stall, m2_funct3,     exmem_funct3);
+        // ⚠️ **CSR 标记与读值逐级透传**（2026-11-25 · P6-2）：
+        //    MEM 区是 3 段（EX/MEM → M2 → MEM/WB）⇒ ⇒ 漏掉 M2 这一段
+        //    ⇒ ⇒ WB 级拿到的是**后继**指令的值（错拍）。
+        m2_is_csr->next         = select(mem_stall, m2_is_csr,         exmem_is_csr);
+        m2_csr_read_value->next = select(mem_stall, m2_csr_read_value, exmem_csr_read_value);
         // ⚠️ **原始字 NOT 寄存**（理由见 `m2_funct3` 处的注释）：`sread` 的输出
         //   寄存器在同一条沿上更新 ⇒ ⇒ 在本沿采到的是**上一拍**的地址的数据
         //   ⇒ ⇒ 采进 M2 会与 M2 的元数据**错配一拍** ⇒ ⇒ 静默错车道。
@@ -353,7 +398,10 @@ public:
         //   `select`：后者覆盖前者 ⇒ jump 最优先）。
         // ⚠️ **数据叶 = M2 寄存器**（+ `m2_word` 寄存器）⇒ ⇒ **不成环**
         //   （ADR-047「数据源的叶子 MUST 是流水线寄存器」）。
+        // ⚠️ **CSR 段**（2026-11-25 · P6-2）：与 load/alu/jump **互斥** ⇒ ⇒
+        //   放最前（最低优先级）⇒ ⇒ 与 `wb_stage` 的同构关系**保持逐条一致**。
         ch_uint<32> m2_write_data = ch_uint<32>(0_d);
+        m2_write_data = select(m2_is_csr, m2_csr_read_value, m2_write_data);
         m2_write_data = select(m2_is_load, m2_load_data, m2_write_data);
         m2_write_data = select(m2_is_alu, m2_alu_result, m2_write_data);
         m2_write_data = select(m2_is_jump, m2_link_value, m2_write_data);
@@ -398,8 +446,10 @@ public:
         //      ⇒ 命中时 `rs1_addr_id` 必然非 0。
         //
         // ---- M2 档（新增 · **优先**）----
+        // ⚠️ **CSR 也是「写 rd」的指令**（2026-11-25 · P6-2）⇒ ⇒ MUST 含 `m2_is_csr`
+        //    （否则距离 2 的消费者读不到 CSR 的写回值）。
         auto m2_write_en = m2_valid &
-                           (m2_is_alu | m2_is_load | m2_is_jump) &
+                           (m2_is_alu | m2_is_load | m2_is_jump | m2_is_csr) &
                            (m2_rd_addr != ch_uint<5>(0_d));
         auto m2_bypass_hit_a = m2_write_en &
                                (m2_rd_addr == id_stage.io().rs1_addr_id);
@@ -445,7 +495,78 @@ public:
         //      = `io().valid & f(opcode)`（ID 级的**输入**）⇒ 而 `if_stage.io().valid`
         //      = `if_id_valid_reg`（**寄存** ⇒ `if_stage.h:329`）⇒ ⇒ 反馈环被打断。
         auto illegal_active = (id_stage.io().illegal_reason != ch_uint<2>(0_d));
-        id_stage.io().stall <<= hazard.io().stall | illegal_active;
+
+        // ==================================================================
+        // ⚠️ **CSR 指令的数据通路**（2026-11-25 · P6-2 · change
+        //    `rv32i-csr-instructions-2026-11`）
+        // ==================================================================
+        // 要点（推导见 change 的 design.md §3 / §4 / §8）：
+        //   · **读 = ID 级**（`CsrBank` 读口是组合）· **写 = EX 级**（沿级）
+        //   · `CsrBank` 只有**一个地址口**（读/写共用）⇒ ⇒ 地址在「EX 级有 CSR」时
+        //     切到 **EX 的地址**（否则写会落到 ID 那条指令的 CSR 地址上 ⇒ 静默写错）
+        //   · **相邻两条 CSR ⇒ 停 1 拍**（`csr_stall`）：写者的写尚未落沿时，
+        //     读者若锁存读值 ⇒ 读到**旧值**（违反 RISC-V 的 CSR 顺序要求）
+        //   · `flush` 优先（与 `if_stage` 的 PC 更新门一致 · ADR-071）
+        //   · ⚠️ **零新增 `HazardUnit` 端口**（根 `AGENTS.md:256` 红线）
+        auto csr_stall = csr_in_id() & csr_idex_valid & !hazard.io().flush;
+        id_stage.io().stall <<= hazard.io().stall | illegal_active | csr_stall;
+
+        // ---- CsrBank 的地址 / 中断输入 ----
+        // ⚠️ CSR 地址 = `instr[31:20]`（**12 位**）—— MUST NOT 取 `[11:0]`
+        //    （那是 `rd` / `funct3` / `opcode`，恒非合法 CSR 地址 ⇒ 读 0 / 写被忽略）。
+        auto id_csr_addr = bits<31, 20>(if_stage.io().instruction);
+        csr_bank.io().csr_addr <<= select(csr_idex_valid, csr_idex_addr, id_csr_addr);
+        // ⚠️ `mtip` / `meip` **显式 tie 0**：本项阶段无中断源（P6-6 才接）
+        //    ⇒ ⇒ 未驱动端口读到的是**未定义值** ⇒ ⇒ MUST 显式驱动。
+        csr_bank.io().mtip <<= ch_bool(false);
+        csr_bank.io().meip <<= ch_bool(false);
+
+        // ---- EX 级的 `csr_wdata`（6 种 `funct3` 的逐条语义）----
+        // ⚠️ `csr_old` MUST 是**同一个**锁存值（ID 级读到的旧值）：
+        //    写路径若改用「写后新值」⇒ `CSRRS` 会把新值再 OR 一遍 ⇒ 错值。
+        const auto& csr_old = csr_idex_read_value;
+        // ⚠️ `funct3` 用 **EX 级视图**（`id_stage.io().funct3` = ID/EX 寄存后的值）
+        auto ex_f3 = id_stage.io().funct3;
+        auto csr_is_imm     = (ex_f3 == ch_uint<3>(5)) | (ex_f3 == ch_uint<3>(6))
+                            | (ex_f3 == ch_uint<3>(7));
+        auto csr_is_set     = (ex_f3 == ch_uint<3>(2)) | (ex_f3 == ch_uint<3>(6));
+        auto csr_is_clear   = (ex_f3 == ch_uint<3>(3)) | (ex_f3 == ch_uint<3>(7));
+        auto csr_always_write = (ex_f3 == ch_uint<3>(1)) | (ex_f3 == ch_uint<3>(5));
+        // 源操作数：立即数型 = `zimm`（5 位零扩展 · **不是** rs1 的值）；
+        //           寄存器型 = **前推后的** rs1（`ex_stage.io().rs1_data`）
+        ch_uint<32> csr_zimm32 = zext<32>(id_stage.io().rs1_addr);
+        // ⚠️ 寄存器型源 = **前推 mux 的输出端口**（`fwd_mux.io().alu_input_a`）
+        //    ⇒ ⇒ MUST NOT 读 `ex_stage.io().rs1_data`（**子组件输入** ⇒ 跨模块边）。
+        auto csr_src = select(csr_is_imm, csr_zimm32, fwd_mux.io().alu_input_a);
+        ch_uint<32> csr_wdata = csr_src;                                    // CSRRW / CSRRWI
+        csr_wdata = select(csr_is_set,   csr_old | csr_src, csr_wdata);     // CSRRS / CSRRSI
+        // ⚠️ clear 的掩码 MUST 是「**按位取反后 AND**」（`~`），**MUST NOT** 用 XOR
+        csr_wdata = select(csr_is_clear, csr_old & ~csr_src, csr_wdata);    // CSRRC / CSRRCI
+        csr_bank.io().csr_wdata <<= csr_wdata;
+        // 写使能：`CSRRW` / `CSRRWI` **总是**写；set / clear 型在源值为 0 时**不写**
+        //（规范：`rs1=x0` / `uimm=0` ⇒ 不写；寄存器型「值为 0」同样不触发写副作用）
+        // ⚠️ `rd = 0` **不影响**写（`CSRRW` 的 `rd=0` 只是**不读**旧值）。
+        csr_bank.io().csr_write_en <<=
+            csr_idex_valid & id_stage.io().valid_out &
+            (csr_always_write | (csr_src != ch_uint<32>(0_d)));
+
+        // ---- ID/EX：CSR 判定 + 地址 + 读值（与 `id_stage` 的 idex 同拍）----
+        // 使能与 `id_stage` 的 `idex_*` **逐条同构**：数据字段 = `valid & !freeze`，
+        // 控制位在 `flush | stall` 时清 0（气泡语义）；`freeze` 优先级最高。
+        // ⚠️ `mem_stall` / `hazard.io().flush` 都是**本层已建的表达式**（或子组件**输出**）
+        //    ⇒ ⇒ MUST NOT 读 `id_stage.io().freeze` / `id_stage.io().flush`（**子组件输入**
+        //    ⇒ 跨模块边 ⇒ 层次化发射失败）。
+        auto csr_idex_en = if_stage.io().valid & !mem_stall;
+        auto csr_idex_bubble =
+            (hazard.io().flush | hazard.io().stall | illegal_active | csr_stall)
+            & !mem_stall;
+        csr_idex_valid->next = select(
+            mem_stall, csr_idex_valid,
+            select(csr_idex_bubble, ch_bool(false),
+                   select(csr_idex_en, csr_in_id(), csr_idex_valid)));
+        csr_idex_addr->next = select(csr_idex_en, id_csr_addr, csr_idex_addr);
+        csr_idex_read_value->next =
+            select(csr_idex_en, csr_bank.io().csr_rdata, csr_idex_read_value);
 
         // ID -> EX
         // ⚠️ `ex_stage.io().rs1_data` / `rs2_data` 的**驱动源**在
@@ -601,6 +722,13 @@ public:
                                 select(exmem_en, id_stage.io().is_alu, ch_bool(false)));
         exmem_is_jump <<= select(mem_stall, exmem_is_jump,
                                  select(exmem_en, id_stage.io().is_jump, ch_bool(false)));
+        // ---- CSR：EX/MEM 级（标记 + **读值** · 2026-11-25 · P6-2）----
+        // ⚠️ `is_csr` 是**控制位** ⇒ 气泡时清 0（同 `is_load` / `is_jump`）；
+        //    `csr_read_value` 是**数据** ⇒ 气泡时保持（`valid=0` ⇒ 不会被写回）。
+        exmem_is_csr <<= select(mem_stall, exmem_is_csr,
+                                select(exmem_en, csr_idex_valid, ch_bool(false)));
+        exmem_csr_read_value <<= select(exmem_en, csr_idex_read_value,
+                                        exmem_csr_read_value);
 
         // EX/MEM -> MEM
         mem_stage.io().alu_result <<= exmem_alu_result;
@@ -647,6 +775,9 @@ public:
         memwb_mem_data->next   = select(mem_stall, memwb_mem_data,
                                         select(m2_valid & m2_is_load, m2_load_data,
                                                ch_uint<32>(0_d)));
+        // ⚠️ **CSR 标记与读值 transit MEM/WB**（2026-11-25 · P6-2）
+        memwb_is_csr->next         = select(mem_stall, memwb_is_csr,         m2_is_csr);
+        memwb_csr_read_value->next = select(mem_stall, memwb_csr_read_value, m2_csr_read_value);
         // MEM/WB 的 valid = M2 的 valid（气泡以 valid=0 逐级传播 ⇒
         // 数据保持、valid 清零 ⇒ WB 不会把陈旧指令再写回一次）
         memwb_valid->next      = select(mem_stall, memwb_valid, m2_valid);
@@ -660,6 +791,9 @@ public:
         wb_stage.io().is_alu <<= memwb_is_alu;
         wb_stage.io().is_jump <<= memwb_is_jump;
         wb_stage.io().mem_valid <<= memwb_valid;
+        // ⚠️ **CSR 写回段**（2026-11-25 · P6-2）：`csr_read_value` = 读到的旧值
+        wb_stage.io().is_csr <<= memwb_is_csr;
+        wb_stage.io().csr_read_value <<= memwb_csr_read_value;
 
         // Data memory interface
         io().data_addr <<= exmem_alu_result;
@@ -716,8 +850,12 @@ public:
         //   `!io().data_ready`（与 `build_datapath()` 里同值 ⇒ 无状态、无环）。
         //   三者（load-use / 非法指令 / MEM 反压）都是「前级不许前进」⇒ 取 OR。
         auto mem_stall = !io().data_ready;
+        // ⚠️ **CSR→CSR 的 1 拍停顿**（2026-11-25 · P6-2）：判据落**顶层**
+        //    （**零新增 `HazardUnit` 端口** · 根 `AGENTS.md:256` 红线）。
+        //    与 `build_datapath()` 内同值（两处各建一个节点 ⇒ 无状态 ⇒ 无顺序依赖）。
+        auto csr_stall = csr_in_id() & csr_idex_valid & !hazard.io().flush;
         if_stage.io().stall <<= hazard.io().stall |
-            (id_stage.io().illegal_reason != ch_uint<2>(0_d)) | mem_stall;
+            (id_stage.io().illegal_reason != ch_uint<2>(0_d)) | mem_stall | csr_stall;
         // ⚠️ **ID/EX 用 `freeze`（保持）而不是 `stall`（装气泡）**：
         //   反压期间 EX 级那条指令 MUST NOT 丢失 ⇒ 见 `id_stage.h` 的端口注释。
         id_stage.io().freeze <<= mem_stall;
@@ -743,8 +881,11 @@ public:
         hazard.io().ex_rd_addr <<= id_stage.io().rd_addr;
         hazard.io().mem_rd_addr <<= exmem_rd_addr;
         hazard.io().ex_reg_write <<= id_stage.io().is_alu | id_stage.io().is_load |
-                                    id_stage.io().is_jump;
-        hazard.io().mem_reg_write <<= exmem_is_alu | exmem_is_load | exmem_is_jump;
+                                    id_stage.io().is_jump | csr_idex_valid;
+        // ⚠️ **CSR 指令也写 rd**（2026-11-25 · P6-2）⇒ ⇒ 两级写使能 MUST 含它，
+        //    否则距离 1 / 2 的消费者读不到 CSR 的写回值（前推档位不成立）。
+        hazard.io().mem_reg_write <<= exmem_is_alu | exmem_is_load | exmem_is_jump |
+                                      exmem_is_csr;
         // ⚠️ **load-use 检测 MUST 走 EX 级**（`ex_is_load`）：
         //    5 级流水线的标准检测点是「EX 级的 load vs ID 级的消费者」。
         //    `mem_is_load`（MEM 级那一路）**故意不连接**（保持 0）：
@@ -847,7 +988,11 @@ public:
         fwd_mux.io().rs1_data_reg <<= id_stage.io().rs1_data;
         fwd_mux.io().rs2_data_reg <<= id_stage.io().rs2_data;
         // 档位 1 = EX/MEM 级（**EX/MEM 寄存器**）
-        fwd_mux.io().ex_mem_alu_result <<= exmem_alu_result;
+        // ⚠️ **CSR 的读值**与 ALU 结果**共用档位 1**（2026-11-25 · P6-2）：
+        //    CSR 与 jump / alu / load 互斥 ⇒ ⇒ 按 `exmem_is_csr` 选择即可
+        //    （`ForwardingMux` 内部再按 `is_jump` 选返回地址 ⇒ 两层互斥）。
+        fwd_mux.io().ex_mem_alu_result <<=
+            select(exmem_is_csr, exmem_csr_read_value, exmem_alu_result);
         // ⚠️ 跳转的**返回地址**：`JAL`/`JALR` 的写回值是 `pc + 4`，不是 ALU 结果
         //    ⇒ MUST 含 `link_value`。三个源同受 `exmem_en` 守卫 ⇒ **对齐**。
         fwd_mux.io().is_jump <<= exmem_is_jump;
@@ -959,6 +1104,26 @@ public:
         // ⚠️ **MUST 在最后**（端口节点按赋值顺序编号 ⇒ 插中间会让既有
         //    `pipeline_unnamed_output_N` 整体位移 ⇒ 独立 TB 端口表错位）
         io().dbg_illegal_reason <<= id_stage.io().illegal_reason;
+    }
+
+    // ⚠️ **ID 级是否是「合法 CSR 指令」**（2026-11-25 · P6-2）
+    //
+    // ⚠️ **合法性判定的单一权威 = `Rv32iDecoder`**（`include/cpu/AGENTS.md` 的
+    //    「非法指令判定唯一权威」纪律）⇒ ⇒ 这里**不重写** `funct3` 合法表，
+    //    而是复用 ID 级已转发的 `illegal_reason`（= `valid & decoder.reason`）：
+    //    `OP_SYSTEM` 且 `reason == 0` ⟺ 合法 CSR 指令（6 种 `funct3`）。
+    //    ⇒ ⇒ 这样「`funct3 = 0` / `4` 仍冻结」与 CSR 判定**不会静默分叉**。
+    // ⚠️ 两处调用（`build_datapath` / `build_control_signals`）各建一个比较节点
+    //    ⇒ 值相同、无状态 ⇒ 不引入顺序依赖（与 `illegal_active` 同做法）。
+    // ⚠️ **MUST 读 `if_stage` 的输出（父侧落地网）**，MUST NOT 读
+    //    `id_stage.io().instruction` / `id_stage.io().valid` —— 那是**子组件的输入端口**
+    //    ⇒ ⇒ 父层读它会产生**跨模块边**（层次化发射：ADR-060 §2.1 / ADR-066 D1
+    //    「父层表达式 MUST 读父侧落地网」⇒ 实测报 `child side is not an output port`）。
+    //    `if_stage.io().instruction` 与本层驱动给 `id_stage` 的是**同一条网**。
+    ch_bool csr_in_id() {
+        auto id_op = bits<6, 0>(if_stage.io().instruction);
+        return if_stage.io().valid & (id_op == ch_uint<7>(OP_SYSTEM)) &
+               (id_stage.io().illegal_reason == ch_uint<2>(0_d));
     }
 
     void describe() override {

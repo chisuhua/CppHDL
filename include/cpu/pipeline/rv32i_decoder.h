@@ -190,13 +190,38 @@ public:
         //    ⇒ 后两者**无 funct3 字段** ⇒ ⇒ 任何取值都合法
         
         // 已知 opcode 集合（**FENCE 已含** ⇒ 它是已知 = NOP ⇒ NOT 非法）
+        // ⚠️ **`OP_SYSTEM` MUST NOT 在此表**（2026-11-25 · P6-2）：它按 `funct3`
+        //    细分（见下）⇒ ⇒ 若整体归「合法」⇒ `funct3 = 0`（ECALL/…) 会掉到
+        //    reason 0 ⇒ ⇒「合法但无功能」⇒ ⇒ **比冻结更糟**（会当 NOP 退休）。
         auto known_opcode = (op == ch_uint<7>(OP_OP)) | (op == ch_uint<7>(OP_OPIMM))
                           | (op == ch_uint<7>(OP_LOAD)) | (op == ch_uint<7>(OP_STORE))
                           | (op == ch_uint<7>(OP_BRANCH)) | (op == ch_uint<7>(OP_JALR))
                           | (op == ch_uint<7>(OP_JAL)) | (op == ch_uint<7>(OP_LUI))
                           | (op == ch_uint<7>(OP_AUIPC)) | (op == ch_uint<7>(OP_FENCE));
-        // 已知但**未实现**（`OP_SYSTEM` = ECALL / EBREAK / CSR / MRET）
-        auto known_unimplemented = (op == ch_uint<7>(OP_SYSTEM));
+        // ========================================================================
+        // `OP_SYSTEM` 的 `funct3` 分类（**2026-11-25 · P6-2 · change
+        // `rv32i-csr-instructions-2026-11`**）
+        //
+        // | funct3 | 指令 | 本项处置 | reason |
+        // |---|---|---|---|
+        // | 001/010/011 | CSRRW/S/C | **实现** | 0 |
+        // | 101/110/111 | CSRRWI/SI/CI | **实现** | 0 |
+        // | 000 | ECALL/EBREAK/MRET/WFI | 未实现（P6-4/P6-5） | **1** |
+        // | 100 | **保留** | — | **3** |
+        //
+        // ⚠️ 优先级仍是 `1 > 3 > 2 > 0`（ADR-071 v1.2）⇒ ⇒ `OP_SYSTEM` 的
+        //    判定仍插在**最前**。
+        // ========================================================================
+        auto is_op_system     = (op == ch_uint<7>(OP_SYSTEM));
+        auto csr_legal_f3     = (f3 == ch_uint<3>(1)) | (f3 == ch_uint<3>(2))
+                              | (f3 == ch_uint<3>(3)) | (f3 == ch_uint<3>(5))
+                              | (f3 == ch_uint<3>(6)) | (f3 == ch_uint<3>(7));
+        // `funct3 = 0`（ECALL/EBREAK/MRET/WFI）⇒ 仍「已知未实现」
+        auto sys_known_unimpl = is_op_system & !csr_legal_f3 & (f3 != ch_uint<3>(4));
+        // `funct3 = 4` ⇒ ISA 保留组合
+        auto sys_reserved     = is_op_system & (f3 == ch_uint<3>(4));
+        // 「合法」= 既有已知 opcode ∪ **合法 `funct3` 的 CSR 指令**
+        auto legal_opcode     = known_opcode | (is_op_system & csr_legal_f3);
         
         // ========================================================================
         // 输出
@@ -213,11 +238,14 @@ public:
         //    ⇒ 插在中间会让既有 `decoder_unnamed_output_N` **整体位移**
         //    ⇒ ⇒ 独立 Verilog TB 的端口表**全部错位**（实测踩过 · 见 id_stage 的同型记录）。
         //
-        // reason 码：0 合法 · 1 已知未实现（`OP_SYSTEM`）· 2 未知 opcode · 3 保留组合
+        // reason 码：0 合法 · 1 已知未实现（`OP_SYSTEM` 的 `funct3=0`）·
+        // 2 未知 opcode · 3 保留组合（含 `OP_SYSTEM` 的 `funct3=4`）
+        // ⚠️ 优先级 `1 > 3 > 2 > 0`（ADR-071 v1.2）
         io().illegal_reason =
-            select(known_unimplemented, ch_uint<2>(1),
+            select(sys_known_unimpl, ch_uint<2>(1),
+            select(sys_reserved, ch_uint<2>(3),
             select(reserved, ch_uint<2>(3),
-            select(known_opcode, ch_uint<2>(0), ch_uint<2>(2))));
+            select(legal_opcode, ch_uint<2>(0), ch_uint<2>(2)))));
     }
 };
 

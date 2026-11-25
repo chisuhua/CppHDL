@@ -46,6 +46,14 @@ public:
         ch_in<ch_bool>     is_alu;       // 是否为 ALU 指令 (R 型/I 型算术逻辑)
         ch_in<ch_bool>     is_jump;      // 是否为跳转指令 (JAL/JALR)
         ch_in<ch_bool>     mem_valid;    // 内存数据有效 (来自 MEM 级)
+        // ⚠️ **CSR 指令的读值**（2026-11-25 · P6-2 · change
+        //    `rv32i-csr-instructions-2026-11`）：
+        //    CSR 指令的写回值 = **读到的旧值**（`csr_old`），与 load/alu/jump
+        //    三条通路**互斥** ⇒ ⇒ 本段加在 mux 的**最低优先级**。
+        //    ⚠️ **追加在输入端口组的最后** —— 端口节点按**声明顺序**编号
+        //    ⇒ 插在中间会让既有 `wb_stage_unnamed_input_N` 整体位移。
+        ch_in<ch_bool>     is_csr{"is_csr"};              // 是否为 CSR 指令
+        ch_in<ch_uint<32>> csr_read_value{"csr_read_value"}; // CSR 的读值（= csr_old）
         
         // ====================================================================
         // 输出端口：连接到寄存器文件的写端口
@@ -81,6 +89,11 @@ public:
         // ⚠️ 2026-10-26 修正：`is_jump` 此前与 `is_alu` **合并** ⇒ JAL/JALR 写回的
         //    是 `alu_result`（垃圾）⇒ `ra` 不是返回地址。现在 `jump` 单独一支
         //    取 `link_value`（= pc + 4）。
+        //
+        // ---- 1.0 CSR 指令数据选择（**最低优先级** · 2026-11-25 · P6-2）----
+        // CSR 与 load / alu / jump **互斥**（一条指令只是一种）⇒ ⇒ 优先级任意
+        // ⇒ ⇒ 放在**最前**（被后续各段覆盖）⇒ ⇒ 零行为风险。
+        wb_data = select(io().is_csr, io().csr_read_value, wb_data);
         wb_data = select(io().is_load, io().mem_data, wb_data);
         wb_data = select(io().is_alu, io().alu_result, wb_data);
         wb_data = select(io().is_jump, io().link_value, wb_data);
@@ -94,7 +107,8 @@ public:
         // 3. 指令有效 (假设有 valid 信号，这里简化处理)
         
         // ---- 2.1 指令写回类型判断 ----
-        auto needs_writeback = io().is_alu | io().is_load | io().is_jump;
+        // ⚠️ **CSR 指令也写回 rd**（写回值 = `csr_read_value` · 2026-11-25 · P6-2）
+        auto needs_writeback = io().is_alu | io().is_load | io().is_jump | io().is_csr;
         
         // ---- 2.2 x0 寄存器保护 ----
         // RISC-V 规定 x0 寄存器硬连线为 0，不能写入

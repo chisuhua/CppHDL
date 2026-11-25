@@ -4,7 +4,7 @@ Child of `include/AGENTS.md` → root `AGENTS.md` (ZERO-DEBT POLICY + PHASE GATE
 
 ## OVERVIEW
 RV32I 5-stage pipeline + cache hierarchy + forwarding + hazard detection + SoC integration.
-**30 headers, 7169 lines**（2026-11-16 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变；6506 → 6473 因 phase-6 **P9**（Zero-Debt）删除 cache wrapper 的**死数据 / 死配置面**（`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲）⇒ ⇒ **头文件数不变**（30）；6473 → **6064** 因 phase-6 **B0 批**（`rv32i-dead-component-consolidation` **C5+C6 同批退役**）**物理删除 3 个头**（`pipeline/rv32i_forwarding.h` / `pipeline/hazard_detection_unit.h` / `pipeline/rv32i_hazard_complete.h`）⇒ ⇒ **头文件数 30 → 27** ⇒ ⇒ 行数差 409 ＝ 删 434 行 ＋ 其它头的注释修订（SLTU 修复等）⇒ ⇒ ⚠️ **该订正于 2026-11-13 补**（B0 批当时漏了 ⇒ ⇒ 护栏 `verify_no_duplicate_rv32i_headers.sh` C5 报红 ⇒ ⇒ 登记为 **F-1**）；**6064 → 6582 · 头文件数 27 → 30** 因 phase-6 **B3 批**（`memory-timing-contract-2026-11` · ADR-069 决策 **A0**）**新增** `pipeline/load_lane_selector.h`（load 的车道选择 + 符号/零扩展，**从 `MemStage` 迁出** ⇒ ⇒ 因为 `sread` 让 load 数据**晚 1 拍**可用 ⇒ ⇒ 车道选择 MUST 在 **M2 的下游**做 ⇒ ⇒ 见 ADR-069 **V5**）⇒ ⇒ **头文件数 +1 · 行数 +238**）；**6582 → 6606 · 头文件数不变** 因 `firmware-load-chain-2026-11` **L2（路线 A）**给 `InstrTCM` / `DataTCM` 增加**可选** `init_words` 构造参数（+24 行注释与参数）⇒ ⇒ 默认空 ⇒ **零行为变化**）；**6606 → 6611 · 头文件数不变** 因 `firmware-load-chain-2026-11` **L2（路线 A）** 后紧接的 **R8 改判（用户裁决 A2）**删掉 `riscv::Rv32iPipeline` 的 **`clk` 输入**（**零消费者** ⇒ ⇒ ZERO-DEBT）⇒ ⇒ 连带 SoC 顶层的 `ext_clk` 一并删 ⇒ ⇒ 顶层端口 32 → 31；**6611 → 6636 · 头文件数不变** 因 architect 批次订正 `hazard_unit.h` 的「注释 vs 行为」差异（`load_use_detected` 不是单拍脉冲 · 移位链「固定延迟」只对其自身成立 · **停顿总长 = 检测条件持续拍数 + 2**）⇒ ⇒ **行为零改动**（注释 + 推导，+25 行）；**6636 → 6587 · 头文件数不变** 因 **B4 · C3（EX 接入 `Rv32iAlu`）**：`ex_stage.h` 的**内联 10 个 ALU 分支已删**（−~50 行）且 `rv32i_alu.h` 的 `mem_size`/`mem_signed` **已删**（Δ8 · ZERO-DEBT）⇒ ⇒ 算术核心的唯一实现 = `rv32i_alu.h` ⇒ ⇒ **行为零变化**（既有 golden 全绿）；**6587 → 6564 · 头文件数不变** 因 **B4 · C4（ID 接入 `Rv32iDecoder`）**：`stages/id_stage.h` 的**内联 5 种立即数生成 + 8 级 `select` 链已删**（−~50 行）⇒ ⇒ 立即数的唯一实现 = `pipeline/rv32i_decoder.h` ⇒ ⇒ **行为零变化**（C4 差分逐条相等 · `ctest -LE perf` 254/254 · 独立 Verilog TB `checks=24 fails=0`）⇒ ⇒ ⚠️ 该子组件使 **8 个端口**冒泡到产物顶层（`id_stage_decoder_unnamed_output*` ⇒ 产物端口 118 → **126**）；**6564 → 6619 · 头文件数不变** 因 **B4 · G1+G4（未知 opcode 检测 + FENCE 显式化）**：`stages/id_stage.h` 增 `illegal_reason`（2 bit）· `pipeline/rv32i_decoder.h` 增 `OP_FENCE = 0x0F` · `pipeline/rv32i_pipeline.h` 增 `dbg_illegal_reason` + **冻结**（`if_stage`/`id_stage` 的 stall 均 OR 上 `illegal_reason != 0`）⇒ ⇒ 未知 opcode **不再被静默当 NOP 退休**（改为一进 ID 级就冻结）⇒ ⇒ `OP_SYSTEM`（ECALL/EBREAK/CSR/MRET）归「**已知未实现**」· `FENCE` 归「**已知 = NOP**」；**6619 → 6647 · 头文件数不变** 因 **ADR-071 审稿修正**（2026-11-15）：`stages/if_stage.h` 的 PC 更新门补 **`flush` 优先于冻结 stall**（判据 `!(stall & !(flush & branch_valid))`）⇒ ⇒ 修正「`flush` ∥ 冻结同拍时 **redirect 被丢掉 + 冻结只活 1 拍**」的真缺陷（oracle 复核发现）⇒ ⇒ 旧互斥论证注释（「flush 与 stall 不会同拍」= **事实错误**）已重写⇒ ⇒ 组件级既有契约（`stall=1 ∧ flush=1 ∧ branch_valid=0` ⇒ PC 冻结）**零改动**；**6647 → 6657 · 头文件数不变** 因 **R21-B（ADR-070 D2 · 2026-11-15）**：`pipeline/rv32i_pipeline.h` 的 **7 处** stage 成员 `ch_module` ⇒ `ch_layer`（+ 显式模块类型名 `IfStage` / `IdStage` / `ExStage` / `MemStage` / `WbStage` / `HazardUnit` / `ForwardingMux<32>`）⇒ ⇒ **只影响层次化产物**（扁平产物逐字节不变）；`load_lane` **保持** `ch_module`（ADR 的字面集合不含它）；**6745 → 6817 · 头文件数不变** 因 **S2（change `rv32i-mem-backpressure-2026-11`）**：`stages/id_stage.h` 新增 `freeze` 输入（MEM 反压冻结 · 与 `stall` 的「装气泡」语义分离） + `rv32i_pipeline.h` 的反压冻结链与注释；**6966 → 6993 · 头文件数不变** 因 **S4a-0（change `rv32i-commit-event-pulse-2026-11`）**：`pipeline/rv32i_pipeline.h` 的 `dbg_wb_write_en` 改**单拍脉冲**（`& !mem_stall`）+ 两处口径注释（store 写使能**不可**门控的**组合环**实测记录）+ 本节新增「**流水线观测面：事件端口 vs 级属性端口**」一节（+27 行）⇒ ⇒ **6993 → 6996** 因 critic NIT 订正（`rv32i_pipeline.h` 的「恰好一次」论证措辞精确化 · +5/−2）；**6996 → 7124 · 头文件数不变** 因 **S4a（change `rv32i-soc-mmio-channel-2026-11` · G-6）**：`rv32i_mem_map.h` 扩 **7 个 MMIO 段**（Clint/Uart/Gpio/Spi/I2c/Pwm/Dma · 每段 4 KB · 自 `0x8010_0000` **顺延派生**）+ `kMmioBase` / `kMmioBytes` + `in_mmio()` + 10 条编译期 `static_assert`（连续性 / 不重叠 / 对齐）；`address_decoder.h` 改**派生**（7 段基址 / 容量全部来自库层表）+ 补 **4 个片选**（`spi_cs`/`i2c_cs`/`pwm_cs`/`dma_cs` ⇒ ⇒ **总片选 9**）+ 修一处 **ODR 隐患**（`rv32i_mem_map.h` 的 include 原在 `namespace riscv` **内部** ⇒ ⇒ 符号落进 `riscv::riscv` ⇒ ⇒ 与直接 include 它的 TU **是两个实体** ⇒ ⇒ 已移到 namespace **之外**）；**7124 → 7129 · 头文件数不变** 因同批的**端口命名棘轮**注释（4 个新片选带显式名字串 + 6 行说明）与 include 移出 namespace 的空行归一（−1）；**7129 → 7137 · 头文件数不变** 因 **S4a-P5** 给 `pipeline/rv32i_asm_encode.h` 补 `LUI` 编码器（SoC 级程序需要与 PC 无关地装载 MMIO 基址 ⇒ `AUIPC` 的 `pc + imm` 表达不了）；**7137 → 7169 · 头文件数不变** 因 **change `riscv-tests-gate-2026-11`**：`pipeline/rv32i_pipeline.h` 的**反压冻结补丁**（`fwd_a_d1` / `fwd_b_d1` 在 `mem_stall` 期间保持 ⇒ 档位与它服务的指令同冻结）+32 行（逻辑 4 行 + 机制/被排除错法的注释）
+**30 headers, 7384 lines**（2026-11-16 实测，ADR-046 D9：磁盘是权威；6459 → 6464 因 ADR-063 落地（B 型立即数 `<< 11` 的两处注释）而变；6464 → 6506 因 `header-self-containment-fix-2026-11` 给 4 个 stage 头补 include/说明、并删除 `ex_stage.h` 的 `BRANCH_*` 死常量块而变；6506 → 6473 因 phase-6 **P9**（Zero-Debt）删除 cache wrapper 的**死数据 / 死配置面**（`WriteBufferEntry` / `WriteBufferConfig` / `PrefetchConfig` / 三个 `prefetch_*` 缓冲）⇒ ⇒ **头文件数不变**（30）；6473 → **6064** 因 phase-6 **B0 批**（`rv32i-dead-component-consolidation` **C5+C6 同批退役**）**物理删除 3 个头**（`pipeline/rv32i_forwarding.h` / `pipeline/hazard_detection_unit.h` / `pipeline/rv32i_hazard_complete.h`）⇒ ⇒ **头文件数 30 → 27** ⇒ ⇒ 行数差 409 ＝ 删 434 行 ＋ 其它头的注释修订（SLTU 修复等）⇒ ⇒ ⚠️ **该订正于 2026-11-13 补**（B0 批当时漏了 ⇒ ⇒ 护栏 `verify_no_duplicate_rv32i_headers.sh` C5 报红 ⇒ ⇒ 登记为 **F-1**）；**6064 → 6582 · 头文件数 27 → 30** 因 phase-6 **B3 批**（`memory-timing-contract-2026-11` · ADR-069 决策 **A0**）**新增** `pipeline/load_lane_selector.h`（load 的车道选择 + 符号/零扩展，**从 `MemStage` 迁出** ⇒ ⇒ 因为 `sread` 让 load 数据**晚 1 拍**可用 ⇒ ⇒ 车道选择 MUST 在 **M2 的下游**做 ⇒ ⇒ 见 ADR-069 **V5**）⇒ ⇒ **头文件数 +1 · 行数 +238**）；**6582 → 6606 · 头文件数不变** 因 `firmware-load-chain-2026-11` **L2（路线 A）**给 `InstrTCM` / `DataTCM` 增加**可选** `init_words` 构造参数（+24 行注释与参数）⇒ ⇒ 默认空 ⇒ **零行为变化**）；**6606 → 6611 · 头文件数不变** 因 `firmware-load-chain-2026-11` **L2（路线 A）** 后紧接的 **R8 改判（用户裁决 A2）**删掉 `riscv::Rv32iPipeline` 的 **`clk` 输入**（**零消费者** ⇒ ⇒ ZERO-DEBT）⇒ ⇒ 连带 SoC 顶层的 `ext_clk` 一并删 ⇒ ⇒ 顶层端口 32 → 31；**6611 → 6636 · 头文件数不变** 因 architect 批次订正 `hazard_unit.h` 的「注释 vs 行为」差异（`load_use_detected` 不是单拍脉冲 · 移位链「固定延迟」只对其自身成立 · **停顿总长 = 检测条件持续拍数 + 2**）⇒ ⇒ **行为零改动**（注释 + 推导，+25 行）；**6636 → 6587 · 头文件数不变** 因 **B4 · C3（EX 接入 `Rv32iAlu`）**：`ex_stage.h` 的**内联 10 个 ALU 分支已删**（−~50 行）且 `rv32i_alu.h` 的 `mem_size`/`mem_signed` **已删**（Δ8 · ZERO-DEBT）⇒ ⇒ 算术核心的唯一实现 = `rv32i_alu.h` ⇒ ⇒ **行为零变化**（既有 golden 全绿）；**6587 → 6564 · 头文件数不变** 因 **B4 · C4（ID 接入 `Rv32iDecoder`）**：`stages/id_stage.h` 的**内联 5 种立即数生成 + 8 级 `select` 链已删**（−~50 行）⇒ ⇒ 立即数的唯一实现 = `pipeline/rv32i_decoder.h` ⇒ ⇒ **行为零变化**（C4 差分逐条相等 · `ctest -LE perf` 254/254 · 独立 Verilog TB `checks=24 fails=0`）⇒ ⇒ ⚠️ 该子组件使 **8 个端口**冒泡到产物顶层（`id_stage_decoder_unnamed_output*` ⇒ 产物端口 118 → **126**）；**6564 → 6619 · 头文件数不变** 因 **B4 · G1+G4（未知 opcode 检测 + FENCE 显式化）**：`stages/id_stage.h` 增 `illegal_reason`（2 bit）· `pipeline/rv32i_decoder.h` 增 `OP_FENCE = 0x0F` · `pipeline/rv32i_pipeline.h` 增 `dbg_illegal_reason` + **冻结**（`if_stage`/`id_stage` 的 stall 均 OR 上 `illegal_reason != 0`）⇒ ⇒ 未知 opcode **不再被静默当 NOP 退休**（改为一进 ID 级就冻结）⇒ ⇒ `OP_SYSTEM`（ECALL/EBREAK/CSR/MRET）归「**已知未实现**」· `FENCE` 归「**已知 = NOP**」；**6619 → 6647 · 头文件数不变** 因 **ADR-071 审稿修正**（2026-11-15）：`stages/if_stage.h` 的 PC 更新门补 **`flush` 优先于冻结 stall**（判据 `!(stall & !(flush & branch_valid))`）⇒ ⇒ 修正「`flush` ∥ 冻结同拍时 **redirect 被丢掉 + 冻结只活 1 拍**」的真缺陷（oracle 复核发现）⇒ ⇒ 旧互斥论证注释（「flush 与 stall 不会同拍」= **事实错误**）已重写⇒ ⇒ 组件级既有契约（`stall=1 ∧ flush=1 ∧ branch_valid=0` ⇒ PC 冻结）**零改动**；**6647 → 6657 · 头文件数不变** 因 **R21-B（ADR-070 D2 · 2026-11-15）**：`pipeline/rv32i_pipeline.h` 的 **7 处** stage 成员 `ch_module` ⇒ `ch_layer`（+ 显式模块类型名 `IfStage` / `IdStage` / `ExStage` / `MemStage` / `WbStage` / `HazardUnit` / `ForwardingMux<32>`）⇒ ⇒ **只影响层次化产物**（扁平产物逐字节不变）；`load_lane` **保持** `ch_module`（ADR 的字面集合不含它）；**6745 → 6817 · 头文件数不变** 因 **S2（change `rv32i-mem-backpressure-2026-11`）**：`stages/id_stage.h` 新增 `freeze` 输入（MEM 反压冻结 · 与 `stall` 的「装气泡」语义分离） + `rv32i_pipeline.h` 的反压冻结链与注释；**6966 → 6993 · 头文件数不变** 因 **S4a-0（change `rv32i-commit-event-pulse-2026-11`）**：`pipeline/rv32i_pipeline.h` 的 `dbg_wb_write_en` 改**单拍脉冲**（`& !mem_stall`）+ 两处口径注释（store 写使能**不可**门控的**组合环**实测记录）+ 本节新增「**流水线观测面：事件端口 vs 级属性端口**」一节（+27 行）⇒ ⇒ **6993 → 6996** 因 critic NIT 订正（`rv32i_pipeline.h` 的「恰好一次」论证措辞精确化 · +5/−2）；**6996 → 7124 · 头文件数不变** 因 **S4a（change `rv32i-soc-mmio-channel-2026-11` · G-6）**：`rv32i_mem_map.h` 扩 **7 个 MMIO 段**（Clint/Uart/Gpio/Spi/I2c/Pwm/Dma · 每段 4 KB · 自 `0x8010_0000` **顺延派生**）+ `kMmioBase` / `kMmioBytes` + `in_mmio()` + 10 条编译期 `static_assert`（连续性 / 不重叠 / 对齐）；`address_decoder.h` 改**派生**（7 段基址 / 容量全部来自库层表）+ 补 **4 个片选**（`spi_cs`/`i2c_cs`/`pwm_cs`/`dma_cs` ⇒ ⇒ **总片选 9**）+ 修一处 **ODR 隐患**（`rv32i_mem_map.h` 的 include 原在 `namespace riscv` **内部** ⇒ ⇒ 符号落进 `riscv::riscv` ⇒ ⇒ 与直接 include 它的 TU **是两个实体** ⇒ ⇒ 已移到 namespace **之外**）；**7124 → 7129 · 头文件数不变** 因同批的**端口命名棘轮**注释（4 个新片选带显式名字串 + 6 行说明）与 include 移出 namespace 的空行归一（−1）；**7129 → 7137 · 头文件数不变** 因 **S4a-P5** 给 `pipeline/rv32i_asm_encode.h` 补 `LUI` 编码器（SoC 级程序需要与 PC 无关地装载 MMIO 基址 ⇒ `AUIPC` 的 `pc + imm` 表达不了）；**7137 → 7169 · 头文件数不变** 因 **change `riscv-tests-gate-2026-11`**：`pipeline/rv32i_pipeline.h` 的**反压冻结补丁**（`fwd_a_d1` / `fwd_b_d1` 在 `mem_stall` 期间保持 ⇒ 档位与它服务的指令同冻结）+32 行（逻辑 4 行 + 机制/被排除错法的注释）；**7169 → 7384 · 头文件数不变** 因 **P6-2（change `rv32i-csr-instructions-2026-11`）**：`pipeline/rv32i_pipeline.h` 接入 `CsrBank`（**生产消费者 0 → 1** · inline `ch_module`）+ 9 个 CSR 流水线寄存器（`csr_idex_*` / `exmem_*` / `m2_*` / `memwb_*`）+ `csr_stall`（**判据落顶层 ⇒ 零新增 `HazardUnit` 端口**）· `pipeline/rv32i_decoder.h` 把 `OP_SYSTEM` 按 `funct3` 细分为「合法 CSR / 未实现(`funct3=0`) / 保留(`funct3=4`)」· `stages/id_stage.h` 把 `OP_SYSTEM` 纳入 `rs1_addr_mux`（CSR 的寄存器源 MUST 经寄存器堆 + 前推）· `stages/wb_stage.h` 加 CSR 写回段（**+2 输入端口，被顶层消费 ⇒ 不冒泡**）⇒ ⇒ **端口面零变更**（核 IP 53 端口契约表 / C6 快照 / 独立 TB / tsv / 期望表全部不动）
 All header-only.
 
 > ⚠️ 2026-10-24（change `rv32i-canonical-convergence-2026-10`，ADR-046）：
@@ -16,7 +16,7 @@ All header-only.
 
 ## STRUCTURE
 ```
-include/cpu/                             # 30 headers, 7169 lines（2026-11-25 实测）
+include/cpu/                             # 30 headers, 7384 lines（2026-11-25 实测）
 │   ⚠️ **STRUCTURE 树里的 per-file 行数只对 `rv32i_pipeline.h` 保持同步**（2026-11-15 · R21-B 改行数后订正）
 │      ⇒ ⇒ 另有 **6** 个 per-file 计数**陈旧**（`rv32i_decoder.h` / `rv32i_tcm.h` / `hazard_unit.h` /
 │      `rv32i_alu.h` / `address_decoder.h` / …）⇒ ⇒ **预存在漂移** ⇒ ⇒ 已登记 **R25**（不在 R21-B 范围内 ⇒ 不顺手清理）
@@ -31,7 +31,7 @@ include/cpu/                             # 30 headers, 7169 lines（2026-11-25 �
 ├── pipeline/                          # 流水线数据通路（ADR-046 D2）
 │   ├── rv32i_decoder.h            # R/I/S/B/U/J format decode (161)
 │   ├── rv32i_pipeline_regs.h       # IF/ID/EX/MEM/WB regs (490 — largest)
-│   ├── rv32i_pipeline.h            # 5-stage top-level (972)
+│   ├── rv32i_pipeline.h            # 5-stage top-level (1137)
 │   ├── rv32i_tcm.h                # Tightly-coupled memory (ITCM/DTCM) (133)
 │   ├── hazard_unit.h               # 冒险检测 + 停顿/冲刷控制 (178)
 │   ├── load_lane_selector.h        # load 车道选择 + 符号/零扩展（ADR-069 A0 · 从 MemStage 迁出）
@@ -249,11 +249,41 @@ include/cpu/                             # 30 headers, 7169 lines（2026-11-25 �
 - **端口面零变更**（`ExceptionUnit.__io` 未动 ⇒ 无「新增端口 ⇒ 全部实例化点 MUST 驱动」义务）。
 - 契约载体 = capability **`rv32i-privilege`**（2026-11-16 新增 · 种子 Requirement）。
 
+## CSR 指令通路：**读在 ID · 写在 EX · 单一地址口**（2026-11-25 · P6-2 · change `rv32i-csr-instructions-2026-11`）
+
+> 权威契约 = capability **`rv32i-privilege`**（`openspec/specs/rv32i-privilege/spec.md`）；
+> 本段只留**实施时必须知道的三条硬事实**（细节见 change 的 `design.md` §3/§4 + §8）。
+
+- **`CsrBank` 的生产消费者 = `Rv32iPipeline`**（此前 0）⇒ ⇒ 它被**内联**实例化
+  （`ch::ch_module` · 与 `load_lane` 同型 ⇒ **不是** ADR-070 的成层集合成员）。
+  端口面：`csr_addr` / `csr_rdata`（**组合读**）· `csr_wdata` / `csr_write_en`（**沿写**）
+  ⇒ ⇒ `mtip` / `meip` **显式 tie 0**（本项无中断源 ⇒ P6-6 才接）。
+- ⚠️ **`CsrBank` 只有一个地址口**（读/写共用）⇒ ⇒ 本项的实现形态**被它决定**：
+  · **读在 ID 级**（结果锁存进 `csr_idex_read_value` = `csr_old`）
+  · **写在 EX 级**（`csr_wdata` / `csr_write_en`）
+  · **地址口在「EX 级有 CSR」时切到 EX 的地址**（否则写会落到 ID 那条指令的地址上）
+  ⇒ ⇒ 相邻两条 CSR 若访问同一 CSR：读者在 ID 的那一拍写者的写**尚未落沿**
+  ⇒ ⇒ **MUST 停 1 拍**（`csr_stall`）⇒ 否则读到**旧值**（违反 RISC-V 的 CSR 顺序要求）。
+- ⚠️ **`csr_stall` 落顶层**（`rv32i_pipeline.h`），复用 `if_stage` / `id_stage` 的 `stall`
+  入口 ⇒ ⇒ **零新增 `HazardUnit` 端口**（根 `AGENTS.md:256` 红线）· **`flush` 优先**。
+- ⚠️ **数据通路的三处写回 mux MUST 同构**（`wb_stage` / M2 的 `m2_write_data` / 档位 1 的
+  `ex_mem_alu_result` 选择）且 **`hazard.ex_reg_write` / `mem_reg_write` MUST 含 CSR**
+  ⇒ ⇒ 否则距离 1 / 2 / 3 的消费者**读不到** CSR 的写回值。
+- ⚠️ **`OP_SYSTEM` 的 `rs1` 字段**：寄存器型是**源寄存器**、立即数型是 **`zimm`**
+  ⇒ ⇒ `stages/id_stage.h` 的 `rs1_addr_mux` **MUST** 含它（否则恒读 x0 ⇒ 源恒 0）。
+- **判据**：`examples/riscv-mini/tests/test_rv32i_csr_instructions.cpp`
+  （8 用例 / 30 断言 · 期望值**手推**）· 变异已逐条登记（去掉 `csr_stall` ⇒ AC3 必红）。
+
 ## 非法指令判定：**唯一权威 = `Rv32iDecoder`**（2026-11-16 · B4 · G1 扩展 · ADR-071 v1.2）
 
-- **`illegal_reason`（2 bit · 4 态）**：`0` 合法 · `1` **已知未实现**（`OP_SYSTEM`）·
+- **`illegal_reason`（2 bit · 4 态）**：`0` 合法 · `1` **已知未实现** ·
   `2` **未知 opcode** · **`3` = 已知 opcode 但 `funct3` / `funct7` 是 ISA 保留组合**。
-  ⇒ ⇒ **优先级**：`1` > `3` > `2` > `0`（`OP_SYSTEM` 已是「已知未实现」⇒ 不重复判其 `funct3`）。
+  ⇒ ⇒ **优先级**：`1` > `3` > `2` > `0`。
+  ⚠️ **2026-11-25（P6-2）起 `OP_SYSTEM` 不再整体归 `1`** —— 它按 `funct3` **细分**：
+  `001/010/011/101/110/111`（CSRRW/S/C/WI/SI/CI）⇒ **0**（合法 · 已实现）·
+  `000`（ECALL/EBREAK/MRET/WFI）⇒ **1**（未实现 · P6-4/P6-5）· `100`（保留）⇒ **3**。
+  ⇒ ⇒ ⚠️ **`known_opcode` MUST NOT 含 `OP_SYSTEM`**（否则 `funct3=0` 掉到 `0` ⇒
+  「合法但无功能」⇒ 会当 NOP 退休 ⇒ **比冻结更糟**）。
 - ⚠️ **判定在 `Rv32iDecoder`（单一来源）** ⇒ ⇒ `IdStage` **只转发** + 保留 `valid` 门控
   ⇒ ⇒ **MUST NOT** 在两处各写一份判据（两份判据 = **静默分叉**）。
 - ⚠️⚠️ **U 型（`LUI`/`AUIPC`）与 J 型（`JAL`）没有 `funct3` 字段**（bits 14:12 是**立即数位**）

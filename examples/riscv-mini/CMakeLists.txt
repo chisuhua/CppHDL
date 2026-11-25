@@ -110,6 +110,13 @@ riscv_mini_catch_test(test_rv32i_core_mmio tests/test_rv32i_core_mmio.cpp)
 # ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
 riscv_mini_catch_test(test_rv32i_stall_integrity tests/test_rv32i_stall_integrity.cpp)
 
+# === RV32I CSR 指令（6 种 `funct3`）· change `rv32i-csr-instructions-2026-11`（P6-2）===
+# DUT = `src/rv32i_core_top.h`（核 IP 顶层）· 固件 = 手推编码的 CSR 序列
+# ⇒ ⇒ 判据 = 写回序列（`dbg_wb_*`）+ 非法原因（`dbg_illegal_reason`）+ 退休计数
+# ⚠️ **不新增端口**（只用既有 `dbg_*` / `obs_perf_*` 观测 ⇒ 端口面零变化）。
+# ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
+riscv_mini_catch_test(test_rv32i_csr_instructions tests/test_rv32i_csr_instructions.cpp)
+
 # === 官方 riscv-tests 套件门禁（change `riscv-tests-gate-2026-11` · R2）===
 # DUT = `src/rv32i_core_top.h`（核 IP 顶层）· 镜像 = **入库**的 40 份
 # `rv32ui-p-*` mem-split 字镜像（来源 / 改造 / 排除项 = tests/riscv-tests/PROVENANCE.md）。

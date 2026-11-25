@@ -147,6 +147,14 @@ public:
         auto is_jal   = (opcode_raw == ch_uint<7>(OP_JAL));
         auto is_lui   = (opcode_raw == ch_uint<7>(OP_LUI));
         auto is_auipc = (opcode_raw == ch_uint<7>(OP_AUIPC));
+        // ⚠️ **CSR 指令的 `rs1`**（2026-11-25 · P6-2 · change
+        //    `rv32i-csr-instructions-2026-11`）：`OP_SYSTEM` 的 `rs1` 字段是
+        //    **源寄存器**（`CSRRW/S/C`）或 **`zimm`**（`CSRRWI/SI/CI`）
+        //    ⇒ ⇒ 寄存器型 MUST 经寄存器堆读口 + 数据前推（否则恒读 x0 = 0
+        //    ⇒ `csr_wdata` 恒为 `csr_old`）⇒ ⇒ 故把 `OP_SYSTEM` 纳入
+        //    `rs1_addr_mux`（**内部信号 · 零新增端口**）。
+        //    ⚠️ 立即数型把 `rs1` 位当地址读是**无害**的（其值不被消费）。
+        auto is_system = (opcode_raw == ch_uint<7>(OP_SYSTEM));
         
         // ========================================================================
         // 立即数 = **库组件 `riscv::Rv32iDecoder`**（2026-11-15 · B4 · C4）
@@ -200,7 +208,7 @@ public:
         // ========================================================================
         // 读端口 A - rs1 地址
         auto rs1_addr_mux = select(
-            is_op | is_opimm | is_load | is_store | is_branch | is_jalr,
+            is_op | is_opimm | is_load | is_store | is_branch | is_jalr | is_system,
             rs1,
             ch_uint<5>(0_d)
         );

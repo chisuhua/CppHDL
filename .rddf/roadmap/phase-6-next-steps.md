@@ -59,6 +59,7 @@
 | | | builder | — | ✅ **2026-11-15 已闭**（commit 见下）⇒ ⇒ ⚠️ **同时订正原登记的归因**：「HEAD 版复现 ⇒ 排除本批引入」是**错误推理**（HEAD 自含该缺陷 ⇒ 必然复现）⇒ ⇒ **正确做法 = 与缺陷引入前的基线比**（`git archive a2f5075` ⇒ 自检全绿）⇒ ⇒ ⇒ 归因 = `1156563` |
 | **R23-A** | ✅ **RC-8 收尾**（2 个被 CI 直接调用的脚本缺可执行位）| builder | — ⇒ ⇒ ✅ **2026-11-13 已闭**（commit `7069f44` · git index 100644 → **100755**）⇒ ⇒ ⚠️ 验收证据（executed+绿）待 CI run 落地后回填（sha + job + step + conclusion）|⇒ ⇒ 判据 = `git ls-files -s` ⇒ 两个脚本**均 100755**（⚠️ MUST 看 **git index**，不是工作区 —— `os.access` / `core.fileMode=false` ⇒ ⇒ 假绿）+ 该 step 本轮 **executed（非 skipped）且绿**（证据 = `sha` + `job` + `step name` + `conclusion`）⇒ ⇒ ⚠️ **不**绑定「N 个 job 全绿」（那是**独立**信号：37 个脚本首次真正执行，任意一条红都不该被记成「RC-8 没修干净」）|
 | **R23-B** | ✅ **护栏可达性 = 一等验收项**（architect 复盘 #5 裁决 ① · **待用户追认**）⇒ ⇒ ①-a **静态护栏** + ①-b **登记** | builder | — ⇒ ⇒ 载体 = `scripts/verify_guard_reachability.sh` + `.rddf/checks/guard-reachability.md`⇒ ⇒ ⚠️ 新台账 MUST 带 `evidence: probe:`（`ledger_evidence.py` 是**全目录 glob** ⇒ ⇒ 否则打破 ledger 的 91/6 基线）⇒ ⇒ 写点 = `scripts/**` ⇒ ⇒ 与 R14（`include/**`+`src/**`）**不重叠 ⇒ ⇒ 可并行**⇒ ⇒ ✅ **2026-11-13 已闭** = `scripts/verify_guard_reachability.sh` + `scripts/lib/guard_reachability.py` + `.rddf/checks/guard-reachability.md`（**45** 个被引用脚本 · 登记表双向 1:1 · 排除类型**逐字派生**）⇒ ⇒ **6 条自检投毒**全判别（含反向对照 ④）⇒ ⇒ 已接入 CI（主 job · 不需 verilator/网络/git 历史）|
+| **R25** | 🟡 **riscv-arch-test（ACT4）认证级证据**（**新线** · 2026-11-25 · planner · 与 R7/R11/R16 **写点零重叠** ⇒ ⇒ **可全程并行**）⇒ ⇒ ⚠️ **入口 = S-A.0（三条 go/no-go）** ⇒ ⇒ **不是**「立刻铺开」⇒ ⇒ ✅ **S-A.0 的判据 ①② 已判**（builder · 2026-11-25 · **零安装侦察**：上游 clone 已在 `/tmp/opencode/rat-act4` ⇒ ⇒ **39/39 个 `.S` 汇编成功** ⇒ ⇒ **默认切分下 NO-GO**：最大 `.text*` = **112.6 KB** vs I-TCM 16 KB（超 7.0×）· 最大 `.data` = **40.9 KB** vs D-TCM 16 KB（超 2.6×）⇒ ⇒ **但两区都随 testcase 数线性增长** ⇒ ⇒ ⇒ **杠杆 = `TESTCASES_PER_FILE ≈ 15~20`**（瓶颈 = `I-jal-00` = 956 B/tc）⇒ ⇒ ⇒ **所需 ELF ≈ 109**（vs 39）⇒ ⇒ ⇒ **运行时外推 18~182 min（跨一个数量级 ⇒ ⇒ 判据 ④ 必须实测）**）⇒ ⇒ ⛔ **判据 ③④⑤ 仍阻塞于 Sail 环境** ⇒ ⇒ ⇒ **综合 = CONDITIONAL GO（未完成）** | planner → builder | — | ① **S-A.0**（**三条 go/no-go** · ⚠️ **已部分完成**：①② 已判 ✅ · ③④⑤ 待 Sail）⇒ ⇒ **结论落进 `examples/riscv-mini/tests/riscv-arch-test/PROVENANCE.md`**（✅ **已落盘** · 含实测数字 + 复现命令 + 探针局限 + 判定表 + 环境就绪度 + 许可登记 + 未闭清单）⇒ ⇒ ⚠️ **「测试自断言」⇒ ⇒ 本项无增量价值 ⇒ ⇒ 降级为「不立项」** ⇒ ⇒ ② **DUT 适配 5 文件**（`test_config.yaml` / `<dut>.yaml`（`{I}`+`{Sm}` dummy）/ `rvmodel_macros.h`（**不定义 `STANDARD_SM_SUPPORTED`**）/ `link.ld`（`TEST_BASE=0x8000_0000` · **`.tohost` 显式钉 `0x8001_0000`** · **`.text.rvmodel` 显式放 I-TCM 侧**）/ `sail.json`）⇒ ⇒ ③ **核级门禁**（N 个 ELF · 全部 `tohost == 1` · **N ≈ 109** 而非 39）⇒ ⇒ ④ ⚠️ **三类失败判据按优先级（② > ① > ③）且各有负向对照**（`tohost==3` / **`dbg_illegal_reason != 0`（`ebreak` ⇒ 冻结 ⇒ MUST 在冻结那一拍判 FAIL · MUST NOT 等超时）** / 其它挂死）⇒ ⇒ ⑤ **交付物级门禁**（RTL 产物侧 · lint 是门禁一环）⇒ ⇒ ⑥ ⚠️ **能力边界用「UDB 声明」表达**（**不是**「排除项」清单 ⇒ ⇒ MUST NOT 与 `riscv-tests` 的排除项登记混用口径）⇒ ⇒ ⚠️ **判定主干 MUST 落核级**（SoC 级**看不到 `obs_data_*`** ⇒ 且内存容量相同 ⇒ ⇒ SoC = 纯成本）⇒ ⇒ ⚠️ **特权面被 P6（CSR 特权级）阻塞** ⇒ ⇒ 本线只取非特权子集 | 📝 **draft**（2026-11-25 · 草案 = `.rddf/improvements/rv32i-arch-test-certification-2026-11.md` · **HARD-GATE exit 0** · **metis 1 轮 18 条全处置** · ✅ **builder 已补实施期实测回填段**）⇒ ⇒ ⚠️ **Sail 0.16 + `mise`/`uv` + Ruby-UDB 的环境搭建 = 独立 work item**（本机就绪度 **1/4** · 官方 Docker 镜像路径本机不可用 ⇒ ⇒ **CI runner 自带 docker ⇒ 路径 ① 可行** · 但本仓 CI 无 docker 先例 ⇒ ⇒ 属 CI 改动）⇒ ⇒ ⚠️ **与 R15 / R16 / R3 的收口阶段不并行**（共享 `AGENTS.md` 的 **2 个计数锚点**：`CTEST_TOTAL` + `EXAMPLES_TEST_SOURCES`） |
 
 ⇒ ⇒ ✅ **B3 的🚪 门（R5 + R6）已全闭**（2026-11-12）⇒ ⇒ ✅ **R13 已闭（2026-11-13）** = 两个 change 立项完成
 ⇒ ⇒ ✅ **R17.1 / R17.2 已闭**（2026-11-13 · 32 端口具名）· ✅ **R4 已闭**（P8 删 stub + 公开面登记 + golden 下限）
@@ -380,6 +381,60 @@ ADR-068 **V3** 明写「BRAM 可推断性未在 CI 验证 ⇒ MUST 登记残差�
 - ⚠️ 裁决 ① 的**语义**部分（`skipped` 不满足 ①-b / 排除集合 MUST 闭合且**派生**）=
   **architect 裁量 · 待用户追认** ⇒ ⇒ 载体已落本页（承 architect 复盘 #4「裁量 MUST 落盘 planner 域」的先例）
 
+### R25 · riscv-arch-test（ACT4）认证级证据 —— 📝 **draft · 入口 = P16-0（只读 go/no-go）**
+
+> ⚠️ **本段是 2026-11-25 新增的独立线**（planner）⇒ ⇒ **与 R7 / R11 / R16 的写点零重叠** ⇒ ⇒ **可全程并行**（仅**收口阶段**不并行 —— 见 §1.1 的 5 个计数锚点）。
+> ⚠️ **本段不是「立刻铺开」** ⇒ ⇒ **入口 = P16-0**（**只读 · 零成本**）⇒ ⇒ 结论出来之前**不得**写任何适配代码。
+
+| 步 | 内容 | 判据 |
+|---|---|---|
+| **R25.0a** | ✅ **零安装容量侦察**（**2026-11-25 · builder 已完成** · **走的第三条路径** ⇒ ⇒ **不在原规划的两条路径内** ⇒ ⇒ **不构成 `plan_drift`** ⇒ ⇒ 产出 = **判据 ①②**） | **为什么能零安装**：`tests/env/signature.h` 是**纯宏模板**（不含 Sail 产出的期望值）⇒ ⇒ 期望签名**只影响 `.data` 运行时内容**、**不影响 `.text`** ⇒ ⇒ ⇒ `riscv64-unknown-elf-gcc`（本机 16.1.0）+ 官方 `cvw-rv32i` 的 `rvmodel_macros.h` ⇒ ⇒ **`-c` 汇编（不链接）** ⇒ ⇒ **39/39 个 `.S` 汇编成功**（`compiled_ok=39 failed=0`）⇒ ⇒ **零 Sail · 零安装 · 零产品代码改动 · 产物全在 `/tmp/opencode/`（不进仓）**<br>**实测**：上游默认切分（`tests/rv32i/I/` = **39** 个 `.S` · **每个只有 `-00` 单分片**）⇒ ⇒ **`.text*` 最大 = 115,280 B（112.6 KB · `I-jal-00`）vs I-TCM 16 KB ⇒ ❌ 超 7.0×** · **`.data` 最大 = 41,888 B（40.9 KB）vs D-TCM 16 KB ⇒ ❌ 超 2.6×** ⇒ ⇒ **但两区都随 testcase 数线性增长**（`.text.rvtest` ≈ 71.3 B/tc · `jal` = 956 B/tc（每 testcase **2 个** `RVTEST_SIGUPD`）· `.data` ≈ 4,840 B 固定 + 90.6 B/tc）⇒ ⇒ ⇒ **杠杆 = `TESTCASES_PER_FILE ≈ 15~20`**（瓶颈 = `I-jal-00`）⇒ ⇒ ⇒ **所需 ELF ≈ 109**（vs 39 ⇒ ×2.8）⇒ ⇒ ⇒ **运行时外推 18 min（@10 s/ELF）~ 182 min（@100 s/ELF）⇒ ⇒ 跨一个数量级 ⇒ ⇒ 判据 ④ 必须实测**<br>⚠️ **探针局限随结论一起读**（`rvtest_config.h` 手造最小版 · `signature_stub.h` 含 4,096 B · 期望签名真实体积未测）⇒ ⇒ **但结论方向不受影响**（超一个数量级 ⇒ 任何合理偏差都救不了）⇒ ⇒ **资产 = `examples/riscv-mini/tests/riscv-arch-test/PROVENANCE.md`** |
+| **R25.0** | ⚠️ **S-A.0 · 环境 spike（metis BLOCKER-3 的修补）** —— **认领 owner + 时限 + 产出** ⇒ ⇒ ⚠️ **原设计里 S-A 依赖生成侧工具链、而该依赖被划进 OUT ⇒ ⇒ 关键路径上有个没人认领的洞** | **owner** = builder（CI job 路线）/ planner + 用户（本地路线 · 需预算）· **时限** = 本地 spike **≤ 0.5 天**（⇒ ⇒ 超时 ⇒ 如实记录并停止）· **产出** = **可复现命令 + 成功/失败记录**⇒ ⇒ ⚠️ **失败 ⇒ 本项降级为「不立项」并记录原因**（**不是**无限投入）· **路径 ①（推荐 · 本机零安装）**：新增 **`workflow_dispatch` 手动触发的 CI job**（`ubuntu-22.04` runner **自带 docker**）跑官方镜像 `ghcr.io/riscv/act4-build:latest` ⇒ ⇒ ⚠️ **本仓 CI 当前无 docker 先例** ⇒ ⇒ 该 job 属 CI 改动（builder 域）· **路径 ②（兜底）**：本地装 Sail 0.16 + `mise`/`uv` + Ruby-UDB ⇒ ⇒ ⚠️ **本机 gcc 16.1.0 高于官方要求的 15 · 兼容性未验证** |
+| **R25.1** | **P16-0 · go/no-go** —— 照抄官方 `config/cores/cvw/cvw-rv32i/`（**现成的 RV32I-only 无 CSR 模板**）⇒ ⇒ 产出 **N 个** ELF（**N = 生成清单记录值 · 默认 39**）⇒ ⇒ **只量尺寸** | **五条判据**：**① 容量（I-TCM）**：`.text.init` + `.text.rvtest` + **`.text.rvmodel`** ≤ **16 KB − 1 KB**（⚠️ 余量**现在定死 1 KB** ⇒ ⇒ **MUST NOT 事后填 0**）· **② 容量（D-TCM）**：`.tohost` + `.rodata` + `.data` + `.bss` ≤ **16 KB − 1 KB**（⚠️ **`.text.rvmodel` 不计入 D-TCM** ⇒ ⇒ 因它落 I-TCM ⇒ ⇒ 见下）· **③ 机械门**：N 个 ELF **逐个**过 `rv32i-fw-dump --format mem-split` ⇒ ⇒ **exit 3 数 == 0**（该工具对越界节区 **fail-closed** ⇒ ⇒ 直接模拟真实装载）· **④ 运行时预算**：单 ELF ~100 s ⇒ N 个 ≈ **65 分钟** ⇒ ⇒ **MUST 给出总时长上限 + CI 落点**（⚠️ **「装得下但跑不完」是与容量独立的第二种 no-go**）· **⑤ 装不下 ⇒ 调 `TESTCASES_PER_FILE` 后重测**（记下调小值 + 新的 N）⇒ ⇒ **五条结论 MUST 落进 `PROVENANCE.md`** |
+| **R25.2** | **DUT 适配 5 文件**（**全在新目录** ⇒ ⇒ 零写点冲突） | ① `test_config.yaml`（含 **`include_priv_tests: False`**）· ② `<dut>.yaml` = `{I, "= 2.1"}` + **`{Sm, "= 1.12.0"}`（⚠️ dummy · 仅为 MXLEN · `udb validate` 强制要求）** + `MXLEN: 32` + **`MISA_CSR_IMPLEMENTED: false`** + **`MISALIGNED_LDST: false`** + **不**声明 `Zicsr`/`Zifencei`/`Zicntr` ⇒ ⇒ ⚠️ **判据 MUST 与产出总数 N 绑定**（「没有 `Zicsr*`」单独看是**恒绿形态**）· ③ `rvmodel_macros.h` = **不定义 `STANDARD_SM_SUPPORTED`**（⇒ ⇒ env 的 CSR 启动代码被 `#ifdef` 屏蔽）+ `RVMODEL_HALT_PASS` 写 `1` / `FAIL` 写 `3` · ④ `link.ld` = `ENTRY(rvtest_entry_point)` + `TEST_BASE = 0x8000_0000`（**MUST**）+ **`.tohost` 显式钉 `0x8001_0000`**（⚠️ **MUST 显式** ⇒ ACT4 默认把 `.tohost` 当 **orphan section** ⇒ 位置不可靠）+ ⚠️ **`.text.rvmodel` 显式放 I-TCM 侧**（**偏离上游惯例** ⇒ ⇒ 理由 MUST 登记）· ⑤ `sail.json` 的 `memory.regions` **MUST 与 `link.ld` 的 `RAM_ORIGIN`/`RAM_LENGTH` 一致**<br>⇒ ⇒ ⚠️ **Sail 侧与 DUT 侧 MUST 共用同一份 `link.ld`**（ACT4 要求 test-visible 符号地址两侧一致）⇒ ⇒ ⇒ **双 TCM 布局对 Sail 不构成障碍**（`0x8000_0000` / `0x8001_0000` 只是普通物理地址） |
+| **R25.3** | **核级门禁**（新 ctest target · **多个独立二进制** —— 单 ELF ~100 s ⇒ 300 s 上限内必须拆） | N 个 ELF 全部 `tohost == 1` + **总时长 < 明写上限** + ⚠️ **两个锚点都同步**：**`CTEST_TOTAL`** + **`EXAMPLES_TEST_SOURCES`**（⚠️ 新文件 `examples/riscv-mini/tests/test_rv32i_arch_suite.cpp` 命中计数口径 (c) ⇒ ⇒ **24 → 25**）⇒ ⇒ ⚠️ **抽样判据 = 装载链抽验**（`objdump -h` 节区地址/尺寸 vs 镜像首字/字数逐一对得上）⇒ ⇒ **不是**「手推复核」（本项期望值来自 Sail = **外部 oracle** ⇒ ⇒ 「禁抄仿真输出」反模式不直接适用） |
+| **R25.4** | ⚠️ **三类失败判据按优先级生效 + 两条负向对照**（⚠️ **不是互斥** —— 一个 ELF 可**先写 `tohost=3` 再 `ebreak`** ⇒ ⇒ **优先级 ② > ① > ③** · 同现 MUST 双记录） | ① 正常失败 = `tohost == 3` ⇒ FAIL · ② ⚠️ **`ebreak` 失败路径**（ACT4 的 failure code 可能执行 `ebreak` ⇒ ⇒ 本核 `OP_SYSTEM` = 已知未实现 ⇒ `dbg_illegal_reason = 1` ⇒ ⇒ **流水线冻结** ⇒ ⇒ ⇒ **MUST 在冻结那一拍就判 FAIL** ⇒ ⇒ ⇒ **MUST NOT 等超时**（⇒ ⇒ 否则每条失败用例都变超时 ⇒ 判据失真）· ③ 其它挂死 = 另设一类 ⇒ ⇒ **负向对照 2 条**（手写镜像写 `3` ⇒ MUST 如实读到 `3`；手写镜像执行 `ebreak` ⇒ MUST 判 FAIL 而非超时）⇒ ⇒ ⇒ **任一条恒绿 ⇒ 门禁红**<br>⇒ ⇒ ⚠️ ② 的观测面 MUST 用**核级 `dbg_illegal_reason`**（`rv32i_core_top.h:113` · 「进 ID 级即冻结」⇒ 信号保持有效 ⇒ 逐拍轮询无采样竞态）⇒ ⇒ ⇒ **又一条「判定主干 MUST 落核级」的硬理由**（SoC 级看不到 `dbg_*`） |
+| **R25.5** | **交付物级门禁**（仿 `scripts/verify_rv32i_official_rtl.sh`） | 发射（带镜像）→ **lint（退出码 0 + 零 `%Error`）** → 编译 → 运行 → 判 `tohost` ⇒ ⇒ **lint 是门禁的一环**（不是可选步骤） |
+| **R25.6** | ⚠️ **能力边界用「UDB 声明」表达**（**不是**「排除项」清单） | 每条 = **扩展名 / 声明值 / 理由 / 产出侧可核对证据（须与 N 同时断言）** ⇒ ⇒ ⚠️ **MUST NOT** 与 `riscv-tests` 的「排除项登记」**混用口径**（那边是「我们删测试」· 这边是「我们声明能力」）⇒ ⇒ ⇒ 且 MUST 显式登记「**`Sm` 是 dummy 声明 · 不代表核实现 CSR**」⇒ ⇒ ⇒ 且 `PROVENANCE.md` MUST 含 **上游 commit SHA + 生成命令全文 + 工具链版本锁**（gcc / sail / uv / udb）⇒ ⇒ ⇒ 且 MUST 登记「`RVMODEL_IO_*` 留空 ⇒ 失败时无法定位到哪个 testcase」这一代价 + 预案 |
+
+#### R25 的边界（⚠️ 不可越界）
+
+- ❌ **不**在本线实施**特权测试** ⇒ ⇒ 被 **P6（CSR 特权级）** 阻塞 ⇒ ⇒ 解锁后需**另一个 change**（去掉 `include_priv_tests: False` + **定义** `STANDARD_SM_SUPPORTED`）
+- ❌ **不**在本线扩 **TCM 容量**（`kTcmAddrWidth` 12 → 13）⇒ ⇒ 全平台内存布局变更 ⇒ ⇒ **独立 change**
+- ❌ **不**在本线做 **RISCOF 3.x** ⇒ ⇒ 已 deprecated + plugin 形态不适配
+- ❌ **不**在本线做 **SoC 级判定** ⇒ ⇒ SoC 级**看不到 `obs_data_*` / `dbg_*`** ⇒ ⇒ 须先扩根端口面 ⇒ ⇒ 纯成本
+- ❌ **不**在本线**搭建生成侧环境**（Sail / mise / uv / Ruby-UDB）⇒ ⇒ **独立 work item**
+- ⚠️ **收口阶段 MUST NOT 与 R15 / R16 / R3 并行** ⇒ ⇒ 共享 `AGENTS.md` 的 **5 个计数锚点** ⇒ ⇒ **锚点编辑权 = 最后合入者**
+
+#### R25 的 metis 第 1 轮处置记录（**2026-11-25 · planner** · **全部已处置**）
+
+> ⚠️ **metis = planner 的固定审查者**（新建 improvement 必审 · **该 improvement 总计 1 轮** ⇒ ⇒ 本轮即用满）⇒ ⇒ 处置记录落此处。
+
+| 级别 | finding | 处置 |
+|---|---|---|
+| 🔴 **BLOCKER** | **`.text.rvmodel` 落点逻辑写反了**（原稿说「确认它在 D-TCM 内」⇒ ⇒ **把风险当成了缓解**）⇒ ⇒ 实测坐实：本核取指 = `bits<kTcmAddrWidth+1,2>(instr_addr)`（`rv32i_core_top.h:204`）⇒ ⇒ **只切片、无区域检查** ⇒ ⇒ D-TCM 取指 ⇒ **alias 回 I-TCM 复位向量** ⇒ ⇒ 而 `RVMODEL_HALT_*` 是**会被 `jal` 调用的代码** | ✅ **已修** ⇒ ⇒ 新增**草案 A.2 段**（冲突 + 实测 + 裁决 + 连带影响）⇒ ⇒ **裁决 = `.text.rvmodel` MUST 显式放 I-TCM 侧**（偏离上游惯例 ⇒ ⇒ 理由 MUST 登记）⇒ ⇒ 容量判据 ① 计入 I-TCM / ② 排除 D-TCM ⇒ ⇒ **R7 风险行已重写** |
+| 🔴 **BLOCKER** | **Capabilities 自相矛盾**（「新增 capability」+「零 spec delta」互斥 ⇒ ⇒ vapor capability）+ **delta 门禁机制误述**（「`verify_openspec_delta.sh` 会红」）⇒ ⇒ 实测坐实：`scripts/verify_openspec_delta.sh:108` = `if [ -d "$dir/specs" ]` ⇒ ⇒ **`specs/` 缺席时零信号 · 不会红** | ✅ **已修** ⇒ ⇒ **选边 = 零 delta**（先例 = `openspec/changes/archive/2026-11-25-riscv-tests-gate-2026-11/`）⇒ ⇒ **删**「新增 capability `rv32i-arch-compliance`」⇒ ⇒ **删**「会红」误述 ⇒ ⇒ 改写为「『proposal 明写无 spec 变更』是**约定俗成 · 非门禁**」⇒ ⇒ 「判定口径由 `PROVENANCE.md` 承载」 |
+| 🔴 **BLOCKER** | **S-A 被本草案自己 OUT 掉的前置阻塞**（S-A 要跑生成侧 ⇒ ⇒ 而「装 Sail/mise/uv」被划为独立工作项 ⇒ ⇒ **关键路径上有个没人认领的洞** ⇒ ⇒ 按现文 S-A 必然走「降级不立项」⇒ ⇒ 零产出） | ✅ **已修** ⇒ ⇒ 新增 **S-A.0 环境 spike**（**owner + 时限 ≤ 0.5 天 + 产出 = 可复现命令 + 成功/失败记录**）⇒ ⇒ **两条路径**：① **CI job 跑官方镜像**（`ubuntu-22.04` runner 自带 docker · ⚠️ 本仓 CI 无 docker 先例 ⇒ ⇒ 属 CI 改动）② 本地装 Sail（**兼容性未验证**）⇒ ⇒ **「零成本」措辞全改**（「零产品代码改动 · 产物不进仓」）⇒ ⇒ **下一步表加第 1 行** |
+| 🟡 **SHOULD_FIX** | 「三类**互斥**」不互斥（可先写 `tohost=3` 再 `ebreak`） | ✅ **已修** ⇒ ⇒ 改**优先级制 ② > ① > ③**（先查 illegal → 再查 tohost → 最后计时）⇒ ⇒ 同现 MUST 双记录 ⇒ ⇒ 判 FAIL 结论不变 |
+| 🟡 **SHOULD_FIX** | S-C.1「与上游 ELF 逐字节可复现」**语义不通**（`.mem` vs `.elf` 不可能逐字节 diff） | ✅ **已修** ⇒ ⇒ 改为「**同一 ELF 重新生成的镜像 vs 入库镜像** `diff -r` == 0」⇒ ⇒ 并注明**执行环境**（需生成侧工具链 ⇒ ⇒ 只能本地跑 · CI 不覆盖 ⇒ ⇒ 这本身也要登记） |
+| 🟡 **SHOULD_FIX** | 「余量 MUST 明写」把余量留给实施者（事后填 0 即恒绿） | ✅ **已修** ⇒ ⇒ **余量现在定死 = 1 KB**（并写明理由：单 ELF 含多 testcase · 尺寸随 `TESTCASES_PER_FILE` 变动） |
+| 🟡 **SHOULD_FIX** | S-E.1 与 S-E 段**自相矛盾**（S-E 说「MUST NOT 出现排除项清单」· S-E.1 却写「排除项逐条登记」） | ✅ **已修** ⇒ ⇒ S-E.1 改名「**能力声明清单**」⇒ ⇒ 字段改为 6 项（扩展名 / 声明值 / 理由 / 产出侧证据（须与 N 同时断言）· **上游 commit SHA** · **生成命令 + 工具链版本锁**）⇒ ⇒ **删**「跑不过」口径（会诱导把「跑不过」伪装成「声明」）⇒ ⇒ 并登记「`RVMODEL_IO_*` 留空 ⇒ 失败时无法定位到哪个 testcase」这一代价 + 预案 |
+| 🟡 **SHOULD_FIX** | **漏了 `EXAMPLES_TEST_SOURCES` 锚点**（新文件 `examples/riscv-mini/tests/test_rv32i_arch_suite.cpp` 命中计数口径 (c) ⇒ ⇒ **24 → 25**） | ✅ **已修** ⇒ ⇒ Acceptance（S-C.2）+ Impact「计数锚点」行 ⇒ ⇒ 均改为「**2 个锚点**」⇒ ⇒ 顺序硬约束 2 的「5 个」也订正为「**其余 3 个与本项无 contention**」 |
+| 🟡 **SHOULD_FIX** | **运行时预算完全缺失**（N × ~100 s ≈ 65 分钟）⇒ ⇒ 「装得下但跑不完」是与容量**独立**的第二种 no-go | ✅ **已修** ⇒ ⇒ S-A.2 判据 **④**（总时长估算 + CI 落点建议 + 明写上限）⇒ ⇒ Acceptance 加「总时长 < 明写上限」 |
+| 🟡 **SHOULD_FIX** | S-B.2「产出目录里没有 `Zicsr*`」单独看是**恒绿形态**（框架若因配置错误一个文件都不产 ⇒ 照样过） | ✅ **已修** ⇒ ⇒ 与产出总数绑定：「**产出 ELF 数 == N**（N = 生成清单记录值 · 默认 39）**且** 无 `Zicsr*` / `Zifencei*`」 |
+| 🟡 **SHOULD_FIX** | Acceptance 的「期望值 MUST 手推复核（抽样 ≥1 条）」**口径错位**（本项期望值来自 Sail = 外部 oracle ⇒ ⇒ 「禁抄仿真输出」防的是**同源双后端**失明 ⇒ ⇒ 不直接适用） | ✅ **已修** ⇒ ⇒ 改写为「**装载链抽验**」：抽 1 个 ELF ⇒ ⇒ `objdump -h` 的节区地址/尺寸 vs 镜像首字/字数**逐一对得上** |
+| 🟡 **SHOULD_FIX** | 容量判据**漏用现成的机械门**（`rv32i-fw-dump` 对越界节区 **fail-closed exit 3**） | ✅ **已修** ⇒ ⇒ S-A.2 判据 **③**：N 个 ELF 逐个过 `rv32i-fw-dump --format mem-split` ⇒ ⇒ **exit 3 数 == 0** |
+| 🟡 **SHOULD_FIX** | `TESTCASES_PER_FILE` 会改变 ELF 总数 ⇒ ⇒ 「39」不是常量 | ✅ **已修** ⇒ ⇒ 全文改为「**N = 生成清单记录值 · 默认 39**」⇒ ⇒ S-A.1 / S-A.2 ③⑤ / Acceptance 逐处联动 |
+| 🟡 **SHOULD_FIX** | 外部事实**过度确定**（版本钉 / issue #2069 / `.text.rvmodel` MUST 在 `.data` 之后） | ✅ **已修** ⇒ ⇒ ⑦ 与 ⑤b 加**来源 + 访问日期（2026-11-25）**⇒ ⇒ ⑤d 的「在 `.data` 之后」标注为「**链接脚本惯例 · 是否框架硬要求待 S-A.0 核实**」 |
+| 🔵 **NIT** | Why #3「4 个文件」vs 实际 5 个 | ✅ **已修** ⇒ ⇒ 改为 **5 个**（并列出 5 个文件名） |
+| 🔵 **NIT** | 「零成本」措辞（3 处） | ✅ **已修** ⇒ ⇒ 统一为「**零产品代码改动 · 产物不进仓**」+ 显式标注「**非零成本**」 |
+| 🔵 **NIT** | 冻结拍观测无采样竞态（`dbg_illegal_reason` 是核级顶层端口 · 「进 ID 级即冻结」⇒ 信号保持有效）⇒ ⇒ 但「冻结后 `obs_data_*` 写停止」⇒ ⇒ ③ 仍必需 | ✅ **已修** ⇒ ⇒ S-C.3 补「先查 illegal 再计时」的判别顺序 + 无采样竞态的依据（`rv32i_core_top.h:113`） |
+| 🔵 **NIT** | 依赖 frontmatter 未区分 improvement / 已归档 change | ✅ **已修** ⇒ ⇒ `riscv-tests-gate-2026-11` / `rv32i-official-rtl-gate-2026-11` 标为「**change（已归档）**」+ 归档路径 |
+| 🔵 **NIT** | 「失败时无诊断手段」未登记 | ✅ **已修** ⇒ ⇒ 登记进 S-E.1 的代价字段 + 预案（手工二分 / 临时开 IO） |
+
+⇒ ⇒ **metis 提出的 3 BLOCKER + 9 SHOULD_FIX + 6 NIT = 18 条 ⇒ ⇒ 全部已处置 ⇒ ⇒ 处置后复跑 `pre_create_brainstorm_check.sh`（**exit 0**）+ `verify_roadmap_fragments.sh`（**PASS**）+ `verify_ledger_evidence.sh`（**PASS**）+ `verify_guard_reachability.sh`（**PASS**）**
+⇒ ⇒ ⚠️ **metis 明确核实为真、无需改动的承重事实**（可放心引用）：`tohost = 0x8001_0000` + PASS=1/FAIL=3 与现有套件逐字同源 · `dbg_illegal_reason` 核级端口存在 · TCM 各 16 KB · 核 53 / SoC 10 端口 · `include_priv_tests` / `STANDARD_SM_SUPPORTED` / `Sm` dummy / `TESTCASES_PER_FILE` / RISCOF 3.x deprecated 与上游文档一致 · capability 名不撞名 · 与 `rv32i-privileged-csr-2026-11` 的边界划分干净。
+
 ## 3. 批次层面的后续内容（**开工门 + 出口**）
 
 | 批 | 内容 | 开工门 | 出口 |
@@ -438,6 +493,7 @@ phase-6 的 **P6**（RV32I ISA 缺口）与 B4 的 **G1–G5** 是**同一片区
 | ⑦ | **R19（F6 判据缺口）** | **两条路径 A① / A②** ⇒ ⇒ ⚠️ **各有取舍**（环境依赖 vs 工具产物端口面变化）⇒ ⇒ **不擅自选** |
 | ⑧ | ✅ **R20（gpio 断言强度）** | **早已闭**（2026-11-12 D1 裁决已显式标注「`spec_checks` 保持 0」）⇒ ⇒ **不需要裁决** |
 | ⑨ | ✅ **architect 复盘 #5 的 2 条裁量的追认** | 裁决 ①（护栏可达性 = 一等验收项）· 裁决 ③（带日期评审快照 = 审计轨迹 · 排除面按**结构特征 + 具名清单**）⇒ ⇒ 两者都是 **architect 裁量 · 用户可推翻** ⇒ ⇒ R23 的载体已落 §1 / §2 ⇒ ⇒ ✅ **2026-11-13 用户追认「architect 复盘 #5 的裁决」全部追认**（① ③）⇒ ⇒ 裁决 ③ 的**回写已执行** = `docs/adr/ADR-035-verilator-backend.md` **v2.3 轻量修订**（修订行 + 原位订正 + 审计轨迹 · 排除面 = 结构特征 + **5** 个具名文件）⇒ ⇒ 代价已登记 = 残差台账 **`id=24`**（`已知`）⇒ ⇒ 裁决 ① 的落地 = **R23-A / R23-B 已闭** |
+| ⑩ | 🟡 **planner 写集投影与索引实际位置不一致** ⇒ ⇒ **planner 无法登记 improvement 索引**（**2026-11-25 实测**） | **实测**：仓内实际被消费的索引 = **仓库根 `improvement-suggestions.md`**（⇒ ⇒ 台账 `rtl-track-correction-list-2026-11.md` / `docs-link-scope.md` / `next-steps.md` 的判据脚本**全部**按**根目录相对路径**引用）⇒ ⇒ **权威解析规则已坐实**（`_lib/core/rddf_paths.py::resolve`：`<root>/.rddf/<name>` 存在则用之 → 否则 **legacy `<root>/<name>`** → 否则 canonical `.rddf/`）⇒ ⇒ 本仓 `.rddf/improvement-suggestions.md` **不存在** ⇒ ⇒ ⇒ **解析结果 = 根目录那份**（legacy 位置**合法**）⇒ ⇒ 而 **planner 的机器层写集只列 `.rddf/improvement-suggestions.md`**（+ `.rddf/improvement-approved.md`）⇒ ⇒ ⇒ **实测被拒**：`role-gate: 角色「planner」禁止对「improvement-suggestions.md」执行 edit` ⇒ ⇒ ⇒ **后果**：planner 新建的 improvement **进不了索引池**（⇒ ⇒ `rddf planner attach` / `rdd-planner` 的发现链断在第一环）⇒ ⇒ ⇒ ⚠️ **这不是本仓文件问题 · 是**机制面**（`~/.config/opencode/lib/role-policy.ts::ROLE_WRITE_POLICY` 的投影只列 canonical 位置 ⇒ ⇒ **漏了 legacy 位置** ⇒ ⇒ 而解析规则明确「两个位置都合法」）⇒ ⇒ ⇒ ⇒ **planner 不擅自改**（机制面归 builder / architect）⇒ ⇒ ⇒ ⇒ **两条候选路径**：**A（建议）** = 写集投影**补上 legacy 根目录两个位置**（`improvement-suggestions.md` / `improvement-approved.md`）⇒ ⇒ **与解析规则的「两个候选都合法」逐字一致** ⇒ ⇒ **零仓内改动** · **B** = 把索引**迁到 `.rddf/`** ⇒ ⇒ 解析规则会自动选新的 ⇒ ⇒ ⚠️ 但 ⇒ ⇒ ① 仓内**所有**按根目录相对路径引用索引的地方都要改（台账 / 清单 / 判据脚本 `pathlib.Path('improvement-suggestions.md')`）· ② `link_prefix()` 会切到 `improvements/<name>.md`（相对索引文件）⇒ ⇒ **索引内的链接要全改** ⇒ ⇒ ⇒ **面更大** ⇒ ⇒ ⇒ ⇒ **建议 A** ⇒ ⇒ ⇒ ⇒ ⚠️ **本轮影响面**：`rv32i-arch-test-certification-2026-11`（R25）的索引行**未登记** ⇒ ⇒ ⇒ **草案本体已落盘且 HARD-GATE exit 0** ⇒ ⇒ ⇒ **只差索引一行** ⇒ ⇒ ⇒ ⇒ ⇒ **MUST NOT** 由 planner 绕过门控手改（⇒ ⇒ 那是静默越权） |
 
 ---
 
@@ -831,3 +887,22 @@ for s in scripts/verify_*.sh; do bash "$s"; done       # 全 PASS
 openspec validate --specs                             # 47 passed / 0 failed
 bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test   # exit 0（含假绿闸门）
 ```
+
+---
+
+## 8. P6-2（RV32I CSR 指令）**闭合记录**（2026-11-25 · builder）
+
+- **载体**：`openspec/changes/archive/2026-11-25-rv32i-csr-instructions-2026-11/`
+  （`proposal` / `design`（含 §8 实施期订正）/ `tasks` / delta `rv32i-privilege` **ADDED ×2**）
+- **判据**：`examples/riscv-mini/tests/test_rv32i_csr_instructions.cpp`（**8 用例 / 30 断言** · 期望值手推）
+  · 变异 **M1–M8**（7 红；M6 无效【select 优先级覆盖】；M6b 组合变异红）
+  · 验收报告 = `.rddf/reviews/rv32i-csr-instructions-2026-11-verify.md`（AC1–AC13 全 PASS）
+- **全量回归**：`ctest -LE perf` **272/272**（`test_component_ownership` 的 `child_count` 8 → 9）·
+  `openspec validate --specs` **54 passed / 0 failed** · 全部 `scripts/verify_*.sh` PASS
+- **端口面**：核 IP **53** 端口逐字不变 · 层次化 module 数仍 **8** · C6 快照不变
+- **实施期发现（已修）**：
+  ① `id_stage.rs1_addr_mux` MUST 含 `OP_SYSTEM`（否则 CSR 源恒 x0）；
+  ② **层次化发射要求父层只读子组件输出端口 / 本层落地网**（读子组件 *输入* ⇒ 跨模块边不可映射）；
+  ③ `csr_addr` = `instr[31:20]`；④ 前推两级写使能 + 三处写回 mux 同构；⑤ MEM 区 3 段 ⇒ CSR 必须过 M2。
+- **仍待办**：P6-3（trap 入口接线）· P6-4/P6-5（`ECALL`/`EBREAK`/`MRET`/`WFI`）· P6-6（中断）· P6-7（`mtval`）
+  ⇒ ⇒ `funct3 = 0` **仍冻结**（`illegal_reason = 1`）
