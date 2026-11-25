@@ -359,7 +359,7 @@ A Phase is **NOT** complete until ALL three pass:
 > 只做了增量构建的开发者会看到失败 ⇒ 先跑
 > `cmake --build build --target all-examples`。
 
-## 护栏索引（51 个 · CI 全跑）
+## 护栏索引（56 个 · CI 全跑）
 
 > **唯一真相** = `.rddf/checks/guard-reachability.md`（派生自 `ci.yml` ⇒ `verify_guard_reachability.sh`
 > 双向 1:1 校验：引用存在 / 可执行位 / gate × 环境对齐）。
@@ -375,7 +375,7 @@ A Phase is **NOT** complete until ALL three pass:
 | core / lnode | `verify_get_lnode_entry_set` · `verify_node_names_single_source` |
 | 头 / API 面 | `verify_header_odr` · `verify_header_self_contained` · `verify_example_only_headers` · `verify_downstream_consumer` · `verify_public_api_visibility` |
 | RV32I / 存储时序 | `verify_no_duplicate_rv32i_headers` · `verify_dtcm_read_timing` · `verify_rv32i_fw_dump` · `verify_rv32i_fw_init_rtl` |
-| 层次化 / RTL 产物 | `verify_hierarchical_rtl` · `verify_hierarchical_p8` · `verify_hier_corpus_coverage` · `verify_hierarchical_tree_extract` · `verify_flat_rtl_emit` · `verify_examples_rtl_sim` · `verify_examples_rtl_sim_coverage` |
+| 层次化 / RTL 产物 | `verify_hierarchical_rtl` · `verify_hierarchical_p8` · `verify_hier_corpus_coverage` · `verify_hierarchical_tree_extract` · `verify_flat_rtl_emit` · `verify_examples_rtl_sim` · `verify_examples_rtl_sim_coverage` · `verify_rv32i_official_rtl` |
 | examples 测试 | `verify_example_test_wiring` · `verify_example_assertion_quality` · `verify_assertion_quality_fixtures` · `verify_dual_backend_parity` · `verify_test_counts` · `verify_perf_baseline_anchors` |
 | JIT / verilator | `verify_jit_golden_coverage` · `verify_verilator_pch` |
 | 弃用治理 | `verify_deprecation_callsites` · `verify_deprecation_calendar_gate` |
@@ -397,7 +397,9 @@ cmake --build build --target all-examples -j$(nproc)
 # Run all samples (regression guard for samples/ — Linux: `timeout`, macOS: `gtimeout`)
 bash scripts/run_all_samples.sh
 
-# 护栏（51 个 · 按领域的索引见 §护栏索引 · 每个都支持 --self-test：
+# 护栏（56 个 · 按领域的索引见 §护栏索引 · 每个都支持 --self-test：
+#   **例外**：`verify_rv32i_official_rtl` 无独立 `--self-test` 标志 —— 它的判别力由
+#   **每次运行内建**的负向对照 + 反向自证承担（形态比 `--self-test` 更强）；
 #   投毒 → 必红 → 还原复绿）。最常手动跑的三个：
 bash scripts/verify_hierarchical_rtl.sh        # R1–R8 · 需 build/tests/hier_rtl_products
 bash scripts/verify_arch_ledger_residuals.sh   # 架构台账 §7 残留（另有 --render / --check-normalization）

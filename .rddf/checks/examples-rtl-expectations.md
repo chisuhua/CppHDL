@@ -1751,3 +1751,54 @@ VERIF-CHECKS: 38
 ⚠️ **M3 是本行的核心判别力**：它正是 capability 记载的历史缺陷形态
 （「`last_grant` 恒传 `0_d` ⇒ ⇒ 轮转从不发生 ⇒ ⇒ 低位通道饿死」）⇒ ⇒
 **相位无关**的 `WAIT` 判据能抓住它 ⇒ ⇒ 这就是「不锁相位」仍能有判别力的证据。
+
+## rv32i-official-rtl {#rv32i-official-rtl}
+
+**载体**：`examples/riscv-mini/tb_rv32i_official.sv`（交付物级 TB · **镜像无关**）
+· 门禁 `scripts/verify_rv32i_official_rtl.sh`（change `rv32i-official-rtl-gate-2026-11`）。
+
+> ⚠️ 与本文件其它条目的**形态差别**：其它条目都是「**本仓自写程序 + 手推期望值**」；
+> 本条目跑的是**上游官方测试集的镜像** ⇒ ⇒ 期望值来自**上游 env 的协议**
+> （外部权威）⇒ ⇒ **不是**本仓手推。
+
+### 期望从哪来（**上游协议**，不是我方约定）
+
+| 来源 | 内容 |
+|---|---|
+| `examples/riscv-mini/tests/riscv-tests/env/link.ld` | `.tohost` @ **`0x8001_0000`**（D-TCM 区首）⇒ ⇒ **地址的单一真相** |
+| 上游 `riscv-tests/env/p/riscv_test.h` 的 `RVTEST_PASS` / `RVTEST_FAIL` | `tohost == 1` ⇒ PASS；`tohost == TESTNUM \| 1` ⇒ FAIL |
+| `examples/riscv-mini/tests/riscv-tests/PROVENANCE.md` §2.1 / §2.2 | 本仓只替换 **4 个 harness 宏** ⇒ ⇒ **测试体一字未改** |
+
+⇒ ⇒ TB **只观测**核的既有根端口（`top_obs_data_write_en` / `top_obs_data_addr` /
+`top_obs_data_write_data`）⇒ ⇒ **零新增端口**。
+
+### 判据（2 条）
+
+| id | 判据 | 判别力 |
+|---|---|---|
+| **O1** | MUST 看到 `tohost` 的写（上限 4000 拍内） | 看不到 ⇒ **fail-closed**（不是 skip） |
+| **O2** | `tohost` 的值 == `+tohost_expected`（默认 `1`） | 负向对照：期望 `3` ⇒ MUST 读到 `3`；读到 `1` ⇒ **红**（判定被吞） |
+
+### 负向对照（**手推** · 与核级门禁逐字节同源）
+
+`negative/itcm.mem` = `800102B7` / `00300313` / `0062A023` / `0000006F`
+
+| 字 | 编码 | 语义 | 手推 |
+|---|---|---|---|
+| `0x800102B7` | `lui x5, 0x80010` | `x5 = 0x8001_0000` | `imm[31:12] = 0x80010` ⇒ `0x80010 << 12` |
+| `0x00300313` | `addi x6, x0, 3` | `x6 = 3` | 协议 FAIL 值形态 `TESTNUM \| 1` |
+| `0x0062A023` | `sw x6, 0(x5)` | `tohost ← 3` | `rs1=x5(00101)` · `rs2=x6(00110)` · `funct3=010` · `imm=0` |
+| `0x0000006F` | `jal x0, 0` | 停机 | — |
+
+### 拍数上限的依据（实测 · **不是拍的**）
+
+- 上限 `MAXC = 4000` ⇒ ⇒ 与核级门禁的 `kMaxCycles` **同值**（两后端口径一致）；
+- 实测（40 个官方镜像 · Verilator）：**`tohost` 写入拍数 = 41 ~ 1552**
+  （最坏 = `rv32ui-p-ld_st` 的 1552）⇒ ⇒ 余量 **≈ 61%**；
+- ⇒ ⇒ 上限被吃掉时 ⇒ ⇒ **O1 红**（不静默截断）⇒ ⇒ 余量变化 MUST 可见。
+
+### 判别力自证（**变异**）
+
+把 TB 的 `TOHOST_ADDR` 由 `32'h8001_0000` 改为 `32'h8000_0000` ⇒ ⇒
+门禁 **exit 1**（负向对照阶段即红：读不到 `tohost=3`）⇒ ⇒ 还原后复绿。
+⇒ ⇒ 证明「地址判据」与「值判据」**都在起作用**，不是恒绿。

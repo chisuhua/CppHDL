@@ -141,3 +141,14 @@ fwd_b_d1->next = select(reset_active, 0_d,
 - ❌ **官方套件的 Verilator 后端** ⇒ ⇒ 门禁是**核级**（解释器）⇒ ⇒ 双后端 parity 覆盖
   由既有 `test_rv32i_soc_dual_parity` 承担；
 - ❌ **改上游 riscv-tests**（测试体 / Makefrag / 上游 `env/`）⇒ ⇒ 只改**本仓的副本**。
+
+## 用户可见变更
+
+- **行为修复（用户可观测）**：MEM 级反压期间旁路档位未冻结 ⇒ ⇒ 被冻结指令的操作数被
+  别的指令的旁路值改写。修复后官方 `rv32ui-p-*` 的 7 个 FAIL 转为 PASS
+  （`lb` / `lbu` / `lh` / `lhu` / `lw` / `sb` / `sh`）⇒ ⇒ **核的仿真结果变化**（错误值 → 正确值）。
+- **新增 CTest 条目 5 个**（`ctest -N` 可见）：`test_rv32i_stall_integrity` +
+  `test_rv32i_official_suite_g1..g4` ⇒ ⇒ `CTEST_TOTAL` **277 → 282**。
+- **新增仓内资产**：`examples/riscv-mini/tests/riscv-tests/`（40 份官方镜像 + 自带 env +
+  `PROVENANCE.md` + 复现脚本 + 上游许可）⇒ ⇒ 此前这些用例依赖**仓外**二进制（CI 全 SKIP）。
+- **无公开 API 变更** · **无端口面变更**（53 端口契约表与 C6 快照不动）。

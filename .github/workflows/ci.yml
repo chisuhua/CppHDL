@@ -2334,6 +2334,19 @@ jobs:
       shell: bash
       run: scripts/verify_openspec_delta.sh
 
+    - name: Verify official riscv-tests on RTL products (subset)
+      # ⚠️ **交付物级门禁**（change `rv32i-official-rtl-gate-2026-11`）：
+      #   官方 `rv32ui-p-*` 套件 MUST 在 **RTL 产物**上全过 ⇒ ⇒ 判定口径 = 上游 env 的
+      #   `tohost` 协议（`tohost == 1` ⇒ PASS）⇒ ⇒ 与核级（解释器）门禁**同源**。
+      #   ⚠️ **为什么核级门禁不够**：解释器与 codegen 由**同一份 C++**生成 ⇒ ⇒ 同构缺陷
+      #   两后端一致地错 ⇒ ⇒ codegen 侧缺陷（初值块 / 端口映射 / 时序形状）**只**在产物级
+      #   可见（实证：初版该门禁抓出带固件产物 **40/40 lint 全红**）。
+      #   ⚠️ **只跑抽样**（PR 要快）⇒ ⇒ 全量在 `nightly-verilator`。
+      #   ⚠️ **只在一个分片跑**（本 job 是 2 分片 ⇒ 否则同一批产物编译两遍）。
+      if: matrix.shard == 1
+      shell: bash
+      run: bash scripts/verify_rv32i_official_rtl.sh --subset 8
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -2468,3 +2481,15 @@ jobs:
     - name: Run tests (including perf/verilator)
       shell: bash
       run: ctest --test-dir build --output-on-failure -j$(nproc)
+
+    - name: Verify official riscv-tests on RTL products (full)
+      # ⚠️ **交付物级门禁**（change `rv32i-official-rtl-gate-2026-11`）：
+      #   官方 `rv32ui-p-*` 套件 MUST 在 **RTL 产物**上全过（**全量 40 个**）
+      #   ⇒ ⇒ 判定口径 = 上游 env 的 `tohost` 协议（`tohost == 1` ⇒ PASS）
+      #   ⇒ ⇒ 与核级（解释器）门禁**同源**但**不同层**（本条判的是**交付物本身**）。
+      #   ⚠️ **为什么必须在这一层**：解释器与 codegen 由**同一份 C++**生成 ⇒ ⇒ 同构缺陷
+      #   两后端一致地错 ⇒ ⇒ codegen 侧缺陷在解释器侧**结构性不可见**
+      #   （实证：初版该门禁抓出带固件产物 **40/40 lint 全红** ⇒ 产物按仓内口径编译失败）。
+      #   ⚠️ **墙钟 ≈ 10 min**（verilator 编译 15 s/个主导）⇒ ⇒ 故放 nightly 而非 PR。
+      shell: bash
+      run: bash scripts/verify_rv32i_official_rtl.sh --full

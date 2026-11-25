@@ -254,6 +254,7 @@ done
 | **R1** | ✅ **已落地** | 自带 `env/`（`RVTEST_CODE_BEGIN` / `PASS` / `FAIL` / `DATA_BEGIN` 四个宏，**无 CSR**）+ `link.ld`（`.data`/`.bss`/`.tohost` → `0x8001_0000`） | 从上游 `.S` 重建 **40 个** `rv32ui-p-*` ⇒ **40/40 pass**（**排除 2 个**：`fence_i` = 无 Zifencei 扩展 · `ma_data` = 主动式多 hart ⇒ ⇒ **登记**在 `tests/riscv-tests/PROVENANCE.md` §3） |
 | **R2** | ✅ **已落地** | **runner**（`tests/test_rv32i_official_suite.cpp` · **4 个独立二进制**）：装载**入库**镜像 → 跑核 → 观测 `tohost` 写 ⇒ pass/fail | `ctest -R test_rv32i_official_suite` ⇒ 4 个条目全绿（**40/40**）· **负向对照** = 运行器 MUST 如实读到 `tohost` 的 FAIL 值（手写镜像写 3 ⇒ 读到 3） |
 | **R3** | ⬜ **未做** | 若需「认证级」证据：`riscv-arch-test` ACT4 的 `rv32i`-only config（`include_priv_tests: False` · 不定义 `STANDARD_SM_SUPPORTED`） | 39 个 `rv32i/I` 自检测 ELF 跑通（生成侧需 Sail 0.16 + UDB） |
+| **R4** | ✅ **已落地**（2026-11-25 · change `rv32i-official-rtl-gate-2026-11`） | **交付物级门禁**：官方套件 ALSO 跑在 **RTL 产物**上（`tb_rv32i_official.sv` + `scripts/verify_rv32i_official_rtl.sh`）⇒ ⇒ 流程 = 发射（带镜像）→ **lint** → 编译 → 运行 → 判 `tohost` | `--full` ⇒ **40/40**（`tohost` 全 `0x1`）· **负向对照** = 手写镜像写 3 ⇒ 如实读到 3（读到 1 ⇒ **门禁红**）· CI 落点 = `pr-verilator-fast`（抽样）· `nightly-verilator`（全量） |
 
 **资产位置**（**单一真相** = `tests/riscv-tests/PROVENANCE.md`）：
 
@@ -264,6 +265,7 @@ done
 | 40 份镜像 | `tests/riscv-tests/images/rv32ui-p-*/{itcm.mem,dtcm.mem}`（`rv32i-fw-dump --format mem-split` 产物） |
 | 复现脚本 | `tests/riscv-tests/env/build.sh`（重建 + 与入库镜像**逐字节**比对） |
 | 上游许可 | `tests/riscv-tests/LICENSE.riscv-tests`（BSD-3-Clause） |
+| **负向对照镜像**（**非官方** · 手写）| `tests/riscv-tests/negative/{itcm.mem,dtcm.mem}`（4 个字 · 登记在 `PROVENANCE.md` §5.1）|
 
 > ⚠️ **两个必须知道的事实**：
 > ① **官方套件暴露了一个核的缺陷**（不是 ISA 语义问题）：MEM 级反压期间，
@@ -273,6 +275,16 @@ done
 > ② **官方套件只跑解释器后端**：该核的设计含 **128 bit** 的 mem 节点 ⇒ ⇒ JIT 整体跳过
 >    ⇒ ⇒ ≈ 36 拍/秒 ⇒ ⇒ 40 个测试 ≈ 7 分钟 ⇒ ⇒ 门禁**拆成 4 个独立二进制**
 >    （每个 ≈ 100 s ⇒ ⇒ 落在仓内的**单测 300 s 上限**之内）。
+>    ⚠️ **2026-11-25 补充**：第 ② 条只说「**核级**门禁跑解释器」⇒ ⇒ **交付物级门禁（R4）**
+>    走 **Verilator**（`--binary --timing` ⇒ 需真 verilator）⇒ ⇒ 单个测试 **0.14 s**
+>    （冷跑墙钟 ≈ 10 min · verilator 编译 15 s/个主导）。
+>
+> ⚠️ **为什么要两层门禁**（R2 + R4 **并存**，不是二选一）：
+> 解释器与 codegen 由**同一份 C++**生成 ⇒ ⇒ **同构缺陷两后端一致地错** ⇒ ⇒
+> **codegen 侧缺陷**（初值块 / 端口映射 / 时序形状 / 宽度）**只**在产物级可见。
+> ⇒ ⇒ **实证**：R4 的初版跑出来 **40/40 个带固件产物的 lint 全红**
+> （`WIDTHEXPAND` ⇒ `codegen_verilog.cpp` 的 mem 初值块写 `1'b0` ⇒ ⇒ 产物按仓内口径
+> **编译直接失败**）⇒ ⇒ 而 R2 对此**结构性失明** ⇒ ⇒ 修法 = 写**目标宽度**的零字面量。
 
 > ⚠️ **现状的诚实说明**：仓内已有的 `tests/test_riscv_tests.cpp`（49 用例 / 43 skip）
 > **不测核** —— 它自带一个 C++ ISA 解释器（`Rv32iInterpreter`），跑的是那颗解释器。

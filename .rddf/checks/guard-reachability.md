@@ -100,6 +100,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_rv32i_elf_e2e.sh` | `build-and-test:Verify RV32I ELF to init_data end-to-end chain`, `build-and-test:Verify RV32I ELF to init_data end-to-end chain (self-test)` | `none` | — |
 | `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)`, `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5) (self-test)` | `none` | — |
 | `scripts/verify_rv32i_fw_init_rtl.sh` | `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)`, `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)` | `none` | — |
+| `scripts/verify_rv32i_official_rtl.sh` | `nightly-verilator:Verify official riscv-tests on RTL products (full)`, `pr-verilator-fast:Verify official riscv-tests on RTL products (subset)` | `gate-event-only` | — |
 | `scripts/verify_stream_domain_closure.sh` | `build-and-test:Verify stream domain closure checklist`, `build-and-test:Verify stream domain closure checklist (self-test)` | `none` | — |
 | `scripts/verify_stream_ready_ownership.sh` | `build-and-test:Verify stream ready ownership`, `build-and-test:Verify stream ready ownership (self-test)` | `none` | — |
 | `scripts/verify_test_counts.sh` | `build-and-test:Verify AGENTS.md test counts`, `pr-verilator-fast:Verify AGENTS.md test counts` | `none` | — |

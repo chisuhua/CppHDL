@@ -1749,7 +1749,16 @@ void ModuleEmitter::print_mem_init(std::ostream &out,
         if (!init_data.empty()) {
             out << "        for (int __i = 0; __i < "
                 << static_cast<int>(node->depth()) << "; __i = __i + 1)\n";
-            out << "            " << mem_name << "[__i] = 1'b0;\n";
+            // ⚠️ **产物卫生**（C6）：`1'b0` 赋给更宽的 mem 元素 ⇒ Verilator 报
+            //   `WIDTHEXPAND`（实测 RV32I 的 TCM 初值块命中 2 条 ⇒ ⇒ 带固件初值的
+            //   产物**按仓内口径编译直接失败**）⇒ ⇒ 写成**元素宽度**的零字面量
+            //   （`<W>'h0`），语义不变（都是零值）。
+            // ⚠️ **宽度来源 = `data_width()`**（元素宽度）⇒ ⇒ **不是** `size()`
+            //   （那是 `data_width * depth` ⇒ 会写出 131072 位宽 ⇒ Verilog 语法错误）。
+            // ⚠️ **不做 `emit_hygiene` 分支** ⇒ ⇒ 两个形态**字节一致**（免漂移面）；
+            //   宽度正确的零字面量与 `1'b0` **语义完全等价** ⇒ ⇒ **零行为变化**。
+            out << "            " << mem_name << "[__i] = "
+                << static_cast<int>(node->data_width()) << "'h0;\n";
         }
         for (std::size_t i = 0; i < init_data.size(); ++i) {
             const auto &w = init_data[i];

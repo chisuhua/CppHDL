@@ -11,6 +11,18 @@ RV32I 5-stage pipeline 的**示例与测试**。微架构组件本身已收敛�
 > ⇒ ⇒ 门禁 = `ctest -R test_rv32i_official_suite`（见 §RUN ⑥）
 > ⇒ ⇒ 资产 / 排除项 / 复现 = `tests/riscv-tests/PROVENANCE.md`（**单一真相**）。
 > ⚠️ **不是**「本仓自写用例全过」—— 两者是**不同**的判据面。
+>
+> ⚠️ **2026-11-25（change `rv32i-official-rtl-gate-2026-11`）——「全过」MUST 在
+> **两层**上成立**（口径**收紧**，不是改口径）：
+> | 层 | 判据面 | 载体 | 门禁 |
+> |---|---|---|---|
+> | **核级** | 本仓那份 **C++**（解释器） | `ch_device<Rv32iCoreTop, itcm, dtcm>` | `ctest -R test_rv32i_official_suite`（§RUN ⑥） |
+> | **交付物级** | 交付给用户的 **Verilog 产物** | `--emit-rtl --firmware <镜像>` 的 `top.v` | `bash scripts/verify_rv32i_official_rtl.sh --full`（§RUN ⑦） |
+>
+> ⇒ ⇒ **为什么必须有第二层**：解释器与 codegen 由**同一份 C++**生成 ⇒ ⇒
+> **同构缺陷两后端一致地错** ⇒ ⇒ codegen 侧缺陷（初值块 / 端口映射 / 时序形状）
+> **只**在产物级可见 ⇒ ⇒ **实证**：该门禁初版抓出「带固件产物 **40/40 lint 全红**」
+> （`WIDTHEXPAND` ⇒ 产物按仓内口径**编译失败**）—— 而核级门禁对此**结构性失明**。
 
 ## STRUCTURE
 ```
@@ -38,6 +50,12 @@ examples/riscv-mini/
 ├── tb_rv32i_soc.sv         # **独立 Verilog TB**（**手写** · 24 条判据 · 与 C++ 侧同源）
 │                            #   ⇒ `.verif` 封闭原语集表达不了 4 个形态 ⇒ MUST 保持手写
 │                            #     （`generated=no` = **终态**，不是欠账 · ADR-076 复核 2026-11-21）
+├── tb_rv32i_official.sv    # **交付物级 TB**（官方套件 · **镜像无关** · change
+│                            #   `rv32i-official-rtl-gate-2026-11`）
+│                            #   ⇒ 镜像在**产物**的 `initial` 块里 ⇒ ⇒ **TB 不装载**
+│                            #   ⇒ 判据 = **上游 env 的 `tohost` 协议**（`tohost == 1` ⇒ PASS）
+│                            #   ⇒ 期望值由门禁脚本用 `+tohost_expected=<N>` 给
+│                            #     （负向对照 = 3 ⇒ MUST 如实读到 3）
 ├── src/                     # **3** 个头（核 IP 顶层 + MMIO 主设备 + 带 `.data` 的示例固件）
 │   ├── rv32i_fw_demo.h      # 带 `.data` 的示例固件（I-TCM / D-TCM 两段字镜像 · 编码手推）
 │   ├── axil_mmio_master.h  # 核侧 AXI4-Lite 主设备（S4a · MMIO 通道的核内一端
@@ -105,6 +123,15 @@ ctest --test-dir build -R test_rv32i_official_suite --output-on-failure
 #   ⇒ 判定口径 = **上游 env 的协议**（`tohost == 1` ⇒ PASS）
 #   ⇒ ⇒ 「riscv-mini 完成」的定义 = 该套件**全过**
 #   ⇒ ⇒ 资产（镜像 / env / 来源登记）= tests/riscv-tests/（见 PROVENANCE.md）
+
+# ⑦ 官方 riscv-tests 套件的**交付物级**门禁（**RTL 产物**侧 · 需真 verilator）
+#   ⚠️ 与 ⑥ **同口径**但**不同层**：⑥ 判「本仓那份 C++」· ⑦ 判「交付的 Verilog 产物」
+bash scripts/verify_rv32i_official_rtl.sh --full      # 全量 40 个（≈ 10 min）
+bash scripts/verify_rv32i_official_rtl.sh --subset 8   # 抽样（PR 快通道 ≈ 2 min）
+#   ⇒ 流程 = 发射（带镜像）⇒ ⇒ lint ⇒ ⇒ 编译 ⇒ ⇒ 运行 ⇒ ⇒ 判 tohost
+#   ⇒ ⇒ **lint 是门禁的一环**（带固件初值的产物 MUST lint 干净）
+#   ⇒ ⇒ 含**负向对照**（手写镜像写 3 ⇒ MUST 如实读到 3 ⇒ 读到 1 ⇒ 门禁红）
+#   ⇒ ⇒ CI 落点：`pr-verilator-fast`（抽样 · shard 1）· `nightly-verilator`（全量）
 ```
 
 ⚠️ **fail-closed**：默认模式收到**任何**未知参数 ⇒ exit **2**；
@@ -279,6 +306,7 @@ ctest --test-dir build -R test_rv32i_official_suite --output-on-failure
 | 核 IP 顶层（唯一留在本目录的头）| `src/rv32i_core_top.h` |
 | SoC 的**激励驱动**（C++ 侧 + 发射入口）| `tb_rv32i_soc.cpp`（**24 条判据**的 C++ 侧实现）|
 | SoC 的**独立 Verilog TB**（手写）| `tb_rv32i_soc.sv`（**24 条判据**的 Verilog 侧实现）|
+| 官方套件的**交付物级 TB**（镜像无关）| `tb_rv32i_official.sv`（判上游 env 的 `tohost` 协议）· 门禁 = `scripts/verify_rv32i_official_rtl.sh`（§RUN ⑦）|
 | 期望值**单一真相**（两侧共用）| `.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` |
 | **跑 ELF / 跑官方 riscv-tests**（用户指南）| `RUNNING-ELF.md`（链路 · 链接脚本 · 三层跑法 · 装载约束 · 故障排查 · 官方套件现状与实测）|
 | **官方 riscv-tests 套件**（来源 / 改造 / **排除项** / 复现）| `tests/riscv-tests/PROVENANCE.md`（**单一真相**）· 门禁 = `tests/test_rv32i_official_suite.cpp`（**4 个独立二进制** · 每个 10 个用例）|
