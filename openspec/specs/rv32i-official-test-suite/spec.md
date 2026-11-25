@@ -24,7 +24,12 @@
   ⇒ ⇒ MUST NOT 自拟一套判定口径
 - **AND** 测试 MUST 跑在**真正的核**上
   （取指走 I-TCM · 数据走 D-TCM ⇒ ⇒ 即 `ch_device<Rv32iCoreTop, itcm, dtcm>` 形态）
-- **AND** 门禁 MUST 是**可重复**的仓内工件 ⇒ ⇒ MUST 进 CTest
+- **AND** **核级**门禁 MUST 是**可重复**的仓内工件 ⇒ ⇒ MUST 进 CTest
+  ⇒ ⇒ **交付物级**门禁（见「官方套件 MUST 也在 RTL 产物上被判定」Requirement）
+  MUST 有 **CI 入口** ⇒ ⇒ 形态**可为脚本**（非 CTest）
+  ⇒ ⇒ 理由：产物级门禁单次 ≈16 s（verilator 编译主导）⇒ ⇒ 40 个条目会让
+  「按条目名实跑每个 ctest 条目」的护栏从 ≈10 min 涨到 ≈20 min
+  ⇒ ⇒ 而脚本形态可**抽样**（PR）+ **全量**（nightly）⇒ ⇒ 两类入口**同口径**
 
 #### Scenario: 门禁条目 MUST 落在仓内的单测耗时上限之内
 
@@ -109,3 +114,35 @@
 - **WHEN** 有人核对「本仓跑通了多少官方测试」
 - **THEN** MUST 能查到**总数**与**排除清单**（名 + 理由）
 - **AND** MUST NOT 存在「未登记的排除」
+
+### Requirement: 官方套件 MUST 也在 **RTL 产物**上被判定（交付物级判据）
+
+- **WHEN** 本仓对外交付 RV32I 核的 **RTL 产物**（Verilog）
+- **THEN** 官方 `rv32ui-p-*` 套件 MUST 也在该**产物**上被判定
+  ⇒ ⇒ 该判定与**核级**（解释器）判定**并存** ⇒ ⇒ 两者都 MUST 为绿
+- **AND** 该判定 MUST 以**产物本身**为被测对象
+  ⇒ ⇒ 即「**发射 → lint → 编译 → 运行**」的完整链路
+  ⇒ ⇒ MUST NOT 以「同一份 C++ 的另一个执行后端」代替
+- **AND** 产物级门禁 MUST **可重复**且 MUST 有 **CI 入口**
+  ⇒ ⇒ 形态可为 **CI 脚本**（非 CTest）⇒ ⇒ 但 MUST fail-closed 且 MUST 零静默跳过
+- **AND** 产物级门禁 MUST 覆盖**带固件初值**的产物形态
+  ⇒ ⇒ 即 `--emit-rtl --firmware <镜像>` 这一形态
+  ⇒ ⇒ 该形态 MUST **通过 lint**（零告警零错误）
+
+#### Scenario: codegen 侧缺陷 MUST NOT 只由核级门禁承担
+
+- **WHEN** 一个缺陷只存在于 **codegen / 产物**侧（如初值块宽度、端口映射、时序形状）
+- **THEN** 核级（解释器）门禁 MUST NOT 具备发现它的能力
+  ⇒ ⇒ 产物级门禁 MUST 在该形态上执行 ⇒ ⇒ 该缺陷 MUST 表现为门禁红
+
+#### Scenario: 产物级门禁 MUST 有负向对照
+
+- **WHEN** 产物级门禁判定「`tohost == 1` ⇒ PASS」
+- **THEN** MUST 有**负向对照**（已知 FAIL 值的镜像）⇒ ⇒ MUST 如实读到该 FAIL 值
+- **AND** 若读到的值是 `1` ⇒ ⇒ 门禁 MUST **红**（判定被吞 ⇒ 恒绿）
+
+#### Scenario: 拍数上限 MUST NOT 静默截断
+
+- **WHEN** 某测试在产物级门禁的拍数上限内**没有**写 `tohost`
+- **THEN** 门禁 MUST **红** ⇒ ⇒ MUST NOT 表现为 skip 或「空洞通过」
+- **AND** 门禁 MUST 记录每个测试的**实际拍数** ⇒ ⇒ 余量变化 MUST 可见
