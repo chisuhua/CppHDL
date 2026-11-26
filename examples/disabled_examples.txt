@@ -51,7 +51,7 @@ testbench_template	源文件 `examples/spinalhdl-ported/testbench_template.cpp` 
 # ⚠️ 下面这 1 条是**活着的** target（源文件在、`CMakeLists.txt` 里以
 #    `riscv_mini_catch_test_noctest` 声明、只构建不注册）⇒ 它属「存活但未跑」
 #    ⇒ 登记在本清单（豁免），**不是**删除留痕。
-test_riscv_tests_pipeline	**已构建但不进 CTest**（2026-10-23）：其 46 个用例**全部**依赖仓外 riscv-tests 的预编译二进制 ⇒ 在 CI（无该 checkout）里全部被 SKIP ⇒ Catch2 v3 退出码为 **4**（= 没有真正跑起来的用例）⇒ **CTest 会把它判为 FAILED**。⚠️ `ctest -N` 仍会列出它 ⇒「CTest 里认得它」**不等于**「它会绿」——这正是护栏 C3（实际运行 + 要求 exit 0）要抓的形态	归位条件：CI 具备 riscv-tests 的预编译二进制（`RISCV_TESTS_PATH` 可指向）后，改回 `riscv_mini_catch_test` 注册进 CTest 并从本清单移除
+test_riscv_tests_pipeline	**已构建但不进 CTest**（2026-10-23）：其 46 个用例**全部**依赖仓外 riscv-tests 的预编译二进制 ⇒ 在 CI（无该 checkout）里全部被 SKIP ⇒ Catch2 v3 退出码为 **4**（= 没有真正跑起来的用例）⇒ **CTest 会把它判为 FAILED**。⚠️ 它**从未 `add_test`**（声明走 `riscv_mini_catch_test_noctest`）⇒ ⇒ `ctest -N` **列不出它** ⇒ ⇒ 反过来：若哪天 `ctest -N` 里出现它 ⇒ 说明被误改回 `riscv_mini_catch_test` ⇒ ⇒ 护栏 C3（实际运行 + 要求 exit 0）会因 exit 4 判红	归位条件：CI 具备 riscv-tests 的预编译二进制（`RISCV_TESTS_PATH` 可指向）后，改回 `riscv_mini_catch_test` 注册进 CTest 并从本清单移除
 
 # --- RTL 发射器（有专属护栏，不属「example 程序」）---
 # ⚠️ **2026-11-22**：原下面这条（`emit_rtl_rv32i_soc_fw_init`）**已退役** ——

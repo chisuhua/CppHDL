@@ -114,7 +114,7 @@ CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 | `test_rv32i_pipeline` | `tests/test_rv32i_pipeline.cpp` | 行为面 · 流水线各级 | 解释器 |
 | `test_rv32i_alu` | `tests/test_rv32i_alu.cpp` | 行为面 · ALU | 解释器 |
 | `test_rv32i_alu_differential` | `tests/test_rv32i_alu_differential.cpp` | 行为面 · ALU 差分 | 解释器 |
-| `test_rv32i_pipeline_behavior` 🔷 | `tests/test_rv32i_pipeline_behavior.cpp` | 行为面 · **Batch 5**（trap / skid / 仲裁等 6 个双后端 pair） | 解释器 + verilator |
+| `test_rv32i_pipeline_behavior` 🔷 | `tests/test_rv32i_pipeline_behavior.cpp` | 行为面 · **20 个双后端 pair**（跨 Batch 1/2/3/4/5 = 组合逻辑 / 流水线寄存器 / 分支预测 / skid 防御契约 / trap 重定向） | 解释器 + verilator |
 | `test_rv32i_arch_dual` 🔷 | `tests/test_rv32i_arch_dual.cpp` | 契约面 · 拍表（CSR 复位值 + WARL） | 解释器 + verilator |
 | `test_rv32i_stage_dual` 🔷 | `tests/test_rv32i_stage_dual.cpp` | 行为面 · 各级 | 解释器 + verilator |
 | `test_rv32i_mem_backpressure` | `tests/test_rv32i_mem_backpressure.cpp` | 行为面 · 存储反压 | 解释器 |
@@ -241,12 +241,20 @@ bash scripts/verify_rv32i_official_rtl.sh --full       # 全量 40 个 ≈ 10 mi
 逐镜像独立 5 步：
 
 ```
-tb_rv32i_soc --emit-rtl --firmware <镜像目录> --emit-hygiene   # ① 发射带固件初值的产物
-  → verilator --lint-only --top-module tb_rv32i_official        # ② lint 门（退出码 0 + 零 %Error）★ 是门禁的一环
-  → verilator --cc / --exe                                       # ③ 编译
-  → ./obj/Vtb_rv32i_official +tohost_expected=1                  # ④ 跑手写独立 TB
+tb_rv32i_soc --emit-rtl --firmware <镜像目录> --out <产物目录> --emit-hygiene
+                                                            # ① 发射带固件初值的产物（<产物目录>/top.v）
+  → verilator --lint-only --top-module top <产物目录>/top.v     # ② lint 门（退出码 0 + 零 %Error）★ 是门禁的一环
+  → verilator --binary --timing -CFLAGS -fcoroutines --x-assign unique \
+       --top-module tb_rv32i_official --Mdir <产物目录>/obj \
+       <产物目录>/top.v examples/riscv-mini/tb_rv32i_official.sv # ③ 编译（TB 模块名 = tb_rv32i_official）
+  → <产物目录>/obj/Vtb_rv32i_official +tohost_expected=1        # ④ 跑手写独立 TB
   → 判 tohost（seen=1 value=0x1 ⇒ PASS）                         # ⑤
 ```
+
+> ⚠️ **② 的 `--top-module` 是 `top`（产物），不是 `tb_rv32i_official`** —— lint 判的是
+> **被交付的产物**（`top.v`）；`tb_rv32i_official` 是 ③ 编译步里 **TB** 的模块名。
+> 逐镜像实际调用形态 = `scripts/verify_rv32i_official_rtl.sh:117`（①）/ `:131`（②）/
+> `:141-143`（③）/ `:149`（④）⇒ ⇒ **照抄上面的形态**才是门禁真正跑的东西。
 
 - **形态**：flat 全 40 个 + **hier 抽样 2 个**（`rv32ui-p-add` / `rv32ui-p-st_ld`）
 - **负向对照（防恒绿）**：手写镜像把 **3** 写进 `tohost` ⇒ 门禁 MUST 如实读到 `3`；
@@ -389,7 +397,9 @@ cmake --build build --target all-examples     # 先构建全部被跟踪 example
 
 46 个用例全依赖仓外二进制 ⇒ 全部 SKIP ⇒ Catch2 v3 退出码 **4**（= 没有真正跑起来的用例）
 ⇒ ⇒ **CTest 会判红** ⇒ ⇒ 只构建不注册（`examples/disabled_examples.txt` 已登记 + 归位条件）。
-⚠️ `ctest -N` **仍会列出它** ⇒「CTest 里认得它」**不等于**「它会绿」。
+⚠️ 它**从未 `add_test`**（声明走 `riscv_mini_catch_test_noctest`）⇒ ⇒ `ctest -N`
+**列不出它**（实测 0 命中）⇒ ⇒ 反过来：若哪天 `ctest -N` 里出现它 ⇒ 说明被误改回
+`riscv_mini_catch_test` ⇒ ⇒ C3 会因 exit 4 判红。
 
 ### 8.3 官方套件的 2 个排除项
 
