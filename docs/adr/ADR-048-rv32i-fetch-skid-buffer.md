@@ -7,6 +7,7 @@
 - Parent: ADR-046（RV32I canonical home；**D10 = SoC 32 端口冻结**，本 ADR 的一处硬约束）、ADR-047（数据前推；**它让缺陷 B 从「计数偏差」升级为「正确性地雷」**，见 §1.3.2）、ADR-041（**imem MUST 用 `sread`**，1 拍读）、ADR-035（verilator 后端的 reset/clock 语义）
 - 关联 OpenSpec change：`rv32i-fetch-skid-buffer-2026-10`（**待立项**，本 ADR 是其架构依据）
 - 关联 objective / feature：`feat-rv32i-isa-completeness` ④、`.rddf/plans/2026-10-26-phase5-followup-execution-plan.md` T5、`.rddf/improvements/rv32i-fetch-skid-buffer-2026-10.md`（5 段草案；**其 §2.1 第 2 条与 §2.2 的根因表述经本 ADR 纠正**，见 §6）
+- **修订 v1.1（2026-11-26 · architect · P6-3）**：**新增 §8**「取指级 PC 重定向的**第二路**（trap / mret）」⇒ ⇒ 本 ADR 的「**flush 唯一来源**」这条**实现层不变量被取代**为「**来源互斥 + 优先级写死**」⇒ ⇒ §1.4 / **D3 的附带收益** / **D5 的防御性契约** 三处**就地标注**已修订
 - 前置审查：本 ADR 的时序推导经 **oracle 独立复核**（9 处判断被修正，其中 2 处推翻了我的初稿 ⇒ 见 §7）
 - ⚠️ **配置缺口**：`.rddf/config/arch-docs.json` **不存在** ⇒ 本 ADR 按 fallback 目录（`docs/adr` / `docs/architecture`）判定归属 ⇒ 该配置的建立**独立立项**（不阻塞本 ADR）
 
@@ -137,6 +138,12 @@ Verilog 的 reset 分支只对框架 `default_reset` 生效，而 `ext_rst` 是 
 **原样保留**；反之，回退会给 PC 引入**第三路**源 ⇒ 恰好触发该注释自己预警的重审义务
 （`if_stage.h:101-103`：「引入第三个 flush 来源前 MUST 改为『flush 时也更新 PC』」）。
 
+> ⚠️ **v1.1（2026-11-26 · P6-3）已触发该「重审义务」**：trap 重定向**不是**分支目标
+> ⇒ ⇒ PC 选择器由**两路**改为**三路**（`trap > branch > PC+4`）⇒ ⇒ 「flush 唯一来源」
+> 这条**实现层不变量被取代** ⇒ ⇒ **取代后的形式 + 优先级 + kill 域 + skid 契约的扩展**
+> ⇒ ⇒ 见 **§8**（dated addendum v1.1）。
+> ⚠️ **本 ADR 的取指语义结论（缺陷 A/B 的修法 · `primed` · `flush_d1` · 深度 1 够用）一字不改**。
+
 #### D3.1 「同一地址被重复读出」在**两后端**都成立且等价
 
 - **解释器**：`instr_mem_sync_read_port::eval()` 只在 clk 高时执行，用**边沿前**的地址
@@ -184,6 +191,10 @@ Verilog 的 reset 分支只对框架 `default_reset` 生效，而 `ext_rst` 是 
 - **flush（含 `flush_d1`）拍 MUST 清空 `skid_valid`**；
 - **填充条件 MUST 排除 `flush | flush_d1`**（否则会把**错误路径**的指令存进 skid，
   之后塞进 ID）；
+
+> ⚠️ **v1.1（2026-11-26 · P6-3）**：**第二个 flush 源已经引入**（`trap_flush`，见 §8）
+> ⇒ ⇒ 本条防御性契约**扩展**到 `trap_flush | trap_flush_d1`（**清空**与**填充排除**两处都要）
+> ⇒ ⇒ **MUST NOT** 被读成「只管 `flush`」⇒ ⇒ 详见 **§8.2 DA3**。
 - ⚠️ **验收 MUST 落到组件级**（D9.4）：流水线级不可达 ⇒ SoC 级变异验证**抓不到**
   「删掉清空逻辑」的变异 ⇒ 该防御逻辑否则是「看起来有保护」。
 
@@ -509,3 +520,200 @@ ADR 内**全部 `文件:行号` 引用零失配**、D10 与仓库 OpenSpec 纪�
 ⇒ **审稿预算用尽（2/2）** ⇒ 本 ADR 状态转 **Accepted**；
 ⇒ 后续：rdd-planner 立项 **一个** proposal（`rv32i-fetch-skid-buffer-2026-10`）+
 **两个** commit（C1 缺陷 A / C2 缺陷 B）；C3（D7 框架层）按 D13 步骤 3 **独立立项**。
+
+---
+
+## 8. Dated addendum **v1.1**（2026-11-26）—— 取指级 PC 重定向的**第二路**（trap / mret）
+
+> ⚠️ **本节是 dated addendum**（先例 = ADR-071 v1.2）⇒ ⇒ **不新增 ADR**，只**修订**本 ADR 的
+> 「flush 唯一来源」这条**实现层不变量**（§1.4 / **D3 的附带收益** / **D5 的防御性契约**
+> 三处已**就地标注**）⇒ ⇒ **Status 仍为 Accepted**（本次修订**不放宽**任何既有不变量：
+> 取指语义的全部结论 —— 缺陷 A/B 的修法 · `primed` · `flush_d1` · 深度 1 够用 —— **一字不改**）。
+>
+> - **日期 / 作者**：2026-11-26 · build-agent（**architect role**）
+> - **父 ADR**：本 ADR（ADR-048）· **关联 ADR**：ADR-071（`illegal_reason` 4 态 · 冻结语义）
+> - **关联 change**：`openspec/changes/rv32i-trap-entry-2026-11/`（**P6-3** · trap 入口接线）
+> - **关联 improvement**：`.rddf/improvements/rv32i-privileged-csr-2026-11.md`（**P6-3**）
+> - **AC 映射**：**V5–V8** → 该 change 的 **AC1–AC8**（流水线级 / 产物面）· **V1 / V1' / V2 / V3 / V4 = 组件级**（宿主 `tests/test_rv32i_pipeline_behavior.cpp` · **D9.4** 义务：流水线级不可达 ⇒ ⇒ 判别力 MUST 落组件级）· **V9 的 AC 落点由 §8.7 的 S5 补齐**（当前 change 的 AC1–AC11 里**没有**覆盖「`reason = 1` 仍冻结」⇒ ⇒ 负向判据在验收网里**是空的**）
+> - **审稿**：oracle（这个决策在目标场景会怎么坏）+ critic（与既有 ADR / 契约是否冲突）
+>   ⇒ ⇒ 报告 = `.rddf/reviews/ADR-048-pc-redirect-second-path-review-2026-11.md`
+
+### 8.1 背景与问题（本 addendum 为何**必须**存在）
+
+本 ADR **D3 的附带收益**把「PC 选择器仍是**两路**」当作**收益**陈述：「不做回退 ⇒
+`if_stage.h` 的不变量『flush 的唯一来源 ⇒ `pc_update_en` 不看 flush』**原样保留**；反之，
+回退会给 PC 引入**第三路**源 ⇒ **恰好触发该注释自己预警的重审义务**」。
+
+⇒ ⇒ **P6-3 引入 trap 重定向，正是那次「重审义务」的兑现**：trap 目标**不是**分支目标 ⇒
+⇒ PC 选择器**必须**多一路 ⇒ ⇒ 「flush 唯一来源」这条**实现层不变量不再成立** ⇒ ⇒
+若不修订它，仓内会同时存在「ADR 说唯一来源」与「代码有两类来源」⇒ ⇒ **文档与实现漂移**。
+
+⚠️ **被修订的只有「不变量」，不是「取指语义」** ⇒ ⇒ skid buffer 的全部结论**不动**。
+
+### 8.2 决策
+
+#### DA1. PC 重定向有**两类**来源 ⇒ 「来源唯一」取代为「来源互斥 + 优先级写死」
+
+取指级 PC 重定向有**两类**来源：
+
+| 类 | 来源 | 承载信号 | 目标 |
+|---|---|---|---|
+| ① **控制流重定向** | taken 分支 / `JAL` / `JALR` | 既有 `flush` | 分支 / 跳转目标 |
+| ② **陷阱重定向** | trap / `mret`（**`mret` 归 P6-5**；本项 `mret_valid` **恒 0**） | **新增** `trap_flush` | `mtvec` 基址 / `mepc` |
+
+⇒ ⇒ `next_pc_target` 由**两路**改为**三路**，优先级 **trap > branch > PC+4**。
+⇒ ⇒ 被取代的不变量 = 「**flush 的唯一来源**」⇒ ⇒ 取代后的形式 =
+「**同一拍至多一个重定向生效，且优先级写死为 trap > branch**」⇒ ⇒
+**不变量更强**（显式优先级 vs 依赖「flush 只来自 EX 分支」的**隐式耦合前提**）。
+
+⚠️ **该优先级当前在流水线级不可观测**（DA5 的 `!flush` 掩码保证两类重定向**互斥**）
+⇒ ⇒ 它是**防御性**的（为 **P6-6** 的中断来源预备 —— 中断**没有** `!flush` 掩码）
+⇒ ⇒ ⇒ **判别力 MUST 落组件级**（**V1'**）⇒ ⇒ 与本 ADR **D9.4** 的教义同型
+（流水线级不可达 ⇒ 变异验证抓不到 ⇒ 判据 MUST 落组件级）。
+
+#### DA2. `pc_update_en` 的新形态：**任何确实发生的重定向都压过 stall**
+
+```
+pc_update_en = !rst & !(stall & !(flush_redirect | trap_redirect))
+```
+
+⇒ ⇒ 理由与 ADR-071 的既有修正**同型**：stall 压过 redirect ⇒ ⇒ **redirect 被丢掉** ⇒ ⇒
+trap 目标永远去不了（= 把 P6-2 的「冻结」换了个地方）。
+⇒ ⇒ ⚠️ **既有组件级契约逐字不变**：`stall=1 ∧ flush=1 ∧ branch_valid=0`（既无 `flush_redirect`
+也无 `trap_redirect`）⇒ ⇒ **PC 仍冻结** ⇒ ⇒ `tests/test_rv32i_pipeline_behavior.cpp`
+的 **Batch 4-a** 判据**MUST NOT 被破坏**（**V2**）。
+
+⚠️ **定义**：`trap_redirect ≡ trap_flush`（`ExceptionUnit` 的 `trap_entry_valid` 与 `trap_flush`
+**同源**；`if_stage` 只接受**一个**陷阱有效输入）⇒ ⇒ **P6-5** 引入 `mret` 时，
+`pc_update_en` 的 override 集 MUST 同步扩为 `flush_redirect | trap_redirect | mret_redirect`。
+
+#### DA3. `trap_flush` MUST 有 `trap_flush_d1`；**四个**站点 MUST 覆盖它
+
+- imem 是 **1 拍 `sread`**（ADR-041）⇒ ⇒ 只杀一拍会让**在途**指令正常进 ID ⇒ ⇒
+  `trap_flush_d1`（与 `flush_d1` **逐字同构**）。
+- ⇒ ⇒ **四个 MUST 站点**（⚠️ 第 4 个是最易漏的**承重件**）：
+
+| # | 站点 | 漏了会怎样 |
+|---|---|---|
+| ① | `if_id_update_en` 的门（`if_stage.h` 的 stall/flush/flush_d1 三元组） | 在途指令正常进 ID |
+| ② | `skid_valid` 的**清空**条件 | skid 残留 ⇒ 之后塞进 ID ⇒ 顺序乱 |
+| ③ | `skid` 的**填充排除**条件 | 把**trap 重定向后的错误路径指令**（比触发指令年轻）存进 skid |
+| ④ | ⚠️ **`if_id_valid_reg` 的清零条件**（内层 select，现为 `io().flush \| flush_d1 \| !primed`） | ⇒ ⇒ **活锁**（见下） |
+
+- ⚠️ **为什么 ④ 是承重件**：该 select 是**两级**的 —— `if_id_update_en = 0` 时走 else 分支，
+  由**内层**条件决定「清零」还是「**保持**」⇒ ⇒ 只门 ① ⇒ ⇒ `valid` **永不清零**
+  ⇒ ⇒ 触发指令**留在 IF/ID** ⇒ ⇒ 下一拍 `illegal_reason` 仍非零 ⇒ ⇒ trap **每拍重触发**
+  ⇒ ⇒ PC 每拍重定向 `mtvec`（幂等）⇒ ⇒ `if_id_update_en` 永 0 ⇒ ⇒
+  **`mtvec` 处的指令永不进 ID = 活锁**。
+  ⇒ ⇒ ⚠️ 该活锁**不会**被「`mepc` / `mcause` / 不退休 / PC→`mtvec`」这类判据抓到
+  ⇒ ⇒ ⇒ 必须有**直接观测 `valid` 清零**的判据（**V3**）。
+- ⇒ ⇒ 这**扩展**了 **D5** 的防御性契约（D5 只写了 `flush | flush_d1`）⇒ ⇒
+  **D5 MUST NOT** 被读成「只管 `flush`」⇒ ⇒ 同时意味着「`flush ∥ skid_valid` 不可达」的
+  **可达性论证前提已变**（多了一个 flush 源）⇒ ⇒ MUST **重新表述**（下）。
+
+⚠️ **「`trap_flush ∥ skid_valid` 不可达」的重新表述**（D5 的论证前提已变 ⇒ MUST 重写）：
+`skid_valid = 1` ⇒ 处于停顿窗口 ⇒ ID 冻结在消费者 C ⇒ C 的首拍 = 停顿首拍 ⇒
+若 C 非法 ⇒ trap **已于该拍触发** ⇒ 而填充条件排除 `trap_flush | trap_flush_d1`
+⇒ ⇒ 与「`skid_valid = 1`」矛盾 ⇒ ⇒ 故**不可达** ⇒ ⇒ **清空条件仍是防御性契约**
+⇒ ⇒ 判别力 MUST 落**组件级**（**V4**）—— 与 **D5** 的定位**一致**。
+
+#### DA4. kill 域**不同** ⇒ 两条信号 MUST **分开命名**、MUST NOT 合并
+
+| 信号 | kill 域 | 语义 |
+|---|---|---|
+| `flush` | **ID/EX + IF/ID** | 错误路径上的指令**不前进** |
+| `trap_flush` | **仅 IF/ID** | 触发指令**不前进**；**EX/MEM/WB 不受影响** ⇒ 在途的**更老**指令**照常退休** |
+
+⇒ ⇒ 两者**MUST NOT** 合并成一个信号（合并 ⇒ trap 会误杀在途指令）⇒ ⇒
+**MUST NOT** 复用 `flush` 的端口名（否则语义被**静默改写**）⇒ ⇒ 命名必须自带「trap」。
+
+⚠️ **触发指令「不进 EX」不是 `trap_flush` 直接产生的** —— 它由既有
+`illegal_active ⇒ stall`（`rv32i_pipeline.h` 驱动 `id_stage.io().stall` 的那一项）经
+`idex_bubble` 承担 ⇒ ⇒ **该 OR 项在 trap 机制下仍是承重件** ⇒ ⇒
+**MUST NOT** 以「冻结已被 trap 取代」为由移除它 ⇒ ⇒ 否则触发指令会以 `valid = 1`
+装进 ID/EX ⇒ ⇒ 进入 EX 并退休（在 trap 重定向之后执行 ⇒ 副作用不可控）。
+
+#### DA5. 触发集 MUST 显式写成「`reason ∈ {2, 3}`」· 且 MUST 排除 `flush`
+
+- 触发集 = **`illegal_reason ∈ {2, 3}`**（**未知 opcode** + **ISA 保留组合**）⇒ ⇒
+  `exception_valid = (illegal_reason == 2 | illegal_reason == 3) & id_valid & !flush`
+- ⇒ ⇒ `reason = 1`（`OP_SYSTEM` 的 `funct3 = 0` ⇒ `ECALL`/`EBREAK`/`MRET`/`WFI`）
+  MUST **维持冻结**（归 **P6-4 / P6-5**）⇒ ⇒ `illegal_active`（`reason != 0`）**继续只服务 stall**。
+- ⇒ ⇒ ⚠️ 触发集 MUST **显式**写成「`reason ∈ {2,3}`」而**不是**「`reason != 0`」
+  ⇒ ⇒ 后者会把 `ECALL` 一并拉进 trap ⇒ ⇒ **抢占 P6-4 的原因码语义**（`ECALL` 的 cause = 11）。
+- ⇒ ⇒ ⚠️ **`!flush` 是承重条款**：taken 分支的 **fall-through 槽**里的非法字会在 flush 同拍
+  触发 trap ⇒ ⇒ **用错误路径的 PC 写坏 `mepc`**（ADR-071 §2.3 记录的**可达轨迹**）⇒ ⇒ **V6**。
+
+### 8.3 选项对比表
+
+| # | 选项 | 结论 | 理由 |
+|---|---|---|---|
+| **A** | **两类来源 + 优先级写死**（`trap > branch > PC+4`） | ✅ **采纳** | 把「隐式互斥」换成「**显式优先级**」⇒ 不变量更强（不再依赖「flush 只来自 EX 分支」的耦合前提）· 顶层端口面**零变化** · 判别可机械判定（**组件级**） |
+| **B** | 把 trap 伪装成「**第三个 flush 源**」（合并成单一 `flush` 信号） | ❌ **否决** | ① **kill 域不同**（`flush` 杀 ID/EX，`trap` 只杀 IF/ID）⇒ 合并 ⇒ **在途更老指令被误杀**；② ⚠️ **更致命**：DA5 的 `!flush` 掩码在**单一信号**下**不可表达**（触发条件需要排除 branch 成分 ⇒ **成分必须可分**）⇒ ⇒ 合并**从一开始就不成立** |
+| **C** | **不做 PC 重定向**（软件轮询 `mcause` 判定 trap） | ❌ **否决** | RISC-V 要求 trap **把 PC 重定向到 `mtvec`** ⇒ 不重定向 ⇒ 软件无法区分「trap 发生过」与「程序卡住」⇒ 且 `mepc`（指向触发指令）的语义失去意义 |
+| **D** | **PC 回退**（trap 时把 PC 退回去重取） | ❌ **否决** | **本 ADR D3 已明确否决**（制造**双装**）· 且 trap 目标**不是**「已取到的指令」⇒ 回退**无对象** |
+
+### 8.4 后果 / 代价
+
+**正面**
+
+- trap **可达** ⇒ 「非法指令」从「**永久挂死**」变成「机器级**可观测**的陷入」；
+- 「flush 唯一来源」这条**耦合前提**不再需要维护（隐式互斥 ⇒ **显式优先级**）；
+- **顶层端口面零变化**（`if_stage` 的新端口**被顶层消费** ⇒ 不冒泡 ⇒ 核 IP 53 端口不变）。
+
+**负面（必须承担）**
+
+| # | 代价 | 载体 / 缓解 |
+|---|---|---|
+| ① | `if_stage.__io` **+2 端口** ⇒ 组件接口面变化 ⇒ 层次化产物里 `IfStage` module 的**端口表**变（**顶层 53 端口不变** ⇒ C6 契约不受影响）⇒ ⇒ ⚠️ **模块级端口表变化当前无机械判据**（`R8′` 只钉**顶层**端口表）⇒ ⇒ 靠本行登记 | `include/cpu/pipeline/stages/if_stage.h` · 判据 = **V8** |
+| ② | `pc_update_en` 的形态变复杂 ⇒ 组件级判据 MUST 覆盖「**trap ∥ stall 同拍**」 | **V1**（组件级） |
+| ③ | **D5** 的防御性契约**扩展** + 「`flush ∥ skid` 不可达」的**可达性论证前提变了** ⇒ MUST **重新表述**并进变异清单 | **DA3**（含重新表述的三行论证）· **V4** |
+| ④ | 既有组件级契约（Batch 4-a）**MUST NOT 被破坏** ⇒ 新形态下**逐字成立**（**DA2**） | **V2** |
+| ⑤ | ⚠️ **组件级测试夹具 MUST 扩展**：既有 helper `if_tick` **实际只驱动 4 个输入**（`rst` / `stall` / `flush` / `instr_data`）⇒ ⇒ ① `if_stage` +2 端口后 **`trap_flush` / `trap_target` 未驱动** ⇒ 未驱动端口读到**未定义值** ⇒ ⇒ 「契约未被破坏」的判据会建立在**未驱动端口**上；② ⚠️ **连 `instr_ready` 也没驱动** ⇒ 未驱动读到 0 ⇒ ⇒ `if_id_valid_reg` 恒 0 ⇒ ⇒ **既有 Batch 4-a 的组件级判据可能在保真度不足下通过** ⇒ ⇒ MUST 把 `instr_ready` 显式驱动为 **1** | `tests/test_rv32i_pipeline_behavior.cpp`（**builder 域** · change 的 tasks **T5 新增组件级用例行**，见 §8.7 **S5**） |
+| ⑥ | ⚠️ **实现侧 MUST 同时改「代码注释块」**：`if_stage.h` 的「flush 唯一来源」注释块 MUST 被重写（否则代码注释与本 ADR 漂移） | 同 ⑤（**builder 域**） |
+
+### 8.5 Verification（可勾选验收判据 · **前瞻**方法）
+
+> ⚠️ 期望值 MUST **手推**（禁抄仿真输出 —— 解释器与 codegen 同源 ⇒ 两后端一致地错）。
+
+- [ ] **V1**（组件级）`stall=1 ∧ trap_flush=1` ⇒ ⇒ **PC 重定向到 trap 目标**
+      （**不被 stall 压过**）⇒ ⇒ 对应 **DA2**
+- [ ] **V1'**（组件级）`trap_flush=1 ∧ branch_valid=1` ⇒ ⇒ `next_pc` = **trap 目标**
+      ⇒ ⇒ 对应 **DA1**（优先级的**唯一**可观测点 ⇒ 变异「优先级写成 branch > trap」**恒绿**
+      ⇒ ⇒ MUST 落组件级）
+- [ ] **V2**（组件级）`stall=1 ∧ flush=1 ∧ branch_valid=0` ⇒ ⇒ **PC 仍冻结**
+      ⇒ ⇒ **既有 Batch 4-a 契约未被破坏** ⇒ ⇒ 对应 **DA2**
+- [ ] **V3**（组件级）`trap_flush` 拍 ⇒ ⇒ IF/ID **不装载且 `valid` 清零**；**下一拍**
+      （`trap_flush_d1`）**同样不装载且 `valid == 0`**
+      ⇒ ⇒ ⚠️ **必须直接观测 `valid`**（否则**活锁**（DA3 ④）不被抓到）⇒ ⇒ 对应 **DA3**
+- [ ] **V4**（组件级）`trap_flush` 拍 ⇒ ⇒ `skid_valid` **清空**；且 `trap_flush ∥ stall` 时
+      **不填充** ⇒ ⇒ 对应 **DA3**（并覆盖 D5 的扩展）
+- [ ] **V5**（流水线级）非法指令（`reason ∈ {2,3}`）⇒ ⇒ `mepc` = 该指令 PC · `mcause` = 2 ·
+      该指令**不退休** · PC → `mtvec` 基址 ⇒ ⇒ 对应 **DA1** / **DA4** / **DA5**
+- [ ] **V6**（流水线级）taken 分支的 fall-through 槽放非法字 ⇒ ⇒ **不** trap
+      （`mepc` / `mcause` **不变**）⇒ ⇒ 对应 **DA5**
+- [ ] **V7**（流水线级）trap 前排入的 ALU 指令 ⇒ ⇒ **照常退休**（kill 域只到 IF/ID）
+      ⇒ ⇒ 对应 **DA4**
+- [ ] **V8**（产物面）核顶层 **53** 端口**逐字不变** + 层次化 module 数**不变**
+      ⇒ ⇒ 对应 **DA1**（`if_stage` 的新端口不冒泡）
+- [ ] **V9**（流水线级）`reason = 1`（`ECALL`）⇒ ⇒ **仍冻结**（**不** trap）
+      ⇒ ⇒ 对应 **DA5**（触发集**不含** `reason = 1` ⇒ ⇒ 不抢占 P6-4）
+
+### 8.6 边界（**不**属本 addendum）
+
+- **`MRET` 的 PC 恢复** 与 `mstatus.MIE↔MPIE`（**P6-5**）· **中断**（**P6-6**）·
+  **`mtval` 真值**（**P6-7**）· **`mtvec` 取值语义**（**D-1**）⇒ ⇒ **不**在本节。
+- **`CsrBank` 单写口的仲裁策略**（trap 上下文优先）⇒ ⇒ **不**在本节（本节只裁决「取指级
+  PC 重定向」这**一个**决策 ⇒ ⇒ 归 change 的 `design.md` + capability spec 的 Scenario）。
+- 触发源的完整集合（`ECALL` / `EBREAK` / 中断）⇒ ⇒ 本节只覆盖**机制**与
+  **非法指令这一个触发源**。
+
+### 8.7 ⚠️ 本 addendum 落地**强制**的**文档同步义务**（oracle 复核追加）
+
+| # | 义务 | 归属 | 依据 |
+|---|---|---|---|
+| **S1** | ⚠️ **ADR-071 MUST 补 dated 标注（v1.3）**：其 **D3**（`MUST NOT` 陷阱到 `mtvec` · 「PC 不前进 · 冻结是终态」）对 **`reason ∈ {2,3}`** 被本 addendum **取代**（`reason = 1` 的冻结**保留**至 P6-4/P6-5）⇒ ⇒ **「ID/EX 装气泡 · MUST NOT 进入 EX · 永不退休」这一半保留** | **architect**（本轮一并落档） | ADR-071 §2.3 D3 · §3 选项 D（trap = ⏸ 独立立项 ⇒ **P6-3 正是该立项**） |
+| **S2** | ⚠️ **本 change MUST 携带 `rv32i-isa-semantics` 的 MODIFIED delta**（「未知 opcode ⇒ 冻结」与「冻结与 `flush` 同拍 ⇒ 重定向优先」两条 Requirement 的**冻结相关句**）⇒ ⇒ **既有内容一条都不删**（只改写冻结 ⇒ 陷入那几处）⇒ ⇒ **禁** `--skip-specs` | **builder**（change 域） | 母 improvement 的「接缝兑现 #1」（接线 change MUST 以 MODIFIED delta 修订该冻结条款）⇒ ⇒ ⚠️ **本 addendum 之前的 change 提案写「既有 Requirement 不动」⇒ MUST 订正** |
+| **S3** | ⚠️ 根 `AGENTS.md` 的 RV32I 红线（「进 ID 级即冻结」）**MUST 同步改写**（冻结 ⇒ 陷入） | **builder**（根文件不在 architect 写集） | 本 addendum 的 §8.2 DA5 + §8.7 S2 |
+| **S4** | ⚠️ 母 improvement 的「接缝兑现 #2（D-3）」：本项关闭 capability「不覆盖」清单里的「**`#2 mtvec 取值语义**」的**机制部分** ⇒ ⇒ 其余（`#1 mtval` / `#3 mstatus 陷阱侧` / `#4 MRET 恢复` / `#5 并发异常排队`）仍归 P6-5/P6-6/P6-7 | **builder**（capability spec 域） | 母 improvement Acceptance #2 |
+| **S5** | ⚠️ **change 侧触发集表达式 MUST 订正为 `illegal_reason ∈ {2,3}`**：`proposal.md` S2 · `design.md` §2.1 · `tasks.md` T4.3 · 母 improvement 的正确性条款（**四处仍写 `illegal_active` = `reason != 0`**）⇒ ⇒ 且 **`rv32i-privilege` delta 的 Requirement 头 MUST 删去「`OP_SYSTEM` 的 `funct3 = 0`」**（与其自身末条 Scenario「`funct3 = 0` MUST 仍冻结」**直接打架** ⇒ ⇒ 照此归档会把一条**自相矛盾**的 Requirement 冻进主 spec）⇒ ⇒ `tasks.md` T2.1 的「D1–D4 四条」订正为 **DA1–DA5** ⇒ ⇒ **T5 MUST 补组件级判据任务**（V1' / V4 的宿主 = `tests/test_rv32i_pipeline_behavior.cpp`）⇒ ⇒ **补一条「`reason = 1` 仍冻结」的 AC**（= **V9** 的落点） | **builder**（change 域） | 本 addendum §8.2 DA5 + §8.5 V1'/V4/V9 + ADR-048 **D9.4** |

@@ -10,6 +10,7 @@
   V4 ↔ 「`valid` 门控」· V5 ↔ 「无组合环」· V6 ↔ 「退休数不变」· V7 ↔ 「顶层端口 31 → 32」
 - **审稿记录**: `.rddf/reviews/ADR-071-fence-and-illegal-opcode-semantics.md`（**oracle ×1**（2026-11-15 · 对抗式复核 ⇒ **REJECT** · 1 个**真缺陷**：`flush ∥ 冻结 stall` 同拍时 **redirect 被丢掉 + 冻结只活 1 拍** ⇒ 已修 + 已补回归用例 + 变异自证；另有 4 条 SHOULD_FIX 已逐条采纳）· **critic ×1** ⇒ 见该文件）
 - **修订 v1.2（2026-11-16 · architect · B4 · G1 扩展）**：**supersede §2.6 D6**（原「本版**只覆盖 opcode**」）⇒ ⇒ 本版**已覆盖** `funct3` / `funct7` 的**保留组合**（新 reason 码 **3**）⇒ ⇒ 判定表见 **§2.6.1** ⇒ ⇒ 判定**移到库组件 `Rv32iDecoder`**（**单一来源** · 与 C4 同精神）⇒ ⇒ ID 级只转发 ⇒ ⇒ 实测：**金标零变化**（`ctest -LE perf` 255/255 · 独立 Verilog TB `checks=24 fails=0`）⇒ ⇒ 且**挖出 1 条测试夹具缺陷**（差分表的 SUB 编码 `funct7=0x40` = 保留组合 ⇒ 已按手推修正）
+- **修订 v1.3（2026-11-26 · architect · P6-3）**：**D3（行为策略 = 冻结）被部分取代** —— 对 **`illegal_reason ∈ {2,3}`**（未知 opcode + ISA 保留组合）⇒ ⇒ 「**PC 不前进 · 冻结是终态**」**失效**（改为**陷入**：写 `mepc`/`mcause` + PC 重定向到 `mtvec`）⇒ ⇒ **「ID/EX 装气泡 · MUST NOT 进入 EX · 永不退休」这一半保留**；对 **`illegal_reason = 1`**（`OP_SYSTEM` 的 `funct3 = 0` ⇒ `ECALL`/`EBREAK`/`MRET`/`WFI`）⇒ ⇒ **冻结维持不变**（归 P6-4 / P6-5）⇒ ⇒ 详见 **ADR-048 §8（dated addendum v1.1）** + `openspec/changes/rv32i-trap-entry-2026-11/`（P6-3）
 - ⚠️ **本 ADR 是「追认」**：实现已先行落地（commit `514fc26` · B4 · G1+G4）⇒ ⇒ 本 ADR 的作用是
   **补上缺失的决策与审稿**（`phase-6-next-steps.md` 的 **R11**：ISA 语义裁决归 architect，
   planner 无权拍板）⇒ ⇒ **裁决内容 MUST 与已落地实现一致**；若审稿判定实现有错 ⇒ ⇒ 走
@@ -86,6 +87,9 @@
 「特权级还没做」看起来像「程序跑飞了」。
 
 ### 2.3 **D3**（P-B）= 行为策略 = **冻结**（PC 不前进 · ID/EX 装气泡 · 永不退休）
+> ⚠️ **v1.3（2026-11-26 · P6-3）已部分取代本条**（精确范围见头部元数据）：`illegal_reason ∈ {2,3}` ⇒ ⇒ 「PC 不前进 · 冻结是终态」**失效**（改为**陷入**）⇒ ⇒ **「ID/EX 装气泡 · MUST NOT 进入 EX · 永不退休」保留** ⇒ ⇒ 依据 = **ADR-048 §8**（dated addendum v1.1） ⇒ ⇒ ⚠️ `illegal_reason = 1` 的**冻结不变**（P6-4 / P6-5）⇒ ⇒ 下方「MUST NOT 陷阱到 `mtvec`」一句**仅对 `reason = 1` 仍然成立**。
+> ⇒ ⇒ ⚠️ **D3-b 的优先级公式同步被 ADR-048 §8 DA2 扩展**（override 集 = `flush_redirect | trap_redirect`）· **D3-b ③ 的「正确路径上冻结仍是终态」对 `reason ∈ {2,3}` 失效**（改为陷入）⇒ ⇒ 只读 D3-b 的读者**不会**知道自己看到的是旧形态。
+
 
 非法指令进入 ID 级时 ⇒ ⇒ **IF 与 ID 同时 `stall`** ⇒ ⇒
 ① PC 不前进（`if_stage` 侧冻结 ⇒ 取指与 skid 一并停）· ② ID/EX 装**气泡**
@@ -225,7 +229,7 @@
 | # | 代价 | 处置 |
 |---|---|---|
 | ① | **下游负担**：依赖「跑出程序尾部仍继续退休」的下游 MUST 把尾部填成 NOP | 载体 = 装载器纪律（G3：`load_firmware` + 独立 Verilog TB 的装载任务）+ `docs/CHANGELOG.md` + 归档 change 的「## 用户可见变更」段 |
-| ② | **冻结是终态**：没有恢复路径（无 trap）⇒ 只能复位 | 已如实登记（§4.3 风险 ①） |
+| ② | **冻结是终态**：没有恢复路径（无 trap）⇒ 只能复位 | 已如实登记（§4.3 风险 ①）· ⚠️ **v1.3（2026-11-26）已部分消解**：`reason ∈ {2,3}` 改为**陷入**（PC 重定向到 `mtvec` ⇒ 恢复路径出现）⇒ ⇒ `reason = 1` 仍是终态 |
 | ③ | **分类只覆盖 opcode**：`funct3`/`funct7` 非法组合**仍静默** | residual（D6） |
 | ④ | **端口面增长**：顶层 31 → 32 · 产物 126 → 129 | 已登记（C6 快照 +1 · TB +3 根） |
 | ⑤ | **实现先于决策**（本 ADR 是追认） | 由本 ADR + oracle→critic 审稿**补齐**；⚠️ **该风险已实际发生**：oracle 复核查出 D3-c 的实现缺陷 ⇒ 已按 `design_drift` 修实现 + 补回归用例 + **变异自证** |
