@@ -211,12 +211,11 @@ dmem 必须是简化 stub（write=0, read_data=0，因为该固件不触发 load
 ### Requirement: RV32I SoC MUST 有 interpreter 与 verilator 的双路逐周期 parity
 
 - **WHEN** 固件含 ≥ 20 条 RV32I 指令，覆盖 ALU-only / load-store / branch 三类路径
-- **THEN** 同一 TEST_CASE 内 MUST 各建一份 `ch::ch_device<Rv32iPipelineTop>`
+- **THEN** 同一 TEST_CASE 内 MUST 各建一份 `ch::ch_device<Rv32iCoreTop>`
   + 一份 `Simulator`；interpreter 侧 MUST 显式
   `set_backend(std::make_unique<InterpreterBackend>())`，verilator 侧 MUST
   `set_backend(std::make_unique<VerilatorBackend>(workdir))`
-- **AND** 每 tick MUST 跨后端比对**全部 27 个输出观测值**（11 功能 `obs_*` +
-  16 诊断 `dbg_*`），持续 ≥ 200 拍
+- **AND** 每 tick MUST 跨后端比对**核顶层全部 `ch_out` 观测端口**，持续 ≥ 200 拍
 - **AND** imem MUST 用 `sread`（`verilator-e2e-coverage` §R1 invariant 3）
 
 #### Scenario: 不得用 `DUAL_BACKEND_TEST_PAIR` 宏做逐周期 diff
@@ -242,6 +241,29 @@ dmem 必须是简化 stub（write=0, read_data=0，因为该固件不触发 load
 
 - **WHEN** 固件含一个 taken 分支与一个 not-taken 分支
 - **THEN** `obs_instr_addr` 的逐周期序列 MUST 在两后端一致（取指流偏差即被抓）
+
+#### Scenario: 观测集合 MUST 对着端口面守恒（**新增**）
+
+- **WHEN** 核顶层 `__io` **新增**一个 `ch_out` 端口（或既有端口改名 / 删除）
+- **THEN** 该端口 MUST 出现在（跨后端比对向量 ∪ 缺口登记表）里
+- **AND** 未纳入向量者 MUST 逐条登记在 `.rddf/checks/rv32i-obs-vector-registry.md`
+  （带「为什么未纳入」+「归位条件」两列）
+- **AND** 该集合 MUST **对着核顶层端口面**判定 ⇒ ⇒ **MUST NOT** 用「写死的条数」表达
+  （写死条数 ⇒ 加端口时静默失同步 ⇒ 正是 S4a 的情形）
+- **AND** 若它**只**出现在登记表 ⇒ MUST 有「为什么未纳入」与「归位条件」两列（空 ⇒ 红）
+- **AND** 若它**补进了向量** ⇒ 对应的登记行 MUST 被删除（登记残留 ⇒ 红）
+  ⇒ ⇒ 理由：`ch_out` 端口面是**被冻结的契约**（ADR-046 D10），而逐周期 parity 的
+  **判别力 = 观测面 == 端口面**；once 观测面相对端口面缩水**而没有信号**，
+  「parity 全绿」就退化成「比对了一个子集且无人知道」——`rv32i-soc-mmio-channel-2026-11`
+  （S4a 加 8 in + 11 out）正是这种情况（向量停在 28，端口面 39，无护栏转红）
+
+#### Scenario: 缺口登记 MUST 双向可判（**新增**）
+
+- **WHEN** 登记表里出现一个**不存在**于核顶层 `ch_out` 的端口名
+- **THEN** 判据 MUST 红（禁止编造豁免）
+- **AND** 登记表的「为什么未纳入」/「归位条件」任一为空 MUST 红
+  ⇒ ⇒ 理由：单向登记（只判「登记了就豁免」）会退化成「按名字的永久自动豁免」——
+  仓内已在 `examples/removed_examples.txt` 上踩过这个形态
 
 #### Scenario: verilator 缺席 MUST log-and-skip
 

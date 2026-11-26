@@ -7,13 +7,7 @@
   + 一份 `Simulator`；interpreter 侧 MUST 显式
   `set_backend(std::make_unique<InterpreterBackend>())`，verilator 侧 MUST
   `set_backend(std::make_unique<VerilatorBackend>(workdir))`
-- **AND** 每 tick MUST 跨后端比对**核顶层全部 `ch_out` 观测端口**（即 `Rv32iCoreTop` 的
-  `__io` 里每一个 `ch_out` ⇒ 当前 39 根），持续 ≥ 200 拍
-  ⇒ ⇒ **MUST NOT** 用「写死的条数」表达这个集合：该集合 MUST **对着核顶层端口面**判定，
-  且条数变化 MUST 被护栏抓到（见下方 Scenario）
-- **AND** 任何**未纳入**该集合的 `ch_out` MUST 逐条登记在
-  `.rddf/checks/rv32i-obs-vector-registry.md`（带「为什么未纳入」+「归位条件」）
-  ⇒ ⇒ 未登记即失同步 ⇒ MUST 红
+- **AND** 每 tick MUST 跨后端比对**核顶层全部 `ch_out` 观测端口**，持续 ≥ 200 拍
 - **AND** imem MUST 用 `sread`（`verilator-e2e-coverage` §R1 invariant 3）
 
 #### Scenario: 不得用 `DUAL_BACKEND_TEST_PAIR` 宏做逐周期 diff
@@ -44,6 +38,10 @@
 
 - **WHEN** 核顶层 `__io` **新增**一个 `ch_out` 端口（或既有端口改名 / 删除）
 - **THEN** 该端口 MUST 出现在（跨后端比对向量 ∪ 缺口登记表）里
+- **AND** 未纳入向量者 MUST 逐条登记在 `.rddf/checks/rv32i-obs-vector-registry.md`
+  （带「为什么未纳入」+「归位条件」两列）
+- **AND** 该集合 MUST **对着核顶层端口面**判定 ⇒ ⇒ **MUST NOT** 用「写死的条数」表达
+  （写死条数 ⇒ 加端口时静默失同步 ⇒ 正是 S4a 的情形）
 - **AND** 若它**只**出现在登记表 ⇒ MUST 有「为什么未纳入」与「归位条件」两列（空 ⇒ 红）
 - **AND** 若它**补进了向量** ⇒ 对应的登记行 MUST 被删除（登记残留 ⇒ 红）
   ⇒ ⇒ 理由：`ch_out` 端口面是**被冻结的契约**（ADR-046 D10），而逐周期 parity 的

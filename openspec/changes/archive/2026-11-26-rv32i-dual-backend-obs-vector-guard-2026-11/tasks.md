@@ -47,4 +47,4 @@
 - [x] **T4.1** ✅ 验收报告 `.rddf/reviews/rv32i-dual-backend-obs-vector-guard-2026-11-verify.md`
 - [x] **T4.2** ✅ 遗留清扫：无 TODO / 无注释掉的代码 / 无临时调试输出；**步 2 的名字已登记**在
       improvement 的 `进度:` 与登记表的「归位条件」列
-- [ ] **T4.3** ⬜ 归档（`openspec archive`）—— 待用户确认（本 change 尚未归档）
+- [x] **T4.3** ✅ 归档（`openspec archive` · 2026-11-26）—— MODIFIED `verilator-rv32i-e2e` 已合并进主 spec

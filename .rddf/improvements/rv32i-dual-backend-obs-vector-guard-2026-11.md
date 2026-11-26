@@ -4,8 +4,8 @@ priority: P1
 phase: phase-6
 category: testing
 type: feature
-状态: draft
-进度: "**立项（2026-11-26 · 用户指令 · 主会话 builder）** ⇒ ⇒ 本项只做**步 1 = 护栏先行**（护栏 + 缺口登记表 + spec 契约），**不**补向量；缺口本体（11 根 `axil_*` 进跨后端向量）归**步 2 = 独立 change**（`rv32i-obs-vector-axil-2026-11`）"
+状态: implemented
+进度: "**立项（2026-11-26 · 用户指令 · 主会话 builder）** ⇒ ⇒ 本项只做**步 1 = 护栏先行**（护栏 + 缺口登记表 + spec 契约），**不**补向量；缺口本体（11 根 `axil_*` 进跨后端向量）归**步 2 = 独立 change**（`rv32i-obs-vector-axil-2026-11`） ⇒ ⇒ ✅ **步 1 已归档**（change `2026-11-26-rv32i-dual-backend-obs-vector-guard-2026-11` · MODIFIED `verilator-rv32i-e2e` 已合并进主 spec）"
 主题: dual-backend 覆盖守恒 —— 跨后端观测向量 vs 核顶层端口面（`axil_*` 缺口）
 依赖: change `rv32i-soc-mmio-channel-2026-11`（**S4a** 给核加 AXI-Lite 通道 · 19 端口 · 已归档 2026-11-24）· ADR-046 D10（核顶层端口面冻结）· `scripts/verify_dual_backend_parity.sh`（既有 parity 计数护栏 · 本项在其内加第二判据）
 来源: 用户 2026-11-26「审查 docs/riscv-mini/test-architecture.md」⇒ 双后端覆盖盘点 ⇒ 采纳「步 1 = 护栏先行」+ builder 实测（向量 28 ≠ 核顶层 ch_out 39）
