@@ -140,3 +140,17 @@ RISC-V 规范要求 **CSR 访问之间保持顺序** ⇒ ⇒ 「后一条 CSR �
 |---|---|
 | **`rv32i-privilege`** | **ADDED** —— 新增一条 Requirement：「**CSR 指令（6 种 `funct3`）的语义与顺序保证**」<br>⚠️ **既有 Requirement 不动**（MODIFIED 会**整体替换**既有条款 ⇒ ⇒ 风险高）⇒ ⇒ ⇒ 只 ADDED<br>⚠️ 该 capability 的 `## Purpose` 里「**不**覆盖 CSR 指令语义（`csrrw`/`csrrs`/`csrrc`）」一句**将在归档后手工更新**（AC12） |
 | `rv32i-isa-semantics` | ⚠️ **零 MODIFIED** ⇒ ⇒ 「未知 / 未实现 opcode ⇒ 流水线级冻结」那条**仍然成立**（只是 `OP_SYSTEM` 的**一部分** `funct3` 不再属于「未实现」）⇒ ⇒ ⇒ **不产生该 capability 的 delta** |
+
+---
+
+## 用户可见变更
+
+> 本段按 `.rddf/checks/public-api-surface.md` 的载体机制填写（机制生效日 = 2026-11-09）。
+> ⚠️ **补录（2026-11-26）**：本条为归档时**漏填**的事后补录
+> （`verify_public_api_visibility.sh` R1 抓出）——**不改任何决策内容**，只补这一机械段。
+
+- **库代码 / 公开 API：无变更**（`CsrBank` 的 `__io` 未动；核 IP 顶层 53 端口逐字不变）。
+- **ISA 行为（对下游可见）**：`csrrw` / `csrrs` / `csrrc` / `csrrwi` / `csrrsi` / `csrrci`
+  从「已知未实现（冻结）」变为**合法指令**（正常退休）；相邻两条 CSR 访问同一 CSR 时**停 1 拍**
+  以保证顺序 ⇒ ⇒ 下游固件的 CSR 访问从此**可执行**。
+- **公开 API 移除 / 改名：无** ⇒ ⇒ 不走移除登记。

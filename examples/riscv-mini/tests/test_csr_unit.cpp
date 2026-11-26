@@ -3,7 +3,7 @@
  * @brief RV32I CSR (Control and Status Register) 单元测试
  * 
  * 测试范围:
- * 1. CSR 寄存器复位值验证 (mstatus=0x80, misa=0x40101101, mtvec=0x20000100)
+ * 1. CSR 寄存器复位值验证 (mstatus=0x80, misa=0x40101101, mtvec=0x80000100)
  * 2. CSR 读写操作 (CSRRW)
  * 3. CSR set 操作 (CSRRS - 仅当 rs1 位为 1 时设置)
  * 4. CSR clear 操作 (CSRRC - 仅当 rs1 位为 1 时清除)
@@ -92,10 +92,10 @@ TEST_CASE("CSR reset values", "[csr][reset]") {
     sim.set_input_value(csr.instance().io().csr_addr, CSR_MTVEC);
     sim.tick();
     
-    // mtvec 复位值: 0x20000100
-    // BASE(31:2)=0x20000000, MODE(1:0)=01 (Direct 模式)
+    // mtvec 复位值: 0x80000100（**P6-4 起** · 原 0x20000100 不在任何映射区）
+    // BASE(31:2)=0x80000000（I-TCM 基址）, MODE(1:0)=00（Direct）
     auto mtvec_val = to_uint32(sim.get_port_value(csr.instance().io().csr_rdata));
-    REQUIRE(mtvec_val == 0x20000100);
+    REQUIRE(mtvec_val == 0x80000100);
     
     std::cout << "  [PASS] mtvec reset value: 0x" << std::hex << mtvec_val << std::dec << std::endl;
     
@@ -763,6 +763,56 @@ TEST_CASE("CSR value output ports", "[csr][output]") {
     
     std::cout << "  [PASS] CSR output ports: mtvec=0x" << std::hex << mtvec_out
               << ", mepc=0x" << mepc_out << ", mcause=0x" << mcause_out << std::dec << std::endl;
+}
+
+// ============================================================================
+// 测试用例 13: WARL coercion（P6-4 · change `rv32i-ecall-ebreak-wfi-2026-11`）
+//
+// 规范依据（Priv Spec）：
+//   · `mtvec` 是 **WARL**（§2.1.1.7）· 本核**只实现 Direct** ⇒ MODE 合法集 = {0}
+//     ⇒ ⇒ 写 `...01`（Vectored）或 `...11`（保留）MUST 读回 `...00`
+//     （否则「读回 ≠ 硬件行为」⇒ 软件按读回值以为向量模式生效）
+//   · `mepc`（§2.1.1.14）· IALIGN=32 ⇒ "the two low bits (`mepc[1:0]`) are always zero"
+//     ⇒ ⇒ 写奇数 PC MUST 读回 4 字节对齐值（否则 `MRET` 可跳非对齐 ⇒ 本核无该 cause）
+//
+// 期望值**手推**（禁抄仿真输出）：
+//   · 写 `0x8000_0103` ⇒ 读回 `0x8000_0100`
+//   · 写 `0x8000_0101` ⇒ 读回 `0x8000_0100`
+//   · 写 `0x0000_1237` ⇒ 读回 `0x0000_1234`
+//   · 写 `0x0000_123F` ⇒ 读回 `0x0000_123C`
+// ============================================================================
+TEST_CASE("CSR WARL coercion: mtvec MODE and mepc IALIGN=32", "[csr][warl]") {
+    ch::ch_device<CsrBank> csr;
+    ch::Simulator sim(csr.context());
+
+    sim.set_input_value(csr.instance().io().mtip, false);
+    sim.set_input_value(csr.instance().io().meip, false);
+
+    auto write_csr = [&](uint32_t addr, uint32_t data) {
+        sim.set_input_value(csr.instance().io().csr_addr, addr);
+        sim.set_input_value(csr.instance().io().csr_wdata, data);
+        sim.set_input_value(csr.instance().io().csr_write_en, true);
+        sim.tick();
+        sim.set_input_value(csr.instance().io().csr_write_en, false);
+    };
+    auto read_csr = [&](uint32_t addr) {
+        sim.set_input_value(csr.instance().io().csr_addr, addr);
+        sim.tick();
+        return to_uint32(sim.get_port_value(csr.instance().io().csr_rdata));
+    };
+
+    // MODE = 11（保留）⇒ 掩为 00
+    write_csr(CSR_MTVEC, 0x80000103u);
+    CHECK(read_csr(CSR_MTVEC) == 0x80000100u);
+    // MODE = 01（Vectored · 本核未实现）⇒ 掩为 00
+    write_csr(CSR_MTVEC, 0x80000101u);
+    CHECK(read_csr(CSR_MTVEC) == 0x80000100u);
+
+    // `mepc[1:0]` 恒 0（IALIGN=32）
+    write_csr(CSR_MEPC, 0x00001237u);
+    CHECK(read_csr(CSR_MEPC) == 0x00001234u);
+    write_csr(CSR_MEPC, 0x0000123Fu);
+    CHECK(read_csr(CSR_MEPC) == 0x0000123Cu);
 }
 
 // Tests use Catch2 main from catch_amalgamated.cpp

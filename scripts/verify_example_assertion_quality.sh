@@ -96,7 +96,9 @@ examples/riscv-mini/tests/test_rv32i_hier_rtl.cpp|RV32I 层次化产物交付物
 examples/riscv-mini/tests/test_soc_hello_world.cpp|SoC 顶层 hello-world|8
 examples/riscv-mini/tests/test_wrapper_ifstage.cpp|IfStage 的 PC 复位/IF-ID 锁存/stall 冻结|4
 examples/riscv-mini/tests/test_wrapper_pipeline.cpp|Rv32iPipeline 直接包裹的周期行为|3
-examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前推选择|4"
+examples/riscv-mini/tests/test_wrapper_simple.cpp|HazardUnit 的 stall / EX 前推选择|4
+examples/riscv-mini/tests/test_rv32i_trap_entry.cpp|核级 trap 入口（非法/ECALL/EBREAK/SRET/WFI/MRET + flush 优先 + 单写口仲裁）|23
+examples/riscv-mini/tests/test_rv32i_csr_instructions.cpp|CSR 指令 6 种 funct3 语义 + 相邻有序 + funct3=0 译码面|15"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 源文件静态分析（`analyze_source`）与 **fail-closed 判定**已抽到共享 lib：

@@ -72,6 +72,12 @@ public:
         //    0 = 合法 · 1 = **已知未实现**（`OP_SYSTEM`）· 2 = **未知 opcode**
         //    · 3 = 已知 opcode 但 **funct3 / funct7 是保留组合**
         ch_out<ch_uint<2>>  illegal_reason{"illegal_reason"};   // ⚠️ **具名**（端口命名契约）
+        // ⚠️ **2026-11-26 · P6-4**：`OP_SYSTEM` / `funct3 = 0` 的**陷阱种类**
+        //    0 = 非 ECALL/EBREAK · **1 = `ECALL`** · **2 = `EBREAK`**
+        //    ⇒ ⇒ 流水线用它选 `mcause`（ECALL = 11 · EBREAK = 3）并触发 trap；
+        //    ⚠️ 两者 `illegal_reason` **都是 0**（合法指令 ⇒ 不冻结）⇒ ⇒
+        //    触发判据 MUST 用**本端口**，MUST NOT 复用 `illegal_reason`。
+        ch_out<ch_uint<2>>  sys_trap_kind{"sys_trap_kind"};
     )
     
     Rv32iDecoder(ch::Component* parent = nullptr, const std::string& name = "rv32i_decoder")
@@ -206,22 +212,50 @@ public:
         // |---|---|---|---|
         // | 001/010/011 | CSRRW/S/C | **实现** | 0 |
         // | 101/110/111 | CSRRWI/SI/CI | **实现** | 0 |
-        // | 000 | ECALL/EBREAK/MRET/WFI | 未实现（P6-4/P6-5） | **1** |
+        // | 000 | 按 `imm[11:0]` 细分（见下） | P6-4 / P6-5 | 0 / 1 / 3 |
         // | 100 | **保留** | — | **3** |
         //
         // ⚠️ 优先级仍是 `1 > 3 > 2 > 0`（ADR-071 v1.2）⇒ ⇒ `OP_SYSTEM` 的
         //    判定仍插在**最前**。
+        //
+        // ⚠️ **2026-11-26 · P6-4**：`funct3 = 0` **不再整桶归 reason 1**
+        //    （此前 ECALL/EBREAK/WFI/MRET 一起「冻结」）⇒ ⇒ 按 `imm[11:0]` 细分
+        //    （编码见 Priv Spec §2.1.3.1 / §2.1.3.3 / §2.1.3.2）：
+        //    · `0x000` **ECALL**  ⇒ **合法**（reason 0）· `sys_trap_kind = 1`
+        //      ⇒ ⇒ 陷阱原因码 = **11**（ECALL from M；`8` 是 U-mode ⇒ 本核不可达）
+        //    · `0x001` **EBREAK** ⇒ **合法**（reason 0）· `sys_trap_kind = 2`
+        //      ⇒ ⇒ 原因码 = **3**（breakpoint）
+        //    · `0x105` **WFI**    ⇒ **合法 NOP**（reason 0 · 规范明文
+        //      「a legal implementation is to simply implement the WFI instruction as a NOP」）
+        //    · `0x302` **MRET**   ⇒ **已知未实现**（reason 1 · 冻结）⇒ 归 **P6-5**
+        //    · 其余 imm（含 **`0x102` SRET**）⇒ reason **3**（trap）
+        //      ⚠️ SRET 是「**已定义但本实现不可编码**」：`misa.S = 0`（本核 M-only）
+        //      ⇒ ⇒ MUST **trap**（illegal-instruction exception）⇒ ⇒ **不得**归
+        //      reason 1（那在本核语义里是**冻结** ⇒ 会 hang）
         // ========================================================================
         auto is_op_system     = (op == ch_uint<7>(OP_SYSTEM));
         auto csr_legal_f3     = (f3 == ch_uint<3>(1)) | (f3 == ch_uint<3>(2))
                               | (f3 == ch_uint<3>(3)) | (f3 == ch_uint<3>(5))
                               | (f3 == ch_uint<3>(6)) | (f3 == ch_uint<3>(7));
-        // `funct3 = 0`（ECALL/EBREAK/MRET/WFI）⇒ 仍「已知未实现」
-        auto sys_known_unimpl = is_op_system & !csr_legal_f3 & (f3 != ch_uint<3>(4));
+        // `funct3 = 0` 的 `imm[11:0]`（SYSTEM 的 rs1/rd 位在合法编码里全 0
+        // ⇒ ⇒ `instr[31:20]` 就是 imm）
+        auto sys_imm          = bits<31, 20>(io().instruction);
+        auto sys_f3_zero      = is_op_system & f3_zero;
+        auto is_ecall         = sys_f3_zero & (sys_imm == ch_uint<12>(0x000));
+        auto is_ebreak        = sys_f3_zero & (sys_imm == ch_uint<12>(0x001));
+        auto is_wfi           = sys_f3_zero & (sys_imm == ch_uint<12>(0x105));
+        auto is_mret          = sys_f3_zero & (sys_imm == ch_uint<12>(0x302));
+        // `funct3 = 0` 的**已实现**指令（合法 ⇒ reason 0）
+        auto sys_f3z_legal    = is_ecall | is_ebreak | is_wfi;
+        // `funct3 = 0` 的**不可编码** imm（含 SRET `0x102`）⇒ reason 3（trap）
+        auto sys_f3z_illegal  = sys_f3_zero & !(sys_f3z_legal | is_mret);
+        // `funct3 = 0` 且**已知但未实现** —— 只有 `MRET`（P6-5）
+        auto sys_known_unimpl = is_mret;
         // `funct3 = 4` ⇒ ISA 保留组合
         auto sys_reserved     = is_op_system & (f3 == ch_uint<3>(4));
-        // 「合法」= 既有已知 opcode ∪ **合法 `funct3` 的 CSR 指令**
-        auto legal_opcode     = known_opcode | (is_op_system & csr_legal_f3);
+        // 「合法」= 已知 opcode ∪ 合法 `funct3` 的 CSR ∪ `funct3=0` 的已实现三指令
+        auto legal_opcode     = known_opcode | (is_op_system & csr_legal_f3)
+                              | sys_f3z_legal;
         
         // ========================================================================
         // 输出
@@ -234,18 +268,25 @@ public:
         io().funct7 = f7;
         io().imm = imm_val;
         io().instr_type = type;
-        // ⚠️ **MUST 是最后一个 `io()` 赋值**（2026-11-16）：端口节点按**赋值顺序**编号
-        //    ⇒ 插在中间会让既有 `decoder_unnamed_output_N` **整体位移**
-        //    ⇒ ⇒ 独立 Verilog TB 的端口表**全部错位**（实测踩过 · 见 id_stage 的同型记录）。
+        // ⚠️ **新增输出 MUST 追加在末尾**（2026-11-16 起的纪律）：端口节点按
+        //    **赋值顺序**编号 ⇒ 插在中间会让既有 `decoder_unnamed_output_N`
+        //    **整体位移** ⇒ ⇒ 独立 Verilog TB 的端口表**全部错位**
+        //    （实测踩过 · 见 id_stage 的同型记录）。
         //
-        // reason 码：0 合法 · 1 已知未实现（`OP_SYSTEM` 的 `funct3=0`）·
-        // 2 未知 opcode · 3 保留组合（含 `OP_SYSTEM` 的 `funct3=4`）
+        // reason 码：0 合法 · 1 已知未实现（**只有 `MRET`** · P6-5）·
+        // 2 未知 opcode · 3 保留组合 / 不可编码（`funct3=4` · `funct3=0` 的未定义 imm 与 `SRET`）
         // ⚠️ 优先级 `1 > 3 > 2 > 0`（ADR-071 v1.2）
         io().illegal_reason =
             select(sys_known_unimpl, ch_uint<2>(1),
             select(sys_reserved, ch_uint<2>(3),
+            select(sys_f3z_illegal, ch_uint<2>(3),
             select(reserved, ch_uint<2>(3),
-            select(legal_opcode, ch_uint<2>(0), ch_uint<2>(2)))));
+            select(legal_opcode, ch_uint<2>(0), ch_uint<2>(2))))));
+        // 陷阱种类（P6-4）：0 = 非 ECALL/EBREAK · 1 = ECALL · 2 = EBREAK
+        // ⚠️ 必须在 `illegal_reason` **之后**赋值（见上「追加在末尾」）
+        io().sys_trap_kind = select(
+            is_ecall, ch_uint<2>(1),
+            select(is_ebreak, ch_uint<2>(2), ch_uint<2>(0)));
     }
 };
 

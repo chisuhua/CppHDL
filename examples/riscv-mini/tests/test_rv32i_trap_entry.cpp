@@ -18,14 +18,15 @@
  * ## 取指索引口径（**必须与核顶层一致**）
  *
  * 核顶层把字节地址折成 **12 位字索引**：`bits<kTcmAddrWidth + 1, 2>(instr_addr)`
- * ⇒ ⇒ **高位被丢弃** ⇒ ⇒ `pc = 0x2000_0100`（`mtvec` 复位值）⇒ ⇒ 索引 **`0x040`**
- * ⇒ ⇒ 「trap 之后从别名落点继续执行」的处理器**必须**放在 **字 `0x040`** 起。
+ * ⇒ ⇒ **高位被丢弃** ⇒ ⇒ `pc = 0x8000_0100`（`mtvec` 复位值 · **P6-4 起**；原
+ * `0x2000_0100` 靠同一别名「碰巧」工作）⇒ ⇒ 索引 **`0x040`**
+ * ⇒ ⇒ 「trap 之后从落点继续执行」的处理器**必须**放在 **字 `0x040`** 起。
  *
  * ## 期望值 MUST **手推**（禁抄仿真输出）
  *
  * 解释器与 Verilog codegen 由**同一份 C++** 生成 ⇒ ⇒ 同构缺陷**两后端一致地错**
  * ⇒ ⇒ 双后端 parity 对该族缺陷**结构性失明** ⇒ ⇒ 本文件的期望值全部由
- * RISC-V 规范 + `CsrBank` 的**复位值**（`mtvec` = `0x2000_0100` · `mepc` = `0`
+ * RISC-V 规范 + `CsrBank` 的**复位值**（`mtvec` = `0x8000_0100` · `mepc` = `0`
  * · `mcause` = `0`）**手推**。
  *
  * ## 判据 ↔ 验收条目
@@ -35,7 +36,11 @@
  * | 未知 opcode ⇒ 陷入：`mepc` / `mcause` 写对 + PC 重定向 | AC1 / AC2 / AC3 | `mepc` 写成 0 ⇒ `x1` 读回 0 |
  * | 在途更老指令照常退休（trap **不杀** EX/MEM/WB） | AC4 | trap 改成杀整条流水线 ⇒ `x3` 无写回 |
  * | 控制流冲刷优先于 trap（错误路径上的非法字**不** trap） | AC5 | 去掉 `!flush` ⇒ `mepc` 被写坏 |
- * | `reason = 1`（`ECALL`）**仍冻结**（**不** trap） | AC12 | 触发集放宽到 `reason != 0` ⇒ PC 跳走 |
+ * | `ECALL` ⇒ 陷入：`mcause = 11`（from **M**）· `mepc` = 自身 | P6-4 AC1 | 原因码写成 2 ⇒ `x2` 读回 2；ECALL 归 reason 1（冻结）⇒ 无写回 |
+ * | `EBREAK` ⇒ 陷入：`mcause = 3`（breakpoint） | P6-4 AC2 | 原因码写成 2 ⇒ `x2` 读回 2 |
+ * | `SRET`（`0x102`）⇒ `reason = 3` ⇒ 陷入（`mcause = 2`） | P6-4 AC3 | 归 reason 1 ⇒ 冻结 ⇒ 无写回 |
+ * | `WFI`（`0x105`）⇒ 合法 NOP（**不** trap · 指令流继续） | P6-4 AC4 | 冻结 / 判非法 ⇒ 后续 `csrrs` 不执行 |
+ * | `MRET`（`0x302`）⇒ `reason = 1` **仍冻结**（P6-5 前） | P6-4 AC6 | 提前当 NOP / trap ⇒ 有写回 |
  */
 
 #include "../../../tests/catch_amalgamated.hpp"
@@ -79,8 +84,16 @@ constexpr uint32_t enc_csrrs(uint32_t rd, uint32_t csr) {
 
 /// **未知 opcode**（`opcode = 0`）⇒ ⇒ `illegal_reason = 2` ⇒ ⇒ 触发 trap
 constexpr uint32_t kIllegalUnknown = 0x00000000u;
-/// `ECALL`（`OP_SYSTEM` · `funct3 = 0`）⇒ ⇒ `illegal_reason = 1` ⇒ ⇒ **冻结**
+/// `ECALL`（`imm = 0x000`）⇒ ⇒ **合法**（`reason = 0`）· `sys_trap_kind = 1` ⇒ trap
 constexpr uint32_t kEcall = 0x00000073u;
+/// `EBREAK`（`imm = 0x001`）⇒ ⇒ **合法** · `sys_trap_kind = 2` ⇒ trap（`mcause = 3`）
+constexpr uint32_t kEbreak = 0x00100073u;
+/// `SRET`（`imm = 0x102`）⇒ ⇒ `misa.S = 0`（M-only）⇒ ⇒ **不可编码** ⇒ `reason = 3`
+constexpr uint32_t kSret = 0x10200073u;
+/// `WFI`（`imm = 0x105`）⇒ ⇒ **合法 NOP**（规范明文允许）⇒ `reason = 0`
+constexpr uint32_t kWfi = 0x10500073u;
+/// `MRET`（`imm = 0x302`）⇒ ⇒ **已知未实现**（P6-5）⇒ `reason = 1`（冻结）
+constexpr uint32_t kMret = 0x30200073u;
 /// `OP_SYSTEM` · `funct3 = 4`（ISA **保留**组合）⇒ ⇒ `illegal_reason = 3`
 constexpr uint32_t kF3Reserved = 4u;
 
@@ -265,6 +278,8 @@ TEST_CASE("TRAP - 在途更老的指令照常退休（trap 不杀 EX/MEM/WB）",
 
     const RunOut out = run_program(image);
 
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 3u);
     require_writebacks(out, {
         {3, 0x11ull},          // 在途更老的指令照常退休
         {1, 0x80000004ull},    // `mepc` = **第二条**指令的 PC
@@ -291,6 +306,8 @@ TEST_CASE("TRAP - flush 优先：错误路径上的非法字 MUST NOT 触发 tra
 
     const RunOut out = run_program(image);
 
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 2u);
     require_writebacks(out, {
         {1, 0x0ull},   // `mepc` 保持复位值 ⇒ **没 trap**
         {2, 0x0ull},   // `mcause` 保持复位值 ⇒ **没 trap**
@@ -321,6 +338,8 @@ TEST_CASE("TRAP - reason=3（保留组合）⇒ 陷入（mepc = 触发指令的 
 
     const RunOut out = run_program(image);
 
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 2u);
     require_writebacks(out, {
         {1, 0x80000000ull},   // `mepc` = 触发指令自身的 PC
         {2, 0x2ull},          // `mcause` = illegal instruction
@@ -353,6 +372,8 @@ TEST_CASE("TRAP - 单写口仲裁：trap 上下文优先于 CSR 指令的写", "
 
     const RunOut out = run_program(image);
 
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 3u);
     require_writebacks(out, {
         {1, 0x2Aull},          // `addi` 照常退休
         {3, 0x0ull},           // `mscratch` 的写被抑制 ⇒ 仍是复位值 0
@@ -361,13 +382,19 @@ TEST_CASE("TRAP - 单写口仲裁：trap 上下文优先于 CSR 指令的写", "
 }
 
 // ===========================================================================
-// AC12 / V9：`illegal_reason = 1`（`ECALL`）⇒ ⇒ **仍冻结**（**不** trap）
+// AC12 / V9（**P6-4 订正**）：`ECALL` ⇒ **陷入**（`mcause = 11`）
 //
-// 手推：`ECALL` 不在触发集 `{2,3}` ⇒ ⇒ 不 trap ⇒ ⇒ PC **不**跳到 `mtvec`
-//       ⇒ ⇒ 别名落点的读回指令**永不执行** ⇒ ⇒ **无任何写回**
-//       ⇒ ⇒ 冻结 ⇒ **永不退休** ⇒ ⇒ 退休计数恒 **0**
+// 手推：
+//   · `ECALL` 在 word 0（PC = `0x8000_0000`）⇒ ⇒ `mepc` = **该指令自身**
+//   · `mcause` = **11**（ECALL from **M**；`8` 是 U-mode ⇒ 本核不可达）
+//   · 规范（§2.1.3.1）：「performs no other operation」⇒ ⇒ ECALL **不退休**
+//   · 处理器在落点 word `0x040`（`mtvec` = `0x8000_0100` ⇒ 同 word）
+//   · ⚠️ `ECALL` 是**合法指令**（`reason = 0`）⇒ ⇒ 采样里 MUST **不出现**非零 reason
+//     （若把它归 reason 1 ⇒ **冻结** ⇒ 无写回；若归 reason 0 但不触发 trap ⇒
+//     当 NOP 退休 ⇒ 同样无写回 ⇒ ⇒ 本用例**双向**钉住）
 // ===========================================================================
-TEST_CASE("TRAP - reason=1（ECALL）仍冻结：不 trap、不重定向", "[riscv][trap]") {
+TEST_CASE("TRAP - ECALL 陷入：mcause = 11（from M）· mepc = ECALL 自身",
+          "[riscv][trap][p6-4]") {
     const std::vector<uint32_t> image = make_image({
         {0x000u, kEcall},
         {kTrapAliasWord + 0u, enc_csrrs(1, kCsrMepc)},
@@ -377,20 +404,178 @@ TEST_CASE("TRAP - reason=1（ECALL）仍冻结：不 trap、不重定向", "[ris
 
     const RunOut out = run_program(image);
 
-    // ⇒ ⇒ **零写回**（别名落点从未被执行）
+    require_writebacks(out, {
+        {1, 0x80000000ull},   // `mepc` = ECALL 自身
+        {2, 11ull},           // `mcause` = ECALL from M-mode
+    });
+
+    // `ECALL` **不是**非法指令 ⇒ reason 恒 0
+    for (const Sample &s : out.samples) {
+        CHECK(s.reason == 0u);
+    }
+
+    // ECALL 在 ID 级那一拍 ⇒ 尚未退休（它永不退休）
+    std::size_t ecall_in_id = out.samples.size();
+    for (std::size_t i = 0; i < out.samples.size(); ++i) {
+        if (out.samples[i].id_valid == 1u && out.samples[i].id_instr == kEcall) {
+            ecall_in_id = i;
+            break;
+        }
+    }
+    REQUIRE(ecall_in_id < out.samples.size());
+    CHECK(out.samples[ecall_in_id].retired == 0u);
+}
+
+// ===========================================================================
+// P6-4 AC2：`EBREAK` ⇒ 陷入（`mcause = 3` · breakpoint）
+//
+// 手推：`EBREAK`（`imm = 0x001`）⇒ 合法 · `sys_trap_kind = 2`
+//       ⇒ ⇒ `mcause` = **3** · `mepc` = EBREAK 自身 = `0x8000_0000`
+//       ⚠️ `3` 在**中断侧**是 MSI ⇒ 靠 `mcause[31] = 0` 区分（本核 P6-6 才实现中断）
+// ===========================================================================
+TEST_CASE("TRAP - EBREAK 陷入：mcause = 3（breakpoint）", "[riscv][trap][p6-4]") {
+    const std::vector<uint32_t> image = make_image({
+        {0x000u, kEbreak},
+        {kTrapAliasWord + 0u, enc_csrrs(1, kCsrMepc)},
+        {kTrapAliasWord + 1u, enc_csrrs(2, kCsrMcause)},
+        {kTrapAliasWord + 2u, riscv::JAL(0, 0)},
+    });
+
+    const RunOut out = run_program(image);
+
+    require_writebacks(out, {
+        {1, 0x80000000ull},   // `mepc` = EBREAK 自身
+        {2, 3ull},            // `mcause` = breakpoint
+    });
+    for (const Sample &s : out.samples) {
+        CHECK(s.reason == 0u);   // 合法指令
+    }
+}
+
+// ===========================================================================
+// P6-4 AC3：`SRET`（`imm = 0x102`）⇒ **不可编码**（`misa.S = 0`）⇒ `reason = 3` ⇒ 陷入
+//
+// 手推：SRET 是 S-mode 的 trap-return ⇒ M-only 实现**没有** `sepc` / `sstatus`
+//       ⇒ ⇒ 必须抛 **illegal-instruction**（`mcause = 2`）⇒ ⇒ `mepc` = SRET 自身
+//       ⚠️ **MUST NOT** 归 `reason = 1`：那在本核语义里是**冻结** ⇒ SRET 会 **hang**
+//       （规范要求异常 ⇒ 软件可处理）
+// ===========================================================================
+TEST_CASE("TRAP - SRET（0x102）不可编码 ⇒ reason 3 ⇒ 陷入（mcause = 2）",
+          "[riscv][trap][p6-4]") {
+    const std::vector<uint32_t> image = make_image({
+        {0x000u, kSret},
+        {kTrapAliasWord + 0u, enc_csrrs(1, kCsrMepc)},
+        {kTrapAliasWord + 1u, enc_csrrs(2, kCsrMcause)},
+        {kTrapAliasWord + 2u, riscv::JAL(0, 0)},
+    });
+
+    const RunOut out = run_program(image);
+
+    require_writebacks(out, {
+        {1, 0x80000000ull},   // `mepc` = SRET 自身
+        {2, 2ull},            // `mcause` = illegal instruction
+    });
+
+    bool saw_reason3 = false;
+    for (const Sample &s : out.samples) {
+        if (s.reason == 3u) {
+            saw_reason3 = true;
+        }
+        CHECK(s.reason != 1u);   // 不得落进「冻结」桶
+    }
+    CHECK(saw_reason3);
+}
+
+// ===========================================================================
+// P6-4 AC5：`funct3 = 0` 的**未定义 imm**（`0x002`）⇒ `reason = 3` ⇒ 陷入
+//
+// 手推：合法 imm 只有 `0x000` / `0x001` / `0x105` / `0x302` ⇒ ⇒ `0x002` 是
+//       **本实现不可编码** ⇒ ⇒ `mcause = 2`（illegal instruction）
+// ===========================================================================
+TEST_CASE("TRAP - SYSTEM funct3=0 的未定义 imm ⇒ reason 3 ⇒ 陷入",
+          "[riscv][trap][p6-4]") {
+    constexpr uint32_t kUndefinedImm = 0x002u;
+    const uint32_t undef = riscv::enc_i(0, 0, 0, static_cast<int32_t>(kUndefinedImm),
+                                        kOpSystem);
+    const std::vector<uint32_t> image = make_image({
+        {0x000u, undef},
+        {kTrapAliasWord + 0u, enc_csrrs(1, kCsrMepc)},
+        {kTrapAliasWord + 1u, enc_csrrs(2, kCsrMcause)},
+        {kTrapAliasWord + 2u, riscv::JAL(0, 0)},
+    });
+
+    const RunOut out = run_program(image);
+
+    require_writebacks(out, {
+        {1, 0x80000000ull},
+        {2, 2ull},
+    });
+    bool saw_reason3 = false;
+    for (const Sample &s : out.samples) {
+        if (s.reason == 3u) {
+            saw_reason3 = true;
+        }
+    }
+    CHECK(saw_reason3);
+}
+
+// ===========================================================================
+// P6-4 AC4：`WFI`（`imm = 0x105`）⇒ **合法 NOP**（不 trap · 指令流继续）
+//
+// 手推（规范 §2.1.3.3）：「**a legal implementation is to simply implement the
+//       WFI instruction as a NOP**」⇒ ⇒ `reason = 0` · 不触发 trap
+//       ⇒ ⇒ 后续 `csrrs` 照常执行 ⇒ ⇒ `mepc` / `mcause` 仍是**复位值 0**
+//       ⚠️ 判别力：冻结（旧行为）或判非法 ⇒ ⇒ 两条 `csrrs` **永不执行** ⇒ 写回为空
+// ===========================================================================
+TEST_CASE("TRAP - WFI（0x105）⇒ 合法 NOP：不 trap、指令流继续", "[riscv][trap][p6-4]") {
+    const std::vector<uint32_t> image = make_image({
+        {0x000u, kWfi},
+        {0x001u, enc_csrrs(1, kCsrMepc)},
+        {0x002u, enc_csrrs(2, kCsrMcause)},
+        {0x003u, riscv::JAL(0, 0)},
+    });
+
+    const RunOut out = run_program(image);
+
+    require_writebacks(out, {
+        {1, 0x0ull},   // 无 trap ⇒ mepc 保持复位值
+        {2, 0x0ull},   // 无 trap ⇒ mcause 保持复位值
+    });
+    for (const Sample &s : out.samples) {
+        CHECK(s.reason == 0u);
+    }
+    // 指令流确实前进了（WFI 退休后才有后续指令退休）
+    CHECK(out.samples.back().retired > 0u);
+}
+
+// ===========================================================================
+// P6-4 AC6：`MRET`（`imm = 0x302`）⇒ **仍 `reason = 1`（冻结）**（P6-5 前）
+//
+// 手推：MRET 的完整语义（`pc ← mepc` + `MIE/MPIE/MPP` 弹栈）归 **P6-5**
+//       ⇒ ⇒ 本项**不得**提前把它当 NOP / trap ⇒ ⇒ 维持「已知未实现」= 冻结
+//       ⇒ ⇒ 落点后的读回指令**永不执行** ⇒ 无写回 · 退休恒 0 · reason 恒 1
+// ===========================================================================
+TEST_CASE("TRAP - MRET（0x302）P6-5 前仍 reason=1 冻结", "[riscv][trap][p6-4]") {
+    const std::vector<uint32_t> image = make_image({
+        {0x000u, kMret},
+        {kTrapAliasWord + 0u, enc_csrrs(1, kCsrMepc)},
+        {kTrapAliasWord + 1u, enc_csrrs(2, kCsrMcause)},
+        {kTrapAliasWord + 2u, riscv::JAL(0, 0)},
+    });
+
+    const RunOut out = run_program(image);
+
     REQUIRE(out.writebacks.empty());
-    // ⇒ ⇒ **零退休**（冻结 ⇒ 永不退休）
     for (const Sample &s : out.samples) {
         CHECK(s.retired == 0u);
+        CHECK(s.reason != 2u);
+        CHECK(s.reason != 3u);
     }
-    // ⇒ ⇒ 非法原因恒为 **1**（已知未实现 · 非 2 / 非 3）
     bool saw_reason1 = false;
     for (const Sample &s : out.samples) {
         if (s.reason == 1u) {
             saw_reason1 = true;
         }
-        CHECK(s.reason != 2u);
-        CHECK(s.reason != 3u);
     }
     CHECK(saw_reason1);
 }

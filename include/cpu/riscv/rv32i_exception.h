@@ -6,12 +6,22 @@
  * 1. 陷阱入口处理：捕获异常时保存 PC、原因码到 CSR，跳转到 mtvec
  * 2. MRET 返回处理：从 mepc 恢复 PC，恢复 mstatus.MIE
  * 
- * 异常原因码：
- * - 3: Machine Software Interrupt (MSI)
- * - 7: Machine Timer Interrupt (MTI)
- * - 11: Machine External Interrupt (MEI)
- * - 8: Machine Environment Call (ECALL)
- * - 3: Breakpoint (EBREAK) — 注意与 MSI 相同
+ * `mcause` 编码（Priv Spec §2.1.1.15）：`bit31` = **Interrupt** · `[30:0]` = **code**
+ * ⇒ ⇒ **同一数字在两侧含义不同** ⇒ ⇒ 必须分表（下表**仅列本核相关项**）：
+ *
+ * 异常（`bit31 = 0`）：
+ * - 2: Illegal instruction（未知 opcode / 保留组合 / `SRET` 在 M-only 下不可编码）
+ * - 3: Breakpoint（`EBREAK`）
+ * - 11: Environment call from **M-mode**（`ECALL` 在本核唯一可达的取值；
+ *   8 = from U / 9 = from S ⇒ 本核**只有 M-mode** ⇒ 不可达）
+ *
+ * 中断（`bit31 = 1` ⇒ 写作 `0x8000_0000 | code`；**P6-6 才实现**）：
+ * - 3: Machine software interrupt
+ * - 7: Machine timer interrupt
+ * - 11: Machine external interrupt
+ *
+ * ⚠️ **旧注释（已废）**：曾把上面两张表**混写**成一张（`3` = MSI / `8` = ECALL /
+ *    `11` = MEI）⇒ ⇒ 与异常侧的 `3` = breakpoint / `11` = ECALL-from-M **直接冲突**。
  * 
  * CSR 地址：
  * - mepc (0x341): 异常指令 PC 保存寄存器
@@ -93,9 +103,8 @@ public:
         constexpr uint32_t CSR_MEPC_ADDR = 0x341;
         constexpr uint32_t CSR_MCAUSE_ADDR = 0x342;
         
-        // mtvec 模式：Direct (0) 或 Vectored (1)
-        // mtvec[1:0] 为模式位，mtvec[31:2] 为基址
-        constexpr uint32_t MTVEC_MODE_MASK = 0x3;
+        // mtvec[31:2] = 基址（`[1:0]` 是 WARL 的 MODE，本实现合法集 = {0}
+        // ⇒ ⇒ 由 `CsrBank` 写路径掩零；本组件只需 BASE）
         constexpr uint32_t MTVEC_BASE_MASK = ~0x3;
         
         // mstatus 位偏移
@@ -109,10 +118,11 @@ public:
         // 计算 mtvec 基址（清除低2位模式位）
         auto mtvec_base = io().csr_mtvec & MTVEC_BASE_MASK;
         
-        // 计算陷阱入口 PC：
-        // 模式0 (Direct): 总是跳转到基址
-        // 模式1 (Vectored): 跳转到基址 + cause * 4（向量模式）
-        // 当前简化实现：使用 Direct 模式
+        // 计算陷阱入口 PC：**只实现 Direct**
+        // ⚠️ `mtvec.MODE` 是 **WARL** 且合法集 = `{0}`（`CsrBank` 写路径把 `[1:0]` 掩零）
+        //    ⇒ ⇒ 恒取 BASE；Vectored（`BASE + 4×cause`）**未实现**
+        //    ⇒ ⇒ 若日后实现，MODE 合法集与 BASE 的对齐约束 MUST 一并更新
+        //    （规范允许 Vectored 模式要求**更严**的对齐）
         auto trap_pc = mtvec_base;
         
         // 陷阱入口信号

@@ -503,7 +503,14 @@ public:
         //    ⚠️ **无组合环**：`illegal_active` 的来源是 `id_stage.io().illegal_reason`
         //      = `io().valid & f(opcode)`（ID 级的**输入**）⇒ 而 `if_stage.io().valid`
         //      = `if_id_valid_reg`（**寄存** ⇒ `if_stage.h:329`）⇒ ⇒ 反馈环被打断。
-        auto illegal_active = (id_stage.io().illegal_reason != ch_uint<2>(0_d));
+        // ⚠️ **P6-4 扩展**：`ECALL` / `EBREAK` 是**合法指令**（`reason = 0`）但
+        //    **必须陷入** ⇒ ⇒ 它们 MUST 走**同一条**「ID 装气泡」路径
+        //    （`sys_trap_kind != 0`）⇒ ⇒ 否则 trap 同拍它们会被锁进 ID/EX
+        //    ⇒ ⇒ **越过 trap 照常退休**（陷阱「白跳」：`mepc`/`mcause` 写了，
+        //    但指令自己也退休了 ⇒ 架构上矛盾）⇒ 实测：retire(20) 16（应为 13）。
+        auto id_sys_trap = (id_stage.io().sys_trap_kind != ch_uint<2>(0_d));
+        auto illegal_active = ((id_stage.io().illegal_reason != ch_uint<2>(0_d)) |
+                               id_sys_trap);
 
         // ==================================================================
         // ⚠️ **CSR 指令的数据通路**（2026-11-25 · P6-2 · change
@@ -566,14 +573,24 @@ public:
         // 架构依据 = ADR-048 §8 的 **DA1–DA5**；审稿报告 =
         // `.rddf/reviews/ADR-048-pc-redirect-second-path-review-2026-11.md`。
         //
-        // ⚠️ **触发集 = `illegal_reason ∈ {2,3}`**（DA5）——**不是** `illegal_active`
-        //    （`!= 0`）⇒ ⇒ `reason = 1`（`ECALL`/`EBREAK`/`MRET`/`WFI`）**维持冻结**
-        //    ⇒ ⇒ `illegal_active`（`!= 0`）**继续只服务 stall**（ID/EX 装气泡）。
-        // ⚠️ **`!flush` 是承重条款**：taken 分支的 fall-through 槽里的非法字若在
+        // ⚠️ **触发集**（DA5 + **P6-4 扩展**）：
+        //    · `illegal_reason ∈ {2,3}`（非法 / 保留组合）
+        //    · **`sys_trap_kind != 0`**（`ECALL` = 1 · `EBREAK` = 2）⇒ ⇒ **P6-4 新增**
+        //      —— 这两条是**合法指令**（`reason = 0` ⇒ 不冻结）但**必须陷入**
+        //      ⇒ ⇒ 触发判据 MUST 用 `sys_trap_kind`，MUST NOT 把 `reason` 放宽到 `!= 0`
+        //      （会让 `MRET`（reason 1 · P6-5 前冻结）也 trap）。
+        //    ⚠️ `reason = 1`（**只剩 `MRET`**）**维持冻结** ⇒ ⇒ `illegal_active`
+        //    （P6-4 起 = `reason != 0` | `sys_trap_kind != 0`）**继续只服务 stall**
+        //    （ID/EX 装气泡）。
+        // ⚠️ **`!flush` 才是承重条款**：taken 分支的 fall-through 槽里的非法字若在
         //    flush 同拍触发 trap ⇒ ⇒ **用错误路径的 PC 写坏 `mepc`**（DA5 · V6）。
+        auto id_sys_trap_kind = id_stage.io().sys_trap_kind;
+        auto id_is_ecall      = (id_sys_trap_kind == ch_uint<2>(1_d));
+        auto id_is_ebreak     = (id_sys_trap_kind == ch_uint<2>(2_d));
         auto trap_trigger =
             ((id_stage.io().illegal_reason == ch_uint<2>(2_d)) |
-             (id_stage.io().illegal_reason == ch_uint<2>(3_d))) &
+             (id_stage.io().illegal_reason == ch_uint<2>(3_d)) |
+             id_is_ecall | id_is_ebreak) &
             if_stage.io().valid & !hazard.io().flush;
         exception.io().exception_valid <<= trap_trigger;
         // ⚠️ `current_pc` = **ID 级那条指令**的 PC（IF/ID 的 PC）⇒ ⇒ `mepc` 指向
@@ -581,9 +598,14 @@ public:
         //    ⇒ 会指向**后一条**指令）⇒ ⇒ MUST 读 `if_stage` 的**输出端口**
         //    （C1：读子组件的*输入*端口 = 跨模块边 ⇒ 层次化发射失败）
         exception.io().current_pc <<= if_stage.io().pc;
-        // ⚠️ 原因码 = **illegal instruction（2）**（RISC-V 规范）⇒ ⇒ **常量**
-        //    （`ECALL` = 11 / `EBREAK` = 3 归 **P6-4** ⇒ ⇒ 本项**不**涉及）
-        exception.io().exception_cause <<= ch_uint<32>(2_d);
+        // ⚠️ 原因码（**P6-4** · 规范 §2.1.1.15 Table 6）：
+        //    · `ECALL` from **M** ⇒ **11**（`8` 是 U-mode ⇒ 本核不可达）
+        //    · `EBREAK` ⇒ **3**（breakpoint）
+        //    · 其余（非法 / 保留组合 / `SRET`）⇒ **2**（illegal instruction）
+        //    ⚠️ 异常 ⇒ `mcause[31] = 0`（中断的 `bit31 = 1` 归 **P6-6**）
+        exception.io().exception_cause <<= select(
+            id_is_ecall, ch_uint<32>(11_d),
+            select(id_is_ebreak, ch_uint<32>(3_d), ch_uint<32>(2_d)));
         // ⚠️ `MRET` 通道留空但接通（**P6-5** 才拉高）
         exception.io().mret_instruction <<= ch_bool(false);
         // ---- ExceptionUnit 的 CSR 读输入 ← `csr_bank` 的**输出端口** ----

@@ -2516,7 +2516,8 @@ TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
 //
 // 因此（固件前 8 条是 NOP，第 9 条是**被判非法/合法的目标指令**）：
 //   · 未知 opcode ⇒ 第 9 条**永不进入 EX** ⇒ 退休数**恒为 8**（20 拍时）
-//   · `OP_SYSTEM`（ECALL）⇒ 同样恒 8，但 `illegal_reason == 1`
+//   · `OP_SYSTEM` 的 **ECALL**（P6-4 起）⇒ 合法 + **陷入** ⇒ 与非法路径同形 ⇒ 13
+//   · `OP_SYSTEM` 的 **MRET**（P6-5 前）⇒ `reason = 1` ⇒ **仍冻结** ⇒ 8
 //   · `FENCE` ⇒ **不冻结** ⇒ retire(20) = 20 − 4 = **16**，`illegal_reason == 0`
 // 且冻结后 ID 级持有第 9 条 ⇒ `dbg_id_pc == 0x80000000 + 4*8 == 0x80000020`
 // （PC 复位值 0x80000000 见 `stages/if_stage.h`；I-TCM 截断高位 ⇒ 字索引 8）
@@ -2536,8 +2537,8 @@ TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
 //        · 陷入 ⇒ PC → `0x20000100`（别名 word `0x040`）⇒ 该 NOP 在 **c=12** 进 ID
 //          ⇒ ⇒ c=13/14/15 走 EX/MEM/WB ⇒ **c=15 起**重新退休
 //        ⇒ ⇒ c=15..19 = **5** 条 ⇒ 8 + 5 = **13** ✓（实测一致）
-//   · `reason = 1`（`ECALL`/`EBREAK`/`MRET`/`WFI`）：**仍冻结** ⇒ 末拍断言**逐字不变**
-//     （归 P6-4 / P6-5）
+//   · `reason = 1`（**P6-4 起只剩 `MRET`**）：**仍冻结** ⇒ 末拍断言 = 8 / 停在探针
+//     （`ECALL` / `EBREAK` 已于 P6-4 改为「合法 + 陷入」；`WFI` 改为合法 NOP）
 //   · `reason = 0`（`FENCE`）：NOP ⇒ 断言**不变**
 // ===========================================================================
 constexpr std::size_t kG1FirmwareWords = 16;
@@ -2580,8 +2581,11 @@ TEST_CASE("Rv32iSoc - IllegalOpcodeObservableNotRetired + FenceIsNop",
     const Scenario scenarios[] = {
         // 0xFFFFFFFF 的 opcode = 0x7F ⇒ **未知** ⇒ P6-3 起**陷入**
         {"unknown opcode(0xFFFFFFFF)", 0xFFFFFFFFu, 2u, kRetireAfterTrap,  false},
-        // 0x00000073 = ECALL ⇒ opcode 0x73 = OP_SYSTEM ⇒ **已知未实现** ⇒ **仍冻结**
-        {"OP_SYSTEM(ecall 0x73)",      0x00000073u, 1u, kRetireBeforeProbe, true},
+        // 0x00000073 = ECALL ⇒ opcode 0x73 = OP_SYSTEM ⇒ **合法 + 陷入**（P6-4）
+        //   ⇒ `mcause = 11` · PC 落到 word 0x040（尾部 NOP）⇒ retire = 13
+        {"OP_SYSTEM(ecall 0x73)",      0x00000073u, 0u, kRetireAfterTrap,  false},
+        // 0x30200073 = MRET ⇒ P6-5 前仍是「已知未实现」⇒ `reason = 1` ⇒ **冻结**
+        {"OP_SYSTEM(mret 0x302)",      0x30200073u, 1u, kRetireBeforeProbe, true},
         // 0x0FF0000F = `fence iorw,iorw` ⇒ opcode 0x0F ⇒ **已知 = NOP**
         {"FENCE(0x0F)",                0x0FF0000Fu, 0u, kRetireNoFreeze,   false},
         // ⚠️ **2026-11-16 · B4 · G1 扩展**：`lb x1, 0(x0)` 但 **funct3 = 011**

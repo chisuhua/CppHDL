@@ -105,6 +105,10 @@ public:
         //    · 2 = **未知 opcode** ⇒ ⇒ 1 bit 的「非法」位 = `(毕竟 != 0)`
         //    ⇒ ⇒ 只留**一个** 2 bit 端口（避免「level 位 + reason」两个**冗余**端口）
         ch_out<ch_uint<2>>  illegal_reason{"illegal_reason"};
+        // ⚠️ **2026-11-26 · P6-4**：`OP_SYSTEM` / `funct3 = 0` 的**陷阱种类**
+        //    （透传自 `Rv32iDecoder`）· 0 = 非 ECALL/EBREAK · 1 = ECALL · 2 = EBREAK
+        //    ⇒ ⇒ 与 `illegal_reason` 同口径：`io().valid` 门控（无效拍 ⇒ 0）
+        ch_out<ch_uint<2>>  sys_trap_kind{"sys_trap_kind"};
     )
     
     IdStage(ch::Component* parent = nullptr, const std::string& name = "id_stage")
@@ -347,6 +351,10 @@ public:
         //    ⇒ ⇒ reason 码：0 合法 · 1 已知未实现（`OP_SYSTEM`）· 2 未知 opcode · 3 保留组合
         io().illegal_reason = select(io().valid, decoder.io().illegal_reason,
                                      ch_uint<2>(0_d));
+        // ⚠️ **追加在末尾**（端口编号纪律）：`sys_trap_kind` 透传 + `valid` 门控
+        //    ⇒ ⇒ 无效拍（flush 后残留指令）MUST NOT 产生「幽灵 ECALL/EBREAK」
+        io().sys_trap_kind = select(io().valid, decoder.io().sys_trap_kind,
+                                    ch_uint<2>(0_d));
     }
 };
 

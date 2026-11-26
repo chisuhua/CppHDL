@@ -91,14 +91,24 @@ public:
         // mie: 0x00000000 (所有中断初始禁用)
         ch_reg<ch_uint<32>> mie(0x0);
         
-        // mtvec: 0x20000100
-        //   BASE(31:2)=0x20000000, MODE(1:0)=01 (Direct模式)
-        ch_reg<ch_uint<32>> mtvec(0x20000100);
+        // mtvec: 0x80000100（**P6-4 起** · 原 `0x20000100`）
+        //   BASE(31:2)=0x80000000（= I-TCM 基址 ⇒ 与 `rv32i_mem_map.h` 一致）
+        //   MODE(1:0)=**00**（Direct）
+        //   ⚠️ 原值 `0x20000100` **不在任何映射区** ⇒ 它能工作只因为取指把高位
+        //      丢弃（别名到 I-TCM word `0x040`）⇒ ⇒ 属**偶然别名**，不是设计
+        //      ⇒ ⇒ 改为映射区内的同一 word（**行为零变化**，读回是合法代码地址）
+        //   ⚠️ MODE 是 **WARL**（Priv §2.1.1.7）：本核**只实现 Direct**
+        //      （`ExceptionUnit` 恒取 BASE）⇒ ⇒ 写路径 MUST 把 `[1:0]` 掩零
+        //      （读回 = 硬件行为；否则软件写入 MODE=1 后读回 1 却仍走 Direct）
+        ch_reg<ch_uint<32>> mtvec(0x80000100);
         
         // mscratch: 0x00000000
         ch_reg<ch_uint<32>> mscratch(0x0);
         
         // mepc: 0x00000000
+        //   ⚠️ **WARL**（Priv §2.1.1.14）：IALIGN=32 的实现 "the two low bits
+        //      (`mepc[1:0]`) are **always zero**" ⇒ ⇒ 写路径 MUST 掩零
+        //      （否则写奇数 PC 会原样读回 ⇒ 违反规范）
         ch_reg<ch_uint<32>> mepc(0x0);
         
         // mcause: 0x00000000
@@ -172,9 +182,11 @@ public:
             mie
         );
         
+        // ⚠️ **WARL coercion（P6-4）**：MODE ∈ {0}（只实现 Direct）⇒ `[1:0]` 掩零
+        //    ⇒ ⇒ 读回恒为合法值（= 硬件行为）
         mtvec->next = select(
             we & sel_mtvec,
-            io().csr_wdata,
+            io().csr_wdata & ch_uint<32>(0xFFFFFFFCu),
             mtvec
         );
         
@@ -184,9 +196,10 @@ public:
             mscratch
         );
         
+        // ⚠️ **WARL coercion（P6-4）**：IALIGN=32 ⇒ `mepc[1:0]` **恒 0**
         mepc->next = select(
             we & sel_mepc,
-            io().csr_wdata,
+            io().csr_wdata & ch_uint<32>(0xFFFFFFFCu),
             mepc
         );
         

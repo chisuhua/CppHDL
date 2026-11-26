@@ -87,13 +87,14 @@ struct RunOut {
 
 /// 镜像的**最小长度**（字）
 ///
-/// ⚠️ **MUST ≥ 0x048**（2026-11-26 · P6-3）：trap 落点 = `mtvec` = `0x2000_0100`
-///    ⇒ ⇒ 核顶层折成 **12 位字索引** ⇒ ⇒ 别名索引 = **`0x040`** = **字 64**
+/// ⚠️ **MUST ≥ 0x048**（2026-11-26 · P6-3 · P6-4 起 `mtvec` = `0x8000_0100`）：
+///    trap 落点 = `mtvec` ⇒ ⇒ 核顶层折成 **12 位字索引** ⇒ ⇒ 索引 = **`0x040`** = **字 64**
 ///    ⇒ ⇒ 镜像 MUST 覆盖它 ⇒ ⇒ 否则该字读到 **0**（= 又一条**未知 opcode**）
 ///    ⇒ ⇒ `illegal_reason = 2` 会**混入**本文件的非法原因判据 ⇒ ⇒ 判据失真。
+///    ⚠️ 陷入类用例 MUST 在落点放**自环**（`jal x0, 0`）⇒ ⇒ 否则 NOP 会跑出镜像末尾。
 constexpr std::size_t kImageWords = 0x048u;
 
-/// trap 落点的**别名字索引**（`(mtvec >> 2) & 0xFFF` · `mtvec` = `0x2000_0100`）
+/// trap 落点的**字索引**（`(mtvec >> 2) & 0xFFF` · `mtvec` = `0x8000_0100`）
 constexpr std::size_t kTrapAliasWord = 0x040u;
 
 /// 跑一个程序（`itcm` = 字镜像 · 尾部补 NOP 到 `kImageWords` 字 · `dtcm` 空）
@@ -261,6 +262,8 @@ TEST_CASE("CSR - CSRRC 掩码是 &~x 而不是 ^x", "[riscv][csr]") {
     };
 
     const RunOut out = run_program(prog);
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 6u);
     require_writebacks(out, {
         {1, 0x0Full},
         {2, 0xF0ull},
@@ -366,6 +369,8 @@ TEST_CASE("CSR - 相邻两条 MUST 有序（读到新值）", "[riscv][csr]") {
     };
 
     const RunOut out = run_program(prog);
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 3u);
     require_writebacks(out, {
         {1, 0x2Aull},
         {2, 0x0ull},
@@ -374,21 +379,30 @@ TEST_CASE("CSR - 相邻两条 MUST 有序（读到新值）", "[riscv][csr]") {
 }
 
 // ===========================================================================
-// AC8：`funct3 = 0`（ECALL）⇒ `illegal_reason == 1` 且**冻结**
+// AC8：`funct3 = 0` 的 **`ECALL`** ⇒ ⇒ **合法**（`reason 0`）· 陷阱语义归 trap 文件
 //
-// ⚠️ 判别力：把 `OP_SYSTEM` 整体归「合法」⇒ reason 0 ⇒ 会当 NOP 退休
-//    ⇒ ⇒ 那比「冻结」**更糟**（错误被静默吞掉）。
+// ⚠️ **2026-11-26 · P6-4 语义变更**：ECALL 从「`reason = 1` 冻结」改为
+//    「**合法指令 + 陷入**」（`mcause = 11`）⇒ ⇒ 本文件只保留**译码面**的判别力：
+//    ECALL 的 `reason` MUST 是 0（**不是** 1 / 2 / 3）且**不冻结**；
+//    ⇒ ⇒ 「陷入」的完整判据（`mepc` / `mcause` / 重定向）归
+//    **`test_rv32i_trap_entry.cpp`**（P6-4 的归属文件）。
+// ⚠️ 判别力：把 ECALL 归回 reason 1 ⇒ 冻结 ⇒ `retired == 0`（本用例红）
 // ===========================================================================
-TEST_CASE("CSR - funct3=0（ECALL）⇒ reason 1 且冻结", "[riscv][csr][illegal]") {
+TEST_CASE("CSR - funct3=0（ECALL）⇒ reason 0（合法 · 不冻结）", "[riscv][csr]") {
     const uint32_t ecall = enc_csr(0, 0, 0, 0);
-    const RunOut out = run_program({ecall}, 60);
+    // 落点放**自环**：ECALL 陷入后从 word `0x040` 继续 ⇒ ⇒ 否则 NOP 会跑出镜像
+    std::vector<uint32_t> prog(kImageWords, riscv::NOP);
+    prog[0] = ecall;
+    prog[kTrapAliasWord] = riscv::JAL(0, 0);
+    const RunOut out = run_program(prog, 40);
 
     REQUIRE(!out.fetched.empty());
     CHECK(out.fetched[0] == ecall);
+    // ECALL 不是非法指令 ⇒ 从未出现非零 reason
     INFO("illegal_reasons = " << out.illegal_reasons.size());
-    REQUIRE(out.illegal_reasons.size() == 1u);
-    CHECK(out.illegal_reasons[0] == 1u);   // 已知未实现（P6-4 / P6-5）
-    CHECK(out.retired == 0u);              // 冻结 ⇒ 永不退休
+    CHECK(out.illegal_reasons.empty());
+    // 不冻结：陷入落点（word 0x040 的尾部 NOP）照常退休
+    CHECK(out.retired > 0u);
 }
 
 // ===========================================================================
@@ -444,5 +458,7 @@ TEST_CASE("CSR - mip 读 0（mtip/meip tie 0 的功能面）", "[riscv][csr]") {
     };
 
     const RunOut out = run_program(prog);
+    // （C4b：核心断言在 `require_writebacks` 辅助函数内 ⇒ 此处补一条直接的计数断言）
+    CHECK(out.writebacks.size() == 1u);
     require_writebacks(out, {{1, 0x0ull}});
 }
