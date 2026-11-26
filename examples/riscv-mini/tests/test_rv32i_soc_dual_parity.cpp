@@ -59,6 +59,8 @@
 #include <vector>
 
 #include "catch_amalgamated.hpp"
+
+#include <span>
 #include "ch.hpp"
 #include "component.h"
 #include "core/eval_backend.h"
@@ -536,9 +538,8 @@ void drive_axil(Simulator &sim, Rv32iCoreTop &dut,
     sim.set_input_value(io.axil_rvalid, s.rvalid);
 }
 
-template <std::size_t N>
-void load_firmware(Simulator &sim, Rv32iCoreTop &dut,
-                    const std::array<uint32_t, N> &fw) {
+void load_firmware_span(Simulator &sim, Rv32iCoreTop &dut,
+                        std::span<const uint32_t> fw) {
     auto &io = dut.io();
     sim.set_input_value(io.ext_rst, 1u);
 
@@ -560,6 +561,18 @@ void load_firmware(Simulator &sim, Rv32iCoreTop &dut,
     sim.set_input_value(io.prog_addr, 0);
     sim.set_input_value(io.prog_data, 0);
     sim.set_input_value(io.ext_rst, 0u);
+}
+
+// `std::array` / `std::vector` 两个入口 ⇒ 都转调 span 版（**单一实现**，防两份漂移）
+template <std::size_t N>
+void load_firmware(Simulator &sim, Rv32iCoreTop &dut,
+                   const std::array<uint32_t, N> &fw) {
+    load_firmware_span(sim, dut, std::span<const uint32_t>(fw.data(), fw.size()));
+}
+
+inline void load_firmware(Simulator &sim, Rv32iCoreTop &dut,
+                          const std::vector<uint32_t> &fw) {
+    load_firmware_span(sim, dut, std::span<const uint32_t>(fw.data(), fw.size()));
 }
 
 // 既有固件（108 字）的重载
@@ -591,6 +604,106 @@ bool has_store(const Trace &t, uint32_t addr, uint32_t data) {
         }
     }
     return false;
+}
+
+
+// ---------------------------------------------------------------------------
+// CSR 编码（**派生自 RISC-V 位布局** ⇒ 不手写魔数；与 test_rv32i_csr_instructions.cpp 同款）
+// ---------------------------------------------------------------------------
+constexpr uint32_t kOpSystem = 0x73u;
+constexpr uint32_t kCsrMscratch = 0x340u;
+constexpr uint32_t kCsrMepc = 0x341u;
+constexpr uint32_t kCsrMcause = 0x342u;
+constexpr uint32_t kF3Csrrw = 1u;
+constexpr uint32_t kF3Csrrs = 2u;
+constexpr uint32_t kF3Csrrc = 3u;
+constexpr uint32_t kF3Csrrwi = 5u;
+constexpr uint32_t kF3Csrrsi = 6u;
+constexpr uint32_t kF3Csrrci = 7u;
+
+/// `csr` 放在 I 型的 `imm[11:0]` 字段（`instr[31:20]`）
+constexpr uint32_t enc_csr(uint32_t rd, uint32_t f3, uint32_t csr, uint32_t rs1) {
+    return riscv::enc_i(rd, rs1, f3, static_cast<int32_t>(csr), kOpSystem);
+}
+/// `csrrs rd, csr, x0`（只读回 · 不写 CSR）
+constexpr uint32_t enc_csrrs(uint32_t rd, uint32_t csr) {
+    return enc_csr(rd, kF3Csrrs, csr, 0u);
+}
+
+// ---------------------------------------------------------------------------
+// 双后端跑同一固件（同一 TEST_CASE 内 2×device + 2×Simulator）
+// ---------------------------------------------------------------------------
+struct BothTraces {
+    Trace a;       ///< interpreter
+    Trace b;       ///< verilator
+    bool ok = false;  ///< false = verilator 不可用（调用方 WARN + return，**不用 SKIP**）
+};
+
+BothTraces run_both(const std::vector<uint32_t> &fw, unsigned cycles,
+                    const char *tag) {
+    BothTraces out;
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return out;
+    }
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir(tag);
+    if (workdir.empty()) {
+        WARN("make_temp_dir failed - verilator half skipped");
+        return out;
+    }
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return out;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return out;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    load_firmware(*sim_a, dev_a->instance(), fw);
+    load_firmware(*sim_b, dev_b->instance(), fw);
+    out.a = run_trace(*sim_a, dev_a->instance(), cycles);
+    out.b = run_trace(*sim_b, dev_b->instance(), cycles);
+    out.ok = true;
+    return out;
+}
+
+/// 逐拍 diff（**全部** kObsCount 根 · 无掩码）
+void require_per_cycle_equal(const Trace &a, const Trace &b, const char *label) {
+    REQUIRE(a.size() == b.size());
+    for (std::size_t c = 0; c < a.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO(label << " cycle " << c << " obs " << kObsNames[k] << " (interp="
+                       << a[c][k] << ", verilator=" << b[c][k] << ")");
+            REQUIRE(a[c][k] == b[c][k]);
+        }
+    }
+}
+
+/// 从 trace 提写回序列（时间序）
+std::vector<std::pair<std::uint64_t, std::uint64_t>> collect_writebacks(const Trace &t) {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> wbs;
+    for (const auto &s : t) {
+        if (s[kIdxWbWriteEn] != 0) {
+            wbs.emplace_back(s[kIdxWbRdAddr], s[kIdxWbWriteData]);
+        }
+    }
+    return wbs;
 }
 
 }  // namespace
@@ -3132,5 +3245,123 @@ TEST_CASE("Rv32iSoc - AxilMmioCrossBackend",
         CHECK(s[kIdxAwValid] == 0u);
         CHECK(s[kIdxWValid] == 0u);
         CHECK(s[kIdxArValid] == 0u);
+    }
+}
+
+// ===========================================================================
+// ⑰ trap 入口的**跨后端**判据（2026-11-26 · change `rv32i-obs-vector-axil-2026-11`）
+// ---------------------------------------------------------------------------
+// ## 手推（与 `test_rv32i_trap_entry.cpp` 同一组常量 · 禁抄仿真输出）
+//   word 0x000 = `0x0000_0000`（未知 opcode ⇒ `illegal_reason = 2`）
+//   word 0x040 = `csrrs x1, mepc, x0`     ⇒ x1 = **0x8000_0000**（触发指令**自身**的 PC）
+//   word 0x041 = `csrrs x2, mcause, x0`   ⇒ x2 = **2**（illegal instruction）
+//   word 0x042 = `jal x0, 0`              ⇒ 自环
+//   ⇒ trap 落点 = `mtvec` 复位值 `0x8000_0100` ⇒ 核顶层字索引 = **0x040**
+//   ⇒ ⇒ 写回序列**恰好两条**：{1, 0x8000_0000} · {2, 2}
+//   ⇒ ⇒ 触发指令**不退休**：首个 `reason == 2` 的拍，`obs_perf_instructions` 仍为 **0**
+// ===========================================================================
+TEST_CASE("Rv32iSoc - TrapEntryCrossBackend",
+          "[rv32i][soc][trap][dual][verilator][e2e]") {
+    constexpr std::size_t kImageWords = 0x43u;  // 覆盖 0x40..0x42 的 handler
+    std::vector<uint32_t> img(kImageWords, NOP);
+    img[0x000] = 0x0000'0000u;          // 未知 opcode
+    img[0x040] = enc_csrrs(1, kCsrMepc);
+    img[0x041] = enc_csrrs(2, kCsrMcause);
+    img[0x042] = JAL(0, 0);
+
+    // 编码交叉校验（手算常量 ⇒ 防自证）
+    REQUIRE(img[0x040] == 0x3410'20F3u);  // csrrs x1, 0x341, x0
+    REQUIRE(img[0x041] == 0x3420'2173u);  // csrrs x2, 0x342, x0
+
+    const BothTraces tr = run_both(img, 200, "_trap");
+    if (!tr.ok) {
+        return;
+    }
+
+    // A 逐拍 diff（39 根无掩码）
+    require_per_cycle_equal(tr.a, tr.b, "trap");
+
+    // B 写回序列 == 手推（恰好两条）
+    const auto wbs = collect_writebacks(tr.a);
+    INFO("writebacks = " << wbs.size());
+    REQUIRE(wbs.size() == 2u);
+    CHECK(wbs[0].first == 1u);
+    CHECK(wbs[0].second == 0x8000'0000ull);  // mepc = 触发指令自身 PC
+    CHECK(wbs[1].first == 2u);
+    CHECK(wbs[1].second == 2ull);            // mcause = illegal instruction
+
+    // C 触发指令**不退休** + IF/ID 在触发后**连续两拍**为空
+    std::size_t trigger = tr.a.size();
+    for (std::size_t i = 0; i < tr.a.size(); ++i) {
+        if (tr.a[i][obs_idx("dbg_illegal_reason")] == 2u) {
+            trigger = i;
+            break;
+        }
+    }
+    REQUIRE(trigger + 2u < tr.a.size());
+    CHECK(tr.a[trigger][obs_idx("dbg_id_valid")] == 1u);        // 触发拍：指令在 ID
+    CHECK(tr.a[trigger][obs_idx("obs_perf_instructions")] == 0u); // 它**从未退休**
+    CHECK(tr.a[trigger + 1u][obs_idx("dbg_id_valid")] == 0u);   // kill 站点
+    CHECK(tr.a[trigger + 2u][obs_idx("dbg_id_valid")] == 0u);   // trap_flush_d1 多杀一拍
+}
+
+// ===========================================================================
+// ⑱ CSR 指令（6 种 funct3）的**跨后端**判据
+// ---------------------------------------------------------------------------
+// ## 手推（与 `test_rv32i_csr_instructions.cpp` 同一组常量）
+//   lui   x1, 0x12345          ⇒ 0x1234_5000
+//   addi  x1, x1, 0x678        ⇒ 0x1234_5678
+//   csrrw  x2, mscratch, x1    ⇒ x2 = 0x0        · mscratch = 0x1234_5678
+//   csrrs  x3, mscratch, x0    ⇒ x3 = 0x1234_5678（rs1 = x0 ⇒ 不写）
+//   csrrc  x4, mscratch, x1    ⇒ x4 = 0x1234_5678 · mscratch = 0（**按位取反后 AND**）
+//   csrrwi x5, mscratch, 0x1f  ⇒ x5 = 0x0        · mscratch = 0x1f
+//   csrrsi x6, mscratch, 0x10  ⇒ x6 = 0x1f       · mscratch = 0x1f
+//   csrrci x7, mscratch, 0x0f  ⇒ x7 = 0x1f       · mscratch = 0x10
+//   csrrs  x8, mscratch, x0    ⇒ x8 = 0x10
+//   ⇒ ⇒ 写回序列 = 下列 **9 条**（`LUI`/`ADDI` 的 x1 两次 + 7 条 CSR 读回）
+// ===========================================================================
+TEST_CASE("Rv32iSoc - CsrInstrsCrossBackend",
+          "[rv32i][soc][csr][dual][verilator][e2e]") {
+    const std::vector<uint32_t> prog = {
+        LUI(1, 0x12345),
+        ADDI(1, 1, 0x678),
+        enc_csr(2, kF3Csrrw, kCsrMscratch, 1),
+        enc_csr(3, kF3Csrrs, kCsrMscratch, 0),
+        enc_csr(4, kF3Csrrc, kCsrMscratch, 1),
+        enc_csr(5, kF3Csrrwi, kCsrMscratch, 0x1f),
+        enc_csr(6, kF3Csrrsi, kCsrMscratch, 0x10),
+        enc_csr(7, kF3Csrrci, kCsrMscratch, 0x0f),
+        enc_csr(8, kF3Csrrs, kCsrMscratch, 0),
+        JAL(0, 0),
+    };
+    // 编码交叉校验（手算常量）
+    REQUIRE(prog[2] == 0x3400'9173u);   // csrrw  x2, 0x340, x1
+    REQUIRE(prog[7] == 0x3407'F3F3u);   // csrrci x7, 0x340, 0x0f
+
+    const BothTraces tr = run_both(prog, 200, "_csr");
+    if (!tr.ok) {
+        return;
+    }
+
+    require_per_cycle_equal(tr.a, tr.b, "csr");
+
+    const auto wbs = collect_writebacks(tr.a);
+    const std::vector<std::pair<std::uint64_t, std::uint64_t>> expect = {
+        {1, 0x1234'5000ull},
+        {1, 0x1234'5678ull},
+        {2, 0x0ull},
+        {3, 0x1234'5678ull},
+        {4, 0x1234'5678ull},
+        {5, 0x0ull},
+        {6, 0x1full},
+        {7, 0x1full},
+        {8, 0x10ull},
+    };
+    INFO("writebacks = " << wbs.size());
+    REQUIRE(wbs == expect);
+
+    // 合法 CSR 指令 MUST NOT 产生非零 illegal_reason
+    for (const auto &s : tr.a) {
+        CHECK(s[obs_idx("dbg_illegal_reason")] == 0u);
     }
 }

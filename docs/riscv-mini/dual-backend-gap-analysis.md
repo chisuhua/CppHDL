@@ -14,7 +14,7 @@
 
 | 档 | 条目 | 判定 |
 |---|---|---|
-| **P0** | ✅ **P0-1 已收口**（2026-11-26 · AXI-Lite 11 根进向量）· ⬜ **P0-2** `test_rv32i_trap_entry` / `test_rv32i_csr_instructions`（核级语义无跨后端证据） | **做** |
+| **P0** | ✅ **P0-1 已收口**（2026-11-26 · AXI-Lite 11 根进向量）· ✅ **P0-2 已收口**（2026-11-27 · trap / CSR 的跨后端 golden） | ✅ 均已完成 |
 | **P1** | `test_rv32i_stall_integrity`（反压期操作数完整性） | 做（可搭 P0 的 MMIO 多拍车） |
 | **P2** | 9 个 `test_pipeline_*` / `test_wrapper_*` / `test_ifstage_device` + `test_csr_unit` + `test_interrupt_flow` + 官方套件 4 条 + `test_riscv_tests` | **不做**（理由逐条见 §6） |
 | **P3** | `test_address_decoder` / `test_axil_mmio_master` / `test_soc_hello_world` / `test_riscv_tests_pipeline` | **结构性不可行 或 零价值**（§7） |
@@ -53,7 +53,7 @@ AXI-Lite 通道都不在其中。
 
 | 条目 | 用例/断言 | DUT 层级 | 观测面（顶层可见？） | verilator |
 |---|---|---|---|---|
-| `test_rv32i_soc_dual_parity` | 16 / 44494 | 核顶层 | **39 / 39** 根 `ch_out`（含 11 根 `axil_*`） | ✅ 双路逐拍 |
+| `test_rv32i_soc_dual_parity` | 18 / 60311 | 核顶层 | **39 / 39** 根 `ch_out`（含 11 根 `axil_*`） | ✅ 双路逐拍（含 trap / CSR） |
 | `test_rv32i_hier_rtl` | 4 / 188 | 产物（flat vs hier） | Verilog 产物端口表 | ✅ 产物级 |
 | `riscv_mini_cache_smoke` | 12 / 78 | cache wrapper | 组件 `ch_out` | ✅ 双后端 |
 | `test_rv32i_trap_entry` | 11 / 1196 | **核顶层** | `dbg_*` + 固件写回 | ❌ |
@@ -110,7 +110,13 @@ AXI-Lite 通道都不在其中。
 
 ---
 
-## 4. P0-2 · trap 入口 / CSR 指令的跨后端 golden
+## 4. P0-2 · trap 入口 / CSR 指令的跨后端 golden —— ✅ **已收口（2026-11-27）**
+
+> 收口 change = `rv32i-trap-csr-crossbackend-2026-11`：新增 `Rv32iSoc - TrapEntryCrossBackend`
+> 与 `Rv32iSoc - CsrInstrsCrossBackend`（逐拍 diff 39 根 + 手推写回 golden + 2 条变异）。
+> ⚠️ **如实登记**：本项只覆盖「未知 opcode」一条触发源；`ECALL`/`EBREAK`/`SRET` 与中断
+> 的跨后端仍归后续（前者由解释器判据覆盖，后者核顶层无 `irq` 端口）。
+> ⇒ ⇒ 以下保留**原始分析**。
 
 **现状**：两个核级判据（11 用例 / 1196 断言 + 8 / 31）**只有解释器证据**。
 dual parity 覆盖的是「非法指令**不退休 + 可观测**」与「flush 优先于 trap」，
@@ -184,7 +190,8 @@ dual parity 覆盖的是「非法指令**不退休 + 可观测**」与「flush �
 |---|---|---|---|
 | **1** | 护栏（**已归档** 2026-11-26） | — | ✅ |
 | **2** | **P0-1**：AXI-Lite 19 端口进跨后端证据 | 步 1 的登记表 | ✅ **已收口 2026-11-26** |
-| **3** | **P0-2 + P1**：trap / CSR / 反压 的跨后端 golden | 步 2 的 fixture 范式 | 2–3 天 |
+| **3** | **P0-2**：trap / CSR 的跨后端 golden | 步 2 的 fixture 范式 | ✅ **已收口 2026-11-27** |
+| **3b** | **P1**：反压期操作数完整性（`test_rv32i_stall_integrity`） | 步 2 的 fixture 范式 | 待排 |
 
 **CI 成本**：全部落在**已有**的 3 个 `verilator_e2e` 条目内扩 ⇒ **不新增条目**
 ⇒ `VERILATOR_E2E_TOTAL` / `CTEST_TOTAL` 锚点不动。

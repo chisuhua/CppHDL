@@ -97,7 +97,7 @@ CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 | `test_ifstage_device.cpp` | `test_ifstage_device` | 行为面 · IF stage 独立 device | 解释器 | 300 | 1 / 2 |
 | `test_rv32i_pipeline.cpp` | `test_rv32i_pipeline_example` | 行为面 · 前推通路（⚠️ **与仓根 `tests/test_rv32i_pipeline.cpp` 不是同一份**） | 解释器 | 300 | 6 / 25 |
 | `test_interrupt_flow.cpp` | `test_interrupt_flow` | 行为面 · CLINT / 中断 / 陷阱入口 / `MRET` | 解释器 | 300 | 18 / 68 |
-| `test_rv32i_soc_dual_parity.cpp` | `test_rv32i_soc_dual_parity` 🔷 | 行为面 · **双后端** SoC parity（**39** 根输出全覆盖 · 含 AXI-Lite） | 解释器 + verilator | 600 | 16 / **44494** |
+| `test_rv32i_soc_dual_parity.cpp` | `test_rv32i_soc_dual_parity` 🔷 | 行为面 · **双后端** SoC parity（**39** 根输出全覆盖 · 含 AXI-Lite / trap / CSR） | 解释器 + verilator | 600 | 18 / **60311** |
 | `test_rv32i_hier_rtl.cpp` | `test_rv32i_hier_rtl` 🔷 | 产物面 · **双后端** 层次化产物（8 module / 53 端口） | 解释器 + verilator | 900 | 4 / 188 |
 | `test_cache_smoke.cpp` | `riscv_mini_cache_smoke` 🔷 | 产物面 · **双后端** cache wrapper smoke | 解释器 + verilator | 600 | 12 / 78 |
 
