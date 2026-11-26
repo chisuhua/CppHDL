@@ -2,15 +2,14 @@
 
 ### Requirement: trap 入口 MUST 保存异常上下文并重定向 PC
 
-RV32I 的**非法指令**（未知 opcode · `OP_SYSTEM` 的 `funct3 = 0` / `funct3 = 4`）MUST
-按机器级 trap 处置：
+RV32I 的**非法指令**（`illegal_reason ∈ {2, 3}`）MUST 按机器级 trap 处置：
 
 - **WHEN** 一条**非法指令**进入 ID 级，且该拍**没有**控制流冲刷（`flush`）
 - **THEN** 它 MUST **触发一次 trap**（取代「流水线级冻结」）
-- **AND** `mepc` MUST = **该指令自身的 PC** · `mcause` MUST = **illegal instruction（2）**
-  ⇒ ⇒ 二者 MUST 是**同一次异常**的一对
+- **AND** `mepc` MUST = **该指令自身的 PC** · `mcause` MUST = **2** ⇒ ⇒ 二者 MUST 是**同一次异常**的一对
 - **AND** 取指级 PC MUST **重定向**到 `mtvec` 的**基址**
 - **AND** 该指令 MUST **不退休** ⇒ ⇒ IF/ID MUST 被杀 ⇒ ⇒ 在途的更老指令 MUST 照常退休
+
 
 #### Scenario: 控制流冲刷 MUST 优先于 trap（错误路径不得写坏上下文）
 
@@ -35,10 +34,14 @@ RV32I 的**非法指令**（未知 opcode · `OP_SYSTEM` 的 `funct3 = 0` / `fun
   ⇒ ⇒ 理由：陷阱上下文是「**一次异常**」的**成对**写入 ⇒ ⇒ 丢它 ⇒ ⇒ 软件永远看不到原因
   ⇒ ⇒ ⚠️ 被抑制的那次写**不得**被「补偿重试」（单写口无队列）
 
-#### Scenario: 本 Requirement 只覆盖「非法指令」这一个触发源
+#### Scenario: 本 Requirement 只覆盖「非法指令」这一个触发源（**触发集 = `{2, 3}`**）
 
-- **WHEN** 触发源是 `ECALL` / `EBREAK` / `MRET` / `WFI`（`OP_SYSTEM` 的 `funct3 = 0`）
-  或 **中断**
-- **THEN** 它们 MUST **仍**按「已知未实现」处置（`illegal_reason` = 1 ⇒ ⇒ 冻结）
+- **WHEN** 触发源是 `ECALL` / `EBREAK` / `MRET` / `WFI`（`OP_SYSTEM` 的 `funct3 = 0`
+  ⇒ `illegal_reason = 1`）或 **中断**
+- **THEN** 它们 MUST **仍**按「已知未实现」处置（`illegal_reason` = 1 ⇒ ⇒ **冻结**
+  ⇒ ⇒ **不**触发 trap）
   ⇒ ⇒ 那些**原因码**与**中断路径**属**独立立项**
 - **AND** `mtval` MUST **保持 0**（本 Requirement **不**覆盖其真值）
+- **AND** ⚠️ **触发集 MUST 显式写成 `illegal_reason ∈ {2, 3}`**（**未知 opcode**（2）·
+  **ISA 保留组合**（3））⇒ ⇒ **MUST NOT** 写成「`illegal_reason != 0`」
+  ⇒ ⇒ 架构依据 = ADR-048 §8.2 **DA5**（`illegal_active`（`!= 0`）**继续只服务 stall**）

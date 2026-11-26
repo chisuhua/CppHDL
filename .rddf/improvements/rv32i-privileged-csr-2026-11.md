@@ -94,7 +94,9 @@ evidence: probe:.rddf/checks/isa-gap-reuse-survey.md
 | 1 | 1 | 0 | ⚠️ **待裁决**（默认 = **trap**：陷阱优先于错误路径上的分支） |
 | 0 | 1 | 1 | ⚠️ **不发生**（`mret` 与 trap 语义互斥）⇒ ⇒ `MUST NOT` 断言它 |
 
-⚠️ **正确性条款（承重）**：`exception_valid` MUST = `illegal_active & id_valid & !flush`
+⚠️ **正确性条款（承重）**：`exception_valid` MUST = **`(illegal_reason == 2 | illegal_reason == 3) & id_valid & !flush`**
+⇒ ⇒ ⚠️ **触发集 = `{2,3}`**（**不是** `illegal_active` = `!= 0`）—— 理由见 `openspec/changes/rv32i-trap-entry-2026-11/design.md` §2.1 与 ADR-048 §8.2 **DA5**
+⇒ ⇒ ⚠️ **`reason = 1`**（`ECALL`/`EBREAK`/`MRET`/`WFI`）**MUST 维持冻结**（归 **P6-4 / P6-5**）⇒ ⇒ `illegal_active`（`!= 0`）**继续只服务 stall**
 ⇒ ⇒ **`id_stage.h` 的门控现在只有 `valid`、不含 `flush`** ⇒ ⇒ taken 分支的 fall-through 槽里的非法字
 （ADR-071 §2.3 记录的**可达轨迹**）会让 `ExceptionUnit` 在 `flush` 同拍 `start_trap`
 ⇒ ⇒ **用错误路径的 PC 写坏 `mepc`** ⇒ ⇒ 判据 = 「taken 分支 fall-through 放非法字 ⇒ `mepc` / `mcause` **不变**」。

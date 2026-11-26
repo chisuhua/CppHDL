@@ -252,7 +252,13 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 - **load-use 停顿拍数 / 距离矩阵的唯一权威 = capability `rv32i-data-forwarding`** ⇒
   本文档 MUST NOT 另写一份数字。
 - **非法指令 MUST 可观测**：`dbg_illegal_reason` 4 态 + 优先级（`1` > `3` > `2` > `0`）⇒
-  进 ID 级即冻结（PC 不前进 · 永不退休）；权威 = capability `rv32i-isa-semantics`。
+  ⚠️ **2026-11-26 · P6-3 起按 reason 分流**（权威 = capability `rv32i-isa-semantics`
+  + `rv32i-privilege` · 架构依据 = ADR-048 **§8**）：
+  · **`reason ∈ {2,3}`**（未知 opcode · ISA 保留组合）⇒ ⇒ **陷入**（trap）：写 `mepc`（= 该指令自身 PC）
+    + `mcause`（= 2）⇒ ⇒ PC **重定向**到 `mtvec` 基址 ⇒ ⇒ 该指令**永不退休**（IF/ID 被杀）
+  · **`reason = 1`**（`OP_SYSTEM` 的 `funct3 = 0` ⇒ `ECALL`/`EBREAK`/`MRET`/`WFI`）⇒ ⇒ **仍冻结**
+    （PC 不前进 · 永不退休）⇒ ⇒ 归 P6-4 / P6-5
+  · ⇒ ⇒ **判别力 MUST 直接观测 `valid` 清零**（否则「trap 每拍重触发 ⇒ 活锁」抓不到）
 - **`HazardUnit` 端口面冻结在 4 个直通端口** ⇒ 不得再接 `ex_alu_result`（环饵）。
 - **cache 变体**：RV32I L1 = `{I,D}CacheSync`（1 拍 sread）· TCM-style = 对应 `Async`（0 拍 aread）·
   `*_complete.h` 是兼容 shim 指向 `*_sync.h` ⇒ 新代码用 `_sync` / `_async`。

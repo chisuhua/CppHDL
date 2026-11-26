@@ -32,7 +32,7 @@ P6-2 落地后，**非法指令**（未知 opcode / `OP_SYSTEM` 的 `funct3=0` /
 | # | 内容 | 载体 |
 |---|---|---|
 | **S1** | **`ExceptionUnit` 首次接入流水线**（此前**零生产消费者**）：作为 pipeline 的 **inline** 子组件（`ch_module`）⇒ ⇒ 与 pipeline 内的 `CsrBank` **共享同一实例**（父层连线 ⇒ **零端口面变更**） | `rv32i_pipeline.h` |
-| **S2** | **trap 触发点 = ID 级**：触发源 = **非法指令**（`illegal_reason != 0`）⇒ ⇒ `exception_valid = illegal_active & id_valid & !flush`（**排除 flush** ⇒ ⇒ 错误路径上的非法字**不得**写坏 `mepc`） | `rv32i_pipeline.h` |
+| **S2** | **trap 触发点 = ID 级**：触发源 = **非法指令** ⇒ ⇒ **触发集 = `illegal_reason ∈ {2, 3}`**（**未知 opcode**（2）· **ISA 保留组合**（3））⇒ ⇒ `exception_valid = (illegal_reason == 2 | illegal_reason == 3) & id_valid & !flush`（**排除 flush** ⇒ ⇒ 错误路径上的非法字**不得**写坏 `mepc`）⇒ ⇒ ⚠️ **`illegal_reason = 1`**（`OP_SYSTEM` 的 `funct3 = 0` ⇒ `ECALL`/`EBREAK`/`MRET`/`WFI`）**MUST 维持冻结**（归 **P6-4 / P6-5**）⇒ ⇒ `illegal_active`（`!= 0`）**继续只服务 stall** | `rv32i_pipeline.h` |
 | **S3** | **`mepc` 保现场** = 触发指令的 PC（**ID 级**的 IF/ID PC ⇒ ⇒ `mepc` 指向**该指令**本身 ⇒ ⇒ 该指令**不前进**、**不退休**） | `rv32i_pipeline.h` |
 | **S4** | **PC 重定向的第二路**：`if_stage` 新增 `trap_target` / `trap_flush` 输入 ⇒ ⇒ `next_pc_target` 变成「**trap > branch > PC+4**」三路（**内部** mux；`if_stage.__io` +2 端口 ⇒ **被顶层消费 ⇒ 不冒泡** ⇒ ⇒ 顶层 53 端口**不变**） | `stages/if_stage.h` |
 | **S5** | **`trap_flush_d1`**（多杀一拍：imem 是 1 拍 `sread` ⇒ ⇒ 与既有 `flush_d1` **同构**）⇒ ⇒ `if_id_update_en` 与 `skid_valid` 的清空条件都 MUST 含 `trap_flush \| trap_flush_d1`（**skid MUST 清空** ⇒ ADR-048 D5 的同构要求） | `stages/if_stage.h` |
@@ -83,6 +83,9 @@ P6-2 落地后，**非法指令**（未知 opcode / `OP_SYSTEM` 的 `funct3=0` /
       「`#2 mtvec 取值语义`」中的**机制部分**，`#1 mtval` / `#3 mstatus 陷阱侧` /
       `#4 MRET 恢复` / `#5 并发异常排队` 仍归 P6-5/P6-6/P6-7）
 - [ ] **AC11**：**全量回归零失败**（`ctest -LE perf`）· 全部 `scripts/verify_*.sh` PASS
+- [ ] **AC12**：⚠️ **`illegal_reason = 1`**（`ECALL`/`EBREAK`/`MRET`/`WFI`）⇒ ⇒ **仍冻结**
+      ⇒ ⇒ **MUST NOT** 触发 trap（`mepc` / `mcause` **不变**）⇒ ⇒ **不**抢占 P6-4 的
+      原因码语义 ⇒ ⇒ **负向判据**（ADR-048 §8.5 **V9** 的落点）
 
 ---
 

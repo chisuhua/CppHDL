@@ -56,7 +56,11 @@ Rv32iPipeline（顶层）
 
 ```
 illegal_active = (id_stage.io().illegal_reason != 0)          // 既有
-exception_valid = illegal_active & id_valid & !flush            // ⚠️ 必须 !flush
+// ⚠️ **触发集 = `illegal_reason ∈ {2,3}`**（ADR-048 §8.2 DA5 · oracle + critic 复核后钉死）
+//    ⇒ `reason = 1`（`OP_SYSTEM` 的 `funct3 = 0` ⇒ ECALL/EBREAK/MRET/WFI）**维持冻结**
+//    ⇒ ⇒ `illegal_active`（!= 0）**继续只服务 stall**（ID/EX 装气泡）
+exception_valid = ((id_stage.io().illegal_reason == 2) | (id_stage.io().illegal_reason == 3))
+                   & id_valid & !flush                          // ⚠️ 必须 !flush
 ```
 
 - ⚠️ **`!flush` 是承重条款**：taken 分支的 **fall-through 槽**里可能有一条非法字
@@ -140,9 +144,11 @@ csr_write_en = exception_write_en | (csr_instr_write_en & !exception_write_en)
 
 - **理由**：trap 上下文是「**一次异常**」的**成对**写入（`mepc` + `mcause`）⇒ ⇒ 丢它
   ⇒ ⇒ **软件永远看不到原因** ⇒ ⇒ 比「一条 CSR 指令的写被吞」更严重。
-- ⚠️ **冲突概率分析**（实测推导）：trap 在 **ID 级**触发 ⇒ ⇒ trap 那一拍 ID/EX 装气泡
-  ⇒ ⇒ **trap 后的第 1/2 拍 EX 级是空的**（IF/ID 被杀 ⇒ ID 级无指令）⇒ ⇒
-  **实际不会同拍** ⇒ ⇒ 规则仍**必须写死**（fail-closed：将来 trap 目标很近时会撞上）。
+- ⚠️ **冲突窗口 = 拍 T 本身**（⚠️ **订正**：原判「trap 后的第 1/2 拍 EX 级是空的 ⇒ 实际不会同拍」
+  **是错的** —— `ExceptionUnit` 的 `csr_write_en` 在 trap **同拍**就拉高（`start_trap` 是**组合**量
+  ⇒ ⇒ 沿上即写）⇒ ⇒ **拍 T** 的 EX 级**仍持有更老指令 J** ⇒ ⇒ 若 J 是 **CSR 写指令**，
+  它的 CSR 写与 `mepc` 写**同拍冲突** ⇒ ⇒ ⇒ **仲裁规则（`ExceptionUnit` 优先）是承重的**，
+  不是「理论上不会发生」⇒ ⇒ （trap **之后**的第 1/2 拍 EX 级才是空的 ⇒ 那两拍无冲突。）
 - ⚠️ **已知边界**：若真发生冲突，被抑制的是**那条 CSR 指令的写** ⇒ ⇒ 该指令**已执行**
   但其 CSR 写丢失 ⇒ ⇒ 记为**已知边界**（本版**不**加队列/重试机制 ⇒ ⇒ 归 **P6-6**
   的写口仲裁统一处理 —— 母 improvement 的 **R1** 已登记「`ExceptionUnit` 接入时 MUST 补仲裁规则」）。
@@ -186,6 +192,7 @@ MUST **先在父层 mux 成形**，再驱动 `csr_bank.io().csr_addr` / `csr_wda
 | AC5 | `flush` 同拍**不**触发 trap | 去掉 `!flush`（⇒ 错误路径的 PC 写坏 `mepc`） |
 | AC6 | trap 后**连续两拍** ID 级 `valid == 0` | 去掉 `trap_flush_d1` |
 | AC7 | `mepc` + `mcause` **成对**且同配对 | 改写 `ExceptionUnit` 的两拍语义（**组件级**可判） |
+| **AC12 / V9** | `reason = 1`（`ECALL`）⇒ ⇒ **仍冻结**（**不** trap） | 把触发集写成 `illegal_active`（`!= 0`）⇒ ⇒ `ECALL` 也 trap |
 
 ### 6.3 ⚠️ **固件级判据的**限制**（如实登记 · 与 D-1 相关）
 
@@ -206,29 +213,16 @@ MUST **先在父层 mux 成形**，再驱动 `csr_bank.io().csr_addr` / `csr_wda
 > ⇒ ⇒ ⇒ 本项**先立项**（builder 可创建 openspec change）⇒ ⇒ **ADR dated addendum 落档**
 > 是**实施的前置**（tasks T2）。
 
-### 7.1 dated addendum **草案**（**待 architect 落档** · 供其直接采用）
+### 7.1 ADR-048 dated addendum（**已落档** · 权威在 ADR）
 
-> **载体**：`docs/adr/ADR-048-*.md`（**architect 写集** · builder **不写**）
-> **形式**：**dated addendum**（先例 = ADR-071 v1.2 · 2026-11-15）
+⚠️ **权威 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md` 的 **§8（dated addendum v1.1 · 2026-11-26）****
+⇒ ⇒ 本节**不再复制**其正文（**避免两份漂移**）⇒ ⇒ 实现时 MUST 以 ADR 的
+**DA1–DA5**（决策）+ **V1–V9**（判据）+ **S1–S5**（同步义务）为准。
 
-**D1（新增不变量 · 取代「flush 唯一来源」）**：取指级的 PC 重定向有**两类**来源：
-① **控制流重定向**（taken 分支 / 跳转）⇒ ⇒ 由 `flush` 承载；
-② **陷阱重定向**（trap / mret）⇒ ⇒ 由 `trap_flush` 承载。
-⇒ ⇒ 两类**互斥**（同一拍只可能有一个生效 ⇒ ⇒ 仲裁表见 design §3.2）⇒ ⇒
-**`flush` 唯一来源**的不变量**由「来源唯一」改为「来源互斥 + 优先级写死」**。
-
-**D2（`pc_update_en` 的形态）**：`pc_update_en = !rst & !(stall & !(flush_redirect | trap_redirect))`
-⇒ ⇒ **任何**「确实发生重定向」的情形都**压过 stall** ⇒ ⇒ 与既有 ADR-071 修正同型。
-
-**D3（`trap_flush_d1` 与 skid）**：`trap_flush` MUST 有 `trap_flush_d1`（imem 1 拍 `sread`）
-⇒ ⇒ `if_id_update_en` 与 `skid_valid` 的清空条件 MUST 含 `trap_flush | trap_flush_d1`
-⇒ ⇒ 与 `flush_d1` **逐字同构**（ADR-048 D5）。
-
-**D4（kill 域）**：trap 只杀 **IF/ID** ⇒ ⇒ **EX/MEM/WB 不受影响**（在途更老指令照常退休）⇒ ⇒
-与 `flush` 的 kill 域**不同**（`flush` 杀 ID/EX + IF/ID）⇒ ⇒ **两条 flush 语义 MUST 分开命名**
-（`flush` vs `trap_flush`）⇒ ⇒ **MUST NOT** 把两者合成一个信号。
-
----
+- **审稿**：oracle（REJECT · 5 条 finding 全处置）→ critic（**APPROVE_WITH_CONDITIONS** · 0 BLOCKER）
+  ⇒ ⇒ 报告 = `.rddf/reviews/ADR-048-pc-redirect-second-path-review-2026-11.md`
+- **连带**：`docs/adr/ADR-071-fence-and-illegal-opcode-semantics.md` 的 **v1.3** 标注
+  （D3「冻结是终态」对 `reason ∈ {2,3}` 失效 · D3-b 的优先级公式被 DA2 扩展）
 
 ## 8. 实施期订正（**追加段** · 实施时填）
 
