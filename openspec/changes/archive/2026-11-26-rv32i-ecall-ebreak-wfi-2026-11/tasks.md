@@ -63,9 +63,23 @@
       `verify_example_test_wiring` · `verify_example_assertion_quality` · `verify_public_api_visibility` ·
       `verify_roadmap_fragments` · `verify_input_port_additions` · `verify_input_port_required_registry` ·
       `scripts/rv32i_rtl_sim_env.sh`（flat/hier 各 `checks=24 fails=0`）
-- [x] **T5.3** `include/cpu/AGENTS.md` 的事实 / 计数同步（30 headers · 7600 lines · 1196 断言）
-- [ ] **T5.4** 归档（`openspec archive`）+ 归档后残留订正（MODIFIED 为**追加**语义）
-- [ ] **T5.5** 验收报告 `.rddf/reviews/<change>-verify.md`（**verifier 角色**写入）
+- [x] **T5.3** `include/cpu/AGENTS.md` 的事实 / 计数同步（30 headers · **7601** lines · 1196 断言）
+      ⇒ ⇒ ⚠️ **验收轮 1 发现 off-by-one**（自述 7600 ≠ 实测 7601 ⇒ 护栏 `verify_no_duplicate_rv32i_headers`
+      的 **C5 红**）⇒ ⇒ **轮 2 已订正为 7601** ⇒ ⇒ 护栏复跑 **exit 0**
+- [x] **T5.4** ✅ **归档**（`openspec archive rv32i-ecall-ebreak-wfi-2026-11 -y` ⇒
+      `rv32i-privilege: + 1 added · ~ 2 modified` ⇒ 归档为
+      `openspec/changes/archive/2026-11-26-rv32i-ecall-ebreak-wfi-2026-11/`）
+      ⇒ ⇒ ⚠️ **事实订正（CLI 1.14.3 实测）**：本仓 delta 对 MODIFIED Requirement 做了
+      **完整重述**（含**全部** Scenario）⇒ ⇒ **合并 = 原地替换** ⇒ ⇒ **零合并残留**
+      （**不是** P6-3 记录的「追加语义」—— 那次 delta 未完整重述 ⇒ ⇒ 追加）
+      ⇒ ⇒ **手工订正 6 处「因语义变更而过时的旧文」**（`rv32i-isa-semantics` 主 spec 的
+      `reason = 1` 清单：分类定义 / 优先级 / 行为策略 / 3 个 Scenario）
+      ⇒ ⇒ **手工更新 `rv32i-privilege` 的 `## Purpose`**（三段 → **四段** · 边界清单同步）
+      ⇒ ⇒ `openspec validate --specs` **54 passed / 0 failed** · `verify_openspec_purpose.sh` PASS
+      ⇒ ⇒ 逐条见验收报告 §9
+- [x] **T5.5** ✅ **验收报告**：`.rddf/reviews/rv32i-ecall-ebreak-wfi-2026-11-verify.md`
+      （**verifier 角色**写入 · **2 轮**：轮 1 **FAIL**（1 BLOCKER = 行数锚点 off-by-one）
+      ⇒ 轮 2 **PASS** ⇒ ⇒ 另含 **6 条独立变异** V1–V6，全部转红）
 
 ---
 

@@ -356,9 +356,14 @@ RV32I SoC MUST 以**显式映射表**声明其存储区域
   ⇒ ⇒ 母 improvement 的「接缝兑现 #1」（接线 change MUST 以 MODIFIED delta 修订本冻结条款）
   ⇒ ⇒ ⚠️ **禁**只改实现不改 spec。
 
-ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（`OP_SYSTEM`，
-即 `ECALL`/`EBREAK`/CSR/`MRET`）· `2` = **未知 opcode**
+ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（**P6-4 起只剩 `MRET`**
+—— `OP_SYSTEM` / `funct3 = 0` / `imm[11:0] = 0x302`）· `2` = **未知 opcode**
 · **`3` = 已知 opcode 但 `funct3` / `funct7` 是保留组合**（见下）。
+⚠️ **2026-11-26 · P6-4 起**：`ECALL` / `EBREAK` / `WFI`（`OP_SYSTEM` / `funct3 = 0` /
+`imm[11:0]` = `0x000` / `0x001` / `0x105`）与 CSR 指令（`funct3 ∈ {1,2,3,5,6,7}`）
+**都是合法指令** ⇒ ⇒ 分类 **0**（`ECALL` / `EBREAK` 另由 `sys_trap_kind ≠ 0` 触发 trap
+⇒ ⇒ 见 capability `rv32i-privilege`）；`SRET`（`0x102`）在 M-only 下**不可编码**
+⇒ ⇒ 分类 **3**（`misa.S = 0` ⇒ 无 S-mode ⇒ 规范要求 illegal-instruction 异常）。
 
 ⇒ ⇒ **保留组合判定（v1.2 · 2026-11-16 扩展）**：判定 MUST 覆盖 `funct3` / `funct7` 的
 **ISA 保留组合** ⇒ ⇒ 判定表 = `docs/adr/ADR-071-fence-and-illegal-opcode-semantics.md` **§2.6.1**
@@ -366,7 +371,8 @@ ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（
 ⇒ ⇒ ⚠️ **关键边界**：**U 型（`LUI` / `AUIPC`）与 J 型（`JAL`）没有 `funct3` 字段**
 （bits 14:12 是**立即数位**）⇒ ⇒ 它们的 bits 14:12 **任何取值都合法**
 ⇒ ⇒ **MUST NOT** 把「`funct3` MUST 为 `000`」套到它们上（否则**误判合法指令为非法**）。
-⇒ ⇒ **优先级**：`1`（`OP_SYSTEM`）> `3`（保留组合）> `2`（未知）> `0`（合法）。
+⇒ ⇒ **优先级**：`1`（**`MRET`** · P6-4 起 `reason = 1` 只剩它）> `3`（保留组合 / 不可编码）
+> `2`（未知）> `0`（合法）。
 ⇒ ⇒ **判定 MUST 在库组件 `Rv32iDecoder`**（**单一来源**）⇒ ⇒ ID 级**只转发** + 保留 `valid` 门控
 ⇒ ⇒ **MUST NOT** 在两处各写一份判据（漂移风险）⇒ ⇒ 两份判据会**静默分叉**。
 
@@ -382,10 +388,15 @@ ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（
   ⇒ ⇒ 依据 = capability `rv32i-privilege` 的「trap 入口 MUST 保存异常上下文并重定向 PC」
   ⇒ ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md` **§8（dated addendum v1.1）**
   ⇒ ⇒ ⚠️ **「陷入」的判据 MUST 直接观测 `valid` 清零**（否则「trap 每拍重触发 ⇒ 活锁」不被抓到）
-- **`illegal_reason = 1`**（`OP_SYSTEM` 的 `funct3 = 0` ⇒ `ECALL`/`EBREAK`/`MRET`/`WFI`）
+- **`illegal_reason = 1`**（**P6-4 起只剩 `MRET`** —— `OP_SYSTEM` / `funct3 = 0` / `imm = 0x302`）
   ⇒ ⇒ **行为策略仍是冻结**（MUST）：IF 与 ID **同时停顿**（PC 不前进 · ID/EX 装**气泡**）
   ⇒ ⇒ 该指令 **MUST NOT** 进入 EX、**MUST NOT** 退休。
 - ⇒ ⇒ 两者**都** **MUST NOT** 把它当作 NOP 继续执行。
+- ⚠️ **2026-11-26 · P6-4 起**：`ECALL` / `EBREAK` **不是**「非法指令」⇒ ⇒ 它们的
+  `illegal_reason` = **0**（**合法指令**）⇒ ⇒ 但**必须陷入**（`mcause` = **11** / **3**）
+  ⇒ ⇒ 触发判据 MUST 用 **`sys_trap_kind ≠ 0`**（**MUST NOT** 用 `illegal_reason != 0`
+  —— 那会让 `MRET` 也 trap）⇒ ⇒ 契约见 capability `rv32i-privilege`；
+  `WFI`（`0x105`）⇒ ⇒ 合法 **NOP**（`illegal_reason` = 0 · 不 trap · 正常退休）。
 
 #### Scenario: 未知 opcode 在 ID 级被点亮
 
@@ -395,7 +406,9 @@ ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（
 
 #### Scenario: 已知但未实现的 opcode 与未知 opcode MUST 可区分
 
-- **WHEN** ID 级持有一条 `OP_SYSTEM`（`0x73`）指令
+- ⚠️ **2026-11-26 · P6-4 起**：判据**按 `imm[11:0]` 分类**
+  （`OP_SYSTEM` 不再整体是「已知未实现」）
+- **WHEN** ID 级持有一条 `OP_SYSTEM`（`0x73`）· `funct3 = 0` · `imm[11:0] = 0x302`（`MRET`）的指令
 - **THEN** 操作码分类 MUST 为 `1`（已知未实现）
 - **AND** MUST NOT 为 `2`（未知）
 
@@ -410,7 +423,9 @@ ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（
 
 #### Scenario: 已知未实现（`reason = 1`）—— 仍是冻结，该指令永不退休
 
-- **WHEN** 一条 `OP_SYSTEM` 的 `funct3 = 0` 指令（`ECALL`/`EBREAK`/`MRET`/`WFI`）进入 ID 级
+- ⚠️ **2026-11-26 · P6-4 起**：判据**只覆盖 `MRET`**
+  （`ECALL` / `EBREAK` 已改判为「合法 + 陷入」· `WFI` 已改判为「合法 NOP」）
+- **WHEN** 一条 `OP_SYSTEM` 的 `funct3 = 0` · `imm[11:0] = 0x302`（`MRET`）的指令进入 ID 级
 - **THEN** PC MUST 停在原地（不前进）
 - **AND** 该指令 MUST NOT 出现在任何一级的**有效**链上（`MUST NOT` 退休）
 - **AND** 后续指令 MUST NOT 被取入并退休
@@ -496,7 +511,9 @@ ID 级 MUST 产出操作码分类（`0` = 合法 · `1` = **已知未实现**（
 
 #### Scenario: 正确路径的「冻结是终态」—— 仅对 `reason = 1` 成立
 
-- **WHEN** ID 级持有一条 `illegal_reason = 1` 的指令（`ECALL`/`EBREAK`/`MRET`/`WFI`），且**同拍无** `flush`
+- ⚠️ **2026-11-26 · P6-4 起**：`reason = 1` **只剩 `MRET`**
+  （`ECALL` / `EBREAK` / `WFI` 已改判 ⇒ ⇒ 本条**只**约束 `MRET`）
+- **WHEN** ID 级持有一条 `illegal_reason = 1` 的指令（**`MRET`**），且**同拍无** `flush`
 - **THEN** PC MUST 停在原地（不前进）
 - **AND** ⚠️ **`illegal_reason ∈ {2,3}` 的「冻结是终态」已失效**（2026-11-26 · P6-3）：
   ⇒ ⇒ 它们改为**陷入**（见「未知 opcode MUST 可观测…」那条 Requirement 的

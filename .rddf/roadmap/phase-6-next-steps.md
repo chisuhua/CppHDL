@@ -946,7 +946,7 @@ bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test   # exit 0（含�
 
 ## 9.2 P6-4（`ECALL` / `EBREAK` / `WFI` + `mtvec`/`mepc` WARL）**闭合记录**（2026-11-26 · builder）
 
-- **载体**：`openspec/changes/rv32i-ecall-ebreak-wfi-2026-11/`（`proposal` / `design` / `tasks` /
+- **载体**：`openspec/changes/archive/2026-11-26-rv32i-ecall-ebreak-wfi-2026-11/`（`proposal` / `design` / `tasks` /
   delta `rv32i-privilege` **MODIFIED ×2 + ADDED ×1**）⇒ ⇒ `openspec validate --strict` **valid**
 - **裁决依据**：`.rddf/checks/decision-request-rv32i-privileged-d1-d2-2026-11.md`
   （**D-1 = A** · **D-2 = 全部按推荐**）· 规范核对 = Priv **v20260120**（§2.1.1.7 / §2.1.1.14 /
@@ -961,12 +961,32 @@ bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test   # exit 0（含�
 - **变异**：**M1–M12 全红（12/12）**，每条均**编译通过**后跑判据 · 其中 **M9** 只有 SoC 级能抓
   （「合法但陷入」的指令若不装气泡 ⇒ 越过 trap 照常退休 ⇒ `retire = 16 ≠ 13`）
 - **端口面**：核 IP **53** 端口逐字不变 · C6 快照 **51** 不变 · 层次化 module 数仍 **8**
-- **锚点**：`include/cpu/AGENTS.md` 行数 **7507 → 7600**（其余锚点不变）
+- **锚点**：`include/cpu/AGENTS.md` 行数 **7507 → 7601**（其余锚点不变）
+- **验收（verifier 独立）**：`.rddf/reviews/rv32i-ecall-ebreak-wfi-2026-11-verify.md`
+  ⇒ **2 轮**（轮 1 **FAIL** = ① `include/cpu/AGENTS.md` 的行数锚点 off-by-one
+  ⇒ 护栏 `verify_no_duplicate_rv32i_headers.sh` **C5 红** ⇒ T5.2 的「护栏 PASS」声明**不成立**；
+  轮 2 **PASS**）⇒ ⇒ 另施加 **6 条 builder 未用过的独立变异 V1–V6** ⇒ **6/6 转红**
+  （V1 = `mepc` 掩码只掩 1 位 ⇒ 补上 M8 覆盖不到的格 · V2 = ECALL 原因码 11→8 ·
+  V3 = `WFI` 不再合法 · V4 = `SRET` 落 reason 2 · V5 = `illegal_active` 不含 `sys_trap_kind`
+  ⇒ 独立复现 `retire = 16 ≠ 13`（且核级仍全绿 ⇒ 证实「该缺陷只在 SoC 级可观测」）·
+  V6 = EBREAK 的 `sys_trap_kind` 2→1）
+- **归档（2026-11-26）**：`openspec archive rv32i-ecall-ebreak-wfi-2026-11 -y`
+  ⇒ ⇒ `rv32i-privilege` **+ 1 added · ~ 2 modified** ⇒ ⇒ 归档为
+  `openspec/changes/archive/2026-11-26-rv32i-ecall-ebreak-wfi-2026-11/`
+  ⇒ ⇒ ⚠️ **CLI 1.14.3 实测事实**：delta 对 MODIFIED Requirement 做了**完整重述**
+  （含**全部** Scenario）⇒ ⇒ 合并 = **原地替换** ⇒ ⇒ **零合并残留**
+  （**不是** P6-3 记录的「追加语义」—— 那次 delta 未完整重述 ⇒ ⇒ 追加）
+  ⇒ ⇒ 手工订正 **6 处「因语义变更而过时的旧文」**（`rv32i-isa-semantics` 主 spec 的
+  `reason = 1` 清单：分类定义 / 优先级 / 行为策略 / 3 个 Scenario）· 手工更新
+  `rv32i-privilege` 的 `## Purpose`（三段 → **四段** + 边界清单）
+  ⇒ ⇒ `openspec validate --specs` **54 passed / 0 failed**
 - **实施期发现（如实登记）**：
   ① ⚠️ **只加触发、不加气泡是静默错的** —— `ECALL` 是 `reason = 0` 的**合法**指令，
   既有 `illegal_active` 抓不到它 ⇒ 它在 trap 同拍被锁进 ID/EX ⇒ **自己也退休**
   （`mepc`/`mcause` 写了 ⇒ 架构自相矛盾）⇒ ⇒ 修法 = `illegal_active` 纳入 `sys_trap_kind`；
   ② ⚠️ `ECALL` 的 `mepc` 指向**自身** ⇒ P6-5 的 handler 模型 MUST 自己 `+4`，否则无限 trapping；
   ③ ⚠️ 判据镜像 MUST 在落点放**自环**（`jal x0,0`）—— 否则 NOP 跑出镜像末尾读到 0
-  （= 未知 opcode）会**污染** `illegal_reason` 判据。
+  （= 未知 opcode）会**污染** `illegal_reason` 判据；
+  ④ ⚠️ **验收轮 1 抓到的 off-by-one**：行数锚点在**最后一次头文件改动之后**才测才准
+  ⇒ ⇒ 本项的教训 = **锚点数字 MUST 在所有头文件改动完成之后**测 ⇒ ⇒ 且要**复跑护栏**再勾 T5.2。
 - **仍待办**：P6-5（`MRET`）· P6-6（中断）· P6-7（`mtval`）

@@ -278,7 +278,7 @@ A **不需要**在 P6-6 里额外处理「mode=1 且 cause 越界」的边界（
 | Q2.5 | 未定义 `imm` / `SRET` | `reason = 3` | ✅ 按推荐 |
 
 **裁决结论**：D-1 = **A**（`MODE` WARL={0} + 复位值 `0x8000_0100`）· D-2 = **全部按推荐**。
-**落地**：change `openspec/changes/rv32i-ecall-ebreak-wfi-2026-11/`（P6-4）。
+**落地**：change `openspec/changes/archive/2026-11-26-rv32i-ecall-ebreak-wfi-2026-11/`（P6-4 · **已归档** 2026-11-26）。
 
 **裁决后由谁落地**：Q1.x + Q2.2–Q2.5 ⇒ **P6-4 的 change**（builder）· Q2.1 的中断半 ⇒ **P6-6**；
 若某项需要 ADR（例如选 Q1.1 = B，则「Vectored 模式的 cause 边界」属架构决策）⇒ **architect**。
