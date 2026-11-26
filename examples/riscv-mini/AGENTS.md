@@ -67,8 +67,8 @@ examples/riscv-mini/
 │                             #  test_rv32i_soc_dual_parity.cpp`（核级双路
 │                             #  parity 测试的 DUT）⇒ 单源化护栏的零消费者
 │                             #  豁免条目已移除（ADR-046 D10-rev 端口契约）
-└── tests/                   # ✅ 24 个 Catch2 target 已注册进 CTest（另有 1 个 noctest 只构建）
-    ├── test_*.cpp           # 22 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
+└── tests/                   # ✅ 26 个 Catch2 target 已注册进 CTest（另有 1 个 noctest 只构建）
+    ├── test_*.cpp           # 24 个 test source（另有 8 个已删除，留痕见 removed_examples.txt）
     ├── minitest_prog.h      # 测试辅助头（非 test source）
     ├── test_rv32i_stall_integrity.cpp  # **反压期操作数完整性**（3 形态 · A1/A2/A3）
     ├── test_rv32i_official_suite.cpp   # **官方 riscv-tests 套件**（40 个 · 4 个二进制）

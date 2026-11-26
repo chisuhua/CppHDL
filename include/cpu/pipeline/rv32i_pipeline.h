@@ -40,6 +40,11 @@
 //    本项把它的**生产消费者**从 0 变成 1（此前只有组件级测试实例化它）。
 //    ⚠️ `CsrBank` 的 `__io` **一字未动** ⇒ ⇒ 零公开 API 变更。
 #include "cpu/riscv/rv32i_csr.h"
+// ⚠️ **异常 / 陷阱单元**（2026-11-26 · P6-3 · change `rv32i-trap-entry-2026-11`）：
+//    本项把它的**生产消费者**从 0 变成 1（此前只有组件级测试实例化它）。
+//    ⚠️ `ExceptionUnit` 的 `__io` **一字未动** ⇒ ⇒ 零公开 API 变更。
+//    ⇒ ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md` **§8**（DA1–DA5）
+#include "cpu/riscv/rv32i_exception.h"
 // ⚠️ 数据 mux（ADR-046 D3 #14 / ADR-047 D2）：**既有**的 `chlib::ForwardingMux`
 //    —— MUST NOT 新建组件，也 MUST NOT 把 mux 放回 `HazardUnit`
 //    （放进 `HazardUnit` 并接进真实流水线装配会成**组合环**，
@@ -160,6 +165,10 @@ public:
     //    ADR-070 D2 点名的 7 处成层集合**不含**它 ⇒ ⇒ 本层按字面集合实施
     //    （与 `load_lane` 同型）⇒ ⇒ 层次化产物的 module 数**不变**。
     ch::ch_module<CsrBank> csr_bank{"csr_bank"};
+    // ⚠️ **异常 / 陷阱单元**（2026-11-26 · P6-3）：**inline**（`ch_module`）
+    //    ⇒ ⇒ 与 `csr_bank` **共享同一实例**（父层连线 ⇒ ⇒ 零端口面变更）
+    //    ⇒ ⇒ **不是** ADR-070 D2 点名的 7 处成层集合成员 ⇒ ⇒ 层次化 module 数**不变**
+    ch::ch_module<ExceptionUnit> exception{"exception"};
     // ⚠️ **数据 mux**（ADR-047 D2）：既有组件，**零新增组件**。
     //    档位语义与当年被移出 `HazardUnit` 的 mux **逐档等价**
     //    （0→REG / 1→EX/MEM / 2→MEM/WB）。
@@ -515,7 +524,9 @@ public:
         // ⚠️ CSR 地址 = `instr[31:20]`（**12 位**）—— MUST NOT 取 `[11:0]`
         //    （那是 `rd` / `funct3` / `opcode`，恒非合法 CSR 地址 ⇒ 读 0 / 写被忽略）。
         auto id_csr_addr = bits<31, 20>(if_stage.io().instruction);
-        csr_bank.io().csr_addr <<= select(csr_idex_valid, csr_idex_addr, id_csr_addr);
+        // ⚠️ **地址口的驱动在下方（写口仲裁段）** —— **MUST NOT** 在这里再驱动一次
+        //    （同一端口被 `<<=` 两次 ⇒ ⇒ `set_driver` 替换 driver 但 `add_src`
+        //    **累积** ⇒ ⇒ IR 图残留**两条 src 边** ⇒ ⇒ 值不确定 ⇒ ⇒ ADR-047 D8）
         // ⚠️ `mtip` / `meip` **显式 tie 0**：本项阶段无中断源（P6-6 才接）
         //    ⇒ ⇒ 未驱动端口读到的是**未定义值** ⇒ ⇒ MUST 显式驱动。
         csr_bank.io().mtip <<= ch_bool(false);
@@ -542,13 +553,76 @@ public:
         csr_wdata = select(csr_is_set,   csr_old | csr_src, csr_wdata);     // CSRRS / CSRRSI
         // ⚠️ clear 的掩码 MUST 是「**按位取反后 AND**」（`~`），**MUST NOT** 用 XOR
         csr_wdata = select(csr_is_clear, csr_old & ~csr_src, csr_wdata);    // CSRRC / CSRRCI
-        csr_bank.io().csr_wdata <<= csr_wdata;
         // 写使能：`CSRRW` / `CSRRWI` **总是**写；set / clear 型在源值为 0 时**不写**
         //（规范：`rs1=x0` / `uimm=0` ⇒ 不写；寄存器型「值为 0」同样不触发写副作用）
         // ⚠️ `rd = 0` **不影响**写（`CSRRW` 的 `rd=0` 只是**不读**旧值）。
-        csr_bank.io().csr_write_en <<=
+        auto csr_instr_write_en =
             csr_idex_valid & id_stage.io().valid_out &
             (csr_always_write | (csr_src != ch_uint<32>(0_d)));
+
+        // ==================================================================
+        // ⚠️ **trap 入口接线**（2026-11-26 · P6-3 · ADR-048 §8）
+        // ==================================================================
+        // 架构依据 = ADR-048 §8 的 **DA1–DA5**；审稿报告 =
+        // `.rddf/reviews/ADR-048-pc-redirect-second-path-review-2026-11.md`。
+        //
+        // ⚠️ **触发集 = `illegal_reason ∈ {2,3}`**（DA5）——**不是** `illegal_active`
+        //    （`!= 0`）⇒ ⇒ `reason = 1`（`ECALL`/`EBREAK`/`MRET`/`WFI`）**维持冻结**
+        //    ⇒ ⇒ `illegal_active`（`!= 0`）**继续只服务 stall**（ID/EX 装气泡）。
+        // ⚠️ **`!flush` 是承重条款**：taken 分支的 fall-through 槽里的非法字若在
+        //    flush 同拍触发 trap ⇒ ⇒ **用错误路径的 PC 写坏 `mepc`**（DA5 · V6）。
+        auto trap_trigger =
+            ((id_stage.io().illegal_reason == ch_uint<2>(2_d)) |
+             (id_stage.io().illegal_reason == ch_uint<2>(3_d))) &
+            if_stage.io().valid & !hazard.io().flush;
+        exception.io().exception_valid <<= trap_trigger;
+        // ⚠️ `current_pc` = **ID 级那条指令**的 PC（IF/ID 的 PC）⇒ ⇒ `mepc` 指向
+        //    **该指令自身**（**不是** `id_stage.io().pc_out` —— 那是 EX 级视图 ⇒
+        //    ⇒ 会指向**后一条**指令）⇒ ⇒ MUST 读 `if_stage` 的**输出端口**
+        //    （C1：读子组件的*输入*端口 = 跨模块边 ⇒ 层次化发射失败）
+        exception.io().current_pc <<= if_stage.io().pc;
+        // ⚠️ 原因码 = **illegal instruction（2）**（RISC-V 规范）⇒ ⇒ **常量**
+        //    （`ECALL` = 11 / `EBREAK` = 3 归 **P6-4** ⇒ ⇒ 本项**不**涉及）
+        exception.io().exception_cause <<= ch_uint<32>(2_d);
+        // ⚠️ `MRET` 通道留空但接通（**P6-5** 才拉高）
+        exception.io().mret_instruction <<= ch_bool(false);
+        // ---- ExceptionUnit 的 CSR 读输入 ← `csr_bank` 的**输出端口** ----
+        // （`CsrBank` 已有这 5 个输出 ⇒ ⇒ **零端口变更**）
+        exception.io().csr_mstatus <<= csr_bank.io().mstatus_value;
+        exception.io().csr_mtvec <<= csr_bank.io().mtvec_value;
+        exception.io().csr_mepc <<= csr_bank.io().mepc_value;
+        exception.io().csr_mie <<= csr_bank.io().mie_value;
+        exception.io().csr_mcause <<= csr_bank.io().mcause_value;
+
+        // ---- `CsrBank` 单写口的**仲裁**（**`ExceptionUnit` 优先**）----
+        // ⚠️ **冲突窗口 = trap 那一拍本身**：`ExceptionUnit` 的 `csr_write_en` 在 trap
+        //    **同拍**就拉高（`start_trap` 是组合量）⇒ ⇒ 与 EX 级那条 CSR 写指令
+        //    **同拍冲突** ⇒ ⇒ 仲裁是**承重**的。
+        // ⚠️ 优先理由：trap 上下文是「**一次异常**」的**成对**写入 ⇒ ⇒ 丢它 ⇒ ⇒
+        //    软件永远看不到原因 ⇒ ⇒ 比「一条 CSR 指令的写被吞」更严重。
+        // ⚠️ 被抑制的那次写**MUST NOT** 补偿重试（单写口无队列）⇒ ⇒ 已知边界。
+        auto exc_write_en = exception.io().csr_write_en;
+        auto csr_instr_addr = select(csr_idex_valid, csr_idex_addr, id_csr_addr);
+        csr_bank.io().csr_addr <<= select(exc_write_en, exception.io().csr_write_addr,
+                                          csr_instr_addr);
+        csr_bank.io().csr_wdata <<= select(exc_write_en, exception.io().csr_write_data,
+                                           csr_wdata);
+        csr_bank.io().csr_write_en <<= exc_write_en |
+                                       (csr_instr_write_en & !exc_write_en);
+
+        // ---- 取指级的**第二路**重定向（trap / mret 内部 mux ⇒ 父层做）----
+        // ⚠️ `mret_valid` 恒 0（**P6-5**）⇒ ⇒ 本项恒取 trap 路 ⇒ 零行为变化。
+        //    ⚠️ 读 `mret_pc` / `mret_valid` **同时**消费了这两个输出端口
+        //    （未被消费的子组件 `ch_out` 会**冒泡** ⇒ ⇒ 顶层端口面变化）。
+        auto trap_pc_selected = select(exception.io().mret_valid,
+                                       exception.io().mret_pc,
+                                       exception.io().trap_entry_pc);
+        if_stage.io().trap_target <<= trap_pc_selected;
+        // ⚠️ `trap_entry_valid` 与 `trap_flush` **同源**（ExceptionUnit 内部都是
+        //    `do_trap_entry`）⇒ ⇒ 这里是**恒等**门（零行为变化）⇒ ⇒ 同时**消费**
+        //    了 `trap_entry_valid`（否则它会冒泡）。
+        if_stage.io().trap_flush <<= exception.io().trap_flush &
+                                    exception.io().trap_entry_valid;
 
         // ---- ID/EX：CSR 判定 + 地址 + 读值（与 `id_stage` 的 idex 同拍）----
         // 使能与 `id_stage` 的 `idex_*` **逐条同构**：数据字段 = `valid & !freeze`，

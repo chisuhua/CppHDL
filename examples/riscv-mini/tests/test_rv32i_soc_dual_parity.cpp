@@ -2520,6 +2520,25 @@ TEST_CASE("Rv32iSoc - StoreHalfwordLaneCoverage",
 //   · `FENCE` ⇒ **不冻结** ⇒ retire(20) = 20 − 4 = **16**，`illegal_reason == 0`
 // 且冻结后 ID 级持有第 9 条 ⇒ `dbg_id_pc == 0x80000000 + 4*8 == 0x80000020`
 // （PC 复位值 0x80000000 见 `stages/if_stage.h`；I-TCM 截断高位 ⇒ 字索引 8）
+//
+// ## ⚠️ **2026-11-26 · P6-3 的语义变更**（change `rv32i-trap-entry-2026-11`）
+//
+// `illegal_reason ∈ {2,3}` 的处置从「**流水线级冻结**」改为「**陷入**」：
+// 写 `mepc`（= 该指令 PC）+ `mcause`（= 2）⇒ PC 重定向到 `mtvec` 的基址。
+// ⇒ ⇒ **本用例的判据随之改写**（判据变了，**不是**行为回归）：
+//   · `reason ∈ {2,3}`：不再断言「末拍仍持有该 reason」/「ID PC 停在探针」
+//     ⇒ ⇒ 改断言「该 reason **出现过**」+「探针**永不退休**」+「最终 ID PC **不是**探针」
+//     ⚠️ 本固件**没有**在 `mtvec` 的别名落点（word `0x040`）放处理器 ⇒ ⇒ 但
+//        `load_firmware` 会补 **256** 个尾部 NOP（`kTailFillWords`）⇒ ⇒ word `0x040`
+//        读到的是 **NOP** ⇒ ⇒ 陷入后**照常退休** ⇒ ⇒ 退休数**不再是 8**
+//     ⚠️ **手推 `retire(20) = 13`**（延迟模型 `retire(c) = c − 4` 的推广）：
+//        · 8 条 NOP 退休（c=4..11 各一条）· 探针（第 9 条）在 c=9 进 ID ⇒ **永不退休**
+//        · 陷入 ⇒ PC → `0x20000100`（别名 word `0x040`）⇒ 该 NOP 在 **c=12** 进 ID
+//          ⇒ ⇒ c=13/14/15 走 EX/MEM/WB ⇒ **c=15 起**重新退休
+//        ⇒ ⇒ c=15..19 = **5** 条 ⇒ 8 + 5 = **13** ✓（实测一致）
+//   · `reason = 1`（`ECALL`/`EBREAK`/`MRET`/`WFI`）：**仍冻结** ⇒ 末拍断言**逐字不变**
+//     （归 P6-4 / P6-5）
+//   · `reason = 0`（`FENCE`）：NOP ⇒ 断言**不变**
 // ===========================================================================
 constexpr std::size_t kG1FirmwareWords = 16;
 
@@ -2533,12 +2552,15 @@ g1_firmware_with(uint32_t probe) {
              riscv::NOP, riscv::NOP, riscv::NOP, riscv::NOP}};
 }
 
-TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
+TEST_CASE("Rv32iSoc - IllegalOpcodeObservableNotRetired + FenceIsNop",
           "[rv32i][soc][isa][illegal][fence][dual][verilator][e2e]") {
     constexpr unsigned kCycles = 20;
     // 手推常量（见上方推导）
     constexpr uint64_t kRetireBeforeProbe = 8;   // 8 条 NOP 退休；第 9 条永不退休
     constexpr uint64_t kRetireNoFreeze   = 16;   // 20 - 4（填充）
+    // ⚠️ P6-3：`reason ∈ {2,3}` ⇒ **陷入** ⇒ PC 落到别名 word 0x040（= 尾部 NOP）
+    //    ⇒ ⇒ 照常退休 ⇒ 8 + 5 = **13**（推导见上方注释）
+    constexpr uint64_t kRetireAfterTrap  = 13;
     constexpr uint64_t kProbeIdPc        = 0x80000020ULL;  // 0x80000000 + 4*8
 
     if (!tool_available("verilator")) {
@@ -2553,20 +2575,22 @@ TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
         uint32_t    probe;
         uint64_t    expect_reason;
         uint64_t    expect_retire;   // 20 拍时的退休数（手推）
+        bool        freezes;         // ⚠️ P6-3：只有 `reason = 1` 仍冻结
     };
     const Scenario scenarios[] = {
-        // 0xFFFFFFFF 的 opcode = 0x7F ⇒ **未知**
-        {"unknown opcode(0xFFFFFFFF)", 0xFFFFFFFFu, 2u, kRetireBeforeProbe},
-        // 0x00000073 = ECALL ⇒ opcode 0x73 = OP_SYSTEM ⇒ **已知未实现**
-        {"OP_SYSTEM(ecall 0x73)",      0x00000073u, 1u, kRetireBeforeProbe},
+        // 0xFFFFFFFF 的 opcode = 0x7F ⇒ **未知** ⇒ P6-3 起**陷入**
+        {"unknown opcode(0xFFFFFFFF)", 0xFFFFFFFFu, 2u, kRetireAfterTrap,  false},
+        // 0x00000073 = ECALL ⇒ opcode 0x73 = OP_SYSTEM ⇒ **已知未实现** ⇒ **仍冻结**
+        {"OP_SYSTEM(ecall 0x73)",      0x00000073u, 1u, kRetireBeforeProbe, true},
         // 0x0FF0000F = `fence iorw,iorw` ⇒ opcode 0x0F ⇒ **已知 = NOP**
-        {"FENCE(0x0F)",                0x0FF0000Fu, 0u, kRetireNoFreeze},
+        {"FENCE(0x0F)",                0x0FF0000Fu, 0u, kRetireNoFreeze,   false},
         // ⚠️ **2026-11-16 · B4 · G1 扩展**：`lb x1, 0(x0)` 但 **funct3 = 011**
         //    ⇒ ⇒ `LB` 只允许 funct3 ∈ {000,001,010,100,101} ⇒ ⇒ **保留组合** ⇒ ⇒ reason **3**
         //    ⇒ ⇒ 编码（手推）：`(imm=0 << 20) | (rs1=0 << 15) | (3 << 12) | (rd=1 << 7) | 0x03`
         //    ⇒ ⇒ = **0x00003083**（⚠️ 第一版我写成 `0x00001083` ⇒ 那是 funct3=**001** = `LH`
         //    ⇒ ⇒ **合法** ⇒ ⇒ 被本判据当场抓住 ⇒ ⇒ 判别力实证 ✓）
-        {"LB with reserved funct3=011", 0x00003083u, 3u, kRetireBeforeProbe},
+        //    ⇒ ⇒ P6-3 起**陷入**
+        {"LB with reserved funct3=011", 0x00003083u, 3u, kRetireAfterTrap,  false},
     };
 
     for (const auto &sc : scenarios) {
@@ -2604,14 +2628,27 @@ TEST_CASE("Rv32iSoc - UnknownOpcodeFreezes + FenceIsNop",
 
             INFO("backend: " << (use_verilator ? "verilator" : "interpreter")
                              << " cycle=" << kCycles);
-            REQUIRE(t.back()[kIdxIllegalReason] == sc.expect_reason);
+            // ⚠️ **P6-3 起** `reason ∈ {2,3}` ⇒ **陷入** ⇒ reason 只**出现**（不保持）
+            //    ⇒ ⇒ 判据 = 「**出现过**该 reason」；`reason = 1` 仍冻结 ⇒ 末拍仍持有
+            uint64_t max_reason = 0;
+            for (const auto &row : t) {
+                if (row[kIdxIllegalReason] > max_reason) {
+                    max_reason = row[kIdxIllegalReason];
+                }
+            }
+            INFO("max_reason = " << max_reason);
+            REQUIRE(max_reason == sc.expect_reason);
+            if (sc.freezes) {
+                REQUIRE(t.back()[kIdxIllegalReason] == sc.expect_reason);
+            }
             REQUIRE(t.back()[kIdxInstructions] == sc.expect_retire);
             // 「非法」1 bit 位 = (reason != 0) ⇒ 与 reason 自洽
-            if (sc.expect_reason != 0) {
+            if (sc.freezes) {
                 // 冻结 ⇒ ID 级停在探针指令上（pc 手推）
                 REQUIRE(t.back()[kIdxIdPc] == kProbeIdPc);
             } else {
-                // FENCE = NOP ⇒ **不**冻结 ⇒ ID 级 MUST 已越过探针
+                // NOP / 陷入 ⇒ ID 级 MUST **不再**停在探针上
+                //   （NOP = 越过去；陷入 = PC 已被重定向到 `mtvec` 的别名落点）
                 REQUIRE(t.back()[kIdxIdPc] != kProbeIdPc);
             }
             // ---- 探针指令 MUST NOT 写回（x0 之外无副作用）----

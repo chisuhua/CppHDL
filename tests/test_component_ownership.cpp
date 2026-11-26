@@ -249,7 +249,10 @@ TEST_CASE("ownership: ch_device<Rv32iPipeline> instantiates without SIGSEGV",
     // ⚠️ **2026-11-25 · P6-2（change `rv32i-csr-instructions-2026-11`）**：
     //    新增第 9 个成员 `csr_bank`（`riscv::CsrBank` —— CSR 指令的存储体，
     //    此前**零生产消费者**，只有组件级测试实例化它）⇒ ⇒ 8 → **9**
-    REQUIRE(pipeline.child_count() == 9);
+    // ⚠️ **2026-11-26 · P6-3（change `rv32i-trap-entry-2026-11`）**：
+    //    新增第 10 个成员 `exception`（`riscv::ExceptionUnit` —— trap 入口，
+    //    同样此前**零生产消费者**）⇒ ⇒ 9 → **10**
+    REQUIRE(pipeline.child_count() == 10);
 
     for (auto& child : pipeline.children()) {
         INFO("child: " << child->name());

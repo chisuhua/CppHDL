@@ -31,6 +31,15 @@
  *   Batch 3（纯组合）= 1 —— ✅ 2026-10-27 实施：
  *     - BranchPredictor - BNT strategy
  *
+ *   Batch 5（trap 重定向 · **P6-3**）= 6 —— ✅ 2026-11-26 实施
+ *     （change rv32i-trap-entry-2026-11 · ADR-048 §8 dated addendum v1.1 · DA1–DA3）
+ *     - IfStage - trap redirect MUST beat branch redirect (and the stall)   [V1']
+ *     - IfStage - branch redirect MUST still beat the stall                 [ADR-071 未破]
+ *     - IfStage - stall + flush without branch redirect MUST freeze the PC  [V2]
+ *     - IfStage - trap MUST clear the IF/ID valid bit (no livelock)         [V3 · DA3 ④]
+ *     - IfStage - trap MUST kill the next cycle's IF/ID load                [V3 · DA3 ①]
+ *     - IfStage - trap MUST clear the skid and MUST NOT fill it             [V4 · DA3 ②③]
+ *
  *   Batch 4（取指 skid buffer 的**防御性契约**）= 3 —— ✅ 2026-10-27 实施
  *     （change rv32i-fetch-skid-buffer-2026-10，ADR-048 D5 / D9.4）：
  *     - IfStage - flush cycle MUST NOT fill skid buffer
@@ -386,8 +395,8 @@ DUAL_BACKEND_TEST_PAIR(
 //    ⇒ SoC 级变异验证**抓不到**「删掉 flush 清空 skid」的变异
 //    ⇒ 该防御逻辑否则就是「看起来有保护」（ADR-048 D5）。
 //
-// ⚠️ 端口驱动纪律：`IfStage` 有 **7 个输入端口**，逐个显式驱动
-//    （未驱动端口读到的是**未定义值**，两后端未必同值 ⇒ 假绿）。
+// ⚠️ 端口驱动纪律：`IfStage` 有 **9 个输入端口**（P6-3 加了 2 个 trap 端口），
+//    逐个显式驱动（未驱动端口读到的是**未定义值**，两后端未必同值 ⇒ 假绿）。
 //    ⚠️ 该组件的 `rst` 是**高有效**（`pc_update_en` / `if_id_update_en`
 //    都是 `select(io().rst, 0, …)`）⇒ 正常工作驱动 **0**（不是 1！）。
 //
@@ -395,15 +404,28 @@ DUAL_BACKEND_TEST_PAIR(
 //   `pc_reg = 0x80000000`、`fetch_pc = 0`、`skid_* = 0`、`primed = 0`。
 
 namespace {
-// 把「一拍」的所有输入一起驱动（7 个端口全覆盖）
+// 把「一拍」的所有输入一起驱动（**全部 9 个输入端口**全覆盖）
+//
+// ⚠️ **2026-11-26 · P6-3**：此前本 helper 只驱动 **4** 个（`rst` / `stall` /
+//    `flush` / `instr_data`）⇒ ⇒ `branch_valid` / `branch_target` / `instr_ready`
+//    由调用方**一次性**驱动 ⇒ ⇒ **P6-3 新增的 `trap_target` / `trap_flush`
+//    根本无人驱动** ⇒ ⇒ 未驱动端口读到**未定义值** ⇒ ⇒ 两后端未必同值
+//    ⇒ ⇒ **假绿 / 假红** ⇒ ⇒ 现在**每个输入端口每拍都显式驱动**
+//    （新增的两个 trap 端口默认 0 ⇒ ⇒ Batch 4 的金标**逐字不变**）。
 template <typename Sim, typename Dev>
 void if_tick(Sim &sim, Dev &dev, bool rst, bool stall, bool flush,
-             uint32_t instr_data) {
+             uint32_t instr_data, bool branch_valid = false, bool trap_flush = false,
+             uint32_t branch_target = 0x0_h, uint32_t trap_target = 0x0_h) {
     auto &io = dev.instance().io();
     sim.set_input_value(io.rst, rst);
     sim.set_input_value(io.stall, stall);
     sim.set_input_value(io.flush, flush);
     sim.set_input_value(io.instr_data, instr_data);
+    sim.set_input_value(io.instr_ready, true);
+    sim.set_input_value(io.branch_valid, branch_valid);
+    sim.set_input_value(io.branch_target, branch_target);
+    sim.set_input_value(io.trap_flush, trap_flush);
+    sim.set_input_value(io.trap_target, trap_target);
     sim.tick();
 }
 }  // namespace
@@ -417,10 +439,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[pipeline][fetch][skid][behavior][flush][dual]",
     [&]() {
         auto &io = dev.instance().io();
-        // 常量输入（一次性驱动；`rst` 之外全部显式给值）
-        sim.set_input_value(io.branch_valid, false);
-        sim.set_input_value(io.branch_target, 0x0_h);
-        sim.set_input_value(io.instr_ready, true);
+        // ⚠️ `branch_valid` / `branch_target` / `instr_ready` 由 `if_tick` **每拍**驱动
+        //    （⇒ ⇒ 此处**不再**一次性驱动 ⇒ ⇒ 避免「两处驱动同一端口」）
 
         // 金标（手工推导，每行是该拍**结束后**的状态）：
         //  tick0 (rst=1)   : 全冻结；`fetch_pc ← pc_reg = 0x80000000`
@@ -459,9 +479,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[pipeline][fetch][skid][behavior][flush][dual]",
     [&]() {
         auto &io = dev.instance().io();
-        sim.set_input_value(io.branch_valid, false);
-        sim.set_input_value(io.branch_target, 0x0_h);
-        sim.set_input_value(io.instr_ready, true);
+        // ⚠️ `branch_valid` / `branch_target` / `instr_ready` 由 `if_tick` **每拍**驱动
+        //    （⇒ ⇒ 此处**不再**一次性驱动 ⇒ ⇒ 避免「两处驱动同一端口」）
 
         // 金标（手工推导，每行是**该拍结束后**的状态）：
         //  tick0 (rst=1)   : 全冻结；`fetch_pc ← pc_reg = 0x80000000`
@@ -502,9 +521,8 @@ DUAL_BACKEND_TEST_PAIR(
     "[pipeline][fetch][skid][behavior][align][dual]",
     [&]() {
         auto &io = dev.instance().io();
-        sim.set_input_value(io.branch_valid, false);
-        sim.set_input_value(io.branch_target, 0x0_h);
-        sim.set_input_value(io.instr_ready, true);
+        // ⚠️ `branch_valid` / `branch_target` / `instr_ready` 由 `if_tick` **每拍**驱动
+        //    （⇒ ⇒ 此处**不再**一次性驱动 ⇒ ⇒ 避免「两处驱动同一端口」）
 
         // 金标（手工推导，每行是该拍**结束后**的状态）：
         //  tick0 (rst=1)   : 全冻结；`fetch_pc ← 0x80000000`
@@ -524,4 +542,210 @@ DUAL_BACKEND_TEST_PAIR(
         REQUIRE(instr == 0x22222222u);
         // **反向期望**：`skid_pc` 误取 `pc_reg` ⇒ 这里是 **0x80000004**（错 4 字节）
         REQUIRE(pc == 0x80000000u);
+    });
+
+// ============================================================================
+// Batch 5 — **trap 重定向**（P6-3 · ADR-048 §8 dated addendum v1.1 · DA1–DA3）
+// ============================================================================
+// ⚠️ **为什么必须在组件级测**（ADR-048 §8 D9.4 明文要求）：
+//    流水线级「trap 与 branch **同拍**」**不可达**（触发集 MUST 排除 `flush`
+//    ⇒ ⇒ 两类重定向**互斥**）⇒ ⇒ **优先级在流水线级结构性不可观测**
+//    ⇒ ⇒ 组件级 MUST 覆盖「`trap_flush = 1 ∧ branch_valid = 1`」。
+//
+// ⚠️ **本批的 6 个用例各钉一个「不可回退」的契约**：
+//   V1'  trap 重定向 **优先于** branch 重定向（DA1 的优先级）
+//   V1'' branch 重定向 **仍优先于** stall（ADR-071 的既有契约，未被 P6-3 破坏）
+//   V1''' `stall ∧ flush ∧ ¬branch_valid` ⇒ PC **仍冻结**（既有契约逐字不变）
+//   V2    trap MUST **清 IF/ID 的 valid** ⇒ 触发指令不留在 ID ⇒ **不活锁**
+//   V3    trap MUST **多杀一拍**（`trap_flush_d1`）⇒ 在途指令不进 ID
+//   V4    trap 拍 MUST **不填 skid** ⇒ 错误路径的指令不会被存进 skid
+//
+// 逐拍金标（**手工推导**）：寄存器初值
+//   `pc_reg = 0x80000000`、`fetch_pc = 0`、`skid_* = 0`、`primed = 0`。
+
+// ----------------------------------------------------------------------------
+// Batch 5-a: trap 重定向 **优先于** branch 重定向（且**压过** stall）
+// ----------------------------------------------------------------------------
+// ⚠️ 判别力：把优先级写成 `branch > trap` ⇒ PC = `0x80000040`（本断言转红）
+DUAL_BACKEND_TEST_PAIR(
+    IfStage,
+    "IfStage - trap redirect MUST beat branch redirect (and the stall)",
+    "[pipeline][fetch][trap][behavior][redirect][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+
+        // 金标（手工推导）：
+        //  tick0 (rst=1)    : 全冻结；`fetch_pc ← pc_reg = 0x80000000`
+        //  tick1 (stall=0)  : `pc_reg ← 0x80000004`；`fetch_pc ← 0x80000000`
+        //  tick2 (stall=1 ∧ trap_flush=1 ∧ branch_valid=1) : ⚠️ **被测点**
+        //      `trap_redirect = 1` ⇒ `pc_update_en = 1`（压过 stall）
+        //      ⇒ `next_pc_target = trap_target`（**trap > branch**）
+        //      ⇒ `pc_reg ← 0x20000100`
+        if_tick(sim, dev, true, false, false, 0x0u);
+        if_tick(sim, dev, false, false, false, 0x11111111u);
+        if_tick(sim, dev, false, true, false, 0x22222222u,
+                /*branch_valid=*/true, /*trap_flush=*/true,
+                /*branch_target=*/0x80000040u, /*trap_target=*/0x20000100u);
+
+        auto addr = static_cast<uint64_t>(sim.get_port_value(io.instr_addr));
+        // **反向期望**：若 branch 优先 ⇒ 这里是 `0x80000040`（错）
+        REQUIRE(addr == 0x20000100u);
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 5-b: branch 重定向 **仍优先于** stall（ADR-071 的既有契约未被 P6-3 破坏）
+// ----------------------------------------------------------------------------
+DUAL_BACKEND_TEST_PAIR(
+    IfStage,
+    "IfStage - branch redirect MUST still beat the stall",
+    "[pipeline][fetch][trap][behavior][redirect][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+
+        // 金标：
+        //  tick2 (stall=1 ∧ flush=1 ∧ branch_valid=1) : `flush_redirect = 1`
+        //      ⇒ `pc_update_en = 1` ⇒ `pc_reg ← branch_target = 0x80000040`
+        if_tick(sim, dev, true, false, false, 0x0u);
+        if_tick(sim, dev, false, false, false, 0x11111111u);
+        if_tick(sim, dev, false, true, true, 0x22222222u,
+                /*branch_valid=*/true, /*trap_flush=*/false,
+                /*branch_target=*/0x80000040u);
+
+        auto addr = static_cast<uint64_t>(sim.get_port_value(io.instr_addr));
+        REQUIRE(addr == 0x80000040u);
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 5-c: `stall ∧ flush ∧ ¬branch_valid` ⇒ PC **仍冻结**（既有契约逐字不变）
+// ----------------------------------------------------------------------------
+// ⚠️ 判别力：把 `pc_update_en` 改成「只看 `flush`」⇒ PC = `0x80000008`（错）
+DUAL_BACKEND_TEST_PAIR(
+    IfStage,
+    "IfStage - stall + flush without branch redirect MUST freeze the PC",
+    "[pipeline][fetch][trap][behavior][redirect][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+
+        // 金标：
+        //  tick1 : `pc_reg = 0x80000004`
+        //  tick2 (stall=1 ∧ flush=1 ∧ branch_valid=0) : `flush_redirect = 0`
+        //      且 `trap_redirect = 0` ⇒ ⇒ `pc_update_en = 0` ⇒ PC **冻结**
+        if_tick(sim, dev, true, false, false, 0x0u);
+        if_tick(sim, dev, false, false, false, 0x11111111u);
+        if_tick(sim, dev, false, true, true, 0x22222222u,
+                /*branch_valid=*/false);
+
+        auto addr = static_cast<uint64_t>(sim.get_port_value(io.instr_addr));
+        REQUIRE(addr == 0x80000004u);
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 5-d: trap MUST **清 IF/ID 的 valid** ⇒ 触发指令不留在 ID ⇒ **不活锁**
+// ----------------------------------------------------------------------------
+// ⚠️ 判别力：删掉 kill 站点 ④ 的 `trap_flush` ⇒ `valid` 恒 1（转红）
+DUAL_BACKEND_TEST_PAIR(
+    IfStage,
+    "IfStage - trap MUST clear the IF/ID valid bit (no livelock)",
+    "[pipeline][fetch][trap][behavior][kill][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+
+        // 金标：
+        //  tick1 : `primed` 仍是 0 ⇒ IF/ID 的 `valid ← 0`（复位后首拍是气泡）
+        //  tick2 : `primed = 1` ⇒ `valid ← instr_ready = 1`
+        //  tick3 (trap_flush=1) : ⚠️ **被测点** ⇒ `valid ← 0`
+        if_tick(sim, dev, true, false, false, 0x0u);
+        if_tick(sim, dev, false, false, false, 0x11111111u);
+        if_tick(sim, dev, false, false, false, 0x22222222u);
+        auto valid_after_load = static_cast<uint64_t>(
+            sim.get_port_value(io.valid));
+        REQUIRE(valid_after_load == 1u);
+
+        if_tick(sim, dev, false, false, false, 0x33333333u,
+                /*branch_valid=*/false, /*trap_flush=*/true,
+                /*branch_target=*/0x0u, /*trap_target=*/0x20000100u);
+        auto valid_after_trap = static_cast<uint64_t>(
+            sim.get_port_value(io.valid));
+        REQUIRE(valid_after_trap == 0u);
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 5-e: trap MUST **多杀一拍**（`trap_flush_d1`）⇒ 在途指令不进 ID
+// ----------------------------------------------------------------------------
+// ⚠️ 判别力：删掉 `trap_flush_d1` ⇒ tick3 的 `0x33333333` 会进 IF/ID（转红）
+DUAL_BACKEND_TEST_PAIR(
+    IfStage,
+    "IfStage - trap MUST kill the next cycle's IF/ID load",
+    "[pipeline][fetch][trap][behavior][kill][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+
+        // 金标：
+        //  tick1 : IF/ID ← (0x11111111, 0x80000000)
+        //  tick2 (trap_flush=1) : IF/ID **不装载**（kill 站点 ①）
+        //  tick3 (`trap_flush_d1 = 1`) : IF/ID **仍不装载** ⇒ 指令仍是 0x11111111
+        //  tick4 : 恢复装载 ⇒ 指令 = 0x44444444
+        if_tick(sim, dev, true, false, false, 0x0u);
+        if_tick(sim, dev, false, false, false, 0x11111111u);
+        if_tick(sim, dev, false, false, false, 0x22222222u,
+                /*branch_valid=*/false, /*trap_flush=*/true,
+                /*branch_target=*/0x0u, /*trap_target=*/0x20000100u);
+        if_tick(sim, dev, false, false, false, 0x33333333u);
+        auto instr_after_d1 = static_cast<uint64_t>(
+            sim.get_port_value(io.instruction));
+        // **反向期望**：若 `trap_flush_d1` 被删 ⇒ 这里是 0x33333333（错）
+        REQUIRE(instr_after_d1 == 0x11111111u);
+
+        if_tick(sim, dev, false, false, false, 0x44444444u);
+        auto instr_after_release = static_cast<uint64_t>(
+            sim.get_port_value(io.instruction));
+        REQUIRE(instr_after_release == 0x44444444u);
+    });
+
+// ----------------------------------------------------------------------------
+// Batch 5-f: trap MUST **清空**非空的 skid buffer
+// ----------------------------------------------------------------------------
+// ⚠️ **判别力（两条变异，各钉 DA3 的一个站点）**：
+//    · **M9**（删掉 skid **填充条件**里的 `trap_flush | trap_flush_d1`）
+//      ⇒ ⇒ tick4（`trap_flush_d1 = 1` 且 skid **空**）会**填充**
+//      ⇒ ⇒ 排空给出 **0x44444444**（本断言转红）⇒ ⇒ 钉 DA3 的**第 ③ 站点**
+//    · **M9b**（删掉 skid **清空条件**里的 `trap_flush | trap_flush_d1`）
+//      ⇒ ⇒ trap 拍**不**清 skid ⇒ ⇒ 排空给出 **0x22222222**（本断言转红）
+//      ⇒ ⇒ 钉 DA3 的**第 ② 站点**
+//
+// ⚠️ **排程为什么是 7 拍**：DA3 的 ② 与 ③ **互相掩护** ⇒ ⇒ 若 trap 拍 skid
+//    **非空**，则「填充」被 `!skid_valid` 挡住 ⇒ ⇒ M9 不可观测；⇒ ⇒ 必须让
+//    skid 在 trap 拍**为空**（tick2 填、tick3 清、tick4 才重新填）⇒ ⇒
+//    两条变异**各自**可观测。
+DUAL_BACKEND_TEST_PAIR(
+    IfStage,
+    "IfStage - trap MUST clear the skid and MUST NOT fill it",
+    "[pipeline][fetch][trap][behavior][kill][dual]",
+    [&]() {
+        auto &io = dev.instance().io();
+
+        // 金标：
+        //  tick1 : `pc_reg ← 0x80000004`；IF/ID ← (0x11111111, 0x80000000)
+        //  tick2 (stall=1) : 填充 ⇒ skid ← (0x22222222, `fetch_pc` = 0x80000000)
+        //  tick3 (stall=1 ∧ trap_flush=1) : ⚠️ **被测点** ⇒ skid MUST 被清空
+        //          ⇒ 且 `trap_redirect = 1` ⇒ `pc_reg ← 0x20000100`
+        //  tick4 (stall=1) : `trap_flush_d1 = 1` ⇒ **既不填也不清**（内容仍是空的）
+        //  tick5 (stall=1) : 重新填充 ⇒ skid ← (0x55555555, `fetch_pc` = 0x20000100)
+        //  tick6 (stall=0) : 排空 ⇒ IF/ID ← skid = (0x55555555, 0x20000100)
+        //          ⇒ ⚠️ `instr_data`(tick6) = 0x66666666 ⇒ ⇒ 「排空」与「取流上」可区分
+        if_tick(sim, dev, true, false, false, 0x0u);
+        if_tick(sim, dev, false, false, false, 0x11111111u);
+        if_tick(sim, dev, false, true, false, 0x22222222u);   // 填充
+        if_tick(sim, dev, false, true, false, 0x33333333u,
+                /*branch_valid=*/false, /*trap_flush=*/true,
+                /*branch_target=*/0x0u, /*trap_target=*/0x20000100u);
+        if_tick(sim, dev, false, true, false, 0x44444444u);   // `trap_flush_d1` ⇒ 不填不清
+        if_tick(sim, dev, false, true, false, 0x55555555u);   // 重新填充
+        if_tick(sim, dev, false, false, false, 0x66666666u); // 排空
+
+        auto instr = static_cast<uint64_t>(sim.get_port_value(io.instruction));
+        auto pc = static_cast<uint64_t>(sim.get_port_value(io.pc));
+        // **反向期望**：若 trap 拍未清 skid ⇒ 排空给出 0x22222222（错）
+        REQUIRE(instr == 0x55555555u);
+        REQUIRE(pc == 0x20000100u);
     });

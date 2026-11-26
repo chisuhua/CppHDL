@@ -454,7 +454,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 283
+- CTEST_TOTAL: 284
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -480,7 +480,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 291
+- DUAL_BACKEND_PARITY_PAIRS: 297
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——
@@ -491,7 +491,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      TEMPLATE_TEST_CASE / TEMPLATE_PRODUCT_TEST_CASE / SCENARIO）的
      .cpp/.cc/.cxx/.C ∪ (b) 含 `CATCH_` 的同类文件 ∪ (c) `examples/**/tests/`
      下的任意 .cpp/.cc/.cxx/.C，去重。Do not reformat. -->
-- EXAMPLES_TEST_SOURCES: 25
+- EXAMPLES_TEST_SOURCES: 26
      ⚠️ **`CPPHDL_BUILD_EXAMPLES=OFF` 下的显式接受项**（`example-file-boundary-2026-11` **C5** · AC20）：
      上述 examples 相关锚点（`EXAMPLES_TEST_SOURCES` · 「examples 的 main() 程序」计数 ·
      `CTEST_TOTAL` 里的 `spinalhdl_*` 条目）**只在默认配置（`BUILD_EXAMPLES=ON`）成立** ⇒ ⇒

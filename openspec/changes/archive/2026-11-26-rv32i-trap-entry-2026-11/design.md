@@ -224,6 +224,53 @@ MUST **先在父层 mux 成形**，再驱动 `csr_bank.io().csr_addr` / `csr_wda
 - **连带**：`docs/adr/ADR-071-fence-and-illegal-opcode-semantics.md` 的 **v1.3** 标注
   （D3「冻结是终态」对 `reason ∈ {2,3}` 失效 · D3-b 的优先级公式被 DA2 扩展）
 
-## 8. 实施期订正（**追加段** · 实施时填）
+## 8. 实施期订正（**追加段** · 2026-11-26 填）
 
-（暂无 —— 实施开始后追加）
+### 8.1 判据的 DUT 从「流水线级」改为「**核级**」（**实测订正**）
+
+§6.2 原设想直接实例化 `riscv::Rv32iPipeline` 并把镜像**组合**喂给 `instr_data`。
+**实测不成立**：imem 是 **1 拍 `sread`**（ADR-041）⇒ ⇒ 取指数据比取指地址**晚 1 拍**
+⇒ ⇒ 组合喂数会让**取指与 PC 错开一个字** ⇒ ⇒ 译码到的指令与 `dbg_id_pc` **不对应**
+⇒ ⇒ 判据全红，且**测的不是产品形态**。
+⇒ ⇒ **改为核级 DUT**（`rv32i_core_top.h` + I-TCM 构造参数装载）⇒ ⇒ 取指对齐由**产品**保证
+（与 P6-2 的 `test_rv32i_csr_instructions.cpp` 同型）。
+
+### 8.2 ⚠️ ADR-048 §8 DA3 的 **② / ③** 两个 skid 站点**互相掩护**
+
+- 「填充排除」（③）在 trap 拍**是否生效**，只在 **skid 队满**时被 `!skid_valid` 挡住
+  ⇒ ⇒ 若 trap 拍 skid **非空**，③ 的变异**不可观测**；
+- 「清空」（②）的变异会被 **`trap_flush_d1` 的清空**兜住（第二拍必清）。
+
+⇒ ⇒ **判据的排程 MUST 让 skid 在 trap 拍为空**（先填 → trap 拍清 → trap+2 才重新填），
+两条变异的判别力才各自可观测 ⇒ ⇒ 落点 = `tests/test_rv32i_pipeline_behavior.cpp` 的
+**Batch 5-f**（变异 **M9** = ③ · **M9b** = ②，二者**各自**转红）。
+
+### 8.3 ⚠️ `trap_flush_d1` 的漏杀在**核级不可观测**（如实登记）
+
+漏掉 `trap_flush_d1`（kill 站点 ①）⇒ ⇒ 在途指令会进 IF/ID ⇒ ⇒ **pc↔指令的配对**错一个字。
+但 `mepc`（= 触发指令的 PC）**仍正确**、handler **仍执行** ⇒ ⇒ 核级观测面（写回序列 +
+`dbg_id_*`）**看不出配对错误**（本核**没有**「读当前 PC」的 CSR：`auipc` 可行但会新增耦合）。
+⇒ ⇒ 判别力**归组件级** Batch 5-e（**M8**）—— 与 ADR-048 §8 **D9.4** 的定位一致。
+
+### 8.4 ⚠️ **语义变更的爆炸半径**（3 条既有判据的期望值过时 ⇒ 已订正）
+
+「冻结 → 陷入」是**语义变更**（capability `rv32i-isa-semantics` 的 **MODIFIED** delta 已写死）
+⇒ ⇒ 三条**既有**判据的期望值因此过时（**判据变更，不是行为回归**）：
+
+| # | 用例 | 订正 |
+|---|---|---|
+| 1 | `test_rv32i_csr_instructions.cpp` 的 `funct3=4 ⇒ reason 3` | 只留**译码级**判据；「陷入」归 `test_rv32i_trap_entry.cpp`；镜像 MUST 在别名落点放**自环** |
+| 2 | `test_pipeline_wrapper.cpp` 的 `PC advances after reset release` | 填 **8** 个 NOP（未初始化 = 0 = 非法 ⇒ 会 trap ⇒ 实测 `instr_addr = 0x20000108`） |
+| 3 | `test_rv32i_soc_dual_parity.cpp` 的 `UnknownOpcodeFreezes + FenceIsNop` | 拆 `freezes` 两类（`reason = 1` 仍冻结 · `{2,3}` 陷入）· `retire(20)` 8 → **13** |
+
+⚠️ **第 3 条的手推曾被实测打红**：初版推 `retire` 恒 8（假设落点 word `0x040` 读到 0 ⇒ 再陷入）
+⇒ ⇒ 实测 **13** ⇒ ⇒ 根因 = `load_firmware` 补 **256** 个尾部 NOP ⇒ 落点是 NOP ⇒ `8 + 5 = 13`。
+⇒ ⇒ **手推 MUST 以「固件装载的真实内容」为前提**（含 `kTailFillWords`），不能只看镜像数组。
+
+### 8.5 追加判据：**单写口仲裁的同拍冲突**（AC7 的直接判据）
+
+原 §6.2 的 AC7 只由「`mepc` / `mcause` 成对」间接覆盖 ⇒ ⇒ **同拍冲突**（EX 级是
+CSR 写指令 + ID 级触发 trap）**没有直接判据** ⇒ ⇒ 追加用例：
+`addi` → `csrrw x0, mscratch, x1` → 非法字 ⇒ ⇒ 处理器读 `mscratch` MUST 得**复位值 0**
+（CSR 指令的写被抑制）· `mepc` MUST = 非法字的 PC。
+⇒ ⇒ 变异 **M12**（让 CSR 指令优先）⇒ 该用例转红 ✔

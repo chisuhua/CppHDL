@@ -85,13 +85,24 @@ struct RunOut {
     std::vector<uint32_t> illegal_reasons;                  ///< 出现过的**非零**值（去重）
 };
 
-/// 跑一个程序（`itcm` = 字镜像 · 尾部补 NOP 到 64 字 · `dtcm` 空）
+/// 镜像的**最小长度**（字）
+///
+/// ⚠️ **MUST ≥ 0x048**（2026-11-26 · P6-3）：trap 落点 = `mtvec` = `0x2000_0100`
+///    ⇒ ⇒ 核顶层折成 **12 位字索引** ⇒ ⇒ 别名索引 = **`0x040`** = **字 64**
+///    ⇒ ⇒ 镜像 MUST 覆盖它 ⇒ ⇒ 否则该字读到 **0**（= 又一条**未知 opcode**）
+///    ⇒ ⇒ `illegal_reason = 2` 会**混入**本文件的非法原因判据 ⇒ ⇒ 判据失真。
+constexpr std::size_t kImageWords = 0x048u;
+
+/// trap 落点的**别名字索引**（`(mtvec >> 2) & 0xFFF` · `mtvec` = `0x2000_0100`）
+constexpr std::size_t kTrapAliasWord = 0x040u;
+
+/// 跑一个程序（`itcm` = 字镜像 · 尾部补 NOP 到 `kImageWords` 字 · `dtcm` 空）
 ///
 /// ⚠️ **采样口径与 `tb_rv32i_soc.cpp` 逐字一致**：`sim.tick(1)` 之后取端口值。
 RunOut run_program(const std::vector<uint32_t> &prog, std::size_t cycles = 160) {
     std::vector<uint32_t> itcm = prog;
-    if (itcm.size() < 64) {
-        itcm.resize(64, riscv::NOP);
+    if (itcm.size() < kImageWords) {
+        itcm.resize(kImageWords, riscv::NOP);
     }
     const std::vector<uint32_t> dtcm;
 
@@ -381,20 +392,39 @@ TEST_CASE("CSR - funct3=0（ECALL）⇒ reason 1 且冻结", "[riscv][csr][illeg
 }
 
 // ===========================================================================
-// AC7：`funct3 = 4`（ISA 保留组合）⇒ `illegal_reason == 3` 且**冻结**
+// AC7：`funct3 = 4`（ISA 保留组合）⇒ `illegal_reason == 3`
 //
 // ⚠️ 判别力：原实现把整个 `OP_SYSTEM` 归 `1` ⇒ 保留组合**拿不到** `3`
 //    （T0.3 的实测：`retired=0` 但 reason 无法区分 1 / 3）。
+//
+// ⚠️ **2026-11-26 · P6-3 语义变更**：触发集 = `reason ∈ {2,3}` ⇒ ⇒ `reason = 3`
+//    **不再冻结** ⇒ ⇒ **陷入**（PC 重定向到 `mtvec`）⇒ ⇒ 「不退休」这条
+//    **不能再用 `retired == 0` 断言**（陷入后的落点会继续退休）。
+//    ⇒ ⇒ 本文件只保留**译码级**的判别力（`reason == 3` 可观测）；
+//    ⇒ ⇒ 「陷入」的判据（`mepc` / `mcause` / 重定向）归
+//    **`test_rv32i_trap_entry.cpp`**（P6-3 的**归属文件**）。
 // ===========================================================================
-TEST_CASE("CSR - funct3=4（保留组合）⇒ reason 3 且冻结", "[riscv][csr][illegal]") {
+TEST_CASE("CSR - funct3=4（保留组合）⇒ reason 3", "[riscv][csr][illegal]") {
     const uint32_t reserved = enc_csr(0, 4, kCsrMscratch, 0);
-    const RunOut out = run_program({reserved}, 60);
+    // ⚠️ 镜像 MUST 在**别名落点** `0x040` 放**自环**（`jal x0, 0`）：
+    //    P6-3 起 `reason = 3` ⇒ **陷入** ⇒ PC 重定向到 `mtvec` 的别名落点
+    //    ⇒ ⇒ 若那里是 NOP ⇒ NOP 会**跑出镜像末尾** ⇒ ⇒ 读到 0（= 未知 opcode）
+    //    ⇒ ⇒ `reason = 2` 会**混入**本用例的非法原因判据 ⇒ ⇒ 判据失真。
+    std::vector<uint32_t> prog(kImageWords, riscv::NOP);
+    prog[0] = reserved;
+    prog[kTrapAliasWord] = riscv::JAL(0, 0);
+    const RunOut out = run_program(prog, 60);
 
     REQUIRE(!out.fetched.empty());
     CHECK(out.fetched[0] == reserved);
+    std::string rs;
+    for (std::size_t i = 0; i < out.illegal_reasons.size(); ++i) {
+        rs += std::to_string(out.illegal_reasons[i]);
+        rs += ",";
+    }
+    INFO("illegal_reasons = " << rs);
     REQUIRE(out.illegal_reasons.size() == 1u);
     CHECK(out.illegal_reasons[0] == 3u);   // 保留组合
-    CHECK(out.retired == 0u);
 }
 
 // ===========================================================================

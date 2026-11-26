@@ -87,13 +87,20 @@ TEST_CASE("PipelineTestTop: PC advances after reset release", "[pipe][2]") {
     ch::ch_device<PipelineTestTop> top;
     ch::Simulator sim(top.context());
 
-    sim.set_input_value(top.instance().io().rst, 0);
+    // ⚠️ **2026-11-26 · P6-3 起**：**未初始化**的 ITCM 字读作 **0 = 未知 opcode**
+    //    ⇒ ⇒ 会**触发 trap**（PC 重定向到 `mtvec`）⇒ ⇒ 本用例若只填 word 0，
+    //    PC 走到 word 1 就 trap（实测 `instr_addr = 0x20000108`）⇒ ⇒ 测的就**不再是**
+    //    「PC 推进」。⇒ ⇒ MUST 把 PC 将访问的字**全部填成 NOP**（`rst=1` 期间填 ⇒
+    //    PC 不动 ⇒ 填充不会跑偏）。
+    sim.set_input_value(top.instance().io().rst, 1);
     sim.set_input_value(top.instance().io().itcm_write_en, 1);
-    // PC 从 0x80000000 开始 ⇒ ITCM 索引 = (pc >> 2) & 0xFFFFF = 0
-    sim.set_input_value(top.instance().io().itcm_write_addr, 0);
-    sim.set_input_value(top.instance().io().itcm_write_data, 0x00000013);  // NOP
-    sim.tick();
+    for (uint64_t w = 0; w < 8; ++w) {
+        sim.set_input_value(top.instance().io().itcm_write_addr, w);
+        sim.set_input_value(top.instance().io().itcm_write_data, 0x00000013);  // NOP
+        sim.tick();
+    }
     sim.set_input_value(top.instance().io().itcm_write_en, 0);
+    sim.set_input_value(top.instance().io().rst, 0);
 
     auto pc_before = sim.get_port_value(top.instance().io().instr_addr);
     sim.tick(4);

@@ -909,7 +909,7 @@ bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test   # exit 0（含�
 
 ---
 
-## 9. P6-3（trap 入口接线）**立项记录**（2026-11-26 · builder）
+## 9. P6-3（trap 入口接线）**闭合记录**（2026-11-26 · builder）
 
 - **载体**：`openspec/changes/rv32i-trap-entry-2026-11/`（`proposal` / `design`（§7.1 = ADR dated addendum **草案**）/ `tasks` / delta `rv32i-privilege` **ADDED ×1**）⇒ ⇒ `openspec validate` **valid（零 WARNING）**
 - **范围**：`ExceptionUnit` 首次接入流水线（inline ⇒ 与 pipeline 内 `CsrBank` **共享实例** ⇒ **零端口面变更**）· 触发源 = **非法指令**（cause 2）· `mepc` = 触发指令自身的 PC · PC 重定向**第二路**（trap/mret 内部 mux）· `trap_flush_d1` + skid 清空 · `CsrBank` **单写口仲裁**（`ExceptionUnit` 优先）
@@ -917,3 +917,27 @@ bash scripts/verify_no_duplicate_rv32i_headers.sh --self-test   # exit 0（含�
   （PC 选择器两路 → **三路** ⇒ ⇒ ADR-048 **D2 自己**写明「恰好触发该注释自己预警的**重审义务**」⇒ ⇒ builder **不得**改 ADR 决策内容 ⇒ ⇒ 草案已备好（`design.md` §7.1 的 D1–D4））
 - ⚠️ **D-1 的事实订正（实测 · builder）**：`mtvec` 复位值 `0x2000_0100` ⇒ ⇒ 取指地址 `instr_addr[13:2]`（12 位 ⇒ **高位被丢弃**）⇒ ⇒ **实际取到 I-TCM 的 word `0x040`** ⇒ ⇒ 「落在 TCM 外 ⇒ **静默重启**」**不成立**（是**别名**跳转）⇒ ⇒ ⇒ **固件级判据可行**（镜像 word 0x040 放停机指令）⇒ ⇒ ⚠️ 但 `mtvec` 的**取值语义**仍归 **D-1**（用户 / architect 域）
 - **仍待办**：P6-4（`ECALL`/`EBREAK` · **D-2** 未裁决）· P6-5（`MRET`）· P6-6（中断 · **D-2**）· P6-7（`mtval`）
+
+### 9.1 ✅ 实施与收口（2026-11-26）
+
+- **载体**：`openspec/changes/archive/2026-11-26-rv32i-trap-entry-2026-11/`
+  （delta = `rv32i-privilege` **ADDED ×1** + `rv32i-isa-semantics` **MODIFIED ×2**）
+- **架构依据**：ADR-048 §8 dated addendum **v1.1**（DA1–DA5）+ ADR-071 **v1.3** 标注
+  （审稿链：oracle **REJECT** → critic **APPROVE_WITH_CONDITIONS / 0 BLOCKER**）
+- **判据**：`examples/riscv-mini/tests/test_rv32i_trap_entry.cpp`（**核级 DUT** · 5 用例 / 515 断言 ·
+  期望值**手推**）+ `tests/test_rv32i_pipeline_behavior.cpp` 的 **Batch 5**（6 个双后端 pair）
+  · 变异 **M1–M11**：10 条转红；**M8 仅组件级转红**（`trap_flush_d1` 漏杀 ⇒ pc↔指令配对错一个字
+  ⇒ 核级观测面看不到；已如实登记）
+- **端口面**：核 IP **53** 端口逐字不变 · C6 快照 **51** 不变 · 层次化 module 数仍 **8**
+  （`verify_riscv_soc_core_ports.sh` PASS · `verify_no_duplicate_rv32i_headers.sh` C5/C6 PASS）
+- **锚点**：`CTEST_TOTAL` 283 → **284** · `EXAMPLES_TEST_SOURCES` 25 → **26** ·
+  `DUAL_BACKEND_PARITY_PAIRS` 291 → **297** · `include/cpu/AGENTS.md` 行数 7384 → **7507**
+- **实施期发现（如实登记）**：
+  ① ⚠️ **流水线级 DUT 不能直接喂镜像** —— imem 是 1 拍 `sread` ⇒ 组合喂 `instr_data` 会让
+  取指与 PC 错开一个字 ⇒ 判据 MUST 落**核级**（真 I-TCM）；
+  ② ⚠️ **DA3 的 ②③ 两站点互相掩护** —— skid 在 trap 拍**非空**时「填充排除」被 `!skid_valid`
+  挡住 ⇒ 变异不可观测 ⇒ Batch 5-f 的排程 MUST 让 skid 在 trap 拍**为空**（trap 前先填、
+  trap 拍清、trap+2 才重新填）；
+  ③ ⚠️ **`trap_flush_d1` 的漏杀在核级不可观测**（无「读 PC」CSR ⇒ 配对错一个字看不出来）
+  ⇒ 判别力归组件级 Batch 5-e（ADR-048 §8 D9.4 的定位）。
+- **验收报告**：`.rddf/reviews/rv32i-trap-entry-2026-11-verify.md`

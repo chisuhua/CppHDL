@@ -55,6 +55,12 @@ public:
         ch_out<ch_uint<32>> instr_addr;     // 指令地址输出
         ch_in<ch_uint<32>>  instr_data;     // 指令数据输入
         ch_in<ch_bool>      instr_ready;    // 指令存储器就绪
+        // ⚠️ **陷阱重定向**（2026-11-26 · P6-3 · change `rv32i-trap-entry-2026-11`）
+        //    ⇒ ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md` **§8**
+        //        （dated addendum v1.1 · **DA1 / DA2 / DA3 / DA4**）
+        //    ⇒ ⇒ **追加在端口组的最后** ⇒ ⇒ 既有端口的**编号不位移**（C1 同款纪律）
+        ch_in<ch_uint<32>>  trap_target;    // 陷阱目标 PC（= mtvec 基址 · P6-5 后含 mepc）
+        ch_in<ch_bool>      trap_flush;     // 陷阱重定向有效（**kill 域仅 IF/ID**）
     )
     
     IfStage(ch::Component* parent = nullptr, const std::string& name = "if_stage")
@@ -83,33 +89,51 @@ public:
         // 选择下一个 PC 值：
         // - 分支有效时：使用分支目标地址
         // - 正常情况：使用 PC+4
+        // ⚠️ **PC 选择器 = 三路**（ADR-048 §8 DA1）：**trap > branch > PC+4**
+        //    ⇒ ⇒ 「flush 唯一来源」被取代为「**来源互斥 + 优先级写死**」
+        //    ⇒ ⇒ ⚠️ `trap` 这一路的**目标**由**父层** mux 好（trap / mret 内部 mux
+        //        归 P6-5 ⇒ 本项 `mret_valid` 恒 0）⇒ ⇒ 本组件只接受**一个**陷阱输入
         ch_uint<32> next_pc_target = select(
-            io().branch_valid,
-            io().branch_target,
-            pc_plus_4
+            io().trap_flush,
+            io().trap_target,
+            select(
+                io().branch_valid,
+                io().branch_target,
+                pc_plus_4
+            )
         );
         
         // PC 更新使能信号：
         // - 不复位 且 不 stall 时更新（**flush 不在此列** —— 见下方说明）
         //
-        // ⚠️ `pc_update_en` **不看 `flush`**（2026-10-25，第 14 轮 critic NIT
-        //    补注）：
-        //    **隐式不变量**：flush 的**唯一**来源是
-        //    `hazard.io().flush = ex_branch & ex_branch_taken`，而
-        //    `next_pc_target` 的选择条件 `branch_valid` 接的正是同一个
-        //    `ex_stage.io().branch_taken` ⇒ flush 为真时 `next_pc_target`
-        //    **已经是**重定向目标 ⇒ PC 无需额外覆盖。
-        //    ⚠️ **2026-10-26 更新（`JAL`/`JALR` 接入后）**：`ex_branch` 的成分
-        //    从「仅条件分支（OP_BRANCH）」扩展为「条件分支 **+** 跳转
-        //    （OP_JAL / OP_JALR）」，`ex_branch_taken` 也相应包含「JAL/JALR 恒 true」。
-        //    ⇒ 不变量的**结构完全不变**（flush 仍只来自这一个表达式，且
-        //    `branch_valid` 仍接同一个 `ex_stage.branch_taken`）；
-        //    且 `ex_branch` 的两个成分**互斥**（一条指令不可能同时是 OP_BRANCH
-        //    与 OP_JAL/OP_JALR）⇒ 不存在「两个来源同时成立」的情形。
-        //    ⇒ 本 change **不需要**「第三路 PC 源」（`jump_valid` / `jump_target`）——
-        //      新增第三路反而会引入**第二个**无条件跳转来源 ⇒ 必须重新论证本不变量。
-        //    ⇒ 若将来引入**第三个** flush 来源（例如分支预测失败），此处 MUST
-        //      改为「flush 时也更新 PC」。
+        // ⚠️⚠️⚠️ **2026-11-26 · P6-3 · ADR-048 §8（dated addendum v1.1 · DA1/DA2）**
+        //    —— **本注释块已被修订**（「flush 唯一来源」这条**实现层不变量被取代**）：
+        //
+        //    **旧不变量（已作废）**：`flush` 的**唯一**来源是
+        //    `hazard.io().flush = ex_branch & ex_branch_taken` ⇒ ⇒ `pc_update_en`
+        //    「不看 flush」（flush 为真时 `next_pc_target` 已经是重定向目标）。
+        //
+        //    **新不变量（现行）**：取指级 PC 重定向有**两类**来源 ——
+        //    ① **控制流重定向**（taken 分支 / `JAL` / `JALR`）⇒ 由 `flush` 承载；
+        //    ② **陷阱重定向**（trap / mret）⇒ 由 **`trap_flush`** 承载。
+        //    ⇒ ⇒ 「来源唯一」被取代为「**同一拍至多一个重定向生效 + 优先级写死**」
+        //    （`trap > branch > PC+4`）⇒ ⇒ **不变量更强**（显式优先级 vs 依赖
+        //    「flush 只来自 EX 分支」的**隐式耦合前提**）。
+        //    ⇒ ⇒ `pc_update_en` 的形态 MUST 是
+        //    `!rst & !(stall & !(flush_redirect | trap_redirect))`
+        //    （**任何确实发生的重定向都压过 stall** ⇒ ⇒ 否则 redirect 被丢掉）。
+        //
+        //    ⚠️ **既有组件级契约逐字不变**：`stall=1 ∧ flush=1 ∧ branch_valid=0`
+        //    （既无 `flush_redirect` 也无 `trap_redirect`）⇒ ⇒ **PC 仍冻结**
+        //    ⇒ ⇒ `tests/test_rv32i_pipeline_behavior.cpp` 的 Batch 4-a **MUST NOT**
+        //    被破坏。
+        //
+        //    ⚠️ **判别力 MUST 落组件级**（ADR-048 **D9.4**）：流水线上两类重定向
+        //    由「trap 触发 MUST 排除 `flush`」**互斥** ⇒ ⇒ 优先级在流水线级
+        //    **不可观测** ⇒ ⇒ 组件级 MUST 覆盖「`trap_flush=1 ∧ branch_valid=1`」。
+        //
+        //    ⇒ ⇒ 架构依据 = `docs/adr/ADR-048-rv32i-fetch-skid-buffer.md` **§8**；
+        //    ⇒ ⇒ 审稿报告 = `.rddf/reviews/ADR-048-pc-redirect-second-path-review-2026-11.md`。
         //
         // ⚠️⚠️ **flush 与 stall 现在 CAN 同拍**（2026-11-15 · ADR-071 审稿修正）：
         //    **第二个 stall 来源** = 「未知 opcode 冻结」
@@ -151,10 +175,18 @@ public:
         //    （ADR-048 D5；组件级负向对照见
         //    `tests/test_rv32i_pipeline_behavior.cpp`）。
         auto flush_redirect = io().flush & io().branch_valid;
+        // ⚠️ **陷阱重定向**（ADR-048 §8 DA2）：`trap_redirect ≡ trap_flush`
+        //    ⇒ ⇒ **任何确实发生的重定向都压过 stall**（否则 redirect 被丢掉 ⇒
+        //        ⇒ 陷阱目标永远去不了）
+        //    ⚠️ **既有组件级契约逐字不变**：`stall=1 ∧ flush=1 ∧ branch_valid=0`
+        //        （既无 flush_redirect 也无 trap_redirect）⇒ ⇒ **PC 仍冻结**
+        auto trap_redirect = io().trap_flush;
         auto pc_update_en = select(
             io().rst,
             ch_bool(false),
-            select(io().stall & !flush_redirect, ch_bool(false), ch_bool(true))
+            select(io().stall & !(flush_redirect | trap_redirect),
+                   ch_bool(false),
+                   ch_bool(true))
         );
         
         // ⚠️ 历史注释「flush 时 PC 重置为 0 (简化处理，实际应该是分支目标)」是一个
@@ -200,6 +232,10 @@ public:
         //    ⇒ 用 `flush_d1`（flush 延迟一拍）把 T+1 拍的 IF/ID 装载**也**门掉。
         //    ⚠️ 代价：分支目标的指令要到 T+2 才进 ID ⇒ 冲刷气泡多 1 拍。
         ch_reg<ch_bool>     flush_d1(false, "flush_d1");
+        // ⚠️ **陷阱重定向也 MUST 多杀一拍**（ADR-048 §8 DA3 · 与 `flush_d1` **逐字同构**）
+        //    ⇒ ⇒ 理由同 `flush_d1`：imem 是 **1 拍 `sread`** ⇒ ⇒ 只杀一拍会让
+        //    **在途**指令正常进 ID
+        ch_reg<ch_bool>     trap_flush_d1(false, "trap_flush_d1");
 
         // ⚠️ **pc 必须与指令同拍进 ID**（实测缺陷，见下）
         //
@@ -217,6 +253,8 @@ public:
         
         // flush 延迟一拍（见 `flush_d1` 的说明）
         flush_d1->next = io().flush;
+        // 陷阱重定向同样延迟一拍（见 `trap_flush_d1` 的说明）
+        trap_flush_d1->next = io().trap_flush;
 
         // IF/ID 寄存器更新使能：
         // - 指令存储器就绪
@@ -227,7 +265,9 @@ public:
             io().rst,
             ch_bool(false),
             select(
-                io().stall | io().flush | flush_d1,
+                // ⚠️ **四个 kill 站点之 ①**（ADR-048 §8 DA3）：在途指令不得进 ID
+                io().stall | io().flush | flush_d1 |
+                io().trap_flush | trap_flush_d1,
                 ch_bool(false),
                 ch_bool(true)
             )
@@ -270,8 +310,10 @@ public:
             io().rst,
             ch_bool(false),
             select(
+                // ⚠️ **四个 kill 站点之 ③**（ADR-048 §8 DA3）：填充 MUST **排除**
+                //    陷阱重定向（否则把「trap 重定向后的错误路径指令」存进 skid）
                 io().stall & io().instr_ready & !skid_valid &
-                    !(io().flush | flush_d1),
+                    !(io().flush | flush_d1 | io().trap_flush | trap_flush_d1),
                 ch_bool(true),
                 ch_bool(false)
             )
@@ -288,7 +330,9 @@ public:
             skid_fill_en,
             ch_bool(true),
             select(
-                skid_drain_en | io().flush | flush_d1 | io().rst,
+                // ⚠️ **四个 kill 站点之 ②**（ADR-048 §8 DA3 · 扩展 D5 的防御性契约）
+                skid_drain_en | io().flush | flush_d1 |
+                io().trap_flush | trap_flush_d1 | io().rst,
                 ch_bool(false),
                 skid_valid
             )
@@ -343,7 +387,12 @@ public:
                 // ⚠️ `!primed` 也清零（不只是 flush）：复位后的首个周期
                 // MUST 是**气泡** —— 否则「`valid` 保持复位前的旧值 1」而
                 // `pc` / `instruction` 已装进幻影 ⇒ 有效位与数据**错配**。
-                io().flush | flush_d1 | !primed,
+                // ⚠️ **四个 kill 站点之 ④**（ADR-048 §8 DA3 · **承重件**）：
+                //    本 select 是**两级**的 —— `if_id_update_en = 0` 时走 else 分支，
+                //    由**内层**条件决定「清零」还是「**保持**」⇒ ⇒ 漏掉本项
+                //    ⇒ ⇒ `valid` **永不清零** ⇒ ⇒ 触发指令留在 IF/ID ⇒ ⇒
+                //    trap **每拍重触发** ⇒ ⇒ **活锁**（`mtvec` 处的指令永不进 ID）
+                io().flush | flush_d1 | io().trap_flush | trap_flush_d1 | !primed,
                 ch_bool(false),
                 if_id_valid_reg
             )

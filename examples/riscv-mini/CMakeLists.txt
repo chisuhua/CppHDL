@@ -117,6 +117,18 @@ riscv_mini_catch_test(test_rv32i_stall_integrity tests/test_rv32i_stall_integrit
 # ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
 riscv_mini_catch_test(test_rv32i_csr_instructions tests/test_rv32i_csr_instructions.cpp)
 
+# === RV32I trap 入口接线（P6-3 · change `rv32i-trap-entry-2026-11`）===
+# DUT = `riscv::Rv32iPipeline`（**公共头**）· 取指由测试喂 ⇒ ⇒ 程序完全可控
+# ⇒ ⇒ 判据 = 写回序列（`dbg_wb_*`）+ `dbg_illegal_reason` + 退休计数
+# ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
+riscv_mini_catch_test(test_rv32i_trap_entry tests/test_rv32i_trap_entry.cpp)
+
+# === RV32I trap 入口接线（P6-3 · change `rv32i-trap-entry-2026-11`）===
+# DUT = `src/rv32i_core_top.h`（核 IP 顶层）· 固件 = 手推编码的指令序列（经构造参数装载）
+# ⇒ ⇒ 判据 = `mepc` / `mcause` 的 **CSR 指令读回**（端到端）+ PC 重定向 + 退休计数
+# ⚠️ **不新增端口**（只用既有 `dbg_*` / `obs_perf_*` 观测 ⇒ 端口面零变化）。
+# ⚠️ 标签 `base` ⇒ `CTEST_TOTAL` +1（锚点同批同步）。
+
 # === 官方 riscv-tests 套件门禁（change `riscv-tests-gate-2026-11` · R2）===
 # DUT = `src/rv32i_core_top.h`（核 IP 顶层）· 镜像 = **入库**的 40 份
 # `rv32ui-p-*` mem-split 字镜像（来源 / 改造 / 排除项 = tests/riscv-tests/PROVENANCE.md）。
