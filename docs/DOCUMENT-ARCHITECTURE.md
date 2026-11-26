@@ -69,7 +69,7 @@ CppHDL/
 │   ├── simulation/              # 仿真语义 · 1 篇（ARCHITECTURE.md = memory read timing 权威）
 │   ├── architecture/            # 🏛 当前态架构主题 · 4 篇 + 索引（README 有判读纪律）
 │   ├── skills/                  # ⚡ 技能库 · 6 项活（5 skill 目录 + 1 速查）+ archive/（11 篇）
-│   ├── riscv-mini/              # 集成测试架构 · 1 篇
+│   ├── riscv-mini/              # riscv-mini **测试知识入口** · 1 篇
 │   ├── adr/                     # ⚖️ 决策正本 · 76 篇（**决策以它为准**）
 │   │
 │   └── archive/                 # 📦 历史归档 · 141 篇 · **14 个分类目录 + 索引**
@@ -242,7 +242,7 @@ sim.set_input_value(data, x);  // x 未定义
 | simulation | **1 篇** | 只留 `ARCHITECTURE.md` |
 | architecture | **4 篇** + 索引 | 只留当前态权威（历史 26 篇已归档） |
 | skills | **6 项活 + 11 归档** | 仓根 `skills/` 已并入 |
-| riscv-mini | **1 篇** | `test-architecture.md` |
+| riscv-mini | **1 篇** | `test-architecture.md`（**测试知识入口**：资产地图 / 完整清单 / 跑法 / 门禁 / 判据纪律 / 护栏矩阵 / 锚点）|
 | adr（决策正本） | **76 篇** | L2 历史快照 |
 | **archive（归档）** | **141 篇** | 14 个分类目录 + 索引 |
 | **活文档区合计** | **约 40 篇** | 重组前 483 篇 |

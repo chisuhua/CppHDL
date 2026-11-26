@@ -1,842 +1,454 @@
-# riscv-mini 集成测试架构方案
+# riscv-mini 测试知识入口（Testing Entry Point）
 
-**版本**: 2.0  
-**创建日期**: 2026-04-14  
-**状态**: 执行中  
-
----
-
-## 目录
-
-1. [架构总览](#1-架构总览)
-2. [测试分层模型](#2-测试分层模型)
-3. [Layer 1: ISA 层 (riscv-tests)](#3-layer-1-isa-层-riscv-tests)
-4. [Layer 2: 中断与异常层](#4-layer-2-中断与异常层)
-5. [Layer 3: SoC 集成层](#5-layer-3-soc-集成层)
-6. [Layer 4: FreeRTOS OS 语义层](#6-layer-4-freertos-os-语义层)
-7. [测试基础设施](#7-测试基础设施)
-8. [CI/CD 集成方案](#8-cicd-集成方案)
-9. [实施计划与里程碑](#9-实施计划与里程碑)
-10. [文件目录结构](#10-文件目录结构)
+> **版本**：3.0 · **重写日期**：2026-11-26
+> **取代**：2026-04-14 的《riscv-mini 集成测试架构方案》v2.0（状态标「执行中」）
+> —— 该版的 **Layer 4 FreeRTOS OS 语义层从未落地**（规划已归档到 `docs/archive/freertos-planning/`），
+> Layer 1 的「41 个」与实际入库的 **40** 个不符，且**完全没有** RTL 产物 / Verilator 层
+> ⇒ ⇒ 本版按**当前实际资产**重写，不再保留「方案」形态。
+>
+> **本篇的角色**：riscv-mini **测试面**的唯一入口 —— 资产地图 · 完整清单 · 跑法 ·
+> 门禁 · 判据纪律 · 护栏矩阵 · 计数锚点 · 已知边界 · 导航。
+>
+> **本篇不做的事**：**不复述**其它文档的正文 ⇒ 需要的细节**链出去**（见 §9）。
+> 权威分层：**能力**在 `openspec/specs/**`（capability）· **决策**在 `docs/adr/**`（ADR）
+> ⇒ ⇒ 本篇只管**测试面**（怎么测、怎么跑、凭什么信）。
 
 ---
 
-## 1. 架构总览
-
-### 1.1 设计理念
-
-riscv-mini 是一个运行在 C++ 模拟器中的 RV32I CPU，测试架构遵循 **从底层 ISA 到上层 OS 语义** 的渐进式验证策略：
+## 0. 一句话地图
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 4: FreeRTOS OS 语义层                                  │  ← x86_64 Catch2 测试加载 FreeRTOS 编译的 ELF
-│  任务调度 · 上下文切换 · 队列/信号量 · 定时器 ISR             │  ← UART 输出解析验证 ("SUCCESS" 关键字)
-├─────────────────────────────────────────────────────────────┤
-│  Layer 3: SoC 集成层                                         │  ← x86_64 Catch2 测试
-│  UART MMIO · CLINT 计时器 · 地址解码 · 固件加载              │  ← 内存映射 IO 验证
-├─────────────────────────────────────────────────────────────┤
-│  Layer 2: 中断与异常层                                       │  ← x86_64 Catch2 测试
-│  CLINT 定时中断 · 异常 Trap · mret 恢复                      │  ← CSR/PC 流验证
-├─────────────────────────────────────────────────────────────┤
-│  Layer 1: ISA 层 (riscv-tests)                               │  ← x86_64 Catch2 测试加载 .bin
-│  41 个 RV32UI 指令集测试 · tohost@0x80001000 机制            │  ← 解释器或 SoC 执行
-├─────────────────────────────────────────────────────────────┤
-│  Layer 0: 模块单元测试                                       │  ← x86_64 Catch2 测试
-│  ALU · RegFile · Decoder · 流水线组件                        │  ← 单模块验证
-└─────────────────────────────────────────────────────────────┘
+        ┌─────────────────────────── riscv-mini 测试面 ───────────────────────────┐
+        │                                                                     │
+        │  L0 组件级          L1 核 IP 级            L2 交付物级                    │
+        │  include/cpu/**    src/rv32i_core_top.h   生成的 Verilog                │
+        │        │                  │                     │                        │
+        │   根 tests/        examples/riscv-mini/     verilator + 独立 .sv TB      │
+        │   （8 个 RV32I）      tests/（24 源）        （flat / hier 两形态）      │
+        │        │                  │                     │                        │
+        │   组件行为断言        固件镜像 + 写回序列      RESULT: checks=N fails=0    │
+        │   逐拍/逐值          退休计数 / CSR 读回      官方套件 tohost 协议         │
+        │                                                                     │
+        │        └──────────────► 三道门禁 ◄──────────────┘                     │
+        │              核级官方套件 │ 交付物级官方套件 │ examples 运行护栏           │
+        └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 关键执行模型
+- **L0 组件级** ⇒ DUT = `include/cpu/**` 的单个组件 ⇒ 载体 = 仓根 `tests/`
+- **L1 核 IP 级** ⇒ DUT = `examples/riscv-mini/src/rv32i_core_top.h` ⇒ 载体 = `examples/riscv-mini/tests/`
+- **L2 交付物级** ⇒ DUT = **生成的 Verilog**（flat / hier）⇒ 载体 = 手写独立 TB（`.sv`）+ verilator
 
-| 层次 | 测试运行位置 | 被测固件 | 验证方式 |
-|------|------------|---------|---------|
-| Layer 0 | x86_64 (Catch2) | 无固件 | C++ 对象方法调用 |
-| Layer 1 | x86_64 (Catch2) | RV32I .bin (riscv32-unknown-elf-gcc 编译) | tohost MMIO 写入 |
-| Layer 2 | x86_64 (Catch2) | 手写汇编/小 C 程序 | CSR/中断流断言 |
-| Layer 3 | x86_64 (Catch2) | C 编译的裸机固件 | UART 输出捕获 |
-| Layer 4 | x86_64 (Catch2) | FreeRTOS 编译的 ELF | "SUCCESS" 关键字匹配 |
-
-**所有测试都运行在 x86_64 主机上**，被测代码是在 RISC-V 工具链下编译的固件。模拟器 (Rv32iSoc) 逐周期执行 RISC-V 指令。
-
-**决策记录 (2026-04-14)**:
-- riscv-tests 执行方式: **仅 Rv32iSoc Pipeline 模式** (CI Gate), Interpreter 保留为开发调试工具
-- FreeRTOS 源码来源: **从 FreeRTOS 官方仓库 clone + 源码编译** (riscv32-unknown-elf-gcc)
-
-### 1.3 riscv-tests 与 FreeRTOS 测试的关系
-
-```
-riscv-tests (Layer 1)                    FreeRTOS Tests (Layer 4)
-─────────────────                        ────────────────────────
-目的: 证明 CPU 正确执行指令               目的: 证明 OS 语义正确
-验证: 单条指令行为                        验证: 多任务调度/同步
-方法: 写 tohost → 读结果                  方法: UART 输出解析
-依赖: ALU/RegFile/L/SW                    依赖: Layer 1+2+3 全部通过
-状态: 41 .bin 已编译                      状态: Phase E, 待实施
-```
-
-**两者正交** — Layer 1 确保指令正确，Layer 4 确保 OS 利用这些正确指令实现了正确的调度语义。
+⚠️ **三层不可互相替代** ⇒ 见 §5.2「两后端一致 ≠ 正确」与 §4.2。
 
 ---
 
-## 2. 测试分层模型
+## 1. 判据类型（正交的四个面）
 
-### 2.1 层次依赖图
+同一个设计要同时被四类判据覆盖才算「测过」：
 
-```
-Layer 4 (FreeRTOS)
-    │  依赖: Layer 1 (CSR/SYSTEM) Layer 2 (中断) Layer 3 (SoC: UART+CLINT)
-    │
-    ├── test_freertos_blinky.cpp    ← 最小 FreeRTOS 验证
-    ├── test_freertos_full.cpp      ← 全面 OS 功能验证
-    └── test_context_switch.cpp     ← 寄存器级上下文切换验证
-    │
-Layer 3 (SoC 集成)
-    │  依赖: Layer 1 (CSR) Layer 2 (CLINT/异常)
-    │
-    ├── test_soc_hello_world.cpp    ← UART 打印验证
-    ├── test_firmware_loader.cpp    ← ELF/BIN/HEX 加载
-    ├── test_uart_mmio.cpp          ← 内存映射 IO
-    └── test_address_decoder.cpp    ← 6 区域地址映射
-    │
-Layer 2 (中断与异常)
-    │  依赖: Layer 1 (CSR/SYSTEM/mret)
-    │
-    ├── test_interrupt_flow.cpp     ← 定时中断完整流程
-    ├── test_exception_trap.cpp     ← 异常入口/恢复
-    └── test_mret_recovery.cpp      ← mret PC 恢复
-    │
-Layer 1 (ISA riscv-tests)
-    │  依赖: Layer 0 (ALU/RegFile/解码/L-SW/Branch)
-    │
-    ├── test_riscv_tests.cpp        ← riscv-tests 官方套件
-    └── test_rv32i_bare.cpp         ← 基本 ISA 子集
-    │
-Layer 0 (模块单元)
-    ├── rv32i_phase1_test.cpp       ← RegFile/ALU/Decoder
-    ├── rv32i_phase2_test.cpp       ← Branch/Jump
-    └── rv32i_phase3_test.cpp       ← Load/Store
-```
+| 面 | 问的问题 | 载体 | 例 |
+|---|---|---|---|
+| **译码面** | 指令 → 译码结果对不对 | 组件级 / 核级 | `illegal_reason` · `sys_trap_kind` |
+| **行为面** | 跑起来对不对（逐拍 / 退休计数 / 写回序列） | 核级固件镜像 | `test_rv32i_trap_entry` · `test_rv32i_soc_dual_parity` |
+| **契约面** | 寄存器 / CSR / 端口语义守不守 | 组件级 | `test_csr_unit`（复位值 + WARL）· 53 端口契约表 |
+| **产物面** | 交付的 Verilog 对不对 | verilator + 独立 TB | `tb_rv32i_soc.sv` · `tb_rv32i_official.sv` |
 
-### 2.2 Gate 矩阵
-
-```
-Phase 0 (Layer 0) → Phase A (CSR) → Phase B (流水线)
-      │                                    ↓
-      │                              Phase C (中断)
-      │                                    ↓
-      │                              Phase D (SoC)
-      │                                    ↓
-      └──────────────────────→ Phase D.5 (riscv-tests)
-                                    │
-                                    ↓
-                              Phase E (FreeRTOS)
-```
-
-每层 Gate 标准：
-
-| Layer | Gate 条件 | Pass 标准 |
-|-------|----------|-----------|
-| L0 | 编译 0 警告 | 所有现有测试 pass |
-| L1 | riscv-tests 41/41 | tohost=1 ≥ 90% (CSR 相关测试除外) |
-| L2 | CLINT 中断触发 | 中断延迟 ≤ 10 cycles |
-| L3 | UART 输出正确 | "Hello World" 在 ≤ 10000 cycles 内打印 |
-| L4 | FreeRTOS 启动 | "SUCCESS" 在 ≤ 60s 内输出 |
+⚠️ **只测译码面是最常见的不足** ⇒ 判据必须落到**可观测行为**（写回序列 / 退休计数 /
+CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 
 ---
 
-## 3. Layer 1: ISA 层 (riscv-tests)
+## 2. 完整清单
 
-### 3.1 测试概述
+### 2.1 L1 核 IP / SoC 级 —— `examples/riscv-mini/tests/`（**24 个源 → 26 个 CTest 条目**）
 
-riscv-tests 是 RISC-V 官方 ISA 验证套件。我们在 Phase D.5 已经完成了：
-- ✅ riscv-tests 仓库克隆到 `«本机»/`
-- ✅ riscv32-unknown-elf-gcc 工具链 (v15.2.0) 位于 `«本机»/`
-- ✅ 41 个 RV32UI 测试编译为 .bin 文件 (位于 `build/rv32ui/`)
-- ✅ Rv32iInterpreter 解释器框架创建
-- ✅ 4 个手写测试通过 (add, load/store, branch, jal)
+> 判据 = `scripts/verify_example_test_wiring.sh`（C1 归属守恒 · C2 数量守恒 ·
+> C3 逐条 exit 0 · C3b 日志无 error/fatal）⇒ ⇒ **增删测试 MUST 同批**更新
+> 根 `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点（**26**）。
+> ⚠️ **接线表（源 → 条目）的运行期副本** = `examples/riscv-mini/AGENTS.md` 的 **§TEST** 段
+> ⇒ ⇒ 两处 MUST 同批改（否则漂移）。
 
-### 3.2 测试分类
+| 源文件（`examples/riscv-mini/tests/`） | CTest 条目 | 判据面 / 覆盖 | 后端 | TIMEOUT | 规模<br>（用例 / 断言） |
+|---|---|---|---|---|---|
+| `test_pipeline_exec.cpp` | `test_pipeline_exec` | 行为面 · 流水线执行 | 解释器 | 300 | 16 / 69 |
+| `test_soc_hello_world.cpp` | `test_soc_hello_world` | 行为面 · SoC 冒烟 | 解释器 | 300 | 4 / 11 |
+| `test_riscv_tests.cpp` | `test_riscv_tests` | 行为面 · 仓内 riscv-tests（⚠️ **43/49 用例 SKIP**，见 §8.1） | 解释器 | 300 | 49（**6 passed · 43 skipped**）/ 10 |
+| `test_riscv_tests_pipeline.cpp` | **（无 · 只构建）** | ⚠️ 46 用例全依赖仓外二进制 ⇒ Catch2 exit **4** ⇒ **不进 CTest**（§8.2） | — | — |
+| `test_csr_unit.cpp` | `test_csr_unit` | 契约面 · CSR 存储体（复位值 / WARL 掩码） | 解释器 | 300 | 15 / 60 |
+| `test_riscv_tests_soc.cpp` | `test_address_decoder` | 契约面 · 地址译码 | 解释器 | 300 | 10 / 132 |
+| `test_axil_mmio_master.cpp` | `test_axil_mmio_master` | 行为面 · 核侧 AXI4-Lite 主设备（一次事务恰好一拍 ready） | 解释器 | 300 | 5 / 58 |
+| `test_rv32i_core_mmio.cpp` | `test_rv32i_core_mmio` | 行为面 · 核级 MMIO 通道（IP 接口面单独验证） | 解释器 | 300 | 7 / 50 |
+| `test_rv32i_stall_integrity.cpp` | `test_rv32i_stall_integrity` | 行为面 · 反压期操作数完整性 | 解释器 | 300 | 3 / 21 |
+| `test_rv32i_csr_instructions.cpp` | `test_rv32i_csr_instructions` | 译码面 + 行为面 · 6 种 CSR 指令 | 解释器 | 300 | 8 / 31 |
+| `test_rv32i_trap_entry.cpp` | `test_rv32i_trap_entry` | 行为面 · trap 入口（非法指令 / `ECALL` / `EBREAK` / `WFI` / `MRET`） | 解释器 | 300 | 11 / 1196 |
+| `test_rv32i_official_suite.cpp` | `test_rv32i_official_suite_g1`<br>`…_g2` `…_g3` `…_g4` | 行为面 · **官方 `rv32ui-p-*` 40 个**（每组 10 个 · 4 个独立二进制） | 解释器 | 300 | 各 11 / 22 |
+| `test_pipeline_minimal.cpp` | `test_pipeline_minimal` | 行为面 · pipeline 最小载体 | 解释器 | 300 | 1 / 1 |
+| `test_pipeline_debug.cpp` | `test_pipeline_debug` | 行为面 · pipeline 调试观测 | 解释器 | 300 | 9 / 15 |
+| `test_pipeline_wrapper.cpp` | `test_pipeline_wrapper` | 行为面 · pipeline wrapper | 解释器 | 300 | 3 / 5 |
+| `test_wrapper_simple.cpp` | `test_wrapper_simple` | 行为面 · wrapper（简单） | 解释器 | 300 | 2 / 4 |
+| `test_wrapper_ifstage.cpp` | `test_wrapper_ifstage` | 行为面 · wrapper（IF stage） | 解释器 | 300 | 2 / 4 |
+| `test_wrapper_pipeline.cpp` | `test_wrapper_pipeline` | 行为面 · wrapper（整条流水线） | 解释器 | 300 | 2 / 3 |
+| `test_ifstage_device.cpp` | `test_ifstage_device` | 行为面 · IF stage 独立 device | 解释器 | 300 | 1 / 2 |
+| `test_rv32i_pipeline.cpp` | `test_rv32i_pipeline_example` | 行为面 · 前推通路（⚠️ **与仓根 `tests/test_rv32i_pipeline.cpp` 不是同一份**） | 解释器 | 300 | 6 / 25 |
+| `test_interrupt_flow.cpp` | `test_interrupt_flow` | 行为面 · CLINT / 中断 / 陷阱入口 / `MRET` | 解释器 | 300 | 18 / 68 |
+| `test_rv32i_soc_dual_parity.cpp` | `test_rv32i_soc_dual_parity` 🔷 | 行为面 · **双后端** SoC parity | 解释器 + verilator | 600 | 15 / **23213** |
+| `test_rv32i_hier_rtl.cpp` | `test_rv32i_hier_rtl` 🔷 | 产物面 · **双后端** 层次化产物（8 module / 53 端口） | 解释器 + verilator | 900 | 4 / 188 |
+| `test_cache_smoke.cpp` | `riscv_mini_cache_smoke` 🔷 | 产物面 · **双后端** cache wrapper smoke | 解释器 + verilator | 600 | 12 / 78 |
 
-| 类别 | 测试名 | 指令验证 | CSR 需要 | 预期状态 |
-|------|--------|---------|---------|---------|
-| **ALU 算术** | add, addi | ADD, ADDI | ❌ | ✅ 应 pass |
-| **ALU 算术** | sub, lui | SUB, LUI | ❌ | ✅ 应 pass |
-| **ALU 逻辑** | and, andi | AND, ANDI | ❌ | ✅ 应 pass |
-| **ALU 逻辑** | or, ori | OR, ORI | ❌ | ✅ 应 pass |
-| **ALU 逻辑** | xor, xori | XOR, XORI | ❌ | ✅ 应 pass |
-| **移位** | sll, slli | SLL, SLLI | ❌ | ✅ 应 pass |
-| **移位** | srl, srli | SRL, SRLI | ❌ | ✅ 应 pass |
-| **移位** | sra, srai | SRA, SRAI | ❌ | ✅ 应 pass |
-| **比较** | slt, slti | SLT, SLTI | ❌ | ✅ 应 pass |
-| **比较** | sltu, sltiu | SLTU, SLTIU | ❌ | ✅ 应 pass |
-| **分支** | beq, bne | BEQ, BNE | ❌ | ✅ 应 pass |
-| **分支** | blt, bltu | BLT, BLTU | ❌ | ✅ 应 pass |
-| **分支** | bge, bgeu | BGE, BGEU | ❌ | ✅ 应 pass |
-| **跳转** | jal | JAL | ❌ | ✅ 应 pass |
-| **跳转** | jalr | JALR | ❌ | ✅ 应 pass |
-| **跳转** | auipc | AUIPC | ❌ | ✅ 应 pass |
-| **加载** | lb, lbu | LB, LBU | ❌ | ✅ 应 pass |
-| **加载** | lh, lhu | LH, LHU | ❌ | ✅ 应 pass |
-| **加载** | lw | LW | ❌ | ✅ 应 pass |
-| **存储** | sb | SB | ❌ | ✅ 应 pass |
-| **存储** | sh | SH | ❌ | ✅ 应 pass |
-| **存储** | sw | SW | ❌ | ✅ 应 pass |
-| **综合** | st_ld | LW/SW 混合 | ❌ | ✅ 应 pass |
-| **综合** | ma_data | 内存对齐 | ❌ | ✅ 应 pass |
-| **综合** | simple | 基础验证 | ❌ | ✅ 应 pass |
-| **综合** | fence_i | 指令屏障 | ❌ | ✅ 应 pass |
-| **特殊*** | (需要 CSR) | 各种 | ✅ | ⏸️ 需 CSR 支持 |
+🔷 = 带 **`verilator_e2e`** 标签 ⇒ 需 verilator + `RESOURCE_LOCK "verilator_backend"`
+⇒ ⇒ **必须串行**（与其它 verilator 任务并发会互抢锁 ⇒ 表现为随机失败）。
 
-### 3.3 riscv-tests 运行机制
+> **规模列 = 2026-11-26 实测**（逐个二进制跑出来的 Catch2 汇总行）⇒ ⇒
+> `test_rv32i_official_suite_g1..g4` 每组 = **10 个官方测试 + 1 个负向对照用例**。
+> ⚠️ 该列是**快照** ⇒ ⇒ 改动测试后 MUST 同批刷新（§10）。
 
-```
-┌─────────────────────────────────────────────────┐
-│  test_riscv_tests.cpp (Catch2 测试)               │
-│                                                   │
-│  1. 加载 .bin 文件到 0x80000000                    │
-│  2. 从 _start 入口点开始执行                       │
-│  3. 监控 0x80001000 (tohost) 的写入                │
-│     - 写入 1 → PASS                               │
-│     - 写入 0 → FAIL                               │
-│  4. 超时 (默认 10000 cycles) → TIMEOUT             │
-│                                                   
-│  执行方式:                                         │
-│  ├── Interpreter (当前)                           │
-│  │   └── 逐指令 RISC-V 模拟                        │
-│  │   └── 缺 CSR/Trap → CSR 测试 fail               │
-│  │                                                 │
-│  └── Rv32iSoc Pipeline (目标)                     │
-│      └── 完整 5 级流水线模拟                       │
-│      └── CSR/异常完整支持                          │
-└─────────────────────────────────────────────────┘
-```
+⚠️ **`test_rv32i_official_suite.cpp` 一源四 target 是刻意的**（不是重复）：
+40 个官方测试跑完 ≈ **7 min** ⇒ 超过仓内单测 **300 s** 上限 ⇒ ⇒ 拆 4 组 × 10 个
+（每组 ≈ 105 s）⇒ 且护栏 C3 按「**ctest 条目名 = 可执行文件名**」找二进制 ⇒
+「同一二进制 + 过滤参数」会被护栏判成「没跑」⇒ ⇒ MUST 是**独立二进制**。
 
-### 3.4 riscv-tests 运行机制
+### 2.2 L0 组件级 —— 仓根 `tests/`（8 个 RV32I 条目）
 
-```
-┌─────────────────────────────────────────────────┐
-│  test_riscv_tests_soc.cpp (Catch2 测试)            │
-│                                                   │
-│  1. 加载 .bin 文件到 0x80000000                    │
-│  2. 从 _start 入口点开始执行 via Rv32iSoc          │
-│  3. 监控 0x80001000 (tohost) 的写入                │
-│     - 写入 1 → PASS                               │
-│     - 写入 0 → FAIL                               │
-│  4. 超时 (默认 10000 cycles) → TIMEOUT             │
-│                                                   
-│  执行方式 (决策):                                  │
-│  ├── CI Gate: Rv32iSoc Pipeline (唯一正式模式)     │
-│  │   └── 完整 5 级流水线模拟                       │
-│  │   └── CSR/异常完整支持                          │
-│  │                                                 │
-│  └── 开发调试: Interpreter (辅助工具)              │
-│      └── 逐指令 RISC-V 模拟                        │
-│      └── 快速迭代，不纳入 CI                       │
-└─────────────────────────────────────────────────┘
-```
+| CTest 条目 | 源 | 判据面 | 后端 |
+|---|---|---|---|
+| `test_rv32i_pipeline` | `tests/test_rv32i_pipeline.cpp` | 行为面 · 流水线各级 | 解释器 |
+| `test_rv32i_alu` | `tests/test_rv32i_alu.cpp` | 行为面 · ALU | 解释器 |
+| `test_rv32i_alu_differential` | `tests/test_rv32i_alu_differential.cpp` | 行为面 · ALU 差分 | 解释器 |
+| `test_rv32i_pipeline_behavior` 🔷 | `tests/test_rv32i_pipeline_behavior.cpp` | 行为面 · **Batch 5**（trap / skid / 仲裁等 6 个双后端 pair） | 解释器 + verilator |
+| `test_rv32i_arch_dual` 🔷 | `tests/test_rv32i_arch_dual.cpp` | 契约面 · 拍表（CSR 复位值 + WARL） | 解释器 + verilator |
+| `test_rv32i_stage_dual` 🔷 | `tests/test_rv32i_stage_dual.cpp` | 行为面 · 各级 | 解释器 + verilator |
+| `test_rv32i_mem_backpressure` | `tests/test_rv32i_mem_backpressure.cpp` | 行为面 · 存储反压 | 解释器 |
+| `test_rv32i_timing_dual` 🔷 | `tests/test_rv32i_timing_dual.cpp` | 行为面 · 时序契约 | 解释器 + verilator |
 
-### 3.5 CMake 集成方案
+### 2.3 非 CTest 载体
 
-add_executable(test_riscv_tests_interpreter
-    tests/test_riscv_tests.cpp 
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp)
-target_link_libraries(test_riscv_tests_interpreter PRIVATE cpphdl)
-target_compile_definitions(test_riscv_tests_interpreter PRIVATE
-    RISCV_TESTS_BIN_DIR="${RISCV_TESTS_BIN_DIR}")
-add_test(NAME riscv_tests_interpreter COMMAND test_riscv_tests_interpreter)
-set_tests_properties(riscv_tests_interpreter PROPERTIES LABELS "riscv-tests;interpreter")
+| 载体 | 是什么 | 怎么跑 |
+|---|---|---|
+| `examples/riscv-mini/tb_rv32i_soc` | **激励驱动 + RTL 发射入口**（三角色分离）⇒ 默认 = 验证模式（24 条手推判据）· `--emit-rtl` = 扁平产物 · `--emit-rtl --hierarchical` = 层次化产物 · `--emit-rtl --firmware-init` = 带固件初值 | `./build/examples/riscv-mini/tb_rv32i_soc`（**不是** CTest 条目 ⇒ `ctest` 跑不到它） |
+| `examples/riscv-mini/tb_rv32i_soc.sv` | **手写**独立 Verilog TB（24 条判据的 Verilog 侧实现）⇒ 两种形态**共用**（顶层端口表同源 ⇒ 连线逐字相同） | 由 `scripts/rv32i_rtl_sim_env.sh` / `verify_examples_rtl_sim.sh` 驱动 |
+| `examples/riscv-mini/tb_rv32i_official.sv` | **手写**独立 TB（官方套件 · **镜像无关** · `tohost` 协议） | 由 `scripts/verify_rv32i_official_rtl.sh` 驱动 |
+| `rv32i_phase1_test` / `_phase2_test` / `_phase3_test` | Phase 1–3 的历史自测程序（**带 `main()`** ⇒ 属 examples 运行护栏的被跟踪集合） | `./build/examples/riscv-mini/rv32i_phase1_test` |
+| `test_riscv_tests_pipeline` | ⚠️ 46 用例全依赖**仓外** riscv-tests 预编译二进制 ⇒ **只构建不注册** | 手工跑（需 `RISCV_TESTS_PATH`） |
 
-add_executable(test_riscv_tests_soc
-    tests/test_riscv_tests_soc.cpp 
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/catch_amalgamated.cpp)
-target_link_libraries(test_riscv_tests_soc PRIVATE cpphdl)
-target_compile_definitions(test_riscv_tests_soc PRIVATE
-    RISCV_TESTS_BIN_DIR="${RISCV_TESTS_BIN_DIR}")
-add_test(NAME riscv_tests_soc COMMAND test_riscv_tests_soc)
-set_tests_properties(riscv_tests_soc PROPERTIES LABELS "riscv-tests;soc")
-```
+### 2.4 已退役（**删除留痕**，不参与任何自动化判定）
 
-### 3.5 路径管理策略
+`examples/removed_examples.txt` 记录了 **11 条**已删除 target 的理由与归位条件
+（**8 个**测试相关：6 个曾声明过的 CMake target + 2 个从未进 CMakeLists 的孤儿源文件
+· **3 个**发射薄壳 `emit_rtl_*`）⇒ ⇒ **不要**在别处记「某某测试没了」—— 那里有完整留痕。
 
-当前 `test_riscv_tests.cpp` 中硬编码路径：
-```cpp
-const char* RISCV_TESTS_PATH = "«本机»/";
-```
-
-改为 CMake 编译宏传入：
-```cpp
-#ifndef RISCV_TESTS_BIN_DIR
-#define RISCV_TESTS_BIN_DIR "«本机»/"
-#endif
-```
-
-CMakeLists.txt 中：
-```cmake
-target_compile_definitions(test_riscv_tests PRIVATE
-    RISCV_TESTS_BIN_DIR="${RISCV_TESTS_BIN_DIR}")
-```
-
-支持运行时覆盖环境变量：
-```cmake
-# 如果设置了 RISCV_TESTS_PATH 环境变量，优先使用
-if(DEFINED ENV{RISCV_TESTS_PATH})
-    set(RISCV_TESTS_BIN_DIR "$ENV{RISCV_TESTS_PATH}")
-endif()
-```
+⚠️ **删除留痕 ≠ 豁免**：豁免在 `examples/disabled_examples.txt`（**存活但未跑** ⇒ 按名字判定）
+⇒ ⇒ 两个文件 MUST 分开（混在一起会让删除留痕退化成「按名字的永久自动豁免」）。
 
 ---
 
-## 4. Layer 2: 中断与异常层
+## 3. 怎么跑
 
-### 4.1 测试覆盖矩阵
-
-| 测试文件 | 测试名 | 验证内容 | 依赖 | 状态 |
-|---------|--------|---------|------|------|
-| `test_interrupt_flow.cpp` (已存在) | CLINT 定时中断 | `mtime` 递增 → `mtimecmp` 触发 → `mtip` 置位 | CLINT, CSR | ✅ |
-| `test_interrupt_flow.cpp` (已存在) | 中断 trap 入口 | PC 跳转 → `mcause`=7 → `mepc` 保存 | CSR, Pipeline | ✅ |
-| `test_interrupt_flow.cpp` (已存在) | `mret` 返回 | `mepc` → PC 恢复 → 继续执行 | CSR, SYSTEM | ✅ |
-| `test_exception_trap.cpp` (新增) | 非法指令异常 | 执行非法 opcode → trap → `mcause`=2 | 异常单元 | ❌ 新增 |
-| `test_exception_trap.cpp` (新增) | 断点异常 | `EBREAK` → trap → `mcause`=3 | SYSTEM, CSR | ❌ 新增 |
-| `test_exception_trap.cpp` (新增) | 环境调用 | `ECALL` → trap → `mcause`=11 | SYSTEM, CSR | ❌ 新增 |
-| `test_exception_trap.cpp` (新增) | 对齐错误 | 非对齐 LW → trap → `mcause`=4 | 内存控制器 | ❌ 新增 |
-| `test_timer_precision.cpp` (新增) | 中断延迟 | `mtimecmp` 设置 → cycles 到中断 ≤ 10 | CLINT, Pipeline | ❌ 新增 |
-
-### 4.2 中断验证流程
-
-```cpp
-// test_interrupt_flow.cpp 中的核心验证模式
-TEST_CASE("Interrupt: Complete CLINT Timer Interrupt Flow", "[interrupt][clint]") {
-    context ctx("clint_timer");
-    ctx_swap swap(&ctx);
-    
-    Rv32iSoc soc(ctx);
-    
-    // 1. 设置中断向量
-    soc.csr.write(CSR_MTVEC, 0x80000200);
-    
-    // 2. 使能中断
-    soc.csr.write(CSR_MSTATUS, 0x8);  // MIE=1
-    soc.csr.write(CSR_MIE, 0x80);      // MTIE=1
-    
-    // 3. 安装中断处理程序到 0x80000200
-    // (手写汇编: mret 回跳)
-    
-    // 4. 运行到中断触发
-    uint64_t tick_before = soc.clint.read_mtime();
-    sim.run_until_interrupt(tick_before, max_cycles);
-    
-    // 5. 验证
-    REQUIRE(soc.csr.read(CSR_MCAUSE) == 0x80000007); // Timer interrupt
-    REQUIRE(soc.pipeline.pc() == 0x80000200);         // PC 跳入 trap handler
-    
-    // 6. mret 恢复
-    sim.tick_one_mret();
-    REQUIRE(soc.pipeline.pc() == original_pc);       // PC 恢复
-}
-```
-
----
-
-## 5. Layer 3: SoC 集成层
-
-### 5.1 测试覆盖矩阵
-
-| 测试文件 | 测试名 | 验证内容 | 依赖 | 状态 |
-|---------|--------|---------|------|------|
-| `test_soc_hello_world.cpp` (已存在) | UART 打印 | "Hello World" 字符串输出 | UART MMIO, Loader | ✅ |
-| `test_address_decoder.cpp` (新增) | 6 区域映射 | I-TCM/D-TCM/CLINT/UART/ROM/未映射 | 地址解码器 | ❌ 新增 |
-| `test_firmware_loader.cpp` (新增) | BIN/HEX 加载 | 固件正确加载到 I-TCM | 固件加载器 | ❌ 新增 |
-| `test_uart_mmio.cpp` (新增) | MMIO 读写 | 数据寄存器/状态寄存器 | UART MMIO | ❌ 新增 |
-| `test_soc_memory.cpp` (新增) | 内存映射完整性 | 跨区域读写正确 | 地址解码器 | ❌ 新增 |
-
-### 5.2 SoC 地址映射
-
-```
-地址范围              大小     组件
-─────────────────────────────────────────
-0x0000_0000 - 0x0000_FFFF  64KB   I-TCM (指令内存)
-0x0001_0000 - 0x0001_FFFF  64KB   D-TCM (数据内存)
-0x1000_0000 - 0x1000_0FFF   4KB   CLINT (mtime/mtimecmp)
-0x1000_1000 - 0x1000_1FFF   4KB   UART MMIO
-0x8000_0000 - 0x8000_0FFF   4KB   ROM (启动代码)
-其他地址                    —     未映射 (读回 0)
-```
-
----
-
-## 6. Layer 4: FreeRTOS OS 语义层
-
-### 6.1 概述
-
-Phase E 的 FreeRTOS 测试验证操作系统语义正确性。参考 FreeRTOS 官方 [RISC-V_RV32_QEMU_VIRT_GCC](https://github.com/FreeRTOS/FreeRTOS/tree/main/FreeRTOS/Demo/RISC-V_RV32_QEMU_VIRT_GCC) demo。
-
-### 6.2 测试设计
-
-#### 6.2.1 `test_freertos_blinky.cpp` — 最小验证
-
-验证 FreeRTOS 能够：
-1. 正确启动并初始化调度器
-2. 运行 2 个任务 (producer/consumer) 通过队列通信
-3. 软件定时器回调被触发
-
-**输出验证**：
-```
-[FreeRTOS] Queue message received from task 1
-[FreeRTOS] Software timer callback invoked
-[FreeRTOS] FreeRTOS Demo SUCCESS : 1234
-```
-
-**Pass 条件**：10000 cycles 内输出包含 `"FreeRTOS Demo SUCCESS"`
-
-#### 6.2.2 `test_freertos_full.cpp` — 全面功能验证
-
-验证 FreeRTOS 的所有 OS 功能：
-- Queue (Generic Queue Test)
-- Semaphore (Binary/Counting)
-- Mutex (Recursive Mutex)
-- Event Groups
-- Task Notifications
-- Stream/Message Buffers
-- Timer Demo
-
-**Check Task 模式** (FreeRTOS 官方做法)：
-```c
-// prvCheckTask 周期性地检查所有其他任务是否仍在运行
-static void prvCheckTask(void *pvParameters) {
-    static const char *pcMessage = "FreeRTOS Demo SUCCESS";
-    
-    for (;;) {
-        vTaskDelayUntil(&xPreviousWakeTime, xTaskPeriod);
-        
-        // 检查所有测试任务
-        if (xAreSemaphoreTasksStillRunning() != pdPASS) {
-            pcMessage = "ERROR: xAreSemaphoreTasksStillRunning";
-        }
-        // ... 检查其他任务
-        
-        printf("[FreeRTOS] %s : %u\n", pcMessage, (uint32_t)xTaskGetTickCount());
-    }
-}
-```
-
-#### 6.2.3 `test_context_switch.cpp` — 寄存器级验证
-
-验证任务切换时所有 RISC-V 寄存器值被正确保存/恢复：
-
-```assembly
-# RegTest.S - 官方模式
-reg_test_1:
-    li t0, 0x11111111     # 填充寄存器
-    li t1, 0x22222222
-    li t2, 0x33333333
-    # ... 填充 a0-a7, s1-s11
-    
-    # 让出 CPU (触发上下文切换)
-    ecall  # 或直接调用 taskYIELD
-    
-    # 回来后验证寄存器
-    li t3, 0x11111111
-    beq t0, t3, 1f
-    sw zero, error, x0    # 出错写入特定地址
-1:
-    j reg_test_1
-```
-
-### 6.3 FreeRTOS 测试依赖
-
-```
-FreeRTOS 测试
-    ├── FreeRTOSConfig.h    ← 平台配置 (必须正确)
-    ├── port.c              ← RISC-V 端口实现
-    ├── portASM.S           ← 上下文切换汇编
-    ├── clint_interrupt.S   ← CLINT tick ISR
-    ├── blinky_demo.c       ← blinky demo 代码
-    ├── full_demo.c         ← full demo 代码
-    └── reg_test.S          ← 寄存器测试汇编
-```
-
-### 6.4 UART 输出验证机制
-
-```cpp
-// 通用验证框架
-class FreeRtosOutputParser {
-public:
-    void feed(char c);
-    bool success_detected() const;
-    bool error_detected() const;
-    std::string error_message() const;
-    
-    static constexpr const char* SUCCESS_PATTERN = "FreeRTOS Demo SUCCESS";
-    static constexpr const char* ERROR_PATTERN = "FreeRTOS Demo ERROR";
-};
-
-// 在测试中使用
-TEST_CASE("FreeRTOS Blinky: Basic verification", "[freertos][blinky]") {
-    context ctx("freertos_blinky");
-    ctx_swap swap(&ctx);
-    
-    Rv32iSoc soc(ctx);
-    load_firmware(soc, "freertos_blinky.bin");
-    
-    UartCapture uart_capture;
-    FreeRtosOutputParser parser;
-    
-    for (uint64_t tick = 0; tick < MAX_TICKS; tick++) {
-        sim.tick();
-        soc.clint.tick();
-        
-        while (soc.uart.txReady()) {
-            char c = soc.uart.readTx();
-            uart_capture.append(c);
-            parser.feed(c);
-            
-            if (parser.success_detected()) {
-                INFO("FreeRTOS started successfully");
-                return;  // PASS
-            }
-            if (parser.error_detected()) {
-                FAIL("FreeRTOS error: " << parser.error_message());
-            }
-        }
-    }
-    
-    FAIL("Timeout: FreeRTOS did not start within " << MAX_TICKS << " cycles");
-}
-```
-
----
-
-## 7. 测试基础设施
-
-### 7.1 构建系统
-
-```cmake
-# 整体 cmake/TestingInfrastructure.cmake
-# riscv-tests 二进制管理
-set(RISCV_TESTS_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}/riscv-tests"
-    CACHE PATH "Path to riscv-tests .bin files")
-
-# 如果启用了 riscv-tests 交叉编译
-option(RISCV_TESTS_BUILD "Build riscv-tests from source" OFF)
-if(RISCV_TESTS_BUILD)
-    find_program(RISCV32_GCC riscv32-unknown-elf-gcc)
-    if(NOT RISCV32_GCC)
-        message(FATAL_ERROR "riscv32-unknown-elf-gcc not found in PATH")
-    endif()
-    # 自定义命令编译 .S -> .elf -> .bin
-    add_subdirectory(third_party/riscv-tests)
-endif()
-
-# riscv-tests 测试注册
-function(add_riscv_tests test_name binary_file)
-    add_test(
-        NAME "riscv-${test_name}"
-        COMMAND $<TARGET_FILE:test_riscv_tests_soc>
-        --test-name "${test_name}"
-        --binary "${RISCV_TESTS_BIN_DIR}/${binary_file}"
-    )
-    set_tests_properties("riscv-${test_name}" PROPERTIES
-        LABELS "riscv-tests;soc"
-        TIMEOUT 30
-    )
-endfunction()
-
-# 批量注册 41 个测试
-add_riscv_tests("add" "add.bin")
-add_riscv_tests("addi" "addi.bin")
-# ... 所有 41 个测试
-```
-
-### 7.2 测试标签体系
-
-```
-ctest -L <label>
-
-标签层级:
-├── unit          ← Layer 0 模块测试
-├── csr           ← Layer 1 CSR 测试
-├── riscv-tests   ← riscv-tests 套件
-│   ├── interpreter   ← 解释器模式
-│   └── soc           ← SoC 流水线模式
-├── interrupt     ← Layer 2 中断测试
-├── soc           ← Layer 3 SoC 集成测试
-└── freertos      ← Layer 4 FreeRTOS 测试
-    ├── blinky        ← 基础验证
-    ├── full          ← 全面功能
-    └── regtest       ← 寄存器切换
-```
-
-运行命令：
-```bash
-# 运行所有测试
-ctest --output-on-failure
-
-# 只运行 riscv-tests
-ctest -L soc
-
-# 只运行 FreeRTOS 测试
-ctest -L freertos
-
-# 运行 riscv-tests 的子集 (28 个应通过的测试)
-ctest -R "riscv-(add|addi|and|sub|...)" --output-on-failure
-```
-
-### 7.3 重试机制
-
-```cmake
-# CTest 重试配置 (适用于 timing-dependent 测试)
-set_tests_properties(test_freertos_blinky PROPERTIES
-    PASS_REGULAR_EXPRESSION "FreeRTOS Demo SUCCESS"
-    FAIL_REGULAR_EXPRESSION "FreeRTOS Demo ERROR"
-    TIMEOUT 60
-    ENVIRONMENT "MAX_TICKS=50000000"
-    RETRIES 3
-)
-```
-
-```cpp
-// Catch2 重试支持
-#define CATCH_CONFIG_FAST_COMPILE
-#define CATCH_CONFIG_ALLOW_RERUNNER
-```
-
----
-
-## 8. CI/CD 集成方案
-
-### 8.1 本地 CI 脚本
+### 3.0 铁律：跑 ctest 前 MUST 先全量重建
 
 ```bash
-#!/bin/bash
-# run_all_freertos_tests.sh
-
-set -e
-
-echo "=== riscv-mini Full Test Suite ==="
-
-# 1. 构建
-cmake -B build -DRISCV_TESTS_PATH=«本机»
-cmake --build build -j$(nproc)
-
-# 2. 单元+集成测试
-echo "--- Running base tests ---"
-ctest -L "unit|csr|interrupt" --output-on-failure
-
-# 3. riscv-tests (解释器模式)
-echo "--- Running riscv-tests (interpreter) ---"
-ctest -L "interpreter" --output-on-failure
-
-# 4. riscv-tests (SoC 模式)
-echo "--- Running riscv-tests (SoC) ---"
-ctest -L "soc" --output-on-failure
-
-# 5. FreeRTOS (如果存在)
-if [ -f build/tests/test_freertos_blinky ]; then
-    echo "--- Running FreeRTOS tests ---"
-    ctest -L "freertos" --output-on-failure
-fi
-
-echo "=== All tests passed ==="
+cmake --build build -j$(nproc)     # 改了 src/** 或 include/** 之后必做
 ```
 
-### 8.2 测试分类与执行策略
+⚠️ `ctest` **不会**自动重新编译 ⇒ 只重建了被点名的 target 时，其余 target 跑的是
+**旧二进制** ⇒ ⇒ **假绿**（仓内实测踩过：`sread` 语义改动后「213/213 全绿」是假的，
+全量重建后立刻转红）。
+⚠️ 同型铁律：**还原源码 ≠ 复原**（**二进制也是状态**）⇒ ⇒ 变异还原后 MUST 重建再跑。
 
+### 3.1 分组跑
+
+```bash
+# ① 只跑 L1 核 IP 级那 26 条目
+#    ⚠️ **按子目录跑**（`build/examples/riscv-mini/CTestTestfile.cmake`）
+#    ⇒ ⇒ 不用维护正则 ⇒ ⇒ 不会误选（仓根 `tests/` 的 RV32I 条目）+ 不会漏选
+ctest --test-dir build/examples/riscv-mini --output-on-failure
+
+# ② 全量（仓级；-LE perf 排除 perf 组）
+ctest --test-dir build -LE perf --output-on-failure -j$(nproc)
+
+# ③ 只跑 L0 组件级那 8 条目（**锚定** ⇒ 不含 examples 侧的同名/近名条目）
+ctest --test-dir build --output-on-failure \
+  -R "^test_rv32i_(pipeline|alu|alu_differential|arch_dual|pipeline_behavior|stage_dual|mem_backpressure|timing_dual)$"
+
+# ④ 只跑双后端（需 verilator ⇒ 串行 ⇒ 慢）
+ctest --test-dir build -L verilator_e2e --output-on-failure
 ```
-阶段 1: 快速验证 (≤ 30s)
-  ├── Layer 0: 3 个 Phase 测试
-  ├── Layer 1: 28 个 ALU/逻辑/分支测试 (解释器)
-  └── Layer 2: 已存在的中断测试
-  
-→ 如果失败，立即停止
-  
-阶段 2: 完整验证 (≤ 5min)
-  ├── Layer 1: 全部 41 riscv-tests
-  ├── Layer 3: SoC 集成测试
-  └── Layer 4: FreeRTOS blinky (如果有)
-  
-阶段 3: 深度验证 (≤ 30min)
-  ├── Layer 4: FreeRTOS full (所有 15+ check tasks)
-  └── Layer 4: RegTest (寄存器切换压力测试)
+
+> ⚠️ **不要用「一个大正则」筛本目录的测试** ⇒ ⇒ 它会**同时**选中仓根 `tests/` 的
+> RV32I 条目与 `spinalhdl_rv32i_phase*`（实测 37 条 vs 实际的 26 条）
+> ⇒ ⇒ 要么按**子目录**跑（①），要么按**锚定正则**跑（③）。
+
+### 3.2 单个跑
+
+```bash
+# 直接跑二进制（反馈最快 · 可带 Catch2 过滤串）
+./build/examples/riscv-mini/test_rv32i_trap_entry
+./build/examples/riscv-mini/test_rv32i_soc_dual_parity \
+  "Rv32iSoc - IllegalOpcodeObservableNotRetired + FenceIsNop"
+
+# 走 ctest（带标签 / 超时 / 资源锁 / 环境注入）
+ctest --test-dir build -R test_rv32i_trap_entry --output-on-failure
 ```
+
+### 3.3 慢条目与前置
+
+| 条目 | 典型耗时 | 前置 |
+|---|---|---|
+| `test_rv32i_official_suite_g1..g4` | 各 ≈ **105 s**（合计 ≈ 7 min） | 40 份镜像在**源码树**内（CMake 已注入 `CPPHDL_SOURCE_DIR`） |
+| `test_rv32i_hier_rtl` 🔷 | 分钟级 | verilator（见下） |
+| `test_rv32i_soc_dual_parity` 🔷 | 分钟级 | verilator |
+| `riscv_mini_cache_smoke` 🔷 | 分钟级 | verilator |
+
+⚠️ **verilator 只装 submodule**：`apt install verilator` 是**错的** ⇒ 用
+`third_party/verilator/`（`bash scripts/init-submodules.sh` +
+`cmake --build build --target verilator` · 冷编 10–30 min）⇒ 见
+`docs/developer_guide/verilator-integration.md`。
+⚠️ **verilator 后端 = 显式 Linux-only**（macOS / Windows 在 configure 期 FATAL_ERROR · 刻意如此）。
+
+### 3.4 排障速查
+
+| 症状 | 首查 |
+|---|---|
+| 全绿但**怀疑没真跑** | 「还原源码 ≠ 复原」⇒ 重建；`ctest -N` 数条目；退出码是不是 0（≠ 4） |
+| `test_riscv_tests` 大量 SKIP | 缺**仓外** riscv-tests 预编译二进制 ⇒ 需 `RISCV_TESTS_PATH`（仓内那 40 份镜像**不**依赖它） |
+| `test_riscv_tests_pipeline` 被判红 | ⚠️ 它**不该**进 CTest ⇒ 若你在 CTest 里看到它 ⇒ CTest 注册被改坏了 |
+| 双后端测试随机失败 | `RESOURCE_LOCK "verilator_backend"` ⇒ **并发**跑 verilator 任务 ⇒ 串行重跑 |
+| verilator 相关全红 | `build/verilator-install/bin/verilator` 在不在 ⇒ submodule 初始化没做 |
+| `run_all_ported_tests.sh` 失败 | ⚠️ **缺失二进制 = 失败**（不是跳过）⇒ 先 `cmake --build build --target all-examples` |
 
 ---
 
-## 9. 实施计划与里程碑
+## 4. 门禁（四道，层次不同）
 
-### 9.1 当前状态
+### 4.1 核级官方套件（**解释器** · 4 个 CTest 条目）
 
-| Layer | 文件 | 状态 | 备注 |
-|-------|------|------|------|
-| L0 | 已完整 | ✅ | rv32i_phase{1,2,3}_test.cpp |
-| L1 | 部分完成 | ⚠️ | 41 .bin 编译好，解释器创建，4 测试通过 |
-| L2 | 部分完成 | ⚠️ | test_interrupt_flow.cpp 已存在 |
-| L3 | 部分完成 | ⚠️ | test_soc_hello_world.cpp 已存在 |
-| L4 | 未开始 | ❌ | Phase E |
-
-### 9.2 下一步计划 (按优先级)
-
-#### Phase F: riscv-tests 全量执行 (预计 2-3 天)
-
-**目标**: 41/41 riscv-tests 全部通过 (或明确标记 CSR 依赖)
-
-| 步骤 | 工作 | 产出 | 验收 |
-|------|------|------|------|
-| F.1 | 修复解释器 CSR 支持 | CSR/Trap 在解释器中工作 | test_csr_unit.cpp pass |
-| F.2 | 创建 test_riscv_tests_soc.cpp | SoC 模式的测试 | 41 .bin 加载成功 |
-| F.3 | CMake 路径管理 | 硬编码路径移除 | CI 可用相对路径 |
-| F.4 | 批量执行 + 分类 | 28 pass / ? CSR 依赖 / ? fail | 分类报告 |
-| F.5 | 修复 fail 的指令 | 流水线 bug 修复 | 全部 pass |
-
-#### Phase G: 新增测试文件 (预计 2 天)
-
-| 测试文件 | 新增测试数 | 验证内容 |
-|---------|----------|---------|
-| `test_address_decoder.cpp` | 6 | 6 区域地址映射 |
-| `test_firmware_loader.cpp` | 8 | BIN/HEX 加载 |
-| `test_uart_mmio.cpp` | 5 | UART MMIO 读写 |
-| `test_soc_memory.cpp` | 4 | 跨区域内存访问 |
-| `test_exception_trap.cpp` | 5 | 异常类型 |
-| `test_timer_precision.cpp` | 2 | 中断延迟 |
-
-#### Phase E: FreeRTOS Port (预计 7-14 天)
-
-在 F 和 G 完成后实施，所有前置依赖已满足。
-
----
-
-## 10. 文件目录结构
-
-```
-CppHDL/
-├── examples/riscv-mini/
-│   ├── CMakeLists.txt                          # 构建配置
-│   ├── tests/
-│   │   ├── rv32i_phase1_test.cpp               # Layer 0: RegFile/ALU/Decoder
-│   │   ├── rv32i_phase2_test.cpp               # Layer 0: Branch/Jump
-│   │   ├── rv32i_phase3_test.cpp               # Layer 0: Load/Store
-│   │   │
-│   │   ├── test_csr_unit.cpp                   # Layer 1: CSR 寄存器测试
-│   │   ├── test_interrupt_flow.cpp             # Layer 2: 中断流测试
-│   │   ├── test_soc_hello_world.cpp            # Layer 3: SoC 集成 (UART 打印)
-│   │   │
-│   │   ├── test_riscv_tests.cpp                # Phase F: riscv-tests 解释器模式
-│   │   ├── test_riscv_tests_soc.cpp            # Phase F: riscv-tests SoC 模式 [新增]
-│   │   │
-│   │   ├── test_address_decoder.cpp            # Phase G: 地址映射 [新增]
-│   │   ├── test_firmware_loader.cpp            # Phase G: 固件加载 [新增]
-│   │   ├── test_uart_mmio.cpp                  # Phase G: UART MMIO [新增]
-│   │   ├── test_soc_memory.cpp                 # Phase G: 内存集成 [新增]
-│   │   ├── test_exception_trap.cpp             # Phase G: 异常类型 [新增]
-│   │   ├── test_timer_precision.cpp            # Phase G: 中断延迟 [新增]
-│   │   │
-│   │   ├── test_freertos_blinky.cpp            # Phase E: FreeRTOS 最小验证 [新增]
-│   │   ├── test_freertos_full.cpp              # Phase E: FreeRTOS 全面验证 [新增]
-│   │   └── test_context_switch.cpp             # Phase E: 寄存器切换 [新增]
-│   │
-│   └── freertos/                               # Phase E: FreeRTOS 源码
-│       ├── FreeRTOSConfig.h                    # 平台配置
-│       ├── port.c                              # RISC-V 端口
-│       ├── portASM.S                           # 上下文切换汇编
-│       ├── clint_interrupt.S                   # CLINT tick ISR
-│       ├── blinky_demo.c                       # blinky 入口
-│       └── full_demo.c                         # full demo 入口
-│
-├── third_party/
-│   └── riscv-tests/ → «本机»/  # symlink 或 submodule
-│
-├── cmake/
-│   └── FetchRiscvTests.cmake                   # riscv-tests CMake 集成
-│
-└── docs/riscv-mini/
-    ├── freertos_roadmap.md                     # 路线图
-    └── test-architecture.md                    # 本文档
+```bash
+ctest --test-dir build -R test_rv32i_official_suite --output-on-failure
 ```
 
----
+- DUT = `ch_device<Rv32iCoreTop, itcm, dtcm>` ⇒ 判「**本仓那份 C++**」的行为
+- 判据 = **上游 env 的 `tohost` 协议**（`tohost == 1` ⇒ PASS）
+- 资产 = 40 份入库镜像（`examples/riscv-mini/tests/riscv-tests/images/`）
+- 资产来源 / 改造 / **排除项** / 复现方法 = **单一真相**
+  ⇒ `examples/riscv-mini/tests/riscv-tests/PROVENANCE.md`
 
-## 附录 A: riscv-tests 41 个测试分类
+### 4.2 交付物级官方套件（**真 verilator** · 交付的 Verilog 产物侧）
 
-### 纯 ALU 测试 (20 个，不依赖 CSR)
+```bash
+bash scripts/verify_rv32i_official_rtl.sh --subset 8   # PR 快通道 ≈ 2 min
+bash scripts/verify_rv32i_official_rtl.sh --full       # 全量 40 个 ≈ 10 min
+```
 
-| 测试 | 验证指令 | 预期 | 风险 |
-|------|---------|------|------|
-| add | ADD | ✅ | 低 |
-| addi | ADDI | ✅ | 低 |
-| sub | SUB | ✅ | 低 |
-| and | AND | ✅ | 低 |
-| andi | ANDI | ✅ | 低 |
-| or | OR | ✅ | 低 |
-| ori | ORI | ✅ | 低 |
-| xor | XOR | ✅ | 低 |
-| xori | XORI | ✅ | 低 |
-| sll | SLL | ✅ | 低 |
-| slli | SLLI | ✅ | 低 |
-| srl | SRL | ✅ | 低 |
-| srli | SRLI | ✅ | 低 |
-| sra | SRA | ✅ | 低 |
-| srai | SRAI | ✅ | 低 |
-| slt | SLT | ✅ | 低 |
-| slti | SLTI | ✅ | 低 |
-| sltu | SLTU | ✅ | 低 |
-| sltiu | SLTIU | ✅ | 低 |
-| lui | LUI | ✅ | 低 |
+逐镜像独立 5 步：
 
-### 分支/跳转测试 (9 个，不依赖 CSR)
+```
+tb_rv32i_soc --emit-rtl --firmware <镜像目录> --emit-hygiene   # ① 发射带固件初值的产物
+  → verilator --lint-only --top-module tb_rv32i_official        # ② lint 门（退出码 0 + 零 %Error）★ 是门禁的一环
+  → verilator --cc / --exe                                       # ③ 编译
+  → ./obj/Vtb_rv32i_official +tohost_expected=1                  # ④ 跑手写独立 TB
+  → 判 tohost（seen=1 value=0x1 ⇒ PASS）                         # ⑤
+```
 
-| 测试 | 验证指令 | 预期 | 风险 |
-|------|---------|------|------|
-| beq | BEQ | ✅ | 低 |
-| bne | BNE | ✅ | 低 |
-| blt | BLT | ✅ | 低 |
-| bltu | BLTU | ✅ | 低 |
-| bge | BGE | ✅ | 低 |
-| bgeu | BGEU | ✅ | 低 |
-| jal | JAL | ✅ | 低 |
-| jalr | JALR | ✅ | 低 |
-| auipc | AUIPC | ✅ | 低 |
+- **形态**：flat 全 40 个 + **hier 抽样 2 个**（`rv32ui-p-add` / `rv32ui-p-st_ld`）
+- **负向对照（防恒绿）**：手写镜像把 **3** 写进 `tohost` ⇒ 门禁 MUST 如实读到 `3`；
+  再用 `+tohost_expected=1` 跑同一负镜像 ⇒ MUST **红**（证明判定没被吞）
+- **fail-closed**：缺 verilator / 缺发射器 / 缺 TB / 缺镜像 ⇒ **exit 2**（不是 skip、不是绿）
+- **CI 落点**：`pr-verilator-fast`（PR 事件 · shard 1 · `--subset 8`）+
+  `nightly-verilator`（02:00 UTC cron · `--full`）
 
-### 访存测试 (9 个，不依赖 CSR)
+⚠️ **为什么必须有第 2 层**（不是冗余）：解释器与 Verilog codegen 由**同一份 C++** 生成
+⇒ ⇒ **同构缺陷两后端一致地错** ⇒ ⇒ 第 1 层对 codegen 侧缺陷（初值块 / 端口映射 /
+时序形状 / 宽度）**结构性失明**。
+**实证**：第 2 层门禁的初版跑出 **40/40 个带固件产物的 lint 全红**（`WIDTHEXPAND`
+⇒ 按仓内口径编译直接失败）⇒ ⇒ 而既有 3 个 RTL 护栏 lint 的产物形态**都没有** TCM 初值块
+⇒ ⇒ 那个形态**从未被 lint 过**。
 
-| 测试 | 验证指令 | 预期 | 风险 |
-|------|---------|------|------|
-| lb | LB | ✅ | 中 |
-| lbu | LBU | ✅ | 中 |
-| lh | LH | ✅ | 中 |
-| lhu | LHU | ✅ | 中 |
-| lw | LW | ✅ | 中 |
-| sb | SB | ✅ | 中 |
-| sh | SH | ✅ | 中 |
-| sw | SW | ✅ | 中 |
-| fence_i | FENCE.I | ✅ | 低 (空操作) |
+### 4.3 RTL 交付环境一键（生成 → lint → 编译 → 运行）
 
-### 综合测试 (3 个)
+```bash
+bash scripts/rv32i_rtl_sim_env.sh
+# ⇒ flat / hier 各 RESULT: checks=24 fails=0
+```
 
-| 测试 | 验证内容 | 预期 | 风险 |
-|------|---------|------|------|
-| simple | 基础算术 + 跳转 | ✅ | 低 |
-| st_ld | 存储加载混合 | ✅ | 中 |
-| ma_data | 内存对齐数据 | ✅ | 中 |
+### 4.4 examples 运行护栏（CI job `examples-runtime`）
 
-**总计**: 41 个测试，全部不依赖 CSR。如果解释器正确实现 riscv-tests 入口框架 (使用 AUIPC+ADDI 而非 CSR 设置 tohost 指针)，应当全部通过。
+```bash
+cmake --build build --target all-examples     # 先构建全部被跟踪 example
+./run_all_ported_tests.sh
+```
+
+- 被跟踪集合的**唯一来源** = `examples/CMakeLists.txt::CH_TRACKED_EXAMPLE_TARGETS`
+  （含 `rv32i_phase1/2/3_test` 与 `tb_rv32i_soc`）⇒ ⇒ 同时驱动构建侧的聚合 target
+  `all-examples` 与运行侧的本脚本
+- ⚠️ **缺失二进制 = 失败**（不是跳过）⇒ ⇒ 只做增量构建的开发者会看到失败
+- ⚠️ 护栏 C1–C3 **不含** riscv-mini 的 26 个 Catch2 条目（那些由 ctest 覆盖）⇒
+  **两条覆盖面**：Catch2 条目走 `ctest`；带 `main()` 的 example 程序走本护栏
 
 ---
 
-## 附录 B: 与 FreeRTOS 官方测试对比
+## 5. 判据纪律（写新测试前必读）
 
-| FreeRTOS 官方 | CppHDL riscv-mini | 匹配度 |
-|---------------|-------------------|--------|
-| QEMU RISC-V virt machine | C++ 模拟器 Rv32iSoc | ✅ 对应 |
-| `main_blinky.c` | `test_freertos_blinky.cpp` | ✅ 对应 |
-| `main_full.c` | `test_freertos_full.cpp` | ✅ 对应 |
-| `build/gcc/RegTest.S` | `test_context_switch.cpp` | ✅ 对应 |
-| `executable-monitor.py` | UART 输出 "SUCCESS" 匹配 | ✅ 对应 |
-| 60s timeout | 50M cycles timeout | ✅ 对应 |
-| 3 retry attempts | CTest RETRIES 3 | ✅ 对应 |
-| "FreeRTOS Demo SUCCESS: <tick>" | Same pattern | ✅ 对应 |
-| "FreeRTOS Demo ERROR: <test>" | Same pattern | ✅ 对应 |
-| `xAreXXXStillRunning()` | Counter increment + check | ✅ 对应 |
+### 5.1 期望值 MUST **手推**（禁抄仿真输出）
+
+解释器与 codegen 同源 ⇒ ⇒ 双后端 parity 对「同构缺陷」这一族**结构性失明**
+⇒ ⇒ 期望值 MUST 从**规范** + **复位值**推导，不能从仿真输出反抄。
+⇒ ⇒ 仓内已命中多次「两后端一致地给出与手推不同的值」⇒ ⇒ 那是**推导错**，不是 parity 分歧。
+
+### 5.2 「两后端一致」**不是**正确性证据
+
+同源缺陷 ⇒ 两后端一致地错 ⇒ ⇒ **parity 只能当辅助证据** ⇒ ⇒ 真正的承重判据是
+「**手推期望值**」+「**变异**」（§5.3）。
+
+### 5.3 每条新判据配**一条变异**（且变异 MUST 仍能编译）
+
+- 变异 = **还原错误实现** ⇒ 目标判据 MUST **转红** ⇒ ⇒ 才有判别力
+- ⚠️ 变异 MUST **先确认仍能编译**（编译失败 ⇒ 跑的是**旧二进制** ⇒ **假绿**）
+- ⚠️ 还原错误实现时 MUST 用**原始写法**：`if (!r.valid) return;` 与
+  `if (r.valid) { … }` **不等价**（`!` 是**硬件算子** ⇒ 产出节点 ⇒ 建图期恒假
+  ⇒ 永远不 return）⇒ ⇒ 该类变异**恒绿**
+- ⚠️ **无效变异 MUST 如实登记**（恒绿 ⇒ 不改变可观测行为 ⇒ 不是判别力缺口）
+- 逐条登记在 change 的 `design.md` §8（变异矩阵）
+
+### 5.4 未驱动的输入端口 = **未定义值**
+
+`ch_in` **没有** `operator=` ⇒ `io().X = value` 走 `CHERROR` + **什么都不做**
+⇒ ⇒ 端口保持未驱动（实测读到**全 1** 或 0）⇒ ⇒ 测试会「**碰巧**通过」而跨后端行为可能分叉。
+⇒ ⇒ 驱动方式 MUST 用 `sim.set_input_value(port, <纯整数>)`（`ch_bool::operator uint64_t`
+是 `explicit` ⇒ 不能直接传 `ch_bool`）。
+⇒ ⇒ 两条护栏：`scripts/verify_input_port_additions.sh`（增量 · 只列不判）·
+`scripts/verify_input_port_required_registry.sh`（登记表双向校验）。
+
+### 5.5 硬件值 MUST NOT 参与 C++ 控制流
+
+`describe()` 在**建图期**执行 ⇒ ⇒ `if (io().x)` / `x ? A : B` / `switch (io().x)`
+/ `while (io().x)` / early `return` / 传给 `bool` 形参 ⇒ **全部在建图期求值**
+⇒ ⇒ 条件恒假 ⇒ ⇒ 分支体从不发射 ⇒ ⇒ 输出**恒为未驱动**（读到 0）⇒ ⇒
+组件「功能上是死的」却**零报错**。
+⇒ ⇒ 条件 MUST 落在**表达式的取值**里（`select(...)` / `&` / `|` / `!`）⇒ ⇒
+且**每个 `ch_out` MUST 被无条件驱动**。
+⚠️ 只把 `if` 换掉**不够** —— 驱动常被注释掉 ⇒ 会发出「地址 0、无写使能」这类
+「看起来合法」的请求 ⇒ ⇒ **比「恒未驱动」更危险**。
+⇒ ⇒ 权威 = `include/cpu/AGENTS.md` + `include/chlib/state_machine.h` 的「5 条纪律」。
+
+### 5.6 组件生命周期（`ch_module` vs `ch_device`）
+
+`ch::ch_module<T>` **MUST** 在 `Component::describe()` **内部**创建（需要有效的
+`Component::current()` 父节点）⇒ ⇒ 在 standalone 测试函数里用 ⇒ **静默失败 + SIGSEGV**。
+⇒ ⇒ standalone 用 `ch::ch_device<T>`；组件内用 `ch::ch_module<T>`。
+⇒ ⇒ 详见 `docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md`。
 
 ---
 
-*文档结束*
-*下一步：执行 Phase F (riscv-tests 全量执行) → Phase G (新增测试文件) → Phase E (FreeRTOS Port)*
+## 6. 护栏矩阵（谁判什么）
+
+| 护栏 | 判什么 | 域 |
+|---|---|---|
+| `scripts/verify_example_test_wiring.sh` | **归属守恒**（测试源有没有被真的执行到 · 退出码 0 · 日志无 error/fatal） | `examples/**` 的 `.cpp/.cc/.cxx/.C` 测试源 |
+| `scripts/verify_example_assertion_quality.sh` | **断言质量**（被执行到的测试有没有真的断言语义输出） | 同上（Catch2 断言） |
+| `scripts/verify_examples_rtl_sim.sh` | **RTL 仿真覆盖**（独立 Verilog TB 的产物级判据） | `.sv` 独立 TB（**不在**上一条的域） |
+| `scripts/verify_rv32i_official_rtl.sh` | **官方套件在 RTL 产物上全过**（+ lint 门 + 负向对照） | 交付物级 |
+| `scripts/rv32i_rtl_sim_env.sh` | 生成 → lint → 编译 → 运行（flat / hier） | 交付物级 |
+| `scripts/verify_hierarchical_rtl.sh` | 层次化产物 **R1–R9**（含 R8′ = RV32I 产品语料 53 端口） | 交付物级 |
+| `scripts/verify_riscv_soc_core_ports.sh` | 核 IP **53** 端口契约（V1 逐字逐序 · V2 = 53 · V3 C6 快照 51） | 契约面 |
+| `scripts/verify_no_duplicate_rv32i_headers.sh` | 单源化（同名头双副本 · C5 行数锚点 · **C6 = 51 端口快照**） | 结构面 |
+| `scripts/verify_dual_backend_parity.sh` | **双后端覆盖不缩面**（源文件数 + pair 数**双锚点**） | 结构面 |
+| `scripts/verify_test_counts.sh` | 计数锚点（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `EXAMPLES_TEST_SOURCES`） | 结构面 |
+| `scripts/verify_input_port_additions.sh` · `verify_input_port_required_registry.sh` | 未驱动输入端口 | 契约面 |
+| `scripts/verify_openspec_delta.sh` | **archive 前的实际门**（`openspec validate` **不在** CI 门内） | 规范面 |
+| `run_all_ported_tests.sh` | examples **运行护栏**（带 `main()` 的程序逐条 exit 0） | 运行面 |
+
+⚠️ 每个护栏的**文件头**都写了自己的「判据 / 反向判据 / 判别力自证」⇒ ⇒ **不要**在本篇复述。
+⚠️ 护栏可达性的**唯一真相** = `.rddf/checks/guard-reachability.md`（与 `ci.yml` 双向 1:1 校验）。
+
+---
+
+## 7. 计数锚点（改动测试后 MUST 同步）
+
+| 锚点 | 值 | 含义 | 校验者 |
+|---|---|---|---|
+| `CTEST_TOTAL` | **284** | ctest 条目总数 | `scripts/verify_test_counts.sh` |
+| `VERILATOR_E2E_TOTAL` | **81** | 带 `verilator_e2e` 标签的条目数 | 同上 |
+| `DUAL_BACKEND_PARITY_TOTAL` | **67** | 含 `DUAL_BACKEND_TEST_PAIR(` 的测试**源文件**数 | `scripts/verify_dual_backend_parity.sh` |
+| `DUAL_BACKEND_PARITY_PAIRS` | **297** | 同上的 **pair 调用数**（深度维度） | 同上 |
+| `EXAMPLES_TEST_SOURCES` | **26** | `examples/**` 下的测试源文件数 | `scripts/verify_example_test_wiring.sh`（C2） |
+
+⚠️ **两个 parity 锚点都要**：只钉「文件数」的话，从**含多个 pair** 的文件里删一个 pair
+⇒ 该文件仍被计数 ⇒ ⇒ 护栏**看不见**（实测：变异 M1 恒绿）⇒ ⇒ 深度锚点补上这个盲区。
+⚠️ 增删 MUST **同批**更新锚点 + 跑校验器（锚点 = 可审计的行为，不是注释）。
+
+---
+
+## 8. 已知边界与退役记录
+
+### 8.1 `test_riscv_tests` 大部分用例会 SKIP
+
+49 个用例里 **6 passed / 43 skipped** ⇒ ⇒ 43 个依赖**仓外** riscv-tests 的**预编译二进制**
+⇒ ⇒ 需 `RISCV_TESTS_PATH` 指向一份 checkout ⇒ ⇒ CI（无该 checkout）里恒为跳过。
+⚠️ 与 §4.1 的 40 份**入库镜像**不是一回事（后者不依赖仓外资源）。
+
+### 8.2 `test_riscv_tests_pipeline` **不进 CTest**
+
+46 个用例全依赖仓外二进制 ⇒ 全部 SKIP ⇒ Catch2 v3 退出码 **4**（= 没有真正跑起来的用例）
+⇒ ⇒ **CTest 会判红** ⇒ ⇒ 只构建不注册（`examples/disabled_examples.txt` 已登记 + 归位条件）。
+⚠️ `ctest -N` **仍会列出它** ⇒「CTest 里认得它」**不等于**「它会绿」。
+
+### 8.3 官方套件的 2 个排除项
+
+| 测试 | 排除理由 |
+|---|---|
+| `fence_i` | 测 `Zifencei` 扩展（`fence.i`）⇒ **本核是 RV32I，无该扩展** ⇒ **能力对齐**，不是「跑不过」 |
+| `ma_data` | 测**非对齐** load/store ⇒ ⇒ 本核 load/store 的**车道选择忽略低地址位** ⇒ 非对齐访问被**静默对齐**（既不处理也不 trap）⇒ ⇒ **能力对齐** |
+
+⇒ ⇒ 权威登记 = `examples/riscv-mini/tests/riscv-tests/PROVENANCE.md` §3（**不得**静默缩小）。
+
+### 8.4 已知缺口（**如实登记 · 不静默留尾**）
+
+| # | 缺口 | 状态 |
+|---|---|---|
+| 1 | `rv32i-privilege` 的 `#### Scenario: 6 种 funct3 的 csr_wdata 语义`（P6-2 的**纯表格式** Scenario · 无 `THEN` 行）⇒ ⇒ 结构检查器会点它 | **既有** · 已由 P6-3 的验收报告登记 ⇒ **须独立立项**（不在 P6-4 范围） |
+| 2 | `AxiDma.rst_n` **无行为覆盖**（必需端口登记表里已登记的已知缺口） | 已登记 |
+| 3 | 层次化逐拍等价只覆盖**顶层可见行为** ⇒ 成层子树的 `ch_out` 被移出顶层 ⇒ 「子树内部算错但顶层输出恰好相同」**结构性测不出** | 权威 = capability `rtl-hierarchical-output` |
+| 4 | 未驱动输入端口**没有通用护栏**（通用状态型判定会误报 ⇒ 死结）⇒ ⇒ 义务仍留在**人工核对 + code review** | 已知设计边界 |
+
+### 8.5 退役记录
+
+- **11 条已删除 target**（8 个测试相关 + 3 个发射薄壳）⇒ `examples/removed_examples.txt`
+  （理由 + 归位条件）
+- **3 个发射薄壳退役**（`emit_rtl.cpp` / `emit_rtl_fw_init.cpp` / `emit_rtl_hier.cpp`）
+  ⇒ ⇒ 发射入口并入 `tb_rv32i_soc` 的 `--emit-rtl` / `--emit-rtl --firmware-init` /
+  `--emit-rtl --hierarchical` 三个模式 ⇒ ⇒ **产物逐字节不变**
+- **根 `tests/test_rv32i_pipeline.cpp` 与 `examples/riscv-mini/tests/test_rv32i_pipeline.cpp`
+  不是副本** ⇒ ⇒ 后者注册为 `test_rv32i_pipeline_example`
+
+---
+
+## 9. 导航
+
+| 想找什么 | 去哪 |
+|---|---|
+| **本目录的运行期速查 + 接线表** | [`examples/riscv-mini/AGENTS.md`](../../examples/riscv-mini/AGENTS.md) §TEST |
+| **核 IP 53 端口契约表 / IP 集成契约** | `examples/riscv-mini/AGENTS.md`（「核 IP 的 53 端口契约表」+「IP 集成契约」两节） |
+| **RTL 交付流程 + Verilator 仿真环境** | [`docs/developer_guide/rv32i-rtl-delivery-and-sim.md`](../developer_guide/rv32i-rtl-delivery-and-sim.md) |
+| **verilator submodule 集成 / 平台支持** | [`docs/developer_guide/verilator-integration.md`](../developer_guide/verilator-integration.md) |
+| **跑 ELF（3 层链路 / 装载约束 / 排障）** | `examples/riscv-mini/RUNNING-ELF.md` |
+| **官方套件资产来源 / 改造 / 排除项 / 复现** | `examples/riscv-mini/tests/riscv-tests/PROVENANCE.md` |
+| **组件生命周期（`ch_device` vs `ch_module`）** | [`docs/developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md`](../developer_guide/patterns/COMPONENT-LIFECYCLE-GUIDE.md) |
+| **RV32I 微架构契约（权威细节）** | `docs/architecture/rv32i-microarchitecture.md` |
+| **ISA 语义 capability** | `openspec/specs/rv32i-isa-semantics/spec.md` |
+| **特权级 capability（CSR / trap / WARL）** | `openspec/specs/rv32i-privilege/spec.md` |
+| **架构决策正本** | `docs/adr/`（76 篇 · **决策以它为准**） |
+| **每个 change 的验收报告（逐条 AC + 变异登记）** | `.rddf/reviews/*-verify.md` |
+| **护栏可达性台账** | `.rddf/checks/guard-reachability.md` |
+| **RTL 仿真覆盖清单（E4 名单）** | `.rddf/checks/examples-rtl-sim-targets.tsv` |
+
+---
+
+## 10. 维护纪律
+
+- 本篇是**入口** ⇒ ⇒ 新增/退役测试 ⇒ ⇒ **同批**更新：§2 清单（**含「规模」列**）· §7 锚点 ·
+  `examples/riscv-mini/AGENTS.md` 的 §TEST 接线表 · 根 `AGENTS.md` 的计数锚点。
+- ⚠️ **「规模」列的刷新办法**（实测口径）：逐个跑二进制取 Catch2 汇总行 ⇒
+  `All tests passed (N assertions in M test cases)` ⇒ ⇒ N/M 即该列的两个数。
+- ⚠️ **不要**把变更流水往本篇追加 ⇒ ⇒ 流水归**过程工件**
+  （change 的 `design.md` / `tasks.md` · `.rddf/reviews/<change>-verify.md` ·
+  `docs/CHANGELOG.md`）⇒ ⇒ 本篇只留**当前态**。
+- ⚠️ 本篇**不复述**其它文档正文 ⇒ ⇒ 引用一律链出去 ⇒ ⇒ 避免同一事实两处维护。

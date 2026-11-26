@@ -65,8 +65,8 @@ docs/
 │   │          shift-fix, simulator-port-value}/SKILL.md
 │   └── archive/                 # 11 个已退役 skill（历史修复模式）
 │
-├── riscv-mini/                  # riscv-mini 集成测试架构 · 1 篇
-│   └── test-architecture.md
+├── riscv-mini/                  # riscv-mini **测试知识入口** · 1 篇
+│   └── test-architecture.md     # 资产地图 / 完整清单 / 跑法 / 门禁 / 判据纪律 / 护栏 / 锚点
 │
 └── adr/                         # ⚖️ 决策正本 · 76 篇（ADR-NNN，**决策以它为准**）
 ```

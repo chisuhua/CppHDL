@@ -137,11 +137,114 @@ bash scripts/verify_rv32i_official_rtl.sh --subset 8   # 抽样（PR 快通道 �
 ⚠️ **fail-closed**：默认模式收到**任何**未知参数 ⇒ exit **2**；
 发射模式缺 `--out` ⇒ exit **2**（MUST NOT 回落到库层默认 `rtl_out/`）。
 
+## TEST · 测试集清单与跑法（**2026-11-26 新增**）
+
+> ⚠️ **完整知识入口 = [`docs/riscv-mini/test-architecture.md`](../../docs/riscv-mini/test-architecture.md)**
+> （资产地图 / 完整清单 / 判据纪律 / 护栏矩阵 / 锚点 / 退役记录）⇒ ⇒ 本节只放
+> **接线表 + 跑法速查** ⇒ ⇒ **不要**在两处各写一份清单（会漂）。
+
+### 接线表：`tests/` 的源 → CTest 条目（**24 个源 → 26 个条目**）
+
+> 判据 = `scripts/verify_example_test_wiring.sh`（C1 归属守恒 · C2 数量守恒 ·
+> C3 逐条 exit 0 · C3b 日志无 error/fatal）⇒ ⇒ **改测试 MUST 同批更新本表 + 根
+> `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点**（26）。
+
+| 源文件（`examples/riscv-mini/tests/`） | CTest 条目 | 覆盖 |
+|---|---|---|
+| `test_pipeline_exec.cpp` | `test_pipeline_exec` | 流水线执行 |
+| `test_soc_hello_world.cpp` | `test_soc_hello_world` | SoC hello world |
+| `test_riscv_tests.cpp` | `test_riscv_tests` | 仓内 riscv-tests（**43/49 用例依赖仓外二进制 ⇒ 会 SKIP**） |
+| `test_riscv_tests_pipeline.cpp` | **（无 · 只构建）** | ⚠️ 46 用例全依赖仓外二进制 ⇒ Catch2 exit **4** ⇒ CTest 判红 ⇒ **不进 CTest**（`examples/disabled_examples.txt`） |
+| `test_csr_unit.cpp` | `test_csr_unit` | CSR 存储体（复位值 / WARL 掩码） |
+| `test_riscv_tests_soc.cpp` | `test_address_decoder` | 地址译码 |
+| `test_axil_mmio_master.cpp` | `test_axil_mmio_master` | 核侧 AXI4-Lite 主设备 |
+| `test_rv32i_core_mmio.cpp` | `test_rv32i_core_mmio` | 核级 MMIO 通道（IP 接口面） |
+| `test_rv32i_stall_integrity.cpp` | `test_rv32i_stall_integrity` | 反压期操作数完整性 |
+| `test_rv32i_csr_instructions.cpp` | `test_rv32i_csr_instructions` | 6 种 CSR 指令 |
+| `test_rv32i_trap_entry.cpp` | `test_rv32i_trap_entry` | trap 入口（非法指令 / `ECALL` / `EBREAK` / `WFI` / `MRET`） |
+| `test_rv32i_official_suite.cpp` | `test_rv32i_official_suite_g1..g4` | **官方 `rv32ui-p-*` 40 个**（每组 10 个 · **4 个独立二进制**） |
+| `test_pipeline_minimal.cpp` | `test_pipeline_minimal` | pipeline 最小载体 |
+| `test_pipeline_debug.cpp` | `test_pipeline_debug` | pipeline 调试观测 |
+| `test_pipeline_wrapper.cpp` | `test_pipeline_wrapper` | pipeline wrapper |
+| `test_wrapper_simple.cpp` | `test_wrapper_simple` | wrapper（简单） |
+| `test_wrapper_ifstage.cpp` | `test_wrapper_ifstage` | wrapper（IF stage） |
+| `test_wrapper_pipeline.cpp` | `test_wrapper_pipeline` | wrapper（整条流水线） |
+| `test_ifstage_device.cpp` | `test_ifstage_device` | IF stage 独立 device |
+| `test_rv32i_pipeline.cpp` | `test_rv32i_pipeline_example` | ⚠️ **与根 `tests/test_rv32i_pipeline.cpp` 不是同一份** |
+| `test_interrupt_flow.cpp` | `test_interrupt_flow` | CLINT / 中断 / 陷阱入口 / `MRET` |
+| `test_rv32i_soc_dual_parity.cpp` | `test_rv32i_soc_dual_parity` 🔷 | SoC **双后端** parity |
+| `test_rv32i_hier_rtl.cpp` | `test_rv32i_hier_rtl` 🔷 | **双后端** 层次化产物（8 module / 53 端口） |
+| `test_cache_smoke.cpp` | `riscv_mini_cache_smoke` 🔷 | **双后端** cache wrapper smoke |
+
+🔷 = 带 **`verilator_e2e`** 标签 ⇒ 需 verilator + `RESOURCE_LOCK "verilator_backend"`
+⇒ ⇒ **必须串行**（与其它 verilator 任务并发会互抢锁）。
+
+> ⚠️ **`test_rv32i_official_suite.cpp` 一源四 target 是刻意的**：40 个官方测试跑完 ≈ 7 min
+> ⇒ 超过仓内单测 **300 s** 上限 ⇒ ⇒ 拆成 4 组 × 10 个（每组 ≈ 105 s）⇒ 且护栏 C3 按
+> 「**ctest 条目名 = 可执行文件名**」找二进制 ⇒ 「同一二进制 + 过滤参数」会被护栏判成
+> 「没跑」⇒ ⇒ MUST 是**独立二进制**。
+
+### 跑法速查
+
+```bash
+# ⚠️ 0. 铁律：改了 src/** 或 include/** ⇒ 跑 ctest 前 MUST 先全量重建
+#    （ctest 不会自动重编 ⇒ 只重建被点名的 target 时其余跑的是**旧二进制** ⇒ 假绿）
+cmake --build build -j$(nproc)
+
+# 1. 只跑本目录这批（26 条目）—— ⚠️ **按子目录跑** ⇒ 不用维护正则
+#    （用大正则会同时选中仓根 tests/ 的 RV32I 条目 + spinalhdl_rv32i_phase* ⇒ 37 条 ≠ 26）
+ctest --test-dir build/examples/riscv-mini --output-on-failure
+
+# 2. 全量（仓级）
+ctest --test-dir build -LE perf --output-on-failure -j$(nproc)
+
+# 3. 单个：直接跑二进制（反馈最快）
+./build/examples/riscv-mini/test_rv32i_trap_entry
+./build/examples/riscv-mini/test_rv32i_soc_dual_parity \
+  "Rv32iSoc - IllegalOpcodeObservableNotRetired + FenceIsNop"
+
+# 4. 单个：走 ctest（带标签 / 超时 / 资源锁）
+ctest --test-dir build -R test_rv32i_trap_entry --output-on-failure
+
+# 5. 只跑双后端（需 verilator ⇒ 串行 ⇒ 慢）
+ctest --test-dir build -L verilator_e2e --output-on-failure
+
+# 6. 官方套件（核级 · 解释器 · 4 条目 · ≈ 7 min）
+ctest --test-dir build -R test_rv32i_official_suite --output-on-failure
+
+# 7. examples 运行护栏（CI job `examples-runtime`；**缺失二进制 = 失败**）
+#    ⇒ 先构建全部被跟踪 example：cmake --build build --target all-examples
+./run_all_ported_tests.sh
+```
+
+### 慢条目与前置
+
+| 条目 | 典型耗时 | 前置 |
+|---|---|---|
+| `test_rv32i_official_suite_g1..g4` | 各 ≈ 105 s | 镜像在**源码树**里（CMake 已注入 `CPPHDL_SOURCE_DIR`） |
+| `test_rv32i_hier_rtl` 🔷 | 分钟级 | verilator（`third_party/verilator/` submodule · **不是** `apt install`） |
+| `test_rv32i_soc_dual_parity` 🔷 | 分钟级 | 同上 |
+| `riscv_mini_cache_smoke` 🔷 | 分钟级 | 同上 |
+
+> ⚠️ **verilator 只装 submodule**：`bash scripts/init-submodules.sh` +
+> `cmake --build build --target verilator`（冷编 10–30 min）⇒ 见
+> `docs/developer_guide/verilator-integration.md`。
+
 ## PASSING TESTS
+
+> ⚠️ **当前的完整清单与跑法见 §TEST**（26 个 CTest 条目）⇒ ⇒ 权威的测试知识入口 =
+> [`docs/riscv-mini/test-architecture.md`](../../docs/riscv-mini/test-architecture.md)
+> ⇒ ⇒ 本段只留**历史里程碑**（Phase 1–3 的收口记录）。
+
 - Phase 1 (RegFile/ALU/Decoder): ✅ 537 lines test_forwarding, 235 lines test_hazard_complete
 - Phase 2 (Branch/Jump): ✅ 13/13 instructions
 - Phase 3 (Load/Store): ✅ 13/13 instructions
 - cache-complete-rewrite smoke (`riscv_mini_cache_smoke`): ✅ compile probe + 3 PASS instantiate (2026-10-20 `fix-riscv-mini-cache-prefetch-sigsegv` 修复: ch_reg array → ch_mem + ch_module 替换)
+- **P6-x 特权级**（2026-11-25/26）：`test_rv32i_csr_instructions`（CSR 指令）·
+  `test_rv32i_trap_entry`（trap 入口 + `ECALL`/`EBREAK`/`WFI`/`MRET`）·
+  `test_rv32i_official_suite_g1..g4`（官方 `rv32ui-p-*` 40 个，**两层门禁**：核级解释器 +
+  交付物级 verilator）⇒ ⇒ 逐条 AC 与变异登记见
+  `.rddf/reviews/rv32i-*-verify.md`（每个 change 一份验收报告）
 
 ## KNOWN ISSUES
 - ~~`rv32i_pipeline_cache.h` — I/D-Cache integration chain incomplete~~ —— ⚠️ 该文件**在磁盘上不存在**（零消费者 ⇒ 已于 2026-10-24 按 ADR-046 D4 删除）
