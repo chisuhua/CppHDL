@@ -464,6 +464,8 @@ cmake --build build --target all-examples     # 先构建全部被跟踪 example
 | **每个 change 的验收报告（逐条 AC + 变异登记）** | `.rddf/reviews/*-verify.md` |
 | **护栏可达性台账** | `.rddf/checks/guard-reachability.md` |
 | **RTL 仿真覆盖清单（E4 名单）** | `.rddf/checks/examples-rtl-sim-targets.tsv` |
+| **双后端覆盖缺口盘点（哪些该补 / 按什么顺序）** | [`dual-backend-gap-analysis.md`](dual-backend-gap-analysis.md) |
+| **跨后端观测向量的缺口登记表（未纳入向量的 `ch_out`）** | `.rddf/checks/rv32i-obs-vector-registry.md` |
 
 ---
 
