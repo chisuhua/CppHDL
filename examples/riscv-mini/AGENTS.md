@@ -192,7 +192,8 @@ bash scripts/verify_rv32i_official_rtl.sh --subset 8   # 抽样（PR 快通道 �
 cmake --build build -j$(nproc)
 
 # 1. 只跑本目录这批（26 条目）—— ⚠️ **按子目录跑** ⇒ 不用维护正则
-#    （用大正则会同时选中仓根 tests/ 的 RV32I 条目 + spinalhdl_rv32i_phase* ⇒ 37 条 ≠ 26）
+#    （大正则会同时选中仓根 tests/ 的 8 条 RV32I + 3 条 spinalhdl_rv32i_phase*
+#      ⇒ 命中 26 + 8 + 3 = 37 ≠ 26）
 ctest --test-dir build/examples/riscv-mini --output-on-failure
 
 # 2. 全量（仓级）

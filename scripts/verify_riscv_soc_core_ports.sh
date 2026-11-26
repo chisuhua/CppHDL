@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/verify_riscv_soc_core_ports.sh
 #
-# **核复合体 34 端口契约**护栏（ADR-077 V5 · change `riscv-soc-skeleton-2026-11` AC6）。
+# **核复合体 53 端口契约**护栏（ADR-077 V5 · change `riscv-soc-skeleton-2026-11` AC6）。
 #
 # ⚠️ **要治的病**：`Rv32iCoreTop` 作为**子 module** 出现在 SoC 产物里 ⇒ 它的端口表
 #   **不在** `manifest.port_table[]`（那只覆盖顶层 · ADR-072 D1-c）⇒ ⇒ 仓内**没有**任何
@@ -9,10 +9,10 @@
 #
 # 判据：
 #   V1  产物里 `Rv32iCoreTop` 的 module 端口表（**名 + 方向 + 位宽**·逐字逐序）
-#       == `examples/riscv-mini/AGENTS.md` 的 34 行表（**单一真相源 = 该表**）
+#       == `examples/riscv-mini/AGENTS.md` 的 53 行表（**单一真相源 = 该表**）
 #       ⇒ ⇒ 2026-11-23（R3e）：契约表**已归位到核侧** ⇒ ⇒ 契约跟随被描述的对象
-#   V2  端口数 == **34** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **32**
-#   V3  核自有 32 条（去 `top_core_` 前缀）与 `verify_no_duplicate_rv32i_headers.sh` 的
+#   V2  端口数 == **53** = 框架 2（`default_clock` / `default_reset`）+ 核自有 **51**
+#   V3  核自有 51 条（去 `top_core_` 前缀）与 `verify_no_duplicate_rv32i_headers.sh` 的
 #       **C6 快照**逐字一致 ⇒ ⇒ 「头文件 → 产物 → 登记表」三方闭环
 #   V4  **微架构副本禁入**（ADR-077 D1 的「MUST NOT 复制任何微架构实现」）——
 #       `examples/riscv-soc/src/**` 下的头 basename MUST NOT 出现在
@@ -60,7 +60,7 @@ ok()   { echo "✅ $*"; }
 TMPROOT="${TMPDIR:-/tmp/opencode}"
 mkdir -p "$TMPROOT" || exit 2
 
-# ── 解析：AGENTS.md 的 34 行表 → `name:dir:width`（按表中出现序）──
+# ── 解析：AGENTS.md 的 53 行表 → `name:dir:width`（按表中出现序）──
 parse_agents_table() {  # $1 = agents md path
     awk -F'|' '
         /^\| *[0-9]+ *\|/ {
@@ -103,7 +103,7 @@ compare_tables() {  # $1 = expected file · $2 = actual file · 返回 diff 行�
     if diff -u "$1" "$2" >/dev/null 2>&1; then echo 0; else diff -u "$1" "$2" | wc -l; fi
 }
 
-# ── V3：核自有 32 条 vs C6 快照 ──
+# ── V3：核自有 51 条 vs C6 快照 ──
 c6_snapshot() {
     sed -n 's/^SOC_TOP_PORTS="\(.*\)"$/\1/p' "$HEADER_GUARD" | tr ' ' '\n' | awk -F: '
         NF == 3 {
@@ -189,7 +189,7 @@ run_checks() {  # $1 = agents md · $2 = product verilog
         ok "V1 $CORE_MODULE 端口表 == AGENTS.md 的 53 行（逐字逐序）"
     fi
 
-    # V3：核自有 32 条 vs C6 快照
+    # V3：核自有 51 条 vs C6 快照
     local own c6
     own="$TMPROOT/.soc_core_own.txt"
     c6="$TMPROOT/.soc_core_c6.txt"

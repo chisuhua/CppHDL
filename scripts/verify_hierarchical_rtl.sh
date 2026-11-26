@@ -2,7 +2,7 @@
 # ============================================================================
 # verify_hierarchical_rtl.sh
 #
-# 护栏：**层次化 RTL 发射的产物级判据**（R1–R8）。
+# 护栏：**层次化 RTL 发射的产物级判据**（R1–R8 + R8′ + R9 · 另有 R0 前置与 R1a 命令行面）。
 #
 # ⚠️ **为什么需要它**：`tests/test_hierarchy_verilog.cpp` 的断言只能看见
 #    「发射器自己认为产出了什么」（文本子串 + 返回值）。它**看不见** Verilog
@@ -34,7 +34,7 @@
 #        （`isPrimaryIO` + dtype 的 `range` ⇒ 复用提取器的 `--ports` 模式）
 #        ⇒ ⇒ 名字 + 方向 + 宽度**逐项**比对 ⇒ ⇒ 同时判掉「成层子树的 `ch_out`
 #        跑到顶层」（期望集里没有它们 ⇒ 出现即红）。
-#   R8′ **RV32I 产品级语料**的顶层端口表 == **手推期望集**（34 根）—— 与 R8 同机制，
+#   R8′ **RV32I 产品级语料**的顶层端口表 == **手推期望集**（53 根）—— 与 R8 同机制，
 #        但**语料与发射器都不同**（examples 侧的 emitter CLI ⇒ ⇒ `tests/**` 禁引
 #        `examples/**` ⇒ ⇒ 不可能塞进 `hier_rtl_products`）⇒ ⇒ 独立块 + 独立前置。
 #        ⚠️ **为什么必须有这一条**：RV32I 现有的两条端口面判据（层次化 == 扁平根端口段
@@ -43,7 +43,7 @@
 #        （台账 id=25 的裁决 · 选项 B · 2026-11-21）。
 #
 # 用法：
-#   bash scripts/verify_hierarchical_rtl.sh              # 主路径（R1–R8）
+#   bash scripts/verify_hierarchical_rtl.sh              # 主路径（R1–R8 + R8′ + R9）
 #   bash scripts/verify_hierarchical_rtl.sh --self-test   # 逐条投毒 ⇒ 必红 ⇒ 还原复绿
 #
 # 前置：`build/tests/hier_rtl_products`（生成器）
@@ -620,8 +620,8 @@ r8p_rv32i_port_set() {  # $1 = 产品目录（内含 top.v）
         if ! python3 - "$WORK/logs/$name-r8p-ports.tsv" <<'PY'
 import sys
 
-# ★ **手推期望集**（34 根）—— 推导源 = `examples/riscv-mini/src/rv32i_core_top.h`
-#   的 `__io`（4 in + 28 out · **声明顺序即端口顺序**）+ 框架 2（clock/reset）
+# ★ **手推期望集**（53 根）—— 推导源 = `examples/riscv-mini/src/rv32i_core_top.h`
+#   的 `__io`（12 in + 39 out · **声明顺序即端口顺序**）+ 框架 2（clock/reset）
 #   ⇒ ⇒ **禁**从产物输出抄（抄了 = 判据自证 ⇒ 恒绿）。
 EXPECTED = [
     # 框架基础设施（2）
@@ -992,7 +992,7 @@ PYX
 
 case "${1:-}" in
 "")
-    run_all && echo "✅ verify_hierarchical_rtl: PASS（R1–R8）"
+    run_all && echo "✅ verify_hierarchical_rtl: PASS（R1–R8 + R8′ + R9）"
     exit $?
     ;;
 --self-test)

@@ -40,6 +40,11 @@
 
 ⚠️ **三层不可互相替代** ⇒ 见 §5.2「两后端一致 ≠ 正确」与 §4.2。
 
+> ⚠️ **两套分层口径别混**（§0 vs §1）：§0 的 **L0/L1/L2 按「载体文件位置」**分层
+> （仓根 `tests/` vs `examples/riscv-mini/tests/`）；§1 的「组件级 / 核级」按 **DUT 层级**
+> 分层 ⇒ ⇒ **`test_csr_unit` 是组件级 DUT**（`cpu/riscv/rv32i_csr.h`）**但文件位置**在
+> examples 侧 ⇒ ⇒ 它落在 §2.1 的 **L1 行**（归位按**位置**，不按 DUT）。
+
 ---
 
 ## 1. 判据类型（正交的四个面）
@@ -63,7 +68,8 @@ CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 ### 2.1 L1 核 IP / SoC 级 —— `examples/riscv-mini/tests/`（**24 个源 → 26 个 CTest 条目**）
 
 > 判据 = `scripts/verify_example_test_wiring.sh`（C1 归属守恒 · C2 数量守恒 ·
-> C3 逐条 exit 0 · C3b 日志无 error/fatal）⇒ ⇒ **增删测试 MUST 同批**更新
+> **C3 = 逐条 exit 0 且日志无 error/fatal** · C3b = allowlist stale 检查）
+> ⇒ ⇒ **增删测试 MUST 同批**更新
 > 根 `AGENTS.md` 的 `EXAMPLES_TEST_SOURCES` 锚点（**26**）。
 > ⚠️ **接线表（源 → 条目）的运行期副本** = `examples/riscv-mini/AGENTS.md` 的 **§TEST** 段
 > ⇒ ⇒ 两处 MUST 同批改（否则漂移）。
@@ -173,8 +179,9 @@ ctest --test-dir build --output-on-failure \
 ctest --test-dir build -L verilator_e2e --output-on-failure
 ```
 
-> ⚠️ **不要用「一个大正则」筛本目录的测试** ⇒ ⇒ 它会**同时**选中仓根 `tests/` 的
-> RV32I 条目与 `spinalhdl_rv32i_phase*`（实测 37 条 vs 实际的 26 条）
+> ⚠️ **不要用「一个大正则」筛本目录的测试** ⇒ ⇒ 一条覆盖 `rv32i|riscv|…` 的大正则会
+> **同时**选中仓根 `tests/` 的 **8** 条 RV32I 条目与 **3** 条 `spinalhdl_rv32i_phase*`
+> ⇒ ⇒ 命中数 = **26（本目录）+ 8 + 3 = 37** ≠ 26
 > ⇒ ⇒ 要么按**子目录**跑（①），要么按**锚定正则**跑（③）。
 
 ### 3.2 单个跑
@@ -194,9 +201,9 @@ ctest --test-dir build -R test_rv32i_trap_entry --output-on-failure
 | 条目 | 典型耗时 | 前置 |
 |---|---|---|
 | `test_rv32i_official_suite_g1..g4` | 各 ≈ **105 s**（合计 ≈ 7 min） | 40 份镜像在**源码树**内（CMake 已注入 `CPPHDL_SOURCE_DIR`） |
-| `test_rv32i_hier_rtl` 🔷 | 分钟级 | verilator（见下） |
-| `test_rv32i_soc_dual_parity` 🔷 | 分钟级 | verilator |
-| `riscv_mini_cache_smoke` 🔷 | 分钟级 | verilator |
+| `test_rv32i_hier_rtl` 🔷 | **冷** verilator cache：分钟级（warm cache 实测 ≈ **3 s**） | verilator（见下） |
+| `test_rv32i_soc_dual_parity` 🔷 | 分钟级（实测 ≈ **3 min** · warm cache 亦然 ⇒ 成本在**仿真拍数**不在编译） | verilator |
+| `riscv_mini_cache_smoke` 🔷 | **冷** verilator cache：分钟级（warm cache 实测 ≈ **1 s**） | verilator |
 
 ⚠️ **verilator 只装 submodule**：`apt install verilator` 是**错的** ⇒ 用
 `third_party/verilator/`（`bash scripts/init-submodules.sh` +
@@ -314,7 +321,9 @@ cmake --build build --target all-examples     # 先构建全部被跟踪 example
   `if (r.valid) { … }` **不等价**（`!` 是**硬件算子** ⇒ 产出节点 ⇒ 建图期恒假
   ⇒ 永远不 return）⇒ ⇒ 该类变异**恒绿**
 - ⚠️ **无效变异 MUST 如实登记**（恒绿 ⇒ 不改变可观测行为 ⇒ 不是判别力缺口）
-- 逐条登记在 change 的 `design.md` §8（变异矩阵）
+- 逐条登记在 change 的 `design.md` 的**变异矩阵**段（⚠️ **段号各 change 不同**
+  ⇒ ⇒ 不写死 §N ⇒ 例：`rv32i-ecall-ebreak-wfi-2026-11` 的 §8 是变异矩阵，
+  而 `rv32i-trap-entry-2026-11` 的 §8 是「实施期订正」）
 
 ### 5.4 未驱动的输入端口 = **未定义值**
 
@@ -354,10 +363,10 @@ cmake --build build --target all-examples     # 先构建全部被跟踪 example
 | `scripts/verify_example_assertion_quality.sh` | **断言质量**（被执行到的测试有没有真的断言语义输出） | 同上（Catch2 断言） |
 | `scripts/verify_examples_rtl_sim.sh` | **RTL 仿真覆盖**（独立 Verilog TB 的产物级判据） | `.sv` 独立 TB（**不在**上一条的域） |
 | `scripts/verify_rv32i_official_rtl.sh` | **官方套件在 RTL 产物上全过**（+ lint 门 + 负向对照） | 交付物级 |
-| `scripts/rv32i_rtl_sim_env.sh` | 生成 → lint → 编译 → 运行（flat / hier） | 交付物级 |
-| `scripts/verify_hierarchical_rtl.sh` | 层次化产物 **R1–R9**（含 R8′ = RV32I 产品语料 53 端口） | 交付物级 |
+| `scripts/rv32i_rtl_sim_env.sh` | 生成 → lint → 编译 → 运行（flat / hier）· ⚠️ **本地一键脚本 · 不在 CI 门内**（不在可达性台账里） | 交付物级 |
+| `scripts/verify_hierarchical_rtl.sh` | 层次化产物 **R1–R8 + R8′ + R9**（另有 R0 前置 / R1a 命令行面）· R8′ = RV32I 产品语料的顶层端口表 == 手推期望集 **53** 根 | 交付物级 |
 | `scripts/verify_riscv_soc_core_ports.sh` | 核 IP **53** 端口契约（V1 逐字逐序 · V2 = 53 · V3 C6 快照 51） | 契约面 |
-| `scripts/verify_no_duplicate_rv32i_headers.sh` | 单源化（同名头双副本 · C5 行数锚点 · **C6 = 51 端口快照**） | 结构面 |
+| `scripts/verify_no_duplicate_rv32i_headers.sh` | 单源化（同名头双副本 · C5 = `include/cpu/AGENTS.md` 的 STRUCTURE / KEY FILES 表与磁盘一致 + 自述计数 · **C6 = 51 端口快照**） | 结构面 |
 | `scripts/verify_dual_backend_parity.sh` | **双后端覆盖不缩面**（源文件数 + pair 数**双锚点**） | 结构面 |
 | `scripts/verify_test_counts.sh` | 计数锚点（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `EXAMPLES_TEST_SOURCES`） | 结构面 |
 | `scripts/verify_input_port_additions.sh` · `verify_input_port_required_registry.sh` | 未驱动输入端口 | 契约面 |
@@ -377,7 +386,7 @@ cmake --build build --target all-examples     # 先构建全部被跟踪 example
 | `VERILATOR_E2E_TOTAL` | **81** | 带 `verilator_e2e` 标签的条目数 | 同上 |
 | `DUAL_BACKEND_PARITY_TOTAL` | **67** | 含 `DUAL_BACKEND_TEST_PAIR(` 的测试**源文件**数 | `scripts/verify_dual_backend_parity.sh` |
 | `DUAL_BACKEND_PARITY_PAIRS` | **297** | 同上的 **pair 调用数**（深度维度） | 同上 |
-| `EXAMPLES_TEST_SOURCES` | **26** | `examples/**` 下的测试源文件数 | `scripts/verify_example_test_wiring.sh`（C2） |
+| `EXAMPLES_TEST_SOURCES` | **26** | `examples/**` 下的测试源文件数（**全域** = riscv-mini **24** + axi4 **2**）⚠️ 与 §2.1 的「**26 个 CTest 条目**」**是两个不同的 26**（后者 = 本目录 24 源 → 26 条目） | `scripts/verify_example_test_wiring.sh`（C2） |
 
 ⚠️ **两个 parity 锚点都要**：只钉「文件数」的话，从**含多个 pair** 的文件里删一个 pair
 ⇒ 该文件仍被计数 ⇒ ⇒ 护栏**看不见**（实测：变异 M1 恒绿）⇒ ⇒ 深度锚点补上这个盲区。
