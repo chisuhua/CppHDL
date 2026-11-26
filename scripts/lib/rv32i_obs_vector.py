@@ -153,8 +153,9 @@ def load(root: pathlib.Path) -> tuple:
         raise SystemExit("::error::fail-closed：核顶层解析到 0 个 ch_out（%s）" % CORE_HEADER)
     if not V:
         raise SystemExit("::error::fail-closed：向量解析到 0 条（%s）" % VECTOR_SRC)
-    if not R_rows:
-        raise SystemExit("::error::fail-closed：登记表解析到 0 行（%s）" % REGISTRY)
+    # ⚠️ **登记表为空 = 合法**（缺口归零 ⇒ 向量覆盖全部端口）
+    #    ⇒ ⇒ 不 fail-closed：真正的判据是 C4（V ∪ R == P）—— 端口漏了就红，
+    #    与「登记表是否有行」无关。空表被误判成「解析失败」会把**已归零**的好状态判红。
     return P, V, R_rows
 
 
@@ -244,6 +245,8 @@ def run_check(root: pathlib.Path) -> int:
         else:
             print("  \033[0;31m❌ %s %s\033[0m" % (code, msg), file=sys.stderr)
             bad += 1
+    if not R_rows:
+        print("  ℹ️ 登记表 0 条（缺口已归零 ⇒ 向量覆盖全部端口）")
     if bad:
         print("\033[0;31m❌ rv32i-obs-vector: %d 处违规\033[0m" % bad, file=sys.stderr)
         return 1
@@ -326,6 +329,21 @@ def run_self_test() -> int:
             else:
                 print("  ✅ %s ⇒ 红（命中 %s）" % (label, "、".join(hit)))
 
+        # P0：登记表**空** + 向量覆盖全部端口 ⇒ MUST 仍绿（缺口归零是合法状态）
+        root = pathlib.Path(tempfile.mkdtemp(dir=td))
+        _mk(root)
+        (root / REGISTRY).write_text(
+            "| 端口 | 方向 / 宽度 | 为什么**未纳入** | 归位条件 |\n|---|---|---|---|\n",
+            encoding="utf-8")
+        (root / VECTOR_SRC).write_text(
+            'constexpr const char *kObsNames[] = {"a", "b", "c", "d"};\n',
+            encoding="utf-8")
+        v0 = _verdict(root)
+        if not v0 or not all(v0.values()):
+            fails.append("P0 空登记表（缺口归零）⇒ **被误判红**：%s" % v0)
+        else:
+            print("  ✅ P0 空登记表 + 向量全覆盖 ⇒ 绿（缺口归零是合法状态）")
+
         # P1：从向量删一项 ⇒ C1 / C4
         poison("P1 向量删一项", VECTOR_SRC, '    "b"}', "}", ["C1", "C4"])
         # P2：登记表加编造端口 ⇒ C2
@@ -366,7 +384,7 @@ def run_self_test() -> int:
             print("  \033[0;31m❌ %s\033[0m" % f, file=sys.stderr)
         print("\033[0;31m❌ rv32i-obs-vector --self-test: %d 项失败\033[0m" % len(fails), file=sys.stderr)
         return 1
-    print("\033[0;32m✅ rv32i-obs-vector --self-test: PASS（基线 + 5/5 投毒各自必红）\033[0m")
+    print("\033[0;32m✅ rv32i-obs-vector --self-test: PASS（基线 + P0 + 5/5 投毒各自必红）\033[0m")
     return 0
 
 

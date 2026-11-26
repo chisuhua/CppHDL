@@ -14,7 +14,7 @@
 
 | 档 | 条目 | 判定 |
 |---|---|---|
-| **P0** | `test_rv32i_soc_dual_parity`（向量缺口：11 根 `axil_*`）+ `test_rv32i_trap_entry` / `test_rv32i_csr_instructions`（核级语义无跨后端证据） | **做** |
+| **P0** | ✅ **P0-1 已收口**（2026-11-26 · AXI-Lite 11 根进向量）· ⬜ **P0-2** `test_rv32i_trap_entry` / `test_rv32i_csr_instructions`（核级语义无跨后端证据） | **做** |
 | **P1** | `test_rv32i_stall_integrity`（反压期操作数完整性） | 做（可搭 P0 的 MMIO 多拍车） |
 | **P2** | 9 个 `test_pipeline_*` / `test_wrapper_*` / `test_ifstage_device` + `test_csr_unit` + `test_interrupt_flow` + 官方套件 4 条 + `test_riscv_tests` | **不做**（理由逐条见 §6） |
 | **P3** | `test_address_decoder` / `test_axil_mmio_master` / `test_soc_hello_world` / `test_riscv_tests_pipeline` | **结构性不可行 或 零价值**（§7） |
@@ -53,7 +53,7 @@ AXI-Lite 通道都不在其中。
 
 | 条目 | 用例/断言 | DUT 层级 | 观测面（顶层可见？） | verilator |
 |---|---|---|---|---|
-| `test_rv32i_soc_dual_parity` | 15 / 23213 | 核顶层 | 28 / **39** 根 `ch_out`（**11 根 `axil_*` 未进向量**） | ✅ 双路逐拍 |
+| `test_rv32i_soc_dual_parity` | 16 / 44494 | 核顶层 | **39 / 39** 根 `ch_out`（含 11 根 `axil_*`） | ✅ 双路逐拍 |
 | `test_rv32i_hier_rtl` | 4 / 188 | 产物（flat vs hier） | Verilog 产物端口表 | ✅ 产物级 |
 | `riscv_mini_cache_smoke` | 12 / 78 | cache wrapper | 组件 `ch_out` | ✅ 双后端 |
 | `test_rv32i_trap_entry` | 11 / 1196 | **核顶层** | `dbg_*` + 固件写回 | ❌ |
@@ -79,7 +79,13 @@ AXI-Lite 通道都不在其中。
 
 ---
 
-## 3. P0-1 · AXI-Lite 通道的跨后端逐拍证据
+## 3. P0-1 · AXI-Lite 通道的跨后端逐拍证据 —— ✅ **已收口（2026-11-26）**
+
+> 收口 change = `rv32i-obs-vector-axil-2026-11`：向量 28 → **39**（+11 根 `axil_*`）·
+> 8 根输入变成显式驱动（`AxilSlave` 默认**立即应答** · 全常量 ⇒ 逐拍输入相同）·
+> 新增 `Rv32iSoc - AxilMmioCrossBackend`（MMIO 事务的 AXI 语义 golden + 非 MMIO 程序
+> 的「请求线全程为 0」）· 登记表 11 行**归零**。
+> ⇒ ⇒ 以下保留**原始分析**（照相机式记录「为什么当时值得做」）。
 
 **现状（三条独立事实指向同一个洞）**
 
@@ -167,7 +173,8 @@ dual parity 覆盖的是「非法指令**不退休 + 可观测**」与「flush �
 （`verilator-rv32i-e2e` 的「观测集合 MUST 对着端口面守恒」）。
 
 ⇒ ⇒ **推论**：本盘点的 P0-1 不再是「可选优化」—— 只要不补，登记表就一直在册；
-一旦有人想删登记行（C3），就必须同时把端口补进向量。
+一旦有人想删登记行（C3），就必须同时把端口补进向量。**该推论已于 2026-11-26 兑现**
+（P0-1 收口 ⇒ 登记表归零 ⇒ 护栏现在守强形式 `|向量| == |端口面|`）。
 
 ---
 
@@ -176,7 +183,7 @@ dual parity 覆盖的是「非法指令**不退休 + 可观测**」与「flush �
 | 步 | 内容 | 前置 | 估 |
 |---|---|---|---|
 | **1** | 护栏（**已归档** 2026-11-26） | — | ✅ |
-| **2** | **P0-1**：AXI-Lite 19 端口进跨后端证据 | 步 1 的登记表 | 1–2 天 |
+| **2** | **P0-1**：AXI-Lite 19 端口进跨后端证据 | 步 1 的登记表 | ✅ **已收口 2026-11-26** |
 | **3** | **P0-2 + P1**：trap / CSR / 反压 的跨后端 golden | 步 2 的 fixture 范式 | 2–3 天 |
 
 **CI 成本**：全部落在**已有**的 3 个 `verilator_e2e` 条目内扩 ⇒ **不新增条目**

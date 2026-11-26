@@ -21,8 +21,12 @@
 //    （先例：tests/test_verilator_complex_e2e.cpp 的 SpiFsm 用例）。
 //
 // 2. **观测点全走顶层 ch_out** —— VerilatorBackend 只对 `port_access_` 里的
-//    顶层端口建访问表，读不到设计内部。⇒ 核 IP 顶层暴露 32 个端口
-//    （5 输入 + 27 输出 = 11 功能观测 + 16 诊断观测），本测试比对**全部 27 个输出**。
+//    顶层端口建访问表，读不到设计内部。⇒ 核 IP 顶层暴露 **53** 个端口
+//    （框架 2 + 12 in + **39 out**），本测试比对**全部 39 个输出**
+//    （11 功能 `obs_*` + 17 诊断 `dbg_*` + **11 `axil_*`**）。
+//    ⚠️ **2026-11-26 补齐**：`axil_*` 11 根曾长期缺席（S4a 加通道时未同步向量）
+//    ⇒ ⇒ 现由 `.rddf/checks/rv32i-obs-vector-registry.md` 的**归零** + 护栏
+//    `scripts/verify_dual_backend_parity.sh`（C1–C4）保证「端口面 == 观测面」。
 //
 // 3. **固件必须无数据冒险** —— lib 版 `HazardUnit` 不接数据前推
 //    （include/cpu/pipeline/hazard_unit.h: `io().rs1_data = io().rs1_data_raw`），
@@ -35,7 +39,7 @@
 // （见 .rddf/improvements/rv32i-pipeline-commit-path-2026-10.md §2）。
 // 断言分三层：
 //   ① 编码器 × 手算常量交叉校验（防自证）；
-//   ② 逐周期双后端全向量一致（27 个输出观测值，**无掩码**）；
+//   ② 逐周期双后端全向量一致（**39** 个输出观测值，**无掩码**）；
 //   ③ ISA 语义 golden（3 个 store 的地址与数据 + 分支/停顿计数 + 退休数）。
 //      ③ 是关键：② 只证明「两个后端一样」，③ 才证明「两个后端都对」。
 // ---------------------------------------------------------------------------
@@ -63,6 +67,7 @@
 #include "cpu/pipeline/rv32i_pipeline.h"
 #include "cpu/pipeline/rv32i_tcm.h"
 #include "cpu/riscv/rv32i_asm_encode.h"
+#include "cpu/riscv/rv32i_mem_map.h"
 #include "rv32i_fw_demo.h"
 #include "rv32i_core_top.h"
 #include "simulator.h"
@@ -86,6 +91,7 @@ using riscv::LB;
 using riscv::LBU;
 using riscv::LH;
 using riscv::LHU;
+using riscv::LUI;
 using riscv::LW;
 using riscv::NOP;
 using riscv::SB;
@@ -121,10 +127,18 @@ constexpr const char *kObsNames[] = {
     // ⚠️ **G1/G2（2026-11-15 · B4）**：未知 opcode 的可观测面
     //   （0 = 合法 · 1 = 已知未实现 `OP_SYSTEM` · 2 = 未知 opcode）
     //   ⇒ ⇒ 进观测向量 ⇒ ⇒ **双后端 parity 也覆盖它**
-    "dbg_illegal_reason"};
+    "dbg_illegal_reason",
+    // ---- AXI-Lite 主口（11 根 · 2026-11-26 补齐 · 顺序 == 核顶层 `__io`）----
+    // ⚠️ 这 11 根**曾长期缺席**（S4a 加通道时未同步向量）⇒ ⇒ 现由护栏
+    //    `scripts/verify_dual_backend_parity.sh` 的 C1–C4 保证「端口面 == 观测面」。
+    "axil_awaddr", "axil_awprot", "axil_awvalid",
+    "axil_wdata", "axil_wstrb", "axil_wvalid",
+    "axil_bready",
+    "axil_araddr", "axil_arprot", "axil_arvalid",
+    "axil_rready"};
 constexpr std::size_t kObsCount = sizeof(kObsNames) / sizeof(kObsNames[0]);
-// 32 个端口里 4 个是输入（ext_rst / prog_*）⇒ 28 个输出被观测
-static_assert(kObsCount == 28, "观测向量长度必须与核 IP 顶层的**输出**端口数一致");
+// 核顶层 53 个端口里 12 个是输入（ext_rst / prog_* / axil_* 的 in 面）⇒ 39 个输出被观测
+static_assert(kObsCount == 39, "观测向量长度必须与核 IP 顶层的**输出**端口数一致");
 
 // 观测向量的**编译期**下标查找（避免手抄下标 ⇒ 下标漂移会静默读错字段；
 // 名字写错 ⇒ 编译期失败而不是读到别的字段）
@@ -196,7 +210,7 @@ uint64_t read_port_output(Simulator &sim, ch::core::lnodeimpl *ln) {
     return static_cast<uint64_t>(it->second);
 }
 
-// 顶层 27 个输出观测端口的当前值（顺序 == kObsNames）
+// 顶层 **39** 个输出观测端口的当前值（顺序 == kObsNames）
 std::array<uint64_t, kObsCount> obs_snapshot(Rv32iCoreTop &dut,
                                              Simulator &sim) {
     auto &io = dut.io();
@@ -227,7 +241,19 @@ std::array<uint64_t, kObsCount> obs_snapshot(Rv32iCoreTop &dut,
             read_port_output(sim, io.dbg_exmem_valid.impl()),
             read_port_output(sim, io.dbg_mem_valid_out.impl()),
             read_port_output(sim, io.dbg_load_use_detected.impl()),
-            read_port_output(sim, io.dbg_illegal_reason.impl())};
+            read_port_output(sim, io.dbg_illegal_reason.impl()),
+            // AXI-Lite 主口（11 根）
+            read_port_output(sim, io.axil_awaddr.impl()),
+            read_port_output(sim, io.axil_awprot.impl()),
+            read_port_output(sim, io.axil_awvalid.impl()),
+            read_port_output(sim, io.axil_wdata.impl()),
+            read_port_output(sim, io.axil_wstrb.impl()),
+            read_port_output(sim, io.axil_wvalid.impl()),
+            read_port_output(sim, io.axil_bready.impl()),
+            read_port_output(sim, io.axil_araddr.impl()),
+            read_port_output(sim, io.axil_arprot.impl()),
+            read_port_output(sim, io.axil_arvalid.impl()),
+            read_port_output(sim, io.axil_rready.impl())};
 }
 
 // ---------------------------------------------------------------------------
@@ -476,11 +502,48 @@ constexpr std::array<uint32_t, kFirmwareWords> firmware() {
 //    ⇒ ⇒ 被执行到的范围**必然**被覆盖；且装载期 `ext_rst = 1` ⇒ 计数器不被污染。
 constexpr std::size_t kTailFillWords = 256;
 
+// ---------------------------------------------------------------------------
+// AXI-Lite **从设备侧**接线（默认 = **立即应答**）
+// ---------------------------------------------------------------------------
+// ⚠️ 为什么默认「立即应答」而不是「全 0」：
+//   · 全 0（永不应答）时，任何走到 MMIO 的固件都会**永久停住**（store 的 `data_ready`
+//     永不回来 ⇒ 流水线冻结）⇒ ⇒ 未来某个用例一碰 MMIO 就是**挂死**（不是红，是挂）。
+//   · 「立即应答」对**无 MMIO 的固件**零影响（master 只在请求时才看这些线）。
+//   · 全部是**常量** ⇒ 两个后端的输入逐拍完全相同 —— 这是逐拍 diff 的**前提**。
+//     （若从设备反应式地跟随 DUT 输出，一旦两端分歧，输入也分歧 ⇒ 信号放大；
+//       常量接线让「分歧」直接体现在 DUT 输出上。）
+struct AxilSlave {
+    uint64_t awready = 1;
+    uint64_t wready = 1;
+    uint64_t bresp = 0;
+    uint64_t bvalid = 1;
+    uint64_t arready = 1;
+    uint64_t rdata = 0x5A;
+    uint64_t rresp = 0;
+    uint64_t rvalid = 1;
+};
+
+void drive_axil(Simulator &sim, Rv32iCoreTop &dut,
+                const AxilSlave &s = AxilSlave{}) {
+    auto &io = dut.io();
+    sim.set_input_value(io.axil_awready, s.awready);
+    sim.set_input_value(io.axil_wready, s.wready);
+    sim.set_input_value(io.axil_bresp, s.bresp);
+    sim.set_input_value(io.axil_bvalid, s.bvalid);
+    sim.set_input_value(io.axil_arready, s.arready);
+    sim.set_input_value(io.axil_rdata, s.rdata);
+    sim.set_input_value(io.axil_rresp, s.rresp);
+    sim.set_input_value(io.axil_rvalid, s.rvalid);
+}
+
 template <std::size_t N>
 void load_firmware(Simulator &sim, Rv32iCoreTop &dut,
                     const std::array<uint32_t, N> &fw) {
     auto &io = dut.io();
     sim.set_input_value(io.ext_rst, 1u);
+
+    // ⚠️ AXI-Lite 的 8 根输入 MUST **显式驱动**（未驱动 = 未定义值 ⇒ 跨后端可能分叉）
+    drive_axil(sim, dut);
     sim.set_input_value(io.prog_we, 1u);
     for (std::size_t i = 0; i < fw.size(); ++i) {
         sim.set_input_value(io.prog_addr, i);
@@ -2879,3 +2942,195 @@ DUAL_BACKEND_TEST_PAIR(Rv32iCoreTop,
     CHECK(x5_seen);
     CHECK(x5_data == 0u);
 });
+
+// ===========================================================================
+// ⑯ AXI-Lite MMIO 通道的**跨后端**判据
+//    （2026-11-26 · change `rv32i-obs-vector-axil-2026-11` · 步 2 of
+//      improvement `rv32i-dual-backend-obs-vector-guard-2026-11`）
+// ---------------------------------------------------------------------------
+// ## 手推（禁抄仿真输出 —— 解释器与 codegen 同源 ⇒ ⇒ 抄输出 = 判据自证）
+// 固件 = 5 字（与 `test_rv32i_core_mmio.cpp` 同款；其期望值已逐条手推 + 库表交叉校验）：
+//   0  lui  x4, 0x80102   ⇒ x4 = 0x8010_2000（== `riscv::kGpio.base` · MMIO 段内）
+//   1  lw   x6, 4(x4)     ⇒ MMIO 读 @ 0x8010_2004 ⇒ 从设备回 `rdata` = 0x5A
+//   2  addi x7, x0, 1     ⇒ 非 MMIO 后继（EX/MEM 地址 = 1）
+//   3  sw   x6, 0(x4)     ⇒ MMIO 写 @ 0x8010_2000 · 数据 = 0x5A
+//   4  jal  x0, 0         ⇒ 自环
+//
+// 从设备 = **立即应答**（`AxilSlave` 默认值）⇒ ⇒ 每条事务 **1 拍**完成：
+//   AW+W 同拍握手（`awready`/`wready` = 1）⇒ 次拍 `bvalid` ⇒ 完成脉冲；
+//   AR 握手 ⇒ 次拍 `rvalid`（`rdata` = 0x5A）⇒ 完成脉冲。
+//
+// ## 判据（每条都可机械判定 · 期望值全部手推）
+//   A **逐拍 diff**：39 根输出（含 11 根 `axil_*`）无掩码全等
+//   B `axil_awvalid` / `axil_arvalid` **各恰好 1 拍**
+//   C 首个 `awvalid` 拍：`awaddr` == 0x8010_2000 · `wdata` == 0x5A · `wstrb` == 0xF
+//   D 首个 `arvalid` 拍：`araddr` == 0x8010_2004
+//   E store 事件 **1 次**（addr / data == 0x8010_2000 / 0x5A）
+//   F 写回 **3 条**：x4 = 0x8010_2000 · x6 = 0x5A · x7 = 1
+//   G **无 MMIO 的固件** ⇒ `awvalid` / `wvalid` / `arvalid` **全程为 0**
+//     （= 把 `test_rv32i_core_mmio` 的 AC5「pre-cache 分流方向」搬进跨后端证据）
+// ===========================================================================
+TEST_CASE("Rv32iSoc - AxilMmioCrossBackend",
+          "[rv32i][soc][axil][dual][verilator][e2e]") {
+    constexpr std::size_t kIdxAwValid = obs_idx("axil_awvalid");
+    constexpr std::size_t kIdxAwAddr = obs_idx("axil_awaddr");
+    constexpr std::size_t kIdxWValid = obs_idx("axil_wvalid");
+    constexpr std::size_t kIdxWData = obs_idx("axil_wdata");
+    constexpr std::size_t kIdxWStrb = obs_idx("axil_wstrb");
+    constexpr std::size_t kIdxArValid = obs_idx("axil_arvalid");
+    constexpr std::size_t kIdxArAddr = obs_idx("axil_araddr");
+    static_assert(kIdxAwValid != kObsCount && kIdxArValid != kObsCount &&
+                      kIdxWData != kObsCount,
+                  "axil_* 未在 kObsNames 中");
+
+    // ── 手推常量 ──
+    constexpr uint32_t kMmioWriteAddr = 0x8010'2000u;  // == riscv::kGpio.base
+    constexpr uint32_t kMmioReadAddr = kMmioWriteAddr + 4u;
+    constexpr uint64_t kStubRdata = 0x5Au;
+    constexpr uint64_t kExpectWstrb = 0xFu;  // `sw` ⇒ 4 字节车道全开
+
+    static_assert(riscv::in_mmio(kMmioWriteAddr), "写地址 MUST 落在 MMIO 段内");
+    static_assert(riscv::in_mmio(kMmioReadAddr), "读地址 MUST 落在 MMIO 段内");
+    static_assert(kMmioWriteAddr == static_cast<uint32_t>(riscv::kGpio.base),
+                  "写地址 MUST == 库层 kGpio.base");
+
+    if (!tool_available("verilator")) {
+        WARN("verilator not on PATH - verilator half skipped (not SKIP: "
+             "all-SKIP makes Catch2 exit 4 and CTest red)");
+        return;
+    }
+
+    // ── 固件（库编码器产出）+ 手算常量交叉校验（防自证）──
+    const std::array<uint32_t, 5> mmio_fw = {
+        LUI(4, 0x80102), LW(6, 4, 4), ADDI(7, 0, 1), SW(6, 4, 0), JAL(0, 0)};
+    REQUIRE(mmio_fw[0] == 0x80102237u);  // lui  x4, 0x80102
+    REQUIRE(mmio_fw[1] == 0x00422303u);  // lw   x6, 4(x4)
+    REQUIRE(mmio_fw[2] == 0x00100393u);  // addi x7, x0, 1
+    REQUIRE(mmio_fw[3] == 0x00622023u);  // sw   x6, 0(x4)
+    REQUIRE(mmio_fw[4] == 0x0000006Fu);  // jal  x0, 0
+
+    // ── 双后端：同一 TEST_CASE 内 2×ch_device + 2×Simulator ──
+    auto dev_a = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto dev_b = std::make_unique<ch::ch_device<Rv32iCoreTop>>();
+    auto sim_a = std::make_unique<Simulator>(dev_a->context());
+    auto sim_b = std::make_unique<Simulator>(dev_b->context());
+
+#if __has_include("jit/jit_compiler.h")
+    sim_a->set_jit_enabled(false);
+#endif
+    sim_a->set_backend(std::make_unique<InterpreterBackend>());
+
+    ch::data_map_t data_map_b;
+    auto workdir = make_temp_dir("_axil");
+    REQUIRE_FALSE(workdir.empty());
+    auto backend = std::make_unique<VerilatorBackend>(workdir);
+    if (!backend->initialize(dev_b->context(), data_map_b)) {
+        WARN("VerilatorBackend::initialize() returned false - verilator half "
+             "skipped (see ADR-035 R3: >64-bit ports are rejected)");
+        return;
+    }
+    if (backend->port_access_snapshot().empty()) {
+        WARN("verilator dlopen did not populate port_access_ - skipped");
+        return;
+    }
+    sim_b->set_backend(std::move(backend));
+
+    // ── ① MMIO 程序：逐拍 diff + AXI-Lite 语义 golden ──
+    load_firmware(*sim_a, dev_a->instance(), mmio_fw);
+    load_firmware(*sim_b, dev_b->instance(), mmio_fw);
+    const Trace ta = run_trace(*sim_a, dev_a->instance(), 200);
+    const Trace tb = run_trace(*sim_b, dev_b->instance(), 200);
+    REQUIRE(ta.size() == tb.size());
+
+    // A 逐拍 diff（39 根 · 无掩码）
+    for (std::size_t c = 0; c < ta.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("MMIO cycle " << c << " obs " << kObsNames[k] << " (interp="
+                               << ta[c][k] << ", verilator=" << tb[c][k] << ")");
+            REQUIRE(ta[c][k] == tb[c][k]);
+        }
+    }
+
+    // B/C/D/E/F：在 ta 上判（ta == tb 已证）
+    std::size_t aw_hi = 0, ar_hi = 0;
+    std::uint64_t first_aw_addr = 0, first_w_data = 0, first_w_strb = 0;
+    std::uint64_t first_ar_addr = 0;
+    bool saw_aw = false, saw_ar = false;
+    std::size_t stores = 0;
+    std::uint64_t store_addr = 0, store_data = 0;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> wbs;
+    for (const auto &s : ta) {
+        if (s[kIdxAwValid] != 0) {
+            ++aw_hi;
+            if (!saw_aw) {
+                saw_aw = true;
+                first_aw_addr = s[kIdxAwAddr];
+                first_w_data = s[kIdxWData];
+                first_w_strb = s[kIdxWStrb];
+            }
+        }
+        if (s[kIdxArValid] != 0) {
+            ++ar_hi;
+            if (!saw_ar) {
+                saw_ar = true;
+                first_ar_addr = s[kIdxArAddr];
+            }
+        }
+        if (s[kIdxDataWriteEn] != 0) {
+            ++stores;
+            store_addr = s[kIdxDataAddr];
+            store_data = s[kIdxDataWriteData];
+        }
+        if (s[kIdxWbWriteEn] != 0) {
+            wbs.emplace_back(s[kIdxWbRdAddr], s[kIdxWbWriteData]);
+        }
+    }
+
+    // B：VALID 各恰好 1 拍（立即应答 ⇒ 不重发、不抖动）
+    CHECK(aw_hi == 1u);
+    CHECK(ar_hi == 1u);
+    // C：写事务的地址 / 数据 / 车道
+    CHECK(saw_aw);
+    CHECK(first_aw_addr == kMmioWriteAddr);
+    CHECK(first_w_data == kStubRdata);
+    CHECK(first_w_strb == kExpectWstrb);
+    // D：读事务的地址
+    CHECK(saw_ar);
+    CHECK(first_ar_addr == kMmioReadAddr);
+    // E：store 事件恰好一次（MMIO 写 ⇒ 事件不是电平）
+    CHECK(stores == 1u);
+    CHECK(store_addr == kMmioWriteAddr);
+    CHECK(store_data == kStubRdata);
+    // F：写回 3 条（x4 / x6 / x7）
+    REQUIRE(wbs.size() == 3u);
+    CHECK(wbs[0].first == 4u);
+    CHECK(wbs[0].second == kMmioWriteAddr);
+    CHECK(wbs[1].first == 6u);
+    CHECK(wbs[1].second == kStubRdata);
+    CHECK(wbs[2].first == 7u);
+    CHECK(wbs[2].second == 1u);
+
+    // ── ② 无 MMIO 的程序：请求线 MUST 全程为 0（AC5 搬进跨后端证据）──
+    //    程序 = 7 字（ALU + 一条**非 MMIO** 的 store + 自环）
+    const std::array<uint32_t, 7> plain_fw = {
+        ADDI(1, 0, 42), NOP, ADDI(2, 0, 11), NOP, ADD(3, 1, 2), SW(3, 0, 0),
+        JAL(0, 0)};
+    load_firmware(*sim_a, dev_a->instance(), plain_fw);
+    load_firmware(*sim_b, dev_b->instance(), plain_fw);
+    const Trace pa = run_trace(*sim_a, dev_a->instance(), 120);
+    const Trace pb = run_trace(*sim_b, dev_b->instance(), 120);
+    REQUIRE(pa.size() == pb.size());
+    for (std::size_t c = 0; c < pa.size(); ++c) {
+        for (std::size_t k = 0; k < kObsCount; ++k) {
+            INFO("plain cycle " << c << " obs " << kObsNames[k] << " (interp="
+                                << pa[c][k] << ", verilator=" << pb[c][k] << ")");
+            REQUIRE(pa[c][k] == pb[c][k]);
+        }
+    }
+    for (const auto &s : pa) {
+        // G：非 MMIO 程序 ⇒ 请求线全程为 0（pre-cache 分流方向正确）
+        CHECK(s[kIdxAwValid] == 0u);
+        CHECK(s[kIdxWValid] == 0u);
+        CHECK(s[kIdxArValid] == 0u);
+    }
+}

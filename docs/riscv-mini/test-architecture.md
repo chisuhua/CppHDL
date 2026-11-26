@@ -97,7 +97,7 @@ CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 | `test_ifstage_device.cpp` | `test_ifstage_device` | 行为面 · IF stage 独立 device | 解释器 | 300 | 1 / 2 |
 | `test_rv32i_pipeline.cpp` | `test_rv32i_pipeline_example` | 行为面 · 前推通路（⚠️ **与仓根 `tests/test_rv32i_pipeline.cpp` 不是同一份**） | 解释器 | 300 | 6 / 25 |
 | `test_interrupt_flow.cpp` | `test_interrupt_flow` | 行为面 · CLINT / 中断 / 陷阱入口 / `MRET` | 解释器 | 300 | 18 / 68 |
-| `test_rv32i_soc_dual_parity.cpp` | `test_rv32i_soc_dual_parity` 🔷 | 行为面 · **双后端** SoC parity | 解释器 + verilator | 600 | 15 / **23213** |
+| `test_rv32i_soc_dual_parity.cpp` | `test_rv32i_soc_dual_parity` 🔷 | 行为面 · **双后端** SoC parity（**39** 根输出全覆盖 · 含 AXI-Lite） | 解释器 + verilator | 600 | 16 / **44494** |
 | `test_rv32i_hier_rtl.cpp` | `test_rv32i_hier_rtl` 🔷 | 产物面 · **双后端** 层次化产物（8 module / 53 端口） | 解释器 + verilator | 900 | 4 / 188 |
 | `test_cache_smoke.cpp` | `riscv_mini_cache_smoke` 🔷 | 产物面 · **双后端** cache wrapper smoke | 解释器 + verilator | 600 | 12 / 78 |
 
@@ -108,11 +108,12 @@ CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 > `test_rv32i_official_suite_g1..g4` 每组 = **10 个官方测试 + 1 个负向对照用例**。
 > ⚠️ 该列是**快照** ⇒ ⇒ 改动测试后 MUST 同批刷新（§10）。
 
-> ⚠️ **双后端观测面的已知缺口**（2026-11-26 登记）：`test_rv32i_soc_dual_parity` 的逐拍
-> 向量覆盖 **28 / 39** 根核顶层 `ch_out` ⇒ ⇒ **11 根 `axil_*` 输出未进跨后端比对**
-> （且该 fixture 连 8 根 `axil_*` **输入都没驱动**）⇒ ⇒ 已登记在
-> `.rddf/checks/rv32i-obs-vector-registry.md`，由 `scripts/verify_dual_backend_parity.sh`
-> 的第二判据（C1–C4）守住「不静默失同步」⇒ ⇒ 补齐归 change `rv32i-obs-vector-axil-2026-11`。
+> ✅ **双后端观测面已全覆盖**（2026-11-26 · change `rv32i-obs-vector-axil-2026-11`）：
+> `test_rv32i_soc_dual_parity` 的逐拍向量 = **39 / 39** 根核顶层 `ch_out`（含 11 根 `axil_*`），
+> 同批驱动了 8 根 `axil_*` 输入 + 加了 `Rv32iSoc - AxilMmioCrossBackend` 用例。
+> ⇒ ⇒ 缺口登记表 `.rddf/checks/rv32i-obs-vector-registry.md` **已归零**；
+> 护栏 `scripts/verify_dual_backend_parity.sh` 的第二判据（C1–C4）现在守的是
+> **强形式** `|向量| == |核顶层 ch_out|`。
 
 ⚠️ **`test_rv32i_official_suite.cpp` 一源四 target 是刻意的**（不是重复）：
 40 个官方测试跑完 ≈ **7 min** ⇒ 超过仓内单测 **300 s** 上限 ⇒ ⇒ 拆 4 组 × 10 个

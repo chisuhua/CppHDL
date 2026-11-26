@@ -26,7 +26,7 @@
 #
 # 用法：
 #   scripts/verify_dual_backend_parity.sh            # 主路径（① + ②）
-#   scripts/verify_dual_backend_parity.sh --self-test # 两个分析器的自检（12 项 + 基线 + 5 投毒）
+#   scripts/verify_dual_backend_parity.sh --self-test # 两个分析器的自检（12 项 + 基线 + P0 + 5 投毒）
 #
 # 退出码：0 = 通过；1 = 违规（计数漂移 / 观测向量失同步）；2 = fail-closed（缺逻辑载体）。
 

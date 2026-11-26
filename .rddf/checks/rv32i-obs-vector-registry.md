@@ -16,19 +16,17 @@
 > - **C1 守恒**：`|向量| + |本表| == |核顶层 ch_out|`；
 > - 两列（「为什么未纳入」/「归位条件」）MUST 非空 ⇒ 否则红。
 >
-> ## 今日实数（2026-11-26 实测）
-> 核顶层 `ch_out` = **39** · 向量 = **28** · 本表 = **11** ⇒ 28 + 11 = 39 ✅
+> ## 🟢 当前状态：**本表已归零**（2026-11-26）
+> 核顶层 `ch_out` = **39** · 向量 = **39** · 本表 = **0** ⇒ `39 + 0 == 39` ✅
+>
+> 归零动作 = change `rv32i-obs-vector-axil-2026-11`（步 2 of
+> `rv32i-dual-backend-obs-vector-guard-2026-11`）：把 S4a 遗留的 **11 根 `axil_*`** 输出
+> 补进 `kObsNames[]`（并同批驱动 8 根 `axil_*` 输入 + 加一条 MMIO 事务固件 + 加
+> `Rv32iSoc - AxilMmioCrossBackend` 用例）。
+> ⇒ ⇒ **今后新增 `ch_out` ⇒ MUST 直接进向量**（本表只用于「有明确理由暂时不进」的登记）。
+>
+> ## 登记格式（需要时）
+> `| \`<端口名>\` | out / <位宽> | 为什么未纳入（MUST 非空） | 归位条件（MUST 非空） |`
 
 | 端口 | 方向 / 宽度 | 为什么**未纳入**跨后端向量 | 归位条件（完成后 MUST 删本行） |
 |---|---|---|---|
-| `axil_awaddr` | out / 32 | S4a（change `rv32i-soc-mmio-channel-2026-11` · 2026-11-24）给核加 AXI-Lite 通道时**未同步**向量 ⇒ ⇒ 该通道 11 根输出整体在跨后端证据之外；且该 fixture 连 8 根 `axil_*` **输入都没驱动**（未驱动 = 未定义值）⇒ 现在补比对只会比两个「未定义输入下的输出」 | change `rv32i-obs-vector-axil-2026-11`（步 2）：驱动 8 根 `axil_*` 输入（范式 = `test_rv32i_trap_entry.cpp` 的 tie-0）+ 固件加一条 MMIO 事务 + 11 根输出进 `kObsNames[]` ⇒ 本行删除 |
-| `axil_awprot` | out / 2 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_awvalid` | out / 1 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_wdata` | out / 32 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_wstrb` | out / 4 | 同上（WSTRB 车道 = 最易被 codegen 算错的一族） | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_wvalid` | out / 1 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_bready` | out / 1 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_araddr` | out / 32 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_arprot` | out / 2 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_arvalid` | out / 1 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
-| `axil_rready` | out / 1 | 同上 | 同上（`rv32i-obs-vector-axil-2026-11`） |
