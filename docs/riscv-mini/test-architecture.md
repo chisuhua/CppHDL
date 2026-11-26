@@ -108,6 +108,12 @@ CSR 读回 / `tohost`），而不是「某个内部信号看起来对」。
 > `test_rv32i_official_suite_g1..g4` 每组 = **10 个官方测试 + 1 个负向对照用例**。
 > ⚠️ 该列是**快照** ⇒ ⇒ 改动测试后 MUST 同批刷新（§10）。
 
+> ⚠️ **双后端观测面的已知缺口**（2026-11-26 登记）：`test_rv32i_soc_dual_parity` 的逐拍
+> 向量覆盖 **28 / 39** 根核顶层 `ch_out` ⇒ ⇒ **11 根 `axil_*` 输出未进跨后端比对**
+> （且该 fixture 连 8 根 `axil_*` **输入都没驱动**）⇒ ⇒ 已登记在
+> `.rddf/checks/rv32i-obs-vector-registry.md`，由 `scripts/verify_dual_backend_parity.sh`
+> 的第二判据（C1–C4）守住「不静默失同步」⇒ ⇒ 补齐归 change `rv32i-obs-vector-axil-2026-11`。
+
 ⚠️ **`test_rv32i_official_suite.cpp` 一源四 target 是刻意的**（不是重复）：
 40 个官方测试跑完 ≈ **7 min** ⇒ 超过仓内单测 **300 s** 上限 ⇒ ⇒ 拆 4 组 × 10 个
 （每组 ≈ 105 s）⇒ 且护栏 C3 按「**ctest 条目名 = 可执行文件名**」找二进制 ⇒
@@ -367,7 +373,7 @@ cmake --build build --target all-examples     # 先构建全部被跟踪 example
 | `scripts/verify_hierarchical_rtl.sh` | 层次化产物 **R1–R8 + R8′ + R9**（另有 R0 前置 / R1a 命令行面）· R8′ = RV32I 产品语料的顶层端口表 == 手推期望集 **53** 根 | 交付物级 |
 | `scripts/verify_riscv_soc_core_ports.sh` | 核 IP **53** 端口契约（V1 逐字逐序 · V2 = 53 · V3 C6 快照 51） | 契约面 |
 | `scripts/verify_no_duplicate_rv32i_headers.sh` | 单源化（同名头双副本 · C5 = `include/cpu/AGENTS.md` 的 STRUCTURE / KEY FILES 表与磁盘一致 + 自述计数 · **C6 = 51 端口快照**） | 结构面 |
-| `scripts/verify_dual_backend_parity.sh` | **双后端覆盖不缩面**（源文件数 + pair 数**双锚点**） | 结构面 |
+| `scripts/verify_dual_backend_parity.sh` | **双后端覆盖不缩面**（源文件数 + pair 数**双锚点** + **观测向量 vs 核顶层 `ch_out` 端口面守恒**：`\|V\|+\|R\|==\|P\|` · 未纳入者 MUST 登记在 `.rddf/checks/rv32i-obs-vector-registry.md`） | 结构面 |
 | `scripts/verify_test_counts.sh` | 计数锚点（`CTEST_TOTAL` / `VERILATOR_E2E_TOTAL` / `EXAMPLES_TEST_SOURCES`） | 结构面 |
 | `scripts/verify_input_port_additions.sh` · `verify_input_port_required_registry.sh` | 未驱动输入端口 | 契约面 |
 | `scripts/verify_openspec_delta.sh` | **archive 前的实际门**（`openspec validate` **不在** CI 门内） | 规范面 |
