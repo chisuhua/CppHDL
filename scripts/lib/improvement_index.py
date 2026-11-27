@@ -38,6 +38,7 @@ import tempfile
 REPO = pathlib.Path(__file__).resolve().parents[2]
 INDEX_NAME = "improvement-suggestions.md"
 IMPROVEMENT_DIR = ".rddf/improvements"
+RDFF_DIR = ".rddf"
 
 # 索引表 = 5 列 ⇒ `|` 分段后恒为 **7** 段（首尾各一个空段）
 EXPECTED_CELLS = 7
@@ -112,9 +113,39 @@ def parse_index(text: str) -> list:
     return rows
 
 
-def _resolve(repo: pathlib.Path, rel: str):
-    """把索引表里的相对路径解析成仓内绝对路径（**防路径逃逸** ⇒ 逃逸 ⇒ None）。"""
-    target = (repo / rel).resolve()
+def index_path(repo: pathlib.Path) -> pathlib.Path:
+    """索引表位置：`.rddf/<name>` 优先（canonical）→ 仓根 `<name>`（legacy 兜底）。
+
+    ⚠️ 与产品侧 `_lib/core/rddf_paths.py::resolve` **同一口径**（canonical 在前 ·
+    legacy 在后）⇒ ⇒ 两边不会漂。
+    ⚠️ **不 import 产品包** ⇒ ⇒ 本护栏仍只依赖 python3 + 仓内文件
+    （`verify_improvement_index.sh` 的可达性前提 = 仓外零依赖）。
+    """
+    canonical = repo / RDFF_DIR / INDEX_NAME
+    if canonical.is_file():
+        return canonical
+    legacy = repo / INDEX_NAME
+    if legacy.is_file():
+        return legacy
+    return canonical
+
+
+def _rel(repo: pathlib.Path, path: pathlib.Path) -> str:
+    """仓内相对路径（消息用）⇒ ⇒ 避免消息里出现绝对路径。"""
+    try:
+        return str(path.relative_to(repo.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _resolve(repo: pathlib.Path, base: pathlib.Path, rel: str):
+    """把索引表里的相对路径解析成仓内绝对路径（**防路径逃逸** ⇒ 逃逸 ⇒ None）。
+
+    ⚠️ `base` = **索引表所在目录**（不是仓根）⇒ ⇒ `.rddf/` 托管的索引用
+    `improvements/<name>.md` 相对链接，legacy 仓根索引用 `.rddf/improvements/<name>.md`
+    ⇒ ⇒ 与产品侧 `rddf_paths.link_prefix()` **同口径**。
+    """
+    target = (base / rel).resolve()
     try:
         target.relative_to(repo.resolve())
     except ValueError:
@@ -124,18 +155,18 @@ def _resolve(repo: pathlib.Path, rel: str):
 
 def collect(repo: pathlib.Path):
     """收集（rows · states · errors）⇒ ⇒ `states[row_line] = 期望的状态词`。"""
-    index_path = repo / INDEX_NAME
+    idx = index_path(repo)
     errors: list = []
     states: dict = {}
     rows: list = []
-    if not index_path.is_file():
-        return rows, states, ["索引文件缺失：`%s`" % INDEX_NAME]
-    text = index_path.read_text(encoding="utf-8")
+    if not idx.is_file():
+        return rows, states, ["索引文件缺失：`%s`" % _rel(repo, idx)]
+    text = idx.read_text(encoding="utf-8")
     rows = parse_index(text)
     if not rows:
         errors.append("索引表里**没有任何数据行**（`| [name](path) | … |` 形态）⇒ ⇒ 无法判定")
     for row in rows:
-        where = "%s:%d" % (INDEX_NAME, row["line"])
+        where = "%s:%d" % (_rel(repo, idx), row["line"])
         if len(row["cells"]) != EXPECTED_CELLS:
             errors.append(
                 "%s：索引行形态异常（`|` 分段数 = %d，期望 %d）"
@@ -147,7 +178,7 @@ def collect(repo: pathlib.Path):
                 "%s：状态列**没有** `**word**` 形态 ⇒ ⇒ 无法判定状态词" % where
             )
             continue
-        target = _resolve(repo, row["path"])
+        target = _resolve(repo, idx.parent, row["path"])
         if target is None:
             errors.append("%s：链接路径**逃出仓根**（`%s`）" % (where, row["path"]))
             continue
@@ -173,8 +204,8 @@ def collect(repo: pathlib.Path):
 
 def render(repo: pathlib.Path) -> str:
     """渲染索引表：只把状态列的 `**word**` 换成 frontmatter 的词 ⇒ ⇒ emoji / 附注**逐字保留**。"""
-    index_path = repo / INDEX_NAME
-    text = index_path.read_text(encoding="utf-8")
+    idx = index_path(repo)
+    text = idx.read_text(encoding="utf-8")
     _rows, states, _errors = collect(repo)
     out = []
     for idx, line in enumerate(text.split("\n"), 1):
@@ -195,8 +226,8 @@ def check(repo: pathlib.Path) -> int:
     violations = list(errors)
 
     # ── R1：逐行比对「索引表的状态词」↔「frontmatter 的状态词」────────────
-    index_path = repo / INDEX_NAME
-    text = index_path.read_text(encoding="utf-8") if index_path.is_file() else ""
+    idx = index_path(repo)
+    text = idx.read_text(encoding="utf-8") if idx.is_file() else ""
     for row in parse_index(text):
         want = states.get(row["line"])
         if want is None:
@@ -232,12 +263,24 @@ def check(repo: pathlib.Path) -> int:
 # fixture 自检（**不依赖真实仓 / 网络 / git 历史 / verilator**）
 # ---------------------------------------------------------------------------
 
-FIXTURE_INDEX = """# improvement-suggestions —— fixture
+# ⚠️ **两套 fixture 索引** = 索引表的**两种合法托管形态** ⇒ ⇒ **链接前缀随托管位置变**
+#   （与产品侧 `rddf_paths.link_prefix()` 同口径）：
+#   · legacy（仓根托管）⇒ 链接 = `.rddf/improvements/<name>.md`
+#   · canonical（`.rddf/` 托管）⇒ 链接 = `improvements/<name>.md`
+FIXTURE_INDEX_LEGACY = """# improvement-suggestions —— fixture
 
 | 提案 | 优先级 | 来源 | 添加时间 | 状态 |
 |---|---|---|---|---|
 | [alpha](.rddf/improvements/alpha.md) | P1 | 来源甲 | 2026-01-01 | 📝 **draft**（附注甲） |
 | [beta](.rddf/improvements/beta.md) | P2 | 来源乙 | 2026-01-02 | ✅ **implemented** |
+"""
+
+FIXTURE_INDEX_CANONICAL = """# improvement-suggestions —— fixture
+
+| 提案 | 优先级 | 来源 | 添加时间 | 状态 |
+|---|---|---|---|---|
+| [alpha](improvements/alpha.md) | P1 | 来源甲 | 2026-01-01 | 📝 **draft**（附注甲） |
+| [beta](improvements/beta.md) | P2 | 来源乙 | 2026-01-02 | ✅ **implemented** |
 """
 
 FIXTURE_ALPHA = """---
@@ -259,10 +302,22 @@ priority: P2
 """
 
 
-def _make_fixture(root: pathlib.Path) -> None:
+def _make_fixture(root: pathlib.Path, canonical: bool = True) -> None:
+    """搭一个 fixture 仓（**canonical=True** ⇒ 索引托管在 `.rddf/`；False ⇒ legacy 仓根）。
+
+    ⚠️ **两处候选位置 MUST 先清干净** ⇒ ⇒ 否则上一条 case 留下的索引文件会让
+    `index_path()` 解析到**另一个位置** ⇒ ⇒ fixture 变成假绿。
+    """
     imp = root / IMPROVEMENT_DIR
     imp.mkdir(parents=True, exist_ok=True)
-    (root / INDEX_NAME).write_text(FIXTURE_INDEX, encoding="utf-8")
+    for cand in (root / RDFF_DIR / INDEX_NAME, root / INDEX_NAME):
+        if cand.is_file():
+            cand.unlink()
+    if canonical:
+        idx = root / RDFF_DIR / INDEX_NAME
+        idx.write_text(FIXTURE_INDEX_CANONICAL, encoding="utf-8")
+    else:
+        (root / INDEX_NAME).write_text(FIXTURE_INDEX_LEGACY, encoding="utf-8")
     (imp / "alpha.md").write_text(FIXTURE_ALPHA, encoding="utf-8")
     (imp / "beta.md").write_text(FIXTURE_BETA, encoding="utf-8")
 
@@ -288,9 +343,10 @@ def selftest() -> int:
 
         # ── F1：索引表的状态词与 frontmatter 不符 ⇒ 必须红 ───────────
         _make_fixture(tmp)
-        p = tmp / INDEX_NAME
+        p = index_path(tmp)
         p.write_text(
-            FIXTURE_INDEX.replace("📝 **draft**", "📝 **approved**"), encoding="utf-8"
+            FIXTURE_INDEX_CANONICAL.replace("📝 **draft**", "📝 **approved**"),
+            encoding="utf-8",
         )
         case("F1 索引表状态词与 frontmatter 不符 ⇒ 红", check(tmp) != 0)
 
@@ -315,8 +371,11 @@ def selftest() -> int:
 
         # ── F5：状态列没有 `**word**` 形态 ⇒ 必须红 ─────────────────
         _make_fixture(tmp)
-        p = tmp / INDEX_NAME
-        p.write_text(FIXTURE_INDEX.replace("📝 **draft**（附注甲）", "draft"), encoding="utf-8")
+        p = index_path(tmp)
+        p.write_text(
+            FIXTURE_INDEX_CANONICAL.replace("📝 **draft**（附注甲）", "draft"),
+            encoding="utf-8",
+        )
         case("F5 状态列无 `**word**` 形态 ⇒ 红", check(tmp) != 0)
 
         # ── F6：`--render` 能把表刷新成一致 ⇒ 渲染后必须绿 ──────────
@@ -325,7 +384,7 @@ def selftest() -> int:
             FIXTURE_ALPHA.replace("状态: draft", "状态: approved"), encoding="utf-8"
         )
         rendered = render(tmp)
-        (tmp / INDEX_NAME).write_text(rendered, encoding="utf-8")
+        index_path(tmp).write_text(rendered, encoding="utf-8")
         case("F6 `--render` 刷新状态词 ⇒ 渲染后绿", check(tmp) == 0)
 
         # ── F7：`--render` MUST **逐字保留** emoji 与附注 ────────────
@@ -338,6 +397,22 @@ def selftest() -> int:
             "F7 `--render` 逐字保留 emoji 与附注",
             "📝 **approved**（附注甲）" in rendered and "✅ **implemented**" in rendered,
         )
+
+        # ── F8：canonical 托管（`.rddf/`）⇒ 必须绿 ──────────────────
+        #   （判别力 = 「解析到 `.rddf/` 那份」；若仍硬编码仓根 ⇒ 索引文件缺失 ⇒ 红）
+        _make_fixture(tmp, canonical=True)
+        case("F8 canonical（`.rddf/` 托管）索引 ⇒ 绿", check(tmp) == 0)
+
+        # ── F9：legacy 托管（仓根）⇒ 必须绿（向后兼容）─────────────
+        _make_fixture(tmp, canonical=False)
+        case("F9 legacy（仓根托管）索引 ⇒ 绿", check(tmp) == 0)
+
+        # ── F10：canonical 索引误用仓根相对链接 ⇒ 必须红 ────────────
+        #   （判别力 = 「链接基准 = 索引文件所在目录」；若基准仍用仓根 ⇒ 链接指向
+        #    `.rddf/.rddf/improvements/…` ⇒ 不存在 ⇒ 红）
+        _make_fixture(tmp, canonical=True)
+        index_path(tmp).write_text(FIXTURE_INDEX_LEGACY, encoding="utf-8")
+        case("F10 canonical 索引误用仓根相对链接 ⇒ 红", check(tmp) != 0)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

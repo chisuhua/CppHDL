@@ -10,7 +10,7 @@ evidence: probe:scripts/verify_docs_links.sh
 > （下次 `--render` 会覆盖 ⇒ 分级漂移会被 C5 抓）。
 > 分级规则见 `docs/DOCUMENT-ARCHITECTURE.md` §9.1（治理口径正本）。
 
-**统计**：扫描 497 篇 · L1 **44** 篇 · L2/L3 453 篇
+**统计**：扫描 530 篇 · L1 **46** 篇 · L2/L3 484 篇
 
 ## 显式登记的例外（无法由前缀机械判定）
 
@@ -42,30 +42,32 @@ evidence: probe:scripts/verify_docs_links.sh
 | 18 | `docs/developer_guide/patterns/PORT-NAMING-GUIDE.md` |
 | 19 | `docs/developer_guide/rv32i-rtl-delivery-and-sim.md` |
 | 20 | `docs/developer_guide/verilator-integration.md` |
-| 21 | `docs/riscv-mini/test-architecture.md` |
-| 22 | `docs/simulation/ARCHITECTURE.md` |
-| 23 | `docs/skills/README.md` |
-| 24 | `docs/skills/cpphdl-bundle-patterns/SKILL.md` |
-| 25 | `docs/skills/cpphdl-component-lifecycle/SKILL.md` |
-| 26 | `docs/skills/cpphdl-input-port-assignment/SKILL.md` |
-| 27 | `docs/skills/cpphdl-shift-fix/SKILL.md` |
-| 28 | `docs/skills/cpphdl-simulator-port-value/SKILL.md` |
-| 29 | `docs/skills/simulator-api-quickref.md` |
-| 30 | `docs/usage_guide/01-simulator-api.md` |
-| 31 | `docs/usage_guide/02-component-design.md` |
-| 32 | `docs/usage_guide/03-bundle-patterns.md` |
-| 33 | `docs/usage_guide/04-testbench-guide.md` |
-| 34 | `docs/usage_guide/05-verilator-backend.md` |
-| 35 | `docs/usage_guide/06-spinalhdl-comparison.md` |
-| 36 | `docs/usage_guide/README.md` |
-| 37 | `examples/spinalhdl-ported/README.md` |
-| 38 | `improvement-approved.md` |
-| 39 | `improvement-suggestions.md` |
-| 40 | `tests/README.md` |
-| 41 | `tests/benchmark/README.md` |
-| 42 | `tests/fixtures/assertion_quality/README.md` |
-| 43 | `tests/fixtures/hierarchical_tree_extract/README.md` |
-| 44 | `tests/hier_corpus_registry.md` |
+| 21 | `docs/riscv-mini/dual-backend-gap-analysis.md` |
+| 22 | `docs/riscv-mini/test-architecture.md` |
+| 23 | `docs/simulation/ARCHITECTURE.md` |
+| 24 | `docs/skills/README.md` |
+| 25 | `docs/skills/cpphdl-bundle-patterns/SKILL.md` |
+| 26 | `docs/skills/cpphdl-component-lifecycle/SKILL.md` |
+| 27 | `docs/skills/cpphdl-input-port-assignment/SKILL.md` |
+| 28 | `docs/skills/cpphdl-shift-fix/SKILL.md` |
+| 29 | `docs/skills/cpphdl-simulator-port-value/SKILL.md` |
+| 30 | `docs/skills/simulator-api-quickref.md` |
+| 31 | `docs/usage_guide/01-simulator-api.md` |
+| 32 | `docs/usage_guide/02-component-design.md` |
+| 33 | `docs/usage_guide/03-bundle-patterns.md` |
+| 34 | `docs/usage_guide/04-testbench-guide.md` |
+| 35 | `docs/usage_guide/05-verilator-backend.md` |
+| 36 | `docs/usage_guide/06-spinalhdl-comparison.md` |
+| 37 | `docs/usage_guide/README.md` |
+| 38 | `examples/riscv-mini/RUNNING-ELF.md` |
+| 39 | `examples/riscv-mini/tests/riscv-arch-test/PROVENANCE.md` |
+| 40 | `examples/riscv-mini/tests/riscv-tests/PROVENANCE.md` |
+| 41 | `examples/spinalhdl-ported/README.md` |
+| 42 | `tests/README.md` |
+| 43 | `tests/benchmark/README.md` |
+| 44 | `tests/fixtures/assertion_quality/README.md` |
+| 45 | `tests/fixtures/hierarchical_tree_extract/README.md` |
+| 46 | `tests/hier_corpus_registry.md` |
 
 ## 规则摘要
 

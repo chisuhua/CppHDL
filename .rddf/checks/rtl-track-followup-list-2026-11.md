@@ -57,7 +57,7 @@ evidence: probe:scripts/verify_arch_ledger_residuals.sh
     printf '%-34s fm=%-12s body=%-10s idx=%-10s ac=%s/%s\n' "$n" \
       "$(grep -m1 '^状态:' "$f" | sed -E 's/^状态:[[:space:]]*//')" \
       "$(grep -m1 -E '^- \*\*Status\*\*' "$f" | grep -oE '\*\*(implemented|approved|in-progress|draft)\*\*' | head -1 | tr -d '*')" \
-      "$(grep "$n" improvement-suggestions.md | grep -oE '\*\*(implemented|approved|in-progress|draft)\*\*' | head -1 | tr -d '*')" \
+      "$(grep "$n" .rddf/improvement-suggestions.md | grep -oE '\*\*(implemented|approved|in-progress|draft)\*\*' | head -1 | tr -d '*')" \
       "$(awk '/^## metis 第 1 轮 gap 分析与处置/{exit} {print}' "$f" | grep -cE '^\s*-\s*\[[xX]\]')" \
       "$(awk '/^## metis 第 1 轮 gap 分析与处置/{exit} {print}' "$f" | grep -cE '^\s*-\s*\[[ xX]\]')"
   done

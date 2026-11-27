@@ -66,6 +66,12 @@
 
 **仓根散落 `*.md` 的逐条裁决**（2026-11-19）：`improvement-suggestions.md` · `improvement-approved.md` = **L1**（是 `.rddf/improvements/` 的**活索引**，不是 legacy 镜像）· `README.md` · `READING-GUIDE.md` · `QUICK_REFERENCE.md` = **L1**（仓入口导航）· `PHASE1-REVISED-PLAN.md` · `perf_results.md` · `Compare.md` = **L3**（计划 / 结果 / 对比快照）· `docs/simulation/ARCHITECTURE.md` = **L1**（被根 `AGENTS.md` 引为「Memory read port timing」的**权威**）。
 
+> ⚠️ **2026-11-27 事实订正**（实测 · 用户裁决「提案池唯一落点 = `.rddf/`」）：上面两份**活索引已迁出仓根**
+> ⇒ ⇒ `improvement-suggestions.md` → **`.rddf/improvement-suggestions.md`** · `improvement-approved.md` → **`.rddf/improvement-approved.md`**
+> ⇒ ⇒ ⇒ **分级随之由 L1 降为 L2**（`.rddf/` 属 L2/L3 前缀）⇒ ⇒ **两者的 markdown 链接不再受 C1/C2 扫**（覆盖由 `scripts/verify_improvement_status_truth.sh` 接管）
+> ⇒ ⇒ ⇒ **本段其余裁决不变**（`README.md` / `READING-GUIDE.md` / `QUICK_REFERENCE.md` 仍 L1 · `PHASE1-REVISED-PLAN.md` / `perf_results.md` / `Compare.md` 仍 L3）。
+> ⇒ ⇒ ⇒ 迁移动因 = **让仓向 planner 机器层写集投影看齐**（投影只列 `.rddf/improvement-suggestions.md` + `.rddf/improvement-approved.md` ⇒ ⇒ 留在仓根则 planner 登记索引会被 `role-gate` 拒）。
+
 
 #### D1″ · 显式 **out-of-scope**（**不是隐含排除**）
 

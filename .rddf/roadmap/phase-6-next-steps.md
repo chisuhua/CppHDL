@@ -536,7 +536,7 @@ sed -n '/^### 8\.4 B3/,/^### 8\.5/p' .rddf/roadmap/phase-6-next-steps.md | grep 
 awk -F'|' '/^### 8\.3/{f=1} /^### 8\.5/{f=0} f && /^\| \*\*/ {gsub(/[^0-9]/,"",$4); s+=$4} END{print "§8.3 合计 =", s, "(期望 74)"}' .rddf/roadmap/phase-6-next-steps.md
 python3 - <<'EOF'
 import pathlib, re
-rows = [l for l in pathlib.Path('improvement-suggestions.md').read_text().split('\n')
+rows = [l for l in pathlib.Path('.rddf/improvement-suggestions.md').read_text().split('\n')
         if re.match(r'^\|\s*\[[a-z0-9-]+-2026-11\]', l)]
 bad = 0
 for l in rows:

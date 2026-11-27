@@ -7,7 +7,7 @@
 > - 7 份草案：`.rddf/improvements/{rtl-emit-product-tooling, port-naming-ratchet,
 >   firmware-load-chain, memory-timing-contract, rv32i-dead-component-consolidation,
 >   rv32i-isa-gap-closure, examples-rtl-sim-coverage}-2026-11.md`
-> - 索引：`improvement-suggestions.md`
+> - 索引：`.rddf/improvement-suggestions.md`
 > - 任务状态唯一真相仍 = `.rddf/roadmap/phases/phase-6.md`（**本文件不复制状态格**，
 >   只承载「**跨 7 份草案的批次编排**」）
 > **本文件不新增任何架构义务** —— 判据全部映射各草案已有的 work item 与 AC。
