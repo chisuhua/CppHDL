@@ -142,7 +142,10 @@
       ⇒ ✅ `Change 'rv32i-soc-peripherals-interconnect-2026-11' is valid`
 - [x] **T6.2** `scripts/verify_openspec_delta.sh`（本 change 有 ADDED ×1）
       ⇒ ✅ `OpenSpec delta 自检通过（4 条全绿）`
-- [ ] **T6.3** `openspec archive … --yes`
+- [x] **T6.3** `openspec archive … --yes`
+      ⇒ ✅ 归档为 `openspec/changes/archive/2026-11-27-rv32i-soc-peripherals-interconnect-2026-11/`
+      ⇒ spec 合并：`axi-interconnect-routing` **+6 added**（`~0 / -0 / →0`）
+      ⇒ ⚠️ 归档时 `Task status: 33/34`（T6.3 自身未勾 · `--yes` 放行）
 
 ## 硬约束
 
