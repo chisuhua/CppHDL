@@ -109,12 +109,22 @@
 
 ## P5 · 回归与收口
 
-- [ ] **T5.1** 全量回归：`ctest` 全绿（**先全量重建**）· `verify_examples_rtl_sim.sh` ·
-      `verify_examples_rtl_sim_coverage.sh` · `verify_hierarchical_rtl.sh` · `rv32i_rtl_sim_env`
-- [ ] **T5.2** 核级 24 判据 / 双后端 parity **零变化**（对照 T0.4 基线）
-- [ ] **T5.3** 计数锚点：`CTEST_TOTAL`（若新增 target）/ `EXAMPLES_TEST_SOURCES`（不变则记录原因）
-- [ ] **T5.4** 母 improvement 回填：`rv32i-soc-platform-2026-11` 的 `进度:` 追加 S4b 完成记录
+- [x] **T5.1** 全量回归（2026-11-27 实测）：
+      · 全量重建 `BUILD=0`（**0 error**）· `ctest` **285/285 passed**（2535 s，含 perf）
+      · `verify_examples_rtl_sim.sh` **PASS**（18 项 · 等式 `checks=16`）
+      · `verify_examples_rtl_sim_coverage.sh` **PASS**（29 == 17 ∪ 12）
+      · `verify_hierarchical_rtl.sh` **PASS**（R1–R8 + R8′ + R9）
+      · `rv32i_rtl_sim_env.sh` **flat 24/24 · hier 24/24 · fails=0**
+- [x] **T5.2** 核级 24 判据 / 双后端 parity **零变化**：`rv32i_rtl_sim_env` 两形态各
+      **24/24**；ctest 全绿（含 `verilator_e2e` 82 条）；parity 锚点未动
+      （`DUAL_BACKEND_PARITY_TOTAL=68` / `PAIRS=307`）
+- [x] **T5.3** 计数锚点：`CTEST_TOTAL` **285 不变**（P4 未新增 ctest target ——
+      `tb_riscv_soc` 不注册为 test）· `EXAMPLES_TEST_SOURCES` **26 不变**
+      （P4 只在已有 `tb_riscv_soc.cpp` 内加判据，未新增测试源文件）
+- [x] **T5.4** 母 improvement 回填：`rv32i-soc-platform-2026-11` 的 `进度:` 追加
+      S4b P4 完成记录（A10–A15 · checks 10→16 · 变异 3 条实测转红）
 - [ ] **T5.5** `verifier` 独立验收（AC1–AC9 逐条工具证据 + 遗留清扫）
+      ⇒ 🔴 **需切 `verifier` 角色**（builder 不能自审自批；用户口令触发）
 
 ## P6 · 归档
 
