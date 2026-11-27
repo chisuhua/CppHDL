@@ -4,7 +4,7 @@
 - **Date**: 2026-11-27
 - **Author**: architect role（build agent）
 - **Parent**: **ADR-077**（两级顶层与 SoC 组合 · D3）· **ADR-073**（SoC RTL 产品面与 TB）· **ADR-075**（产品顶层端口具名化）· **ADR-041**（cache 变体族）
-- **关联 change**: **`backlog: rv32i-soc-platform-2026-11`**（母 improvement 的 **S4c** 批次 · **尚未立项** ⇒ 立项后由 planner 回填 AC 映射）
+- **关联 change**: **`rv32i-full-product-line-2026-11`**（`openspec/changes/rv32i-full-product-line-2026-11/` · **已立项** 2026-11-27 · **范围 = S4c-0**）⇒ ⇒ **AC 映射** = 该 change 的 **AC1 / AC2 / AC3 / AC4 / AC5 / AC6 / AC7 / AC8 / AC9 / AC11 / AC12**（对应本 ADR 的 **AC2 / AC3 / AC4 / AC13 / AC17 / AC18 / AC19**；逐条对照见该 change 的 `proposal.md` §「与 ADR-078 的 AC 映射」）⇒ ⇒ 母 improvement = `rv32i-soc-platform-2026-11`（**S4c** 批次 · S4c-1..3 各自另立）
 - **审稿记录**: `.rddf/reviews/ADR-078-dual-product-lines-and-full-line-scope.md`
 - **超长自检**: 正文 **< 250 行** ⇒ 无需拆分
 - **实施序**: **S4c-0（产品线抽象）先于本 ADR 的任何实施批次**
