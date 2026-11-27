@@ -13,8 +13,9 @@
 > - **SoC 侧只负责装配**：用 `AxiLiteMatrix2x2` / `AxiInterconnect4x4` 的 `Map::windows[]`
 >   模板参数（已是现成机制 · 事实⑦⑧）⇒ **不在库层给默认 `Map`**（那是被否的选项 C）
 > - ⚠️ **公开面变更** ⇒ MUST 登记 `.rddf/checks/public-api-surface.md` + `docs/CHANGELOG.md`
-> - ⚠️ **未裁决（随 S4a design）**：S4 的**互联形态**（级联矩阵 / 单窗口 + 二级译码 / 新写 N×M）
->   ⇒ 见 §五 的三种可选
+> - ✅ **S4 互联形态已裁决（2026-11-27 · 用户）= ③ 新写 N×M Lite 互联**
+>   （**不是**级联矩阵 · **不是**单窗口 + 二级译码）⇒ ⇒ 设计要求 =
+>   `openspec/changes/rv32i-soc-peripherals-interconnect-2026-11/design.md`
 > - ⚠️ **裁决顺序修正**：`G-6 → S4a/S4b/S4c → G-5（S5 前）→ G-8（S6 前）`
 >   （G-5 推迟的理由见 §六 末段：S5 被 `rv32i-privileged-csr-2026-11`（draft）阻塞，
 >   现在加 `irq` 口只会留下**无人驱动**的悬空端口）
