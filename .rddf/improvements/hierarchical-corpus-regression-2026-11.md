@@ -5,6 +5,11 @@ source: 台账 §7 残留 1b（语料级回归缺口 · 2026-11-06 由 oracle �
 phase: phase-5
 category: test
 type: chore
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #5）：同名 change
+  `openspec/changes/archive/2026-11-07-hierarchical-corpus-regression-2026-11/` 已归档（tasks 32/32）
+  ⇒ 判定 = **① 正文陈旧**（非流程被绕过 —— change 的 proposal/review 记录齐全）
 created_at: 2026-11-07
 evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
 ---
@@ -13,7 +18,7 @@ evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
 
 - **Date drafted**：2026-11-07（**v2** —— v2 吸收 metis 第 1 轮 gap 分析的 18 条 finding）
 - **Drafted by**：build-agent（planner 角色）
-- **Status**：📝 草稿 v2（**待用户拍板** ⇒ 拍板后转 builder 流程）
+- **Status**：✅ **已实施**（2026-11-27 对账：change `2026-11-07-hierarchical-corpus-regression-2026-11` 已归档 32/32）｜原记录：📝 草稿 v2（**待用户拍板** ⇒ 拍板后转 builder 流程）
 - **权威登记**：台账 §7 残留 **1b**（= **语料级**回归缺口；★ **不是**残留 1 那个「用户面缺口」
   ⇒ ⇒ **用户面缺口 = P8**，**两者 MUST NOT 合并**）
 - **裁决**：§11.1 **A4**（2026-11-05）⇒ 独立立项 · **不为此立新 ADR**

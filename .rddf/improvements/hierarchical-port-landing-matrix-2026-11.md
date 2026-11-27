@@ -4,7 +4,12 @@ priority: P1
 phase: phase-5
 category: test
 type: chore
-状态: draft
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #4）：同名 change
+  `openspec/changes/archive/2026-11-08-hierarchical-port-landing-matrix-2026-11/` 已归档（tasks 28/32）
+  ⇒ ⇒ 4 条未勾**全为 T6 归档前置流程步**（`openspec validate` / no-spec 声明 / `rddf feedback` 不需要 /
+  按路径 commit），proposal 已含 no-spec 声明 ⇒ 判定 = **① 正文陈旧**（交付侧无未完成项）
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）
 依赖: ADR-060, ADR-062
 来源: 台账 §7 残留 16 + 裁定输入文档 docs/archive/architecture-history/2026-11-08-hierarchical-parent-side-landing.md
@@ -16,7 +21,7 @@ evidence: probe:docs/archive/architecture-history/2026-11-08-hierarchical-parent
 
 - **Date drafted**: 2026-11-08（**v2** —— 据 metis 第 1 轮 gap 分析**大幅收窄** scope：既有覆盖远多于初稿假设 ⇒ ⇒ 改为**扩展既有 36 格 probe matrix 的一个轴缺口**，而非新建平行矩阵）
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📝 草稿 v2 ⇒ 待 `rdd-builder` P0 批准门
+- **Status**: ✅ **已实施**（2026-11-27 对账：change `2026-11-08-hierarchical-port-landing-matrix-2026-11` 已归档 28/32 · 4 条未勾均为 T6 流程步）｜原记录：📝 草稿 v2 ⇒ 待 `rdd-builder` P0 批准门
 - **权威登记**：台账 §7 残留 **16**（`未决` · 归属 architect）· 本 improvement **不裁定**行 16，只固化其**现状基线**
 - **本文件不是 ADR**：MUST NOT 修改任何已签批决策的结论（契约裁定归 architect）
 

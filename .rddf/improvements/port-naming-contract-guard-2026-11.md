@@ -5,6 +5,11 @@ source: 台账 §7 残留 5 + roadmap `feat-hierarchical-rtl-output` §③ 后�
 phase: phase-5
 category: guard
 type: chore
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #8）：同名 change
+  `openspec/changes/archive/2026-11-06-port-naming-contract-guard-2026-11/` 已归档（tasks 42/42）
+  ⇒ 判定 = **① 正文陈旧**（非流程被绕过）
 created_at: 2026-11-06
 evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
 ---
@@ -13,7 +18,7 @@ evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7
 
 - **Date drafted**: 2026-11-06（v3 —— v2 吸收 metis 第 1 轮 gap 分析；v3 落下用户拍板 B1）
 - **Drafted by**: build-agent（planner 角色）
-- **Status**: 📝 草稿 v3（**设计已拍板** ⇒ 待 `rdd-builder` P0 走 5 选项批准门）
+- **Status**: ✅ **已实施**（2026-11-27 对账：change `2026-11-06-port-naming-contract-guard-2026-11` 已归档 42/42）｜原记录：📝 草稿 v3（**设计已拍板** ⇒ 待 `rdd-builder` P0 走 5 选项批准门）
 - **权威登记**：台账 §7 残留 **5**
 - **规范所有者**：命名规则本身归 **`openspec/specs/rtl-hierarchical-output/spec.md`**
   （Purpose `:10-11` + 「悬空子输入 MUST 向上冒泡」Scenario `:186-187`）

@@ -5,6 +5,11 @@ source: 台账 §7 残留 11 + §11.2（形态约束）+ roadmap `feat-hierarchi
 phase: phase-5
 category: api
 type: feature
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #6）：同名 change
+  `openspec/changes/archive/2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11/` 已归档（tasks 41/41）
+  ⇒ 判定 = **① 正文陈旧**（P0 5 选项批准门在归档前已走）
 created_at: 2026-11-06
 evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
 ---
@@ -13,7 +18,7 @@ evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
 
 - **Date drafted**: 2026-11-06（v3 —— v2 吸收 metis 第 1 轮 gap 分析；v3 落下用户拍板）
 - **Drafted by**: build-agent（planner 角色）
-- **Status**: 📝 草稿 v3（**设计已拍板** ⇒ 待 `rdd-builder` P0 走 5 选项批准门）
+- **Status**: ✅ **已实施**（2026-11-27 对账：change `2026-11-07-p6-hierarchy-friendliness-diagnosis-2026-11` 已归档 41/41）｜原记录：📝 草稿 v3（**设计已拍板** ⇒ 待 `rdd-builder` P0 走 5 选项批准门）
 - **权威登记**：台账 §7 残留 11（= P6 诊断 API）· 形态约束 = 台账 §11.2 的 P6 行
   （**唯一权威** ⇒ 本文件只做指针与展开，**不复制全文**）
 - **裁决**：§11.1 **A4**（2026-11-05）⇒ 独立立项 · **不为此二项立新 ADR**

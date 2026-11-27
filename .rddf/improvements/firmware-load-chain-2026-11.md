@@ -4,8 +4,12 @@ priority: P1
 phase: phase-6
 category: cpu
 type: feature
-状态: approved
-进度: L1–L6 的 5 项裁决已落定（2026-11-11）· B3 未开工 · ✅ **前置门已闭**（公开面登记 2026-11-12 = `public-api-surface.md`「行为变更」节 + `docs/CHANGELOG.md` 各一行）⇒ ⇒ ✅ **T2 已裁决**（ADR-069 Accepted · 决策 = A0）⇒ ⇒ **只差 change 立项**
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #2）：同名 change
+  `openspec/changes/archive/2026-11-14-firmware-load-chain-2026-11/` 已归档（tasks 27/27）
+  ⇒ 判定 = **① 正文陈旧**（非流程被绕过）⇒ ⇒ 独立证据 = `include/cpu/riscv/rv32i_asm_encode.h` 已存在
+进度: '**已实施并归档**（change `openspec/changes/archive/2026-11-14-firmware-load-chain-2026-11/` · 27/27 · 2026-11-14）⇒ ⇒ 原「B3 未开工 / 只差立项」= 立项前的历史记录（已作废）'
 主题: 已知功能缺口清零
 依赖: rtl-emit-product-tooling-2026-11（manifest）· rv32i-canonical-home（SoC 顶层归属）
 来源: 用户 2026-11-10 拍板「② 固件转储器作为项目工具能力，并考虑添加 ELF 装载固件能力」+ planner 实测装载链路缺口
@@ -17,7 +21,7 @@ evidence: probe:examples/riscv-mini/src/rv32i_core_top.h#L112
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 📋 **approved**（裁决已落定 · 未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：公开面登记（R6）+ T2 裁决（R5）
+- **Status**: ✅ **已实施**（2026-11-27 对账：change `2026-11-14-firmware-load-chain-2026-11` 已归档 27/27）｜原记录：📋 **approved**（裁决已落定 · 未开工 ⇒ 归 **B3**）⇒ ⇒ 🚪 **入口门**：公开面登记（R6）+ T2 裁决（R5）
 - **审计（2026-11-13 · planner 独立复核）**: ✅ **确认未开工**（`tools/rv32i-fw-dump` ❌ 不存在 · `include/cpu/riscv/rv32i_asm_encode.h` ❌ 不存在 · SoC 侧**无显式地址映射** · `prog_*` 仍只接 I-TCM ⇒ ⇒ **D-TCM 仍无加载通路** ⇒ ⇒ 结论与 frontmatter「`approved` / B3 未开工」**一致** ⇒ ⇒ 本轮**无需订正**（该草案的状态自述**准确**）
 - **用户裁决（2026-11-10）**: 「② 固件转储器也可以做为项目提供的工具能力，同时再考虑添加一个 ELF 装载固件的能力」
 - **依赖判定**: ⚠️ **ELF 装载当前不可行** ⇒ ⇒ 本项 MUST **先**修装载链路（地址映射 + D-TCM 加载通路），ELF 是其**下游**

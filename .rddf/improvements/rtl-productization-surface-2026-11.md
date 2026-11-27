@@ -5,9 +5,18 @@ phase: phase-6
 category: framework
 type: feature
 残余: >-
-  **D5 + D6 仍未立项**（其独立 change `rtl-productization-coverage-registration-2026-11` **未归档**）⇒ ⇒ 主 spec delta 形状错 / 后端端口面不可执行两项已闭，但残余未销
-状态: in-progress
-进度: "**立项（2026-11-16）** · **已实施并归档**（change `rtl-productization-surface-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11/`）· ✅ **开工前门 P-0 已闭**（2026-11-16 · ADR-072 v2 + v2.1 Accepted · `ef0d284` / `e00b321`）⇒ ⇒ **P-1 spec delta 已交付并合并**（G-1…G-8 全部由 ADR-072 v2 交付）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **D1 / J1–J4 已落地**（产品端口面 **130 → 34** · manifest schema **v1 → v2** · 两份 capability delta 已合并进 `openspec/specs/`）⇒ ⇒ 但 **D5 / D6**（覆盖登记完备性 + 可执行载体）仍**未立项**（`rtl-productization-coverage-registration-2026-11` **文件不存在**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐该草案后可改 `implemented`**"
+  **D5 + D6 已交付**（2026-11-27 对账：独立 change
+  `openspec/changes/archive/2026-11-17-examples-rtl-sim-registration-hygiene-2026-11/`（tasks 22/22）
+  = 落选表 TSV 化 + 补登 9 项 + `spec_checks` 列纯化 + 守恒/完备/列纯三判据护栏 + CI 接线）
+  ⇒ ⇒ 原「其独立 change `rtl-productization-coverage-registration-2026-11` 未归档」= **名称假设错误**
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（本轮审计）：D1 / J1–J4 已由 change `rtl-productization-surface-2026-11` 交付；
+  D5 / D6 由 change `examples-rtl-sim-registration-hygiene-2026-11` 交付 ⇒ ⇒ 机械判据 =
+  `scripts/verify_examples_rtl_sim_coverage.sh` **PASS**（守恒 29 == 17 ∪ 12 · 落选登记完备 · 列纯度）
+  + `--self-test` 3 条投毒全红 + 已接 CI（`build-and-test` 两步）+ 已登记 `guard-reachability.md`
+  ⇒ ⇒ 「未纳入本轮的部分已登记」⇒ 12 个落选项按落选表登记（8 项不补/条件性 · 4 项待批次）
+进度: "**2026-11-27 订正**：D5+D6 已由 `examples-rtl-sim-registration-hygiene-2026-11` 交付（见 `状态依据`）⇒ ⇒ 以下为历史记录。 **立项（2026-11-16）** · **已实施并归档**（change `rtl-productization-surface-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11/`）· ✅ **开工前门 P-0 已闭**（2026-11-16 · ADR-072 v2 + v2.1 Accepted · `ef0d284` / `e00b321`）⇒ ⇒ **P-1 spec delta 已交付并合并**（G-1…G-8 全部由 ADR-072 v2 交付）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **D1 / J1–J4 已落地**（产品端口面 **130 → 34** · manifest schema **v1 → v2** · 两份 capability delta 已合并进 `openspec/specs/`）⇒ ⇒ 但 **D5 / D6**（覆盖登记完备性 + 可执行载体）仍**未立项**（`rtl-productization-coverage-registration-2026-11` **文件不存在**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐该草案后可改 `implemented`**"
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）—— 顶层端口面收敛 + 产品单元四件套
 依赖: rtl-emit-product-tooling-2026-11（implemented）· examples-rtl-sim-coverage-2026-11（implemented）· rv32i-hierarchical-example-2026-11（implemented）· rtl-hierarchical-output capability · rtl-emit-portability capability
 来源: 用户 2026-11-16「评估能否生成功能完整的 RISC-V CPU 核 RTL + 推进为 RTL 生成能力产品化」+ **ADR-072**（Accepted 2026-11-16 · oracle ×1 + critic ×2 复审 APPROVE）

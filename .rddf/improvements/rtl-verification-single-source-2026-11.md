@@ -5,7 +5,7 @@ phase: phase-6
 category: framework
 type: refactor
 状态: in-progress
-进度: '**立项（2026-11-17）** · **已实施并归档**（change `rtl-verification-single-source-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-19-rtl-verification-single-source-2026-11/` · verifier 第 2 轮 **23/23** ⇒ 「本 change 可归档」· 证据 `.rddf/reviews/rtl-verification-single-source-2026-11-verify-2.md`）· 🚪 开工前门 = **ADR-074 / ADR-075**（**均已 Accepted**）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **C1–C6 已落地**（W3「发射实现两处」已收口 · 2026-11-22）⇒ ⇒ 但**移交项尚未全部立项**（「其余 example 的 `.sv` TB 仍手写」·「子 module 端口名具名化」⇒ ⇒ **无对应 improvement 文件**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐对应草案后可改 `implemented`**'
+进度: '**2026-11-27**：移交项 W2 已登记为 `axi4-submodule-port-naming-2026-11`（draft · 未实施）⇒ 移交项 1/2 已落；另一项「其余 example 的 `.sv` TB 仍手写」**待复核**（tsv 实测 `generated=no` 仅 3 行，且均为「MUST 保持手写（终态）」）⇒ ⇒ 原记录：**立项（2026-11-17）** · **已实施并归档**（change `rtl-verification-single-source-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-19-rtl-verification-single-source-2026-11/` · verifier 第 2 轮 **23/23** ⇒ 「本 change 可归档」· 证据 `.rddf/reviews/rtl-verification-single-source-2026-11-verify-2.md`）· 🚪 开工前门 = **ADR-074 / ADR-075**（**均已 Accepted**）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **C1–C6 已落地**（W3「发射实现两处」已收口 · 2026-11-22）⇒ ⇒ 但**移交项尚未全部立项**（「其余 example 的 `.sv` TB 仍手写」·「子 module 端口名具名化」⇒ ⇒ **无对应 improvement 文件**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐对应草案后可改 `implemented`**'
 主题: RTL 验证的单一真相源 —— 判据单一语义（IR）+ 生成式 `*.sv` TB + 端口具名化 + 发射面收敛
 依赖: ADR-072（Accepted · v2.2 · D4 被本项部分 supersede）· ADR-073（Accepted · v1.2）·
   ADR-074（**Proposed**）· ADR-075（**Proposed**）·

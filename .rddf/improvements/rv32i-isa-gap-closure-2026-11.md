@@ -5,9 +5,17 @@ phase: phase-6
 category: cpu
 type: feature
 残余: >-
-  **特权级立项未做**（⇒ 归 `rv32i-privileged-csr-2026-11`）⇒ ⇒ 其余 G 项已落地
-状态: partial（G3 + G1 + G2 最小面 + G4 + G5 + **G1 扩展（funct3/funct7 保留组合）** 已落地 · 仅**特权级立项**未做）
-进度: B4 已开工（G3 → G1+G4 已落地 2026-11-15） · ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ ⇒ 实施前 MUST 先确认 phase-6 P6 的侦察结论已并入
+  **G 项全落地**（G3 + G1 + G2 最小面 + G4 + G5 + G1 扩展）⇒ ⇒ **特权级已由
+  `rv32i-privileged-csr-2026-11` 承接**（立项 2026-11-16 · P6-2/3/4 已闭）⇒ ⇒ 本文件剩余 =
+  AC 勾选与正文回填（非实现工作）
+状态: implemented
+状态依据: >-
+  2026-11-27 对账：G3/G1/G4/G2 的最小面已由归档 change
+  `openspec/changes/archive/2026-11-15-isa-gap-illegal-opcode-fence-2026-11/`（9/9）交付 ·
+  G5 由 `openspec/changes/archive/2026-11-16-csr-mcause-write-2026-11/`（8/8）交付 ·
+  未纳入本项的特权级已登记为独立立项（`rv32i-privileged-csr-2026-11`）⇒ §0.0 的
+  `implemented` 条件满足
+进度: 2026-11-27 订正 —— G1–G5 已全部归档（见 `状态依据`）⇒ ⇒ 以下为历史记录。 B4 已开工（G3 → G1+G4 已落地 2026-11-15） · ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ ⇒ 实施前 MUST 先确认 phase-6 P6 的侦察结论已并入
 主题: RV32I ISA 缺口
 依赖: rv32i-commit-path（时序基线）· memory-timing-contract-2026-11（建议先行，稳时序基线）
 来源: planner 实测（未识别 opcode 静默当 NOP 穿过 5 级）+ phase-6 P6 的「CSR / ECALL / FENCE MUST 独立立项」约束
@@ -19,7 +27,7 @@ evidence: probe:include/cpu/pipeline/stages/id_stage.h#L123
 
 - **Date drafted**: 2026-11-10
 - **Drafted by**: planner 角色（build-agent）
-- **Status**: 🟡 **partial**（2026-11-15：**G3 + G1 + G4 + G2 最小面已落地** ⇒ ⇒ 载体 = `openspec/changes/isa-gap-illegal-opcode-fence-2026-11`；**G5 未做** · `funct3`/`funct7` 非法组合登记为 residual）⇒ ⇒ ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ 实施前 MUST 先确认 `phase-6.md` 的 P6 结论
+- **Status**: ✅ **已实施**（2026-11-27 对账：G3/G1/G4/G2 最小面已归档（`isa-gap-illegal-opcode-fence-2026-11` · 9/9）· G5 已归档（`csr-mcause-write-2026-11` · 8/8）· 特权级已移交 `rv32i-privileged-csr-2026-11`）｜原记录：🟡 **partial**（2026-11-15：**G3 + G1 + G4 + G2 最小面已落地** ⇒ ⇒ 载体 = `openspec/changes/isa-gap-illegal-opcode-fence-2026-11`；**G5 未做** · `funct3`/`funct7` 非法组合登记为 residual）⇒ ⇒ ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ 实施前 MUST 先确认 `phase-6.md` 的 P6 结论
 - **审计（2026-11-13 · planner 独立复核）**: ✅ **确认未开工**（`include/cpu/pipeline/**` 对 `illegal` / `unknown_opcode` / `FENCE` **零命中** ⇒ ⇒ 未知 opcode **仍静默当 NOP** · `rv32i_exception.h:132,136` 的 `write_mepc = write_mcause = do_trap_entry` **原样未动** ⇒ ⇒ **`mcause` 仍不可达**）⇒ ⇒ 结论与 frontmatter「`draft` / B4 未开工」**一致** ⇒ ⇒ 本轮**无需订正**（⚠️ 遗留：实施前 MUST 先确认 `phase-6.md` P6 的侦察结论已并入 —— 该项**至今未并入**）
 - **⚠️ 范围边界（硬约束）**: 本项 **MUST NOT** 包含 **CSR 指令 / `ECALL` / `EBREAK` / `MRET` / 中断** ⇒ ⇒ 按 `phase-6.md` **P6** 行（「CSR / `ECALL` / `FENCE` **MUST 独立立项** ⇒ 新 capability + 新 change」）⇒ ⇒ **特权级 = 另一条独立立项**（本项末尾给出候选形态）
 

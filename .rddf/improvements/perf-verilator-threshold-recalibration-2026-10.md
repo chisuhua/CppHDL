@@ -5,6 +5,10 @@ source: perf-baseline-refresh-2026-10（3 样本实测推翻阈值表的前提�
 phase: phase-5
 category: tooling
 type: chore
+状态: draft
+状态依据: >-
+  草案已写、**未批准**（阈值方案 1/2/3 互斥 ⇒ 决策权归 planner）⇒ ⇒ 非「未开工的僵尸」，
+  而是**待裁决** ⇒ ⇒ 原缺 `状态:` 字段（`rddf status` 显示「待讨论」）已补
 残余: >-
   **阈值重校准未裁决**（决策权归 planner ⇒ build 只登记，不定方案）
 created_at: 2026-10-28

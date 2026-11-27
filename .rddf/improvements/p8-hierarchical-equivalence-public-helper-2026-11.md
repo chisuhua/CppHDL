@@ -5,6 +5,11 @@ source: 台账 §7 残留 1（用户面缺口）+ §7 残留 11（权威登记�
 phase: phase-5
 category: api
 type: feature
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #7）：同名 change
+  `openspec/changes/archive/2026-11-07-p8-hierarchical-equivalence-public-helper-2026-11/` 已归档（tasks 62/62）
+  ⇒ 判定 = **① 正文陈旧**（非流程被绕过）
 created_at: 2026-11-07
 evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
 ---
@@ -13,7 +18,7 @@ evidence: probe:docs/architecture/2026-11-02-hierarchical-rtl-output.md#7·#11.2
 
 - **Date drafted**：2026-11-07（**v2** —— v2 吸收 metis 第 1 轮 gap 分析的 12 条 finding）
 - **Drafted by**：build-agent（planner 角色）
-- **Status**：📝 草稿 v2（**待用户拍板** ⇒ 拍板后转 builder 流程）
+- **Status**：✅ **已实施**（2026-11-27 对账：change `2026-11-07-p8-hierarchical-equivalence-public-helper-2026-11` 已归档 62/62）｜原记录：📝 草稿 v2（**待用户拍板** ⇒ 拍板后转 builder 流程）
 - **权威登记**：台账 §7 残留 1（= P8 的**用户面**缺口）· §7 残留 11（= P6 + P8 的共同权威登记）·
   形态约束 = 台账 §11.2 的 P8 行（**唯一权威** ⇒ 本文件只做指针与展开，**不复制全文**）
 - **裁决**：§11.1 **A4**（2026-11-05）⇒ 独立立项 · **不为此立新 ADR**（API 尚未设计 ⇒ 为未设计的 API

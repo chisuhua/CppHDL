@@ -6,6 +6,11 @@ source: 裁决请求单 `.rddf/checks/decision-request-hierarchical-ledger-resid
 phase: phase-5
 category: infra-setup
 type: functional
+状态: implemented
+状态依据: >-
+  2026-11-27 对账（台账 `improvement-body-vs-archive-drift-2026-11` #1）：同名 change
+  `openspec/changes/archive/2026-11-08-arch-residual-registry-2026-11/` 已归档（tasks 34/34）
+  ⇒ 判定 = **① 正文陈旧**；且本项已登记在 `improvement-approved.md` 的「已实施」表
 created_at: 2026-11-07
 evidence: probe:.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md
 roadmap_ref:
@@ -18,7 +23,7 @@ roadmap_ref:
 
 - **Date drafted**：2026-11-07（**v4** —— v4 吸收 **critic 第 1 轮**的 **4 条 SHOULD_FIX**（0 BLOCKER · `APPROVE_WITH_CONDITIONS`）+ 3 条 NITS；v3 吸收 **oracle 第 1 轮**的 9 条 finding + 3 条替代方案裁决；v2 已吸收 **metis 第 1 轮**的 33 条）
 - **Drafted by**：build-agent（planner 角色 · 用户口令「选项 B 立项」）
-- **Status**：✅ **已批准**（2026-11-07 · 用户在 **oracle 第 1 轮 + critic 第 1 轮**审查通过后批准 ⇒ critic = `APPROVE_WITH_CONDITIONS` · **0 BLOCKER** · 4 条 SHOULD_FIX 已在 v4 全修）⇒ ⇒ 登记于 `improvement-approved.md` ⇒ ⇒ 下一步 = 创建 openspec change（★ 按增强层工件归属 ⇒ `proposal.md` 由 `rdd-builder` **P0** 从本草稿生成 ⇒ **不手写**）
+- **Status**：✅ **已实施**（2026-11-27 对账：change `2026-11-08-arch-residual-registry-2026-11` 已归档 34/34）｜原记录：✅ **已批准**（2026-11-07 · 用户在 **oracle 第 1 轮 + critic 第 1 轮**审查通过后批准 ⇒ critic = `APPROVE_WITH_CONDITIONS` · **0 BLOCKER** · 4 条 SHOULD_FIX 已在 v4 全修）⇒ ⇒ 登记于 `improvement-approved.md` ⇒ ⇒ 下一步 = 创建 openspec change（★ 按增强层工件归属 ⇒ `proposal.md` 由 `rdd-builder` **P0** 从本草稿生成 ⇒ **不手写**）
 - **权威来源**：裁决请求单 `.rddf/checks/decision-request-hierarchical-ledger-residuals-2026-11.md` §2 **选项 B**（用户 2026-11-07 拍板「立项（治本）」）⇒ ⇒ 其 §3 建议 2 的**关键约束** = 「**登记表是唯一真相，台账是它的渲染**」
 - **首期对象**：台账 `docs/architecture/2026-11-02-hierarchical-rtl-output.md` §7「已知残留」（**15 行**）
 - **设计批准**：用户 2026-11-07 批准（方案 B + 3 个默认：派生语义 = 「规范句 + 散文追加」· 首期只迁本台账 · capability 归属待裁定）
