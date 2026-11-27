@@ -76,4 +76,17 @@ struct AxiLiteDefaultMatrixMap {
     };
 };
 
+// 窗口的**目标**：slave 索引，或 `kErr`（互连层自应答 DECERR）。
+//
+// ⚠️ `kErr` 是**窗口目标**，不是「未命中」：未命中任何窗口的地址同样路由到
+//   ERR 路（互连自应答 DECERR）⇒ ⇒ 两者在互联内部**同一档**（demux 的最后一路）。
+inline constexpr uint32_t kErr = 0xFFFF'FFFFu;
+
+// N×M Lite 互联的地址窗口（带目标）。
+struct AxiLiteMapWindow {
+    uint64_t base;
+    uint64_t size;
+    uint32_t target;  // slave 索引（< M）或 `kErr`
+};
+
 }  // namespace axi4

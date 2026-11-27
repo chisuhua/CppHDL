@@ -1,3 +1,20 @@
+## 2026-11-27 — S4b P1：新增 `AxiLiteCrossbar`（2×6 AXI4-Lite 互联，数据面用 chlib stream 组合）
+
+change `rv32i-soc-peripherals-interconnect-2026-11`（P1 = 新 IP；SoC 装配属 P3）。
+**新增公开头** `include/axi4/axi_lite_crossbar.h`（子目录头 ⇒ 不进顶层公共头活账）：
+
+- `axi4::AxiLiteCrossbar<Map, ADDR_WIDTH = 32, DATA_WIDTH = 32>`：**2 master × 6 slave**，
+  每面 19 根 Lite 通道（全部具名）+ `rst_n`；无 ID / burst / last；地址不重定基。
+- `axi4::AxiLiteMapWindow{base, size, target}` + `axi4::kErr`（`interconnect_common.h`）：
+  窗口目标 = slave 索引或 `kErr`；未命中也路由到同一 ERR 档（互连自应答 DECERR）。
+- 数据面由 `chlib::stream_mux` / `stream_demux` / `round_robin_selector` 组合：
+  AW/AR = mux 选主 → demux 选从（第 7 路 = ERR）；W = 每 master demux → 每 slave mux；
+  B/R = 每 slave demux → 每 master mux（末档 = 本地 DECERR 流）。
+- 语义：握手当拍锁存路由（写 / 读独立）· 每方向独立 RR（握手后推进）· 单 master 单 outstanding ·
+  **同一 slave 的写/读各自串行**（第二个 `ready` 与 `valid` 一起为 0）· `bresp/rresp = DECERR`。
+- 判据：`tests/test_axi_lite_crossbar.cpp`（双后端 · 20 TEST_CASE / 508 断言）+ 7 条变异自证
+  （M1/M2/M3/M4a/M4b/M5/M6/M7 全部实测转红；M6 = 编译期 `static_assert`）。
+
 ## 2026-11-24 — IP 冻结：`riscv-mini` 的判据完备（MMIO 通道核级判据 + 层次化等价纳入 19 根 axil + 集成契约）
 
 change `rv32i-ip-freeze-2026-11`（用户 2026-11-24 裁决「先把 IP 做完备并归档，再继续 SoC 批次」）

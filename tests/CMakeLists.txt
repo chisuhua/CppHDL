@@ -1057,6 +1057,12 @@ add_dual_backend_test(test_axi_lite_matrix_2x2
     SOURCES test_axi_lite_matrix_2x2.cpp
     TIMEOUT 600
 )
+# N×M AXI4-Lite 互联（S4b）：chlib stream 组合（stream_mux / stream_demux /
+# round_robin_selector）· 路由锁存 / 在途门控 / 轮转仲裁 / ERR 窗口 DECERR —— 双后端。
+add_dual_backend_test(test_axi_lite_crossbar
+    SOURCES test_axi_lite_crossbar.cpp
+    TIMEOUT 600
+)
 add_catch_test(test_axi_gpio test_axi_gpio.cpp)
 add_catch_test(test_axi_i2c test_axi_i2c.cpp)
 add_catch_test(test_axi_lite_bundle test_axi_lite_bundle.cpp)

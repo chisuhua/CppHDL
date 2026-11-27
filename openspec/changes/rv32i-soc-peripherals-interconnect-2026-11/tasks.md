@@ -18,36 +18,41 @@
 
 ## P1 · 新 IP（TDD · 先写失败用例 · **数据面用 chlib stream**）
 
-- [ ] **T1.0** 接线纪律前置：确认 3 条（照抄 `examples/stream/stream_mux_top.h`）
+- [x] **T1.0** 接线纪律前置：确认 3 条（照抄 `examples/stream/stream_mux_top.h`）
       - 被组合子消费的 stream MUST 先 `as_master()`
       - `input_streams[i].ready` MUST 用 `<<=`（禁 `operator=`）
       - 消费端覆盖输出 ready MUST 直接 `<<=` 到 `result.output_stream.ready`
-- [ ] **T1.1** 🔴 先写 `tests/test_axi_lite_crossbar.cpp` 的**失败**用例：
-      - 路由完备：`N=2, M=3` 的 fixture map，每对 1 笔写 + 1 笔读
-      - 锁存：AW 握手后改 `awaddr` ⇒ W/B 仍去原 slave
-      - 在途门控：同 master 第二笔 AW 不被接受、且不丢
-      - 仲裁：两 master 同时请求 ⇒ 轮转（连续 4 轮，顺序符合手推）
+- [x] **T1.1** 🔴 先写 `tests/test_axi_lite_crossbar.cpp` 的**失败**用例（首版 `M=3`；
+      落地时按端口面固定 2×6 改为 6 个 slave，见 T1.2a）：
+      - 路由完备：每个 (master, slave) 对 1 笔写 + 1 笔读
+      - 锁存：AW / AR 握手后改地址 ⇒ W/B / R 仍去原 slave
+      - 在途门控：同 master 第二笔 AW 不被接受、且不丢（**同目标 + 另一个空闲目标**）
+      - 仲裁：两 master 同时请求 ⇒ **AW 与 AR 各自**轮转（连续 4 轮，顺序符合手推）
       - DECERR：未映射 + `ERR` 窗口 ⇒ `bresp/rresp = 0b11`、不挂死
       - W 跟随写路由：AW 与 W 相隔 1 拍
-- [ ] **T1.2a** 边界适配器：19 根端口 ↔ 5 条 `ch_stream`（**唯一**手写 valid/ready 的地方）
-- [ ] **T1.2b** AW / AR 平面：`stream_mux<N>`（grant 选主）→ `stream_demux<M+1>`（地址选从 ·
-      **第 M 路 = ERR**）⇒ ERR 路 `ready=1`（**禁**用「select 越界」表达 ERR）
-- [ ] **T1.2c** W 平面：`ERR` 路由**就地消费**（ready=1），其余按 `wr_owner[j]` 经
-      `stream_mux<N>` 送对应 slave
-- [ ] **T1.2d** B / R 平面：按 `wr_owner[j]` / `rd_owner[j]` 用 `stream_demux<N>` 反查 master；
-      **本地 DECERR B/R 流**（`resp=0b11` · `rdata=0`）保持到 ready
-- [ ] **T1.2e** 仲裁：`chlib::round_robin_selector` + `last_grant_oh`（握手后推进）+
-      `grant_oh`（保持到握手）；索引用 `chlib::onehot_to_binary`
-- [ ] **T1.3** 跑 T1.1 ⇒ 全绿；再跑 T1.4 的反向判据
-- [ ] **T1.4** 🔴 **变异自证**（每条必须实测转红，且**先确认仍能编译**）：
-      M1 target 改 `ERR` · M2 读写 owner 串线 · M3 去在途门控 · M4 仲裁固定优先 ·
-      M5 只回 `bvalid` 不回 `rvalid`
-      ⇒ 记录「变异 → 哪条用例红」
-- [ ] **T1.5** 窗口非法配置的编译期判据：`size` 非 2 的幂 / `base` 未对齐 / `target` 越界
-      ⇒ 用 `static_assert` 断言
-- [ ] **T1.6** 复用审计（人工 + grep）：crossbar 内 **MUST NOT** 出现手写的
-      `xxx_ready = ...valid...` 反压转发；数据面 MUST 经 `stream_mux` / `stream_demux`
-      ⇒ 记录 grep 判据与例外（边界适配器除外）
+      - 同 slave 串行：第二个 `awready=0` 且 slave 看不到第二次 `awvalid`
+- [x] **T1.2a** 边界适配器：19 根端口 ↔ 5 条 `ch_stream`（**唯一**手写 valid/ready 的地方）
+      ⇒ 端口面固定 2×6、全部**具名**（`verify_port_naming.sh` 0 新增债）
+- [x] **T1.2b** AW / AR 平面：`stream_mux<2>`（grant 选主）→ `stream_demux<7>`（地址选从 ·
+      **第 6 路 = ERR**）⇒ ERR 路 `ready=1`（**禁**用「select 越界」表达 ERR）
+- [x] **T1.2c** W 平面：每 master `stream_demux<7>`（按锁存路由）→ 每 slave `stream_mux<2>`
+      （按 owner）⇒ ERR 路由**就地消费**（ready=1）。
+      ⚠️ 两级是必需的：ready 节点只能有一个驱动者（`<<=` last-wins）
+- [x] **T1.2d** B / R 平面：每 slave `stream_demux<2>`（按 owner 反查）→ 每 master
+      `stream_mux<7>`（按锁存路由，末档 = ERR）；**本地 DECERR B/R 流**保持到 ready
+- [x] **T1.2e** 仲裁：`chlib::round_robin_selector` + `last_grant`（握手后推进）+
+      `chlib::onehot_to_binary`；owner 由 `active ∧ route` **组合派生**（不存寄存器）
+- [x] **T1.3** 跑 T1.1 ⇒ 全绿（20 TEST_CASE / 508 断言 · interpreter + verilator）
+- [x] **T1.4** 🔴 **变异自证**（每条实测转红；先确认仍能编译）：
+      M1 ERR 窗口→s0（ERR 用例红）· M2 B 平面用读 owner（fanout/arb 红）·
+      M3 去 AW 在途门控（在途用例红）· M4a/M4b 去 AW/AR 指针更新（仲裁红）·
+      M5 rvalid 恒 0（全部读用例红）· M6 窗口 size 非 2 的幂（编译失败）·
+      M7 去 slave 侧忙门控（串行用例红）
+- [x] **T1.5** 窗口非法配置的编译期判据：`size` 非 2 的幂 / `base` 未对齐 / `target` 越界
+      ⇒ `static_assert(windows_are_valid())`（M6 实测触发）
+- [x] **T1.6** 复用审计（人工 + grep）：crossbar 内无手写的
+      `xxx_ready = ...valid...` 反压转发；数据面经 `stream_mux` / `stream_demux`
+      ⇒ 手写 valid/ready 仅两处：边界适配、在途/忙门控
 
 ## P2 · 库层地址表（D-1）
 
