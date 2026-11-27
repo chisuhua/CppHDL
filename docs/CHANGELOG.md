@@ -1,3 +1,21 @@
+## 2026-11-27 — S4b P2：MMIO 地址表追加 **TIMER 段**（D-1）+ `AddressDecoder` 补 `timer_cs`
+
+change `rv32i-soc-peripherals-interconnect-2026-11`（P2 = 库层地址表；D-1 已由用户确认）。
+**公开面变更**（已登记 `.rddf/checks/public-api-surface.md`）：
+
+- `riscv::kTimer` = `0x8010_7000`（4 KB · **追加在末尾** ⇒ ⇒ **既有 7 段基址零移动**），
+  全部**派生**（`kMmioBase + 7 × kMmioSegmentBytes`）⇒ ⇒ 禁手写第二份。
+- `riscv::kMmioBytes`：`0x7000` → **`0x8000`**（8 段 × 4 KB · 仍**派生**）⇒ ⇒
+  核内 pre-cache 分流的 MMIO 窗口随之右移一格（该段此前落进 D-L1 ⇒ 现走 MMIO 通道；
+  既有程序**零影响** —— 无程序触碰该段）。
+- `riscv::ADDR_TIMER_BASE` / `ADDR_TIMER_SIZE` / `ADDR_TIMER_END`（派生自库层表）。
+- `riscv::AddressDecoder`：**+1 个具名输出** `timer_cs` ⇒ ⇒ **片选 10 个**（2 TCM + **8 MMIO**）+ `error_cs`
+  ⇒ ⇒ **11** 个片选类输出 ⇒ ⇒ **端口命名棘轮零新增债**。
+- 判据：`test_address_decoder`（10 用例 / 163 断言）—— TIMER 段首字节只命中自己、
+  窗口末字节 `0x8010_7FFF` 命中 TIMER（`local = 0xFFF`）、`local_addr` 减**自己**的基址、
+  第一个外字节 `0x8010_8000` 报错 ⇒ ⇒ 变异 N1（`in_timer` 恒 0）/ N2（`timer_local` 减错基址）
+  **实测转红**。
+
 ## 2026-11-27 — S4b P1：新增 `AxiLiteCrossbar`（2×6 AXI4-Lite 互联，数据面用 chlib stream 组合）
 
 change `rv32i-soc-peripherals-interconnect-2026-11`（P1 = 新 IP；SoC 装配属 P3）。

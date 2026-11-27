@@ -20,14 +20,19 @@
  * | I2C    | 0x80104000      | 4KB    | i2c_cs     |
  * | PWM    | 0x80105000      | 4KB    | pwm_cs     |
  * | DMA    | 0x80106000      | 4KB    | dma_cs     |
+ * | TIMER  | 0x80107000      | 4KB    | timer_cs   |
  *
  * ⚠️ **2026-11-24 · change `rv32i-soc-mmio-channel-2026-11`（G-6）**：
  *   ① 本表**全部基址 / 容量改为派生**自 `rv32i_mem_map.h`（**单一真相**）
  *      ⇒ ⇒ 禁手写字面量（原先 `ADDR_CLINT_BASE` 等是**手写**的 ⇒ ⇒ 与库层表**两份真相**）
  *      ⇒ ⇒ 顺带订正「I-TCM / D-TCM **64 KB**」的**既有漂移**（真实容量 = **16 KB**）
- *   ② **片选由 5 个扩到 9 个**（2 TCM + **7 MMIO**）+ `error_cs` ⇒ ⇒ **10 个片选类输出**
- *      （另有 `local_addr` ⇒ ⇒ 共 **11** 个输出端口）
+ *   ② **片选由 5 个扩到 10 个**（2 TCM + **8 MMIO**）+ `error_cs` ⇒ ⇒ **11 个片选类输出**
+ *      （另有 `local_addr` ⇒ ⇒ 共 **12** 个输出端口）
  *   ③ 新增 4 个输出端口 = **公开面变更** ⇒ ⇒ 已登记 `public-api-surface.md`
+ *
+ * ⚠️ **2026-11-27 · change `rv32i-soc-peripherals-interconnect-2026-11`（D-1）**：
+ *   追加 **TIMER 段**（`0x8010_7000` ⇒ ⇒ **既有 7 段零移动**）⇒ ⇒ 新增片选
+ *   `timer_cs`（**具名** ⇒ ⇒ 端口命名棘轮**零新增债**）⇒ ⇒ **公开面变更** ⇒ ⇒ 已登记。
  */
 
 #pragma once
@@ -71,6 +76,8 @@ constexpr uint32_t ADDR_SPI_BASE   = static_cast<uint32_t>(riscv::kSpi.base);
 constexpr uint32_t ADDR_I2C_BASE   = static_cast<uint32_t>(riscv::kI2c.base);
 constexpr uint32_t ADDR_PWM_BASE   = static_cast<uint32_t>(riscv::kPwm.base);
 constexpr uint32_t ADDR_DMA_BASE   = static_cast<uint32_t>(riscv::kDma.base);
+// ⚠️ **2026-11-27 · D-1**：TIMER 段**追加在末尾**（`0x8010_7000`）⇒ ⇒ **既有 7 段零移动**
+constexpr uint32_t ADDR_TIMER_BASE = static_cast<uint32_t>(riscv::kTimer.base);
 // ⚠️ **size 由容量派生**（**禁**手写 0x10000 —— 那与硬件的 16 KB 不一致；
 //    MMIO 段的 4 KB 同样**派生**自库层表 ⇒ ⇒ 禁在此处再写一遍 0x1000）
 constexpr uint32_t ADDR_ITCM_SIZE  = static_cast<uint32_t>(riscv::kItcm.size);
@@ -82,6 +89,7 @@ constexpr uint32_t ADDR_SPI_SIZE   = static_cast<uint32_t>(riscv::kSpi.size);
 constexpr uint32_t ADDR_I2C_SIZE   = static_cast<uint32_t>(riscv::kI2c.size);
 constexpr uint32_t ADDR_PWM_SIZE   = static_cast<uint32_t>(riscv::kPwm.size);
 constexpr uint32_t ADDR_DMA_SIZE   = static_cast<uint32_t>(riscv::kDma.size);
+constexpr uint32_t ADDR_TIMER_SIZE = static_cast<uint32_t>(riscv::kTimer.size);
 constexpr uint32_t ADDR_ITCM_END   = ADDR_ITCM_BASE + ADDR_ITCM_SIZE - 1;
 constexpr uint32_t ADDR_DTCM_END   = ADDR_DTCM_BASE + ADDR_DTCM_SIZE - 1;
 constexpr uint32_t ADDR_CLINT_END  = ADDR_CLINT_BASE + ADDR_CLINT_SIZE - 1;
@@ -91,6 +99,7 @@ constexpr uint32_t ADDR_SPI_END    = ADDR_SPI_BASE + ADDR_SPI_SIZE - 1;
 constexpr uint32_t ADDR_I2C_END    = ADDR_I2C_BASE + ADDR_I2C_SIZE - 1;
 constexpr uint32_t ADDR_PWM_END    = ADDR_PWM_BASE + ADDR_PWM_SIZE - 1;
 constexpr uint32_t ADDR_DMA_END    = ADDR_DMA_BASE + ADDR_DMA_SIZE - 1;
+constexpr uint32_t ADDR_TIMER_END  = ADDR_TIMER_BASE + ADDR_TIMER_SIZE - 1;
 
 class AddressDecoder : public ch::Component {
 public:
@@ -111,6 +120,9 @@ public:
         ch_out<ch_bool>    i2c_cs{"i2c_cs"};
         ch_out<ch_bool>    pwm_cs{"pwm_cs"};
         ch_out<ch_bool>    dma_cs{"dma_cs"};
+        // ⚠️ **2026-11-27 · D-1**：TIMER 段（`0x8010_7000`）的片选 —— **具名**
+        //    （端口命名棘轮：新增端口 MUST 具名 ⇒ ⇒ 零新增债）。
+        ch_out<ch_bool>    timer_cs{"timer_cs"};
         ch_out<ch_bool>    error_cs;
         ch_out<ch_uint<32>> local_addr;
     )
@@ -134,6 +146,7 @@ public:
         auto i2c_base   = ch_uint<32>(ADDR_I2C_BASE);
         auto pwm_base   = ch_uint<32>(ADDR_PWM_BASE);
         auto dma_base   = ch_uint<32>(ADDR_DMA_BASE);
+        auto timer_base = ch_uint<32>(ADDR_TIMER_BASE);
 
         auto itcm_end  = ch_uint<32>(ADDR_ITCM_END);
         auto dtcm_end  = ch_uint<32>(ADDR_DTCM_END);
@@ -144,6 +157,7 @@ public:
         auto i2c_end   = ch_uint<32>(ADDR_I2C_END);
         auto pwm_end   = ch_uint<32>(ADDR_PWM_END);
         auto dma_end   = ch_uint<32>(ADDR_DMA_END);
+        auto timer_end = ch_uint<32>(ADDR_TIMER_END);
 
         ch_bool in_itcm = select(addr_in >= itcm_base, addr_in <= itcm_end, ch_bool(false));
         ch_bool in_dtcm = select(addr_in >= dtcm_base, addr_in <= dtcm_end, ch_bool(false));
@@ -154,6 +168,7 @@ public:
         ch_bool in_i2c = select(addr_in >= i2c_base, addr_in <= i2c_end, ch_bool(false));
         ch_bool in_pwm = select(addr_in >= pwm_base, addr_in <= pwm_end, ch_bool(false));
         ch_bool in_dma = select(addr_in >= dma_base, addr_in <= dma_end, ch_bool(false));
+        ch_bool in_timer = select(addr_in >= timer_base, addr_in <= timer_end, ch_bool(false));
 
         ch_bool in_valid_region = select(in_itcm, ch_bool(true),
                               select(in_dtcm, ch_bool(true),
@@ -164,7 +179,8 @@ public:
                               select(in_i2c, ch_bool(true),
                               select(in_pwm, ch_bool(true),
                               select(in_dma, ch_bool(true),
-                              ch_bool(false))))))))));
+                              select(in_timer, ch_bool(true),
+                              ch_bool(false)))))))))));
 
         io().i_tcm_cs = in_itcm;
         io().d_tcm_cs = in_dtcm;
@@ -175,6 +191,7 @@ public:
         io().i2c_cs = in_i2c;
         io().pwm_cs = in_pwm;
         io().dma_cs = in_dma;
+        io().timer_cs = in_timer;
         io().error_cs = select(in_valid_region, ch_bool(false), ch_bool(true));
 
         ch_uint<32> itcm_local = addr_in - itcm_base;
@@ -186,6 +203,7 @@ public:
         ch_uint<32> i2c_local = addr_in - i2c_base;
         ch_uint<32> pwm_local = addr_in - pwm_base;
         ch_uint<32> dma_local = addr_in - dma_base;
+        ch_uint<32> timer_local = addr_in - timer_base;
 
         io().local_addr = select(in_itcm, itcm_local,
                        select(in_dtcm, dtcm_local,
@@ -196,7 +214,8 @@ public:
                        select(in_i2c, i2c_local,
                        select(in_pwm, pwm_local,
                        select(in_dma, dma_local,
-                       ch_uint<32>(0_d))))))))));
+                       select(in_timer, timer_local,
+                       ch_uint<32>(0_d)))))))))));
     }
 };
 

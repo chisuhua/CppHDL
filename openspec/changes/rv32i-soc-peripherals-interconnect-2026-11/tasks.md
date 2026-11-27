@@ -8,8 +8,8 @@
 
 ## P0 · 决策门（按阶段阻塞）
 
-- [ ] **T0.1** D-1 = 追加 `kTimer` 段（`0x8010_7000`）**已确认**
-  ⇒ 未确认 ⇒ **T2.1 起 STOP**（不得改 `rv32i_mem_map.h`）；**T1 不受影响**
+- [x] **T0.1** D-1 = 追加 `kTimer` 段（`0x8010_7000`）**已确认**（2026-11-27 · 用户「继续 P2」）
+  ⇒ ⇒ **T2 已解禁**（`rv32i_mem_map.h` 已改）
 - [ ] **T0.2** D-3 = 外设物理引脚**本批不上根端口** **已确认**
   ⇒ 未确认 ⇒ **T3.2 STOP**（装配前必须定）；T1 / T2 不受影响
 - [ ] **T0.3** 确认 `AxiLiteMatrix2x2` 在 `examples/axi4` 仍被使用 ⇒ **不删**
@@ -54,13 +54,19 @@
       `xxx_ready = ...valid...` 反压转发；数据面经 `stream_mux` / `stream_demux`
       ⇒ 手写 valid/ready 仅两处：边界适配、在途/忙门控
 
-## P2 · 库层地址表（D-1）
+## P2 · 库层地址表（D-1 · ✅ 已闭）
 
-- [ ] **T2.1** `rv32i_mem_map.h` 追加 `kTimer` + `kMmioBytes` 派生（8 段）
-      ⇒ `static_assert` 连续性 + 与 TCM 不重叠
-- [ ] **T2.2** `tests/test_address_decoder.cpp` 补 `kTimer` 片选 / `local_addr` 判据
-      （手推：`kTimer.base+0x40 ⇒ 0x40`；`0x8010_7FFF` 命中；`0x8010_8000` 出窗）
-- [ ] **T2.3** 公开面登记：`public-api-surface.md` + `docs/CHANGELOG.md`（**1 行**）
+- [x] **T2.1** `rv32i_mem_map.h` 追加 `kTimer`（`kMmioBase + 7 × kMmioSegmentBytes`）
+      + `kMmioBytes` 派生（7 → **8** 段）+ 2 条 `static_assert`（连续性 / 覆盖全部 8 段）
+      ⇒ ⇒ **既有 7 段基址零移动**
+- [x] **T2.2** `examples/riscv-mini/tests/test_riscv_tests_soc.cpp`（ctest target
+      `test_address_decoder`）补 TIMER 判据：首字节只命中自己 · 窗口末字节 `0x8010_7FFF`
+      命中 TIMER（`local = 0xFFF`）· `local_addr` 减**自己**的基址（`base+0x40 ⇒ 0x40`）·
+      第一个外字节 `0x8010_8000` 报错 ⇒ ⇒ 期望值**手推**
+      ⇒ ⇒ **变异自证 N1**（`in_timer` 恒 0 ⇒ 3 处红）/ **N2**（`timer_local` 减错基址 ⇒ 2 处红）
+- [x] **T2.3** 公开面登记：`public-api-surface.md`（行为变更 +1 行 · 新增符号 +1 行）
+      + `docs/CHANGELOG.md`（1 条）+ `include/cpu/AGENTS.md` 的自述计数（7601 → **7624**）
+      ⇒ ⇒ `AddressDecoder` 的 `timer_cs` **具名** ⇒ 端口命名棘轮**零新增债**
 
 ## P3 · SoC 装配
 
@@ -101,4 +107,4 @@
 1. **T1 必须先于 T3**（IP 语义先独立判据，再进 SoC）。
 2. **T2 必须先于 T3.1**（窗口派生要读得到 `kTimer`）。
 3. **T4.1 必须先于 T4.2**（先见红）。
-4. **D-1 未确认 ⇒ T2.1 起 STOP**（T1 可做）· **D-3 未确认 ⇒ T3.2 STOP**（T1/T2 可做）。
+4. ✅ **D-1 已确认**（2026-11-27）⇒ T2 已闭 · ⚠️ **D-3 未确认 ⇒ T3.2 STOP**（T1/T2 已闭）。

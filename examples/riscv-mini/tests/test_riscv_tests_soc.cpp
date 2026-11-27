@@ -89,23 +89,26 @@ TEST_CASE("address_decoder: invalid address", "[address-decoder]") {
 //
 // ## 为什么既有 6 处消费者**判不了**新表
 //
-// 既有用例只覆盖 ITCM / DTCM / CLINT / UART / 非法地址 ⇒ ⇒ 新增的 **4 个片选**
-// （`spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs`）与 **7 段表**的**派生性**
+// 既有用例只覆盖 ITCM / DTCM / CLINT / UART / 非法地址 ⇒ ⇒ 新增的 **5 个片选**
+// （`spi_cs` / `i2c_cs` / `pwm_cs` / `dma_cs` / `timer_cs`）与 **8 段表**的**派生性**
 // ⇒ ⇒ **零覆盖** ⇒ ⇒ 「片选接错 / 段序错位 / 窗口越界」全部**不可见**。
 //
 // ## 期望值**手推**（禁抄实现）
 //
-// · 7 段**自 `0x8010_0000` 顺延**，每段 **4 KB** ⇒ ⇒
+// · 8 段**自 `0x8010_0000` 顺延**，每段 **4 KB** ⇒ ⇒
 //   Clint `0x80100000` · Uart `0x80101000` · Gpio `0x80102000` · Spi `0x80103000`
-//   · I2c `0x80104000` · Pwm `0x80105000` · Dma `0x80106000`
-// · 窗口**最后一字节** = `0x80106000 + 0x1000 - 1` = `0x80106FFF`
-//   ⇒ ⇒ **第一个窗口外字节** = `0x80107000`
+//   · I2c `0x80104000` · Pwm `0x80105000` · Dma `0x80106000` · **Timer `0x80107000`**
+// · 窗口**最后一字节** = `0x80107000 + 0x1000 - 1` = `0x80107FFF`
+//   ⇒ ⇒ **第一个窗口外字节** = `0x80108000`
+// ⚠️ **2026-11-27 · D-1**：TIMER 段**追加在末尾** ⇒ ⇒ **既有 7 段基址零移动**
+//   ⇒ ⇒ 下表前 7 段的**期望值逐字不变**（只把「窗口末字节 / 第一个外字节」右移一段）。
 // ===========================================================================
 namespace {
 struct MmioSight {
     uint64_t clint = 0, uart = 0, gpio = 0, spi = 0, i2c = 0, pwm = 0, dma = 0;
+    uint64_t timer = 0;
     uint64_t error = 0;
-    // `local_addr` 是**另一条**独立的 9 路 mux 链（与片选分开推导）⇒ ⇒
+    // `local_addr` 是**另一条**独立的 10 路 mux 链（与片选分开推导）⇒ ⇒
     // 只判片选时「某分支减错基址」（如 spi 分支减 i2c_base）**不可见** ⇒ ⇒ 一并观测。
     uint64_t local = 0;
 };
@@ -125,13 +128,14 @@ MmioSight probe_mmio(uint32_t addr) {
     out.i2c = static_cast<uint64_t>(sim.get_port_value(io.i2c_cs));
     out.pwm = static_cast<uint64_t>(sim.get_port_value(io.pwm_cs));
     out.dma = static_cast<uint64_t>(sim.get_port_value(io.dma_cs));
+    out.timer = static_cast<uint64_t>(sim.get_port_value(io.timer_cs));
     out.error = static_cast<uint64_t>(sim.get_port_value(io.error_cs));
     out.local = static_cast<uint64_t>(sim.get_port_value(io.local_addr));
     return out;
 }
 }  // namespace
 
-TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 7 段 MUST 各自命中",
+TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 8 段 MUST 各自命中",
           "[address-decoder][mmio]") {
     // ① 基址**手推值** vs 派生值（**禁**抄实现常量 ⇒ ⇒ 派生写错必红）
     REQUIRE(ADDR_CLINT_BASE == 0x80100000u);
@@ -141,9 +145,12 @@ TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 7 段 MUST 各自命中",
     REQUIRE(ADDR_I2C_BASE == 0x80104000u);
     REQUIRE(ADDR_PWM_BASE == 0x80105000u);
     REQUIRE(ADDR_DMA_BASE == 0x80106000u);
+    // ⚠️ **2026-11-27 · D-1**：TIMER 段**追加在末尾** ⇒ ⇒ 前 7 段**零移动**
+    REQUIRE(ADDR_TIMER_BASE == 0x80107000u);
     // ② 每段 **4 KB**（**派生**自库层表 ⇒ ⇒ 禁手写第二份）
     REQUIRE(ADDR_CLINT_SIZE == 0x1000u);
     REQUIRE(ADDR_DMA_SIZE == 0x1000u);
+    REQUIRE(ADDR_TIMER_SIZE == 0x1000u);
 
     SECTION("每段的**首字节** MUST 只命中自己那一个片选") {
         const auto c = probe_mmio(ADDR_CLINT_BASE);
@@ -173,10 +180,23 @@ TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 7 段 MUST 各自命中",
         REQUIRE(d.dma == 1u);
         REQUIRE(d.pwm == 0u);
         REQUIRE(d.error == 0u);
+        const auto t = probe_mmio(ADDR_TIMER_BASE);
+        REQUIRE(t.timer == 1u);
+        REQUIRE(t.dma == 0u);
+        REQUIRE(t.error == 0u);
     }
-    SECTION("窗口**最后一字节** MUST 命中 DMA") {
+    SECTION("窗口**最后一字节** MUST 命中 TIMER") {
+        const auto t = probe_mmio(0x80107FFFu);
+        REQUIRE(t.timer == 1u);
+        REQUIRE(t.dma == 0u);
+        REQUIRE(t.error == 0u);
+        // 手推：`0x8010_7FFF - 0x8010_7000` = `0x1000 - 1` = `0xFFF`
+        REQUIRE(t.local == 0xFFFu);
+    }
+    SECTION("DMA 段的**最后一字节** MUST 命中 DMA（TIMER 追加 ⇒ DMA 零移动）") {
         const auto d = probe_mmio(0x80106FFFu);
         REQUIRE(d.dma == 1u);
+        REQUIRE(d.timer == 0u);
         REQUIRE(d.error == 0u);
         // 手推：`0x8010_6FFF - 0x8010_6000` = `0x1000 - 1` = `0xFFF`
         REQUIRE(d.local == 0xFFFu);
@@ -192,12 +212,14 @@ TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 7 段 MUST 各自命中",
         REQUIRE(probe_mmio(ADDR_I2C_BASE   + 0x40u).local == 0x40u);
         REQUIRE(probe_mmio(ADDR_PWM_BASE   + 0x40u).local == 0x40u);
         REQUIRE(probe_mmio(ADDR_DMA_BASE   + 0x40u).local == 0x40u);
+        REQUIRE(probe_mmio(ADDR_TIMER_BASE + 0x40u).local == 0x40u);
         // 反向：地址不在任何段 ⇒ ⇒ local 恒 0（窗口外不泄漏基址差）
         REQUIRE(probe_mmio(0x90000000u).local == 0u);
     }
     SECTION("窗口**第一个外字节** MUST 报错且 MUST NOT 命中任何片选") {
-        const auto x = probe_mmio(0x80107000u);
+        const auto x = probe_mmio(0x80108000u);
         REQUIRE(x.error == 1u);
+        REQUIRE(x.timer == 0u);
         REQUIRE(x.dma == 0u);
         REQUIRE(x.pwm == 0u);
     }
@@ -209,9 +231,9 @@ TEST_CASE("address_decoder: MMIO 全表 MUST 派生 + 7 段 MUST 各自命中",
 }
 
 TEST_CASE("mem_map: MMIO 窗口 MUST 连续且不与 TCM 重叠", "[address-decoder][mmio]") {
-    // ① 窗口**连续**（7 段 × 4 KB = `0x80100000` + `0x7000`）
+    // ① 窗口**连续**（8 段 × 4 KB = `0x80100000` + `0x8000`）
     REQUIRE(kMmioBase == 0x80100000ull);
-    REQUIRE(kMmioBytes == 0x7000ull);
+    REQUIRE(kMmioBytes == 0x8000ull);
     // ② 段序**不重叠**（逐段断言 ⇒ ⇒ 段序写错必红）
     REQUIRE(kClint.base + kClint.size == kUart.base);
     REQUIRE(kUart.base + kUart.size == kGpio.base);
@@ -219,6 +241,7 @@ TEST_CASE("mem_map: MMIO 窗口 MUST 连续且不与 TCM 重叠", "[address-deco
     REQUIRE(kSpi.base + kSpi.size == kI2c.base);
     REQUIRE(kI2c.base + kI2c.size == kPwm.base);
     REQUIRE(kPwm.base + kPwm.size == kDma.base);
+    REQUIRE(kDma.base + kDma.size == kTimer.base);
     // ③ **不与 TCM 重叠**（MMIO 基址 MUST ≥ D-TCM 末地址 + 1）
     REQUIRE(kMmioBase >= kDtcm.base + kDtcm.size);
     // ④ `in_mmio` 的**边界**（**闭区间** `[base, base+bytes)`）
