@@ -118,8 +118,12 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
       ⇒ 且该指针指向的期望源里的 module 集 == 磁盘实际（17）
 - [ ] **AC9 full 线空壳可用**：`examples/riscv-full/` 与 `examples/riscv-full-soc/` 存在 ·
       CMake 目标可构建 · `--check-products` **PASS** · 产物 module 集 / 顶层端口表 == 登记值
-- [ ] **AC10 mini 线零行为变化**：`ctest` **全绿**（285/285）· 5 个既有护栏全绿 ·
-      mini 线产物端口表**逐字不变**
+- [ ] **AC10 mini 线零行为变化**：`ctest` **全绿**（285/285 · P2/P5 时实测）·
+      **下列 5 个既有护栏全绿**（S4c-0 期间逐个实测）·
+      `verify_examples_rtl_sim.sh` · `verify_examples_rtl_sim_coverage.sh` ·
+      `verify_hierarchical_rtl.sh` · `verify_no_duplicate_rv32i_headers.sh` ·
+      `verify_riscv_soc_core_ports.sh` · 且 mini 线产物端口表**逐字不变**
+      ⇒ ⚠️ **「全绿」指上列 5 个**，不是「仓内全部护栏」（见下方「已知既有红」）
 - [ ] **AC11 新线覆盖不缩面**：full 线的 example MUST 被 tsv / test-wiring / assertion-quality
       **三处登记** ⇒ 任一处漏登记 ⇒ 对应护栏红 ⇒ ⇒ 「加线漏登记 = 当场红」
 - [ ] **AC12 AC 映射回填**：ADR-078 元数据的「关联 change」行指向本 change 并列出 AC 映射
@@ -138,6 +142,15 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
 
 ⇒ ADR-078 的 AC1 / AC5 / AC6 / AC7 / AC8 / AC9 / AC10 / AC11 / AC12 / AC14 / AC15 / AC16
 **分属 S4c-1..3**（或本 change 的 AC10 / AC12）⇒ 不在本 change 的判据面。
+
+## 已知既有红（范围外遗留 · **不阻塞本 change**）
+
+| 护栏 | 现象 | 引入 | 处置 |
+|---|---|---|---|
+| `verify_example_assertion_quality.sh` | `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp` 的逐用例计数（14）与分析器报告的字面用例数（15）不符 ⇒ 「逐用例扫描未完整执行」 | `1190a6f` / `ec5db47`（**均非 S4b 批次**）⇒ **在 S4c-0 立项前即红** | 该护栏是 **fail-closed** 设计（空输出 / 缺结束标记 / 计数不符 三种失效形态都判违规，**无豁免机制**）⇒ 修法 = 修分析器的逐用例扫描 ⇒ 而 AGENTS.md 已载明「该自研 C 子集分析器**不可能被完全闭合**」⇒ ⇒ **本 change 不修**（范围外债）· 建议单独立项 |
+
+⇒ ⚠️ **实测方法**：用 `git worktree add /tmp/... HEAD~1`（**S4c-0 立项前**的提交点）跑该护栏
+⇒ **同样红** ⇒ ⇒ 确认是既有红，**非本 change 引入**。
 
 ## Out of Scope（明确不做）
 

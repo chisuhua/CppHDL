@@ -110,7 +110,11 @@
    ctest target ⇒ ⇒ 否则 C3 恒红 ⇒ ⇒ 顺序改为 **P1 → P5（骨架）→ P3（B 类参数化）→ P2（元护栏）**。
 2. **P3 的 B 类参数化 MUST 在 full 线骨架之后** —— 新 example 目录一旦存在，`verify_example_test_wiring`
    / `verify_example_assertion_quality` 会因**未登记**而红 ⇒ ⇒ 参数化与骨架**同批**才自洽。
-3. **根 `AGENTS.md` 的 5 个 CI 锚点当前仍是单值** ⇒ 生成器登记面 §2 标「**未归组**（T4.2）」
+3. **仓内存在 1 处既有护栏红**（`verify_example_assertion_quality.sh` 的
+   `test_rv32i_soc_dual_parity.cpp` 计数不符 · 引入于 `1190a6f`/`ec5db47` · **非本批引入**）
+   ⇒ 已用 `git worktree` 在 **S4c-0 立项前**的提交点复现 ⇒ 确认为既有 ⇒ **不修**（范围外债）·
+   ⇒ ⚠️ **不在 AC10 的 5 个护栏清单内** ⇒ AC10 与 ADR-078 的 AC6 **不受影响**
+4. **根 `AGENTS.md` 的 5 个 CI 锚点当前仍是单值** ⇒ 生成器登记面 §2 标「**未归组**（T4.2）」
    ⇒ ⇒ 生成器**同时容忍**单值 / 分组两种形态 ⇒ ⇒ T4.2 之前生成器不会误红。
 
 ## 硬约束
