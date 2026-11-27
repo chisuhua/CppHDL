@@ -123,8 +123,12 @@
       （P4 只在已有 `tb_riscv_soc.cpp` 内加判据，未新增测试源文件）
 - [x] **T5.4** 母 improvement 回填：`rv32i-soc-platform-2026-11` 的 `进度:` 追加
       S4b P4 完成记录（A10–A15 · checks 10→16 · 变异 3 条实测转红）
-- [ ] **T5.5** `verifier` 独立验收（AC1–AC9 逐条工具证据 + 遗留清扫）
-      ⇒ 🔴 **需切 `verifier` 角色**（builder 不能自审自批；用户口令触发）
+- [x] **T5.5** `verifier` 独立验收（AC1–AC9 逐条工具证据 + 遗留清扫）
+      ⇒ ✅ **PASS — 9/9 AC 满足**（2026-11-27 · verifier 角色 · 第 1 轮 · 无失败项）
+      ⇒ 报告 = `.rddf/reviews/rv32i-soc-peripherals-interconnect-2026-11-verify.md`
+      ⇒ 两条非阻断建议：① AC9 的「ERR → s0」形态未在 verifier 侧实测（写集不含
+      `examples/**`；「或」支路已由 `static_assert` 满足）② UART/TIMER/SPI/I2C 的
+      「单点窗口错位」SoC 层无判别力（由 P1 逐从口单测承担 · 已三处登记）
 
 ## P6 · 归档
 
