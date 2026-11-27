@@ -66,7 +66,6 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_example_assertion_quality.sh` | `build-and-test:Verify example assertion quality`, `pr-verilator-fast:Verify example assertion quality` | `none` | — |
 | `scripts/verify_example_only_headers.sh` | `build-and-test:Verify example-only headers stay out of include/`, `build-and-test:Verify example-only headers guard self-test` | `none` | — |
 | `scripts/verify_example_test_wiring.sh` | `build-and-test:Verify example test wiring`, `pr-verilator-fast:Verify example test wiring` | `none` | — |
-| `scripts/verify_riscv_soc_core_ports.sh` | `pr-verilator-fast:Verify RV32I SoC core-complex port contract (ADR-077 V5)`, `pr-verilator-fast:Verify RV32I SoC core-complex port contract self-test` | `gate-event-only` | — |
 | `scripts/verify_examples_rtl_sim.sh` | `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB)`, `pr-verilator-fast:Verify examples RTL simulation (independent Verilog TB) self-test` | `gate-event-only` | — |
 | `scripts/verify_examples_rtl_sim_coverage.sh` | `build-and-test:Verify examples RTL sim coverage registration`, `build-and-test:Verify examples RTL sim coverage registration (self-test)` | `none` | — |
 | `scripts/verify_flat_rtl_emit.sh` | `build-and-test:Verify flat RTL emit products`, `build-and-test:Verify flat RTL emit products (self-test)`, `pr-verilator-fast:Verify flat RTL emit products (verilator required)`, `pr-verilator-fast:Verify flat RTL emit products (self-test)`, `nightly-verilator:Verify flat RTL emit products (verilator required)`, `nightly-verilator:Verify flat RTL emit products (self-test)` | `gate-event-only` | — |
@@ -82,6 +81,7 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_hierarchical_tree_extract.sh` | `pr-verilator-fast:Verify hierarchical module-tree extraction` | `gate-event-only` | — |
 | `scripts/verify_if_stmt_wiring.sh` | `build-and-test:Verify conditional-block assignment wiring`, `build-and-test:Verify conditional-block assignment wiring (self-test)`, `pr-verilator-fast:Verify conditional-block assignment wiring`, `pr-verilator-fast:Verify conditional-block assignment wiring (self-test)` | `none` | — |
 | `scripts/verify_improvement_index.sh` | `build-and-test:Verify improvement index state column`, `build-and-test:Verify improvement index state column (self-test)` | `none` | — |
+| `scripts/verify_improvement_status_truth.sh` | `build-and-test:Verify improvement status truth`, `build-and-test:Verify improvement status truth (self-test)` | `none` | — |
 | `scripts/verify_input_port_additions.sh` | `build-and-test:Verify input-port additions (event-driven, PR only)`, `build-and-test:Verify input-port additions (self-test)` | `none` | — |
 | `scripts/verify_input_port_required_registry.sh` | `build-and-test:Verify input-port required registry (D2-A)`, `build-and-test:Verify input-port required registry (self-test)` | `none` | — |
 | `scripts/verify_jit_golden_coverage.sh` | `build-and-test:Verify JIT golden coverage floor`, `build-and-test:Verify JIT golden coverage floor (self-test)` | `none` | — |
@@ -95,12 +95,13 @@ evidence: probe:scripts/verify_guard_reachability.sh
 | `scripts/verify_perf_baseline_anchors.sh` | `build-and-test:Verify perf baseline anchor conservation`, `build-and-test:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation`, `pr-verilator-fast:Verify perf baseline anchor conservation` | `none` | — |
 | `scripts/verify_port_naming.sh` | `build-and-test:Verify port naming ratchet`, `build-and-test:Verify port naming ratchet (self-test)` | `none` | — |
 | `scripts/verify_public_api_visibility.sh` | `build-and-test:Verify public API removal visibility (issue`, `build-and-test:Verify public API removal visibility (self-test)` | `none` | — |
+| `scripts/verify_riscv_soc_core_ports.sh` | `pr-verilator-fast:Verify RV32I SoC core-complex port contract (ADR-077 V5)`, `pr-verilator-fast:Verify RV32I SoC core-complex port contract self-test` | `gate-event-only` | — |
 | `scripts/verify_roadmap_fragments.sh` | `build-and-test:Verify roadmap fragments consistency`, `build-and-test:Verify roadmap fragments consistency (self-test)`, `pr-verilator-fast:Verify roadmap fragments consistency`, `pr-verilator-fast:Verify roadmap fragments consistency (self-test)` | `none` | — |
 | `scripts/verify_rst_n_wiring.sh` | `build-and-test:Verify rst_n wiring`, `pr-verilator-fast:Verify rst_n wiring` | `none` | — |
 | `scripts/verify_rv32i_elf_e2e.sh` | `build-and-test:Verify RV32I ELF to init_data end-to-end chain`, `build-and-test:Verify RV32I ELF to init_data end-to-end chain (self-test)` | `none` | — |
 | `scripts/verify_rv32i_fw_dump.sh` | `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5)`, `build-and-test:Verify RV32I firmware dumper / ELF loader (L4/L5) (self-test)` | `none` | — |
 | `scripts/verify_rv32i_fw_init_rtl.sh` | `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)`, `build-and-test:Verify RV32I firmware init in emitted product (L2/L6)` | `none` | — |
-| `scripts/verify_rv32i_official_rtl.sh` | `nightly-verilator:Verify official riscv-tests on RTL products (full)`, `pr-verilator-fast:Verify official riscv-tests on RTL products (subset)` | `gate-event-only` | — |
+| `scripts/verify_rv32i_official_rtl.sh` | `pr-verilator-fast:Verify official riscv-tests on RTL products (subset)`, `nightly-verilator:Verify official riscv-tests on RTL products (full)` | `gate-event-only` | — |
 | `scripts/verify_stream_domain_closure.sh` | `build-and-test:Verify stream domain closure checklist`, `build-and-test:Verify stream domain closure checklist (self-test)` | `none` | — |
 | `scripts/verify_stream_ready_ownership.sh` | `build-and-test:Verify stream ready ownership`, `build-and-test:Verify stream ready ownership (self-test)` | `none` | — |
 | `scripts/verify_test_counts.sh` | `build-and-test:Verify AGENTS.md test counts`, `pr-verilator-fast:Verify AGENTS.md test counts` | `none` | — |

@@ -338,7 +338,7 @@ jobs:
 
     - name: Verify improvement index state column
       # phase-6 §4 「索引表状态列的自动生成」—— the status column of
-      # `improvement-suggestions.md` MUST be derived from each proposal's
+      # `.rddf/improvement-suggestions.md` MUST be derived from each proposal's
       # front-matter `状态:` field.
       #   R1 per row: the index's status word MUST equal the front-matter word
       #      => BOTH drift directions turn red (front-matter changed / index
@@ -362,6 +362,34 @@ jobs:
       # The fixtures run in a temp dir => they never touch the real repo.
       shell: bash
       run: scripts/verify_improvement_index.sh --self-test
+
+    - name: Verify improvement status truth
+      # 2026-11-27 governance review: the proposal pool's "pending" view was
+      # dominated by zombies (delivered but the front-matter `状态:` was never
+      # written back). This guard mechanises that invariant:
+      #   C1 every `.rddf/improvements/*.md` MUST have VALID YAML front matter
+      #      with a closing `---` (6 files were broken => their priority/phase
+      #      were silently swallowed => one showed `priority = -`).
+      #   C2 delivered (body `- **Status**` LEADING TOKEN says done) => the
+      #      front-matter `状态:` MUST be a terminal word or `partial`.
+      #   C3 every index row's link target MUST exist.
+      # NOT judged: "marked terminal but not actually done" => needs per-item
+      # body review; 8 such body-vs-archive contradictions are registered in
+      # `.rddf/checks/improvement-body-vs-archive-drift-2026-11.md`.
+      # Needs python3 only: NO network, NO git history, NO verilator.
+      shell: bash
+      run: scripts/verify_improvement_status_truth.sh
+
+    - name: Verify improvement status truth (self-test)
+      # 9 fixtures (3 poisons + 2 boundary assertions + 4 others):
+      # C1 broken YAML / C1 unterminated front matter / C2 delivered but
+      # non-terminal / C3 dead index link / C2 `partial` allowed /
+      # boundary: terminal-but-body-not-done stays green (deliberately not
+      # judged) / boundary: a done marker outside the LEADING TOKEN does not
+      # count / baseline.
+      # The fixtures run in a temp dir => they never touch the real repo.
+      shell: bash
+      run: scripts/verify_improvement_status_truth.sh --self-test
 
     - name: Verify guard reachability
       # phase-6 R23-B (1-a): the guards themselves must be REACHABLE.
