@@ -1,3 +1,24 @@
+## 2026-11-27 — S4b P4：s1–s5 五个从口的总线级回环判据（`checks` 10 → 16）
+
+change `rv32i-soc-peripherals-interconnect-2026-11`（P4 = 判据）。
+
+- `tb_riscv_soc` 新增 **A10–A14**：UART `CTRL(0x0C)` / TIMER `LOAD(0x00)` /
+  SPI `BAUD(0x10)` / I2C `PRESCALE(0x10)` / PWM `PERIOD(0x00)` 各一段
+  「写 → 读回 → 写 GPIO `DATA_OUT`」程序（7 字 · 编码走库编码器），判 `gpio_out`。
+- 每段**独立 SoC 实例** ⇒ 5 个读值互不覆盖；5 个写入值**互不相同且都 ≠ 目标外设复位值**
+  （SPI/I2C 复位 0x64、PWM 复位 0xFF ⇒ 否则「写没生效」会撞值而失去判别力）。
+- 期望值**全部手推**（段基址派生自 `rv32i_mem_map.h`，`static_assert` 保证 4 KiB 对齐）。
+- **A15（同批追加·实测缺口）**：PWM `PERIOD(0x00)` 的**复位值 0xFF**（不写）。
+  A10–A14 全是「写 → 读回」⇒ ⇒ 若某窗口**单点错位**到「同偏移也可写」的外设，写和读
+  都落到同一个错误外设 ⇒ 读回值一致 ⇒ 该条仍绿（**实测**：PWM 窗口指向 GPIO ⇒ 15 条全绿）。
+  PWM 的 0xFF 是 word 0 中**唯一非零**的复位值 ⇒ 任何错位都 ≠ 0xFF ⇒ 必红。
+- `.sv` 侧同步加 6 段同值判据（A10–A15）⇒ 两侧**等式** 16 == 16
+  （tsv `interp_checks=16` / `min_checks=16` / `scenarios=12` / `spec_checks=11`）。
+- 登记残留盲区：UART / TIMER / SPI / I2C 的「单点窗口错位」仍无 SoC 级判别力
+  （四者 word 0 复位值都是 0；SPI/I2C 的 word 4 又同为 0x64）
+  ⇒ 该形态由 P1 的逐从口单测（`test_axi_lite_crossbar`）+ `SocCrossbarMap` 的
+  8 条 `static_assert` / 7 条 target 断言承担。
+
 ## 2026-11-27 — S4b P3：SoC 侧换成 **2×6 Lite 互联** + 6 个 MMIO 外设（D-3 = 本批不引物理引脚）
 
 change `rv32i-soc-peripherals-interconnect-2026-11`（P3 = SoC 装配；D-3 已由用户裁决）。

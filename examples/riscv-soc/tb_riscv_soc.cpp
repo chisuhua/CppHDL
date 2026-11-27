@@ -30,6 +30,7 @@
 #include "simulator.h"
 
 #include "cpu/riscv/rv32i_asm_encode.h"
+#include "cpu/riscv/rv32i_mem_map.h"
 
 #if !defined(_WIN32)
 #include <sys/wait.h>
@@ -37,6 +38,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -505,6 +507,133 @@ bool read_data_path_probe() {
     return static_cast<uint64_t>(sim.get_port_value(io.gpio_out)) == 0x5Au;
 }
 
+// ---------------------------------------------------------------------------
+// **A10–A14**：6 个从口的总线级回环（s1–s5 · 每段独立 SoC 实例）
+//
+// ## 手推表（**值互不相同** · 且都 ≠ 目标外设的复位值）
+//
+// | 从口 | 外设 | 段基址（库层单一真相） | 寄存器 | 字节偏移 | word | 写入值 | 外设复位值 |
+// |---|---|---|---|---|---|---|---|
+// | s1 | UART  | `riscv::kUart.base`  = 0x8010_1000 | CTRL     | 0x0C | 3 | **0x53** | 0x00 |
+// | s2 | TIMER | `riscv::kTimer.base` = 0x8010_7000 | LOAD     | 0x00 | 0 | **0x6A** | 0x00 |
+// | s3 | SPI   | `riscv::kSpi.base`   = 0x8010_3000 | BAUD     | 0x10 | 4 | **0x17** | 0x64 |
+// | s4 | I2C   | `riscv::kI2c.base`   = 0x8010_4000 | PRESCALE | 0x10 | 4 | **0x2C** | 0x64 |
+// | s5 | PWM   | `riscv::kPwm.base`   = 0x8010_5000 | PERIOD   | 0x00 | 0 | **0xE1** | 0xFF |
+//
+// 读 MUX 已逐个核实「写后可读回同一寄存器」（`read_val = select(sel_*, <reg>, ...)`）：
+// UART `ctrl_reg` · TIMER `load_reg` · SPI `baud_reg` · I2C `prescale_reg` ·
+// PWM `period_reg`。
+//
+// ⚠️ **值 MUST 互不相同且 ≠ 复位值**：若只判「写 X 读 X == V」而 V 恰等于复位值
+//    ⇒ ⇒ 「写根本没生效」也会绿（SPI / I2C 的 0x64、PWM 的 0xFF 都是真实复位值）。
+// ⚠️ **每段 MUST 独立实例**：`gpio_out` 只有一个根端口 ⇒ ⇒ 同一实例里 5 个读值只能
+//    留最后一个 ⇒ ⇒ 分段观测会依赖精确拍数（impl-contract）⇒ ⇒ 脆。
+// ⚠️ **已知盲区**（如实登记）：若某窗口**单点**错位到「同偏移也可写」的外设
+//    （例：TIMER 窗口 → UART 从口 · 两者 word 0 均可写）⇒ ⇒ 该条仍可能绿
+//    （写和读都落到同一个错误外设 ⇒ 读回值一致）。**A15 用地址特征闭合了 PWM 面**；
+//    UART / TIMER / SPI / I2C 面仍由 P1 的逐从口单测（`tests/test_axi_lite_crossbar.cpp`）
+//    与 `SocCrossbarMap` 的 8 条 `static_assert` + 7 条 target 断言承担 —— 本段判的是
+//    **SoC 侧装配可用性**（6 个从口的事务通路），不重复承担路由本身的判别力。
+// ---------------------------------------------------------------------------
+
+constexpr std::size_t kPeriphProgWords = 7;
+
+/// 段 MUST 4 KiB 对齐 ⇒ ⇒ `LUI` 立即数 = 基址高 20 位，偏移可直接当 imm12 用
+static_assert((riscv::kUart.base & 0xFFFu) == 0u, "UART 段 MUST 4 KiB 对齐");
+static_assert((riscv::kTimer.base & 0xFFFu) == 0u, "TIMER 段 MUST 4 KiB 对齐");
+static_assert((riscv::kSpi.base & 0xFFFu) == 0u, "SPI 段 MUST 4 KiB 对齐");
+static_assert((riscv::kI2c.base & 0xFFFu) == 0u, "I2C 段 MUST 4 KiB 对齐");
+static_assert((riscv::kPwm.base & 0xFFFu) == 0u, "PWM 段 MUST 4 KiB 对齐");
+static_assert((riscv::kGpio.base & 0xFFFu) == 0u, "GPIO 段 MUST 4 KiB 对齐");
+
+constexpr uint32_t kGpioBaseHi = static_cast<uint32_t>(riscv::kGpio.base >> 12);
+
+/// 一段「写外设 → 读回 → 写 GPIO DATA_OUT」程序（**7 字**）
+constexpr std::array<uint32_t, kPeriphProgWords>
+make_periph_program(uint32_t base_hi, int32_t off, uint32_t value) {
+    return {LUI(4, base_hi),        ADDI(5, 0, static_cast<int32_t>(value)),
+            SW(5, 4, off),          LW(6, 4, off),
+            LUI(1, kGpioBaseHi),    SW(6, 1, 0),
+            JAL(0, 0)};
+}
+
+struct PeriphProbe {
+    const char *name;
+    std::array<uint32_t, kPeriphProgWords> prog;
+    uint32_t expected;
+};
+
+const std::array<PeriphProbe, 5> &periph_probes() {
+    static const std::array<PeriphProbe, 5> probes = {{
+        {"A10 UART CTRL(0x0C) 写 0x53 ⇒ 读回 ⇒ gpio_out",
+         make_periph_program(static_cast<uint32_t>(riscv::kUart.base >> 12), 0x0C, 0x53),
+         0x53},
+        {"A11 TIMER LOAD(0x00) 写 0x6A ⇒ 读回 ⇒ gpio_out",
+         make_periph_program(static_cast<uint32_t>(riscv::kTimer.base >> 12), 0x00, 0x6A),
+         0x6A},
+        {"A12 SPI BAUD(0x10) 写 0x17 ⇒ 读回 ⇒ gpio_out",
+         make_periph_program(static_cast<uint32_t>(riscv::kSpi.base >> 12), 0x10, 0x17),
+         0x17},
+        {"A13 I2C PRESCALE(0x10) 写 0x2C ⇒ 读回 ⇒ gpio_out",
+         make_periph_program(static_cast<uint32_t>(riscv::kI2c.base >> 12), 0x10, 0x2C),
+         0x2C},
+        {"A14 PWM PERIOD(0x00) 写 0xE1 ⇒ 读回 ⇒ gpio_out",
+         make_periph_program(static_cast<uint32_t>(riscv::kPwm.base >> 12), 0x00, 0xE1),
+         0xE1},
+    }};
+    return probes;
+}
+
+/// 装载一段程序并跑满 `kCycles` 拍 ⇒ 返回根端口 `gpio_out`（**独立 SoC 实例**）
+uint64_t run_program_to_gpio(const uint32_t *prog, std::size_t words) {
+    auto dev = std::make_unique<ch::ch_device<riscv_soc::Rv32iSocTop>>();
+    Simulator sim(dev->context());
+    auto &io = dev->instance().io();
+    sim.set_input_value(io.ext_rst, 1u);
+    sim.set_input_value(io.prog_we, 1u);
+    sim.set_input_value(io.gpio_in, 0u);
+    for (std::size_t i = 0; i < kFillWords; ++i) {
+        sim.set_input_value(io.prog_addr, static_cast<uint64_t>(i));
+        sim.set_input_value(io.prog_data,
+                            i < words ? static_cast<uint64_t>(prog[i])
+                                      : static_cast<uint64_t>(NOP));
+        sim.tick(1);
+    }
+    sim.set_input_value(io.prog_we, 0u);
+    sim.set_input_value(io.prog_addr, 0u);
+    sim.set_input_value(io.prog_data, 0u);
+    sim.set_input_value(io.ext_rst, 0u);
+
+    for (std::size_t c = 0; c < kCycles; ++c) {
+        sim.tick(1);
+    }
+    return static_cast<uint64_t>(sim.get_port_value(io.gpio_out));
+}
+
+/// 单条外设回环（写 → 读回 → 写 GPIO）
+bool periph_roundtrip(const PeriphProbe &probe) {
+    return run_program_to_gpio(probe.prog.data(), kPeriphProgWords) ==
+           static_cast<uint64_t>(probe.expected);
+}
+
+/// **A15**：PWM `PERIOD(0x00)` 的**复位值**判据（**地址特征** · 不写）
+///
+/// ⚠️ **为什么需要它**（2026-11-27 实测的判据缺口）：A10–A14 全是「写 → 读回」，
+///    若某窗口**单点错位**到「同偏移也可写」的外设 ⇒ ⇒ 写和读都落到**同一个**错误
+///    外设 ⇒ ⇒ 读回值一致 ⇒ ⇒ **该条仍绿**（实测：把 PWM 窗口改成指向 GPIO 从口
+///    ⇒ 写 `PERIOD` 实际写 `DATA_OUT` ⇒ A14 仍绿 ⇒ 15 条**全绿**）。
+/// ⚠️ PWM 的 `period_reg` 复位值 = **255（0xFF）**，而其他外设在 word 0 的复位值
+///    **全是 0**（UART `TX_DATA` · TIMER `LOAD` · SPI `TX_DATA` · I2C `CTRL` ·
+///    GPIO `DATA_OUT`）⇒ ⇒「不写直接读」即可判定**地址真的落在 PWM**
+///    ⇒ ⇒ 任何 PWM 窗口错位（其他从口 / `kErr`）都得到 ≠ 0xFF ⇒ **必红**。
+/// ⇒ ⇒ 它是 **RW 面之外**的判据（A10–A14 判「事务通路」；本条判「地址特征」）。
+bool pwm_reset_value_probe() {
+    constexpr std::array<uint32_t, 5> prog = {
+        LUI(4, static_cast<uint32_t>(riscv::kPwm.base >> 12)), LW(6, 4, 0x00),
+        LUI(1, kGpioBaseHi), SW(6, 1, 0), JAL(0, 0)};
+    return run_program_to_gpio(prog.data(), prog.size()) == 0xFFu;
+}
+
 int run_verification() {
     Checker ck;
 
@@ -604,6 +733,18 @@ int run_verification() {
     // ── A9：MMIO **读值**回路（critic BLOCKER 的靶子）──
     ck.check(read_data_path_probe(),
              "A9 MMIO 读值经「非 MMIO 后继」后仍 == 0x5A（读数据 mux 与 M2 同拍）");
+
+    // ── A10–A14：6 个从口的总线级回环（s1–s5 · 每段独立实例）──
+    // ⚠️ S4a 只验证过 s0（GPIO）⇒ ⇒ s1–s5 在本批之前**从未被实际访问**。
+    for (const auto &probe : periph_probes()) {
+        ck.check(periph_roundtrip(probe), probe.name);
+    }
+
+    // ── A15：PWM `PERIOD` 的**复位值**（地址特征 · 不写）──
+    // ⚠️ A10–A14 对「窗口错位到同偏移也可写的外设」**结构性失明**（实测 15 条全绿）
+    //    ⇒ ⇒ 本条用 PWM 独有的复位值 0xFF 闭合该缺口。
+    ck.check(pwm_reset_value_probe(),
+             "A15 PWM PERIOD(0x00) 复位值 == 0xFF（地址真的落在 PWM · 非 0 特征值）");
 
     std::cout << "RESULT: checks=" << ck.checks() << " fails=" << ck.fails() << "\n";
     return ck.fails() == 0 ? 0 : 1;

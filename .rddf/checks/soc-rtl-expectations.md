@@ -255,12 +255,22 @@ VERIF-CHECKS: 15
 > **TB**：`tb_riscv_soc.cpp`（默认模式 · 解释器路径）+ `tb_riscv_soc.sv`（独立 Verilog · `generated=no`）
 > **上游登记**：`.rddf/checks/examples-rtl-expectations.md#riscv-mini-rv32i-soc` —— **程序与写回/存储手推台账同源**
 >
-> ⚠️ **两侧判据 MUST 逐条同值**（AC7 的 `interp_checks == min_checks == L`）：本段 **10** 条 · C++ 侧 10 · `.sv` 侧 10。
+> ⚠️ **两侧判据 MUST 逐条同值**（AC7 的 `interp_checks == min_checks == L`）：本段 **16** 条 · C++ 侧 16 · `.sv` 侧 16。
 > ⚠️ **2026-11-24 · S4a（`rv32i-soc-mmio-channel-2026-11`）**：程序 **7 → 12 字**（含 2 次 MMIO 访问）·
 >   判据 **7 → 9**（+A7 MMIO 写通路的值 · +A8 DECERR 不挂死）· 程序**与核级分叉**（核级 AXI-Lite 输入全 tie 0）。
 > ⚠️ **2026-11-24 · critic BLOCKER 后追加 A9（判据 9 → 10）**：读数据 mux 的选择线**错拍**
 >   （机理与闭合证据见 §4 的「A9 的『先红后绿』」）⇒ ⇒ 原 9 条判据对该缺陷**结构性失明**
 >   （读值不在 SoC 根端口上 · `gpio_in` 又被 tie 0 ⇒ ⇒ 错源与正源**碰巧同值**）。
+> ⚠️ **2026-11-27 · S4b P4（判据 10 → 16）**：新增 **A10–A14** = s1–s5 五个从口的
+>   **总线级回环**（写外设寄存器 → 读回 → 写 GPIO DATA_OUT ⇒ 判 `gpio_out`）。S4a 只验证过
+>   **s0**（GPIO）⇒ ⇒ 其余 5 个从口在本批之前**从未被实际访问**（crossbar 的路由正确性由
+>   P1 单测 `test_axi_lite_crossbar` 承担；本段判的是 **SoC 侧装配**）。
+> ⚠️ **2026-11-27 · P4 实测发现的判据缺口 ⇒ 追加 A15（判据 15 → 16）**：A10–A14 全是
+>   「写 → 读回」⇒ ⇒ 若某窗口**单点错位**到「同偏移也可写」的外设，**写和读都落到同一个
+>   错误外设** ⇒ 读回值一致 ⇒ 该条仍绿。**实测**：把 PWM 窗口改成指向 GPIO 从口
+>   ⇒ 写 `PERIOD` 实际写 `DATA_OUT` ⇒ **15 条全绿**。⇒ ⇒ A15 用
+>   **PWM `PERIOD` 的复位值 0xFF**（其他外设 word 0 复位值全是 0）作**地址特征**判据
+>   ⇒ 任何 PWM 窗口错位都得到 ≠ 0xFF ⇒ 必红。
 
 ### 1. 产物形态（手推 · 禁从 `ch_layer` 调用点派生）
 
@@ -302,7 +312,7 @@ VERIF-CHECKS: 15
 
 ⇒ ⇒ **写回事件 3 次**（x1 / x2 / x3）⇒ ⇒ DECERR 未返回 ⇒ 冻结在 **1** ⇒ 必红。
 
-### 3. 判据（7 条 · 逐条手推）
+### 3. 判据（16 条 · 逐条手推）
 
 | # | 判据 | 期望 | 级别 | 推导 |
 |---|---|---|---|---|
@@ -316,8 +326,14 @@ VERIF-CHECKS: 15
 | A7 | `gpio_out` | **0xA5** | **spec-derived** | ISA 语义 + GPIO 寄存器表：word 10 把 x5 = 0xA5 写进 `DATA_OUT`（reg0）⇒ ⇒ 只判计数**判不出**「写错段 / 数据错位」 |
 | A8 | DECERR 场景的 `writeback_count` | **3** | impl-contract | ISA 语义：独立 4 字程序有 3 条写回；**DECERR 未返回 ⇒ `lw` 永久停顿 ⇒ 冻结在 1** |
 | A9 | 读值回路的 `gpio_out` | **0x5A** | **spec-derived** | ISA 语义：`lw` 读 DATA_IN（`gpio_in` = 0x5A）→ 一条**非 MMIO** 指令 → `sw` 回 DATA_OUT ⇒ ⇒ 读值 MUST 走 MMIO 通路；若 mux 用**后继指令**的地址选路径 ⇒ ⇒ 读到 `dcache.rdata`（本场景无 D-L1 读 ⇒ 0）⇒ 0 ≠ 0x5A ⇒ 必红 |
+| A10 | UART 回环的 `gpio_out` | **0x53** | **spec-derived** | ISA 语义 + UART 寄存器表：`sw` 写 `CTRL`（字节 `0x0C` = word 3）→ `lw` 读回 → `sw` 写 GPIO `DATA_OUT`。**值 ≠ 复位值 0x00** ⇒ 「写没生效」必红 |
+| A11 | TIMER 回环的 `gpio_out` | **0x6A** | **spec-derived** | 同上：`LOAD`（`0x00` = word 0）· 复位值 0x00 ⇒ 写 0x6A 可判别 |
+| A12 | SPI 回环的 `gpio_out` | **0x17** | **spec-derived** | 同上：`BAUD`（`0x10` = word 4）· ⚠️ **复位值 0x64（100）** ⇒ 写 0x17 与复位值不同（否则「写没生效」会撞值） |
+| A13 | I2C 回环的 `gpio_out` | **0x2C** | **spec-derived** | 同上：`PRESCALE`（`0x10` = word 4）· ⚠️ **复位值 0x64（100）** ⇒ 同上 |
+| A14 | PWM 回环的 `gpio_out` | **0xE1** | **spec-derived** | 同上：`PERIOD`（`0x00` = word 0）· ⚠️ **复位值 0xFF（255）** ⇒ 同上 |
+| A15 | **PWM `PERIOD` 的复位值**（不写） | **0xFF** | **spec-derived** | PWM 寄存器表：`period_reg` 复位 **255**，而其他外设 word 0 的复位值**全是 0**（`TX_DATA` / `LOAD` / `TX_DATA` / `CTRL` / `DATA_OUT`）⇒ ⇒ 「不写直接读」即可判定**地址真的落在 PWM**。⚠️ **这是「窗口错位」唯一的判别面** —— A10–A14 对该形态**结构性失明**（实测 15 条全绿） |
 
-⇒ **spec-derived = 5**（A3 / A4 / A6 / A7 / A9）· impl-contract = 5（A1a / A1b / A2 / A5 / A8）。
+⇒ **spec-derived = 11**（A3 / A4 / A6 / A7 / A9 / A10–A15）· impl-contract = 5（A1a / A1b / A2 / A5 / A8）。
 ⇒ ⚠️ **A8 归 impl-contract 的口径**：`writeback_count == 3` 本身由 ISA 语义推出，但「**DECERR 会让事务完成**」是**互联/总线**语义（不是 RV32I ISA 的一部分）⇒ ⇒ 该判据的可推导性依赖本实现的 error responder ⇒ ⇒ 保守归 impl-contract（与 tsv 的 `spec_checks=5` 同一口径 · critic 轮次 2 的 NIT）。
 
 ### 4. 变异自证（判别力 · **六条全部实测** · 2026-11-24）
@@ -358,6 +374,20 @@ VERIF-CHECKS: 15
 ⇒ ⇒ 该 mux 的**专属判别力**由 A9 的「先红」证明（修复前用**当拍**地址 ⇒ `fails=1`），**不是**由 M7 证明。
 ⇒ ⇒ **已知边界**：M7 与正确写法只在「MMIO load 完成后的**下一条**指令也在 MEM 停顿」时才有差异；本 change 的程序没有这种形态（不新增该判据）⇒ ⇒ 如实登记为覆盖不足。
 
+#### P4 的变异自证（2026-11-27 · **三条全部实测**）
+
+| # | 变异 | 靶子 | 期望 | 实测 |
+|---|---|---|---|---|
+| M-P4-1 | PWM 窗口 `windows[5].target` **5 → 0**（+ 同步改 `static_assert`，否则编译失败） | A14 / A15 | A14 **仍绿**（写读同落 `DATA_OUT`）· A15 **必红** | ✅ `checks=16 fails=1` —— **只有 A15 红** |
+| M-P4-2 | UART 窗口 `windows[1].target` **1 → 2**（指向 TIMER） | A10 | TIMER word 3 = `STATUS` **只读** ⇒ 写 DECERR + 读回 0 ≠ 0x53 | ✅ `checks=16 fails=1`（A10 红） |
+| M-P4-3 | SPI 窗口 `windows[3].target` **3 → `kErr`**（从口未接） | A12 | 写/读都 DECERR ⇒ 读回 0 ≠ 0x17 | ✅ `checks=16 fails=1`（A12 红） |
+
+⇒ ⚠️ **M-P4-1 是 A15 存在的理由**：同一变异下 **A10–A14 全绿**（写和读都落到同一个错误外设
+⇒ 读回值一致）⇒ ⇒ 只有 A15 转红 ⇒ ⇒ 证明「写 → 读回」形态对「窗口错位到**同偏移也可写**
+的外设」**结构性失明**，必须由**地址特征**判据（PWM 复位值 0xFF）补上。
+⇒ ⚠️ 每条变异均**先确认编译通过**（0 error）再跑；**还原源码后 MUST 重建**（二进制也是状态）；
+还原后复测 `checks=16 fails=0` ✅
+
 ### 5. 已知盲区（如实登记）
 
 - ⚠️ **SoC 级看不到核的任何内部信号**（`dbg_*` / `obs_*` 不是顶层端口 · ADR-072 D1）⇒ ⇒
@@ -369,3 +399,11 @@ VERIF-CHECKS: 15
   两个响应码 ⇒ ⇒ DECERR / SLVERR 对软件**不可见**（A8 恰好依赖「错误响应当成功完成、数据取 0」
   这一未写下来的语义）⇒ ⇒ 错误观测面 / 陷入口归 **S5**（与 `irq` 同批）。
 - ⚠️ **`prog_*` 是运行期后门**（ADR-077 D3 长期保留）⇒ ⇒ 真实芯片形态的装载路径未定义。
+- ⚠️ **A10–A14 的「单点错位」残留**（2026-11-27 · S4b P4 · **已部分闭合**）：
+  若某窗口**单点**错位到「同偏移也可写」的外设（例：TIMER 窗口 → UART 从口 · 两者
+  word 0 均可写）⇒ ⇒ 该条判据仍可能绿（写和读都落在同一个错误外设上 ⇒ 读回值一致）。
+  ⇒ **A15 闭合了 PWM 面**（0xFF 是 word 0 唯一的非零复位值）；**UART / TIMER / SPI / I2C
+  面仍无 SoC 级判别力**（四者的 word 0 复位值都是 0，word 4 的 SPI/I2C 又同为 0x64）。
+  该形态由 P1 的**逐从口单测**（`tests/test_axi_lite_crossbar.cpp` 的 20 用例 / 508 断言）
+  与 `SocCrossbarMap` 的 8 条 `static_assert` + 7 条 target 断言共同承担；
+  本段判的是 **SoC 侧装配可用性**（6 个从口的事务通路），不重复承担路由本身的判别力。

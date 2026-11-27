@@ -10,9 +10,17 @@
 //   ⇒ ⇒ 产品端口 = 框架 2 + 根自有 8 = **10**（ADR-077 V1 · S4a 的 dated addendum）
 //
 // ⚠️ **判据 MUST 与 C++ 侧（`tb_riscv_soc.cpp` 默认模式）逐条同值**（AC7 的
-//   「`interp_checks == min_checks == L`」）⇒ 本文件 **10** 条 · C++ 侧 **10** 条。
+//   「`interp_checks == min_checks == L`」）⇒ 本文件 **16** 条 · C++ 侧 **16** 条。
 //   ⚠️ A9（读值回路）是 2026-11-24 critic BLOCKER 的靶子：原 9 条判据对「读数据 mux
 //      与 M2 错拍」**结构性失明**（读值在 SoC 根端口不可观测 · gpio_in 又被 tie 0）。
+//   ⚠️ A10–A14（2026-11-27 · S4b P4）：s1–s5 五个从口的**总线级回环**（每段独立程序
+//      ⇒ 写外设寄存器 → 读回 → 写 GPIO DATA_OUT ⇒ 判 `gpio_out == 写入值`）。
+//      ⚠️ 写入值**互不相同且都 ≠ 目标外设的复位值**（SPI/I2C 的 0x64、PWM 的 0xFF
+//      都是真实复位值 ⇒ 「写没生效」会与期望撞值 ⇒ 判据失去判别力）。
+//   ⚠️ A15（同批 · **实测缺口后追加**）：PWM `PERIOD` 的**复位值 0xFF**（不写）。
+//      靶子 = 「窗口错位到同偏移也可写的外设」—— A10–A14 对该形态**结构性失明**
+//      （实测：PWM 窗口指向 GPIO ⇒ 写读都落到 DATA_OUT ⇒ 15 条全绿）；
+//      PWM 的复位值 0xFF 是 word 0 中**唯一非零**的 ⇒ 任何错位都 ≠ 0xFF ⇒ 必红。
 //
 // ⚠️ **程序与 C++ 侧同源**（S4a 起与核级产品**分叉** —— 核级没有 MMIO 从设备）：
 //   主程序 = **12 字**（`.rddf/checks/soc-rtl-expectations.md#riscv-soc` §2），
@@ -92,6 +100,100 @@ module tb_riscv_soc;
         endcase
     endfunction
 
+    // ══ A10–A14 的 5 段**独立 7 字程序**（每段一个从口 · 手推编码）══
+    //
+    // | p | 从口 | 外设 | 基址 hi20 | 寄存器 | 偏移 | word | 写入值 | 复位值 |
+    // |---|---|---|---|---|---|---|---|---|
+    // | 0 | s1 | UART  | 0x80101 | CTRL     | 0x0C | 3 | 0x53 | 0x00 |
+    // | 1 | s2 | TIMER | 0x80107 | LOAD     | 0x00 | 0 | 0x6A | 0x00 |
+    // | 2 | s3 | SPI   | 0x80103 | BAUD     | 0x10 | 4 | 0x17 | 0x64 |
+    // | 3 | s4 | I2C   | 0x80104 | PRESCALE | 0x10 | 4 | 0x2C | 0x64 |
+    // | 4 | s5 | PWM   | 0x80105 | PERIOD   | 0x00 | 0 | 0xE1 | 0xFF |
+    //
+    // 程序骨架：`lui x4,<hi>` → `addi x5,x0,<v>` → `sw x5,<off>(x4)` →
+    //            `lw x6,<off>(x4)` → `lui x1,0x80102` → `sw x6,0(x1)` → `jal x0,0`
+    // ⇒ ⇒ `gpio_out == <v>`（读回值经 GPIO DATA_OUT 回到根端口）。
+    function automatic logic [31:0] periph_word(input integer p, input integer idx);
+        case (p)
+            0: begin case (idx)  // UART CTRL(0x0C) ← 0x53
+                   0: periph_word = 32'h80101237;  // lui  x4, 0x80101
+                   1: periph_word = 32'h05300293;  // addi x5, x0, 0x53
+                   2: periph_word = 32'h00522623;  // sw   x5, 0x0C(x4)
+                   3: periph_word = 32'h00C22303;  // lw   x6, 0x0C(x4)
+                   4: periph_word = 32'h801020B7;  // lui  x1, 0x80102 (GPIO)
+                   5: periph_word = 32'h0060A023;  // sw   x6, 0(x1)
+                   default: periph_word = 32'h0000006F;  // jal x0, 0
+               endcase
+            end
+            1: begin case (idx)  // TIMER LOAD(0x00) ← 0x6A
+                   0: periph_word = 32'h80107237;  // lui  x4, 0x80107
+                   1: periph_word = 32'h06A00293;  // addi x5, x0, 0x6A
+                   2: periph_word = 32'h00522023;  // sw   x5, 0(x4)
+                   3: periph_word = 32'h00022303;  // lw   x6, 0(x4)
+                   4: periph_word = 32'h801020B7;  // lui  x1, 0x80102
+                   5: periph_word = 32'h0060A023;  // sw   x6, 0(x1)
+                   default: periph_word = 32'h0000006F;
+               endcase
+            end
+            2: begin case (idx)  // SPI BAUD(0x10) ← 0x17
+                   0: periph_word = 32'h80103237;  // lui  x4, 0x80103
+                   1: periph_word = 32'h01700293;  // addi x5, x0, 0x17
+                   2: periph_word = 32'h00522823;  // sw   x5, 0x10(x4)
+                   3: periph_word = 32'h01022303;  // lw   x6, 0x10(x4)
+                   4: periph_word = 32'h801020B7;  // lui  x1, 0x80102
+                   5: periph_word = 32'h0060A023;  // sw   x6, 0(x1)
+                   default: periph_word = 32'h0000006F;
+               endcase
+            end
+            3: begin case (idx)  // I2C PRESCALE(0x10) ← 0x2C
+                   0: periph_word = 32'h80104237;  // lui  x4, 0x80104
+                   1: periph_word = 32'h02C00293;  // addi x5, x0, 0x2C
+                   2: periph_word = 32'h00522823;  // sw   x5, 0x10(x4)
+                   3: periph_word = 32'h01022303;  // lw   x6, 0x10(x4)
+                   4: periph_word = 32'h801020B7;  // lui  x1, 0x80102
+                   5: periph_word = 32'h0060A023;  // sw   x6, 0(x1)
+                   default: periph_word = 32'h0000006F;
+               endcase
+            end
+            default: begin case (idx)  // PWM PERIOD(0x00) ← 0xE1
+                   0: periph_word = 32'h80105237;  // lui  x4, 0x80105
+                   1: periph_word = 32'h0E100293;  // addi x5, x0, 0xE1
+                   2: periph_word = 32'h00522023;  // sw   x5, 0(x4)
+                   3: periph_word = 32'h00022303;  // lw   x6, 0(x4)
+                   4: periph_word = 32'h801020B7;  // lui  x1, 0x80102
+                   5: periph_word = 32'h0060A023;  // sw   x6, 0(x1)
+                   default: periph_word = 32'h0000006F;
+               endcase
+            end
+        endcase
+    endfunction
+
+    // 5 段的手推期望值（= 写入值 · `gpio_out` 是 8 位）
+    function automatic integer periph_exp(input integer p);
+        case (p)
+            0: periph_exp = 32'h0000_0053;  // UART
+            1: periph_exp = 32'h0000_006A;  // TIMER
+            2: periph_exp = 32'h0000_0017;  // SPI
+            3: periph_exp = 32'h0000_002C;  // I2C
+            default: periph_exp = 32'h0000_00E1;  // PWM
+        endcase
+    endfunction
+
+    // A15 的**独立 5 字程序**：读 PWM `PERIOD(0x00)` 的**复位值** ⇒ 写 GPIO
+    // ⚠️ 靶子 = 「窗口错位到同偏移也可写的外设」（A10–A14 对该形态**结构性失明** ——
+    //    实测：PWM 窗口指向 GPIO 时写读都落到 DATA_OUT ⇒ 15 条全绿）。
+    // ⚠️ PWM 的 `period_reg` 复位值 = 255（0xFF），其他外设 word 0 的复位值全是 0
+    //    ⇒ ⇒ 「不写直接读」即可判定地址真的落在 PWM。
+    function automatic logic [31:0] pwm_reset_word(input integer idx);
+        case (idx)
+            0:  pwm_reset_word = 32'h80105237;  // lui  x4, 0x80105  ⇒ 0x8010_5000
+            1:  pwm_reset_word = 32'h00022303;  // lw   x6, 0(x4)    ← PERIOD（0xFF）
+            2:  pwm_reset_word = 32'h801020B7;  // lui  x1, 0x80102  ⇒ GPIO
+            3:  pwm_reset_word = 32'h0060A023;  // sw   x6, 0(x1)
+            default: pwm_reset_word = 32'h0000006F;  // jal x0, 0
+        endcase
+    endfunction
+
     task automatic expect_bit(input logic got, input logic want);
         begin
             checks = checks + 1;
@@ -145,6 +247,7 @@ module tb_riscv_soc;
 
     integer i;
     integer k;
+    integer p;
     logic   clean;
     logic   load_clean;
     logic   monotonic_ok;
@@ -268,6 +371,53 @@ module tb_riscv_soc;
             #1;
         end
         expect_eq({24'h0, gpio_out}, EXP_RDBACK);
+
+        // ══ A10–A14：s1–s5 五个从口的**总线级回环**（5 段 · 每段独立程序）══
+        // ⚠️ `gpio_out` 只有一个根端口 ⇒ ⇒ MUST 逐段观测（每段先 `rst`/`ext_rst`
+        //    复位 ⇒ GPIO 的 DATA_OUT 回到 0 ⇒ 不会残留上一段的值）。
+        // ⚠️ 靶子：窗口 ↔ 从口 ↔ 外设的装配错位（S4a 只验证过 s0 = GPIO）。
+        for (p = 0; p < 5; p = p + 1) begin
+            rst     = 1'b1;
+            ext_rst = 1'b1;
+            repeat (4) @(posedge clk);
+            @(negedge clk);
+            rst = 1'b0;
+            for (i = 0; i < 7; i = i + 1) begin
+                load_word(i, periph_word(p, i), clean);
+            end
+            for (i = 7; i < 64; i = i + 1) begin
+                load_word(i, 32'h00000013, clean);
+            end
+            @(negedge clk);
+            ext_rst = 1'b0;
+            for (k = 0; k < 100; k = k + 1) begin
+                @(posedge clk);
+                #1;
+            end
+            expect_eq({24'h0, gpio_out}, periph_exp(p));
+        end
+
+        // ══ A15：PWM `PERIOD` 的**复位值**（地址特征 · 不写）（1 条）══
+        // ⚠️ A10–A14 对「窗口错位到同偏移也可写的外设」**结构性失明**
+        //    （实测：PWM 窗口指向 GPIO ⇒ 15 条全绿）⇒ ⇒ 本条闭合该缺口。
+        rst     = 1'b1;
+        ext_rst = 1'b1;
+        repeat (4) @(posedge clk);
+        @(negedge clk);
+        rst = 1'b0;
+        for (i = 0; i < 5; i = i + 1) begin
+            load_word(i, pwm_reset_word(i), clean);
+        end
+        for (i = 5; i < 64; i = i + 1) begin
+            load_word(i, 32'h00000013, clean);
+        end
+        @(negedge clk);
+        ext_rst = 1'b0;
+        for (k = 0; k < 100; k = k + 1) begin
+            @(posedge clk);
+            #1;
+        end
+        expect_eq({24'h0, gpio_out}, 32'h0000_00FF);
 
         $display("RESULT: checks=%0d fails=%0d", checks, fails);
         $finish;

@@ -83,16 +83,29 @@
       未驱动输入 **0** · lint 干净 · 双形态等价 ok）⇒ ⇒ `tb_riscv_soc` **checks=10 fails=0**
       ⇒ ⇒ `verify_examples_rtl_sim.sh` 全绿（⑧' 层次化 module 数 17 · ④″ 产物级判据）
 
-## P4 · 判据（TDD）
+## P4 · 判据（TDD）（✅ 已闭）
 
-- [ ] **T4.1** 🔴 先在 `tb_riscv_soc` 里加 **5 条失败回环判据**（UART/TIMER/SPI/I2C/PWM）
-      ⇒ 固件写序列 + 读回 + 存 D-TCM ⇒ TB 断言（期望值手推，见 design §4.1）
-- [ ] **T4.2** 让固件通过：`examples/riscv-soc/tb_riscv_soc.cpp` 的程序段按 A10–A14 扩展
-      ⇒ `checks = 10 + 5 = 15`（**等式**，不是下界）
-- [ ] **T4.3** A8（CLINT 段 DECERR）**语义不变** + 新增「`kTimer` 段**不** DECERR」判据（D-1 的判别点）
-- [ ] **T4.4** 期望台账：`.rddf/checks/soc-rtl-expectations.md#riscv-soc` 增 5 条
-      （地址 / 写值 / 读值 / 来源）
-- [ ] **T4.5** tsv：`tb_riscv_soc` 行的 `min_checks` / `scenarios` / `spec_checks` 重算
+- [x] **T4.1** `tb_riscv_soc` 加 **5 条失败回环判据**（UART/TIMER/SPI/I2C/PWM）
+      ⇒ ⚠️ **实现形态与设计稿不同**（如实记录）：设计稿写的是「固件写序列 + 读回 +
+      **存 D-TCM** ⇒ TB 断言」；实际用**独立 SoC 实例 + GPIO 回环**
+      （写外设寄存器 → 读回 → 写 GPIO `DATA_OUT` ⇒ 判 `gpio_out`）。
+      理由：SoC 级**观测不到 D-TCM**（后代 `ch_out` 不是顶层端口 · ADR-072 D1）⇒ ⇒
+      设计稿那条路径在 SoC 级**不成立**（规划期缺陷）；`gpio_out` 是唯一能让任意读值
+      回到根端口的现成通路。每段**独立实例** ⇒ 5 个读值互不覆盖
+      （同一实例只能留最后一个 ⇒ 分段按拍观测会依赖精确拍数 ⇒ 脆）。
+- [x] **T4.2** `checks = 10 + 5 + 1 = 16`（**等式**，不是下界）：C++ 侧 16 · `.sv` 侧 16 ·
+      tsv 登记 `interp_checks=16` / `min_checks=16`
+      ⇒ ⚠️ **+1 = A15（同批追加）**：实测发现 A10–A14 对「窗口错位到同偏移也可写的
+      外设」**结构性失明**（把 PWM 窗口指向 GPIO ⇒ 写读都落到 `DATA_OUT` ⇒ 15 条全绿）
+      ⇒ ⇒ 追加「PWM `PERIOD` 复位值 == 0xFF」的**地址特征**判据闭合该缺口
+- [x] **T4.3** A8（CLINT 段 DECERR）语义不变（仍 `writeback_count == 3`）；
+      **A11 = D-1 的判别点**：TIMER `LOAD(0x00)` 写 0x6A 再读回 —— 若 `kTimer` 段仍落
+      `kErr` ⇒ 写 DECERR + 读回 0 ≠ 0x6A ⇒ **必红**
+- [x] **T4.4** 期望台账 §3 增 A10–A15（地址 / 写值 / **外设复位值** / 来源）+
+      §5 更新「单点错位残留」盲区（**A15 闭合 PWM 面**；UART/TIMER/SPI/I2C 面仍由
+      P1 逐从口单测 + `SocCrossbarMap` 的断言承担）
+- [x] **T4.5** tsv：`interp_checks` 10→16 · `min_checks` 10→16 · `scenarios` 6→12 ·
+      `spec_checks` 5→11（A10–A15 全部 spec-derived）
 
 ## P5 · 回归与收口
 
