@@ -110,6 +110,11 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
       ⇒ 漏一行 ⇒ 元护栏 C2 红
 - [ ] **AC5 B 类脚本已参数化**：8 个 B 类脚本**对 full 线不误红**且**对 mini 线行为不变**
       ⇒ 逐个用「full 线存在 / 不存在」两种状态各跑一次，退出码 MUST 相同
+      ⇒ ⚠️ **「0 处护栏脚本改动」≠ 「0 处约束」** —— 护栏对 **CMake 写法**有隐式约束
+      （`verify_example_test_wiring.sh` 的 MAP 解析**逐行**取「首个实参 = target」+
+      「**最后一个** `.cpp` = 源文件」⇒ ⇒ 测试源 MUST **独占一行**）⇒ ⇒ 该约束 MUST
+      作为「加线的**隐性成本**」登记（实测：分行写 ⇒ 关联丢失 ⇒ 护栏报「未被任何已覆盖的
+      target 编译」；同行写 amalgamated ⇒ 关联落到 amalgamated ⇒ 同样丢失）
 - [ ] **AC6 锚点分组**：根 `AGENTS.md` 的 5 个 CI 锚点按产品线分组，且 `verify_test_counts.sh`
       按**分组**比对 ⇒ 分组值与 `ctest -N` 实际一致 ⇒ 改错分组 ⇒ 红
 - [ ] **AC7 逐线 scope 标注**：imem-`sread` 红线与 `rv32i-data-forwarding` 停顿矩阵标注「mini 线专属」
@@ -117,7 +122,10 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
 - [ ] **AC8 散文表治理**：`examples/riscv-soc/AGENTS.md` **不含**手写的 module 集表（只留指针）
       ⇒ 且该指针指向的期望源里的 module 集 == 磁盘实际（17）
 - [ ] **AC9 full 线空壳可用**：`examples/riscv-full/` 与 `examples/riscv-full-soc/` 存在 ·
-      CMake 目标可构建 · `--check-products` **PASS** · 产物 module 集 / 顶层端口表 == 登记值
+      CMake 目标可构建 · `tb_riscv_full_soc` **3/3** · `test_rv32i_full_soc` **9 断言 / 4 用例** ·
+      根端口面 == 框架 2 + 2 = **4** 且端口**具名**
+      ⇒ ⚠️ **实施期订正**：初稿写「`--check-products` PASS」⇒ 但 S4c-0 的 full 线**不发 RTL**
+      （2 根恒定输出 ⇒ 层次化产物无判别力）⇒ ⇒ `--check-products` 从 **S4c-1** 起
 - [ ] **AC10 mini 线零行为变化**：`ctest` **全绿**（285/285 · P2/P5 时实测）·
       **下列 5 个既有护栏全绿**（S4c-0 期间逐个实测）·
       `verify_examples_rtl_sim.sh` · `verify_examples_rtl_sim_coverage.sh` ·
@@ -148,6 +156,7 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
 | 护栏 | 现象 | 引入 | 处置 |
 |---|---|---|---|
 | `verify_example_assertion_quality.sh` | `examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp` 的逐用例计数（14）与分析器报告的字面用例数（15）不符 ⇒ 「逐用例扫描未完整执行」 | `1190a6f` / `ec5db47`（**均非 S4b 批次**）⇒ **在 S4c-0 立项前即红** | 该护栏是 **fail-closed** 设计（空输出 / 缺结束标记 / 计数不符 三种失效形态都判违规，**无豁免机制**）⇒ 修法 = 修分析器的逐用例扫描 ⇒ 而 AGENTS.md 已载明「该自研 C 子集分析器**不可能被完全闭合**」⇒ ⇒ **本 change 不修**（范围外债）· 建议单独立项 |
+| `verify_example_test_wiring.sh`（**C3 运行期**） | 该护栏以 `timeout 300` **直接跑**二进制；`test_rv32i_soc_dual_parity` 实测 **245 s**（ctest 口径）/ **>400 s**（直跑口径）⇒ ⇒ 余量仅 22% ⇒ ⇒ 稍慢即 exit 124 | **既有脆弱性**（护栏 timeout 策略 vs 该测试运行时）⇒ 本 change 未改 mini 线任何源码 | 证据链：① 失败原因是 `SIGTERM`（超时）而**非断言失败**（Catch2 记 `{Unknown expression after the reported line} due to SIGTERM`）② `ctest -R test_rv32i_soc_dual_parity` 同二进制 **PASS**（245 s）③ 该测试是 mini 线的 `Rv32iSoc - AxilMmioCrossBackend`，与 full 线无关 ⇒ ⇒ **本 change 不修**（属护栏 timeout 策略）· 建议给该条更长 timeout 或改由 ctest 跑 |
 
 ⇒ ⚠️ **实测方法**：用 `git worktree add /tmp/... HEAD~1`（**S4c-0 立项前**的提交点）跑该护栏
 ⇒ **同样红** ⇒ ⇒ 确认是既有红，**非本 change 引入**。

@@ -19,7 +19,7 @@
 # ⚠️ **未被跟踪**的 main() 程序 / 测试二进制 MUST 登记进
 # `examples/disabled_examples.txt`（带理由 + 归位条件）⇒ 「新增即漏」不再静默。
 #
-# ⚠️ `all-examples` **MUST 只含被跟踪的那 28 个** —— 不可整目录收编：
+# ⚠️ `all-examples` **MUST 只含被跟踪的那 30 个** —— 不可整目录收编：
 # `examples/riscv-mini/` 另有 14 个 Catch2 测试 target（+1 个只构建不注册，见
 # `examples/disabled_examples.txt`），`examples/verilator/` 另有 3 个 demo。
 # ---------------------------------------------------------------------------
@@ -78,6 +78,11 @@ set(CH_TRACKED_EXAMPLE_TARGETS
 
     # PHASE: RV32I SoC 平台 · SoC 级产品单元（ADR-077 D1 · 两级顶层）
     tb_riscv_soc
+
+    # PHASE: RV32I 平台 · **full 产品线**（ADR-078 · S4c-0 · 空壳 · 零功能）
+    # ⚠️ 该 target **无 RTL 产物** ⇒ ⇒ 落选登记在
+    #    `.rddf/checks/examples-rtl-sim-exclusions.tsv`（理由 = 无 RTL 产物 · RTL 从 S4c-1 起）
+    tb_riscv_full_soc
 )
 
 # ---------------------------------------------------------------------------
@@ -121,6 +126,11 @@ add_subdirectory(riscv-mini)  # Phase B: API 兼容,已启用
 
 # RV32I SoC 平台：SoC 级产品单元（ADR-077 D1 · 核复合体仍住 riscv-mini）
 add_subdirectory(riscv-soc)
+
+# RV32I 平台 · **full 产品线**（ADR-078 · S4c-0 · **空壳** · 零功能）
+# ⚠️ 该目录的 target **不进** `CH_TRACKED_EXAMPLE_TARGETS` 的「产品程序」之外的角色：
+#    `tb_riscv_full_soc` 是产品级可执行（进跟踪集合）· `test_rv32i_full_soc` 是 Catch2 判据（进 CTest）。
+add_subdirectory(riscv-full-soc)
 
 # ---------------------------------------------------------------------------
 # 聚合 target：一次构建全部**被跟踪**的 example。

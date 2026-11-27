@@ -7,8 +7,12 @@
 #   只保留**入选准则 / 首批未覆盖项 / 墙钟实测**，落选名单**只在这里**。
 #
 # ⚠️ **守恒判据** = `scripts/verify_examples_rtl_sim_coverage.sh` ①：
-#   `CH_TRACKED_EXAMPLE_TARGETS`（**29**）== 覆盖（**17**：`kind ∈ {target, soc}`）
-#   ∪ 落选（**12** = 本表行数）⇒ ⇒ 且三者互斥 ⇒ ⇒ 「新增即漏」即红。
+#   `CH_TRACKED_EXAMPLE_TARGETS`（**30**）== 覆盖（**17**：`kind ∈ {target, soc}`）
+#   ∪ 落选（**13** = 本表行数）⇒ ⇒ 且三者互斥 ⇒ ⇒ 「新增即漏」即红。
+#   ⚠️ **2026-11-27 订正**（change `rv32i-full-product-line-2026-11` · S4c-0 · ADR-078）：
+#   新增被跟踪 target `tb_riscv_full_soc`（full 产品线的**空壳** · ADR-078）⇒ ⇒
+#   tracked 29 → 30、落选 12 → 13（**覆盖 17 不动** —— 该线**无 RTL 产物**）
+#   ⇒ ⇒ `30 == 17 ∪ 13`。
 #   ⚠️ **2026-11-23 订正**（change `riscv-soc-skeleton-2026-11`）：新增被跟踪 target
 #   `tb_riscv_soc`（SoC 级产品单元 · ADR-077 D1）⇒ ⇒ tracked 28 → 29、覆盖 16 → 17
 #   （落选 12 不动）⇒ ⇒ `29 == 17 ∪ 12`。
@@ -48,3 +52,4 @@ phase1c_test	多组件拼装（Phase 1c 组合）	类别已覆盖（组合 count
 rv32i_phase1_test	流水线阶段测试（阶段 1）	它是流水线单阶段的 C++ 侧回归 ⇒ ⇒ 产品面由整 SoC（riscv-mini-rv32i-soc）承载 ⇒ ⇒ 单阶段不作为产品单元分发	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
 rv32i_phase2_test	流水线阶段测试（阶段 2）	同上	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
 rv32i_phase3_test	流水线阶段测试（阶段 3）	同上	若将来把单阶段 RTL 作为独立产品单元分发 ⇒ ⇒ 补独立 TB
+tb_riscv_full_soc	full 产品线空壳	**S4c-0 空壳 · 零功能** ⇒ ⇒ 只有 2 根恒定输出 ⇒ ⇒ 层次化产物**无判别力** ⇒ ⇒ 本批**不发 RTL** ⇒ ⇒ 不进 RTL 仿真覆盖	S4c-1 起 full 线有核与取指通路后补 RTL 发射 + 独立 TB（`.rddf/checks/examples-rtl-sim-targets.tsv` 增 `kind=soc` 行）

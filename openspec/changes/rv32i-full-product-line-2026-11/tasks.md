@@ -51,8 +51,8 @@
 - [ ] **T3.2** `verify_riscv_soc_core_ports.sh`：加 `--line` 参数 ⇒ full 线**无对象**（不误红）
 - [ ] **T3.3** `rv32i_obs_vector.py`：核头 / 观测向量源按 marker 发现 ⇒ 找不到 ⇒ **跳过而非误红**
 - [ ] **T3.4** `dual_backend_parity.py`：测试源清单按 marker 发现 + 锚点改分组
-- [ ] **T3.5** `verify_example_assertion_quality.sh`：新线测试源 MUST 登记（漏登记 ⇒ 红）
-- [ ] **T3.6** `verify_example_test_wiring.sh`：归属守恒面按 marker 发现（full 线测试源 MUST
+- [x] **T3.5** `verify_example_assertion_quality.sh`：新线测试源 MUST 登记（漏登记 ⇒ 红）
+- [x] **T3.6** `verify_example_test_wiring.sh`：归属守恒面按 marker 发现（full 线测试源 MUST
       在其 CMake 注册）
 - [ ] **T3.7** `verify_examples_rtl_sim.sh`：S4c-0 的 full 线**无 RTL 产物 ⇒ tsv 无行是合法的**
       ⇒ 「有产物但未登记」⇒ 红（判定逻辑须区分这两种情形）
@@ -76,12 +76,16 @@
 
 ## P5 · full 线空壳（**零功能**）
 
-- [ ] **T5.1** `examples/riscv-full/`：marker + README（说明 **S4c-1 才建核**）
-- [ ] **T5.2** `examples/riscv-full-soc/`：marker + **最小 SoC 顶层**（框架 2 + 2 个 `ch_out` 计数
+- [x] **T5.1** `examples/riscv-full/`：marker + README（说明 **S4c-1 才建核**）
+- [x] **T5.2** `examples/riscv-full-soc/`：marker + **最小 SoC 顶层**（框架 2 + 2 个 `ch_out` 计数
       · 端口**具名**且**不与** mini 线重名）+ CMake 目标
-- [ ] **T5.3** **1 个 Catch2 测试源**（最小：构建 + 产物形态）⇒ ⇒ 使 full 线立即进入
+- [x] **T5.3** **1 个 Catch2 测试源**（最小：构建 + 产物形态）⇒ ⇒ 使 full 线立即进入
       test-wiring / assertion-quality 的扫描面（AC11 的登记对象）
-- [ ] **T5.4** full 线的产物面（module 集 / 顶层端口表）**登记** ⇒ `--check-products` **PASS**
+- [x] **T5.4** full 线的**组件端口面**登记（根端口面 = 框架 2 + 2 = **4** · 端口**具名**）⇒
+      且被 Catch2 判据断言（**9 断言 / 4 用例**）+ `tb_riscv_full_soc` **3/3** ⇒ ⇒
+      ⚠️ **实施期订正**：初稿写「`--check-products` PASS」⇒ 但 S4c-0 的 full 线**不发 RTL**
+      （只有 2 根恒定输出 ⇒ 层次化产物**无判别力**）⇒ ⇒ `--check-products` 从 **S4c-1** 起
+      ⇒ ⇒ 本批改为「组件端口面登记 + 可构建 + 可运行」
 
 ## P6 · 回归与收口
 
@@ -114,7 +118,34 @@
    `test_rv32i_soc_dual_parity.cpp` 计数不符 · 引入于 `1190a6f`/`ec5db47` · **非本批引入**）
    ⇒ 已用 `git worktree` 在 **S4c-0 立项前**的提交点复现 ⇒ 确认为既有 ⇒ **不修**（范围外债）·
    ⇒ ⚠️ **不在 AC10 的 5 个护栏清单内** ⇒ AC10 与 ADR-078 的 AC6 **不受影响**
-4. **根 `AGENTS.md` 的 5 个 CI 锚点当前仍是单值** ⇒ 生成器登记面 §2 标「**未归组**（T4.2）」
+4. **两个护栏的实测形态比处置表原写的更好**（⇒ 处置表已订正）——
+   · `verify_example_test_wiring.sh` 的源集合**已是全扫**（`find examples -path '*/tests/*'`）
+     ⇒ ⇒ **T3.6 = 零改动**（新线自动覆盖）
+   · `verify_example_assertion_quality.sh` 的 `SRC_LIST` **自动收集**（含 `examples/**/tests/`）
+     ⇒ ⇒ 新线测试源自动进扫描面；但护栏**主动要求**「新增测试源 MUST 登记一行（含真断言数下限）」
+     ⇒ ⇒ **T3.5 = 登记 1 行** ⇒ ⇒ **「加线漏登记 = 当场红」天然成立**（ADR-078 AC11 的实现）
+5. ⚠️ **护栏对 CMake 写法的约束（真实坑 · 未来每条产品线都会踩）** ——
+   `verify_example_test_wiring.sh` 的 MAP 解析是**逐行**的：取「`fn(` 的**首个实参** =
+   target」+「**最后一个** `.cpp` 实参 = 源文件」⇒ ⇒
+   ① `add_executable(<target>` 与源文件**分行**⇒ ⇒ 该行无 `.cpp` ⇒ ⇒ **整行被跳过**
+   ⇒ ⇒ 源文件与 target 的关联丢失 ⇒ ⇒ 护栏报「未被任何已覆盖的 target 编译」；
+   ② 若把 `catch_amalgamated.cpp` 与测试源写在**同一行**⇒ ⇒ 关联落到 amalgamated 身上
+   ⇒ ⇒ 同样丢关联。
+   ⇒ ⇒ **正确写法**：测试源**独占一行**（唯一的 `.cpp`）· amalgamated 走 `target_sources`。
+   ⇒ ⇒ ⚠️ 这**不违反** ADR-078 的 AC3（「0 处护栏**脚本**改动」）—— 它是**写法约束**，不是脚本改动；
+   ⇒ ⇒ 但它是「加线成本」里的**隐性项** ⇒ ⇒ 已在 **AC5** 的载体里登记。
+6. **慢护栏 MUST 独占 CPU** —— `verify_example_test_wiring.sh` 内部会跑
+   `test_rv32i_soc_dual_parity`（**245 秒**）⇒ ⇒ 并行跑其它重活 ⇒ ⇒ 该测试超时
+   （exit 124）⇒ ⇒ 护栏误报「CTest 条目退出码 ≠ 0」⇒ ⇒ 排查耗时的**假红**。
+   ⇒ ⇒ 实测：单独复跑 `ctest -R test_rv32i_soc_dual_parity` ⇒ **PASS**（245 s）。
+7. ⚠️ **`verify_example_test_wiring.sh` 的 C3 有既有脆弱性**（**非本批引入**）——
+   它以 `timeout 300` 直接跑二进制，而 `test_rv32i_soc_dual_parity` 实测 **245 s**（ctest）/
+   **>400 s**（直跑）⇒ ⇒ 稍慢即 exit 124。**失败原因是 `SIGTERM` 不是断言失败**
+   （Catch2 打印 `{Unknown expression after the reported line} due to SIGTERM`）·
+   `ctest -R` 同二进制 **PASS** ⇒ ⇒ 该红**不代表断言失败**，也不属本批。
+   ⇒ ⚠️ T3.6 的**实质**（新线被自动覆盖）已由护栏输出证明：
+   `OK examples/riscv-full-soc/tests/test_rv32i_full_soc.cpp → test_rv32i_full_soc` ✅
+8. **根 `AGENTS.md` 的 5 个 CI 锚点当前仍是单值** ⇒ 生成器登记面 §2 标「**未归组**（T4.2）」
    ⇒ ⇒ 生成器**同时容忍**单值 / 分组两种形态 ⇒ ⇒ T4.2 之前生成器不会误红。
 
 ## 硬约束

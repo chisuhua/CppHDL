@@ -454,7 +454,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 285
+- CTEST_TOTAL: 286
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -491,7 +491,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      TEMPLATE_TEST_CASE / TEMPLATE_PRODUCT_TEST_CASE / SCENARIO）的
      .cpp/.cc/.cxx/.C ∪ (b) 含 `CATCH_` 的同类文件 ∪ (c) `examples/**/tests/`
      下的任意 .cpp/.cc/.cxx/.C，去重。Do not reformat. -->
-- EXAMPLES_TEST_SOURCES: 26
+- EXAMPLES_TEST_SOURCES: 27
      ⚠️ **`CPPHDL_BUILD_EXAMPLES=OFF` 下的显式接受项**（`example-file-boundary-2026-11` **C5** · AC20）：
      上述 examples 相关锚点（`EXAMPLES_TEST_SOURCES` · 「examples 的 main() 程序」计数 ·
      `CTEST_TOTAL` 里的 `spinalhdl_*` 条目）**只在默认配置（`BUILD_EXAMPLES=ON`）成立** ⇒ ⇒
@@ -507,7 +507,7 @@ bash scripts/rv32i_rtl_sim_env.sh
   | `tests/chlib/test_*.cpp` | 51 | `ls tests/chlib/test_*.cpp \| wc -l` |
   | `tests/jit/test_*.cpp` | 3 | `ls tests/jit/test_*.cpp \| wc -l` |
   | `samples/*.cpp` | 40 | `ls samples/*.cpp \| wc -l`（39 已注册 + 1 已禁用）|
-  | examples 的 main() 程序 | 33 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
+  | examples 的 main() 程序 | 34 | `grep -rl '^int main' examples --include='*.cpp' \| wc -l`（全部已跟踪）|
 
   ⚠️ **本表是**快照**，不是锚点** ⇒ ⇒ **无机械判据**（`scripts/verify_test_counts.sh` 第 3 条
   只**打印**、不判违规）⇒ ⇒ 漂移靠**人工**发现 ⇒ ⇒ 改测试数时 MUST 同步本表。
