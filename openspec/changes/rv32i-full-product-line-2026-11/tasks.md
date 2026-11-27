@@ -34,13 +34,33 @@
 
 ## P2 · 元护栏
 
-- [ ] **T2.1** `scripts/verify_product_lines.sh` 四条判据：
+- [x] **T2.1** `scripts/verify_product_lines.sh` 四条判据：
       **C1** 发现集 == 登记集 · **C2** marker 完备性（必填字段 / `layer` 合法 /
       `line` == 目录名 / `adrs` 指向的 ADR 文件存在）· **C3** 覆盖完备性（每条线 MUST 被
       **至少一个**护栏登记面引用）· **C4** `--self-test` 投毒自证
-- [ ] **T2.2** `--self-test` **三条投毒全部实测转红**（改 marker / 删 marker / 改 `layer`）
+- [x] **T2.2** `--self-test` **三条投毒全部实测转红**（改 marker / 删 marker / 改 `layer`）
       ⇒ ⇒ 每条投毒**先确认能跑**（不是「文件不存在」式的假红）
-- [ ] **T2.3** 元护栏接入 `scripts/verify_guard_reachability.sh` 的守恒面 + CI
+- [x] **T2.3** 元护栏接入 `scripts/verify_guard_reachability.sh` 的守恒面 + CI
+
+**T2 的实施期发现（2026-11-28）**：
+
+- **T2.1 的多字段面比初稿多**：C2 从 6 条子判据（字段 / `layer` / `line` / `members` /
+  `adrs` / `specs`）扩到 7 条（+ **归属完备性**）；C3 从 1 条判据扩到 2 条
+  （每条线 ≥1 target · 每个 examples target 归线唯一）。
+- **判据实现拆两件**：`scripts/lib/product_lines.py`（判据 · 可单测）+ `scripts/verify_product_lines.sh`
+  （入口 + `--self-test`）⇒ ⇒ 与 `guard_reachability.sh` + `guard_reachability.py` 同型。
+- **`specs` 字段 MUST 允许「active change 的 delta capability」** —— 实测：full 线的 marker
+  引用 `rv32i-product-lines`（本 change 正在新增）⇒ 归档前不在 `openspec/specs/` ⇒ ⇒
+  若只判「`openspec/specs/<name>` 存在」⇒ **变更进行中恒红**。
+- **排除清单是必需件**（见 design §1.1 的 dated 订正）。
+- **`--self-test` 的 trap 变量 MUST 是脚本级** —— 实测：`local` 变量在 EXIT trap 执行时
+  已销毁 ⇒ ⇒ `set -u` 下报 `unbound variable`（功能仍对，但那是错误用法，会掩盖真的 trap 故障）。
+- **C3 的 ctest target 提取 MUST 认两种形态** —— ① 字面 `add_test(NAME <t>`；
+  ② **helper 形态**（`riscv_mini_catch_test(<t> <src.cpp>)`）⇒ ⇒ 只认 ① 会漏掉
+  **整条 riscv-mini 线**（实测：mini 线被判「零 ctest target」）。
+
+**T2.3 的实测**：`verify_guard_reachability.sh` **PASS**（**60 个被引用脚本** · 登记表双向 1:1
+且排除类型逐字派生一致）；登记表由 `--render` 派生（禁手改）⇒ 本批按 render 输出替换表格段。
 
 ## P3 · B 类 8 脚本按产品线参数化
 

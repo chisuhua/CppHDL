@@ -1,0 +1,15 @@
+# examples/ 下的**非产品线** example 组（ADR-078 · S4c-0）
+#
+# ⚠️ 本清单是「**非**产品线」的**显式否认**，不是产品线的登记面
+#    （产品线的唯一真相 = 各目录内的 `.rddf-line.yaml`）。
+#
+# ⚠️ 为什么存在：元护栏 C2 的「归属完备性」要能抓「**新建产品线目录却忘登记**」
+#    ⇒ ⇒ 若判据是「examples 下每个目录 MUST 属某产品线」⇒ ⇒ 下面这些**与 RV32I
+#    产品线无关**的总线/组件级 demo 会**恒红** ⇒ ⇒ 故显式列出（增量极小：
+#    新增非产品线 demo 组时才加一行）。
+#
+# 格式：<目录>	TAB	<为什么它不是产品线>
+examples/axi4	总线段 demo（AXI4 / AXI4-Lite 互连与外设的产品级 example，无 RV32I 核）
+examples/stream	chlib stream 组合子 demo（无 RV32I 核）
+examples/spinalhdl-ported	SpinalHDL 移植语料（逐组件对照，无 RV32I 产品形态）
+examples/verilator	Verilator 后端 demo（后端验证载体，非产品线）

@@ -247,6 +247,21 @@ jobs:
       shell: bash
       run: scripts/verify_test_counts.sh
 
+    - name: Verify product lines registry (ADR-078 · S4c-0)
+      # 产品线元护栏：C1 发现集 == 登记集 · C2 marker 完备性 + 归属 · C3 覆盖完备性。
+      # 为什么需要它：纯自动发现（examples/*/ glob）会「**静默不覆盖新线**」——
+      # 正是本仓最恐惧的失败族（见根 AGENTS.md 的 CI 锚点段）；手写中央登记表会在
+      # 多会话并行下冲突。=> per-line marker（单点真相在各自目录）+ 本护栏三重闭合。
+      # 判据实现：scripts/lib/product_lines.py · 投毒自证：--self-test（5 条）
+      shell: bash
+      run: scripts/verify_product_lines.sh
+
+    - name: Verify product lines registry guard self-test
+      # 5 条投毒 MUST 全部转红（改 line / 改 layer / 断 members / 断 adrs / 删 marker）
+      # 且还原后基线 MUST 复绿 => 否则判据无判别力（本仓护栏的统一纪律）。
+      shell: bash
+      run: scripts/verify_product_lines.sh --self-test
+
     - name: Verify root AGENTS.md size cap
       # Root AGENTS.md is injected into EVERY agent session's context =>
       # its byte size IS the resident token cost. It once grew to 393,052 B /
