@@ -15,9 +15,14 @@
 | phase-2 | 高级特性与 JIT 编译器 | archived | 2026-05 | 2026-06 |
 | phase-3 | Verilator 后端集成与 Verilog codegen | archived | 2026-06 | 2026-09 |
 | phase-4 | dual-backend 测试完整化 + cache 子系统重建 | archived | 2026-10 | 2026-10 |
-| phase-5 | riscv-mini 收敛 + SoC 双路 parity + RV32I ISA 语义边界 + 平台矩阵 | done | 2026-10 | 2026-11 |
+| phase-5 | riscv-mini 收敛 + SoC 双路 parity + RV32I ISA 语义边界 + 平台矩阵 | archived | 2026-10 | 2026-11 |
 | phase-6 | 层次化父侧落点收口 + mem 端口实参跨层支持 + RV32I ISA 缺口 + PortPolicy 三档分化 | active | 2026-11 | |
 <!-- AUTO-INDEX -->
+
+> ⚠️ **Phase 表 `Status` 列 ≠ phase 文件 frontmatter `status:`**（**两套词表 · 语义不同**）：
+> · **本表**（`## Phase Skeleton`）的 `Status` 走 schema 枚举 `active|deferred|completed|archived` ⇒ 已收口 phase 一律写 `archived`（2026-11-27 订正：phase-5 原写 `done` ⇒ 越界 ⇒ 改 `archived`）。
+> · **`.rddf/roadmap/phases/phase-*.md` 的 frontmatter** 走 **fragment loader** 语义：`archived` ⇒ **被逐出 fragment 索引**（`_lib/roadmap_state.py::load_fragments` 默认排除）⇒ ⇒ 已收口但**仍需出现在 fragment 索引**的 phase 必须写 **`done`**（phase-1..5 现状）。
+> ⇒ ⇒ **禁**把 phase 文件的 `status: done`「统一」成 `archived`（会触发 doctor `roadmap-phases.index-drift` × N）。
 
 ## Fragment Index (auto-generated)
 
