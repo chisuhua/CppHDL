@@ -1,0 +1,27 @@
+# 产品线 × 护栏脚本的处置表（ADR-078 D8 · S4c-0）
+#
+# ⚠️ **本表是「逐个处置」的登记面**（C2 判据：行数 MUST == 14 = 12 sh + 2 py）
+#    ⇒ ⇒ 漏登记一个写死产品线路径的脚本 ⇒ 元护栏红。
+# ⚠️ **每行 MUST 四要素齐全**：写死内容 · 分类（A|B）· S4c-0 的动作 · 何时才需按线分组
+#    ⇒ ⇒ 「只写『参数化护栏』一句」⇒ ⇒ AC5 不可判 ⇒ review 阻塞。
+#
+# 分类：
+#   A = 该脚本的语料/产物**只属于 mini 线**（full 线不复制该语料）⇒ **只登记不改**
+#   B = 该脚本会扫到 / 需按线分组 ⇒ **MUST 参数化**
+#
+# 列：script · kind · hardcoded（写死内容摘要）· class · action（S4c-0 的动作）· grouped_when（何时才需按线分组）
+
+scripts/probe_r21_hier_granularity.sh	sh	-I examples/riscv-mini/src（include 路径）	A	只登记不改（一次性探针）	不分组
+scripts/rv32i_rtl_sim_env.sh	sh	examples/riscv-mini/tb_rv32i_soc.sv（TB 路径）	A	只登记不改（mini 线专有 TB）	不分组
+scripts/verify_dtcm_read_timing.sh	sh	build/examples/riscv-mini/tb_rv32i_soc（发射器）	A	只登记不改（mini 线专有场景）	不分组
+scripts/verify_rv32i_fw_init_rtl.sh	sh	build/examples/riscv-mini/tb_rv32i_soc（发射器）	A	只登记不改（mini 线专有场景）	不分组
+scripts/verify_rv32i_elf_e2e.sh	sh	MINI_BIN / SOC_BIN（两个具体 binary）	A	只登记不改（full 线有对应物时再加行）	full 线有 ELF 流程时另议
+scripts/verify_rv32i_official_rtl.sh	sh	riscv-tests 语料目录 + tb_rv32i_official.sv	A	只登记不改（语料在 mini 线）	不分组
+scripts/verify_no_duplicate_rv32i_headers.sh	sh	34 处：C1/C4/C5/C6 扫描面写死 examples/riscv-mini/src/**	B	扫描面改为按 marker 发现；C1 因 full 线 basename 独立而天然绿；C6 快照仍只对 mini	C6 的 per-line 快照 => S4c-1
+scripts/verify_riscv_soc_core_ports.sh	sh	10 处：AGENTS_MD=examples/riscv-mini/AGENTS.md + 53 行表 + V4 basename 规则	B	加 --line 参数；full 线无核 => 本脚本对 full 线无对象（不误红）	53 行表的 per-line 版本 => S4c-1
+scripts/verify_example_assertion_quality.sh	sh	24 处：测试源清单 + 每源的期望描述	B	new 线的测试源 MUST 登记（漏登记 => 红）	持续
+scripts/verify_example_test_wiring.sh	sh	examples/** 的归属守恒（CMake 声明 vs 实际测试源）	B	守恒面按 marker 发现（full 线测试源 MUST 在其 CMake 注册）	持续
+scripts/verify_examples_rtl_sim.sh	sh	tsv 登记 + self-test 临时清单行	B	S4c-0 的 full 线无 RTL 产物 => tsv 无行是合法的；「有产物但未登记」=> 红	full 线进 tsv => S4c-1 起
+scripts/verify_hierarchical_rtl.sh	sh	5 处：RV32I_HIER_EMITTER（已可覆盖）+ 期望集推导源	B	无需改（S4c-0 的 full 线不参与层次化判据）	full 线语料 => S4c-1 起
+scripts/lib/rv32i_obs_vector.py	py	CORE_HEADER / VECTOR_SRC（写死 mini 的核头与观测向量源）	B	改为按 marker 发现核头；找不到 => 跳过而非误红	full 线的向量源 => S4c-1
+scripts/lib/dual_backend_parity.py	py	2 处：测试源清单 + 全局锚点	B	清单按 marker 发现；锚点改按产品线分组	full 线有 dual pair => S4c-1 起

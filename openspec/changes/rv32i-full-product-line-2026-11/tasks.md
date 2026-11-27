@@ -16,13 +16,19 @@
 
 ## P1 · per-line marker + 登记面
 
-- [ ] **T1.1** 4 条线各建 `.rddf-line.yaml`（`examples/riscv-mini` · `examples/riscv-soc` ·
-      `examples/riscv-full` · `examples/riscv-full-soc`）⇒ 字段 = `line` / `layer` / `adrs` / `specs`
-      ⇒ 且 `line` == 目录名（design §2）
-- [ ] **T1.2** `scripts/gen_product_lines.py`（生成器 + `--check` 模式）⇒ 输出
+- [x] **T1.1** **每条产品线恰好一个** `.rddf-line.yaml`（放在该线的 **IP 级目录** · 产品线的锚点）：
+      `examples/riscv-mini/.rddf-line.yaml`（mini 线 · `members` = 迷你 + `examples/riscv-soc`）·
+      `examples/riscv-full/.rddf-line.yaml`（full 线 · `members` = full + `examples/riscv-full-soc`）
+      ⇒ 字段 = `line` / `layer`（恒 `ip`）/ `members` / `adrs` / `specs`
+      ⇒ 且 `line` == 所在目录名（design §2）
+      ⚠️ **实施期订正**（2026-11-27）：初稿把 marker 放「每个成员目录一个」⇒ 但 C2 的
+      「`line` == 目录名」对 SoC 级目录**不成立**（`examples/riscv-soc` 的 `line` 是
+      `riscv-mini`）⇒ ⇒ 改为「每线一个 + `members` 列出全部成员目录」+ 新增「归属完备性」
+      子判据（`examples/` 下每个产品线成员目录 MUST 有归属）
+- [x] **T1.2** `scripts/gen_product_lines.py`（生成器 + `--check` 模式）⇒ 输出
       `.rddf/checks/product-lines.md`（登记面：产品线表 · 锚点分组表 · 脚本处置表指针）
       ⇒ **生成物不含任何手写内容**
-- [ ] **T1.3** `scripts/product_line_scope.tsv`（处置表 · **14 行** = 12 sh + 2 py）
+- [x] **T1.3** `scripts/product_line_scope.tsv`（处置表 · **14 行** = 12 sh + 2 py）
       ⇒ 每行含：脚本 · 写死内容 · 类（A|B）· 处置 · S4c-0 的动作
       ⇒ ⚠️ **B 类 8 个的动作各不相同**（design §5）⇒ MUST 逐条落
 
@@ -94,6 +100,18 @@
       ⇒ 归档到 `openspec/changes/archive/2026-11-27-rv32i-full-product-line-2026-11/`
 
 ---
+
+## 实施期发现（2026-11-27 · P1 期间）
+
+⚠️ **实施顺序 MUST 调整**（P1 期间实测得出）：
+
+1. **P5 的 full 线骨架 MUST 提前到 P2 之前** —— 元护栏的 **C3（每条产品线 MUST 有至少一个
+   可执行的验证载体）**的载体 = 「该线的 ctest target 归属」⇒ ⇒ full 线 MUST 已有**至少一个**
+   ctest target ⇒ ⇒ 否则 C3 恒红 ⇒ ⇒ 顺序改为 **P1 → P5（骨架）→ P3（B 类参数化）→ P2（元护栏）**。
+2. **P3 的 B 类参数化 MUST 在 full 线骨架之后** —— 新 example 目录一旦存在，`verify_example_test_wiring`
+   / `verify_example_assertion_quality` 会因**未登记**而红 ⇒ ⇒ 参数化与骨架**同批**才自洽。
+3. **根 `AGENTS.md` 的 5 个 CI 锚点当前仍是单值** ⇒ 生成器登记面 §2 标「**未归组**（T4.2）」
+   ⇒ ⇒ 生成器**同时容忍**单值 / 分组两种形态 ⇒ ⇒ T4.2 之前生成器不会误红。
 
 ## 硬约束
 

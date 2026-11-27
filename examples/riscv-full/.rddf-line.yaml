@@ -1,0 +1,27 @@
+# 产品线 marker（ADR-078 D8 · S4c-0）
+#
+# ⚠️ **一条产品线 = 两个成员目录**（IP 级 + SoC 级）⇒ 本文件放在该线的 **IP 级目录**
+#    （产品线的锚点）⇒ ⇒ `line` == 所在目录名。
+# ⚠️ 本文件是**该产品线的唯一真相** ⇒ 中央登记面（`.rddf/checks/product-lines.md`）
+#    是**从本文件派生**的派生物。
+#
+# ⚠️ **本线当前是「空壳」**（S4c-0 范围）：**零功能** —— 无核、无外设、无互连。
+#    核与取指总线化 / I-L1 在 **S4c-1**；DMA boot 在 **S4c-2**；full 互连 + L2 在 **S4c-3**
+#    （分批表 = ADR-078 的 D8 · 唯一权威）。
+
+line: riscv-full
+layer: ip
+
+# 该产品线的**全部**成员目录（每个 MUST 存在）
+members:
+  - examples/riscv-full
+  - examples/riscv-full-soc
+
+# 关联 ADR（`docs/adr/ADR-NNN-*.md` MUST 存在）
+adrs:
+  - ADR-078
+
+# 关联 capability（`openspec/specs/<name>/` MUST 存在）
+specs:
+  - rv32i-product-lines
+  - rv32i-data-forwarding

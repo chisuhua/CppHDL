@@ -34,9 +34,11 @@
 
 ### A. **per-line marker**（每条产品线自带真相）
 
-每条产品线目录放一个 `.rddf-line.yaml`：字段 = `line`（标识）· `layer`（`ip` | `soc`）·
+**每条产品线恰好一个** `.rddf-line.yaml`，放在该线的 **IP 级目录**（产品线的锚点）：
+字段 = `line`（标识，== 所在目录名）· `layer`（恒 `ip`）· `members`（该线的**全部**成员目录）·
 `adrs`（关联 ADR 列表）· `specs`（关联 capability 列表）。
-⇒ 4 条线（`riscv-mini` / `riscv-soc` / `riscv-full` / `riscv-full-soc`）各一个 ⇒ **单点真相在各自目录内**。
+⇒ 一条产品线 = **两个成员目录**（IP 级 + SoC 级）⇒ 例：产品线 `riscv-mini` =
+`examples/riscv-mini` + `examples/riscv-soc` ⇒ ⇒ **单点真相在该线的 IP 级目录内**。
 
 ### B. **生成器 + 登记面**（派生物 ⇒ 无手写中央表）
 
@@ -96,8 +98,10 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
 
 ## 验收标准
 
-- [ ] **AC1 per-line marker**：4 条线各有 `.rddf-line.yaml` 且必填字段完备（`layer` ∈ {`ip`,`soc`} ·
-      `adrs` 指向的 ADR 文件**存在**）⇒ 元护栏 C2 绿
+- [ ] **AC1 per-line marker**：**每条产品线恰好一个** `.rddf-line.yaml`（在其 IP 级目录）
+      且必填字段完备（`line` == 所在目录名 · `layer` == `ip` · `members` 每个目录**存在** ·
+      `adrs` 指向的 ADR 文件**存在**）⇒ 且 `examples/` 下**每个**产品线成员目录**有归属**
+      （是某 marker 的 `members` 成员、或自带 marker）⇒ 元护栏 C2 绿
 - [ ] **AC2 登记面是派生物**：`.rddf/checks/product-lines.md` **由 marker 生成** ⇒
       `scripts/gen_product_lines.py --check` 绿 ⇒ ⇒ 手工改生成物 ⇒ 红
 - [ ] **AC3 元护栏存在且有判别力**：`scripts/verify_product_lines.sh` 的 C1–C4 全绿，

@@ -18,18 +18,29 @@
 
 ## 2. marker schema
 
+⚠️ **一条产品线 = 两个成员目录**（IP 级 + SoC 级）⇒ 例：产品线 `riscv-mini` 含
+`examples/riscv-mini`（IP 级）+ `examples/riscv-soc`（SoC 级）⇒ ⇒ **marker 放在该线的
+**IP 级目录**（产品线的锚点）**，**每条产品线恰好一个** ⇒ ⇒ 「发现集」= marker 集。
+
 ```yaml
-# examples/riscv-full-soc/.rddf-line.yaml
-line: riscv-full-soc        # 唯一标识（= 目录名）
-layer: soc                  # ip | soc
-adrs:                       # 关联 ADR（文件 MUST 存在 ⇒ C2 可判）
-  - ADR-078
-specs:                      # 关联 capability
-  - rv32i-product-lines
+# examples/riscv-mini/.rddf-line.yaml
+line: riscv-mini        # 产品线标识 == 所在目录名（锚点 = IP 级目录）
+layer: ip               # 本 marker 所在目录的层（恒为 ip · 锚点语义）
+members:                # 该产品线的全部成员目录（每个 MUST 存在）
+  - examples/riscv-mini
+  - examples/riscv-soc
+adrs:                   # 关联 ADR（文件 MUST 存在 ⇒ C2 可判）
+  - ADR-035
+  - ADR-046
+specs:                  # 关联 capability（目录 MUST 存在）
+  - rv32i-isa-semantics
 ```
 
-**必填字段** = `line` / `layer` / `adrs`（`specs` 可空）。
-**`line` MUST == 所在目录名**（⇒ 目录改名 ⇒ 必改 marker ⇒ C2 红 ⇒ 改名不可能静默发生）。
+**必填字段** = `line` / `layer` / `members` / `adrs`（`specs` 可空）。
+**C2 的四条子判据**：`line` == 所在目录名（⇒ 目录改名必改 marker ⇒ 改名不可能静默）·
+`layer` ∈ {`ip`}（锚点语义）· `members` 列的**每个目录 MUST 存在** · `adrs` 指向的 ADR 文件 MUST 存在。
+**归属完备性**（C2 的第五子判据）：`examples/` 下的**每个**产品线成员目录 MUST 要么是某 marker 的
+`members` 成员、要么**自己带 marker** ⇒ ⇒ 「新建了产品线目录却忘了登记」当场红。
 
 ## 3. 生成器与登记面
 
