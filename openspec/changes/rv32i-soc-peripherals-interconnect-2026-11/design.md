@@ -90,8 +90,10 @@ AR/R: 与 AW/W/B 同构（读侧独立：`rd_owner` / `err_r_pending`）
 ```
 
 - **AW 的 `decode(addr)` 取自 mux 之后**（被选中 master 的 payload）⇒ 路由与授权一致。
+- **W 只在 `wr_active_i` 期间有效**（AW 握手前 `wready=0` ⇒ master 持有 W，AXI 合法）；
+  `wr_active` 由 AW `fire` 置位、B `fire` 清零。
 - **W 用 `wr_owner`（按 slave）**，B 用同一个 owner 反查 ⇒ W/B 跟随**写路由锁存**。
-- **R 用 `rd_owner`** ⇒ 读响应跟随**读路由锁存**。
+- **R 用 `rd_owner`** ⇒ 读响应跟随**读路由锁存**；R 也只在 `rd_active_i` 期间有效。
 - `ERR` 路的 AW/AR 立即 `ready=1`；W 就地消费；B/R 由**本地 DECERR 流**产生
   （`resp = 2'b11` · `rdata = 0`），保持到 `ready`。
 
