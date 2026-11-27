@@ -12,9 +12,15 @@
   ⇒ ⇒ **T2 已解禁**（`rv32i_mem_map.h` 已改）
 - [x] **T0.2** D-3 = 外设物理引脚**本批不上根端口** **已确认**（2026-11-27 · 用户裁决）
   ⇒ ⇒ **T3.2 已解禁并完成**
-- [ ] **T0.3** 确认 `AxiLiteMatrix2x2` 在 `examples/axi4` 仍被使用 ⇒ **不删**
-- [ ] **T0.4** 记录基线：核级 24 判据 · SoC 10 判据 · `tb_riscv_soc` 的 `checks=10` ·
+- [x] **T0.3** 确认 `AxiLiteMatrix2x2` 在 `examples/axi4` 仍被使用 ⇒ **不删**
+      ⇒ ✅ 实测 `examples/axi4/axi_soc_example_top.h:196` 仍实例化
+      （`ch_layer<AxiLiteMatrix2x2<32,32>> matrix`）· 且 `tb_axi_soc_example.cpp:71` 的
+      module 期望集仍含 `AxiLiteMatrix2x2_32_32_` ⇒ ⇒ **保留**（S4b 只在 SoC 侧替换）
+- [x] **T0.4** 记录基线：核级 24 判据 · SoC 10 判据 · `tb_riscv_soc` 的 `checks=10` ·
       根端口 10 · 层次化 module 12
+      ⇒ ✅ 基线落 `.rddf/checks/soc-rtl-expectations.md#riscv-soc`（§1 产物形态 / §3 判据表）
+      + `.rddf/checks/examples-rtl-expectations.md`（核级 24 合计行）
+      ⇒ ⇒ P5 复测：核级仍 **24/24**（flat + hier）· 根端口仍 **10** · module **12 → 17**（P3）
 
 ## P1 · 新 IP（TDD · 先写失败用例 · **数据面用 chlib stream**）
 
@@ -132,8 +138,10 @@
 
 ## P6 · 归档
 
-- [ ] **T6.1** `openspec validate rv32i-soc-peripherals-interconnect-2026-11 --strict`
-- [ ] **T6.2** `scripts/verify_openspec_delta.sh`（本 change 有 ADDED ×1）
+- [x] **T6.1** `openspec validate rv32i-soc-peripherals-interconnect-2026-11 --strict`
+      ⇒ ✅ `Change 'rv32i-soc-peripherals-interconnect-2026-11' is valid`
+- [x] **T6.2** `scripts/verify_openspec_delta.sh`（本 change 有 ADDED ×1）
+      ⇒ ✅ `OpenSpec delta 自检通过（4 条全绿）`
 - [ ] **T6.3** `openspec archive … --yes`
 
 ## 硬约束
