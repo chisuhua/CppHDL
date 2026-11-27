@@ -1,3 +1,20 @@
+## 2026-11-27 — S4b P3：SoC 侧换成 **2×6 Lite 互联** + 6 个 MMIO 外设（D-3 = 本批不引物理引脚）
+
+change `rv32i-soc-peripherals-interconnect-2026-11`（P3 = SoC 装配；D-3 已由用户裁决）。
+
+- `SocLiteMap`（2 窗口）→ **`SocCrossbarMap`**（**8 窗口** ⇒ 库层 8 段逐段派生）
+  + **8 条 `static_assert`**（逐段 == 库层表 ⇒ 手写基址字面量会**编译失败**）
+  + 7 条 `target` 意图断言（CLINT/DMA → `kErr`；6 个真实外设各落一个从口）。
+- `AxiLiteMatrix2x2` → **`AxiLiteCrossbar`**（2 主 × 6 从）⇒ ⇒ 6 个外设全接：
+  s0 GPIO · s1 UART · s2 TIMER · s3 SPI · s4 I2C · s5 PWM。
+- **D-3 = 本批不引物理引脚**：5 个新外设的物理输入 tie 常量（`uart_rx` / `spi_miso` /
+  `i2c_sda_in` / `i2c_scl_in`）· 物理输出不接根 ⇒ ⇒ **根端口面保持 10 根**
+  （GPIO 的 `gpio_in` / `gpio_out` 是 S4a 既有根端口 ⇒ 不动）。
+- 产物形态：module 集合 **12 → 17**（12 − 1 矩阵 + 1 互联 + 5 外设）· 顶层端口仍 **10**。
+- 判据：`tb_riscv_soc` **checks=10 fails=0**（A1–A9 全绿，含 A7 MMIO 写值 · A8 DECERR 不挂死 ·
+  A9 MMIO 读值回路）· `--check-products` **PRODUCTS-CHECK: PASS**（module 集 / 端口面 / lint /
+  双形态等价）· `verify_examples_rtl_sim.sh` 全绿。
+
 ## 2026-11-27 — S4b P2：MMIO 地址表追加 **TIMER 段**（D-1）+ `AddressDecoder` 补 `timer_cs`
 
 change `rv32i-soc-peripherals-interconnect-2026-11`（P2 = 库层地址表；D-1 已由用户确认）。

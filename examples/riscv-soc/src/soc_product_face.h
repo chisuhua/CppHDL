@@ -23,9 +23,13 @@ namespace riscv_soc {
 
 /// **冻结的产物 module 期望集**（ADR-077 V2 · **手推**）
 ///
-/// = 根 1（`top`）+ SoC 级 3 个 `ch_layer`（`Rv32iCoreTop` / `SocTraceCounter` +
-/// S4a 的 2 个：2×2 Lite 互联、GPIO 外设）+ 核复合体内部 7 个 `ch_layer`
-/// （`rv32i_pipeline.h` 的七个 stage / HMU / 前推 mux）⇒ ⇒ **12**。
+/// = 根 1（`top`）+ SoC 级 8 个 `ch_layer`（`Rv32iCoreTop` / `SocTraceCounter` +
+/// S4b 的 7 个：2×6 Lite 互联 + **6 个** MMIO 外设）+ 核复合体内部 7 个 `ch_layer`
+/// （`rv32i_pipeline.h` 的七个 stage / HMU / 前推 mux）⇒ ⇒ **17**。
+///
+/// ⚠️ **S4b 的口径订正**：S4a 的 12 个里含 `AxiLiteMatrix2x2` ⇒ ⇒ S4b 把它**换成**
+///   `AxiLiteCrossbar`（**1 换 1**）**并新增 5 个外设**（UART/TIMER/SPI/I2C/PWM）
+///   ⇒ ⇒ **12 − 1 + 1 + 5 = 17**（不是「12 + 6 = 18」—— 那把「替换」当成了「新增」）。
 ///
 /// ⚠️ 名字 MUST 与 `ch_layer<T>` 的**显式类型名实参**逐字一致（那是产物 module 名）。
 /// ⚠️ **禁**从产物输出抄（抄了 = 判据自证 ⇒ 恒绿）。
@@ -41,9 +45,14 @@ inline const std::vector<std::string> &product_modules() {
         "WbStage",
         "HazardUnit",
         "ForwardingMux_32_",
-        // ── S4a（ADR-077 V2 的 10 → **12**）──
-        "AxiLiteMatrix2x2",   // 2×2 Lite 互联（SoC 级 ch_layer）
-        "AxiLiteGpio",        // GPIO 外设（SoC 级 ch_layer）
+        // ── S4b（ADR-077 V2 的 12 → **17**）──
+        "AxiLiteCrossbar",    // 2×6 Lite 互联（SoC 级 ch_layer · 替掉 S4a 的 2×2 矩阵）
+        "AxiLiteGpio",        // MMIO 外设（SoC 级 ch_layer）
+        "AxiLiteUart",
+        "AxiLiteTimer",
+        "AxiLiteSpi",
+        "AxiLiteI2c",
+        "AxiLitePwm",
     };
     return kModules;
 }

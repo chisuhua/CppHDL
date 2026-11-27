@@ -10,8 +10,8 @@
 
 - [x] **T0.1** D-1 = 追加 `kTimer` 段（`0x8010_7000`）**已确认**（2026-11-27 · 用户「继续 P2」）
   ⇒ ⇒ **T2 已解禁**（`rv32i_mem_map.h` 已改）
-- [ ] **T0.2** D-3 = 外设物理引脚**本批不上根端口** **已确认**
-  ⇒ 未确认 ⇒ **T3.2 STOP**（装配前必须定）；T1 / T2 不受影响
+- [x] **T0.2** D-3 = 外设物理引脚**本批不上根端口** **已确认**（2026-11-27 · 用户裁决）
+  ⇒ ⇒ **T3.2 已解禁并完成**
 - [ ] **T0.3** 确认 `AxiLiteMatrix2x2` 在 `examples/axi4` 仍被使用 ⇒ **不删**
 - [ ] **T0.4** 记录基线：核级 24 判据 · SoC 10 判据 · `tb_riscv_soc` 的 `checks=10` ·
       根端口 10 · 层次化 module 12
@@ -68,13 +68,20 @@
       + `docs/CHANGELOG.md`（1 条）+ `include/cpu/AGENTS.md` 的自述计数（7601 → **7624**）
       ⇒ ⇒ `AddressDecoder` 的 `timer_cs` **具名** ⇒ 端口命名棘轮**零新增债**
 
-## P3 · SoC 装配
+## P3 · SoC 装配（✅ 已闭）
 
-- [ ] **T3.1** `SocCrossbarMap`（8 窗口，派生）+ 8 条 `static_assert`（逐段 == 库层表）
-- [ ] **T3.2** `AxiLiteMatrix2x2` → `AxiLiteCrossbar<2, 6, SocCrossbarMap>`
-      + 6 个外设接线 + m1 tie 0 + 物理输入 tie 常量
-- [ ] **T3.3** `--check-products` 绿：module 数 = 12 + 6 = **18** · 根端口 **10** ·
-      未驱动输入 **0** · lint 白名单（物理输出无消费者）
+- [x] **T3.1** `SocCrossbarMap`（**8 窗口**，逐段派生自库层表）+ **8 条 `static_assert`**
+      （逐段 base/size == 库层表 ⇒ 手写基址字面量 ⇒ **编译失败**）+ 7 条 `target` 意图断言
+      （CLINT/DMA → `kErr`；GPIO/UART/TIMER/SPI/I2C/PWM → s0..s5）
+- [x] **T3.2** `AxiLiteMatrix2x2` → `AxiLiteCrossbar<SocCrossbarMap>` + **6 个外设**接线
+      （19 根 × 6）· m1（DMA 预留）tie 0 · 物理输入 tie 常量（D-3 = **本批不引**）
+      ⚠️ **方向按 AXI4-Lite 角色**：主→从（awaddr/awprot/awvalid/wdata/wstrb/wvalid/
+      **bready**/araddr/arprot/arvalid/**rready**）与从→主（**awready/wready/bresp/bvalid/
+      arready/rdata/rresp/rvalid**）**相反** ⇒ ⇒ 本批踩过一次（接反 ⇒ 互连看不到从设备的
+      响应 ⇒ MMIO 事务挂死 ⇒ A3/A4/A7/A9 全红）⇒ ⇒ 方向已写进代码注释
+- [x] **T3.3** `--check-products` **PRODUCTS-CHECK: PASS**（module 集 **17** · 根端口 **10** ·
+      未驱动输入 **0** · lint 干净 · 双形态等价 ok）⇒ ⇒ `tb_riscv_soc` **checks=10 fails=0**
+      ⇒ ⇒ `verify_examples_rtl_sim.sh` 全绿（⑧' 层次化 module 数 17 · ④″ 产物级判据）
 
 ## P4 · 判据（TDD）
 
@@ -107,4 +114,4 @@
 1. **T1 必须先于 T3**（IP 语义先独立判据，再进 SoC）。
 2. **T2 必须先于 T3.1**（窗口派生要读得到 `kTimer`）。
 3. **T4.1 必须先于 T4.2**（先见红）。
-4. ✅ **D-1 已确认**（2026-11-27）⇒ T2 已闭 · ⚠️ **D-3 未确认 ⇒ T3.2 STOP**（T1/T2 已闭）。
+4. ✅ **D-1 / D-3 均已确认**（2026-11-27）⇒ T2 / T3 已闭 ⇒ ⇒ 剩余 = **P4（外设回环判据）**。

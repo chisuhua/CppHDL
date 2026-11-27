@@ -22,8 +22,13 @@
 #include "component.h"
 #include "soc_trace_counter.h"
 #include "cpu/riscv/rv32i_mem_map.h"      // MMIO 段基址（单一真相 · G-6）
-#include "axi4/axi4_lite_matrix.h"        // 2×2 Lite 互联（s0 = GPIO）
-#include "axi4/peripherals/axi_gpio.h"    // 首个 MMIO 外设（S4a 只接它）
+#include "axi4/axi_lite_crossbar.h"      // 2×6 Lite 互联（S4b：chlib stream 数据面）
+#include "axi4/peripherals/axi_gpio.h"    // MMIO 外设（6 个 · S4b 全接）
+#include "axi4/peripherals/axi_uart.h"
+#include "axi4/peripherals/axi_timer.h"
+#include "axi4/peripherals/axi_spi.h"
+#include "axi4/peripherals/axi_i2c.h"
+#include "axi4/peripherals/axi_pwm.h"
 
 // 核复合体住在 `examples/riscv-mini/src/`（ADR-046 / ADR-077 D1）
 // ⇒ CMake 侧以 target_include_directories 注入该目录（本文件不带 examples/ 前缀）。
@@ -37,19 +42,68 @@ namespace riscv_soc {
 
 using namespace ch::core;
 
-/// **Lite 互联的地址映射**（S4a · G-6：基址**派生**自库层地址表 ⇒ ⇒ 禁手写字面量）
+/// **Lite 互联的地址映射**（S4b · G-6/D-1：基址与容量**全部派生**自库层地址表）
 ///
-/// · `windows[0]` = GPIO 段（`kGpio`）⇒ ⇒ **唯一接上外设的从口**（s0）
-/// · `windows[1]` = **最高 4 KB**（`0xFFFF_F000`）⇒ ⇒ **核永不发该地址**
-///   ⇒ ⇒ s1 永不被选中 ⇒ ⇒ s1 的 8 根输入 tie 0 是**可证明的**死接线
-///   ⇒ ⇒ ⚠️ **禁**用低位窗口（如 `{0, 4 KB}`）—— 字节地址 0 的访问会被路由到
-///   **未接的 s1** ⇒ ⇒ 事务永不完成 ⇒ ⇒ 程序**挂死**（核级 `sw x3, 0(x0)` 就是这种访问）。
-struct SocLiteMap {
-    static constexpr axi4::AxiAddrWindow windows[2] = {
-        {riscv::kGpio.base, riscv::kGpio.size},
-        {0xFFFF'F000ull, 0x1000ull},
+/// ⚠️ **8 个窗口 = 库层表的 8 段**（`kClint`/`kUart`/`kGpio`/`kSpi`/`kI2c`/`kPwm`/
+///   `kDma`/`kTimer`）⇒ ⇒ **禁手写基地址字面量**（禁手写 ⇒ 由下面的 `static_assert` 钉住）。
+///
+/// · `target` = **从口索引**（0..5）或 `axi4::kErr`（⇒ 互连层自应答 DECERR）
+/// · 从口编号（G-6 的 SoC 装配口径）：
+///   `s0` = GPIO · `s1` = UART · `s2` = TIMER · `s3` = SPI · `s4` = I2C · `s5` = PWM
+/// · **CLINT 段**（设备在 S5）与 **DMA 段**（设备在 S4c）⇒ ⇒ 映射到 `kErr`
+///   ⇒ ⇒ **不留死从口**（不留「有窗口无设备」的洞 ⇒ 访问得到 DECERR 而非挂死）
+struct SocCrossbarMap {
+    static constexpr axi4::AxiLiteMapWindow windows[8] = {
+        {riscv::kClint.base, riscv::kClint.size, axi4::kErr},
+        {riscv::kUart.base, riscv::kUart.size, 1u},
+        {riscv::kGpio.base, riscv::kGpio.size, 0u},
+        {riscv::kSpi.base, riscv::kSpi.size, 3u},
+        {riscv::kI2c.base, riscv::kI2c.size, 4u},
+        {riscv::kPwm.base, riscv::kPwm.size, 5u},
+        {riscv::kDma.base, riscv::kDma.size, axi4::kErr},
+        {riscv::kTimer.base, riscv::kTimer.size, 2u},
     };
 };
+
+// ⚠️ **8 条 `static_assert` 逐段钉住「窗口 == 库层表」**（G-6 的**单一真相**护栏）
+//   ⇒ ⇒ 若有人把上面的派生基址换成**手写字面量**（例如 `0x80102000`）⇒ ⇒ **编译失败**
+//   ⇒ ⇒ 而不是「编译通过但地址路由错位」的静默漂移。
+static_assert(SocCrossbarMap::windows[0].base == riscv::kClint.base &&
+                  SocCrossbarMap::windows[0].size == riscv::kClint.size,
+              "窗口 0 MUST 等于库层表 kClint");
+static_assert(SocCrossbarMap::windows[1].base == riscv::kUart.base &&
+                  SocCrossbarMap::windows[1].size == riscv::kUart.size,
+              "窗口 1 MUST 等于库层表 kUart");
+static_assert(SocCrossbarMap::windows[2].base == riscv::kGpio.base &&
+                  SocCrossbarMap::windows[2].size == riscv::kGpio.size,
+              "窗口 2 MUST 等于库层表 kGpio");
+static_assert(SocCrossbarMap::windows[3].base == riscv::kSpi.base &&
+                  SocCrossbarMap::windows[3].size == riscv::kSpi.size,
+              "窗口 3 MUST 等于库层表 kSpi");
+static_assert(SocCrossbarMap::windows[4].base == riscv::kI2c.base &&
+                  SocCrossbarMap::windows[4].size == riscv::kI2c.size,
+              "窗口 4 MUST 等于库层表 kI2c");
+static_assert(SocCrossbarMap::windows[5].base == riscv::kPwm.base &&
+                  SocCrossbarMap::windows[5].size == riscv::kPwm.size,
+              "窗口 5 MUST 等于库层表 kPwm");
+static_assert(SocCrossbarMap::windows[6].base == riscv::kDma.base &&
+                  SocCrossbarMap::windows[6].size == riscv::kDma.size,
+              "窗口 6 MUST 等于库层表 kDma");
+static_assert(SocCrossbarMap::windows[7].base == riscv::kTimer.base &&
+                  SocCrossbarMap::windows[7].size == riscv::kTimer.size,
+              "窗口 7 MUST 等于库层表 kTimer");
+
+// ⚠️ **target 映射的意图钉死**（编译期 ⇒ ⇒ 段序写错 / 从口错位必红）
+static_assert(SocCrossbarMap::windows[0].target == axi4::kErr,
+              "CLINT 段（设备在 S5）MUST 指向 kErr（互连自应答 DECERR）");
+static_assert(SocCrossbarMap::windows[6].target == axi4::kErr,
+              "DMA 段（设备在 S4c）MUST 指向 kErr（互连自应答 DECERR）");
+static_assert(SocCrossbarMap::windows[2].target == 0u, "GPIO MUST 落 s0");
+static_assert(SocCrossbarMap::windows[1].target == 1u, "UART MUST 落 s1");
+static_assert(SocCrossbarMap::windows[7].target == 2u, "TIMER MUST 落 s2");
+static_assert(SocCrossbarMap::windows[3].target == 3u, "SPI MUST 落 s3");
+static_assert(SocCrossbarMap::windows[4].target == 4u, "I2C MUST 落 s4");
+static_assert(SocCrossbarMap::windows[5].target == 5u, "PWM MUST 落 s5");
 
 /// 根的**实例名**（≠ 产物 module 名 `top` —— 后者由发射入口配置决定）。
 inline constexpr const char *kSocRootName = "top";
@@ -100,15 +154,27 @@ public:
                      const std::vector<uint32_t> &>
             core{"core", "Rv32iCoreTop", itcm_init_, dtcm_init_};
         ch::ch_layer<SocTraceCounter> trace{"trace", "SocTraceCounter"};
-        // ── S4a（G-9）：MMIO 通道的 SoC 侧 = 2×2 Lite 互联 + 首个外设（GPIO）──
+        // ── S4b（G-9）：MMIO 通道的 SoC 侧 = **2×6 Lite 互联** + **6 个外设**──
         // ⚠️ 成层 IP ⇒ 实例处给**模块类型名**（层次化产物里可辨识）
-        ch::ch_layer<axi4::AxiLiteMatrix2x2<32, 32, SocLiteMap>>
-            lite{"lite", "AxiLiteMatrix2x2"};
+        // ⚠️ 互联的数据面 = `chlib` 的 stream 组合子（`stream_mux` / `stream_demux`）
+        //    ⇒ ⇒ SoC 侧**只做装配**，不碰反压转发。
+        ch::ch_layer<axi4::AxiLiteCrossbar<SocCrossbarMap>>
+            lite{"lite", "AxiLiteCrossbar"};
         ch::ch_layer<axi4::AxiLiteGpio<8>> gpio{"gpio", "AxiLiteGpio"};
+        ch::ch_layer<axi4::AxiLiteUart<>> uart{"uart", "AxiLiteUart"};
+        ch::ch_layer<axi4::AxiLiteTimer<>> timer{"timer", "AxiLiteTimer"};
+        ch::ch_layer<axi4::AxiLiteSpi<>> spi{"spi", "AxiLiteSpi"};
+        ch::ch_layer<axi4::AxiLiteI2c<>> i2c{"i2c", "AxiLiteI2c"};
+        ch::ch_layer<axi4::AxiLitePwm<>> pwm{"pwm", "AxiLitePwm"};
 
         // 复位（低有效）⇒ ⇒ 由高有效的 `ext_rst` 取反
         lite.io().rst_n <<= !io().ext_rst;
         gpio.io().rst_n <<= !io().ext_rst;
+        uart.io().rst_n <<= !io().ext_rst;
+        timer.io().rst_n <<= !io().ext_rst;
+        spi.io().rst_n <<= !io().ext_rst;
+        i2c.io().rst_n <<= !io().ext_rst;
+        pwm.io().rst_n <<= !io().ext_rst;
 
         // ── 核的 AXI4-Lite 主口 → 互联的 m0 面（**19 根直连，无适配层**）──
         lite.io().m0_awaddr  <<= core.io().axil_awaddr;
@@ -131,7 +197,12 @@ public:
         core.io().axil_rvalid <<= lite.io().m0_rvalid;
         lite.io().m0_rready  <<= core.io().axil_rready;
 
-        // ── 互联的 s0 面 → GPIO（**唯一的从设备**）──
+        // ── s0 面 ↔ GPIO（**19 根** · 从口编号见 `SocCrossbarMap`）──
+        // ⚠️ **方向 MUST 按 AXI4-Lite 的角色**（本批踩过一次 ⇒ 写进注释）：
+        //   · **主 → 从**（互联驱动）：awaddr/awprot/awvalid · wdata/wstrb/wvalid ·
+        //     **bready** · araddr/arprot/arvalid · **rready**
+        //   · **从 → 主**（从设备驱动）：**awready** · **wready** · **bresp/bvalid** ·
+        //     **arready** · **rdata/rresp/rvalid**
         gpio.io().awaddr  <<= lite.io().s0_awaddr;
         gpio.io().awprot  <<= lite.io().s0_awprot;
         gpio.io().awvalid <<= lite.io().s0_awvalid;
@@ -151,14 +222,151 @@ public:
         lite.io().s0_rresp   <<= gpio.io().rresp;
         lite.io().s0_rvalid  <<= gpio.io().rvalid;
         gpio.io().rready  <<= lite.io().s0_rready;
-
-        // ── GPIO 的物理面 → 根端口（`gpio_dir` / `irq` 本批**不引出** · G-5）──
+        // ── s1 面 ↔ UART（**19 根** · 从口编号见 `SocCrossbarMap`）──
+        // ⚠️ **方向 MUST 按 AXI4-Lite 的角色**（本批踩过一次 ⇒ 写进注释）：
+        //   · **主 → 从**（互联驱动）：awaddr/awprot/awvalid · wdata/wstrb/wvalid ·
+        //     **bready** · araddr/arprot/arvalid · **rready**
+        //   · **从 → 主**（从设备驱动）：**awready** · **wready** · **bresp/bvalid** ·
+        //     **arready** · **rdata/rresp/rvalid**
+        uart.io().awaddr  <<= lite.io().s1_awaddr;
+        uart.io().awprot  <<= lite.io().s1_awprot;
+        uart.io().awvalid <<= lite.io().s1_awvalid;
+        lite.io().s1_awready <<= uart.io().awready;
+        uart.io().wdata   <<= lite.io().s1_wdata;
+        uart.io().wstrb   <<= lite.io().s1_wstrb;
+        uart.io().wvalid  <<= lite.io().s1_wvalid;
+        lite.io().s1_wready <<= uart.io().wready;
+        lite.io().s1_bresp  <<= uart.io().bresp;
+        lite.io().s1_bvalid <<= uart.io().bvalid;
+        uart.io().bready  <<= lite.io().s1_bready;
+        uart.io().araddr  <<= lite.io().s1_araddr;
+        uart.io().arprot  <<= lite.io().s1_arprot;
+        uart.io().arvalid <<= lite.io().s1_arvalid;
+        lite.io().s1_arready <<= uart.io().arready;
+        lite.io().s1_rdata   <<= uart.io().rdata;
+        lite.io().s1_rresp   <<= uart.io().rresp;
+        lite.io().s1_rvalid  <<= uart.io().rvalid;
+        uart.io().rready  <<= lite.io().s1_rready;
+        // ── s2 面 ↔ TIMER（**19 根** · 从口编号见 `SocCrossbarMap`）──
+        // ⚠️ **方向 MUST 按 AXI4-Lite 的角色**（本批踩过一次 ⇒ 写进注释）：
+        //   · **主 → 从**（互联驱动）：awaddr/awprot/awvalid · wdata/wstrb/wvalid ·
+        //     **bready** · araddr/arprot/arvalid · **rready**
+        //   · **从 → 主**（从设备驱动）：**awready** · **wready** · **bresp/bvalid** ·
+        //     **arready** · **rdata/rresp/rvalid**
+        timer.io().awaddr  <<= lite.io().s2_awaddr;
+        timer.io().awprot  <<= lite.io().s2_awprot;
+        timer.io().awvalid <<= lite.io().s2_awvalid;
+        lite.io().s2_awready <<= timer.io().awready;
+        timer.io().wdata   <<= lite.io().s2_wdata;
+        timer.io().wstrb   <<= lite.io().s2_wstrb;
+        timer.io().wvalid  <<= lite.io().s2_wvalid;
+        lite.io().s2_wready <<= timer.io().wready;
+        lite.io().s2_bresp  <<= timer.io().bresp;
+        lite.io().s2_bvalid <<= timer.io().bvalid;
+        timer.io().bready  <<= lite.io().s2_bready;
+        timer.io().araddr  <<= lite.io().s2_araddr;
+        timer.io().arprot  <<= lite.io().s2_arprot;
+        timer.io().arvalid <<= lite.io().s2_arvalid;
+        lite.io().s2_arready <<= timer.io().arready;
+        lite.io().s2_rdata   <<= timer.io().rdata;
+        lite.io().s2_rresp   <<= timer.io().rresp;
+        lite.io().s2_rvalid  <<= timer.io().rvalid;
+        timer.io().rready  <<= lite.io().s2_rready;
+        // ── s3 面 ↔ SPI（**19 根** · 从口编号见 `SocCrossbarMap`）──
+        // ⚠️ **方向 MUST 按 AXI4-Lite 的角色**（本批踩过一次 ⇒ 写进注释）：
+        //   · **主 → 从**（互联驱动）：awaddr/awprot/awvalid · wdata/wstrb/wvalid ·
+        //     **bready** · araddr/arprot/arvalid · **rready**
+        //   · **从 → 主**（从设备驱动）：**awready** · **wready** · **bresp/bvalid** ·
+        //     **arready** · **rdata/rresp/rvalid**
+        spi.io().awaddr  <<= lite.io().s3_awaddr;
+        spi.io().awprot  <<= lite.io().s3_awprot;
+        spi.io().awvalid <<= lite.io().s3_awvalid;
+        lite.io().s3_awready <<= spi.io().awready;
+        spi.io().wdata   <<= lite.io().s3_wdata;
+        spi.io().wstrb   <<= lite.io().s3_wstrb;
+        spi.io().wvalid  <<= lite.io().s3_wvalid;
+        lite.io().s3_wready <<= spi.io().wready;
+        lite.io().s3_bresp  <<= spi.io().bresp;
+        lite.io().s3_bvalid <<= spi.io().bvalid;
+        spi.io().bready  <<= lite.io().s3_bready;
+        spi.io().araddr  <<= lite.io().s3_araddr;
+        spi.io().arprot  <<= lite.io().s3_arprot;
+        spi.io().arvalid <<= lite.io().s3_arvalid;
+        lite.io().s3_arready <<= spi.io().arready;
+        lite.io().s3_rdata   <<= spi.io().rdata;
+        lite.io().s3_rresp   <<= spi.io().rresp;
+        lite.io().s3_rvalid  <<= spi.io().rvalid;
+        spi.io().rready  <<= lite.io().s3_rready;
+        // ── s4 面 ↔ I2C（**19 根** · 从口编号见 `SocCrossbarMap`）──
+        // ⚠️ **方向 MUST 按 AXI4-Lite 的角色**（本批踩过一次 ⇒ 写进注释）：
+        //   · **主 → 从**（互联驱动）：awaddr/awprot/awvalid · wdata/wstrb/wvalid ·
+        //     **bready** · araddr/arprot/arvalid · **rready**
+        //   · **从 → 主**（从设备驱动）：**awready** · **wready** · **bresp/bvalid** ·
+        //     **arready** · **rdata/rresp/rvalid**
+        i2c.io().awaddr  <<= lite.io().s4_awaddr;
+        i2c.io().awprot  <<= lite.io().s4_awprot;
+        i2c.io().awvalid <<= lite.io().s4_awvalid;
+        lite.io().s4_awready <<= i2c.io().awready;
+        i2c.io().wdata   <<= lite.io().s4_wdata;
+        i2c.io().wstrb   <<= lite.io().s4_wstrb;
+        i2c.io().wvalid  <<= lite.io().s4_wvalid;
+        lite.io().s4_wready <<= i2c.io().wready;
+        lite.io().s4_bresp  <<= i2c.io().bresp;
+        lite.io().s4_bvalid <<= i2c.io().bvalid;
+        i2c.io().bready  <<= lite.io().s4_bready;
+        i2c.io().araddr  <<= lite.io().s4_araddr;
+        i2c.io().arprot  <<= lite.io().s4_arprot;
+        i2c.io().arvalid <<= lite.io().s4_arvalid;
+        lite.io().s4_arready <<= i2c.io().arready;
+        lite.io().s4_rdata   <<= i2c.io().rdata;
+        lite.io().s4_rresp   <<= i2c.io().rresp;
+        lite.io().s4_rvalid  <<= i2c.io().rvalid;
+        i2c.io().rready  <<= lite.io().s4_rready;
+        // ── s5 面 ↔ PWM（**19 根** · 从口编号见 `SocCrossbarMap`）──
+        // ⚠️ **方向 MUST 按 AXI4-Lite 的角色**（本批踩过一次 ⇒ 写进注释）：
+        //   · **主 → 从**（互联驱动）：awaddr/awprot/awvalid · wdata/wstrb/wvalid ·
+        //     **bready** · araddr/arprot/arvalid · **rready**
+        //   · **从 → 主**（从设备驱动）：**awready** · **wready** · **bresp/bvalid** ·
+        //     **arready** · **rdata/rresp/rvalid**
+        pwm.io().awaddr  <<= lite.io().s5_awaddr;
+        pwm.io().awprot  <<= lite.io().s5_awprot;
+        pwm.io().awvalid <<= lite.io().s5_awvalid;
+        lite.io().s5_awready <<= pwm.io().awready;
+        pwm.io().wdata   <<= lite.io().s5_wdata;
+        pwm.io().wstrb   <<= lite.io().s5_wstrb;
+        pwm.io().wvalid  <<= lite.io().s5_wvalid;
+        lite.io().s5_wready <<= pwm.io().wready;
+        lite.io().s5_bresp  <<= pwm.io().bresp;
+        lite.io().s5_bvalid <<= pwm.io().bvalid;
+        pwm.io().bready  <<= lite.io().s5_bready;
+        pwm.io().araddr  <<= lite.io().s5_araddr;
+        pwm.io().arprot  <<= lite.io().s5_arprot;
+        pwm.io().arvalid <<= lite.io().s5_arvalid;
+        lite.io().s5_arready <<= pwm.io().arready;
+        lite.io().s5_rdata   <<= pwm.io().rdata;
+        lite.io().s5_rresp   <<= pwm.io().rresp;
+        lite.io().s5_rvalid  <<= pwm.io().rvalid;
+        pwm.io().rready  <<= lite.io().s5_rready;
+        // ── 物理面（D-3 · 2026-11-27 用户裁决 = **本批不引**）──
+        //
+        // ⚠️ **GPIO 的两根引脚是 S4a 已有的根端口** ⇒ ⇒ **保持不动**
+        //    （`gpio_in` / `gpio_out` ⇒ 根端口面不变 ⇒ D-8 成立）。
         gpio.io().gpio_in <<= io().gpio_in;
         io().gpio_out <<= gpio.io().gpio_out;
+        //
+        // ⚠️ **其余 5 个外设的物理引脚本批不引** ⇒ ⇒
+        //    ① **物理输入** MUST 显式 tie 常量（未驱动输入 = 未定义值 ⇒ 跨后端漂移）
+        //    ② **物理输出**（`uart_tx` / `spi_*` / `i2c_*` / `pwm_out_*` / `irq`）
+        //       不接根 ⇒ ⇒ 产物卫生发射器按「零引用」剪除 ⇒ ⇒ lint 干净。
+        uart.io().uart_rx <<= ch_bool(false);   // 无外部设备 ⇒ 永远「无数据」
+        spi.io().spi_miso <<= ch_bool(false);
+        i2c.io().i2c_sda_in <<= ch_bool(false);
+        i2c.io().i2c_scl_in <<= ch_bool(false);
+        // （`gpio_dir` / 各外设 `irq` 本批**不引出** · G-5 归 S5）
 
-        // ── **零未驱动**：m1 面（11 根）与 s1 面（8 根）**显式 tie 0** ──
-        //   m1 永不发请求（根只有核一个 master）· s1 永不被选中
-        //   （`windows[1]` = 最高 4 KB ⇒ 核永不发该地址）
+        // ── **零未驱动**：m1 面（DMA 预留 · 11 根）**显式 tie 0** ──
+        //   m1 是 **DMA 预留**（设备在 S4c 接入）⇒ ⇒ 本批根只有一个 master（核）
+        //   ⇒ ⇒ m1 永不发请求 ⇒ ⇒ tie 0 是**可证明的**死接线。
         lite.io().m1_awaddr  <<= ch_uint<32>(0_d);
         lite.io().m1_awprot  <<= ch_uint<2>(0_d);
         lite.io().m1_awvalid <<= ch_bool(false);
@@ -170,15 +378,6 @@ public:
         lite.io().m1_arprot  <<= ch_uint<2>(0_d);
         lite.io().m1_arvalid <<= ch_bool(false);
         lite.io().m1_rready  <<= ch_bool(false);
-
-        lite.io().s1_awready <<= ch_bool(false);
-        lite.io().s1_wready  <<= ch_bool(false);
-        lite.io().s1_bresp   <<= ch_uint<2>(0_d);
-        lite.io().s1_bvalid  <<= ch_bool(false);
-        lite.io().s1_arready <<= ch_bool(false);
-        lite.io().s1_rdata   <<= ch_uint<32>(0_d);
-        lite.io().s1_rresp   <<= ch_uint<2>(0_d);
-        lite.io().s1_rvalid  <<= ch_bool(false);
 
         // ── 核的 4 个输入全由根驱动（ADR-073 D2：零未驱动后代输入）──
         core.io().ext_rst <<= io().ext_rst;

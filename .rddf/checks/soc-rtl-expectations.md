@@ -266,7 +266,7 @@ VERIF-CHECKS: 15
 
 | 项 | 期望 | 推导 |
 |---|---|---|
-| module 集合 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` · `AxiLiteMatrix2x2` · `AxiLiteGpio` = **12** | 根 1 + 2 个 `ch_layer` + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠**；**S4a 新增 2 个 SoC 级 `ch_layer`**（Lite 互联 + GPIO）|
+| module 集合 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` · `AxiLiteCrossbar` · `AxiLiteGpio` · `AxiLiteUart` · `AxiLiteTimer` · `AxiLiteSpi` · `AxiLiteI2c` · `AxiLitePwm` = **17** | 根 1 + 核复合体**内部**的 7 个 `ch_layer`（`rv32i_pipeline.h:140-153`）⇒ ⇒ 子层**不折叠**；**SoC 级 8 个 `ch_layer`**（`Rv32iCoreTop` · `SocTraceCounter` · **2×6 Lite 互联** + **6 个 MMIO 外设**）⇒ ⇒ ⚠️ **S4b：12 − 1（矩阵换成互联）+ 1（互联）+ 5（新外设）= 17**（不是「12 + 6」—— 那把「替换」当成了「新增」）|
 | 顶层端口 | **10** = 框架 2 + 根自有 8（`ext_rst` / `prog_we` / `prog_addr` / `prog_data` / `store_count` / `writeback_count` / **`gpio_out`** / **`gpio_in`**） | ADR-077 V1 + **S4a dated addendum** · ADR-072 D1（后代 `ch_out` 不冒泡） |
 | `Rv32iCoreTop` module 端口 | **53** = 框架 2 + 核自有 51（**12 in + 39 out** ⇒ S4a 加 19 根 `axil_*`） | 核自有 32 = `Rv32iPipelineTop` 的 `__io`（**已由 `verify_no_duplicate_rv32i_headers.sh` 的 C6 冻结**）· +2 = 核内 **inline** 的 TCM `sread` 寄存器落在该 module ⇒ 需时钟/复位；端口表单一真相 = `examples/riscv-mini/AGENTS.md`（护栏 V1 逐字逐序）|
 
