@@ -4,6 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
+残余: >-
+  **D5 + D6 仍未立项**（其独立 change `rtl-productization-coverage-registration-2026-11` **未归档**）⇒ ⇒ 主 spec delta 形状错 / 后端端口面不可执行两项已闭，但残余未销
 状态: in-progress
 进度: "**立项（2026-11-16）** · **已实施并归档**（change `rtl-productization-surface-2026-11` ⇒ ⇒ `openspec/changes/archive/2026-11-17-rtl-productization-surface-2026-11/`）· ✅ **开工前门 P-0 已闭**（2026-11-16 · ADR-072 v2 + v2.1 Accepted · `ef0d284` / `e00b321`）⇒ ⇒ **P-1 spec delta 已交付并合并**（G-1…G-8 全部由 ADR-072 v2 交付）· ⚠️ **状态 = `in-progress` 而非 `implemented`**（§0.0 词表）：本项承诺的 **D1 / J1–J4 已落地**（产品端口面 **130 → 34** · manifest schema **v1 → v2** · 两份 capability delta 已合并进 `openspec/specs/`）⇒ ⇒ 但 **D5 / D6**（覆盖登记完备性 + 可执行载体）仍**未立项**（`rtl-productization-coverage-registration-2026-11` **文件不存在**）⇒ ⇒ 「未纳入本轮的部分 MUST 已登记为独立立项」条件**未满足** ⇒ ⇒ **补齐该草案后可改 `implemented`**"
 主题: 真层次化 RTL 输出（成层粒度由用户显式声明 · 默认 inline · 与扁平逐字节一致）—— 顶层端口面收敛 + 产品单元四件套

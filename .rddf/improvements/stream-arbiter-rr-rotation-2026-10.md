@@ -5,6 +5,8 @@ source: P0 探针（`/tmp/opencode/p0/p0v2.cpp`，2026-10-31 实测）+ oracle �
 phase: phase-5
 category: chlib
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-01-stream-arbiter-rr-rotation-2026-11/`（30/31 · 残余 T5.4「补写 spec」已由 `openspec/specs/chlib-stream-arbitration/spec.md`（3 Requirement）实际闭合）
+状态: implemented
 created_at: 2026-10-31
 evidence: test:tests/chlib/test_stream.cpp#[rotation]
 ---

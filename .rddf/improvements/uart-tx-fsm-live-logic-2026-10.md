@@ -5,6 +5,8 @@ source: input-port-assignment-antipattern-fix-2026-10（实施期实测挖出）
 phase: phase-5
 category: testing
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-29-uart-tx-fsm-live-logic-2026-10/`（41/41 task 已勾）
+状态: implemented
 created_at: 2026-10-28
 evidence: probe:examples/spinalhdl-ported/uart/uart_top.h
 ---

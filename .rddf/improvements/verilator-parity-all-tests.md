@@ -5,6 +5,8 @@ source: 用户在 cache-complete-rewrite 合并后提出"所有单元测试除�
 phase: phase-4
 category: testing
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-19-verilator-parity-all-tests/`（9/9 task 已勾）
+状态: implemented
 created_at: 2026-10-19
 evidence: probe:scripts/verify_dual_backend_parity.sh
 ---

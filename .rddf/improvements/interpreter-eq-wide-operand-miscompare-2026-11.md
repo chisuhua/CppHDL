@@ -5,6 +5,8 @@ source: ADR-065 实施期实测挖出（chlib 仲裁器族修复过程中）
 phase: phase-5
 category: framework
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-03-wide-shl-truncate-word-carry-2026-11/`（18/18 task 已勾）
+状态: implemented
 created_at: 2026-11-03
 evidence: test:tests/test_wide_shl_dual.cpp
 ---

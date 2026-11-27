@@ -5,6 +5,8 @@ source: 2026-10-26 roadmap 审计（feat-rv32i-isa-completeness ①）
 phase: phase-5
 category: cpu
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-26-rv32i-store-byte-enable-2026-10/`（15/17 task 已勾）· 残余 2 项为**流程步**（归档命令 / CI / 对抗审稿 / 测试计数）⇒ 非产品残余
+状态: implemented
 created_at: 2026-10-26
 evidence: test:tests/test_rv32i_timing_dual.cpp
 ---

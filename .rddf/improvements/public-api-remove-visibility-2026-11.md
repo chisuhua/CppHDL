@@ -6,7 +6,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: process
-状态: draft
+状态依据: 归档 `openspec/changes/archive/2026-11-09-public-api-remove-visibility/`（20/20 task 已勾）
+状态: implemented
 主题: 已知功能缺口清零
 依赖: ADR-050, ADR-043
 来源: 上游 issue #28（下游 ChipForge 反馈 · 2026-11-08）· phase-6 P12（起草）/ P14（实施）

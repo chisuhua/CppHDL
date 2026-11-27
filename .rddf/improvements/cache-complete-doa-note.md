@@ -5,6 +5,9 @@ source: 撞墙事件 —— 第一次尝试按 ADR-037 提前物理删 cache stu
 phase: phase-4
 category: cache
 type: incident-note
+状态依据: >-
+  **非提案**（撞墙事件起源 + Re-entry Protocol 的**立项登记**（其内容已被 cache 重写线 ADR-039/041 全部消费））⇒ ⇒ 作为**记录件**留原地（被主 spec / ADR / roadmap objective 引用 ⇒ 移出会破坏入向引用）⇒ ⇒ 标终态以退出待办池
+状态: 已完成
 created_at: 2026-10-18
 evidence: test:tests/chlib/test_cache_complete.cpp
 ---
@@ -14,7 +17,7 @@ evidence: test:tests/chlib/test_cache_complete.cpp
 - **Date drafted**: 2026-10-18
 - **Drafted by**: build-agent (architect role)
 - **Source**: 撞墙事件 —— 第一次尝试按 ADR-037 提前物理删 cache stub 时（见 `.rddf/improvements/cache-stub-physical-removal.md` 顶部 status 修订），cmake build probe 显示 `*_complete.h` 有 11 个 pre-existing compile error，**最严重是架构级**（SRAM 用 C-style 数组但用运行时 `ch_uint<7>` 索引），不可能在 ADR-037 scope 内修复。
-- **Status**: Draft — backlog（无活跃 change；本文件只是立项登记）
+- **Status**: ✅ **已完成**（2026-11-27 · 本文件是**记录件**而非提案 ⇒ ⇒ 撞墙事件起源 + Re-entry Protocol 已随 cache 重写线 ADR-039/041 全部消费 ⇒ ⇒ 标终态以退出待办池；**文件原地保留** ⇒ 因被主 spec / ADR / objective 引用）
 - **Priority**: 中（cache 完整功能不是当前 RV32I 集成阻塞路径；riscv-mini 当前阶段跑 ch_device 顶层失败，cache 不是主因）
 - **Related**:
   - `.rddf/improvements/cache-stub-physical-removal.md` — 父 change（docs-only 收尾，等本 rewrite 落地后再回来执行）

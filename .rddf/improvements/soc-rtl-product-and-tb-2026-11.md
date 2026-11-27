@@ -4,6 +4,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
+残余: >-
+  **ADR-073 的 5 处 dated 修订待办**（措辞/事实订正）+ ADR-072 change 的前置说明 ⇒ ⇒ change 已归档（15/15）⇒ ⇒ **残余在架构文档侧**，不在实现侧
 状态: draft
 进度: '**立项（2026-11-16）** · 未开工 · 🚪 开工前门 = **ADR-073 已 Accepted**（架构依据）· ⚠️ **顺序硬约束**：本项的
   **T0（后代输入驱动源）MUST 先于 ADR-072（D1）的合并** · ⚠️ **metis 第 1 轮 19 条 finding 全处置**（见末节）'

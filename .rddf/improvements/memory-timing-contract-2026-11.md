@@ -5,12 +5,15 @@ phase: phase-6
 category: cpu
 type: feature
 状态: approved
-状态依据: 🚪 门 R5（T2 裁决 = **ADR-069** · **Accepted** · 决策 = 候选 ②（A0））+ R6（公开面前置登记：`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各 1 行）**均已闭**（2026-11-12）⇒ ⇒ 用户 2026-11-12/13 裁决「按推荐顺序推进」⇒ ⇒ 且 change **已立项**（`openspec/changes/memory-timing-contract-2026-11/` · `validate --strict` exit 0 + delta 4/4）⇒ ⇒ ⇒ **2026-11-13 订正**：此前停在 `draft` = **状态漂移**（architect 复盘 #5 的发现 3）
-进度: **change 已立项**（R13 闭 · 2026-11-13 · `validate --strict` exit 0 + delta 4/4）· **实施未开工** · ADR-068 **Accepted**（T2′ = (F) 字节道拆分存储）· ✅ **T2 已裁决**（**ADR-069** · **Accepted · 2026-11-12** · 决策 = **候选 ②（A0）** = 地址照旧 + MEM/WB 延后 1 拍 ⇒ ⇒ `read-new` 条件自动成立）· ✅ 公开面前置门已登记（R6 · 2026-11-12）⇒ ⇒ **只差 change 立项**（⚠️ 原载体 = 新立 ADR-069 · Parent = ADR-068 ⇒ ⇒ **禁**改写刚 Accepted 的「本 ADR 不裁决 T2」承重句 ⇒ ⇒ 裁决 MUST 与 ADR-068 的 D4 一并读：若 T2 选 A1 ⇒ MUST 追加同址处置（读数据旁路 或 一拍停顿）) ⇒ ⇒ T2 相关项不可开工
+状态依据: >-
+  🚪 门 R5（T2 裁决 = **ADR-069** · **Accepted** · 决策 = 候选 ②（A0））+ R6（公开面前置登记：`docs/CHANGELOG.md` + `.rddf/checks/public-api-surface.md` 各 1 行）**均已闭**（2026-11-12）⇒ ⇒ 用户 2026-11-12/13 裁决「按推荐顺序推进」⇒ ⇒ 且 change **已立项**（`openspec/changes/memory-timing-contract-2026-11/` · `validate --strict` exit 0 + delta 4/4）⇒ ⇒ ⇒ **2026-11-13 订正**：此前停在 `draft` = **状态漂移**（architect 复盘 #5 的发现 3）
+进度: >-
+  **change 已立项**（R13 闭 · 2026-11-13 · `validate --strict` exit 0 + delta 4/4）· **实施未开工** · ADR-068 **Accepted**（T2′ = (F) 字节道拆分存储）· ✅ **T2 已裁决**（**ADR-069** · **Accepted · 2026-11-12** · 决策 = **候选 ②（A0）** = 地址照旧 + MEM/WB 延后 1 拍 ⇒ ⇒ `read-new` 条件自动成立）· ✅ 公开面前置门已登记（R6 · 2026-11-12）⇒ ⇒ **只差 change 立项**（⚠️ 原载体 = 新立 ADR-069 · Parent = ADR-068 ⇒ ⇒ **禁**改写刚 Accepted 的「本 ADR 不裁决 T2」承重句 ⇒ ⇒ 裁决 MUST 与 ADR-068 的 D4 一并读：若 T2 选 A1 ⇒ MUST 追加同址处置（读数据旁路 或 一拍停顿）) ⇒ ⇒ T2 相关项不可开工
 主题: 已知功能缺口清零
 依赖: rv32i-commit-path（时序金标基线）· firmware-load-chain-2026-11（装载路径先做）
 来源: 用户 2026-11-10 拍板「#12 改成寄存器读」+ planner 实测（组合读 ⇒ 推断不出 BRAM）
-生成时间: 2026-11-10
+生成时间: >-
+  2026-11-10
 evidence: probe:include/cpu/pipeline/rv32i_tcm.h#L100
 ---
 

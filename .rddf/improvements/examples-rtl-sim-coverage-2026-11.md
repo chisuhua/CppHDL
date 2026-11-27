@@ -5,11 +5,13 @@ phase: phase-6
 category: testing
 type: feature
 状态: implemented
-进度: **E1–E8 全部落地 ✅**（E1 已归并进 `rtl-emit-product-tooling` 的 F1–F6 · **E3 = 10/10 verified** · E6 = `pr-verilator-fast` 的一个 step · 墙钟 warm 3 s / cold 61 s · 落选名单 + 未覆盖项 = `.rddf/checks/examples-rtl-sim-exclusions.md`）· ✅ **B2 批的实质产出 = 3 个被仿真抓出的实现缺陷**（D5 fifo `full` 门限 / D6 uart_rx 采样点 / D7 uart_rx 位反转 ⇒ 全部在 C++ 侧 demo 里是绿的）· ⚠️ **B2 验收报告尚未写**（`.rddf/reviews/b2-batch-verify-2026-11.md`）
+进度: >-
+  **E1–E8 全部落地 ✅**（E1 已归并进 `rtl-emit-product-tooling` 的 F1–F6 · **E3 = 10/10 verified** · E6 = `pr-verilator-fast` 的一个 step · 墙钟 warm 3 s / cold 61 s · 落选名单 + 未覆盖项 = `.rddf/checks/examples-rtl-sim-exclusions.md`）· ✅ **B2 批的实质产出 = 3 个被仿真抓出的实现缺陷**（D5 fifo `full` 门限 / D6 uart_rx 采样点 / D7 uart_rx 位反转 ⇒ 全部在 C++ 侧 demo 里是绿的）· ⚠️ **B2 验收报告尚未写**（`.rddf/reviews/b2-batch-verify-2026-11.md`）
 主题: dual-backend 测试完整化
 依赖: rtl-emit-product-tooling-2026-11（CLI + manifest）· port-naming-ratchet-2026-11（端口名可读）
 来源: 用户 2026-11-10 拍板「③ 对 example 下的示例添加完整的 RTL 生成和独立 Verilog 仿真能力，同时是否也需要创建单元测试覆盖生成 RTL 和独立 Verilator 测试能力」
-生成时间: 2026-11-10
+生成时间: >-
+  2026-11-10
 evidence: probe:scripts/verify_examples_rtl_sim.sh
 ---
 

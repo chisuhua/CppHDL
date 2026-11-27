@@ -5,6 +5,8 @@ source: ADR-051 D10 实施期实测（共享守卫贡献的**优先级**被静�
 phase: phase-5
 category: chlib
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-30-chlib-guard-contribution-priority-2026-10/`（22/22 task 已勾）
+状态: implemented
 created_at: 2026-10-30
 evidence: test:tests/chlib/test_guard_contribution.cpp
 ---

@@ -5,6 +5,8 @@ source: P0 探针（`/tmp/opencode/p0/p0v2.cpp`，2026-10-31 实测）+ oracle /
 phase: phase-5
 category: chlib
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-02-stream-demux-fork-ready-semantics-2026-11/`（20/20 task 已勾）+ 护栏 `scripts/verify_stream_ready_ownership.sh`
+状态: implemented
 created_at: 2026-10-31
 evidence: test:tests/chlib/test_stream.cpp#[ready]
 ---

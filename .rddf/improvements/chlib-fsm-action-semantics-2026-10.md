@@ -5,6 +5,8 @@ source: ADR-050（2026-10-29 立项；由 oracle 两轮复核 + metis 缺口分�
 phase: phase-5
 category: framework
 type: capability-change
+状态依据: 归档 `openspec/changes/archive/2026-10-30-chlib-fsm-action-semantics-2026-10/`（60/60 task 已勾）
+状态: implemented
 created_at: 2026-10-29
 evidence: test:tests/test_state_machine.cpp
 ---

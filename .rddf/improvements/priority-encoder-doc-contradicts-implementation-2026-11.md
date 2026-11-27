@@ -5,6 +5,10 @@ source: 路线 B 只读查重（dual-backend-parity route B · 4 问①）实测
 phase: phase-5
 category: chlib
 type: docfix
+残余: >-
+  **行为未改** —— 是否把实现改成低位优先 = **另一决策**（会改变所有消费者的语义）⇒ ⇒ 本条只关闭「注释说谎」这一半
+状态依据: 文档订正已落地（归档 `openspec/changes/archive/2026-11-03-header-self-containment-fix-2026-11/` 的 A2 类）· ⚠️ **行为未改** —— 是否把实现改成低位优先 = **另一决策**（会改变所有消费者的语义）⇒ ⇒ **仍待裁决** ⇒ 本条只关闭「注释说谎」这一半
+状态: partial
 created_at: 2026-11-03
 evidence: test:tests/chlib/test_arithmetic_encoding_dual.cpp
 ---

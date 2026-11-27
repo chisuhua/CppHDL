@@ -5,6 +5,8 @@ source: objective-riscv-mini-convergence §10（2026-10-23 roadmap 重梳理）
 phase: phase-5
 category: refactor
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-25-rv32i-canonical-convergence-2026-10/`（38/38 task 已勾）
+状态: implemented
 created_at: 2026-10-23
 evidence: probe:scripts/verify_no_duplicate_rv32i_headers.sh
 ---

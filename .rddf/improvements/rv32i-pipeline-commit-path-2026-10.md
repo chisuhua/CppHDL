@@ -5,6 +5,8 @@ source: C3 实测发现（objective-rv32i-e2e 的**前置**）
 phase: phase-5
 category: bugfix
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-26-rv32i-pipeline-commit-path-2026-10/`（55/55 task 已勾）
+状态: implemented
 created_at: 2026-10-25
 evidence: test:tests/test_verilator_complex_e2e.cpp
 ---

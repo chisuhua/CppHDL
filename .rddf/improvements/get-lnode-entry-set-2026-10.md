@@ -5,6 +5,8 @@ source: ADR-053（`get_lnode` 的入口集合收敛）
 phase: phase-5
 category: core
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-30-get-lnode-entry-set-2026-10/`（31/31 task 已勾）
+状态: implemented
 created_at: 2026-10-30
 evidence: test:tests/test_lnode_entry_set.cpp
 ---

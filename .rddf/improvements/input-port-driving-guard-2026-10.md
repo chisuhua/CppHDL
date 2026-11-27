@@ -5,6 +5,8 @@ source: 2026-10-27 两轮 critic 的反复指向（Batch 2/3 的 M3/M3' + AGENTS
 phase: phase-5
 category: testing
 type: research
+状态依据: 归档 `openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/`（14/14 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: probe:openspec/changes/archive/2026-10-28-input-port-driving-guard-2026-10/design.md
 ---

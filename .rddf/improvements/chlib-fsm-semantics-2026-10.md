@@ -5,6 +5,8 @@ source: uart-tx-fsm-live-logic-2026-10 + spi-fsm-fixture-live-logic-2026-10（�
 phase: phase-5
 category: testing
 type: capability-gap
+状态依据: 归档 `openspec/changes/archive/2026-10-29-chlib-fsm-semantics-2026-10/`（37/37 task 已勾）
+状态: implemented
 created_at: 2026-10-29
 evidence: probe:scripts/verify_fsm_next_wiring.sh
 ---

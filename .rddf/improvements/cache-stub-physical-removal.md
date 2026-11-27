@@ -5,6 +5,8 @@ source: 用户"选择 2"（ADR-037 cache stub 物理删除 6-month plan 提前�
 phase: phase-5
 category: cache
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-20-cache-stub-physical-removal-2026-10/`（9/9 task 已勾）+ `include/cpu/cache/*_stub.h` 已物理删除（ADR-037）
+状态: implemented
 created_at: 2026-10-18
 evidence: test:tests/chlib/test_cache_pipeline_integration.cpp
 ---

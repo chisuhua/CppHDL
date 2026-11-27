@@ -5,6 +5,8 @@ source: 2026-10-27 roadmap 审查（feat-rv32i-isa-completeness ④ 的载体缺
 phase: phase-5
 category: cpu
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-27-rv32i-fetch-skid-buffer-2026-10/`（50/50 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: test:tests/test_rv32i_pipeline_behavior.cpp
 ---

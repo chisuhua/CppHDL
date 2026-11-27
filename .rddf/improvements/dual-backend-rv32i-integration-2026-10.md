@@ -5,6 +5,8 @@ source: 2026-10-27 roadmap 审查（objective-rv32i-e2e 的 Go 判据第 5 条�
 phase: phase-5
 category: testing
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-27-dual-backend-rv32i-integration-2026-10/`（41/42 task 已勾）· 残余 1 项为**流程步**（归档命令 / CI / 对抗审稿 / 测试计数）⇒ 非产品残余
+状态: implemented
 created_at: 2026-10-27
 evidence: test:tests/test_rv32i_pipeline_behavior.cpp
 ---

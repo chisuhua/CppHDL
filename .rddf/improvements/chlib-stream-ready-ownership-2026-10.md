@@ -5,6 +5,8 @@ source: ADR-045（`docs/adr/ADR-045-chlib-stream-semantics.md` 裁决 1 / 裁决
 phase: phase-5
 category: chlib
 type: refactor
+状态依据: 归档 `openspec/changes/archive/2026-10-31-chlib-stream-ready-ownership-2026-10/`（32/32 task 已勾）
+状态: implemented
 created_at: 2026-10-31
 evidence: test:tests/chlib/test_stream.cpp#[ready]
 ---

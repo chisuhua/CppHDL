@@ -5,6 +5,8 @@ source: 路线 C 第一批（`ExStage` 双后端 parity）实施期实测挖出
 phase: phase-5
 category: cpu
 type: docfix
+状态依据: 归档 `openspec/changes/archive/2026-11-03-header-self-containment-fix-2026-11/`（20/20 task 已勾 · 处置 = 物理删除）
+状态: implemented
 created_at: 2026-11-03
 evidence: probe:include/cpu/pipeline/stages/ex_stage.h
 ---

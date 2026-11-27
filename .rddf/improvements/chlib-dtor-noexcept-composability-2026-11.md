@@ -6,7 +6,8 @@ priority: P1
 phase: phase-6
 category: framework
 type: feature
-状态: approved
+状态依据: 归档 `openspec/changes/archive/2026-11-09-chlib-dtor-composability-2026-11/`（25/25 task 已勾 · ADR-067 Accepted 2026-11-09）
+状态: implemented
 主题: 已知功能缺口清零
 依赖: ADR-050, ADR-051, ADR-067
 来源: 上游 issue #28（下游 ChipForge 反馈 · 2026-11-08）· **ADR-067（Accepted 2026-11-09 · 用户拍板）** · phase-6 P12（起草）/ P13（architect 裁定 · 已闭口）/ P15（实施）

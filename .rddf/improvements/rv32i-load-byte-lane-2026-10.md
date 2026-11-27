@@ -5,6 +5,8 @@ source: roadmap 审计（2026-10-27，ISA 语义边界收口的最后一块）
 phase: phase-5
 category: cpu
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-28-rv32i-load-byte-lane-2026-10/`（41/41 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: probe:examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp
 ---

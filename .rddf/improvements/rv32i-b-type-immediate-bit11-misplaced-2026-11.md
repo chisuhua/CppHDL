@@ -5,6 +5,8 @@ source: 路线 C 第一批（`Rv32iDecoder` / `MemStage` / `ExStage` 双后端 p
 phase: phase-5
 category: cpu
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-03-rv32i-b-type-immediate-fix-2026-11/`（21/23 · 残余 2 项均标「独立议题」· ADR-063）
+状态: implemented
 created_at: 2026-11-03
 evidence: test:tests/test_rv32i_stage_dual.cpp
 ---

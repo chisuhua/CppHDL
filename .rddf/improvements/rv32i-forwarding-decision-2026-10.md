@@ -5,6 +5,8 @@ source: ADR-046 §D5 悬置项的落地裁决（ADR-047，2026-10-27，2 轮 cri
 phase: phase-5
 category: cpu
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-27-rv32i-forwarding-decision-2026-10/`（17/17 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: test:tests/chlib/test_forwarding.cpp
 ---

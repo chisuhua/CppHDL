@@ -5,6 +5,8 @@ source: dual-backend-full-coverage-inventory-2026-10（只读盘点实测推翻 
 phase: phase-5
 category: testing
 type: chore
+状态依据: 裁决落地 = `.rddf/roadmap/objectives/objective-test-coverage-100pct.md` §2/§9.2/§11 + 护栏 `scripts/verify_dual_backend_parity.sh`（2026-10-30）
+状态: implemented
 created_at: 2026-10-28
 evidence: probe:scripts/verify_dual_backend_parity.sh
 ---

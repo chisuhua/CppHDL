@@ -1,11 +1,15 @@
 ---
 name: framework-undriven-field-diagnostic-2026-10
 priority: P1
-source: `chlib-stream-ready-ownership-2026-10` 的实施期证伪（design.md §9.1）
+source: >-
+  `chlib-stream-ready-ownership-2026-10` 的实施期证伪（design.md §9.1）
 phase: phase-5
 category: core
 type: feature
-created_at: 2026-10-31
+状态依据: 归档 `openspec/changes/archive/2026-11-02-node-driver-diagnosis-2026-11/`（16/16 task 已勾）
+状态: implemented
+created_at: >-
+  2026-10-31
 evidence: test:tests/test_node_driver_diagnosis.cpp
 ---
 

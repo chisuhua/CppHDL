@@ -5,6 +5,8 @@ source: uart-tx-fsm-live-logic-2026-10（实施期实测挖出 —— 该 change
 phase: phase-5
 category: testing
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-29-spi-fsm-fixture-live-logic-2026-10/`（46/46 task 已勾）
+状态: implemented
 created_at: 2026-10-29
 evidence: test:tests/test_verilator_complex_e2e.cpp
 ---

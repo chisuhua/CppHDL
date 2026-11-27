@@ -5,6 +5,8 @@ source: ADR-052（`multi_if` 的接受面五形态裁决）
 phase: phase-5
 category: chlib
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-30-multi-if-acceptance-surface-2026-10/`（39/39 task 已勾）
+状态: implemented
 created_at: 2026-10-30
 evidence: probe:scripts/verify_multi_if_width.sh
 ---

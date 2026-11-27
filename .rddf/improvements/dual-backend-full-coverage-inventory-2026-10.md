@@ -5,6 +5,8 @@ source: phase-5 计划 T7 的第一步（gap C：判据「≥ 100」可能不可
 phase: phase-5
 category: testing
 type: research
+状态依据: 归档 `openspec/changes/archive/2026-10-28-dual-backend-full-coverage-inventory-2026-10/`（21/21 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: probe:openspec/changes/archive/2026-10-28-dual-backend-full-coverage-inventory-2026-10/design.md
 ---

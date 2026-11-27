@@ -5,6 +5,8 @@ source: input-port-driving-guard-2026-10（spike 的决策门结论）+ 规范�
 phase: phase-5
 category: testing
 type: chore
+状态依据: 登记表 `.rddf/checks/input-port-required-registry.md` + 护栏 `scripts/verify_input_port_required_registry.sh` 在位（2026-11-03 · 用户裁决 D2-A）
+状态: implemented
 created_at: 2026-10-28
 evidence: test:tests/test_axi_rst_n_guard.cpp
 ---

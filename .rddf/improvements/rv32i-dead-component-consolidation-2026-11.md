@@ -4,6 +4,8 @@ priority: P2
 phase: phase-6
 category: cpu
 type: chore
+残余: >-
+  **B4 的 C1–C4 未开工**（⇒ ⇒ C1 差分 MUST 在 B3 之后）⇒ ⇒ B0 的 5 项已验收
 状态: in-progress
 进度: B0 的 ⑧ SLTU 修缺陷 / C5+C6 同批退役 / C7 交接登记 / C8 `mem_is_load` tie-off 已落（B0 验收 `67926cf`+`bd21b45`）· **B4 的 C1–C4 未开工** ⇒ ⇒ **C1 差分 MUST 在 B3 之后**（否则时序金标算两遍 —— `phase-6-rtl-productization.md` 依据 ④）
 主题: riscv-mini 技术债清零

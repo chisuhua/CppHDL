@@ -4,6 +4,8 @@ priority: P1
 phase: phase-6
 category: cpu
 type: feature
+残余: >-
+  **特权级立项未做**（⇒ 归 `rv32i-privileged-csr-2026-11`）⇒ ⇒ 其余 G 项已落地
 状态: partial（G3 + G1 + G2 最小面 + G4 + G5 + **G1 扩展（funct3/funct7 保留组合）** 已落地 · 仅**特权级立项**未做）
 进度: B4 已开工（G3 → G1+G4 已落地 2026-11-15） · ⚠️ **P6 侦察（P6-0）未并入本草案** ⇒ ⇒ 实施前 MUST 先确认 phase-6 P6 的侦察结论已并入
 主题: RV32I ISA 缺口

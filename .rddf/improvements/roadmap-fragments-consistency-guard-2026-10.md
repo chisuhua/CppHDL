@@ -5,6 +5,8 @@ source: 2026-10-27 实施 ISA ④ 时的实测漂移
 phase: phase-5
 category: tooling
 type: tooling
+状态依据: 归档 `openspec/changes/archive/2026-10-28-roadmap-fragments-consistency-guard-2026-10/`（23/23 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: probe:scripts/verify_roadmap_fragments.sh
 ---

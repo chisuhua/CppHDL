@@ -5,6 +5,8 @@ source: 路线 B（I 批）双后端 parity 实施期实测挖出
 phase: phase-5
 category: framework
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-03-mux-slot-width-preservation-2026-11/`（17/17 task 已勾）
+状态: implemented
 created_at: 2026-11-03
 evidence: test:tests/chlib/test_stream_arbiter_dual.cpp
 ---

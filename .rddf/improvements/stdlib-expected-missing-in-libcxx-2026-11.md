@@ -5,6 +5,8 @@ source: 头文件自包含性护栏（scripts/verify_header_self_contained.sh）
 phase: phase-5
 category: framework
 type: bugfix
+状态依据: 选项 D 落地 = `include/core/verilator_backend.h` 显式 `#error` + CMake 层 `-DBUILD_VERILATOR=OFF` 排除 macOS/Windows（2026-11-03 用户裁决）
+状态: implemented
 created_at: 2026-11-03
 evidence: probe:scripts/verify_header_self_contained.sh
 ---

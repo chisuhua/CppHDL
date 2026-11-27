@@ -5,6 +5,8 @@ source: input-port-driving-guard-2026-10（只读 spike 的决策门结论）
 phase: phase-5
 category: testing
 type: chore
+状态依据: 护栏 `scripts/verify_input_port_additions.sh` 在位（2026-11-03 · 用户裁决 D1-A）
+状态: implemented
 created_at: 2026-10-28
 evidence: probe:scripts/measure_new_input_ports.sh
 ---

@@ -5,6 +5,8 @@ source: perf-baseline-refresh-2026-10（3 样本实测推翻阈值表的前提�
 phase: phase-5
 category: tooling
 type: chore
+残余: >-
+  **阈值重校准未裁决**（决策权归 planner ⇒ build 只登记，不定方案）
 created_at: 2026-10-28
 evidence: probe:tests/benchmark/perf_baseline.json
 ---

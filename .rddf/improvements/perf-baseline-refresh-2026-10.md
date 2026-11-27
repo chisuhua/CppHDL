@@ -5,6 +5,8 @@ source: 2026-10-27 ISA ④ 归档前的 perf 实测（perf_regression 假红 2 �
 phase: phase-5
 category: tooling
 type: chore
+状态依据: 归档 `openspec/changes/archive/2026-10-28-perf-baseline-refresh-2026-10/`（25/25 task 已勾）
+状态: implemented
 created_at: 2026-10-27
 evidence: probe:scripts/verify_perf_baseline_anchors.sh
 ---

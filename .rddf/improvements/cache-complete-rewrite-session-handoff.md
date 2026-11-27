@@ -5,6 +5,9 @@ source: 用户 2026-10-18 session 末尾决议 "A1 启动 R2 spike + F 保留为
 phase: phase-4
 category: cache
 type: handoff
+状态依据: >-
+  **非提案**（Session B 的**交接文档**（6 步 TDD 计划）—— 交接已执行完毕（change `cache-complete-rewrite-session-handoff` 落地））⇒ ⇒ 作为**记录件**留原地（被主 spec / ADR / roadmap objective 引用 ⇒ 移出会破坏入向引用）⇒ ⇒ 标终态以退出待办池
+状态: 已完成
 created_at: 2026-10-19
 evidence: test:tests/chlib/test_cache_complete.cpp
 ---
@@ -14,7 +17,7 @@ evidence: test:tests/chlib/test_cache_complete.cpp
 - **Date drafted**: 2026-10-19
 - **Drafted by**: build-agent (general role)
 - **Source**: 用户在 2026-10-18 session 末尾决议 "A1 启动 R2 spike + F 保留为 fallback + ADR-039 §2 按 R2 实测修订"，本文件是决议落地后的 Session B 启动资料
-- **Status**: 📋 **Handoff document** — 无 openspec change；本文件不写 `## ADDED Requirements`，不触发 spec 流程。目的：把 2026-10-18 R2 spike 闭环 + ADR-039 §6 6 步 TDD 拆成可勾选清单，作为下个 session 启动时第一份读材料
+- **Status**: ✅ **已完成**（2026-11-27 · 本文件是**记录件**而非提案 ⇒ ⇒ 原为「2026-10-18 R2 spike 闭环 + ADR-039 §6 6 步 TDD 拆成可勾选清单」的 Session B 启动资料 ⇒ ⇒ 该交接计划**已执行完毕**（change `cache-complete-rewrite-session-handoff` 落地）⇒ ⇒ 标终态以退出待办池；**文件原地保留** ⇒ 因被主 spec `openspec/specs/cpu-cache-subsystem/spec.md` 引用） 步 TDD 拆成可勾选清单，作为下个 session 启动时第一份读材料
 - **Related**:
   - `docs/adr/ADR-039-cache-complete-rewrite-via-ch-mem.md` (commit `bfb3960`) — 本文件的父决策（§2.2 R2 闭环 + §6 Step 3 multi-port coverage）
   - `docs/adr/ADR-037-cache-stub-removal.md` — 父 ADR（6-month deadline 2027-04-17）

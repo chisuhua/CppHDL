@@ -5,6 +5,8 @@ source: riscv-mini-test-triage-2026-10（实测挖出的真实 RTL 缺口）
 phase: phase-5
 category: cpu
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-30-clint-mtime-autoincrement-2026-10/`（27/27 task 已勾）
+状态: implemented
 created_at: 2026-10-24
 evidence: test:tests/test_rv32i_arch_dual.cpp
 ---

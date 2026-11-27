@@ -5,8 +5,12 @@ source: A4（梳理轮次 · 2026-11-01）——「命名诚实性」从 1 个�
 phase: phase-5
 category: chlib
 type: audit
-created_at: 2026-11-01
-evidence: probe:scripts/verify_chlib_naming_honesty.sh---
+状态依据: 护栏 `scripts/verify_chlib_naming_honesty.sh` + 登记表 `.rddf/checks/chlib-naming-honesty-registry.md` 在位（2026-11-02 · B8 落地）
+状态: implemented
+created_at: >-
+  2026-11-01
+evidence: probe:scripts/verify_chlib_naming_honesty.sh
+---
 
 # Improvement: `chlib` 的**命名诚实性**审计（+ 顺带挖出 `stream_pipeline.h` 的**未收口面**）
 

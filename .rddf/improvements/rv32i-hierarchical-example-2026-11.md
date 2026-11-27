@@ -4,6 +4,8 @@ priority: P2
 phase: phase-6
 category: framework
 type: feature
+残余: >-
+  **R21-A（发射器 spike）+ R21-B（成层方式的 architect 裁决）**两道开工前门⇒ ⇒ change 已归档（26/26）⇒ ⇒ **残余在裁决侧**，不在实现侧
 状态: approved
 进度: 2026-11-13 立项（用户口令「R21立项」）· **R21-B 裁决已落**（`docs/adr/ADR-070-rv32i-hierarchical-layering-granularity.md` · **Accepted** · 选项 **①** = 7 处 `ch_layer`；「部分成层」= **条件式可接受**（三条件））· **未开工** ⇒ ⇒ 规模侦察 + IR 级根因已定死 ⇒ ⇒ **已过 metis 1 轮（10 条处置全采纳，
 主题: 层次化 RTL 输出

@@ -5,6 +5,8 @@ source: objective-rv32i-e2e §10（2026-10-23 roadmap 重梳理）
 phase: phase-5
 category: testing
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-26-rv32i-soc-dual-parity-2026-10/`（36/36 task 已勾）
+状态: implemented
 created_at: 2026-10-23
 evidence: probe:examples/riscv-mini/tests/test_rv32i_soc_dual_parity.cpp
 ---

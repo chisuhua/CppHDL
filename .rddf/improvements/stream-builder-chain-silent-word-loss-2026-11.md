@@ -5,6 +5,8 @@ source: P1-a 实施期实测（探针 `/tmp/opencode/p1/p1a_probe11.cpp` + `dbg_
 phase: phase-5
 category: chlib
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-01-stream-builder-and-pipe-ready-ownership-2026-11/`（29/29 task 已勾 · ADR-055）
+状态: implemented
 created_at: 2026-11-01
 evidence: test:tests/test_stream_builder_backpressure_dual.cpp
 ---

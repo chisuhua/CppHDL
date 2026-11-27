@@ -5,6 +5,8 @@ source: 路线 B 只读查重（dual-backend-parity route B · 4 问①）实测
 phase: phase-5
 category: chlib
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-11-03-chlib-arbiter-buildtime-eval-fix-2026-11/`（18/20 · 残余 2 项均标「独立议题」· ADR-065）
+状态: implemented
 created_at: 2026-11-03
 evidence: test:tests/chlib/test_stream_arbiter_lock_dual.cpp
 ---

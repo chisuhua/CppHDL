@@ -5,6 +5,8 @@ source: riscv-mini-test-triage-2026-10（实测挖出的真实 RTL 缺口）
 phase: phase-5
 category: cpu
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-28-riscv-mini-cache-wrapper-live-logic-2026-10/`（40/40 task 已勾）
+状态: implemented
 created_at: 2026-10-24
 evidence: probe:examples/riscv-mini/tests/test_cache_smoke.cpp
 ---

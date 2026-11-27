@@ -5,6 +5,8 @@ source: ADR-051（chlib 条件构造的语义模型 —— 守卫贡献 + 权威
 phase: phase-5
 category: chlib
 type: feature
+状态依据: 归档 `openspec/changes/archive/2026-10-30-chlib-conditional-semantics-2026-10/`（35/35 task 已勾）
+状态: implemented
 created_at: 2026-10-30
 evidence: test:tests/chlib/test_if_stmt.cpp
 ---

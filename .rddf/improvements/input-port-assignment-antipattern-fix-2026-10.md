@@ -5,6 +5,8 @@ source: input-port-driving-guard-2026-10（spike 顺手发现的存量缺陷）
 phase: phase-5
 category: testing
 type: bugfix
+状态依据: 归档 `openspec/changes/archive/2026-10-28-input-port-assignment-antipattern-fix-2026-10/`（20/20 task 已勾）
+状态: implemented
 created_at: 2026-10-28
 evidence: probe:run_all_ported_tests.sh
 ---

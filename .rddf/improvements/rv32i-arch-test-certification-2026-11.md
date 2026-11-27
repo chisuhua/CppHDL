@@ -4,12 +4,17 @@ priority: P2
 phase: phase-6
 category: cpu
 type: feature
+残余: >-
+  **第一步 = S-A.0 环境 spike 未做**（认领 owner + 时限 → S-A go/no-go）⇒ ⇒ 前置 = `rv32i-privileged-csr-2026-11` 的特权面
 状态: draft
-进度: "**立项（2026-11-25 · planner）** · 仓内 **R3**（`examples/riscv-mini/RUNNING-ELF.md` §8.6）自 2026-11 起登记为「⬜ 未做」且**至今无草案、无 change** ⇒ ⇒ 本草案补上该缺口 · ⚠️ **第一步 = S-A.0 环境 spike（认领 owner + 时限）→ S-A go/no-go**（**零产品代码改动 · 产物不进仓**；⚠️ **非「零成本」** —— 生成侧 Sail/mise/uv 本机全缺）· ⚠️ **前置**：① **特权面被 `rv32i-privileged-csr-2026-11` 阻塞** ⇒ ⇒ **本项只取非特权子集** · ② **`.text.rvmodel` 落点 = 架构级冲突**（本核取指无区域检查 ⇒ ⇒ MUST 显式放 I-TCM 侧 · 见草案 A.2）· ③ **经 metis 第 1 轮审稿**（3 BLOCKER + 9 建议 + NIT · **全部已处置**）"
+进度: >-
+  "**立项（2026-11-25 · planner）** · 仓内 **R3**（`examples/riscv-mini/RUNNING-ELF.md` §8.6）自 2026-11 起登记为「⬜ 未做」且**至今无草案、无 change** ⇒ ⇒ 本草案补上该缺口 · ⚠️ **第一步 = S-A.0 环境 spike（认领 owner + 时限）→ S-A go/no-go**（**零产品代码改动 · 产物不进仓**；⚠️ **非「零成本」** —— 生成侧 Sail/mise/uv 本机全缺）· ⚠️ **前置**：① **特权面被 `rv32i-privileged-csr-2026-11` 阻塞** ⇒ ⇒ **本项只取非特权子集** · ② **`.text.rvmodel` 落点 = 架构级冲突**（本核取指无区域检查 ⇒ ⇒ MUST 显式放 I-TCM 侧 · 见草案 A.2）· ③ **经 metis 第 1 轮审稿**（3 BLOCKER + 9 建议 + NIT · **全部已处置**）"
 主题: RV32I ISA 缺口 —— riscv-arch-test（ACT4）认证级合规证据
-依赖: `rv32i-privileged-csr-2026-11`（**特权面**的硬前置 · improvement · draft）· `rv32i-isa-gap-closure-2026-11`（`OP_SYSTEM` 非法 ⇒ CSR 未实现 · improvement · partial）· **change `riscv-tests-gate-2026-11`（已归档** · `openspec/changes/archive/2026-11-25-riscv-tests-gate-2026-11/` · **R1/R2/R4 已落地** · 本项复用其 env / runner / 门禁骨架）· **change `rv32i-official-rtl-gate-2026-11`（已归档** · 交付物级门禁骨架）· ADR-069（内存时序）· ADR-047（前推）
+依赖: >-
+  `rv32i-privileged-csr-2026-11`（**特权面**的硬前置 · improvement · draft）· `rv32i-isa-gap-closure-2026-11`（`OP_SYSTEM` 非法 ⇒ CSR 未实现 · improvement · partial）· **change `riscv-tests-gate-2026-11`（已归档** · `openspec/changes/archive/2026-11-25-riscv-tests-gate-2026-11/` · **R1/R2/R4 已落地** · 本项复用其 env / runner / 门禁骨架）· **change `rv32i-official-rtl-gate-2026-11`（已归档** · 交付物级门禁骨架）· ADR-069（内存时序）· ADR-047（前推）
 来源: 用户 2026-11-25 三问（「riscv-mini 可以做 riscv-arch-test 吗」「建议在 riscv-mini 还是 riscv-soc 做」「切 planner 给出后续任务建议和规划」）+ planner 实测（上游 ACT4 事实核对 · 本机工具就绪度 · 核级/SoC 级观测面对比 · 现有门禁基线复跑 4/4 绿）
-生成时间: 2026-11-25
+生成时间: >-
+  2026-11-25
 evidence: probe:examples/riscv-mini/RUNNING-ELF.md
 ---
 

@@ -5,6 +5,9 @@ source: cache-stub-physical-removal.md 的配套调研备忘录
 phase: phase-5
 category: cache
 type: research
+状态依据: >-
+  **非提案**（调用面 grep 的**调研备忘录**（11 个 pre- 引用）—— 调研已消费于 `cache-stub-physical-removal` 的物理删除）⇒ ⇒ 作为**记录件**留原地（被主 spec / ADR / roadmap objective 引用 ⇒ 移出会破坏入向引用）⇒ ⇒ 标终态以退出待办池
+状态: 已完成
 created_at: 2026-10-18
 evidence: test:tests/chlib/test_cache_pipeline_integration.cpp
 ---
@@ -14,6 +17,7 @@ evidence: test:tests/chlib/test_cache_pipeline_integration.cpp
 **日期**: 2026-10-18
 **作者**: build-agent (architect role)
 **父 improvement**: `cache-stub-physical-removal.md`（同目录）
+**Status**: ✅ **已完成**（2026-11-27 · 本文件是**记录件**而非提案 ⇒ ⇒ 调用面 grep 调研（11 个 pre- 引用）已消费于 `cache-stub-physical-removal` 的物理删除 ⇒ ⇒ 标终态以退出待办池；**文件原地保留** ⇒ 因被 `docs/adr/ADR-039` / `objective-cache-stub-retired` 引用）
 
 ---
 
