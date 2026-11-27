@@ -7,12 +7,13 @@
 #
 # ⚠️ **护栏判什么 / 不判什么**：
 #   · **判**：① 每份 improvement 的 front matter MUST 是合法 YAML 且 `---` 闭合
-#            ② 「已交付」（同名归档 change **或** 正文 Status 首词命中已完标记）
+#            ② 「已交付」（正文 Status 首 token 命中已完标记）
 #              ⇒ ⇒ `状态:` MUST 是终态词 **或** `partial`
 #            ③ 索引表每行的链接目标 MUST 存在
-#   · **不判**：「标了终态但其实没做」⇒ 那要逐条核对 body 语义，本仓已有 2 份
-#     **已登记**的同型漂移（归 planner 的 `rtl-track-followup-list-2026-11.md`）
-#     ⇒ ⇒ 强判会把本护栏变成恒红 ⇒ ⇒ 只判**单向**（已交付 ⇒ 必须标终态）。
+#            ④ 反向矛盾：正文未判已完 ∧ 同名归档 change 的 tasks **全勾** ∧ 非终态
+#              ⇒ ⇒ MUST 有非空 `残余:`（否则矛盾静默）
+#   · **不判**：「标了终态但其实没做」⇒ 那要逐条核对 body 语义 ⇒ ⇒ 只判可机械判的
+#     那一半（已交付 ⇒ 必须标终态；反向矛盾 ⇒ 必须有交代）。
 #
 # ⚠️ **可达性前提**（`scripts/verify_guard_reachability.sh` 的纪律 1）：
 #   · 依赖 = **python3**（≥ 3.8）+ 仓内文件；**不**依赖网络 / git 历史 /
@@ -22,8 +23,8 @@
 #     ⇒ ⇒ 不依赖真实仓历史 ⇒ 不会成为「第一个不可达护栏」。
 #
 # 用法：
-#   scripts/verify_improvement_status_truth.sh              # C1–C3 检查
-#   scripts/verify_improvement_status_truth.sh --self-test   # 6 条 fixture（5 类投毒 + 还原）
+#   scripts/verify_improvement_status_truth.sh              # C1–C4 检查
+#   scripts/verify_improvement_status_truth.sh --self-test   # 15 条 fixture（投毒 + 边界 + 还原）
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
