@@ -36,13 +36,13 @@
 | `scripts/verify_rv32i_fw_init_rtl.sh` | **A** | 只登记不改（mini 线专有场景） | 不分组 |
 | `scripts/verify_rv32i_elf_e2e.sh` | **A** | 只登记不改（full 线有对应物时再加行） | full 线有 ELF 流程时另议 |
 | `scripts/verify_rv32i_official_rtl.sh` | **A** | 只登记不改（语料在 mini 线） | 不分组 |
-| `scripts/verify_no_duplicate_rv32i_headers.sh` | **B** | 扫描面改为按 marker 发现；C1 因 full 线 basename 独立而天然绿；C6 快照仍只对 mini | C6 的 per-line 快照 => S4c-1 |
-| `scripts/verify_riscv_soc_core_ports.sh` | **B** | 加 --line 参数；full 线无核 => 本脚本对 full 线无对象（不误红） | 53 行表的 per-line 版本 => S4c-1 |
-| `scripts/verify_example_assertion_quality.sh` | **B** | **实测形态**：SRC_LIST **自动收集**（含 examples/**/tests/）⇒ ⇒ 新线测试源**自动进扫描面**；但护栏**主动要求**「新增测试源 MUST 登记一行（含真断言数下限）」⇒ ⇒ **登记 1 行**（漏登记当场红） | 持续 |
-| `scripts/verify_example_test_wiring.sh` | **B** | **实测形态**：源集合已是 `find examples -path '*/tests/*'`（**全扫**）⇒ ⇒ 新线**自动覆盖** ⇒ ⇒ **S4c-0 零改动**（只需实测新线被覆盖） | 持续 |
-| `scripts/verify_examples_rtl_sim.sh` | **B** | S4c-0 的 full 线无 RTL 产物 => tsv 无行是合法的；「有产物但未登记」=> 红 | full 线进 tsv => S4c-1 起 |
-| `scripts/verify_hierarchical_rtl.sh` | **B** | 无需改（S4c-0 的 full 线不参与层次化判据） | full 线语料 => S4c-1 起 |
-| `scripts/lib/rv32i_obs_vector.py` | **B** | 改为按 marker 发现核头；找不到 => 跳过而非误红 | full 线的向量源 => S4c-1 |
-| `scripts/lib/dual_backend_parity.py` | **B** | 清单按 marker 发现；锚点改按产品线分组 | full 线有 dual pair => S4c-1 起 |
+| `scripts/verify_no_duplicate_rv32i_headers.sh` | **B** | **实测：两态（full 线存在/不存在）退出码同为 0** ⇒ ⇒ S4c-0 **零改动**（该护栏只看 mini 线路径，full 线不在其扫描面）· 按 marker 发现推迟到 S4c-1（届时 full 线才有核头） | C6 的 per-line 快照 + 扫描面按 marker => S4c-1 |
+| `scripts/verify_riscv_soc_core_ports.sh` | **B** | **实测：两态退出码同为 0** ⇒ ⇒ S4c-0 **零改动**（full 线无核 ⇒ 本脚本对 full 线**无对象**）· `--line` 参数与 53 行表的 per-line 版本推迟到 S4c-1 | 53 行表的 per-line 版本 => S4c-1 |
+| `scripts/verify_example_assertion_quality.sh` | **B** | **已落实**：SRC_LIST 自动收集 + **登记 1 行**（full 线 · 真断言数下限 9）⇒ ⇒ 漏登记当场红。**两态实测**：present=1（既有红）· absent=1（+1 条**真** STALE = 锚点文件消失，属正确行为）⇒ 退出码相同 | 持续 |
+| `scripts/verify_example_test_wiring.sh` | **B** | **已落实**：源集合**已是全扫**（`find examples -path '*/tests/*'`）⇒ 新线**自动覆盖**（实测 `OK ... → test_rv32i_full_soc`）⇒ **零改动**。⚠️ 两态未做端到端实测（单次 ~15 min 且其 C3 有既有 245s 超时脆弱性）⇒ 以逻辑论证 + 单态实测代替 | 持续 |
+| `scripts/verify_examples_rtl_sim.sh` | **B** | **已落实（零改动）**：full 线**无 RTL 产物** ⇒ tsv 无行合法；「有产物但未登记」由 `verify_examples_rtl_sim_coverage.sh` 的**守恒**判据承担（实测 30 == 17 ∪ 13）⇒ 本脚本按 tsv 逐行 ⇒ full 线不涉及 | full 线进 tsv => S4c-1 起 |
+| `scripts/verify_hierarchical_rtl.sh` | **B** | **已落实（零改动）**：只对 mini 线的 `RV32I_HIER_EMITTER` 取语料 ⇒ full 线不参与层次化判据 | full 线语料 => S4c-1 起 |
+| `scripts/lib/rv32i_obs_vector.py` | **B** | **实测：两态退出码同为 0**（其宿主护栏 `verify_dual_backend_parity` 的 C4 只盯 mini 核的 39 根 ch_out）⇒ ⇒ S4c-0 **零改动** | full 线的向量源 => S4c-1 |
+| `scripts/lib/dual_backend_parity.py` | **B** | **实测：两态退出码同为 0** ⇒ ⇒ S4c-0 **零改动**（扫描面本来就全扫；`HANDCRAFTED_DUAL` 是显式白名单） | full 线有 dual pair => S4c-1 起 |
 
 ⇒ **A 类 6 个**（该线专属 · 只登记不改）· **B 类 8 个**（MUST 参数化）

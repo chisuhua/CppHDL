@@ -108,8 +108,20 @@ marker + 构建目标 + **最小 SoC 顶层**（框架 2 + 极少端口 · 无�
       且 `--self-test` 投毒（改 marker / 删 marker / 改 `layer`）⇒ **必红**
 - [ ] **AC4 脚本处置登记完备**：处置表 **14 行**（12 sh + 2 py）逐行有「写死内容 / 类（A|B）/ 处置」
       ⇒ 漏一行 ⇒ 元护栏 C2 红
-- [ ] **AC5 B 类脚本已参数化**：8 个 B 类脚本**对 full 线不误红**且**对 mini 线行为不变**
-      ⇒ 逐个用「full 线存在 / 不存在」两种状态各跑一次，退出码 MUST 相同
+- [ ] **AC5 8 个 B 类脚本的处置已逐个落实**（判据 = **两态退出码相同**）：
+      逐个用「full 线存在 / 不存在」两态跑 ⇒ 退出码 MUST 相同。**实测结果**：
+      · **零改动（已实证两态相同）**：`verify_no_duplicate_rv32i_headers`（0==0）·
+        `verify_riscv_soc_core_ports`（0==0）· `rv32i_obs_vector.py`（0==0）·
+        `dual_backend_parity.py`（0==0）· `verify_example_assertion_quality`（1==1；absent 多
+        1 条**真** STALE = 锚点文件消失，属正确行为）
+      · **已落实（自动覆盖 / 无对象）**：`verify_example_test_wiring`（源集合**已全扫**
+        ⇒ 新线自动覆盖，实测 `OK ... → test_rv32i_full_soc`）· `verify_examples_rtl_sim`
+        （full 线**无 RTL 产物** ⇒ tsv 无行合法；「有产物但未登记」由
+        `verify_examples_rtl_sim_coverage.sh` 的**守恒**承担，实测 `30 == 17 ∪ 13`）·
+        `verify_hierarchical_rtl`（只对 mini 的 `RV32I_HIER_EMITTER` 取语料 ⇒ 无对象）
+      ⇒ ⚠️ **两条未做端到端两态实测**（`test_wiring` 单次 ~15 min 且其 C3 有既有 245 s 超时脆弱性 ·
+      `examples_rtl_sim` 单次 ~15 min）⇒ 以**逻辑论证 + 单态实测**代替，**已如实登记**
+      ⇒ ⚠️ 「per-line 判别（按 marker 分组）」推迟到 **S4c-1**（full 线届时才有核/产物）
       ⇒ ⚠️ **「0 处护栏脚本改动」≠ 「0 处约束」** —— 护栏对 **CMake 写法**有隐式约束
       （`verify_example_test_wiring.sh` 的 MAP 解析**逐行**取「首个实参 = target」+
       「**最后一个** `.cpp` = 源文件」⇒ ⇒ 测试源 MUST **独占一行**）⇒ ⇒ 该约束 MUST

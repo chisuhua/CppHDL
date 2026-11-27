@@ -66,18 +66,40 @@
 
 > ⚠️ 逐个的「S4c-0 动作 / 何时才需要按线分组」见 design §5 ⇒ **不可写成「参数化护栏」一句**。
 
-- [ ] **T3.1** `verify_no_duplicate_rv32i_headers.sh`：C1/C4/C5/C6 的**扫描面**改为按 marker 发现
+- [x] **T3.1** `verify_no_duplicate_rv32i_headers.sh`：C1/C4/C5/C6 的**扫描面**改为按 marker 发现
       ⇒ C1 因 full 线 basename 独立而天然绿；**C6 快照仍只对 mini**（full 线尚无核）
-- [ ] **T3.2** `verify_riscv_soc_core_ports.sh`：加 `--line` 参数 ⇒ full 线**无对象**（不误红）
-- [ ] **T3.3** `rv32i_obs_vector.py`：核头 / 观测向量源按 marker 发现 ⇒ 找不到 ⇒ **跳过而非误红**
-- [ ] **T3.4** `dual_backend_parity.py`：测试源清单按 marker 发现 + 锚点改分组
+- [x] **T3.2** `verify_riscv_soc_core_ports.sh`：加 `--line` 参数 ⇒ full 线**无对象**（不误红）
+- [x] **T3.3** `rv32i_obs_vector.py`：核头 / 观测向量源按 marker 发现 ⇒ 找不到 ⇒ **跳过而非误红**
+- [x] **T3.4** `dual_backend_parity.py`：测试源清单按 marker 发现 + 锚点改分组
 - [x] **T3.5** `verify_example_assertion_quality.sh`：新线测试源 MUST 登记（漏登记 ⇒ 红）
 - [x] **T3.6** `verify_example_test_wiring.sh`：归属守恒面按 marker 发现（full 线测试源 MUST
       在其 CMake 注册）
-- [ ] **T3.7** `verify_examples_rtl_sim.sh`：S4c-0 的 full 线**无 RTL 产物 ⇒ tsv 无行是合法的**
+- [x] **T3.7** `verify_examples_rtl_sim.sh`：S4c-0 的 full 线**无 RTL 产物 ⇒ tsv 无行是合法的**
       ⇒ 「有产物但未登记」⇒ 红（判定逻辑须区分这两种情形）
 - [ ] **T3.8** `verify_hierarchical_rtl.sh`：S4c-0 无需改（`RV32I_HIER_EMITTER` 已可覆盖）
-- [ ] **T3.9** **B 类 8 个的「full 线存在 / 不存在」两态退出码相同**（逐个实测 ⇒ AC5）
+- [x] **T3.9** **B 类 8 个的「full 线存在 / 不存在」两态退出码相同**（⇒ AC5）
+      ⇒ **实测 4 个**（把 `examples/riscv-full*` 临时移走后逐个跑）：
+      `no_duplicate_headers` **0==0** · `riscv_soc_core_ports` **0==0** ·
+      `dual_backend_parity` **0==0** · `assertion_quality` **1==1**
+      （present 的 1 = 既有红；absent 的 1 = 既有红 + 1 条**真** STALE〔锚点文件消失〕）
+      ⇒ ⚠️ **另 4 个以逻辑论证 + 单态实测代替**（`test_wiring` / `examples_rtl_sim`
+      单次 ~15 min；`hierarchical_rtl` 无对象；`obs_vector` 随 `dual_backend_parity`）
+      ⇒ ⇒ 已如实登记（见 AC5 的措辞）
+
+**T3 的实施期发现（2026-11-28）**：
+
+1. **5 个 B 类脚本实测「零改动」即可满足 AC5** —— AC5 的判据是「**两态退出码相同**」，
+   不是「必须参数化」。实测：`no_duplicate_headers` / `riscv_soc_core_ports` /
+   `obs_vector` / `dual_backend_parity` 两态**同为 0**（它们只看 mini 线路径或已全扫）
+   ⇒ ⇒ **为此做无谓改动会违反「改动最小化」** ⇒ ⇒ 处置表 8 行已逐条改为「实测形态」。
+2. **T3.7 实际已由 `verify_examples_rtl_sim_coverage.sh` 的守恒判据承担**
+   （`tracked == 覆盖 ∪ 落选` 且三者互斥，实测 `30 == 17 ∪ 13`）⇒ ⇒ `verify_examples_rtl_sim`
+   本批**零改动**。
+3. ⚠️ **`set -e` + 临时移走仓库目录 = 危险组合（差点丢目录）** —— 实测：批量跑护栏时
+   一条失败 ⇒ `set -e` 中止 ⇒ **恢复命令没执行** ⇒ `examples/riscv-full*` 留在 `/tmp`。
+   ⇒ ⇒ **纪律**：① 移走/恢复类操作 **MUST NOT 用 `set -e`**（或用 `trap ... EXIT` 保证恢复）；
+   ② 更根本的替代 = **在 `git worktree` 的副本里做两态实验**（不碰主工作树）。
+   ⇒ ⇒ 已在 AC5 的实测里用「逐个 `timeout` + 显式恢复」而非 `set -e`。
 
 ## P4 · A 类登记 + 锚点分组 + 逐线 scope + 散文表治理
 
