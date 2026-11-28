@@ -68,7 +68,44 @@
 | F4 | **爆炸半径漏改**（wrapper / 4 个测试文件）⇒ ⇒ 编译失败或测试恒绿 | AC4 用 grep 判「零遗留旧形态」 |
 | F5 | **把 `ready` 当成「数据可用」** ⇒ ⇒ 与 `IfStage` 的「instr_ready 恒 1」前提冲突 ⇒ ⇒ 取指侧行为漂移 | 本批**不接核**（I 侧无生产消费者）⇒ ⇒ 只在 S4c-1b 处理取指反压 |
 
-## 5. 与后续批次的边界
+## 5. 实施指引（**下一轮执行时必读** · 2026-11-28 实测得出）
+
+### 5.1 ⚠️ **拍数陷阱**：I 侧 `sread`（1 拍）vs D 侧 `aread`（组合）
+
+D 侧用例（`tests/chlib/test_cache_sync.cpp` 的用例 7）的形态是「fill 4 beat → re-read →
+**tick 一次** ⇒ 立刻读到 `rdata`」⇒ ⇒ **那是 `aread`（组合读）的性质**。
+**I 侧是 `sread`（寄存器读）** ⇒ ⇒ 同样形态下**必须多等一拍**才读到 `data` ⇒ ⇒
+照抄 D 侧用例会**恒红**（不是实现错，是判据拍数错）。
+
+⇒ ⇒ **判据的拍数 MUST 逐拍手推**（§3.1 的 4 个字读回同理：fill 完成 → `ready`=1 → **下一拍** 数据）。
+
+### 5.2 fill 的拍序（手推）
+
+| 拍 | 事件 | 观测 |
+|---|---|---|
+| N | `ar_valid=1` · `ar_ready=1` ⇒ **AR 握手** | `ar_addr` = `addr & 0xFFFFFFF0` · `ar_len=3` · `ar_size=2` · `ar_burst=1` |
+| N+1 … N+3 | R beat 0/1/2（`r_last=0`）| 各落一个 lane |
+| **N+4** | R beat 3（`r_last=1`）⇒ **`fill_complete`** | ⚠️ **lane 3 此刻才装载** ⇒ 拼整行 MUST 用**当拍 `r_data`**（S3 的 off-by-one）· `ready` 在本拍为 **1** |
+| N+5 | —— | `data` = **请求 lane** 的字（`miss_data_r` 锁存 ⇒ 本拍可读）|
+
+⇒ ⇒ `ready` 的语义（design §1.1 ②）：hit ⇒ 本拍 1 + **下一拍**数据；miss ⇒ **N+4** 拍 1 + **N+5** 拍数据 ⇒ ⇒ **两条路径的数据延迟统一为 1 拍** ✅
+
+### 5.3 实施顺序（避免留下编译不过的中间态）
+
+1. `include/cpu/cache/i_cache_sync.h`（AXI 侧 5 根 → 11 根 full 读通道 + fill 状态机 + lane 选择 + `ready` 语义）
+2. `include/cpu/cache/i_cache_prefetch.h`（wrapper：**AXI 侧**转发面同步扩；**前端转发不变**）
+3. 编译 `test_cache_sync` ⇒ 44 处错误集中在测试的旧简化口 ⇒ ⇒
+4. 改测试：`tests/chlib/test_cache_sync.cpp`（I 侧 5 个用例 · 照 D 侧 burst 模板 + §5.1/§5.2 的拍数）
+   + `tests/chlib/test_cache_complete.cpp` + `examples/riscv-mini/tests/test_cache_smoke.cpp`
+   + 其余消费者
+5. 跑 `test_cache_sync` ⇒ ⇒ **新增 lane 判据**（§3.1 的 4 个不同字）⇒ ⇒ 绿
+6. **反向判据**（AC8）：把读选择改回 `bits<31,0>` ⇒ ⇒ lane 判据 MUST 红 ⇒ ⇒ 还原
+
+> ⚠️ **实现草稿**（端口面 + fill 状态机 + lane 选择的完整 C++）已在本次会话写就，
+> 暂存于 `/tmp/opencode/s4c1a/`（**仓外** · 同会话内可读回）⇒ ⇒ 若该路径已失效，
+> 按 §1 的差异表 + §5.1/§5.2 的拍数表**重写即可**（不依赖草稿）。
+
+## 6. 与后续批次的边界
 
 - **本批不改**：`include/cpu/pipeline/**`（取指协议）· `examples/riscv-mini/src/**`（核）· `examples/riscv-full/**`
   （full 线核）⇒ ⇒ **mini 线零行为变化**（I 侧**无生产消费者**：核的取指仍走 I-TCM 直连）
