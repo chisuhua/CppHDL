@@ -65,7 +65,7 @@
 
 ## P6 · 归档
 
-- [ ] **T6.1** `openspec archive rv32i-i-l1-axi-full-2026-11 --yes`
+- [x] **T6.1** `openspec archive rv32i-i-l1-axi-full-2026-11 --yes` ⇒ 已归档为 `openspec/changes/archive/2026-11-29-rv32i-i-l1-axi-full-2026-11/`（spec 合并：`cpu-cache-subsystem` +1 · `rv32i-i-l1-timing` 新建 +3）
 
 ## T5.1 / T5.5 证据（**实施记录** · 2026-11-28 · builder）
 
