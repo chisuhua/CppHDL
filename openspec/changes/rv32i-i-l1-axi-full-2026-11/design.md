@@ -101,9 +101,20 @@ D 侧用例（`tests/chlib/test_cache_sync.cpp` 的用例 7）的形态是「fil
 5. 跑 `test_cache_sync` ⇒ ⇒ **新增 lane 判据**（§3.1 的 4 个不同字）⇒ ⇒ 绿
 6. **反向判据**（AC8）：把读选择改回 `bits<31,0>` ⇒ ⇒ lane 判据 MUST 红 ⇒ ⇒ 还原
 
-> ⚠️ **实现草稿**（端口面 + fill 状态机 + lane 选择的完整 C++）已在本次会话写就，
-> 暂存于 `/tmp/opencode/s4c1a/`（**仓外** · 同会话内可读回）⇒ ⇒ 若该路径已失效，
-> 按 §1 的差异表 + §5.1/§5.2 的拍数表**重写即可**（不依赖草稿）。
+### 5.4 实施期的 4 个**实测坑**（2026-11-28 · 实施尝试后回退时记下）
+
+| # | 坑 | 现象 | 正解 |
+|---|---|---|---|
+| **K1** | **`ready` MUST 用**寄存器**，不能用组合的 `fill_complete` | `fill_complete` 是**组合**信号 ⇒ 只在填充完成**那一拍**内为高 ⇒ ⇒ 观测方在 tick **之后**读**永远是 0** ⇒ ⇒ 「miss 完成 ⇒ ready=1」这条判据**恒红** | 加 `ch_reg<ch_bool> fill_done_r`：`fill_done_r->next = select(fill_complete, true, false)` ⇒ ⇒ **填充完成后的那一拍** `ready` 为高（且与 `miss_data_r` **同拍可见**）⇒ ⇒ `io().ready <<= select(hit, true, fill_done_r)` |
+| **K2** | **批量替换端口名 MUST 按「块」做**，不能按「出现位置」做 | 用「`ICacheAsync` 出现的行向上找最近的 `DUAL_BACKEND_TEST_PAIR(`」定位块 ⇒ 会把**下一个块**的首行一并误标 ⇒ ⇒ 回退时**误伤 Sync 块** ⇒ 错误数从 33 **涨到 112** | 块边界 MUST 用**宏起点行**（`DUAL_BACKEND_TEST_PAIR(`）切分 ⇒ ⇒ 逐块判断块内是否含 `ICacheAsync`（**Async 变体的 AXI 侧不变** ⇒ 该块**整体跳过**）⇒ ⚠️ `tests/chlib/test_cache_complete.cpp` **不用** `DUAL_BACKEND_TEST_PAIR` ⇒ 块边界须按它自己的宏（实测该文件用 `TEST_CASE` + 手工 DUT）|
+| **K3** | **`i_cache_async.h` 的 AXI 侧**不变 | 同上 ⇒ 任何「全文件替换 `axi_*`」都会误伤 Async ⇒ ⇒ **零 diff** 要求（硬约束 4）与「批量替换」直接冲突 | 只改 **Sync** 相关块 ⇒ ⇒ `i_cache_async.h` **零 diff** |
+| **K4** | `test_cache_sync.cpp` 的 **D 侧用例已用 burst 激励** ⇒ ⇒ **可直接抄** | D 侧用例 6/7/8/9（`:178-291`）已是 `ar_ready` + 4 beat `r_valid/r_data/r_last` 形态 | I 侧 5 个用例照 D 侧模板改写 ⇒ ⇒ 差别只在 **① 无写通道 ② 数据源是 `sread`（1 拍）⇒ 拍数见 §5.1/§5.2** |
+
+> ⚠️ **实现草稿**（端口面 + fill 状态机 + lane 选择 + K1 的 `fill_done_r` 修正）已在
+> 2026-11-28 的实施尝试中写就并**实测编译通过**（`test_cache_sync` 24 用例 / 86 断言全绿），
+> 但因 K2/K3（另两个测试文件的批量替换误伤）导致工作区不可提交 ⇒ ⇒ **已整体回退** ⇒
+> ⇒ 草稿暂存于 `/tmp/opencode/s4c1a/`（**仓外** · 同会话内可读回）；若该路径已失效，
+> 按 §1 的差异表 + §5.1/§5.2 的拍数表 + **上表 K1–K4** **重写即可**（不依赖草稿）。
 
 ## 6. 与后续批次的边界
 
