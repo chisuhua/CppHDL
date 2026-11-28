@@ -116,6 +116,13 @@ specs:                  # 关联 capability（目录 MUST 存在）
 - EXAMPLES_TEST_SOURCES: mini=26, full=1
 ```
 
+- **格式**（实施期定稿）：`- <KEY>: <group>=<N>[, <group>=<M>]*`
+  ⇒ **组名 = 产品线全名**（`riscv-mini` / `riscv-full`）+ 特殊组 **`lib`**
+  （库层测试 = 根 `tests/**`，**不属任何产品线** ⇒ 它是**余项**）。
+  例：`CTEST_TOTAL: lib=283, riscv-mini=2, riscv-full=1`
+  ⚠️ **组名 MUST 用产品线全名**（实测：用缩写 `mini` 会与 `--counts` 的输出不匹配 ⇒ 恒 0）。
+- **两层判据（都是等式）**：① **和** == 实测总数 ② **每线** == 该线的实际数
+  （由 `scripts/lib/product_lines.py --counts` 派生的 target 清单 ∩ 实测清单）。
 - `verify_test_counts.sh` 改为**分组比对**（逐组 × `ctest -N` 的对应子集）。
   ⚠️ **分组子集的划定口径 MUST 明确**：`ctest -N` 的测试名**不含产品线标识** ⇒ ⇒
   分组比对**只能**用「该线**拥有**的测试 target 清单」（由 marker / CMake 派生）⇒ ⇒

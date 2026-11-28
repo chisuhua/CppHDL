@@ -18,11 +18,11 @@
 
 | 锚点 | 值 | 归组形态 |
 |---|---|---|
-| `CTEST_TOTAL` | `286` | **未归组**（T4.2） |
-| `VERILATOR_E2E_TOTAL` | `82` | **未归组**（T4.2） |
-| `DUAL_BACKEND_PARITY_TOTAL` | `68` | **未归组**（T4.2） |
-| `DUAL_BACKEND_PARITY_PAIRS` | `307` | **未归组**（T4.2） |
-| `EXAMPLES_TEST_SOURCES` | `27` | **未归组**（T4.2） |
+| `CTEST_TOTAL` | `lib=283, riscv-mini=2, riscv-full=1` | 已归组 |
+| `VERILATOR_E2E_TOTAL` | `lib=81, riscv-mini=1, riscv-full=0` | 已归组 |
+| `DUAL_BACKEND_PARITY_TOTAL` | `riscv-mini=68, riscv-full=0` | 已归组 |
+| `DUAL_BACKEND_PARITY_PAIRS` | `riscv-mini=307, riscv-full=0` | 已归组 |
+| `EXAMPLES_TEST_SOURCES` | `riscv-mini=26, riscv-full=1` | 已归组 |
 
 ## 3. 脚本处置表
 

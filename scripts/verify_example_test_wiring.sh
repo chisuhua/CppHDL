@@ -278,7 +278,11 @@ done < "$SRC_LIST"
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- C2: 源文件总数 vs EXAMPLES_TEST_SOURCES 锚点 ---"
-anchor="$(sed -n 's/^[[:space:]]*-[[:space:]]*EXAMPLES_TEST_SOURCES:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$AGENTS_MD" | head -1)"
+# ⚠️ 锚点**按产品线分组**（ADR-078 · S4c-0）⇒ 校验「和」：
+#    `EXAMPLES_TEST_SOURCES: riscv-mini=<N>, riscv-full=<M>` ⇒ 和 == 实测源文件数。
+anchor="$(sed -nE 's/^[[:space:]]*-[[:space:]]*EXAMPLES_TEST_SOURCES:[[:space:]]*(.+)$/\1/p' "$AGENTS_MD" | head -1 \
+    | tr ',' '\n' | sed -nE 's/^[[:space:]]*[a-z-]+=([0-9]+)[[:space:]]*$/\1/p' \
+    | awk '{ s += $1 } END { if (NR > 0) printf "%d\n", s }')"
 if [ -z "$anchor" ]; then
     violation "$AGENTS_MD 缺少 'EXAMPLES_TEST_SOURCES: <N>' 锚点（C2 无法判定 ⇒ 缩面不可见）"
 else

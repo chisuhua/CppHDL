@@ -35,7 +35,7 @@ cmake --build build --target tb_riscv_soc -j$(nproc)
 build/examples/riscv-soc/tb_riscv_soc
 #   ⇒ RESULT: checks=9 fails=0
 
-# ② 发射（恒加 --hierarchical ⇒ 12 module）
+# ② 发射（恒加 --hierarchical ⇒ module 集见期望源 `.rddf/checks/soc-rtl-expectations.md#riscv-soc`）
 build/examples/riscv-soc/tb_riscv_soc --emit-rtl --hierarchical --out out/hier
 
 # ②' 从 **ELF 派生的镜像**装载（**方案 a**：零 `prog_*` 写 ⇒ `ch_mem::init_data`）
@@ -57,7 +57,7 @@ build/examples/riscv-soc/tb_riscv_soc --check-products --out out/chk
 
 | 项 | 值 | 出处 |
 |---|---|---|
-| 产物 module 集 | `top` · `Rv32iCoreTop` · `SocTraceCounter` · `IfStage` · `IdStage` · `ExStage` · `MemStage` · `WbStage` · `HazardUnit` · `ForwardingMux_32_` · `AxiLiteMatrix2x2` · `AxiLiteGpio` = **12** | ADR-077 V2 + **S4a dated addendum** |
+| 产物 module 集 | **见单一真相源** ⇒ `.rddf/checks/soc-rtl-expectations.md#riscv-soc` §1「产物形态」的 module 集合（**不在此复制** ⇒ 复制即漂移：实测本文曾长期停在 12，而磁盘已是 17 ⇒ S4b 换成 `AxiLiteCrossbar` + 6 外设） | ADR-077 V2 + **S4a dated addendum** + **S4b dated addendum**（2026-11-27 散文表治理） |
 | 顶层端口 | **10** = 框架 2 + 根自有 8（+ `gpio_out` / `gpio_in`） | ADR-077 V1 + **S4a dated addendum** |
 | 变化观测量 | **2**（`store_count` / `writeback_count`） | `rtl-soc-output` 签批要求 ≥2 |
 | 手推计数 | `store_count == 2` · `writeback_count == 6`（12 字程序 · D-L1 一条 + MMIO 一条） | 期望源见下 |

@@ -189,6 +189,8 @@ include/cpu/                             # 30 headers, 7624 lines（2026-11-27 �
   - **RV32I L1 imem/dmem** (默认) → `ICacheSync` / `DCacheSync` (1-cycle sread)
   - **软核 TCM-style** (低频, 延迟关键) → `ICacheAsync` / `DCacheAsync` (0-cycle aread)
   - **imem 必须 sread** (per `verilator-e2e-coverage` spec §R1 invariant 3): 不要在 RV32I imem 用 Async
+    ⚠️ **本条是「mini 线专属」不变量**（ADR-078 D3/D14）：full 线取指走**总线读** ⇒ ⇒ 其
+    停顿契约 MUST 有独立 capability ⇒ ⇒ 本条**不适用于** full 线
 - **cache wrapper 的「组合逻辑真发射」契约**（2026-10-28，change
   `riscv-mini-cache-wrapper-live-logic-2026-10`）：
   `cache/i_cache_prefetch.h` 与 `cache/d_cache_write_buffer.h` 是 **wrapper**

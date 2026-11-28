@@ -76,7 +76,7 @@
       在其 CMake 注册）
 - [x] **T3.7** `verify_examples_rtl_sim.sh`：S4c-0 的 full 线**无 RTL 产物 ⇒ tsv 无行是合法的**
       ⇒ 「有产物但未登记」⇒ 红（判定逻辑须区分这两种情形）
-- [ ] **T3.8** `verify_hierarchical_rtl.sh`：S4c-0 无需改（`RV32I_HIER_EMITTER` 已可覆盖）
+- [x] **T3.8** `verify_hierarchical_rtl.sh`：S4c-0 无需改（`RV32I_HIER_EMITTER` 已可覆盖）
 - [x] **T3.9** **B 类 8 个的「full 线存在 / 不存在」两态退出码相同**（⇒ AC5）
       ⇒ **实测 4 个**（把 `examples/riscv-full*` 临时移走后逐个跑）：
       `no_duplicate_headers` **0==0** · `riscv_soc_core_ports` **0==0** ·
@@ -103,18 +103,28 @@
 
 ## P4 · A 类登记 + 锚点分组 + 逐线 scope + 散文表治理
 
-- [ ] **T4.1** A 类 6 个脚本（`verify_rv32i_official_rtl` / `verify_dtcm_read_timing` /
+- [x] **T4.1** A 类 6 个脚本（`verify_rv32i_official_rtl` / `verify_dtcm_read_timing` /
       `verify_rv32i_fw_init_rtl` / `verify_rv32i_elf_e2e` / `rv32i_rtl_sim_env` /
       `probe_r21_hier_granularity`）**只登记不改** ⇒ 处置表 14 行齐（AC4）
-- [ ] **T4.2** 根 `AGENTS.md` 的 **5 个 CI 整数锚点**改**按产品线分组** ⇒ 且
+- [x] **T4.2** 根 `AGENTS.md` 的 **5 个 CI 整数锚点**改**按产品线分组** ⇒ 且
       `verify_test_counts.sh` 改**分组比对**（分组子集 = 由 marker 派生的「该线的 ctest target
       清单」⇒ 见 design §6）⇒ **每个 ctest target MUST 归属唯一一条产品线**（未归属 ⇒ 元护栏 C3 红）
-- [ ] **T4.3** **逐线 scope 标注**：根 `AGENTS.md` + `include/cpu/AGENTS.md` 的
+      ⇒ **实测（2026-11-28）**：格式 = `<组名>=<N>`（组名 = **产品线全名** + `lib` 余项组）
+      ⇒ `CTEST_TOTAL: lib=283, riscv-mini=2, riscv-full=1`（和 286）
+      ⇒ `VERILATOR_E2E_TOTAL: lib=81, riscv-mini=1, riscv-full=0`（和 82）
+      ⇒ `DUAL_BACKEND_PARITY_TOTAL: riscv-mini=68, riscv-full=0` · `PAIRS: riscv-mini=307, riscv-full=0`
+      ⇒ `EXAMPLES_TEST_SOURCES: riscv-mini=26, riscv-full=1`（和 27）
+      ⇒ ⇒ **三个读取锚点的护栏全部改分组解析**（`verify_test_counts` / `verify_dual_backend_parity`
+      / `verify_example_test_wiring`）⇒ 三个护栏实测绿
+      ⇒ ⚠️ **组名 MUST 用产品线全名**（实测：用缩写 `mini` ⇒ 与 `--counts` 输出不匹配 ⇒ 恒 0）
+- [x] **T4.3** **逐线 scope 标注**：根 `AGENTS.md` + `include/cpu/AGENTS.md` 的
       「imem MUST `sread`（1 拍）」类红线 + capability `rv32i-data-forwarding` 的
       距离矩阵 ⇒ 三处 MUST 各含「mini 线」标记（grep 可判 ⇒ AC7）
-- [ ] **T4.4** **散文表治理**：`examples/riscv-soc/AGENTS.md` 的 module 集表 ⇒ 替换为**指针**
+- [x] **T4.4** **散文表治理**：`examples/riscv-soc/AGENTS.md` 的 module 集表 ⇒ 替换为**指针**
       （指向 `.rddf/checks/soc-rtl-expectations.md#riscv-soc`）⇒ 且该指针目标的 module 集
       == 磁盘实际（17）（AC8）
+      ⇒ ⚠️ **实测该表曾长期停在 12**（磁盘已是 `AxiLiteCrossbar` + 6 外设 = 17）⇒ ⇒ **同周内漂移**
+      ⇒ ⇒ 散文表**不复制**数值，只留指针（单一真相源唯一）
 
 ## P5 · full 线空壳（**零功能**）
 
@@ -128,6 +138,20 @@
       ⚠️ **实施期订正**：初稿写「`--check-products` PASS」⇒ 但 S4c-0 的 full 线**不发 RTL**
       （只有 2 根恒定输出 ⇒ 层次化产物**无判别力**）⇒ ⇒ `--check-products` 从 **S4c-1** 起
       ⇒ ⇒ 本批改为「组件端口面登记 + 可构建 + 可运行」
+
+**P4 的实施期发现（2026-11-28）**：
+
+- **分组名 MUST 用产品线全名** —— 锚点分组最初写成 `mini=` / `full=` ⇒ 与
+  `product_lines.py --counts` 输出的 `riscv-mini` 不匹配 ⇒ 每线校验恒 0 ⇒ ⇒ 改用全名。
+- **`lib` 余项组是必需的** —— 根 `tests/**` 的 280+ 个 ctest **不属任何产品线** ⇒ ⇒
+  分组必须含 `lib`（= 总数 − 各产品线）⇒ 否则「和」对不上。
+- **`bc` 在精简容器里不存在** ⇒ 分组求和 MUST 用 `awk`。
+- **`awk -F'\t'` 在 mawk 下不把 `\t` 解释为 TAB**（实测：整行不分割 ⇒ 恒 0）⇒ ⇒
+  MUST 用 `-F"$(printf '\t')"`。
+- **三个读取锚点的护栏都要改** ⇒ ⇒ 只改 AGENTS.md 会打断它们 ⇒ ⇒ **锚点格式变更
+  MUST 与读取方的解析同批**。
+- **逐线 scope 标注的第三处（capability）在 delta 里** —— 本 change 的
+  `specs/rv32i-data-forwarding/spec.md` **ADDED** 了适用范围声明 ⇒ ⇒ 归档时自动进主 spec。
 
 ## P6 · 回归与收口
 

@@ -58,11 +58,18 @@ if [ ! -f "$AGENTS" ]; then
     exit 0
 fi
 
-if ! grep -qE 'DUAL_BACKEND_PARITY_TOTAL: [0-9]+' "$AGENTS"; then
-    echo "::error::No DUAL_BACKEND_PARITY_TOTAL anchor in AGENTS.md"
-    echo "::error::(add a line 'DUAL_BACKEND_PARITY_TOTAL: <N>' under NOTES §Test counts)"
+if ! grep -qE 'DUAL_BACKEND_PARITY_TOTAL: [a-z-]+=[0-9]+' "$AGENTS"; then
+    echo "::error::No grouped DUAL_BACKEND_PARITY_TOTAL anchor in AGENTS.md"
+    echo "::error::(add 'DUAL_BACKEND_PARITY_TOTAL: riscv-mini=<N>, riscv-full=<N>' under NOTES §Test counts)"
     exit 1
 fi
+
+# 锚点分组求和（ADR-078 · S4c-0：锚点按产品线分组 ⇒ 校验「和」）
+anchor_sum() {  # $1=KEY
+    sed -nE "s/^[[:space:]]*-[[:space:]]*$1:[[:space:]]*(.+)$/\1/p" "$AGENTS" | head -1 \
+        | tr ',' '\n' | sed -nE 's/^[[:space:]]*[a-z-]+=([0-9]+)[[:space:]]*$/\1/p' \
+        | awk '{ s += $1 } END { if (NR > 0) printf "%d\n", s }'
+}
 
 # 两个锚点：**广度**（源文件数）与**深度**（macro 调用数）
 # ⚠️ 为什么两个都要：只钉「文件数」的话，**从有 3 个 dual pair 的文件里删掉
@@ -86,7 +93,7 @@ fi
 rc=0
 for anchor in DUAL_BACKEND_PARITY_TOTAL DUAL_BACKEND_PARITY_PAIRS; do
     metric=${ANCHORS[$anchor]}
-    documented=$(grep -oE "$anchor: [0-9]+" "$AGENTS" | head -1 | grep -oE '[0-9]+$')
+    documented=$(anchor_sum "$anchor")
     if [ -z "$documented" ]; then
         echo "::warning::No $anchor anchor in AGENTS.md"
         continue

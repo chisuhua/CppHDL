@@ -247,9 +247,14 @@ The Verilator backend (`src/core/verilator_backend.cpp`) dlopen's a compiled Vto
 - **地址 / 数据旁路的叶子 MUST 是流水线寄存器** —— MUST NOT 取 EX/MEM 级的**组合输出**
   （组合环事故形态 `git show bf78367`）⇒ 负向对照 `tests/chlib/test_forwarding.cpp`。
 - **imem MUST `sread`（1 拍）** ⇒ IF/ID 的 pc 必须同样延迟（`fetch_pc_reg`）；
+  ⚠️ **本条是「mini 线专属」不变量**（ADR-078 D3/D14）—— full 线取指走**总线读**（多拍 + 可能
+  miss）⇒ ⇒ 该线的停顿契约 MUST 有**独立** capability（`rv32i-product-lines` + 各线自己的），
+  ⇒ ⇒ 本条**不适用于** full 线（其适用范围声明见 capability `rv32i-data-forwarding`）；
   **D-TCM 读口也 MUST `sread`**（ADR-069 A0 ⇒ **不是** 0 拍组合读）⇒
   仅**字节写 RMW** 与**寄存器堆**是 `aread`。
-- **load-use 停顿拍数 / 距离矩阵的唯一权威 = capability `rv32i-data-forwarding`** ⇒
+- **load-use 停顿拍数 / 距离矩阵的唯一权威 = capability `rv32i-data-forwarding`**
+  ⚠️ **该矩阵是「mini 线专属」**（它在「取指 1 拍 `sread`」前提下推导 ⇒ ADR-078 D3/D14）⇒ ⇒
+  其它产品线 MUST 有自己的 capability，**MUST NOT** 取用本矩阵；
   本文档 MUST NOT 另写一份数字。
 - **非法指令 MUST 可观测**：`dbg_illegal_reason` 4 态 + 优先级（`1` > `3` > `2` > `0`）⇒
   ⚠️ **2026-11-26 · P6-3 起按 reason 分流**（权威 = capability `rv32i-isa-semantics`
@@ -454,7 +459,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      scripts/verify_test_counts.sh and the CI step in .github/workflows/ci.yml
      parse this line. Update this number (and the matching ctest -N output)
      together when adding/removing tests. Do not reformat. -->
-- CTEST_TOTAL: 286
+- CTEST_TOTAL: lib=283, riscv-mini=2, riscv-full=1
 <!-- CI anchor: `ctest -L verilator_e2e` 的测试数（**双后端**套件）。
      scripts/verify_test_counts.sh 的第 2 条检查与之比对。
      ⚠️ 它防的是「双后端覆盖**静默缩面**」—— 加 `verilator_e2e` 标签会让
@@ -463,7 +468,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      Update this number (and the matching `ctest -N -L verilator_e2e | tail -1`
      output) together when adding/removing a `verilator_e2e` label.
      Do not reformat. -->
-- VERILATOR_E2E_TOTAL: 82
+- VERILATOR_E2E_TOTAL: lib=81, riscv-mini=1, riscv-full=0
 <!-- CI anchor: 「**双后端 parity 源文件数**」。
      scripts/verify_dual_backend_parity.sh 的第 2 条检查与之比对；
      口径定义见 .rddf/roadmap/objectives/objective-test-coverage-100pct.md §2。
@@ -473,14 +478,14 @@ bash scripts/rv32i_rtl_sim_env.sh
      计数口径 = 「剥注释与字符串后含 `DUAL_BACKEND_TEST_PAIR(` **调用**的
      测试源文件」+ 「hand-crafted 真 dual 白名单（1 个）」。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_TOTAL: 68
+- DUAL_BACKEND_PARITY_TOTAL: riscv-mini=68, riscv-full=0
 <!-- CI anchor: 「**双后端 parity macro 调用数**」= 上一个锚点的**深度**维度。
      ⚠️ 为什么两个锚点都要：只钉「文件数」的话，**从有多个 dual pair 的文件里
      删掉 1 个 pair** ⇒ 该文件仍被计数 ⇒ 护栏**看不见**（实测：变异 M1 恒绿）
      ⇒ ⇒ 深度锚点补上这个盲区。
      计数口径 = 剥注释与字符串后 `DUAL_BACKEND_TEST_PAIR(` 的**调用**总数。
      任何增减 MUST 显式更新本行。Do not reformat. -->
-- DUAL_BACKEND_PARITY_PAIRS: 307
+- DUAL_BACKEND_PARITY_PAIRS: riscv-mini=307, riscv-full=0
 <!-- CI anchor: examples 内测试源文件数的**单一真相**（护栏
      scripts/verify_example_test_wiring.sh 的 C2 与之比对）。
      ⚠️ 它防的是「源文件与其 CMake 声明**一起**被删除」的静默缩面 ——
@@ -491,7 +496,7 @@ bash scripts/rv32i_rtl_sim_env.sh
      TEMPLATE_TEST_CASE / TEMPLATE_PRODUCT_TEST_CASE / SCENARIO）的
      .cpp/.cc/.cxx/.C ∪ (b) 含 `CATCH_` 的同类文件 ∪ (c) `examples/**/tests/`
      下的任意 .cpp/.cc/.cxx/.C，去重。Do not reformat. -->
-- EXAMPLES_TEST_SOURCES: 27
+- EXAMPLES_TEST_SOURCES: riscv-mini=26, riscv-full=1
      ⚠️ **`CPPHDL_BUILD_EXAMPLES=OFF` 下的显式接受项**（`example-file-boundary-2026-11` **C5** · AC20）：
      上述 examples 相关锚点（`EXAMPLES_TEST_SOURCES` · 「examples 的 main() 程序」计数 ·
      `CTEST_TOTAL` 里的 `spinalhdl_*` 条目）**只在默认配置（`BUILD_EXAMPLES=ON`）成立** ⇒ ⇒

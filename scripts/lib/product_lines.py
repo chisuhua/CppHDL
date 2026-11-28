@@ -295,7 +295,30 @@ def check_c3(markers: list[tuple[Path, dict]]) -> list[str]:
     return problems
 
 
+def emit_counts() -> int:
+    """输出 `line<TAB>target`（每个 examples 域的 ctest target 及其归属产品线）。
+
+    用法（锚点分组校验）：`ctest -N` 的实际清单 ∩ 本输出 = 该线的**真实** target 数
+    ⇒ ⇒ 与根 `AGENTS.md` 的分组值比对（`scripts/verify_test_counts.sh`）。
+    """
+    markers = load_markers()
+    members: dict[str, str] = {}
+    for _, data in markers:
+        for m in data.get("members") or []:
+            members[str(m).rstrip("/")] = str(data.get("line"))
+    excluded = _load_exclusions()
+    for target, tdir in _collect_add_tests():
+        owners = _owner_lines(tdir, members)
+        if owners:
+            print(f"{owners[0]}\t{target}")
+        elif not _is_excluded_dir(tdir, excluded):
+            print(f"?\t{target}")
+    return 0
+
+
 def main() -> int:
+    if "--counts" in sys.argv:
+        return emit_counts()
     markers = load_markers()
     if not markers:
         print("FATAL：未发现任何 marker（`examples/*/.rddf-line.yaml`）", file=sys.stderr)
