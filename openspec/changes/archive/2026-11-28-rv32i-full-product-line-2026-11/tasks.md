@@ -179,7 +179,8 @@
       verilator 缓存命中 · 本批零计算路径改动 · S4b 阶段同机 285/285 绿）⇒ ⇒ **未宣称全绿**
       ⇒ 2 条 SHOULD_FIX：① 处置表空行（**本批已修**）② `perf_regression` 的 baseline
       重采属**改基线数据** ⇒ **需用户裁决**（独立决策，不阻塞归档）
-- [ ] **T6.6** 母 improvement `rv32i-soc-platform-2026-11` 的 `进度:` 追加 S4c-0 完成记录
+- [x] **T6.6** 母 improvement `rv32i-soc-platform-2026-11` 的 `进度:` 追加 S4c-0 完成记录
+      ⇒ ✅ 已回填（提交 `36e5411`）：交付 5 项 + verifier PASS + 下一批 = S4c-1 或 S5
 
 ## P7 · 归档
 **P6 的实施期发现（2026-11-28）**：
