@@ -192,8 +192,11 @@
   T6.1 的「ctest 全绿」因此**如实写成 285/286 + 1 条环境红** ⇒ ⇒ 不谎报全绿。
 
 
-- [ ] **T7.1** `openspec archive rv32i-full-product-line-2026-11 --yes`
-      ⇒ 归档到 `openspec/changes/archive/2026-11-27-rv32i-full-product-line-2026-11/`
+- [x] **T7.1** `openspec archive rv32i-full-product-line-2026-11 --yes`
+      ⇒ ✅ 归档为 `openspec/changes/archive/2026-11-28-rv32i-full-product-line-2026-11/`
+      ⇒ spec 合并：新 capability **`rv32i-product-lines`（+5）** · `rv32i-data-forwarding`（+1）
+      ⇒ ⇒ 归档后 `examples/riscv-full/.rddf-line.yaml` 的 `specs: rv32i-product-lines`
+      ⇒ ⇒ 指向**真实存在**的主 spec（此前是 active change 的 delta）
 
 ---
 
