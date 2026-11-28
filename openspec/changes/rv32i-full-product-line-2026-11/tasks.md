@@ -167,7 +167,18 @@
 - [x] **T6.3** `openspec validate rv32i-full-product-line-2026-11 --strict` exit 0 ·
       `bash scripts/verify_openspec_delta.sh` 4/4
 - [x] **T6.4** **AC 映射回填**：ADR-078 元数据的「关联 change」行指向本 change + 列出 AC 映射
-- [ ] **T6.5** `verifier` 独立验收（AC1–AC12 逐条工具证据 + 遗留清扫）
+- [x] **T6.5** `verifier` 独立验收（AC1–AC12 逐条工具证据 + 遗留清扫）
+      ⇒ ✅ **PASS —— AC1–AC12 全部满足**（2026-11-28 · verifier 角色 · 第 1 轮 · **0 BLOCKER**）
+      ⇒ 报告 = `.rddf/reviews/rv32i-full-product-line-2026-11-verify.md`
+      ⇒ **6 处投毒实测**证明判据有判别力：AC2 手工改生成物 / AC3 五连投毒 /
+      AC6 改分组 + **换组且和不变**（两层判据各自可抓）/ AC11 未登记测试源 / AC5 两态复核
+      ⇒ 遗留清扫（verifier 独立跑）：TODO / 调试输出 / skip 测试 / 注释代码 **全 0 命中** ·
+      工作区干净 · 被改的 3 个既有护栏只改锚点解析、判据逻辑未动
+      ⇒ ⚠️ **AC10 如实判定**：ctest **285/286**（唯一红 = `perf_regression` 的 verilator 微基准
+      **环境漂移**：baseline 采集于 2026-10-28 · interpreter/jit 未报 REGRESSION ⇒ 非代码退化 ·
+      verilator 缓存命中 · 本批零计算路径改动 · S4b 阶段同机 285/285 绿）⇒ ⇒ **未宣称全绿**
+      ⇒ 2 条 SHOULD_FIX：① 处置表空行（**本批已修**）② `perf_regression` 的 baseline
+      重采属**改基线数据** ⇒ **需用户裁决**（独立决策，不阻塞归档）
 - [ ] **T6.6** 母 improvement `rv32i-soc-platform-2026-11` 的 `进度:` 追加 S4c-0 完成记录
 
 ## P7 · 归档
