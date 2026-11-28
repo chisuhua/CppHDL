@@ -47,6 +47,9 @@ TEST_CASE("Cache-Pipeline Integration - Type Check", "[integration][cache]") {
 }
 
 TEST_CASE("Cache-Pipeline - I-Cache Integration", "[integration][icache]") {
+    // ⚠️ **2026-11-28（S4c-1a）重写**：`ICacheSync` 的 AXI 侧已是 **AXI4-full 读通道**
+    //    ⇒ ⇒ 读 miss 需 **4 个 R beat**；`ready` 保持 I 侧语义（「请求已被接受」）
+    //    ⇒ ⇒ 填充完成**下一拍** `ready` 与 `data` 同拍有效。
     ch::core::context ctx("icache_pipe");
     ch::core::ctx_swap swap(&ctx);
 
@@ -54,32 +57,49 @@ TEST_CASE("Cache-Pipeline - I-Cache Integration", "[integration][icache]") {
     ch::Simulator sim(dev.context());
     auto& icache = dev.instance();
 
-    // cycle 1: 冷读 → tag/valid 均无效 → miss, 并发起 AXI 读请求
-    sim.set_input_value(icache.io().addr, 0x1000u);
-    sim.set_input_value(icache.io().req,  1u);
-    sim.set_input_value(icache.io().axi_ready, 1u);
+    // cycle 1: 冷读 → tag/valid 均无效 → miss, 并发起 AR（4-beat burst）
+    // ⚠️ 本拍**不拉** `ar_ready` ⇒ 观察 `ar_valid` 保持（AXI：VALID 不等 READY）
+    sim.set_input_value(icache.io().addr,     0x1000u);
+    sim.set_input_value(icache.io().req,      1u);
+    sim.set_input_value(icache.io().ar_ready, 0u);
     sim.tick();
 
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().miss))      == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().axi_valid)) == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().axi_addr))  == 0x1000u);
-    // miss 时 ready 跟随 axi_ready (真实 cache 语义, 非 stub 的 ready := req)
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ready))     == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().miss))     == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ar_valid)) == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ar_addr))  == 0x1000u);
+    // 手推 burst 参数：ARLEN=3（4 beat）· ARSIZE=2（4 B）· ARBURST=INCR(1)
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ar_len))   == 3u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ar_size))  == 2u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ar_burst)) == 1u);
+    // `ready` = 「请求已被接受」⇒ 填充尚未完成 ⇒ 0（**不是** D 侧的组合「数据可用」）
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ready))    == 0u);
 
-    // cycle 2: AXI 响应带回数据 → 填充 way0
-    sim.set_input_value(icache.io().req,  0u);
-    sim.set_input_value(icache.io().axi_resp_valid, 1u);
-    sim.set_input_value(icache.io().axi_data, 0xDEADBEEFu);
+    // cycle 2: AR 握手 ⇒ 下一拍 `fill_active` 置位
+    sim.set_input_value(icache.io().ar_ready, 1u);
     sim.tick();
 
-    // cycle 3: 同址再读 → hit, 数据来自 cache (非 axi_data)
-    sim.set_input_value(icache.io().addr, 0x1000u);
-    sim.set_input_value(icache.io().req,  1u);
-    sim.set_input_value(icache.io().axi_ready, 0u);
+    // cycle 3..6: 4 个 R beat（lane 0 = 0xDEADBEEF）
+    sim.set_input_value(icache.io().req,      0u);
+    sim.set_input_value(icache.io().ar_ready, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(icache.io().r_valid, 1u);
+        sim.set_input_value(icache.io().r_data,  b == 0 ? 0xDEADBEEFu : 0u);
+        sim.set_input_value(icache.io().r_last,  b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(icache.io().r_valid, 0u);
+    sim.set_input_value(icache.io().r_last,  0u);
+    sim.set_input_value(icache.io().r_data,  0u);
+
+    // cycle 8: 同址再读 → hit, 数据来自 cache (非 r_data)
+    sim.set_input_value(icache.io().addr,     0x1000u);
+    sim.set_input_value(icache.io().req,      1u);
+    sim.set_input_value(icache.io().ar_ready, 0u);
     sim.tick();
 
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().miss)) == 0u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().data)) == 0xDEADBEEFu);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().miss))     == 0u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().data))     == 0xDEADBEEFu);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(icache.io().ar_valid)) == 0u);
 
     // Rv32iPipelineWithCache 已删除，未来重建后恢复流水线联调
     SKIP("Rv32iPipelineWithCache not implemented; cache-level assertions above passed.");

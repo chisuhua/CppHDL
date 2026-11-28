@@ -22,28 +22,33 @@
  * **当前语义（直通式）**：
  * - CPU 请求（`addr` / `req`）**直通**内层 `ICacheSync`；
  * - 数据 / 就绪 / 未命中（`data` / `ready` / `miss`）**转发**内层；
- * - AXI 主端（`axi_addr` / `axi_valid`）**转发**内层
+ * - AXI4-full 主端（`ar_*` 出向 + `r_*` 入出向）**逐根转发**内层
  *   ⇒ 内层 `ICacheSync` **本身**就是完整的 AXI 主端（`i_cache_sync.h`）
  *   ⇒ wrapper 层**不**重推导 ⇒ AXI 的「**VALID 不得等 READY**」纪律天然成立；
- * - 内层 cache 的 **5 个输入端口全部被显式驱动**
+ * - 内层的 **7 个输入端口全部被显式驱动**
  *   （未驱动端口读到的是**未定义值** ⇒ `miss` 恒为「冷 miss」
  *   ⇒ hit / miss **不可区分**）。
+ *
+ * ⚠️ **2026-11-28 · S4c-1a（ADR-078 D7）**：内层 AXI 侧由 5 根简化握手升级为
+ *   **AXI4-full 读通道**（`ar_*` 6 根 + `r_*` 5 根，**只读 ⇒ 无写通道**）
+ *   ⇒ ⇒ 本 wrapper 的 **AXI 侧转发面同步扩**；**前端转发面（`addr`/`req`/
+ *   `data`/`ready`/`miss`）逐字不变** ⇒ ⇒ 爆炸半径只落在 AXI 侧。
  *
  * ⚠️ **未实现 / 已知边界（如实登记；backlog 见该 change 的 design.md §7）**：
  * - **预取尚未实现** ⇒ ⚠️ **2026-11-09（phase-6 **P9** · Zero-Debt）**：原三个预取缓冲
  *   （`prefetch_data` / `prefetch_addr` / `prefetch_valid`）与 `PrefetchConfig`
  *   **已删除**（**零消费者**的死数据 ⇒ Zero-Debt「No dead code」）⇒ ⇒
  *   **本组件现在不含任何预取状态** ⇒ 真预取 = **独立立项**（届时重新引入配置面）。
- * - 内层的 `miss` 来自 `sread`（**1 拍**注册读）而 `axi_addr` 取**当拍**地址
+ * - 内层的 `miss` 来自 `sread`（**1 拍**注册读）而 `ar_addr` 取**当拍**地址
  *   ⇒ 二者存在 **1 拍错位**（属**内层 cache 自身**的问题
  *   ⇒ 转发**不**加剧、也**不**修它）
- *   ⇒ ⇒ **调用方 MUST 在 `miss` 期间保持 `addr` 不变**（契约见 capability
+ *   ⇒ ⇒ **调用方 MUST 在 `miss` / 填充期间保持 `addr` 不变**（契约见 capability
  *   `cpu-cache-subsystem` 的「`miss` 期间的地址稳定性」Requirement）
  *   ⇒ ⇒ 违反该约束 ⇒ 取回的是**新块**的数据（判别性证据见
  *   `examples/riscv-mini/tests/test_cache_smoke.cpp` 的 miss/addr 探针用例）。
  *
  * 作者：DevMate
- * 日期：2026-04-10（2026-10-28 行为订正）
+ * 日期：2026-04-10（2026-10-28 行为订正 · 2026-11-28 AXI4-full 转发面）
  */
 #pragma once
 
@@ -71,12 +76,20 @@ public:
         ch_out<ch_bool> ready;            // 就绪信号
         ch_out<ch_bool> miss;             // 未命中信号
 
-        // AXI 主设备接口
-        ch_out<ch_uint<32>> axi_addr;     // AXI 读地址
-        ch_out<ch_bool> axi_valid;        // AXI 请求有效
-        ch_in<ch_bool> axi_ready;         // AXI 就绪
-        ch_in<ch_uint<32>> axi_data;      // AXI 读数据
-        ch_in<ch_bool> axi_resp_valid;    // AXI 响应有效
+        // ---- AXI4 full 主口 · AR（**只读** ⇒ 无 AW/W/B 写通道）----
+        ch_out<ch_uint<32>> ar_addr{"ar_addr"};
+        ch_out<ch_uint<4>>  ar_len{"ar_len"};
+        ch_out<ch_uint<3>>  ar_size{"ar_size"};
+        ch_out<ch_uint<2>>  ar_burst{"ar_burst"};
+        ch_out<ch_bool>     ar_valid{"ar_valid"};
+        ch_in<ch_bool>      ar_ready{"ar_ready"};
+
+        // ---- AXI4 full 主口 · R ----
+        ch_in<ch_uint<32>>  r_data{"r_data"};
+        ch_in<ch_uint<2>>   r_resp{"r_resp"};
+        ch_in<ch_bool>      r_last{"r_last"};
+        ch_in<ch_bool>      r_valid{"r_valid"};
+        ch_out<ch_bool>     r_ready{"r_ready"};
     )
 
     ICachePrefetch(ch::Component* parent = nullptr,
@@ -98,14 +111,16 @@ public:
         // 未驱动的输入端口读到的是**未定义值**（根 `AGENTS.md §ANTI-PATTERNS`
         // 登记：实测 `strbe` 读**全 1**、`rst_n` 读 0）⇒ 依赖默认值会让测试
         // 「**碰巧**通过」而跨后端行为可能分叉。
-        // ⇒ 此前这 **5 个端口全部未驱动** ⇒ 内层 `addr` 恒 0 ⇒ `miss` 恒为
+        // ⇒ 此前这些端口全部未驱动 ⇒ 内层 `addr` 恒 0 ⇒ `miss` 恒为
         //   「冷 miss」⇒ hit / miss **不可区分**。
         // =====================================================================
-        icache.io().addr           <<= io().addr;
-        icache.io().req            <<= io().req;
-        icache.io().axi_ready      <<= io().axi_ready;
-        icache.io().axi_data       <<= io().axi_data;
-        icache.io().axi_resp_valid <<= io().axi_resp_valid;
+        icache.io().addr    <<= io().addr;
+        icache.io().req     <<= io().req;
+        icache.io().ar_ready <<= io().ar_ready;
+        icache.io().r_data  <<= io().r_data;
+        icache.io().r_resp  <<= io().r_resp;
+        icache.io().r_last  <<= io().r_last;
+        icache.io().r_valid <<= io().r_valid;
 
         // =====================================================================
         // 预取缓冲：**已删除**（2026-11-09 · phase-6 P9 · Zero-Debt）
@@ -128,20 +143,23 @@ public:
         io().miss  <<= cache_miss;
 
         // =====================================================================
-        // AXI 主端：**转发**内层（**不**在 wrapper 层重推导）
+        // AXI4-full 主端：**转发**内层（**不**在 wrapper 层重推导）
         //
         // ⚠️ 为什么 MUST 转发而不是重算（3 条理由）：
-        //   ① **AXI 合规**：内层的 `axi_valid` **不含** `axi_ready`
+        //   ① **AXI 合规**：内层的 `ar_valid` **不含** `ar_ready`
         //      （AXI 要求「VALID **不得**等 READY 才拉高」）⇒ wrapper 重推导
         //      就得把 READY 引进 VALID ⇒ **违反 AXI**；
-        //   ② **无死逻辑**：wrapper 重推导 ⇒ 内层的 `axi_addr` / `axi_valid`
+        //   ② **无死逻辑**：wrapper 重推导 ⇒ 内层的 `ar_addr` / `ar_valid`
         //      **无人消费** ⇒ 违反 ZERO-DEBT「无死代码」；
-        //   ③ **值同源**：内层的 `icache_get_block_addr`（`i_cache_sync.h`）
-        //      = `addr & 0xFFFFFFF0` ⇒ 与 wrapper 原先的 `get_block_addr`
-        //      **逐位相同** ⇒ 转发**不改变值**，只是消除重复实现。
+        //   ③ **值同源**：内层的 `ar_addr` = `addr & 0xFFFFFFF0`（`i_cache_sync.h`）
+        //      ⇒ 转发**不改变值**，只是消除重复实现。
         // =====================================================================
-        io().axi_addr  <<= icache.io().axi_addr;
-        io().axi_valid <<= icache.io().axi_valid;
+        io().ar_addr  <<= icache.io().ar_addr;
+        io().ar_len   <<= icache.io().ar_len;
+        io().ar_size  <<= icache.io().ar_size;
+        io().ar_burst <<= icache.io().ar_burst;
+        io().ar_valid <<= icache.io().ar_valid;
+        io().r_ready  <<= icache.io().r_ready;
     }
 };
 

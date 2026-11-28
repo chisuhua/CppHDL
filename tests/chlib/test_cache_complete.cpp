@@ -23,18 +23,59 @@
 #include "cpu/cache/d_cache_async.h"
 #include "simulator.h"
 
+#include <array>
+
 using namespace chlib;
+
+// =============================================================================
+// Helper: 驱动一次完整的 4-beat AXI4-full burst fill（**只用于 I 侧的 Sync 变体**）
+//
+// 拍序手推（change `rv32i-i-l1-axi-full-2026-11` 的 design.md §5.2）：
+//   N     AR 握手 ⇒ 下一拍 `fill_active` 置位
+//   N+1..N+4  4 个 R beat（第 b 个落 lane b · `r_last=1` 在 N+4 = `fill_complete`）
+//   N+5   line 已写入 · `ready` 与 `data` **同拍**有效
+//
+// ⚠️ `ICacheAsync` 的 AXI 侧**未变**（仍是简化握手）⇒ 本 helper **不得**用于 Async。
+// =============================================================================
+template <typename Dut>
+static void icache_burst_fill(ch::Simulator& sim, Dut& ic, uint32_t addr,
+                              const std::array<uint32_t, 4>& words) {
+    // ① 呈现地址 · 本拍不握手（`miss` 来自 1 拍 sread ⇒ 先与 addr 对齐）
+    sim.set_input_value(ic.io().addr,     static_cast<uint64_t>(addr));
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
+    sim.tick();
+
+    // ② AR 握手 ⇒ 下一拍 `fill_active` 置位
+    sim.set_input_value(ic.io().ar_ready, 1u);
+    sim.tick();
+
+    // ③ 4 个 R beat
+    sim.set_input_value(ic.io().req,      0u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(ic.io().r_valid, 1u);
+        sim.set_input_value(ic.io().r_data,  static_cast<uint64_t>(words[b]));
+        sim.set_input_value(ic.io().r_last,  b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(ic.io().r_valid, 0u);
+    sim.set_input_value(ic.io().r_last,  0u);
+    sim.set_input_value(ic.io().r_data,  0u);
+}
 
 // =============================================================================
 // §3.3.1 ICache miss-fill-then-hit
 // =============================================================================
 //
 // 测试场景:
-//   周期 1: addr=0x1000, req=1, axi_data=0xDEADBEEF, axi_resp_valid=1, axi_ready=1
-//           初始 cache 全 invalid → miss → AXI 触发 + fill (way0, 因为 lru 初始 X)
-//   周期 2: axi_resp_valid=0, axi_ready=0, 同地址再读 → 应 hit (way0 已 fill)
+//   填充: addr=0x1000, lane 0 = 0xDEADBEEF（**4-beat AXI4-full burst**）
+//   再读: 同地址 1 拍后 → 应 hit
 //   断言:
-//     周期 2 后: io().miss == 0, io().data == 0xDEADBEEF, io().ready == 1
+//     hit 后: io().miss == 0, io().data == 0xDEADBEEF, io().ready == 1
+//
+// ⚠️ 2026-11-28（S4c-1a）：AXI 侧由 5 根简化握手改为 **AXI4-full 读通道** ⇒
+//    fill 激励从「1 次 resp」改为 **4-beat burst**；断言端口同步改名。
 //
 TEST_CASE("ICache miss-fill-then-hit", "[cache][complete][icache][miss-fill]") {
     ch::core::context ctx("icache_miss_fill_then_hit");
@@ -44,22 +85,13 @@ TEST_CASE("ICache miss-fill-then-hit", "[cache][complete][icache][miss-fill]") {
     ch::Simulator sim(ic_dev.context());
     auto& ic = ic_dev.instance();
 
-    // 周期 1: 触发 miss fill
-    sim.set_input_value(ic.io().addr,           0x1000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xDEADBEEFu);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
+    // fill：4 beat（lane 0 = 0xDEADBEEF，其余 lane = 0）
+    icache_burst_fill(sim, ic, 0x1000u, {0xDEADBEEFu, 0u, 0u, 0u});
 
-    // 周期 2: 关 AXI 应答, 同地址再读
-    //   fill 是 ch_mem::write 1-cycle registered; 周期 1 触发, 周期 2 上升沿完成 → 本周期 tag/valid 已被 lnode 更新 (write enable 已记录到 pending write)
-    //   hit 检测走 aread (combinational) → 应直接看到 valid=1
-    sim.set_input_value(ic.io().addr,           0x1000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 关闭 AR，同地址再读 ⇒ 1 拍后 hit（sread 语义）
+    sim.set_input_value(ic.io().addr,     0x1000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     // 验证: hit (miss==0), data==cached value, ready==1
@@ -215,28 +247,16 @@ TEST_CASE("ICache 2-way aread isolation (g1)", "[cache][complete][isolation][g1]
     ch::Simulator sim(ic_dev.context());
     auto& ic = ic_dev.instance();
 
-    // 周期 1: fill set 16 way0 (addr=0x1000, lru[16] 初始 0)
-    sim.set_input_value(ic.io().addr,           0x1000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xAAAA0000u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
+    // fill set 0 way0 (addr=0x1000, lane 0 = 0xAAAA0000) —— 4-beat AXI4-full burst
+    icache_burst_fill(sim, ic, 0x1000u, {0xAAAA0000u, 0u, 0u, 0u});
 
-    // 周期 2: fill set 16 way1 (addr=0x1100, 同 set 不同 tag, lru[16]=1 after hit update)
-    sim.set_input_value(ic.io().addr,           0x1100u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xBBBB1111u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
+    // fill set 16 way0 (addr=0x1100 ⇒ 不同 index ⇒ 不同 set, lane 0 = 0xBBBB1111)
+    icache_burst_fill(sim, ic, 0x1100u, {0xBBBB1111u, 0u, 0u, 0u});
 
-    // 周期 3: 关闭 AXI, 读 0x1000 → 应 hit (way0), 验证 way0 数据正确
-    sim.set_input_value(ic.io().addr,           0x1000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 关闭 AXI, 读 0x1000 → 应 hit (way0), 验证 way0 数据正确
+    sim.set_input_value(ic.io().addr,     0x1000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     // 验证: hit (way0 有 valid + tag match)
@@ -244,12 +264,10 @@ TEST_CASE("ICache 2-way aread isolation (g1)", "[cache][complete][isolation][g1]
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data))  == 0xAAAA0000u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ready)) == 1u);
 
-    // 周期 4: 切到 addr=0x1100 → 应 hit (way1), data 应该是 way1 的值 (0xBBBB1111)
-    sim.set_input_value(ic.io().addr,           0x1100u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 切到 addr=0x1100 → 应 hit (另一个 set 的 way0), data 应该是 0xBBBB1111
+    sim.set_input_value(ic.io().addr,     0x1100u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 0u);
@@ -277,42 +295,31 @@ TEST_CASE("ICache hit + miss-fill concurrency (g2)", "[cache][complete][concurre
     ch::Simulator sim(ic_dev.context());
     auto& ic = ic_dev.instance();
 
-    // 周期 1: fill set 0 way0 (0x100000, data=0xAAAA)
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xAAAA0000u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
+    // fill set 0 way0 (0x100000, lane 0 = 0xAAAA0000) —— 4-beat AXI4-full burst
+    icache_burst_fill(sim, ic, 0x100000u, {0xAAAA0000u, 0u, 0u, 0u});
 
-    // 周期 2: 关 AXI, 同地址再读 → 应 hit
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 关 AXI, 同地址再读 → 应 hit
+    sim.set_input_value(ic.io().addr,     0x100000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data))  == 0xAAAA0000u);
 
-    // 周期 3: 再次读 → hit 数据稳定
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 再次读 → hit 数据稳定
+    sim.set_input_value(ic.io().addr,     0x100000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data))  == 0xAAAA0000u);
 
-    // 周期 4: 再读 → hit 数据稳定 (LRU update 在 hit 时, 不污染 data)
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 再读 → hit 数据稳定 (LRU update 在 hit 时, 不污染 data)
+    sim.set_input_value(ic.io().addr,     0x100000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 0u);
@@ -391,42 +398,53 @@ TEST_CASE("DCacheAsync read miss-fill (0-cycle)", "[cache][async][dcache][miss-f
 }
 
 TEST_CASE("ICacheSync vs ICacheAsync same fill behavior", "[cache][sync][async][variant]") {
-    // 同一 fill 序列在 Sync 和 Async 上都应得到相同最终状态
-    // (sync 多 1 cycle latency 但数据语义一致)
+    // 同一 fill 语义在 Sync 和 Async 上都应得到相同最终状态
+    // ⚠️ 2026-11-28（S4c-1a）：两者 AXI 侧**已分化**
+    //    （Sync = AXI4 full · 4-beat burst · 1 拍 sread；Async = 简化握手 · 1 resp · 0 拍 aread）
+    //    ⇒ ⇒ fill 激励不同，但**判据相同**：fill 后同地址再读 ⇒ hit 且 data 正确。
 
-    auto run_fill_and_read = [](auto& ic, ch::Simulator& sim, uint32_t addr, uint32_t data) {
-        sim.set_input_value(ic.io().addr, addr);
-        sim.set_input_value(ic.io().req, 1u);
-        sim.set_input_value(ic.io().axi_data, data);
-        sim.set_input_value(ic.io().axi_resp_valid, 1u);
-        sim.set_input_value(ic.io().axi_ready, 1u);
-        sim.tick();
-        // 1-cycle NOP 等 write 完成 (sync 和 async 都需要)
-        sim.set_input_value(ic.io().addr, addr);
-        sim.set_input_value(ic.io().req, 1u);
-        sim.set_input_value(ic.io().axi_data, 0u);
-        sim.set_input_value(ic.io().axi_resp_valid, 0u);
-        sim.set_input_value(ic.io().axi_ready, 0u);
-        sim.tick();
-    };
+    // ---- ICacheSync（AXI4 full · 4-beat burst）----
+    {
+        ch::core::context ctx_s("icache_sync_variant");
+        ch::core::ctx_swap swap_s(&ctx_s);
+        ch::ch_device<chlib::ICacheSync> ic_s_dev;
+        ch::Simulator sim_s(ic_s_dev.context());
+        auto& ic = ic_s_dev.instance();
 
-    // ICacheSync (1-cycle sread)
-    ch::core::context ctx_s("icache_sync_variant");
-    ch::core::ctx_swap swap_s(&ctx_s);
-    ch::ch_device<chlib::ICacheSync> ic_s_dev;
-    ch::Simulator sim_s(ic_s_dev.context());
-    run_fill_and_read(ic_s_dev.instance(), sim_s, 0x100000u, 0x11223344u);
-    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(ic_s_dev.instance().io().miss)) == 0u);
-    REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(ic_s_dev.instance().io().data)) == 0x11223344u);
+        icache_burst_fill(sim_s, ic, 0x100000u, {0x11223344u, 0u, 0u, 0u});
+        sim_s.set_input_value(ic.io().addr,     0x100000u);
+        sim_s.set_input_value(ic.io().req,      1u);
+        sim_s.set_input_value(ic.io().ar_ready, 0u);
+        sim_s.tick();
 
-    // ICacheAsync (0-cycle aread)
-    ch::core::context ctx_a("icache_async_variant");
-    ch::core::ctx_swap swap_a(&ctx_a);
-    ch::ch_device<chlib::ICacheAsync> ic_a_dev;
-    ch::Simulator sim_a(ic_a_dev.context());
-    run_fill_and_read(ic_a_dev.instance(), sim_a, 0x100000u, 0x11223344u);
-    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(ic_a_dev.instance().io().miss)) == 0u);
-    REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(ic_a_dev.instance().io().data)) == 0x11223344u);
+        REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(ic.io().miss)) == 0u);
+        REQUIRE(static_cast<uint64_t>(sim_s.get_port_value(ic.io().data)) == 0x11223344u);
+    }
+
+    // ---- ICacheAsync（简化握手 · 1 resp · 0-cycle aread）----
+    {
+        ch::core::context ctx_a("icache_async_variant");
+        ch::core::ctx_swap swap_a(&ctx_a);
+        ch::ch_device<chlib::ICacheAsync> ic_a_dev;
+        ch::Simulator sim_a(ic_a_dev.context());
+        auto& ic = ic_a_dev.instance();
+
+        sim_a.set_input_value(ic.io().addr,           0x100000u);
+        sim_a.set_input_value(ic.io().req,            1u);
+        sim_a.set_input_value(ic.io().axi_data,       0x11223344u);
+        sim_a.set_input_value(ic.io().axi_resp_valid, 1u);
+        sim_a.set_input_value(ic.io().axi_ready,      1u);
+        sim_a.tick();
+        sim_a.set_input_value(ic.io().addr,           0x100000u);
+        sim_a.set_input_value(ic.io().req,            1u);
+        sim_a.set_input_value(ic.io().axi_data,       0u);
+        sim_a.set_input_value(ic.io().axi_resp_valid, 0u);
+        sim_a.set_input_value(ic.io().axi_ready,      0u);
+        sim_a.tick();
+
+        REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(ic.io().miss)) == 0u);
+        REQUIRE(static_cast<uint64_t>(sim_a.get_port_value(ic.io().data)) == 0x11223344u);
+    }
 }
 
 TEST_CASE("DCacheSync vs DCacheAsync same fill behavior", "[cache][sync][async][variant]") {
@@ -517,55 +535,26 @@ TEST_CASE("ICacheSync g1 strict: 2 different sets, way0 data isolation", "[cache
     ch::Simulator sim(ic_dev.context());
     auto& ic = ic_dev.instance();
 
-    // 周期 1: fill set 16 way0 (0x100000, tag=0x80)
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xAAAA0000u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
+    // fill set 0 (0x100000, lane 0 = 0xAAAA0000) —— 4-beat AXI4-full burst
+    icache_burst_fill(sim, ic, 0x100000u, {0xAAAA0000u, 0u, 0u, 0u});
 
-    // 周期 2: 1-cycle NOP 等 ch_mem::write 完成
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
-    sim.tick();
+    // fill set 16 (0x200000, 不同 set 不同 tag, lane 0 = 0xBBBB0000)
+    icache_burst_fill(sim, ic, 0x200000u, {0xBBBB0000u, 0u, 0u, 0u});
 
-    // 周期 3: fill set 32 way0 (0x200000, tag=0x100, 不同 set 不同 tag)
-    sim.set_input_value(ic.io().addr,           0x200000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xBBBB0000u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
-
-    // 周期 4: 1-cycle NOP
-    sim.set_input_value(ic.io().addr,           0x200000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
-    sim.tick();
-
-    // 周期 5: 读 0x100000 (set 16) → 应 hit, data=0xAAAA0000 (未被 set 32 fill 污染)
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xDEAD1111u);  // 故意不同 data, hit 应返回 0xAAAA0000
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 读 0x100000 → 应 hit, data=0xAAAA0000 (未被 set 16 的 fill 污染)
+    // ⚠️ `r_data` 已清 0 ⇒ 若读到 AXI 数据就必须是 0 ⇒ 断言钉住「数据来自 cache」
+    sim.set_input_value(ic.io().addr,     0x100000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss)) == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data)) == 0xAAAA0000u);
 
-    // 周期 6: 读 0x200000 (set 32) → 应 hit, data=0xBBBB0000
-    sim.set_input_value(ic.io().addr,           0x200000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xDEAD2222u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 读 0x200000 → 应 hit, data=0xBBBB0000
+    sim.set_input_value(ic.io().addr,     0x200000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss)) == 0u);
@@ -596,55 +585,22 @@ TEST_CASE("ICacheSync g2 strict: hit data stable across later fills", "[cache][s
     ch::Simulator sim(ic_dev.context());
     auto& ic = ic_dev.instance();
 
-    // 周期 1: fill set 16 way0
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xAAAA0000u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
+    // fill set 0 (0x100000, lane 0 = 0xAAAA0000) —— 4-beat AXI4-full burst
+    icache_burst_fill(sim, ic, 0x100000u, {0xAAAA0000u, 0u, 0u, 0u});
 
-    // 周期 2: NOP
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
-    sim.tick();
-
-    // 周期 3: fill set 32 (不同 set 触发新的 miss-fill 路径)
-    sim.set_input_value(ic.io().addr,           0x200000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xBBBB0000u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
-    sim.tick();
-
-    // 周期 4: NOP
-    sim.set_input_value(ic.io().addr,           0x200000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
-    sim.tick();
-
-    // 周期 5: 读 0x100000 → 应 hit, data=0xAAAA0000 (set 32 fill 没污染 set 16)
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 读 0x100000 → 应 hit, data=0xAAAA0000
+    sim.set_input_value(ic.io().addr,     0x100000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss)) == 0u);
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data)) == 0xAAAA0000u);
 
-    // 周期 6: 再读 0x100000 → hit 仍稳定 (LRU update on hit 不会污染 data)
-    sim.set_input_value(ic.io().addr,           0x100000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 再读 0x100000 → hit 仍稳定 (LRU update on hit 不会污染 data)
+    sim.set_input_value(ic.io().addr,     0x100000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
     REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss)) == 0u);
@@ -728,19 +684,17 @@ TEST_CASE("DCacheAsync write hit-through", "[cache][async][dcache][write-through
 }
 
 // =============================================================================
-// 补充测试 #4: ICache miss-fill with axi_ready=0 wait (AXI 握手重试)
+// 补充测试 #4: ICache fill 等 AR 握手（AXI4-full 的「VALID 不等 READY」）
 // =============================================================================
 //
-// 目标: 验证 miss-fill 状态机在 AXI 侧未就绪时持续触发, 就绪后才完成 fill.
-//   周期 1: miss, axi_valid=1, axi_ready=0 → miss 持续
-//   周期 2: miss 仍持续 (axi_ready=0 阻塞 fill)
-//   周期 3: axi_ready=1 → fill 完成
-//   周期 4: NOP 等 ch_mem::write
-//   周期 5: 同地址再读 → hit
+// 目标: 验证 AR 通道在 `ar_ready=0` 时**保持** `ar_valid`（AXI 要求 VALID 不得
+//   等 READY 才拉高），握手后才进 4-beat fill，填充完成后同地址再读 → hit。
+//   周期 0/1: miss + ar_valid=1 · ar_ready=0 ⇒ 状态保持
+//   周期 2:   ar_ready=1 ⇒ AR 握手
+//   周期 3..6: 4 个 R beat
+//   周期 8:   同地址再读 → hit, data = lane 0 的字
 //
-// 覆盖: miss-fill 完整状态机 (handshake retry), 不是简单 "axi_resp_valid 立即 1" 路径.
-//
-TEST_CASE("ICacheSync miss-fill with axi_ready wait", "[cache][sync][icache][axi-handshake]") {
+TEST_CASE("ICacheSync fill waits for the AR handshake", "[cache][sync][icache][axi-handshake]") {
     ch::core::context ctx("icache_axi_handshake");
     ch::core::ctx_swap swap(&ctx);
 
@@ -748,59 +702,46 @@ TEST_CASE("ICacheSync miss-fill with axi_ready wait", "[cache][sync][icache][axi
     ch::Simulator sim(ic_dev.context());
     auto& ic = ic_dev.instance();
 
-    // 周期 1: 触发 miss, AXI 侧未就绪 (axi_ready=0)
-    sim.set_input_value(ic.io().addr,           0x5000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);  // 此时无意义, AXI 未握手
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);  // AXI 未就绪
+    // 冷 miss, AXI 侧未就绪 (ar_ready=0)
+    sim.set_input_value(ic.io().addr,     0x5000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
-    // 周期 1 后: 应该是 miss=1 (cache 空), axi_valid=1 (发出请求, 等 AXI ready)
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))      == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().axi_valid)) == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ready))     == 0u);  // ready 等 AXI ready
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))     == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ar_valid)) == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ready))    == 0u);
 
-    // 周期 2: AXI 仍未就绪
-    sim.set_input_value(ic.io().addr,           0x5000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 再等一拍: 仍未握手 ⇒ ar_valid 仍保持 1（不是「READY 依赖」）
     sim.tick();
 
-    // 周期 2 后: miss 仍持续, axi_valid 仍 1
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))      == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().axi_valid)) == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))     == 1u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ar_valid)) == 1u);
 
-    // 周期 3: AXI 就绪 + AXI 响应有效 + 数据
-    sim.set_input_value(ic.io().addr,           0x5000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0xCAFE1234u);
-    sim.set_input_value(ic.io().axi_resp_valid, 1u);
-    sim.set_input_value(ic.io().axi_ready,      1u);
+    // AR 握手 ⇒ 下一拍 fill_active 置位
+    sim.set_input_value(ic.io().ar_ready, 1u);
     sim.tick();
 
-    // 周期 3 后: ready 变 1 (AXI 握手完成, fill 触发), miss 仍 1 (ch_mem::write 1-cycle latency)
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))  == 1u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ready)) == 1u);
+    // 4 个 R beat（lane 0 = 0xCAFE1234）
+    sim.set_input_value(ic.io().req,      0u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(ic.io().r_valid, 1u);
+        sim.set_input_value(ic.io().r_data,  b == 0 ? 0xCAFE1234u : 0u);
+        sim.set_input_value(ic.io().r_last,  b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(ic.io().r_valid, 0u);
+    sim.set_input_value(ic.io().r_last,  0u);
+    sim.set_input_value(ic.io().r_data,  0u);
 
-    // 周期 4: NOP 等 ch_mem::write 完成
-    sim.set_input_value(ic.io().addr,           0x5000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
+    // 同地址再读 → hit, data = 0xCAFE1234
+    sim.set_input_value(ic.io().addr,     0x5000u);
+    sim.set_input_value(ic.io().req,      1u);
+    sim.set_input_value(ic.io().ar_ready, 0u);
     sim.tick();
 
-    // 周期 5: 同地址再读 → 应 hit, data=0xCAFE1234
-    sim.set_input_value(ic.io().addr,           0x5000u);
-    sim.set_input_value(ic.io().req,            1u);
-    sim.set_input_value(ic.io().axi_data,       0x0u);
-    sim.set_input_value(ic.io().axi_resp_valid, 0u);
-    sim.set_input_value(ic.io().axi_ready,      0u);
-    sim.tick();
-
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss)) == 0u);
-    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data)) == 0xCAFE1234u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().miss))     == 0u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().data))     == 0xCAFE1234u);
+    REQUIRE(static_cast<uint64_t>(sim.get_port_value(ic.io().ar_valid)) == 0u);
 }

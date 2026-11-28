@@ -79,6 +79,8 @@ static inline bool to_bool(const sdata_type& val) { return val != 0; }
 //
 // ⚠️ 主 spec `cpu-cache-subsystem` 的 Scenario「instantiation smoke 测试必通过」
 //    依赖 **`[fixed]` 这个 tag** ⇒ 本用例 MUST 保留该 tag。
+// ⚠️ 2026-11-28（S4c-1a）：内层 AXI 侧 = **AXI4-full 读通道** ⇒ 输入端口全部驱动
+//    （未驱动端口读到**未定义值** ⇒ 行为不可判）。
 // ===========================================================================
 DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
                         "ICachePrefetch instantiation + cold-miss surfaced",
@@ -88,14 +90,16 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
     auto &io = dev.instance().io();
     sim.set_input_value(io.addr, 0x80000000u);
     sim.set_input_value(io.req, 1u);
-    sim.set_input_value(io.axi_ready, 1u);
-    sim.set_input_value(io.axi_resp_valid, 0u);
-    sim.set_input_value(io.axi_data, 0u);
+    sim.set_input_value(io.ar_ready, 0u);
+    sim.set_input_value(io.r_valid, 0u);
+    sim.set_input_value(io.r_data, 0u);
+    sim.set_input_value(io.r_last, 0u);
+    sim.set_input_value(io.r_resp, 0u);
     sim.tick();
 
     // 冷缓存必 miss（内层的 valid 位从未被置 1 ⇒ 永远不可能 hit）
-    // ⚠️ 反向期望：**若内层被真正驱动**（`addr`/`req` 接上、且 `axi_resp_valid`
-    //    拉高过）⇒ 内层会填充 ⇒ 再读同一块会 hit ⇒ `miss` 变 0。
+    // ⚠️ 反向期望：**若内层被真正驱动**（`addr`/`req` 接上、且填充走过）⇒
+    //    内层会填充 ⇒ 再读同一块会 hit ⇒ `miss` 变 0。
     //    （「未驱动 ⇒ miss 恒 0」这个说法**不准确**：未驱动端口读到的是
     //      **未定义值**，不保证是 0 ⇒ 判别力由 test ③ 的 fill→hit 路径承担。）
     REQUIRE(to_bool(sim.get_port_value(io.miss)) == true);
@@ -107,6 +111,8 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
 // ⚠️ 判别力来源：每条断言都带**反向期望**（写坏时会是多少），
 //    且「跟随」是**逐个输入 → 逐个输出**的粒度 ——
 //    只断言「输出非零」只能证明「有驱动」，证不出「随输入变化」。
+// ⚠️ 2026-11-28（S4c-1a）：AXI 侧改为 **AXI4-full 读通道** ⇒
+//    `ar_*`（出向）逐根跟随内层；`data` 在 miss 期间**不再**透传 `r_data`（旧行为已废弃）。
 // ===========================================================================
 DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
                         "ICachePrefetch outputs follow their own inputs",
@@ -119,67 +125,68 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
     //    （`0x…40` / `0x…50`），两种语义**给出同一个值** ⇒ 零判别力。
     sim.set_input_value(io.addr, 0x80000042u);
     sim.set_input_value(io.req, 1u);
-    sim.set_input_value(io.axi_ready, 1u);
-    sim.set_input_value(io.axi_resp_valid, 0u);
-    sim.set_input_value(io.axi_data, 0x11111111u);
+    sim.set_input_value(io.ar_ready, 0u);
+    sim.set_input_value(io.r_valid, 0u);
+    sim.set_input_value(io.r_data, 0x11111111u);
+    sim.set_input_value(io.r_last, 0u);
+    sim.set_input_value(io.r_resp, 0u);
     sim.tick();
 
-    // ① `axi_addr` = 被请求地址的**块地址**（`addr & 0xFFFFFFF0`）
+    // ① `ar_addr` = 被请求地址的**块地址**（`addr & 0xFFFFFFF0`）
     //    ⇒ 块地址 **≠** 原地址（`0x80000042` → `0x80000040`）⇒ 钉住「对齐」
     //    ⚠️ 反向期望：未驱动 ⇒ `0`；不跟随 ⇒ 恒为基线值
-    REQUIRE(sim.get_port_value(io.axi_addr) == 0x80000040u);
-    // ② `axi_valid` 跟随 `req`（内层 `miss` 恒 1 ⇒ `axi_valid = miss & req`）
+    REQUIRE(sim.get_port_value(io.ar_addr) == 0x80000040u);
+    // ② `ar_valid` 跟随 `miss & req`（冷 ⇒ miss=1）
     //    ⚠️ 反向期望：未驱动 ⇒ 恒 `0`
-    REQUIRE(to_bool(sim.get_port_value(io.axi_valid)) == true);
-    // ③ `data` 跟随 `axi_data`（内层 `hit = 0` ⇒ `data = axi_data`）
-    //    ⚠️ 反向期望：未驱动 ⇒ 恒 `0`
-    REQUIRE(sim.get_port_value(io.data) == 0x11111111u);
-    // ④ `ready` 跟随 `axi_ready`（内层 `hit = 0` ⇒ `ready = axi_ready`）
-    //    ⚠️ 反向期望：未驱动 ⇒ 恒 `0`
-    REQUIRE(to_bool(sim.get_port_value(io.ready)) == true);
+    REQUIRE(to_bool(sim.get_port_value(io.ar_valid)) == true);
+    // ③ burst 参数逐根跟随（ARLEN=3 · ARSIZE=2 · ARBURST=INCR）
+    REQUIRE(sim.get_port_value(io.ar_len)   == 3u);
+    REQUIRE(sim.get_port_value(io.ar_size)  == 2u);
+    REQUIRE(sim.get_port_value(io.ar_burst) == 1u);
+    // ④ `data` 在 miss 期间**不**透传 AXI 数据（旧简化口的语义已废弃）：
+    //    此时尚未填充 ⇒ 读到 `miss_data_r` 初值 0
+    //    ⚠️ 反向期望：`0x11111111`（把 `r_data` 直接当读数据 = 旧行为回潮）
+    REQUIRE(sim.get_port_value(io.data) == 0u);
+    // ⑤ `ready` = 内层「请求已被接受」⇒ 填充未完成 ⇒ 0
+    //    ⚠️ 反向期望：恒 `1`（未驱动 / 错接成 `ar_ready`）
+    REQUIRE(to_bool(sim.get_port_value(io.ready)) == false);
+    // ⑥ `r_ready` = 内层恒 1（本 cache 无 R 缓冲）
+    REQUIRE(to_bool(sim.get_port_value(io.r_ready)) == true);
 
     // ---- 逐个改输入 ⇒ 对应输出 MUST 跟随 ----
-    // ⑤ 换块地址 ⇒ `axi_addr` 跟随（仍**不对齐** ⇒ 仍能验出「对齐」语义）
+    // ⑦ 换块地址 ⇒ `ar_addr` 跟随（仍**不对齐** ⇒ 仍能验出「对齐」语义）
     sim.set_input_value(io.addr, 0x80000052u);
     sim.tick();
     //    ⚠️ 反向期望：恒 `0x80000040`（不跟随）；或 `0x80000052`（未对齐 = 直通）
-    REQUIRE(sim.get_port_value(io.axi_addr) == 0x80000050u);
+    REQUIRE(sim.get_port_value(io.ar_addr) == 0x80000050u);
 
-    // ⑥ 拉低 `req` ⇒ `axi_valid` 变 0
+    // ⑧ 拉低 `req` ⇒ `ar_valid` 变 0
     sim.set_input_value(io.req, 0u);
     sim.tick();
     //    ⚠️ 反向期望：恒 `1`（不跟随）
-    REQUIRE(to_bool(sim.get_port_value(io.axi_valid)) == false);
+    REQUIRE(to_bool(sim.get_port_value(io.ar_valid)) == false);
 
-    // ⑦ 拉低 `axi_ready` ⇒ `ready` 变 0，但 **`axi_valid` 不变**
-    //    ⇒ 证明 `axi_valid` **不依赖** `axi_ready`
+    // ⑨ 拉低 `ar_ready` ⇒ `ar_valid` **不变**
+    //    ⇒ 证明 `ar_valid` **不依赖** `ar_ready`
     //      （AXI：「VALID **不得**等 READY 才拉高」⇒ READY 为低时该请求
     //        仍 MUST 保持在总线上等待握手）
     sim.set_input_value(io.req, 1u);
-    sim.set_input_value(io.axi_ready, 0u);
+    sim.set_input_value(io.ar_ready, 0u);
     sim.tick();
-    //    ⚠️ 反向期望：`ready` 恒 `1`；`axi_valid` 恒 `0`（引入了 READY 依赖）
-    REQUIRE(to_bool(sim.get_port_value(io.ready)) == false);
-    REQUIRE(to_bool(sim.get_port_value(io.axi_valid)) == true);
-
-    // ⑧ 改 `axi_data` ⇒ `data` 跟随
-    sim.set_input_value(io.axi_data, 0x22222222u);
-    sim.tick();
-    //    ⚠️ 反向期望：恒 `0x11111111`（不跟随）
-    REQUIRE(sim.get_port_value(io.data) == 0x22222222u);
+    //    ⚠️ 反向期望：`ar_valid` 恒 `0`（引入了 READY 依赖）
+    REQUIRE(to_bool(sim.get_port_value(io.ar_valid)) == true);
 });
 
 // ===========================================================================
 // ③ ICachePrefetch：内层 cache 被**真正驱动**（hit / miss 可区分）
 //
-// ⚠️ 这是本文件**判别力最强**的一条：内层 cache 的 `addr` / `req` /
-//    `axi_ready` / `axi_data` / `axi_resp_valid` **全部未驱动**时，
+// ⚠️ 这是本文件**判别力最强**的一条：内层 cache 的输入全部未驱动时，
 //    内层永远停在「冷 miss」⇒ 「内层输入 MUST 被全部驱动」这条契约
 //    **完全不可观测** ⇒ 本用例把「填充 → 命中」这条**真实**路径跑出来。
 //
-// ⚠️ 内层是 **1-cycle `sread`** ⇒ hit 的到达拍数取决于内层实现
-//    （**不属于**本 wrapper 的契约）⇒ 用**有界等待**而不是钉死拍数；
-//    契约本身（hit **可达**）由 `REQUIRE` 保证。
+// ⚠️ 2026-11-28（S4c-1a）：填充走 **4-beat AXI4-full burst**；内层是
+//    **1-cycle `sread`** ⇒ `fill_complete` 落沿后**下一拍** `hit` 才可见
+//    ⇒ 拍序手推见 `tests/chlib/test_cache_sync.cpp` 的 helper 注释。
 // ===========================================================================
 DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
                         "ICachePrefetch inner cache is really driven "
@@ -192,39 +199,58 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
     const uint64_t kOtherBlock = 0x80000050u;
     const uint64_t kCached = 0xAAAA0000u;
 
+    // 冷读（本拍**不**握手 ⇒ 观察 `ar_valid` 保持：AXI 的 VALID 不等 READY）
     sim.set_input_value(io.addr, kBlock);
     sim.set_input_value(io.req, 1u);
-    sim.set_input_value(io.axi_ready, 1u);
-    sim.set_input_value(io.axi_resp_valid, 0u);
-    sim.set_input_value(io.axi_data, 0u);
+    sim.set_input_value(io.ar_ready, 0u);
+    sim.set_input_value(io.r_valid, 0u);
+    sim.set_input_value(io.r_data, 0u);
+    sim.set_input_value(io.r_last, 0u);
+    sim.set_input_value(io.r_resp, 0u);
     sim.tick();
 
-    // 冷 ⇒ miss（且 `axi_valid` 拉高 = 向 AXI 要数据）
+    // 冷 ⇒ miss（且 `ar_valid` 拉高 = 向 AXI 要数据）
     // ⚠️ 反向期望：内层未被驱动 ⇒ `miss` 恒 `0`
     REQUIRE(to_bool(sim.get_port_value(io.miss)) == true);
-    REQUIRE(to_bool(sim.get_port_value(io.axi_valid)) == true);
+    REQUIRE(to_bool(sim.get_port_value(io.ar_valid)) == true);
 
-    // ---- 触发内层填充（`axi_resp_valid` + `axi_data`）⇒ 下一轮读同一块应 hit ----
-    sim.set_input_value(io.axi_resp_valid, 1u);
-    sim.set_input_value(io.axi_data, kCached);
+    // ---- AR 握手 ⇒ 下一拍 `fill_active` 置位 ----
+    sim.set_input_value(io.ar_ready, 1u);
+    sim.tick();
+
+    // ---- 4 个 R beat ⇒ 内层填充（lane 0 = kCached）----
+    sim.set_input_value(io.req, 0u);
+    sim.set_input_value(io.ar_ready, 0u);
+    for (int b = 0; b < 4; ++b) {
+        sim.set_input_value(io.r_valid, 1u);
+        sim.set_input_value(io.r_data, b == 0 ? kCached : 0u);
+        sim.set_input_value(io.r_last, b == 3 ? 1u : 0u);
+        sim.tick();
+    }
+    sim.set_input_value(io.r_valid, 0u);
+    sim.set_input_value(io.r_last, 0u);
+    sim.set_input_value(io.r_data, 0u);
+
+    // 填充完成那一拍：`ready`（fill_done）与 `data`（请求 lane 的字）同拍有效
+    REQUIRE(to_bool(sim.get_port_value(io.ready)) == true);
+    // ⚠️ 反向期望：`0`（若 `data` 读的是 AXI 数据 ⇒ 此刻 `r_data` 已清 0）
+    REQUIRE(sim.get_port_value(io.data) == kCached);
+
+    // ---- 同址再读 ⇒ hit（数据来自 cache）----
     bool hit = false;
-    for (unsigned i = 0; i < 8u; ++i) {
+    for (unsigned i = 0; i < 4u; ++i) {
+        sim.set_input_value(io.addr, kBlock);
+        sim.set_input_value(io.req, 1u);
         sim.tick();
         if (!to_bool(sim.get_port_value(io.miss))) { hit = true; break; }
     }
-    // ⚠️ 反向期望：内层 `axi_resp_valid`/`axi_data` 未被驱动 ⇒ 永远 miss ⇒ 恒 `false`
+    // ⚠️ 反向期望：内层 `r_valid`/`r_data` 未被驱动 ⇒ 永远 miss ⇒ 恒 `false`
     REQUIRE(hit == true);
-    // hit ⇒ 不再向 AXI 要数据（`axi_valid` 落 0）
+    // hit ⇒ 不再向 AXI 要数据（`ar_valid` 落 0）
     // ⚠️ 反向期望：恒 `1`
-    REQUIRE(to_bool(sim.get_port_value(io.axi_valid)) == false);
-
-    // ---- 停 fill + 把 `axi_data` 清 0 ⇒ `data` 仍返回**缓存里的值** ----
-    // ⇒ 这证明读的是 **cache** 而不是 AXI 数据 ⇒ 内层真的被填充了
-    sim.set_input_value(io.axi_resp_valid, 0u);
-    sim.set_input_value(io.axi_data, 0u);
-    sim.tick();
-    sim.tick();
-    // ⚠️ 反向期望：恒 `0`（`axi_data` = 0 ⇒ 若读的是 AXI 数据就必须是 0）
+    REQUIRE(to_bool(sim.get_port_value(io.ar_valid)) == false);
+    // ⇒ 且读的是 **cache** 而不是 AXI 数据（`r_data` = 0）
+    // ⚠️ 反向期望：恒 `0`
     REQUIRE(sim.get_port_value(io.data) == kCached);
 
     // ---- 换块 ⇒ 回到 miss（证明 hit 不是「恒 0」）----
@@ -242,20 +268,20 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
 // ③' `miss` 期间的地址稳定性（phase-6 **P9 ③** · 判别性探针）
 //
 // ⚠️ **要测的是什么**：内层 cache 的 `miss` 由 **1 拍 `sread`** 推导（对应**上一拍**
-//    采样的地址），而 `axi_addr` 取**当拍**地址（`addr & 0xFFFFFFF0`）
+//    采样的地址），而 `ar_addr` 取**当拍**地址（`addr & 0xFFFFFFF0`）
 //    ⇒ ⇒ 二者**错位 1 拍**（属**内层 cache 本体**）⇒ ⇒ **后果** =
 //    调用方若在 `miss` 期间改变 `addr` ⇒ AXI 请求会跟**新地址**发出
 //    ⇒ ⇒ 取回的是**新块**的数据。
 //
 // ⚠️ **判别力**（不是「看起来对」而是「可判定的错位」）：本用例**显式断言**
-//    「`axi_addr` 跟随**当拍**地址」⇒ ⇒ 若内层 cache 改成「跟随 `miss` 所指地址」
+//    「`ar_addr` 跟随**当拍**地址」⇒ ⇒ 若内层 cache 改成「跟随 `miss` 所指地址」
 //    ⇒ ⇒ 第 2 段**转红** ⇒ ⇒ 它是「错位确实存在」的**可执行**证据。
-//    ⇒ ⇒ 由此确立契约：**调用方 MUST 在 `miss` 期间保持 `addr` 不变**
+//    ⇒ ⇒ 由此确立契约：**调用方 MUST 在 `miss` / 填充期间保持 `addr` 不变**
 //    （契约载体 = capability `cpu-cache-subsystem` 的「`miss` 期间的地址稳定性」
 //    Requirement + `include/cpu/AGENTS.md` 债务段）。
 // ===========================================================================
 DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
-                        "ICachePrefetch: changing addr during miss makes axi_addr follow the current addr (1-cycle skew)",
+                        "ICachePrefetch: changing addr during miss makes ar_addr follow the current addr (1-cycle skew)",
                         "[riscv-mini][cache][wrapper][probe][miss-addr][dual][verilator][e2e]",
                         [&]() {
     CACHE_SMOKE_BACKEND_INFO();
@@ -266,16 +292,18 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
     const uint64_t kBlockB = 0x80000180u;
 
     sim.set_input_value(io.req, 1u);
-    sim.set_input_value(io.axi_ready, 1u);
-    sim.set_input_value(io.axi_resp_valid, 0u);
-    sim.set_input_value(io.axi_data, 0u);
+    sim.set_input_value(io.ar_ready, 0u);
+    sim.set_input_value(io.r_valid, 0u);
+    sim.set_input_value(io.r_data, 0u);
+    sim.set_input_value(io.r_last, 0u);
+    sim.set_input_value(io.r_resp, 0u);
 
     // ---- ① 冷地址 A ⇒ miss（`sread` 尚未命中 ⇒ 必然 miss）----
     sim.set_input_value(io.addr, kBlockA);
     sim.tick();
     REQUIRE(to_bool(sim.get_port_value(io.miss)) == true);
-    // 遵守契约（`addr` 不变）⇒ `axi_addr` = A 的块地址
-    REQUIRE(sim.get_port_value(io.axi_addr) == kBlockA);
+    // 遵守契约（`addr` 不变）⇒ `ar_addr` = A 的块地址
+    REQUIRE(sim.get_port_value(io.ar_addr) == kBlockA);
 
     // ---- ② `miss` 期间把 `addr` 改到 B ⇒ 错位显现 ----
     sim.set_input_value(io.addr, kBlockB);
@@ -283,7 +311,7 @@ DUAL_BACKEND_TEST_PAIR(ICachePrefetch,
     // `miss` 仍来自上一拍的采样 ⇒ 仍为 true
     REQUIRE(to_bool(sim.get_port_value(io.miss)) == true);
     // ⇒ 但 AXI 请求地址已跟到**当拍**地址（B）⇒ 不再是 A ⇒ **错位可观测**
-    REQUIRE(sim.get_port_value(io.axi_addr) == kBlockB);
+    REQUIRE(sim.get_port_value(io.ar_addr) == kBlockB);
     // ⇒ ⇒ 契约的后果 = 取回的是 **B 块**的数据（而调用方要的是 A 块）
     //    ⇒ ⇒ 这就是「调用方 MUST 在 `miss` 期间保持 `addr`」的**原因**
 });
@@ -403,7 +431,7 @@ TEST_CASE("corpus hierarchy regression (product level): ICachePrefetch",
 //   「跨模块 mem」硬拒绝 ⇒ ⇒ 本形态证明「mem 不必跨层」也可行）。
 //
 // ⚠️ **已知观测偏差（★ 登记在 `tests/hier_corpus_registry.md`）**：内层 `miss`(1 拍
-//   `sread`) 与 `axi_addr`(当拍地址) 存在 1 拍错位 ⇒ ⇒ ⇒ **比对时 MUST NOT 把它当
+//   `sread`) 与 `ar_addr`(当拍地址) 存在 1 拍错位 ⇒ ⇒ ⇒ **比对时 MUST NOT 把它当
 //   缺陷** ⇒ ⇒ 但它**不影响**本次比对（★ 比的是 flat ≡ hier ⇒ ⇒ 两侧**同样**错位）。
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -434,30 +462,30 @@ TEST_CASE("corpus hierarchy regression (behaviour level): ICachePrefetch - root 
             s.set_input_value(dev.instance().io().req, v);
         }});
     inputs.push_back(ch::hier_eq::DrivenInput{
-        "axi_ready", [&dev](ch::Simulator &s, std::uint64_t v) {
-            s.set_input_value(dev.instance().io().axi_ready, v);
+        "ar_ready", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().ar_ready, v);
         }});
     inputs.push_back(ch::hier_eq::DrivenInput{
-        "axi_resp_valid", [&dev](ch::Simulator &s, std::uint64_t v) {
-            s.set_input_value(dev.instance().io().axi_resp_valid, v);
+        "r_valid", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().r_valid, v);
         }});
     inputs.push_back(ch::hier_eq::DrivenInput{
-        "axi_data", [&dev](ch::Simulator &s, std::uint64_t v) {
-            s.set_input_value(dev.instance().io().axi_data, v);
+        "r_data", [&dev](ch::Simulator &s, std::uint64_t v) {
+            s.set_input_value(dev.instance().io().r_data, v);
         }});
 
     // ⚠️ 观测**只**取**顶层**的 `ch_out`（★ 子组件的 `ch_out` 在层次化顶层**不可观测**
     //    ⇒ ⇒ 观测它 ⇒ ⇒ helper 会**机械拒绝**（前缀 `observation-not-visible`））
     std::vector<ch::hier_eq::Observation> observations;
     observations.push_back(ch::hier_eq::make_observation(
-        "axi_addr", dev.instance().io().axi_addr,
+        "ar_addr", dev.instance().io().ar_addr,
         [&dev](ch::Simulator &s) -> std::uint64_t {
-            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().axi_addr));
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().ar_addr));
         }));
     observations.push_back(ch::hier_eq::make_observation(
-        "axi_valid", dev.instance().io().axi_valid,
+        "ar_valid", dev.instance().io().ar_valid,
         [&dev](ch::Simulator &s) -> std::uint64_t {
-            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().axi_valid));
+            return static_cast<std::uint64_t>(s.get_port_value(dev.instance().io().ar_valid));
         }));
     observations.push_back(ch::hier_eq::make_observation(
         "miss", dev.instance().io().miss,

@@ -252,3 +252,23 @@ MUST NOT 把 `AxiDma` 的任何行为写进 AC**。
 - **实施序**：**S4c-0 → S4c-1 → S4c-2 → S4c-3**（串行 · D8）。
 - **归属**：本 ADR 只裁「形态 / 边界 / 分批」⇒ 逐文件实施清单归 openspec change 的 `tasks.md`；推导与时序证据归 `design.md`。
 - **归档前**：`Draft` → `Accepted` + 关联 change **已立项**并回填 **AC 映射**。
+
+---
+
+## 7. 订正记录（**dated** · 不改决策）
+
+> 约定：本节只记**表述与实现的收敛**。§2 的决策**不变**；真要改决策 MUST 走「取代」流程。
+
+### 7.1 2026-11-28 · S4c-1a —— I-L1 的 AXI 侧 = **full 读通道 11 根**（无 ID）
+
+- **订正对象**：§2.7 与 **AC8** 的「fill = 4-beat burst **+ ID**」表述。
+- **实施形态**（**决策未变**：仍是 full 协议 + 4-beat burst + 读选 lane）：
+  `ICacheSync` / `ICachePrefetch` 的 AXI 侧 **只读** ⇒ **无 AW/W/B**；
+  读通道 **11 根** = `ar_addr` / `ar_len` / `ar_size` / `ar_burst` / `ar_valid` / `ar_ready`
+  + `r_data` / `r_resp` / `r_last` / `r_valid` / `r_ready` ⇒ ⇒ **无 `ar_id` / `r_id`**。
+- **三条依据**：① **I 侧只读出** ⇒ 写通道无落点；② **与 S3 先例同构** ——
+  `d_cache_sync.h` 的读通道同样是 11 根**且无 ID**（事实 ⑥ 所指的「S3 完整形态」的**实际**形态）；
+  ③ 单主场景下 ID 无路由作用，且下游 `TcmAxiSlave` **忽略 ID 值**（事实 ⑤）。
+- **不得被视为放松的项**：hit 延迟仍 **1 拍 `sread`**；`ready` 仍是 I 侧语义
+  （「请求已被接受」⇒ 数据**下一拍**到 · **不**照搬 D 侧组合 ready）；`i_cache_async.h` **零 diff**。
+- **落地**：change `rv32i-i-l1-axi-full-2026-11`（`design.md` §1.1 ① / `tasks.md` T1.1 · AC1–AC8）。

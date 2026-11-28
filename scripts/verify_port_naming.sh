@@ -47,7 +47,10 @@ REGISTRY="$REPO_ROOT/.rddf/checks/port-naming-exempt.tsv"
 
 # ⚠️ **计数锚点钉在护栏脚本里**（N2 ④）—— **不**钉在可编辑的登记表里
 #    （否则「改登记表」与「改锚点」会一起动 ⇒ ⇒ 锚点失去守门作用）。
-EXPECTED_EXEMPT_PORTS=1367
+#    ⚠️ **1367 → 1357**（2026-11-28 · S4c-1a）：`i_cache_sync.h` / `i_cache_prefetch.h`
+#    的 AXI 侧由 5 根简化口换成 **AXI4-full 读通道** ⇒ ⇒ 旧 `axi_*` 5 条/文件已删除，
+#    新 `ar_*` / `r_*` 端口**全部具名**（`ident{"name"}`）⇒ ⇒ 债**只减不增**。
+EXPECTED_EXEMPT_PORTS=1357
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; RESET='\033[0m'
 FAILS=0
