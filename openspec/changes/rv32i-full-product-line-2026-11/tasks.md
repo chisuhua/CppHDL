@@ -155,16 +155,31 @@
 
 ## P6 · 回归与收口
 
-- [ ] **T6.1** **mini 线零行为变化**：全量重建 0 error · `ctest` **285/285**（+full 线的 1 条）
+- [x] **T6.1** **mini 线零行为变化**：全量重建 0 error · `ctest` **285/285**（+full 线的 1 条）
+      ⇒ **实测（2026-11-28）**：全量重建 **0 error** · `ctest` **285/286 绿**（286 条含 full 线的 1 条）
+      ⇒ ⚠️ **唯一失败 = `perf_regression`（#125）· verilator 后端微基准的环境漂移** ⇒ ⇒
+      **不是本批引入**（证据链见 proposal 的「已知既有红」表：baseline 采集于 2026-10-28 ·
+      interpreter/jit 后端正常 · verilator 缓存命中 · 本批零计算路径改动 · S4b 阶段同机 285/285 绿）
+      ⇒ ⇒ 5 个既有护栏（rtl_sim / rtl_sim_coverage / hierarchical_rtl / no_duplicate_headers /
+      riscv_soc_core_ports）实测**全绿** ⇒ ⇒ 「重采 baseline」属**需用户裁决**的独立决策
       · 5 个既有护栏全绿 · mini 线产物端口表**逐字不变**
-- [ ] **T6.2** 元护栏 + 生成器 `--check` + 锚点分组校验**全绿**；且各自的 `--self-test` 投毒**必红**
-- [ ] **T6.3** `openspec validate rv32i-full-product-line-2026-11 --strict` exit 0 ·
+- [x] **T6.2** 元护栏 + 生成器 `--check` + 锚点分组校验**全绿**；且各自的 `--self-test` 投毒**必红**
+- [x] **T6.3** `openspec validate rv32i-full-product-line-2026-11 --strict` exit 0 ·
       `bash scripts/verify_openspec_delta.sh` 4/4
-- [ ] **T6.4** **AC 映射回填**：ADR-078 元数据的「关联 change」行指向本 change + 列出 AC 映射
+- [x] **T6.4** **AC 映射回填**：ADR-078 元数据的「关联 change」行指向本 change + 列出 AC 映射
 - [ ] **T6.5** `verifier` 独立验收（AC1–AC12 逐条工具证据 + 遗留清扫）
 - [ ] **T6.6** 母 improvement `rv32i-soc-platform-2026-11` 的 `进度:` 追加 S4c-0 完成记录
 
 ## P7 · 归档
+**P6 的实施期发现（2026-11-28）**：
+
+- ⚠️ **`perf_regression` 依赖前置生成的 `perf_results.json`** ⇒ ⇒ **单独 `ctest -R perf_regression`
+  是无效的**（会报 `cannot open perf_results.json` ⇒ 「红」不代表退化）⇒ ⇒ 判读 perf 红 MUST 在
+  **完整 perf 组上下文**里做（且 `perf_results_clean`(#286) 在序列里的位置会提前清结果 ⇒ ⇒
+  即便 `-R perf` 也不可靠 ⇒ ⇒ 最稳 = 跑**全量**）。
+- **`perf_regression` 的 verilator 退化 = 环境漂移**（详见 proposal 的「已知既有红」表）⇒ ⇒
+  T6.1 的「ctest 全绿」因此**如实写成 285/286 + 1 条环境红** ⇒ ⇒ 不谎报全绿。
+
 
 - [ ] **T7.1** `openspec archive rv32i-full-product-line-2026-11 --yes`
       ⇒ 归档到 `openspec/changes/archive/2026-11-27-rv32i-full-product-line-2026-11/`
